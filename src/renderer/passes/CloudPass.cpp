@@ -65,7 +65,8 @@ void CloudPass::invalidateHistory() {
 bool CloudPass::shouldRenderClouds(const FrameContext& ctx,
                                    const RenderSettings& settings) const {
     const int updateInterval = std::clamp(settings.cloud.updateInterval, 1, 8);
-    if (!m_hasRenderedClouds || ctx.temporalReset || updateInterval <= 1) {
+    if (!m_hasRenderedClouds || requiresTemporalReset(ctx.temporalResetReasons) ||
+        updateInterval <= 1) {
         return true;
     }
 
@@ -233,7 +234,8 @@ bool CloudPass::recordCloud(RhiCommandList& commandList,
         return false;
     }
 
-    const bool historyAvailable = m_hasRenderedClouds && !ctx.temporalReset;
+    const bool historyAvailable = m_hasRenderedClouds &&
+                                  !requiresTemporalReset(ctx.temporalResetReasons);
     const CloudParams params = buildCloudParams(ctx, historyAvailable);
 
     RhiColorAttachment colorAttachment;
@@ -302,7 +304,8 @@ bool CloudPass::recordCloudCompute(RhiCommandList& commandList,
         return false;
     }
 
-    const bool historyAvailable = m_hasRenderedClouds && !ctx.temporalReset;
+    const bool historyAvailable = m_hasRenderedClouds &&
+                                  !requiresTemporalReset(ctx.temporalResetReasons);
     const CloudParams params = buildCloudParams(ctx, historyAvailable);
 
     const GpuTimerSegmentToken timerToken = ctx.debugService != nullptr

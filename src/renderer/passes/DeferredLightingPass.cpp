@@ -115,7 +115,7 @@ bool DeferredLightingPass::execute(RhiCommandList& commandList,
     RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
     const bool useTemporalSsao =
         settings.ssao.enabled && settings.ssao.temporalEnabled &&
-        !ctx.temporalReset;
+        !requiresTemporalReset(ctx.temporalResetReasons);
     if (!ensureRhiPipeline(rhiDevice) ||
         !targets.ensureSceneLightingTextureView(rhiDevice) ||
         !targets.ensureGBufferTextureViews(rhiDevice) ||

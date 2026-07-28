@@ -1540,16 +1540,43 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
             0.0f, 1.0f, "%.2f");
         pipelineChanged |= ImGui::Checkbox(
             "FSR 3.1 Debug View", &settings.upscale.debugVisualizationEnabled);
+        ImGui::EndDisabled();
         if (const auto& temporalFrame = renderScene.temporalFrameInput();
             temporalFrame.has_value()) {
+            const TemporalFrameExtents& extents = temporalFrame->extents;
             ImGui::Text(
-                "Temporal Extent: %ux%u -> %ux%u",
-                temporalFrame->renderExtent.width,
-                temporalFrame->renderExtent.height,
-                temporalFrame->outputExtent.width,
-                temporalFrame->outputExtent.height);
+                "Temporal Resource: %ux%u",
+                extents.resourceExtent.width,
+                extents.resourceExtent.height);
+            ImGui::Text(
+                "Temporal Render Rect: (%u, %u) %ux%u",
+                extents.renderRect.x,
+                extents.renderRect.y,
+                extents.renderRect.width,
+                extents.renderRect.height);
+            ImGui::Text(
+                "Temporal Signal Rect: (%u, %u) %ux%u",
+                extents.signalRect.x,
+                extents.signalRect.y,
+                extents.signalRect.width,
+                extents.signalRect.height);
+            ImGui::Text(
+                "Temporal Output: %ux%u",
+                extents.outputExtent.width,
+                extents.outputExtent.height);
+            ImGui::TextUnformatted("Temporal Reset Reasons:");
+            if (!requiresTemporalReset(temporalFrame->resetReasons)) {
+                ImGui::BulletText("none");
+            } else {
+                for (const TemporalResetReasonDescriptor& descriptor :
+                     temporalResetReasonDescriptors()) {
+                    if (hasTemporalResetReason(
+                            temporalFrame->resetReasons, descriptor.reason)) {
+                        ImGui::BulletText("%s", descriptor.stableId);
+                    }
+                }
+            }
         }
-        ImGui::EndDisabled();
 
         bool fsr1EnabledUi = fsr1Supported && settings.upscale.fsr1Enabled;
         ImGui::BeginDisabled(!fsr1Supported);

@@ -375,7 +375,7 @@ TemporalUpscaleResult TemporalUpscalePass::execute(
 
     switch (settings.type) {
         case TemporalUpscalerType::Native:
-            if (frame.renderExtent != frame.outputExtent) {
+            if (frame.extents.renderExtent != frame.extents.outputExtent) {
                 return temporalFailure(TemporalUpscaleStatus::NativeExtentMismatch);
             }
             {
@@ -383,7 +383,7 @@ TemporalUpscaleResult TemporalUpscalePass::execute(
                 result.status = TemporalUpscaleStatus::Success;
                 result.outputHdrColor = frame.textures.hdrColor;
                 result.outputHdrColorView = frame.textures.hdrColorView;
-                result.outputExtent = frame.outputExtent;
+                result.outputExtent = frame.extents.outputExtent;
                 return result;
             }
         case TemporalUpscalerType::Fsr31:
@@ -510,7 +510,7 @@ TemporalUpscaleResult TemporalUpscalePass::execute(
                 result.status = TemporalUpscaleStatus::Success;
                 result.outputHdrColor = m_outputTexture;
                 result.outputHdrColorView = m_outputView;
-                result.outputExtent = frame.outputExtent;
+                result.outputExtent = frame.extents.outputExtent;
                 return result;
             }
 #else
@@ -613,7 +613,7 @@ TemporalUpscaleResult TemporalUpscalePass::execute(
                 result.status = TemporalUpscaleStatus::Success;
                 result.outputHdrColor = m_outputTexture;
                 result.outputHdrColorView = m_outputView;
-                result.outputExtent = frame.outputExtent;
+                result.outputExtent = frame.extents.outputExtent;
                 return result;
             }
 #else

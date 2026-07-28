@@ -512,8 +512,8 @@ bool PresentationController::prepareFrameGeneration(
     if (!resources.has_value() || validateTemporalFrame(temporalFrame).has_value() ||
         !temporalFrame.renderingGameFrames ||
         temporalFrame.frameIndex != Time::getFrameIndex() ||
-        temporalFrame.outputExtent.width != resources->width ||
-        temporalFrame.outputExtent.height != resources->height ||
+        temporalFrame.extents.outputExtent.width != resources->width ||
+        temporalFrame.extents.outputExtent.height != resources->height ||
         !m_backend.prepareFrameGeneration(*resources, temporalFrame)) {
         return false;
     }

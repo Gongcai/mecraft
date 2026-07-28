@@ -152,9 +152,8 @@ struct FrameContext {
     float animationTime = 0.0f;
     float shaderTime = 0.0f;
 
-    // Scene rendering and presentation dimensions are independent contracts.
-    TemporalExtent renderExtent;
-    TemporalExtent outputExtent;
+    // Resource, active signal, rendering, and presentation dimensions form one contract.
+    TemporalFrameExtents temporalExtents;
 
     // Current swapchain output target.
     RhiTextureHandle swapchainColorTexture;
@@ -208,7 +207,8 @@ struct FrameContext {
     // State flags
     bool eyeInWater = false;
     bool moonShadowActive = false;
-    bool temporalReset = true;
+    TemporalResetReasons temporalResetReasons =
+        temporalResetReasonBit(TemporalResetReason::FirstFrame);
     float cameraRainVisibility = 1.0f; // 0=indoors, 1=outdoors (from multi-ray check)
 
     // Shared resources (non-owning pointer)

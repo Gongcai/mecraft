@@ -78,7 +78,12 @@ bool WaterCompositePass::recordGraphPass(
         colorAttachments[2].view = targets.transparencyMaskTextureViewHandle();
         depthAttachment.view = ctx.sceneCaptureDepthView;
         renderingInfo.debugName = "WaterComposite.SceneCapture";
-        renderingInfo.renderArea = {0, 0, ctx.renderExtent.width, ctx.renderExtent.height};
+        renderingInfo.renderArea = {
+            0,
+            0,
+            ctx.temporalExtents.renderExtent.width,
+            ctx.temporalExtents.renderExtent.height
+        };
     } else {
         return true;
     }

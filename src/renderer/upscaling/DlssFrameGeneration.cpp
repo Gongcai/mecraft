@@ -47,7 +47,7 @@ constexpr uint32_t kStreamlineViewport = 0u;
     constants.verticalFovRadians = frame.verticalFovRadians;
     constants.cameraAspectRatio = frame.cameraAspectRatio;
     constants.depthInverted = frame.depthInverted;
-    constants.reset = frame.reset;
+    constants.reset = requiresTemporalReset(frame.resetReasons);
     return constants;
 }
 
@@ -327,10 +327,10 @@ public:
         if (!depth.has_value() || !motionVectors.has_value() ||
             !hudlessColor.has_value() || !uiColor.has_value() ||
             !validTexture(*depth, VK_FORMAT_D32_SFLOAT,
-                          temporalFrame.renderExtent,
+                          temporalFrame.extents.resourceExtent,
                           VK_IMAGE_USAGE_SAMPLED_BIT) ||
             !validTexture(*motionVectors, VK_FORMAT_R16G16_SFLOAT,
-                          temporalFrame.renderExtent,
+                          temporalFrame.extents.resourceExtent,
                           VK_IMAGE_USAGE_SAMPLED_BIT) ||
             !validTexture(*hudlessColor, VK_FORMAT_B8G8R8A8_UNORM,
                           outputExtent,
@@ -343,8 +343,8 @@ public:
 
         StreamlineDlssFrameGenerationOptions options;
         options.enabled = m_renderingGameFrames;
-        options.renderWidth = temporalFrame.renderExtent.width;
-        options.renderHeight = temporalFrame.renderExtent.height;
+        options.renderWidth = temporalFrame.extents.renderRect.width;
+        options.renderHeight = temporalFrame.extents.renderRect.height;
         options.outputWidth = resources.width;
         options.outputHeight = resources.height;
         options.backBufferCount = m_device.capabilities().swapchainImageCount;

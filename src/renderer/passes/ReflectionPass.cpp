@@ -57,7 +57,8 @@ RgPassHandle ReflectionPass::addGraphPasses(
     const bool filterActive = settings.reflection.filterEnabled &&
         settings.debug.reflectionDebugMode == 0;
     const bool temporalActive = settings.reflection.temporalEnabled &&
-        settings.debug.reflectionDebugMode == 0 && !ctx.temporalReset;
+        settings.debug.reflectionDebugMode == 0 &&
+        !requiresTemporalReset(ctx.temporalResetReasons);
     if (!dependency.isValid() || !resources.sceneLighting.isValid() ||
         !resources.albedo.isValid() ||
         !resources.depth.isValid() || !resources.normalAo.isValid() ||

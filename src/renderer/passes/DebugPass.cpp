@@ -164,8 +164,8 @@ RgPassHandle DebugPass::addGraphPass(
                      frameTargets = &targets](RgPassContext& pass) {
             return recordGraphPass(
                 *frame, frameSettings, *frameTargets,
-                static_cast<int>(frame->renderExtent.width),
-                static_cast<int>(frame->renderExtent.height),
+                static_cast<int>(frame->temporalExtents.renderExtent.width),
+                static_cast<int>(frame->temporalExtents.renderExtent.height),
                 pass.commandList());
         });
     return debug.handle();

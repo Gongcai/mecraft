@@ -175,7 +175,7 @@ bool ShadowPass::prepareGraphFrame(const FrameContext& ctx,
     const glm::vec3 lightDirection = m_shadowRenderer->lightDirection();
     const bool forceAllCascades =
         !settings.shadow.farCascadeInterleaved || !m_farCascadesPrimed ||
-        ctx.temporalReset ||
+        requiresTemporalReset(ctx.temporalResetReasons) ||
         settings.shadow.resolution != m_lastShadowResolution ||
         settings.shadow.distance != m_lastShadowDistance ||
         glm::dot(lightDirection, m_lastShadowLightDirection) < 0.999f;

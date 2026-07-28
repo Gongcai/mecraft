@@ -1,9 +1,11 @@
+#include "renderer/contracts/SceneIdentityContract.h"
 #include "renderer/contracts/TemporalFrameContract.h"
 #include "renderer/core/RenderSettings.h"
 #include "renderer/passes/TemporalUpscalePass.h"
 
 #include <iostream>
 #include <limits>
+#include <type_traits>
 
 namespace {
 
@@ -25,23 +27,25 @@ RhiTextureViewHandle textureViewHandle(const uint32_t index) {
 
 TemporalFrameInput completeFrame() {
     TemporalFrameInput frame;
-    frame.renderExtent = {1280u, 720u};
-    frame.outputExtent = {1920u, 1080u};
+    frame.extents = makeTemporalFrameExtents(
+        {1600u, 900u}, {1280u, 720u}, {640u, 360u}, {1920u, 1080u});
     frame.jitter.pixels = {0.25f, -0.5f};
     frame.jitter.projectionOffset = {
-        frame.jitter.pixels.x / static_cast<float>(frame.renderExtent.width),
-        -frame.jitter.pixels.y / static_cast<float>(frame.renderExtent.height)
+        frame.jitter.pixels.x /
+            static_cast<float>(frame.extents.renderExtent.width),
+        -frame.jitter.pixels.y /
+            static_cast<float>(frame.extents.renderExtent.height)
     };
     frame.motionVectorScale = {
-        static_cast<float>(frame.renderExtent.width),
-        static_cast<float>(frame.renderExtent.height)
+        static_cast<float>(frame.extents.renderExtent.width),
+        static_cast<float>(frame.extents.renderExtent.height)
     };
     frame.frameDeltaMilliseconds = 16.0f;
     frame.preExposure = 1.0f;
     frame.cameraNear = 0.1f;
     frame.cameraFar = 500.0f;
     frame.verticalFovRadians = 1.22173048f;
-    frame.reset = false;
+    frame.resetReasons = temporalResetReasonBit(TemporalResetReason::None);
     frame.textures.hdrColor = textureHandle(1u);
     frame.textures.hdrColorView = textureViewHandle(1u);
     frame.textures.depth = textureHandle(2u);
@@ -104,21 +108,162 @@ bool testMotionVectorConvention() {
                        "motion-vector storage range must match RG16F resolve clamping");
 }
 
+bool testTemporalExtents() {
+    TemporalFrameExtents extents = makeTemporalFrameExtents(
+        {1920u, 1080u}, {1280u, 720u}, {640u, 360u}, {2560u, 1440u});
+    if (!requireTrue(extents.isValid(),
+                     "separate resource, render, signal, and output extents must validate") ||
+        !requireTrue(extents.renderRect == TemporalRect{0u, 0u, 1280u, 720u},
+                     "render rect must match the active render extent") ||
+        !requireTrue(extents.signalRect == TemporalRect{0u, 0u, 640u, 360u},
+                     "signal rect must match the active signal extent")) {
+        return false;
+    }
+
+    extents.renderRect = {64u, 32u, 1280u, 720u};
+    extents.signalRect = {16u, 8u, 640u, 360u};
+    if (!requireTrue(extents.isValid(),
+                     "non-zero active-rect origins inside the resource must validate")) {
+        return false;
+    }
+
+    extents.renderRect = {1000u, 500u, 1280u, 720u};
+    return requireTrue(!extents.isValid(),
+                       "active rectangles extending beyond the resource must be rejected");
+}
+
 bool testTemporalReset() {
-    const TemporalExtent renderExtent{1280u, 720u};
-    const TemporalExtent outputExtent{1920u, 1080u};
-    return requireTrue(requiresTemporalReset(
-                           false, renderExtent, outputExtent, renderExtent, outputExtent),
-                       "missing previous frame must request temporal reset") &&
-           requireTrue(!requiresTemporalReset(
-                           true, renderExtent, outputExtent, renderExtent, outputExtent),
-                       "stable extents must preserve temporal history") &&
-           requireTrue(requiresTemporalReset(
-                           true, renderExtent, outputExtent, {960u, 540u}, outputExtent),
-                       "render extent change must request temporal reset") &&
-           requireTrue(requiresTemporalReset(
-                           true, renderExtent, outputExtent, renderExtent, {2560u, 1440u}),
-                       "output extent change must request temporal reset");
+    const TemporalFrameExtents previous = makeTemporalFrameExtents(
+        {1920u, 1080u}, {1280u, 720u}, {640u, 360u}, {2560u, 1440u});
+    const TemporalResetReasons noExplicitReasons =
+        temporalResetReasonBit(TemporalResetReason::None);
+
+    const TemporalResetReasons firstFrame = evaluateTemporalResetReasons(
+        false, previous, previous, noExplicitReasons, {});
+    if (!requireTrue(requiresTemporalReset(firstFrame) &&
+                         hasTemporalResetReason(firstFrame, TemporalResetReason::FirstFrame),
+                     "missing previous frame must report FirstFrame")) {
+        return false;
+    }
+
+    const TemporalResetReasons methodChange = evaluateTemporalResetReasons(
+        false,
+        previous,
+        previous,
+        temporalResetReasonBit(TemporalResetReason::Method),
+        {});
+    if (!requireTrue(
+            hasTemporalResetReason(methodChange, TemporalResetReason::Method) &&
+                !hasTemporalResetReason(methodChange, TemporalResetReason::FirstFrame),
+            "known invalidation causes must not be relabeled as FirstFrame")) {
+        return false;
+    }
+
+    const TemporalResetReasons stable = evaluateTemporalResetReasons(
+        true, previous, previous, noExplicitReasons, {});
+    if (!requireTrue(!requiresTemporalReset(stable),
+                     "stable extents without explicit causes must preserve history")) {
+        return false;
+    }
+
+    TemporalFrameExtents changed = previous;
+    changed.resourceExtent = {2048u, 1152u};
+    TemporalResetReasons reasons = evaluateTemporalResetReasons(
+        true, previous, changed, noExplicitReasons, {});
+    if (!requireTrue(
+            hasTemporalResetReason(reasons, TemporalResetReason::ResourceExtent),
+            "resource allocation changes must report ResourceExtent")) {
+        return false;
+    }
+
+    changed = previous;
+    changed.outputExtent = {3840u, 2160u};
+    reasons = evaluateTemporalResetReasons(
+        true, previous, changed, noExplicitReasons, {});
+    if (!requireTrue(
+            hasTemporalResetReason(reasons, TemporalResetReason::ResourceExtent),
+            "output allocation changes must report ResourceExtent")) {
+        return false;
+    }
+
+    changed = previous;
+    changed.renderExtent = {960u, 540u};
+    changed.renderRect = {32u, 24u, 960u, 540u};
+    reasons = evaluateTemporalResetReasons(
+        true, previous, changed, noExplicitReasons, {});
+    if (!requireTrue(hasTemporalResetReason(reasons, TemporalResetReason::ActiveRect),
+                     "unaccepted render active-rect changes must report ActiveRect")) {
+        return false;
+    }
+    reasons = evaluateTemporalResetReasons(
+        true, previous, changed, noExplicitReasons, {true, false});
+    if (!requireTrue(!requiresTemporalReset(reasons),
+                     "consumers may preserve history across accepted render-rect changes")) {
+        return false;
+    }
+
+    changed = previous;
+    changed.signalExtent = {480u, 270u};
+    changed.signalRect = {8u, 4u, 480u, 270u};
+    reasons = evaluateTemporalResetReasons(
+        true, previous, changed, noExplicitReasons, {false, true});
+    if (!requireTrue(!requiresTemporalReset(reasons),
+                     "consumers may preserve history across accepted signal-rect changes")) {
+        return false;
+    }
+
+    const TemporalResetReasons explicitReasons =
+        TemporalResetReason::CameraCut | TemporalResetReason::AssetRevision;
+    reasons = evaluateTemporalResetReasons(
+        true, previous, previous, explicitReasons, {true, true});
+    if (!requireTrue(
+            hasTemporalResetReason(reasons, TemporalResetReason::CameraCut) &&
+                hasTemporalResetReason(reasons, TemporalResetReason::AssetRevision),
+            "explicit reset causes must remain independently observable")) {
+        return false;
+    }
+
+    TemporalResetReasons describedReasons =
+        temporalResetReasonBit(TemporalResetReason::None);
+    for (const TemporalResetReasonDescriptor& descriptor :
+         temporalResetReasonDescriptors()) {
+        if (!requireTrue(
+                descriptor.reason != TemporalResetReason::None &&
+                    descriptor.stableId != nullptr && descriptor.stableId[0] != '\0' &&
+                    !hasTemporalResetReason(describedReasons, descriptor.reason),
+                "reset descriptors must contain unique non-zero reasons and stable IDs")) {
+            return false;
+        }
+        describedReasons |= temporalResetReasonBit(descriptor.reason);
+    }
+    return requireTrue(
+        describedReasons == ((1u << 12u) - 1u),
+        "reset descriptors must cover every declared temporal reset bit");
+}
+
+bool testStableSceneIdentity() {
+    using renderer::contracts::StableGeometryId;
+    using renderer::contracts::StableMaterialId;
+    using renderer::contracts::StableObjectId;
+
+    static_assert(!std::is_same_v<StableObjectId, StableMaterialId>);
+    static_assert(!std::is_same_v<StableObjectId, StableGeometryId>);
+    static_assert(!std::is_convertible_v<StableObjectId, StableMaterialId>);
+
+    const StableObjectId invalidObject;
+    const StableObjectId object{42u};
+    const StableObjectId sameObject{42u};
+    const StableObjectId differentObject{43u};
+    const StableMaterialId material{42u};
+    const StableGeometryId geometry{7u};
+    return requireTrue(!invalidObject.isValid(),
+                       "zero must remain the explicit invalid stable object ID") &&
+           requireTrue(object.isValid() && material.isValid() && geometry.isValid(),
+                       "non-zero stable scene IDs must be valid") &&
+           requireTrue(object == sameObject && object != differentObject,
+                       "stable IDs must compare by their preserved numeric identity") &&
+           requireTrue(object.value == material.value,
+                       "different ID domains may reuse numeric values without type aliasing");
 }
 
 bool testFrameValidation() {
@@ -128,10 +273,26 @@ bool testFrameValidation() {
         return false;
     }
 
-    frame.renderExtent = {};
+    frame.extents.resourceExtent = {};
+    if (!requireTrue(validateTemporalFrame(frame) ==
+                         TemporalFrameValidationError::InvalidResourceExtent,
+                     "zero resource extent must be rejected")) {
+        return false;
+    }
+
+    frame = completeFrame();
+    frame.extents.renderExtent = {};
     if (!requireTrue(validateTemporalFrame(frame) ==
                          TemporalFrameValidationError::InvalidRenderExtent,
                      "zero render extent must be rejected")) {
+        return false;
+    }
+
+    frame = completeFrame();
+    frame.extents.signalRect = {1500u, 800u, 640u, 360u};
+    if (!requireTrue(validateTemporalFrame(frame) ==
+                         TemporalFrameValidationError::InvalidSignalRect,
+                     "signal rectangles outside the resource must be rejected")) {
         return false;
     }
 
@@ -218,7 +379,7 @@ bool testTemporalUpscaleDispatch() {
     TemporalUpscalePass pass;
     UpscaleSettings settings;
     TemporalFrameInput frame = completeFrame();
-    frame.outputExtent = frame.renderExtent;
+    frame.extents.outputExtent = frame.extents.renderExtent;
 
     const TemporalUpscaleResult nativeResult = pass.execute(
         settings,
@@ -230,19 +391,19 @@ bool testTemporalUpscaleDispatch() {
         !requireTrue(nativeResult.outputHdrColorView.index ==
                          frame.textures.hdrColorView.index,
                      "native temporal reconstruction must preserve the HDR scene view") ||
-        !requireTrue(nativeResult.outputExtent == frame.outputExtent,
+        !requireTrue(nativeResult.outputExtent == frame.extents.outputExtent,
                      "native temporal reconstruction must preserve the output extent")) {
         return false;
     }
 
-    frame.outputExtent = {1920u, 1080u};
+    frame.extents.outputExtent = {1920u, 1080u};
     if (!requireTrue(pass.execute(settings, frame).status ==
                          TemporalUpscaleStatus::NativeExtentMismatch,
                      "native temporal reconstruction must reject mismatched extents")) {
         return false;
     }
 
-    frame.outputExtent = frame.renderExtent;
+    frame.extents.outputExtent = frame.extents.renderExtent;
     settings.type = TemporalUpscalerType::Fsr31;
     if (!requireTrue(pass.execute(settings, frame).status ==
                          TemporalUpscaleStatus::Fsr31Unavailable,
@@ -270,7 +431,9 @@ int main() {
     if (!testSettingsDefaults()) return 1;
     if (!testTemporalReconstructionSelection()) return 1;
     if (!testMotionVectorConvention()) return 1;
+    if (!testTemporalExtents()) return 1;
     if (!testTemporalReset()) return 1;
+    if (!testStableSceneIdentity()) return 1;
     if (!testFrameValidation()) return 1;
     if (!testTemporalUpscaleDispatch()) return 1;
     return 0;

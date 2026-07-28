@@ -381,8 +381,8 @@ void destroyFsr31SmokeTexture(
     }
 
     TemporalFrameInput frame;
-    frame.renderExtent = kRenderExtent;
-    frame.outputExtent = kOutputExtent;
+    frame.extents = makeTemporalFrameExtents(
+        kRenderExtent, kRenderExtent, kRenderExtent, kOutputExtent);
     frame.motionVectorScale = glm::vec2(
         static_cast<float>(kRenderExtent.width),
         static_cast<float>(kRenderExtent.height));
@@ -391,7 +391,7 @@ void destroyFsr31SmokeTexture(
     frame.cameraNear = 0.1f;
     frame.cameraFar = 1000.0f;
     frame.verticalFovRadians = 1.0f;
-    frame.reset = true;
+    frame.resetReasons = temporalResetReasonBit(TemporalResetReason::FirstFrame);
     frame.textures.hdrColor = hdr.texture;
     frame.textures.hdrColorView = hdr.view;
     frame.textures.depth = depth.texture;
@@ -410,7 +410,7 @@ void destroyFsr31SmokeTexture(
     const TemporalUpscaleResult firstResult = pass.execute(settings, frame);
     TemporalUpscaleResult secondResult;
     if (firstResult.succeeded()) {
-        frame.reset = false;
+        frame.resetReasons = temporalResetReasonBit(TemporalResetReason::None);
         secondResult = pass.execute(settings, frame);
     }
     device.waitIdle();
@@ -580,8 +580,8 @@ void destroyDlssSmokeTexture(
     }
 
     TemporalFrameInput frame;
-    frame.renderExtent = renderExtent;
-    frame.outputExtent = kOutputExtent;
+    frame.extents = makeTemporalFrameExtents(
+        renderExtent, renderExtent, renderExtent, kOutputExtent);
     frame.motionVectorScale = glm::vec2(
         static_cast<float>(renderExtent.width),
         static_cast<float>(renderExtent.height));
@@ -592,7 +592,7 @@ void destroyDlssSmokeTexture(
     frame.verticalFovRadians = 1.0f;
     frame.cameraAspectRatio = static_cast<float>(kOutputExtent.width) /
                               static_cast<float>(kOutputExtent.height);
-    frame.reset = true;
+    frame.resetReasons = temporalResetReasonBit(TemporalResetReason::FirstFrame);
     frame.textures.hdrColor = hdr.texture;
     frame.textures.hdrColorView = hdr.view;
     frame.textures.depth = depth.texture;
@@ -617,7 +617,7 @@ void destroyDlssSmokeTexture(
         frame.frameIndex = 1u;
         frame.jitter = queryDlssJitter(
             frame.frameIndex, renderExtent, kOutputExtent).jitter;
-        frame.reset = false;
+        frame.resetReasons = temporalResetReasonBit(TemporalResetReason::None);
         secondResult = pass.execute(settings, frame);
     }
     device.waitIdle();

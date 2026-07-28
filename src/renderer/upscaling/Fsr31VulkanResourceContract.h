@@ -70,12 +70,12 @@ struct Fsr31ResourceResolveResult {
 };
 
 /// Validate native image metadata required by an FSR 3.1 Vulkan dispatch.
-/// @param renderExtent Resolution shared by scene inputs except exposure.
+/// @param resourceExtent Allocated resolution shared by scene inputs except exposure.
 /// @param outputExtent Resolution of the storage output image.
 /// @param resources Native Vulkan resource metadata resolved from RHI handles.
 /// @return Empty on success, otherwise the first invalid resource and reason.
 [[nodiscard]] std::optional<Fsr31ResourceValidationFailure>
-validateFsr31VulkanResourceSet(TemporalExtent renderExtent,
+validateFsr31VulkanResourceSet(TemporalExtent resourceExtent,
                               TemporalExtent outputExtent,
                               const Fsr31VulkanResourceSet& resources);
 

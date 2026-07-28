@@ -348,10 +348,10 @@ Fsr31VulkanDispatchResult Fsr31VulkanContext::dispatch(
         return Fsr31VulkanDispatchResult{
             Fsr31VulkanDispatchStatus::InvalidSettings};
     }
-    if (frame.renderExtent.width > m_impl->maxRenderExtent.width ||
-        frame.renderExtent.height > m_impl->maxRenderExtent.height ||
-        frame.outputExtent.width > m_impl->maxOutputExtent.width ||
-        frame.outputExtent.height > m_impl->maxOutputExtent.height) {
+    if (frame.extents.resourceExtent.width > m_impl->maxRenderExtent.width ||
+        frame.extents.resourceExtent.height > m_impl->maxRenderExtent.height ||
+        frame.extents.outputExtent.width > m_impl->maxOutputExtent.width ||
+        frame.extents.outputExtent.height > m_impl->maxOutputExtent.height) {
         return Fsr31VulkanDispatchResult{
             Fsr31VulkanDispatchStatus::ContextExtentExceeded};
     }
@@ -443,14 +443,14 @@ Fsr31VulkanDispatchResult Fsr31VulkanContext::dispatch(
     dispatchDesc.motionVectorScale = {
         motionVectorScale.x, motionVectorScale.y};
     dispatchDesc.renderSize = {
-        frame.renderExtent.width, frame.renderExtent.height};
+        frame.extents.renderRect.width, frame.extents.renderRect.height};
     dispatchDesc.upscaleSize = {
-        frame.outputExtent.width, frame.outputExtent.height};
+        frame.extents.outputExtent.width, frame.extents.outputExtent.height};
     dispatchDesc.enableSharpening = desc.enableSharpening;
     dispatchDesc.sharpness = desc.sharpness;
     dispatchDesc.frameTimeDelta = frame.frameDeltaMilliseconds;
     dispatchDesc.preExposure = frame.preExposure;
-    dispatchDesc.reset = frame.reset;
+    dispatchDesc.reset = requiresTemporalReset(frame.resetReasons);
     dispatchDesc.cameraNear = frame.cameraNear;
     dispatchDesc.cameraFar = frame.cameraFar;
     dispatchDesc.cameraFovAngleVertical = frame.verticalFovRadians;

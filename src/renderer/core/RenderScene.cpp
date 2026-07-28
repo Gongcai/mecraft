@@ -137,8 +137,8 @@ bool beginSceneCaptureRendering(RhiCommandList& commandList,
     renderingInfo.renderArea = {
         0,
         0,
-        ctx.renderExtent.width,
-        ctx.renderExtent.height
+        ctx.temporalExtents.renderExtent.width,
+        ctx.temporalExtents.renderExtent.height
     };
     renderingInfo.colorAttachments = &colorAttachment;
     renderingInfo.colorAttachmentCount = 1u;
@@ -180,7 +180,8 @@ bool beginWeatherRendering(RhiCommandList& commandList,
 
     RhiRenderingInfo renderingInfo;
     renderingInfo.debugName = "SceneCapture.Weather";
-    renderingInfo.renderArea = {0, 0, ctx.renderExtent.width, ctx.renderExtent.height};
+    renderingInfo.renderArea = {
+        0, 0, ctx.temporalExtents.renderExtent.width, ctx.temporalExtents.renderExtent.height};
     renderingInfo.colorAttachments = colorAttachments;
     renderingInfo.colorAttachmentCount = 3u;
     renderingInfo.depthStencilAttachment = &depthAttachment;
@@ -278,6 +279,12 @@ void RenderScene::shutdown() {
     m_fsr1Supported = false;
     m_temporalUpscalePass.shutdown();
     m_postProcessPass.shutdown();
+    m_hasPreviousContext = false;
+    m_pendingTemporalResetReasons =
+        temporalResetReasonBit(TemporalResetReason::FirstFrame);
+    m_temporalFrameInput.reset();
+    m_temporalUpscaleResult.reset();
+    m_lastFrameOutput = {};
 }
 
 bool RenderScene::renderFrame(const IWorldView& worldView,
@@ -690,8 +697,8 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
 
     if (!m_temporalUpscalePass.prepareOutputTarget(
             m_settings.upscale,
-            m_currentContext.renderExtent,
-            m_currentContext.outputExtent)) {
+            m_currentContext.temporalExtents.renderExtent,
+            m_currentContext.temporalExtents.outputExtent)) {
         MECRAFT_LOG_STREAM(
             std::cerr << "[RenderScene] Failed to prepare temporal HDR output target\n");
         m_terrainStreamingService.endFrame();
@@ -803,7 +810,7 @@ void RenderScene::setPipelineMode(PipelineMode mode) {
     if (m_settings.pipelineMode == mode) return;
 
     m_settings.pipelineMode = mode;
-    invalidateFrameHistory();
+    invalidateFrameHistory(temporalResetReasonBit(TemporalResetReason::PipelineMode));
 
     // Phase 9: Switch active pipeline
     if (m_forwardPipeline && m_deferredPipeline) {
@@ -857,22 +864,28 @@ void RenderScene::setSettings(const RenderSettings& settings) {
         setPipelineMode(settings.pipelineMode);
     }
 
-    const bool upscaleChanged =
-        settings.upscale.type != m_settings.upscale.type ||
-        settings.upscale.quality != m_settings.upscale.quality ||
+    TemporalResetReasons resetReasons =
+        temporalResetReasonBit(TemporalResetReason::None);
+    if (settings.upscale.type != m_settings.upscale.type ||
+        settings.upscale.debugVisualizationEnabled !=
+            m_settings.upscale.debugVisualizationEnabled ||
+        settings.upscale.fsr1Enabled != m_settings.upscale.fsr1Enabled) {
+        resetReasons = resetReasons | TemporalResetReason::Method;
+    }
+    if (settings.upscale.quality != m_settings.upscale.quality ||
         settings.upscale.outputWidth != m_settings.upscale.outputWidth ||
         settings.upscale.outputHeight != m_settings.upscale.outputHeight ||
         settings.upscale.dynamicResolutionEnabled !=
             m_settings.upscale.dynamicResolutionEnabled ||
-        settings.upscale.debugVisualizationEnabled !=
-            m_settings.upscale.debugVisualizationEnabled ||
-        settings.upscale.fsr1Enabled != m_settings.upscale.fsr1Enabled ||
-        std::abs(settings.upscale.fsr1RenderScale - m_settings.upscale.fsr1RenderScale) > 0.0001f;
+        std::abs(settings.upscale.fsr1RenderScale -
+                 m_settings.upscale.fsr1RenderScale) > 0.0001f) {
+        resetReasons = resetReasons | TemporalResetReason::ResourceExtent;
+    }
 
     m_settings = settings;
 
-    if (upscaleChanged) {
-        invalidateFrameHistory();
+    if (requiresTemporalReset(resetReasons)) {
+        invalidateFrameHistory(resetReasons);
     }
 
 }
@@ -1077,10 +1090,10 @@ ShadowCullFrameStats RenderScene::shadowCullStats() const {
 
 RenderScene::PresentationDebugInfo RenderScene::presentationDebugInfo() const {
     PresentationDebugInfo info;
-    info.renderWidth = m_currentContext.renderExtent.width;
-    info.renderHeight = m_currentContext.renderExtent.height;
-    info.outputWidth = m_currentContext.outputExtent.width;
-    info.outputHeight = m_currentContext.outputExtent.height;
+    info.renderWidth = m_currentContext.temporalExtents.renderExtent.width;
+    info.renderHeight = m_currentContext.temporalExtents.renderExtent.height;
+    info.outputWidth = m_currentContext.temporalExtents.outputExtent.width;
+    info.outputHeight = m_currentContext.temporalExtents.outputExtent.height;
     if (m_shared.rhiDevice != nullptr) {
         info.presentMode = m_shared.rhiDevice->capabilities().swapchainPresentMode;
         info.valid = true;
@@ -1110,7 +1123,8 @@ void RenderScene::setNewPipelineActive(bool active) {
     }
     m_newPipelineActive = active && isNewPipelineReady() && m_activePipelineInitialized;
     if (m_newPipelineActive && !wasActive) {
-        invalidateFrameHistory();
+        invalidateFrameHistory(
+            temporalResetReasonBit(TemporalResetReason::PipelineMode));
     }
 }
 
@@ -1248,14 +1262,16 @@ std::optional<FrameContext> RenderScene::buildFrameContext(
     ctx.debugService = &m_debugService;
     ctx.renderLocalPlayerModel = m_renderLocalPlayerModel;
 
-    ctx.renderExtent = {
+    const TemporalExtent renderExtent{
         static_cast<uint32_t>(std::max(1, frameRenderSize.x)),
         static_cast<uint32_t>(std::max(1, frameRenderSize.y))
     };
-    ctx.outputExtent = {
+    const TemporalExtent outputExtent{
         static_cast<uint32_t>(std::max(1, frameOutputSize.x)),
         static_cast<uint32_t>(std::max(1, frameOutputSize.y))
     };
+    ctx.temporalExtents = makeTemporalFrameExtents(
+        renderExtent, renderExtent, renderExtent, outputExtent);
     ctx.swapchainColorTexture = m_shared.rhiDevice->currentSwapchainColorTexture();
     ctx.swapchainColorView = m_shared.rhiDevice->currentSwapchainColorView();
     ctx.swapchainDepthStencilView = m_shared.rhiDevice->currentSwapchainDepthStencilView();
@@ -1277,7 +1293,9 @@ std::optional<FrameContext> RenderScene::buildFrameContext(
     if (m_settings.upscale.type == TemporalUpscalerType::Fsr31) {
 #if defined(MECRAFT_ENABLE_FSR31)
         const Fsr31JitterResult jitter = queryFsr31Jitter(
-            ctx.frameIndex, ctx.renderExtent, ctx.outputExtent);
+            ctx.frameIndex,
+            ctx.temporalExtents.renderExtent,
+            ctx.temporalExtents.outputExtent);
         if (!jitter.succeeded()) {
             return std::nullopt;
         }
@@ -1288,7 +1306,9 @@ std::optional<FrameContext> RenderScene::buildFrameContext(
     } else if (m_settings.upscale.type == TemporalUpscalerType::Dlss) {
 #if defined(MECRAFT_ENABLE_STREAMLINE)
         const DlssJitterResult jitter = queryDlssJitter(
-            ctx.frameIndex, ctx.renderExtent, ctx.outputExtent);
+            ctx.frameIndex,
+            ctx.temporalExtents.renderExtent,
+            ctx.temporalExtents.outputExtent);
         if (!jitter.succeeded()) {
             return std::nullopt;
         }
@@ -1325,13 +1345,26 @@ std::optional<FrameContext> RenderScene::buildFrameContext(
     }
 
     // Previous frame data (temporal)
-    ctx.temporalReset = requiresTemporalReset(
+    TemporalResetReasons explicitResetReasons = m_pendingTemporalResetReasons;
+    if (m_hasPreviousContext && m_previousContext.worldView != &worldView) {
+        explicitResetReasons = explicitResetReasons | TemporalResetReason::WorldReload;
+    }
+    if (m_hasPreviousContext &&
+        m_previousContext.camera.projection != ctx.camera.projection) {
+        explicitResetReasons = explicitResetReasons | TemporalResetReason::Projection;
+    }
+    if (m_hasPreviousContext &&
+        m_previousContext.frameIndex + 1u != ctx.frameIndex) {
+        explicitResetReasons =
+            explicitResetReasons | TemporalResetReason::FrameDiscontinuity;
+    }
+    ctx.temporalResetReasons = evaluateTemporalResetReasons(
         m_hasPreviousContext,
-        m_previousContext.renderExtent,
-        m_previousContext.outputExtent,
-        ctx.renderExtent,
-        ctx.outputExtent);
-    if (!ctx.temporalReset) {
+        m_previousContext.temporalExtents,
+        ctx.temporalExtents,
+        explicitResetReasons,
+        {});
+    if (!requiresTemporalReset(ctx.temporalResetReasons)) {
         ctx.prevCamera = m_previousContext.camera;
         ctx.previousJitter = m_previousContext.jitter;
         ctx.previousViewProj = m_previousContext.camera.viewProj;
@@ -1472,6 +1505,8 @@ std::optional<FrameContext> RenderScene::buildFrameContext(
     // Store current context as previous for next frame
     m_previousContext = ctx;
     m_hasPreviousContext = true;
+    m_pendingTemporalResetReasons =
+        temporalResetReasonBit(TemporalResetReason::None);
 
     return ctx;
 }
@@ -1526,7 +1561,8 @@ bool RenderScene::isFsr1RuntimeEnabled() const {
            m_settings.pipelineMode == PipelineMode::Deferred;
 }
 
-void RenderScene::invalidateFrameHistory() {
+void RenderScene::invalidateFrameHistory(const TemporalResetReasons reasons) {
+    m_pendingTemporalResetReasons |= reasons;
     m_hasPreviousContext = false;
     m_temporalFrameInput.reset();
     m_temporalUpscaleResult.reset();
@@ -1545,20 +1581,20 @@ void RenderScene::refreshTemporalFrameInput() {
 
     TemporalFrameInput input;
     input.frameIndex = m_currentContext.frameIndex;
-    input.renderExtent = m_currentContext.renderExtent;
-    input.outputExtent = m_currentContext.outputExtent;
+    input.extents = m_currentContext.temporalExtents;
     input.jitter = m_currentContext.jitter;
     input.motionVectorScale = {
-        static_cast<float>(m_currentContext.renderExtent.width),
-        static_cast<float>(m_currentContext.renderExtent.height)
+        static_cast<float>(m_currentContext.temporalExtents.renderExtent.width),
+        static_cast<float>(m_currentContext.temporalExtents.renderExtent.height)
     };
     input.frameDeltaMilliseconds = m_currentContext.deltaTime * 1000.0f;
     input.preExposure = 1.0f;
     input.cameraNear = m_currentContext.camera.nearPlane;
     input.cameraFar = m_currentContext.camera.farPlane;
     input.verticalFovRadians = glm::radians(m_currentContext.camera.fovDegrees);
-    input.cameraAspectRatio = static_cast<float>(m_currentContext.outputExtent.width) /
-                              static_cast<float>(m_currentContext.outputExtent.height);
+    input.cameraAspectRatio =
+        static_cast<float>(m_currentContext.temporalExtents.outputExtent.width) /
+        static_cast<float>(m_currentContext.temporalExtents.outputExtent.height);
     input.cameraViewToClip = m_currentContext.camera.projection;
     input.clipToCameraView = glm::inverse(m_currentContext.camera.projection);
     input.clipToPrevClip = m_currentContext.previousViewProj *
@@ -1570,7 +1606,7 @@ void RenderScene::refreshTemporalFrameInput() {
     input.cameraUp = glm::normalize(glm::vec3(inverseView[1]));
     input.cameraForward = glm::normalize(-glm::vec3(inverseView[2]));
     input.depthInverted = false;
-    input.reset = m_currentContext.temporalReset;
+    input.resetReasons = m_currentContext.temporalResetReasons;
     input.textures.hdrColor = m_postProcessPass.sceneColorTextureHandle();
     input.textures.hdrColorView = m_postProcessPass.sceneColorTextureViewHandle();
     input.textures.depth = m_lastFrameOutput.gbufferDepth;

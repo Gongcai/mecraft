@@ -305,8 +305,9 @@ private:
         bool lightDebugActive,
         float& cameraRainVisibility);
 
-    /// Invalidate temporal/history resources when pipeline changes
-    void invalidateFrameHistory();
+    /// Invalidate temporal resources and preserve the exact cause for the next frame.
+    /// @param reasons Non-empty bitmask describing why existing histories are invalid.
+    void invalidateFrameHistory(TemporalResetReasons reasons);
     void refreshTemporalFrameInput();
 
     // Configuration
@@ -340,6 +341,8 @@ private:
     std::optional<TemporalFrameInput> m_temporalFrameInput;
     std::optional<TemporalUpscaleResult> m_temporalUpscaleResult;
     bool m_hasPreviousContext = false;
+    TemporalResetReasons m_pendingTemporalResetReasons =
+        temporalResetReasonBit(TemporalResetReason::FirstFrame);
     double m_contextCpuMs = 0.0;
     bool m_eyeInWater = false;
     bool m_renderLocalPlayerModel = false;

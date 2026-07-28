@@ -391,8 +391,8 @@ FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderS
 
     auto& targets = *m_shared->deferredTargets;
     RhiDevice& rhiDevice = *m_shared->rhiDevice;
-    const int windowWidth = static_cast<int>(ctx.renderExtent.width);
-    const int windowHeight = static_cast<int>(ctx.renderExtent.height);
+    const int windowWidth = static_cast<int>(ctx.temporalExtents.renderExtent.width);
+    const int windowHeight = static_cast<int>(ctx.temporalExtents.renderExtent.height);
 
     // Use settings from RenderScene
     m_currentSettings = settings;
@@ -534,13 +534,14 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
         m_transparentPassPlan = {};
         m_graphCpuTerrainPrepMs = 0.0;
     }
+    const bool temporalReset = requiresTemporalReset(ctx.temporalResetReasons);
     const bool ssaoEnabled = settings.ssao.enabled;
     const bool ssaoTemporalEnabled =
-        ssaoEnabled && settings.ssao.temporalEnabled && !ctx.temporalReset;
+        ssaoEnabled && settings.ssao.temporalEnabled && !temporalReset;
     const bool ssgiEnabled =
         settings.ssgi.enabled && settings.debug.deferredLightDebugMode <= 0;
     const bool ssgiTemporalEnabled =
-        ssgiEnabled && settings.ssgi.temporalEnabled && !ctx.temporalReset;
+        ssgiEnabled && settings.ssgi.temporalEnabled && !temporalReset;
     const bool reflectionFilterEnabled =
         settings.debug.deferredLightDebugMode <= 0 &&
         settings.reflection.filterEnabled &&
@@ -548,9 +549,9 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
     const bool reflectionTemporalEnabled =
         settings.debug.deferredLightDebugMode <= 0 &&
         settings.reflection.temporalEnabled &&
-        settings.debug.reflectionDebugMode == 0 && !ctx.temporalReset;
+        settings.debug.reflectionDebugMode == 0 && !temporalReset;
     const bool cloudEnabled = settings.debug.deferredLightDebugMode <= 0;
-    const bool hasPreviousFrame = m_hasPreviousFrameData && !ctx.temporalReset;
+    const bool hasPreviousFrame = m_hasPreviousFrameData && !temporalReset;
     const bool nativeTaaEnabled =
         usesNativeTaaResolve(settings.upscale.type, settings.taa.enabled) &&
         hasPreviousFrame;
@@ -1111,7 +1112,8 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
     m_terrainDrawsPrepared = false;
     const bool hiZCullActive = !externalGeometry &&
         settings.occlusion.hiZEnabled &&
-        m_hiZPass != nullptr && m_hasPreviousFrameData && !ctx.temporalReset;
+        m_hiZPass != nullptr && m_hasPreviousFrameData &&
+        !requiresTemporalReset(ctx.temporalResetReasons);
     if (!externalGeometry && settings.occlusion.hiZEnabled &&
         m_hiZPass != nullptr) {
         HiZPass::GraphResources hiZResources;

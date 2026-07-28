@@ -203,8 +203,8 @@ bool ForwardPipeline::recordSkyPass(const FrameContext& ctx,
     renderingInfo.renderArea = {
         0,
         0,
-        ctx.renderExtent.width,
-        ctx.renderExtent.height
+        ctx.temporalExtents.renderExtent.width,
+        ctx.temporalExtents.renderExtent.height
     };
     renderingInfo.colorAttachments = &colorAttachment;
     renderingInfo.colorAttachmentCount = 1u;
@@ -214,8 +214,8 @@ bool ForwardPipeline::recordSkyPass(const FrameContext& ctx,
     commandList.setViewport({
         0.0f,
         0.0f,
-        static_cast<float>(ctx.renderExtent.width),
-        static_cast<float>(ctx.renderExtent.height),
+        static_cast<float>(ctx.temporalExtents.renderExtent.width),
+        static_cast<float>(ctx.temporalExtents.renderExtent.height),
         0.0f,
         1.0f
     });
@@ -248,8 +248,8 @@ bool ForwardPipeline::recordScenePass(const FrameContext& ctx,
     renderingInfo.renderArea = {
         0,
         0,
-        ctx.renderExtent.width,
-        ctx.renderExtent.height
+        ctx.temporalExtents.renderExtent.width,
+        ctx.temporalExtents.renderExtent.height
     };
     renderingInfo.colorAttachments = &colorAttachment;
     renderingInfo.colorAttachmentCount = 1u;
@@ -259,8 +259,8 @@ bool ForwardPipeline::recordScenePass(const FrameContext& ctx,
     commandList.setViewport({
         0.0f,
         0.0f,
-        static_cast<float>(ctx.renderExtent.width),
-        static_cast<float>(ctx.renderExtent.height),
+        static_cast<float>(ctx.temporalExtents.renderExtent.width),
+        static_cast<float>(ctx.temporalExtents.renderExtent.height),
         0.0f,
         1.0f
     });
@@ -280,8 +280,8 @@ void ForwardPipeline::renderSky(const FrameContext& ctx,
     if (!m_skyRenderer || !ctx.dayNightSystem || !ctx.cameraPtr) return;
 
     const auto& dayNight = *ctx.dayNightSystem;
-    const float aspect = static_cast<float>(ctx.renderExtent.width) /
-                         static_cast<float>(ctx.renderExtent.height);
+    const float aspect = static_cast<float>(ctx.temporalExtents.renderExtent.width) /
+                         static_cast<float>(ctx.temporalExtents.renderExtent.height);
 
     m_skyRenderer->render(*ctx.cameraPtr, aspect, dayNight, commandList);
 }

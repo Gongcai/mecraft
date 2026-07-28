@@ -197,8 +197,8 @@ DlssVulkanDispatchResult DlssVulkanContext::dispatch(
     const VkRhiDevice& device,
     const RhiCommandList& commandList,
     const TemporalFrameInput& frame) {
-    if (!m_initialized || frame.renderExtent != m_renderExtent ||
-        frame.outputExtent != m_outputExtent) {
+    if (!m_initialized || frame.extents.resourceExtent != m_renderExtent ||
+        frame.extents.outputExtent != m_outputExtent) {
         return {DlssVulkanStatus::RuntimeUnavailable};
     }
     const auto inputColor = VkRhiInterop::textureInfo(
@@ -215,13 +215,13 @@ DlssVulkanDispatchResult DlssVulkanContext::dispatch(
         !depth.has_value() || !motionVectors.has_value() ||
         !exposure.has_value() ||
         !validResource(*inputColor, VK_FORMAT_R16G16B16A16_SFLOAT,
-                       frame.renderExtent, VK_IMAGE_USAGE_SAMPLED_BIT) ||
+                       frame.extents.resourceExtent, VK_IMAGE_USAGE_SAMPLED_BIT) ||
         !validResource(*outputColor, VK_FORMAT_R16G16B16A16_SFLOAT,
-                       frame.outputExtent, VK_IMAGE_USAGE_STORAGE_BIT) ||
+                       frame.extents.outputExtent, VK_IMAGE_USAGE_STORAGE_BIT) ||
         !validResource(*depth, VK_FORMAT_D32_SFLOAT,
-                       frame.renderExtent, VK_IMAGE_USAGE_SAMPLED_BIT) ||
+                       frame.extents.resourceExtent, VK_IMAGE_USAGE_SAMPLED_BIT) ||
         !validResource(*motionVectors, VK_FORMAT_R16G16_SFLOAT,
-                       frame.renderExtent, VK_IMAGE_USAGE_SAMPLED_BIT) ||
+                       frame.extents.resourceExtent, VK_IMAGE_USAGE_SAMPLED_BIT) ||
         !validResource(*exposure, VK_FORMAT_R16G16B16A16_SFLOAT,
                        {1u, 1u}, VK_IMAGE_USAGE_SAMPLED_BIT)) {
         return {DlssVulkanStatus::InvalidResources};
@@ -254,7 +254,7 @@ DlssVulkanDispatchResult DlssVulkanContext::dispatch(
     dispatch.constants.verticalFovRadians = frame.verticalFovRadians;
     dispatch.constants.cameraAspectRatio = frame.cameraAspectRatio;
     dispatch.constants.depthInverted = frame.depthInverted;
-    dispatch.constants.reset = frame.reset;
+    dispatch.constants.reset = requiresTemporalReset(frame.resetReasons);
     dispatch.inputColor = toDlssResource(*inputColor, RhiResourceState::ShaderRead);
     dispatch.outputColor = toDlssResource(*outputColor, RhiResourceState::ShaderWrite);
     dispatch.depth = toDlssResource(*depth, RhiResourceState::ShaderRead);

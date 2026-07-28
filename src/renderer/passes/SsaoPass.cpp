@@ -55,7 +55,8 @@ RgPassHandle SsaoPass::addGraphPasses(RenderGraph& graph,
                                       const GraphResources& resources,
                                       const RgPassHandle dependency,
                                       const bool useAsyncCompute) {
-    const bool temporalEnabled = ssao.temporalEnabled && !ctx.temporalReset;
+    const bool temporalEnabled =
+        ssao.temporalEnabled && !requiresTemporalReset(ctx.temporalResetReasons);
     if (!dependency.isValid() || !resources.depth.isValid() ||
         !resources.normalAo.isValid() || !resources.velocity.isValid() ||
         !resources.noise.isValid() || !resources.halfRes.isValid() ||

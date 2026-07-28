@@ -210,6 +210,14 @@ struct ModelSceneDeferredRenderer::Impl {
             RhiQueueType::Graphics});
     }
 
+    /// Invalidate model-scene histories and preserve their cause until a frame succeeds.
+    /// @param reasons Non-empty bitmask describing why existing histories are invalid.
+    void invalidateTemporalHistory(const TemporalResetReasons reasons) {
+        pendingTemporalResetReasons |= reasons;
+        hasPreviousContext = false;
+        pipeline.invalidateHistory();
+    }
+
     [[nodiscard]] std::optional<FrameContext> buildFrameContext(
         const glm::mat4& view,
         const glm::mat4& projection,
@@ -228,8 +236,10 @@ struct ModelSceneDeferredRenderer::Impl {
         context.camera.nearPlane = nearPlane;
         context.camera.farPlane = farPlane;
         context.camera.fovDegrees = 55.0f;
-        context.renderExtent = {renderWidth, renderHeight};
-        context.outputExtent = {width, height};
+        const TemporalExtent renderExtent{renderWidth, renderHeight};
+        const TemporalExtent outputExtent{width, height};
+        context.temporalExtents = makeTemporalFrameExtents(
+            renderExtent, renderExtent, renderExtent, outputExtent);
         context.sceneCaptureColorTexture =
             postProcess.sceneColorTextureHandle();
         context.sceneCaptureDepthTexture =
@@ -247,7 +257,9 @@ struct ModelSceneDeferredRenderer::Impl {
         if (settings.upscale.type == TemporalUpscalerType::Fsr31) {
 #if defined(MECRAFT_ENABLE_FSR31)
             const Fsr31JitterResult jitter = queryFsr31Jitter(
-                context.frameIndex, context.renderExtent, context.outputExtent);
+                context.frameIndex,
+                context.temporalExtents.renderExtent,
+                context.temporalExtents.outputExtent);
             if (!jitter.succeeded()) {
                 return std::nullopt;
             }
@@ -266,13 +278,23 @@ struct ModelSceneDeferredRenderer::Impl {
         context.camera.jitteredViewProj = jitteredProjection * view;
         context.camera.jitteredInvViewProj =
             glm::inverse(context.camera.jitteredViewProj);
-        context.temporalReset = requiresTemporalReset(
+        TemporalResetReasons explicitResetReasons = pendingTemporalResetReasons;
+        if (hasPreviousContext &&
+            previousContext.camera.projection != context.camera.projection) {
+            explicitResetReasons = explicitResetReasons | TemporalResetReason::Projection;
+        }
+        if (hasPreviousContext &&
+            previousContext.frameIndex + 1u != context.frameIndex) {
+            explicitResetReasons =
+                explicitResetReasons | TemporalResetReason::FrameDiscontinuity;
+        }
+        context.temporalResetReasons = evaluateTemporalResetReasons(
             hasPreviousContext,
-            previousContext.renderExtent,
-            previousContext.outputExtent,
-            context.renderExtent,
-            context.outputExtent);
-        if (!context.temporalReset) {
+            previousContext.temporalExtents,
+            context.temporalExtents,
+            explicitResetReasons,
+            {});
+        if (!requiresTemporalReset(context.temporalResetReasons)) {
             context.prevCamera = previousContext.camera;
             context.previousJitter = previousContext.jitter;
             context.previousViewProj = previousContext.camera.viewProj;
@@ -418,6 +440,8 @@ struct ModelSceneDeferredRenderer::Impl {
     bool viewportUsesFsr1 = false;
     bool initialized = false;
     bool hasPreviousContext = false;
+    TemporalResetReasons pendingTemporalResetReasons =
+        temporalResetReasonBit(TemporalResetReason::FirstFrame);
     std::string error;
 };
 
@@ -517,6 +541,8 @@ void ModelSceneDeferredRenderer::shutdown() {
     state.renderHeight = 0u;
     state.viewportUsesFsr1 = false;
     state.hasPreviousContext = false;
+    state.pendingTemporalResetReasons =
+        temporalResetReasonBit(TemporalResetReason::FirstFrame);
     state.initialized = false;
 }
 
@@ -570,8 +596,8 @@ bool ModelSceneDeferredRenderer::ensureViewport(
         state.height = height;
         state.renderWidth = renderExtent->width;
         state.renderHeight = renderExtent->height;
-        state.hasPreviousContext = false;
-        state.pipeline.invalidateHistory();
+        state.invalidateTemporalHistory(
+            temporalResetReasonBit(TemporalResetReason::ResourceExtent));
     }
     if (state.textureId == 0u) {
         const RhiTextureViewHandle viewportView = useFsr1
@@ -625,12 +651,11 @@ bool ModelSceneDeferredRenderer::render(
     if (!state.fsr1Enabled()) {
         TemporalFrameInput temporalInput;
         temporalInput.frameIndex = context.frameIndex;
-        temporalInput.renderExtent = context.renderExtent;
-        temporalInput.outputExtent = context.outputExtent;
+        temporalInput.extents = context.temporalExtents;
         temporalInput.jitter = context.jitter;
         temporalInput.motionVectorScale = {
-            static_cast<float>(context.renderExtent.width),
-            static_cast<float>(context.renderExtent.height)};
+            static_cast<float>(context.temporalExtents.renderExtent.width),
+            static_cast<float>(context.temporalExtents.renderExtent.height)};
         temporalInput.frameDeltaMilliseconds = deltaTime * 1000.0f;
         temporalInput.preExposure = 1.0f;
         temporalInput.cameraNear = nearPlane;
@@ -651,7 +676,7 @@ bool ModelSceneDeferredRenderer::render(
         temporalInput.cameraForward =
             glm::normalize(-glm::vec3(inverseView[2]));
         temporalInput.depthInverted = false;
-        temporalInput.reset = context.temporalReset;
+        temporalInput.resetReasons = context.temporalResetReasons;
         temporalInput.textures.hdrColor =
             state.postProcess.sceneColorTextureHandle();
         temporalInput.textures.hdrColorView =
@@ -726,6 +751,8 @@ bool ModelSceneDeferredRenderer::render(
     }
     state.previousContext = context;
     state.hasPreviousContext = true;
+    state.pendingTemporalResetReasons =
+        temporalResetReasonBit(TemporalResetReason::None);
     state.error.clear();
     return true;
 }
@@ -740,8 +767,8 @@ void ModelSceneDeferredRenderer::setTimeOfDay(const float timeOfDaySeconds) {
         return;
     }
     state.dayNight.setTimeOfDay(timeOfDaySeconds);
-    state.hasPreviousContext = false;
-    state.pipeline.invalidateHistory();
+    state.invalidateTemporalHistory(
+        temporalResetReasonBit(TemporalResetReason::FrameDiscontinuity));
 }
 
 float ModelSceneDeferredRenderer::timeOfDay() const {
@@ -786,8 +813,8 @@ void ModelSceneDeferredRenderer::setWeather(const WeatherType weather,
     }
     m_impl->weather.setDebugWeatherPreset(weather, instant);
     m_impl->instantWeatherTransition = instant;
-    m_impl->hasPreviousContext = false;
-    m_impl->pipeline.invalidateHistory();
+    m_impl->invalidateTemporalHistory(
+        temporalResetReasonBit(TemporalResetReason::FrameDiscontinuity));
 }
 
 WeatherType ModelSceneDeferredRenderer::weather() const {
@@ -809,9 +836,19 @@ void ModelSceneDeferredRenderer::setSettings(const RenderSettings& settings) {
     if (!state.initialized) {
         std::abort();
     }
+    TemporalResetReasons resetReasons =
+        temporalResetReasonBit(TemporalResetReason::Method);
+    if (settings.upscale.quality != state.settings.upscale.quality ||
+        settings.upscale.outputWidth != state.settings.upscale.outputWidth ||
+        settings.upscale.outputHeight != state.settings.upscale.outputHeight ||
+        settings.upscale.dynamicResolutionEnabled !=
+            state.settings.upscale.dynamicResolutionEnabled ||
+        std::abs(settings.upscale.fsr1RenderScale -
+                 state.settings.upscale.fsr1RenderScale) > 0.0001f) {
+        resetReasons = resetReasons | TemporalResetReason::ResourceExtent;
+    }
     state.settings = settings;
-    state.hasPreviousContext = false;
-    state.pipeline.invalidateHistory();
+    state.invalidateTemporalHistory(resetReasons);
 }
 
 RenderSettings ModelSceneDeferredRenderer::defaultSettings() {

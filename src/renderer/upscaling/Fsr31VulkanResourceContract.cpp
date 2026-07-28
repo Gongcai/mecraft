@@ -64,22 +64,22 @@ struct ResourceRequirement {
 } // namespace
 
 std::optional<Fsr31ResourceValidationFailure> validateFsr31VulkanResourceSet(
-    const TemporalExtent renderExtent,
+    const TemporalExtent resourceExtent,
     const TemporalExtent outputExtent,
     const Fsr31VulkanResourceSet& resources) {
     const std::array<ResourceRequirement, 7u> requirements{{
         {Fsr31ResourceRole::HdrColor, &resources.hdrColor,
-         VK_FORMAT_R16G16B16A16_SFLOAT, renderExtent, VK_IMAGE_ASPECT_COLOR_BIT, false},
+         VK_FORMAT_R16G16B16A16_SFLOAT, resourceExtent, VK_IMAGE_ASPECT_COLOR_BIT, false},
         {Fsr31ResourceRole::Depth, &resources.depth,
-         VK_FORMAT_D32_SFLOAT, renderExtent, VK_IMAGE_ASPECT_DEPTH_BIT, false},
+         VK_FORMAT_D32_SFLOAT, resourceExtent, VK_IMAGE_ASPECT_DEPTH_BIT, false},
         {Fsr31ResourceRole::Velocity, &resources.velocity,
-         VK_FORMAT_R16G16_SFLOAT, renderExtent, VK_IMAGE_ASPECT_COLOR_BIT, false},
+         VK_FORMAT_R16G16_SFLOAT, resourceExtent, VK_IMAGE_ASPECT_COLOR_BIT, false},
         {Fsr31ResourceRole::Exposure, &resources.exposure,
          VK_FORMAT_R16G16B16A16_SFLOAT, {1u, 1u}, VK_IMAGE_ASPECT_COLOR_BIT, false},
         {Fsr31ResourceRole::ReactiveMask, &resources.reactiveMask,
-         VK_FORMAT_R8_UNORM, renderExtent, VK_IMAGE_ASPECT_COLOR_BIT, false},
+         VK_FORMAT_R8_UNORM, resourceExtent, VK_IMAGE_ASPECT_COLOR_BIT, false},
         {Fsr31ResourceRole::TransparencyMask, &resources.transparencyMask,
-         VK_FORMAT_R8_UNORM, renderExtent, VK_IMAGE_ASPECT_COLOR_BIT, false},
+         VK_FORMAT_R8_UNORM, resourceExtent, VK_IMAGE_ASPECT_COLOR_BIT, false},
         {Fsr31ResourceRole::OutputHdrColor, &resources.outputHdrColor,
          VK_FORMAT_R16G16B16A16_SFLOAT, outputExtent, VK_IMAGE_ASPECT_COLOR_BIT, true}
     }};
@@ -139,7 +139,7 @@ Fsr31ResourceResolveResult resolveFsr31VulkanResourceSet(
     }
 
     const auto failure = validateFsr31VulkanResourceSet(
-        frame.renderExtent, frame.outputExtent, resources);
+        frame.extents.resourceExtent, frame.extents.outputExtent, resources);
     if (failure.has_value()) {
         Fsr31ResourceResolveResult result;
         result.status = Fsr31ResourceResolveStatus::InvalidResourceContract;

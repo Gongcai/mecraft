@@ -59,8 +59,8 @@ RgPassHandle SsgiPass::addGraphPasses(RenderGraph& graph,
                                       DeferredRenderTargets& targets,
                                       const GraphResources& resources,
                                       const RgPassHandle dependency) {
-    const bool temporalActive =
-        settings.ssgi.temporalEnabled && !ctx.temporalReset;
+    const bool temporalActive = settings.ssgi.temporalEnabled &&
+                                !requiresTemporalReset(ctx.temporalResetReasons);
     const int denoiseIterations = settings.ssgi.denoiseEnabled
         ? std::clamp(settings.ssgi.denoiseIterations, 0, 4)
         : 0;
