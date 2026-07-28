@@ -14,8 +14,8 @@
 #include "renderer/rhi/RhiDevice.h"
 #include "renderer/rhi/RhiResources.h"
 #include "renderer/core/RenderScene.h"
+#include "renderer/mesh/TerrainStreamingService.h"
 #include "engine/platform/Window.h"
-#include "app/validation/ValidationRunController.h"
 #include "world/World.h"
 #include "world/WeatherSystem.h"
 #include <algorithm>
@@ -304,7 +304,7 @@ Game::takeValidationCaptureResult() {
     return result;
 }
 
-bool Game::prepareValidationScene() {
+bool Game::prepareValidationScene(const float timeOfDaySeconds) {
     if (!m_initialized || !isLoadingComplete() || m_config.isMultiplayer() ||
         m_config.enableSaving ||
         m_config.renderSettingsSource !=
@@ -312,11 +312,19 @@ bool Game::prepareValidationScene() {
         return false;
     }
     World& world = m_session.world();
-    world.getDayNightSystem().setTimeOfDay(
-        app::validation::kValidationWorldTimeSeconds);
+    world.getDayNightSystem().setTimeOfDay(timeOfDaySeconds);
     world.getWeatherSystem().setDebugWeatherPresetInstant(
         WeatherType::Clear);
     return true;
+}
+
+bool Game::isValidationSceneReady() const {
+    if (!m_initialized || !isLoadingComplete() || !m_renderRuntime) {
+        return false;
+    }
+    return m_renderRuntime->renderScene()
+        .getTerrainStreamingService()
+        .isSettled(m_session.worldView());
 }
 
 const GpuFrameStats* Game::gpuFrameStats() const {
@@ -375,7 +383,12 @@ Game::LoadProgress Game::getLoadProgress() const {
             ? static_cast<float>(chunkProgress.clientLoaded) / static_cast<float>(chunkProgress.target)
             : 0.0f;
         progress.progress = 0.45f + std::clamp(chunkRatio, 0.0f, 1.0f) * 0.55f;
-        progress.label = "Loading chunks";
+        progress.label =
+            chunkProgress.target > 0 &&
+                chunkProgress.clientLoaded >= chunkProgress.target &&
+                !chunkProgress.lightingSettled
+            ? "Stabilizing lighting"
+            : "Loading chunks";
         progress.complete = chunkProgress.complete;
         break;
     }

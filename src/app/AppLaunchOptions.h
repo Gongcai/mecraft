@@ -46,8 +46,7 @@ struct AppLaunchOptions {
     bool rhiBackendExplicit = false;
     RhiBackend rhiBackend;
 
-    ValidationScene validationScene = ValidationScene::None;
-    std::filesystem::path validationCameraPath;
+    std::filesystem::path validationScenePath;
     std::filesystem::path validationCapturePath;
     std::filesystem::path validationReportPath;
     uint32_t validationWarmupFrames = 300u;
@@ -60,7 +59,7 @@ struct AppLaunchOptions {
     bool validationHeightSet = false;
 
     /// Reports whether a deterministic validation run was requested.
-    /// @return True when validationScene identifies a concrete scene class.
+    /// @return True when a versioned scene descriptor was supplied.
     [[nodiscard]] bool validationEnabled() const;
 };
 

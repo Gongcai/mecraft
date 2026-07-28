@@ -26,7 +26,10 @@ bool GameplayAppState::beginValidation() {
     if (!m_deps.validationRun.enabled()) {
         return true;
     }
-    if (!m_game->prepareValidationScene()) {
+    const app::validation::ValidationSceneContract& contract =
+        m_deps.validationRun.sceneContract();
+    if (!m_game->prepareValidationScene(
+            static_cast<float>(contract.environment.timeOfDaySeconds))) {
         m_deps.validationRun.fail(
             app::validation::ValidationRunError::SceneInitializationFailed,
             "gameplay validation requires a loaded local session with persistence disabled and fixed renderer settings");
@@ -40,6 +43,7 @@ bool GameplayAppState::beginValidation() {
     m_previousTimeSpeed = Time::getTimeSpeed();
     Time::setTimeSpeed(0.0);
     m_validationActive = true;
+    m_validationSceneReady = false;
     m_deps.input.captureMouse(false);
     return true;
 }
@@ -98,6 +102,7 @@ void GameplayAppState::onExit() {
         Time::setTimeSpeed(m_previousTimeSpeed);
         m_validationActive = false;
     }
+    m_validationSceneReady = false;
     m_deps.input.captureMouse(false);
     m_quitToMenuPending = false;
     m_closeAppAfterExitScreenshot = false;
@@ -199,7 +204,7 @@ void GameplayAppState::render(double frameTime) {
                 validationFrame->renderTimeSeconds,
                 validationFrame->renderTimeSeconds};
             const std::filesystem::path* capturePath =
-                validationFrame->captureAfterRender
+                m_validationSceneReady && validationFrame->captureAfterRender
                 ? &options.validationCapturePath
                 : nullptr;
             if (!m_game->configureValidationFrame(
@@ -213,6 +218,12 @@ void GameplayAppState::render(double frameTime) {
                 m_deps.validationRun.fail(
                     app::validation::ValidationRunError::RenderFailed,
                     "gameplay validation scene rendering failed");
+                return;
+            }
+
+            if (!m_validationSceneReady) {
+                m_validationSceneReady =
+                    m_game->isValidationSceneReady();
                 return;
             }
 

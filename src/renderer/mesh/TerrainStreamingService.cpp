@@ -59,6 +59,10 @@ void TerrainStreamingService::submitMeshingJobs(const IWorldView& worldView, con
     syncFrameStats();
 }
 
+bool TerrainStreamingService::isSettled(const IWorldView& worldView) const {
+    return m_terrainCache.isMeshingSettled(worldView);
+}
+
 void TerrainStreamingService::endFrame() {
 #ifdef MECRAFT_DEBUG
     const int submitted = m_terrainCache.meshingSubmittedThisFrame();

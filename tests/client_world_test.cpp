@@ -126,6 +126,27 @@ static void testSetRenderDistance() {
     std::printf("[PASS] testSetRenderDistance\n");
 }
 
+static void testChunkLoadProgressIncludesMeshingHalo() {
+    client::ClientWorld world;
+    world.setRenderDistance(1);
+
+    for (int cx = -2; cx <= 2; ++cx) {
+        for (int cz = -2; cz <= 2; ++cz) {
+            if (cx * cx + cz * cz <= 4) {
+                world.addChunk(std::make_shared<Chunk>(cx, cz));
+            }
+        }
+    }
+
+    const client::ClientWorld::ChunkLoadProgress progress =
+        world.getChunkLoadProgress(glm::vec3(0.0f));
+    require(progress.target == 13,
+            "client load target should include the one-chunk meshing halo");
+    require(progress.loaded == progress.target,
+            "client load progress should count every loaded halo chunk");
+    std::printf("[PASS] testChunkLoadProgressIncludesMeshingHalo\n");
+}
+
 static void testWeatherDayNightProxy() {
     client::ClientWorld cw;
     assert(cw.dayNightSystem() == nullptr);
@@ -309,6 +330,7 @@ int main() {
     testIsChunkLoadedForBlock();
     testGetChunkCoords();
     testSetRenderDistance();
+    testChunkLoadProgressIncludesMeshingHalo();
     testWeatherDayNightProxy();
     testNeighborLinkingDirtiesExistingBorders();
     testClientWorldRaycastHitsBlocks();

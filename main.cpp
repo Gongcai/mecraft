@@ -26,8 +26,7 @@ void printUsage() {
         << "  --benchmark-report <file>          Write gameplay replay frame timing summary as JSON.\n"
         << "  --benchmark-save-root <path>       Save root for benchmark worlds.\n"
         << "  --benchmark-no-save                Disable saving for benchmark gameplay.\n"
-        << "  --validation-scene <voxel|model>  Run one deterministic validation scene.\n"
-        << "  --validation-camera-path <file>   Versioned Camera Path used by validation.\n"
+        << "  --validation-scene-file <file>    Versioned scene identity used by validation.\n"
         << "  --validation-capture <file>       Write the final scene frame as PNG.\n"
         << "  --validation-report <file>        Write timing and capture metadata as JSON.\n"
         << "  --validation-warmup-frames <n>    Fixed warmup frame count; default 300.\n"
@@ -178,26 +177,13 @@ bool parseLaunchOptions(int argc, char** argv, AppLaunchOptions& options, std::s
             options.benchmarkSaveRoot = value;
         } else if (arg == "--benchmark-no-save") {
             options.benchmarkEnableSaving = false;
-        } else if (arg == "--validation-scene") {
-            const char* value = nullptr;
-            if (!requireValue(argc, argv, index, "--validation-scene", value,
-                              error)) {
-                return false;
-            }
-            const std::optional<ValidationScene> scene =
-                parseValidationScene(value);
-            if (!scene.has_value()) {
-                error = "Validation scene must be voxel or model";
-                return false;
-            }
-            options.validationScene = *scene;
-        } else if (arg == "--validation-camera-path") {
+        } else if (arg == "--validation-scene-file") {
             const char* value = nullptr;
             if (!requireValue(argc, argv, index,
-                              "--validation-camera-path", value, error)) {
+                              "--validation-scene-file", value, error)) {
                 return false;
             }
-            options.validationCameraPath = value;
+            options.validationScenePath = value;
         } else if (arg == "--validation-capture") {
             const char* value = nullptr;
             if (!requireValue(argc, argv, index, "--validation-capture", value,
@@ -281,9 +267,6 @@ bool parseLaunchOptions(int argc, char** argv, AppLaunchOptions& options, std::s
     if (!options.benchmarkReportPath.empty() && !options.autoStartGameplay) {
         error = "--benchmark-report requires --benchmark or --benchmark-world";
         return false;
-    }
-    if (options.validationScene == ValidationScene::Voxel) {
-        options.autoStartGameplay = true;
     }
     if (!validateAppLaunchOptions(options, error)) {
         return false;

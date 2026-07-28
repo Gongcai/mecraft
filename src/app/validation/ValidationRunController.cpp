@@ -4,60 +4,10 @@
 #include <utility>
 
 namespace app::validation {
-namespace {
-
-void configureCommonValidationSettings(RenderSettings& settings) {
-    settings.pipelineMode = PipelineMode::Deferred;
-    settings.ssao.asyncComputeEnabled = false;
-    settings.cloud.asyncComputeEnabled = false;
-    settings.cloud.updateInterval = 1;
-    settings.volumetric.updateInterval = 1;
-    settings.shadow.farCascadeInterleaved = false;
-    settings.renderGraph.multithreadedRecordEnabled = false;
-    settings.postProcess.motionBlurEnabled = false;
-    settings.postProcess.dofEnabled = false;
-    settings.upscale.type = TemporalUpscalerType::Native;
-    settings.upscale.quality = TemporalUpscaleQuality::Native;
-    settings.upscale.outputWidth = 0u;
-    settings.upscale.outputHeight = 0u;
-    settings.upscale.dynamicResolutionEnabled = false;
-    settings.upscale.debugVisualizationEnabled = false;
-    settings.upscale.fsr1Enabled = false;
-    settings.nvidia.frameGeneration = FrameGenerationType::Disabled;
-    settings.nvidia.reflexMode = ReflexLowLatencyMode::Off;
-    settings.debug = {};
-}
-
-} // namespace
-
-ValidationRenderSettingsProfile makeValidationRenderSettingsProfile(
-    const ValidationScene scene) {
-    ValidationRenderSettingsProfile profile;
-    profile.version = kValidationRenderSettingsVersion;
-    configureCommonValidationSettings(profile.settings);
-    switch (scene) {
-        case ValidationScene::Voxel:
-            profile.id = "m0_voxel_render_settings";
-            return profile;
-        case ValidationScene::Model:
-            profile.id = "m0_model_render_settings";
-            profile.settings.occlusion.hiZEnabled = false;
-            profile.settings.transparent.waterEffectsEnabled = false;
-            profile.settings.transparent.compositeEnabled = false;
-            profile.settings.weather.particlesEnabled = false;
-            profile.settings.weather.rainLinesEnabled = false;
-            profile.settings.taa.enabled = false;
-            profile.settings.shadow.gpuCascadeCullEnabled = false;
-            profile.settings.fog.autoDistanceByRenderDistance = false;
-            return profile;
-        case ValidationScene::None:
-            std::abort();
-    }
-    std::abort();
-}
 
 bool ValidationRunController::configure(const AppLaunchOptions& options) {
     m_options = options;
+    m_sceneContract = {};
     m_cameraPath = {};
     m_renderSettingsProfile = {};
     m_currentFrame.reset();
@@ -71,20 +21,20 @@ bool ValidationRunController::configure(const AppLaunchOptions& options) {
         return true;
     }
 
-    m_renderSettingsProfile =
-        makeValidationRenderSettingsProfile(options.validationScene);
-
-    renderer::contracts::CameraPathLoadResult loaded =
-        renderer::contracts::loadCameraPath(options.validationCameraPath);
+    ValidationSceneContractLoadResult loaded =
+        loadValidationSceneContract(options.validationScenePath);
     if (!loaded.succeeded()) {
-        m_error = ValidationRunError::CameraPathLoadFailed;
+        m_error = ValidationRunError::SceneContractLoadFailed;
         m_detail = std::string(
-            renderer::contracts::cameraPathErrorStableId(loaded.error)) +
+            validationSceneContractErrorStableId(loaded.error)) +
             ":" + loaded.detail;
         m_phase = Phase::Failed;
         return false;
     }
-    m_cameraPath = std::move(loaded.path);
+    m_sceneContract = std::move(loaded.contract);
+    m_cameraPath = std::move(loaded.cameraPath);
+    m_renderSettingsProfile =
+        makeValidationRenderSettingsProfile(m_sceneContract.scene);
     m_phase = Phase::Ready;
     return true;
 }
@@ -95,10 +45,10 @@ bool ValidationRunController::beginScene(const ValidationScene scene) {
              "validation scene startup requires the ready phase");
         return false;
     }
-    if (scene != m_options.validationScene) {
+    if (scene != m_sceneContract.scene) {
         fail(ValidationRunError::SceneMismatch,
              std::string(validationSceneStableId(scene)) + "!=" +
-                 validationSceneStableId(m_options.validationScene));
+                 validationSceneStableId(m_sceneContract.scene));
         return false;
     }
     m_phase = Phase::Running;
@@ -174,7 +124,7 @@ bool ValidationRunController::failed() const {
 }
 
 ValidationScene ValidationRunController::scene() const {
-    return m_options.validationScene;
+    return m_sceneContract.scene;
 }
 
 ValidationRunError ValidationRunController::error() const {
@@ -188,6 +138,11 @@ const std::string& ValidationRunController::detail() const {
 const renderer::contracts::CameraPath&
 ValidationRunController::cameraPath() const {
     return m_cameraPath;
+}
+
+const ValidationSceneContract&
+ValidationRunController::sceneContract() const {
+    return m_sceneContract;
 }
 
 const ValidationRenderSettingsProfile&
@@ -248,8 +203,8 @@ bool ValidationRunController::buildCurrentFrame() {
 const char* validationRunErrorStableId(const ValidationRunError error) {
     switch (error) {
         case ValidationRunError::None: return "None";
-        case ValidationRunError::CameraPathLoadFailed:
-            return "CameraPathLoadFailed";
+        case ValidationRunError::SceneContractLoadFailed:
+            return "SceneContractLoadFailed";
         case ValidationRunError::SceneMismatch: return "SceneMismatch";
         case ValidationRunError::SceneInitializationFailed:
             return "SceneInitializationFailed";

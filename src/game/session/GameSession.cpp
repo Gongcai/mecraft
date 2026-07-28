@@ -628,13 +628,19 @@ GameSession::InitialLoadProgress GameSession::getInitialLoadProgress() const {
     if (!m_isMultiplayer && m_server) {
         const auto serverProgress = m_server->getWorldLoadProgress(loadCenter);
         const auto clientProgress = m_client->clientWorld().getChunkLoadProgress(loadCenter);
+        const LightFrameStats lightStats =
+            m_server->world().getLightFrameStats();
         progress.serverLoaded = serverProgress.loaded;
         progress.clientLoaded = clientProgress.loaded;
         progress.target = std::max(serverProgress.target, clientProgress.target);
-        progress.inFlight = serverProgress.inFlight;
+        progress.inFlight = serverProgress.inFlight + lightStats.inFlight +
+                            lightStats.queued + lightStats.pendingCompleted;
+        progress.lightingSettled = isLightFrameSettled(lightStats);
         progress.complete = progress.target > 0 &&
                             progress.serverLoaded >= progress.target &&
-                            progress.clientLoaded >= progress.target;
+                            progress.clientLoaded >= progress.target &&
+                            serverProgress.inFlight == 0 &&
+                            progress.lightingSettled;
         return progress;
     }
 
@@ -644,6 +650,7 @@ GameSession::InitialLoadProgress GameSession::getInitialLoadProgress() const {
         progress.serverLoaded = progress.clientLoaded;
         progress.target = m_client->spawnChunksTargetCount();
         progress.inFlight = std::max(0, clientProgress.target - clientProgress.loaded);
+        progress.lightingSettled = true;
         progress.complete = m_client->areSpawnChunksReady();
     }
     return progress;

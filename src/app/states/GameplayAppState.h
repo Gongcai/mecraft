@@ -50,6 +50,7 @@ private:
     bool m_quitToMenuPending = false;
     bool m_closeAppAfterExitScreenshot = false;
     bool m_validationActive = false;
+    bool m_validationSceneReady = false;
     double m_previousTimeSpeed = 1.0;
 };
 

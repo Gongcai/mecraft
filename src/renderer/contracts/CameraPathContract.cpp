@@ -1,4 +1,5 @@
 #include "renderer/contracts/CameraPathContract.h"
+#include "renderer/contracts/ContentHashContract.h"
 
 #include <glm/geometric.hpp>
 #include <glm/mat3x3.hpp>
@@ -6,10 +7,8 @@
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
-#include <array>
 #include <cmath>
 #include <cstdlib>
-#include <cstring>
 #include <fstream>
 #include <initializer_list>
 #include <limits>
@@ -18,46 +17,9 @@ namespace renderer::contracts {
 namespace {
 using Json = nlohmann::json;
 
-constexpr uint64_t kFnvOffset = 14695981039346656037ull;
-constexpr uint64_t kFnvPrime = 1099511628211ull;
 constexpr size_t kMaximumIdentifierLength = 128u;
 constexpr size_t kMaximumKeyframeCount = 65536u;
 constexpr double kMinimumVectorLengthSquared = 1.0e-12;
-
-class StableHash final {
-public:
-  void addUint64(const uint64_t value) {
-    for (uint32_t byteIndex = 0u; byteIndex < 8u; ++byteIndex) {
-      addByte(static_cast<uint8_t>(value >> (byteIndex * 8u)));
-    }
-  }
-
-  void addDouble(const double value) {
-    static_assert(sizeof(double) == sizeof(uint64_t));
-    static_assert(std::numeric_limits<double>::is_iec559);
-    uint64_t bits = 0u;
-    const double canonicalValue = value == 0.0 ? 0.0 : value;
-    std::memcpy(&bits, &canonicalValue, sizeof(bits));
-    addUint64(bits);
-  }
-
-  void addString(const std::string_view value) {
-    addUint64(value.size());
-    for (const char character : value) {
-      addByte(static_cast<uint8_t>(character));
-    }
-  }
-
-  [[nodiscard]] uint64_t value() const { return m_value; }
-
-private:
-  void addByte(const uint8_t value) {
-    m_value ^= value;
-    m_value *= kFnvPrime;
-  }
-
-  uint64_t m_value = kFnvOffset;
-};
 
 [[nodiscard]] bool finiteVector(const glm::dvec3 &value) {
   return std::isfinite(value.x) && std::isfinite(value.y) &&
@@ -249,7 +211,7 @@ validateFields(const Json &object,
 }
 
 [[nodiscard]] uint64_t hashPath(const CameraPath &path) {
-  StableHash hash;
+  StableContentHashBuilder hash;
   hash.addString(kCameraPathContractKind);
   hash.addUint64(kCameraPathContractVersion);
   hash.addString(path.id);
@@ -575,14 +537,7 @@ CameraPathError sampleCameraPath(const CameraPath &path,
 }
 
 std::string cameraPathContentHashHex(const uint64_t contentHash) {
-  constexpr char kHexDigits[] = "0123456789abcdef";
-  std::array<char, 16u> characters{};
-  for (size_t index = 0u; index < characters.size(); ++index) {
-    const uint32_t shift =
-        static_cast<uint32_t>((characters.size() - index - 1u) * 4u);
-    characters[index] = kHexDigits[(contentHash >> shift) & 0x0fu];
-  }
-  return std::string(characters.data(), characters.size());
+  return stableContentHashHex(contentHash);
 }
 
 } // namespace renderer::contracts

@@ -1556,11 +1556,12 @@ glm::ivec2 World::getChunkCoords(int worldX, int worldZ) const {
 World::ChunkLoadProgress World::getChunkLoadProgress(const glm::vec3& center) const {
     const int centerChunkX = worldToChunkCoord(static_cast<int>(std::floor(center.x)), Chunk::SIZE_X);
     const int centerChunkZ = worldToChunkCoord(static_cast<int>(std::floor(center.z)), Chunk::SIZE_Z);
+    const int loadRadius = m_ticketManager.loadRadius();
 
     ChunkLoadProgress progress{};
-    for (int dx = -m_renderDistance; dx <= m_renderDistance; ++dx) {
-        for (int dz = -m_renderDistance; dz <= m_renderDistance; ++dz) {
-            if (dx * dx + dz * dz > m_renderDistance * m_renderDistance) {
+    for (int dx = -loadRadius; dx <= loadRadius; ++dx) {
+        for (int dz = -loadRadius; dz <= loadRadius; ++dz) {
+            if (dx * dx + dz * dz > loadRadius * loadRadius) {
                 continue;
             }
 

@@ -2,8 +2,8 @@
 #define MECRAFT_VALIDATION_RUN_CONTROLLER_H
 
 #include "app/AppLaunchOptions.h"
+#include "app/validation/ValidationSceneContract.h"
 #include "renderer/contracts/CameraPathContract.h"
-#include "renderer/core/RenderSettings.h"
 
 #include <cstdint>
 #include <optional>
@@ -12,20 +12,10 @@
 namespace app::validation {
 
 inline constexpr float kValidationFrameDeltaSeconds = 1.0f / 60.0f;
-inline constexpr float kValidationWorldTimeSeconds = 300.0f;
-inline constexpr uint32_t kValidationRenderSettingsVersion = 1u;
-
-/// Stores one immutable renderer configuration used by validation scenes.
-struct ValidationRenderSettingsProfile {
-    std::string id;
-    uint32_t version = 0u;
-    RenderSettings settings;
-};
-
 /// Identifies every deterministic validation-run lifecycle failure.
 enum class ValidationRunError : uint8_t {
     None,
-    CameraPathLoadFailed,
+    SceneContractLoadFailed,
     SceneMismatch,
     SceneInitializationFailed,
     InvalidState,
@@ -87,6 +77,7 @@ public:
     [[nodiscard]] ValidationRunError error() const;
     [[nodiscard]] const std::string& detail() const;
     [[nodiscard]] const renderer::contracts::CameraPath& cameraPath() const;
+    [[nodiscard]] const ValidationSceneContract& sceneContract() const;
     [[nodiscard]] const ValidationRenderSettingsProfile&
     renderSettingsProfile() const;
     [[nodiscard]] const AppLaunchOptions& options() const;
@@ -105,6 +96,7 @@ private:
     [[nodiscard]] bool buildCurrentFrame();
 
     AppLaunchOptions m_options;
+    ValidationSceneContract m_sceneContract;
     renderer::contracts::CameraPath m_cameraPath;
     ValidationRenderSettingsProfile m_renderSettingsProfile;
     std::optional<ValidationFrame> m_currentFrame;
@@ -120,12 +112,6 @@ private:
 /// @param error Validation-run error to identify.
 /// @return Process-lifetime string containing the stable error identifier.
 [[nodiscard]] const char* validationRunErrorStableId(ValidationRunError error);
-
-/// Builds the versioned fixed renderer profile for one validation scene.
-/// @param scene Concrete validation scene that will consume the profile.
-/// @return Complete immutable settings and stable profile metadata.
-[[nodiscard]] ValidationRenderSettingsProfile
-makeValidationRenderSettingsProfile(ValidationScene scene);
 
 } // namespace app::validation
 

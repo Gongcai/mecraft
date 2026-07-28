@@ -1,0 +1,25 @@
+{
+  "kind": "mecraft.validation_scene",
+  "version": 1,
+  "id": "m0_model_damaged_helmet",
+  "scene": "model",
+  "content_hash": "bde98b1cf0faca9a",
+  "camera_path": {
+    "source": "../camera_paths/m0_model_damaged_helmet.json",
+    "id": "m0_model_damaged_helmet",
+    "content_hash": "6f33df94f7766d10"
+  },
+  "render_settings": {
+    "id": "m0_model_render_settings",
+    "version": 1,
+    "content_hash": "9a8940b4590c9585"
+  },
+  "environment": {
+    "time_of_day_seconds": 300.0,
+    "weather": "clear"
+  },
+  "model_asset": {
+    "source": "../../models/showcase/DamagedHelmet.glb",
+    "content_hash": "f67fb46e0033d3dd"
+  }
+}

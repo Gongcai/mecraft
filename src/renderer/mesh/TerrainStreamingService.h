@@ -44,6 +44,11 @@ public:
     /// Submit new meshing jobs for dirty sub-chunks near the camera.
     void submitMeshingJobs(const IWorldView& worldView, const glm::vec3& cameraPos);
 
+    /// Reports whether the current world has no pending terrain mesh mutations.
+    /// @param worldView Frozen world whose dirty sub-chunks are inspected.
+    /// @return True when all required terrain meshes are resident and stable.
+    [[nodiscard]] bool isSettled(const IWorldView& worldView) const;
+
     /// Record meshing history for debug display. Call at end of frame.
     void endFrame();
 

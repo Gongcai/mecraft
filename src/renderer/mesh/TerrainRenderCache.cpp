@@ -430,6 +430,26 @@ void TerrainRenderCache::submitMeshingJobs(const IWorldView& worldView, const gl
     }
 }
 
+bool TerrainRenderCache::isMeshingSettled(const IWorldView& worldView) const {
+    if (m_meshingService == nullptr ||
+        m_meshingService->inFlightCount() != 0 ||
+        !m_meshingInFlight.empty() || !m_deferredMeshResults.empty()) {
+        return false;
+    }
+
+    for (const auto& entry : worldView.getActiveChunks()) {
+        if (!entry.second) {
+            continue;
+        }
+        for (int scy = 0; scy < Chunk::NUM_SUB_CHUNKS; ++scy) {
+            if (entry.second->isSubChunkDirty(scy)) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
 // ---------------------------------------------------------------------------
 // Meshing result drain
 // ---------------------------------------------------------------------------

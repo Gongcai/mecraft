@@ -181,10 +181,11 @@ bool GameManager::init(int width, int height, const char* title, AppLaunchOption
         return false;
     }
 
-    if (m_launchOptions.validationScene == ValidationScene::Model) {
+    if (m_validationRun.scene() == ValidationScene::Model) {
         m_appStateMachine.pushState(
             std::make_unique<ModelSceneAppState>(makeAppStateDependencies()));
-    } else if (m_launchOptions.autoStartGameplay) {
+    } else if (m_validationRun.scene() == ValidationScene::Voxel ||
+               m_launchOptions.autoStartGameplay) {
         GameSessionConfig benchmarkConfig;
         if (!makeBenchmarkSessionConfig(benchmarkConfig)) {
             return false;
@@ -280,25 +281,34 @@ AppStateDependencies GameManager::makeAppStateDependencies() {
 
 bool GameManager::makeBenchmarkSessionConfig(GameSessionConfig& outConfig) const {
     outConfig = GameSessionConfig{};
+    if (m_launchOptions.validationEnabled()) {
+        const app::validation::ValidationSceneContract& contract =
+            m_validationRun.sceneContract();
+        if (contract.scene != ValidationScene::Voxel ||
+            !contract.voxelWorld.has_value()) {
+            MECRAFT_LOG_STREAM(std::cerr
+                << "Voxel validation requires one verified world identity\n");
+            return false;
+        }
+        outConfig.seed = contract.voxelWorld->seed;
+        outConfig.renderDistance = contract.voxelWorld->renderDistance;
+        outConfig.enableSaving = false;
+        outConfig.renderSettingsSource = GameRenderSettingsSource::FixedProfile;
+        outConfig.fixedRenderSettings =
+            m_validationRun.renderSettingsProfile().settings;
+        return true;
+    }
+
     outConfig.seed = m_launchOptions.benchmarkSeed;
-    outConfig.renderDistance = m_launchOptions.validationEnabled()
+    outConfig.renderDistance = m_launchOptions.benchmarkRenderDistanceSet
         ? m_launchOptions.benchmarkRenderDistance
-        : (m_launchOptions.benchmarkRenderDistanceSet
-               ? m_launchOptions.benchmarkRenderDistance
-               : app::loadRenderDistance());
+        : app::loadRenderDistance();
     outConfig.worldName = m_launchOptions.benchmarkWorldName;
     outConfig.worldDisplayName = m_launchOptions.benchmarkWorldDisplayName.empty()
         ? m_launchOptions.benchmarkWorldName
         : m_launchOptions.benchmarkWorldDisplayName;
     outConfig.saveRoot = m_launchOptions.benchmarkSaveRoot;
-    outConfig.enableSaving = m_launchOptions.validationEnabled()
-        ? false
-        : m_launchOptions.benchmarkEnableSaving;
-    if (m_launchOptions.validationEnabled()) {
-        outConfig.renderSettingsSource = GameRenderSettingsSource::FixedProfile;
-        outConfig.fixedRenderSettings =
-            m_validationRun.renderSettingsProfile().settings;
-    }
+    outConfig.enableSaving = m_launchOptions.benchmarkEnableSaving;
 
     if (!m_launchOptions.benchmarkSeedSet && !outConfig.worldName.empty()) {
         const std::filesystem::path worldPath = outConfig.saveRoot / outConfig.worldName;
@@ -604,15 +614,27 @@ bool GameManager::writeBenchmarkReport() {
 
     nlohmann::json root;
     if (m_validationRun.enabled()) {
+        const app::validation::ValidationSceneContract& contract =
+            m_validationRun.sceneContract();
         root["kind"] = "mecraft.validation_capture_report";
         root["version"] = 1;
         root["scene"] = validationSceneStableId(m_validationRun.scene());
+        root["scene_contract"] = {
+            {"id", contract.id},
+            {"version", contract.version},
+            {"content_hash",
+             renderer::contracts::stableContentHashHex(
+                 contract.contentHash)},
+            {"hash_algorithm",
+             renderer::contracts::kStableContentHashAlgorithm},
+            {"source", contract.sourcePath.generic_u8string()}
+        };
         root["camera_path"] = {
             {"id", m_validationRun.cameraPath().id},
             {"content_hash", renderer::contracts::cameraPathContentHashHex(
                 m_validationRun.cameraPath().contentHash)},
             {"duration_seconds", m_validationRun.cameraPath().durationSeconds},
-            {"source", m_launchOptions.validationCameraPath.generic_u8string()}
+            {"source", contract.cameraPath.source.generic_u8string()}
         };
         root["capture"] = {
             {"path", m_launchOptions.validationCapturePath.generic_u8string()},
@@ -628,19 +650,40 @@ bool GameManager::writeBenchmarkReport() {
             m_validationRun.renderSettingsProfile();
         root["render_settings"] = {
             {"id", profile.id},
-            {"version", profile.version}
+            {"version", profile.version},
+            {"content_hash",
+             renderer::contracts::stableContentHashHex(
+                 profile.contentHash)}
         };
         root["environment"] = {
             {"time_of_day_seconds",
-             app::validation::kValidationWorldTimeSeconds},
-            {"weather", "clear"}
+             contract.environment.timeOfDaySeconds},
+            {"weather", app::validation::validationWeatherStableId(
+                 contract.environment.weather)}
         };
         if (m_validationRun.scene() == ValidationScene::Voxel) {
+            const app::validation::ValidationVoxelWorldIdentity& world =
+                *contract.voxelWorld;
             root["voxel_world"] = {
-                {"seed", m_launchOptions.benchmarkSeed},
-                {"render_distance",
-                 m_launchOptions.benchmarkRenderDistance},
+                {"generator", {
+                    {"id", world.generatorId},
+                    {"version", world.generatorVersion}
+                }},
+                {"seed", world.seed},
+                {"render_distance", world.renderDistance},
+                {"content_hash",
+                 renderer::contracts::stableContentHashHex(
+                     world.contentHash)},
                 {"persistent_writes_enabled", false}
+            };
+        } else {
+            const app::validation::ValidationModelAssetIdentity& asset =
+                *contract.modelAsset;
+            root["model_asset"] = {
+                {"source", asset.source.generic_u8string()},
+                {"content_hash",
+                 renderer::contracts::stableContentHashHex(
+                     asset.contentHash)}
             };
         }
     } else {

@@ -228,6 +228,7 @@ find_package(spirv_cross_c CONFIG REQUIRED)
 # [应用层]
 set(SRC_APP
         src/app/AppLaunchOptions.cpp
+        src/app/validation/ValidationSceneContract.cpp
         src/app/validation/ValidationRunController.cpp
         src/app/AppSettings.cpp
         src/app/GameResourceBootstrapper.cpp
@@ -348,6 +349,7 @@ set(SRC_RENDERER
 
         # Contracts
         src/renderer/contracts/CameraPathContract.cpp
+        src/renderer/contracts/ContentHashContract.cpp
         src/renderer/contracts/RenderFeatureContract.cpp
 
         # Capture
@@ -993,6 +995,9 @@ if(MECRAFT_BUILD_TESTS)
     add_mecraft_test(validation_run_controller_test tests/validation_run_controller_test.cpp)
     target_compile_definitions(validation_run_controller_test PRIVATE
             MECRAFT_TEST_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
+    add_mecraft_test(validation_scene_contract_test tests/validation_scene_contract_test.cpp)
+    target_compile_definitions(validation_scene_contract_test PRIVATE
+            MECRAFT_TEST_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
     add_mecraft_test(texture_capture_test tests/texture_capture_test.cpp)
     add_mecraft_test(temporal_frame_contract_test tests/temporal_frame_contract_test.cpp)
     add_mecraft_test(render_feature_contract_test tests/render_feature_contract_test.cpp)
@@ -1106,6 +1111,7 @@ if(MECRAFT_BUILD_TESTS)
     add_mecraft_test(fluid_flow_test tests/fluid_flow_test.cpp)
     add_mecraft_test(thread_pool_test tests/thread_pool_test.cpp)
     add_mecraft_test(chunk_meshing_service_test tests/chunk_meshing_service_test.cpp)
+    add_mecraft_test(terrain_render_cache_test tests/terrain_render_cache_test.cpp)
     add_mecraft_test(chunk_section_test tests/chunk_section_test.cpp)
     add_mecraft_test(chunk_aggregation_test tests/chunk_aggregation_test.cpp)
     add_mecraft_test(meshing_perf_test tests/meshing_perf_test.cpp)

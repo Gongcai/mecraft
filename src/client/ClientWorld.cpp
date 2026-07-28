@@ -350,12 +350,13 @@ size_t ClientWorld::loadedChunkCount() const {
 ClientWorld::ChunkLoadProgress ClientWorld::getChunkLoadProgress(const glm::vec3& center) const {
     const int centerChunkX = static_cast<int>(std::floor(center.x / static_cast<float>(Chunk::SIZE_X)));
     const int centerChunkZ = static_cast<int>(std::floor(center.z / static_cast<float>(Chunk::SIZE_Z)));
+    const int loadRadius = m_renderDistance + 1;
 
     ChunkLoadProgress progress{};
     std::lock_guard lock(m_chunksMutex);
-    for (int dx = -m_renderDistance; dx <= m_renderDistance; ++dx) {
-        for (int dz = -m_renderDistance; dz <= m_renderDistance; ++dz) {
-            if (dx * dx + dz * dz > m_renderDistance * m_renderDistance) {
+    for (int dx = -loadRadius; dx <= loadRadius; ++dx) {
+        for (int dz = -loadRadius; dz <= loadRadius; ++dz) {
+            if (dx * dx + dz * dz > loadRadius * loadRadius) {
                 continue;
             }
 

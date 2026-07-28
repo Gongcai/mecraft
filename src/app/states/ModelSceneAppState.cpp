@@ -115,7 +115,21 @@ void ModelSceneAppState::onEnter() {
         failValidationInitialization(m_scene.lastError());
         return;
     }
-    if (m_scene.importModel(kDefaultModelPath) == entt::null) {
+    std::string initialModelPath = kDefaultModelPath;
+    if (m_deps.validationRun.enabled()) {
+        const app::validation::ValidationSceneContract& contract =
+            m_deps.validationRun.sceneContract();
+        if (contract.scene != ValidationScene::Model ||
+            !contract.modelAsset.has_value()) {
+            failValidationInitialization(
+                "model validation requires one verified model asset");
+            m_scene.shutdown();
+            return;
+        }
+        initialModelPath =
+            contract.modelAsset->resolvedPath.generic_u8string();
+    }
+    if (m_scene.importModel(initialModelPath) == entt::null) {
         MECRAFT_LOG_STREAM(
             std::cerr << "[ModelSceneAppState] " << m_scene.lastError() << '\n');
         failValidationInitialization(m_scene.lastError());
@@ -136,13 +150,15 @@ void ModelSceneAppState::onEnter() {
     m_transformCommandFromGizmo = false;
     m_transformCommandEntityId = scene::kInvalidSceneEntityId;
     if (m_deps.validationRun.enabled()) {
+        const app::validation::ValidationSceneContract& contract =
+            m_deps.validationRun.sceneContract();
         if (!m_scene.setRenderSettings(
                 m_deps.validationRun.renderSettingsProfile().settings)) {
             failValidationInitialization(m_scene.lastError());
             return;
         }
         m_scene.setTimeOfDay(
-            app::validation::kValidationWorldTimeSeconds);
+            static_cast<float>(contract.environment.timeOfDaySeconds));
         m_scene.setTimePaused(true);
         m_scene.setTimeScale(1.0f);
         m_scene.setWeather(WeatherType::Clear, true);

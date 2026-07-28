@@ -39,6 +39,7 @@ public:
         int clientLoaded = 0;
         int target = 0;
         int inFlight = 0;
+        bool lightingSettled = false;
         bool complete = false;
     };
 

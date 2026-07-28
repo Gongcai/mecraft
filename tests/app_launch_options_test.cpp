@@ -52,8 +52,7 @@ int main() {
     }
 
     AppLaunchOptions validation;
-    validation.validationScene = ValidationScene::Voxel;
-    validation.validationCameraPath = "camera.json";
+    validation.validationScenePath = "scene.json";
     validation.validationCapturePath = "capture.png";
     validation.validationReportPath = "report.json";
     std::string error;
@@ -63,9 +62,9 @@ int main() {
     }
 
     AppLaunchOptions invalid = validation;
-    invalid.validationCameraPath.clear();
+    invalid.validationScenePath.clear();
     if (!requireTrue(!validateAppLaunchOptions(invalid, error),
-                     "validation must require a Camera Path")) {
+                     "validation outputs must require a scene descriptor")) {
         return 1;
     }
     invalid = validation;
@@ -100,10 +99,15 @@ int main() {
         return 1;
     }
     invalid = validation;
-    invalid.validationScene = ValidationScene::Model;
     invalid.benchmarkSeedSet = true;
     if (!requireTrue(!validateAppLaunchOptions(invalid, error),
-                     "model validation must reject voxel world options")) {
+                     "scene descriptors must own voxel world options")) {
+        return 1;
+    }
+    invalid = validation;
+    invalid.autoStartGameplay = true;
+    if (!requireTrue(!validateAppLaunchOptions(invalid, error),
+                     "validation must reject benchmark gameplay mode")) {
         return 1;
     }
 

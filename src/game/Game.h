@@ -111,7 +111,12 @@ public:
 
     /// Freezes authoritative world state before deterministic rendering begins.
     /// @return True when the session is non-persistent, local, and fully loaded.
-    [[nodiscard]] bool prepareValidationScene();
+    /// @param timeOfDaySeconds Fixed world time supplied by the scene contract.
+    [[nodiscard]] bool prepareValidationScene(float timeOfDaySeconds);
+
+    /// Reports whether every terrain mesh required by the frozen world is resident.
+    /// @return True after all dirty, executing, and deferred meshing work has drained.
+    [[nodiscard]] bool isValidationSceneReady() const;
 
 private:
     // G1: Structured config and dependencies

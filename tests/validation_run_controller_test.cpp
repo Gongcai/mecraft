@@ -24,10 +24,9 @@ bool nearlyEqual(const double lhs, const double rhs,
 
 int main() {
     AppLaunchOptions options;
-    options.validationScene = ValidationScene::Voxel;
-    options.validationCameraPath =
+    options.validationScenePath =
         std::filesystem::path(MECRAFT_TEST_SOURCE_DIR) /
-        "assets/validation/camera_paths/m0_voxel_baseline.json";
+        "assets/validation/scenes/m0_voxel_baseline.json";
     options.validationCapturePath = "capture.png";
     options.validationReportPath = "report.json";
     options.validationWarmupFrames = 2u;
@@ -41,11 +40,20 @@ int main() {
                     "m0_voxel_render_settings" &&
                 controller.renderSettingsProfile().version ==
                     app::validation::kValidationRenderSettingsVersion &&
+                renderer::contracts::stableContentHashHex(
+                    controller.renderSettingsProfile().contentHash) ==
+                    "511c4e7a0e2e2de9" &&
                 !controller.renderSettingsProfile()
                      .settings.upscale.dynamicResolutionEnabled &&
                 !controller.renderSettingsProfile()
                      .settings.upscale.fsr1Enabled,
             "validation must publish the fixed versioned renderer profile") ||
+        !requireTrue(
+            controller.sceneContract().id == "m0_voxel_baseline" &&
+                controller.sceneContract().voxelWorld.has_value() &&
+                controller.sceneContract().voxelWorld->seed == 1234 &&
+                controller.sceneContract().voxelWorld->renderDistance == 4,
+            "validation must expose the verified scene and world identity") ||
         !requireTrue(controller.beginScene(ValidationScene::Voxel),
                      "the configured scene class must start validation")) {
         return 1;

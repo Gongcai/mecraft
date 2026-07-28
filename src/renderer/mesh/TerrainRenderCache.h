@@ -125,6 +125,7 @@ public:
     void submitMeshingJobs(const IWorldView& worldView, const glm::vec3& cameraPos);
     void drainMeshingResults(const IWorldView& worldView, RhiCommandList& commandList);
     [[nodiscard]] const std::unordered_set<int64_t>& meshingInFlight() const { return m_meshingInFlight; }
+    [[nodiscard]] bool isMeshingSettled(const IWorldView& worldView) const;
 
     [[nodiscard]] int meshingSubmittedThisFrame() const { return m_meshingSubmittedThisFrame; }
     [[nodiscard]] int meshingCompletedThisFrame() const { return m_meshingCompletedThisFrame; }

@@ -111,6 +111,13 @@ struct LightFrameStats {
     int captureCount = 0;
 };
 
-#endif // MECRAFT_LIGHTTYPES_H
+/// Reports whether all queued, executing, and completed lighting work has drained.
+/// @param stats Current lighting scheduler state.
+/// @return True when lighting can no longer mutate loaded chunk meshes.
+[[nodiscard]] inline bool isLightFrameSettled(const LightFrameStats& stats) {
+    return stats.inFlight == 0 && stats.queued == 0 && stats.dirty == 0 &&
+           stats.pendingCompleted == 0;
+}
 
+#endif // MECRAFT_LIGHTTYPES_H
 

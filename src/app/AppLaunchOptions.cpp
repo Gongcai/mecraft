@@ -9,7 +9,7 @@ AppLaunchOptions::AppLaunchOptions()
     : rhiBackend(renderer::rhi::defaultRhiBackend()) {}
 
 bool AppLaunchOptions::validationEnabled() const {
-    return validationScene != ValidationScene::None;
+    return !validationScenePath.empty();
 }
 
 RhiBackend resolveLaunchRhiBackend(const AppLaunchOptions& options,
@@ -44,20 +44,15 @@ bool validateAppLaunchOptions(
     const AppLaunchOptions& options,
     std::string& error) {
     if (!options.validationEnabled()) {
-        if (!options.validationCameraPath.empty() ||
-            !options.validationCapturePath.empty() ||
+        if (!options.validationCapturePath.empty() ||
             !options.validationReportPath.empty() ||
             options.validationWarmupFramesSet ||
             options.validationSampleFramesSet ||
             options.validationWidthSet || options.validationHeightSet) {
-            error = "Validation options require --validation-scene";
+            error = "Validation options require --validation-scene-file";
             return false;
         }
         return true;
-    }
-    if (options.validationCameraPath.empty()) {
-        error = "--validation-camera-path is required for validation runs";
-        return false;
     }
     if (options.validationCapturePath.empty()) {
         error = "--validation-capture is required for validation runs";
@@ -97,9 +92,8 @@ bool validateAppLaunchOptions(
         error = "Validation runs use frame counts and --validation-report";
         return false;
     }
-    if (options.validationScene == ValidationScene::Model &&
-        options.autoStartGameplay) {
-        error = "Model validation cannot start gameplay benchmark mode";
+    if (options.autoStartGameplay) {
+        error = "Validation scenes cannot start gameplay benchmark mode";
         return false;
     }
     if (!options.benchmarkWorldName.empty() ||
@@ -107,9 +101,8 @@ bool validateAppLaunchOptions(
         error = "Validation runs do not accept writable benchmark worlds";
         return false;
     }
-    if (options.validationScene == ValidationScene::Model &&
-        (options.benchmarkSeedSet || options.benchmarkRenderDistanceSet)) {
-        error = "Model validation does not accept voxel world options";
+    if (options.benchmarkSeedSet || options.benchmarkRenderDistanceSet) {
+        error = "Validation scene files own voxel world options";
         return false;
     }
     return true;
