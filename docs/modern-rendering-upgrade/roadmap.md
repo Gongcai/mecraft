@@ -30,16 +30,21 @@ M1 与 M2 可并行开发，但公共 `GpuMaterial`、`GpuSceneGeometry` 与 Sta
 ### 交付物
 
 - 固定 Vulkan Modern 与 OpenGL Base 能力表及结构化错误。
+- 删除 `VoxelGiClipmap.cpp/.h` 及 CMake 源文件项。
+- 删除 Deferred Pipeline/Scene Composite 的 Voxel GI Pass、3D 纹理、Bind Group、Shader
+  Variant、参数和统计接口。
+- 删除 `VoxelGiSettings`、JSON 序列化、默认配置、Dashboard 与 Settings Screen 控件。
 - 扩充 Temporal Extent、Reset Reason、Stable Object/Material ID。
 - 建立版本化体素与模型测试场景、Camera Path 和 Reference Capture。
 - Render Graph 大阶段 Timestamp、p50/p95/p99 报告和显存分类。
-- 现有 SSGI、Voxel GI、SSR、透明、模型 CPU Draw 的基线 Capture。
+- 现有 SSGI、SSR、透明、模型 CPU Draw 的基线 Capture；不采集 Voxel GI 基线。
 
 ### 完成条件
 
 - 两类场景可以一条命令运行确定性截图与性能采集。
 - Dashboard 能显示后端能力、历史失效原因、各 Pass GPU 时间和资源占用。
 - 不支持功能的 UI 状态、日志错误码和自动测试一致。
+- 产品源码、构建项、设置、UI、Shader 和 Render Graph 中的 Voxel GI 运行时引用为 0。
 
 ## 4. M1：统一灯光与 PBR IBL
 
@@ -100,7 +105,7 @@ M1 与 M2 可并行开发，但公共 `GpuMaterial`、`GpuSceneGeometry` 与 Sta
 - 体素洞穴间接光不随屏幕朝向消失。
 - 模型 Sponza/Helmet 的次级材质、Emissive 与法线正确。
 - NRD 达到验证矩阵的方差、拖影和 GPU 时间门槛。
-- Vulkan Modern 合成中不混入 SSGI 或 Voxel GI。
+- Vulkan Modern 的间接漫反射只来自 RTGI，不混入 SSGI。
 
 ## 7. M4：GPU Culling、LOD 与动画
 

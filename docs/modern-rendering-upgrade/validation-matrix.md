@@ -32,6 +32,7 @@
 
 | 能力 | 体素验收 | 模型验收 | 自动检查 | 通过标准 |
 | --- | --- | --- | --- | --- |
+| Voxel GI 删除 | 全部 | 全部 | 源码/构建/设置/Shader 引用扫描 | 不创建 3D 体积、不注册 Pass、运行时引用为 0 |
 | 统一材质 | V01/V07 | M01/M02 | Reference Pixel、Material ID | Base/F0/Roughness/Emission 语义一致 |
 | Clustered Light | V07 | M03 | Cluster Count、Light ID | 无容量错误，光源覆盖正确 |
 | 局部灯阴影 | V07 | M03 | Shadow ID/Atlas Heatmap | 无错误复用，动态遮挡者更新 |
@@ -145,7 +146,8 @@ BLAS/TLAS 和 NRD Dispatch 数。Frame Generation 只单列展示 FPS，不用�
 
 ### 7.1 OpenGL Base
 
-- Deferred/Forward、基础 PBR、CSM、SSAO、现有 SSGI/Voxel GI/SSR 按现有测试运行。
+- Deferred/Forward、基础 PBR、CSM、SSAO、现有 SSGI/SSR 按现有测试运行。
+- `VoxelGiClipmap`、Voxel GI 设置、UI、Shader Variant 和 GPU 资源不存在。
 - RTGI、NRD、PPLL Multi-layer、Bindless GPU Scene、HDR10/scRGB 不出现在可选设置中。
 - API/日志返回稳定的 `BackendFeatureUnavailable` 原因。
 - 加入公共 GPU Scene/RHI 类型后，OpenGL 编译和 Smoke Test 继续通过。

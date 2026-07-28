@@ -2,16 +2,19 @@
 
 ## 1. 技术结论
 
-Vulkan 现代管线直接从现有 SSGI/Voxel GI 路线转向硬件 RTGI，技术上成立，也更符合
-当前项目的目标。世界空间 Voxel GI 不是 RTGI 的必要阶段：TLAS 本身已经表达世界几何，
-次级命中着色能够直接读取材质、灯光和天空辐射。
+Vulkan 现代管线从现有 SSGI 路线直接转向硬件 RTGI，技术上成立，也更符合当前项目的
+目标。世界空间 Voxel GI 不是 RTGI 的必要阶段：TLAS 本身已经表达世界几何，次级命中
+着色能够直接读取材质、灯光和天空辐射。
 
 现有 SSGI 的主要问题不只是滤波参数。屏幕外表面、被遮挡表面、背面和超出深度范围的
 能量根本不存在于输入中，任何降噪器都无法恢复这些信息。RTGI 解决采样域，NRD 解决
 低样本随机噪声、时域稳定与边缘保持，二者职责不同。
 
-Vulkan 现代预设只合成 RTGI。现有 `VoxelGiClipmap` 与 SSGI 保留在 OpenGL 基础功能集
-和独立诊断模式中，不与 Vulkan RTGI 同帧叠加。
+`VoxelGiClipmap` 已确认没有可见画质收益并造成性能下降，因此不保留在 OpenGL、Vulkan、
+独立诊断或模型场景中。删除范围包含实现文件、CMake 源文件项、Render Graph Pass、3D
+纹理与上传资源、Scene Composite Variant、设置序列化、默认配置、UI 控件和统计接口。
+删除工作不要求 Reference Capture，也不要求输出兼容。Vulkan 现代预设只合成 RTGI；
+OpenGL 基础功能集继续使用其明确列出的 SSGI/SSR 能力。
 
 ## 2. 首版范围
 

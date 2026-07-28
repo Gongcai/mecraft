@@ -8,10 +8,12 @@
 
 ## 1. 结论
 
-Mecraft 的 Vulkan 高级画面路线直接建设硬件 RTGI，不继续扩展
-`VoxelGiClipmap`。RTGI 以 `VK_KHR_ray_query`、统一 GPU Scene、体素区块与模型
-BLAS/TLAS、次级命中材质求值、NVIDIA NRD 时空降噪为核心。首个质量模式使用
-`RELAX_DIFFUSE`，性能模式使用 `REBLUR_DIFFUSE`。
+当前 `VoxelGiClipmap` 已被画质测试否决：画面没有可见提升，只增加 GPU/CPU 时间和资源
+占用。本方案将其按废弃代码直接删除，不保留后端、调试、兼容、基线或资产接入要求。
+
+Mecraft 的 Vulkan 高级画面路线直接建设硬件 RTGI。RTGI 以 `VK_KHR_ray_query`、统一
+GPU Scene、体素区块与模型 BLAS/TLAS、次级命中材质求值、NVIDIA NRD 时空降噪为核心。
+首个质量模式使用 `RELAX_DIFFUSE`，性能模式使用 `REBLUR_DIFFUSE`。
 
 这不是模型预览器专属方案。方块地形、异形方块、水体、方块实体、生物、掉落物、
 粒子和 glTF 模型必须遵循同一套场景、材质、灯光、运动矢量、曝光与时域历史契约。
@@ -23,10 +25,13 @@ OpenGL 保持独立的基础功能集。Vulkan 现代功能未满足设备、驱
 ## 2. 当前基线与关键缺口
 
 当前已经具备 Deferred/Forward、Render Graph、Vulkan/OpenGL RHI、CSM/PCSS、
-SSAO、SSGI、Voxel GI、SSR、体积雾、体积云、物理大气、TAA、FSR 1、FSR 3.1、
+SSAO、SSGI、SSR、体积雾、体积云、物理大气、TAA、FSR 1、FSR 3.1、
 DLSS、HDR 中间颜色和 Hi-Z。glTF 路径已经支持 metallic-roughness，并处理
 `KHR_materials_ior`、`KHR_materials_clearcoat`、`KHR_materials_transmission` 与
 `KHR_materials_volume` 的主要参数。
+
+代码库目前仍包含 `VoxelGiClipmap`、3D 纹理更新、Scene Composite Shader Variant、设置
+序列化和 UI 控件，这些属于待删除实现，不计入当前能力，也不进入任何后续阶段的依赖图。
 
 当前距离完整现代画面的关键链路是：
 
@@ -48,7 +53,8 @@ DLSS、HDR 中间颜色和 Hi-Z。glTF 路径已经支持 metallic-roughness，�
 
 | 主题 | 决策 |
 | --- | --- |
-| Vulkan GI | 单次反弹 Diffuse RTGI + NRD；不把 Voxel GI 作为其前置条件 |
+| Voxel GI | 直接删除实现、资源、设置、UI、Shader Variant 和构建项 |
+| Vulkan GI | 单次反弹 Diffuse RTGI + NRD，从统一场景与材质契约独立建设 |
 | 首版光追执行模型 | Compute Shader + `VK_KHR_ray_query`，暂不引入 RayGen/Miss/Hit/SBT |
 | 质量降噪 | `RELAX_DIFFUSE` |
 | 性能降噪 | `REBLUR_DIFFUSE` |
@@ -122,7 +128,8 @@ GPU Scene 提交。模型预览中玻璃的折射与模糊必须来自正式透�
 | 能力 | OpenGL 基础管线 | Vulkan 现代管线 |
 | --- | --- | --- |
 | Deferred PBR / CSM / SSAO | 支持 | 支持 |
-| 现有 SSGI / Voxel GI / SSR | 支持 | 可作为独立调试模式，现代预设不参与合成 |
+| 现有 SSGI / SSR | 支持 | 可作为独立调试模式，现代预设不参与 GI 合成 |
+| `VoxelGiClipmap` | 不保留 | 不保留 |
 | glTF 基础材质与现有扩展 | 支持 | 支持 |
 | Clustered 局部灯 | 不在本轮承诺范围 | 支持 |
 | GGX IBL / Reflection Probe Grid | 不在本轮承诺范围 | 支持 |
@@ -163,3 +170,4 @@ GPU Scene 提交。模型预览中玻璃的折射与模糊必须来自正式透�
 6. 所有时域效果对相机切换、传送、尺寸变化和内容修订执行统一历史失效。
 7. 不支持的功能状态可解释、可测试，且不会更改用户选择的渲染算法。
 8. 第三方依赖许可证、版本、构建开关和运行时版本均可追踪。
+9. 产品源码、CMake、设置、UI、Shader 与 Render Graph 中不再存在 Voxel GI 运行时链路。
