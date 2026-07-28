@@ -1,0 +1,281 @@
+# GPU Scene 与资产管线
+
+## 1. 目标
+
+当前体素地形已经使用池化 Buffer 与 Multi-Draw Indirect，模型路径则由 CPU 遍历 ECS
+实例、逐 Primitive 调用 Renderer。现代管线需要把两者统一为 GPU Scene：CPU 负责提交
+场景修订，GPU 负责实例/网格剔除、LOD 选择、可见列表和间接命令。统一后的数据同时
+服务光栅、阴影、RTGI、反射探针和透明链。
+
+## 2. 数据分层
+
+```text
+Asset Source
+  ├── glTF Mesh / Material / Texture / Skin / Animation
+  └── Block Definition / Texture Array / Chunk Mesh
+          │
+          ▼
+Canonical Asset Data
+  ├── Mesh Geometry + Primitive Metadata
+  ├── GpuMaterial + Bindless Texture Handles
+  ├── LOD Group + Meshlets
+  └── Skeleton / Morph / Animation Clips
+          │
+          ▼
+Resident GPU Resources
+  ├── Vertex/Index/Meshlet Buffers
+  ├── Texture/Sampler Descriptors
+  ├── BLAS
+  └── Generation Handles
+          │
+          ▼
+Frame GPU Scene
+  ├── Instance / Previous Transform
+  ├── Geometry / Material / Light Tables
+  ├── Visible Instance + Meshlet Lists
+  └── Indirect Draw + TLAS Instance Buffers
+```
+
+资产数据与帧实例数据分离。相同模型的千个实例共享 Mesh、Material、Texture 和 BLAS，
+只新增 Instance 记录。
+
+## 3. Bindless 资源
+
+### 3.1 Descriptor Array
+
+Vulkan Global Bindless Set 保存 Sampled Image、Sampler 和 Storage Buffer 数组。材质表只
+存 32-bit Index，不为每个 Primitive 创建 Bind Group。必要特性包括：
+
+- Runtime Descriptor Array。
+- Partially Bound。
+- Variable Descriptor Count。
+- Update-after-bind。
+- Sampled Image/Storage Buffer Non-uniform Indexing。
+
+RHI 需要移除 Vulkan `arrayCount == 1` 限制，扩充 Bind Group Entry 表达数组元素、首元素
+与批量更新。Descriptor Layout、Pool 和 Pipeline Layout 都要携带 Binding Flags。
+
+### 3.2 句柄生命周期
+
+资源索引使用 `index + generation`：
+
+1. Asset Registry 分配槽并创建 GPU 资源。
+2. 材质发布后才能进入可见 GPU Scene。
+3. 销毁先发布不再引用该槽的新一代 Material/Scene Buffer。
+4. 等待最后 Submission Token 完成。
+5. 增加 Generation 后复用槽。
+
+纹理流送不允许把未 Resident 的索引放入可见材质。Residency 状态是资产状态机的一部分，
+不是 Shader 内的条件替换。
+
+### 3.3 体素纹理数组
+
+方块 Albedo/Normal/Specular Texture Array 继续作为高效资源产品，每个数组只占一个
+Bindless Image Slot，Material/Primitive Metadata 保存 Layer Index。Biome Tint、动画帧和
+Greedy UV Repeat 仍由体素材质采样器处理，最终输出统一 PBR 参数。
+
+## 4. GPU Scene Buffer
+
+帧资源至少包括：
+
+| Buffer | 内容 | 更新方式 |
+| --- | --- | --- |
+| Instance | 当前/上一帧 Transform、Bounds、Geometry Range、Stable ID | Dirty Range Upload |
+| Geometry | Device Address、Index Range、Material、Meshlet Range | 资产修订上传 |
+| Material | PBR 参数与 Bindless Index | Dirty Range Upload |
+| Light | 统一局部灯 | Dirty Range Upload |
+| Visible Instance | 剔除结果 | GPU 写 |
+| Visible Meshlet | Meshlet 剔除结果 | GPU 写 |
+| Indirect Command | GBuffer/Shadow/Transparent 等 Draw Command | GPU 写 |
+| Draw Count | 每类可见命令数量 | GPU 写 |
+| TLAS Instance | Ray Tracing Instance | GPU 或 CPU 写，AS Build 读 |
+
+Buffer 使用帧环形区和增量 Dirty Range。CPU 不每帧重写静态 Material/Geometry。所有表
+都具有容量、使用量、峰值和结构化容量错误。
+
+## 5. GPU Culling 与间接绘制
+
+### 5.1 Pass 链
+
+```text
+InstanceUpload
+      │
+      ▼
+FrustumAndDistanceCull
+      │
+      ├── LOD Selection
+      ├── Hi-Z Occlusion Test
+      └── Visibility History Update
+      │
+      ▼
+MeshletCull / PrimitiveGroupCull
+      │
+      ├── GBuffer Indirect Commands
+      ├── Shadow Cascade Indirect Commands
+      ├── Transparent Gather Commands
+      └── TLAS Instance Buffer
+```
+
+RHI 增加 `drawIndexedIndirectCount`，Vulkan 映射到 Core 1.2 的 Indirect Count 能力。每类
+Draw 以 Pipeline/Material Class 分桶，Bindless Material ID 解除逐材质 Bind Group 切换。
+
+### 5.2 遮挡历史
+
+Hi-Z 使用上一帧深度进行 Instance Occlusion，当前帧对新出现、快速移动、相机切换和
+历史失效实例保持可见标记。Occlusion History 由 Stable Object ID 索引。剔除统计包含
+Frustum、Distance、Occlusion、LOD 和最终 Draw Count。
+
+### 5.3 体素区块
+
+现有 `WorldRenderBuffer` 的 Buffer Pool 与 MDI 是良好基础，改造重点是：
+
+- 区块 Bounds、Mesh Class、Buffer Range 和 Revision 写入 GPU Scene。
+- Compute 生成各 Mesh Class 的 Indirect Command，而不是 CPU 整理全部可见命令。
+- GBuffer、CSM、Reflection Probe Capture 和 TLAS 共用同一可见区块产品。
+- Buffer Pool 搬迁导致 Device Address 改变时增加 Geometry Revision 并重建相关 BLAS。
+- 区块上传与 AS Build 由 Submission Token 和 Render Graph Dependency 串联。
+
+### 5.4 模型实例
+
+`ModelSceneRuntime` 不再对每个 Entity 调用 `renderToGBuffer`/`renderToShadowMap`。它把
+Transform、Previous Transform 和 Asset Handle 写入 Instance Buffer，GPU 产生 Draw。
+同一资产的 Primitive 通过 Geometry Range 展开，实例数量只影响 Instance Buffer 与
+可见命令。
+
+## 6. LOD 与 Meshlet
+
+### 6.1 模型 LOD
+
+每个 Mesh Asset 支持离线 LOD Chain，误差使用屏幕空间投影度量。LOD 选择加入滞回区间，
+避免边界抖动；切换阶段可用 Dithered Transition，并正确写 Reactive Mask。
+
+LOD 生成保留：UV Seam、Hard Normal、Skin Weight、Morph Target、Material Boundary 和
+Alpha Mask 轮廓。每个 LOD 拥有独立 BLAS 或按资产策略共享可更新 BLAS，不能让光栅 LOD
+与 TLAS Geometry 不一致。
+
+### 6.2 体素 LOD
+
+近距离区块保持当前完整 Greedy Mesh。远距离环可生成保持方块轮廓与材质分类的简化
+Terrain LOD；其边界需要裙边或拓扑连续方案。体素 LOD 是独立里程碑，不影响近距离
+GPU Scene 与 RTGI 上线。
+
+### 6.3 Meshlet
+
+离线把模型与区块 Mesh 划分为约 64 Vertices/126 Triangles 的 Meshlet，保存 Bounding
+Sphere 与 Normal Cone。Compute Meshlet Culling 可在传统 Indexed Indirect Draw 中使用。
+
+`VK_EXT_mesh_shader` 定义为独立 Vulkan Feature Mode；启用时使用 Task/Mesh Pipeline。
+该模式不可用时设置项不可选，Indexed Indirect 仍是完整 GPU Scene 的正式模式，而不是
+运行时算法替换。
+
+## 7. glTF 资产处理
+
+### 7.1 规范格式
+
+glTF 2.0 是运行时规范格式。OBJ/FBX 等内容若继续支持，应在导入阶段转换为同一 Canonical
+Mesh/Material/Skeleton 数据，运行时不保留格式分支。
+
+导入管线执行：
+
+1. 严格校验 Accessor、Buffer View、Index、Node Graph 与扩展。
+2. 规范化坐标系、单位、Front Face 与 Transform。
+3. 保留源 Tangent；缺少 Tangent 时使用 MikkTSpace 生成。
+4. 生成优化后的 Vertex/Index Buffer、Vertex Cache/Fetched Order。
+5. 规范化 PBR Material 与 Texture Transform。
+6. 生成 LOD、Meshlet、Bounds 与 Ray Tracing Primitive Metadata。
+7. 构建 Asset Manifest、内容 Hash 和版本号。
+
+Importer 对不支持的 Required Extension 返回准确错误。Optional Extension 也不能被悄然
+忽略；必须明确记录资产结果不包含该特性。
+
+### 7.2 纹理
+
+- Base Color/Emissive 按 sRGB 解码，其他 PBR Texture 按线性数据解码。
+- Mip 生成对 Normal 执行向量重归一化，对 Roughness 采用能量合理的过滤。
+- GPU 压缩格式由构建平台明确指定，Manifest 记录 BC/ASTC 等产品类型。
+- Sampler Wrap/Filter/Anisotropy 完整映射。
+- Texture Transform 在光栅、透明和 Ray Query Material Sampling 中一致。
+
+### 7.3 材质扩展路线
+
+已有 Metallic-Roughness、Specular-Glossiness、IOR、Clearcoat、Transmission、Volume
+进入统一材质表。后续按以下依赖建设：
+
+- Emissive Strength 与 Texture Transform：不改变 BRDF，直接纳入。
+- Sheen：增加 Charlie/Visibility Lobe 与能量分配。
+- Anisotropy：需要 Tangent Direction、Anisotropic GGX 与 IBL 支持。
+- Diffuse Transmission：需要薄片双面漫透射和阴影语义。
+
+每个扩展都要同时覆盖主 GBuffer/Forward、Shadow、Probe Capture 和 Ray Query Material
+Sampling，不能只在模型预览 Shader 中生效。
+
+## 8. 动画与变形
+
+### 8.1 Animation Runtime
+
+支持 TRS Channel、Linear/Step/Cubic Spline 插值，Skeleton Palette 写入 GPU Buffer。
+Animation State 使用稳定时间线，暂停、跳转和循环边界产生明确的 Previous Pose。
+
+### 8.2 Compute Skinning/Morph
+
+Pass 顺序：
+
+```text
+AnimationEvaluate (CPU or Compute)
+        │
+        ▼
+MorphTargets ─► Skinning ─► Current Deformed Vertex Buffer
+        │                         │
+        ├── Previous Buffer ──────┴──► Motion Vector
+        └────────────────────────────► BLAS Update
+```
+
+变形 Buffer 使用双代资源，GBuffer 与 RTGI 在同一帧读取相同 Current Position。切换动画、
+Skeleton 重建和 Asset Reload 时生成局部历史失效标记。
+
+### 8.3 体素动画
+
+方块纹理动画只改变 Texture Frame，不改变 BLAS。活塞、移动方块、方块实体和生物作为
+动态 Instance 提供双 Transform；形变网格采用同一 Compute Deformation 契约。
+
+## 9. Streaming 与预算
+
+资产状态机：
+
+```text
+Unloaded → CPU Ready → Uploading → GPU Resident → AS Ready → Visible
+```
+
+状态转换由错误码和 Submission Token 驱动。Visible 只引用完整 Resident 的 Geometry、
+Material 和 Descriptor。卸载按 Visible 移除、TLAS 移除、GPU 完成、资源释放的顺序执行。
+
+预算项：
+
+- Vertex/Index/Meshlet Buffer 字节数。
+- Texture 各 Mip Resident 字节数。
+- Bindless Image/Sampler/Buffer 槽数。
+- BLAS 压缩前后字节数。
+- Frame GPU Scene 与 Indirect Buffer 峰值。
+- 上传队列字节数与每帧 Upload 时间。
+
+## 10. 工具与调试视图
+
+- Instance/Geometry/Material ID 可视化。
+- Frustum/Distance/Occlusion/LOD 剔除原因。
+- Meshlet Bounds/Normal Cone。
+- Bindless Slot、Generation 与 Residency。
+- Draw Count、Triangle Count、Pipeline Bucket Count。
+- Skin/Morph Current-Previous Position 差。
+- 光栅 Geometry 与 BLAS Geometry Overlay。
+
+## 11. 验收
+
+体素世界：高速飞行与区块流送无失效句柄；破坏/放置方块后光栅与 RT 几何同帧代一致；
+现有 MDI 吞吐不下降；透明、阴影和 Probe Capture 可复用可见列表。
+
+模型场景：1000 个 Damaged Helmet 实例由 GPU Scene 提交；Draw Count 与资产 Primitive
+种类相关而非实例数线性增长；LOD/遮挡稳定；动画模型速度与 BLAS 一致；资产卸载不产生
+Descriptor 或 Device Address 悬空引用。
+
+共同标准：CPU Render Submission 时间、GPU Culling 时间、可见 Triangle 数、AS Instance
+数和显存占用均可从 Dashboard 与自动化 Capture 读取。
