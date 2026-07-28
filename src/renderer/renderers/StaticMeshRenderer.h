@@ -10,6 +10,7 @@
 #include <glm/glm.hpp>
 
 #include "../rhi/RhiHandles.h"
+#include "../contracts/ClusteredLightingContract.h"
 #include "../contracts/SceneIdentityContract.h"
 
 class FrameContext;
@@ -107,6 +108,16 @@ public:
         RhiTextureViewHandle opaqueDepth,
         RhiTextureViewHandle skyCapture);
 
+    /// Publishes the current Forward+ descriptor set and cluster lattice.
+    /// @param bindGroupLayout Exact shared layout used by the descriptor set.
+    /// @param bindGroup Four-buffer clustered-light descriptor set.
+    /// @param grid Current view-space 16x16x24 cluster lattice.
+    /// @return True when both resources satisfy the Vulkan transparent path.
+    [[nodiscard]] bool configureClusteredLighting(
+        RhiBindGroupLayoutHandle bindGroupLayout,
+        RhiBindGroupHandle bindGroup,
+        const renderer::contracts::ClusterGrid& grid);
+
     /// Records all static primitives into the active shadow depth rendering scope.
     /// @param commandList Command list with one CSM cascade active.
     /// @param shadowViewProj Current cascade view-projection matrix.
@@ -148,7 +159,10 @@ private:
     };
 
     [[nodiscard]] bool createPipelineResources();
+    [[nodiscard]] bool ensureTransparentPipelines(
+        RhiBindGroupLayoutHandle clusteredLightingLayout);
     [[nodiscard]] bool loadAsset(const std::string& modelPath, ResourceMgr& resourceMgr);
+    void destroyTransparentPipelines();
     void destroyPipelineResources();
     void setError(std::string message);
 
@@ -160,10 +174,13 @@ private:
     RhiBufferHandle m_frameUniformBuffer;
     RhiBindGroupLayoutHandle m_bindGroupLayout;
     RhiBindGroupLayoutHandle m_transparentSceneBindGroupLayout;
+    RhiBindGroupLayoutHandle m_transparentClusterBindGroupLayout;
     RhiBindGroupHandle m_transparentSceneBindGroup;
+    RhiBindGroupHandle m_transparentClusterBindGroup;
     RhiSamplerHandle m_transparentSceneLinearSampler;
     RhiSamplerHandle m_transparentSceneDepthSampler;
     std::array<RhiTextureViewHandle, 3> m_transparentSceneViews{};
+    renderer::contracts::ClusterGrid m_transparentClusterGrid;
     RhiPipelineLayoutHandle m_gbufferPipelineLayout;
     RhiPipelineLayoutHandle m_shadowPipelineLayout;
     RhiPipelineLayoutHandle m_previewPipelineLayout;

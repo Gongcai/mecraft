@@ -9,6 +9,9 @@
 #include "derivative_sunlight.glsl"
 #include "weather_surface.glsl"
 #include "rhi_screen_coordinates.glsl"
+#ifdef MECRAFT_CLUSTERED_LIGHTING
+#include "clustered_lighting.glsl"
+#endif
 
 struct CsmCascade {
     mat4 viewProj;
@@ -84,6 +87,9 @@ layout(std140, binding = 20) uniform DeferredLightingParams {
     ivec4 pFlags3;
     ivec4 pFlags4;
     ivec4 pFlags5;
+    uvec4 pClusterGrid;
+    vec4 pClusterDepth;
+    uvec4 pClusterRenderExtent;
 };
 
 #define uViewProj pViewProj
@@ -179,6 +185,9 @@ layout(std140, binding = 20) uniform DeferredLightingParams {
 #define uRainWetSurfacesEnabled pFlags4.w
 #define uRainSurfaceRipplesEnabled pFlags5.x
 #define uCsmCascadeCount pFlags5.y
+#define uClusterGrid pClusterGrid
+#define uClusterDepth pClusterDepth
+#define uClusterRenderExtent pClusterRenderExtent
 
 #include "atmosphere_lut.glsl"
 
@@ -713,6 +722,26 @@ void main() {
 
     // --- BRDF preparation (DerivativeMain BRDF.glsl — now via derivative_brdf.glsl include) ---
     float alpha2 = sqr(roughness);
+    vec3 clusteredDiffuse = vec3(0.0);
+    vec3 clusteredSpecular = vec3(0.0);
+#ifdef MECRAFT_CLUSTERED_LIGHTING
+    bool clusteredBuildValid;
+    float clusteredViewDepth = abs(
+        (uViewProj * vec4(worldPos, 1.0)).w);
+    ClusteredSurfaceLighting clusteredLighting =
+        evaluateClusteredSurfaceLighting(
+            vClipUv, clusteredViewDepth, uClusterGrid,
+            uClusterRenderExtent, uClusterDepth,
+            worldPos - uCameraPos, normal, viewDir,
+            specularF0, specularF90, roughness,
+            clusteredBuildValid);
+    if (!clusteredBuildValid) {
+        FragColor = vec4(1.0, 0.0, 1.0, 1.0);
+        return;
+    }
+    clusteredDiffuse = clusteredLighting.diffuse;
+    clusteredSpecular = clusteredLighting.specular;
+#endif
     // === DerivativeMain lighting order ===
     // Reference: deferred5.fsh main() — sceneData starts at 0
 
@@ -1038,6 +1067,7 @@ void main() {
     // (DerivativeMain deferred5.fsh:352: sceneData += shadow * diffuse)
     dbgDirect = directVisibilityDebug;
     sceneData += shadow * diffuse;
+    sceneData += clusteredDiffuse;
 
     // Multiply by albedo AFTER all diffuse/ambient/emission accumulation
     // (DerivativeMain deferred5.fsh:353: sceneData *= albedo)
@@ -1055,6 +1085,7 @@ void main() {
     // (DerivativeMain deferred5.fsh:356: sceneData += shadow * specular)
     // Note: shadow already contains sunlightMult, and specular already contains SPECULAR_HIGHLIGHT_BRIGHTNESS + wetnessCustom
     sceneData += shadow * specular;
+    sceneData += clusteredSpecular;
 
     vec3 color = sceneData;
 

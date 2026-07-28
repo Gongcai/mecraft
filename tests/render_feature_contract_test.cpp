@@ -126,7 +126,7 @@ int main() {
         currentImplementedRenderFeatureMask());
     if (!requireTrue(currentVulkan.code == RenderFeatureStatusCode::ImplementationPending,
                      "the current Vulkan modern profile must report unfinished integration") ||
-        !requireTrue(currentVulkan.blockingFeature == RenderFeature::ClusteredLighting,
+        !requireTrue(currentVulkan.blockingFeature == RenderFeature::PbrImageBasedLighting,
                      "profile evaluation must return the first deterministic blocker")) {
         return 1;
     }

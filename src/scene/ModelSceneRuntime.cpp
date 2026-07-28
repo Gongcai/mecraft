@@ -1314,6 +1314,19 @@ void ModelSceneRuntime::renderToShadowMap(
     }
 }
 
+bool ModelSceneRuntime::configureClusteredLighting(
+    const DeferredClusteredLightingResources& resources) {
+    for (MeshAsset& asset : m_assets) {
+        if (!asset.renderer->configureClusteredLighting(
+                resources.bindGroupLayout, resources.bindGroup,
+                resources.grid)) {
+            setError(asset.renderer->lastError());
+            return false;
+        }
+    }
+    return true;
+}
+
 bool ModelSceneRuntime::hasTransparentGeometry() const {
     const auto view = m_registry.view<scene::StaticMeshComponent>();
     return std::any_of(

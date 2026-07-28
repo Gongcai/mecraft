@@ -14,6 +14,9 @@ layout(set = 1, binding = 14) uniform sampler3D uAtmosphereLut;
 uniform sampler3D uAtmosphereLut;
 #endif
 #include "atmosphere_lut.glsl"
+#ifdef MECRAFT_CLUSTERED_LIGHTING
+#include "clustered_lighting.glsl"
+#endif
 
 #ifndef MECRAFT_TRANSPARENT_COMPOSITE
 #define MECRAFT_TRANSPARENT_COMPOSITE 0
@@ -551,6 +554,31 @@ uniform vec3 uCameraPos;
 
         // Combine texture, lightmap color, and AO
         vec3 finalColor = albedo * lightColor * aoFactor;
+#ifdef MECRAFT_CLUSTERED_LIGHTING
+        vec4 clusteredClip =
+            rhiTerrainLitViewProj * vec4(vWorldPos, 1.0);
+        vec2 clusteredClipUv =
+            clusteredClip.xy / clusteredClip.w * 0.5 + 0.5;
+        bool clusteredBuildValid;
+        ClusteredSurfaceLighting clusteredLighting =
+            evaluateClusteredSurfaceLighting(
+                clusteredClipUv, abs(clusteredClip.w), uClusterGrid,
+                uClusterRenderExtent, uClusterDepth,
+                vWorldPos - uCameraPos, normal, viewDir,
+                decodeLabPbrF0(material.encodedF0OrMetalId, albedo),
+                material.specularF90, roughness,
+                clusteredBuildValid);
+        if (!clusteredBuildValid) {
+            FragColor = vec4(1.0, 0.0, 1.0, 1.0);
+#if MECRAFT_TRANSPARENT_COMPOSITE != 0
+            FragReactiveMask = 1.0;
+            FragTransparencyMask = 1.0;
+#endif
+            return;
+        }
+        finalColor += albedo * clusteredLighting.diffuse +
+            clusteredLighting.specular;
+#endif
         float backScatter = pow(max(dot(-normal, sunDir), 0.0), 1.35) * skyLightMask;
         finalColor += albedo * warmSunColor * backScatter * sss * (0.38 + 0.16 * uDirectSunStrength);
         if (isDerivativeEmissiveMaterialId(materialKindId(vMaterialKind))) {

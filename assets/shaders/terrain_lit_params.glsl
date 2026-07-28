@@ -23,6 +23,9 @@ layout(std140, set = 1, binding = 15) uniform TerrainLitParams {
     ivec4 rhiTerrainLitControlFlags1;
     ivec4 rhiTerrainLitControlFlags2;
     ivec4 rhiTerrainLitWaterFlags;
+    uvec4 rhiTerrainLitClusterGrid;
+    vec4 rhiTerrainLitClusterDepth;
+    uvec4 rhiTerrainLitClusterRenderExtent;
 };
 
 #define uCameraPos rhiTerrainLitCameraAnimation.xyz
@@ -80,3 +83,6 @@ layout(std140, set = 1, binding = 15) uniform TerrainLitParams {
 #define uVolumetricFogActive rhiTerrainLitControlFlags2.z
 #define uHeldBlockLightValue rhiTerrainLitControlFlags2.w
 #define uWaterEffectsEnabled rhiTerrainLitWaterFlags.x
+#define uClusterGrid rhiTerrainLitClusterGrid
+#define uClusterDepth rhiTerrainLitClusterDepth
+#define uClusterRenderExtent rhiTerrainLitClusterRenderExtent

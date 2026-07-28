@@ -170,6 +170,10 @@ public:
     void recordRhiTransparent(RhiCommandList& commandList,
                               RhiPipelineHandle pipeline,
                               RhiBindGroupHandle materialBindGroup);
+    void recordRhiTransparent(RhiCommandList& commandList,
+                              RhiPipelineHandle pipeline,
+                              RhiBindGroupHandle materialBindGroup,
+                              RhiBindGroupHandle clusteredLightingBindGroup);
     bool prepareRhiWater(RhiCommandList& commandList,
                          RhiBindGroupLayoutHandle metadataLayout);
     void recordRhiWater(RhiCommandList& commandList,

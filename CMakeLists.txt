@@ -349,7 +349,9 @@ set(SRC_RENDERER
 
         # Contracts
         src/renderer/contracts/CameraPathContract.cpp
+        src/renderer/contracts/ClusteredLightingContract.cpp
         src/renderer/contracts/ContentHashContract.cpp
+        src/renderer/contracts/GpuLightContract.cpp
         src/renderer/contracts/GpuMaterialContract.cpp
         src/renderer/contracts/RenderFeatureContract.cpp
 
@@ -385,6 +387,7 @@ set(SRC_RENDERER
         src/renderer/passes/TemporalUpscalePass.cpp
         src/renderer/passes/MotionBlurPass.cpp
         src/renderer/passes/DepthOfFieldPass.cpp
+        src/renderer/passes/ClusteredLightingPass.cpp
         src/renderer/passes/DeferredLightingPass.cpp
         src/renderer/passes/CloudPass.cpp
         src/renderer/passes/SceneCompositePass.cpp
@@ -1004,6 +1007,13 @@ if(MECRAFT_BUILD_TESTS)
             MECRAFT_TEST_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
     add_mecraft_test(texture_capture_test tests/texture_capture_test.cpp)
     add_mecraft_test(temporal_frame_contract_test tests/temporal_frame_contract_test.cpp)
+    add_mecraft_test(clustered_lighting_contract_test
+            tests/clustered_lighting_contract_test.cpp)
+    target_compile_definitions(clustered_lighting_contract_test PRIVATE
+            MECRAFT_TEST_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
+    add_mecraft_test(gpu_light_contract_test tests/gpu_light_contract_test.cpp)
+    target_compile_definitions(gpu_light_contract_test PRIVATE
+            MECRAFT_TEST_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
     add_mecraft_test(gpu_material_contract_test tests/gpu_material_contract_test.cpp)
     target_compile_definitions(gpu_material_contract_test PRIVATE
             MECRAFT_TEST_SOURCE_DIR="${PROJECT_SOURCE_DIR}")

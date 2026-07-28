@@ -16,6 +16,7 @@
 #include "../passes/TemporalResolvePass.h"
 #include "../passes/MotionBlurPass.h"
 #include "../passes/DepthOfFieldPass.h"
+#include "../passes/ClusteredLightingPass.h"
 #include "../passes/DeferredLightingPass.h"
 #include "../passes/CloudPass.h"
 #include "../passes/SceneCompositePass.h"
@@ -28,6 +29,8 @@
 
 #include <cstdint>
 #include <memory>
+#include <utility>
+#include <vector>
 
 class ResourceMgr;
 class World;
@@ -51,6 +54,11 @@ public:
 
     // Held block light value (set from Game)
     void setHeldBlockLightValue(int value) { m_heldBlockLightValue = value; }
+    [[nodiscard]] bool setGpuLights(
+        std::vector<renderer::contracts::GpuLight> lights) {
+        return m_clusteredLightingPass != nullptr &&
+               m_clusteredLightingPass->setLights(std::move(lights));
+    }
     void invalidateHistory();
 
     // Pass accessors
@@ -61,6 +69,9 @@ public:
     TemporalResolvePass* taaPass() const { return m_taaPass.get(); }
     MotionBlurPass* motionBlurPass() const { return m_motionBlurPass.get(); }
     DepthOfFieldPass* dofPass() const { return m_dofPass.get(); }
+    ClusteredLightingPass* clusteredLightingPass() const {
+        return m_clusteredLightingPass.get();
+    }
     DeferredLightingPass* lightingPass() const { return m_lightingPass.get(); }
     CloudPass* cloudPass() const { return m_cloudPass.get(); }
     SceneCompositePass* sceneCompositePass() const { return m_sceneCompositePass.get(); }
@@ -90,6 +101,7 @@ private:
     std::unique_ptr<TemporalResolvePass> m_taaPass;
     std::unique_ptr<MotionBlurPass> m_motionBlurPass;
     std::unique_ptr<DepthOfFieldPass> m_dofPass;
+    std::unique_ptr<ClusteredLightingPass> m_clusteredLightingPass;
     std::unique_ptr<DeferredLightingPass> m_lightingPass;
     std::unique_ptr<CloudPass> m_cloudPass;
     std::unique_ptr<SceneCompositePass> m_sceneCompositePass;

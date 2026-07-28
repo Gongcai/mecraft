@@ -37,6 +37,11 @@
 
 namespace {
 
+template <typename Handle>
+[[nodiscard]] bool sameHandle(const Handle lhs, const Handle rhs) {
+    return lhs.index == rhs.index && lhs.generation == rhs.generation;
+}
+
 struct StaticMeshVertex {
     float position[3];
     float normal[3];
@@ -64,6 +69,9 @@ struct StaticMeshFrameParams {
     glm::vec4 ambientColor{0.2f, 0.2f, 0.2f, 0.0f};
     glm::vec4 fogColor{0.0f};
     glm::vec4 fogParams{0.0f};
+    glm::uvec4 clusterGrid{0u};
+    glm::vec4 clusterDepth{0.0f};
+    glm::uvec4 clusterRenderExtent{0u};
 };
 
 struct StaticMeshMaterialParams {
@@ -108,7 +116,7 @@ static_assert(sizeof(StaticMeshGBufferPushConstants) == 128u,
               "Static mesh G-buffer push constants must fit the Vulkan minimum limit");
 static_assert(sizeof(StaticMeshTransparentPushConstants) == 80u,
               "Static mesh transparent push constants must match the shader block");
-static_assert(sizeof(StaticMeshFrameParams) == 240u,
+static_assert(sizeof(StaticMeshFrameParams) == 288u,
               "Static mesh frame parameters must match the std140 shader block");
 static_assert(sizeof(StaticMeshMaterialParams) == 272u,
               "Static mesh material parameters must match the std140 shader block");
@@ -663,8 +671,14 @@ bool StaticMeshRenderer::createPipelineResources() {
         "assets/shaders/static_mesh_preview_rhi.frag");
     const auto transparentVertexSource = renderer::rhi::loadShaderSource(
         "assets/shaders/static_mesh_transparent_rhi.vert");
+    renderer::rhi::RhiShaderSourceOptions transparentOptions;
+    if (m_rhiDevice->backend() == RhiBackend::Vulkan) {
+        transparentOptions.preprocessorDefinitions.emplace_back(
+            "MECRAFT_CLUSTERED_LIGHTING");
+    }
     const auto transparentFragmentSource = renderer::rhi::loadShaderSource(
-        "assets/shaders/static_mesh_transparent_rhi.frag");
+        "assets/shaders/static_mesh_transparent_rhi.frag",
+        transparentOptions);
     if (!gbufferVertexSource || !gbufferFragmentSource ||
         !shadowVertexSource || !shadowFragmentSource ||
         !previewVertexSource || !previewFragmentSource ||
@@ -777,19 +791,8 @@ bool StaticMeshRenderer::createPipelineResources() {
     pipelineLayoutDesc.debugName = "StaticMesh.Preview.PipelineLayout";
     pipelineLayoutDesc.pushConstantBytes = sizeof(StaticMeshPreviewPushConstants);
     m_previewPipelineLayout = m_rhiDevice->createPipelineLayout(pipelineLayoutDesc);
-    pipelineLayoutDesc.debugName = "StaticMesh.Transparent.PipelineLayout";
-    pipelineLayoutDesc.bindGroupLayouts.push_back(
-        m_transparentSceneBindGroupLayout);
-    pipelineLayoutDesc.pushConstantBytes =
-        sizeof(StaticMeshTransparentPushConstants);
-    pipelineLayoutDesc.pushConstantStages =
-        rhiFlag(RhiShaderStage::Vertex) |
-        rhiFlag(RhiShaderStage::Fragment);
-    m_transparentPipelineLayout =
-        m_rhiDevice->createPipelineLayout(pipelineLayoutDesc);
     if (!m_gbufferPipelineLayout.isValid() || !m_shadowPipelineLayout.isValid() ||
-        !m_previewPipelineLayout.isValid() ||
-        !m_transparentPipelineLayout.isValid()) {
+        !m_previewPipelineLayout.isValid()) {
         setError("failed to create static mesh pipeline layouts");
         return false;
     }
@@ -875,56 +878,16 @@ bool StaticMeshRenderer::createPipelineResources() {
     pipelineDesc.raster.cullMode = RhiCullMode::None;
     m_previewTransparentDoubleSidedPipeline =
         m_rhiDevice->createGraphicsPipeline(pipelineDesc);
-
-    RhiGraphicsPipelineDesc transparentDesc;
-    transparentDesc.debugName = "StaticMesh.Transparent.Pipeline";
-    transparentDesc.vertexShader = m_transparentVertexShader;
-    transparentDesc.fragmentShader = m_transparentFragmentShader;
-    transparentDesc.layout = m_transparentPipelineLayout;
-    transparentDesc.vertexInput.bindings = {
-        {0u, sizeof(StaticMeshVertex), RhiVertexInputRate::Vertex}};
-    transparentDesc.vertexInput.attributes = {
-        {0u, 0u, RhiVertexFormat::Float3, offsetof(StaticMeshVertex, position)},
-        {1u, 0u, RhiVertexFormat::Float3, offsetof(StaticMeshVertex, normal)},
-        {2u, 0u, RhiVertexFormat::Float4, offsetof(StaticMeshVertex, tangent)},
-        {3u, 0u, RhiVertexFormat::Float2, offsetof(StaticMeshVertex, uv)}};
-    transparentDesc.raster.cullMode = RhiCullMode::Back;
-    transparentDesc.depthStencil.depthTestEnabled = true;
-    transparentDesc.depthStencil.depthWriteEnabled = false;
-    transparentDesc.depthStencil.depthCompare = RhiCompareOp::LessOrEqual;
-    transparentDesc.colorFormats = {
-        RhiTextureFormat::Rgba16Float,
-        RhiTextureFormat::R8Unorm,
-        RhiTextureFormat::R8Unorm};
-    transparentDesc.depthFormat = RhiTextureFormat::Depth32Float;
-    RhiBlendAttachmentState colorBlend;
-    colorBlend.blendEnabled = true;
-    colorBlend.srcColor = RhiBlendFactor::One;
-    colorBlend.dstColor = RhiBlendFactor::OneMinusSrcAlpha;
-    colorBlend.srcAlpha = RhiBlendFactor::One;
-    colorBlend.dstAlpha = RhiBlendFactor::OneMinusSrcAlpha;
-    RhiBlendAttachmentState maskBlend;
-    maskBlend.blendEnabled = true;
-    maskBlend.srcColor = RhiBlendFactor::One;
-    maskBlend.dstColor = RhiBlendFactor::One;
-    maskBlend.colorOp = RhiBlendOp::Max;
-    maskBlend.srcAlpha = RhiBlendFactor::One;
-    maskBlend.dstAlpha = RhiBlendFactor::One;
-    maskBlend.alphaOp = RhiBlendOp::Max;
-    transparentDesc.blend.attachments = {colorBlend, maskBlend, maskBlend};
-    m_transparentPipeline =
-        m_rhiDevice->createGraphicsPipeline(transparentDesc);
-    transparentDesc.debugName = "StaticMesh.Transparent.DoubleSidedPipeline";
-    transparentDesc.raster.cullMode = RhiCullMode::None;
-    m_transparentDoubleSidedPipeline =
-        m_rhiDevice->createGraphicsPipeline(transparentDesc);
+    if (m_rhiDevice->backend() != RhiBackend::Vulkan &&
+        !ensureTransparentPipelines({})) {
+        setError("failed to create static mesh transparent pipelines");
+        return false;
+    }
     if (!m_gbufferPipeline.isValid() || !m_gbufferDoubleSidedPipeline.isValid() ||
         !m_shadowPipeline.isValid() || !m_shadowDoubleSidedPipeline.isValid() ||
         !m_previewPipeline.isValid() || !m_previewDoubleSidedPipeline.isValid() ||
         !m_previewTransparentPipeline.isValid() ||
-        !m_previewTransparentDoubleSidedPipeline.isValid() ||
-        !m_transparentPipeline.isValid() ||
-        !m_transparentDoubleSidedPipeline.isValid()) {
+        !m_previewTransparentDoubleSidedPipeline.isValid()) {
         setError("failed to create static mesh graphics pipelines");
         return false;
     }
@@ -942,6 +905,100 @@ bool StaticMeshRenderer::createPipelineResources() {
         frameBufferDesc, &frameParams, sizeof(frameParams));
     if (!m_frameUniformBuffer.isValid()) {
         setError("failed to create static mesh frame uniform buffer");
+        return false;
+    }
+    return true;
+}
+
+bool StaticMeshRenderer::ensureTransparentPipelines(
+    const RhiBindGroupLayoutHandle clusteredLightingLayout) {
+    if (m_rhiDevice == nullptr || !m_bindGroupLayout.isValid() ||
+        !m_transparentSceneBindGroupLayout.isValid() ||
+        !m_transparentVertexShader.isValid() ||
+        !m_transparentFragmentShader.isValid() ||
+        (m_rhiDevice->backend() == RhiBackend::Vulkan &&
+         !clusteredLightingLayout.isValid())) {
+        return false;
+    }
+    if (m_transparentPipeline.isValid() &&
+        m_transparentDoubleSidedPipeline.isValid() &&
+        (m_rhiDevice->backend() != RhiBackend::Vulkan ||
+         sameHandle(m_transparentClusterBindGroupLayout,
+                    clusteredLightingLayout))) {
+        return true;
+    }
+
+    destroyTransparentPipelines();
+    m_transparentClusterBindGroupLayout = clusteredLightingLayout;
+
+    RhiPipelineLayoutDesc layoutDesc;
+    layoutDesc.debugName = "StaticMesh.Transparent.PipelineLayout";
+    layoutDesc.bindGroupLayouts.push_back(m_bindGroupLayout);
+    layoutDesc.bindGroupLayouts.push_back(
+        m_transparentSceneBindGroupLayout);
+    if (m_rhiDevice->backend() == RhiBackend::Vulkan) {
+        layoutDesc.bindGroupLayouts.push_back(clusteredLightingLayout);
+    }
+    layoutDesc.pushConstantBytes =
+        sizeof(StaticMeshTransparentPushConstants);
+    layoutDesc.pushConstantStages =
+        rhiFlag(RhiShaderStage::Vertex) |
+        rhiFlag(RhiShaderStage::Fragment);
+    m_transparentPipelineLayout =
+        m_rhiDevice->createPipelineLayout(layoutDesc);
+    if (!m_transparentPipelineLayout.isValid()) {
+        destroyTransparentPipelines();
+        return false;
+    }
+
+    RhiGraphicsPipelineDesc desc;
+    desc.debugName = "StaticMesh.Transparent.Pipeline";
+    desc.vertexShader = m_transparentVertexShader;
+    desc.fragmentShader = m_transparentFragmentShader;
+    desc.layout = m_transparentPipelineLayout;
+    desc.vertexInput.bindings = {
+        {0u, sizeof(StaticMeshVertex), RhiVertexInputRate::Vertex}};
+    desc.vertexInput.attributes = {
+        {0u, 0u, RhiVertexFormat::Float3,
+         offsetof(StaticMeshVertex, position)},
+        {1u, 0u, RhiVertexFormat::Float3,
+         offsetof(StaticMeshVertex, normal)},
+        {2u, 0u, RhiVertexFormat::Float4,
+         offsetof(StaticMeshVertex, tangent)},
+        {3u, 0u, RhiVertexFormat::Float2,
+         offsetof(StaticMeshVertex, uv)}};
+    desc.raster.cullMode = RhiCullMode::Back;
+    desc.depthStencil.depthTestEnabled = true;
+    desc.depthStencil.depthWriteEnabled = false;
+    desc.depthStencil.depthCompare = RhiCompareOp::LessOrEqual;
+    desc.colorFormats = {
+        RhiTextureFormat::Rgba16Float,
+        RhiTextureFormat::R8Unorm,
+        RhiTextureFormat::R8Unorm};
+    desc.depthFormat = RhiTextureFormat::Depth32Float;
+    RhiBlendAttachmentState colorBlend;
+    colorBlend.blendEnabled = true;
+    colorBlend.srcColor = RhiBlendFactor::One;
+    colorBlend.dstColor = RhiBlendFactor::OneMinusSrcAlpha;
+    colorBlend.srcAlpha = RhiBlendFactor::One;
+    colorBlend.dstAlpha = RhiBlendFactor::OneMinusSrcAlpha;
+    RhiBlendAttachmentState maskBlend;
+    maskBlend.blendEnabled = true;
+    maskBlend.srcColor = RhiBlendFactor::One;
+    maskBlend.dstColor = RhiBlendFactor::One;
+    maskBlend.colorOp = RhiBlendOp::Max;
+    maskBlend.srcAlpha = RhiBlendFactor::One;
+    maskBlend.dstAlpha = RhiBlendFactor::One;
+    maskBlend.alphaOp = RhiBlendOp::Max;
+    desc.blend.attachments = {colorBlend, maskBlend, maskBlend};
+    m_transparentPipeline = m_rhiDevice->createGraphicsPipeline(desc);
+    desc.debugName = "StaticMesh.Transparent.DoubleSidedPipeline";
+    desc.raster.cullMode = RhiCullMode::None;
+    m_transparentDoubleSidedPipeline =
+        m_rhiDevice->createGraphicsPipeline(desc);
+    if (!m_transparentPipeline.isValid() ||
+        !m_transparentDoubleSidedPipeline.isValid()) {
+        destroyTransparentPipelines();
         return false;
     }
     return true;
@@ -1704,6 +1761,25 @@ bool StaticMeshRenderer::prepareGBuffer(
         context.fog.endDistance,
         context.fog.density,
         context.fog.enabled ? static_cast<float>(context.fog.mode + 1) : 0.0f);
+    if (m_rhiDevice->backend() == RhiBackend::Vulkan) {
+        if (!m_transparentClusterBindGroup.isValid() ||
+            m_transparentClusterGrid.clusterCount == 0u) {
+            return false;
+        }
+        frameParams.clusterGrid = {
+            m_transparentClusterGrid.tileCountX,
+            m_transparentClusterGrid.tileCountY,
+            m_transparentClusterGrid.depthSliceCount,
+            renderer::contracts::kClusterTileWidth};
+        frameParams.clusterDepth = {
+            m_transparentClusterGrid.nearPlane,
+            m_transparentClusterGrid.farPlane,
+            m_transparentClusterGrid.depthLogScale,
+            m_transparentClusterGrid.depthLogBias};
+        frameParams.clusterRenderExtent = {
+            m_transparentClusterGrid.renderWidth,
+            m_transparentClusterGrid.renderHeight, 0u, 0u};
+    }
     commandList.updateBuffer(
         m_frameUniformBuffer, 0u, &frameParams, sizeof(frameParams));
     commandList.bufferBarrier({
@@ -1808,6 +1884,28 @@ bool StaticMeshRenderer::prepareTransparentResources(
     return true;
 }
 
+bool StaticMeshRenderer::configureClusteredLighting(
+    const RhiBindGroupLayoutHandle bindGroupLayout,
+    const RhiBindGroupHandle bindGroup,
+    const renderer::contracts::ClusterGrid& grid) {
+    if (m_rhiDevice == nullptr ||
+        m_rhiDevice->backend() != RhiBackend::Vulkan ||
+        !bindGroupLayout.isValid() || !bindGroup.isValid() ||
+        grid.clusterCount == 0u ||
+        grid.tileCountX == 0u || grid.tileCountY == 0u ||
+        grid.depthSliceCount != renderer::contracts::kClusterDepthSliceCount) {
+        setError("static mesh clustered-light resources are invalid");
+        return false;
+    }
+    if (!ensureTransparentPipelines(bindGroupLayout)) {
+        setError("failed to create shared-layout static mesh Forward+ pipelines");
+        return false;
+    }
+    m_transparentClusterBindGroup = bindGroup;
+    m_transparentClusterGrid = grid;
+    return true;
+}
+
 void StaticMeshRenderer::renderTransparentDraw(
     RhiCommandList& commandList,
     const TransparentDraw& draw,
@@ -1827,6 +1925,12 @@ void StaticMeshRenderer::renderTransparentDraw(
         ? m_transparentDoubleSidedPipeline : m_transparentPipeline);
     commandList.setBindGroup(0u, material.bindGroup);
     commandList.setBindGroup(1u, m_transparentSceneBindGroup);
+    if (m_rhiDevice->backend() == RhiBackend::Vulkan) {
+        if (!m_transparentClusterBindGroup.isValid()) {
+            std::abort();
+        }
+        commandList.setBindGroup(2u, m_transparentClusterBindGroup);
+    }
     commandList.setVertexBuffer(0u, primitive.vertexBuffer, 0u);
     commandList.setIndexBuffer(
         primitive.indexBuffer, RhiIndexFormat::Uint32, 0u);
@@ -1969,12 +2073,7 @@ void StaticMeshRenderer::destroyPipelineResources() {
     if (m_transparentSceneBindGroup.isValid()) {
         m_rhiDevice->destroyBindGroup(m_transparentSceneBindGroup);
     }
-    if (m_transparentDoubleSidedPipeline.isValid()) {
-        m_rhiDevice->destroyPipeline(m_transparentDoubleSidedPipeline);
-    }
-    if (m_transparentPipeline.isValid()) {
-        m_rhiDevice->destroyPipeline(m_transparentPipeline);
-    }
+    destroyTransparentPipelines();
     if (m_previewDoubleSidedPipeline.isValid()) {
         m_rhiDevice->destroyPipeline(m_previewDoubleSidedPipeline);
     }
@@ -2001,9 +2100,6 @@ void StaticMeshRenderer::destroyPipelineResources() {
     }
     if (m_shadowPipelineLayout.isValid()) {
         m_rhiDevice->destroyPipelineLayout(m_shadowPipelineLayout);
-    }
-    if (m_transparentPipelineLayout.isValid()) {
-        m_rhiDevice->destroyPipelineLayout(m_transparentPipelineLayout);
     }
     if (m_previewPipelineLayout.isValid()) {
         m_rhiDevice->destroyPipelineLayout(m_previewPipelineLayout);
@@ -2067,10 +2163,13 @@ void StaticMeshRenderer::destroyPipelineResources() {
     m_previewPipelineLayout = {};
     m_bindGroupLayout = {};
     m_transparentSceneBindGroupLayout = {};
+    m_transparentClusterBindGroupLayout = {};
     m_transparentSceneBindGroup = {};
+    m_transparentClusterBindGroup = {};
     m_transparentSceneLinearSampler = {};
     m_transparentSceneDepthSampler = {};
     m_transparentSceneViews = {};
+    m_transparentClusterGrid = {};
     m_shadowFragmentShader = {};
     m_shadowVertexShader = {};
     m_transparentFragmentShader = {};
@@ -2080,4 +2179,22 @@ void StaticMeshRenderer::destroyPipelineResources() {
     m_previewFragmentShader = {};
     m_previewVertexShader = {};
     m_frameUniformBuffer = {};
+}
+
+void StaticMeshRenderer::destroyTransparentPipelines() {
+    if (m_rhiDevice != nullptr) {
+        if (m_transparentDoubleSidedPipeline.isValid()) {
+            m_rhiDevice->destroyPipeline(m_transparentDoubleSidedPipeline);
+        }
+        if (m_transparentPipeline.isValid()) {
+            m_rhiDevice->destroyPipeline(m_transparentPipeline);
+        }
+        if (m_transparentPipelineLayout.isValid()) {
+            m_rhiDevice->destroyPipelineLayout(m_transparentPipelineLayout);
+        }
+    }
+    m_transparentDoubleSidedPipeline = {};
+    m_transparentPipeline = {};
+    m_transparentPipelineLayout = {};
+    m_transparentClusterBindGroupLayout = {};
 }

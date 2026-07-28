@@ -2,6 +2,7 @@
 #define MECRAFT_I_DEFERRED_GEOMETRY_PROVIDER_H
 
 #include "../rhi/RhiHandles.h"
+#include "../contracts/ClusteredLightingContract.h"
 
 #include <glm/glm.hpp>
 
@@ -15,6 +16,13 @@ struct DeferredTransparentResources {
     RhiTextureViewHandle opaqueDepth;
     RhiTextureViewHandle skyCapture;
     float reflectionCompositeStrength = 1.0f;
+};
+
+/// Persistent Forward+ resources shared with external transparent geometry.
+struct DeferredClusteredLightingResources {
+    RhiBindGroupLayoutHandle bindGroupLayout;
+    RhiBindGroupHandle bindGroup;
+    renderer::contracts::ClusterGrid grid;
 };
 
 /// Supplies non-world geometry to the shared deferred rendering pipeline.
@@ -45,6 +53,13 @@ public:
     virtual void renderToShadowMap(
         RhiCommandList& commandList,
         const glm::mat4& shadowViewProjection) = 0;
+
+    /// Publishes the current clustered-light descriptor set and grid before
+    /// any frame commands are recorded.
+    /// @param resources Valid Vulkan Forward+ resources for this frame.
+    /// @return True when every owned transparent renderer accepted them.
+    [[nodiscard]] virtual bool configureClusteredLighting(
+        const DeferredClusteredLightingResources& resources) = 0;
 
     /// Reports whether the provider owns alpha-blended forward geometry.
     /// @return True when at least one instantiated transparent primitive exists.

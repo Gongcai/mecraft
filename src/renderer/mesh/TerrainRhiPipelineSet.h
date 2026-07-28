@@ -2,6 +2,7 @@
 #define MECRAFT_TERRAIN_RHI_PIPELINE_SET_H
 
 #include "TerrainRenderer.h"
+#include "renderer/contracts/ClusteredLightingContract.h"
 #include "renderer/rhi/RhiHandles.h"
 #include "renderer/rhi/RhiTypes.h"
 
@@ -63,6 +64,11 @@ public:
     void init(RhiDevice& rhiDevice);
     void shutdown();
 
+    [[nodiscard]] bool configureClusteredLighting(
+        RhiBindGroupLayoutHandle bindGroupLayout,
+        RhiBindGroupHandle bindGroup,
+        const renderer::contracts::ClusterGrid& grid);
+
     bool prepareGBuffer(RhiCommandList& commandList,
                         ResourceMgr& resourceMgr,
                         const TerrainFrameData& frame,
@@ -98,6 +104,9 @@ public:
     [[nodiscard]] RhiBindGroupLayoutHandle transparentMetadataLayout() const { return m_transparentMetadataLayout; }
     [[nodiscard]] RhiPipelineHandle transparentPipeline() const { return m_transparentPipeline; }
     [[nodiscard]] RhiBindGroupHandle transparentBindGroup() const { return m_transparentBindGroup; }
+    [[nodiscard]] RhiBindGroupHandle transparentClusterBindGroup() const {
+        return m_transparentClusterBindGroup;
+    }
     [[nodiscard]] RhiBindGroupLayoutHandle waterMetadataLayout() const { return m_waterMetadataLayout; }
     [[nodiscard]] RhiPipelineHandle waterPipeline() const { return m_waterPipeline; }
     [[nodiscard]] RhiBindGroupHandle waterBindGroup() const { return m_waterBindGroup; }
@@ -209,12 +218,15 @@ private:
     float m_transparentSamplerAnisotropy = 1.0f;
     RhiBindGroupLayoutHandle m_transparentMetadataLayout;
     RhiBindGroupLayoutHandle m_transparentMaterialLayout;
+    RhiBindGroupLayoutHandle m_transparentClusterLayout;
     RhiPipelineLayoutHandle m_transparentPipelineLayout;
     RhiShaderHandle m_transparentVertexShader;
     RhiShaderHandle m_transparentFragmentShader;
     RhiPipelineHandle m_transparentPipeline;
     RhiBufferHandle m_transparentParamsBuffer;
     RhiBindGroupHandle m_transparentBindGroup;
+    RhiBindGroupHandle m_transparentClusterBindGroup;
+    renderer::contracts::ClusterGrid m_transparentClusterGrid;
     RhiSamplerHandle m_transparentBlockSampler;
     RhiSamplerHandle m_transparentLinearClampSampler;
     RhiSamplerHandle m_transparentLinearRepeatSampler;

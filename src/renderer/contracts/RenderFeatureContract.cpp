@@ -237,7 +237,8 @@ uint64_t currentImplementedRenderFeatureMask() {
            featureBit(RenderFeature::Ssao) |
            featureBit(RenderFeature::Ssgi) |
            featureBit(RenderFeature::Ssr) |
-           featureBit(RenderFeature::GltfMaterials);
+           featureBit(RenderFeature::GltfMaterials) |
+           featureBit(RenderFeature::ClusteredLighting);
 }
 
 RenderFeatureStatus evaluateRenderFeature(

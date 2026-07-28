@@ -1,0 +1,57 @@
+#version 450 core
+#include "cluster_build_contract.glsl"
+
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+
+layout(binding = 0, std430) readonly buffer LightBoundsBuffer {
+    ClusterLightBounds uLightBounds[];
+};
+layout(binding = 1, std430) readonly buffer ClusterRecordBuffer {
+    ClusterRecord uClusterRecords[];
+};
+layout(binding = 2, std430) buffer ClusterCursorBuffer {
+    uint uClusterCursors[];
+};
+layout(binding = 3, std430) buffer CompactLightIndexBuffer {
+    uint uCompactLightIndices[];
+};
+layout(binding = 4, std430) buffer ClusterStatsBuffer {
+    uint uClusterStats[];
+};
+
+layout(push_constant) uniform RhiPushConstants {
+    // xyz: cluster grid dimensions; w: light count.
+    uvec4 uGridAndLightCount;
+    // x: compact index capacity.
+    uvec4 uCapacity;
+};
+
+void main() {
+    const uint lightIndex = gl_GlobalInvocationID.x;
+    if (lightIndex >= uGridAndLightCount.w) {
+        return;
+    }
+    const ClusterLightBounds bounds = uLightBounds[lightIndex];
+    if (bounds.minCluster.w == 0u) {
+        return;
+    }
+    const uvec3 gridSize = uGridAndLightCount.xyz;
+    for (uint z = bounds.minCluster.z; z <= bounds.maxCluster.z; ++z) {
+        for (uint y = bounds.minCluster.y; y <= bounds.maxCluster.y; ++y) {
+            for (uint x = bounds.minCluster.x; x <= bounds.maxCluster.x; ++x) {
+                const uint clusterIndex = clusteredLightClusterIndex(
+                    uvec3(x, y, z), gridSize);
+                const uint cursor = atomicAdd(
+                    uClusterCursors[clusterIndex], 1u);
+                const ClusterRecord record = uClusterRecords[clusterIndex];
+                if (cursor >= record.count || record.offset > uCapacity.x ||
+                    cursor >= uCapacity.x - min(record.offset, uCapacity.x)) {
+                    atomicOr(uClusterStats[CLUSTER_STATS_BUILD_ERROR],
+                             CLUSTER_BUILD_ERROR_FILL_CAPACITY);
+                    continue;
+                }
+                uCompactLightIndices[record.offset + cursor] = lightIndex;
+            }
+        }
+    }
+}

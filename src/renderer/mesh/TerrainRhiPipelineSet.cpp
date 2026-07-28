@@ -77,9 +77,12 @@ struct alignas(16) TerrainLitParams {
     glm::ivec4 controlFlags1 = glm::ivec4(0);
     glm::ivec4 controlFlags2 = glm::ivec4(0);
     glm::ivec4 waterFlags = glm::ivec4(0);
+    glm::uvec4 clusterGrid = glm::uvec4(0u);
+    glm::vec4 clusterDepth = glm::vec4(0.0f);
+    glm::uvec4 clusterRenderExtent = glm::uvec4(0u);
 };
 
-static_assert(sizeof(TerrainLitParams) == 480u,
+static_assert(sizeof(TerrainLitParams) == 528u,
               "Terrain lit parameters must match the std140 shader block");
 
 struct alignas(16) TerrainWaterParams {
@@ -152,7 +155,33 @@ void TerrainRhiPipelineSet::shutdown() {
     destroyTransparentResources();
     destroyShadowResources();
     destroyGBufferResources();
+    m_transparentClusterLayout = {};
+    m_transparentClusterBindGroup = {};
+    m_transparentClusterGrid = {};
     m_rhiDevice = nullptr;
+}
+
+bool TerrainRhiPipelineSet::configureClusteredLighting(
+    const RhiBindGroupLayoutHandle bindGroupLayout,
+    const RhiBindGroupHandle bindGroup,
+    const renderer::contracts::ClusterGrid& grid) {
+    if (m_rhiDevice == nullptr ||
+        m_rhiDevice->backend() != RhiBackend::Vulkan ||
+        !bindGroupLayout.isValid() || !bindGroup.isValid() ||
+        grid.clusterCount == 0u ||
+        grid.tileCountX == 0u || grid.tileCountY == 0u ||
+        grid.depthSliceCount !=
+            renderer::contracts::kClusterDepthSliceCount) {
+        return false;
+    }
+    if (m_transparentPipeline.isValid() &&
+        !sameHandle(m_transparentClusterLayout, bindGroupLayout)) {
+        destroyTransparentResources();
+    }
+    m_transparentClusterLayout = bindGroupLayout;
+    m_transparentClusterBindGroup = bindGroup;
+    m_transparentClusterGrid = grid;
+    return true;
 }
 
 bool TerrainRhiPipelineSet::prepareGBuffer(RhiCommandList& commandList,
@@ -237,7 +266,12 @@ bool TerrainRhiPipelineSet::prepareTransparent(
     const TerrainRenderSettings& settings,
     const int heldBlockLightValue,
     const bool volumetricFogShadersReady) {
-    if (m_rhiDevice == nullptr || !ensureTransparentPipeline(resourceMgr) ||
+    if (m_rhiDevice == nullptr ||
+        (m_rhiDevice->backend() == RhiBackend::Vulkan &&
+         (!m_transparentClusterLayout.isValid() ||
+          !m_transparentClusterBindGroup.isValid() ||
+          m_transparentClusterGrid.clusterCount == 0u)) ||
+        !ensureTransparentPipeline(resourceMgr) ||
         !ensureTransparentTextureViews(resourceMgr, targets) ||
         !ensureTransparentBindGroup()) {
         return false;
@@ -305,6 +339,21 @@ bool TerrainRhiPipelineSet::prepareTransparent(
         settings.volumetricLightEnabled ? 1 : 0,
         volumetricFogActive ? 1 : 0,
         heldBlockLightValue);
+    if (m_rhiDevice->backend() == RhiBackend::Vulkan) {
+        params.clusterGrid = {
+            m_transparentClusterGrid.tileCountX,
+            m_transparentClusterGrid.tileCountY,
+            m_transparentClusterGrid.depthSliceCount,
+            renderer::contracts::kClusterTileWidth};
+        params.clusterDepth = {
+            m_transparentClusterGrid.nearPlane,
+            m_transparentClusterGrid.farPlane,
+            m_transparentClusterGrid.depthLogScale,
+            m_transparentClusterGrid.depthLogBias};
+        params.clusterRenderExtent = {
+            m_transparentClusterGrid.renderWidth,
+            m_transparentClusterGrid.renderHeight, 0u, 0u};
+    }
     commandList.bufferBarrier({m_transparentParamsBuffer, RhiResourceState::UniformBuffer,
                                RhiResourceState::TransferDst});
     commandList.updateBuffer(m_transparentParamsBuffer, 0u, &params, sizeof(params));
@@ -1357,6 +1406,10 @@ bool TerrainRhiPipelineSet::ensureTransparentPipeline(ResourceMgr& resourceMgr) 
 
     renderer::rhi::RhiShaderSourceOptions sourceOptions;
     sourceOptions.preprocessorDefinitions.push_back("RHI_TERRAIN_LIT_MDI");
+    if (m_rhiDevice->backend() == RhiBackend::Vulkan) {
+        sourceOptions.preprocessorDefinitions.push_back(
+            "MECRAFT_CLUSTERED_LIGHTING");
+    }
     const std::optional<std::string> vertexSource = renderer::rhi::loadShaderSource(
         "assets/shaders/chunk_lit.vert",
         sourceOptions);
@@ -1461,7 +1514,10 @@ bool TerrainRhiPipelineSet::ensureTransparentPipeline(ResourceMgr& resourceMgr) 
         1u
     });
     m_transparentMaterialLayout = m_rhiDevice->createBindGroupLayout(materialLayoutDesc);
-    if (!m_transparentMetadataLayout.isValid() || !m_transparentMaterialLayout.isValid()) {
+    if (!m_transparentMetadataLayout.isValid() ||
+        !m_transparentMaterialLayout.isValid() ||
+        (m_rhiDevice->backend() == RhiBackend::Vulkan &&
+         !m_transparentClusterLayout.isValid())) {
         destroyTransparentResources();
         return false;
     }
@@ -1470,6 +1526,10 @@ bool TerrainRhiPipelineSet::ensureTransparentPipeline(ResourceMgr& resourceMgr) 
     pipelineLayoutDesc.debugName = "Terrain.TransparentPipelineLayout";
     pipelineLayoutDesc.bindGroupLayouts.push_back(m_transparentMetadataLayout);
     pipelineLayoutDesc.bindGroupLayouts.push_back(m_transparentMaterialLayout);
+    if (m_rhiDevice->backend() == RhiBackend::Vulkan) {
+        pipelineLayoutDesc.bindGroupLayouts.push_back(
+            m_transparentClusterLayout);
+    }
     m_transparentPipelineLayout = m_rhiDevice->createPipelineLayout(pipelineLayoutDesc);
     if (!m_transparentPipelineLayout.isValid()) {
         destroyTransparentResources();

@@ -116,7 +116,7 @@ struct ShaderCase {
 } // namespace
 
 int main() {
-    constexpr std::array<ShaderCase, 75> kShaderCases{{
+    constexpr std::array<ShaderCase, 84> kShaderCases{{
         {"tests/shaders/rhi_screen_coordinates_test.frag", RhiShaderStage::Fragment},
         {"tests/shaders/material_brdf_shared_test.frag", RhiShaderStage::Fragment},
         {"assets/shaders/fullscreen_triangle_rhi.vert", RhiShaderStage::Vertex},
@@ -145,6 +145,8 @@ int main() {
         {"assets/shaders/static_mesh_preview_rhi.frag", RhiShaderStage::Fragment},
         {"assets/shaders/static_mesh_transparent_rhi.vert", RhiShaderStage::Vertex},
         {"assets/shaders/static_mesh_transparent_rhi.frag", RhiShaderStage::Fragment},
+        {"assets/shaders/static_mesh_transparent_rhi.frag", RhiShaderStage::Fragment,
+         "MECRAFT_CLUSTERED_LIGHTING"},
         {"assets/shaders/chunk_gbuffer.frag", RhiShaderStage::Fragment,
          "RHI_TERRAIN_MDI", "RHI_TERRAIN_NORMAL_MAPS", "RHI_TERRAIN_SPECULAR_MAPS"},
         {"assets/shaders/ssao.frag", RhiShaderStage::Fragment},
@@ -152,6 +154,8 @@ int main() {
         {"assets/shaders/ssao_upsample.frag", RhiShaderStage::Fragment},
         {"assets/shaders/ssao_temporal.frag", RhiShaderStage::Fragment},
         {"assets/shaders/deferred_lighting.frag", RhiShaderStage::Fragment},
+        {"assets/shaders/deferred_lighting.frag", RhiShaderStage::Fragment,
+         "MECRAFT_CLUSTERED_LIGHTING"},
         {"assets/shaders/velocity_resolve.frag", RhiShaderStage::Fragment},
         {"assets/shaders/velocity_transparent_resolve.frag", RhiShaderStage::Fragment},
         {"assets/shaders/temporal_resolve.frag", RhiShaderStage::Fragment},
@@ -172,6 +176,12 @@ int main() {
         {"assets/shaders/hiz_build.comp", RhiShaderStage::Compute},
         {"assets/shaders/hiz_cull.comp", RhiShaderStage::Compute},
         {"assets/shaders/shadow_cull.comp", RhiShaderStage::Compute},
+        {"assets/shaders/cluster_count.comp", RhiShaderStage::Compute},
+        {"assets/shaders/cluster_scan.comp", RhiShaderStage::Compute},
+        {"assets/shaders/cluster_scan_add.comp", RhiShaderStage::Compute},
+        {"assets/shaders/cluster_finalize.comp", RhiShaderStage::Compute},
+        {"assets/shaders/cluster_fill.comp", RhiShaderStage::Compute},
+        {"assets/shaders/cluster_validate.comp", RhiShaderStage::Compute},
         {"assets/shaders/volumetric_fog.frag", RhiShaderStage::Fragment},
         {"assets/shaders/volumetric_composite.frag", RhiShaderStage::Fragment},
         {"assets/shaders/volumetric_temporal.frag", RhiShaderStage::Fragment},
@@ -195,6 +205,8 @@ int main() {
          "RHI_TERRAIN_WATER_MDI"},
         {"assets/shaders/transparent_composite.frag", RhiShaderStage::Fragment,
          "RHI_TERRAIN_LIT_MDI"},
+        {"assets/shaders/transparent_composite.frag", RhiShaderStage::Fragment,
+         "RHI_TERRAIN_LIT_MDI", "MECRAFT_CLUSTERED_LIGHTING"},
         {"assets/shaders/particle_rhi.frag", RhiShaderStage::Fragment,
          "PARTICLE_DEFERRED"},
         {"assets/shaders/rain_rhi.frag", RhiShaderStage::Fragment,

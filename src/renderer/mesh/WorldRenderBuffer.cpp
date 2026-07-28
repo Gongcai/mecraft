@@ -795,6 +795,30 @@ void WorldRenderBuffer::recordRhiTransparent(
     ++m_rhiSubmitCount;
 }
 
+void WorldRenderBuffer::recordRhiTransparent(
+    RhiCommandList& commandList,
+    const RhiPipelineHandle pipeline,
+    const RhiBindGroupHandle materialBindGroup,
+    const RhiBindGroupHandle clusteredLightingBindGroup) {
+    if (m_transparentCommands.empty()) {
+        return;
+    }
+    if (!clusteredLightingBindGroup.isValid()) {
+        std::abort();
+    }
+    commandList.setGraphicsPipeline(pipeline);
+    commandList.setBindGroup(0u, m_rhiMetadataBindGroup);
+    commandList.setBindGroup(1u, materialBindGroup);
+    commandList.setBindGroup(2u, clusteredLightingBindGroup);
+    commandList.setVertexBuffer(0u, m_transparentPool.buffer(), 0u);
+    commandList.drawIndirect(
+        m_rhiTransparentIndirectBuffer.buffer(),
+        0u,
+        static_cast<uint32_t>(m_transparentCommands.size()),
+        sizeof(DrawArraysIndirectCommand));
+    ++m_rhiSubmitCount;
+}
+
 bool WorldRenderBuffer::prepareRhiWater(
     RhiCommandList& commandList,
     const RhiBindGroupLayoutHandle metadataLayout) {

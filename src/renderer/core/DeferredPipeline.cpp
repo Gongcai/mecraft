@@ -282,6 +282,7 @@ void DeferredPipeline::initializePasses(ResourceMgr& resourceMgr,
     m_hiZPass = std::make_unique<HiZPass>();
     m_ssaoPass = std::make_unique<SsaoPass>();
     m_ssgiPass = std::make_unique<SsgiPass>();
+    m_clusteredLightingPass = std::make_unique<ClusteredLightingPass>();
     m_lightingPass = std::make_unique<DeferredLightingPass>();
     m_reflectionPass = std::make_unique<ReflectionPass>();
     m_cloudPass = std::make_unique<CloudPass>();
@@ -300,6 +301,7 @@ void DeferredPipeline::initializePasses(ResourceMgr& resourceMgr,
     m_ssaoPass->init(resourceMgr);
     m_ssgiPass->init(resourceMgr);
     m_lightingPass->init(resourceMgr);
+    m_lightingPass->setClusteredLightingPass(m_clusteredLightingPass.get());
     m_reflectionPass->init(resourceMgr);
     m_cloudPass->init(resourceMgr);
     m_sceneCompositePass->init(resourceMgr);
@@ -357,6 +359,7 @@ void DeferredPipeline::shutdown() {
     if (m_cloudPass) m_cloudPass->shutdown();
     if (m_reflectionPass) m_reflectionPass->shutdown();
     if (m_lightingPass) m_lightingPass->shutdown();
+    if (m_clusteredLightingPass) m_clusteredLightingPass->shutdown();
     if (m_ssgiPass) m_ssgiPass->shutdown();
     if (m_ssaoPass) m_ssaoPass->shutdown();
     if (m_velocityPass) m_velocityPass->shutdown();
@@ -375,6 +378,7 @@ void DeferredPipeline::shutdown() {
     m_cloudPass.reset();
     m_reflectionPass.reset();
     m_lightingPass.reset();
+    m_clusteredLightingPass.reset();
     m_ssgiPass.reset();
     m_ssaoPass.reset();
     m_velocityPass.reset();
@@ -634,6 +638,8 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
     }
 
     const bool shadowEnabled = settings.shadow.enabled;
+    const bool clusteredLightingActive =
+        rhiDevice.backend() == RhiBackend::Vulkan;
     {
         const auto shadowPrepStart = std::chrono::steady_clock::now();
         if (shadowEnabled &&
@@ -647,7 +653,12 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
     }
     bool cloudGraphPrepared = false;
     bool volumetricGraphPrepared = false;
+    bool clusteredLightingGraphPrepared = false;
     const auto failGraphSetup = [&]() {
+        if (clusteredLightingGraphPrepared) {
+            m_clusteredLightingPass->finishGraphExecution(false);
+            clusteredLightingGraphPrepared = false;
+        }
         if (volumetricGraphPrepared) {
             m_volumetricPass->finishGraphExecution(false);
             volumetricGraphPrepared = false;
@@ -661,6 +672,35 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
         }
         return false;
     };
+
+    if (clusteredLightingActive) {
+        if (m_clusteredLightingPass == nullptr ||
+            !m_clusteredLightingPass->prepareGraphFrame(
+                rhiDevice, ctx,
+                ctx.temporalExtents.renderExtent.width,
+                ctx.temporalExtents.renderExtent.height)) {
+            return failGraphSetup();
+        }
+        clusteredLightingGraphPrepared = true;
+
+        const DeferredClusteredLightingResources clusteredResources{
+            m_clusteredLightingPass->consumerBindGroupLayout(),
+            m_clusteredLightingPass->consumerBindGroup(),
+            m_clusteredLightingPass->grid()};
+        if ((m_shared->staticMeshRenderer != nullptr &&
+             !m_shared->staticMeshRenderer->configureClusteredLighting(
+                 clusteredResources.bindGroupLayout,
+                 clusteredResources.bindGroup, clusteredResources.grid)) ||
+            (!externalGeometry &&
+             !m_shared->terrainRhiPipelines->configureClusteredLighting(
+                 clusteredResources.bindGroupLayout,
+                 clusteredResources.bindGroup, clusteredResources.grid)) ||
+            (externalGeometry &&
+             !m_shared->deferredGeometryProvider->configureClusteredLighting(
+                 clusteredResources))) {
+            return failGraphSetup();
+        }
+    }
 
     const auto graphBuildStart = std::chrono::steady_clock::now();
     m_renderGraph.reset();
@@ -734,6 +774,13 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
         !importTexture(targets.velocityTextureHandle(),
                        targets.velocityTextureViewHandle(),
                        RhiResourceState::ShaderRead, velocity)) {
+        return failGraphSetup();
+    }
+
+    ClusteredLightingPass::GraphResources clusteredLightingResources;
+    if (clusteredLightingActive &&
+        !m_clusteredLightingPass->importGraphResources(
+            m_renderGraph, clusteredLightingResources)) {
         return failGraphSetup();
     }
 
@@ -1313,6 +1360,14 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
         }
     }
 
+    if (clusteredLightingActive) {
+        graphTail = m_clusteredLightingPass->addGraphPasses(
+            m_renderGraph, clusteredLightingResources, graphTail);
+        if (!graphTail.isValid()) {
+            return failGraphSetup();
+        }
+    }
+
     RenderGraphPassBuilder sceneLightingCopy = m_renderGraph.addPass(
         {"Deferred.SceneLightingCopy", RgPassType::Copy,
          RhiQueueType::Graphics, /*threadSafeRecord=*/true});
@@ -1359,6 +1414,16 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
             return m_lightingPass->execute(
                 pass.commandList(), ctx, settings, targets);
         });
+    if (clusteredLightingActive) {
+        lighting.readBuffer(clusteredLightingResources.lights,
+                            RhiResourceState::StorageBuffer)
+            .readBuffer(clusteredLightingResources.records,
+                        RhiResourceState::StorageBuffer)
+            .readBuffer(clusteredLightingResources.compactIndices,
+                        RhiResourceState::StorageBuffer)
+            .readBuffer(clusteredLightingResources.stats,
+                        RhiResourceState::StorageBuffer);
+    }
     graphTail = lighting.handle();
 
     if (ssgiEnabled) {
@@ -1613,6 +1678,17 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
                         ? pass.textureView(transmissionSource)
                         : RhiTextureViewHandle{});
             });
+        if (clusteredLightingActive) {
+            genericTransparent
+                .readBuffer(clusteredLightingResources.lights,
+                            RhiResourceState::StorageBuffer)
+                .readBuffer(clusteredLightingResources.records,
+                            RhiResourceState::StorageBuffer)
+                .readBuffer(clusteredLightingResources.compactIndices,
+                            RhiResourceState::StorageBuffer)
+                .readBuffer(clusteredLightingResources.stats,
+                            RhiResourceState::StorageBuffer);
+        }
         if (externalTransparent) {
             genericTransparent.readTexture(
                 transmissionSource, RhiResourceState::ShaderRead);
@@ -2147,6 +2223,9 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
     if (m_hiZPass) {
         m_hiZPass->finishGraphExecution(executed.succeeded());
     }
+    if (clusteredLightingGraphPrepared) {
+        m_clusteredLightingPass->finishGraphExecution(executed.succeeded());
+    }
     if (executed.succeeded()) {
         commitDeferredHistoryState();
     }
@@ -2629,7 +2708,8 @@ bool DeferredPipeline::recordGenericTransparentPass(
     worldBuffer.recordRhiTransparent(
         commandList,
         m_shared->terrainRhiPipelines->transparentPipeline(),
-        m_shared->terrainRhiPipelines->transparentBindGroup());
+        m_shared->terrainRhiPipelines->transparentBindGroup(),
+        m_shared->terrainRhiPipelines->transparentClusterBindGroup());
 
     commandList.endRendering();
     if (ctx.debugService != nullptr) {

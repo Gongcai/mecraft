@@ -1063,6 +1063,12 @@ void RenderScene::setHeldBlockLightValue(int value) {
     }
 }
 
+bool RenderScene::setGpuLights(
+    std::vector<renderer::contracts::GpuLight> lights) {
+    return m_deferredPipeline != nullptr &&
+           m_deferredPipeline->setGpuLights(std::move(lights));
+}
+
 // R7: Legacy bridge methods removed — use renderFrame() instead
 
 bool RenderScene::isLightDebugActive() const {

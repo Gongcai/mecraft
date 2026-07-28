@@ -25,6 +25,9 @@ layout(std140, binding = 6) uniform StaticMeshFrameParams {
     vec4 uAmbientColor;
     vec4 uFogColor;
     vec4 uFogParams;
+    uvec4 uClusterGrid;
+    vec4 uClusterDepth;
+    uvec4 uClusterRenderExtent;
 };
 
 void main() {

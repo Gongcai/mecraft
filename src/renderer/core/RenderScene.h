@@ -5,6 +5,7 @@
 #include "RenderPipeline.h"
 #include "FrameContext.h"
 #include "FrameOutput.h"
+#include "../contracts/GpuLightContract.h"
 #include "../passes/PostProcessPass.h"
 #include "../passes/Fsr1Pass.h"
 #include "../passes/TemporalUpscalePass.h"
@@ -16,6 +17,7 @@
 #include <memory>
 #include <functional>
 #include <optional>
+#include <vector>
 
 // Forward declarations
 class RenderResourceHub;
@@ -181,6 +183,8 @@ public:
     void setEyeInWater(bool inWater);
     void setRenderLocalPlayerModel(bool visible);
     void setHeldBlockLightValue(int value);
+    [[nodiscard]] bool setGpuLights(
+        std::vector<renderer::contracts::GpuLight> lights);
 
     // R7: Legacy bridge methods removed — use renderFrame() instead
 

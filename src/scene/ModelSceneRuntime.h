@@ -68,6 +68,8 @@ public:
     void renderToShadowMap(
         RhiCommandList& commandList,
         const glm::mat4& shadowViewProjection) override;
+    [[nodiscard]] bool configureClusteredLighting(
+        const DeferredClusteredLightingResources& resources) override;
     [[nodiscard]] bool hasTransparentGeometry() const override;
     [[nodiscard]] bool prepareTransparentResources(
         const DeferredTransparentResources& resources) override;

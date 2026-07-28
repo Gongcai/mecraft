@@ -1,5 +1,6 @@
 #include "DeferredLightingPass.h"
 
+#include "ClusteredLightingPass.h"
 #include "../core/RenderScene.h"
 #include "../debug/RenderDebugService.h"
 #include "../rhi/RhiCommandList.h"
@@ -83,8 +84,11 @@ struct alignas(16) DeferredLightingParams {
     glm::ivec4 flags3;
     glm::ivec4 flags4;
     glm::ivec4 flags5;
+    glm::uvec4 clusterGrid;
+    glm::vec4 clusterDepth;
+    glm::uvec4 clusterRenderExtent;
 };
-static_assert(sizeof(DeferredLightingParams) == 1280u);
+static_assert(sizeof(DeferredLightingParams) == 1328u);
 } // namespace
 
 void DeferredLightingPass::init(ResourceMgr& resourceMgr) {
@@ -97,6 +101,7 @@ void DeferredLightingPass::init(ResourceMgr& resourceMgr) {
 void DeferredLightingPass::shutdown() {
     destroyRhiResources();
     m_shadowRenderer = nullptr;
+    m_clusteredLightingPass = nullptr;
     m_lightmapDayTexture = {};
     m_lightmapNightTexture = {};
     m_noiseTexture = {};
@@ -113,6 +118,14 @@ bool DeferredLightingPass::execute(RhiCommandList& commandList,
     }
 
     RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
+    const bool clusteredLightingActive =
+        rhiDevice.backend() == RhiBackend::Vulkan;
+    if (clusteredLightingActive &&
+        (m_clusteredLightingPass == nullptr ||
+         !m_clusteredLightingPass->consumerBindGroupLayout().isValid() ||
+         !m_clusteredLightingPass->consumerBindGroup().isValid())) {
+        return false;
+    }
     const bool useTemporalSsao =
         settings.ssao.enabled && settings.ssao.temporalEnabled &&
         !requiresTemporalReset(ctx.temporalResetReasons);
@@ -270,6 +283,19 @@ bool DeferredLightingPass::execute(RhiCommandList& commandList,
                                shadow::ShadowRenderer::CASCADE_COUNT,
                                0,
                                0);
+    if (clusteredLightingActive) {
+        const renderer::contracts::ClusterGrid& clusterGrid =
+            m_clusteredLightingPass->grid();
+        params.clusterGrid = {
+            clusterGrid.tileCountX, clusterGrid.tileCountY,
+            clusterGrid.depthSliceCount,
+            renderer::contracts::kClusterTileWidth};
+        params.clusterDepth = {
+            clusterGrid.nearPlane, clusterGrid.farPlane,
+            clusterGrid.depthLogScale, clusterGrid.depthLogBias};
+        params.clusterRenderExtent = {
+            clusterGrid.renderWidth, clusterGrid.renderHeight, 0u, 0u};
+    }
 
     const bool clearForDebug = settings.debug.deferredLightDebugMode > 0;
     RhiColorAttachment colorAttachment;
@@ -303,6 +329,10 @@ bool DeferredLightingPass::execute(RhiCommandList& commandList,
     commandList.beginRendering(renderingInfo);
     commandList.setGraphicsPipeline(m_pipeline);
     commandList.setBindGroup(0u, m_bindGroup);
+    if (clusteredLightingActive) {
+        commandList.setBindGroup(
+            1u, m_clusteredLightingPass->consumerBindGroup());
+    }
     commandList.draw(3u, 1u, 0u, 0u);
     commandList.endRendering();
     if (ctx.debugService != nullptr) {
@@ -322,8 +352,14 @@ bool DeferredLightingPass::ensureRhiPipeline(RhiDevice& rhiDevice) {
 
     const std::optional<std::string> vertexSource =
         renderer::rhi::loadShaderSource("assets/shaders/deferred_lighting.vert");
+    renderer::rhi::RhiShaderSourceOptions fragmentOptions;
+    if (rhiDevice.backend() == RhiBackend::Vulkan) {
+        fragmentOptions.preprocessorDefinitions.emplace_back(
+            "MECRAFT_CLUSTERED_LIGHTING");
+    }
     const std::optional<std::string> fragmentSource =
-        renderer::rhi::loadShaderSource("assets/shaders/deferred_lighting.frag");
+        renderer::rhi::loadShaderSource(
+            "assets/shaders/deferred_lighting.frag", fragmentOptions);
     if (!vertexSource.has_value() || !fragmentSource.has_value()) {
         return false;
     }
@@ -431,6 +467,15 @@ bool DeferredLightingPass::ensureRhiPipeline(RhiDevice& rhiDevice) {
     RhiPipelineLayoutDesc pipelineLayoutDesc;
     pipelineLayoutDesc.debugName = "DeferredLighting.PipelineLayout";
     pipelineLayoutDesc.bindGroupLayouts.push_back(m_bindGroupLayout);
+    if (rhiDevice.backend() == RhiBackend::Vulkan) {
+        if (m_clusteredLightingPass == nullptr ||
+            !m_clusteredLightingPass->consumerBindGroupLayout().isValid()) {
+            destroyRhiResources();
+            return false;
+        }
+        pipelineLayoutDesc.bindGroupLayouts.push_back(
+            m_clusteredLightingPass->consumerBindGroupLayout());
+    }
     m_pipelineLayout = rhiDevice.createPipelineLayout(pipelineLayoutDesc);
     if (!m_pipelineLayout.isValid()) {
         destroyRhiResources();

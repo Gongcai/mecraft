@@ -2,6 +2,10 @@
 
 #include "gpu_material_contract.glsl"
 #include "rhi_screen_coordinates.glsl"
+#ifdef MECRAFT_CLUSTERED_LIGHTING
+#define MECRAFT_CLUSTER_BIND_SET 2
+#include "clustered_lighting.glsl"
+#endif
 
 layout(location = 0) in vec2 vUv;
 layout(location = 1) in vec3 vNormal;
@@ -46,6 +50,9 @@ layout(std140, binding = 6) uniform StaticMeshFrameParams {
     vec4 uAmbientColor;
     vec4 uFogColor;
     vec4 uFogParams;
+    uvec4 uClusterGrid;
+    vec4 uClusterDepth;
+    uvec4 uClusterRenderExtent;
 };
 
 #include "static_mesh_material.glsl"
@@ -196,6 +203,27 @@ void main() {
         sampledMaterial.baseColor.rgb * uAmbientColor.rgb *
             sampledMaterial.occlusion +
         evaluateMaterialEmission(sampledMaterial);
+#ifdef MECRAFT_CLUSTERED_LIGHTING
+    vec4 clusteredClip = uViewProj * vec4(vWorldPosition, 1.0);
+    vec2 clusteredClipUv = clusteredClip.xy / clusteredClip.w * 0.5 + 0.5;
+    bool clusteredBuildValid;
+    ClusteredSurfaceLighting clusteredLighting =
+        evaluateClusteredSurfaceLighting(
+            clusteredClipUv, abs(clusteredClip.w), uClusterGrid,
+            uClusterRenderExtent, uClusterDepth,
+            vWorldPosition - uCameraPosition.xyz, normal, viewDirection,
+            f0, f90, sampledMaterial.perceptualRoughness,
+            clusteredBuildValid);
+    if (!clusteredBuildValid) {
+        outColor = vec4(1.0, 0.0, 1.0, 1.0);
+        outReactiveMask = 1.0;
+        outTransparencyMask = 1.0;
+        return;
+    }
+    color += sampledMaterial.baseColor.rgb *
+        (1.0 - sampledMaterial.metalness) * clusteredLighting.diffuse +
+        clusteredLighting.specular;
+#endif
 
     vec3 clearcoatDirect = vec3(0.0);
     if (sampledMaterial.clearcoat > 0.0) {

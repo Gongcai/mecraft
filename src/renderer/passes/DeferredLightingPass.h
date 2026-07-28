@@ -13,6 +13,7 @@ class DeferredRenderTargets;
 class ResourceMgr;
 class RhiCommandList;
 class RhiDevice;
+class ClusteredLightingPass;
 
 namespace shadow { class ShadowRenderer; }
 
@@ -28,6 +29,12 @@ public:
 
     /// Set the held block light value (from player inventory).
     void setHeldBlockLightValue(int value) { m_heldBlockLightValue = value; }
+
+    /// Injects the Vulkan clustered-light data owner used as descriptor set 1.
+    /// @param pass Pass whose persistent buffers outlive this lighting pipeline.
+    void setClusteredLightingPass(ClusteredLightingPass* pass) {
+        m_clusteredLightingPass = pass;
+    }
 
     /// Records deferred lighting into a graph-owned command list.
     /// @param commandList Recording command list supplied by the Render Graph.
@@ -54,6 +61,7 @@ private:
 
     RhiDevice* m_rhiDevice = nullptr;
     shadow::ShadowRenderer* m_shadowRenderer = nullptr;
+    ClusteredLightingPass* m_clusteredLightingPass = nullptr;
     int m_heldBlockLightValue = 0;
     RhiTextureHandle m_lightmapDayTexture;
     RhiTextureHandle m_lightmapNightTexture;
