@@ -529,6 +529,8 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
 
     RhiDevice& rhiDevice = *m_shared->rhiDevice;
     DeferredRenderTargets& targets = *m_shared->deferredTargets;
+    const bool externalTransparent = externalGeometry &&
+        m_shared->deferredGeometryProvider->hasTransparentGeometry();
     if (!externalGeometry && m_shared->staticMeshRenderer != nullptr) {
         m_shared->staticMeshRenderer->prepareFrame(ctx, *ctx.worldView);
     }
@@ -784,6 +786,8 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
     RgTextureHandle historyScenePrevious;
     RgTextureHandle transparentComposite;
     RgTextureHandle transparentCompositeDepth;
+    RgTextureHandle transmissionSource;
+    uint32_t transmissionSourceMipLevels = 0u;
     RgTextureHandle cloud;
     RgTextureHandle halfRes;
     RgTextureHandle ssgiHalfRes;
@@ -845,6 +849,24 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
          targets.transientTargetDesc(
              DeferredTransientTarget::TransparentCompositeDepth),
          RhiResourceState::Undefined});
+    if (externalTransparent) {
+        RhiTextureDesc transmissionSourceDesc =
+            targets.transientTargetDesc(
+                DeferredTransientTarget::SceneComposite);
+        // Rough transmission samples the opaque HDR scene at a material-driven
+        // LOD, so the source must retain the complete downsample chain.
+        uint32_t largestExtent = std::max(
+            transmissionSourceDesc.width,
+            transmissionSourceDesc.height);
+        while (largestExtent > 1u) {
+            largestExtent >>= 1u;
+            ++transmissionSourceDesc.mipLevels;
+        }
+        transmissionSourceMipLevels = transmissionSourceDesc.mipLevels;
+        transmissionSource = m_renderGraph.createTexture(
+            {"Deferred.TransmissionSource", transmissionSourceDesc,
+             RhiResourceState::Undefined});
+    }
     reflection = m_renderGraph.createTexture(
         {"Deferred.Reflection",
          targets.transientTargetDesc(DeferredTransientTarget::Reflection),
@@ -856,7 +878,8 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
     if (!sceneLighting.isValid() || !sceneComposite.isValid() ||
         !transparentComposite.isValid() ||
         !transparentCompositeDepth.isValid() || !reflection.isValid() ||
-        !cloud.isValid()) {
+        !cloud.isValid() ||
+        (externalTransparent && !transmissionSource.isValid())) {
         return failGraphSetup();
     }
 
@@ -1539,6 +1562,30 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
             graphTail = waterCopies.handle();
         }
 
+        if (externalTransparent) {
+            RenderGraphPassBuilder transmissionPyramid =
+                m_renderGraph.addPass(
+                    {"Deferred.TransmissionPyramid", RgPassType::Copy,
+                     RhiQueueType::Graphics});
+            transmissionPyramid.dependsOn(graphTail)
+                .readTexture(sceneComposite, RhiResourceState::TransferSrc)
+                .writeTexture(
+                    transmissionSource, RhiResourceState::TransferDst)
+                .setExecute([&, transmissionSource,
+                             transmissionSourceMipLevels](RgPassContext& pass) {
+                    RhiTextureBlit blit;
+                    blit.src = targets.sceneCompositeTextureHandle();
+                    blit.dst = pass.texture(transmissionSource);
+                    pass.commandList().blitTexture(blit);
+                    if (transmissionSourceMipLevels > 1u) {
+                        pass.commandList().generateMipmaps(
+                            pass.texture(transmissionSource));
+                    }
+                    return true;
+                });
+            graphTail = transmissionPyramid.handle();
+        }
+
         RenderGraphPassBuilder genericTransparent = m_renderGraph.addPass(
             {"Deferred.GenericTransparent", RgPassType::Graphics,
              RhiQueueType::Graphics});
@@ -1554,9 +1601,17 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
             .readWriteTexture(transparentCompositeDepth, RhiResourceState::DepthWrite)
             .readWriteTexture(reactiveMask, RhiResourceState::RenderTarget)
             .readWriteTexture(transparencyMask, RhiResourceState::RenderTarget)
-            .setExecute([&](RgPassContext& pass) {
-                return recordGenericTransparentPass(pass.commandList(), ctx);
+            .setExecute([&, transmissionSource](RgPassContext& pass) {
+                return recordGenericTransparentPass(
+                    pass.commandList(), ctx,
+                    externalTransparent
+                        ? pass.textureView(transmissionSource)
+                        : RhiTextureViewHandle{});
             });
+        if (externalTransparent) {
+            genericTransparent.readTexture(
+                transmissionSource, RhiResourceState::ShaderRead);
+        }
         graphTail = genericTransparent.handle();
 
         RenderGraphPassBuilder genericCopies = m_renderGraph.addPass(
@@ -2358,7 +2413,8 @@ bool DeferredPipeline::renderGBufferTerrain(RhiCommandList& commandList,
 
 bool DeferredPipeline::recordGenericTransparentPass(
     RhiCommandList& commandList,
-    const FrameContext& ctx) {
+    const FrameContext& ctx,
+    const RhiTextureViewHandle transmissionSourceView) {
     if (!hasGenericTransparentGeometry()) {
         return true;
     }
@@ -2422,7 +2478,7 @@ bool DeferredPipeline::recordGenericTransparentPass(
 
     if (externalTransparent) {
         const DeferredTransparentResources resources{
-            targets.sceneCompositeTextureViewHandle(),
+            transmissionSourceView,
             targets.depthTextureViewHandle(),
             targets.skyCaptureTextureViewHandle(),
             m_currentSettings.reflection.sceneReflectionCompositeStrength};

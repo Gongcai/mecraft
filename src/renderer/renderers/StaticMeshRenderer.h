@@ -126,7 +126,9 @@ private:
         RhiBufferHandle uniformBuffer;
         RhiBindGroupHandle bindGroup;
         bool doubleSided = false;
-        bool transparent = false;
+        bool alphaBlended = false;
+        bool transmissive = false;
+        bool forwardOpticalLayer = false;
     };
 
     struct PrimitiveResource {
@@ -172,6 +174,8 @@ private:
     RhiPipelineHandle m_shadowDoubleSidedPipeline;
     RhiPipelineHandle m_previewPipeline;
     RhiPipelineHandle m_previewDoubleSidedPipeline;
+    RhiPipelineHandle m_previewTransparentPipeline;
+    RhiPipelineHandle m_previewTransparentDoubleSidedPipeline;
     RhiPipelineHandle m_transparentPipeline;
     RhiPipelineHandle m_transparentDoubleSidedPipeline;
     glm::vec3 m_assetBoundsMin{0.0f};

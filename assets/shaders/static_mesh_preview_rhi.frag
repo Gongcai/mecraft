@@ -13,11 +13,22 @@ layout(binding = 1) uniform sampler2D uMetallicRoughnessTexture;
 layout(binding = 2) uniform sampler2D uNormalTexture;
 layout(binding = 3) uniform sampler2D uOcclusionTexture;
 layout(binding = 4) uniform sampler2D uEmissiveTexture;
+layout(binding = 7) uniform sampler2D uSpecularTexture;
+layout(binding = 8) uniform sampler2D uSpecularColorTexture;
+layout(binding = 9) uniform sampler2D uClearcoatTexture;
+layout(binding = 10) uniform sampler2D uClearcoatRoughnessTexture;
+layout(binding = 11) uniform sampler2D uClearcoatNormalTexture;
+layout(binding = 12) uniform sampler2D uTransmissionTexture;
+layout(binding = 13) uniform sampler2D uThicknessTexture;
 layout(std140, binding = 5) uniform StaticMeshMaterialParams {
     vec4 uBaseColorFactor;
     vec4 uEmissiveAlphaCutoff;
     vec4 uMaterialFactors;
     vec4 uWorkflowFactors;
+    vec4 uSpecularFactors;
+    vec4 uClearcoatFactors;
+    vec4 uTransmissionVolumeFactors;
+    vec4 uAttenuationColorDistance;
     ivec4 uMaterialFlags;
 };
 layout(std140, binding = 6) uniform StaticMeshFrameParams {
@@ -49,13 +60,34 @@ void main() {
     float diffuse = max(dot(normal, lightDirection), 0.0);
     float specularPower = mix(96.0, 8.0, roughness);
     float specular = pow(max(dot(normal, halfDirection), 0.0), specularPower);
-    vec3 dielectric = vec3(0.04);
-    vec3 f0 = mix(dielectric, baseColor.rgb, metalness);
+    vec3 f0 = mix(
+        sampledMaterial.dielectricF0, baseColor.rgb, metalness);
     vec3 diffuseColor = baseColor.rgb * (1.0 - metalness);
     vec3 color = diffuseColor * (0.12 + diffuse * 0.88) * occlusion;
     color += f0 * specular * (1.0 - roughness * 0.5);
+    if (sampledMaterial.clearcoat > 0.0) {
+        vec3 clearcoatNormalSample = texture(
+            uClearcoatNormalTexture, vUv).xyz * 2.0 - 1.0;
+        clearcoatNormalSample.xy *= uClearcoatFactors.z;
+        vec3 clearcoatNormal = normalize(
+            mat3(tangent, bitangent, normalize(vNormal)) *
+            normalize(clearcoatNormalSample));
+        float clearcoatPower = mix(
+            128.0, 12.0, sampledMaterial.clearcoatRoughness);
+        float clearcoatSpecular = pow(
+            max(dot(clearcoatNormal, halfDirection), 0.0),
+            clearcoatPower);
+        color += vec3(0.04) * clearcoatSpecular *
+            sampledMaterial.clearcoat;
+    }
     color += emissive;
     color = color / (color + vec3(1.0));
     color = pow(color, vec3(1.0 / 2.2));
-    outColor = vec4(color, baseColor.a);
+    float previewAlpha = baseColor.a *
+        (1.0 - sampledMaterial.transmission * 0.85);
+    bool transparentPreview = uMaterialFlags.z != 0 ||
+                              sampledMaterial.transmission > 0.0;
+    outColor = transparentPreview
+        ? vec4(color * previewAlpha, previewAlpha)
+        : vec4(color, baseColor.a);
 }

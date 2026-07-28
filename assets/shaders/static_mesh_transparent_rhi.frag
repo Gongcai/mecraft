@@ -17,6 +17,13 @@ layout(binding = 1) uniform sampler2D uMetallicRoughnessTexture;
 layout(binding = 2) uniform sampler2D uNormalTexture;
 layout(binding = 3) uniform sampler2D uOcclusionTexture;
 layout(binding = 4) uniform sampler2D uEmissiveTexture;
+layout(binding = 7) uniform sampler2D uSpecularTexture;
+layout(binding = 8) uniform sampler2D uSpecularColorTexture;
+layout(binding = 9) uniform sampler2D uClearcoatTexture;
+layout(binding = 10) uniform sampler2D uClearcoatRoughnessTexture;
+layout(binding = 11) uniform sampler2D uClearcoatNormalTexture;
+layout(binding = 12) uniform sampler2D uTransmissionTexture;
+layout(binding = 13) uniform sampler2D uThicknessTexture;
 layout(set = 1, binding = 0) uniform sampler2D uSceneColorTexture;
 layout(set = 1, binding = 1) uniform sampler2D uOpaqueDepthTexture;
 layout(set = 1, binding = 2) uniform sampler2D uSkyCaptureTexture;
@@ -29,6 +36,10 @@ layout(std140, binding = 5) uniform StaticMeshMaterialParams {
     vec4 uEmissiveAlphaCutoff;
     vec4 uMaterialFactors;
     vec4 uWorkflowFactors;
+    vec4 uSpecularFactors;
+    vec4 uClearcoatFactors;
+    vec4 uTransmissionVolumeFactors;
+    vec4 uAttenuationColorDistance;
     ivec4 uMaterialFlags;
 };
 layout(std140, binding = 6) uniform StaticMeshFrameParams {
@@ -61,8 +72,21 @@ float geometrySchlickGgx(float nDotV, float roughness) {
     return nDotV / max(nDotV * (1.0 - k) + k, 1e-6);
 }
 
-vec3 fresnelSchlick(float cosTheta, vec3 f0) {
-    return f0 + (1.0 - f0) * pow(1.0 - cosTheta, 5.0);
+vec3 fresnelSchlick(float cosTheta, vec3 f0, float f90) {
+    return f0 + (vec3(f90) - f0) * pow(1.0 - cosTheta, 5.0);
+}
+
+vec3 sampleMappedNormal(sampler2D normalTexture,
+                        vec2 uv,
+                        float scale,
+                        vec3 tangent,
+                        vec3 bitangent,
+                        vec3 geometricNormal) {
+    vec3 tangentNormal = texture(normalTexture, uv).xyz * 2.0 - 1.0;
+    tangentNormal.xy *= scale;
+    return normalize(
+        mat3(tangent, bitangent, geometricNormal) *
+        normalize(tangentNormal));
 }
 
 vec2 projectTransparentReflection(
@@ -123,7 +147,8 @@ bool traceTransparentScreenReflection(
                 0.0, 0.08, min(edgeDistance.x, edgeDistance.y));
             hitConfidence = edgeConfidence *
                 mix(1.0, 0.35, roughness * roughness);
-            hitColor = texture(uSceneColorTexture, textureUv).rgb;
+            hitColor = textureLod(
+                uSceneColorTexture, textureUv, 0.0).rgb;
             return true;
         }
     }
@@ -157,10 +182,15 @@ void main() {
         vTangent - geometricNormal * dot(vTangent, geometricNormal));
     vec3 bitangent =
         normalize(cross(geometricNormal, tangent)) * vTangentSign;
-    vec3 tangentNormal = texture(uNormalTexture, vUv).xyz * 2.0 - 1.0;
-    tangentNormal.xy *= uMaterialFactors.z;
-    vec3 normal = normalize(
-        mat3(tangent, bitangent, geometricNormal) * normalize(tangentNormal));
+    vec3 normal = sampleMappedNormal(
+        uNormalTexture, vUv, uMaterialFactors.z,
+        tangent, bitangent, geometricNormal);
+    vec3 clearcoatNormal = normal;
+    if (sampledMaterial.clearcoat > 0.0) {
+        clearcoatNormal = sampleMappedNormal(
+            uClearcoatNormalTexture, vUv, uClearcoatFactors.z,
+            tangent, bitangent, geometricNormal);
+    }
 
     vec3 viewDirection = normalize(uCameraPosition.xyz - vWorldPosition);
     normal = faceforward(normal, -viewDirection, normal);
@@ -172,9 +202,13 @@ void main() {
     float hDotV = max(dot(halfDirection, viewDirection), 0.0);
 
     vec3 f0 = mix(
-        vec3(0.04), sampledMaterial.baseColor.rgb,
+        sampledMaterial.dielectricF0,
+        sampledMaterial.baseColor.rgb,
         sampledMaterial.metalness);
-    vec3 fresnel = fresnelSchlick(hDotV, f0);
+    float f90 = mix(
+        sampledMaterial.specularF90, 1.0,
+        sampledMaterial.metalness);
+    vec3 fresnel = fresnelSchlick(hDotV, f0, f90);
     float distribution = distributionGgx(nDotH, sampledMaterial.roughness);
     float geometry = geometrySchlickGgx(nDotV, sampledMaterial.roughness) *
                      geometrySchlickGgx(nDotL, sampledMaterial.roughness);
@@ -191,6 +225,35 @@ void main() {
             uSunColor.rgb * nDotL +
         sampledMaterial.baseColor.rgb * uAmbientColor.rgb * occlusion +
         emissive;
+
+    vec3 clearcoatDirect = vec3(0.0);
+    if (sampledMaterial.clearcoat > 0.0) {
+        vec3 clearcoatHalf = normalize(viewDirection + lightDirection);
+        float clearcoatNdotL = max(
+            dot(clearcoatNormal, lightDirection), 0.0);
+        float clearcoatNdotV = max(
+            dot(clearcoatNormal, viewDirection), 0.0);
+        float clearcoatNdotH = max(
+            dot(clearcoatNormal, clearcoatHalf), 0.0);
+        float clearcoatHdotV = max(
+            dot(clearcoatHalf, viewDirection), 0.0);
+        float clearcoatDistribution = distributionGgx(
+            clearcoatNdotH, sampledMaterial.clearcoatRoughness);
+        float clearcoatGeometry = geometrySchlickGgx(
+            clearcoatNdotV, sampledMaterial.clearcoatRoughness) *
+            geometrySchlickGgx(
+                clearcoatNdotL, sampledMaterial.clearcoatRoughness);
+        vec3 clearcoatFresnel = fresnelSchlick(
+            clearcoatHdotV, vec3(0.04), 1.0);
+        clearcoatDirect = sampledMaterial.clearcoat *
+            clearcoatDistribution * clearcoatGeometry * clearcoatFresnel /
+            max(4.0 * clearcoatNdotV * clearcoatNdotL, 1e-5) *
+            uSunColor.rgb * clearcoatNdotL;
+        float layerAttenuation = 1.0 - sampledMaterial.clearcoat *
+            max(max(clearcoatFresnel.r, clearcoatFresnel.g),
+                clearcoatFresnel.b);
+        color = color * layerAttenuation + clearcoatDirect;
+    }
     float distanceToCamera = length(uCameraPosition.xyz - vWorldPosition);
     color = mix(color, uFogColor.rgb, fogAmount(distanceToCamera));
 
@@ -206,16 +269,99 @@ void main() {
     vec3 reflectionSource = mix(
         environmentReflection, screenReflection,
         screenReflectionConfidence);
-    vec3 viewFresnel = fresnelSchlick(nDotV, f0);
+    vec3 viewFresnel = fresnelSchlick(nDotV, f0, f90);
     float roughnessEnergy = mix(
         1.0, 0.25,
         sampledMaterial.roughness * sampledMaterial.roughness);
     vec3 reflection = reflectionSource * viewFresnel *
         roughnessEnergy * clamp(uReflectionParams.x, 0.0, 1.0);
 
+    vec3 clearcoatReflection = vec3(0.0);
+    if (sampledMaterial.clearcoat > 0.0) {
+        vec3 clearcoatReflectedDirection = reflect(
+            -viewDirection, clearcoatNormal);
+        vec3 clearcoatEnvironment = sampleSkyRadianceCloudy(
+            uSkyCaptureTexture, clearcoatReflectedDirection);
+        vec3 clearcoatScreen;
+        float clearcoatScreenConfidence;
+        traceTransparentScreenReflection(
+            vWorldPosition, clearcoatReflectedDirection, clearcoatNormal,
+            sampledMaterial.clearcoatRoughness,
+            clearcoatScreen, clearcoatScreenConfidence);
+        vec3 clearcoatSource = mix(
+            clearcoatEnvironment, clearcoatScreen,
+            clearcoatScreenConfidence);
+        float clearcoatNdotV = max(
+            dot(clearcoatNormal, viewDirection), 0.0);
+        vec3 clearcoatFresnel = fresnelSchlick(
+            clearcoatNdotV, vec3(0.04), 1.0);
+        float clearcoatEnergy = mix(
+            1.0, 0.25,
+            sampledMaterial.clearcoatRoughness *
+                sampledMaterial.clearcoatRoughness);
+        clearcoatReflection = clearcoatSource * clearcoatFresnel *
+            sampledMaterial.clearcoat * clearcoatEnergy *
+            clamp(uReflectionParams.x, 0.0, 1.0);
+        reflection *= 1.0 - sampledMaterial.clearcoat *
+            max(max(clearcoatFresnel.r, clearcoatFresnel.g),
+                clearcoatFresnel.b);
+        reflection += clearcoatReflection;
+    }
+
+    if (sampledMaterial.transmission > 0.0) {
+        vec3 refractedDirection = refract(
+            -viewDirection, normal, 1.0 / sampledMaterial.ior);
+        vec3 modelScale = vec3(
+            length(uModel[0].xyz),
+            length(uModel[1].xyz),
+            length(uModel[2].xyz));
+        vec3 transmissionRay = normalize(refractedDirection) *
+            sampledMaterial.thickness * modelScale;
+        float refractedDepth;
+        vec2 refractedScreenUv = projectTransparentReflection(
+            vWorldPosition + transmissionRay,
+            refractedDepth);
+        vec2 transmissionScreenUv = clamp(
+            refractedScreenUv, vec2(0.001), vec2(0.999));
+        // Match the glTF sample-viewer mapping: IOR controls how strongly
+        // microsurface roughness spreads transmitted radiance across the
+        // opaque-scene color pyramid.
+        float iorRoughness = sampledMaterial.roughness * clamp(
+            sampledMaterial.ior * 2.0 - 2.0, 0.0, 1.0);
+        float transmissionLod = iorRoughness *
+            float(textureQueryLevels(uSceneColorTexture) - 1);
+        vec3 transmittedScene = textureLod(
+            uSceneColorTexture,
+            rhiScreenUvToTextureUv(transmissionScreenUv),
+            transmissionLod).rgb;
+        vec3 volumeAttenuation = vec3(1.0);
+        if (sampledMaterial.thickness > 0.0 &&
+            sampledMaterial.attenuationDistance > 0.0) {
+            volumeAttenuation = pow(
+                max(sampledMaterial.attenuationColor, vec3(1e-5)),
+                vec3(length(transmissionRay) /
+                     sampledMaterial.attenuationDistance));
+        }
+        vec3 transmittedColor = transmittedScene * volumeAttenuation *
+            sampledMaterial.baseColor.rgb * (vec3(1.0) - viewFresnel);
+        color = mix(color, transmittedColor, sampledMaterial.transmission);
+    }
+
+    bool clearcoatOverlay = uMaterialFlags.z == 0 &&
+        sampledMaterial.transmission <= 0.0 &&
+        sampledMaterial.clearcoat > 0.0;
+    if (clearcoatOverlay) {
+        outColor = vec4(clearcoatDirect + clearcoatReflection, 0.0);
+        outReactiveMask = sampledMaterial.clearcoat;
+        outTransparencyMask = 0.0;
+        return;
+    }
+
     outColor = vec4(
         color * sampledMaterial.baseColor.a + reflection,
         sampledMaterial.baseColor.a);
-    outReactiveMask = sampledMaterial.baseColor.a;
-    outTransparencyMask = sampledMaterial.baseColor.a;
+    float temporalMask = max(
+        sampledMaterial.baseColor.a, sampledMaterial.transmission);
+    outReactiveMask = temporalMask;
+    outTransparencyMask = temporalMask;
 }

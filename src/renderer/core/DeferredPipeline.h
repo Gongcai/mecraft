@@ -155,7 +155,8 @@ private:
                                             const RenderSettings& settings);
     [[nodiscard]] bool recordGenericTransparentPass(
         RhiCommandList& commandList,
-        const FrameContext& ctx);
+        const FrameContext& ctx,
+        RhiTextureViewHandle transmissionSourceView);
     [[nodiscard]] bool hasGenericTransparentGeometry() const;
     [[nodiscard]] bool recordParticlesPass(
         RhiCommandList& commandList,

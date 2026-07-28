@@ -85,6 +85,7 @@ const int MATERIAL_TEXTURED_EMISSIVE = 36;
 const int MATERIAL_ORE = 57;
 const int MATERIAL_NETHER_ORE = 58;
 const int MATERIAL_SKIN = 60;  // Entity skin (player/mob) — Mecraft extension
+const int MATERIAL_STATIC_MESH = 61;  // glTF static mesh with colored dielectric F0
 const float MATERIAL_ID_MAX = 63.0;
 
 // DerivativeMain Material.inc:12 — EMISSION_CURVE shapes the PBR emissiveness channel.
@@ -116,6 +117,8 @@ struct GBufferSurface {
     vec2 voxelLight;
     SurfaceMaterial material;
     SurfaceMaterialAux aux;
+    vec3 dielectricF0;
+    float specularF90;
 };
 
 int materialKindId(float materialKind) {
@@ -310,12 +313,24 @@ GBufferSurface unpackGBufferSurface(vec4 albedoMaterial, vec4 normalAo, vec4 vox
     surface.voxelLight = voxelLight.rg;
     surface.material = unpackGBufferMaterial(packedMaterial);
     surface.aux = defaultSurfaceMaterialAux();
+    surface.dielectricF0 = vec3(surface.material.f0);
+    surface.specularF90 = 1.0;
     return surface;
 }
 
 GBufferSurface unpackGBufferSurface(vec4 albedoMaterial, vec4 normalAo, vec4 voxelLight, vec4 packedMaterial, vec4 packedMaterialAux) {
     GBufferSurface surface = unpackGBufferSurface(albedoMaterial, normalAo, voxelLight, packedMaterial);
     surface.aux = unpackGBufferMaterialAux(packedMaterialAux);
+    if (isMaterialKind(surface.aux.materialKind, MATERIAL_STATIC_MESH)) {
+        surface.material.roughness = clamp(packedMaterial.r, 0.0, 1.0);
+        surface.dielectricF0 = clamp(packedMaterial.gba, vec3(0.0), vec3(1.0));
+        surface.material.f0 = max(
+            surface.dielectricF0.r,
+            max(surface.dielectricF0.g, surface.dielectricF0.b));
+        surface.material.emission = clamp(albedoMaterial.a, 0.0, 1.0);
+        surface.material.sss = 0.0;
+        surface.specularF90 = clamp(surface.aux.porosity, 0.0, 1.0);
+    }
     return surface;
 }
 

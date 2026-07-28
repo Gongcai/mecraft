@@ -7,6 +7,10 @@ layout(std140, binding = 5) uniform StaticMeshMaterialParams {
     vec4 uEmissiveAlphaCutoff;
     vec4 uMaterialFactors;
     vec4 uWorkflowFactors;
+    vec4 uSpecularFactors;
+    vec4 uClearcoatFactors;
+    vec4 uTransmissionVolumeFactors;
+    vec4 uAttenuationColorDistance;
     ivec4 uMaterialFlags;
 };
 

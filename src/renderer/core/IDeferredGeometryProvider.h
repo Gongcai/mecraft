@@ -10,6 +10,7 @@ class RhiCommandList;
 
 /// Read-only deferred targets required by external transparent geometry.
 struct DeferredTransparentResources {
+    // Full-mip opaque HDR color used by rough reflection and transmission.
     RhiTextureViewHandle sceneColor;
     RhiTextureViewHandle opaqueDepth;
     RhiTextureViewHandle skyCapture;

@@ -20,11 +20,22 @@ layout(binding = 1) uniform sampler2D uMetallicRoughnessTexture;
 layout(binding = 2) uniform sampler2D uNormalTexture;
 layout(binding = 3) uniform sampler2D uOcclusionTexture;
 layout(binding = 4) uniform sampler2D uEmissiveTexture;
+layout(binding = 7) uniform sampler2D uSpecularTexture;
+layout(binding = 8) uniform sampler2D uSpecularColorTexture;
+layout(binding = 9) uniform sampler2D uClearcoatTexture;
+layout(binding = 10) uniform sampler2D uClearcoatRoughnessTexture;
+layout(binding = 11) uniform sampler2D uClearcoatNormalTexture;
+layout(binding = 12) uniform sampler2D uTransmissionTexture;
+layout(binding = 13) uniform sampler2D uThicknessTexture;
 layout(std140, binding = 5) uniform StaticMeshMaterialParams {
     vec4 uBaseColorFactor;
     vec4 uEmissiveAlphaCutoff;
     vec4 uMaterialFactors;
     vec4 uWorkflowFactors;
+    vec4 uSpecularFactors;
+    vec4 uClearcoatFactors;
+    vec4 uTransmissionVolumeFactors;
+    vec4 uAttenuationColorDistance;
     ivec4 uMaterialFlags;
 };
 layout(std140, binding = 6) uniform StaticMeshFrameParams {
@@ -62,18 +73,15 @@ void main() {
     vec3 emissive = texture(uEmissiveTexture, vUv).rgb * uEmissiveAlphaCutoff.rgb;
     float emissiveStrength = max(max(emissive.r, emissive.g), emissive.b);
 
-    SurfaceMaterial material = defaultSurfaceMaterial();
-    material.roughness = roughness;
-    material.f0 = 0.04;
-    material.emission = emissiveStrength;
-
     SurfaceMaterialAux aux = defaultSurfaceMaterialAux();
+    aux.materialKind = float(MATERIAL_STATIC_MESH);
+    aux.porosity = sampledMaterial.specularF90;
     aux.metalness = metalness;
 
     gAlbedoMaterial = vec4(baseColor.rgb, emissiveStrength);
     gNormalAo = packGBufferNormalAo(worldNormal, occlusion);
     gVoxelLight = vec4(clamp(uVoxelLight.xy, 0.0, 1.0), 0.0, 1.0);
-    gMaterial = packGBufferMaterial(material);
+    gMaterial = vec4(roughness, sampledMaterial.dielectricF0);
     gMaterialAux = packGBufferMaterialAux(aux);
     gVelocity = vVelocity;
 }

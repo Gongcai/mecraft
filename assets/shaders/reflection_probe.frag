@@ -50,6 +50,10 @@ vec2 GenerateRandomOffset(vec2 screenPos, float time) {
     return Hash2D(p);
 }
 
+vec3 gltfFresnelSchlick(float cosTheta, vec3 f0, float f90) {
+    return f0 + (vec3(f90) - f0) * pow(1.0 - cosTheta, 5.0);
+}
+
 #include "weather_surface.glsl"
 
 vec3 reconstructWorldPosition(vec2 clipUv, float depth) {
@@ -233,6 +237,17 @@ void main() {
     // DerivativeMain wet surface — shared implementation in weather_surface.glsl
     float roughness = material.roughness;
     float f0Scalar = material.f0;
+    bool staticMeshMaterial =
+        isMaterialKind(aux.materialKind, MATERIAL_STATIC_MESH);
+    vec3 dielectricF0 = staticMeshMaterial
+        ? clamp(packedMaterial.gba, vec3(0.0), vec3(1.0))
+        : vec3(f0Scalar);
+    if (staticMeshMaterial) {
+        f0Scalar = max(
+            dielectricF0.r, max(dielectricF0.g, dielectricF0.b));
+    }
+    float specularF90 = staticMeshMaterial
+        ? clamp(aux.porosity, 0.0, 1.0) : 1.0;
     vec2 voxelLightRaw = texture(uVoxelLightTex, textureUv).rg;
     float skyLightRaw01 = clamp(voxelLightRaw.r, 0.0, 1.0);
     float weatherSurfaceWetness = (uRainWetSurfacesEnabled != 0) ? uSurfaceWetness : 0.0;
@@ -263,6 +278,7 @@ void main() {
             float derivativePuddleRoughness = sqr(oneMinus(puddleMask) * wetRoughnessScale);
             roughness = min(roughness, derivativePuddleRoughness);
             f0Scalar = max(f0Scalar, 0.04 * puddleMask);
+            dielectricF0 = max(dielectricF0, vec3(0.04 * puddleMask));
         }
     }
 
@@ -357,8 +373,13 @@ void main() {
 
     // DerivativeMain Material.inc GetMaterialData(vec2):
     // material.hasReflections = max0(0.625 - material.roughness) + material.isMetal > 5e-3.
-    float derivativeReflectionMask = max(max(0.625 - clamp(roughness, 0.0, 1.0), 0.0),
-                                         puddleMask * 0.625) + aux.metalness;
+    float dielectricReflectionWeight = max(
+        specularF90,
+        max(dielectricF0.r, max(dielectricF0.g, dielectricF0.b)));
+    float derivativeReflectionMask =
+        max(max(0.625 - clamp(roughness, 0.0, 1.0), 0.0),
+            puddleMask * 0.625) * dielectricReflectionWeight +
+        aux.metalness;
     bool hasDerivativeReflection = transMask.isTranslucent ||
                                    derivativeReflectionMask > 0.005;
     if (uReflectionDebugMode == 14) {
@@ -376,23 +397,25 @@ void main() {
 
     float nDotRay = max(dot(normal, reflectedDir), 0.0);
     float nDotView = max(dot(normal, -viewDir), 1e-6);
-    float specular = 0.0;
+    float metalness = clamp(aux.metalness, 0.0, 1.0);
+    vec3 finalF0 = mix(dielectricF0, baseColor, metalness);
+    float finalF90 = mix(specularF90, 1.0, metalness);
+    vec3 reflectionSpecular = vec3(0.0);
     float dist = 0.0;
     bool usesRoughReflection = materialIsRough || weatherSurfaceWetness > 1e-2;
     if (usesRoughReflection) {
         vec3 halfWay = normalize(reflectedDir - viewDir);
         float lDotH = saturate(dot(reflectedDir, halfWay));
-        float F = FresnelSchlick(lDotH, f0Scalar);
+        vec3 fresnel = gltfFresnelSchlick(lDotH, finalF0, finalF90);
         float alpha2 = roughness * roughness;
         float V2 = V2SmithGGX(nDotView, max(nDotRay, 1e-6), alpha2);
         float V1Inverse = V1SmithGGXInverse(nDotView, alpha2);
-        specular = nDotRay * F * V2 * V1Inverse;
+        reflectionSpecular = nDotRay * fresnel * V2 * V1Inverse;
         dist = saturate(max(ssrHit * 2.0, roughness * 3.0));
     } else {
-        specular = FresnelDielectric(nDotView, f0Scalar);
+        reflectionSpecular = gltfFresnelSchlick(
+            nDotView, finalF0, finalF90);
     }
-    float metalness = clamp(aux.metalness, 0.0, 1.0);
-    float dielectricReflectance = specular;
     if (!transMask.isTranslucent && puddleMask > 1e-4) {
         // Mecraft adaptation: DerivativeMain's sky reflection source is sampled
         // from an HDR sky capture in the same composite chain. Our separated
@@ -400,11 +423,10 @@ void main() {
         // close to damp terrain, so use the same water F0 as a smooth dielectric
         // Fresnel floor only where Terrain.frag already wrote a puddle mask.
         float waterFresnel = FresnelDielectric(nDotView, max(f0Scalar, 0.04));
-        dielectricReflectance = max(dielectricReflectance,
-                                    waterFresnel * puddleCoreMask);
+        reflectionSpecular = max(
+            reflectionSpecular,
+            vec3(waterFresnel * puddleCoreMask));
     }
-    vec3 reflectionSpecular = vec3(dielectricReflectance) * oneMinus(metalness) +
-                              baseColor * metalness;
     float reflectance = max(reflectionSpecular.r,
                             max(reflectionSpecular.g, reflectionSpecular.b));
 

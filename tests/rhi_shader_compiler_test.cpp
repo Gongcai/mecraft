@@ -39,7 +39,7 @@ struct ShaderCase {
 } // namespace
 
 int main() {
-    constexpr std::array<ShaderCase, 59> kShaderCases{{
+    constexpr std::array<ShaderCase, 65> kShaderCases{{
         {"tests/shaders/rhi_screen_coordinates_test.frag", RhiShaderStage::Fragment},
         {"assets/shaders/fullscreen_triangle_rhi.vert", RhiShaderStage::Vertex},
         {"assets/shaders/deferred_lighting.vert", RhiShaderStage::Vertex},
@@ -48,6 +48,12 @@ int main() {
         {"assets/shaders/entity_gbuffer_rhi.vert", RhiShaderStage::Vertex},
         {"assets/shaders/item_drop_gbuffer_rhi.vert", RhiShaderStage::Vertex},
         {"assets/shaders/falling_block_gbuffer_rhi.vert", RhiShaderStage::Vertex},
+        {"assets/shaders/static_mesh_gbuffer_rhi.vert", RhiShaderStage::Vertex},
+        {"assets/shaders/static_mesh_gbuffer_rhi.frag", RhiShaderStage::Fragment},
+        {"assets/shaders/static_mesh_shadow_rhi.vert", RhiShaderStage::Vertex},
+        {"assets/shaders/static_mesh_shadow_rhi.frag", RhiShaderStage::Fragment},
+        {"assets/shaders/static_mesh_preview_rhi.vert", RhiShaderStage::Vertex},
+        {"assets/shaders/static_mesh_preview_rhi.frag", RhiShaderStage::Fragment},
         {"assets/shaders/static_mesh_transparent_rhi.vert", RhiShaderStage::Vertex},
         {"assets/shaders/static_mesh_transparent_rhi.frag", RhiShaderStage::Fragment},
         {"assets/shaders/ssao.frag", RhiShaderStage::Fragment},

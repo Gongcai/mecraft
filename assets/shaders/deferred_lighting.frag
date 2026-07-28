@@ -183,6 +183,28 @@ layout(std140, binding = 19) uniform DeferredLightingParams {
 
 #include "cloud_density.glsl"
 
+vec3 staticMeshFresnelSchlick(float cosTheta, vec3 f0, float f90) {
+    return f0 + (vec3(f90) - f0) * pow(1.0 - cosTheta, 5.0);
+}
+
+vec3 staticMeshSpecularBrdf(float lDotH,
+                            float nDotV,
+                            float nDotL,
+                            float nDotH,
+                            float alpha2,
+                            vec3 f0,
+                            float f90) {
+    if (nDotL < 1e-5) {
+        return vec3(0.0);
+    }
+    vec3 fresnel = staticMeshFresnelSchlick(lDotH, f0, f90);
+    float distribution = DistributionGGX(nDotH, alpha2);
+    float visibility = V2SmithGGX(
+        max(nDotV, 1e-2), max(nDotL, 1e-2), alpha2);
+    return min(vec3(nDotL * distribution * visibility) * fresnel,
+               vec3(4.0));
+}
+
 vec3 srgbToLinear(vec3 color) {
     return pow(max(color, vec3(0.0)), vec3(2.2));
 }
@@ -611,6 +633,8 @@ void main() {
     vec2 voxelLight = surface.voxelLight;
     float roughness = surface.material.roughness;
     float f0Scalar = surface.material.f0;
+    vec3 dielectricF0 = surface.dielectricF0;
+    float specularF90 = surface.specularF90;
     float materialEmission = surface.material.emission;
     float sss = surface.material.sss;
     int materialKind = materialKindId(surface.aux.materialKind);
@@ -627,7 +651,12 @@ void main() {
     float pixelWetness = max(ComputePixelWetness(weatherSurfaceWetness, skyLightRaw01, surface.aux.wetnessMask, normal.y),
                              gbufferRainWetMask);
 
-    bool hasDerivativeSpecular = (max(0.625 - roughness, 0.0) + surface.aux.metalness > 0.005) ||
+    float dielectricReflectionWeight = max(
+        specularF90,
+        max(dielectricF0.r, max(dielectricF0.g, dielectricF0.b)));
+    bool hasDerivativeSpecular =
+        (max(0.625 - roughness, 0.0) * dielectricReflectionWeight +
+             surface.aux.metalness > 0.005) ||
                                  transMask.isTranslucent;
     float derivativeSpecularMask = hasDerivativeSpecular ? 1.0 : 0.0;
     vec3 worldPos = reconstructWorldPosition(vClipUv, depth);
@@ -772,8 +801,13 @@ void main() {
             diffuse *= DiffuseHammon(LdotV, NdotV, NdotL, NdotH, roughness, albedo);
 
             // Specular (DerivativeMain deferred5.fsh:291-292)
-            specular = vec3(SpecularBRDF(LdotH, NdotV, rawNdotL, NdotH, alpha2, f0ScalarClamped)) *
-                       mix(vec3(1.0), albedo, surface.aux.metalness);
+            vec3 finalF0 = mix(
+                dielectricF0, albedo, surface.aux.metalness);
+            float finalF90 = mix(
+                specularF90, 1.0, surface.aux.metalness);
+            specular = staticMeshSpecularBrdf(
+                LdotH, NdotV, rawNdotL, NdotH, alpha2,
+                finalF0, finalF90);
             // DerivativeMain deferred5.fsh:297 — specular *= SPECULAR_HIGHLIGHT_BRIGHTNESS + wetnessCustom.
             specular *= 0.6 + weatherSurfaceWetness; // SPECULAR_HIGHLIGHT_BRIGHTNESS=0.6 (DerivativeMain Settings.glsl:133)
 
@@ -1055,8 +1089,14 @@ void main() {
     // Sky specular (environment reflection) — Mecraft extension, not in DerivativeMain deferred5.fsh
     // DerivativeMain handles sky reflections in a separate SSR pass (deferred6.fsh)
     if (uDerivativeStrictMode == 0 && !isRainWetSurface) {
-        color += evaluateSkySH(skySH, normal) * FresnelSchlick(max(dot(normal, viewDir), 0.0), f0ScalarClamped) *
-                 pow(oneMinus(roughness), 1.65) * (0.018 + 0.105 * outdoorSkyMask) * derivativeSpecularMask;
+        vec3 finalF0 = mix(dielectricF0, albedo, surface.aux.metalness);
+        float finalF90 = mix(specularF90, 1.0, surface.aux.metalness);
+        color += evaluateSkySH(skySH, normal) *
+                 staticMeshFresnelSchlick(
+                     max(dot(normal, viewDir), 0.0), finalF0, finalF90) *
+                 pow(oneMinus(roughness), 1.65) *
+                 (0.018 + 0.105 * outdoorSkyMask) *
+                 derivativeSpecularMask;
     }
 
     // Shadow desaturation (Mecraft extension, not in DerivativeMain)
