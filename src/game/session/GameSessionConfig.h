@@ -1,7 +1,10 @@
 #ifndef MECRAFT_GAME_SESSION_CONFIG_H
 #define MECRAFT_GAME_SESSION_CONFIG_H
 
+#include "renderer/core/RenderSettings.h"
+
 #include <glm/glm.hpp>
+#include <cstdint>
 #include <filesystem>
 #include <string>
 
@@ -19,6 +22,12 @@ class RhiCommandListPool;
 class ThreadPool;
 class PresentationController;
 
+/// Selects the authoritative source of renderer settings for one game session.
+enum class GameRenderSettingsSource : uint8_t {
+    UserProfile,
+    FixedProfile
+};
+
 /// Configuration for a gameplay session (seed, render distance, etc.)
 struct GameSessionConfig {
     int seed = 1234;
@@ -35,6 +44,12 @@ struct GameSessionConfig {
     std::string worldDisplayName;       // User-visible displayName stored in level.json for new worlds
     std::filesystem::path saveRoot;     // Root directory for all saves (e.g. "saves/")
     bool enableSaving = true;
+
+    /// Renderer settings source selected before GPU runtime initialization.
+    GameRenderSettingsSource renderSettingsSource =
+        GameRenderSettingsSource::UserProfile;
+    /// Immutable renderer configuration used when renderSettingsSource is FixedProfile.
+    RenderSettings fixedRenderSettings;
 };
 
 /// External service dependencies required by a gameplay session.

@@ -8,7 +8,6 @@
 
 #include <glm/gtc/matrix_inverse.hpp>
 
-#include "engine/platform/Time.h"
 #include "renderer/core/DeferredPipeline.h"
 #include "renderer/core/IDeferredGeometryProvider.h"
 #include "renderer/core/RenderScene.h"
@@ -224,7 +223,8 @@ struct ModelSceneDeferredRenderer::Impl {
         const glm::vec3& cameraPosition,
         const float nearPlane,
         const float farPlane,
-        const float deltaTime) {
+        const float verticalFovDegrees,
+        const RenderFrameClock& frameClock) {
         FrameContext context;
         context.camera.view = view;
         context.camera.projection = projection;
@@ -235,7 +235,7 @@ struct ModelSceneDeferredRenderer::Impl {
         context.camera.position = cameraPosition;
         context.camera.nearPlane = nearPlane;
         context.camera.farPlane = farPlane;
-        context.camera.fovDegrees = 55.0f;
+        context.camera.fovDegrees = verticalFovDegrees;
         const TemporalExtent renderExtent{renderWidth, renderHeight};
         const TemporalExtent outputExtent{width, height};
         context.temporalExtents = makeTemporalFrameExtents(
@@ -248,12 +248,12 @@ struct ModelSceneDeferredRenderer::Impl {
             postProcess.sceneColorTextureViewHandle();
         context.sceneCaptureDepthView =
             postProcess.sceneDepthTextureViewHandle();
-        context.frameIndex = Time::getFrameIndex();
-        context.deltaTime = deltaTime;
+        context.frameIndex = frameClock.frameIndex;
+        context.deltaTime = frameClock.deltaTimeSeconds;
         context.animationTime = static_cast<float>(
-            std::fmod(Time::getGameTime(), 16.0));
+            std::fmod(frameClock.animationTimeSeconds, 16.0));
         context.shaderTime = static_cast<float>(
-            std::fmod(Time::getRawTime(), 8192.0));
+            std::fmod(frameClock.shaderTimeSeconds, 8192.0));
         if (settings.upscale.type == TemporalUpscalerType::Fsr31) {
 #if defined(MECRAFT_ENABLE_FSR31)
             const Fsr31JitterResult jitter = queryFsr31Jitter(
@@ -624,19 +624,30 @@ bool ModelSceneDeferredRenderer::render(
     const glm::vec3& cameraPosition,
     const float nearPlane,
     const float farPlane,
-    const float deltaTime) {
+    const float verticalFovDegrees,
+    const RenderFrameClock& frameClock) {
     Impl& state = *m_impl;
     if (!state.initialized || state.width == 0u || state.height == 0u ||
         !state.beginDebugFrame()) {
         state.error = "failed to begin model scene deferred frame";
         return false;
     }
-    if (!state.timePaused) {
-        state.dayNight.update(deltaTime * state.timeScale);
+    if (!std::isfinite(verticalFovDegrees) ||
+        verticalFovDegrees <= 1.0f || verticalFovDegrees >= 179.0f ||
+        !std::isfinite(frameClock.deltaTimeSeconds) ||
+        frameClock.deltaTimeSeconds < 0.0f ||
+        !std::isfinite(frameClock.animationTimeSeconds) ||
+        !std::isfinite(frameClock.shaderTimeSeconds)) {
+        state.error = "invalid model scene camera or frame clock";
+        return false;
     }
-    state.weather.update(deltaTime);
+    if (!state.timePaused) {
+        state.dayNight.update(frameClock.deltaTimeSeconds * state.timeScale);
+    }
+    state.weather.update(frameClock.deltaTimeSeconds);
     const std::optional<FrameContext> builtContext = state.buildFrameContext(
-        view, projection, cameraPosition, nearPlane, farPlane, deltaTime);
+        view, projection, cameraPosition, nearPlane, farPlane,
+        verticalFovDegrees, frameClock);
     if (!builtContext.has_value()) {
         state.error = "failed to build model scene temporal frame context";
         return false;
@@ -656,11 +667,12 @@ bool ModelSceneDeferredRenderer::render(
         temporalInput.motionVectorScale = {
             static_cast<float>(context.temporalExtents.renderExtent.width),
             static_cast<float>(context.temporalExtents.renderExtent.height)};
-        temporalInput.frameDeltaMilliseconds = deltaTime * 1000.0f;
+        temporalInput.frameDeltaMilliseconds =
+            frameClock.deltaTimeSeconds * 1000.0f;
         temporalInput.preExposure = 1.0f;
         temporalInput.cameraNear = nearPlane;
         temporalInput.cameraFar = farPlane;
-        temporalInput.verticalFovRadians = glm::radians(55.0f);
+        temporalInput.verticalFovRadians = glm::radians(verticalFovDegrees);
         temporalInput.cameraAspectRatio =
             static_cast<float>(state.width) / static_cast<float>(state.height);
         temporalInput.cameraViewToClip = projection;
@@ -731,7 +743,7 @@ bool ModelSceneDeferredRenderer::render(
     state.postProcess.setFrameEffects(
         buildPostProcessEffects(state.settings, context));
     const RhiTextureHandle texture = state.postProcess.compositeToTexture(
-        *state.rhiDevice, deltaTime, output.gbufferDepth,
+        *state.rhiDevice, frameClock.deltaTimeSeconds, output.gbufferDepth,
         state.debugService);
     if (!texture.isValid()) {
         state.error = "failed to composite model scene post-process output";
@@ -927,6 +939,24 @@ uint32_t ModelSceneDeferredRenderer::viewportWidth() const {
 
 uint32_t ModelSceneDeferredRenderer::viewportHeight() const {
     return m_impl->height;
+}
+
+RhiTextureHandle ModelSceneDeferredRenderer::captureTextureHandle() const {
+    return m_impl->viewportUsesFsr1
+        ? m_impl->fsr1.outputTextureHandle()
+        : m_impl->postProcess.compositeTextureHandle();
+}
+
+RhiTextureFormat ModelSceneDeferredRenderer::captureTextureFormat() const {
+    return m_impl->viewportUsesFsr1
+        ? m_impl->rhiDevice->swapchainColorFormat()
+        : RhiTextureFormat::Rgba8Unorm;
+}
+
+const GpuFrameStats* ModelSceneDeferredRenderer::gpuFrameStats() const {
+    return m_impl->initialized
+        ? &m_impl->debugService.getGpuFrameStats()
+        : nullptr;
 }
 
 const std::string& ModelSceneDeferredRenderer::lastError() const {

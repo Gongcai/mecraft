@@ -1183,10 +1183,12 @@ bool ModelSceneRuntime::renderViewport(const glm::mat4& view,
                                        const glm::vec3& cameraPosition,
                                        const float nearPlane,
                                        const float farPlane,
-                                       const float deltaTime) {
+                                       const float verticalFovDegrees,
+                                       const RenderFrameClock& frameClock) {
     if (!m_deferredRenderer ||
         !m_deferredRenderer->render(
-            view, projection, cameraPosition, nearPlane, farPlane, deltaTime)) {
+            view, projection, cameraPosition, nearPlane, farPlane,
+            verticalFovDegrees, frameClock)) {
         if (m_deferredRenderer) {
             setError(m_deferredRenderer->lastError());
         }
@@ -1332,6 +1334,24 @@ uint32_t ModelSceneRuntime::viewportHeight() const {
         std::abort();
     }
     return m_deferredRenderer->viewportHeight();
+}
+
+RhiTextureHandle ModelSceneRuntime::captureTextureHandle() const {
+    return m_deferredRenderer
+        ? m_deferredRenderer->captureTextureHandle()
+        : RhiTextureHandle{};
+}
+
+RhiTextureFormat ModelSceneRuntime::captureTextureFormat() const {
+    return m_deferredRenderer
+        ? m_deferredRenderer->captureTextureFormat()
+        : RhiTextureFormat::Undefined;
+}
+
+const GpuFrameStats* ModelSceneRuntime::gpuFrameStats() const {
+    return m_deferredRenderer
+        ? m_deferredRenderer->gpuFrameStats()
+        : nullptr;
 }
 
 void ModelSceneRuntime::setTimeOfDay(const float timeOfDaySeconds) {

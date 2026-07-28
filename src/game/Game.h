@@ -4,9 +4,15 @@
 
 #ifndef MECRAFT_GAME_H
 #define MECRAFT_GAME_H
+#include <filesystem>
 #include <memory>
+#include <optional>
 #include <string>
 
+#include "engine/camera/Camera.h"
+#include "renderer/capture/TextureCapture.h"
+#include "renderer/contracts/CameraPathContract.h"
+#include "renderer/core/FrameContext.h"
 #include "session/GameSessionConfig.h"
 #include "session/GameSession.h"
 
@@ -88,6 +94,25 @@ public:
     /// Schedules save-thumbnail capture during the next normal gameplay frame.
     void requestExitScreenshot();
 
+    /// Configures the exact camera, clock, and optional PNG request for one frame.
+    /// @param pose Validated Camera Path pose to apply to world rendering.
+    /// @param clock Fixed validation frame clock used by temporal rendering.
+    /// @param capturePath PNG destination for the final frame, or null for no capture.
+    /// @return True when the double-precision pose converts to a valid render camera.
+    [[nodiscard]] bool configureValidationFrame(
+        const renderer::contracts::CameraPathPose& pose,
+        const RenderFrameClock& clock,
+        const std::filesystem::path* capturePath);
+
+    /// Returns and clears the most recent validation capture result.
+    /// @return Capture status after a requested frame, or no value otherwise.
+    [[nodiscard]] std::optional<renderer::capture::TextureCaptureResult>
+    takeValidationCaptureResult();
+
+    /// Freezes authoritative world state before deterministic rendering begins.
+    /// @return True when the session is non-persistent, local, and fully loaded.
+    [[nodiscard]] bool prepareValidationScene();
+
 private:
     // G1: Structured config and dependencies
     GameSessionConfig m_config;
@@ -108,6 +133,11 @@ private:
 
     bool m_initialized = false;
     bool m_captureScreenshotOnNextFrame = false;
+    std::optional<Camera> m_validationCamera;
+    std::optional<RenderFrameClock> m_validationFrameClock;
+    std::optional<std::filesystem::path> m_validationCapturePath;
+    std::optional<renderer::capture::TextureCaptureResult>
+        m_validationCaptureResult;
     float m_fixedInterpolationAlpha = 0.0f;
     LoadPhase m_loadPhase = LoadPhase::NotStarted;
 };

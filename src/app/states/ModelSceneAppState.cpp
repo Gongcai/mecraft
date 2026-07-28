@@ -18,10 +18,14 @@
 
 #include "MainMenuAppState.h"
 #include "app/AppSettings.h"
+#include "app/validation/ValidationRunController.h"
 #include "Diagnostics.h"
 #include "ecs/components/TransformComponents.h"
 #include "engine/input/InputManager.h"
+#include "engine/camera/Camera.h"
 #include "engine/platform/Time.h"
+#include "renderer/capture/TextureCapture.h"
+#include "renderer/core/FrameContext.h"
 #include "renderer/rhi/RhiCommandList.h"
 #include "renderer/rhi/RhiCommandListPool.h"
 #include "renderer/rhi/RhiDevice.h"
@@ -84,6 +88,14 @@ ModelSceneAppState::ModelSceneAppState(AppStateDependencies deps)
     : m_deps(deps) {}
 
 void ModelSceneAppState::onEnter() {
+    const auto failValidationInitialization = [this](std::string detail) {
+        if (m_deps.validationRun.enabled() &&
+            !m_deps.validationRun.failed()) {
+            m_deps.validationRun.fail(
+                app::validation::ValidationRunError::SceneInitializationFailed,
+                std::move(detail));
+        }
+    };
     m_deps.contextManager.pushContext(InputContextType::UI);
     m_cameraControlActive = false;
     m_deps.input.captureMouse(false);
@@ -92,17 +104,21 @@ void ModelSceneAppState::onEnter() {
                               "model_scene_imgui.ini")) {
         MECRAFT_LOG_STREAM(
             std::cerr << "[ModelSceneAppState] Failed to initialize ImGui\n");
+        failValidationInitialization(
+            "model validation ImGui renderer initialization failed");
         return;
     }
     if (!m_scene.init(m_deps.resourceMgr, m_deps.rhiDevice,
                       m_deps.commandListPool, m_imguiRenderer)) {
         MECRAFT_LOG_STREAM(
             std::cerr << "[ModelSceneAppState] " << m_scene.lastError() << '\n');
+        failValidationInitialization(m_scene.lastError());
         return;
     }
     if (m_scene.importModel(kDefaultModelPath) == entt::null) {
         MECRAFT_LOG_STREAM(
             std::cerr << "[ModelSceneAppState] " << m_scene.lastError() << '\n');
+        failValidationInitialization(m_scene.lastError());
         m_scene.shutdown();
         return;
     }
@@ -119,6 +135,22 @@ void ModelSceneAppState::onEnter() {
     m_transformCommandActive = false;
     m_transformCommandFromGizmo = false;
     m_transformCommandEntityId = scene::kInvalidSceneEntityId;
+    if (m_deps.validationRun.enabled()) {
+        if (!m_scene.setRenderSettings(
+                m_deps.validationRun.renderSettingsProfile().settings)) {
+            failValidationInitialization(m_scene.lastError());
+            return;
+        }
+        m_scene.setTimeOfDay(
+            app::validation::kValidationWorldTimeSeconds);
+        m_scene.setTimePaused(true);
+        m_scene.setTimeScale(1.0f);
+        m_scene.setWeather(WeatherType::Clear, true);
+        if (!m_deps.validationRun.beginScene(ValidationScene::Model)) {
+            return;
+        }
+        m_validationActive = true;
+    }
     m_initialized = true;
 }
 
@@ -129,6 +161,7 @@ void ModelSceneAppState::onExit() {
     m_imguiRenderer.shutdown();
     m_deps.contextManager.popContext();
     m_initialized = false;
+    m_validationActive = false;
 }
 
 void ModelSceneAppState::requestReturnToMenu() {
@@ -524,6 +557,11 @@ void ModelSceneAppState::update(const double frameTime, double& accumulator) {
     accumulator = 0.0;
     if (!m_initialized) {
         requestReturnToMenu();
+        return;
+    }
+    if (m_validationActive) {
+        accumulator = 0.0;
+        m_scene.syncTransforms();
         return;
     }
     m_deps.input.update();
@@ -1563,6 +1601,84 @@ void ModelSceneAppState::render(const double frameTime) {
     if (!m_initialized || m_returnRequested) {
         return;
     }
+    if (m_validationActive) {
+        const app::validation::ValidationFrame* validationFrame =
+            m_deps.validationRun.currentFrame();
+        if (validationFrame == nullptr) {
+            m_deps.validationRun.fail(
+                app::validation::ValidationRunError::InvalidState,
+                "model validation has no active frame");
+            return;
+        }
+        const AppLaunchOptions& options = m_deps.validationRun.options();
+        if (!m_scene.ensureViewport(
+                options.validationWidth, options.validationHeight)) {
+            m_deps.validationRun.fail(
+                app::validation::ValidationRunError::RenderFailed,
+                m_scene.lastError());
+            return;
+        }
+
+        Camera camera;
+        if (!camera.setViewPose(
+                glm::vec3(validationFrame->cameraPose.position),
+                glm::vec3(validationFrame->cameraPose.forward),
+                glm::vec3(validationFrame->cameraPose.up),
+                static_cast<float>(
+                    validationFrame->cameraPose.verticalFovDegrees))) {
+            m_deps.validationRun.fail(
+                app::validation::ValidationRunError::CameraPoseConversionFailed,
+                "model Camera Path pose cannot be represented by the float render camera");
+            return;
+        }
+        const float aspect =
+            static_cast<float>(options.validationWidth) /
+            static_cast<float>(options.validationHeight);
+        const glm::mat4 view = camera.getViewMatrix();
+        const glm::mat4 projection = glm::perspective(
+            glm::radians(camera.getFOV()), aspect,
+            m_cameraNearPlane, m_cameraFarPlane);
+        const RenderFrameClock clock{
+            validationFrame->sequenceFrameIndex,
+            validationFrame->deltaTimeSeconds,
+            validationFrame->renderTimeSeconds,
+            validationFrame->renderTimeSeconds};
+        if (!m_scene.renderViewport(
+                view, projection, camera.getPosition(),
+                m_cameraNearPlane, m_cameraFarPlane, camera.getFOV(), clock)) {
+            m_deps.validationRun.fail(
+                app::validation::ValidationRunError::RenderFailed,
+                m_scene.lastError());
+            return;
+        }
+
+        bool captureSucceeded = true;
+        std::string captureDetail;
+        if (validationFrame->captureAfterRender) {
+            renderer::capture::TextureCaptureRequest request;
+            request.sourceTexture = m_scene.captureTextureHandle();
+            request.sourceState = RhiResourceState::ShaderRead;
+            request.sourceFormat = m_scene.captureTextureFormat();
+            request.width = options.validationWidth;
+            request.height = options.validationHeight;
+            request.origin = m_deps.rhiDevice.backend() == RhiBackend::OpenGL
+                ? renderer::capture::TextureCaptureOrigin::BottomLeft
+                : renderer::capture::TextureCaptureOrigin::TopLeft;
+            request.outputPath = options.validationCapturePath;
+            const renderer::capture::TextureCaptureResult result =
+                renderer::capture::captureTextureToPng(
+                    m_deps.rhiDevice, m_deps.commandListPool, request);
+            captureSucceeded = result.succeeded();
+            if (!captureSucceeded) {
+                captureDetail = std::string(
+                    renderer::capture::textureCaptureErrorStableId(
+                        result.error)) + ":" + result.detail;
+            }
+        }
+        static_cast<void>(m_deps.validationRun.completeFrame(
+            captureSucceeded, std::move(captureDetail)));
+        return;
+    }
     const Window::FramebufferSize framebufferSize =
         m_deps.window.getFramebufferSize();
     if (framebufferSize.width <= 0 || framebufferSize.height <= 0) {
@@ -1596,7 +1712,12 @@ void ModelSceneAppState::render(const double frameTime) {
         !m_scene.renderViewport(
             m_view, m_projection, cameraPosition(),
             m_cameraNearPlane, m_cameraFarPlane,
-            static_cast<float>(frameTime))) {
+            55.0f,
+            RenderFrameClock{
+                Time::getFrameIndex(),
+                static_cast<float>(frameTime),
+                Time::getGameTime(),
+                Time::getRawTime()})) {
         std::abort();
     }
     RhiCommandList* commandList =

@@ -7,12 +7,17 @@
 
 #include <glm/glm.hpp>
 
+#include "renderer/core/FrameContext.h"
+#include "renderer/rhi/RhiHandles.h"
+#include "renderer/rhi/RhiTypes.h"
+
 class IDeferredGeometryProvider;
 class ImGuiRhiRenderer;
 class ResourceMgr;
 class RhiCommandListPool;
 class RhiDevice;
 struct RenderSettings;
+struct GpuFrameStats;
 enum class WeatherType;
 
 /// Owns the shared deferred environment used by the standalone model scene.
@@ -42,7 +47,8 @@ public:
                               const glm::vec3& cameraPosition,
                               float nearPlane,
                               float farPlane,
-                              float deltaTime);
+                              float verticalFovDegrees,
+                              const RenderFrameClock& frameClock);
 
     /// Changes the standalone environment time and invalidates temporal history.
     /// @param timeOfDaySeconds Time within the 1200-second world day.
@@ -83,6 +89,9 @@ public:
     [[nodiscard]] uint64_t viewportTextureId() const;
     [[nodiscard]] uint32_t viewportWidth() const;
     [[nodiscard]] uint32_t viewportHeight() const;
+    [[nodiscard]] RhiTextureHandle captureTextureHandle() const;
+    [[nodiscard]] RhiTextureFormat captureTextureFormat() const;
+    [[nodiscard]] const GpuFrameStats* gpuFrameStats() const;
     [[nodiscard]] const std::string& lastError() const;
 
 private:

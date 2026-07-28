@@ -117,6 +117,7 @@ struct RenderGameplayFrameRequest {
     const FirstPersonHeldItemMotion* firstPersonHeldItemMotion = nullptr;
     bool renderFirstPersonHeldItem = false;
     bool renderingGameFrames = true;
+    std::optional<RenderFrameClock> frameClock;
 };
 
 /// Entry point for all rendering
@@ -138,10 +139,13 @@ public:
                                    const glm::ivec2& frameOutputSize,
                                    float frameAspectRatio,
                                    const DayNightSystem& dayNightSystem,
-                                   const WeatherSystem& weatherSystem);
+                                   const WeatherSystem& weatherSystem,
+                                   const std::optional<RenderFrameClock>& frameClock);
 
     /// Render a complete gameplay frame, including scene, precipitation, and post-process setup.
-    void renderGameplayFrame(const RenderGameplayFrameRequest& request);
+    /// @return True when every scene, temporal, and composite stage succeeds.
+    [[nodiscard]] bool renderGameplayFrame(
+        const RenderGameplayFrameRequest& request);
 
     // Pipeline management
     void setPipelineMode(PipelineMode mode);
@@ -287,7 +291,8 @@ private:
         const glm::ivec2& frameOutputSize,
         float frameAspectRatio,
         const DayNightSystem& dayNightSystem,
-        const WeatherSystem& weatherSystem);
+        const WeatherSystem& weatherSystem,
+        const std::optional<RenderFrameClock>& frameClock);
     [[nodiscard]] std::optional<glm::ivec2> internalRenderSize(
         const glm::ivec2& displaySize) const;
     [[nodiscard]] bool isFsr1RuntimeEnabled() const;

@@ -18,6 +18,8 @@
 
 class ImGuiRhiRenderer;
 class ResourceMgr;
+struct GpuFrameStats;
+struct RenderFrameClock;
 class RhiCommandList;
 class RhiCommandListPool;
 class RhiDevice;
@@ -53,7 +55,8 @@ public:
                                       const glm::vec3& cameraPosition,
                                       float nearPlane,
                                       float farPlane,
-                                      float deltaTime);
+                                      float verticalFovDegrees,
+                                      const RenderFrameClock& frameClock);
 
     [[nodiscard]] bool prepareGBuffer(
         RhiCommandList& commandList,
@@ -170,6 +173,9 @@ public:
     [[nodiscard]] uint64_t viewportTextureId() const;
     [[nodiscard]] uint32_t viewportWidth() const;
     [[nodiscard]] uint32_t viewportHeight() const;
+    [[nodiscard]] RhiTextureHandle captureTextureHandle() const;
+    [[nodiscard]] RhiTextureFormat captureTextureFormat() const;
+    [[nodiscard]] const GpuFrameStats* gpuFrameStats() const;
 
     /// Updates the deferred environment time used by sky and lighting passes.
     /// @param timeOfDaySeconds Time within the 1200-second world day.

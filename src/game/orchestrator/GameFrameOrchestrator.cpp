@@ -247,8 +247,10 @@ bool GameFrameOrchestrator::renderFrame(GameSession& session,
                                          GameplayRenderRuntime& renderRuntime,
                                          GameplayHudPresenter* hudPresenter,
                                          Window& window,
-                                         float frameTime,
-                                         float interpolationAlpha) {
+                                         const float frameTime,
+                                         const float interpolationAlpha,
+                                         const Camera* cameraOverride,
+                                         const RenderFrameClock* frameClock) {
     if (session.isMultiplayer() && !session.client().areSpawnChunksReady()) {
         session.client().receiveMessages();
         return true;
@@ -307,11 +309,19 @@ bool GameFrameOrchestrator::renderFrame(GameSession& session,
 
     // Build presentation snapshot from ECS (single point of ECS access)
     auto& reg = session.gameplayScene().registry();
-    const auto snap = session.presentationBuilder().build(
+    auto snap = session.presentationBuilder().build(
         reg,
         session.cameraController(),
         session.worldView(),
         interpolationAlpha);
+    if (cameraOverride != nullptr) {
+        snap.renderCamera = *cameraOverride;
+        snap.renderLocalPlayerModel = true;
+        snap.eyeInWater = false;
+        snap.blockTarget = {};
+        snap.blockBreak = {};
+        snap.inventory = nullptr;
+    }
 #ifdef MECRAFT_DEBUG
     const auto snapshotEnd = std::chrono::steady_clock::now();
 #endif
@@ -366,9 +376,16 @@ bool GameFrameOrchestrator::renderFrame(GameSession& session,
         snap.inventory,
         &firstPersonMotion,
         snap.inventory != nullptr && !snap.renderLocalPlayerModel,
-        !session.stateMachine().pausesSimulation()
+        !session.stateMachine().pausesSimulation(),
+        frameClock != nullptr
+            ? std::optional<RenderFrameClock>(*frameClock)
+            : std::nullopt
     };
-    renderScene.renderGameplayFrame(renderRequest);
+    if (!renderScene.renderGameplayFrame(renderRequest)) {
+        MECRAFT_LOG_STREAM(std::cerr
+            << "[GameFrameOrchestrator] Gameplay scene rendering failed\n");
+        return failOpenFrame();
+    }
 #ifdef MECRAFT_DEBUG
     const auto sceneEnd = std::chrono::steady_clock::now();
     auto uiEnd = sceneEnd;

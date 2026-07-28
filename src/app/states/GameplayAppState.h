@@ -41,12 +41,16 @@ public:
 #endif
 
 private:
+    [[nodiscard]] bool beginValidation();
+
     AppStateDependencies m_deps;
     GameSessionConfig m_config;
     std::unique_ptr<Game> m_game;
     bool m_enterFailed = false;
     bool m_quitToMenuPending = false;
     bool m_closeAppAfterExitScreenshot = false;
+    bool m_validationActive = false;
+    double m_previousTimeSpeed = 1.0;
 };
 
 #endif // MECRAFT_GAMEPLAYAPPSTATE_H

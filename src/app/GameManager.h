@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "AppLaunchOptions.h"
+#include "validation/ValidationRunController.h"
 #include "../engine/platform/Window.h"
 #include "../engine/input/InputManager.h"
 #include "../game/session/GameSessionConfig.h"
@@ -32,7 +33,7 @@ public:
     ~GameManager();
 
     [[nodiscard]] bool init(int width, int height, const char* title, AppLaunchOptions launchOptions = {});
-    void run();
+    [[nodiscard]] bool run();
     void shutdown();
 
 private:
@@ -45,9 +46,10 @@ private:
     [[nodiscard]] bool makeBenchmarkSessionConfig(GameSessionConfig& outConfig) const;
     [[nodiscard]] bool configureInputReplay();
     void activateInputReplayForScope(AppLaunchOptions::InputReplayScope scope);
-    void recordBenchmarkFrame(double frameTime);
+    void recordBenchmarkFrame(double measuredFrameSeconds,
+                              bool validationSampleCompleted);
     void closeWindowIfBenchmarkComplete();
-    void writeBenchmarkReport();
+    [[nodiscard]] bool writeBenchmarkReport();
 
     struct BenchmarkFrameStats {
         bool active = false;
@@ -74,12 +76,15 @@ private:
 
     AppStateMachine m_appStateMachine;
     AppLaunchOptions m_launchOptions{};
+    app::validation::ValidationRunController m_validationRun;
     std::optional<bool> m_vsyncEnabled;
     bool m_fullscreenEnabled = false;
     BenchmarkFrameStats m_benchmarkStats{};
     GpuTimingHistory m_benchmarkGpuTimingHistory;
     bool m_benchmarkReplayWasActive = false;
     bool m_benchmarkReportWritten = false;
+    bool m_benchmarkReportSucceeded = true;
+    bool m_runSucceeded = true;
 };
 
 #endif //MECRAFT_GAMEMANAGER_H

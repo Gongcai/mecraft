@@ -17,6 +17,9 @@ class AppStateMachine;
 class RhiDevice;
 class RhiCommandListPool;
 class ThreadPool;
+namespace app::validation {
+class ValidationRunController;
+}
 
 struct AppStateDependencies {
     AppStateMachine& appFsm;
@@ -32,6 +35,7 @@ struct AppStateDependencies {
     ThreadPool& threadPool;
     RhiDevice& rhiDevice;
     RhiCommandListPool& commandListPool;
+    app::validation::ValidationRunController& validationRun;
     bool enableDebugDashboard;
     std::function<void()> beginGameplayInputReplay;
     std::function<void()> endGameplayInputReplay;

@@ -19,6 +19,14 @@ class WeatherSystem;
 class RenderDebugService;
 struct SharedRenderResources;
 
+/// Supplies an explicit deterministic frame clock to rendering code.
+struct RenderFrameClock {
+    uint32_t frameIndex = 0u;
+    float deltaTimeSeconds = 0.0f;
+    double animationTimeSeconds = 0.0;
+    double shaderTimeSeconds = 0.0;
+};
+
 /// Camera data for current and previous frame (for temporal effects)
 struct CameraData {
     glm::mat4 view = glm::mat4(1.0f);

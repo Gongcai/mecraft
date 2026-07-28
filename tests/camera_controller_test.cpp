@@ -89,6 +89,28 @@ bool nearlyEqualVec3(const glm::vec3& a, const glm::vec3& b, const float epsilon
 int main() {
     BlockRegistry::init(nullptr);
 
+    {
+        Camera explicitPose;
+        if (!explicitPose.setViewPose(
+                {1.0f, 2.0f, 3.0f}, {0.0f, 0.0f, -2.0f},
+                {1.0f, 1.0f, 0.0f}, 60.0f) ||
+            !nearlyEqualVec3(explicitPose.getPosition(),
+                             {1.0f, 2.0f, 3.0f}) ||
+            !nearlyEqualVec3(explicitPose.getFront(),
+                             {0.0f, 0.0f, -1.0f}) ||
+            !nearlyEqual(glm::dot(explicitPose.getFront(),
+                                  explicitPose.getUp()),
+                         0.0f) ||
+            !nearlyEqual(explicitPose.getFOV(), 60.0f)) {
+            return fail("explicit Camera Path poses must preserve an orthonormal view basis");
+        }
+        if (explicitPose.setViewPose(
+                {0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, -1.0f},
+                {0.0f, 0.0f, -1.0f}, 60.0f)) {
+            return fail("parallel forward and up vectors must be rejected");
+        }
+    }
+
     Camera eyeCamera;
     const glm::vec3 eyePosition(0.5f, 1.5f, 0.5f);
     eyeCamera.setPosition(eyePosition);

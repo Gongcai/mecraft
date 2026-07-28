@@ -14,6 +14,8 @@ class GameplayRenderRuntime;
 class Window;
 class AudioListenerSyncSystem;
 class GameplayHudPresenter;
+class Camera;
+struct RenderFrameClock;
 
 namespace ecs { class GameplayRegistry; }
 
@@ -41,7 +43,9 @@ public:
                      GameplayHudPresenter* hudPresenter,
                      Window& window,
                      float frameTime,
-                     float interpolationAlpha);
+                     float interpolationAlpha,
+                     const Camera* cameraOverride,
+                     const RenderFrameClock* frameClock);
 
     /// Set a callback to be invoked after 3D scene render but before UI overlay.
     /// Used for screenshot capture.

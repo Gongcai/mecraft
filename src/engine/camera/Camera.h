@@ -18,6 +18,17 @@ public:
     void processMouseMovement(float xOffset, float yOffset);
     void setPosition(const glm::vec3& pos);
 
+    /// Replaces the camera transform with one explicit orthonormal view pose.
+    /// @param position World-space camera position.
+    /// @param forward World-space viewing direction; length need not be one.
+    /// @param up Requested world-space up direction; length need not be one.
+    /// @param verticalFovDegrees Vertical field of view inside the open range (1, 179).
+    /// @return True when every value is finite and the view basis is non-degenerate.
+    [[nodiscard]] bool setViewPose(const glm::vec3& position,
+                                   const glm::vec3& forward,
+                                   const glm::vec3& up,
+                                   float verticalFovDegrees);
+
     [[nodiscard]] glm::mat4 getViewMatrix() const;
     [[nodiscard]] glm::mat4 getProjectionMatrix(float aspect) const;
 

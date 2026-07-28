@@ -294,7 +294,8 @@ bool RenderScene::renderFrame(const IWorldView& worldView,
                               const glm::ivec2& frameOutputSize,
                               const float frameAspectRatio,
                               const DayNightSystem& dayNightSystem,
-                              const WeatherSystem& weatherSystem) {
+                              const WeatherSystem& weatherSystem,
+                              const std::optional<RenderFrameClock>& frameClock) {
     if (!prepareFrameResources(frameRenderSize)) {
         return false;
     }
@@ -314,7 +315,7 @@ bool RenderScene::renderFrame(const IWorldView& worldView,
     const auto contextBuildStart = std::chrono::steady_clock::now();
     const std::optional<FrameContext> frameContext = buildFrameContext(
         worldView, camera, window, frameRenderSize, frameOutputSize, frameAspectRatio,
-        dayNightSystem, weatherSystem);
+        dayNightSystem, weatherSystem, frameClock);
     m_contextCpuMs = std::chrono::duration<double, std::milli>(
         std::chrono::steady_clock::now() - contextBuildStart).count();
     if (!frameContext.has_value()) {
@@ -652,7 +653,7 @@ bool RenderScene::executeSceneOverlayGraph(
     return true;
 }
 
-void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request) {
+bool RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request) {
     // Activate the pipeline when shared resources become available after target initialization.
     if (!isNewPipelineActive() && isNewPipelineReady()) {
         setNewPipelineActive(true);
@@ -668,7 +669,7 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
         if (!resolvedRenderSize.has_value()) {
             MECRAFT_LOG_STREAM(
                 std::cerr << "[RenderScene] Invalid temporal upscaler resolution settings\n");
-            return;
+            return false;
         }
         frameRenderSize = *resolvedRenderSize;
     }
@@ -678,7 +679,7 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
                                              frameRenderSize.x,
                                              frameRenderSize.y)) {
         MECRAFT_LOG_STREAM(std::cerr << "[RenderScene] Failed to begin post-process scene capture\n");
-        return;
+        return false;
     }
 
     const bool lightDebugActive = isLightDebugActive();
@@ -686,13 +687,14 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
 
     if (!renderFrame(request.worldView, request.camera, request.window,
                      frameRenderSize, displaySize, frameAspectRatio,
-                     request.dayNightSystem, request.weatherSystem)) {
-        return;
+                     request.dayNightSystem, request.weatherSystem,
+                     request.frameClock)) {
+        return false;
     }
     if (!executeSceneOverlayGraph(request, frameRenderSize,
                                   lightDebugActive, cameraRainVisibility)) {
         m_terrainStreamingService.endFrame();
-        return;
+        return false;
     }
 
     if (!m_temporalUpscalePass.prepareOutputTarget(
@@ -702,7 +704,7 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
         MECRAFT_LOG_STREAM(
             std::cerr << "[RenderScene] Failed to prepare temporal HDR output target\n");
         m_terrainStreamingService.endFrame();
-        return;
+        return false;
     }
     refreshTemporalFrameInput();
     if (m_temporalFrameInput.has_value()) {
@@ -719,7 +721,7 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
                           << TemporalUpscalePass::statusText(m_temporalUpscaleResult->status)
                           << '\n');
             m_terrainStreamingService.endFrame();
-            return;
+            return false;
         }
         if (!m_postProcessPass.setHdrInput(
                 m_temporalUpscaleResult->outputHdrColor,
@@ -729,13 +731,13 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
             MECRAFT_LOG_STREAM(
                 std::cerr << "[RenderScene] Failed to configure the post-process HDR input\n");
             m_terrainStreamingService.endFrame();
-            return;
+            return false;
         }
     } else if (!skipPostProcess && !isFsr1RuntimeEnabled()) {
         MECRAFT_LOG_STREAM(
             std::cerr << "[RenderScene] Temporal frame input is unavailable\n");
         m_terrainStreamingService.endFrame();
-        return;
+        return false;
     }
 
     if (skipPostProcess) {
@@ -744,7 +746,7 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
                 m_currentContext.swapchainColorView,
                 m_debugService)) {
             m_terrainStreamingService.endFrame();
-            return;
+            return false;
         }
     } else {
         PostProcessEffects effects = buildPostProcessEffects(
@@ -758,7 +760,7 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
                     m_currentContext.swapchainColorView,
                     m_debugService)) {
                 m_terrainStreamingService.endFrame();
-                return;
+                return false;
             }
         } else {
             const bool fsrEnabled = isFsr1RuntimeEnabled();
@@ -769,7 +771,8 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
                     m_lastFrameOutput.gbufferDepth,
                     m_debugService);
                 if (!postTexture.isValid()) {
-                    std::abort();
+                    m_terrainStreamingService.endFrame();
+                    return false;
                 }
                 const int inputWidth = m_postProcessPass.targetWidth();
                 const int inputHeight = m_postProcessPass.targetHeight();
@@ -784,7 +787,8 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
                         displaySize.y,
                         m_settings.upscale.fsr1Sharpness,
                         m_debugService)) {
-                    std::abort();
+                    m_terrainStreamingService.endFrame();
+                    return false;
                 }
             } else {
                 if (!m_postProcessPass.compositeToBackbuffer(
@@ -797,13 +801,14 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
                         m_lastFrameOutput.gbufferDepth,
                         m_debugService)) {
                     m_terrainStreamingService.endFrame();
-                    return;
+                    return false;
                 }
             }
         }
     }
 
     m_terrainStreamingService.endFrame();
+    return true;
 }
 
 void RenderScene::setPipelineMode(PipelineMode mode) {
@@ -1208,7 +1213,7 @@ PostProcessEffects RenderScene::buildPostProcessEffects(const IWorldView& worldV
     effects.weatherExposureBias = m_settings.weather.exposureBias;
     effects.weatherPostRainFog = m_settings.weather.postRainFog;
     effects.cameraRainVisibility = cameraRainVisibility;
-    effects.gameTime = static_cast<float>(Time::getRawTime());
+    effects.gameTime = m_currentContext.shaderTime;
     effects.postprocessDebugMode = m_settings.debug.postprocessDebugMode;
 
     // Calculate the sun position in the top-left screen UV domain used by post-processing.
@@ -1245,7 +1250,8 @@ std::optional<FrameContext> RenderScene::buildFrameContext(
     const glm::ivec2& frameOutputSize,
     const float frameAspectRatio,
     const DayNightSystem& dayNightSystem,
-    const WeatherSystem& weatherSystem) {
+    const WeatherSystem& weatherSystem,
+    const std::optional<RenderFrameClock>& frameClock) {
     FrameContext ctx;
 
     // Camera matrices
@@ -1283,10 +1289,18 @@ std::optional<FrameContext> RenderScene::buildFrameContext(
     ctx.sceneCaptureDepthView = m_postProcessPass.sceneDepthTextureViewHandle();
 
     // Frame timing
-    ctx.frameIndex = Time::getFrameIndex();
-    ctx.deltaTime = static_cast<float>(Time::deltaTime);
-    const double gameTime = Time::getGameTime();
-    const double visualTime = Time::getRawTime();
+    ctx.frameIndex = frameClock.has_value()
+        ? frameClock->frameIndex
+        : Time::getFrameIndex();
+    ctx.deltaTime = frameClock.has_value()
+        ? frameClock->deltaTimeSeconds
+        : static_cast<float>(Time::deltaTime);
+    const double gameTime = frameClock.has_value()
+        ? frameClock->animationTimeSeconds
+        : Time::getGameTime();
+    const double visualTime = frameClock.has_value()
+        ? frameClock->shaderTimeSeconds
+        : Time::getRawTime();
     ctx.animationTime = static_cast<float>(std::fmod(gameTime, 16.0));
     ctx.shaderTime = static_cast<float>(std::fmod(visualTime, 8192.0));
 

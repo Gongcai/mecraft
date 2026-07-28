@@ -4,6 +4,7 @@
 #include <cerrno>
 #include <charconv>
 #include <cmath>
+#include <cstdint>
 #include <cstdlib>
 #include <iostream>
 #include <string>
@@ -25,6 +26,14 @@ void printUsage() {
         << "  --benchmark-report <file>          Write gameplay replay frame timing summary as JSON.\n"
         << "  --benchmark-save-root <path>       Save root for benchmark worlds.\n"
         << "  --benchmark-no-save                Disable saving for benchmark gameplay.\n"
+        << "  --validation-scene <voxel|model>  Run one deterministic validation scene.\n"
+        << "  --validation-camera-path <file>   Versioned Camera Path used by validation.\n"
+        << "  --validation-capture <file>       Write the final scene frame as PNG.\n"
+        << "  --validation-report <file>        Write timing and capture metadata as JSON.\n"
+        << "  --validation-warmup-frames <n>    Fixed warmup frame count; default 300.\n"
+        << "  --validation-sample-frames <n>    Fixed measured frame count; default 1000.\n"
+        << "  --validation-width <pixels>       Capture width; default 1280.\n"
+        << "  --validation-height <pixels>      Capture height; default 720.\n"
         << "  --rhi-backend <opengl|vulkan>      Select the graphics backend.\n"
         << "  --rhi-debug-output                 Enable graphics backend debug output.\n"
         << "  --no-rhi-debug-output              Disable graphics backend debug output.\n"
@@ -49,6 +58,22 @@ bool parseDoubleArg(const char* text, const char* name, double& out, std::string
     const double value = std::strtod(text, &end);
     if (errno == ERANGE || end == text || *end != '\0' || value < 0.0 || !std::isfinite(value)) {
         error = std::string("Invalid number for ") + name + ": " + text;
+        return false;
+    }
+    out = value;
+    return true;
+}
+
+bool parseUint32Arg(const char* text,
+                    const char* name,
+                    uint32_t& out,
+                    std::string& error) {
+    const char* end = text + std::char_traits<char>::length(text);
+    uint32_t value = 0u;
+    const auto result = std::from_chars(text, end, value);
+    if (result.ec != std::errc{} || result.ptr != end) {
+        error = std::string("Invalid unsigned integer for ") + name +
+                ": " + text;
         return false;
     }
     out = value;
@@ -153,6 +178,76 @@ bool parseLaunchOptions(int argc, char** argv, AppLaunchOptions& options, std::s
             options.benchmarkSaveRoot = value;
         } else if (arg == "--benchmark-no-save") {
             options.benchmarkEnableSaving = false;
+        } else if (arg == "--validation-scene") {
+            const char* value = nullptr;
+            if (!requireValue(argc, argv, index, "--validation-scene", value,
+                              error)) {
+                return false;
+            }
+            const std::optional<ValidationScene> scene =
+                parseValidationScene(value);
+            if (!scene.has_value()) {
+                error = "Validation scene must be voxel or model";
+                return false;
+            }
+            options.validationScene = *scene;
+        } else if (arg == "--validation-camera-path") {
+            const char* value = nullptr;
+            if (!requireValue(argc, argv, index,
+                              "--validation-camera-path", value, error)) {
+                return false;
+            }
+            options.validationCameraPath = value;
+        } else if (arg == "--validation-capture") {
+            const char* value = nullptr;
+            if (!requireValue(argc, argv, index, "--validation-capture", value,
+                              error)) {
+                return false;
+            }
+            options.validationCapturePath = value;
+        } else if (arg == "--validation-report") {
+            const char* value = nullptr;
+            if (!requireValue(argc, argv, index, "--validation-report", value,
+                              error)) {
+                return false;
+            }
+            options.validationReportPath = value;
+        } else if (arg == "--validation-warmup-frames") {
+            const char* value = nullptr;
+            if (!requireValue(argc, argv, index,
+                              "--validation-warmup-frames", value, error) ||
+                !parseUint32Arg(value, "--validation-warmup-frames",
+                                options.validationWarmupFrames, error)) {
+                return false;
+            }
+            options.validationWarmupFramesSet = true;
+        } else if (arg == "--validation-sample-frames") {
+            const char* value = nullptr;
+            if (!requireValue(argc, argv, index,
+                              "--validation-sample-frames", value, error) ||
+                !parseUint32Arg(value, "--validation-sample-frames",
+                                options.validationSampleFrames, error)) {
+                return false;
+            }
+            options.validationSampleFramesSet = true;
+        } else if (arg == "--validation-width") {
+            const char* value = nullptr;
+            if (!requireValue(argc, argv, index, "--validation-width", value,
+                              error) ||
+                !parseUint32Arg(value, "--validation-width",
+                                options.validationWidth, error)) {
+                return false;
+            }
+            options.validationWidthSet = true;
+        } else if (arg == "--validation-height") {
+            const char* value = nullptr;
+            if (!requireValue(argc, argv, index, "--validation-height", value,
+                              error) ||
+                !parseUint32Arg(value, "--validation-height",
+                                options.validationHeight, error)) {
+                return false;
+            }
+            options.validationHeightSet = true;
         } else if (arg == "--rhi-backend") {
             const char* value = nullptr;
             if (!requireValue(argc, argv, index, "--rhi-backend", value, error)) {
@@ -187,10 +282,16 @@ bool parseLaunchOptions(int argc, char** argv, AppLaunchOptions& options, std::s
         error = "--benchmark-report requires --benchmark or --benchmark-world";
         return false;
     }
+    if (options.validationScene == ValidationScene::Voxel) {
+        options.autoStartGameplay = true;
+    }
+    if (!validateAppLaunchOptions(options, error)) {
+        return false;
+    }
     if (options.autoStartGameplay && !inputScopeSet) {
         options.inputReplayScope = AppLaunchOptions::InputReplayScope::Gameplay;
     }
-    if (options.autoStartGameplay) {
+    if (options.autoStartGameplay || options.validationEnabled()) {
         options.enableDebugDashboard = false;
         if (!rhiDebugOutputSet) {
             options.enableRhiDebugOutput = false;
@@ -210,12 +311,18 @@ int main(int argc, char** argv) {
         return 1;
     }
 
+    const int windowWidth = options.validationEnabled()
+        ? static_cast<int>(options.validationWidth)
+        : 1280;
+    const int windowHeight = options.validationEnabled()
+        ? static_cast<int>(options.validationHeight)
+        : 720;
     GameManager app;
-    if (!app.init(1280, 720, "Mecraft", std::move(options))) {
+    if (!app.init(windowWidth, windowHeight, "Mecraft", std::move(options))) {
         app.shutdown();
         return 1;
     }
-    app.run();
+    const bool runSucceeded = app.run();
     app.shutdown();
-    return 0;
+    return runSucceeded ? 0 : 1;
 }

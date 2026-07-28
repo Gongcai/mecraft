@@ -153,7 +153,9 @@ bool GameplayRenderRuntime::init(ResourceMgr& resourceMgr,
                                   ThreadPool& threadPool,
                                   Window& window,
                                   RhiDevice& rhiDevice,
-                                  RhiCommandListPool& commandListPool) {
+                                  RhiCommandListPool& commandListPool,
+                                  const GameRenderSettingsSource settingsSource,
+                                  const RenderSettings& fixedSettings) {
     auto& renderer = m_impl->resourceHub;
     auto& renderScene = m_impl->scene;
     auto& blockEntityRenderer = m_impl->blockEntityRenderer;
@@ -192,7 +194,15 @@ bool GameplayRenderRuntime::init(ResourceMgr& resourceMgr,
 
     // Initialize RenderScene and connect to RenderResourceHub
     renderScene.init(resourceMgr);
-    const RenderSettings initialSettings = app::loadRenderSettings(renderer.getSettings());
+    RenderSettings initialSettings;
+    switch (settingsSource) {
+        case GameRenderSettingsSource::UserProfile:
+            initialSettings = app::loadRenderSettings(renderer.getSettings());
+            break;
+        case GameRenderSettingsSource::FixedProfile:
+            initialSettings = fixedSettings;
+            break;
+    }
     renderScene.setupResources(
         &threadPool,
         &renderer.rhiDevice(),
@@ -214,19 +224,20 @@ bool GameplayRenderRuntime::init(ResourceMgr& resourceMgr,
         return false;
     }
 #endif
-    renderScene.setSettingsChangedCallback([this](const RenderSettings& settings) {
+    if (settingsSource == GameRenderSettingsSource::UserProfile) {
+        renderScene.setSettingsChangedCallback([this](const RenderSettings& settings) {
 #if defined(MECRAFT_ENABLE_STREAMLINE)
-        if (m_impl->resourceHub.rhiDevice().backend() == RhiBackend::Vulkan &&
-            !applyNvidiaFeatureSettings(
-                settings, m_impl->scene,
-                *m_impl->presentationController,
-                m_impl->pendingReflexMode)) {
-            return false;
-        }
+            if (m_impl->resourceHub.rhiDevice().backend() == RhiBackend::Vulkan &&
+                !applyNvidiaFeatureSettings(
+                    settings, m_impl->scene,
+                    *m_impl->presentationController,
+                    m_impl->pendingReflexMode)) {
+                return false;
+            }
 #endif
-        app::saveRenderSettings(settings);
-        return true;
-    });
+            return app::saveRenderSettings(settings);
+        });
+    }
 
     // Inject RenderScene services into RenderResourceHub
     renderer.setTerrainStreamingService(&renderScene.getTerrainStreamingService());

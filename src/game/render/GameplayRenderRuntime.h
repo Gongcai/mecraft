@@ -1,6 +1,7 @@
 #ifndef MECRAFT_GAMEPLAY_RENDER_RUNTIME_H
 #define MECRAFT_GAMEPLAY_RENDER_RUNTIME_H
 
+#include <cstdint>
 #include <memory>
 
 class ResourceMgr;
@@ -14,6 +15,8 @@ class RhiDevice;
 class RhiCommandListPool;
 class ThreadPool;
 class Window;
+struct RenderSettings;
+enum class GameRenderSettingsSource : uint8_t;
 
 #ifdef MECRAFT_DEBUG
 #include "../../ui/Dashboard.h"
@@ -42,7 +45,9 @@ public:
                             ThreadPool& threadPool,
                             Window& window,
                             RhiDevice& rhiDevice,
-                            RhiCommandListPool& commandListPool);
+                            RhiCommandListPool& commandListPool,
+                            GameRenderSettingsSource settingsSource,
+                            const RenderSettings& fixedSettings);
 
     /// Shutdown all renderers in reverse order of initialization.
     void shutdown();

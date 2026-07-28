@@ -2,6 +2,7 @@
 
 #include "GameplayAppState.h"
 #include "MainMenuAppState.h"
+#include "app/validation/ValidationRunController.h"
 #include "../../Diagnostics.h"
 #include "../../game/Game.h"
 #include "../../renderer/rhi/RhiCommandList.h"
@@ -105,6 +106,15 @@ LoadingAppState::~LoadingAppState() {
     }
 }
 
+void LoadingAppState::failValidationLoading(const char* detail) {
+    if (m_deps.validationRun.enabled() &&
+        !m_deps.validationRun.failed()) {
+        m_deps.validationRun.fail(
+            app::validation::ValidationRunError::SceneInitializationFailed,
+            detail);
+    }
+}
+
 void LoadingAppState::onEnter() {
     m_deps.contextManager.pushContext(InputContextType::UI);
     m_deps.input.captureMouse(false);
@@ -139,6 +149,7 @@ void LoadingAppState::update(const double frameTime, double& accumulator) {
 
     if (!m_game->isLoadingComplete() && !m_game->updateLoading(static_cast<float>(frameTime))) {
         MECRAFT_LOG_STREAM(std::cerr << "[LoadingAppState] Failed to load gameplay\n");
+        failValidationLoading("gameplay validation scene loading failed");
         if (m_game) {
             m_game->shutdown();
             m_game.reset();
@@ -171,6 +182,8 @@ void LoadingAppState::render(const double frameTime) {
     const uint32_t height = static_cast<uint32_t>(framebufferSize.height);
     if (!m_deps.rhiDevice.resizeSwapchain(width, height)) {
         MECRAFT_LOG_STREAM(std::cerr << "[LoadingAppState] Failed to resize the RHI swapchain\n");
+        failValidationLoading(
+            "gameplay validation loading swapchain resize failed");
         return;
     }
     const RhiFrameAcquireResult frame = m_deps.rhiDevice.acquireFrame();
@@ -181,6 +194,8 @@ void LoadingAppState::render(const double frameTime) {
     if (frame.status != RhiFrameStatus::Success &&
         frame.status != RhiFrameStatus::Suboptimal) {
         MECRAFT_LOG_STREAM(std::cerr << "[LoadingAppState] Failed to acquire the RHI frame\n");
+        failValidationLoading(
+            "gameplay validation loading frame acquisition failed");
         return;
     }
 
@@ -194,6 +209,8 @@ void LoadingAppState::render(const double frameTime) {
     if (!beginLoadingPass(m_deps.rhiDevice, m_deps.commandListPool,
                           frame.width, frame.height, m_deps.uiRenderer, commandList)) {
         MECRAFT_LOG_STREAM(std::cerr << "[LoadingAppState] Failed to begin RHI loading pass\n");
+        failValidationLoading(
+            "gameplay validation loading pass recording failed");
         (void)m_deps.rhiDevice.presentFrame(
             {frame.frameIndex, frame.imageIndex, Time::getFrameIndex()});
         return;
@@ -211,6 +228,8 @@ void LoadingAppState::render(const double frameTime) {
     if (presentStatus != RhiFrameStatus::Success &&
         presentStatus != RhiFrameStatus::Suboptimal) {
         MECRAFT_LOG_STREAM(std::cerr << "[LoadingAppState] Failed to present the RHI frame\n");
+        failValidationLoading(
+            "gameplay validation loading frame presentation failed");
         return;
     }
     m_firstFrameRendered = true;

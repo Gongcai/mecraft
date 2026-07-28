@@ -15,6 +15,9 @@
 #include "renderer/rhi/RhiResources.h"
 #include "renderer/core/RenderScene.h"
 #include "engine/platform/Window.h"
+#include "app/validation/ValidationRunController.h"
+#include "world/World.h"
+#include "world/WeatherSystem.h"
 #include <algorithm>
 #include <cstdint>
 #include <iostream>
@@ -74,7 +77,9 @@ bool Game::updateLoading(const float deltaTime) {
                                    m_deps.threadPool,
                                    m_deps.window,
                                    m_deps.rhiDevice,
-                                   m_deps.commandListPool)) {
+                                   m_deps.commandListPool,
+                                   m_config.renderSettingsSource,
+                                   m_config.fixedRenderSettings)) {
             MECRAFT_LOG_STREAM(std::cerr << "[Game] Render runtime initialization failed\n");
             m_loadPhase = LoadPhase::Failed;
             return false;
@@ -209,8 +214,41 @@ bool Game::renderFrame(const float frameTime) {
         return true;
     }
 
+    if (m_captureScreenshotOnNextFrame && m_validationCapturePath.has_value()) {
+        return false;
+    }
     // Set screenshot capture callback if requested (captures before UI overlay)
-    if (m_captureScreenshotOnNextFrame) {
+    if (m_validationCapturePath.has_value()) {
+        const std::filesystem::path capturePath = *m_validationCapturePath;
+        m_validationCapturePath.reset();
+        m_validationCaptureResult.reset();
+        m_frameOrchestrator->setPreUiCallback([this, capturePath]() {
+            const Window::FramebufferSize framebufferSize =
+                m_deps.window.getFramebufferSize();
+            if (framebufferSize.width <= 0 || framebufferSize.height <= 0) {
+                renderer::capture::TextureCaptureResult result;
+                result.error =
+                    renderer::capture::TextureCaptureError::InvalidRequest;
+                result.detail = "validation framebuffer extent is invalid";
+                m_validationCaptureResult = std::move(result);
+                return;
+            }
+            renderer::capture::TextureCaptureRequest request;
+            request.sourceTexture =
+                m_deps.rhiDevice.currentSwapchainColorTexture();
+            request.sourceState = RhiResourceState::Present;
+            request.sourceFormat = m_deps.rhiDevice.swapchainColorFormat();
+            request.width = static_cast<uint32_t>(framebufferSize.width);
+            request.height = static_cast<uint32_t>(framebufferSize.height);
+            request.origin = m_deps.rhiDevice.backend() == RhiBackend::OpenGL
+                ? renderer::capture::TextureCaptureOrigin::BottomLeft
+                : renderer::capture::TextureCaptureOrigin::TopLeft;
+            request.outputPath = capturePath;
+            m_validationCaptureResult =
+                renderer::capture::captureTextureToPng(
+                    m_deps.rhiDevice, m_deps.commandListPool, request);
+        });
+    } else if (m_captureScreenshotOnNextFrame) {
         m_captureScreenshotOnNextFrame = false;
         m_frameOrchestrator->setPreUiCallback([this]() { captureExitScreenshot(); });
     }
@@ -221,10 +259,64 @@ bool Game::renderFrame(const float frameTime) {
         : m_fixedInterpolationAlpha;
     return m_frameOrchestrator->renderFrame(m_session,
                                             *m_renderRuntime,
-                                            m_hudPresenter.get(),
+                                            m_validationCamera
+                                                ? nullptr
+                                                : m_hudPresenter.get(),
                                             m_deps.window,
                                             frameTime,
-                                            renderInterpolationAlpha);
+                                            renderInterpolationAlpha,
+                                            m_validationCamera
+                                                ? &*m_validationCamera
+                                                : nullptr,
+                                            m_validationFrameClock
+                                                ? &*m_validationFrameClock
+                                                : nullptr);
+}
+
+bool Game::configureValidationFrame(
+    const renderer::contracts::CameraPathPose& pose,
+    const RenderFrameClock& clock,
+    const std::filesystem::path* capturePath) {
+    const glm::vec3 position(pose.position);
+    const glm::vec3 forward(pose.forward);
+    const glm::vec3 up(pose.up);
+    const float fov = static_cast<float>(pose.verticalFovDegrees);
+    Camera camera;
+    if (!camera.setViewPose(position, forward, up, fov)) {
+        return false;
+    }
+    m_validationCamera = camera;
+    m_validationFrameClock = clock;
+    m_validationCaptureResult.reset();
+    if (capturePath != nullptr) {
+        m_validationCapturePath = *capturePath;
+    } else {
+        m_validationCapturePath.reset();
+    }
+    return true;
+}
+
+std::optional<renderer::capture::TextureCaptureResult>
+Game::takeValidationCaptureResult() {
+    std::optional<renderer::capture::TextureCaptureResult> result =
+        std::move(m_validationCaptureResult);
+    m_validationCaptureResult.reset();
+    return result;
+}
+
+bool Game::prepareValidationScene() {
+    if (!m_initialized || !isLoadingComplete() || m_config.isMultiplayer() ||
+        m_config.enableSaving ||
+        m_config.renderSettingsSource !=
+            GameRenderSettingsSource::FixedProfile) {
+        return false;
+    }
+    World& world = m_session.world();
+    world.getDayNightSystem().setTimeOfDay(
+        app::validation::kValidationWorldTimeSeconds);
+    world.getWeatherSystem().setDebugWeatherPresetInstant(
+        WeatherType::Clear);
+    return true;
 }
 
 const GpuFrameStats* Game::gpuFrameStats() const {

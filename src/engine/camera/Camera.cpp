@@ -5,6 +5,7 @@
 #include "Camera.h"
 
 #include <algorithm>
+#include <cmath>
 
 Camera::Camera(glm::vec3 position, float yaw, float pitch)
     : m_position(position), m_front(0.0f, 0.0f, -1.0f), m_up(0.0f, 1.0f, 0.0f), m_right(1.0f, 0.0f, 0.0f),
@@ -23,6 +24,56 @@ void Camera::processMouseMovement(float xOffset, float yOffset) {
 
 void Camera::setPosition(const glm::vec3& pos) {
     m_position = pos;
+}
+
+bool Camera::setViewPose(const glm::vec3& position,
+                         const glm::vec3& forward,
+                         const glm::vec3& up,
+                         const float verticalFovDegrees) {
+    const auto finiteVector = [](const glm::vec3& value) {
+        return std::isfinite(value.x) && std::isfinite(value.y) &&
+               std::isfinite(value.z);
+    };
+    constexpr float kMinimumLengthSquared = 1.0e-12f;
+    if (!finiteVector(position) || !finiteVector(forward) ||
+        !finiteVector(up) || !std::isfinite(verticalFovDegrees) ||
+        verticalFovDegrees <= 1.0f || verticalFovDegrees >= 179.0f) {
+        return false;
+    }
+    const float forwardLengthSquared = glm::dot(forward, forward);
+    const float upLengthSquared = glm::dot(up, up);
+    if (!std::isfinite(forwardLengthSquared) ||
+        !std::isfinite(upLengthSquared) ||
+        forwardLengthSquared <= kMinimumLengthSquared ||
+        upLengthSquared <= kMinimumLengthSquared) {
+        return false;
+    }
+    const glm::vec3 normalizedForward =
+        forward / std::sqrt(forwardLengthSquared);
+    const glm::vec3 normalizedUp = up / std::sqrt(upLengthSquared);
+    glm::vec3 right = glm::cross(normalizedForward, normalizedUp);
+    const float rightLengthSquared = glm::dot(right, right);
+    if (!std::isfinite(rightLengthSquared) ||
+        rightLengthSquared <= kMinimumLengthSquared) {
+        return false;
+    }
+    right /= std::sqrt(rightLengthSquared);
+    const glm::vec3 correctedUp = glm::normalize(
+        glm::cross(right, normalizedForward));
+    if (!finiteVector(correctedUp)) {
+        return false;
+    }
+
+    m_position = position;
+    m_front = normalizedForward;
+    m_right = right;
+    m_up = correctedUp;
+    m_yaw = glm::degrees(std::atan2(m_front.z, m_front.x));
+    m_pitch = glm::degrees(std::atan2(
+        m_front.y,
+        std::sqrt(m_front.x * m_front.x + m_front.z * m_front.z)));
+    fov = verticalFovDegrees;
+    return true;
 }
 
 glm::mat4 Camera::getViewMatrix() const {

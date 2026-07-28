@@ -2,8 +2,15 @@
 
 #include "renderer/rhi/RhiDeviceFactory.h"
 
+#include <cstdlib>
+#include <limits>
+
 AppLaunchOptions::AppLaunchOptions()
     : rhiBackend(renderer::rhi::defaultRhiBackend()) {}
+
+bool AppLaunchOptions::validationEnabled() const {
+    return validationScene != ValidationScene::None;
+}
 
 RhiBackend resolveLaunchRhiBackend(const AppLaunchOptions& options,
                                    const std::optional<RhiBackend> savedBackend) {
@@ -11,4 +18,99 @@ RhiBackend resolveLaunchRhiBackend(const AppLaunchOptions& options,
         return options.rhiBackend;
     }
     return savedBackend.value_or(options.rhiBackend);
+}
+
+std::optional<ValidationScene> parseValidationScene(
+    const std::string_view value) {
+    if (value == "voxel") {
+        return ValidationScene::Voxel;
+    }
+    if (value == "model") {
+        return ValidationScene::Model;
+    }
+    return std::nullopt;
+}
+
+const char* validationSceneStableId(const ValidationScene scene) {
+    switch (scene) {
+        case ValidationScene::None: return "none";
+        case ValidationScene::Voxel: return "voxel";
+        case ValidationScene::Model: return "model";
+    }
+    std::abort();
+}
+
+bool validateAppLaunchOptions(
+    const AppLaunchOptions& options,
+    std::string& error) {
+    if (!options.validationEnabled()) {
+        if (!options.validationCameraPath.empty() ||
+            !options.validationCapturePath.empty() ||
+            !options.validationReportPath.empty() ||
+            options.validationWarmupFramesSet ||
+            options.validationSampleFramesSet ||
+            options.validationWidthSet || options.validationHeightSet) {
+            error = "Validation options require --validation-scene";
+            return false;
+        }
+        return true;
+    }
+    if (options.validationCameraPath.empty()) {
+        error = "--validation-camera-path is required for validation runs";
+        return false;
+    }
+    if (options.validationCapturePath.empty()) {
+        error = "--validation-capture is required for validation runs";
+        return false;
+    }
+    if (options.validationReportPath.empty()) {
+        error = "--validation-report is required for validation runs";
+        return false;
+    }
+    if (options.validationSampleFrames < 2u) {
+        error = "--validation-sample-frames must be at least 2";
+        return false;
+    }
+    if (options.validationWarmupFrames >
+        std::numeric_limits<uint32_t>::max() -
+            options.validationSampleFrames) {
+        error = "Validation warmup and sample frame counts overflow the frame index";
+        return false;
+    }
+    if (options.validationWidth == 0u || options.validationHeight == 0u) {
+        error = "Validation dimensions must be greater than zero";
+        return false;
+    }
+    if (options.validationWidth >
+            static_cast<uint32_t>(std::numeric_limits<int>::max()) ||
+        options.validationHeight >
+            static_cast<uint32_t>(std::numeric_limits<int>::max())) {
+        error = "Validation dimensions exceed the window size contract";
+        return false;
+    }
+    if (options.recordInput || options.replayInput) {
+        error = "Validation runs cannot record or replay input";
+        return false;
+    }
+    if (options.benchmarkDurationSeconds > 0.0 ||
+        !options.benchmarkReportPath.empty()) {
+        error = "Validation runs use frame counts and --validation-report";
+        return false;
+    }
+    if (options.validationScene == ValidationScene::Model &&
+        options.autoStartGameplay) {
+        error = "Model validation cannot start gameplay benchmark mode";
+        return false;
+    }
+    if (!options.benchmarkWorldName.empty() ||
+        !options.benchmarkWorldDisplayName.empty()) {
+        error = "Validation runs do not accept writable benchmark worlds";
+        return false;
+    }
+    if (options.validationScene == ValidationScene::Model &&
+        (options.benchmarkSeedSet || options.benchmarkRenderDistanceSet)) {
+        error = "Model validation does not accept voxel world options";
+        return false;
+    }
+    return true;
 }

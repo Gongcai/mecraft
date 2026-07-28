@@ -23,7 +23,7 @@ public:
     void update(double frameTime, double& accumulator) override;
     void render(double frameTime) override;
     [[nodiscard]] const GpuFrameStats* gpuFrameStats() const override {
-        return nullptr;
+        return m_scene.gpuFrameStats();
     }
 
 private:
@@ -108,6 +108,7 @@ private:
     bool m_initialized = false;
     bool m_returnRequested = false;
     bool m_sceneDirty = false;
+    bool m_validationActive = false;
     bool m_nonHistoryDirty = false;
     bool m_openUnsavedPopup = false;
     bool m_transformCommandActive = false;

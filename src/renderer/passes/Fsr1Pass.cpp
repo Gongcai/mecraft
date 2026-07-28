@@ -538,7 +538,8 @@ bool Fsr1Pass::ensureOutputTarget(RhiDevice& rhiDevice,
     textureDesc.mipLevels = 1u;
     textureDesc.sampleCount = 1u;
     textureDesc.usage = rhiFlag(RhiTextureUsage::Sampled) |
-                        rhiFlag(RhiTextureUsage::ColorAttachment);
+                        rhiFlag(RhiTextureUsage::ColorAttachment) |
+                        rhiFlag(RhiTextureUsage::TransferSrc);
     textureDesc.memoryCategory = RhiMemoryCategory::GBufferHistory;
     m_outputHandle = rhiDevice.createTexture(textureDesc, nullptr);
     if (!m_outputHandle.isValid()) {

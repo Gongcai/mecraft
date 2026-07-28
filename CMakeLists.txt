@@ -228,6 +228,7 @@ find_package(spirv_cross_c CONFIG REQUIRED)
 # [应用层]
 set(SRC_APP
         src/app/AppLaunchOptions.cpp
+        src/app/validation/ValidationRunController.cpp
         src/app/AppSettings.cpp
         src/app/GameResourceBootstrapper.cpp
         src/app/GameManager.cpp
@@ -348,6 +349,9 @@ set(SRC_RENDERER
         # Contracts
         src/renderer/contracts/CameraPathContract.cpp
         src/renderer/contracts/RenderFeatureContract.cpp
+
+        # Capture
+        src/renderer/capture/TextureCapture.cpp
 
         # RHI
         src/renderer/rhi/RhiGrowableBuffer.cpp
@@ -986,6 +990,10 @@ if(MECRAFT_BUILD_TESTS)
     add_mecraft_test(camera_path_contract_test tests/camera_path_contract_test.cpp)
     target_compile_definitions(camera_path_contract_test PRIVATE
             MECRAFT_TEST_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
+    add_mecraft_test(validation_run_controller_test tests/validation_run_controller_test.cpp)
+    target_compile_definitions(validation_run_controller_test PRIVATE
+            MECRAFT_TEST_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
+    add_mecraft_test(texture_capture_test tests/texture_capture_test.cpp)
     add_mecraft_test(temporal_frame_contract_test tests/temporal_frame_contract_test.cpp)
     add_mecraft_test(render_feature_contract_test tests/render_feature_contract_test.cpp)
     add_mecraft_test(gpu_timing_history_test tests/gpu_timing_history_test.cpp)

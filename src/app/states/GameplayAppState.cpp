@@ -2,6 +2,9 @@
 #include "MainMenuAppState.h"
 #include "../../Diagnostics.h"
 #include "game/Game.h"
+#include "app/validation/ValidationRunController.h"
+#include "engine/platform/Time.h"
+#include "renderer/capture/TextureCapture.h"
 #include <algorithm>
 #include <iostream>
 
@@ -19,12 +22,35 @@ GameplayAppState::~GameplayAppState() {
     }
 }
 
+bool GameplayAppState::beginValidation() {
+    if (!m_deps.validationRun.enabled()) {
+        return true;
+    }
+    if (!m_game->prepareValidationScene()) {
+        m_deps.validationRun.fail(
+            app::validation::ValidationRunError::SceneInitializationFailed,
+            "gameplay validation requires a loaded local session with persistence disabled and fixed renderer settings");
+        m_enterFailed = true;
+        return false;
+    }
+    if (!m_deps.validationRun.beginScene(ValidationScene::Voxel)) {
+        m_enterFailed = true;
+        return false;
+    }
+    m_previousTimeSpeed = Time::getTimeSpeed();
+    Time::setTimeSpeed(0.0);
+    m_validationActive = true;
+    m_deps.input.captureMouse(false);
+    return true;
+}
+
 void GameplayAppState::onEnter() {
     if (m_game && m_game->isInitialized()) {
         m_deps.input.captureMouse(true);
         if (m_deps.beginGameplayInputReplay) {
             m_deps.beginGameplayInputReplay();
         }
+        static_cast<void>(beginValidation());
         return;
     }
 
@@ -57,6 +83,7 @@ void GameplayAppState::onEnter() {
     if (m_deps.beginGameplayInputReplay) {
         m_deps.beginGameplayInputReplay();
     }
+    static_cast<void>(beginValidation());
 }
 
 void GameplayAppState::onExit() {
@@ -66,6 +93,10 @@ void GameplayAppState::onExit() {
     if (m_game) {
         m_game->shutdown();
         m_game.reset();
+    }
+    if (m_validationActive) {
+        Time::setTimeSpeed(m_previousTimeSpeed);
+        m_validationActive = false;
     }
     m_deps.input.captureMouse(false);
     m_quitToMenuPending = false;
@@ -79,6 +110,16 @@ void GameplayAppState::update(double frameTime, double& accumulator) {
     }
     if (m_quitToMenuPending) {
         accumulator = 0.0;
+        return;
+    }
+
+    if (m_validationActive) {
+        accumulator = 0.0;
+        if (!m_game->updateFrame(0.0f)) {
+            m_deps.validationRun.fail(
+                app::validation::ValidationRunError::RenderFailed,
+                "gameplay validation frame update failed");
+        }
         return;
     }
 
@@ -130,6 +171,68 @@ void GameplayAppState::update(double frameTime, double& accumulator) {
 
 void GameplayAppState::render(double frameTime) {
     if (m_game) {
+        if (m_validationActive) {
+            const Window::FramebufferSize framebufferSize =
+                m_deps.window.getFramebufferSize();
+            const AppLaunchOptions& options =
+                m_deps.validationRun.options();
+            if (framebufferSize.width !=
+                    static_cast<int>(options.validationWidth) ||
+                framebufferSize.height !=
+                    static_cast<int>(options.validationHeight)) {
+                m_deps.validationRun.fail(
+                    app::validation::ValidationRunError::RenderFailed,
+                    "gameplay validation framebuffer extent does not match the requested capture extent");
+                return;
+            }
+            const app::validation::ValidationFrame* validationFrame =
+                m_deps.validationRun.currentFrame();
+            if (validationFrame == nullptr) {
+                m_deps.validationRun.fail(
+                    app::validation::ValidationRunError::InvalidState,
+                    "gameplay validation has no active frame");
+                return;
+            }
+            const RenderFrameClock clock{
+                validationFrame->sequenceFrameIndex,
+                validationFrame->deltaTimeSeconds,
+                validationFrame->renderTimeSeconds,
+                validationFrame->renderTimeSeconds};
+            const std::filesystem::path* capturePath =
+                validationFrame->captureAfterRender
+                ? &options.validationCapturePath
+                : nullptr;
+            if (!m_game->configureValidationFrame(
+                    validationFrame->cameraPose, clock, capturePath)) {
+                m_deps.validationRun.fail(
+                    app::validation::ValidationRunError::CameraPoseConversionFailed,
+                    "gameplay Camera Path pose cannot be represented by the float render camera");
+                return;
+            }
+            if (!m_game->renderFrame(validationFrame->deltaTimeSeconds)) {
+                m_deps.validationRun.fail(
+                    app::validation::ValidationRunError::RenderFailed,
+                    "gameplay validation scene rendering failed");
+                return;
+            }
+
+            bool captureSucceeded = true;
+            std::string captureDetail;
+            if (validationFrame->captureAfterRender) {
+                std::optional<renderer::capture::TextureCaptureResult> result =
+                    m_game->takeValidationCaptureResult();
+                captureSucceeded = result.has_value() && result->succeeded();
+                if (!captureSucceeded) {
+                    captureDetail = result.has_value()
+                        ? std::string(renderer::capture::textureCaptureErrorStableId(
+                              result->error)) + ":" + result->detail
+                        : "capture callback did not publish a result";
+                }
+            }
+            static_cast<void>(m_deps.validationRun.completeFrame(
+                captureSucceeded, std::move(captureDetail)));
+            return;
+        }
         if (m_deps.window.shouldClose()) {
             m_game->requestExitScreenshot();
         }

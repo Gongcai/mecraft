@@ -26,6 +26,7 @@ public:
 private:
     [[nodiscard]] std::unique_ptr<Game> createGame() const;
     void refreshScreen();
+    void failValidationLoading(const char* detail);
 
     AppStateDependencies m_deps;
     GameSessionConfig m_config;
