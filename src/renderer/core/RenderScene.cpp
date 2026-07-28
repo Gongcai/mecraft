@@ -924,14 +924,6 @@ void RenderScene::setSettingsChangedCallback(
     m_settingsChangedCallback = std::move(callback);
 }
 
-const VoxelGiClipmapStats& RenderScene::getVoxelGiClipmapStats() const {
-    static const VoxelGiClipmapStats kEmptyStats{};
-    if (m_deferredPipeline && m_deferredPipeline->voxelGiClipmap()) {
-        return m_deferredPipeline->voxelGiClipmap()->stats();
-    }
-    return kEmptyStats;
-}
-
 void RenderScene::setBlockEntityRenderer(BlockEntityRenderer* ber) {
     m_blockEntityRenderer = ber;
     m_shared.blockEntityRenderer = ber;

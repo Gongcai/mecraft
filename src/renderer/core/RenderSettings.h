@@ -66,27 +66,6 @@ struct SsgiSettings {
     int denoiseIterations = 2;
 };
 
-/// Voxel clipmap global illumination settings.
-struct VoxelGiSettings {
-    bool enabled = false;
-    bool debugEnabled = false;
-    int resolution = 64;
-    int updateInterval = 4;
-    int coneSteps = 6;
-    int originSnap = 8;
-    float voxelSize = 1.0f;
-    float strength = 0.35f;
-    float normalBias = 0.45f;
-    float sampleDistance = 1.5f;
-    float traceDistance = 18.0f;
-    float coneAperture = 0.55f;
-    float occupancyScale = 0.55f;
-    float occlusionStrength = 1.55f;
-    float skyBounceStrength = 0.70f;
-    float sunBounceStrength = 1.15f;
-    float receiverShadowBoost = 0.85f;
-};
-
 /// Volumetric fog/light settings
 struct VolumetricSettings {
     bool lightEnabled = true;
@@ -377,7 +356,6 @@ struct RenderSettings {
     ShadowSettings shadow;
     SsaoSettings ssao;
     SsgiSettings ssgi;
-    VoxelGiSettings voxelGi;
     VolumetricSettings volumetric;
     CloudSettings cloud;
     OcclusionSettings occlusion;

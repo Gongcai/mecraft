@@ -13,7 +13,6 @@ class DeferredRenderTargets;
 class ResourceMgr;
 class RhiCommandList;
 class RhiDevice;
-class VoxelGiClipmap;
 
 /// Scene composite pass: combines lighting, reflections, clouds, and atmosphere into final HDR scene.
 class SceneCompositePass : public RenderPass {
@@ -33,7 +32,6 @@ public:
         RgTextureHandle skyCapture;
         RgTextureHandle albedo;
         RgTextureHandle ssgi;
-        RgTextureHandle voxelGi;
         RgTextureHandle output;
         RgTextureHandle reactiveMask;
         RgTextureHandle transparencyMask;
@@ -44,7 +42,6 @@ public:
     /// @param ctx Frame state used to build scene composite parameters.
     /// @param settings Render settings controlling composite features.
     /// @param targets Persistent target set supplying attachment views.
-    /// @param voxelGiClipmap Optional clipmap sampled by the voxel GI variant.
     /// @param resources Graph resources read and written by this pass.
     /// @param dependency Pass that must complete before scene composite.
     /// @return The scene composite pass handle, or an invalid handle on setup failure.
@@ -53,47 +50,31 @@ public:
         const FrameContext& ctx,
         const RenderSettings& settings,
         DeferredRenderTargets& targets,
-        const VoxelGiClipmap* voxelGiClipmap,
         const GraphResources& resources,
         RgPassHandle dependency);
 
 private:
     bool ensureRhiPipelines(RhiDevice& rhiDevice);
-    bool ensureBindGroup(RhiDevice& rhiDevice, bool voxelGiEnabled,
-                         const std::array<RhiTextureViewHandle, 11>& views);
-    bool ensureVoxelGiTextureView(RhiDevice& rhiDevice, const VoxelGiClipmap& voxelGiClipmap);
+    bool ensureBindGroup(RhiDevice& rhiDevice,
+                         const std::array<RhiTextureViewHandle, 10>& views);
     [[nodiscard]] bool recordGraphPass(RhiCommandList& commandList,
                                        const FrameContext& ctx,
                                        const RenderSettings& settings,
-                                       DeferredRenderTargets& targets,
-                                       const VoxelGiClipmap* voxelGiClipmap);
+                                       DeferredRenderTargets& targets);
     void destroyBindGroups();
-    void destroyVoxelBindGroup();
     void destroyRhiResources();
-    void destroyVoxelGiTextureView();
 
     RhiDevice* m_rhiDevice = nullptr;
     RhiBufferHandle m_uniformBuffer;
     RhiSamplerHandle m_nearestSampler;
     RhiSamplerHandle m_linearSampler;
-    RhiSamplerHandle m_voxelSampler;
-    RhiBindGroupLayoutHandle m_baseBindGroupLayout;
-    RhiBindGroupLayoutHandle m_voxelBindGroupLayout;
-    RhiPipelineLayoutHandle m_basePipelineLayout;
-    RhiPipelineLayoutHandle m_voxelPipelineLayout;
+    RhiBindGroupLayoutHandle m_bindGroupLayout;
+    RhiPipelineLayoutHandle m_pipelineLayout;
     RhiShaderHandle m_vertexShader;
-    RhiShaderHandle m_baseFragmentShader;
-    RhiShaderHandle m_voxelFragmentShader;
-    RhiPipelineHandle m_basePipeline;
-    RhiPipelineHandle m_voxelPipeline;
-    RhiBindGroupHandle m_baseBindGroup;
-    RhiBindGroupHandle m_voxelBindGroup;
-    std::array<RhiTextureViewHandle, 11> m_baseBoundViews = {};
-    std::array<RhiTextureViewHandle, 11> m_voxelBoundViews = {};
-
-    RhiTextureViewHandle m_voxelGiTextureView;
-    RhiTextureHandle m_voxelGiViewTexture;
-    RhiDevice* m_voxelGiViewDevice = nullptr;
+    RhiShaderHandle m_fragmentShader;
+    RhiPipelineHandle m_pipeline;
+    RhiBindGroupHandle m_bindGroup;
+    std::array<RhiTextureViewHandle, 10> m_boundViews = {};
 };
 
 #endif // MECRAFT_SCENE_COMPOSITE_PASS_H

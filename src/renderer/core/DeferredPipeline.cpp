@@ -277,7 +277,6 @@ void DeferredPipeline::initializePasses(ResourceMgr& resourceMgr,
     m_motionBlurPass = std::make_unique<MotionBlurPass>();
     m_dofPass = std::make_unique<DepthOfFieldPass>();
     m_debugPass = std::make_unique<DebugPass>();
-    m_voxelGiClipmap = std::make_unique<VoxelGiClipmap>();
 
     m_skyCapturePass->init(resourceMgr);
     m_gbufferPass->init(resourceMgr);
@@ -335,9 +334,6 @@ void DeferredPipeline::shutdown() {
     if (m_shared != nullptr && m_shared->rhiDevice != nullptr) {
         m_renderGraph.releaseTransientResources(*m_shared->rhiDevice);
     }
-    if (m_voxelGiClipmap) {
-        m_voxelGiClipmap->shutdown();
-    }
     if (m_debugPass) m_debugPass->shutdown();
     if (m_dofPass) m_dofPass->shutdown();
     if (m_motionBlurPass) m_motionBlurPass->shutdown();
@@ -372,7 +368,6 @@ void DeferredPipeline::shutdown() {
     m_waterCompositePass.reset();
     m_gbufferPass.reset();
     m_skyCapturePass.reset();
-    m_voxelGiClipmap.reset();
     m_resourceMgr = nullptr;
     m_shadowRenderer = nullptr;
     m_shared = nullptr;
@@ -637,15 +632,10 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
     }
     bool cloudGraphPrepared = false;
     bool volumetricGraphPrepared = false;
-    bool voxelGiGraphPrepared = false;
     const auto failGraphSetup = [&]() {
         if (volumetricGraphPrepared) {
             m_volumetricPass->finishGraphExecution(false);
             volumetricGraphPrepared = false;
-        }
-        if (voxelGiGraphPrepared) {
-            m_voxelGiClipmap->finishGraphExecution(false);
-            voxelGiGraphPrepared = false;
         }
         if (cloudGraphPrepared) {
             m_cloudPass->finishGraphExecution(false);
@@ -1408,16 +1398,6 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
         }
     }
 
-    if (settings.debug.deferredLightDebugMode <= 0 && m_voxelGiClipmap) {
-        graphTail = m_voxelGiClipmap->addGraphPasses(
-            m_renderGraph, ctx, settings.voxelGi, *m_resourceMgr, rhiDevice,
-            graphTail);
-        if (!graphTail.isValid()) {
-            return failGraphSetup();
-        }
-        voxelGiGraphPrepared = m_voxelGiClipmap->graphFramePrepared();
-    }
-
     if (settings.debug.deferredLightDebugMode <= 0) {
         SceneCompositePass::GraphResources sceneCompositeResources;
         sceneCompositeResources.sceneLighting = sceneLighting;
@@ -1430,15 +1410,12 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
         sceneCompositeResources.skyCapture = skyCapture;
         sceneCompositeResources.albedo = albedo;
         sceneCompositeResources.ssgi = ssgi;
-        sceneCompositeResources.voxelGi = m_voxelGiClipmap != nullptr
-            ? m_voxelGiClipmap->graphTextureHandle()
-            : RgTextureHandle{};
         sceneCompositeResources.output = sceneComposite;
         sceneCompositeResources.reactiveMask = reactiveMask;
         sceneCompositeResources.transparencyMask = transparencyMask;
         graphTail = m_sceneCompositePass->addGraphPasses(
-            m_renderGraph, ctx, settings, targets, m_voxelGiClipmap.get(),
-            sceneCompositeResources, graphTail);
+            m_renderGraph, ctx, settings, targets, sceneCompositeResources,
+            graphTail);
         if (!graphTail.isValid()) {
             return failGraphSetup();
         }
@@ -2139,9 +2116,6 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
     }
     if (m_hiZPass) {
         m_hiZPass->finishGraphExecution(executed.succeeded());
-    }
-    if (voxelGiGraphPrepared) {
-        m_voxelGiClipmap->finishGraphExecution(executed.succeeded());
     }
     if (executed.succeeded()) {
         commitDeferredHistoryState();

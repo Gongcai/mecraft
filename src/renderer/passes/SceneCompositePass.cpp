@@ -1,7 +1,6 @@
 #include "SceneCompositePass.h"
 #include "../core/RenderScene.h"
 #include "../targets/DeferredRenderTargets.h"
-#include "../gi/VoxelGiClipmap.h"
 #include "../rhi/RhiCommandList.h"
 #include "../rhi/RhiDevice.h"
 #include "../rhi/RhiResources.h"
@@ -13,10 +12,6 @@
 #include <optional>
 
 namespace {
-[[nodiscard]] bool sameTextureHandle(const RhiTextureHandle lhs, const RhiTextureHandle rhs) {
-    return lhs.index == rhs.index && lhs.generation == rhs.generation;
-}
-
 [[nodiscard]] bool sameTextureView(const RhiTextureViewHandle lhs, const RhiTextureViewHandle rhs) {
     return lhs.index == rhs.index && lhs.generation == rhs.generation;
 }
@@ -40,21 +35,16 @@ struct alignas(16) SceneCompositeParams {
     glm::vec4 atmosphereComposite;
     glm::vec4 reflectionWater;
     glm::vec4 status;
-    glm::vec4 voxelOriginSize;
-    glm::vec4 voxel0;
-    glm::vec4 voxel1;
-    glm::vec4 voxel2;
     glm::ivec4 flags0;
     glm::ivec4 flags1;
 };
-static_assert(sizeof(SceneCompositeParams) == 256u);
+static_assert(sizeof(SceneCompositeParams) == 192u);
 } // namespace
 
 void SceneCompositePass::init(ResourceMgr&) {}
 
 void SceneCompositePass::shutdown() {
     destroyRhiResources();
-    destroyVoxelGiTextureView();
 }
 
 RgPassHandle SceneCompositePass::addGraphPasses(
@@ -62,7 +52,6 @@ RgPassHandle SceneCompositePass::addGraphPasses(
     const FrameContext& ctx,
     const RenderSettings& settings,
     DeferredRenderTargets& targets,
-    const VoxelGiClipmap* voxelGiClipmap,
     const GraphResources& resources,
     const RgPassHandle dependency) {
     if (!dependency.isValid() || !resources.sceneLighting.isValid() ||
@@ -73,15 +62,6 @@ RgPassHandle SceneCompositePass::addGraphPasses(
         !resources.ssgi.isValid() || !resources.output.isValid() ||
         !resources.reactiveMask.isValid() ||
         !resources.transparencyMask.isValid()) {
-        return {};
-    }
-
-    const bool voxelGiEnabled = settings.voxelGi.enabled &&
-                                voxelGiClipmap != nullptr &&
-                                voxelGiClipmap->textureHandle().isValid() &&
-                                resources.voxelGi.isValid();
-    if (settings.voxelGi.enabled && voxelGiClipmap != nullptr &&
-        voxelGiClipmap->textureHandle().isValid() != resources.voxelGi.isValid()) {
         return {};
     }
 
@@ -98,17 +78,14 @@ RgPassHandle SceneCompositePass::addGraphPasses(
         .readTexture(resources.materialAux, RhiResourceState::ShaderRead)
         .readTexture(resources.skyCapture, RhiResourceState::ShaderRead)
         .readTexture(resources.albedo, RhiResourceState::ShaderRead)
-        .readTexture(resources.ssgi, RhiResourceState::ShaderRead);
-    if (voxelGiEnabled) {
-        composite.readTexture(resources.voxelGi, RhiResourceState::ShaderRead);
-    }
-    composite.writeTexture(resources.output, RhiResourceState::RenderTarget)
+        .readTexture(resources.ssgi, RhiResourceState::ShaderRead)
+        .writeTexture(resources.output, RhiResourceState::RenderTarget)
         .writeTexture(resources.reactiveMask, RhiResourceState::RenderTarget)
         .writeTexture(resources.transparencyMask, RhiResourceState::RenderTarget)
         .setExecute([this, frame = &ctx, frameTargets = &targets,
-                     frameSettings = settings, voxelGiClipmap](RgPassContext& pass) {
+                     frameSettings = settings](RgPassContext& pass) {
             return recordGraphPass(pass.commandList(), *frame, frameSettings,
-                                   *frameTargets, voxelGiClipmap);
+                                   *frameTargets);
         });
     return composite.handle();
 }
@@ -117,8 +94,7 @@ bool SceneCompositePass::recordGraphPass(
     RhiCommandList& commandList,
     const FrameContext& ctx,
     const RenderSettings& settings,
-    DeferredRenderTargets& targets,
-    const VoxelGiClipmap* voxelGiClipmap) {
+    DeferredRenderTargets& targets) {
     if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr ||
         !targets.ensureSceneCompositeTextureView(*ctx.shared->rhiDevice) ||
         !targets.ensureSceneLightingTextureView(*ctx.shared->rhiDevice) ||
@@ -133,16 +109,10 @@ bool SceneCompositePass::recordGraphPass(
     }
 
     RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
-    const bool voxelGiEnabled = settings.voxelGi.enabled &&
-                                voxelGiClipmap != nullptr &&
-                                voxelGiClipmap->textureHandle().isValid();
     if (!ensureRhiPipelines(rhiDevice)) {
         return false;
     }
-    if (voxelGiEnabled && !ensureVoxelGiTextureView(rhiDevice, *voxelGiClipmap)) {
-        return false;
-    }
-    const std::array<RhiTextureViewHandle, 11> views = {
+    const std::array<RhiTextureViewHandle, 10> views = {
         targets.sceneLightingTextureViewHandle(),
         targets.reflectionTextureViewHandle(),
         targets.cloudTextureViewHandle(),
@@ -152,10 +122,9 @@ bool SceneCompositePass::recordGraphPass(
         targets.materialAuxTextureViewHandle(),
         targets.skyCaptureTextureViewHandle(),
         targets.albedoTextureViewHandle(),
-        targets.ssgiTextureViewHandle(),
-        voxelGiEnabled ? m_voxelGiTextureView : RhiTextureViewHandle{}
+        targets.ssgiTextureViewHandle()
     };
-    if (!ensureBindGroup(rhiDevice, voxelGiEnabled, views)) {
+    if (!ensureBindGroup(rhiDevice, views)) {
         return false;
     }
 
@@ -178,25 +147,10 @@ bool SceneCompositePass::recordGraphPass(
                                        0.14f,
                                        0.08f);
     params.status = glm::vec4(0.0f);
-    if (voxelGiEnabled) {
-        params.voxelOriginSize = glm::vec4(voxelGiClipmap->origin(), voxelGiClipmap->voxelSize());
-        params.voxel0 = glm::vec4(static_cast<float>(voxelGiClipmap->resolution()),
-                                  static_cast<float>(voxelGiClipmap->mipLevels()),
-                                  settings.voxelGi.strength,
-                                  settings.voxelGi.normalBias);
-        params.voxel1 = glm::vec4(settings.voxelGi.sampleDistance,
-                                  settings.voxelGi.traceDistance,
-                                  settings.voxelGi.coneAperture,
-                                  settings.voxelGi.occupancyScale);
-        params.voxel2 = glm::vec4(settings.voxelGi.occlusionStrength,
-                                  settings.voxelGi.receiverShadowBoost,
-                                  0.0f,
-                                  0.0f);
-    }
     params.flags0 = glm::ivec4(settings.ssgi.enabled ? 1 : 0,
-                               voxelGiEnabled ? 1 : 0,
-                               voxelGiEnabled && settings.voxelGi.debugEnabled ? 1 : 0,
-                               settings.voxelGi.coneSteps);
+                               0,
+                               0,
+                               0);
     params.flags1 = glm::ivec4(settings.debug.reflectionDebugMode,
                                ctx.eyeInWater ? 1 : 0,
                                0,
@@ -238,77 +192,27 @@ bool SceneCompositePass::recordGraphPass(
     commandList.bufferBarrier({m_uniformBuffer, RhiResourceState::TransferDst,
                                RhiResourceState::UniformBuffer});
     commandList.beginRendering(renderingInfo);
-    commandList.setGraphicsPipeline(voxelGiEnabled ? m_voxelPipeline : m_basePipeline);
-    commandList.setBindGroup(0u, voxelGiEnabled ? m_voxelBindGroup : m_baseBindGroup);
+    commandList.setGraphicsPipeline(m_pipeline);
+    commandList.setBindGroup(0u, m_bindGroup);
     commandList.draw(3u, 1u, 0u, 0u);
     commandList.endRendering();
     return true;
 }
 
-bool SceneCompositePass::ensureVoxelGiTextureView(
-    RhiDevice& rhiDevice,
-    const VoxelGiClipmap& voxelGiClipmap) {
-    const RhiTextureHandle texture = voxelGiClipmap.textureHandle();
-    if (m_voxelGiViewDevice != nullptr && m_voxelGiViewDevice != &rhiDevice) {
-        destroyVoxelGiTextureView();
-    }
-    if (m_voxelGiTextureView.isValid() && sameTextureHandle(m_voxelGiViewTexture, texture)) {
-        return true;
-    }
-
-    destroyVoxelGiTextureView();
-    if (!texture.isValid() || voxelGiClipmap.resolution() <= 0 || voxelGiClipmap.mipLevels() <= 0) {
-        return false;
-    }
-
-    RhiTextureViewDesc viewDesc;
-    viewDesc.texture = texture;
-    viewDesc.viewType = RhiTextureViewType::Texture3D;
-    viewDesc.format = RhiTextureFormat::Rgba16Float;
-    viewDesc.baseMip = 0u;
-    viewDesc.mipCount = static_cast<uint32_t>(voxelGiClipmap.mipLevels());
-    viewDesc.baseLayer = 0u;
-    viewDesc.layerCount = static_cast<uint32_t>(voxelGiClipmap.resolution());
-    m_voxelGiTextureView = rhiDevice.createTextureView(viewDesc);
-    if (!m_voxelGiTextureView.isValid()) {
-        return false;
-    }
-
-    m_voxelGiViewTexture = texture;
-    m_voxelGiViewDevice = &rhiDevice;
-    return true;
-}
-
-void SceneCompositePass::destroyVoxelGiTextureView() {
-    destroyVoxelBindGroup();
-    if (m_voxelGiViewDevice != nullptr && m_voxelGiTextureView.isValid()) {
-        m_voxelGiViewDevice->destroyTextureView(m_voxelGiTextureView);
-    }
-    m_voxelGiTextureView = {};
-    m_voxelGiViewTexture = {};
-    m_voxelGiViewDevice = nullptr;
-}
-
 bool SceneCompositePass::ensureRhiPipelines(RhiDevice& rhiDevice) {
     if (m_rhiDevice != nullptr && m_rhiDevice != &rhiDevice) {
         destroyRhiResources();
-        destroyVoxelGiTextureView();
     }
-    if (m_basePipeline.isValid() && m_voxelPipeline.isValid()) {
+    if (m_pipeline.isValid()) {
         return true;
     }
     m_rhiDevice = &rhiDevice;
 
     const std::optional<std::string> vertexSource =
         renderer::rhi::loadShaderSource("assets/shaders/fullscreen_triangle_rhi.vert");
-    const std::optional<std::string> baseFragmentSource =
+    const std::optional<std::string> fragmentSource =
         renderer::rhi::loadShaderSource("assets/shaders/scene_composite.frag");
-    renderer::rhi::RhiShaderSourceOptions voxelOptions;
-    voxelOptions.preprocessorDefinitions.push_back("MECRAFT_SCENE_VOXEL_GI");
-    const std::optional<std::string> voxelFragmentSource =
-        renderer::rhi::loadShaderSource("assets/shaders/scene_composite.frag", voxelOptions);
-    if (!vertexSource.has_value() || !baseFragmentSource.has_value() ||
-        !voxelFragmentSource.has_value()) {
+    if (!vertexSource.has_value() || !fragmentSource.has_value()) {
         return false;
     }
 
@@ -320,17 +224,12 @@ bool SceneCompositePass::ensureRhiPipelines(RhiDevice& rhiDevice) {
     m_vertexShader = rhiDevice.createShader(vertexDesc);
 
     RhiShaderDesc fragmentDesc;
-    fragmentDesc.debugName = "SceneComposite.Base.Fragment";
+    fragmentDesc.debugName = "SceneComposite.Fragment";
     fragmentDesc.stage = RhiShaderStage::Fragment;
-    fragmentDesc.source = baseFragmentSource->c_str();
-    fragmentDesc.sourceSize = baseFragmentSource->size();
-    m_baseFragmentShader = rhiDevice.createShader(fragmentDesc);
-    fragmentDesc.debugName = "SceneComposite.Voxel.Fragment";
-    fragmentDesc.source = voxelFragmentSource->c_str();
-    fragmentDesc.sourceSize = voxelFragmentSource->size();
-    m_voxelFragmentShader = rhiDevice.createShader(fragmentDesc);
-    if (!m_vertexShader.isValid() || !m_baseFragmentShader.isValid() ||
-        !m_voxelFragmentShader.isValid()) {
+    fragmentDesc.source = fragmentSource->c_str();
+    fragmentDesc.sourceSize = fragmentSource->size();
+    m_fragmentShader = rhiDevice.createShader(fragmentDesc);
+    if (!m_vertexShader.isValid() || !m_fragmentShader.isValid()) {
         destroyRhiResources();
         return false;
     }
@@ -360,94 +259,59 @@ bool SceneCompositePass::ensureRhiPipelines(RhiDevice& rhiDevice) {
     };
     m_nearestSampler = createSampler(RhiFilter::Nearest, RhiMipmapMode::Nearest);
     m_linearSampler = createSampler(RhiFilter::Linear, RhiMipmapMode::Nearest);
-    m_voxelSampler = createSampler(RhiFilter::Linear, RhiMipmapMode::Linear);
-    if (!m_nearestSampler.isValid() || !m_linearSampler.isValid() ||
-        !m_voxelSampler.isValid()) {
+    if (!m_nearestSampler.isValid() || !m_linearSampler.isValid()) {
         destroyRhiResources();
         return false;
     }
 
-    auto createBindGroupLayout = [&](const char* debugName, const bool includeVoxel) {
-        RhiBindGroupLayoutDesc desc;
-        desc.debugName = debugName;
-        for (uint32_t binding = 0u; binding < 10u; ++binding) {
-            desc.entries.push_back({
-                binding,
-                RhiBindingType::CombinedTextureSampler,
-                rhiFlag(RhiShaderStage::Fragment),
-                1u
-            });
-        }
-        if (includeVoxel) {
-            desc.entries.push_back({
-                10u,
-                RhiBindingType::CombinedTextureSampler,
-                rhiFlag(RhiShaderStage::Fragment),
-                1u
-            });
-        }
-        desc.entries.push_back({
-            11u,
-            RhiBindingType::UniformBuffer,
+    RhiBindGroupLayoutDesc bindGroupLayoutDesc;
+    bindGroupLayoutDesc.debugName = "SceneComposite.BindGroupLayout";
+    for (uint32_t binding = 0u; binding < 10u; ++binding) {
+        bindGroupLayoutDesc.entries.push_back({
+            binding,
+            RhiBindingType::CombinedTextureSampler,
             rhiFlag(RhiShaderStage::Fragment),
             1u
         });
-        return rhiDevice.createBindGroupLayout(desc);
-    };
-    m_baseBindGroupLayout = createBindGroupLayout("SceneComposite.Base.BindGroupLayout", false);
-    m_voxelBindGroupLayout = createBindGroupLayout("SceneComposite.Voxel.BindGroupLayout", true);
-    if (!m_baseBindGroupLayout.isValid() || !m_voxelBindGroupLayout.isValid()) {
+    }
+    bindGroupLayoutDesc.entries.push_back({
+        10u,
+        RhiBindingType::UniformBuffer,
+        rhiFlag(RhiShaderStage::Fragment),
+        1u
+    });
+    m_bindGroupLayout = rhiDevice.createBindGroupLayout(bindGroupLayoutDesc);
+    if (!m_bindGroupLayout.isValid()) {
         destroyRhiResources();
         return false;
     }
 
-    auto createPipelineLayout = [&](const char* debugName,
-                                    const RhiBindGroupLayoutHandle bindGroupLayout) {
-        RhiPipelineLayoutDesc desc;
-        desc.debugName = debugName;
-        desc.bindGroupLayouts.push_back(bindGroupLayout);
-        return rhiDevice.createPipelineLayout(desc);
-    };
-    m_basePipelineLayout = createPipelineLayout(
-        "SceneComposite.Base.PipelineLayout",
-        m_baseBindGroupLayout);
-    m_voxelPipelineLayout = createPipelineLayout(
-        "SceneComposite.Voxel.PipelineLayout",
-        m_voxelBindGroupLayout);
-    if (!m_basePipelineLayout.isValid() || !m_voxelPipelineLayout.isValid()) {
+    RhiPipelineLayoutDesc pipelineLayoutDesc;
+    pipelineLayoutDesc.debugName = "SceneComposite.PipelineLayout";
+    pipelineLayoutDesc.bindGroupLayouts.push_back(m_bindGroupLayout);
+    m_pipelineLayout = rhiDevice.createPipelineLayout(pipelineLayoutDesc);
+    if (!m_pipelineLayout.isValid()) {
         destroyRhiResources();
         return false;
     }
 
-    auto createPipeline = [&](const char* debugName,
-                              const RhiShaderHandle fragmentShader,
-                              const RhiPipelineLayoutHandle pipelineLayout) {
-        RhiGraphicsPipelineDesc desc;
-        desc.debugName = debugName;
-        desc.vertexShader = m_vertexShader;
-        desc.fragmentShader = fragmentShader;
-        desc.layout = pipelineLayout;
-        desc.topology = RhiPrimitiveTopology::TriangleList;
-        desc.raster.cullMode = RhiCullMode::None;
-        desc.depthStencil.depthTestEnabled = false;
-        desc.depthStencil.depthWriteEnabled = false;
-        desc.colorFormats = {
-            RhiTextureFormat::Rgba16Float,
-            RhiTextureFormat::R8Unorm,
-            RhiTextureFormat::R8Unorm
-        };
-        desc.blend.attachments.resize(3u);
-        return rhiDevice.createGraphicsPipeline(desc);
+    RhiGraphicsPipelineDesc pipelineDesc;
+    pipelineDesc.debugName = "SceneComposite.Pipeline";
+    pipelineDesc.vertexShader = m_vertexShader;
+    pipelineDesc.fragmentShader = m_fragmentShader;
+    pipelineDesc.layout = m_pipelineLayout;
+    pipelineDesc.topology = RhiPrimitiveTopology::TriangleList;
+    pipelineDesc.raster.cullMode = RhiCullMode::None;
+    pipelineDesc.depthStencil.depthTestEnabled = false;
+    pipelineDesc.depthStencil.depthWriteEnabled = false;
+    pipelineDesc.colorFormats = {
+        RhiTextureFormat::Rgba16Float,
+        RhiTextureFormat::R8Unorm,
+        RhiTextureFormat::R8Unorm
     };
-    m_basePipeline = createPipeline(
-        "SceneComposite.Base.Pipeline",
-        m_baseFragmentShader,
-        m_basePipelineLayout);
-    m_voxelPipeline = createPipeline(
-        "SceneComposite.Voxel.Pipeline",
-        m_voxelFragmentShader,
-        m_voxelPipelineLayout);
-    if (!m_basePipeline.isValid() || !m_voxelPipeline.isValid()) {
+    pipelineDesc.blend.attachments.resize(3u);
+    m_pipeline = rhiDevice.createGraphicsPipeline(pipelineDesc);
+    if (!m_pipeline.isValid()) {
         destroyRhiResources();
         return false;
     }
@@ -457,31 +321,25 @@ bool SceneCompositePass::ensureRhiPipelines(RhiDevice& rhiDevice) {
 
 bool SceneCompositePass::ensureBindGroup(
     RhiDevice& rhiDevice,
-    const bool voxelGiEnabled,
-    const std::array<RhiTextureViewHandle, 11>& views) {
+    const std::array<RhiTextureViewHandle, 10>& views) {
     if (!ensureRhiPipelines(rhiDevice)) {
         return false;
     }
-    const uint32_t textureCount = voxelGiEnabled ? 11u : 10u;
-    for (uint32_t binding = 0u; binding < textureCount; ++binding) {
+    for (uint32_t binding = 0u; binding < views.size(); ++binding) {
         if (!views[binding].isValid()) {
             return false;
         }
     }
 
-    RhiBindGroupHandle& bindGroup = voxelGiEnabled ? m_voxelBindGroup : m_baseBindGroup;
-    std::array<RhiTextureViewHandle, 11>& boundViews = voxelGiEnabled
-        ? m_voxelBoundViews
-        : m_baseBoundViews;
-    if (bindGroup.isValid() && sameTextureViews(boundViews, views)) {
+    if (m_bindGroup.isValid() && sameTextureViews(m_boundViews, views)) {
         return true;
     }
-    if (bindGroup.isValid()) {
-        rhiDevice.destroyBindGroup(bindGroup);
-        bindGroup = {};
+    if (m_bindGroup.isValid()) {
+        rhiDevice.destroyBindGroup(m_bindGroup);
+        m_bindGroup = {};
     }
 
-    const RhiSamplerHandle samplers[11] = {
+    const RhiSamplerHandle samplers[10] = {
         m_linearSampler,
         m_linearSampler,
         m_linearSampler,
@@ -491,12 +349,11 @@ bool SceneCompositePass::ensureBindGroup(
         m_nearestSampler,
         m_linearSampler,
         m_nearestSampler,
-        m_linearSampler,
-        m_voxelSampler
+        m_linearSampler
     };
     RhiBindGroupDesc bindGroupDesc;
-    bindGroupDesc.layout = voxelGiEnabled ? m_voxelBindGroupLayout : m_baseBindGroupLayout;
-    for (uint32_t binding = 0u; binding < textureCount; ++binding) {
+    bindGroupDesc.layout = m_bindGroupLayout;
+    for (uint32_t binding = 0u; binding < views.size(); ++binding) {
         RhiBindGroupEntry entry;
         entry.binding = binding;
         entry.resource.combinedTextureSampler.textureView = views[binding];
@@ -505,83 +362,51 @@ bool SceneCompositePass::ensureBindGroup(
     }
 
     RhiBindGroupEntry uniformEntry;
-    uniformEntry.binding = 11u;
+    uniformEntry.binding = 10u;
     uniformEntry.resource.buffer.buffer = m_uniformBuffer;
     uniformEntry.resource.buffer.offset = 0u;
     uniformEntry.resource.buffer.range = sizeof(SceneCompositeParams);
     bindGroupDesc.entries.push_back(uniformEntry);
 
-    bindGroup = rhiDevice.createBindGroup(bindGroupDesc);
-    if (!bindGroup.isValid()) {
-        boundViews = {};
+    m_bindGroup = rhiDevice.createBindGroup(bindGroupDesc);
+    if (!m_bindGroup.isValid()) {
+        m_boundViews = {};
         return false;
     }
-    boundViews = views;
+    m_boundViews = views;
     return true;
 }
 
-void SceneCompositePass::destroyVoxelBindGroup() {
-    if (m_rhiDevice != nullptr && m_voxelBindGroup.isValid()) {
-        m_rhiDevice->destroyBindGroup(m_voxelBindGroup);
-    }
-    m_voxelBindGroup = {};
-    m_voxelBoundViews = {};
-}
-
 void SceneCompositePass::destroyBindGroups() {
-    if (m_rhiDevice != nullptr && m_baseBindGroup.isValid()) {
-        m_rhiDevice->destroyBindGroup(m_baseBindGroup);
+    if (m_rhiDevice != nullptr && m_bindGroup.isValid()) {
+        m_rhiDevice->destroyBindGroup(m_bindGroup);
     }
-    m_baseBindGroup = {};
-    m_baseBoundViews = {};
-    destroyVoxelBindGroup();
+    m_bindGroup = {};
+    m_boundViews = {};
 }
 
 void SceneCompositePass::destroyRhiResources() {
     destroyBindGroups();
     if (m_rhiDevice != nullptr) {
-        const RhiPipelineHandle pipelines[] = {m_basePipeline, m_voxelPipeline};
-        for (const RhiPipelineHandle pipeline : pipelines) {
-            if (pipeline.isValid()) {
-                m_rhiDevice->destroyPipeline(pipeline);
-            }
+        if (m_pipeline.isValid()) {
+            m_rhiDevice->destroyPipeline(m_pipeline);
         }
-        const RhiShaderHandle shaders[] = {
-            m_vertexShader,
-            m_baseFragmentShader,
-            m_voxelFragmentShader
-        };
+        const RhiShaderHandle shaders[] = {m_vertexShader, m_fragmentShader};
         for (const RhiShaderHandle shader : shaders) {
             if (shader.isValid()) {
                 m_rhiDevice->destroyShader(shader);
             }
         }
-        const RhiPipelineLayoutHandle pipelineLayouts[] = {
-            m_basePipelineLayout,
-            m_voxelPipelineLayout
-        };
-        for (const RhiPipelineLayoutHandle layout : pipelineLayouts) {
-            if (layout.isValid()) {
-                m_rhiDevice->destroyPipelineLayout(layout);
-            }
+        if (m_pipelineLayout.isValid()) {
+            m_rhiDevice->destroyPipelineLayout(m_pipelineLayout);
         }
-        const RhiBindGroupLayoutHandle bindGroupLayouts[] = {
-            m_baseBindGroupLayout,
-            m_voxelBindGroupLayout
-        };
-        for (const RhiBindGroupLayoutHandle layout : bindGroupLayouts) {
-            if (layout.isValid()) {
-                m_rhiDevice->destroyBindGroupLayout(layout);
-            }
+        if (m_bindGroupLayout.isValid()) {
+            m_rhiDevice->destroyBindGroupLayout(m_bindGroupLayout);
         }
         if (m_uniformBuffer.isValid()) {
             m_rhiDevice->destroyBuffer(m_uniformBuffer);
         }
-        const RhiSamplerHandle samplers[] = {
-            m_nearestSampler,
-            m_linearSampler,
-            m_voxelSampler
-        };
+        const RhiSamplerHandle samplers[] = {m_nearestSampler, m_linearSampler};
         for (const RhiSamplerHandle sampler : samplers) {
             if (sampler.isValid()) {
                 m_rhiDevice->destroySampler(sampler);
@@ -592,15 +417,10 @@ void SceneCompositePass::destroyRhiResources() {
     m_uniformBuffer = {};
     m_nearestSampler = {};
     m_linearSampler = {};
-    m_voxelSampler = {};
-    m_baseBindGroupLayout = {};
-    m_voxelBindGroupLayout = {};
-    m_basePipelineLayout = {};
-    m_voxelPipelineLayout = {};
+    m_bindGroupLayout = {};
+    m_pipelineLayout = {};
     m_vertexShader = {};
-    m_baseFragmentShader = {};
-    m_voxelFragmentShader = {};
-    m_basePipeline = {};
-    m_voxelPipeline = {};
+    m_fragmentShader = {};
+    m_pipeline = {};
     m_rhiDevice = nullptr;
 }

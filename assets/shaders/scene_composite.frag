@@ -19,11 +19,8 @@ layout(binding = 6) uniform sampler2D uMaterialAuxTex;
 layout(binding = 7) uniform sampler2D uSkyCaptureTex;
 layout(binding = 8) uniform sampler2D uAlbedoTex;
 layout(binding = 9) uniform sampler2D uSsgiTex;
-#ifdef MECRAFT_SCENE_VOXEL_GI
-layout(binding = 10) uniform sampler3D uVoxelGiTex;
-#endif
 
-layout(std140, binding = 11) uniform SceneCompositeParams {
+layout(std140, binding = 10) uniform SceneCompositeParams {
     mat4 pInvViewProj;
     vec4 pCameraPosSkyIntensity;
     vec4 pSunDirectionVisibility;
@@ -31,10 +28,6 @@ layout(std140, binding = 11) uniform SceneCompositeParams {
     vec4 pAtmosphereComposite;
     vec4 pReflectionWater;
     vec4 pStatus;
-    vec4 pVoxelOriginSize;
-    vec4 pVoxel0;
-    vec4 pVoxel1;
-    vec4 pVoxel2;
     ivec4 pFlags0;
     ivec4 pFlags1;
 };
@@ -54,22 +47,7 @@ layout(std140, binding = 11) uniform SceneCompositeParams {
 #define uWaterAbsorption pReflectionWater.yzw
 #define uBlindness pStatus.x
 #define uDarknessFactor pStatus.y
-#define uVoxelGiOrigin pVoxelOriginSize.xyz
-#define uVoxelGiVoxelSize pVoxelOriginSize.w
-#define uVoxelGiResolution pVoxel0.x
-#define uVoxelGiMipCount pVoxel0.y
-#define uVoxelGiStrength pVoxel0.z
-#define uVoxelGiNormalBias pVoxel0.w
-#define uVoxelGiSampleDistance pVoxel1.x
-#define uVoxelGiTraceDistance pVoxel1.y
-#define uVoxelGiConeAperture pVoxel1.z
-#define uVoxelGiOccupancyScale pVoxel1.w
-#define uVoxelGiOcclusionStrength pVoxel2.x
-#define uVoxelGiReceiverShadowBoost pVoxel2.y
 #define uSsgiEnabled pFlags0.x
-#define uVoxelGiEnabled pFlags0.y
-#define uVoxelGiDebugEnabled pFlags0.z
-#define uVoxelGiConeSteps pFlags0.w
 #define uReflectionDebugMode pFlags1.x
 #define uIsEyeInWater pFlags1.y
 
@@ -90,105 +68,6 @@ vec3 reconstructWorldPosition(vec2 clipUv, float depth) {
 float luminance(vec3 color) {
     return dot(color, vec3(0.2126, 0.7152, 0.0722));
 }
-
-#ifdef MECRAFT_SCENE_VOXEL_GI
-vec3 voxelGiUv(vec3 worldPos) {
-    return (worldPos - uVoxelGiOrigin) / max(uVoxelGiVoxelSize * uVoxelGiResolution, 0.0001);
-}
-
-float voxelGiInside(vec3 uv) {
-    vec3 edge = step(vec3(0.0), uv) * step(uv, vec3(1.0));
-    return edge.x * edge.y * edge.z;
-}
-
-vec4 sampleVoxelGiRadiance(vec3 worldPos, float lod) {
-    vec3 uv = voxelGiUv(worldPos);
-    return textureLod(uVoxelGiTex, clamp(uv, vec3(0.0), vec3(1.0)), lod) * voxelGiInside(uv);
-}
-
-float voxelGiConeCoverage(float occupancy, float coneDiameter) {
-    float normalizedOccupancy = clamp(occupancy, 0.0, 1.0);
-    float footprint = max(1.0, pow(coneDiameter / max(uVoxelGiVoxelSize, 0.0001), 2.0) * max(uVoxelGiOccupancyScale, 0.0));
-    return 1.0 - pow(max(1.0 - normalizedOccupancy, 0.0001), footprint);
-}
-
-vec4 traceVoxelGiCone(vec3 start, vec3 direction, float weight) {
-    int steps = clamp(uVoxelGiConeSteps, 1, 12);
-    float traceDistance = max(uVoxelGiTraceDistance, uVoxelGiVoxelSize);
-    float firstDistance = max(uVoxelGiSampleDistance, uVoxelGiVoxelSize);
-    float stepLength = max(uVoxelGiVoxelSize, (traceDistance - firstDistance) / float(steps));
-    vec3 radiance = vec3(0.0);
-    float opacity = 0.0;
-
-    for (int i = 0; i < 12; ++i) {
-        if (i >= steps) {
-            break;
-        }
-        float distanceAlongCone = firstDistance + (float(i) + 0.35) * stepLength;
-        float coneDiameter = max(uVoxelGiVoxelSize, distanceAlongCone * max(uVoxelGiConeAperture, 0.05));
-        float lod = clamp(log2(coneDiameter / max(uVoxelGiVoxelSize, 0.0001)), 0.0, max(uVoxelGiMipCount - 1.0, 0.0));
-        vec4 sampleData = sampleVoxelGiRadiance(start + direction * distanceAlongCone, lod);
-        float coverage = voxelGiConeCoverage(sampleData.a, coneDiameter);
-        float stepRatio = max(stepLength / max(uVoxelGiVoxelSize, 0.0001), 1.0);
-        float correctedAlpha = 1.0 - pow(max(1.0 - coverage, 0.0001), stepRatio);
-        float surfaceVisibility = mix(1.0, 0.58, coverage);
-        vec3 surfaceRadiance = sampleData.a > 1e-4
-            ? sampleData.rgb / max(sampleData.a, 1e-4)
-            : vec3(0.0);
-        float alphaStep = clamp(correctedAlpha * max(uVoxelGiOcclusionStrength, 0.0), 0.0, 1.0);
-        float frontToBack = (1.0 - opacity) * alphaStep;
-        radiance += surfaceRadiance * surfaceVisibility * frontToBack;
-        opacity += frontToBack;
-        if (opacity > 0.965) {
-            break;
-        }
-    }
-
-    return vec4(radiance * weight, weight);
-}
-
-vec3 sampleVoxelGiContribution(vec3 worldPos, vec3 normal, vec3 albedo, float vertexAo, vec3 sceneColor) {
-    vec3 n = normalize(normal);
-    vec3 up = abs(n.y) < 0.92 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
-    vec3 tangent = normalize(cross(up, n));
-    vec3 bitangent = normalize(cross(n, tangent));
-
-    vec3 start = worldPos + n * max(uVoxelGiNormalBias, 0.0);
-    vec3 radiance = vec3(0.0);
-    float weightSum = 0.0;
-
-    vec3 selfSample = sampleVoxelGiRadiance(worldPos - n * (uVoxelGiVoxelSize * 0.35), 0.0).rgb;
-    radiance += selfSample * 0.25;
-    weightSum += 0.35;
-
-    vec3 directions[5] = vec3[5](
-        n,
-        normalize(n + tangent * 0.75),
-        normalize(n - tangent * 0.75),
-        normalize(n + bitangent * 0.75),
-        normalize(n - bitangent * 0.75)
-    );
-
-    float directionWeights[5] = float[5](1.0, 0.58, 0.58, 0.58, 0.58);
-    for (int i = 0; i < 5; ++i) {
-        vec4 coneTrace = traceVoxelGiCone(start, directions[i], directionWeights[i]);
-        radiance += coneTrace.rgb;
-        weightSum += coneTrace.a;
-    }
-
-    vec3 irradiance = radiance / max(weightSum, 0.0001);
-    vec3 receiverTint = mix(vec3(0.50), albedo, 0.70);
-    float ao = clamp(vertexAo, 0.0, 1.0);
-    float aoWeight = mix(0.58, 1.0, ao);
-    float sunFacing = max(dot(n, normalize(uSunDirection)), 0.0);
-    float daylight = clamp(uSunVisibility * uSkyIntensity, 0.0, 1.0);
-    float backlitWeight = (1.0 - smoothstep(0.08, 0.72, sunFacing)) * daylight;
-    float lowLightWeight = 1.0 - smoothstep(0.035, 0.55, luminance(sceneColor));
-    float receiverWeight = 1.0 + max(uVoxelGiReceiverShadowBoost, 0.0) *
-                           (backlitWeight * 0.75 + lowLightWeight * 0.45 + (1.0 - ao) * 0.35);
-    return irradiance * receiverTint * aoWeight * receiverWeight * max(uVoxelGiStrength, 0.0);
-}
-#endif
 
 void applyUnderwaterFog(inout vec3 color, float fogDistance, LightingEnvironment env) {
     // DerivativeMain/lib/Water/WaterFog.glsl UnderwaterFog(), adapted for
@@ -279,20 +158,6 @@ void main() {
     SurfaceMaterial material = unpackGBufferMaterial(texture(uMaterialTex, textureUv));
     SurfaceMaterialAux aux = baseAux;
     TranslucentMask transMask = decodeTranslucentMask(aux.materialKind);
-#ifdef MECRAFT_SCENE_VOXEL_GI
-    if (uVoxelGiEnabled != 0 && depth < 0.9999 && !transMask.isTranslucent) {
-        vec3 worldPos = reconstructWorldPosition(vClipUv, depth);
-        vec4 normalAo = texture(uNormalAoTex, textureUv);
-        vec3 normal = unpackGBufferNormal(normalAo);
-        vec3 albedo = texture(uAlbedoTex, textureUv).rgb;
-        vec3 voxelGi = sampleVoxelGiContribution(worldPos, normal, albedo, unpackGBufferVertexAo(normalAo), color);
-        if (uVoxelGiDebugEnabled != 0) {
-            FragColor = vec4(max(voxelGi, vec3(0.0)) * 6.0, 1.0);
-            return;
-        }
-        color += max(voxelGi, vec3(0.0));
-    }
-#endif
     if (uSsgiEnabled != 0 && depth < 0.9999 && !transMask.isTranslucent) {
         vec4 ssgi = texture(uSsgiTex, textureUv);
         float confidence = smoothstep(0.06, 0.45, ssgi.a);

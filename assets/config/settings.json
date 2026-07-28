@@ -185,25 +185,6 @@
       "updateInterval": 1,
       "uwLightEnabled": true
     },
-    "voxelGi": {
-      "coneAperture": 0.550000011920929,
-      "coneSteps": 6,
-      "debugEnabled": false,
-      "enabled": false,
-      "normalBias": 0.44999998807907104,
-      "occlusionStrength": 1.5499999523162842,
-      "occupancyScale": 0.550000011920929,
-      "originSnap": 8,
-      "receiverShadowBoost": 0.8500000238418579,
-      "resolution": 64,
-      "sampleDistance": 1.5,
-      "skyBounceStrength": 0.699999988079071,
-      "strength": 0.3499999940395355,
-      "sunBounceStrength": 1.149999976158142,
-      "traceDistance": 18.0,
-      "updateInterval": 4,
-      "voxelSize": 1.0
-    },
     "weather": {
       "directWeatherOcclusion": -1.0,
       "exposureBias": 0.0,

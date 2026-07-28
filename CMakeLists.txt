@@ -361,9 +361,6 @@ set(SRC_RENDERER
         src/renderer/core/DeferredPipeline.cpp
         src/renderer/core/ForwardPipeline.cpp
 
-        # Global illumination
-        src/renderer/gi/VoxelGiClipmap.cpp
-
         # OpenGL helpers
 
         # Render targets
@@ -978,6 +975,11 @@ if(MECRAFT_BUILD_TESTS)
     add_mecraft_test(sleeping_state_test tests/sleeping_state_test.cpp)
     add_mecraft_test(gameplay_sky_renderer_test tests/gameplay_sky_renderer_test.cpp)
     add_mecraft_test(rhi_shader_compiler_test tests/rhi_shader_compiler_test.cpp)
+    add_test(
+        NAME renderer_removed_feature_test
+        COMMAND ${CMAKE_COMMAND}
+                -DMECRAFT_SOURCE_DIR=${PROJECT_SOURCE_DIR}
+                -P ${PROJECT_SOURCE_DIR}/tests/renderer_removed_feature_test.cmake)
     add_mecraft_test(app_launch_options_test tests/app_launch_options_test.cpp)
     add_mecraft_test(temporal_frame_contract_test tests/temporal_frame_contract_test.cpp)
     add_mecraft_test(rhi_render_graph_test tests/rhi_render_graph_test.cpp)

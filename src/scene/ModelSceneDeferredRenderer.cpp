@@ -74,7 +74,6 @@ RenderSettings modelSceneSettings() {
     RenderSettings settings;
     settings.pipelineMode = PipelineMode::Deferred;
     settings.occlusion.hiZEnabled = false;
-    settings.voxelGi.enabled = false;
     settings.transparent.waterEffectsEnabled = false;
     settings.transparent.compositeEnabled = false;
     settings.weather.particlesEnabled = false;
@@ -829,10 +828,6 @@ bool ModelSceneDeferredRenderer::validateSettings(
     }
     if (settings.occlusion.hiZEnabled) {
         error = "model scenes do not provide terrain Hi-Z occlusion resources";
-        return false;
-    }
-    if (settings.voxelGi.enabled) {
-        error = "model scenes do not provide voxel GI world resources";
         return false;
     }
     if (settings.transparent.waterEffectsEnabled ||

@@ -25,7 +25,6 @@
 #include "../passes/ShadowPass.h"
 #include "../passes/WaterCompositePass.h"
 #include "../passes/DebugPass.h"
-#include "../gi/VoxelGiClipmap.h"
 
 #include <cstdint>
 #include <memory>
@@ -71,7 +70,6 @@ public:
     ShadowPass* shadowPass() const { return m_shadowPass.get(); }
     WaterCompositePass* waterCompositePass() const { return m_waterCompositePass.get(); }
     DebugPass* debugPass() const { return m_debugPass.get(); }
-    VoxelGiClipmap* voxelGiClipmap() const { return m_voxelGiClipmap.get(); }
     HiZPass* hiZPass() const { return m_hiZPass.get(); }
 
     /// Builds dashboard statistics from the most recent Render Graph frame:
@@ -101,7 +99,6 @@ private:
     std::unique_ptr<ShadowPass> m_shadowPass;
     std::unique_ptr<WaterCompositePass> m_waterCompositePass;
     std::unique_ptr<DebugPass> m_debugPass;
-    std::unique_ptr<VoxelGiClipmap> m_voxelGiClipmap;
 
     // Shared resources (non-owning, set during init)
     ResourceMgr* m_resourceMgr = nullptr;

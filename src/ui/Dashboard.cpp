@@ -1422,30 +1422,6 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
         }
         pipelineChanged |= ImGui::Checkbox("SSGI Temporal", &settings.ssgi.temporalEnabled);
         pipelineChanged |= ImGui::Checkbox("SSGI Denoise", &settings.ssgi.denoiseEnabled);
-        pipelineChanged |= ImGui::Checkbox("Voxel GI", &settings.voxelGi.enabled);
-        ImGui::SameLine();
-        pipelineChanged |= ImGui::Checkbox("Voxel GI Debug", &settings.voxelGi.debugEnabled);
-        ImGui::SameLine();
-        if (ImGui::Button("Voxel GI Test")) {
-            settings.voxelGi.enabled = true;
-            settings.voxelGi.debugEnabled = false;
-            settings.voxelGi.strength = 0.48f;
-            settings.voxelGi.resolution = 64;
-            settings.voxelGi.updateInterval = 3;
-            settings.voxelGi.coneSteps = 6;
-            settings.voxelGi.originSnap = 8;
-            settings.voxelGi.voxelSize = 1.0f;
-            settings.voxelGi.normalBias = 0.45f;
-            settings.voxelGi.sampleDistance = 1.5f;
-            settings.voxelGi.traceDistance = 18.0f;
-            settings.voxelGi.coneAperture = 0.55f;
-            settings.voxelGi.occupancyScale = 0.55f;
-            settings.voxelGi.occlusionStrength = 1.55f;
-            settings.voxelGi.skyBounceStrength = 0.80f;
-            settings.voxelGi.sunBounceStrength = 1.35f;
-            settings.voxelGi.receiverShadowBoost = 0.95f;
-            pipelineChanged = true;
-        }
         const bool fsr1Supported = renderScene.isFsr1Supported();
         const bool fsr31Supported = renderScene.isFsr31Supported();
         const bool dlssSupported = renderScene.isDlssSupported();
@@ -1995,52 +1971,6 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
         pipelineChanged |= ImGui::SliderFloat("SSGI Radiance Filter", &settings.ssgi.radianceFilterStrength, 0.0f, 1.0f, "%.2f");
         pipelineChanged |= ImGui::SliderFloat("SSGI Color Bleed", &settings.ssgi.colorBleedStrength, 0.0f, 1.0f, "%.2f");
         pipelineChanged |= ImGui::SliderFloat("SSGI History Weight", &settings.ssgi.historyWeight, 0.0f, 0.98f, "%.2f");
-        pipelineChanged |= ImGui::SliderFloat("Voxel GI Strength", &settings.voxelGi.strength, 0.0f, 1.0f, "%.2f");
-        pipelineChanged |= ImGui::SliderInt("Voxel GI Resolution", &settings.voxelGi.resolution, 16, 128);
-        pipelineChanged |= ImGui::SliderInt("Voxel GI Update Frames", &settings.voxelGi.updateInterval, 1, 20);
-        pipelineChanged |= ImGui::SliderInt("Voxel GI Cone Steps", &settings.voxelGi.coneSteps, 1, 12);
-        pipelineChanged |= ImGui::SliderInt("Voxel GI Origin Snap", &settings.voxelGi.originSnap, 1, 32);
-        pipelineChanged |= ImGui::SliderFloat("Voxel GI Voxel Size", &settings.voxelGi.voxelSize, 1.0f, 4.0f, "%.0f");
-        pipelineChanged |= ImGui::SliderFloat("Voxel GI Normal Bias", &settings.voxelGi.normalBias, 0.0f, 2.0f, "%.2f");
-        pipelineChanged |= ImGui::SliderFloat("Voxel GI Sample Distance", &settings.voxelGi.sampleDistance, 1.0f, 12.0f, "%.2f");
-        pipelineChanged |= ImGui::SliderFloat("Voxel GI Trace Distance", &settings.voxelGi.traceDistance, 4.0f, 48.0f, "%.1f");
-        pipelineChanged |= ImGui::SliderFloat("Voxel GI Cone Aperture", &settings.voxelGi.coneAperture, 0.05f, 1.50f, "%.2f");
-        pipelineChanged |= ImGui::SliderFloat("Voxel GI Occupancy Scale", &settings.voxelGi.occupancyScale, 0.0f, 2.0f, "%.2f");
-        pipelineChanged |= ImGui::SliderFloat("Voxel GI Occlusion Strength", &settings.voxelGi.occlusionStrength, 0.0f, 4.0f, "%.2f");
-        pipelineChanged |= ImGui::SliderFloat("Voxel GI Sky Bounce", &settings.voxelGi.skyBounceStrength, 0.0f, 2.0f, "%.2f");
-        pipelineChanged |= ImGui::SliderFloat("Voxel GI Sun Bounce", &settings.voxelGi.sunBounceStrength, 0.0f, 3.0f, "%.2f");
-        pipelineChanged |= ImGui::SliderFloat("Voxel GI Shadow Boost", &settings.voxelGi.receiverShadowBoost, 0.0f, 2.0f, "%.2f");
-        const VoxelGiClipmapStats& voxelGiStats = renderScene.getVoxelGiClipmapStats();
-        const auto voxelGiModeName = [](const VoxelGiClipmapUpdateMode mode) {
-            switch (mode) {
-                case VoxelGiClipmapUpdateMode::Disabled: return "Disabled";
-                case VoxelGiClipmapUpdateMode::Idle: return "Idle";
-                case VoxelGiClipmapUpdateMode::Full: return "Full";
-                case VoxelGiClipmapUpdateMode::Shifted: return "Shifted";
-            }
-            return "Unknown";
-        };
-        ImGui::Text("Voxel GI Mode: %s (%s)",
-                    voxelGiModeName(voxelGiStats.mode),
-                    voxelGiStats.valid ? "valid" : "invalid");
-        ImGui::Text("Voxel GI Volume: %d^3, mips %d, origin (%d,%d,%d), delta (%d,%d,%d)",
-                    voxelGiStats.resolution,
-                    voxelGiStats.mipLevels,
-                    voxelGiStats.originBlock.x,
-                    voxelGiStats.originBlock.y,
-                    voxelGiStats.originBlock.z,
-                    voxelGiStats.deltaVoxels.x,
-                    voxelGiStats.deltaVoxels.y,
-                    voxelGiStats.deltaVoxels.z);
-        ImGui::Text("Voxel GI Work: sampled %llu, reused %llu, uploaded %llu, copied %llu, boxes %d",
-                    static_cast<unsigned long long>(voxelGiStats.sampledVoxels),
-                    static_cast<unsigned long long>(voxelGiStats.reusedVoxels),
-                    static_cast<unsigned long long>(voxelGiStats.uploadedVoxels),
-                    static_cast<unsigned long long>(voxelGiStats.copiedVoxels),
-                    voxelGiStats.uploadedBoxes);
-        ImGui::Text("Voxel GI Light: sky %.3f, sun %.3f",
-                    voxelGiStats.skyRadianceScale,
-                    voxelGiStats.sunRadianceScale);
         pipelineChanged |= ImGui::Checkbox("Reflection Temporal", &settings.reflection.temporalEnabled);
         pipelineChanged |= ImGui::SliderFloat("Reflection History Weight", &settings.reflection.historyWeight, 0.0f, 0.98f, "%.2f");
         pipelineChanged |=
