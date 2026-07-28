@@ -9,10 +9,12 @@
 #include "ui/core/UIRenderer.h"
 #include "../ecs/components/Components.h"
 #include "../renderer/renderers/FirstPersonHeldItemRenderer.h"
+#include "../renderer/contracts/RenderFeatureContract.h"
 #include "../renderer/core/RenderSettings.h"
 #include "../renderer/debug/RenderDebugService.h"
 #include "../renderer/rhi/RhiCommandList.h"
 #include "../renderer/rhi/RhiDevice.h"
+#include "../renderer/rhi/RhiDeviceFactory.h"
 #include "../renderer/rhi/RhiShaderSourceLoader.h"
 #include "ui/imgui/RenderSettingsImGui.h"
 
@@ -868,6 +870,52 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
         ImGui::Text("Presentation Skips / Failures: %llu / %llu",
                     static_cast<unsigned long long>(displayedProfilerStats.presentationSkippedFrames),
                     static_cast<unsigned long long>(displayedProfilerStats.presentationFailedOperations));
+        if (ImGui::TreeNode("Renderer Capability Contract")) {
+            const RhiBackend backend = m_rhiDevice->backend();
+            const renderer::contracts::RenderProfile profile =
+                renderer::contracts::activeRenderProfile(backend);
+            const renderer::contracts::RenderProfileStatus profileStatus =
+                renderer::contracts::evaluateCurrentRenderProfile(
+                    profile, backend, m_rhiDevice->capabilities());
+            ImGui::Text("Backend: %s", renderer::rhi::rhiBackendDisplayName(backend));
+            ImGui::Text("Profile: %s (%s)",
+                        renderer::contracts::renderProfileDisplayNameZh(profile),
+                        renderer::contracts::renderProfileStableId(profile));
+            ImGui::Text("Profile Status: %s [%s]",
+                        profileStatus.available() ? "可用" : "不可用",
+                        renderer::contracts::renderFeatureStatusCodeStableId(
+                            profileStatus.code));
+            if (!profileStatus.available()) {
+                if (profileStatus.blockingFeature !=
+                    renderer::contracts::RenderFeature::Count) {
+                    ImGui::Text("Blocking Feature: %s (%s)",
+                                renderer::contracts::renderFeatureDisplayNameZh(
+                                    profileStatus.blockingFeature),
+                                renderer::contracts::renderFeatureStableId(
+                                    profileStatus.blockingFeature));
+                }
+                ImGui::TextWrapped("原因：%s", profileStatus.reasonZh);
+            }
+            ImGui::Separator();
+            for (size_t index = 0u;
+                 index < renderer::contracts::renderFeatureCount();
+                 ++index) {
+                const auto feature =
+                    static_cast<renderer::contracts::RenderFeature>(index);
+                const renderer::contracts::RenderFeatureStatus featureStatus =
+                    renderer::contracts::evaluateCurrentRenderFeature(
+                        profile, backend, m_rhiDevice->capabilities(), feature);
+                ImGui::Text("%s: %s [%s]",
+                            renderer::contracts::renderFeatureDisplayNameZh(feature),
+                            featureStatus.available() ? "可用" : "不可用",
+                            renderer::contracts::renderFeatureStatusCodeStableId(
+                                featureStatus.code));
+                if (!featureStatus.available()) {
+                    ImGui::TextDisabled("  %s", featureStatus.reasonZh);
+                }
+            }
+            ImGui::TreePop();
+        }
         showMax("Loop Frame (clamped)", displayedProfilerStats.frameMs, displayedProfilerStats.maxFrameMs);
         showMax("App Update Dispatch", displayedProfilerStats.appUpdateDispatchMs, displayedProfilerStats.maxAppUpdateDispatchMs);
         showMax("App Render Dispatch", displayedProfilerStats.appRenderDispatchMs, displayedProfilerStats.maxAppRenderDispatchMs);

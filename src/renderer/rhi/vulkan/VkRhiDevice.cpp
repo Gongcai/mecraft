@@ -1567,12 +1567,16 @@ bool VkRhiDevice::init(const RhiDeviceDesc& desc) {
     features12.descriptorIndexing = selected12.descriptorIndexing;
     features12.shaderSampledImageArrayNonUniformIndexing =
         selected12.shaderSampledImageArrayNonUniformIndexing;
+    features12.shaderStorageBufferArrayNonUniformIndexing =
+        selected12.shaderStorageBufferArrayNonUniformIndexing;
     features12.shaderStorageImageArrayNonUniformIndexing =
         selected12.shaderStorageImageArrayNonUniformIndexing;
     features12.descriptorBindingSampledImageUpdateAfterBind =
         selected12.descriptorBindingSampledImageUpdateAfterBind;
     features12.descriptorBindingStorageImageUpdateAfterBind =
         selected12.descriptorBindingStorageImageUpdateAfterBind;
+    features12.descriptorBindingStorageBufferUpdateAfterBind =
+        selected12.descriptorBindingStorageBufferUpdateAfterBind;
     features12.descriptorBindingPartiallyBound = selected12.descriptorBindingPartiallyBound;
     features12.descriptorBindingVariableDescriptorCount =
         selected12.descriptorBindingVariableDescriptorCount;
@@ -1719,6 +1723,16 @@ bool VkRhiDevice::init(const RhiDeviceDesc& desc) {
     m_capabilities.samplerAnisotropy = true;
     m_capabilities.storageImage = true;
     m_capabilities.descriptorIndexing = selected12.descriptorIndexing == VK_TRUE;
+    m_capabilities.descriptorBindingPartiallyBound =
+        selected12.descriptorBindingPartiallyBound == VK_TRUE;
+    m_capabilities.descriptorBindingVariableDescriptorCount =
+        selected12.descriptorBindingVariableDescriptorCount == VK_TRUE;
+    m_capabilities.runtimeDescriptorArray =
+        selected12.runtimeDescriptorArray == VK_TRUE;
+    m_capabilities.shaderSampledImageArrayNonUniformIndexing =
+        selected12.shaderSampledImageArrayNonUniformIndexing == VK_TRUE;
+    m_capabilities.shaderStorageBufferArrayNonUniformIndexing =
+        selected12.shaderStorageBufferArrayNonUniformIndexing == VK_TRUE;
     m_capabilities.maxColorAttachments = m_data->properties.limits.maxColorAttachments;
     m_capabilities.maxSampledTexturesPerStage =
         m_data->properties.limits.maxPerStageDescriptorSampledImages;

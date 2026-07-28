@@ -346,6 +346,7 @@ set(SRC_RENDERER
         src/renderer/debug/RenderDebugService.cpp
 
         # Contracts
+        src/renderer/contracts/RenderFeatureContract.cpp
 
         # RHI
         src/renderer/rhi/RhiGrowableBuffer.cpp
@@ -982,6 +983,7 @@ if(MECRAFT_BUILD_TESTS)
                 -P ${PROJECT_SOURCE_DIR}/tests/renderer_removed_feature_test.cmake)
     add_mecraft_test(app_launch_options_test tests/app_launch_options_test.cpp)
     add_mecraft_test(temporal_frame_contract_test tests/temporal_frame_contract_test.cpp)
+    add_mecraft_test(render_feature_contract_test tests/render_feature_contract_test.cpp)
     add_mecraft_test(rhi_render_graph_test tests/rhi_render_graph_test.cpp)
     add_mecraft_test(presentation_controller_test tests/presentation_controller_test.cpp)
     add_mecraft_test(presented_frame_rate_sampler_test tests/presented_frame_rate_sampler_test.cpp)
