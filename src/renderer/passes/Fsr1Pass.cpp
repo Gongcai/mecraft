@@ -475,6 +475,7 @@ bool Fsr1Pass::ensureTargets(RhiDevice& rhiDevice, const int width, const int he
     textureDesc.sampleCount = 1u;
     textureDesc.usage = rhiFlag(RhiTextureUsage::Sampled) |
                         rhiFlag(RhiTextureUsage::ColorAttachment);
+    textureDesc.memoryCategory = RhiMemoryCategory::GBufferHistory;
     m_easuHandle = rhiDevice.createTexture(textureDesc, nullptr);
     if (!m_easuHandle.isValid()) {
         destroyTargets();
@@ -538,6 +539,7 @@ bool Fsr1Pass::ensureOutputTarget(RhiDevice& rhiDevice,
     textureDesc.sampleCount = 1u;
     textureDesc.usage = rhiFlag(RhiTextureUsage::Sampled) |
                         rhiFlag(RhiTextureUsage::ColorAttachment);
+    textureDesc.memoryCategory = RhiMemoryCategory::GBufferHistory;
     m_outputHandle = rhiDevice.createTexture(textureDesc, nullptr);
     if (!m_outputHandle.isValid()) {
         return false;

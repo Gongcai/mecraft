@@ -571,6 +571,7 @@ bool PresentationController::ensureUiTargets(const uint32_t width,
         hudlessColorDesc.height = height;
         hudlessColorDesc.usage = rhiFlag(RhiTextureUsage::Sampled) |
                                  rhiFlag(RhiTextureUsage::TransferDst);
+        hudlessColorDesc.memoryCategory = RhiMemoryCategory::Presentation;
         slot.hudlessColorTexture =
             m_uiDevice->createTexture(hudlessColorDesc, nullptr);
 
@@ -581,6 +582,7 @@ bool PresentationController::ensureUiTargets(const uint32_t width,
         colorDesc.height = height;
         colorDesc.usage = rhiFlag(RhiTextureUsage::Sampled) |
                           rhiFlag(RhiTextureUsage::ColorAttachment);
+        colorDesc.memoryCategory = RhiMemoryCategory::Presentation;
         slot.colorTexture = m_uiDevice->createTexture(colorDesc, nullptr);
 
         RhiTextureDesc depthDesc;
@@ -589,6 +591,7 @@ bool PresentationController::ensureUiTargets(const uint32_t width,
         depthDesc.width = width;
         depthDesc.height = height;
         depthDesc.usage = rhiFlag(RhiTextureUsage::DepthStencilAttachment);
+        depthDesc.memoryCategory = RhiMemoryCategory::Presentation;
         slot.depthTexture = m_uiDevice->createTexture(depthDesc, nullptr);
         if (!slot.hudlessColorTexture.isValid() ||
             !slot.colorTexture.isValid() || !slot.depthTexture.isValid()) {

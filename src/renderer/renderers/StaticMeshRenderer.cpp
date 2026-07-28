@@ -929,6 +929,7 @@ bool StaticMeshRenderer::createPipelineResources() {
                             rhiFlag(RhiBufferUsage::TransferDst);
     frameBufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
     frameBufferDesc.initialState = RhiResourceState::UniformBuffer;
+    frameBufferDesc.memoryCategory = RhiMemoryCategory::Uniform;
     const StaticMeshFrameParams frameParams{};
     m_frameUniformBuffer = m_rhiDevice->createBuffer(
         frameBufferDesc, &frameParams, sizeof(frameParams));
@@ -1002,6 +1003,7 @@ bool StaticMeshRenderer::loadAsset(const std::string& modelPath,
         textureDesc.usage = rhiFlag(RhiTextureUsage::Sampled) |
                             rhiFlag(RhiTextureUsage::TransferSrc) |
                             rhiFlag(RhiTextureUsage::TransferDst);
+        textureDesc.memoryCategory = RhiMemoryCategory::Texture;
         RhiTextureInitialData initialData;
         initialData.pixels = pixels;
         initialData.sizeBytes = sizeBytes;
@@ -1222,6 +1224,7 @@ bool StaticMeshRenderer::loadAsset(const std::string& modelPath,
                                    rhiFlag(RhiBufferUsage::TransferDst);
         materialBufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
         materialBufferDesc.initialState = RhiResourceState::UniformBuffer;
+        materialBufferDesc.memoryCategory = RhiMemoryCategory::Uniform;
         MaterialResource resource;
         resource.uniformBuffer = m_rhiDevice->createBuffer(
             materialBufferDesc, &params, sizeof(params));
@@ -1466,6 +1469,7 @@ bool StaticMeshRenderer::loadAsset(const std::string& modelPath,
                            rhiFlag(RhiBufferUsage::TransferDst);
         bufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
         bufferDesc.initialState = RhiResourceState::VertexBuffer;
+        bufferDesc.memoryCategory = RhiMemoryCategory::Geometry;
         resource.vertexBuffer = m_rhiDevice->createBuffer(
             bufferDesc, vertices.data(), bufferDesc.size);
         bufferDesc.debugName = "StaticMesh.IndexBuffer";

@@ -972,6 +972,7 @@ void destroySwapchainResources(VkRhiDeviceData& data) {
         const RhiTextureHandle textureHandle = data.textureHandles.allocate();
         RhiTextureDesc textureDesc{};
         textureDesc.debugName = "Vulkan swapchain image";
+        textureDesc.memoryCategory = RhiMemoryCategory::Presentation;
         textureDesc.format = RhiTextureFormat::Bgra8Unorm;
         textureDesc.width = extent.width;
         textureDesc.height = extent.height;
@@ -1020,8 +1021,10 @@ void destroySwapchainResources(VkRhiDeviceData& data) {
         allocationInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
         VkImage depthImage = VK_NULL_HANDLE;
         VmaAllocation depthAllocation = VK_NULL_HANDLE;
+        VmaAllocationInfo depthAllocationInfo{};
         if (!vkSucceeded(vmaCreateImage(data.allocator, &depthInfo, &allocationInfo,
-                                        &depthImage, &depthAllocation, nullptr),
+                                        &depthImage, &depthAllocation,
+                                        &depthAllocationInfo),
                          "vmaCreateImage(swapchain depth)")) {
             destroySwapchainResources(data);
             return false;
@@ -1029,6 +1032,7 @@ void destroySwapchainResources(VkRhiDeviceData& data) {
         const RhiTextureHandle depthHandle = data.textureHandles.allocate();
         RhiTextureDesc depthDesc{};
         depthDesc.debugName = "Vulkan swapchain depth";
+        depthDesc.memoryCategory = RhiMemoryCategory::Presentation;
         depthDesc.format = RhiTextureFormat::Depth32Float;
         depthDesc.width = extent.width;
         depthDesc.height = extent.height;
@@ -1038,7 +1042,8 @@ void destroySwapchainResources(VkRhiDeviceData& data) {
                               VkRhiDeviceData::Texture{depthImage, depthAllocation,
                                                        depthDesc,
                                                        depthDesc.debugName,
-                                                       false, true});
+                                                       false, true, {},
+                                                       depthAllocationInfo.size});
         data.depthTextures.push_back(depthHandle);
 
         VkImageViewCreateInfo depthViewInfo{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
@@ -1924,10 +1929,44 @@ const RhiCapabilities& VkRhiDevice::capabilities() const {
     return m_capabilities;
 }
 
+RhiMemoryStats VkRhiDevice::memoryStats() const {
+    RhiMemoryStats stats;
+    if (!m_initialized || m_data == nullptr) {
+        return stats;
+    }
+    const std::shared_lock<std::shared_mutex> registryLock(
+        m_data->resourceRegistryMutex);
+    stats.valid = true;
+    stats.accuracy = RhiMemoryStatsAccuracy::Exact;
+    for (const auto& [_, record] : m_data->buffers) {
+        if (record.allocation == VK_NULL_HANDLE || record.allocationBytes == 0u ||
+            !stats.add(record.desc.memoryCategory, record.allocationBytes, 1u,
+                       1u)) {
+            return {};
+        }
+    }
+    for (const auto& [_, record] : m_data->textures) {
+        const bool hasAllocation = record.allocation != VK_NULL_HANDLE;
+        if ((hasAllocation && record.allocationBytes == 0u) ||
+            !stats.add(record.desc.memoryCategory, record.allocationBytes,
+                       hasAllocation ? 1u : 0u, 1u)) {
+            return {};
+        }
+    }
+    for (const auto& [_, record] : m_data->textureMemories) {
+        if (record.allocation == VK_NULL_HANDLE || record.sizeBytes == 0u ||
+            !stats.add(record.category, record.sizeBytes, 1u, 0u)) {
+            return {};
+        }
+    }
+    return stats;
+}
+
 RhiBufferHandle VkRhiDevice::createBuffer(const RhiBufferDesc& desc,
                                           const void* initialData,
                                           const size_t initialDataSize) {
-    if (!m_initialized || desc.size == 0u ||
+    if (!m_initialized || !rhiMemoryCategoryValid(desc.memoryCategory) ||
+        desc.size == 0u ||
         (initialData == nullptr && initialDataSize != 0u) || initialDataSize > desc.size) {
         return {};
     }
@@ -2044,7 +2083,9 @@ RhiBufferHandle VkRhiDevice::createBuffer(const RhiBufferDesc& desc,
                                                     desc.debugName != nullptr
                                                         ? desc.debugName
                                                         : "",
-                                                    nativeAllocationInfo.pMappedData});
+                                                    nativeAllocationInfo.pMappedData,
+                                                    {},
+                                                    nativeAllocationInfo.size});
     nameObject(*m_data, VK_OBJECT_TYPE_BUFFER, reinterpret_cast<uint64_t>(buffer), desc.debugName);
     return handle;
 }
@@ -2082,7 +2123,8 @@ bool fillImageCreateInfo(const RhiTextureDesc& desc, VkImageCreateInfo& imageInf
 RhiTextureHandle VkRhiDevice::createTexture(const RhiTextureDesc& desc,
                                             const RhiTextureInitialData* initialData) {
     VkImageCreateInfo imageInfo;
-    if (!m_initialized || !fillImageCreateInfo(desc, imageInfo)) {
+    if (!m_initialized || !rhiMemoryCategoryValid(desc.memoryCategory) ||
+        !fillImageCreateInfo(desc, imageInfo)) {
         return {};
     }
     if (initialData != nullptr) {
@@ -2095,8 +2137,9 @@ RhiTextureHandle VkRhiDevice::createTexture(const RhiTextureDesc& desc,
     allocationInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
     VkImage image = VK_NULL_HANDLE;
     VmaAllocation allocation = VK_NULL_HANDLE;
+    VmaAllocationInfo nativeAllocationInfo{};
     if (!vkSucceeded(vmaCreateImage(m_data->allocator, &imageInfo, &allocationInfo,
-                                    &image, &allocation, nullptr),
+                                    &image, &allocation, &nativeAllocationInfo),
                      "vmaCreateImage")) {
         return {};
     }
@@ -2112,7 +2155,9 @@ RhiTextureHandle VkRhiDevice::createTexture(const RhiTextureDesc& desc,
                                      desc,
                                      desc.debugName != nullptr ? desc.debugName : "",
                                      false,
-                                     false
+                                     false,
+                                     {},
+                                     nativeAllocationInfo.size
                                  });
     }
     nameObject(*m_data, VK_OBJECT_TYPE_IMAGE, reinterpret_cast<uint64_t>(image), desc.debugName);
@@ -2146,8 +2191,11 @@ bool VkRhiDevice::getTextureMemoryRequirements(
 }
 
 RhiMemoryHandle VkRhiDevice::allocateTextureMemory(
-    const RhiTextureMemoryRequirements& requirements, const char* debugName) {
-    if (!m_initialized || requirements.sizeBytes == 0u ||
+    const RhiTextureMemoryRequirements& requirements,
+    const RhiMemoryCategory category,
+    const char* debugName) {
+    if (!m_initialized || !rhiMemoryCategoryValid(category) ||
+        requirements.sizeBytes == 0u ||
         requirements.memoryTypeBits == 0u) {
         return {};
     }
@@ -2159,8 +2207,10 @@ RhiMemoryHandle VkRhiDevice::allocateTextureMemory(
     allocationInfo.flags = VMA_ALLOCATION_CREATE_CAN_ALIAS_BIT;
     allocationInfo.preferredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
     VmaAllocation allocation = VK_NULL_HANDLE;
+    VmaAllocationInfo nativeAllocationInfo{};
     if (!vkSucceeded(vmaAllocateMemory(m_data->allocator, &memoryRequirements,
-                                       &allocationInfo, &allocation, nullptr),
+                                       &allocationInfo, &allocation,
+                                       &nativeAllocationInfo),
                      "vmaAllocateMemory")) {
         return {};
     }
@@ -2172,14 +2222,15 @@ RhiMemoryHandle VkRhiDevice::allocateTextureMemory(
     const RhiMemoryHandle handle = m_data->textureMemoryHandles.allocate();
     m_data->textureMemories.emplace(
         handleKey(handle),
-        VkRhiDeviceData::TextureMemory{allocation, requirements.sizeBytes,
+        VkRhiDeviceData::TextureMemory{allocation, nativeAllocationInfo.size,
+                                       category,
                                        debugName != nullptr ? debugName : ""});
     return handle;
 }
 
 RhiTextureHandle VkRhiDevice::createPlacedTexture(const RhiTextureDesc& desc,
                                                   const RhiMemoryHandle memory) {
-    if (!m_initialized) {
+    if (!m_initialized || !rhiMemoryCategoryValid(desc.memoryCategory)) {
         return {};
     }
     const std::unique_lock<std::shared_mutex> registryLock(
@@ -2229,7 +2280,9 @@ RhiTextureHandle VkRhiDevice::createPlacedTexture(const RhiTextureDesc& desc,
                                  desc,
                                  desc.debugName != nullptr ? desc.debugName : "",
                                  false,
-                                 false
+                                 false,
+                                 {},
+                                 0u
                              });
     nameObject(*m_data, VK_OBJECT_TYPE_IMAGE, reinterpret_cast<uint64_t>(image),
                desc.debugName);

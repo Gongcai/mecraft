@@ -268,6 +268,7 @@ RhiTextureDesc DeferredRenderTargets::transientTargetDesc(
     // The caller names the graph resource; the shared pool must not point at
     // a string whose storage may outlive this call site.
     desc.debugName = nullptr;
+    desc.memoryCategory = RhiMemoryCategory::Transient;
     desc.dimension = RhiTextureDimension::Texture2D;
     desc.width = static_cast<uint32_t>(m_width);
     desc.height = static_cast<uint32_t>(m_height);
@@ -329,6 +330,7 @@ bool DeferredRenderTargets::createGBufferTextures() {
                                       RhiTextureHandle& handle) {
         RhiTextureDesc desc;
         desc.debugName = debugName;
+        desc.memoryCategory = RhiMemoryCategory::GBufferHistory;
         desc.dimension = RhiTextureDimension::Texture2D;
         desc.format = format;
         desc.width = static_cast<uint32_t>(m_width);
@@ -393,6 +395,7 @@ bool DeferredRenderTargets::createSceneTextures() {
     const auto createTexture = [this](const char* debugName, RhiTextureHandle& handle) {
         RhiTextureDesc desc;
         desc.debugName = debugName;
+        desc.memoryCategory = RhiMemoryCategory::GBufferHistory;
         desc.dimension = RhiTextureDimension::Texture2D;
         desc.format = RhiTextureFormat::Rgba16Float;
         desc.width = static_cast<uint32_t>(m_width);
@@ -442,6 +445,7 @@ bool DeferredRenderTargets::createScreenEffectTextures() {
                                           0u) {
         RhiTextureDesc desc;
         desc.debugName = debugName;
+        desc.memoryCategory = RhiMemoryCategory::GBufferHistory;
         desc.dimension = RhiTextureDimension::Texture2D;
         desc.format = RhiTextureFormat::Rgba16Float;
         desc.width = width;
@@ -502,6 +506,7 @@ bool DeferredRenderTargets::createAtmosphereTextures() {
                                           0u) {
         RhiTextureDesc desc;
         desc.debugName = debugName;
+        desc.memoryCategory = RhiMemoryCategory::GBufferHistory;
         desc.dimension = RhiTextureDimension::Texture2D;
         desc.format = RhiTextureFormat::Rgba16Float;
         desc.width = width;
@@ -551,6 +556,7 @@ bool DeferredRenderTargets::createSceneHistoryTextures() {
                                       RhiTextureHandle& handle) {
         RhiTextureDesc desc;
         desc.debugName = debugName;
+        desc.memoryCategory = RhiMemoryCategory::GBufferHistory;
         desc.dimension = RhiTextureDimension::Texture2D;
         desc.format = format;
         desc.width = static_cast<uint32_t>(m_width);
@@ -628,6 +634,7 @@ bool DeferredRenderTargets::createEffectHistoryTextures() {
                                           0u) {
         RhiTextureDesc desc;
         desc.debugName = debugName;
+        desc.memoryCategory = RhiMemoryCategory::GBufferHistory;
         desc.dimension = RhiTextureDimension::Texture2D;
         desc.format = RhiTextureFormat::Rgba16Float;
         desc.width = width;
@@ -698,6 +705,7 @@ bool DeferredRenderTargets::createMotionTextures() {
                                       RhiTextureHandle& handle) {
         RhiTextureDesc desc;
         desc.debugName = debugName;
+        desc.memoryCategory = RhiMemoryCategory::GBufferHistory;
         desc.dimension = RhiTextureDimension::Texture2D;
         desc.format = format;
         desc.width = static_cast<uint32_t>(m_width);
@@ -729,6 +737,7 @@ bool DeferredRenderTargets::createMotionTextures() {
         m_hiZMipCount = mipCount;
         RhiTextureDesc desc;
         desc.debugName = "DeferredTargets.HiZ";
+        desc.memoryCategory = RhiMemoryCategory::GBufferHistory;
         desc.dimension = RhiTextureDimension::Texture2D;
         desc.format = RhiTextureFormat::R32Float;
         desc.width = static_cast<uint32_t>(m_width);
@@ -801,6 +810,7 @@ bool DeferredRenderTargets::createSsaoTextures() {
                                       RhiTextureHandle& handle) {
         RhiTextureDesc desc;
         desc.debugName = debugName;
+        desc.memoryCategory = RhiMemoryCategory::GBufferHistory;
         desc.dimension = RhiTextureDimension::Texture2D;
         desc.format = RhiTextureFormat::R8Unorm;
         desc.width = width;
@@ -880,6 +890,7 @@ bool DeferredRenderTargets::createSsgiTextures() {
                                       RhiTextureHandle& handle) {
         RhiTextureDesc desc;
         desc.debugName = debugName;
+        desc.memoryCategory = RhiMemoryCategory::GBufferHistory;
         desc.dimension = RhiTextureDimension::Texture2D;
         desc.format = RhiTextureFormat::Rgba16Float;
         desc.width = width;
@@ -966,6 +977,7 @@ bool DeferredRenderTargets::createCsmShadowTextures() {
                                       RhiTextureHandle& handle) {
         RhiTextureDesc desc;
         desc.debugName = debugName;
+        desc.memoryCategory = RhiMemoryCategory::GBufferHistory;
         desc.dimension = RhiTextureDimension::Texture2DArray;
         desc.format = format;
         desc.width = static_cast<uint32_t>(m_shadowResolution);
@@ -2779,6 +2791,7 @@ bool DeferredRenderTargets::loadAtmosphereLut(const char* path) {
 
     RhiTextureDesc desc;
     desc.debugName = "DeferredTargets.AtmosphereLUT";
+    desc.memoryCategory = RhiMemoryCategory::Texture;
     desc.dimension = RhiTextureDimension::Texture3D;
     desc.format = RhiTextureFormat::Rgba32Float;
     desc.width = static_cast<uint32_t>(kAtmosphereLutWidth);

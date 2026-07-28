@@ -1876,6 +1876,7 @@ void main() {
     colorDesc.height = 256u;
     colorDesc.usage = rhiFlag(RhiTextureUsage::ColorAttachment) |
                       rhiFlag(RhiTextureUsage::Sampled);
+    colorDesc.memoryCategory = RhiMemoryCategory::Transient;
     RhiTextureDesc storageDesc;
     storageDesc.debugName = "VulkanSmoke.Aliasing.Storage";
     storageDesc.format = RhiTextureFormat::R32Float;
@@ -1883,6 +1884,7 @@ void main() {
     storageDesc.height = 128u;
     storageDesc.usage = rhiFlag(RhiTextureUsage::Storage) |
                         rhiFlag(RhiTextureUsage::Sampled);
+    storageDesc.memoryCategory = RhiMemoryCategory::Transient;
 
     RhiTextureMemoryRequirements colorRequirements;
     RhiTextureMemoryRequirements storageRequirements;
@@ -1904,8 +1906,13 @@ void main() {
         return true;
     }
 
+    const RhiMemoryStats memoryStatsBefore = device.memoryStats();
+    const RhiMemoryCategoryStats transientBefore =
+        memoryStatsBefore.categories[static_cast<size_t>(
+            RhiMemoryCategory::Transient)];
     const RhiMemoryHandle memory = device.allocateTextureMemory(
-        blockRequirements, "VulkanSmoke.Aliasing.Block");
+        blockRequirements, RhiMemoryCategory::Transient,
+        "VulkanSmoke.Aliasing.Block");
     if (!memory.isValid()) {
         std::cerr << "Texture memory allocation failed\n";
         return false;
@@ -1915,6 +1922,20 @@ void main() {
     const RhiTextureHandle storageTexture =
         device.createPlacedTexture(storageDesc, memory);
     bool valid = colorTexture.isValid() && storageTexture.isValid();
+    const RhiMemoryStats memoryStatsPlaced = device.memoryStats();
+    const RhiMemoryCategoryStats transientPlaced =
+        memoryStatsPlaced.categories[static_cast<size_t>(
+            RhiMemoryCategory::Transient)];
+    if (!memoryStatsPlaced.valid ||
+        memoryStatsPlaced.accuracy != RhiMemoryStatsAccuracy::Exact ||
+        transientPlaced.allocationCount !=
+            transientBefore.allocationCount + 1u ||
+        transientPlaced.resourceCount != transientBefore.resourceCount + 2u ||
+        transientPlaced.bytes <
+            transientBefore.bytes + blockRequirements.sizeBytes) {
+        std::cerr << "Placed textures must count one exact shared allocation\n";
+        valid = false;
+    }
 
     // Views must be creatable on placed textures like any other texture.
     RhiTextureViewHandle colorView;
@@ -1944,6 +1965,15 @@ void main() {
     if (storageTexture.isValid()) device.destroyTexture(storageTexture);
     device.destroyTextureMemory(memory);
     device.waitIdle();
+    const RhiMemoryCategoryStats transientAfter =
+        device.memoryStats().categories[static_cast<size_t>(
+            RhiMemoryCategory::Transient)];
+    if (transientAfter.bytes != transientBefore.bytes ||
+        transientAfter.allocationCount != transientBefore.allocationCount ||
+        transientAfter.resourceCount != transientBefore.resourceCount) {
+        std::cerr << "Released shared allocation remained in the live memory snapshot\n";
+        valid = false;
+    }
     return valid && device.validationErrorCount() == validationErrorsBefore;
 }
 

@@ -241,6 +241,7 @@ bool SceneCompositePass::ensureRhiPipelines(RhiDevice& rhiDevice) {
                               rhiFlag(RhiBufferUsage::TransferDst);
     uniformBufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
     uniformBufferDesc.initialState = RhiResourceState::UniformBuffer;
+    uniformBufferDesc.memoryCategory = RhiMemoryCategory::Uniform;
     m_uniformBuffer = rhiDevice.createBuffer(uniformBufferDesc, nullptr, 0u);
     if (!m_uniformBuffer.isValid()) {
         destroyRhiResources();

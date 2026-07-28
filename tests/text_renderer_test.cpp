@@ -188,6 +188,7 @@ public:
 
     [[nodiscard]] RhiBackend backend() const override { return RhiBackend::OpenGL; }
     [[nodiscard]] const RhiCapabilities& capabilities() const override { return m_capabilities; }
+    [[nodiscard]] RhiMemoryStats memoryStats() const override { return {}; }
 
     RhiBufferHandle createBuffer(const RhiBufferDesc& desc,
                                  const void*,

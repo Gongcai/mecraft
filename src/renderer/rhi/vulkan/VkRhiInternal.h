@@ -85,6 +85,7 @@ struct VkRhiDeviceData {
         std::string debugName;
         void* mapped = nullptr;
         VkRhiResourceLifetime lifetime{};
+        uint64_t allocationBytes = 0u;
     };
     struct Texture {
         VkImage image = VK_NULL_HANDLE;
@@ -94,6 +95,7 @@ struct VkRhiDeviceData {
         bool swapchainOwned = false;
         bool swapchainAttachment = false;
         VkRhiResourceLifetime lifetime{};
+        uint64_t allocationBytes = 0u;
     };
     struct TextureView { VkImageView view = VK_NULL_HANDLE; RhiTextureViewDesc desc{}; VkRhiResourceLifetime lifetime{}; };
     struct Sampler { VkSampler sampler = VK_NULL_HANDLE; VkRhiResourceLifetime lifetime{}; };
@@ -114,6 +116,7 @@ struct VkRhiDeviceData {
     struct TextureMemory {
         VmaAllocation allocation = VK_NULL_HANDLE;
         uint64_t sizeBytes = 0u;
+        RhiMemoryCategory category = RhiMemoryCategory::Unclassified;
         std::string debugName;
     };
     struct DeferredBuffer { uint64_t sequence; VkBuffer buffer; VmaAllocation allocation; };

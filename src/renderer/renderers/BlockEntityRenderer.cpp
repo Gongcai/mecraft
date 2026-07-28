@@ -159,6 +159,7 @@ void BlockEntityRenderer::init(ResourceMgr& resourceMgr) {
     if (!m_rhiInstanceBuffer.init(*m_rhiDevice,
                                   256u * sizeof(InstancedDrawData),
                                   rhiFlag(RhiBufferUsage::Vertex),
+                                  RhiMemoryCategory::SceneData,
                                   "BlockEntity.InstanceBuffer")) {
         failBlockEntityRenderer("Failed to create block entity RHI instance buffer");
     }
@@ -493,6 +494,7 @@ BlockEntityRenderer::Mesh BlockEntityRenderer::buildMesh(const ModelDefinition& 
                           rhiFlag(RhiBufferUsage::TransferDst);
     rhiBufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
     rhiBufferDesc.initialState = RhiResourceState::VertexBuffer;
+    rhiBufferDesc.memoryCategory = RhiMemoryCategory::Geometry;
     mesh.rhiVertexBuffer = m_rhiDevice->createBuffer(
         rhiBufferDesc, vertices.data(), vertices.size() * sizeof(BlockEntityVertex));
     if (!mesh.rhiVertexBuffer.isValid()) {

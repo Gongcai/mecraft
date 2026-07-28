@@ -288,6 +288,7 @@ bool GlyphAtlas::prepareUpload(RhiCommandList& commandList) {
         textureDesc.height = static_cast<uint32_t>(m_atlasHeight);
         textureDesc.usage = rhiFlag(RhiTextureUsage::Sampled) |
                             rhiFlag(RhiTextureUsage::TransferDst);
+        textureDesc.memoryCategory = RhiMemoryCategory::Texture;
         m_texture = m_rhiDevice->createTexture(textureDesc, nullptr);
         if (!m_texture.isValid()) {
             return false;
@@ -309,6 +310,7 @@ bool GlyphAtlas::prepareUpload(RhiCommandList& commandList) {
                         rhiFlag(RhiBufferUsage::TransferDst);
     stagingDesc.memoryUsage = RhiMemoryUsage::CpuToGpu;
     stagingDesc.initialState = RhiResourceState::TransferSrc;
+    stagingDesc.memoryCategory = RhiMemoryCategory::Transient;
     m_stagingBuffer =
         m_rhiDevice->createBuffer(stagingDesc, m_pixelData.data(), m_pixelData.size());
     if (!m_stagingBuffer.isValid()) {

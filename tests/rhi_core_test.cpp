@@ -261,6 +261,22 @@ bool testDescHashStability() {
                      "texture desc hash must change when semantic fields change")) {
         return false;
     }
+    const uint64_t categoryHash = rhiHashTextureDesc(desc);
+    desc.memoryCategory = RhiMemoryCategory::Texture;
+    if (!requireTrue(categoryHash != rhiHashTextureDesc(desc),
+                     "texture desc hash must include the memory category")) {
+        return false;
+    }
+
+    RhiBufferDesc bufferDesc;
+    bufferDesc.size = 64u;
+    bufferDesc.usage = rhiFlag(RhiBufferUsage::Storage);
+    const uint64_t bufferHash = rhiHashBufferDesc(bufferDesc);
+    bufferDesc.memoryCategory = RhiMemoryCategory::SceneData;
+    if (!requireTrue(bufferHash != rhiHashBufferDesc(bufferDesc),
+                     "buffer desc hash must include the memory category")) {
+        return false;
+    }
 
     RhiGraphicsPipelineDesc pipelineDesc;
     const uint64_t pipelineHash = rhiHashGraphicsPipelineDesc(pipelineDesc);
@@ -269,6 +285,55 @@ bool testDescHashStability() {
     pipelineDesc.raster.depthBiasSlopeFactor = 2.0f;
     return requireTrue(pipelineHash != rhiHashGraphicsPipelineDesc(pipelineDesc),
                        "graphics pipeline hash must include depth bias state");
+}
+
+bool testMemoryStatsContract() {
+    if (!requireTrue(kRhiMemoryCategoryCount == 12u,
+                     "memory category count must remain stable") ||
+        !requireTrue(std::strcmp(
+                         rhiMemoryCategoryStableId(
+                             RhiMemoryCategory::GBufferHistory),
+                         "gbuffer_history") == 0,
+                     "GBuffer/history category must expose its stable id") ||
+        !requireTrue(std::strcmp(
+                         rhiMemoryStatsAccuracyStableId(
+                             RhiMemoryStatsAccuracy::Exact),
+                         "exact") == 0,
+                     "exact memory statistics must expose a stable id")) {
+        return false;
+    }
+
+    RhiTextureDesc textureDesc;
+    textureDesc.format = RhiTextureFormat::Rgba8Unorm;
+    textureDesc.width = 4u;
+    textureDesc.height = 4u;
+    textureDesc.mipLevels = 3u;
+    const std::optional<uint64_t> textureBytes =
+        rhiEstimateTextureBytes(textureDesc);
+    if (!requireTrue(textureBytes.has_value() && *textureBytes == 84u,
+                     "texture byte estimation must include every mip")) {
+        return false;
+    }
+
+    RhiMemoryStats stats;
+    stats.valid = true;
+    stats.accuracy = RhiMemoryStatsAccuracy::Exact;
+    if (!requireTrue(stats.add(RhiMemoryCategory::Geometry, 256u, 1u, 1u),
+                     "memory snapshot must accept a concrete category") ||
+        !requireTrue(stats.add(RhiMemoryCategory::Transient, 512u, 1u, 2u),
+                     "memory snapshot must accumulate another category") ||
+        !requireTrue(!stats.add(RhiMemoryCategory::Count, 1u, 1u, 1u),
+                     "memory snapshot must reject the Count sentinel") ||
+        !requireTrue(stats.totalBytes == 768u &&
+                         stats.totalAllocationCount == 2u &&
+                         stats.totalResourceCount == 3u,
+                     "memory snapshot totals must equal category contributions")) {
+        return false;
+    }
+    return requireTrue(
+        stats.categories[static_cast<size_t>(RhiMemoryCategory::Transient)]
+                .bytes == 512u,
+        "memory snapshot must retain per-category bytes");
 }
 
 bool testGlRhiDeviceHandles() {
@@ -289,6 +354,7 @@ bool testGlRhiDeviceHandles() {
     bufferDesc.debugName = "test-buffer";
     bufferDesc.size = 256;
     bufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex) | rhiFlag(RhiBufferUsage::TransferDst);
+    bufferDesc.memoryCategory = RhiMemoryCategory::Geometry;
     const RhiBufferHandle buffer = device.createBuffer(bufferDesc, nullptr, 0);
     if (!requireTrue(buffer.isValid(), "OpenGL RHI device must create buffer handles")) {
         return false;
@@ -300,6 +366,7 @@ bool testGlRhiDeviceHandles() {
     textureDesc.height = 4;
     textureDesc.mipLevels = 3u;
     textureDesc.usage = rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::TransferDst);
+    textureDesc.memoryCategory = RhiMemoryCategory::Texture;
     const RhiTextureHandle texture = device.createTexture(textureDesc, nullptr);
     if (!requireTrue(texture.isValid(), "OpenGL RHI device must create texture handles")) {
         return false;
@@ -314,9 +381,39 @@ bool testGlRhiDeviceHandles() {
         return false;
     }
 
+    const RhiMemoryStats allocatedStats = device.memoryStats();
+    const RhiMemoryCategoryStats& geometryStats =
+        allocatedStats.categories[static_cast<size_t>(
+            RhiMemoryCategory::Geometry)];
+    const RhiMemoryCategoryStats& textureStats =
+        allocatedStats.categories[static_cast<size_t>(
+            RhiMemoryCategory::Texture)];
+    if (!requireTrue(allocatedStats.valid &&
+                         allocatedStats.accuracy ==
+                             RhiMemoryStatsAccuracy::Estimated,
+                     "OpenGL memory statistics must be marked estimated") ||
+        !requireTrue(geometryStats.bytes == 256u &&
+                         geometryStats.allocationCount == 1u &&
+                         geometryStats.resourceCount == 1u,
+                     "OpenGL buffer bytes must enter the explicit category") ||
+        !requireTrue(textureStats.bytes == 84u &&
+                         textureStats.allocationCount == 1u &&
+                         textureStats.resourceCount == 1u,
+                     "OpenGL texture estimate must include its mip chain") ||
+        !requireTrue(allocatedStats.totalBytes == 340u,
+                     "OpenGL memory total must sum tracked resources")) {
+        return false;
+    }
+
     device.destroyTextureView(view);
     device.destroyTexture(texture);
     device.destroyBuffer(buffer);
+    const RhiMemoryStats releasedStats = device.memoryStats();
+    if (!requireTrue(releasedStats.valid && releasedStats.totalBytes == 0u &&
+                         releasedStats.totalResourceCount == 0u,
+                     "destroyed OpenGL resources must leave the live snapshot")) {
+        return false;
+    }
     device.shutdown();
     return true;
 }
@@ -1055,6 +1152,7 @@ bool testGlRhiGrowableBuffer() {
     if (!requireTrue(buffer.init(device,
                                  16u,
                                  rhiFlag(RhiBufferUsage::Indirect),
+                                 RhiMemoryCategory::Geometry,
                                  "growable-indirect-buffer"),
                      "growable RHI buffer must initialize")) {
         device.shutdown();
@@ -5157,6 +5255,15 @@ bool testGlRenderGraphExecutionAndTransientReuse() {
                      "Render Graph timings must retain pass names")) {
       return false;
     }
+    const RhiMemoryCategoryStats transientStats =
+        device.memoryStats().categories[static_cast<size_t>(
+            RhiMemoryCategory::Transient)];
+    if (!requireTrue(transientStats.bytes == 1280u &&
+                         transientStats.allocationCount == 2u &&
+                         transientStats.resourceCount == 2u,
+                     "Render Graph resources must enter the transient category")) {
+      return false;
+    }
     if (expectReuse) {
       return requireTrue(
           resolvedTexture.index == firstTexture.index &&
@@ -5176,6 +5283,16 @@ bool testGlRenderGraphExecutionAndTransientReuse() {
   const bool passed = executeFrame(false) && executeFrame(true);
   graph.releaseTransientResources(device);
   device.waitIdle();
+  const RhiMemoryCategoryStats transientAfterRelease =
+      device.memoryStats().categories[static_cast<size_t>(
+          RhiMemoryCategory::Transient)];
+  if (!requireTrue(transientAfterRelease.bytes == 0u &&
+                       transientAfterRelease.resourceCount == 0u,
+                   "released Render Graph resources must leave memory statistics")) {
+    commandPool.reset();
+    device.shutdown();
+    return false;
+  }
   commandPool.reset();
   device.shutdown();
   return passed;
@@ -5187,6 +5304,9 @@ int main() {
         return 1;
     }
     if (!testDescHashStability()) {
+        return 1;
+    }
+    if (!testMemoryStatsContract()) {
         return 1;
     }
     if (!testVertexRangeAllocator()) {

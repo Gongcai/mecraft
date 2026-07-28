@@ -205,6 +205,7 @@ void GameplaySkyRenderer::init(ResourceMgr& resourceMgr, RhiDevice& rhiDevice) {
                               rhiFlag(RhiBufferUsage::TransferDst);
     captureBufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
     captureBufferDesc.initialState = RhiResourceState::UniformBuffer;
+    captureBufferDesc.memoryCategory = RhiMemoryCategory::Uniform;
     m_captureUniformBuffer = rhiDevice.createBuffer(captureBufferDesc, nullptr, 0u);
     RhiSamplerDesc captureSamplerDesc;
     captureSamplerDesc.addressU = RhiAddressMode::ClampToEdge;
@@ -788,6 +789,7 @@ void GameplaySkyRenderer::initMeshes() {
                            rhiFlag(RhiBufferUsage::TransferDst);
         bufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
         bufferDesc.initialState = RhiResourceState::VertexBuffer;
+        bufferDesc.memoryCategory = RhiMemoryCategory::Geometry;
         m_skyVertexBuffer = m_rhiDevice->createBuffer(
             bufferDesc, skyVertices.data(), bufferDesc.size);
         if (!m_skyVertexBuffer.isValid()) std::abort();
@@ -815,6 +817,7 @@ void GameplaySkyRenderer::initMeshes() {
                            rhiFlag(RhiBufferUsage::TransferDst);
         bufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
         bufferDesc.initialState = RhiResourceState::VertexBuffer;
+        bufferDesc.memoryCategory = RhiMemoryCategory::Geometry;
         m_haloVertexBuffer = m_rhiDevice->createBuffer(
             bufferDesc, haloVertices.data(), bufferDesc.size);
         if (!m_haloVertexBuffer.isValid()) std::abort();
@@ -969,6 +972,7 @@ void GameplaySkyRenderer::initCloudMesh() {
                        rhiFlag(RhiBufferUsage::TransferDst);
     bufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
     bufferDesc.initialState = RhiResourceState::VertexBuffer;
+    bufferDesc.memoryCategory = RhiMemoryCategory::Geometry;
     m_cloudVertexBuffer = m_rhiDevice->createBuffer(
         bufferDesc, vertices.data(), bufferDesc.size);
     if (!m_cloudVertexBuffer.isValid()) std::abort();

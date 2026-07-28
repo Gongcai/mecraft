@@ -4,15 +4,200 @@
 #include "renderer/rhi/RhiHandles.h"
 #include "renderer/rhi/RhiTypes.h"
 
+#include <algorithm>
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <optional>
 
 inline constexpr uint32_t kRhiRemainingMipLevels = 0xFFFFFFFFu;
 inline constexpr uint32_t kRhiRemainingArrayLayers = 0xFFFFFFFFu;
 inline constexpr uint64_t kRhiWholeSize = std::numeric_limits<uint64_t>::max();
 inline constexpr uint32_t kRhiQueueFamilyIgnored = std::numeric_limits<uint32_t>::max();
 inline constexpr uint32_t kRhiQueueFamilyExternal = kRhiQueueFamilyIgnored - 1u;
+
+/// Identifies the owning subsystem for one RHI allocation. Resource creators
+/// must set this explicitly; Unclassified remains visible in diagnostics so
+/// missing ownership metadata cannot be hidden in another category.
+enum class RhiMemoryCategory : uint8_t {
+    Unclassified,
+    GBufferHistory,
+    Nrd,
+    AccelerationStructure,
+    Texture,
+    Geometry,
+    SceneData,
+    Uniform,
+    Readback,
+    Transient,
+    Presentation,
+    Sdk,
+    Count
+};
+
+inline constexpr size_t kRhiMemoryCategoryCount =
+    static_cast<size_t>(RhiMemoryCategory::Count);
+
+/// Reports whether a category can index a memory statistics snapshot.
+/// @param category Category value to validate.
+/// @return True for every concrete category and false for Count.
+[[nodiscard]] constexpr bool rhiMemoryCategoryValid(
+    const RhiMemoryCategory category) {
+    return static_cast<size_t>(category) < kRhiMemoryCategoryCount;
+}
+
+/// Describes whether reported bytes originate from native allocations or
+/// from backend-independent resource description estimates.
+enum class RhiMemoryStatsAccuracy : uint8_t {
+    Unavailable,
+    Exact,
+    Estimated
+};
+
+/// Current allocation and resource totals for one ownership category.
+struct RhiMemoryCategoryStats {
+    uint64_t bytes = 0u;
+    uint64_t allocationCount = 0u;
+    uint64_t resourceCount = 0u;
+};
+
+/// Snapshot of all live RHI resources and their backing allocations.
+struct RhiMemoryStats {
+    bool valid = false;
+    RhiMemoryStatsAccuracy accuracy = RhiMemoryStatsAccuracy::Unavailable;
+    std::array<RhiMemoryCategoryStats, kRhiMemoryCategoryCount> categories{};
+    uint64_t totalBytes = 0u;
+    uint64_t totalAllocationCount = 0u;
+    uint64_t totalResourceCount = 0u;
+
+    /// Adds one category contribution and updates the snapshot totals.
+    /// @param category Explicit resource ownership category.
+    /// @param bytes Backing allocation bytes attributed to the category.
+    /// @param allocationCount Number of backing allocations represented.
+    /// @param resourceCount Number of live public RHI resources represented.
+    /// @return False when category is Count or otherwise outside the contract.
+    [[nodiscard]] bool add(RhiMemoryCategory category,
+                           uint64_t bytes,
+                           uint64_t allocationCount,
+                           uint64_t resourceCount) {
+        const size_t index = static_cast<size_t>(category);
+        if (index >= categories.size()) {
+            return false;
+        }
+        RhiMemoryCategoryStats& entry = categories[index];
+        if (bytes > std::numeric_limits<uint64_t>::max() - entry.bytes ||
+            allocationCount >
+                std::numeric_limits<uint64_t>::max() - entry.allocationCount ||
+            resourceCount >
+                std::numeric_limits<uint64_t>::max() - entry.resourceCount ||
+            bytes > std::numeric_limits<uint64_t>::max() - totalBytes ||
+            allocationCount >
+                std::numeric_limits<uint64_t>::max() - totalAllocationCount ||
+            resourceCount >
+                std::numeric_limits<uint64_t>::max() - totalResourceCount) {
+            return false;
+        }
+        entry.bytes += bytes;
+        entry.allocationCount += allocationCount;
+        entry.resourceCount += resourceCount;
+        totalBytes += bytes;
+        totalAllocationCount += allocationCount;
+        totalResourceCount += resourceCount;
+        return true;
+    }
+};
+
+/// Returns the stable machine-readable identifier for a memory category.
+/// @param category Category to identify.
+/// @return Stable lowercase identifier, or "invalid" for Count.
+[[nodiscard]] constexpr const char* rhiMemoryCategoryStableId(
+    const RhiMemoryCategory category) {
+    switch (category) {
+        case RhiMemoryCategory::Unclassified: return "unclassified";
+        case RhiMemoryCategory::GBufferHistory: return "gbuffer_history";
+        case RhiMemoryCategory::Nrd: return "nrd";
+        case RhiMemoryCategory::AccelerationStructure:
+            return "acceleration_structure";
+        case RhiMemoryCategory::Texture: return "texture";
+        case RhiMemoryCategory::Geometry: return "geometry";
+        case RhiMemoryCategory::SceneData: return "scene_data";
+        case RhiMemoryCategory::Uniform: return "uniform";
+        case RhiMemoryCategory::Readback: return "readback";
+        case RhiMemoryCategory::Transient: return "transient";
+        case RhiMemoryCategory::Presentation: return "presentation";
+        case RhiMemoryCategory::Sdk: return "sdk";
+        case RhiMemoryCategory::Count: return "invalid";
+    }
+    return "invalid";
+}
+
+/// Returns the human-readable English label for a memory category.
+/// @param category Category to label.
+/// @return Display label, or "Invalid" for Count.
+[[nodiscard]] constexpr const char* rhiMemoryCategoryDisplayName(
+    const RhiMemoryCategory category) {
+    switch (category) {
+        case RhiMemoryCategory::Unclassified: return "Unclassified";
+        case RhiMemoryCategory::GBufferHistory: return "GBuffer / History";
+        case RhiMemoryCategory::Nrd: return "NRD";
+        case RhiMemoryCategory::AccelerationStructure:
+            return "Acceleration Structure";
+        case RhiMemoryCategory::Texture: return "Texture";
+        case RhiMemoryCategory::Geometry: return "Geometry";
+        case RhiMemoryCategory::SceneData: return "Scene Data";
+        case RhiMemoryCategory::Uniform: return "Uniform";
+        case RhiMemoryCategory::Readback: return "Readback";
+        case RhiMemoryCategory::Transient: return "Transient";
+        case RhiMemoryCategory::Presentation: return "Presentation";
+        case RhiMemoryCategory::Sdk: return "SDK";
+        case RhiMemoryCategory::Count: return "Invalid";
+    }
+    return "Invalid";
+}
+
+/// Returns the stable machine-readable identifier for snapshot accuracy.
+/// @param accuracy Accuracy mode reported by the backend.
+/// @return Stable lowercase identifier.
+[[nodiscard]] constexpr const char* rhiMemoryStatsAccuracyStableId(
+    const RhiMemoryStatsAccuracy accuracy) {
+    switch (accuracy) {
+        case RhiMemoryStatsAccuracy::Unavailable: return "unavailable";
+        case RhiMemoryStatsAccuracy::Exact: return "exact";
+        case RhiMemoryStatsAccuracy::Estimated: return "estimated";
+    }
+    return "unavailable";
+}
+
+/// Returns the storage bytes per texel for an uncompressed RHI format.
+/// @param format Texture format to measure.
+/// @return Bytes per texel, or zero for Undefined.
+[[nodiscard]] constexpr uint64_t rhiTextureFormatSizeBytes(
+    const RhiTextureFormat format) {
+    switch (format) {
+        case RhiTextureFormat::R8Unorm: return 1u;
+        case RhiTextureFormat::Rg8Unorm: return 2u;
+        case RhiTextureFormat::Rgba8Unorm:
+        case RhiTextureFormat::Rgba8Srgb:
+        case RhiTextureFormat::Bgra8Unorm:
+        case RhiTextureFormat::Bgra8Srgb:
+        case RhiTextureFormat::Rgb10A2Unorm:
+        case RhiTextureFormat::R32Float:
+        case RhiTextureFormat::R32Uint:
+        case RhiTextureFormat::Depth24:
+        case RhiTextureFormat::Depth24Stencil8:
+        case RhiTextureFormat::Depth32Float:
+            return 4u;
+        case RhiTextureFormat::R16Float:
+        case RhiTextureFormat::Depth16:
+            return 2u;
+        case RhiTextureFormat::Rg16Float: return 4u;
+        case RhiTextureFormat::Rgba16Float: return 8u;
+        case RhiTextureFormat::Rgba32Float: return 16u;
+        case RhiTextureFormat::Undefined: return 0u;
+    }
+    return 0u;
+}
 
 /// Selects whether a resource barrier performs a complete transition or one
 /// half of a queue-family ownership transfer.
@@ -50,7 +235,55 @@ struct RhiTextureDesc {
     uint32_t mipLevels = 1;
     uint32_t sampleCount = 1;
     RhiTextureUsageFlags usage = 0;
+    RhiMemoryCategory memoryCategory = RhiMemoryCategory::Unclassified;
 };
+
+/// Estimates the complete texture storage described by every mip and layer.
+/// The calculation models uncompressed resource payload bytes and excludes
+/// backend-specific alignment and allocator metadata.
+/// @param desc Texture description to measure.
+/// @return Estimated bytes, or std::nullopt for invalid data or overflow.
+[[nodiscard]] inline std::optional<uint64_t> rhiEstimateTextureBytes(
+    const RhiTextureDesc& desc) {
+    const uint64_t bytesPerTexel = rhiTextureFormatSizeBytes(desc.format);
+    if (bytesPerTexel == 0u || desc.width == 0u || desc.height == 0u ||
+        desc.depthOrLayers == 0u || desc.mipLevels == 0u ||
+        desc.sampleCount == 0u) {
+        return std::nullopt;
+    }
+    const auto checkedMultiply = [](const uint64_t lhs,
+                                    const uint64_t rhs,
+                                    uint64_t& result) {
+        if (lhs != 0u && rhs > std::numeric_limits<uint64_t>::max() / lhs) {
+            return false;
+        }
+        result = lhs * rhs;
+        return true;
+    };
+    uint64_t totalBytes = 0u;
+    for (uint32_t mip = 0u; mip < desc.mipLevels; ++mip) {
+        const uint64_t width = mip < 32u
+            ? std::max<uint32_t>(1u, desc.width >> mip) : 1u;
+        const uint64_t height = mip < 32u
+            ? std::max<uint32_t>(1u, desc.height >> mip) : 1u;
+        const uint64_t depthOrLayers =
+            desc.dimension == RhiTextureDimension::Texture3D
+                ? (mip < 32u
+                       ? std::max<uint32_t>(1u, desc.depthOrLayers >> mip)
+                       : 1u)
+                : desc.depthOrLayers;
+        uint64_t mipBytes = 0u;
+        if (!checkedMultiply(width, height, mipBytes) ||
+            !checkedMultiply(mipBytes, depthOrLayers, mipBytes) ||
+            !checkedMultiply(mipBytes, desc.sampleCount, mipBytes) ||
+            !checkedMultiply(mipBytes, bytesPerTexel, mipBytes) ||
+            mipBytes > std::numeric_limits<uint64_t>::max() - totalBytes) {
+            return std::nullopt;
+        }
+        totalBytes += mipBytes;
+    }
+    return totalBytes;
+}
 
 struct RhiTextureInitialData {
     const void* pixels = nullptr;
@@ -78,6 +311,7 @@ struct RhiBufferDesc {
     RhiBufferUsageFlags usage = 0;
     RhiMemoryUsage memoryUsage = RhiMemoryUsage::GpuOnly;
     RhiResourceState initialState = RhiResourceState::Undefined;
+    RhiMemoryCategory memoryCategory = RhiMemoryCategory::Unclassified;
 };
 
 struct RhiSamplerDesc {

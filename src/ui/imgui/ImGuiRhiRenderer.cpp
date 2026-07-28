@@ -226,6 +226,7 @@ bool ImGuiRhiRenderer::createRhiResources() {
     textureDesc.height = static_cast<uint32_t>(fontHeight);
     textureDesc.usage = rhiFlag(RhiTextureUsage::Sampled) |
                         rhiFlag(RhiTextureUsage::TransferDst);
+    textureDesc.memoryCategory = RhiMemoryCategory::Texture;
     RhiTextureInitialData initialData;
     initialData.pixels = fontPixels;
     initialData.sizeBytes = static_cast<size_t>(fontByteSize);
@@ -307,6 +308,7 @@ bool ImGuiRhiRenderer::createRhiResources() {
                        rhiFlag(RhiBufferUsage::TransferDst);
     bufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
     bufferDesc.initialState = RhiResourceState::VertexBuffer;
+    bufferDesc.memoryCategory = RhiMemoryCategory::Geometry;
     m_vertexBuffer = m_rhiDevice->createBuffer(bufferDesc, nullptr, 0u);
     m_vertexBufferCapacity = kInitialVertexBufferCapacity;
     m_vertexBufferState = RhiResourceState::VertexBuffer;
@@ -519,6 +521,7 @@ bool ImGuiRhiRenderer::uploadDrawBuffers(RhiCommandList& commandList) {
         const RhiResourceState functionalState = usage == RhiBufferUsage::Vertex
             ? RhiResourceState::VertexBuffer : RhiResourceState::IndexBuffer;
         desc.initialState = functionalState;
+        desc.memoryCategory = RhiMemoryCategory::Geometry;
         const RhiBufferHandle replacement =
             m_rhiDevice->createBuffer(desc, nullptr, 0u);
         if (!replacement.isValid()) {

@@ -292,6 +292,7 @@ bool RainRenderer::createRhiResources() {
     bufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex) | rhiFlag(RhiBufferUsage::TransferDst);
     bufferDesc.memoryUsage = RhiMemoryUsage::CpuToGpu;
     bufferDesc.initialState = RhiResourceState::VertexBuffer;
+    bufferDesc.memoryCategory = RhiMemoryCategory::Geometry;
     m_vertexBuffer = m_rhiDevice->createBuffer(bufferDesc, nullptr, 0u);
 
     RhiTextureViewDesc viewDesc;

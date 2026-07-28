@@ -677,6 +677,7 @@ TextureAtlas buildBlockIconAtlas(int iconSize,
     desc.height = static_cast<uint32_t>(atlasHeight);
     desc.usage = rhiFlag(RhiTextureUsage::Sampled) |
                  rhiFlag(RhiTextureUsage::TransferDst);
+    desc.memoryCategory = RhiMemoryCategory::Texture;
     RhiTextureInitialData initialData;
     initialData.pixels = iconAtlasPixels.data();
     initialData.sizeBytes = iconAtlasPixels.size();

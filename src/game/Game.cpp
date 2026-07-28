@@ -338,6 +338,7 @@ void Game::captureExitScreenshot() {
                          rhiFlag(RhiBufferUsage::MapRead);
     readbackDesc.memoryUsage = RhiMemoryUsage::GpuToCpu;
     readbackDesc.initialState = RhiResourceState::TransferDst;
+    readbackDesc.memoryCategory = RhiMemoryCategory::Readback;
     const RhiBufferHandle readbackBuffer =
         rhiDevice.createBuffer(readbackDesc, nullptr, 0u);
     if (!readbackBuffer.isValid()) return;

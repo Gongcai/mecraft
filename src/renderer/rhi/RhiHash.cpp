@@ -35,6 +35,7 @@ uint64_t rhiHashTextureDesc(const RhiTextureDesc& desc) {
     rhiHashCombine(hash, desc.mipLevels);
     rhiHashCombine(hash, desc.sampleCount);
     rhiHashCombine(hash, desc.usage);
+    rhiHashEnum(hash, desc.memoryCategory);
     return hash;
 }
 
@@ -44,6 +45,7 @@ uint64_t rhiHashBufferDesc(const RhiBufferDesc& desc) {
     rhiHashCombine(hash, desc.usage);
     rhiHashEnum(hash, desc.memoryUsage);
     rhiHashEnum(hash, desc.initialState);
+    rhiHashEnum(hash, desc.memoryCategory);
     return hash;
 }
 

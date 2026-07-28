@@ -214,6 +214,7 @@ void UINumericSpinner::initMesh() {
             rhiFlag(RhiBufferUsage::TransferDst);
   d.memoryUsage = RhiMemoryUsage::GpuOnly;
   d.initialState = RhiResourceState::VertexBuffer;
+  d.memoryCategory = RhiMemoryCategory::Geometry;
   m_vertexBuffer = m_rhiDevice->createBuffer(d, vertices, sizeof(vertices));
 }
 

@@ -73,6 +73,7 @@ RhiTextureHandle CubemapLibrary::load(const std::string& name,
     textureDesc.depthOrLayers = 6u;
     textureDesc.usage = rhiFlag(RhiTextureUsage::Sampled) |
                         rhiFlag(RhiTextureUsage::TransferDst);
+    textureDesc.memoryCategory = RhiMemoryCategory::Texture;
     RhiTextureInitialData initialData;
     initialData.pixels = pixels.data();
     initialData.sizeBytes = pixels.size();

@@ -161,6 +161,7 @@ void createAtlasTexture(resource::IndexedTextureAtlas& atlas,
     desc.usage = rhiFlag(RhiTextureUsage::Sampled) |
                  rhiFlag(RhiTextureUsage::TransferSrc) |
                  rhiFlag(RhiTextureUsage::TransferDst);
+    desc.memoryCategory = RhiMemoryCategory::Texture;
 
     RhiTextureInitialData initialData;
     initialData.pixels = atlas.pixels.data();

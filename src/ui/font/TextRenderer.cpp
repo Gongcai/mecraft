@@ -209,6 +209,7 @@ bool TextRenderer::ensureVertexCapacity(const uint64_t requiredBytes) {
     desc.usage = rhiFlag(RhiBufferUsage::Vertex) | rhiFlag(RhiBufferUsage::TransferDst);
     desc.memoryUsage = RhiMemoryUsage::GpuOnly;
     desc.initialState = RhiResourceState::VertexBuffer;
+    desc.memoryCategory = RhiMemoryCategory::Geometry;
     const RhiBufferHandle newBuffer = m_rhiDevice->createBuffer(desc, nullptr, 0u);
     if (!newBuffer.isValid()) {
         return false;

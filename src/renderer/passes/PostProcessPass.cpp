@@ -51,6 +51,7 @@ bool createTextureAndView(RhiDevice& rhiDevice,
     textureDesc.mipLevels = 1u;
     textureDesc.sampleCount = 1u;
     textureDesc.usage = usage;
+    textureDesc.memoryCategory = RhiMemoryCategory::GBufferHistory;
     texture = rhiDevice.createTexture(textureDesc, nullptr);
     if (!texture.isValid()) {
         return false;
@@ -1312,6 +1313,7 @@ bool PostProcessPass::ensureRhiPipelines(RhiDevice& rhiDevice) {
                        rhiFlag(RhiBufferUsage::TransferDst);
     bufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
     bufferDesc.initialState = RhiResourceState::UniformBuffer;
+    bufferDesc.memoryCategory = RhiMemoryCategory::Uniform;
     m_compositeParamsBuffer = rhiDevice.createBuffer(bufferDesc, nullptr, 0u);
     if (!m_compositeParamsBuffer.isValid()) {
         destroyRhiResources();

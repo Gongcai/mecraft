@@ -50,6 +50,27 @@ nlohmann::json gpuTimingPercentilesJson(const GpuTimingPercentiles& timing) {
     };
 }
 
+nlohmann::json rhiMemoryStatsJson(const RhiMemoryStats& stats) {
+    nlohmann::json categories = nlohmann::json::object();
+    for (size_t index = 0u; index < kRhiMemoryCategoryCount; ++index) {
+        const auto category = static_cast<RhiMemoryCategory>(index);
+        const RhiMemoryCategoryStats& entry = stats.categories[index];
+        categories[rhiMemoryCategoryStableId(category)] = {
+            {"bytes", entry.bytes},
+            {"allocation_count", entry.allocationCount},
+            {"resource_count", entry.resourceCount}
+        };
+    }
+    return {
+        {"valid", stats.valid},
+        {"accuracy", rhiMemoryStatsAccuracyStableId(stats.accuracy)},
+        {"total_bytes", stats.totalBytes},
+        {"total_allocation_count", stats.totalAllocationCount},
+        {"total_resource_count", stats.totalResourceCount},
+        {"categories", std::move(categories)}
+    };
+}
+
 } // namespace
 
 GameManager::GameManager() 
@@ -462,6 +483,8 @@ void GameManager::writeBenchmarkReport() {
     const double avgFps = avgFrameMs > 0.0 ? 1000.0 / avgFrameMs : 0.0;
     const GpuTimingWindowStats gpuTimingWindow =
         m_benchmarkGpuTimingHistory.snapshot();
+    const RhiMemoryStats memoryStats =
+        m_rhiDevice != nullptr ? m_rhiDevice->memoryStats() : RhiMemoryStats{};
 
     std::cout << std::fixed << std::setprecision(3)
               << "[Benchmark] frames=" << m_benchmarkStats.frameCount
@@ -473,7 +496,8 @@ void GameManager::writeBenchmarkReport() {
               << " min_ms=" << m_benchmarkStats.minFrameMs
               << " max_ms=" << m_benchmarkStats.maxFrameMs
               << " avg_fps=" << avgFps
-              << " gpu_samples=" << gpuTimingWindow.sampleCount;
+              << " gpu_samples=" << gpuTimingWindow.sampleCount
+              << " rhi_memory_bytes=" << memoryStats.totalBytes;
     if (gpuTimingWindow.valid) {
         std::cout << " gpu_tracked_p95_ms="
                   << gpuTimingWindow.totalTrackedGpuMs.p95Ms;
@@ -517,6 +541,7 @@ void GameManager::writeBenchmarkReport() {
             gpuTimingWindow.totalTrackedGpuMs)},
         {"stages", std::move(gpuStages)}
     };
+    root["rhi_memory"] = rhiMemoryStatsJson(memoryStats);
 
     const std::filesystem::path reportPath = m_launchOptions.benchmarkReportPath;
     const std::filesystem::path parentPath = reportPath.parent_path();

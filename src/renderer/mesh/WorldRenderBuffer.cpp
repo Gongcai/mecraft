@@ -287,6 +287,7 @@ bool RhiVertexPoolAllocator::init(RhiDevice& rhiDevice,
                  rhiFlag(RhiBufferUsage::TransferDst);
     desc.memoryUsage = RhiMemoryUsage::GpuOnly;
     desc.initialState = RhiResourceState::VertexBuffer;
+    desc.memoryCategory = RhiMemoryCategory::Geometry;
     m_buffer = rhiDevice.createBuffer(desc, nullptr, 0u);
     if (!m_buffer.isValid()) {
         return false;
@@ -383,6 +384,7 @@ bool RhiVertexPoolAllocator::expand(RhiCommandList& commandList,
                  rhiFlag(RhiBufferUsage::TransferDst);
     desc.memoryUsage = RhiMemoryUsage::GpuOnly;
     desc.initialState = RhiResourceState::VertexBuffer;
+    desc.memoryCategory = RhiMemoryCategory::Geometry;
     const RhiBufferHandle newBuffer = m_rhiDevice->createBuffer(desc, nullptr, 0u);
     if (!newBuffer.isValid()) {
         return false;
@@ -438,26 +440,31 @@ bool WorldRenderBuffer::init(RhiDevice& rhiDevice) {
             rhiDevice,
             commandBytes,
             rhiFlag(RhiBufferUsage::Indirect) | rhiFlag(RhiBufferUsage::Storage),
+            RhiMemoryCategory::Geometry,
             "WorldRenderBuffer.RhiOpaqueIndirect") ||
         !m_rhiCutoutIndirectBuffer.init(
             rhiDevice,
             commandBytes,
             rhiFlag(RhiBufferUsage::Indirect) | rhiFlag(RhiBufferUsage::Storage),
+            RhiMemoryCategory::Geometry,
             "WorldRenderBuffer.RhiCutoutIndirect") ||
         !m_rhiTransparentIndirectBuffer.init(
             rhiDevice,
             commandBytes,
             rhiFlag(RhiBufferUsage::Indirect) | rhiFlag(RhiBufferUsage::Storage),
+            RhiMemoryCategory::Geometry,
             "WorldRenderBuffer.RhiTransparentIndirect") ||
         !m_rhiWaterIndirectBuffer.init(
             rhiDevice,
             commandBytes,
             rhiFlag(RhiBufferUsage::Indirect) | rhiFlag(RhiBufferUsage::Storage),
+            RhiMemoryCategory::Geometry,
             "WorldRenderBuffer.RhiWaterIndirect") ||
         !m_rhiMetadataBuffer.init(
             rhiDevice,
             metadataBytes,
             rhiFlag(RhiBufferUsage::Storage),
+            RhiMemoryCategory::SceneData,
             "WorldRenderBuffer.RhiMetadata")) {
         shutdown();
         return false;

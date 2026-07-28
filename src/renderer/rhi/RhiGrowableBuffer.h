@@ -1,8 +1,7 @@
 #ifndef MECRAFT_RHI_GROWABLE_BUFFER_H
 #define MECRAFT_RHI_GROWABLE_BUFFER_H
 
-#include "renderer/rhi/RhiHandles.h"
-#include "renderer/rhi/RhiTypes.h"
+#include "renderer/rhi/RhiResources.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -19,6 +18,7 @@ public:
     bool init(RhiDevice& rhiDevice,
               uint64_t initialSize,
               RhiBufferUsageFlags usage,
+              RhiMemoryCategory memoryCategory,
               const char* debugName);
     void shutdown();
 
@@ -37,6 +37,7 @@ private:
     std::vector<RhiBufferHandle> m_retiredBuffers;
     RhiBufferUsageFlags m_usage = 0u;
     RhiResourceState m_steadyState = RhiResourceState::Undefined;
+    RhiMemoryCategory m_memoryCategory = RhiMemoryCategory::Unclassified;
     uint64_t m_capacity = 0u;
     const char* m_debugName = nullptr;
 };

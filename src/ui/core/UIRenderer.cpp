@@ -814,6 +814,7 @@ void UIRenderer::initPanelRhiResources(RhiDevice& rhiDevice)
                        rhiFlag(RhiBufferUsage::TransferDst);
     bufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
     bufferDesc.initialState = RhiResourceState::VertexBuffer;
+    bufferDesc.memoryCategory = RhiMemoryCategory::Geometry;
     m_panelQuadVertexBuffer = rhiDevice.createBuffer(bufferDesc, vertices, sizeof(vertices));
 
     const std::optional<std::string> solidVertexSource =
@@ -1133,6 +1134,7 @@ bool UIRenderer::ensureBackdropBlurTargets(const int sourceWidth,
         desc.width = static_cast<uint32_t>(sourceWidth);
         desc.height = static_cast<uint32_t>(sourceHeight);
         desc.usage = rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::TransferDst);
+        desc.memoryCategory = RhiMemoryCategory::Presentation;
         m_backdropSource = rhiDevice.createTexture(desc, nullptr);
     }
     if (!m_backdropSourceView.isValid() && m_backdropSource.isValid()) {
@@ -1155,6 +1157,7 @@ bool UIRenderer::ensureBackdropBlurTargets(const int sourceWidth,
             desc.width = static_cast<uint32_t>(blurWidth);
             desc.height = static_cast<uint32_t>(blurHeight);
             desc.usage = rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment);
+            desc.memoryCategory = RhiMemoryCategory::Presentation;
             m_backdropBlur[i] = rhiDevice.createTexture(desc, nullptr);
         }
 

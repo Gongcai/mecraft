@@ -237,6 +237,7 @@ bool Dashboard::createRhiResources(RhiDevice& rhiDevice) {
     textureDesc.height = static_cast<uint32_t>(fontHeight);
     textureDesc.usage = rhiFlag(RhiTextureUsage::Sampled) |
                         rhiFlag(RhiTextureUsage::TransferDst);
+    textureDesc.memoryCategory = RhiMemoryCategory::Texture;
     RhiTextureInitialData initialData;
     initialData.pixels = fontPixels;
     initialData.sizeBytes = static_cast<size_t>(fontByteSize);
@@ -344,6 +345,7 @@ bool Dashboard::createRhiResources(RhiDevice& rhiDevice) {
                        rhiFlag(RhiBufferUsage::TransferDst);
     bufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
     bufferDesc.initialState = RhiResourceState::VertexBuffer;
+    bufferDesc.memoryCategory = RhiMemoryCategory::Geometry;
     m_vertexBuffer = rhiDevice.createBuffer(bufferDesc, nullptr, 0u);
     m_vertexBufferCapacity = kInitialVertexBufferCapacity;
     m_vertexBufferState = RhiResourceState::VertexBuffer;
@@ -567,6 +569,7 @@ bool Dashboard::uploadDrawBuffers(RhiCommandList& commandList) {
             ? RhiResourceState::VertexBuffer
             : RhiResourceState::IndexBuffer;
         desc.initialState = functionalState;
+        desc.memoryCategory = RhiMemoryCategory::Geometry;
         const RhiBufferHandle newBuffer = m_rhiDevice->createBuffer(desc, nullptr, 0u);
         if (!newBuffer.isValid()) {
             return false;
@@ -817,6 +820,7 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
             m_displayShadowCullStats = renderScene.shadowCullStats();
             m_displayRenderWorkStats = render.getRenderWorkStats();
             m_displayLightStats = world.getLightFrameStats();
+            m_displayRhiMemoryStats = m_rhiDevice->memoryStats();
             refreshWorldMetricsIfNeeded(world, now, false);
             m_displayFps = ImGui::GetIO().Framerate;
             m_nextProfilerStatsRefreshTime = now + static_cast<double>(m_profilerStatsRefreshIntervalSec);
@@ -914,6 +918,52 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
                                 featureStatus.code));
                 if (!featureStatus.available()) {
                     ImGui::TextDisabled("  %s", featureStatus.reasonZh);
+                }
+            }
+            ImGui::TreePop();
+        }
+        if (ImGui::TreeNode("RHI Memory")) {
+            if (!m_displayRhiMemoryStats.valid) {
+                ImGui::TextDisabled("Memory statistics are unavailable.");
+            } else {
+                constexpr double kBytesPerMiB = 1024.0 * 1024.0;
+                ImGui::Text("Accuracy: %s",
+                            rhiMemoryStatsAccuracyStableId(
+                                m_displayRhiMemoryStats.accuracy));
+                ImGui::Text("Tracked Total: %.2f MiB (%llu allocations, %llu resources)",
+                            static_cast<double>(m_displayRhiMemoryStats.totalBytes) /
+                                kBytesPerMiB,
+                            static_cast<unsigned long long>(
+                                m_displayRhiMemoryStats.totalAllocationCount),
+                            static_cast<unsigned long long>(
+                                m_displayRhiMemoryStats.totalResourceCount));
+                ImGui::Separator();
+                for (size_t index = 0u; index < kRhiMemoryCategoryCount;
+                     ++index) {
+                    const auto category =
+                        static_cast<RhiMemoryCategory>(index);
+                    const RhiMemoryCategoryStats& entry =
+                        m_displayRhiMemoryStats.categories[index];
+                    const double mebibytes =
+                        static_cast<double>(entry.bytes) / kBytesPerMiB;
+                    const bool unclassifiedNonZero =
+                        entry.bytes != 0u || entry.allocationCount != 0u ||
+                        entry.resourceCount != 0u;
+                    if (category == RhiMemoryCategory::Unclassified &&
+                        unclassifiedNonZero) {
+                        ImGui::TextColored(
+                            ImVec4(1.0f, 0.45f, 0.25f, 1.0f),
+                            "%s: %.2f MiB (%llu allocations, %llu resources)",
+                            rhiMemoryCategoryDisplayName(category), mebibytes,
+                            static_cast<unsigned long long>(entry.allocationCount),
+                            static_cast<unsigned long long>(entry.resourceCount));
+                    } else {
+                        ImGui::Text(
+                            "%s: %.2f MiB (%llu allocations, %llu resources)",
+                            rhiMemoryCategoryDisplayName(category), mebibytes,
+                            static_cast<unsigned long long>(entry.allocationCount),
+                            static_cast<unsigned long long>(entry.resourceCount));
+                    }
                 }
             }
             ImGui::TreePop();

@@ -474,6 +474,7 @@ bool SkyboxRenderer::ensureBlurTargets(RhiDevice& rhiDevice, int width, int heig
         desc.usage = rhiFlag(RhiTextureUsage::Sampled) |
                      rhiFlag(RhiTextureUsage::ColorAttachment) |
                      rhiFlag(RhiTextureUsage::TransferSrc);
+        desc.memoryCategory = RhiMemoryCategory::GBufferHistory;
         return rhiDevice.createTexture(desc, nullptr);
     };
     m_sceneColorHandle = createTexture("Skybox.SceneColor");
@@ -552,6 +553,7 @@ void SkyboxRenderer::initCubeMesh() {
                        rhiFlag(RhiBufferUsage::TransferDst);
     bufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
     bufferDesc.initialState = RhiResourceState::VertexBuffer;
+    bufferDesc.memoryCategory = RhiMemoryCategory::Geometry;
     m_cubeVertexBuffer = m_rhiDevice->createBuffer(
         bufferDesc, kCubeVertices, sizeof(kCubeVertices));
     if (!m_cubeVertexBuffer.isValid()) std::abort();

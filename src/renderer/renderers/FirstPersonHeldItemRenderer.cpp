@@ -420,6 +420,7 @@ void FirstPersonHeldItemRenderer::createRhiTextureResources() {
                               rhiFlag(RhiBufferUsage::TransferDst);
     uniformBufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
     uniformBufferDesc.initialState = RhiResourceState::UniformBuffer;
+    uniformBufferDesc.memoryCategory = RhiMemoryCategory::Uniform;
     m_shadowUniformBuffer = m_rhiDevice->createBuffer(uniformBufferDesc, nullptr, 0u);
     if (!m_textureSampler.isValid() || !m_blockTextureSampler.isValid() ||
         !m_shadowCompareSampler.isValid() || !m_shadowRawSampler.isValid() ||
@@ -1126,6 +1127,7 @@ FirstPersonHeldItemRenderer::Mesh FirstPersonHeldItemRenderer::buildItemMesh(con
                        rhiFlag(RhiBufferUsage::TransferDst);
     bufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
     bufferDesc.initialState = RhiResourceState::VertexBuffer;
+    bufferDesc.memoryCategory = RhiMemoryCategory::Geometry;
     mesh.rhiVertexBuffer = m_rhiDevice->createBuffer(
         bufferDesc, vertices.data(), vertices.size() * sizeof(ItemModelVertex));
     mesh.rhiDevice = m_rhiDevice;
@@ -1170,6 +1172,7 @@ FirstPersonHeldItemRenderer::Mesh FirstPersonHeldItemRenderer::buildRightArmMesh
                        rhiFlag(RhiBufferUsage::TransferDst);
     bufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
     bufferDesc.initialState = RhiResourceState::VertexBuffer;
+    bufferDesc.memoryCategory = RhiMemoryCategory::Geometry;
     mesh.rhiVertexBuffer = m_rhiDevice->createBuffer(
         bufferDesc, vertices.data(), vertices.size() * sizeof(SteveVertex));
     mesh.rhiDevice = m_rhiDevice;

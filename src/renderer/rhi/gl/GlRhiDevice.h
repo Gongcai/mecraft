@@ -215,6 +215,7 @@ public:
 
     [[nodiscard]] RhiBackend backend() const override;
     [[nodiscard]] const RhiCapabilities& capabilities() const override;
+    [[nodiscard]] RhiMemoryStats memoryStats() const override;
 
     RhiBufferHandle createBuffer(const RhiBufferDesc& desc,
                                  const void* initialData,

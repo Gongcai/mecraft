@@ -79,6 +79,7 @@ enum class RgExecuteError {
   NotCompiled,
   DeviceMismatch,
   ResourceCreationFailed,
+  TextureAliasingFailed,
   CommandListUnavailable,
   CommandRecordingFailed,
   PassExecutionFailed,

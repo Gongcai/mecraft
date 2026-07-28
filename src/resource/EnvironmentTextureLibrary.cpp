@@ -36,6 +36,7 @@ RhiTextureHandle EnvironmentTextureLibrary::loadTexture(const std::string& path,
     textureDesc.height = static_cast<uint32_t>(height);
     textureDesc.usage = rhiFlag(RhiTextureUsage::Sampled) |
                         rhiFlag(RhiTextureUsage::TransferDst);
+    textureDesc.memoryCategory = RhiMemoryCategory::Texture;
     RhiTextureInitialData initialData;
     initialData.pixels = data;
     initialData.sizeBytes = static_cast<size_t>(width) * static_cast<size_t>(height) * 4u;

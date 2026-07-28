@@ -146,6 +146,7 @@ HumanoidRenderer::PartMesh HumanoidRenderer::buildPartMesh(const renderer::Human
                        rhiFlag(RhiBufferUsage::TransferDst);
     bufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
     bufferDesc.initialState = RhiResourceState::VertexBuffer;
+    bufferDesc.memoryCategory = RhiMemoryCategory::Geometry;
     mesh.rhiVertexBuffer = m_rhiDevice->createBuffer(
         bufferDesc, vertices.data(), vertices.size() * sizeof(SteveVertex));
     if (!mesh.rhiVertexBuffer.isValid()) {
@@ -220,6 +221,7 @@ HumanoidRenderer::PartMesh HumanoidRenderer::buildEntityModelPartMesh(
                        rhiFlag(RhiBufferUsage::TransferDst);
     bufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
     bufferDesc.initialState = RhiResourceState::VertexBuffer;
+    bufferDesc.memoryCategory = RhiMemoryCategory::Geometry;
     mesh.rhiVertexBuffer = m_rhiDevice->createBuffer(
         bufferDesc, vertices.data(), vertices.size() * sizeof(SteveVertex));
     if (!mesh.rhiVertexBuffer.isValid()) {

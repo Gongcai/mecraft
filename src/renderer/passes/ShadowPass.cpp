@@ -821,6 +821,7 @@ bool ShadowPass::ensureCullStatsBuffers(RhiDevice& rhiDevice) {
                             rhiFlag(RhiBufferUsage::TransferDst);
         counterDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
         counterDesc.initialState = RhiResourceState::StorageBuffer;
+        counterDesc.memoryCategory = RhiMemoryCategory::SceneData;
         m_cullCounterBuffer = rhiDevice.createBuffer(counterDesc, nullptr, 0u);
         if (!m_cullCounterBuffer.isValid()) {
             return false;
@@ -839,6 +840,7 @@ bool ShadowPass::ensureCullStatsBuffers(RhiDevice& rhiDevice) {
                              rhiFlag(RhiBufferUsage::MapRead);
         readbackDesc.memoryUsage = RhiMemoryUsage::GpuToCpu;
         readbackDesc.initialState = RhiResourceState::TransferDst;
+        readbackDesc.memoryCategory = RhiMemoryCategory::Readback;
         m_cullReadbackBuffers[slot] = rhiDevice.createBuffer(readbackDesc, nullptr, 0u);
         if (!m_cullReadbackBuffers[slot].isValid()) {
             return false;

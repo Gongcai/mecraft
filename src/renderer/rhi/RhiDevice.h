@@ -22,6 +22,9 @@ public:
 
     [[nodiscard]] virtual RhiBackend backend() const = 0;
     [[nodiscard]] virtual const RhiCapabilities& capabilities() const = 0;
+    /// Captures all live public RHI resources and their backing allocations.
+    /// @return Backend snapshot with exact or explicitly estimated byte totals.
+    [[nodiscard]] virtual RhiMemoryStats memoryStats() const = 0;
 
     virtual RhiBufferHandle createBuffer(const RhiBufferDesc& desc,
                                          const void* initialData,
@@ -44,9 +47,9 @@ public:
                                               RhiTextureDesc& desc) const = 0;
 
     // --- Placed textures on shared memory (memory aliasing) ---
-    // Optional feature gated by capabilities().textureAliasing; the default
-    // implementations report "unsupported" so backends without placement
-    // (OpenGL) need no changes and callers fall back to createTexture.
+    // Optional feature gated by capabilities().textureAliasing. Backends that
+    // do not expose placement report the feature as unsupported, and callers
+    // select the non-aliasing resource path before invoking these methods.
 
     /// Queries the memory footprint a texture with this description would
     /// occupy when placed on a shared memory block.
@@ -65,12 +68,15 @@ public:
     /// @param requirements Size, alignment, and type mask the block satisfies;
     ///        callers pass the combined (max size/alignment, intersected mask)
     ///        requirements of every texture that will alias the block.
+    /// @param category Explicit ownership category for the backing allocation.
     /// @param debugName Optional label for tooling.
     /// @return Invalid handle when aliasing is unsupported or allocation fails.
     virtual RhiMemoryHandle allocateTextureMemory(
         const RhiTextureMemoryRequirements& requirements,
+        RhiMemoryCategory category,
         const char* debugName) {
         (void)requirements;
+        (void)category;
         (void)debugName;
         return {};
     }

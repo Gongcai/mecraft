@@ -265,6 +265,7 @@ bool TemporalUpscalePass::prepareOutputTarget(
                             rhiFlag(RhiTextureUsage::Storage) |
                             rhiFlag(RhiTextureUsage::TransferSrc) |
                             rhiFlag(RhiTextureUsage::TransferDst);
+        textureDesc.memoryCategory = RhiMemoryCategory::GBufferHistory;
         m_outputTexture = m_device->createTexture(textureDesc, nullptr);
         if (!m_outputTexture.isValid()) {
             return false;

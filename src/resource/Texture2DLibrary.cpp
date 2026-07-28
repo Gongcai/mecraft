@@ -26,6 +26,7 @@ namespace {
     textureDesc.sampleCount = 1;
     textureDesc.usage = rhiFlag(RhiTextureUsage::Sampled) |
                         rhiFlag(RhiTextureUsage::TransferDst);
+    textureDesc.memoryCategory = RhiMemoryCategory::Texture;
 
     RhiTextureInitialData initialData;
     initialData.pixels = pixels;

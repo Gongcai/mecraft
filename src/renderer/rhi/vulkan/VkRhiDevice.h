@@ -21,6 +21,7 @@ public:
     void shutdown() override;
     [[nodiscard]] RhiBackend backend() const override;
     [[nodiscard]] const RhiCapabilities& capabilities() const override;
+    [[nodiscard]] RhiMemoryStats memoryStats() const override;
 
     RhiBufferHandle createBuffer(const RhiBufferDesc& desc,
                                  const void* initialData,
@@ -36,6 +37,7 @@ public:
         RhiTextureMemoryRequirements& requirements) override;
     RhiMemoryHandle allocateTextureMemory(
         const RhiTextureMemoryRequirements& requirements,
+        RhiMemoryCategory category,
         const char* debugName) override;
     RhiTextureHandle createPlacedTexture(const RhiTextureDesc& desc,
                                          RhiMemoryHandle memory) override;

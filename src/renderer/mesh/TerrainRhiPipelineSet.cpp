@@ -467,6 +467,7 @@ bool TerrainRhiPipelineSet::ensureGBufferPipeline(ResourceMgr& resourceMgr) {
                        rhiFlag(RhiBufferUsage::TransferDst);
     paramsDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
     paramsDesc.initialState = RhiResourceState::UniformBuffer;
+    paramsDesc.memoryCategory = RhiMemoryCategory::Uniform;
     for (RhiBufferHandle& buffer : m_gbufferParamsBuffers) {
         buffer = m_rhiDevice->createBuffer(paramsDesc, nullptr, 0u);
     }
@@ -753,6 +754,7 @@ bool TerrainRhiPipelineSet::ensureForwardPipeline(ResourceMgr& resourceMgr) {
                        rhiFlag(RhiBufferUsage::TransferDst);
     paramsDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
     paramsDesc.initialState = RhiResourceState::UniformBuffer;
+    paramsDesc.memoryCategory = RhiMemoryCategory::Uniform;
     for (RhiBufferHandle& buffer : m_forwardParamsBuffers) {
         buffer = m_rhiDevice->createBuffer(paramsDesc, nullptr, 0u);
     }
@@ -1053,6 +1055,7 @@ bool TerrainRhiPipelineSet::ensureWaterPipeline(ResourceMgr& resourceMgr) {
                        rhiFlag(RhiBufferUsage::TransferDst);
     paramsDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
     paramsDesc.initialState = RhiResourceState::UniformBuffer;
+    paramsDesc.memoryCategory = RhiMemoryCategory::Uniform;
     m_waterParamsBuffer = m_rhiDevice->createBuffer(paramsDesc, nullptr, 0u);
     if (!m_waterParamsBuffer.isValid()) {
         destroyWaterResources();
@@ -1387,6 +1390,7 @@ bool TerrainRhiPipelineSet::ensureTransparentPipeline(ResourceMgr& resourceMgr) 
                        rhiFlag(RhiBufferUsage::TransferDst);
     paramsDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
     paramsDesc.initialState = RhiResourceState::UniformBuffer;
+    paramsDesc.memoryCategory = RhiMemoryCategory::Uniform;
     m_transparentParamsBuffer = m_rhiDevice->createBuffer(paramsDesc, nullptr, 0u);
     if (!m_transparentParamsBuffer.isValid()) {
         destroyTransparentResources();
@@ -1750,6 +1754,7 @@ bool TerrainRhiPipelineSet::ensureShadowPipeline(ResourceMgr& resourceMgr) {
                        rhiFlag(RhiBufferUsage::TransferDst);
     paramsDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
     paramsDesc.initialState = RhiResourceState::UniformBuffer;
+    paramsDesc.memoryCategory = RhiMemoryCategory::Uniform;
     m_shadowParamsBuffer = m_rhiDevice->createBuffer(paramsDesc, nullptr, 0u);
     if (!m_shadowParamsBuffer.isValid()) {
         destroyShadowResources();

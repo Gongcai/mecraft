@@ -71,6 +71,7 @@ public:
         desc.usage = rhiFlag(RhiTextureUsage::Sampled) |
                      rhiFlag(RhiTextureUsage::TransferSrc) |
                      rhiFlag(RhiTextureUsage::TransferDst);
+        desc.memoryCategory = RhiMemoryCategory::Texture;
         RhiTextureInitialData initialData;
         initialData.pixels = m_pixels.data();
         initialData.sizeBytes = m_pixels.size();

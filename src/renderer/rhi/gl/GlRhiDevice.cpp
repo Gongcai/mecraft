@@ -4657,10 +4657,40 @@ const RhiCapabilities& GlRhiDevice::capabilities() const {
     return m_capabilities;
 }
 
+RhiMemoryStats GlRhiDevice::memoryStats() const {
+    RhiMemoryStats stats;
+    if (!m_initialized || m_data == nullptr) {
+        return stats;
+    }
+    stats.valid = true;
+    stats.accuracy = RhiMemoryStatsAccuracy::Estimated;
+    for (const GlBufferRecord& record : m_data->bufferRecords) {
+        if (!record.active) {
+            continue;
+        }
+        if (!stats.add(record.desc.memoryCategory, record.desc.size, 1u, 1u)) {
+            return {};
+        }
+    }
+    for (const GlTextureRecord& record : m_data->textureRecords) {
+        if (!record.active || record.swapchainBackbuffer) {
+            continue;
+        }
+        const std::optional<uint64_t> bytes =
+            rhiEstimateTextureBytes(record.desc);
+        if (!bytes.has_value() ||
+            !stats.add(record.desc.memoryCategory, *bytes, 1u, 1u)) {
+            return {};
+        }
+    }
+    return stats;
+}
+
 RhiBufferHandle GlRhiDevice::createBuffer(const RhiBufferDesc& desc,
                                           const void* initialData,
                                           size_t initialDataSize) {
-    if (!m_initialized || desc.size == 0u || desc.usage == 0u ||
+    if (!m_initialized || !rhiMemoryCategoryValid(desc.memoryCategory) ||
+        desc.size == 0u || desc.usage == 0u ||
         (initialData == nullptr && initialDataSize != 0u) ||
         initialDataSize > desc.size ||
         !bufferUsageSupportsState(desc.usage, desc.initialState) ||
@@ -4700,7 +4730,8 @@ RhiTextureHandle GlRhiDevice::createTexture(const RhiTextureDesc& desc,
                                             const RhiTextureInitialData* initialData) {
     GlFormatInfo format;
     const GLenum target = toGlTextureTarget(desc.dimension);
-    if (!m_initialized || target == 0u || !toGlFormatInfo(desc.format, format) ||
+    if (!m_initialized || !rhiMemoryCategoryValid(desc.memoryCategory) ||
+        target == 0u || !toGlFormatInfo(desc.format, format) ||
         desc.width == 0u || desc.height == 0u || desc.depthOrLayers == 0u ||
         desc.mipLevels == 0u || desc.sampleCount != 1u || desc.usage == 0u) {
         logRhiError("createTexture received an invalid descriptor");

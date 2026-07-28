@@ -245,13 +245,15 @@ singleSubresourceRange(const uint32_t mip, const uint32_t layer,
          lhs.width == rhs.width && lhs.height == rhs.height &&
          lhs.depthOrLayers == rhs.depthOrLayers &&
          lhs.mipLevels == rhs.mipLevels && lhs.sampleCount == rhs.sampleCount &&
-         lhs.usage == rhs.usage;
+         lhs.usage == rhs.usage &&
+         lhs.memoryCategory == rhs.memoryCategory;
 }
 
 [[nodiscard]] bool sameBufferDesc(const RhiBufferDesc &lhs,
                                   const RhiBufferDesc &rhs) {
   return lhs.size == rhs.size && lhs.usage == rhs.usage &&
-         lhs.memoryUsage == rhs.memoryUsage;
+         lhs.memoryUsage == rhs.memoryUsage &&
+         lhs.memoryCategory == rhs.memoryCategory;
 }
 
 [[nodiscard]] RhiTextureViewType
@@ -530,9 +532,11 @@ RgTextureHandle RenderGraph::createTexture(const RgTransientTextureDesc &desc) {
                     "invalid transient texture description");
     return {};
   }
+  RhiTextureDesc resourceDesc = desc.desc;
+  resourceDesc.memoryCategory = RhiMemoryCategory::Transient;
   m_textures.push_back({desc.name,
                         {},
-                        desc.desc,
+                        resourceDesc,
                         RhiResourceState::Undefined,
                         desc.finalState,
                         {},
@@ -571,9 +575,11 @@ RgBufferHandle RenderGraph::createBuffer(const RgTransientBufferDesc &desc) {
                     "invalid transient buffer description");
     return {};
   }
+  RhiBufferDesc resourceDesc = desc.desc;
+  resourceDesc.memoryCategory = RhiMemoryCategory::Transient;
   m_buffers.push_back({desc.name,
                        {},
-                       desc.desc,
+                       resourceDesc,
                        RhiResourceState::Undefined,
                        desc.finalState,
                        RhiQueueType::Graphics,
@@ -1409,7 +1415,8 @@ RenderGraph::TransientTexture *RenderGraph::resolveAliasedTransient(
   }
   if (pageIndex == kRgInvalidPassIndex) {
     const RhiMemoryHandle memory =
-        device.allocateTextureMemory(requirements, "RenderGraph.AliasPage");
+        device.allocateTextureMemory(requirements, RhiMemoryCategory::Transient,
+                                     "RenderGraph.AliasPage");
     if (!memory.isValid())
       return nullptr;
     m_aliasPages.push_back({memory, requirements, {}, 0u});
@@ -1647,29 +1654,37 @@ RgExecuteResult RenderGraph::execute(RhiDevice &device,
       continue;
     }
     TransientTexture *allocation = nullptr;
-    // Lifetime-disjoint graphics-queue transients share memory pages; any
-    // failure in the placed path silently falls back to a dedicated image.
-    if (aliasingActive && index < m_textureLifetimes.size() &&
+    const bool requiresAliasing =
+        aliasingActive && index < m_textureLifetimes.size() &&
         m_textureLifetimes[index].used &&
-        m_textureLifetimes[index].graphicsOnly) {
+        m_textureLifetimes[index].graphicsOnly;
+    if (requiresAliasing) {
       RhiTextureMemoryRequirements requirements;
-      if (lookupTextureRequirements(device, record.desc, requirements)) {
-        allocation = resolveAliasedTransient(
-            device, record, m_textureLifetimes[index], requirements);
-        if (allocation != nullptr) {
-          m_transientMemoryStats.aliasedRequestBytes += requirements.sizeBytes;
-          ++m_transientMemoryStats.aliasedTextureCount;
-        }
+      if (!lookupTextureRequirements(device, record.desc, requirements)) {
+        return {RgExecuteError::TextureAliasingFailed,
+                "failed to query aliasing requirements for transient texture '" +
+                    record.name + "'",
+                {}};
       }
-    }
-    for (TransientTexture &candidate : m_transientTextures) {
-      if (allocation != nullptr)
-        break;
-      if (candidate.pageIndex == kRgInvalidPassIndex &&
-          candidate.claimedGeneration != m_generation &&
-          sameTextureDesc(candidate.desc, record.desc)) {
-        allocation = &candidate;
-        candidate.claimedGeneration = m_generation;
+      allocation = resolveAliasedTransient(
+          device, record, m_textureLifetimes[index], requirements);
+      if (allocation == nullptr) {
+        return {RgExecuteError::TextureAliasingFailed,
+                "failed to allocate aliased transient texture '" +
+                    record.name + "'",
+                {}};
+      }
+      m_transientMemoryStats.aliasedRequestBytes += requirements.sizeBytes;
+      ++m_transientMemoryStats.aliasedTextureCount;
+    } else {
+      for (TransientTexture &candidate : m_transientTextures) {
+        if (candidate.pageIndex == kRgInvalidPassIndex &&
+            candidate.claimedGeneration != m_generation &&
+            sameTextureDesc(candidate.desc, record.desc)) {
+          allocation = &candidate;
+          candidate.claimedGeneration = m_generation;
+          break;
+        }
       }
     }
     if (allocation == nullptr) {

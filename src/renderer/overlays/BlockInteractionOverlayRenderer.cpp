@@ -190,6 +190,7 @@ void BlockInteractionOverlayRenderer::initOutlineMesh() {
                        rhiFlag(RhiBufferUsage::TransferDst);
     bufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
     bufferDesc.initialState = RhiResourceState::VertexBuffer;
+    bufferDesc.memoryCategory = RhiMemoryCategory::Geometry;
     m_outlineVertexBuffer = m_rhiDevice->createBuffer(
         bufferDesc, kOutlineVertices.data(), bufferDesc.size);
     if (!m_outlineVertexBuffer.isValid()) std::abort();
@@ -239,6 +240,7 @@ void BlockInteractionOverlayRenderer::initBreakOverlayMesh() {
                               rhiFlag(RhiBufferUsage::TransferDst);
     overlayBufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
     overlayBufferDesc.initialState = RhiResourceState::VertexBuffer;
+    overlayBufferDesc.memoryCategory = RhiMemoryCategory::Geometry;
     m_breakOverlayVertexBuffer = m_rhiDevice->createBuffer(
         overlayBufferDesc, kBreakOverlayVertices.data(), overlayBufferDesc.size);
     if (!m_breakOverlayVertexBuffer.isValid()) std::abort();
@@ -251,6 +253,7 @@ void BlockInteractionOverlayRenderer::initBreakOverlayMesh() {
                             rhiFlag(RhiBufferUsage::TransferDst);
     crossBufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
     crossBufferDesc.initialState = RhiResourceState::VertexBuffer;
+    crossBufferDesc.memoryCategory = RhiMemoryCategory::Geometry;
     m_breakOverlayCrossVertexBuffer = m_rhiDevice->createBuffer(
         crossBufferDesc, kBreakOverlayCrossVertices.data(), crossBufferDesc.size);
     if (!m_breakOverlayCrossVertexBuffer.isValid()) std::abort();

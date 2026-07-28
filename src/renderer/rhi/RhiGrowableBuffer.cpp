@@ -47,9 +47,11 @@ RhiGrowableBuffer::~RhiGrowableBuffer() {
 bool RhiGrowableBuffer::init(RhiDevice& rhiDevice,
                              const uint64_t initialSize,
                              const RhiBufferUsageFlags usage,
+                             const RhiMemoryCategory memoryCategory,
                              const char* debugName) {
     shutdown();
-    if (initialSize == 0u || usage == 0u) {
+    if (initialSize == 0u || usage == 0u ||
+        !rhiMemoryCategoryValid(memoryCategory)) {
         return false;
     }
     if (!resolveSteadyState(usage, m_steadyState)) {
@@ -65,6 +67,7 @@ bool RhiGrowableBuffer::init(RhiDevice& rhiDevice,
     desc.usage = m_usage;
     desc.memoryUsage = RhiMemoryUsage::GpuOnly;
     desc.initialState = m_steadyState;
+    desc.memoryCategory = memoryCategory;
     m_buffer = rhiDevice.createBuffer(desc, nullptr, 0u);
     if (!m_buffer.isValid()) {
         m_usage = 0u;
@@ -74,6 +77,7 @@ bool RhiGrowableBuffer::init(RhiDevice& rhiDevice,
 
     m_rhiDevice = &rhiDevice;
     m_capacity = initialSize;
+    m_memoryCategory = memoryCategory;
     m_debugName = debugName;
     return true;
 }
@@ -91,6 +95,7 @@ void RhiGrowableBuffer::shutdown() {
     m_buffer = {};
     m_usage = 0u;
     m_steadyState = RhiResourceState::Undefined;
+    m_memoryCategory = RhiMemoryCategory::Unclassified;
     m_capacity = 0u;
     m_debugName = nullptr;
     m_retiredBuffers.clear();
@@ -116,6 +121,7 @@ bool RhiGrowableBuffer::ensureCapacity(RhiCommandList& commandList,
     desc.usage = m_usage;
     desc.memoryUsage = RhiMemoryUsage::GpuOnly;
     desc.initialState = m_steadyState;
+    desc.memoryCategory = m_memoryCategory;
     const RhiBufferHandle newBuffer = m_rhiDevice->createBuffer(desc, nullptr, 0u);
     if (!newBuffer.isValid()) {
         return false;

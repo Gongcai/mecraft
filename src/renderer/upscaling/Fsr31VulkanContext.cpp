@@ -86,6 +86,7 @@ struct Fsr31SharedTexture {
                         rhiFlag(RhiTextureUsage::Storage) |
                         rhiFlag(RhiTextureUsage::TransferSrc) |
                         rhiFlag(RhiTextureUsage::TransferDst);
+    textureDesc.memoryCategory = RhiMemoryCategory::Sdk;
     output.texture = device.createTexture(textureDesc, nullptr);
     if (!output.texture.isValid()) {
         return false;

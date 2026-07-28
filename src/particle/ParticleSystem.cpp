@@ -179,6 +179,7 @@ bool ParticleSystem::createRhiResources() {
     bufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex) | rhiFlag(RhiBufferUsage::TransferDst);
     bufferDesc.memoryUsage = RhiMemoryUsage::CpuToGpu;
     bufferDesc.initialState = RhiResourceState::VertexBuffer;
+    bufferDesc.memoryCategory = RhiMemoryCategory::Geometry;
     m_rhiVertexBuffer = m_rhiDevice->createBuffer(bufferDesc, nullptr, 0u);
     RhiTextureViewDesc arrayViewDesc;
     arrayViewDesc.texture = m_texArray->texture;

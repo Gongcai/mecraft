@@ -520,6 +520,7 @@ bool VolumetricPass::ensureFogRhiPipeline(RhiDevice& rhiDevice) {
                               rhiFlag(RhiBufferUsage::TransferDst);
     uniformBufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
     uniformBufferDesc.initialState = RhiResourceState::UniformBuffer;
+    uniformBufferDesc.memoryCategory = RhiMemoryCategory::Uniform;
     m_fogUniformBuffer = rhiDevice.createBuffer(uniformBufferDesc, nullptr, 0u);
     if (!m_fogUniformBuffer.isValid()) {
         destroyFogRhiResources();

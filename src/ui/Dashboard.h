@@ -226,6 +226,7 @@ private:
     ShadowCullFrameStats m_displayShadowCullStats{};
     RenderWorkStats m_displayRenderWorkStats{};
     LightFrameStats m_displayLightStats{};
+    RhiMemoryStats m_displayRhiMemoryStats{};
     CachedWorldMetrics m_cachedWorldMetrics{};
     double m_displayFps = 0.0;
     double m_nextProfilerStatsRefreshTime = 0.0;

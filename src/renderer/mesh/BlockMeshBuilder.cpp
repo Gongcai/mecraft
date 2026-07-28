@@ -398,6 +398,7 @@ BlockCubeMesh uploadBlockCubeMesh(const std::vector<BlockVertex>& vertices,
                        rhiFlag(RhiBufferUsage::TransferDst);
     bufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
     bufferDesc.initialState = RhiResourceState::VertexBuffer;
+    bufferDesc.memoryCategory = RhiMemoryCategory::Geometry;
     mesh.rhiVertexBuffer = rhiDevice.createBuffer(
         bufferDesc, vertices.data(), vertices.size() * sizeof(BlockVertex));
     mesh.rhiDevice = &rhiDevice;
