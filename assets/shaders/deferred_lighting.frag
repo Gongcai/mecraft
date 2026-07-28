@@ -183,28 +183,6 @@ layout(std140, binding = 19) uniform DeferredLightingParams {
 
 #include "cloud_density.glsl"
 
-vec3 staticMeshFresnelSchlick(float cosTheta, vec3 f0, float f90) {
-    return f0 + (vec3(f90) - f0) * pow(1.0 - cosTheta, 5.0);
-}
-
-vec3 staticMeshSpecularBrdf(float lDotH,
-                            float nDotV,
-                            float nDotL,
-                            float nDotH,
-                            float alpha2,
-                            vec3 f0,
-                            float f90) {
-    if (nDotL < 1e-5) {
-        return vec3(0.0);
-    }
-    vec3 fresnel = staticMeshFresnelSchlick(lDotH, f0, f90);
-    float distribution = DistributionGGX(nDotH, alpha2);
-    float visibility = V2SmithGGX(
-        max(nDotV, 1e-2), max(nDotL, 1e-2), alpha2);
-    return min(vec3(nDotL * distribution * visibility) * fresnel,
-               vec3(4.0));
-}
-
 vec3 srgbToLinear(vec3 color) {
     return pow(max(color, vec3(0.0)), vec3(2.2));
 }
@@ -797,7 +775,7 @@ void main() {
             diffuse *= DiffuseHammon(LdotV, NdotV, NdotL, NdotH, roughness, albedo);
 
             // Specular (DerivativeMain deferred5.fsh:291-292)
-            specular = staticMeshSpecularBrdf(
+            specular = pbrEvaluateDirectSpecular(
                 LdotH, NdotV, rawNdotL, NdotH, alpha2,
                 specularF0, specularF90);
             // DerivativeMain deferred5.fsh:297 — specular *= SPECULAR_HIGHLIGHT_BRIGHTNESS + wetnessCustom.
@@ -1082,7 +1060,7 @@ void main() {
     // DerivativeMain handles sky reflections in a separate SSR pass (deferred6.fsh)
     if (uDerivativeStrictMode == 0 && !isRainWetSurface) {
         color += evaluateSkySH(skySH, normal) *
-                 staticMeshFresnelSchlick(
+                 pbrFresnelSchlick(
                      max(dot(normal, viewDir), 0.0),
                      specularF0, specularF90) *
                  pow(oneMinus(roughness), 1.65) *

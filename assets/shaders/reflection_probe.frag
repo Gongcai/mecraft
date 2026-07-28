@@ -50,10 +50,6 @@ vec2 GenerateRandomOffset(vec2 screenPos, float time) {
     return Hash2D(p);
 }
 
-vec3 gltfFresnelSchlick(float cosTheta, vec3 f0, float f90) {
-    return f0 + (vec3(f90) - f0) * pow(1.0 - cosTheta, 5.0);
-}
-
 #include "weather_surface.glsl"
 
 vec3 reconstructWorldPosition(vec2 clipUv, float depth) {
@@ -403,7 +399,7 @@ void main() {
     if (usesRoughReflection) {
         vec3 halfWay = normalize(reflectedDir - viewDir);
         float lDotH = saturate(dot(reflectedDir, halfWay));
-        vec3 fresnel = gltfFresnelSchlick(
+        vec3 fresnel = pbrFresnelSchlick(
             lDotH, specularF0, specularF90);
         float alpha2 = roughness * roughness;
         float V2 = V2SmithGGX(nDotView, max(nDotRay, 1e-6), alpha2);
@@ -411,7 +407,7 @@ void main() {
         reflectionSpecular = nDotRay * fresnel * V2 * V1Inverse;
         dist = saturate(max(ssrHit * 2.0, roughness * 3.0));
     } else {
-        reflectionSpecular = gltfFresnelSchlick(
+        reflectionSpecular = pbrFresnelSchlick(
             nDotView, specularF0, specularF90);
     }
     if (!transMask.isTranslucent && puddleMask > 1e-4) {

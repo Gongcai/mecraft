@@ -40,8 +40,9 @@ struct ShaderCase {
 } // namespace
 
 int main() {
-    constexpr std::array<ShaderCase, 66> kShaderCases{{
+    constexpr std::array<ShaderCase, 67> kShaderCases{{
         {"tests/shaders/rhi_screen_coordinates_test.frag", RhiShaderStage::Fragment},
+        {"tests/shaders/material_brdf_shared_test.frag", RhiShaderStage::Fragment},
         {"assets/shaders/fullscreen_triangle_rhi.vert", RhiShaderStage::Vertex},
         {"assets/shaders/deferred_lighting.vert", RhiShaderStage::Vertex},
         {"assets/shaders/skybox_blur_rhi.vert", RhiShaderStage::Vertex},

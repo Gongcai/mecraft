@@ -50,36 +50,17 @@ layout(std140, binding = 6) uniform StaticMeshFrameParams {
 #include "static_mesh_material.glsl"
 #include "render_contract.glsl"
 
-const float PI = 3.14159265358979323846;
-
-float distributionGgx(float nDotH, float roughness) {
-    float alpha = roughness * roughness;
-    float alphaSquared = alpha * alpha;
-    float denominator = nDotH * nDotH * (alphaSquared - 1.0) + 1.0;
-    return alphaSquared / max(PI * denominator * denominator, 1e-6);
-}
-
-float geometrySchlickGgx(float nDotV, float roughness) {
-    float r = roughness + 1.0;
-    float k = r * r * 0.125;
-    return nDotV / max(nDotV * (1.0 - k) + k, 1e-6);
-}
-
-vec3 fresnelSchlick(float cosTheta, vec3 f0, float f90) {
-    return f0 + (vec3(f90) - f0) * pow(1.0 - cosTheta, 5.0);
-}
-
 vec3 sampleMappedNormal(sampler2D normalTexture,
                         vec2 uv,
                         float scale,
                         vec3 tangent,
                         vec3 bitangent,
                         vec3 geometricNormal) {
-    vec3 tangentNormal = texture(normalTexture, uv).xyz * 2.0 - 1.0;
-    tangentNormal.xy *= scale;
+    vec3 tangentNormal = decodeMaterialTangentNormal(
+        texture(normalTexture, uv).xyz, scale);
     return normalize(
         mat3(tangent, bitangent, geometricNormal) *
-        normalize(tangentNormal));
+        tangentNormal);
 }
 
 vec2 projectTransparentReflection(
@@ -165,7 +146,7 @@ float fogAmount(float distanceToCamera) {
 }
 
 void main() {
-    StaticMeshMaterialSample sampledMaterial = sampleStaticMeshMaterial(vUv);
+    MaterialSample sampledMaterial = sampleStaticMeshMaterial(vUv);
     if (sampledMaterial.baseColor.a <= 0.0) {
         discard;
     }
@@ -195,32 +176,25 @@ void main() {
     float nDotH = max(dot(normal, halfDirection), 0.0);
     float hDotV = max(dot(halfDirection, viewDirection), 0.0);
 
-    vec3 f0 = mix(
+    vec3 f0 = pbrMaterialSpecularF0(
         sampledMaterial.dielectricF0,
         sampledMaterial.baseColor.rgb,
         sampledMaterial.metalness);
-    float f90 = mix(
-        sampledMaterial.specularF90, 1.0,
+    float f90 = pbrMaterialSpecularF90(
+        sampledMaterial.specularF90,
         sampledMaterial.metalness);
-    vec3 fresnel = fresnelSchlick(hDotV, f0, f90);
-    float distribution = distributionGgx(nDotH, sampledMaterial.roughness);
-    float geometry = geometrySchlickGgx(nDotV, sampledMaterial.roughness) *
-                     geometrySchlickGgx(nDotL, sampledMaterial.roughness);
-    vec3 specular = distribution * geometry * fresnel /
-                    max(4.0 * nDotV * nDotL, 1e-5);
-    vec3 diffuseWeight =
-        (1.0 - fresnel) * (1.0 - sampledMaterial.metalness);
-    float occlusion = mix(
-        1.0, texture(uOcclusionTexture, vUv).r,
-        uMaterial.materialFactors.w);
-    vec3 emissive = texture(uEmissiveTexture, vUv).rgb *
-                    uMaterial.emissiveFactorAndStrength.rgb *
-                    uMaterial.emissiveFactorAndStrength.w;
-    vec3 color =
-        (diffuseWeight * sampledMaterial.baseColor.rgb / PI + specular) *
-            uSunColor.rgb * nDotL +
-        sampledMaterial.baseColor.rgb * uAmbientColor.rgb * occlusion +
-        emissive;
+    vec3 fresnel = pbrFresnelSchlick(hDotV, f0, f90);
+    float alphaSquared = pbrPerceptualRoughnessToAlphaSquared(
+        sampledMaterial.perceptualRoughness);
+    vec3 specular = pbrEvaluateDirectSpecular(
+        hDotV, nDotV, nDotL, nDotH, alphaSquared, f0, f90);
+    vec3 diffuse = pbrDiffuseWeight(
+        fresnel, sampledMaterial.metalness) *
+        pbrLambertDiffuse(sampledMaterial.baseColor.rgb) * nDotL;
+    vec3 color = (diffuse + specular) * uSunColor.rgb +
+        sampledMaterial.baseColor.rgb * uAmbientColor.rgb *
+            sampledMaterial.occlusion +
+        evaluateMaterialEmission(sampledMaterial);
 
     vec3 clearcoatDirect = vec3(0.0);
     if (sampledMaterial.clearcoat > 0.0) {
@@ -233,18 +207,21 @@ void main() {
             dot(clearcoatNormal, clearcoatHalf), 0.0);
         float clearcoatHdotV = max(
             dot(clearcoatHalf, viewDirection), 0.0);
-        float clearcoatDistribution = distributionGgx(
-            clearcoatNdotH, sampledMaterial.clearcoatRoughness);
-        float clearcoatGeometry = geometrySchlickGgx(
-            clearcoatNdotV, sampledMaterial.clearcoatRoughness) *
-            geometrySchlickGgx(
-                clearcoatNdotL, sampledMaterial.clearcoatRoughness);
-        vec3 clearcoatFresnel = fresnelSchlick(
+        float clearcoatAlphaSquared =
+            pbrPerceptualRoughnessToAlphaSquared(
+                sampledMaterial.clearcoatPerceptualRoughness);
+        vec3 clearcoatFresnel = pbrFresnelSchlick(
             clearcoatHdotV, vec3(0.04), 1.0);
         clearcoatDirect = sampledMaterial.clearcoat *
-            clearcoatDistribution * clearcoatGeometry * clearcoatFresnel /
-            max(4.0 * clearcoatNdotV * clearcoatNdotL, 1e-5) *
-            uSunColor.rgb * clearcoatNdotL;
+            pbrEvaluateDirectSpecular(
+                clearcoatHdotV,
+                clearcoatNdotV,
+                clearcoatNdotL,
+                clearcoatNdotH,
+                clearcoatAlphaSquared,
+                vec3(0.04),
+                1.0) *
+            uSunColor.rgb;
         float layerAttenuation = 1.0 - sampledMaterial.clearcoat *
             max(max(clearcoatFresnel.r, clearcoatFresnel.g),
                 clearcoatFresnel.b);
@@ -260,15 +237,16 @@ void main() {
     float screenReflectionConfidence;
     traceTransparentScreenReflection(
         vWorldPosition, reflectedDirection, normal,
-        sampledMaterial.roughness,
+        sampledMaterial.perceptualRoughness,
         screenReflection, screenReflectionConfidence);
     vec3 reflectionSource = mix(
         environmentReflection, screenReflection,
         screenReflectionConfidence);
-    vec3 viewFresnel = fresnelSchlick(nDotV, f0, f90);
+    vec3 viewFresnel = pbrFresnelSchlick(nDotV, f0, f90);
     float roughnessEnergy = mix(
         1.0, 0.25,
-        sampledMaterial.roughness * sampledMaterial.roughness);
+        sampledMaterial.perceptualRoughness *
+            sampledMaterial.perceptualRoughness);
     vec3 reflection = reflectionSource * viewFresnel *
         roughnessEnergy * clamp(uReflectionParams.x, 0.0, 1.0);
 
@@ -282,19 +260,19 @@ void main() {
         float clearcoatScreenConfidence;
         traceTransparentScreenReflection(
             vWorldPosition, clearcoatReflectedDirection, clearcoatNormal,
-            sampledMaterial.clearcoatRoughness,
+            sampledMaterial.clearcoatPerceptualRoughness,
             clearcoatScreen, clearcoatScreenConfidence);
         vec3 clearcoatSource = mix(
             clearcoatEnvironment, clearcoatScreen,
             clearcoatScreenConfidence);
         float clearcoatNdotV = max(
             dot(clearcoatNormal, viewDirection), 0.0);
-        vec3 clearcoatFresnel = fresnelSchlick(
+        vec3 clearcoatFresnel = pbrFresnelSchlick(
             clearcoatNdotV, vec3(0.04), 1.0);
         float clearcoatEnergy = mix(
             1.0, 0.25,
-            sampledMaterial.clearcoatRoughness *
-                sampledMaterial.clearcoatRoughness);
+            sampledMaterial.clearcoatPerceptualRoughness *
+                sampledMaterial.clearcoatPerceptualRoughness);
         clearcoatReflection = clearcoatSource * clearcoatFresnel *
             sampledMaterial.clearcoat * clearcoatEnergy *
             clamp(uReflectionParams.x, 0.0, 1.0);
@@ -322,8 +300,8 @@ void main() {
         // Match the glTF sample-viewer mapping: IOR controls how strongly
         // microsurface roughness spreads transmitted radiance across the
         // opaque-scene color pyramid.
-        float iorRoughness = sampledMaterial.roughness * clamp(
-            sampledMaterial.ior * 2.0 - 2.0, 0.0, 1.0);
+        float iorRoughness = sampledMaterial.perceptualRoughness *
+            clamp(sampledMaterial.ior * 2.0 - 2.0, 0.0, 1.0);
         float transmissionLod = iorRoughness *
             float(textureQueryLevels(uSceneColorTexture) - 1);
         vec3 transmittedScene = textureLod(

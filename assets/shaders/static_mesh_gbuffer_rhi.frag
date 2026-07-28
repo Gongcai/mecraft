@@ -46,28 +46,24 @@ layout(std140, binding = 6) uniform StaticMeshFrameParams {
 #include "static_mesh_material.glsl"
 
 void main() {
-    StaticMeshMaterialSample sampledMaterial = sampleStaticMeshMaterial(vUv);
+    MaterialSample sampledMaterial = sampleStaticMeshMaterial(vUv);
     vec4 baseColor = sampledMaterial.baseColor;
-    if (uMaterial.modesAndFlags.x == GPU_MATERIAL_ALPHA_MASK &&
-        baseColor.a < uMaterial.transmissionVolumeFactors.z) {
+    if (!materialPassesAlphaTest(uMaterial, baseColor.a)) {
         discard;
     }
 
     vec3 geometricNormal = normalize(vNormal);
     vec3 tangent = normalize(vTangent - geometricNormal * dot(vTangent, geometricNormal));
     vec3 bitangent = normalize(cross(geometricNormal, tangent)) * vTangentSign;
-    vec3 tangentNormal = texture(uNormalTexture, vUv).xyz * 2.0 - 1.0;
-    tangentNormal.xy *= uMaterial.materialFactors.z;
+    vec3 tangentNormal = decodeMaterialTangentNormal(
+        texture(uNormalTexture, vUv).xyz,
+        uMaterial.materialFactors.z);
     vec3 worldNormal = normalize(mat3(tangent, bitangent, geometricNormal) * normalize(tangentNormal));
 
-    float roughness = sampledMaterial.roughness;
+    float roughness = sampledMaterial.perceptualRoughness;
     float metalness = sampledMaterial.metalness;
-    float occlusionSample = texture(uOcclusionTexture, vUv).r;
-    float occlusion = mix(
-        1.0, occlusionSample, uMaterial.materialFactors.w);
-    vec3 emissive = texture(uEmissiveTexture, vUv).rgb *
-                    uMaterial.emissiveFactorAndStrength.rgb *
-                    uMaterial.emissiveFactorAndStrength.w;
+    float occlusion = sampledMaterial.occlusion;
+    vec3 emissive = evaluateMaterialEmission(sampledMaterial);
     float emissiveStrength = max(max(emissive.r, emissive.g), emissive.b);
 
     SurfaceMaterialAux aux = defaultSurfaceMaterialAux();

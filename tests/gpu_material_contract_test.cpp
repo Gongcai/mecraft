@@ -308,11 +308,73 @@ bool testShaderLayoutMirror() {
     return true;
 }
 
+bool testSharedShaderIncludes() {
+    const auto readSource = [](const char* relativePath, std::string& source) {
+        const std::string path =
+            std::string(MECRAFT_TEST_SOURCE_DIR) + "/" + relativePath;
+        std::ifstream stream(path, std::ios::binary);
+        if (!stream.is_open()) {
+            return false;
+        }
+        source.assign(std::istreambuf_iterator<char>(stream),
+                      std::istreambuf_iterator<char>());
+        return true;
+    };
+
+    std::string materialDecode;
+    std::string pbrBrdf;
+    if (!requireTrue(readSource("assets/shaders/material_decode.glsl",
+                                materialDecode),
+                     "shared material decode include must be readable") ||
+        !requireTrue(readSource("assets/shaders/pbr_brdf.glsl", pbrBrdf),
+                     "shared PBR include must be readable")) {
+        return false;
+    }
+
+    if (!requireTrue(materialDecode.find("MaterialSample decodeGltfMaterial") !=
+                         std::string::npos,
+                     "material include must expose glTF material decoding") ||
+        !requireTrue(materialDecode.find("decodeMaterialTangentNormal") !=
+                         std::string::npos,
+                     "material include must expose tangent normal decoding") ||
+        !requireTrue(materialDecode.find("materialPassesAlphaTest") !=
+                         std::string::npos,
+                     "material include must expose the shared alpha test") ||
+        !requireTrue(materialDecode.find("evaluateMaterialEmission") !=
+                         std::string::npos,
+                     "material include must expose shared emission evaluation") ||
+        !requireTrue(pbrBrdf.find("pbrFresnelSchlick") != std::string::npos,
+                     "PBR include must expose shared Schlick Fresnel") ||
+        !requireTrue(pbrBrdf.find("pbrDistributionGgx") != std::string::npos,
+                     "PBR include must expose shared GGX distribution") ||
+        !requireTrue(pbrBrdf.find("pbrSmithGgxCorrelatedVisibility") !=
+                         std::string::npos,
+                     "PBR include must expose correlated Smith visibility") ||
+        !requireTrue(pbrBrdf.find("pbrEvaluateDirectSpecular") !=
+                         std::string::npos,
+                     "PBR include must expose direct specular evaluation")) {
+        return false;
+    }
+
+    constexpr std::array<const char*, 4> kForbiddenTokens{
+        "sampler", "texture(", "uniform", "layout("};
+    for (const char* token : kForbiddenTokens) {
+        if (!requireTrue(materialDecode.find(token) == std::string::npos,
+                         "material decode include must not depend on shader resources") ||
+            !requireTrue(pbrBrdf.find(token) == std::string::npos,
+                         "PBR include must not depend on shader resources")) {
+            return false;
+        }
+    }
+    return true;
+}
+
 } // namespace
 
 int main() {
     if (!testGpuLayoutAndPacking() || !testStructuredErrors() || !testGltfNumericDomains() ||
-        !testTextureSemantics() || !testLabPbrReferenceVectors() || !testShaderLayoutMirror()) {
+        !testTextureSemantics() || !testLabPbrReferenceVectors() || !testShaderLayoutMirror() ||
+        !testSharedShaderIncludes()) {
         return 1;
     }
     std::cout << "[gpu_material_contract_test] PASS\n";

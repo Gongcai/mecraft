@@ -32,47 +32,44 @@ layout(std140, binding = 6) uniform StaticMeshFrameParams {
 #include "static_mesh_material.glsl"
 
 void main() {
-    StaticMeshMaterialSample sampledMaterial = sampleStaticMeshMaterial(vUv);
+    MaterialSample sampledMaterial = sampleStaticMeshMaterial(vUv);
     vec4 baseColor = sampledMaterial.baseColor;
-    if (uMaterial.modesAndFlags.x == GPU_MATERIAL_ALPHA_MASK &&
-        baseColor.a < uMaterial.transmissionVolumeFactors.z) {
+    if (!materialPassesAlphaTest(uMaterial, baseColor.a)) {
         discard;
     }
     vec3 normal = normalize(vNormal);
     vec3 tangent = normalize(vTangent - normal * dot(vTangent, normal));
     vec3 bitangent = normalize(cross(normal, tangent)) * vTangentSign;
-    vec3 tangentNormal = texture(uNormalTexture, vUv).xyz * 2.0 - 1.0;
-    tangentNormal.xy *= uMaterial.materialFactors.z;
+    vec3 tangentNormal = decodeMaterialTangentNormal(
+        texture(uNormalTexture, vUv).xyz,
+        uMaterial.materialFactors.z);
     normal = normalize(mat3(tangent, bitangent, normal) * normalize(tangentNormal));
 
-    float roughness = sampledMaterial.roughness;
+    float roughness = sampledMaterial.perceptualRoughness;
     float metalness = sampledMaterial.metalness;
-    float occlusion = mix(
-        1.0, texture(uOcclusionTexture, vUv).r,
-        uMaterial.materialFactors.w);
-    vec3 emissive = texture(uEmissiveTexture, vUv).rgb *
-                    uMaterial.emissiveFactorAndStrength.rgb *
-                    uMaterial.emissiveFactorAndStrength.w;
+    float occlusion = sampledMaterial.occlusion;
+    vec3 emissive = evaluateMaterialEmission(sampledMaterial);
     vec3 lightDirection = normalize(vec3(-0.45, 0.8, 0.35));
     vec3 viewDirection = normalize(vec3(4.0, 3.0, 6.0) - vWorldPosition);
     vec3 halfDirection = normalize(lightDirection + viewDirection);
     float diffuse = max(dot(normal, lightDirection), 0.0);
     float specularPower = mix(96.0, 8.0, roughness);
     float specular = pow(max(dot(normal, halfDirection), 0.0), specularPower);
-    vec3 f0 = mix(
+    vec3 f0 = pbrMaterialSpecularF0(
         sampledMaterial.dielectricF0, baseColor.rgb, metalness);
     vec3 diffuseColor = baseColor.rgb * (1.0 - metalness);
     vec3 color = diffuseColor * (0.12 + diffuse * 0.88) * occlusion;
     color += f0 * specular * (1.0 - roughness * 0.5);
     if (sampledMaterial.clearcoat > 0.0) {
-        vec3 clearcoatNormalSample = texture(
-            uClearcoatNormalTexture, vUv).xyz * 2.0 - 1.0;
-        clearcoatNormalSample.xy *= uMaterial.clearcoatFactors.z;
+        vec3 clearcoatNormalSample = decodeMaterialTangentNormal(
+            texture(uClearcoatNormalTexture, vUv).xyz,
+            uMaterial.clearcoatFactors.z);
         vec3 clearcoatNormal = normalize(
             mat3(tangent, bitangent, normalize(vNormal)) *
             normalize(clearcoatNormalSample));
         float clearcoatPower = mix(
-            128.0, 12.0, sampledMaterial.clearcoatRoughness);
+            128.0, 12.0,
+            sampledMaterial.clearcoatPerceptualRoughness);
         float clearcoatSpecular = pow(
             max(dot(clearcoatNormal, halfDirection), 0.0),
             clearcoatPower);

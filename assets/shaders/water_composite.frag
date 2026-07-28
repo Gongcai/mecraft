@@ -88,6 +88,7 @@ layout(location = 2) out float FragTransparencyMask;
 #define MECRAFT_ATMOSPHERE_EXTERNAL_UNIFORMS
 #endif
 #include "atmosphere_lut.glsl"
+#include "pbr_brdf.glsl"
 
 const float rPI = 1.0 / 3.14159265359;
 const float kTwoPi = 6.28318530718;
@@ -345,18 +346,6 @@ vec2 calculateDerivativeWaterRefractClipUv(vec2 clipUv,
     return refractClipUv;
 }
 
-// DerivativeMain FresnelDielectricN
-float FresnelDielectricN(float cosTheta, float n) {
-    float cosR = n * n + cosTheta * cosTheta - 1.0;
-    if (cosR < 0.0) return 1.0;
-    cosR = sqrt(cosR);
-    float a = n * cosTheta;
-    float b = n * cosR;
-    float r1 = (a - cosR) / (a + cosR);
-    float r2 = (b - cosTheta) / (b + cosTheta);
-    return clamp(0.5 * (r1 * r1 + r2 * r2), 0.0, 1.0);
-}
-
 // DerivativeMain WaterFog (lib/Water/WaterFog.glsl)
 // env: LightingEnvironment from SkyCapture — provides sky color + illuminance.
 void WaterFog(inout vec3 color, float waterSkylight, float LdotV, float waterDepth,
@@ -503,7 +492,7 @@ void main() {
 
     // ---- Fresnel (DerivativeMain BRDF.glsl FresnelDielectricN) ----
     float NdotV = max(1e-6, dot(normal, viewDir));
-    float fresnel = FresnelDielectricN(NdotV, uWaterIOR);
+    float fresnel = pbrFresnelDielectricFromIor(NdotV, uWaterIOR);
 
     // ---- Refraction (DerivativeMain Refraction.glsl line 87-108) ----
     float refractDepthTex = sceneDepth;
