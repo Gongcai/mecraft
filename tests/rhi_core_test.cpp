@@ -3726,10 +3726,12 @@ bool testGlRhiTerrainGBufferPipeline() {
     pipelineDesc.depthStencil.depthCompare = RhiCompareOp::Less;
     pipelineDesc.colorFormats = {
         RhiTextureFormat::Rgba8Unorm,
-        RhiTextureFormat::Rgba16Float,
+        RhiTextureFormat::Rgb10A2Unorm,
         RhiTextureFormat::Rg8Unorm,
         RhiTextureFormat::Rgba8Unorm,
-        RhiTextureFormat::Rgba8Unorm
+        RhiTextureFormat::Rgba8Unorm,
+        RhiTextureFormat::Rgba8Unorm,
+        RhiTextureFormat::Rg32Uint
     };
     pipelineDesc.depthFormat = RhiTextureFormat::Depth32Float;
     const RhiPipelineHandle pipeline = device.createGraphicsPipeline(pipelineDesc);
@@ -4123,6 +4125,129 @@ bool testGlRhiTerrainForwardPipeline() {
     device.destroyShader(vertexShader);
     device.shutdown();
     return true;
+}
+
+bool testGlRhiRg32UintAttachmentClear() {
+    GlTestContext context;
+    if (!requireTrue(context.init(),
+                     "OpenGL test context must initialize for RG32Uint attachment clear")) {
+        return false;
+    }
+
+    GlRhiDevice device;
+    std::unique_ptr<RhiCommandListPool> commandPool;
+    RhiDeviceDesc deviceDesc = makeDeviceDesc();
+    deviceDesc.debugName = "rhi_rg32_uint_attachment_clear_test";
+    if (!requireTrue(device.init(deviceDesc),
+                     "OpenGL RHI device must initialize for RG32Uint attachment clear")) {
+        return false;
+    }
+
+    RhiTextureDesc textureDesc;
+    textureDesc.debugName = "rg32-uint-clear-target";
+    textureDesc.format = RhiTextureFormat::Rg32Uint;
+    textureDesc.width = 1u;
+    textureDesc.height = 1u;
+    textureDesc.usage = rhiFlag(RhiTextureUsage::ColorAttachment) |
+                        rhiFlag(RhiTextureUsage::TransferSrc);
+    const RhiTextureHandle texture = device.createTexture(textureDesc, nullptr);
+    RhiTextureViewDesc viewDesc;
+    viewDesc.texture = texture;
+    viewDesc.format = textureDesc.format;
+    const RhiTextureViewHandle view = device.createTextureView(viewDesc);
+
+    RhiBufferDesc readbackDesc;
+    readbackDesc.debugName = "rg32-uint-clear-readback";
+    readbackDesc.size = sizeof(uint32_t) * 2u;
+    readbackDesc.usage = rhiFlag(RhiBufferUsage::TransferDst) |
+                         rhiFlag(RhiBufferUsage::MapRead);
+    readbackDesc.memoryUsage = RhiMemoryUsage::GpuToCpu;
+    readbackDesc.initialState = RhiResourceState::TransferDst;
+    const RhiBufferHandle readback =
+        device.createBuffer(readbackDesc, nullptr, 0u);
+    if (!requireTrue(texture.isValid() && view.isValid() && readback.isValid(),
+                     "RG32Uint clear resources must be created")) {
+        device.shutdown();
+        return false;
+    }
+
+    RhiCommandList& invalidCommands = beginTestCommands(device, commandPool);
+    invalidCommands.textureBarrier({texture, RhiResourceState::Undefined,
+                                    RhiResourceState::RenderTarget});
+    RhiColorAttachment invalidAttachment;
+    invalidAttachment.view = view;
+    invalidAttachment.loadOp = RhiLoadOp::Clear;
+    invalidAttachment.storeOp = RhiStoreOp::Store;
+    RhiRenderingInfo invalidRenderingInfo;
+    invalidRenderingInfo.debugName = "Rg32Uint.InvalidFloatClear";
+    invalidRenderingInfo.renderArea = {0, 0, 1u, 1u};
+    invalidRenderingInfo.colorAttachments = &invalidAttachment;
+    invalidRenderingInfo.colorAttachmentCount = 1u;
+    invalidCommands.beginRendering(invalidRenderingInfo);
+    invalidCommands.endRendering();
+    RhiCommandList* invalidSubmission[] = {&invalidCommands};
+    bool rejectedFloatClear = false;
+    {
+        ScopedErrorCapture capture;
+        rejectedFloatClear = invalidCommands.end() &&
+            !device.submit({"Rg32Uint.InvalidFloatClear.Submit",
+                            invalidSubmission, 1u});
+    }
+    if (!requireTrue(rejectedFloatClear && commandPool->reset(),
+                     "float clear values must be rejected for unsigned integer attachments")) {
+        device.shutdown();
+        return false;
+    }
+
+    constexpr std::array<uint32_t, 2> kClearValue{
+        0x12345678u, 0x9abcdef0u};
+    RhiCommandList& commandList = beginTestCommands(device, commandPool);
+    commandList.textureBarrier({texture, RhiResourceState::Undefined,
+                                RhiResourceState::RenderTarget});
+    RhiColorAttachment attachment;
+    attachment.view = view;
+    attachment.loadOp = RhiLoadOp::Clear;
+    attachment.storeOp = RhiStoreOp::Store;
+    attachment.clearValueType = RhiColorClearValueType::Uint;
+    attachment.clearColorUint[0] = kClearValue[0];
+    attachment.clearColorUint[1] = kClearValue[1];
+    RhiRenderingInfo renderingInfo;
+    renderingInfo.debugName = "Rg32Uint.ValidUintClear";
+    renderingInfo.renderArea = {0, 0, 1u, 1u};
+    renderingInfo.colorAttachments = &attachment;
+    renderingInfo.colorAttachmentCount = 1u;
+    commandList.beginRendering(renderingInfo);
+    commandList.endRendering();
+    commandList.textureBarrier({texture, RhiResourceState::RenderTarget,
+                                RhiResourceState::TransferSrc});
+    RhiTextureBufferCopy copy;
+    copy.srcTexture = texture;
+    copy.dstBuffer = readback;
+    copy.bytesPerRow = sizeof(kClearValue);
+    copy.rowsPerImage = 1u;
+    copy.width = 1u;
+    copy.height = 1u;
+    commandList.copyTextureToBuffer(copy);
+    commandList.bufferBarrier({readback, RhiResourceState::TransferDst,
+                               RhiResourceState::HostRead});
+    submitTestCommands(device, commandPool, commandList);
+
+    const auto* mapped = static_cast<const uint32_t*>(
+        device.mapBuffer(readback, 0u, sizeof(kClearValue)));
+    const bool clearPreserved = mapped != nullptr &&
+        mapped[0] == kClearValue[0] && mapped[1] == kClearValue[1];
+    if (mapped != nullptr) {
+        device.unmapBuffer(readback);
+    }
+    const bool passed = requireTrue(
+        clearPreserved,
+        "RG32Uint attachment clear must preserve both unsigned integer channels");
+
+    device.destroyBuffer(readback);
+    device.destroyTextureView(view);
+    device.destroyTexture(texture);
+    device.shutdown();
+    return passed;
 }
 
 bool testGlRhiTextureSubresourceStates() {
@@ -5400,6 +5525,9 @@ int main() {
         return 1;
     }
     if (!testGlRhiTerrainForwardPipeline()) {
+        return 1;
+    }
+    if (!testGlRhiRg32UintAttachmentClear()) {
         return 1;
     }
     if (!testGlRhiTextureSubresourceStates()) {

@@ -63,6 +63,7 @@ RgPassHandle ReflectionPass::addGraphPasses(
         !resources.albedo.isValid() ||
         !resources.depth.isValid() || !resources.normalAo.isValid() ||
         !resources.material.isValid() || !resources.materialAux.isValid() ||
+        !resources.f0Metallic.isValid() ||
         !resources.skyCapture.isValid() || !resources.voxelLight.isValid() ||
         !resources.reflection.isValid() ||
         ((filterActive || temporalActive) && !resources.scratch.isValid()) ||
@@ -93,6 +94,7 @@ RgPassHandle ReflectionPass::addGraphPasses(
         .readTexture(resources.normalAo, RhiResourceState::ShaderRead)
         .readTexture(resources.material, RhiResourceState::ShaderRead)
         .readTexture(resources.materialAux, RhiResourceState::ShaderRead)
+        .readTexture(resources.f0Metallic, RhiResourceState::ShaderRead)
         .readTexture(resources.skyCapture, RhiResourceState::ShaderRead)
         .readTexture(resources.voxelLight, RhiResourceState::ShaderRead)
         .writeTexture(baseWritesScratch ? resources.scratch
@@ -183,7 +185,7 @@ bool ReflectionPass::recordReflection(RhiCommandList& commandList,
     }
 
     RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
-    const std::array<RhiTextureViewHandle, 8> views = {
+    const std::array<RhiTextureViewHandle, 9> views = {
         targets.sceneLightingTextureViewHandle(),
         targets.albedoTextureViewHandle(),
         targets.depthTextureViewHandle(),
@@ -191,7 +193,8 @@ bool ReflectionPass::recordReflection(RhiCommandList& commandList,
         targets.materialTextureViewHandle(),
         targets.materialAuxTextureViewHandle(),
         targets.skyCaptureTextureViewHandle(),
-        targets.voxelLightTextureViewHandle()
+        targets.voxelLightTextureViewHandle(),
+        targets.f0MetallicTextureViewHandle()
     };
     if (!ensureBaseRhiPipeline(rhiDevice) || !ensureBaseBindGroup(rhiDevice, views)) {
         return false;
@@ -324,7 +327,7 @@ bool ReflectionPass::ensureBaseRhiPipeline(RhiDevice& rhiDevice) {
 
     RhiBindGroupLayoutDesc bindGroupLayoutDesc;
     bindGroupLayoutDesc.debugName = "ReflectionBase.BindGroupLayout";
-    for (uint32_t binding = 0u; binding < 8u; ++binding) {
+    for (uint32_t binding = 0u; binding < 9u; ++binding) {
         bindGroupLayoutDesc.entries.push_back({
             binding,
             RhiBindingType::CombinedTextureSampler,
@@ -333,7 +336,7 @@ bool ReflectionPass::ensureBaseRhiPipeline(RhiDevice& rhiDevice) {
         });
     }
     bindGroupLayoutDesc.entries.push_back({
-        8u,
+        9u,
         RhiBindingType::UniformBuffer,
         rhiFlag(RhiShaderStage::Fragment),
         1u
@@ -375,7 +378,7 @@ bool ReflectionPass::ensureBaseRhiPipeline(RhiDevice& rhiDevice) {
 
 bool ReflectionPass::ensureBaseBindGroup(
     RhiDevice& rhiDevice,
-    const std::array<RhiTextureViewHandle, 8>& views) {
+    const std::array<RhiTextureViewHandle, 9>& views) {
     if (!ensureBaseRhiPipeline(rhiDevice)) {
         return false;
     }
@@ -389,7 +392,7 @@ bool ReflectionPass::ensureBaseBindGroup(
     }
 
     destroyBaseBindGroup();
-    const RhiSamplerHandle samplers[8] = {
+    const RhiSamplerHandle samplers[9] = {
         m_baseLinearSampler,
         m_baseNearestSampler,
         m_baseNearestSampler,
@@ -397,6 +400,7 @@ bool ReflectionPass::ensureBaseBindGroup(
         m_baseNearestSampler,
         m_baseNearestSampler,
         m_baseLinearSampler,
+        m_baseNearestSampler,
         m_baseNearestSampler
     };
     RhiBindGroupDesc bindGroupDesc;
@@ -410,7 +414,7 @@ bool ReflectionPass::ensureBaseBindGroup(
     }
 
     RhiBindGroupEntry uniformEntry;
-    uniformEntry.binding = 8u;
+    uniformEntry.binding = 9u;
     uniformEntry.resource.buffer.buffer = m_baseUniformBuffer;
     uniformEntry.resource.buffer.offset = 0u;
     uniformEntry.resource.buffer.range = sizeof(ReflectionBaseParams);

@@ -77,6 +77,16 @@ void clearFramebufferColor(const GLuint framebuffer, const GLint drawBuffer, con
     glClearNamedFramebufferfv(framebuffer, GL_COLOR, drawBuffer, color);
 }
 
+void clearFramebufferColorUint(const GLuint framebuffer,
+                               const GLint drawBuffer,
+                               const uint32_t* color) {
+    if (framebuffer == 0u) {
+        glClearBufferuiv(GL_COLOR, drawBuffer, color);
+        return;
+    }
+    glClearNamedFramebufferuiv(framebuffer, GL_COLOR, drawBuffer, color);
+}
+
 void clearFramebufferDepth(const GLuint framebuffer, const float depth) {
     if (framebuffer == 0u) {
         glClearBufferfv(GL_DEPTH, 0, &depth);
@@ -179,6 +189,9 @@ template <typename Handle>
         case RhiTextureFormat::R32Uint:
             out = {GL_R32UI, GL_RED_INTEGER, GL_UNSIGNED_INT, false, false};
             return true;
+        case RhiTextureFormat::Rg32Uint:
+            out = {GL_RG32UI, GL_RG_INTEGER, GL_UNSIGNED_INT, false, false};
+            return true;
         case RhiTextureFormat::Depth16:
             out = {GL_DEPTH_COMPONENT16, GL_DEPTH_COMPONENT, GL_UNSIGNED_SHORT, true, false};
             return true;
@@ -214,6 +227,7 @@ template <typename Handle>
         case RhiTextureFormat::R16Float:
         case RhiTextureFormat::Depth16: return 2u;
         case RhiTextureFormat::Rg16Float: return 4u;
+        case RhiTextureFormat::Rg32Uint:
         case RhiTextureFormat::Rgba16Float: return 8u;
         case RhiTextureFormat::Rgba32Float: return 16u;
         case RhiTextureFormat::Undefined: return 0u;
@@ -244,6 +258,7 @@ template <typename Handle>
         case RhiTextureFormat::R16Float:
         case RhiTextureFormat::R32Float:
         case RhiTextureFormat::R32Uint:
+        case RhiTextureFormat::Rg32Uint:
             return rhiFlag(RhiTextureAspect::Color);
         case RhiTextureFormat::Undefined:
             return 0u;
@@ -2524,9 +2539,20 @@ void GlRhiCommandList::beginRendering(const RhiRenderingInfo& info) {
 
     m_renderingColorFormats.clear();
     m_renderingColorFormats.reserve(colorViews.size());
-    for (const RhiTextureViewHandle view : colorViews) {
+    for (size_t index = 0u; index < colorViews.size(); ++index) {
+        const RhiTextureViewHandle view = colorViews[index];
         const GlTextureViewRecord* viewRecord =
             recordForHandle(data.textureViews, data.textureViewRecords, view);
+        const RhiColorAttachment& attachment = info.colorAttachments[index];
+        const bool unsignedInteger =
+            rhiTextureFormatIsUnsignedInteger(viewRecord->resolvedFormat);
+        if (attachment.loadOp == RhiLoadOp::Clear &&
+            unsignedInteger !=
+                (attachment.clearValueType == RhiColorClearValueType::Uint)) {
+            (void) rejectReplayCommand(
+                "beginRendering clear value type does not match the color attachment format");
+            return;
+        }
         m_renderingColorFormats.push_back(viewRecord->resolvedFormat);
     }
     m_renderingDepthFormat = depthViewRecord != nullptr
@@ -2623,7 +2649,18 @@ void GlRhiCommandList::beginRendering(const RhiRenderingInfo& info) {
 
     for (uint32_t i = 0u; i < info.colorAttachmentCount; ++i) {
         if (info.colorAttachments[i].loadOp == RhiLoadOp::Clear) {
-            clearFramebufferColor(framebuffer, static_cast<GLint>(i), info.colorAttachments[i].clearColor);
+            if (info.colorAttachments[i].clearValueType ==
+                RhiColorClearValueType::Uint) {
+                clearFramebufferColorUint(
+                    framebuffer,
+                    static_cast<GLint>(i),
+                    info.colorAttachments[i].clearColorUint);
+            } else {
+                clearFramebufferColor(
+                    framebuffer,
+                    static_cast<GLint>(i),
+                    info.colorAttachments[i].clearColor);
+            }
         }
         if (info.colorAttachments[i].storeOp == RhiStoreOp::DontCare) {
             data.currentStoreDiscardAttachments.push_back(GL_COLOR_ATTACHMENT0 + i);

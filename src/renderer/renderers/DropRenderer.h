@@ -8,6 +8,7 @@
 #include <glm/glm.hpp>
 
 #include "../rhi/RhiHandles.h"
+#include "../contracts/SceneIdentityContract.h"
 #include "../../world/block/Block.h"
 #include "../../item/Item.h"
 
@@ -22,14 +23,16 @@ class DropRenderer {
 public:
 	void init(ResourceMgr& resourceMgr);
 	void shutdown();
-	void prepareFrame(const IWorldView& worldView, const DropSystem& dropSystem);
+	[[nodiscard]] bool prepareFrame(const IWorldView& worldView,
+	                                const DropSystem& dropSystem);
 	void renderItemsToGBuffer(RhiCommandList& commandList,
 	                          const glm::mat4& viewProj,
 	                          const glm::mat4& previousViewProj);
+	[[nodiscard]] bool prepareBlockGBuffer(RhiCommandList& commandList,
+	                                       float animationTime);
 	void renderBlocksToGBuffer(RhiCommandList& commandList,
 	                           const glm::mat4& viewProj,
-	                           const glm::mat4& previousViewProj,
-	                           float animationTime);
+	                           const glm::mat4& previousViewProj);
 	void finishGBufferFrame();
 	void renderForward(RhiCommandList& commandList,
 	                   const glm::mat4& viewProj,
@@ -44,6 +47,7 @@ private:
 		RhiBufferHandle rhiVertexBuffer;
 		RhiDevice* rhiDevice = nullptr;
 		uint32_t vertexCount = 0;
+		renderer::contracts::StableMaterialId materialId;
 	};
 
 	struct PreparedDrop {
@@ -51,6 +55,8 @@ private:
 		glm::mat4 model{1.0f};
 		glm::mat4 previousModel{1.0f};
 		glm::vec2 light{1.0f, 0.0f};
+		renderer::contracts::StableObjectId objectId;
+		renderer::contracts::StableMaterialId materialId;
 		bool itemMesh = false;
 	};
 
@@ -71,6 +77,8 @@ private:
 	// Per-object velocity: stores previous-frame model matrix per drop (by drop ID).
 	std::unordered_map<std::size_t, glm::mat4> m_previousModelMatrices;
 	std::unordered_map<std::size_t, glm::mat4> m_currentModelMatrices;
+	std::unordered_map<std::size_t, renderer::contracts::StableObjectId>
+		m_dropObjectIds;
 	std::vector<PreparedDrop> m_preparedDrops;
 	RhiDevice* m_rhiDevice = nullptr;
 	RhiTextureViewHandle m_itemAtlasView;
@@ -91,6 +99,7 @@ private:
 	RhiPipelineLayoutHandle m_blockGBufferPipelineLayout;
 	RhiPipelineHandle m_blockGBufferPipeline;
 	RhiBindGroupHandle m_blockGBufferBindGroup;
+	RhiBufferHandle m_blockAnimationBuffer;
 	RhiShaderHandle m_itemShadowVertexShader;
 	RhiShaderHandle m_itemShadowFragmentShader;
 	RhiPipelineLayoutHandle m_itemShadowPipelineLayout;

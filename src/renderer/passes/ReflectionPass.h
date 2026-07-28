@@ -30,6 +30,7 @@ public:
         RgTextureHandle normalAo;
         RgTextureHandle material;
         RgTextureHandle materialAux;
+        RgTextureHandle f0Metallic;
         RgTextureHandle skyCapture;
         RgTextureHandle voxelLight;
         RgTextureHandle reflection;
@@ -72,7 +73,7 @@ private:
                                       bool readScratch);
     bool ensureBaseRhiPipeline(RhiDevice& rhiDevice);
     bool ensureBaseBindGroup(RhiDevice& rhiDevice,
-                             const std::array<RhiTextureViewHandle, 8>& views);
+                             const std::array<RhiTextureViewHandle, 9>& views);
     void destroyBaseBindGroup();
     void destroyBaseRhiResources();
     bool ensureFilterRhiPipeline(RhiDevice& rhiDevice);
@@ -96,7 +97,7 @@ private:
     RhiShaderHandle m_baseFragmentShader;
     RhiPipelineHandle m_basePipeline;
     RhiBindGroupHandle m_baseBindGroup;
-    std::array<RhiTextureViewHandle, 8> m_baseBoundViews = {};
+    std::array<RhiTextureViewHandle, 9> m_baseBoundViews = {};
 
     RhiDevice* m_filterRhiDevice = nullptr;
     RhiSamplerHandle m_filterNearestSampler;

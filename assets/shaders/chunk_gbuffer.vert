@@ -42,6 +42,7 @@ layout(location = 9) flat out float vTintKind;
 layout(location = 10) flat out float vMaterialKind;
 layout(location = 11) out vec2 vTintUV;
 layout(location = 12) out vec3 vWorldPos;
+layout(location = 13) flat out uvec2 vIdentity;
 
 void main() {
 #ifdef RHI_TERRAIN_MDI
@@ -58,7 +59,7 @@ void main() {
         ? decodeTerrainPackedVertex(aPackedPos, aPackedUV, aPackedLightAoLayer, aPackedTintAnim, gl_BaseInstanceARB)
         : decodeLegacyBlockVertex(aLegacyPos, aLegacyUV, aLegacyNormal, aLegacySunlight, aLegacyBlockLight,
                                   aLegacyAO, aLegacyLayer, aLegacyAnimationFrameCount, aLegacyAnimationFps,
-                                  aLegacyAnimated, aLegacyTintPacked);
+                                  aLegacyAnimated, aLegacyTintPacked, gl_BaseInstanceARB);
     vec4 localPos = vec4(vertex.pos, 1.0);
     vec4 worldPos = (uUseModel != 0) ? model * localPos : localPos;
     gl_Position = viewProj * worldPos;
@@ -74,6 +75,7 @@ void main() {
     vAnimationFps = vertex.animationFps;
     vAnimated = vertex.animated;
     vWorldPos = worldPos.xyz;
+    vIdentity = uvec2(vertex.objectId, uint(round(vertex.layer)) + 1u);
 
     uint tintKind = (vertex.tintPacked >> 14u) & 3u;
     uint materialKind = (vertex.tintPacked >> 8u) & 63u;

@@ -113,7 +113,7 @@ RenderFeatureStatusCode missingDeviceStatusCode(const RenderFeature feature) {
 bool deviceSupportsFeature(const RhiCapabilities& capabilities, const RenderFeature feature) {
     switch (feature) {
         case RenderFeature::DeferredPbr:
-            return capabilities.maxColorAttachments >= 5u;
+            return capabilities.maxColorAttachments >= 8u;
         case RenderFeature::CascadedSunShadows:
             return capabilities.textureView;
         case RenderFeature::Ssao:

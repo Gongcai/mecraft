@@ -1,6 +1,7 @@
 #include "FallingBlockRenderer.h"
 
 #include <cmath>
+#include <unordered_set>
 #include <vector>
 
 #include <glm/gtc/matrix_transform.hpp>
@@ -22,7 +23,9 @@ struct FallingBlockPushConstants {
     glm::mat4 modelViewProj;
     glm::mat4 previousModelViewProj;
     glm::mat4 model;
-    glm::vec4 lightAnimation;
+    glm::vec2 light;
+    float animationTime;
+    uint32_t objectId;
 };
 
 struct FallingBlockShadowPushConstants {
@@ -70,17 +73,33 @@ void FallingBlockRenderer::shutdown() {
     }
     m_meshes.clear();
     m_previousModelMatrices.clear();
+    m_currentModelMatrices.clear();
+    m_objectIds.clear();
     m_renderInstances.clear();
     m_resourceMgr = nullptr;
 }
 
-void FallingBlockRenderer::prepareFrame(const IWorldView& worldView,
-                                        const ecs::GameplayRegistry& registry) {
+bool FallingBlockRenderer::prepareFrame(
+    const IWorldView& worldView,
+    const ecs::GameplayRegistry& registry) {
     m_renderInstances.clear();
+    m_currentModelMatrices.clear();
+    std::unordered_set<std::size_t> currentEntityIds;
     auto& reg = registry.registry();
     auto appendInstance = [&](const BlockStateId stateId,
                               const glm::vec3& position,
-                              const std::size_t entityId) {
+                              const std::size_t entityId) -> bool {
+        currentEntityIds.insert(entityId);
+        auto objectId = m_objectIds.find(entityId);
+        if (objectId == m_objectIds.end()) {
+            const std::optional<renderer::contracts::StableObjectId> allocated =
+                renderer::contracts::allocateStableSceneId<
+                    renderer::contracts::StableObjectIdTag>();
+            if (!allocated.has_value()) {
+                return false;
+            }
+            objectId = m_objectIds.emplace(entityId, *allocated).first;
+        }
         glm::mat4 model(1.0f);
         model = glm::translate(model, position);
         model = glm::translate(model, glm::vec3(-0.5f));
@@ -89,9 +108,11 @@ void FallingBlockRenderer::prepareFrame(const IWorldView& worldView,
             stateId,
             model,
             previous != m_previousModelMatrices.end() ? previous->second : model,
-            queryWorldLight(worldView, position)
+            queryWorldLight(worldView, position),
+            objectId->second
         });
-        m_previousModelMatrices[entityId] = model;
+        m_currentModelMatrices[entityId] = model;
+        return true;
     };
 
     auto fallingView = reg.view<ecs::FallingBlockTag,
@@ -102,7 +123,10 @@ void FallingBlockRenderer::prepareFrame(const IWorldView& worldView,
         const auto& block = fallingView.get<ecs::FallingBlockComponent>(entity);
         const auto& transform = fallingView.get<ecs::TransformComponent>(entity);
         const auto& id = fallingView.get<ecs::DropEntityIdComponent>(entity);
-        appendInstance(BlockStateRegistry::getDefaultState(block.blockId), transform.position, id.dropId);
+        if (!appendInstance(BlockStateRegistry::getDefaultState(block.blockId),
+                            transform.position, id.dropId)) {
+            return false;
+        }
     }
 
     auto movingView = reg.view<ecs::MovingBlockTag,
@@ -113,8 +137,20 @@ void FallingBlockRenderer::prepareFrame(const IWorldView& worldView,
         const auto& block = movingView.get<ecs::MovingBlockComponent>(entity);
         const auto& transform = movingView.get<ecs::TransformComponent>(entity);
         const auto& id = movingView.get<ecs::DropEntityIdComponent>(entity);
-        appendInstance(block.stateId, transform.position, id.dropId);
+        if (!appendInstance(block.stateId, transform.position, id.dropId)) {
+            return false;
+        }
     }
+
+    for (auto it = m_objectIds.begin(); it != m_objectIds.end();) {
+        if (currentEntityIds.find(it->first) == currentEntityIds.end()) {
+            it = m_objectIds.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    m_previousModelMatrices = m_currentModelMatrices;
+    return true;
 }
 
 const renderer::BlockCubeMesh* FallingBlockRenderer::getOrCreateMesh(BlockStateId stateId) {
@@ -145,7 +181,9 @@ void FallingBlockRenderer::renderToGBuffer(RhiCommandList& commandList,
             jitteredViewProj * instance.model,
             previousViewProj * instance.previousModel,
             instance.model,
-            glm::vec4(instance.light, animationTime, 0.0f)
+            instance.light,
+            animationTime,
+            instance.objectId.value
         };
         commandList.setVertexBuffer(0u, mesh->rhiVertexBuffer, 0u);
         commandList.pushConstants(&pushConstants, sizeof(pushConstants),
@@ -239,9 +277,10 @@ bool FallingBlockRenderer::createGBufferRhiResources() {
     pipelineDesc.depthStencil.depthTestEnabled = true; pipelineDesc.depthStencil.depthWriteEnabled = true;
     pipelineDesc.colorFormats = {RhiTextureFormat::Rgba8Unorm, RhiTextureFormat::Rgb10A2Unorm,
         RhiTextureFormat::Rg8Unorm, RhiTextureFormat::Rgba8Unorm, RhiTextureFormat::Rgba8Unorm,
+        RhiTextureFormat::Rgba8Unorm, RhiTextureFormat::Rg32Uint,
         RhiTextureFormat::Rg16Float};
     pipelineDesc.depthFormat = RhiTextureFormat::Depth32Float;
-    pipelineDesc.blend.attachments.resize(6u);
+    pipelineDesc.blend.attachments.resize(8u);
     m_gbufferPipeline = m_rhiDevice->createGraphicsPipeline(pipelineDesc);
     pipelineDesc.debugName = "FallingBlock.Shadow.Pipeline";
     pipelineDesc.vertexShader = m_shadowVertexShader;

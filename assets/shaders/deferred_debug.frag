@@ -49,8 +49,10 @@ layout(binding = 19) uniform sampler2DArray uCsmShadowColor0Tex;
 layout(binding = 20) uniform sampler2DArray uCsmShadowColor1Tex;
 layout(binding = 21) uniform sampler2D uReactiveMaskTex;
 layout(binding = 22) uniform sampler2D uTransparencyMaskTex;
+layout(binding = 23) uniform sampler2D uF0MetallicTex;
+layout(binding = 24) uniform usampler2D uObjectMaterialIdTex;
 
-layout(std140, binding = 23) uniform DebugParams {
+layout(std140, binding = 25) uniform DebugParams {
     mat4 pShadowModelView;
     mat4 pShadowProjection;
     mat4 pShadowProjectionInverse;
@@ -111,6 +113,17 @@ vec3 heatmap(float v) {
     vec3 b = mix(vec3(0.05, 0.35, 0.95), vec3(0.95, 0.86, 0.18), smoothstep(0.35, 0.72, v));
     vec3 c = mix(vec3(0.95, 0.86, 0.18), vec3(1.0, 0.08, 0.02), smoothstep(0.72, 1.0, v));
     return v < 0.35 ? a : (v < 0.72 ? b : c);
+}
+
+vec3 stableIdentityColor(uint value) {
+    value ^= value >> 16u;
+    value *= 0x7feb352du;
+    value ^= value >> 15u;
+    value *= 0x846ca68bu;
+    value ^= value >> 16u;
+    return vec3(float(value & 0xffu),
+                float((value >> 8u) & 0xffu),
+                float((value >> 16u) & 0xffu)) / 255.0;
 }
 
 float linearizeDepthPreview(float depth) {
@@ -240,9 +253,10 @@ void main() {
     }
     if (uDebugViewMode == 5) {
         SurfaceMaterial material = unpackGBufferMaterial(texture(uMaterialTex, textureUv));
+        vec3 specularF0 = texture(uF0MetallicTex, textureUv).rgb;
         FragColor = vec4(
             material.perceptualRoughness,
-            material.f0 * 3.0,
+            dot(specularF0, vec3(0.2126, 0.7152, 0.0722)) * 3.0,
             material.emission,
             1.0);
         return;
@@ -901,6 +915,27 @@ void main() {
 
     if (uDebugViewMode == 85) {
         FragColor = vec4(vec3(texture(uTransparencyMaskTex, textureUv).r), 1.0);
+        return;
+    }
+
+    if (uDebugViewMode == 86) {
+        FragColor = vec4(texture(uF0MetallicTex, textureUv).rgb, 1.0);
+        return;
+    }
+
+    if (uDebugViewMode == 87) {
+        uint objectId = texture(uObjectMaterialIdTex, textureUv).r;
+        FragColor = vec4(objectId == 0u ? vec3(0.0)
+                                       : stableIdentityColor(objectId),
+                         1.0);
+        return;
+    }
+
+    if (uDebugViewMode == 88) {
+        uint materialId = texture(uObjectMaterialIdTex, textureUv).g;
+        FragColor = vec4(materialId == 0u ? vec3(0.0)
+                                         : stableIdentityColor(materialId),
+                         1.0);
         return;
     }
 

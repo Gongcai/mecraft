@@ -5,7 +5,9 @@ layout(location = 1) out vec4 gNormalAo;
 layout(location = 2) out vec4 gVoxelLight;
 layout(location = 3) out vec4 gMaterial;
 layout(location = 4) out vec4 gMaterialAux;
-layout(location = 5) out vec2 gVelocity;
+layout(location = 5) out vec4 gF0Metallic;
+layout(location = 6) out uvec2 gObjectMaterialId;
+layout(location = 7) out vec2 gVelocity;
 layout(location = 0) in vec2 vUv;
 layout(location = 1) in vec4 vVertexData;
 layout(location = 2) in vec4 vAnimationData;
@@ -13,14 +15,27 @@ layout(location = 3) flat in uvec2 vMaterialTint;
 layout(location = 4) in vec2 vTintUv;
 layout(location = 5) in vec3 vWorldPosition;
 layout(location = 6) in vec2 vVelocity;
+layout(location = 7) flat in uvec2 vIdentity;
 layout(binding = 0) uniform sampler2DArray uTextureArray;
 layout(binding = 1) uniform sampler2D uGrassColormap;
 layout(binding = 2) uniform sampler2D uFoliageColormap;
+#ifdef RHI_DROP_BLOCK
+layout(std140, binding = 3) uniform DropBlockAnimation {
+    vec4 uDropBlockAnimation;
+};
+#endif
 layout(push_constant) uniform RhiPushConstants {
     mat4 uModelViewProj;
     mat4 uPreviousModelViewProj;
     mat4 uModel;
-    vec4 uLightAnimation;
+#ifdef RHI_DROP_BLOCK
+    vec2 uLight;
+    uvec2 uIdentity;
+#else
+    vec2 uLight;
+    float uAnimationTime;
+    uint uObjectId;
+#endif
 };
 vec3 srgbToLinear(vec3 color) { return pow(max(color, vec3(0.0)), vec3(2.2)); }
 vec3 redstoneTintSrgb(vec2 tintUv) {
@@ -53,7 +68,11 @@ void main() {
     bool crossVegetation = normalMarker > -2.5 && normalMarker < -0.5;
     float layer = vAnimationData.x;
     if (vAnimationData.w > 0.5 && vAnimationData.y > 1.0 && vAnimationData.z > 0.0) {
-        layer += mod(floor(uLightAnimation.z * vAnimationData.z), vAnimationData.y);
+#ifdef RHI_DROP_BLOCK
+        layer += mod(floor(uDropBlockAnimation.x * vAnimationData.z), vAnimationData.y);
+#else
+        layer += mod(floor(uAnimationTime * vAnimationData.z), vAnimationData.y);
+#endif
     }
     vec4 texel = crossVegetation
         ? textureLod(uTextureArray, vec3(vUv, layer), 0.0)
@@ -71,12 +90,17 @@ void main() {
     float peak = max(max(albedo.r, albedo.g), albedo.b);
     float luma = dot(albedo, vec3(0.2126, 0.7152, 0.0722));
     float emissive = emissiveMaterial
-        ? smoothstep(0.34, 0.72, max(luma, peak * 0.72)) * clamp(uLightAnimation.y * 1.25, 0.0, 1.0)
+        ? smoothstep(0.34, 0.72, max(luma, peak * 0.72)) * clamp(uLight.y * 1.25, 0.0, 1.0)
         : 0.0;
     gAlbedoMaterial = vec4(albedo, emissive);
     gNormalAo = packGBufferNormalAo(normal, ao);
-    gVoxelLight = vec4(clamp(uLightAnimation.x, 0.0, 1.0), clamp(uLightAnimation.y, 0.0, 1.0), 0.0, 1.0);
-    gMaterial = packGBufferMaterial(surfaceMaterialForKind(float(vMaterialTint.x), emissive));
-    gMaterialAux = packGBufferMaterialAux(surfaceMaterialAuxForKind(float(vMaterialTint.x)));
+    gVoxelLight = vec4(clamp(uLight, 0.0, 1.0), 0.0, 1.0);
+    SurfaceMaterial material = surfaceMaterialForKind(float(vMaterialTint.x), emissive);
+    SurfaceMaterialAux aux = surfaceMaterialAuxForKind(float(vMaterialTint.x));
+    gMaterial = packGBufferMaterial(material);
+    gMaterialAux = packGBufferMaterialAux(aux);
+    gF0Metallic = packGBufferF0Metallic(
+        decodeLabPbrF0(material.encodedF0OrMetalId, albedo), aux.metalness);
+    gObjectMaterialId = vIdentity;
     gVelocity = vVelocity;
 }

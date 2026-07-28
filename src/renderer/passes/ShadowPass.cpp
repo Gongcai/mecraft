@@ -466,15 +466,23 @@ bool ShadowPass::recordOpaquePass(RhiCommandList& commandList, const int cascade
     }
 
     if (cascade == 0) {
-        if (m_blockEntityRenderer != nullptr) {
-            m_blockEntityRenderer->prepareFrame(*ctx.worldView);
+        if (m_blockEntityRenderer != nullptr &&
+            !m_blockEntityRenderer->prepareFrame(*ctx.worldView)) {
+            return false;
         }
-        if (m_dropRenderer != nullptr && m_dropSystem != nullptr) {
-            m_dropRenderer->prepareFrame(*ctx.worldView, *m_dropSystem);
+        if (m_dropRenderer != nullptr && m_dropSystem != nullptr &&
+            !m_dropRenderer->prepareFrame(*ctx.worldView, *m_dropSystem)) {
+            return false;
         }
-        if (m_humanoidRenderer != nullptr && m_gameplayRegistry != nullptr) {
-            m_humanoidRenderer->prepareFrame(
-                *ctx.worldView, *m_gameplayRegistry, HumanoidRenderer::kRenderAll);
+        if (m_humanoidRenderer != nullptr && m_gameplayRegistry != nullptr &&
+            !m_humanoidRenderer->prepareFrame(
+                *ctx.worldView, *m_gameplayRegistry, HumanoidRenderer::kRenderAll)) {
+            return false;
+        }
+        if (m_fallingBlockRenderer != nullptr && m_gameplayRegistry != nullptr &&
+            !m_fallingBlockRenderer->prepareFrame(
+                *ctx.worldView, *m_gameplayRegistry)) {
+            return false;
         }
     }
 

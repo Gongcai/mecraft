@@ -26,6 +26,35 @@ void setLoadAttachment(RhiColorAttachment& attachment, const RhiTextureViewHandl
     attachment.storeOp = RhiStoreOp::Store;
 }
 
+void setClearAttachment(RhiColorAttachment& attachment,
+                        const RhiTextureViewHandle view,
+                        const float red,
+                        const float green,
+                        const float blue,
+                        const float alpha) {
+    attachment.view = view;
+    attachment.loadOp = RhiLoadOp::Clear;
+    attachment.storeOp = RhiStoreOp::Store;
+    attachment.clearColor[0] = red;
+    attachment.clearColor[1] = green;
+    attachment.clearColor[2] = blue;
+    attachment.clearColor[3] = alpha;
+}
+
+void setClearAttachmentUint(RhiColorAttachment& attachment,
+                            const RhiTextureViewHandle view,
+                            const uint32_t red,
+                            const uint32_t green) {
+    attachment.view = view;
+    attachment.loadOp = RhiLoadOp::Clear;
+    attachment.storeOp = RhiStoreOp::Store;
+    attachment.clearValueType = RhiColorClearValueType::Uint;
+    attachment.clearColorUint[0] = red;
+    attachment.clearColorUint[1] = green;
+    attachment.clearColorUint[2] = 0u;
+    attachment.clearColorUint[3] = 0u;
+}
+
 bool beginObjectGBufferRendering(RhiDevice& rhiDevice,
                                  RhiCommandList& commandList,
                                  DeferredRenderTargets& targets,
@@ -36,19 +65,21 @@ bool beginObjectGBufferRendering(RhiDevice& rhiDevice,
         return false;
     }
 
-    RhiColorAttachment attachments[6];
+    RhiColorAttachment attachments[8];
     setLoadAttachment(attachments[0], targets.albedoTextureViewHandle());
     setLoadAttachment(attachments[1], targets.normalAoTextureViewHandle());
     setLoadAttachment(attachments[2], targets.voxelLightTextureViewHandle());
     setLoadAttachment(attachments[3], targets.materialTextureViewHandle());
     setLoadAttachment(attachments[4], targets.materialAuxTextureViewHandle());
-    attachments[5].view = targets.perObjectVelocityTextureViewHandle();
-    attachments[5].loadOp = clearPerObjectVelocity ? RhiLoadOp::Clear : RhiLoadOp::Load;
-    attachments[5].storeOp = RhiStoreOp::Store;
-    attachments[5].clearColor[0] = 0.0f;
-    attachments[5].clearColor[1] = 0.0f;
-    attachments[5].clearColor[2] = 0.0f;
-    attachments[5].clearColor[3] = 0.0f;
+    setLoadAttachment(attachments[5], targets.f0MetallicTextureViewHandle());
+    setLoadAttachment(attachments[6], targets.objectMaterialIdTextureViewHandle());
+    attachments[7].view = targets.perObjectVelocityTextureViewHandle();
+    attachments[7].loadOp = clearPerObjectVelocity ? RhiLoadOp::Clear : RhiLoadOp::Load;
+    attachments[7].storeOp = RhiStoreOp::Store;
+    attachments[7].clearColor[0] = 0.0f;
+    attachments[7].clearColor[1] = 0.0f;
+    attachments[7].clearColor[2] = 0.0f;
+    attachments[7].clearColor[3] = 0.0f;
 
     RhiDepthStencilAttachment depthAttachment;
     depthAttachment.view = targets.depthTextureViewHandle();
@@ -64,7 +95,7 @@ bool beginObjectGBufferRendering(RhiDevice& rhiDevice,
         static_cast<uint32_t>(std::max(1, targets.height()))
     };
     renderingInfo.colorAttachments = attachments;
-    renderingInfo.colorAttachmentCount = 6u;
+    renderingInfo.colorAttachmentCount = 8u;
     renderingInfo.depthStencilAttachment = &depthAttachment;
 
     commandList.beginRendering(renderingInfo);
@@ -103,7 +134,9 @@ bool GBufferPass::executeEntities(RhiCommandList& commandList,
     const HumanoidRenderer::RenderMode mode = renderLocalPlayerModel
         ? HumanoidRenderer::kRenderAll
         : HumanoidRenderer::kRenderMobsOnly;
-    humanoidRenderer->prepareFrame(worldView, *gameplayRegistry, mode);
+    if (!humanoidRenderer->prepareFrame(worldView, *gameplayRegistry, mode)) {
+        return false;
+    }
     if (!beginObjectGBufferRendering(
             rhiDevice, commandList, targets, "GBuffer.Entities", false)) {
         return false;
@@ -145,7 +178,9 @@ bool GBufferPass::executeBlockEntities(RhiCommandList& commandList,
     }
 
     RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
-    blockEntityRenderer->prepareFrame(worldView);
+    if (!blockEntityRenderer->prepareFrame(worldView)) {
+        return false;
+    }
     const GpuTimerSegmentToken preparationGpuTimer = ctx.debugService != nullptr
         ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::GBuffer)
         : GpuTimerSegmentToken{};
@@ -226,32 +261,22 @@ bool GBufferPass::executeExternalGeometry(
         return false;
     }
 
-    RhiColorAttachment attachments[6];
-    const auto setClear = [](RhiColorAttachment& attachment,
-                             const RhiTextureViewHandle view,
-                             const float red,
-                             const float green,
-                             const float blue,
-                             const float alpha) {
-        attachment.view = view;
-        attachment.loadOp = RhiLoadOp::Clear;
-        attachment.storeOp = RhiStoreOp::Store;
-        attachment.clearColor[0] = red;
-        attachment.clearColor[1] = green;
-        attachment.clearColor[2] = blue;
-        attachment.clearColor[3] = alpha;
-    };
-    setClear(attachments[0], targets.albedoTextureViewHandle(),
+    RhiColorAttachment attachments[8];
+    setClearAttachment(attachments[0], targets.albedoTextureViewHandle(),
              0.0f, 0.0f, 0.0f, 0.0f);
-    setClear(attachments[1], targets.normalAoTextureViewHandle(),
+    setClearAttachment(attachments[1], targets.normalAoTextureViewHandle(),
              0.5f, 0.5f, 1.0f, 1.0f);
-    setClear(attachments[2], targets.voxelLightTextureViewHandle(),
+    setClearAttachment(attachments[2], targets.voxelLightTextureViewHandle(),
              0.0f, 0.0f, 0.0f, 1.0f);
-    setClear(attachments[3], targets.materialTextureViewHandle(),
-             0.86f, 0.035f, 0.0f, 0.0f);
-    setClear(attachments[4], targets.materialAuxTextureViewHandle(),
+    setClearAttachment(attachments[3], targets.materialTextureViewHandle(),
+             0.86f, 1.0f, 0.0f, 0.0f);
+    setClearAttachment(attachments[4], targets.materialAuxTextureViewHandle(),
              0.0f, 0.0f, 0.65f, 0.0f);
-    setClear(attachments[5], targets.perObjectVelocityTextureViewHandle(),
+    setClearAttachment(attachments[5], targets.f0MetallicTextureViewHandle(),
+             0.0f, 0.0f, 0.0f, 0.0f);
+    setClearAttachmentUint(attachments[6], targets.objectMaterialIdTextureViewHandle(),
+                           0u, 0u);
+    setClearAttachment(attachments[7], targets.perObjectVelocityTextureViewHandle(),
              0.0f, 0.0f, 0.0f, 0.0f);
 
     RhiDepthStencilAttachment depthAttachment;
@@ -267,7 +292,7 @@ bool GBufferPass::executeExternalGeometry(
         static_cast<uint32_t>(std::max(1, targets.width())),
         static_cast<uint32_t>(std::max(1, targets.height()))};
     renderingInfo.colorAttachments = attachments;
-    renderingInfo.colorAttachmentCount = 6u;
+    renderingInfo.colorAttachmentCount = 8u;
     renderingInfo.depthStencilAttachment = &depthAttachment;
 
     const GpuTimerSegmentToken gpuTimer = ctx.debugService != nullptr
@@ -309,7 +334,12 @@ bool GBufferPass::executeDrops(RhiCommandList& commandList,
     }
 
     RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
-    dropRenderer->prepareFrame(worldView, *dropSystem);
+    if (!dropRenderer->prepareFrame(worldView, *dropSystem)) {
+        return false;
+    }
+    if (!dropRenderer->prepareBlockGBuffer(commandList, ctx.animationTime)) {
+        return false;
+    }
     if (!beginObjectGBufferRendering(
             rhiDevice, commandList, targets, "GBuffer.Drops", false)) {
         return false;
@@ -325,7 +355,7 @@ bool GBufferPass::executeDrops(RhiCommandList& commandList,
         ? ctx.camera.jitteredViewProj : ctx.camera.viewProj;
     const glm::mat4& previousViewProj = ctx.previousViewProjWithCurrentJitter;
     dropRenderer->renderItemsToGBuffer(commandList, viewProj, previousViewProj);
-    dropRenderer->renderBlocksToGBuffer(commandList, viewProj, previousViewProj, ctx.animationTime);
+    dropRenderer->renderBlocksToGBuffer(commandList, viewProj, previousViewProj);
     dropRenderer->finishGBufferFrame();
 
     endObjectGBufferRendering(commandList);
@@ -350,7 +380,9 @@ bool GBufferPass::executeFallingBlocks(RhiCommandList& commandList,
         return false;
     }
 
-    fallingBlockRenderer->prepareFrame(worldView, *gameplayRegistry);
+    if (!fallingBlockRenderer->prepareFrame(worldView, *gameplayRegistry)) {
+        return false;
+    }
     RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
     if (!beginObjectGBufferRendering(
             rhiDevice, commandList, targets, "GBuffer.FallingBlocks", false)) {

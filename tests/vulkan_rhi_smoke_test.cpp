@@ -1977,6 +1977,99 @@ void main() {
     return valid && device.validationErrorCount() == validationErrorsBefore;
 }
 
+[[nodiscard]] bool validateRg32UintAttachmentClear(
+    VkRhiDevice& device,
+    RhiCommandListPool& commandPool) {
+    constexpr std::array<uint32_t, 2> kClearValue{
+        0x13579bdfu, 0x2468ace0u};
+    const uint64_t validationErrorsBefore = device.validationErrorCount();
+
+    RhiTextureDesc textureDesc;
+    textureDesc.debugName = "VulkanSmoke.Rg32UintClear.Target";
+    textureDesc.format = RhiTextureFormat::Rg32Uint;
+    textureDesc.width = 1u;
+    textureDesc.height = 1u;
+    textureDesc.usage = rhiFlag(RhiTextureUsage::ColorAttachment) |
+                        rhiFlag(RhiTextureUsage::TransferSrc);
+    const RhiTextureHandle texture = device.createTexture(textureDesc, nullptr);
+    RhiTextureViewDesc viewDesc;
+    viewDesc.texture = texture;
+    viewDesc.format = textureDesc.format;
+    const RhiTextureViewHandle view = device.createTextureView(viewDesc);
+
+    RhiBufferDesc readbackDesc;
+    readbackDesc.debugName = "VulkanSmoke.Rg32UintClear.Readback";
+    readbackDesc.size = sizeof(kClearValue);
+    readbackDesc.usage = rhiFlag(RhiBufferUsage::TransferDst) |
+                         rhiFlag(RhiBufferUsage::MapRead);
+    readbackDesc.memoryUsage = RhiMemoryUsage::GpuToCpu;
+    readbackDesc.initialState = RhiResourceState::TransferDst;
+    const RhiBufferHandle readback =
+        device.createBuffer(readbackDesc, nullptr, 0u);
+
+    bool valid = texture.isValid() && view.isValid() && readback.isValid();
+    RhiCommandList* commands = valid
+        ? commandPool.acquire(RhiCommandListType::Graphics)
+        : nullptr;
+    valid = valid && commands != nullptr &&
+        commands->begin({"VulkanSmoke.Rg32UintClear.Commands",
+                         RhiCommandListType::Graphics});
+    if (valid) {
+        commands->textureBarrier({texture, RhiResourceState::Undefined,
+                                  RhiResourceState::RenderTarget});
+        RhiColorAttachment attachment;
+        attachment.view = view;
+        attachment.loadOp = RhiLoadOp::Clear;
+        attachment.storeOp = RhiStoreOp::Store;
+        attachment.clearValueType = RhiColorClearValueType::Uint;
+        attachment.clearColorUint[0] = kClearValue[0];
+        attachment.clearColorUint[1] = kClearValue[1];
+        RhiRenderingInfo renderingInfo;
+        renderingInfo.debugName = "VulkanSmoke.Rg32UintClear.Rendering";
+        renderingInfo.renderArea = {0, 0, 1u, 1u};
+        renderingInfo.colorAttachments = &attachment;
+        renderingInfo.colorAttachmentCount = 1u;
+        commands->beginRendering(renderingInfo);
+        commands->endRendering();
+        commands->textureBarrier({texture, RhiResourceState::RenderTarget,
+                                  RhiResourceState::TransferSrc});
+        RhiTextureBufferCopy copy;
+        copy.srcTexture = texture;
+        copy.dstBuffer = readback;
+        copy.bytesPerRow = static_cast<uint32_t>(sizeof(kClearValue));
+        copy.rowsPerImage = 1u;
+        copy.width = 1u;
+        copy.height = 1u;
+        commands->copyTextureToBuffer(copy);
+        commands->bufferBarrier({readback, RhiResourceState::TransferDst,
+                                 RhiResourceState::HostRead});
+        valid = commands->end();
+    }
+
+    RhiSubmissionToken token;
+    if (valid) {
+        RhiCommandList* submissions[] = {commands};
+        valid = device.submit({"VulkanSmoke.Rg32UintClear.Submit",
+                               submissions, 1u}, &token) &&
+                device.waitForSubmission(token);
+    }
+    if (valid) {
+        const auto* mapped = static_cast<const uint32_t*>(
+            device.mapBuffer(readback, 0u, sizeof(kClearValue)));
+        valid = mapped != nullptr && mapped[0] == kClearValue[0] &&
+                mapped[1] == kClearValue[1];
+        if (mapped != nullptr) {
+            device.unmapBuffer(readback);
+        }
+    }
+
+    if (readback.isValid()) device.destroyBuffer(readback);
+    if (view.isValid()) device.destroyTextureView(view);
+    if (texture.isValid()) device.destroyTexture(texture);
+    device.waitIdle();
+    return valid && device.validationErrorCount() == validationErrorsBefore;
+}
+
 } // namespace
 
 int main() {
@@ -2126,6 +2219,7 @@ int main() {
          renderStableFrame(device, *commandPool, window) &&
          device.capabilities().swapchainPresentMode == RhiPresentMode::Fifo);
     if (commandPool == nullptr || !immediateModeValidated ||
+        !validateRg32UintAttachmentClear(device, *commandPool) ||
 #if defined(MECRAFT_ENABLE_FSR31)
         !validateFsr31VulkanDispatch(device, *commandPool) ||
         !validateFsr31VulkanContext(device) ||

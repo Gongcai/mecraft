@@ -12,6 +12,7 @@
 
 #include "../rhi/RhiHandles.h"
 #include "../rhi/RhiGrowableBuffer.h"
+#include "../contracts/SceneIdentityContract.h"
 #include "../../world/block/BlockStateRegistry.h"
 
 class IWorldView;
@@ -24,10 +25,10 @@ class SubChunk;
 /// Renders world block entities whose visual geometry is not emitted by terrain meshing.
 class BlockEntityRenderer {
 public:
-    void init(ResourceMgr& resourceMgr);
+    [[nodiscard]] bool init(ResourceMgr& resourceMgr);
     void shutdown();
     void beginFrame();
-    void prepareFrame(const IWorldView& worldView);
+    [[nodiscard]] bool prepareFrame(const IWorldView& worldView);
     [[nodiscard]] bool prepareGBuffer(RhiCommandList& commandList);
     [[nodiscard]] bool prepareForward(RhiCommandList& commandList);
     [[nodiscard]] bool prepareShadow(RhiCommandList& commandList,
@@ -70,6 +71,7 @@ private:
         RhiTextureViewHandle textureView;
         RhiBindGroupHandle gbufferBindGroup;
         RhiBindGroupHandle shadowBindGroup;
+        renderer::contracts::StableMaterialId materialId;
         bool usesHorizontalFacing = false;
     };
 
@@ -85,11 +87,13 @@ private:
         glm::vec3 center{0.0f};
         glm::mat4 modelMatrix{1.0f};
         glm::vec2 light{1.0f, 0.0f};
+        renderer::contracts::StableObjectId objectId;
     };
 
     struct InstancedDrawData {
         glm::mat4 modelMatrix{1.0f};
         glm::vec2 light{1.0f, 0.0f};
+        glm::uvec2 identity{0u};
     };
 
     struct PreparedModelBatch {
@@ -115,6 +119,27 @@ private:
         }
     };
 
+    struct BlockPositionKey {
+        int x = 0;
+        int y = 0;
+        int z = 0;
+
+        bool operator==(const BlockPositionKey& other) const {
+            return x == other.x && y == other.y && z == other.z;
+        }
+    };
+
+    struct BlockPositionKeyHash {
+        std::size_t operator()(const BlockPositionKey& key) const {
+            std::size_t hash = std::hash<int>{}(key.x);
+            hash ^= std::hash<int>{}(key.y) + 0x9e3779b97f4a7c15ull +
+                    (hash << 6u) + (hash >> 2u);
+            hash ^= std::hash<int>{}(key.z) + 0x9e3779b97f4a7c15ull +
+                    (hash << 6u) + (hash >> 2u);
+            return hash;
+        }
+    };
+
     struct SectionCache {
         const Chunk* chunk = nullptr;
         uint64_t meshRevision = 0;
@@ -126,6 +151,9 @@ private:
     RhiDevice* m_rhiDevice = nullptr;
     std::unordered_map<BlockID, ModelEntry> m_models;
     std::unordered_map<SectionKey, SectionCache, SectionKeyHash> m_sectionCaches;
+    std::unordered_map<BlockPositionKey,
+                       renderer::contracts::StableObjectId,
+                       BlockPositionKeyHash> m_blockObjectIds;
     std::vector<BlockEntityInstance*> m_flatInstances;
     RhiGrowableBuffer m_rhiInstanceBuffer;
     std::vector<InstancedDrawData> m_instanceData;
@@ -161,13 +189,13 @@ private:
     static glm::mat4 buildModelMatrix(const ModelEntry& entry,
                                       BlockStateId stateId,
                                       const glm::vec3& blockPosition);
-    void synchronizeInstanceCache(const IWorldView& worldView);
+    [[nodiscard]] bool synchronizeInstanceCache(const IWorldView& worldView);
     void rebuildFlatInstanceList();
     void updateInstanceLightsForFrame();
-    void rebuildSectionCache(const Chunk& chunk,
-                             const SubChunk& subChunk,
-                             int scy,
-                             SectionCache& cache) const;
+    [[nodiscard]] bool rebuildSectionCache(const Chunk& chunk,
+                                           const SubChunk& subChunk,
+                                           int scy,
+                                           SectionCache& cache);
 };
 
 #endif // MECRAFT_BLOCK_ENTITY_RENDERER_H

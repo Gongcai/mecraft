@@ -187,11 +187,20 @@ entt::entity ModelSceneRuntime::createEntity(const std::string& baseName) {
         setError("model scene entity ID space is exhausted");
         return entt::null;
     }
+    const std::optional<renderer::contracts::StableObjectId> objectId =
+        renderer::contracts::allocateStableSceneId<
+            renderer::contracts::StableObjectIdTag>();
+    if (!objectId.has_value()) {
+        setError("stable model scene object identity space is exhausted");
+        return entt::null;
+    }
     const entt::entity entity = m_registry.create();
     m_registry.emplace<scene::SceneEntityIdComponent>(
         entity, scene::SceneEntityIdComponent{m_nextEntityId++});
     m_registry.emplace<scene::NameComponent>(
         entity, scene::NameComponent{makeUniqueInstanceName(baseName)});
+    m_registry.emplace<scene::StableObjectIdComponent>(
+        entity, scene::StableObjectIdComponent{*objectId});
     m_registry.emplace<ecs::LocalTransformComponent>(entity);
     m_registry.emplace<ecs::WorldTransformComponent>(entity);
     m_registry.emplace<scene::PreviousWorldTransformComponent>(entity);
@@ -205,8 +214,10 @@ entt::entity ModelSceneRuntime::createEmptyEntity(const std::string& baseName) {
         return entt::null;
     }
     const entt::entity entity = createEntity(baseName);
-    m_selectedEntity = entity;
-    m_lastError.clear();
+    if (entity != entt::null) {
+        m_selectedEntity = entity;
+        m_lastError.clear();
+    }
     return entity;
 }
 
@@ -253,6 +264,7 @@ entt::entity ModelSceneRuntime::duplicateEntity(const entt::entity source) {
         !m_registry.all_of<
             scene::SceneEntityIdComponent,
             scene::NameComponent,
+            scene::StableObjectIdComponent,
             ecs::LocalTransformComponent,
             ecs::WorldTransformComponent,
             ecs::ChildrenComponent>(source)) {
@@ -268,6 +280,7 @@ entt::entity ModelSceneRuntime::duplicateEntity(const entt::entity source) {
             !m_registry.all_of<
                 scene::SceneEntityIdComponent,
                 scene::NameComponent,
+                scene::StableObjectIdComponent,
                 ecs::LocalTransformComponent,
                 ecs::WorldTransformComponent,
                 ecs::ChildrenComponent>(entity) ||
@@ -296,12 +309,19 @@ entt::entity ModelSceneRuntime::duplicateEntity(const entt::entity source) {
 
     std::unordered_map<entt::entity, entt::entity> duplicates;
     duplicates.reserve(originals.size());
+    const scene::SceneEntityId originalNextEntityId = m_nextEntityId;
     for (const entt::entity original : originals) {
         const auto& originalName =
             m_registry.get<scene::NameComponent>(original).value;
         const entt::entity duplicate = createEntity(originalName);
         if (duplicate == entt::null) {
-            std::abort();
+            for (const auto& pair : duplicates) {
+                if (m_registry.valid(pair.second)) {
+                    m_registry.destroy(pair.second);
+                }
+            }
+            m_nextEntityId = originalNextEntityId;
+            return entt::null;
         }
         duplicates.emplace(original, duplicate);
         m_registry.replace<ecs::LocalTransformComponent>(
@@ -570,15 +590,32 @@ entt::entity ModelSceneRuntime::restoreEntitySubtree(
         }
     }
 
+    std::vector<renderer::contracts::StableObjectId> stableObjectIds;
+    stableObjectIds.reserve(states.size());
+    for (std::size_t index = 0u; index < states.size(); ++index) {
+        const std::optional<renderer::contracts::StableObjectId> objectId =
+            renderer::contracts::allocateStableSceneId<
+                renderer::contracts::StableObjectIdTag>();
+        if (!objectId.has_value()) {
+            setError("stable model scene object identity space is exhausted");
+            return entt::null;
+        }
+        stableObjectIds.push_back(*objectId);
+    }
+
     std::unordered_map<scene::SceneEntityId, entt::entity> restored;
     restored.reserve(states.size());
-    for (const scene::SceneEntityDocument& state : states) {
+    for (std::size_t index = 0u; index < states.size(); ++index) {
+        const scene::SceneEntityDocument& state = states[index];
         const entt::entity entity = m_registry.create();
         restored.emplace(state.id, entity);
         m_registry.emplace<scene::SceneEntityIdComponent>(
             entity, scene::SceneEntityIdComponent{state.id});
         m_registry.emplace<scene::NameComponent>(
             entity, scene::NameComponent{state.name});
+        m_registry.emplace<scene::StableObjectIdComponent>(
+            entity,
+            scene::StableObjectIdComponent{stableObjectIds[index]});
         ecs::LocalTransformComponent transform;
         transform.localPosition = state.transform.position;
         transform.localRotation = state.transform.rotation;
@@ -1040,18 +1077,37 @@ bool ModelSceneRuntime::loadDocument(
     }
 
     entt::registry loadedRegistry;
+    std::vector<renderer::contracts::StableObjectId> stableObjectIds;
+    stableObjectIds.reserve(document.entities.size());
+    for (std::size_t index = 0u; index < document.entities.size(); ++index) {
+        const std::optional<renderer::contracts::StableObjectId> objectId =
+            renderer::contracts::allocateStableSceneId<
+                renderer::contracts::StableObjectIdTag>();
+        if (!objectId.has_value()) {
+            for (MeshAsset& loaded : loadedAssets) {
+                loaded.renderer->shutdown();
+            }
+            setError("stable model scene object identity space is exhausted");
+            return false;
+        }
+        stableObjectIds.push_back(*objectId);
+    }
     std::unordered_map<scene::SceneEntityId, entt::entity> loadedEntities;
     loadedEntities.reserve(document.entities.size());
     entt::entity selectedEntity = entt::null;
     scene::SceneEntityId selectedId =
         std::numeric_limits<scene::SceneEntityId>::max();
-    for (const scene::SceneEntityDocument& entry : document.entities) {
+    for (std::size_t index = 0u; index < document.entities.size(); ++index) {
+        const scene::SceneEntityDocument& entry = document.entities[index];
         const entt::entity entity = loadedRegistry.create();
         loadedEntities.emplace(entry.id, entity);
         loadedRegistry.emplace<scene::SceneEntityIdComponent>(
             entity, scene::SceneEntityIdComponent{entry.id});
         loadedRegistry.emplace<scene::NameComponent>(
             entity, scene::NameComponent{entry.name});
+        loadedRegistry.emplace<scene::StableObjectIdComponent>(
+            entity,
+            scene::StableObjectIdComponent{stableObjectIds[index]});
         ecs::LocalTransformComponent transform;
         transform.localPosition = entry.transform.position;
         transform.localRotation = entry.transform.rotation;
@@ -1220,16 +1276,22 @@ void ModelSceneRuntime::renderToGBuffer(
     (void)previousViewProjection;
     const auto view = m_registry.view<
         scene::StaticMeshComponent,
+        scene::StableObjectIdComponent,
         ecs::WorldTransformComponent,
         scene::PreviousWorldTransformComponent>();
     for (const entt::entity entity : view) {
         const auto& mesh = view.get<scene::StaticMeshComponent>(entity);
+        const auto& objectId =
+            view.get<scene::StableObjectIdComponent>(entity).value;
         const auto& world = view.get<ecs::WorldTransformComponent>(entity);
         const auto& previous =
             view.get<scene::PreviousWorldTransformComponent>(entity);
         StaticMeshRenderer& renderer =
             *m_assets[assetIndex(mesh.assetId)].renderer;
         renderer.setInstanceTransform(world.worldMatrix, previous.worldMatrix);
+        if (!renderer.setStableObjectId(objectId)) {
+            std::abort();
+        }
         renderer.renderToGBuffer(commandList);
     }
 }

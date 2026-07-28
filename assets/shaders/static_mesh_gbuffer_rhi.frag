@@ -8,13 +8,16 @@ layout(location = 1) out vec4 gNormalAo;
 layout(location = 2) out vec4 gVoxelLight;
 layout(location = 3) out vec4 gMaterial;
 layout(location = 4) out vec4 gMaterialAux;
-layout(location = 5) out vec2 gVelocity;
+layout(location = 5) out vec4 gF0Metallic;
+layout(location = 6) out uvec2 gObjectMaterialId;
+layout(location = 7) out vec2 gVelocity;
 
 layout(location = 0) in vec2 vUv;
 layout(location = 1) in vec3 vNormal;
 layout(location = 2) in vec3 vTangent;
 layout(location = 3) in float vTangentSign;
 layout(location = 4) in vec2 vVelocity;
+layout(location = 5) flat in uint vObjectId;
 
 layout(binding = 0) uniform sampler2D uBaseColorTexture;
 layout(binding = 1) uniform sampler2D uMetallicRoughnessTexture;
@@ -30,6 +33,7 @@ layout(binding = 12) uniform sampler2D uTransmissionTexture;
 layout(binding = 13) uniform sampler2D uThicknessTexture;
 layout(std140, binding = 5) uniform GpuMaterialParams {
     GpuMaterial uMaterial;
+    uvec4 uMaterialIdentity;
 };
 layout(std140, binding = 6) uniform StaticMeshFrameParams {
     vec4 uVoxelLight;
@@ -68,13 +72,22 @@ void main() {
 
     SurfaceMaterialAux aux = defaultSurfaceMaterialAux();
     aux.materialKind = float(MATERIAL_STATIC_MESH);
-    aux.porosity = sampledMaterial.specularF90;
     aux.metalness = metalness;
+
+    SurfaceMaterial material = defaultSurfaceMaterial();
+    material.perceptualRoughness = roughness;
+    material.specularF90 = sampledMaterial.specularF90;
+    material.emission = emissiveStrength;
 
     gAlbedoMaterial = vec4(baseColor.rgb, emissiveStrength);
     gNormalAo = packGBufferNormalAo(worldNormal, occlusion);
     gVoxelLight = vec4(clamp(uVoxelLight.xy, 0.0, 1.0), 0.0, 1.0);
-    gMaterial = vec4(roughness, sampledMaterial.dielectricF0);
+    gMaterial = packGBufferMaterial(material);
     gMaterialAux = packGBufferMaterialAux(aux);
+    gF0Metallic = packGBufferF0Metallic(
+        pbrMaterialSpecularF0(
+            sampledMaterial.dielectricF0, baseColor.rgb, metalness),
+        metalness);
+    gObjectMaterialId = uvec2(vObjectId, uMaterialIdentity.x);
     gVelocity = vVelocity;
 }

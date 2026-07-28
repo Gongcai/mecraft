@@ -40,6 +40,20 @@ void setClearAttachment(RhiColorAttachment& attachment,
     attachment.clearColor[3] = alpha;
 }
 
+void setClearAttachmentUint(RhiColorAttachment& attachment,
+                            const RhiTextureViewHandle view,
+                            const uint32_t red,
+                            const uint32_t green) {
+    attachment.view = view;
+    attachment.loadOp = RhiLoadOp::Clear;
+    attachment.storeOp = RhiStoreOp::Store;
+    attachment.clearValueType = RhiColorClearValueType::Uint;
+    attachment.clearColorUint[0] = red;
+    attachment.clearColorUint[1] = green;
+    attachment.clearColorUint[2] = 0u;
+    attachment.clearColorUint[3] = 0u;
+}
+
 void clearColorAttachments(RhiCommandList& commandList,
                            const char* debugName,
                            const int width,
@@ -685,6 +699,8 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
     RgTextureHandle voxelLight;
     RgTextureHandle material;
     RgTextureHandle materialAux;
+    RgTextureHandle f0Metallic;
+    RgTextureHandle objectMaterialId;
     RgTextureHandle depth;
     RgTextureHandle perObjectVelocity;
     RgTextureHandle velocity;
@@ -703,6 +719,12 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
         !importTexture(targets.materialAuxTextureHandle(),
                        targets.materialAuxTextureViewHandle(),
                        RhiResourceState::ShaderRead, materialAux) ||
+        !importTexture(targets.f0MetallicTextureHandle(),
+                       targets.f0MetallicTextureViewHandle(),
+                       RhiResourceState::ShaderRead, f0Metallic) ||
+        !importTexture(targets.objectMaterialIdTextureHandle(),
+                       targets.objectMaterialIdTextureViewHandle(),
+                       RhiResourceState::ShaderRead, objectMaterialId) ||
         !importTexture(targets.depthTextureHandle(),
                        targets.depthTextureViewHandle(),
                        RhiResourceState::DepthRead, depth) ||
@@ -1153,6 +1175,8 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
         .writeTexture(voxelLight, RhiResourceState::RenderTarget)
         .writeTexture(material, RhiResourceState::RenderTarget)
         .writeTexture(materialAux, RhiResourceState::RenderTarget)
+        .writeTexture(f0Metallic, RhiResourceState::RenderTarget)
+        .writeTexture(objectMaterialId, RhiResourceState::RenderTarget)
         .writeTexture(depth, RhiResourceState::DepthWrite)
         .writeTexture(perObjectVelocity, RhiResourceState::RenderTarget)
         .setExecute([&](RgPassContext& pass) {
@@ -1317,6 +1341,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
         .readTexture(voxelLight, RhiResourceState::ShaderRead)
         .readTexture(material, RhiResourceState::ShaderRead)
         .readTexture(materialAux, RhiResourceState::ShaderRead)
+        .readTexture(f0Metallic, RhiResourceState::ShaderRead)
         .readTexture(depth, RhiResourceState::DepthRead)
         .readTexture(lightmapDay, RhiResourceState::ShaderRead)
         .readTexture(lightmapNight, RhiResourceState::ShaderRead)
@@ -1370,6 +1395,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
         reflectionResources.normalAo = normalAo;
         reflectionResources.material = material;
         reflectionResources.materialAux = materialAux;
+        reflectionResources.f0Metallic = f0Metallic;
         reflectionResources.skyCapture = skyCapture;
         reflectionResources.voxelLight = voxelLight;
         reflectionResources.reflection = reflection;
@@ -1896,7 +1922,9 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
             shadowResources.color0,
             shadowResources.color1,
             reactiveMask,
-            transparencyMask
+            transparencyMask,
+            f0Metallic,
+            objectMaterialId
         };
         debugResources.output = sceneCaptureColor;
         graphTail = m_debugPass->addGraphPass(
@@ -2324,12 +2352,14 @@ bool DeferredPipeline::renderGBufferTerrain(RhiCommandList& commandList,
         return false;
     }
 
-    RhiColorAttachment gbufferAttachments[5];
+    RhiColorAttachment gbufferAttachments[7];
     setClearAttachment(gbufferAttachments[0], targets.albedoTextureViewHandle(), 0.0f, 0.0f, 0.0f, 0.0f);
     setClearAttachment(gbufferAttachments[1], targets.normalAoTextureViewHandle(), 0.5f, 0.5f, 1.0f, 1.0f);
     setClearAttachment(gbufferAttachments[2], targets.voxelLightTextureViewHandle(), 0.0f, 0.0f, 0.0f, 1.0f);
-    setClearAttachment(gbufferAttachments[3], targets.materialTextureViewHandle(), 0.86f, 0.035f, 0.0f, 0.0f);
+    setClearAttachment(gbufferAttachments[3], targets.materialTextureViewHandle(), 0.86f, 1.0f, 0.0f, 0.0f);
     setClearAttachment(gbufferAttachments[4], targets.materialAuxTextureViewHandle(), 0.0f, 0.0f, 0.65f, 0.0f);
+    setClearAttachment(gbufferAttachments[5], targets.f0MetallicTextureViewHandle(), 0.0f, 0.0f, 0.0f, 0.0f);
+    setClearAttachmentUint(gbufferAttachments[6], targets.objectMaterialIdTextureViewHandle(), 0u, 0u);
 
     RhiDepthStencilAttachment depthAttachment;
     depthAttachment.view = targets.depthTextureViewHandle();
@@ -2346,7 +2376,7 @@ bool DeferredPipeline::renderGBufferTerrain(RhiCommandList& commandList,
         static_cast<uint32_t>(std::max(1, targets.height()))
     };
     renderingInfo.colorAttachments = gbufferAttachments;
-    renderingInfo.colorAttachmentCount = 5u;
+    renderingInfo.colorAttachmentCount = 7u;
     renderingInfo.depthStencilAttachment = &depthAttachment;
 
     const GpuTimerSegmentToken gpuTimer = ctx.debugService != nullptr

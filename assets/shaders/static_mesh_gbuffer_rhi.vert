@@ -1,4 +1,5 @@
 #version 450 core
+#extension GL_ARB_shader_draw_parameters : require
 
 #include "rhi_screen_coordinates.glsl"
 
@@ -12,6 +13,7 @@ layout(location = 1) out vec3 vNormal;
 layout(location = 2) out vec3 vTangent;
 layout(location = 3) out float vTangentSign;
 layout(location = 4) out vec2 vVelocity;
+layout(location = 5) flat out uint vObjectId;
 
 layout(push_constant) uniform StaticMeshPushConstants {
     mat4 uModel;
@@ -46,4 +48,5 @@ void main() {
     vTangentSign = aTangent.w;
     vVelocity = rhiScreenUvToTextureUv(rhiScreenUvToClipUv(currentClipUv)) -
                 rhiScreenUvToTextureUv(rhiScreenUvToClipUv(previousClipUv));
+    vObjectId = gl_BaseInstanceARB;
 }

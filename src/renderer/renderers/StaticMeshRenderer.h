@@ -10,6 +10,7 @@
 #include <glm/glm.hpp>
 
 #include "../rhi/RhiHandles.h"
+#include "../contracts/SceneIdentityContract.h"
 
 class FrameContext;
 class IWorldView;
@@ -45,6 +46,12 @@ public:
     /// @param previousModel Local-to-world matrix used by temporal velocity.
     void setInstanceTransform(const glm::mat4& model,
                               const glm::mat4& previousModel);
+
+    /// Sets the stable object identity written by subsequent G-buffer draws.
+    /// @param objectId Non-zero identity owned by the visible scene instance.
+    /// @return True when the supplied identity is valid and was accepted.
+    [[nodiscard]] bool setStableObjectId(
+        renderer::contracts::StableObjectId objectId);
 
     /// Prepares constant neutral lighting for standalone scene preview rendering.
     void prepareStandaloneFrame();
@@ -125,6 +132,7 @@ private:
     struct MaterialResource {
         RhiBufferHandle uniformBuffer;
         RhiBindGroupHandle bindGroup;
+        renderer::contracts::StableMaterialId materialId;
         bool doubleSided = false;
         bool alphaBlended = false;
         bool transmissive = false;
@@ -183,6 +191,7 @@ private:
     glm::mat4 m_modelMatrix{1.0f};
     glm::mat4 m_previousModelMatrix{1.0f};
     glm::vec4 m_voxelLight{1.0f, 0.0f, 0.0f, 1.0f};
+    renderer::contracts::StableObjectId m_objectId;
     bool m_instancePlaced = false;
     bool m_framePrepared = false;
     std::string m_lastError;

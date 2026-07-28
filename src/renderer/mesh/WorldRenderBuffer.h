@@ -104,6 +104,7 @@ public:
     [[nodiscard]] uint64_t metadataBufferCapacity() const { return m_rhiMetadataBuffer.capacity(); }
     struct SubChunkDrawMetadata {
         glm::vec4 originAndFlags = glm::vec4(0.0f);
+        glm::uvec4 identity = glm::uvec4(0u);
     };
 
     struct FrameStatsSnapshot {

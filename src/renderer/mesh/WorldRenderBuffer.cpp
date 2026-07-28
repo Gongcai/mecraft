@@ -1,6 +1,7 @@
 #include "WorldRenderBuffer.h"
 #include "../rhi/RhiCommandList.h"
 #include "../rhi/RhiDevice.h"
+#include "../contracts/SceneIdentityContract.h"
 
 #include <algorithm>
 #include <cmath>
@@ -639,14 +640,24 @@ uint32_t WorldRenderBuffer::uploadSubChunkMetadata(RhiCommandList& commandList,
         return kInvalidMetadataIndex;
     }
 
+    const std::optional<renderer::contracts::StableObjectId> objectId =
+        renderer::contracts::allocateStableSceneId<
+            renderer::contracts::StableObjectIdTag>();
+    if (!objectId.has_value()) {
+        return kInvalidMetadataIndex;
+    }
+
+    const SubChunkDrawMetadata metadata{
+        glm::vec4(origin, 0.0f),
+        glm::uvec4(objectId->value, 0u, 0u, 0u)};
     uint32_t index = kInvalidMetadataIndex;
     if (!m_freeSubChunkMetadataIndices.empty()) {
         index = m_freeSubChunkMetadataIndices.back();
         m_freeSubChunkMetadataIndices.pop_back();
-        m_subChunkMetadata[index] = SubChunkDrawMetadata{glm::vec4(origin, 0.0f)};
+        m_subChunkMetadata[index] = metadata;
     } else {
         index = static_cast<uint32_t>(m_subChunkMetadata.size());
-        m_subChunkMetadata.push_back(SubChunkDrawMetadata{glm::vec4(origin, 0.0f)});
+        m_subChunkMetadata.push_back(metadata);
     }
     if (!m_rhiMetadataBuffer.write(
             commandList,

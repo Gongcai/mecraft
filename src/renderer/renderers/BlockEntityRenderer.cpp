@@ -7,6 +7,7 @@
 #include <cstdlib>
 #include <iostream>
 #include <string>
+#include <unordered_set>
 
 #include <glm/gtc/matrix_transform.hpp>
 
@@ -153,7 +154,7 @@ float chestYawRadians(const BlockStateId stateId) {
 
 } // namespace
 
-void BlockEntityRenderer::init(ResourceMgr& resourceMgr) {
+bool BlockEntityRenderer::init(ResourceMgr& resourceMgr) {
     m_resourceMgr = &resourceMgr;
     m_rhiDevice = &resourceMgr.rhiDevice();
     if (!m_rhiInstanceBuffer.init(*m_rhiDevice,
@@ -161,9 +162,17 @@ void BlockEntityRenderer::init(ResourceMgr& resourceMgr) {
                                   rhiFlag(RhiBufferUsage::Vertex),
                                   RhiMemoryCategory::SceneData,
                                   "BlockEntity.InstanceBuffer")) {
-        failBlockEntityRenderer("Failed to create block entity RHI instance buffer");
+        return false;
     }
     createGBufferRhiResources();
+
+    const std::optional<renderer::contracts::StableMaterialId> materialId =
+        renderer::contracts::allocateStableSceneId<
+            renderer::contracts::StableMaterialIdTag>();
+    if (!materialId.has_value()) {
+        shutdown();
+        return false;
+    }
 
     const BlockID chestBlock = BlockRegistry::requireIdByName("minecraft:chest");
 
@@ -174,6 +183,7 @@ void BlockEntityRenderer::init(ResourceMgr& resourceMgr) {
     }
 
     ModelEntry entry;
+    entry.materialId = *materialId;
     entry.mesh = buildMesh(chest);
     entry.texture = chestTexture;
     RhiTextureViewDesc textureViewDesc;
@@ -200,6 +210,7 @@ void BlockEntityRenderer::init(ResourceMgr& resourceMgr) {
     }
     entry.usesHorizontalFacing = chest.usesHorizontalFacing;
     m_models.emplace(chestBlock, entry);
+    return true;
 }
 
 void BlockEntityRenderer::shutdown() {
@@ -219,6 +230,7 @@ void BlockEntityRenderer::shutdown() {
     destroyGBufferRhiResources();
     m_rhiInstanceBuffer.shutdown();
     m_sectionCaches.clear();
+    m_blockObjectIds.clear();
     m_flatInstances.clear();
     m_cacheSyncSerial = 0;
     m_syncedActiveChunkRevision = 0;
@@ -238,9 +250,12 @@ void BlockEntityRenderer::beginFrame() {
     m_instanceLightsSyncedThisFrame = false;
 }
 
-void BlockEntityRenderer::prepareFrame(const IWorldView& worldView) {
-    synchronizeInstanceCache(worldView);
+bool BlockEntityRenderer::prepareFrame(const IWorldView& worldView) {
+    if (!synchronizeInstanceCache(worldView)) {
+        return false;
+    }
     updateInstanceLightsForFrame();
+    return true;
 }
 
 bool BlockEntityRenderer::prepareGBuffer(RhiCommandList& commandList) {
@@ -251,7 +266,10 @@ bool BlockEntityRenderer::prepareGBuffer(RhiCommandList& commandList) {
         const uint64_t instanceOffset = m_instanceData.size() * sizeof(InstancedDrawData);
         for (const BlockEntityInstance* instance : m_flatInstances) {
             if (instance->model == &model) {
-                m_instanceData.push_back({instance->modelMatrix, instance->light});
+                m_instanceData.push_back({
+                    instance->modelMatrix,
+                    instance->light,
+                    glm::uvec2(instance->objectId.value, model.materialId.value)});
             }
         }
         const uint64_t instanceCount =
@@ -295,7 +313,10 @@ bool BlockEntityRenderer::prepareShadow(RhiCommandList& commandList,
                 distanceSq > maxDistanceSq) {
                 continue;
             }
-            m_instanceData.push_back({instance->modelMatrix, instance->light});
+            m_instanceData.push_back({
+                instance->modelMatrix,
+                instance->light,
+                glm::uvec2(instance->objectId.value, model.materialId.value)});
         }
         const uint64_t instanceCount =
             (m_instanceData.size() * sizeof(InstancedDrawData) - instanceOffset) /
@@ -394,20 +415,23 @@ void BlockEntityRenderer::createGBufferRhiResources() {
         {4u, 1u, RhiVertexFormat::Float4, offsetof(InstancedDrawData, modelMatrix) + sizeof(glm::vec4)},
         {5u, 1u, RhiVertexFormat::Float4, offsetof(InstancedDrawData, modelMatrix) + sizeof(glm::vec4) * 2u},
         {6u, 1u, RhiVertexFormat::Float4, offsetof(InstancedDrawData, modelMatrix) + sizeof(glm::vec4) * 3u},
-        {7u, 1u, RhiVertexFormat::Float2, offsetof(InstancedDrawData, light)}
+        {7u, 1u, RhiVertexFormat::Float2, offsetof(InstancedDrawData, light)},
+        {8u, 1u, RhiVertexFormat::Uint2, offsetof(InstancedDrawData, identity)}
     };
     pipelineDesc.depthStencil.depthTestEnabled = true;
     pipelineDesc.depthStencil.depthWriteEnabled = true;
     pipelineDesc.colorFormats = {RhiTextureFormat::Rgba8Unorm, RhiTextureFormat::Rgb10A2Unorm,
         RhiTextureFormat::Rg8Unorm, RhiTextureFormat::Rgba8Unorm, RhiTextureFormat::Rgba8Unorm,
+        RhiTextureFormat::Rgba8Unorm, RhiTextureFormat::Rg32Uint,
         RhiTextureFormat::Rg16Float};
     pipelineDesc.depthFormat = RhiTextureFormat::Depth32Float;
-    pipelineDesc.blend.attachments.resize(6u);
+    pipelineDesc.blend.attachments.resize(8u);
     m_gbufferPipeline = m_rhiDevice->createGraphicsPipeline(pipelineDesc);
     pipelineDesc.debugName = "BlockEntity.Shadow.Pipeline";
     pipelineDesc.vertexShader = m_shadowVertexShader;
     pipelineDesc.fragmentShader = m_shadowFragmentShader;
     pipelineDesc.layout = m_shadowPipelineLayout;
+    pipelineDesc.vertexInput.attributes.pop_back();
     pipelineDesc.colorFormats.clear();
     pipelineDesc.blend.attachments.clear();
     m_shadowPipeline = m_rhiDevice->createGraphicsPipeline(pipelineDesc);
@@ -525,11 +549,11 @@ glm::mat4 BlockEntityRenderer::buildModelMatrix(const ModelEntry& entry,
     return model;
 }
 
-void BlockEntityRenderer::rebuildSectionCache(const Chunk& chunk,
+bool BlockEntityRenderer::rebuildSectionCache(const Chunk& chunk,
                                               const SubChunk& subChunk,
                                               const int scy,
-                                              SectionCache& cache) const {
-    cache.instances.clear();
+                                              SectionCache& cache) {
+    std::vector<BlockEntityInstance> rebuiltInstances;
 
     const glm::ivec3 chunkOffset = chunk.getWorldOffset();
     const int yBase = scy * SubChunk::SIZE;
@@ -551,6 +575,18 @@ void BlockEntityRenderer::rebuildSectionCache(const Chunk& chunk,
                 const glm::vec3 blockPosition(static_cast<float>(chunkOffset.x + lx),
                                               static_cast<float>(columnY),
                                               static_cast<float>(chunkOffset.z + lz));
+                const BlockPositionKey positionKey{
+                    chunkOffset.x + lx, columnY, chunkOffset.z + lz};
+                auto objectId = m_blockObjectIds.find(positionKey);
+                if (objectId == m_blockObjectIds.end()) {
+                    const std::optional<renderer::contracts::StableObjectId> allocated =
+                        renderer::contracts::allocateStableSceneId<
+                            renderer::contracts::StableObjectIdTag>();
+                    if (!allocated.has_value()) {
+                        return false;
+                    }
+                    objectId = m_blockObjectIds.emplace(positionKey, *allocated).first;
+                }
                 BlockEntityInstance instance;
                 instance.chunk = &chunk;
                 instance.model = &modelIt->second;
@@ -562,10 +598,13 @@ void BlockEntityRenderer::rebuildSectionCache(const Chunk& chunk,
                 instance.blockPosition = blockPosition;
                 instance.center = blockPosition + glm::vec3(0.5f, 0.5f, 0.5f);
                 instance.modelMatrix = buildModelMatrix(*instance.model, instance.stateId, instance.blockPosition);
-                cache.instances.push_back(instance);
+                instance.objectId = objectId->second;
+                rebuiltInstances.push_back(instance);
             }
         }
     }
+    cache.instances = std::move(rebuiltInstances);
+    return true;
 }
 
 void BlockEntityRenderer::rebuildFlatInstanceList() {
@@ -594,9 +633,9 @@ void BlockEntityRenderer::updateInstanceLightsForFrame() {
     }
 }
 
-void BlockEntityRenderer::synchronizeInstanceCache(const IWorldView& worldView) {
+bool BlockEntityRenderer::synchronizeInstanceCache(const IWorldView& worldView) {
     if (m_instanceCacheSyncedThisFrame) {
-        return;
+        return true;
     }
     m_instanceCacheSyncedThisFrame = true;
 
@@ -605,7 +644,7 @@ void BlockEntityRenderer::synchronizeInstanceCache(const IWorldView& worldView) 
     if (m_hasSyncedRevisions &&
         m_syncedActiveChunkRevision == activeChunkRevision &&
         m_syncedBlockContentRevision == blockContentRevision) {
-        return;
+        return true;
     }
 
     ++m_cacheSyncSerial;
@@ -629,9 +668,13 @@ void BlockEntityRenderer::synchronizeInstanceCache(const IWorldView& worldView) 
             auto [it, inserted] = m_sectionCaches.try_emplace(key);
             SectionCache& cache = it->second;
             if (inserted || cache.chunk != chunk || cache.meshRevision != revision) {
-                cache.chunk = chunk;
-                cache.meshRevision = revision;
-                rebuildSectionCache(*chunk, *subChunk, scy, cache);
+                SectionCache rebuilt;
+                rebuilt.chunk = chunk;
+                rebuilt.meshRevision = revision;
+                if (!rebuildSectionCache(*chunk, *subChunk, scy, rebuilt)) {
+                    return false;
+                }
+                cache = std::move(rebuilt);
             }
             cache.syncSerial = syncSerial;
         }
@@ -645,10 +688,28 @@ void BlockEntityRenderer::synchronizeInstanceCache(const IWorldView& worldView) 
         }
     }
 
+    std::unordered_set<BlockPositionKey, BlockPositionKeyHash> visiblePositions;
+    for (const auto& cachePair : m_sectionCaches) {
+        for (const BlockEntityInstance& instance : cachePair.second.instances) {
+            visiblePositions.insert({
+                static_cast<int>(instance.blockPosition.x),
+                static_cast<int>(instance.blockPosition.y),
+                static_cast<int>(instance.blockPosition.z)});
+        }
+    }
+    for (auto it = m_blockObjectIds.begin(); it != m_blockObjectIds.end();) {
+        if (visiblePositions.find(it->first) == visiblePositions.end()) {
+            it = m_blockObjectIds.erase(it);
+        } else {
+            ++it;
+        }
+    }
+
     m_syncedActiveChunkRevision = activeChunkRevision;
     m_syncedBlockContentRevision = blockContentRevision;
     rebuildFlatInstanceList();
     m_hasSyncedRevisions = true;
+    return true;
 }
 
 void BlockEntityRenderer::renderToGBuffer(RhiCommandList& commandList,

@@ -2,8 +2,11 @@
 #include "renderer/rhi/RhiShaderSourceLoader.h"
 
 #include <array>
+#include <cctype>
+#include <initializer_list>
 #include <iostream>
 #include <string>
+#include <string_view>
 
 namespace {
 struct ShaderCase {
@@ -37,19 +40,103 @@ struct ShaderCase {
     }
     return true;
 }
+
+[[nodiscard]] std::string normalizedShaderSource(const std::string& source) {
+    std::string normalized;
+    normalized.reserve(source.size());
+    for (const unsigned char character : source) {
+        if (std::isspace(character) == 0) {
+            normalized.push_back(static_cast<char>(character));
+        }
+    }
+    return normalized;
+}
+
+[[nodiscard]] bool sourceContainsAll(
+    const std::string& source,
+    const std::initializer_list<std::string_view> tokens) {
+    for (const std::string_view token : tokens) {
+        if (source.find(token) == std::string::npos) {
+            return false;
+        }
+    }
+    return true;
+}
+
+[[nodiscard]] bool validateGBufferWriterContracts() {
+    const auto terrainSource = renderer::rhi::loadShaderSource(
+        "assets/shaders/chunk_gbuffer.frag");
+    if (!terrainSource.has_value()) {
+        std::cerr << "Terrain GBuffer fragment source failed to load\n";
+        return false;
+    }
+    const std::string normalizedTerrain = normalizedShaderSource(*terrainSource);
+    if (!sourceContainsAll(normalizedTerrain, {
+            "layout(location=0)outvec4GAlbedoMaterial;",
+            "layout(location=1)outvec4GNormalAo;",
+            "layout(location=2)outvec4GVoxelLight;",
+            "layout(location=3)outvec4GMaterial;",
+            "layout(location=4)outvec4GMaterialAux;",
+            "layout(location=5)outvec4GF0Metallic;",
+            "layout(location=6)outuvec2GObjectMaterialId;"}) ||
+        normalizedTerrain.find("layout(location=7)out") != std::string::npos) {
+        std::cerr << "Terrain GBuffer writer must expose seven outputs ending in integer identity\n";
+        return false;
+    }
+
+    constexpr std::array<const char*, 5> kObjectWriters{{
+        "assets/shaders/entity_gbuffer_rhi.frag",
+        "assets/shaders/item_drop_gbuffer_rhi.frag",
+        "assets/shaders/falling_block_gbuffer_rhi.frag",
+        "assets/shaders/block_entity_gbuffer_rhi.frag",
+        "assets/shaders/static_mesh_gbuffer_rhi.frag"}};
+    for (const char* path : kObjectWriters) {
+        const auto source = renderer::rhi::loadShaderSource(path);
+        if (!source.has_value()) {
+            std::cerr << "Object GBuffer fragment source failed to load: " << path << '\n';
+            return false;
+        }
+        const std::string normalized = normalizedShaderSource(*source);
+        if (!sourceContainsAll(normalized, {
+                "layout(location=0)outvec4gAlbedoMaterial;",
+                "layout(location=1)outvec4gNormalAo;",
+                "layout(location=2)outvec4gVoxelLight;",
+                "layout(location=3)outvec4gMaterial;",
+                "layout(location=4)outvec4gMaterialAux;",
+                "layout(location=5)outvec4gF0Metallic;",
+                "layout(location=6)outuvec2gObjectMaterialId;",
+                "layout(location=7)outvec2gVelocity;"})) {
+            std::cerr << "Object GBuffer writer must expose eight outputs with integer identity: "
+                      << path << '\n';
+            return false;
+        }
+    }
+    return true;
+}
 } // namespace
 
 int main() {
-    constexpr std::array<ShaderCase, 67> kShaderCases{{
+    constexpr std::array<ShaderCase, 75> kShaderCases{{
         {"tests/shaders/rhi_screen_coordinates_test.frag", RhiShaderStage::Fragment},
         {"tests/shaders/material_brdf_shared_test.frag", RhiShaderStage::Fragment},
         {"assets/shaders/fullscreen_triangle_rhi.vert", RhiShaderStage::Vertex},
         {"assets/shaders/deferred_lighting.vert", RhiShaderStage::Vertex},
         {"assets/shaders/skybox_blur_rhi.vert", RhiShaderStage::Vertex},
         {"assets/shaders/gameplay_sky_capture_rhi.vert", RhiShaderStage::Vertex},
+        {"assets/shaders/chunk_gbuffer.vert", RhiShaderStage::Vertex,
+         "RHI_TERRAIN_MDI", "RHI_TERRAIN_NORMAL_MAPS", "RHI_TERRAIN_SPECULAR_MAPS"},
         {"assets/shaders/entity_gbuffer_rhi.vert", RhiShaderStage::Vertex},
+        {"assets/shaders/entity_gbuffer_rhi.frag", RhiShaderStage::Fragment},
         {"assets/shaders/item_drop_gbuffer_rhi.vert", RhiShaderStage::Vertex},
+        {"assets/shaders/item_drop_gbuffer_rhi.frag", RhiShaderStage::Fragment},
         {"assets/shaders/falling_block_gbuffer_rhi.vert", RhiShaderStage::Vertex},
+        {"assets/shaders/falling_block_gbuffer_rhi.frag", RhiShaderStage::Fragment},
+        {"assets/shaders/falling_block_gbuffer_rhi.vert", RhiShaderStage::Vertex,
+         "RHI_DROP_BLOCK"},
+        {"assets/shaders/falling_block_gbuffer_rhi.frag", RhiShaderStage::Fragment,
+         "RHI_DROP_BLOCK"},
+        {"assets/shaders/block_entity_gbuffer_rhi.vert", RhiShaderStage::Vertex},
+        {"assets/shaders/block_entity_gbuffer_rhi.frag", RhiShaderStage::Fragment},
         {"assets/shaders/static_mesh_gbuffer_rhi.vert", RhiShaderStage::Vertex},
         {"assets/shaders/static_mesh_gbuffer_rhi.frag", RhiShaderStage::Fragment},
         {"assets/shaders/static_mesh_shadow_rhi.vert", RhiShaderStage::Vertex},
@@ -140,5 +227,6 @@ int main() {
                                     renderer::rhi::RhiShaderBackend::OpenGl,
                                     "OpenGL") && success;
     }
+    success = validateGBufferWriterContracts() && success;
     return success ? 0 : 1;
 }

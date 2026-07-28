@@ -574,8 +574,11 @@ bool TerrainRhiPipelineSet::ensureGBufferPipeline(ResourceMgr& resourceMgr) {
         RhiTextureFormat::Rgb10A2Unorm,
         RhiTextureFormat::Rg8Unorm,
         RhiTextureFormat::Rgba8Unorm,
-        RhiTextureFormat::Rgba8Unorm
+        RhiTextureFormat::Rgba8Unorm,
+        RhiTextureFormat::Rgba8Unorm,
+        RhiTextureFormat::Rg32Uint
     };
+    pipelineDesc.blend.attachments.resize(7u);
     pipelineDesc.depthFormat = RhiTextureFormat::Depth32Float;
     pipelineDesc.debugName = "Terrain.GBuffer.OpaquePipeline";
     pipelineDesc.raster.cullMode = RhiCullMode::Back;

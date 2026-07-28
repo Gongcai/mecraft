@@ -14,8 +14,9 @@ layout(binding = 4) uniform sampler2D uMaterialTex;
 layout(binding = 5) uniform sampler2D uMaterialAuxTex;
 layout(binding = 6) uniform sampler2D uSkyCaptureTex;
 layout(binding = 7) uniform sampler2D uVoxelLightTex;
+layout(binding = 8) uniform sampler2D uF0MetallicTex;
 
-layout(std140, binding = 8) uniform ReflectionParams {
+layout(std140, binding = 9) uniform ReflectionParams {
     mat4 pViewProj;
     mat4 pInvViewProj;
     vec4 pCameraPosNear;
@@ -212,10 +213,10 @@ bool traceScreenSpaceReflection(vec3 worldPos,
 void main() {
     vec2 textureUv = rhiScreenUvToTextureUv(vScreenUv);
     float depth = texture(uDepthTex, textureUv).r;
-    vec4 packedMaterial = texture(uMaterialTex, textureUv);
-    SurfaceMaterial material = unpackGBufferMaterial(packedMaterial);
+    SurfaceMaterial material = unpackGBufferMaterial(
+        texture(uMaterialTex, textureUv));
     SurfaceMaterialAux aux = unpackGBufferMaterialAux(texture(uMaterialAuxTex, textureUv));
-    vec3 baseColor = texture(uAlbedoTex, textureUv).rgb;
+    vec3 specularF0 = texture(uF0MetallicTex, textureUv).rgb;
 
     if (depth >= 0.9999) {
         vec3 skyPos = reconstructWorldPosition(vClipUv, 1.0);
@@ -232,18 +233,9 @@ void main() {
 
     // DerivativeMain wet surface — shared implementation in weather_surface.glsl
     float roughness = linearMaterialRoughness(material);
-    float f0Scalar = material.f0;
-    bool staticMeshMaterial =
-        isMaterialKind(aux.materialKind, MATERIAL_STATIC_MESH);
-    vec3 specularF0 = staticMeshMaterial
-        ? mix(clamp(packedMaterial.gba, vec3(0.0), vec3(1.0)),
-              baseColor, aux.metalness)
-        : decodeLabPbrF0(f0Scalar, baseColor);
-    f0Scalar = max(
+    float f0Scalar = max(
         specularF0.r, max(specularF0.g, specularF0.b));
-    float specularF90 = staticMeshMaterial
-        ? mix(clamp(aux.porosity, 0.0, 1.0), 1.0, aux.metalness)
-        : 1.0;
+    float specularF90 = material.specularF90;
     vec2 voxelLightRaw = texture(uVoxelLightTex, textureUv).rg;
     float skyLightRaw01 = clamp(voxelLightRaw.r, 0.0, 1.0);
     float weatherSurfaceWetness = (uRainWetSurfacesEnabled != 0) ? uSurfaceWetness : 0.0;

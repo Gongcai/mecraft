@@ -7,6 +7,7 @@
 #include <glm/glm.hpp>
 
 #include "ModelSceneIds.h"
+#include "renderer/contracts/SceneIdentityContract.h"
 
 namespace scene {
 
@@ -16,6 +17,10 @@ struct NameComponent {
 
 struct SceneEntityIdComponent {
     SceneEntityId value = kInvalidSceneEntityId;
+};
+
+struct StableObjectIdComponent {
+    renderer::contracts::StableObjectId value;
 };
 
 struct StaticMeshComponent {

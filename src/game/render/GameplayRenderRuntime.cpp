@@ -245,7 +245,9 @@ bool GameplayRenderRuntime::init(ResourceMgr& resourceMgr,
     renderer.setDebugService(&renderScene.debugService());
 
     // Entity renderers
-    blockEntityRenderer.init(resourceMgr);
+    if (!blockEntityRenderer.init(resourceMgr)) {
+        return false;
+    }
     if (!staticMeshRenderer.init(resourceMgr, DAMAGED_HELMET_MODEL_PATH)) {
         std::cerr << "GameplayRenderRuntime: " << staticMeshRenderer.lastError() << '\n';
         return false;
@@ -255,7 +257,9 @@ bool GameplayRenderRuntime::init(ResourceMgr& resourceMgr,
         return false;
     }
     firstPersonHeldItemRenderer.init(resourceMgr, renderer.rhiDevice());
-    humanoidRenderer.init(resourceMgr, renderer.rhiDevice());
+    if (!humanoidRenderer.init(resourceMgr, renderer.rhiDevice())) {
+        return false;
+    }
 
     // Cross-wire renderers into RenderScene
     renderScene.setBlockEntityRenderer(&blockEntityRenderer);

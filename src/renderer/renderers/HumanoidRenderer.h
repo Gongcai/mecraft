@@ -13,6 +13,7 @@
 #include "../../ecs/entity/EntitySkinLayout.h"
 #include "../../ecs/entity/EntityModelRegistry.h"
 #include "../rhi/RhiHandles.h"
+#include "../contracts/SceneIdentityContract.h"
 #include "HumanoidSkinLayoutCatalog.h"
 
 class Camera;
@@ -34,11 +35,11 @@ public:
         kRenderMobsOnly   // hide only the local Steve model (first-person view)
     };
 
-    void init(ResourceMgr& resourceMgr, RhiDevice& rhiDevice);
+    [[nodiscard]] bool init(ResourceMgr& resourceMgr, RhiDevice& rhiDevice);
     void shutdown();
-    void prepareFrame(const IWorldView& worldView,
-                      ecs::GameplayRegistry& registry,
-                      RenderMode mode = kRenderAll);
+    [[nodiscard]] bool prepareFrame(const IWorldView& worldView,
+                                    ecs::GameplayRegistry& registry,
+                                    RenderMode mode = kRenderAll);
     void finishFrame();
     void renderPreparedToGBuffer(RhiCommandList& commandList,
                                  const glm::mat4& viewProj,
@@ -85,6 +86,8 @@ private:
     struct TextureResource {
         RhiTextureHandle texture;
         RhiTextureViewHandle view;
+        RhiBufferHandle materialIdentityBuffer;
+        renderer::contracts::StableMaterialId materialId;
         RhiBindGroupHandle gbufferBindGroup;
         RhiBindGroupHandle shadowBindGroup;
     };
@@ -98,6 +101,7 @@ private:
         glm::vec3 entityCenter{0.0f};
         glm::vec2 light{1.0f, 0.0f};
         float hurtFlash = 0.0f;
+        renderer::contracts::StableObjectId objectId;
     };
     std::vector<PreparedPartDraw> m_preparedPartDraws;
 
@@ -139,13 +143,16 @@ private:
 
     PartMesh* getMeshForPart(ecs::StevePartType partType, ecs::EntitySkinLayoutKind skinLayout);
     PartMesh* getMeshForEntityModelPart(const std::string& modelId, const std::string& partName);
-    const TextureResource& requireTextureResource(const std::string& textureKey);
+    [[nodiscard]] const TextureResource* requireTextureResource(
+        const std::string& textureKey);
     void createGBufferRhiResources();
     void destroyGBufferRhiResources();
 
     // Per-object velocity: stores previous-frame model matrix per entity part.
     std::unordered_map<entt::entity, glm::mat4> m_previousModelMatrices;
     std::unordered_map<entt::entity, glm::mat4> m_currentModelMatrices;
+    std::unordered_map<entt::entity, renderer::contracts::StableObjectId>
+        m_rootObjectIds;
 
     // Query world light at a block position. Returns (sunlight, blocklight) normalized to [0,1].
     static glm::vec2 queryWorldLight(const IWorldView& worldView, const glm::vec3& position);

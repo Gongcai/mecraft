@@ -268,14 +268,21 @@ HumanoidRenderer::PartMesh* HumanoidRenderer::getMeshForEntityModelPart(const st
     return &inserted.first->second;
 }
 
-const HumanoidRenderer::TextureResource& HumanoidRenderer::requireTextureResource(
+const HumanoidRenderer::TextureResource* HumanoidRenderer::requireTextureResource(
     const std::string& textureKey) {
     const auto existing = m_textureResources.find(textureKey);
     if (existing != m_textureResources.end()) {
-        return existing->second;
+        return &existing->second;
     }
 
     TextureResource resource;
+    const std::optional<renderer::contracts::StableMaterialId> materialId =
+        renderer::contracts::allocateStableSceneId<
+            renderer::contracts::StableMaterialIdTag>();
+    if (!materialId.has_value()) {
+        return nullptr;
+    }
+    resource.materialId = *materialId;
     resource.texture = m_resourceMgr->getGuiTextureHandle(textureKey);
     if (!resource.texture.isValid()) {
         std::abort();
@@ -287,12 +294,32 @@ const HumanoidRenderer::TextureResource& HumanoidRenderer::requireTextureResourc
     if (!resource.view.isValid()) {
         std::abort();
     }
+    const glm::uvec4 materialIdentity(resource.materialId.value, 0u, 0u, 0u);
+    RhiBufferDesc identityBufferDesc;
+    identityBufferDesc.debugName = "Humanoid.MaterialIdentity";
+    identityBufferDesc.size = sizeof(materialIdentity);
+    identityBufferDesc.usage = rhiFlag(RhiBufferUsage::Uniform) |
+                               rhiFlag(RhiBufferUsage::TransferDst);
+    identityBufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+    identityBufferDesc.initialState = RhiResourceState::UniformBuffer;
+    identityBufferDesc.memoryCategory = RhiMemoryCategory::Uniform;
+    resource.materialIdentityBuffer = m_rhiDevice->createBuffer(
+        identityBufferDesc, &materialIdentity, sizeof(materialIdentity));
+    if (!resource.materialIdentityBuffer.isValid()) {
+        std::abort();
+    }
     RhiBindGroupDesc bindGroupDesc;
     bindGroupDesc.layout = m_gbufferRhiBindGroupLayout;
     RhiBindGroupEntry textureEntry;
     textureEntry.binding = 0u;
     textureEntry.resource.combinedTextureSampler = {resource.view, m_gbufferSampler};
     bindGroupDesc.entries.push_back(textureEntry);
+    RhiBindGroupEntry identityEntry;
+    identityEntry.binding = 1u;
+    identityEntry.resource.buffer.buffer = resource.materialIdentityBuffer;
+    identityEntry.resource.buffer.offset = 0u;
+    identityEntry.resource.buffer.range = sizeof(materialIdentity);
+    bindGroupDesc.entries.push_back(identityEntry);
     resource.gbufferBindGroup = m_rhiDevice->createBindGroup(bindGroupDesc);
     if (!resource.gbufferBindGroup.isValid()) {
         std::abort();
@@ -302,14 +329,16 @@ const HumanoidRenderer::TextureResource& HumanoidRenderer::requireTextureResourc
     if (!resource.shadowBindGroup.isValid()) {
         std::abort();
     }
-    return m_textureResources.emplace(textureKey, resource).first->second;
+    return &m_textureResources.emplace(textureKey, resource).first->second;
 }
 
-void HumanoidRenderer::init(ResourceMgr& resourceMgr, RhiDevice& rhiDevice) {
+bool HumanoidRenderer::init(ResourceMgr& resourceMgr, RhiDevice& rhiDevice) {
     m_resourceMgr = &resourceMgr;
     m_rhiDevice = &rhiDevice;
     createGBufferRhiResources();
-    requireTextureResource("steve");
+    if (requireTextureResource("steve") == nullptr) {
+        return false;
+    }
 
     const renderer::HumanoidSkinLayoutDefinitions& skinLayouts = renderer::humanoidSkinLayoutDefinitions();
     for (std::size_t layout = 0; layout < skinLayouts.size(); ++layout) {
@@ -320,6 +349,7 @@ void HumanoidRenderer::init(ResourceMgr& resourceMgr, RhiDevice& rhiDevice) {
                                                              skinLayout.textureHeight);
         }
     }
+    return true;
 }
 
 void HumanoidRenderer::shutdown() {
@@ -333,11 +363,15 @@ void HumanoidRenderer::shutdown() {
         if (texturePair.second.view.isValid()) {
             m_rhiDevice->destroyTextureView(texturePair.second.view);
         }
+        if (texturePair.second.materialIdentityBuffer.isValid()) {
+            m_rhiDevice->destroyBuffer(texturePair.second.materialIdentityBuffer);
+        }
     }
     m_textureResources.clear();
     destroyGBufferRhiResources();
     m_preparedPartDraws.clear();
     m_currentModelMatrices.clear();
+    m_rootObjectIds.clear();
     for (auto& layoutMeshes : m_skinLayoutMeshes) {
         for (PartMesh& mesh : layoutMeshes) {
             destroyMesh(mesh);
@@ -351,12 +385,29 @@ void HumanoidRenderer::shutdown() {
     m_resourceMgr = nullptr;
 }
 
-void HumanoidRenderer::prepareFrame(const IWorldView& worldView,
+bool HumanoidRenderer::prepareFrame(const IWorldView& worldView,
                                     ecs::GameplayRegistry& gameplayRegistry,
                                     const RenderMode mode) {
     auto& registry = gameplayRegistry.registry();
     m_preparedPartDraws.clear();
     m_currentModelMatrices.clear();
+    std::unordered_set<entt::entity> currentRoots;
+
+    const auto objectIdForRoot = [this](const entt::entity root)
+        -> std::optional<renderer::contracts::StableObjectId> {
+        const auto existing = m_rootObjectIds.find(root);
+        if (existing != m_rootObjectIds.end()) {
+            return existing->second;
+        }
+        const std::optional<renderer::contracts::StableObjectId> allocated =
+            renderer::contracts::allocateStableSceneId<
+                renderer::contracts::StableObjectIdTag>();
+        if (!allocated.has_value()) {
+            return std::nullopt;
+        }
+        m_rootObjectIds.emplace(root, *allocated);
+        return allocated;
+    };
 
     const auto appendPart = [this](const entt::entity partEntity,
                                    const PartMesh* mesh,
@@ -364,7 +415,8 @@ void HumanoidRenderer::prepareFrame(const IWorldView& worldView,
                                    const glm::mat4& model,
                                    const glm::vec3& entityCenter,
                                    const glm::vec2& light,
-                                   const float hurtFlash) {
+                                   const float hurtFlash,
+                                   const renderer::contracts::StableObjectId objectId) {
         if (mesh == nullptr || !mesh->rhiVertexBuffer.isValid() || mesh->vertexCount == 0u) {
             return;
         }
@@ -376,14 +428,24 @@ void HumanoidRenderer::prepareFrame(const IWorldView& worldView,
             previous != m_previousModelMatrices.end() ? previous->second : model,
             entityCenter,
             light,
-            hurtFlash
+            hurtFlash,
+            objectId
         });
         m_currentModelMatrices[partEntity] = model;
     };
 
-    const TextureResource& steveTexture = requireTextureResource("steve");
+    const TextureResource* steveTexture = requireTextureResource("steve");
+    if (steveTexture == nullptr) {
+        return false;
+    }
     auto steveView = registry.view<ecs::SteveTag, ecs::ChildrenComponent>();
     for (const entt::entity root : steveView) {
+        currentRoots.insert(root);
+        const std::optional<renderer::contracts::StableObjectId> objectId =
+            objectIdForRoot(root);
+        if (!objectId.has_value()) {
+            return false;
+        }
         if (!shouldRenderSteveRoot(registry, root, mode)) {
             continue;
         }
@@ -412,7 +474,8 @@ void HumanoidRenderer::prepareFrame(const IWorldView& worldView,
                 const auto& transform = registry.get<ecs::WorldTransformComponent>(child);
                 appendPart(child,
                            getMeshForPart(part.partType, ecs::EntitySkinLayoutKind::Steve64x64),
-                           steveTexture, transform.worldMatrix, entityCenter, light, hurtFlash);
+                           *steveTexture, transform.worldMatrix, entityCenter,
+                           light, hurtFlash, *objectId);
             }
             const auto* children = registry.try_get<ecs::ChildrenComponent>(child);
             if (children == nullptr) {
@@ -426,7 +489,8 @@ void HumanoidRenderer::prepareFrame(const IWorldView& worldView,
                 const auto& transform = registry.get<ecs::WorldTransformComponent>(partEntity);
                 appendPart(partEntity,
                            getMeshForPart(part.partType, ecs::EntitySkinLayoutKind::Steve64x64),
-                           steveTexture, transform.worldMatrix, entityCenter, light, hurtFlash);
+                           *steveTexture, transform.worldMatrix, entityCenter,
+                           light, hurtFlash, *objectId);
             }
         }
     }
@@ -434,10 +498,19 @@ void HumanoidRenderer::prepareFrame(const IWorldView& worldView,
     auto mobView = registry.view<ecs::MobTag, ecs::ChildrenComponent,
                                  ecs::MobVisualComponent, ecs::TransformComponent>();
     for (const entt::entity root : mobView) {
+        currentRoots.insert(root);
+        const std::optional<renderer::contracts::StableObjectId> objectId =
+            objectIdForRoot(root);
+        if (!objectId.has_value()) {
+            return false;
+        }
         const auto& visual = mobView.get<ecs::MobVisualComponent>(root);
         const auto& rootTransform = mobView.get<ecs::TransformComponent>(root);
         const auto& rootChildren = mobView.get<ecs::ChildrenComponent>(root);
-        const TextureResource& texture = requireTextureResource(visual.textureKey);
+        const TextureResource* texture = requireTextureResource(visual.textureKey);
+        if (texture == nullptr) {
+            return false;
+        }
         const glm::vec3 entityCenter = rootTransform.position +
             glm::vec3(0.0f, rootTransform.eyeHeight * 0.5f, 0.0f);
         const glm::vec2 light = queryWorldLight(worldView, entityCenter);
@@ -467,9 +540,19 @@ void HumanoidRenderer::prepareFrame(const IWorldView& worldView,
             }
             const glm::mat4 model = applyMobVisualScale(
                 transform->worldMatrix, rootTransform.position, visual.scale);
-            appendPart(partEntity, mesh, texture, model, entityCenter, light, hurtFlash);
+            appendPart(partEntity, mesh, *texture, model, entityCenter, light,
+                       hurtFlash, *objectId);
         }
     }
+
+    for (auto it = m_rootObjectIds.begin(); it != m_rootObjectIds.end();) {
+        if (currentRoots.find(it->first) == currentRoots.end()) {
+            it = m_rootObjectIds.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    return true;
 }
 
 void HumanoidRenderer::finishFrame() {
@@ -525,6 +608,8 @@ void HumanoidRenderer::createGBufferRhiResources() {
     bindGroupLayoutDesc.debugName = "Humanoid.GBuffer.BindGroupLayout";
     bindGroupLayoutDesc.entries.push_back({0u, RhiBindingType::CombinedTextureSampler,
                                            rhiFlag(RhiShaderStage::Fragment), 1u});
+    bindGroupLayoutDesc.entries.push_back({1u, RhiBindingType::UniformBuffer,
+                                           rhiFlag(RhiShaderStage::Fragment), 1u});
     m_gbufferRhiBindGroupLayout = m_rhiDevice->createBindGroupLayout(bindGroupLayoutDesc);
     bindGroupLayoutDesc.debugName = "Humanoid.Shadow.BindGroupLayout";
     m_shadowRhiBindGroupLayout = m_rhiDevice->createBindGroupLayout(bindGroupLayoutDesc);
@@ -561,9 +646,10 @@ void HumanoidRenderer::createGBufferRhiResources() {
     pipelineDesc.depthStencil.depthWriteEnabled = true;
     pipelineDesc.colorFormats = {RhiTextureFormat::Rgba8Unorm, RhiTextureFormat::Rgb10A2Unorm,
         RhiTextureFormat::Rg8Unorm, RhiTextureFormat::Rgba8Unorm, RhiTextureFormat::Rgba8Unorm,
+        RhiTextureFormat::Rgba8Unorm, RhiTextureFormat::Rg32Uint,
         RhiTextureFormat::Rg16Float};
     pipelineDesc.depthFormat = RhiTextureFormat::Depth32Float;
-    pipelineDesc.blend.attachments.resize(6u);
+    pipelineDesc.blend.attachments.resize(8u);
     m_gbufferRhiPipeline = m_rhiDevice->createGraphicsPipeline(pipelineDesc);
     pipelineDesc.debugName = "Humanoid.Shadow.Pipeline";
     pipelineDesc.vertexShader = m_shadowRhiVertexShader;
@@ -646,7 +732,9 @@ void HumanoidRenderer::renderPreparedToGBuffer(RhiCommandList& commandList,
         glm::mat4 modelViewProj;
         glm::mat4 previousModelViewProj;
         glm::mat4 model;
-        glm::vec4 lightHurt;
+        glm::vec2 light;
+        float hurtFlash;
+        uint32_t objectId;
     };
     commandList.setGraphicsPipeline(m_gbufferRhiPipeline);
     for (const PreparedPartDraw& draw : m_preparedPartDraws) {
@@ -654,7 +742,9 @@ void HumanoidRenderer::renderPreparedToGBuffer(RhiCommandList& commandList,
             viewProj * draw.model,
             previousViewProj * draw.previousModel,
             draw.model,
-            glm::vec4(draw.light, draw.hurtFlash, 0.0f)
+            draw.light,
+            draw.hurtFlash,
+            draw.objectId.value
         };
         commandList.setBindGroup(0u, draw.texture->gbufferBindGroup);
         commandList.setVertexBuffer(0u, draw.mesh->rhiVertexBuffer, 0u);
@@ -763,7 +853,11 @@ void HumanoidRenderer::renderPreparedForward(RhiCommandList& commandList,
     const glm::mat4 torso = root * glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 1.125f, 0.0f));
 
     struct PushConstants { glm::mat4 viewProj; glm::mat4 model; glm::vec4 lighting; };
-    const TextureResource& steveTexture = requireTextureResource("steve");
+    const auto steveTextureIt = m_textureResources.find("steve");
+    if (steveTextureIt == m_textureResources.end()) {
+        std::abort();
+    }
+    const TextureResource& steveTexture = steveTextureIt->second;
     commandList.setGraphicsPipeline(m_inventoryPreviewPipeline);
     commandList.setBindGroup(0u, steveTexture.gbufferBindGroup);
     const glm::mat4 viewProj = projection * view;

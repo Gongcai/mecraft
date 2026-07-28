@@ -8,6 +8,8 @@ layout (location = 1) out vec4 GNormalAo;
 layout (location = 2) out vec4 GVoxelLight;
 layout (location = 3) out vec4 GMaterial;
 layout (location = 4) out vec4 GMaterialAux;
+layout (location = 5) out vec4 GF0Metallic;
+layout (location = 6) out uvec2 GObjectMaterialId;
 
 layout(location = 0) in vec2 vUV;
 layout(location = 1) in float vSunlight;
@@ -22,6 +24,7 @@ layout(location = 9) flat in float vTintKind;
 layout(location = 10) flat in float vMaterialKind;
 layout(location = 11) in vec2 vTintUV;
 layout(location = 12) in vec3 vWorldPos;
+layout(location = 13) flat in uvec2 vIdentity;
 
 #ifdef RHI_TERRAIN_MDI
 layout(set = 1, binding = 0) uniform sampler2DArray texArray;
@@ -231,7 +234,7 @@ void applyLabPbrSpecularMap(vec4 specularTexel,
     LabPbrSpecularSample decoded =
         decodeLabPbrSpecular(specularTexel, albedo);
     material.perceptualRoughness = decoded.perceptualRoughness;
-    material.f0 = clamp(specularTexel.g, 0.0, 1.0);
+    material.encodedF0OrMetalId = clamp(specularTexel.g, 0.0, 1.0);
     if (decoded.emissionProvided) {
         material.emission = decoded.emission;
     }
@@ -335,7 +338,8 @@ void main() {
                 material.perceptualRoughness, 0.0, 1.0);
             smoothness = mix(smoothness, 1.0, puddleFact);
             material.perceptualRoughness = 1.0 - smoothness;
-            material.f0 = max(material.f0, 0.04 * puddleFact);
+            material.encodedF0OrMetalId = max(
+                material.encodedF0OrMetalId, 0.04 * puddleFact);
         }
 
         float wetAlbedoFact = ComputeRainWetAlbedoMaskFromNoise(rainWetness);
@@ -349,4 +353,8 @@ void main() {
     GVoxelLight = vec4(clamp(vSunlight, 0.0, 1.0), clamp(vBlockLight, 0.0, 1.0), 0.0, 1.0);
     GMaterial = packGBufferMaterial(material);
     GMaterialAux = packGBufferMaterialAux(aux);
+    vec3 specularF0 = decodeLabPbrF0(
+        material.encodedF0OrMetalId, albedo);
+    GF0Metallic = packGBufferF0Metallic(specularF0, aux.metalness);
+    GObjectMaterialId = vIdentity;
 }

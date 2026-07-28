@@ -12,7 +12,8 @@ layout(push_constant) uniform RhiPushConstants {
     mat4 uModelViewProj;
     mat4 uPreviousModelViewProj;
     mat4 uModel;
-    vec4 uLight;
+    vec2 uLight;
+    uvec2 uIdentity;
 };
 void main() {
     vec4 worldPosition = uModel * vec4(aPosition, 1.0);

@@ -61,12 +61,16 @@ public:
     [[nodiscard]] RhiTextureHandle voxelLightTextureHandle() const { return m_gVoxelLightHandle; }
     [[nodiscard]] RhiTextureHandle materialTextureHandle() const { return m_gMaterialHandle; }
     [[nodiscard]] RhiTextureHandle materialAuxTextureHandle() const { return m_gMaterialAuxHandle; }
+    [[nodiscard]] RhiTextureHandle f0MetallicTextureHandle() const { return m_gF0MetallicHandle; }
+    [[nodiscard]] RhiTextureHandle objectMaterialIdTextureHandle() const { return m_gObjectMaterialIdHandle; }
     [[nodiscard]] RhiTextureHandle depthTextureHandle() const { return m_gDepthHandle; }
     [[nodiscard]] RhiTextureViewHandle albedoTextureViewHandle() const { return m_gAlbedoView; }
     [[nodiscard]] RhiTextureViewHandle normalAoTextureViewHandle() const { return m_gNormalAoView; }
     [[nodiscard]] RhiTextureViewHandle voxelLightTextureViewHandle() const { return m_gVoxelLightView; }
     [[nodiscard]] RhiTextureViewHandle materialTextureViewHandle() const { return m_gMaterialView; }
     [[nodiscard]] RhiTextureViewHandle materialAuxTextureViewHandle() const { return m_gMaterialAuxView; }
+    [[nodiscard]] RhiTextureViewHandle f0MetallicTextureViewHandle() const { return m_gF0MetallicView; }
+    [[nodiscard]] RhiTextureViewHandle objectMaterialIdTextureViewHandle() const { return m_gObjectMaterialIdView; }
     [[nodiscard]] RhiTextureViewHandle depthTextureViewHandle() const { return m_gDepthView; }
     bool ensureGBufferTextureViews(RhiDevice& rhiDevice);
     [[nodiscard]] RhiTextureHandle csmShadowDepthTextureHandle() const { return m_csmShadowDepthHandle; }
@@ -311,19 +315,25 @@ private:
     // 0 RGBA8    = linear albedo.rgb, emissive hint.a
     // 1 RGBA16F  = encoded world normal.rgb, vertex AO.a
     // 2 RG8      = sky light.r, block light.g
-    // 3 RGBA8    = perceptual roughness.r, F0-or-LabPBR-metal.g, emission.b, subsurface.a
+    // 3 RGBA8    = perceptual roughness.r, specular F90.g, emission.b, subsurface.a
     // 4 RGBA8    = DerivativeMain material id.r, wetness mask.g, porosity.b, metalness.a
+    // 5 RGBA8    = resolved RGB F0.rgb, metallic.a
+    // 6 RG32UI   = stable object ID.r, stable material ID.g
     RhiTextureHandle m_gAlbedoHandle;
     RhiTextureHandle m_gNormalAoHandle;
     RhiTextureHandle m_gVoxelLightHandle;
     RhiTextureHandle m_gMaterialHandle;
     RhiTextureHandle m_gMaterialAuxHandle;
+    RhiTextureHandle m_gF0MetallicHandle;
+    RhiTextureHandle m_gObjectMaterialIdHandle;
     RhiTextureHandle m_gDepthHandle;
     RhiTextureViewHandle m_gAlbedoView;
     RhiTextureViewHandle m_gNormalAoView;
     RhiTextureViewHandle m_gVoxelLightView;
     RhiTextureViewHandle m_gMaterialView;
     RhiTextureViewHandle m_gMaterialAuxView;
+    RhiTextureViewHandle m_gF0MetallicView;
+    RhiTextureViewHandle m_gObjectMaterialIdView;
     RhiTextureViewHandle m_gDepthView;
 
     RhiDevice* m_rhiDevice = nullptr;

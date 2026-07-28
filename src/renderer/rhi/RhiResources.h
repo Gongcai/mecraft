@@ -192,11 +192,26 @@ struct RhiMemoryStats {
         case RhiTextureFormat::Depth16:
             return 2u;
         case RhiTextureFormat::Rg16Float: return 4u;
+        case RhiTextureFormat::Rg32Uint:
         case RhiTextureFormat::Rgba16Float: return 8u;
         case RhiTextureFormat::Rgba32Float: return 16u;
         case RhiTextureFormat::Undefined: return 0u;
     }
     return 0u;
+}
+
+/// Reports whether a texture format stores unsigned integer color components.
+/// @param format Texture format to classify.
+/// @return True only for unsigned integer color formats.
+[[nodiscard]] constexpr bool rhiTextureFormatIsUnsignedInteger(
+    const RhiTextureFormat format) {
+    switch (format) {
+        case RhiTextureFormat::R32Uint:
+        case RhiTextureFormat::Rg32Uint:
+            return true;
+        default:
+            return false;
+    }
 }
 
 /// Selects whether a resource barrier performs a complete transition or one
@@ -333,11 +348,18 @@ struct RhiQueryPoolDesc {
     uint32_t queryCount = 1;
 };
 
+enum class RhiColorClearValueType : uint8_t {
+    Float,
+    Uint
+};
+
 struct RhiColorAttachment {
     RhiTextureViewHandle view;
     RhiLoadOp loadOp = RhiLoadOp::Load;
     RhiStoreOp storeOp = RhiStoreOp::Store;
+    RhiColorClearValueType clearValueType = RhiColorClearValueType::Float;
     float clearColor[4] = {0.0f, 0.0f, 0.0f, 1.0f};
+    uint32_t clearColorUint[4] = {0u, 0u, 0u, 0u};
 };
 
 struct RhiDepthStencilAttachment {

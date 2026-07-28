@@ -20,12 +20,20 @@ layout(location = 3) flat out uvec2 vMaterialTint;
 layout(location = 4) out vec2 vTintUv;
 layout(location = 5) out vec3 vWorldPosition;
 layout(location = 6) out vec2 vVelocity;
+layout(location = 7) flat out uvec2 vIdentity;
 
 layout(push_constant) uniform RhiPushConstants {
     mat4 uModelViewProj;
     mat4 uPreviousModelViewProj;
     mat4 uModel;
-    vec4 uLightAnimation;
+#ifdef RHI_DROP_BLOCK
+    vec2 uLight;
+    uvec2 uIdentity;
+#else
+    vec2 uLight;
+    float uAnimationTime;
+    uint uObjectId;
+#endif
 };
 
 void main() {
@@ -46,4 +54,9 @@ void main() {
     vec2 currentTextureUv = rhiScreenUvToTextureUv(rhiScreenUvToClipUv(currentClipUv));
     vec2 previousTextureUv = rhiScreenUvToTextureUv(rhiScreenUvToClipUv(previousClipUv));
     vVelocity = currentTextureUv - previousTextureUv;
+#ifdef RHI_DROP_BLOCK
+    vIdentity = uIdentity;
+#else
+    vIdentity = uvec2(uObjectId, aLayer + 1u);
+#endif
 }

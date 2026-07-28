@@ -26,6 +26,7 @@
 #include "stb/stb_image.h"
 
 #include "../contracts/GpuMaterialContract.h"
+#include "../contracts/SceneIdentityContract.h"
 #include "../core/FrameContext.h"
 #include "../rhi/RhiCommandList.h"
 #include "../rhi/RhiCommandListPool.h"
@@ -63,6 +64,11 @@ struct StaticMeshFrameParams {
     glm::vec4 ambientColor{0.2f, 0.2f, 0.2f, 0.0f};
     glm::vec4 fogColor{0.0f};
     glm::vec4 fogParams{0.0f};
+};
+
+struct StaticMeshMaterialParams {
+    renderer::contracts::GpuMaterial material;
+    glm::uvec4 identity{0u};
 };
 
 struct StaticMeshPreviewPushConstants {
@@ -104,6 +110,8 @@ static_assert(sizeof(StaticMeshTransparentPushConstants) == 80u,
               "Static mesh transparent push constants must match the shader block");
 static_assert(sizeof(StaticMeshFrameParams) == 240u,
               "Static mesh frame parameters must match the std140 shader block");
+static_assert(sizeof(StaticMeshMaterialParams) == 272u,
+              "Static mesh material parameters must match the std140 shader block");
 static_assert(sizeof(StaticMeshPreviewPushConstants) == 128u,
               "Static mesh preview push constants must fit the Vulkan minimum limit");
 
@@ -618,6 +626,15 @@ bool StaticMeshRenderer::init(ResourceMgr& resourceMgr,
                               const std::string& modelPath) {
     shutdown();
     m_rhiDevice = &resourceMgr.rhiDevice();
+    const std::optional<renderer::contracts::StableObjectId> objectId =
+        renderer::contracts::allocateStableSceneId<
+            renderer::contracts::StableObjectIdTag>();
+    if (!objectId.has_value()) {
+        setError("stable static mesh object identity space is exhausted");
+        m_rhiDevice = nullptr;
+        return false;
+    }
+    m_objectId = *objectId;
     if (!createPipelineResources() || !loadAsset(modelPath, resourceMgr)) {
         const std::string error = m_lastError;
         shutdown();
@@ -795,9 +812,11 @@ bool StaticMeshRenderer::createPipelineResources() {
         RhiTextureFormat::Rg8Unorm,
         RhiTextureFormat::Rgba8Unorm,
         RhiTextureFormat::Rgba8Unorm,
+        RhiTextureFormat::Rgba8Unorm,
+        RhiTextureFormat::Rg32Uint,
         RhiTextureFormat::Rg16Float};
     pipelineDesc.depthFormat = RhiTextureFormat::Depth32Float;
-    pipelineDesc.blend.attachments.resize(6u);
+    pipelineDesc.blend.attachments.resize(8u);
     m_gbufferPipeline = m_rhiDevice->createGraphicsPipeline(pipelineDesc);
     pipelineDesc.debugName = "StaticMesh.GBuffer.DoubleSidedPipeline";
     pipelineDesc.raster.cullMode = RhiCullMode::None;
@@ -1236,7 +1255,16 @@ bool StaticMeshRenderer::loadAsset(const std::string& modelPath,
                 "]");
             return false;
         }
-        const renderer::contracts::GpuMaterial& params = normalization.material;
+        const std::optional<renderer::contracts::StableMaterialId> materialId =
+            renderer::contracts::allocateStableSceneId<
+                renderer::contracts::StableMaterialIdTag>();
+        if (!materialId.has_value()) {
+            setError("stable static mesh material identity space is exhausted");
+            return false;
+        }
+        const StaticMeshMaterialParams params{
+            normalization.material,
+            glm::uvec4(materialId->value, 0u, 0u, 0u)};
 
         RhiBufferDesc materialBufferDesc;
         materialBufferDesc.debugName = "StaticMesh.MaterialUniformBuffer";
@@ -1247,6 +1275,7 @@ bool StaticMeshRenderer::loadAsset(const std::string& modelPath,
         materialBufferDesc.initialState = RhiResourceState::UniformBuffer;
         materialBufferDesc.memoryCategory = RhiMemoryCategory::Uniform;
         MaterialResource resource;
+        resource.materialId = *materialId;
         resource.uniformBuffer = m_rhiDevice->createBuffer(
             materialBufferDesc, &params, sizeof(params));
         if (!resource.uniformBuffer.isValid()) {
@@ -1617,6 +1646,15 @@ void StaticMeshRenderer::setInstanceTransform(const glm::mat4& model,
     m_instancePlaced = true;
 }
 
+bool StaticMeshRenderer::setStableObjectId(
+    const renderer::contracts::StableObjectId objectId) {
+    if (!objectId.isValid()) {
+        return false;
+    }
+    m_objectId = objectId;
+    return true;
+}
+
 void StaticMeshRenderer::prepareStandaloneFrame() {
     m_voxelLight = glm::vec4(1.0f, 0.0f, 0.0f, 1.0f);
     m_framePrepared = true;
@@ -1690,7 +1728,8 @@ void StaticMeshRenderer::renderToGBuffer(RhiCommandList& commandList) const {
         commandList.setIndexBuffer(primitive.indexBuffer, RhiIndexFormat::Uint32, 0u);
         commandList.pushConstants(
             &pushConstants, sizeof(pushConstants), rhiFlag(RhiShaderStage::Vertex));
-        commandList.drawIndexed(primitive.indexCount, 1u, 0u, 0, 0u);
+        commandList.drawIndexed(
+            primitive.indexCount, 1u, 0u, 0, m_objectId.value);
     }
 }
 
@@ -1920,6 +1959,7 @@ void StaticMeshRenderer::shutdown() {
     m_modelMatrix = glm::mat4(1.0f);
     m_previousModelMatrix = glm::mat4(1.0f);
     m_voxelLight = glm::vec4(1.0f, 0.0f, 0.0f, 1.0f);
+    m_objectId = {};
     m_instancePlaced = false;
     m_framePrepared = false;
     m_lastError.clear();

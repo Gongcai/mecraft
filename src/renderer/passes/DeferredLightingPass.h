@@ -47,7 +47,7 @@ private:
                            RhiTextureFormat format, RhiTextureHandle& viewTexture,
                            RhiTextureViewHandle& textureView);
     bool ensureRhiBindGroup(RhiDevice& rhiDevice,
-                            const std::array<RhiTextureViewHandle, 19>& views);
+                            const std::array<RhiTextureViewHandle, 20>& views);
     void destroyRhiBindGroup();
     void destroyExternalTextureViews();
     void destroyRhiResources();
@@ -79,7 +79,7 @@ private:
     RhiShaderHandle m_fragmentShader;
     RhiPipelineHandle m_pipeline;
     RhiBindGroupHandle m_bindGroup;
-    std::array<RhiTextureViewHandle, 19> m_boundViews = {};
+    std::array<RhiTextureViewHandle, 20> m_boundViews = {};
 };
 
 #endif // MECRAFT_DEFERRED_LIGHTING_PASS_H

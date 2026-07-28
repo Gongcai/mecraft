@@ -99,7 +99,10 @@ struct SurfaceMaterial {
     // Every geometry path stores perceptual roughness. BRDF consumers convert
     // it to linear microfacet roughness exactly once.
     float perceptualRoughness;
-    float f0;
+    // Producer-side LabPBR F0/metal encoding. This value is resolved to RGB
+    // before the G-buffer is written and is never reconstructed by consumers.
+    float encodedF0OrMetalId;
+    float specularF90;
     // Packed emission and SSS contributions.
     float emission;
     float sss;
@@ -154,7 +157,8 @@ bool isDerivativeSssMaterialId(int materialId) {
 SurfaceMaterial defaultSurfaceMaterial() {
     SurfaceMaterial material;
     material.perceptualRoughness = 1.0;
-    material.f0 = 0.0;
+    material.encodedF0OrMetalId = 0.0;
+    material.specularF90 = 1.0;
     material.emission = 0.0;
     material.sss = 0.0;
     return material;
@@ -209,17 +213,17 @@ SurfaceMaterial surfaceMaterialForKind(float materialKind, float emissiveHint) {
     // Per-ID material defaults used when no block _s texture contribution is present.
     if (materialId == MATERIAL_STAINED_GLASS) {
         material.perceptualRoughness = 0.20;
-        material.f0 = 0.04;
+        material.encodedF0OrMetalId = 0.04;
     } else if (materialId == MATERIAL_WATER) {
         material.perceptualRoughness = 0.0;
-        material.f0 = 0.02;
+        material.encodedF0OrMetalId = 0.02;
     } else if (materialId == MATERIAL_ICE) {
         material.perceptualRoughness = 0.31622777;
-        material.f0 = 0.04;
+        material.encodedF0OrMetalId = 0.04;
     } else if (materialId == MATERIAL_SKIN) {
         // Mecraft extension: entity skin — moderate roughness, standard dielectric.
         material.perceptualRoughness = 0.80622577;
-        material.f0 = 0.04;
+        material.encodedF0OrMetalId = 0.04;
     }
 
     // SSS from DerivativeMain per-ID defaults.
@@ -277,10 +281,13 @@ float unpackGBufferVertexAo(vec4 packedNormalAo) {
 }
 
 vec4 packGBufferMaterial(SurfaceMaterial material) {
-    // colortex3Out.zw in DerivativeMain pack specularData.rg/ba. Our target is
-    // expanded RGBA: perceptual roughness/f0-or-metal/emission/sss.
-    return vec4(material.perceptualRoughness, material.f0,
+    return vec4(material.perceptualRoughness, material.specularF90,
                 material.emission, material.sss);
+}
+
+vec4 packGBufferF0Metallic(vec3 specularF0, float metalness) {
+    return vec4(clamp(specularF0, vec3(0.0), vec3(1.0)),
+                clamp(metalness, 0.0, 1.0));
 }
 
 vec4 packGBufferMaterialAux(SurfaceMaterialAux aux) {
@@ -293,7 +300,8 @@ vec4 packGBufferMaterialAux(SurfaceMaterialAux aux) {
 SurfaceMaterial unpackGBufferMaterial(vec4 packedMaterial) {
     SurfaceMaterial material;
     material.perceptualRoughness = clamp(packedMaterial.r, 0.0, 1.0);
-    material.f0 = clamp(packedMaterial.g, 0.0, 1.0);
+    material.encodedF0OrMetalId = 0.0;
+    material.specularF90 = clamp(packedMaterial.g, 0.0, 1.0);
     material.emission = clamp(packedMaterial.b, 0.0, 1.0);
     material.sss = clamp(packedMaterial.a, 0.0, 1.0);
     return material;
@@ -313,7 +321,12 @@ SurfaceMaterialAux unpackGBufferMaterialAux(vec4 packedAux) {
     return aux;
 }
 
-GBufferSurface unpackGBufferSurface(vec4 albedoMaterial, vec4 normalAo, vec4 voxelLight, vec4 packedMaterial) {
+GBufferSurface unpackGBufferSurface(vec4 albedoMaterial,
+                                    vec4 normalAo,
+                                    vec4 voxelLight,
+                                    vec4 packedMaterial,
+                                    vec4 packedMaterialAux,
+                                    vec4 packedF0Metallic) {
     GBufferSurface surface;
     surface.albedo = albedoMaterial.rgb;
     surface.emissiveHint = albedoMaterial.a;
@@ -321,32 +334,10 @@ GBufferSurface unpackGBufferSurface(vec4 albedoMaterial, vec4 normalAo, vec4 vox
     surface.vertexAo = mix(0.72, 1.0, unpackGBufferVertexAo(normalAo));
     surface.voxelLight = voxelLight.rg;
     surface.material = unpackGBufferMaterial(packedMaterial);
-    surface.aux = defaultSurfaceMaterialAux();
-    surface.specularF0 = decodeLabPbrF0(
-        surface.material.f0, surface.albedo);
-    surface.specularF90 = 1.0;
-    return surface;
-}
-
-GBufferSurface unpackGBufferSurface(vec4 albedoMaterial, vec4 normalAo, vec4 voxelLight, vec4 packedMaterial, vec4 packedMaterialAux) {
-    GBufferSurface surface = unpackGBufferSurface(albedoMaterial, normalAo, voxelLight, packedMaterial);
     surface.aux = unpackGBufferMaterialAux(packedMaterialAux);
-    if (isMaterialKind(surface.aux.materialKind, MATERIAL_STATIC_MESH)) {
-        surface.material.perceptualRoughness =
-            clamp(packedMaterial.r, 0.0, 1.0);
-        vec3 dielectricF0 =
-            clamp(packedMaterial.gba, vec3(0.0), vec3(1.0));
-        surface.material.f0 = max(
-            dielectricF0.r,
-            max(dielectricF0.g, dielectricF0.b));
-        surface.material.emission = clamp(albedoMaterial.a, 0.0, 1.0);
-        surface.material.sss = 0.0;
-        surface.specularF0 = mix(
-            dielectricF0, surface.albedo, surface.aux.metalness);
-        surface.specularF90 = mix(
-            clamp(surface.aux.porosity, 0.0, 1.0),
-            1.0, surface.aux.metalness);
-    }
+    surface.specularF0 = clamp(packedF0Metallic.rgb, vec3(0.0), vec3(1.0));
+    surface.aux.metalness = clamp(packedF0Metallic.a, 0.0, 1.0);
+    surface.specularF90 = surface.material.specularF90;
     return surface;
 }
 

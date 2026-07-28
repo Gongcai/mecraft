@@ -167,8 +167,25 @@ bool ForwardPipeline::prepareGraphFrame(const FrameContext& ctx,
         m_shared->particleSystem->prepareFrame(ctx.camera.view, commandList);
     }
     if (m_shared->blockEntityRenderer != nullptr) {
-        m_shared->blockEntityRenderer->prepareFrame(*ctx.worldView);
+        if (!m_shared->blockEntityRenderer->prepareFrame(*ctx.worldView)) {
+            return false;
+        }
         if (!m_shared->blockEntityRenderer->prepareForward(commandList)) {
+            return false;
+        }
+    }
+    if (m_shared->dropRenderer != nullptr && m_shared->dropSystem != nullptr &&
+        !m_shared->dropRenderer->prepareFrame(
+            *ctx.worldView, *m_shared->dropSystem)) {
+        return false;
+    }
+    if (m_shared->humanoidRenderer != nullptr &&
+        m_shared->gameplayRegistry != nullptr) {
+        const HumanoidRenderer::RenderMode mode = ctx.renderLocalPlayerModel
+            ? HumanoidRenderer::kRenderAll
+            : HumanoidRenderer::kRenderMobsOnly;
+        if (!m_shared->humanoidRenderer->prepareFrame(
+                *ctx.worldView, *m_shared->gameplayRegistry, mode)) {
             return false;
         }
     }
@@ -375,7 +392,6 @@ void ForwardPipeline::renderEntitiesAndParticles(
     }
 
     if (m_shared->dropRenderer && m_shared->dropSystem) {
-        m_shared->dropRenderer->prepareFrame(*ctx.worldView, *m_shared->dropSystem);
         m_shared->dropRenderer->renderForward(commandList,
                                               ctx.camera.viewProj,
                                               ctx.skyIntensity,
@@ -383,10 +399,6 @@ void ForwardPipeline::renderEntitiesAndParticles(
     }
 
     if (m_shared->humanoidRenderer && m_shared->gameplayRegistry) {
-        const auto mode = ctx.renderLocalPlayerModel
-            ? HumanoidRenderer::kRenderAll
-            : HumanoidRenderer::kRenderMobsOnly;
-        m_shared->humanoidRenderer->prepareFrame(*ctx.worldView, *m_shared->gameplayRegistry, mode);
         m_shared->humanoidRenderer->renderPreparedForward(
             commandList, ctx.camera.viewProj, ctx.skyIntensity);
         m_shared->humanoidRenderer->finishFrame();

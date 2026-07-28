@@ -154,6 +154,8 @@ void DeferredRenderTargets::initializePersistentTextureStates() {
         m_gVoxelLightHandle,
         m_gMaterialHandle,
         m_gMaterialAuxHandle,
+        m_gF0MetallicHandle,
+        m_gObjectMaterialIdHandle,
         // SceneLighting/SceneComposite/TransparentComposite/Reflection/Cloud
         // are render-graph transients now; the graph tracks their states.
         m_sceneResolvedHandle,
@@ -359,6 +361,8 @@ bool DeferredRenderTargets::createGBufferTextures() {
         !createTexture("DeferredTargets.GBufferVoxelLight", RhiTextureFormat::Rg8Unorm, colorUsage, m_gVoxelLightHandle) ||
         !createTexture("DeferredTargets.GBufferMaterial", RhiTextureFormat::Rgba8Unorm, colorUsage, m_gMaterialHandle) ||
         !createTexture("DeferredTargets.GBufferMaterialAux", RhiTextureFormat::Rgba8Unorm, colorUsage, m_gMaterialAuxHandle) ||
+        !createTexture("DeferredTargets.GBufferF0Metallic", RhiTextureFormat::Rgba8Unorm, colorUsage, m_gF0MetallicHandle) ||
+        !createTexture("DeferredTargets.GBufferObjectMaterialId", RhiTextureFormat::Rg32Uint, colorUsage, m_gObjectMaterialIdHandle) ||
         !createTexture("DeferredTargets.GBufferDepth", RhiTextureFormat::Depth32Float, depthUsage, m_gDepthHandle)) {
         destroyGBufferTextures();
         return false;
@@ -377,6 +381,8 @@ void DeferredRenderTargets::destroyGBufferTextures() {
         &m_gVoxelLightHandle,
         &m_gMaterialHandle,
         &m_gMaterialAuxHandle,
+        &m_gF0MetallicHandle,
+        &m_gObjectMaterialIdHandle,
         &m_gDepthHandle
     };
     for (RhiTextureHandle* texture : textures) {
@@ -1032,6 +1038,8 @@ bool DeferredRenderTargets::registerRhiTextures() {
                             m_gVoxelLightHandle.isValid() &&
                             m_gMaterialHandle.isValid() &&
                             m_gMaterialAuxHandle.isValid() &&
+                            m_gF0MetallicHandle.isValid() &&
+                            m_gObjectMaterialIdHandle.isValid() &&
                             m_gDepthHandle.isValid() &&
                             m_sceneResolvedHandle.isValid() &&
                             m_halfResHandle.isValid() &&
@@ -1305,6 +1313,8 @@ bool DeferredRenderTargets::ensureGBufferTextureViews(RhiDevice& rhiDevice) {
                                m_gVoxelLightView.isValid() &&
                                m_gMaterialView.isValid() &&
                                m_gMaterialAuxView.isValid() &&
+                               m_gF0MetallicView.isValid() &&
+                               m_gObjectMaterialIdView.isValid() &&
                                m_gDepthView.isValid();
     if (allViewsValid) {
         return true;
@@ -1315,6 +1325,8 @@ bool DeferredRenderTargets::ensureGBufferTextureViews(RhiDevice& rhiDevice) {
         !m_gVoxelLightHandle.isValid() ||
         !m_gMaterialHandle.isValid() ||
         !m_gMaterialAuxHandle.isValid() ||
+        !m_gF0MetallicHandle.isValid() ||
+        !m_gObjectMaterialIdHandle.isValid() ||
         !m_gDepthHandle.isValid()) {
         return false;
     }
@@ -1335,6 +1347,12 @@ bool DeferredRenderTargets::ensureGBufferTextureViews(RhiDevice& rhiDevice) {
         if (m_gMaterialAuxView.isValid()) {
             rhiDevice.destroyTextureView(m_gMaterialAuxView);
         }
+        if (m_gF0MetallicView.isValid()) {
+            rhiDevice.destroyTextureView(m_gF0MetallicView);
+        }
+        if (m_gObjectMaterialIdView.isValid()) {
+            rhiDevice.destroyTextureView(m_gObjectMaterialIdView);
+        }
         if (m_gDepthView.isValid()) {
             rhiDevice.destroyTextureView(m_gDepthView);
         }
@@ -1343,6 +1361,8 @@ bool DeferredRenderTargets::ensureGBufferTextureViews(RhiDevice& rhiDevice) {
         m_gVoxelLightView = {};
         m_gMaterialView = {};
         m_gMaterialAuxView = {};
+        m_gF0MetallicView = {};
+        m_gObjectMaterialIdView = {};
         m_gDepthView = {};
     };
 
@@ -1351,6 +1371,8 @@ bool DeferredRenderTargets::ensureGBufferTextureViews(RhiDevice& rhiDevice) {
                               m_gVoxelLightView.isValid() ||
                               m_gMaterialView.isValid() ||
                               m_gMaterialAuxView.isValid() ||
+                              m_gF0MetallicView.isValid() ||
+                              m_gObjectMaterialIdView.isValid() ||
                               m_gDepthView.isValid();
     if (anyViewValid) {
         destroyGBufferViews();
@@ -1383,6 +1405,14 @@ bool DeferredRenderTargets::ensureGBufferTextureViews(RhiDevice& rhiDevice) {
     desc.format = RhiTextureFormat::Rgba8Unorm;
     m_gMaterialAuxView = rhiDevice.createTextureView(desc);
 
+    desc.texture = m_gF0MetallicHandle;
+    desc.format = RhiTextureFormat::Rgba8Unorm;
+    m_gF0MetallicView = rhiDevice.createTextureView(desc);
+
+    desc.texture = m_gObjectMaterialIdHandle;
+    desc.format = RhiTextureFormat::Rg32Uint;
+    m_gObjectMaterialIdView = rhiDevice.createTextureView(desc);
+
     desc.texture = m_gDepthHandle;
     desc.format = RhiTextureFormat::Depth32Float;
     m_gDepthView = rhiDevice.createTextureView(desc);
@@ -1392,6 +1422,8 @@ bool DeferredRenderTargets::ensureGBufferTextureViews(RhiDevice& rhiDevice) {
         !m_gVoxelLightView.isValid() ||
         !m_gMaterialView.isValid() ||
         !m_gMaterialAuxView.isValid() ||
+        !m_gF0MetallicView.isValid() ||
+        !m_gObjectMaterialIdView.isValid() ||
         !m_gDepthView.isValid()) {
         destroyGBufferViews();
         return false;
@@ -2499,6 +2531,12 @@ void DeferredRenderTargets::destroyRhiTextureViews() {
     if (m_rhiViewDevice != nullptr && m_gMaterialAuxView.isValid()) {
         m_rhiViewDevice->destroyTextureView(m_gMaterialAuxView);
     }
+    if (m_rhiViewDevice != nullptr && m_gF0MetallicView.isValid()) {
+        m_rhiViewDevice->destroyTextureView(m_gF0MetallicView);
+    }
+    if (m_rhiViewDevice != nullptr && m_gObjectMaterialIdView.isValid()) {
+        m_rhiViewDevice->destroyTextureView(m_gObjectMaterialIdView);
+    }
     if (m_rhiViewDevice != nullptr && m_gDepthView.isValid()) {
         m_rhiViewDevice->destroyTextureView(m_gDepthView);
     }
@@ -2663,6 +2701,8 @@ void DeferredRenderTargets::destroyRhiTextureViews() {
     m_gVoxelLightView = {};
     m_gMaterialView = {};
     m_gMaterialAuxView = {};
+    m_gF0MetallicView = {};
+    m_gObjectMaterialIdView = {};
     m_gDepthView = {};
     m_atmosphereLutView = {};
     m_csmShadowDepthArrayView = {};

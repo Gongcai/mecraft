@@ -45,8 +45,9 @@ layout(binding = 15) uniform sampler2DArray uCsmShadowDepthAllRaw;
 layout(binding = 16) uniform sampler2DArray uCsmShadowColor0;
 layout(binding = 17) uniform sampler2DArray uCsmShadowColor1;
 layout(binding = 18) uniform sampler2D uRippleNormalTex;
+layout(binding = 19) uniform sampler2D uF0MetallicTex;
 
-layout(std140, binding = 19) uniform DeferredLightingParams {
+layout(std140, binding = 20) uniform DeferredLightingParams {
     mat4 pViewProj;
     mat4 pInvViewProj;
     mat4 pProjection;
@@ -602,7 +603,8 @@ void main() {
                                                   texture(uNormalAoTex, textureUv),
                                                   texture(uVoxelLightTex, textureUv),
                                                   texture(uMaterialTex, textureUv),
-                                                  texture(uMaterialAuxTex, textureUv));
+                                                  texture(uMaterialAuxTex, textureUv),
+                                                  texture(uF0MetallicTex, textureUv));
     vec3 albedo = surface.albedo;
     albedo = desaturateLinear(albedo, uAlbedoDesaturation);
     vec3 normal = surface.normal;

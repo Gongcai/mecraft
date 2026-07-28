@@ -10,10 +10,16 @@ struct TerrainVertexDecoded {
     float animationFps;
     float animated;
     uint tintPacked;
+    uint objectId;
+};
+
+struct TerrainSubChunkMetadata {
+    vec4 originAndFlags;
+    uvec4 identity;
 };
 
 layout(std430, set = 0, binding = 0) readonly buffer TerrainSubChunkMetadataBuffer {
-    vec4 terrainSubChunkOriginAndFlags[];
+    TerrainSubChunkMetadata terrainSubChunkMetadata[];
 };
 
 float decodePackedNormal(uint value) {
@@ -32,7 +38,7 @@ TerrainVertexDecoded decodeTerrainPackedVertex(uint posPacked,
     uint y = (posPacked >> 8u) & 0x0FFFu;
     uint z = ((posPacked & 0xFFu) << 4u) | ((lightAoLayer >> 28u) & 0x0Fu);
     vec3 localPos = vec3(float(x), float(y), float(z)) * (1.0 / 128.0);
-    v.pos = terrainSubChunkOriginAndFlags[metadataIndex].xyz + localPos;
+    v.pos = terrainSubChunkMetadata[metadataIndex].originAndFlags.xyz + localPos;
     ivec2 uvFixed = ivec2(int((uvPacked >> 16u) & 0xFFFFu),
                           int(uvPacked & 0xFFFFu));
     uvFixed = ivec2((uvFixed.x >= 32768) ? uvFixed.x - 65536 : uvFixed.x,
@@ -49,6 +55,7 @@ TerrainVertexDecoded decodeTerrainPackedVertex(uint posPacked,
     v.animationFps = float((tintAnim >> 20u) & 0x3Fu);
     v.animated = float((tintAnim >> 19u) & 0x01u);
     v.tintPacked = tintAnim & 0xFFFFu;
+    v.objectId = terrainSubChunkMetadata[metadataIndex].identity.x;
     return v;
 }
 
@@ -62,7 +69,8 @@ TerrainVertexDecoded decodeLegacyBlockVertex(vec3 pos,
                                               float animationFrameCount,
                                               float animationFps,
                                               float animated,
-                                              uint tintPacked) {
+                                              uint tintPacked,
+                                              uint metadataIndex) {
     TerrainVertexDecoded v;
     v.pos = pos;
     v.uv = uv;
@@ -75,5 +83,6 @@ TerrainVertexDecoded decodeLegacyBlockVertex(vec3 pos,
     v.animationFps = animationFps;
     v.animated = animated;
     v.tintPacked = tintPacked;
+    v.objectId = terrainSubChunkMetadata[metadataIndex].identity.x;
     return v;
 }

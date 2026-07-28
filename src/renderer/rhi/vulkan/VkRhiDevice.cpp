@@ -230,6 +230,7 @@ VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityFlagBits
         case RhiTextureFormat::Depth24:
         case RhiTextureFormat::Depth24Stencil8:
         case RhiTextureFormat::Depth32Float: return 4u;
+        case RhiTextureFormat::Rg32Uint:
         case RhiTextureFormat::Rgba16Float: return 8u;
         case RhiTextureFormat::Rgba32Float: return 16u;
         case RhiTextureFormat::Undefined: break;
@@ -4019,7 +4020,22 @@ void VkRhiCommandList::beginRendering(const RhiRenderingInfo& info) {
     colors.reserve(info.colorAttachmentCount);
     for (uint32_t i = 0u; i < info.colorAttachmentCount; ++i) {
         const auto* view = findRecord(m_device->m_data->textureViews, info.colorAttachments[i].view);
-        if (view == nullptr || !registerAttachmentExtent(info.colorAttachments[i].view)) {
+        const auto* texture = view != nullptr
+            ? findRecord(m_device->m_data->textures, view->desc.texture)
+            : nullptr;
+        const RhiTextureFormat viewFormat = view != nullptr && texture != nullptr
+            ? (view->desc.format == RhiTextureFormat::Undefined
+                   ? texture->desc.format
+                   : view->desc.format)
+            : RhiTextureFormat::Undefined;
+        const bool unsignedInteger =
+            rhiTextureFormatIsUnsignedInteger(viewFormat);
+        if (view == nullptr || texture == nullptr ||
+            !registerAttachmentExtent(info.colorAttachments[i].view) ||
+            (info.colorAttachments[i].loadOp == RhiLoadOp::Clear &&
+             unsignedInteger !=
+                 (info.colorAttachments[i].clearValueType ==
+                  RhiColorClearValueType::Uint))) {
             m_data->valid = false;
             return;
         }
@@ -4028,8 +4044,16 @@ void VkRhiCommandList::beginRendering(const RhiRenderingInfo& info) {
         attachment.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
         attachment.loadOp = toVkLoadOp(info.colorAttachments[i].loadOp);
         attachment.storeOp = toVkStoreOp(info.colorAttachments[i].storeOp);
-        std::memcpy(attachment.clearValue.color.float32,
-                    info.colorAttachments[i].clearColor, sizeof(float) * 4u);
+        if (info.colorAttachments[i].clearValueType ==
+            RhiColorClearValueType::Uint) {
+            std::memcpy(attachment.clearValue.color.uint32,
+                        info.colorAttachments[i].clearColorUint,
+                        sizeof(uint32_t) * 4u);
+        } else {
+            std::memcpy(attachment.clearValue.color.float32,
+                        info.colorAttachments[i].clearColor,
+                        sizeof(float) * 4u);
+        }
         colors.push_back(attachment);
         m_data->resourceReferences.reference(info.colorAttachments[i].view);
     }

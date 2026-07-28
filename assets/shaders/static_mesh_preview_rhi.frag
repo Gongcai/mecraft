@@ -24,6 +24,7 @@ layout(binding = 12) uniform sampler2D uTransmissionTexture;
 layout(binding = 13) uniform sampler2D uThicknessTexture;
 layout(std140, binding = 5) uniform GpuMaterialParams {
     GpuMaterial uMaterial;
+    uvec4 uMaterialIdentity;
 };
 layout(std140, binding = 6) uniform StaticMeshFrameParams {
     vec4 uPreviewLight;

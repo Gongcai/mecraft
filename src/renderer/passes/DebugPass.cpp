@@ -254,7 +254,9 @@ bool DebugPass::recordGraphPass(const FrameContext& ctx,
         targets.csmShadowColor0ArrayTextureViewHandle(),
         targets.csmShadowColor1ArrayTextureViewHandle(),
         targets.reactiveMaskTextureViewHandle(),
-        targets.transparencyMaskTextureViewHandle()
+        targets.transparencyMaskTextureViewHandle(),
+        targets.f0MetallicTextureViewHandle(),
+        targets.objectMaterialIdTextureViewHandle()
     };
     if (!ensureRhiBindGroup(rhiDevice, debugViewMode, views)) {
         return false;
@@ -498,7 +500,8 @@ bool DebugPass::ensureRhiBindGroup(
     std::array<RhiSamplerHandle, kDebugTextureCount> samplers;
     samplers.fill(m_linearSampler);
     const size_t nearestBindings[] = {
-        0u, 1u, 2u, 3u, 4u, 5u, 9u, 12u, 16u, 19u, 20u, 21u, 22u
+        0u, 1u, 2u, 3u, 4u, 5u, 9u, 12u, 16u, 19u, 20u, 21u, 22u,
+        23u, 24u
     };
     for (const size_t binding : nearestBindings) {
         samplers[binding] = m_nearestSampler;

@@ -17,7 +17,7 @@
 #include <glm/glm.hpp>
 
 namespace {
-constexpr size_t kLightingTextureCount = 19u;
+constexpr size_t kLightingTextureCount = 20u;
 
 [[nodiscard]] bool sameTextureHandle(const RhiTextureHandle lhs, const RhiTextureHandle rhs) {
     return lhs.index == rhs.index && lhs.generation == rhs.generation;
@@ -149,7 +149,8 @@ bool DeferredLightingPass::execute(RhiCommandList& commandList,
         targets.csmShadowDepthAllArrayTextureViewHandle(),
         targets.csmShadowColor0ArrayTextureViewHandle(),
         targets.csmShadowColor1ArrayTextureViewHandle(),
-        m_rippleNormalTextureView
+        m_rippleNormalTextureView,
+        targets.f0MetallicTextureViewHandle()
     };
     if (!ensureRhiBindGroup(rhiDevice, views)) {
         return false;
@@ -515,7 +516,7 @@ bool DeferredLightingPass::ensureTextureView(RhiDevice& rhiDevice,
 
 bool DeferredLightingPass::ensureRhiBindGroup(
     RhiDevice& rhiDevice,
-    const std::array<RhiTextureViewHandle, 19>& views) {
+    const std::array<RhiTextureViewHandle, 20>& views) {
     for (const RhiTextureViewHandle view : views) {
         if (!view.isValid()) {
             return false;
@@ -545,7 +546,8 @@ bool DeferredLightingPass::ensureRhiBindGroup(
         m_nearestBorderSampler,
         m_nearestBorderSampler,
         m_nearestBorderSampler,
-        m_linearRepeatSampler
+        m_linearRepeatSampler,
+        m_nearestClampSampler
     };
 
     RhiBindGroupDesc bindGroupDesc;

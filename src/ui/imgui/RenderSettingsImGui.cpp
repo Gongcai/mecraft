@@ -93,7 +93,10 @@ bool showDeferredDebugView(RenderSettings& settings) {
         "82: SSGI x8",
         "83: SSGI Confidence",
         "84: Reactive Mask",
-        "85: Transparency Mask"
+        "85: Transparency Mask",
+        "86: RGB F0",
+        "87: Stable Object ID",
+        "88: Stable Material ID"
     };
     int debugViewMode = settings.debug.viewMode;
     const bool changed = ImGui::Combo(

@@ -22,7 +22,7 @@ namespace shadow { class ShadowRenderer; }
 /// Displays all intermediate render targets for visual inspection.
 class DebugPass : public RenderPass {
 public:
-    static constexpr std::size_t kTextureCount = 23u;
+    static constexpr std::size_t kTextureCount = 25u;
     void init(ResourceMgr& resourceMgr);
     void shutdown() override;
     [[nodiscard]] const char* name() const override { return "Debug"; }

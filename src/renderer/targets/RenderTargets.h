@@ -14,11 +14,13 @@ namespace render {
 enum class Target : int {
     // --- GBuffer MRT (written by gbuffers, read by lighting/composite) ---
     GAlbedo       = 0,   // RGBA8   — linear albedo.rgb, emissive hint.a         ≈ colortex6
-    GNormalAo     = 1,   // RGBA16F — octahedral normal.rgb, vertex AO.a        ≈ colortex3 (RG)
+    GNormalAo     = 1,   // RGB10A2 — octahedral normal.rg, vertex AO.b          ≈ colortex3 (RG)
     GVoxelLight   = 2,   // RG8     — sky light.r, block light.g                 ≈ colortex7 (RG)
-    GMaterial     = 3,   // RGBA8   — perceptual roughness.r, F0/metal.g, emission.b, SSS.a
+    GMaterial     = 3,   // RGBA8   — perceptual roughness.r, specular F90.g, emission.b, SSS.a
     GMaterialAux  = 4,   // RGBA8   — DerivativeMain material id.r, wetness.g, porosity.b, metal.a
-    GDepth        = 5,   // DEPTH32F — opaque + transparent depth                ≈ depthtex0
+    GF0Metallic   = 5,   // RGBA8   — resolved RGB F0.rgb, metallic.a
+    GObjectMaterialId = 6, // RG32UI — stable object ID.r, stable material ID.g
+    GDepth        = 7,   // DEPTH32F — opaque + transparent depth                ≈ depthtex0
 
     // --- Deferred outputs ---
     SceneLighting = 10,  // RGBA16F — HDR scene after deferred lighting          ≈ colortex4
@@ -57,8 +59,8 @@ enum class Target : int {
 // This is the authoritative reference for the buffer dependency graph.
 struct PassIO {
     const char* name;
-    Target reads[10];
-    Target writes[5];
+    Target reads[12];
+    Target writes[8];
 };
 
 // clang-format off
@@ -70,7 +72,8 @@ inline constexpr PassIO kPassTable[] = {
     { "GBuffer",
       { Target::Count },
       { Target::GAlbedo, Target::GNormalAo, Target::GVoxelLight,
-        Target::GMaterial, Target::GMaterialAux, Target::GDepth } },
+        Target::GMaterial, Target::GMaterialAux, Target::GF0Metallic,
+        Target::GObjectMaterialId, Target::GDepth } },
 
     { "Velocity",
       { Target::GDepth },
@@ -94,14 +97,16 @@ inline constexpr PassIO kPassTable[] = {
 
     { "DeferredLighting",
       { Target::GAlbedo, Target::GNormalAo, Target::GVoxelLight,
-        Target::GMaterial, Target::GMaterialAux, Target::GDepth,
+        Target::GMaterial, Target::GMaterialAux, Target::GF0Metallic,
+        Target::GDepth,
         Target::ShadowDepth, Target::ShadowColor, Target::ShadowNormal,
         Target::SSAOFiltered, Target::SkyCapture },
       { Target::SceneLighting } },
 
     { "Reflection",
       { Target::SceneLighting, Target::GDepth, Target::GNormalAo,
-        Target::GMaterial, Target::GMaterialAux, Target::SkyCapture },
+        Target::GMaterial, Target::GMaterialAux, Target::GF0Metallic,
+        Target::SkyCapture },
       { Target::ReflectionData } },
 
     { "ReflectionFilter",

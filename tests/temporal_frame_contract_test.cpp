@@ -242,9 +242,15 @@ bool testTemporalReset() {
 }
 
 bool testStableSceneIdentity() {
+    using renderer::contracts::StableGeometryIdTag;
     using renderer::contracts::StableGeometryId;
+    using renderer::contracts::StableMaterialIdTag;
     using renderer::contracts::StableMaterialId;
+    using renderer::contracts::StableObjectIdTag;
     using renderer::contracts::StableObjectId;
+    using renderer::contracts::allocateStableSceneId;
+    using renderer::contracts::kVoxelMaterialIdCapacity;
+    using renderer::contracts::stableMaterialIdForVoxelLayer;
 
     static_assert(!std::is_same_v<StableObjectId, StableMaterialId>);
     static_assert(!std::is_same_v<StableObjectId, StableGeometryId>);
@@ -256,6 +262,20 @@ bool testStableSceneIdentity() {
     const StableObjectId differentObject{43u};
     const StableMaterialId material{42u};
     const StableGeometryId geometry{7u};
+    const auto firstObject = allocateStableSceneId<StableObjectIdTag>();
+    const auto secondObject = allocateStableSceneId<StableObjectIdTag>();
+    const auto firstMaterial = allocateStableSceneId<StableMaterialIdTag>();
+    const auto secondMaterial = allocateStableSceneId<StableMaterialIdTag>();
+    const auto firstGeometry = allocateStableSceneId<StableGeometryIdTag>();
+    const auto secondGeometry = allocateStableSceneId<StableGeometryIdTag>();
+    constexpr uint32_t kAnimatedBaseLayer = 37u;
+    constexpr uint32_t kAnimationFrameLayer = kAnimatedBaseLayer + 5u;
+    const auto animatedMaterial = stableMaterialIdForVoxelLayer(kAnimatedBaseLayer);
+    const auto lastVoxelMaterial =
+        stableMaterialIdForVoxelLayer(kVoxelMaterialIdCapacity - 1u);
+    const auto outOfRangeVoxelMaterial =
+        stableMaterialIdForVoxelLayer(kVoxelMaterialIdCapacity);
+
     return requireTrue(!invalidObject.isValid(),
                        "zero must remain the explicit invalid stable object ID") &&
            requireTrue(object.isValid() && material.isValid() && geometry.isValid(),
@@ -263,7 +283,26 @@ bool testStableSceneIdentity() {
            requireTrue(object == sameObject && object != differentObject,
                        "stable IDs must compare by their preserved numeric identity") &&
            requireTrue(object.value == material.value,
-                       "different ID domains may reuse numeric values without type aliasing");
+                       "different ID domains may reuse numeric values without type aliasing") &&
+           requireTrue(firstObject.has_value() && secondObject.has_value() &&
+                           firstMaterial.has_value() && secondMaterial.has_value() &&
+                           firstGeometry.has_value() && secondGeometry.has_value(),
+                       "stable scene ID allocation must return valid non-zero values") &&
+           requireTrue(secondObject->value == firstObject->value + 1u &&
+                           secondMaterial->value == firstMaterial->value + 1u &&
+                           secondGeometry->value == firstGeometry->value + 1u,
+                       "stable scene IDs must increase monotonically without reuse") &&
+           requireTrue(firstObject->value == firstGeometry->value &&
+                           firstMaterial->value == kVoxelMaterialIdCapacity + 1u,
+                       "strong identity domains must own independent allocation sequences") &&
+           requireTrue(animatedMaterial.has_value() &&
+                           animatedMaterial->value == kAnimatedBaseLayer + 1u &&
+                           animatedMaterial->value != kAnimationFrameLayer + 1u,
+                       "voxel material identity must derive from the base layer only") &&
+           requireTrue(lastVoxelMaterial.has_value() &&
+                           lastVoxelMaterial->value == kVoxelMaterialIdCapacity &&
+                           !outOfRangeVoxelMaterial.has_value(),
+                       "voxel material IDs must exactly cover the reserved layer range");
 }
 
 bool testFrameValidation() {

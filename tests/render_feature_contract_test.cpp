@@ -55,6 +55,31 @@ int main() {
     RenderBuildCapabilities completeBuild;
     completeBuild.nrd = true;
 
+    RhiCapabilities sevenAttachmentCapabilities = capabilities;
+    sevenAttachmentCapabilities.maxColorAttachments = 7u;
+    const RenderFeatureStatus sevenAttachmentDeferredPbr = evaluateRenderFeature(
+        RenderProfile::OpenGlBase,
+        RhiBackend::OpenGL,
+        sevenAttachmentCapabilities,
+        completeBuild,
+        completeFeatureMask(),
+        RenderFeature::DeferredPbr);
+    const RenderFeatureStatus eightAttachmentDeferredPbr = evaluateRenderFeature(
+        RenderProfile::OpenGlBase,
+        RhiBackend::OpenGL,
+        capabilities,
+        completeBuild,
+        completeFeatureMask(),
+        RenderFeature::DeferredPbr);
+    if (!requireTrue(
+            sevenAttachmentDeferredPbr.code ==
+                RenderFeatureStatusCode::DeviceCapabilityMissing,
+            "deferred PBR must reject devices limited to seven color attachments") ||
+        !requireTrue(eightAttachmentDeferredPbr.available(),
+                     "deferred PBR must accept exactly eight color attachments")) {
+        return 1;
+    }
+
     const RenderProfileStatus openGlBase = evaluateRenderProfile(
         RenderProfile::OpenGlBase,
         RhiBackend::OpenGL,
