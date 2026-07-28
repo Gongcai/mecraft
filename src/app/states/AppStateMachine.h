@@ -16,6 +16,10 @@ public:
     void update(double frameTime, double& accumulator);
     void render(double frameTime);
 
+    /// Queries GPU timing statistics from the active application state.
+    /// @return Non-owning statistics pointer, or null when no render sample exists.
+    [[nodiscard]] const GpuFrameStats* gpuFrameStats() const;
+
 #ifdef MECRAFT_DEBUG
     void recordPollEvents(double ms,
                           unsigned keyEvents,

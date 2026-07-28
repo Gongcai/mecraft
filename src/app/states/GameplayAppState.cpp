@@ -156,6 +156,10 @@ void GameplayAppState::render(double frameTime) {
     }
 }
 
+const GpuFrameStats* GameplayAppState::gpuFrameStats() const {
+    return m_game ? m_game->gpuFrameStats() : nullptr;
+}
+
 #ifdef MECRAFT_DEBUG
 void GameplayAppState::recordPollEvents(double ms,
                                         unsigned keyEvents,

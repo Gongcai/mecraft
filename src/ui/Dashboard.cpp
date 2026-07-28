@@ -809,6 +809,8 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
         if (m_nextProfilerStatsRefreshTime <= 0.0 || now >= m_nextProfilerStatsRefreshTime) {
             m_displayProfilerStats = profilerStats;
             m_displayGpuStats = render.getGpuFrameStats();
+            m_displayGpuTimingWindowStats =
+                renderScene.debugService().getGpuTimingWindowStats();
             m_displayShadowStats = render.getShadowFrameStats();
             m_displayRenderGraphStats = renderScene.renderGraphFrameStats();
             m_displayHiZCullStats = renderScene.hiZCullStats();
@@ -1042,6 +1044,46 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
             ImGui::Text("GPU Cloud: %.3f ms", gpuStats.cloudMs);
             ImGui::Text("GPU Water: %.3f ms", gpuStats.waterMs);
             ImGui::Text("GPU Post: %.3f ms", gpuStats.postMs);
+        }
+        const GpuTimingWindowStats& gpuWindow = m_displayGpuTimingWindowStats;
+        if (gpuWindow.valid &&
+            ImGui::TreeNode("Render Graph Stage Percentiles")) {
+            ImGui::Text("Latest window: %zu / %zu samples  Observed: %llu",
+                        gpuWindow.sampleCount,
+                        gpuWindow.capacity,
+                        static_cast<unsigned long long>(
+                            gpuWindow.observedSampleCount));
+            if (ImGui::BeginTable("GpuStagePercentileTable", 4,
+                                  ImGuiTableFlags_RowBg |
+                                      ImGuiTableFlags_BordersInnerV |
+                                      ImGuiTableFlags_SizingStretchProp)) {
+                ImGui::TableSetupColumn("Stage");
+                ImGui::TableSetupColumn(
+                    "p50 ms", ImGuiTableColumnFlags_WidthFixed, 70.0f);
+                ImGui::TableSetupColumn(
+                    "p95 ms", ImGuiTableColumnFlags_WidthFixed, 70.0f);
+                ImGui::TableSetupColumn(
+                    "p99 ms", ImGuiTableColumnFlags_WidthFixed, 70.0f);
+                ImGui::TableHeadersRow();
+                const auto showTimingRow = [](const char* name,
+                                              const GpuTimingPercentiles& timing) {
+                    ImGui::TableNextRow();
+                    ImGui::TableNextColumn();
+                    ImGui::TextUnformatted(name);
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%.3f", timing.p50Ms);
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%.3f", timing.p95Ms);
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%.3f", timing.p99Ms);
+                };
+                showTimingRow("Total tracked", gpuWindow.totalTrackedGpuMs);
+                for (const GpuTimerPassWindowStats& stage : gpuWindow.passes) {
+                    showTimingRow(gpuTimerPassName(stage.pass), stage.gpuMs);
+                }
+                ImGui::EndTable();
+            }
+            ImGui::TreePop();
         }
         ShadowFrameStats shadowStats = m_displayShadowStats;
         if (shadowStats.supported && shadowStats.valid) {

@@ -19,6 +19,7 @@ public:
     void onExit() override;
     void update(double frameTime, double& accumulator) override;
     void render(double frameTime) override;
+    [[nodiscard]] const GpuFrameStats* gpuFrameStats() const override;
 #ifdef MECRAFT_DEBUG
     void recordPollEvents(double ms,
                           unsigned keyEvents,

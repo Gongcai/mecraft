@@ -219,6 +219,7 @@ private:
     int32_t m_framebufferHeight = 0;
     FrameProfilerStats m_displayProfilerStats{};
     GpuFrameStats m_displayGpuStats{};
+    GpuTimingWindowStats m_displayGpuTimingWindowStats{};
     ShadowFrameStats m_displayShadowStats{};
     RenderGraphFrameStats m_displayRenderGraphStats{};
     HiZCullFrameStats m_displayHiZCullStats{};

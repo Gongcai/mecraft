@@ -17,6 +17,7 @@
 #include "../audio/AudioEngine.h"
 #include "../audio/BgmSystem.h"
 #include "../ui/core/UIRenderer.h"
+#include "../renderer/debug/RenderDebugService.h"
 #include "states/AppStateMachine.h"
 #include "states/AppStateDependencies.h"
 #include "../locale/LocaleManager.h"
@@ -76,6 +77,7 @@ private:
     std::optional<bool> m_vsyncEnabled;
     bool m_fullscreenEnabled = false;
     BenchmarkFrameStats m_benchmarkStats{};
+    GpuTimingHistory m_benchmarkGpuTimingHistory;
     bool m_benchmarkReplayWasActive = false;
     bool m_benchmarkReportWritten = false;
 };

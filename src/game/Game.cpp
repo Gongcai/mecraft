@@ -13,6 +13,7 @@
 #include "renderer/rhi/RhiCommandList.h"
 #include "renderer/rhi/RhiDevice.h"
 #include "renderer/rhi/RhiResources.h"
+#include "renderer/core/RenderScene.h"
 #include "engine/platform/Window.h"
 #include <algorithm>
 #include <cstdint>
@@ -224,6 +225,13 @@ bool Game::renderFrame(const float frameTime) {
                                             m_deps.window,
                                             frameTime,
                                             renderInterpolationAlpha);
+}
+
+const GpuFrameStats* Game::gpuFrameStats() const {
+    if (!m_initialized || !m_renderRuntime) {
+        return nullptr;
+    }
+    return &m_renderRuntime->renderScene().debugService().getGpuFrameStats();
 }
 
 void Game::shutdown() {

@@ -5,7 +5,124 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstdlib>
+
+namespace {
+
+double gpuTimerPassMilliseconds(const GpuFrameStats& stats,
+                                const GpuTimerPass pass) {
+    switch (pass) {
+        case GpuTimerPass::GBuffer: return stats.gbufferMs;
+        case GpuTimerPass::Shadow: return stats.shadowMs;
+        case GpuTimerPass::Ssao: return stats.ssaoMs;
+        case GpuTimerPass::Ssgi: return stats.ssgiMs;
+        case GpuTimerPass::Lighting: return stats.lightingMs;
+        case GpuTimerPass::Transparent: return stats.transparentMs;
+        case GpuTimerPass::Volumetric: return stats.volumetricMs;
+        case GpuTimerPass::Reflection: return stats.reflectionMs;
+        case GpuTimerPass::Cloud: return stats.cloudMs;
+        case GpuTimerPass::Water: return stats.waterMs;
+        case GpuTimerPass::Post: return stats.postMs;
+        case GpuTimerPass::Count: break;
+    }
+    std::abort();
+}
+
+GpuTimingPercentiles calculatePercentiles(
+    const std::array<double, GpuTimingHistory::kCapacity>& samples,
+    const size_t sampleCount) {
+    if (sampleCount == 0u) {
+        return {};
+    }
+    std::array<double, GpuTimingHistory::kCapacity> sortedSamples{};
+    std::copy_n(samples.begin(), sampleCount, sortedSamples.begin());
+    std::sort(sortedSamples.begin(), sortedSamples.begin() + sampleCount);
+    const auto nearestRank = [&](const size_t percentile) {
+        const size_t rank = (sampleCount * percentile + 99u) / 100u;
+        return sortedSamples[rank - 1u];
+    };
+    return {
+        nearestRank(50u),
+        nearestRank(95u),
+        nearestRank(99u)
+    };
+}
+
+} // namespace
+
+const char* gpuTimerPassName(const GpuTimerPass pass) {
+    switch (pass) {
+        case GpuTimerPass::GBuffer: return "GBuffer";
+        case GpuTimerPass::Shadow: return "Shadow";
+        case GpuTimerPass::Ssao: return "SSAO";
+        case GpuTimerPass::Ssgi: return "SSGI";
+        case GpuTimerPass::Lighting: return "Lighting";
+        case GpuTimerPass::Transparent: return "Transparent";
+        case GpuTimerPass::Volumetric: return "Volumetric";
+        case GpuTimerPass::Reflection: return "Reflection";
+        case GpuTimerPass::Cloud: return "Cloud";
+        case GpuTimerPass::Water: return "Water";
+        case GpuTimerPass::Post: return "Post";
+        case GpuTimerPass::Count: break;
+    }
+    std::abort();
+}
+
+void GpuTimingHistory::reset() {
+    m_nextSample = 0u;
+    m_sampleCount = 0u;
+    m_observedSampleCount = 0u;
+    m_lastSequence = 0u;
+}
+
+bool GpuTimingHistory::record(const GpuFrameStats& stats) {
+    if (!stats.supported || !stats.valid || stats.sequence == 0u ||
+        stats.sequence <= m_lastSequence) {
+        return false;
+    }
+
+    std::array<double, static_cast<size_t>(GpuTimerPass::Count)> passValues{};
+    double totalMs = 0.0;
+    for (size_t passIndex = 0u;
+         passIndex < static_cast<size_t>(GpuTimerPass::Count);
+         ++passIndex) {
+        const auto pass = static_cast<GpuTimerPass>(passIndex);
+        const double milliseconds = gpuTimerPassMilliseconds(stats, pass);
+        if (!std::isfinite(milliseconds) || milliseconds < 0.0) {
+            return false;
+        }
+        passValues[passIndex] = milliseconds;
+        totalMs += milliseconds;
+    }
+    for (size_t passIndex = 0u; passIndex < passValues.size(); ++passIndex) {
+        m_passSamples[passIndex][m_nextSample] = passValues[passIndex];
+    }
+    m_totalSamples[m_nextSample] = totalMs;
+    m_nextSample = (m_nextSample + 1u) % kCapacity;
+    m_sampleCount = std::min(m_sampleCount + 1u, kCapacity);
+    ++m_observedSampleCount;
+    m_lastSequence = stats.sequence;
+    return true;
+}
+
+GpuTimingWindowStats GpuTimingHistory::snapshot() const {
+    GpuTimingWindowStats stats;
+    stats.valid = m_sampleCount > 0u;
+    stats.sampleCount = m_sampleCount;
+    stats.capacity = kCapacity;
+    stats.observedSampleCount = m_observedSampleCount;
+    stats.totalTrackedGpuMs = calculatePercentiles(m_totalSamples, m_sampleCount);
+    for (size_t passIndex = 0u;
+         passIndex < static_cast<size_t>(GpuTimerPass::Count);
+         ++passIndex) {
+        GpuTimerPassWindowStats& passStats = stats.passes[passIndex];
+        passStats.pass = static_cast<GpuTimerPass>(passIndex);
+        passStats.gpuMs = calculatePercentiles(
+            m_passSamples[passIndex], m_sampleCount);
+    }
+    return stats;
+}
 
 uint32_t RenderDebugService::gpuTimerQueryIndex(const size_t frameIndex,
                                                 const size_t passIndex,
@@ -63,7 +180,10 @@ void RenderDebugService::init(RhiDevice& rhiDevice) {
         }
     }
     m_shadowFrameIssued.fill(false);
+    m_gpuFrameStats = {};
     m_gpuFrameStats.supported = true;
+    m_gpuFrameSequence = 0u;
+    m_gpuTimingHistory.reset();
     m_shadowFrameStats.supported = true;
     m_gpuTimersInitialized = true;
 }
@@ -96,7 +216,9 @@ void RenderDebugService::shutdown() {
     }
     m_shadowFrameIssued.fill(false);
     m_gpuTimersInitialized = false;
-    m_gpuFrameStats.valid = false;
+    m_gpuFrameStats = {};
+    m_gpuFrameSequence = 0u;
+    m_gpuTimingHistory.reset();
     m_shadowFrameStats.valid = false;
     m_shadowFrameActive = false;
 }
@@ -183,6 +305,10 @@ void RenderDebugService::beginFrame(RhiCommandList& commandList) {
             m_gpuFrameStats.cloudMs = readMs(GpuTimerPass::Cloud);
             m_gpuFrameStats.waterMs = readMs(GpuTimerPass::Water);
             m_gpuFrameStats.postMs = readMs(GpuTimerPass::Post);
+            m_gpuFrameStats.sequence = ++m_gpuFrameSequence;
+            if (!m_gpuTimingHistory.record(m_gpuFrameStats)) {
+                std::abort();
+            }
             m_gpuTimerAllocatedSegmentCounts[readIndex].fill(0u);
             for (auto& pass : m_gpuTimerSegmentStates[readIndex]) {
                 pass.fill(GpuTimerSegmentState::Unused);

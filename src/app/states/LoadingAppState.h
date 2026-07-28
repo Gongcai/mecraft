@@ -19,6 +19,9 @@ public:
     void onExit() override;
     void update(double frameTime, double& accumulator) override;
     void render(double frameTime) override;
+    [[nodiscard]] const GpuFrameStats* gpuFrameStats() const override {
+        return nullptr;
+    }
 
 private:
     [[nodiscard]] std::unique_ptr<Game> createGame() const;

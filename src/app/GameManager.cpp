@@ -42,6 +42,14 @@ double percentileFromSorted(const std::vector<double>& sortedValues, const doubl
     return sortedValues[clampedRank - 1];
 }
 
+nlohmann::json gpuTimingPercentilesJson(const GpuTimingPercentiles& timing) {
+    return {
+        {"p50", timing.p50Ms},
+        {"p95", timing.p95Ms},
+        {"p99", timing.p99Ms}
+    };
+}
+
 } // namespace
 
 GameManager::GameManager() 
@@ -52,6 +60,10 @@ GameManager::~GameManager() = default;
 
 bool GameManager::init(int width, int height, const char* title, AppLaunchOptions launchOptions) {
     m_launchOptions = std::move(launchOptions);
+    m_benchmarkStats = {};
+    m_benchmarkGpuTimingHistory.reset();
+    m_benchmarkReplayWasActive = false;
+    m_benchmarkReportWritten = false;
     std::optional<RhiBackend> savedBackend;
     if (!m_launchOptions.rhiBackendExplicit) {
         const app::RhiBackendSettingResult backendSetting = app::loadRhiBackend();
@@ -407,6 +419,11 @@ void GameManager::recordBenchmarkFrame(const double frameTime) {
     m_benchmarkStats.minFrameMs = std::min(m_benchmarkStats.minFrameMs, frameMs);
     m_benchmarkStats.maxFrameMs = std::max(m_benchmarkStats.maxFrameMs, frameMs);
     m_benchmarkStats.frameTimesMs.push_back(frameMs);
+
+    const GpuFrameStats* gpuStats = m_appStateMachine.gpuFrameStats();
+    if (gpuStats != nullptr) {
+        (void)m_benchmarkGpuTimingHistory.record(*gpuStats);
+    }
 }
 
 void GameManager::closeWindowIfBenchmarkComplete() {
@@ -439,22 +456,29 @@ void GameManager::writeBenchmarkReport() {
 
     const double frameCount = static_cast<double>(m_benchmarkStats.frameCount);
     const double avgFrameMs = m_benchmarkStats.totalFrameMs / frameCount;
-    const double medianFrameMs = percentileFromSorted(sortedFrameMs, 50.0);
+    const double p50FrameMs = percentileFromSorted(sortedFrameMs, 50.0);
     const double p95FrameMs = percentileFromSorted(sortedFrameMs, 95.0);
     const double p99FrameMs = percentileFromSorted(sortedFrameMs, 99.0);
     const double avgFps = avgFrameMs > 0.0 ? 1000.0 / avgFrameMs : 0.0;
+    const GpuTimingWindowStats gpuTimingWindow =
+        m_benchmarkGpuTimingHistory.snapshot();
 
     std::cout << std::fixed << std::setprecision(3)
               << "[Benchmark] frames=" << m_benchmarkStats.frameCount
               << " replay_active_s=" << m_benchmarkStats.replayActiveSeconds
               << " avg_ms=" << avgFrameMs
-              << " median_ms=" << medianFrameMs
+              << " p50_ms=" << p50FrameMs
               << " p95_ms=" << p95FrameMs
               << " p99_ms=" << p99FrameMs
               << " min_ms=" << m_benchmarkStats.minFrameMs
               << " max_ms=" << m_benchmarkStats.maxFrameMs
               << " avg_fps=" << avgFps
-              << '\n';
+              << " gpu_samples=" << gpuTimingWindow.sampleCount;
+    if (gpuTimingWindow.valid) {
+        std::cout << " gpu_tracked_p95_ms="
+                  << gpuTimingWindow.totalTrackedGpuMs.p95Ms;
+    }
+    std::cout << '\n';
 
     if (m_launchOptions.benchmarkReportPath.empty()) {
         return;
@@ -469,7 +493,8 @@ void GameManager::writeBenchmarkReport() {
     root["frame_count"] = m_benchmarkStats.frameCount;
     root["frame_ms"] = {
         {"average", avgFrameMs},
-        {"median", medianFrameMs},
+        {"median", p50FrameMs},
+        {"p50", p50FrameMs},
         {"p95", p95FrameMs},
         {"p99", p99FrameMs},
         {"min", m_benchmarkStats.minFrameMs},
@@ -477,6 +502,20 @@ void GameManager::writeBenchmarkReport() {
     };
     root["fps"] = {
         {"average", avgFps}
+    };
+    nlohmann::json gpuStages = nlohmann::json::object();
+    for (const GpuTimerPassWindowStats& stage : gpuTimingWindow.passes) {
+        gpuStages[gpuTimerPassName(stage.pass)] =
+            gpuTimingPercentilesJson(stage.gpuMs);
+    }
+    root["render_graph_stage_ms"] = {
+        {"valid", gpuTimingWindow.valid},
+        {"window_capacity", gpuTimingWindow.capacity},
+        {"window_sample_count", gpuTimingWindow.sampleCount},
+        {"observed_sample_count", gpuTimingWindow.observedSampleCount},
+        {"total_tracked", gpuTimingPercentilesJson(
+            gpuTimingWindow.totalTrackedGpuMs)},
+        {"stages", std::move(gpuStages)}
     };
 
     const std::filesystem::path reportPath = m_launchOptions.benchmarkReportPath;

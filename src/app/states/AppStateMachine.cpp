@@ -85,6 +85,13 @@ void AppStateMachine::render(double frameTime) {
     }
 }
 
+const GpuFrameStats* AppStateMachine::gpuFrameStats() const {
+    if (m_states.empty()) {
+        return nullptr;
+    }
+    return m_states.back()->gpuFrameStats();
+}
+
 #ifdef MECRAFT_DEBUG
 void AppStateMachine::recordPollEvents(double ms,
                                        unsigned keyEvents,

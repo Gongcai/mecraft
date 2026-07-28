@@ -1,6 +1,8 @@
 #ifndef MECRAFT_IAPPSTATE_H
 #define MECRAFT_IAPPSTATE_H
 
+struct GpuFrameStats;
+
 class IAppState {
 public:
     virtual ~IAppState() = default;
@@ -10,6 +12,10 @@ public:
 
     virtual void update(double frameTime, double& accumulator) = 0;
     virtual void render(double frameTime) = 0;
+
+    /// Returns the latest completed gameplay GPU timing frame.
+    /// @return Non-owning statistics pointer, or null for states without a renderer.
+    [[nodiscard]] virtual const GpuFrameStats* gpuFrameStats() const = 0;
 
 #ifdef MECRAFT_DEBUG
     virtual void recordPollEvents(double ms,

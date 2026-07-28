@@ -60,6 +60,8 @@ enum class FrustumPlane : size_t {
 struct GpuFrameStats {
     bool supported = false;
     bool valid = false;
+    /// Monotonic identity assigned whenever a completed timer frame is published.
+    uint64_t sequence = 0u;
     double gbufferMs = 0.0;
     double shadowMs = 0.0;
     double ssaoMs = 0.0;
@@ -71,6 +73,64 @@ struct GpuFrameStats {
     double cloudMs = 0.0;
     double waterMs = 0.0;
     double postMs = 0.0;
+};
+
+/// Percentiles computed from one fixed GPU timing sample window.
+struct GpuTimingPercentiles {
+    double p50Ms = 0.0;
+    double p95Ms = 0.0;
+    double p99Ms = 0.0;
+};
+
+/// Percentiles for one stable Render Graph timing stage.
+struct GpuTimerPassWindowStats {
+    GpuTimerPass pass = GpuTimerPass::GBuffer;
+    GpuTimingPercentiles gpuMs;
+};
+
+/// Snapshot of the most recent fixed-size GPU timing sample window.
+struct GpuTimingWindowStats {
+    bool valid = false;
+    size_t sampleCount = 0u;
+    size_t capacity = 0u;
+    uint64_t observedSampleCount = 0u;
+    GpuTimingPercentiles totalTrackedGpuMs;
+    std::array<GpuTimerPassWindowStats,
+               static_cast<size_t>(GpuTimerPass::Count)> passes{};
+};
+
+/// Returns the stable diagnostic name for a Render Graph GPU timing stage.
+/// @param pass Stage identifier whose name is requested.
+/// @return Process-lifetime English name suitable for UI and JSON keys.
+[[nodiscard]] const char* gpuTimerPassName(GpuTimerPass pass);
+
+/// Stores the most recent real-rendered Render Graph timings without allocation.
+/// Duplicate sequence identities are rejected so delayed query results are
+/// counted exactly once by both Dashboard and benchmark consumers.
+class GpuTimingHistory {
+public:
+    static constexpr size_t kCapacity = 1000u;
+
+    /// Clears every stored sample and sequence identity.
+    void reset();
+
+    /// Records one completed GPU timer frame.
+    /// @param stats Completed frame with a non-zero unique sequence identity.
+    /// @return True when the frame was accepted into the window.
+    [[nodiscard]] bool record(const GpuFrameStats& stats);
+
+    /// Computes p50, p95, and p99 for each stage and their tracked sum.
+    /// @return Immutable statistics for the currently stored sample window.
+    [[nodiscard]] GpuTimingWindowStats snapshot() const;
+
+private:
+    std::array<std::array<double, kCapacity>,
+               static_cast<size_t>(GpuTimerPass::Count)> m_passSamples{};
+    std::array<double, kCapacity> m_totalSamples{};
+    size_t m_nextSample = 0u;
+    size_t m_sampleCount = 0u;
+    uint64_t m_observedSampleCount = 0u;
+    uint64_t m_lastSequence = 0u;
 };
 
 /// One Render Graph pass GPU timing entry in compiled execution order.
@@ -288,6 +348,12 @@ public:
     /// Get the latest GPU frame statistics.
     [[nodiscard]] const GpuFrameStats& getGpuFrameStats() const { return m_gpuFrameStats; }
 
+    /// Computes fixed-window percentiles for completed GPU timer frames.
+    /// @return Statistics covering at most the latest 1000 real rendered frames.
+    [[nodiscard]] GpuTimingWindowStats getGpuTimingWindowStats() const {
+        return m_gpuTimingHistory.snapshot();
+    }
+
     /// Shadow pass GPU timestamp and cascade statistics.
     [[nodiscard]] bool beginShadowFrame(int cascadeCount, int shadowResolution);
     void recordShadowCascadeStats(int cascadeIndex, const ShadowCascadeStats& stats);
@@ -354,6 +420,8 @@ private:
                GPU_TIMER_RING_SIZE>
         m_gpuTimerSegmentStates{};
     GpuFrameStats m_gpuFrameStats{};
+    GpuTimingHistory m_gpuTimingHistory;
+    uint64_t m_gpuFrameSequence = 0u;
     size_t m_gpuTimerWriteIndex = 0;
     bool m_gpuTimersInitialized = false;
     bool m_gpuTimerEnabled = true;

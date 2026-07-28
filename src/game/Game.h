@@ -14,6 +14,7 @@ class GameplayHudPresenter;
 class AudioListenerSyncSystem;
 class GameFrameOrchestrator;
 class GameplayRenderRuntime;
+struct GpuFrameStats;
 
 class Game {
 public:
@@ -50,6 +51,10 @@ public:
     [[nodiscard]] bool updateFrame(float deltaTime);
     void setFixedInterpolationAlpha(float alpha);
     [[nodiscard]] bool renderFrame(float frameTime);
+
+    /// Returns the latest completed renderer GPU timing frame.
+    /// @return Non-owning statistics pointer, or null before renderer initialization.
+    [[nodiscard]] const GpuFrameStats* gpuFrameStats() const;
 #ifdef MECRAFT_DEBUG
     void publishDebugStats(float frameTime);
     void recordPollEvents(double ms,
