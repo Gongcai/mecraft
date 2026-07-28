@@ -346,6 +346,7 @@ set(SRC_RENDERER
         src/renderer/debug/RenderDebugService.cpp
 
         # Contracts
+        src/renderer/contracts/CameraPathContract.cpp
         src/renderer/contracts/RenderFeatureContract.cpp
 
         # RHI
@@ -982,6 +983,9 @@ if(MECRAFT_BUILD_TESTS)
                 -DMECRAFT_SOURCE_DIR=${PROJECT_SOURCE_DIR}
                 -P ${PROJECT_SOURCE_DIR}/tests/renderer_removed_feature_test.cmake)
     add_mecraft_test(app_launch_options_test tests/app_launch_options_test.cpp)
+    add_mecraft_test(camera_path_contract_test tests/camera_path_contract_test.cpp)
+    target_compile_definitions(camera_path_contract_test PRIVATE
+            MECRAFT_TEST_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
     add_mecraft_test(temporal_frame_contract_test tests/temporal_frame_contract_test.cpp)
     add_mecraft_test(render_feature_contract_test tests/render_feature_contract_test.cpp)
     add_mecraft_test(gpu_timing_history_test tests/gpu_timing_history_test.cpp)
