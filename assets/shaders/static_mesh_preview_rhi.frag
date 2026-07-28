@@ -1,5 +1,7 @@
 #version 450 core
 
+#include "gpu_material_contract.glsl"
+
 layout(location = 0) in vec2 vUv;
 layout(location = 1) in vec3 vNormal;
 layout(location = 2) in vec3 vTangent;
@@ -20,16 +22,8 @@ layout(binding = 10) uniform sampler2D uClearcoatRoughnessTexture;
 layout(binding = 11) uniform sampler2D uClearcoatNormalTexture;
 layout(binding = 12) uniform sampler2D uTransmissionTexture;
 layout(binding = 13) uniform sampler2D uThicknessTexture;
-layout(std140, binding = 5) uniform StaticMeshMaterialParams {
-    vec4 uBaseColorFactor;
-    vec4 uEmissiveAlphaCutoff;
-    vec4 uMaterialFactors;
-    vec4 uWorkflowFactors;
-    vec4 uSpecularFactors;
-    vec4 uClearcoatFactors;
-    vec4 uTransmissionVolumeFactors;
-    vec4 uAttenuationColorDistance;
-    ivec4 uMaterialFlags;
+layout(std140, binding = 5) uniform GpuMaterialParams {
+    GpuMaterial uMaterial;
 };
 layout(std140, binding = 6) uniform StaticMeshFrameParams {
     vec4 uPreviewLight;
@@ -40,20 +34,25 @@ layout(std140, binding = 6) uniform StaticMeshFrameParams {
 void main() {
     StaticMeshMaterialSample sampledMaterial = sampleStaticMeshMaterial(vUv);
     vec4 baseColor = sampledMaterial.baseColor;
-    if (uMaterialFlags.x != 0 && baseColor.a < uEmissiveAlphaCutoff.w) {
+    if (uMaterial.modesAndFlags.x == GPU_MATERIAL_ALPHA_MASK &&
+        baseColor.a < uMaterial.transmissionVolumeFactors.z) {
         discard;
     }
     vec3 normal = normalize(vNormal);
     vec3 tangent = normalize(vTangent - normal * dot(vTangent, normal));
     vec3 bitangent = normalize(cross(normal, tangent)) * vTangentSign;
     vec3 tangentNormal = texture(uNormalTexture, vUv).xyz * 2.0 - 1.0;
-    tangentNormal.xy *= uMaterialFactors.z;
+    tangentNormal.xy *= uMaterial.materialFactors.z;
     normal = normalize(mat3(tangent, bitangent, normal) * normalize(tangentNormal));
 
     float roughness = sampledMaterial.roughness;
     float metalness = sampledMaterial.metalness;
-    float occlusion = mix(1.0, texture(uOcclusionTexture, vUv).r, uMaterialFactors.w);
-    vec3 emissive = texture(uEmissiveTexture, vUv).rgb * uEmissiveAlphaCutoff.rgb;
+    float occlusion = mix(
+        1.0, texture(uOcclusionTexture, vUv).r,
+        uMaterial.materialFactors.w);
+    vec3 emissive = texture(uEmissiveTexture, vUv).rgb *
+                    uMaterial.emissiveFactorAndStrength.rgb *
+                    uMaterial.emissiveFactorAndStrength.w;
     vec3 lightDirection = normalize(vec3(-0.45, 0.8, 0.35));
     vec3 viewDirection = normalize(vec3(4.0, 3.0, 6.0) - vWorldPosition);
     vec3 halfDirection = normalize(lightDirection + viewDirection);
@@ -68,7 +67,7 @@ void main() {
     if (sampledMaterial.clearcoat > 0.0) {
         vec3 clearcoatNormalSample = texture(
             uClearcoatNormalTexture, vUv).xyz * 2.0 - 1.0;
-        clearcoatNormalSample.xy *= uClearcoatFactors.z;
+        clearcoatNormalSample.xy *= uMaterial.clearcoatFactors.z;
         vec3 clearcoatNormal = normalize(
             mat3(tangent, bitangent, normalize(vNormal)) *
             normalize(clearcoatNormalSample));
@@ -85,7 +84,11 @@ void main() {
     color = pow(color, vec3(1.0 / 2.2));
     float previewAlpha = baseColor.a *
         (1.0 - sampledMaterial.transmission * 0.85);
-    bool transparentPreview = uMaterialFlags.z != 0 ||
+    bool transparentPreview =
+                              uMaterial.modesAndFlags.x ==
+                                  GPU_MATERIAL_ALPHA_BLEND ||
+                              uMaterial.modesAndFlags.x ==
+                                  GPU_MATERIAL_ALPHA_TRANSMISSION ||
                               sampledMaterial.transmission > 0.0;
     outColor = transparentPreview
         ? vec4(color * previewAlpha, previewAlpha)

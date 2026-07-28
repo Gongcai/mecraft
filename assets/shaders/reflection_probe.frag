@@ -235,19 +235,19 @@ void main() {
     TranslucentMask transMask = decodeTranslucentMask(aux.materialKind);
 
     // DerivativeMain wet surface — shared implementation in weather_surface.glsl
-    float roughness = material.roughness;
+    float roughness = linearMaterialRoughness(material);
     float f0Scalar = material.f0;
     bool staticMeshMaterial =
         isMaterialKind(aux.materialKind, MATERIAL_STATIC_MESH);
-    vec3 dielectricF0 = staticMeshMaterial
-        ? clamp(packedMaterial.gba, vec3(0.0), vec3(1.0))
-        : vec3(f0Scalar);
-    if (staticMeshMaterial) {
-        f0Scalar = max(
-            dielectricF0.r, max(dielectricF0.g, dielectricF0.b));
-    }
+    vec3 specularF0 = staticMeshMaterial
+        ? mix(clamp(packedMaterial.gba, vec3(0.0), vec3(1.0)),
+              baseColor, aux.metalness)
+        : decodeLabPbrF0(f0Scalar, baseColor);
+    f0Scalar = max(
+        specularF0.r, max(specularF0.g, specularF0.b));
     float specularF90 = staticMeshMaterial
-        ? clamp(aux.porosity, 0.0, 1.0) : 1.0;
+        ? mix(clamp(aux.porosity, 0.0, 1.0), 1.0, aux.metalness)
+        : 1.0;
     vec2 voxelLightRaw = texture(uVoxelLightTex, textureUv).rg;
     float skyLightRaw01 = clamp(voxelLightRaw.r, 0.0, 1.0);
     float weatherSurfaceWetness = (uRainWetSurfacesEnabled != 0) ? uSurfaceWetness : 0.0;
@@ -263,9 +263,9 @@ void main() {
     vec2 rainRippleDebug = hasGBufferRainWetMask ? normal.xz : vec2(0.0);
     float rainRippleStrengthDebug = length(rainRippleDebug) * gbufferRainWetMask;
     // DerivativeMain world0/deferred5.fsh writes specularData.x for the
-    // reflection pass after Terrain.frag's wet smoothness mix. Mecraft stores
-    // roughness directly, so apply that deferred5 conversion here at the same
-    // consumer boundary.
+    // reflection pass after Terrain.frag's wet smoothness mix. The G-buffer
+    // perceptual value was converted to linear microfacet roughness above, so
+    // this consumer keeps DerivativeMain's linear-roughness equations.
     if (!transMask.isTranslucent && weatherSurfaceWetness > 1e-2) {
         float wetRoughnessScale = oneMinus(weatherSurfaceWetness * 0.3);
         roughness = sqr(sqrt(clamp(roughness, 0.0, 1.0)) * wetRoughnessScale);
@@ -278,7 +278,7 @@ void main() {
             float derivativePuddleRoughness = sqr(oneMinus(puddleMask) * wetRoughnessScale);
             roughness = min(roughness, derivativePuddleRoughness);
             f0Scalar = max(f0Scalar, 0.04 * puddleMask);
-            dielectricF0 = max(dielectricF0, vec3(0.04 * puddleMask));
+            specularF0 = max(specularF0, vec3(0.04 * puddleMask));
         }
     }
 
@@ -375,7 +375,7 @@ void main() {
     // material.hasReflections = max0(0.625 - material.roughness) + material.isMetal > 5e-3.
     float dielectricReflectionWeight = max(
         specularF90,
-        max(dielectricF0.r, max(dielectricF0.g, dielectricF0.b)));
+        max(specularF0.r, max(specularF0.g, specularF0.b)));
     float derivativeReflectionMask =
         max(max(0.625 - clamp(roughness, 0.0, 1.0), 0.0),
             puddleMask * 0.625) * dielectricReflectionWeight +
@@ -397,16 +397,14 @@ void main() {
 
     float nDotRay = max(dot(normal, reflectedDir), 0.0);
     float nDotView = max(dot(normal, -viewDir), 1e-6);
-    float metalness = clamp(aux.metalness, 0.0, 1.0);
-    vec3 finalF0 = mix(dielectricF0, baseColor, metalness);
-    float finalF90 = mix(specularF90, 1.0, metalness);
     vec3 reflectionSpecular = vec3(0.0);
     float dist = 0.0;
     bool usesRoughReflection = materialIsRough || weatherSurfaceWetness > 1e-2;
     if (usesRoughReflection) {
         vec3 halfWay = normalize(reflectedDir - viewDir);
         float lDotH = saturate(dot(reflectedDir, halfWay));
-        vec3 fresnel = gltfFresnelSchlick(lDotH, finalF0, finalF90);
+        vec3 fresnel = gltfFresnelSchlick(
+            lDotH, specularF0, specularF90);
         float alpha2 = roughness * roughness;
         float V2 = V2SmithGGX(nDotView, max(nDotRay, 1e-6), alpha2);
         float V1Inverse = V1SmithGGXInverse(nDotView, alpha2);
@@ -414,7 +412,7 @@ void main() {
         dist = saturate(max(ssrHit * 2.0, roughness * 3.0));
     } else {
         reflectionSpecular = gltfFresnelSchlick(
-            nDotView, finalF0, finalF90);
+            nDotView, specularF0, specularF90);
     }
     if (!transMask.isTranslucent && puddleMask > 1e-4) {
         // Mecraft adaptation: DerivativeMain's sky reflection source is sampled

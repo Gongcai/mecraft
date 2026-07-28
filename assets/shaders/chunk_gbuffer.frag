@@ -213,26 +213,31 @@ vec2 applyBlockParallaxMap(vec3 geometricNormal,
 }
 #endif
 
-vec3 applyBlockNormalMap(vec3 geometricNormal, vec3 position, vec2 derivativeUv, vec4 normalTexel) {
-    vec3 tangentNormal = normalize(normalTexel.xyz * 2.0 - 1.0);
+vec3 applyBlockNormalMap(vec3 geometricNormal,
+                         vec3 position,
+                         vec2 derivativeUv,
+                         vec3 tangentNormal) {
     return normalize(tangentFrame(geometricNormal, position, derivativeUv) * tangentNormal);
 }
 
 bool hasAuthoredSpecularData(vec4 specularTexel) {
-    return dot(specularTexel, vec4(1.0)) > (1.0 / 255.0);
+    return !isLabPbrInternalNeutralSpecular(specularTexel);
 }
 
 void applyLabPbrSpecularMap(vec4 specularTexel,
-                            int materialId,
-                            float emissiveHint,
+                            vec3 albedo,
                             inout SurfaceMaterial material,
                             inout SurfaceMaterialAux aux) {
-    float smoothness = clamp(specularTexel.r, 0.0, 1.0);
-    material.roughness = sqr(1.0 - smoothness);
+    LabPbrSpecularSample decoded =
+        decodeLabPbrSpecular(specularTexel, albedo);
+    material.perceptualRoughness = decoded.perceptualRoughness;
     material.f0 = clamp(specularTexel.g, 0.0, 1.0);
-    material.emission = max(material.emission, derivativeEmissionHint(materialId, max(specularTexel.b, emissiveHint)));
-    material.sss = max(material.sss, clamp(specularTexel.a, 0.0, 1.0));
-    aux.metalness = max(aux.metalness, smoothstep(229.5 / 255.0, 230.5 / 255.0, specularTexel.g));
+    if (decoded.emissionProvided) {
+        material.emission = decoded.emission;
+    }
+    material.sss = decoded.subsurface;
+    aux.porosity = decoded.porosity;
+    aux.metalness = decoded.metalness;
 }
 
 void main() {
@@ -284,7 +289,10 @@ void main() {
 #if !defined(RHI_TERRAIN_MDI) || defined(RHI_TERRAIN_NORMAL_MAPS)
     if (!isCrossVegetation && uHasBlockNormalMaps != 0) {
         vec4 normalTexel = sampleBlockMap(uBlockNormalTex, sampleUv, sampledLayer, forceBaseLod, uvDx, uvDy);
-        normal = applyBlockNormalMap(normal, vWorldPos, vUV, normalTexel);
+        LabPbrNormalSample normalSample = decodeLabPbrNormal(normalTexel);
+        normal = applyBlockNormalMap(
+            normal, vWorldPos, vUV, normalSample.tangentNormal);
+        ao *= normalSample.materialAo;
     }
 #endif
 
@@ -292,7 +300,7 @@ void main() {
     if (uHasBlockSpecularMaps != 0) {
         vec4 specularTexel = sampleBlockMap(uBlockSpecularTex, sampleUv, sampledLayer, forceBaseLod, uvDx, uvDy);
         if (hasAuthoredSpecularData(specularTexel)) {
-            applyLabPbrSpecularMap(specularTexel, derivativeMaterialId, emissiveHint, material, aux);
+            applyLabPbrSpecularMap(specularTexel, albedo, material, aux);
         }
     }
 #endif
@@ -323,9 +331,10 @@ void main() {
 
         if (puddleFact > 1e-4) {
             aux.wetnessMask = max(aux.wetnessMask, puddleFact);
-            float smoothness = 1.0 - sqrt(clamp(material.roughness, 0.0, 1.0));
+            float smoothness = 1.0 - clamp(
+                material.perceptualRoughness, 0.0, 1.0);
             smoothness = mix(smoothness, 1.0, puddleFact);
-            material.roughness = sqr(1.0 - smoothness);
+            material.perceptualRoughness = 1.0 - smoothness;
             material.f0 = max(material.f0, 0.04 * puddleFact);
         }
 

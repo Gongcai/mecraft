@@ -1,6 +1,8 @@
 #ifndef MECRAFT_STATIC_MESH_MATERIAL_GLSL
 #define MECRAFT_STATIC_MESH_MATERIAL_GLSL
 
+#include "gpu_material_contract.glsl"
+
 struct StaticMeshMaterialSample {
     vec4 baseColor;
     float metalness;
@@ -13,17 +15,12 @@ struct StaticMeshMaterialSample {
     float thickness;
     vec3 attenuationColor;
     float attenuationDistance;
+    bool attenuationEnabled;
     float ior;
 };
 
-const int STATIC_MATERIAL_SPECULAR = 1 << 0;
-const int STATIC_MATERIAL_IOR = 1 << 1;
-const int STATIC_MATERIAL_CLEARCOAT = 1 << 2;
-const int STATIC_MATERIAL_TRANSMISSION = 1 << 3;
-const int STATIC_MATERIAL_VOLUME = 1 << 4;
-
-bool staticMeshMaterialHas(int extensionBit) {
-    return (uMaterialFlags.w & extensionBit) != 0;
+bool staticMeshMaterialHas(uint capabilityBit) {
+    return gpuMaterialHas(uMaterial, capabilityBit);
 }
 
 float staticMeshPerceivedBrightness(vec3 color) {
@@ -60,20 +57,23 @@ StaticMeshMaterialSample sampleStaticMeshMaterial(vec2 uv) {
     material.thickness = 0.0;
     material.attenuationColor = vec3(1.0);
     material.attenuationDistance = 0.0;
-    material.ior = staticMeshMaterialHas(STATIC_MATERIAL_IOR)
-        ? uTransmissionVolumeFactors.w : 1.5;
+    material.attenuationEnabled = false;
+    material.ior = staticMeshMaterialHas(GPU_MATERIAL_FLAG_IOR)
+        ? uMaterial.transmissionVolumeFactors.w : 1.5;
     vec4 colorSample = texture(uBaseColorTexture, uv);
     vec4 propertySample = texture(uMetallicRoughnessTexture, uv);
-    if (uMaterialFlags.y == 0) {
-        material.baseColor = colorSample * uBaseColorFactor;
+    if (uMaterial.modesAndFlags.y ==
+        GPU_MATERIAL_WORKFLOW_METALLIC_ROUGHNESS) {
+        material.baseColor = colorSample * uMaterial.baseColorFactor;
         material.metalness = clamp(
-            propertySample.b * uMaterialFactors.x, 0.0, 1.0);
+            propertySample.b * uMaterial.materialFactors.x, 0.0, 1.0);
         material.roughness = clamp(
-            propertySample.g * uMaterialFactors.y, 0.02, 1.0);
+            propertySample.g * uMaterial.materialFactors.y, 0.02, 1.0);
     } else {
         const float dielectricSpecular = 0.04;
-        vec4 diffuse = colorSample * uBaseColorFactor;
-        vec3 specular = propertySample.rgb * uWorkflowFactors.rgb;
+        vec4 diffuse = colorSample * uMaterial.baseColorFactor;
+        vec3 specular = propertySample.rgb *
+                        uMaterial.specularGlossinessFactors.rgb;
         float oneMinusSpecularStrength =
             1.0 - max(max(specular.r, specular.g), specular.b);
         float metalness = staticMeshSolveMetallic(
@@ -90,16 +90,19 @@ StaticMeshMaterialSample sampleStaticMeshMaterial(vec2 uv) {
             diffuse.a);
         material.metalness = metalness;
         material.roughness = clamp(
-            1.0 - propertySample.a * uWorkflowFactors.a, 0.02, 1.0);
+            1.0 - propertySample.a *
+                      uMaterial.specularGlossinessFactors.a,
+            0.02, 1.0);
     }
 
     float iorF0 = pow((material.ior - 1.0) / (material.ior + 1.0), 2.0);
-    if (staticMeshMaterialHas(STATIC_MATERIAL_SPECULAR)) {
+    if (staticMeshMaterialHas(GPU_MATERIAL_FLAG_SPECULAR)) {
         float specularWeight = clamp(
-            texture(uSpecularTexture, uv).a * uSpecularFactors.a,
+            texture(uSpecularTexture, uv).a *
+                uMaterial.dielectricSpecularFactors.a,
             0.0, 1.0);
         vec3 specularColor = texture(uSpecularColorTexture, uv).rgb *
-                             uSpecularFactors.rgb;
+                             uMaterial.dielectricSpecularFactors.rgb;
         material.dielectricF0 = clamp(
             vec3(iorF0 * specularWeight) * specularColor,
             vec3(0.0), vec3(1.0));
@@ -107,29 +110,34 @@ StaticMeshMaterialSample sampleStaticMeshMaterial(vec2 uv) {
     } else {
         material.dielectricF0 = vec3(iorF0);
     }
-    if (staticMeshMaterialHas(STATIC_MATERIAL_CLEARCOAT)) {
+    if (staticMeshMaterialHas(GPU_MATERIAL_FLAG_CLEARCOAT)) {
         material.clearcoat = clamp(
-            texture(uClearcoatTexture, uv).r * uClearcoatFactors.x,
+            texture(uClearcoatTexture, uv).r *
+                uMaterial.clearcoatFactors.x,
             0.0, 1.0);
         material.clearcoatRoughness = clamp(
             texture(uClearcoatRoughnessTexture, uv).g *
-                uClearcoatFactors.y,
+                uMaterial.clearcoatFactors.y,
             0.02, 1.0);
     }
-    if (staticMeshMaterialHas(STATIC_MATERIAL_TRANSMISSION)) {
+    if (staticMeshMaterialHas(GPU_MATERIAL_FLAG_TRANSMISSION)) {
         material.transmission = clamp(
             texture(uTransmissionTexture, uv).r *
-                uTransmissionVolumeFactors.x,
+                uMaterial.transmissionVolumeFactors.x,
             0.0, 1.0);
     }
-    if (staticMeshMaterialHas(STATIC_MATERIAL_VOLUME)) {
+    if (staticMeshMaterialHas(GPU_MATERIAL_FLAG_VOLUME)) {
         material.thickness = max(
             texture(uThicknessTexture, uv).g *
-                uTransmissionVolumeFactors.y,
+                uMaterial.transmissionVolumeFactors.y,
             0.0);
         material.attenuationColor = clamp(
-            uAttenuationColorDistance.rgb, vec3(0.0), vec3(1.0));
-        material.attenuationDistance = uAttenuationColorDistance.w;
+            uMaterial.attenuationColorAndDistance.rgb,
+            vec3(0.0), vec3(1.0));
+        material.attenuationDistance =
+            uMaterial.attenuationColorAndDistance.w;
+        material.attenuationEnabled = !staticMeshMaterialHas(
+            GPU_MATERIAL_FLAG_INFINITE_ATTENUATION_DISTANCE);
     }
     return material;
 }

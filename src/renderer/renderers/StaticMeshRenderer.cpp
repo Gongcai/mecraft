@@ -25,6 +25,7 @@
 #include "mikktspace/mikktspace.h"
 #include "stb/stb_image.h"
 
+#include "../contracts/GpuMaterialContract.h"
 #include "../core/FrameContext.h"
 #include "../rhi/RhiCommandList.h"
 #include "../rhi/RhiCommandListPool.h"
@@ -40,18 +41,6 @@ struct StaticMeshVertex {
     float normal[3];
     float tangent[4];
     float uv[2];
-};
-
-struct StaticMeshMaterialParams {
-    glm::vec4 baseColorFactor{1.0f};
-    glm::vec4 emissiveAlphaCutoff{0.0f, 0.0f, 0.0f, 0.5f};
-    glm::vec4 materialFactors{1.0f, 1.0f, 1.0f, 1.0f};
-    glm::vec4 workflowFactors{1.0f};
-    glm::vec4 specularFactors{1.0f};
-    glm::vec4 clearcoatFactors{0.0f, 0.0f, 1.0f, 0.0f};
-    glm::vec4 transmissionVolumeFactors{0.0f, 0.0f, 0.0f, 1.5f};
-    glm::vec4 attenuationColorDistance{1.0f};
-    glm::ivec4 materialFlags{0};
 };
 
 struct StaticMeshGBufferPushConstants {
@@ -81,12 +70,6 @@ struct StaticMeshPreviewPushConstants {
     glm::mat4 model{1.0f};
 };
 
-constexpr int kMaterialSpecular = 1 << 0;
-constexpr int kMaterialIor = 1 << 1;
-constexpr int kMaterialClearcoat = 1 << 2;
-constexpr int kMaterialTransmission = 1 << 3;
-constexpr int kMaterialVolume = 1 << 4;
-
 struct TextureCacheKey {
     const cgltf_image* image = nullptr;
     bool srgb = false;
@@ -115,8 +98,6 @@ struct TangentGenerationContext {
     std::vector<StaticMeshVertex>* vertices = nullptr;
 };
 
-static_assert(sizeof(StaticMeshMaterialParams) == 144u,
-              "Static mesh material UBO must match std140 layout");
 static_assert(sizeof(StaticMeshGBufferPushConstants) == 128u,
               "Static mesh G-buffer push constants must fit the Vulkan minimum limit");
 static_assert(sizeof(StaticMeshTransparentPushConstants) == 80u,
@@ -287,6 +268,7 @@ void appendMaterialExtensionIssue(const cgltf_data& data,
     std::size_t conflictingWorkflows = 0u;
     std::size_t incompatibleLegacyExtensions = 0u;
     std::size_t volumeWithoutTransmission = 0u;
+    std::size_t transmissionAlphaConflicts = 0u;
     std::size_t unlit = 0u;
     for (cgltf_size index = 0u; index < data.materials_count; ++index) {
         const cgltf_material& material = data.materials[index];
@@ -305,6 +287,8 @@ void appendMaterialExtensionIssue(const cgltf_data& data,
                 ? 1u : 0u;
         volumeWithoutTransmission +=
             material.has_volume && !material.has_transmission ? 1u : 0u;
+        transmissionAlphaConflicts +=
+            material.has_transmission && material.alpha_mode != cgltf_alpha_mode_opaque ? 1u : 0u;
         unlit += material.unlit != 0 ? 1u : 0u;
     }
     if (conflictingWorkflows != 0u) {
@@ -324,6 +308,10 @@ void appendMaterialExtensionIssue(const cgltf_data& data,
             error, std::to_string(volumeWithoutTransmission) +
                        " material(s) use KHR_materials_volume without "
                        "KHR_materials_transmission");
+    }
+    if (transmissionAlphaConflicts != 0u) {
+        appendContractIssue(error, std::to_string(transmissionAlphaConflicts) +
+                                       " transmission material(s) use non-opaque alpha coverage");
     }
     if (unlit != 0u) {
         appendContractIssue(
@@ -1132,90 +1120,123 @@ bool StaticMeshRenderer::loadAsset(const std::string& modelPath,
             &material.clearcoat.clearcoat_normal_texture,
             &material.transmission.transmission_texture,
             &material.volume.thickness_texture};
-        const std::array<bool, 12> textureSrgb = {
-            true, specularGlossiness, false, false, true,
-            false, true, false, false, false, false, false};
-        const std::array<std::array<unsigned char, 4>, 12> defaultPixels = {{
-            {255u, 255u, 255u, 255u},
-            {255u, 255u, 255u, 255u},
-            {128u, 128u, 255u, 255u},
-            {255u, 255u, 255u, 255u},
-            {255u, 255u, 255u, 255u},
-            {255u, 255u, 255u, 255u},
-            {255u, 255u, 255u, 255u},
-            {255u, 255u, 255u, 255u},
-            {255u, 255u, 255u, 255u},
-            {128u, 128u, 255u, 255u},
-            {255u, 255u, 255u, 255u},
-            {255u, 255u, 255u, 255u}}};
         std::array<uint32_t, 12> textureIndices{};
         std::array<RhiSamplerHandle, 12> samplers{};
+        const renderer::contracts::GpuMaterialWorkflow workflow =
+            specularGlossiness ? renderer::contracts::GpuMaterialWorkflow::SpecularGlossiness
+                               : renderer::contracts::GpuMaterialWorkflow::MetallicRoughness;
         for (std::size_t channel = 0u; channel < textureViews.size(); ++channel) {
-            if (!loadTexture(*textureViews[channel], textureSrgb[channel],
-                             defaultPixels[channel],
+            const auto semantic =
+                static_cast<renderer::contracts::GpuMaterialTextureSemantic>(channel);
+            if (!loadTexture(*textureViews[channel],
+                             renderer::contracts::gpuMaterialTextureUsesSrgb(semantic, workflow),
+                             renderer::contracts::gpuMaterialDefaultTexturePixel(semantic),
                              textureIndices[channel], samplers[channel])) {
                 return false;
             }
         }
 
-        StaticMeshMaterialParams params;
-        params.baseColorFactor = specularGlossiness
-            ? glm::make_vec4(specularGloss.diffuse_factor)
-            : glm::make_vec4(pbr.base_color_factor);
-        const float emissiveStrength = material.has_emissive_strength
-            ? material.emissive_strength.emissive_strength : 1.0f;
-        params.emissiveAlphaCutoff = glm::vec4(
-            glm::make_vec3(material.emissive_factor) * emissiveStrength,
-            material.alpha_cutoff);
-        params.materialFactors = glm::vec4(
-            specularGlossiness ? 0.0f : pbr.metallic_factor,
-            specularGlossiness ? 1.0f : pbr.roughness_factor,
-            material.normal_texture.scale,
-            material.occlusion_texture.scale);
+        const std::string materialName =
+            material.name != nullptr
+                ? material.name
+                : ("#" + std::to_string(materialIndex));
+        renderer::contracts::GltfMaterialNormalizationInput materialInput;
+        materialInput.workflow = workflow;
+        materialInput.baseColorFactor = specularGlossiness
+                                            ? glm::make_vec4(specularGloss.diffuse_factor)
+                                            : glm::make_vec4(pbr.base_color_factor);
+        materialInput.emissiveFactor = glm::make_vec3(material.emissive_factor);
+        materialInput.emissiveStrength =
+            material.has_emissive_strength ? material.emissive_strength.emissive_strength : 1.0f;
+        materialInput.metallicFactor = pbr.metallic_factor;
+        materialInput.perceptualRoughnessFactor = pbr.roughness_factor;
+        materialInput.normalScale = material.normal_texture.scale;
+        materialInput.occlusionStrength = material.occlusion_texture.scale;
         if (specularGlossiness) {
-            params.workflowFactors = glm::vec4(
-                glm::make_vec3(specularGloss.specular_factor),
-                specularGloss.glossiness_factor);
+            materialInput.specularGlossinessFactor = glm::make_vec3(specularGloss.specular_factor);
+            materialInput.glossinessFactor = specularGloss.glossiness_factor;
         }
         if (material.has_specular) {
-            params.specularFactors = glm::vec4(
-                glm::make_vec3(material.specular.specular_color_factor),
-                material.specular.specular_factor);
+            materialInput.dielectricSpecularColorFactor =
+                glm::make_vec3(material.specular.specular_color_factor);
+            materialInput.dielectricSpecularWeightFactor = material.specular.specular_factor;
         }
         if (material.has_clearcoat) {
-            params.clearcoatFactors = glm::vec4(
-                material.clearcoat.clearcoat_factor,
-                material.clearcoat.clearcoat_roughness_factor,
-                material.clearcoat.clearcoat_normal_texture.scale,
-                0.0f);
+            materialInput.clearcoatFactor = material.clearcoat.clearcoat_factor;
+            materialInput.clearcoatPerceptualRoughnessFactor =
+                material.clearcoat.clearcoat_roughness_factor;
+            materialInput.clearcoatNormalScale = material.clearcoat.clearcoat_normal_texture.scale;
         }
-        const float ior = material.has_ior ? material.ior.ior : 1.5f;
-        const float attenuationDistance =
-            material.has_volume &&
-                    std::isfinite(material.volume.attenuation_distance)
-                ? material.volume.attenuation_distance : 0.0f;
-        params.transmissionVolumeFactors = glm::vec4(
-            material.has_transmission
-                ? material.transmission.transmission_factor : 0.0f,
-            material.has_volume ? material.volume.thickness_factor : 0.0f,
-            0.0f,
-            ior);
-        params.attenuationColorDistance = glm::vec4(
-            material.has_volume
-                ? glm::make_vec3(material.volume.attenuation_color)
-                : glm::vec3(1.0f),
-            attenuationDistance);
-        params.materialFlags.x =
-            material.alpha_mode == cgltf_alpha_mode_mask ? 1 : 0;
-        params.materialFlags.y = specularGlossiness ? 1 : 0;
-        params.materialFlags.z =
-            material.alpha_mode == cgltf_alpha_mode_blend ? 1 : 0;
-        params.materialFlags.w =
-            (material.has_specular ? kMaterialSpecular : 0) |
-            (material.has_ior ? kMaterialIor : 0) |
-            (material.has_clearcoat ? kMaterialClearcoat : 0) |
-            (material.has_transmission ? kMaterialTransmission : 0) |
-            (material.has_volume ? kMaterialVolume : 0);
+        materialInput.transmissionFactor =
+            material.has_transmission ? material.transmission.transmission_factor : 0.0f;
+        materialInput.thicknessFactor =
+            material.has_volume ? material.volume.thickness_factor : 0.0f;
+        materialInput.alphaCutoff = material.alpha_cutoff;
+        materialInput.ior = material.has_ior ? material.ior.ior : 1.5f;
+        bool infiniteAttenuationDistance = false;
+        if (material.has_volume) {
+            materialInput.attenuationColor = glm::make_vec3(material.volume.attenuation_color);
+            const float encodedDistance = material.volume.attenuation_distance;
+            if (encodedDistance == std::numeric_limits<float>::max()) {
+                infiniteAttenuationDistance = true;
+            } else if (std::isfinite(encodedDistance) && encodedDistance > 0.0f) {
+                materialInput.attenuationDistance = encodedDistance;
+            } else {
+                setError("glTF volume attenuation distance is invalid [material=" +
+                         materialName + "]");
+                return false;
+            }
+        }
+
+        using renderer::contracts::GpuMaterialAlphaMode;
+        if (material.has_transmission) {
+            materialInput.alphaMode = GpuMaterialAlphaMode::Transmission;
+        } else {
+            switch (material.alpha_mode) {
+            case cgltf_alpha_mode_opaque:
+                materialInput.alphaMode = GpuMaterialAlphaMode::Opaque;
+                break;
+            case cgltf_alpha_mode_mask:
+                materialInput.alphaMode = GpuMaterialAlphaMode::Mask;
+                break;
+            case cgltf_alpha_mode_blend:
+                materialInput.alphaMode = GpuMaterialAlphaMode::Blend;
+                break;
+            case cgltf_alpha_mode_max_enum:
+                setError("glTF material alpha mode is invalid");
+                return false;
+            }
+        }
+
+        using renderer::contracts::GpuMaterialFlag;
+        using renderer::contracts::gpuMaterialFlagBit;
+        materialInput.flags =
+            (material.double_sided ? gpuMaterialFlagBit(GpuMaterialFlag::DoubleSided) : 0u) |
+            (material.has_specular ? gpuMaterialFlagBit(GpuMaterialFlag::Specular) : 0u) |
+            (material.has_ior ? gpuMaterialFlagBit(GpuMaterialFlag::Ior) : 0u) |
+            (material.has_clearcoat ? gpuMaterialFlagBit(GpuMaterialFlag::Clearcoat) : 0u) |
+            (material.has_transmission ? gpuMaterialFlagBit(GpuMaterialFlag::Transmission) : 0u) |
+            (material.has_volume ? gpuMaterialFlagBit(GpuMaterialFlag::Volume) : 0u) |
+            (infiniteAttenuationDistance
+                 ? gpuMaterialFlagBit(GpuMaterialFlag::InfiniteAttenuationDistance)
+                 : 0u);
+        for (size_t channel = 0u; channel < textureIndices.size(); ++channel) {
+            materialInput.textureBindings[channel] = {textureIndices[channel],
+                                                      samplers[channel].index};
+        }
+
+        const renderer::contracts::GpuMaterialNormalizationResult normalization =
+            renderer::contracts::normalizeGltfMaterial(materialInput);
+        if (!normalization.succeeded()) {
+            setError(
+                std::string("glTF material normalization failed [material=") + materialName +
+                ", error=" +
+                renderer::contracts::gpuMaterialNormalizationErrorStableId(normalization.error) +
+                ", field=" + renderer::contracts::gpuMaterialFieldStableId(normalization.field) +
+                "]");
+            return false;
+        }
+        const renderer::contracts::GpuMaterial& params = normalization.material;
 
         RhiBufferDesc materialBufferDesc;
         materialBufferDesc.debugName = "StaticMesh.MaterialUniformBuffer";
@@ -1234,8 +1255,9 @@ bool StaticMeshRenderer::loadAsset(const std::string& modelPath,
         }
         resource.doubleSided = material.double_sided != 0;
         resource.alphaBlended =
-            material.alpha_mode == cgltf_alpha_mode_blend;
-        resource.transmissive = material.has_transmission != 0;
+            materialInput.alphaMode == renderer::contracts::GpuMaterialAlphaMode::Blend;
+        resource.transmissive =
+            materialInput.alphaMode == renderer::contracts::GpuMaterialAlphaMode::Transmission;
         resource.forwardOpticalLayer =
             resource.alphaBlended || resource.transmissive ||
             material.has_clearcoat;

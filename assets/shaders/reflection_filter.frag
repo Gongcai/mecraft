@@ -120,7 +120,7 @@ void main() {
 
     vec3 centerNormal = reconstructNormal(texture(uNormalAoTex, textureUv));
     SurfaceMaterial centerMaterial = unpackGBufferMaterial(texture(uMaterialTex, textureUv));
-    float centerRoughness = clamp(centerMaterial.roughness, 0.0, 1.0);
+    float centerRoughness = linearMaterialRoughness(centerMaterial);
     float centerWetness = clamp(centerAux.wetnessMask, 0.0, 1.0);
     bool centerCanReceiveRain = !centerTransMask.isTranslucent &&
                                 materialKindId(centerAux.materialKind) != MATERIAL_SKIN;

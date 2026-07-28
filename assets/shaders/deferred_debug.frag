@@ -240,7 +240,11 @@ void main() {
     }
     if (uDebugViewMode == 5) {
         SurfaceMaterial material = unpackGBufferMaterial(texture(uMaterialTex, textureUv));
-        FragColor = vec4(material.roughness, material.f0 * 3.0, material.emission, 1.0);
+        FragColor = vec4(
+            material.perceptualRoughness,
+            material.f0 * 3.0,
+            material.emission,
+            1.0);
         return;
     }
     if (uDebugViewMode == 6) {

@@ -32,12 +32,11 @@ vec3 ApplyWetNormal(vec3 normal, float pixelWetness) {
 }
 
 // Wet roughness reduction: wet surfaces are smoother / more reflective.
-// DerivativeMain terrain starts from smoothness in specTex.r and converts to
-// roughness as sqr(1.0 - specTex.r). Mecraft stores roughness directly, so the
-// equivalent wet smoothness mix becomes roughness * sqr(1.0 - wetness).
-float ApplyWetRoughness(float roughness, float pixelWetness) {
+// Mecraft stores perceptual roughness, so increasing smoothness scales the
+// inverse-smoothness value directly before BRDF conversion.
+float ApplyWetRoughness(float perceptualRoughness, float pixelWetness) {
     float wet = clamp(pixelWetness, 0.0, 1.0);
-    return max(roughness * (1.0 - wet) * (1.0 - wet), 0.02);
+    return max(perceptualRoughness * (1.0 - wet), 0.02);
 }
 
 // Wet F0 boost: wet surfaces have stronger Fresnel (water IOR ~0.04).

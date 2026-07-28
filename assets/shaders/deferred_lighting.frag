@@ -627,13 +627,11 @@ void main() {
                                                   texture(uMaterialAuxTex, textureUv));
     vec3 albedo = surface.albedo;
     albedo = desaturateLinear(albedo, uAlbedoDesaturation);
-    float emissiveHint = surface.emissiveHint;
     vec3 normal = surface.normal;
     float vertexAo = surface.vertexAo;
     vec2 voxelLight = surface.voxelLight;
-    float roughness = surface.material.roughness;
-    float f0Scalar = surface.material.f0;
-    vec3 dielectricF0 = surface.dielectricF0;
+    float roughness = linearMaterialRoughness(surface.material);
+    vec3 specularF0 = surface.specularF0;
     float specularF90 = surface.specularF90;
     float materialEmission = surface.material.emission;
     float sss = surface.material.sss;
@@ -653,7 +651,7 @@ void main() {
 
     float dielectricReflectionWeight = max(
         specularF90,
-        max(dielectricF0.r, max(dielectricF0.g, dielectricF0.b)));
+        max(specularF0.r, max(specularF0.g, specularF0.b)));
     bool hasDerivativeSpecular =
         (max(0.625 - roughness, 0.0) * dielectricReflectionWeight +
              surface.aux.metalness > 0.005) ||
@@ -665,8 +663,6 @@ void main() {
     vec2 rainRippleDebug = hasGBufferRainWetMask ? normal.xz : vec2(0.0);
     float rainRippleStrengthDebug = length(rainRippleDebug) * gbufferRainWetMask;
     bool isRainWetSurface = hasGBufferRainWetMask && gbufferRainWetMask > 1e-4;
-    float f0ScalarClamped = max(f0Scalar, 0.005);
-
     vec2 lightmapUV = vec2(voxelLight.g, 1.0 - voxelLight.r);
     vec3 dayLight = srgbToLinear(texture(uLightmapDay, lightmapUV).rgb);
     vec3 nightLight = srgbToLinear(texture(uLightmapNight, lightmapUV).rgb);
@@ -801,13 +797,9 @@ void main() {
             diffuse *= DiffuseHammon(LdotV, NdotV, NdotL, NdotH, roughness, albedo);
 
             // Specular (DerivativeMain deferred5.fsh:291-292)
-            vec3 finalF0 = mix(
-                dielectricF0, albedo, surface.aux.metalness);
-            float finalF90 = mix(
-                specularF90, 1.0, surface.aux.metalness);
             specular = staticMeshSpecularBrdf(
                 LdotH, NdotV, rawNdotL, NdotH, alpha2,
-                finalF0, finalF90);
+                specularF0, specularF90);
             // DerivativeMain deferred5.fsh:297 — specular *= SPECULAR_HIGHLIGHT_BRIGHTNESS + wetnessCustom.
             specular *= 0.6 + weatherSurfaceWetness; // SPECULAR_HIGHLIGHT_BRIGHTNESS=0.6 (DerivativeMain Settings.glsl:133)
 
@@ -1005,10 +997,10 @@ void main() {
     vec3 sceneDataBeforeBlocklight = sceneData; // snapshot for debug
     sceneData += EmissionColor * uBlockLightStrength;
 
-    // EMISSION_MODE 1: material.emissiveness with brightness and curve.
+    // EMISSION_MODE 1: unified linear material emission with brightness.
     // DerivativeMain: sceneData += material.emissiveness * 1.5 * EMISSION_BRIGHTNESS
-    // EMISSION_CURVE (2.2) is applied during G-buffer unpacking (unpackGBufferMaterial),
-    // matching DerivativeMain GetMaterialData() which applies pow(x, EMISSIVE_CURVE).
+    // Legacy material-ID hints apply DerivativeMain's curve before G-buffer
+    // packing, while authored LabPBR emission remains linear.
     if (materialEmission > 0.01) {
         sceneData += materialEmission * 1.5 * uBlockLightStrength;
     }
@@ -1089,11 +1081,10 @@ void main() {
     // Sky specular (environment reflection) — Mecraft extension, not in DerivativeMain deferred5.fsh
     // DerivativeMain handles sky reflections in a separate SSR pass (deferred6.fsh)
     if (uDerivativeStrictMode == 0 && !isRainWetSurface) {
-        vec3 finalF0 = mix(dielectricF0, albedo, surface.aux.metalness);
-        float finalF90 = mix(specularF90, 1.0, surface.aux.metalness);
         color += evaluateSkySH(skySH, normal) *
                  staticMeshFresnelSchlick(
-                     max(dot(normal, viewDir), 0.0), finalF0, finalF90) *
+                     max(dot(normal, viewDir), 0.0),
+                     specularF0, specularF90) *
                  pow(oneMinus(roughness), 1.65) *
                  (0.018 + 0.105 * outdoorSkyMask) *
                  derivativeSpecularMask;

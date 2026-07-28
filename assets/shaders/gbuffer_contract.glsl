@@ -50,6 +50,8 @@
 #ifndef MECRAFT_GBUFFER_CONTRACT_GLSL
 #define MECRAFT_GBUFFER_CONTRACT_GLSL
 
+#include "lab_pbr_material.glsl"
+
 const int MATERIAL_DEFAULT = 0;
 const int MATERIAL_GRASS = 1;
 const int MATERIAL_WHEAT = 2;
@@ -88,14 +90,15 @@ const int MATERIAL_SKIN = 60;  // Entity skin (player/mob) — Mecraft extension
 const int MATERIAL_STATIC_MESH = 61;  // glTF static mesh with colored dielectric F0
 const float MATERIAL_ID_MAX = 63.0;
 
-// DerivativeMain Material.inc:12 — EMISSION_CURVE shapes the PBR emissiveness channel.
-// pow(x, 2.2) makes partial emission values dimmer, creating a steeper falloff.
-const float EMISSIVE_CURVE = 2.2;
+// DerivativeMain material IDs use a shaped proxy instead of authored LabPBR
+// emission. Apply that producer-specific curve before storing unified linear
+// emission in the G-buffer.
+const float DERIVATIVE_EMISSIVE_HINT_CURVE = 2.2;
 
 struct SurfaceMaterial {
-    // Chunk G-buffer stores roughness directly. LabPBR smoothness is converted
-    // to roughness before packing this value.
-    float roughness;
+    // Every geometry path stores perceptual roughness. BRDF consumers convert
+    // it to linear microfacet roughness exactly once.
+    float perceptualRoughness;
     float f0;
     // Packed emission and SSS contributions.
     float emission;
@@ -117,7 +120,7 @@ struct GBufferSurface {
     vec2 voxelLight;
     SurfaceMaterial material;
     SurfaceMaterialAux aux;
-    vec3 dielectricF0;
+    vec3 specularF0;
     float specularF90;
 };
 
@@ -150,7 +153,7 @@ bool isDerivativeSssMaterialId(int materialId) {
 
 SurfaceMaterial defaultSurfaceMaterial() {
     SurfaceMaterial material;
-    material.roughness = 1.0;
+    material.perceptualRoughness = 1.0;
     material.f0 = 0.0;
     material.emission = 0.0;
     material.sss = 0.0;
@@ -185,15 +188,16 @@ float derivativeHardcodedSss(int materialId) {
     return 0.0;
 }
 
-// DerivativeMain: when MC_SPECULAR_MAP is defined, emissiveness comes from specTex.a
-// (format 0) or specTex.b (PBR format), then pow(x, EMISSIVE_CURVE) is applied.
+// DerivativeMain: when MC_SPECULAR_MAP is defined, emissiveness comes from
+// specTex.a (format 0) or specTex.b (PBR format), then a 2.2 curve is applied.
 // Without PBR textures, emissiveness is 0.0 — all emission comes from per-ID
 // BlockLighting.glsl logic instead. Mecraft uses albedo-brightness-based
 // emissiveHint as a PBR emission proxy; pass it through directly without
 // the old max(hint, 1.0) clamp that forced binary behavior.
 float derivativeEmissionHint(int materialId, float emissiveHint) {
     if (isDerivativeEmissiveMaterialId(materialId) || materialId == MATERIAL_ORE || materialId == MATERIAL_NETHER_ORE) {
-        return emissiveHint;
+        return pow(clamp(emissiveHint, 0.0, 1.0),
+                   DERIVATIVE_EMISSIVE_HINT_CURVE);
     }
     return 0.0;
 }
@@ -204,17 +208,17 @@ SurfaceMaterial surfaceMaterialForKind(float materialKind, float emissiveHint) {
 
     // Per-ID material defaults used when no block _s texture contribution is present.
     if (materialId == MATERIAL_STAINED_GLASS) {
-        material.roughness = 0.04;
+        material.perceptualRoughness = 0.20;
         material.f0 = 0.04;
     } else if (materialId == MATERIAL_WATER) {
-        material.roughness = 0.0;
+        material.perceptualRoughness = 0.0;
         material.f0 = 0.02;
     } else if (materialId == MATERIAL_ICE) {
-        material.roughness = 0.10;
+        material.perceptualRoughness = 0.31622777;
         material.f0 = 0.04;
     } else if (materialId == MATERIAL_SKIN) {
         // Mecraft extension: entity skin — moderate roughness, standard dielectric.
-        material.roughness = 0.65;
+        material.perceptualRoughness = 0.80622577;
         material.f0 = 0.04;
     }
 
@@ -274,8 +278,9 @@ float unpackGBufferVertexAo(vec4 packedNormalAo) {
 
 vec4 packGBufferMaterial(SurfaceMaterial material) {
     // colortex3Out.zw in DerivativeMain pack specularData.rg/ba. Our target is
-    // expanded RGBA: roughness/f0/emission/sss.
-    return vec4(material.roughness, material.f0, material.emission, material.sss);
+    // expanded RGBA: perceptual roughness/f0-or-metal/emission/sss.
+    return vec4(material.perceptualRoughness, material.f0,
+                material.emission, material.sss);
 }
 
 vec4 packGBufferMaterialAux(SurfaceMaterialAux aux) {
@@ -287,12 +292,16 @@ vec4 packGBufferMaterialAux(SurfaceMaterialAux aux) {
 
 SurfaceMaterial unpackGBufferMaterial(vec4 packedMaterial) {
     SurfaceMaterial material;
-    material.roughness = clamp(packedMaterial.r, 0.0, 1.0);
+    material.perceptualRoughness = clamp(packedMaterial.r, 0.0, 1.0);
     material.f0 = clamp(packedMaterial.g, 0.0, 1.0);
-    // DerivativeMain Material.inc:35 — material.emissiveness = pow(emissiveness, EMISSIVE_CURVE)
-    material.emission = pow(clamp(packedMaterial.b, 0.0, 1.0), EMISSIVE_CURVE);
+    material.emission = clamp(packedMaterial.b, 0.0, 1.0);
     material.sss = clamp(packedMaterial.a, 0.0, 1.0);
     return material;
+}
+
+float linearMaterialRoughness(SurfaceMaterial material) {
+    float perceptual = clamp(material.perceptualRoughness, 0.0, 1.0);
+    return perceptual * perceptual;
 }
 
 SurfaceMaterialAux unpackGBufferMaterialAux(vec4 packedAux) {
@@ -313,7 +322,8 @@ GBufferSurface unpackGBufferSurface(vec4 albedoMaterial, vec4 normalAo, vec4 vox
     surface.voxelLight = voxelLight.rg;
     surface.material = unpackGBufferMaterial(packedMaterial);
     surface.aux = defaultSurfaceMaterialAux();
-    surface.dielectricF0 = vec3(surface.material.f0);
+    surface.specularF0 = decodeLabPbrF0(
+        surface.material.f0, surface.albedo);
     surface.specularF90 = 1.0;
     return surface;
 }
@@ -322,14 +332,20 @@ GBufferSurface unpackGBufferSurface(vec4 albedoMaterial, vec4 normalAo, vec4 vox
     GBufferSurface surface = unpackGBufferSurface(albedoMaterial, normalAo, voxelLight, packedMaterial);
     surface.aux = unpackGBufferMaterialAux(packedMaterialAux);
     if (isMaterialKind(surface.aux.materialKind, MATERIAL_STATIC_MESH)) {
-        surface.material.roughness = clamp(packedMaterial.r, 0.0, 1.0);
-        surface.dielectricF0 = clamp(packedMaterial.gba, vec3(0.0), vec3(1.0));
+        surface.material.perceptualRoughness =
+            clamp(packedMaterial.r, 0.0, 1.0);
+        vec3 dielectricF0 =
+            clamp(packedMaterial.gba, vec3(0.0), vec3(1.0));
         surface.material.f0 = max(
-            surface.dielectricF0.r,
-            max(surface.dielectricF0.g, surface.dielectricF0.b));
+            dielectricF0.r,
+            max(dielectricF0.g, dielectricF0.b));
         surface.material.emission = clamp(albedoMaterial.a, 0.0, 1.0);
         surface.material.sss = 0.0;
-        surface.specularF90 = clamp(surface.aux.porosity, 0.0, 1.0);
+        surface.specularF0 = mix(
+            dielectricF0, surface.albedo, surface.aux.metalness);
+        surface.specularF90 = mix(
+            clamp(surface.aux.porosity, 0.0, 1.0),
+            1.0, surface.aux.metalness);
     }
     return surface;
 }

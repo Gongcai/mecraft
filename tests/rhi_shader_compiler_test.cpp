@@ -11,6 +11,7 @@ struct ShaderCase {
     RhiShaderStage stage;
     const char* definition = nullptr;
     const char* secondDefinition = nullptr;
+    const char* thirdDefinition = nullptr;
 };
 
 [[nodiscard]] bool compileForBackend(const ShaderCase& shaderCase,
@@ -39,7 +40,7 @@ struct ShaderCase {
 } // namespace
 
 int main() {
-    constexpr std::array<ShaderCase, 65> kShaderCases{{
+    constexpr std::array<ShaderCase, 66> kShaderCases{{
         {"tests/shaders/rhi_screen_coordinates_test.frag", RhiShaderStage::Fragment},
         {"assets/shaders/fullscreen_triangle_rhi.vert", RhiShaderStage::Vertex},
         {"assets/shaders/deferred_lighting.vert", RhiShaderStage::Vertex},
@@ -56,6 +57,8 @@ int main() {
         {"assets/shaders/static_mesh_preview_rhi.frag", RhiShaderStage::Fragment},
         {"assets/shaders/static_mesh_transparent_rhi.vert", RhiShaderStage::Vertex},
         {"assets/shaders/static_mesh_transparent_rhi.frag", RhiShaderStage::Fragment},
+        {"assets/shaders/chunk_gbuffer.frag", RhiShaderStage::Fragment,
+         "RHI_TERRAIN_MDI", "RHI_TERRAIN_NORMAL_MAPS", "RHI_TERRAIN_SPECULAR_MAPS"},
         {"assets/shaders/ssao.frag", RhiShaderStage::Fragment},
         {"assets/shaders/ssao_filter.frag", RhiShaderStage::Fragment},
         {"assets/shaders/ssao_upsample.frag", RhiShaderStage::Fragment},
@@ -119,6 +122,9 @@ int main() {
         }
         if (shaderCase.secondDefinition != nullptr) {
             sourceOptions.preprocessorDefinitions.emplace_back(shaderCase.secondDefinition);
+        }
+        if (shaderCase.thirdDefinition != nullptr) {
+            sourceOptions.preprocessorDefinitions.emplace_back(shaderCase.thirdDefinition);
         }
         const auto source = renderer::rhi::loadShaderSource(shaderCase.path, sourceOptions);
         if (!source.has_value()) {

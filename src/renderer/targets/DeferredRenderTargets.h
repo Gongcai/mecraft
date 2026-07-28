@@ -311,7 +311,7 @@ private:
     // 0 RGBA8    = linear albedo.rgb, emissive hint.a
     // 1 RGBA16F  = encoded world normal.rgb, vertex AO.a
     // 2 RG8      = sky light.r, block light.g
-    // 3 RGBA8    = roughness.r, f0.g, emission.b, subsurface.a
+    // 3 RGBA8    = perceptual roughness.r, F0-or-LabPBR-metal.g, emission.b, subsurface.a
     // 4 RGBA8    = DerivativeMain material id.r, wetness mask.g, porosity.b, metalness.a
     RhiTextureHandle m_gAlbedoHandle;
     RhiTextureHandle m_gNormalAoHandle;

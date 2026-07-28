@@ -16,7 +16,7 @@ enum class Target : int {
     GAlbedo       = 0,   // RGBA8   — linear albedo.rgb, emissive hint.a         ≈ colortex6
     GNormalAo     = 1,   // RGBA16F — octahedral normal.rgb, vertex AO.a        ≈ colortex3 (RG)
     GVoxelLight   = 2,   // RG8     — sky light.r, block light.g                 ≈ colortex7 (RG)
-    GMaterial     = 3,   // RGBA8   — roughness.r, f0.g, emission.b, sss.a      ≈ colortex3 (BA)
+    GMaterial     = 3,   // RGBA8   — perceptual roughness.r, F0/metal.g, emission.b, SSS.a
     GMaterialAux  = 4,   // RGBA8   — DerivativeMain material id.r, wetness.g, porosity.b, metal.a
     GDepth        = 5,   // DEPTH32F — opaque + transparent depth                ≈ depthtex0
 

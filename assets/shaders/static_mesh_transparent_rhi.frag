@@ -1,5 +1,6 @@
 #version 450 core
 
+#include "gpu_material_contract.glsl"
 #include "rhi_screen_coordinates.glsl"
 
 layout(location = 0) in vec2 vUv;
@@ -31,16 +32,8 @@ layout(push_constant) uniform StaticMeshTransparentPushConstants {
     mat4 uModel;
     vec4 uReflectionParams;
 };
-layout(std140, binding = 5) uniform StaticMeshMaterialParams {
-    vec4 uBaseColorFactor;
-    vec4 uEmissiveAlphaCutoff;
-    vec4 uMaterialFactors;
-    vec4 uWorkflowFactors;
-    vec4 uSpecularFactors;
-    vec4 uClearcoatFactors;
-    vec4 uTransmissionVolumeFactors;
-    vec4 uAttenuationColorDistance;
-    ivec4 uMaterialFlags;
+layout(std140, binding = 5) uniform GpuMaterialParams {
+    GpuMaterial uMaterial;
 };
 layout(std140, binding = 6) uniform StaticMeshFrameParams {
     vec4 uVoxelLight;
@@ -183,12 +176,13 @@ void main() {
     vec3 bitangent =
         normalize(cross(geometricNormal, tangent)) * vTangentSign;
     vec3 normal = sampleMappedNormal(
-        uNormalTexture, vUv, uMaterialFactors.z,
+        uNormalTexture, vUv, uMaterial.materialFactors.z,
         tangent, bitangent, geometricNormal);
     vec3 clearcoatNormal = normal;
     if (sampledMaterial.clearcoat > 0.0) {
         clearcoatNormal = sampleMappedNormal(
-            uClearcoatNormalTexture, vUv, uClearcoatFactors.z,
+            uClearcoatNormalTexture, vUv,
+            uMaterial.clearcoatFactors.z,
             tangent, bitangent, geometricNormal);
     }
 
@@ -217,9 +211,11 @@ void main() {
     vec3 diffuseWeight =
         (1.0 - fresnel) * (1.0 - sampledMaterial.metalness);
     float occlusion = mix(
-        1.0, texture(uOcclusionTexture, vUv).r, uMaterialFactors.w);
-    vec3 emissive =
-        texture(uEmissiveTexture, vUv).rgb * uEmissiveAlphaCutoff.rgb;
+        1.0, texture(uOcclusionTexture, vUv).r,
+        uMaterial.materialFactors.w);
+    vec3 emissive = texture(uEmissiveTexture, vUv).rgb *
+                    uMaterial.emissiveFactorAndStrength.rgb *
+                    uMaterial.emissiveFactorAndStrength.w;
     vec3 color =
         (diffuseWeight * sampledMaterial.baseColor.rgb / PI + specular) *
             uSunColor.rgb * nDotL +
@@ -336,7 +332,7 @@ void main() {
             transmissionLod).rgb;
         vec3 volumeAttenuation = vec3(1.0);
         if (sampledMaterial.thickness > 0.0 &&
-            sampledMaterial.attenuationDistance > 0.0) {
+            sampledMaterial.attenuationEnabled) {
             volumeAttenuation = pow(
                 max(sampledMaterial.attenuationColor, vec3(1e-5)),
                 vec3(length(transmissionRay) /
@@ -347,7 +343,8 @@ void main() {
         color = mix(color, transmittedColor, sampledMaterial.transmission);
     }
 
-    bool clearcoatOverlay = uMaterialFlags.z == 0 &&
+    bool clearcoatOverlay =
+        uMaterial.modesAndFlags.x != GPU_MATERIAL_ALPHA_BLEND &&
         sampledMaterial.transmission <= 0.0 &&
         sampledMaterial.clearcoat > 0.0;
     if (clearcoatOverlay) {

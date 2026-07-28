@@ -1,5 +1,6 @@
 #include "BlockTextureArrayBuilder.h"
 #include "TextureResampler.h"
+#include "renderer/contracts/GpuMaterialContract.h"
 #include "renderer/rhi/RhiCommandList.h"
 #include "renderer/rhi/RhiDevice.h"
 
@@ -25,7 +26,9 @@ namespace {
 }
 
 constexpr std::array<unsigned char, 4> kNeutralNormalPixel = {128, 128, 255, 255};
-constexpr std::array<unsigned char, 4> kNeutralSpecularPixel = {0, 0, 0, 0};
+constexpr std::array<unsigned char, 4> kNeutralSpecularPixel = {0, 254, 0, 255};
+
+enum class MaterialMapEncoding { LabPbrNormal, LabPbrSpecular };
 
 struct ResourceTint {
     float r = 1.0f;
@@ -236,38 +239,35 @@ std::vector<unsigned char> makeTextureArrayTilePixels(const unsigned char* sourc
                                    filter);
 }
 
-void setTileAlpha(std::vector<unsigned char>& tilePixels, const unsigned char alpha) {
-    for (size_t i = 3; i < tilePixels.size(); i += 4) {
-        tilePixels[i] = alpha;
+void validateMaterialMapTile(const unsigned char* pixels, const size_t pixelCount,
+                             const MaterialMapEncoding encoding,
+                             const std::filesystem::path& sourcePath) {
+    if (encoding == MaterialMapEncoding::LabPbrNormal) {
+        return;
+    }
+    for (size_t pixel = 0u; pixel < pixelCount; ++pixel) {
+        const uint8_t encodedMetalId = pixels[pixel * 4u + 1u];
+        const auto error = renderer::contracts::validateLabPbrMetalId(encodedMetalId);
+        if (error != renderer::contracts::GpuMaterialNormalizationError::None) {
+            failBlockTextureArrayBuilder(
+                std::string("Block specular texture violates LabPBR 1.3 [") +
+                renderer::contracts::gpuMaterialNormalizationErrorStableId(error) +
+                ", metalId=" + std::to_string(encodedMetalId) + "]: " + sourcePath.string());
+        }
     }
 }
 
-void transformNormalMapTile(std::vector<unsigned char>& tilePixels, const bool sourceHasAlpha) {
-    for (size_t i = 0; i < tilePixels.size(); i += 4) {
-        tilePixels[i + 1] = static_cast<unsigned char>(255u - tilePixels[i + 1]);
-    }
-
-    if (!sourceHasAlpha) {
-        setTileAlpha(tilePixels, kNeutralNormalPixel[3]);
-        return;
-    }
-
-    unsigned char minAlpha = 255;
-    unsigned char maxAlpha = 0;
-    for (size_t i = 3; i < tilePixels.size(); i += 4) {
-        minAlpha = std::min(minAlpha, tilePixels[i]);
-        maxAlpha = std::max(maxAlpha, tilePixels[i]);
-    }
-    if (maxAlpha == minAlpha) {
-        setTileAlpha(tilePixels, kNeutralNormalPixel[3]);
-        return;
-    }
-
-    const float invRange = 255.0f / static_cast<float>(maxAlpha - minAlpha);
-    for (size_t i = 3; i < tilePixels.size(); i += 4) {
-        const float normalized = static_cast<float>(tilePixels[i] - minAlpha) * invRange;
-        tilePixels[i] = static_cast<unsigned char>(std::clamp(normalized + 0.5f, 0.0f, 255.0f));
-    }
+std::vector<unsigned char> makeMaterialMapTilePixels(const unsigned char* sourcePixels,
+                                                     const int sourceWidth, const int sourceHeight,
+                                                     const int sourceRowStridePixels,
+                                                     const int tileSize,
+                                                     const MaterialMapEncoding encoding) {
+    const resource::TextureResampleFilter filter =
+        encoding == MaterialMapEncoding::LabPbrSpecular
+            ? resource::TextureResampleFilter::Nearest
+            : resource::selectTextureTileResampleFilter(sourceWidth, sourceHeight, tileSize);
+    return resource::resampleRgba8(sourcePixels, sourceWidth, sourceHeight, sourceRowStridePixels,
+                                   tileSize, tileSize, filter);
 }
 
 void writeAlbedoLayers(PendingTextureArray& texture,
@@ -312,30 +312,23 @@ void writeAlbedoLayers(PendingTextureArray& texture,
 }
 
 void writeMaterialMapLayers(PendingTextureArray& texture,
-                             const std::optional<std::filesystem::path>& mapPath,
-                             const int firstLayer,
-                             const int layerCount,
-                             const int tileSize,
-                             const bool topFrameFirst,
-                             const std::array<unsigned char, 4>& neutralPixel,
-                             const char* roleName,
-                             const bool neutralizeSourceAlpha,
-                             const bool transformNormalMap) {
+                            const std::optional<std::filesystem::path>& mapPath,
+                            const int firstLayer, const int layerCount, const int tileSize,
+                            const bool topFrameFirst,
+                            const std::array<unsigned char, 4>& neutralPixel, const char* roleName,
+                            const MaterialMapEncoding encoding) {
     if (!mapPath.has_value()) {
         writeNeutralMaterialLayers(texture, firstLayer, layerCount, tileSize, neutralPixel);
         return;
     }
 
     LoadedImage image(mapPath.value());
-    const bool sourceHasAlpha = image.channels >= 4;
+    validateMaterialMapTile(image.data,
+                            static_cast<size_t>(image.width) * static_cast<size_t>(image.height),
+                            encoding, mapPath.value());
     if (image.height == image.width) {
-        std::vector<unsigned char> tilePixels =
-            makeTextureArrayTilePixels(image.data, image.width, image.height, image.width, tileSize);
-        if (transformNormalMap) {
-            transformNormalMapTile(tilePixels, sourceHasAlpha);
-        } else if (neutralizeSourceAlpha && !sourceHasAlpha) {
-            setTileAlpha(tilePixels, neutralPixel[3]);
-        }
+        std::vector<unsigned char> tilePixels = makeMaterialMapTilePixels(
+            image.data, image.width, image.height, image.width, tileSize, encoding);
         for (int layer = 0; layer < layerCount; ++layer) {
             writeTextureArrayLayer(texture, firstLayer + layer, tilePixels.data(), tileSize);
         }
@@ -347,13 +340,8 @@ void writeMaterialMapLayers(PendingTextureArray& texture,
             const int sourceFrameIndex = topFrameFirst ? layerCount - 1 - frame : frame;
             const unsigned char* framePixels =
                 image.data + static_cast<size_t>(sourceFrameIndex * image.width * image.width) * 4U;
-            std::vector<unsigned char> tilePixels =
-                makeTextureArrayTilePixels(framePixels, image.width, image.width, image.width, tileSize);
-            if (transformNormalMap) {
-                transformNormalMapTile(tilePixels, sourceHasAlpha);
-            } else if (neutralizeSourceAlpha && !sourceHasAlpha) {
-                setTileAlpha(tilePixels, neutralPixel[3]);
-            }
+            std::vector<unsigned char> tilePixels = makeMaterialMapTilePixels(
+                framePixels, image.width, image.width, image.width, tileSize, encoding);
             writeTextureArrayLayer(texture, firstLayer + frame, tilePixels.data(), tileSize);
         }
         return;
@@ -447,12 +435,14 @@ BlockTextureArraySet buildBlockTextureArraySet(const BlockTextureManifest& manif
         writeAlbedoLayers(albedoArray, entry, currentLayer, layerCount, tileSize, catalogEntry,
                           result.layerAverageColors);
         if (normalArray.has_value()) {
-            writeMaterialMapLayers(*normalArray, entry.normalPath, currentLayer, layerCount, tileSize,
-                                   topFrameFirst, kNeutralNormalPixel, "normal", true, true);
+            writeMaterialMapLayers(*normalArray, entry.normalPath, currentLayer, layerCount,
+                                   tileSize, topFrameFirst, kNeutralNormalPixel, "normal",
+                                   MaterialMapEncoding::LabPbrNormal);
         }
         if (specularArray.has_value()) {
-            writeMaterialMapLayers(*specularArray, entry.specularPath, currentLayer, layerCount, tileSize,
-                                   topFrameFirst, kNeutralSpecularPixel, "specular", false, false);
+            writeMaterialMapLayers(*specularArray, entry.specularPath, currentLayer, layerCount,
+                                   tileSize, topFrameFirst, kNeutralSpecularPixel, "specular",
+                                   MaterialMapEncoding::LabPbrSpecular);
         }
 
         currentLayer += layerCount;

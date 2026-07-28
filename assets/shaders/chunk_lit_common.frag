@@ -487,7 +487,7 @@ uniform vec3 uCameraPos;
         vec3 moonDir = normalize(uMoonDirection);
         vec3 viewDir = normalize(uCameraPos - vWorldPos);
         SurfaceMaterial material = surfaceMaterialForKind(vMaterialKind, 0.0);
-        float roughness = material.roughness;
+        float roughness = linearMaterialRoughness(material);
         float sss = material.sss;
 
         // DerivativeMain-style wet surface effects (RainEffect.glsl + Terrain.frag).

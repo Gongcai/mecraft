@@ -80,7 +80,7 @@ void main() {
 
     // Roughness disocclusion: smooth surfaces are more sensitive to mismatch
     SurfaceMaterial centerMaterial = unpackGBufferMaterial(texelFetch(uMaterialTex, texel, 0));
-    float centerRoughness = clamp(centerMaterial.roughness, 0.0, 1.0);
+    float centerRoughness = linearMaterialRoughness(centerMaterial);
     float roughnessFactor = mix(0.5, 1.0, 1.0 - centerRoughness);
 
     // Combined disocclusion

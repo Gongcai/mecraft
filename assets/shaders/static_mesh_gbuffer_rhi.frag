@@ -1,6 +1,7 @@
 #version 450 core
 
 #include "gbuffer_contract.glsl"
+#include "gpu_material_contract.glsl"
 
 layout(location = 0) out vec4 gAlbedoMaterial;
 layout(location = 1) out vec4 gNormalAo;
@@ -27,16 +28,8 @@ layout(binding = 10) uniform sampler2D uClearcoatRoughnessTexture;
 layout(binding = 11) uniform sampler2D uClearcoatNormalTexture;
 layout(binding = 12) uniform sampler2D uTransmissionTexture;
 layout(binding = 13) uniform sampler2D uThicknessTexture;
-layout(std140, binding = 5) uniform StaticMeshMaterialParams {
-    vec4 uBaseColorFactor;
-    vec4 uEmissiveAlphaCutoff;
-    vec4 uMaterialFactors;
-    vec4 uWorkflowFactors;
-    vec4 uSpecularFactors;
-    vec4 uClearcoatFactors;
-    vec4 uTransmissionVolumeFactors;
-    vec4 uAttenuationColorDistance;
-    ivec4 uMaterialFlags;
+layout(std140, binding = 5) uniform GpuMaterialParams {
+    GpuMaterial uMaterial;
 };
 layout(std140, binding = 6) uniform StaticMeshFrameParams {
     vec4 uVoxelLight;
@@ -55,7 +48,8 @@ layout(std140, binding = 6) uniform StaticMeshFrameParams {
 void main() {
     StaticMeshMaterialSample sampledMaterial = sampleStaticMeshMaterial(vUv);
     vec4 baseColor = sampledMaterial.baseColor;
-    if (uMaterialFlags.x != 0 && baseColor.a < uEmissiveAlphaCutoff.w) {
+    if (uMaterial.modesAndFlags.x == GPU_MATERIAL_ALPHA_MASK &&
+        baseColor.a < uMaterial.transmissionVolumeFactors.z) {
         discard;
     }
 
@@ -63,14 +57,17 @@ void main() {
     vec3 tangent = normalize(vTangent - geometricNormal * dot(vTangent, geometricNormal));
     vec3 bitangent = normalize(cross(geometricNormal, tangent)) * vTangentSign;
     vec3 tangentNormal = texture(uNormalTexture, vUv).xyz * 2.0 - 1.0;
-    tangentNormal.xy *= uMaterialFactors.z;
+    tangentNormal.xy *= uMaterial.materialFactors.z;
     vec3 worldNormal = normalize(mat3(tangent, bitangent, geometricNormal) * normalize(tangentNormal));
 
     float roughness = sampledMaterial.roughness;
     float metalness = sampledMaterial.metalness;
     float occlusionSample = texture(uOcclusionTexture, vUv).r;
-    float occlusion = mix(1.0, occlusionSample, uMaterialFactors.w);
-    vec3 emissive = texture(uEmissiveTexture, vUv).rgb * uEmissiveAlphaCutoff.rgb;
+    float occlusion = mix(
+        1.0, occlusionSample, uMaterial.materialFactors.w);
+    vec3 emissive = texture(uEmissiveTexture, vUv).rgb *
+                    uMaterial.emissiveFactorAndStrength.rgb *
+                    uMaterial.emissiveFactorAndStrength.w;
     float emissiveStrength = max(max(emissive.r, emissive.g), emissive.b);
 
     SurfaceMaterialAux aux = defaultSurfaceMaterialAux();

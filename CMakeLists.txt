@@ -350,6 +350,7 @@ set(SRC_RENDERER
         # Contracts
         src/renderer/contracts/CameraPathContract.cpp
         src/renderer/contracts/ContentHashContract.cpp
+        src/renderer/contracts/GpuMaterialContract.cpp
         src/renderer/contracts/RenderFeatureContract.cpp
 
         # Capture
@@ -1003,6 +1004,9 @@ if(MECRAFT_BUILD_TESTS)
             MECRAFT_TEST_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
     add_mecraft_test(texture_capture_test tests/texture_capture_test.cpp)
     add_mecraft_test(temporal_frame_contract_test tests/temporal_frame_contract_test.cpp)
+    add_mecraft_test(gpu_material_contract_test tests/gpu_material_contract_test.cpp)
+    target_compile_definitions(gpu_material_contract_test PRIVATE
+            MECRAFT_TEST_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
     add_mecraft_test(render_feature_contract_test tests/render_feature_contract_test.cpp)
     add_mecraft_test(gpu_timing_history_test tests/gpu_timing_history_test.cpp)
     add_mecraft_test(rhi_render_graph_test tests/rhi_render_graph_test.cpp)
