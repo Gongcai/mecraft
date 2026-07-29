@@ -128,6 +128,7 @@ VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityFlagBits
         case RhiTextureViewType::Texture2DArray: return VK_IMAGE_VIEW_TYPE_2D_ARRAY;
         case RhiTextureViewType::Texture3D: return VK_IMAGE_VIEW_TYPE_3D;
         case RhiTextureViewType::Cube: return VK_IMAGE_VIEW_TYPE_CUBE;
+        case RhiTextureViewType::CubeArray: return VK_IMAGE_VIEW_TYPE_CUBE_ARRAY;
     }
     return VK_IMAGE_VIEW_TYPE_MAX_ENUM;
 }
@@ -1483,6 +1484,7 @@ bool VkRhiDevice::init(const RhiDeviceDesc& desc) {
 #endif
         if (features2.features.samplerAnisotropy != VK_TRUE ||
             features2.features.independentBlend != VK_TRUE ||
+            features2.features.imageCubeArray != VK_TRUE ||
             features11.shaderDrawParameters != VK_TRUE ||
             features13.dynamicRendering != VK_TRUE || features13.synchronization2 != VK_TRUE ||
             features12.timelineSemaphore != VK_TRUE ||
@@ -1594,6 +1596,7 @@ bool VkRhiDevice::init(const RhiDeviceDesc& desc) {
                                         &features11};
     features2.features.samplerAnisotropy = VK_TRUE;
     features2.features.independentBlend = VK_TRUE;
+    features2.features.imageCubeArray = VK_TRUE;
     features2.features.multiDrawIndirect = selectedCoreFeatures.multiDrawIndirect;
     // Single-channel (r8) storage images used by async-compute SSAO are an
     // extended storage format; enable the feature whenever the device has it.
@@ -2102,8 +2105,17 @@ bool fillImageCreateInfo(const RhiTextureDesc& desc, VkImageCreateInfo& imageInf
         toVkSampleCount(desc.sampleCount) == 0u) {
         return false;
     }
+    const bool cube = desc.dimension == RhiTextureDimension::Cube;
+    const bool cubeArray =
+        desc.dimension == RhiTextureDimension::CubeArray;
+    if ((cube || cubeArray) &&
+        (desc.width != desc.height ||
+         (cube && desc.depthOrLayers != 6u) ||
+         (cubeArray && desc.depthOrLayers % 6u != 0u))) {
+        return false;
+    }
     imageInfo = VkImageCreateInfo{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
-    imageInfo.flags = desc.dimension == RhiTextureDimension::Cube
+    imageInfo.flags = cube || cubeArray
         ? VkImageCreateFlags{VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT} : VkImageCreateFlags{};
     imageInfo.imageType = toVkImageType(desc.dimension);
     imageInfo.format = toVkFormat(desc.format);
@@ -2354,6 +2366,18 @@ RhiTextureViewHandle VkRhiDevice::createTextureView(const RhiTextureViewDesc& de
     }
     if (texture3D && (desc.viewType != RhiTextureViewType::Texture3D || desc.baseLayer != 0u ||
                       layerCount != texture->desc.depthOrLayers)) {
+        return {};
+    }
+    const bool cubeView = desc.viewType == RhiTextureViewType::Cube;
+    const bool cubeArrayView =
+        desc.viewType == RhiTextureViewType::CubeArray;
+    const bool cubeTexture =
+        texture->desc.dimension == RhiTextureDimension::Cube ||
+        texture->desc.dimension == RhiTextureDimension::CubeArray;
+    if ((cubeView || cubeArrayView) &&
+        (!cubeTexture || desc.baseLayer % 6u != 0u ||
+         (cubeView && layerCount != 6u) ||
+         (cubeArrayView && layerCount % 6u != 0u))) {
         return {};
     }
     const RhiTextureFormat format = desc.format == RhiTextureFormat::Undefined

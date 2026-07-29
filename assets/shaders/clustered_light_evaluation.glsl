@@ -9,6 +9,11 @@ const float GPU_LIGHT_LUMINOUS_EFFICACY = 683.0;
 struct ClusteredSurfaceLighting {
     vec3 diffuse;
     vec3 specular;
+    uint shadowLightId;
+    uint shadowMetadataIndex;
+    vec3 shadowResourceCoordinate;
+    float shadowVisibility;
+    float shadowWeight;
 };
 
 float gpuLightFiniteRangeAttenuation(float distanceToLight, float range) {
@@ -29,6 +34,11 @@ ClusteredSurfaceLighting evaluateGpuLight(
     ClusteredSurfaceLighting result;
     result.diffuse = vec3(0.0);
     result.specular = vec3(0.0);
+    result.shadowLightId = GPU_LIGHT_INVALID_RESOURCE_INDEX;
+    result.shadowMetadataIndex = GPU_LIGHT_INVALID_RESOURCE_INDEX;
+    result.shadowResourceCoordinate = vec3(0.0);
+    result.shadowVisibility = 1.0;
+    result.shadowWeight = 0.0;
 
     uint lightType = gpuLightType(light);
     vec3 lightDirection;

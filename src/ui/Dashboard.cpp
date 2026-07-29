@@ -1455,7 +1455,10 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
             "20: Puddle Mask",
             "21: Rain Splash Mask",
             "22: Rain Ripple Normal",
-            "23: Rain Ripple Strength"
+            "23: Rain Ripple Strength",
+            "24: Shadow ID",
+            "25: Shadow Atlas",
+            "26: Shadow Visibility"
         };
         int lightDebugMode = settings.debug.deferredLightDebugMode;
         pipelineChanged |= ImGui::Combo("Light Debug", &lightDebugMode, kLightDebugModes, IM_ARRAYSIZE(kLightDebugModes));

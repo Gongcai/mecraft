@@ -233,6 +233,11 @@ struct BlockRandomTickRule {
 
 /// Defines the physical point-light proxy emitted by one placed block.
 /// Block light propagation remains a separate gameplay data product.
+enum class BlockAnalyticLightShadowPolicy : uint8_t {
+    None,
+    RasterCached
+};
+
 struct BlockAnalyticLightDefinition {
     static constexpr uint16_t kUnconditionalStateIndex =
         std::numeric_limits<uint16_t>::max();
@@ -245,6 +250,9 @@ struct BlockAnalyticLightDefinition {
     float luminousFluxLumens = 0.0f;
     /// Finite influence radius used by clustered-light bounds and attenuation.
     float rangeMeters = 0.0f;
+    /// Explicit local-shadow policy independent of frame-time quality changes.
+    BlockAnalyticLightShadowPolicy shadowPolicy =
+        BlockAnalyticLightShadowPolicy::None;
     /// Optional block-state property and value required to emit this light.
     uint16_t enabledStatePropertyIndex = kUnconditionalStateIndex;
     uint16_t enabledStateValueIndex = kUnconditionalStateIndex;

@@ -86,11 +86,15 @@ bool testParsedPunctualLights() {
         !requireTrue(
             sources[0].type == GpuLightType::Point &&
             sources[0].intensityUnit == GpuLightIntensityUnit::Candela &&
+            sources[0].shadowPolicy ==
+                GpuLightShadowPolicy::RasterDynamic &&
             sources[0].localPositionMeters == glm::vec3(1.0f, 2.0f, 3.0f) &&
             sources[0].rangeMeters == 8.0f,
             "point lights must preserve glTF position, candela, and range") ||
         !requireTrue(
             sources[1].type == GpuLightType::Spot &&
+            sources[1].shadowPolicy ==
+                GpuLightShadowPolicy::RasterDynamic &&
             near(sources[1].localEmissionDirection.x, -1.0f) &&
             near(sources[1].localEmissionDirection.y, 0.0f) &&
             near(sources[1].localEmissionDirection.z, 0.0f) &&
@@ -100,6 +104,7 @@ bool testParsedPunctualLights() {
         !requireTrue(
             sources[2].type == GpuLightType::Directional &&
             sources[2].intensityUnit == GpuLightIntensityUnit::Lux &&
+            sources[2].shadowPolicy == GpuLightShadowPolicy::None &&
             near(sources[2].localEmissionDirection.x, 0.0f) &&
             near(sources[2].localEmissionDirection.y, 1.0f) &&
             near(sources[2].localEmissionDirection.z, 0.0f),
@@ -115,12 +120,19 @@ bool testParsedPunctualLights() {
     return requireTrue(instantiated.succeeded(),
                        "decoded glTF lights must instantiate into GPU records") &&
            requireTrue(
-               glm::vec3(instantiated.light.positionAndRange) ==
+               glm::vec3(instantiated.sceneLight.light.positionAndRange) ==
                    glm::vec3(4.0f, 1.0f, 0.0f),
                "glTF instance lights must become camera-relative") &&
            requireTrue(
-               instantiated.light.classificationAndIdentity.y == 101u,
-               "glTF instance lights must preserve their stable identity");
+               instantiated.sceneLight.light.classificationAndIdentity.y ==
+                   101u,
+               "glTF instance lights must preserve their stable identity") &&
+           requireTrue(
+               instantiated.sceneLight.requestedShadowPolicy ==
+                       GpuLightShadowPolicy::RasterDynamic &&
+                   instantiated.sceneLight.light.classificationAndIdentity.z ==
+                       static_cast<uint32_t>(GpuLightShadowPolicy::None),
+               "glTF shadow requests must remain unallocated scene metadata");
 }
 
 bool testStructuredDecodeFailure() {
@@ -138,6 +150,32 @@ bool testStructuredDecodeFailure() {
     node.matrix[5] = 1.0f;
     node.matrix[10] = 1.0f;
     node.matrix[15] = 1.0f;
+    const renderer::assets::GltfPunctualLightDecodeResult missingPolicy =
+        renderer::assets::decodeGltfPunctualLight(node);
+    if (!requireTrue(
+            missingPolicy.error ==
+                renderer::assets::GltfPunctualLightDecodeError::
+                    InvalidShadowPolicy,
+            "glTF lights must declare an explicit shadow policy")) {
+        return false;
+    }
+
+    char invalidShadowPolicyExtras[] =
+        "{\"mecraftShadowPolicy\":\"automatic\"}";
+    light.extras.data = invalidShadowPolicyExtras;
+    const renderer::assets::GltfPunctualLightDecodeResult invalidPolicy =
+        renderer::assets::decodeGltfPunctualLight(node);
+    if (!requireTrue(
+            invalidPolicy.error ==
+                renderer::assets::GltfPunctualLightDecodeError::
+                    InvalidShadowPolicy,
+            "unknown glTF shadow policies must fail explicitly")) {
+        return false;
+    }
+
+    char shadowPolicyExtras[] =
+        "{\"mecraftShadowPolicy\":\"none\"}";
+    light.extras.data = shadowPolicyExtras;
     const renderer::assets::GltfPunctualLightDecodeResult invalidRange =
         renderer::assets::decodeGltfPunctualLight(node);
     if (!requireTrue(

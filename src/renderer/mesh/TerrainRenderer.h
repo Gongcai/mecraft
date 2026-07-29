@@ -7,6 +7,7 @@
 
 #include "TerrainRenderCache.h"
 #include "WorldDrawBatch.h"
+#include "renderer/contracts/LocalShadowContract.h"
 #include "../../world/chunk/SubChunk.h"
 
 struct CascadeAabbCuller {
@@ -22,6 +23,21 @@ struct CascadeAabbCuller {
     glm::vec3 absClipExtentX = glm::vec3(1.0f, 0.0f, 0.0f);
     glm::vec3 absClipExtentY = glm::vec3(0.0f, 1.0f, 0.0f);
     glm::vec3 absClipExtentZ = glm::vec3(0.0f, 0.0f, 1.0f);
+};
+
+/// World-space culling volume for one local-shadow allocation.
+struct LocalShadowCullVolume final {
+    renderer::contracts::LocalShadowType type =
+        renderer::contracts::LocalShadowType::Spot;
+    glm::vec3 position{0.0f};
+    float range = 0.0f;
+    std::array<glm::vec4, 6> frustumPlanes{};
+};
+
+/// Opaque and cutout terrain ranges visible to one local light.
+struct LocalShadowChunkRanges final {
+    std::vector<GpuMeshRange> opaque;
+    std::vector<GpuMeshRange> cutout;
 };
 
 // Forward declarations for types used only as pointers/references in the public interface
@@ -164,6 +180,17 @@ public:
         std::array<std::vector<GpuMeshRange>, 4>& outCutoutRanges,
         std::array<std::vector<GpuMeshRange>, 4>& outTransparentRanges
     );
+
+    /// Traverses active terrain once and bins opaque/cutout ranges for every
+    /// local-shadow volume. Point lights use sphere-AABB intersection; Spot
+    /// lights use six normalized world-space frustum planes.
+    /// @param worldView Active chunk set supplying render-column revisions.
+    /// @param volumes Complete local-light culling volume array.
+    /// @param ranges Destination resized to match volumes on success.
+    void collectLocalShadowChunks(
+        const IWorldView& worldView,
+        const std::vector<LocalShadowCullVolume>& volumes,
+        std::vector<LocalShadowChunkRanges>& ranges);
 
     // --- Accessors ---
     [[nodiscard]] const std::vector<ChunkRenderColumnCache>& chunkRenderColumns() const;

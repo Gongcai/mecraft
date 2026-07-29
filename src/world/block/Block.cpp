@@ -250,6 +250,25 @@ std::optional<ParsedBlockAnalyticLightDefinition> parseAnalyticLight(
     definition.luminousFluxLumens =
         object["luminousFluxLumens"].get<float>();
     definition.rangeMeters = object["rangeMeters"].get<float>();
+    if (!object.contains("shadowPolicy") ||
+        !object["shadowPolicy"].is_string()) {
+        failBlockRegistry(
+            "Block " + blockId.full() +
+            " analyticLight.shadowPolicy must be an explicit string");
+    }
+    const std::string shadowPolicy =
+        object["shadowPolicy"].get<std::string>();
+    if (shadowPolicy == "none") {
+        definition.shadowPolicy =
+            BlockAnalyticLightShadowPolicy::None;
+    } else if (shadowPolicy == "raster_cached") {
+        definition.shadowPolicy =
+            BlockAnalyticLightShadowPolicy::RasterCached;
+    } else {
+        failBlockRegistry(
+            "Block " + blockId.full() +
+            " analyticLight.shadowPolicy must be none or raster_cached");
+    }
     if (!std::isfinite(definition.luminousFluxLumens) ||
         definition.luminousFluxLumens <= 0.0f ||
         !std::isfinite(definition.rangeMeters) ||

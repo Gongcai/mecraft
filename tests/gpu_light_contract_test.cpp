@@ -58,7 +58,7 @@ bool testPhysicalUnitNormalization() {
     point.colorLinear = {1.0f, 0.5f, 0.25f};
     point.intensity = 1256.6370614f;
     point.intensityUnit = GpuLightIntensityUnit::Lumen;
-    point.shadowPolicy = GpuLightShadowPolicy::Dynamic;
+    point.shadowPolicy = GpuLightShadowPolicy::RasterDynamic;
     point.shadowIndex = 7u;
     point.cookieIndex = 3u;
     point.iesProfileIndex = 5u;
@@ -227,6 +227,7 @@ bool testAnalyticLightInstantiation() {
     source.intensityUnit = GpuLightIntensityUnit::Candela;
     source.innerConeAngleRadians = 0.2f;
     source.outerConeAngleRadians = 0.6f;
+    source.shadowPolicy = GpuLightShadowPolicy::RasterCached;
 
     const glm::mat4 model =
         glm::translate(glm::mat4(1.0f), glm::vec3(10.0f, 2.0f, -5.0f)) *
@@ -249,15 +250,23 @@ bool testAnalyticLightInstantiation() {
     if (!requireTrue(instantiated.succeeded(),
                      "orthogonal non-uniform instance transforms must remain valid") ||
         !requireTrue(glm::length(
-                         glm::vec3(instantiated.light.positionAndRange) -
+                         glm::vec3(instantiated.sceneLight.light.positionAndRange) -
                          expectedPosition) < 1.0e-5f,
                      "analytic lights must upload camera-relative positions") ||
         !requireTrue(glm::length(
-                         glm::vec3(instantiated.light.direction) -
+                         glm::vec3(instantiated.sceneLight.light.direction) -
                          expectedDirection) < 1.0e-5f,
                      "analytic light direction must exclude instance scale") ||
-        !requireTrue(instantiated.light.positionAndRange.w == 9.0f,
-                     "physical light range must not inherit scene scale")) {
+        !requireTrue(instantiated.sceneLight.light.positionAndRange.w == 9.0f,
+                     "physical light range must not inherit scene scale") ||
+        !requireTrue(
+            instantiated.sceneLight.requestedShadowPolicy ==
+                GpuLightShadowPolicy::RasterCached &&
+            instantiated.sceneLight.light.classificationAndIdentity.z ==
+                static_cast<uint32_t>(GpuLightShadowPolicy::None) &&
+            instantiated.sceneLight.light.classificationAndIdentity.w ==
+                kGpuLightInvalidResourceIndex,
+            "scene lights must preserve requested policy outside the GPU record")) {
         return false;
     }
 
@@ -282,13 +291,29 @@ bool testAnalyticLightInstantiation() {
         instantiateAnalyticLight(
             source, StableLightId{73u}, glm::mat4(1.0f),
             glm::vec3(0.0f));
-    return requireTrue(
+    if (!requireTrue(
                invalidSource.error ==
                    AnalyticLightInstantiationError::NormalizationFailed &&
                invalidSource.normalizationError ==
                    GpuLightNormalizationError::ValueOutOfRange &&
                invalidSource.normalizationField == GpuLightField::Range,
-               "invalid physical source values must preserve normalization diagnostics");
+               "invalid physical source values must preserve normalization diagnostics")) {
+        return false;
+    }
+
+    source.rangeMeters = 9.0f;
+    source.shadowPolicy = static_cast<GpuLightShadowPolicy>(99u);
+    const AnalyticLightInstantiationResult invalidPolicy =
+        instantiateAnalyticLight(
+            source, StableLightId{74u}, glm::mat4(1.0f),
+            glm::vec3(0.0f));
+    return requireTrue(
+        invalidPolicy.error ==
+            AnalyticLightInstantiationError::NormalizationFailed &&
+        invalidPolicy.normalizationError ==
+            GpuLightNormalizationError::InvalidShadowPolicy &&
+        invalidPolicy.normalizationField == GpuLightField::ShadowPolicy,
+        "invalid source shadow policies must fail before publication");
 }
 
 bool testShaderLayoutMirror() {
@@ -302,7 +327,7 @@ bool testShaderLayoutMirror() {
     }
     const std::string source((std::istreambuf_iterator<char>(stream)),
                              std::istreambuf_iterator<char>());
-    if (!requireTrue(source.find("GPU_LIGHT_CONTRACT_VERSION = 1u") !=
+    if (!requireTrue(source.find("GPU_LIGHT_CONTRACT_VERSION = 2u") !=
                          std::string::npos,
                      "GLSL light contract must mirror the CPU version") ||
         !requireTrue(source.find("GPU_LIGHT_TYPE_RECT = 3u") !=
@@ -310,7 +335,15 @@ bool testShaderLayoutMirror() {
                      "GLSL light types must mirror the CPU order") ||
         !requireTrue(source.find("GPU_LIGHT_CONTRIBUTION_VOLUMETRIC") !=
                          std::string::npos,
-                     "GLSL flags must mirror all contribution channels")) {
+                     "GLSL flags must mirror all contribution channels") ||
+        !requireTrue(
+            source.find("GPU_LIGHT_SHADOW_RASTER_DYNAMIC = 1u") !=
+                    std::string::npos &&
+            source.find("GPU_LIGHT_SHADOW_RASTER_CACHED = 2u") !=
+                    std::string::npos &&
+            source.find("GPU_LIGHT_SHADOW_RAY_QUERY = 3u") !=
+                    std::string::npos,
+            "GLSL shadow policies must mirror the CPU order")) {
         return false;
     }
     constexpr std::array<const char*, 6> kOrderedFields{

@@ -352,6 +352,7 @@ set(SRC_RENDERER
         src/renderer/contracts/ClusteredLightingContract.cpp
         src/renderer/contracts/ContentHashContract.cpp
         src/renderer/contracts/GpuLightContract.cpp
+        src/renderer/contracts/LocalShadowContract.cpp
         src/renderer/contracts/GpuMaterialContract.cpp
         src/renderer/contracts/RenderFeatureContract.cpp
 
@@ -390,6 +391,7 @@ set(SRC_RENDERER
         src/renderer/passes/TemporalUpscalePass.cpp
         src/renderer/passes/MotionBlurPass.cpp
         src/renderer/passes/DepthOfFieldPass.cpp
+        src/renderer/passes/LocalShadowPass.cpp
         src/renderer/passes/ClusteredLightingPass.cpp
         src/renderer/passes/DeferredLightingPass.cpp
         src/renderer/passes/CloudPass.cpp
@@ -1017,6 +1019,10 @@ if(MECRAFT_BUILD_TESTS)
             MECRAFT_TEST_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
     add_mecraft_test(gpu_light_contract_test tests/gpu_light_contract_test.cpp)
     target_compile_definitions(gpu_light_contract_test PRIVATE
+            MECRAFT_TEST_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
+    add_mecraft_test(local_shadow_contract_test
+            tests/local_shadow_contract_test.cpp)
+    target_compile_definitions(local_shadow_contract_test PRIVATE
             MECRAFT_TEST_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
     add_mecraft_test(gltf_punctual_light_test
             tests/gltf_punctual_light_test.cpp)

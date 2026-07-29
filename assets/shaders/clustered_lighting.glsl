@@ -3,6 +3,8 @@
 
 #include "cluster_build_contract.glsl"
 #include "clustered_light_evaluation.glsl"
+#include "local_shadow_contract.glsl"
+#include "rhi_screen_coordinates.glsl"
 
 #ifndef MECRAFT_CLUSTER_BIND_SET
 #define MECRAFT_CLUSTER_BIND_SET 1
@@ -20,6 +22,252 @@ layout(set = MECRAFT_CLUSTER_BIND_SET, binding = 2, std430) readonly buffer Clus
 layout(set = MECRAFT_CLUSTER_BIND_SET, binding = 3, std430) readonly buffer ClusterStatsBuffer {
     uint uClusterStats[];
 };
+layout(set = MECRAFT_CLUSTER_BIND_SET, binding = 4, std430) readonly buffer LocalShadowMetadataBuffer {
+    LocalShadowMetadata uLocalShadowMetadata[];
+};
+layout(set = MECRAFT_CLUSTER_BIND_SET, binding = 5) uniform sampler2D uLocalShadowSpotAtlas;
+layout(set = MECRAFT_CLUSTER_BIND_SET, binding = 6) uniform samplerCubeArray uLocalShadowPointCubeArray;
+
+bool localShadowFinite(float value) {
+    return !isnan(value) && !isinf(value);
+}
+
+bool localShadowFinite(vec4 value) {
+    return all(not(isnan(value))) && all(not(isinf(value)));
+}
+
+bool localShadowCommonMetadataValid(LocalShadowMetadata metadata) {
+    vec4 parameters = metadata.nearFarDepthBiasNormalOffset;
+    return localShadowFinite(parameters) &&
+        parameters.x > 0.0 && parameters.y > parameters.x &&
+        parameters.z >= 0.0 && parameters.w >= 0.0 &&
+        metadata.classification.w == LOCAL_SHADOW_CONTRACT_VERSION;
+}
+
+uint localShadowPointFaceIndex(vec3 direction) {
+    vec3 magnitude = abs(direction);
+    if (magnitude.x >= magnitude.y && magnitude.x >= magnitude.z) {
+        return direction.x >= 0.0 ? 0u : 1u;
+    }
+    if (magnitude.y >= magnitude.z) {
+        return direction.y >= 0.0 ? 2u : 3u;
+    }
+    return direction.z >= 0.0 ? 4u : 5u;
+}
+
+bool localShadowProjectedDepth(
+    LocalShadowMetadata metadata,
+    uint faceIndex,
+    vec3 cameraRelativePosition,
+    out float depth) {
+    vec4 clip = metadata.cameraRelativeViewProjection[faceIndex] *
+        vec4(cameraRelativePosition, 1.0);
+    if (!localShadowFinite(clip) || clip.w <= 0.0) {
+        return false;
+    }
+    float ndcDepth = clip.z / clip.w;
+    depth = ndcDepth * 0.5 + 0.5;
+    return localShadowFinite(depth);
+}
+
+float sampleLocalSpotShadow(
+    LocalShadowMetadata metadata,
+    vec3 cameraRelativeSurface,
+    vec3 normal,
+    out vec3 resourceCoordinate,
+    out bool valid) {
+    valid = true;
+    resourceCoordinate = vec3(0.0);
+    vec4 atlas = metadata.atlasScaleBias;
+    if (!localShadowCommonMetadataValid(metadata) ||
+        metadata.classification.x != LOCAL_SHADOW_TYPE_SPOT ||
+        metadata.classification.y >= LOCAL_SHADOW_SPOT_METADATA_COUNT ||
+        metadata.classification.z != 1u || !localShadowFinite(atlas) ||
+        any(lessThanEqual(atlas.xy, vec2(0.0))) ||
+        any(lessThan(atlas.zw, vec2(0.0))) ||
+        any(greaterThan(atlas.zw + atlas.xy, vec2(1.0)))) {
+        valid = false;
+        return 1.0;
+    }
+
+    vec3 receiver = cameraRelativeSurface + normal *
+        metadata.nearFarDepthBiasNormalOffset.w;
+    vec4 clip = metadata.cameraRelativeViewProjection[0] *
+        vec4(receiver, 1.0);
+    if (!localShadowFinite(clip) || clip.w <= 0.0) {
+        valid = false;
+        return 1.0;
+    }
+    vec3 ndc = clip.xyz / clip.w;
+    if (!localShadowFinite(vec4(ndc, 0.0))) {
+        valid = false;
+        return 1.0;
+    }
+    vec2 localClipUv = ndc.xy * 0.5 + 0.5;
+    vec2 localTextureUv = rhiScreenUvToTextureUv(
+        rhiScreenUvToClipUv(localClipUv));
+    vec2 atlasUv = localTextureUv * atlas.xy + atlas.zw;
+    resourceCoordinate = vec3(atlasUv, 0.0);
+    float referenceDepth = ndc.z * 0.5 + 0.5 -
+        metadata.nearFarDepthBiasNormalOffset.z;
+    if (any(lessThan(localClipUv, vec2(0.0))) ||
+        any(greaterThan(localClipUv, vec2(1.0))) ||
+        referenceDepth < 0.0 || referenceDepth > 1.0) {
+        return 1.0;
+    }
+
+    ivec2 atlasSize = textureSize(uLocalShadowSpotAtlas, 0);
+    if (any(lessThanEqual(atlasSize, ivec2(0)))) {
+        valid = false;
+        return 1.0;
+    }
+    vec2 texel = 1.0 / vec2(atlasSize);
+    vec2 tileMinimum = atlas.zw + texel * 0.5;
+    vec2 tileMaximum = atlas.zw + atlas.xy - texel * 0.5;
+    if (any(greaterThan(tileMinimum, tileMaximum))) {
+        valid = false;
+        return 1.0;
+    }
+
+    float visibility = 0.0;
+    for (int y = -1; y <= 1; ++y) {
+        for (int x = -1; x <= 1; ++x) {
+            vec2 sampleUv = clamp(
+                atlasUv + vec2(float(x), float(y)) * texel,
+                tileMinimum, tileMaximum);
+            float storedDepth = texture(uLocalShadowSpotAtlas, sampleUv).r;
+            if (!localShadowFinite(storedDepth)) {
+                valid = false;
+                return 1.0;
+            }
+            visibility += referenceDepth <= storedDepth ? 1.0 : 0.0;
+        }
+    }
+    return visibility / 9.0;
+}
+
+float sampleLocalPointShadow(
+    GpuLight light,
+    LocalShadowMetadata metadata,
+    vec3 cameraRelativeSurface,
+    vec3 normal,
+    out vec3 resourceCoordinate,
+    out bool valid) {
+    valid = true;
+    resourceCoordinate = vec3(0.0);
+    if (!localShadowCommonMetadataValid(metadata) ||
+        metadata.classification.x != LOCAL_SHADOW_TYPE_POINT ||
+        metadata.classification.y >= LOCAL_SHADOW_POINT_METADATA_COUNT ||
+        metadata.classification.z != 6u ||
+        any(notEqual(metadata.atlasScaleBias, vec4(0.0)))) {
+        valid = false;
+        return 1.0;
+    }
+
+    vec3 receiver = cameraRelativeSurface + normal *
+        metadata.nearFarDepthBiasNormalOffset.w;
+    vec3 receiverVector = receiver - light.positionAndRange.xyz;
+    float receiverDistance = length(receiverVector);
+    if (!localShadowFinite(receiverDistance)) {
+        valid = false;
+        return 1.0;
+    }
+    if (receiverDistance <= metadata.nearFarDepthBiasNormalOffset.x ||
+        receiverDistance >= metadata.nearFarDepthBiasNormalOffset.y) {
+        return 1.0;
+    }
+
+    vec3 baseDirection = receiverVector / receiverDistance;
+    resourceCoordinate = baseDirection * 0.5 + 0.5;
+    vec3 referenceAxis = abs(baseDirection.y) < 0.99
+        ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
+    vec3 tangent = normalize(cross(referenceAxis, baseDirection));
+    vec3 bitangent = cross(baseDirection, tangent);
+    int faceResolution = textureSize(uLocalShadowPointCubeArray, 0).x;
+    if (faceResolution <= 0) {
+        valid = false;
+        return 1.0;
+    }
+    float angularTexel = 2.0 / float(faceResolution);
+
+    float visibility = 0.0;
+    for (int y = -1; y <= 1; ++y) {
+        for (int x = -1; x <= 1; ++x) {
+            vec3 sampleDirection = normalize(
+                baseDirection +
+                (tangent * float(x) + bitangent * float(y)) * angularTexel);
+            uint faceIndex = localShadowPointFaceIndex(sampleDirection);
+            vec3 projectedReceiver = light.positionAndRange.xyz +
+                sampleDirection * receiverDistance;
+            float referenceDepth;
+            if (!localShadowProjectedDepth(
+                    metadata, faceIndex, projectedReceiver,
+                    referenceDepth)) {
+                valid = false;
+                return 1.0;
+            }
+            referenceDepth -= metadata.nearFarDepthBiasNormalOffset.z;
+            float storedDepth = texture(
+                uLocalShadowPointCubeArray,
+                vec4(sampleDirection,
+                     float(metadata.classification.y))).r;
+            if (!localShadowFinite(storedDepth)) {
+                valid = false;
+                return 1.0;
+            }
+            visibility += referenceDepth <= storedDepth ? 1.0 : 0.0;
+        }
+    }
+    return visibility / 9.0;
+}
+
+float localShadowVisibility(
+    GpuLight light,
+    vec3 cameraRelativeSurface,
+    vec3 normal,
+    out vec3 resourceCoordinate,
+    out bool valid) {
+    resourceCoordinate = vec3(0.0);
+    valid = true;
+    uint policy = gpuLightShadowPolicy(light);
+    uint metadataIndex = gpuLightShadowIndex(light);
+    if (policy == GPU_LIGHT_SHADOW_NONE) {
+        valid = metadataIndex == GPU_LIGHT_INVALID_RESOURCE_INDEX;
+        return 1.0;
+    }
+    if ((policy != GPU_LIGHT_SHADOW_RASTER_DYNAMIC &&
+         policy != GPU_LIGHT_SHADOW_RASTER_CACHED) ||
+        metadataIndex >= LOCAL_SHADOW_METADATA_COUNT) {
+        valid = false;
+        return 1.0;
+    }
+
+    LocalShadowMetadata metadata = uLocalShadowMetadata[metadataIndex];
+    uint type = gpuLightType(light);
+    if (type == GPU_LIGHT_TYPE_SPOT) {
+        if (metadataIndex >= LOCAL_SHADOW_SPOT_METADATA_COUNT ||
+            metadata.classification.y != metadataIndex) {
+            valid = false;
+            return 1.0;
+        }
+        return sampleLocalSpotShadow(
+            metadata, cameraRelativeSurface, normal,
+            resourceCoordinate, valid);
+    }
+    if (type == GPU_LIGHT_TYPE_POINT) {
+        if (metadataIndex < LOCAL_SHADOW_POINT_METADATA_BASE ||
+            metadata.classification.y !=
+                metadataIndex - LOCAL_SHADOW_POINT_METADATA_BASE) {
+            valid = false;
+            return 1.0;
+        }
+        return sampleLocalPointShadow(
+            light, metadata, cameraRelativeSurface, normal,
+            resourceCoordinate, valid);
+    }
+    valid = false;
+    return 1.0;
+}
 
 uint clusteredSurfaceClusterIndex(
     vec2 clipUv,
@@ -53,6 +301,11 @@ ClusteredSurfaceLighting evaluateClusteredSurfaceLighting(
     ClusteredSurfaceLighting result;
     result.diffuse = vec3(0.0);
     result.specular = vec3(0.0);
+    result.shadowLightId = GPU_LIGHT_INVALID_RESOURCE_INDEX;
+    result.shadowMetadataIndex = GPU_LIGHT_INVALID_RESOURCE_INDEX;
+    result.shadowResourceCoordinate = vec3(0.0);
+    result.shadowVisibility = 1.0;
+    result.shadowWeight = 0.0;
     buildValid = uClusterStats[CLUSTER_STATS_BUILD_ERROR] == 0u &&
         uClusterStats[CLUSTER_STATS_CONTRACT_VERSION] ==
             GPU_LIGHT_CONTRACT_VERSION;
@@ -76,12 +329,33 @@ ClusteredSurfaceLighting evaluateClusteredSurfaceLighting(
             buildValid = false;
             return result;
         }
+        GpuLight light = uClusterLights[lightIndex];
+        vec3 shadowResourceCoordinate;
+        bool shadowValid;
+        float shadowVisibilityValue = localShadowVisibility(
+            light, cameraRelativeSurface, normal,
+            shadowResourceCoordinate, shadowValid);
+        if (!shadowValid) {
+            buildValid = false;
+            return result;
+        }
         ClusteredSurfaceLighting contribution = evaluateGpuLight(
-            uClusterLights[lightIndex], cameraRelativeSurface,
+            light, cameraRelativeSurface,
             normal, viewDirection, specularF0, specularF90,
             perceptualRoughness);
-        result.diffuse += contribution.diffuse;
-        result.specular += contribution.specular;
+        float shadowWeight = dot(
+            max(contribution.diffuse + contribution.specular, vec3(0.0)),
+            vec3(0.2126, 0.7152, 0.0722));
+        if (gpuLightShadowPolicy(light) != GPU_LIGHT_SHADOW_NONE &&
+            shadowWeight > result.shadowWeight) {
+            result.shadowLightId = gpuLightStableId(light);
+            result.shadowMetadataIndex = gpuLightShadowIndex(light);
+            result.shadowResourceCoordinate = shadowResourceCoordinate;
+            result.shadowVisibility = shadowVisibilityValue;
+            result.shadowWeight = shadowWeight;
+        }
+        result.diffuse += contribution.diffuse * shadowVisibilityValue;
+        result.specular += contribution.specular * shadowVisibilityValue;
     }
     return result;
 }

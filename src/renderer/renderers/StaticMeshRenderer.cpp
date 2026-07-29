@@ -1756,7 +1756,7 @@ bool StaticMeshRenderer::appendPunctualLights(
     const glm::mat4& model,
     const glm::vec3& cameraPosition,
     const std::vector<renderer::contracts::StableLightId>& lightIds,
-    std::vector<renderer::contracts::GpuLight>& lights,
+    std::vector<renderer::contracts::SceneLight>& lights,
     std::string& error) const {
     using namespace renderer::contracts;
 
@@ -1783,7 +1783,7 @@ bool StaticMeshRenderer::appendPunctualLights(
                 gpuLightFieldStableId(result.normalizationField) + "]";
             return false;
         }
-        lights.push_back(result.light);
+        lights.push_back(result.sceneLight);
     }
     error.clear();
     return true;

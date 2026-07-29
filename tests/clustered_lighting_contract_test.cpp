@@ -252,7 +252,15 @@ bool testSharedLightingConsumers() {
                      "terrain Forward+ must use the shared clustered evaluator") ||
         !requireTrue(sharedLighting.find("evaluateGpuLight(") !=
                          std::string::npos,
-                     "every clustered consumer must dispatch through evaluateGpuLight")) {
+                     "every clustered consumer must dispatch through evaluateGpuLight") ||
+        !requireTrue(
+            sharedLighting.find("sampler2D uLocalShadowSpotAtlas") !=
+                    std::string::npos &&
+            sharedLighting.find(
+                "samplerCubeArray uLocalShadowPointCubeArray") !=
+                    std::string::npos &&
+            sharedLighting.find("visibility / 9.0") != std::string::npos,
+            "shared consumers must evaluate Spot and Point 3x3 PCF")) {
         return false;
     }
 
@@ -262,10 +270,13 @@ bool testSharedLightingConsumers() {
         "layout(set=MECRAFT_CLUSTER_BIND_SET,binding=0,std430)",
         "layout(set=MECRAFT_CLUSTER_BIND_SET,binding=1,std430)",
         "layout(set=MECRAFT_CLUSTER_BIND_SET,binding=2,std430)",
-        "layout(set=MECRAFT_CLUSTER_BIND_SET,binding=3,std430)"};
+        "layout(set=MECRAFT_CLUSTER_BIND_SET,binding=3,std430)",
+        "layout(set=MECRAFT_CLUSTER_BIND_SET,binding=4,std430)",
+        "layout(set=MECRAFT_CLUSTER_BIND_SET,binding=5)",
+        "layout(set=MECRAFT_CLUSTER_BIND_SET,binding=6)"};
     for (const char* binding : kBindings) {
         if (!requireTrue(normalizedShared.find(binding) != std::string::npos,
-                         "shared consumers must expose exactly four fixed storage bindings")) {
+                         "shared consumers must expose the complete fixed resource layout")) {
             return false;
         }
     }
@@ -282,11 +293,45 @@ bool testSharedLightingConsumers() {
         if (!requireTrue(
                 firstRead != std::string::npos &&
                     secondRead != std::string::npos,
-                "deferred and Forward+ graph passes must read the same four buffers")) {
+                "deferred and Forward+ graph passes must read the same clustered buffers")) {
             return false;
         }
     }
-    return true;
+    constexpr const char* kLocalShadowResources[] = {
+        "readBuffer(localShadowResources.metadata",
+        "readTexture(localShadowResources.spotAtlas",
+        "readTexture(localShadowResources.pointCubeArray"};
+    for (const char* resource : kLocalShadowResources) {
+        const size_t firstRead = normalizedPipeline.find(resource);
+        const size_t secondRead = firstRead == std::string::npos
+            ? std::string::npos
+            : normalizedPipeline.find(
+                  resource, firstRead + std::string(resource).size());
+        if (!requireTrue(
+                firstRead != std::string::npos &&
+                    secondRead != std::string::npos,
+                "deferred and Forward+ graph passes must read local shadows")) {
+            return false;
+        }
+    }
+
+    const size_t localShadowPass = normalizedPipeline.find(
+        "m_localShadowPass->addGraphPasses(");
+    const size_t clusteredPass = normalizedPipeline.find(
+        "m_clusteredLightingPass->addGraphPasses(");
+    return requireTrue(
+               localShadowPass != std::string::npos &&
+                   clusteredPass != std::string::npos &&
+                   localShadowPass < clusteredPass,
+               "local shadow rendering must complete before cluster build") &&
+           requireTrue(
+               deferred.find("uDeferredDebugMode == 24") !=
+                       std::string::npos &&
+                   deferred.find("uDeferredDebugMode == 25") !=
+                       std::string::npos &&
+                   deferred.find("uDeferredDebugMode == 26") !=
+                       std::string::npos,
+               "deferred lighting must expose local-shadow diagnostics");
 }
 
 } // namespace

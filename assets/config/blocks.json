@@ -885,7 +885,8 @@
         "colorLinear": [1.0, 0.32, 0.08],
         "positionOffsetMeters": [0.5, 0.72, 0.5],
         "luminousFluxLumens": 90.0,
-        "rangeMeters": 10.0
+        "rangeMeters": 10.0,
+        "shadowPolicy": "raster_cached"
       },
       "allowsFluidCoexistence": true,
       "cutoutDistanceCull": false,
@@ -1022,7 +1023,8 @@
         "colorLinear": [0.42, 0.78, 0.20],
         "positionOffsetMeters": [0.5, 0.5, 0.5],
         "luminousFluxLumens": 20.0,
-        "rangeMeters": 4.0
+        "rangeMeters": 4.0,
+        "shadowPolicy": "none"
       },
       "timeToBreak": 10,
       "textures": {
@@ -1145,6 +1147,7 @@
         "positionOffsetMeters": [0.5, 0.72, 0.5],
         "luminousFluxLumens": 30.0,
         "rangeMeters": 6.0,
+        "shadowPolicy": "raster_cached",
         "enabledStateProperty": "lit",
         "enabledStateValue": "true"
       },
@@ -1182,6 +1185,7 @@
         "positionOffsetMeters": [0.5, 0.5, 0.5],
         "luminousFluxLumens": 900.0,
         "rangeMeters": 14.0,
+        "shadowPolicy": "raster_cached",
         "enabledStateProperty": "lit",
         "enabledStateValue": "true"
       },
@@ -1946,7 +1950,8 @@
         "colorLinear": [1.0, 0.78, 0.42],
         "positionOffsetMeters": [0.5, 0.5, 0.5],
         "luminousFluxLumens": 1200.0,
-        "rangeMeters": 16.0
+        "rangeMeters": 16.0,
+        "shadowPolicy": "none"
       },
       "timeToBreak": 300,
       "textures": {
@@ -1962,7 +1967,8 @@
         "colorLinear": [1.0, 0.12, 0.015],
         "positionOffsetMeters": [0.5, 0.6, 0.5],
         "luminousFluxLumens": 45.0,
-        "rangeMeters": 5.0
+        "rangeMeters": 5.0,
+        "shadowPolicy": "none"
       },
       "timeToBreak": 500,
       "textures": {

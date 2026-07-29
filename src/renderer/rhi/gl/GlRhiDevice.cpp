@@ -134,6 +134,7 @@ template <typename Handle>
         case RhiTextureDimension::Texture2DArray: return GL_TEXTURE_2D_ARRAY;
         case RhiTextureDimension::Texture3D: return GL_TEXTURE_3D;
         case RhiTextureDimension::Cube: return GL_TEXTURE_CUBE_MAP;
+        case RhiTextureDimension::CubeArray: return GL_TEXTURE_CUBE_MAP_ARRAY;
     }
     return 0u;
 }
@@ -144,6 +145,7 @@ template <typename Handle>
         case RhiTextureViewType::Texture2DArray: return GL_TEXTURE_2D_ARRAY;
         case RhiTextureViewType::Texture3D: return GL_TEXTURE_3D;
         case RhiTextureViewType::Cube: return GL_TEXTURE_CUBE_MAP;
+        case RhiTextureViewType::CubeArray: return GL_TEXTURE_CUBE_MAP_ARRAY;
     }
     return 0u;
 }
@@ -4775,9 +4777,21 @@ RhiTextureHandle GlRhiDevice::createTexture(const RhiTextureDesc& desc,
         return {};
     }
 
+    const bool cube = desc.dimension == RhiTextureDimension::Cube;
+    const bool cubeArray =
+        desc.dimension == RhiTextureDimension::CubeArray;
+    if ((cube || cubeArray) &&
+        (desc.width != desc.height ||
+         (cube && desc.depthOrLayers != 6u) ||
+         (cubeArray && desc.depthOrLayers % 6u != 0u))) {
+        logRhiError("createTexture received an invalid cube descriptor");
+        return {};
+    }
+
     GLuint texture = 0u;
     glCreateTextures(target, 1, &texture);
-    if (desc.dimension == RhiTextureDimension::Texture2D || desc.dimension == RhiTextureDimension::Cube) {
+    if (desc.dimension == RhiTextureDimension::Texture2D ||
+        desc.dimension == RhiTextureDimension::Cube) {
         glTextureStorage2D(texture,
                            static_cast<GLsizei>(desc.mipLevels),
                            format.internalFormat,
@@ -4920,13 +4934,22 @@ RhiTextureViewHandle GlRhiDevice::createTextureView(const RhiTextureViewDesc& de
     const bool cubeRangeValid = desc.viewType != RhiTextureViewType::Cube ||
                                 (resolvedDesc.baseLayer % 6u == 0u &&
                                  resolvedDesc.layerCount == 6u);
+    const bool cubeArrayRangeValid =
+        desc.viewType != RhiTextureViewType::CubeArray ||
+        (resolvedDesc.baseLayer % 6u == 0u &&
+         resolvedDesc.layerCount % 6u == 0u);
+    const bool cubeTexture = textureResolved &&
+        (textureRecord.desc.dimension == RhiTextureDimension::Cube ||
+         textureRecord.desc.dimension == RhiTextureDimension::CubeArray);
     if (!m_initialized || !textureResolved || textureRecord.swapchainBackbuffer || viewTarget == 0u ||
         !toGlFormatInfo(resolvedFormat, format) || resolvedDesc.mipCount == 0u ||
         resolvedDesc.layerCount == 0u || resolvedDesc.baseMip >= textureRecord.desc.mipLevels ||
         resolvedDesc.mipCount > textureRecord.desc.mipLevels - resolvedDesc.baseMip ||
         resolvedDesc.baseLayer >= textureRecord.desc.depthOrLayers ||
         resolvedDesc.layerCount > textureRecord.desc.depthOrLayers - resolvedDesc.baseLayer ||
-        !cubeRangeValid) {
+        !cubeRangeValid || !cubeArrayRangeValid ||
+        ((desc.viewType == RhiTextureViewType::Cube ||
+          desc.viewType == RhiTextureViewType::CubeArray) && !cubeTexture)) {
         std::cerr << "GlRhiDevice: invalid texture view"
                   << " handle=" << desc.texture.index << ':' << desc.texture.generation
                   << " resolved=" << textureResolved

@@ -163,33 +163,46 @@ bool testIncrementalVoxelLights() {
     world.notifyBlockChange();
 
     renderer::lighting::VoxelLightRegistry registry;
-    std::vector<renderer::contracts::GpuLight> lights;
+    std::vector<renderer::contracts::SceneLight> lights;
     if (!requireTrue(
-            registry.buildGpuLights(world, glm::vec3(0.0f), lights),
+            registry.buildSceneLights(world, glm::vec3(0.0f), lights),
             "initial voxel light snapshot must build") ||
         !requireTrue(lights.size() == 3u && registry.sourceCount() == 3u,
                      "only enabled analytic block lights must be emitted") ||
         !requireTrue(
-            lights[0].positionAndRange.x == -0.5f &&
-            lights[1].positionAndRange.x == 1.5f &&
-            lights[2].positionAndRange.x == 3.5f,
-            "voxel lights must use deterministic chunk and block order")) {
+            lights[0].light.positionAndRange.x == -0.5f &&
+            lights[1].light.positionAndRange.x == 1.5f &&
+            lights[2].light.positionAndRange.x == 3.5f,
+            "voxel lights must use deterministic chunk and block order") ||
+        !requireTrue(
+            lights[0].requestedShadowPolicy ==
+                    renderer::contracts::GpuLightShadowPolicy::None &&
+            lights[1].requestedShadowPolicy ==
+                    renderer::contracts::GpuLightShadowPolicy::RasterCached &&
+            lights[2].requestedShadowPolicy ==
+                    renderer::contracts::GpuLightShadowPolicy::RasterCached &&
+            lights[1].light.classificationAndIdentity.z ==
+                    static_cast<uint32_t>(
+                        renderer::contracts::GpuLightShadowPolicy::None) &&
+            lights[1].light.classificationAndIdentity.w ==
+                    renderer::contracts::kGpuLightInvalidResourceIndex,
+            "voxel shadow policies must remain explicit unallocated requests")) {
         return false;
     }
     const uint32_t westLightId =
-        lights[0].classificationAndIdentity.y;
+        lights[0].light.classificationAndIdentity.y;
     const uint32_t torchLightId =
-        lights[1].classificationAndIdentity.y;
+        lights[1].light.classificationAndIdentity.y;
     const uint64_t initialRevision = registry.lightRevision();
 
     if (!requireTrue(
-            registry.buildGpuLights(
+            registry.buildSceneLights(
                 world, glm::vec3(10.0f, 0.0f, 0.0f), lights),
             "camera movement must rebuild relative records from cached sources") ||
         !requireTrue(
-            lights[0].positionAndRange.x == -10.5f &&
-            lights[0].classificationAndIdentity.y == westLightId &&
-            lights[1].classificationAndIdentity.y == torchLightId,
+            lights[0].light.positionAndRange.x == -10.5f &&
+            lights[0].light.classificationAndIdentity.y == westLightId &&
+            lights[1].light.classificationAndIdentity.y == torchLightId,
             "camera movement must preserve stable light IDs") ||
         !requireTrue(registry.lightRevision() == initialRevision,
                      "camera-relative movement must not change source revision")) {
@@ -199,7 +212,7 @@ bool testIncrementalVoxelLights() {
     center->setBlock(1, 64, 2, stone);
     world.notifyBlockChange();
     if (!requireTrue(
-            registry.buildGpuLights(world, glm::vec3(0.0f), lights) &&
+            registry.buildSceneLights(world, glm::vec3(0.0f), lights) &&
                 lights.size() == 2u,
             "removing an emissive block must update only its changed chunk") ||
         !requireTrue(registry.lightRevision() > initialRevision,
@@ -211,12 +224,12 @@ bool testIncrementalVoxelLights() {
     center->setBlock(2, 64, 2, redstoneTorchOn);
     world.notifyBlockChange();
     if (!requireTrue(
-            registry.buildGpuLights(world, glm::vec3(0.0f), lights) &&
+            registry.buildSceneLights(world, glm::vec3(0.0f), lights) &&
                 lights.size() == 2u,
             "state-controlled lights must track their enabled property") ||
         !requireTrue(
-            lights[1].colorAndIntensity.x == 1.0f &&
-            lights[1].colorAndIntensity.y == 0.025f,
+            lights[1].light.colorAndIntensity.x == 1.0f &&
+            lights[1].light.colorAndIntensity.y == 0.025f,
             "enabled redstone torches must use their configured color")) {
         return false;
     }
@@ -224,17 +237,17 @@ bool testIncrementalVoxelLights() {
     west->setBlock(15, 64, 2, magma);
     world.notifyBlockChange();
     if (!requireTrue(
-            registry.buildGpuLights(world, glm::vec3(0.0f), lights),
+            registry.buildSceneLights(world, glm::vec3(0.0f), lights),
             "replacing one analytic block with another must rebuild") ||
         !requireTrue(
-            lights[0].classificationAndIdentity.y == westLightId,
+            lights[0].light.classificationAndIdentity.y == westLightId,
             "parameter changes at one persistent source position must retain ID")) {
         return false;
     }
 
     world.removeChunk(-1, 0);
     if (!requireTrue(
-            registry.buildGpuLights(world, glm::vec3(0.0f), lights) &&
+            registry.buildSceneLights(world, glm::vec3(0.0f), lights) &&
                 lights.size() == 1u,
             "unloaded chunks must retire their cached light sources")) {
         return false;

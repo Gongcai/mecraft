@@ -1,6 +1,7 @@
 #include "ClusteredLightingPass.h"
 
 #include "Diagnostics.h"
+#include "renderer/contracts/LocalShadowContract.h"
 #include "renderer/rhi/RhiCommandList.h"
 #include "renderer/rhi/RhiDevice.h"
 #include "renderer/rhi/RhiResources.h"
@@ -80,6 +81,18 @@ void appendStorageBinding(RhiBindGroupDesc& desc,
     desc.entries.push_back(entry);
 }
 
+void appendCombinedTextureSamplerBinding(
+    RhiBindGroupDesc& desc,
+    const uint32_t binding,
+    const RhiTextureViewHandle textureView,
+    const RhiSamplerHandle sampler) {
+    RhiBindGroupEntry entry;
+    entry.binding = binding;
+    entry.resource.combinedTextureSampler.textureView = textureView;
+    entry.resource.combinedTextureSampler.sampler = sampler;
+    desc.entries.push_back(entry);
+}
+
 } // namespace
 
 bool ClusteredLightingPass::setLights(
@@ -92,6 +105,42 @@ bool ClusteredLightingPass::setLights(
         return false;
     }
     m_prepared = false;
+    return true;
+}
+
+bool ClusteredLightingPass::setLocalShadowResources(
+    const LocalShadowResources& resources) {
+    if (!resources.metadataBuffer.isValid() ||
+        resources.metadataBufferBytes == 0u ||
+        !resources.spotAtlasView.isValid() ||
+        !resources.pointCubeArrayView.isValid() ||
+        !resources.sampler.isValid()) {
+        return false;
+    }
+    const bool changed =
+        resources.metadataBuffer.index !=
+            m_localShadowResources.metadataBuffer.index ||
+        resources.metadataBuffer.generation !=
+            m_localShadowResources.metadataBuffer.generation ||
+        resources.metadataBufferBytes !=
+            m_localShadowResources.metadataBufferBytes ||
+        resources.spotAtlasView.index !=
+            m_localShadowResources.spotAtlasView.index ||
+        resources.spotAtlasView.generation !=
+            m_localShadowResources.spotAtlasView.generation ||
+        resources.pointCubeArrayView.index !=
+            m_localShadowResources.pointCubeArrayView.index ||
+        resources.pointCubeArrayView.generation !=
+            m_localShadowResources.pointCubeArrayView.generation ||
+        resources.sampler.index != m_localShadowResources.sampler.index ||
+        resources.sampler.generation !=
+            m_localShadowResources.sampler.generation;
+    if (changed && m_rhiDevice != nullptr &&
+        m_consumerBindGroup.isValid()) {
+        m_rhiDevice->destroyBindGroup(m_consumerBindGroup);
+        m_consumerBindGroup = {};
+    }
+    m_localShadowResources = resources;
     return true;
 }
 
@@ -109,7 +158,8 @@ bool ClusteredLightingPass::validateLights() const {
         const uint32_t shadowIndex = light.classificationAndIdentity.w;
         if (type > static_cast<uint32_t>(GpuLightType::Rect) ||
             stableId == 0u ||
-            shadowPolicy > static_cast<uint32_t>(GpuLightShadowPolicy::Cached) ||
+            shadowPolicy >
+                static_cast<uint32_t>(GpuLightShadowPolicy::RasterCached) ||
             light.resourcesAndFlags.w != kGpuLightContractVersion ||
             (light.resourcesAndFlags.z & ~kGpuLightKnownContributionFlags) != 0u ||
             !finite(light.positionAndRange) || !finite(light.direction) ||
@@ -123,6 +173,20 @@ bool ClusteredLightingPass::validateLights() const {
         if (noShadow != (shadowIndex == kGpuLightInvalidResourceIndex)) {
             return false;
         }
+        if (!noShadow) {
+            if (type == static_cast<uint32_t>(GpuLightType::Spot)) {
+                if (shadowIndex >= kLocalShadowMaxSpotLightCount) {
+                    return false;
+                }
+            } else if (type == static_cast<uint32_t>(GpuLightType::Point)) {
+                if (shadowIndex < kLocalShadowPointMetadataBase ||
+                    shadowIndex >= kLocalShadowMetadataCount) {
+                    return false;
+                }
+            } else {
+                return false;
+            }
+        }
     }
     return true;
 }
@@ -132,7 +196,12 @@ bool ClusteredLightingPass::prepareGraphFrame(RhiDevice& rhiDevice,
                                                const uint32_t renderWidth,
                                                const uint32_t renderHeight) {
     if (rhiDevice.backend() != RhiBackend::Vulkan || !m_inputValid ||
-        m_gpuBuildFailed) {
+        m_gpuBuildFailed ||
+        !m_localShadowResources.metadataBuffer.isValid() ||
+        m_localShadowResources.metadataBufferBytes == 0u ||
+        !m_localShadowResources.spotAtlasView.isValid() ||
+        !m_localShadowResources.pointCubeArrayView.isValid() ||
+        !m_localShadowResources.sampler.isValid()) {
         return false;
     }
     if (m_rhiDevice != nullptr && m_rhiDevice != &rhiDevice) {
@@ -293,11 +362,17 @@ bool ClusteredLightingPass::ensurePipelines(RhiDevice& rhiDevice) {
 
     RhiBindGroupLayoutDesc consumerLayoutDesc;
     consumerLayoutDesc.debugName = "ClusteredLighting.ConsumerLayout";
-    for (uint32_t binding = 0u; binding < 4u; ++binding) {
+    for (uint32_t binding = 0u; binding < 5u; ++binding) {
         consumerLayoutDesc.entries.push_back({
             binding, RhiBindingType::StorageBuffer,
             rhiFlag(RhiShaderStage::Fragment), 1u});
     }
+    consumerLayoutDesc.entries.push_back({
+        5u, RhiBindingType::CombinedTextureSampler,
+        rhiFlag(RhiShaderStage::Fragment), 1u});
+    consumerLayoutDesc.entries.push_back({
+        6u, RhiBindingType::CombinedTextureSampler,
+        rhiFlag(RhiShaderStage::Fragment), 1u});
     m_consumerBindGroupLayout =
         rhiDevice.createBindGroupLayout(consumerLayoutDesc);
     if (!m_consumerBindGroupLayout.isValid()) {
@@ -639,6 +714,15 @@ bool ClusteredLightingPass::ensureConsumerBindGroup(RhiDevice& rhiDevice) {
                          m_compactIndexBuffer.capacityBytes);
     appendStorageBinding(desc, 3u, m_statsBuffer.handle,
                          m_statsBuffer.capacityBytes);
+    appendStorageBinding(desc, 4u,
+                         m_localShadowResources.metadataBuffer,
+                         m_localShadowResources.metadataBufferBytes);
+    appendCombinedTextureSamplerBinding(
+        desc, 5u, m_localShadowResources.spotAtlasView,
+        m_localShadowResources.sampler);
+    appendCombinedTextureSamplerBinding(
+        desc, 6u, m_localShadowResources.pointCubeArrayView,
+        m_localShadowResources.sampler);
     m_consumerBindGroup = rhiDevice.createBindGroup(desc);
     return m_consumerBindGroup.isValid();
 }
@@ -1071,4 +1155,5 @@ void ClusteredLightingPass::shutdown() {
     m_indexCapacity = 0u;
     m_scanScratchWordCount = 0u;
     m_frameStats = {};
+    m_localShadowResources = {};
 }

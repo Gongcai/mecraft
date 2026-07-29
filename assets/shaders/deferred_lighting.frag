@@ -29,6 +29,16 @@ layout(location = 3) flat in vec4 vSkySH_G;
 layout(location = 4) flat in vec4 vSkySH_B;
 layout(location = 0) out vec4 FragColor;
 
+const uint DEFERRED_LOCAL_SHADOW_INVALID_ID = 0xffffffffu;
+
+vec3 deferredLocalShadowIdColor(uint stableId) {
+    uint hash = stableId * 1664525u + 1013904223u;
+    return vec3(
+        float((hash >> 0u) & 255u),
+        float((hash >> 8u) & 255u),
+        float((hash >> 16u) & 255u)) / 255.0;
+}
+
 layout(binding = 0) uniform sampler2D uAlbedoTex;
 layout(binding = 1) uniform sampler2D uNormalAoTex;
 layout(binding = 2) uniform sampler2D uVoxelLightTex;
@@ -724,6 +734,9 @@ void main() {
     float alpha2 = sqr(roughness);
     vec3 clusteredDiffuse = vec3(0.0);
     vec3 clusteredSpecular = vec3(0.0);
+    uint clusteredShadowLightId = DEFERRED_LOCAL_SHADOW_INVALID_ID;
+    vec3 clusteredShadowResourceCoordinate = vec3(0.0);
+    float clusteredShadowVisibility = 1.0;
 #ifdef MECRAFT_CLUSTERED_LIGHTING
     bool clusteredBuildValid;
     float clusteredViewDepth = abs(
@@ -741,6 +754,10 @@ void main() {
     }
     clusteredDiffuse = clusteredLighting.diffuse;
     clusteredSpecular = clusteredLighting.specular;
+    clusteredShadowLightId = clusteredLighting.shadowLightId;
+    clusteredShadowResourceCoordinate =
+        clusteredLighting.shadowResourceCoordinate;
+    clusteredShadowVisibility = clusteredLighting.shadowVisibility;
 #endif
     // === DerivativeMain lighting order ===
     // Reference: deferred5.fsh main() — sceneData starts at 0
@@ -1158,6 +1175,18 @@ void main() {
     else if (uDeferredDebugMode == 21) { color = vec3(rainSplashMask); }
     else if (uDeferredDebugMode == 22) { color = vec3(abs(rainRippleDebug), 0.0) * 2.0; }
     else if (uDeferredDebugMode == 23) { color = vec3(rainRippleStrengthDebug * 4.0); }
+    else if (uDeferredDebugMode == 24) {
+        color = clusteredShadowLightId != DEFERRED_LOCAL_SHADOW_INVALID_ID
+            ? deferredLocalShadowIdColor(clusteredShadowLightId) : vec3(0.0);
+    }
+    else if (uDeferredDebugMode == 25) {
+        color = clusteredShadowLightId != DEFERRED_LOCAL_SHADOW_INVALID_ID
+            ? clusteredShadowResourceCoordinate : vec3(0.0);
+    }
+    else if (uDeferredDebugMode == 26) {
+        color = clusteredShadowLightId != DEFERRED_LOCAL_SHADOW_INVALID_ID
+            ? vec3(clusteredShadowVisibility) : vec3(0.0);
+    }
 
     // Alpha encodes translucency: 0 = opaque, 1 = translucent (water/glass/ice/stained glass).
     // Downstream composite passes use this to apply refraction/tinting selectively.

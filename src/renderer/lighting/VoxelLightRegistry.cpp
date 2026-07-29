@@ -245,10 +245,10 @@ VoxelLightRegistry::VoxelLightRegistry()
 
 VoxelLightRegistry::~VoxelLightRegistry() = default;
 
-bool VoxelLightRegistry::buildGpuLights(
+bool VoxelLightRegistry::buildSceneLights(
     const IWorldView& worldView,
     const glm::vec3& cameraPositionMeters,
-    std::vector<renderer::contracts::GpuLight>& lights) {
+    std::vector<renderer::contracts::SceneLight>& lights) {
     if (!std::isfinite(cameraPositionMeters.x) ||
         !std::isfinite(cameraPositionMeters.y) ||
         !std::isfinite(cameraPositionMeters.z)) {
@@ -260,7 +260,7 @@ bool VoxelLightRegistry::buildGpuLights(
     }
 
     using namespace renderer::contracts;
-    std::vector<GpuLight> built;
+    std::vector<SceneLight> built;
     built.reserve(m_impl->sourceCount);
     for (const int64_t chunkKey : m_impl->orderedChunkKeys) {
         const CachedVoxelLightChunk& chunk =
@@ -322,7 +322,14 @@ bool VoxelLightRegistry::buildGpuLights(
                     gpuLightFieldStableId(normalized.field) + "]");
                 return false;
             }
-            built.push_back(normalized.light);
+            SceneLight sceneLight;
+            sceneLight.light = normalized.light;
+            sceneLight.requestedShadowPolicy =
+                definition.shadowPolicy ==
+                        BlockAnalyticLightShadowPolicy::RasterCached
+                    ? GpuLightShadowPolicy::RasterCached
+                    : GpuLightShadowPolicy::None;
+            built.push_back(sceneLight);
         }
     }
     lights = std::move(built);

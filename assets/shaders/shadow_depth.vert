@@ -64,10 +64,7 @@ void main() {
     vec4 worldPos = (uUseModel != 0) ? model * localPos : localPos;
 #endif
 
-    // Mecraft CSM: linear projection, no distortion warp.
-    vec3 viewPos = mat3(uShadowModelView) * worldPos.xyz + uShadowModelView[3].xyz;
-    vec3 clipPos = vec3(uShadowProjection[0].x, uShadowProjection[1].y, uShadowProjection[2].z) * viewPos + uShadowProjection[3].xyz;
-    gl_Position = vec4(clipPos, 1.0);
+    gl_Position = uShadowProjection * uShadowModelView * worldPos;
     vUV = vertex.uv;
     vLayer = vertex.layer;
     vAnimationFrameCount = vertex.animationFrameCount;

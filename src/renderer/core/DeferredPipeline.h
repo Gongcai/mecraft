@@ -16,6 +16,7 @@
 #include "../passes/TemporalResolvePass.h"
 #include "../passes/MotionBlurPass.h"
 #include "../passes/DepthOfFieldPass.h"
+#include "../passes/LocalShadowPass.h"
 #include "../passes/ClusteredLightingPass.h"
 #include "../passes/DeferredLightingPass.h"
 #include "../passes/CloudPass.h"
@@ -54,11 +55,8 @@ public:
 
     // Held block light value (set from Game)
     void setHeldBlockLightValue(int value) { m_heldBlockLightValue = value; }
-    [[nodiscard]] bool setGpuLights(
-        std::vector<renderer::contracts::GpuLight> lights) {
-        return m_clusteredLightingPass != nullptr &&
-               m_clusteredLightingPass->setLights(std::move(lights));
-    }
+    [[nodiscard]] bool setSceneLights(
+        std::vector<renderer::contracts::SceneLight> lights);
     void invalidateHistory();
 
     // Pass accessors
@@ -69,6 +67,9 @@ public:
     TemporalResolvePass* taaPass() const { return m_taaPass.get(); }
     MotionBlurPass* motionBlurPass() const { return m_motionBlurPass.get(); }
     DepthOfFieldPass* dofPass() const { return m_dofPass.get(); }
+    LocalShadowPass* localShadowPass() const {
+        return m_localShadowPass.get();
+    }
     ClusteredLightingPass* clusteredLightingPass() const {
         return m_clusteredLightingPass.get();
     }
@@ -101,6 +102,7 @@ private:
     std::unique_ptr<TemporalResolvePass> m_taaPass;
     std::unique_ptr<MotionBlurPass> m_motionBlurPass;
     std::unique_ptr<DepthOfFieldPass> m_dofPass;
+    std::unique_ptr<LocalShadowPass> m_localShadowPass;
     std::unique_ptr<ClusteredLightingPass> m_clusteredLightingPass;
     std::unique_ptr<DeferredLightingPass> m_lightingPass;
     std::unique_ptr<CloudPass> m_cloudPass;
@@ -123,6 +125,7 @@ private:
     bool m_waterRenderedBeforeTemporal = false;
     bool m_waterRenderedAfterTemporal = false;
     int m_heldBlockLightValue = 0;
+    std::vector<renderer::contracts::SceneLight> m_sceneLights;
 
     // Settings (cached from RenderSettings for current frame)
     RenderSettings m_currentSettings;

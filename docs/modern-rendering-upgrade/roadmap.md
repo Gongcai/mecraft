@@ -55,7 +55,9 @@ M1 与 M2 可并行开发，但公共 `GpuMaterial`、`GpuSceneGeometry` 与 Sta
 3. 升级 GBuffer 的 RGB F0、Stable ID 和 Material ID。
 4. 建设 `GpuLight`、Cluster Build、Deferred/Forward+ 读取。
 5. 接入体素发光方块代理和 glTF `KHR_lights_punctual`。
-6. 建设局部灯 Shadow Atlas/Cube Array。
+6. 建设局部灯 Shadow Atlas/Cube Array。（实现完成：稳定 Light ID 分配、Spot Atlas、
+   Point Cube Array、缓存修订、Deferred/Forward+ 共享采样、Debug View、契约测试、
+   双后端 RHI 测试与 Vulkan Validation 均已接入；V07/M03 场景验收待对应版本化资产落地。）
 7. 生成 Sky Cubemap、GGX Prefilter Mips、DFG LUT。
 8. 建设 Reflection Probe 数据与 Box Projection。
 

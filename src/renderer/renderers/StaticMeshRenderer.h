@@ -78,7 +78,7 @@ public:
         const glm::mat4& model,
         const glm::vec3& cameraPosition,
         const std::vector<renderer::contracts::StableLightId>& lightIds,
-        std::vector<renderer::contracts::GpuLight>& lights,
+        std::vector<renderer::contracts::SceneLight>& lights,
         std::string& error) const;
 
     /// Uploads lighting and camera transforms before the G-buffer rendering scope starts.

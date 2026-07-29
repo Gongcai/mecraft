@@ -68,9 +68,10 @@ public:
     void renderToShadowMap(
         RhiCommandList& commandList,
         const glm::mat4& shadowViewProjection) override;
-    [[nodiscard]] bool collectGpuLights(
+    [[nodiscard]] bool prepareShadowFrame() override;
+    [[nodiscard]] bool collectSceneLights(
         const glm::vec3& cameraPosition,
-        std::vector<renderer::contracts::GpuLight>& lights,
+        std::vector<renderer::contracts::SceneLight>& lights,
         std::string& error) override;
     [[nodiscard]] bool configureClusteredLighting(
         const DeferredClusteredLightingResources& resources) override;

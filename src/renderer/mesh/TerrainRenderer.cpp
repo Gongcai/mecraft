@@ -55,6 +55,44 @@ unsigned int buildCascadeVisibilityMask(const glm::vec3& boundsMin,
     return mask;
 }
 
+[[nodiscard]] bool sphereIntersectsAabb(
+    const glm::vec3& center,
+    const float radius,
+    const glm::vec3& boundsMin,
+    const glm::vec3& boundsMax) {
+    const glm::vec3 closest = glm::clamp(center, boundsMin, boundsMax);
+    const glm::vec3 delta = center - closest;
+    return glm::dot(delta, delta) <= radius * radius;
+}
+
+[[nodiscard]] bool frustumIntersectsAabb(
+    const std::array<glm::vec4, 6>& planes,
+    const glm::vec3& boundsMin,
+    const glm::vec3& boundsMax) {
+    for (const glm::vec4& plane : planes) {
+        const glm::vec3 positive{
+            plane.x >= 0.0f ? boundsMax.x : boundsMin.x,
+            plane.y >= 0.0f ? boundsMax.y : boundsMin.y,
+            plane.z >= 0.0f ? boundsMax.z : boundsMin.z};
+        if (glm::dot(glm::vec3(plane), positive) + plane.w < 0.0f) {
+            return false;
+        }
+    }
+    return true;
+}
+
+[[nodiscard]] bool localShadowVolumeIntersectsAabb(
+    const LocalShadowCullVolume& volume,
+    const glm::vec3& boundsMin,
+    const glm::vec3& boundsMax) {
+    if (volume.type == renderer::contracts::LocalShadowType::Point) {
+        return sphereIntersectsAabb(
+            volume.position, volume.range, boundsMin, boundsMax);
+    }
+    return frustumIntersectsAabb(
+        volume.frustumPlanes, boundsMin, boundsMax);
+}
+
 } // namespace
 
 void TerrainRenderer::init() {
@@ -580,6 +618,138 @@ void TerrainRenderer::collectShadowChunks(
             }
         }
 
+        regionBegin = regionEnd;
+    }
+}
+
+void TerrainRenderer::collectLocalShadowChunks(
+    const IWorldView& worldView,
+    const std::vector<LocalShadowCullVolume>& volumes,
+    std::vector<LocalShadowChunkRanges>& ranges) {
+    ranges.clear();
+    ranges.resize(volumes.size());
+    if (volumes.empty()) {
+        return;
+    }
+
+    m_terrainCache->syncChunkRenderColumns(worldView);
+    std::vector<ChunkRenderColumnCache>& columns =
+        m_terrainCache->chunkRenderColumns();
+    if (columns.empty()) {
+        return;
+    }
+
+    std::vector<uint8_t> regionVisible(volumes.size());
+    std::vector<uint8_t> columnVisible(volumes.size());
+    size_t regionBegin = 0u;
+    while (regionBegin < columns.size()) {
+        size_t regionEnd = regionBegin + 1u;
+        const ChunkRenderColumnCache& regionFirst = columns[regionBegin];
+        while (regionEnd < columns.size() &&
+               columns[regionEnd].regionX == regionFirst.regionX &&
+               columns[regionEnd].regionZ == regionFirst.regionZ) {
+            ++regionEnd;
+        }
+
+        bool regionHasBounds = false;
+        glm::vec3 regionMin(0.0f);
+        glm::vec3 regionMax(0.0f);
+        for (size_t index = regionBegin; index < regionEnd; ++index) {
+            ChunkRenderColumnCache& column = columns[index];
+            m_terrainCache->refreshChunkRenderColumnCache(column);
+            if (column.columnHasBounds) {
+                expandBounds(regionMin, regionMax, regionHasBounds,
+                             column.columnBoundsMin,
+                             column.columnBoundsMax);
+            }
+        }
+        if (!regionHasBounds) {
+            regionBegin = regionEnd;
+            continue;
+        }
+
+        bool anyRegionVisible = false;
+        for (size_t lightIndex = 0u;
+             lightIndex < volumes.size(); ++lightIndex) {
+            regionVisible[lightIndex] = static_cast<uint8_t>(
+                localShadowVolumeIntersectsAabb(
+                    volumes[lightIndex], regionMin, regionMax));
+            anyRegionVisible = anyRegionVisible ||
+                regionVisible[lightIndex] != 0u;
+        }
+        if (!anyRegionVisible) {
+            regionBegin = regionEnd;
+            continue;
+        }
+
+        for (size_t index = regionBegin; index < regionEnd; ++index) {
+            ChunkRenderColumnCache& column = columns[index];
+            if (column.chunk == nullptr || !column.columnHasBounds) {
+                continue;
+            }
+            bool anyColumnVisible = false;
+            for (size_t lightIndex = 0u;
+                 lightIndex < volumes.size(); ++lightIndex) {
+                columnVisible[lightIndex] = static_cast<uint8_t>(
+                    regionVisible[lightIndex] != 0u &&
+                    localShadowVolumeIntersectsAabb(
+                        volumes[lightIndex], column.columnBoundsMin,
+                        column.columnBoundsMax));
+                anyColumnVisible = anyColumnVisible ||
+                    columnVisible[lightIndex] != 0u;
+            }
+            if (!anyColumnVisible) {
+                continue;
+            }
+
+            const glm::vec3 offset = column.worldOffset;
+            for (int sectionY = 0;
+                 sectionY < Chunk::NUM_SUB_CHUNKS; ++sectionY) {
+                const SubChunk* subChunk =
+                    column.chunk->getSubChunk(sectionY);
+                if (subChunk == nullptr) {
+                    continue;
+                }
+                const SubChunkMesh& mesh = subChunk->getMesh();
+                if (!mesh.inGlobalPool ||
+                    (mesh.opaqueRange.vertexCount == 0u &&
+                     mesh.cutoutRange.vertexCount == 0u &&
+                     mesh.cutoutDistanceRange.vertexCount == 0u)) {
+                    continue;
+                }
+                const int yBase = sectionY * SubChunk::SIZE;
+                const glm::vec3 derivedMin{
+                    offset.x, offset.y + static_cast<float>(yBase),
+                    offset.z};
+                const glm::vec3 derivedMax{
+                    offset.x + static_cast<float>(Chunk::SIZE_X),
+                    offset.y + static_cast<float>(yBase + SubChunk::SIZE),
+                    offset.z + static_cast<float>(Chunk::SIZE_Z)};
+                const glm::vec3 boundsMin =
+                    mesh.hasBounds ? mesh.boundsMin : derivedMin;
+                const glm::vec3 boundsMax =
+                    mesh.hasBounds ? mesh.boundsMax : derivedMax;
+
+                for (size_t lightIndex = 0u;
+                     lightIndex < volumes.size(); ++lightIndex) {
+                    if (columnVisible[lightIndex] == 0u ||
+                        !localShadowVolumeIntersectsAabb(
+                            volumes[lightIndex], boundsMin, boundsMax)) {
+                        continue;
+                    }
+                    LocalShadowChunkRanges& output = ranges[lightIndex];
+                    if (mesh.opaqueRange.vertexCount > 0u) {
+                        output.opaque.push_back(mesh.opaqueRange);
+                    }
+                    if (mesh.cutoutRange.vertexCount > 0u) {
+                        output.cutout.push_back(mesh.cutoutRange);
+                    }
+                    if (mesh.cutoutDistanceRange.vertexCount > 0u) {
+                        output.cutout.push_back(mesh.cutoutDistanceRange);
+                    }
+                }
+            }
+        }
         regionBegin = regionEnd;
     }
 }

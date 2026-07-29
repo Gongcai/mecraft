@@ -14,7 +14,7 @@
 
 namespace renderer::contracts {
 
-inline constexpr uint32_t kGpuLightContractVersion = 1u;
+inline constexpr uint32_t kGpuLightContractVersion = 2u;
 inline constexpr uint32_t kGpuLightInvalidResourceIndex =
     std::numeric_limits<uint32_t>::max();
 
@@ -37,8 +37,9 @@ enum class GpuLightIntensityUnit : uint32_t {
 /// Selects how one light obtains and updates its shadow allocation.
 enum class GpuLightShadowPolicy : uint32_t {
     None = 0u,
-    Dynamic = 1u,
-    Cached = 2u
+    RasterDynamic = 1u,
+    RasterCached = 2u,
+    RayQuery = 3u
 };
 
 /// Controls which lighting products receive energy from one light.
@@ -96,6 +97,15 @@ struct alignas(16) GpuLight final {
     glm::uvec4 resourcesAndFlags{kGpuLightInvalidResourceIndex,
                                  kGpuLightInvalidResourceIndex, 0u,
                                  kGpuLightContractVersion};
+};
+
+/// Preserves the author-requested shadow policy until the local-shadow pass
+/// has allocated a stable resource slot. The embedded GPU record must always
+/// carry the None policy and invalid shadow index while it is scene input.
+struct SceneLight final {
+    GpuLight light;
+    GpuLightShadowPolicy requestedShadowPolicy =
+        GpuLightShadowPolicy::None;
 };
 
 /// Carries source-level light values into strict physical-unit normalization.
@@ -180,6 +190,7 @@ struct AnalyticLightSourceDefinition final {
     float innerConeAngleRadians = 0.0f;
     float outerConeAngleRadians = 0.0f;
     glm::vec2 rectSizeMeters{0.0f};
+    GpuLightShadowPolicy shadowPolicy = GpuLightShadowPolicy::None;
     GpuLightContributionFlags contributionFlags =
         gpuLightContributionFlagBit(GpuLightContributionFlag::Diffuse) |
         gpuLightContributionFlagBit(GpuLightContributionFlag::Specular);
@@ -200,7 +211,7 @@ enum class AnalyticLightInstantiationError : uint8_t {
 /// Returns one instantiated GPU light or a stable transform/normalization
 /// error without publishing a partial record.
 struct AnalyticLightInstantiationResult final {
-    GpuLight light;
+    SceneLight sceneLight;
     AnalyticLightInstantiationError error =
         AnalyticLightInstantiationError::None;
     GpuLightNormalizationError normalizationError =

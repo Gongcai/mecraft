@@ -184,8 +184,8 @@ public:
     void setEyeInWater(bool inWater);
     void setRenderLocalPlayerModel(bool visible);
     void setHeldBlockLightValue(int value);
-    [[nodiscard]] bool setGpuLights(
-        std::vector<renderer::contracts::GpuLight> lights);
+    [[nodiscard]] bool setSceneLights(
+        std::vector<renderer::contracts::SceneLight> lights);
 
     // R7: Legacy bridge methods removed — use renderFrame() instead
 

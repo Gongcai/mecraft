@@ -31,10 +31,10 @@ public:
     /// @param cameraPositionMeters World-space camera position used as floating origin.
     /// @param lights Destination replaced only after every source validates.
     /// @return True when synchronization and GPU normalization both succeed.
-    [[nodiscard]] bool buildGpuLights(
+    [[nodiscard]] bool buildSceneLights(
         const IWorldView& worldView,
         const glm::vec3& cameraPositionMeters,
-        std::vector<renderer::contracts::GpuLight>& lights);
+        std::vector<renderer::contracts::SceneLight>& lights);
 
     /// Retires every cached source and detaches the current world owner.
     void reset();

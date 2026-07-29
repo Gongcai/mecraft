@@ -52,8 +52,9 @@ constexpr float kHalfPi = kPi * 0.5f;
 [[nodiscard]] bool validShadowPolicy(const GpuLightShadowPolicy policy) {
     switch (policy) {
         case GpuLightShadowPolicy::None:
-        case GpuLightShadowPolicy::Dynamic:
-        case GpuLightShadowPolicy::Cached: return true;
+        case GpuLightShadowPolicy::RasterDynamic:
+        case GpuLightShadowPolicy::RasterCached:
+        case GpuLightShadowPolicy::RayQuery: return true;
     }
     return false;
 }
@@ -242,6 +243,14 @@ AnalyticLightInstantiationResult instantiateAnalyticLight(
     const glm::mat4& localToWorld,
     const glm::vec3& cameraPositionMeters) {
     AnalyticLightInstantiationResult result;
+    if (!validShadowPolicy(source.shadowPolicy)) {
+        result.error =
+            AnalyticLightInstantiationError::NormalizationFailed;
+        result.normalizationError =
+            GpuLightNormalizationError::InvalidShadowPolicy;
+        result.normalizationField = GpuLightField::ShadowPolicy;
+        return result;
+    }
     if (!finite(cameraPositionMeters)) {
         result.error =
             AnalyticLightInstantiationError::InvalidCameraPosition;
@@ -317,7 +326,8 @@ AnalyticLightInstantiationResult instantiateAnalyticLight(
         result.normalizationField = normalized.field;
         return result;
     }
-    result.light = normalized.light;
+    result.sceneLight.light = normalized.light;
+    result.sceneLight.requestedShadowPolicy = source.shadowPolicy;
     return result;
 }
 

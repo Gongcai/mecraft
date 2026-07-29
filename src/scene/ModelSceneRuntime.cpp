@@ -1314,9 +1314,20 @@ void ModelSceneRuntime::renderToShadowMap(
     }
 }
 
-bool ModelSceneRuntime::collectGpuLights(
+bool ModelSceneRuntime::prepareShadowFrame() {
+    for (MeshAsset& asset : m_assets) {
+        if (asset.renderer == nullptr) {
+            setError("model scene shadow preparation references an empty mesh asset");
+            return false;
+        }
+        asset.renderer->prepareStandaloneFrame();
+    }
+    return true;
+}
+
+bool ModelSceneRuntime::collectSceneLights(
     const glm::vec3& cameraPosition,
-    std::vector<renderer::contracts::GpuLight>& lights,
+    std::vector<renderer::contracts::SceneLight>& lights,
     std::string& error) {
     struct LightEntityEntry final {
         scene::SceneEntityId sceneEntityId =
@@ -1332,7 +1343,7 @@ bool ModelSceneRuntime::collectGpuLights(
     std::vector<LightEntityEntry> entries;
     entries.reserve(view.size_hint());
     std::size_t totalLightCount = 0u;
-    std::vector<renderer::contracts::GpuLight> collected;
+    std::vector<renderer::contracts::SceneLight> collected;
     for (const entt::entity entity : view) {
         const auto& mesh = view.get<scene::StaticMeshComponent>(entity);
         const auto assetIt = m_assetIndices.find(mesh.assetId);

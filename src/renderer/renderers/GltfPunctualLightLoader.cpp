@@ -2,6 +2,8 @@
 
 #include <glm/gtc/type_ptr.hpp>
 
+#include <nlohmann/json.hpp>
+
 #include "cgltf/cgltf.h"
 
 namespace renderer::assets {
@@ -55,6 +57,32 @@ GltfPunctualLightDecodeResult decodeGltfPunctualLight(
         result.source.outerConeAngleRadians =
             node.light->spot_outer_cone_angle;
     }
+    if (node.light->extras.data == nullptr) {
+        result.error = GltfPunctualLightDecodeError::InvalidShadowPolicy;
+        return result;
+    }
+    const nlohmann::json extras = nlohmann::json::parse(
+        node.light->extras.data, nullptr, false);
+    if (extras.is_discarded() || !extras.is_object() ||
+        !extras.contains("mecraftShadowPolicy") ||
+        !extras["mecraftShadowPolicy"].is_string()) {
+        result.error = GltfPunctualLightDecodeError::InvalidShadowPolicy;
+        return result;
+    }
+    const std::string policy =
+        extras["mecraftShadowPolicy"].get<std::string>();
+    if (policy == "none") {
+        result.source.shadowPolicy = GpuLightShadowPolicy::None;
+    } else if (policy == "raster_dynamic") {
+        result.source.shadowPolicy = GpuLightShadowPolicy::RasterDynamic;
+    } else if (policy == "raster_cached") {
+        result.source.shadowPolicy = GpuLightShadowPolicy::RasterCached;
+    } else if (policy == "ray_query") {
+        result.source.shadowPolicy = GpuLightShadowPolicy::RayQuery;
+    } else {
+        result.error = GltfPunctualLightDecodeError::InvalidShadowPolicy;
+        return result;
+    }
 
     cgltf_float worldValues[16];
     cgltf_node_transform_world(&node, worldValues);
@@ -78,11 +106,11 @@ GltfPunctualLightDecodeResult decodeGltfPunctualLight(
     }
     if (!point) {
         result.source.localEmissionDirection =
-            glm::vec3(validation.light.direction);
+            glm::vec3(validation.sceneLight.light.direction);
     }
     if (result.source.type != GpuLightType::Directional) {
         result.source.localPositionMeters =
-            glm::vec3(validation.light.positionAndRange);
+            glm::vec3(validation.sceneLight.light.positionAndRange);
     }
     return result;
 }
@@ -95,6 +123,8 @@ const char* gltfPunctualLightDecodeErrorStableId(
             return "MissingLight";
         case GltfPunctualLightDecodeError::InvalidType:
             return "InvalidType";
+        case GltfPunctualLightDecodeError::InvalidShadowPolicy:
+            return "InvalidShadowPolicy";
         case GltfPunctualLightDecodeError::InvalidTransform:
             return "InvalidTransform";
         case GltfPunctualLightDecodeError::InvalidPhysicalValue:

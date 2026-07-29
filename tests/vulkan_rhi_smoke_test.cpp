@@ -2072,6 +2072,64 @@ void main() {
 
 } // namespace
 
+[[nodiscard]] bool validateCubeArrayViews(VkRhiDevice& device) {
+    const uint64_t validationErrorsBefore = device.validationErrorCount();
+    RhiTextureDesc textureDesc;
+    textureDesc.debugName = "VulkanSmoke.CubeArray";
+    textureDesc.dimension = RhiTextureDimension::CubeArray;
+    textureDesc.format = RhiTextureFormat::Rgba8Unorm;
+    textureDesc.width = 4u;
+    textureDesc.height = 4u;
+    textureDesc.depthOrLayers = 12u;
+    textureDesc.usage = rhiFlag(RhiTextureUsage::Sampled) |
+                        rhiFlag(RhiTextureUsage::ColorAttachment);
+    const RhiTextureHandle texture = device.createTexture(textureDesc, nullptr);
+    if (!texture.isValid()) {
+        return false;
+    }
+
+    RhiTextureViewDesc cubeArrayDesc;
+    cubeArrayDesc.texture = texture;
+    cubeArrayDesc.viewType = RhiTextureViewType::CubeArray;
+    cubeArrayDesc.layerCount = 12u;
+    const RhiTextureViewHandle cubeArrayView =
+        device.createTextureView(cubeArrayDesc);
+
+    RhiTextureViewDesc cubeDesc;
+    cubeDesc.texture = texture;
+    cubeDesc.viewType = RhiTextureViewType::Cube;
+    cubeDesc.baseLayer = 6u;
+    cubeDesc.layerCount = 6u;
+    const RhiTextureViewHandle cubeView = device.createTextureView(cubeDesc);
+
+    RhiTextureViewDesc faceDesc;
+    faceDesc.texture = texture;
+    faceDesc.viewType = RhiTextureViewType::Texture2D;
+    faceDesc.baseLayer = 7u;
+    faceDesc.layerCount = 1u;
+    const RhiTextureViewHandle faceView = device.createTextureView(faceDesc);
+
+    RhiTextureDesc invalidTextureDesc = textureDesc;
+    invalidTextureDesc.depthOrLayers = 10u;
+    const RhiTextureHandle invalidTexture =
+        device.createTexture(invalidTextureDesc, nullptr);
+    RhiTextureViewDesc invalidViewDesc = cubeArrayDesc;
+    invalidViewDesc.baseLayer = 1u;
+    invalidViewDesc.layerCount = 6u;
+    const RhiTextureViewHandle invalidView =
+        device.createTextureView(invalidViewDesc);
+
+    const bool valid = cubeArrayView.isValid() && cubeView.isValid() &&
+        faceView.isValid() && !invalidTexture.isValid() &&
+        !invalidView.isValid();
+    if (faceView.isValid()) device.destroyTextureView(faceView);
+    if (cubeView.isValid()) device.destroyTextureView(cubeView);
+    if (cubeArrayView.isValid()) device.destroyTextureView(cubeArrayView);
+    device.destroyTexture(texture);
+    return valid &&
+        device.validationErrorCount() == validationErrorsBefore;
+}
+
 int main() {
 #if defined(MECRAFT_ENABLE_STREAMLINE)
     StreamlineRuntime& streamline = StreamlineRuntime::instance();
@@ -2129,8 +2187,8 @@ int main() {
         glfwTerminate();
         return 1;
     }
-    if (!validateTextureAliasing(device)) {
-        std::cerr << "vulkan_rhi_smoke_test: texture aliasing check failed\n";
+    if (!validateTextureAliasing(device) || !validateCubeArrayViews(device)) {
+        std::cerr << "vulkan_rhi_smoke_test: texture aliasing or cube-array check failed\n";
         device.shutdown();
         glfwDestroyWindow(window);
         glfwTerminate();

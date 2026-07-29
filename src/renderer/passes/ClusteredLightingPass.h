@@ -33,6 +33,14 @@ struct ClusteredLightingFrameStats final {
 /// cursor invariant is validated before consumers read the list.
 class ClusteredLightingPass final : public RenderPass {
 public:
+    struct LocalShadowResources final {
+        RhiBufferHandle metadataBuffer;
+        uint64_t metadataBufferBytes = 0u;
+        RhiTextureViewHandle spotAtlasView;
+        RhiTextureViewHandle pointCubeArrayView;
+        RhiSamplerHandle sampler;
+    };
+
     struct GraphResources final {
         RgBufferHandle lights;
         RgBufferHandle lightBounds;
@@ -57,6 +65,14 @@ public:
     /// @return True when every record satisfies the fixed GPU contract.
     [[nodiscard]] bool setLights(
         std::vector<renderer::contracts::GpuLight> lights);
+
+    /// Publishes the persistent local-shadow resources consumed with the
+    /// clustered light list. A resource generation change rebuilds only the
+    /// consumer descriptor set while preserving compute-stage bind groups.
+    /// @param resources Complete metadata, atlas, cube-array, and sampler set.
+    /// @return True when every handle and range is valid.
+    [[nodiscard]] bool setLocalShadowResources(
+        const LocalShadowResources& resources);
 
     /// Allocates persistent buffers, computes per-light coverage bounds, and
     /// prepares all bind groups before the graph imports their handles.
@@ -202,6 +218,7 @@ private:
     RhiBindGroupHandle m_fillBindGroup;
     RhiBindGroupHandle m_validateBindGroup;
     RhiBindGroupHandle m_consumerBindGroup;
+    LocalShadowResources m_localShadowResources;
 
     static constexpr uint32_t kStatsWordCount = 8u;
     static constexpr uint32_t kStatsReadbackRingSize = 3u;

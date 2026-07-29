@@ -691,15 +691,15 @@ bool RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
         m_shared.rhiDevice != nullptr &&
         m_shared.rhiDevice->backend() == RhiBackend::Vulkan;
     if (clusteredVoxelLightsRequired) {
-        std::vector<renderer::contracts::GpuLight> lights;
-        if (!m_voxelLightRegistry.buildGpuLights(
+        std::vector<renderer::contracts::SceneLight> lights;
+        if (!m_voxelLightRegistry.buildSceneLights(
                 request.worldView, request.camera.getPosition(), lights)) {
             MECRAFT_LOG_STREAM(
                 std::cerr << "[RenderScene] "
                           << m_voxelLightRegistry.lastError() << '\n');
             return false;
         }
-        if (!setGpuLights(std::move(lights))) {
+        if (!setSceneLights(std::move(lights))) {
             MECRAFT_LOG_STREAM(
                 std::cerr << "[RenderScene] Voxel GPU light snapshot violates the clustered-light contract\n");
             return false;
@@ -1084,10 +1084,10 @@ void RenderScene::setHeldBlockLightValue(int value) {
     }
 }
 
-bool RenderScene::setGpuLights(
-    std::vector<renderer::contracts::GpuLight> lights) {
+bool RenderScene::setSceneLights(
+    std::vector<renderer::contracts::SceneLight> lights) {
     return m_deferredPipeline != nullptr &&
-           m_deferredPipeline->setGpuLights(std::move(lights));
+           m_deferredPipeline->setSceneLights(std::move(lights));
 }
 
 // R7: Legacy bridge methods removed — use renderFrame() instead

@@ -267,6 +267,8 @@ defaultViewType(const RhiTextureDimension dimension) {
     return RhiTextureViewType::Texture3D;
   case RhiTextureDimension::Cube:
     return RhiTextureViewType::Cube;
+  case RhiTextureDimension::CubeArray:
+    return RhiTextureViewType::CubeArray;
   }
   return RhiTextureViewType::Texture2D;
 }

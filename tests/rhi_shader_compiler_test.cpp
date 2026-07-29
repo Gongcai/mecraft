@@ -116,7 +116,7 @@ struct ShaderCase {
 } // namespace
 
 int main() {
-    constexpr std::array<ShaderCase, 84> kShaderCases{{
+    constexpr std::array<ShaderCase, 85> kShaderCases{{
         {"tests/shaders/rhi_screen_coordinates_test.frag", RhiShaderStage::Fragment},
         {"tests/shaders/material_brdf_shared_test.frag", RhiShaderStage::Fragment},
         {"assets/shaders/fullscreen_triangle_rhi.vert", RhiShaderStage::Vertex},
@@ -176,6 +176,8 @@ int main() {
         {"assets/shaders/hiz_build.comp", RhiShaderStage::Compute},
         {"assets/shaders/hiz_cull.comp", RhiShaderStage::Compute},
         {"assets/shaders/shadow_cull.comp", RhiShaderStage::Compute},
+        {"assets/shaders/shadow_depth.vert", RhiShaderStage::Vertex,
+         "RHI_TERRAIN_SHADOW_MDI"},
         {"assets/shaders/cluster_count.comp", RhiShaderStage::Compute},
         {"assets/shaders/cluster_scan.comp", RhiShaderStage::Compute},
         {"assets/shaders/cluster_scan_add.comp", RhiShaderStage::Compute},

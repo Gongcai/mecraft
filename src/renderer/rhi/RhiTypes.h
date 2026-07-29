@@ -200,14 +200,16 @@ enum class RhiTextureDimension {
     Texture2D,
     Texture2DArray,
     Texture3D,
-    Cube
+    Cube,
+    CubeArray
 };
 
 enum class RhiTextureViewType {
     Texture2D,
     Texture2DArray,
     Texture3D,
-    Cube
+    Cube,
+    CubeArray
 };
 
 enum class RhiTextureFormat {

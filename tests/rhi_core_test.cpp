@@ -1684,6 +1684,117 @@ bool testGlRhiCubemapInitialData() {
     return true;
 }
 
+bool testGlRhiCubeArrayViews() {
+    GlTestContext context;
+    if (!requireTrue(
+            context.init(),
+            "OpenGL test context must initialize for cube-array views")) {
+        return false;
+    }
+
+    GlRhiDevice device;
+    RhiDeviceDesc deviceDesc = makeDeviceDesc();
+    deviceDesc.debugName = "rhi_cube_array_view_test";
+    if (!requireTrue(
+            device.init(deviceDesc),
+            "OpenGL RHI device must initialize for cube-array views")) {
+        return false;
+    }
+
+    RhiTextureDesc textureDesc;
+    textureDesc.debugName = "cube-array-view-test";
+    textureDesc.dimension = RhiTextureDimension::CubeArray;
+    textureDesc.format = RhiTextureFormat::Rgba8Unorm;
+    textureDesc.width = 4u;
+    textureDesc.height = 4u;
+    textureDesc.depthOrLayers = 12u;
+    textureDesc.usage = rhiFlag(RhiTextureUsage::Sampled) |
+                        rhiFlag(RhiTextureUsage::ColorAttachment);
+    const RhiTextureHandle texture = device.createTexture(textureDesc, nullptr);
+    if (!requireTrue(texture.isValid(),
+                     "a two-cube array texture must be created")) {
+        device.shutdown();
+        return false;
+    }
+
+    RhiTextureViewDesc cubeArrayDesc;
+    cubeArrayDesc.texture = texture;
+    cubeArrayDesc.viewType = RhiTextureViewType::CubeArray;
+    cubeArrayDesc.layerCount = 12u;
+    const RhiTextureViewHandle cubeArrayView =
+        device.createTextureView(cubeArrayDesc);
+
+    RhiTextureViewDesc cubeDesc;
+    cubeDesc.texture = texture;
+    cubeDesc.viewType = RhiTextureViewType::Cube;
+    cubeDesc.baseLayer = 6u;
+    cubeDesc.layerCount = 6u;
+    const RhiTextureViewHandle cubeView = device.createTextureView(cubeDesc);
+
+    RhiTextureViewDesc faceDesc;
+    faceDesc.texture = texture;
+    faceDesc.viewType = RhiTextureViewType::Texture2D;
+    faceDesc.baseLayer = 7u;
+    faceDesc.layerCount = 1u;
+    const RhiTextureViewHandle faceView = device.createTextureView(faceDesc);
+    if (!requireTrue(
+            cubeArrayView.isValid() && cubeView.isValid() &&
+                faceView.isValid(),
+            "cube arrays must expose array, single-cube, and single-face views")) {
+        if (faceView.isValid()) device.destroyTextureView(faceView);
+        if (cubeView.isValid()) device.destroyTextureView(cubeView);
+        if (cubeArrayView.isValid()) {
+            device.destroyTextureView(cubeArrayView);
+        }
+        device.destroyTexture(texture);
+        device.shutdown();
+        return false;
+    }
+
+    RhiTextureHandle invalidLayerTexture;
+    RhiTextureHandle invalidExtentTexture;
+    RhiTextureViewHandle invalidBaseView;
+    RhiTextureViewHandle invalidCountView;
+    RhiTextureViewHandle invalidCubeView;
+    {
+        ScopedErrorCapture capture;
+        RhiTextureDesc invalidTextureDesc = textureDesc;
+        invalidTextureDesc.depthOrLayers = 10u;
+        invalidLayerTexture =
+            device.createTexture(invalidTextureDesc, nullptr);
+        invalidTextureDesc = textureDesc;
+        invalidTextureDesc.height = 2u;
+        invalidExtentTexture =
+            device.createTexture(invalidTextureDesc, nullptr);
+
+        RhiTextureViewDesc invalidViewDesc = cubeArrayDesc;
+        invalidViewDesc.baseLayer = 1u;
+        invalidViewDesc.layerCount = 6u;
+        invalidBaseView = device.createTextureView(invalidViewDesc);
+        invalidViewDesc = cubeArrayDesc;
+        invalidViewDesc.layerCount = 7u;
+        invalidCountView = device.createTextureView(invalidViewDesc);
+        invalidViewDesc = cubeDesc;
+        invalidViewDesc.baseLayer = 0u;
+        invalidViewDesc.layerCount = 12u;
+        invalidCubeView = device.createTextureView(invalidViewDesc);
+    }
+    const bool invalidDescriptorsRejected =
+        !invalidLayerTexture.isValid() && !invalidExtentTexture.isValid() &&
+        !invalidBaseView.isValid() && !invalidCountView.isValid() &&
+        !invalidCubeView.isValid();
+
+    device.destroyTextureView(faceView);
+    device.destroyTextureView(cubeView);
+    device.destroyTextureView(cubeArrayView);
+    device.destroyTexture(texture);
+    const bool result = requireTrue(
+        invalidDescriptorsRejected,
+        "cube-array textures and views must reject invalid face ranges");
+    device.shutdown();
+    return result;
+}
+
 bool testGlRhiGenerateMipmaps() {
     GlTestContext context;
     if (!requireTrue(context.init(), "OpenGL test context must initialize for mipmap generation")) {
@@ -5474,6 +5585,9 @@ int main() {
         return 1;
     }
     if (!testGlRhiCubemapInitialData()) {
+        return 1;
+    }
+    if (!testGlRhiCubeArrayViews()) {
         return 1;
     }
     if (!testGlRhiGenerateMipmaps()) {

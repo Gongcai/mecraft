@@ -15,6 +15,7 @@ enum class GltfPunctualLightDecodeError : uint8_t {
     None,
     MissingLight,
     InvalidType,
+    InvalidShadowPolicy,
     InvalidTransform,
     InvalidPhysicalValue
 };

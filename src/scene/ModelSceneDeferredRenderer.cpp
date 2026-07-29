@@ -655,18 +655,18 @@ bool ModelSceneDeferredRenderer::render(
         return false;
     }
     FrameContext context = *builtContext;
-    std::vector<renderer::contracts::GpuLight> lights;
+    std::vector<renderer::contracts::SceneLight> lights;
     std::string lightError;
     if (state.geometryProvider == nullptr ||
-        !state.geometryProvider->collectGpuLights(
+        !state.geometryProvider->collectSceneLights(
             cameraPosition, lights, lightError)) {
         state.error = lightError.empty()
             ? "failed to collect model scene GPU lights"
             : std::move(lightError);
         return false;
     }
-    if (!state.pipeline.setGpuLights(std::move(lights))) {
-        state.error = "model scene GPU light snapshot violates the clustered-light contract";
+    if (!state.pipeline.setSceneLights(std::move(lights))) {
+        state.error = "model scene light snapshot violates the local-shadow contract";
         return false;
     }
     const FrameOutput output = state.pipeline.renderFrame(
