@@ -154,7 +154,7 @@ void testCrossChunkBlockLightNeedsPersistentBoundaryInput() {
     }
 }
 
-void testLocalEmitterRemovalUsesRemovePass() {
+void testGlowLichenPropagationAndRemovalUsesRemovePass() {
     auto chunk = std::make_shared<Chunk>(0, 0);
 
     constexpr int y = 20;
@@ -169,9 +169,14 @@ void testLocalEmitterRemovalUsesRemovePass() {
     for (int x = 6; x <= 10; ++x) {
         chunk->setBlockFast(x, y, z, NULL_BLOCK_STATE);
     }
-    chunk->setBlockFast(8, y, z, stateForBlockName("minecraft:torch"));
+    chunk->setBlockFast(
+        8, y, z, stateForBlockName("minecraft:glow_lichen"));
 
     const LightResult lit = LightSolver::solve(buildJob(chunk));
+    if (blockAt(lit.selfDelta.packedLight, 9, y, z) == 0 ||
+        blockAt(lit.selfDelta.packedLight, 10, y, z) == 0) {
+        fail("glow lichen block light should propagate through the local tunnel");
+    }
     chunk->replacePackedLight(lit.selfDelta.packedLight.data(), lit.selfDelta.packedLight.size(), nullptr);
 
     chunk->setBlockFast(8, y, z, NULL_BLOCK_STATE);
@@ -181,7 +186,7 @@ void testLocalEmitterRemovalUsesRemovePass() {
         static_cast<uint8_t>(8),
         static_cast<uint8_t>(y),
         static_cast<uint8_t>(z),
-        BlockRegistry::requireIdByName("minecraft:torch"),
+        BlockRegistry::requireIdByName("minecraft:glow_lichen"),
         RUNTIME_ID_NULL
     });
 
@@ -189,7 +194,7 @@ void testLocalEmitterRemovalUsesRemovePass() {
     if (blockAt(cleared.selfDelta.packedLight, 8, y, z) != 0 ||
         blockAt(cleared.selfDelta.packedLight, 9, y, z) != 0 ||
         blockAt(cleared.selfDelta.packedLight, 10, y, z) != 0) {
-        fail("local block light should be removed after deleting the emitter");
+        fail("glow lichen block light should clear after deleting the emitter");
     }
 }
 } // namespace
@@ -198,9 +203,8 @@ int main() {
     BlockRegistry::init(nullptr);
 
     testCrossChunkBlockLightNeedsPersistentBoundaryInput();
-    testLocalEmitterRemovalUsesRemovePass();
+    testGlowLichenPropagationAndRemovalUsesRemovePass();
 
     std::cout << "[light_solver_cross_chunk_block_rules_test] PASS\n";
     return EXIT_SUCCESS;
 }
-

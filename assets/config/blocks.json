@@ -1018,14 +1018,8 @@
       "supportRule": "attached_face",
       "renderShape": "face_plane",
       "materialKind": "plant",
+      "isLightSource": true,
       "lightLevel": 7,
-      "analyticLight": {
-        "colorLinear": [0.42, 0.78, 0.20],
-        "positionOffsetMeters": [0.5, 0.5, 0.5],
-        "luminousFluxLumens": 20.0,
-        "rangeMeters": 4.0,
-        "shadowPolicy": "none"
-      },
       "timeToBreak": 10,
       "textures": {
         "all": "glow_lichen"

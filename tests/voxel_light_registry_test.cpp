@@ -113,6 +113,8 @@ bool testIncrementalVoxelLights() {
         BlockRegistry::requireIdByName("minecraft:redstone_torch");
     const BlockID redstoneLampId =
         BlockRegistry::requireIdByName("minecraft:redstone_lamp");
+    const BlockID glowLichenId =
+        BlockRegistry::requireIdByName("minecraft:glow_lichen");
     const BlockID glowstoneId =
         BlockRegistry::requireIdByName("minecraft:glowstone");
     const BlockID magmaId =
@@ -132,6 +134,8 @@ bool testIncrementalVoxelLights() {
     const BlockStateId redstoneLampOn =
         BlockStateRegistry::withProperty(
             redstoneLampOff, PropIndices::LIT, PropIndices::LIT_TRUE);
+    const BlockStateId glowLichen =
+        BlockStateRegistry::getDefaultState(glowLichenId);
     const BlockStateId glowstone =
         BlockStateRegistry::getDefaultState(glowstoneId);
     const BlockStateId magma =
@@ -159,6 +163,7 @@ bool testIncrementalVoxelLights() {
     center->setBlock(1, 64, 2, torch);
     center->setBlock(2, 64, 2, redstoneTorchOff);
     center->setBlock(3, 64, 2, redstoneLampOn);
+    center->setBlock(5, 64, 2, glowLichen);
     west->setBlock(15, 64, 2, glowstone);
     world.notifyBlockChange();
 
@@ -168,7 +173,7 @@ bool testIncrementalVoxelLights() {
             registry.buildSceneLights(world, glm::vec3(0.0f), lights),
             "initial voxel light snapshot must build") ||
         !requireTrue(lights.size() == 3u && registry.sourceCount() == 3u,
-                     "only enabled analytic block lights must be emitted") ||
+                     "propagated-only block lights must not emit analytic lights") ||
         !requireTrue(
             lights[0].light.positionAndRange.x == -0.5f &&
             lights[1].light.positionAndRange.x == 1.5f &&

@@ -1030,8 +1030,9 @@ int main() {
         glowLichenDef.placementStrategy != "face_plane_wall") {
         return fail("new face plane decorations should use the matching placement strategy");
     }
-    if (glowLichenDef.lightLevel != 7) {
-        return fail("glow_lichen should emit level 7 block light");
+    if (!glowLichenDef.isLightSource || glowLichenDef.lightLevel != 7 ||
+        glowLichenDef.analyticLight.has_value()) {
+        return fail("glow_lichen should emit propagated level 7 block light without an analytic light");
     }
     if (BlockStateRegistry::getPropertyIndex(BlockStateRegistry::getDefaultState(wildflowers),
                                              PropIndices::FACING) != PropIndices::FACING_FLOOR ||

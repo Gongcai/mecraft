@@ -44,6 +44,18 @@ void testLightSourcesSeedOwnVoxel() {
         fail("light source voxel should seed block light immediately");
     }
 }
+
+void testGlowLichenSeedsPropagatedBlockLight() {
+    Chunk chunk(0, 0);
+    chunk.setBlockFast(
+        4, 80, 4, stateForBlockName("minecraft:glow_lichen"));
+
+    chunk.seedInitialLightMap();
+
+    if (chunk.getBlockLight(4, 80, 4) != 7) {
+        fail("glow lichen should seed its configured block-light level");
+    }
+}
 } // namespace
 
 int main() {
@@ -51,6 +63,7 @@ int main() {
 
     testWaterColumnsArePreseeded();
     testLightSourcesSeedOwnVoxel();
+    testGlowLichenSeedsPropagatedBlockLight();
 
     std::cout << "[chunk_initial_lightmap_test] PASS\n";
     return EXIT_SUCCESS;
