@@ -816,6 +816,8 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
                 renderScene.debugService().getGpuTimingWindowStats();
             m_displayShadowStats = render.getShadowFrameStats();
             m_displayRenderGraphStats = renderScene.renderGraphFrameStats();
+            m_displayClusteredLightingStats =
+                renderScene.clusteredLightingDebugInfo();
             m_displayHiZCullStats = renderScene.hiZCullStats();
             m_displayShadowCullStats = renderScene.shadowCullStats();
             m_displayRenderWorkStats = render.getRenderWorkStats();
@@ -885,22 +887,22 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
                     profile, backend, m_rhiDevice->capabilities());
             ImGui::Text("Backend: %s", renderer::rhi::rhiBackendDisplayName(backend));
             ImGui::Text("Profile: %s (%s)",
-                        renderer::contracts::renderProfileDisplayNameZh(profile),
+                        renderer::contracts::renderProfileDisplayName(profile),
                         renderer::contracts::renderProfileStableId(profile));
             ImGui::Text("Profile Status: %s [%s]",
-                        profileStatus.available() ? "可用" : "不可用",
+                        profileStatus.available() ? "Available" : "Unavailable",
                         renderer::contracts::renderFeatureStatusCodeStableId(
                             profileStatus.code));
             if (!profileStatus.available()) {
                 if (profileStatus.blockingFeature !=
                     renderer::contracts::RenderFeature::Count) {
                     ImGui::Text("Blocking Feature: %s (%s)",
-                                renderer::contracts::renderFeatureDisplayNameZh(
+                                renderer::contracts::renderFeatureDisplayName(
                                     profileStatus.blockingFeature),
                                 renderer::contracts::renderFeatureStableId(
                                     profileStatus.blockingFeature));
                 }
-                ImGui::TextWrapped("原因：%s", profileStatus.reasonZh);
+                ImGui::TextWrapped("Reason: %s", profileStatus.reason);
             }
             ImGui::Separator();
             for (size_t index = 0u;
@@ -912,12 +914,12 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
                     renderer::contracts::evaluateCurrentRenderFeature(
                         profile, backend, m_rhiDevice->capabilities(), feature);
                 ImGui::Text("%s: %s [%s]",
-                            renderer::contracts::renderFeatureDisplayNameZh(feature),
-                            featureStatus.available() ? "可用" : "不可用",
+                            renderer::contracts::renderFeatureDisplayName(feature),
+                            featureStatus.available() ? "Available" : "Unavailable",
                             renderer::contracts::renderFeatureStatusCodeStableId(
                                 featureStatus.code));
                 if (!featureStatus.available()) {
-                    ImGui::TextDisabled("  %s", featureStatus.reasonZh);
+                    ImGui::TextDisabled("  %s", featureStatus.reason);
                 }
             }
             ImGui::TreePop();
@@ -971,6 +973,8 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
         showMax("Loop Frame (clamped)", displayedProfilerStats.frameMs, displayedProfilerStats.maxFrameMs);
         showMax("App Update Dispatch", displayedProfilerStats.appUpdateDispatchMs, displayedProfilerStats.maxAppUpdateDispatchMs);
         showMax("App Render Dispatch", displayedProfilerStats.appRenderDispatchMs, displayedProfilerStats.maxAppRenderDispatchMs);
+        showMax("  - Presentation Acquire", displayedProfilerStats.presentationAcquireMs, displayedProfilerStats.maxPresentationAcquireMs);
+        showMax("  - Dispatch Other", displayedProfilerStats.renderDispatchOtherMs, displayedProfilerStats.maxRenderDispatchOtherMs);
         showMax("Fixed Update", displayedProfilerStats.fixedUpdateMs, displayedProfilerStats.maxFixedUpdateMs);
         showMax("  - Input Update", displayedProfilerStats.fixedInputMs, displayedProfilerStats.maxFixedInputMs);
         showMax("  - State Update", displayedProfilerStats.fixedStateUpdateMs, displayedProfilerStats.maxFixedStateUpdateMs);
@@ -1000,6 +1004,8 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
                 stats.maxRenderMs = 0.0;
                 stats.maxAppUpdateDispatchMs = 0.0;
                 stats.maxAppRenderDispatchMs = 0.0;
+                stats.maxPresentationAcquireMs = 0.0;
+                stats.maxRenderDispatchOtherMs = 0.0;
                 stats.maxRenderSnapshotMs = 0.0;
                 stats.maxRenderSceneMs = 0.0;
                 stats.maxRenderUiMs = 0.0;
@@ -1214,6 +1220,26 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
                         kBytesPerMegabyte,
                     static_cast<double>(graphStats.aliasTotalPageBytes) /
                         kBytesPerMegabyte);
+            }
+            if (m_displayClusteredLightingStats.valid) {
+                const RenderScene::ClusteredLightingDebugInfo& clustered =
+                    m_displayClusteredLightingStats;
+                ImGui::Text(
+                    "Clusters: %ux%ux%u = %u  Lights: %u / %u active  Non-empty: %u",
+                    clustered.tileCountX,
+                    clustered.tileCountY,
+                    clustered.depthSliceCount,
+                    clustered.clusterCount,
+                    clustered.lightCount,
+                    clustered.activeLightCount,
+                    clustered.nonEmptyClusterCount);
+                ImGui::Text(
+                    "Cluster Indices: %u / %u  Avg: %.2f  Max: %u  Error: 0x%08x",
+                    clustered.totalIndexCount,
+                    clustered.indexCapacity,
+                    clustered.averageLightsPerCluster,
+                    clustered.maxLightsPerCluster,
+                    clustered.buildError);
             }
             if (graphStats.passes.empty()) {
                 ImGui::Text("GPU timings: waiting");

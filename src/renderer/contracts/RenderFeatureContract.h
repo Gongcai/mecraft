@@ -62,7 +62,7 @@ struct RenderBuildCapabilities {
 struct RenderFeatureStatus {
     RenderFeature feature = RenderFeature::DeferredPbr;
     RenderFeatureStatusCode code = RenderFeatureStatusCode::ImplementationPending;
-    const char* reasonZh = nullptr;
+    const char* reason = nullptr;
 
     /// Reports whether the feature can be selected and executed.
     /// @return True only when the status code is Available.
@@ -76,7 +76,7 @@ struct RenderProfileStatus {
     RenderProfile profile = RenderProfile::OpenGlBase;
     RenderFeature blockingFeature = RenderFeature::Count;
     RenderFeatureStatusCode code = RenderFeatureStatusCode::ImplementationPending;
-    const char* reasonZh = nullptr;
+    const char* reason = nullptr;
 
     /// Reports whether the complete profile can be selected and executed.
     /// @return True only when all profile requirements are available.
@@ -101,20 +101,20 @@ struct RenderProfileStatus {
 /// @return Process-lifetime string containing the stable profile identifier.
 [[nodiscard]] const char* renderProfileStableId(RenderProfile profile);
 
-/// Returns the Chinese profile name displayed to users.
+/// Returns the English profile name displayed to users.
 /// @param profile Renderer profile to name.
-/// @return Process-lifetime UTF-8 string containing the display name.
-[[nodiscard]] const char* renderProfileDisplayNameZh(RenderProfile profile);
+/// @return Process-lifetime string containing the display name.
+[[nodiscard]] const char* renderProfileDisplayName(RenderProfile profile);
 
 /// Returns the stable identifier used by logs and automated diagnostics.
 /// @param feature Renderer feature to identify.
 /// @return Process-lifetime string containing the stable feature identifier.
 [[nodiscard]] const char* renderFeatureStableId(RenderFeature feature);
 
-/// Returns the Chinese feature name displayed to users.
+/// Returns the English feature name displayed to users.
 /// @param feature Renderer feature to name.
-/// @return Process-lifetime UTF-8 string containing the display name.
-[[nodiscard]] const char* renderFeatureDisplayNameZh(RenderFeature feature);
+/// @return Process-lifetime string containing the display name.
+[[nodiscard]] const char* renderFeatureDisplayName(RenderFeature feature);
 
 /// Returns the stable identifier for a structured availability result.
 /// @param code Availability code to identify.
@@ -144,7 +144,7 @@ struct RenderProfileStatus {
 /// @param buildCapabilities Optional components present in the executable.
 /// @param implementedFeatureMask Product-integrated features represented as feature bits.
 /// @param feature Feature to evaluate.
-/// @return Structured availability code and a Chinese user-facing reason.
+/// @return Structured availability code and an English user-facing reason.
 [[nodiscard]] RenderFeatureStatus evaluateRenderFeature(
     RenderProfile profile,
     RhiBackend backend,
@@ -158,7 +158,7 @@ struct RenderProfileStatus {
 /// @param backend Active RHI backend.
 /// @param capabilities Capabilities exposed by the initialized RHI device.
 /// @param feature Feature to evaluate.
-/// @return Structured availability code and a Chinese user-facing reason.
+/// @return Structured availability code and an English user-facing reason.
 [[nodiscard]] RenderFeatureStatus evaluateCurrentRenderFeature(
     RenderProfile profile,
     RhiBackend backend,

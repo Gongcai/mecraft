@@ -16,6 +16,8 @@ void DebugFrameProfiler::publish(double frameTime) {
     m_timing.currentPollEventsMs = m_timing.framePollEventsAccumMs;
     m_timing.currentAppUpdateDispatchMs = m_timing.frameAppUpdateDispatchAccumMs;
     m_timing.currentAppRenderDispatchMs = m_timing.frameAppRenderDispatchAccumMs;
+    m_timing.currentPresentationAcquireMs =
+        m_timing.framePresentationAcquireAccumMs;
     m_timing.currentRenderSnapshotMs = m_timing.frameRenderSnapshotAccumMs;
     m_timing.currentRenderSceneMs = m_timing.frameRenderSceneAccumMs;
     m_timing.currentRenderUiMs = m_timing.frameRenderUiAccumMs;
@@ -113,6 +115,7 @@ void DebugFrameProfiler::resetFrameAccumulators() {
     m_timing.framePollEventsAccumMs = 0.0;
     m_timing.frameAppUpdateDispatchAccumMs = 0.0;
     m_timing.frameAppRenderDispatchAccumMs = 0.0;
+    m_timing.framePresentationAcquireAccumMs = 0.0;
     m_timing.frameRenderSnapshotAccumMs = 0.0;
     m_timing.frameRenderSceneAccumMs = 0.0;
     m_timing.frameRenderUiAccumMs = 0.0;

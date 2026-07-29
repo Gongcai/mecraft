@@ -116,6 +116,9 @@ public:
     [[nodiscard]] const ClusteredLightingFrameStats& frameStats() const {
         return m_frameStats;
     }
+    [[nodiscard]] uint32_t activeLightCount() const {
+        return static_cast<uint32_t>(m_lightBounds.size());
+    }
     [[nodiscard]] RhiBindGroupLayoutHandle consumerBindGroupLayout() const {
         return m_consumerBindGroupLayout;
     }

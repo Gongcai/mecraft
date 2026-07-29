@@ -69,6 +69,9 @@ bool testGridAndLogarithmicSlices() {
            requireTrue(grid->depthSliceCount == 24u &&
                            grid->clusterCount == 195840u,
                        "the initial contract must use 24 logarithmic slices") &&
+           requireTrue(kClusterCoverageWorkgroupSize == 64u &&
+                           kClusterMaxLightCount == 65535u,
+                       "coverage dispatch must use one bounded workgroup per light") &&
            requireTrue(clusterDepthSlice(*grid, grid->nearPlane) == 0u,
                        "the near plane must map to the first slice") &&
            requireTrue(clusterDepthSlice(*grid, grid->farPlane) == 23u,
@@ -198,9 +201,29 @@ bool testComputeShaderContracts() {
            requireTrue(count.find("atomicAdd(uClusterCounts") !=
                            std::string::npos,
                        "coverage counting must execute on the GPU") &&
+           requireTrue(count.find("gl_WorkGroupID.x") !=
+                           std::string::npos &&
+                           count.find("gl_LocalInvocationID.x") !=
+                           std::string::npos &&
+                           count.find("CLUSTER_COVERAGE_WORKGROUP_SIZE") !=
+                           std::string::npos &&
+                           count.find("gl_WorkGroupID.y") !=
+                           std::string::npos,
+                       "count must distribute every light slice across one workgroup") &&
            requireTrue(fill.find("uCompactLightIndices") !=
                            std::string::npos,
                        "fill must write the compact light index list") &&
+           requireTrue(fill.find("gl_WorkGroupID.x") !=
+                           std::string::npos &&
+                           fill.find("gl_LocalInvocationID.x") !=
+                           std::string::npos &&
+                           fill.find("bounds.maxCluster.w") !=
+                           std::string::npos &&
+                           fill.find("CLUSTER_COVERAGE_WORKGROUP_SIZE") !=
+                           std::string::npos &&
+                           fill.find("gl_WorkGroupID.y") !=
+                           std::string::npos,
+                       "fill must distribute every active light slice and preserve the source light index") &&
            requireTrue(fill.find("CLUSTER_BUILD_ERROR") !=
                            std::string::npos,
                        "capacity and cursor failures must be explicit");
@@ -211,6 +234,7 @@ bool testSharedLightingConsumers() {
     std::string staticMeshForward;
     std::string terrainForward;
     std::string sharedLighting;
+    std::string lightEvaluation;
     std::string pipeline;
     if (!requireTrue(readProjectFile(
                          "assets/shaders/deferred_lighting.frag", deferred),
@@ -228,11 +252,19 @@ bool testSharedLightingConsumers() {
                          sharedLighting),
                      "shared clustered-light shader must be readable") ||
         !requireTrue(readProjectFile(
+                         "assets/shaders/clustered_light_evaluation.glsl",
+                         lightEvaluation),
+                     "clustered-light evaluation shader must be readable") ||
+        !requireTrue(readProjectFile(
                          "src/renderer/core/DeferredPipeline.cpp", pipeline),
                      "deferred Render Graph source must be readable")) {
         return false;
     }
 
+    const size_t contributionEvaluation = sharedLighting.find(
+        "GpuLightSurfaceContribution contribution = evaluateGpuLight(");
+    const size_t shadowSampling = sharedLighting.find(
+        "shadowVisibilityValue = localShadowVisibility(");
     if (!requireTrue(deferred.find("clustered_lighting.glsl") !=
                          std::string::npos &&
                          deferred.find("evaluateClusteredSurfaceLighting") !=
@@ -260,7 +292,21 @@ bool testSharedLightingConsumers() {
                 "samplerCubeArray uLocalShadowPointCubeArray") !=
                     std::string::npos &&
             sharedLighting.find("visibility / 9.0") != std::string::npos,
-            "shared consumers must evaluate Spot and Point 3x3 PCF")) {
+            "shared consumers must evaluate Spot and Point 3x3 PCF") ||
+        !requireTrue(
+            contributionEvaluation != std::string::npos &&
+                shadowSampling != std::string::npos &&
+                contributionEvaluation < shadowSampling,
+            "surface contribution rejection must precede local-shadow sampling") ||
+        !requireTrue(
+            lightEvaluation.find("inversesqrt(distanceSquared)") !=
+                    std::string::npos &&
+                lightEvaluation.find(
+                    "distanceSquared, normalizedDistanceSquared") !=
+                    std::string::npos &&
+                lightEvaluation.find("normalize(light.direction.xyz)") ==
+                    std::string::npos,
+            "local-light evaluation must reuse squared distance and normalized contract directions")) {
         return false;
     }
 

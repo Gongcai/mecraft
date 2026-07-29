@@ -72,6 +72,10 @@ bool testPhysicalUnitNormalization() {
                      "isotropic point lumens must convert to candela") ||
         !requireTrue(pointResult.light.positionAndRange == glm::vec4(1.0f, 2.0f, 3.0f, 12.0f),
                      "point position and range must preserve meters") ||
+        !requireTrue(near(pointResult.light.direction.w, 1.0f / 144.0f,
+                          1.0e-7f) &&
+                         gpuLightPackedRangeValid(pointResult.light),
+                     "local lights must pack a validated inverse squared range") ||
         !requireTrue(pointResult.light.classificationAndIdentity ==
                          glm::uvec4(1u, 41u, 1u, 7u),
                      "classification and stable identity must use fixed fields") ||
@@ -100,7 +104,8 @@ bool testPhysicalUnitNormalization() {
         !requireTrue(near(spotResult.light.colorAndIntensity.w,
                           expectedSpotCandela, 1.0e-3f),
                      "spot lumens must use the outer-cone solid angle") ||
-        !requireTrue(spotResult.light.direction == glm::vec4(0.0f, 1.0f, 0.0f, 0.0f),
+        !requireTrue(spotResult.light.direction ==
+                         glm::vec4(0.0f, 1.0f, 0.0f, 1.0f / 400.0f),
                      "directional inputs must be normalized once") ||
         !requireTrue(near(spotResult.light.spotCosinesAndRectSize.x,
                           std::cos(0.25f), 1.0e-6f) &&
@@ -122,6 +127,8 @@ bool testPhysicalUnitNormalization() {
                      "directional lux must remain directly usable") ||
         !requireTrue(directionalResult.light.positionAndRange == glm::vec4(0.0f),
                      "directional lights must not carry finite bounds") ||
+        !requireTrue(gpuLightPackedRangeValid(directionalResult.light),
+                     "directional lights must store a zero packed range") ||
         !requireTrue(near(glm::length(glm::vec3(directionalResult.light.direction)),
                           1.0f, 1.0e-6f),
                      "directional vectors must be unit length") ||
@@ -327,7 +334,7 @@ bool testShaderLayoutMirror() {
     }
     const std::string source((std::istreambuf_iterator<char>(stream)),
                              std::istreambuf_iterator<char>());
-    if (!requireTrue(source.find("GPU_LIGHT_CONTRACT_VERSION = 2u") !=
+    if (!requireTrue(source.find("GPU_LIGHT_CONTRACT_VERSION = 3u") !=
                          std::string::npos,
                      "GLSL light contract must mirror the CPU version") ||
         !requireTrue(source.find("GPU_LIGHT_TYPE_RECT = 3u") !=
@@ -336,6 +343,9 @@ bool testShaderLayoutMirror() {
         !requireTrue(source.find("GPU_LIGHT_CONTRIBUTION_VOLUMETRIC") !=
                          std::string::npos,
                      "GLSL flags must mirror all contribution channels") ||
+        !requireTrue(source.find("gpuLightInverseRangeSquared") !=
+                         std::string::npos,
+                     "GLSL lights must expose the packed inverse range") ||
         !requireTrue(
             source.find("GPU_LIGHT_SHADOW_RASTER_DYNAMIC = 1u") !=
                     std::string::npos &&

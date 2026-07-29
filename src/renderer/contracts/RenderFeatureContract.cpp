@@ -8,27 +8,27 @@ namespace {
 struct FeatureDefinition {
     RenderFeature feature;
     const char* stableId;
-    const char* displayNameZh;
+    const char* displayName;
     bool openGlBase;
     bool vulkanModern;
 };
 
 constexpr std::array<FeatureDefinition, renderFeatureCount()> kFeatureDefinitions{{
-    {RenderFeature::DeferredPbr, "DeferredPbr", "延迟渲染 PBR", true, true},
-    {RenderFeature::CascadedSunShadows, "CascadedSunShadows", "级联太阳阴影", true, true},
-    {RenderFeature::Ssao, "Ssao", "屏幕空间环境光遮蔽", true, true},
-    {RenderFeature::Ssgi, "Ssgi", "屏幕空间全局光照调试模式", true, true},
-    {RenderFeature::Ssr, "Ssr", "屏幕空间反射调试模式", true, true},
-    {RenderFeature::GltfMaterials, "GltfMaterials", "glTF 材质", true, true},
-    {RenderFeature::ClusteredLighting, "ClusteredLighting", "集群局部灯光", false, true},
-    {RenderFeature::PbrImageBasedLighting, "PbrImageBasedLighting", "GGX 图像光照", false, true},
-    {RenderFeature::ReflectionProbeGrid, "ReflectionProbeGrid", "反射探针网格", false, true},
-    {RenderFeature::RayTracedGlobalIllumination, "RayTracedGlobalIllumination", "硬件光追全局光照", false, true},
-    {RenderFeature::NrdDenoiser, "NrdDenoiser", "NRD 时空降噪", false, true},
-    {RenderFeature::MultiLayerTransparency, "MultiLayerTransparency", "多层透明折射", false, true},
-    {RenderFeature::BindlessGpuScene, "BindlessGpuScene", "Bindless GPU 场景", false, true},
-    {RenderFeature::GpuDynamicResolution, "GpuDynamicResolution", "GPU 时间动态分辨率", false, true},
-    {RenderFeature::HdrSwapchain, "HdrSwapchain", "HDR 交换链", false, true},
+    {RenderFeature::DeferredPbr, "DeferredPbr", "Deferred PBR", true, true},
+    {RenderFeature::CascadedSunShadows, "CascadedSunShadows", "Cascaded Sun Shadows", true, true},
+    {RenderFeature::Ssao, "Ssao", "Screen-Space Ambient Occlusion", true, true},
+    {RenderFeature::Ssgi, "Ssgi", "Screen-Space Global Illumination Debug Mode", true, true},
+    {RenderFeature::Ssr, "Ssr", "Screen-Space Reflection Debug Mode", true, true},
+    {RenderFeature::GltfMaterials, "GltfMaterials", "glTF Materials", true, true},
+    {RenderFeature::ClusteredLighting, "ClusteredLighting", "Clustered Lighting", false, true},
+    {RenderFeature::PbrImageBasedLighting, "PbrImageBasedLighting", "GGX Image-Based Lighting", false, true},
+    {RenderFeature::ReflectionProbeGrid, "ReflectionProbeGrid", "Reflection Probe Grid", false, true},
+    {RenderFeature::RayTracedGlobalIllumination, "RayTracedGlobalIllumination", "Ray-Traced Global Illumination", false, true},
+    {RenderFeature::NrdDenoiser, "NrdDenoiser", "NRD Spatiotemporal Denoising", false, true},
+    {RenderFeature::MultiLayerTransparency, "MultiLayerTransparency", "Multi-Layer Transparency", false, true},
+    {RenderFeature::BindlessGpuScene, "BindlessGpuScene", "Bindless GPU Scene", false, true},
+    {RenderFeature::GpuDynamicResolution, "GpuDynamicResolution", "GPU Dynamic Resolution", false, true},
+    {RenderFeature::HdrSwapchain, "HdrSwapchain", "HDR Swapchain", false, true},
 }};
 
 constexpr uint64_t featureBit(const RenderFeature feature) {
@@ -51,31 +51,31 @@ bool profileMatchesBackend(const RenderProfile profile, const RhiBackend backend
     std::abort();
 }
 
-const char* missingDeviceReasonZh(const RenderFeature feature) {
+const char* missingDeviceReason(const RenderFeature feature) {
     switch (feature) {
         case RenderFeature::ClusteredLighting:
         case RenderFeature::MultiLayerTransparency:
-            return "当前设备或驱动缺少存储图像能力";
+            return "The device or driver does not provide storage images.";
         case RenderFeature::PbrImageBasedLighting:
         case RenderFeature::ReflectionProbeGrid:
-            return "当前设备或驱动缺少纹理视图或各向异性采样能力";
+            return "The device or driver does not provide texture views and anisotropic sampling.";
         case RenderFeature::RayTracedGlobalIllumination:
-            return "当前设备或驱动缺少加速结构、Ray Query 或 Buffer Device Address";
+            return "The device or driver does not provide acceleration structures, ray queries, and buffer device addresses.";
         case RenderFeature::NrdDenoiser:
-            return "当前设备或驱动缺少 NRD 所需的计算存储图像能力";
+            return "The device or driver does not provide the compute storage images required by NRD.";
         case RenderFeature::BindlessGpuScene:
-            return "当前设备或驱动缺少运行时描述符数组、部分绑定或非一致索引能力";
+            return "The device or driver does not provide the required bindless descriptor features.";
         case RenderFeature::GpuDynamicResolution:
-            return "当前设备或驱动缺少 GPU 时间戳查询能力";
+            return "The device or driver does not provide GPU timestamp queries.";
         case RenderFeature::HdrSwapchain:
-            return "当前显示表面不支持 HDR10 或 scRGB 交换链";
+            return "The display surface does not provide an HDR10 or scRGB swapchain.";
         case RenderFeature::DeferredPbr:
         case RenderFeature::CascadedSunShadows:
         case RenderFeature::Ssao:
         case RenderFeature::Ssgi:
         case RenderFeature::Ssr:
         case RenderFeature::GltfMaterials:
-            return "当前设备或驱动缺少该功能所需的图形能力";
+            return "The device or driver does not provide the required graphics capabilities.";
         case RenderFeature::Count:
             std::abort();
     }
@@ -167,10 +167,10 @@ const char* renderProfileStableId(const RenderProfile profile) {
     std::abort();
 }
 
-const char* renderProfileDisplayNameZh(const RenderProfile profile) {
+const char* renderProfileDisplayName(const RenderProfile profile) {
     switch (profile) {
-        case RenderProfile::OpenGlBase: return "OpenGL 基础管线";
-        case RenderProfile::VulkanModern: return "Vulkan 现代管线";
+        case RenderProfile::OpenGlBase: return "OpenGL Base Pipeline";
+        case RenderProfile::VulkanModern: return "Vulkan Modern Pipeline";
     }
     std::abort();
 }
@@ -179,8 +179,8 @@ const char* renderFeatureStableId(const RenderFeature feature) {
     return definition(feature).stableId;
 }
 
-const char* renderFeatureDisplayNameZh(const RenderFeature feature) {
-    return definition(feature).displayNameZh;
+const char* renderFeatureDisplayName(const RenderFeature feature) {
+    return definition(feature).displayName;
 }
 
 const char* renderFeatureStatusCodeStableId(const RenderFeatureStatusCode code) {
@@ -253,26 +253,26 @@ RenderFeatureStatus evaluateRenderFeature(
     if (!profileMatchesBackend(profile, backend) ||
         renderFeatureRequirement(profile, feature) == RenderFeatureRequirement::Unsupported) {
         status.code = RenderFeatureStatusCode::BackendFeatureUnavailable;
-        status.reasonZh = "当前渲染后端不支持该功能";
+        status.reason = "The active rendering backend does not support this feature.";
         return status;
     }
     if (feature == RenderFeature::NrdDenoiser && !buildCapabilities.nrd) {
         status.code = RenderFeatureStatusCode::BuildFeatureUnavailable;
-        status.reasonZh = "当前构建未启用 NRD 组件";
+        status.reason = "This build does not include the NRD component.";
         return status;
     }
     if ((implementedFeatureMask & featureBit(feature)) == 0u) {
         status.code = RenderFeatureStatusCode::ImplementationPending;
-        status.reasonZh = "该功能尚未完成产品集成";
+        status.reason = "This feature has not completed product integration.";
         return status;
     }
     if (!deviceSupportsFeature(capabilities, feature)) {
         status.code = missingDeviceStatusCode(feature);
-        status.reasonZh = missingDeviceReasonZh(feature);
+        status.reason = missingDeviceReason(feature);
         return status;
     }
     status.code = RenderFeatureStatusCode::Available;
-    status.reasonZh = "可用";
+    status.reason = "Available.";
     return status;
 }
 
@@ -301,7 +301,7 @@ RenderProfileStatus evaluateRenderProfile(
     if (!profileMatchesBackend(profile, backend)) {
         profileStatus.blockingFeature = RenderFeature::Count;
         profileStatus.code = RenderFeatureStatusCode::BackendFeatureUnavailable;
-        profileStatus.reasonZh = "当前渲染后端与所选管线不匹配";
+        profileStatus.reason = "The active rendering backend does not match the selected profile.";
         return profileStatus;
     }
     for (size_t index = 0u; index < renderFeatureCount(); ++index) {
@@ -319,13 +319,13 @@ RenderProfileStatus evaluateRenderProfile(
         if (!featureStatus.available()) {
             profileStatus.blockingFeature = feature;
             profileStatus.code = featureStatus.code;
-            profileStatus.reasonZh = featureStatus.reasonZh;
+            profileStatus.reason = featureStatus.reason;
             return profileStatus;
         }
     }
     profileStatus.blockingFeature = RenderFeature::Count;
     profileStatus.code = RenderFeatureStatusCode::Available;
-    profileStatus.reasonZh = "可用";
+    profileStatus.reason = "Available.";
     return profileStatus;
 }
 

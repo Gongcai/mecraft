@@ -1105,6 +1105,36 @@ RenderGraphFrameStats RenderScene::renderGraphFrameStats() const {
     return stats;
 }
 
+RenderScene::ClusteredLightingDebugInfo
+RenderScene::clusteredLightingDebugInfo() const {
+    ClusteredLightingDebugInfo info;
+    if (m_deferredPipeline == nullptr ||
+        m_deferredPipeline->clusteredLightingPass() == nullptr) {
+        return info;
+    }
+    const ClusteredLightingPass& pass =
+        *m_deferredPipeline->clusteredLightingPass();
+    const ClusteredLightingFrameStats& stats = pass.frameStats();
+    if (!stats.valid) {
+        return info;
+    }
+    const renderer::contracts::ClusterGrid& grid = pass.grid();
+    info.valid = true;
+    info.tileCountX = grid.tileCountX;
+    info.tileCountY = grid.tileCountY;
+    info.depthSliceCount = grid.depthSliceCount;
+    info.clusterCount = stats.clusterCount;
+    info.lightCount = stats.lightCount;
+    info.activeLightCount = pass.activeLightCount();
+    info.totalIndexCount = stats.totalIndexCount;
+    info.maxLightsPerCluster = stats.maxLightsPerCluster;
+    info.nonEmptyClusterCount = stats.nonEmptyClusterCount;
+    info.indexCapacity = stats.indexCapacity;
+    info.buildError = stats.buildError;
+    info.averageLightsPerCluster = stats.averageLightsPerCluster;
+    return info;
+}
+
 HiZCullFrameStats RenderScene::hiZCullStats() const {
     if (m_deferredPipeline == nullptr || m_deferredPipeline->hiZPass() == nullptr) {
         return {};

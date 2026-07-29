@@ -26,10 +26,15 @@ renderer::contracts::SceneLight makeSceneLight(
     const renderer::contracts::GpuLightShadowPolicy policy) {
     using namespace renderer::contracts;
     SceneLight result;
-    result.light.positionAndRange = {0.0f, 1.0f, -4.0f, 8.0f};
-    result.light.direction = type == GpuLightType::Spot
+    const bool directional = type == GpuLightType::Directional;
+    result.light.positionAndRange = directional
+        ? glm::vec4(0.0f)
+        : glm::vec4(0.0f, 1.0f, -4.0f, 8.0f);
+    result.light.direction = directional
         ? glm::vec4(0.0f, -1.0f, 0.0f, 0.0f)
-        : glm::vec4(0.0f);
+        : type == GpuLightType::Spot
+            ? glm::vec4(0.0f, -1.0f, 0.0f, 1.0f / 64.0f)
+            : glm::vec4(0.0f, 0.0f, 0.0f, 1.0f / 64.0f);
     result.light.colorAndIntensity = {1.0f, 0.8f, 0.6f, 100.0f};
     result.light.spotCosinesAndRectSize = type == GpuLightType::Spot
         ? glm::vec4(0.95f, 0.8f, 0.0f, 0.0f)

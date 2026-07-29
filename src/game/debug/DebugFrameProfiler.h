@@ -46,6 +46,7 @@ public:
         double currentPollEventsMs = 0.0;
         double currentAppUpdateDispatchMs = 0.0;
         double currentAppRenderDispatchMs = 0.0;
+        double currentPresentationAcquireMs = 0.0;
         double currentRenderSnapshotMs = 0.0;
         double currentRenderSceneMs = 0.0;
         double currentRenderUiMs = 0.0;
@@ -85,6 +86,7 @@ public:
         double framePollEventsAccumMs = 0.0;
         double frameAppUpdateDispatchAccumMs = 0.0;
         double frameAppRenderDispatchAccumMs = 0.0;
+        double framePresentationAcquireAccumMs = 0.0;
         double frameRenderSnapshotAccumMs = 0.0;
         double frameRenderSceneAccumMs = 0.0;
         double frameRenderUiAccumMs = 0.0;
@@ -188,6 +190,9 @@ public:
     void recordAppRenderDispatch(double ms) {
         m_timing.appRenderDispatchAccumMs += ms;
         m_timing.frameAppRenderDispatchAccumMs += ms;
+    }
+    void recordPresentationAcquire(double ms) {
+        m_timing.framePresentationAcquireAccumMs += ms;
     }
     void recordRenderSnapshot(double ms) { m_timing.frameRenderSnapshotAccumMs += ms; }
     void recordRenderScene(double ms) { m_timing.frameRenderSceneAccumMs += ms; }

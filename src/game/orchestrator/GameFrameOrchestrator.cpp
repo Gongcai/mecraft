@@ -265,7 +265,18 @@ bool GameFrameOrchestrator::renderFrame(GameSession& session,
             << "[GameFrameOrchestrator] Failed to update frame-generation activity\n");
         return false;
     }
+#ifdef MECRAFT_DEBUG
+    const auto presentationAcquireStart = std::chrono::steady_clock::now();
+#endif
     const PresentationFrame presentationFrame = presentation.beginFrame(window);
+#ifdef MECRAFT_DEBUG
+    if (auto* profiler = renderRuntime.profiler()) {
+        profiler->recordPresentationAcquire(
+            std::chrono::duration<double, std::milli>(
+                std::chrono::steady_clock::now() -
+                presentationAcquireStart).count());
+    }
+#endif
     if (!presentationFrame.shouldContinue()) {
         MECRAFT_LOG_STREAM(std::cerr
             << "[GameFrameOrchestrator] "

@@ -394,6 +394,10 @@ void GameplayRenderRuntime::publishDebugStats(const double frameTime) {
     stats.pollEventsMs = timing.currentPollEventsMs;
     stats.appUpdateDispatchMs = timing.currentAppUpdateDispatchMs;
     stats.appRenderDispatchMs = timing.currentAppRenderDispatchMs;
+    stats.presentationAcquireMs = timing.currentPresentationAcquireMs;
+    stats.renderDispatchOtherMs = std::max(
+        0.0, stats.appRenderDispatchMs - stats.presentationAcquireMs -
+                 stats.renderMs);
     stats.renderSnapshotMs = timing.currentRenderSnapshotMs;
     stats.renderSceneMs = timing.currentRenderSceneMs;
     stats.renderUiMs = timing.currentRenderUiMs;
@@ -453,6 +457,8 @@ void GameplayRenderRuntime::publishDebugStats(const double frameTime) {
         stats.maxPollEventsMs = stats.pollEventsMs;
         stats.maxAppUpdateDispatchMs = stats.appUpdateDispatchMs;
         stats.maxAppRenderDispatchMs = stats.appRenderDispatchMs;
+        stats.maxPresentationAcquireMs = stats.presentationAcquireMs;
+        stats.maxRenderDispatchOtherMs = stats.renderDispatchOtherMs;
         stats.maxRenderSnapshotMs = stats.renderSnapshotMs;
         stats.maxRenderSceneMs = stats.renderSceneMs;
         stats.maxRenderUiMs = stats.renderUiMs;

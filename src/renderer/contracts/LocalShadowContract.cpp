@@ -29,7 +29,8 @@ struct PendingRequest final {
                static_cast<uint32_t>(GpuLightShadowPolicy::None) &&
            light.classificationAndIdentity.w ==
                kGpuLightInvalidResourceIndex &&
-           light.resourcesAndFlags.w == kGpuLightContractVersion;
+           light.resourcesAndFlags.w == kGpuLightContractVersion &&
+           gpuLightPackedRangeValid(light);
 }
 
 [[nodiscard]] uint32_t capacityForType(const LocalShadowType type) {

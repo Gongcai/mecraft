@@ -69,6 +69,29 @@ bool AnalyticLightInstantiationResult::succeeded() const {
     return error == AnalyticLightInstantiationError::None;
 }
 
+bool gpuLightPackedRangeValid(const GpuLight& light) {
+    const uint32_t type = light.classificationAndIdentity.x;
+    if (type > static_cast<uint32_t>(GpuLightType::Rect)) {
+        return false;
+    }
+    const bool directional = type == static_cast<uint32_t>(
+        GpuLightType::Directional);
+    if (directional) {
+        return light.positionAndRange.w == 0.0f && light.direction.w == 0.0f;
+    }
+    const float range = light.positionAndRange.w;
+    const float inverseRangeSquared = light.direction.w;
+    if (!std::isfinite(range) || range <= 0.0f ||
+        !std::isfinite(inverseRangeSquared) || inverseRangeSquared <= 0.0f) {
+        return false;
+    }
+    const double normalizedRange =
+        static_cast<double>(inverseRangeSquared) *
+        static_cast<double>(range) * static_cast<double>(range);
+    return std::isfinite(normalizedRange) &&
+        std::abs(normalizedRange - 1.0) <= 1.0e-4;
+}
+
 GpuLightNormalizationResult normalizeGpuLight(
     const GpuLightNormalizationInput& input) {
     if (!validType(input.type)) {
@@ -164,6 +187,16 @@ GpuLightNormalizationResult normalizeGpuLight(
         return fail(GpuLightNormalizationError::ValueOutOfRange,
                     GpuLightField::Range);
     }
+    float inverseRangeSquared = 0.0f;
+    if (!directional) {
+        inverseRangeSquared =
+            1.0f / (input.rangeMeters * input.rangeMeters);
+        if (!std::isfinite(inverseRangeSquared) ||
+            inverseRangeSquared <= 0.0f) {
+            return fail(GpuLightNormalizationError::ValueOutOfRange,
+                        GpuLightField::Range);
+        }
+    }
 
     glm::vec3 normalizedDirection{0.0f};
     if (point) {
@@ -220,7 +253,8 @@ GpuLightNormalizationResult normalizeGpuLight(
     result.light.positionAndRange = directional
         ? glm::vec4(0.0f)
         : glm::vec4(input.positionMeters, input.rangeMeters);
-    result.light.direction = glm::vec4(normalizedDirection, 0.0f);
+    result.light.direction =
+        glm::vec4(normalizedDirection, inverseRangeSquared);
     result.light.colorAndIntensity =
         glm::vec4(input.colorLinear, shadingIntensity);
     result.light.spotCosinesAndRectSize = {

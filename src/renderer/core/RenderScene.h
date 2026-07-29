@@ -202,6 +202,26 @@ public:
     /// default-constructed (valid == false) while the pipeline is absent.
     [[nodiscard]] RenderGraphFrameStats renderGraphFrameStats() const;
 
+    /// Compact clustered-light build diagnostics from the latest completed
+    /// GPU readback and the active render grid.
+    struct ClusteredLightingDebugInfo {
+        bool valid = false;
+        uint32_t tileCountX = 0u;
+        uint32_t tileCountY = 0u;
+        uint32_t depthSliceCount = 0u;
+        uint32_t clusterCount = 0u;
+        uint32_t lightCount = 0u;
+        uint32_t activeLightCount = 0u;
+        uint32_t totalIndexCount = 0u;
+        uint32_t maxLightsPerCluster = 0u;
+        uint32_t nonEmptyClusterCount = 0u;
+        uint32_t indexCapacity = 0u;
+        uint32_t buildError = 0u;
+        float averageLightsPerCluster = 0.0f;
+    };
+    [[nodiscard]] ClusteredLightingDebugInfo
+    clusteredLightingDebugInfo() const;
+
     /// Actual frame extents and swapchain presentation mode for diagnostics.
     /// Render and output extents come from the latest frame context, so they
     /// reflect what the renderer really rasterized rather than the nominal

@@ -146,7 +146,7 @@ bool ClusteredLightingPass::setLocalShadowResources(
 
 bool ClusteredLightingPass::validateLights() const {
     using namespace renderer::contracts;
-    if (m_lights.size() > std::numeric_limits<uint32_t>::max()) {
+    if (m_lights.size() > kClusterMaxLightCount) {
         return false;
     }
     std::unordered_set<uint32_t> stableIds;
@@ -162,6 +162,7 @@ bool ClusteredLightingPass::validateLights() const {
                 static_cast<uint32_t>(GpuLightShadowPolicy::RasterCached) ||
             light.resourcesAndFlags.w != kGpuLightContractVersion ||
             (light.resourcesAndFlags.z & ~kGpuLightKnownContributionFlags) != 0u ||
+            !gpuLightPackedRangeValid(light) ||
             !finite(light.positionAndRange) || !finite(light.direction) ||
             !finite(light.colorAndIntensity) ||
             !finite(light.spotCosinesAndRectSize) ||
@@ -288,14 +289,22 @@ bool ClusteredLightingPass::buildCoverage(const FrameContext& ctx,
     m_grid = *grid;
     m_lightBounds.clear();
     m_lightBounds.reserve(m_lights.size());
-    for (const GpuLight& light : m_lights) {
+    for (uint32_t lightIndex = 0u;
+         lightIndex < static_cast<uint32_t>(m_lights.size());
+         ++lightIndex) {
+        const GpuLight& light = m_lights[lightIndex];
         const std::optional<GpuClusterLightBounds> bounds =
             buildGpuClusterLightBounds(
                 light, m_grid, ctx.camera.view, ctx.camera.projection);
         if (!bounds.has_value()) {
             return false;
         }
-        m_lightBounds.push_back(*bounds);
+        if (bounds->minCluster.w == 0u) {
+            continue;
+        }
+        GpuClusterLightBounds activeBounds = *bounds;
+        activeBounds.maxCluster.w = lightIndex;
+        m_lightBounds.push_back(activeBounds);
     }
     const std::optional<uint32_t> required =
         requiredClusterLightIndexCount(m_lightBounds);
@@ -888,6 +897,8 @@ bool ClusteredLightingPass::recordUpload(RhiCommandList& commandList) const {
     if (!m_lights.empty()) {
         commandList.updateBuffer(m_lightBuffer.handle, 0u, m_lights.data(),
                                  m_lights.size() * sizeof(m_lights.front()));
+    }
+    if (!m_lightBounds.empty()) {
         commandList.updateBuffer(
             m_lightBoundsBuffer.handle, 0u, m_lightBounds.data(),
             m_lightBounds.size() * sizeof(m_lightBounds.front()));
@@ -907,19 +918,19 @@ bool ClusteredLightingPass::recordUpload(RhiCommandList& commandList) const {
 }
 
 bool ClusteredLightingPass::recordCount(RhiCommandList& commandList) const {
-    if (m_lights.empty()) {
+    if (m_lightBounds.empty()) {
         return true;
     }
     ClusterGridPushConstants push;
     push.gridAndLightCount = {
         m_grid.tileCountX, m_grid.tileCountY, m_grid.depthSliceCount,
-        static_cast<uint32_t>(m_lights.size())};
+        static_cast<uint32_t>(m_lightBounds.size())};
     commandList.setComputePipeline(m_countStage.pipeline);
     commandList.setBindGroup(0u, m_countBindGroup);
     commandList.pushConstants(&push, sizeof(push),
                               rhiFlag(RhiShaderStage::Compute));
-    commandList.dispatch(
-        (static_cast<uint32_t>(m_lights.size()) + 63u) / 64u, 1u, 1u);
+    commandList.dispatch(static_cast<uint32_t>(m_lightBounds.size()),
+                         m_grid.depthSliceCount, 1u);
     return true;
 }
 
@@ -977,20 +988,20 @@ bool ClusteredLightingPass::recordFinalize(RhiCommandList& commandList) const {
 }
 
 bool ClusteredLightingPass::recordFill(RhiCommandList& commandList) const {
-    if (m_lights.empty()) {
+    if (m_lightBounds.empty()) {
         return true;
     }
     ClusterFillPushConstants push;
     push.gridAndLightCount = {
         m_grid.tileCountX, m_grid.tileCountY, m_grid.depthSliceCount,
-        static_cast<uint32_t>(m_lights.size())};
+        static_cast<uint32_t>(m_lightBounds.size())};
     push.capacity = {m_indexCapacity, 0u, 0u, 0u};
     commandList.setComputePipeline(m_fillStage.pipeline);
     commandList.setBindGroup(0u, m_fillBindGroup);
     commandList.pushConstants(&push, sizeof(push),
                               rhiFlag(RhiShaderStage::Compute));
-    commandList.dispatch(
-        (static_cast<uint32_t>(m_lights.size()) + 63u) / 64u, 1u, 1u);
+    commandList.dispatch(static_cast<uint32_t>(m_lightBounds.size()),
+                         m_grid.depthSliceCount, 1u);
     return true;
 }
 

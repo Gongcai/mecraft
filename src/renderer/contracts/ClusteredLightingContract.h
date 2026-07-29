@@ -16,6 +16,8 @@ namespace renderer::contracts {
 inline constexpr uint32_t kClusterTileWidth = 16u;
 inline constexpr uint32_t kClusterTileHeight = 16u;
 inline constexpr uint32_t kClusterDepthSliceCount = 24u;
+inline constexpr uint32_t kClusterCoverageWorkgroupSize = 64u;
+inline constexpr uint32_t kClusterMaxLightCount = 65535u;
 inline constexpr uint32_t kClusterScanWorkgroupSize = 256u;
 inline constexpr uint32_t kClusterScanElementsPerWorkgroup =
     kClusterScanWorkgroupSize * 2u;
@@ -36,7 +38,8 @@ struct ClusterGrid final {
 
 /// Stores one inclusive integer cluster box consumed by count and fill
 /// compute passes. minCluster.w is one for an intersecting light and zero for
-/// a light outside the current view.
+/// a light outside the current view. ClusteredLightingPass stores the source
+/// GpuLight index in maxCluster.w after removing inactive bounds.
 struct alignas(16) GpuClusterLightBounds final {
     glm::uvec4 minCluster{0u};
     glm::uvec4 maxCluster{0u};

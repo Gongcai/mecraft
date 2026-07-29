@@ -50,6 +50,8 @@ public:
         double pollEventsMs = 0.0;
         double appUpdateDispatchMs = 0.0;
         double appRenderDispatchMs = 0.0;
+        double presentationAcquireMs = 0.0;
+        double renderDispatchOtherMs = 0.0;
         double renderSnapshotMs = 0.0;
         double renderSceneMs = 0.0;
         double renderUiMs = 0.0;
@@ -98,6 +100,8 @@ public:
         double maxPollEventsMs = 0.0;
         double maxAppUpdateDispatchMs = 0.0;
         double maxAppRenderDispatchMs = 0.0;
+        double maxPresentationAcquireMs = 0.0;
+        double maxRenderDispatchOtherMs = 0.0;
         double maxRenderSnapshotMs = 0.0;
         double maxRenderSceneMs = 0.0;
         double maxRenderUiMs = 0.0;
@@ -222,6 +226,8 @@ private:
     GpuTimingWindowStats m_displayGpuTimingWindowStats{};
     ShadowFrameStats m_displayShadowStats{};
     RenderGraphFrameStats m_displayRenderGraphStats{};
+    RenderScene::ClusteredLightingDebugInfo
+        m_displayClusteredLightingStats{};
     HiZCullFrameStats m_displayHiZCullStats{};
     ShadowCullFrameStats m_displayShadowCullStats{};
     RenderWorkStats m_displayRenderWorkStats{};

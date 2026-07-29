@@ -37,7 +37,8 @@ namespace {
     return type <= static_cast<uint32_t>(GpuLightType::Rect) &&
            light.classificationAndIdentity.y != 0u &&
            light.resourcesAndFlags.w == kGpuLightContractVersion &&
-           (light.resourcesAndFlags.z & ~kGpuLightKnownContributionFlags) == 0u;
+           (light.resourcesAndFlags.z & ~kGpuLightKnownContributionFlags) == 0u &&
+           gpuLightPackedRangeValid(light);
 }
 
 } // namespace

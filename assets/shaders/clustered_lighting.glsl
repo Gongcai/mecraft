@@ -323,6 +323,12 @@ ClusteredSurfaceLighting evaluateClusteredSurfaceLighting(
         buildValid = false;
         return result;
     }
+    if (record.count == 0u) {
+        return result;
+    }
+    float nDotV = max(dot(normal, viewDirection), 0.0);
+    float alphaSquared =
+        pbrPerceptualRoughnessToAlphaSquared(perceptualRoughness);
     for (uint listIndex = 0u; listIndex < record.count; ++listIndex) {
         uint lightIndex = uClusterLightIndices[record.offset + listIndex];
         if (lightIndex >= lightCount) {
@@ -330,29 +336,36 @@ ClusteredSurfaceLighting evaluateClusteredSurfaceLighting(
             return result;
         }
         GpuLight light = uClusterLights[lightIndex];
-        vec3 shadowResourceCoordinate;
-        bool shadowValid;
-        float shadowVisibilityValue = localShadowVisibility(
-            light, cameraRelativeSurface, normal,
-            shadowResourceCoordinate, shadowValid);
-        if (!shadowValid) {
-            buildValid = false;
-            return result;
-        }
-        ClusteredSurfaceLighting contribution = evaluateGpuLight(
+        GpuLightSurfaceContribution contribution = evaluateGpuLight(
             light, cameraRelativeSurface,
             normal, viewDirection, specularF0, specularF90,
-            perceptualRoughness);
-        float shadowWeight = dot(
-            max(contribution.diffuse + contribution.specular, vec3(0.0)),
-            vec3(0.2126, 0.7152, 0.0722));
-        if (gpuLightShadowPolicy(light) != GPU_LIGHT_SHADOW_NONE &&
-            shadowWeight > result.shadowWeight) {
-            result.shadowLightId = gpuLightStableId(light);
-            result.shadowMetadataIndex = gpuLightShadowIndex(light);
-            result.shadowResourceCoordinate = shadowResourceCoordinate;
-            result.shadowVisibility = shadowVisibilityValue;
-            result.shadowWeight = shadowWeight;
+            nDotV, alphaSquared);
+        vec3 combinedContribution =
+            contribution.diffuse + contribution.specular;
+        if (all(lessThanEqual(combinedContribution, vec3(0.0)))) {
+            continue;
+        }
+
+        float shadowVisibilityValue = 1.0;
+        if (gpuLightShadowPolicy(light) != GPU_LIGHT_SHADOW_NONE) {
+            float shadowWeight = dot(
+                combinedContribution, vec3(0.2126, 0.7152, 0.0722));
+            vec3 shadowResourceCoordinate;
+            bool shadowValid;
+            shadowVisibilityValue = localShadowVisibility(
+                light, cameraRelativeSurface, normal,
+                shadowResourceCoordinate, shadowValid);
+            if (!shadowValid) {
+                buildValid = false;
+                return result;
+            }
+            if (shadowWeight > result.shadowWeight) {
+                result.shadowLightId = gpuLightStableId(light);
+                result.shadowMetadataIndex = gpuLightShadowIndex(light);
+                result.shadowResourceCoordinate = shadowResourceCoordinate;
+                result.shadowVisibility = shadowVisibilityValue;
+                result.shadowWeight = shadowWeight;
+            }
         }
         result.diffuse += contribution.diffuse * shadowVisibilityValue;
         result.specular += contribution.specular * shadowVisibilityValue;

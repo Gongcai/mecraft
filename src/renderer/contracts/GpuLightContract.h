@@ -14,7 +14,7 @@
 
 namespace renderer::contracts {
 
-inline constexpr uint32_t kGpuLightContractVersion = 2u;
+inline constexpr uint32_t kGpuLightContractVersion = 3u;
 inline constexpr uint32_t kGpuLightInvalidResourceIndex =
     std::numeric_limits<uint32_t>::max();
 
@@ -80,8 +80,9 @@ struct alignas(16) GpuLight final {
     /// Camera-relative position in meters and finite influence range in meters.
     /// Directional lights store zero in all four components.
     glm::vec4 positionAndRange{0.0f};
-    /// Unit direction in which the light emits. Point lights store zero
-    /// because their direction is position-derived.
+    /// Unit direction in which the light emits. Point lights store zero in
+    /// xyz because their direction is position-derived. Finite local lights
+    /// store inverse squared range in w; directional lights store zero in w.
     glm::vec4 direction{0.0f};
     /// Linear RGB chromaticity and normalized shading intensity. The fourth
     /// component stores lux, candela, or nit according to the light type.
@@ -230,6 +231,12 @@ struct AnalyticLightInstantiationResult final {
 /// @return Packed light or a stable field-specific validation error.
 [[nodiscard]] GpuLightNormalizationResult
 normalizeGpuLight(const GpuLightNormalizationInput& input);
+
+/// Validates the packed inverse squared range against the finite range.
+/// @param light Normalized GPU light record.
+/// @return True when directional lights store zeros and every local light
+/// stores a finite positive reciprocal matching positionAndRange.w.
+[[nodiscard]] bool gpuLightPackedRangeValid(const GpuLight& light);
 
 /// Applies one affine scene transform to an asset-local analytic light.
 /// Translation affects its position, the orthonormalized basis affects its

@@ -1,7 +1,9 @@
 #version 450 core
 #include "cluster_build_contract.glsl"
 
-layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+layout(local_size_x = CLUSTER_COVERAGE_WORKGROUP_SIZE,
+       local_size_y = 1,
+       local_size_z = 1) in;
 
 layout(binding = 0, std430) readonly buffer LightBoundsBuffer {
     ClusterLightBounds uLightBounds[];
@@ -27,31 +29,40 @@ layout(push_constant) uniform RhiPushConstants {
 };
 
 void main() {
-    const uint lightIndex = gl_GlobalInvocationID.x;
-    if (lightIndex >= uGridAndLightCount.w) {
+    const uint boundsIndex = gl_WorkGroupID.x;
+    if (boundsIndex >= uGridAndLightCount.w) {
         return;
     }
-    const ClusterLightBounds bounds = uLightBounds[lightIndex];
+    const ClusterLightBounds bounds = uLightBounds[boundsIndex];
     if (bounds.minCluster.w == 0u) {
         return;
     }
+    const uint depthSlice = bounds.minCluster.z + gl_WorkGroupID.y;
+    if (depthSlice > bounds.maxCluster.z) {
+        return;
+    }
+    const uint lightIndex = bounds.maxCluster.w;
+    const uvec2 minimumCluster = bounds.minCluster.xy;
+    const uvec2 coverageExtent =
+        bounds.maxCluster.xy - minimumCluster + uvec2(1u);
+    const uint coverageCount = coverageExtent.x * coverageExtent.y;
     const uvec3 gridSize = uGridAndLightCount.xyz;
-    for (uint z = bounds.minCluster.z; z <= bounds.maxCluster.z; ++z) {
-        for (uint y = bounds.minCluster.y; y <= bounds.maxCluster.y; ++y) {
-            for (uint x = bounds.minCluster.x; x <= bounds.maxCluster.x; ++x) {
-                const uint clusterIndex = clusteredLightClusterIndex(
-                    uvec3(x, y, z), gridSize);
-                const uint cursor = atomicAdd(
-                    uClusterCursors[clusterIndex], 1u);
-                const ClusterRecord record = uClusterRecords[clusterIndex];
-                if (cursor >= record.count || record.offset > uCapacity.x ||
-                    cursor >= uCapacity.x - min(record.offset, uCapacity.x)) {
-                    atomicOr(uClusterStats[CLUSTER_STATS_BUILD_ERROR],
-                             CLUSTER_BUILD_ERROR_FILL_CAPACITY);
-                    continue;
-                }
-                uCompactLightIndices[record.offset + cursor] = lightIndex;
-            }
+    for (uint coverageIndex = gl_LocalInvocationID.x;
+         coverageIndex < coverageCount;
+         coverageIndex += CLUSTER_COVERAGE_WORKGROUP_SIZE) {
+        const uvec3 cluster = clusteredLightCoverageCoordinate(
+            coverageIndex, minimumCluster, coverageExtent, depthSlice);
+        const uint clusterIndex = clusteredLightClusterIndex(
+            cluster, gridSize);
+        const uint cursor = atomicAdd(
+            uClusterCursors[clusterIndex], 1u);
+        const ClusterRecord record = uClusterRecords[clusterIndex];
+        if (cursor >= record.count || record.offset > uCapacity.x ||
+            cursor >= uCapacity.x - min(record.offset, uCapacity.x)) {
+            atomicOr(uClusterStats[CLUSTER_STATS_BUILD_ERROR],
+                     CLUSTER_BUILD_ERROR_FILL_CAPACITY);
+            continue;
         }
+        uCompactLightIndices[record.offset + cursor] = lightIndex;
     }
 }
