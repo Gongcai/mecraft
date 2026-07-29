@@ -285,6 +285,7 @@ void RenderScene::shutdown() {
     m_temporalFrameInput.reset();
     m_temporalUpscaleResult.reset();
     m_lastFrameOutput = {};
+    m_voxelLightRegistry.reset();
 }
 
 bool RenderScene::renderFrame(const IWorldView& worldView,
@@ -684,6 +685,26 @@ bool RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
 
     const bool lightDebugActive = isLightDebugActive();
     float cameraRainVisibility = 1.0f;
+
+    const bool clusteredVoxelLightsRequired =
+        getPipelineMode() == PipelineMode::Deferred &&
+        m_shared.rhiDevice != nullptr &&
+        m_shared.rhiDevice->backend() == RhiBackend::Vulkan;
+    if (clusteredVoxelLightsRequired) {
+        std::vector<renderer::contracts::GpuLight> lights;
+        if (!m_voxelLightRegistry.buildGpuLights(
+                request.worldView, request.camera.getPosition(), lights)) {
+            MECRAFT_LOG_STREAM(
+                std::cerr << "[RenderScene] "
+                          << m_voxelLightRegistry.lastError() << '\n');
+            return false;
+        }
+        if (!setGpuLights(std::move(lights))) {
+            MECRAFT_LOG_STREAM(
+                std::cerr << "[RenderScene] Voxel GPU light snapshot violates the clustered-light contract\n");
+            return false;
+        }
+    }
 
     if (!renderFrame(request.worldView, request.camera, request.window,
                      frameRenderSize, displaySize, frameAspectRatio,

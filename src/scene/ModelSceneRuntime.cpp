@@ -1314,6 +1314,102 @@ void ModelSceneRuntime::renderToShadowMap(
     }
 }
 
+bool ModelSceneRuntime::collectGpuLights(
+    const glm::vec3& cameraPosition,
+    std::vector<renderer::contracts::GpuLight>& lights,
+    std::string& error) {
+    struct LightEntityEntry final {
+        scene::SceneEntityId sceneEntityId =
+            scene::kInvalidSceneEntityId;
+        entt::entity entity = entt::null;
+        StaticMeshRenderer* renderer = nullptr;
+    };
+
+    const auto view = m_registry.view<
+        scene::StaticMeshComponent,
+        scene::SceneEntityIdComponent,
+        ecs::WorldTransformComponent>();
+    std::vector<LightEntityEntry> entries;
+    entries.reserve(view.size_hint());
+    std::size_t totalLightCount = 0u;
+    std::vector<renderer::contracts::GpuLight> collected;
+    for (const entt::entity entity : view) {
+        const auto& mesh = view.get<scene::StaticMeshComponent>(entity);
+        const auto assetIt = m_assetIndices.find(mesh.assetId);
+        if (assetIt == m_assetIndices.end() ||
+            assetIt->second >= m_assets.size() ||
+            m_assets[assetIt->second].renderer == nullptr) {
+            error =
+                "model scene light collection references an unknown mesh asset";
+            return false;
+        }
+        StaticMeshRenderer* const renderer =
+            m_assets[assetIt->second].renderer.get();
+        const std::size_t assetLightCount =
+            renderer->punctualLightCount();
+        if (assetLightCount > collected.max_size() - totalLightCount) {
+            error = "model scene punctual-light count exceeds vector capacity";
+            return false;
+        }
+        totalLightCount += assetLightCount;
+        entries.push_back({
+            view.get<scene::SceneEntityIdComponent>(entity).value,
+            entity,
+            renderer});
+    }
+    std::sort(
+        entries.begin(), entries.end(),
+        [](const LightEntityEntry& lhs, const LightEntityEntry& rhs) {
+            return lhs.sceneEntityId < rhs.sceneEntityId;
+        });
+
+    collected.reserve(totalLightCount);
+    for (const LightEntityEntry& entry : entries) {
+        const entt::entity entity = entry.entity;
+        StaticMeshRenderer& renderer = *entry.renderer;
+        auto* identities =
+            m_registry.try_get<scene::StaticMeshLightIdentityComponent>(
+                entity);
+        if (identities == nullptr) {
+            scene::StaticMeshLightIdentityComponent created;
+            created.values.reserve(renderer.punctualLightCount());
+            for (std::size_t index = 0u;
+                 index < renderer.punctualLightCount(); ++index) {
+                const std::optional<renderer::contracts::StableLightId> id =
+                    renderer::contracts::allocateStableSceneId<
+                        renderer::contracts::StableLightIdTag>();
+                if (!id.has_value()) {
+                    error =
+                        "stable model punctual-light identity space is exhausted";
+                    return false;
+                }
+                created.values.push_back(*id);
+            }
+            identities =
+                &m_registry.emplace<
+                    scene::StaticMeshLightIdentityComponent>(
+                    entity, std::move(created));
+        }
+        if (identities->values.size() != renderer.punctualLightCount()) {
+            error =
+                "model scene punctual-light identity count changed after asset creation";
+            return false;
+        }
+        std::string assetError;
+        if (!renderer.appendPunctualLights(
+                m_registry.get<ecs::WorldTransformComponent>(entity)
+                    .worldMatrix,
+                cameraPosition, identities->values, collected,
+                assetError)) {
+            error = std::move(assetError);
+            return false;
+        }
+    }
+    lights = std::move(collected);
+    error.clear();
+    return true;
+}
+
 bool ModelSceneRuntime::configureClusteredLighting(
     const DeferredClusteredLightingResources& resources) {
     for (MeshAsset& asset : m_assets) {

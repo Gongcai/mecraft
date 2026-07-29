@@ -153,7 +153,19 @@ bool ClusteredLightingPass::prepareGraphFrame(RhiDevice& rhiDevice,
 
 bool ClusteredLightingPass::consumeReadback(RhiDevice& rhiDevice) {
     const uint32_t ringIndex = m_statsReadbackWriteIndex;
-    if (!m_statsReadbackWritten[ringIndex]) {
+    m_statsReadbackSlotAvailable = true;
+    const RhiSubmissionToken token = m_statsReadbackTokens[ringIndex];
+    if (!token.isValid()) {
+        return true;
+    }
+    bool complete = false;
+    if (!rhiDevice.isSubmissionComplete(token, complete)) {
+        MECRAFT_LOG_STREAM(
+            std::cerr << "[ClusteredLightingPass] Stats submission query failed\n");
+        return false;
+    }
+    if (!complete) {
+        m_statsReadbackSlotAvailable = false;
         return true;
     }
     const void* mapped = rhiDevice.mapBuffer(
@@ -167,6 +179,7 @@ bool ClusteredLightingPass::consumeReadback(RhiDevice& rhiDevice) {
     uint32_t words[kStatsWordCount];
     std::memcpy(words, mapped, sizeof(words));
     rhiDevice.unmapBuffer(m_statsReadbackBuffers[ringIndex]);
+    m_statsReadbackTokens[ringIndex] = {};
 
     m_frameStats.valid = true;
     m_frameStats.totalIndexCount = words[kStatsTotalIndexCount];
@@ -906,6 +919,9 @@ bool ClusteredLightingPass::recordValidateAndReadback(
     commandList.pushConstants(&push, sizeof(push),
                               rhiFlag(RhiShaderStage::Compute));
     commandList.dispatch((m_grid.clusterCount + 255u) / 256u, 1u, 1u);
+    if (!m_statsReadbackSlotAvailable) {
+        return true;
+    }
 
     const uint32_t ringIndex = m_statsReadbackWriteIndex;
     commandList.bufferBarrier({m_statsBuffer.handle,
@@ -932,14 +948,22 @@ bool ClusteredLightingPass::recordValidateAndReadback(
     return true;
 }
 
-void ClusteredLightingPass::finishGraphExecution(const bool succeeded) {
+void ClusteredLightingPass::finishGraphExecution(
+    const bool succeeded,
+    const RhiSubmissionToken completionToken) {
     if (!m_statsReadbackPending) {
         return;
     }
-    if (succeeded) {
+    if (succeeded && completionToken.isValid()) {
         m_statsReadbackWritten[m_pendingStatsReadbackIndex] = true;
+        m_statsReadbackTokens[m_pendingStatsReadbackIndex] =
+            completionToken;
         m_statsReadbackWriteIndex =
             (m_pendingStatsReadbackIndex + 1u) % kStatsReadbackRingSize;
+    } else if (succeeded) {
+        m_gpuBuildFailed = true;
+        MECRAFT_LOG_STREAM(
+            std::cerr << "[ClusteredLightingPass] Stats readback submission token is invalid\n");
     }
     m_statsReadbackPending = false;
 }
@@ -1025,8 +1049,10 @@ void ClusteredLightingPass::destroyBuffers() {
         }
     }
     m_statsReadbackWritten.fill(false);
+    m_statsReadbackTokens.fill({});
     m_statsReadbackWriteIndex = 0u;
     m_pendingStatsReadbackIndex = 0u;
+    m_statsReadbackSlotAvailable = true;
     m_statsReadbackPending = false;
 }
 

@@ -13,6 +13,7 @@
 #include "../../renderer/mesh/MeshBuilderRegistry.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdlib>
 #include <fstream>
 #include <initializer_list>
@@ -187,6 +188,106 @@ BiomeTintKind parseBiomeTintKind(const nlohmann::json& blockJson) {
         return blockJson["useGrassTint"].get<bool>() ? BiomeTintKind::Grass : BiomeTintKind::None;
     }
     return BiomeTintKind::None;
+}
+
+glm::vec3 parseRequiredFiniteVec3(const nlohmann::json& object,
+                                  const char* field,
+                                  const NamespacedId& blockId) {
+    if (!object.contains(field) || !object[field].is_array() ||
+        object[field].size() != 3u ||
+        !object[field][0].is_number() ||
+        !object[field][1].is_number() ||
+        !object[field][2].is_number()) {
+        failBlockRegistry(
+            "Block " + blockId.full() + " analyticLight." + field +
+            " must be an array of three numbers");
+    }
+    const glm::vec3 value{
+        object[field][0].get<float>(),
+        object[field][1].get<float>(),
+        object[field][2].get<float>()};
+    if (!std::isfinite(value.x) || !std::isfinite(value.y) ||
+        !std::isfinite(value.z)) {
+        failBlockRegistry(
+            "Block " + blockId.full() + " analyticLight." + field +
+            " must contain finite values");
+    }
+    return value;
+}
+
+struct ParsedBlockAnalyticLightDefinition {
+    BlockAnalyticLightDefinition definition;
+    std::string enabledStateProperty;
+    std::string enabledStateValue;
+};
+
+std::optional<ParsedBlockAnalyticLightDefinition> parseAnalyticLight(
+    const nlohmann::json& blockJson,
+    const NamespacedId& blockId) {
+    if (!blockJson.contains("analyticLight")) {
+        return std::nullopt;
+    }
+    const nlohmann::json& object = blockJson["analyticLight"];
+    if (!object.is_object()) {
+        failBlockRegistry(
+            "Block " + blockId.full() + " analyticLight must be an object");
+    }
+
+    ParsedBlockAnalyticLightDefinition parsed;
+    BlockAnalyticLightDefinition& definition = parsed.definition;
+    definition.colorLinear = parseRequiredFiniteVec3(
+        object, "colorLinear", blockId);
+    definition.positionOffsetMeters = parseRequiredFiniteVec3(
+        object, "positionOffsetMeters", blockId);
+    if (!object.contains("luminousFluxLumens") ||
+        !object["luminousFluxLumens"].is_number() ||
+        !object.contains("rangeMeters") ||
+        !object["rangeMeters"].is_number()) {
+        failBlockRegistry(
+            "Block " + blockId.full() +
+            " analyticLight requires numeric luminousFluxLumens and rangeMeters");
+    }
+    definition.luminousFluxLumens =
+        object["luminousFluxLumens"].get<float>();
+    definition.rangeMeters = object["rangeMeters"].get<float>();
+    if (!std::isfinite(definition.luminousFluxLumens) ||
+        definition.luminousFluxLumens <= 0.0f ||
+        !std::isfinite(definition.rangeMeters) ||
+        definition.rangeMeters <= 0.0f ||
+        glm::any(glm::lessThan(definition.colorLinear, glm::vec3(0.0f))) ||
+        glm::all(glm::equal(definition.colorLinear, glm::vec3(0.0f))) ||
+        glm::any(glm::lessThan(definition.positionOffsetMeters,
+                               glm::vec3(0.0f))) ||
+        glm::any(glm::greaterThan(definition.positionOffsetMeters,
+                                  glm::vec3(1.0f)))) {
+        failBlockRegistry(
+            "Block " + blockId.full() +
+            " analyticLight requires positive flux, range, color energy, and a position inside the unit block");
+    }
+
+    const bool hasEnabledProperty = object.contains("enabledStateProperty");
+    const bool hasEnabledValue = object.contains("enabledStateValue");
+    if (hasEnabledProperty != hasEnabledValue ||
+        (hasEnabledProperty &&
+         (!object["enabledStateProperty"].is_string() ||
+          !object["enabledStateValue"].is_string()))) {
+        failBlockRegistry(
+            "Block " + blockId.full() +
+            " analyticLight state activation requires string property and value fields");
+    }
+    if (hasEnabledProperty) {
+        parsed.enabledStateProperty =
+            object["enabledStateProperty"].get<std::string>();
+        parsed.enabledStateValue =
+            object["enabledStateValue"].get<std::string>();
+        if (parsed.enabledStateProperty.empty() ||
+            parsed.enabledStateValue.empty()) {
+            failBlockRegistry(
+                "Block " + blockId.full() +
+                " analyticLight state activation fields must be non-empty");
+        }
+    }
+    return parsed;
 }
 
 BiomeTintKind biomeTintKindFromResourceTint(const ResourceTextureTint tint) {
@@ -512,6 +613,12 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
     setAllFaces(s_blocks[0], makeStaticWorldTexture(0));
 
     std::vector<std::pair<BlockID, nlohmann::json>> pendingModelVariants;
+    struct PendingAnalyticLightState {
+        BlockID blockId = RUNTIME_ID_NULL;
+        std::string property;
+        std::string value;
+    };
+    std::vector<PendingAnalyticLightState> pendingAnalyticLightStates;
 
     for (const auto& blockJson : root["blocks"]) {
         BlockID id = 0;
@@ -577,6 +684,7 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
         def.surfaceFriction = 1.0f;
         def.surfaceSpeedFactor = 1.0f;
         def.surfaceDamping = 0.0f;
+        def.analyticLight.reset();
 
         if (blockJson.contains("isSolid") && blockJson["isSolid"].is_boolean()) {
             def.isSolid = blockJson["isSolid"].get<bool>();
@@ -594,6 +702,17 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
         if (blockJson.contains("lightLevel") && blockJson["lightLevel"].is_number_integer()) {
             const int light = blockJson["lightLevel"].get<int>();
             def.lightLevel = static_cast<uint8_t>(std::clamp(light, 0, 15));
+        }
+        const std::optional<ParsedBlockAnalyticLightDefinition> analyticLight =
+            parseAnalyticLight(blockJson, def.namespacedId);
+        if (analyticLight.has_value()) {
+            def.analyticLight = analyticLight->definition;
+            if (!analyticLight->enabledStateProperty.empty()) {
+                pendingAnalyticLightStates.push_back({
+                    id,
+                    analyticLight->enabledStateProperty,
+                    analyticLight->enabledStateValue});
+            }
         }
         if (blockJson.contains("isSelectable") && blockJson["isSelectable"].is_boolean()) {
             def.isSelectable = blockJson["isSelectable"].get<bool>();
@@ -1224,6 +1343,37 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
 
     BlockStateRegistry::explodeAllStates();
     PropIndices::init();
+    for (const PendingAnalyticLightState& pending :
+         pendingAnalyticLightStates) {
+        const uint16_t propertyIndex =
+            BlockStateRegistry::getPropertyNameIndex(pending.property);
+        const uint16_t valueIndex =
+            BlockStateRegistry::getPropertyValueIndex(
+                propertyIndex, pending.value);
+        bool propertyDeclared = false;
+        bool valueDeclared = false;
+        for (const BlockStateId state :
+             BlockStateRegistry::getStatesForBlock(pending.blockId)) {
+            const uint16_t stateValue =
+                BlockStateRegistry::getPropertyIndex(state, propertyIndex);
+            propertyDeclared = propertyDeclared ||
+                stateValue != BlockStateRegistry::INVALID_INDEX;
+            valueDeclared = valueDeclared || stateValue == valueIndex;
+        }
+        if (propertyIndex == BlockStateRegistry::INVALID_INDEX ||
+            valueIndex == BlockStateRegistry::INVALID_INDEX ||
+            !propertyDeclared || !valueDeclared ||
+            pending.blockId >= s_blocks.size() ||
+            !s_blocks[pending.blockId].analyticLight.has_value()) {
+            failBlockRegistry(
+                "Block " + BlockRegistry::getNamespacedId(pending.blockId).full() +
+                " analyticLight state activation references an undeclared property value");
+        }
+        BlockAnalyticLightDefinition& definition =
+            *s_blocks[pending.blockId].analyticLight;
+        definition.enabledStatePropertyIndex = propertyIndex;
+        definition.enabledStateValueIndex = valueIndex;
+    }
     for (const auto& [blockId, variantsJson] : pendingModelVariants) {
         BlockStateRegistry::registerBlockModelVariants(blockId, variantsJson);
     }

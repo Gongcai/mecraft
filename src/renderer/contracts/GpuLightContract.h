@@ -3,6 +3,7 @@
 
 #include "SceneIdentityContract.h"
 
+#include <glm/mat4x4.hpp>
 #include <glm/vec2.hpp>
 #include <glm/vec3.hpp>
 #include <glm/vec4.hpp>
@@ -165,6 +166,52 @@ struct GpuLightNormalizationResult final {
     [[nodiscard]] bool succeeded() const;
 };
 
+/// Stores one asset-local analytic light before a visible scene instance
+/// supplies its stable identity and camera-relative transform.
+struct AnalyticLightSourceDefinition final {
+    GpuLightType type = GpuLightType::Point;
+    glm::vec3 localPositionMeters{0.0f};
+    glm::vec3 localEmissionDirection{0.0f};
+    float rangeMeters = 0.0f;
+    glm::vec3 colorLinear{1.0f};
+    float intensity = 0.0f;
+    GpuLightIntensityUnit intensityUnit =
+        GpuLightIntensityUnit::Candela;
+    float innerConeAngleRadians = 0.0f;
+    float outerConeAngleRadians = 0.0f;
+    glm::vec2 rectSizeMeters{0.0f};
+    GpuLightContributionFlags contributionFlags =
+        gpuLightContributionFlagBit(GpuLightContributionFlag::Diffuse) |
+        gpuLightContributionFlagBit(GpuLightContributionFlag::Specular);
+};
+
+/// Identifies failures while transforming an asset-local analytic light into
+/// the camera-relative coordinate system consumed by clustered lighting.
+enum class AnalyticLightInstantiationError : uint8_t {
+    None,
+    InvalidCameraPosition,
+    NonFiniteTransform,
+    NonAffineTransform,
+    DegenerateTransformBasis,
+    ShearedTransform,
+    NormalizationFailed
+};
+
+/// Returns one instantiated GPU light or a stable transform/normalization
+/// error without publishing a partial record.
+struct AnalyticLightInstantiationResult final {
+    GpuLight light;
+    AnalyticLightInstantiationError error =
+        AnalyticLightInstantiationError::None;
+    GpuLightNormalizationError normalizationError =
+        GpuLightNormalizationError::None;
+    GpuLightField normalizationField = GpuLightField::None;
+
+    /// Reports whether the source transform and physical light values are valid.
+    /// @return True only when a complete GPU light record was produced.
+    [[nodiscard]] bool succeeded() const;
+};
+
 /// Validates and converts source physical units into the fixed GPU record.
 /// Directional intensity is stored as lux, Point and Spot intensity as
 /// candela, and Rect intensity as nit.
@@ -172,6 +219,22 @@ struct GpuLightNormalizationResult final {
 /// @return Packed light or a stable field-specific validation error.
 [[nodiscard]] GpuLightNormalizationResult
 normalizeGpuLight(const GpuLightNormalizationInput& input);
+
+/// Applies one affine scene transform to an asset-local analytic light.
+/// Translation affects its position, the orthonormalized basis affects its
+/// direction, and scale is deliberately excluded from physical light range
+/// and intensity. Sheared transforms are rejected because they do not define
+/// one unambiguous light orientation.
+/// @param source Asset-local physical light definition.
+/// @param lightId Stable identity owned by the visible scene instance.
+/// @param localToWorld Complete affine transform of the scene instance.
+/// @param cameraPositionMeters World-space camera position subtracted before upload.
+/// @return Camera-relative GPU light or a structured failure.
+[[nodiscard]] AnalyticLightInstantiationResult instantiateAnalyticLight(
+    const AnalyticLightSourceDefinition& source,
+    StableLightId lightId,
+    const glm::mat4& localToWorld,
+    const glm::vec3& cameraPositionMeters);
 
 /// Returns the stable identifier used by logs and tests for one error.
 /// @param error Error to identify.
@@ -183,6 +246,12 @@ gpuLightNormalizationErrorStableId(GpuLightNormalizationError error);
 /// @param field Semantic field to identify.
 /// @return Process-lifetime string containing the stable identifier.
 [[nodiscard]] const char* gpuLightFieldStableId(GpuLightField field);
+
+/// Returns the stable identifier for one analytic-light instantiation error.
+/// @param error Error to identify.
+/// @return Process-lifetime string containing the stable identifier.
+[[nodiscard]] const char* analyticLightInstantiationErrorStableId(
+    AnalyticLightInstantiationError error);
 
 static_assert(sizeof(GpuLight) == 96u);
 static_assert(alignof(GpuLight) == 16u);

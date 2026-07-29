@@ -1,6 +1,7 @@
 #include "GpuLightContract.h"
 
 #include <glm/geometric.hpp>
+#include <glm/matrix.hpp>
 
 #include <cmath>
 
@@ -61,6 +62,10 @@ constexpr float kHalfPi = kPi * 0.5f;
 
 bool GpuLightNormalizationResult::succeeded() const {
     return error == GpuLightNormalizationError::None;
+}
+
+bool AnalyticLightInstantiationResult::succeeded() const {
+    return error == AnalyticLightInstantiationError::None;
 }
 
 GpuLightNormalizationResult normalizeGpuLight(
@@ -231,6 +236,91 @@ GpuLightNormalizationResult normalizeGpuLight(
     return result;
 }
 
+AnalyticLightInstantiationResult instantiateAnalyticLight(
+    const AnalyticLightSourceDefinition& source,
+    const StableLightId lightId,
+    const glm::mat4& localToWorld,
+    const glm::vec3& cameraPositionMeters) {
+    AnalyticLightInstantiationResult result;
+    if (!finite(cameraPositionMeters)) {
+        result.error =
+            AnalyticLightInstantiationError::InvalidCameraPosition;
+        return result;
+    }
+    for (int column = 0; column < 4; ++column) {
+        for (int row = 0; row < 4; ++row) {
+            if (!std::isfinite(localToWorld[column][row])) {
+                result.error =
+                    AnalyticLightInstantiationError::NonFiniteTransform;
+                return result;
+            }
+        }
+    }
+    constexpr float kTransformTolerance = 1.0e-5f;
+    if (std::abs(localToWorld[0][3]) > kTransformTolerance ||
+        std::abs(localToWorld[1][3]) > kTransformTolerance ||
+        std::abs(localToWorld[2][3]) > kTransformTolerance ||
+        std::abs(localToWorld[3][3] - 1.0f) > kTransformTolerance) {
+        result.error = AnalyticLightInstantiationError::NonAffineTransform;
+        return result;
+    }
+
+    glm::vec3 basis[3] = {
+        glm::vec3(localToWorld[0]),
+        glm::vec3(localToWorld[1]),
+        glm::vec3(localToWorld[2])};
+    for (glm::vec3& axis : basis) {
+        const float lengthSquared = glm::dot(axis, axis);
+        if (!std::isfinite(lengthSquared) || lengthSquared <= 1.0e-12f) {
+            result.error =
+                AnalyticLightInstantiationError::DegenerateTransformBasis;
+            return result;
+        }
+        axis /= std::sqrt(lengthSquared);
+    }
+    constexpr float kOrthogonalityTolerance = 1.0e-4f;
+    if (std::abs(glm::dot(basis[0], basis[1])) >
+            kOrthogonalityTolerance ||
+        std::abs(glm::dot(basis[0], basis[2])) >
+            kOrthogonalityTolerance ||
+        std::abs(glm::dot(basis[1], basis[2])) >
+            kOrthogonalityTolerance) {
+        result.error = AnalyticLightInstantiationError::ShearedTransform;
+        return result;
+    }
+
+    const glm::mat3 orientation(basis[0], basis[1], basis[2]);
+    const bool directional = source.type == GpuLightType::Directional;
+    GpuLightNormalizationInput input;
+    input.lightId = lightId;
+    input.type = source.type;
+    input.positionMeters = directional
+        ? glm::vec3(0.0f)
+        : glm::vec3(localToWorld *
+                    glm::vec4(source.localPositionMeters, 1.0f)) -
+              cameraPositionMeters;
+    input.emissionDirection =
+        orientation * source.localEmissionDirection;
+    input.rangeMeters = source.rangeMeters;
+    input.colorLinear = source.colorLinear;
+    input.intensity = source.intensity;
+    input.intensityUnit = source.intensityUnit;
+    input.innerConeAngleRadians = source.innerConeAngleRadians;
+    input.outerConeAngleRadians = source.outerConeAngleRadians;
+    input.rectSizeMeters = source.rectSizeMeters;
+    input.contributionFlags = source.contributionFlags;
+    const GpuLightNormalizationResult normalized = normalizeGpuLight(input);
+    if (!normalized.succeeded()) {
+        result.error =
+            AnalyticLightInstantiationError::NormalizationFailed;
+        result.normalizationError = normalized.error;
+        result.normalizationField = normalized.field;
+        return result;
+    }
+    result.light = normalized.light;
+    return result;
+}
+
 const char* gpuLightNormalizationErrorStableId(
     const GpuLightNormalizationError error) {
     switch (error) {
@@ -273,6 +363,26 @@ const char* gpuLightFieldStableId(const GpuLightField field) {
         case GpuLightField::ContributionFlags: return "ContributionFlags";
     }
     return "InvalidGpuLightField";
+}
+
+const char* analyticLightInstantiationErrorStableId(
+    const AnalyticLightInstantiationError error) {
+    switch (error) {
+        case AnalyticLightInstantiationError::None: return "None";
+        case AnalyticLightInstantiationError::InvalidCameraPosition:
+            return "InvalidCameraPosition";
+        case AnalyticLightInstantiationError::NonFiniteTransform:
+            return "NonFiniteTransform";
+        case AnalyticLightInstantiationError::NonAffineTransform:
+            return "NonAffineTransform";
+        case AnalyticLightInstantiationError::DegenerateTransformBasis:
+            return "DegenerateTransformBasis";
+        case AnalyticLightInstantiationError::ShearedTransform:
+            return "ShearedTransform";
+        case AnalyticLightInstantiationError::NormalizationFailed:
+            return "NormalizationFailed";
+    }
+    return "InvalidAnalyticLightInstantiationError";
 }
 
 } // namespace renderer::contracts

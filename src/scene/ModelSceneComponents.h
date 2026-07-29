@@ -3,6 +3,7 @@
 
 #include <cstdint>
 #include <string>
+#include <vector>
 
 #include <glm/glm.hpp>
 
@@ -25,6 +26,12 @@ struct StableObjectIdComponent {
 
 struct StaticMeshComponent {
     SceneAssetId assetId = kInvalidSceneAssetId;
+};
+
+/// Owns one stable light identity for every punctual light in a mesh asset.
+/// The vector is runtime-only and follows the visible entity lifetime.
+struct StaticMeshLightIdentityComponent {
+    std::vector<renderer::contracts::StableLightId> values;
 };
 
 struct PreviousWorldTransformComponent {

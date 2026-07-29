@@ -1,4 +1,5 @@
 #include "StaticMeshRenderer.h"
+#include "GltfPunctualLightLoader.h"
 
 #include <algorithm>
 #include <array>
@@ -236,7 +237,8 @@ void appendContractIssue(std::string& error, const std::string& issue) {
            extension == "KHR_materials_ior" ||
            extension == "KHR_materials_clearcoat" ||
            extension == "KHR_materials_transmission" ||
-           extension == "KHR_materials_volume";
+           extension == "KHR_materials_volume" ||
+           extension == "KHR_lights_punctual";
 }
 
 template <typename Predicate>
@@ -365,7 +367,8 @@ void appendMaterialExtensionIssue(const cgltf_data& data,
            "KHR_materials_ior, KHR_materials_clearcoat, "
            "KHR_materials_transmission, KHR_materials_volume, "
            "KHR_materials_emissive_strength, and "
-           "KHR_materials_pbrSpecularGlossiness";
+           "KHR_materials_pbrSpecularGlossiness; supported scene extensions "
+           "include KHR_lights_punctual";
 }
 
 [[nodiscard]] bool readBinaryFile(const std::filesystem::path& path,
@@ -1603,6 +1606,7 @@ bool StaticMeshRenderer::loadAsset(const std::string& modelPath,
 
     std::vector<const cgltf_node*> nodes;
     nodes.reserve(data->nodes_count);
+    m_punctualLights.reserve(data->lights_count);
     for (cgltf_size rootIndex = 0u;
          rootIndex < data->scene->nodes_count; ++rootIndex) {
         nodes.push_back(data->scene->nodes[rootIndex]);
@@ -1612,6 +1616,31 @@ bool StaticMeshRenderer::loadAsset(const std::string& modelPath,
         if (node == nullptr || node->skin != nullptr || node->has_mesh_gpu_instancing) {
             setError("default scene contains an unsupported node contract");
             return false;
+        }
+        if (node->light != nullptr) {
+            const renderer::assets::GltfPunctualLightDecodeResult decoded =
+                renderer::assets::decodeGltfPunctualLight(*node);
+            if (!decoded.succeeded()) {
+                const std::string lightName = node->light->name != nullptr
+                    ? node->light->name
+                    : (node->name != nullptr ? node->name : "unnamed");
+                setError(
+                    "glTF punctual light decode failed [light=" +
+                    lightName + ", error=" +
+                    renderer::assets::gltfPunctualLightDecodeErrorStableId(
+                        decoded.error) +
+                    ", instantiation=" +
+                    renderer::contracts::analyticLightInstantiationErrorStableId(
+                        decoded.instantiationError) +
+                    ", normalization=" +
+                    renderer::contracts::gpuLightNormalizationErrorStableId(
+                        decoded.normalizationError) +
+                    ", field=" +
+                    renderer::contracts::gpuLightFieldStableId(
+                        decoded.normalizationField) + "]");
+                return false;
+            }
+            m_punctualLights.push_back(decoded.source);
         }
         if (node->mesh != nullptr) {
             for (cgltf_size primitiveIndex = 0u;
@@ -1721,6 +1750,43 @@ void StaticMeshRenderer::assetBounds(glm::vec3& minimum,
                                      glm::vec3& maximum) const {
     minimum = m_assetBoundsMin;
     maximum = m_assetBoundsMax;
+}
+
+bool StaticMeshRenderer::appendPunctualLights(
+    const glm::mat4& model,
+    const glm::vec3& cameraPosition,
+    const std::vector<renderer::contracts::StableLightId>& lightIds,
+    std::vector<renderer::contracts::GpuLight>& lights,
+    std::string& error) const {
+    using namespace renderer::contracts;
+
+    if (lightIds.size() != m_punctualLights.size()) {
+        error = "static mesh punctual-light identity count does not match the asset definition";
+        return false;
+    }
+    const std::size_t initialLightCount = lights.size();
+    for (std::size_t index = 0u; index < m_punctualLights.size(); ++index) {
+        const AnalyticLightInstantiationResult result =
+            instantiateAnalyticLight(
+                m_punctualLights[index], lightIds[index], model,
+                cameraPosition);
+        if (!result.succeeded()) {
+            lights.resize(initialLightCount);
+            error =
+                "static mesh punctual-light instantiation failed [index=" +
+                std::to_string(index) + ", error=" +
+                analyticLightInstantiationErrorStableId(result.error) +
+                ", normalization=" +
+                gpuLightNormalizationErrorStableId(
+                    result.normalizationError) +
+                ", field=" +
+                gpuLightFieldStableId(result.normalizationField) + "]";
+            return false;
+        }
+        lights.push_back(result.light);
+    }
+    error.clear();
+    return true;
 }
 
 bool StaticMeshRenderer::prepareGBuffer(
@@ -2057,6 +2123,7 @@ void StaticMeshRenderer::shutdown() {
     m_materials.clear();
     m_textures.clear();
     m_samplers.clear();
+    m_punctualLights.clear();
     m_rhiDevice = nullptr;
     m_assetBoundsMin = glm::vec3(0.0f);
     m_assetBoundsMax = glm::vec3(0.0f);

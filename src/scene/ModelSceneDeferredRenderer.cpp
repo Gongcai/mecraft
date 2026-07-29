@@ -4,7 +4,9 @@
 #include <cmath>
 #include <cstdlib>
 #include <optional>
+#include <string>
 #include <utility>
+#include <vector>
 
 #include <glm/gtc/matrix_inverse.hpp>
 
@@ -653,6 +655,20 @@ bool ModelSceneDeferredRenderer::render(
         return false;
     }
     FrameContext context = *builtContext;
+    std::vector<renderer::contracts::GpuLight> lights;
+    std::string lightError;
+    if (state.geometryProvider == nullptr ||
+        !state.geometryProvider->collectGpuLights(
+            cameraPosition, lights, lightError)) {
+        state.error = lightError.empty()
+            ? "failed to collect model scene GPU lights"
+            : std::move(lightError);
+        return false;
+    }
+    if (!state.pipeline.setGpuLights(std::move(lights))) {
+        state.error = "model scene GPU light snapshot violates the clustered-light contract";
+        return false;
+    }
     const FrameOutput output = state.pipeline.renderFrame(
         context, state.settings);
     if (!output.sceneColor.isValid() || !output.gbufferDepth.isValid()) {

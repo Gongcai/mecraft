@@ -340,6 +340,8 @@ void Chunk::setBlockImpl(const int x,
         return;
     }
 
+    const BlockStateId previousState = getBlock(x, y, z);
+
     const int scy = toSubChunkIndex(y);
     const int localY = toSubChunkLocalY(y);
 
@@ -356,6 +358,10 @@ void Chunk::setBlockImpl(const int x,
         sc->setBlockWithoutMeshDirty(x, localY, z, stateId);
     }
     tryRecycleSubChunk(scy);
+
+    if (previousState != stateId) {
+        ++m_blockContentRevision;
+    }
 
     if (!markMeshDirty) {
         return;
@@ -396,8 +402,12 @@ void Chunk::setBlockFast(const int x, const int y, const int z, const BlockState
         return;
     }
 
+    const BlockStateId previousState = getBlock(x, y, z);
     SubChunk* sc = getOrCreateSubChunk(scy);
     sc->setBlockFast(x, toSubChunkLocalY(y), z, stateId);
+    if (previousState != stateId) {
+        ++m_blockContentRevision;
+    }
 }
 
 void Chunk::markExistingSubChunksDirty() {

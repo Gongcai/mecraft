@@ -10,6 +10,7 @@
 #include "../passes/Fsr1Pass.h"
 #include "../passes/TemporalUpscalePass.h"
 #include "../mesh/TerrainStreamingService.h"
+#include "../lighting/VoxelLightRegistry.h"
 #include "../overlays/BlockInteractionOverlayRenderer.h"
 #include "../debug/RenderDebugService.h"
 #include "../rhi/RhiRenderGraph.h"
@@ -355,6 +356,7 @@ private:
     double m_contextCpuMs = 0.0;
     bool m_eyeInWater = false;
     bool m_renderLocalPlayerModel = false;
+    renderer::lighting::VoxelLightRegistry m_voxelLightRegistry;
 
     // Pipeline implementations (Phase 9)
     std::unique_ptr<ForwardPipeline> m_forwardPipeline;

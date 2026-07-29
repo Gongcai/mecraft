@@ -90,7 +90,9 @@ public:
 
     /// Commits delayed statistics only after the graph submission succeeds.
     /// @param succeeded True when every graph command list was submitted.
-    void finishGraphExecution(bool succeeded);
+    /// @param completionToken Final graph submission that depends on validation.
+    void finishGraphExecution(bool succeeded,
+                              RhiSubmissionToken completionToken);
 
     [[nodiscard]] const renderer::contracts::ClusterGrid& grid() const {
         return m_grid;
@@ -205,8 +207,11 @@ private:
     static constexpr uint32_t kStatsReadbackRingSize = 3u;
     std::array<RhiBufferHandle, kStatsReadbackRingSize> m_statsReadbackBuffers{};
     std::array<bool, kStatsReadbackRingSize> m_statsReadbackWritten{};
+    std::array<RhiSubmissionToken, kStatsReadbackRingSize>
+        m_statsReadbackTokens{};
     uint32_t m_statsReadbackWriteIndex = 0u;
     uint32_t m_pendingStatsReadbackIndex = 0u;
+    bool m_statsReadbackSlotAvailable = true;
     bool m_statsReadbackPending = false;
     ClusteredLightingFrameStats m_frameStats;
 };

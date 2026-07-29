@@ -68,6 +68,10 @@ public:
     void renderToShadowMap(
         RhiCommandList& commandList,
         const glm::mat4& shadowViewProjection) override;
+    [[nodiscard]] bool collectGpuLights(
+        const glm::vec3& cameraPosition,
+        std::vector<renderer::contracts::GpuLight>& lights,
+        std::string& error) override;
     [[nodiscard]] bool configureClusteredLighting(
         const DeferredClusteredLightingResources& resources) override;
     [[nodiscard]] bool hasTransparentGeometry() const override;

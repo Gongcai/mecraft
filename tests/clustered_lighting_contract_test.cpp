@@ -135,11 +135,44 @@ bool testCoverageAndCapacity() {
         *directionalBounds, *centerBounds, *outsideBounds};
     const std::optional<uint32_t> capacity =
         requiredClusterLightIndexCount(bounds);
+    const std::optional<uint32_t> inactiveCapacity =
+        requiredClusterLightIndexCount({*outsideBounds});
     return requireTrue(capacity.has_value(),
                        "valid coverage counts must produce a compact capacity") &&
            requireTrue(*capacity == grid.clusterCount +
                            clusterLightCoverageCount(*centerBounds),
-                       "capacity must exactly equal the sum of light coverage");
+                       "capacity must exactly equal the sum of light coverage") &&
+           requireTrue(inactiveCapacity.has_value() &&
+                           *inactiveCapacity == 0u,
+                       "a complete off-screen light set must produce valid zero coverage");
+}
+
+bool testReadbackCompletionContract() {
+    std::string pass;
+    std::string pipeline;
+    if (!requireTrue(readProjectFile(
+                         "src/renderer/passes/ClusteredLightingPass.cpp",
+                         pass),
+                     "clustered-light pass source must be readable") ||
+        !requireTrue(readProjectFile(
+                         "src/renderer/core/DeferredPipeline.cpp",
+                         pipeline),
+                     "deferred pipeline source must be readable")) {
+        return false;
+    }
+    return requireTrue(
+               pass.find("isSubmissionComplete(token, complete)") !=
+                   std::string::npos,
+               "statistics readback must query its exact GPU submission") &&
+           requireTrue(
+               pass.find("m_statsReadbackSlotAvailable = false") !=
+                   std::string::npos,
+               "pending readback slots must remain unavailable for overwrite") &&
+           requireTrue(
+               pipeline.find(
+                   "executed.succeeded(), executed.completionToken()") !=
+                   std::string::npos,
+               "the clustered pass must retain the graph completion token");
 }
 
 bool testComputeShaderContracts() {
@@ -260,7 +293,8 @@ bool testSharedLightingConsumers() {
 
 int main() {
     if (!testGridAndLogarithmicSlices() || !testCoverageAndCapacity() ||
-        !testComputeShaderContracts() || !testSharedLightingConsumers()) {
+        !testComputeShaderContracts() || !testReadbackCompletionContract() ||
+        !testSharedLightingConsumers()) {
         return 1;
     }
     std::cout << "[clustered_lighting_contract_test] PASS\n";

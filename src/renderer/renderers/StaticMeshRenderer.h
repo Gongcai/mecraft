@@ -11,6 +11,7 @@
 
 #include "../rhi/RhiHandles.h"
 #include "../contracts/ClusteredLightingContract.h"
+#include "../contracts/GpuLightContract.h"
 #include "../contracts/SceneIdentityContract.h"
 
 class FrameContext;
@@ -59,6 +60,26 @@ public:
 
     /// Returns the asset-space axis-aligned bounds generated while decoding glTF vertices.
     void assetBounds(glm::vec3& minimum, glm::vec3& maximum) const;
+
+    /// Returns the number of KHR_lights_punctual instances in the default scene.
+    /// @return Count of validated asset-local punctual light definitions.
+    [[nodiscard]] std::size_t punctualLightCount() const {
+        return m_punctualLights.size();
+    }
+
+    /// Appends this asset instance's camera-relative punctual lights.
+    /// @param model Local-to-world transform shared with the rendered instance.
+    /// @param cameraPosition World-space camera position used as the floating origin.
+    /// @param lightIds Stable identities in asset-local light order.
+    /// @param lights Destination receiving a complete light batch on success.
+    /// @param error Receives a precise transform or physical-contract failure.
+    /// @return True when every asset light was instantiated without partial output.
+    [[nodiscard]] bool appendPunctualLights(
+        const glm::mat4& model,
+        const glm::vec3& cameraPosition,
+        const std::vector<renderer::contracts::StableLightId>& lightIds,
+        std::vector<renderer::contracts::GpuLight>& lights,
+        std::string& error) const;
 
     /// Uploads lighting and camera transforms before the G-buffer rendering scope starts.
     /// @param commandList Graphics command list recording the current G-buffer pass.
@@ -171,6 +192,8 @@ private:
     std::vector<RhiSamplerHandle> m_samplers;
     std::vector<MaterialResource> m_materials;
     std::vector<PrimitiveResource> m_primitives;
+    std::vector<renderer::contracts::AnalyticLightSourceDefinition>
+        m_punctualLights;
     RhiBufferHandle m_frameUniformBuffer;
     RhiBindGroupLayoutHandle m_bindGroupLayout;
     RhiBindGroupLayoutHandle m_transparentSceneBindGroupLayout;

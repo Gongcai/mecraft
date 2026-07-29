@@ -3,8 +3,12 @@
 
 #include "../rhi/RhiHandles.h"
 #include "../contracts/ClusteredLightingContract.h"
+#include "../contracts/GpuLightContract.h"
 
 #include <glm/glm.hpp>
+
+#include <string>
+#include <vector>
 
 class FrameContext;
 class RhiCommandList;
@@ -53,6 +57,17 @@ public:
     virtual void renderToShadowMap(
         RhiCommandList& commandList,
         const glm::mat4& shadowViewProjection) = 0;
+
+    /// Builds the complete camera-relative light snapshot owned by this
+    /// geometry provider before clustered-light resources are prepared.
+    /// @param cameraPosition World-space camera position used as the floating origin.
+    /// @param lights Destination replaced with a complete normalized snapshot.
+    /// @param error Receives a precise asset, identity, or transform failure.
+    /// @return True when every visible light was resolved without partial output.
+    [[nodiscard]] virtual bool collectGpuLights(
+        const glm::vec3& cameraPosition,
+        std::vector<renderer::contracts::GpuLight>& lights,
+        std::string& error) = 0;
 
     /// Publishes the current clustered-light descriptor set and grid before
     /// any frame commands are recorded.

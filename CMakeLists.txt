@@ -355,6 +355,9 @@ set(SRC_RENDERER
         src/renderer/contracts/GpuMaterialContract.cpp
         src/renderer/contracts/RenderFeatureContract.cpp
 
+        # Lighting data producers
+        src/renderer/lighting/VoxelLightRegistry.cpp
+
         # Capture
         src/renderer/capture/TextureCapture.cpp
 
@@ -411,6 +414,7 @@ set(SRC_RENDERER
         src/renderer/renderers/GameplaySkyRenderer.cpp
         src/renderer/renderers/HumanoidRenderer.cpp
         src/renderer/renderers/HumanoidSkinLayoutCatalog.cpp
+        src/renderer/renderers/GltfPunctualLightLoader.cpp
         src/renderer/renderers/SkyboxRenderer.cpp
         src/renderer/renderers/StaticMeshRenderer.cpp
 
@@ -1014,6 +1018,12 @@ if(MECRAFT_BUILD_TESTS)
     add_mecraft_test(gpu_light_contract_test tests/gpu_light_contract_test.cpp)
     target_compile_definitions(gpu_light_contract_test PRIVATE
             MECRAFT_TEST_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
+    add_mecraft_test(gltf_punctual_light_test
+            tests/gltf_punctual_light_test.cpp)
+    target_compile_definitions(gltf_punctual_light_test PRIVATE
+            MECRAFT_TEST_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
+    add_mecraft_test(voxel_light_registry_test
+            tests/voxel_light_registry_test.cpp)
     add_mecraft_test(gpu_material_contract_test tests/gpu_material_contract_test.cpp)
     target_compile_definitions(gpu_material_contract_test PRIVATE
             MECRAFT_TEST_SOURCE_DIR="${PROJECT_SOURCE_DIR}")

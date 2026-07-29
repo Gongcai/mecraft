@@ -9,8 +9,12 @@
 #include <nlohmann/json.hpp>
 #include <string>
 #include <array>
+#include <limits>
+#include <optional>
 #include <string_view>
 #include <unordered_map>
+
+#include <glm/vec3.hpp>
 
 #include "../../MecraftExport.h"
 #include "../../engine/registry/NamespacedId.h"
@@ -227,6 +231,25 @@ struct BlockRandomTickRule {
     float chance = 1.0f;
 };
 
+/// Defines the physical point-light proxy emitted by one placed block.
+/// Block light propagation remains a separate gameplay data product.
+struct BlockAnalyticLightDefinition {
+    static constexpr uint16_t kUnconditionalStateIndex =
+        std::numeric_limits<uint16_t>::max();
+
+    /// Linear RGB light chromaticity multiplied by the normalized intensity.
+    glm::vec3 colorLinear{1.0f};
+    /// Light position within the block-local unit cube, measured in meters.
+    glm::vec3 positionOffsetMeters{0.5f};
+    /// Authoring luminous flux converted to candela by the GPU light contract.
+    float luminousFluxLumens = 0.0f;
+    /// Finite influence radius used by clustered-light bounds and attenuation.
+    float rangeMeters = 0.0f;
+    /// Optional block-state property and value required to emit this light.
+    uint16_t enabledStatePropertyIndex = kUnconditionalStateIndex;
+    uint16_t enabledStateValueIndex = kUnconditionalStateIndex;
+};
+
 struct BlockDef {
     NamespacedId namespacedId = NamespacedId("minecraft", "unknown");
     bool isSolid        = true;
@@ -252,6 +275,7 @@ struct BlockDef {
     BiomeTintKind biomeTint = BiomeTintKind::None;
     uint8_t lightLevel  = 0;
     uint8_t opacity     = 0;
+    std::optional<BlockAnalyticLightDefinition> analyticLight;
     uint16_t timeToBreak = 1000;
     float surfaceFriction = 1.0f;
     float surfaceSpeedFactor = 1.0f;

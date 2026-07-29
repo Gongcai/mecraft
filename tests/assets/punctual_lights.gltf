@@ -1,0 +1,154 @@
+{
+  "asset": {
+    "version": "2.0",
+    "generator": "mecraft punctual light contract test"
+  },
+  "extensionsUsed": [
+    "KHR_lights_punctual"
+  ],
+  "extensionsRequired": [
+    "KHR_lights_punctual"
+  ],
+  "extensions": {
+    "KHR_lights_punctual": {
+      "lights": [
+        {
+          "name": "PointKey",
+          "type": "point",
+          "color": [1.0, 0.5, 0.25],
+          "intensity": 250.0,
+          "range": 8.0
+        },
+        {
+          "name": "SpotFill",
+          "type": "spot",
+          "color": [0.2, 0.4, 1.0],
+          "intensity": 400.0,
+          "range": 12.0,
+          "spot": {
+            "innerConeAngle": 0.2,
+            "outerConeAngle": 0.6
+          }
+        },
+        {
+          "name": "DirectionalRim",
+          "type": "directional",
+          "color": [0.8, 0.9, 1.0],
+          "intensity": 50000.0
+        }
+      ]
+    }
+  },
+  "scene": 0,
+  "scenes": [
+    {
+      "nodes": [0, 1, 2, 3]
+    }
+  ],
+  "nodes": [
+    {
+      "name": "Triangle",
+      "mesh": 0
+    },
+    {
+      "name": "PointNode",
+      "translation": [1.0, 2.0, 3.0],
+      "extensions": {
+        "KHR_lights_punctual": {
+          "light": 0
+        }
+      }
+    },
+    {
+      "name": "SpotNode",
+      "translation": [-2.0, 1.0, 0.0],
+      "rotation": [0.0, 0.7071067811865476, 0.0, 0.7071067811865476],
+      "extensions": {
+        "KHR_lights_punctual": {
+          "light": 1
+        }
+      }
+    },
+    {
+      "name": "DirectionalNode",
+      "rotation": [0.7071067811865476, 0.0, 0.0, 0.7071067811865476],
+      "extensions": {
+        "KHR_lights_punctual": {
+          "light": 2
+        }
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 0,
+            "NORMAL": 1
+          },
+          "indices": 2,
+          "material": 0
+        }
+      ]
+    }
+  ],
+  "materials": [
+    {
+      "name": "Neutral",
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [0.7, 0.7, 0.7, 1.0],
+        "metallicFactor": 0.0,
+        "roughnessFactor": 0.5
+      }
+    }
+  ],
+  "buffers": [
+    {
+      "byteLength": 78,
+      "uri": "data:application/octet-stream;base64,AAAAvwAAAAAAAAAAAAAAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAABAAIA"
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteOffset": 0,
+      "byteLength": 36,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 36,
+      "byteLength": 36,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 72,
+      "byteLength": 6,
+      "target": 34963
+    }
+  ],
+  "accessors": [
+    {
+      "bufferView": 0,
+      "componentType": 5126,
+      "count": 3,
+      "type": "VEC3",
+      "min": [-0.5, 0.0, 0.0],
+      "max": [0.5, 1.0, 0.0]
+    },
+    {
+      "bufferView": 1,
+      "componentType": 5126,
+      "count": 3,
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 2,
+      "componentType": 5123,
+      "count": 3,
+      "type": "SCALAR"
+    }
+  ]
+}

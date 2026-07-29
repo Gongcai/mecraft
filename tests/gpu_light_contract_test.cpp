@@ -1,6 +1,7 @@
 #include "renderer/contracts/GpuLightContract.h"
 
 #include <glm/geometric.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 
 #include <array>
 #include <cmath>
@@ -213,6 +214,83 @@ bool testStructuredErrors() {
                        "non-positive Rect dimensions must fail explicitly");
 }
 
+bool testAnalyticLightInstantiation() {
+    using namespace renderer::contracts;
+
+    AnalyticLightSourceDefinition source;
+    source.type = GpuLightType::Spot;
+    source.localPositionMeters = {1.0f, 0.0f, 0.0f};
+    source.localEmissionDirection = {0.0f, 0.0f, -1.0f};
+    source.rangeMeters = 9.0f;
+    source.colorLinear = {0.2f, 0.4f, 1.0f};
+    source.intensity = 300.0f;
+    source.intensityUnit = GpuLightIntensityUnit::Candela;
+    source.innerConeAngleRadians = 0.2f;
+    source.outerConeAngleRadians = 0.6f;
+
+    const glm::mat4 model =
+        glm::translate(glm::mat4(1.0f), glm::vec3(10.0f, 2.0f, -5.0f)) *
+        glm::rotate(glm::mat4(1.0f), glm::radians(90.0f),
+                    glm::vec3(0.0f, 1.0f, 0.0f)) *
+        glm::scale(glm::mat4(1.0f), glm::vec3(2.0f, 3.0f, 4.0f));
+    const glm::vec3 camera{1.0f, 1.0f, -1.0f};
+    const AnalyticLightInstantiationResult instantiated =
+        instantiateAnalyticLight(
+            source, StableLightId{71u}, model, camera);
+    const glm::vec3 expectedPosition =
+        glm::vec3(model * glm::vec4(source.localPositionMeters, 1.0f)) -
+        camera;
+    const glm::mat3 orientation(
+        glm::normalize(glm::vec3(model[0])),
+        glm::normalize(glm::vec3(model[1])),
+        glm::normalize(glm::vec3(model[2])));
+    const glm::vec3 expectedDirection =
+        glm::normalize(orientation * source.localEmissionDirection);
+    if (!requireTrue(instantiated.succeeded(),
+                     "orthogonal non-uniform instance transforms must remain valid") ||
+        !requireTrue(glm::length(
+                         glm::vec3(instantiated.light.positionAndRange) -
+                         expectedPosition) < 1.0e-5f,
+                     "analytic lights must upload camera-relative positions") ||
+        !requireTrue(glm::length(
+                         glm::vec3(instantiated.light.direction) -
+                         expectedDirection) < 1.0e-5f,
+                     "analytic light direction must exclude instance scale") ||
+        !requireTrue(instantiated.light.positionAndRange.w == 9.0f,
+                     "physical light range must not inherit scene scale")) {
+        return false;
+    }
+
+    glm::mat4 sheared(1.0f);
+    sheared[1][0] = 0.5f;
+    const AnalyticLightInstantiationResult invalidTransform =
+        instantiateAnalyticLight(
+            source, StableLightId{72u}, sheared, glm::vec3(0.0f));
+    if (!requireTrue(
+            invalidTransform.error ==
+                AnalyticLightInstantiationError::ShearedTransform,
+            "sheared light transforms must fail explicitly") ||
+        !requireTrue(
+            std::string(analyticLightInstantiationErrorStableId(
+                invalidTransform.error)) == "ShearedTransform",
+            "analytic transform failures must expose stable identifiers")) {
+        return false;
+    }
+
+    source.rangeMeters = 0.0f;
+    const AnalyticLightInstantiationResult invalidSource =
+        instantiateAnalyticLight(
+            source, StableLightId{73u}, glm::mat4(1.0f),
+            glm::vec3(0.0f));
+    return requireTrue(
+               invalidSource.error ==
+                   AnalyticLightInstantiationError::NormalizationFailed &&
+               invalidSource.normalizationError ==
+                   GpuLightNormalizationError::ValueOutOfRange &&
+               invalidSource.normalizationField == GpuLightField::Range,
+               "invalid physical source values must preserve normalization diagnostics");
+}
+
 bool testShaderLayoutMirror() {
     const std::string shaderPath =
         std::string(MECRAFT_TEST_SOURCE_DIR) +
@@ -255,7 +333,8 @@ bool testShaderLayoutMirror() {
 
 int main() {
     if (!testStableIdentityAndLayout() || !testPhysicalUnitNormalization() ||
-        !testStructuredErrors() || !testShaderLayoutMirror()) {
+        !testStructuredErrors() || !testAnalyticLightInstantiation() ||
+        !testShaderLayoutMirror()) {
         return 1;
     }
     std::cout << "[gpu_light_contract_test] PASS\n";

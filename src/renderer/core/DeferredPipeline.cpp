@@ -656,7 +656,8 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
     bool clusteredLightingGraphPrepared = false;
     const auto failGraphSetup = [&]() {
         if (clusteredLightingGraphPrepared) {
-            m_clusteredLightingPass->finishGraphExecution(false);
+            m_clusteredLightingPass->finishGraphExecution(
+                false, RhiSubmissionToken{});
             clusteredLightingGraphPrepared = false;
         }
         if (volumetricGraphPrepared) {
@@ -2224,7 +2225,8 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
         m_hiZPass->finishGraphExecution(executed.succeeded());
     }
     if (clusteredLightingGraphPrepared) {
-        m_clusteredLightingPass->finishGraphExecution(executed.succeeded());
+        m_clusteredLightingPass->finishGraphExecution(
+            executed.succeeded(), executed.completionToken());
     }
     if (executed.succeeded()) {
         commitDeferredHistoryState();
