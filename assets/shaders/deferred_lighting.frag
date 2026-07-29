@@ -195,6 +195,7 @@ layout(std140, binding = 20) uniform DeferredLightingParams {
 #define uRainWetSurfacesEnabled pFlags4.w
 #define uRainSurfaceRipplesEnabled pFlags5.x
 #define uCsmCascadeCount pFlags5.y
+#define uClusterActiveLightCount pFlags5.z
 #define uClusterGrid pClusterGrid
 #define uClusterDepth pClusterDepth
 #define uClusterRenderExtent pClusterRenderExtent
@@ -738,26 +739,28 @@ void main() {
     vec3 clusteredShadowResourceCoordinate = vec3(0.0);
     float clusteredShadowVisibility = 1.0;
 #ifdef MECRAFT_CLUSTERED_LIGHTING
-    bool clusteredBuildValid;
-    float clusteredViewDepth = abs(
-        (uViewProj * vec4(worldPos, 1.0)).w);
-    ClusteredSurfaceLighting clusteredLighting =
-        evaluateClusteredSurfaceLighting(
-            vClipUv, clusteredViewDepth, uClusterGrid,
-            uClusterRenderExtent, uClusterDepth,
-            worldPos - uCameraPos, normal, viewDir,
-            specularF0, specularF90, roughness,
-            clusteredBuildValid);
-    if (!clusteredBuildValid) {
-        FragColor = vec4(1.0, 0.0, 1.0, 1.0);
-        return;
+    if (uClusterActiveLightCount > 0) {
+        bool clusteredBuildValid;
+        float clusteredViewDepth = abs(
+            (uViewProj * vec4(worldPos, 1.0)).w);
+        ClusteredSurfaceLighting clusteredLighting =
+            evaluateClusteredSurfaceLighting(
+                vClipUv, clusteredViewDepth, uClusterGrid,
+                uClusterRenderExtent, uClusterDepth,
+                worldPos - uCameraPos, normal, viewDir,
+                specularF0, specularF90, roughness,
+                clusteredBuildValid);
+        if (!clusteredBuildValid) {
+            FragColor = vec4(1.0, 0.0, 1.0, 1.0);
+            return;
+        }
+        clusteredDiffuse = clusteredLighting.diffuse;
+        clusteredSpecular = clusteredLighting.specular;
+        clusteredShadowLightId = clusteredLighting.shadowLightId;
+        clusteredShadowResourceCoordinate =
+            clusteredLighting.shadowResourceCoordinate;
+        clusteredShadowVisibility = clusteredLighting.shadowVisibility;
     }
-    clusteredDiffuse = clusteredLighting.diffuse;
-    clusteredSpecular = clusteredLighting.specular;
-    clusteredShadowLightId = clusteredLighting.shadowLightId;
-    clusteredShadowResourceCoordinate =
-        clusteredLighting.shadowResourceCoordinate;
-    clusteredShadowVisibility = clusteredLighting.shadowVisibility;
 #endif
     // === DerivativeMain lighting order ===
     // Reference: deferred5.fsh main() — sceneData starts at 0

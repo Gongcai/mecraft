@@ -1,7 +1,7 @@
 #ifndef MECRAFT_TEXTURE_2D_LIBRARY_H
 #define MECRAFT_TEXTURE_2D_LIBRARY_H
 
-#include "renderer/rhi/RhiHandles.h"
+#include "renderer/rhi/RhiResources.h"
 
 #include <cstdint>
 #include <string>
@@ -27,7 +27,9 @@ public:
     RhiTextureHandle load(const std::string& name,
                           const std::string& path,
                           bool srgb = false,
-                          bool flipVertically = false);
+                          bool flipVertically = false,
+                          RhiTextureQueueSharing queueSharing =
+                              RhiTextureQueueSharing::Exclusive);
 
     [[nodiscard]] RhiTextureHandle getHandle(const std::string& name) const;
 

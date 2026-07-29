@@ -329,7 +329,9 @@ bool DeferredRenderTargets::createGBufferTextures() {
     const auto createTexture = [this](const char* debugName,
                                       const RhiTextureFormat format,
                                       const RhiTextureUsageFlags usage,
-                                      RhiTextureHandle& handle) {
+                                      RhiTextureHandle& handle,
+                                      const RhiTextureQueueSharing
+                                          queueSharing) {
         RhiTextureDesc desc;
         desc.debugName = debugName;
         desc.memoryCategory = RhiMemoryCategory::GBufferHistory;
@@ -341,6 +343,7 @@ bool DeferredRenderTargets::createGBufferTextures() {
         desc.mipLevels = 1u;
         desc.sampleCount = 1u;
         desc.usage = usage;
+        desc.queueSharing = queueSharing;
         handle = m_rhiDevice->createTexture(desc, nullptr);
         return handle.isValid();
     };
@@ -356,14 +359,32 @@ bool DeferredRenderTargets::createGBufferTextures() {
         rhiFlag(RhiTextureUsage::TransferSrc) |
         rhiFlag(RhiTextureUsage::TransferDst);
 
-    if (!createTexture("DeferredTargets.GBufferAlbedo", RhiTextureFormat::Rgba8Unorm, colorUsage, m_gAlbedoHandle) ||
-        !createTexture("DeferredTargets.GBufferNormalAo", RhiTextureFormat::Rgb10A2Unorm, colorUsage, m_gNormalAoHandle) ||
-        !createTexture("DeferredTargets.GBufferVoxelLight", RhiTextureFormat::Rg8Unorm, colorUsage, m_gVoxelLightHandle) ||
-        !createTexture("DeferredTargets.GBufferMaterial", RhiTextureFormat::Rgba8Unorm, colorUsage, m_gMaterialHandle) ||
-        !createTexture("DeferredTargets.GBufferMaterialAux", RhiTextureFormat::Rgba8Unorm, colorUsage, m_gMaterialAuxHandle) ||
-        !createTexture("DeferredTargets.GBufferF0Metallic", RhiTextureFormat::Rgba8Unorm, colorUsage, m_gF0MetallicHandle) ||
-        !createTexture("DeferredTargets.GBufferObjectMaterialId", RhiTextureFormat::Rg32Uint, colorUsage, m_gObjectMaterialIdHandle) ||
-        !createTexture("DeferredTargets.GBufferDepth", RhiTextureFormat::Depth32Float, depthUsage, m_gDepthHandle)) {
+    if (!createTexture("DeferredTargets.GBufferAlbedo",
+                       RhiTextureFormat::Rgba8Unorm, colorUsage,
+                       m_gAlbedoHandle, RhiTextureQueueSharing::Exclusive) ||
+        !createTexture("DeferredTargets.GBufferNormalAo",
+                       RhiTextureFormat::Rgb10A2Unorm, colorUsage,
+                       m_gNormalAoHandle, RhiTextureQueueSharing::Exclusive) ||
+        !createTexture("DeferredTargets.GBufferVoxelLight",
+                       RhiTextureFormat::Rg8Unorm, colorUsage,
+                       m_gVoxelLightHandle, RhiTextureQueueSharing::Exclusive) ||
+        !createTexture("DeferredTargets.GBufferMaterial",
+                       RhiTextureFormat::Rgba8Unorm, colorUsage,
+                       m_gMaterialHandle, RhiTextureQueueSharing::Exclusive) ||
+        !createTexture("DeferredTargets.GBufferMaterialAux",
+                       RhiTextureFormat::Rgba8Unorm, colorUsage,
+                       m_gMaterialAuxHandle, RhiTextureQueueSharing::Exclusive) ||
+        !createTexture("DeferredTargets.GBufferF0Metallic",
+                       RhiTextureFormat::Rgba8Unorm, colorUsage,
+                       m_gF0MetallicHandle, RhiTextureQueueSharing::Exclusive) ||
+        !createTexture("DeferredTargets.GBufferObjectMaterialId",
+                       RhiTextureFormat::Rg32Uint, colorUsage,
+                       m_gObjectMaterialIdHandle,
+                       RhiTextureQueueSharing::Exclusive) ||
+        !createTexture("DeferredTargets.GBufferDepth",
+                       RhiTextureFormat::Depth32Float, depthUsage,
+                       m_gDepthHandle,
+                       RhiTextureQueueSharing::GraphicsComputeConcurrent)) {
         destroyGBufferTextures();
         return false;
     }
@@ -524,6 +545,8 @@ bool DeferredRenderTargets::createAtmosphereTextures() {
                      rhiFlag(RhiTextureUsage::ColorAttachment) |
                      rhiFlag(RhiTextureUsage::TransferSrc) |
                      rhiFlag(RhiTextureUsage::TransferDst) | extraUsage;
+        desc.queueSharing =
+            RhiTextureQueueSharing::GraphicsComputeConcurrent;
         handle = m_rhiDevice->createTexture(desc, nullptr);
         return handle.isValid();
     };

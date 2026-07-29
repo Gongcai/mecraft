@@ -281,7 +281,10 @@ bool DeferredLightingPass::execute(RhiCommandList& commandList,
                                settings.weather.rainLinesEnabled ? 1 : 0);
     params.flags5 = glm::ivec4(settings.weather.surfaceRipplesEnabled ? 1 : 0,
                                shadow::ShadowRenderer::CASCADE_COUNT,
-                               0,
+                               clusteredLightingActive
+                                   ? static_cast<int>(
+                                         m_clusteredLightingPass->activeLightCount())
+                                   : 0,
                                0);
     if (clusteredLightingActive) {
         const renderer::contracts::ClusterGrid& clusterGrid =

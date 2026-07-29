@@ -22,6 +22,20 @@ namespace {
   return access == RgAccessType::Write || access == RgAccessType::ReadWrite;
 }
 
+[[nodiscard]] bool textureQueuesShareConcurrently(
+    const RhiTextureDesc &desc, const RhiQueueType lhs,
+    const RhiQueueType rhs) {
+  if (desc.queueSharing !=
+      RhiTextureQueueSharing::GraphicsComputeConcurrent) {
+    return false;
+  }
+  const auto isSharedQueue = [](const RhiQueueType queue) {
+    return queue == RhiQueueType::Graphics ||
+           queue == RhiQueueType::Compute;
+  };
+  return isSharedQueue(lhs) && isSharedQueue(rhs);
+}
+
 [[nodiscard]] bool textureStateAcceptsAccess(const RhiResourceState state,
                                              const RgAccessType access) {
   switch (state) {
@@ -246,7 +260,8 @@ singleSubresourceRange(const uint32_t mip, const uint32_t layer,
          lhs.depthOrLayers == rhs.depthOrLayers &&
          lhs.mipLevels == rhs.mipLevels && lhs.sampleCount == rhs.sampleCount &&
          lhs.usage == rhs.usage &&
-         lhs.memoryCategory == rhs.memoryCategory;
+         lhs.memoryCategory == rhs.memoryCategory &&
+         lhs.queueSharing == rhs.queueSharing;
 }
 
 [[nodiscard]] bool sameBufferDesc(const RhiBufferDesc &lhs,
@@ -816,6 +831,7 @@ uint64_t RenderGraph::computeStructuralFingerprint() const {
     hasher.mixValue(record.desc.mipLevels);
     hasher.mixValue(record.desc.sampleCount);
     hasher.mixValue(record.desc.usage);
+    hasher.mixValue(record.desc.queueSharing);
     hasher.mixValue(record.initialState);
     hasher.mixValue(record.finalState);
     hasher.mixValue(record.initialQueue);
@@ -965,11 +981,21 @@ RgCompileResult RenderGraph::compile() {
           }
         }
         for (const PriorAccess &candidate : prior) {
+          const RhiQueueType candidateQueue =
+              m_passes[candidate.pass].queue;
+          const RhiQueueType currentQueue = m_passes[passIndex].queue;
+          const bool queueChanged = candidateQueue != currentQueue;
+          const bool concurrentRead =
+              queueChanged &&
+              textureQueuesShareConcurrently(texture.desc, candidateQueue,
+                                              currentQueue) &&
+              candidate.access.state == access.state &&
+              !includesWrite(candidate.access.access) &&
+              !includesWrite(access.access);
           if (textureRangesOverlap(candidate.range, range) &&
               (includesWrite(candidate.access.access) ||
                includesWrite(access.access) ||
-               m_passes[candidate.pass].queue !=
-                   m_passes[passIndex].queue)) {
+               (queueChanged && !concurrentRead))) {
             addUniqueEdge(edges, dependencies, candidate.pass, passIndex);
           }
         }
@@ -1159,15 +1185,19 @@ RgCompileResult RenderGraph::compile() {
           const bool hazard =
               current.accessed && (includesWrite(current.lastAccess) ||
                                    includesWrite(access.access));
-          if (current.accessed && current.queue != pass.queue &&
+          const bool ownershipTransition =
+              current.state != RhiResourceState::Undefined &&
+              current.queue != pass.queue &&
+              !textureQueuesShareConcurrently(texture.desc, current.queue,
+                                              pass.queue);
+          if (current.accessed && ownershipTransition &&
               current.lastPass < m_compiledPasses.size()) {
             m_compiledPasses[current.lastPass].releaseTextureBarriers.push_back(
                 {access.texture, current.state, access.state,
                  singleSubresourceRange(mip, layer, range.aspect),
                  current.queue, pass.queue});
           }
-          if (current.state != access.state || current.queue != pass.queue ||
-              hazard) {
+          if (current.state != access.state || ownershipTransition || hazard) {
             compiled.textureBarriers.push_back(
                 {access.texture, current.state, access.state,
                  singleSubresourceRange(mip, layer, range.aspect),
@@ -1226,8 +1256,11 @@ RgCompileResult RenderGraph::compile() {
       for (uint32_t layer = 0u; layer < layerCount; ++layer) {
         const TextureState &current =
             textureStates[index][mip * layerCount + layer];
-        if (current.state == texture.finalState &&
-            current.queue == texture.finalQueue)
+        const bool ownershipTransition =
+            current.queue != texture.finalQueue &&
+            !textureQueuesShareConcurrently(texture.desc, current.queue,
+                                            texture.finalQueue);
+        if (current.state == texture.finalState && !ownershipTransition)
           continue;
         const uint32_t sourcePass =
             current.accessed ? current.lastPass
@@ -1243,7 +1276,7 @@ RgCompileResult RenderGraph::compile() {
             sourcePass};
         m_epilogueTextureBarriers.push_back(barrier);
         if (current.state != RhiResourceState::Undefined &&
-            current.queue != texture.finalQueue &&
+            ownershipTransition &&
             sourcePass < m_compiledPasses.size()) {
           m_compiledPasses[sourcePass].releaseTextureBarriers.push_back(
               barrier);
@@ -1846,10 +1879,13 @@ RgExecuteResult RenderGraph::execute(RhiDevice &device,
     const uint32_t sourceFamily = queueFamily(capabilities, runtime.queue);
     const uint32_t destinationFamily =
         queueFamily(capabilities, barrier.destinationQueue);
+    const bool concurrentQueues = textureQueuesShareConcurrently(
+        m_textures[textureIndex].desc, runtime.queue,
+        barrier.destinationQueue);
     const bool ownershipTransfer =
         runtime.state != RhiResourceState::Undefined &&
         runtime.queue != barrier.destinationQueue &&
-        sourceFamily != destinationFamily;
+        sourceFamily != destinationFamily && !concurrentQueues;
     const bool queueTransition =
         runtime.state != RhiResourceState::Undefined &&
         runtime.queue != barrier.destinationQueue;

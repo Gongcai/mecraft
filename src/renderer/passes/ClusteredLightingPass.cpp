@@ -50,6 +50,21 @@ static_assert(sizeof(ClusterFillPushConstants) == 32u);
            std::isfinite(value.z) && std::isfinite(value.w);
 }
 
+[[nodiscard]] bool sameClusterGrid(
+    const renderer::contracts::ClusterGrid& lhs,
+    const renderer::contracts::ClusterGrid& rhs) {
+    return lhs.renderWidth == rhs.renderWidth &&
+           lhs.renderHeight == rhs.renderHeight &&
+           lhs.tileCountX == rhs.tileCountX &&
+           lhs.tileCountY == rhs.tileCountY &&
+           lhs.depthSliceCount == rhs.depthSliceCount &&
+           lhs.clusterCount == rhs.clusterCount &&
+           lhs.nearPlane == rhs.nearPlane &&
+           lhs.farPlane == rhs.farPlane &&
+           lhs.depthLogScale == rhs.depthLogScale &&
+           lhs.depthLogBias == rhs.depthLogBias;
+}
+
 [[nodiscard]] uint64_t alignBufferSize(const uint64_t size) {
     constexpr uint64_t kAlignment = 256u;
     if (size > std::numeric_limits<uint64_t>::max() - (kAlignment - 1u)) {
@@ -102,7 +117,11 @@ bool ClusteredLightingPass::setLights(
     if (!m_inputValid) {
         m_lights.clear();
         m_prepared = false;
+        m_emptyBuildReady = false;
         return false;
+    }
+    if (!m_lights.empty()) {
+        m_emptyBuildReady = false;
     }
     m_prepared = false;
     return true;
@@ -285,6 +304,9 @@ bool ClusteredLightingPass::buildCoverage(const FrameContext& ctx,
         renderWidth, renderHeight, ctx.camera.nearPlane, ctx.camera.farPlane);
     if (!grid.has_value()) {
         return false;
+    }
+    if (!sameClusterGrid(m_grid, *grid)) {
+        m_emptyBuildReady = false;
     }
     m_grid = *grid;
     m_lightBounds.clear();
@@ -496,6 +518,7 @@ bool ClusteredLightingPass::ensureBuffers(RhiDevice& rhiDevice) {
         scratchBytes > m_scanScratchBuffer.capacityBytes ||
         sizeof(uint32_t) * kStatsWordCount > m_statsBuffer.capacityBytes;
     if (buffersGrow) {
+        m_emptyBuildReady = false;
         destroyBuildBindGroups();
     }
 
@@ -781,6 +804,12 @@ RgPassHandle ClusteredLightingPass::addGraphPasses(
     if (!m_prepared || !dependency.isValid()) {
         return {};
     }
+    m_emptyBuildScheduled = false;
+    if (m_lights.empty() && m_emptyBuildReady) {
+        publishEmptyFrameStats();
+        return dependency;
+    }
+    m_emptyBuildScheduled = m_lights.empty();
 
     RenderGraphPassBuilder upload = graph.addPass(
         {"ClusteredLighting.Upload", RgPassType::Copy,
@@ -1043,12 +1072,29 @@ bool ClusteredLightingPass::recordValidateAndReadback(
     return true;
 }
 
+void ClusteredLightingPass::publishEmptyFrameStats() {
+    m_frameStats = {};
+    m_frameStats.valid = true;
+    m_frameStats.clusterCount = m_grid.clusterCount;
+    m_frameStats.indexCapacity = m_indexCapacity;
+}
+
 void ClusteredLightingPass::finishGraphExecution(
     const bool succeeded,
     const RhiSubmissionToken completionToken) {
+    if (!succeeded) {
+        m_emptyBuildReady = false;
+    }
+    const bool emptyBuildScheduled = m_emptyBuildScheduled;
+    m_emptyBuildScheduled = false;
     if (!m_statsReadbackPending) {
+        if (emptyBuildScheduled && succeeded) {
+            m_emptyBuildReady = true;
+            publishEmptyFrameStats();
+        }
         return;
     }
+    bool completionValid = succeeded;
     if (succeeded && completionToken.isValid()) {
         m_statsReadbackWritten[m_pendingStatsReadbackIndex] = true;
         m_statsReadbackTokens[m_pendingStatsReadbackIndex] =
@@ -1057,10 +1103,17 @@ void ClusteredLightingPass::finishGraphExecution(
             (m_pendingStatsReadbackIndex + 1u) % kStatsReadbackRingSize;
     } else if (succeeded) {
         m_gpuBuildFailed = true;
+        completionValid = false;
         MECRAFT_LOG_STREAM(
             std::cerr << "[ClusteredLightingPass] Stats readback submission token is invalid\n");
     }
     m_statsReadbackPending = false;
+    if (emptyBuildScheduled) {
+        m_emptyBuildReady = completionValid;
+        if (m_emptyBuildReady) {
+            publishEmptyFrameStats();
+        }
+    }
 }
 
 void ClusteredLightingPass::destroyBuildBindGroups() {
@@ -1149,6 +1202,8 @@ void ClusteredLightingPass::destroyBuffers() {
     m_pendingStatsReadbackIndex = 0u;
     m_statsReadbackSlotAvailable = true;
     m_statsReadbackPending = false;
+    m_emptyBuildReady = false;
+    m_emptyBuildScheduled = false;
 }
 
 void ClusteredLightingPass::shutdown() {
@@ -1158,6 +1213,8 @@ void ClusteredLightingPass::shutdown() {
     m_rhiDevice = nullptr;
     m_prepared = false;
     m_gpuBuildFailed = false;
+    m_emptyBuildReady = false;
+    m_emptyBuildScheduled = false;
     m_lightBounds.clear();
     m_zeroClusterWords.clear();
     m_scanLevels.clear();

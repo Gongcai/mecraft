@@ -11,7 +11,7 @@
 #include <vector>
 #include "BlockTextureCatalog.h"
 #include "BlockTextureColorProvider.h"
-#include "renderer/rhi/RhiHandles.h"
+#include "renderer/rhi/RhiResources.h"
 #include "TextureAtlas.h"
 
 class RhiDevice;
@@ -36,7 +36,9 @@ public:
     RhiTextureHandle loadTexture2D(const std::string& name,
                                    const std::string& path,
                                    bool srgb = false,
-                                   bool flipVertically = false);
+                                   bool flipVertically = false,
+                                   RhiTextureQueueSharing queueSharing =
+                                       RhiTextureQueueSharing::Exclusive);
     [[nodiscard]] RhiTextureHandle getTexture2DHandle(const std::string& name) const;
 
     // Standalone named textures (non-atlas), e.g. GUI sheets.

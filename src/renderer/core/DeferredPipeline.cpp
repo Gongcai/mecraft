@@ -1338,39 +1338,17 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
         graphTail = velocityPass.handle();
     }
 
-    // Async compute pilot: the cloud raymarch depends only on the depth
-    // buffer, sky capture, and its own history, none of which the upcoming
-    // shadow/SSAO/lighting chain modifies. Declaring it on the compute queue
-    // here splits the graphics batches exactly at the overlap window, so the
-    // raymarch runs concurrently with that raster work. The main graphTail
-    // is deliberately not advanced: downstream cloud consumers are ordered
-    // through their resource reads.
+    const RgPassHandle postGBufferDependency = graphTail;
+
+    // SSAO is the first compute submission because deferred lighting consumes
+    // its result directly. Cloud work is declared after the independent shadow
+    // chain below so it forms a second compute submission and cannot extend the
+    // SSAO completion token that deferred lighting waits on.
     bool cloudGraphAdded = false;
     const bool cloudAsyncCompute = cloudEnabled && m_cloudPass != nullptr &&
         settings.cloud.asyncComputeEnabled &&
         rhiDevice.backend() == RhiBackend::Vulkan &&
         rhiDevice.capabilities().dedicatedComputeQueue;
-    if (cloudAsyncCompute) {
-        CloudPass::GraphResources cloudResources;
-        cloudResources.depth = depth;
-        cloudResources.skyCapture = skyCapture;
-        cloudResources.noise = skyNoise;
-        cloudResources.historyPrevious = historyCloudPrevious;
-        cloudResources.cloud = cloud;
-        const RgPassHandle cloudHandle = m_cloudPass->addGraphPass(
-            m_renderGraph, ctx, settings, targets, cloudResources, graphTail,
-            true);
-        if (!cloudHandle.isValid()) {
-            return failGraphSetup();
-        }
-        cloudGraphPrepared = true;
-        cloudGraphAdded = true;
-    }
-
-    // SSAO joins the async compute window under the same reasoning: it only
-    // needs the GBuffer products and its own history, so it runs on the
-    // compute queue alongside the shadow rasterization ahead. The r8 outputs
-    // additionally require extended storage image formats.
     bool ssaoGraphAdded = false;
     const bool ssaoAsyncCompute = ssaoEnabled && m_ssaoPass != nullptr &&
         settings.ssao.asyncComputeEnabled &&
@@ -1393,7 +1371,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
     if (ssaoAsyncCompute) {
         const RgPassHandle ssaoHandle = m_ssaoPass->addGraphPasses(
             m_renderGraph, ctx, settings.ssao, targets, ssaoResources,
-            graphTail, true);
+            postGBufferDependency, true);
         if (!ssaoHandle.isValid()) {
             return failGraphSetup();
         }
@@ -1414,6 +1392,27 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
         if (!graphTail.isValid()) {
             return failGraphSetup();
         }
+    }
+
+    // The shared Cloud inputs use concurrent graphics/compute image sharing,
+    // so this independent compute submission may overlap deferred lighting
+    // without forcing read-only queue-family ownership transfers. Downstream
+    // cloud consumers are ordered by their read of the Cloud output.
+    if (cloudAsyncCompute) {
+        CloudPass::GraphResources cloudResources;
+        cloudResources.depth = depth;
+        cloudResources.skyCapture = skyCapture;
+        cloudResources.noise = skyNoise;
+        cloudResources.historyPrevious = historyCloudPrevious;
+        cloudResources.cloud = cloud;
+        const RgPassHandle cloudHandle = m_cloudPass->addGraphPass(
+            m_renderGraph, ctx, settings, targets, cloudResources,
+            postGBufferDependency, true);
+        if (!cloudHandle.isValid()) {
+            return failGraphSetup();
+        }
+        cloudGraphPrepared = true;
+        cloudGraphAdded = true;
     }
 
     if (ssaoEnabled && !ssaoGraphAdded) {

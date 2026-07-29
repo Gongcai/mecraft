@@ -220,7 +220,9 @@ bool bootstrapGameResources(ResourceMgr& resourceMgr,
                                            blockTextureNames);
     resourceMgr.loadLightmapTextures(LIGHTMAP_DAY_PATH, LIGHTMAP_NIGHT_PATH);
     resourceMgr.loadColormapTextures(GRASS_TEXTURE_PATH, FOLIAGE_TEXTURE_PATH);
-    resourceMgr.loadTexture2D("shader_noise2d", SHADERPACK_NOISE2D_PATH);
+    resourceMgr.loadTexture2D(
+        "shader_noise2d", SHADERPACK_NOISE2D_PATH, false, false,
+        RhiTextureQueueSharing::GraphicsComputeConcurrent);
     resourceMgr.loadTexture2D("shader_bayer256", SHADERPACK_BAYER256_PATH);
     resourceMgr.loadTexture2D("shader_ripple_normal", SHADERPACK_RIPPLE_NORMAL_PATH);
     resourceMgr.loadTexture2D("shader_ldr_lut", SHADERPACK_LDR_LUT_PATH);

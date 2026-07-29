@@ -177,6 +177,7 @@ private:
     [[nodiscard]] bool recordFinalize(RhiCommandList& commandList) const;
     [[nodiscard]] bool recordFill(RhiCommandList& commandList) const;
     [[nodiscard]] bool recordValidateAndReadback(RhiCommandList& commandList);
+    void publishEmptyFrameStats();
 
     void destroyBuildBindGroups();
     void destroyComputeStage(ComputeStage& stage);
@@ -187,6 +188,8 @@ private:
     bool m_inputValid = true;
     bool m_prepared = false;
     bool m_gpuBuildFailed = false;
+    bool m_emptyBuildReady = false;
+    bool m_emptyBuildScheduled = false;
     std::vector<renderer::contracts::GpuLight> m_lights;
     std::vector<renderer::contracts::GpuClusterLightBounds> m_lightBounds;
     std::vector<uint32_t> m_zeroClusterWords;

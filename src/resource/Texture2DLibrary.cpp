@@ -14,7 +14,9 @@ namespace {
                                                const RhiTextureFormat format,
                                                const int width,
                                                const int height,
-                                               const unsigned char* pixels) {
+                                               const unsigned char* pixels,
+                                               const RhiTextureQueueSharing
+                                                   queueSharing) {
     RhiTextureDesc textureDesc;
     textureDesc.debugName = debugName;
     textureDesc.dimension = RhiTextureDimension::Texture2D;
@@ -27,6 +29,7 @@ namespace {
     textureDesc.usage = rhiFlag(RhiTextureUsage::Sampled) |
                         rhiFlag(RhiTextureUsage::TransferDst);
     textureDesc.memoryCategory = RhiMemoryCategory::Texture;
+    textureDesc.queueSharing = queueSharing;
 
     RhiTextureInitialData initialData;
     initialData.pixels = pixels;
@@ -45,7 +48,9 @@ void Texture2DLibrary::init(RhiDevice& rhiDevice) {
 RhiTextureHandle Texture2DLibrary::load(const std::string& name,
                                         const std::string& path,
                                         const bool srgb,
-                                        const bool flipVertically) {
+                                        const bool flipVertically,
+                                        const RhiTextureQueueSharing
+                                            queueSharing) {
     assert(m_rhiDevice != nullptr);
     const auto existing = m_textures.find(name);
     if (existing != m_textures.end()) {
@@ -72,7 +77,8 @@ RhiTextureHandle Texture2DLibrary::load(const std::string& name,
                                    srgb ? RhiTextureFormat::Rgba8Srgb : RhiTextureFormat::Rgba8Unorm,
                                    width,
                                    height,
-                                   data);
+                                   data,
+                                   queueSharing);
     stbi_image_free(data);
     if (!info.texture.isValid()) {
         MECRAFT_LOG_FPRINTF(stderr, "[Resource] Failed to create texture2D RHI resource '%s': %s\n",
@@ -138,7 +144,8 @@ RhiTextureHandle Texture2DLibrary::loadGui(const std::string& name,
                                    RhiTextureFormat::Rgba8Unorm,
                                    width,
                                    height,
-                                   data);
+                                   data,
+                                   RhiTextureQueueSharing::Exclusive);
     stbi_image_free(data);
     if (!info.texture.isValid()) {
         MECRAFT_LOG_FPRINTF(stderr, "[Resource] Failed to create GUI texture RHI resource '%s': %s\n",

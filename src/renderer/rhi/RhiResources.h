@@ -240,6 +240,15 @@ struct RhiTextureMemoryRequirements {
     uint32_t memoryTypeBits = 0u;
 };
 
+/// Selects the queue-family sharing contract used when a texture is created.
+/// Concurrent graphics/compute textures may be read from both queue families
+/// without queue-family ownership transfers; write hazards still require
+/// explicit Render Graph dependencies and memory barriers.
+enum class RhiTextureQueueSharing {
+    Exclusive,
+    GraphicsComputeConcurrent
+};
+
 struct RhiTextureDesc {
     const char* debugName = nullptr;
     RhiTextureDimension dimension = RhiTextureDimension::Texture2D;
@@ -251,6 +260,7 @@ struct RhiTextureDesc {
     uint32_t sampleCount = 1;
     RhiTextureUsageFlags usage = 0;
     RhiMemoryCategory memoryCategory = RhiMemoryCategory::Unclassified;
+    RhiTextureQueueSharing queueSharing = RhiTextureQueueSharing::Exclusive;
 };
 
 /// Estimates the complete texture storage described by every mip and layer.

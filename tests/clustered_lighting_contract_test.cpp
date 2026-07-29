@@ -178,6 +178,59 @@ bool testReadbackCompletionContract() {
                "the clustered pass must retain the graph completion token");
 }
 
+bool testEmptyLightingSteadyStateContract() {
+    std::string pass;
+    std::string lightingPass;
+    std::string deferred;
+    if (!requireTrue(readProjectFile(
+                         "src/renderer/passes/ClusteredLightingPass.cpp",
+                         pass),
+                     "clustered-light pass source must be readable") ||
+        !requireTrue(readProjectFile(
+                         "src/renderer/passes/DeferredLightingPass.cpp",
+                         lightingPass),
+                     "deferred-light pass source must be readable") ||
+        !requireTrue(readProjectFile(
+                         "assets/shaders/deferred_lighting.frag", deferred),
+                     "deferred-light shader source must be readable")) {
+        return false;
+    }
+
+    const size_t emptySkip = pass.find(
+        "m_lights.empty() && m_emptyBuildReady");
+    const size_t dependencyReturn = emptySkip == std::string::npos
+        ? std::string::npos
+        : pass.find("return dependency;", emptySkip);
+    const size_t uploadPass = pass.find("ClusteredLighting.Upload");
+    const size_t activeLightBranch = deferred.find(
+        "if (uClusterActiveLightCount > 0)");
+    const size_t clusteredEvaluation = deferred.find(
+        "evaluateClusteredSurfaceLighting(");
+    return requireTrue(
+               emptySkip != std::string::npos &&
+                   dependencyReturn != std::string::npos &&
+                   uploadPass != std::string::npos &&
+                   dependencyReturn < uploadPass,
+               "a validated empty build must bypass the complete cluster graph chain") &&
+           requireTrue(
+               pass.find("m_emptyBuildReady = completionValid") !=
+                       std::string::npos &&
+                   pass.find("publishEmptyFrameStats()") !=
+                       std::string::npos,
+               "empty-build reuse must begin only after successful graph submission") &&
+           requireTrue(
+               lightingPass.find(
+                   "m_clusteredLightingPass->activeLightCount()") !=
+                       std::string::npos &&
+                   deferred.find(
+                       "#define uClusterActiveLightCount pFlags5.z") !=
+                       std::string::npos &&
+                   activeLightBranch != std::string::npos &&
+                   clusteredEvaluation != std::string::npos &&
+                   activeLightBranch < clusteredEvaluation,
+               "deferred lighting must bypass clustered buffer queries when no light intersects the view");
+}
+
 bool testComputeShaderContracts() {
     std::string scan;
     std::string count;
@@ -385,6 +438,7 @@ bool testSharedLightingConsumers() {
 int main() {
     if (!testGridAndLogarithmicSlices() || !testCoverageAndCapacity() ||
         !testComputeShaderContracts() || !testReadbackCompletionContract() ||
+        !testEmptyLightingSteadyStateContract() ||
         !testSharedLightingConsumers()) {
         return 1;
     }

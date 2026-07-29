@@ -2131,6 +2131,31 @@ bool fillImageCreateInfo(const RhiTextureDesc& desc, VkImageCreateInfo& imageInf
     imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
     return true;
 }
+
+/// Applies the requested logical queue-sharing contract to one Vulkan image.
+/// @param desc Backend-independent texture description.
+/// @param data Vulkan device state containing the selected queue families.
+/// @param imageInfo Image description updated before creation or measurement.
+/// @param queueFamilies Caller-owned storage retained through the Vulkan call.
+void configureImageQueueSharing(
+    const RhiTextureDesc& desc,
+    const VkRhiDeviceData& data,
+    VkImageCreateInfo& imageInfo,
+    std::array<uint32_t, 2>& queueFamilies) {
+    if (desc.queueSharing !=
+        RhiTextureQueueSharing::GraphicsComputeConcurrent) {
+        return;
+    }
+    queueFamilies[0] = data.queueFamilies.graphics;
+    queueFamilies[1] = data.queueFamilies.compute;
+    if (queueFamilies[0] == queueFamilies[1]) {
+        return;
+    }
+    imageInfo.sharingMode = VK_SHARING_MODE_CONCURRENT;
+    imageInfo.queueFamilyIndexCount =
+        static_cast<uint32_t>(queueFamilies.size());
+    imageInfo.pQueueFamilyIndices = queueFamilies.data();
+}
 } // namespace
 
 RhiTextureHandle VkRhiDevice::createTexture(const RhiTextureDesc& desc,
@@ -2140,6 +2165,8 @@ RhiTextureHandle VkRhiDevice::createTexture(const RhiTextureDesc& desc,
         !fillImageCreateInfo(desc, imageInfo)) {
         return {};
     }
+    std::array<uint32_t, 2> queueFamilies{};
+    configureImageQueueSharing(desc, *m_data, imageInfo, queueFamilies);
     if (initialData != nullptr) {
         if (initialData->pixels == nullptr || initialData->sizeBytes == 0u) {
             return {};
@@ -2189,6 +2216,8 @@ bool VkRhiDevice::getTextureMemoryRequirements(
     if (!m_initialized || !fillImageCreateInfo(desc, imageInfo)) {
         return false;
     }
+    std::array<uint32_t, 2> queueFamilies{};
+    configureImageQueueSharing(desc, *m_data, imageInfo, queueFamilies);
     VkDeviceImageMemoryRequirements query{
         VK_STRUCTURE_TYPE_DEVICE_IMAGE_MEMORY_REQUIREMENTS};
     query.pCreateInfo = &imageInfo;
@@ -2256,6 +2285,8 @@ RhiTextureHandle VkRhiDevice::createPlacedTexture(const RhiTextureDesc& desc,
     if (!fillImageCreateInfo(desc, imageInfo)) {
         return {};
     }
+    std::array<uint32_t, 2> queueFamilies{};
+    configureImageQueueSharing(desc, *m_data, imageInfo, queueFamilies);
     // A block accepted at allocation time may still be too small or of an
     // incompatible type for this description; re-check before binding.
     VkDeviceImageMemoryRequirements query{

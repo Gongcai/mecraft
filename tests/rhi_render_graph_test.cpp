@@ -476,6 +476,112 @@ bool testCrossQueueReadOwnershipDependency() {
                      "cross-queue read must have a paired destination plan");
 }
 
+bool testConcurrentCrossQueueReads() {
+  RenderGraph graph;
+  RhiTextureDesc desc = colorTextureDesc();
+  desc.queueSharing =
+      RhiTextureQueueSharing::GraphicsComputeConcurrent;
+  const RgTextureHandle texture =
+      graph.importTexture({"ConcurrentSharedRead",
+                           {18u, 4u},
+                           desc,
+                           RhiResourceState::ShaderRead,
+                           RhiResourceState::ShaderRead,
+                           {},
+                           RhiQueueType::Graphics,
+                           RhiQueueType::Graphics});
+  graph.addPass({"GraphicsRead", RgPassType::Graphics,
+                 RhiQueueType::Graphics})
+      .readTexture(texture)
+      .setExecute(executeNoop);
+  graph.addPass({"ComputeRead", RgPassType::Compute,
+                 RhiQueueType::Compute})
+      .readTexture(texture)
+      .setExecute(executeNoop);
+
+  const RgCompileResult result = graph.compile();
+  if (!requireTrue(result.succeeded(), result.message.c_str()))
+    return false;
+  const RgCompiledPass &source = graph.compiledPasses()[0];
+  const RgCompiledPass &destination = graph.compiledPasses()[1];
+  return requireTrue(destination.dependencies.empty(),
+                     "concurrent cross-queue reads must remain independent") &&
+         requireTrue(source.releaseTextureBarriers.empty(),
+                     "concurrent reads must not release queue ownership") &&
+         requireTrue(destination.textureBarriers.empty(),
+                     "concurrent reads in one state need no acquire barrier") &&
+         requireTrue(graph.epilogueTextureBarriers().empty(),
+                     "concurrent reads need no queue-only epilogue");
+}
+
+bool testAsyncLightingCriticalPathIsolation() {
+  RenderGraph graph;
+  RhiTextureDesc sharedDesc = colorTextureDesc();
+  sharedDesc.queueSharing =
+      RhiTextureQueueSharing::GraphicsComputeConcurrent;
+  const RgTextureHandle sharedInput = graph.createTexture(
+      {"SharedLightingInput", sharedDesc});
+  const RgTextureHandle ssaoOutput = graph.createTexture(
+      {"SsaoOutput", colorTextureDesc()});
+  const RgTextureHandle cloudOutput = graph.createTexture(
+      {"CloudOutput", colorTextureDesc()});
+
+  RenderGraphPassBuilder gbuffer = graph.addPass(
+      {"GBuffer", RgPassType::Graphics, RhiQueueType::Graphics});
+  gbuffer.writeTexture(sharedInput, RhiResourceState::RenderTarget)
+      .setExecute(executeNoop);
+
+  RenderGraphPassBuilder ssao = graph.addPass(
+      {"SSAO", RgPassType::Compute, RhiQueueType::Compute});
+  ssao.dependsOn(gbuffer.handle())
+      .readTexture(sharedInput, RhiResourceState::ShaderRead)
+      .writeTexture(ssaoOutput, RhiResourceState::ShaderWrite)
+      .setExecute(executeNoop);
+
+  RenderGraphPassBuilder shadow = graph.addPass(
+      {"Shadow", RgPassType::Graphics, RhiQueueType::Graphics});
+  shadow.dependsOn(gbuffer.handle()).setExecute(executeNoop);
+
+  RenderGraphPassBuilder cloud = graph.addPass(
+      {"Cloud", RgPassType::Compute, RhiQueueType::Compute});
+  cloud.dependsOn(gbuffer.handle())
+      .readTexture(sharedInput, RhiResourceState::ShaderRead)
+      .writeTexture(cloudOutput, RhiResourceState::ShaderWrite)
+      .setExecute(executeNoop);
+
+  graph.addPass(
+           {"Lighting", RgPassType::Graphics, RhiQueueType::Graphics})
+      .dependsOn(shadow.handle())
+      .readTexture(sharedInput, RhiResourceState::ShaderRead)
+      .readTexture(ssaoOutput, RhiResourceState::ShaderRead)
+      .setExecute(executeNoop);
+
+  const RgCompileResult result = graph.compile();
+  if (!requireTrue(result.succeeded(), result.message.c_str()))
+    return false;
+  const auto &batches = graph.submissionBatches();
+  if (!requireTrue(batches.size() == 5u,
+                   "SSAO, shadow, cloud, and lighting must form distinct queue batches")) {
+    return false;
+  }
+  const std::vector<uint32_t> &lightingDependencies = batches[4].dependencies;
+  return requireTrue(
+             std::find(lightingDependencies.begin(),
+                       lightingDependencies.end(), 1u) !=
+                 lightingDependencies.end(),
+             "lighting must wait for the SSAO compute batch") &&
+         requireTrue(
+             std::find(lightingDependencies.begin(),
+                       lightingDependencies.end(), 2u) !=
+                 lightingDependencies.end(),
+             "lighting must retain its graphics shadow dependency") &&
+         requireTrue(
+             std::find(lightingDependencies.begin(),
+                       lightingDependencies.end(), 3u) ==
+                 lightingDependencies.end(),
+             "independent cloud compute must not extend lighting's critical path");
+}
+
 bool testQueueOnlyEpiloguePlanning() {
   RenderGraph graph;
   RhiBufferDesc desc;
@@ -602,6 +708,8 @@ int main() {
       testDuplicateAccessValidation() && testResetInvalidatesHandles() &&
       testUndefinedImportedReadValidation() &&
       testCrossQueueReadOwnershipDependency() &&
+      testConcurrentCrossQueueReads() &&
+      testAsyncLightingCriticalPathIsolation() &&
       testQueueOnlyEpiloguePlanning() &&
       testBatchSplitForLateQueueDependency() &&
       testSubmissionBatchPassLimit();

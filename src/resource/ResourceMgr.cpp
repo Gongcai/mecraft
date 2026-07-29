@@ -85,8 +85,11 @@ RhiCommandListPool& ResourceMgr::commandListPool() {
 RhiTextureHandle ResourceMgr::loadTexture2D(const std::string& name,
                                             const std::string& path,
                                             const bool srgb,
-                                            const bool flipVertically) {
-    return m_impl->texture2D.load(name, path, srgb, flipVertically);
+                                            const bool flipVertically,
+                                            const RhiTextureQueueSharing
+                                                queueSharing) {
+    return m_impl->texture2D.load(name, path, srgb, flipVertically,
+                                  queueSharing);
 }
 
 RhiTextureHandle ResourceMgr::getTexture2DHandle(const std::string& name) const {
