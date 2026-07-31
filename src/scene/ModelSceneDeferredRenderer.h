@@ -4,10 +4,12 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include <glm/glm.hpp>
 
 #include "renderer/core/FrameContext.h"
+#include "renderer/passes/ReflectionProbeCapturePass.h"
 #include "renderer/rhi/RhiHandles.h"
 #include "renderer/rhi/RhiTypes.h"
 
@@ -49,6 +51,14 @@ public:
                               float farPlane,
                               float verticalFovDegrees,
                               const RenderFrameClock& frameClock);
+
+    /// Publishes the model scene's complete reflection-probe source snapshot.
+    /// @param renderer Scene callback that records one HDR cubemap face.
+    /// @param sources Stable model-scene probe placement and capture revisions.
+    /// @return True when the deferred capture pass accepted the configuration.
+    [[nodiscard]] bool configureReflectionProbeCapture(
+        IReflectionProbeCaptureRenderer& renderer,
+        std::vector<ReflectionProbeCaptureSource> sources);
 
     /// Changes the standalone environment time and invalidates temporal history.
     /// @param timeOfDaySeconds Time within the 1200-second world day.

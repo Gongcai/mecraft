@@ -85,6 +85,15 @@ struct StaticMeshPreviewPushConstants {
     glm::mat4 model{1.0f};
 };
 
+struct StaticMeshProbeCaptureFrameParams {
+    glm::mat4 viewProjection{1.0f};
+    glm::vec4 probePosition{0.0f, 0.0f, 0.0f, 1.0f};
+    glm::vec4 sunDirection{0.0f, 1.0f, 0.0f, 0.0f};
+    glm::vec4 sunColor{1.0f};
+    glm::vec4 ambientColor{0.2f, 0.2f, 0.2f, 0.0f};
+    glm::uvec4 lightCount{0u};
+};
+
 struct TextureCacheKey {
     const cgltf_image* image = nullptr;
     bool srgb = false;
@@ -123,6 +132,8 @@ static_assert(sizeof(StaticMeshMaterialParams) == 272u,
               "Static mesh material parameters must match the std140 shader block");
 static_assert(sizeof(StaticMeshPreviewPushConstants) == 128u,
               "Static mesh preview push constants must fit the Vulkan minimum limit");
+static_assert(sizeof(StaticMeshProbeCaptureFrameParams) == 144u,
+              "Static mesh probe-capture parameters must match the std140 block");
 
 [[nodiscard]] bool finiteVector(const glm::vec3& value) {
     return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
@@ -672,6 +683,10 @@ bool StaticMeshRenderer::createPipelineResources() {
         "assets/shaders/static_mesh_preview_rhi.vert");
     const auto previewFragmentSource = renderer::rhi::loadShaderSource(
         "assets/shaders/static_mesh_preview_rhi.frag");
+    const auto probeCaptureVertexSource = renderer::rhi::loadShaderSource(
+        "assets/shaders/static_mesh_probe_capture_rhi.vert");
+    const auto probeCaptureFragmentSource = renderer::rhi::loadShaderSource(
+        "assets/shaders/static_mesh_probe_capture_rhi.frag");
     const auto transparentVertexSource = renderer::rhi::loadShaderSource(
         "assets/shaders/static_mesh_transparent_rhi.vert");
     renderer::rhi::RhiShaderSourceOptions transparentOptions;
@@ -685,6 +700,7 @@ bool StaticMeshRenderer::createPipelineResources() {
     if (!gbufferVertexSource || !gbufferFragmentSource ||
         !shadowVertexSource || !shadowFragmentSource ||
         !previewVertexSource || !previewFragmentSource ||
+        !probeCaptureVertexSource || !probeCaptureFragmentSource ||
         !transparentVertexSource || !transparentFragmentSource) {
         setError("failed to load static mesh shaders");
         return false;
@@ -717,11 +733,19 @@ bool StaticMeshRenderer::createPipelineResources() {
     m_transparentFragmentShader = createShader(
         "StaticMesh.Transparent.Fragment", RhiShaderStage::Fragment,
         *transparentFragmentSource);
+    m_probeCaptureVertexShader = createShader(
+        "StaticMesh.ProbeCapture.Vertex", RhiShaderStage::Vertex,
+        *probeCaptureVertexSource);
+    m_probeCaptureFragmentShader = createShader(
+        "StaticMesh.ProbeCapture.Fragment", RhiShaderStage::Fragment,
+        *probeCaptureFragmentSource);
     if (!m_gbufferVertexShader.isValid() || !m_gbufferFragmentShader.isValid() ||
         !m_shadowVertexShader.isValid() || !m_shadowFragmentShader.isValid() ||
         !m_previewVertexShader.isValid() || !m_previewFragmentShader.isValid() ||
         !m_transparentVertexShader.isValid() ||
-        !m_transparentFragmentShader.isValid()) {
+        !m_transparentFragmentShader.isValid() ||
+        !m_probeCaptureVertexShader.isValid() ||
+        !m_probeCaptureFragmentShader.isValid()) {
         setError("failed to compile static mesh shaders");
         return false;
     }
@@ -782,6 +806,24 @@ bool StaticMeshRenderer::createPipelineResources() {
         return false;
     }
 
+    RhiBindGroupLayoutDesc probeCaptureLayoutDesc;
+    probeCaptureLayoutDesc.debugName =
+        "StaticMesh.ProbeCapture.BindGroupLayout";
+    probeCaptureLayoutDesc.entries.push_back({
+        0u, RhiBindingType::UniformBuffer,
+        rhiFlag(RhiShaderStage::Vertex) |
+            rhiFlag(RhiShaderStage::Fragment),
+        1u});
+    probeCaptureLayoutDesc.entries.push_back({
+        1u, RhiBindingType::StorageBuffer,
+        rhiFlag(RhiShaderStage::Fragment), 1u});
+    m_probeCaptureBindGroupLayout =
+        m_rhiDevice->createBindGroupLayout(probeCaptureLayoutDesc);
+    if (!m_probeCaptureBindGroupLayout.isValid()) {
+        setError("failed to create static mesh probe-capture bind group layout");
+        return false;
+    }
+
     RhiPipelineLayoutDesc pipelineLayoutDesc;
     pipelineLayoutDesc.debugName = "StaticMesh.GBuffer.PipelineLayout";
     pipelineLayoutDesc.bindGroupLayouts.push_back(m_bindGroupLayout);
@@ -794,8 +836,16 @@ bool StaticMeshRenderer::createPipelineResources() {
     pipelineLayoutDesc.debugName = "StaticMesh.Preview.PipelineLayout";
     pipelineLayoutDesc.pushConstantBytes = sizeof(StaticMeshPreviewPushConstants);
     m_previewPipelineLayout = m_rhiDevice->createPipelineLayout(pipelineLayoutDesc);
+    pipelineLayoutDesc.debugName = "StaticMesh.ProbeCapture.PipelineLayout";
+    pipelineLayoutDesc.bindGroupLayouts = {
+        m_bindGroupLayout, m_probeCaptureBindGroupLayout};
+    pipelineLayoutDesc.pushConstantBytes = sizeof(glm::mat4);
+    pipelineLayoutDesc.pushConstantStages = rhiFlag(RhiShaderStage::Vertex);
+    m_probeCapturePipelineLayout =
+        m_rhiDevice->createPipelineLayout(pipelineLayoutDesc);
     if (!m_gbufferPipelineLayout.isValid() || !m_shadowPipelineLayout.isValid() ||
-        !m_previewPipelineLayout.isValid()) {
+        !m_previewPipelineLayout.isValid() ||
+        !m_probeCapturePipelineLayout.isValid()) {
         setError("failed to create static mesh pipeline layouts");
         return false;
     }
@@ -881,6 +931,45 @@ bool StaticMeshRenderer::createPipelineResources() {
     pipelineDesc.raster.cullMode = RhiCullMode::None;
     m_previewTransparentDoubleSidedPipeline =
         m_rhiDevice->createGraphicsPipeline(pipelineDesc);
+
+    pipelineDesc.debugName = "StaticMesh.ProbeCapture.Pipeline";
+    pipelineDesc.vertexShader = m_probeCaptureVertexShader;
+    pipelineDesc.fragmentShader = m_probeCaptureFragmentShader;
+    pipelineDesc.layout = m_probeCapturePipelineLayout;
+    pipelineDesc.raster.cullMode = RhiCullMode::Back;
+    pipelineDesc.colorFormats = {RhiTextureFormat::Rgba16Float};
+    pipelineDesc.depthFormat = RhiTextureFormat::Depth32Float;
+    pipelineDesc.depthStencil.depthTestEnabled = true;
+    pipelineDesc.depthStencil.depthWriteEnabled = true;
+    pipelineDesc.depthStencil.depthCompare = RhiCompareOp::Less;
+    pipelineDesc.blend.attachments.resize(1u);
+    m_probeCapturePipeline =
+        m_rhiDevice->createGraphicsPipeline(pipelineDesc);
+    pipelineDesc.debugName =
+        "StaticMesh.ProbeCapture.DoubleSidedPipeline";
+    pipelineDesc.raster.cullMode = RhiCullMode::None;
+    m_probeCaptureDoubleSidedPipeline =
+        m_rhiDevice->createGraphicsPipeline(pipelineDesc);
+
+    RhiBlendAttachmentState probeCaptureBlend;
+    probeCaptureBlend.blendEnabled = true;
+    probeCaptureBlend.srcColor = RhiBlendFactor::One;
+    probeCaptureBlend.dstColor = RhiBlendFactor::OneMinusSrcAlpha;
+    probeCaptureBlend.srcAlpha = RhiBlendFactor::One;
+    probeCaptureBlend.dstAlpha = RhiBlendFactor::OneMinusSrcAlpha;
+    pipelineDesc.debugName =
+        "StaticMesh.ProbeCapture.TransparentPipeline";
+    pipelineDesc.raster.cullMode = RhiCullMode::Back;
+    pipelineDesc.depthStencil.depthWriteEnabled = false;
+    pipelineDesc.depthStencil.depthCompare = RhiCompareOp::LessOrEqual;
+    pipelineDesc.blend.attachments = {probeCaptureBlend};
+    m_probeCaptureTransparentPipeline =
+        m_rhiDevice->createGraphicsPipeline(pipelineDesc);
+    pipelineDesc.debugName =
+        "StaticMesh.ProbeCapture.TransparentDoubleSidedPipeline";
+    pipelineDesc.raster.cullMode = RhiCullMode::None;
+    m_probeCaptureTransparentDoubleSidedPipeline =
+        m_rhiDevice->createGraphicsPipeline(pipelineDesc);
     if (m_rhiDevice->backend() != RhiBackend::Vulkan &&
         !ensureTransparentPipelines({})) {
         setError("failed to create static mesh transparent pipelines");
@@ -890,7 +979,11 @@ bool StaticMeshRenderer::createPipelineResources() {
         !m_shadowPipeline.isValid() || !m_shadowDoubleSidedPipeline.isValid() ||
         !m_previewPipeline.isValid() || !m_previewDoubleSidedPipeline.isValid() ||
         !m_previewTransparentPipeline.isValid() ||
-        !m_previewTransparentDoubleSidedPipeline.isValid()) {
+        !m_previewTransparentDoubleSidedPipeline.isValid() ||
+        !m_probeCapturePipeline.isValid() ||
+        !m_probeCaptureDoubleSidedPipeline.isValid() ||
+        !m_probeCaptureTransparentPipeline.isValid() ||
+        !m_probeCaptureTransparentDoubleSidedPipeline.isValid()) {
         setError("failed to create static mesh graphics pipelines");
         return false;
     }
@@ -906,7 +999,15 @@ bool StaticMeshRenderer::createPipelineResources() {
     const StaticMeshFrameParams frameParams{};
     m_frameUniformBuffer = m_rhiDevice->createBuffer(
         frameBufferDesc, &frameParams, sizeof(frameParams));
-    if (!m_frameUniformBuffer.isValid()) {
+    frameBufferDesc.debugName =
+        "StaticMesh.ProbeCapture.FrameUniformBuffer";
+    frameBufferDesc.size = sizeof(StaticMeshProbeCaptureFrameParams);
+    const StaticMeshProbeCaptureFrameParams probeCaptureParams{};
+    m_probeCaptureFrameUniformBuffer = m_rhiDevice->createBuffer(
+        frameBufferDesc, &probeCaptureParams, sizeof(probeCaptureParams));
+    if (!m_frameUniformBuffer.isValid() ||
+        !m_probeCaptureFrameUniformBuffer.isValid() ||
+        !ensureReflectionProbeCaptureLightCapacity(1u)) {
         setError("failed to create static mesh frame uniform buffer");
         return false;
     }
@@ -2019,6 +2120,183 @@ bool StaticMeshRenderer::hasTransparentPrimitives() const {
         });
 }
 
+bool StaticMeshRenderer::rebuildReflectionProbeCaptureBindGroup() {
+    if (m_rhiDevice == nullptr || !m_probeCaptureBindGroupLayout.isValid() ||
+        !m_probeCaptureFrameUniformBuffer.isValid() ||
+        !m_probeCaptureLightBuffer.isValid() ||
+        m_probeCaptureLightCapacity == 0u) {
+        return false;
+    }
+    RhiBindGroupDesc desc;
+    desc.layout = m_probeCaptureBindGroupLayout;
+    RhiBindGroupEntry frameEntry;
+    frameEntry.binding = 0u;
+    frameEntry.resource.buffer = {
+        m_probeCaptureFrameUniformBuffer, 0u,
+        sizeof(StaticMeshProbeCaptureFrameParams)};
+    desc.entries.push_back(frameEntry);
+    RhiBindGroupEntry lightEntry;
+    lightEntry.binding = 1u;
+    lightEntry.resource.buffer = {
+        m_probeCaptureLightBuffer, 0u,
+        static_cast<uint64_t>(m_probeCaptureLightCapacity) *
+            sizeof(renderer::contracts::GpuLight)};
+    desc.entries.push_back(lightEntry);
+    const RhiBindGroupHandle bindGroup = m_rhiDevice->createBindGroup(desc);
+    if (!bindGroup.isValid()) {
+        return false;
+    }
+    if (m_probeCaptureBindGroup.isValid()) {
+        m_rhiDevice->destroyBindGroup(m_probeCaptureBindGroup);
+    }
+    m_probeCaptureBindGroup = bindGroup;
+    return true;
+}
+
+bool StaticMeshRenderer::ensureReflectionProbeCaptureLightCapacity(
+    const uint32_t lightCount) {
+    if (m_rhiDevice == nullptr ||
+        lightCount > renderer::contracts::kClusterMaxLightCount) {
+        return false;
+    }
+    const uint32_t requiredCapacity = std::max(lightCount, 1u);
+    if (m_probeCaptureLightCapacity >= requiredCapacity &&
+        m_probeCaptureLightBuffer.isValid() &&
+        m_probeCaptureBindGroup.isValid()) {
+        return true;
+    }
+    RhiBufferDesc desc;
+    desc.debugName = "StaticMesh.ProbeCapture.LightBuffer";
+    desc.size = static_cast<uint64_t>(requiredCapacity) *
+        sizeof(renderer::contracts::GpuLight);
+    desc.usage = rhiFlag(RhiBufferUsage::Storage) |
+                 rhiFlag(RhiBufferUsage::TransferDst);
+    desc.memoryUsage = RhiMemoryUsage::GpuOnly;
+    desc.initialState = RhiResourceState::StorageBuffer;
+    desc.memoryCategory = RhiMemoryCategory::SceneData;
+    const RhiBufferHandle previousBuffer = m_probeCaptureLightBuffer;
+    const uint32_t previousCapacity = m_probeCaptureLightCapacity;
+    m_probeCaptureLightBuffer = m_rhiDevice->createBuffer(desc, nullptr, 0u);
+    m_probeCaptureLightCapacity = requiredCapacity;
+    if (!m_probeCaptureLightBuffer.isValid() ||
+        !rebuildReflectionProbeCaptureBindGroup()) {
+        if (m_probeCaptureLightBuffer.isValid()) {
+            m_rhiDevice->destroyBuffer(m_probeCaptureLightBuffer);
+        }
+        m_probeCaptureLightBuffer = previousBuffer;
+        m_probeCaptureLightCapacity = previousCapacity;
+        return false;
+    }
+    if (previousBuffer.isValid()) {
+        m_rhiDevice->destroyBuffer(previousBuffer);
+    }
+    return true;
+}
+
+bool StaticMeshRenderer::prepareReflectionProbeCapture(
+    RhiCommandList& commandList,
+    const glm::mat4& viewProjection,
+    const glm::vec3& probePosition,
+    const FrameContext& context,
+    const std::vector<renderer::contracts::SceneLight>& lights) {
+    if (!m_framePrepared || !m_probeCaptureFrameUniformBuffer.isValid() ||
+        !m_probeCaptureLightBuffer.isValid() ||
+        !m_probeCaptureBindGroup.isValid() ||
+        lights.size() > m_probeCaptureLightCapacity) {
+        return false;
+    }
+    StaticMeshProbeCaptureFrameParams params;
+    params.viewProjection = viewProjection;
+    params.probePosition = glm::vec4(probePosition, 1.0f);
+    const bool moonDominant =
+        context.skyColors.moonVisibility > context.skyColors.sunVisibility;
+    params.sunDirection = glm::vec4(
+        moonDominant ? context.skyColors.moonDirection
+                     : context.skyColors.sunDirection,
+        0.0f);
+    params.sunColor = glm::vec4(
+        (moonDominant ? context.skyColors.moonLightColor
+                      : context.skyColors.sunLightColor) * context.skyIntensity,
+        1.0f);
+    params.ambientColor = glm::vec4(
+        context.skyColors.skyAmbientColor * context.skyIntensity, 0.0f);
+    params.lightCount.x = static_cast<uint32_t>(lights.size());
+    commandList.bufferBarrier({
+        m_probeCaptureFrameUniformBuffer, RhiResourceState::UniformBuffer,
+        RhiResourceState::TransferDst});
+    commandList.updateBuffer(
+        m_probeCaptureFrameUniformBuffer, 0u, &params, sizeof(params));
+    commandList.bufferBarrier({
+        m_probeCaptureFrameUniformBuffer, RhiResourceState::TransferDst,
+        RhiResourceState::UniformBuffer});
+    if (!lights.empty()) {
+        std::vector<renderer::contracts::GpuLight> gpuLights;
+        gpuLights.reserve(lights.size());
+        for (const renderer::contracts::SceneLight& light : lights) {
+            gpuLights.push_back(light.light);
+        }
+        commandList.bufferBarrier({
+            m_probeCaptureLightBuffer, RhiResourceState::StorageBuffer,
+            RhiResourceState::TransferDst});
+        commandList.updateBuffer(
+            m_probeCaptureLightBuffer, 0u, gpuLights.data(),
+            gpuLights.size() * sizeof(gpuLights.front()));
+        commandList.bufferBarrier({
+            m_probeCaptureLightBuffer, RhiResourceState::TransferDst,
+            RhiResourceState::StorageBuffer});
+    }
+    return true;
+}
+
+void StaticMeshRenderer::renderReflectionProbeCaptureOpaque(
+    RhiCommandList& commandList) const {
+    if (!m_probeCaptureBindGroup.isValid()) {
+        std::abort();
+    }
+    for (const PrimitiveResource& primitive : m_primitives) {
+        const MaterialResource& material = m_materials[primitive.materialIndex];
+        if (material.alphaBlended || material.transmissive) {
+            continue;
+        }
+        commandList.setGraphicsPipeline(material.doubleSided
+            ? m_probeCaptureDoubleSidedPipeline : m_probeCapturePipeline);
+        commandList.setBindGroup(0u, material.bindGroup);
+        commandList.setBindGroup(1u, m_probeCaptureBindGroup);
+        commandList.setVertexBuffer(0u, primitive.vertexBuffer, 0u);
+        commandList.setIndexBuffer(
+            primitive.indexBuffer, RhiIndexFormat::Uint32, 0u);
+        commandList.pushConstants(
+            &m_modelMatrix, sizeof(m_modelMatrix),
+            rhiFlag(RhiShaderStage::Vertex));
+        commandList.drawIndexed(primitive.indexCount, 1u, 0u, 0, 0u);
+    }
+}
+
+void StaticMeshRenderer::renderReflectionProbeCaptureTransparent(
+    RhiCommandList& commandList,
+    const TransparentDraw& draw) const {
+    if (draw.primitiveIndex >= m_primitives.size() ||
+        !m_probeCaptureBindGroup.isValid()) {
+        std::abort();
+    }
+    const PrimitiveResource& primitive = m_primitives[draw.primitiveIndex];
+    const MaterialResource& material = m_materials[primitive.materialIndex];
+    if (!material.forwardOpticalLayer) {
+        std::abort();
+    }
+    commandList.setGraphicsPipeline(material.doubleSided
+        ? m_probeCaptureTransparentDoubleSidedPipeline
+        : m_probeCaptureTransparentPipeline);
+    commandList.setBindGroup(0u, material.bindGroup);
+    commandList.setBindGroup(1u, m_probeCaptureBindGroup);
+    commandList.setVertexBuffer(0u, primitive.vertexBuffer, 0u);
+    commandList.setIndexBuffer(
+        primitive.indexBuffer, RhiIndexFormat::Uint32, 0u);
+    commandList.pushConstants(
+        &draw.model, sizeof(draw.model), rhiFlag(RhiShaderStage::Vertex));
+    commandList.drawIndexed(primitive.indexCount, 1u, 0u, 0, 0u);
+}
+
 void StaticMeshRenderer::renderPreview(RhiCommandList& commandList,
                                        const glm::mat4& viewProj) const {
     if (!m_framePrepared) {
@@ -2140,7 +2418,23 @@ void StaticMeshRenderer::destroyPipelineResources() {
     if (m_transparentSceneBindGroup.isValid()) {
         m_rhiDevice->destroyBindGroup(m_transparentSceneBindGroup);
     }
+    if (m_probeCaptureBindGroup.isValid()) {
+        m_rhiDevice->destroyBindGroup(m_probeCaptureBindGroup);
+    }
     destroyTransparentPipelines();
+    if (m_probeCaptureTransparentDoubleSidedPipeline.isValid()) {
+        m_rhiDevice->destroyPipeline(
+            m_probeCaptureTransparentDoubleSidedPipeline);
+    }
+    if (m_probeCaptureTransparentPipeline.isValid()) {
+        m_rhiDevice->destroyPipeline(m_probeCaptureTransparentPipeline);
+    }
+    if (m_probeCaptureDoubleSidedPipeline.isValid()) {
+        m_rhiDevice->destroyPipeline(m_probeCaptureDoubleSidedPipeline);
+    }
+    if (m_probeCapturePipeline.isValid()) {
+        m_rhiDevice->destroyPipeline(m_probeCapturePipeline);
+    }
     if (m_previewDoubleSidedPipeline.isValid()) {
         m_rhiDevice->destroyPipeline(m_previewDoubleSidedPipeline);
     }
@@ -2165,6 +2459,9 @@ void StaticMeshRenderer::destroyPipelineResources() {
     if (m_gbufferPipeline.isValid()) {
         m_rhiDevice->destroyPipeline(m_gbufferPipeline);
     }
+    if (m_probeCapturePipelineLayout.isValid()) {
+        m_rhiDevice->destroyPipelineLayout(m_probeCapturePipelineLayout);
+    }
     if (m_shadowPipelineLayout.isValid()) {
         m_rhiDevice->destroyPipelineLayout(m_shadowPipelineLayout);
     }
@@ -2181,6 +2478,9 @@ void StaticMeshRenderer::destroyPipelineResources() {
         m_rhiDevice->destroyBindGroupLayout(
             m_transparentSceneBindGroupLayout);
     }
+    if (m_probeCaptureBindGroupLayout.isValid()) {
+        m_rhiDevice->destroyBindGroupLayout(m_probeCaptureBindGroupLayout);
+    }
     if (m_transparentSceneDepthSampler.isValid()) {
         m_rhiDevice->destroySampler(m_transparentSceneDepthSampler);
     }
@@ -2189,6 +2489,12 @@ void StaticMeshRenderer::destroyPipelineResources() {
     }
     if (m_shadowFragmentShader.isValid()) {
         m_rhiDevice->destroyShader(m_shadowFragmentShader);
+    }
+    if (m_probeCaptureFragmentShader.isValid()) {
+        m_rhiDevice->destroyShader(m_probeCaptureFragmentShader);
+    }
+    if (m_probeCaptureVertexShader.isValid()) {
+        m_rhiDevice->destroyShader(m_probeCaptureVertexShader);
     }
     if (m_transparentFragmentShader.isValid()) {
         m_rhiDevice->destroyShader(m_transparentFragmentShader);
@@ -2214,6 +2520,16 @@ void StaticMeshRenderer::destroyPipelineResources() {
     if (m_frameUniformBuffer.isValid()) {
         m_rhiDevice->destroyBuffer(m_frameUniformBuffer);
     }
+    if (m_probeCaptureFrameUniformBuffer.isValid()) {
+        m_rhiDevice->destroyBuffer(m_probeCaptureFrameUniformBuffer);
+    }
+    if (m_probeCaptureLightBuffer.isValid()) {
+        m_rhiDevice->destroyBuffer(m_probeCaptureLightBuffer);
+    }
+    m_probeCaptureTransparentDoubleSidedPipeline = {};
+    m_probeCaptureTransparentPipeline = {};
+    m_probeCaptureDoubleSidedPipeline = {};
+    m_probeCapturePipeline = {};
     m_shadowDoubleSidedPipeline = {};
     m_shadowPipeline = {};
     m_transparentDoubleSidedPipeline = {};
@@ -2224,6 +2540,7 @@ void StaticMeshRenderer::destroyPipelineResources() {
     m_previewPipeline = {};
     m_previewTransparentDoubleSidedPipeline = {};
     m_previewTransparentPipeline = {};
+    m_probeCapturePipelineLayout = {};
     m_shadowPipelineLayout = {};
     m_transparentPipelineLayout = {};
     m_gbufferPipelineLayout = {};
@@ -2231,8 +2548,10 @@ void StaticMeshRenderer::destroyPipelineResources() {
     m_bindGroupLayout = {};
     m_transparentSceneBindGroupLayout = {};
     m_transparentClusterBindGroupLayout = {};
+    m_probeCaptureBindGroupLayout = {};
     m_transparentSceneBindGroup = {};
     m_transparentClusterBindGroup = {};
+    m_probeCaptureBindGroup = {};
     m_transparentSceneLinearSampler = {};
     m_transparentSceneDepthSampler = {};
     m_transparentSceneViews = {};
@@ -2241,11 +2560,16 @@ void StaticMeshRenderer::destroyPipelineResources() {
     m_shadowVertexShader = {};
     m_transparentFragmentShader = {};
     m_transparentVertexShader = {};
+    m_probeCaptureFragmentShader = {};
+    m_probeCaptureVertexShader = {};
     m_gbufferFragmentShader = {};
     m_gbufferVertexShader = {};
     m_previewFragmentShader = {};
     m_previewVertexShader = {};
     m_frameUniformBuffer = {};
+    m_probeCaptureFrameUniformBuffer = {};
+    m_probeCaptureLightBuffer = {};
+    m_probeCaptureLightCapacity = 0u;
 }
 
 void StaticMeshRenderer::destroyTransparentPipelines() {

@@ -42,6 +42,7 @@ struct ReflectionProbeCaptureWork final {
     glm::vec3 positionWorldMeters{0.0f};
     glm::mat4 viewProjection{1.0f};
     RhiTextureViewHandle targetView;
+    RhiTextureViewHandle depthTargetView;
 };
 
 /// Records one six-face HDR scene capture using the same material and direct
@@ -67,6 +68,7 @@ public:
     struct GraphResources final {
         RgTextureHandle radiance;
         RgTextureHandle prefiltered;
+        RgTextureHandle depth;
     };
 
     struct ConsumerResources final {
@@ -176,12 +178,15 @@ private:
     bool m_workScheduled = false;
     bool m_radianceInitialized = false;
     bool m_prefilteredInitialized = false;
+    bool m_depthInitialized = false;
     uint64_t m_sourceRevision = 1u;
     uint64_t m_preparedRevision = 0u;
     RhiTextureHandle m_radianceTexture;
     RhiTextureHandle m_prefilteredTexture;
+    RhiTextureHandle m_depthTexture;
     RhiTextureViewHandle m_radianceView;
     RhiTextureViewHandle m_prefilteredView;
+    RhiTextureViewHandle m_depthView;
     std::vector<std::vector<RhiTextureViewHandle>> m_radianceFaceViews;
     std::vector<RhiTextureViewHandle> m_radianceCubeViews;
     std::vector<std::vector<std::vector<RhiTextureViewHandle>>>

@@ -151,6 +151,38 @@ public:
     void renderPreview(RhiCommandList& commandList,
                        const glm::mat4& viewProj) const;
 
+    /// Ensures the probe-capture light buffer can hold one complete scene snapshot.
+    /// @param lightCount Number of normalized analytic lights captured per face.
+    /// @return True when the dedicated capture descriptor set is ready.
+    [[nodiscard]] bool ensureReflectionProbeCaptureLightCapacity(
+        uint32_t lightCount);
+
+    /// Uploads view-independent HDR probe-capture frame and light data.
+    /// @param commandList Graphics command list recording the capture face.
+    /// @param viewProjection Probe-face view-projection matrix.
+    /// @param probePosition World-space probe position used as the light origin.
+    /// @param context Main-frame environment state supplying sun and ambient energy.
+    /// @param lights Probe-relative normalized analytic light snapshot.
+    /// @return True when all dedicated capture resources were updated.
+    [[nodiscard]] bool prepareReflectionProbeCapture(
+        RhiCommandList& commandList,
+        const glm::mat4& viewProjection,
+        const glm::vec3& probePosition,
+        const FrameContext& context,
+        const std::vector<renderer::contracts::SceneLight>& lights);
+
+    /// Draws opaque and alpha-tested primitives into an active HDR probe face.
+    /// @param commandList Command list with RGBA16F and depth attachments active.
+    void renderReflectionProbeCaptureOpaque(
+        RhiCommandList& commandList) const;
+
+    /// Draws one globally sorted optical primitive into an active HDR probe face.
+    /// @param commandList Command list with RGBA16F and depth attachments active.
+    /// @param draw Primitive and world transform collected for probe sorting.
+    void renderReflectionProbeCaptureTransparent(
+        RhiCommandList& commandList,
+        const TransparentDraw& draw) const;
+
     /// Returns the precise initialization failure reported by the asset pipeline.
     [[nodiscard]] const std::string& lastError() const { return m_lastError; }
 
@@ -180,6 +212,7 @@ private:
     };
 
     [[nodiscard]] bool createPipelineResources();
+    [[nodiscard]] bool rebuildReflectionProbeCaptureBindGroup();
     [[nodiscard]] bool ensureTransparentPipelines(
         RhiBindGroupLayoutHandle clusteredLightingLayout);
     [[nodiscard]] bool loadAsset(const std::string& modelPath, ResourceMgr& resourceMgr);
@@ -195,11 +228,15 @@ private:
     std::vector<renderer::contracts::AnalyticLightSourceDefinition>
         m_punctualLights;
     RhiBufferHandle m_frameUniformBuffer;
+    RhiBufferHandle m_probeCaptureFrameUniformBuffer;
+    RhiBufferHandle m_probeCaptureLightBuffer;
     RhiBindGroupLayoutHandle m_bindGroupLayout;
     RhiBindGroupLayoutHandle m_transparentSceneBindGroupLayout;
     RhiBindGroupLayoutHandle m_transparentClusterBindGroupLayout;
+    RhiBindGroupLayoutHandle m_probeCaptureBindGroupLayout;
     RhiBindGroupHandle m_transparentSceneBindGroup;
     RhiBindGroupHandle m_transparentClusterBindGroup;
+    RhiBindGroupHandle m_probeCaptureBindGroup;
     RhiSamplerHandle m_transparentSceneLinearSampler;
     RhiSamplerHandle m_transparentSceneDepthSampler;
     std::array<RhiTextureViewHandle, 3> m_transparentSceneViews{};
@@ -208,6 +245,7 @@ private:
     RhiPipelineLayoutHandle m_shadowPipelineLayout;
     RhiPipelineLayoutHandle m_previewPipelineLayout;
     RhiPipelineLayoutHandle m_transparentPipelineLayout;
+    RhiPipelineLayoutHandle m_probeCapturePipelineLayout;
     RhiShaderHandle m_gbufferVertexShader;
     RhiShaderHandle m_gbufferFragmentShader;
     RhiShaderHandle m_shadowVertexShader;
@@ -216,6 +254,8 @@ private:
     RhiShaderHandle m_previewFragmentShader;
     RhiShaderHandle m_transparentVertexShader;
     RhiShaderHandle m_transparentFragmentShader;
+    RhiShaderHandle m_probeCaptureVertexShader;
+    RhiShaderHandle m_probeCaptureFragmentShader;
     RhiPipelineHandle m_gbufferPipeline;
     RhiPipelineHandle m_gbufferDoubleSidedPipeline;
     RhiPipelineHandle m_shadowPipeline;
@@ -226,6 +266,10 @@ private:
     RhiPipelineHandle m_previewTransparentDoubleSidedPipeline;
     RhiPipelineHandle m_transparentPipeline;
     RhiPipelineHandle m_transparentDoubleSidedPipeline;
+    RhiPipelineHandle m_probeCapturePipeline;
+    RhiPipelineHandle m_probeCaptureDoubleSidedPipeline;
+    RhiPipelineHandle m_probeCaptureTransparentPipeline;
+    RhiPipelineHandle m_probeCaptureTransparentDoubleSidedPipeline;
     glm::vec3 m_assetBoundsMin{0.0f};
     glm::vec3 m_assetBoundsMax{0.0f};
     glm::mat4 m_modelMatrix{1.0f};
@@ -234,6 +278,7 @@ private:
     renderer::contracts::StableObjectId m_objectId;
     bool m_instancePlaced = false;
     bool m_framePrepared = false;
+    uint32_t m_probeCaptureLightCapacity = 0u;
     std::string m_lastError;
 };
 

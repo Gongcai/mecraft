@@ -266,8 +266,11 @@ ID 生成紧凑候选索引；Probe、Grid Metadata、Cell 和 Index Buffer 通�
 拥有两个捕获槽位，一次修订按稳定 Probe ID 进入确定性队列：先记录 6 个 Radiance Face，再按
 Mip/Face 顺序生成 48 个 GGX Prefilter 产品；仅当 54 个工作项全部成功提交后，才发布新的
 Cubemap Index 与 Capture Revision，构建中的槽位不会进入 Reflection Pass。Capture Renderer
-使用显式接口接收 Probe 世界位置、六面相机矩阵与目标 View，主视图一致的材质/直接光场景绘制
-器、体素/模型场景 Probe 数据源、Dashboard 队列展示及版本化场景验收仍属于后续集成范围。
+使用显式接口接收 Probe 世界位置、六面相机矩阵与颜色/深度目标 View。模型场景已接入基于场景
+AABB 的稳定 Probe 数据源，并以独立 RGBA16F 前向管线复用 glTF Material Sampling、太阳/月亮
+直接光、环境光、发光材质和完整 `KHR_lights_punctual` 快照；透明光学层按 Probe 距离全局排序，
+捕获过程不读取主视图时域结果。体素场景数据源、模型编辑器手工/规则网格放置、Dashboard 队列
+展示及版本化场景验收仍属于后续集成范围。
 
 Probe Capture 使用与主视图一致的材质和直接光，但关闭时域效果。动态探针按确定的更新
 队列逐 Face/Mip 构建，Dashboard 展示队列长度与资源代际。

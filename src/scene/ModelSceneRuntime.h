@@ -14,6 +14,7 @@
 #include "renderer/rhi/RhiHandles.h"
 #include "renderer/rhi/RhiTypes.h"
 #include "renderer/core/IDeferredGeometryProvider.h"
+#include "renderer/passes/ReflectionProbeCapturePass.h"
 #include "ModelSceneDocument.h"
 
 class ImGuiRhiRenderer;
@@ -31,7 +32,8 @@ struct LocalTransformComponent;
 }
 
 /// Owns editor scene entities, mesh assets, picking data, and offscreen targets.
-class ModelSceneRuntime : public IDeferredGeometryProvider {
+class ModelSceneRuntime : public IDeferredGeometryProvider,
+                          public IReflectionProbeCaptureRenderer {
 public:
     ModelSceneRuntime();
     ~ModelSceneRuntime();
@@ -82,6 +84,10 @@ public:
         RhiCommandList& commandList,
         const glm::vec3& cameraPosition,
         float reflectionCompositeStrength) override;
+    [[nodiscard]] bool recordReflectionProbeRadianceFace(
+        RhiCommandList& commandList,
+        const FrameContext& context,
+        const ReflectionProbeCaptureWork& work) override;
 
     /// Imports or reuses one glTF asset and creates an independent ECS instance.
     /// @param path Filesystem path to a GLB or glTF document.
@@ -242,6 +248,8 @@ private:
     [[nodiscard]] bool localTransformFromMatrix(
         const glm::mat4& matrix,
         ecs::LocalTransformComponent& transform) const;
+    [[nodiscard]] bool configureReflectionProbeCapture();
+    void invalidateReflectionProbeCapture();
     void detachFromParent(entt::entity entity);
     void setError(std::string message);
 
@@ -253,6 +261,12 @@ private:
     entt::entity m_selectedEntity = entt::null;
     scene::SceneEntityId m_nextEntityId = 1u;
     scene::SceneAssetId m_nextAssetId = 1u;
+    renderer::contracts::StableReflectionProbeId m_reflectionProbeId;
+    std::vector<renderer::contracts::SceneLight> m_reflectionProbeLights;
+    uint64_t m_reflectionProbeSceneSignature = 0u;
+    uint32_t m_reflectionProbeCaptureRevision = 1u;
+    bool m_reflectionProbeSignatureValid = false;
+    bool m_reflectionProbeRevisionInvalidated = false;
     std::string m_lastError;
 };
 

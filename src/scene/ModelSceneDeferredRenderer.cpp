@@ -785,6 +785,27 @@ bool ModelSceneDeferredRenderer::render(
     return true;
 }
 
+bool ModelSceneDeferredRenderer::configureReflectionProbeCapture(
+    IReflectionProbeCaptureRenderer& renderer,
+    std::vector<ReflectionProbeCaptureSource> sources) {
+    Impl& state = *m_impl;
+    if (!state.initialized) {
+        state.error =
+            "model scene reflection-probe capture is not initialized";
+        return false;
+    }
+    ReflectionProbeCapturePass* capturePass =
+        state.pipeline.reflectionProbeCapturePass();
+    if (capturePass == nullptr) {
+        state.error =
+            "model scene reflection-probe capture pass is unavailable";
+        return false;
+    }
+    capturePass->setCaptureRenderer(&renderer);
+    capturePass->setSources(std::move(sources));
+    return true;
+}
+
 void ModelSceneDeferredRenderer::setTimeOfDay(const float timeOfDaySeconds) {
     Impl& state = *m_impl;
     if (!state.initialized) {

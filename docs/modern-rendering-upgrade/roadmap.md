@@ -69,8 +69,10 @@ M1 与 M2 可并行开发，但公共 `GpuMaterial`、`GpuSceneGeometry` 与 Sta
    Prefiltered Cube Array 资源契约、Reflection Pass Box Projection/Top-4 消费，以及 Probe ID/
    Weight 调试视图。Capture 运行时已建立 128×128 HDR Radiance/Prefilter Cube Array、每个
    Probe 双槽代际，以及按 6 个 Radiance Face + 48 个 Prefilter Face/Mip 排列的确定性队列；
-   只有完整 54 项提交成功后才切换活动槽。主视图一致的场景六面绘制器、体素/模型场景 Probe
-   数据源、Dashboard 队列展示和 V02/V07/M07 场景验收待后续接入。）
+   只有完整 54 项提交成功后才切换活动槽。模型场景已接入稳定 AABB Probe 数据源及 RGBA16F
+   六面绘制器，复用 glTF Material Sampling、主环境直接光和完整模型局部灯快照。体素场景
+   Probe 数据源、模型编辑器 Probe 放置/规则网格、Dashboard 队列展示和 V02/V07/M07 场景
+   验收待后续接入。）
 
 ### 完成条件
 
