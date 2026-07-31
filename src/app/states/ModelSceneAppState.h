@@ -45,6 +45,7 @@ private:
     void showHierarchyEntity(entt::entity entity);
     void showInspectorPanel();
     void showRenderSettingsPanel();
+    void showReflectionProbePanel();
     void showAssetsPanel();
     void browseAndImportModel();
     void importModelPath(const std::string& path);
@@ -115,6 +116,9 @@ private:
     scene::SceneEntityDocument m_transformCommandBefore;
     scene::SceneEntityId m_hierarchyDropChild = scene::kInvalidSceneEntityId;
     scene::SceneEntityId m_hierarchyDropParent = scene::kInvalidSceneEntityId;
+    scene::SceneReflectionProbeId m_reflectionProbeEditorId = scene::kInvalidSceneReflectionProbeId;
+    float m_reflectionProbeGridSpacing = 8.0f;
+    float m_reflectionProbeGridPadding = 1.0f;
     std::array<char, 4096> m_importPath{"assets/models/showcase/DamagedHelmet.glb"};
     std::array<char, 512> m_entityNameBuffer{};
     std::string m_importDialogError;

@@ -1,9 +1,11 @@
 #include "ModelSceneSerializer.h"
 
 #include "app/AppSettings.h"
+#include "renderer/contracts/ReflectionProbeContract.h"
 
 #include <cmath>
 #include <cstdint>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <limits>
@@ -19,6 +21,27 @@ using json = nlohmann::json;
 
 constexpr float kMinimumScaleMagnitude = 1e-8f;
 constexpr float kWorldDaySeconds = 1200.0f;
+
+[[nodiscard]] const char* reflectionProbeFieldName(const renderer::contracts::ReflectionProbeField field) {
+    using renderer::contracts::ReflectionProbeField;
+    switch (field) {
+    case ReflectionProbeField::StableId: return "id";
+    case ReflectionProbeField::Position: return "position";
+    case ReflectionProbeField::Exposure: return "exposureScale";
+    case ReflectionProbeField::InfluenceBounds: return "influenceBounds";
+    case ReflectionProbeField::BlendDistance: return "blendDistance";
+    case ReflectionProbeField::BoxProjectionBounds: return "boxProjectionBounds";
+    case ReflectionProbeField::Validity:
+    case ReflectionProbeField::PrefilteredCubemapIndex:
+    case ReflectionProbeField::CaptureRevision:
+    case ReflectionProbeField::ContractVersion:
+    case ReflectionProbeField::ReservedValue:
+    case ReflectionProbeField::SurfacePosition:
+    case ReflectionProbeField::SurfaceNormal:
+    case ReflectionProbeField::None: return "contract";
+    default: std::abort();
+    }
+}
 
 [[nodiscard]] bool isValidUtf8(const std::string& value) {
     const auto* bytes = reinterpret_cast<const unsigned char*>(value.data());
@@ -349,6 +372,25 @@ bool ModelSceneSerializer::validate(const ModelSceneDocument& document, std::str
         return false;
     }
 
+    if (document.reflectionProbes.size() > renderer::contracts::kReflectionProbeCaptureMaxProbeCount) {
+        error = "reflectionProbes exceeds the capture capacity";
+        return false;
+    }
+    std::unordered_set<SceneReflectionProbeId> reflectionProbeIds;
+    reflectionProbeIds.reserve(document.reflectionProbes.size());
+    for (std::size_t index = 0u; index < document.reflectionProbes.size(); ++index) {
+        const SceneReflectionProbeDocument& probe = document.reflectionProbes[index];
+        const std::string context = "reflectionProbes[" + std::to_string(index) + "]";
+        if (!validateReflectionProbe(probe, error)) {
+            error = context + "." + error;
+            return false;
+        }
+        if (!reflectionProbeIds.insert(probe.id).second) {
+            error = context + ".id is duplicated";
+            return false;
+        }
+    }
+
     if (!std::isfinite(document.environment.timeOfDay) || document.environment.timeOfDay < 0.0f ||
         document.environment.timeOfDay >= kWorldDaySeconds) {
         error = "environment.timeOfDay must be within [0, 1200)";
@@ -381,6 +423,30 @@ bool ModelSceneSerializer::validate(const ModelSceneDocument& document, std::str
     return true;
 }
 
+bool ModelSceneSerializer::validateReflectionProbe(const SceneReflectionProbeDocument& probe, std::string& error) {
+    error.clear();
+    if (probe.id == kInvalidSceneReflectionProbeId || probe.id == std::numeric_limits<SceneReflectionProbeId>::max()) {
+        error = "id is invalid";
+        return false;
+    }
+    renderer::contracts::ReflectionProbeNormalizationInput input;
+    input.probeId = renderer::contracts::StableReflectionProbeId{probe.id};
+    input.positionMeters = probe.position;
+    input.exposureScale = probe.exposureScale;
+    input.influenceMinMeters = probe.influenceMin;
+    input.influenceMaxMeters = probe.influenceMax;
+    input.blendDistanceMeters = probe.blendDistance;
+    input.boxProjectionMinMeters = probe.boxProjectionMin;
+    input.boxProjectionMaxMeters = probe.boxProjectionMax;
+    const renderer::contracts::ReflectionProbeNormalizationResult normalized =
+        renderer::contracts::normalizeReflectionProbe(input);
+    if (!normalized.succeeded()) {
+        error = std::string(reflectionProbeFieldName(normalized.field)) + " violates the reflection-probe contract";
+        return false;
+    }
+    return true;
+}
+
 nlohmann::json ModelSceneSerializer::serialize(const ModelSceneDocument& document) {
     json assets = json::array();
     for (const SceneAssetDocument& asset : document.assets) {
@@ -407,11 +473,26 @@ nlohmann::json ModelSceneSerializer::serialize(const ModelSceneDocument& documen
         });
     }
 
+    json reflectionProbes = json::array();
+    for (const SceneReflectionProbeDocument& probe : document.reflectionProbes) {
+        reflectionProbes.push_back({
+            {"id", probe.id},
+            {"position", vec3ToJson(probe.position)},
+            {"influenceMin", vec3ToJson(probe.influenceMin)},
+            {"influenceMax", vec3ToJson(probe.influenceMax)},
+            {"boxProjectionMin", vec3ToJson(probe.boxProjectionMin)},
+            {"boxProjectionMax", vec3ToJson(probe.boxProjectionMax)},
+            {"blendDistance", probe.blendDistance},
+            {"exposureScale", probe.exposureScale},
+        });
+    }
+
     return {
         {"format", document.format},
         {"version", document.version},
         {"assets", std::move(assets)},
         {"entities", std::move(entities)},
+        {"reflectionProbes", std::move(reflectionProbes)},
         {"environment",
          {
              {"timeOfDay", document.environment.timeOfDay},
@@ -445,17 +526,18 @@ bool ModelSceneSerializer::deserialize(const nlohmann::json& value, ModelSceneDo
         !readUnsigned(value, "version", parsed.version, "scene", error)) {
         return false;
     }
-    const uint32_t sourceVersion = parsed.version;
-    if (sourceVersion != 1u && sourceVersion != ModelSceneDocument::kCurrentVersion) {
+    if (parsed.version != ModelSceneDocument::kCurrentVersion) {
         error = "scene version is not supported";
         return false;
     }
     const json* assets = nullptr;
     const json* entities = nullptr;
+    const json* reflectionProbes = nullptr;
     const json* environment = nullptr;
     const json* editorCamera = nullptr;
     if (!readArray(value, "assets", assets, "scene", error) ||
         !readArray(value, "entities", entities, "scene", error) ||
+        !readArray(value, "reflectionProbes", reflectionProbes, "scene", error) ||
         !readObject(value, "environment", environment, "scene", error) ||
         !readObject(value, "editorCamera", editorCamera, "scene", error)) {
         return false;
@@ -501,39 +583,53 @@ bool ModelSceneSerializer::deserialize(const nlohmann::json& value, ModelSceneDo
         parsed.entities.push_back(std::move(entity));
     }
 
+    parsed.reflectionProbes.reserve(reflectionProbes->size());
+    for (std::size_t index = 0u; index < reflectionProbes->size(); ++index) {
+        const json& item = (*reflectionProbes)[index];
+        const std::string context = "scene.reflectionProbes[" + std::to_string(index) + "]";
+        if (!item.is_object()) {
+            error = context + " must be an object";
+            return false;
+        }
+        SceneReflectionProbeDocument probe;
+        if (!readUnsigned(item, "id", probe.id, context, error) ||
+            !readVec3(item, "position", probe.position, context, error) ||
+            !readVec3(item, "influenceMin", probe.influenceMin, context, error) ||
+            !readVec3(item, "influenceMax", probe.influenceMax, context, error) ||
+            !readVec3(item, "boxProjectionMin", probe.boxProjectionMin, context, error) ||
+            !readVec3(item, "boxProjectionMax", probe.boxProjectionMax, context, error) ||
+            !readFloat(item, "blendDistance", probe.blendDistance, context, error) ||
+            !readFloat(item, "exposureScale", probe.exposureScale, context, error)) {
+            return false;
+        }
+        parsed.reflectionProbes.push_back(probe);
+    }
+
     const json* renderSettings = nullptr;
+    uint32_t weather = 0u;
     if (!readFloat(*environment, "timeOfDay", parsed.environment.timeOfDay, "scene.environment", error) ||
+        !readBool(*environment, "timePaused", parsed.environment.timePaused, "scene.environment", error) ||
+        !readFloat(*environment, "timeScale", parsed.environment.timeScale, "scene.environment", error) ||
+        !readUnsigned(*environment, "weather", weather, "scene.environment", error) ||
+        !readBool(*environment, "weatherTransitionInstant", parsed.environment.weatherTransitionInstant,
+                  "scene.environment", error) ||
         !readObject(*environment, "renderSettings", renderSettings, "scene.environment", error) ||
         !app::deserializeRenderSettings(*renderSettings, parsed.environment.renderSettings, error)) {
         return false;
     }
-    if (sourceVersion >= 2u) {
-        uint32_t weather = 0u;
-        if (!readBool(*environment, "timePaused", parsed.environment.timePaused, "scene.environment", error) ||
-            !readFloat(*environment, "timeScale", parsed.environment.timeScale, "scene.environment", error) ||
-            !readUnsigned(*environment, "weather", weather, "scene.environment", error) ||
-            !readBool(*environment, "weatherTransitionInstant", parsed.environment.weatherTransitionInstant,
-                      "scene.environment", error)) {
-            return false;
-        }
-        if (weather > static_cast<uint32_t>(WeatherType::Snow)) {
-            error = "scene.environment.weather is invalid";
-            return false;
-        }
-        parsed.environment.weather = static_cast<WeatherType>(weather);
+    if (weather > static_cast<uint32_t>(WeatherType::Snow)) {
+        error = "scene.environment.weather is invalid";
+        return false;
     }
+    parsed.environment.weather = static_cast<WeatherType>(weather);
     if (!readVec3(*editorCamera, "target", parsed.editorCamera.target, "scene.editorCamera", error) ||
         !readFloat(*editorCamera, "distance", parsed.editorCamera.distance, "scene.editorCamera", error) ||
         !readFloat(*editorCamera, "yaw", parsed.editorCamera.yaw, "scene.editorCamera", error) ||
-        !readFloat(*editorCamera, "pitch", parsed.editorCamera.pitch, "scene.editorCamera", error)) {
+        !readFloat(*editorCamera, "pitch", parsed.editorCamera.pitch, "scene.editorCamera", error) ||
+        !readFloat(*editorCamera, "nearPlane", parsed.editorCamera.nearPlane, "scene.editorCamera", error) ||
+        !readFloat(*editorCamera, "farPlane", parsed.editorCamera.farPlane, "scene.editorCamera", error)) {
         return false;
     }
-    if (sourceVersion >= 2u &&
-        (!readFloat(*editorCamera, "nearPlane", parsed.editorCamera.nearPlane, "scene.editorCamera", error) ||
-         !readFloat(*editorCamera, "farPlane", parsed.editorCamera.farPlane, "scene.editorCamera", error))) {
-        return false;
-    }
-    parsed.version = ModelSceneDocument::kCurrentVersion;
     if (!validate(parsed, error)) {
         return false;
     }

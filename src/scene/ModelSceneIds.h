@@ -7,9 +7,11 @@ namespace scene {
 
 using SceneEntityId = uint64_t;
 using SceneAssetId = uint64_t;
+using SceneReflectionProbeId = uint32_t;
 
 constexpr SceneEntityId kInvalidSceneEntityId = 0u;
 constexpr SceneAssetId kInvalidSceneAssetId = 0u;
+constexpr SceneReflectionProbeId kInvalidSceneReflectionProbeId = 0u;
 
 } // namespace scene
 

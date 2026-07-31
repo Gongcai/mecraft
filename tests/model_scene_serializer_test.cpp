@@ -10,6 +10,7 @@
 
 #include "scene/ModelSceneSerializer.h"
 #include "scene/ModelSceneDeferredRenderer.h"
+#include "renderer/contracts/ReflectionProbeContract.h"
 
 namespace {
 
@@ -41,6 +42,17 @@ scene::ModelSceneDocument makeDocument() {
     child.transform.rotation = {10.0f, 20.0f, 30.0f};
     child.transform.scale = {1.5f, 1.5f, 1.5f};
     document.entities.push_back(child);
+
+    scene::SceneReflectionProbeDocument probe;
+    probe.id = 23u;
+    probe.position = {1.0f, 2.0f, 3.0f};
+    probe.influenceMin = {-2.0f, -1.0f, 0.0f};
+    probe.influenceMax = {4.0f, 5.0f, 6.0f};
+    probe.boxProjectionMin = {-3.0f, -2.0f, -1.0f};
+    probe.boxProjectionMax = {5.0f, 6.0f, 7.0f};
+    probe.blendDistance = 1.5f;
+    probe.exposureScale = 1.25f;
+    document.reflectionProbes.push_back(probe);
 
     document.environment.timeOfDay = 725.0f;
     document.environment.timePaused = false;
@@ -84,32 +96,29 @@ int main() {
     }
     if (decoded.format != scene::ModelSceneDocument::kFormat ||
         decoded.version != scene::ModelSceneDocument::kCurrentVersion || decoded.assets.size() != 1u ||
-        decoded.entities.size() != 2u || decoded.entities[1].parentId != source.entities[0].id ||
-        decoded.entities[1].assetId != source.assets[0].id || !near(decoded.environment.timeOfDay, 725.0f) ||
-        decoded.environment.timePaused || !near(decoded.environment.timeScale, 2.5f) ||
-        decoded.environment.weather != WeatherType::Storm || decoded.environment.weatherTransitionInstant ||
-        decoded.environment.renderSettings.shadow.resolution != 4096 ||
+        decoded.entities.size() != 2u || decoded.reflectionProbes.size() != 1u ||
+        decoded.entities[1].parentId != source.entities[0].id || decoded.entities[1].assetId != source.assets[0].id ||
+        !near(decoded.environment.timeOfDay, 725.0f) || decoded.environment.timePaused ||
+        !near(decoded.environment.timeScale, 2.5f) || decoded.environment.weather != WeatherType::Storm ||
+        decoded.environment.weatherTransitionInstant || decoded.environment.renderSettings.shadow.resolution != 4096 ||
         !near(decoded.environment.renderSettings.ssao.strength, 0.42f) ||
         !near(decoded.environment.renderSettings.postProcess.saturation, 1.25f) ||
         !near(decoded.editorCamera.distance, 12.0f) || !near(decoded.editorCamera.nearPlane, 0.025f) ||
-        !near(decoded.editorCamera.farPlane, 2500.0f)) {
+        !near(decoded.editorCamera.farPlane, 2500.0f) || decoded.reflectionProbes[0].id != 23u ||
+        !near(decoded.reflectionProbes[0].position.y, 2.0f) || !near(decoded.reflectionProbes[0].blendDistance, 1.5f) ||
+        !near(decoded.reflectionProbes[0].exposureScale, 1.25f)) {
         return fail("JSON round trip changed stable scene data");
     }
 
-    nlohmann::json versionOne = encoded;
-    versionOne["version"] = 1u;
-    versionOne["environment"].erase("timePaused");
-    versionOne["environment"].erase("timeScale");
-    versionOne["environment"].erase("weather");
-    versionOne["environment"].erase("weatherTransitionInstant");
-    versionOne["editorCamera"].erase("nearPlane");
-    versionOne["editorCamera"].erase("farPlane");
-    if (!scene::ModelSceneSerializer::deserialize(versionOne, decoded, error) ||
-        decoded.version != scene::ModelSceneDocument::kCurrentVersion || !decoded.environment.timePaused ||
-        !near(decoded.environment.timeScale, 1.0f) || decoded.environment.weather != WeatherType::Clear ||
-        !decoded.environment.weatherTransitionInstant || !near(decoded.editorCamera.nearPlane, 0.05f) ||
-        !near(decoded.editorCamera.farPlane, 500.0f)) {
-        return fail("version 1 scene migration did not apply version 2 defaults");
+    nlohmann::json oldVersion = encoded;
+    oldVersion["version"] = 2u;
+    if (scene::ModelSceneSerializer::deserialize(oldVersion, decoded, error)) {
+        return fail("obsolete scene version was accepted");
+    }
+    nlohmann::json missingProbes = encoded;
+    missingProbes.erase("reflectionProbes");
+    if (scene::ModelSceneSerializer::deserialize(missingProbes, decoded, error)) {
+        return fail("missing reflection-probe array was accepted");
     }
 
     nlohmann::json incompleteSettings = encoded;
@@ -141,6 +150,27 @@ int main() {
         return fail("cyclic entity hierarchy was accepted");
     }
 
+    scene::ModelSceneDocument duplicateProbe = source;
+    duplicateProbe.reflectionProbes.push_back(source.reflectionProbes.front());
+    if (scene::ModelSceneSerializer::validate(duplicateProbe, error)) {
+        return fail("duplicate reflection-probe ID was accepted");
+    }
+    scene::ModelSceneDocument invalidProbe = source;
+    invalidProbe.reflectionProbes.front().position = invalidProbe.reflectionProbes.front().influenceMax;
+    if (scene::ModelSceneSerializer::validate(invalidProbe, error)) {
+        return fail("reflection-probe position on the influence boundary was accepted");
+    }
+    scene::ModelSceneDocument excessiveProbes = source;
+    excessiveProbes.reflectionProbes.clear();
+    for (uint32_t index = 0u; index <= renderer::contracts::kReflectionProbeCaptureMaxProbeCount; ++index) {
+        scene::SceneReflectionProbeDocument probe = source.reflectionProbes.front();
+        probe.id = index + 1u;
+        excessiveProbes.reflectionProbes.push_back(probe);
+    }
+    if (scene::ModelSceneSerializer::validate(excessiveProbes, error)) {
+        return fail("reflection-probe capture capacity overflow was accepted");
+    }
+
     const auto unique = std::chrono::steady_clock::now().time_since_epoch().count();
     const std::filesystem::path path =
         std::filesystem::temp_directory_path() / ("mecraft-model-scene-" + std::to_string(unique) + ".scene");
@@ -158,8 +188,10 @@ int main() {
     if (!scene::ModelSceneSerializer::loadFromFile(path.string(), loaded, error)) {
         return fail("saved scene could not be loaded: " + error);
     }
-    if (loaded.entities.size() != source.entities.size() || loaded.entities[1].name != source.entities[1].name ||
-        loaded.assets[0].path != source.assets[0].path) {
+    if (loaded.entities.size() != source.entities.size() ||
+        loaded.reflectionProbes.size() != source.reflectionProbes.size() ||
+        loaded.entities[1].name != source.entities[1].name || loaded.assets[0].path != source.assets[0].path ||
+        !near(loaded.reflectionProbes[0].boxProjectionMax.z, 7.0f)) {
         return fail("file round trip changed scene entities");
     }
 

@@ -15,6 +15,9 @@ public:
     /// Validates document IDs, references, hierarchy, transforms, and environment values.
     [[nodiscard]] static bool validate(const ModelSceneDocument& document, std::string& error);
 
+    /// Validates one persistent reflection probe against the renderer contract.
+    [[nodiscard]] static bool validateReflectionProbe(const SceneReflectionProbeDocument& probe, std::string& error);
+
     /// Serializes a previously validated document to a JSON object.
     [[nodiscard]] static nlohmann::json serialize(const ModelSceneDocument& document);
 

@@ -159,6 +159,22 @@ public:
     [[nodiscard]] const GpuFrameStats* gpuFrameStats() const;
     [[nodiscard]] ReflectionProbeCaptureFrameStats reflectionProbeCaptureStats() const;
 
+    /// Adds one manually placed probe centered at the requested world position.
+    /// @return Persistent scene ID, or zero when validation or allocation fails.
+    [[nodiscard]] scene::SceneReflectionProbeId addReflectionProbe(const glm::vec3& position);
+
+    /// Replaces one probe's spatial and exposure settings while preserving its ID.
+    [[nodiscard]] bool updateReflectionProbe(const scene::SceneReflectionProbeDocument& probe);
+
+    /// Removes one explicitly placed reflection probe.
+    [[nodiscard]] bool removeReflectionProbe(scene::SceneReflectionProbeId id);
+
+    /// Replaces all probes with a deterministic regular grid over scene mesh bounds.
+    [[nodiscard]] bool generateReflectionProbeGrid(float spacingMeters, float boundsPaddingMeters);
+
+    [[nodiscard]] std::size_t reflectionProbeCount() const { return m_reflectionProbes.size(); }
+    [[nodiscard]] const scene::SceneReflectionProbeDocument& reflectionProbe(std::size_t index) const;
+
     /// Updates the deferred environment time used by sky and lighting passes.
     /// @param timeOfDaySeconds Time within the 1200-second world day.
     void setTimeOfDay(float timeOfDaySeconds);
@@ -198,6 +214,12 @@ private:
         glm::vec3 boundsMax{0.0f};
     };
 
+    struct RuntimeReflectionProbe {
+        scene::SceneReflectionProbeDocument document;
+        renderer::contracts::StableReflectionProbeId stableId;
+        uint32_t captureRevision = 1u;
+    };
+
     [[nodiscard]] bool createMeshAsset(ResourceMgr& resourceMgr, scene::SceneAssetId assetId, const std::string& name,
                                        const std::string& path, MeshAsset& asset);
     [[nodiscard]] bool loadMeshAsset(ResourceMgr& resourceMgr, const std::string& name, const std::string& path,
@@ -209,6 +231,8 @@ private:
     [[nodiscard]] uint32_t assetIndex(scene::SceneAssetId id) const;
     [[nodiscard]] bool localTransformFromMatrix(const glm::mat4& matrix, ecs::LocalTransformComponent& transform) const;
     [[nodiscard]] bool configureReflectionProbeCapture();
+    [[nodiscard]] bool sceneWorldBounds(glm::vec3& boundsMin, glm::vec3& boundsMax) const;
+    [[nodiscard]] bool allocateReflectionProbeIdentities(std::vector<RuntimeReflectionProbe>& probes);
     void invalidateReflectionProbeCapture();
     void detachFromParent(entt::entity entity);
     void setError(std::string message);
@@ -221,10 +245,10 @@ private:
     entt::entity m_selectedEntity = entt::null;
     scene::SceneEntityId m_nextEntityId = 1u;
     scene::SceneAssetId m_nextAssetId = 1u;
-    renderer::contracts::StableReflectionProbeId m_reflectionProbeId;
+    scene::SceneReflectionProbeId m_nextReflectionProbeId = 1u;
+    std::vector<RuntimeReflectionProbe> m_reflectionProbes;
     std::vector<renderer::contracts::SceneLight> m_reflectionProbeLights;
     uint64_t m_reflectionProbeSceneSignature = 0u;
-    uint32_t m_reflectionProbeCaptureRevision = 1u;
     bool m_reflectionProbeSignatureValid = false;
     bool m_reflectionProbeRevisionInvalidated = false;
     std::string m_lastError;

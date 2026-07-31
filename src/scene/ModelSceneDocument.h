@@ -52,14 +52,26 @@ struct SceneEditorCameraDocument {
     float farPlane = 500.0f;
 };
 
+struct SceneReflectionProbeDocument {
+    SceneReflectionProbeId id = kInvalidSceneReflectionProbeId;
+    glm::vec3 position{0.0f};
+    glm::vec3 influenceMin{-1.0f};
+    glm::vec3 influenceMax{1.0f};
+    glm::vec3 boxProjectionMin{-1.0f};
+    glm::vec3 boxProjectionMax{1.0f};
+    float blendDistance = 0.25f;
+    float exposureScale = 1.0f;
+};
+
 struct ModelSceneDocument {
-    static constexpr uint32_t kCurrentVersion = 2u;
+    static constexpr uint32_t kCurrentVersion = 3u;
     static constexpr const char* kFormat = "mecraft.scene";
 
     std::string format = kFormat;
     uint32_t version = kCurrentVersion;
     std::vector<SceneAssetDocument> assets;
     std::vector<SceneEntityDocument> entities;
+    std::vector<SceneReflectionProbeDocument> reflectionProbes;
     SceneEnvironmentDocument environment;
     SceneEditorCameraDocument editorCamera;
 };

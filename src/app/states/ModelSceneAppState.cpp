@@ -5,6 +5,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <iostream>
+#include <optional>
 #include <utility>
 #include <vector>
 
@@ -133,6 +134,10 @@ void ModelSceneAppState::onEnter() {
     m_transformCommandEntityId = scene::kInvalidSceneEntityId;
     if (m_deps.validationRun.enabled()) {
         const app::validation::ValidationSceneContract& contract = m_deps.validationRun.sceneContract();
+        if (!m_scene.generateReflectionProbeGrid(8.0f, 1.0f)) {
+            failValidationInitialization(m_scene.lastError());
+            return;
+        }
         if (!m_scene.setRenderSettings(m_deps.validationRun.renderSettingsProfile().settings)) {
             failValidationInitialization(m_scene.lastError());
             return;
@@ -395,6 +400,7 @@ void ModelSceneAppState::newScene() {
     m_transformCommandActive = false;
     m_transformCommandFromGizmo = false;
     m_transformCommandEntityId = scene::kInvalidSceneEntityId;
+    m_reflectionProbeEditorId = scene::kInvalidSceneReflectionProbeId;
 }
 
 bool ModelSceneAppState::loadScenePath(const std::string& path) {
@@ -420,6 +426,7 @@ bool ModelSceneAppState::loadScenePath(const std::string& path) {
     m_transformCommandActive = false;
     m_transformCommandFromGizmo = false;
     m_transformCommandEntityId = scene::kInvalidSceneEntityId;
+    m_reflectionProbeEditorId = scene::kInvalidSceneReflectionProbeId;
     return true;
 }
 
@@ -899,6 +906,7 @@ void ModelSceneAppState::showRenderSettingsPanel() {
         }
         ImGui::PopID();
     }
+    showReflectionProbePanel();
     if (ImGui::CollapsingHeader("Shadows")) {
         ImGui::PushID("ShadowSettings");
         changed |= render_settings_imgui::showShadowSettings(settings);
@@ -934,6 +942,81 @@ void ModelSceneAppState::showRenderSettingsPanel() {
         ImGui::TextColored(ImVec4(1.0f, 0.35f, 0.30f, 1.0f), "%s", m_scene.lastError().c_str());
     }
     ImGui::End();
+}
+
+void ModelSceneAppState::showReflectionProbePanel() {
+    if (!ImGui::CollapsingHeader("Reflection Probes", ImGuiTreeNodeFlags_DefaultOpen)) {
+        return;
+    }
+    ImGui::Text("Persistent probes: %zu / %u", m_scene.reflectionProbeCount(),
+                renderer::contracts::kReflectionProbeCaptureMaxProbeCount);
+    if (ImGui::Button("Add Probe at Camera Target")) {
+        const scene::SceneReflectionProbeId id = m_scene.addReflectionProbe(m_cameraTarget);
+        if (id != scene::kInvalidSceneReflectionProbeId) {
+            m_reflectionProbeEditorId = id;
+            markSceneDirty();
+        }
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Generate Regular Grid")) {
+        if (m_scene.generateReflectionProbeGrid(m_reflectionProbeGridSpacing, m_reflectionProbeGridPadding)) {
+            m_reflectionProbeEditorId = m_scene.reflectionProbe(0u).id;
+            markSceneDirty();
+        }
+    }
+    ImGui::SetNextItemWidth(180.0f);
+    ImGui::DragFloat("Grid Spacing", &m_reflectionProbeGridSpacing, 0.1f, 0.1f, 1000.0f, "%.2f m");
+    ImGui::SetNextItemWidth(180.0f);
+    ImGui::DragFloat("Grid Padding", &m_reflectionProbeGridPadding, 0.1f, 0.0f, 1000.0f, "%.2f m");
+    if (m_scene.reflectionProbeCount() == 0u) {
+        ImGui::TextDisabled("No capture source is active until a probe is added.");
+        return;
+    }
+
+    if (m_reflectionProbeEditorId == scene::kInvalidSceneReflectionProbeId) {
+        m_reflectionProbeEditorId = m_scene.reflectionProbe(0u).id;
+    }
+    ImGui::Separator();
+    for (std::size_t index = 0u; index < m_scene.reflectionProbeCount(); ++index) {
+        const scene::SceneReflectionProbeDocument& probe = m_scene.reflectionProbe(index);
+        const bool selected = probe.id == m_reflectionProbeEditorId;
+        const std::string label = "Probe " + std::to_string(probe.id);
+        if (ImGui::Selectable(label.c_str(), selected)) {
+            m_reflectionProbeEditorId = probe.id;
+        }
+    }
+    const auto selectedIndex = [&]() -> std::optional<std::size_t> {
+        for (std::size_t index = 0u; index < m_scene.reflectionProbeCount(); ++index) {
+            if (m_scene.reflectionProbe(index).id == m_reflectionProbeEditorId) {
+                return index;
+            }
+        }
+        return std::nullopt;
+    }();
+    if (!selectedIndex.has_value()) {
+        m_reflectionProbeEditorId = scene::kInvalidSceneReflectionProbeId;
+        return;
+    }
+    scene::SceneReflectionProbeDocument edited = m_scene.reflectionProbe(*selectedIndex);
+    ImGui::PushID(static_cast<int>(edited.id));
+    bool changed = false;
+    changed |= ImGui::InputFloat3("Position", glm::value_ptr(edited.position));
+    changed |= ImGui::InputFloat3("Influence Min", glm::value_ptr(edited.influenceMin));
+    changed |= ImGui::InputFloat3("Influence Max", glm::value_ptr(edited.influenceMax));
+    changed |= ImGui::InputFloat3("Projection Min", glm::value_ptr(edited.boxProjectionMin));
+    changed |= ImGui::InputFloat3("Projection Max", glm::value_ptr(edited.boxProjectionMax));
+    changed |= ImGui::DragFloat("Blend Distance", &edited.blendDistance, 0.05f, 0.001f, 10000.0f, "%.3f m");
+    changed |= ImGui::DragFloat("Exposure Scale", &edited.exposureScale, 0.01f, 0.001f, 100.0f, "%.3f");
+    if (changed && m_scene.updateReflectionProbe(edited)) {
+        markSceneDirty();
+    }
+    if (ImGui::Button("Delete Selected Probe")) {
+        if (m_scene.removeReflectionProbe(edited.id)) {
+            m_reflectionProbeEditorId = scene::kInvalidSceneReflectionProbeId;
+            markSceneDirty();
+        }
+    }
+    ImGui::PopID();
 }
 
 void ModelSceneAppState::showHierarchyPanel() {

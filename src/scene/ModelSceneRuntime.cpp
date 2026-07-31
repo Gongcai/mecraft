@@ -118,15 +118,6 @@ bool ModelSceneRuntime::init(ResourceMgr& resourceMgr, RhiDevice& rhiDevice, Rhi
                              ImGuiRhiRenderer& imguiRenderer) {
     shutdown();
     m_resourceMgr = &resourceMgr;
-    const std::optional<renderer::contracts::StableReflectionProbeId> probeId =
-        renderer::contracts::allocateStableSceneId<renderer::contracts::StableReflectionProbeIdTag>();
-    if (!probeId.has_value()) {
-        const std::string error = "stable model scene reflection-probe identity space is exhausted";
-        shutdown();
-        m_lastError = error;
-        return false;
-    }
-    m_reflectionProbeId = *probeId;
     m_deferredRenderer = std::make_unique<ModelSceneDeferredRenderer>();
     if (!m_deferredRenderer->init(resourceMgr, rhiDevice, commandListPool, imguiRenderer, *this)) {
         const std::string error = m_deferredRenderer->lastError();
@@ -864,7 +855,6 @@ void ModelSceneRuntime::shutdown() {
     }
     clearScene();
     m_resourceMgr = nullptr;
-    m_reflectionProbeId = {};
 }
 
 void ModelSceneRuntime::clearScene() {
@@ -879,9 +869,10 @@ void ModelSceneRuntime::clearScene() {
     m_selectedEntity = entt::null;
     m_nextEntityId = 1u;
     m_nextAssetId = 1u;
+    m_nextReflectionProbeId = 1u;
+    m_reflectionProbes.clear();
     m_reflectionProbeLights.clear();
     m_reflectionProbeSceneSignature = 0u;
-    m_reflectionProbeCaptureRevision = 1u;
     m_reflectionProbeSignatureValid = false;
     m_reflectionProbeRevisionInvalidated = false;
     m_lastError.clear();
@@ -898,6 +889,191 @@ void ModelSceneRuntime::resetEnvironment() {
     if (!setRenderSettings(ModelSceneDeferredRenderer::defaultSettings())) {
         std::abort();
     }
+}
+
+bool ModelSceneRuntime::allocateReflectionProbeIdentities(std::vector<RuntimeReflectionProbe>& probes) {
+    for (RuntimeReflectionProbe& probe : probes) {
+        const std::optional<renderer::contracts::StableReflectionProbeId> stableId =
+            renderer::contracts::allocateStableSceneId<renderer::contracts::StableReflectionProbeIdTag>();
+        if (!stableId.has_value()) {
+            setError("stable model scene reflection-probe identity space is exhausted");
+            return false;
+        }
+        probe.stableId = *stableId;
+    }
+    return true;
+}
+
+const scene::SceneReflectionProbeDocument& ModelSceneRuntime::reflectionProbe(const std::size_t index) const {
+    if (index >= m_reflectionProbes.size()) {
+        std::abort();
+    }
+    return m_reflectionProbes[index].document;
+}
+
+scene::SceneReflectionProbeId ModelSceneRuntime::addReflectionProbe(const glm::vec3& position) {
+    if (m_reflectionProbes.size() >= renderer::contracts::kReflectionProbeCaptureMaxProbeCount) {
+        setError("model scene reflection-probe capture capacity is exhausted");
+        return scene::kInvalidSceneReflectionProbeId;
+    }
+    if (m_nextReflectionProbeId == std::numeric_limits<scene::SceneReflectionProbeId>::max()) {
+        setError("model scene reflection-probe ID space is exhausted");
+        return scene::kInvalidSceneReflectionProbeId;
+    }
+
+    RuntimeReflectionProbe probe;
+    probe.document.id = m_nextReflectionProbeId;
+    probe.document.position = position;
+    probe.document.influenceMin = position - glm::vec3(4.0f);
+    probe.document.influenceMax = position + glm::vec3(4.0f);
+    probe.document.boxProjectionMin = probe.document.influenceMin;
+    probe.document.boxProjectionMax = probe.document.influenceMax;
+    probe.document.blendDistance = 1.0f;
+    std::string validationError;
+    if (!scene::ModelSceneSerializer::validateReflectionProbe(probe.document, validationError)) {
+        setError(std::move(validationError));
+        return scene::kInvalidSceneReflectionProbeId;
+    }
+    std::vector<RuntimeReflectionProbe> added{probe};
+    if (!allocateReflectionProbeIdentities(added)) {
+        return scene::kInvalidSceneReflectionProbeId;
+    }
+    const scene::SceneReflectionProbeId id = m_nextReflectionProbeId;
+    ++m_nextReflectionProbeId;
+    m_reflectionProbes.push_back(std::move(added.front()));
+    m_lastError.clear();
+    return id;
+}
+
+bool ModelSceneRuntime::updateReflectionProbe(const scene::SceneReflectionProbeDocument& probe) {
+    const auto found = std::find_if(m_reflectionProbes.begin(), m_reflectionProbes.end(),
+                                    [&probe](const auto& entry) { return entry.document.id == probe.id; });
+    if (found == m_reflectionProbes.end()) {
+        setError("cannot update an unknown model scene reflection probe");
+        return false;
+    }
+    std::string validationError;
+    if (!scene::ModelSceneSerializer::validateReflectionProbe(probe, validationError)) {
+        setError(std::move(validationError));
+        return false;
+    }
+    if (found->captureRevision == std::numeric_limits<uint32_t>::max()) {
+        setError("model scene reflection-probe capture revision is exhausted");
+        return false;
+    }
+    found->document = probe;
+    ++found->captureRevision;
+    m_lastError.clear();
+    return true;
+}
+
+bool ModelSceneRuntime::removeReflectionProbe(const scene::SceneReflectionProbeId id) {
+    const auto found = std::find_if(m_reflectionProbes.begin(), m_reflectionProbes.end(),
+                                    [id](const auto& entry) { return entry.document.id == id; });
+    if (found == m_reflectionProbes.end()) {
+        setError("cannot remove an unknown model scene reflection probe");
+        return false;
+    }
+    m_reflectionProbes.erase(found);
+    m_lastError.clear();
+    return true;
+}
+
+bool ModelSceneRuntime::sceneWorldBounds(glm::vec3& boundsMin, glm::vec3& boundsMax) const {
+    boundsMin = glm::vec3(std::numeric_limits<float>::max());
+    boundsMax = glm::vec3(std::numeric_limits<float>::lowest());
+    bool foundMesh = false;
+    const auto meshView = m_registry.view<scene::PickableComponent, ecs::WorldTransformComponent>();
+    for (const entt::entity entity : meshView) {
+        const scene::PickableComponent& bounds = meshView.get<scene::PickableComponent>(entity);
+        const glm::mat4& worldMatrix = meshView.get<ecs::WorldTransformComponent>(entity).worldMatrix;
+        for (uint32_t corner = 0u; corner < 8u; ++corner) {
+            const glm::vec3 local{(corner & 1u) != 0u ? bounds.localBoundsMax.x : bounds.localBoundsMin.x,
+                                  (corner & 2u) != 0u ? bounds.localBoundsMax.y : bounds.localBoundsMin.y,
+                                  (corner & 4u) != 0u ? bounds.localBoundsMax.z : bounds.localBoundsMin.z};
+            const glm::vec3 world = glm::vec3(worldMatrix * glm::vec4(local, 1.0f));
+            if (!std::isfinite(world.x) || !std::isfinite(world.y) || !std::isfinite(world.z)) {
+                return false;
+            }
+            boundsMin = glm::min(boundsMin, world);
+            boundsMax = glm::max(boundsMax, world);
+        }
+        foundMesh = true;
+    }
+    return foundMesh;
+}
+
+bool ModelSceneRuntime::generateReflectionProbeGrid(const float spacingMeters, const float boundsPaddingMeters) {
+    if (!std::isfinite(spacingMeters) || spacingMeters <= 0.0f || !std::isfinite(boundsPaddingMeters) ||
+        boundsPaddingMeters < 0.0f) {
+        setError("reflection-probe grid spacing and padding are invalid");
+        return false;
+    }
+    syncTransforms();
+    glm::vec3 boundsMin;
+    glm::vec3 boundsMax;
+    if (!sceneWorldBounds(boundsMin, boundsMax)) {
+        setError("reflection-probe grid generation requires finite scene mesh bounds");
+        return false;
+    }
+    boundsMin -= glm::vec3(boundsPaddingMeters);
+    boundsMax += glm::vec3(boundsPaddingMeters);
+    const glm::vec3 extent = boundsMax - boundsMin;
+    if (extent.x <= 0.0f || extent.y <= 0.0f || extent.z <= 0.0f) {
+        setError("reflection-probe grid bounds must have positive volume");
+        return false;
+    }
+    const glm::vec3 dimensionValues = glm::ceil(extent / spacingMeters);
+    const float maximumDimension = static_cast<float>(renderer::contracts::kReflectionProbeCaptureMaxProbeCount);
+    if (!std::isfinite(dimensionValues.x) || !std::isfinite(dimensionValues.y) || !std::isfinite(dimensionValues.z) ||
+        dimensionValues.x > maximumDimension || dimensionValues.y > maximumDimension ||
+        dimensionValues.z > maximumDimension) {
+        setError("reflection-probe grid exceeds the capture capacity");
+        return false;
+    }
+    const glm::uvec3 dimensions{static_cast<uint32_t>(dimensionValues.x), static_cast<uint32_t>(dimensionValues.y),
+                                static_cast<uint32_t>(dimensionValues.z)};
+    const uint64_t probeCount =
+        static_cast<uint64_t>(dimensions.x) * static_cast<uint64_t>(dimensions.y) * static_cast<uint64_t>(dimensions.z);
+    if (probeCount == 0u || probeCount > renderer::contracts::kReflectionProbeCaptureMaxProbeCount) {
+        setError("reflection-probe grid exceeds the capture capacity");
+        return false;
+    }
+
+    std::vector<RuntimeReflectionProbe> generated;
+    generated.reserve(static_cast<std::size_t>(probeCount));
+    const glm::vec3 cellExtent = extent / glm::vec3(dimensions);
+    for (uint32_t z = 0u; z < dimensions.z; ++z) {
+        for (uint32_t y = 0u; y < dimensions.y; ++y) {
+            for (uint32_t x = 0u; x < dimensions.x; ++x) {
+                RuntimeReflectionProbe probe;
+                probe.document.id = static_cast<scene::SceneReflectionProbeId>(generated.size() + 1u);
+                probe.document.influenceMin = boundsMin + glm::vec3(x, y, z) * cellExtent;
+                probe.document.influenceMax = {
+                    x + 1u == dimensions.x ? boundsMax.x : probe.document.influenceMin.x + cellExtent.x,
+                    y + 1u == dimensions.y ? boundsMax.y : probe.document.influenceMin.y + cellExtent.y,
+                    z + 1u == dimensions.z ? boundsMax.z : probe.document.influenceMin.z + cellExtent.z,
+                };
+                probe.document.position = (probe.document.influenceMin + probe.document.influenceMax) * 0.5f;
+                probe.document.boxProjectionMin = boundsMin;
+                probe.document.boxProjectionMax = boundsMax;
+                probe.document.blendDistance = std::min({cellExtent.x, cellExtent.y, cellExtent.z}) * 0.2f;
+                std::string validationError;
+                if (!scene::ModelSceneSerializer::validateReflectionProbe(probe.document, validationError)) {
+                    setError(std::move(validationError));
+                    return false;
+                }
+                generated.push_back(probe);
+            }
+        }
+    }
+    if (!allocateReflectionProbeIdentities(generated)) {
+        return false;
+    }
+    m_reflectionProbes = std::move(generated);
+    m_nextReflectionProbeId = static_cast<scene::SceneReflectionProbeId>(probeCount + 1u);
+    m_lastError.clear();
+    return true;
 }
 
 bool ModelSceneRuntime::loadDocument(const scene::ModelSceneDocument& document) {
@@ -921,6 +1097,19 @@ bool ModelSceneRuntime::loadDocument(const scene::ModelSceneDocument& document) 
     if (document.environment.renderSettings.upscale.type == TemporalUpscalerType::Fsr31 &&
         !m_deferredRenderer->isFsr31Supported()) {
         setError("FSR 3.1 requires an enabled Vulkan FSR 3.1 build");
+        return false;
+    }
+
+    std::vector<RuntimeReflectionProbe> loadedProbes;
+    loadedProbes.reserve(document.reflectionProbes.size());
+    for (const scene::SceneReflectionProbeDocument& entry : document.reflectionProbes) {
+        RuntimeReflectionProbe probe;
+        probe.document = entry;
+        loadedProbes.push_back(probe);
+    }
+    std::sort(loadedProbes.begin(), loadedProbes.end(),
+              [](const auto& lhs, const auto& rhs) { return lhs.document.id < rhs.document.id; });
+    if (!allocateReflectionProbeIdentities(loadedProbes)) {
         return false;
     }
 
@@ -1010,6 +1199,7 @@ bool ModelSceneRuntime::loadDocument(const scene::ModelSceneDocument& document) 
     }
     m_assets = std::move(loadedAssets);
     m_assetIndices = std::move(loadedAssetIndices);
+    m_reflectionProbes = std::move(loadedProbes);
     m_registry.swap(loadedRegistry);
     m_selectedEntity = selectedEntity;
     m_nextEntityId = 1u;
@@ -1019,6 +1209,10 @@ bool ModelSceneRuntime::loadDocument(const scene::ModelSceneDocument& document) 
     m_nextAssetId = 1u;
     for (const scene::SceneAssetDocument& entry : document.assets) {
         m_nextAssetId = std::max(m_nextAssetId, entry.id + 1u);
+    }
+    m_nextReflectionProbeId = 1u;
+    for (const scene::SceneReflectionProbeDocument& entry : document.reflectionProbes) {
+        m_nextReflectionProbeId = std::max(m_nextReflectionProbeId, entry.id + 1u);
     }
     setTimeOfDay(document.environment.timeOfDay);
     setTimePaused(document.environment.timePaused);
@@ -1288,7 +1482,7 @@ void ModelSceneRuntime::renderTransparent(RhiCommandList& commandList, const glm
 }
 
 bool ModelSceneRuntime::configureReflectionProbeCapture() {
-    if (!m_deferredRenderer || !m_reflectionProbeId.isValid()) {
+    if (!m_deferredRenderer) {
         setError("model scene reflection-probe capture is not initialized");
         return false;
     }
@@ -1329,53 +1523,44 @@ bool ModelSceneRuntime::configureReflectionProbeCapture() {
         appendSignature(entry.localBoundsMin);
         appendSignature(entry.localBoundsMax);
     }
+    const bool sceneChanged = m_reflectionProbeRevisionInvalidated || signature != m_reflectionProbeSceneSignature;
     if (!m_reflectionProbeSignatureValid) {
         m_reflectionProbeSceneSignature = signature;
         m_reflectionProbeSignatureValid = true;
-    } else if (m_reflectionProbeRevisionInvalidated || signature != m_reflectionProbeSceneSignature) {
-        if (m_reflectionProbeCaptureRevision == std::numeric_limits<uint32_t>::max()) {
-            setError("model scene reflection-probe capture revision is exhausted");
-            return false;
+    } else if (sceneChanged) {
+        for (const RuntimeReflectionProbe& probe : m_reflectionProbes) {
+            if (probe.captureRevision == std::numeric_limits<uint32_t>::max()) {
+                setError("model scene reflection-probe capture revision is exhausted");
+                return false;
+            }
         }
-        ++m_reflectionProbeCaptureRevision;
+        for (RuntimeReflectionProbe& probe : m_reflectionProbes) {
+            ++probe.captureRevision;
+        }
         m_reflectionProbeSceneSignature = signature;
     }
     m_reflectionProbeRevisionInvalidated = false;
 
     std::vector<ReflectionProbeCaptureSource> sources;
-    if (!entries.empty()) {
-        glm::vec3 boundsMin(std::numeric_limits<float>::max());
-        glm::vec3 boundsMax(std::numeric_limits<float>::lowest());
-        for (const SignatureEntry& entry : entries) {
-            for (uint32_t corner = 0u; corner < 8u; ++corner) {
-                const glm::vec3 local{(corner & 1u) != 0u ? entry.localBoundsMax.x : entry.localBoundsMin.x,
-                                      (corner & 2u) != 0u ? entry.localBoundsMax.y : entry.localBoundsMin.y,
-                                      (corner & 4u) != 0u ? entry.localBoundsMax.z : entry.localBoundsMin.z};
-                const glm::vec3 world = glm::vec3(entry.world * glm::vec4(local, 1.0f));
-                boundsMin = glm::min(boundsMin, world);
-                boundsMax = glm::max(boundsMax, world);
-            }
-        }
-        const glm::vec3 extent = boundsMax - boundsMin;
-        const float padding = std::max(0.5f, std::max({extent.x, extent.y, extent.z}) * 0.1f);
-        boundsMin -= glm::vec3(padding);
-        boundsMax += glm::vec3(padding);
-        const glm::vec3 probePosition = (boundsMin + boundsMax) * 0.5f;
-        const glm::vec3 paddedExtent = boundsMax - boundsMin;
-
+    sources.reserve(m_reflectionProbes.size());
+    for (const RuntimeReflectionProbe& probe : m_reflectionProbes) {
+        const scene::SceneReflectionProbeDocument& document = probe.document;
         ReflectionProbeCaptureSource source;
-        source.probeId = m_reflectionProbeId;
-        source.positionWorldMeters = probePosition;
-        source.influenceMinWorldMeters = boundsMin;
-        source.influenceMaxWorldMeters = boundsMax;
-        source.blendDistanceMeters = std::min({paddedExtent.x, paddedExtent.y, paddedExtent.z}) * 0.2f;
-        source.boxProjectionMinWorldMeters = boundsMin;
-        source.boxProjectionMaxWorldMeters = boundsMax;
-        source.requestedRevision = m_reflectionProbeCaptureRevision;
+        source.probeId = probe.stableId;
+        source.positionWorldMeters = document.position;
+        source.exposureScale = document.exposureScale;
+        source.influenceMinWorldMeters = document.influenceMin;
+        source.influenceMaxWorldMeters = document.influenceMax;
+        source.blendDistanceMeters = document.blendDistance;
+        source.boxProjectionMinWorldMeters = document.boxProjectionMin;
+        source.boxProjectionMaxWorldMeters = document.boxProjectionMax;
+        source.requestedRevision = probe.captureRevision;
         sources.push_back(source);
+    }
 
+    if (!sources.empty()) {
         std::string lightError;
-        if (!collectSceneLights(probePosition, m_reflectionProbeLights, lightError)) {
+        if (!collectSceneLights(sources.front().positionWorldMeters, m_reflectionProbeLights, lightError)) {
             setError(lightError.empty() ? "failed to collect model scene probe-capture lights" : std::move(lightError));
             return false;
         }
@@ -1405,6 +1590,11 @@ bool ModelSceneRuntime::recordReflectionProbeRadianceFace(RhiCommandList& comman
     if (!work.targetView.isValid() || !work.depthTargetView.isValid() ||
         work.face >= renderer::contracts::kReflectionProbeCubeFaceCount) {
         setError("model scene reflection-probe capture work is invalid");
+        return false;
+    }
+    std::string lightError;
+    if (!collectSceneLights(work.positionWorldMeters, m_reflectionProbeLights, lightError)) {
+        setError(lightError.empty() ? "failed to collect model scene probe-capture lights" : std::move(lightError));
         return false;
     }
     for (MeshAsset& asset : m_assets) {
@@ -1736,6 +1926,14 @@ ModelSceneRuntime::captureDocument(const scene::SceneEditorCameraDocument& edito
     std::sort(
         document.entities.begin(), document.entities.end(),
         [](const scene::SceneEntityDocument& lhs, const scene::SceneEntityDocument& rhs) { return lhs.id < rhs.id; });
+    document.reflectionProbes.reserve(m_reflectionProbes.size());
+    for (const RuntimeReflectionProbe& probe : m_reflectionProbes) {
+        document.reflectionProbes.push_back(probe.document);
+    }
+    std::sort(document.reflectionProbes.begin(), document.reflectionProbes.end(),
+              [](const scene::SceneReflectionProbeDocument& lhs, const scene::SceneReflectionProbeDocument& rhs) {
+                  return lhs.id < rhs.id;
+              });
     document.environment.timeOfDay = timeOfDay();
     document.environment.timePaused = timePaused();
     document.environment.timeScale = timeScale();
