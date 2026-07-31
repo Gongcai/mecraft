@@ -13,6 +13,7 @@
 #include "../passes/HiZPass.h"
 #include "../passes/VelocityPass.h"
 #include "../passes/ReflectionPass.h"
+#include "../passes/ReflectionProbeCapturePass.h"
 #include "../passes/ReflectionProbeGridPass.h"
 #include "../passes/TemporalResolvePass.h"
 #include "../passes/MotionBlurPass.h"
@@ -66,6 +67,9 @@ public:
     SsgiPass* ssgiPass() const { return m_ssgiPass.get(); }
     VelocityPass* velocityPass() const { return m_velocityPass.get(); }
     ReflectionPass* reflectionPass() const { return m_reflectionPass.get(); }
+    ReflectionProbeCapturePass* reflectionProbeCapturePass() const {
+        return m_reflectionProbeCapturePass.get();
+    }
     ReflectionProbeGridPass* reflectionProbeGridPass() const {
         return m_reflectionProbeGridPass.get();
     }
@@ -105,7 +109,9 @@ private:
     std::unique_ptr<VelocityPass> m_velocityPass;
     std::unique_ptr<HiZPass> m_hiZPass;
     std::unique_ptr<ReflectionPass> m_reflectionPass;
+    std::unique_ptr<ReflectionProbeCapturePass> m_reflectionProbeCapturePass;
     std::unique_ptr<ReflectionProbeGridPass> m_reflectionProbeGridPass;
+    bool m_reflectionProbeGridOwnedByCapture = false;
     std::unique_ptr<TemporalResolvePass> m_taaPass;
     std::unique_ptr<MotionBlurPass> m_motionBlurPass;
     std::unique_ptr<DepthOfFieldPass> m_dofPass;

@@ -63,7 +63,8 @@ public:
     /// Imports persistent grid buffers and the selected cubemap array.
     [[nodiscard]] bool importGraphResources(
         RenderGraph& graph,
-        GraphResources& resources) const;
+        GraphResources& resources,
+        RgTextureHandle capturedCubeArray = {}) const;
 
     /// Adds the transactional CPU-to-GPU grid upload when data changed.
     [[nodiscard]] RgPassHandle addGraphPasses(

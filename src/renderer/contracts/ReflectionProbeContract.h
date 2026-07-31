@@ -6,6 +6,7 @@
 #include <glm/vec3.hpp>
 #include <glm/vec4.hpp>
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <limits>
@@ -18,6 +19,15 @@ namespace renderer::contracts {
 inline constexpr uint32_t kReflectionProbeContractVersion = 1u;
 inline constexpr uint32_t kReflectionProbeCubeExtent = 128u;
 inline constexpr uint32_t kReflectionProbeCubeMipCount = 8u;
+inline constexpr uint32_t kReflectionProbeCubeFaceCount = 6u;
+inline constexpr uint32_t kReflectionProbeGgxSampleCount = 128u;
+inline constexpr uint32_t kReflectionProbeCaptureSlotCount = 2u;
+inline constexpr uint32_t kReflectionProbeCaptureMaxProbeCount = 128u;
+inline constexpr uint32_t kReflectionProbePrefilterWorkItemCount =
+    kReflectionProbeCubeFaceCount * kReflectionProbeCubeMipCount;
+inline constexpr uint32_t kReflectionProbeCaptureWorkItemCount =
+    kReflectionProbeCubeFaceCount + kReflectionProbePrefilterWorkItemCount;
+inline constexpr float kReflectionProbeCaptureNearPlaneMeters = 0.05f;
 inline constexpr uint32_t kReflectionProbeInvalidCubemapIndex =
     std::numeric_limits<uint32_t>::max();
 inline constexpr uint32_t kReflectionProbeBlendCount = 4u;
@@ -27,6 +37,54 @@ inline constexpr uint32_t kReflectionProbeGridMaxCellCount = 262144u;
 inline constexpr uint32_t kReflectionProbeGridMaxProbeCount = 4096u;
 inline constexpr uint32_t kReflectionProbeGridMaxProbesPerCell = 16u;
 inline constexpr uint32_t kReflectionProbeGridMaxIndexCount = 1048576u;
+
+/// Identifies whether one deterministic capture item records source radiance
+/// or generates one prefiltered face/mip product.
+enum class ReflectionProbeCaptureWorkKind : uint8_t {
+    RadianceFace,
+    PrefilterFaceMip
+};
+
+/// Returns the stage owned by one bounded capture work item.
+[[nodiscard]] constexpr ReflectionProbeCaptureWorkKind
+reflectionProbeCaptureWorkKind(const uint32_t workItem) {
+    return workItem < kReflectionProbeCubeFaceCount
+        ? ReflectionProbeCaptureWorkKind::RadianceFace
+        : ReflectionProbeCaptureWorkKind::PrefilterFaceMip;
+}
+
+/// Maps one bounded capture work item to its destination cubemap face.
+[[nodiscard]] constexpr uint32_t reflectionProbeCaptureFace(
+    const uint32_t workItem) {
+    const uint32_t bounded = std::min(
+        workItem, kReflectionProbeCaptureWorkItemCount - 1u);
+    return bounded < kReflectionProbeCubeFaceCount
+        ? bounded
+        : (bounded - kReflectionProbeCubeFaceCount) %
+            kReflectionProbeCubeFaceCount;
+}
+
+/// Maps one bounded capture work item to its prefilter mip.
+/// Radiance-face work maps to mip zero because it does not write the
+/// prefiltered product.
+[[nodiscard]] constexpr uint32_t reflectionProbeCaptureMip(
+    const uint32_t workItem) {
+    const uint32_t bounded = std::min(
+        workItem, kReflectionProbeCaptureWorkItemCount - 1u);
+    return bounded < kReflectionProbeCubeFaceCount
+        ? 0u
+        : (bounded - kReflectionProbeCubeFaceCount) /
+            kReflectionProbeCubeFaceCount;
+}
+
+/// Converts one prefilter mip into perceptual material roughness.
+[[nodiscard]] constexpr float reflectionProbeRoughnessForMip(
+    const uint32_t mip) {
+    const uint32_t bounded = std::min(
+        mip, kReflectionProbeCubeMipCount - 1u);
+    return static_cast<float>(bounded) /
+        static_cast<float>(kReflectionProbeCubeMipCount - 1u);
+}
 
 /// Defines the immutable 96-byte CPU/GPU reflection-probe record consumed by
 /// probe selection, box projection, and environment-lighting passes.

@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cstring>
 #include <limits>
 #include <utility>
 
@@ -43,6 +44,12 @@ namespace {
 
 void ReflectionProbeGridPass::setSceneProbes(
     std::vector<renderer::contracts::GpuReflectionProbe> probes) {
+    if (m_sceneProbes.size() == probes.size() &&
+        (probes.empty() ||
+         std::memcmp(m_sceneProbes.data(), probes.data(),
+                     probes.size() * sizeof(probes.front())) == 0)) {
+        return;
+    }
     m_sceneProbes = std::move(probes);
     ++m_sceneRevision;
     m_prepared = false;
@@ -249,7 +256,8 @@ bool ReflectionProbeGridPass::selectCubeArray(RhiDevice& rhiDevice) {
 
 bool ReflectionProbeGridPass::importGraphResources(
     RenderGraph& graph,
-    GraphResources& resources) const {
+    GraphResources& resources,
+    const RgTextureHandle capturedCubeArray) const {
     if (!m_prepared || m_rhiDevice == nullptr ||
         !m_consumerCubeArrayTexture.isValid() ||
         !m_consumerCubeArrayView.isValid() ||
@@ -258,6 +266,10 @@ bool ReflectionProbeGridPass::importGraphResources(
         !importBuffer(graph, m_cellBuffer, resources.cells) ||
         !importBuffer(graph, m_indexBuffer, resources.indices)) {
         return false;
+    }
+    if (capturedCubeArray.isValid()) {
+        resources.prefilteredCubeArray = capturedCubeArray;
+        return true;
     }
     RhiTextureDesc desc;
     if (!m_rhiDevice->getTextureDesc(m_consumerCubeArrayTexture, desc)) {

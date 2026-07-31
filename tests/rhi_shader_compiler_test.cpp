@@ -116,7 +116,7 @@ struct ShaderCase {
 } // namespace
 
 int main() {
-    constexpr std::array<ShaderCase, 89> kShaderCases{{
+    constexpr std::array<ShaderCase, 90> kShaderCases{{
         {"tests/shaders/rhi_screen_coordinates_test.frag", RhiShaderStage::Fragment},
         {"tests/shaders/material_brdf_shared_test.frag", RhiShaderStage::Fragment},
         {"tests/shaders/reflection_probe_contract_test.frag", RhiShaderStage::Fragment},
@@ -206,6 +206,7 @@ int main() {
         {"assets/shaders/gameplay_sky_capture_rhi.frag", RhiShaderStage::Fragment},
         {"assets/shaders/sky_ibl_radiance.frag", RhiShaderStage::Fragment},
         {"assets/shaders/sky_ibl_prefilter.frag", RhiShaderStage::Fragment},
+        {"assets/shaders/reflection_probe_prefilter.frag", RhiShaderStage::Fragment},
         {"assets/shaders/sky_ibl_dfg.frag", RhiShaderStage::Fragment},
         {"assets/shaders/water_composite.frag", RhiShaderStage::Fragment,
          "RHI_TERRAIN_WATER_MDI"},

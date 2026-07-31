@@ -292,6 +292,8 @@ void DeferredPipeline::initializePasses(ResourceMgr& resourceMgr,
     m_localShadowPass = std::make_unique<LocalShadowPass>();
     m_clusteredLightingPass = std::make_unique<ClusteredLightingPass>();
     m_lightingPass = std::make_unique<DeferredLightingPass>();
+    m_reflectionProbeCapturePass =
+        std::make_unique<ReflectionProbeCapturePass>();
     m_reflectionProbeGridPass =
         std::make_unique<ReflectionProbeGridPass>();
     m_reflectionPass = std::make_unique<ReflectionPass>();
@@ -385,6 +387,9 @@ void DeferredPipeline::shutdown() {
     if (m_cloudPass) m_cloudPass->shutdown();
     if (m_reflectionPass) m_reflectionPass->shutdown();
     if (m_reflectionProbeGridPass) m_reflectionProbeGridPass->shutdown();
+    if (m_reflectionProbeCapturePass) {
+        m_reflectionProbeCapturePass->shutdown();
+    }
     if (m_lightingPass) m_lightingPass->shutdown();
     if (m_clusteredLightingPass) m_clusteredLightingPass->shutdown();
     if (m_localShadowPass) m_localShadowPass->shutdown();
@@ -407,6 +412,8 @@ void DeferredPipeline::shutdown() {
     m_cloudPass.reset();
     m_reflectionPass.reset();
     m_reflectionProbeGridPass.reset();
+    m_reflectionProbeCapturePass.reset();
+    m_reflectionProbeGridOwnedByCapture = false;
     m_lightingPass.reset();
     m_clusteredLightingPass.reset();
     m_localShadowPass.reset();
@@ -557,6 +564,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
         m_shared->deferredTargets == nullptr ||
         m_resourceMgr == nullptr || m_skyCapturePass == nullptr ||
         m_skyIblPass == nullptr ||
+        m_reflectionProbeCapturePass == nullptr ||
         m_reflectionProbeGridPass == nullptr ||
         m_lightingPass == nullptr || m_sceneCompositePass == nullptr ||
         m_waterCompositePass == nullptr || m_volumetricPass == nullptr ||
@@ -654,6 +662,34 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
             ctx.frameIndex)) {
         return false;
     }
+    if (!m_reflectionProbeCapturePass->prepareFrame(
+            rhiDevice, ctx.camera.position)) {
+        MECRAFT_LOG_STREAM(
+            std::cerr << "[DeferredPipeline] "
+                      << m_reflectionProbeCapturePass->lastError() << '\n');
+        return false;
+    }
+    const auto& capturedProbes =
+        m_reflectionProbeCapturePass->activeProbes();
+    if (m_reflectionProbeCapturePass->hasSources()) {
+        const auto captureConsumer =
+            m_reflectionProbeCapturePass->consumerResources();
+        if ((!capturedProbes.empty() ||
+             m_reflectionProbeCapturePass->hasPendingWork()) &&
+            (!captureConsumer.prefilteredTexture.isValid() ||
+             !captureConsumer.prefilteredView.isValid())) {
+            return false;
+        }
+        m_reflectionProbeGridPass->setSceneProbes(capturedProbes);
+        m_reflectionProbeGridPass->setPrefilteredCubeArray(
+            captureConsumer.prefilteredTexture,
+            captureConsumer.prefilteredView);
+        m_reflectionProbeGridOwnedByCapture = true;
+    } else if (m_reflectionProbeGridOwnedByCapture) {
+        m_reflectionProbeGridPass->setSceneProbes({});
+        m_reflectionProbeGridPass->setPrefilteredCubeArray({}, {});
+        m_reflectionProbeGridOwnedByCapture = false;
+    }
     if (!m_reflectionProbeGridPass->prepareGraphFrame(rhiDevice)) {
         MECRAFT_LOG_STREAM(
             std::cerr << "[DeferredPipeline] "
@@ -704,11 +740,16 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
     bool localShadowGraphPrepared = false;
     bool clusteredLightingGraphPrepared = false;
     bool skyIblGraphPrepared = false;
+    bool reflectionProbeCaptureGraphPrepared = false;
     bool reflectionProbeGridGraphPrepared = false;
     const auto failGraphSetup = [&]() {
         if (reflectionProbeGridGraphPrepared) {
             m_reflectionProbeGridPass->finishGraphExecution(false);
             reflectionProbeGridGraphPrepared = false;
+        }
+        if (reflectionProbeCaptureGraphPrepared) {
+            m_reflectionProbeCapturePass->finishGraphExecution(false);
+            reflectionProbeCaptureGraphPrepared = false;
         }
         if (skyIblGraphPrepared) {
             m_skyIblPass->finishGraphExecution(false);
@@ -864,6 +905,8 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
 
     ClusteredLightingPass::GraphResources clusteredLightingResources;
     LocalShadowPass::GraphResources localShadowResources;
+    ReflectionProbeCapturePass::GraphResources
+        reflectionProbeCaptureResources;
     ReflectionProbeGridPass::GraphResources reflectionProbeGridResources;
     if (clusteredLightingActive) {
         if (!m_localShadowPass->importGraphResources(
@@ -873,8 +916,17 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
             return failGraphSetup();
         }
     }
+    if (!m_reflectionProbeCapturePass->importGraphResources(
+            m_renderGraph, reflectionProbeCaptureResources)) {
+        return failGraphSetup();
+    }
+    const RgTextureHandle capturedCubeArray =
+        m_reflectionProbeCapturePass->activeProbes().empty()
+            ? RgTextureHandle{}
+            : reflectionProbeCaptureResources.prefiltered;
     if (!m_reflectionProbeGridPass->importGraphResources(
-            m_renderGraph, reflectionProbeGridResources)) {
+            m_renderGraph, reflectionProbeGridResources,
+            capturedCubeArray)) {
         return failGraphSetup();
     }
 
@@ -1279,13 +1331,6 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
         return failGraphSetup();
     }
     skyIblGraphPrepared = true;
-    graphTail = m_reflectionProbeGridPass->addGraphPasses(
-        m_renderGraph, reflectionProbeGridResources, graphTail);
-    if (!graphTail.isValid()) {
-        return failGraphSetup();
-    }
-    reflectionProbeGridGraphPrepared = true;
-
     // Hi-Z occlusion culling: reduce the previous frame's depth into a
     // max-depth pyramid, upload this frame's indirect terrain commands in a
     // dedicated pass, and zero occluded commands before the GBuffer draws
@@ -1486,6 +1531,19 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
             return failGraphSetup();
         }
     }
+
+    graphTail = m_reflectionProbeCapturePass->addGraphPasses(
+        m_renderGraph, reflectionProbeCaptureResources, ctx, graphTail);
+    if (!graphTail.isValid()) {
+        return failGraphSetup();
+    }
+    reflectionProbeCaptureGraphPrepared = true;
+    graphTail = m_reflectionProbeGridPass->addGraphPasses(
+        m_renderGraph, reflectionProbeGridResources, graphTail);
+    if (!graphTail.isValid()) {
+        return failGraphSetup();
+    }
+    reflectionProbeGridGraphPrepared = true;
 
     RenderGraphPassBuilder sceneLightingCopy = m_renderGraph.addPass(
         {"Deferred.SceneLightingCopy", RgPassType::Copy,
@@ -2378,6 +2436,10 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
     }
     if (reflectionProbeGridGraphPrepared) {
         m_reflectionProbeGridPass->finishGraphExecution(
+            executed.succeeded());
+    }
+    if (reflectionProbeCaptureGraphPrepared) {
+        m_reflectionProbeCapturePass->finishGraphExecution(
             executed.succeeded());
     }
     if (executed.succeeded()) {

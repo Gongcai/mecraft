@@ -260,8 +260,14 @@ GLSL 共用相同的 Box Projection 算法和字段顺序。
 ID 生成紧凑候选索引；Probe、Grid Metadata、Cell 和 Index Buffer 通过 Render Graph 事务式
 上传。Reflection Pass 从 Prefiltered Cube Array 读取入选探针，使用 Box Projection 修正方向，
 按 Top-4 权重混合局部环境与天空环境，并提供 Probe ID/Weight 调试视图。粗糙环境反射统一以
-几何反射方向查询预过滤 Mip，不再对方向额外执行随机微表面扰动。实际六面场景捕获、动态更新
-队列、体素/模型场景 Probe 数据源及版本化场景验收仍属于后续集成范围。
+几何反射方向查询预过滤 Mip，不再对方向额外执行随机微表面扰动。
+
+`ReflectionProbeCapturePass` 已建立 128×128 RGBA16F Radiance/Prefilter Cube Array。每个 Probe
+拥有两个捕获槽位，一次修订按稳定 Probe ID 进入确定性队列：先记录 6 个 Radiance Face，再按
+Mip/Face 顺序生成 48 个 GGX Prefilter 产品；仅当 54 个工作项全部成功提交后，才发布新的
+Cubemap Index 与 Capture Revision，构建中的槽位不会进入 Reflection Pass。Capture Renderer
+使用显式接口接收 Probe 世界位置、六面相机矩阵与目标 View，主视图一致的材质/直接光场景绘制
+器、体素/模型场景 Probe 数据源、Dashboard 队列展示及版本化场景验收仍属于后续集成范围。
 
 Probe Capture 使用与主视图一致的材质和直接光，但关闭时域效果。动态探针按确定的更新
 队列逐 Face/Mip 构建，Dashboard 展示队列长度与资源代际。

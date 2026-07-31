@@ -417,6 +417,35 @@ bool testBoxProjection() {
                        "box projection must reject zero directions");
 }
 
+bool testDeterministicCaptureWorkSchedule() {
+    using namespace renderer::contracts;
+    static_assert(kReflectionProbeCubeFaceCount == 6u);
+    static_assert(kReflectionProbeCubeMipCount == 8u);
+    static_assert(kReflectionProbeCaptureMaxProbeCount == 128u);
+    static_assert(kReflectionProbePrefilterWorkItemCount == 48u);
+    static_assert(kReflectionProbeCaptureWorkItemCount == 54u);
+    return requireTrue(
+               reflectionProbeCaptureWorkKind(0u) ==
+                       ReflectionProbeCaptureWorkKind::RadianceFace &&
+                   reflectionProbeCaptureFace(0u) == 0u &&
+                   reflectionProbeCaptureFace(5u) == 5u,
+               "the first six capture items must record ordered radiance faces") &&
+           requireTrue(
+               reflectionProbeCaptureWorkKind(6u) ==
+                       ReflectionProbeCaptureWorkKind::PrefilterFaceMip &&
+                   reflectionProbeCaptureFace(6u) == 0u &&
+                   reflectionProbeCaptureMip(6u) == 0u &&
+                   reflectionProbeCaptureFace(12u) == 0u &&
+                   reflectionProbeCaptureMip(12u) == 1u &&
+                   reflectionProbeCaptureFace(53u) == 5u &&
+                   reflectionProbeCaptureMip(53u) == 7u,
+               "prefilter work must advance face-major within every mip") &&
+           requireTrue(
+               nearlyEqual(reflectionProbeRoughnessForMip(0u), 0.0f) &&
+                   nearlyEqual(reflectionProbeRoughnessForMip(7u), 1.0f),
+               "prefilter mip endpoints must cover the complete roughness range");
+}
+
 bool testCpuAndGlslMirror() {
     using namespace renderer::contracts;
     static_assert(offsetof(GpuReflectionProbe, positionAndExposure) == 0u);
@@ -487,11 +516,16 @@ bool testCpuAndGlslMirror() {
 }
 
 bool testRuntimeGridIntegrationContract() {
+    std::string capturePass;
     std::string gridPass;
     std::string reflectionPass;
     std::string reflectionShader;
     std::string pipeline;
     if (!requireTrue(readProjectFile(
+                         "src/renderer/passes/ReflectionProbeCapturePass.cpp",
+                         capturePass),
+                     "probe-capture pass source must be readable") ||
+        !requireTrue(readProjectFile(
                          "src/renderer/passes/ReflectionProbeGridPass.cpp",
                          gridPass),
                      "probe-grid pass source must be readable") ||
@@ -510,6 +544,20 @@ bool testRuntimeGridIntegrationContract() {
         return false;
     }
     return requireTrue(
+               capturePass.find(
+                   "kReflectionProbeCaptureWorkItemCount") !=
+                       std::string::npos &&
+                   capturePass.find(
+                       "ReflectionProbeCapture.RadianceFace") !=
+                       std::string::npos &&
+                   capturePass.find(
+                       "ReflectionProbeCapture.PrefilterFaceMip") !=
+                       std::string::npos &&
+                   capturePass.find(
+                       "state.activeSlot = state.buildSlot") !=
+                       std::string::npos,
+               "capture pass must queue radiance/prefilter work and commit complete slots") &&
+           requireTrue(
                gridPass.find("buildReflectionProbeGrid(m_sceneProbes)") !=
                        std::string::npos &&
                    gridPass.find("RhiTextureDimension::CubeArray") !=
@@ -537,6 +585,12 @@ bool testRuntimeGridIntegrationContract() {
                "reflection shading must consume Box Projection and expose ID/weight debug") &&
            requireTrue(
                pipeline.find(
+                   "m_reflectionProbeCapturePass->prepareFrame") !=
+                       std::string::npos &&
+                   pipeline.find(
+                       "m_reflectionProbeCapturePass->addGraphPasses") !=
+                       std::string::npos &&
+                   pipeline.find(
                    "m_reflectionProbeGridPass->prepareGraphFrame") !=
                        std::string::npos &&
                    pipeline.find(
@@ -560,7 +614,8 @@ int main() {
         !testDeterministicTopFourSelection() ||
         !testDeterministicSpatialGrid() ||
         !testSpatialGridFailures() ||
-        !testBoxProjection() || !testCpuAndGlslMirror() ||
+        !testBoxProjection() || !testDeterministicCaptureWorkSchedule() ||
+        !testCpuAndGlslMirror() ||
         !testRuntimeGridIntegrationContract()) {
         return 1;
     }
