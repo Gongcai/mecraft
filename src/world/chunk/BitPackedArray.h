@@ -50,7 +50,7 @@ public:
 private:
     size_t m_count = 0;
     uint8_t m_bitsPerEntry = 0;
-    std::vector<uint64_t> m_data;  // 64-bit words for storage
+    std::vector<uint64_t> m_data; // 64-bit words for storage
 
     static constexpr int BITS_PER_WORD = 64;
     [[nodiscard]] static uint8_t normalizeBitsPerEntry(uint8_t bitsPerEntry);

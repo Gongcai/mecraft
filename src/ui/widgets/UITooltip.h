@@ -34,8 +34,8 @@ public:
     }
 
     // Begin a hover over an item. Call each frame while hovering.
-    void startHover(const std::string& text, float cursorX, float cursorY,
-                    float screenW, float screenH, float currentTime) const {
+    void startHover(const std::string& text, float cursorX, float cursorY, float screenW, float screenH,
+                    float currentTime) const {
         if (m_hoverText != text) {
             m_hoverText = text;
             m_hoverStartTime = currentTime;
@@ -79,7 +79,8 @@ public:
 
 protected:
     void renderSelf(const UIRenderContext& ctx) const override {
-        if (!visible) return;
+        if (!visible)
+            return;
         const UIResolvedTooltipStyle style = resolveStyle(ctx);
         if (m_sizeDirty && ctx.textRenderer) {
             updateSize(*ctx.textRenderer, style);

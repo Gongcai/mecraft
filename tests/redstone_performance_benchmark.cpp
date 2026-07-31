@@ -52,35 +52,21 @@ BenchmarkStats computeStats(std::vector<double> timingsMs, const uint64_t checks
     stats.checksum = checksum;
     stats.minMs = timingsMs.front();
     stats.maxMs = timingsMs.back();
-    stats.avgMs = std::accumulate(timingsMs.begin(), timingsMs.end(), 0.0) /
-                  static_cast<double>(timingsMs.size());
+    stats.avgMs = std::accumulate(timingsMs.begin(), timingsMs.end(), 0.0) / static_cast<double>(timingsMs.size());
     const size_t mid = timingsMs.size() / 2;
-    stats.medianMs = (timingsMs.size() % 2) == 0
-        ? (timingsMs[mid - 1] + timingsMs[mid]) * 0.5
-        : timingsMs[mid];
+    stats.medianMs = (timingsMs.size() % 2) == 0 ? (timingsMs[mid - 1] + timingsMs[mid]) * 0.5 : timingsMs[mid];
     stats.p95Ms = timingsMs[(timingsMs.size() - 1U) * 95U / 100U];
     return stats;
 }
 
-void printStats(const std::string& caseName,
-                const BenchmarkStats& stats,
-                const int warmupRounds,
-                const int measureRounds,
-                const int wireCount,
-                const double targetMs) {
+void printStats(const std::string& caseName, const BenchmarkStats& stats, const int warmupRounds,
+                const int measureRounds, const int wireCount, const double targetMs) {
     std::cout << "[redstone_performance_benchmark]"
-              << " case=" << caseName
-              << " wires=" << wireCount
-              << " warmup=" << warmupRounds
-              << " rounds=" << measureRounds
-              << " target_ms=" << std::fixed << std::setprecision(3) << targetMs
-              << " median_ms=" << stats.medianMs
-              << " p95_ms=" << stats.p95Ms
-              << " avg_ms=" << stats.avgMs
-              << " min_ms=" << stats.minMs
-              << " max_ms=" << stats.maxMs
-              << " checksum=" << std::hex << stats.checksum << std::dec
-              << '\n';
+              << " case=" << caseName << " wires=" << wireCount << " warmup=" << warmupRounds
+              << " rounds=" << measureRounds << " target_ms=" << std::fixed << std::setprecision(3) << targetMs
+              << " median_ms=" << stats.medianMs << " p95_ms=" << stats.p95Ms << " avg_ms=" << stats.avgMs
+              << " min_ms=" << stats.minMs << " max_ms=" << stats.maxMs << " checksum=" << std::hex << stats.checksum
+              << std::dec << '\n';
 }
 
 BlockStateId leverState(const bool powered) {
@@ -88,28 +74,15 @@ BlockStateId leverState(const bool powered) {
         BlockRegistry::requireIdByName("minecraft:lever"),
         std::vector<std::pair<uint16_t, uint16_t>>{
             {PropIndices::FACING, PropIndices::FACING_FLOOR},
-            {PropIndices::POWERED, powered ? PropIndices::POWERED_TRUE : PropIndices::POWERED_FALSE}
-        });
+            {PropIndices::POWERED, powered ? PropIndices::POWERED_TRUE : PropIndices::POWERED_FALSE}});
 }
 
 uint8_t powerFromState(const BlockStateId state) {
     static const std::array<uint16_t, 16> kPowerValues = {
-        PropIndices::POWER_0,
-        PropIndices::POWER_1,
-        PropIndices::POWER_2,
-        PropIndices::POWER_3,
-        PropIndices::POWER_4,
-        PropIndices::POWER_5,
-        PropIndices::POWER_6,
-        PropIndices::POWER_7,
-        PropIndices::POWER_8,
-        PropIndices::POWER_9,
-        PropIndices::POWER_10,
-        PropIndices::POWER_11,
-        PropIndices::POWER_12,
-        PropIndices::POWER_13,
-        PropIndices::POWER_14,
-        PropIndices::POWER_15,
+        PropIndices::POWER_0,  PropIndices::POWER_1,  PropIndices::POWER_2,  PropIndices::POWER_3,
+        PropIndices::POWER_4,  PropIndices::POWER_5,  PropIndices::POWER_6,  PropIndices::POWER_7,
+        PropIndices::POWER_8,  PropIndices::POWER_9,  PropIndices::POWER_10, PropIndices::POWER_11,
+        PropIndices::POWER_12, PropIndices::POWER_13, PropIndices::POWER_14, PropIndices::POWER_15,
     };
 
     const uint16_t value = BlockStateRegistry::getPropertyIndex(state, PropIndices::POWER);
@@ -138,10 +111,8 @@ bool areaLoaded(const World& world, const int minX, const int maxX, const int y,
 
 void loadBenchmarkArea(World& world, const int minX, const int maxX, const int y, const int minZ, const int maxZ) {
     world.setRenderDistance(8);
-    const glm::vec3 center(
-        static_cast<float>(minX + maxX) * 0.5f,
-        static_cast<float>(y),
-        static_cast<float>(minZ + maxZ) * 0.5f);
+    const glm::vec3 center(static_cast<float>(minX + maxX) * 0.5f, static_cast<float>(y),
+                           static_cast<float>(minZ + maxZ) * 0.5f);
 
     for (int i = 0; i < 512; ++i) {
         world.update(center, 1.0f / 60.0f);
@@ -163,7 +134,8 @@ std::unique_ptr<RedstoneBenchmarkWorld> buildLargeWireGrid() {
     loadBenchmarkArea(benchmark->world, -1, maxX, benchmark->y, minZ, maxZ);
 
     const BlockID stone = BlockRegistry::requireIdByName("minecraft:stone");
-    const BlockStateId wire = BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_wire"));
+    const BlockStateId wire =
+        BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_wire"));
 
     for (int x = minX; x <= maxX; ++x) {
         for (int z = minZ; z <= maxZ; ++z) {
@@ -173,11 +145,8 @@ std::unique_ptr<RedstoneBenchmarkWorld> buildLargeWireGrid() {
         }
     }
     benchmark->world.setBlock(benchmark->leverPosition.x, benchmark->y - 1, benchmark->leverPosition.z, stone);
-    benchmark->world.setBlockState(
-        benchmark->leverPosition.x,
-        benchmark->leverPosition.y,
-        benchmark->leverPosition.z,
-        leverState(false));
+    benchmark->world.setBlockState(benchmark->leverPosition.x, benchmark->leverPosition.y, benchmark->leverPosition.z,
+                                   leverState(false));
 
     benchmark->world.redstoneUpdateQueue().clear();
     benchmark->world.redstoneChangedBlockQueue().clear();
@@ -196,9 +165,7 @@ uint64_t checksumGrid(const World& world, const int y) {
     return checksum;
 }
 
-BenchmarkStats runToggleBenchmark(RedstoneBenchmarkWorld& benchmark,
-                                  const int warmupRounds,
-                                  const int measureRounds) {
+BenchmarkStats runToggleBenchmark(RedstoneBenchmarkWorld& benchmark, const int warmupRounds, const int measureRounds) {
     std::vector<double> timings;
     timings.reserve(static_cast<size_t>(measureRounds));
     uint64_t checksum = 14695981039346656037ULL;
@@ -207,11 +174,8 @@ BenchmarkStats runToggleBenchmark(RedstoneBenchmarkWorld& benchmark,
 
     const auto runOne = [&]() {
         powered = !powered;
-        benchmark.world.setBlockState(
-            benchmark.leverPosition.x,
-            benchmark.leverPosition.y,
-            benchmark.leverPosition.z,
-            leverState(powered));
+        benchmark.world.setBlockState(benchmark.leverPosition.x, benchmark.leverPosition.y, benchmark.leverPosition.z,
+                                      leverState(powered));
 
         const auto start = std::chrono::steady_clock::now();
         const size_t changed = ecs::RedstoneSystem::processWorld(benchmark.world, redstoneTick++, 20000);
@@ -243,9 +207,7 @@ BenchmarkStats runToggleBenchmark(RedstoneBenchmarkWorld& benchmark,
     return computeStats(std::move(timings), checksum);
 }
 
-BenchmarkStats runIdleBenchmark(RedstoneBenchmarkWorld& benchmark,
-                                const int warmupRounds,
-                                const int measureRounds) {
+BenchmarkStats runIdleBenchmark(RedstoneBenchmarkWorld& benchmark, const int warmupRounds, const int measureRounds) {
     std::vector<double> timings;
     timings.reserve(static_cast<size_t>(measureRounds));
     uint64_t checksum = 14695981039346656037ULL;

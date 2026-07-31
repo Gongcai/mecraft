@@ -37,20 +37,16 @@ public:
     /// @param viewProj Combined view-projection matrix
     /// @param target Block selection target data
     /// @param blockBreak Block break progress data
-    void render(const IWorldView& worldView,
-                const glm::mat4& viewProj,
-                const BlockTargetRenderData& target,
-                const BlockBreakRenderData& blockBreak,
-                RhiCommandList& commandList);
+    void render(const IWorldView& worldView, const glm::mat4& viewProj, const BlockTargetRenderData& target,
+                const BlockBreakRenderData& blockBreak, RhiCommandList& commandList);
 
 private:
     void initOutlineMesh();
     void initBreakOverlayMesh();
-    void renderBlockOutline(const IWorldView& worldView, const glm::mat4& viewProj,
-                            const BlockTargetRenderData& target, RhiCommandList& commandList);
+    void renderBlockOutline(const IWorldView& worldView, const glm::mat4& viewProj, const BlockTargetRenderData& target,
+                            RhiCommandList& commandList);
     void renderBlockBreakOverlay(const IWorldView& worldView, const glm::mat4& viewProj,
-                                 const BlockBreakRenderData& blockBreak,
-                                 RhiCommandList& commandList);
+                                 const BlockBreakRenderData& blockBreak, RhiCommandList& commandList);
 
     int32_t m_breakOverlayVertexCount = 0;
     int32_t m_breakOverlayCrossVertexCount = 0;

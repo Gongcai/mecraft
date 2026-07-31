@@ -29,18 +29,11 @@ public:
     static constexpr int DEFAULT_SMELTING_OUTPUT_SLOT = 2;
     static constexpr int MAX_SLOT_COUNT = BlockEntityInventory::SLOT_COUNT;
 
-    explicit MachineInventory(const int slotCount = 0)
-        : m_slotCount(slotCount) {
-        validateSlotCount(slotCount);
-    }
+    explicit MachineInventory(const int slotCount = 0) : m_slotCount(slotCount) { validateSlotCount(slotCount); }
 
-    [[nodiscard]] int slotCount() const {
-        return m_slotCount;
-    }
+    [[nodiscard]] int slotCount() const { return m_slotCount; }
 
-    [[nodiscard]] bool isValidSlot(const int slot) const {
-        return slot >= 0 && slot < m_slotCount;
-    }
+    [[nodiscard]] bool isValidSlot(const int slot) const { return slot >= 0 && slot < m_slotCount; }
 
     [[nodiscard]] ItemStack getSlotStack(const int slot) const {
         if (!isValidSlot(slot)) {
@@ -105,25 +98,15 @@ public:
         return std::clamp(m_cookSeconds / m_cookTargetSeconds, 0.0f, 1.0f);
     }
 
-    [[nodiscard]] float burnSecondsRemaining() const {
-        return m_burnSecondsRemaining;
-    }
+    [[nodiscard]] float burnSecondsRemaining() const { return m_burnSecondsRemaining; }
 
-    [[nodiscard]] float burnSecondsTotal() const {
-        return m_burnSecondsTotal;
-    }
+    [[nodiscard]] float burnSecondsTotal() const { return m_burnSecondsTotal; }
 
-    [[nodiscard]] float cookSeconds() const {
-        return m_cookSeconds;
-    }
+    [[nodiscard]] float cookSeconds() const { return m_cookSeconds; }
 
-    [[nodiscard]] float cookTargetSeconds() const {
-        return m_cookTargetSeconds;
-    }
+    [[nodiscard]] float cookTargetSeconds() const { return m_cookTargetSeconds; }
 
-    void setProgress(const float burnSecondsRemaining,
-                     const float burnSecondsTotal,
-                     const float cookSeconds,
+    void setProgress(const float burnSecondsRemaining, const float burnSecondsTotal, const float cookSeconds,
                      const float cookTargetSeconds) {
         m_burnSecondsRemaining = std::max(0.0f, burnSecondsRemaining);
         m_burnSecondsTotal = std::max(0.0f, burnSecondsTotal);
@@ -157,16 +140,11 @@ private:
     }
 
     void validateProcessor(const MachineSmeltingProcessor& processor) const {
-        if (processor.inputSlot < 0 ||
-            processor.inputSlot >= m_slotCount ||
-            processor.fuelSlot < 0 ||
-            processor.fuelSlot >= m_slotCount ||
-            processor.outputSlot < 0 ||
-            processor.outputSlot >= m_slotCount) {
+        if (processor.inputSlot < 0 || processor.inputSlot >= m_slotCount || processor.fuelSlot < 0 ||
+            processor.fuelSlot >= m_slotCount || processor.outputSlot < 0 || processor.outputSlot >= m_slotCount) {
             fail("Machine smelting processor references a slot outside machine storage");
         }
-        if (processor.inputSlot == processor.fuelSlot ||
-            processor.inputSlot == processor.outputSlot ||
+        if (processor.inputSlot == processor.fuelSlot || processor.inputSlot == processor.outputSlot ||
             processor.fuelSlot == processor.outputSlot) {
             fail("Machine smelting processor requires distinct input, fuel, and output slots");
         }
@@ -181,8 +159,7 @@ private:
         return smeltingSystem.findRecipe(input.itemId);
     }
 
-    [[nodiscard]] bool canReceiveResult(const SmeltingRecipe& recipe,
-                                        const MachineSmeltingProcessor& processor) const {
+    [[nodiscard]] bool canReceiveResult(const SmeltingRecipe& recipe, const MachineSmeltingProcessor& processor) const {
         const ItemDef& resultDef = ItemRegistry::get(recipe.result);
         if (resultDef.maxStack == 0) {
             return false;
@@ -198,8 +175,7 @@ private:
         return static_cast<uint32_t>(output.count) + recipe.resultCount <= resultDef.maxStack;
     }
 
-    [[nodiscard]] bool consumeFuel(const SmeltingSystem& smeltingSystem,
-                                   const MachineSmeltingProcessor& processor) {
+    [[nodiscard]] bool consumeFuel(const SmeltingSystem& smeltingSystem, const MachineSmeltingProcessor& processor) {
         ItemStack& fuel = m_slots[static_cast<std::size_t>(processor.fuelSlot)];
         if (fuel.isEmpty()) {
             return false;
@@ -246,8 +222,7 @@ private:
 
 class MachineInventoryStore {
 public:
-    [[nodiscard]] MachineInventory& getOrCreate(const glm::ivec3& position,
-                                                const std::string& typeId,
+    [[nodiscard]] MachineInventory& getOrCreate(const glm::ivec3& position, const std::string& typeId,
                                                 const int slotCount) {
         validateTypeAndSlotCount(typeId, slotCount);
         Entry& entry = m_entries[positionKey(position)];
@@ -279,19 +254,15 @@ public:
         return &it->second.inventory;
     }
 
-    [[nodiscard]] bool empty() const {
-        return m_entries.empty();
-    }
+    [[nodiscard]] bool empty() const { return m_entries.empty(); }
 
-    template <typename Fn>
-    void forEach(Fn&& fn) const {
+    template <typename Fn> void forEach(Fn&& fn) const {
         for (const auto& [key, entry] : m_entries) {
             fn(glm::ivec3(key.x, key.y, key.z), entry.typeId, entry.inventory);
         }
     }
 
-    [[nodiscard]] std::array<ItemStack, MachineInventory::MAX_SLOT_COUNT> extractAndErase(
-        const glm::ivec3& position) {
+    [[nodiscard]] std::array<ItemStack, MachineInventory::MAX_SLOT_COUNT> extractAndErase(const glm::ivec3& position) {
         std::array<ItemStack, MachineInventory::MAX_SLOT_COUNT> contents{};
         const auto it = m_entries.find(positionKey(position));
         if (it == m_entries.end()) {
@@ -305,9 +276,7 @@ public:
         return contents;
     }
 
-    void erase(const glm::ivec3& position) {
-        m_entries.erase(positionKey(position));
-    }
+    void erase(const glm::ivec3& position) { m_entries.erase(positionKey(position)); }
 
 private:
     [[noreturn]] static void fail(const char* message) {
@@ -320,9 +289,7 @@ private:
         int y = 0;
         int z = 0;
 
-        [[nodiscard]] bool operator==(const Key& other) const {
-            return x == other.x && y == other.y && z == other.z;
-        }
+        [[nodiscard]] bool operator==(const Key& other) const { return x == other.x && y == other.y && z == other.z; }
     };
 
     struct KeyHash {
@@ -349,9 +316,7 @@ private:
         }
     }
 
-    [[nodiscard]] static Key positionKey(const glm::ivec3& position) {
-        return {position.x, position.y, position.z};
-    }
+    [[nodiscard]] static Key positionKey(const glm::ivec3& position) { return {position.x, position.y, position.z}; }
 
     std::unordered_map<Key, Entry, KeyHash> m_entries;
 };

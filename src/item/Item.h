@@ -14,11 +14,7 @@
 // ItemID is now a separate RuntimeId from BlockID
 using ItemID = RuntimeId;
 
-enum class ItemUseBehavior : uint8_t {
-    TillSoil = 0,
-    BucketPickupFluid = 1,
-    BucketPlaceFluid = 2
-};
+enum class ItemUseBehavior : uint8_t { TillSoil = 0, BucketPickupFluid = 1, BucketPlaceFluid = 2 };
 
 struct ItemUseRule {
     ItemUseBehavior behavior = ItemUseBehavior::TillSoil;
@@ -32,20 +28,18 @@ struct ItemUseRule {
 };
 
 struct ItemStack {
-    ItemID itemId = 0;  // AIR is RuntimeId 0.
+    ItemID itemId = 0; // AIR is RuntimeId 0.
     uint16_t count = 0;
     uint16_t durability = 0;
 
-    [[nodiscard]] bool isEmpty() const {
-        return itemId == 0 || count == 0;
-    }
+    [[nodiscard]] bool isEmpty() const { return itemId == 0 || count == 0; }
 };
 
 struct ItemDef {
     NamespacedId namespacedId = NamespacedId("minecraft", "unknown");
     const char* iconTextureName = "unknown";
     uint16_t maxStack = 64;
-    ItemID iconItemId = 0;  // AIR
+    ItemID iconItemId = 0; // AIR
     BlockID placeBlock = 0; // AIR
     BlockID renderBlock = 0; // AIR
     bool isTool = false;
@@ -73,11 +67,11 @@ namespace ItemUseRules {
     }
     return std::find(rule.matchBlocks.begin(), rule.matchBlocks.end(), blockId) != rule.matchBlocks.end();
 }
-}
+} // namespace ItemUseRules
 
 // Block drop table entry
 struct BlockDropEntry {
-    ItemID dropItem = 0;   // defaults to AIR (0)
+    ItemID dropItem = 0; // defaults to AIR (0)
     uint8_t minCount = 1;
     uint8_t maxCount = 1;
 };
@@ -88,6 +82,7 @@ public:
     static void init();
     [[nodiscard]] static ItemID getDropItem(BlockID blockId);
     [[nodiscard]] static const BlockDropEntry& get(BlockID blockId);
+
 private:
     static std::unordered_map<BlockID, BlockDropEntry> s_drops;
     static bool s_initialized;
@@ -119,8 +114,8 @@ public:
 
 private:
     static IdRegistry s_idRegistry;
-    static std::vector<ItemDef> s_items;                        // index = ItemID
-    static std::vector<std::string> s_itemIconTextureNames;     // for stable c_str storage
+    static std::vector<ItemDef> s_items; // index = ItemID
+    static std::vector<std::string> s_itemIconTextureNames; // for stable c_str storage
     static std::unordered_map<NamespacedId, ItemID> s_idLookup;
     static bool s_initializing;
     static bool s_initialized;

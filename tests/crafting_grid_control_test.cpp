@@ -15,7 +15,7 @@ int fail(const char* message) {
 bool getItemId(const char* name, ItemID& outId) {
     return ItemRegistry::tryGetIdByName(name, outId);
 }
-}
+} // namespace
 
 int main() {
     BlockRegistry::init(nullptr);
@@ -23,8 +23,7 @@ int main() {
 
     ItemID oakLog = 0;
     ItemID oakPlanks = 0;
-    if (!getItemId("minecraft:oak_log", oakLog) ||
-        !getItemId("minecraft:oak_planks", oakPlanks)) {
+    if (!getItemId("minecraft:oak_log", oakLog) || !getItemId("minecraft:oak_planks", oakPlanks)) {
         return fail("expected oak log and oak planks item ids to exist");
     }
 
@@ -78,8 +77,7 @@ int main() {
     ItemID cobblestone = 0;
     ItemID stick = 0;
     ItemID stonePickaxe = 0;
-    if (!getItemId("minecraft:cobblestone", cobblestone) ||
-        !getItemId("minecraft:stick", stick) ||
+    if (!getItemId("minecraft:cobblestone", cobblestone) || !getItemId("minecraft:stick", stick) ||
         !getItemId("minecraft:stone_pickaxe", stonePickaxe)) {
         return fail("expected stone pickaxe ingredients and result item ids to exist");
     }
@@ -98,8 +96,8 @@ int main() {
     if (!grid.consumeOneCraft()) {
         return fail("taking the workbench result should consume one craft");
     }
-    if (grid.getCraftingSlot(4) != stick || grid.getCraftingSlotCount(4) != 1 ||
-        grid.getCraftingSlot(7) != stick || grid.getCraftingSlotCount(7) != 1) {
+    if (grid.getCraftingSlot(4) != stick || grid.getCraftingSlotCount(4) != 1 || grid.getCraftingSlot(7) != stick ||
+        grid.getCraftingSlotCount(7) != 1) {
         return fail("3x3 craft should consume one item from each occupied ingredient slot");
     }
 

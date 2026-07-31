@@ -26,11 +26,9 @@ public:
     void shutdown();
 
     [[nodiscard]] bool loadCatalog(const std::string& textureConfigPath);
-    [[nodiscard]] bool loadCatalog(const std::string& textureConfigPath,
-                                   const std::string& packConfigPath);
+    [[nodiscard]] bool loadCatalog(const std::string& textureConfigPath, const std::string& packConfigPath);
     void buildTextures(const std::string& directory, int tileSize);
-    void buildTextures(const std::string& directory,
-                       int tileSize,
+    void buildTextures(const std::string& directory, int tileSize,
                        const std::unordered_set<std::string>& registeredTextureNames);
     void buildAtlas(const std::string& directory, int tileSize);
     void buildTextureArray(const std::string& directory, int tileSize);

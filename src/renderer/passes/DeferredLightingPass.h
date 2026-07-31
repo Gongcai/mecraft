@@ -15,7 +15,9 @@ class RhiCommandList;
 class RhiDevice;
 class ClusteredLightingPass;
 
-namespace shadow { class ShadowRenderer; }
+namespace shadow {
+class ShadowRenderer;
+}
 
 /// Deferred lighting pass: computes full-scene lighting from GBuffer, shadows, SSAO, and atmosphere.
 class DeferredLightingPass : public RenderPass {
@@ -32,9 +34,7 @@ public:
 
     /// Injects the Vulkan clustered-light data owner used as descriptor set 1.
     /// @param pass Pass whose persistent buffers outlive this lighting pipeline.
-    void setClusteredLightingPass(ClusteredLightingPass* pass) {
-        m_clusteredLightingPass = pass;
-    }
+    void setClusteredLightingPass(ClusteredLightingPass* pass) { m_clusteredLightingPass = pass; }
 
     /// Records deferred lighting into a graph-owned command list.
     /// @param commandList Recording command list supplied by the Render Graph.
@@ -42,19 +42,15 @@ public:
     /// @param settings Current shadow, SSAO, and post-process settings.
     /// @param targets Persistent GBuffer inputs and scene-lighting output.
     /// @return True when resources were prepared and lighting commands were recorded.
-    [[nodiscard]] bool execute(RhiCommandList& commandList,
-                               const FrameContext& ctx,
-                               const RenderSettings& settings,
+    [[nodiscard]] bool execute(RhiCommandList& commandList, const FrameContext& ctx, const RenderSettings& settings,
                                DeferredRenderTargets& targets);
 
 private:
     bool ensureRhiPipeline(RhiDevice& rhiDevice);
     bool ensureExternalTextureViews(RhiDevice& rhiDevice);
-    bool ensureTextureView(RhiDevice& rhiDevice, RhiTextureHandle texture,
-                           RhiTextureFormat format, RhiTextureHandle& viewTexture,
-                           RhiTextureViewHandle& textureView);
-    bool ensureRhiBindGroup(RhiDevice& rhiDevice,
-                            const std::array<RhiTextureViewHandle, 20>& views);
+    bool ensureTextureView(RhiDevice& rhiDevice, RhiTextureHandle texture, RhiTextureFormat format,
+                           RhiTextureHandle& viewTexture, RhiTextureViewHandle& textureView);
+    bool ensureRhiBindGroup(RhiDevice& rhiDevice, const std::array<RhiTextureViewHandle, 20>& views);
     void destroyRhiBindGroup();
     void destroyExternalTextureViews();
     void destroyRhiResources();

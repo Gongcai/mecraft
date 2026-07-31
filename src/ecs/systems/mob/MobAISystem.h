@@ -8,10 +8,8 @@ namespace ecs {
 
 class MobAISystem : public ISystem {
 public:
-    using Dependencies = SystemDependency<
-        std::tuple<MobTag, MobAIComponent, TransformComponent>,
-        std::tuple<MobAIComponent, MoveIntentComponent>
-    >;
+    using Dependencies = SystemDependency<std::tuple<MobTag, MobAIComponent, TransformComponent>,
+                                          std::tuple<MobAIComponent, MoveIntentComponent>>;
 
     void update(SystemContext& ctx) override;
 };

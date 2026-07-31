@@ -24,14 +24,12 @@ constexpr size_t kLightingTextureCount = 20u;
     return lhs.index == rhs.index && lhs.generation == rhs.generation;
 }
 
-[[nodiscard]] bool sameTextureView(const RhiTextureViewHandle lhs,
-                                   const RhiTextureViewHandle rhs) {
+[[nodiscard]] bool sameTextureView(const RhiTextureViewHandle lhs, const RhiTextureViewHandle rhs) {
     return lhs.index == rhs.index && lhs.generation == rhs.generation;
 }
 
-[[nodiscard]] bool sameTextureViews(
-    const std::array<RhiTextureViewHandle, kLightingTextureCount>& lhs,
-    const std::array<RhiTextureViewHandle, kLightingTextureCount>& rhs) {
+[[nodiscard]] bool sameTextureViews(const std::array<RhiTextureViewHandle, kLightingTextureCount>& lhs,
+                                    const std::array<RhiTextureViewHandle, kLightingTextureCount>& rhs) {
     for (size_t index = 0u; index < lhs.size(); ++index) {
         if (!sameTextureView(lhs[index], rhs[index])) {
             return false;
@@ -108,36 +106,26 @@ void DeferredLightingPass::shutdown() {
     m_rippleNormalTexture = {};
 }
 
-bool DeferredLightingPass::execute(RhiCommandList& commandList,
-                                   const FrameContext& ctx,
-                                   const RenderSettings& settings,
+bool DeferredLightingPass::execute(RhiCommandList& commandList, const FrameContext& ctx, const RenderSettings& settings,
                                    DeferredRenderTargets& targets) {
-    if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr ||
-        m_shadowRenderer == nullptr) {
+    if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr || m_shadowRenderer == nullptr) {
         return false;
     }
 
     RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
-    const bool clusteredLightingActive =
-        rhiDevice.backend() == RhiBackend::Vulkan;
+    const bool clusteredLightingActive = rhiDevice.backend() == RhiBackend::Vulkan;
     if (clusteredLightingActive &&
-        (m_clusteredLightingPass == nullptr ||
-         !m_clusteredLightingPass->consumerBindGroupLayout().isValid() ||
+        (m_clusteredLightingPass == nullptr || !m_clusteredLightingPass->consumerBindGroupLayout().isValid() ||
          !m_clusteredLightingPass->consumerBindGroup().isValid())) {
         return false;
     }
     const bool useTemporalSsao =
-        settings.ssao.enabled && settings.ssao.temporalEnabled &&
-        !requiresTemporalReset(ctx.temporalResetReasons);
-    if (!ensureRhiPipeline(rhiDevice) ||
-        !targets.ensureSceneLightingTextureView(rhiDevice) ||
-        !targets.ensureGBufferTextureViews(rhiDevice) ||
-        !targets.ensureVolumetricFogTextureViews(rhiDevice) ||
-        !(useTemporalSsao
-              ? targets.ensureSsaoTemporalTextureView(rhiDevice)
-              : targets.ensureSsaoFilteredTextureView(rhiDevice)) ||
-        !targets.ensureSkyCaptureTextureView(rhiDevice) ||
-        !ensureExternalTextureViews(rhiDevice)) {
+        settings.ssao.enabled && settings.ssao.temporalEnabled && !requiresTemporalReset(ctx.temporalResetReasons);
+    if (!ensureRhiPipeline(rhiDevice) || !targets.ensureSceneLightingTextureView(rhiDevice) ||
+        !targets.ensureGBufferTextureViews(rhiDevice) || !targets.ensureVolumetricFogTextureViews(rhiDevice) ||
+        !(useTemporalSsao ? targets.ensureSsaoTemporalTextureView(rhiDevice)
+                          : targets.ensureSsaoFilteredTextureView(rhiDevice)) ||
+        !targets.ensureSkyCaptureTextureView(rhiDevice) || !ensureExternalTextureViews(rhiDevice)) {
         return false;
     }
 
@@ -150,9 +138,7 @@ bool DeferredLightingPass::execute(RhiCommandList& commandList,
         targets.depthTextureViewHandle(),
         m_lightmapDayTextureView,
         m_lightmapNightTextureView,
-        useTemporalSsao
-            ? targets.ssaoTemporalTextureViewHandle()
-            : targets.ssaoFilteredTextureViewHandle(),
+        useTemporalSsao ? targets.ssaoTemporalTextureViewHandle() : targets.ssaoFilteredTextureViewHandle(),
         targets.skyCaptureTextureViewHandle(),
         m_noiseTextureView,
         targets.atmosphereLutTextureViewHandle(),
@@ -163,25 +149,18 @@ bool DeferredLightingPass::execute(RhiCommandList& commandList,
         targets.csmShadowColor0ArrayTextureViewHandle(),
         targets.csmShadowColor1ArrayTextureViewHandle(),
         m_rippleNormalTextureView,
-        targets.f0MetallicTextureViewHandle()
-    };
+        targets.f0MetallicTextureViewHandle()};
     if (!ensureRhiBindGroup(rhiDevice, views)) {
         return false;
     }
 
     const bool volumetricFogActive =
-        (ctx.volumetric.lightEnabled ||
-         (ctx.volumetric.fogEnabled && ctx.volumetric.fogDensityScale > 0.001f)) &&
+        (ctx.volumetric.lightEnabled || (ctx.volumetric.fogEnabled && ctx.volumetric.fogDensityScale > 0.001f)) &&
         settings.volumetric.fogEnabled;
     DeferredLightingParams params{};
-    const bool projectionJitter = usesTemporalProjectionJitter(
-        settings.upscale.type, settings.taa.enabled);
-    params.viewProj = projectionJitter
-        ? ctx.camera.jitteredViewProj
-        : ctx.camera.viewProj;
-    params.invViewProj = projectionJitter
-        ? ctx.camera.jitteredInvViewProj
-        : ctx.camera.invViewProj;
+    const bool projectionJitter = usesTemporalProjectionJitter(settings.upscale.type, settings.taa.enabled);
+    params.viewProj = projectionJitter ? ctx.camera.jitteredViewProj : ctx.camera.viewProj;
+    params.invViewProj = projectionJitter ? ctx.camera.jitteredInvViewProj : ctx.camera.invViewProj;
     params.projection = ctx.camera.projection;
     params.shadowViewProj = m_shadowRenderer->viewProj();
     params.shadowModelView = m_shadowRenderer->modelView();
@@ -189,115 +168,63 @@ bool DeferredLightingPass::execute(RhiCommandList& commandList,
     params.shadowProjectionInverse = m_shadowRenderer->projectionInverse();
     for (int index = 0; index < shadow::ShadowRenderer::CASCADE_COUNT; ++index) {
         const shadow::ShadowRenderer::Cascade& cascade = m_shadowRenderer->cascade(index);
-        DeferredLightingCascadeParams& cascadeParams =
-            params.cascades[static_cast<size_t>(index)];
+        DeferredLightingCascadeParams& cascadeParams = params.cascades[static_cast<size_t>(index)];
         cascadeParams.viewProj = cascade.viewProj;
-        cascadeParams.splitParams = glm::vec4(cascade.splitNear,
-                                               cascade.splitFar,
-                                               cascade.texelWorldSize,
-                                               index >= 2 ? 0.5f : 1.0f);
+        cascadeParams.splitParams =
+            glm::vec4(cascade.splitNear, cascade.splitFar, cascade.texelWorldSize, index >= 2 ? 0.5f : 1.0f);
         cascadeParams.depthExtent = glm::vec4(cascade.depthExtent, 0.0f, 0.0f, 0.0f);
     }
     params.cameraSkyIntensity = glm::vec4(ctx.camera.position, ctx.skyIntensity);
-    params.sunDirectionMoonVisibility = glm::vec4(ctx.skyColors.sunDirection,
-                                                  ctx.skyColors.moonVisibility);
+    params.sunDirectionMoonVisibility = glm::vec4(ctx.skyColors.sunDirection, ctx.skyColors.moonVisibility);
     params.moonDirection = glm::vec4(ctx.skyColors.moonDirection, 0.0f);
-    params.shadowDirectionDistance = glm::vec4(
-        m_shadowRenderer->lightDirection(),
-        std::max(64.0f, m_shadowRenderer->shadowDistance()));
-    params.sunLightShadowExtent = glm::vec4(ctx.skyColors.sunLightColor,
-                                            m_shadowRenderer->shadowExtent());
-    params.moonLightShadowTexelSize = glm::vec4(ctx.skyColors.moonLightColor,
-                                                m_shadowRenderer->texelWorldSize());
-    params.skyAmbientShadowSoftness = glm::vec4(ctx.skyColors.skyAmbientColor,
-                                                settings.shadow.softness);
-    params.shadowTintPcssStrength = glm::vec4(ctx.skyColors.shadowTintColor,
-                                              settings.shadow.pcssStrength);
-    params.horizonColorConstantBias = glm::vec4(ctx.skyColors.horizonScatterColor,
-                                                settings.shadow.constantBias);
-    params.cloudWeatherSlopeBias = glm::vec4(ctx.skyIlluminance.cloudDynamicWeather,
-                                             settings.shadow.slopeBias);
+    params.shadowDirectionDistance =
+        glm::vec4(m_shadowRenderer->lightDirection(), std::max(64.0f, m_shadowRenderer->shadowDistance()));
+    params.sunLightShadowExtent = glm::vec4(ctx.skyColors.sunLightColor, m_shadowRenderer->shadowExtent());
+    params.moonLightShadowTexelSize = glm::vec4(ctx.skyColors.moonLightColor, m_shadowRenderer->texelWorldSize());
+    params.skyAmbientShadowSoftness = glm::vec4(ctx.skyColors.skyAmbientColor, settings.shadow.softness);
+    params.shadowTintPcssStrength = glm::vec4(ctx.skyColors.shadowTintColor, settings.shadow.pcssStrength);
+    params.horizonColorConstantBias = glm::vec4(ctx.skyColors.horizonScatterColor, settings.shadow.constantBias);
+    params.cloudWeatherSlopeBias = glm::vec4(ctx.skyIlluminance.cloudDynamicWeather, settings.shadow.slopeBias);
     params.fogColorNormalOffset = glm::vec4(ctx.fog.color, settings.shadow.normalOffset);
-    params.lighting0 = glm::vec4(settings.postProcess.shadowTintStrength,
-                                 settings.postProcess.directSunStrength,
-                                 settings.postProcess.skyAmbientStrength,
-                                 settings.weather.skylightScale);
-    params.lighting1 = glm::vec4(settings.postProcess.minimumAmbient,
-                                 settings.postProcess.shadowMinLight,
-                                 settings.postProcess.shadowContrast,
-                                 settings.postProcess.blockLightStrength);
-    params.lighting2 = glm::vec4(settings.postProcess.fakeBounceStrength,
-                                 settings.postProcess.albedoDesaturation,
-                                 settings.postProcess.shadowDesaturation,
-                                 settings.shadow.contactShadowStrength);
-    params.atmosphere0 = glm::vec4(ctx.atmosphere.sunWarmth,
-                                   ctx.atmosphere.skyCoolness,
-                                   ctx.atmosphere.aerialStrength,
+    params.lighting0 = glm::vec4(settings.postProcess.shadowTintStrength, settings.postProcess.directSunStrength,
+                                 settings.postProcess.skyAmbientStrength, settings.weather.skylightScale);
+    params.lighting1 = glm::vec4(settings.postProcess.minimumAmbient, settings.postProcess.shadowMinLight,
+                                 settings.postProcess.shadowContrast, settings.postProcess.blockLightStrength);
+    params.lighting2 = glm::vec4(settings.postProcess.fakeBounceStrength, settings.postProcess.albedoDesaturation,
+                                 settings.postProcess.shadowDesaturation, settings.shadow.contactShadowStrength);
+    params.atmosphere0 = glm::vec4(ctx.atmosphere.sunWarmth, ctx.atmosphere.skyCoolness, ctx.atmosphere.aerialStrength,
                                    ctx.atmosphere.horizonScatterStrength);
-    params.weather0 = glm::vec4(ctx.weather.wetness,
-                                ctx.weather.storm,
-                                ctx.weather.aerialReduction,
-                                ctx.weather.lightningFlash);
-    params.weather1 = glm::vec4(ctx.weather.surfaceWetness,
-                                ctx.weather.skyWetness,
-                                ctx.weather.fogWetness,
-                                ctx.weather.cloudWetness);
-    params.weather2 = glm::vec4(ctx.atmosphere.directWeatherOcclusion,
-                                ctx.weather.precipitation,
-                                ctx.shaderTime,
+    params.weather0 =
+        glm::vec4(ctx.weather.wetness, ctx.weather.storm, ctx.weather.aerialReduction, ctx.weather.lightningFlash);
+    params.weather1 =
+        glm::vec4(ctx.weather.surfaceWetness, ctx.weather.skyWetness, ctx.weather.fogWetness, ctx.weather.cloudWetness);
+    params.weather2 = glm::vec4(ctx.atmosphere.directWeatherOcclusion, ctx.weather.precipitation, ctx.shaderTime,
                                 ctx.cloud.timeScale);
-    params.cloud0 = glm::vec4(ctx.cloud.shadowStrength,
-                              ctx.cloud.shadowScale,
-                              ctx.cloud.shadowSpeed,
-                              ctx.cloud.coverage);
-    params.cloud1 = glm::vec4(ctx.cloud.density,
-                              ctx.cloud.height,
-                              ctx.cloud.thickness,
-                              ctx.cloud.planarCoverage);
-    params.cloud2 = glm::vec4(ctx.cloud.planarDensity,
-                              ctx.cloud.planarAltitude,
-                              ctx.fog.startDistance,
-                              ctx.fog.endDistance);
+    params.cloud0 =
+        glm::vec4(ctx.cloud.shadowStrength, ctx.cloud.shadowScale, ctx.cloud.shadowSpeed, ctx.cloud.coverage);
+    params.cloud1 = glm::vec4(ctx.cloud.density, ctx.cloud.height, ctx.cloud.thickness, ctx.cloud.planarCoverage);
+    params.cloud2 =
+        glm::vec4(ctx.cloud.planarDensity, ctx.cloud.planarAltitude, ctx.fog.startDistance, ctx.fog.endDistance);
     params.fogParams = glm::vec4(ctx.fog.density, 0.0f, 0.0f, 0.0f);
-    params.flags0 = glm::ivec4(1,
-                               settings.postProcess.aerialPerspectiveEnabled ? 1 : 0,
-                               volumetricFogActive ? 1 : 0,
+    params.flags0 = glm::ivec4(1, settings.postProcess.aerialPerspectiveEnabled ? 1 : 0, volumetricFogActive ? 1 : 0,
                                ctx.volumetric.lightEnabled ? 1 : 0);
-    params.flags1 = glm::ivec4(ctx.atmosphere.directWeatherOcclusionOverride,
-                               settings.shadow.enabled ? 1 : 0,
-                               settings.shadow.softShadowsEnabled ? 1 : 0,
-                               settings.shadow.pcssShadowsEnabled ? 1 : 0);
-    params.flags2 = glm::ivec4(settings.shadow.contactShadowsEnabled ? 1 : 0,
-                               ctx.cloud.shadowsEnabled ? 1 : 0,
-                               ctx.moonShadowActive ? 1 : 0,
-                               settings.ssao.enabled ? 1 : 0);
-    params.flags3 = glm::ivec4(ctx.eyeInWater ? 1 : 0,
-                               m_heldBlockLightValue,
-                               0,
-                               ctx.fog.enabled ? 1 : 0);
-    params.flags4 = glm::ivec4(0,
-                               settings.debug.deferredLightDebugMode,
-                               settings.debug.derivativeStrictMode ? 1 : 0,
+    params.flags1 = glm::ivec4(ctx.atmosphere.directWeatherOcclusionOverride, settings.shadow.enabled ? 1 : 0,
+                               settings.shadow.softShadowsEnabled ? 1 : 0, settings.shadow.pcssShadowsEnabled ? 1 : 0);
+    params.flags2 = glm::ivec4(settings.shadow.contactShadowsEnabled ? 1 : 0, ctx.cloud.shadowsEnabled ? 1 : 0,
+                               ctx.moonShadowActive ? 1 : 0, settings.ssao.enabled ? 1 : 0);
+    params.flags3 = glm::ivec4(ctx.eyeInWater ? 1 : 0, m_heldBlockLightValue, 0, ctx.fog.enabled ? 1 : 0);
+    params.flags4 = glm::ivec4(0, settings.debug.deferredLightDebugMode, settings.debug.derivativeStrictMode ? 1 : 0,
                                settings.weather.rainLinesEnabled ? 1 : 0);
-    params.flags5 = glm::ivec4(settings.weather.surfaceRipplesEnabled ? 1 : 0,
-                               shadow::ShadowRenderer::CASCADE_COUNT,
-                               clusteredLightingActive
-                                   ? static_cast<int>(
-                                         m_clusteredLightingPass->activeLightCount())
-                                   : 0,
-                               0);
+    params.flags5 =
+        glm::ivec4(settings.weather.surfaceRipplesEnabled ? 1 : 0, shadow::ShadowRenderer::CASCADE_COUNT,
+                   clusteredLightingActive ? static_cast<int>(m_clusteredLightingPass->activeLightCount()) : 0, 0);
     if (clusteredLightingActive) {
-        const renderer::contracts::ClusterGrid& clusterGrid =
-            m_clusteredLightingPass->grid();
-        params.clusterGrid = {
-            clusterGrid.tileCountX, clusterGrid.tileCountY,
-            clusterGrid.depthSliceCount,
-            renderer::contracts::kClusterTileWidth};
-        params.clusterDepth = {
-            clusterGrid.nearPlane, clusterGrid.farPlane,
-            clusterGrid.depthLogScale, clusterGrid.depthLogBias};
-        params.clusterRenderExtent = {
-            clusterGrid.renderWidth, clusterGrid.renderHeight, 0u, 0u};
+        const renderer::contracts::ClusterGrid& clusterGrid = m_clusteredLightingPass->grid();
+        params.clusterGrid = {clusterGrid.tileCountX, clusterGrid.tileCountY, clusterGrid.depthSliceCount,
+                              renderer::contracts::kClusterTileWidth};
+        params.clusterDepth = {clusterGrid.nearPlane, clusterGrid.farPlane, clusterGrid.depthLogScale,
+                               clusterGrid.depthLogBias};
+        params.clusterRenderExtent = {clusterGrid.renderWidth, clusterGrid.renderHeight, 0u, 0u};
     }
 
     const bool clearForDebug = settings.debug.deferredLightDebugMode > 0;
@@ -312,29 +239,22 @@ bool DeferredLightingPass::execute(RhiCommandList& commandList,
 
     RhiRenderingInfo renderingInfo;
     renderingInfo.debugName = "DeferredLighting";
-    renderingInfo.renderArea = {
-        0,
-        0,
-        static_cast<uint32_t>(std::max(1, targets.width())),
-        static_cast<uint32_t>(std::max(1, targets.height()))
-    };
+    renderingInfo.renderArea = {0, 0, static_cast<uint32_t>(std::max(1, targets.width())),
+                                static_cast<uint32_t>(std::max(1, targets.height()))};
     renderingInfo.colorAttachments = &colorAttachment;
     renderingInfo.colorAttachmentCount = 1u;
 
     const GpuTimerSegmentToken timerToken = ctx.debugService != nullptr
-        ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::Lighting)
-        : GpuTimerSegmentToken{};
-    commandList.bufferBarrier({m_uniformBuffer, RhiResourceState::UniformBuffer,
-                               RhiResourceState::TransferDst});
+                                                ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::Lighting)
+                                                : GpuTimerSegmentToken{};
+    commandList.bufferBarrier({m_uniformBuffer, RhiResourceState::UniformBuffer, RhiResourceState::TransferDst});
     commandList.updateBuffer(m_uniformBuffer, 0u, &params, sizeof(params));
-    commandList.bufferBarrier({m_uniformBuffer, RhiResourceState::TransferDst,
-                               RhiResourceState::UniformBuffer});
+    commandList.bufferBarrier({m_uniformBuffer, RhiResourceState::TransferDst, RhiResourceState::UniformBuffer});
     commandList.beginRendering(renderingInfo);
     commandList.setGraphicsPipeline(m_pipeline);
     commandList.setBindGroup(0u, m_bindGroup);
     if (clusteredLightingActive) {
-        commandList.setBindGroup(
-            1u, m_clusteredLightingPass->consumerBindGroup());
+        commandList.setBindGroup(1u, m_clusteredLightingPass->consumerBindGroup());
     }
     commandList.draw(3u, 1u, 0u, 0u);
     commandList.endRendering();
@@ -357,12 +277,10 @@ bool DeferredLightingPass::ensureRhiPipeline(RhiDevice& rhiDevice) {
         renderer::rhi::loadShaderSource("assets/shaders/deferred_lighting.vert");
     renderer::rhi::RhiShaderSourceOptions fragmentOptions;
     if (rhiDevice.backend() == RhiBackend::Vulkan) {
-        fragmentOptions.preprocessorDefinitions.emplace_back(
-            "MECRAFT_CLUSTERED_LIGHTING");
+        fragmentOptions.preprocessorDefinitions.emplace_back("MECRAFT_CLUSTERED_LIGHTING");
     }
     const std::optional<std::string> fragmentSource =
-        renderer::rhi::loadShaderSource(
-            "assets/shaders/deferred_lighting.frag", fragmentOptions);
+        renderer::rhi::loadShaderSource("assets/shaders/deferred_lighting.frag", fragmentOptions);
     if (!vertexSource.has_value() || !fragmentSource.has_value()) {
         return false;
     }
@@ -388,8 +306,7 @@ bool DeferredLightingPass::ensureRhiPipeline(RhiDevice& rhiDevice) {
     RhiBufferDesc uniformBufferDesc;
     uniformBufferDesc.debugName = "DeferredLighting.Params";
     uniformBufferDesc.size = sizeof(DeferredLightingParams);
-    uniformBufferDesc.usage = rhiFlag(RhiBufferUsage::Uniform) |
-                              rhiFlag(RhiBufferUsage::TransferDst);
+    uniformBufferDesc.usage = rhiFlag(RhiBufferUsage::Uniform) | rhiFlag(RhiBufferUsage::TransferDst);
     uniformBufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
     uniformBufferDesc.initialState = RhiResourceState::UniformBuffer;
     uniformBufferDesc.memoryCategory = RhiMemoryCategory::Uniform;
@@ -399,9 +316,7 @@ bool DeferredLightingPass::ensureRhiPipeline(RhiDevice& rhiDevice) {
         return false;
     }
 
-    auto createSampler = [&](const RhiFilter filter,
-                             const RhiAddressMode addressMode,
-                             const RhiBorderColor borderColor,
+    auto createSampler = [&](const RhiFilter filter, const RhiAddressMode addressMode, const RhiBorderColor borderColor,
                              const bool compareEnabled) {
         RhiSamplerDesc samplerDesc;
         samplerDesc.minFilter = filter;
@@ -415,29 +330,18 @@ bool DeferredLightingPass::ensureRhiPipeline(RhiDevice& rhiDevice) {
         samplerDesc.compareOp = RhiCompareOp::LessOrEqual;
         return rhiDevice.createSampler(samplerDesc);
     };
-    m_nearestClampSampler = createSampler(RhiFilter::Nearest,
-                                           RhiAddressMode::ClampToEdge,
-                                           RhiBorderColor::TransparentBlack,
-                                           false);
-    m_linearClampSampler = createSampler(RhiFilter::Linear,
-                                          RhiAddressMode::ClampToEdge,
-                                          RhiBorderColor::TransparentBlack,
-                                          false);
-    m_linearRepeatSampler = createSampler(RhiFilter::Linear,
-                                           RhiAddressMode::Repeat,
-                                           RhiBorderColor::TransparentBlack,
-                                           false);
-    m_nearestBorderSampler = createSampler(RhiFilter::Nearest,
-                                            RhiAddressMode::ClampToBorder,
-                                            RhiBorderColor::OpaqueWhite,
-                                            false);
-    m_compareBorderSampler = createSampler(RhiFilter::Linear,
-                                            RhiAddressMode::ClampToBorder,
-                                            RhiBorderColor::OpaqueWhite,
-                                            true);
-    if (!m_nearestClampSampler.isValid() || !m_linearClampSampler.isValid() ||
-        !m_linearRepeatSampler.isValid() || !m_nearestBorderSampler.isValid() ||
-        !m_compareBorderSampler.isValid()) {
+    m_nearestClampSampler =
+        createSampler(RhiFilter::Nearest, RhiAddressMode::ClampToEdge, RhiBorderColor::TransparentBlack, false);
+    m_linearClampSampler =
+        createSampler(RhiFilter::Linear, RhiAddressMode::ClampToEdge, RhiBorderColor::TransparentBlack, false);
+    m_linearRepeatSampler =
+        createSampler(RhiFilter::Linear, RhiAddressMode::Repeat, RhiBorderColor::TransparentBlack, false);
+    m_nearestBorderSampler =
+        createSampler(RhiFilter::Nearest, RhiAddressMode::ClampToBorder, RhiBorderColor::OpaqueWhite, false);
+    m_compareBorderSampler =
+        createSampler(RhiFilter::Linear, RhiAddressMode::ClampToBorder, RhiBorderColor::OpaqueWhite, true);
+    if (!m_nearestClampSampler.isValid() || !m_linearClampSampler.isValid() || !m_linearRepeatSampler.isValid() ||
+        !m_nearestBorderSampler.isValid() || !m_compareBorderSampler.isValid()) {
         destroyRhiResources();
         return false;
     }
@@ -446,21 +350,12 @@ bool DeferredLightingPass::ensureRhiPipeline(RhiDevice& rhiDevice) {
     bindGroupLayoutDesc.debugName = "DeferredLighting.BindGroupLayout";
     for (uint32_t binding = 0u; binding < kLightingTextureCount; ++binding) {
         const RhiShaderStageFlags visibility = binding == 9u
-            ? rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment)
-            : rhiFlag(RhiShaderStage::Fragment);
-        bindGroupLayoutDesc.entries.push_back({
-            binding,
-            RhiBindingType::CombinedTextureSampler,
-            visibility,
-            1u
-        });
+                                                   ? rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment)
+                                                   : rhiFlag(RhiShaderStage::Fragment);
+        bindGroupLayoutDesc.entries.push_back({binding, RhiBindingType::CombinedTextureSampler, visibility, 1u});
     }
-    bindGroupLayoutDesc.entries.push_back({
-        static_cast<uint32_t>(kLightingTextureCount),
-        RhiBindingType::UniformBuffer,
-        rhiFlag(RhiShaderStage::Fragment),
-        1u
-    });
+    bindGroupLayoutDesc.entries.push_back({static_cast<uint32_t>(kLightingTextureCount), RhiBindingType::UniformBuffer,
+                                           rhiFlag(RhiShaderStage::Fragment), 1u});
     m_bindGroupLayout = rhiDevice.createBindGroupLayout(bindGroupLayoutDesc);
     if (!m_bindGroupLayout.isValid()) {
         destroyRhiResources();
@@ -471,13 +366,11 @@ bool DeferredLightingPass::ensureRhiPipeline(RhiDevice& rhiDevice) {
     pipelineLayoutDesc.debugName = "DeferredLighting.PipelineLayout";
     pipelineLayoutDesc.bindGroupLayouts.push_back(m_bindGroupLayout);
     if (rhiDevice.backend() == RhiBackend::Vulkan) {
-        if (m_clusteredLightingPass == nullptr ||
-            !m_clusteredLightingPass->consumerBindGroupLayout().isValid()) {
+        if (m_clusteredLightingPass == nullptr || !m_clusteredLightingPass->consumerBindGroupLayout().isValid()) {
             destroyRhiResources();
             return false;
         }
-        pipelineLayoutDesc.bindGroupLayouts.push_back(
-            m_clusteredLightingPass->consumerBindGroupLayout());
+        pipelineLayoutDesc.bindGroupLayouts.push_back(m_clusteredLightingPass->consumerBindGroupLayout());
     }
     m_pipelineLayout = rhiDevice.createPipelineLayout(pipelineLayoutDesc);
     if (!m_pipelineLayout.isValid()) {
@@ -506,32 +399,18 @@ bool DeferredLightingPass::ensureRhiPipeline(RhiDevice& rhiDevice) {
 }
 
 bool DeferredLightingPass::ensureExternalTextureViews(RhiDevice& rhiDevice) {
-    return ensureTextureView(rhiDevice,
-                             m_lightmapDayTexture,
-                             RhiTextureFormat::Rgba8Unorm,
-                             m_lightmapDayViewTexture,
+    return ensureTextureView(rhiDevice, m_lightmapDayTexture, RhiTextureFormat::Rgba8Unorm, m_lightmapDayViewTexture,
                              m_lightmapDayTextureView) &&
-           ensureTextureView(rhiDevice,
-                             m_lightmapNightTexture,
-                             RhiTextureFormat::Rgba8Unorm,
-                             m_lightmapNightViewTexture,
-                             m_lightmapNightTextureView) &&
-           ensureTextureView(rhiDevice,
-                             m_noiseTexture,
-                             RhiTextureFormat::Rgba8Unorm,
-                             m_noiseViewTexture,
+           ensureTextureView(rhiDevice, m_lightmapNightTexture, RhiTextureFormat::Rgba8Unorm,
+                             m_lightmapNightViewTexture, m_lightmapNightTextureView) &&
+           ensureTextureView(rhiDevice, m_noiseTexture, RhiTextureFormat::Rgba8Unorm, m_noiseViewTexture,
                              m_noiseTextureView) &&
-           ensureTextureView(rhiDevice,
-                             m_rippleNormalTexture,
-                             RhiTextureFormat::Rgba8Unorm,
-                             m_rippleNormalViewTexture,
+           ensureTextureView(rhiDevice, m_rippleNormalTexture, RhiTextureFormat::Rgba8Unorm, m_rippleNormalViewTexture,
                              m_rippleNormalTextureView);
 }
 
-bool DeferredLightingPass::ensureTextureView(RhiDevice& rhiDevice,
-                                             const RhiTextureHandle texture,
-                                             const RhiTextureFormat format,
-                                             RhiTextureHandle& viewTexture,
+bool DeferredLightingPass::ensureTextureView(RhiDevice& rhiDevice, const RhiTextureHandle texture,
+                                             const RhiTextureFormat format, RhiTextureHandle& viewTexture,
                                              RhiTextureViewHandle& textureView) {
     if (textureView.isValid() && sameTextureHandle(viewTexture, texture)) {
         return true;
@@ -562,9 +441,7 @@ bool DeferredLightingPass::ensureTextureView(RhiDevice& rhiDevice,
     return true;
 }
 
-bool DeferredLightingPass::ensureRhiBindGroup(
-    RhiDevice& rhiDevice,
-    const std::array<RhiTextureViewHandle, 20>& views) {
+bool DeferredLightingPass::ensureRhiBindGroup(RhiDevice& rhiDevice, const std::array<RhiTextureViewHandle, 20>& views) {
     for (const RhiTextureViewHandle view : views) {
         if (!view.isValid()) {
             return false;
@@ -576,27 +453,11 @@ bool DeferredLightingPass::ensureRhiBindGroup(
     destroyRhiBindGroup();
 
     const RhiSamplerHandle samplers[kLightingTextureCount] = {
-        m_nearestClampSampler,
-        m_nearestClampSampler,
-        m_nearestClampSampler,
-        m_nearestClampSampler,
-        m_nearestClampSampler,
-        m_nearestClampSampler,
-        m_linearClampSampler,
-        m_linearClampSampler,
-        m_linearClampSampler,
-        m_linearClampSampler,
-        m_linearRepeatSampler,
-        m_linearClampSampler,
-        m_compareBorderSampler,
-        m_nearestBorderSampler,
-        m_compareBorderSampler,
-        m_nearestBorderSampler,
-        m_nearestBorderSampler,
-        m_nearestBorderSampler,
-        m_linearRepeatSampler,
-        m_nearestClampSampler
-    };
+        m_nearestClampSampler,  m_nearestClampSampler,  m_nearestClampSampler,  m_nearestClampSampler,
+        m_nearestClampSampler,  m_nearestClampSampler,  m_linearClampSampler,   m_linearClampSampler,
+        m_linearClampSampler,   m_linearClampSampler,   m_linearRepeatSampler,  m_linearClampSampler,
+        m_compareBorderSampler, m_nearestBorderSampler, m_compareBorderSampler, m_nearestBorderSampler,
+        m_nearestBorderSampler, m_nearestBorderSampler, m_linearRepeatSampler,  m_nearestClampSampler};
 
     RhiBindGroupDesc bindGroupDesc;
     bindGroupDesc.layout = m_bindGroupLayout;
@@ -633,12 +494,8 @@ void DeferredLightingPass::destroyRhiBindGroup() {
 
 void DeferredLightingPass::destroyExternalTextureViews() {
     if (m_rhiDevice != nullptr) {
-        const RhiTextureViewHandle views[] = {
-            m_lightmapDayTextureView,
-            m_lightmapNightTextureView,
-            m_noiseTextureView,
-            m_rippleNormalTextureView
-        };
+        const RhiTextureViewHandle views[] = {m_lightmapDayTextureView, m_lightmapNightTextureView, m_noiseTextureView,
+                                              m_rippleNormalTextureView};
         for (const RhiTextureViewHandle view : views) {
             if (view.isValid()) {
                 m_rhiDevice->destroyTextureView(view);
@@ -677,13 +534,8 @@ void DeferredLightingPass::destroyRhiResources() {
         if (m_uniformBuffer.isValid()) {
             m_rhiDevice->destroyBuffer(m_uniformBuffer);
         }
-        const RhiSamplerHandle samplers[] = {
-            m_nearestClampSampler,
-            m_linearClampSampler,
-            m_linearRepeatSampler,
-            m_nearestBorderSampler,
-            m_compareBorderSampler
-        };
+        const RhiSamplerHandle samplers[] = {m_nearestClampSampler, m_linearClampSampler, m_linearRepeatSampler,
+                                             m_nearestBorderSampler, m_compareBorderSampler};
         for (const RhiSamplerHandle sampler : samplers) {
             if (sampler.isValid()) {
                 m_rhiDevice->destroySampler(sampler);

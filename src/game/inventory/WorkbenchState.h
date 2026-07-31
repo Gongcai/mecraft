@@ -21,10 +21,7 @@
 class WorkbenchState final : public IGameState {
 public:
     WorkbenchState(InventoryStateContext deps, std::string containerUiId)
-        : m_deps(deps),
-          m_containerUiId(std::move(containerUiId)),
-          m_dragCtrl(m_deps),
-          m_craftCtrl(m_deps, m_dragCtrl) {
+        : m_deps(deps), m_containerUiId(std::move(containerUiId)), m_dragCtrl(m_deps), m_craftCtrl(m_deps, m_dragCtrl) {
         m_dragCtrl.setCraftingGrid(&deps.uiRenderer.getCraftingGrid());
     }
 
@@ -63,10 +60,8 @@ public:
         const bool secondaryPressed = uiRouteResult.secondaryPressed;
         const bool primaryReleased = uiRouteResult.primaryReleased;
 
-        if (m_deps.context.isActionTriggered(Action::Inventory) ||
-            m_deps.context.isActionTriggered(Action::Menu) ||
-            (m_deps.context.isActionTriggered(Action::Cancel) &&
-             uiRouteResult.aggregate != UIEventResult::Consumed)) {
+        if (m_deps.context.isActionTriggered(Action::Inventory) || m_deps.context.isActionTriggered(Action::Menu) ||
+            (m_deps.context.isActionTriggered(Action::Cancel) && uiRouteResult.aggregate != UIEventResult::Consumed)) {
             m_deps.fsm.popState();
             return;
         }
@@ -155,23 +150,17 @@ private:
         std::abort();
     }
 
-    [[nodiscard]] static bool nearlyEqual(const float lhs, const float rhs) {
-        return std::fabs(lhs - rhs) <= 0.001f;
-    }
+    [[nodiscard]] static bool nearlyEqual(const float lhs, const float rhs) { return std::fabs(lhs - rhs) <= 0.001f; }
 
-    static void requireEqualMetric(const std::string& owner,
-                                   const char* fieldName,
-                                   const float actual,
+    static void requireEqualMetric(const std::string& owner, const char* fieldName, const float actual,
                                    const float expected) {
         if (!nearlyEqual(actual, expected)) {
             fail(owner + " requires matching field: " + fieldName);
         }
     }
 
-    [[nodiscard]] static const ui::ContainerSlotGroupDef& requireSlotGroup(
-        const ui::ContainerUiDef& def,
-        const char* id,
-        const ui::ContainerSlotGroupKind kind) {
+    [[nodiscard]] static const ui::ContainerSlotGroupDef&
+    requireSlotGroup(const ui::ContainerUiDef& def, const char* id, const ui::ContainerSlotGroupKind kind) {
         for (const ui::ContainerSlotGroupDef& group : def.slotGroups) {
             if (group.id != id) {
                 continue;
@@ -184,20 +173,14 @@ private:
         fail(def.id + " is missing required slot group: " + id);
     }
 
-    static void requireSlotGroupShape(const ui::ContainerUiDef& def,
-                                      const ui::ContainerSlotGroupDef& group,
-                                      const int firstSlot,
-                                      const int columns,
-                                      const int rows) {
-        if (group.firstSlot != firstSlot ||
-            group.columns != columns ||
-            group.rows != rows) {
+    static void requireSlotGroupShape(const ui::ContainerUiDef& def, const ui::ContainerSlotGroupDef& group,
+                                      const int firstSlot, const int columns, const int rows) {
+        if (group.firstSlot != firstSlot || group.columns != columns || group.rows != rows) {
             fail(def.id + " has incompatible slot group shape: " + group.id);
         }
     }
 
-    static void requireSameSlotMetrics(const ui::ContainerUiDef& def,
-                                       const ui::ContainerSlotGroupDef& lhs,
+    static void requireSameSlotMetrics(const ui::ContainerUiDef& def, const ui::ContainerSlotGroupDef& lhs,
                                        const ui::ContainerSlotGroupDef& rhs) {
         const std::string owner = def.id + "." + rhs.id;
         requireEqualMetric(owner, "x", rhs.x, lhs.x);
@@ -219,18 +202,18 @@ private:
         const ui::ContainerSlotGroupDef& hotbar =
             requireSlotGroup(def, "hotbar", ui::ContainerSlotGroupKind::PlayerInventory);
 
-        if (craftingInput.columns != craftingInput.rows ||
-            craftingInput.columns < CraftingGridLayout::MIN_GRID_SIZE ||
+        if (craftingInput.columns != craftingInput.rows || craftingInput.columns < CraftingGridLayout::MIN_GRID_SIZE ||
             craftingInput.columns > CraftingGridLayout::MAX_GRID_SIZE) {
             fail(def.id + " requires square crafting input within supported grid size");
         }
         requireSlotGroupShape(def, craftingResult, craftingInput.columns * craftingInput.rows, 1, 1);
-        requireSlotGroupShape(def, playerInventory, Inventory::HOTBAR_SIZE, Inventory::INVENTORY_COLUMNS, Inventory::MAIN_INVENTORY_ROWS);
+        requireSlotGroupShape(def, playerInventory, Inventory::HOTBAR_SIZE, Inventory::INVENTORY_COLUMNS,
+                              Inventory::MAIN_INVENTORY_ROWS);
         requireSlotGroupShape(def, hotbar, 0, Inventory::INVENTORY_COLUMNS, 1);
         requireSameSlotMetrics(def, playerInventory, hotbar);
 
-        const float expectedHotbarY =
-            playerInventory.y + static_cast<float>(playerInventory.rows) * (playerInventory.slotSize + playerInventory.rowGap);
+        const float expectedHotbarY = playerInventory.y + static_cast<float>(playerInventory.rows) *
+                                                              (playerInventory.slotSize + playerInventory.rowGap);
         const float row4ExtraGap = hotbar.y - expectedHotbarY;
         if (row4ExtraGap < 0.0f) {
             fail(def.id + ".hotbar requires y at or below the main inventory rows");

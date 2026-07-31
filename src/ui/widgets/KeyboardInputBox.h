@@ -17,8 +17,7 @@ public:
     void close();
     [[nodiscard]] bool isOpen() const;
 
-    void update(const InputSnapshot& snapshot,
-                float dtSeconds = 0.0f,
+    void update(const InputSnapshot& snapshot, float dtSeconds = 0.0f,
                 const InputContextManager* inputContext = nullptr);
 
     [[nodiscard]] const std::string& getText() const;
@@ -35,7 +34,6 @@ public:
     bool consumeHistoryNext();
 
 private:
-
     bool m_open = false;
     size_t m_maxLength = 128;
     std::string m_text;
@@ -49,4 +47,3 @@ private:
 };
 
 #endif // MECRAFT_KEYBOARDINPUTBOX_H
-

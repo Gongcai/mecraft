@@ -1,7 +1,7 @@
 #include "AppStateMachine.h"
 
 void AppStateMachine::pushState(std::unique_ptr<IAppState> state) {
-        if (m_dispatching) {
+    if (m_dispatching) {
         m_pendingOps.push_back({PendingOpType::Push, std::move(state)});
         return;
     }
@@ -53,15 +53,9 @@ void AppStateMachine::applyPendingOps() {
         ops.swap(m_pendingOps);
         for (PendingOp& op : ops) {
             switch (op.type) {
-                case PendingOpType::Push:
-                    pushStateNow(std::move(op.state));
-                    break;
-                case PendingOpType::Pop:
-                    popStateNow();
-                    break;
-                case PendingOpType::Change:
-                    changeStateNow(std::move(op.state));
-                    break;
+            case PendingOpType::Push: pushStateNow(std::move(op.state)); break;
+            case PendingOpType::Pop: popStateNow(); break;
+            case PendingOpType::Change: changeStateNow(std::move(op.state)); break;
             }
         }
     }
@@ -93,21 +87,12 @@ const GpuFrameStats* AppStateMachine::gpuFrameStats() const {
 }
 
 #ifdef MECRAFT_DEBUG
-void AppStateMachine::recordPollEvents(double ms,
-                                       unsigned keyEvents,
-                                       unsigned mouseButtonEvents,
-                                       unsigned cursorPosEvents,
-                                       unsigned scrollEvents,
-                                       unsigned charEvents,
-                                       double inputCallbackMs,
-                                       double cursorPosCallbackMs,
-                                       double imguiCallbackMs,
-                                       double imguiCursorPosCallbackMs,
-                                       double imguiCursorPosBackendMs,
-                                       double imguiWndProcMs,
-                                       double imguiWndProcSlowestMs,
-                                       unsigned imguiWndProcSlowestMsg,
-                                       unsigned imguiWndProcCount) {
+void AppStateMachine::recordPollEvents(double ms, unsigned keyEvents, unsigned mouseButtonEvents,
+                                       unsigned cursorPosEvents, unsigned scrollEvents, unsigned charEvents,
+                                       double inputCallbackMs, double cursorPosCallbackMs, double imguiCallbackMs,
+                                       double imguiCursorPosCallbackMs, double imguiCursorPosBackendMs,
+                                       double imguiWndProcMs, double imguiWndProcSlowestMs,
+                                       unsigned imguiWndProcSlowestMsg, unsigned imguiWndProcCount) {
     if (!m_states.empty()) {
         m_states.back()->recordPollEvents(ms, keyEvents, mouseButtonEvents, cursorPosEvents, scrollEvents, charEvents,
                                           inputCallbackMs, cursorPosCallbackMs, imguiCallbackMs,

@@ -39,18 +39,9 @@ struct StreamlineVulkanDeviceInfo {
     bool useNativeOpticalFlow = false;
 };
 
-enum class StreamlineDlssMode {
-    Quality,
-    Balanced,
-    Performance,
-    UltraPerformance
-};
+enum class StreamlineDlssMode { Quality, Balanced, Performance, UltraPerformance };
 
-enum class StreamlineReflexMode {
-    Off,
-    LowLatency,
-    LowLatencyWithBoost
-};
+enum class StreamlineReflexMode { Off, LowLatency, LowLatencyWithBoost };
 
 enum class StreamlinePclMarker {
     SimulationStart,
@@ -191,9 +182,7 @@ public:
     /// @param options Output dimensions and project quality mode.
     /// @param settings Receives the optimal and dynamic-resolution bounds.
     /// @return True when the DLSS plugin returned valid settings.
-    bool queryDlssOptimalSettings(
-        const StreamlineDlssOptions& options,
-        StreamlineDlssOptimalSettings& settings);
+    bool queryDlssOptimalSettings(const StreamlineDlssOptions& options, StreamlineDlssOptimalSettings& settings);
 
     /// Configures DLSS Super Resolution for one Streamline viewport.
     /// @param viewport Stable viewport identifier shared by all DLSS calls.
@@ -216,10 +205,7 @@ public:
     /// @param viewport Stable Streamline viewport identifier.
     /// @param constants Camera, motion-vector, depth, and reset state.
     /// @return True when constants were accepted or already set for this frame.
-    bool setFrameConstants(
-        uint64_t frameIndex,
-        uint32_t viewport,
-        const StreamlineDlssFrameConstants& constants);
+    bool setFrameConstants(uint64_t frameIndex, uint32_t viewport, const StreamlineDlssFrameConstants& constants);
 
     /// Loads or unloads the DLSS Frame Generation plugin at a swapchain boundary.
     /// @param loaded True before creating an interpolated swapchain, false before a native one.
@@ -230,31 +216,24 @@ public:
     /// @param viewport Stable viewport identifier shared by tags and presentation markers.
     /// @param options Output, render, swapchain, format, and activation state.
     /// @return True when the DLSS-G plugin accepted the options.
-    bool configureDlssFrameGeneration(
-        uint32_t viewport,
-        const StreamlineDlssFrameGenerationOptions& options);
+    bool configureDlssFrameGeneration(uint32_t viewport, const StreamlineDlssFrameGenerationOptions& options);
 
     /// Tags depth, motion vectors, HUD-less color, and premultiplied UI for present-time use.
     /// @param info Complete frame resources and common constants.
     /// @return True when every DLSS-G input was tagged for the tracked frame.
-    bool tagDlssFrameGenerationResources(
-        const StreamlineDlssFrameGenerationDispatchInfo& info);
+    bool tagDlssFrameGenerationResources(const StreamlineDlssFrameGenerationDispatchInfo& info);
 
     /// Clears present-time DLSS-G input tags for a frame without valid gameplay resources.
     /// @param frameIndex Application frame identifier shared by present markers.
     /// @param viewport Stable viewport identifier.
     /// @return True when the null tags were accepted.
-    bool clearDlssFrameGenerationResources(
-        uint64_t frameIndex,
-        uint32_t viewport);
+    bool clearDlssFrameGenerationResources(uint64_t frameIndex, uint32_t viewport);
 
     /// Queries DLSS-G status, displayed-frame count, and input-completion synchronization.
     /// @param viewport Stable viewport identifier.
     /// @param state Receives current plugin status and completion fence data.
     /// @return True when the state query completed successfully.
-    bool queryDlssFrameGenerationState(
-        uint32_t viewport,
-        StreamlineDlssFrameGenerationState& state);
+    bool queryDlssFrameGenerationState(uint32_t viewport, StreamlineDlssFrameGenerationState& state);
 
     /// Releases retained DLSS-G resources for one viewport.
     /// @param viewport Stable viewport identifier.
@@ -265,9 +244,7 @@ public:
     /// @param mode Off, low-latency, or low-latency with boost.
     /// @param frameLimitMicroseconds Optional Reflex frame limiter period; zero disables it.
     /// @return True when the Reflex plugin accepted the complete option set.
-    bool configureReflex(
-        StreamlineReflexMode mode,
-        uint32_t frameLimitMicroseconds = 0u);
+    bool configureReflex(StreamlineReflexMode mode, uint32_t frameLimitMicroseconds = 0u);
 
     /// Queries Reflex availability and the PCL latency-message identifier.
     /// @param state Receives low-latency, flash-indicator, and message state.
@@ -304,39 +281,24 @@ public:
     VkResult presentVulkanFrame(VkQueue queue, const VkPresentInfoKHR& info);
 
     /// Creates the main Win32 Vulkan surface through the Streamline manual hook.
-    VkResult createVulkanWin32Surface(
-        VkInstance instance,
-        void* applicationInstance,
-        void* window,
-        VkSurfaceKHR& surface);
+    VkResult createVulkanWin32Surface(VkInstance instance, void* applicationInstance, void* window,
+                                      VkSurfaceKHR& surface);
 
     /// Destroys the main Vulkan surface through the Streamline manual hook.
     void destroyVulkanSurface(VkInstance instance, VkSurfaceKHR surface);
 
     /// Creates the main Vulkan swapchain through the Streamline manual hook.
-    VkResult createVulkanSwapchain(
-        VkDevice device,
-        const VkSwapchainCreateInfoKHR& info,
-        VkSwapchainKHR& swapchain);
+    VkResult createVulkanSwapchain(VkDevice device, const VkSwapchainCreateInfoKHR& info, VkSwapchainKHR& swapchain);
 
     /// Destroys the main Vulkan swapchain through the Streamline manual hook.
     void destroyVulkanSwapchain(VkDevice device, VkSwapchainKHR swapchain);
 
     /// Queries Vulkan swapchain images through the Streamline manual hook.
-    VkResult getVulkanSwapchainImages(
-        VkDevice device,
-        VkSwapchainKHR swapchain,
-        uint32_t& imageCount,
-        VkImage* images);
+    VkResult getVulkanSwapchainImages(VkDevice device, VkSwapchainKHR swapchain, uint32_t& imageCount, VkImage* images);
 
     /// Acquires the next Vulkan image through the Streamline manual hook.
-    VkResult acquireVulkanImage(
-        VkDevice device,
-        VkSwapchainKHR swapchain,
-        uint64_t timeout,
-        VkSemaphore semaphore,
-        VkFence fence,
-        uint32_t& imageIndex);
+    VkResult acquireVulkanImage(VkDevice device, VkSwapchainKHR swapchain, uint64_t timeout, VkSemaphore semaphore,
+                                VkFence fence, uint32_t& imageIndex);
 
     /// Waits for the Vulkan device through the Streamline manual hook.
     VkResult waitVulkanDeviceIdle(VkDevice device);

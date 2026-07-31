@@ -23,6 +23,7 @@ size_t BlockNeighborUpdateQueue::size() const {
 }
 
 void BlockNeighborUpdateQueue::clear() {
-    while (!m_queue.empty()) m_queue.pop();
+    while (!m_queue.empty())
+        m_queue.pop();
     m_queued.clear();
 }

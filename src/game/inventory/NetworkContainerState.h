@@ -33,12 +33,8 @@
 
 class NetworkContainerState final : public IGameState {
 public:
-    NetworkContainerState(InventoryStateContext deps,
-                          std::string containerUiId,
-                          const glm::ivec3 blockPosition)
-        : m_deps(deps),
-          m_containerUiId(std::move(containerUiId)),
-          m_blockPosition(blockPosition) {}
+    NetworkContainerState(InventoryStateContext deps, std::string containerUiId, const glm::ivec3 blockPosition)
+        : m_deps(deps), m_containerUiId(std::move(containerUiId)), m_blockPosition(blockPosition) {}
 
     void onEnter() override {
         if (m_deps.gameClient == nullptr) {
@@ -88,10 +84,8 @@ public:
         const UIInputRouteResult uiRouteResult =
             UIInputAdapter::routeInput(m_deps.uiRenderer, snapshot, m_deps.context);
 
-        if (m_deps.context.isActionTriggered(Action::Inventory) ||
-            m_deps.context.isActionTriggered(Action::Menu) ||
-            (m_deps.context.isActionTriggered(Action::Cancel) &&
-             uiRouteResult.aggregate != UIEventResult::Consumed)) {
+        if (m_deps.context.isActionTriggered(Action::Inventory) || m_deps.context.isActionTriggered(Action::Menu) ||
+            (m_deps.context.isActionTriggered(Action::Cancel) && uiRouteResult.aggregate != UIEventResult::Consumed)) {
             m_deps.fsm.popState();
             return;
         }
@@ -119,8 +113,7 @@ public:
             }
         }
 
-        if (!uiRouteResult.primaryPressed ||
-            uiRouteResult.primaryDown != UIEventResult::Consumed) {
+        if (!uiRouteResult.primaryPressed || uiRouteResult.primaryDown != UIEventResult::Consumed) {
             return;
         }
 
@@ -139,13 +132,9 @@ private:
         net::ContainerSlotSpace space = net::ContainerSlotSpace::None;
         int slot = -1;
 
-        [[nodiscard]] bool valid() const {
-            return space != net::ContainerSlotSpace::None && slot >= 0;
-        }
+        [[nodiscard]] bool valid() const { return space != net::ContainerSlotSpace::None && slot >= 0; }
 
-        [[nodiscard]] bool operator!=(const SlotRef& other) const {
-            return space != other.space || slot != other.slot;
-        }
+        [[nodiscard]] bool operator!=(const SlotRef& other) const { return space != other.space || slot != other.slot; }
     };
 
     [[nodiscard]] const net::ContainerSnapshotMessage* currentSnapshot() const {
@@ -155,8 +144,7 @@ private:
         return m_deps.gameClient->findContainerSnapshotAt(m_blockPosition);
     }
 
-    void configurePanel(const net::ContainerSnapshotMessage& snapshot,
-                        const ContainerBehaviorDef& behavior) {
+    void configurePanel(const net::ContainerSnapshotMessage& snapshot, const ContainerBehaviorDef& behavior) {
         if (m_panelConfigured) {
             return;
         }
@@ -209,8 +197,8 @@ private:
 
         for (int slot = 0; slot < Inventory::INVENTORY_SIZE; ++slot) {
             const ItemStack stack = slot < static_cast<int>(snapshot.playerSlots.size())
-                ? stackFromSlotData(snapshot.playerSlots[slot])
-                : ItemStack{};
+                                        ? stackFromSlotData(snapshot.playerSlots[slot])
+                                        : ItemStack{};
             m_deps.inventory.setSlotStack(slot, stack);
         }
 
@@ -223,16 +211,14 @@ private:
 
     [[nodiscard]] SlotRef activatedSlot() const {
         const bool machine = m_machineMirror != nullptr;
-        const int containerSlot = machine
-            ? m_deps.uiRenderer.getMachinePanelLastActivatedSlot()
-            : m_deps.uiRenderer.getStoragePanelLastActivatedSlot();
+        const int containerSlot = machine ? m_deps.uiRenderer.getMachinePanelLastActivatedSlot()
+                                          : m_deps.uiRenderer.getStoragePanelLastActivatedSlot();
         if (containerSlot >= 0 && containerSlot < m_containerSlotCount) {
             return {net::ContainerSlotSpace::Container, containerSlot};
         }
 
-        const int playerSlot = machine
-            ? m_deps.uiRenderer.getMachinePanelPlayerLastActivatedSlot()
-            : m_deps.uiRenderer.getStoragePanelPlayerLastActivatedSlot();
+        const int playerSlot = machine ? m_deps.uiRenderer.getMachinePanelPlayerLastActivatedSlot()
+                                       : m_deps.uiRenderer.getStoragePanelPlayerLastActivatedSlot();
         if (m_deps.inventory.isValidSlot(playerSlot)) {
             return {net::ContainerSlotSpace::Player, playerSlot};
         }
@@ -241,16 +227,14 @@ private:
 
     [[nodiscard]] SlotRef hoveredSlot() const {
         const bool machine = m_machineMirror != nullptr;
-        const int containerSlot = machine
-            ? m_deps.uiRenderer.getMachinePanelHoveredSlot()
-            : m_deps.uiRenderer.getStoragePanelHoveredSlot();
+        const int containerSlot =
+            machine ? m_deps.uiRenderer.getMachinePanelHoveredSlot() : m_deps.uiRenderer.getStoragePanelHoveredSlot();
         if (containerSlot >= 0 && containerSlot < m_containerSlotCount) {
             return {net::ContainerSlotSpace::Container, containerSlot};
         }
 
-        const int playerSlot = machine
-            ? m_deps.uiRenderer.getMachinePanelPlayerHoveredSlot()
-            : m_deps.uiRenderer.getStoragePanelPlayerHoveredSlot();
+        const int playerSlot = machine ? m_deps.uiRenderer.getMachinePanelPlayerHoveredSlot()
+                                       : m_deps.uiRenderer.getStoragePanelPlayerHoveredSlot();
         if (m_deps.inventory.isValidSlot(playerSlot)) {
             return {net::ContainerSlotSpace::Player, playerSlot};
         }

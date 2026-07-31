@@ -60,16 +60,13 @@ bool FileContentHashResult::succeeded() const {
     return error == ContentHashError::None && hash != 0u;
 }
 
-StableContentHash stableContentHashBytes(
-    const void* data,
-    const size_t size) {
+StableContentHash stableContentHashBytes(const void* data, const size_t size) {
     StableContentHashBuilder hash;
     hash.addBytes(data, size);
     return hash.value();
 }
 
-FileContentHashResult stableFileContentHash(
-    const std::filesystem::path& path) {
+FileContentHashResult stableFileContentHash(const std::filesystem::path& path) {
     std::ifstream input(path, std::ios::binary);
     if (!input) {
         return {0u, ContentHashError::FileOpenFailed};
@@ -90,9 +87,7 @@ FileContentHashResult stableFileContentHash(
     return {hash.value(), ContentHashError::None};
 }
 
-bool parseStableContentHashHex(
-    const std::string_view text,
-    StableContentHash& hash) {
+bool parseStableContentHashHex(const std::string_view text, StableContentHash& hash) {
     if (text.size() != 16u) {
         return false;
     }
@@ -116,8 +111,7 @@ std::string stableContentHashHex(const StableContentHash hash) {
     constexpr char kHexDigits[] = "0123456789abcdef";
     std::array<char, 16u> characters{};
     for (size_t index = 0u; index < characters.size(); ++index) {
-        const uint32_t shift = static_cast<uint32_t>(
-            (characters.size() - index - 1u) * 4u);
+        const uint32_t shift = static_cast<uint32_t>((characters.size() - index - 1u) * 4u);
         characters[index] = kHexDigits[(hash >> shift) & 0x0fu];
     }
     return std::string(characters.data(), characters.size());
@@ -125,9 +119,9 @@ std::string stableContentHashHex(const StableContentHash hash) {
 
 const char* contentHashErrorStableId(const ContentHashError error) {
     switch (error) {
-        case ContentHashError::None: return "None";
-        case ContentHashError::FileOpenFailed: return "FileOpenFailed";
-        case ContentHashError::FileReadFailed: return "FileReadFailed";
+    case ContentHashError::None: return "None";
+    case ContentHashError::FileOpenFailed: return "FileOpenFailed";
+    case ContentHashError::FileReadFailed: return "FileReadFailed";
     }
     std::abort();
 }

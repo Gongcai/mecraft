@@ -12,9 +12,7 @@
 namespace {
 struct ThreadPoolGuard {
     ThreadPool& pool;
-    ~ThreadPoolGuard() {
-        pool.shutdown();
-    }
+    ~ThreadPoolGuard() { pool.shutdown(); }
 };
 
 [[noreturn]] void fail(const char* message) {
@@ -30,10 +28,7 @@ void tickWorld(World& world, const glm::vec3& playerPos, const int frames) {
     }
 }
 
-bool waitUntil(World& world,
-               const glm::vec3& playerPos,
-               const int maxFrames,
-               const std::function<bool()>& predicate) {
+bool waitUntil(World& world, const glm::vec3& playerPos, const int maxFrames, const std::function<bool()>& predicate) {
     for (int i = 0; i < maxFrames; ++i) {
         world.update(playerPos);
         if (predicate()) {
@@ -120,7 +115,6 @@ int main() {
     if (!rightChunk.isSubChunkDirty(scy)) {
         fail("neighboring chunk should be marked dirty after cross-chunk light removal");
     }
-
 
     std::cout << "[light_cross_chunk_removal_test] PASS\n";
     return EXIT_SUCCESS;

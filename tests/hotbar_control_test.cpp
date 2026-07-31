@@ -8,7 +8,7 @@ int fail(const char* message) {
     std::cerr << "[hotbar_control_test] FAIL: " << message << '\n';
     return EXIT_FAILURE;
 }
-}
+} // namespace
 
 int main() {
     HotbarControl hotbar;
@@ -17,7 +17,8 @@ int main() {
     if (!hotbar.visible) {
         return fail("hotbar should default to visible");
     }
-    if (hotbar.onInput({UIInputEventType::PointerMove, 0.0f, 0.0f, UIPointerButton::None}, ctx) != UIEventResult::Ignored) {
+    if (hotbar.onInput({UIInputEventType::PointerMove, 0.0f, 0.0f, UIPointerButton::None}, ctx) !=
+        UIEventResult::Ignored) {
         return fail("hotbar should ignore pointer input by default");
     }
 
@@ -50,4 +51,3 @@ int main() {
     std::cout << "[hotbar_control_test] PASS\n";
     return EXIT_SUCCESS;
 }
-

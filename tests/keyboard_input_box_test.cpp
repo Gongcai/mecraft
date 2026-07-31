@@ -23,7 +23,7 @@ InputSnapshot makePressedShiftKeySnapshot(int key) {
     snapshot.keysJustPressed[key] = true;
     return snapshot;
 }
-}
+} // namespace
 
 int main() {
     KeyboardInputBox inputBox(8);
@@ -75,4 +75,3 @@ int main() {
     std::cout << "[keyboard_input_box_test] PASS\n";
     return EXIT_SUCCESS;
 }
-

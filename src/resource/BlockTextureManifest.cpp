@@ -31,9 +31,7 @@ struct ClassifiedTextureFile {
 
 std::string toLowerAscii(std::string value) {
     std::transform(value.begin(), value.end(), value.begin(),
-                   [](const unsigned char c) {
-                       return static_cast<char>(std::tolower(c));
-                   });
+                   [](const unsigned char c) { return static_cast<char>(std::tolower(c)); });
     return value;
 }
 
@@ -59,14 +57,12 @@ ClassifiedTextureFile classifyTextureFile(const std::filesystem::path& path) {
     file.textureName = path.stem().string();
 
     std::string normalizedStem = toLowerAscii(file.textureName);
-    if (removeSuffix(normalizedStem, "_normal") ||
-        removeSuffix(normalizedStem, "_n")) {
+    if (removeSuffix(normalizedStem, "_normal") || removeSuffix(normalizedStem, "_n")) {
         file.textureName = normalizedStem;
         file.role = TextureFileRole::Normal;
         return file;
     }
-    if (removeSuffix(normalizedStem, "_specular") ||
-        removeSuffix(normalizedStem, "_spec") ||
+    if (removeSuffix(normalizedStem, "_specular") || removeSuffix(normalizedStem, "_spec") ||
         removeSuffix(normalizedStem, "_s")) {
         file.textureName = normalizedStem;
         file.role = TextureFileRole::Specular;
@@ -84,8 +80,8 @@ std::vector<ClassifiedTextureFile> collectClassifiedTextureFiles(const std::stri
     std::error_code fsError;
     if (!fs::exists(directory, fsError)) {
         if (fsError) {
-            failBlockTextureManifest("Failed to inspect block texture directory: " +
-                                     directory + ": " + fsError.message());
+            failBlockTextureManifest("Failed to inspect block texture directory: " + directory + ": " +
+                                     fsError.message());
         }
         failBlockTextureManifest("Block texture directory does not exist: " + directory);
     }
@@ -93,8 +89,7 @@ std::vector<ClassifiedTextureFile> collectClassifiedTextureFiles(const std::stri
     std::vector<ClassifiedTextureFile> files;
     fs::directory_iterator it(directory, fsError);
     if (fsError) {
-        failBlockTextureManifest("Failed to iterate block texture directory: " +
-                                 directory + ": " + fsError.message());
+        failBlockTextureManifest("Failed to iterate block texture directory: " + directory + ": " + fsError.message());
     }
     const fs::directory_iterator end;
     while (it != end) {
@@ -102,26 +97,25 @@ std::vector<ClassifiedTextureFile> collectClassifiedTextureFiles(const std::stri
         fsError.clear();
         const bool regularFile = entry.is_regular_file(fsError);
         if (fsError) {
-            failBlockTextureManifest("Failed to inspect block texture path: " +
-                                     entry.path().string() + ": " + fsError.message());
+            failBlockTextureManifest("Failed to inspect block texture path: " + entry.path().string() + ": " +
+                                     fsError.message());
         }
         if (regularFile && hasPngExtension(entry.path())) {
             files.push_back(classifyTextureFile(entry.path()));
         }
         it.increment(fsError);
         if (fsError) {
-            failBlockTextureManifest("Failed to continue iterating block texture directory: " +
-                                     directory + ": " + fsError.message());
+            failBlockTextureManifest("Failed to continue iterating block texture directory: " + directory + ": " +
+                                     fsError.message());
         }
     }
 
-    std::sort(files.begin(), files.end(),
-              [](const ClassifiedTextureFile& a, const ClassifiedTextureFile& b) {
-                  if (a.textureName != b.textureName) {
-                      return a.textureName < b.textureName;
-                  }
-                  return static_cast<int>(a.role) < static_cast<int>(b.role);
-              });
+    std::sort(files.begin(), files.end(), [](const ClassifiedTextureFile& a, const ClassifiedTextureFile& b) {
+        if (a.textureName != b.textureName) {
+            return a.textureName < b.textureName;
+        }
+        return static_cast<int>(a.role) < static_cast<int>(b.role);
+    });
 
     if (files.empty()) {
         failBlockTextureManifest("Block texture directory contains no PNG files: " + directory);
@@ -136,8 +130,7 @@ struct PendingManifestEntry {
     std::optional<std::filesystem::path> specularPath;
 };
 
-void assignTexturePath(PendingManifestEntry& entry,
-                       const ClassifiedTextureFile& file) {
+void assignTexturePath(PendingManifestEntry& entry, const ClassifiedTextureFile& file) {
     if (file.role == TextureFileRole::Albedo) {
         if (entry.albedoPath.has_value()) {
             failBlockTextureManifest("Duplicate block albedo texture: " + file.textureName);
@@ -243,17 +236,14 @@ BlockTextureManifest buildBlockTextureManifestImpl(const std::string& directory,
     }
 
     if (ignoredUnregisteredFiles > 0) {
-        std::cerr << "[Resource] Ignored " << ignoredUnregisteredFiles
-                  << " unregistered block texture file"
+        std::cerr << "[Resource] Ignored " << ignoredUnregisteredFiles << " unregistered block texture file"
                   << (ignoredUnregisteredFiles == 1 ? "" : "s") << '\n';
     }
 
     if (!orphanMaterialNames.empty()) {
         constexpr size_t kMaxReportedOrphanMaterialNames = 8;
-        std::cerr << "[Resource] Ignored " << orphanMaterialNames.size()
-                  << " block material sidecar texture"
-                  << (orphanMaterialNames.size() == 1 ? "" : "s")
-                  << " without albedo";
+        std::cerr << "[Resource] Ignored " << orphanMaterialNames.size() << " block material sidecar texture"
+                  << (orphanMaterialNames.size() == 1 ? "" : "s") << " without albedo";
         const size_t reportedCount = std::min(orphanMaterialNames.size(), kMaxReportedOrphanMaterialNames);
         std::cerr << ": ";
         for (size_t i = 0; i < reportedCount; ++i) {

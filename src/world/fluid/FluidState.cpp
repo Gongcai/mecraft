@@ -14,20 +14,19 @@ uint8_t clampFluidLevel(const FluidDesc& desc, const uint8_t level) {
 
 uint16_t resolveLevelValue(const uint8_t level, const FluidDesc& desc) {
     switch (clampFluidLevel(desc, level)) {
-        case 0: return PropIndices::LEVEL_0;
-        case 1: return PropIndices::LEVEL_1;
-        case 2: return PropIndices::LEVEL_2;
-        case 3: return PropIndices::LEVEL_3;
-        case 4: return PropIndices::LEVEL_4;
-        case 5: return PropIndices::LEVEL_5;
-        case 6: return PropIndices::LEVEL_6;
-        case 7:
-        default:
-            return PropIndices::LEVEL_7;
+    case 0: return PropIndices::LEVEL_0;
+    case 1: return PropIndices::LEVEL_1;
+    case 2: return PropIndices::LEVEL_2;
+    case 3: return PropIndices::LEVEL_3;
+    case 4: return PropIndices::LEVEL_4;
+    case 5: return PropIndices::LEVEL_5;
+    case 6: return PropIndices::LEVEL_6;
+    case 7:
+    default: return PropIndices::LEVEL_7;
     }
 }
 
-}
+} // namespace
 
 namespace FluidState {
 
@@ -42,13 +41,20 @@ DecodedFluid decode(const BlockStateId id) {
 
     if (PropIndices::LEVEL != PropIndices::INVALID) {
         const uint16_t value = BlockStateRegistry::getPropertyIndex(id, PropIndices::LEVEL);
-        if (value == PropIndices::LEVEL_1) fluid.level = 1;
-        else if (value == PropIndices::LEVEL_2) fluid.level = 2;
-        else if (value == PropIndices::LEVEL_3) fluid.level = 3;
-        else if (value == PropIndices::LEVEL_4) fluid.level = 4;
-        else if (value == PropIndices::LEVEL_5) fluid.level = 5;
-        else if (value == PropIndices::LEVEL_6) fluid.level = 6;
-        else if (value == PropIndices::LEVEL_7) fluid.level = 7;
+        if (value == PropIndices::LEVEL_1)
+            fluid.level = 1;
+        else if (value == PropIndices::LEVEL_2)
+            fluid.level = 2;
+        else if (value == PropIndices::LEVEL_3)
+            fluid.level = 3;
+        else if (value == PropIndices::LEVEL_4)
+            fluid.level = 4;
+        else if (value == PropIndices::LEVEL_5)
+            fluid.level = 5;
+        else if (value == PropIndices::LEVEL_6)
+            fluid.level = 6;
+        else if (value == PropIndices::LEVEL_7)
+            fluid.level = 7;
     }
 
     if (PropIndices::FALLING != PropIndices::INVALID) {
@@ -76,10 +82,8 @@ BlockStateId encode(const DecodedFluid& fluid) {
 
     BlockStateId state = BlockStateRegistry::getDefaultState(desc.blockId);
     state = BlockStateRegistry::withProperty(state, PropIndices::LEVEL, resolveLevelValue(fluid.level, desc));
-    state = BlockStateRegistry::withProperty(
-        state,
-        PropIndices::FALLING,
-        fluid.falling ? PropIndices::FALLING_TRUE : PropIndices::FALLING_FALSE);
+    state = BlockStateRegistry::withProperty(state, PropIndices::FALLING,
+                                             fluid.falling ? PropIndices::FALLING_TRUE : PropIndices::FALLING_FALSE);
     return state;
 }
 
@@ -154,4 +158,4 @@ FluidCellView getCombinedCell(const BlockStateId cellState) {
     return FluidCellView{cellState, NULL_BLOCK_STATE};
 }
 
-}
+} // namespace FluidState

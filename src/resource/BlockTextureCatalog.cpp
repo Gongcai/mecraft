@@ -8,8 +8,7 @@
 
 namespace {
 
-bool parseResourceTextureTint(const nlohmann::json& textureJson,
-                              const std::string& textureName,
+bool parseResourceTextureTint(const nlohmann::json& textureJson, const std::string& textureName,
                               ResourceTextureTint& outTint) {
     const auto tintIt = textureJson.find("tint");
     if (tintIt == textureJson.end()) {
@@ -35,8 +34,8 @@ bool parseResourceTextureTint(const nlohmann::json& textureJson,
         outTint = ResourceTextureTint::Foliage;
         return true;
     }
-    MECRAFT_LOG_FPRINTF(stderr, "[Resource] Unknown block texture tint for %s: %s\n",
-                        textureName.c_str(), tint.c_str());
+    MECRAFT_LOG_FPRINTF(stderr, "[Resource] Unknown block texture tint for %s: %s\n", textureName.c_str(),
+                        tint.c_str());
     return false;
 }
 
@@ -45,8 +44,7 @@ bool parseResourceTextureTint(const nlohmann::json& textureJson,
 bool BlockTextureCatalog::load(const std::string& textureConfigPath) {
     std::ifstream file(textureConfigPath);
     if (!file.is_open()) {
-        MECRAFT_LOG_FPRINTF(stderr, "[Resource] Failed to open block texture catalog: %s\n",
-                            textureConfigPath.c_str());
+        MECRAFT_LOG_FPRINTF(stderr, "[Resource] Failed to open block texture catalog: %s\n", textureConfigPath.c_str());
         return false;
     }
 
@@ -119,8 +117,7 @@ bool BlockTextureCatalog::load(const std::string& textureConfigPath) {
             }
             entry.animation.fps = fpsIt->get<float>();
             if (entry.animation.fps < 0.0f || entry.animation.fps > 63.0f) {
-                MECRAFT_LOG_FPRINTF(stderr, "[Resource] block_textures.json fps out of range for %s\n",
-                                    name.c_str());
+                MECRAFT_LOG_FPRINTF(stderr, "[Resource] block_textures.json fps out of range for %s\n", name.c_str());
                 return false;
             }
         }

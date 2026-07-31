@@ -46,17 +46,14 @@ BlockStateId leverState(const bool powered) {
         BlockRegistry::requireIdByName("minecraft:lever"),
         std::vector<std::pair<uint16_t, uint16_t>>{
             {PropIndices::FACING, PropIndices::FACING_FLOOR},
-            {PropIndices::POWERED, powered ? PropIndices::POWERED_TRUE : PropIndices::POWERED_FALSE}
-        });
+            {PropIndices::POWERED, powered ? PropIndices::POWERED_TRUE : PropIndices::POWERED_FALSE}});
 }
 
 BlockStateId pistonState(const BlockID blockId, const uint16_t facing, const bool extended) {
     return BlockStateRegistry::getState(
-        blockId,
-        std::vector<std::pair<uint16_t, uint16_t>>{
-            {PropIndices::FACING, facing},
-            {PropIndices::EXTENDED, extended ? PropIndices::EXTENDED_TRUE : PropIndices::EXTENDED_FALSE}
-        });
+        blockId, std::vector<std::pair<uint16_t, uint16_t>>{
+                     {PropIndices::FACING, facing},
+                     {PropIndices::EXTENDED, extended ? PropIndices::EXTENDED_TRUE : PropIndices::EXTENDED_FALSE}});
 }
 
 BlockStateId pistonState(const BlockID blockId, const bool extended) {
@@ -68,11 +65,7 @@ bool pistonExtended(const World& world, const int x, const int y, const int z) {
     return BlockStateRegistry::getPropertyIndex(state, PropIndices::EXTENDED) == PropIndices::EXTENDED_TRUE;
 }
 
-bool matchingPistonHead(const World& world,
-                        const int x,
-                        const int y,
-                        const int z,
-                        const uint16_t expectedFacing,
+bool matchingPistonHead(const World& world, const int x, const int y, const int z, const uint16_t expectedFacing,
                         const uint16_t expectedType) {
     const BlockStateId state = world.getBlockState(x, y, z);
     return BlockStateRegistry::getBlockId(state) == BlockRegistry::requireIdByName("minecraft:piston_head") &&
@@ -80,11 +73,7 @@ bool matchingPistonHead(const World& world,
            BlockStateRegistry::getPropertyIndex(state, PropIndices::TYPE) == expectedType;
 }
 
-bool matchingPistonHead(const World& world,
-                        const int x,
-                        const int y,
-                        const int z,
-                        const uint16_t expectedType) {
+bool matchingPistonHead(const World& world, const int x, const int y, const int z, const uint16_t expectedType) {
     return matchingPistonHead(world, x, y, z, PropIndices::FACING_EAST, expectedType);
 }
 
@@ -165,15 +154,13 @@ int main() {
         world.setBlockState(1, y, 0, pistonState(BlockRegistry::requireIdByName("minecraft:piston"), false));
 
         ecs::RedstoneSystem::processWorld(world, 0);
-        if (!pistonExtended(world, 1, y, 0) ||
-            !matchingPistonHead(world, 2, y, 0, PropIndices::TYPE_NORMAL)) {
+        if (!pistonExtended(world, 1, y, 0) || !matchingPistonHead(world, 2, y, 0, PropIndices::TYPE_NORMAL)) {
             return fail("powered piston should extend into empty space and place a normal piston head");
         }
 
         world.setBlockState(0, y, 0, leverState(false));
         ecs::RedstoneSystem::processWorld(world, 1);
-        if (pistonExtended(world, 1, y, 0) ||
-            world.getBlockState(2, y, 0) != NULL_BLOCK_STATE) {
+        if (pistonExtended(world, 1, y, 0) || world.getBlockState(2, y, 0) != NULL_BLOCK_STATE) {
             return fail("unpowered piston should retract and remove its piston head");
         }
     }
@@ -185,8 +172,7 @@ int main() {
         world.setBlockState(1, y, 0, pistonState(BlockRegistry::requireIdByName("minecraft:sticky_piston"), false));
 
         ecs::RedstoneSystem::processWorld(world, 2);
-        if (!pistonExtended(world, 1, y, 0) ||
-            !matchingPistonHead(world, 2, y, 0, PropIndices::TYPE_STICKY)) {
+        if (!pistonExtended(world, 1, y, 0) || !matchingPistonHead(world, 2, y, 0, PropIndices::TYPE_STICKY)) {
             return fail("powered sticky piston should place a sticky piston head");
         }
     }
@@ -199,15 +185,11 @@ int main() {
 
         ecs::RedstoneSystem::processWorld(world, 3);
         std::vector<glm::ivec3> removedPositions;
-        const BlockID removedBlock = PistonBlockLogic::removePistonAssembly(
-            world,
-            glm::ivec3(2, y, 0),
-            &removedPositions);
-        if (removedBlock != BlockRegistry::requireIdByName("minecraft:piston") ||
-            removedPositions.size() != 2 ||
+        const BlockID removedBlock =
+            PistonBlockLogic::removePistonAssembly(world, glm::ivec3(2, y, 0), &removedPositions);
+        if (removedBlock != BlockRegistry::requireIdByName("minecraft:piston") || removedPositions.size() != 2 ||
             (!removedPositions.empty() && removedPositions.front() != glm::ivec3(2, y, 0)) ||
-            world.getBlockState(1, y, 0) != NULL_BLOCK_STATE ||
-            world.getBlockState(2, y, 0) != NULL_BLOCK_STATE) {
+            world.getBlockState(1, y, 0) != NULL_BLOCK_STATE || world.getBlockState(2, y, 0) != NULL_BLOCK_STATE) {
             return fail("breaking an extended piston head should remove the piston base as one assembly");
         }
     }
@@ -220,15 +202,11 @@ int main() {
 
         ecs::RedstoneSystem::processWorld(world, 4);
         std::vector<glm::ivec3> removedPositions;
-        const BlockID removedBlock = PistonBlockLogic::removePistonAssembly(
-            world,
-            glm::ivec3(1, y, 0),
-            &removedPositions);
-        if (removedBlock != BlockRegistry::requireIdByName("minecraft:sticky_piston") ||
-            removedPositions.size() != 2 ||
+        const BlockID removedBlock =
+            PistonBlockLogic::removePistonAssembly(world, glm::ivec3(1, y, 0), &removedPositions);
+        if (removedBlock != BlockRegistry::requireIdByName("minecraft:sticky_piston") || removedPositions.size() != 2 ||
             (!removedPositions.empty() && removedPositions.front() != glm::ivec3(1, y, 0)) ||
-            world.getBlockState(1, y, 0) != NULL_BLOCK_STATE ||
-            world.getBlockState(2, y, 0) != NULL_BLOCK_STATE) {
+            world.getBlockState(1, y, 0) != NULL_BLOCK_STATE || world.getBlockState(2, y, 0) != NULL_BLOCK_STATE) {
             return fail("breaking an extended piston base should remove the piston head as one assembly");
         }
     }
@@ -238,12 +216,13 @@ int main() {
         preparePistonArea(world, y);
         world.setBlockState(0, y, 0, leverState(true));
         world.setBlockState(1, y, 0, pistonState(BlockRegistry::requireIdByName("minecraft:piston"), false));
-        world.setBlockState(2, y, 0, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:stone")));
-        world.setBlockState(3, y, 0, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:dirt")));
+        world.setBlockState(2, y, 0,
+                            BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:stone")));
+        world.setBlockState(3, y, 0,
+                            BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:dirt")));
 
         ecs::RedstoneSystem::processWorld(world, 5);
-        if (!pistonExtended(world, 1, y, 0) ||
-            !matchingPistonHead(world, 2, y, 0, PropIndices::TYPE_NORMAL) ||
+        if (!pistonExtended(world, 1, y, 0) || !matchingPistonHead(world, 2, y, 0, PropIndices::TYPE_NORMAL) ||
             !blockIs(world, 3, y, 0, BlockRegistry::requireIdByName("minecraft:stone")) ||
             !blockIs(world, 4, y, 0, BlockRegistry::requireIdByName("minecraft:dirt"))) {
             return fail("powered piston should push a movable block chain forward before placing its head");
@@ -251,8 +230,7 @@ int main() {
 
         world.setBlockState(0, y, 0, leverState(false));
         ecs::RedstoneSystem::processWorld(world, 6);
-        if (pistonExtended(world, 1, y, 0) ||
-            world.getBlockState(2, y, 0) != NULL_BLOCK_STATE ||
+        if (pistonExtended(world, 1, y, 0) || world.getBlockState(2, y, 0) != NULL_BLOCK_STATE ||
             !blockIs(world, 3, y, 0, BlockRegistry::requireIdByName("minecraft:stone")) ||
             !blockIs(world, 4, y, 0, BlockRegistry::requireIdByName("minecraft:dirt"))) {
             return fail("normal piston should retract its head without pulling pushed blocks back");
@@ -264,11 +242,11 @@ int main() {
         preparePistonArea(world, y);
         world.setBlockState(0, y, 0, leverState(true));
         world.setBlockState(1, y, 0, pistonState(BlockRegistry::requireIdByName("minecraft:sticky_piston"), false));
-        world.setBlockState(2, y, 0, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:stone")));
+        world.setBlockState(2, y, 0,
+                            BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:stone")));
 
         ecs::RedstoneSystem::processWorld(world, 7);
-        if (!pistonExtended(world, 1, y, 0) ||
-            !matchingPistonHead(world, 2, y, 0, PropIndices::TYPE_STICKY) ||
+        if (!pistonExtended(world, 1, y, 0) || !matchingPistonHead(world, 2, y, 0, PropIndices::TYPE_STICKY) ||
             !blockIs(world, 3, y, 0, BlockRegistry::requireIdByName("minecraft:stone"))) {
             return fail("powered sticky piston should push a movable front block");
         }
@@ -290,8 +268,7 @@ int main() {
         world.setBlockState(2, y, 0, BlockStateRegistry::getDefaultState(obsidianBlockId));
 
         ecs::RedstoneSystem::processWorld(world, 9);
-        if (pistonExtended(world, 1, y, 0) ||
-            !blockIs(world, 2, y, 0, obsidianBlockId) ||
+        if (pistonExtended(world, 1, y, 0) || !blockIs(world, 2, y, 0, obsidianBlockId) ||
             world.getBlockState(3, y, 0) != NULL_BLOCK_STATE) {
             return fail("piston should not extend when an immovable block is directly in front");
         }
@@ -303,7 +280,8 @@ int main() {
         world.setBlockState(0, y, 0, leverState(true));
         world.setBlockState(1, y, 0, pistonState(BlockRegistry::requireIdByName("minecraft:piston"), false));
         for (int x = 2; x <= 14; ++x) {
-            world.setBlockState(x, y, 0, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:stone")));
+            world.setBlockState(x, y, 0,
+                                BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:stone")));
         }
 
         ecs::RedstoneSystem::processWorld(world, 10);
@@ -322,22 +300,17 @@ int main() {
         world.setBlockState(1, y, 0, pistonState(BlockRegistry::requireIdByName("minecraft:piston"), false));
 
         ecs::GameplayRegistry registry;
-        const entt::entity player = createPhysicsPlayer(
-            registry,
-            glm::vec3(2.5f, static_cast<float>(y), 0.5f));
+        const entt::entity player = createPhysicsPlayer(registry, glm::vec3(2.5f, static_cast<float>(y), 0.5f));
 
         ecs::RedstoneSystem::processWorld(world, 11, registry);
-        if (countMovingBlocks(registry) != 1 ||
-            world.getBlockState(2, y, 0) != NULL_BLOCK_STATE) {
+        if (countMovingBlocks(registry) != 1 || world.getBlockState(2, y, 0) != NULL_BLOCK_STATE) {
             return fail("extending piston should create a moving head before final placement");
         }
         advanceMovingBlocks(world, registry);
         const auto& transform = registry.get<ecs::TransformComponent>(player);
         const auto& physics = registry.get<ecs::PhysicsBodyComponent>(player);
-        if (!pistonExtended(world, 1, y, 0) ||
-            !matchingPistonHead(world, 2, y, 0, PropIndices::TYPE_NORMAL) ||
-            transform.position.x <= 3.29f ||
-            physicsBodyOverlapsWorld(world, physics)) {
+        if (!pistonExtended(world, 1, y, 0) || !matchingPistonHead(world, 2, y, 0, PropIndices::TYPE_NORMAL) ||
+            transform.position.x <= 3.29f || physicsBodyOverlapsWorld(world, physics)) {
             return fail("extending piston head should push an intersecting player out of the head block");
         }
     }
@@ -347,16 +320,14 @@ int main() {
         preparePistonArea(world, y);
         world.setBlockState(0, y, 0, leverState(true));
         world.setBlockState(1, y, 0, pistonState(BlockRegistry::requireIdByName("minecraft:piston"), false));
-        world.setBlockState(2, y, 0, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:stone")));
+        world.setBlockState(2, y, 0,
+                            BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:stone")));
 
         ecs::GameplayRegistry registry;
-        const entt::entity player = createPhysicsPlayer(
-            registry,
-            glm::vec3(3.5f, static_cast<float>(y), 0.5f));
+        const entt::entity player = createPhysicsPlayer(registry, glm::vec3(3.5f, static_cast<float>(y), 0.5f));
 
         ecs::RedstoneSystem::processWorld(world, 12, registry);
-        if (countMovingBlocks(registry) != 2 ||
-            world.getBlockState(2, y, 0) != NULL_BLOCK_STATE ||
+        if (countMovingBlocks(registry) != 2 || world.getBlockState(2, y, 0) != NULL_BLOCK_STATE ||
             world.getBlockState(3, y, 0) != NULL_BLOCK_STATE) {
             return fail("piston-pushed block should move as entities before final placement");
         }
@@ -364,8 +335,7 @@ int main() {
         const auto& transform = registry.get<ecs::TransformComponent>(player);
         const auto& physics = registry.get<ecs::PhysicsBodyComponent>(player);
         if (!blockIs(world, 3, y, 0, BlockRegistry::requireIdByName("minecraft:stone")) ||
-            transform.position.x <= 4.29f ||
-            physicsBodyOverlapsWorld(world, physics)) {
+            transform.position.x <= 4.29f || physicsBodyOverlapsWorld(world, physics)) {
             return fail("piston-pushed block should push an intersecting player out of the target block");
         }
     }
@@ -377,20 +347,16 @@ int main() {
         world.setBlockState(1, y, 0, pistonState(BlockRegistry::requireIdByName("minecraft:piston"), false));
 
         ecs::GameplayRegistry registry;
-        const entt::entity player = createPhysicsPlayer(
-            registry,
-            glm::vec3(2.1f, static_cast<float>(y), 0.05f));
+        const entt::entity player = createPhysicsPlayer(registry, glm::vec3(2.1f, static_cast<float>(y), 0.05f));
 
         ecs::RedstoneSystem::processWorld(world, 14, registry);
-        if (countMovingBlocks(registry) != 1 ||
-            world.getBlockState(2, y, 0) != NULL_BLOCK_STATE) {
+        if (countMovingBlocks(registry) != 1 || world.getBlockState(2, y, 0) != NULL_BLOCK_STATE) {
             return fail("extending piston head should be animated through its swept path");
         }
         advanceMovingBlocks(world, registry);
         const auto& transform = registry.get<ecs::TransformComponent>(player);
         const auto& physics = registry.get<ecs::PhysicsBodyComponent>(player);
-        if (!matchingPistonHead(world, 2, y, 0, PropIndices::TYPE_NORMAL) ||
-            transform.position.x <= 3.29f ||
+        if (!matchingPistonHead(world, 2, y, 0, PropIndices::TYPE_NORMAL) || transform.position.x <= 3.29f ||
             physicsBodyOverlapsWorld(world, physics)) {
             return fail("extending piston head should push a player from the full swept head path");
         }
@@ -401,12 +367,11 @@ int main() {
         preparePistonArea(world, y);
         world.setBlockState(0, y, 0, leverState(true));
         world.setBlockState(1, y, 0, pistonState(BlockRegistry::requireIdByName("minecraft:piston"), false));
-        world.setBlockState(2, y, 0, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:stone")));
+        world.setBlockState(2, y, 0,
+                            BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:stone")));
 
         ecs::GameplayRegistry registry;
-        const entt::entity player = createPhysicsPlayer(
-            registry,
-            glm::vec3(2.5f, static_cast<float>(y + 1), 0.5f));
+        const entt::entity player = createPhysicsPlayer(registry, glm::vec3(2.5f, static_cast<float>(y + 1), 0.5f));
 
         ecs::RedstoneSystem::processWorld(world, 15, registry);
         if (countMovingBlocks(registry) != 2) {
@@ -416,8 +381,7 @@ int main() {
         const auto& transform = registry.get<ecs::TransformComponent>(player);
         const auto& physics = registry.get<ecs::PhysicsBodyComponent>(player);
         if (!blockIs(world, 3, y, 0, BlockRegistry::requireIdByName("minecraft:stone")) ||
-            transform.position.x <= 3.29f ||
-            physicsBodyOverlapsWorld(world, physics)) {
+            transform.position.x <= 3.29f || physicsBodyOverlapsWorld(world, physics)) {
             return fail("horizontal piston-pushed block should carry a player standing on it");
         }
     }
@@ -426,22 +390,30 @@ int main() {
         const int y = 32;
         preparePistonArea(world, y);
         world.setBlockState(-2, y, 0, leverState(true));
-        world.setBlockState(-1, y, 0, pistonState(BlockRegistry::requireIdByName("minecraft:piston"), PropIndices::FACING_EAST, false));
-        world.setBlockState(0, y, 0, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:stone")));
+        world.setBlockState(
+            -1, y, 0, pistonState(BlockRegistry::requireIdByName("minecraft:piston"), PropIndices::FACING_EAST, false));
+        world.setBlockState(0, y, 0,
+                            BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:stone")));
         world.setBlockState(-2, y + 1, 0, leverState(true));
-        world.setBlockState(-1, y + 1, 0, pistonState(BlockRegistry::requireIdByName("minecraft:piston"), PropIndices::FACING_EAST, false));
-        world.setBlockState(0, y + 1, 0, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:stone")));
+        world.setBlockState(
+            -1, y + 1, 0,
+            pistonState(BlockRegistry::requireIdByName("minecraft:piston"), PropIndices::FACING_EAST, false));
+        world.setBlockState(0, y + 1, 0,
+                            BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:stone")));
         world.setBlockState(5, y, 0, leverState(true));
-        world.setBlockState(4, y, 0, pistonState(BlockRegistry::requireIdByName("minecraft:piston"), PropIndices::FACING_WEST, false));
-        world.setBlockState(3, y, 0, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:stone")));
+        world.setBlockState(
+            4, y, 0, pistonState(BlockRegistry::requireIdByName("minecraft:piston"), PropIndices::FACING_WEST, false));
+        world.setBlockState(3, y, 0,
+                            BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:stone")));
         world.setBlockState(5, y + 1, 0, leverState(true));
-        world.setBlockState(4, y + 1, 0, pistonState(BlockRegistry::requireIdByName("minecraft:piston"), PropIndices::FACING_WEST, false));
-        world.setBlockState(3, y + 1, 0, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:stone")));
+        world.setBlockState(
+            4, y + 1, 0,
+            pistonState(BlockRegistry::requireIdByName("minecraft:piston"), PropIndices::FACING_WEST, false));
+        world.setBlockState(3, y + 1, 0,
+                            BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:stone")));
 
         ecs::GameplayRegistry registry;
-        const entt::entity player = createPhysicsPlayer(
-            registry,
-            glm::vec3(1.5f, static_cast<float>(y), 0.5f));
+        const entt::entity player = createPhysicsPlayer(registry, glm::vec3(1.5f, static_cast<float>(y), 0.5f));
 
         ecs::RedstoneSystem::processWorld(world, 16, registry);
         if (countMovingBlocks(registry) != 8) {
@@ -463,10 +435,12 @@ int main() {
             return fail("two-high opposing piston door should close all pushed blocks");
         }
         if (!pushedOutsideDoorDepth) {
-            return fail("closing two-high opposing piston door should move the player outside the closed doorway depth");
+            return fail(
+                "closing two-high opposing piston door should move the player outside the closed doorway depth");
         }
         if (physicsBodyOverlapsWorld(world, physics)) {
-            return fail("closing two-high opposing piston door should not leave the player intersecting block collision");
+            return fail(
+                "closing two-high opposing piston door should not leave the player intersecting block collision");
         }
     }
 

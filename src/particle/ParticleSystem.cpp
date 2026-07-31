@@ -65,12 +65,9 @@ void ParticleSystem::prepareFrame(const glm::mat4& view, RhiCommandList& command
     if (buildVertices(view, m_vertexBuffer) == 0) {
         return;
     }
-    commandList.bufferBarrier({m_rhiVertexBuffer, RhiResourceState::VertexBuffer,
-                               RhiResourceState::TransferDst});
-    commandList.updateBuffer(m_rhiVertexBuffer, 0u,
-                             m_vertexBuffer.data(), m_vertexBuffer.size() * sizeof(float));
-    commandList.bufferBarrier({m_rhiVertexBuffer, RhiResourceState::TransferDst,
-                               RhiResourceState::VertexBuffer});
+    commandList.bufferBarrier({m_rhiVertexBuffer, RhiResourceState::VertexBuffer, RhiResourceState::TransferDst});
+    commandList.updateBuffer(m_rhiVertexBuffer, 0u, m_vertexBuffer.data(), m_vertexBuffer.size() * sizeof(float));
+    commandList.bufferBarrier({m_rhiVertexBuffer, RhiResourceState::TransferDst, RhiResourceState::VertexBuffer});
     m_preparedVertexCount = static_cast<uint32_t>(m_vertexBuffer.size() / 8u);
 }
 
@@ -126,15 +123,10 @@ int ParticleSystem::buildVertices(const glm::mat4& view, std::vector<float>& ver
 }
 
 void ParticleSystem::render(RhiCommandList& commandList, const glm::mat4& viewProj) {
-    if (m_preparedVertexCount == 0u || !m_forwardPipeline.isValid() ||
-        !m_forwardBindGroup.isValid()) {
+    if (m_preparedVertexCount == 0u || !m_forwardPipeline.isValid() || !m_forwardBindGroup.isValid()) {
         return;
     }
-    const ParticlePushConstants pushConstants{
-        viewProj,
-        glm::vec4(0.50f, 0.78f, 0.34f, 0.0f),
-        glm::vec4(0.0f)
-    };
+    const ParticlePushConstants pushConstants{viewProj, glm::vec4(0.50f, 0.78f, 0.34f, 0.0f), glm::vec4(0.0f)};
     commandList.setGraphicsPipeline(m_forwardPipeline);
     commandList.setBindGroup(0u, m_forwardBindGroup);
     commandList.setVertexBuffer(0u, m_rhiVertexBuffer, 0u);
@@ -143,20 +135,14 @@ void ParticleSystem::render(RhiCommandList& commandList, const glm::mat4& viewPr
     commandList.draw(m_preparedVertexCount, 1u, 0u, 0u);
 }
 
-void ParticleSystem::renderToSceneResolved(RhiCommandList& commandList,
-                                            const RhiTextureHandle voxelLightTexture,
-                                            const RhiTextureHandle depthTexture,
-                                            const glm::mat4& viewProj,
-                                            const glm::vec2& screenSize) {
-    if (m_preparedVertexCount == 0u ||
-        !ensureDeferredBindGroup(voxelLightTexture, depthTexture)) {
+void ParticleSystem::renderToSceneResolved(RhiCommandList& commandList, const RhiTextureHandle voxelLightTexture,
+                                           const RhiTextureHandle depthTexture, const glm::mat4& viewProj,
+                                           const glm::vec2& screenSize) {
+    if (m_preparedVertexCount == 0u || !ensureDeferredBindGroup(voxelLightTexture, depthTexture)) {
         return;
     }
-    const ParticlePushConstants pushConstants{
-        viewProj,
-        glm::vec4(0.50f, 0.78f, 0.34f, 0.0f),
-        glm::vec4(screenSize, 0.0f, 0.0f)
-    };
+    const ParticlePushConstants pushConstants{viewProj, glm::vec4(0.50f, 0.78f, 0.34f, 0.0f),
+                                              glm::vec4(screenSize, 0.0f, 0.0f)};
     commandList.setGraphicsPipeline(m_deferredPipeline);
     commandList.setBindGroup(0u, m_deferredBindGroup);
     commandList.setVertexBuffer(0u, m_rhiVertexBuffer, 0u);
@@ -171,7 +157,8 @@ bool ParticleSystem::createRhiResources() {
     renderer::rhi::RhiShaderSourceOptions options;
     options.preprocessorDefinitions.push_back("PARTICLE_DEFERRED");
     const auto deferredSource = renderer::rhi::loadShaderSource("assets/shaders/particle_rhi.frag", options);
-    if (!vertexSource || !forwardSource || !deferredSource) return false;
+    if (!vertexSource || !forwardSource || !deferredSource)
+        return false;
 
     RhiBufferDesc bufferDesc;
     bufferDesc.debugName = "Particle.VertexBuffer";
@@ -214,14 +201,11 @@ bool ParticleSystem::createRhiResources() {
 
     RhiBindGroupLayoutDesc layoutDesc;
     layoutDesc.debugName = "Particle.ForwardBindGroupLayout";
-    layoutDesc.entries.push_back({0u, RhiBindingType::CombinedTextureSampler,
-                                  rhiFlag(RhiShaderStage::Fragment), 1u});
+    layoutDesc.entries.push_back({0u, RhiBindingType::CombinedTextureSampler, rhiFlag(RhiShaderStage::Fragment), 1u});
     m_forwardBindGroupLayout = m_rhiDevice->createBindGroupLayout(layoutDesc);
     layoutDesc.debugName = "Particle.DeferredBindGroupLayout";
-    layoutDesc.entries.push_back({1u, RhiBindingType::CombinedTextureSampler,
-                                  rhiFlag(RhiShaderStage::Fragment), 1u});
-    layoutDesc.entries.push_back({2u, RhiBindingType::CombinedTextureSampler,
-                                  rhiFlag(RhiShaderStage::Fragment), 1u});
+    layoutDesc.entries.push_back({1u, RhiBindingType::CombinedTextureSampler, rhiFlag(RhiShaderStage::Fragment), 1u});
+    layoutDesc.entries.push_back({2u, RhiBindingType::CombinedTextureSampler, rhiFlag(RhiShaderStage::Fragment), 1u});
     m_deferredBindGroupLayout = m_rhiDevice->createBindGroupLayout(layoutDesc);
 
     RhiPipelineLayoutDesc pipelineLayoutDesc;
@@ -245,10 +229,11 @@ bool ParticleSystem::createRhiResources() {
     pipelineDesc.colorFormats.push_back(RhiTextureFormat::Rgba16Float);
     pipelineDesc.depthFormat = RhiTextureFormat::Depth32Float;
     pipelineDesc.vertexInput.bindings.push_back({0u, 8u * sizeof(float), RhiVertexInputRate::Vertex});
-    pipelineDesc.vertexInput.attributes = {
-        {0u, 0u, RhiVertexFormat::Float3, 0u}, {1u, 0u, RhiVertexFormat::Float2, 3u * sizeof(float)},
-        {2u, 0u, RhiVertexFormat::Float, 5u * sizeof(float)}, {3u, 0u, RhiVertexFormat::Float, 6u * sizeof(float)},
-        {4u, 0u, RhiVertexFormat::Float, 7u * sizeof(float)}};
+    pipelineDesc.vertexInput.attributes = {{0u, 0u, RhiVertexFormat::Float3, 0u},
+                                           {1u, 0u, RhiVertexFormat::Float2, 3u * sizeof(float)},
+                                           {2u, 0u, RhiVertexFormat::Float, 5u * sizeof(float)},
+                                           {3u, 0u, RhiVertexFormat::Float, 6u * sizeof(float)},
+                                           {4u, 0u, RhiVertexFormat::Float, 7u * sizeof(float)}};
     RhiBlendAttachmentState blend;
     blend.blendEnabled = true;
     blend.srcColor = RhiBlendFactor::SrcAlpha;
@@ -262,11 +247,7 @@ bool ParticleSystem::createRhiResources() {
     pipelineDesc.fragmentShader = m_deferredFragmentShader;
     pipelineDesc.layout = m_deferredPipelineLayout;
     pipelineDesc.depthStencil.depthTestEnabled = false;
-    pipelineDesc.colorFormats = {
-        RhiTextureFormat::Rgba16Float,
-        RhiTextureFormat::R8Unorm,
-        RhiTextureFormat::R8Unorm
-    };
+    pipelineDesc.colorFormats = {RhiTextureFormat::Rgba16Float, RhiTextureFormat::R8Unorm, RhiTextureFormat::R8Unorm};
     RhiBlendAttachmentState maskBlend;
     maskBlend.blendEnabled = true;
     maskBlend.srcColor = RhiBlendFactor::One;
@@ -291,8 +272,8 @@ bool ParticleSystem::createRhiResources() {
         !m_nearestSampler.isValid() || !m_vertexShader.isValid() || !m_forwardFragmentShader.isValid() ||
         !m_deferredFragmentShader.isValid() || !m_forwardBindGroupLayout.isValid() ||
         !m_deferredBindGroupLayout.isValid() || !m_forwardPipelineLayout.isValid() ||
-        !m_deferredPipelineLayout.isValid() || !m_forwardPipeline.isValid() ||
-        !m_deferredPipeline.isValid() || !m_forwardBindGroup.isValid()) {
+        !m_deferredPipelineLayout.isValid() || !m_forwardPipeline.isValid() || !m_deferredPipeline.isValid() ||
+        !m_forwardBindGroup.isValid()) {
         destroyRhiResources();
         return false;
     }
@@ -301,9 +282,11 @@ bool ParticleSystem::createRhiResources() {
 
 bool ParticleSystem::ensureDeferredBindGroup(const RhiTextureHandle voxelLightTexture,
                                              const RhiTextureHandle depthTexture) {
-    if (!voxelLightTexture.isValid() || !depthTexture.isValid()) return false;
+    if (!voxelLightTexture.isValid() || !depthTexture.isValid())
+        return false;
     if (m_deferredBindGroup.isValid() && sameTexture(m_boundVoxelLightTexture, voxelLightTexture) &&
-        sameTexture(m_boundDepthTexture, depthTexture)) return true;
+        sameTexture(m_boundDepthTexture, depthTexture))
+        return true;
     destroyDeferredBindGroup();
     RhiTextureViewDesc viewDesc;
     viewDesc.texture = voxelLightTexture;
@@ -336,9 +319,12 @@ bool ParticleSystem::ensureDeferredBindGroup(const RhiTextureHandle voxelLightTe
 
 void ParticleSystem::destroyDeferredBindGroup() {
     if (m_rhiDevice) {
-        if (m_deferredBindGroup.isValid()) m_rhiDevice->destroyBindGroup(m_deferredBindGroup);
-        if (m_depthView.isValid()) m_rhiDevice->destroyTextureView(m_depthView);
-        if (m_voxelLightView.isValid()) m_rhiDevice->destroyTextureView(m_voxelLightView);
+        if (m_deferredBindGroup.isValid())
+            m_rhiDevice->destroyBindGroup(m_deferredBindGroup);
+        if (m_depthView.isValid())
+            m_rhiDevice->destroyTextureView(m_depthView);
+        if (m_voxelLightView.isValid())
+            m_rhiDevice->destroyTextureView(m_voxelLightView);
     }
     m_deferredBindGroup = {};
     m_depthView = {};
@@ -350,20 +336,34 @@ void ParticleSystem::destroyDeferredBindGroup() {
 void ParticleSystem::destroyRhiResources() {
     destroyDeferredBindGroup();
     if (m_rhiDevice) {
-        if (m_forwardBindGroup.isValid()) m_rhiDevice->destroyBindGroup(m_forwardBindGroup);
-        if (m_deferredPipeline.isValid()) m_rhiDevice->destroyPipeline(m_deferredPipeline);
-        if (m_forwardPipeline.isValid()) m_rhiDevice->destroyPipeline(m_forwardPipeline);
-        if (m_deferredPipelineLayout.isValid()) m_rhiDevice->destroyPipelineLayout(m_deferredPipelineLayout);
-        if (m_forwardPipelineLayout.isValid()) m_rhiDevice->destroyPipelineLayout(m_forwardPipelineLayout);
-        if (m_deferredBindGroupLayout.isValid()) m_rhiDevice->destroyBindGroupLayout(m_deferredBindGroupLayout);
-        if (m_forwardBindGroupLayout.isValid()) m_rhiDevice->destroyBindGroupLayout(m_forwardBindGroupLayout);
-        if (m_deferredFragmentShader.isValid()) m_rhiDevice->destroyShader(m_deferredFragmentShader);
-        if (m_forwardFragmentShader.isValid()) m_rhiDevice->destroyShader(m_forwardFragmentShader);
-        if (m_vertexShader.isValid()) m_rhiDevice->destroyShader(m_vertexShader);
-        if (m_nearestSampler.isValid()) m_rhiDevice->destroySampler(m_nearestSampler);
-        if (m_linearSampler.isValid()) m_rhiDevice->destroySampler(m_linearSampler);
-        if (m_textureArrayView.isValid()) m_rhiDevice->destroyTextureView(m_textureArrayView);
-        if (m_rhiVertexBuffer.isValid()) m_rhiDevice->destroyBuffer(m_rhiVertexBuffer);
+        if (m_forwardBindGroup.isValid())
+            m_rhiDevice->destroyBindGroup(m_forwardBindGroup);
+        if (m_deferredPipeline.isValid())
+            m_rhiDevice->destroyPipeline(m_deferredPipeline);
+        if (m_forwardPipeline.isValid())
+            m_rhiDevice->destroyPipeline(m_forwardPipeline);
+        if (m_deferredPipelineLayout.isValid())
+            m_rhiDevice->destroyPipelineLayout(m_deferredPipelineLayout);
+        if (m_forwardPipelineLayout.isValid())
+            m_rhiDevice->destroyPipelineLayout(m_forwardPipelineLayout);
+        if (m_deferredBindGroupLayout.isValid())
+            m_rhiDevice->destroyBindGroupLayout(m_deferredBindGroupLayout);
+        if (m_forwardBindGroupLayout.isValid())
+            m_rhiDevice->destroyBindGroupLayout(m_forwardBindGroupLayout);
+        if (m_deferredFragmentShader.isValid())
+            m_rhiDevice->destroyShader(m_deferredFragmentShader);
+        if (m_forwardFragmentShader.isValid())
+            m_rhiDevice->destroyShader(m_forwardFragmentShader);
+        if (m_vertexShader.isValid())
+            m_rhiDevice->destroyShader(m_vertexShader);
+        if (m_nearestSampler.isValid())
+            m_rhiDevice->destroySampler(m_nearestSampler);
+        if (m_linearSampler.isValid())
+            m_rhiDevice->destroySampler(m_linearSampler);
+        if (m_textureArrayView.isValid())
+            m_rhiDevice->destroyTextureView(m_textureArrayView);
+        if (m_rhiVertexBuffer.isValid())
+            m_rhiDevice->destroyBuffer(m_rhiVertexBuffer);
     }
     m_forwardBindGroup = {};
     m_deferredPipeline = {};

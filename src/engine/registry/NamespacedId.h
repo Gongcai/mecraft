@@ -23,21 +23,19 @@ public:
 
     bool operator==(const NamespacedId& other) const;
     bool operator!=(const NamespacedId& other) const;
-    bool operator<(const NamespacedId& other) const;  // for ordered containers
+    bool operator<(const NamespacedId& other) const; // for ordered containers
 
 private:
-    std::string m_ns;     // namespace, e.g. "minecraft"
-    std::string m_path;   // path, e.g. "stone"
-    uint64_t m_hash;      // precomputed hash
+    std::string m_ns; // namespace, e.g. "minecraft"
+    std::string m_path; // path, e.g. "stone"
+    uint64_t m_hash; // precomputed hash
 
     static uint64_t computeHash(std::string_view ns, std::string_view path);
 };
 
 // Hash support for unordered_map/unordered_set
 namespace std {
-template<> struct hash<NamespacedId> {
-    size_t operator()(const NamespacedId& id) const noexcept {
-        return static_cast<size_t>(id.hash());
-    }
+template <> struct hash<NamespacedId> {
+    size_t operator()(const NamespacedId& id) const noexcept { return static_cast<size_t>(id.hash()); }
 };
-}
+} // namespace std

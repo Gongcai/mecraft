@@ -35,8 +35,7 @@ struct InputSnapshot;
 class UIScene;
 class UIWidget;
 
-class UIRenderer
-{
+class UIRenderer {
 public:
     UIRenderer();
     ~UIRenderer();
@@ -48,11 +47,8 @@ public:
     void init(ResourceMgr& resourceMgr);
     void shutdown();
 
-    UIRenderContext prepareRenderContext(int surfaceWidth,
-                                         int surfaceHeight,
-                                         RhiDevice& rhiDevice,
-                                         const Inventory& inventory,
-                                         const PlayerStatsData& playerStats,
+    UIRenderContext prepareRenderContext(int surfaceWidth, int surfaceHeight, RhiDevice& rhiDevice,
+                                         const Inventory& inventory, const PlayerStatsData& playerStats,
                                          const InputSnapshot& inputSnapshot);
     void renderPrepared(const UIRenderContext& context);
     void renderCommandInputBox(const std::string& text);
@@ -114,9 +110,7 @@ public:
     void setActiveScene(UIScene* scene);
     [[nodiscard]] UIScene* getActiveScene() const;
     [[nodiscard]] ResourceMgr* getResourceMgr() const;
-    UIRenderContext prepareSceneContext(int surfaceWidth,
-                                        int surfaceHeight,
-                                        RhiDevice& rhiDevice,
+    UIRenderContext prepareSceneContext(int surfaceWidth, int surfaceHeight, RhiDevice& rhiDevice,
                                         const InputSnapshot& inputSnapshot);
     void renderSceneOnlyPrepared(const UIRenderContext& context);
 
@@ -159,11 +153,9 @@ public:
     [[nodiscard]] float getInventoryCountTextScale() const;
 
 private:
-    [[nodiscard]] UIRenderContext makeContextFromSurface(int surfaceWidth,
-                                                         int surfaceHeight,
-                                                        const Inventory& inventory,
-                                                        const PlayerStatsData& playerStats,
-                                                        const InputSnapshot& inputSnapshot) const;
+    [[nodiscard]] UIRenderContext makeContextFromSurface(int surfaceWidth, int surfaceHeight,
+                                                         const Inventory& inventory, const PlayerStatsData& playerStats,
+                                                         const InputSnapshot& inputSnapshot) const;
     void renderControls(const UIRenderContext& context);
     void renderDeathOverlay(const UIRenderContext& context);
     void prepareBackdropBlur(UIRenderContext& context, RhiDevice& rhiDevice) const;
@@ -234,10 +226,7 @@ private:
     mutable int m_backdropBlurWidth = 0;
     mutable int m_backdropBlurHeight = 0;
     mutable RhiResourceState m_backdropSourceState = RhiResourceState::Undefined;
-    mutable RhiResourceState m_backdropBlurState[2] = {
-        RhiResourceState::Undefined,
-        RhiResourceState::Undefined
-    };
+    mutable RhiResourceState m_backdropBlurState[2] = {RhiResourceState::Undefined, RhiResourceState::Undefined};
 
     RhiDevice* m_panelRhiDevice = nullptr;
     RhiBufferHandle m_panelQuadVertexBuffer;

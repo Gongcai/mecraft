@@ -35,29 +35,19 @@ enum class Fsr31VulkanContextCreateStatus {
 };
 
 struct Fsr31VulkanContextCreateResult {
-    Fsr31VulkanContextCreateStatus status =
-        Fsr31VulkanContextCreateStatus::MissingVulkanDevice;
+    Fsr31VulkanContextCreateStatus status = Fsr31VulkanContextCreateStatus::MissingVulkanDevice;
     int32_t sdkError = 0;
 
-    [[nodiscard]] bool succeeded() const {
-        return status == Fsr31VulkanContextCreateStatus::Success;
-    }
+    [[nodiscard]] bool succeeded() const { return status == Fsr31VulkanContextCreateStatus::Success; }
 };
 
-enum class Fsr31VulkanContextDestroyStatus {
-    Success,
-    NotInitialized,
-    ContextDestroyError
-};
+enum class Fsr31VulkanContextDestroyStatus { Success, NotInitialized, ContextDestroyError };
 
 struct Fsr31VulkanContextDestroyResult {
-    Fsr31VulkanContextDestroyStatus status =
-        Fsr31VulkanContextDestroyStatus::NotInitialized;
+    Fsr31VulkanContextDestroyStatus status = Fsr31VulkanContextDestroyStatus::NotInitialized;
     int32_t sdkError = 0;
 
-    [[nodiscard]] bool succeeded() const {
-        return status == Fsr31VulkanContextDestroyStatus::Success;
-    }
+    [[nodiscard]] bool succeeded() const { return status == Fsr31VulkanContextDestroyStatus::Success; }
 };
 
 struct Fsr31VulkanDispatchDesc {
@@ -77,8 +67,7 @@ enum class Fsr31VulkanDispatchStatus {
 };
 
 struct Fsr31VulkanDispatchResult {
-    Fsr31VulkanDispatchStatus status =
-        Fsr31VulkanDispatchStatus::NotInitialized;
+    Fsr31VulkanDispatchStatus status = Fsr31VulkanDispatchStatus::NotInitialized;
     int32_t sdkError = 0;
     std::optional<TemporalFrameValidationError> temporalError;
     std::optional<Fsr31ResourceResolveStatus> resourceStatus;
@@ -86,14 +75,10 @@ struct Fsr31VulkanDispatchResult {
     std::optional<Fsr31ResourceValidationFailure> validationFailure;
 
     Fsr31VulkanDispatchResult() = default;
-    explicit Fsr31VulkanDispatchResult(
-        const Fsr31VulkanDispatchStatus resultStatus,
-        const int32_t error = 0)
+    explicit Fsr31VulkanDispatchResult(const Fsr31VulkanDispatchStatus resultStatus, const int32_t error = 0)
         : status(resultStatus), sdkError(error) {}
 
-    [[nodiscard]] bool succeeded() const {
-        return status == Fsr31VulkanDispatchStatus::Success;
-    }
+    [[nodiscard]] bool succeeded() const { return status == Fsr31VulkanDispatchStatus::Success; }
 };
 
 /// Owns one FidelityFX FSR 3.1 upscaler context and its Vulkan backend memory.
@@ -108,9 +93,7 @@ public:
     /// @param device Initialized Vulkan RHI device that owns the SDK shared resources.
     /// @param desc Maximum extents and immutable context feature flags.
     /// @return Explicit lifecycle status plus the SDK error code when applicable.
-    [[nodiscard]] Fsr31VulkanContextCreateResult initialize(
-        VkRhiDevice& device,
-        const Fsr31VulkanContextDesc& desc);
+    [[nodiscard]] Fsr31VulkanContextCreateResult initialize(VkRhiDevice& device, const Fsr31VulkanContextDesc& desc);
 
     /// Destroy the FSR context before its owning Vulkan device is destroyed.
     /// @return Explicit lifecycle status plus the SDK error code when applicable.
@@ -122,11 +105,9 @@ public:
     /// @param frame Validated temporal inputs and output target for this frame.
     /// @param desc Immutable per-dispatch sharpening and debug settings.
     /// @return Explicit resource, command-buffer, or SDK dispatch status.
-    [[nodiscard]] Fsr31VulkanDispatchResult dispatch(
-        const VkRhiDevice& device,
-        RhiCommandList& commandList,
-        const TemporalFrameInput& frame,
-        const Fsr31VulkanDispatchDesc& desc);
+    [[nodiscard]] Fsr31VulkanDispatchResult dispatch(const VkRhiDevice& device, RhiCommandList& commandList,
+                                                     const TemporalFrameInput& frame,
+                                                     const Fsr31VulkanDispatchDesc& desc);
 
     [[nodiscard]] bool isInitialized() const;
     [[nodiscard]] TemporalExtent maxRenderExtent() const;

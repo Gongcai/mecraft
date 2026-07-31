@@ -44,7 +44,7 @@ constexpr uint8_t METAL = 12;
 constexpr uint8_t ICE = 13;
 constexpr uint8_t STAINED_GLASS = 14;
 constexpr uint8_t MAX_BUILTIN = STAINED_GLASS;
-}
+} // namespace BlockMaterialKinds
 
 namespace DerivativeMaterialIds {
 // Mirrored by assets/shaders/gbuffer_contract.glsl and DerivativeMain/block.properties.
@@ -83,7 +83,7 @@ constexpr uint8_t TEXTURED_EMISSIVE = 36;
 constexpr uint8_t ORE = 57;
 constexpr uint8_t NETHER_ORE = 58;
 constexpr uint8_t MAX_BUILTIN = NETHER_ORE;
-}
+} // namespace DerivativeMaterialIds
 
 namespace BlockMaterialFlags {
 constexpr uint16_t None = 0;
@@ -96,7 +96,7 @@ constexpr uint16_t Reflective = 1u << 5u;
 constexpr uint16_t Metallic = 1u << 6u;
 constexpr uint16_t Subsurface = 1u << 7u;
 constexpr uint16_t Terrain = 1u << 8u;
-}
+} // namespace BlockMaterialFlags
 
 struct BlockMaterialInfo {
     uint8_t kind = BlockMaterialKinds::DEFAULT;
@@ -111,34 +111,57 @@ struct BlockMaterialInfo {
 namespace BlockMaterials {
 inline constexpr std::array<BlockMaterialInfo, BlockMaterialKinds::MAX_BUILTIN + 1> BUILTIN = {{
     {BlockMaterialKinds::DEFAULT, "default", BlockMaterialFlags::Terrain, 1.0f, 0.0f, 0.0f, 0.0f},
-    {BlockMaterialKinds::STONE, "stone", BlockMaterialFlags::Solid | BlockMaterialFlags::Terrain, 1.0f, 0.0f, 0.0f, 0.0f},
+    {BlockMaterialKinds::STONE, "stone", BlockMaterialFlags::Solid | BlockMaterialFlags::Terrain, 1.0f, 0.0f, 0.0f,
+     0.0f},
     {BlockMaterialKinds::DIRT, "dirt", BlockMaterialFlags::Solid | BlockMaterialFlags::Terrain, 1.0f, 0.0f, 0.0f, 0.0f},
-    {BlockMaterialKinds::GRASS, "grass", BlockMaterialFlags::Solid | BlockMaterialFlags::Terrain | BlockMaterialFlags::Vegetation, 1.0f, 0.0f, 0.0f, 0.0f},
+    {BlockMaterialKinds::GRASS, "grass",
+     BlockMaterialFlags::Solid | BlockMaterialFlags::Terrain | BlockMaterialFlags::Vegetation, 1.0f, 0.0f, 0.0f, 0.0f},
     {BlockMaterialKinds::WOOD, "wood", BlockMaterialFlags::Solid | BlockMaterialFlags::Terrain, 1.0f, 0.0f, 0.0f, 0.0f},
-    {BlockMaterialKinds::LEAVES, "leaves", BlockMaterialFlags::Vegetation | BlockMaterialFlags::Subsurface, 1.0f, 0.0f, 0.0f, 0.70f},
-    {BlockMaterialKinds::PLANT, "plant", BlockMaterialFlags::Vegetation | BlockMaterialFlags::Subsurface, 1.0f, 0.0f, 0.0f, 0.45f},
+    {BlockMaterialKinds::LEAVES, "leaves", BlockMaterialFlags::Vegetation | BlockMaterialFlags::Subsurface, 1.0f, 0.0f,
+     0.0f, 0.70f},
+    {BlockMaterialKinds::PLANT, "plant", BlockMaterialFlags::Vegetation | BlockMaterialFlags::Subsurface, 1.0f, 0.0f,
+     0.0f, 0.45f},
     {BlockMaterialKinds::SAND, "sand", BlockMaterialFlags::Solid | BlockMaterialFlags::Terrain, 1.0f, 0.0f, 0.0f, 0.0f},
-    {BlockMaterialKinds::GLASS, "glass", BlockMaterialFlags::Translucent | BlockMaterialFlags::Reflective, 0.08f, 0.060f, 0.0f, 0.0f},
-    {BlockMaterialKinds::WATER, "water", BlockMaterialFlags::Translucent | BlockMaterialFlags::Water | BlockMaterialFlags::Reflective, 0.03f, 0.020f, 0.0f, 0.0f},
+    {BlockMaterialKinds::GLASS, "glass", BlockMaterialFlags::Translucent | BlockMaterialFlags::Reflective, 0.08f,
+     0.060f, 0.0f, 0.0f},
+    {BlockMaterialKinds::WATER, "water",
+     BlockMaterialFlags::Translucent | BlockMaterialFlags::Water | BlockMaterialFlags::Reflective, 0.03f, 0.020f, 0.0f,
+     0.0f},
     {BlockMaterialKinds::ORE, "ore", BlockMaterialFlags::Solid | BlockMaterialFlags::Terrain, 1.0f, 0.0f, 0.0f, 0.0f},
-    {BlockMaterialKinds::EMISSIVE, "emissive", BlockMaterialFlags::Solid | BlockMaterialFlags::Emissive, 0.44f, 0.060f, 1.0f, 0.0f},
-    {BlockMaterialKinds::METAL, "metal", BlockMaterialFlags::Solid | BlockMaterialFlags::Reflective | BlockMaterialFlags::Metallic, 0.30f, 0.260f, 0.0f, 0.0f},
+    {BlockMaterialKinds::EMISSIVE, "emissive", BlockMaterialFlags::Solid | BlockMaterialFlags::Emissive, 0.44f, 0.060f,
+     1.0f, 0.0f},
+    {BlockMaterialKinds::METAL, "metal",
+     BlockMaterialFlags::Solid | BlockMaterialFlags::Reflective | BlockMaterialFlags::Metallic, 0.30f, 0.260f, 0.0f,
+     0.0f},
 }};
 
-static_assert(BUILTIN.size() == BlockMaterialKinds::MAX_BUILTIN + 1, "Block material table must cover all builtin material ids.");
-static_assert(BUILTIN[BlockMaterialKinds::DEFAULT].kind == BlockMaterialKinds::DEFAULT, "Block material table order mismatch.");
-static_assert(BUILTIN[BlockMaterialKinds::STONE].kind == BlockMaterialKinds::STONE, "Block material table order mismatch.");
-static_assert(BUILTIN[BlockMaterialKinds::DIRT].kind == BlockMaterialKinds::DIRT, "Block material table order mismatch.");
-static_assert(BUILTIN[BlockMaterialKinds::GRASS].kind == BlockMaterialKinds::GRASS, "Block material table order mismatch.");
-static_assert(BUILTIN[BlockMaterialKinds::WOOD].kind == BlockMaterialKinds::WOOD, "Block material table order mismatch.");
-static_assert(BUILTIN[BlockMaterialKinds::LEAVES].kind == BlockMaterialKinds::LEAVES, "Block material table order mismatch.");
-static_assert(BUILTIN[BlockMaterialKinds::PLANT].kind == BlockMaterialKinds::PLANT, "Block material table order mismatch.");
-static_assert(BUILTIN[BlockMaterialKinds::SAND].kind == BlockMaterialKinds::SAND, "Block material table order mismatch.");
-static_assert(BUILTIN[BlockMaterialKinds::GLASS].kind == BlockMaterialKinds::GLASS, "Block material table order mismatch.");
-static_assert(BUILTIN[BlockMaterialKinds::WATER].kind == BlockMaterialKinds::WATER, "Block material table order mismatch.");
+static_assert(BUILTIN.size() == BlockMaterialKinds::MAX_BUILTIN + 1,
+              "Block material table must cover all builtin material ids.");
+static_assert(BUILTIN[BlockMaterialKinds::DEFAULT].kind == BlockMaterialKinds::DEFAULT,
+              "Block material table order mismatch.");
+static_assert(BUILTIN[BlockMaterialKinds::STONE].kind == BlockMaterialKinds::STONE,
+              "Block material table order mismatch.");
+static_assert(BUILTIN[BlockMaterialKinds::DIRT].kind == BlockMaterialKinds::DIRT,
+              "Block material table order mismatch.");
+static_assert(BUILTIN[BlockMaterialKinds::GRASS].kind == BlockMaterialKinds::GRASS,
+              "Block material table order mismatch.");
+static_assert(BUILTIN[BlockMaterialKinds::WOOD].kind == BlockMaterialKinds::WOOD,
+              "Block material table order mismatch.");
+static_assert(BUILTIN[BlockMaterialKinds::LEAVES].kind == BlockMaterialKinds::LEAVES,
+              "Block material table order mismatch.");
+static_assert(BUILTIN[BlockMaterialKinds::PLANT].kind == BlockMaterialKinds::PLANT,
+              "Block material table order mismatch.");
+static_assert(BUILTIN[BlockMaterialKinds::SAND].kind == BlockMaterialKinds::SAND,
+              "Block material table order mismatch.");
+static_assert(BUILTIN[BlockMaterialKinds::GLASS].kind == BlockMaterialKinds::GLASS,
+              "Block material table order mismatch.");
+static_assert(BUILTIN[BlockMaterialKinds::WATER].kind == BlockMaterialKinds::WATER,
+              "Block material table order mismatch.");
 static_assert(BUILTIN[BlockMaterialKinds::ORE].kind == BlockMaterialKinds::ORE, "Block material table order mismatch.");
-static_assert(BUILTIN[BlockMaterialKinds::EMISSIVE].kind == BlockMaterialKinds::EMISSIVE, "Block material table order mismatch.");
-static_assert(BUILTIN[BlockMaterialKinds::METAL].kind == BlockMaterialKinds::METAL, "Block material table order mismatch.");
+static_assert(BUILTIN[BlockMaterialKinds::EMISSIVE].kind == BlockMaterialKinds::EMISSIVE,
+              "Block material table order mismatch.");
+static_assert(BUILTIN[BlockMaterialKinds::METAL].kind == BlockMaterialKinds::METAL,
+              "Block material table order mismatch.");
 
 [[nodiscard]] inline constexpr const BlockMaterialInfo& get(const uint8_t kind) {
     return kind <= BlockMaterialKinds::MAX_BUILTIN ? BUILTIN[kind] : BUILTIN[BlockMaterialKinds::DEFAULT];
@@ -177,13 +200,9 @@ static_assert(BUILTIN[BlockMaterialKinds::METAL].kind == BlockMaterialKinds::MET
     }
     return false;
 }
-}
+} // namespace BlockMaterials
 
-enum class BlockRenderShape : uint8_t {
-    Cube = 0,
-    Cross = 1,
-    Custom = 2
-};
+enum class BlockRenderShape : uint8_t { Cube = 0, Cross = 1, Custom = 2 };
 
 enum class BiomeTintKind : uint8_t {
     None = 0,
@@ -233,14 +252,10 @@ struct BlockRandomTickRule {
 
 /// Defines the physical point-light proxy emitted by one placed block.
 /// Block light propagation remains a separate gameplay data product.
-enum class BlockAnalyticLightShadowPolicy : uint8_t {
-    None,
-    RasterCached
-};
+enum class BlockAnalyticLightShadowPolicy : uint8_t { None, RasterCached };
 
 struct BlockAnalyticLightDefinition {
-    static constexpr uint16_t kUnconditionalStateIndex =
-        std::numeric_limits<uint16_t>::max();
+    static constexpr uint16_t kUnconditionalStateIndex = std::numeric_limits<uint16_t>::max();
 
     /// Linear RGB light chromaticity multiplied by the normalized intensity.
     glm::vec3 colorLinear{1.0f};
@@ -251,8 +266,7 @@ struct BlockAnalyticLightDefinition {
     /// Finite influence radius used by clustered-light bounds and attenuation.
     float rangeMeters = 0.0f;
     /// Explicit local-shadow policy independent of frame-time quality changes.
-    BlockAnalyticLightShadowPolicy shadowPolicy =
-        BlockAnalyticLightShadowPolicy::None;
+    BlockAnalyticLightShadowPolicy shadowPolicy = BlockAnalyticLightShadowPolicy::None;
     /// Optional block-state property and value required to emit this light.
     uint16_t enabledStatePropertyIndex = kUnconditionalStateIndex;
     uint16_t enabledStateValueIndex = kUnconditionalStateIndex;
@@ -260,12 +274,12 @@ struct BlockAnalyticLightDefinition {
 
 struct BlockDef {
     NamespacedId namespacedId = NamespacedId("minecraft", "unknown");
-    bool isSolid        = true;
-    bool isTransparent  = false;
-    bool isLightSource  = false;
-    bool isSelectable   = true;
+    bool isSolid = true;
+    bool isTransparent = false;
+    bool isLightSource = false;
+    bool isSelectable = true;
     bool allowsFluidCoexistence = false;
-    bool affectedByGravity = false;   // gravity-affected blocks fall as entities when unsupported (sand/gravel)
+    bool affectedByGravity = false; // gravity-affected blocks fall as entities when unsupported (sand/gravel)
     BlockRenderShape renderShape = BlockRenderShape::Cube;
     BlockRenderLayer renderLayer = BlockRenderLayer::Opaque;
     bool cutoutDistanceCull = true;
@@ -281,8 +295,8 @@ struct BlockDef {
     std::string interaction;
     std::vector<NamespacedId> tags;
     BiomeTintKind biomeTint = BiomeTintKind::None;
-    uint8_t lightLevel  = 0;
-    uint8_t opacity     = 0;
+    uint8_t lightLevel = 0;
+    uint8_t opacity = 0;
     std::optional<BlockAnalyticLightDefinition> analyticLight;
     uint16_t timeToBreak = 1000;
     float surfaceFriction = 1.0f;
@@ -300,32 +314,33 @@ struct BlockDef {
     std::unordered_map<std::string, NamedTextureAnimation> namedTextureAnimations;
     std::vector<StateTextureRule> stateTextureRules;
     BlockRandomTickRule randomTick;
-    bool isRedstoneConductor = false;      // True when this block can transfer redstone power through its body.
-    bool isRedstonePowerSource = false;    // True when this block can emit redstone power.
-    bool respondsToRedstone = false;       // True when this block changes state after receiving redstone power.
-    uint8_t redstonePowerOutput = 0;       // Fixed output strength in the inclusive range [0, 15].
-    uint64_t redstonePulseTicks = 0;       // Scheduled pulse duration for momentary redstone devices.
-    std::string redstoneBehavior;          // Behavior tag used by redstone systems and device-specific logic.
-    std::string redstoneWireChannel;       // Wire network key; wires only connect and propagate to matching channels.
-    uint16_t redstoneWireChannelId = 0;    // Parsed wire network id used by hot-path wire comparisons.
-    uint8_t redstoneWireTint = 0;          // Redstone shader tint palette index in the inclusive range [0, 15].
-    bool isWireContainer = false;          // True when the block hosts multiple redstone wire parts.
+    bool isRedstoneConductor = false; // True when this block can transfer redstone power through its body.
+    bool isRedstonePowerSource = false; // True when this block can emit redstone power.
+    bool respondsToRedstone = false; // True when this block changes state after receiving redstone power.
+    uint8_t redstonePowerOutput = 0; // Fixed output strength in the inclusive range [0, 15].
+    uint64_t redstonePulseTicks = 0; // Scheduled pulse duration for momentary redstone devices.
+    std::string redstoneBehavior; // Behavior tag used by redstone systems and device-specific logic.
+    std::string redstoneWireChannel; // Wire network key; wires only connect and propagate to matching channels.
+    uint16_t redstoneWireChannelId = 0; // Parsed wire network id used by hot-path wire comparisons.
+    uint8_t redstoneWireTint = 0; // Redstone shader tint palette index in the inclusive range [0, 15].
+    bool isWireContainer = false; // True when the block hosts multiple redstone wire parts.
     std::string pressurePlateEntityFilter; // Entity filter used by pressure plate contact evaluation.
     std::string redstoneControlledProperty; // Boolean state property driven by incoming redstone power.
-    std::vector<std::string> redstoneControlledMirrorProperties; // Boolean state properties updated when the controlled property changes.
+    std::vector<std::string>
+        redstoneControlledMirrorProperties; // Boolean state properties updated when the controlled property changes.
     bool redstoneControlledPowerInverted = false; // True when powered blocks select the false property value.
     std::string pistonPushReaction = "normal"; // Controls how pistons treat this block during movement.
 
     // Convenience: return the TextureArray first layer for a given face (0=top,1=bottom,2=front,3=back,4=left,5=right)
     [[nodiscard]] int getFaceLayer(int face) const {
         switch (face) {
-            case 0: return faceTop.firstLayer;
-            case 1: return faceBottom.firstLayer;
-            case 2: return faceFront.firstLayer;
-            case 3: return faceBack.firstLayer;
-            case 4: return faceLeft.firstLayer;
-            case 5: return faceRight.firstLayer;
-            default: return faceTop.firstLayer;
+        case 0: return faceTop.firstLayer;
+        case 1: return faceBottom.firstLayer;
+        case 2: return faceFront.firstLayer;
+        case 3: return faceBack.firstLayer;
+        case 4: return faceLeft.firstLayer;
+        case 5: return faceRight.firstLayer;
+        default: return faceTop.firstLayer;
         }
     }
 };
@@ -365,11 +380,10 @@ public:
 
 private:
     static IdRegistry s_idRegistry;
-    static std::vector<BlockDef> s_blocks;                        // index = BlockID (RuntimeId)
-    static std::vector<NamespacedId> s_blockDropIds;               // index = BlockID
-    static std::unordered_map<NamespacedId, BlockID> s_idLookup;  // fast reverse lookup
+    static std::vector<BlockDef> s_blocks; // index = BlockID (RuntimeId)
+    static std::vector<NamespacedId> s_blockDropIds; // index = BlockID
+    static std::unordered_map<NamespacedId, BlockID> s_idLookup; // fast reverse lookup
     static bool s_initialized;
 };
-
 
 #endif //MECRAFT_BLOCK_H

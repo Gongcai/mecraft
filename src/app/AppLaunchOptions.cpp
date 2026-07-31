@@ -5,23 +5,20 @@
 #include <cstdlib>
 #include <limits>
 
-AppLaunchOptions::AppLaunchOptions()
-    : rhiBackend(renderer::rhi::defaultRhiBackend()) {}
+AppLaunchOptions::AppLaunchOptions() : rhiBackend(renderer::rhi::defaultRhiBackend()) {}
 
 bool AppLaunchOptions::validationEnabled() const {
     return !validationScenePath.empty();
 }
 
-RhiBackend resolveLaunchRhiBackend(const AppLaunchOptions& options,
-                                   const std::optional<RhiBackend> savedBackend) {
+RhiBackend resolveLaunchRhiBackend(const AppLaunchOptions& options, const std::optional<RhiBackend> savedBackend) {
     if (options.rhiBackendExplicit) {
         return options.rhiBackend;
     }
     return savedBackend.value_or(options.rhiBackend);
 }
 
-std::optional<ValidationScene> parseValidationScene(
-    const std::string_view value) {
+std::optional<ValidationScene> parseValidationScene(const std::string_view value) {
     if (value == "voxel") {
         return ValidationScene::Voxel;
     }
@@ -33,22 +30,18 @@ std::optional<ValidationScene> parseValidationScene(
 
 const char* validationSceneStableId(const ValidationScene scene) {
     switch (scene) {
-        case ValidationScene::None: return "none";
-        case ValidationScene::Voxel: return "voxel";
-        case ValidationScene::Model: return "model";
+    case ValidationScene::None: return "none";
+    case ValidationScene::Voxel: return "voxel";
+    case ValidationScene::Model: return "model";
     }
     std::abort();
 }
 
-bool validateAppLaunchOptions(
-    const AppLaunchOptions& options,
-    std::string& error) {
+bool validateAppLaunchOptions(const AppLaunchOptions& options, std::string& error) {
     if (!options.validationEnabled()) {
-        if (!options.validationCapturePath.empty() ||
-            !options.validationReportPath.empty() ||
-            options.validationWarmupFramesSet ||
-            options.validationSampleFramesSet ||
-            options.validationWidthSet || options.validationHeightSet) {
+        if (!options.validationCapturePath.empty() || !options.validationReportPath.empty() ||
+            options.validationWarmupFramesSet || options.validationSampleFramesSet || options.validationWidthSet ||
+            options.validationHeightSet) {
             error = "Validation options require --validation-scene-file";
             return false;
         }
@@ -66,9 +59,7 @@ bool validateAppLaunchOptions(
         error = "--validation-sample-frames must be at least 2";
         return false;
     }
-    if (options.validationWarmupFrames >
-        std::numeric_limits<uint32_t>::max() -
-            options.validationSampleFrames) {
+    if (options.validationWarmupFrames > std::numeric_limits<uint32_t>::max() - options.validationSampleFrames) {
         error = "Validation warmup and sample frame counts overflow the frame index";
         return false;
     }
@@ -76,10 +67,8 @@ bool validateAppLaunchOptions(
         error = "Validation dimensions must be greater than zero";
         return false;
     }
-    if (options.validationWidth >
-            static_cast<uint32_t>(std::numeric_limits<int>::max()) ||
-        options.validationHeight >
-            static_cast<uint32_t>(std::numeric_limits<int>::max())) {
+    if (options.validationWidth > static_cast<uint32_t>(std::numeric_limits<int>::max()) ||
+        options.validationHeight > static_cast<uint32_t>(std::numeric_limits<int>::max())) {
         error = "Validation dimensions exceed the window size contract";
         return false;
     }
@@ -87,8 +76,7 @@ bool validateAppLaunchOptions(
         error = "Validation runs cannot record or replay input";
         return false;
     }
-    if (options.benchmarkDurationSeconds > 0.0 ||
-        !options.benchmarkReportPath.empty()) {
+    if (options.benchmarkDurationSeconds > 0.0 || !options.benchmarkReportPath.empty()) {
         error = "Validation runs use frame counts and --validation-report";
         return false;
     }
@@ -96,8 +84,7 @@ bool validateAppLaunchOptions(
         error = "Validation scenes cannot start gameplay benchmark mode";
         return false;
     }
-    if (!options.benchmarkWorldName.empty() ||
-        !options.benchmarkWorldDisplayName.empty()) {
+    if (!options.benchmarkWorldName.empty() || !options.benchmarkWorldDisplayName.empty()) {
         error = "Validation runs do not accept writable benchmark worlds";
         return false;
     }

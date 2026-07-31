@@ -29,21 +29,16 @@ public:
 
     /// Reports whether the latest prepareFrame produced billboard vertices.
     /// Used to skip scene writeback copies when no particle was rendered.
-    [[nodiscard]] bool hasPreparedVertices() const {
-        return m_preparedVertexCount > 0u;
-    }
+    [[nodiscard]] bool hasPreparedVertices() const { return m_preparedVertexCount > 0u; }
     void render(RhiCommandList& commandList, const glm::mat4& viewProj);
-    void renderToSceneResolved(RhiCommandList& commandList,
-                               RhiTextureHandle voxelLightTexture,
-                               RhiTextureHandle depthTexture,
-                               const glm::mat4& viewProj, const glm::vec2& screenSize);
+    void renderToSceneResolved(RhiCommandList& commandList, RhiTextureHandle voxelLightTexture,
+                               RhiTextureHandle depthTexture, const glm::mat4& viewProj, const glm::vec2& screenSize);
 
 private:
     // Build billboard vertices from ECS particle data. Returns vertex count.
     int buildVertices(const glm::mat4& view, std::vector<float>& vertices);
     [[nodiscard]] bool createRhiResources();
-    [[nodiscard]] bool ensureDeferredBindGroup(RhiTextureHandle voxelLightTexture,
-                                               RhiTextureHandle depthTexture);
+    [[nodiscard]] bool ensureDeferredBindGroup(RhiTextureHandle voxelLightTexture, RhiTextureHandle depthTexture);
     void destroyDeferredBindGroup();
     void destroyRhiResources();
 

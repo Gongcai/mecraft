@@ -41,8 +41,7 @@ BenchmarkStats computeStats(std::vector<double> timingsMs, uint64_t checksum) {
     stats.checksum = checksum;
     stats.minMs = timingsMs.front();
     stats.maxMs = timingsMs.back();
-    stats.avgMs = std::accumulate(timingsMs.begin(), timingsMs.end(), 0.0) /
-                  static_cast<double>(timingsMs.size());
+    stats.avgMs = std::accumulate(timingsMs.begin(), timingsMs.end(), 0.0) / static_cast<double>(timingsMs.size());
 
     const size_t mid = timingsMs.size() / 2;
     if (timingsMs.size() % 2 == 0) {
@@ -62,26 +61,15 @@ BenchmarkStats computeStats(std::vector<double> timingsMs, uint64_t checksum) {
     return stats;
 }
 
-void printStats(const std::string& tag,
-                const std::string& caseName,
-                const BenchmarkStats& stats,
-                int warmupRounds,
-                int measureRounds,
-                int batchSize = 1) {
+void printStats(const std::string& tag, const std::string& caseName, const BenchmarkStats& stats, int warmupRounds,
+                int measureRounds, int batchSize = 1) {
     std::cout << "[" << tag << "]"
-              << " case=" << caseName
-              << " batch=" << batchSize
-              << " warmup=" << warmupRounds
-              << " rounds=" << measureRounds
-              << " median_ms=" << std::fixed << std::setprecision(3) << stats.medianMs
-              << " p95_ms=" << stats.p95Ms
-              << " avg_ms=" << stats.avgMs
-              << " min_ms=" << stats.minMs
-              << " max_ms=" << stats.maxMs
-              << " calls_per_sec=" << std::setprecision(0) << stats.callsPerSec
-              << " ns_per_call=" << std::setprecision(2) << stats.nsPerCall
-              << " checksum=" << std::hex << std::setprecision(0) << stats.checksum
-              << std::dec << "\n";
+              << " case=" << caseName << " batch=" << batchSize << " warmup=" << warmupRounds
+              << " rounds=" << measureRounds << " median_ms=" << std::fixed << std::setprecision(3) << stats.medianMs
+              << " p95_ms=" << stats.p95Ms << " avg_ms=" << stats.avgMs << " min_ms=" << stats.minMs
+              << " max_ms=" << stats.maxMs << " calls_per_sec=" << std::setprecision(0) << stats.callsPerSec
+              << " ns_per_call=" << std::setprecision(2) << stats.nsPerCall << " checksum=" << std::hex
+              << std::setprecision(0) << stats.checksum << std::dec << "\n";
 }
 
 // ── Test data builders ────────────────────────────────────────────────
@@ -93,9 +81,7 @@ uint32_t nextRand(uint32_t& state) {
 }
 
 BlockStateId stateForBlockId(const BlockID blockId) {
-    return blockId == RUNTIME_ID_NULL
-        ? NULL_BLOCK_STATE
-        : BlockStateRegistry::getDefaultState(blockId);
+    return blockId == RUNTIME_ID_NULL ? NULL_BLOCK_STATE : BlockStateRegistry::getDefaultState(blockId);
 }
 
 BlockStateId stateForBlockName(const char* name) {
@@ -168,9 +154,12 @@ std::shared_ptr<Chunk> makeMediumChunk(int cx, int cz, uint32_t seed) {
         nextRand(state);
         const uint32_t bucket = state % 4U;
         BlockID id = BlockRegistry::requireIdByName("minecraft:coal_ore");
-        if (bucket == 1) id = BlockRegistry::requireIdByName("minecraft:iron_ore");
-        else if (bucket == 2) id = BlockRegistry::requireIdByName("minecraft:glass");
-        else if (bucket == 3) id = BlockRegistry::requireIdByName("minecraft:gold_ore");
+        if (bucket == 1)
+            id = BlockRegistry::requireIdByName("minecraft:iron_ore");
+        else if (bucket == 2)
+            id = BlockRegistry::requireIdByName("minecraft:glass");
+        else if (bucket == 3)
+            id = BlockRegistry::requireIdByName("minecraft:gold_ore");
         chunk->setBlock(ox, oy, oz, stateForBlockId(id));
     }
     // Add some tall grass / flowers on surface
@@ -188,8 +177,8 @@ std::shared_ptr<Chunk> makeMediumChunk(int cx, int cz, uint32_t seed) {
                     nextRand(state);
                     chunk->setBlock(fx, y + 1, fz,
                                     stateForBlockId((state % 2 == 0)
-                                        ? BlockRegistry::requireIdByName("minecraft:tall_grass")
-                                        : BlockRegistry::requireIdByName("minecraft:rose")));
+                                                        ? BlockRegistry::requireIdByName("minecraft:tall_grass")
+                                                        : BlockRegistry::requireIdByName("minecraft:rose")));
                 }
                 break;
             }
@@ -252,17 +241,15 @@ std::shared_ptr<Chunk> makeLargeChunk(int cx, int cz, uint32_t seed) {
         nextRand(state);
         const int baseY = 60 + static_cast<int>(state % 50);
         for (int y = Chunk::SIZE_Y - 1; y >= 0; --y) {
-            if (chunk->getBlock(fx, y, fz) != NULL_BLOCK_STATE &&
-                !FluidState::isWater(chunk->getBlock(fx, y, fz))) {
+            if (chunk->getBlock(fx, y, fz) != NULL_BLOCK_STATE && !FluidState::isWater(chunk->getBlock(fx, y, fz))) {
                 if (y + 1 < Chunk::SIZE_Y) {
                     nextRand(state);
                     const uint32_t t = state % 3U;
                     chunk->setBlock(fx, y + 1, fz,
-                                    stateForBlockId(t == 0
-                                        ? BlockRegistry::requireIdByName("minecraft:tall_grass")
-                                        : (t == 1
-                                            ? BlockRegistry::requireIdByName("minecraft:rose")
-                                            : BlockRegistry::requireIdByName("minecraft:brown_mushroom"))));
+                                    stateForBlockId(t == 0 ? BlockRegistry::requireIdByName("minecraft:tall_grass")
+                                                           : (t == 1 ? BlockRegistry::requireIdByName("minecraft:rose")
+                                                                     : BlockRegistry::requireIdByName(
+                                                                           "minecraft:brown_mushroom"))));
                 }
                 break;
             }
@@ -272,7 +259,6 @@ std::shared_ptr<Chunk> makeLargeChunk(int cx, int cz, uint32_t seed) {
 }
 
 // ── Scenario 1: Single-thread sub-chunk meshing baseline ─────────────
-
 
 struct TestCase {
     std::string name;
@@ -319,23 +305,28 @@ ChunkMeshData buildMeshDataFor(const Chunk& chunk) {
 
         ChunkMeshData scMeshData = ChunkMesher::buildSubChunkMeshData(*snapshot);
         const float yOffset = static_cast<float>(scy * SubChunk::SIZE);
-        for (auto& vertex : scMeshData.opaqueVertices) { vertex.y += yOffset; }
-        for (auto& vertex : scMeshData.cutoutVertices) { vertex.y += yOffset; }
-        for (auto& vertex : scMeshData.transparentVertices) { vertex.y += yOffset; }
+        for (auto& vertex : scMeshData.opaqueVertices) {
+            vertex.y += yOffset;
+        }
+        for (auto& vertex : scMeshData.cutoutVertices) {
+            vertex.y += yOffset;
+        }
+        for (auto& vertex : scMeshData.transparentVertices) {
+            vertex.y += yOffset;
+        }
 
-        merged.opaqueVertices.insert(merged.opaqueVertices.end(),
-                                     scMeshData.opaqueVertices.begin(), scMeshData.opaqueVertices.end());
-        merged.cutoutVertices.insert(merged.cutoutVertices.end(),
-                                     scMeshData.cutoutVertices.begin(), scMeshData.cutoutVertices.end());
-        merged.transparentVertices.insert(merged.transparentVertices.end(),
-                                          scMeshData.transparentVertices.begin(), scMeshData.transparentVertices.end());
+        merged.opaqueVertices.insert(merged.opaqueVertices.end(), scMeshData.opaqueVertices.begin(),
+                                     scMeshData.opaqueVertices.end());
+        merged.cutoutVertices.insert(merged.cutoutVertices.end(), scMeshData.cutoutVertices.begin(),
+                                     scMeshData.cutoutVertices.end());
+        merged.transparentVertices.insert(merged.transparentVertices.end(), scMeshData.transparentVertices.begin(),
+                                          scMeshData.transparentVertices.end());
         merged.opaqueFaceCountBeforeGreedy += scMeshData.opaqueFaceCountBeforeGreedy;
         merged.opaqueFaceCountAfterGreedy += scMeshData.opaqueFaceCountAfterGreedy;
         merged.transparentFaceCountBeforeGreedy += scMeshData.transparentFaceCountBeforeGreedy;
         merged.transparentFaceCountAfterGreedy += scMeshData.transparentFaceCountAfterGreedy;
         if (scMeshData.hasBounds) {
-            expandBounds(merged,
-                         scMeshData.boundsMin + glm::vec3(0.0f, yOffset, 0.0f),
+            expandBounds(merged, scMeshData.boundsMin + glm::vec3(0.0f, yOffset, 0.0f),
                          scMeshData.boundsMax + glm::vec3(0.0f, yOffset, 0.0f));
         }
     }
@@ -368,10 +359,7 @@ std::vector<SubChunkMeshingJob> collectMeshingJobs(const std::vector<std::shared
     return jobs;
 }
 
-
-BenchmarkStats runSingleThreadBenchmark(const TestCase& testCase,
-                                        int warmupRounds,
-                                        int measureRounds) {
+BenchmarkStats runSingleThreadBenchmark(const TestCase& testCase, int warmupRounds, int measureRounds) {
     const size_t batchCount = testCase.chunks.size();
 
     for (int r = 0; r < warmupRounds; ++r) {
@@ -396,7 +384,6 @@ BenchmarkStats runSingleThreadBenchmark(const TestCase& testCase,
         }
         const auto end = std::chrono::high_resolution_clock::now();
 
-
         checksum ^= roundChecksum + static_cast<uint64_t>(r + 1);
         const double durationMs = std::chrono::duration<double, std::milli>(end - start).count();
         timingsMs.push_back(durationMs);
@@ -418,10 +405,8 @@ struct ThroughputStats {
     uint64_t checksum = 0;
 };
 
-ThroughputStats runServiceThroughput(const std::vector<std::shared_ptr<Chunk>>& chunks,
-                                     int numThreads,
-                                     int warmupRounds,
-                                     int measureRounds) {
+ThroughputStats runServiceThroughput(const std::vector<std::shared_ptr<Chunk>>& chunks, int numThreads,
+                                     int warmupRounds, int measureRounds) {
     const std::vector<SubChunkMeshingJob> jobs = collectMeshingJobs(chunks);
     const int totalChunks = static_cast<int>(jobs.size());
 
@@ -498,23 +483,14 @@ ThroughputStats runServiceThroughput(const std::vector<std::shared_ptr<Chunk>>& 
     return stats;
 }
 
-
-void printThroughput(const std::string& caseName,
-                     int numThreads,
-                     const ThroughputStats& stats,
-                     int warmupRounds,
+void printThroughput(const std::string& caseName, int numThreads, const ThroughputStats& stats, int warmupRounds,
                      int measureRounds) {
     std::cout << "[meshing_perf_test]"
-              << " case=" << caseName
-              << "_throughput"
-              << " threads=" << numThreads
-              << " chunks=" << stats.totalChunks
-              << " warmup=" << warmupRounds
-              << " rounds=" << measureRounds
-              << " avg_total_ms=" << std::fixed << std::setprecision(3) << stats.totalMs
-              << " chunks_per_sec=" << std::setprecision(0) << stats.chunksPerSec
-              << " checksum=" << std::hex << stats.checksum << std::dec
-              << "\n";
+              << " case=" << caseName << "_throughput"
+              << " threads=" << numThreads << " chunks=" << stats.totalChunks << " warmup=" << warmupRounds
+              << " rounds=" << measureRounds << " avg_total_ms=" << std::fixed << std::setprecision(3) << stats.totalMs
+              << " chunks_per_sec=" << std::setprecision(0) << stats.chunksPerSec << " checksum=" << std::hex
+              << stats.checksum << std::dec << "\n";
 }
 
 // ── JSON result writer ────────────────────────────────────────────────
@@ -568,8 +544,7 @@ std::string resolveProjectRoot() {
     std::string file = __FILE__;
     // Strip "tests/meshing_perf_test.cpp" to get the project root
     const std::string suffix = "tests/meshing_perf_test.cpp";
-    if (file.size() >= suffix.size() &&
-        file.substr(file.size() - suffix.size()) == suffix) {
+    if (file.size() >= suffix.size() && file.substr(file.size() - suffix.size()) == suffix) {
         return file.substr(0, file.size() - suffix.size());
     }
     // Resolve paths produced by unusual compiler configurations.
@@ -584,60 +559,47 @@ std::string resolveProjectRoot() {
     return "./";
 }
 
-bool writeResultsJson(const std::string& filePath,
-                      const std::string& buildConfig,
-                      int warmupRounds,
-                      int measureRounds,
-                      int numThreads,
-                      const std::vector<CaseResult>& singleThreadCases,
+bool writeResultsJson(const std::string& filePath, const std::string& buildConfig, int warmupRounds, int measureRounds,
+                      int numThreads, const std::vector<CaseResult>& singleThreadCases,
                       const std::vector<CaseResult>& throughputCases) {
     using json = nlohmann::json;
 
     json singleThreadJson = json::array();
     for (const auto& c : singleThreadCases) {
-        singleThreadJson.push_back({
-            {"name",              c.name},
-            {"median_ms",         c.medianMs},
-            {"p95_ms",            c.p95Ms},
-            {"avg_ms",            c.avgMs},
-            {"min_ms",            c.minMs},
-            {"max_ms",            c.maxMs},
-            {"calls_per_sec",     c.callsPerSec},
-            {"ns_per_call",       c.nsPerCall},
-            {"checksum",          c.checksum}
-        });
+        singleThreadJson.push_back({{"name", c.name},
+                                    {"median_ms", c.medianMs},
+                                    {"p95_ms", c.p95Ms},
+                                    {"avg_ms", c.avgMs},
+                                    {"min_ms", c.minMs},
+                                    {"max_ms", c.maxMs},
+                                    {"calls_per_sec", c.callsPerSec},
+                                    {"ns_per_call", c.nsPerCall},
+                                    {"checksum", c.checksum}});
     }
 
     json throughputJson = json::array();
     for (const auto& c : throughputCases) {
-        throughputJson.push_back({
-            {"name",              c.name},
-            {"threads",           c.threads},
-            {"chunks",            c.totalChunks},
-            {"avg_total_ms",      c.totalMs},
-            {"chunks_per_sec",    c.chunksPerSec},
-            {"median_ms",         c.medianMs},
-            {"p95_ms",            c.p95Ms},
-            {"checksum",          c.checksum}
-        });
+        throughputJson.push_back({{"name", c.name},
+                                  {"threads", c.threads},
+                                  {"chunks", c.totalChunks},
+                                  {"avg_total_ms", c.totalMs},
+                                  {"chunks_per_sec", c.chunksPerSec},
+                                  {"median_ms", c.medianMs},
+                                  {"p95_ms", c.p95Ms},
+                                  {"checksum", c.checksum}});
     }
 
     json root;
-    root["benchmark"]     = "meshing_perf_test";
-    root["focus"]         = "SubChunk meshing + ChunkMeshingService throughput";
+    root["benchmark"] = "meshing_perf_test";
+    root["focus"] = "SubChunk meshing + ChunkMeshingService throughput";
 
-    root["captured_at"]   = getCurrentDate();
-    root["build"]         = {{"config", buildConfig}};
-    root["settings"]      = {
-        {"warmup_rounds",  warmupRounds},
-        {"measure_rounds", measureRounds},
-        {"num_threads",    numThreads},
-        {"small_chunks",   8},
-        {"medium_chunks",  16},
-        {"large_chunks",   32}
-    };
+    root["captured_at"] = getCurrentDate();
+    root["build"] = {{"config", buildConfig}};
+    root["settings"] = {{"warmup_rounds", warmupRounds}, {"measure_rounds", measureRounds},
+                        {"num_threads", numThreads},     {"small_chunks", 8},
+                        {"medium_chunks", 16},           {"large_chunks", 32}};
     root["scenario_1_single_thread"] = singleThreadJson;
-    root["scenario_2_throughput"]    = throughputJson;
+    root["scenario_2_throughput"] = throughputJson;
 
     std::ofstream out(filePath);
     if (!out.is_open()) {
@@ -687,11 +649,7 @@ int main() {
         largeChunks.push_back(makeLargeChunk(i, 0, 0xBAADF00DU + static_cast<uint32_t>(i)));
     }
 
-    std::vector<TestCase> testCases = {
-        {"small",  smallChunks},
-        {"medium", mediumChunks},
-        {"large",  largeChunks}
-    };
+    std::vector<TestCase> testCases = {{"small", smallChunks}, {"medium", mediumChunks}, {"large", largeChunks}};
 
     std::vector<CaseResult> singleThreadResults;
     std::vector<CaseResult> throughputResults;
@@ -705,33 +663,32 @@ int main() {
                    static_cast<int>(tc.chunks.size()));
 
         CaseResult cr;
-        cr.name        = tc.name;
-        cr.medianMs    = stats.medianMs;
-        cr.p95Ms       = stats.p95Ms;
-        cr.avgMs       = stats.avgMs;
-        cr.minMs       = stats.minMs;
-        cr.maxMs       = stats.maxMs;
+        cr.name = tc.name;
+        cr.medianMs = stats.medianMs;
+        cr.p95Ms = stats.p95Ms;
+        cr.avgMs = stats.avgMs;
+        cr.minMs = stats.minMs;
+        cr.maxMs = stats.maxMs;
         cr.callsPerSec = stats.callsPerSec;
-        cr.nsPerCall   = stats.nsPerCall;
-        cr.checksum    = stats.checksum;
+        cr.nsPerCall = stats.nsPerCall;
+        cr.checksum = stats.checksum;
         singleThreadResults.push_back(cr);
     }
 
     // ── Scenario 2: ThreadPool + ChunkMeshingService throughput ───────
-    std::cout << "[meshing_perf_test] === Scenario 2: ChunkMeshingService throughput ("
-              << numThreads << " threads) ===\n";
+    std::cout << "[meshing_perf_test] === Scenario 2: ChunkMeshingService throughput (" << numThreads
+              << " threads) ===\n";
     for (const auto& tc : testCases) {
-        const ThroughputStats stats = runServiceThroughput(
-            tc.chunks, numThreads, warmupRounds, measureRounds);
+        const ThroughputStats stats = runServiceThroughput(tc.chunks, numThreads, warmupRounds, measureRounds);
         printThroughput(tc.name, numThreads, stats, warmupRounds, measureRounds);
 
         CaseResult cr;
-        cr.name         = tc.name;
-        cr.totalChunks  = stats.totalChunks;
-        cr.threads      = numThreads;
-        cr.totalMs      = stats.totalMs;
+        cr.name = tc.name;
+        cr.totalChunks = stats.totalChunks;
+        cr.threads = numThreads;
+        cr.totalMs = stats.totalMs;
         cr.chunksPerSec = stats.chunksPerSec;
-        cr.checksum     = stats.checksum;
+        cr.checksum = stats.checksum;
         throughputResults.push_back(cr);
     }
 
@@ -739,8 +696,8 @@ int main() {
     const std::string projectRoot = resolveProjectRoot();
     const std::string outputPath =
         projectRoot + "tests/perf_baselines/meshing_perf_baseline_" + getCurrentTimestampSuffix() + ".json";
-    if (writeResultsJson(outputPath, buildConfig, warmupRounds, measureRounds,
-                         numThreads, singleThreadResults, throughputResults)) {
+    if (writeResultsJson(outputPath, buildConfig, warmupRounds, measureRounds, numThreads, singleThreadResults,
+                         throughputResults)) {
         std::cout << "[meshing_perf_test] Results written to " << outputPath << "\n";
     }
 

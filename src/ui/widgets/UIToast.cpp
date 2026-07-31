@@ -15,10 +15,10 @@ namespace {
 
 UIToastTone toToastTone(UIToast::Type type) {
     switch (type) {
-    case UIToast::Type::Info:    return UIToastTone::Info;
+    case UIToast::Type::Info: return UIToastTone::Info;
     case UIToast::Type::Success: return UIToastTone::Success;
     case UIToast::Type::Warning: return UIToastTone::Warning;
-    case UIToast::Type::Error:   return UIToastTone::Error;
+    case UIToast::Type::Error: return UIToastTone::Error;
     }
     return UIToastTone::Info;
 }
@@ -39,7 +39,8 @@ void UIToast::init(ResourceMgr& resourceMgr) {
     m_rhiDevice = &resourceMgr.rhiDevice();
     const auto vertexSource = renderer::rhi::loadShaderSource("assets/shaders/ui_capsule_rhi.vert");
     const auto fragmentSource = renderer::rhi::loadShaderSource("assets/shaders/ui_capsule_rhi.frag");
-    if (!vertexSource || !fragmentSource) std::abort();
+    if (!vertexSource || !fragmentSource)
+        std::abort();
     RhiShaderDesc shaderDesc;
     shaderDesc.debugName = "UiToast.Vertex";
     shaderDesc.stage = RhiShaderStage::Vertex;
@@ -76,18 +77,18 @@ void UIToast::init(ResourceMgr& resourceMgr) {
     blend.dstAlpha = RhiBlendFactor::OneMinusSrcAlpha;
     pipelineDesc.blend.attachments.push_back(blend);
     m_pipeline = m_rhiDevice->createGraphicsPipeline(pipelineDesc);
-    constexpr float vertices[] = {0,0, 1,0, 1,1, 0,0, 1,1, 0,1};
+    constexpr float vertices[] = {0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1};
     RhiBufferDesc bufferDesc;
     bufferDesc.debugName = "UiToast.VertexBuffer";
     bufferDesc.size = sizeof(vertices);
-    bufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex) |
-                       rhiFlag(RhiBufferUsage::TransferDst);
+    bufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex) | rhiFlag(RhiBufferUsage::TransferDst);
     bufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
     bufferDesc.initialState = RhiResourceState::VertexBuffer;
     bufferDesc.memoryCategory = RhiMemoryCategory::Geometry;
     m_vertexBuffer = m_rhiDevice->createBuffer(bufferDesc, vertices, sizeof(vertices));
-    if (!m_vertexShader.isValid() || !m_fragmentShader.isValid() ||
-        !m_pipelineLayout.isValid() || !m_pipeline.isValid() || !m_vertexBuffer.isValid()) std::abort();
+    if (!m_vertexShader.isValid() || !m_fragmentShader.isValid() || !m_pipelineLayout.isValid() ||
+        !m_pipeline.isValid() || !m_vertexBuffer.isValid())
+        std::abort();
 
     UIWidget::init(resourceMgr);
 }
@@ -95,12 +96,19 @@ void UIToast::init(ResourceMgr& resourceMgr) {
 void UIToast::shutdown() {
     cleanupMesh();
     if (m_rhiDevice) {
-        if (m_pipeline.isValid()) m_rhiDevice->destroyPipeline(m_pipeline);
-        if (m_pipelineLayout.isValid()) m_rhiDevice->destroyPipelineLayout(m_pipelineLayout);
-        if (m_fragmentShader.isValid()) m_rhiDevice->destroyShader(m_fragmentShader);
-        if (m_vertexShader.isValid()) m_rhiDevice->destroyShader(m_vertexShader);
+        if (m_pipeline.isValid())
+            m_rhiDevice->destroyPipeline(m_pipeline);
+        if (m_pipelineLayout.isValid())
+            m_rhiDevice->destroyPipelineLayout(m_pipelineLayout);
+        if (m_fragmentShader.isValid())
+            m_rhiDevice->destroyShader(m_fragmentShader);
+        if (m_vertexShader.isValid())
+            m_rhiDevice->destroyShader(m_vertexShader);
     }
-    m_pipeline = {}; m_pipelineLayout = {}; m_fragmentShader = {}; m_vertexShader = {};
+    m_pipeline = {};
+    m_pipelineLayout = {};
+    m_fragmentShader = {};
+    m_vertexShader = {};
     m_rhiDevice = nullptr;
     m_toasts.clear();
     UIWidget::shutdown();
@@ -154,14 +162,17 @@ void UIToast::onUpdate(float dt) {
 }
 
 void UIToast::cleanupMesh() {
-    if (m_rhiDevice && m_vertexBuffer.isValid()) m_rhiDevice->destroyBuffer(m_vertexBuffer);
+    if (m_rhiDevice && m_vertexBuffer.isValid())
+        m_rhiDevice->destroyBuffer(m_vertexBuffer);
     m_vertexBuffer = {};
 }
 
 void UIToast::renderSelf(const UIRenderContext& ctx) const {
-    if (m_toasts.empty()) return;
+    if (m_toasts.empty())
+        return;
     const bool record = ctx.phase == UIRenderPhase::Record;
-    if (record && (!ctx.commandList || !m_pipeline.isValid() || !m_vertexBuffer.isValid())) return;
+    if (record && (!ctx.commandList || !m_pipeline.isValid() || !m_vertexBuffer.isValid()))
+        return;
     const UIToastStyle baseStyle = resolveBaseStyle(ctx);
 
     const float screenW = static_cast<float>(ctx.screenWidth);
@@ -170,7 +181,8 @@ void UIToast::renderSelf(const UIRenderContext& ctx) const {
 
     for (const auto& toast : m_toasts) {
         const float toastAlpha = toast.alphaTween.value();
-        if (toastAlpha < 0.01f) continue;
+        if (toastAlpha < 0.01f)
+            continue;
 
         const UIResolvedToastStyle resolved = UIStyleResolver::resolveToast(baseStyle, toToastTone(toast.type));
         const float x0 = centerX - resolved.width * 0.5f;
@@ -184,12 +196,15 @@ void UIToast::renderSelf(const UIRenderContext& ctx) const {
             ctx.commandList->setVertexBuffer(0u, m_vertexBuffer, 0u);
             auto drawRect = [&](float rx, float ry, float rw, float rh, Color color) {
                 color[3] *= toastAlpha;
-                struct Push { glm::vec4 screenRect; glm::vec4 rectRadius; glm::vec4 color; };
+                struct Push {
+                    glm::vec4 screenRect;
+                    glm::vec4 rectRadius;
+                    glm::vec4 color;
+                };
                 const Push push{glm::vec4(screenW, static_cast<float>(ctx.screenHeight), rx, ry),
-                                glm::vec4(rw, rh, 0.0f, 0.0f),
-                                glm::vec4(color[0], color[1], color[2], color[3])};
+                                glm::vec4(rw, rh, 0.0f, 0.0f), glm::vec4(color[0], color[1], color[2], color[3])};
                 ctx.commandList->pushConstants(&push, sizeof(push),
-                    rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment));
+                                               rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment));
                 ctx.commandList->draw(6u, 1u, 0u, 0u);
             };
             drawRect(x0, y0, resolved.width, resolved.height, resolved.background);
@@ -207,13 +222,8 @@ void UIToast::renderSelf(const UIRenderContext& ctx) const {
             const float textX = x0 + resolved.textPadding;
             const float textY = y0 + (resolved.height - metrics.height) * 0.5f;
             ctx.textRenderer->draw(
-                ctx,
-                toast.text,
-                textX,
-                textY,
-                textScale,
-                {resolved.text[0], resolved.text[1], resolved.text[2],
-                 resolved.text[3] * toastAlpha});
+                ctx, toast.text, textX, textY, textScale,
+                {resolved.text[0], resolved.text[1], resolved.text[2], resolved.text[3] * toastAlpha});
         }
 
         currentY += resolved.height + resolved.spacing;

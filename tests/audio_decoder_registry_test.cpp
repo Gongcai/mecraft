@@ -32,8 +32,7 @@ int main() {
         return fail("OGG should be preferred over WAV when both files exist");
     }
 
-    const std::filesystem::path dir =
-        std::filesystem::temp_directory_path() / "mecraft_audio_discovery_test";
+    const std::filesystem::path dir = std::filesystem::temp_directory_path() / "mecraft_audio_discovery_test";
     std::filesystem::remove_all(dir);
     std::filesystem::create_directories(dir);
 

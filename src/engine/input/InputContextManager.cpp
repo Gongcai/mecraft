@@ -1,8 +1,7 @@
 #include "InputContextManager.h"
 
-InputContextManager::InputContextManager(ActionMap& actionMap,const InputManager& inputManager)
-    : m_actionMap(actionMap),m_inputManager(inputManager)
-{
+InputContextManager::InputContextManager(ActionMap& actionMap, const InputManager& inputManager)
+    : m_actionMap(actionMap), m_inputManager(inputManager) {
     // Make sure we start with a context
     m_contextStack.push_back(InputContextType::Gameplay);
 }
@@ -26,13 +25,15 @@ void InputContextManager::switchContext(InputContextType context) {
 }
 
 InputContextType InputContextManager::getCurrentContext() const {
-    if (m_contextStack.empty()) return InputContextType::Gameplay; // Safety
+    if (m_contextStack.empty())
+        return InputContextType::Gameplay; // Safety
     return m_contextStack.back();
 }
 
 bool InputContextManager::isContextActive(InputContextType context) const {
     for (const auto& c : m_contextStack) {
-        if (c == context) return true;
+        if (c == context)
+            return true;
     }
     return false;
 }
@@ -93,11 +94,9 @@ float InputContextManager::getAxisValue(Axis axis) const {
 float InputContextManager::getMouseX() const {
     const InputSnapshot& snapshot = m_inputManager.snapshot(); // 内部自取
     return snapshot.mousePosition.x;
-
 }
 
 float InputContextManager::getMouseY() const {
     const InputSnapshot& snapshot = m_inputManager.snapshot(); // 内部自取
     return snapshot.mousePosition.y;
 }
-

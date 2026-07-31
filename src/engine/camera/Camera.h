@@ -5,11 +5,9 @@
 #ifndef MECRAFT_CAMERA_H
 #define MECRAFT_CAMERA_H
 
-
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include "physics/PhysicsInfo.h"
-
 
 class Camera {
 public:
@@ -24,9 +22,7 @@ public:
     /// @param up Requested world-space up direction; length need not be one.
     /// @param verticalFovDegrees Vertical field of view inside the open range (1, 179).
     /// @return True when every value is finite and the view basis is non-degenerate.
-    [[nodiscard]] bool setViewPose(const glm::vec3& position,
-                                   const glm::vec3& forward,
-                                   const glm::vec3& up,
+    [[nodiscard]] bool setViewPose(const glm::vec3& position, const glm::vec3& forward, const glm::vec3& up,
                                    float verticalFovDegrees);
 
     [[nodiscard]] glm::mat4 getViewMatrix() const;
@@ -39,10 +35,8 @@ public:
     [[nodiscard]] float getYaw() const;
     [[nodiscard]] float getPitch() const;
 
-
     // 射线拾取 — 返回视线方向
     [[nodiscard]] PhysicsInfo getPickRay() const;
-
 
     //参数配置
     [[nodiscard]] float getFOV() const;
@@ -56,15 +50,11 @@ public:
     void setSensitivity(float sensitivity);
     void setYawPitch(float yaw, float pitch);
 
-
-
-
 private:
-    float fov   = 75.0f;
+    float fov = 75.0f;
     float nearPlane = 0.1f;
-    float farPlane  = 500.0f;
+    float farPlane = 500.0f;
     float sensitivity = 0.1f;
-
 
     glm::vec3 m_position;
     glm::vec3 m_front;

@@ -65,9 +65,7 @@ public:
 
     bool allocate(RhiCommandList& commandList, uint32_t vertexCount, GpuMeshRange& outRange);
     void free(const GpuMeshRange& range);
-    bool upload(RhiCommandList& commandList,
-                const GpuMeshRange& range,
-                const std::vector<PackedBlockVertex>& vertices);
+    bool upload(RhiCommandList& commandList, const GpuMeshRange& range, const std::vector<PackedBlockVertex>& vertices);
 
     [[nodiscard]] RhiBufferHandle buffer() const { return m_buffer; }
     [[nodiscard]] size_t capacityVertices() const { return m_ranges.capacityVertices(); }
@@ -96,11 +94,15 @@ public:
     // cull pass can patch indirect draw commands in place.
     [[nodiscard]] RhiBufferHandle opaqueIndirectBufferHandle() const { return m_rhiOpaqueIndirectBuffer.buffer(); }
     [[nodiscard]] RhiBufferHandle cutoutIndirectBufferHandle() const { return m_rhiCutoutIndirectBuffer.buffer(); }
-    [[nodiscard]] RhiBufferHandle transparentIndirectBufferHandle() const { return m_rhiTransparentIndirectBuffer.buffer(); }
+    [[nodiscard]] RhiBufferHandle transparentIndirectBufferHandle() const {
+        return m_rhiTransparentIndirectBuffer.buffer();
+    }
     [[nodiscard]] RhiBufferHandle metadataBufferHandle() const { return m_rhiMetadataBuffer.buffer(); }
     [[nodiscard]] uint64_t opaqueIndirectBufferCapacity() const { return m_rhiOpaqueIndirectBuffer.capacity(); }
     [[nodiscard]] uint64_t cutoutIndirectBufferCapacity() const { return m_rhiCutoutIndirectBuffer.capacity(); }
-    [[nodiscard]] uint64_t transparentIndirectBufferCapacity() const { return m_rhiTransparentIndirectBuffer.capacity(); }
+    [[nodiscard]] uint64_t transparentIndirectBufferCapacity() const {
+        return m_rhiTransparentIndirectBuffer.capacity();
+    }
     [[nodiscard]] uint64_t metadataBufferCapacity() const { return m_rhiMetadataBuffer.capacity(); }
     struct SubChunkDrawMetadata {
         glm::vec4 originAndFlags = glm::vec4(0.0f);
@@ -122,7 +124,7 @@ public:
         uint64_t waterVertices = 0;
     };
 
-    static constexpr size_t kInitialPoolVertices = 1 << 21;   // ~2M vertices (~64MB), avoids early expand stalls
+    static constexpr size_t kInitialPoolVertices = 1 << 21; // ~2M vertices (~64MB), avoids early expand stalls
     static constexpr size_t kInitialCutoutPoolVertices = kInitialPoolVertices / 4;
     static constexpr size_t kInitialTransparentPoolVertices = kInitialPoolVertices / 16;
     static constexpr size_t kInitialIndirectCapacity = 4096;
@@ -134,15 +136,10 @@ public:
     bool init(RhiDevice& rhiDevice);
     void shutdown();
 
-    WorldGpuMesh uploadSubChunk(RhiCommandList& commandList,
-                                const std::vector<BlockVertex>& opaque,
-                                const std::vector<BlockVertex>& cutout,
-                                const std::vector<BlockVertex>& cutoutDistance,
-                                const std::vector<BlockVertex>& transparent,
-                                const std::vector<BlockVertex>& water,
-                                bool hasBounds,
-                                const glm::vec3& boundsMin,
-                                const glm::vec3& boundsMax);
+    WorldGpuMesh uploadSubChunk(RhiCommandList& commandList, const std::vector<BlockVertex>& opaque,
+                                const std::vector<BlockVertex>& cutout, const std::vector<BlockVertex>& cutoutDistance,
+                                const std::vector<BlockVertex>& transparent, const std::vector<BlockVertex>& water,
+                                bool hasBounds, const glm::vec3& boundsMin, const glm::vec3& boundsMax);
     void free(const WorldGpuMesh& mesh);
 
     void beginFrame();
@@ -157,28 +154,16 @@ public:
     void addTransparent(const GpuMeshRange& range);
     void addWater(const GpuMeshRange& range);
 
-    bool prepareRhiOpaqueAndCutout(RhiCommandList& commandList,
-                                   RhiBindGroupLayoutHandle metadataLayout);
-    void recordRhiOpaque(RhiCommandList& commandList,
-                         RhiPipelineHandle pipeline,
-                         RhiBindGroupHandle materialBindGroup);
-    void recordRhiCutout(RhiCommandList& commandList,
-                         RhiPipelineHandle pipeline,
-                         RhiBindGroupHandle materialBindGroup);
-    bool prepareRhiTransparent(RhiCommandList& commandList,
-                               RhiBindGroupLayoutHandle metadataLayout);
-    void recordRhiTransparent(RhiCommandList& commandList,
-                              RhiPipelineHandle pipeline,
+    bool prepareRhiOpaqueAndCutout(RhiCommandList& commandList, RhiBindGroupLayoutHandle metadataLayout);
+    void recordRhiOpaque(RhiCommandList& commandList, RhiPipelineHandle pipeline, RhiBindGroupHandle materialBindGroup);
+    void recordRhiCutout(RhiCommandList& commandList, RhiPipelineHandle pipeline, RhiBindGroupHandle materialBindGroup);
+    bool prepareRhiTransparent(RhiCommandList& commandList, RhiBindGroupLayoutHandle metadataLayout);
+    void recordRhiTransparent(RhiCommandList& commandList, RhiPipelineHandle pipeline,
                               RhiBindGroupHandle materialBindGroup);
-    void recordRhiTransparent(RhiCommandList& commandList,
-                              RhiPipelineHandle pipeline,
-                              RhiBindGroupHandle materialBindGroup,
-                              RhiBindGroupHandle clusteredLightingBindGroup);
-    bool prepareRhiWater(RhiCommandList& commandList,
-                         RhiBindGroupLayoutHandle metadataLayout);
-    void recordRhiWater(RhiCommandList& commandList,
-                        RhiPipelineHandle pipeline,
-                        RhiBindGroupHandle materialBindGroup);
+    void recordRhiTransparent(RhiCommandList& commandList, RhiPipelineHandle pipeline,
+                              RhiBindGroupHandle materialBindGroup, RhiBindGroupHandle clusteredLightingBindGroup);
+    bool prepareRhiWater(RhiCommandList& commandList, RhiBindGroupLayoutHandle metadataLayout);
+    void recordRhiWater(RhiCommandList& commandList, RhiPipelineHandle pipeline, RhiBindGroupHandle materialBindGroup);
 
     void clearWaterCommands();
 

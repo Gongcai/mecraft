@@ -102,10 +102,7 @@ public:
     void setEnvironmentLight(float sunlight, float blockLight);
     void setSceneHdrScale(float scale);
     void prepareFrameResources(const Inventory& inventory);
-    void prepareFrame(int width,
-                      int height,
-                      const Inventory& inventory,
-                      const FirstPersonHeldItemMotion& motion,
+    void prepareFrame(int width, int height, const Inventory& inventory, const FirstPersonHeldItemMotion& motion,
                       float timeSeconds);
     void prepareRhiFrame(RhiCommandList& commandList);
     void renderPrepared(RhiCommandList& commandList);
@@ -116,12 +113,12 @@ public:
         float cascadeSplitFar[4]{};
         float cascadeTexelWorldSize[4]{};
         float cascadeDepthExtent[4]{};
-        RhiTextureHandle shadowTexture;        // sampler2DArrayShadow (shadowtex1)
-        RhiTextureHandle shadowDepthRaw;       // sampler2DArray
-        RhiTextureHandle shadowDepthAll;       // sampler2DArrayShadow (shadowtex0)
-        RhiTextureHandle shadowDepthAllRaw;    // sampler2DArray
-        RhiTextureHandle shadowColor0;         // sampler2DArray
-        RhiTextureHandle shadowColor1;         // sampler2DArray
+        RhiTextureHandle shadowTexture; // sampler2DArrayShadow (shadowtex1)
+        RhiTextureHandle shadowDepthRaw; // sampler2DArray
+        RhiTextureHandle shadowDepthAll; // sampler2DArrayShadow (shadowtex0)
+        RhiTextureHandle shadowDepthAllRaw; // sampler2DArray
+        RhiTextureHandle shadowColor0; // sampler2DArray
+        RhiTextureHandle shadowColor1; // sampler2DArray
         glm::vec3 cameraPos = glm::vec3(0.0f);
         glm::vec3 sunDirection = glm::vec3(0.0f, 1.0f, 0.0f);
         float shadowDistance = 192.0f;

@@ -24,15 +24,7 @@ struct GpuFrameStats;
 
 class Game {
 public:
-    enum class LoadPhase {
-        NotStarted,
-        Session,
-        RenderRuntime,
-        Ecs,
-        InitialChunks,
-        Complete,
-        Failed
-    };
+    enum class LoadPhase { NotStarted, Session, RenderRuntime, Ecs, InitialChunks, Complete, Failed };
 
     struct LoadProgress {
         LoadPhase phase = LoadPhase::NotStarted;
@@ -63,21 +55,11 @@ public:
     [[nodiscard]] const GpuFrameStats* gpuFrameStats() const;
 #ifdef MECRAFT_DEBUG
     void publishDebugStats(float frameTime);
-    void recordPollEvents(double ms,
-                          unsigned keyEvents,
-                          unsigned mouseButtonEvents,
-                          unsigned cursorPosEvents,
-                          unsigned scrollEvents,
-                          unsigned charEvents,
-                          double inputCallbackMs,
-                          double cursorPosCallbackMs,
-                          double imguiCallbackMs,
-                          double imguiCursorPosCallbackMs,
-                          double imguiCursorPosBackendMs,
-                          double imguiWndProcMs,
-                          double imguiWndProcSlowestMs,
-                          unsigned imguiWndProcSlowestMsg,
-                          unsigned imguiWndProcCount);
+    void recordPollEvents(double ms, unsigned keyEvents, unsigned mouseButtonEvents, unsigned cursorPosEvents,
+                          unsigned scrollEvents, unsigned charEvents, double inputCallbackMs,
+                          double cursorPosCallbackMs, double imguiCallbackMs, double imguiCursorPosCallbackMs,
+                          double imguiCursorPosBackendMs, double imguiWndProcMs, double imguiWndProcSlowestMs,
+                          unsigned imguiWndProcSlowestMsg, unsigned imguiWndProcCount);
     void recordAppUpdateDispatch(double ms);
     void recordAppRenderDispatch(double ms);
 #endif
@@ -99,15 +81,13 @@ public:
     /// @param clock Fixed validation frame clock used by temporal rendering.
     /// @param capturePath PNG destination for the final frame, or null for no capture.
     /// @return True when the double-precision pose converts to a valid render camera.
-    [[nodiscard]] bool configureValidationFrame(
-        const renderer::contracts::CameraPathPose& pose,
-        const RenderFrameClock& clock,
-        const std::filesystem::path* capturePath);
+    [[nodiscard]] bool configureValidationFrame(const renderer::contracts::CameraPathPose& pose,
+                                                const RenderFrameClock& clock,
+                                                const std::filesystem::path* capturePath);
 
     /// Returns and clears the most recent validation capture result.
     /// @return Capture status after a requested frame, or no value otherwise.
-    [[nodiscard]] std::optional<renderer::capture::TextureCaptureResult>
-    takeValidationCaptureResult();
+    [[nodiscard]] std::optional<renderer::capture::TextureCaptureResult> takeValidationCaptureResult();
 
     /// Freezes authoritative world state before deterministic rendering begins.
     /// @return True when the session is non-persistent, local, and fully loaded.
@@ -141,8 +121,7 @@ private:
     std::optional<Camera> m_validationCamera;
     std::optional<RenderFrameClock> m_validationFrameClock;
     std::optional<std::filesystem::path> m_validationCapturePath;
-    std::optional<renderer::capture::TextureCaptureResult>
-        m_validationCaptureResult;
+    std::optional<renderer::capture::TextureCaptureResult> m_validationCaptureResult;
     float m_fixedInterpolationAlpha = 0.0f;
     LoadPhase m_loadPhase = LoadPhase::NotStarted;
 };

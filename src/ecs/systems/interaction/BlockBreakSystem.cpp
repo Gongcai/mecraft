@@ -46,8 +46,7 @@ const IGameplayModeRules& resolveModeRules(const GameplayRegistry& registry) {
     return SurvivalModeRules::instance();
 }
 
-void resetBreakSession(BlockBreakComponent& blockBreak,
-                       BlockInteractionRuntimeComponent& runtime) {
+void resetBreakSession(BlockBreakComponent& blockBreak, BlockInteractionRuntimeComponent& runtime) {
     runtime.breakActive = false;
     runtime.breakElapsedMs = 0.0f;
     runtime.breakRequiredMs = 0.0f;
@@ -60,18 +59,14 @@ void resetBreakSession(BlockBreakComponent& blockBreak,
 
 std::string_view requiredToolKind(const BlockDef& blockDef) {
     switch (blockDef.materialKind) {
-        case BlockMaterialKinds::STONE:
-        case BlockMaterialKinds::ORE:
-        case BlockMaterialKinds::METAL:
-            return "pickaxe";
-        case BlockMaterialKinds::WOOD:
-            return "axe";
-        case BlockMaterialKinds::DIRT:
-        case BlockMaterialKinds::GRASS:
-        case BlockMaterialKinds::SAND:
-            return "shovel";
-        default:
-            return {};
+    case BlockMaterialKinds::STONE:
+    case BlockMaterialKinds::ORE:
+    case BlockMaterialKinds::METAL: return "pickaxe";
+    case BlockMaterialKinds::WOOD: return "axe";
+    case BlockMaterialKinds::DIRT:
+    case BlockMaterialKinds::GRASS:
+    case BlockMaterialKinds::SAND: return "shovel";
+    default: return {};
     }
 }
 
@@ -101,18 +96,12 @@ bool isWireContainerState(const BlockStateId stateId) {
 }
 
 bool isAxisNormal(const glm::ivec3& normal) {
-    const int components =
-        (normal.x == 0 ? 0 : 1) +
-        (normal.y == 0 ? 0 : 1) +
-        (normal.z == 0 ? 0 : 1);
-    return components == 1 &&
-           normal.x >= -1 && normal.x <= 1 &&
-           normal.y >= -1 && normal.y <= 1 &&
-           normal.z >= -1 && normal.z <= 1;
+    const int components = (normal.x == 0 ? 0 : 1) + (normal.y == 0 ? 0 : 1) + (normal.z == 0 ? 0 : 1);
+    return components == 1 && normal.x >= -1 && normal.x <= 1 && normal.y >= -1 && normal.y <= 1 && normal.z >= -1 &&
+           normal.z <= 1;
 }
 
-WireContainerParts removeTargetWireContainerParts(World& world,
-                                                  const glm::ivec3& hitBlock,
+WireContainerParts removeTargetWireContainerParts(World& world, const glm::ivec3& hitBlock,
                                                   const glm::ivec3& hitNormal) {
     const BlockStateId targetState = world.getBlockState(hitBlock.x, hitBlock.y, hitBlock.z);
     if (!isWireContainerState(targetState)) {
@@ -126,9 +115,7 @@ WireContainerParts removeTargetWireContainerParts(World& world,
     return WireContainerPlacement::removePartsOnFace(world, hitBlock, facing);
 }
 
-BlockID removeTargetBlock(World& world,
-                          const glm::ivec3& hitBlock,
-                          std::vector<glm::ivec3>& removedPositions) {
+BlockID removeTargetBlock(World& world, const glm::ivec3& hitBlock, std::vector<glm::ivec3>& removedPositions) {
     const BlockStateId targetState = world.getBlockState(hitBlock.x, hitBlock.y, hitBlock.z);
     if (BedBlockLogic::isBedState(targetState)) {
         return BedBlockLogic::removeBed(world, hitBlock, &removedPositions);
@@ -153,14 +140,13 @@ WireContainerParts copyWireContainerPartsAt(const World& world, const glm::ivec3
     return parts;
 }
 
-void spawnWireContainerPartDrops(GameplayRegistry& registry,
-                                 const WireContainerParts& parts,
+void spawnWireContainerPartDrops(GameplayRegistry& registry, const WireContainerParts& parts,
                                  const glm::ivec3& position) {
     for (const BlockID blockId : WireContainerPlacement::wireBlocksForParts(parts)) {
         const ItemID dropItem = BlockDropTable::getDropItem(blockId);
         if (dropItem == RUNTIME_ID_NULL) {
             failBlockBreakSystem("Wire container part block has no drop item: " +
-                                     BlockRegistry::getFast(blockId).namespacedId.full());
+                                 BlockRegistry::getFast(blockId).namespacedId.full());
         }
         ItemSpawnSystem::spawn(registry, dropItem, position, 1);
     }
@@ -169,7 +155,8 @@ void spawnWireContainerPartDrops(GameplayRegistry& registry,
 } // namespace
 
 void BlockBreakSystem::update(SystemContext& ctx) {
-    if (!ctx.services.worldView) return;
+    if (!ctx.services.worldView)
+        return;
     const auto& worldView = *ctx.services.worldView;
     World* mutableWorld = ctx.services.world.get();
     auto& registry = ctx.registry;
@@ -180,14 +167,10 @@ void BlockBreakSystem::update(SystemContext& ctx) {
     auto& particleBus = ensureParticleEventBus(registry);
     auto& dropBus = ensureDropSpawnEventBus(registry);
 
-    auto view = registry.view<LocalPlayerTag,
-                              BlockActionIntentComponent,
-                              BlockTargetComponent,
-                              BlockBreakComponent,
-                              BlockInteractionRuntimeComponent,
-                              InventoryComponent,
-                              InventoryDataComponent,
-                              TransformComponent>();
+    auto view =
+        registry
+            .view<LocalPlayerTag, BlockActionIntentComponent, BlockTargetComponent, BlockBreakComponent,
+                  BlockInteractionRuntimeComponent, InventoryComponent, InventoryDataComponent, TransformComponent>();
     for (auto e : view) {
         auto& runtime = view.get<BlockInteractionRuntimeComponent>(e);
         auto& blockBreak = view.get<BlockBreakComponent>(e);
@@ -199,8 +182,7 @@ void BlockBreakSystem::update(SystemContext& ctx) {
 
         inventoryData.inventory.setSelectedSlot(inventoryState.selectedHotbarSlot);
 
-        runtime.creativeBreakCooldownRemaining =
-            std::max(0.0f, runtime.creativeBreakCooldownRemaining - dt);
+        runtime.creativeBreakCooldownRemaining = std::max(0.0f, runtime.creativeBreakCooldownRemaining - dt);
 
         if (!intent.wantsBreak || !target.hasTarget) {
             resetBreakSession(blockBreak, runtime);
@@ -228,7 +210,8 @@ void BlockBreakSystem::update(SystemContext& ctx) {
 
         if (!modeRules.shouldReportBreakProgress()) {
             // Creative instant break
-            if (runtime.creativeBreakCooldownRemaining > 0.0f) continue;
+            if (runtime.creativeBreakCooldownRemaining > 0.0f)
+                continue;
             if (mutableWorld == nullptr) {
                 if (ctx.services.gameClient) {
                     net::ClientBlockAction action;

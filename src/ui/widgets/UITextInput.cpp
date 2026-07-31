@@ -22,10 +22,14 @@ int utf8CharCount(const std::string& s) {
     for (size_t i = 0; i < s.size();) {
         const auto c = static_cast<unsigned char>(s[i]);
         int len = 1;
-        if ((c & 0x80u) == 0) len = 1;
-        else if ((c & 0xE0u) == 0xC0u) len = 2;
-        else if ((c & 0xF0u) == 0xE0u) len = 3;
-        else if ((c & 0xF8u) == 0xF0u) len = 4;
+        if ((c & 0x80u) == 0)
+            len = 1;
+        else if ((c & 0xE0u) == 0xC0u)
+            len = 2;
+        else if ((c & 0xF0u) == 0xE0u)
+            len = 3;
+        else if ((c & 0xF8u) == 0xF0u)
+            len = 4;
         i += static_cast<size_t>(len);
         ++count;
     }
@@ -36,13 +40,18 @@ int utf8CharCount(const std::string& s) {
 int utf8ByteOffset(const std::string& s, int charIndex) {
     int ci = 0;
     for (size_t i = 0; i < s.size();) {
-        if (ci == charIndex) return static_cast<int>(i);
+        if (ci == charIndex)
+            return static_cast<int>(i);
         const auto c = static_cast<unsigned char>(s[i]);
         int len = 1;
-        if ((c & 0x80u) == 0) len = 1;
-        else if ((c & 0xE0u) == 0xC0u) len = 2;
-        else if ((c & 0xF0u) == 0xE0u) len = 3;
-        else if ((c & 0xF8u) == 0xF0u) len = 4;
+        if ((c & 0x80u) == 0)
+            len = 1;
+        else if ((c & 0xE0u) == 0xC0u)
+            len = 2;
+        else if ((c & 0xF0u) == 0xE0u)
+            len = 3;
+        else if ((c & 0xF8u) == 0xF0u)
+            len = 4;
         i += static_cast<size_t>(len);
         ++ci;
     }
@@ -55,10 +64,14 @@ int utf8CharCountUpTo(const std::string& s, int byteOffset) {
     for (int i = 0; i < byteOffset && i < static_cast<int>(s.size());) {
         const auto c = static_cast<unsigned char>(s[i]);
         int len = 1;
-        if ((c & 0x80u) == 0) len = 1;
-        else if ((c & 0xE0u) == 0xC0u) len = 2;
-        else if ((c & 0xF0u) == 0xE0u) len = 3;
-        else if ((c & 0xF8u) == 0xF0u) len = 4;
+        if ((c & 0x80u) == 0)
+            len = 1;
+        else if ((c & 0xE0u) == 0xC0u)
+            len = 2;
+        else if ((c & 0xF0u) == 0xE0u)
+            len = 3;
+        else if ((c & 0xF8u) == 0xF0u)
+            len = 4;
         i += len;
         ++count;
     }
@@ -105,7 +118,8 @@ void UITextInput::init(ResourceMgr& resourceMgr) {
     m_rhiDevice = &resourceMgr.rhiDevice();
     const auto vertexSource = renderer::rhi::loadShaderSource("assets/shaders/ui_capsule_rhi.vert");
     const auto fragmentSource = renderer::rhi::loadShaderSource("assets/shaders/ui_capsule_rhi.frag");
-    if (!vertexSource || !fragmentSource) std::abort();
+    if (!vertexSource || !fragmentSource)
+        std::abort();
 
     RhiShaderDesc shaderDesc;
     shaderDesc.debugName = "UiTextInput.Vertex";
@@ -147,8 +161,8 @@ void UITextInput::init(ResourceMgr& resourceMgr) {
     m_pipeline = m_rhiDevice->createGraphicsPipeline(pipelineDesc);
 
     initMesh();
-    if (!m_vertexShader.isValid() || !m_fragmentShader.isValid() ||
-        !m_pipelineLayout.isValid() || !m_pipeline.isValid() || !m_vertexBuffer.isValid()) {
+    if (!m_vertexShader.isValid() || !m_fragmentShader.isValid() || !m_pipelineLayout.isValid() ||
+        !m_pipeline.isValid() || !m_vertexBuffer.isValid()) {
         std::abort();
     }
     UIWidget::init(resourceMgr);
@@ -157,10 +171,14 @@ void UITextInput::init(ResourceMgr& resourceMgr) {
 void UITextInput::shutdown() {
     cleanupMesh();
     if (m_rhiDevice != nullptr) {
-        if (m_pipeline.isValid()) m_rhiDevice->destroyPipeline(m_pipeline);
-        if (m_pipelineLayout.isValid()) m_rhiDevice->destroyPipelineLayout(m_pipelineLayout);
-        if (m_fragmentShader.isValid()) m_rhiDevice->destroyShader(m_fragmentShader);
-        if (m_vertexShader.isValid()) m_rhiDevice->destroyShader(m_vertexShader);
+        if (m_pipeline.isValid())
+            m_rhiDevice->destroyPipeline(m_pipeline);
+        if (m_pipelineLayout.isValid())
+            m_rhiDevice->destroyPipelineLayout(m_pipelineLayout);
+        if (m_fragmentShader.isValid())
+            m_rhiDevice->destroyShader(m_fragmentShader);
+        if (m_vertexShader.isValid())
+            m_rhiDevice->destroyShader(m_vertexShader);
     }
     m_pipeline = {};
     m_pipelineLayout = {};
@@ -201,7 +219,8 @@ void UITextInput::clearLocalStyle() {
 }
 
 void UITextInput::deleteSelection() {
-    if (!hasSelection()) return;
+    if (!hasSelection())
+        return;
     const int lo = std::min(m_selStart, m_selEnd);
     const int hi = std::max(m_selStart, m_selEnd);
     m_text.erase(static_cast<size_t>(lo), static_cast<size_t>(hi - lo));
@@ -223,7 +242,8 @@ void UITextInput::insertText(const std::string& text) {
 }
 
 int UITextInput::charIndexFromX(float localX, const UIRenderContext& ctx) const {
-    if (!ctx.textRenderer) return 0;
+    if (!ctx.textRenderer)
+        return 0;
     const float textScale = 1.0f;
     const int charCount = utf8CharCount(m_text);
     for (int i = 0; i <= charCount; ++i) {
@@ -238,7 +258,8 @@ int UITextInput::charIndexFromX(float localX, const UIRenderContext& ctx) const 
 }
 
 float UITextInput::measureTextUpTo(int index, const UIRenderContext& ctx) const {
-    if (!ctx.textRenderer || index <= 0) return 0.0f;
+    if (!ctx.textRenderer || index <= 0)
+        return 0.0f;
     const int byteOff = utf8ByteOffset(m_text, index);
     const std::string sub = m_text.substr(0, static_cast<size_t>(byteOff));
     return ctx.textRenderer->measureText(sub, 1.0f).width;
@@ -258,15 +279,11 @@ void UITextInput::onUpdate(float dt) {
 }
 
 void UITextInput::initMesh() {
-    constexpr float vertices[] = {
-        0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 1.0f,
-        0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 1.0f
-    };
+    constexpr float vertices[] = {0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 1.0f};
     RhiBufferDesc desc;
     desc.debugName = "UiTextInput.VertexBuffer";
     desc.size = sizeof(vertices);
-    desc.usage = rhiFlag(RhiBufferUsage::Vertex) |
-                 rhiFlag(RhiBufferUsage::TransferDst);
+    desc.usage = rhiFlag(RhiBufferUsage::Vertex) | rhiFlag(RhiBufferUsage::TransferDst);
     desc.memoryUsage = RhiMemoryUsage::GpuOnly;
     desc.initialState = RhiResourceState::VertexBuffer;
     desc.memoryCategory = RhiMemoryCategory::Geometry;
@@ -282,8 +299,8 @@ void UITextInput::cleanupMesh() {
 
 void UITextInput::renderSelf(const UIRenderContext& ctx) const {
     const bool record = ctx.phase == UIRenderPhase::Record;
-    if (record &&
-        (ctx.commandList == nullptr || !m_pipeline.isValid() || !m_vertexBuffer.isValid())) return;
+    if (record && (ctx.commandList == nullptr || !m_pipeline.isValid() || !m_vertexBuffer.isValid()))
+        return;
 
     const UIResolvedTextInputStyle resolved =
         UIStyleResolver::resolveTextInput(resolveBaseStyle(ctx), currentStyleState());
@@ -301,12 +318,10 @@ void UITextInput::renderSelf(const UIRenderContext& ctx) const {
     const float ah = height * scaleY;
 
     const float uiScale = ctx.pixelScale();
-    RhiRect2D contentScissor{
-        static_cast<int32_t>(std::floor((ax + 2.0f) * uiScale)),
-        static_cast<int32_t>(std::floor((ay + 2.0f) * uiScale)),
-        static_cast<uint32_t>(std::max(1.0f, std::ceil((aw - 4.0f) * uiScale))),
-        static_cast<uint32_t>(std::max(1.0f, std::ceil((ah - 4.0f) * uiScale)))
-    };
+    RhiRect2D contentScissor{static_cast<int32_t>(std::floor((ax + 2.0f) * uiScale)),
+                             static_cast<int32_t>(std::floor((ay + 2.0f) * uiScale)),
+                             static_cast<uint32_t>(std::max(1.0f, std::ceil((aw - 4.0f) * uiScale))),
+                             static_cast<uint32_t>(std::max(1.0f, std::ceil((ah - 4.0f) * uiScale)))};
     if (ctx.hasScissor) {
         const int32_t x0 = std::max(contentScissor.x, ctx.scissor.x);
         const int32_t y0 = std::max(contentScissor.y, ctx.scissor.y);
@@ -330,9 +345,7 @@ void UITextInput::renderSelf(const UIRenderContext& ctx) const {
             };
             const PushConstants pushConstants{
                 glm::vec4(static_cast<float>(ctx.screenWidth), static_cast<float>(ctx.screenHeight), x, y),
-                glm::vec4(rectWidth, rectHeight, 0.0f, 0.0f),
-                glm::vec4(color[0], color[1], color[2], color[3])
-            };
+                glm::vec4(rectWidth, rectHeight, 0.0f, 0.0f), glm::vec4(color[0], color[1], color[2], color[3])};
             ctx.commandList->pushConstants(&pushConstants, sizeof(pushConstants),
                                            rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment));
             ctx.commandList->draw(6u, 1u, 0u, 0u);
@@ -356,7 +369,8 @@ void UITextInput::renderSelf(const UIRenderContext& ctx) const {
             drawRect(sx0, ay + 2.0f, sx1 - sx0, ah - 4.0f, selCol);
         }
         if (m_cursorVisible && isFocused()) {
-            const float cursorX = ax + kTextPadX + measureTextUpTo(utf8CharCountUpTo(m_text, m_cursorPos), ctx) - m_scrollOffset;
+            const float cursorX =
+                ax + kTextPadX + measureTextUpTo(utf8CharCountUpTo(m_text, m_cursorPos), ctx) - m_scrollOffset;
             drawRect(cursorX, ay + 3.0f, 1.5f, ah - 6.0f, curCol);
         }
     }
@@ -367,37 +381,29 @@ void UITextInput::renderSelf(const UIRenderContext& ctx) const {
         textContext.scissor = contentScissor;
         const float textScale = 1.0f;
         if (m_text.empty() && !m_placeholder.empty() && !isFocused()) {
-            ctx.textRenderer->draw(
-                textContext,
-                m_placeholder,
-                ax + kTextPadX,
-                ay + (ah - ctx.textRenderer->measureText("A", textScale).height) * 0.5f,
-                textScale,
-                {phCol[0], phCol[1], phCol[2], phCol[3] * alpha});
+            ctx.textRenderer->draw(textContext, m_placeholder, ax + kTextPadX,
+                                   ay + (ah - ctx.textRenderer->measureText("A", textScale).height) * 0.5f, textScale,
+                                   {phCol[0], phCol[1], phCol[2], phCol[3] * alpha});
         } else if (!m_text.empty()) {
             const auto metrics = ctx.textRenderer->measureText(m_text, textScale);
-            ctx.textRenderer->draw(
-                textContext,
-                m_text,
-                ax + kTextPadX - m_scrollOffset,
-                ay + (ah - metrics.height) * 0.5f,
-                textScale,
-                {txtCol[0], txtCol[1], txtCol[2], txtCol[3] * alpha});
+            ctx.textRenderer->draw(textContext, m_text, ax + kTextPadX - m_scrollOffset,
+                                   ay + (ah - metrics.height) * 0.5f, textScale,
+                                   {txtCol[0], txtCol[1], txtCol[2], txtCol[3] * alpha});
         }
-
     }
 
     if (record) {
         const RhiRect2D parentScissor = ctx.hasScissor
-            ? ctx.scissor
-            : RhiRect2D{0, 0, static_cast<uint32_t>(ctx.screenWidth * uiScale),
-                        static_cast<uint32_t>(ctx.screenHeight * uiScale)};
+                                            ? ctx.scissor
+                                            : RhiRect2D{0, 0, static_cast<uint32_t>(ctx.screenWidth * uiScale),
+                                                        static_cast<uint32_t>(ctx.screenHeight * uiScale)};
         ctx.commandList->setScissor(parentScissor);
     }
 }
 
 UIEventResult UITextInput::onInput(const UIInputEvent& event, const UIRenderContext& ctx) {
-    if (!visible || !interactive) return UIEventResult::Ignored;
+    if (!visible || !interactive)
+        return UIEventResult::Ignored;
 
     const bool inside = hitTest(event.x, event.y, ctx);
 
@@ -422,7 +428,8 @@ UIEventResult UITextInput::onInput(const UIInputEvent& event, const UIRenderCont
         break;
 
     case UIInputEventType::KeyDown: {
-        if (!isFocused()) break;
+        if (!isFocused())
+            break;
 
         const int key = event.key;
         const bool ctrl = hasInputModifier(event.modifiers, UIInputModifier::Control);
@@ -435,7 +442,8 @@ UIEventResult UITextInput::onInput(const UIInputEvent& event, const UIRenderCont
             } else if (m_cursorPos > 0) {
                 // Move one UTF-8 character back.
                 int prev = m_cursorPos - 1;
-                while (prev > 0 && (static_cast<unsigned char>(m_text[prev]) & 0xC0u) == 0x80u) --prev;
+                while (prev > 0 && (static_cast<unsigned char>(m_text[prev]) & 0xC0u) == 0x80u)
+                    --prev;
                 m_cursorPos = prev;
                 m_selStart = m_selEnd = m_cursorPos;
             }
@@ -451,7 +459,8 @@ UIEventResult UITextInput::onInput(const UIInputEvent& event, const UIRenderCont
             } else if (m_cursorPos < static_cast<int>(m_text.size())) {
                 int next = m_cursorPos + 1;
                 while (next < static_cast<int>(m_text.size()) &&
-                       (static_cast<unsigned char>(m_text[next]) & 0xC0u) == 0x80u) ++next;
+                       (static_cast<unsigned char>(m_text[next]) & 0xC0u) == 0x80u)
+                    ++next;
                 m_cursorPos = next;
                 m_selStart = m_selEnd = m_cursorPos;
             }
@@ -481,15 +490,16 @@ UIEventResult UITextInput::onInput(const UIInputEvent& event, const UIRenderCont
                 deleteSelection();
             } else if (m_cursorPos > 0) {
                 int prev = m_cursorPos - 1;
-                while (prev > 0 && (static_cast<unsigned char>(m_text[prev]) & 0xC0u) == 0x80u) --prev;
-                m_text.erase(static_cast<size_t>(prev),
-                             static_cast<size_t>(m_cursorPos - prev));
+                while (prev > 0 && (static_cast<unsigned char>(m_text[prev]) & 0xC0u) == 0x80u)
+                    --prev;
+                m_text.erase(static_cast<size_t>(prev), static_cast<size_t>(m_cursorPos - prev));
                 m_cursorPos = prev;
                 m_selStart = m_selEnd = m_cursorPos;
             }
             m_cursorBlinkTimer = 0.0f;
             m_cursorVisible = true;
-            if (onTextChanged) onTextChanged(m_text);
+            if (onTextChanged)
+                onTextChanged(m_text);
             return UIEventResult::Consumed;
         }
 
@@ -499,13 +509,14 @@ UIEventResult UITextInput::onInput(const UIInputEvent& event, const UIRenderCont
             } else if (m_cursorPos < static_cast<int>(m_text.size())) {
                 int next = m_cursorPos + 1;
                 while (next < static_cast<int>(m_text.size()) &&
-                       (static_cast<unsigned char>(m_text[next]) & 0xC0u) == 0x80u) ++next;
-                m_text.erase(static_cast<size_t>(m_cursorPos),
-                             static_cast<size_t>(next - m_cursorPos));
+                       (static_cast<unsigned char>(m_text[next]) & 0xC0u) == 0x80u)
+                    ++next;
+                m_text.erase(static_cast<size_t>(m_cursorPos), static_cast<size_t>(next - m_cursorPos));
             }
             m_cursorBlinkTimer = 0.0f;
             m_cursorVisible = true;
-            if (onTextChanged) onTextChanged(m_text);
+            if (onTextChanged)
+                onTextChanged(m_text);
             return UIEventResult::Consumed;
         }
 
@@ -518,28 +529,32 @@ UIEventResult UITextInput::onInput(const UIInputEvent& event, const UIRenderCont
     }
 
     case UIInputEventType::Command: {
-        if (!isFocused()) break;
+        if (!isFocused())
+            break;
         if (event.command == UICommand::Activate) {
-            if (onSubmit) onSubmit(m_text);
+            if (onSubmit)
+                onSubmit(m_text);
             return UIEventResult::Consumed;
         }
         break;
     }
 
     case UIInputEventType::TextInput: {
-        if (!isFocused()) break;
+        if (!isFocused())
+            break;
         const std::uint32_t cp = event.codepoint;
         // Accept printable ASCII and common Unicode ranges.
-        if (cp < 32) break;
+        if (cp < 32)
+            break;
         insertText(codepointToUtf8(cp));
         m_cursorBlinkTimer = 0.0f;
         m_cursorVisible = true;
-        if (onTextChanged) onTextChanged(m_text);
+        if (onTextChanged)
+            onTextChanged(m_text);
         return UIEventResult::Consumed;
     }
 
-    default:
-        break;
+    default: break;
     }
 
     return UIEventResult::Ignored;

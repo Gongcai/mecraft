@@ -17,7 +17,9 @@ class RhiCommandList;
 class IDeferredGeometryProvider;
 struct RenderSettings;
 
-namespace ecs { class GameplayRegistry; }
+namespace ecs {
+class GameplayRegistry;
+}
 
 /// GBuffer pass for entities and drops.
 /// Terrain GBuffer is handled separately by the terrain rendering pipeline.
@@ -37,14 +39,10 @@ public:
     /// @param gameplayRegistry Optional entity registry paired with the renderer.
     /// @param renderLocalPlayerModel True when the local player belongs in the GBuffer.
     /// @return True when optional work was skipped or all commands were recorded.
-    [[nodiscard]] bool executeEntities(RhiCommandList& commandList,
-                                       const IWorldView& worldView,
-                                       const FrameContext& ctx,
-                                       const RenderSettings& settings,
-                                       DeferredRenderTargets& targets,
-                                       HumanoidRenderer* humanoidRenderer,
-                                       ecs::GameplayRegistry* gameplayRegistry,
-                                       bool renderLocalPlayerModel);
+    [[nodiscard]] bool executeEntities(RhiCommandList& commandList, const IWorldView& worldView,
+                                       const FrameContext& ctx, const RenderSettings& settings,
+                                       DeferredRenderTargets& targets, HumanoidRenderer* humanoidRenderer,
+                                       ecs::GameplayRegistry* gameplayRegistry, bool renderLocalPlayerModel);
 
     /// Records block entity GBuffer rendering into a graph-owned command list.
     /// @param commandList Recording command list supplied by the Render Graph.
@@ -54,12 +52,9 @@ public:
     /// @param targets Persistent GBuffer attachments and views.
     /// @param blockEntityRenderer Optional renderer; no work is recorded when null.
     /// @return True when optional work was skipped or all commands were recorded.
-    [[nodiscard]] bool executeBlockEntities(RhiCommandList& commandList,
-                                            const IWorldView& worldView,
-                                            const FrameContext& ctx,
-                                            const RenderSettings& settings,
-                                            DeferredRenderTargets& targets,
-                                            BlockEntityRenderer* blockEntityRenderer);
+    [[nodiscard]] bool executeBlockEntities(RhiCommandList& commandList, const IWorldView& worldView,
+                                            const FrameContext& ctx, const RenderSettings& settings,
+                                            DeferredRenderTargets& targets, BlockEntityRenderer* blockEntityRenderer);
 
     /// Records the prepared static showcase model into the G-buffer.
     /// @param commandList Graphics command list supplied by the Render Graph.
@@ -68,10 +63,8 @@ public:
     /// @param targets Persistent G-buffer attachments and views.
     /// @param staticMeshRenderer Optional static model renderer.
     /// @return True when optional work was skipped or all commands were recorded.
-    [[nodiscard]] bool executeStaticMeshes(RhiCommandList& commandList,
-                                           const FrameContext& ctx,
-                                           const RenderSettings& settings,
-                                           DeferredRenderTargets& targets,
+    [[nodiscard]] bool executeStaticMeshes(RhiCommandList& commandList, const FrameContext& ctx,
+                                           const RenderSettings& settings, DeferredRenderTargets& targets,
                                            StaticMeshRenderer* staticMeshRenderer);
 
     /// Clears and records an explicit non-world geometry source into the G-buffer.
@@ -81,12 +74,9 @@ public:
     /// @param targets Persistent G-buffer attachments and views.
     /// @param geometryProvider Required external geometry source.
     /// @return True when preparation and command recording both succeed.
-    [[nodiscard]] bool executeExternalGeometry(
-        RhiCommandList& commandList,
-        const FrameContext& ctx,
-        const RenderSettings& settings,
-        DeferredRenderTargets& targets,
-        IDeferredGeometryProvider& geometryProvider);
+    [[nodiscard]] bool executeExternalGeometry(RhiCommandList& commandList, const FrameContext& ctx,
+                                               const RenderSettings& settings, DeferredRenderTargets& targets,
+                                               IDeferredGeometryProvider& geometryProvider);
 
     /// Records dropped item and block GBuffer rendering with per-object velocity.
     /// @param commandList Recording command list supplied by the Render Graph.
@@ -97,13 +87,9 @@ public:
     /// @param dropRenderer Optional dropped-object renderer.
     /// @param dropSystem Optional dropped-object simulation paired with the renderer.
     /// @return True when optional work was skipped or all commands were recorded.
-    [[nodiscard]] bool executeDrops(RhiCommandList& commandList,
-                                    const IWorldView& worldView,
-                                    const FrameContext& ctx,
-                                    const RenderSettings& settings,
-                                    DeferredRenderTargets& targets,
-                                    DropRenderer* dropRenderer,
-                                    DropSystem* dropSystem);
+    [[nodiscard]] bool executeDrops(RhiCommandList& commandList, const IWorldView& worldView, const FrameContext& ctx,
+                                    const RenderSettings& settings, DeferredRenderTargets& targets,
+                                    DropRenderer* dropRenderer, DropSystem* dropSystem);
 
     /// Records falling-block GBuffer rendering with per-object velocity.
     /// @param commandList Recording command list supplied by the Render Graph.
@@ -114,14 +100,10 @@ public:
     /// @param fallingBlockRenderer Optional falling-block renderer.
     /// @param gameplayRegistry Optional entity registry paired with the renderer.
     /// @return True when optional work was skipped or all commands were recorded.
-    [[nodiscard]] bool executeFallingBlocks(RhiCommandList& commandList,
-                                            const IWorldView& worldView,
-                                            const FrameContext& ctx,
-                                            const RenderSettings& settings,
-                                            DeferredRenderTargets& targets,
-                                            FallingBlockRenderer* fallingBlockRenderer,
+    [[nodiscard]] bool executeFallingBlocks(RhiCommandList& commandList, const IWorldView& worldView,
+                                            const FrameContext& ctx, const RenderSettings& settings,
+                                            DeferredRenderTargets& targets, FallingBlockRenderer* fallingBlockRenderer,
                                             ecs::GameplayRegistry* gameplayRegistry);
-
 };
 
 #endif // MECRAFT_GBUFFER_PASS_H

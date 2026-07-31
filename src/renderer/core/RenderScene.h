@@ -59,8 +59,12 @@ struct BlockTargetRenderData;
 struct BlockBreakRenderData;
 struct FirstPersonHeldItemMotion;
 
-namespace ecs { class GameplayRegistry; }
-namespace shadow { class ShadowRenderer; }
+namespace ecs {
+class GameplayRegistry;
+}
+namespace shadow {
+class ShadowRenderer;
+}
 
 /// Shared render resources used by both pipelines.
 /// All pointers are non-owning; lifetime is managed by Renderer.
@@ -136,20 +140,15 @@ public:
     void shutdown();
 
     /// Main render entry point (called from Game)
-    [[nodiscard]] bool renderFrame(const IWorldView& worldView,
-                                   const Camera& camera,
-                                   const Window& window,
-                                   const glm::ivec2& frameRenderSize,
-                                   const glm::ivec2& frameOutputSize,
-                                   float frameAspectRatio,
-                                   const DayNightSystem& dayNightSystem,
+    [[nodiscard]] bool renderFrame(const IWorldView& worldView, const Camera& camera, const Window& window,
+                                   const glm::ivec2& frameRenderSize, const glm::ivec2& frameOutputSize,
+                                   float frameAspectRatio, const DayNightSystem& dayNightSystem,
                                    const WeatherSystem& weatherSystem,
                                    const std::optional<RenderFrameClock>& frameClock);
 
     /// Render a complete gameplay frame, including scene, precipitation, and post-process setup.
     /// @return True when every scene, temporal, and composite stage succeeds.
-    [[nodiscard]] bool renderGameplayFrame(
-        const RenderGameplayFrameRequest& request);
+    [[nodiscard]] bool renderGameplayFrame(const RenderGameplayFrameRequest& request);
 
     // Pipeline management
     void setPipelineMode(PipelineMode mode);
@@ -161,8 +160,7 @@ public:
     const RenderSettings& getSettings() const;
     /// Installs a settings transaction callback that can reject invalid runtime changes.
     /// @param callback Invoked before renderer state changes; return false to reject the settings.
-    void setSettingsChangedCallback(
-        std::function<bool(const RenderSettings&)> callback);
+    void setSettingsChangedCallback(std::function<bool(const RenderSettings&)> callback);
     [[nodiscard]] bool isFsr1Supported() const { return m_fsr1Supported; }
     [[nodiscard]] bool isFsr31Supported() const;
     [[nodiscard]] bool isDlssSupported() const;
@@ -185,8 +183,7 @@ public:
     void setEyeInWater(bool inWater);
     void setRenderLocalPlayerModel(bool visible);
     void setHeldBlockLightValue(int value);
-    [[nodiscard]] bool setSceneLights(
-        std::vector<renderer::contracts::SceneLight> lights);
+    [[nodiscard]] bool setSceneLights(std::vector<renderer::contracts::SceneLight> lights);
 
     // R7: Legacy bridge methods removed — use renderFrame() instead
 
@@ -220,12 +217,10 @@ public:
         uint32_t buildError = 0u;
         float averageLightsPerCluster = 0.0f;
     };
-    [[nodiscard]] ClusteredLightingDebugInfo
-    clusteredLightingDebugInfo() const;
+    [[nodiscard]] ClusteredLightingDebugInfo clusteredLightingDebugInfo() const;
 
     /// Returns the deterministic reflection-probe capture queue snapshot.
-    [[nodiscard]] ReflectionProbeCaptureFrameStats
-    reflectionProbeCaptureStats() const;
+    [[nodiscard]] ReflectionProbeCaptureFrameStats reflectionProbeCaptureStats() const;
 
     /// Actual frame extents and swapchain presentation mode for diagnostics.
     /// Render and output extents come from the latest frame context, so they
@@ -257,9 +252,7 @@ public:
 
     // Frame output access
     const FrameOutput& getLastFrameOutput() const;
-    [[nodiscard]] const std::optional<TemporalFrameInput>& temporalFrameInput() const {
-        return m_temporalFrameInput;
-    }
+    [[nodiscard]] const std::optional<TemporalFrameInput>& temporalFrameInput() const { return m_temporalFrameInput; }
     [[nodiscard]] const std::optional<TemporalUpscaleResult>& temporalUpscaleResult() const {
         return m_temporalUpscaleResult;
     }
@@ -281,25 +274,18 @@ public:
     const BlockInteractionOverlayRenderer& getOverlayRenderer() const { return m_overlayRenderer; }
 
     // Initialize shared resources without depending on legacy renderer
-    void setupResources(
-        ThreadPool* threadPool,
-        RhiDevice* rhiDevice,
-        RhiCommandListPool* commandListPool,
-        TerrainRenderer* terrain,
-        TerrainRhiPipelineSet* terrainRhiPipelines,
-        WorldRenderBuffer* worldRenderBuffer,
-        DeferredRenderTargets* deferredTargets,
-        GameplaySkyRenderer* sky,
-        shadow::ShadowRenderer* shadowRenderer,
-        const RenderSettings& initialSettings);
+    void setupResources(ThreadPool* threadPool, RhiDevice* rhiDevice, RhiCommandListPool* commandListPool,
+                        TerrainRenderer* terrain, TerrainRhiPipelineSet* terrainRhiPipelines,
+                        WorldRenderBuffer* worldRenderBuffer, DeferredRenderTargets* deferredTargets,
+                        GameplaySkyRenderer* sky, shadow::ShadowRenderer* shadowRenderer,
+                        const RenderSettings& initialSettings);
 
     /// Build PostProcessEffects from current settings and world state.
     /// Replaces the ~70 line parameter assembly in Game::renderFrame().
     PostProcessEffects buildPostProcessEffects(const IWorldView& worldView, const Camera& camera,
-                                                float frameAspectRatio, float cameraRainVisibility,
-                                                float screenRollRadians,
-                                                const DayNightSystem& dayNightSystem,
-                                                const WeatherSystem& weatherSystem) const;
+                                               float frameAspectRatio, float cameraRainVisibility,
+                                               float screenRollRadians, const DayNightSystem& dayNightSystem,
+                                               const WeatherSystem& weatherSystem) const;
 
     /// Get held item shadow data from the last frame output.
     const FirstPersonShadowData& getHeldItemShadowData() const { return m_lastFrameOutput.heldItemShadow; }
@@ -313,18 +299,13 @@ public:
 
 private:
     /// Build FrameContext from world state
-    std::optional<FrameContext> buildFrameContext(
-        const IWorldView& worldView,
-        const Camera& camera,
-        const Window& window,
-        const glm::ivec2& frameRenderSize,
-        const glm::ivec2& frameOutputSize,
-        float frameAspectRatio,
-        const DayNightSystem& dayNightSystem,
-        const WeatherSystem& weatherSystem,
-        const std::optional<RenderFrameClock>& frameClock);
-    [[nodiscard]] std::optional<glm::ivec2> internalRenderSize(
-        const glm::ivec2& displaySize) const;
+    std::optional<FrameContext> buildFrameContext(const IWorldView& worldView, const Camera& camera,
+                                                  const Window& window, const glm::ivec2& frameRenderSize,
+                                                  const glm::ivec2& frameOutputSize, float frameAspectRatio,
+                                                  const DayNightSystem& dayNightSystem,
+                                                  const WeatherSystem& weatherSystem,
+                                                  const std::optional<RenderFrameClock>& frameClock);
+    [[nodiscard]] std::optional<glm::ivec2> internalRenderSize(const glm::ivec2& displaySize) const;
     [[nodiscard]] bool isFsr1RuntimeEnabled() const;
 
     /// Prepare active pipeline targets that FrameContext depends on.
@@ -334,11 +315,9 @@ private:
     [[nodiscard]] bool executeFrameBeginGraph();
 
     /// Record scene overlays, precipitation, and the first-person item in display order.
-    [[nodiscard]] bool executeSceneOverlayGraph(
-        const RenderGameplayFrameRequest& request,
-        const glm::ivec2& frameRenderSize,
-        bool lightDebugActive,
-        float& cameraRainVisibility);
+    [[nodiscard]] bool executeSceneOverlayGraph(const RenderGameplayFrameRequest& request,
+                                                const glm::ivec2& frameRenderSize, bool lightDebugActive,
+                                                float& cameraRainVisibility);
 
     /// Invalidate temporal resources and preserve the exact cause for the next frame.
     /// @param reasons Non-empty bitmask describing why existing histories are invalid.
@@ -376,8 +355,7 @@ private:
     std::optional<TemporalFrameInput> m_temporalFrameInput;
     std::optional<TemporalUpscaleResult> m_temporalUpscaleResult;
     bool m_hasPreviousContext = false;
-    TemporalResetReasons m_pendingTemporalResetReasons =
-        temporalResetReasonBit(TemporalResetReason::FirstFrame);
+    TemporalResetReasons m_pendingTemporalResetReasons = temporalResetReasonBit(TemporalResetReason::FirstFrame);
     double m_contextCpuMs = 0.0;
     bool m_eyeInWater = false;
     bool m_renderLocalPlayerModel = false;

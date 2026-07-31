@@ -19,27 +19,19 @@ enum class ApplyResult : uint8_t {
 };
 
 /// Returns true when `incomingWireState` can add a redstone wire part at `position`.
-[[nodiscard]] bool isContainerPlacementTarget(BlockStateId existingState,
-                                              BlockStateId incomingWireState);
+[[nodiscard]] bool isContainerPlacementTarget(BlockStateId existingState, BlockStateId incomingWireState);
 
 /// Returns true when `incomingWireState` can add a redstone wire part to `existingState`.
-[[nodiscard]] bool canApplyToBlockState(BlockStateId existingState,
-                                        BlockStateId incomingWireState);
+[[nodiscard]] bool canApplyToBlockState(BlockStateId existingState, BlockStateId incomingWireState);
 
 /// Returns true when `incomingWireState` can add a redstone wire part at `position`.
-[[nodiscard]] bool canApply(const World& world,
-                            const glm::ivec3& position,
-                            BlockStateId incomingWireState);
+[[nodiscard]] bool canApply(const World& world, const glm::ivec3& position, BlockStateId incomingWireState);
 
 /// Adds a redstone wire part at `position`, upgrading plain wires to a wire container when needed.
-[[nodiscard]] ApplyResult apply(World& world,
-                                const glm::ivec3& position,
-                                BlockStateId incomingWireState);
+[[nodiscard]] ApplyResult apply(World& world, const glm::ivec3& position, BlockStateId incomingWireState);
 
 /// Removes every wire part hosted on one face of a wire container block.
-[[nodiscard]] WireContainerParts removePartsOnFace(World& world,
-                                                   const glm::ivec3& position,
-                                                   uint16_t facing);
+[[nodiscard]] WireContainerParts removePartsOnFace(World& world, const glm::ivec3& position, uint16_t facing);
 
 /// Returns the ordinary wire block ids represented by the container parts.
 [[nodiscard]] std::vector<BlockID> wireBlocksForParts(const WireContainerParts& parts);

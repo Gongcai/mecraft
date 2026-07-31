@@ -15,17 +15,13 @@
 namespace app::validation {
 
 inline constexpr uint32_t kValidationSceneContractVersion = 1u;
-inline constexpr const char* kValidationSceneContractKind =
-    "mecraft.validation_scene";
+inline constexpr const char* kValidationSceneContractKind = "mecraft.validation_scene";
 inline constexpr uint32_t kValidationRenderSettingsVersion = 1u;
-inline constexpr const char* kValidationVoxelGeneratorId =
-    "mecraft.overworld";
+inline constexpr const char* kValidationVoxelGeneratorId = "mecraft.overworld";
 inline constexpr uint32_t kValidationVoxelGeneratorVersion = 1u;
 
 /// Identifies the deterministic weather state encoded by a validation scene.
-enum class ValidationWeather : uint8_t {
-    Clear
-};
+enum class ValidationWeather : uint8_t { Clear };
 
 /// Stores one immutable renderer configuration used by validation scenes.
 struct ValidationRenderSettingsProfile {
@@ -132,8 +128,7 @@ struct ValidationSceneContractLoadResult {
 /// Builds the renderer profile whose hash is locked by scene descriptors.
 /// @param scene Concrete validation scene that consumes the settings.
 /// @return Complete settings, stable metadata, and semantic content hash.
-[[nodiscard]] ValidationRenderSettingsProfile
-makeValidationRenderSettingsProfile(ValidationScene scene);
+[[nodiscard]] ValidationRenderSettingsProfile makeValidationRenderSettingsProfile(ValidationScene scene);
 
 /// Computes the semantic hash of one generated voxel world recipe.
 /// @param world Generator identity, seed, and render distance to hash.
@@ -152,15 +147,12 @@ validationSceneContentHash(const ValidationSceneContract& contract);
 /// @param sourcePath Logical descriptor path used to resolve relative assets.
 /// @return Verified scene contract, Camera Path, or a structured error.
 [[nodiscard]] ValidationSceneContractLoadResult
-parseValidationSceneContractJson(
-    std::string_view jsonText,
-    const std::filesystem::path& sourcePath);
+parseValidationSceneContractJson(std::string_view jsonText, const std::filesystem::path& sourcePath);
 
 /// Loads and verifies one versioned validation scene descriptor.
 /// @param path Scene JSON file whose directory anchors relative asset paths.
 /// @return Verified scene contract, Camera Path, or a structured error.
-[[nodiscard]] ValidationSceneContractLoadResult
-loadValidationSceneContract(const std::filesystem::path& path);
+[[nodiscard]] ValidationSceneContractLoadResult loadValidationSceneContract(const std::filesystem::path& path);
 
 /// Returns the stable lowercase weather identifier used by manifests.
 /// @param weather Validation weather state to identify.
@@ -170,8 +162,7 @@ loadValidationSceneContract(const std::filesystem::path& path);
 /// Returns the stable identifier used by diagnostics and automated tests.
 /// @param error Scene contract error to identify.
 /// @return Process-lifetime error identifier.
-[[nodiscard]] const char* validationSceneContractErrorStableId(
-    ValidationSceneContractError error);
+[[nodiscard]] const char* validationSceneContractErrorStableId(ValidationSceneContractError error);
 
 } // namespace app::validation
 

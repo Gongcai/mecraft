@@ -28,39 +28,22 @@ struct InventoryImagePushConstants {
 
 static_assert(sizeof(InventoryImagePushConstants) == 64u);
 
-[[nodiscard]] RhiRect2D inventoryScissor(const UIRenderContext& context)
-{
+[[nodiscard]] RhiRect2D inventoryScissor(const UIRenderContext& context) {
     if (context.hasScissor) {
         return context.scissor;
     }
-    return {
-        0,
-        0,
-        static_cast<uint32_t>(std::max(1.0f,
-            std::round(static_cast<float>(context.screenWidth) * context.pixelScale()))),
-        static_cast<uint32_t>(std::max(1.0f,
-            std::round(static_cast<float>(context.screenHeight) * context.pixelScale())))
-    };
+    return {0, 0,
+            static_cast<uint32_t>(
+                std::max(1.0f, std::round(static_cast<float>(context.screenWidth) * context.pixelScale()))),
+            static_cast<uint32_t>(
+                std::max(1.0f, std::round(static_cast<float>(context.screenHeight) * context.pixelScale())))};
 }
 
-void drawTexturedQuad(const UIRenderContext& context,
-                      const RhiTextureHandle texture,
-                      const float x,
-                      const float y,
-                      const float width,
-                      const float height,
-                      const glm::vec4& uvRect,
-                      const glm::vec4& tint)
-{
-    if (context.commandList == nullptr ||
-        context.uiRenderer == nullptr ||
-        !context.panelQuadVertexBuffer.isValid() ||
-        !context.imageTexturePipeline.isValid() ||
-        !texture.isValid() ||
-        context.screenWidth <= 0 ||
-        context.screenHeight <= 0 ||
-        width <= 0.0f ||
-        height <= 0.0f) {
+void drawTexturedQuad(const UIRenderContext& context, const RhiTextureHandle texture, const float x, const float y,
+                      const float width, const float height, const glm::vec4& uvRect, const glm::vec4& tint) {
+    if (context.commandList == nullptr || context.uiRenderer == nullptr || !context.panelQuadVertexBuffer.isValid() ||
+        !context.imageTexturePipeline.isValid() || !texture.isValid() || context.screenWidth <= 0 ||
+        context.screenHeight <= 0 || width <= 0.0f || height <= 0.0f) {
         return;
     }
 
@@ -70,12 +53,8 @@ void drawTexturedQuad(const UIRenderContext& context,
     }
 
     const InventoryImagePushConstants pushConstants{
-        glm::vec4(static_cast<float>(context.screenWidth),
-                  static_cast<float>(context.screenHeight), x, y),
-        glm::vec4(width, height, 0.0f, 0.0f),
-        uvRect,
-        tint
-    };
+        glm::vec4(static_cast<float>(context.screenWidth), static_cast<float>(context.screenHeight), x, y),
+        glm::vec4(width, height, 0.0f, 0.0f), uvRect, tint};
 
     RhiCommandList& commandList = *context.commandList;
     commandList.setGraphicsPipeline(context.imageTexturePipeline);
@@ -83,14 +62,12 @@ void drawTexturedQuad(const UIRenderContext& context,
     commandList.setBindGroup(0u, bindGroup);
     commandList.setScissor(inventoryScissor(context));
     commandList.pushConstants(&pushConstants, sizeof(pushConstants),
-                              rhiFlag(RhiShaderStage::Vertex) |
-                              rhiFlag(RhiShaderStage::Fragment));
+                              rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment));
     commandList.draw(6u, 1u, 0u, 0u);
 }
-}
+} // namespace
 
-void InventoryPanelControl::init(ResourceMgr& resourceMgr)
-{
+void InventoryPanelControl::init(ResourceMgr& resourceMgr) {
     UIWidget::init(resourceMgr);
     m_resourceMgr = &resourceMgr;
 
@@ -99,8 +76,7 @@ void InventoryPanelControl::init(ResourceMgr& resourceMgr)
     m_tooltip.init(resourceMgr);
 }
 
-void InventoryPanelControl::shutdown()
-{
+void InventoryPanelControl::shutdown() {
     m_tooltip.shutdown();
     m_craftingGrid.shutdown();
     m_itemGrid.shutdown();
@@ -110,8 +86,7 @@ void InventoryPanelControl::shutdown()
     UIWidget::shutdown();
 }
 
-void InventoryPanelControl::renderSelf(const UIRenderContext& context) const
-{
+void InventoryPanelControl::renderSelf(const UIRenderContext& context) const {
     auto* self = const_cast<InventoryPanelControl*>(this);
     self->m_cachedScreenWidth = context.screenWidth;
     self->m_cachedScreenHeight = context.screenHeight;
@@ -147,20 +122,15 @@ void InventoryPanelControl::renderSelf(const UIRenderContext& context) const
 
         if (hoveredId != 0) {
             const ItemDef& def = ItemRegistry::get(hoveredId);
-            const std::string name = context.localeManager
-                ? context.localeManager->getItemName(def.namespacedId.path())
-                : std::string(def.namespacedId.path());
+            const std::string name = context.localeManager ? context.localeManager->getItemName(def.namespacedId.path())
+                                                           : std::string(def.namespacedId.path());
             if (hoveredId != m_tooltipHoveredItemId) {
                 m_tooltipHoveredItemId = hoveredId;
-                m_tooltip.startHover(name, context.pointerX, context.pointerY,
-                                     static_cast<float>(context.screenWidth),
-                                     static_cast<float>(context.screenHeight),
-                                     context.timeSeconds);
+                m_tooltip.startHover(name, context.pointerX, context.pointerY, static_cast<float>(context.screenWidth),
+                                     static_cast<float>(context.screenHeight), context.timeSeconds);
             } else if (m_tooltip.isHovering()) {
-                m_tooltip.startHover(name, context.pointerX, context.pointerY,
-                                     static_cast<float>(context.screenWidth),
-                                     static_cast<float>(context.screenHeight),
-                                     context.timeSeconds);
+                m_tooltip.startHover(name, context.pointerX, context.pointerY, static_cast<float>(context.screenWidth),
+                                     static_cast<float>(context.screenHeight), context.timeSeconds);
             }
         } else {
             m_tooltip.cancelHover();
@@ -170,8 +140,7 @@ void InventoryPanelControl::renderSelf(const UIRenderContext& context) const
     m_tooltip.render(context);
 }
 
-UIEventResult InventoryPanelControl::onInput(const UIInputEvent& event, const UIRenderContext& ctx)
-{
+UIEventResult InventoryPanelControl::onInput(const UIInputEvent& event, const UIRenderContext& ctx) {
     if (!visible) {
         return UIEventResult::Ignored;
     }
@@ -199,64 +168,53 @@ UIEventResult InventoryPanelControl::onInput(const UIInputEvent& event, const UI
     return result;
 }
 
-void InventoryPanelControl::setVisible(bool isVisible)
-{
+void InventoryPanelControl::setVisible(bool isVisible) {
     visible = isVisible;
     m_itemGrid.setVisible(isVisible);
     m_craftingGrid.setVisible(isVisible);
 }
 
-void InventoryPanelControl::setSlots(const Pickable::SlotInfo* slots, int count)
-{
+void InventoryPanelControl::setSlots(const Pickable::SlotInfo* slots, int count) {
     m_useExternalSlots = true;
     m_itemGrid.setSlots(slots, count);
 }
 
-void InventoryPanelControl::setInventorySource(const Inventory* inventory)
-{
+void InventoryPanelControl::setInventorySource(const Inventory* inventory) {
     m_inventory = inventory;
     m_useExternalSlots = false;
 }
 
-void InventoryPanelControl::setLayout(const InventoryPanelLayout& layout)
-{
+void InventoryPanelControl::setLayout(const InventoryPanelLayout& layout) {
     m_layout = layout;
     m_craftingGrid.setLayout(layout.craftingGrid);
     syncSlotsFromInventory();
 }
 
-const InventoryPanelLayout& InventoryPanelControl::getLayout() const
-{
+const InventoryPanelLayout& InventoryPanelControl::getLayout() const {
     return m_layout;
 }
 
-ItemGridControl& InventoryPanelControl::itemGrid()
-{
+ItemGridControl& InventoryPanelControl::itemGrid() {
     return m_itemGrid;
 }
 
-const ItemGridControl& InventoryPanelControl::itemGrid() const
-{
+const ItemGridControl& InventoryPanelControl::itemGrid() const {
     return m_itemGrid;
 }
 
-CraftingGridControl& InventoryPanelControl::craftingGrid()
-{
+CraftingGridControl& InventoryPanelControl::craftingGrid() {
     return m_craftingGrid;
 }
 
-const CraftingGridControl& InventoryPanelControl::craftingGrid() const
-{
+const CraftingGridControl& InventoryPanelControl::craftingGrid() const {
     return m_craftingGrid;
 }
 
-void InventoryPanelControl::setCraftingSystem(const CraftingSystem* craftingSystem)
-{
+void InventoryPanelControl::setCraftingSystem(const CraftingSystem* craftingSystem) {
     m_craftingSystem = craftingSystem;
 }
 
-void InventoryPanelControl::syncSlotsFromInventory()
-{
+void InventoryPanelControl::syncSlotsFromInventory() {
     if (m_useExternalSlots) {
         return;
     }
@@ -281,13 +239,8 @@ void InventoryPanelControl::syncSlotsFromInventory()
         for (int col = 0; col < Inventory::INVENTORY_COLUMNS; ++col) {
             const int inventoryIndex = Inventory::toInventoryIndex(row, col);
             const ItemStack stack = m_inventory->getSlotStack(inventoryIndex);
-            slots[static_cast<size_t>(outIndex)] = {
-                baseX + col * colStep,
-                slotY,
-                slotSize,
-                static_cast<int>(stack.itemId),
-                static_cast<int>(stack.count)
-            };
+            slots[static_cast<size_t>(outIndex)] = {baseX + col * colStep, slotY, slotSize,
+                                                    static_cast<int>(stack.itemId), static_cast<int>(stack.count)};
             ++outIndex;
         }
     }
@@ -295,14 +248,12 @@ void InventoryPanelControl::syncSlotsFromInventory()
     m_itemGrid.setSlots(slots.data(), static_cast<int>(slots.size()));
 }
 
-void InventoryPanelControl::syncCraftingGridPosition(const ResolvedPanelRect& panelRect)
-{
+void InventoryPanelControl::syncCraftingGridPosition(const ResolvedPanelRect& panelRect) {
     m_craftingGrid.setPanelOrigin(panelRect.x, panelRect.y, panelRect.scale);
     m_craftingGrid.setLayout(m_layout.craftingGrid);
 }
 
-void InventoryPanelControl::renderBackground(const UIRenderContext& context) const
-{
+void InventoryPanelControl::renderBackground(const UIRenderContext& context) const {
     if (!m_resourceMgr || context.screenWidth <= 0 || context.screenHeight <= 0 ||
         m_layout.backgroundAtlasWidth <= 0.0f || m_layout.backgroundAtlasHeight <= 0.0f) {
         return;
@@ -320,17 +271,13 @@ void InventoryPanelControl::renderBackground(const UIRenderContext& context) con
     const float u1 = InventoryPanelLayout::kTextureWidth / atlasWidth;
     const float v0 = 1.0f - InventoryPanelLayout::kTextureHeight / atlasHeight;
     const float v1 = 1.0f;
-    const float bottomY = static_cast<float>(context.screenHeight) -
-                          (panelRect.y + panelRect.height);
-    drawTexturedQuad(context, texture,
-                     panelRect.x, bottomY, panelRect.width, panelRect.height,
-                     glm::vec4(u0, v0, u1, v1),
-                     glm::vec4(1.0f));
+    const float bottomY = static_cast<float>(context.screenHeight) - (panelRect.y + panelRect.height);
+    drawTexturedQuad(context, texture, panelRect.x, bottomY, panelRect.width, panelRect.height,
+                     glm::vec4(u0, v0, u1, v1), glm::vec4(1.0f));
 }
 
 void InventoryPanelControl::renderPlayerPreview(const UIRenderContext& context,
-                                                const ResolvedPanelRect& panelRect) const
-{
+                                                const ResolvedPanelRect& panelRect) const {
     if (!context.humanoidRenderer || context.commandList == nullptr || context.pixelScale() <= 0.0f) {
         return;
     }
@@ -345,21 +292,12 @@ void InventoryPanelControl::renderPlayerPreview(const UIRenderContext& context,
     const float previewY = static_cast<float>(context.screenHeight) - (previewTopY + previewHeight);
     const float pointerBottomY = static_cast<float>(context.screenHeight) - context.pointerY;
 
-    context.humanoidRenderer->renderInventoryPreview(*context.commandList,
-                                                     previewX,
-                                                     previewY,
-                                                     previewWidth,
-                                                     previewHeight,
-                                                     context.pixelScale(),
-                                                     context.pointerX,
-                                                     pointerBottomY,
-                                                     context.timeSeconds,
-                                                     context.screenWidth,
-                                                     context.screenHeight);
+    context.humanoidRenderer->renderInventoryPreview(
+        *context.commandList, previewX, previewY, previewWidth, previewHeight, context.pixelScale(), context.pointerX,
+        pointerBottomY, context.timeSeconds, context.screenWidth, context.screenHeight);
 }
 
-void InventoryPanelControl::renderDraggedItem(const UIRenderContext& context) const
-{
+void InventoryPanelControl::renderDraggedItem(const UIRenderContext& context) const {
     if (!context.hasDraggedItem || context.draggedItemId <= 0 || !m_resourceMgr) {
         return;
     }
@@ -400,13 +338,11 @@ void InventoryPanelControl::renderDraggedItem(const UIRenderContext& context) co
     }
 
     drawTexturedQuad(context, texture, x0, y0, x1 - x0, y1 - y0,
-                     glm::vec4(uv.first.x, uv.first.y, uv.second.x, uv.second.y),
-                     glm::vec4(1.0f, 1.0f, 1.0f, 0.95f));
+                     glm::vec4(uv.first.x, uv.first.y, uv.second.x, uv.second.y), glm::vec4(1.0f, 1.0f, 1.0f, 0.95f));
 }
 
 InventoryPanelControl::ResolvedPanelRect InventoryPanelControl::resolvePanelRect(const int screenWidth,
-                                                                                 const int screenHeight) const
-{
+                                                                                 const int screenHeight) const {
     const int safeWidth = std::max(1, screenWidth);
     const int safeHeight = std::max(1, screenHeight);
     const float preferredScale = std::max(0.1f, m_layout.panelScale);
@@ -422,6 +358,7 @@ InventoryPanelControl::ResolvedPanelRect InventoryPanelControl::resolvePanelRect
     rect.width = InventoryPanelLayout::kTextureWidth * scale;
     rect.height = InventoryPanelLayout::kTextureHeight * scale;
     rect.x = static_cast<float>(safeWidth) * m_layout.anchorX - rect.width * m_layout.pivotX + m_layout.offsetX * scale;
-    rect.y = static_cast<float>(safeHeight) * m_layout.anchorY - rect.height * m_layout.pivotY + m_layout.offsetY * scale;
+    rect.y =
+        static_cast<float>(safeHeight) * m_layout.anchorY - rect.height * m_layout.pivotY + m_layout.offsetY * scale;
     return rect;
 }

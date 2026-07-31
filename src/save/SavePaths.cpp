@@ -5,8 +5,7 @@
 
 namespace save {
 
-SavePaths::SavePaths(std::filesystem::path saveRoot)
-    : m_root(std::move(saveRoot)) {}
+SavePaths::SavePaths(std::filesystem::path saveRoot) : m_root(std::move(saveRoot)) {}
 
 std::filesystem::path SavePaths::chunksDir() const {
     return m_root / "chunks";

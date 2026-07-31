@@ -32,12 +32,10 @@ const ContainerBehaviorDef* storageBehaviorForBlock(const BlockID blockId) {
     }
     return &behavior;
 }
-}
+} // namespace
 
-bool handleBlockEntityInventoryBreak(ecs::GameplayRegistry& registry,
-                                     const BlockID brokenBlock,
-                                     const glm::ivec3& blockPos,
-                                     const bool dropContents) {
+bool handleBlockEntityInventoryBreak(ecs::GameplayRegistry& registry, const BlockID brokenBlock,
+                                     const glm::ivec3& blockPos, const bool dropContents) {
     const ContainerBehaviorDef* behavior = storageBehaviorForBlock(brokenBlock);
     if (behavior == nullptr) {
         return false;
@@ -62,8 +60,7 @@ bool handleBlockEntityInventoryBreak(ecs::GameplayRegistry& registry,
     return true;
 }
 
-bool ensureBlockEntityInventoryForPlacedBlock(ecs::GameplayRegistry& registry,
-                                              const BlockID placedBlock,
+bool ensureBlockEntityInventoryForPlacedBlock(ecs::GameplayRegistry& registry, const BlockID placedBlock,
                                               const glm::ivec3& blockPos) {
     const ContainerBehaviorDef* behavior = storageBehaviorForBlock(placedBlock);
     if (behavior == nullptr) {
@@ -71,8 +68,8 @@ bool ensureBlockEntityInventoryForPlacedBlock(ecs::GameplayRegistry& registry,
     }
 
     BlockEntityInventoryStore& store = registry.ctxHas<BlockEntityInventoryStore>()
-        ? registry.ctxGet<BlockEntityInventoryStore>()
-        : registry.ctxSet<BlockEntityInventoryStore>();
+                                           ? registry.ctxGet<BlockEntityInventoryStore>()
+                                           : registry.ctxSet<BlockEntityInventoryStore>();
     static_cast<void>(store.getOrCreate(blockPos, behavior->id, behavior->storage.slots));
     return true;
 }

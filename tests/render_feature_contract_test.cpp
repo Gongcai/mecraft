@@ -34,8 +34,7 @@ RhiCapabilities completeCapabilities() {
 }
 
 constexpr uint64_t completeFeatureMask() {
-    return (uint64_t{1u} << static_cast<uint8_t>(
-                renderer::contracts::RenderFeature::Count)) - 1u;
+    return (uint64_t{1u} << static_cast<uint8_t>(renderer::contracts::RenderFeature::Count)) - 1u;
 }
 } // namespace
 
@@ -57,73 +56,46 @@ int main() {
 
     RhiCapabilities sevenAttachmentCapabilities = capabilities;
     sevenAttachmentCapabilities.maxColorAttachments = 7u;
-    const RenderFeatureStatus sevenAttachmentDeferredPbr = evaluateRenderFeature(
-        RenderProfile::OpenGlBase,
-        RhiBackend::OpenGL,
-        sevenAttachmentCapabilities,
-        completeBuild,
-        completeFeatureMask(),
-        RenderFeature::DeferredPbr);
-    const RenderFeatureStatus eightAttachmentDeferredPbr = evaluateRenderFeature(
-        RenderProfile::OpenGlBase,
-        RhiBackend::OpenGL,
-        capabilities,
-        completeBuild,
-        completeFeatureMask(),
-        RenderFeature::DeferredPbr);
-    if (!requireTrue(
-            sevenAttachmentDeferredPbr.code ==
-                RenderFeatureStatusCode::DeviceCapabilityMissing,
-            "deferred PBR must reject devices limited to seven color attachments") ||
+    const RenderFeatureStatus sevenAttachmentDeferredPbr =
+        evaluateRenderFeature(RenderProfile::OpenGlBase, RhiBackend::OpenGL, sevenAttachmentCapabilities, completeBuild,
+                              completeFeatureMask(), RenderFeature::DeferredPbr);
+    const RenderFeatureStatus eightAttachmentDeferredPbr =
+        evaluateRenderFeature(RenderProfile::OpenGlBase, RhiBackend::OpenGL, capabilities, completeBuild,
+                              completeFeatureMask(), RenderFeature::DeferredPbr);
+    if (!requireTrue(sevenAttachmentDeferredPbr.code == RenderFeatureStatusCode::DeviceCapabilityMissing,
+                     "deferred PBR must reject devices limited to seven color attachments") ||
         !requireTrue(eightAttachmentDeferredPbr.available(),
                      "deferred PBR must accept exactly eight color attachments")) {
         return 1;
     }
 
-    const RenderProfileStatus openGlBase = evaluateRenderProfile(
-        RenderProfile::OpenGlBase,
-        RhiBackend::OpenGL,
-        capabilities,
-        completeBuild,
-        currentImplementedRenderFeatureMask());
-    if (!requireTrue(openGlBase.available(),
-                     "OpenGL base must be available when its required capabilities exist")) {
+    const RenderProfileStatus openGlBase =
+        evaluateRenderProfile(RenderProfile::OpenGlBase, RhiBackend::OpenGL, capabilities, completeBuild,
+                              currentImplementedRenderFeatureMask());
+    if (!requireTrue(openGlBase.available(), "OpenGL base must be available when its required capabilities exist")) {
         return 1;
     }
 
-    const RenderFeatureStatus openGlRtgi = evaluateRenderFeature(
-        RenderProfile::OpenGlBase,
-        RhiBackend::OpenGL,
-        capabilities,
-        completeBuild,
-        completeFeatureMask(),
-        RenderFeature::RayTracedGlobalIllumination);
+    const RenderFeatureStatus openGlRtgi =
+        evaluateRenderFeature(RenderProfile::OpenGlBase, RhiBackend::OpenGL, capabilities, completeBuild,
+                              completeFeatureMask(), RenderFeature::RayTracedGlobalIllumination);
     if (!requireTrue(openGlRtgi.code == RenderFeatureStatusCode::BackendFeatureUnavailable,
                      "OpenGL must reject RTGI at the backend contract boundary") ||
-        !requireTrue(std::string_view(renderFeatureStatusCodeStableId(openGlRtgi.code)) ==
-                         "BackendFeatureUnavailable",
+        !requireTrue(std::string_view(renderFeatureStatusCodeStableId(openGlRtgi.code)) == "BackendFeatureUnavailable",
                      "backend rejection must expose the stable error code")) {
         return 1;
     }
 
     const RenderProfileStatus mismatchedProfile = evaluateRenderProfile(
-        RenderProfile::VulkanModern,
-        RhiBackend::OpenGL,
-        capabilities,
-        completeBuild,
-        completeFeatureMask());
-    if (!requireTrue(
-            mismatchedProfile.code == RenderFeatureStatusCode::BackendFeatureUnavailable,
-            "a renderer profile must reject a mismatched active backend")) {
+        RenderProfile::VulkanModern, RhiBackend::OpenGL, capabilities, completeBuild, completeFeatureMask());
+    if (!requireTrue(mismatchedProfile.code == RenderFeatureStatusCode::BackendFeatureUnavailable,
+                     "a renderer profile must reject a mismatched active backend")) {
         return 1;
     }
 
-    const RenderProfileStatus currentVulkan = evaluateRenderProfile(
-        RenderProfile::VulkanModern,
-        RhiBackend::Vulkan,
-        capabilities,
-        completeBuild,
-        currentImplementedRenderFeatureMask());
+    const RenderProfileStatus currentVulkan =
+        evaluateRenderProfile(RenderProfile::VulkanModern, RhiBackend::Vulkan, capabilities, completeBuild,
+                              currentImplementedRenderFeatureMask());
     if (!requireTrue(currentVulkan.code == RenderFeatureStatusCode::ImplementationPending,
                      "the current Vulkan modern profile must report unfinished integration") ||
         !requireTrue(currentVulkan.blockingFeature == RenderFeature::ReflectionProbeGrid,
@@ -132,13 +104,9 @@ int main() {
     }
 
     RenderBuildCapabilities missingNrdBuild;
-    const RenderFeatureStatus missingNrd = evaluateRenderFeature(
-        RenderProfile::VulkanModern,
-        RhiBackend::Vulkan,
-        capabilities,
-        missingNrdBuild,
-        completeFeatureMask(),
-        RenderFeature::NrdDenoiser);
+    const RenderFeatureStatus missingNrd =
+        evaluateRenderFeature(RenderProfile::VulkanModern, RhiBackend::Vulkan, capabilities, missingNrdBuild,
+                              completeFeatureMask(), RenderFeature::NrdDenoiser);
     if (!requireTrue(missingNrd.code == RenderFeatureStatusCode::BuildFeatureUnavailable,
                      "NRD must report a missing build component separately")) {
         return 1;
@@ -146,44 +114,29 @@ int main() {
 
     RhiCapabilities missingRayQuery = capabilities;
     missingRayQuery.rayQuery = false;
-    const RenderFeatureStatus missingRtCapability = evaluateRenderFeature(
-        RenderProfile::VulkanModern,
-        RhiBackend::Vulkan,
-        missingRayQuery,
-        completeBuild,
-        completeFeatureMask(),
-        RenderFeature::RayTracedGlobalIllumination);
-    if (!requireTrue(
-            missingRtCapability.code == RenderFeatureStatusCode::RayTracingCapabilityMissing,
-            "RTGI must report a missing device capability separately")) {
+    const RenderFeatureStatus missingRtCapability =
+        evaluateRenderFeature(RenderProfile::VulkanModern, RhiBackend::Vulkan, missingRayQuery, completeBuild,
+                              completeFeatureMask(), RenderFeature::RayTracedGlobalIllumination);
+    if (!requireTrue(missingRtCapability.code == RenderFeatureStatusCode::RayTracingCapabilityMissing,
+                     "RTGI must report a missing device capability separately")) {
         return 1;
     }
 
     RhiCapabilities incompleteBindless = capabilities;
     incompleteBindless.runtimeDescriptorArray = false;
-    const RenderFeatureStatus missingBindlessCapability = evaluateRenderFeature(
-        RenderProfile::VulkanModern,
-        RhiBackend::Vulkan,
-        incompleteBindless,
-        completeBuild,
-        completeFeatureMask(),
-        RenderFeature::BindlessGpuScene);
-    if (!requireTrue(
-            missingBindlessCapability.code ==
-                RenderFeatureStatusCode::BindlessDescriptorCapabilityMissing,
-            "bindless GPU scene must validate descriptor indexing subfeatures")) {
+    const RenderFeatureStatus missingBindlessCapability =
+        evaluateRenderFeature(RenderProfile::VulkanModern, RhiBackend::Vulkan, incompleteBindless, completeBuild,
+                              completeFeatureMask(), RenderFeature::BindlessGpuScene);
+    if (!requireTrue(missingBindlessCapability.code == RenderFeatureStatusCode::BindlessDescriptorCapabilityMissing,
+                     "bindless GPU scene must validate descriptor indexing subfeatures")) {
         return 1;
     }
 
     RhiCapabilities missingTiming = capabilities;
     missingTiming.timestampQuery = false;
-    const RenderFeatureStatus missingGpuTiming = evaluateRenderFeature(
-        RenderProfile::VulkanModern,
-        RhiBackend::Vulkan,
-        missingTiming,
-        completeBuild,
-        completeFeatureMask(),
-        RenderFeature::GpuDynamicResolution);
+    const RenderFeatureStatus missingGpuTiming =
+        evaluateRenderFeature(RenderProfile::VulkanModern, RhiBackend::Vulkan, missingTiming, completeBuild,
+                              completeFeatureMask(), RenderFeature::GpuDynamicResolution);
     if (!requireTrue(missingGpuTiming.code == RenderFeatureStatusCode::GpuTimingUnavailable,
                      "dynamic resolution must expose the stable GPU timing error")) {
         return 1;
@@ -191,27 +144,17 @@ int main() {
 
     RhiCapabilities missingHdr = capabilities;
     missingHdr.hdr10Swapchain = false;
-    const RenderFeatureStatus missingHdrDisplay = evaluateRenderFeature(
-        RenderProfile::VulkanModern,
-        RhiBackend::Vulkan,
-        missingHdr,
-        completeBuild,
-        completeFeatureMask(),
-        RenderFeature::HdrSwapchain);
-    if (!requireTrue(
-            missingHdrDisplay.code == RenderFeatureStatusCode::HdrDisplayModeUnavailable,
-            "HDR must expose the stable display-mode error")) {
+    const RenderFeatureStatus missingHdrDisplay =
+        evaluateRenderFeature(RenderProfile::VulkanModern, RhiBackend::Vulkan, missingHdr, completeBuild,
+                              completeFeatureMask(), RenderFeature::HdrSwapchain);
+    if (!requireTrue(missingHdrDisplay.code == RenderFeatureStatusCode::HdrDisplayModeUnavailable,
+                     "HDR must expose the stable display-mode error")) {
         return 1;
     }
 
     const RenderProfileStatus completeVulkan = evaluateRenderProfile(
-        RenderProfile::VulkanModern,
-        RhiBackend::Vulkan,
-        capabilities,
-        completeBuild,
-        completeFeatureMask());
-    if (!requireTrue(completeVulkan.available(),
-                     "Vulkan modern must be available when every contract is satisfied")) {
+        RenderProfile::VulkanModern, RhiBackend::Vulkan, capabilities, completeBuild, completeFeatureMask());
+    if (!requireTrue(completeVulkan.available(), "Vulkan modern must be available when every contract is satisfied")) {
         return 1;
     }
 

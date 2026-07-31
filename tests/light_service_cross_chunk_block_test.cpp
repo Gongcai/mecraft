@@ -29,10 +29,7 @@ void tickWorld(World& world, const glm::vec3& playerPos, const int frames) {
     }
 }
 
-bool waitUntil(World& world,
-               const glm::vec3& playerPos,
-               const int maxFrames,
-               const std::function<bool()>& predicate) {
+bool waitUntil(World& world, const glm::vec3& playerPos, const int maxFrames, const std::function<bool()>& predicate) {
     for (int i = 0; i < maxFrames; ++i) {
         world.update(playerPos);
         if (predicate()) {

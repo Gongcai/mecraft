@@ -8,10 +8,10 @@
 
 /// Chunk ticket types with different priorities and radii.
 enum class ChunkTicketType : uint8_t {
-    Spawn,           // World spawn area — always loaded
+    Spawn, // World spawn area — always loaded
     PlayerSimulation, // Player position — ticking radius
-    PlayerView,       // Player view distance — loaded, sent to client
-    Forced,           // Command/debug — always loaded
+    PlayerView, // Player view distance — loaded, sent to client
+    Forced, // Command/debug — always loaded
 };
 
 /// Manages chunk loading tickets with multiple radii and unload hysteresis.
@@ -49,15 +49,13 @@ public:
     /// @param maxCount Maximum number of chunks to return.
     /// @param alreadyLoaded Set of already loaded chunk keys (to skip).
     /// @return Vector of chunk coordinates to load.
-    [[nodiscard]] std::vector<glm::ivec2> getChunksToLoad(
-        int maxCount,
-        const std::unordered_set<int64_t>& alreadyLoaded) const;
+    [[nodiscard]] std::vector<glm::ivec2> getChunksToLoad(int maxCount,
+                                                          const std::unordered_set<int64_t>& alreadyLoaded) const;
 
     /// Get chunk keys that should be unloaded (outside unload radius).
     /// @param loadedChunks Currently loaded chunk keys.
     /// @return Vector of chunk keys to unload.
-    [[nodiscard]] std::vector<int64_t> getChunksToUnload(
-        const std::unordered_set<int64_t>& loadedChunks) const;
+    [[nodiscard]] std::vector<int64_t> getChunksToUnload(const std::unordered_set<int64_t>& loadedChunks) const;
 
     /// Get the current simulation center.
     [[nodiscard]] glm::ivec2 simulationCenter() const { return m_playerChunk; }
@@ -69,7 +67,7 @@ public:
     [[nodiscard]] int simulationRadius() const { return m_simulationRadius; }
     [[nodiscard]] int viewRadius() const { return m_viewRadius; }
     [[nodiscard]] int loadRadius() const { return m_viewRadius + 1; }
-    [[nodiscard]] int unloadRadius() const { return m_viewRadius + 3; }  // loadRadius + 2
+    [[nodiscard]] int unloadRadius() const { return m_viewRadius + 3; } // loadRadius + 2
 
     /// Compute chunk key from chunk coordinates.
     static int64_t chunkKey(int cx, int cz);

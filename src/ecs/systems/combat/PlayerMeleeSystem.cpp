@@ -10,12 +10,8 @@
 namespace ecs {
 namespace {
 
-bool intersectRayAabb(const glm::vec3& origin,
-                      const glm::vec3& direction,
-                      const glm::vec3& min,
-                      const glm::vec3& max,
-                      const float maxDistance,
-                      float& outDistance) {
+bool intersectRayAabb(const glm::vec3& origin, const glm::vec3& direction, const glm::vec3& min, const glm::vec3& max,
+                      const float maxDistance, float& outDistance) {
     float tMin = 0.0f;
     float tMax = maxDistance;
 
@@ -50,10 +46,7 @@ bool intersectRayAabb(const glm::vec3& origin,
     return outDistance >= 0.0f && outDistance <= maxDistance;
 }
 
-void mobBounds(entt::registry& registry,
-               const entt::entity mob,
-               const TransformComponent& transform,
-               glm::vec3& outMin,
+void mobBounds(entt::registry& registry, const entt::entity mob, const TransformComponent& transform, glm::vec3& outMin,
                glm::vec3& outMax) {
     glm::vec3 halfExtents(0.3f, 0.9f, 0.3f);
     glm::vec3 colliderOffset(0.0f, 0.9f, 0.0f);
@@ -75,12 +68,8 @@ void PlayerMeleeSystem::update(SystemContext& ctx) {
     auto& reg = registry.registry();
     const float dt = ctx.dt;
 
-    auto playerView = reg.view<LocalPlayerTag,
-                               TransformComponent,
-                               CameraStateComponent,
-                               BlockActionIntentComponent,
-                               BlockTargetComponent,
-                               MeleeAttackComponent>();
+    auto playerView = reg.view<LocalPlayerTag, TransformComponent, CameraStateComponent, BlockActionIntentComponent,
+                               BlockTargetComponent, MeleeAttackComponent>();
 
     for (const entt::entity player : playerView) {
         const auto& transform = playerView.get<TransformComponent>(player);

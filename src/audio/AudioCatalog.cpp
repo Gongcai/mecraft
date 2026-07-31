@@ -24,9 +24,7 @@ fs::path appendExtension(fs::path path, const std::string& extension) {
     return path;
 }
 
-bool resolveVariantPath(const fs::path& rootDirectory,
-                        const fs::path& relativePath,
-                        fs::path& outPath,
+bool resolveVariantPath(const fs::path& rootDirectory, const fs::path& relativePath, fs::path& outPath,
                         std::string& error) {
     const auto& registry = AudioDecoderRegistry::instance();
     if (relativePath.empty()) {
@@ -61,10 +59,7 @@ bool resolveVariantPath(const fs::path& rootDirectory,
     return true;
 }
 
-bool parseVariant(const json& node,
-                  const fs::path& rootDirectory,
-                  SoundVariant& out,
-                  std::string& error) {
+bool parseVariant(const json& node, const fs::path& rootDirectory, SoundVariant& out, std::string& error) {
     fs::path relativePath;
     float weight = 1.0f;
 
@@ -118,9 +113,7 @@ bool parseVariant(const json& node,
     return true;
 }
 
-bool appendVariantList(const json& node,
-                       const fs::path& rootDirectory,
-                       std::vector<SoundVariant>& variants,
+bool appendVariantList(const json& node, const fs::path& rootDirectory, std::vector<SoundVariant>& variants,
                        std::string& error) {
     if (node.is_array()) {
         for (const json& variantNode : node) {
@@ -141,13 +134,8 @@ bool appendVariantList(const json& node,
     return true;
 }
 
-bool parseEntry(const std::string& soundId,
-                const json& node,
-                const fs::path& rootDirectory,
-                const std::string& defaultGroup,
-                bool defaultPreload,
-                SoundEntry& out,
-                std::string& error) {
+bool parseEntry(const std::string& soundId, const json& node, const fs::path& rootDirectory,
+                const std::string& defaultGroup, bool defaultPreload, SoundEntry& out, std::string& error) {
     out = SoundEntry{};
     out.id = soundId;
     out.group = defaultGroup;
@@ -192,11 +180,8 @@ bool parseEntry(const std::string& soundId,
 
 } // namespace
 
-bool AudioCatalog::loadFromFile(const fs::path& manifestPath,
-                                const fs::path& rootDirectory,
-                                const std::string& defaultGroup,
-                                const bool defaultPreload,
-                                std::string& error) {
+bool AudioCatalog::loadFromFile(const fs::path& manifestPath, const fs::path& rootDirectory,
+                                const std::string& defaultGroup, const bool defaultPreload, std::string& error) {
     std::ifstream file(manifestPath);
     if (!file.is_open()) {
         error = "failed to open audio catalog: " + pathToUtf8(manifestPath);

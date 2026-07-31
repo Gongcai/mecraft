@@ -23,9 +23,7 @@ public:
     void buildBlockIconAtlas(int iconSize, const BlockTextureLibrary& blockTextures);
     [[nodiscard]] const TextureAtlas& blockIconAtlas() const;
 
-    void buildItemTextureAtlas(const std::string& directory,
-                               int tileSize,
-                               const BlockTextureCatalog& catalog);
+    void buildItemTextureAtlas(const std::string& directory, int tileSize, const BlockTextureCatalog& catalog);
     [[nodiscard]] const TextureAtlas& itemTextureAtlas() const;
     [[nodiscard]] int itemTextureIndex(const std::string& textureName) const;
     [[nodiscard]] const std::vector<unsigned char>& itemTexturePixels() const;

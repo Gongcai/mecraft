@@ -48,24 +48,13 @@ private:
     [[nodiscard]] int mapContainerGridIndex(int gridIndex) const;
     [[nodiscard]] int mapPlayerGridIndex(int gridIndex) const;
     void syncSlots();
-    void appendSlotsForGroup(const ui::ContainerSlotGroupDef& group,
-                             const ResolvedPanelRect& panelRect,
-                             bool containerGroup,
-                             std::vector<Pickable::SlotInfo>& outSlots,
+    void appendSlotsForGroup(const ui::ContainerSlotGroupDef& group, const ResolvedPanelRect& panelRect,
+                             bool containerGroup, std::vector<Pickable::SlotInfo>& outSlots,
                              std::vector<int>* outSlotMapping) const;
     void renderBackground(const UIRenderContext& context) const;
     void renderProgressBars(const UIRenderContext& context) const;
-    void drawTextureQuad(const UIRenderContext& context,
-                         RhiTextureHandle texture,
-                         float x0,
-                         float y0,
-                         float x1,
-                         float y1,
-                         float u0,
-                         float v0,
-                         float u1,
-                         float v1,
-                         float opacity) const;
+    void drawTextureQuad(const UIRenderContext& context, RhiTextureHandle texture, float x0, float y0, float x1,
+                         float y1, float u0, float v0, float u1, float v1, float opacity) const;
     void renderDraggedItem(const UIRenderContext& context) const;
     void renderTooltip(const UIRenderContext& context) const;
 

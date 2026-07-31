@@ -8,7 +8,8 @@ WeatherSystem::WeatherSystem() = default;
 // Exponential decay interpolation: moves current toward target.
 // halflife is the time for half the remaining distance to be closed.
 static float expDecay(float current, float target, float dt, float halflife) {
-    if (halflife <= 0.0f) return target;
+    if (halflife <= 0.0f)
+        return target;
     float lambda = 0.69314718f / halflife; // ln(2) / halflife
     return target + (current - target) * std::exp(-lambda * dt);
 }
@@ -23,14 +24,16 @@ void WeatherSystem::update(float dt) {
     m_state.aerialReduction = expDecay(m_state.aerialReduction, m_targetAerialReduction, dt, 30.0f);
 
     // Snap to target when very close to avoid perpetual drift.
-    if (std::abs(m_state.wetness - m_targetWetness) < 0.001f) m_state.wetness = m_targetWetness;
-    if (std::abs(m_state.storm - m_targetStorm) < 0.001f) m_state.storm = m_targetStorm;
-    if (std::abs(m_state.aerialReduction - m_targetAerialReduction) < 0.001f) m_state.aerialReduction = m_targetAerialReduction;
+    if (std::abs(m_state.wetness - m_targetWetness) < 0.001f)
+        m_state.wetness = m_targetWetness;
+    if (std::abs(m_state.storm - m_targetStorm) < 0.001f)
+        m_state.storm = m_targetStorm;
+    if (std::abs(m_state.aerialReduction - m_targetAerialReduction) < 0.001f)
+        m_state.aerialReduction = m_targetAerialReduction;
 
-    const bool reachedTarget =
-        std::abs(m_state.wetness - m_targetWetness) < 0.001f &&
-        std::abs(m_state.storm - m_targetStorm) < 0.001f &&
-        std::abs(m_state.aerialReduction - m_targetAerialReduction) < 0.001f;
+    const bool reachedTarget = std::abs(m_state.wetness - m_targetWetness) < 0.001f &&
+                               std::abs(m_state.storm - m_targetStorm) < 0.001f &&
+                               std::abs(m_state.aerialReduction - m_targetAerialReduction) < 0.001f;
     if (reachedTarget) {
         m_state.type = m_targetType;
     }
@@ -58,9 +61,8 @@ void WeatherSystem::computeDerived() {
     m_derived.thunderStrength = isSnow ? 0.0f : std::clamp(s * 1.2f - 0.15f, 0.0f, 1.0f);
     // surfaceWetness: drives albedo darkening, roughness reduction, specular boost
     // Snow still wets surfaces (melt), but less aggressively than rain.
-    m_derived.surfaceWetness = isSnow
-        ? std::clamp((w + s * 0.3f) * 0.5f, 0.0f, 1.0f)
-        : std::clamp(w + s * 0.3f, 0.0f, 1.0f);
+    m_derived.surfaceWetness =
+        isSnow ? std::clamp((w + s * 0.3f) * 0.5f, 0.0f, 1.0f) : std::clamp(w + s * 0.3f, 0.0f, 1.0f);
     // skyWetness: DerivativeMain rain/overcast occlusion for sky, post, and direct cloud shadow.
     m_derived.skyWetness = std::clamp(w + s, 0.0f, 1.0f);
     // fogWetness: historical Mecraft haze weighting used by aerial and volumetric fog.
@@ -86,7 +88,8 @@ void WeatherSystem::updateLightning(float dt) {
     }
 
     m_lightningCooldown -= dt;
-    if (m_lightningCooldown > 0.0f) return;
+    if (m_lightningCooldown > 0.0f)
+        return;
 
     // Random chance to trigger a flash, scaled by storm intensity.
     static thread_local std::mt19937 rng{42};
@@ -107,26 +110,26 @@ WeatherState WeatherSystem::stateForPreset(WeatherType type) {
     WeatherState state;
     state.type = type;
     switch (type) {
-        case WeatherType::Clear:
-            state.wetness = 0.0f;
-            state.storm = 0.0f;
-            state.aerialReduction = 0.55f;
-            break;
-        case WeatherType::Rain:
-            state.wetness = 0.75f;
-            state.storm = 0.0f;
-            state.aerialReduction = 0.25f;
-            break;
-        case WeatherType::Storm:
-            state.wetness = 0.95f;
-            state.storm = 0.80f;
-            state.aerialReduction = 0.15f;
-            break;
-        case WeatherType::Snow:
-            state.wetness = 0.75f;
-            state.storm = 0.0f;
-            state.aerialReduction = 0.25f;
-            break;
+    case WeatherType::Clear:
+        state.wetness = 0.0f;
+        state.storm = 0.0f;
+        state.aerialReduction = 0.55f;
+        break;
+    case WeatherType::Rain:
+        state.wetness = 0.75f;
+        state.storm = 0.0f;
+        state.aerialReduction = 0.25f;
+        break;
+    case WeatherType::Storm:
+        state.wetness = 0.95f;
+        state.storm = 0.80f;
+        state.aerialReduction = 0.15f;
+        break;
+    case WeatherType::Snow:
+        state.wetness = 0.75f;
+        state.storm = 0.0f;
+        state.aerialReduction = 0.25f;
+        break;
     }
     return state;
 }

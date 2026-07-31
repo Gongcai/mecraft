@@ -14,8 +14,7 @@
 class SmeltingProcessorRuntime {
 public:
     [[nodiscard]] static SmeltingProcessorRuntime create(const ui::ContainerUiDef& uiDef,
-                                                         const ContainerBehaviorDef& behavior,
-                                                         int storageSlotCount) {
+                                                         const ContainerBehaviorDef& behavior, int storageSlotCount) {
         if (behavior.handler != "smelting") {
             fail(behavior.id + " requires smelting handler");
         }
@@ -57,9 +56,7 @@ public:
         return runtime;
     }
 
-    [[nodiscard]] const MachineSmeltingProcessor& processor() const {
-        return m_processor;
-    }
+    [[nodiscard]] const MachineSmeltingProcessor& processor() const { return m_processor; }
 
     [[nodiscard]] bool acceptsItem(const int slot, const ItemID itemId, const SmeltingSystem& smelting) const {
         if (slot < 0 || slot >= m_storageSlotCount || itemId == 0) {
@@ -101,10 +98,8 @@ private:
         return false;
     }
 
-    static void validateConfiguredSlot(const ui::ContainerUiDef& uiDef,
-                                       const int storageSlotCount,
-                                       const int slot,
-        const char* slotName) {
+    static void validateConfiguredSlot(const ui::ContainerUiDef& uiDef, const int storageSlotCount, const int slot,
+                                       const char* slotName) {
         if (slot < 0 || slot >= storageSlotCount) {
             fail(uiDef.id + " smelting processor has invalid " + std::string(slotName) + " slot");
         }
@@ -122,9 +117,7 @@ private:
         return nullptr;
     }
 
-    void requireSlotRule(const int slot,
-                         const std::string& accepts,
-                         const bool outputOnly,
+    void requireSlotRule(const int slot, const std::string& accepts, const bool outputOnly,
                          const std::string& behaviorId) const {
         const ContainerSlotRuleDef* rule = slotRuleFor(slot);
         if (rule == nullptr) {

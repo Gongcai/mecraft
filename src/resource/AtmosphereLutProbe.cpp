@@ -8,9 +8,7 @@
 
 namespace resource {
 
-bool probeAtmosphereLut(const std::string& name,
-                        const std::string& path,
-                        const size_t expectedBytes) {
+bool probeAtmosphereLut(const std::string& name, const std::string& path, const size_t expectedBytes) {
     namespace fs = std::filesystem;
     std::error_code ec;
     const fs::path lutPath(path);

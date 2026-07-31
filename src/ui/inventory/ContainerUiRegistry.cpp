@@ -26,10 +26,8 @@ bool fail(std::string& error, std::string message) {
     return false;
 }
 
-const nlohmann::json* findRequiredField(const nlohmann::json& owner,
-                                        const std::string& ownerName,
-                                        const char* fieldName,
-                                        std::string& error) {
+const nlohmann::json* findRequiredField(const nlohmann::json& owner, const std::string& ownerName,
+                                        const char* fieldName, std::string& error) {
     const auto it = owner.find(fieldName);
     if (it == owner.end()) {
         fail(error, ownerName + " is missing required field: " + fieldName);
@@ -38,10 +36,7 @@ const nlohmann::json* findRequiredField(const nlohmann::json& owner,
     return &(*it);
 }
 
-bool readString(const nlohmann::json& owner,
-                const std::string& ownerName,
-                const char* fieldName,
-                std::string& out,
+bool readString(const nlohmann::json& owner, const std::string& ownerName, const char* fieldName, std::string& out,
                 std::string& error) {
     const nlohmann::json* value = findRequiredField(owner, ownerName, fieldName, error);
     if (value == nullptr) {
@@ -58,10 +53,7 @@ bool readString(const nlohmann::json& owner,
     return true;
 }
 
-bool readNumber(const nlohmann::json& owner,
-                const std::string& ownerName,
-                const char* fieldName,
-                float& out,
+bool readNumber(const nlohmann::json& owner, const std::string& ownerName, const char* fieldName, float& out,
                 std::string& error) {
     const nlohmann::json* value = findRequiredField(owner, ownerName, fieldName, error);
     if (value == nullptr) {
@@ -74,10 +66,7 @@ bool readNumber(const nlohmann::json& owner,
     return true;
 }
 
-bool readFiniteNumber(const nlohmann::json& owner,
-                      const std::string& ownerName,
-                      const char* fieldName,
-                      float& out,
+bool readFiniteNumber(const nlohmann::json& owner, const std::string& ownerName, const char* fieldName, float& out,
                       std::string& error) {
     if (!readNumber(owner, ownerName, fieldName, out, error)) {
         return false;
@@ -88,10 +77,7 @@ bool readFiniteNumber(const nlohmann::json& owner,
     return true;
 }
 
-bool readNormalizedNumber(const nlohmann::json& owner,
-                          const std::string& ownerName,
-                          const char* fieldName,
-                          float& out,
+bool readNormalizedNumber(const nlohmann::json& owner, const std::string& ownerName, const char* fieldName, float& out,
                           std::string& error) {
     if (!readFiniteNumber(owner, ownerName, fieldName, out, error)) {
         return false;
@@ -102,10 +88,7 @@ bool readNormalizedNumber(const nlohmann::json& owner,
     return true;
 }
 
-bool readInteger(const nlohmann::json& owner,
-                 const std::string& ownerName,
-                 const char* fieldName,
-                 int& out,
+bool readInteger(const nlohmann::json& owner, const std::string& ownerName, const char* fieldName, int& out,
                  std::string& error) {
     const nlohmann::json* value = findRequiredField(owner, ownerName, fieldName, error);
     if (value == nullptr) {
@@ -122,10 +105,7 @@ bool readInteger(const nlohmann::json& owner,
     return true;
 }
 
-bool readPositiveInteger(const nlohmann::json& owner,
-                         const std::string& ownerName,
-                         const char* fieldName,
-                         int& out,
+bool readPositiveInteger(const nlohmann::json& owner, const std::string& ownerName, const char* fieldName, int& out,
                          std::string& error) {
     if (!readInteger(owner, ownerName, fieldName, out, error)) {
         return false;
@@ -136,10 +116,7 @@ bool readPositiveInteger(const nlohmann::json& owner,
     return true;
 }
 
-bool readNonNegativeInteger(const nlohmann::json& owner,
-                            const std::string& ownerName,
-                            const char* fieldName,
-                            int& out,
+bool readNonNegativeInteger(const nlohmann::json& owner, const std::string& ownerName, const char* fieldName, int& out,
                             std::string& error) {
     if (!readInteger(owner, ownerName, fieldName, out, error)) {
         return false;
@@ -150,10 +127,7 @@ bool readNonNegativeInteger(const nlohmann::json& owner,
     return true;
 }
 
-bool readBoolean(const nlohmann::json& owner,
-                 const std::string& ownerName,
-                 const char* fieldName,
-                 bool& out,
+bool readBoolean(const nlohmann::json& owner, const std::string& ownerName, const char* fieldName, bool& out,
                  std::string& error) {
     const nlohmann::json* value = findRequiredField(owner, ownerName, fieldName, error);
     if (value == nullptr) {
@@ -166,11 +140,8 @@ bool readBoolean(const nlohmann::json& owner,
     return true;
 }
 
-bool readNamespacedField(const nlohmann::json& owner,
-                         const std::string& ownerName,
-                         const char* fieldName,
-                         std::string& out,
-                         std::string& error) {
+bool readNamespacedField(const nlohmann::json& owner, const std::string& ownerName, const char* fieldName,
+                         std::string& out, std::string& error) {
     std::string raw;
     if (!readString(owner, ownerName, fieldName, raw, error)) {
         return false;
@@ -183,9 +154,7 @@ bool readNamespacedField(const nlohmann::json& owner,
     return true;
 }
 
-bool parseSlotGroupKind(const std::string& value,
-                        const std::string& ownerName,
-                        ContainerSlotGroupKind& out,
+bool parseSlotGroupKind(const std::string& value, const std::string& ownerName, ContainerSlotGroupKind& out,
                         std::string& error) {
     if (value == "container") {
         out = ContainerSlotGroupKind::Container;
@@ -206,9 +175,7 @@ bool parseSlotGroupKind(const std::string& value,
     return fail(error, ownerName + " has unknown slot group kind: " + value);
 }
 
-bool parseProgressKind(const std::string& value,
-                       const std::string& ownerName,
-                       ContainerProgressKind& out,
+bool parseProgressKind(const std::string& value, const std::string& ownerName, ContainerProgressKind& out,
                        std::string& error) {
     if (value == "burn") {
         out = ContainerProgressKind::Burn;
@@ -221,11 +188,8 @@ bool parseProgressKind(const std::string& value,
     return fail(error, ownerName + " has unknown progress kind: " + value);
 }
 
-bool parseSlotGroup(const nlohmann::json& slotJson,
-                    const std::string& containerId,
-                    const int index,
-                    ContainerSlotGroupDef& group,
-                    std::string& error) {
+bool parseSlotGroup(const nlohmann::json& slotJson, const std::string& containerId, const int index,
+                    ContainerSlotGroupDef& group, std::string& error) {
     if (!slotJson.is_object()) {
         return fail(error, containerId + ".slotGroups[" + std::to_string(index) + "] must be an object");
     }
@@ -250,11 +214,8 @@ bool parseSlotGroup(const nlohmann::json& slotJson,
            readNumber(slotJson, ownerName, "row4ExtraGap", group.row4ExtraGap, error);
 }
 
-bool parseProgress(const nlohmann::json& progressJson,
-                   const std::string& containerId,
-                   const int index,
-                   ContainerProgressDef& progress,
-                   std::string& error) {
+bool parseProgress(const nlohmann::json& progressJson, const std::string& containerId, const int index,
+                   ContainerProgressDef& progress, std::string& error) {
     if (!progressJson.is_object()) {
         return fail(error, containerId + ".progressBars[" + std::to_string(index) + "] must be an object");
     }
@@ -283,9 +244,7 @@ bool parseProgress(const nlohmann::json& progressJson,
     return true;
 }
 
-bool parseContainerUiDef(const nlohmann::json& root,
-                         const std::string& sourceName,
-                         ContainerUiDef& def,
+bool parseContainerUiDef(const nlohmann::json& root, const std::string& sourceName, ContainerUiDef& def,
                          std::string& error) {
     if (!root.is_object()) {
         return fail(error, "Container UI file must contain an object: " + sourceName);
@@ -365,8 +324,7 @@ bool parseContainerUiDef(const nlohmann::json& root,
     return true;
 }
 
-bool loadContainerUiFile(const std::filesystem::path& path,
-                         std::unordered_map<std::string, ContainerUiDef>& defs,
+bool loadContainerUiFile(const std::filesystem::path& path, std::unordered_map<std::string, ContainerUiDef>& defs,
                          std::string& error) {
     std::ifstream file(path);
     if (!file.is_open()) {
@@ -388,7 +346,7 @@ bool loadContainerUiFile(const std::filesystem::path& path,
     defs.emplace(def.id, std::move(def));
     return true;
 }
-}
+} // namespace
 
 bool ContainerUiRegistry::init() {
     if (s_initialized) {
@@ -397,9 +355,7 @@ bool ContainerUiRegistry::init() {
 
     const std::filesystem::path configDir(kContainerUiConfigDir);
     std::error_code fsError;
-    if (!std::filesystem::exists(configDir, fsError) ||
-        fsError ||
-        !std::filesystem::is_directory(configDir, fsError) ||
+    if (!std::filesystem::exists(configDir, fsError) || fsError || !std::filesystem::is_directory(configDir, fsError) ||
         fsError) {
         std::cerr << "Container UI config directory is missing: " << configDir.string() << '\n';
         return false;
@@ -408,15 +364,15 @@ bool ContainerUiRegistry::init() {
     std::unordered_map<std::string, ContainerUiDef> defs;
     std::filesystem::directory_iterator it(configDir, fsError);
     if (fsError) {
-        std::cerr << "Failed to enumerate container UI config directory: "
-                  << configDir.string() << ": " << fsError.message() << '\n';
+        std::cerr << "Failed to enumerate container UI config directory: " << configDir.string() << ": "
+                  << fsError.message() << '\n';
         return false;
     }
     const std::filesystem::directory_iterator end;
     for (; it != end; it.increment(fsError)) {
         if (fsError) {
-            std::cerr << "Failed to advance container UI config iterator: "
-                      << configDir.string() << ": " << fsError.message() << '\n';
+            std::cerr << "Failed to advance container UI config iterator: " << configDir.string() << ": "
+                      << fsError.message() << '\n';
             return false;
         }
         const std::filesystem::directory_entry& entry = *it;

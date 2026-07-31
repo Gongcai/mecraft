@@ -13,113 +13,73 @@
 namespace {
 
 [[nodiscard]] bool isRenderableAcquireStatus(const RhiFrameStatus status) {
-    return status == RhiFrameStatus::Success ||
-           status == RhiFrameStatus::Suboptimal;
+    return status == RhiFrameStatus::Success || status == RhiFrameStatus::Suboptimal;
 }
 
-[[nodiscard]] bool sameTextureHandle(const RhiTextureHandle lhs,
-                                     const RhiTextureHandle rhs) {
+[[nodiscard]] bool sameTextureHandle(const RhiTextureHandle lhs, const RhiTextureHandle rhs) {
     return lhs.index == rhs.index && lhs.generation == rhs.generation;
 }
 
-[[nodiscard]] bool sameTextureViewHandle(const RhiTextureViewHandle lhs,
-                                         const RhiTextureViewHandle rhs) {
+[[nodiscard]] bool sameTextureViewHandle(const RhiTextureViewHandle lhs, const RhiTextureViewHandle rhs) {
     return lhs.index == rhs.index && lhs.generation == rhs.generation;
 }
 
 class NativePresentationBackend final : public PresentationBackend {
 public:
-    explicit NativePresentationBackend(RhiDevice& rhiDevice)
-        : m_rhiDevice(rhiDevice) {
-    }
+    explicit NativePresentationBackend(RhiDevice& rhiDevice) : m_rhiDevice(rhiDevice) {}
 
-    [[nodiscard]] PresentationMode mode() const override {
-        return PresentationMode::Native;
-    }
+    [[nodiscard]] PresentationMode mode() const override { return PresentationMode::Native; }
 
     bool resize(const uint32_t width, const uint32_t height) override {
         return m_rhiDevice.resizeSwapchain(width, height);
     }
 
-    [[nodiscard]] RhiFrameAcquireResult acquireFrame() override {
-        return m_rhiDevice.acquireFrame();
-    }
+    [[nodiscard]] RhiFrameAcquireResult acquireFrame() override { return m_rhiDevice.acquireFrame(); }
 
-    PresentationBackendPresentResult presentFrame(
-        const RhiPresentInfo& info) override {
+    PresentationBackendPresentResult presentFrame(const RhiPresentInfo& info) override {
         const RhiFrameStatus status = m_rhiDevice.presentFrame(info);
-        const uint32_t displayedFrameCount = isRenderableAcquireStatus(status)
-            ? 1u
-            : 0u;
+        const uint32_t displayedFrameCount = isRenderableAcquireStatus(status) ? 1u : 0u;
         return {status, displayedFrameCount, 0u};
     }
 
-    bool cancelFrame(const RhiPresentInfo& info) override {
-        return m_rhiDevice.cancelFrame(info);
-    }
+    bool cancelFrame(const RhiPresentInfo& info) override { return m_rhiDevice.cancelFrame(info); }
 
-    [[nodiscard]] bool vsyncEnabled() const override {
-        return m_rhiDevice.vsyncEnabled();
-    }
+    [[nodiscard]] bool vsyncEnabled() const override { return m_rhiDevice.vsyncEnabled(); }
 
-    [[nodiscard]] bool supportsVsyncControl() const override {
-        return m_rhiDevice.capabilities().vsyncControl;
-    }
+    [[nodiscard]] bool supportsVsyncControl() const override { return m_rhiDevice.capabilities().vsyncControl; }
 
-    bool setVsyncEnabled(const bool enabled) override {
-        return m_rhiDevice.setVsyncEnabled(enabled);
-    }
+    bool setVsyncEnabled(const bool enabled) override { return m_rhiDevice.setVsyncEnabled(enabled); }
 
-    [[nodiscard]] bool supportsFrameGeneration() const override {
-        return false;
-    }
+    [[nodiscard]] bool supportsFrameGeneration() const override { return false; }
 
-    [[nodiscard]] bool frameGenerationEnabled() const override {
-        return false;
-    }
+    [[nodiscard]] bool frameGenerationEnabled() const override { return false; }
 
-    [[nodiscard]] bool frameGenerationActive() const override {
-        return false;
-    }
+    [[nodiscard]] bool frameGenerationActive() const override { return false; }
 
-    bool setFrameGenerationEnabled(const bool enabled) override {
-        return !enabled;
-    }
+    bool setFrameGenerationEnabled(const bool enabled) override { return !enabled; }
 
-    bool setRenderingGameFrames(const bool) override {
-        return true;
-    }
+    bool setRenderingGameFrames(const bool) override { return true; }
 
-    [[nodiscard]] bool requiresFrameGenerationInputs() const override {
-        return false;
-    }
+    [[nodiscard]] bool requiresFrameGenerationInputs() const override { return false; }
 
-    bool prepareFrameGeneration(
-        const PresentationFrameResources&,
-        const TemporalFrameInput&) override {
-        return true;
-    }
+    bool prepareFrameGeneration(const PresentationFrameResources&, const TemporalFrameInput&) override { return true; }
 
 private:
     RhiDevice& m_rhiDevice;
 };
 
 [[nodiscard]] bool isNonFatalPresentationStatus(const RhiFrameStatus status) {
-    return status == RhiFrameStatus::OutOfDate ||
-           status == RhiFrameStatus::Minimized ||
+    return status == RhiFrameStatus::OutOfDate || status == RhiFrameStatus::Minimized ||
            status == RhiFrameStatus::SurfaceLost;
 }
 
 } // namespace
 
-std::unique_ptr<PresentationBackend> createNativePresentationBackend(
-    RhiDevice& rhiDevice) {
+std::unique_ptr<PresentationBackend> createNativePresentationBackend(RhiDevice& rhiDevice) {
     return std::make_unique<NativePresentationBackend>(rhiDevice);
 }
 
-PresentationController::PresentationController(
-    PresentationBackend& backend)
-    : m_backend(backend) {
+PresentationController::PresentationController(PresentationBackend& backend) : m_backend(backend) {
     m_statistics.mode = m_backend.mode();
     m_statistics.vsyncEnabled = m_backend.vsyncEnabled();
 }
@@ -137,16 +97,14 @@ bool PresentationController::initUiComposition(RhiDevice& rhiDevice) {
         m_uiColorFormat = rhiDevice.swapchainColorFormat();
         m_uiDepthFormat = rhiDevice.swapchainDepthStencilFormat();
     }
-    if (m_uiColorFormat == RhiTextureFormat::Undefined ||
-        m_uiDepthFormat == RhiTextureFormat::Undefined) {
+    if (m_uiColorFormat == RhiTextureFormat::Undefined || m_uiDepthFormat == RhiTextureFormat::Undefined) {
         return false;
     }
     return createUiCompositionPipeline();
 }
 
 bool PresentationController::initWindowState(Window& window) {
-    if (window.getHandle() == nullptr ||
-        (m_window != nullptr && m_window != &window)) {
+    if (window.getHandle() == nullptr || (m_window != nullptr && m_window != &window)) {
         return false;
     }
     m_window = &window;
@@ -197,8 +155,7 @@ bool PresentationController::requestFrameGenerationEnabled(const bool enabled) {
     return true;
 }
 
-bool PresentationController::requestRenderingGameFrames(
-    const bool renderingGameFrames) {
+bool PresentationController::requestRenderingGameFrames(const bool renderingGameFrames) {
     m_renderingGameFrames = renderingGameFrames;
     if (!renderingGameFrames) {
         m_resumeFrameGeneration = false;
@@ -216,9 +173,7 @@ bool PresentationController::requestRenderingGameFrames(
 }
 
 bool PresentationController::vsyncEnabled() const {
-    return m_requestedVsyncEnabled.has_value()
-        ? *m_requestedVsyncEnabled
-        : m_backend.vsyncEnabled();
+    return m_requestedVsyncEnabled.has_value() ? *m_requestedVsyncEnabled : m_backend.vsyncEnabled();
 }
 
 bool PresentationController::vsyncControlAvailable() const {
@@ -241,9 +196,8 @@ bool PresentationController::frameGenerationAvailable() const {
 }
 
 bool PresentationController::frameGenerationEnabled() const {
-    return m_requestedFrameGenerationEnabled.has_value()
-        ? *m_requestedFrameGenerationEnabled
-        : m_backend.frameGenerationEnabled();
+    return m_requestedFrameGenerationEnabled.has_value() ? *m_requestedFrameGenerationEnabled
+                                                         : m_backend.frameGenerationEnabled();
 }
 
 bool PresentationController::frameGenerationSwapchainEnabled() const {
@@ -269,14 +223,11 @@ void PresentationController::shutdownUiComposition() {
     m_uiResourceGeneration = 0u;
 }
 
-std::optional<PresentationUiFrame> PresentationController::acquireUiFrame(
-    const PresentationFrame& frame) {
+std::optional<PresentationUiFrame> PresentationController::acquireUiFrame(const PresentationFrame& frame) {
     if (m_uiDevice == nullptr || !frame.shouldRender() || !m_frameOpen ||
-        frame.realFrameNumber != m_openRealFrameNumber ||
-        frame.acquired.frameIndex != m_openFrame.frameIndex ||
+        frame.realFrameNumber != m_openRealFrameNumber || frame.acquired.frameIndex != m_openFrame.frameIndex ||
         frame.acquired.imageIndex != m_openFrame.imageIndex ||
-        !ensureUiTargets(frame.acquired.width, frame.acquired.height) ||
-        m_uiSlots.empty()) {
+        !ensureUiTargets(frame.acquired.width, frame.acquired.height) || m_uiSlots.empty()) {
         return std::nullopt;
     }
 
@@ -286,76 +237,42 @@ std::optional<PresentationUiFrame> PresentationController::acquireUiFrame(
         return std::nullopt;
     }
     const uint32_t slotIndex = static_cast<uint32_t>(&slot - m_uiSlots.data());
-    return PresentationUiFrame{
-        slot.colorTexture,
-        slot.colorView,
-        m_uiColorFormat,
-        m_uiWidth,
-        m_uiHeight,
-        slotIndex,
-        m_uiResourceGeneration,
-        frame.realFrameNumber,
-        true
-    };
+    return PresentationUiFrame{slot.colorTexture, slot.colorView,         m_uiColorFormat,       m_uiWidth, m_uiHeight,
+                               slotIndex,         m_uiResourceGeneration, frame.realFrameNumber, true};
 }
 
-std::optional<PresentationFrameResources> PresentationController::frameResources(
-    const PresentationFrame& frame,
-    const PresentationUiFrame& uiFrame) const {
+std::optional<PresentationFrameResources>
+PresentationController::frameResources(const PresentationFrame& frame, const PresentationUiFrame& uiFrame) const {
     if (!validateUiFrame(uiFrame) || !frame.shouldRender() || !m_frameOpen ||
-        frame.realFrameNumber != m_openRealFrameNumber ||
-        frame.acquired.frameIndex != m_openFrame.frameIndex ||
-        frame.acquired.imageIndex != m_openFrame.imageIndex ||
-        !frame.acquired.colorTexture.isValid() ||
+        frame.realFrameNumber != m_openRealFrameNumber || frame.acquired.frameIndex != m_openFrame.frameIndex ||
+        frame.acquired.imageIndex != m_openFrame.imageIndex || !frame.acquired.colorTexture.isValid() ||
         !frame.acquired.colorView.isValid()) {
         return std::nullopt;
     }
     const UiSlot& slot = m_uiSlots[uiFrame.slotIndex];
     const bool preserveHudlessColor = m_backend.requiresFrameGenerationInputs();
-    const RhiTextureHandle hudlessTexture = preserveHudlessColor
-        ? slot.hudlessColorTexture
-        : frame.acquired.colorTexture;
-    const RhiTextureViewHandle hudlessView = preserveHudlessColor
-        ? slot.hudlessColorView
-        : frame.acquired.colorView;
+    const RhiTextureHandle hudlessTexture =
+        preserveHudlessColor ? slot.hudlessColorTexture : frame.acquired.colorTexture;
+    const RhiTextureViewHandle hudlessView = preserveHudlessColor ? slot.hudlessColorView : frame.acquired.colorView;
     if (!hudlessTexture.isValid() || !hudlessView.isValid()) {
         return std::nullopt;
     }
-    return PresentationFrameResources{
-        hudlessTexture,
-        hudlessView,
-        uiFrame.colorTexture,
-        uiFrame.colorView,
-        m_uiColorFormat,
-        frame.acquired.width,
-        frame.acquired.height,
-        frame.realFrameNumber,
-        true
-    };
+    return PresentationFrameResources{hudlessTexture,        hudlessView,           uiFrame.colorTexture,
+                                      uiFrame.colorView,     m_uiColorFormat,       frame.acquired.width,
+                                      frame.acquired.height, frame.realFrameNumber, true};
 }
 
-bool PresentationController::beginUiRendering(
-    RhiCommandList& commandList,
-    const PresentationUiFrame& uiFrame) {
+bool PresentationController::beginUiRendering(RhiCommandList& commandList, const PresentationUiFrame& uiFrame) {
     if (!validateUiFrame(uiFrame)) {
         return false;
     }
     UiSlot& slot = m_uiSlots[uiFrame.slotIndex];
-    if (slot.colorState != RhiResourceState::Undefined &&
-        slot.colorState != RhiResourceState::ShaderRead) {
+    if (slot.colorState != RhiResourceState::Undefined && slot.colorState != RhiResourceState::ShaderRead) {
         return false;
     }
 
-    commandList.textureBarrier({
-        slot.colorTexture,
-        slot.colorState,
-        RhiResourceState::RenderTarget
-    });
-    commandList.textureBarrier({
-        slot.depthTexture,
-        slot.depthState,
-        RhiResourceState::DepthWrite
-    });
+    commandList.textureBarrier({slot.colorTexture, slot.colorState, RhiResourceState::RenderTarget});
+    commandList.textureBarrier({slot.depthTexture, slot.depthState, RhiResourceState::DepthWrite});
 
     RhiColorAttachment colorAttachment;
     colorAttachment.view = slot.colorView;
@@ -384,66 +301,41 @@ bool PresentationController::beginUiRendering(
     return true;
 }
 
-bool PresentationController::endUiRenderingAndComposite(
-    RhiCommandList& commandList,
-    const PresentationFrame& frame,
-    const PresentationUiFrame& uiFrame) {
-    const std::optional<PresentationFrameResources> resources =
-        frameResources(frame, uiFrame);
+bool PresentationController::endUiRenderingAndComposite(RhiCommandList& commandList, const PresentationFrame& frame,
+                                                        const PresentationUiFrame& uiFrame) {
+    const std::optional<PresentationFrameResources> resources = frameResources(frame, uiFrame);
     if (!resources.has_value()) {
         return false;
     }
     UiSlot& slot = m_uiSlots[uiFrame.slotIndex];
-    if (slot.colorState != RhiResourceState::RenderTarget ||
-        !m_uiCompositePipeline.isValid() ||
-        uiFrame.slotIndex >= m_uiCompositeBindGroups.size() ||
-        !m_uiCompositeBindGroups[uiFrame.slotIndex].isValid()) {
+    if (slot.colorState != RhiResourceState::RenderTarget || !m_uiCompositePipeline.isValid() ||
+        uiFrame.slotIndex >= m_uiCompositeBindGroups.size() || !m_uiCompositeBindGroups[uiFrame.slotIndex].isValid()) {
         return false;
     }
 
     commandList.endRendering();
-    commandList.textureBarrier({
-        slot.colorTexture,
-        RhiResourceState::RenderTarget,
-        RhiResourceState::ShaderRead
-    });
+    commandList.textureBarrier({slot.colorTexture, RhiResourceState::RenderTarget, RhiResourceState::ShaderRead});
     if (m_backend.requiresFrameGenerationInputs()) {
         if (slot.hudlessColorState != RhiResourceState::Undefined &&
             slot.hudlessColorState != RhiResourceState::ShaderRead) {
             return false;
         }
-        commandList.textureBarrier({
-            frame.acquired.colorTexture,
-            RhiResourceState::Present,
-            RhiResourceState::TransferSrc
-        });
-        commandList.textureBarrier({
-            slot.hudlessColorTexture,
-            slot.hudlessColorState,
-            RhiResourceState::TransferDst
-        });
+        commandList.textureBarrier(
+            {frame.acquired.colorTexture, RhiResourceState::Present, RhiResourceState::TransferSrc});
+        commandList.textureBarrier({slot.hudlessColorTexture, slot.hudlessColorState, RhiResourceState::TransferDst});
         RhiTextureCopy copy;
         copy.src = frame.acquired.colorTexture;
         copy.dst = slot.hudlessColorTexture;
         copy.extent = {resources->width, resources->height, 1u};
         commandList.copyTexture(copy);
-        commandList.textureBarrier({
-            slot.hudlessColorTexture,
-            RhiResourceState::TransferDst,
-            RhiResourceState::ShaderRead
-        });
-        commandList.textureBarrier({
-            frame.acquired.colorTexture,
-            RhiResourceState::TransferSrc,
-            RhiResourceState::RenderTarget
-        });
+        commandList.textureBarrier(
+            {slot.hudlessColorTexture, RhiResourceState::TransferDst, RhiResourceState::ShaderRead});
+        commandList.textureBarrier(
+            {frame.acquired.colorTexture, RhiResourceState::TransferSrc, RhiResourceState::RenderTarget});
         slot.hudlessColorState = RhiResourceState::ShaderRead;
     } else {
-        commandList.textureBarrier({
-            frame.acquired.colorTexture,
-            RhiResourceState::Present,
-            RhiResourceState::RenderTarget
-        });
+        commandList.textureBarrier(
+            {frame.acquired.colorTexture, RhiResourceState::Present, RhiResourceState::RenderTarget});
     }
     RhiColorAttachment swapchainAttachment;
     swapchainAttachment.view = frame.acquired.colorView;
@@ -455,63 +347,42 @@ bool PresentationController::endUiRenderingAndComposite(
     renderingInfo.colorAttachments = &swapchainAttachment;
     renderingInfo.colorAttachmentCount = 1u;
     commandList.beginRendering(renderingInfo);
-    commandList.setViewport({
-        0.0f,
-        0.0f,
-        static_cast<float>(resources->width),
-        static_cast<float>(resources->height),
-        0.0f,
-        1.0f
-    });
+    commandList.setViewport(
+        {0.0f, 0.0f, static_cast<float>(resources->width), static_cast<float>(resources->height), 0.0f, 1.0f});
     commandList.setScissor({0, 0, resources->width, resources->height});
     commandList.setGraphicsPipeline(m_uiCompositePipeline);
     commandList.setBindGroup(0u, m_uiCompositeBindGroups[uiFrame.slotIndex]);
     commandList.draw(3u, 1u, 0u, 0u);
     commandList.endRendering();
-    commandList.textureBarrier({
-        frame.acquired.colorTexture,
-        RhiResourceState::RenderTarget,
-        RhiResourceState::Present
-    });
+    commandList.textureBarrier(
+        {frame.acquired.colorTexture, RhiResourceState::RenderTarget, RhiResourceState::Present});
     slot.colorState = RhiResourceState::ShaderRead;
     return true;
 }
 
-bool PresentationController::submitUiFrame(
-    RhiCommandList& commandList,
-    const PresentationUiFrame& uiFrame) {
+bool PresentationController::submitUiFrame(RhiCommandList& commandList, const PresentationUiFrame& uiFrame) {
     if (!validateUiFrame(uiFrame) || !commandList.end()) {
         return false;
     }
     RhiCommandList* commandLists[] = {&commandList};
     RhiSubmissionToken completionToken;
-    if (!m_uiDevice->submit({
-            "Presentation.UiSubmit",
-            commandLists,
-            1u,
-            RhiQueueType::Graphics,
-            nullptr,
-            0u
-        }, &completionToken)) {
+    if (!m_uiDevice->submit({"Presentation.UiSubmit", commandLists, 1u, RhiQueueType::Graphics, nullptr, 0u},
+                            &completionToken)) {
         return false;
     }
     m_uiSlots[uiFrame.slotIndex].completionToken = completionToken;
     return true;
 }
 
-bool PresentationController::prepareFrameGeneration(
-    const PresentationFrame& frame,
-    const PresentationUiFrame& uiFrame,
-    const TemporalFrameInput& temporalFrame) {
+bool PresentationController::prepareFrameGeneration(const PresentationFrame& frame, const PresentationUiFrame& uiFrame,
+                                                    const TemporalFrameInput& temporalFrame) {
     m_frameGenerationPrepared = false;
     if (!m_backend.requiresFrameGenerationInputs()) {
         return true;
     }
-    const std::optional<PresentationFrameResources> resources =
-        frameResources(frame, uiFrame);
+    const std::optional<PresentationFrameResources> resources = frameResources(frame, uiFrame);
     if (!resources.has_value() || validateTemporalFrame(temporalFrame).has_value() ||
-        !temporalFrame.renderingGameFrames ||
-        temporalFrame.frameIndex != Time::getFrameIndex() ||
+        !temporalFrame.renderingGameFrames || temporalFrame.frameIndex != Time::getFrameIndex() ||
         temporalFrame.extents.outputExtent.width != resources->width ||
         temporalFrame.extents.outputExtent.height != resources->height ||
         !m_backend.prepareFrameGeneration(*resources, temporalFrame)) {
@@ -521,32 +392,21 @@ bool PresentationController::prepareFrameGeneration(
     return true;
 }
 
-bool PresentationController::validateUiFrame(
-    const PresentationUiFrame& uiFrame) const {
-    return m_uiDevice != nullptr &&
-           uiFrame.resourceGeneration == m_uiResourceGeneration &&
-           uiFrame.realFrameNumber == m_openRealFrameNumber &&
-           uiFrame.slotIndex < m_uiSlots.size() &&
-           uiFrame.colorFormat == m_uiColorFormat &&
-           uiFrame.width == m_uiWidth &&
-           uiFrame.height == m_uiHeight &&
+bool PresentationController::validateUiFrame(const PresentationUiFrame& uiFrame) const {
+    return m_uiDevice != nullptr && uiFrame.resourceGeneration == m_uiResourceGeneration &&
+           uiFrame.realFrameNumber == m_openRealFrameNumber && uiFrame.slotIndex < m_uiSlots.size() &&
+           uiFrame.colorFormat == m_uiColorFormat && uiFrame.width == m_uiWidth && uiFrame.height == m_uiHeight &&
            uiFrame.premultipliedAlpha &&
-           sameTextureHandle(uiFrame.colorTexture,
-                             m_uiSlots[uiFrame.slotIndex].colorTexture) &&
-           sameTextureViewHandle(uiFrame.colorView,
-                                 m_uiSlots[uiFrame.slotIndex].colorView);
+           sameTextureHandle(uiFrame.colorTexture, m_uiSlots[uiFrame.slotIndex].colorTexture) &&
+           sameTextureViewHandle(uiFrame.colorView, m_uiSlots[uiFrame.slotIndex].colorView);
 }
 
-bool PresentationController::ensureUiTargets(const uint32_t width,
-                                              const uint32_t height) {
-    if (m_uiDevice == nullptr || width == 0u || height == 0u ||
-        !m_uiCompositePipeline.isValid()) {
+bool PresentationController::ensureUiTargets(const uint32_t width, const uint32_t height) {
+    if (m_uiDevice == nullptr || width == 0u || height == 0u || !m_uiCompositePipeline.isValid()) {
         return false;
     }
     const uint32_t slotCount = std::max(2u, m_uiDevice->capabilities().swapchainImageCount);
-    if (!m_uiSlots.empty() &&
-        (m_uiWidth != width || m_uiHeight != height ||
-         m_uiSlots.size() != slotCount)) {
+    if (!m_uiSlots.empty() && (m_uiWidth != width || m_uiHeight != height || m_uiSlots.size() != slotCount)) {
         destroyUiTargets();
     }
     if (!m_uiSlots.empty()) {
@@ -569,19 +429,16 @@ bool PresentationController::ensureUiTargets(const uint32_t width,
         hudlessColorDesc.format = m_uiColorFormat;
         hudlessColorDesc.width = width;
         hudlessColorDesc.height = height;
-        hudlessColorDesc.usage = rhiFlag(RhiTextureUsage::Sampled) |
-                                 rhiFlag(RhiTextureUsage::TransferDst);
+        hudlessColorDesc.usage = rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::TransferDst);
         hudlessColorDesc.memoryCategory = RhiMemoryCategory::Presentation;
-        slot.hudlessColorTexture =
-            m_uiDevice->createTexture(hudlessColorDesc, nullptr);
+        slot.hudlessColorTexture = m_uiDevice->createTexture(hudlessColorDesc, nullptr);
 
         RhiTextureDesc colorDesc;
         colorDesc.debugName = "Presentation.UiColor";
         colorDesc.format = m_uiColorFormat;
         colorDesc.width = width;
         colorDesc.height = height;
-        colorDesc.usage = rhiFlag(RhiTextureUsage::Sampled) |
-                          rhiFlag(RhiTextureUsage::ColorAttachment);
+        colorDesc.usage = rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment);
         colorDesc.memoryCategory = RhiMemoryCategory::Presentation;
         slot.colorTexture = m_uiDevice->createTexture(colorDesc, nullptr);
 
@@ -593,8 +450,7 @@ bool PresentationController::ensureUiTargets(const uint32_t width,
         depthDesc.usage = rhiFlag(RhiTextureUsage::DepthStencilAttachment);
         depthDesc.memoryCategory = RhiMemoryCategory::Presentation;
         slot.depthTexture = m_uiDevice->createTexture(depthDesc, nullptr);
-        if (!slot.hudlessColorTexture.isValid() ||
-            !slot.colorTexture.isValid() || !slot.depthTexture.isValid()) {
+        if (!slot.hudlessColorTexture.isValid() || !slot.colorTexture.isValid() || !slot.depthTexture.isValid()) {
             destroyUiTargets();
             return false;
         }
@@ -603,8 +459,7 @@ bool PresentationController::ensureUiTargets(const uint32_t width,
         hudlessColorViewDesc.texture = slot.hudlessColorTexture;
         hudlessColorViewDesc.viewType = RhiTextureViewType::Texture2D;
         hudlessColorViewDesc.format = m_uiColorFormat;
-        slot.hudlessColorView =
-            m_uiDevice->createTextureView(hudlessColorViewDesc);
+        slot.hudlessColorView = m_uiDevice->createTextureView(hudlessColorViewDesc);
 
         RhiTextureViewDesc colorViewDesc;
         colorViewDesc.texture = slot.colorTexture;
@@ -617,8 +472,7 @@ bool PresentationController::ensureUiTargets(const uint32_t width,
         depthViewDesc.viewType = RhiTextureViewType::Texture2D;
         depthViewDesc.format = m_uiDepthFormat;
         slot.depthView = m_uiDevice->createTextureView(depthViewDesc);
-        if (!slot.hudlessColorView.isValid() ||
-            !slot.colorView.isValid() || !slot.depthView.isValid()) {
+        if (!slot.hudlessColorView.isValid() || !slot.colorView.isValid() || !slot.depthView.isValid()) {
             destroyUiTargets();
             return false;
         }
@@ -677,20 +531,14 @@ bool PresentationController::createUiCompositionPipeline() {
 
     RhiBindGroupLayoutDesc bindGroupLayoutDesc;
     bindGroupLayoutDesc.debugName = "Presentation.UiComposite.BindGroupLayout";
-    bindGroupLayoutDesc.entries.push_back({
-        0u,
-        RhiBindingType::CombinedTextureSampler,
-        rhiFlag(RhiShaderStage::Fragment),
-        1u
-    });
-    m_uiCompositeBindGroupLayout =
-        m_uiDevice->createBindGroupLayout(bindGroupLayoutDesc);
+    bindGroupLayoutDesc.entries.push_back(
+        {0u, RhiBindingType::CombinedTextureSampler, rhiFlag(RhiShaderStage::Fragment), 1u});
+    m_uiCompositeBindGroupLayout = m_uiDevice->createBindGroupLayout(bindGroupLayoutDesc);
 
     RhiPipelineLayoutDesc pipelineLayoutDesc;
     pipelineLayoutDesc.debugName = "Presentation.UiComposite.PipelineLayout";
     pipelineLayoutDesc.bindGroupLayouts.push_back(m_uiCompositeBindGroupLayout);
-    m_uiCompositePipelineLayout =
-        m_uiDevice->createPipelineLayout(pipelineLayoutDesc);
+    m_uiCompositePipelineLayout = m_uiDevice->createPipelineLayout(pipelineLayoutDesc);
 
     RhiGraphicsPipelineDesc pipelineDesc;
     pipelineDesc.debugName = "Presentation.UiComposite.Pipeline";
@@ -710,11 +558,8 @@ bool PresentationController::createUiCompositionPipeline() {
     blend.dstAlpha = RhiBlendFactor::OneMinusSrcAlpha;
     pipelineDesc.blend.attachments.push_back(blend);
     m_uiCompositePipeline = m_uiDevice->createGraphicsPipeline(pipelineDesc);
-    if (!m_uiCompositeVertexShader.isValid() ||
-        !m_uiCompositeFragmentShader.isValid() ||
-        !m_uiSampler.isValid() ||
-        !m_uiCompositeBindGroupLayout.isValid() ||
-        !m_uiCompositePipelineLayout.isValid() ||
+    if (!m_uiCompositeVertexShader.isValid() || !m_uiCompositeFragmentShader.isValid() || !m_uiSampler.isValid() ||
+        !m_uiCompositeBindGroupLayout.isValid() || !m_uiCompositePipelineLayout.isValid() ||
         !m_uiCompositePipeline.isValid()) {
         destroyUiCompositionPipeline();
         return false;
@@ -738,13 +583,17 @@ void PresentationController::destroyUiTargets() {
         if (slot.hudlessColorView.isValid()) {
             m_uiDevice->destroyTextureView(slot.hudlessColorView);
         }
-        if (slot.colorView.isValid()) m_uiDevice->destroyTextureView(slot.colorView);
-        if (slot.depthView.isValid()) m_uiDevice->destroyTextureView(slot.depthView);
+        if (slot.colorView.isValid())
+            m_uiDevice->destroyTextureView(slot.colorView);
+        if (slot.depthView.isValid())
+            m_uiDevice->destroyTextureView(slot.depthView);
         if (slot.hudlessColorTexture.isValid()) {
             m_uiDevice->destroyTexture(slot.hudlessColorTexture);
         }
-        if (slot.colorTexture.isValid()) m_uiDevice->destroyTexture(slot.colorTexture);
-        if (slot.depthTexture.isValid()) m_uiDevice->destroyTexture(slot.depthTexture);
+        if (slot.colorTexture.isValid())
+            m_uiDevice->destroyTexture(slot.colorTexture);
+        if (slot.depthTexture.isValid())
+            m_uiDevice->destroyTexture(slot.depthTexture);
         slot = {};
     }
     m_uiSlots.clear();
@@ -761,12 +610,18 @@ void PresentationController::destroyUiCompositionPipeline() {
         m_uiCompositeVertexShader = {};
         return;
     }
-    if (m_uiCompositePipeline.isValid()) m_uiDevice->destroyPipeline(m_uiCompositePipeline);
-    if (m_uiCompositePipelineLayout.isValid()) m_uiDevice->destroyPipelineLayout(m_uiCompositePipelineLayout);
-    if (m_uiCompositeBindGroupLayout.isValid()) m_uiDevice->destroyBindGroupLayout(m_uiCompositeBindGroupLayout);
-    if (m_uiSampler.isValid()) m_uiDevice->destroySampler(m_uiSampler);
-    if (m_uiCompositeFragmentShader.isValid()) m_uiDevice->destroyShader(m_uiCompositeFragmentShader);
-    if (m_uiCompositeVertexShader.isValid()) m_uiDevice->destroyShader(m_uiCompositeVertexShader);
+    if (m_uiCompositePipeline.isValid())
+        m_uiDevice->destroyPipeline(m_uiCompositePipeline);
+    if (m_uiCompositePipelineLayout.isValid())
+        m_uiDevice->destroyPipelineLayout(m_uiCompositePipelineLayout);
+    if (m_uiCompositeBindGroupLayout.isValid())
+        m_uiDevice->destroyBindGroupLayout(m_uiCompositeBindGroupLayout);
+    if (m_uiSampler.isValid())
+        m_uiDevice->destroySampler(m_uiSampler);
+    if (m_uiCompositeFragmentShader.isValid())
+        m_uiDevice->destroyShader(m_uiCompositeFragmentShader);
+    if (m_uiCompositeVertexShader.isValid())
+        m_uiDevice->destroyShader(m_uiCompositeVertexShader);
     m_uiCompositePipeline = {};
     m_uiCompositePipelineLayout = {};
     m_uiCompositeBindGroupLayout = {};
@@ -790,10 +645,8 @@ bool PresentationController::waitForUiSlot(UiSlot& slot) {
     return true;
 }
 
-PresentationFrame PresentationController::beginFrame(const int width,
-                                                       const int height) {
-    const std::optional<PresentationFailure> displayFailure =
-        applyPendingDisplayState();
+PresentationFrame PresentationController::beginFrame(const int width, const int height) {
+    const std::optional<PresentationFailure> displayFailure = applyPendingDisplayState();
     if (displayFailure.has_value()) {
         return failBegin(*displayFailure);
     }
@@ -804,8 +657,7 @@ PresentationFrame PresentationController::beginFrame(Window& window) {
     if (m_window != &window) {
         return failBegin(PresentationFailure::WindowStateUnavailable);
     }
-    const std::optional<PresentationFailure> displayFailure =
-        applyPendingDisplayState();
+    const std::optional<PresentationFailure> displayFailure = applyPendingDisplayState();
     if (displayFailure.has_value()) {
         return failBegin(*displayFailure);
     }
@@ -813,8 +665,7 @@ PresentationFrame PresentationController::beginFrame(Window& window) {
     return beginFrameExtent(size.width, size.height);
 }
 
-PresentationFrame PresentationController::beginFrameExtent(const int width,
-                                                             const int height) {
+PresentationFrame PresentationController::beginFrameExtent(const int width, const int height) {
     if (m_frameOpen) {
         return failBegin(PresentationFailure::FrameAlreadyOpen);
     }
@@ -826,13 +677,7 @@ PresentationFrame PresentationController::beginFrameExtent(const int width,
         ++m_statistics.skippedFrames;
         m_statistics.lastAcquireStatus = RhiFrameStatus::Minimized;
         m_statistics.lastFailure = PresentationFailure::None;
-        return {
-            PresentationResult::Skipped,
-            PresentationFailure::None,
-            RhiFrameStatus::Minimized,
-            {},
-            0u
-        };
+        return {PresentationResult::Skipped, PresentationFailure::None, RhiFrameStatus::Minimized, {}, 0u};
     }
 
     const uint32_t requestedWidth = static_cast<uint32_t>(width);
@@ -855,52 +700,33 @@ PresentationFrame PresentationController::beginFrameExtent(const int width,
     m_statistics.lastAcquireStatus = acquired.status;
     if (isRenderableAcquireStatus(acquired.status)) {
         if (!resumeFrameGenerationAfterAcquire()) {
-            const bool canceled = m_backend.cancelFrame({
-                acquired.frameIndex,
-                acquired.imageIndex,
-                Time::getFrameIndex()
-            });
-            return failBegin(
-                canceled
-                    ? PresentationFailure::FrameGenerationRejected
-                    : PresentationFailure::FrameCancellationRejected);
+            const bool canceled =
+                m_backend.cancelFrame({acquired.frameIndex, acquired.imageIndex, Time::getFrameIndex()});
+            return failBegin(canceled ? PresentationFailure::FrameGenerationRejected
+                                      : PresentationFailure::FrameCancellationRejected);
         }
         m_frameOpen = true;
         m_openFrame = acquired;
         m_openRealFrameNumber = ++m_statistics.realFramesAcquired;
         m_statistics.lastFailure = PresentationFailure::None;
-        return {
-            PresentationResult::Ready,
-            PresentationFailure::None,
-            acquired.status,
-            acquired,
-            m_openRealFrameNumber
-        };
+        return {PresentationResult::Ready, PresentationFailure::None, acquired.status, acquired, m_openRealFrameNumber};
     }
     if (isNonFatalPresentationStatus(acquired.status)) {
         invalidateExtentForStatus(acquired.status);
         ++m_statistics.skippedFrames;
         m_statistics.lastFailure = PresentationFailure::None;
-        return {
-            PresentationResult::Skipped,
-            PresentationFailure::None,
-            acquired.status,
-            acquired,
-            0u
-        };
+        return {PresentationResult::Skipped, PresentationFailure::None, acquired.status, acquired, 0u};
     }
     return failBegin(PresentationFailure::AcquireRejected, acquired.status);
 }
 
-std::optional<PresentationFailure>
-PresentationController::applyPendingDisplayState() {
+std::optional<PresentationFailure> PresentationController::applyPendingDisplayState() {
     if (m_frameOpen) {
         return PresentationFailure::FrameAlreadyOpen;
     }
     if (m_requestedFrameGenerationEnabled.has_value()) {
         const bool enabled = *m_requestedFrameGenerationEnabled;
-        if (!m_backend.setFrameGenerationEnabled(enabled) ||
-            m_backend.frameGenerationEnabled() != enabled) {
+        if (!m_backend.setFrameGenerationEnabled(enabled) || m_backend.frameGenerationEnabled() != enabled) {
             return PresentationFailure::FrameGenerationRejected;
         }
         m_requestedFrameGenerationEnabled.reset();
@@ -914,8 +740,7 @@ PresentationController::applyPendingDisplayState() {
             return PresentationFailure::WindowStateUnavailable;
         }
         const bool enabled = *m_requestedFullscreenEnabled;
-        if (!m_window->setFullscreen(enabled) ||
-            m_window->isFullscreen() != enabled) {
+        if (!m_window->setFullscreen(enabled) || m_window->isFullscreen() != enabled) {
             return PresentationFailure::FullscreenRejected;
         }
         m_requestedFullscreenEnabled.reset();
@@ -928,8 +753,7 @@ PresentationController::applyPendingDisplayState() {
             return PresentationFailure::FrameGenerationRejected;
         }
         const bool enabled = *m_requestedVsyncEnabled;
-        if (!m_backend.setVsyncEnabled(enabled) ||
-            m_backend.vsyncEnabled() != enabled) {
+        if (!m_backend.setVsyncEnabled(enabled) || m_backend.vsyncEnabled() != enabled) {
             return PresentationFailure::VsyncRejected;
         }
         m_requestedVsyncEnabled.reset();
@@ -937,8 +761,7 @@ PresentationController::applyPendingDisplayState() {
         ++m_statistics.vsyncChanges;
         m_statistics.vsyncEnabled = enabled;
     }
-    if (m_requestedRenderingGameFrames.has_value() &&
-        !m_resumeFrameGeneration) {
+    if (m_requestedRenderingGameFrames.has_value() && !m_resumeFrameGeneration) {
         const bool renderingGameFrames = *m_requestedRenderingGameFrames;
         if (!m_backend.setRenderingGameFrames(renderingGameFrames)) {
             return PresentationFailure::FrameGenerationRejected;
@@ -977,30 +800,23 @@ bool PresentationController::resumeFrameGenerationAfterAcquire() {
     return true;
 }
 
-PresentationCompleteResult PresentationController::presentFrame(
-    const PresentationFrame& frame) {
+PresentationCompleteResult PresentationController::presentFrame(const PresentationFrame& frame) {
     if (!m_frameOpen) {
         return failPresent(PresentationFailure::FrameNotOpen);
     }
-    if (!frame.shouldRender() ||
-        frame.realFrameNumber != m_openRealFrameNumber ||
-        frame.acquired.frameIndex != m_openFrame.frameIndex ||
-        frame.acquired.imageIndex != m_openFrame.imageIndex) {
+    if (!frame.shouldRender() || frame.realFrameNumber != m_openRealFrameNumber ||
+        frame.acquired.frameIndex != m_openFrame.frameIndex || frame.acquired.imageIndex != m_openFrame.imageIndex) {
         return failPresent(PresentationFailure::FrameIdentityMismatch);
     }
-    if (m_backend.requiresFrameGenerationInputs() &&
-        !m_frameGenerationPrepared) {
+    if (m_backend.requiresFrameGenerationInputs() && !m_frameGenerationPrepared) {
         if (!cancelFrame(frame)) {
             return failPresent(PresentationFailure::FrameCancellationRejected);
         }
         return failPresent(PresentationFailure::FrameGenerationInputsRejected);
     }
 
-    const PresentationBackendPresentResult backendResult = m_backend.presentFrame({
-        m_openFrame.frameIndex,
-        m_openFrame.imageIndex,
-        Time::getFrameIndex()
-    });
+    const PresentationBackendPresentResult backendResult =
+        m_backend.presentFrame({m_openFrame.frameIndex, m_openFrame.imageIndex, Time::getFrameIndex()});
     const RhiFrameStatus status = backendResult.status;
     m_statistics.lastPresentStatus = status;
     m_frameOpen = false;
@@ -1010,53 +826,37 @@ PresentationCompleteResult PresentationController::presentFrame(
     if (isRenderableAcquireStatus(status)) {
         if (backendResult.displayedFrameCount == 0u ||
             backendResult.generatedFrameCount >= backendResult.displayedFrameCount) {
-            return failPresent(
-                PresentationFailure::BackendFrameCountInvalid,
-                status);
+            return failPresent(PresentationFailure::BackendFrameCountInvalid, status);
         }
         ++m_statistics.realFramesPresented;
         m_statistics.generatedFramesPresented += backendResult.generatedFrameCount;
         m_statistics.displayedFrames += backendResult.displayedFrameCount;
         m_statistics.lastFailure = PresentationFailure::None;
-        return {
-            PresentationResult::Presented,
-            PresentationFailure::None,
-            status
-        };
+        return {PresentationResult::Presented, PresentationFailure::None, status};
     }
     if (isNonFatalPresentationStatus(status)) {
         invalidateExtentForStatus(status);
         ++m_statistics.skippedFrames;
         m_statistics.lastFailure = PresentationFailure::None;
-        return {
-            PresentationResult::Skipped,
-            PresentationFailure::None,
-            status
-        };
+        return {PresentationResult::Skipped, PresentationFailure::None, status};
     }
     return failPresent(PresentationFailure::PresentRejected, status);
 }
 
 bool PresentationController::cancelFrame(const PresentationFrame& frame) {
-    if (!m_frameOpen || !frame.shouldRender() ||
-        frame.realFrameNumber != m_openRealFrameNumber ||
-        frame.acquired.frameIndex != m_openFrame.frameIndex ||
-        frame.acquired.imageIndex != m_openFrame.imageIndex) {
+    if (!m_frameOpen || !frame.shouldRender() || frame.realFrameNumber != m_openRealFrameNumber ||
+        frame.acquired.frameIndex != m_openFrame.frameIndex || frame.acquired.imageIndex != m_openFrame.imageIndex) {
         return false;
     }
     bool interpolationSuspended = true;
     if (m_backend.frameGenerationActive()) {
-        interpolationSuspended =
-            m_backend.setRenderingGameFrames(false);
+        interpolationSuspended = m_backend.setRenderingGameFrames(false);
         if (interpolationSuspended) {
             m_resumeFrameGeneration = m_renderingGameFrames;
         }
     }
-    const bool frameReleased = m_backend.cancelFrame({
-        m_openFrame.frameIndex,
-        m_openFrame.imageIndex,
-        Time::getFrameIndex()
-    });
+    const bool frameReleased =
+        m_backend.cancelFrame({m_openFrame.frameIndex, m_openFrame.imageIndex, Time::getFrameIndex()});
     if (!frameReleased) {
         return false;
     }
@@ -1067,61 +867,44 @@ bool PresentationController::cancelFrame(const PresentationFrame& frame) {
     return interpolationSuspended;
 }
 
-PresentationFrame PresentationController::failBegin(
-    const PresentationFailure failure,
-    const RhiFrameStatus status) {
+PresentationFrame PresentationController::failBegin(const PresentationFailure failure, const RhiFrameStatus status) {
     ++m_statistics.failedOperations;
     m_statistics.lastFailure = failure;
-    return {
-        failure == PresentationFailure::FrameAlreadyOpen
-            ? PresentationResult::ContractViolation
-            : PresentationResult::Failed,
-        failure,
-        status,
-        {},
-        0u
-    };
+    return {failure == PresentationFailure::FrameAlreadyOpen ? PresentationResult::ContractViolation
+                                                             : PresentationResult::Failed,
+            failure,
+            status,
+            {},
+            0u};
 }
 
-PresentationCompleteResult PresentationController::failPresent(
-    const PresentationFailure failure,
-    const RhiFrameStatus status) {
+PresentationCompleteResult PresentationController::failPresent(const PresentationFailure failure,
+                                                               const RhiFrameStatus status) {
     ++m_statistics.failedOperations;
     m_statistics.lastFailure = failure;
-    return {
-        failure == PresentationFailure::FrameNotOpen ||
-        failure == PresentationFailure::FrameIdentityMismatch
-            ? PresentationResult::ContractViolation
-            : PresentationResult::Failed,
-        failure,
-        status
-    };
+    return {failure == PresentationFailure::FrameNotOpen || failure == PresentationFailure::FrameIdentityMismatch
+                ? PresentationResult::ContractViolation
+                : PresentationResult::Failed,
+            failure, status};
 }
 
-void PresentationController::invalidateExtentForStatus(
-    const RhiFrameStatus status) {
-    if (status == RhiFrameStatus::OutOfDate ||
-        status == RhiFrameStatus::SurfaceLost) {
+void PresentationController::invalidateExtentForStatus(const RhiFrameStatus status) {
+    if (status == RhiFrameStatus::OutOfDate || status == RhiFrameStatus::SurfaceLost) {
         m_extentValid = false;
     }
 }
 
 const char* presentationFailureMessage(const PresentationFailure failure) {
     switch (failure) {
-    case PresentationFailure::None:
-        return "no presentation failure";
-    case PresentationFailure::ResizeRejected:
-        return "presentation backend rejected the requested framebuffer extent";
-    case PresentationFailure::AcquireRejected:
-        return "presentation backend failed to acquire a real frame";
-    case PresentationFailure::PresentRejected:
-        return "presentation backend failed to present the acquired real frame";
+    case PresentationFailure::None: return "no presentation failure";
+    case PresentationFailure::ResizeRejected: return "presentation backend rejected the requested framebuffer extent";
+    case PresentationFailure::AcquireRejected: return "presentation backend failed to acquire a real frame";
+    case PresentationFailure::PresentRejected: return "presentation backend failed to present the acquired real frame";
     case PresentationFailure::BackendFrameCountInvalid:
         return "presentation backend reported invalid displayed-frame counters";
     case PresentationFailure::VsyncRejected:
         return "presentation backend rejected the queued vertical synchronization state";
-    case PresentationFailure::FullscreenRejected:
-        return "native window rejected the queued fullscreen state";
+    case PresentationFailure::FullscreenRejected: return "native window rejected the queued fullscreen state";
     case PresentationFailure::WindowStateUnavailable:
         return "presentation controller is not bound to the requested native window";
     case PresentationFailure::FrameGenerationRejected:
@@ -1130,10 +913,8 @@ const char* presentationFailureMessage(const PresentationFailure failure) {
         return "presentation backend rejected the DLSS Frame Generation inputs";
     case PresentationFailure::FrameCancellationRejected:
         return "presentation backend failed to release the acquired frame";
-    case PresentationFailure::FrameAlreadyOpen:
-        return "presentation controller already owns an acquired real frame";
-    case PresentationFailure::FrameNotOpen:
-        return "presentation controller has no acquired real frame to present";
+    case PresentationFailure::FrameAlreadyOpen: return "presentation controller already owns an acquired real frame";
+    case PresentationFailure::FrameNotOpen: return "presentation controller has no acquired real frame to present";
     case PresentationFailure::FrameIdentityMismatch:
         return "presented frame identity does not match the acquired real frame";
     }

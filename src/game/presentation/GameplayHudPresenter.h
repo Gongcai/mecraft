@@ -16,7 +16,9 @@ struct InputSnapshot;
 class RhiDevice;
 class RhiCommandList;
 
-namespace ecs { class GameplayRegistry; }
+namespace ecs {
+class GameplayRegistry;
+}
 class World;
 class RenderResourceHub;
 class RenderScene;
@@ -31,10 +33,8 @@ public:
 
     /// Render gameplay UI overlay.
     void render(const GameplayPresentationSnapshot& snap, RhiDevice& rhiDevice, GameStateMachine& stateMachine);
-    UIRenderContext prepareRenderContext(const GameplayPresentationSnapshot& snap,
-                                         RhiDevice& rhiDevice,
-                                         int surfaceWidth,
-                                         int surfaceHeight);
+    UIRenderContext prepareRenderContext(const GameplayPresentationSnapshot& snap, RhiDevice& rhiDevice,
+                                         int surfaceWidth, int surfaceHeight);
     bool prepareTextFrame(RhiCommandList& commandList);
     void renderPrepared(const UIRenderContext& context, GameStateMachine& stateMachine);
 
@@ -44,18 +44,11 @@ public:
     [[nodiscard]] bool hasDashboard() const { return m_dashboard != nullptr; }
 
     /// Build ImGui draw data and upload its GPU resources before rendering begins.
-    [[nodiscard]] bool prepareDashboard(
-        RhiCommandList& commandList,
-        int framebufferWidth,
-        int framebufferHeight,
-        ecs::GameplayRegistry& reg,
-        World& world,
-        const Camera& camera,
-        RenderResourceHub& renderer,
-        RenderScene& renderScene,
-        PostProcessPass& postProcess,
-        Dashboard::FrameProfilerStats& profilerStats,
-        const std::function<void(int)>& renderDistanceSetter);
+    [[nodiscard]] bool prepareDashboard(RhiCommandList& commandList, int framebufferWidth, int framebufferHeight,
+                                        ecs::GameplayRegistry& reg, World& world, const Camera& camera,
+                                        RenderResourceHub& renderer, RenderScene& renderScene,
+                                        PostProcessPass& postProcess, Dashboard::FrameProfilerStats& profilerStats,
+                                        const std::function<void(int)>& renderDistanceSetter);
 
     /// Record the prepared ImGui draws inside the active UI rendering scope.
     void recordDashboard(RhiCommandList& commandList) const;
@@ -67,7 +60,7 @@ private:
     InputManager& m_input;
     PlayerStatsData m_playerStats;
 #ifdef MECRAFT_DEBUG
-    Dashboard* m_dashboard = nullptr;  // Non-owning, injected by Game via setDashboard()
+    Dashboard* m_dashboard = nullptr; // Non-owning, injected by Game via setDashboard()
 #endif
 };
 

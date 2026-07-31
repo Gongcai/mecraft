@@ -116,13 +116,11 @@ bool parseIngredientToken(const json& token, CraftingIngredient& outIngredient) 
 bool isShapelessRecipe(const json& recipeJson) {
     if (recipeJson.contains("type") && recipeJson["type"].is_string()) {
         const std::string type = recipeJson["type"].get<std::string>();
-        return type == "shapeless" ||
-               type == "crafting_shapeless" ||
-               type == "minecraft:crafting_shapeless";
+        return type == "shapeless" || type == "crafting_shapeless" || type == "minecraft:crafting_shapeless";
     }
     return recipeJson.contains("ingredients") && !recipeJson.contains("pattern");
 }
-}
+} // namespace
 
 void CraftingSystem::loadRecipes(const std::string& configPath) {
     ItemRegistry::init();
@@ -223,8 +221,8 @@ void CraftingSystem::loadRecipes(const std::string& configPath) {
             recipe.pattern[static_cast<size_t>(row)].reserve(static_cast<size_t>(recipe.width));
             for (int col = 0; col < recipe.width; ++col) {
                 const char ch = col < static_cast<int>(rows[static_cast<size_t>(row)].size())
-                    ? rows[static_cast<size_t>(row)][static_cast<size_t>(col)]
-                    : ' ';
+                                    ? rows[static_cast<size_t>(row)][static_cast<size_t>(col)]
+                                    : ' ';
 
                 if (ch == ' ') {
                     recipe.pattern[static_cast<size_t>(row)].push_back(CraftingIngredient{});
@@ -253,9 +251,7 @@ void CraftingSystem::loadRecipes(const std::string& configPath) {
     }
 }
 
-CraftingResult CraftingSystem::match(const std::vector<ItemID>& grid,
-                                     int gridWidth,
-                                     int gridHeight) const {
+CraftingResult CraftingSystem::match(const std::vector<ItemID>& grid, int gridWidth, int gridHeight) const {
     std::vector<std::vector<ItemID>> trimmed;
     int trimmedW = 0, trimmedH = 0;
 
@@ -299,12 +295,8 @@ void CraftingSystem::clear() {
     m_recipes.clear();
 }
 
-bool CraftingSystem::trimGrid(const std::vector<ItemID>& grid,
-                               int gridWidth,
-                               int gridHeight,
-                               std::vector<std::vector<ItemID>>& outPattern,
-                               int& outWidth,
-                               int& outHeight) {
+bool CraftingSystem::trimGrid(const std::vector<ItemID>& grid, int gridWidth, int gridHeight,
+                              std::vector<std::vector<ItemID>>& outPattern, int& outWidth, int& outHeight) {
     if (gridWidth <= 0 || gridHeight <= 0 ||
         grid.size() < static_cast<size_t>(gridWidth) * static_cast<size_t>(gridHeight)) {
         outWidth = 0;
@@ -342,8 +334,7 @@ bool CraftingSystem::trimGrid(const std::vector<ItemID>& grid,
         outPattern[static_cast<size_t>(row - minRow)].reserve(static_cast<size_t>(outWidth));
         for (int col = minCol; col <= maxCol; ++col) {
             const size_t index = static_cast<size_t>(row) * static_cast<size_t>(gridWidth) + static_cast<size_t>(col);
-            outPattern[static_cast<size_t>(row - minRow)].push_back(
-                grid[index]);
+            outPattern[static_cast<size_t>(row - minRow)].push_back(grid[index]);
         }
     }
 
@@ -403,12 +394,9 @@ bool CraftingSystem::shapelessMatches(const std::vector<CraftingIngredient>& rec
 
 bool CraftingSystem::ingredientMatches(const CraftingIngredient& ingredient, const ItemID itemId) {
     switch (ingredient.kind) {
-        case CraftingIngredient::Kind::Empty:
-            return itemId == 0;
-        case CraftingIngredient::Kind::Item:
-            return itemId != 0 && itemId == ingredient.itemId;
-        case CraftingIngredient::Kind::Tag:
-            return itemId != 0 && ItemRegistry::hasTag(itemId, ingredient.tag);
+    case CraftingIngredient::Kind::Empty: return itemId == 0;
+    case CraftingIngredient::Kind::Item: return itemId != 0 && itemId == ingredient.itemId;
+    case CraftingIngredient::Kind::Tag: return itemId != 0 && ItemRegistry::hasTag(itemId, ingredient.tag);
     }
     return false;
 }

@@ -17,7 +17,5 @@ struct UIInputRouteResult {
 };
 
 namespace UIInputAdapter {
-    UIInputRouteResult routeInput(UIRenderer& renderer,
-                                  const InputSnapshot& snapshot,
-                                  const InputContextManager& context);
+UIInputRouteResult routeInput(UIRenderer& renderer, const InputSnapshot& snapshot, const InputContextManager& context);
 }

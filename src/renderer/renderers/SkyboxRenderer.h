@@ -14,8 +14,7 @@ class SkyboxRenderer {
 public:
     void init(ResourceMgr& resourceMgr, RhiDevice& rhiDevice);
     void shutdown();
-    void render(int width, int height, float aspect, float yawDegrees,
-                float pitchDegrees, RhiDevice& rhiDevice);
+    void render(int width, int height, float aspect, float yawDegrees, float pitchDegrees, RhiDevice& rhiDevice);
 
 private:
     void initCubeMesh();

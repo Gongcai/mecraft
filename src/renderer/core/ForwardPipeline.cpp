@@ -58,8 +58,8 @@ void ForwardPipeline::shutdown() {
 }
 
 FrameOutput ForwardPipeline::renderFrame(const FrameContext& ctx, const RenderSettings& settings) {
-    if (!m_initialized || !ctx.worldView || m_shared == nullptr ||
-        m_shared->rhiDevice == nullptr || m_shared->commandListPool == nullptr) {
+    if (!m_initialized || !ctx.worldView || m_shared == nullptr || m_shared->rhiDevice == nullptr ||
+        m_shared->commandListPool == nullptr) {
         return {};
     }
 
@@ -69,24 +69,18 @@ FrameOutput ForwardPipeline::renderFrame(const FrameContext& ctx, const RenderSe
     return buildFrameOutput(ctx);
 }
 
-bool ForwardPipeline::executeFrameGraph(const FrameContext& ctx,
-                                        const RenderSettings& settings) {
-    if (m_shared == nullptr || m_shared->rhiDevice == nullptr ||
-        m_shared->commandListPool == nullptr ||
-        !ctx.sceneCaptureColorTexture.isValid() ||
-        !ctx.sceneCaptureDepthTexture.isValid() ||
-        !ctx.sceneCaptureColorView.isValid() ||
-        !ctx.sceneCaptureDepthView.isValid()) {
+bool ForwardPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSettings& settings) {
+    if (m_shared == nullptr || m_shared->rhiDevice == nullptr || m_shared->commandListPool == nullptr ||
+        !ctx.sceneCaptureColorTexture.isValid() || !ctx.sceneCaptureDepthTexture.isValid() ||
+        !ctx.sceneCaptureColorView.isValid() || !ctx.sceneCaptureDepthView.isValid()) {
         return false;
     }
 
     RhiDevice& rhiDevice = *m_shared->rhiDevice;
     m_renderGraph.reset();
 
-    const auto importTexture = [&](const RhiTextureHandle texture,
-                                   const RhiTextureViewHandle view,
-                                   const RhiResourceState stableState,
-                                   RgTextureHandle& graphTexture) {
+    const auto importTexture = [&](const RhiTextureHandle texture, const RhiTextureViewHandle view,
+                                   const RhiResourceState stableState, RgTextureHandle& graphTexture) {
         RhiTextureDesc desc;
         if (!rhiDevice.getTextureDesc(texture, desc)) {
             return false;
@@ -104,61 +98,45 @@ bool ForwardPipeline::executeFrameGraph(const FrameContext& ctx,
 
     RgTextureHandle sceneColor;
     RgTextureHandle sceneDepth;
-    if (!importTexture(ctx.sceneCaptureColorTexture,
-                       ctx.sceneCaptureColorView,
-                       RhiResourceState::ShaderRead,
+    if (!importTexture(ctx.sceneCaptureColorTexture, ctx.sceneCaptureColorView, RhiResourceState::ShaderRead,
                        sceneColor) ||
-        !importTexture(ctx.sceneCaptureDepthTexture,
-                       ctx.sceneCaptureDepthView,
-                       RhiResourceState::DepthRead,
+        !importTexture(ctx.sceneCaptureDepthTexture, ctx.sceneCaptureDepthView, RhiResourceState::DepthRead,
                        sceneDepth)) {
         return false;
     }
 
-    RenderGraphPassBuilder prepare = m_renderGraph.addPass(
-        {"Forward.Prepare", RgPassType::Graphics, RhiQueueType::Graphics});
-    prepare.setExecute([&](RgPassContext& pass) {
-        return prepareGraphFrame(ctx, settings, pass.commandList());
-    });
+    RenderGraphPassBuilder prepare =
+        m_renderGraph.addPass({"Forward.Prepare", RgPassType::Graphics, RhiQueueType::Graphics});
+    prepare.setExecute([&](RgPassContext& pass) { return prepareGraphFrame(ctx, settings, pass.commandList()); });
 
-    RenderGraphPassBuilder sky = m_renderGraph.addPass(
-        {"Forward.Sky", RgPassType::Graphics, RhiQueueType::Graphics});
+    RenderGraphPassBuilder sky = m_renderGraph.addPass({"Forward.Sky", RgPassType::Graphics, RhiQueueType::Graphics});
     sky.dependsOn(prepare.handle())
         .writeTexture(sceneColor, RhiResourceState::RenderTarget)
         .writeTexture(sceneDepth, RhiResourceState::DepthWrite)
-        .setExecute([&](RgPassContext& pass) {
-            return recordSkyPass(ctx, pass.commandList());
-        });
+        .setExecute([&](RgPassContext& pass) { return recordSkyPass(ctx, pass.commandList()); });
 
-    RenderGraphPassBuilder scene = m_renderGraph.addPass(
-        {"Forward.Scene", RgPassType::Graphics, RhiQueueType::Graphics});
+    RenderGraphPassBuilder scene =
+        m_renderGraph.addPass({"Forward.Scene", RgPassType::Graphics, RhiQueueType::Graphics});
     scene.dependsOn(sky.handle())
         .readWriteTexture(sceneColor, RhiResourceState::RenderTarget)
         .writeTexture(sceneDepth, RhiResourceState::DepthWrite)
-        .setExecute([&](RgPassContext& pass) {
-            return recordScenePass(ctx, settings, pass.commandList());
-        });
+        .setExecute([&](RgPassContext& pass) { return recordScenePass(ctx, settings, pass.commandList()); });
 
     const RgCompileResult compiled = m_renderGraph.compile();
     if (!compiled.succeeded()) {
-        MECRAFT_LOG_STREAM(
-            std::cerr << "[ForwardPipeline] Render Graph compile failed: "
-                      << compiled.message << '\n');
+        MECRAFT_LOG_STREAM(std::cerr << "[ForwardPipeline] Render Graph compile failed: " << compiled.message << '\n');
         return false;
     }
-    const RgExecuteResult executed =
-        m_renderGraph.execute(rhiDevice, *m_shared->commandListPool);
+    const RgExecuteResult executed = m_renderGraph.execute(rhiDevice, *m_shared->commandListPool);
     if (!executed.succeeded()) {
-        MECRAFT_LOG_STREAM(
-            std::cerr << "[ForwardPipeline] Render Graph execution failed: "
-                      << executed.message << '\n');
+        MECRAFT_LOG_STREAM(std::cerr << "[ForwardPipeline] Render Graph execution failed: " << executed.message
+                                     << '\n');
         return false;
     }
     return true;
 }
 
-bool ForwardPipeline::prepareGraphFrame(const FrameContext& ctx,
-                                        const RenderSettings& settings,
+bool ForwardPipeline::prepareGraphFrame(const FrameContext& ctx, const RenderSettings& settings,
                                         RhiCommandList& commandList) {
     if (!prepareTerrain(ctx, commandList)) {
         return false;
@@ -175,28 +153,22 @@ bool ForwardPipeline::prepareGraphFrame(const FrameContext& ctx,
         }
     }
     if (m_shared->dropRenderer != nullptr && m_shared->dropSystem != nullptr &&
-        !m_shared->dropRenderer->prepareFrame(
-            *ctx.worldView, *m_shared->dropSystem)) {
+        !m_shared->dropRenderer->prepareFrame(*ctx.worldView, *m_shared->dropSystem)) {
         return false;
     }
-    if (m_shared->humanoidRenderer != nullptr &&
-        m_shared->gameplayRegistry != nullptr) {
-        const HumanoidRenderer::RenderMode mode = ctx.renderLocalPlayerModel
-            ? HumanoidRenderer::kRenderAll
-            : HumanoidRenderer::kRenderMobsOnly;
-        if (!m_shared->humanoidRenderer->prepareFrame(
-                *ctx.worldView, *m_shared->gameplayRegistry, mode)) {
+    if (m_shared->humanoidRenderer != nullptr && m_shared->gameplayRegistry != nullptr) {
+        const HumanoidRenderer::RenderMode mode =
+            ctx.renderLocalPlayerModel ? HumanoidRenderer::kRenderAll : HumanoidRenderer::kRenderMobsOnly;
+        if (!m_shared->humanoidRenderer->prepareFrame(*ctx.worldView, *m_shared->gameplayRegistry, mode)) {
             return false;
         }
     }
     return true;
 }
 
-bool ForwardPipeline::recordSkyPass(const FrameContext& ctx,
-                                    RhiCommandList& commandList) {
-    if (m_skyRenderer == nullptr || ctx.dayNightSystem == nullptr ||
-        ctx.cameraPtr == nullptr || !ctx.sceneCaptureColorView.isValid() ||
-        !ctx.sceneCaptureDepthView.isValid()) {
+bool ForwardPipeline::recordSkyPass(const FrameContext& ctx, RhiCommandList& commandList) {
+    if (m_skyRenderer == nullptr || ctx.dayNightSystem == nullptr || ctx.cameraPtr == nullptr ||
+        !ctx.sceneCaptureColorView.isValid() || !ctx.sceneCaptureDepthView.isValid()) {
         return false;
     }
 
@@ -217,35 +189,22 @@ bool ForwardPipeline::recordSkyPass(const FrameContext& ctx,
 
     RhiRenderingInfo renderingInfo;
     renderingInfo.debugName = "ForwardBackbuffer";
-    renderingInfo.renderArea = {
-        0,
-        0,
-        ctx.temporalExtents.renderExtent.width,
-        ctx.temporalExtents.renderExtent.height
-    };
+    renderingInfo.renderArea = {0, 0, ctx.temporalExtents.renderExtent.width, ctx.temporalExtents.renderExtent.height};
     renderingInfo.colorAttachments = &colorAttachment;
     renderingInfo.colorAttachmentCount = 1u;
     renderingInfo.depthStencilAttachment = &depthAttachment;
 
     commandList.beginRendering(renderingInfo);
-    commandList.setViewport({
-        0.0f,
-        0.0f,
-        static_cast<float>(ctx.temporalExtents.renderExtent.width),
-        static_cast<float>(ctx.temporalExtents.renderExtent.height),
-        0.0f,
-        1.0f
-    });
+    commandList.setViewport({0.0f, 0.0f, static_cast<float>(ctx.temporalExtents.renderExtent.width),
+                             static_cast<float>(ctx.temporalExtents.renderExtent.height), 0.0f, 1.0f});
     renderSky(ctx, commandList);
     commandList.endRendering();
     return true;
 }
 
-bool ForwardPipeline::recordScenePass(const FrameContext& ctx,
-                                      const RenderSettings& settings,
+bool ForwardPipeline::recordScenePass(const FrameContext& ctx, const RenderSettings& settings,
                                       RhiCommandList& commandList) {
-    if (!ctx.sceneCaptureColorView.isValid() ||
-        !ctx.sceneCaptureDepthView.isValid()) {
+    if (!ctx.sceneCaptureColorView.isValid() || !ctx.sceneCaptureDepthView.isValid()) {
         return false;
     }
 
@@ -262,25 +221,14 @@ bool ForwardPipeline::recordScenePass(const FrameContext& ctx,
 
     RhiRenderingInfo renderingInfo;
     renderingInfo.debugName = "ForwardSceneBackbuffer";
-    renderingInfo.renderArea = {
-        0,
-        0,
-        ctx.temporalExtents.renderExtent.width,
-        ctx.temporalExtents.renderExtent.height
-    };
+    renderingInfo.renderArea = {0, 0, ctx.temporalExtents.renderExtent.width, ctx.temporalExtents.renderExtent.height};
     renderingInfo.colorAttachments = &colorAttachment;
     renderingInfo.colorAttachmentCount = 1u;
     renderingInfo.depthStencilAttachment = &depthAttachment;
 
     commandList.beginRendering(renderingInfo);
-    commandList.setViewport({
-        0.0f,
-        0.0f,
-        static_cast<float>(ctx.temporalExtents.renderExtent.width),
-        static_cast<float>(ctx.temporalExtents.renderExtent.height),
-        0.0f,
-        1.0f
-    });
+    commandList.setViewport({0.0f, 0.0f, static_cast<float>(ctx.temporalExtents.renderExtent.width),
+                             static_cast<float>(ctx.temporalExtents.renderExtent.height), 0.0f, 1.0f});
     renderTerrain(commandList);
     renderEntitiesAndParticles(ctx, settings, commandList);
     renderTransparent(commandList);
@@ -292,9 +240,9 @@ bool ForwardPipeline::recordScenePass(const FrameContext& ctx,
 // Sky rendering
 // ============================================================================
 
-void ForwardPipeline::renderSky(const FrameContext& ctx,
-                                RhiCommandList& commandList) {
-    if (!m_skyRenderer || !ctx.dayNightSystem || !ctx.cameraPtr) return;
+void ForwardPipeline::renderSky(const FrameContext& ctx, RhiCommandList& commandList) {
+    if (!m_skyRenderer || !ctx.dayNightSystem || !ctx.cameraPtr)
+        return;
 
     const auto& dayNight = *ctx.dayNightSystem;
     const float aspect = static_cast<float>(ctx.temporalExtents.renderExtent.width) /
@@ -307,10 +255,8 @@ void ForwardPipeline::renderSky(const FrameContext& ctx,
 // Terrain rendering (opaque + cutout)
 // ============================================================================
 
-bool ForwardPipeline::prepareTerrain(const FrameContext& ctx,
-                                     RhiCommandList& commandList) {
-    if (!m_shared || !m_shared->terrainRhiPipelines || !m_terrainRenderer ||
-        !m_resourceMgr || !m_worldRenderBuffer) {
+bool ForwardPipeline::prepareTerrain(const FrameContext& ctx, RhiCommandList& commandList) {
+    if (!m_shared || !m_shared->terrainRhiPipelines || !m_terrainRenderer || !m_resourceMgr || !m_worldRenderBuffer) {
         return false;
     }
 
@@ -338,75 +284,52 @@ bool ForwardPipeline::prepareTerrain(const FrameContext& ctx,
     m_transparentBatch = terrain.transparentBatches();
     m_transparentPassPlan = terrain.transparentPassPlan();
     std::sort(m_transparentBatch.begin(), m_transparentBatch.end(),
-              [](const DrawBatchEntry& lhs, const DrawBatchEntry& rhs) {
-                  return lhs.distanceSq > rhs.distanceSq;
-              });
+              [](const DrawBatchEntry& lhs, const DrawBatchEntry& rhs) { return lhs.distanceSq > rhs.distanceSq; });
     for (const DrawBatchEntry& entry : m_transparentBatch) {
         worldBuffer.addTransparent(entry.range);
     }
 
-    if (!m_shared->terrainRhiPipelines->prepareForward(
-            commandList,
-            *m_resourceMgr,
-            tfd) ||
-        !worldBuffer.prepareRhiOpaqueAndCutout(
-            commandList,
-            m_shared->terrainRhiPipelines->forwardMetadataLayout()) ||
-        !worldBuffer.prepareRhiTransparent(
-            commandList,
-            m_shared->terrainRhiPipelines->forwardMetadataLayout())) {
+    if (!m_shared->terrainRhiPipelines->prepareForward(commandList, *m_resourceMgr, tfd) ||
+        !worldBuffer.prepareRhiOpaqueAndCutout(commandList, m_shared->terrainRhiPipelines->forwardMetadataLayout()) ||
+        !worldBuffer.prepareRhiTransparent(commandList, m_shared->terrainRhiPipelines->forwardMetadataLayout())) {
         return false;
     }
     return true;
 }
 
 void ForwardPipeline::renderTerrain(RhiCommandList& commandList) {
-    if (m_shared == nullptr || m_shared->terrainRhiPipelines == nullptr ||
-        m_worldRenderBuffer == nullptr) {
+    if (m_shared == nullptr || m_shared->terrainRhiPipelines == nullptr || m_worldRenderBuffer == nullptr) {
         return;
     }
 
-    m_worldRenderBuffer->recordRhiOpaque(
-        commandList,
-        m_shared->terrainRhiPipelines->forwardOpaquePipeline(),
-        m_shared->terrainRhiPipelines->forwardOpaqueBindGroup());
-    m_worldRenderBuffer->recordRhiCutout(
-        commandList,
-        m_shared->terrainRhiPipelines->forwardCutoutPipeline(),
-        m_shared->terrainRhiPipelines->forwardCutoutBindGroup());
+    m_worldRenderBuffer->recordRhiOpaque(commandList, m_shared->terrainRhiPipelines->forwardOpaquePipeline(),
+                                         m_shared->terrainRhiPipelines->forwardOpaqueBindGroup());
+    m_worldRenderBuffer->recordRhiCutout(commandList, m_shared->terrainRhiPipelines->forwardCutoutPipeline(),
+                                         m_shared->terrainRhiPipelines->forwardCutoutBindGroup());
     m_worldRenderBuffer->captureSceneFrameStats();
 }
 
-void ForwardPipeline::renderEntitiesAndParticles(
-    const FrameContext& ctx,
-    const RenderSettings& settings,
-    RhiCommandList& commandList) {
+void ForwardPipeline::renderEntitiesAndParticles(const FrameContext& ctx, const RenderSettings& settings,
+                                                 RhiCommandList& commandList) {
     if (!m_shared || !ctx.cameraPtr || !ctx.windowPtr) {
         return;
     }
 
     if (m_shared->blockEntityRenderer) {
-        m_shared->blockEntityRenderer->renderForward(commandList,
-                                                     ctx.camera.viewProj,
-                                                     ctx.skyIntensity);
+        m_shared->blockEntityRenderer->renderForward(commandList, ctx.camera.viewProj, ctx.skyIntensity);
     }
 
     if (m_shared->dropRenderer && m_shared->dropSystem) {
-        m_shared->dropRenderer->renderForward(commandList,
-                                              ctx.camera.viewProj,
-                                              ctx.skyIntensity,
-                                              ctx.animationTime);
+        m_shared->dropRenderer->renderForward(commandList, ctx.camera.viewProj, ctx.skyIntensity, ctx.animationTime);
     }
 
     if (m_shared->humanoidRenderer && m_shared->gameplayRegistry) {
-        m_shared->humanoidRenderer->renderPreparedForward(
-            commandList, ctx.camera.viewProj, ctx.skyIntensity);
+        m_shared->humanoidRenderer->renderPreparedForward(commandList, ctx.camera.viewProj, ctx.skyIntensity);
         m_shared->humanoidRenderer->finishFrame();
     }
 
     if (settings.weather.particlesEnabled && m_shared->particleSystem) {
-        m_shared->particleSystem->render(commandList,
-                                         ctx.camera.projection * ctx.camera.view);
+        m_shared->particleSystem->render(commandList, ctx.camera.projection * ctx.camera.view);
     }
 }
 
@@ -415,16 +338,13 @@ void ForwardPipeline::renderEntitiesAndParticles(
 // ============================================================================
 
 void ForwardPipeline::renderTransparent(RhiCommandList& commandList) {
-    if (!m_transparentPassPlan.hasAny() || m_shared == nullptr ||
-        m_shared->terrainRhiPipelines == nullptr ||
+    if (!m_transparentPassPlan.hasAny() || m_shared == nullptr || m_shared->terrainRhiPipelines == nullptr ||
         m_worldRenderBuffer == nullptr) {
         return;
     }
 
-    m_worldRenderBuffer->recordRhiTransparent(
-        commandList,
-        m_shared->terrainRhiPipelines->forwardTransparentPipeline(),
-        m_shared->terrainRhiPipelines->forwardTransparentBindGroup());
+    m_worldRenderBuffer->recordRhiTransparent(commandList, m_shared->terrainRhiPipelines->forwardTransparentPipeline(),
+                                              m_shared->terrainRhiPipelines->forwardTransparentBindGroup());
 }
 
 // ============================================================================

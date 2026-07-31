@@ -22,12 +22,9 @@ void TerrainStreamingService::init(ThreadPool* threadPool, WorldRenderBuffer* wo
         m_meshingDrainTimeBudgetMs = 1.25;
 #endif
     }
-    m_terrainCache.setMeshingBudgets(m_meshingSubmitBudget,
-                                     m_meshingMaxInFlight,
-                                     static_cast<float>(m_meshingSubmitTimeBudgetMs),
-                                     m_meshingDrainBudget,
-                                     static_cast<float>(m_meshingDrainTimeBudgetMs),
-                                     m_meshingDrainVertexBudget);
+    m_terrainCache.setMeshingBudgets(m_meshingSubmitBudget, m_meshingMaxInFlight,
+                                     static_cast<float>(m_meshingSubmitTimeBudgetMs), m_meshingDrainBudget,
+                                     static_cast<float>(m_meshingDrainTimeBudgetMs), m_meshingDrainVertexBudget);
     m_meshingService.start(threadPool);
 }
 
@@ -48,8 +45,7 @@ void TerrainStreamingService::releaseMdiAllocation(const SubChunkGpuKey& key) {
     m_terrainCache.releaseMdiAllocation(key);
 }
 
-void TerrainStreamingService::drainMeshingResults(const IWorldView& worldView,
-                                                  RhiCommandList& commandList) {
+void TerrainStreamingService::drainMeshingResults(const IWorldView& worldView, RhiCommandList& commandList) {
     m_terrainCache.drainMeshingResults(worldView, commandList);
     syncFrameStats();
 }
@@ -92,12 +88,9 @@ void TerrainStreamingService::endFrame() {
 void TerrainStreamingService::setMeshingSubmitBudget(int budget) {
     m_meshingSubmitBudget = std::max(1, budget);
     m_meshingSubmitBudgetOverridden = true;
-    m_terrainCache.setMeshingBudgets(m_meshingSubmitBudget,
-                                     m_meshingMaxInFlight,
-                                     static_cast<float>(m_meshingSubmitTimeBudgetMs),
-                                     m_meshingDrainBudget,
-                                     static_cast<float>(m_meshingDrainTimeBudgetMs),
-                                     m_meshingDrainVertexBudget);
+    m_terrainCache.setMeshingBudgets(m_meshingSubmitBudget, m_meshingMaxInFlight,
+                                     static_cast<float>(m_meshingSubmitTimeBudgetMs), m_meshingDrainBudget,
+                                     static_cast<float>(m_meshingDrainTimeBudgetMs), m_meshingDrainVertexBudget);
 }
 
 void TerrainStreamingService::setRegionChunkSize(int chunkSize) {
@@ -121,8 +114,9 @@ TerrainStreamingService::MeshingFrameStats TerrainStreamingService::getMeshingFr
     stats.deferredResults = m_terrainCache.deferredMeshResultCount();
     stats.lastBuildMs = m_terrainCache.lastMeshingBuildMs();
     stats.averageBuildMs = m_terrainCache.meshingCompletedThisFrame() > 0
-        ? (m_terrainCache.meshingBuildMsThisFrame() / static_cast<double>(m_terrainCache.meshingCompletedThisFrame()))
-        : 0.0;
+                               ? (m_terrainCache.meshingBuildMsThisFrame() /
+                                  static_cast<double>(m_terrainCache.meshingCompletedThisFrame()))
+                               : 0.0;
     stats.lastOpaqueFacesBeforeGreedy = m_terrainCache.lastOpaqueFacesBeforeGreedy();
     stats.lastOpaqueFacesAfterGreedy = m_terrainCache.lastOpaqueFacesAfterGreedy();
     stats.lastTransparentFacesBeforeGreedy = m_terrainCache.lastTransparentFacesBeforeGreedy();

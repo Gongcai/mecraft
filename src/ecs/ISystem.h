@@ -8,8 +8,7 @@
 namespace ecs {
 
 /// System dependency declaration (for validation and documentation).
-template<typename RequiredTuple, typename WrittenTuple>
-struct SystemDependency {
+template <typename RequiredTuple, typename WrittenTuple> struct SystemDependency {
     using Required = RequiredTuple;
     using Written = WrittenTuple;
 };

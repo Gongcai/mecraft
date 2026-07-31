@@ -54,10 +54,7 @@ float lerpAngleRadians(const float from, const float to, const float t) {
     return from + shortestDeltaRadians(from, to) * t;
 }
 
-void applyPose(entt::registry& reg,
-               const entt::entity entity,
-               TransformComponent& transform,
-               const SampledPose& pose) {
+void applyPose(entt::registry& reg, const entt::entity entity, TransformComponent& transform, const SampledPose& pose) {
     transform.position = pose.position;
     if (auto* spin = reg.try_get<SpinVisualComponent>(entity)) {
         spin->yawRadians = lerpAngleRadians(pose.yawFrom, pose.yawTo, pose.alpha);
@@ -71,11 +68,8 @@ void applyPose(entt::registry& reg,
     }
 }
 
-void applyFallbackTarget(entt::registry& reg,
-                         const entt::entity entity,
-                         TransformComponent& transform,
-                         const NetworkInterpolationComponent& interpolation,
-                         const float dt) {
+void applyFallbackTarget(entt::registry& reg, const entt::entity entity, TransformComponent& transform,
+                         const NetworkInterpolationComponent& interpolation, const float dt) {
     const float distance = glm::length(interpolation.targetPosition - transform.position);
     if (distance > interpolation.snapDistance || distance < 0.001f || interpolation.positionLerpSpeed <= 0.0f) {
         transform.position = interpolation.targetPosition;
@@ -97,9 +91,7 @@ void applyFallbackTarget(entt::registry& reg,
     }
 }
 
-bool sampleSnapshotBuffer(NetworkInterpolationComponent& interpolation,
-                          const float dt,
-                          SampledPose& outPose) {
+bool sampleSnapshotBuffer(NetworkInterpolationComponent& interpolation, const float dt, SampledPose& outPose) {
     if (interpolation.snapshotCount < 2) {
         return false;
     }
@@ -118,8 +110,8 @@ bool sampleSnapshotBuffer(NetworkInterpolationComponent& interpolation,
         const float previousRenderTick = interpolation.renderServerTick;
         const float advancedRenderTick = previousRenderTick + std::max(0.0f, interpolation.serverTickRate) * dt;
         interpolation.renderServerTick = delayedNewestTick >= previousRenderTick
-            ? std::min(advancedRenderTick, delayedNewestTick)
-            : previousRenderTick;
+                                             ? std::min(advancedRenderTick, delayedNewestTick)
+                                             : previousRenderTick;
         interpolation.renderServerTick = std::max(interpolation.renderServerTick, oldestTick);
     }
 
@@ -131,9 +123,10 @@ bool sampleSnapshotBuffer(NetworkInterpolationComponent& interpolation,
         }
 
         const float tickSpan = static_cast<float>(b.serverTick - a.serverTick);
-        const float alpha = tickSpan > 0.0f
-            ? std::clamp((interpolation.renderServerTick - static_cast<float>(a.serverTick)) / tickSpan, 0.0f, 1.0f)
-            : 1.0f;
+        const float alpha =
+            tickSpan > 0.0f
+                ? std::clamp((interpolation.renderServerTick - static_cast<float>(a.serverTick)) / tickSpan, 0.0f, 1.0f)
+                : 1.0f;
 
         if (glm::length(b.position - a.position) > interpolation.snapDistance && alpha < 1.0f) {
             outPose.position = a.position;

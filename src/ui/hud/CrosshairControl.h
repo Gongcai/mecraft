@@ -10,8 +10,7 @@
 class ResourceMgr;
 class RhiDevice;
 
-class CrosshairControl : public UIWidget
-{
+class CrosshairControl : public UIWidget {
 public:
     void init(ResourceMgr& resourceMgr) override;
     void shutdown() override;
@@ -38,5 +37,5 @@ private:
     RhiPipelineHandle m_pipeline;
     int m_vertexCount = 0;
     float m_size = 1.0f;
-    std::array<float, 4> m_color {1.0f, 1.0f, 1.0f, 1.0f};
+    std::array<float, 4> m_color{1.0f, 1.0f, 1.0f, 1.0f};
 };

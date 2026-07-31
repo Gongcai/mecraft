@@ -30,29 +30,22 @@ public:
     // Compute light direction from sky colors and store it.
     // Clamps minimum elevation to 0.12 above horizon.
     // Returns the computed direction.
-    glm::vec3 computeLightDirection(const glm::vec3& sunDirection,
-                                    float sunVisibility,
-                                    const glm::vec3& moonDirection,
-                                    float moonVisibility,
-                                    bool* moonShadowActive = nullptr);
+    glm::vec3 computeLightDirection(const glm::vec3& sunDirection, float sunVisibility, const glm::vec3& moonDirection,
+                                    float moonVisibility, bool* moonShadowActive = nullptr);
 
     // Set the light direction directly (e.g. from external source).
     void setLightDirection(const glm::vec3& direction);
 
     // Build CSM cascades for the current frame and cache all shadow state.
-    void update(const Camera& camera,
-                const ShadowMatrices::Settings& settings,
-                int framebufferWidth,
+    void update(const Camera& camera, const ShadowMatrices::Settings& settings, int framebufferWidth,
                 int framebufferHeight);
 
     // Build CSM cascades from a CameraBasis directly (no Camera dependency).
     // Cascades whose updateCascade entry is false keep their previous
     // matrices so interleaved far-cascade updates sample a shadow map that
     // still matches the frozen projection.
-    void updateFromBasis(const ShadowMatrices::CameraBasis& basis,
-                         const ShadowMatrices::Settings& settings,
-                         const std::array<bool, CASCADE_COUNT>& updateCascade = {
-                             true, true, true, true});
+    void updateFromBasis(const ShadowMatrices::CameraBasis& basis, const ShadowMatrices::Settings& settings,
+                         const std::array<bool, CASCADE_COUNT>& updateCascade = {true, true, true, true});
 
     // Accessors
     const Cascade& cascade(int index) const { return m_cascades[index]; }
@@ -70,14 +63,14 @@ public:
 
 private:
     std::array<Cascade, CASCADE_COUNT> m_cascades{};
-    glm::mat4 m_modelView         = glm::mat4(1.0f);
-    glm::mat4 m_projection        = glm::mat4(1.0f);
+    glm::mat4 m_modelView = glm::mat4(1.0f);
+    glm::mat4 m_projection = glm::mat4(1.0f);
     glm::mat4 m_projectionInverse = glm::mat4(1.0f);
-    glm::mat4 m_viewProj          = glm::mat4(1.0f);
-    glm::vec3 m_lightDirection    = glm::vec3(0.0f, 1.0f, 0.0f);
-    float m_shadowExtent          = 1.0f;
-    float m_texelWorldSize        = 1.0f;
-    float m_shadowDistance         = 192.0f;
+    glm::mat4 m_viewProj = glm::mat4(1.0f);
+    glm::vec3 m_lightDirection = glm::vec3(0.0f, 1.0f, 0.0f);
+    float m_shadowExtent = 1.0f;
+    float m_texelWorldSize = 1.0f;
+    float m_shadowDistance = 192.0f;
 };
 
 } // namespace shadow

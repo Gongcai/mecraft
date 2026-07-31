@@ -15,10 +15,7 @@ uint64_t mixRandomTickSeed(const uint64_t value) {
     return z ^ (z >> 31u);
 }
 
-uint64_t makeSubChunkSeed(const World& world,
-                          const Chunk& chunk,
-                          const int scy,
-                          const uint64_t tickIndex) {
+uint64_t makeSubChunkSeed(const World& world, const Chunk& chunk, const int scy, const uint64_t tickIndex) {
     uint64_t seed = static_cast<uint64_t>(world.getSeed());
     seed ^= tickIndex * 0xD1B54A32D192ED03ull;
     seed ^= static_cast<uint64_t>(static_cast<uint32_t>(chunk.m_chunkX)) * 0x9E3779B185EBCA87ull;
@@ -102,12 +99,8 @@ size_t RandomTickSystem::processWorld(World& world, const uint64_t tickIndex, co
                 }
 
                 BlockRandomTickContext randomTickCtx{
-                    world,
-                    glm::ivec3(chunkOffset.x + localX, scy * SubChunk::SIZE + localY, chunkOffset.z + localZ),
-                    state,
-                    tickIndex,
-                    nextRandomBits(randomState)
-                };
+                    world, glm::ivec3(chunkOffset.x + localX, scy * SubChunk::SIZE + localY, chunkOffset.z + localZ),
+                    state, tickIndex, nextRandomBits(randomState)};
                 if (BlockRandomTick::dispatch(def.randomTick, randomTickCtx)) {
                     ++changedCount;
                 }

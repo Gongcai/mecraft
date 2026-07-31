@@ -71,16 +71,15 @@ struct SubChunkGpuKey {
     int64_t chunkKey = 0;
     int scy = 0;
 
-    bool operator==(const SubChunkGpuKey& other) const {
-        return chunkKey == other.chunkKey && scy == other.scy;
-    }
+    bool operator==(const SubChunkGpuKey& other) const { return chunkKey == other.chunkKey && scy == other.scy; }
 };
 
 /// Hash for SubChunkGpuKey
 struct SubChunkGpuKeyHash {
     size_t operator()(const SubChunkGpuKey& key) const {
         const uint64_t chunk = static_cast<uint64_t>(key.chunkKey);
-        const uint64_t mixed = chunk ^ (static_cast<uint64_t>(key.scy) + 0x9e3779b97f4a7c15ULL + (chunk << 6) + (chunk >> 2));
+        const uint64_t mixed =
+            chunk ^ (static_cast<uint64_t>(key.scy) + 0x9e3779b97f4a7c15ULL + (chunk << 6) + (chunk >> 2));
         return static_cast<size_t>(mixed);
     }
 };
@@ -102,12 +101,8 @@ public:
     void setWorldRenderBuffer(WorldRenderBuffer* buf) { m_worldRenderBuffer = buf; }
     void setChunkMeshingService(ChunkMeshingService* svc) { m_meshingService = svc; }
     void setRegionChunkSize(int size) { m_regionChunkSize = size; }
-    void setMeshingBudgets(int submitBudget,
-                           int maxInFlight,
-                           float submitTimeBudgetMs,
-                           int drainBudget,
-                           float drainTimeBudgetMs,
-                           int drainVertexBudget);
+    void setMeshingBudgets(int submitBudget, int maxInFlight, float submitTimeBudgetMs, int drainBudget,
+                           float drainTimeBudgetMs, int drainVertexBudget);
 
     // Chunk column cache
     void syncChunkRenderColumns(const IWorldView& worldView);
@@ -118,8 +113,13 @@ public:
     // MDI allocation management
     void releaseMdiAllocation(const SubChunkGpuKey& key);
     void releaseStaleMdiAllocations(const IWorldView& worldView);
-    [[nodiscard]] const std::unordered_map<SubChunkGpuKey, MdiMeshAllocation, SubChunkGpuKeyHash>& mdiMeshAllocations() const { return m_mdiMeshAllocations; }
-    [[nodiscard]] std::unordered_map<SubChunkGpuKey, MdiMeshAllocation, SubChunkGpuKeyHash>& mdiMeshAllocations() { return m_mdiMeshAllocations; }
+    [[nodiscard]] const std::unordered_map<SubChunkGpuKey, MdiMeshAllocation, SubChunkGpuKeyHash>&
+    mdiMeshAllocations() const {
+        return m_mdiMeshAllocations;
+    }
+    [[nodiscard]] std::unordered_map<SubChunkGpuKey, MdiMeshAllocation, SubChunkGpuKeyHash>& mdiMeshAllocations() {
+        return m_mdiMeshAllocations;
+    }
 
     // Meshing job management
     void submitMeshingJobs(const IWorldView& worldView, const glm::vec3& cameraPos);
@@ -147,7 +147,9 @@ public:
     // Transparent batch collection
     void addTransparentBatch(const GpuMeshRange& range, float distanceSq, TransparentBatchKind kind);
     void clearTransparentBatches();
-    [[nodiscard]] const std::vector<DrawBatchEntry>& deferredTransparentBatch() const { return m_deferredTransparentBatch; }
+    [[nodiscard]] const std::vector<DrawBatchEntry>& deferredTransparentBatch() const {
+        return m_deferredTransparentBatch;
+    }
     [[nodiscard]] std::vector<DrawBatchEntry>& deferredTransparentBatch() { return m_deferredTransparentBatch; }
     [[nodiscard]] const TransparentPassPlan& transparentPassPlan() const { return m_transparentPassPlan; }
 

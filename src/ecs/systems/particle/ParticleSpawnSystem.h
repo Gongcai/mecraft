@@ -8,10 +8,9 @@ namespace ecs {
 
 class ParticleSpawnSystem : public ISystem {
 public:
-    using Dependencies = SystemDependency<
-        std::tuple<ParticleTag, ParticleComponent>,
-        std::tuple<ParticleTag, TransformComponent, VelocityComponent, ParticleComponent>
-    >;
+    using Dependencies =
+        SystemDependency<std::tuple<ParticleTag, ParticleComponent>,
+                         std::tuple<ParticleTag, TransformComponent, VelocityComponent, ParticleComponent>>;
 
     void update(SystemContext& ctx) override;
 };

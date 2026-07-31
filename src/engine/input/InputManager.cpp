@@ -22,8 +22,7 @@
 namespace {
 using json = nlohmann::json;
 
-template <size_t Count>
-json boolArrayToIndices(const bool (&values)[Count]) {
+template <size_t Count> json boolArrayToIndices(const bool (&values)[Count]) {
     json indices = json::array();
     for (size_t index = 0; index < Count; ++index) {
         if (values[index]) {
@@ -33,8 +32,7 @@ json boolArrayToIndices(const bool (&values)[Count]) {
     return indices;
 }
 
-template <size_t Count>
-bool indicesToBoolArray(const json& indices, bool (&values)[Count]) {
+template <size_t Count> bool indicesToBoolArray(const json& indices, bool (&values)[Count]) {
     std::fill(std::begin(values), std::end(values), false);
     if (!indices.is_array()) {
         MECRAFT_LOG_FPRINTF(stderr, "[InputReplay] Index list must be an array\n");
@@ -76,13 +74,11 @@ json snapshotToJson(const InputSnapshot& snapshot) {
     frame["typedChars"] = std::move(typedChars);
 
     const auto& drag = snapshot.draggedItem;
-    frame["draggedItem"] = {
-        {"active", drag.active},
-        {"itemId", drag.itemId},
-        {"count", drag.count},
-        {"sourceSlot", drag.sourceSlot},
-        {"pointerPosition", {drag.pointerPosition.x, drag.pointerPosition.y}}
-    };
+    frame["draggedItem"] = {{"active", drag.active},
+                            {"itemId", drag.itemId},
+                            {"count", drag.count},
+                            {"sourceSlot", drag.sourceSlot},
+                            {"pointerPosition", {drag.pointerPosition.x, drag.pointerPosition.y}}};
 
     json gamepad;
     gamepad["connected"] = snapshot.gamepad.connected;
@@ -189,8 +185,7 @@ bool readVec2(const json& value, const char* fieldName, glm::vec2& out) {
     return true;
 }
 
-template <size_t Count>
-bool readIndexArrayField(const json& object, const char* fieldName, bool (&values)[Count]) {
+template <size_t Count> bool readIndexArrayField(const json& object, const char* fieldName, bool (&values)[Count]) {
     const json* field = findField(object, fieldName);
     if (field == nullptr) {
         MECRAFT_LOG_FPRINTF(stderr, "[InputReplay] Missing index array field: %s\n", fieldName);
@@ -211,8 +206,8 @@ bool snapshotFromJson(const json& frame, InputSnapshot& snapshot) {
     const json* drag = findField(frame, "draggedItem");
     const json* gamepad = findField(frame, "gamepad");
 
-    if (mousePosition == nullptr || mouseDelta == nullptr || typedChars == nullptr ||
-        drag == nullptr || gamepad == nullptr) {
+    if (mousePosition == nullptr || mouseDelta == nullptr || typedChars == nullptr || drag == nullptr ||
+        gamepad == nullptr) {
         MECRAFT_LOG_FPRINTF(stderr, "[InputReplay] Frame is missing required fields\n");
         return false;
     }
@@ -247,8 +242,7 @@ bool snapshotFromJson(const json& frame, InputSnapshot& snapshot) {
         return false;
     }
     const json* pointerPosition = findField(*drag, "pointerPosition");
-    if (pointerPosition == nullptr ||
-        !readBoolField(*drag, "active", snapshot.draggedItem.active) ||
+    if (pointerPosition == nullptr || !readBoolField(*drag, "active", snapshot.draggedItem.active) ||
         !readIntField(*drag, "itemId", snapshot.draggedItem.itemId) ||
         !readIntField(*drag, "count", snapshot.draggedItem.count) ||
         !readIntField(*drag, "sourceSlot", snapshot.draggedItem.sourceSlot) ||
@@ -308,10 +302,8 @@ bool framesFromReplayFile(const std::filesystem::path& path, std::vector<InputSn
 
     std::string kind;
     int version = 0;
-    if (!readStringField(root, "kind", kind) ||
-        !readIntField(root, "version", version) ||
-        kind != "mecraft.input_replay" ||
-        version != 1) {
+    if (!readStringField(root, "kind", kind) || !readIntField(root, "version", version) ||
+        kind != "mecraft.input_replay" || version != 1) {
         MECRAFT_LOG_FPRINTF(stderr, "[InputReplay] Unsupported input replay file: %s\n", path.string().c_str());
         return false;
     }
@@ -464,9 +456,8 @@ void InputManager::update() {
         m_keysJustReleased[key] = !m_keys[key] && m_keysPrev[key];
 
         // 双击检测：本次刚按下 且 距上次按下时间在超时内
-        m_snapshot.keysDoubleTapped[key] = m_keysJustPressed[key]
-            && m_keyLastPressTime[key] > 0.0
-            && (now - m_keyLastPressTime[key]) <= m_doubleTapTimeout;
+        m_snapshot.keysDoubleTapped[key] = m_keysJustPressed[key] && m_keyLastPressTime[key] > 0.0 &&
+                                           (now - m_keyLastPressTime[key]) <= m_doubleTapTimeout;
         if (m_keysJustPressed[key]) {
             m_keyLastPressTime[key] = now;
         }
@@ -483,9 +474,9 @@ void InputManager::update() {
         m_mouseButtonsJustReleased[button] = !m_mouseButtons[button] && m_mouseButtonsPrev[button];
 
         // 鼠标双击检测
-        m_snapshot.mouseButtonsDoubleTapped[button] = m_mouseButtonsJustPressed[button]
-            && m_mouseButtonLastPressTime[button] > 0.0
-            && (now - m_mouseButtonLastPressTime[button]) <= m_doubleTapTimeout;
+        m_snapshot.mouseButtonsDoubleTapped[button] = m_mouseButtonsJustPressed[button] &&
+                                                      m_mouseButtonLastPressTime[button] > 0.0 &&
+                                                      (now - m_mouseButtonLastPressTime[button]) <= m_doubleTapTimeout;
         if (m_mouseButtonsJustPressed[button]) {
             m_mouseButtonLastPressTime[button] = now;
         }
@@ -506,9 +497,9 @@ void InputManager::update() {
                 m_gamepadButtonsJustReleased[btn] = !pressed && m_gamepadButtonsPrev[btn];
 
                 // Gamepad button double-tap detection
-                m_snapshot.gamepad.buttonsDoubleTapped[btn] = m_gamepadButtonsJustPressed[btn]
-                    && m_gamepadButtonLastPressTime[btn] > 0.0
-                    && (now - m_gamepadButtonLastPressTime[btn]) <= m_doubleTapTimeout;
+                m_snapshot.gamepad.buttonsDoubleTapped[btn] =
+                    m_gamepadButtonsJustPressed[btn] && m_gamepadButtonLastPressTime[btn] > 0.0 &&
+                    (now - m_gamepadButtonLastPressTime[btn]) <= m_doubleTapTimeout;
                 if (m_gamepadButtonsJustPressed[btn]) {
                     m_gamepadButtonLastPressTime[btn] = now;
                 }
@@ -595,14 +586,8 @@ void InputManager::update() {
         m_snapshot.gamepad.axes[axis] = m_gamepadAxes[axis];
     }
 
-    m_snapshot.mousePosition = {
-        static_cast<float>(m_mouseX),
-        static_cast<float>(m_mouseY)
-    };
-    m_snapshot.mouseDelta = {
-        static_cast<float>(m_mouseDeltaX),
-        static_cast<float>(m_mouseDeltaY)
-    };
+    m_snapshot.mousePosition = {static_cast<float>(m_mouseX), static_cast<float>(m_mouseY)};
+    m_snapshot.mouseDelta = {static_cast<float>(m_mouseDeltaX), static_cast<float>(m_mouseDeltaY)};
 
     if (m_draggedItem.active) {
         m_draggedItem.pointerPosition = m_snapshot.mousePosition;
@@ -715,19 +700,11 @@ void InputManager::captureMouse(bool capture) {
         return;
     }
 
-    glfwSetInputMode(
-        m_handle,
-        GLFW_CURSOR,
-        capture ? GLFW_CURSOR_DISABLED : GLFW_CURSOR_NORMAL
-    );
+    glfwSetInputMode(m_handle, GLFW_CURSOR, capture ? GLFW_CURSOR_DISABLED : GLFW_CURSOR_NORMAL);
 
     // --- 新增：尝试开启/关闭原始鼠标运动 ---
     if (glfwRawMouseMotionSupported()) {
-        glfwSetInputMode(
-            m_handle,
-            GLFW_RAW_MOUSE_MOTION,
-            capture ? GLFW_TRUE : GLFW_FALSE
-        );
+        glfwSetInputMode(m_handle, GLFW_RAW_MOUSE_MOTION, capture ? GLFW_TRUE : GLFW_FALSE);
     }
     // ----------------------------------------
 

@@ -24,8 +24,7 @@ ALenum openAlFormatFor(const int channels, const int bitsPerSample) {
 
 } // namespace
 
-AudioClip::AudioClip(const std::string& filepath)
-    : m_filepath(filepath) {
+AudioClip::AudioClip(const std::string& filepath) : m_filepath(filepath) {
     const size_t lastSep = filepath.find_last_of("/\\");
     const size_t lastDot = filepath.find_last_of('.');
     if (lastSep != std::string::npos && lastDot != std::string::npos && lastDot > lastSep) {
@@ -64,17 +63,11 @@ bool AudioClip::load(const std::string& filepath) {
     }
 
     alGenBuffers(1, &m_buffer);
-    alBufferData(m_buffer,
-                 format,
-                 decoded.pcm.data(),
-                 static_cast<ALsizei>(decoded.pcm.size()),
-                 decoded.sampleRate);
+    alBufferData(m_buffer, format, decoded.pcm.data(), static_cast<ALsizei>(decoded.pcm.size()), decoded.sampleRate);
 
     const int bytesPerSample = decoded.bitsPerSample / 8;
     const int byteRate = decoded.sampleRate * decoded.channels * bytesPerSample;
-    m_duration = byteRate > 0
-        ? static_cast<float>(decoded.pcm.size()) / static_cast<float>(byteRate)
-        : 0.0f;
+    m_duration = byteRate > 0 ? static_cast<float>(decoded.pcm.size()) / static_cast<float>(byteRate) : 0.0f;
 
     const ALenum alError = alGetError();
     if (alError != AL_NO_ERROR) {

@@ -17,19 +17,15 @@ namespace {
 }
 
 void requireBedProperties() {
-    if (PropIndices::FACING == PropIndices::INVALID ||
-        PropIndices::PART == PropIndices::INVALID ||
-        PropIndices::PART_HEAD == PropIndices::INVALID ||
-        PropIndices::PART_FOOT == PropIndices::INVALID) {
+    if (PropIndices::FACING == PropIndices::INVALID || PropIndices::PART == PropIndices::INVALID ||
+        PropIndices::PART_HEAD == PropIndices::INVALID || PropIndices::PART_FOOT == PropIndices::INVALID) {
         failBedBlock("Bed blocks require facing and part=head/foot properties");
     }
 }
 
 bool isHorizontalFacingValue(const uint16_t facingValue) {
-    return facingValue == PropIndices::FACING_NORTH ||
-           facingValue == PropIndices::FACING_SOUTH ||
-           facingValue == PropIndices::FACING_EAST ||
-           facingValue == PropIndices::FACING_WEST;
+    return facingValue == PropIndices::FACING_NORTH || facingValue == PropIndices::FACING_SOUTH ||
+           facingValue == PropIndices::FACING_EAST || facingValue == PropIndices::FACING_WEST;
 }
 
 void requireHorizontalFacingValue(const uint16_t facingValue) {
@@ -38,10 +34,8 @@ void requireHorizontalFacingValue(const uint16_t facingValue) {
     }
 }
 
-BlockStateId withRequiredProperty(const BlockStateId stateId,
-                             const uint16_t property,
-                             const uint16_t value,
-                             const char* context) {
+BlockStateId withRequiredProperty(const BlockStateId stateId, const uint16_t property, const uint16_t value,
+                                  const char* context) {
     const BlockStateId updated = BlockStateRegistry::withProperty(stateId, property, value);
     if (BlockStateRegistry::getPropertyIndex(updated, property) != value) {
         failBedBlock(context);
@@ -97,8 +91,7 @@ bool isBedState(const BlockStateId stateId) {
     requireBedProperties();
     const uint16_t part = BlockStateRegistry::getPropertyIndex(stateId, PropIndices::PART);
     const uint16_t facing = BlockStateRegistry::getPropertyIndex(stateId, PropIndices::FACING);
-    return (part == PropIndices::PART_HEAD || part == PropIndices::PART_FOOT) &&
-           isHorizontalFacingValue(facing);
+    return (part == PropIndices::PART_HEAD || part == PropIndices::PART_FOOT) && isHorizontalFacingValue(facing);
 }
 
 bool isFootState(const BlockStateId stateId) {
@@ -139,9 +132,7 @@ BlockStateId makeBedState(const BlockID blockId, const uint16_t facingValue, con
     return stateId;
 }
 
-BedPlacement resolvePlacement(const IWorldView& worldView,
-                              const glm::ivec3& footPos,
-                              const BlockStateId footState) {
+BedPlacement resolvePlacement(const IWorldView& worldView, const glm::ivec3& footPos, const BlockStateId footState) {
     BedPlacement placement;
     if (!isFootState(footState)) {
         return placement;
@@ -153,22 +144,17 @@ BedPlacement resolvePlacement(const IWorldView& worldView,
     placement.headPos = footPos + headOffsetForFacing(facing);
     placement.footState = footState;
     placement.headState = makeBedState(blockId, facing, PropIndices::PART_HEAD);
-    placement.valid = isEmptyBedCell(worldView, placement.footPos) &&
-                      isEmptyBedCell(worldView, placement.headPos);
+    placement.valid = isEmptyBedCell(worldView, placement.footPos) && isEmptyBedCell(worldView, placement.headPos);
     return placement;
 }
 
-bool tryGetOtherHalfPosition(const glm::ivec3& pos,
-                             const BlockStateId stateId,
-                             glm::ivec3& outOtherPos) {
+bool tryGetOtherHalfPosition(const glm::ivec3& pos, const BlockStateId stateId, glm::ivec3& outOtherPos) {
     if (!isBedState(stateId)) {
         return false;
     }
 
     const glm::ivec3 headOffset = headOffsetForFacing(facingValue(stateId));
-    outOtherPos = partValue(stateId) == PropIndices::PART_FOOT
-        ? pos + headOffset
-        : pos - headOffset;
+    outOtherPos = partValue(stateId) == PropIndices::PART_FOOT ? pos + headOffset : pos - headOffset;
     return true;
 }
 
@@ -202,9 +188,8 @@ BlockID removeBed(World& world, const glm::ivec3& hitPos, std::vector<glm::ivec3
     const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
     glm::ivec3 otherPos{};
     const bool hasOtherPos = tryGetOtherHalfPosition(hitPos, stateId, otherPos);
-    const BlockStateId otherState = hasOtherPos
-        ? world.getBlockState(otherPos.x, otherPos.y, otherPos.z)
-        : NULL_BLOCK_STATE;
+    const BlockStateId otherState =
+        hasOtherPos ? world.getBlockState(otherPos.x, otherPos.y, otherPos.z) : NULL_BLOCK_STATE;
     const bool removeOther = hasOtherPos && isMatchingOtherHalf(stateId, otherState);
 
     world.setBlockState(hitPos.x, hitPos.y, hitPos.z, NULL_BLOCK_STATE);

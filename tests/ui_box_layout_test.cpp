@@ -44,13 +44,11 @@ int main() {
 
         box.layout();
 
-        if (!almostEqual(firstPtr->x, 10.0f) ||
-            !almostEqual(firstPtr->y, 120.0f - 12.0f - 20.0f) ||
+        if (!almostEqual(firstPtr->x, 10.0f) || !almostEqual(firstPtr->y, 120.0f - 12.0f - 20.0f) ||
             !almostEqual(firstPtr->width, 176.0f)) {
             return fail("vertical box should place first visible child at top and stretch width");
         }
-        if (!almostEqual(secondPtr->x, 10.0f) ||
-            !almostEqual(secondPtr->y, 120.0f - 12.0f - 20.0f - 6.0f - 30.0f) ||
+        if (!almostEqual(secondPtr->x, 10.0f) || !almostEqual(secondPtr->y, 120.0f - 12.0f - 20.0f - 6.0f - 30.0f) ||
             !almostEqual(secondPtr->width, 176.0f)) {
             return fail("vertical box should apply gap and preserve child height");
         }
@@ -81,8 +79,7 @@ int main() {
         if (!almostEqual(firstPtr->x, 10.0f) || !almostEqual(firstPtr->y, 30.0f)) {
             return fail("horizontal box should honor padding and center alignment");
         }
-        if (!almostEqual(flexPtr->x, 55.0f) ||
-            !almostEqual(flexPtr->width, 200.0f)) {
+        if (!almostEqual(flexPtr->x, 55.0f) || !almostEqual(flexPtr->width, 200.0f)) {
             return fail("horizontal box should assign remaining width to flex child");
         }
         if (!almostEqual(lastPtr->x, 260.0f)) {

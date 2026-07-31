@@ -26,16 +26,12 @@ struct BlockTextureArraySet {
     bool hasSpecularMaps = false;
 };
 
-[[nodiscard]] BlockTextureArraySet buildBlockTextureArraySet(const std::string& directory,
-                                                             int tileSize,
-                                                             BlockTextureCatalog& catalog,
-                                                             RhiDevice& rhiDevice,
+[[nodiscard]] BlockTextureArraySet buildBlockTextureArraySet(const std::string& directory, int tileSize,
+                                                             BlockTextureCatalog& catalog, RhiDevice& rhiDevice,
                                                              RhiCommandListPool& commandListPool);
 
-[[nodiscard]] BlockTextureArraySet buildBlockTextureArraySet(const BlockTextureManifest& manifest,
-                                                             int tileSize,
-                                                             BlockTextureCatalog& catalog,
-                                                             RhiDevice& rhiDevice,
+[[nodiscard]] BlockTextureArraySet buildBlockTextureArraySet(const BlockTextureManifest& manifest, int tileSize,
+                                                             BlockTextureCatalog& catalog, RhiDevice& rhiDevice,
                                                              RhiCommandListPool& commandListPool);
 
 } // namespace resource

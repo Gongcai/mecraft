@@ -14,12 +14,10 @@ struct MeshBuilderEntry {
 std::unordered_map<std::string, MeshBuilderEntry> g_entriesByName;
 std::unordered_map<uint8_t, MeshBuilderEntry> g_entriesByTag;
 bool g_initialized = false;
-}
+} // namespace
 
-void MeshBuilderRegistry::registerBuilder(const std::string& shapeName,
-                                          const uint8_t tag,
-                                          const MeshShapeClass shapeClass,
-                                          const MeshBuilderFn fn) {
+void MeshBuilderRegistry::registerBuilder(const std::string& shapeName, const uint8_t tag,
+                                          const MeshShapeClass shapeClass, const MeshBuilderFn fn) {
     const MeshBuilderEntry entry{tag, shapeClass, fn};
     g_entriesByName[shapeName] = entry;
     g_entriesByTag[tag] = entry;
@@ -58,7 +56,8 @@ void MeshBuilderRegistry::initBuiltinBuilders() {
     registerBuilder("block_entity", BLOCK_ENTITY_TAG, MeshShapeClass::Custom, &ChunkMeshBuilders::buildBlockEntity);
     registerBuilder("face_plane", FACE_PLANE_TAG, MeshShapeClass::Custom, &ChunkMeshBuilders::buildFacePlane);
     registerBuilder("redstone_wire", REDSTONE_WIRE_TAG, MeshShapeClass::Custom, &ChunkMeshBuilders::buildRedstoneWire);
-    registerBuilder("wire_container", WIRE_CONTAINER_TAG, MeshShapeClass::Custom, &ChunkMeshBuilders::buildWireContainer);
+    registerBuilder("wire_container", WIRE_CONTAINER_TAG, MeshShapeClass::Custom,
+                    &ChunkMeshBuilders::buildWireContainer);
 
     g_initialized = true;
 }

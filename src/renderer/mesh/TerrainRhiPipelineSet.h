@@ -64,32 +64,19 @@ public:
     void init(RhiDevice& rhiDevice);
     void shutdown();
 
-    [[nodiscard]] bool configureClusteredLighting(
-        RhiBindGroupLayoutHandle bindGroupLayout,
-        RhiBindGroupHandle bindGroup,
-        const renderer::contracts::ClusterGrid& grid);
+    [[nodiscard]] bool configureClusteredLighting(RhiBindGroupLayoutHandle bindGroupLayout,
+                                                  RhiBindGroupHandle bindGroup,
+                                                  const renderer::contracts::ClusterGrid& grid);
 
-    bool prepareGBuffer(RhiCommandList& commandList,
-                        ResourceMgr& resourceMgr,
-                        const TerrainFrameData& frame,
+    bool prepareGBuffer(RhiCommandList& commandList, ResourceMgr& resourceMgr, const TerrainFrameData& frame,
                         const TerrainRenderSettings& settings);
-    bool prepareShadow(RhiCommandList& commandList,
-                       ResourceMgr& resourceMgr,
-                       const TerrainShadowFrameData& frame);
-    bool prepareTransparent(RhiCommandList& commandList,
-                            ResourceMgr& resourceMgr,
-                            DeferredRenderTargets& targets,
-                            const TerrainFrameData& frame,
-                            const TerrainRenderSettings& settings,
-                            int heldBlockLightValue,
-                            bool volumetricFogShadersReady);
-    bool prepareWater(RhiCommandList& commandList,
-                      ResourceMgr& resourceMgr,
-                      DeferredRenderTargets& targets,
+    bool prepareShadow(RhiCommandList& commandList, ResourceMgr& resourceMgr, const TerrainShadowFrameData& frame);
+    bool prepareTransparent(RhiCommandList& commandList, ResourceMgr& resourceMgr, DeferredRenderTargets& targets,
+                            const TerrainFrameData& frame, const TerrainRenderSettings& settings,
+                            int heldBlockLightValue, bool volumetricFogShadersReady);
+    bool prepareWater(RhiCommandList& commandList, ResourceMgr& resourceMgr, DeferredRenderTargets& targets,
                       const TerrainWaterFrameData& frame);
-    bool prepareForward(RhiCommandList& commandList,
-                        ResourceMgr& resourceMgr,
-                        const TerrainFrameData& frame);
+    bool prepareForward(RhiCommandList& commandList, ResourceMgr& resourceMgr, const TerrainFrameData& frame);
 
     [[nodiscard]] RhiBindGroupLayoutHandle metadataLayout() const { return m_metadataLayout; }
     [[nodiscard]] RhiPipelineHandle gbufferOpaquePipeline() const { return m_gbufferOpaquePipeline; }
@@ -104,9 +91,7 @@ public:
     [[nodiscard]] RhiBindGroupLayoutHandle transparentMetadataLayout() const { return m_transparentMetadataLayout; }
     [[nodiscard]] RhiPipelineHandle transparentPipeline() const { return m_transparentPipeline; }
     [[nodiscard]] RhiBindGroupHandle transparentBindGroup() const { return m_transparentBindGroup; }
-    [[nodiscard]] RhiBindGroupHandle transparentClusterBindGroup() const {
-        return m_transparentClusterBindGroup;
-    }
+    [[nodiscard]] RhiBindGroupHandle transparentClusterBindGroup() const { return m_transparentClusterBindGroup; }
     [[nodiscard]] RhiBindGroupLayoutHandle waterMetadataLayout() const { return m_waterMetadataLayout; }
     [[nodiscard]] RhiPipelineHandle waterPipeline() const { return m_waterPipeline; }
     [[nodiscard]] RhiBindGroupHandle waterBindGroup() const { return m_waterBindGroup; }
@@ -128,39 +113,29 @@ private:
     bool ensureGBufferPipeline(ResourceMgr& resourceMgr);
     bool ensureGBufferTextureViews(ResourceMgr& resourceMgr);
     bool ensureGBufferBindGroups();
-    bool ensureTextureView(size_t slot,
-                           RhiTextureHandle texture,
-                           RhiTextureViewType viewType);
+    bool ensureTextureView(size_t slot, RhiTextureHandle texture, RhiTextureViewType viewType);
     void destroyGBufferBindGroups();
     void destroyGBufferTextureViews();
     void destroyGBufferResources();
     bool ensureShadowPipeline(ResourceMgr& resourceMgr);
     bool ensureShadowTextureViews(ResourceMgr& resourceMgr);
     bool ensureShadowBindGroup();
-    bool ensureShadowTextureView(size_t slot,
-                                 RhiTextureHandle texture,
-                                 RhiTextureViewType viewType);
+    bool ensureShadowTextureView(size_t slot, RhiTextureHandle texture, RhiTextureViewType viewType);
     void destroyShadowBindGroup();
     void destroyShadowTextureViews();
     void destroyShadowResources();
     bool ensureTransparentPipeline(ResourceMgr& resourceMgr);
-    bool ensureTransparentTextureViews(ResourceMgr& resourceMgr,
-                                       DeferredRenderTargets& targets);
+    bool ensureTransparentTextureViews(ResourceMgr& resourceMgr, DeferredRenderTargets& targets);
     bool ensureTransparentBindGroup();
-    bool ensureTransparentTextureView(size_t slot,
-                                      RhiTextureHandle texture,
-                                      RhiTextureViewType viewType,
+    bool ensureTransparentTextureView(size_t slot, RhiTextureHandle texture, RhiTextureViewType viewType,
                                       RhiTextureFormat format);
     void destroyTransparentBindGroup();
     void destroyTransparentTextureViews();
     void destroyTransparentResources();
     bool ensureWaterPipeline(ResourceMgr& resourceMgr);
-    bool ensureWaterTextureViews(ResourceMgr& resourceMgr,
-                                 DeferredRenderTargets& targets);
+    bool ensureWaterTextureViews(ResourceMgr& resourceMgr, DeferredRenderTargets& targets);
     bool ensureWaterBindGroup();
-    bool ensureWaterTextureView(size_t slot,
-                                RhiTextureHandle texture,
-                                RhiTextureViewType viewType,
+    bool ensureWaterTextureView(size_t slot, RhiTextureHandle texture, RhiTextureViewType viewType,
                                 RhiTextureFormat format);
     void destroyWaterBindGroup();
     void destroyWaterTextureViews();
@@ -168,9 +143,7 @@ private:
     bool ensureForwardPipeline(ResourceMgr& resourceMgr);
     bool ensureForwardTextureViews(ResourceMgr& resourceMgr);
     bool ensureForwardBindGroups();
-    bool ensureForwardTextureView(size_t slot,
-                                  RhiTextureHandle texture,
-                                  RhiTextureViewType viewType);
+    bool ensureForwardTextureView(size_t slot, RhiTextureHandle texture, RhiTextureViewType viewType);
     void destroyForwardBindGroups();
     void destroyForwardTextureViews();
     void destroyForwardResources();

@@ -7,14 +7,7 @@
 // Forward declaration
 class GameStateMachine;
 
-enum class GameStateKind {
-    Generic,
-    Gameplay,
-    DataDrivenContainer,
-    SmeltingContainer,
-    Workbench,
-    NetworkContainer
-};
+enum class GameStateKind { Generic, Gameplay, DataDrivenContainer, SmeltingContainer, Workbench, NetworkContainer };
 
 class IGameState {
 public:

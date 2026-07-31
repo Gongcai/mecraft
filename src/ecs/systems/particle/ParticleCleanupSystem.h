@@ -8,10 +8,7 @@ namespace ecs {
 
 class ParticleCleanupSystem : public ISystem {
 public:
-    using Dependencies = SystemDependency<
-        std::tuple<ParticleTag, ParticleComponent>,
-        std::tuple<>
-    >;
+    using Dependencies = SystemDependency<std::tuple<ParticleTag, ParticleComponent>, std::tuple<>>;
 
     void update(SystemContext& ctx) override;
 };

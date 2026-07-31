@@ -30,8 +30,8 @@ void UIBoxLayout::layout(const UIRenderContext& ctx) {
 
 void UIBoxLayout::layout() {
     const auto& children = getChildren();
-    const int visibleCount = static_cast<int>(std::count_if(children.begin(), children.end(),
-        [](const auto& child) { return child && child->visible; }));
+    const int visibleCount = static_cast<int>(
+        std::count_if(children.begin(), children.end(), [](const auto& child) { return child && child->visible; }));
     if (visibleCount <= 0) {
         return;
     }
@@ -78,17 +78,12 @@ void UIBoxLayout::layout() {
     float gap = m_gap;
     float cursor = 0.0f;
     switch (m_justify) {
-        case UIJustifyContent::Start:
-            break;
-        case UIJustifyContent::Center:
-            cursor = remaining * 0.5f;
-            break;
-        case UIJustifyContent::End:
-            cursor = remaining;
-            break;
-        case UIJustifyContent::SpaceBetween:
-            gap = visibleCount > 1 ? m_gap + remaining / static_cast<float>(visibleCount - 1) : 0.0f;
-            break;
+    case UIJustifyContent::Start: break;
+    case UIJustifyContent::Center: cursor = remaining * 0.5f; break;
+    case UIJustifyContent::End: cursor = remaining; break;
+    case UIJustifyContent::SpaceBetween:
+        gap = visibleCount > 1 ? m_gap + remaining / static_cast<float>(visibleCount - 1) : 0.0f;
+        break;
     }
 
     for (const auto& child : children) {
@@ -101,22 +96,17 @@ void UIBoxLayout::layout() {
         float cross = 0.0f;
 
         switch (m_align) {
-            case UIAlignItems::Start:
-                break;
-            case UIAlignItems::Center:
-                cross = std::max(0.0f, (innerCross - childCross) * 0.5f);
-                break;
-            case UIAlignItems::End:
-                cross = std::max(0.0f, innerCross - childCross);
-                break;
-            case UIAlignItems::Stretch:
-                childCross = innerCross;
-                if (horizontal) {
-                    child->height = childCross;
-                } else {
-                    child->width = childCross;
-                }
-                break;
+        case UIAlignItems::Start: break;
+        case UIAlignItems::Center: cross = std::max(0.0f, (innerCross - childCross) * 0.5f); break;
+        case UIAlignItems::End: cross = std::max(0.0f, innerCross - childCross); break;
+        case UIAlignItems::Stretch:
+            childCross = innerCross;
+            if (horizontal) {
+                child->height = childCross;
+            } else {
+                child->width = childCross;
+            }
+            break;
         }
 
         child->anchor = Anchor::BottomLeft;

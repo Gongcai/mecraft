@@ -45,9 +45,9 @@ public:
 private:
     GameplayRegistry m_registry;
     GameplayServices m_services;
-    GameTickClock    m_tickClock;
+    GameTickClock m_tickClock;
     GameplayPipeline m_pipeline;
-    entt::entity     m_localPlayer = entt::null;
+    entt::entity m_localPlayer = entt::null;
 };
 
 } // namespace ecs

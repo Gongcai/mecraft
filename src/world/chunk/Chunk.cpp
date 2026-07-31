@@ -19,11 +19,11 @@ constexpr int OPPOSITE_SUB_CHUNK_NEIGHBOR[6] = {1, 0, 3, 2, 5, 4};
 
 int chunkDirectionToSubChunkDirection(const int direction) {
     switch (direction) {
-        case 0: return 0;
-        case 1: return 1;
-        case 2: return 4;
-        case 3: return 5;
-        default: return -1;
+    case 0: return 0;
+    case 1: return 1;
+    case 2: return 4;
+    case 3: return 5;
+    default: return -1;
     }
 }
 
@@ -51,9 +51,7 @@ bool Chunk::isInBounds(const int x, const int y, const int z) {
 }
 
 size_t Chunk::toIndex(const int x, const int y, const int z) {
-    return static_cast<size_t>(x) +
-           static_cast<size_t>(z) * SIZE_X +
-           static_cast<size_t>(y) * SIZE_X * SIZE_Z;
+    return static_cast<size_t>(x) + static_cast<size_t>(z) * SIZE_X + static_cast<size_t>(y) * SIZE_X * SIZE_Z;
 }
 
 uint8_t Chunk::getImplicitSunlight(const int x, const int y, const int z) const {
@@ -132,7 +130,8 @@ void Chunk::tryRecycleSubChunk(const int scy) {
 // --- Sub-chunk access ---
 
 SubChunk* Chunk::getOrCreateSubChunk(const int scy) {
-    if (scy < 0 || scy >= NUM_SUB_CHUNKS) return nullptr;
+    if (scy < 0 || scy >= NUM_SUB_CHUNKS)
+        return nullptr;
     if (!m_subChunks[scy]) {
         m_subChunks[scy] = std::make_unique<SubChunk>();
         SubChunk* sc = m_subChunks[scy].get();
@@ -205,9 +204,8 @@ bool Chunk::replacePackedLight(const uint8_t* data, const size_t size, uint32_t*
                 const size_t index = toIndex(x, y, z);
                 const uint8_t packed = data[index];
                 const uint8_t implicit = getImplicitPackedLight(x, y, z);
-                const uint8_t currentPacked = sc
-                    ? sc->m_lightMap[SubChunk::toIndex(x, toSubChunkLocalY(y), z)]
-                    : implicit;
+                const uint8_t currentPacked =
+                    sc ? sc->m_lightMap[SubChunk::toIndex(x, toSubChunkLocalY(y), z)] : implicit;
 
                 if (currentPacked == packed) {
                     continue;
@@ -251,8 +249,7 @@ bool Chunk::replacePackedLight(const uint8_t* data, const size_t size, uint32_t*
 }
 
 bool Chunk::replacePackedLightSection(const int scy, const uint8_t* data, const size_t size) {
-    if (data == nullptr || size != SubChunk::BLOCK_COUNT ||
-        scy < 0 || scy >= NUM_SUB_CHUNKS) {
+    if (data == nullptr || size != SubChunk::BLOCK_COUNT || scy < 0 || scy >= NUM_SUB_CHUNKS) {
         return false;
     }
 
@@ -265,9 +262,8 @@ bool Chunk::replacePackedLightSection(const int scy, const uint8_t* data, const 
         for (int z = 0; z < SIZE_Z; ++z) {
             for (int x = 0; x < SIZE_X; ++x) {
                 const uint8_t packed = data[index++];
-                const uint8_t currentPacked = sc
-                    ? sc->m_lightMap[SubChunk::toIndex(x, ly, z)]
-                    : getImplicitPackedLight(x, y, z);
+                const uint8_t currentPacked =
+                    sc ? sc->m_lightMap[SubChunk::toIndex(x, ly, z)] : getImplicitPackedLight(x, y, z);
 
                 if (currentPacked == packed) {
                     continue;
@@ -331,11 +327,7 @@ BlockStateId Chunk::getFluidState(const int x, const int y, const int z) const {
     return NULL_BLOCK_STATE;
 }
 
-void Chunk::setBlockImpl(const int x,
-                         const int y,
-                         const int z,
-                         const BlockStateId stateId,
-                         const bool markMeshDirty) {
+void Chunk::setBlockImpl(const int x, const int y, const int z, const BlockStateId stateId, const bool markMeshDirty) {
     if (!isInBounds(x, y, z)) {
         return;
     }
@@ -497,18 +489,14 @@ void Chunk::seedInitialLightMap() {
                 if (def.opacity >= 15) {
                     skyLevel = 0;
                 } else if (skyLevel > 0) {
-                    skyLevel = (skyLevel > def.opacity)
-                        ? static_cast<uint8_t>(skyLevel - def.opacity)
-                        : 0;
+                    skyLevel = (skyLevel > def.opacity) ? static_cast<uint8_t>(skyLevel - def.opacity) : 0;
                 }
 
                 if (!sc) {
                     continue;
                 }
 
-                const uint8_t blockLight = (def.isLightSource && def.lightLevel > 0)
-                    ? clampLight(def.lightLevel)
-                    : 0;
+                const uint8_t blockLight = (def.isLightSource && def.lightLevel > 0) ? clampLight(def.lightLevel) : 0;
                 sc->m_lightMap[SubChunk::toIndex(x, toSubChunkLocalY(y), z)] =
                     static_cast<uint8_t>((skyLevel << 4) | blockLight);
             }

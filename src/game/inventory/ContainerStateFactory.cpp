@@ -11,28 +11,20 @@
 #include "../../ui/inventory/ContainerUiRegistry.h"
 
 namespace {
-using ContainerStateCreator = std::unique_ptr<IGameState> (*)(
-    InventoryStateContext,
-    const ui::ContainerUiDef&,
-    const ContainerBehaviorDef&,
-    const glm::ivec3&);
+using ContainerStateCreator = std::unique_ptr<IGameState> (*)(InventoryStateContext, const ui::ContainerUiDef&,
+                                                              const ContainerBehaviorDef&, const glm::ivec3&);
 
-std::unique_ptr<IGameState> createStorageState(InventoryStateContext deps,
-                                               const ui::ContainerUiDef& def,
-                                               const ContainerBehaviorDef& behavior,
-                                               const glm::ivec3& blockPosition) {
+std::unique_ptr<IGameState> createStorageState(InventoryStateContext deps, const ui::ContainerUiDef& def,
+                                               const ContainerBehaviorDef& behavior, const glm::ivec3& blockPosition) {
     return std::make_unique<DataDrivenContainerState>(deps, def.id, behavior.id, blockPosition);
 }
 
-std::unique_ptr<IGameState> createSmeltingState(InventoryStateContext deps,
-                                                const ui::ContainerUiDef& def,
-                                                const ContainerBehaviorDef& behavior,
-                                                const glm::ivec3& blockPosition) {
+std::unique_ptr<IGameState> createSmeltingState(InventoryStateContext deps, const ui::ContainerUiDef& def,
+                                                const ContainerBehaviorDef& behavior, const glm::ivec3& blockPosition) {
     return std::make_unique<SmeltingContainerState>(deps, def.id, behavior.id, blockPosition);
 }
 
-std::unique_ptr<IGameState> createCraftingState(InventoryStateContext deps,
-                                                const ui::ContainerUiDef& def,
+std::unique_ptr<IGameState> createCraftingState(InventoryStateContext deps, const ui::ContainerUiDef& def,
                                                 const ContainerBehaviorDef& /*behavior*/,
                                                 const glm::ivec3& /*blockPosition*/) {
     return std::make_unique<WorkbenchState>(deps, def.id);
@@ -46,10 +38,9 @@ const std::unordered_map<std::string, ContainerStateCreator>& containerStateCrea
     };
     return creators;
 }
-}
+} // namespace
 
-std::unique_ptr<IGameState> ContainerStateFactory::create(InventoryStateContext deps,
-                                                          const std::string& containerUiId,
+std::unique_ptr<IGameState> ContainerStateFactory::create(InventoryStateContext deps, const std::string& containerUiId,
                                                           const glm::ivec3& blockPosition) {
     const ui::ContainerUiDef& def = ui::ContainerUiRegistry::require(containerUiId);
     const ContainerBehaviorDef& behavior = ContainerBehaviorRegistry::require(def.behavior);

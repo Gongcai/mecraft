@@ -28,10 +28,22 @@ public:
     void setLabelTextScale(float scale);
 
     // Local color overrides.
-    void setTrackOffColor(const Color& c) { m_trackOffColor = c; m_hasLocalColors = true; }
-    void setTrackOnColor(const Color& c)  { m_trackOnColor = c; m_hasLocalColors = true; }
-    void setKnobColor(const Color& c)     { m_knobColor = c; m_hasLocalColors = true; }
-    void setKnobHoverColor(const Color& c){ m_knobHoverColor = c; m_hasLocalColors = true; }
+    void setTrackOffColor(const Color& c) {
+        m_trackOffColor = c;
+        m_hasLocalColors = true;
+    }
+    void setTrackOnColor(const Color& c) {
+        m_trackOnColor = c;
+        m_hasLocalColors = true;
+    }
+    void setKnobColor(const Color& c) {
+        m_knobColor = c;
+        m_hasLocalColors = true;
+    }
+    void setKnobHoverColor(const Color& c) {
+        m_knobHoverColor = c;
+        m_hasLocalColors = true;
+    }
     void setStyle(const UIToggleStyle& style);
     void clearLocalStyle();
 

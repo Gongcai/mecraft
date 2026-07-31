@@ -10,17 +10,11 @@ enum class TextureResampleFilter {
     Linear,
 };
 
-[[nodiscard]] TextureResampleFilter selectTextureTileResampleFilter(int sourceWidth,
-                                                                    int sourceHeight,
-                                                                    int targetSize);
+[[nodiscard]] TextureResampleFilter selectTextureTileResampleFilter(int sourceWidth, int sourceHeight, int targetSize);
 
-[[nodiscard]] std::vector<unsigned char> resampleRgba8(const unsigned char* sourcePixels,
-                                                       int sourceWidth,
-                                                       int sourceHeight,
-                                                       int sourceRowStridePixels,
-                                                       int targetWidth,
-                                                       int targetHeight,
-                                                       TextureResampleFilter filter);
+[[nodiscard]] std::vector<unsigned char> resampleRgba8(const unsigned char* sourcePixels, int sourceWidth,
+                                                       int sourceHeight, int sourceRowStridePixels, int targetWidth,
+                                                       int targetHeight, TextureResampleFilter filter);
 
 } // namespace resource
 

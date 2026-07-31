@@ -12,12 +12,7 @@
 namespace ecs {
 
 struct MobAIComponent {
-    enum class State : uint8_t {
-        Idle,
-        Wander,
-        Pursue,
-        Attack
-    };
+    enum class State : uint8_t { Idle, Wander, Pursue, Attack };
 
     State state = State::Idle;
     entt::entity target = entt::null;
@@ -67,14 +62,7 @@ struct EntityModelPartComponent {
     std::string partName;
 };
 
-enum class StevePartType : uint8_t {
-    Torso,
-    Head,
-    RightArm,
-    LeftArm,
-    RightLeg,
-    LeftLeg
-};
+enum class StevePartType : uint8_t { Torso, Head, RightArm, LeftArm, RightLeg, LeftLeg };
 
 struct StevePartComponent {
     StevePartType partType = StevePartType::Torso;

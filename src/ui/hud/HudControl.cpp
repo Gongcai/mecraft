@@ -21,25 +21,20 @@ struct HudImagePushConstants {
 
 static_assert(sizeof(HudImagePushConstants) == 64u);
 
-[[nodiscard]] RhiRect2D hudScissor(const UIRenderContext& context)
-{
+[[nodiscard]] RhiRect2D hudScissor(const UIRenderContext& context) {
     if (context.hasScissor) {
         return context.scissor;
     }
-    return {
-        0,
-        0,
-        static_cast<uint32_t>(std::max(1.0f,
-            std::round(static_cast<float>(context.screenWidth) * context.pixelScale()))),
-        static_cast<uint32_t>(std::max(1.0f,
-            std::round(static_cast<float>(context.screenHeight) * context.pixelScale())))
-    };
+    return {0, 0,
+            static_cast<uint32_t>(
+                std::max(1.0f, std::round(static_cast<float>(context.screenWidth) * context.pixelScale()))),
+            static_cast<uint32_t>(
+                std::max(1.0f, std::round(static_cast<float>(context.screenHeight) * context.pixelScale())))};
 }
 
 } // namespace
 
-void HudControl::init(ResourceMgr& resourceMgr)
-{
+void HudControl::init(ResourceMgr& resourceMgr) {
     UIWidget::init(resourceMgr);
     m_resourceMgr = &resourceMgr;
 
@@ -47,23 +42,18 @@ void HudControl::init(ResourceMgr& resourceMgr)
     m_heartHalf = resourceMgr.getHudIconIndex("heart_half");
     m_armorFull = resourceMgr.getHudIconIndex("armor_full");
     m_armorHalf = resourceMgr.getHudIconIndex("armor_half");
-    m_foodFull  = resourceMgr.getHudIconIndex("food_full");
-    m_foodHalf  = resourceMgr.getHudIconIndex("food_half");
+    m_foodFull = resourceMgr.getHudIconIndex("food_full");
+    m_foodHalf = resourceMgr.getHudIconIndex("food_half");
 }
 
-void HudControl::shutdown()
-{
+void HudControl::shutdown() {
     m_resourceMgr = nullptr;
     UIWidget::shutdown();
 }
 
-void HudControl::drawIconRow(const UIRenderContext& context,
-                                const TextureAtlas& atlas,
-                                const float startX, const float startY,
-                                const int current, const int max,
-                                const int fullIndex, const int halfIndex,
-                                const float iconSize) const
-{
+void HudControl::drawIconRow(const UIRenderContext& context, const TextureAtlas& atlas, const float startX,
+                             const float startY, const int current, const int max, const int fullIndex,
+                             const int halfIndex, const float iconSize) const {
     if (fullIndex < 0 || context.commandList == nullptr || context.uiRenderer == nullptr) {
         return;
     }
@@ -84,15 +74,11 @@ void HudControl::drawIconRow(const UIRenderContext& context,
 
     const auto drawIcon = [&](const float x, const auto& uv) {
         const HudImagePushConstants pushConstants{
-            glm::vec4(static_cast<float>(context.screenWidth),
-                      static_cast<float>(context.screenHeight), x, startY),
-            glm::vec4(iconSize, iconSize, 0.0f, 0.0f),
-            glm::vec4(uv.first.x, uv.first.y, uv.second.x, uv.second.y),
-            glm::vec4(1.0f)
-        };
+            glm::vec4(static_cast<float>(context.screenWidth), static_cast<float>(context.screenHeight), x, startY),
+            glm::vec4(iconSize, iconSize, 0.0f, 0.0f), glm::vec4(uv.first.x, uv.first.y, uv.second.x, uv.second.y),
+            glm::vec4(1.0f)};
         commandList.pushConstants(&pushConstants, sizeof(pushConstants),
-                                  rhiFlag(RhiShaderStage::Vertex) |
-                                  rhiFlag(RhiShaderStage::Fragment));
+                                  rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment));
         commandList.draw(6u, 1u, 0u, 0u);
     };
 
@@ -106,13 +92,10 @@ void HudControl::drawIconRow(const UIRenderContext& context,
     }
 }
 
-void HudControl::renderSelf(const UIRenderContext& context) const
-{
-    if (!visible || !context.playerStats || !m_resourceMgr ||
-        context.commandList == nullptr || context.uiRenderer == nullptr ||
-        !context.panelQuadVertexBuffer.isValid() ||
-        !context.imageTexturePipeline.isValid() ||
-        context.screenWidth <= 0 || context.screenHeight <= 0) {
+void HudControl::renderSelf(const UIRenderContext& context) const {
+    if (!visible || !context.playerStats || !m_resourceMgr || context.commandList == nullptr ||
+        context.uiRenderer == nullptr || !context.panelQuadVertexBuffer.isValid() ||
+        !context.imageTexturePipeline.isValid() || context.screenWidth <= 0 || context.screenHeight <= 0) {
         return;
     }
 
@@ -149,20 +132,16 @@ void HudControl::renderSelf(const UIRenderContext& context) const
     const float foodStartX = hotbarRightX - static_cast<float>(foodMax) * 0.5f * iconSize;
 
     // Health row
-    drawIconRow(context, atlas, heartStartX, hudBaseY,
-                  stats.health, heartMax, m_heartFull, m_heartHalf, iconSize);
+    drawIconRow(context, atlas, heartStartX, hudBaseY, stats.health, heartMax, m_heartFull, m_heartHalf, iconSize);
 
     // Food row (right side)
-    drawIconRow(context, atlas, foodStartX, hudBaseY,
-                  stats.food, foodMax, m_foodFull, m_foodHalf, iconSize);
+    drawIconRow(context, atlas, foodStartX, hudBaseY, stats.food, foodMax, m_foodFull, m_foodHalf, iconSize);
 
     // Armor row (above hearts, only when armor > 0)
     const int armorVal = stats.armor;
     if (armorVal > 0) {
         const int armorMax = stats.maxArmor;
         const float armorY = hudBaseY + iconSize + 2.0f;
-        drawIconRow(context, atlas, heartStartX, armorY,
-                      armorVal, armorMax, m_armorFull, m_armorHalf, iconSize);
+        drawIconRow(context, atlas, heartStartX, armorY, armorVal, armorMax, m_armorFull, m_armorHalf, iconSize);
     }
-
 }

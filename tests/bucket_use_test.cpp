@@ -43,11 +43,8 @@ struct BucketRunResult {
     glm::ivec3 fluidTargetBlock{};
 };
 
-BucketRunResult runBucketUse(World& world,
-                             const ItemID selectedItem,
-                             const glm::ivec3& targetBlock,
-                             const glm::ivec3& placeBlock,
-                             const glm::ivec3& hitNormal) {
+BucketRunResult runBucketUse(World& world, const ItemID selectedItem, const glm::ivec3& targetBlock,
+                             const glm::ivec3& placeBlock, const glm::ivec3& hitNormal) {
     ecs::GameplayRegistry registry;
     ecs::GameplayServices services;
     services.world = &world;
@@ -96,20 +93,12 @@ BucketRunResult runBucketUse(World& world,
     const auto& updatedInventory = registry.get<ecs::InventoryDataComponent>(player).inventory;
     const auto& runtime = registry.get<ecs::BlockInteractionRuntimeComponent>(player);
     const auto& updatedTarget = registry.get<ecs::BlockTargetComponent>(player);
-    return {
-        updatedInventory.getSlotStack(0),
-        runtime.placeCooldownRemaining,
-        runtime.heldItemSwingSequence,
-        updatedTarget.hasTarget,
-        updatedTarget.targetBlock,
-        updatedTarget.hasFluidTarget,
-        updatedTarget.fluidTargetBlock
-    };
+    return {updatedInventory.getSlotStack(0), runtime.placeCooldownRemaining, runtime.heldItemSwingSequence,
+            updatedTarget.hasTarget,          updatedTarget.targetBlock,      updatedTarget.hasFluidTarget,
+            updatedTarget.fluidTargetBlock};
 }
 
-BucketRunResult runBucketUseFromRaycast(World& world,
-                                        const ItemID selectedItem,
-                                        const glm::vec3& eyePosition,
+BucketRunResult runBucketUseFromRaycast(World& world, const ItemID selectedItem, const glm::vec3& eyePosition,
                                         const glm::vec3& viewDirection) {
     ecs::GameplayRegistry registry;
     ecs::GameplayServices services;
@@ -155,15 +144,9 @@ BucketRunResult runBucketUseFromRaycast(World& world,
     const auto& updatedInventory = registry.get<ecs::InventoryDataComponent>(player).inventory;
     const auto& runtime = registry.get<ecs::BlockInteractionRuntimeComponent>(player);
     const auto& updatedTarget = registry.get<ecs::BlockTargetComponent>(player);
-    return {
-        updatedInventory.getSlotStack(0),
-        runtime.placeCooldownRemaining,
-        runtime.heldItemSwingSequence,
-        updatedTarget.hasTarget,
-        updatedTarget.targetBlock,
-        updatedTarget.hasFluidTarget,
-        updatedTarget.fluidTargetBlock
-    };
+    return {updatedInventory.getSlotStack(0), runtime.placeCooldownRemaining, runtime.heldItemSwingSequence,
+            updatedTarget.hasTarget,          updatedTarget.targetBlock,      updatedTarget.hasFluidTarget,
+            updatedTarget.fluidTargetBlock};
 }
 
 bool isSourceWaterAt(const World& world, const glm::ivec3& pos) {
@@ -185,33 +168,22 @@ int main() {
     world.setBlockState(sourcePos.x, sourcePos.y, sourcePos.z, NULL_BLOCK_STATE);
     world.setFluidState(sourcePos.x, sourcePos.y, sourcePos.z, FluidState::makeWater(0, false));
 
-    BucketRunResult pickupResult = runBucketUse(
-        world,
-        ItemRegistry::requireIdByName("minecraft:bucket"),
-        sourcePos,
-        sourcePos + glm::ivec3(0, 1, 0),
-        glm::ivec3(0, 1, 0));
+    BucketRunResult pickupResult = runBucketUse(world, ItemRegistry::requireIdByName("minecraft:bucket"), sourcePos,
+                                                sourcePos + glm::ivec3(0, 1, 0), glm::ivec3(0, 1, 0));
     if (world.getFluidState(sourcePos.x, sourcePos.y, sourcePos.z) != NULL_BLOCK_STATE ||
         pickupResult.selectedStack.itemId != ItemRegistry::requireIdByName("minecraft:water_bucket") ||
-        pickupResult.selectedStack.count != 1 ||
-        pickupResult.placeCooldownRemaining <= 0.0f ||
+        pickupResult.selectedStack.count != 1 || pickupResult.placeCooldownRemaining <= 0.0f ||
         pickupResult.heldItemSwingSequence != 1) {
         return fail("empty bucket should pick up source water and become a water bucket");
     }
 
     const glm::ivec3 raycastSourcePos(1, 122, 0);
     world.setBlockState(raycastSourcePos.x, raycastSourcePos.y, raycastSourcePos.z, NULL_BLOCK_STATE);
-    world.setFluidState(raycastSourcePos.x,
-                        raycastSourcePos.y,
-                        raycastSourcePos.z,
-                        FluidState::makeWater(0, false));
+    world.setFluidState(raycastSourcePos.x, raycastSourcePos.y, raycastSourcePos.z, FluidState::makeWater(0, false));
     BucketRunResult raycastPickupResult = runBucketUseFromRaycast(
-        world,
-        ItemRegistry::requireIdByName("minecraft:bucket"),
-        glm::vec3(raycastSourcePos) + glm::vec3(0.5f, 0.5f, 2.5f),
-        glm::vec3(0.0f, 0.0f, -1.0f));
-    if (raycastPickupResult.hadTarget ||
-        !raycastPickupResult.hadFluidTarget ||
+        world, ItemRegistry::requireIdByName("minecraft:bucket"),
+        glm::vec3(raycastSourcePos) + glm::vec3(0.5f, 0.5f, 2.5f), glm::vec3(0.0f, 0.0f, -1.0f));
+    if (raycastPickupResult.hadTarget || !raycastPickupResult.hadFluidTarget ||
         raycastPickupResult.fluidTargetBlock != raycastSourcePos ||
         world.getFluidState(raycastSourcePos.x, raycastSourcePos.y, raycastSourcePos.z) != NULL_BLOCK_STATE ||
         raycastPickupResult.selectedStack.itemId != ItemRegistry::requireIdByName("minecraft:water_bucket") ||
@@ -220,17 +192,12 @@ int main() {
     }
 
     const glm::ivec3 blockLayerSourcePos(4, 122, 0);
-    world.setBlockState(blockLayerSourcePos.x,
-                        blockLayerSourcePos.y,
-                        blockLayerSourcePos.z,
+    world.setBlockState(blockLayerSourcePos.x, blockLayerSourcePos.y, blockLayerSourcePos.z,
                         FluidState::makeWater(0, false));
     BucketRunResult blockLayerPickupResult = runBucketUseFromRaycast(
-        world,
-        ItemRegistry::requireIdByName("minecraft:bucket"),
-        glm::vec3(blockLayerSourcePos) + glm::vec3(0.5f, 0.5f, 2.5f),
-        glm::vec3(0.0f, 0.0f, -1.0f));
-    if (blockLayerPickupResult.hadTarget ||
-        !blockLayerPickupResult.hadFluidTarget ||
+        world, ItemRegistry::requireIdByName("minecraft:bucket"),
+        glm::vec3(blockLayerSourcePos) + glm::vec3(0.5f, 0.5f, 2.5f), glm::vec3(0.0f, 0.0f, -1.0f));
+    if (blockLayerPickupResult.hadTarget || !blockLayerPickupResult.hadFluidTarget ||
         blockLayerPickupResult.fluidTargetBlock != blockLayerSourcePos ||
         world.getBlockState(blockLayerSourcePos.x, blockLayerSourcePos.y, blockLayerSourcePos.z) != NULL_BLOCK_STATE ||
         blockLayerPickupResult.selectedStack.itemId != ItemRegistry::requireIdByName("minecraft:water_bucket") ||
@@ -241,23 +208,14 @@ int main() {
     const glm::ivec3 waterInFrontPos(7, 122, 0);
     const glm::ivec3 stoneBehindWaterPos(7, 122, -1);
     world.setBlockState(waterInFrontPos.x, waterInFrontPos.y, waterInFrontPos.z, NULL_BLOCK_STATE);
-    world.setFluidState(waterInFrontPos.x,
-                        waterInFrontPos.y,
-                        waterInFrontPos.z,
-                        FluidState::makeWater(0, false));
-    world.setBlock(stoneBehindWaterPos.x,
-                   stoneBehindWaterPos.y,
-                   stoneBehindWaterPos.z,
+    world.setFluidState(waterInFrontPos.x, waterInFrontPos.y, waterInFrontPos.z, FluidState::makeWater(0, false));
+    world.setBlock(stoneBehindWaterPos.x, stoneBehindWaterPos.y, stoneBehindWaterPos.z,
                    BlockRegistry::requireIdByName("minecraft:stone"));
-    BucketRunResult underwaterTargetResult = runBucketUseFromRaycast(
-        world,
-        ItemRegistry::requireIdByName("minecraft:bucket"),
-        glm::vec3(waterInFrontPos) + glm::vec3(0.5f, 0.5f, 2.5f),
-        glm::vec3(0.0f, 0.0f, -1.0f));
-    if (!underwaterTargetResult.hadTarget ||
-        underwaterTargetResult.targetBlock != stoneBehindWaterPos ||
-        !underwaterTargetResult.hadFluidTarget ||
-        underwaterTargetResult.fluidTargetBlock != waterInFrontPos ||
+    BucketRunResult underwaterTargetResult =
+        runBucketUseFromRaycast(world, ItemRegistry::requireIdByName("minecraft:bucket"),
+                                glm::vec3(waterInFrontPos) + glm::vec3(0.5f, 0.5f, 2.5f), glm::vec3(0.0f, 0.0f, -1.0f));
+    if (!underwaterTargetResult.hadTarget || underwaterTargetResult.targetBlock != stoneBehindWaterPos ||
+        !underwaterTargetResult.hadFluidTarget || underwaterTargetResult.fluidTargetBlock != waterInFrontPos ||
         world.getFluidState(waterInFrontPos.x, waterInFrontPos.y, waterInFrontPos.z) != NULL_BLOCK_STATE ||
         underwaterTargetResult.selectedStack.itemId != ItemRegistry::requireIdByName("minecraft:water_bucket")) {
         return fail("fluid target should not block the ordinary block target behind water");
@@ -265,13 +223,9 @@ int main() {
 
     const glm::ivec3 underwaterPlacePos(8, 122, 0);
     world.setBlockState(underwaterPlacePos.x, underwaterPlacePos.y, underwaterPlacePos.z, NULL_BLOCK_STATE);
-    world.setFluidState(underwaterPlacePos.x,
-                        underwaterPlacePos.y,
-                        underwaterPlacePos.z,
+    world.setFluidState(underwaterPlacePos.x, underwaterPlacePos.y, underwaterPlacePos.z,
                         FluidState::makeWater(0, false));
-    world.setBlock(underwaterPlacePos.x,
-                   underwaterPlacePos.y,
-                   underwaterPlacePos.z,
+    world.setBlock(underwaterPlacePos.x, underwaterPlacePos.y, underwaterPlacePos.z,
                    BlockRegistry::requireIdByName("minecraft:stone"));
     if (blockIdOf(world.getBlockState(underwaterPlacePos.x, underwaterPlacePos.y, underwaterPlacePos.z)) !=
             BlockRegistry::requireIdByName("minecraft:stone") ||
@@ -283,16 +237,11 @@ int main() {
     world.setBlockState(placePos.x, placePos.y, placePos.z, NULL_BLOCK_STATE);
     world.setFluidState(placePos.x, placePos.y, placePos.z, NULL_BLOCK_STATE);
 
-    BucketRunResult placeResult = runBucketUse(
-        world,
-        ItemRegistry::requireIdByName("minecraft:water_bucket"),
-        placePos + glm::ivec3(0, -1, 0),
-        placePos,
-        glm::ivec3(0, 1, 0));
+    BucketRunResult placeResult = runBucketUse(world, ItemRegistry::requireIdByName("minecraft:water_bucket"),
+                                               placePos + glm::ivec3(0, -1, 0), placePos, glm::ivec3(0, 1, 0));
     if (!isSourceWaterAt(world, placePos) ||
         placeResult.selectedStack.itemId != ItemRegistry::requireIdByName("minecraft:bucket") ||
-        placeResult.selectedStack.count != 1 ||
-        placeResult.placeCooldownRemaining <= 0.0f ||
+        placeResult.selectedStack.count != 1 || placeResult.placeCooldownRemaining <= 0.0f ||
         placeResult.heldItemSwingSequence != 1) {
         return fail("water bucket should place source water and become an empty bucket");
     }
@@ -301,12 +250,9 @@ int main() {
     world.setBlockState(flowingPos.x, flowingPos.y, flowingPos.z, NULL_BLOCK_STATE);
     world.setFluidState(flowingPos.x, flowingPos.y, flowingPos.z, FluidState::makeWater(3, false));
 
-    BucketRunResult flowingPickupResult = runBucketUse(
-        world,
-        ItemRegistry::requireIdByName("minecraft:bucket"),
-        flowingPos,
-        flowingPos + glm::ivec3(0, 1, 0),
-        glm::ivec3(0, 1, 0));
+    BucketRunResult flowingPickupResult =
+        runBucketUse(world, ItemRegistry::requireIdByName("minecraft:bucket"), flowingPos,
+                     flowingPos + glm::ivec3(0, 1, 0), glm::ivec3(0, 1, 0));
     if (flowingPickupResult.selectedStack.itemId != ItemRegistry::requireIdByName("minecraft:bucket") ||
         flowingPickupResult.heldItemSwingSequence != 0 ||
         world.getFluidState(flowingPos.x, flowingPos.y, flowingPos.z) != FluidState::makeWater(3, false)) {
@@ -317,15 +263,13 @@ int main() {
     world.setBlock(blockedPos.x, blockedPos.y, blockedPos.z, BlockRegistry::requireIdByName("minecraft:stone"));
     world.setFluidState(blockedPos.x, blockedPos.y, blockedPos.z, NULL_BLOCK_STATE);
 
-    BucketRunResult blockedPlaceResult = runBucketUse(
-        world,
-        ItemRegistry::requireIdByName("minecraft:water_bucket"),
-        blockedPos + glm::ivec3(0, -1, 0),
-        blockedPos,
-        glm::ivec3(0, 1, 0));
+    BucketRunResult blockedPlaceResult =
+        runBucketUse(world, ItemRegistry::requireIdByName("minecraft:water_bucket"), blockedPos + glm::ivec3(0, -1, 0),
+                     blockedPos, glm::ivec3(0, 1, 0));
     if (blockedPlaceResult.selectedStack.itemId != ItemRegistry::requireIdByName("minecraft:water_bucket") ||
         blockedPlaceResult.heldItemSwingSequence != 0 ||
-        blockIdOf(world.getBlockState(blockedPos.x, blockedPos.y, blockedPos.z)) != BlockRegistry::requireIdByName("minecraft:stone") ||
+        blockIdOf(world.getBlockState(blockedPos.x, blockedPos.y, blockedPos.z)) !=
+            BlockRegistry::requireIdByName("minecraft:stone") ||
         world.getFluidState(blockedPos.x, blockedPos.y, blockedPos.z) != NULL_BLOCK_STATE) {
         return fail("water bucket should not place water into a non-coexisting solid block");
     }

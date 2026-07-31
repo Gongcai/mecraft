@@ -8,8 +8,8 @@
 namespace {
 
 void glfwErrorCallback(int error, const char* description) {
-    MECRAFT_LOG_STREAM(std::cerr << "GLFW error " << error << ": "
-                                 << (description != nullptr ? description : "unknown") << "\n");
+    MECRAFT_LOG_STREAM(std::cerr << "GLFW error " << error << ": " << (description != nullptr ? description : "unknown")
+                                 << "\n");
 }
 
 } // namespace
@@ -21,8 +21,8 @@ bool Window::initializePlatform() {
         const int error = glfwGetError(&description);
         MECRAFT_LOG_STREAM(std::cerr << "Failed to initialize GLFW");
         if (error != GLFW_NO_ERROR) {
-            MECRAFT_LOG_STREAM(std::cerr << " (" << error << ": "
-                                         << (description != nullptr ? description : "unknown") << ")");
+            MECRAFT_LOG_STREAM(std::cerr << " (" << error << ": " << (description != nullptr ? description : "unknown")
+                                         << ")");
         }
         MECRAFT_LOG_STREAM(std::cerr << "\n");
         return false;
@@ -42,8 +42,8 @@ bool Window::create(const int width, const int height, const char* title) {
         const int error = glfwGetError(&description);
         MECRAFT_LOG_STREAM(std::cerr << "Failed to create GLFW window");
         if (error != GLFW_NO_ERROR) {
-            MECRAFT_LOG_STREAM(std::cerr << " (" << error << ": "
-                                         << (description != nullptr ? description : "unknown") << ")");
+            MECRAFT_LOG_STREAM(std::cerr << " (" << error << ": " << (description != nullptr ? description : "unknown")
+                                         << ")");
         }
         MECRAFT_LOG_STREAM(std::cerr << "\n");
         return false;
@@ -65,8 +65,8 @@ void Window::destroy() {
         m_window = nullptr;
     }
 
-    m_width =0;
-    m_height =0;
+    m_width = 0;
+    m_height = 0;
     m_windowedX = 0;
     m_windowedY = 0;
     m_windowedWidth = 0;
@@ -77,8 +77,6 @@ void Window::destroy() {
         m_platformInitialized = false;
     }
 }
-
-
 
 bool Window::shouldClose() const {
     return glfwWindowShouldClose(m_window);
@@ -108,11 +106,10 @@ int Window::getHeight() const {
 
 float Window::getAspectRatio() const {
     const FramebufferSize size = getFramebufferSize();
-    return static_cast<float>(size.width) /
-           static_cast<float>(size.height > 0 ? size.height : 1);
+    return static_cast<float>(size.width) / static_cast<float>(size.height > 0 ? size.height : 1);
 }
 
-void Window::setTitle(const std::string &title) const {
+void Window::setTitle(const std::string& title) const {
     glfwSetWindowTitle(m_window, title.c_str());
 }
 
@@ -127,8 +124,7 @@ bool Window::setFullscreen(const bool enabled) {
     (void)glfwGetError(nullptr);
     if (enabled) {
         GLFWmonitor* const monitor = glfwGetPrimaryMonitor();
-        const GLFWvidmode* const mode =
-            monitor != nullptr ? glfwGetVideoMode(monitor) : nullptr;
+        const GLFWvidmode* const mode = monitor != nullptr ? glfwGetVideoMode(monitor) : nullptr;
         if (monitor == nullptr || mode == nullptr) {
             return false;
         }
@@ -137,23 +133,12 @@ bool Window::setFullscreen(const bool enabled) {
         if (m_windowedWidth <= 0 || m_windowedHeight <= 0) {
             return false;
         }
-        glfwSetWindowMonitor(m_window,
-                             monitor,
-                             0,
-                             0,
-                             mode->width,
-                             mode->height,
-                             mode->refreshRate);
+        glfwSetWindowMonitor(m_window, monitor, 0, 0, mode->width, mode->height, mode->refreshRate);
     } else {
         if (m_windowedWidth <= 0 || m_windowedHeight <= 0) {
             return false;
         }
-        glfwSetWindowMonitor(m_window,
-                             nullptr,
-                             m_windowedX,
-                             m_windowedY,
-                             m_windowedWidth,
-                             m_windowedHeight,
+        glfwSetWindowMonitor(m_window, nullptr, m_windowedX, m_windowedY, m_windowedWidth, m_windowedHeight,
                              GLFW_DONT_CARE);
     }
     const int error = glfwGetError(nullptr);
@@ -176,6 +161,6 @@ bool Window::fullscreenControlAvailable() const {
     return monitor != nullptr && glfwGetVideoMode(monitor) != nullptr;
 }
 
-GLFWwindow * Window::getHandle() const {
+GLFWwindow* Window::getHandle() const {
     return m_window;
 }

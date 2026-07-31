@@ -52,9 +52,7 @@ struct InventoryPanelLayout {
 
 class InventoryPanelControl : public UIWidget {
 public:
-    InventoryPanelControl() {
-        visible = false;
-    }
+    InventoryPanelControl() { visible = false; }
 
     void init(ResourceMgr& resourceMgr) override;
     void shutdown() override;

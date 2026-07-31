@@ -247,10 +247,7 @@ int main() {
     }
     const BlockStateId bottomSlab = BlockStateRegistry::getDefaultState(oakSlab);
     const BlockStateId topSlab = BlockStateRegistry::getState(
-        oakSlab,
-        std::vector<std::pair<uint16_t, uint16_t>>{
-            {PropIndices::HALF, PropIndices::HALF_TOP}
-        });
+        oakSlab, std::vector<std::pair<uint16_t, uint16_t>>{{PropIndices::HALF, PropIndices::HALF_TOP}});
 
     const int slabY = surfaceY + 9;
     for (int x = -2; x <= 2; ++x) {
@@ -309,9 +306,7 @@ int main() {
     }
 
     PhysicsBody slabStepper;
-    slabStepper.position = glm::vec3(0.5f,
-                                     static_cast<float>(stepLaneY) + 1.0f + slabStepper.halfExtents.y,
-                                     26.5f);
+    slabStepper.position = glm::vec3(0.5f, static_cast<float>(stepLaneY) + 1.0f + slabStepper.halfExtents.y, 26.5f);
     slabStepper.isGrounded = true;
 
     MoveIntent stepForward{};
@@ -348,9 +343,7 @@ int main() {
     }
 
     PhysicsBody stairStepper;
-    stairStepper.position = glm::vec3(0.5f,
-                                      static_cast<float>(stepLaneY) + 1.0f + stairStepper.halfExtents.y,
-                                      31.5f);
+    stairStepper.position = glm::vec3(0.5f, static_cast<float>(stepLaneY) + 1.0f + stairStepper.halfExtents.y, 31.5f);
     stairStepper.isGrounded = true;
     for (int i = 0; i < 120; ++i) {
         phys.updateBody(stairStepper, stepForward, kDt);
@@ -382,22 +375,18 @@ int main() {
 
     const BlockStateId openDoorLower = BlockStateRegistry::getState(
         BlockRegistry::requireIdByName("minecraft:oak_door"),
-        std::vector<std::pair<uint16_t, uint16_t>>{
-            {PropIndices::FACING, PropIndices::FACING_EAST},
-            {PropIndices::HALF, PropIndices::HALF_LOWER},
-            {PropIndices::HINGE, PropIndices::HINGE_LEFT},
-            {PropIndices::OPEN, PropIndices::OPEN_TRUE},
-            {PropIndices::POWERED, PropIndices::POWERED_FALSE}
-        });
+        std::vector<std::pair<uint16_t, uint16_t>>{{PropIndices::FACING, PropIndices::FACING_EAST},
+                                                   {PropIndices::HALF, PropIndices::HALF_LOWER},
+                                                   {PropIndices::HINGE, PropIndices::HINGE_LEFT},
+                                                   {PropIndices::OPEN, PropIndices::OPEN_TRUE},
+                                                   {PropIndices::POWERED, PropIndices::POWERED_FALSE}});
     const BlockStateId openDoorUpper = BlockStateRegistry::getState(
         BlockRegistry::requireIdByName("minecraft:oak_door"),
-        std::vector<std::pair<uint16_t, uint16_t>>{
-            {PropIndices::FACING, PropIndices::FACING_EAST},
-            {PropIndices::HALF, PropIndices::HALF_UPPER},
-            {PropIndices::HINGE, PropIndices::HINGE_LEFT},
-            {PropIndices::OPEN, PropIndices::OPEN_TRUE},
-            {PropIndices::POWERED, PropIndices::POWERED_FALSE}
-        });
+        std::vector<std::pair<uint16_t, uint16_t>>{{PropIndices::FACING, PropIndices::FACING_EAST},
+                                                   {PropIndices::HALF, PropIndices::HALF_UPPER},
+                                                   {PropIndices::HINGE, PropIndices::HINGE_LEFT},
+                                                   {PropIndices::OPEN, PropIndices::OPEN_TRUE},
+                                                   {PropIndices::POWERED, PropIndices::POWERED_FALSE}});
     world.setBlockState(0, doorLowerY, doorZ, openDoorLower);
     world.setBlockState(0, doorLowerY + 1, doorZ, openDoorUpper);
 
@@ -413,8 +402,7 @@ int main() {
     for (int i = 0; i < 80; ++i) {
         phys.updateBody(doorEscaper, moveOutOfDoor, kDt);
     }
-    if (doorEscaper.position.z <= static_cast<float>(doorZ) + 0.49f ||
-        bodyOverlapsWorld(world, doorEscaper)) {
+    if (doorEscaper.position.z <= static_cast<float>(doorZ) + 0.49f || bodyOverlapsWorld(world, doorEscaper)) {
         return fail("body starting inside an opened door should be able to move out of the door collision");
     }
 
@@ -506,9 +494,7 @@ int main() {
     const float shoreStandingY = static_cast<float>(shoreY) + 1.0f + swimmer.halfExtents.y;
     for (int i = 0; i < 180; ++i) {
         phys.updateBody(swimmer, swimToShore, kDt);
-        if (!swimmer.isInWater &&
-            swimmer.position.x > 2.25f &&
-            swimmer.position.y >= shoreStandingY - 0.08f) {
+        if (!swimmer.isInWater && swimmer.position.x > 2.25f && swimmer.position.y >= shoreStandingY - 0.08f) {
             reachedShore = true;
             break;
         }

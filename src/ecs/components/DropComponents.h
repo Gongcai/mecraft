@@ -34,10 +34,10 @@ struct SpinVisualComponent {
 /// Tick-rate logic moves gridPosition one cell down per tick (Minecraft semantics);
 /// FallingBlockInterpolateSystem lerps TransformComponent.position between ticks for rendering.
 struct FallingBlockComponent {
-    BlockID blockId = 0;             ///< Block placed back into the world on landing
-    glm::ivec3 gridPosition{};       ///< Current logical (integer) grid cell
-    glm::ivec3 prevGridPosition{};   ///< Grid cell at the start of the current tick (for interpolation)
-    float tickAccumulator = 0.0f;    ///< Seconds accumulated since the last tick (render alpha source)
+    BlockID blockId = 0; ///< Block placed back into the world on landing
+    glm::ivec3 gridPosition{}; ///< Current logical (integer) grid cell
+    glm::ivec3 prevGridPosition{}; ///< Grid cell at the start of the current tick (for interpolation)
+    float tickAccumulator = 0.0f; ///< Seconds accumulated since the last tick (render alpha source)
 };
 
 /// A piston-driven block that is currently moving between adjacent cells.

@@ -38,12 +38,10 @@
 
 namespace {
 
-bool prepareUiOverlayFrame(RenderResourceHub& renderer,
-                           GameplayHudPresenter& hudPresenter,
+bool prepareUiOverlayFrame(RenderResourceHub& renderer, GameplayHudPresenter& hudPresenter,
                            RhiCommandList*& commandList) {
     commandList = renderer.commandListPool().acquire(RhiCommandListType::Graphics);
-    if (commandList == nullptr ||
-        !commandList->begin({"Gameplay.UiOverlay.Commands", RhiCommandListType::Graphics})) {
+    if (commandList == nullptr || !commandList->begin({"Gameplay.UiOverlay.Commands", RhiCommandListType::Graphics})) {
         return false;
     }
     return hudPresenter.prepareTextFrame(*commandList);
@@ -57,13 +55,9 @@ void sendClientInput(GameSession& session, const float fixedStep) {
     auto& gameplayRegistry = session.gameplayScene().registry();
     auto& reg = gameplayRegistry.registry();
     const bool playerDead = session.client().isPlayerDead();
-    auto view = reg.view<ecs::LocalPlayerTag,
-                         ecs::MoveIntentComponent,
-                         ecs::LookIntentComponent,
-                         ecs::TransformComponent,
-                         ecs::PhysicsBodyComponent,
-                         ecs::CameraStateComponent,
-                         ecs::InventoryComponent>();
+    auto view =
+        reg.view<ecs::LocalPlayerTag, ecs::MoveIntentComponent, ecs::LookIntentComponent, ecs::TransformComponent,
+                 ecs::PhysicsBodyComponent, ecs::CameraStateComponent, ecs::InventoryComponent>();
     for (auto entity : view) {
         const auto& move = view.get<ecs::MoveIntentComponent>(entity);
         const auto& look = view.get<ecs::LookIntentComponent>(entity);
@@ -81,17 +75,10 @@ void sendClientInput(GameSession& session, const float fixedStep) {
                 actions |= net::ClientInputActions::UseItem;
             }
         }
-        session.client().sendInput(fixedStep,
-                                   playerDead ? glm::vec3(0.0f) : glm::vec3(move.move.x, 0.0f, move.move.y),
-                                   glm::vec2(look.deltaX, look.deltaY),
-                                   !playerDead && move.wantsJump,
-                                   !playerDead && move.wantsCrouch,
-                                   !playerDead && move.wantsSprint,
-                                   transform.position,
-                                   physics.body.velocity,
-                                   camera.yaw,
-                                   camera.pitch,
-                                   actions,
+        session.client().sendInput(fixedStep, playerDead ? glm::vec3(0.0f) : glm::vec3(move.move.x, 0.0f, move.move.y),
+                                   glm::vec2(look.deltaX, look.deltaY), !playerDead && move.wantsJump,
+                                   !playerDead && move.wantsCrouch, !playerDead && move.wantsSprint, transform.position,
+                                   physics.body.velocity, camera.yaw, camera.pitch, actions,
                                    static_cast<uint8_t>(std::clamp(inventory.selectedHotbarSlot, 0, 8)));
         return;
     }
@@ -99,11 +86,9 @@ void sendClientInput(GameSession& session, const float fixedStep) {
 
 } // namespace
 
-bool GameFrameOrchestrator::runFixedUpdate(GameSession& session,
-                                            InputManager& input,
-                                            GameplayRenderRuntime* renderRuntime,
-                                            double fixedStep,
-                                            double& accumulator) {
+bool GameFrameOrchestrator::runFixedUpdate(GameSession& session, InputManager& input,
+                                           GameplayRenderRuntime* renderRuntime, double fixedStep,
+                                           double& accumulator) {
 #ifndef MECRAFT_DEBUG
     (void)renderRuntime;
 #endif
@@ -183,8 +168,7 @@ bool GameFrameOrchestrator::runFixedUpdate(GameSession& session,
     constexpr double kServerStep = 1.0 / 20.0;
     constexpr uint32_t kMaxServerTicksPerFixedUpdate = 4;
     uint32_t serverTicks = 0;
-    while (m_serverAccumulator >= kServerStep &&
-           serverTicks < kMaxServerTicksPerFixedUpdate) {
+    while (m_serverAccumulator >= kServerStep && serverTicks < kMaxServerTicksPerFixedUpdate) {
         session.updateWorldAroundLocalPlayer(static_cast<float>(kServerStep));
         m_serverAccumulator -= kServerStep;
         ++serverTicks;
@@ -213,8 +197,8 @@ bool GameFrameOrchestrator::runFixedUpdate(GameSession& session,
 #endif
     session.gameplayScene().tickClock().advance(scaledFixedStep);
     uint32_t ticksThisFrame = 0;
-    while (session.gameplayScene().tickClock().shouldTick()
-           && ticksThisFrame < session.gameplayScene().tickClock().maxTicksPerFrame()) {
+    while (session.gameplayScene().tickClock().shouldTick() &&
+           ticksThisFrame < session.gameplayScene().tickClock().maxTicksPerFrame()) {
         session.gameplayScene().runOneTick();
         session.gameplayScene().tickClock().consumeTick();
         ++ticksThisFrame;
@@ -237,20 +221,15 @@ bool GameFrameOrchestrator::runFixedUpdate(GameSession& session,
     return session.stateMachine().isQuitToMenuRequested();
 }
 
-void GameFrameOrchestrator::syncAudioListener(AudioListenerSyncSystem& audioSync,
-                                                float deltaTime,
-                                                GameSession& session) {
+void GameFrameOrchestrator::syncAudioListener(AudioListenerSyncSystem& audioSync, float deltaTime,
+                                              GameSession& session) {
     audioSync.update(deltaTime, session.gameplayScene().registry());
 }
 
-bool GameFrameOrchestrator::renderFrame(GameSession& session,
-                                         GameplayRenderRuntime& renderRuntime,
-                                         GameplayHudPresenter* hudPresenter,
-                                         Window& window,
-                                         const float frameTime,
-                                         const float interpolationAlpha,
-                                         const Camera* cameraOverride,
-                                         const RenderFrameClock* frameClock) {
+bool GameFrameOrchestrator::renderFrame(GameSession& session, GameplayRenderRuntime& renderRuntime,
+                                        GameplayHudPresenter* hudPresenter, Window& window, const float frameTime,
+                                        const float interpolationAlpha, const Camera* cameraOverride,
+                                        const RenderFrameClock* frameClock) {
     if (session.isMultiplayer() && !session.client().areSpawnChunksReady()) {
         session.client().receiveMessages();
         return true;
@@ -261,8 +240,7 @@ bool GameFrameOrchestrator::renderFrame(GameSession& session,
     PresentationController& presentation = renderRuntime.presentationController();
     const bool renderingGameFrames = !session.stateMachine().pausesSimulation();
     if (!presentation.requestRenderingGameFrames(renderingGameFrames)) {
-        MECRAFT_LOG_STREAM(std::cerr
-            << "[GameFrameOrchestrator] Failed to update frame-generation activity\n");
+        MECRAFT_LOG_STREAM(std::cerr << "[GameFrameOrchestrator] Failed to update frame-generation activity\n");
         return false;
     }
 #ifdef MECRAFT_DEBUG
@@ -272,27 +250,23 @@ bool GameFrameOrchestrator::renderFrame(GameSession& session,
 #ifdef MECRAFT_DEBUG
     if (auto* profiler = renderRuntime.profiler()) {
         profiler->recordPresentationAcquire(
-            std::chrono::duration<double, std::milli>(
-                std::chrono::steady_clock::now() -
-                presentationAcquireStart).count());
+            std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - presentationAcquireStart)
+                .count());
     }
 #endif
     if (!presentationFrame.shouldContinue()) {
-        MECRAFT_LOG_STREAM(std::cerr
-            << "[GameFrameOrchestrator] "
-            << presentationFailureMessage(presentationFrame.failure) << '\n');
+        MECRAFT_LOG_STREAM(std::cerr << "[GameFrameOrchestrator] "
+                                     << presentationFailureMessage(presentationFrame.failure) << '\n');
         return false;
     }
     const auto cancelAcquiredFrame = [&presentation, &presentationFrame]() {
-        return !presentationFrame.shouldRender() ||
-               presentation.cancelFrame(presentationFrame);
+        return !presentationFrame.shouldRender() || presentation.cancelFrame(presentationFrame);
     };
     if (!renderRuntime.applyFrameBoundaryNvidiaSettings()) {
-        MECRAFT_LOG_STREAM(std::cerr
-            << "[GameFrameOrchestrator] Failed to apply NVIDIA frame-boundary settings\n");
+        MECRAFT_LOG_STREAM(std::cerr << "[GameFrameOrchestrator] Failed to apply NVIDIA frame-boundary settings\n");
         if (!cancelAcquiredFrame()) {
-            MECRAFT_LOG_STREAM(std::cerr
-                << "[GameFrameOrchestrator] Failed to cancel the acquired presentation frame\n");
+            MECRAFT_LOG_STREAM(
+                std::cerr << "[GameFrameOrchestrator] Failed to cancel the acquired presentation frame\n");
         }
         return false;
     }
@@ -302,8 +276,8 @@ bool GameFrameOrchestrator::renderFrame(GameSession& session,
     const RhiFrameAcquireResult& frame = presentationFrame.acquired;
     const auto failOpenFrame = [&cancelAcquiredFrame]() {
         if (!cancelAcquiredFrame()) {
-            MECRAFT_LOG_STREAM(std::cerr
-                << "[GameFrameOrchestrator] Failed to cancel the acquired presentation frame\n");
+            MECRAFT_LOG_STREAM(
+                std::cerr << "[GameFrameOrchestrator] Failed to cancel the acquired presentation frame\n");
         }
         return false;
     };
@@ -320,11 +294,8 @@ bool GameFrameOrchestrator::renderFrame(GameSession& session,
 
     // Build presentation snapshot from ECS (single point of ECS access)
     auto& reg = session.gameplayScene().registry();
-    auto snap = session.presentationBuilder().build(
-        reg,
-        session.cameraController(),
-        session.worldView(),
-        interpolationAlpha);
+    auto snap =
+        session.presentationBuilder().build(reg, session.cameraController(), session.worldView(), interpolationAlpha);
     if (cameraOverride != nullptr) {
         snap.renderCamera = *cameraOverride;
         snap.renderLocalPlayerModel = true;
@@ -370,31 +341,27 @@ bool GameFrameOrchestrator::renderFrame(GameSession& session,
     }
     m_lastHeldItemSwingSequence = snap.heldItemSwingSequence;
 
-    RenderGameplayFrameRequest renderRequest{
-        session.worldView(),
-        snap.renderCamera,
-        window,
-        static_cast<int>(frame.width),
-        static_cast<int>(frame.height),
-        session.dayNightSystem(),
-        session.weatherSystem(),
-        targetData,
-        breakData,
-        session.rainRenderer(),
-        frameTime,
-        snap.fallRollRadians,
-        &firstPersonHeldItemRenderer,
-        snap.inventory,
-        &firstPersonMotion,
-        snap.inventory != nullptr && !snap.renderLocalPlayerModel,
-        !session.stateMachine().pausesSimulation(),
-        frameClock != nullptr
-            ? std::optional<RenderFrameClock>(*frameClock)
-            : std::nullopt
-    };
+    RenderGameplayFrameRequest renderRequest{session.worldView(),
+                                             snap.renderCamera,
+                                             window,
+                                             static_cast<int>(frame.width),
+                                             static_cast<int>(frame.height),
+                                             session.dayNightSystem(),
+                                             session.weatherSystem(),
+                                             targetData,
+                                             breakData,
+                                             session.rainRenderer(),
+                                             frameTime,
+                                             snap.fallRollRadians,
+                                             &firstPersonHeldItemRenderer,
+                                             snap.inventory,
+                                             &firstPersonMotion,
+                                             snap.inventory != nullptr && !snap.renderLocalPlayerModel,
+                                             !session.stateMachine().pausesSimulation(),
+                                             frameClock != nullptr ? std::optional<RenderFrameClock>(*frameClock)
+                                                                   : std::nullopt};
     if (!renderScene.renderGameplayFrame(renderRequest)) {
-        MECRAFT_LOG_STREAM(std::cerr
-            << "[GameFrameOrchestrator] Gameplay scene rendering failed\n");
+        MECRAFT_LOG_STREAM(std::cerr << "[GameFrameOrchestrator] Gameplay scene rendering failed\n");
         return failOpenFrame();
     }
 #ifdef MECRAFT_DEBUG
@@ -416,13 +383,11 @@ bool GameFrameOrchestrator::renderFrame(GameSession& session,
     if (hudPresenter) {
         uiFrame = presentation.acquireUiFrame(presentationFrame);
         if (!uiFrame.has_value()) {
-            MECRAFT_LOG_STREAM(std::cerr
-                << "[GameFrameOrchestrator] Failed to acquire the independent UI target\n");
+            MECRAFT_LOG_STREAM(std::cerr << "[GameFrameOrchestrator] Failed to acquire the independent UI target\n");
             return failOpenFrame();
         }
         UIRenderContext uiContext = hudPresenter->prepareRenderContext(
-            snap, renderer.rhiDevice(),
-            static_cast<int>(frame.width), static_cast<int>(frame.height));
+            snap, renderer.rhiDevice(), static_cast<int>(frame.width), static_cast<int>(frame.height));
         RhiCommandList* uiCommandList = nullptr;
         if (!prepareUiOverlayFrame(renderer, *hudPresenter, uiCommandList)) {
             return failOpenFrame();
@@ -434,31 +399,23 @@ bool GameFrameOrchestrator::renderFrame(GameSession& session,
         if (hudPresenter->hasDashboard() && renderRuntime.dashboardProfilerStats()) {
             const auto dashboardPrepareStart = std::chrono::steady_clock::now();
             dashboardPrepared = hudPresenter->prepareDashboard(
-                *uiCommandList,
-                static_cast<int>(frame.width),
-                static_cast<int>(frame.height),
-                reg,
-                session.world(),
-                snap.renderCamera,
-                renderer,
-                renderScene,
-                postProcess,
-                *renderRuntime.dashboardProfilerStats(),
+                *uiCommandList, static_cast<int>(frame.width), static_cast<int>(frame.height), reg, session.world(),
+                snap.renderCamera, renderer, renderScene, postProcess, *renderRuntime.dashboardProfilerStats(),
                 [&session](const int distance) {
                     session.world().setRenderDistance(distance);
                     session.client().clientWorld().setRenderDistance(distance);
                     session.client().sendViewConfig(distance);
                 });
-            dashboardPrepareMs = std::chrono::duration<double, std::milli>(
-                std::chrono::steady_clock::now() - dashboardPrepareStart).count();
+            dashboardPrepareMs =
+                std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - dashboardPrepareStart)
+                    .count();
             if (!dashboardPrepared) {
                 return failOpenFrame();
             }
         }
 #endif
         if (!presentation.beginUiRendering(*uiCommandList, *uiFrame)) {
-            MECRAFT_LOG_STREAM(std::cerr
-                << "[GameFrameOrchestrator] Failed to begin independent UI rendering\n");
+            MECRAFT_LOG_STREAM(std::cerr << "[GameFrameOrchestrator] Failed to begin independent UI rendering\n");
             return failOpenFrame();
         }
         hudPresenter->renderPrepared(uiContext, session.stateMachine());
@@ -469,50 +426,38 @@ bool GameFrameOrchestrator::renderFrame(GameSession& session,
         }
         dashboardEnd = std::chrono::steady_clock::now();
 #endif
-        if (!presentation.endUiRenderingAndComposite(
-                *uiCommandList,
-                presentationFrame,
-                *uiFrame)) {
-            MECRAFT_LOG_STREAM(std::cerr
-                << "[GameFrameOrchestrator] Failed to record independent UI composition\n");
+        if (!presentation.endUiRenderingAndComposite(*uiCommandList, presentationFrame, *uiFrame)) {
+            MECRAFT_LOG_STREAM(std::cerr << "[GameFrameOrchestrator] Failed to record independent UI composition\n");
             return failOpenFrame();
         }
         if (!presentation.submitUiFrame(*uiCommandList, *uiFrame)) {
-            MECRAFT_LOG_STREAM(std::cerr
-                << "[GameFrameOrchestrator] Failed to submit independent UI composition\n");
+            MECRAFT_LOG_STREAM(std::cerr << "[GameFrameOrchestrator] Failed to submit independent UI composition\n");
             return failOpenFrame();
         }
     }
     if (presentation.frameGenerationActive()) {
-        const std::optional<TemporalFrameInput>& temporalFrame =
-            renderScene.temporalFrameInput();
+        const std::optional<TemporalFrameInput>& temporalFrame = renderScene.temporalFrameInput();
         if (!uiFrame.has_value() || !temporalFrame.has_value() ||
-            !presentation.prepareFrameGeneration(
-                presentationFrame, *uiFrame, *temporalFrame)) {
-            MECRAFT_LOG_STREAM(std::cerr
-                << "[GameFrameOrchestrator] Failed to prepare DLSS Frame Generation inputs\n");
+            !presentation.prepareFrameGeneration(presentationFrame, *uiFrame, *temporalFrame)) {
+            MECRAFT_LOG_STREAM(std::cerr << "[GameFrameOrchestrator] Failed to prepare DLSS Frame Generation inputs\n");
             return failOpenFrame();
         }
     }
 #ifdef MECRAFT_DEBUG
     const auto preSwapEnd = std::chrono::steady_clock::now();
 #endif
-    const PresentationCompleteResult presentResult =
-        presentation.presentFrame(presentationFrame);
+    const PresentationCompleteResult presentResult = presentation.presentFrame(presentationFrame);
     if (!presentResult.shouldContinue()) {
-        MECRAFT_LOG_STREAM(std::cerr
-            << "[GameFrameOrchestrator] "
-            << presentationFailureMessage(presentResult.failure) << '\n');
+        MECRAFT_LOG_STREAM(std::cerr << "[GameFrameOrchestrator] " << presentationFailureMessage(presentResult.failure)
+                                     << '\n');
         return false;
     }
 
 #ifdef MECRAFT_DEBUG
     const auto renderEnd = std::chrono::steady_clock::now();
     if (auto* profiler = renderRuntime.profiler()) {
-        const double uiTotalMs =
-            std::chrono::duration<double, std::milli>(uiEnd - sceneEnd).count();
-        const double dashboardRecordMs =
-            std::chrono::duration<double, std::milli>(dashboardEnd - uiEnd).count();
+        const double uiTotalMs = std::chrono::duration<double, std::milli>(uiEnd - sceneEnd).count();
+        const double dashboardRecordMs = std::chrono::duration<double, std::milli>(dashboardEnd - uiEnd).count();
         profiler->recordRenderSnapshot(std::chrono::duration<double, std::milli>(snapshotEnd - renderStart).count());
         profiler->recordRenderScene(std::chrono::duration<double, std::milli>(sceneEnd - snapshotEnd).count());
         profiler->recordRenderUi(std::max(0.0, uiTotalMs - dashboardPrepareMs));

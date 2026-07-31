@@ -61,7 +61,8 @@ void BgmSystem::buildPlaylist() {
     std::sort(m_playlist.begin(), m_playlist.end());
 
 #ifdef MECRAFT_ENABLE_CONSOLE_OUTPUT
-    MECRAFT_LOG_STREAM(std::cout << "[Audio] Loaded " << m_playlist.size() << " BGM track(s) from catalog" << std::endl);
+    MECRAFT_LOG_STREAM(std::cout << "[Audio] Loaded " << m_playlist.size() << " BGM track(s) from catalog"
+                                 << std::endl);
 #endif
 }
 

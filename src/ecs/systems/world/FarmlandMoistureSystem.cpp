@@ -49,8 +49,7 @@ size_t FarmlandMoistureSystem::hydrateLoadedFarmland(World& world) {
     const BlockID farmlandBlock = BlockRegistry::requireIdByName("minecraft:farmland");
 
     const FarmlandMoistureProperties props = getMoistureProperties();
-    if (props.moisture == BlockStateRegistry::INVALID_INDEX ||
-        props.moisture7 == BlockStateRegistry::INVALID_INDEX) {
+    if (props.moisture == BlockStateRegistry::INVALID_INDEX || props.moisture7 == BlockStateRegistry::INVALID_INDEX) {
         return 0;
     }
 
@@ -91,10 +90,8 @@ size_t FarmlandMoistureSystem::hydrateLoadedFarmland(World& world) {
                             continue;
                         }
 
-                        const BlockStateId hydratedState = BlockStateRegistry::withProperty(
-                            state,
-                            props.moisture,
-                            props.moisture7);
+                        const BlockStateId hydratedState =
+                            BlockStateRegistry::withProperty(state, props.moisture, props.moisture7);
                         if (hydratedState != state) {
                             world.setBlockState(pos.x, pos.y, pos.z, hydratedState);
                             ++hydratedCount;

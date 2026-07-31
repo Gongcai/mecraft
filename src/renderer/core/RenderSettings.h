@@ -6,10 +6,7 @@
 #include <cstdint>
 
 /// Pipeline mode selection
-enum class PipelineMode {
-    Forward = 0,
-    Deferred = 1
-};
+enum class PipelineMode { Forward = 0, Deferred = 1 };
 
 /// Shadow subsystem settings
 struct ShadowSettings {
@@ -227,27 +224,16 @@ struct PostProcessSettings {
     float dofFocusDistance = 5.0f;
 };
 
-enum class TemporalUpscalerType {
-    Native = 0,
-    Fsr31 = 1,
-    Dlss = 2
-};
+enum class TemporalUpscalerType { Native = 0, Fsr31 = 1, Dlss = 2 };
 
-enum class TemporalUpscaleQuality {
-    Native = 0,
-    Quality = 1,
-    Balanced = 2,
-    Performance = 3,
-    UltraPerformance = 4
-};
+enum class TemporalUpscaleQuality { Native = 0, Quality = 1, Balanced = 2, Performance = 3, UltraPerformance = 4 };
 
 /// Determine whether scene rasterization must use the frame jitter.
 /// @param type Selected temporal reconstruction implementation.
 /// @param nativeTaaEnabled Whether the native TAA resolve is enabled.
 /// @return True for native TAA and every SDK temporal upscaler.
-[[nodiscard]] constexpr bool usesTemporalProjectionJitter(
-    const TemporalUpscalerType type,
-    const bool nativeTaaEnabled) {
+[[nodiscard]] constexpr bool usesTemporalProjectionJitter(const TemporalUpscalerType type,
+                                                          const bool nativeTaaEnabled) {
     return type != TemporalUpscalerType::Native || nativeTaaEnabled;
 }
 
@@ -255,9 +241,7 @@ enum class TemporalUpscaleQuality {
 /// @param type Selected temporal reconstruction implementation.
 /// @param nativeTaaEnabled Whether the native TAA resolve is enabled.
 /// @return True only when Native reconstruction explicitly enables TAA.
-[[nodiscard]] constexpr bool usesNativeTaaResolve(
-    const TemporalUpscalerType type,
-    const bool nativeTaaEnabled) {
+[[nodiscard]] constexpr bool usesNativeTaaResolve(const TemporalUpscalerType type, const bool nativeTaaEnabled) {
     return type == TemporalUpscalerType::Native && nativeTaaEnabled;
 }
 
@@ -278,16 +262,9 @@ struct UpscaleSettings {
     float fsr1Sharpness = 0.2f;
 };
 
-enum class FrameGenerationType {
-    Disabled = 0,
-    Dlss = 1
-};
+enum class FrameGenerationType { Disabled = 0, Dlss = 1 };
 
-enum class ReflexLowLatencyMode {
-    Off = 0,
-    On = 1,
-    OnWithBoost = 2
-};
+enum class ReflexLowLatencyMode { Off = 0, On = 1, OnWithBoost = 2 };
 
 /// NVIDIA presentation and latency settings persisted with the renderer profile.
 struct NvidiaFeatureSettings {
@@ -376,14 +353,10 @@ struct RenderSettings {
 /// @param settings Candidate renderer configuration.
 /// @param fsr1Supported True when the active RHI can execute the configured FSR 1 pass.
 /// @return True when deferred depth, dense motion vectors, and output-resolution color remain available.
-[[nodiscard]] inline bool supportsDlssFrameGenerationInputs(
-    const RenderSettings& settings,
-    const bool fsr1Supported) {
+[[nodiscard]] inline bool supportsDlssFrameGenerationInputs(const RenderSettings& settings, const bool fsr1Supported) {
     const bool fsr1RuntimeEnabled =
-        fsr1Supported && settings.upscale.fsr1Enabled &&
-        settings.upscale.fsr1RenderScale < 0.999f;
-    return settings.pipelineMode == PipelineMode::Deferred &&
-           !fsr1RuntimeEnabled;
+        fsr1Supported && settings.upscale.fsr1Enabled && settings.upscale.fsr1RenderScale < 0.999f;
+    return settings.pipelineMode == PipelineMode::Deferred && !fsr1RuntimeEnabled;
 }
 
 #endif // MECRAFT_RENDER_SETTINGS_H

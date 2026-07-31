@@ -9,39 +9,32 @@ int fail(const char* message) {
     std::cerr << "[block_interaction_registry_test] FAIL: " << message << '\n';
     return EXIT_FAILURE;
 }
-}
+} // namespace
 
 int main() {
     BlockRegistry::init(nullptr);
     BlockInteractionRegistry::init();
 
     const BlockInteractionDef& lever = BlockInteractionRegistry::require("minecraft:toggle_powered");
-    if (lever.action != BlockInteractionActionKind::ToggleBooleanProperty ||
-        lever.property != "powered" ||
-        lever.falseValue != "false" ||
-        lever.trueValue != "true") {
+    if (lever.action != BlockInteractionActionKind::ToggleBooleanProperty || lever.property != "powered" ||
+        lever.falseValue != "false" || lever.trueValue != "true") {
         return fail("lever interaction should declare a powered boolean toggle");
     }
 
     const BlockInteractionDef& button = BlockInteractionRegistry::require("minecraft:button_press");
-    if (button.action != BlockInteractionActionKind::SetPropertyOnce ||
-        button.property != "powered" ||
+    if (button.action != BlockInteractionActionKind::SetPropertyOnce || button.property != "powered" ||
         button.setValue != "true") {
         return fail("button interaction should declare a one-way powered press");
     }
 
     const BlockInteractionDef& repeater = BlockInteractionRegistry::require("minecraft:cycle_repeater_delay");
-    if (repeater.action != BlockInteractionActionKind::CycleProperty ||
-        repeater.property != "delay" ||
-        repeater.cycleValues.size() != 4 ||
-        repeater.cycleValues[0] != "1" ||
-        repeater.cycleValues[3] != "4") {
+    if (repeater.action != BlockInteractionActionKind::CycleProperty || repeater.property != "delay" ||
+        repeater.cycleValues.size() != 4 || repeater.cycleValues[0] != "1" || repeater.cycleValues[3] != "4") {
         return fail("repeater interaction should cycle delay values from data");
     }
 
     const BlockInteractionDef& door = BlockInteractionRegistry::require("minecraft:toggle_door_open");
-    if (door.action != BlockInteractionActionKind::ToggleBooleanProperty ||
-        door.property != "open" ||
+    if (door.action != BlockInteractionActionKind::ToggleBooleanProperty || door.property != "open" ||
         door.partnerSync != BlockInteractionPartnerSync::DoorOpen) {
         return fail("door interaction should declare open toggle with door partner sync");
     }
@@ -60,8 +53,7 @@ int main() {
         oakButtonBlock.interaction != "minecraft:button_press" ||
         repeaterBlock.interaction != "minecraft:cycle_repeater_delay" ||
         comparatorBlock.interaction != "minecraft:toggle_comparator_mode" ||
-        doorBlock.interaction != "minecraft:toggle_door_open" ||
-        trapdoorBlock.interaction != "minecraft:toggle_open" ||
+        doorBlock.interaction != "minecraft:toggle_door_open" || trapdoorBlock.interaction != "minecraft:toggle_open" ||
         fenceGateBlock.interaction != "minecraft:toggle_open") {
         return fail("right-click control blocks should bind interactions from blocks.json");
     }

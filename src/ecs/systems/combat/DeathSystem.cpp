@@ -43,8 +43,7 @@ uint32_t rollDropCount(const DropTableEntry& drop) {
     return dist(lootRng());
 }
 
-template <typename SpawnFn>
-void forEachDropEntry(const DropTableComponent& dropTable, SpawnFn&& spawn) {
+template <typename SpawnFn> void forEachDropEntry(const DropTableComponent& dropTable, SpawnFn&& spawn) {
     if (!dropTable.entries.empty()) {
         for (const DropTableEntry& drop : dropTable.entries) {
             spawn(drop);
@@ -56,16 +55,13 @@ void forEachDropEntry(const DropTableComponent& dropTable, SpawnFn&& spawn) {
 }
 
 bool hasLocalPresentationServices(const SystemContext& ctx) {
-    return static_cast<bool>(ctx.services.audioEngine) ||
-           static_cast<bool>(ctx.services.particleSystem);
+    return static_cast<bool>(ctx.services.audioEngine) || static_cast<bool>(ctx.services.particleSystem);
 }
 
-void queueLocalDeathEffects(GameplayRegistry& registry,
-                            const DeathEffectComponent& effect,
-                            const glm::vec3& position) {
+void queueLocalDeathEffects(GameplayRegistry& registry, const DeathEffectComponent& effect, const glm::vec3& position) {
     if (effect.particleBlock != 0 && effect.particleCount > 0) {
-        ensureParticleEventBus(registry)
-            .push(makeImpactParticleEvent(position, effect.particleBlock, effect.particleCount));
+        ensureParticleEventBus(registry).push(
+            makeImpactParticleEvent(position, effect.particleBlock, effect.particleCount));
     }
 
     if (!effect.soundId.empty()) {
@@ -73,16 +69,11 @@ void queueLocalDeathEffects(GameplayRegistry& registry,
     }
 }
 
-void queueNetworkDeathDespawn(entt::registry& registry,
-                              const entt::entity entity,
-                              const DeathEffectComponent* effect,
+void queueNetworkDeathDespawn(entt::registry& registry, const entt::entity entity, const DeathEffectComponent* effect,
                               const glm::vec3& position) {
     if (effect != nullptr && effect->particleBlock != 0 && effect->particleCount > 0) {
-        registry.emplace_or_replace<EntityImpactComponent>(
-            entity,
-            position,
-            effect->particleBlock,
-            effect->particleCount);
+        registry.emplace_or_replace<EntityImpactComponent>(entity, position, effect->particleBlock,
+                                                           effect->particleCount);
     }
     registry.emplace_or_replace<PendingNetworkDespawnTag>(entity);
 }

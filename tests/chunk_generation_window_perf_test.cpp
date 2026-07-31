@@ -39,8 +39,7 @@ struct WindowCase {
 };
 
 int64_t chunkKey(const int cx, const int cz) {
-    return (static_cast<int64_t>(cx) << 32) |
-           (static_cast<uint32_t>(cz) & 0xFFFFFFFFULL);
+    return (static_cast<int64_t>(cx) << 32) | (static_cast<uint32_t>(cz) & 0xFFFFFFFFULL);
 }
 
 std::vector<BlockID> snapshotBlocks(const Chunk& chunk) {
@@ -92,25 +91,16 @@ LightJob makeChunkLoadedJob(const std::shared_ptr<Chunk>& chunk) {
 }
 
 void applyLightResult(const LightResult& result, const std::shared_ptr<Chunk>& chunk) {
-    chunk->replacePackedLight(result.selfDelta.packedLight.data(),
-                              result.selfDelta.packedLight.size(),
-                              nullptr);
+    chunk->replacePackedLight(result.selfDelta.packedLight.data(), result.selfDelta.packedLight.size(), nullptr);
 }
 
 uint64_t checksumLightResult(const LightResult& result) {
     uint64_t checksum = static_cast<uint64_t>(result.nodesVisited) << 32U;
     checksum ^= static_cast<uint64_t>(result.selfDelta.dirtySubChunkMask);
     checksum ^= static_cast<uint64_t>(result.outgoing.size()) << 48U;
-    static constexpr std::size_t sampleIndices[] = {
-        0U,
-        255U,
-        4096U,
-        16384U,
-        Chunk::BLOCK_COUNT - 1U
-    };
+    static constexpr std::size_t sampleIndices[] = {0U, 255U, 4096U, 16384U, Chunk::BLOCK_COUNT - 1U};
     for (const std::size_t index : sampleIndices) {
-        checksum = (checksum * 1099511628211ULL) ^
-                   static_cast<uint64_t>(result.selfDelta.packedLight[index]);
+        checksum = (checksum * 1099511628211ULL) ^ static_cast<uint64_t>(result.selfDelta.packedLight[index]);
     }
     for (const BorderUpdateBatch& batch : result.outgoing) {
         checksum ^= static_cast<uint64_t>(batch.nodes.size() + 1U) << (batch.fromDirection + 8U);
@@ -149,34 +139,39 @@ ChunkMeshData buildChunkMeshData(const Chunk& chunk) {
 
         ChunkMeshData subChunkMesh = ChunkMesher::buildSubChunkMeshData(*snapshot);
         const float yOffset = static_cast<float>(scy * SubChunk::SIZE);
-        for (BlockVertex& vertex : subChunkMesh.opaqueVertices) { vertex.y += yOffset; }
-        for (BlockVertex& vertex : subChunkMesh.cutoutVertices) { vertex.y += yOffset; }
-        for (BlockVertex& vertex : subChunkMesh.cutoutDistanceVertices) { vertex.y += yOffset; }
-        for (BlockVertex& vertex : subChunkMesh.transparentVertices) { vertex.y += yOffset; }
-        for (BlockVertex& vertex : subChunkMesh.waterVertices) { vertex.y += yOffset; }
+        for (BlockVertex& vertex : subChunkMesh.opaqueVertices) {
+            vertex.y += yOffset;
+        }
+        for (BlockVertex& vertex : subChunkMesh.cutoutVertices) {
+            vertex.y += yOffset;
+        }
+        for (BlockVertex& vertex : subChunkMesh.cutoutDistanceVertices) {
+            vertex.y += yOffset;
+        }
+        for (BlockVertex& vertex : subChunkMesh.transparentVertices) {
+            vertex.y += yOffset;
+        }
+        for (BlockVertex& vertex : subChunkMesh.waterVertices) {
+            vertex.y += yOffset;
+        }
 
-        merged.opaqueVertices.insert(merged.opaqueVertices.end(),
-                                     subChunkMesh.opaqueVertices.begin(),
+        merged.opaqueVertices.insert(merged.opaqueVertices.end(), subChunkMesh.opaqueVertices.begin(),
                                      subChunkMesh.opaqueVertices.end());
-        merged.cutoutVertices.insert(merged.cutoutVertices.end(),
-                                     subChunkMesh.cutoutVertices.begin(),
+        merged.cutoutVertices.insert(merged.cutoutVertices.end(), subChunkMesh.cutoutVertices.begin(),
                                      subChunkMesh.cutoutVertices.end());
         merged.cutoutDistanceVertices.insert(merged.cutoutDistanceVertices.end(),
                                              subChunkMesh.cutoutDistanceVertices.begin(),
                                              subChunkMesh.cutoutDistanceVertices.end());
-        merged.transparentVertices.insert(merged.transparentVertices.end(),
-                                          subChunkMesh.transparentVertices.begin(),
+        merged.transparentVertices.insert(merged.transparentVertices.end(), subChunkMesh.transparentVertices.begin(),
                                           subChunkMesh.transparentVertices.end());
-        merged.waterVertices.insert(merged.waterVertices.end(),
-                                    subChunkMesh.waterVertices.begin(),
+        merged.waterVertices.insert(merged.waterVertices.end(), subChunkMesh.waterVertices.begin(),
                                     subChunkMesh.waterVertices.end());
         merged.opaqueFaceCountBeforeGreedy += subChunkMesh.opaqueFaceCountBeforeGreedy;
         merged.opaqueFaceCountAfterGreedy += subChunkMesh.opaqueFaceCountAfterGreedy;
         merged.transparentFaceCountBeforeGreedy += subChunkMesh.transparentFaceCountBeforeGreedy;
         merged.transparentFaceCountAfterGreedy += subChunkMesh.transparentFaceCountAfterGreedy;
         if (subChunkMesh.hasBounds) {
-            expandBounds(merged,
-                         subChunkMesh.boundsMin + glm::vec3(0.0f, yOffset, 0.0f),
+            expandBounds(merged, subChunkMesh.boundsMin + glm::vec3(0.0f, yOffset, 0.0f),
                          subChunkMesh.boundsMax + glm::vec3(0.0f, yOffset, 0.0f));
         }
     }
@@ -201,9 +196,7 @@ struct ChunkWindow {
     int side = 0;
     std::vector<std::shared_ptr<Chunk>> chunks;
 
-    std::shared_ptr<Chunk>& at(const int gx, const int gz) {
-        return chunks[static_cast<std::size_t>(gz * side + gx)];
-    }
+    std::shared_ptr<Chunk>& at(const int gx, const int gz) { return chunks[static_cast<std::size_t>(gz * side + gx)]; }
 
     const std::shared_ptr<Chunk>& at(const int gx, const int gz) const {
         return chunks[static_cast<std::size_t>(gz * side + gx)];
@@ -277,13 +270,10 @@ BenchmarkStats computeStats(std::vector<double> timingsMs, const uint64_t checks
     stats.checksum = checksum;
     stats.minMs = timingsMs.front();
     stats.maxMs = timingsMs.back();
-    stats.avgMs = std::accumulate(timingsMs.begin(), timingsMs.end(), 0.0) /
-                  static_cast<double>(timingsMs.size());
+    stats.avgMs = std::accumulate(timingsMs.begin(), timingsMs.end(), 0.0) / static_cast<double>(timingsMs.size());
 
     const std::size_t mid = timingsMs.size() / 2U;
-    stats.medianMs = timingsMs.size() % 2U == 0U
-        ? (timingsMs[mid - 1U] + timingsMs[mid]) * 0.5
-        : timingsMs[mid];
+    stats.medianMs = timingsMs.size() % 2U == 0U ? (timingsMs[mid - 1U] + timingsMs[mid]) * 0.5 : timingsMs[mid];
     stats.p95Ms = timingsMs[(timingsMs.size() - 1U) * 95U / 100U];
 
     if (stats.medianMs > 0.0 && chunkCount > 0) {
@@ -292,11 +282,8 @@ BenchmarkStats computeStats(std::vector<double> timingsMs, const uint64_t checks
     return stats;
 }
 
-BenchmarkStats runBenchmark(const std::string& caseName,
-                            const TerrainGenerator& generator,
-                            const int radius,
-                            const int warmupRounds,
-                            const int measureRounds) {
+BenchmarkStats runBenchmark(const std::string& caseName, const TerrainGenerator& generator, const int radius,
+                            const int warmupRounds, const int measureRounds) {
     const int side = radius * 2 + 1;
     const int chunkCount = side * side;
 
@@ -317,19 +304,11 @@ BenchmarkStats runBenchmark(const std::string& caseName,
 
     BenchmarkStats stats = computeStats(std::move(timingsMs), checksum, chunkCount);
     std::cout << "[chunk_generation_window_perf_test]"
-              << " case=" << caseName
-              << " radius=" << radius
-              << " chunks=" << chunkCount
-              << " warmup=" << warmupRounds
-              << " rounds=" << measureRounds
-              << " median_ms=" << std::fixed << std::setprecision(3) << stats.medianMs
-              << " p95_ms=" << stats.p95Ms
-              << " avg_ms=" << stats.avgMs
-              << " min_ms=" << stats.minMs
-              << " max_ms=" << stats.maxMs
-              << " chunks_per_sec=" << std::setprecision(0) << stats.chunksPerSec
-              << " checksum=" << std::hex << stats.checksum << std::dec
-              << "\n";
+              << " case=" << caseName << " radius=" << radius << " chunks=" << chunkCount << " warmup=" << warmupRounds
+              << " rounds=" << measureRounds << " median_ms=" << std::fixed << std::setprecision(3) << stats.medianMs
+              << " p95_ms=" << stats.p95Ms << " avg_ms=" << stats.avgMs << " min_ms=" << stats.minMs
+              << " max_ms=" << stats.maxMs << " chunks_per_sec=" << std::setprecision(0) << stats.chunksPerSec
+              << " checksum=" << std::hex << stats.checksum << std::dec << "\n";
     return stats;
 }
 
@@ -349,8 +328,7 @@ std::string currentDate() {
 std::string resolveProjectRoot() {
     std::string file = __FILE__;
     const std::string suffix = "tests/chunk_generation_window_perf_test.cpp";
-    if (file.size() >= suffix.size() &&
-        file.substr(file.size() - suffix.size()) == suffix) {
+    if (file.size() >= suffix.size() && file.substr(file.size() - suffix.size()) == suffix) {
         return file.substr(0, file.size() - suffix.size());
     }
 
@@ -365,29 +343,22 @@ std::string resolveProjectRoot() {
     return "./";
 }
 
-bool writeResultsJson(const std::string& filePath,
-                      const std::string& buildConfig,
-                      const int seed,
-                      const int seaLevel,
-                      const int warmupRounds,
-                      const int measureRounds,
-                      const std::vector<WindowCase>& cases) {
+bool writeResultsJson(const std::string& filePath, const std::string& buildConfig, const int seed, const int seaLevel,
+                      const int warmupRounds, const int measureRounds, const std::vector<WindowCase>& cases) {
     using json = nlohmann::json;
 
     json caseJson = json::array();
     for (const WindowCase& c : cases) {
-        caseJson.push_back({
-            {"name", c.name},
-            {"radius", c.radius},
-            {"chunks", c.chunkCount},
-            {"median_ms", c.stats.medianMs},
-            {"p95_ms", c.stats.p95Ms},
-            {"avg_ms", c.stats.avgMs},
-            {"min_ms", c.stats.minMs},
-            {"max_ms", c.stats.maxMs},
-            {"chunks_per_sec", c.stats.chunksPerSec},
-            {"checksum", c.stats.checksum}
-        });
+        caseJson.push_back({{"name", c.name},
+                            {"radius", c.radius},
+                            {"chunks", c.chunkCount},
+                            {"median_ms", c.stats.medianMs},
+                            {"p95_ms", c.stats.p95Ms},
+                            {"avg_ms", c.stats.avgMs},
+                            {"min_ms", c.stats.minMs},
+                            {"max_ms", c.stats.maxMs},
+                            {"chunks_per_sec", c.stats.chunksPerSec},
+                            {"checksum", c.stats.checksum}});
     }
 
     json root;
@@ -396,17 +367,12 @@ bool writeResultsJson(const std::string& filePath,
     root["captured_at"] = currentDate();
     root["build"] = {{"config", buildConfig}};
     root["settings"] = {
-        {"seed", seed},
-        {"sea_level", seaLevel},
-        {"warmup_rounds", warmupRounds},
-        {"measure_rounds", measureRounds}
-    };
+        {"seed", seed}, {"sea_level", seaLevel}, {"warmup_rounds", warmupRounds}, {"measure_rounds", measureRounds}};
     root["cases"] = std::move(caseJson);
 
     std::ofstream out(filePath);
     if (!out.is_open()) {
-        std::cerr << "[chunk_generation_window_perf_test] ERROR: cannot write results to "
-                  << filePath << "\n";
+        std::cerr << "[chunk_generation_window_perf_test] ERROR: cannot write results to " << filePath << "\n";
         return false;
     }
 
@@ -436,17 +402,10 @@ int main() {
     generator.init(seed, seaLevel);
 
     std::cout << "[chunk_generation_window_perf_test] Starting end-to-end chunk window baseline"
-              << " build=" << buildConfig
-              << " seed=" << seed
-              << " sea_level=" << seaLevel
-              << " warmup=" << warmupRounds
-              << " rounds=" << measureRounds
-              << "\n";
+              << " build=" << buildConfig << " seed=" << seed << " sea_level=" << seaLevel << " warmup=" << warmupRounds
+              << " rounds=" << measureRounds << "\n";
 
-    std::vector<WindowCase> cases = {
-        {"window_3x3", 1, 9, {}},
-        {"window_5x5", 2, 25, {}}
-    };
+    std::vector<WindowCase> cases = {{"window_3x3", 1, 9, {}}, {"window_5x5", 2, 25, {}}};
 
     for (WindowCase& c : cases) {
         c.stats = runBenchmark(c.name, generator, c.radius, warmupRounds, measureRounds);
@@ -454,15 +413,9 @@ int main() {
 
     const std::string outputPath =
         resolveProjectRoot() + "tests/perf_baselines/chunk_generation_window_perf_baseline.json";
-    if (writeResultsJson(outputPath,
-                         buildConfig,
-                         static_cast<int>(seed),
-                         seaLevel,
-                         warmupRounds,
-                         measureRounds,
+    if (writeResultsJson(outputPath, buildConfig, static_cast<int>(seed), seaLevel, warmupRounds, measureRounds,
                          cases)) {
-        std::cout << "[chunk_generation_window_perf_test] Results written to "
-                  << outputPath << "\n";
+        std::cout << "[chunk_generation_window_perf_test] Results written to " << outputPath << "\n";
     }
 
     uint64_t finalChecksum = 0;
@@ -470,7 +423,7 @@ int main() {
         finalChecksum ^= c.stats.checksum;
     }
 
-    std::cout << "[chunk_generation_window_perf_test] PASS baseline_ready checksum="
-              << std::hex << finalChecksum << std::dec << "\n";
+    std::cout << "[chunk_generation_window_perf_test] PASS baseline_ready checksum=" << std::hex << finalChecksum
+              << std::dec << "\n";
     return EXIT_SUCCESS;
 }

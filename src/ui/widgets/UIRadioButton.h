@@ -30,10 +30,22 @@ public:
     void setSpacing(float spacing) { m_spacing = spacing; }
 
     // Local color overrides.
-    void setOuterColor(const Color& c)      { m_outerColor = c; m_hasLocalColors = true; }
-    void setOuterHoverColor(const Color& c) { m_outerHoverColor = c; m_hasLocalColors = true; }
-    void setInnerColor(const Color& c)      { m_innerColor = c; m_hasLocalColors = true; }
-    void setTextColor(const Color& c)       { m_textColor = c; m_hasLocalColors = true; }
+    void setOuterColor(const Color& c) {
+        m_outerColor = c;
+        m_hasLocalColors = true;
+    }
+    void setOuterHoverColor(const Color& c) {
+        m_outerHoverColor = c;
+        m_hasLocalColors = true;
+    }
+    void setInnerColor(const Color& c) {
+        m_innerColor = c;
+        m_hasLocalColors = true;
+    }
+    void setTextColor(const Color& c) {
+        m_textColor = c;
+        m_hasLocalColors = true;
+    }
     void setStyle(const UIRadioButtonStyle& style);
     void clearLocalStyle();
 

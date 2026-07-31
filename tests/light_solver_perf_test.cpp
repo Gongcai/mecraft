@@ -55,14 +55,11 @@ uint32_t mix(uint32_t value) {
 }
 
 int64_t chunkKey(const int cx, const int cz) {
-    return (static_cast<int64_t>(cx) << 32) |
-           (static_cast<uint32_t>(cz) & 0xFFFFFFFFULL);
+    return (static_cast<int64_t>(cx) << 32) | (static_cast<uint32_t>(cz) & 0xFFFFFFFFULL);
 }
 
 BlockStateId stateForBlockId(const BlockID blockId) {
-    return blockId == RUNTIME_ID_NULL
-        ? NULL_BLOCK_STATE
-        : BlockStateRegistry::getDefaultState(blockId);
+    return blockId == RUNTIME_ID_NULL ? NULL_BLOCK_STATE : BlockStateRegistry::getDefaultState(blockId);
 }
 
 BlockStateId stateForBlockName(const char* name) {
@@ -94,18 +91,10 @@ std::vector<uint8_t> snapshotPackedLight(const Chunk& chunk) {
 }
 
 void applyResultToChunk(const LightResult& result, const std::shared_ptr<Chunk>& chunk) {
-    chunk->replacePackedLight(result.selfDelta.packedLight.data(),
-                              result.selfDelta.packedLight.size(),
-                              nullptr);
+    chunk->replacePackedLight(result.selfDelta.packedLight.data(), result.selfDelta.packedLight.size(), nullptr);
 }
 
-void carveRoom(Chunk& chunk,
-               const int x0,
-               const int x1,
-               const int y0,
-               const int y1,
-               const int z0,
-               const int z1) {
+void carveRoom(Chunk& chunk, const int x0, const int x1, const int y0, const int y1, const int z0, const int z1) {
     for (int y = y0; y <= y1; ++y) {
         for (int z = z0; z <= z1; ++z) {
             for (int x = x0; x <= x1; ++x) {
@@ -115,20 +104,13 @@ void carveRoom(Chunk& chunk,
     }
 }
 
-void carveColumn(Chunk& chunk,
-                 const int x,
-                 const int y0,
-                 const int y1,
-                 const int z,
-                 const BlockID id) {
+void carveColumn(Chunk& chunk, const int x, const int y0, const int y1, const int z, const BlockID id) {
     for (int y = y0; y <= y1; ++y) {
         chunk.setBlockFast(x, y, z, stateForBlockId(id));
     }
 }
 
-std::shared_ptr<Chunk> makeLightingStressChunk(const int cx,
-                                               const int cz,
-                                               const uint32_t seed) {
+std::shared_ptr<Chunk> makeLightingStressChunk(const int cx, const int cz, const uint32_t seed) {
     auto chunk = std::make_shared<Chunk>(cx, cz);
 
     for (int z = 0; z < Chunk::SIZE_Z; ++z) {
@@ -175,32 +157,19 @@ std::shared_ptr<Chunk> makeLightingStressChunk(const int cx,
         chunk->setBlockFast(13, 18, z, stateForBlockName("minecraft:glass"));
     }
 
-    const std::array<std::array<int, 3>, 6> torchPositions = {{
-        {4, 14, 8},
-        {8, 14, 4},
-        {8, 14, 12},
-        {12, 14, 8},
-        {6, 23, 8},
-        {10, 23, 8}
-    }};
+    const std::array<std::array<int, 3>, 6> torchPositions = {
+        {{4, 14, 8}, {8, 14, 4}, {8, 14, 12}, {12, 14, 8}, {6, 23, 8}, {10, 23, 8}}};
     for (const auto& pos : torchPositions) {
         chunk->setBlockFast(pos[0], pos[1], pos[2], stateForBlockName("minecraft:torch"));
     }
 
-    const std::array<std::array<int, 2>, 6> floraPositions = {{
-        {2, 2},
-        {4, 11},
-        {7, 8},
-        {9, 13},
-        {12, 3},
-        {13, 12}
-    }};
+    const std::array<std::array<int, 2>, 6> floraPositions = {{{2, 2}, {4, 11}, {7, 8}, {9, 13}, {12, 3}, {13, 12}}};
     for (size_t i = 0; i < floraPositions.size(); ++i) {
         const int x = floraPositions[i][0];
         const int z = floraPositions[i][1];
         const BlockID flora = ((seed + static_cast<uint32_t>(i)) & 1U) == 0U
-            ? BlockRegistry::requireIdByName("minecraft:tall_grass")
-            : BlockRegistry::requireIdByName("minecraft:rose");
+                                  ? BlockRegistry::requireIdByName("minecraft:tall_grass")
+                                  : BlockRegistry::requireIdByName("minecraft:rose");
         for (int y = Chunk::SIZE_Y - 2; y >= 0; --y) {
             if (chunk->getBlock(x, y, z) != NULL_BLOCK_STATE) {
                 if (y + 1 < Chunk::SIZE_Y) {
@@ -211,27 +180,25 @@ std::shared_ptr<Chunk> makeLightingStressChunk(const int cx,
         }
     }
 
-    const std::array<std::array<int, 3>, 10> scatterPositions = {{
-        {3, 12, 6},
-        {5, 12, 10},
-        {6, 21, 6},
-        {10, 21, 10},
-        {8, 29, 6},
-        {6, 29, 8},
-        {10, 29, 8},
-        {8, 29, 10},
-        {5, 15, 5},
-        {11, 15, 11}
-    }};
+    const std::array<std::array<int, 3>, 10> scatterPositions = {{{3, 12, 6},
+                                                                  {5, 12, 10},
+                                                                  {6, 21, 6},
+                                                                  {10, 21, 10},
+                                                                  {8, 29, 6},
+                                                                  {6, 29, 8},
+                                                                  {10, 29, 8},
+                                                                  {8, 29, 10},
+                                                                  {5, 15, 5},
+                                                                  {11, 15, 11}}};
     for (size_t i = 0; i < scatterPositions.size(); ++i) {
         const auto& pos = scatterPositions[i];
         const uint32_t value = mix(seed + static_cast<uint32_t>(i * 17U));
         BlockID id = RUNTIME_ID_NULL;
         switch (value % 4U) {
-            case 0: id = BlockRegistry::requireIdByName("minecraft:glass"); break;
-            case 1: id = BlockRegistry::requireIdByName("minecraft:water"); break;
-            case 2: id = BlockRegistry::requireIdByName("minecraft:stone"); break;
-            default: break;
+        case 0: id = BlockRegistry::requireIdByName("minecraft:glass"); break;
+        case 1: id = BlockRegistry::requireIdByName("minecraft:water"); break;
+        case 2: id = BlockRegistry::requireIdByName("minecraft:stone"); break;
+        default: break;
         }
         chunk->setBlockFast(pos[0], pos[1], pos[2], stateForBlockId(id));
     }
@@ -250,32 +217,22 @@ LightJob makeChunkLoadedJob(const std::shared_ptr<Chunk>& chunk) {
     return job;
 }
 
-LightJob makeBlockChangedJob(const int cx,
-                             const int cz,
-                             const uint32_t seed) {
+LightJob makeBlockChangedJob(const int cx, const int cz, const uint32_t seed) {
     const std::shared_ptr<Chunk> chunk = makeLightingStressChunk(cx, cz, seed);
     const LightResult initial = LightSolver::solve(makeChunkLoadedJob(chunk));
     applyResultToChunk(initial, chunk);
 
     std::vector<LocalLightChange> changes;
 
-    const auto pushChange = [&](const int x,
-                                const int y,
-                                const int z,
-                                const BlockID newId) {
+    const auto pushChange = [&](const int x, const int y, const int z, const BlockID newId) {
         const BlockID oldId = BlockStateRegistry::getBlockId(chunk->getBlock(x, y, z));
         if (oldId == newId) {
             return;
         }
 
         chunk->setBlockFast(x, y, z, stateForBlockId(newId));
-        changes.push_back(LocalLightChange{
-            static_cast<uint8_t>(x),
-            static_cast<uint8_t>(y),
-            static_cast<uint8_t>(z),
-            oldId,
-            newId
-        });
+        changes.push_back(
+            LocalLightChange{static_cast<uint8_t>(x), static_cast<uint8_t>(y), static_cast<uint8_t>(z), oldId, newId});
     };
 
     pushChange(4, 14, 8, RUNTIME_ID_NULL);
@@ -296,9 +253,7 @@ LightJob makeBlockChangedJob(const int cx,
     return job;
 }
 
-BorderUpdateBatch findOutgoingBatch(const LightResult& result,
-                                    const int64_t targetKey,
-                                    const uint8_t fromDirection) {
+BorderUpdateBatch findOutgoingBatch(const LightResult& result, const int64_t targetKey, const uint8_t fromDirection) {
     for (const BorderUpdateBatch& batch : result.outgoing) {
         if (batch.targetChunkKey == targetKey && batch.fromDirection == fromDirection) {
             return batch;
@@ -307,9 +262,7 @@ BorderUpdateBatch findOutgoingBatch(const LightResult& result,
     fail("expected outgoing boundary batch was not produced");
 }
 
-void buildBoundaryTunnel(const std::shared_ptr<Chunk>& left,
-                         const std::shared_ptr<Chunk>& right,
-                         const int y,
+void buildBoundaryTunnel(const std::shared_ptr<Chunk>& left, const std::shared_ptr<Chunk>& right, const int y,
                          const int z) {
     for (int iy = 0; iy <= 40; ++iy) {
         for (int iz = 0; iz < Chunk::SIZE_Z; ++iz) {
@@ -332,9 +285,7 @@ void buildBoundaryTunnel(const std::shared_ptr<Chunk>& left,
     right->setBlockFast(1, y + 1, z, stateForBlockName("minecraft:glass"));
 }
 
-LightJob makeNeighborBoundaryJob(const int pairIndex,
-                                 const int y,
-                                 const int z) {
+LightJob makeNeighborBoundaryJob(const int pairIndex, const int y, const int z) {
     const int leftX = pairIndex * 2;
     const int rightX = leftX + 1;
     const std::shared_ptr<Chunk> left = std::make_shared<Chunk>(leftX, 0);
@@ -345,10 +296,7 @@ LightJob makeNeighborBoundaryJob(const int pairIndex,
     LightJob leftLitJob = makeChunkLoadedJob(left);
     leftLitJob.neighborPosX = right;
     const LightResult leftLit = LightSolver::solve(leftLitJob);
-    const BorderUpdateBatch litBoundary = findOutgoingBatch(
-        leftLit,
-        chunkKey(right->m_chunkX, right->m_chunkZ),
-        0);
+    const BorderUpdateBatch litBoundary = findOutgoingBatch(leftLit, chunkKey(right->m_chunkX, right->m_chunkZ), 0);
 
     LightJob rightLitJob = makeChunkLoadedJob(right);
     rightLitJob.reason = LightDirtyReason::NeighborBoundary;
@@ -362,10 +310,8 @@ LightJob makeNeighborBoundaryJob(const int pairIndex,
     LightJob leftRemovedJob = makeChunkLoadedJob(left);
     leftRemovedJob.neighborPosX = right;
     const LightResult leftRemoved = LightSolver::solve(leftRemovedJob);
-    const BorderUpdateBatch removedBoundary = findOutgoingBatch(
-        leftRemoved,
-        chunkKey(right->m_chunkX, right->m_chunkZ),
-        0);
+    const BorderUpdateBatch removedBoundary =
+        findOutgoingBatch(leftRemoved, chunkKey(right->m_chunkX, right->m_chunkZ), 0);
 
     LightJob job;
     job.chunkKey = chunkKey(right->m_chunkX, right->m_chunkZ);
@@ -381,23 +327,14 @@ LightJob makeNeighborBoundaryJob(const int pairIndex,
 }
 
 uint64_t checksumResult(const LightResult& result) {
-    static constexpr std::array<std::size_t, 8> sampleIndices = {
-        0U,
-        1U,
-        17U,
-        255U,
-        1024U,
-        8191U,
-        16384U,
-        Chunk::BLOCK_COUNT - 1U
-    };
+    static constexpr std::array<std::size_t, 8> sampleIndices = {0U,    1U,    17U,    255U,
+                                                                 1024U, 8191U, 16384U, Chunk::BLOCK_COUNT - 1U};
 
     uint64_t checksum = static_cast<uint64_t>(result.nodesVisited) << 32U;
     checksum ^= static_cast<uint64_t>(result.selfDelta.dirtySubChunkMask);
     checksum ^= static_cast<uint64_t>(result.outgoing.size()) << 48U;
     for (const std::size_t index : sampleIndices) {
-        checksum = (checksum * 1315423911ULL) ^
-                   static_cast<uint64_t>(result.selfDelta.packedLight[index]);
+        checksum = (checksum * 1315423911ULL) ^ static_cast<uint64_t>(result.selfDelta.packedLight[index]);
     }
     for (const BorderUpdateBatch& batch : result.outgoing) {
         checksum ^= static_cast<uint64_t>(batch.dirtySubChunkMask) * 1099511628211ULL;
@@ -406,20 +343,15 @@ uint64_t checksumResult(const LightResult& result) {
     return checksum;
 }
 
-BenchmarkStats computeStats(std::vector<double> timingsMs,
-                            const uint64_t checksum,
-                            const double avgNodesVisited,
-                            const double avgOutgoingNodes,
-                            const double avgWorkerMs,
-                            const size_t solvesPerRound) {
+BenchmarkStats computeStats(std::vector<double> timingsMs, const uint64_t checksum, const double avgNodesVisited,
+                            const double avgOutgoingNodes, const double avgWorkerMs, const size_t solvesPerRound) {
     std::sort(timingsMs.begin(), timingsMs.end());
 
     BenchmarkStats stats;
     stats.checksum = checksum;
     stats.minMs = timingsMs.front();
     stats.maxMs = timingsMs.back();
-    stats.avgMs = std::accumulate(timingsMs.begin(), timingsMs.end(), 0.0) /
-                  static_cast<double>(timingsMs.size());
+    stats.avgMs = std::accumulate(timingsMs.begin(), timingsMs.end(), 0.0) / static_cast<double>(timingsMs.size());
 
     const size_t mid = timingsMs.size() / 2U;
     if (timingsMs.size() % 2U == 0U) {
@@ -443,9 +375,7 @@ BenchmarkStats computeStats(std::vector<double> timingsMs,
     return stats;
 }
 
-BenchmarkStats runBenchmark(const PerfCase& perfCase,
-                            const int warmupRounds,
-                            const int measureRounds) {
+BenchmarkStats runBenchmark(const PerfCase& perfCase, const int warmupRounds, const int measureRounds) {
     for (int warmup = 0; warmup < warmupRounds; ++warmup) {
         uint64_t warmupChecksum = 0;
         for (const LightJob& job : perfCase.jobs) {
@@ -480,46 +410,25 @@ BenchmarkStats runBenchmark(const PerfCase& perfCase,
         timingsMs.push_back(std::chrono::duration<double, std::milli>(end - start).count());
     }
 
-    const double totalSolves = static_cast<double>(measureRounds) *
-                               static_cast<double>(perfCase.jobs.size());
-    const double avgNodesVisited = totalSolves > 0.0
-        ? static_cast<double>(totalNodesVisited) / totalSolves
-        : 0.0;
-    const double avgOutgoingNodes = totalSolves > 0.0
-        ? static_cast<double>(totalOutgoingNodes) / totalSolves
-        : 0.0;
-    const double avgWorkerMs = totalSolves > 0.0
-        ? totalWorkerMs / totalSolves
-        : 0.0;
+    const double totalSolves = static_cast<double>(measureRounds) * static_cast<double>(perfCase.jobs.size());
+    const double avgNodesVisited = totalSolves > 0.0 ? static_cast<double>(totalNodesVisited) / totalSolves : 0.0;
+    const double avgOutgoingNodes = totalSolves > 0.0 ? static_cast<double>(totalOutgoingNodes) / totalSolves : 0.0;
+    const double avgWorkerMs = totalSolves > 0.0 ? totalWorkerMs / totalSolves : 0.0;
 
-    return computeStats(std::move(timingsMs),
-                        checksum,
-                        avgNodesVisited,
-                        avgOutgoingNodes,
-                        avgWorkerMs,
+    return computeStats(std::move(timingsMs), checksum, avgNodesVisited, avgOutgoingNodes, avgWorkerMs,
                         perfCase.jobs.size());
 }
 
-void printStats(const PerfCase& perfCase,
-                const BenchmarkStats& stats,
-                const int warmupRounds,
+void printStats(const PerfCase& perfCase, const BenchmarkStats& stats, const int warmupRounds,
                 const int measureRounds) {
     std::cout << "[light_solver_perf_test]"
-              << " case=" << perfCase.name
-              << " jobs=" << perfCase.jobs.size()
-              << " warmup=" << warmupRounds
-              << " rounds=" << measureRounds
-              << " median_ms=" << std::fixed << std::setprecision(3) << stats.medianMs
-              << " p95_ms=" << stats.p95Ms
-              << " avg_ms=" << stats.avgMs
-              << " min_ms=" << stats.minMs
-              << " max_ms=" << stats.maxMs
-              << " calls_per_sec=" << std::setprecision(0) << stats.callsPerSec
-              << " ns_per_call=" << std::setprecision(2) << stats.nsPerCall
-              << " avg_nodes=" << std::setprecision(2) << stats.avgNodesVisited
-              << " avg_outgoing_nodes=" << stats.avgOutgoingNodes
-              << " avg_worker_ms=" << stats.avgWorkerMs
-              << " checksum=" << std::hex << stats.checksum << std::dec
+              << " case=" << perfCase.name << " jobs=" << perfCase.jobs.size() << " warmup=" << warmupRounds
+              << " rounds=" << measureRounds << " median_ms=" << std::fixed << std::setprecision(3) << stats.medianMs
+              << " p95_ms=" << stats.p95Ms << " avg_ms=" << stats.avgMs << " min_ms=" << stats.minMs
+              << " max_ms=" << stats.maxMs << " calls_per_sec=" << std::setprecision(0) << stats.callsPerSec
+              << " ns_per_call=" << std::setprecision(2) << stats.nsPerCall << " avg_nodes=" << std::setprecision(2)
+              << stats.avgNodesVisited << " avg_outgoing_nodes=" << stats.avgOutgoingNodes
+              << " avg_worker_ms=" << stats.avgWorkerMs << " checksum=" << std::hex << stats.checksum << std::dec
               << "\n";
 }
 
@@ -539,8 +448,7 @@ std::string currentDate() {
 std::string resolveProjectRoot() {
     std::string file = __FILE__;
     const std::string suffix = "tests/light_solver_perf_test.cpp";
-    if (file.size() >= suffix.size() &&
-        file.substr(file.size() - suffix.size()) == suffix) {
+    if (file.size() >= suffix.size() && file.substr(file.size() - suffix.size()) == suffix) {
         return file.substr(0, file.size() - suffix.size());
     }
 
@@ -555,33 +463,28 @@ std::string resolveProjectRoot() {
     return "./";
 }
 
-bool writeResultsJson(const std::string& filePath,
-                      const std::string& buildConfig,
-                      const int warmupRounds,
-                      const int measureRounds,
-                      const std::vector<std::pair<PerfCase, BenchmarkStats>>& results) {
+bool writeResultsJson(const std::string& filePath, const std::string& buildConfig, const int warmupRounds,
+                      const int measureRounds, const std::vector<std::pair<PerfCase, BenchmarkStats>>& results) {
     using json = nlohmann::json;
 
     json cases = json::array();
     for (const auto& entry : results) {
         const PerfCase& perfCase = entry.first;
         const BenchmarkStats& stats = entry.second;
-        cases.push_back({
-            {"name", perfCase.name},
-            {"focus", perfCase.focus},
-            {"jobs", perfCase.jobs.size()},
-            {"median_ms", stats.medianMs},
-            {"p95_ms", stats.p95Ms},
-            {"avg_ms", stats.avgMs},
-            {"min_ms", stats.minMs},
-            {"max_ms", stats.maxMs},
-            {"calls_per_sec", stats.callsPerSec},
-            {"ns_per_call", stats.nsPerCall},
-            {"avg_nodes_visited", stats.avgNodesVisited},
-            {"avg_outgoing_nodes", stats.avgOutgoingNodes},
-            {"avg_worker_ms", stats.avgWorkerMs},
-            {"checksum", stats.checksum}
-        });
+        cases.push_back({{"name", perfCase.name},
+                         {"focus", perfCase.focus},
+                         {"jobs", perfCase.jobs.size()},
+                         {"median_ms", stats.medianMs},
+                         {"p95_ms", stats.p95Ms},
+                         {"avg_ms", stats.avgMs},
+                         {"min_ms", stats.minMs},
+                         {"max_ms", stats.maxMs},
+                         {"calls_per_sec", stats.callsPerSec},
+                         {"ns_per_call", stats.nsPerCall},
+                         {"avg_nodes_visited", stats.avgNodesVisited},
+                         {"avg_outgoing_nodes", stats.avgOutgoingNodes},
+                         {"avg_worker_ms", stats.avgWorkerMs},
+                         {"checksum", stats.checksum}});
     }
 
     json root;
@@ -589,16 +492,12 @@ bool writeResultsJson(const std::string& filePath,
     root["focus"] = "LightSolver solve()/propagateLevel()/getOpacity() baseline";
     root["captured_at"] = currentDate();
     root["build"] = {{"config", buildConfig}};
-    root["settings"] = {
-        {"warmup_rounds", warmupRounds},
-        {"measure_rounds", measureRounds}
-    };
+    root["settings"] = {{"warmup_rounds", warmupRounds}, {"measure_rounds", measureRounds}};
     root["cases"] = std::move(cases);
 
     std::ofstream out(filePath);
     if (!out.is_open()) {
-        std::cerr << "[light_solver_perf_test] ERROR: cannot write results to "
-                  << filePath << "\n";
+        std::cerr << "[light_solver_perf_test] ERROR: cannot write results to " << filePath << "\n";
         return false;
     }
 
@@ -628,8 +527,8 @@ int main() {
     chunkLoadedCase.focus = "Full rebuild path dominated by sky/block add propagation";
     chunkLoadedCase.jobs.reserve(jobsPerCase);
     for (int i = 0; i < jobsPerCase; ++i) {
-        chunkLoadedCase.jobs.push_back(makeChunkLoadedJob(
-            makeLightingStressChunk(i, 0, 0xC0FFEE00U + static_cast<uint32_t>(i))));
+        chunkLoadedCase.jobs.push_back(
+            makeChunkLoadedJob(makeLightingStressChunk(i, 0, 0xC0FFEE00U + static_cast<uint32_t>(i))));
     }
 
     PerfCase blockChangedCase;
@@ -637,10 +536,7 @@ int main() {
     blockChangedCase.focus = "Local block updates with remove/add passes and dirty sky columns";
     blockChangedCase.jobs.reserve(jobsPerCase);
     for (int i = 0; i < jobsPerCase; ++i) {
-        blockChangedCase.jobs.push_back(makeBlockChangedJob(
-            i,
-            4,
-            0xBADC0DE0U + static_cast<uint32_t>(i)));
+        blockChangedCase.jobs.push_back(makeBlockChangedJob(i, 4, 0xBADC0DE0U + static_cast<uint32_t>(i)));
     }
 
     PerfCase neighborBoundaryCase;
@@ -648,27 +544,17 @@ int main() {
     neighborBoundaryCase.focus = "Cross-chunk boundary diff with propagated light removal";
     neighborBoundaryCase.jobs.reserve(jobsPerCase);
     for (int i = 0; i < jobsPerCase; ++i) {
-        neighborBoundaryCase.jobs.push_back(makeNeighborBoundaryJob(
-            i,
-            18 + (i % 6),
-            4 + (i % 8)));
+        neighborBoundaryCase.jobs.push_back(makeNeighborBoundaryJob(i, 18 + (i % 6), 4 + (i % 8)));
     }
 
-    const std::vector<PerfCase> perfCases = {
-        chunkLoadedCase,
-        blockChangedCase,
-        neighborBoundaryCase
-    };
+    const std::vector<PerfCase> perfCases = {chunkLoadedCase, blockChangedCase, neighborBoundaryCase};
 
     std::vector<std::pair<PerfCase, BenchmarkStats>> results;
     results.reserve(perfCases.size());
 
     std::cout << "[light_solver_perf_test] Starting LightSolver baseline"
-              << " build=" << buildConfig
-              << " warmup=" << warmupRounds
-              << " rounds=" << measureRounds
-              << " jobs_per_case=" << jobsPerCase
-              << "\n";
+              << " build=" << buildConfig << " warmup=" << warmupRounds << " rounds=" << measureRounds
+              << " jobs_per_case=" << jobsPerCase << "\n";
 
     for (const PerfCase& perfCase : perfCases) {
         const BenchmarkStats stats = runBenchmark(perfCase, warmupRounds, measureRounds);
@@ -676,8 +562,7 @@ int main() {
         results.push_back({perfCase, stats});
     }
 
-    const std::string outputPath =
-        resolveProjectRoot() + "tests/perf_baselines/light_solver_perf_baseline.json";
+    const std::string outputPath = resolveProjectRoot() + "tests/perf_baselines/light_solver_perf_baseline.json";
     if (writeResultsJson(outputPath, buildConfig, warmupRounds, measureRounds, results)) {
         std::cout << "[light_solver_perf_test] Results written to " << outputPath << "\n";
     }
@@ -687,7 +572,7 @@ int main() {
         finalChecksum ^= entry.second.checksum;
     }
 
-    std::cout << "[light_solver_perf_test] PASS baseline_ready checksum="
-              << std::hex << finalChecksum << std::dec << "\n";
+    std::cout << "[light_solver_perf_test] PASS baseline_ready checksum=" << std::hex << finalChecksum << std::dec
+              << "\n";
     return EXIT_SUCCESS;
 }

@@ -23,24 +23,15 @@ public:
     [[nodiscard]] const RhiCapabilities& capabilities() const override;
     [[nodiscard]] RhiMemoryStats memoryStats() const override;
 
-    RhiBufferHandle createBuffer(const RhiBufferDesc& desc,
-                                 const void* initialData,
-                                 size_t initialDataSize) override;
-    RhiTextureHandle createTexture(const RhiTextureDesc& desc,
-                                   const RhiTextureInitialData* initialData) override;
-    [[nodiscard]] bool getBufferDesc(RhiBufferHandle buffer,
-                                     RhiBufferDesc& desc) const override;
-    [[nodiscard]] bool getTextureDesc(RhiTextureHandle texture,
-                                      RhiTextureDesc& desc) const override;
-    [[nodiscard]] bool getTextureMemoryRequirements(
-        const RhiTextureDesc& desc,
-        RhiTextureMemoryRequirements& requirements) override;
-    RhiMemoryHandle allocateTextureMemory(
-        const RhiTextureMemoryRequirements& requirements,
-        RhiMemoryCategory category,
-        const char* debugName) override;
-    RhiTextureHandle createPlacedTexture(const RhiTextureDesc& desc,
-                                         RhiMemoryHandle memory) override;
+    RhiBufferHandle createBuffer(const RhiBufferDesc& desc, const void* initialData, size_t initialDataSize) override;
+    RhiTextureHandle createTexture(const RhiTextureDesc& desc, const RhiTextureInitialData* initialData) override;
+    [[nodiscard]] bool getBufferDesc(RhiBufferHandle buffer, RhiBufferDesc& desc) const override;
+    [[nodiscard]] bool getTextureDesc(RhiTextureHandle texture, RhiTextureDesc& desc) const override;
+    [[nodiscard]] bool getTextureMemoryRequirements(const RhiTextureDesc& desc,
+                                                    RhiTextureMemoryRequirements& requirements) override;
+    RhiMemoryHandle allocateTextureMemory(const RhiTextureMemoryRequirements& requirements, RhiMemoryCategory category,
+                                          const char* debugName) override;
+    RhiTextureHandle createPlacedTexture(const RhiTextureDesc& desc, RhiMemoryHandle memory) override;
     void destroyTextureMemory(RhiMemoryHandle handle) override;
     RhiTextureViewHandle createTextureView(const RhiTextureViewDesc& desc) override;
     RhiSamplerHandle createSampler(const RhiSamplerDesc& desc) override;
@@ -51,16 +42,13 @@ public:
     RhiPipelineHandle createComputePipeline(const RhiComputePipelineDesc& desc) override;
     RhiBindGroupHandle createBindGroup(const RhiBindGroupDesc& desc) override;
     RhiQueryPoolHandle createQueryPool(const RhiQueryPoolDesc& desc) override;
-    bool resetQueryPool(RhiQueryPoolHandle pool,
-                        uint32_t firstQuery,
-                        uint32_t queryCount) override;
+    bool resetQueryPool(RhiQueryPoolHandle pool, uint32_t firstQuery, uint32_t queryCount) override;
     void* mapBuffer(RhiBufferHandle buffer, uint64_t offset, uint64_t size) override;
     void unmapBuffer(RhiBufferHandle buffer) override;
-    [[nodiscard]] bool areQueryResultsAvailable(RhiQueryPoolHandle pool,
-                                                uint32_t firstQuery,
+    [[nodiscard]] bool areQueryResultsAvailable(RhiQueryPoolHandle pool, uint32_t firstQuery,
                                                 uint32_t queryCount) const override;
-    bool getQueryResults(RhiQueryPoolHandle pool, uint32_t firstQuery,
-                         uint32_t queryCount, uint64_t* results) const override;
+    bool getQueryResults(RhiQueryPoolHandle pool, uint32_t firstQuery, uint32_t queryCount,
+                         uint64_t* results) const override;
 
     [[nodiscard]] RhiTextureViewHandle currentSwapchainColorView() const override;
     [[nodiscard]] RhiTextureViewHandle currentSwapchainDepthStencilView() const override;
@@ -85,12 +73,10 @@ public:
     void destroyBindGroup(RhiBindGroupHandle handle) override;
     void destroyQueryPool(RhiQueryPoolHandle handle) override;
 
-    [[nodiscard]] std::unique_ptr<RhiCommandListPool> createCommandListPool(
-        const RhiCommandListPoolDesc& desc) override;
-    bool submit(const RhiSubmitInfo& info,
-                RhiSubmissionToken* completionToken = nullptr) override;
-    [[nodiscard]] bool isSubmissionComplete(RhiSubmissionToken token,
-                                            bool& complete) override;
+    [[nodiscard]] std::unique_ptr<RhiCommandListPool>
+    createCommandListPool(const RhiCommandListPoolDesc& desc) override;
+    bool submit(const RhiSubmitInfo& info, RhiSubmissionToken* completionToken = nullptr) override;
+    [[nodiscard]] bool isSubmissionComplete(RhiSubmissionToken token, bool& complete) override;
     bool waitForSubmission(RhiSubmissionToken token) override;
     void waitIdle() override;
 
@@ -104,8 +90,7 @@ private:
     friend class VkRhiInterop;
 
     [[nodiscard]] bool validateSubmissionToken(RhiSubmissionToken token) const;
-    [[nodiscard]] RhiFrameStatus cancelAcquiredFrame(
-        const RhiPresentInfo& info);
+    [[nodiscard]] RhiFrameStatus cancelAcquiredFrame(const RhiPresentInfo& info);
     void refreshSwapchainCapabilities();
     void reclaimCompletedWork();
     void reclaimCompletedWorkUnlocked();

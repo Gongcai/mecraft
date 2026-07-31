@@ -19,10 +19,11 @@ namespace {
 /// Solid blocks return false; air/non-solid return true.
 bool isPassable(const World& world, const glm::ivec3& pos) {
     if (pos.y < 0 || pos.y >= Chunk::SIZE_Y) {
-        return false;  // world bottom / top — treat as non-passable (landing surface)
+        return false; // world bottom / top — treat as non-passable (landing surface)
     }
     const BlockStateId stateId = world.getBlockState(pos.x, pos.y, pos.z);
-    if (stateId == NULL_BLOCK_STATE) return true;  // air
+    if (stateId == NULL_BLOCK_STATE)
+        return true; // air
     const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
     return !BlockRegistry::getFast(blockId).isSolid;
 }
@@ -34,25 +35,25 @@ bool tryLandBlock(World& world, const glm::ivec3& pos, BlockID blockId) {
         return false;
     }
     if (!isPassable(world, pos)) {
-        return false;  // occupied — caller will drop as item instead
+        return false; // occupied — caller will drop as item instead
     }
     world.setBlock(pos.x, pos.y, pos.z, blockId);
     return true;
 }
 
 bool isBlockPositionTicking(const World& world, const glm::ivec3& position) {
-    const int chunkX = static_cast<int>(std::floor(static_cast<float>(position.x) /
-                                                   static_cast<float>(Chunk::SIZE_X)));
-    const int chunkZ = static_cast<int>(std::floor(static_cast<float>(position.z) /
-                                                   static_cast<float>(Chunk::SIZE_Z)));
+    const int chunkX = static_cast<int>(std::floor(static_cast<float>(position.x) / static_cast<float>(Chunk::SIZE_X)));
+    const int chunkZ = static_cast<int>(std::floor(static_cast<float>(position.z) / static_cast<float>(Chunk::SIZE_Z)));
     return world.ticketManager().shouldTick(chunkX, chunkZ);
 }
 
 } // namespace
 
 void FallingBlockTickSystem::update(SystemContext& ctx) {
-    if (!ctx.services.world) return;
-    if (ctx.services.gameClient) return;
+    if (!ctx.services.world)
+        return;
+    if (ctx.services.gameClient)
+        return;
     tickWorld(*ctx.services.world, ctx.registry);
 }
 

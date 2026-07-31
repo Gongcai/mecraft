@@ -27,13 +27,11 @@ constexpr int kBackdropBlurDownsample = 4;
 
 UIRenderer::UIRenderer() = default;
 
-UIRenderer::~UIRenderer()
-{
+UIRenderer::~UIRenderer() {
     shutdown();
 }
 
-void UIRenderer::init(ResourceMgr& resourceMgr)
-{
+void UIRenderer::init(ResourceMgr& resourceMgr) {
     m_resourceMgr = &resourceMgr;
     m_theme = UIThemePresets::dark();
     initPanelRhiResources(resourceMgr.rhiDevice());
@@ -103,14 +101,8 @@ void UIRenderer::init(ResourceMgr& resourceMgr)
     m_console.setScaleStrategy(UIScaleStrategy::TextOnly);
 
     m_widgetControls = {
-        &m_hud,
-        &m_console,
-        &m_commandInput,
-        &m_hotbar,
-        &m_inventoryPanel,
-        &m_storagePanel,
-        &m_machinePanel,
-        &m_creativeInventoryPanel,
+        &m_hud,          &m_console,      &m_commandInput,           &m_hotbar, &m_inventoryPanel,
+        &m_storagePanel, &m_machinePanel, &m_creativeInventoryPanel,
     };
 
     m_lastSceneContext = {};
@@ -120,8 +112,7 @@ void UIRenderer::init(ResourceMgr& resourceMgr)
     populatePanelRhiContext(m_lastSceneContext);
 }
 
-void UIRenderer::shutdown()
-{
+void UIRenderer::shutdown() {
     m_crosshair.shutdown();
 
     m_console.shutdown();
@@ -144,180 +135,144 @@ void UIRenderer::shutdown()
     m_humanoidRenderer = nullptr;
 }
 
-void UIRenderer::setCrosshairSize(float size)
-{
+void UIRenderer::setCrosshairSize(float size) {
     m_crosshair.setSize(size);
 }
 
-float UIRenderer::getCrosshairSize() const
-{
+float UIRenderer::getCrosshairSize() const {
     return m_crosshair.getSize();
 }
 
-void UIRenderer::setCrosshairColor(const std::array<float, 4>& color)
-{
+void UIRenderer::setCrosshairColor(const std::array<float, 4>& color) {
     m_crosshair.setColor(color);
 }
 
-const std::array<float, 4>& UIRenderer::getCrosshairColor() const
-{
+const std::array<float, 4>& UIRenderer::getCrosshairColor() const {
     return m_crosshair.getColor();
 }
 
-void UIRenderer::setHotbarBgColor(const std::array<float, 4>& color)
-{
+void UIRenderer::setHotbarBgColor(const std::array<float, 4>& color) {
     m_hotbar.setBgColor(color);
 }
 
-const std::array<float, 4>& UIRenderer::getHotbarBgColor() const
-{
+const std::array<float, 4>& UIRenderer::getHotbarBgColor() const {
     return m_hotbar.getBgColor();
 }
 
-void UIRenderer::setHotbarBorderColor(const std::array<float, 4>& color)
-{
+void UIRenderer::setHotbarBorderColor(const std::array<float, 4>& color) {
     m_hotbar.setBorderColor(color);
 }
 
-const std::array<float, 4>& UIRenderer::getHotbarBorderColor() const
-{
+const std::array<float, 4>& UIRenderer::getHotbarBorderColor() const {
     return m_hotbar.getBorderColor();
 }
 
-void UIRenderer::setHotbarIconTintColor(const std::array<float, 4>& color)
-{
+void UIRenderer::setHotbarIconTintColor(const std::array<float, 4>& color) {
     m_hotbar.setIconTintColor(color);
 }
 
-const std::array<float, 4>& UIRenderer::getHotbarIconTintColor() const
-{
+const std::array<float, 4>& UIRenderer::getHotbarIconTintColor() const {
     return m_hotbar.getIconTintColor();
 }
 
-
-void UIRenderer::setHotbarCountTextScale(float scale)
-{
+void UIRenderer::setHotbarCountTextScale(float scale) {
     m_hotbar.setCountTextScale(scale);
 }
 
-float UIRenderer::getHotbarCountTextScale() const
-{
+float UIRenderer::getHotbarCountTextScale() const {
     return m_hotbar.getCountTextScale();
 }
 
-void UIRenderer::setInventoryCountTextOffsetX(float offsetX)
-{
+void UIRenderer::setInventoryCountTextOffsetX(float offsetX) {
     m_inventoryPanel.itemGrid().setCountTextOffsetX(offsetX);
 }
 
-float UIRenderer::getInventoryCountTextOffsetX() const
-{
+float UIRenderer::getInventoryCountTextOffsetX() const {
     return m_inventoryPanel.itemGrid().getRenderParams().countTextOffsetX;
 }
 
-void UIRenderer::setInventoryCountTextOffsetY(float offsetY)
-{
+void UIRenderer::setInventoryCountTextOffsetY(float offsetY) {
     m_inventoryPanel.itemGrid().setCountTextOffsetY(offsetY);
 }
 
-float UIRenderer::getInventoryCountTextOffsetY() const
-{
+float UIRenderer::getInventoryCountTextOffsetY() const {
     return m_inventoryPanel.itemGrid().getRenderParams().countTextOffsetY;
 }
 
-void UIRenderer::setInventoryCountTextScale(float scale)
-{
+void UIRenderer::setInventoryCountTextScale(float scale) {
     m_inventoryPanel.itemGrid().setCountTextScale(scale);
 }
 
-float UIRenderer::getInventoryCountTextScale() const
-{
+float UIRenderer::getInventoryCountTextScale() const {
     return m_inventoryPanel.itemGrid().getRenderParams().countTextScale;
 }
 
-void UIRenderer::setGUIScale(GUIScale scale)
-{
+void UIRenderer::setGUIScale(GUIScale scale) {
     m_guiScale = scale;
 }
 
-GUIScale UIRenderer::getGUIScale() const
-{
+GUIScale UIRenderer::getGUIScale() const {
     return m_guiScale;
 }
 
-void UIRenderer::setCommandCaretBlinkPeriodMs(float periodMs)
-{
+void UIRenderer::setCommandCaretBlinkPeriodMs(float periodMs) {
     m_commandInput.setCaretBlinkPeriodMs(periodMs);
 }
 
-float UIRenderer::getCommandCaretBlinkPeriodMs() const
-{
+float UIRenderer::getCommandCaretBlinkPeriodMs() const {
     return m_commandInput.getCaretBlinkPeriodMs();
 }
 
-void UIRenderer::setTheme(const UITheme& theme)
-{
+void UIRenderer::setTheme(const UITheme& theme) {
     m_theme = theme;
 }
 
-void UIRenderer::setLocaleManager(const LocaleManager* localeManager)
-{
+void UIRenderer::setLocaleManager(const LocaleManager* localeManager) {
     m_localeManager = localeManager;
 }
 
-const UITheme& UIRenderer::getTheme() const
-{
+const UITheme& UIRenderer::getTheme() const {
     return m_theme;
 }
 
-UITheme& UIRenderer::getTheme()
-{
+UITheme& UIRenderer::getTheme() {
     return m_theme;
 }
 
-void UIRenderer::appendCommandLine(const std::string& command)
-{
+void UIRenderer::appendCommandLine(const std::string& command) {
     if (command.empty()) {
         return;
     }
     appendOutputLine("> " + command, ConsoleDisplayBox::MessageType::Normal);
 }
 
-void UIRenderer::appendOutputLine(const std::string& message,
-                                  ConsoleDisplayBox::MessageType type)
-{
+void UIRenderer::appendOutputLine(const std::string& message, ConsoleDisplayBox::MessageType type) {
     m_console.appendLine(message, Time::getRawTime(), type);
 }
 
-void UIRenderer::appendWarningLine(const std::string& message)
-{
+void UIRenderer::appendWarningLine(const std::string& message) {
     appendOutputLine(message, ConsoleDisplayBox::MessageType::Warning);
 }
 
-void UIRenderer::appendSuccessLine(const std::string& message)
-{
+void UIRenderer::appendSuccessLine(const std::string& message) {
     appendOutputLine(message, ConsoleDisplayBox::MessageType::Success);
 }
 
-void UIRenderer::clearConsoleLines()
-{
+void UIRenderer::clearConsoleLines() {
     m_console.clear();
 }
 
-bool UIRenderer::prepareTextFrame(RhiCommandList& commandList)
-{
+bool UIRenderer::prepareTextFrame(RhiCommandList& commandList) {
     return m_text.prepareFrame(commandList);
 }
 
-void UIRenderer::renderCommandInputBox(const std::string& text)
-{
+void UIRenderer::renderCommandInputBox(const std::string& text) {
     m_commandInput.setText(text);
-    m_commandInput.visible =(true);
+    m_commandInput.visible = (true);
     m_commandInputRequested = true;
 }
 
-UIEventResult UIRenderer::routeUIInput(const UIInputEvent& event) const
-{
+UIEventResult UIRenderer::routeUIInput(const UIInputEvent& event) const {
     UIEventResult aggregate = UIEventResult::Ignored;
     UIInputEvent refEvent = event;
 
@@ -344,7 +299,8 @@ UIEventResult UIRenderer::routeUIInput(const UIInputEvent& event) const
         m_activeScene->setInputContext(m_lastSceneContext);
 
         UIEventResult sceneResult = m_activeScene->onInput(refEvent, m_lastSceneContext);
-        if (sceneResult == UIEventResult::Consumed) return UIEventResult::Consumed;
+        if (sceneResult == UIEventResult::Consumed)
+            return UIEventResult::Consumed;
         if (sceneResult == UIEventResult::Handled) {
             aggregate = UIEventResult::Handled;
         }
@@ -382,8 +338,7 @@ UIEventResult UIRenderer::routeUIInput(const UIInputEvent& event) const
     return aggregate;
 }
 
-void UIRenderer::setInventoryPanelVisible(bool visible)
-{
+void UIRenderer::setInventoryPanelVisible(bool visible) {
     m_inventoryPanel.setVisible(visible);
     if (visible) {
         m_storagePanel.setVisible(false);
@@ -392,34 +347,28 @@ void UIRenderer::setInventoryPanelVisible(bool visible)
     }
 }
 
-void UIRenderer::setHumanoidRenderer(HumanoidRenderer* humanoidRenderer)
-{
+void UIRenderer::setHumanoidRenderer(HumanoidRenderer* humanoidRenderer) {
     m_humanoidRenderer = humanoidRenderer;
     m_lastSceneContext.humanoidRenderer = humanoidRenderer;
 }
 
-void UIRenderer::setInventoryPanelLayout(const InventoryPanelLayout& layout)
-{
+void UIRenderer::setInventoryPanelLayout(const InventoryPanelLayout& layout) {
     m_inventoryPanel.setLayout(layout);
 }
 
-const InventoryPanelLayout& UIRenderer::getInventoryPanelLayout() const
-{
+const InventoryPanelLayout& UIRenderer::getInventoryPanelLayout() const {
     return m_inventoryPanel.getLayout();
 }
 
-int UIRenderer::getInventoryPanelLastActivatedSlot() const
-{
+int UIRenderer::getInventoryPanelLastActivatedSlot() const {
     return m_inventoryPanel.itemGrid().getLastActivatedIndex();
 }
 
-int UIRenderer::getInventoryPanelHoveredSlot() const
-{
+int UIRenderer::getInventoryPanelHoveredSlot() const {
     return m_inventoryPanel.itemGrid().getHoveredIndex();
 }
 
-void UIRenderer::setStoragePanelVisible(const bool visible)
-{
+void UIRenderer::setStoragePanelVisible(const bool visible) {
     m_storagePanel.setVisible(visible);
     if (visible) {
         m_inventoryPanel.setVisible(false);
@@ -428,43 +377,35 @@ void UIRenderer::setStoragePanelVisible(const bool visible)
     }
 }
 
-void UIRenderer::setStoragePanelDefinition(const ui::ContainerUiDef& definition)
-{
+void UIRenderer::setStoragePanelDefinition(const ui::ContainerUiDef& definition) {
     m_storagePanel.setDefinition(definition);
 }
 
-void UIRenderer::setStoragePanelSource(const BlockEntityInventory* storageInventory)
-{
+void UIRenderer::setStoragePanelSource(const BlockEntityInventory* storageInventory) {
     m_storagePanel.setStorageSource(storageInventory);
 }
 
-int UIRenderer::getStoragePanelLastActivatedSlot() const
-{
+int UIRenderer::getStoragePanelLastActivatedSlot() const {
     return m_storagePanel.getContainerLastActivatedSlot();
 }
 
-int UIRenderer::getStoragePanelPlayerLastActivatedSlot() const
-{
+int UIRenderer::getStoragePanelPlayerLastActivatedSlot() const {
     return m_storagePanel.getPlayerLastActivatedSlot();
 }
 
-int UIRenderer::getStoragePanelHoveredSlot() const
-{
+int UIRenderer::getStoragePanelHoveredSlot() const {
     return m_storagePanel.getContainerHoveredSlot();
 }
 
-int UIRenderer::getStoragePanelPlayerHoveredSlot() const
-{
+int UIRenderer::getStoragePanelPlayerHoveredSlot() const {
     return m_storagePanel.getPlayerHoveredSlot();
 }
 
-void UIRenderer::clearStoragePanelActivations()
-{
+void UIRenderer::clearStoragePanelActivations() {
     m_storagePanel.clearActivations();
 }
 
-void UIRenderer::setMachinePanelVisible(const bool visible)
-{
+void UIRenderer::setMachinePanelVisible(const bool visible) {
     m_machinePanel.setVisible(visible);
     if (visible) {
         m_inventoryPanel.setVisible(false);
@@ -473,48 +414,39 @@ void UIRenderer::setMachinePanelVisible(const bool visible)
     }
 }
 
-void UIRenderer::setMachinePanelDefinition(const ui::ContainerUiDef& definition)
-{
+void UIRenderer::setMachinePanelDefinition(const ui::ContainerUiDef& definition) {
     m_machinePanel.setDefinition(definition);
 }
 
-void UIRenderer::setMachinePanelSource(const MachineInventory* machine)
-{
+void UIRenderer::setMachinePanelSource(const MachineInventory* machine) {
     m_machinePanel.setMachineSource(machine);
 }
 
-void UIRenderer::setMachinePanelProgress(const float burnFraction, const float cookFraction)
-{
+void UIRenderer::setMachinePanelProgress(const float burnFraction, const float cookFraction) {
     m_machinePanel.setProgress(burnFraction, cookFraction);
 }
 
-int UIRenderer::getMachinePanelLastActivatedSlot() const
-{
+int UIRenderer::getMachinePanelLastActivatedSlot() const {
     return m_machinePanel.getContainerLastActivatedSlot();
 }
 
-int UIRenderer::getMachinePanelPlayerLastActivatedSlot() const
-{
+int UIRenderer::getMachinePanelPlayerLastActivatedSlot() const {
     return m_machinePanel.getPlayerLastActivatedSlot();
 }
 
-int UIRenderer::getMachinePanelHoveredSlot() const
-{
+int UIRenderer::getMachinePanelHoveredSlot() const {
     return m_machinePanel.getContainerHoveredSlot();
 }
 
-int UIRenderer::getMachinePanelPlayerHoveredSlot() const
-{
+int UIRenderer::getMachinePanelPlayerHoveredSlot() const {
     return m_machinePanel.getPlayerHoveredSlot();
 }
 
-void UIRenderer::clearMachinePanelActivations()
-{
+void UIRenderer::clearMachinePanelActivations() {
     m_machinePanel.clearActivations();
 }
 
-void UIRenderer::setCreativeInventoryVisible(const bool visible)
-{
+void UIRenderer::setCreativeInventoryVisible(const bool visible) {
     m_creativeInventoryPanel.setVisible(visible);
     if (visible) {
         m_inventoryPanel.setVisible(false);
@@ -523,68 +455,53 @@ void UIRenderer::setCreativeInventoryVisible(const bool visible)
     }
 }
 
-void UIRenderer::setCreativeInventoryTab(const CreativeInventoryTab tab)
-{
+void UIRenderer::setCreativeInventoryTab(const CreativeInventoryTab tab) {
     m_creativeInventoryPanel.setTab(tab);
 }
 
-CreativeInventoryTab UIRenderer::getCreativeInventoryTab() const
-{
+CreativeInventoryTab UIRenderer::getCreativeInventoryTab() const {
     return m_creativeInventoryPanel.getTab();
 }
 
-int UIRenderer::getCreativeInventoryLastActivatedSlot() const
-{
+int UIRenderer::getCreativeInventoryLastActivatedSlot() const {
     return m_creativeInventoryPanel.getLastActivatedSlot();
 }
 
-ItemID UIRenderer::getCreativeInventoryLastActivatedCreativeItem() const
-{
+ItemID UIRenderer::getCreativeInventoryLastActivatedCreativeItem() const {
     return m_creativeInventoryPanel.getLastActivatedCreativeItem();
 }
 
-int UIRenderer::getCreativeInventoryHoveredInventorySlot() const
-{
+int UIRenderer::getCreativeInventoryHoveredInventorySlot() const {
     return m_creativeInventoryPanel.getHoveredInventorySlot();
 }
 
-void UIRenderer::clearCreativeInventoryActivations()
-{
+void UIRenderer::clearCreativeInventoryActivations() {
     m_creativeInventoryPanel.clearActivations();
 }
 
-int UIRenderer::getCraftingGridLastActivatedSlot() const
-{
+int UIRenderer::getCraftingGridLastActivatedSlot() const {
     return m_inventoryPanel.craftingGrid().getLastActivatedSlot();
 }
 
-int UIRenderer::getCraftingGridHoveredSlot() const
-{
+int UIRenderer::getCraftingGridHoveredSlot() const {
     return m_inventoryPanel.craftingGrid().getHoveredSlot();
 }
 
-CraftingGridControl& UIRenderer::getCraftingGrid()
-{
+CraftingGridControl& UIRenderer::getCraftingGrid() {
     return m_inventoryPanel.craftingGrid();
 }
 
-const CraftingGridControl& UIRenderer::getCraftingGrid() const
-{
+const CraftingGridControl& UIRenderer::getCraftingGrid() const {
     return m_inventoryPanel.craftingGrid();
 }
 
-void UIRenderer::setCraftingSystem(const CraftingSystem* craftingSystem)
-{
+void UIRenderer::setCraftingSystem(const CraftingSystem* craftingSystem) {
     m_inventoryPanel.setCraftingSystem(craftingSystem);
 }
 
-UIRenderContext UIRenderer::prepareRenderContext(const int surfaceWidth,
-                                                 const int surfaceHeight,
-                                                 RhiDevice& rhiDevice,
-                                                 const Inventory& inventory,
-                                                 const PlayerStatsData& playerStats,
-                                                 const InputSnapshot& inputSnapshot)
-{
+UIRenderContext UIRenderer::prepareRenderContext(const int surfaceWidth, const int surfaceHeight, RhiDevice& rhiDevice,
+                                                 const Inventory& inventory, const PlayerStatsData& playerStats,
+                                                 const InputSnapshot& inputSnapshot) {
     m_surfaceWidth = std::max(1, surfaceWidth);
     m_surfaceHeight = std::max(1, surfaceHeight);
 
@@ -593,10 +510,10 @@ UIRenderContext UIRenderer::prepareRenderContext(const int surfaceWidth,
     m_storagePanel.setPlayerInventorySource(&inventory);
     m_machinePanel.setPlayerInventorySource(&inventory);
     m_creativeInventoryPanel.setInventorySource(&inventory);
-    m_commandInput.visible =(m_commandInputRequested);
+    m_commandInput.visible = (m_commandInputRequested);
 
-    UIRenderContext context = makeContextFromSurface(
-        m_surfaceWidth, m_surfaceHeight, inventory, playerStats, inputSnapshot);
+    UIRenderContext context =
+        makeContextFromSurface(m_surfaceWidth, m_surfaceHeight, inventory, playerStats, inputSnapshot);
     if (m_activeScene && m_activeScene->visible) {
         prepareBackdropBlur(context, rhiDevice);
     }
@@ -607,8 +524,7 @@ UIRenderContext UIRenderer::prepareRenderContext(const int surfaceWidth,
     return context;
 }
 
-void UIRenderer::renderPrepared(const UIRenderContext& context)
-{
+void UIRenderer::renderPrepared(const UIRenderContext& context) {
     m_text.beginFrameRecording();
     m_crosshair.render(context);
     renderControls(context);
@@ -618,12 +534,9 @@ void UIRenderer::renderPrepared(const UIRenderContext& context)
     m_commandInputRequested = false;
 }
 
-UIRenderContext UIRenderer::makeContextFromSurface(const int surfaceWidth,
-                                                   const int surfaceHeight,
-                                                   const Inventory& inventory,
-                                                   const PlayerStatsData& playerStats,
-                                                   const InputSnapshot& inputSnapshot) const
-{
+UIRenderContext UIRenderer::makeContextFromSurface(const int surfaceWidth, const int surfaceHeight,
+                                                   const Inventory& inventory, const PlayerStatsData& playerStats,
+                                                   const InputSnapshot& inputSnapshot) const {
     UIRenderContext context;
     const float actualW = static_cast<float>(std::max(1, surfaceWidth));
     const float actualH = static_cast<float>(std::max(1, surfaceHeight));
@@ -651,29 +564,23 @@ UIRenderContext UIRenderer::makeContextFromSurface(const int surfaceWidth,
     return context;
 }
 
-void UIRenderer::setActiveScene(UIScene* scene)
-{
+void UIRenderer::setActiveScene(UIScene* scene) {
     m_activeScene = scene;
     if (m_activeScene) {
         m_activeScene->setInputContext(m_lastSceneContext);
     }
 }
 
-UIScene* UIRenderer::getActiveScene() const
-{
+UIScene* UIRenderer::getActiveScene() const {
     return m_activeScene;
 }
 
-ResourceMgr* UIRenderer::getResourceMgr() const
-{
+ResourceMgr* UIRenderer::getResourceMgr() const {
     return m_resourceMgr;
 }
 
-UIRenderContext UIRenderer::prepareSceneContext(const int surfaceWidth,
-                                                const int surfaceHeight,
-                                                RhiDevice& rhiDevice,
-                                                const InputSnapshot& inputSnapshot)
-{
+UIRenderContext UIRenderer::prepareSceneContext(const int surfaceWidth, const int surfaceHeight, RhiDevice& rhiDevice,
+                                                const InputSnapshot& inputSnapshot) {
     const int windowW = std::max(1, surfaceWidth);
     const int windowH = std::max(1, surfaceHeight);
     m_surfaceWidth = windowW;
@@ -705,8 +612,7 @@ UIRenderContext UIRenderer::prepareSceneContext(const int surfaceWidth,
     return context;
 }
 
-void UIRenderer::renderSceneOnlyPrepared(const UIRenderContext& context)
-{
+void UIRenderer::renderSceneOnlyPrepared(const UIRenderContext& context) {
     m_text.beginFrameRecording();
     if (m_activeScene && m_activeScene->visible) {
         m_activeScene->setInputContext(context);
@@ -717,20 +623,16 @@ void UIRenderer::renderSceneOnlyPrepared(const UIRenderContext& context)
     }
 }
 
-void UIRenderer::collectGameplayText(UIRenderContext& context)
-{
-    m_text.beginFrameCollection(static_cast<float>(context.screenWidth),
-                                static_cast<float>(context.screenHeight));
+void UIRenderer::collectGameplayText(UIRenderContext& context) {
+    m_text.beginFrameCollection(static_cast<float>(context.screenWidth), static_cast<float>(context.screenHeight));
     context.phase = UIRenderPhase::CollectText;
     context.commandList = nullptr;
     renderControls(context);
     context.phase = UIRenderPhase::Record;
 }
 
-void UIRenderer::collectSceneText(UIRenderContext& context)
-{
-    m_text.beginFrameCollection(static_cast<float>(context.screenWidth),
-                                static_cast<float>(context.screenHeight));
+void UIRenderer::collectSceneText(UIRenderContext& context) {
+    m_text.beginFrameCollection(static_cast<float>(context.screenWidth), static_cast<float>(context.screenHeight));
     context.phase = UIRenderPhase::CollectText;
     context.commandList = nullptr;
     if (m_activeScene && m_activeScene->visible) {
@@ -740,8 +642,7 @@ void UIRenderer::collectSceneText(UIRenderContext& context)
     context.phase = UIRenderPhase::Record;
 }
 
-void UIRenderer::renderControls(const UIRenderContext& context)
-{
+void UIRenderer::renderControls(const UIRenderContext& context) {
     UIRenderContext renderContext = context;
 
     for (const UIWidget* widget : m_widgetControls) {
@@ -762,8 +663,7 @@ void UIRenderer::renderControls(const UIRenderContext& context)
     }
 }
 
-void UIRenderer::renderDeathOverlay(const UIRenderContext& context)
-{
+void UIRenderer::renderDeathOverlay(const UIRenderContext& context) {
     m_deathBackdrop.anchor = Anchor::BottomLeft;
     m_deathBackdrop.anchorOffsetX = 0.0f;
     m_deathBackdrop.anchorOffsetY = 0.0f;
@@ -793,8 +693,7 @@ void UIRenderer::renderDeathOverlay(const UIRenderContext& context)
     m_deathPrompt.render(context);
 }
 
-void UIRenderer::initPanelRhiResources(RhiDevice& rhiDevice)
-{
+void UIRenderer::initPanelRhiResources(RhiDevice& rhiDevice) {
     if (m_panelRhiDevice != nullptr) {
         if (m_panelRhiDevice != &rhiDevice) {
             std::abort();
@@ -803,15 +702,11 @@ void UIRenderer::initPanelRhiResources(RhiDevice& rhiDevice)
     }
     m_panelRhiDevice = &rhiDevice;
 
-    constexpr float vertices[] = {
-        0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 1.0f,
-        0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 1.0f
-    };
+    constexpr float vertices[] = {0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 1.0f};
     RhiBufferDesc bufferDesc;
     bufferDesc.debugName = "UiPanel.SharedQuad";
     bufferDesc.size = sizeof(vertices);
-    bufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex) |
-                       rhiFlag(RhiBufferUsage::TransferDst);
+    bufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex) | rhiFlag(RhiBufferUsage::TransferDst);
     bufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
     bufferDesc.initialState = RhiResourceState::VertexBuffer;
     bufferDesc.memoryCategory = RhiMemoryCategory::Geometry;
@@ -829,15 +724,12 @@ void UIRenderer::initPanelRhiResources(RhiDevice& rhiDevice)
         renderer::rhi::loadShaderSource("assets/shaders/ui_image_rhi.vert");
     const std::optional<std::string> imageFragmentSource =
         renderer::rhi::loadShaderSource("assets/shaders/ui_image_rhi.frag");
-    if (!solidVertexSource || !solidFragmentSource ||
-        !glassVertexSource || !glassFragmentSource ||
+    if (!solidVertexSource || !solidFragmentSource || !glassVertexSource || !glassFragmentSource ||
         !imageVertexSource || !imageFragmentSource) {
         std::abort();
     }
 
-    auto createShader = [&](const char* debugName,
-                            const RhiShaderStage stage,
-                            const std::string& source) {
+    auto createShader = [&](const char* debugName, const RhiShaderStage stage, const std::string& source) {
         RhiShaderDesc desc;
         desc.debugName = debugName;
         desc.stage = stage;
@@ -845,18 +737,13 @@ void UIRenderer::initPanelRhiResources(RhiDevice& rhiDevice)
         desc.sourceSize = source.size();
         return rhiDevice.createShader(desc);
     };
-    m_panelSolidVertexShader = createShader(
-        "UiPanel.SolidVertex", RhiShaderStage::Vertex, *solidVertexSource);
-    m_panelSolidFragmentShader = createShader(
-        "UiPanel.SolidFragment", RhiShaderStage::Fragment, *solidFragmentSource);
-    m_panelGlassVertexShader = createShader(
-        "UiPanel.GlassVertex", RhiShaderStage::Vertex, *glassVertexSource);
-    m_panelGlassFragmentShader = createShader(
-        "UiPanel.GlassFragment", RhiShaderStage::Fragment, *glassFragmentSource);
-    m_imageTextureVertexShader = createShader(
-        "UiImage.TextureVertex", RhiShaderStage::Vertex, *imageVertexSource);
-    m_imageTextureFragmentShader = createShader(
-        "UiImage.TextureFragment", RhiShaderStage::Fragment, *imageFragmentSource);
+    m_panelSolidVertexShader = createShader("UiPanel.SolidVertex", RhiShaderStage::Vertex, *solidVertexSource);
+    m_panelSolidFragmentShader = createShader("UiPanel.SolidFragment", RhiShaderStage::Fragment, *solidFragmentSource);
+    m_panelGlassVertexShader = createShader("UiPanel.GlassVertex", RhiShaderStage::Vertex, *glassVertexSource);
+    m_panelGlassFragmentShader = createShader("UiPanel.GlassFragment", RhiShaderStage::Fragment, *glassFragmentSource);
+    m_imageTextureVertexShader = createShader("UiImage.TextureVertex", RhiShaderStage::Vertex, *imageVertexSource);
+    m_imageTextureFragmentShader =
+        createShader("UiImage.TextureFragment", RhiShaderStage::Fragment, *imageFragmentSource);
 
     RhiSamplerDesc samplerDesc;
     samplerDesc.minFilter = RhiFilter::Linear;
@@ -873,10 +760,8 @@ void UIRenderer::initPanelRhiResources(RhiDevice& rhiDevice)
 
     RhiBindGroupLayoutDesc bindGroupLayoutDesc;
     bindGroupLayoutDesc.debugName = "UiPanel.GlassBindGroupLayout";
-    bindGroupLayoutDesc.entries.push_back({
-        0u, RhiBindingType::CombinedTextureSampler,
-        rhiFlag(RhiShaderStage::Fragment), 1u
-    });
+    bindGroupLayoutDesc.entries.push_back(
+        {0u, RhiBindingType::CombinedTextureSampler, rhiFlag(RhiShaderStage::Fragment), 1u});
     m_panelGlassBindGroupLayout = rhiDevice.createBindGroupLayout(bindGroupLayoutDesc);
 
     bindGroupLayoutDesc.debugName = "UiImage.TextureBindGroupLayout";
@@ -885,40 +770,33 @@ void UIRenderer::initPanelRhiResources(RhiDevice& rhiDevice)
     RhiPipelineLayoutDesc solidLayoutDesc;
     solidLayoutDesc.debugName = "UiPanel.SolidPipelineLayout";
     solidLayoutDesc.pushConstantBytes = 48u;
-    solidLayoutDesc.pushConstantStages =
-        rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment);
+    solidLayoutDesc.pushConstantStages = rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment);
     m_panelSolidPipelineLayout = rhiDevice.createPipelineLayout(solidLayoutDesc);
 
     RhiPipelineLayoutDesc glassLayoutDesc;
     glassLayoutDesc.debugName = "UiPanel.GlassPipelineLayout";
     glassLayoutDesc.bindGroupLayouts.push_back(m_panelGlassBindGroupLayout);
     glassLayoutDesc.pushConstantBytes = 64u;
-    glassLayoutDesc.pushConstantStages =
-        rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment);
+    glassLayoutDesc.pushConstantStages = rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment);
     m_panelGlassPipelineLayout = rhiDevice.createPipelineLayout(glassLayoutDesc);
 
     RhiPipelineLayoutDesc imageLayoutDesc;
     imageLayoutDesc.debugName = "UiImage.TexturePipelineLayout";
     imageLayoutDesc.bindGroupLayouts.push_back(m_imageTextureBindGroupLayout);
     imageLayoutDesc.pushConstantBytes = 64u;
-    imageLayoutDesc.pushConstantStages =
-        rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment);
+    imageLayoutDesc.pushConstantStages = rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment);
     m_imageTexturePipelineLayout = rhiDevice.createPipelineLayout(imageLayoutDesc);
 
-    auto createPipeline = [&](const char* debugName,
-                              const RhiShaderHandle vertexShader,
-                              const RhiShaderHandle fragmentShader,
-                              const RhiPipelineLayoutHandle layout) {
+    auto createPipeline = [&](const char* debugName, const RhiShaderHandle vertexShader,
+                              const RhiShaderHandle fragmentShader, const RhiPipelineLayoutHandle layout) {
         RhiGraphicsPipelineDesc desc;
         desc.debugName = debugName;
         desc.vertexShader = vertexShader;
         desc.fragmentShader = fragmentShader;
         desc.layout = layout;
         desc.topology = RhiPrimitiveTopology::TriangleList;
-        desc.vertexInput.bindings.push_back(
-            {0u, sizeof(float) * 2u, RhiVertexInputRate::Vertex});
-        desc.vertexInput.attributes.push_back(
-            {0u, 0u, RhiVertexFormat::Float2, 0u});
+        desc.vertexInput.bindings.push_back({0u, sizeof(float) * 2u, RhiVertexInputRate::Vertex});
+        desc.vertexInput.attributes.push_back({0u, 0u, RhiVertexFormat::Float2, 0u});
         desc.raster.cullMode = RhiCullMode::None;
         desc.raster.scissorEnabled = true;
         desc.depthStencil.depthTestEnabled = false;
@@ -934,59 +812,63 @@ void UIRenderer::initPanelRhiResources(RhiDevice& rhiDevice)
         desc.blend.attachments.push_back(blend);
         return rhiDevice.createGraphicsPipeline(desc);
     };
-    m_panelSolidPipeline = createPipeline(
-        "UiPanel.SolidPipeline", m_panelSolidVertexShader,
-        m_panelSolidFragmentShader, m_panelSolidPipelineLayout);
-    m_panelGlassPipeline = createPipeline(
-        "UiPanel.GlassPipeline", m_panelGlassVertexShader,
-        m_panelGlassFragmentShader, m_panelGlassPipelineLayout);
-    m_imageTexturePipeline = createPipeline(
-        "UiImage.TexturePipeline", m_imageTextureVertexShader,
-        m_imageTextureFragmentShader, m_imageTexturePipelineLayout);
+    m_panelSolidPipeline = createPipeline("UiPanel.SolidPipeline", m_panelSolidVertexShader, m_panelSolidFragmentShader,
+                                          m_panelSolidPipelineLayout);
+    m_panelGlassPipeline = createPipeline("UiPanel.GlassPipeline", m_panelGlassVertexShader, m_panelGlassFragmentShader,
+                                          m_panelGlassPipelineLayout);
+    m_imageTexturePipeline = createPipeline("UiImage.TexturePipeline", m_imageTextureVertexShader,
+                                            m_imageTextureFragmentShader, m_imageTexturePipelineLayout);
 
-    if (!m_panelQuadVertexBuffer.isValid() ||
-        !m_panelSolidVertexShader.isValid() ||
-        !m_panelSolidFragmentShader.isValid() ||
-        !m_panelGlassVertexShader.isValid() ||
-        !m_panelGlassFragmentShader.isValid() ||
-        !m_imageTextureVertexShader.isValid() ||
-        !m_imageTextureFragmentShader.isValid() ||
-        !m_panelGlassSampler.isValid() ||
-        !m_imageTextureSampler.isValid() ||
-        !m_panelGlassBindGroupLayout.isValid() ||
-        !m_imageTextureBindGroupLayout.isValid() ||
-        !m_panelSolidPipelineLayout.isValid() ||
-        !m_panelGlassPipelineLayout.isValid() ||
-        !m_imageTexturePipelineLayout.isValid() ||
-        !m_panelSolidPipeline.isValid() ||
-        !m_panelGlassPipeline.isValid() ||
+    if (!m_panelQuadVertexBuffer.isValid() || !m_panelSolidVertexShader.isValid() ||
+        !m_panelSolidFragmentShader.isValid() || !m_panelGlassVertexShader.isValid() ||
+        !m_panelGlassFragmentShader.isValid() || !m_imageTextureVertexShader.isValid() ||
+        !m_imageTextureFragmentShader.isValid() || !m_panelGlassSampler.isValid() || !m_imageTextureSampler.isValid() ||
+        !m_panelGlassBindGroupLayout.isValid() || !m_imageTextureBindGroupLayout.isValid() ||
+        !m_panelSolidPipelineLayout.isValid() || !m_panelGlassPipelineLayout.isValid() ||
+        !m_imageTexturePipelineLayout.isValid() || !m_panelSolidPipeline.isValid() || !m_panelGlassPipeline.isValid() ||
         !m_imageTexturePipeline.isValid()) {
         std::abort();
     }
 }
 
-void UIRenderer::destroyPanelRhiResources()
-{
+void UIRenderer::destroyPanelRhiResources() {
     destroyPanelGlassBindGroup();
     destroyImageTextureBindings();
     if (m_panelRhiDevice != nullptr) {
-        if (m_imageTexturePipeline.isValid()) m_panelRhiDevice->destroyPipeline(m_imageTexturePipeline);
-        if (m_panelGlassPipeline.isValid()) m_panelRhiDevice->destroyPipeline(m_panelGlassPipeline);
-        if (m_panelSolidPipeline.isValid()) m_panelRhiDevice->destroyPipeline(m_panelSolidPipeline);
-        if (m_imageTexturePipelineLayout.isValid()) m_panelRhiDevice->destroyPipelineLayout(m_imageTexturePipelineLayout);
-        if (m_panelGlassPipelineLayout.isValid()) m_panelRhiDevice->destroyPipelineLayout(m_panelGlassPipelineLayout);
-        if (m_panelSolidPipelineLayout.isValid()) m_panelRhiDevice->destroyPipelineLayout(m_panelSolidPipelineLayout);
-        if (m_imageTextureBindGroupLayout.isValid()) m_panelRhiDevice->destroyBindGroupLayout(m_imageTextureBindGroupLayout);
-        if (m_panelGlassBindGroupLayout.isValid()) m_panelRhiDevice->destroyBindGroupLayout(m_panelGlassBindGroupLayout);
-        if (m_imageTextureSampler.isValid()) m_panelRhiDevice->destroySampler(m_imageTextureSampler);
-        if (m_panelGlassSampler.isValid()) m_panelRhiDevice->destroySampler(m_panelGlassSampler);
-        if (m_imageTextureFragmentShader.isValid()) m_panelRhiDevice->destroyShader(m_imageTextureFragmentShader);
-        if (m_imageTextureVertexShader.isValid()) m_panelRhiDevice->destroyShader(m_imageTextureVertexShader);
-        if (m_panelGlassFragmentShader.isValid()) m_panelRhiDevice->destroyShader(m_panelGlassFragmentShader);
-        if (m_panelGlassVertexShader.isValid()) m_panelRhiDevice->destroyShader(m_panelGlassVertexShader);
-        if (m_panelSolidFragmentShader.isValid()) m_panelRhiDevice->destroyShader(m_panelSolidFragmentShader);
-        if (m_panelSolidVertexShader.isValid()) m_panelRhiDevice->destroyShader(m_panelSolidVertexShader);
-        if (m_panelQuadVertexBuffer.isValid()) m_panelRhiDevice->destroyBuffer(m_panelQuadVertexBuffer);
+        if (m_imageTexturePipeline.isValid())
+            m_panelRhiDevice->destroyPipeline(m_imageTexturePipeline);
+        if (m_panelGlassPipeline.isValid())
+            m_panelRhiDevice->destroyPipeline(m_panelGlassPipeline);
+        if (m_panelSolidPipeline.isValid())
+            m_panelRhiDevice->destroyPipeline(m_panelSolidPipeline);
+        if (m_imageTexturePipelineLayout.isValid())
+            m_panelRhiDevice->destroyPipelineLayout(m_imageTexturePipelineLayout);
+        if (m_panelGlassPipelineLayout.isValid())
+            m_panelRhiDevice->destroyPipelineLayout(m_panelGlassPipelineLayout);
+        if (m_panelSolidPipelineLayout.isValid())
+            m_panelRhiDevice->destroyPipelineLayout(m_panelSolidPipelineLayout);
+        if (m_imageTextureBindGroupLayout.isValid())
+            m_panelRhiDevice->destroyBindGroupLayout(m_imageTextureBindGroupLayout);
+        if (m_panelGlassBindGroupLayout.isValid())
+            m_panelRhiDevice->destroyBindGroupLayout(m_panelGlassBindGroupLayout);
+        if (m_imageTextureSampler.isValid())
+            m_panelRhiDevice->destroySampler(m_imageTextureSampler);
+        if (m_panelGlassSampler.isValid())
+            m_panelRhiDevice->destroySampler(m_panelGlassSampler);
+        if (m_imageTextureFragmentShader.isValid())
+            m_panelRhiDevice->destroyShader(m_imageTextureFragmentShader);
+        if (m_imageTextureVertexShader.isValid())
+            m_panelRhiDevice->destroyShader(m_imageTextureVertexShader);
+        if (m_panelGlassFragmentShader.isValid())
+            m_panelRhiDevice->destroyShader(m_panelGlassFragmentShader);
+        if (m_panelGlassVertexShader.isValid())
+            m_panelRhiDevice->destroyShader(m_panelGlassVertexShader);
+        if (m_panelSolidFragmentShader.isValid())
+            m_panelRhiDevice->destroyShader(m_panelSolidFragmentShader);
+        if (m_panelSolidVertexShader.isValid())
+            m_panelRhiDevice->destroyShader(m_panelSolidVertexShader);
+        if (m_panelQuadVertexBuffer.isValid())
+            m_panelRhiDevice->destroyBuffer(m_panelQuadVertexBuffer);
     }
     m_imageTexturePipeline = {};
     m_panelGlassPipeline = {};
@@ -1008,16 +890,13 @@ void UIRenderer::destroyPanelRhiResources()
     m_panelRhiDevice = nullptr;
 }
 
-RhiBindGroupHandle UIRenderer::resolveImageBindGroup(const RhiTextureHandle texture) const
-{
-    if (m_panelRhiDevice == nullptr || !texture.isValid() ||
-        !m_imageTextureBindGroupLayout.isValid() ||
+RhiBindGroupHandle UIRenderer::resolveImageBindGroup(const RhiTextureHandle texture) const {
+    if (m_panelRhiDevice == nullptr || !texture.isValid() || !m_imageTextureBindGroupLayout.isValid() ||
         !m_imageTextureSampler.isValid()) {
         return {};
     }
 
-    const uint64_t key = (static_cast<uint64_t>(texture.generation) << 32u) |
-                         static_cast<uint64_t>(texture.index);
+    const uint64_t key = (static_cast<uint64_t>(texture.generation) << 32u) | static_cast<uint64_t>(texture.index);
     const auto existing = m_imageTextureBindings.find(key);
     if (existing != m_imageTextureBindings.end()) {
         return existing->second.bindGroup;
@@ -1053,8 +932,7 @@ RhiBindGroupHandle UIRenderer::resolveImageBindGroup(const RhiTextureHandle text
     return bindGroup;
 }
 
-void UIRenderer::destroyImageTextureBindings()
-{
+void UIRenderer::destroyImageTextureBindings() {
     if (m_panelRhiDevice != nullptr) {
         for (const auto& [_, binding] : m_imageTextureBindings) {
             if (binding.bindGroup.isValid()) {
@@ -1068,11 +946,8 @@ void UIRenderer::destroyImageTextureBindings()
     m_imageTextureBindings.clear();
 }
 
-bool UIRenderer::ensurePanelGlassBindGroup(RhiDevice& rhiDevice) const
-{
-    if (m_panelRhiDevice != &rhiDevice ||
-        !m_panelGlassBindGroupLayout.isValid() ||
-        !m_panelGlassSampler.isValid() ||
+bool UIRenderer::ensurePanelGlassBindGroup(RhiDevice& rhiDevice) const {
+    if (m_panelRhiDevice != &rhiDevice || !m_panelGlassBindGroupLayout.isValid() || !m_panelGlassSampler.isValid() ||
         !m_backdropBlurView[1].isValid()) {
         return false;
     }
@@ -1090,16 +965,14 @@ bool UIRenderer::ensurePanelGlassBindGroup(RhiDevice& rhiDevice) const
     return m_panelGlassBindGroup.isValid();
 }
 
-void UIRenderer::destroyPanelGlassBindGroup() const
-{
+void UIRenderer::destroyPanelGlassBindGroup() const {
     if (m_panelRhiDevice != nullptr && m_panelGlassBindGroup.isValid()) {
         m_panelRhiDevice->destroyBindGroup(m_panelGlassBindGroup);
     }
     m_panelGlassBindGroup = {};
 }
 
-void UIRenderer::populatePanelRhiContext(UIRenderContext& context) const
-{
+void UIRenderer::populatePanelRhiContext(UIRenderContext& context) const {
     context.panelQuadVertexBuffer = m_panelQuadVertexBuffer;
     context.panelSolidPipeline = m_panelSolidPipeline;
     context.panelGlassPipeline = m_panelGlassPipeline;
@@ -1108,16 +981,11 @@ void UIRenderer::populatePanelRhiContext(UIRenderContext& context) const
     context.uiRenderer = this;
 }
 
-bool UIRenderer::ensureBackdropBlurTargets(const int sourceWidth,
-                                           const int sourceHeight,
-                                           RhiDevice& rhiDevice) const
-{
+bool UIRenderer::ensureBackdropBlurTargets(const int sourceWidth, const int sourceHeight, RhiDevice& rhiDevice) const {
     const int blurWidth = std::max(1, sourceWidth / kBackdropBlurDownsample);
     const int blurHeight = std::max(1, sourceHeight / kBackdropBlurDownsample);
-    const bool sizeChanged = sourceWidth != m_backdropSourceWidth ||
-                             sourceHeight != m_backdropSourceHeight ||
-                             blurWidth != m_backdropBlurWidth ||
-                             blurHeight != m_backdropBlurHeight;
+    const bool sizeChanged = sourceWidth != m_backdropSourceWidth || sourceHeight != m_backdropSourceHeight ||
+                             blurWidth != m_backdropBlurWidth || blurHeight != m_backdropBlurHeight;
 
     if (m_backdropRhiViewDevice != nullptr && m_backdropRhiViewDevice != &rhiDevice) {
         destroyBackdropBlurTargets();
@@ -1174,9 +1042,7 @@ bool UIRenderer::ensureBackdropBlurTargets(const int sourceWidth,
         }
     }
 
-    if (!m_backdropSource.isValid() ||
-        !m_backdropBlur[0].isValid() ||
-        !m_backdropBlur[1].isValid()) {
+    if (!m_backdropSource.isValid() || !m_backdropBlur[0].isValid() || !m_backdropBlur[1].isValid()) {
         destroyBackdropBlurTargets();
         return false;
     }
@@ -1198,8 +1064,7 @@ bool UIRenderer::ensureBackdropBlurTargets(const int sourceWidth,
     return true;
 }
 
-bool UIRenderer::ensureBackdropBlurPipeline(RhiDevice& rhiDevice) const
-{
+bool UIRenderer::ensureBackdropBlurPipeline(RhiDevice& rhiDevice) const {
     if (m_backdropRhiViewDevice != nullptr && m_backdropRhiViewDevice != &rhiDevice) {
         destroyBackdropBlurTargets();
     }
@@ -1209,8 +1074,7 @@ bool UIRenderer::ensureBackdropBlurPipeline(RhiDevice& rhiDevice) const
 
     const std::optional<std::string> vertexSource =
         renderer::rhi::loadShaderSource("assets/shaders/fullscreen_triangle_rhi.vert");
-    const std::optional<std::string> fragmentSource =
-        renderer::rhi::loadShaderSource("assets/shaders/blur_rhi.frag");
+    const std::optional<std::string> fragmentSource = renderer::rhi::loadShaderSource("assets/shaders/blur_rhi.frag");
     if (!vertexSource.has_value() || !fragmentSource.has_value()) {
         return false;
     }
@@ -1248,12 +1112,8 @@ bool UIRenderer::ensureBackdropBlurPipeline(RhiDevice& rhiDevice) const
 
     RhiBindGroupLayoutDesc bindGroupLayoutDesc;
     bindGroupLayoutDesc.debugName = "UiBackdropBlur.BindGroupLayout";
-    bindGroupLayoutDesc.entries.push_back({
-        0u,
-        RhiBindingType::CombinedTextureSampler,
-        rhiFlag(RhiShaderStage::Fragment),
-        1u
-    });
+    bindGroupLayoutDesc.entries.push_back(
+        {0u, RhiBindingType::CombinedTextureSampler, rhiFlag(RhiShaderStage::Fragment), 1u});
     m_backdropBlurBindGroupLayout = rhiDevice.createBindGroupLayout(bindGroupLayoutDesc);
     if (!m_backdropBlurBindGroupLayout.isValid()) {
         destroyBackdropBlurPipeline();
@@ -1292,17 +1152,12 @@ bool UIRenderer::ensureBackdropBlurPipeline(RhiDevice& rhiDevice) const
     return true;
 }
 
-bool UIRenderer::ensureBackdropBlurBindGroups(RhiDevice& rhiDevice) const
-{
+bool UIRenderer::ensureBackdropBlurBindGroups(RhiDevice& rhiDevice) const {
     if (!ensureBackdropBlurPipeline(rhiDevice)) {
         return false;
     }
 
-    const RhiTextureViewHandle inputViews[3] = {
-        m_backdropSourceView,
-        m_backdropBlurView[0],
-        m_backdropBlurView[1]
-    };
+    const RhiTextureViewHandle inputViews[3] = {m_backdropSourceView, m_backdropBlurView[0], m_backdropBlurView[1]};
     for (int i = 0; i < 3; ++i) {
         if (m_backdropBlurBindGroup[i].isValid()) {
             continue;
@@ -1328,8 +1183,7 @@ bool UIRenderer::ensureBackdropBlurBindGroups(RhiDevice& rhiDevice) const
     return true;
 }
 
-void UIRenderer::prepareBackdropBlur(UIRenderContext& context, RhiDevice& rhiDevice) const
-{
+void UIRenderer::prepareBackdropBlur(UIRenderContext& context, RhiDevice& rhiDevice) const {
     context.backdropBlur = {};
     context.backdropBlurView = {};
     context.panelGlassBindGroup = {};
@@ -1352,9 +1206,8 @@ void UIRenderer::prepareBackdropBlur(UIRenderContext& context, RhiDevice& rhiDev
         return;
     }
 
-    if (!m_backdropSource.isValid() || !m_backdropBlur[0].isValid() ||
-        !m_backdropBlur[1].isValid() || !m_backdropBlurView[0].isValid() ||
-        !m_backdropBlurView[1].isValid()) {
+    if (!m_backdropSource.isValid() || !m_backdropBlur[0].isValid() || !m_backdropBlur[1].isValid() ||
+        !m_backdropBlurView[0].isValid() || !m_backdropBlurView[1].isValid()) {
         return;
     }
 
@@ -1365,47 +1218,28 @@ void UIRenderer::prepareBackdropBlur(UIRenderContext& context, RhiDevice& rhiDev
     if (m_resourceMgr == nullptr) {
         std::abort();
     }
-    RhiCommandList* commandListStorage =
-        m_resourceMgr->commandListPool().acquire(RhiCommandListType::Graphics);
+    RhiCommandList* commandListStorage = m_resourceMgr->commandListPool().acquire(RhiCommandListType::Graphics);
     if (commandListStorage == nullptr ||
-        !commandListStorage->begin(
-            {"UiBackdropBlur.Commands", RhiCommandListType::Graphics})) {
+        !commandListStorage->begin({"UiBackdropBlur.Commands", RhiCommandListType::Graphics})) {
         std::abort();
     }
     RhiCommandList& commandList = *commandListStorage;
 
-    commandList.textureBarrier({
-        swapchainTexture,
-        RhiResourceState::Present,
-        RhiResourceState::TransferSrc
-    });
-    commandList.textureBarrier({
-        m_backdropSource,
-        m_backdropSourceState,
-        RhiResourceState::TransferDst
-    });
+    commandList.textureBarrier({swapchainTexture, RhiResourceState::Present, RhiResourceState::TransferSrc});
+    commandList.textureBarrier({m_backdropSource, m_backdropSourceState, RhiResourceState::TransferDst});
     m_backdropSourceState = RhiResourceState::TransferDst;
 
     RhiTextureBlit sourceBlit;
     sourceBlit.srcView = rhiDevice.currentSwapchainColorView();
     sourceBlit.dstView = m_backdropSourceView;
     commandList.blitTexture(sourceBlit);
-    commandList.textureBarrier({
-        m_backdropSource,
-        m_backdropSourceState,
-        RhiResourceState::ShaderRead
-    });
+    commandList.textureBarrier({m_backdropSource, m_backdropSourceState, RhiResourceState::ShaderRead});
     m_backdropSourceState = RhiResourceState::ShaderRead;
 
-    auto blurPass = [&](const uint32_t bindGroupIndex,
-                        const uint32_t outputIndex,
-                        const RhiTextureViewHandle outputView,
-                        const glm::vec2 direction) {
-        commandList.textureBarrier({
-            m_backdropBlur[outputIndex],
-            m_backdropBlurState[outputIndex],
-            RhiResourceState::RenderTarget
-        });
+    auto blurPass = [&](const uint32_t bindGroupIndex, const uint32_t outputIndex,
+                        const RhiTextureViewHandle outputView, const glm::vec2 direction) {
+        commandList.textureBarrier(
+            {m_backdropBlur[outputIndex], m_backdropBlurState[outputIndex], RhiResourceState::RenderTarget});
         m_backdropBlurState[outputIndex] = RhiResourceState::RenderTarget;
 
         RhiColorAttachment colorAttachment;
@@ -1415,12 +1249,8 @@ void UIRenderer::prepareBackdropBlur(UIRenderContext& context, RhiDevice& rhiDev
 
         RhiRenderingInfo renderingInfo;
         renderingInfo.debugName = "UiBackdropBlur";
-        renderingInfo.renderArea = {
-            0,
-            0,
-            static_cast<uint32_t>(std::max(1, m_backdropBlurWidth)),
-            static_cast<uint32_t>(std::max(1, m_backdropBlurHeight))
-        };
+        renderingInfo.renderArea = {0, 0, static_cast<uint32_t>(std::max(1, m_backdropBlurWidth)),
+                                    static_cast<uint32_t>(std::max(1, m_backdropBlurHeight))};
         renderingInfo.colorAttachments = &colorAttachment;
         renderingInfo.colorAttachmentCount = 1u;
 
@@ -1431,11 +1261,8 @@ void UIRenderer::prepareBackdropBlur(UIRenderContext& context, RhiDevice& rhiDev
         commandList.pushConstants(&pushConstants, sizeof(pushConstants), rhiFlag(RhiShaderStage::Fragment));
         commandList.draw(3u, 1u, 0u, 0u);
         commandList.endRendering();
-        commandList.textureBarrier({
-            m_backdropBlur[outputIndex],
-            m_backdropBlurState[outputIndex],
-            RhiResourceState::ShaderRead
-        });
+        commandList.textureBarrier(
+            {m_backdropBlur[outputIndex], m_backdropBlurState[outputIndex], RhiResourceState::ShaderRead});
         m_backdropBlurState[outputIndex] = RhiResourceState::ShaderRead;
     };
 
@@ -1444,11 +1271,7 @@ void UIRenderer::prepareBackdropBlur(UIRenderContext& context, RhiDevice& rhiDev
     blurPass(2u, 0u, m_backdropBlurView[0], glm::vec2(1.0f / static_cast<float>(m_backdropBlurWidth), 0.0f));
     blurPass(1u, 1u, m_backdropBlurView[1], glm::vec2(0.0f, 1.0f / static_cast<float>(m_backdropBlurHeight)));
 
-    commandList.textureBarrier({
-        swapchainTexture,
-        RhiResourceState::TransferSrc,
-        RhiResourceState::Present
-    });
+    commandList.textureBarrier({swapchainTexture, RhiResourceState::TransferSrc, RhiResourceState::Present});
 
     if (!commandList.end()) {
         std::abort();
@@ -1467,15 +1290,17 @@ void UIRenderer::prepareBackdropBlur(UIRenderContext& context, RhiDevice& rhiDev
     context.backdropBlurHeight = m_backdropBlurHeight;
 }
 
-void UIRenderer::destroyBackdropBlurTargets() const
-{
+void UIRenderer::destroyBackdropBlurTargets() const {
     RhiDevice* device = m_backdropRhiViewDevice;
     destroyBackdropBlurPipeline();
     destroyBackdropBlurViews();
     if (device != nullptr) {
-        if (m_backdropSource.isValid()) device->destroyTexture(m_backdropSource);
-        if (m_backdropBlur[0].isValid()) device->destroyTexture(m_backdropBlur[0]);
-        if (m_backdropBlur[1].isValid()) device->destroyTexture(m_backdropBlur[1]);
+        if (m_backdropSource.isValid())
+            device->destroyTexture(m_backdropSource);
+        if (m_backdropBlur[0].isValid())
+            device->destroyTexture(m_backdropBlur[0]);
+        if (m_backdropBlur[1].isValid())
+            device->destroyTexture(m_backdropBlur[1]);
     }
     m_backdropSource = {};
     m_backdropBlur[0] = {};
@@ -1489,8 +1314,7 @@ void UIRenderer::destroyBackdropBlurTargets() const
     m_backdropBlurState[1] = RhiResourceState::Undefined;
 }
 
-void UIRenderer::destroyBackdropBlurBindGroups() const
-{
+void UIRenderer::destroyBackdropBlurBindGroups() const {
     if (m_backdropRhiViewDevice != nullptr) {
         for (RhiBindGroupHandle& bindGroup : m_backdropBlurBindGroup) {
             if (bindGroup.isValid()) {
@@ -1505,8 +1329,7 @@ void UIRenderer::destroyBackdropBlurBindGroups() const
     }
 }
 
-void UIRenderer::destroyBackdropBlurPipeline() const
-{
+void UIRenderer::destroyBackdropBlurPipeline() const {
     destroyBackdropBlurBindGroups();
     if (m_backdropRhiViewDevice != nullptr) {
         if (m_backdropBlurPipeline.isValid()) {
@@ -1536,8 +1359,7 @@ void UIRenderer::destroyBackdropBlurPipeline() const
     m_backdropBlurSampler = {};
 }
 
-void UIRenderer::destroyBackdropBlurViews() const
-{
+void UIRenderer::destroyBackdropBlurViews() const {
     destroyPanelGlassBindGroup();
     destroyBackdropBlurBindGroups();
     if (m_backdropRhiViewDevice != nullptr) {

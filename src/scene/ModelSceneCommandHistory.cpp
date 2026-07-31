@@ -9,43 +9,31 @@
 namespace scene {
 namespace {
 
-[[nodiscard]] bool equalTransform(const SceneTransformDocument& lhs,
-                                  const SceneTransformDocument& rhs) {
-    return lhs.position == rhs.position &&
-           lhs.rotation == rhs.rotation &&
-           lhs.scale == rhs.scale;
+[[nodiscard]] bool equalTransform(const SceneTransformDocument& lhs, const SceneTransformDocument& rhs) {
+    return lhs.position == rhs.position && lhs.rotation == rhs.rotation && lhs.scale == rhs.scale;
 }
 
-[[nodiscard]] bool equalEntity(const SceneEntityDocument& lhs,
-                               const SceneEntityDocument& rhs) {
-    return lhs.id == rhs.id && lhs.name == rhs.name &&
-           lhs.parentId == rhs.parentId && lhs.assetId == rhs.assetId &&
+[[nodiscard]] bool equalEntity(const SceneEntityDocument& lhs, const SceneEntityDocument& rhs) {
+    return lhs.id == rhs.id && lhs.name == rhs.name && lhs.parentId == rhs.parentId && lhs.assetId == rhs.assetId &&
            equalTransform(lhs.transform, rhs.transform);
 }
 
-[[nodiscard]] bool equalSubtree(
-    const std::vector<SceneEntityDocument>& lhs,
-    const std::vector<SceneEntityDocument>& rhs) {
+[[nodiscard]] bool equalSubtree(const std::vector<SceneEntityDocument>& lhs,
+                                const std::vector<SceneEntityDocument>& rhs) {
     return lhs.size() == rhs.size() &&
-           std::equal(
-               lhs.begin(), lhs.end(), rhs.begin(),
-               [](const SceneEntityDocument& left,
-                  const SceneEntityDocument& right) {
-                   return equalEntity(left, right);
-               });
+           std::equal(lhs.begin(), lhs.end(), rhs.begin(),
+                      [](const SceneEntityDocument& left, const SceneEntityDocument& right) {
+                          return equalEntity(left, right);
+                      });
 }
 
-[[nodiscard]] bool removeExpectedSubtree(
-    ModelSceneRuntime& runtime,
-    const std::vector<SceneEntityDocument>& expected) {
+[[nodiscard]] bool removeExpectedSubtree(ModelSceneRuntime& runtime, const std::vector<SceneEntityDocument>& expected) {
     if (expected.empty()) {
         return false;
     }
     const entt::entity root = runtime.findEntity(expected.front().id);
     std::vector<SceneEntityDocument> current;
-    if (root == entt::null ||
-        !runtime.captureEntitySubtree(root, current) ||
-        !equalSubtree(current, expected)) {
+    if (root == entt::null || !runtime.captureEntitySubtree(root, current) || !equalSubtree(current, expected)) {
         return false;
     }
     runtime.destroyEntity(root);
@@ -76,24 +64,20 @@ bool ModelSceneCommandHistory::isAtSavedState() const {
     return m_savedCursor.has_value() && *m_savedCursor == m_cursor;
 }
 
-void ModelSceneCommandHistory::recordEntityState(
-    const SceneEntityDocument& before,
-    const SceneEntityDocument& after) {
+void ModelSceneCommandHistory::recordEntityState(const SceneEntityDocument& before, const SceneEntityDocument& after) {
     if (equalEntity(before, after)) {
         return;
     }
     record(EntityStateCommand{before, after});
 }
 
-void ModelSceneCommandHistory::recordCreatedSubtree(
-    std::vector<SceneEntityDocument> states) {
+void ModelSceneCommandHistory::recordCreatedSubtree(std::vector<SceneEntityDocument> states) {
     if (!states.empty()) {
         record(EntityPresenceCommand{std::move(states), true});
     }
 }
 
-void ModelSceneCommandHistory::recordDeletedSubtree(
-    std::vector<SceneEntityDocument> states) {
+void ModelSceneCommandHistory::recordDeletedSubtree(std::vector<SceneEntityDocument> states) {
     if (!states.empty()) {
         record(EntityPresenceCommand{std::move(states), false});
     }
@@ -123,9 +107,7 @@ bool ModelSceneCommandHistory::redo(ModelSceneRuntime& runtime) {
 
 void ModelSceneCommandHistory::record(Command command) {
     if (m_cursor < m_commands.size()) {
-        m_commands.erase(
-            m_commands.begin() + static_cast<std::ptrdiff_t>(m_cursor),
-            m_commands.end());
+        m_commands.erase(m_commands.begin() + static_cast<std::ptrdiff_t>(m_cursor), m_commands.end());
         if (m_savedCursor.has_value() && *m_savedCursor > m_cursor) {
             m_savedCursor.reset();
         }
@@ -146,26 +128,21 @@ void ModelSceneCommandHistory::record(Command command) {
     }
 }
 
-bool ModelSceneCommandHistory::apply(ModelSceneRuntime& runtime,
-                                     const Command& command,
-                                     const bool forward) {
+bool ModelSceneCommandHistory::apply(ModelSceneRuntime& runtime, const Command& command, const bool forward) {
     return std::visit(
         [&runtime, forward](const auto& typedCommand) {
             using Type = std::decay_t<decltype(typedCommand)>;
             if constexpr (std::is_same_v<Type, EntityStateCommand>) {
-                const SceneEntityDocument& state =
-                    forward ? typedCommand.after : typedCommand.before;
+                const SceneEntityDocument& state = forward ? typedCommand.after : typedCommand.before;
                 if (!runtime.applyEntityState(state)) {
                     return false;
                 }
                 runtime.setSelectedEntity(runtime.findEntity(state.id));
                 return true;
             } else {
-                const bool shouldExist =
-                    forward ? typedCommand.created : !typedCommand.created;
+                const bool shouldExist = forward ? typedCommand.created : !typedCommand.created;
                 if (shouldExist) {
-                    return runtime.restoreEntitySubtree(typedCommand.states) !=
-                           entt::null;
+                    return runtime.restoreEntitySubtree(typedCommand.states) != entt::null;
                 }
                 return removeExpectedSubtree(runtime, typedCommand.states);
             }

@@ -10,28 +10,26 @@
 
 namespace {
 
-double gpuTimerPassMilliseconds(const GpuFrameStats& stats,
-                                const GpuTimerPass pass) {
+double gpuTimerPassMilliseconds(const GpuFrameStats& stats, const GpuTimerPass pass) {
     switch (pass) {
-        case GpuTimerPass::GBuffer: return stats.gbufferMs;
-        case GpuTimerPass::Shadow: return stats.shadowMs;
-        case GpuTimerPass::Ssao: return stats.ssaoMs;
-        case GpuTimerPass::Ssgi: return stats.ssgiMs;
-        case GpuTimerPass::Lighting: return stats.lightingMs;
-        case GpuTimerPass::Transparent: return stats.transparentMs;
-        case GpuTimerPass::Volumetric: return stats.volumetricMs;
-        case GpuTimerPass::Reflection: return stats.reflectionMs;
-        case GpuTimerPass::Cloud: return stats.cloudMs;
-        case GpuTimerPass::Water: return stats.waterMs;
-        case GpuTimerPass::Post: return stats.postMs;
-        case GpuTimerPass::Count: break;
+    case GpuTimerPass::GBuffer: return stats.gbufferMs;
+    case GpuTimerPass::Shadow: return stats.shadowMs;
+    case GpuTimerPass::Ssao: return stats.ssaoMs;
+    case GpuTimerPass::Ssgi: return stats.ssgiMs;
+    case GpuTimerPass::Lighting: return stats.lightingMs;
+    case GpuTimerPass::Transparent: return stats.transparentMs;
+    case GpuTimerPass::Volumetric: return stats.volumetricMs;
+    case GpuTimerPass::Reflection: return stats.reflectionMs;
+    case GpuTimerPass::Cloud: return stats.cloudMs;
+    case GpuTimerPass::Water: return stats.waterMs;
+    case GpuTimerPass::Post: return stats.postMs;
+    case GpuTimerPass::Count: break;
     }
     std::abort();
 }
 
-GpuTimingPercentiles calculatePercentiles(
-    const std::array<double, GpuTimingHistory::kCapacity>& samples,
-    const size_t sampleCount) {
+GpuTimingPercentiles calculatePercentiles(const std::array<double, GpuTimingHistory::kCapacity>& samples,
+                                          const size_t sampleCount) {
     if (sampleCount == 0u) {
         return {};
     }
@@ -42,29 +40,25 @@ GpuTimingPercentiles calculatePercentiles(
         const size_t rank = (sampleCount * percentile + 99u) / 100u;
         return sortedSamples[rank - 1u];
     };
-    return {
-        nearestRank(50u),
-        nearestRank(95u),
-        nearestRank(99u)
-    };
+    return {nearestRank(50u), nearestRank(95u), nearestRank(99u)};
 }
 
 } // namespace
 
 const char* gpuTimerPassName(const GpuTimerPass pass) {
     switch (pass) {
-        case GpuTimerPass::GBuffer: return "GBuffer";
-        case GpuTimerPass::Shadow: return "Shadow";
-        case GpuTimerPass::Ssao: return "SSAO";
-        case GpuTimerPass::Ssgi: return "SSGI";
-        case GpuTimerPass::Lighting: return "Lighting";
-        case GpuTimerPass::Transparent: return "Transparent";
-        case GpuTimerPass::Volumetric: return "Volumetric";
-        case GpuTimerPass::Reflection: return "Reflection";
-        case GpuTimerPass::Cloud: return "Cloud";
-        case GpuTimerPass::Water: return "Water";
-        case GpuTimerPass::Post: return "Post";
-        case GpuTimerPass::Count: break;
+    case GpuTimerPass::GBuffer: return "GBuffer";
+    case GpuTimerPass::Shadow: return "Shadow";
+    case GpuTimerPass::Ssao: return "SSAO";
+    case GpuTimerPass::Ssgi: return "SSGI";
+    case GpuTimerPass::Lighting: return "Lighting";
+    case GpuTimerPass::Transparent: return "Transparent";
+    case GpuTimerPass::Volumetric: return "Volumetric";
+    case GpuTimerPass::Reflection: return "Reflection";
+    case GpuTimerPass::Cloud: return "Cloud";
+    case GpuTimerPass::Water: return "Water";
+    case GpuTimerPass::Post: return "Post";
+    case GpuTimerPass::Count: break;
     }
     std::abort();
 }
@@ -77,16 +71,13 @@ void GpuTimingHistory::reset() {
 }
 
 bool GpuTimingHistory::record(const GpuFrameStats& stats) {
-    if (!stats.supported || !stats.valid || stats.sequence == 0u ||
-        stats.sequence <= m_lastSequence) {
+    if (!stats.supported || !stats.valid || stats.sequence == 0u || stats.sequence <= m_lastSequence) {
         return false;
     }
 
     std::array<double, static_cast<size_t>(GpuTimerPass::Count)> passValues{};
     double totalMs = 0.0;
-    for (size_t passIndex = 0u;
-         passIndex < static_cast<size_t>(GpuTimerPass::Count);
-         ++passIndex) {
+    for (size_t passIndex = 0u; passIndex < static_cast<size_t>(GpuTimerPass::Count); ++passIndex) {
         const auto pass = static_cast<GpuTimerPass>(passIndex);
         const double milliseconds = gpuTimerPassMilliseconds(stats, pass);
         if (!std::isfinite(milliseconds) || milliseconds < 0.0) {
@@ -113,36 +104,26 @@ GpuTimingWindowStats GpuTimingHistory::snapshot() const {
     stats.capacity = kCapacity;
     stats.observedSampleCount = m_observedSampleCount;
     stats.totalTrackedGpuMs = calculatePercentiles(m_totalSamples, m_sampleCount);
-    for (size_t passIndex = 0u;
-         passIndex < static_cast<size_t>(GpuTimerPass::Count);
-         ++passIndex) {
+    for (size_t passIndex = 0u; passIndex < static_cast<size_t>(GpuTimerPass::Count); ++passIndex) {
         GpuTimerPassWindowStats& passStats = stats.passes[passIndex];
         passStats.pass = static_cast<GpuTimerPass>(passIndex);
-        passStats.gpuMs = calculatePercentiles(
-            m_passSamples[passIndex], m_sampleCount);
+        passStats.gpuMs = calculatePercentiles(m_passSamples[passIndex], m_sampleCount);
     }
     return stats;
 }
 
-uint32_t RenderDebugService::gpuTimerQueryIndex(const size_t frameIndex,
-                                                const size_t passIndex,
-                                                const size_t segmentIndex,
-                                                const size_t pointIndex) {
+uint32_t RenderDebugService::gpuTimerQueryIndex(const size_t frameIndex, const size_t passIndex,
+                                                const size_t segmentIndex, const size_t pointIndex) {
     return static_cast<uint32_t>(
-        (((frameIndex * GPU_TIMER_PASS_COUNT + passIndex) *
-              GPU_TIMER_MAX_SEGMENTS_PER_PASS +
-          segmentIndex) *
-             GPU_TIMER_POINTS_PER_SEGMENT) +
+        (((frameIndex * GPU_TIMER_PASS_COUNT + passIndex) * GPU_TIMER_MAX_SEGMENTS_PER_PASS + segmentIndex) *
+         GPU_TIMER_POINTS_PER_SEGMENT) +
         pointIndex);
 }
 
-uint32_t RenderDebugService::shadowQueryIndex(const size_t frameIndex,
-                                              const size_t cascadeIndex,
+uint32_t RenderDebugService::shadowQueryIndex(const size_t frameIndex, const size_t cascadeIndex,
                                               const size_t pointIndex) {
-    return static_cast<uint32_t>(
-        (frameIndex * SHADOW_TIMER_CASCADE_COUNT + cascadeIndex) *
-            SHADOW_TIMER_POINT_COUNT +
-        pointIndex);
+    return static_cast<uint32_t>((frameIndex * SHADOW_TIMER_CASCADE_COUNT + cascadeIndex) * SHADOW_TIMER_POINT_COUNT +
+                                 pointIndex);
 }
 
 void RenderDebugService::init(RhiDevice& rhiDevice) {
@@ -247,14 +228,12 @@ void RenderDebugService::beginFrame(RhiCommandList& commandList) {
         bool allAvailable = true;
         for (size_t pass = 0; pass < GPU_TIMER_PASS_COUNT; ++pass) {
             for (size_t segment = 0; segment < GPU_TIMER_MAX_SEGMENTS_PER_PASS; ++segment) {
-                if (m_gpuTimerSegmentStates[readIndex][pass][segment] !=
-                    GpuTimerSegmentState::Issued) {
+                if (m_gpuTimerSegmentStates[readIndex][pass][segment] != GpuTimerSegmentState::Issued) {
                     continue;
                 }
                 const uint32_t firstQuery = gpuTimerQueryIndex(readIndex, pass, segment, 0u);
-                if (!m_rhiDevice->areQueryResultsAvailable(
-                        m_gpuTimerQueryPool, firstQuery,
-                        static_cast<uint32_t>(GPU_TIMER_POINTS_PER_SEGMENT))) {
+                if (!m_rhiDevice->areQueryResultsAvailable(m_gpuTimerQueryPool, firstQuery,
+                                                           static_cast<uint32_t>(GPU_TIMER_POINTS_PER_SEGMENT))) {
                     allAvailable = false;
                     break;
                 }
@@ -269,17 +248,14 @@ void RenderDebugService::beginFrame(RhiCommandList& commandList) {
                 const size_t passIndex = static_cast<size_t>(pass);
                 uint64_t elapsedNs = 0u;
                 for (size_t segment = 0; segment < GPU_TIMER_MAX_SEGMENTS_PER_PASS; ++segment) {
-                    if (m_gpuTimerSegmentStates[readIndex][passIndex][segment] !=
-                        GpuTimerSegmentState::Issued) {
+                    if (m_gpuTimerSegmentStates[readIndex][passIndex][segment] != GpuTimerSegmentState::Issued) {
                         continue;
                     }
                     std::array<uint64_t, GPU_TIMER_POINTS_PER_SEGMENT> timestamps{};
-                    const uint32_t firstQuery =
-                        gpuTimerQueryIndex(readIndex, passIndex, segment, 0u);
-                    if (!m_rhiDevice->getQueryResults(
-                            m_gpuTimerQueryPool, firstQuery,
-                            static_cast<uint32_t>(GPU_TIMER_POINTS_PER_SEGMENT),
-                            timestamps.data())) {
+                    const uint32_t firstQuery = gpuTimerQueryIndex(readIndex, passIndex, segment, 0u);
+                    if (!m_rhiDevice->getQueryResults(m_gpuTimerQueryPool, firstQuery,
+                                                      static_cast<uint32_t>(GPU_TIMER_POINTS_PER_SEGMENT),
+                                                      timestamps.data())) {
                         std::abort();
                     }
                     const uint64_t start = timestamps[0];
@@ -318,20 +294,17 @@ void RenderDebugService::beginFrame(RhiCommandList& commandList) {
 
     if (m_shadowFrameIssued[readIndex]) {
         const ShadowFrameStats& pendingStats = m_shadowFrameSlots[readIndex];
-        const int cascadeCount = std::min(static_cast<int>(SHADOW_TIMER_CASCADE_COUNT),
-                                          std::max(0, pendingStats.cascadeCount));
+        const int cascadeCount =
+            std::min(static_cast<int>(SHADOW_TIMER_CASCADE_COUNT), std::max(0, pendingStats.cascadeCount));
         const uint32_t firstQuery = shadowQueryIndex(readIndex, 0u, 0u);
-        const uint32_t queryCount = static_cast<uint32_t>(cascadeCount) *
-                                    static_cast<uint32_t>(SHADOW_TIMER_POINT_COUNT);
-        const bool allAvailable = queryCount > 0u &&
-            m_rhiDevice->areQueryResultsAvailable(
-                m_shadowTimestampQueryPool, firstQuery, queryCount);
+        const uint32_t queryCount =
+            static_cast<uint32_t>(cascadeCount) * static_cast<uint32_t>(SHADOW_TIMER_POINT_COUNT);
+        const bool allAvailable = queryCount > 0u && m_rhiDevice->areQueryResultsAvailable(m_shadowTimestampQueryPool,
+                                                                                           firstQuery, queryCount);
 
         if (allAvailable) {
-            std::array<uint64_t, SHADOW_TIMER_CASCADE_COUNT * SHADOW_TIMER_POINT_COUNT>
-                timestamps{};
-            if (!m_rhiDevice->getQueryResults(
-                    m_shadowTimestampQueryPool, firstQuery, queryCount, timestamps.data())) {
+            std::array<uint64_t, SHADOW_TIMER_CASCADE_COUNT * SHADOW_TIMER_POINT_COUNT> timestamps{};
+            if (!m_rhiDevice->getQueryResults(m_shadowTimestampQueryPool, firstQuery, queryCount, timestamps.data())) {
                 std::abort();
             }
             ShadowFrameStats stats = pendingStats;
@@ -340,9 +313,8 @@ void RenderDebugService::beginFrame(RhiCommandList& commandList) {
             stats.gpuTotalMs = 0.0;
             for (int cascade = 0; cascade < cascadeCount; ++cascade) {
                 const auto readTimestamp = [&](const ShadowTimestampPoint point) {
-                    const size_t localIndex = static_cast<size_t>(cascade) *
-                                                  SHADOW_TIMER_POINT_COUNT +
-                                              static_cast<size_t>(point);
+                    const size_t localIndex =
+                        static_cast<size_t>(cascade) * SHADOW_TIMER_POINT_COUNT + static_cast<size_t>(point);
                     return timestamps[localIndex];
                 };
                 const uint64_t start = readTimestamp(ShadowTimestampPoint::Start);
@@ -433,24 +405,17 @@ void RenderDebugService::beginFrame(RhiCommandList& commandList) {
     m_shadowFrameIssued[m_gpuTimerWriteIndex] = false;
     m_shadowFrameActive = false;
 
-    const uint32_t timerSlotFirstQuery = gpuTimerQueryIndex(
-        m_gpuTimerWriteIndex, 0u, 0u, 0u);
-    const uint32_t timerSlotQueryCount = static_cast<uint32_t>(
-        GPU_TIMER_PASS_COUNT * GPU_TIMER_MAX_SEGMENTS_PER_PASS *
-        GPU_TIMER_POINTS_PER_SEGMENT);
-    commandList.resetQueryPool(
-        m_gpuTimerQueryPool, timerSlotFirstQuery, timerSlotQueryCount);
+    const uint32_t timerSlotFirstQuery = gpuTimerQueryIndex(m_gpuTimerWriteIndex, 0u, 0u, 0u);
+    const uint32_t timerSlotQueryCount =
+        static_cast<uint32_t>(GPU_TIMER_PASS_COUNT * GPU_TIMER_MAX_SEGMENTS_PER_PASS * GPU_TIMER_POINTS_PER_SEGMENT);
+    commandList.resetQueryPool(m_gpuTimerQueryPool, timerSlotFirstQuery, timerSlotQueryCount);
 
-    const uint32_t shadowSlotFirstQuery = shadowQueryIndex(
-        m_gpuTimerWriteIndex, 0u, 0u);
-    const uint32_t shadowSlotQueryCount = static_cast<uint32_t>(
-        SHADOW_TIMER_CASCADE_COUNT * SHADOW_TIMER_POINT_COUNT);
-    commandList.resetQueryPool(
-        m_shadowTimestampQueryPool, shadowSlotFirstQuery, shadowSlotQueryCount);
+    const uint32_t shadowSlotFirstQuery = shadowQueryIndex(m_gpuTimerWriteIndex, 0u, 0u);
+    const uint32_t shadowSlotQueryCount = static_cast<uint32_t>(SHADOW_TIMER_CASCADE_COUNT * SHADOW_TIMER_POINT_COUNT);
+    commandList.resetQueryPool(m_shadowTimestampQueryPool, shadowSlotFirstQuery, shadowSlotQueryCount);
 }
 
-GpuTimerSegmentToken RenderDebugService::beginGpuTimer(RhiCommandList& commandList,
-                                                       const GpuTimerPass pass) {
+GpuTimerSegmentToken RenderDebugService::beginGpuTimer(RhiCommandList& commandList, const GpuTimerPass pass) {
     if (!m_gpuTimersInitialized || !m_gpuTimerEnabled || !m_gpuTimerCanIssueThisFrame) {
         return {};
     }
@@ -460,46 +425,32 @@ GpuTimerSegmentToken RenderDebugService::beginGpuTimer(RhiCommandList& commandLi
     if (passIndex >= GPU_TIMER_PASS_COUNT) {
         std::abort();
     }
-    const size_t segmentIndex =
-        m_gpuTimerAllocatedSegmentCounts[m_gpuTimerWriteIndex][passIndex];
+    const size_t segmentIndex = m_gpuTimerAllocatedSegmentCounts[m_gpuTimerWriteIndex][passIndex];
     if (segmentIndex >= GPU_TIMER_MAX_SEGMENTS_PER_PASS) {
         std::abort();
     }
-    m_gpuTimerAllocatedSegmentCounts[m_gpuTimerWriteIndex][passIndex] =
-        static_cast<uint8_t>(segmentIndex + 1u);
-    const uint32_t firstQuery = gpuTimerQueryIndex(
-        m_gpuTimerWriteIndex, passIndex, segmentIndex, 0u);
+    m_gpuTimerAllocatedSegmentCounts[m_gpuTimerWriteIndex][passIndex] = static_cast<uint8_t>(segmentIndex + 1u);
+    const uint32_t firstQuery = gpuTimerQueryIndex(m_gpuTimerWriteIndex, passIndex, segmentIndex, 0u);
     commandList.writeTimestamp(m_gpuTimerQueryPool, firstQuery);
-    m_gpuTimerSegmentStates[m_gpuTimerWriteIndex][passIndex][segmentIndex] =
-        GpuTimerSegmentState::Recording;
-    return {
-        pass,
-        static_cast<uint8_t>(m_gpuTimerWriteIndex),
-        static_cast<uint8_t>(segmentIndex),
-        true
-    };
+    m_gpuTimerSegmentStates[m_gpuTimerWriteIndex][passIndex][segmentIndex] = GpuTimerSegmentState::Recording;
+    return {pass, static_cast<uint8_t>(m_gpuTimerWriteIndex), static_cast<uint8_t>(segmentIndex), true};
 }
 
-void RenderDebugService::endGpuTimer(RhiCommandList& commandList,
-                                     const GpuTimerSegmentToken token) {
+void RenderDebugService::endGpuTimer(RhiCommandList& commandList, const GpuTimerSegmentToken token) {
     if (!token.valid) {
         return;
     }
 
     const std::lock_guard<std::mutex> timerLock(m_gpuTimerMutex);
     const size_t passIndex = static_cast<size_t>(token.pass);
-    if (!m_gpuTimersInitialized || token.frameIndex != m_gpuTimerWriteIndex ||
-        passIndex >= GPU_TIMER_PASS_COUNT ||
+    if (!m_gpuTimersInitialized || token.frameIndex != m_gpuTimerWriteIndex || passIndex >= GPU_TIMER_PASS_COUNT ||
         token.segmentIndex >= GPU_TIMER_MAX_SEGMENTS_PER_PASS ||
-        m_gpuTimerSegmentStates[token.frameIndex][passIndex][token.segmentIndex] !=
-            GpuTimerSegmentState::Recording) {
+        m_gpuTimerSegmentStates[token.frameIndex][passIndex][token.segmentIndex] != GpuTimerSegmentState::Recording) {
         std::abort();
     }
-    const uint32_t endQuery = gpuTimerQueryIndex(
-        token.frameIndex, passIndex, token.segmentIndex, 1u);
+    const uint32_t endQuery = gpuTimerQueryIndex(token.frameIndex, passIndex, token.segmentIndex, 1u);
     commandList.writeTimestamp(m_gpuTimerQueryPool, endQuery);
-    m_gpuTimerSegmentStates[token.frameIndex][passIndex][token.segmentIndex] =
-        GpuTimerSegmentState::Issued;
+    m_gpuTimerSegmentStates[token.frameIndex][passIndex][token.segmentIndex] = GpuTimerSegmentState::Issued;
 }
 
 void RenderDebugService::cancelGpuTimer(const GpuTimerSegmentToken token) {
@@ -509,15 +460,12 @@ void RenderDebugService::cancelGpuTimer(const GpuTimerSegmentToken token) {
 
     const std::lock_guard<std::mutex> timerLock(m_gpuTimerMutex);
     const size_t passIndex = static_cast<size_t>(token.pass);
-    if (!m_gpuTimersInitialized || token.frameIndex != m_gpuTimerWriteIndex ||
-        passIndex >= GPU_TIMER_PASS_COUNT ||
+    if (!m_gpuTimersInitialized || token.frameIndex != m_gpuTimerWriteIndex || passIndex >= GPU_TIMER_PASS_COUNT ||
         token.segmentIndex >= GPU_TIMER_MAX_SEGMENTS_PER_PASS ||
-        m_gpuTimerSegmentStates[token.frameIndex][passIndex][token.segmentIndex] !=
-            GpuTimerSegmentState::Recording) {
+        m_gpuTimerSegmentStates[token.frameIndex][passIndex][token.segmentIndex] != GpuTimerSegmentState::Recording) {
         std::abort();
     }
-    m_gpuTimerSegmentStates[token.frameIndex][passIndex][token.segmentIndex] =
-        GpuTimerSegmentState::Unused;
+    m_gpuTimerSegmentStates[token.frameIndex][passIndex][token.segmentIndex] = GpuTimerSegmentState::Unused;
 }
 
 GpuTimerCheckpoint RenderDebugService::gpuTimerCheckpoint() const {
@@ -525,11 +473,7 @@ GpuTimerCheckpoint RenderDebugService::gpuTimerCheckpoint() const {
         return {};
     }
     const std::lock_guard<std::mutex> timerLock(m_gpuTimerMutex);
-    return {
-        m_gpuTimerAllocatedSegmentCounts[m_gpuTimerWriteIndex],
-        static_cast<uint8_t>(m_gpuTimerWriteIndex),
-        true
-    };
+    return {m_gpuTimerAllocatedSegmentCounts[m_gpuTimerWriteIndex], static_cast<uint8_t>(m_gpuTimerWriteIndex), true};
 }
 
 void RenderDebugService::cancelGpuTimersSince(const GpuTimerCheckpoint& checkpoint) {
@@ -542,18 +486,15 @@ void RenderDebugService::cancelGpuTimersSince(const GpuTimerCheckpoint& checkpoi
     }
     for (size_t passIndex = 0; passIndex < GPU_TIMER_PASS_COUNT; ++passIndex) {
         const size_t firstSegment = checkpoint.segmentCounts[passIndex];
-        const size_t allocatedSegments =
-            m_gpuTimerAllocatedSegmentCounts[m_gpuTimerWriteIndex][passIndex];
+        const size_t allocatedSegments = m_gpuTimerAllocatedSegmentCounts[m_gpuTimerWriteIndex][passIndex];
         if (firstSegment > allocatedSegments) {
             std::abort();
         }
         for (size_t segment = firstSegment; segment < allocatedSegments; ++segment) {
-            GpuTimerSegmentState& state =
-                m_gpuTimerSegmentStates[m_gpuTimerWriteIndex][passIndex][segment];
+            GpuTimerSegmentState& state = m_gpuTimerSegmentStates[m_gpuTimerWriteIndex][passIndex][segment];
             state = GpuTimerSegmentState::Unused;
         }
-        m_gpuTimerAllocatedSegmentCounts[m_gpuTimerWriteIndex][passIndex] =
-            checkpoint.segmentCounts[passIndex];
+        m_gpuTimerAllocatedSegmentCounts[m_gpuTimerWriteIndex][passIndex] = checkpoint.segmentCounts[passIndex];
     }
 }
 
@@ -575,10 +516,8 @@ bool RenderDebugService::beginShadowFrame(const int cascadeCount, const int shad
     return true;
 }
 
-void RenderDebugService::recordShadowCascadeStats(const int cascadeIndex,
-                                                  const ShadowCascadeStats& stats) {
-    if (!m_shadowFrameActive || cascadeIndex < 0 ||
-        cascadeIndex >= static_cast<int>(SHADOW_TIMER_CASCADE_COUNT)) {
+void RenderDebugService::recordShadowCascadeStats(const int cascadeIndex, const ShadowCascadeStats& stats) {
+    if (!m_shadowFrameActive || cascadeIndex < 0 || cascadeIndex >= static_cast<int>(SHADOW_TIMER_CASCADE_COUNT)) {
         return;
     }
 
@@ -586,8 +525,7 @@ void RenderDebugService::recordShadowCascadeStats(const int cascadeIndex,
     frame.cascades[static_cast<size_t>(cascadeIndex)] = stats;
 }
 
-void RenderDebugService::recordShadowFrameTotals(const int submitted, const int culled,
-                                                 const float maxCasterDistance) {
+void RenderDebugService::recordShadowFrameTotals(const int submitted, const int culled, const float maxCasterDistance) {
     if (!m_shadowFrameActive) {
         return;
     }
@@ -598,12 +536,10 @@ void RenderDebugService::recordShadowFrameTotals(const int submitted, const int 
     frame.maxCasterDistance = maxCasterDistance;
 }
 
-void RenderDebugService::markShadowTimestamp(RhiCommandList& commandList,
-                                             const int cascadeIndex,
+void RenderDebugService::markShadowTimestamp(RhiCommandList& commandList, const int cascadeIndex,
                                              const ShadowTimestampPoint point) {
     const std::lock_guard<std::mutex> timerLock(m_gpuTimerMutex);
-    if (!m_shadowFrameActive || cascadeIndex < 0 ||
-        cascadeIndex >= static_cast<int>(SHADOW_TIMER_CASCADE_COUNT)) {
+    if (!m_shadowFrameActive || cascadeIndex < 0 || cascadeIndex >= static_cast<int>(SHADOW_TIMER_CASCADE_COUNT)) {
         return;
     }
     const size_t pointIndex = static_cast<size_t>(point);
@@ -611,8 +547,7 @@ void RenderDebugService::markShadowTimestamp(RhiCommandList& commandList,
         return;
     }
 
-    const uint32_t queryIndex = shadowQueryIndex(
-        m_gpuTimerWriteIndex, static_cast<size_t>(cascadeIndex), pointIndex);
+    const uint32_t queryIndex = shadowQueryIndex(m_gpuTimerWriteIndex, static_cast<size_t>(cascadeIndex), pointIndex);
     commandList.writeTimestamp(m_shadowTimestampQueryPool, queryIndex);
     m_shadowTimestampIssued[m_gpuTimerWriteIndex][static_cast<size_t>(cascadeIndex)][pointIndex] = true;
 }
@@ -625,8 +560,7 @@ void RenderDebugService::endShadowFrame() {
     const int cascadeCount = m_shadowFrameSlots[m_gpuTimerWriteIndex].cascadeCount;
     for (int cascade = 0; cascade < cascadeCount; ++cascade) {
         for (size_t point = 0; point < SHADOW_TIMER_POINT_COUNT; ++point) {
-            if (!m_shadowTimestampIssued[m_gpuTimerWriteIndex]
-                                        [static_cast<size_t>(cascade)][point]) {
+            if (!m_shadowTimestampIssued[m_gpuTimerWriteIndex][static_cast<size_t>(cascade)][point]) {
                 std::abort();
             }
         }

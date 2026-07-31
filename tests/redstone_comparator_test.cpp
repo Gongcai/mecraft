@@ -45,8 +45,7 @@ BlockStateId leverState(const bool powered) {
         BlockRegistry::requireIdByName("minecraft:lever"),
         std::vector<std::pair<uint16_t, uint16_t>>{
             {PropIndices::FACING, PropIndices::FACING_FLOOR},
-            {PropIndices::POWERED, powered ? PropIndices::POWERED_TRUE : PropIndices::POWERED_FALSE}
-        });
+            {PropIndices::POWERED, powered ? PropIndices::POWERED_TRUE : PropIndices::POWERED_FALSE}});
 }
 
 BlockStateId comparatorState(const uint16_t mode, const bool powered) {
@@ -55,28 +54,15 @@ BlockStateId comparatorState(const uint16_t mode, const bool powered) {
         std::vector<std::pair<uint16_t, uint16_t>>{
             {PropIndices::FACING, PropIndices::FACING_EAST},
             {PropIndices::POWERED, powered ? PropIndices::POWERED_TRUE : PropIndices::POWERED_FALSE},
-            {PropIndices::MODE, mode}
-        });
+            {PropIndices::MODE, mode}});
 }
 
 uint8_t wirePower(const World& world, const int x, const int y, const int z) {
     static const std::array<uint16_t, 16> kPowerValues = {
-        PropIndices::POWER_0,
-        PropIndices::POWER_1,
-        PropIndices::POWER_2,
-        PropIndices::POWER_3,
-        PropIndices::POWER_4,
-        PropIndices::POWER_5,
-        PropIndices::POWER_6,
-        PropIndices::POWER_7,
-        PropIndices::POWER_8,
-        PropIndices::POWER_9,
-        PropIndices::POWER_10,
-        PropIndices::POWER_11,
-        PropIndices::POWER_12,
-        PropIndices::POWER_13,
-        PropIndices::POWER_14,
-        PropIndices::POWER_15,
+        PropIndices::POWER_0,  PropIndices::POWER_1,  PropIndices::POWER_2,  PropIndices::POWER_3,
+        PropIndices::POWER_4,  PropIndices::POWER_5,  PropIndices::POWER_6,  PropIndices::POWER_7,
+        PropIndices::POWER_8,  PropIndices::POWER_9,  PropIndices::POWER_10, PropIndices::POWER_11,
+        PropIndices::POWER_12, PropIndices::POWER_13, PropIndices::POWER_14, PropIndices::POWER_15,
     };
 
     const BlockStateId state = world.getBlockState(x, y, z);
@@ -103,8 +89,10 @@ bool lampLit(const World& world, const int x, const int y, const int z) {
 
 void placeComparatorOutput(World& world, const int y, const uint16_t mode) {
     world.setBlockState(2, y, 0, comparatorState(mode, false));
-    world.setBlockState(3, y, 0, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_wire")));
-    world.setBlockState(4, y, 0, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_lamp")));
+    world.setBlockState(3, y, 0,
+                        BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_wire")));
+    world.setBlockState(4, y, 0,
+                        BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_lamp")));
 }
 
 } // namespace
@@ -121,13 +109,12 @@ int main() {
         const int y = 96;
         prepareComparatorArea(world, y);
         world.setBlockState(0, y, 0, leverState(true));
-        world.setBlockState(1, y, 0, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_wire")));
+        world.setBlockState(
+            1, y, 0, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_wire")));
         placeComparatorOutput(world, y, PropIndices::MODE_COMPARE);
 
         ecs::RedstoneSystem::processWorld(world, 0);
-        if (!powered(world, 2, y, 0) ||
-            wirePower(world, 3, y, 0) != 15 ||
-            !lampLit(world, 4, y, 0)) {
+        if (!powered(world, 2, y, 0) || wirePower(world, 3, y, 0) != 15 || !lampLit(world, 4, y, 0)) {
             return fail("compare mode should pass rear input when no side input is stronger");
         }
     }
@@ -136,16 +123,17 @@ int main() {
         const int y = 80;
         prepareComparatorArea(world, y);
         world.setBlockState(-1, y, 0, leverState(true));
-        world.setBlockState(0, y, 0, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_wire")));
-        world.setBlockState(1, y, 0, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_wire")));
+        world.setBlockState(
+            0, y, 0, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_wire")));
+        world.setBlockState(
+            1, y, 0, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_wire")));
         world.setBlockState(2, y, 2, leverState(true));
-        world.setBlockState(2, y, 1, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_wire")));
+        world.setBlockState(
+            2, y, 1, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_wire")));
         placeComparatorOutput(world, y, PropIndices::MODE_COMPARE);
 
         ecs::RedstoneSystem::processWorld(world, 1);
-        if (powered(world, 2, y, 0) ||
-            wirePower(world, 3, y, 0) != 0 ||
-            lampLit(world, 4, y, 0)) {
+        if (powered(world, 2, y, 0) || wirePower(world, 3, y, 0) != 0 || lampLit(world, 4, y, 0)) {
             return fail("compare mode should block output when side input is stronger than rear input");
         }
     }
@@ -154,16 +142,17 @@ int main() {
         const int y = 64;
         prepareComparatorArea(world, y);
         world.setBlockState(0, y, 0, leverState(true));
-        world.setBlockState(1, y, 0, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_wire")));
+        world.setBlockState(
+            1, y, 0, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_wire")));
         world.setBlockState(2, y, 3, leverState(true));
-        world.setBlockState(2, y, 2, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_wire")));
-        world.setBlockState(2, y, 1, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_wire")));
+        world.setBlockState(
+            2, y, 2, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_wire")));
+        world.setBlockState(
+            2, y, 1, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_wire")));
         placeComparatorOutput(world, y, PropIndices::MODE_SUBTRACT);
 
         ecs::RedstoneSystem::processWorld(world, 2);
-        if (!powered(world, 2, y, 0) ||
-            wirePower(world, 3, y, 0) != 1 ||
-            !lampLit(world, 4, y, 0)) {
+        if (!powered(world, 2, y, 0) || wirePower(world, 3, y, 0) != 1 || !lampLit(world, 4, y, 0)) {
             return fail("subtract mode should output rear minus strongest side input");
         }
     }
@@ -181,17 +170,12 @@ int main() {
             chest.setSlotItem(slot, coalId, coalMaxStack);
         }
 
-        world.setBlockState(
-            chestPosition.x,
-            chestPosition.y,
-            chestPosition.z,
-            BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:chest")));
+        world.setBlockState(chestPosition.x, chestPosition.y, chestPosition.z,
+                            BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:chest")));
         placeComparatorOutput(world, y, PropIndices::MODE_COMPARE);
 
         ecs::RedstoneSystem::processWorld(world, 3, registry);
-        if (!powered(world, 2, y, 0) ||
-            wirePower(world, 3, y, 0) != 8 ||
-            !lampLit(world, 4, y, 0)) {
+        if (!powered(world, 2, y, 0) || wirePower(world, 3, y, 0) != 8 || !lampLit(world, 4, y, 0)) {
             return fail("compare mode should read half-full chest inventory as signal strength 8");
         }
     }
@@ -209,17 +193,12 @@ int main() {
             barrel.setSlotItem(slot, coalId, coalMaxStack);
         }
 
-        world.setBlockState(
-            barrelPosition.x,
-            barrelPosition.y,
-            barrelPosition.z,
-            BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:barrel")));
+        world.setBlockState(barrelPosition.x, barrelPosition.y, barrelPosition.z,
+                            BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:barrel")));
         placeComparatorOutput(world, y, PropIndices::MODE_COMPARE);
 
         ecs::RedstoneSystem::processWorld(world, 4, registry);
-        if (!powered(world, 2, y, 0) ||
-            wirePower(world, 3, y, 0) != 8 ||
-            !lampLit(world, 4, y, 0)) {
+        if (!powered(world, 2, y, 0) || wirePower(world, 3, y, 0) != 8 || !lampLit(world, 4, y, 0)) {
             return fail("compare mode should read data-driven barrel inventory as signal strength 8");
         }
     }
@@ -235,17 +214,12 @@ int main() {
         const uint16_t coalMaxStack = ItemRegistry::get(coalId).maxStack;
         furnace.setSlotStack(MachineInventory::DEFAULT_SMELTING_INPUT_SLOT, ItemStack{coalId, coalMaxStack, 0});
 
-        world.setBlockState(
-            furnacePosition.x,
-            furnacePosition.y,
-            furnacePosition.z,
-            BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:furnace")));
+        world.setBlockState(furnacePosition.x, furnacePosition.y, furnacePosition.z,
+                            BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:furnace")));
         placeComparatorOutput(world, y, PropIndices::MODE_COMPARE);
 
         ecs::RedstoneSystem::processWorld(world, 5, registry);
-        if (!powered(world, 2, y, 0) ||
-            wirePower(world, 3, y, 0) != 5 ||
-            !lampLit(world, 4, y, 0)) {
+        if (!powered(world, 2, y, 0) || wirePower(world, 3, y, 0) != 5 || !lampLit(world, 4, y, 0)) {
             return fail("compare mode should read data-driven furnace inventory as signal strength 5");
         }
     }

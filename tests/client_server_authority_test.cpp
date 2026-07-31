@@ -61,9 +61,7 @@ void fillSubChunk(World& world, const glm::ivec3& origin, const BlockStateId sta
     }
 }
 
-size_t countStatesWithPropertyValue(World& world,
-                                    const glm::ivec3& origin,
-                                    const uint16_t property,
+size_t countStatesWithPropertyValue(World& world, const glm::ivec3& origin, const uint16_t property,
                                     const uint16_t value) {
     size_t count = 0;
     for (int y = 0; y < 16; ++y) {
@@ -80,10 +78,9 @@ size_t countStatesWithPropertyValue(World& world,
 }
 
 BlockStateId poweredPlateState(const bool powered) {
-    return BlockStateRegistry::getState(
-        BlockRegistry::requireIdByName("minecraft:oak_pressure_plate"),
-        PropIndices::POWERED,
-        powered ? PropIndices::POWERED_TRUE : PropIndices::POWERED_FALSE);
+    return BlockStateRegistry::getState(BlockRegistry::requireIdByName("minecraft:oak_pressure_plate"),
+                                        PropIndices::POWERED,
+                                        powered ? PropIndices::POWERED_TRUE : PropIndices::POWERED_FALSE);
 }
 
 } // namespace
@@ -172,7 +169,8 @@ int main() {
     ecs::BlockSupportSystem blockSupportSystem;
     blockSupportSystem.update(clientCtx);
     if (world.neighborUpdateQueue().size() != queuedSupportUpdates ||
-        BlockStateRegistry::getBlockId(world.getBlock(sandPos.x, sandPos.y, sandPos.z)) != BlockRegistry::requireIdByName("minecraft:sand")) {
+        BlockStateRegistry::getBlockId(world.getBlock(sandPos.x, sandPos.y, sandPos.z)) !=
+            BlockRegistry::requireIdByName("minecraft:sand")) {
         return fail("client block support tick must not drain authoritative support updates");
     }
 

@@ -9,7 +9,7 @@
 
 class InputContextManager {
 public:
-    InputContextManager(ActionMap& actionMap,const InputManager& inputManager);
+    InputContextManager(ActionMap& actionMap, const InputManager& inputManager);
 
     // Context Stack Management
     void pushContext(InputContextType context);
@@ -36,5 +36,3 @@ private:
 };
 
 #endif //MECRAFT_INPUTCONTEXTMANAGER_H
-
-

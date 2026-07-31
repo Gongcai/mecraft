@@ -47,8 +47,7 @@ void testLightSourcesSeedOwnVoxel() {
 
 void testGlowLichenSeedsPropagatedBlockLight() {
     Chunk chunk(0, 0);
-    chunk.setBlockFast(
-        4, 80, 4, stateForBlockName("minecraft:glow_lichen"));
+    chunk.setBlockFast(4, 80, 4, stateForBlockName("minecraft:glow_lichen"));
 
     chunk.seedInitialLightMap();
 

@@ -9,14 +9,15 @@ int fail(const char* message) {
     std::cerr << "[item_registry_test] FAIL: " << message << '\n';
     return EXIT_FAILURE;
 }
-}
+} // namespace
 
 int main() {
     BlockRegistry::init(nullptr);
     ItemRegistry::init();
     BlockDropTable::init();
 
-    const ItemDef& dirtItem = ItemRegistry::get(ItemRegistry::fromBlock(BlockRegistry::requireIdByName("minecraft:dirt")));
+    const ItemDef& dirtItem =
+        ItemRegistry::get(ItemRegistry::fromBlock(BlockRegistry::requireIdByName("minecraft:dirt")));
     if (dirtItem.placeBlock != BlockRegistry::requireIdByName("minecraft:dirt")) {
         return fail("dirt should place its source block");
     }
@@ -32,7 +33,8 @@ int main() {
         return fail("block name lookup should resolve synthesized block items");
     }
     const ItemDef& blueWool = ItemRegistry::get(blueWoolItem);
-    if (blueWool.placeBlock != BlockRegistry::requireIdByName("minecraft:blue_wool") || blueWool.renderBlock != BlockRegistry::requireIdByName("minecraft:blue_wool")) {
+    if (blueWool.placeBlock != BlockRegistry::requireIdByName("minecraft:blue_wool") ||
+        blueWool.renderBlock != BlockRegistry::requireIdByName("minecraft:blue_wool")) {
         return fail("blue_wool synthesized item should render and place its source block");
     }
 
@@ -89,9 +91,8 @@ int main() {
     if (ItemRegistry::findByName("iron_pickaxe") != ItemRegistry::requireIdByName("minecraft:iron_pickaxe")) {
         return fail("item name lookup should resolve iron_pickaxe from items.json");
     }
-    if (!ironPickaxe.isTool || ironPickaxe.maxStack != 1 ||
-        ironPickaxe.toolKind != "pickaxe" || ironPickaxe.toolTier != 2 ||
-        ironPickaxe.toolEfficiency < 5.9f || ironPickaxe.toolEfficiency > 6.1f) {
+    if (!ironPickaxe.isTool || ironPickaxe.maxStack != 1 || ironPickaxe.toolKind != "pickaxe" ||
+        ironPickaxe.toolTier != 2 || ironPickaxe.toolEfficiency < 5.9f || ironPickaxe.toolEfficiency > 6.1f) {
         return fail("iron pickaxe should be a non-stackable tool");
     }
 
@@ -99,8 +100,7 @@ int main() {
     if (ItemRegistry::findByName("iron_hoe") != ItemRegistry::requireIdByName("minecraft:iron_hoe")) {
         return fail("item name lookup should resolve iron_hoe from items.json");
     }
-    if (!ironHoe.isTool || ironHoe.maxStack != 1 ||
-        ironHoe.toolKind != "hoe" || ironHoe.toolTier != 2 ||
+    if (!ironHoe.isTool || ironHoe.maxStack != 1 || ironHoe.toolKind != "hoe" || ironHoe.toolTier != 2 ||
         ironHoe.placeBlock != RUNTIME_ID_NULL || ironHoe.renderBlock != RUNTIME_ID_NULL ||
         std::string(ironHoe.iconTextureName) != "iron_hoe") {
         return fail("iron hoe should be a non-placeable hoe tool with an item texture");
@@ -110,8 +110,7 @@ int main() {
         !ItemUseRules::matchesBlock(*tillRule, BlockRegistry::requireIdByName("minecraft:dirt")) ||
         !ItemUseRules::matchesBlock(*tillRule, BlockRegistry::requireIdByName("minecraft:grass_block")) ||
         tillRule->resultBlock != BlockRegistry::requireIdByName("minecraft:farmland") ||
-        tillRule->consumeDurability != 1 ||
-        !tillRule->requiresEmptyAbove) {
+        tillRule->consumeDurability != 1 || !tillRule->requiresEmptyAbove) {
         return fail("iron hoe should declare a data-driven tilling rule");
     }
 
@@ -162,8 +161,7 @@ int main() {
         return fail("red_bed item and block should be registered");
     }
     const ItemDef& redBed = ItemRegistry::get(redBedItem);
-    if (redBed.placeBlock != redBedBlock ||
-        redBed.renderBlock != redBedBlock ||
+    if (redBed.placeBlock != redBedBlock || redBed.renderBlock != redBedBlock ||
         std::string(redBed.iconTextureName) != "bed") {
         return fail("red_bed item should place the bed block and use the bed item texture");
     }
@@ -200,8 +198,7 @@ int main() {
         return fail("redstone_torch item and block should be registered");
     }
     const ItemDef& redstoneTorch = ItemRegistry::get(redstoneTorchItem);
-    if (redstoneTorch.placeBlock != redstoneTorchBlock ||
-        redstoneTorch.renderBlock != redstoneTorchBlock ||
+    if (redstoneTorch.placeBlock != redstoneTorchBlock || redstoneTorch.renderBlock != redstoneTorchBlock ||
         std::string(redstoneTorch.iconTextureName) != "redstone_torch") {
         return fail("redstone_torch item should place the torch block and use its item texture");
     }
@@ -212,43 +209,33 @@ int main() {
     const BlockID repeaterBlock = BlockRegistry::findByName("repeater");
     const BlockID comparatorBlock = BlockRegistry::findByName("comparator");
     const BlockID hopperBlock = BlockRegistry::findByName("hopper");
-    if (repeaterItem == RUNTIME_ID_NULL ||
-        comparatorItem == RUNTIME_ID_NULL ||
-        hopperItem == RUNTIME_ID_NULL ||
-        repeaterBlock == RUNTIME_ID_NULL ||
-        comparatorBlock == RUNTIME_ID_NULL ||
-        hopperBlock == RUNTIME_ID_NULL) {
+    if (repeaterItem == RUNTIME_ID_NULL || comparatorItem == RUNTIME_ID_NULL || hopperItem == RUNTIME_ID_NULL ||
+        repeaterBlock == RUNTIME_ID_NULL || comparatorBlock == RUNTIME_ID_NULL || hopperBlock == RUNTIME_ID_NULL) {
         return fail("redstone component items and blocks should be registered");
     }
     const ItemDef& repeater = ItemRegistry::get(repeaterItem);
     const ItemDef& comparator = ItemRegistry::get(comparatorItem);
     const ItemDef& hopper = ItemRegistry::get(hopperItem);
-    if (repeater.placeBlock != repeaterBlock ||
-        comparator.placeBlock != comparatorBlock ||
-        hopper.placeBlock != hopperBlock ||
-        std::string(repeater.iconTextureName) != "repeater" ||
-        std::string(comparator.iconTextureName) != "comparator" ||
-        std::string(hopper.iconTextureName) != "hopper") {
+    if (repeater.placeBlock != repeaterBlock || comparator.placeBlock != comparatorBlock ||
+        hopper.placeBlock != hopperBlock || std::string(repeater.iconTextureName) != "repeater" ||
+        std::string(comparator.iconTextureName) != "comparator" || std::string(hopper.iconTextureName) != "hopper") {
         return fail("redstone component items should place their blocks and use explicit item textures");
     }
-    if (ui::shouldUseBakedBlockIcon(repeater) ||
-        ui::shouldUseBakedBlockIcon(comparator) ||
+    if (ui::shouldUseBakedBlockIcon(repeater) || ui::shouldUseBakedBlockIcon(comparator) ||
         ui::shouldUseBakedBlockIcon(hopper)) {
         return fail("redstone component item icons should use their item textures");
     }
 
     const ItemID bucketItem = ItemRegistry::findByName("bucket");
     const ItemID waterBucketItem = ItemRegistry::findByName("water_bucket");
-    if (bucketItem != ItemRegistry::requireIdByName("minecraft:bucket") || waterBucketItem != ItemRegistry::requireIdByName("minecraft:water_bucket")) {
+    if (bucketItem != ItemRegistry::requireIdByName("minecraft:bucket") ||
+        waterBucketItem != ItemRegistry::requireIdByName("minecraft:water_bucket")) {
         return fail("bucket and water_bucket should resolve to their builtin item ids");
     }
     const ItemDef& bucket = ItemRegistry::get(ItemRegistry::requireIdByName("minecraft:bucket"));
     const ItemDef& waterBucket = ItemRegistry::get(ItemRegistry::requireIdByName("minecraft:water_bucket"));
-    if (bucket.maxStack != 1 ||
-        waterBucket.maxStack != 1 ||
-        bucket.placeBlock != RUNTIME_ID_NULL ||
-        waterBucket.placeBlock != RUNTIME_ID_NULL ||
-        std::string(bucket.iconTextureName) != "bucket" ||
+    if (bucket.maxStack != 1 || waterBucket.maxStack != 1 || bucket.placeBlock != RUNTIME_ID_NULL ||
+        waterBucket.placeBlock != RUNTIME_ID_NULL || std::string(bucket.iconTextureName) != "bucket" ||
         std::string(waterBucket.iconTextureName) != "water_bucket") {
         return fail("bucket items should be non-stackable non-placeable items with explicit item textures");
     }
@@ -256,22 +243,17 @@ int main() {
     const ItemUseRule* placeWaterRule = ItemUseRules::findRule(waterBucket, ItemUseBehavior::BucketPlaceFluid);
     if (pickupWaterRule == nullptr ||
         !ItemUseRules::matchesBlock(*pickupWaterRule, BlockRegistry::requireIdByName("minecraft:water")) ||
-        pickupWaterRule->resultBlock != RUNTIME_ID_NULL ||
-        pickupWaterRule->resultItem != waterBucketItem ||
-        !pickupWaterRule->requiresSourceFluid ||
-        placeWaterRule == nullptr ||
+        pickupWaterRule->resultBlock != RUNTIME_ID_NULL || pickupWaterRule->resultItem != waterBucketItem ||
+        !pickupWaterRule->requiresSourceFluid || placeWaterRule == nullptr ||
         placeWaterRule->resultBlock != BlockRegistry::requireIdByName("minecraft:water") ||
-        placeWaterRule->resultItem != bucketItem ||
-        !placeWaterRule->requiresFluidPlacement) {
+        placeWaterRule->resultItem != bucketItem || !placeWaterRule->requiresFluidPlacement) {
         return fail("bucket items should declare data-driven fluid use rules");
     }
 
     const ItemID oakDoorItem = ItemRegistry::findByName("oak_door");
     const ItemID oakTrapdoorItem = ItemRegistry::findByName("oak_trapdoor");
     const ItemID oakFenceGateItem = ItemRegistry::findByName("oak_fence_gate");
-    if (oakDoorItem == RUNTIME_ID_NULL ||
-        oakTrapdoorItem == RUNTIME_ID_NULL ||
-        oakFenceGateItem == RUNTIME_ID_NULL) {
+    if (oakDoorItem == RUNTIME_ID_NULL || oakTrapdoorItem == RUNTIME_ID_NULL || oakFenceGateItem == RUNTIME_ID_NULL) {
         return fail("oak door, trapdoor, and fence gate items should be registered");
     }
     const ItemDef& oakDoor = ItemRegistry::get(oakDoorItem);
@@ -288,8 +270,7 @@ int main() {
         std::string(oakFenceGate.iconTextureName) != "oak_planks") {
         return fail("oak door, trapdoor, and fence gate items should place/render their blocks and use declared icons");
     }
-    if (ui::shouldUseBakedBlockIcon(oakDoor) ||
-        ui::shouldUseBakedBlockIcon(oakTrapdoor) ||
+    if (ui::shouldUseBakedBlockIcon(oakDoor) || ui::shouldUseBakedBlockIcon(oakTrapdoor) ||
         ui::shouldUseBakedBlockIcon(oakFenceGate)) {
         return fail("oak door, trapdoor, and fence gate item icons should use explicit item textures");
     }
@@ -300,27 +281,21 @@ int main() {
     const BlockID wildflowersBlock = BlockRegistry::findByName("wildflowers");
     const BlockID leafLitterBlock = BlockRegistry::findByName("leaf_litter");
     const BlockID glowLichenBlock = BlockRegistry::findByName("glow_lichen");
-    if (wildflowersItem == RUNTIME_ID_NULL ||
-        leafLitterItem == RUNTIME_ID_NULL ||
-        glowLichenItem == RUNTIME_ID_NULL ||
-        wildflowersBlock == RUNTIME_ID_NULL ||
-        leafLitterBlock == RUNTIME_ID_NULL ||
+    if (wildflowersItem == RUNTIME_ID_NULL || leafLitterItem == RUNTIME_ID_NULL || glowLichenItem == RUNTIME_ID_NULL ||
+        wildflowersBlock == RUNTIME_ID_NULL || leafLitterBlock == RUNTIME_ID_NULL ||
         glowLichenBlock == RUNTIME_ID_NULL) {
         return fail("new face plane decoration items and blocks should be registered");
     }
     const ItemDef& wildflowers = ItemRegistry::get(wildflowersItem);
     const ItemDef& leafLitter = ItemRegistry::get(leafLitterItem);
     const ItemDef& glowLichen = ItemRegistry::get(glowLichenItem);
-    if (wildflowers.placeBlock != wildflowersBlock ||
-        leafLitter.placeBlock != leafLitterBlock ||
-        glowLichen.placeBlock != glowLichenBlock ||
-        std::string(wildflowers.iconTextureName) != "wildflowers" ||
+    if (wildflowers.placeBlock != wildflowersBlock || leafLitter.placeBlock != leafLitterBlock ||
+        glowLichen.placeBlock != glowLichenBlock || std::string(wildflowers.iconTextureName) != "wildflowers" ||
         std::string(leafLitter.iconTextureName) != "leaf_litter" ||
         std::string(glowLichen.iconTextureName) != "glow_lichen") {
         return fail("new face plane items should place their block and use explicit item textures");
     }
-    if (ui::shouldUseBakedBlockIcon(wildflowers) ||
-        ui::shouldUseBakedBlockIcon(leafLitter) ||
+    if (ui::shouldUseBakedBlockIcon(wildflowers) || ui::shouldUseBakedBlockIcon(leafLitter) ||
         ui::shouldUseBakedBlockIcon(glowLichen)) {
         return fail("new face plane item icons should use their item textures");
     }
@@ -349,8 +324,8 @@ int main() {
     const ItemID potatoItem = ItemRegistry::findByName("potato");
     const BlockID carrotsBlock = BlockRegistry::findByName("carrots");
     const BlockID potatoesBlock = BlockRegistry::findByName("potatoes");
-    if (carrotItem == RUNTIME_ID_NULL || potatoItem == RUNTIME_ID_NULL ||
-        carrotsBlock == RUNTIME_ID_NULL || potatoesBlock == RUNTIME_ID_NULL) {
+    if (carrotItem == RUNTIME_ID_NULL || potatoItem == RUNTIME_ID_NULL || carrotsBlock == RUNTIME_ID_NULL ||
+        potatoesBlock == RUNTIME_ID_NULL) {
         return fail("carrot and potato crop items and blocks should be registered");
     }
     if (ItemRegistry::toPlaceBlock(carrotItem) != carrotsBlock ||
@@ -363,16 +338,19 @@ int main() {
     }
 
     // BlockDropTable tests
-    if (BlockDropTable::getDropItem(BlockRegistry::requireIdByName("minecraft:coal_ore")) != ItemRegistry::requireIdByName("minecraft:coal")) {
+    if (BlockDropTable::getDropItem(BlockRegistry::requireIdByName("minecraft:coal_ore")) !=
+        ItemRegistry::requireIdByName("minecraft:coal")) {
         return fail("coal_ore should drop coal item");
     }
     if (BlockDropTable::getDropItem(BlockRegistry::findByName("iron_ore")) != ItemRegistry::findByName("raw_iron")) {
         return fail("iron_ore should drop raw iron for furnace smelting");
     }
-    if (BlockDropTable::getDropItem(BlockRegistry::requireIdByName("minecraft:stone")) != ItemRegistry::findByName("cobblestone")) {
+    if (BlockDropTable::getDropItem(BlockRegistry::requireIdByName("minecraft:stone")) !=
+        ItemRegistry::findByName("cobblestone")) {
         return fail("stone should drop cobblestone");
     }
-    if (BlockDropTable::getDropItem(BlockRegistry::requireIdByName("minecraft:dirt")) != ItemRegistry::fromBlock(BlockRegistry::requireIdByName("minecraft:dirt"))) {
+    if (BlockDropTable::getDropItem(BlockRegistry::requireIdByName("minecraft:dirt")) !=
+        ItemRegistry::fromBlock(BlockRegistry::requireIdByName("minecraft:dirt"))) {
         return fail("dirt should drop itself by default");
     }
     if (BlockDropTable::getDropItem(BlockRegistry::requireIdByName("minecraft:chest")) != chestItem) {

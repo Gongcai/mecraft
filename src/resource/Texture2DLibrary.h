@@ -24,23 +24,15 @@ class Texture2DLibrary {
 public:
     void init(RhiDevice& rhiDevice);
 
-    RhiTextureHandle load(const std::string& name,
-                          const std::string& path,
-                          bool srgb = false,
+    RhiTextureHandle load(const std::string& name, const std::string& path, bool srgb = false,
                           bool flipVertically = false,
-                          RhiTextureQueueSharing queueSharing =
-                              RhiTextureQueueSharing::Exclusive);
+                          RhiTextureQueueSharing queueSharing = RhiTextureQueueSharing::Exclusive);
 
     [[nodiscard]] RhiTextureHandle getHandle(const std::string& name) const;
 
-    RhiTextureHandle loadGui(const std::string& name,
-                             const std::string& path,
-                             bool flipVertically = true);
+    RhiTextureHandle loadGui(const std::string& name, const std::string& path, bool flipVertically = true);
 
-    RhiTextureHandle loadGui(const std::string& name,
-                             const std::string& path,
-                             int& outWidth,
-                             int& outHeight,
+    RhiTextureHandle loadGui(const std::string& name, const std::string& path, int& outWidth, int& outHeight,
                              bool flipVertically = true);
 
     [[nodiscard]] RhiTextureHandle getGuiHandle(const std::string& name) const;

@@ -31,25 +31,21 @@ MoveIntent toLegacyIntent(const MoveIntentComponent& moveIntent, const bool isFl
     return legacyIntent;
 }
 
-void updateEyeHeight(const MoveIntentComponent& moveIntent,
-                     const bool isFlying,
-                     const PhysicsBodyComponent& physicsBody,
-                     const CharacterControllerComponent& controller,
-                     TransformComponent& transform,
-                     const float dt) {
+void updateEyeHeight(const MoveIntentComponent& moveIntent, const bool isFlying,
+                     const PhysicsBodyComponent& physicsBody, const CharacterControllerComponent& controller,
+                     TransformComponent& transform, const float dt) {
     if (!controller.crouchChangesEyeHeight) {
         transform.eyeHeight = controller.standEyeHeight;
         return;
     }
 
     const float targetEyeHeight = physicsBody.body.isGrounded && moveIntent.wantsCrouch && !isFlying
-        ? controller.crouchEyeHeight
-        : controller.standEyeHeight;
+                                      ? controller.crouchEyeHeight
+                                      : controller.standEyeHeight;
     transform.eyeHeight = lerp(transform.eyeHeight, targetEyeHeight, dt * controller.eyeHeightLerpSpeed);
 }
 
-void capturePreviousTransform(TransformInterpolationComponent* interpolation,
-                              const TransformComponent& transform) {
+void capturePreviousTransform(TransformInterpolationComponent* interpolation, const TransformComponent& transform) {
     if (interpolation == nullptr) {
         return;
     }
@@ -61,7 +57,8 @@ void capturePreviousTransform(TransformInterpolationComponent* interpolation,
 } // namespace
 
 void CharacterPhysicsSystem::update(SystemContext& ctx) {
-    if (!ctx.services.physicsSystem) return;
+    if (!ctx.services.physicsSystem)
+        return;
     auto& registry = ctx.registry;
     auto& physicsSystem = *ctx.services.physicsSystem;
     const float dt = ctx.dt;

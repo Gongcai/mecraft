@@ -11,7 +11,8 @@ namespace ecs {
 /// Apply damage to the local player. Reduces health, triggers hurt effect.
 /// Does nothing if amount <= 0 or if the player is in creative mode.
 inline void applyDamage(GameplayRegistry& registry, int amount) {
-    if (amount <= 0) return;
+    if (amount <= 0)
+        return;
 
     if (registry.ctxHas<GameplayRuntimeContext>()) {
         if (registry.ctxGet<GameplayRuntimeContext>().gameplayMode == GameplayMode::Creative) {

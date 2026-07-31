@@ -31,13 +31,9 @@
 // DebugRuntime struct has been migrated to GameplayRenderRuntime
 
 Game::Game(GameSessionConfig config, GameSessionDependencies deps)
-    : m_config(std::move(config)),
-      m_deps(std::move(deps)),
-      m_renderRuntime(std::make_unique<GameplayRenderRuntime>()),
-      m_hudPresenter(nullptr),
-      m_audioSyncSystem(nullptr),
-      m_frameOrchestrator(std::make_unique<GameFrameOrchestrator>()) {
-}
+    : m_config(std::move(config)), m_deps(std::move(deps)), m_renderRuntime(std::make_unique<GameplayRenderRuntime>()),
+      m_hudPresenter(nullptr), m_audioSyncSystem(nullptr),
+      m_frameOrchestrator(std::make_unique<GameFrameOrchestrator>()) {}
 
 Game::~Game() = default;
 
@@ -71,14 +67,8 @@ bool Game::updateLoading(const float deltaTime) {
         m_loadPhase = LoadPhase::RenderRuntime;
         break;
     case LoadPhase::RenderRuntime:
-        if (!m_renderRuntime->init(m_deps.resourceMgr,
-                                   m_session,
-                                   m_deps.uiRenderer,
-                                   m_deps.threadPool,
-                                   m_deps.window,
-                                   m_deps.rhiDevice,
-                                   m_deps.commandListPool,
-                                   m_config.renderSettingsSource,
+        if (!m_renderRuntime->init(m_deps.resourceMgr, m_session, m_deps.uiRenderer, m_deps.threadPool, m_deps.window,
+                                   m_deps.rhiDevice, m_deps.commandListPool, m_config.renderSettingsSource,
                                    m_config.fixedRenderSettings)) {
             MECRAFT_LOG_STREAM(std::cerr << "[Game] Render runtime initialization failed\n");
             m_loadPhase = LoadPhase::Failed;
@@ -90,7 +80,7 @@ bool Game::updateLoading(const float deltaTime) {
         break;
     case LoadPhase::Ecs:
         m_session.initECS(m_deps);
-        m_session.loadLocalPlayer();  // Restore saved player state before preloading chunks.
+        m_session.loadLocalPlayer(); // Restore saved player state before preloading chunks.
         m_session.initStateMachine(m_deps);
 
         m_audioSyncSystem = std::make_unique<AudioListenerSyncSystem>(m_deps.bgmSystem, m_deps.audioEngine);
@@ -115,16 +105,14 @@ bool Game::updateLoading(const float deltaTime) {
         for (int i = 0; i < pumpCount && !m_session.isInitialChunkLoadComplete(); ++i) {
             m_session.pumpInitialChunkLoad(kInitialLoadTickDt);
         }
-        if (m_session.isInitialChunkLoadComplete() &&
-            m_session.stabilizeLocalPlayerAfterInitialLoad()) {
+        if (m_session.isInitialChunkLoadComplete() && m_session.stabilizeLocalPlayerAfterInitialLoad()) {
             m_loadPhase = LoadPhase::Complete;
         }
         break;
     }
     case LoadPhase::Complete:
     case LoadPhase::Failed:
-    case LoadPhase::NotStarted:
-        break;
+    case LoadPhase::NotStarted: break;
     }
     return m_loadPhase != LoadPhase::Failed;
 }
@@ -167,27 +155,17 @@ void Game::publishDebugStats(const float frameTime) {
     }
 }
 
-void Game::recordPollEvents(double ms,
-                            unsigned keyEvents,
-                            unsigned mouseButtonEvents,
-                            unsigned cursorPosEvents,
-                            unsigned scrollEvents,
-                            unsigned charEvents,
-                            double inputCallbackMs,
-                            double cursorPosCallbackMs,
-                            double imguiCallbackMs,
-                            double imguiCursorPosCallbackMs,
-                            double imguiCursorPosBackendMs,
-                            double imguiWndProcMs,
-                            double imguiWndProcSlowestMs,
-                            unsigned imguiWndProcSlowestMsg,
-                            unsigned imguiWndProcCount) {
+void Game::recordPollEvents(double ms, unsigned keyEvents, unsigned mouseButtonEvents, unsigned cursorPosEvents,
+                            unsigned scrollEvents, unsigned charEvents, double inputCallbackMs,
+                            double cursorPosCallbackMs, double imguiCallbackMs, double imguiCursorPosCallbackMs,
+                            double imguiCursorPosBackendMs, double imguiWndProcMs, double imguiWndProcSlowestMs,
+                            unsigned imguiWndProcSlowestMsg, unsigned imguiWndProcCount) {
     if (m_renderRuntime) {
         if (auto* profiler = m_renderRuntime->profiler()) {
             profiler->recordPollEvents(ms, keyEvents, mouseButtonEvents, cursorPosEvents, scrollEvents, charEvents,
-                                       inputCallbackMs, cursorPosCallbackMs, imguiCallbackMs,
-                                       imguiCursorPosCallbackMs, imguiCursorPosBackendMs, imguiWndProcMs,
-                                       imguiWndProcSlowestMs, imguiWndProcSlowestMsg, imguiWndProcCount);
+                                       inputCallbackMs, cursorPosCallbackMs, imguiCallbackMs, imguiCursorPosCallbackMs,
+                                       imguiCursorPosBackendMs, imguiWndProcMs, imguiWndProcSlowestMs,
+                                       imguiWndProcSlowestMsg, imguiWndProcCount);
         }
     }
 }
@@ -223,30 +201,26 @@ bool Game::renderFrame(const float frameTime) {
         m_validationCapturePath.reset();
         m_validationCaptureResult.reset();
         m_frameOrchestrator->setPreUiCallback([this, capturePath]() {
-            const Window::FramebufferSize framebufferSize =
-                m_deps.window.getFramebufferSize();
+            const Window::FramebufferSize framebufferSize = m_deps.window.getFramebufferSize();
             if (framebufferSize.width <= 0 || framebufferSize.height <= 0) {
                 renderer::capture::TextureCaptureResult result;
-                result.error =
-                    renderer::capture::TextureCaptureError::InvalidRequest;
+                result.error = renderer::capture::TextureCaptureError::InvalidRequest;
                 result.detail = "validation framebuffer extent is invalid";
                 m_validationCaptureResult = std::move(result);
                 return;
             }
             renderer::capture::TextureCaptureRequest request;
-            request.sourceTexture =
-                m_deps.rhiDevice.currentSwapchainColorTexture();
+            request.sourceTexture = m_deps.rhiDevice.currentSwapchainColorTexture();
             request.sourceState = RhiResourceState::Present;
             request.sourceFormat = m_deps.rhiDevice.swapchainColorFormat();
             request.width = static_cast<uint32_t>(framebufferSize.width);
             request.height = static_cast<uint32_t>(framebufferSize.height);
             request.origin = m_deps.rhiDevice.backend() == RhiBackend::OpenGL
-                ? renderer::capture::TextureCaptureOrigin::BottomLeft
-                : renderer::capture::TextureCaptureOrigin::TopLeft;
+                                 ? renderer::capture::TextureCaptureOrigin::BottomLeft
+                                 : renderer::capture::TextureCaptureOrigin::TopLeft;
             request.outputPath = capturePath;
             m_validationCaptureResult =
-                renderer::capture::captureTextureToPng(
-                    m_deps.rhiDevice, m_deps.commandListPool, request);
+                renderer::capture::captureTextureToPng(m_deps.rhiDevice, m_deps.commandListPool, request);
         });
     } else if (m_captureScreenshotOnNextFrame) {
         m_captureScreenshotOnNextFrame = false;
@@ -254,29 +228,16 @@ bool Game::renderFrame(const float frameTime) {
     }
 
     // G5: Delegate frame rendering to orchestrator
-    const float renderInterpolationAlpha = m_session.stateMachine().pausesSimulation()
-        ? 1.0f
-        : m_fixedInterpolationAlpha;
-    return m_frameOrchestrator->renderFrame(m_session,
-                                            *m_renderRuntime,
-                                            m_validationCamera
-                                                ? nullptr
-                                                : m_hudPresenter.get(),
-                                            m_deps.window,
-                                            frameTime,
-                                            renderInterpolationAlpha,
-                                            m_validationCamera
-                                                ? &*m_validationCamera
-                                                : nullptr,
-                                            m_validationFrameClock
-                                                ? &*m_validationFrameClock
-                                                : nullptr);
+    const float renderInterpolationAlpha =
+        m_session.stateMachine().pausesSimulation() ? 1.0f : m_fixedInterpolationAlpha;
+    return m_frameOrchestrator->renderFrame(
+        m_session, *m_renderRuntime, m_validationCamera ? nullptr : m_hudPresenter.get(), m_deps.window, frameTime,
+        renderInterpolationAlpha, m_validationCamera ? &*m_validationCamera : nullptr,
+        m_validationFrameClock ? &*m_validationFrameClock : nullptr);
 }
 
-bool Game::configureValidationFrame(
-    const renderer::contracts::CameraPathPose& pose,
-    const RenderFrameClock& clock,
-    const std::filesystem::path* capturePath) {
+bool Game::configureValidationFrame(const renderer::contracts::CameraPathPose& pose, const RenderFrameClock& clock,
+                                    const std::filesystem::path* capturePath) {
     const glm::vec3 position(pose.position);
     const glm::vec3 forward(pose.forward);
     const glm::vec3 up(pose.up);
@@ -296,25 +257,20 @@ bool Game::configureValidationFrame(
     return true;
 }
 
-std::optional<renderer::capture::TextureCaptureResult>
-Game::takeValidationCaptureResult() {
-    std::optional<renderer::capture::TextureCaptureResult> result =
-        std::move(m_validationCaptureResult);
+std::optional<renderer::capture::TextureCaptureResult> Game::takeValidationCaptureResult() {
+    std::optional<renderer::capture::TextureCaptureResult> result = std::move(m_validationCaptureResult);
     m_validationCaptureResult.reset();
     return result;
 }
 
 bool Game::prepareValidationScene(const float timeOfDaySeconds) {
-    if (!m_initialized || !isLoadingComplete() || m_config.isMultiplayer() ||
-        m_config.enableSaving ||
-        m_config.renderSettingsSource !=
-            GameRenderSettingsSource::FixedProfile) {
+    if (!m_initialized || !isLoadingComplete() || m_config.isMultiplayer() || m_config.enableSaving ||
+        m_config.renderSettingsSource != GameRenderSettingsSource::FixedProfile) {
         return false;
     }
     World& world = m_session.world();
     world.getDayNightSystem().setTimeOfDay(timeOfDaySeconds);
-    world.getWeatherSystem().setDebugWeatherPresetInstant(
-        WeatherType::Clear);
+    world.getWeatherSystem().setDebugWeatherPresetInstant(WeatherType::Clear);
     return true;
 }
 
@@ -322,9 +278,7 @@ bool Game::isValidationSceneReady() const {
     if (!m_initialized || !isLoadingComplete() || !m_renderRuntime) {
         return false;
     }
-    return m_renderRuntime->renderScene()
-        .getTerrainStreamingService()
-        .isSettled(m_session.worldView());
+    return m_renderRuntime->renderScene().getTerrainStreamingService().isSettled(m_session.worldView());
 }
 
 const GpuFrameStats* Game::gpuFrameStats() const {
@@ -379,16 +333,14 @@ Game::LoadProgress Game::getLoadProgress() const {
         progress.loadedChunks = chunkProgress.clientLoaded;
         progress.targetChunks = chunkProgress.target;
         progress.inFlightChunks = chunkProgress.inFlight;
-        const float chunkRatio = chunkProgress.target > 0
-            ? static_cast<float>(chunkProgress.clientLoaded) / static_cast<float>(chunkProgress.target)
-            : 0.0f;
+        const float chunkRatio = chunkProgress.target > 0 ? static_cast<float>(chunkProgress.clientLoaded) /
+                                                                static_cast<float>(chunkProgress.target)
+                                                          : 0.0f;
         progress.progress = 0.45f + std::clamp(chunkRatio, 0.0f, 1.0f) * 0.55f;
-        progress.label =
-            chunkProgress.target > 0 &&
-                chunkProgress.clientLoaded >= chunkProgress.target &&
-                !chunkProgress.lightingSettled
-            ? "Stabilizing lighting"
-            : "Loading chunks";
+        progress.label = chunkProgress.target > 0 && chunkProgress.clientLoaded >= chunkProgress.target &&
+                                 !chunkProgress.lightingSettled
+                             ? "Stabilizing lighting"
+                             : "Loading chunks";
         progress.complete = chunkProgress.complete;
         break;
     }
@@ -407,15 +359,18 @@ Game::LoadProgress Game::getLoadProgress() const {
 
 void Game::captureExitScreenshot() {
     // Only capture in single-player mode with saving enabled
-    if (m_config.isMultiplayer() || m_config.worldName.empty()) return;
+    if (m_config.isMultiplayer() || m_config.worldName.empty())
+        return;
 
     auto* server = &m_session.server();
     auto* sm = server->saveManager();
-    if (!sm) return;
+    if (!sm)
+        return;
 
     const int w = m_deps.window.getWidth();
     const int h = m_deps.window.getHeight();
-    if (w <= 0 || h <= 0) return;
+    if (w <= 0 || h <= 0)
+        return;
 
     // Downscale to thumbnail size for reasonable file size
     constexpr int THUMB_W = 640;
@@ -425,42 +380,34 @@ void Game::captureExitScreenshot() {
 
     RhiDevice& rhiDevice = m_deps.rhiDevice;
     const RhiTextureHandle swapchainTexture = rhiDevice.currentSwapchainColorTexture();
-    if (!swapchainTexture.isValid()) return;
+    if (!swapchainTexture.isValid())
+        return;
 
     constexpr uint32_t kBytesPerPixel = 4u;
     const uint32_t tightRowBytes = static_cast<uint32_t>(readW) * kBytesPerPixel;
-    const uint32_t rowAlignment = std::max(
-        1u, rhiDevice.capabilities().textureBufferCopyRowPitchAlignment);
-    const uint32_t bytesPerRow =
-        ((tightRowBytes + rowAlignment - 1u) / rowAlignment) * rowAlignment;
-    const uint64_t readbackSize = static_cast<uint64_t>(bytesPerRow) *
-                                  static_cast<uint32_t>(readH);
+    const uint32_t rowAlignment = std::max(1u, rhiDevice.capabilities().textureBufferCopyRowPitchAlignment);
+    const uint32_t bytesPerRow = ((tightRowBytes + rowAlignment - 1u) / rowAlignment) * rowAlignment;
+    const uint64_t readbackSize = static_cast<uint64_t>(bytesPerRow) * static_cast<uint32_t>(readH);
 
     RhiBufferDesc readbackDesc;
     readbackDesc.debugName = "ExitScreenshot.Readback";
     readbackDesc.size = readbackSize;
-    readbackDesc.usage = rhiFlag(RhiBufferUsage::TransferDst) |
-                         rhiFlag(RhiBufferUsage::MapRead);
+    readbackDesc.usage = rhiFlag(RhiBufferUsage::TransferDst) | rhiFlag(RhiBufferUsage::MapRead);
     readbackDesc.memoryUsage = RhiMemoryUsage::GpuToCpu;
     readbackDesc.initialState = RhiResourceState::TransferDst;
     readbackDesc.memoryCategory = RhiMemoryCategory::Readback;
-    const RhiBufferHandle readbackBuffer =
-        rhiDevice.createBuffer(readbackDesc, nullptr, 0u);
-    if (!readbackBuffer.isValid()) return;
+    const RhiBufferHandle readbackBuffer = rhiDevice.createBuffer(readbackDesc, nullptr, 0u);
+    if (!readbackBuffer.isValid())
+        return;
 
-    RhiCommandList* commandListStorage =
-        m_deps.commandListPool.acquire(RhiCommandListType::Graphics);
+    RhiCommandList* commandListStorage = m_deps.commandListPool.acquire(RhiCommandListType::Graphics);
     if (commandListStorage == nullptr ||
         !commandListStorage->begin({"ExitScreenshot.Commands", RhiCommandListType::Graphics})) {
         rhiDevice.destroyBuffer(readbackBuffer);
         return;
     }
     RhiCommandList& commandList = *commandListStorage;
-    commandList.textureBarrier({
-        swapchainTexture,
-        RhiResourceState::Present,
-        RhiResourceState::TransferSrc
-    });
+    commandList.textureBarrier({swapchainTexture, RhiResourceState::Present, RhiResourceState::TransferSrc});
     RhiTextureBufferCopy copy;
     copy.srcTexture = swapchainTexture;
     copy.dstBuffer = readbackBuffer;
@@ -469,16 +416,8 @@ void Game::captureExitScreenshot() {
     copy.width = static_cast<uint32_t>(readW);
     copy.height = static_cast<uint32_t>(readH);
     commandList.copyTextureToBuffer(copy);
-    commandList.bufferBarrier({
-        readbackBuffer,
-        RhiResourceState::TransferDst,
-        RhiResourceState::HostRead
-    });
-    commandList.textureBarrier({
-        swapchainTexture,
-        RhiResourceState::TransferSrc,
-        RhiResourceState::Present
-    });
+    commandList.bufferBarrier({readbackBuffer, RhiResourceState::TransferDst, RhiResourceState::HostRead});
+    commandList.textureBarrier({swapchainTexture, RhiResourceState::TransferSrc, RhiResourceState::Present});
     if (!commandList.end()) {
         std::abort();
     }
@@ -488,8 +427,7 @@ void Game::captureExitScreenshot() {
     }
     rhiDevice.waitIdle();
 
-    const auto* pixels = static_cast<const uint8_t*>(
-        rhiDevice.mapBuffer(readbackBuffer, 0u, readbackSize));
+    const auto* pixels = static_cast<const uint8_t*>(rhiDevice.mapBuffer(readbackBuffer, 0u, readbackSize));
     if (pixels == nullptr) {
         rhiDevice.destroyBuffer(readbackBuffer);
         return;
@@ -497,10 +435,8 @@ void Game::captureExitScreenshot() {
 
     std::vector<uint8_t> flipped(readW * readH * 3);
     for (int y = 0; y < readH; ++y) {
-        const uint8_t* sourceRow = pixels +
-            static_cast<uint64_t>(readH - 1 - y) * bytesPerRow;
-        uint8_t* destinationRow = flipped.data() +
-            static_cast<size_t>(y) * static_cast<size_t>(readW) * 3u;
+        const uint8_t* sourceRow = pixels + static_cast<uint64_t>(readH - 1 - y) * bytesPerRow;
+        uint8_t* destinationRow = flipped.data() + static_cast<size_t>(y) * static_cast<size_t>(readW) * 3u;
         for (int x = 0; x < readW; ++x) {
             destinationRow[x * 3 + 0] = sourceRow[x * 4 + 0];
             destinationRow[x * 3 + 1] = sourceRow[x * 4 + 1];

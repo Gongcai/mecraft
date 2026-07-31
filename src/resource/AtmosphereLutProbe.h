@@ -6,9 +6,7 @@
 
 namespace resource {
 
-bool probeAtmosphereLut(const std::string& name,
-                        const std::string& path,
-                        size_t expectedBytes = 0);
+bool probeAtmosphereLut(const std::string& name, const std::string& path, size_t expectedBytes = 0);
 
 } // namespace resource
 

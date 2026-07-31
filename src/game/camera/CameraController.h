@@ -25,15 +25,11 @@ public:
     /// In first-person mode, returns the eye camera unchanged.
     /// In third-person back mode, offsets the camera behind and above the eye position.
     /// In third-person front mode, offsets the camera in front and flips the view direction.
-    [[nodiscard]] Camera computeRenderCamera(
-        const Camera& eyeCamera,
-        const glm::vec3& eyePosition) const;
+    [[nodiscard]] Camera computeRenderCamera(const Camera& eyeCamera, const glm::vec3& eyePosition) const;
     /// Compute the effective render camera and shorten third-person offsets
     /// when a solid block lies between the eye and desired camera position.
-    [[nodiscard]] Camera computeRenderCamera(
-        const Camera& eyeCamera,
-        const glm::vec3& eyePosition,
-        const IWorldView& worldView) const;
+    [[nodiscard]] Camera computeRenderCamera(const Camera& eyeCamera, const glm::vec3& eyePosition,
+                                             const IWorldView& worldView) const;
 
 private:
     ViewMode m_viewMode = ViewMode::FirstPerson;

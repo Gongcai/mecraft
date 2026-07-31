@@ -14,9 +14,7 @@ class GameplayRegistry;
 class CreativeModeState final : public GameplayState {
 public:
     explicit CreativeModeState(StateDependencies deps)
-            : GameplayState(deps,
-                            CreativeModeRules::instance(),
-                            GameplayMode::Creative) {}
+        : GameplayState(deps, CreativeModeRules::instance(), GameplayMode::Creative) {}
 };
 
 #endif //MECRAFT_CREATIVEMODESTATE_H

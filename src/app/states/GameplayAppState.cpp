@@ -9,12 +9,10 @@
 #include <iostream>
 
 GameplayAppState::GameplayAppState(AppStateDependencies deps, GameSessionConfig config)
-    : m_deps(deps), m_config(config) {
-}
+    : m_deps(deps), m_config(config) {}
 
 GameplayAppState::GameplayAppState(AppStateDependencies deps, std::unique_ptr<Game> game)
-    : m_deps(deps), m_game(std::move(game)) {
-}
+    : m_deps(deps), m_game(std::move(game)) {}
 
 GameplayAppState::~GameplayAppState() {
     if (m_game) {
@@ -26,13 +24,11 @@ bool GameplayAppState::beginValidation() {
     if (!m_deps.validationRun.enabled()) {
         return true;
     }
-    const app::validation::ValidationSceneContract& contract =
-        m_deps.validationRun.sceneContract();
-    if (!m_game->prepareValidationScene(
-            static_cast<float>(contract.environment.timeOfDaySeconds))) {
-        m_deps.validationRun.fail(
-            app::validation::ValidationRunError::SceneInitializationFailed,
-            "gameplay validation requires a loaded local session with persistence disabled and fixed renderer settings");
+    const app::validation::ValidationSceneContract& contract = m_deps.validationRun.sceneContract();
+    if (!m_game->prepareValidationScene(static_cast<float>(contract.environment.timeOfDaySeconds))) {
+        m_deps.validationRun.fail(app::validation::ValidationRunError::SceneInitializationFailed,
+                                  "gameplay validation requires a loaded local session with persistence disabled and "
+                                  "fixed renderer settings");
         m_enterFailed = true;
         return false;
     }
@@ -58,21 +54,19 @@ void GameplayAppState::onEnter() {
         return;
     }
 
-    GameSessionDependencies deps{
-        m_deps.window,
-        m_deps.input,
-        m_deps.actionMap,
-        m_deps.contextManager,
-        m_deps.resourceMgr,
-        m_deps.audioEngine,
-        m_deps.bgmSystem,
-        m_deps.uiRenderer,
-        m_deps.localeManager,
-        m_deps.threadPool,
-        m_deps.rhiDevice,
-        m_deps.commandListPool,
-        m_deps.enableDebugDashboard
-    };
+    GameSessionDependencies deps{m_deps.window,
+                                 m_deps.input,
+                                 m_deps.actionMap,
+                                 m_deps.contextManager,
+                                 m_deps.resourceMgr,
+                                 m_deps.audioEngine,
+                                 m_deps.bgmSystem,
+                                 m_deps.uiRenderer,
+                                 m_deps.localeManager,
+                                 m_deps.threadPool,
+                                 m_deps.rhiDevice,
+                                 m_deps.commandListPool,
+                                 m_deps.enableDebugDashboard};
 
     m_game = std::make_unique<Game>(m_config, deps);
     if (!m_game->init()) {
@@ -121,9 +115,8 @@ void GameplayAppState::update(double frameTime, double& accumulator) {
     if (m_validationActive) {
         accumulator = 0.0;
         if (!m_game->updateFrame(0.0f)) {
-            m_deps.validationRun.fail(
-                app::validation::ValidationRunError::RenderFailed,
-                "gameplay validation frame update failed");
+            m_deps.validationRun.fail(app::validation::ValidationRunError::RenderFailed,
+                                      "gameplay validation frame update failed");
         }
         return;
     }
@@ -136,8 +129,7 @@ void GameplayAppState::update(double frameTime, double& accumulator) {
         m_game->requestExitScreenshot();
         m_quitToMenuPending = true;
         m_closeAppAfterExitScreenshot =
-            m_deps.shouldCloseAppOnGameplayQuitToMenu &&
-            m_deps.shouldCloseAppOnGameplayQuitToMenu();
+            m_deps.shouldCloseAppOnGameplayQuitToMenu && m_deps.shouldCloseAppOnGameplayQuitToMenu();
         accumulator = 0.0;
     };
 
@@ -177,71 +169,55 @@ void GameplayAppState::update(double frameTime, double& accumulator) {
 void GameplayAppState::render(double frameTime) {
     if (m_game) {
         if (m_validationActive) {
-            const Window::FramebufferSize framebufferSize =
-                m_deps.window.getFramebufferSize();
-            const AppLaunchOptions& options =
-                m_deps.validationRun.options();
-            if (framebufferSize.width !=
-                    static_cast<int>(options.validationWidth) ||
-                framebufferSize.height !=
-                    static_cast<int>(options.validationHeight)) {
+            const Window::FramebufferSize framebufferSize = m_deps.window.getFramebufferSize();
+            const AppLaunchOptions& options = m_deps.validationRun.options();
+            if (framebufferSize.width != static_cast<int>(options.validationWidth) ||
+                framebufferSize.height != static_cast<int>(options.validationHeight)) {
                 m_deps.validationRun.fail(
                     app::validation::ValidationRunError::RenderFailed,
                     "gameplay validation framebuffer extent does not match the requested capture extent");
                 return;
             }
-            const app::validation::ValidationFrame* validationFrame =
-                m_deps.validationRun.currentFrame();
+            const app::validation::ValidationFrame* validationFrame = m_deps.validationRun.currentFrame();
             if (validationFrame == nullptr) {
-                m_deps.validationRun.fail(
-                    app::validation::ValidationRunError::InvalidState,
-                    "gameplay validation has no active frame");
+                m_deps.validationRun.fail(app::validation::ValidationRunError::InvalidState,
+                                          "gameplay validation has no active frame");
                 return;
             }
-            const RenderFrameClock clock{
-                validationFrame->sequenceFrameIndex,
-                validationFrame->deltaTimeSeconds,
-                validationFrame->renderTimeSeconds,
-                validationFrame->renderTimeSeconds};
-            const std::filesystem::path* capturePath =
-                m_validationSceneReady && validationFrame->captureAfterRender
-                ? &options.validationCapturePath
-                : nullptr;
-            if (!m_game->configureValidationFrame(
-                    validationFrame->cameraPose, clock, capturePath)) {
-                m_deps.validationRun.fail(
-                    app::validation::ValidationRunError::CameraPoseConversionFailed,
-                    "gameplay Camera Path pose cannot be represented by the float render camera");
+            const RenderFrameClock clock{validationFrame->sequenceFrameIndex, validationFrame->deltaTimeSeconds,
+                                         validationFrame->renderTimeSeconds, validationFrame->renderTimeSeconds};
+            const std::filesystem::path* capturePath = m_validationSceneReady && validationFrame->captureAfterRender
+                                                           ? &options.validationCapturePath
+                                                           : nullptr;
+            if (!m_game->configureValidationFrame(validationFrame->cameraPose, clock, capturePath)) {
+                m_deps.validationRun.fail(app::validation::ValidationRunError::CameraPoseConversionFailed,
+                                          "gameplay Camera Path pose cannot be represented by the float render camera");
                 return;
             }
             if (!m_game->renderFrame(validationFrame->deltaTimeSeconds)) {
-                m_deps.validationRun.fail(
-                    app::validation::ValidationRunError::RenderFailed,
-                    "gameplay validation scene rendering failed");
+                m_deps.validationRun.fail(app::validation::ValidationRunError::RenderFailed,
+                                          "gameplay validation scene rendering failed");
                 return;
             }
 
             if (!m_validationSceneReady) {
-                m_validationSceneReady =
-                    m_game->isValidationSceneReady();
+                m_validationSceneReady = m_game->isValidationSceneReady();
                 return;
             }
 
             bool captureSucceeded = true;
             std::string captureDetail;
             if (validationFrame->captureAfterRender) {
-                std::optional<renderer::capture::TextureCaptureResult> result =
-                    m_game->takeValidationCaptureResult();
+                std::optional<renderer::capture::TextureCaptureResult> result = m_game->takeValidationCaptureResult();
                 captureSucceeded = result.has_value() && result->succeeded();
                 if (!captureSucceeded) {
                     captureDetail = result.has_value()
-                        ? std::string(renderer::capture::textureCaptureErrorStableId(
-                              result->error)) + ":" + result->detail
-                        : "capture callback did not publish a result";
+                                        ? std::string(renderer::capture::textureCaptureErrorStableId(result->error)) +
+                                              ":" + result->detail
+                                        : "capture callback did not publish a result";
                 }
             }
-            static_cast<void>(m_deps.validationRun.completeFrame(
-                captureSucceeded, std::move(captureDetail)));
+            static_cast<void>(m_deps.validationRun.completeFrame(captureSucceeded, std::move(captureDetail)));
             return;
         }
         if (m_deps.window.shouldClose()) {
@@ -263,8 +239,7 @@ void GameplayAppState::render(double frameTime) {
             if (closeApp) {
                 glfwSetWindowShouldClose(m_deps.window.getHandle(), true);
             } else {
-                m_deps.appFsm.changeState(
-                    std::make_unique<MainMenuAppState>(m_deps));
+                m_deps.appFsm.changeState(std::make_unique<MainMenuAppState>(m_deps));
             }
         }
     }
@@ -275,26 +250,17 @@ const GpuFrameStats* GameplayAppState::gpuFrameStats() const {
 }
 
 #ifdef MECRAFT_DEBUG
-void GameplayAppState::recordPollEvents(double ms,
-                                        unsigned keyEvents,
-                                        unsigned mouseButtonEvents,
-                                        unsigned cursorPosEvents,
-                                        unsigned scrollEvents,
-                                        unsigned charEvents,
-                                        double inputCallbackMs,
-                                        double cursorPosCallbackMs,
-                                        double imguiCallbackMs,
-                                        double imguiCursorPosCallbackMs,
-                                        double imguiCursorPosBackendMs,
-                                        double imguiWndProcMs,
-                                        double imguiWndProcSlowestMs,
-                                        unsigned imguiWndProcSlowestMsg,
-                                        unsigned imguiWndProcCount) {
+void GameplayAppState::recordPollEvents(double ms, unsigned keyEvents, unsigned mouseButtonEvents,
+                                        unsigned cursorPosEvents, unsigned scrollEvents, unsigned charEvents,
+                                        double inputCallbackMs, double cursorPosCallbackMs, double imguiCallbackMs,
+                                        double imguiCursorPosCallbackMs, double imguiCursorPosBackendMs,
+                                        double imguiWndProcMs, double imguiWndProcSlowestMs,
+                                        unsigned imguiWndProcSlowestMsg, unsigned imguiWndProcCount) {
     if (m_game) {
         m_game->recordPollEvents(ms, keyEvents, mouseButtonEvents, cursorPosEvents, scrollEvents, charEvents,
                                  inputCallbackMs, cursorPosCallbackMs, imguiCallbackMs, imguiCursorPosCallbackMs,
-                                 imguiCursorPosBackendMs, imguiWndProcMs, imguiWndProcSlowestMs,
-                                 imguiWndProcSlowestMsg, imguiWndProcCount);
+                                 imguiCursorPosBackendMs, imguiWndProcMs, imguiWndProcSlowestMs, imguiWndProcSlowestMsg,
+                                 imguiWndProcCount);
     }
 }
 

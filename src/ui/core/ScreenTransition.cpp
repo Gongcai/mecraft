@@ -17,7 +17,8 @@ void ScreenTransition::init(ResourceMgr& resourceMgr) {
     m_rhiDevice = &resourceMgr.rhiDevice();
     const auto vertexSource = renderer::rhi::loadShaderSource("assets/shaders/ui_capsule_rhi.vert");
     const auto fragmentSource = renderer::rhi::loadShaderSource("assets/shaders/ui_capsule_rhi.frag");
-    if (!vertexSource || !fragmentSource) std::abort();
+    if (!vertexSource || !fragmentSource)
+        std::abort();
 
     RhiShaderDesc shaderDesc;
     shaderDesc.debugName = "ScreenTransition.Vertex";
@@ -57,18 +58,23 @@ void ScreenTransition::init(ResourceMgr& resourceMgr) {
     blend.dstAlpha = RhiBlendFactor::OneMinusSrcAlpha;
     pipelineDesc.blend.attachments.push_back(blend);
     m_pipeline = m_rhiDevice->createGraphicsPipeline(pipelineDesc);
-    if (!m_vertexShader.isValid() || !m_fragmentShader.isValid() ||
-        !m_pipelineLayout.isValid() || !m_pipeline.isValid()) std::abort();
+    if (!m_vertexShader.isValid() || !m_fragmentShader.isValid() || !m_pipelineLayout.isValid() ||
+        !m_pipeline.isValid())
+        std::abort();
     initMesh();
 }
 
 void ScreenTransition::shutdown() {
     cleanupMesh();
     if (m_rhiDevice != nullptr) {
-        if (m_pipeline.isValid()) m_rhiDevice->destroyPipeline(m_pipeline);
-        if (m_pipelineLayout.isValid()) m_rhiDevice->destroyPipelineLayout(m_pipelineLayout);
-        if (m_fragmentShader.isValid()) m_rhiDevice->destroyShader(m_fragmentShader);
-        if (m_vertexShader.isValid()) m_rhiDevice->destroyShader(m_vertexShader);
+        if (m_pipeline.isValid())
+            m_rhiDevice->destroyPipeline(m_pipeline);
+        if (m_pipelineLayout.isValid())
+            m_rhiDevice->destroyPipelineLayout(m_pipelineLayout);
+        if (m_fragmentShader.isValid())
+            m_rhiDevice->destroyShader(m_fragmentShader);
+        if (m_vertexShader.isValid())
+            m_rhiDevice->destroyShader(m_vertexShader);
     }
     m_pipeline = {};
     m_pipelineLayout = {};
@@ -79,23 +85,18 @@ void ScreenTransition::shutdown() {
 
 void ScreenTransition::initMesh() {
     constexpr float vertices[] = {
-        0.0f, 0.0f,
-        1.0f, 0.0f,
-        1.0f, 1.0f,
-        0.0f, 0.0f,
-        1.0f, 1.0f,
-        0.0f, 1.0f,
+        0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 1.0f,
     };
     RhiBufferDesc desc;
     desc.debugName = "ScreenTransition.VertexBuffer";
     desc.size = sizeof(vertices);
-    desc.usage = rhiFlag(RhiBufferUsage::Vertex) |
-                 rhiFlag(RhiBufferUsage::TransferDst);
+    desc.usage = rhiFlag(RhiBufferUsage::Vertex) | rhiFlag(RhiBufferUsage::TransferDst);
     desc.memoryUsage = RhiMemoryUsage::GpuOnly;
     desc.initialState = RhiResourceState::VertexBuffer;
     desc.memoryCategory = RhiMemoryCategory::Geometry;
     m_vertexBuffer = m_rhiDevice->createBuffer(desc, vertices, sizeof(vertices));
-    if (!m_vertexBuffer.isValid()) std::abort();
+    if (!m_vertexBuffer.isValid())
+        std::abort();
 }
 
 void ScreenTransition::cleanupMesh() {
@@ -117,20 +118,22 @@ void ScreenTransition::tick(float dt) {
     m_alphaTween.tick(dt);
 }
 
-void ScreenTransition::render(const int screenW,
-                              const int screenH,
-                              RhiCommandList& commandList) const {
-    if (!m_pipeline.isValid() || !m_vertexBuffer.isValid() || m_alphaTween.isDone()) return;
+void ScreenTransition::render(const int screenW, const int screenH, RhiCommandList& commandList) const {
+    if (!m_pipeline.isValid() || !m_vertexBuffer.isValid() || m_alphaTween.isDone())
+        return;
 
     float a = m_alphaTween.value();
-    if (a <= 0.0f) return;
+    if (a <= 0.0f)
+        return;
 
-    struct PushConstants { glm::vec4 screenRect; glm::vec4 rectRadius; glm::vec4 color; };
-    const PushConstants pushConstants{
-        glm::vec4(static_cast<float>(screenW), static_cast<float>(screenH), 0.0f, 0.0f),
-        glm::vec4(static_cast<float>(screenW), static_cast<float>(screenH), 0.0f, 0.0f),
-        glm::vec4(0.0f, 0.0f, 0.0f, a)
+    struct PushConstants {
+        glm::vec4 screenRect;
+        glm::vec4 rectRadius;
+        glm::vec4 color;
     };
+    const PushConstants pushConstants{glm::vec4(static_cast<float>(screenW), static_cast<float>(screenH), 0.0f, 0.0f),
+                                      glm::vec4(static_cast<float>(screenW), static_cast<float>(screenH), 0.0f, 0.0f),
+                                      glm::vec4(0.0f, 0.0f, 0.0f, a)};
     commandList.setGraphicsPipeline(m_pipeline);
     commandList.setVertexBuffer(0u, m_vertexBuffer, 0u);
     commandList.pushConstants(&pushConstants, sizeof(pushConstants),

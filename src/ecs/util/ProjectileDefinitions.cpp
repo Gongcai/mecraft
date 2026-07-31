@@ -34,11 +34,7 @@ std::string describeEntry(const std::size_t index) {
     return "projectiles[" + std::to_string(index) + "]";
 }
 
-bool readString(const json& node,
-                const char* key,
-                std::string& out,
-                const std::string& context,
-                std::string* error,
+bool readString(const json& node, const char* key, std::string& out, const std::string& context, std::string* error,
                 const bool required = false) {
     const auto it = node.find(key);
     if (it == node.end()) {
@@ -56,11 +52,7 @@ bool readString(const json& node,
     return true;
 }
 
-bool readInt(const json& node,
-             const char* key,
-             int& out,
-             const std::string& context,
-             std::string* error) {
+bool readInt(const json& node, const char* key, int& out, const std::string& context, std::string* error) {
     const auto it = node.find(key);
     if (it == node.end()) {
         return true;
@@ -73,11 +65,7 @@ bool readInt(const json& node,
     return true;
 }
 
-bool readFloat(const json& node,
-               const char* key,
-               float& out,
-               const std::string& context,
-               std::string* error) {
+bool readFloat(const json& node, const char* key, float& out, const std::string& context, std::string* error) {
     const auto it = node.find(key);
     if (it == node.end()) {
         return true;
@@ -90,10 +78,7 @@ bool readFloat(const json& node,
     return true;
 }
 
-bool parseImpact(const json& node,
-                 ProjectileDefinition& definition,
-                 const std::string& context,
-                 std::string* error) {
+bool parseImpact(const json& node, ProjectileDefinition& definition, const std::string& context, std::string* error) {
     const auto it = node.find("impact");
     if (it == node.end()) {
         return true;
@@ -113,8 +98,7 @@ bool parseImpact(const json& node,
     if (!particleBlockName.empty()) {
         if (!BlockRegistry::tryGetIdByName(particleBlockName, definition.entityImpactParticleBlock) ||
             definition.entityImpactParticleBlock == 0) {
-            setError(error, context + ".impact.particleBlock references an unknown block: " +
-                                particleBlockName);
+            setError(error, context + ".impact.particleBlock references an unknown block: " + particleBlockName);
             return false;
         }
     }
@@ -126,9 +110,7 @@ bool parseImpact(const json& node,
     return true;
 }
 
-bool parseProjectileDefinition(const json& node,
-                               const std::size_t index,
-                               ProjectileDefinition& definition,
+bool parseProjectileDefinition(const json& node, const std::size_t index, ProjectileDefinition& definition,
                                std::string* error) {
     const std::string context = describeEntry(index);
     if (!node.is_object()) {
@@ -165,11 +147,8 @@ bool parseProjectileDefinition(const json& node,
         setError(error, context + ".damage must be positive");
         return false;
     }
-    if (definition.hitRadius <= 0.0f ||
-        definition.throwSpeed <= 0.0f ||
-        definition.spawnForwardOffset < 0.0f ||
-        definition.boundsHalfExtent <= 0.0f ||
-        definition.lifetimeSeconds <= 0.0f) {
+    if (definition.hitRadius <= 0.0f || definition.throwSpeed <= 0.0f || definition.spawnForwardOffset < 0.0f ||
+        definition.boundsHalfExtent <= 0.0f || definition.lifetimeSeconds <= 0.0f) {
         setError(error, context + " projectile distances and lifetime must be positive");
         return false;
     }

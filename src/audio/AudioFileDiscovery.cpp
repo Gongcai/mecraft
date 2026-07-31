@@ -11,9 +11,7 @@ namespace fs = std::filesystem;
 namespace {
 
 std::string lowerCopy(std::string value) {
-    std::transform(value.begin(),
-                   value.end(),
-                   value.begin(),
+    std::transform(value.begin(), value.end(), value.begin(),
                    [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
     return value;
 }
@@ -34,8 +32,7 @@ std::string pathToUtf8(const fs::path& path) {
     return path.u8string();
 }
 
-std::optional<fs::path> findAudioFileByStem(const fs::path& directory,
-                                            const fs::path& stemOrFilename) {
+std::optional<fs::path> findAudioFileByStem(const fs::path& directory, const fs::path& stemOrFilename) {
     const auto& registry = AudioDecoderRegistry::instance();
     const fs::path base = directory / stemOrFilename;
 
@@ -92,11 +89,9 @@ std::vector<fs::path> listSupportedAudioFiles(const fs::path& directory) {
         files.push_back(path);
     }
 
-    std::sort(files.begin(),
-              files.end(),
-              [](const fs::path& a, const fs::path& b) {
-                  return lowerCopy(pathToUtf8(a.stem())) < lowerCopy(pathToUtf8(b.stem()));
-              });
+    std::sort(files.begin(), files.end(), [](const fs::path& a, const fs::path& b) {
+        return lowerCopy(pathToUtf8(a.stem())) < lowerCopy(pathToUtf8(b.stem()));
+    });
     return files;
 }
 

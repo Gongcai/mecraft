@@ -42,8 +42,7 @@ BlockStateId hopperState(const uint16_t facing, const bool enabled) {
         BlockRegistry::requireIdByName("minecraft:hopper"),
         std::vector<std::pair<uint16_t, uint16_t>>{
             {PropIndices::FACING, facing},
-            {PropIndices::ENABLED, enabled ? PropIndices::ENABLED_TRUE : PropIndices::ENABLED_FALSE}
-        });
+            {PropIndices::ENABLED, enabled ? PropIndices::ENABLED_TRUE : PropIndices::ENABLED_FALSE}});
 }
 
 void placeBlock(World& world, const glm::ivec3& position, const BlockStateId state) {
@@ -77,14 +76,11 @@ int main() {
         ecs::GameplayRegistry registry;
         const glm::ivec3 hopperPos(0, 96, 0);
         const bool created = ensureBlockEntityInventoryForPlacedBlock(
-            registry,
-            BlockRegistry::requireIdByName("minecraft:hopper"),
-            hopperPos);
+            registry, BlockRegistry::requireIdByName("minecraft:hopper"), hopperPos);
         if (!created || !registry.ctxHas<BlockEntityInventoryStore>()) {
             return fail("placing a hopper should create a block-entity storage inventory");
         }
-        const BlockEntityInventory* hopperInventory =
-            registry.ctxGet<BlockEntityInventoryStore>().find(hopperPos);
+        const BlockEntityInventory* hopperInventory = registry.ctxGet<BlockEntityInventoryStore>().find(hopperPos);
         if (hopperInventory == nullptr || !hopperInventory->getSlotStack(0).isEmpty()) {
             return fail("placed hopper inventory should exist and start empty");
         }
@@ -108,9 +104,7 @@ int main() {
 
         const std::size_t transfers = ecs::HopperSystem::processWorld(world, registry, 8);
         const BlockEntityInventory* hopper = store.find(hopperPos);
-        if (transfers != 1 ||
-            !stackIs(chest.getSlotStack(0), apple, 2) ||
-            hopper == nullptr ||
+        if (transfers != 1 || !stackIs(chest.getSlotStack(0), apple, 2) || hopper == nullptr ||
             !stackIs(hopper->getSlotStack(0), apple, 1)) {
             return fail("enabled hopper should pull one item from the container above");
         }
@@ -133,9 +127,7 @@ int main() {
         BlockEntityInventory& chest = store.getOrCreate(chestPos, "minecraft:chest", 27);
 
         const std::size_t transfers = ecs::HopperSystem::processWorld(world, registry, 16);
-        if (transfers != 1 ||
-            !stackIs(hopper.getSlotStack(0), apple, 1) ||
-            !stackIs(chest.getSlotStack(0), apple, 1)) {
+        if (transfers != 1 || !stackIs(hopper.getSlotStack(0), apple, 1) || !stackIs(chest.getSlotStack(0), apple, 1)) {
             return fail("enabled hopper should push one item into the facing container");
         }
     }
@@ -157,9 +149,7 @@ int main() {
         BlockEntityInventory& chest = store.getOrCreate(chestPos, "minecraft:chest", 27);
 
         const std::size_t transfers = ecs::HopperSystem::processWorld(world, registry, 24);
-        if (transfers != 0 ||
-            !stackIs(hopper.getSlotStack(0), apple, 2) ||
-            !chest.getSlotStack(0).isEmpty()) {
+        if (transfers != 0 || !stackIs(hopper.getSlotStack(0), apple, 2) || !chest.getSlotStack(0).isEmpty()) {
             return fail("redstone-disabled hopper should not transfer items");
         }
     }
@@ -185,9 +175,7 @@ int main() {
 
         const std::size_t transfers = ecs::HopperSystem::processWorld(world, registry, 32);
         const ecs::ItemComponent* dropItem = registry.try_get<ecs::ItemComponent>(drop);
-        if (transfers != 1 ||
-            !stackIs(hopper.getSlotStack(0), apple, 1) ||
-            dropItem == nullptr ||
+        if (transfers != 1 || !stackIs(hopper.getSlotStack(0), apple, 1) || dropItem == nullptr ||
             dropItem->stackCount != 3) {
             return fail("enabled hopper should pick up one intersecting dropped item");
         }
@@ -249,8 +237,7 @@ int main() {
         furnace.setSlotStack(MachineInventory::DEFAULT_SMELTING_OUTPUT_SLOT, ItemStack{ironIngot, 2, 0});
 
         const std::size_t transfers = ecs::HopperSystem::processWorld(world, registry, 64);
-        if (transfers != 1 ||
-            !stackIs(hopper.getSlotStack(0), ironIngot, 1) ||
+        if (transfers != 1 || !stackIs(hopper.getSlotStack(0), ironIngot, 1) ||
             !stackIs(furnace.getSlotStack(MachineInventory::DEFAULT_SMELTING_INPUT_SLOT), rawIron, 1) ||
             !stackIs(furnace.getSlotStack(MachineInventory::DEFAULT_SMELTING_FUEL_SLOT), coal, 1) ||
             !stackIs(furnace.getSlotStack(MachineInventory::DEFAULT_SMELTING_OUTPUT_SLOT), ironIngot, 1)) {

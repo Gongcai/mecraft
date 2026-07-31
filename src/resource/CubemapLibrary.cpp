@@ -14,12 +14,9 @@ void CubemapLibrary::init(RhiDevice& rhiDevice) {
     m_rhiDevice = &rhiDevice;
 }
 
-RhiTextureHandle CubemapLibrary::load(const std::string& name,
-                                      const std::string& rightPath,
-                                      const std::string& leftPath,
-                                      const std::string& topPath,
-                                      const std::string& bottomPath,
-                                      const std::string& frontPath,
+RhiTextureHandle CubemapLibrary::load(const std::string& name, const std::string& rightPath,
+                                      const std::string& leftPath, const std::string& topPath,
+                                      const std::string& bottomPath, const std::string& frontPath,
                                       const std::string& backPath) {
     assert(m_rhiDevice != nullptr);
     const auto existing = m_cubemaps.find(name);
@@ -27,9 +24,7 @@ RhiTextureHandle CubemapLibrary::load(const std::string& name,
         return existing->second;
     }
 
-    const std::array<std::string, 6> paths = {
-        rightPath, leftPath, topPath, bottomPath, frontPath, backPath
-    };
+    const std::array<std::string, 6> paths = {rightPath, leftPath, topPath, bottomPath, frontPath, backPath};
 
     stbi_set_flip_vertically_on_load(false);
 
@@ -46,8 +41,8 @@ RhiTextureHandle CubemapLibrary::load(const std::string& name,
             if (data != nullptr) {
                 stbi_image_free(data);
             }
-            MECRAFT_LOG_FPRINTF(stderr, "[Resource] Failed to load cubemap face '%s': %s\n",
-                                name.c_str(), paths[i].c_str());
+            MECRAFT_LOG_FPRINTF(stderr, "[Resource] Failed to load cubemap face '%s': %s\n", name.c_str(),
+                                paths[i].c_str());
             return {};
         }
         if (i == 0) {
@@ -55,8 +50,8 @@ RhiTextureHandle CubemapLibrary::load(const std::string& name,
             cubemapHeight = height;
         } else if (width != cubemapWidth || height != cubemapHeight) {
             stbi_image_free(data);
-            MECRAFT_LOG_FPRINTF(stderr, "[Resource] Cubemap face size mismatch '%s': %s\n",
-                                name.c_str(), paths[i].c_str());
+            MECRAFT_LOG_FPRINTF(stderr, "[Resource] Cubemap face size mismatch '%s': %s\n", name.c_str(),
+                                paths[i].c_str());
             return {};
         }
         const size_t faceSize = static_cast<size_t>(width) * static_cast<size_t>(height) * 4u;
@@ -71,8 +66,7 @@ RhiTextureHandle CubemapLibrary::load(const std::string& name,
     textureDesc.width = static_cast<uint32_t>(cubemapWidth);
     textureDesc.height = static_cast<uint32_t>(cubemapHeight);
     textureDesc.depthOrLayers = 6u;
-    textureDesc.usage = rhiFlag(RhiTextureUsage::Sampled) |
-                        rhiFlag(RhiTextureUsage::TransferDst);
+    textureDesc.usage = rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::TransferDst);
     textureDesc.memoryCategory = RhiMemoryCategory::Texture;
     RhiTextureInitialData initialData;
     initialData.pixels = pixels.data();
@@ -81,8 +75,7 @@ RhiTextureHandle CubemapLibrary::load(const std::string& name,
     initialData.finalState = RhiResourceState::ShaderRead;
     RhiTextureHandle texture = m_rhiDevice->createTexture(textureDesc, &initialData);
     if (!texture.isValid()) {
-        MECRAFT_LOG_FPRINTF(stderr, "[Resource] Failed to create cubemap RHI resource '%s'\n",
-                            name.c_str());
+        MECRAFT_LOG_FPRINTF(stderr, "[Resource] Failed to create cubemap RHI resource '%s'\n", name.c_str());
         return {};
     }
 

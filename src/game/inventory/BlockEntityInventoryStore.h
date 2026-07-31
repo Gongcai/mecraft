@@ -20,9 +20,7 @@ public:
     static constexpr int ROWS = 6;
     static constexpr int SLOT_COUNT = COLUMNS * ROWS;
 
-    [[nodiscard]] bool isValidSlot(const int slot) const {
-        return slot >= 0 && slot < SLOT_COUNT;
-    }
+    [[nodiscard]] bool isValidSlot(const int slot) const { return slot >= 0 && slot < SLOT_COUNT; }
 
     [[nodiscard]] ItemStack getSlotStack(const int slot) const {
         if (!isValidSlot(slot)) {
@@ -101,8 +99,7 @@ private:
 
 class BlockEntityInventoryStore {
 public:
-    [[nodiscard]] BlockEntityInventory& getOrCreate(const glm::ivec3& position,
-                                                    const std::string& typeId,
+    [[nodiscard]] BlockEntityInventory& getOrCreate(const glm::ivec3& position, const std::string& typeId,
                                                     const int slotCount) {
         validateTypeAndSlotCount(typeId, slotCount);
         Entry& entry = m_entries[toKey(position)];
@@ -127,12 +124,9 @@ public:
         return it == m_entries.end() ? nullptr : &it->second.inventory;
     }
 
-    [[nodiscard]] bool empty() const {
-        return m_entries.empty();
-    }
+    [[nodiscard]] bool empty() const { return m_entries.empty(); }
 
-    template <typename Fn>
-    void forEach(Fn&& fn) const {
+    template <typename Fn> void forEach(Fn&& fn) const {
         for (const auto& [key, entry] : m_entries) {
             fn(glm::ivec3(key.x, key.y, key.z), entry.typeId, entry.slotCount, entry.inventory);
         }
@@ -152,9 +146,7 @@ public:
         return contents;
     }
 
-    void erase(const glm::ivec3& position) {
-        m_entries.erase(toKey(position));
-    }
+    void erase(const glm::ivec3& position) { m_entries.erase(toKey(position)); }
 
 private:
     [[noreturn]] static void fail(const char* message) {
@@ -167,9 +159,7 @@ private:
         int y = 0;
         int z = 0;
 
-        [[nodiscard]] bool operator==(const Key& other) const {
-            return x == other.x && y == other.y && z == other.z;
-        }
+        [[nodiscard]] bool operator==(const Key& other) const { return x == other.x && y == other.y && z == other.z; }
     };
 
     struct KeyHash {
@@ -177,8 +167,7 @@ private:
             const std::size_t hx = std::hash<int>{}(key.x);
             const std::size_t hy = std::hash<int>{}(key.y);
             const std::size_t hz = std::hash<int>{}(key.z);
-            return hx ^ (hy + 0x9e3779b9u + (hx << 6u) + (hx >> 2u)) ^
-                   (hz + 0x9e3779b9u + (hy << 6u) + (hy >> 2u));
+            return hx ^ (hy + 0x9e3779b9u + (hx << 6u) + (hx >> 2u)) ^ (hz + 0x9e3779b9u + (hy << 6u) + (hy >> 2u));
         }
     };
 
@@ -197,9 +186,7 @@ private:
         }
     }
 
-    [[nodiscard]] static Key toKey(const glm::ivec3& position) {
-        return {position.x, position.y, position.z};
-    }
+    [[nodiscard]] static Key toKey(const glm::ivec3& position) { return {position.x, position.y, position.z}; }
 
     std::unordered_map<Key, Entry, KeyHash> m_entries;
 };

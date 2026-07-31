@@ -3,7 +3,9 @@
 
 #include "GameplayPresentationSnapshot.h"
 
-namespace ecs { class GameplayRegistry; }
+namespace ecs {
+class GameplayRegistry;
+}
 
 class CameraController;
 class IWorldView;
@@ -20,9 +22,8 @@ public:
     /// @param interpolationAlpha Normalized fixed-step remainder used for render interpolation
     /// @return An immutable snapshot for the current frame
     [[nodiscard]] GameplayPresentationSnapshot build(ecs::GameplayRegistry& reg,
-                                                      const CameraController& cameraController,
-                                                      const IWorldView& worldView,
-                                                      float interpolationAlpha);
+                                                     const CameraController& cameraController,
+                                                     const IWorldView& worldView, float interpolationAlpha);
 };
 
 #endif // MECRAFT_GAMEPLAY_PRESENTATION_BUILDER_H

@@ -86,14 +86,16 @@ void AudioSource::setReferenceDistance(float dist) {
 }
 
 bool AudioSource::isPlaying() const {
-    if (m_source == 0) return false;
+    if (m_source == 0)
+        return false;
     ALint state;
     alGetSourcei(m_source, AL_SOURCE_STATE, &state);
     return state == AL_PLAYING;
 }
 
 bool AudioSource::isStopped() const {
-    if (m_source == 0) return true;
+    if (m_source == 0)
+        return true;
     ALint state;
     alGetSourcei(m_source, AL_SOURCE_STATE, &state);
     return state == AL_STOPPED || state == AL_INITIAL;

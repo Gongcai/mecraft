@@ -61,7 +61,8 @@ struct CloudVertex {
     float shade;
 };
 
-bool isCloudPixelSolid(const std::vector<unsigned char>& pixels, const int width, const int height, const int x, const int y) {
+bool isCloudPixelSolid(const std::vector<unsigned char>& pixels, const int width, const int height, const int x,
+                       const int y) {
     if (x < 0 || y < 0 || x >= width || y >= height) {
         return false;
     }
@@ -76,19 +77,16 @@ bool isMaskSolid(const std::vector<uint8_t>& mask, const int width, const int he
     return mask[static_cast<size_t>(y * width + x)] != 0;
 }
 
-bool isExteriorEmpty(const std::vector<uint8_t>& exteriorEmpty, const int width, const int height, const int x, const int y) {
+bool isExteriorEmpty(const std::vector<uint8_t>& exteriorEmpty, const int width, const int height, const int x,
+                     const int y) {
     if (x < 0 || y < 0 || x >= width || y >= height) {
         return true;
     }
     return exteriorEmpty[static_cast<size_t>(y * width + x)] != 0;
 }
 
-void appendCloudQuad(std::vector<CloudVertex>& vertices,
-                     const glm::vec3& a,
-                     const glm::vec3& b,
-                     const glm::vec3& c,
-                     const glm::vec3& d,
-                     const float shade) {
+void appendCloudQuad(std::vector<CloudVertex>& vertices, const glm::vec3& a, const glm::vec3& b, const glm::vec3& c,
+                     const glm::vec3& d, const float shade) {
     vertices.push_back({a, shade});
     vertices.push_back({b, shade});
     vertices.push_back({c, shade});
@@ -97,58 +95,28 @@ void appendCloudQuad(std::vector<CloudVertex>& vertices,
     vertices.push_back({d, shade});
 }
 
-void appendCloudBoxFaceRect(std::vector<CloudVertex>& vertices,
-                            const int x,
-                            const int y,
-                            const int width,
-                            const int height,
-                            const float originX,
-                            const float originZ,
-                            const float cellWorldSize,
-                            const float y0,
-                            const float y1,
-                            const int face,
-                            const float shade) {
+void appendCloudBoxFaceRect(std::vector<CloudVertex>& vertices, const int x, const int y, const int width,
+                            const int height, const float originX, const float originZ, const float cellWorldSize,
+                            const float y0, const float y1, const int face, const float shade) {
     const float x0 = originX + static_cast<float>(x) * cellWorldSize;
     const float x1 = originX + static_cast<float>(x + width) * cellWorldSize;
     const float z0 = originZ + static_cast<float>(y) * cellWorldSize;
     const float z1 = originZ + static_cast<float>(y + height) * cellWorldSize;
 
     switch (face) {
-        case 0:
-            appendCloudQuad(vertices, {x0, y1, z1}, {x1, y1, z1}, {x1, y1, z0}, {x0, y1, z0}, shade);
-            break;
-        case 1:
-            appendCloudQuad(vertices, {x0, y0, z0}, {x1, y0, z0}, {x1, y0, z1}, {x0, y0, z1}, shade);
-            break;
-        case 2:
-            appendCloudQuad(vertices, {x0, y0, z1}, {x0, y1, z1}, {x0, y1, z0}, {x0, y0, z0}, shade);
-            break;
-        case 3:
-            appendCloudQuad(vertices, {x1, y0, z0}, {x1, y1, z0}, {x1, y1, z1}, {x1, y0, z1}, shade);
-            break;
-        case 4:
-            appendCloudQuad(vertices, {x0, y0, z0}, {x0, y1, z0}, {x1, y1, z0}, {x1, y0, z0}, shade);
-            break;
-        case 5:
-            appendCloudQuad(vertices, {x1, y0, z1}, {x1, y1, z1}, {x0, y1, z1}, {x0, y0, z1}, shade);
-            break;
-        default:
-            break;
+    case 0: appendCloudQuad(vertices, {x0, y1, z1}, {x1, y1, z1}, {x1, y1, z0}, {x0, y1, z0}, shade); break;
+    case 1: appendCloudQuad(vertices, {x0, y0, z0}, {x1, y0, z0}, {x1, y0, z1}, {x0, y0, z1}, shade); break;
+    case 2: appendCloudQuad(vertices, {x0, y0, z1}, {x0, y1, z1}, {x0, y1, z0}, {x0, y0, z0}, shade); break;
+    case 3: appendCloudQuad(vertices, {x1, y0, z0}, {x1, y1, z0}, {x1, y1, z1}, {x1, y0, z1}, shade); break;
+    case 4: appendCloudQuad(vertices, {x0, y0, z0}, {x0, y1, z0}, {x1, y1, z0}, {x1, y0, z0}, shade); break;
+    case 5: appendCloudQuad(vertices, {x1, y0, z1}, {x1, y1, z1}, {x0, y1, z1}, {x0, y0, z1}, shade); break;
+    default: break;
     }
 }
 
-void appendGreedySurface(std::vector<CloudVertex>& vertices,
-                         const std::vector<uint8_t>& surface,
-                         const int width,
-                         const int height,
-                         const float originX,
-                         const float originZ,
-                         const float cellWorldSize,
-                         const float y0,
-                         const float y1,
-                         const int face,
-                         const float shade) {
+void appendGreedySurface(std::vector<CloudVertex>& vertices, const std::vector<uint8_t>& surface, const int width,
+                         const int height, const float originX, const float originZ, const float cellWorldSize,
+                         const float y0, const float y1, const int face, const float shade) {
     std::vector<uint8_t> used(surface.size(), 0);
 
     for (int y = 0; y < height; ++y) {
@@ -188,12 +156,12 @@ void appendGreedySurface(std::vector<CloudVertex>& vertices,
                 }
             }
 
-            appendCloudBoxFaceRect(vertices, x, y, rectWidth, rectHeight,
-                                   originX, originZ, cellWorldSize, y0, y1, face, shade);
+            appendCloudBoxFaceRect(vertices, x, y, rectWidth, rectHeight, originX, originZ, cellWorldSize, y0, y1, face,
+                                   shade);
         }
     }
 }
-}
+} // namespace
 
 void GameplaySkyRenderer::init(ResourceMgr& resourceMgr, RhiDevice& rhiDevice) {
     m_resourceMgr = &resourceMgr;
@@ -201,8 +169,7 @@ void GameplaySkyRenderer::init(ResourceMgr& resourceMgr, RhiDevice& rhiDevice) {
     RhiBufferDesc captureBufferDesc;
     captureBufferDesc.debugName = "GameplaySky.Capture.UniformBuffer";
     captureBufferDesc.size = sizeof(CaptureUniforms);
-    captureBufferDesc.usage = rhiFlag(RhiBufferUsage::Uniform) |
-                              rhiFlag(RhiBufferUsage::TransferDst);
+    captureBufferDesc.usage = rhiFlag(RhiBufferUsage::Uniform) | rhiFlag(RhiBufferUsage::TransferDst);
     captureBufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
     captureBufferDesc.initialState = RhiResourceState::UniformBuffer;
     captureBufferDesc.memoryCategory = RhiMemoryCategory::Uniform;
@@ -214,21 +181,18 @@ void GameplaySkyRenderer::init(ResourceMgr& resourceMgr, RhiDevice& rhiDevice) {
     m_captureSampler = rhiDevice.createSampler(captureSamplerDesc);
     RhiBindGroupLayoutDesc captureLayoutDesc;
     captureLayoutDesc.debugName = "GameplaySky.Capture.BindGroupLayout";
-    captureLayoutDesc.entries = {
-        {0u, RhiBindingType::UniformBuffer, rhiFlag(RhiShaderStage::Fragment), 1u},
-        {1u, RhiBindingType::CombinedTextureSampler, rhiFlag(RhiShaderStage::Fragment), 1u},
-        {2u, RhiBindingType::CombinedTextureSampler, rhiFlag(RhiShaderStage::Fragment), 1u}
-    };
+    captureLayoutDesc.entries = {{0u, RhiBindingType::UniformBuffer, rhiFlag(RhiShaderStage::Fragment), 1u},
+                                 {1u, RhiBindingType::CombinedTextureSampler, rhiFlag(RhiShaderStage::Fragment), 1u},
+                                 {2u, RhiBindingType::CombinedTextureSampler, rhiFlag(RhiShaderStage::Fragment), 1u}};
     m_captureBindGroupLayout = rhiDevice.createBindGroupLayout(captureLayoutDesc);
     RhiPipelineLayoutDesc capturePipelineLayoutDesc;
     capturePipelineLayoutDesc.debugName = "GameplaySky.Capture.PipelineLayout";
     capturePipelineLayoutDesc.bindGroupLayouts.push_back(m_captureBindGroupLayout);
     m_capturePipelineLayout = rhiDevice.createPipelineLayout(capturePipelineLayoutDesc);
-    const auto captureVertexSource = renderer::rhi::loadShaderSource(
-        "assets/shaders/gameplay_sky_capture_rhi.vert");
-    const auto captureFragmentSource = renderer::rhi::loadShaderSource(
-        "assets/shaders/gameplay_sky_capture_rhi.frag");
-    if (!captureVertexSource || !captureFragmentSource) std::abort();
+    const auto captureVertexSource = renderer::rhi::loadShaderSource("assets/shaders/gameplay_sky_capture_rhi.vert");
+    const auto captureFragmentSource = renderer::rhi::loadShaderSource("assets/shaders/gameplay_sky_capture_rhi.frag");
+    if (!captureVertexSource || !captureFragmentSource)
+        std::abort();
     RhiShaderDesc captureShaderDesc;
     captureShaderDesc.debugName = "GameplaySky.Capture.Vertex";
     captureShaderDesc.stage = RhiShaderStage::Vertex;
@@ -251,11 +215,10 @@ void GameplaySkyRenderer::init(ResourceMgr& resourceMgr, RhiDevice& rhiDevice) {
     capturePipelineDesc.colorFormats = {RhiTextureFormat::Rgba16Float};
     capturePipelineDesc.blend.attachments.resize(1u);
     m_capturePipeline = rhiDevice.createGraphicsPipeline(capturePipelineDesc);
-    const auto visibleVertexSource = renderer::rhi::loadShaderSource(
-        "assets/shaders/gameplay_sky_visible_rhi.vert");
-    const auto visibleFragmentSource = renderer::rhi::loadShaderSource(
-        "assets/shaders/gameplay_sky_visible_rhi.frag");
-    if (!visibleVertexSource || !visibleFragmentSource) std::abort();
+    const auto visibleVertexSource = renderer::rhi::loadShaderSource("assets/shaders/gameplay_sky_visible_rhi.vert");
+    const auto visibleFragmentSource = renderer::rhi::loadShaderSource("assets/shaders/gameplay_sky_visible_rhi.frag");
+    if (!visibleVertexSource || !visibleFragmentSource)
+        std::abort();
     RhiShaderDesc visibleShaderDesc;
     visibleShaderDesc.debugName = "GameplaySky.Visible.Vertex";
     visibleShaderDesc.stage = RhiShaderStage::Vertex;
@@ -270,8 +233,7 @@ void GameplaySkyRenderer::init(ResourceMgr& resourceMgr, RhiDevice& rhiDevice) {
     RhiPipelineLayoutDesc visibleLayoutDesc;
     visibleLayoutDesc.debugName = "GameplaySky.Visible.PipelineLayout";
     visibleLayoutDesc.pushConstantBytes = sizeof(glm::mat4) * 2u + sizeof(glm::vec4) * 6u;
-    visibleLayoutDesc.pushConstantStages = rhiFlag(RhiShaderStage::Vertex) |
-                                           rhiFlag(RhiShaderStage::Fragment);
+    visibleLayoutDesc.pushConstantStages = rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment);
     m_visiblePipelineLayout = rhiDevice.createPipelineLayout(visibleLayoutDesc);
     RhiGraphicsPipelineDesc visiblePipelineDesc;
     visiblePipelineDesc.debugName = "GameplaySky.Visible.Pipeline";
@@ -285,11 +247,10 @@ void GameplaySkyRenderer::init(ResourceMgr& resourceMgr, RhiDevice& rhiDevice) {
     visiblePipelineDesc.depthFormat = RhiTextureFormat::Depth32Float;
     visiblePipelineDesc.blend.attachments.resize(1u);
     m_visiblePipeline = rhiDevice.createGraphicsPipeline(visiblePipelineDesc);
-    const auto haloVertexSource = renderer::rhi::loadShaderSource(
-        "assets/shaders/gameplay_sky_halo_rhi.vert");
-    const auto haloFragmentSource = renderer::rhi::loadShaderSource(
-        "assets/shaders/gameplay_sky_halo_rhi.frag");
-    if (!haloVertexSource || !haloFragmentSource) std::abort();
+    const auto haloVertexSource = renderer::rhi::loadShaderSource("assets/shaders/gameplay_sky_halo_rhi.vert");
+    const auto haloFragmentSource = renderer::rhi::loadShaderSource("assets/shaders/gameplay_sky_halo_rhi.frag");
+    if (!haloVertexSource || !haloFragmentSource)
+        std::abort();
     RhiShaderDesc haloShaderDesc;
     haloShaderDesc.debugName = "GameplaySky.Halo.Vertex";
     haloShaderDesc.stage = RhiShaderStage::Vertex;
@@ -304,22 +265,17 @@ void GameplaySkyRenderer::init(ResourceMgr& resourceMgr, RhiDevice& rhiDevice) {
     RhiPipelineLayoutDesc haloLayoutDesc;
     haloLayoutDesc.debugName = "GameplaySky.Halo.PipelineLayout";
     haloLayoutDesc.pushConstantBytes = sizeof(glm::mat4) * 2u + sizeof(glm::vec4);
-    haloLayoutDesc.pushConstantStages = rhiFlag(RhiShaderStage::Vertex) |
-                                        rhiFlag(RhiShaderStage::Fragment);
+    haloLayoutDesc.pushConstantStages = rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment);
     m_haloPipelineLayout = rhiDevice.createPipelineLayout(haloLayoutDesc);
     RhiGraphicsPipelineDesc haloPipelineDesc;
     haloPipelineDesc.debugName = "GameplaySky.Halo.Pipeline";
     haloPipelineDesc.vertexShader = m_haloVertexShader;
     haloPipelineDesc.fragmentShader = m_haloFragmentShader;
     haloPipelineDesc.layout = m_haloPipelineLayout;
-    haloPipelineDesc.vertexInput.bindings = {
-        {0u, sizeof(HaloVertex), RhiVertexInputRate::Vertex}
-    };
-    haloPipelineDesc.vertexInput.attributes = {
-        {0u, 0u, RhiVertexFormat::Float3, offsetof(HaloVertex, position)},
-        {1u, 0u, RhiVertexFormat::Float2, offsetof(HaloVertex, uv)},
-        {2u, 0u, RhiVertexFormat::Float4, offsetof(HaloVertex, color)}
-    };
+    haloPipelineDesc.vertexInput.bindings = {{0u, sizeof(HaloVertex), RhiVertexInputRate::Vertex}};
+    haloPipelineDesc.vertexInput.attributes = {{0u, 0u, RhiVertexFormat::Float3, offsetof(HaloVertex, position)},
+                                               {1u, 0u, RhiVertexFormat::Float2, offsetof(HaloVertex, uv)},
+                                               {2u, 0u, RhiVertexFormat::Float4, offsetof(HaloVertex, color)}};
     haloPipelineDesc.raster.cullMode = RhiCullMode::None;
     haloPipelineDesc.depthStencil.depthTestEnabled = false;
     haloPipelineDesc.depthStencil.depthWriteEnabled = false;
@@ -333,11 +289,10 @@ void GameplaySkyRenderer::init(ResourceMgr& resourceMgr, RhiDevice& rhiDevice) {
     haloBlend.dstAlpha = RhiBlendFactor::OneMinusSrcAlpha;
     haloPipelineDesc.blend.attachments.push_back(haloBlend);
     m_haloPipeline = rhiDevice.createGraphicsPipeline(haloPipelineDesc);
-    const auto cloudVertexSource = renderer::rhi::loadShaderSource(
-        "assets/shaders/gameplay_sky_cloud_rhi.vert");
-    const auto cloudFragmentSource = renderer::rhi::loadShaderSource(
-        "assets/shaders/gameplay_sky_cloud_rhi.frag");
-    if (!cloudVertexSource || !cloudFragmentSource) std::abort();
+    const auto cloudVertexSource = renderer::rhi::loadShaderSource("assets/shaders/gameplay_sky_cloud_rhi.vert");
+    const auto cloudFragmentSource = renderer::rhi::loadShaderSource("assets/shaders/gameplay_sky_cloud_rhi.frag");
+    if (!cloudVertexSource || !cloudFragmentSource)
+        std::abort();
     RhiShaderDesc cloudShaderDesc;
     cloudShaderDesc.debugName = "GameplaySky.Cloud.Vertex";
     cloudShaderDesc.stage = RhiShaderStage::Vertex;
@@ -352,21 +307,16 @@ void GameplaySkyRenderer::init(ResourceMgr& resourceMgr, RhiDevice& rhiDevice) {
     RhiPipelineLayoutDesc cloudLayoutDesc;
     cloudLayoutDesc.debugName = "GameplaySky.Cloud.PipelineLayout";
     cloudLayoutDesc.pushConstantBytes = sizeof(glm::mat4) * 2u + sizeof(glm::vec4);
-    cloudLayoutDesc.pushConstantStages = rhiFlag(RhiShaderStage::Vertex) |
-                                         rhiFlag(RhiShaderStage::Fragment);
+    cloudLayoutDesc.pushConstantStages = rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment);
     m_cloudPipelineLayout = rhiDevice.createPipelineLayout(cloudLayoutDesc);
     RhiGraphicsPipelineDesc cloudPipelineDesc;
     cloudPipelineDesc.debugName = "GameplaySky.Cloud.Pipeline";
     cloudPipelineDesc.vertexShader = m_cloudVertexShader;
     cloudPipelineDesc.fragmentShader = m_cloudFragmentShader;
     cloudPipelineDesc.layout = m_cloudPipelineLayout;
-    cloudPipelineDesc.vertexInput.bindings = {
-        {0u, sizeof(CloudVertex), RhiVertexInputRate::Vertex}
-    };
-    cloudPipelineDesc.vertexInput.attributes = {
-        {0u, 0u, RhiVertexFormat::Float3, offsetof(CloudVertex, position)},
-        {1u, 0u, RhiVertexFormat::Float, offsetof(CloudVertex, shade)}
-    };
+    cloudPipelineDesc.vertexInput.bindings = {{0u, sizeof(CloudVertex), RhiVertexInputRate::Vertex}};
+    cloudPipelineDesc.vertexInput.attributes = {{0u, 0u, RhiVertexFormat::Float3, offsetof(CloudVertex, position)},
+                                                {1u, 0u, RhiVertexFormat::Float, offsetof(CloudVertex, shade)}};
     cloudPipelineDesc.depthStencil.depthTestEnabled = true;
     cloudPipelineDesc.depthStencil.depthWriteEnabled = true;
     cloudPipelineDesc.depthStencil.depthCompare = RhiCompareOp::Less;
@@ -374,39 +324,54 @@ void GameplaySkyRenderer::init(ResourceMgr& resourceMgr, RhiDevice& rhiDevice) {
     cloudPipelineDesc.depthFormat = RhiTextureFormat::Depth32Float;
     cloudPipelineDesc.blend.attachments.resize(1u);
     m_cloudPipeline = rhiDevice.createGraphicsPipeline(cloudPipelineDesc);
-    if (!m_captureUniformBuffer.isValid() || !m_captureSampler.isValid() ||
-        !m_captureBindGroupLayout.isValid() || !m_capturePipelineLayout.isValid() ||
-        !m_captureVertexShader.isValid() || !m_captureFragmentShader.isValid() ||
-        !m_capturePipeline.isValid() || !m_visibleVertexShader.isValid() ||
-        !m_visibleFragmentShader.isValid() || !m_visiblePipelineLayout.isValid() ||
-        !m_visiblePipeline.isValid() || !m_haloVertexShader.isValid() ||
-        !m_haloFragmentShader.isValid() || !m_haloPipelineLayout.isValid() ||
-        !m_haloPipeline.isValid() || !m_cloudVertexShader.isValid() ||
-        !m_cloudFragmentShader.isValid() || !m_cloudPipelineLayout.isValid() ||
-        !m_cloudPipeline.isValid()) std::abort();
+    if (!m_captureUniformBuffer.isValid() || !m_captureSampler.isValid() || !m_captureBindGroupLayout.isValid() ||
+        !m_capturePipelineLayout.isValid() || !m_captureVertexShader.isValid() || !m_captureFragmentShader.isValid() ||
+        !m_capturePipeline.isValid() || !m_visibleVertexShader.isValid() || !m_visibleFragmentShader.isValid() ||
+        !m_visiblePipelineLayout.isValid() || !m_visiblePipeline.isValid() || !m_haloVertexShader.isValid() ||
+        !m_haloFragmentShader.isValid() || !m_haloPipelineLayout.isValid() || !m_haloPipeline.isValid() ||
+        !m_cloudVertexShader.isValid() || !m_cloudFragmentShader.isValid() || !m_cloudPipelineLayout.isValid() ||
+        !m_cloudPipeline.isValid())
+        std::abort();
     initMeshes();
     initCloudMesh();
 }
 
 void GameplaySkyRenderer::shutdown() {
     destroyMeshes();
-    if (m_captureBindGroup.isValid()) m_rhiDevice->destroyBindGroup(m_captureBindGroup);
-    if (m_captureNoiseView.isValid()) m_rhiDevice->destroyTextureView(m_captureNoiseView);
-    if (m_capturePipeline.isValid()) m_rhiDevice->destroyPipeline(m_capturePipeline);
-    if (m_visiblePipeline.isValid()) m_rhiDevice->destroyPipeline(m_visiblePipeline);
-    if (m_haloPipeline.isValid()) m_rhiDevice->destroyPipeline(m_haloPipeline);
-    if (m_cloudPipeline.isValid()) m_rhiDevice->destroyPipeline(m_cloudPipeline);
-    if (m_cloudPipelineLayout.isValid()) m_rhiDevice->destroyPipelineLayout(m_cloudPipelineLayout);
-    if (m_cloudFragmentShader.isValid()) m_rhiDevice->destroyShader(m_cloudFragmentShader);
-    if (m_cloudVertexShader.isValid()) m_rhiDevice->destroyShader(m_cloudVertexShader);
-    if (m_haloPipelineLayout.isValid()) m_rhiDevice->destroyPipelineLayout(m_haloPipelineLayout);
-    if (m_haloFragmentShader.isValid()) m_rhiDevice->destroyShader(m_haloFragmentShader);
-    if (m_haloVertexShader.isValid()) m_rhiDevice->destroyShader(m_haloVertexShader);
-    if (m_visiblePipelineLayout.isValid()) m_rhiDevice->destroyPipelineLayout(m_visiblePipelineLayout);
-    if (m_visibleFragmentShader.isValid()) m_rhiDevice->destroyShader(m_visibleFragmentShader);
-    if (m_visibleVertexShader.isValid()) m_rhiDevice->destroyShader(m_visibleVertexShader);
-    if (m_captureFragmentShader.isValid()) m_rhiDevice->destroyShader(m_captureFragmentShader);
-    if (m_captureVertexShader.isValid()) m_rhiDevice->destroyShader(m_captureVertexShader);
+    if (m_captureBindGroup.isValid())
+        m_rhiDevice->destroyBindGroup(m_captureBindGroup);
+    if (m_captureNoiseView.isValid())
+        m_rhiDevice->destroyTextureView(m_captureNoiseView);
+    if (m_capturePipeline.isValid())
+        m_rhiDevice->destroyPipeline(m_capturePipeline);
+    if (m_visiblePipeline.isValid())
+        m_rhiDevice->destroyPipeline(m_visiblePipeline);
+    if (m_haloPipeline.isValid())
+        m_rhiDevice->destroyPipeline(m_haloPipeline);
+    if (m_cloudPipeline.isValid())
+        m_rhiDevice->destroyPipeline(m_cloudPipeline);
+    if (m_cloudPipelineLayout.isValid())
+        m_rhiDevice->destroyPipelineLayout(m_cloudPipelineLayout);
+    if (m_cloudFragmentShader.isValid())
+        m_rhiDevice->destroyShader(m_cloudFragmentShader);
+    if (m_cloudVertexShader.isValid())
+        m_rhiDevice->destroyShader(m_cloudVertexShader);
+    if (m_haloPipelineLayout.isValid())
+        m_rhiDevice->destroyPipelineLayout(m_haloPipelineLayout);
+    if (m_haloFragmentShader.isValid())
+        m_rhiDevice->destroyShader(m_haloFragmentShader);
+    if (m_haloVertexShader.isValid())
+        m_rhiDevice->destroyShader(m_haloVertexShader);
+    if (m_visiblePipelineLayout.isValid())
+        m_rhiDevice->destroyPipelineLayout(m_visiblePipelineLayout);
+    if (m_visibleFragmentShader.isValid())
+        m_rhiDevice->destroyShader(m_visibleFragmentShader);
+    if (m_visibleVertexShader.isValid())
+        m_rhiDevice->destroyShader(m_visibleVertexShader);
+    if (m_captureFragmentShader.isValid())
+        m_rhiDevice->destroyShader(m_captureFragmentShader);
+    if (m_captureVertexShader.isValid())
+        m_rhiDevice->destroyShader(m_captureVertexShader);
     if (m_captureUniformBuffer.isValid()) {
         m_rhiDevice->destroyBuffer(m_captureUniformBuffer);
         m_captureUniformBuffer = {};
@@ -414,8 +379,10 @@ void GameplaySkyRenderer::shutdown() {
     if (m_capturePipelineLayout.isValid()) {
         m_rhiDevice->destroyPipelineLayout(m_capturePipelineLayout);
     }
-    if (m_captureBindGroupLayout.isValid()) m_rhiDevice->destroyBindGroupLayout(m_captureBindGroupLayout);
-    if (m_captureSampler.isValid()) m_rhiDevice->destroySampler(m_captureSampler);
+    if (m_captureBindGroupLayout.isValid())
+        m_rhiDevice->destroyBindGroupLayout(m_captureBindGroupLayout);
+    if (m_captureSampler.isValid())
+        m_rhiDevice->destroySampler(m_captureSampler);
     m_captureBindGroup = {};
     m_capturePipeline = {};
     m_visiblePipeline = {};
@@ -442,18 +409,15 @@ void GameplaySkyRenderer::shutdown() {
     m_rhiDevice = nullptr;
 }
 
-void GameplaySkyRenderer::synchronizeCaptureResources(
-    const RhiTextureViewHandle atmosphereLutView,
-    const RhiTextureHandle noiseTexture) {
+void GameplaySkyRenderer::synchronizeCaptureResources(const RhiTextureViewHandle atmosphereLutView,
+                                                      const RhiTextureHandle noiseTexture) {
     if (!atmosphereLutView.isValid() || !noiseTexture.isValid()) {
         std::abort();
     }
-    const bool atmosphereUnchanged =
-        m_captureAtmosphereLutView.index == atmosphereLutView.index &&
-        m_captureAtmosphereLutView.generation == atmosphereLutView.generation;
-    const bool noiseUnchanged =
-        m_captureNoiseTexture.index == noiseTexture.index &&
-        m_captureNoiseTexture.generation == noiseTexture.generation;
+    const bool atmosphereUnchanged = m_captureAtmosphereLutView.index == atmosphereLutView.index &&
+                                     m_captureAtmosphereLutView.generation == atmosphereLutView.generation;
+    const bool noiseUnchanged = m_captureNoiseTexture.index == noiseTexture.index &&
+                                m_captureNoiseTexture.generation == noiseTexture.generation;
     if (atmosphereUnchanged && noiseUnchanged && m_captureBindGroup.isValid()) {
         return;
     }
@@ -489,13 +453,13 @@ void GameplaySkyRenderer::synchronizeCaptureResources(
     noiseEntry.resource.combinedTextureSampler = {m_captureNoiseView, m_captureSampler};
     bindGroupDesc.entries.push_back(noiseEntry);
     m_captureBindGroup = m_rhiDevice->createBindGroup(bindGroupDesc);
-    if (!m_captureBindGroup.isValid()) std::abort();
+    if (!m_captureBindGroup.isValid())
+        std::abort();
     m_captureAtmosphereLutView = atmosphereLutView;
     m_captureNoiseTexture = noiseTexture;
 }
 
-void GameplaySkyRenderer::render(const Camera& camera, const float aspect,
-                                 const DayNightSystem& dayNight,
+void GameplaySkyRenderer::render(const Camera& camera, const float aspect, const DayNightSystem& dayNight,
                                  RhiCommandList& commandList) {
     m_lastColors = computeSkyColors(dayNight);
     struct PushConstants {
@@ -508,35 +472,27 @@ void GameplaySkyRenderer::render(const Camera& camera, const float aspect,
         glm::vec4 sunScatterNight;
         glm::vec4 moonLightPhase;
     };
-    const PushConstants constants{
-        glm::perspective(glm::radians(camera.getFOV()), aspect, 0.1f, 100.0f),
-        buildSkyView(camera),
-        {m_lastColors.top, m_lastColors.horizonHaze},
-        {m_lastColors.horizon, m_lastColors.sunGlare},
-        {m_lastColors.sunDirection, m_lastColors.sunVisibility},
-        {m_lastColors.moonDirection, m_lastColors.moonVisibility},
-        {m_lastColors.sunScatter, m_lastColors.nightFactor},
-        {m_lastColors.moonLightColor, m_lastColors.moonPhaseAngle}
-    };
+    const PushConstants constants{glm::perspective(glm::radians(camera.getFOV()), aspect, 0.1f, 100.0f),
+                                  buildSkyView(camera),
+                                  {m_lastColors.top, m_lastColors.horizonHaze},
+                                  {m_lastColors.horizon, m_lastColors.sunGlare},
+                                  {m_lastColors.sunDirection, m_lastColors.sunVisibility},
+                                  {m_lastColors.moonDirection, m_lastColors.moonVisibility},
+                                  {m_lastColors.sunScatter, m_lastColors.nightFactor},
+                                  {m_lastColors.moonLightColor, m_lastColors.moonPhaseAngle}};
     commandList.setGraphicsPipeline(m_visiblePipeline);
     commandList.pushConstants(&constants, sizeof(constants),
-        rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment));
+                              rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment));
     commandList.draw(3u, 1u, 0u, 0u);
     renderHalo(camera, aspect, dayNight, m_lastColors, commandList);
     renderClouds(camera, aspect, dayNight, m_lastColors, commandList);
 }
 
-void GameplaySkyRenderer::renderCloudySkyCapture(const SkyColors& colors,
-                                                  RhiCommandList& commandList,
-                                                  const RhiTextureViewHandle targetView,
-                                                  const int skyCaptureWidth,
-                                                  const int skyCaptureHeight,
-                                                  const RhiTextureViewHandle atmosphereLutView,
-                                                  const RhiTextureHandle noiseTexture,
-                                                  const SkyIlluminanceData& illuminance,
-                                                  const CloudySkyCaptureParams& params) {
-    if (!targetView.isValid() ||
-        !atmosphereLutView.isValid() || skyCaptureWidth <= 0 || skyCaptureHeight <= 258) {
+void GameplaySkyRenderer::renderCloudySkyCapture(
+    const SkyColors& colors, RhiCommandList& commandList, const RhiTextureViewHandle targetView,
+    const int skyCaptureWidth, const int skyCaptureHeight, const RhiTextureViewHandle atmosphereLutView,
+    const RhiTextureHandle noiseTexture, const SkyIlluminanceData& illuminance, const CloudySkyCaptureParams& params) {
+    if (!targetView.isValid() || !atmosphereLutView.isValid() || skyCaptureWidth <= 0 || skyCaptureHeight <= 258) {
         return;
     }
     synchronizeCaptureResources(atmosphereLutView, noiseTexture);
@@ -553,22 +509,15 @@ void GameplaySkyRenderer::renderCloudySkyCapture(const SkyColors& colors,
         {illuminance.sunIlluminance, params.cloudTimeScale},
         {illuminance.moonIlluminance, params.cloudCoverage},
         {illuminance.cloudDynamicWeather, params.cloudDensity},
-        {params.cloudHeight, params.cloudThickness,
-         params.planarCloudCoverage, params.planarCloudDensity},
+        {params.cloudHeight, params.cloudThickness, params.planarCloudCoverage, params.planarCloudDensity},
         {params.planarCloudAltitude, params.precipitation, 0.0f, 0.0f},
-        {params.weatherWetness, params.weatherStorm,
-         params.skyWetness, params.fogWetness},
+        {params.weatherWetness, params.weatherStorm, params.skyWetness, params.fogWetness},
         {params.cloudWetness, params.surfaceWetness, params.precipitation, 0.0f},
-        {params.cloudCoverage, params.cloudDensity,
-         params.cloudTimeScale, params.shaderTime},
-        {params.cameraPosition, 0.0f}
-    };
-    commandList.bufferBarrier({m_captureUniformBuffer, RhiResourceState::UniformBuffer,
-                               RhiResourceState::TransferDst});
-    commandList.updateBuffer(m_captureUniformBuffer, 0u,
-                             &captureUniforms, sizeof(captureUniforms));
-    commandList.bufferBarrier({m_captureUniformBuffer, RhiResourceState::TransferDst,
-                               RhiResourceState::UniformBuffer});
+        {params.cloudCoverage, params.cloudDensity, params.cloudTimeScale, params.shaderTime},
+        {params.cameraPosition, 0.0f}};
+    commandList.bufferBarrier({m_captureUniformBuffer, RhiResourceState::UniformBuffer, RhiResourceState::TransferDst});
+    commandList.updateBuffer(m_captureUniformBuffer, 0u, &captureUniforms, sizeof(captureUniforms));
+    commandList.bufferBarrier({m_captureUniformBuffer, RhiResourceState::TransferDst, RhiResourceState::UniformBuffer});
 
     RhiColorAttachment colorAttachment;
     colorAttachment.view = targetView;
@@ -578,18 +527,12 @@ void GameplaySkyRenderer::renderCloudySkyCapture(const SkyColors& colors,
     // Cloudy sky: rows 258..513 (256 rows). Matches DerivativeMain Deferred0.glsl cloudy sky region.
     RhiRenderingInfo renderingInfo;
     renderingInfo.debugName = "SkyCapture.Cloudy";
-    renderingInfo.renderArea = {
-        0,
-        258,
-        static_cast<uint32_t>(std::max(1, skyCaptureWidth)),
-        256u
-    };
+    renderingInfo.renderArea = {0, 258, static_cast<uint32_t>(std::max(1, skyCaptureWidth)), 256u};
     renderingInfo.colorAttachments = &colorAttachment;
     renderingInfo.colorAttachmentCount = 1u;
 
     commandList.beginRendering(renderingInfo);
-    commandList.setViewport({0.0f, 258.0f, static_cast<float>(skyCaptureWidth),
-                             256.0f, 0.0f, 1.0f});
+    commandList.setViewport({0.0f, 258.0f, static_cast<float>(skyCaptureWidth), 256.0f, 0.0f, 1.0f});
     commandList.setScissor({0, 258, static_cast<uint32_t>(skyCaptureWidth), 256u});
     commandList.setGraphicsPipeline(m_capturePipeline);
     commandList.setBindGroup(0u, m_captureBindGroup);
@@ -709,15 +652,19 @@ glm::vec3 GameplaySkyRenderer::computeCloudDynamicWeather(const int worldDay, co
     // Replicates DerivativeMain deferred.vsh cloudDynamicWeather computation.
     // Uses triple32 hash + per-day random weather maps interpolated over the day cycle.
     auto triple32 = [](uint32_t x) -> uint32_t {
-        x ^= x >> 17; x *= 0xed5ad4bbu;
-        x ^= x >> 11; x *= 0xac4c1b51u;
-        x ^= x >> 15; x *= 0x31848babu;
+        x ^= x >> 17;
+        x *= 0xed5ad4bbu;
+        x ^= x >> 11;
+        x *= 0xac4c1b51u;
+        x ^= x >> 15;
+        x *= 0x31848babu;
         x ^= x >> 14;
         return x;
     };
     auto hash1 = [](float p) -> float {
         p = std::fmod(p, 1.0f);
-        if (p < 0.0f) p += 1.0f;
+        if (p < 0.0f)
+            p += 1.0f;
         p = p * p * (3.0f - 2.0f * p); // fract approximation not needed, just use p
         // Exact GLSL: p = fract(p * 0.1031); p *= p + 33.33; p *= p + p; return fract(p);
         float v = p * 0.1031f;
@@ -753,10 +700,10 @@ glm::vec3 GameplaySkyRenderer::computeCloudDynamicWeather(const int worldDay, co
     weatherMap.y = w0.y + (w1.y - w0.y) * curveTY;
 
     glm::vec3 result;
-    result.x = curve(remap(0.25f, 0.4f, weatherMap.x)) * 0.5f;           // cirrocumulus
+    result.x = curve(remap(0.25f, 0.4f, weatherMap.x)) * 0.5f; // cirrocumulus
     result.y = (1.0f - remap(0.65f, 0.8f, weatherMap.y));
-    result.y = result.y * result.y * 0.5f;                                 // cirrus
-    result.z = remap(0.4f, 0.55f, weatherMap.x * 2.0f - weatherMap.y);    // storm
+    result.y = result.y * result.y * 0.5f; // cirrus
+    result.z = remap(0.4f, 0.55f, weatherMap.x * 2.0f - weatherMap.y); // storm
     result.z *= 2.0f - result.z;
 
     return result;
@@ -777,22 +724,20 @@ std::pair<glm::vec2, glm::vec2> GameplaySkyRenderer::getMoonPhaseUv(const int ph
 void GameplaySkyRenderer::initMeshes() {
     if (!m_skyVertexBuffer.isValid()) {
         constexpr std::array<float, 18> skyVertices = {
-            -1.0f, -1.0f, 0.0f, 0.0f, 0.0f, 1.0f,
-             3.0f, -1.0f, 0.0f, 2.0f, 0.0f, 1.0f,
-            -1.0f,  3.0f, 0.0f, 0.0f, 2.0f, 1.0f,
+            -1.0f, -1.0f, 0.0f, 0.0f,  0.0f, 1.0f, 3.0f, -1.0f, 0.0f,
+            2.0f,  0.0f,  1.0f, -1.0f, 3.0f, 0.0f, 0.0f, 2.0f,  1.0f,
         };
 
         RhiBufferDesc bufferDesc;
         bufferDesc.debugName = "GameplaySky.Gradient.VertexBuffer";
         bufferDesc.size = skyVertices.size() * sizeof(float);
-        bufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex) |
-                           rhiFlag(RhiBufferUsage::TransferDst);
+        bufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex) | rhiFlag(RhiBufferUsage::TransferDst);
         bufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
         bufferDesc.initialState = RhiResourceState::VertexBuffer;
         bufferDesc.memoryCategory = RhiMemoryCategory::Geometry;
-        m_skyVertexBuffer = m_rhiDevice->createBuffer(
-            bufferDesc, skyVertices.data(), bufferDesc.size);
-        if (!m_skyVertexBuffer.isValid()) std::abort();
+        m_skyVertexBuffer = m_rhiDevice->createBuffer(bufferDesc, skyVertices.data(), bufferDesc.size);
+        if (!m_skyVertexBuffer.isValid())
+            std::abort();
     }
 
     if (!m_haloVertexBuffer.isValid()) {
@@ -813,24 +758,25 @@ void GameplaySkyRenderer::initMeshes() {
         RhiBufferDesc bufferDesc;
         bufferDesc.debugName = "GameplaySky.Halo.VertexBuffer";
         bufferDesc.size = haloVertices.size() * sizeof(HaloVertex);
-        bufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex) |
-                           rhiFlag(RhiBufferUsage::TransferDst);
+        bufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex) | rhiFlag(RhiBufferUsage::TransferDst);
         bufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
         bufferDesc.initialState = RhiResourceState::VertexBuffer;
         bufferDesc.memoryCategory = RhiMemoryCategory::Geometry;
-        m_haloVertexBuffer = m_rhiDevice->createBuffer(
-            bufferDesc, haloVertices.data(), bufferDesc.size);
-        if (!m_haloVertexBuffer.isValid()) std::abort();
+        m_haloVertexBuffer = m_rhiDevice->createBuffer(bufferDesc, haloVertices.data(), bufferDesc.size);
+        if (!m_haloVertexBuffer.isValid())
+            std::abort();
         m_haloVertexCount = static_cast<int32_t>(haloVertices.size());
     }
-
 }
 
 void GameplaySkyRenderer::destroyMeshes() {
     if (m_rhiDevice != nullptr) {
-        if (m_cloudVertexBuffer.isValid()) m_rhiDevice->destroyBuffer(m_cloudVertexBuffer);
-        if (m_haloVertexBuffer.isValid()) m_rhiDevice->destroyBuffer(m_haloVertexBuffer);
-        if (m_skyVertexBuffer.isValid()) m_rhiDevice->destroyBuffer(m_skyVertexBuffer);
+        if (m_cloudVertexBuffer.isValid())
+            m_rhiDevice->destroyBuffer(m_cloudVertexBuffer);
+        if (m_haloVertexBuffer.isValid())
+            m_rhiDevice->destroyBuffer(m_haloVertexBuffer);
+        if (m_skyVertexBuffer.isValid())
+            m_rhiDevice->destroyBuffer(m_skyVertexBuffer);
     }
     m_cloudVertexBuffer = {};
     m_haloVertexBuffer = {};
@@ -948,18 +894,18 @@ void GameplaySkyRenderer::initCloudMesh() {
         }
     }
 
-    appendGreedySurface(vertices, topBottomSurface, maskWidth, maskHeight,
-                        originX, originZ, cellWorldSize, y0, y1, 0, 1.00f);
-    appendGreedySurface(vertices, topBottomSurface, maskWidth, maskHeight,
-                        originX, originZ, cellWorldSize, y0, y1, 1, 0.70f);
-    appendGreedySurface(vertices, negXSurface, maskWidth, maskHeight,
-                        originX, originZ, cellWorldSize, y0, y1, 2, 0.82f);
-    appendGreedySurface(vertices, posXSurface, maskWidth, maskHeight,
-                        originX, originZ, cellWorldSize, y0, y1, 3, 0.82f);
-    appendGreedySurface(vertices, negZSurface, maskWidth, maskHeight,
-                        originX, originZ, cellWorldSize, y0, y1, 4, 0.76f);
-    appendGreedySurface(vertices, posZSurface, maskWidth, maskHeight,
-                        originX, originZ, cellWorldSize, y0, y1, 5, 0.88f);
+    appendGreedySurface(vertices, topBottomSurface, maskWidth, maskHeight, originX, originZ, cellWorldSize, y0, y1, 0,
+                        1.00f);
+    appendGreedySurface(vertices, topBottomSurface, maskWidth, maskHeight, originX, originZ, cellWorldSize, y0, y1, 1,
+                        0.70f);
+    appendGreedySurface(vertices, negXSurface, maskWidth, maskHeight, originX, originZ, cellWorldSize, y0, y1, 2,
+                        0.82f);
+    appendGreedySurface(vertices, posXSurface, maskWidth, maskHeight, originX, originZ, cellWorldSize, y0, y1, 3,
+                        0.82f);
+    appendGreedySurface(vertices, negZSurface, maskWidth, maskHeight, originX, originZ, cellWorldSize, y0, y1, 4,
+                        0.76f);
+    appendGreedySurface(vertices, posZSurface, maskWidth, maskHeight, originX, originZ, cellWorldSize, y0, y1, 5,
+                        0.88f);
 
     if (vertices.empty()) {
         return;
@@ -968,25 +914,21 @@ void GameplaySkyRenderer::initCloudMesh() {
     RhiBufferDesc bufferDesc;
     bufferDesc.debugName = "GameplaySky.Cloud.VertexBuffer";
     bufferDesc.size = vertices.size() * sizeof(CloudVertex);
-    bufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex) |
-                       rhiFlag(RhiBufferUsage::TransferDst);
+    bufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex) | rhiFlag(RhiBufferUsage::TransferDst);
     bufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
     bufferDesc.initialState = RhiResourceState::VertexBuffer;
     bufferDesc.memoryCategory = RhiMemoryCategory::Geometry;
-    m_cloudVertexBuffer = m_rhiDevice->createBuffer(
-        bufferDesc, vertices.data(), bufferDesc.size);
-    if (!m_cloudVertexBuffer.isValid()) std::abort();
+    m_cloudVertexBuffer = m_rhiDevice->createBuffer(bufferDesc, vertices.data(), bufferDesc.size);
+    if (!m_cloudVertexBuffer.isValid())
+        std::abort();
 
     m_cloudVertexCount = static_cast<int32_t>(vertices.size());
     m_cloudMeshInfo.tileWorldSize = tileWidth;
     m_cloudMeshInfo.valid = true;
 }
 
-void GameplaySkyRenderer::renderClouds(const Camera& camera,
-                                       const float aspect,
-                                       const DayNightSystem& dayNight,
-                                       const SkyColors& colors,
-                                       RhiCommandList& commandList) {
+void GameplaySkyRenderer::renderClouds(const Camera& camera, const float aspect, const DayNightSystem& dayNight,
+                                       const SkyColors& colors, RhiCommandList& commandList) {
     if (!m_cloudVertexBuffer.isValid() || !m_cloudMeshInfo.valid) {
         return;
     }
@@ -1002,10 +944,13 @@ void GameplaySkyRenderer::renderClouds(const Camera& camera,
     const float baseTileX = std::floor((cameraPos.x - drift) / tileSize);
     const float baseTileZ = std::floor(cameraPos.z / tileSize);
 
-    struct PushConstants { glm::mat4 viewProj; glm::mat4 model; glm::vec4 tint; };
+    struct PushConstants {
+        glm::mat4 viewProj;
+        glm::mat4 model;
+        glm::vec4 tint;
+    };
     const glm::mat4 viewProj =
-        glm::perspective(glm::radians(camera.getFOV()), aspect, 0.1f, 1200.0f) *
-        camera.getViewMatrix();
+        glm::perspective(glm::radians(camera.getFOV()), aspect, 0.1f, 1200.0f) * camera.getViewMatrix();
     commandList.setGraphicsPipeline(m_cloudPipeline);
     commandList.setVertexBuffer(0u, m_cloudVertexBuffer, 0u);
 
@@ -1017,17 +962,14 @@ void GameplaySkyRenderer::renderClouds(const Camera& camera,
             model = glm::translate(model, glm::vec3(tileX * tileSize + drift, cloudY, tileZ * tileSize));
             const PushConstants constants{viewProj, model, glm::vec4(colors.cloudColor, 1.0f)};
             commandList.pushConstants(&constants, sizeof(constants),
-                rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment));
+                                      rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment));
             commandList.draw(static_cast<uint32_t>(m_cloudVertexCount), 1u, 0u, 0u);
         }
     }
 }
 
-void GameplaySkyRenderer::renderHalo(const Camera& camera,
-                                     const float aspect,
-                                     const DayNightSystem& dayNight,
-                                     const SkyColors& colors,
-                                     RhiCommandList& commandList) {
+void GameplaySkyRenderer::renderHalo(const Camera& camera, const float aspect, const DayNightSystem& dayNight,
+                                     const SkyColors& colors, RhiCommandList& commandList) {
     if (!m_haloVertexBuffer.isValid() || colors.haloStrength <= 0.001f) {
         return;
     }
@@ -1043,17 +985,18 @@ void GameplaySkyRenderer::renderHalo(const Camera& camera,
     model[2] = glm::vec4(direction, 0.0f);
     model[3] = glm::vec4(direction * 12.0f, 1.0f);
 
-    struct PushConstants { glm::mat4 viewProj; glm::mat4 model; glm::vec4 tint; };
-    const PushConstants constants{
-        glm::perspective(glm::radians(camera.getFOV()), aspect, 0.1f, 100.0f) *
-            buildSkyView(camera),
-        model,
-        colors.halo
+    struct PushConstants {
+        glm::mat4 viewProj;
+        glm::mat4 model;
+        glm::vec4 tint;
     };
+    const PushConstants constants{glm::perspective(glm::radians(camera.getFOV()), aspect, 0.1f, 100.0f) *
+                                      buildSkyView(camera),
+                                  model, colors.halo};
     commandList.setGraphicsPipeline(m_haloPipeline);
     commandList.setVertexBuffer(0u, m_haloVertexBuffer, 0u);
     commandList.pushConstants(&constants, sizeof(constants),
-        rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment));
+                              rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment));
     commandList.draw(static_cast<uint32_t>(m_haloVertexCount), 1u, 0u, 0u);
 }
 

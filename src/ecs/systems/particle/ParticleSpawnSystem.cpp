@@ -71,11 +71,9 @@ void ParticleSpawnSystem::update(SystemContext& ctx) {
         }
 
         const BlockDef& blockDef = BlockRegistry::get(event.blockType);
-        const int texIndices[] = {
-            blockDef.faceTop.firstLayer, blockDef.faceBottom.firstLayer,
-            blockDef.faceLeft.firstLayer, blockDef.faceRight.firstLayer,
-            blockDef.faceFront.firstLayer, blockDef.faceBack.firstLayer
-        };
+        const int texIndices[] = {blockDef.faceTop.firstLayer,   blockDef.faceBottom.firstLayer,
+                                  blockDef.faceLeft.firstLayer,  blockDef.faceRight.firstLayer,
+                                  blockDef.faceFront.firstLayer, blockDef.faceBack.firstLayer};
 
         for (int i = 0; i < event.particleCount; ++i) {
             const entt::entity e = raw.create();
@@ -92,26 +90,21 @@ void ParticleSpawnSystem::update(SystemContext& ctx) {
             auto& transform = raw.emplace<TransformComponent>(e);
             if (event.useWorldPos) {
                 const float spread = std::max(0.0f, event.spread);
-                transform.position = event.worldPos + glm::vec3(
-                    randomFloat(-spread, spread),
-                    randomFloat(-spread, spread),
-                    randomFloat(-spread, spread)
-                );
+                transform.position =
+                    event.worldPos +
+                    glm::vec3(randomFloat(-spread, spread), randomFloat(-spread, spread), randomFloat(-spread, spread));
             } else {
-                transform.position = glm::vec3(event.blockPos) + glm::vec3(
-                    randomFloat(0.2f, 0.8f),
-                    randomFloat(0.2f, 0.8f),
-                    randomFloat(0.2f, 0.8f)
-                );
+                transform.position =
+                    glm::vec3(event.blockPos) +
+                    glm::vec3(randomFloat(0.2f, 0.8f), randomFloat(0.2f, 0.8f), randomFloat(0.2f, 0.8f));
             }
             transform.eyeHeight = 0.0f;
 
             auto& velocity = raw.emplace<VelocityComponent>(e);
             const float velocityScale = std::max(0.0f, event.velocityScale);
-            velocity.velocity = glm::vec3(
-                randomFloat(-2.0f, 2.0f) * velocityScale,
-                randomFloat(0.5f, 3.5f) * velocityScale,
-                randomFloat(-2.0f, 2.0f) * velocityScale);
+            velocity.velocity =
+                glm::vec3(randomFloat(-2.0f, 2.0f) * velocityScale, randomFloat(0.5f, 3.5f) * velocityScale,
+                          randomFloat(-2.0f, 2.0f) * velocityScale);
 
             auto& particle = raw.emplace<ParticleComponent>(e);
             const float minLife = std::max(0.01f, std::min(event.minLife, event.maxLife));

@@ -39,8 +39,7 @@ void markChunkSubChunkAndVerticalNeighborsDirty(Chunk& chunk, const int scy, con
     }
 }
 
-template <typename Fn>
-void forEachWireOuterCornerPeerPosition(const glm::ivec3& position, Fn&& fn) {
+template <typename Fn> void forEachWireOuterCornerPeerPosition(const glm::ivec3& position, Fn&& fn) {
     for (const uint16_t selfFacing : WireFaceGeometry::wireFacings()) {
         const glm::ivec3 support = WireFaceGeometry::supportPosition(position, selfFacing);
         for (const uint16_t peerFacing : WireFaceGeometry::wireFacings()) {
@@ -52,8 +51,7 @@ void forEachWireOuterCornerPeerPosition(const glm::ivec3& position, Fn&& fn) {
     }
 }
 
-template <typename Fn>
-void forEachWireOuterCornerPositionBlockedBy(const glm::ivec3& blocker, Fn&& fn) {
+template <typename Fn> void forEachWireOuterCornerPositionBlockedBy(const glm::ivec3& blocker, Fn&& fn) {
     for (const uint16_t facingA : WireFaceGeometry::wireFacings()) {
         for (const uint16_t facingB : WireFaceGeometry::wireFacings()) {
             if (facingA >= facingB || !WireFaceGeometry::arePerpendicularFacings(facingA, facingB)) {
@@ -68,8 +66,7 @@ void forEachWireOuterCornerPositionBlockedBy(const glm::ivec3& blocker, Fn&& fn)
     }
 }
 
-template <typename Fn>
-void forEachWirePositionOnSupport(const glm::ivec3& support, Fn&& fn) {
+template <typename Fn> void forEachWirePositionOnSupport(const glm::ivec3& support, Fn&& fn) {
     for (const uint16_t facing : WireFaceGeometry::wireFacings()) {
         fn(WireFaceGeometry::wirePositionOnSupportFace(support, facing));
     }
@@ -144,8 +141,7 @@ bool isRedstoneTorchRuntimeState(const BlockStateId stateId) {
 }
 
 bool isFaceOrientedLogicUnitDef(const BlockDef& def) {
-    return def.redstoneBehavior == "repeater" ||
-           def.redstoneBehavior == "comparator";
+    return def.redstoneBehavior == "repeater" || def.redstoneBehavior == "comparator";
 }
 
 bool faceOrientedLogicUnitMatchesWireFacing(const BlockStateId stateId, const uint16_t wireFacing) {
@@ -175,38 +171,29 @@ uint16_t redstoneWireFacingForState(const BlockStateId stateId) {
     return facing;
 }
 
-bool isMatchingRedstoneWireStateWithFacing(const BlockStateId stateId,
-                                           const uint16_t wireChannelId,
+bool isMatchingRedstoneWireStateWithFacing(const BlockStateId stateId, const uint16_t wireChannelId,
                                            const uint16_t wireFacing) {
-    return isMatchingRedstoneWireState(stateId, wireChannelId) &&
-           redstoneWireFacingForState(stateId) == wireFacing;
+    return isMatchingRedstoneWireState(stateId, wireChannelId) && redstoneWireFacingForState(stateId) == wireFacing;
 }
 
-const WirePart* findWireContainerPartAt(const World& world,
-                                        const glm::ivec3& position,
-                                        const uint16_t wireChannelId,
+const WirePart* findWireContainerPartAt(const World& world, const glm::ivec3& position, const uint16_t wireChannelId,
                                         const uint16_t wireFacing) {
     const WireContainerParts* parts = world.wireContainerParts().find(position);
     return parts == nullptr ? nullptr : parts->find(wireChannelId, wireFacing);
 }
 
-bool hasWireContainerPartAt(const World& world,
-                            const glm::ivec3& position,
-                            const uint16_t wireChannelId,
+bool hasWireContainerPartAt(const World& world, const glm::ivec3& position, const uint16_t wireChannelId,
                             const uint16_t wireFacing) {
     return findWireContainerPartAt(world, position, wireChannelId, wireFacing) != nullptr;
 }
 
-bool hasMatchingRedstoneWireAt(const World& world,
-                               const glm::ivec3& position,
-                               const uint16_t wireChannelId,
+bool hasMatchingRedstoneWireAt(const World& world, const glm::ivec3& position, const uint16_t wireChannelId,
                                const uint16_t wireFacing) {
     const BlockStateId stateId = world.getBlockState(position.x, position.y, position.z);
     if (isMatchingRedstoneWireStateWithFacing(stateId, wireChannelId, wireFacing)) {
         return true;
     }
-    return isWireContainerState(stateId) &&
-           hasWireContainerPartAt(world, position, wireChannelId, wireFacing);
+    return isWireContainerState(stateId) && hasWireContainerPartAt(world, position, wireChannelId, wireFacing);
 }
 
 bool canConnectedBlockAttachTo(const BlockStateId stateId) {
@@ -219,9 +206,7 @@ bool canConnectedBlockAttachTo(const BlockStateId stateId) {
     return isConnectedBlockDef(def) || def.isSolid;
 }
 
-bool canRedstoneWireAttachToAt(const World& world,
-                               const glm::ivec3& position,
-                               const uint16_t wireChannelId,
+bool canRedstoneWireAttachToAt(const World& world, const glm::ivec3& position, const uint16_t wireChannelId,
                                const uint16_t wireFacing) {
     const BlockStateId stateId = world.getBlockState(position.x, position.y, position.z);
     if (stateId == NULL_BLOCK_STATE) {
@@ -244,8 +229,7 @@ bool canRedstoneWireAttachToAt(const World& world,
     return def.redstoneBehavior == "observer";
 }
 
-bool canPlanarRedstoneWireAttachTo(const BlockStateId stateId,
-                                   const uint16_t wireChannelId,
+bool canPlanarRedstoneWireAttachTo(const BlockStateId stateId, const uint16_t wireChannelId,
                                    const uint16_t wireFacing) {
     if (stateId == NULL_BLOCK_STATE) {
         return false;
@@ -270,21 +254,14 @@ bool canPlanarRedstoneWireAttachTo(const BlockStateId stateId,
     return def.redstoneBehavior == "observer";
 }
 
-uint16_t redstoneWirePlanarConnectionValue(const BlockStateId neighborState,
-                                           const uint16_t wireChannelId,
-                                           const uint16_t wireFacing,
-                                           const uint16_t noneValue,
+uint16_t redstoneWirePlanarConnectionValue(const BlockStateId neighborState, const uint16_t wireChannelId,
+                                           const uint16_t wireFacing, const uint16_t noneValue,
                                            const uint16_t sideValue) {
-    return canPlanarRedstoneWireAttachTo(neighborState, wireChannelId, wireFacing)
-        ? sideValue
-        : noneValue;
+    return canPlanarRedstoneWireAttachTo(neighborState, wireChannelId, wireFacing) ? sideValue : noneValue;
 }
 
-bool hasSameCellRedstoneWireConnection(const World& world,
-                                       const glm::ivec3& pos,
-                                       const uint16_t wireChannelId,
-                                       const uint16_t wireFacing,
-                                       const glm::ivec3& connectionOffset) {
+bool hasSameCellRedstoneWireConnection(const World& world, const glm::ivec3& pos, const uint16_t wireChannelId,
+                                       const uint16_t wireFacing, const glm::ivec3& connectionOffset) {
     const uint16_t peerFacing = WireFaceGeometry::facingFromSurfaceNormal(-connectionOffset);
     if (!WireFaceGeometry::arePerpendicularFacings(wireFacing, peerFacing)) {
         failWorld("Redstone wire same-cell connection requires a perpendicular face");
@@ -292,11 +269,8 @@ bool hasSameCellRedstoneWireConnection(const World& world,
     return hasMatchingRedstoneWireAt(world, pos, wireChannelId, peerFacing);
 }
 
-bool hasOuterCornerRedstoneWireConnection(const World& world,
-                                          const glm::ivec3& pos,
-                                          const uint16_t wireChannelId,
-                                          const uint16_t wireFacing,
-                                          const glm::ivec3& connectionOffset) {
+bool hasOuterCornerRedstoneWireConnection(const World& world, const glm::ivec3& pos, const uint16_t wireChannelId,
+                                          const uint16_t wireFacing, const glm::ivec3& connectionOffset) {
     const uint16_t peerFacing = WireFaceGeometry::facingFromSurfaceNormal(connectionOffset);
     if (!WireFaceGeometry::arePerpendicularFacings(wireFacing, peerFacing)) {
         failWorld("Redstone wire outer-corner connection requires a perpendicular face");
@@ -312,9 +286,7 @@ bool hasOuterCornerRedstoneWireConnection(const World& world,
     return hasMatchingRedstoneWireAt(world, peerPosition, wireChannelId, peerFacing);
 }
 
-uint16_t redstoneWireConnectionValueAt(const World& world,
-                                       const glm::ivec3& pos,
-                                       const uint16_t wireChannelId,
+uint16_t redstoneWireConnectionValueAt(const World& world, const glm::ivec3& pos, const uint16_t wireChannelId,
                                        const uint16_t wireFacing,
                                        const WireFaceGeometry::ConnectionDirection& connection) {
     const glm::ivec3 planarNeighbor = pos + connection.offset;
@@ -323,8 +295,8 @@ uint16_t redstoneWireConnectionValueAt(const World& world,
     }
     return (hasSameCellRedstoneWireConnection(world, pos, wireChannelId, wireFacing, connection.offset) ||
             hasOuterCornerRedstoneWireConnection(world, pos, wireChannelId, wireFacing, connection.offset))
-        ? connection.sideValue
-        : connection.noneValue;
+               ? connection.sideValue
+               : connection.noneValue;
 }
 
 glm::ivec3 wireAxis1PositiveOffset(const uint16_t facing) {
@@ -365,9 +337,7 @@ uint8_t wireConnectionBitForOffset(const uint16_t facing, const glm::ivec3& offs
     failWorld("Wire container connection update received a connection outside the wire plane");
 }
 
-uint8_t refreshedWireContainerConnections(const World& world,
-                                          const glm::ivec3& pos,
-                                          const WirePart& part) {
+uint8_t refreshedWireContainerConnections(const World& world, const glm::ivec3& pos, const WirePart& part) {
     uint8_t connections = 0;
     for (const WireFaceGeometry::ConnectionDirection& connection :
          WireFaceGeometry::connectionDirections(part.facing)) {
@@ -384,35 +354,23 @@ uint8_t refreshedWireContainerConnections(const World& world,
 }
 
 void requireHorizontalConnectionProperties() {
-    if (PropIndices::NORTH == PropIndices::INVALID ||
-        PropIndices::SOUTH == PropIndices::INVALID ||
-        PropIndices::EAST == PropIndices::INVALID ||
-        PropIndices::WEST == PropIndices::INVALID ||
-        PropIndices::NORTH_TRUE == PropIndices::INVALID ||
-        PropIndices::NORTH_FALSE == PropIndices::INVALID ||
-        PropIndices::SOUTH_TRUE == PropIndices::INVALID ||
-        PropIndices::SOUTH_FALSE == PropIndices::INVALID ||
-        PropIndices::EAST_TRUE == PropIndices::INVALID ||
-        PropIndices::EAST_FALSE == PropIndices::INVALID ||
-        PropIndices::WEST_TRUE == PropIndices::INVALID ||
-        PropIndices::WEST_FALSE == PropIndices::INVALID ||
-        PropIndices::NORTH_NONE == PropIndices::INVALID ||
-        PropIndices::NORTH_SIDE == PropIndices::INVALID ||
-        PropIndices::SOUTH_NONE == PropIndices::INVALID ||
-        PropIndices::SOUTH_SIDE == PropIndices::INVALID ||
-        PropIndices::EAST_NONE == PropIndices::INVALID ||
-        PropIndices::EAST_SIDE == PropIndices::INVALID ||
-        PropIndices::WEST_NONE == PropIndices::INVALID ||
-        PropIndices::WEST_SIDE == PropIndices::INVALID) {
+    if (PropIndices::NORTH == PropIndices::INVALID || PropIndices::SOUTH == PropIndices::INVALID ||
+        PropIndices::EAST == PropIndices::INVALID || PropIndices::WEST == PropIndices::INVALID ||
+        PropIndices::NORTH_TRUE == PropIndices::INVALID || PropIndices::NORTH_FALSE == PropIndices::INVALID ||
+        PropIndices::SOUTH_TRUE == PropIndices::INVALID || PropIndices::SOUTH_FALSE == PropIndices::INVALID ||
+        PropIndices::EAST_TRUE == PropIndices::INVALID || PropIndices::EAST_FALSE == PropIndices::INVALID ||
+        PropIndices::WEST_TRUE == PropIndices::INVALID || PropIndices::WEST_FALSE == PropIndices::INVALID ||
+        PropIndices::NORTH_NONE == PropIndices::INVALID || PropIndices::NORTH_SIDE == PropIndices::INVALID ||
+        PropIndices::SOUTH_NONE == PropIndices::INVALID || PropIndices::SOUTH_SIDE == PropIndices::INVALID ||
+        PropIndices::EAST_NONE == PropIndices::INVALID || PropIndices::EAST_SIDE == PropIndices::INVALID ||
+        PropIndices::WEST_NONE == PropIndices::INVALID || PropIndices::WEST_SIDE == PropIndices::INVALID) {
         failWorld("Horizontal connection updates require north/south/east/west connection properties");
     }
 }
 
 void requireStairShapeProperties() {
-    if (PropIndices::FACING == PropIndices::INVALID ||
-        PropIndices::HALF == PropIndices::INVALID ||
-        PropIndices::SHAPE == PropIndices::INVALID ||
-        PropIndices::SHAPE_STRAIGHT == PropIndices::INVALID ||
+    if (PropIndices::FACING == PropIndices::INVALID || PropIndices::HALF == PropIndices::INVALID ||
+        PropIndices::SHAPE == PropIndices::INVALID || PropIndices::SHAPE_STRAIGHT == PropIndices::INVALID ||
         PropIndices::SHAPE_INNER_LEFT == PropIndices::INVALID ||
         PropIndices::SHAPE_INNER_RIGHT == PropIndices::INVALID ||
         PropIndices::SHAPE_OUTER_LEFT == PropIndices::INVALID ||
@@ -479,34 +437,22 @@ bool arePerpendicularHorizontalFacings(const uint16_t a, const uint16_t b) {
     failWorld("Stair shape updates require horizontal facing values");
 }
 
-bool isWithinChunkRenderDistance(const int cx,
-                                 const int cz,
-                                 const int playerChunkX,
-                                 const int playerChunkZ,
+bool isWithinChunkRenderDistance(const int cx, const int cz, const int playerChunkX, const int playerChunkZ,
                                  const int renderDistance) {
     const int dx = cx - playerChunkX;
     const int dz = cz - playerChunkZ;
     return dx * dx + dz * dz <= renderDistance * renderDistance;
 }
 
-bool rayIntersectsAabb(const glm::vec3& rayOrigin,
-                       const glm::vec3& rayDir,
-                       const glm::vec3& boxMin,
-                       const glm::vec3& boxMax,
-                       const float maxDist,
-                       float& tHit,
-                       glm::ivec3& normal) {
+bool rayIntersectsAabb(const glm::vec3& rayOrigin, const glm::vec3& rayDir, const glm::vec3& boxMin,
+                       const glm::vec3& boxMax, const float maxDist, float& tHit, glm::ivec3& normal) {
     constexpr float kEpsilon = 1e-6f;
     float tMin = 0.0f;
     float tMax = maxDist;
     glm::ivec3 enterNormal(0);
 
-    const auto testAxis = [&](const float origin,
-                              const float dir,
-                              const float minValue,
-                              const float maxValue,
-                              const glm::ivec3& negNormal,
-                              const glm::ivec3& posNormal) {
+    const auto testAxis = [&](const float origin, const float dir, const float minValue, const float maxValue,
+                              const glm::ivec3& negNormal, const glm::ivec3& posNormal) {
         if (std::abs(dir) < kEpsilon) {
             return origin >= minValue && origin <= maxValue;
         }
@@ -527,16 +473,13 @@ bool rayIntersectsAabb(const glm::vec3& rayOrigin,
         return tMin <= tMax;
     };
 
-    if (!testAxis(rayOrigin.x, rayDir.x, boxMin.x, boxMax.x,
-                  glm::ivec3(-1, 0, 0), glm::ivec3(1, 0, 0))) {
+    if (!testAxis(rayOrigin.x, rayDir.x, boxMin.x, boxMax.x, glm::ivec3(-1, 0, 0), glm::ivec3(1, 0, 0))) {
         return false;
     }
-    if (!testAxis(rayOrigin.y, rayDir.y, boxMin.y, boxMax.y,
-                  glm::ivec3(0, -1, 0), glm::ivec3(0, 1, 0))) {
+    if (!testAxis(rayOrigin.y, rayDir.y, boxMin.y, boxMax.y, glm::ivec3(0, -1, 0), glm::ivec3(0, 1, 0))) {
         return false;
     }
-    if (!testAxis(rayOrigin.z, rayDir.z, boxMin.z, boxMax.z,
-                  glm::ivec3(0, 0, -1), glm::ivec3(0, 0, 1))) {
+    if (!testAxis(rayOrigin.z, rayDir.z, boxMin.z, boxMax.z, glm::ivec3(0, 0, -1), glm::ivec3(0, 0, 1))) {
         return false;
     }
 
@@ -548,7 +491,7 @@ bool rayIntersectsAabb(const glm::vec3& rayOrigin,
     normal = (tMin > 0.0f) ? enterNormal : glm::ivec3(0);
     return true;
 }
-}
+} // namespace
 void World::init(uint32_t seed) {
     m_seed = seed;
     m_terrainGen.init(seed, m_flatSurfaceY);
@@ -579,26 +522,12 @@ void World::init(uint32_t seed) {
 }
 
 void World::update(const glm::vec3& playerPos, const float dt) {
-    updateStreaming(playerPos,
-                    dt,
-                    kMaxChunkLoadSubmitsPerFrame,
-                    kMaxGenerationInFlight,
-                    kMaxChunkLoadFinalizesPerFrame,
-                    kChunkLoadFinalizeTimeBudgetMs,
-                    -1,
-                    -1,
-                    -1.0f);
+    updateStreaming(playerPos, dt, kMaxChunkLoadSubmitsPerFrame, kMaxGenerationInFlight, kMaxChunkLoadFinalizesPerFrame,
+                    kChunkLoadFinalizeTimeBudgetMs, -1, -1, -1.0f);
 }
 
 void World::updateForInitialLoad(const glm::vec3& playerPos, const float dt) {
-    updateStreaming(playerPos,
-                    dt,
-                    24,
-                    std::max(8, m_threadPool ? m_threadPool->numWorkers() * 2 : 8),
-                    12,
-                    8.0,
-                    24,
-                    24,
+    updateStreaming(playerPos, dt, 24, std::max(8, m_threadPool ? m_threadPool->numWorkers() * 2 : 8), 12, 8.0, 24, 24,
                     4.0f);
 }
 
@@ -610,22 +539,15 @@ void World::flushInteractiveLighting(const glm::vec3& playerPos) {
     constexpr int kInteractiveLightJobBudget = 4;
     constexpr int kInteractiveLightMergeBudget = 16;
     constexpr float kInteractiveLightMergeTimeBudgetMs = 2.0f;
-    m_lightService->processInteractiveJobsInline(playerPos,
-                                                 kInteractiveLightJobBudget,
-                                                 kInteractiveLightMergeBudget,
+    m_lightService->processInteractiveJobsInline(playerPos, kInteractiveLightJobBudget, kInteractiveLightMergeBudget,
                                                  kInteractiveLightMergeTimeBudgetMs);
     m_interactiveLightFlushRequested = m_lightService->countPendingInteractiveJobs() > 0;
 }
 
-void World::updateStreaming(const glm::vec3& playerPos,
-                            const float dt,
-                            const int submitBudget,
-                            const int maxGenerationInFlight,
-                            const int finalizeBudget,
-                            const double finalizeTimeBudgetMs,
-                            const int lightSubmitBudgetOverride,
-                            const int lightMergeBudgetOverride,
-                            const float lightMergeTimeBudgetMsOverride) {
+void World::updateStreaming(const glm::vec3& playerPos, const float dt, const int submitBudget,
+                            const int maxGenerationInFlight, const int finalizeBudget,
+                            const double finalizeTimeBudgetMs, const int lightSubmitBudgetOverride,
+                            const int lightMergeBudgetOverride, const float lightMergeTimeBudgetMsOverride) {
     m_dayNightSystem.update(dt);
     m_weatherSystem.update(dt);
 
@@ -660,9 +582,8 @@ void World::updateStreaming(const glm::vec3& playerPos,
         loadedKeys.insert(key);
     }
 
-    const auto chunksToLoad = m_ticketManager.getChunksToLoad(
-        submitBudget * 4,  // Look ahead a bit for prioritization
-        loadedKeys);
+    const auto chunksToLoad = m_ticketManager.getChunksToLoad(submitBudget * 4, // Look ahead a bit for prioritization
+                                                              loadedKeys);
 
     // Submit chunk generation jobs from the prioritized list
     int submitted = 0;
@@ -694,10 +615,9 @@ void World::updateStreaming(const glm::vec3& playerPos,
 
         int finalized = 0;
         for (auto& loadData : completed) {
-            const double elapsedMs = std::chrono::duration<double, std::milli>(
-                std::chrono::steady_clock::now() - finalizeStart).count();
-            if (finalized >= finalizeBudget ||
-                elapsedMs >= finalizeTimeBudgetMs) {
+            const double elapsedMs =
+                std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - finalizeStart).count();
+            if (finalized >= finalizeBudget || elapsedMs >= finalizeTimeBudgetMs) {
                 deferred.push_back(std::move(loadData));
                 continue;
             }
@@ -714,8 +634,7 @@ void World::updateStreaming(const glm::vec3& playerPos,
 
         if (!deferred.empty()) {
             std::lock_guard<std::mutex> lock(m_completedGenMutex);
-            m_completedGenQueue.insert(m_completedGenQueue.begin(),
-                                       std::make_move_iterator(deferred.begin()),
+            m_completedGenQueue.insert(m_completedGenQueue.begin(), std::make_move_iterator(deferred.begin()),
                                        std::make_move_iterator(deferred.end()));
         }
     }
@@ -727,11 +646,11 @@ void World::updateStreaming(const glm::vec3& playerPos,
         // Scale submit budget with load, back off when the completed queue is deep.
         int lightSubmitBudget = 6;
         if (completedDepth > 48) {
-            lightSubmitBudget = 0;           // backpressure: let drain catch up
+            lightSubmitBudget = 0; // backpressure: let drain catch up
         } else if (dirtyCount > 50) {
-            lightSubmitBudget = 10;          // many dirty chunks, increase throughput
+            lightSubmitBudget = 10; // many dirty chunks, increase throughput
         } else if (dirtyCount < 5) {
-            lightSubmitBudget = 3;           // low load, conserve resources
+            lightSubmitBudget = 3; // low load, conserve resources
         }
 
         // Drain more aggressively when results are piling up.
@@ -754,7 +673,8 @@ void World::updateStreaming(const glm::vec3& playerPos,
 }
 
 BlockStateId World::getBlock(int x, int y, int z) const {
-    if (y < 0 || y >= Chunk::SIZE_Y) return NULL_BLOCK_STATE;
+    if (y < 0 || y >= Chunk::SIZE_Y)
+        return NULL_BLOCK_STATE;
 
     const int chunkX = worldToChunkCoord(x, Chunk::SIZE_X);
     const int chunkZ = worldToChunkCoord(z, Chunk::SIZE_Z);
@@ -769,7 +689,8 @@ BlockStateId World::getBlock(int x, int y, int z) const {
 }
 
 uint8_t World::getPackedLight(const int x, const int y, const int z) const {
-    if (y < 0 || y >= Chunk::SIZE_Y) return 0;
+    if (y < 0 || y >= Chunk::SIZE_Y)
+        return 0;
 
     const int chunkX = worldToChunkCoord(x, Chunk::SIZE_X);
     const int chunkZ = worldToChunkCoord(z, Chunk::SIZE_Z);
@@ -789,7 +710,8 @@ BlockStateId World::getBlockState(const int x, const int y, const int z) const {
 }
 
 BlockStateId World::getFluidState(const int x, const int y, const int z) const {
-    if (y < 0 || y >= Chunk::SIZE_Y) return NULL_BLOCK_STATE;
+    if (y < 0 || y >= Chunk::SIZE_Y)
+        return NULL_BLOCK_STATE;
 
     const int chunkX = worldToChunkCoord(x, Chunk::SIZE_X);
     const int chunkZ = worldToChunkCoord(z, Chunk::SIZE_Z);
@@ -818,7 +740,8 @@ BlockStateId World::getFluidState(const int x, const int y, const int z) const {
 }
 
 FluidCellView World::getCombinedCell(const int x, const int y, const int z) const {
-    if (y < 0 || y >= Chunk::SIZE_Y) return {};
+    if (y < 0 || y >= Chunk::SIZE_Y)
+        return {};
 
     const int chunkX = worldToChunkCoord(x, Chunk::SIZE_X);
     const int chunkZ = worldToChunkCoord(z, Chunk::SIZE_Z);
@@ -861,7 +784,8 @@ void World::setBlock(int x, int y, int z, BlockID id) {
 }
 
 void World::setFluidState(const int x, const int y, const int z, const BlockStateId stateId) {
-    if (y < 0 || y >= Chunk::SIZE_Y) return;
+    if (y < 0 || y >= Chunk::SIZE_Y)
+        return;
     const BlockStateId normalizedStateId = normalizeFluidBlockState(stateId);
 
     const int chunkX = worldToChunkCoord(x, Chunk::SIZE_X);
@@ -889,9 +813,7 @@ void World::setFluidState(const int x, const int y, const int z, const BlockStat
         // Current block layer IS fluid (pure water position).
         // If new state is also fluid of same kind, update block layer directly.
         // If new state is air/no-fluid, clear block layer to air.
-        const BlockStateId targetBlockState = (newFluid.kind != FluidKind::None)
-            ? normalizedStateId
-            : NULL_BLOCK_STATE;
+        const BlockStateId targetBlockState = (newFluid.kind != FluidKind::None) ? normalizedStateId : NULL_BLOCK_STATE;
         setBlockState(x, y, z, targetBlockState);
         return;
     }
@@ -901,7 +823,7 @@ void World::setFluidState(const int x, const int y, const int z, const BlockStat
         // Removing fluid from this cell
         const BlockStateId oldFluid = sc->getFluidLayer(localX, localY, localZ);
         if (oldFluid == NULL_BLOCK_STATE) {
-            return;  // Nothing to do
+            return; // Nothing to do
         }
         sc->setFluidLayer(localX, localY, localZ, NULL_BLOCK_STATE);
     } else {
@@ -920,19 +842,23 @@ void World::setFluidState(const int x, const int y, const int z, const BlockStat
     markChunkSubChunkAndVerticalNeighborsDirty(chunk, scy, localY);
     if (localX == 0) {
         auto nit = m_chunks.find(chunkKey(chunkX - 1, chunkZ));
-        if (nit != m_chunks.end()) markChunkSubChunkAndVerticalNeighborsDirty(*nit->second, scy, localY);
+        if (nit != m_chunks.end())
+            markChunkSubChunkAndVerticalNeighborsDirty(*nit->second, scy, localY);
     }
     if (localX == Chunk::SIZE_X - 1) {
         auto nit = m_chunks.find(chunkKey(chunkX + 1, chunkZ));
-        if (nit != m_chunks.end()) markChunkSubChunkAndVerticalNeighborsDirty(*nit->second, scy, localY);
+        if (nit != m_chunks.end())
+            markChunkSubChunkAndVerticalNeighborsDirty(*nit->second, scy, localY);
     }
     if (localZ == 0) {
         auto nit = m_chunks.find(chunkKey(chunkX, chunkZ - 1));
-        if (nit != m_chunks.end()) markChunkSubChunkAndVerticalNeighborsDirty(*nit->second, scy, localY);
+        if (nit != m_chunks.end())
+            markChunkSubChunkAndVerticalNeighborsDirty(*nit->second, scy, localY);
     }
     if (localZ == Chunk::SIZE_Z - 1) {
         auto nit = m_chunks.find(chunkKey(chunkX, chunkZ + 1));
-        if (nit != m_chunks.end()) markChunkSubChunkAndVerticalNeighborsDirty(*nit->second, scy, localY);
+        if (nit != m_chunks.end())
+            markChunkSubChunkAndVerticalNeighborsDirty(*nit->second, scy, localY);
     }
 
     m_fluidSystem.onBlockChanged(glm::ivec3(x, y, z));
@@ -959,7 +885,8 @@ bool World::isChunkLoadedForBlock(const int x, const int y, const int z) const {
 }
 
 void World::setBlockState(int x, int y, int z, BlockStateId id) {
-    if (y < 0 || y >= Chunk::SIZE_Y) return;
+    if (y < 0 || y >= Chunk::SIZE_Y)
+        return;
     id = normalizeFluidBlockState(id);
 
     const int chunkX = worldToChunkCoord(x, Chunk::SIZE_X);
@@ -978,24 +905,19 @@ void World::setBlockState(int x, int y, int z, BlockStateId id) {
     const int localY = Chunk::toSubChunkLocalY(y);
     const SubChunk* existingSubChunk = chunk.getSubChunk(editedScy);
     const BlockStateId oldId = chunk.getBlock(localX, y, localZ);
-    const BlockStateId oldFluidLayer = existingSubChunk
-        ? existingSubChunk->getFluidLayer(localX, localY, localZ)
-        : NULL_BLOCK_STATE;
+    const BlockStateId oldFluidLayer =
+        existingSubChunk ? existingSubChunk->getFluidLayer(localX, localY, localZ) : NULL_BLOCK_STATE;
 
     BlockStateId targetState = id;
-    const bool uncoverFluidLayer =
-        id == NULL_BLOCK_STATE &&
-        oldFluidLayer != NULL_BLOCK_STATE &&
-        FluidState::decode(oldId).kind == FluidKind::None &&
-        FluidState::decode(oldFluidLayer).kind != FluidKind::None;
+    const bool uncoverFluidLayer = id == NULL_BLOCK_STATE && oldFluidLayer != NULL_BLOCK_STATE &&
+                                   FluidState::decode(oldId).kind == FluidKind::None &&
+                                   FluidState::decode(oldFluidLayer).kind != FluidKind::None;
     if (uncoverFluidLayer) {
         targetState = oldFluidLayer;
     }
 
-    const bool clearFluidLayer =
-        oldFluidLayer != NULL_BLOCK_STATE &&
-        !uncoverFluidLayer &&
-        !canBlockStateKeepFluidLayer(targetState, oldFluidLayer);
+    const bool clearFluidLayer = oldFluidLayer != NULL_BLOCK_STATE && !uncoverFluidLayer &&
+                                 !canBlockStateKeepFluidLayer(targetState, oldFluidLayer);
     const bool blockStateChanges = oldId != targetState;
 
     if (!blockStateChanges && !uncoverFluidLayer && !clearFluidLayer) {
@@ -1025,37 +947,37 @@ void World::setBlockState(int x, int y, int z, BlockStateId id) {
         }
     }
 
-
     // Geometry edits must always trigger remesh, regardless of lighting pipeline.
     ++m_blockContentRevision;
     markChunkSubChunkAndVerticalNeighborsDirty(chunk, editedScy, localY);
     if (localX == 0) {
         auto nit = m_chunks.find(chunkKey(chunkX - 1, chunkZ));
-        if (nit != m_chunks.end()) markChunkSubChunkAndVerticalNeighborsDirty(*nit->second, editedScy, localY);
+        if (nit != m_chunks.end())
+            markChunkSubChunkAndVerticalNeighborsDirty(*nit->second, editedScy, localY);
     }
     if (localX == Chunk::SIZE_X - 1) {
         auto nit = m_chunks.find(chunkKey(chunkX + 1, chunkZ));
-        if (nit != m_chunks.end()) markChunkSubChunkAndVerticalNeighborsDirty(*nit->second, editedScy, localY);
+        if (nit != m_chunks.end())
+            markChunkSubChunkAndVerticalNeighborsDirty(*nit->second, editedScy, localY);
     }
     if (localZ == 0) {
         auto nit = m_chunks.find(chunkKey(chunkX, chunkZ - 1));
-        if (nit != m_chunks.end()) markChunkSubChunkAndVerticalNeighborsDirty(*nit->second, editedScy, localY);
+        if (nit != m_chunks.end())
+            markChunkSubChunkAndVerticalNeighborsDirty(*nit->second, editedScy, localY);
     }
     if (localZ == Chunk::SIZE_Z - 1) {
         auto nit = m_chunks.find(chunkKey(chunkX, chunkZ + 1));
-        if (nit != m_chunks.end()) markChunkSubChunkAndVerticalNeighborsDirty(*nit->second, editedScy, localY);
+        if (nit != m_chunks.end())
+            markChunkSubChunkAndVerticalNeighborsDirty(*nit->second, editedScy, localY);
     }
 
-    m_fluidSystem.onBlockChanged(glm::ivec3(x, y, z),
-                                 clearFluidLayer || changesFluidPathing(oldId, targetState));
+    m_fluidSystem.onBlockChanged(glm::ivec3(x, y, z), clearFluidLayer || changesFluidPathing(oldId, targetState));
 
     // Enqueue the edited cell and its 6 neighbors for support-rule validation.
     // The edited cell matters for gravity blocks placed directly into an
     // unsupported position; neighbors matter when this edit removes support.
     static constexpr glm::ivec3 kNeighborOffsets[6] = {
-        { 1,  0,  0}, {-1,  0,  0},
-        { 0,  1,  0}, { 0, -1,  0},
-        { 0,  0,  1}, { 0,  0, -1},
+        {1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1},
     };
     m_neighborUpdateQueue.enqueue(glm::ivec3(x, y, z));
     m_redstoneUpdateQueue.enqueue(glm::ivec3(x, y, z));
@@ -1064,12 +986,10 @@ void World::setBlockState(int x, int y, int z, BlockStateId id) {
         m_neighborUpdateQueue.enqueue(glm::ivec3(x, y, z) + off);
         m_redstoneUpdateQueue.enqueue(glm::ivec3(x, y, z) + off);
     }
-    forEachWireOuterCornerPeerPosition(glm::ivec3(x, y, z), [this](const glm::ivec3& peer) {
-        m_redstoneUpdateQueue.enqueue(peer);
-    });
-    forEachWireOuterCornerPositionBlockedBy(glm::ivec3(x, y, z), [this](const glm::ivec3& wirePosition) {
-        m_redstoneUpdateQueue.enqueue(wirePosition);
-    });
+    forEachWireOuterCornerPeerPosition(glm::ivec3(x, y, z),
+                                       [this](const glm::ivec3& peer) { m_redstoneUpdateQueue.enqueue(peer); });
+    forEachWireOuterCornerPositionBlockedBy(
+        glm::ivec3(x, y, z), [this](const glm::ivec3& wirePosition) { m_redstoneUpdateQueue.enqueue(wirePosition); });
     // Notify block change callback (used by GameServer for BlockUpdateBatch)
     if (m_blockChangeCallback) {
         m_blockChangeCallback(x, y, z, targetState);
@@ -1110,34 +1030,34 @@ void World::notifyWireContainerPartsChanged(const glm::ivec3& pos) {
     markChunkSubChunkAndVerticalNeighborsDirty(chunk, editedScy, localY);
     if (localX == 0) {
         auto nit = m_chunks.find(chunkKey(chunkX - 1, chunkZ));
-        if (nit != m_chunks.end()) markChunkSubChunkAndVerticalNeighborsDirty(*nit->second, editedScy, localY);
+        if (nit != m_chunks.end())
+            markChunkSubChunkAndVerticalNeighborsDirty(*nit->second, editedScy, localY);
     }
     if (localX == Chunk::SIZE_X - 1) {
         auto nit = m_chunks.find(chunkKey(chunkX + 1, chunkZ));
-        if (nit != m_chunks.end()) markChunkSubChunkAndVerticalNeighborsDirty(*nit->second, editedScy, localY);
+        if (nit != m_chunks.end())
+            markChunkSubChunkAndVerticalNeighborsDirty(*nit->second, editedScy, localY);
     }
     if (localZ == 0) {
         auto nit = m_chunks.find(chunkKey(chunkX, chunkZ - 1));
-        if (nit != m_chunks.end()) markChunkSubChunkAndVerticalNeighborsDirty(*nit->second, editedScy, localY);
+        if (nit != m_chunks.end())
+            markChunkSubChunkAndVerticalNeighborsDirty(*nit->second, editedScy, localY);
     }
     if (localZ == Chunk::SIZE_Z - 1) {
         auto nit = m_chunks.find(chunkKey(chunkX, chunkZ + 1));
-        if (nit != m_chunks.end()) markChunkSubChunkAndVerticalNeighborsDirty(*nit->second, editedScy, localY);
+        if (nit != m_chunks.end())
+            markChunkSubChunkAndVerticalNeighborsDirty(*nit->second, editedScy, localY);
     }
 
     static constexpr glm::ivec3 kNeighborOffsets[6] = {
-        { 1,  0,  0}, {-1,  0,  0},
-        { 0,  1,  0}, { 0, -1,  0},
-        { 0,  0,  1}, { 0,  0, -1},
+        {1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1},
     };
     m_redstoneUpdateQueue.enqueue(pos);
     m_redstoneChangedBlockQueue.enqueue(pos);
     for (const glm::ivec3& offset : kNeighborOffsets) {
         m_redstoneUpdateQueue.enqueue(pos + offset);
     }
-    forEachWireOuterCornerPeerPosition(pos, [this](const glm::ivec3& peer) {
-        m_redstoneUpdateQueue.enqueue(peer);
-    });
+    forEachWireOuterCornerPeerPosition(pos, [this](const glm::ivec3& peer) { m_redstoneUpdateQueue.enqueue(peer); });
     markChunkSaveDirty(chunkX, chunkZ);
     refreshConnectedBlocksAround(pos);
 }
@@ -1187,29 +1107,21 @@ void World::refreshConnectedBlockAt(const glm::ivec3& pos) {
         requireHorizontalConnectionProperties();
 
         updatedState = BlockStateRegistry::withProperty(
-            updatedState,
-            PropIndices::NORTH,
-            canConnectedBlockAttachTo(getBlockState(pos.x, pos.y, pos.z - 1))
-                ? PropIndices::NORTH_TRUE
-                : PropIndices::NORTH_FALSE);
+            updatedState, PropIndices::NORTH,
+            canConnectedBlockAttachTo(getBlockState(pos.x, pos.y, pos.z - 1)) ? PropIndices::NORTH_TRUE
+                                                                              : PropIndices::NORTH_FALSE);
         updatedState = BlockStateRegistry::withProperty(
-            updatedState,
-            PropIndices::SOUTH,
-            canConnectedBlockAttachTo(getBlockState(pos.x, pos.y, pos.z + 1))
-                ? PropIndices::SOUTH_TRUE
-                : PropIndices::SOUTH_FALSE);
+            updatedState, PropIndices::SOUTH,
+            canConnectedBlockAttachTo(getBlockState(pos.x, pos.y, pos.z + 1)) ? PropIndices::SOUTH_TRUE
+                                                                              : PropIndices::SOUTH_FALSE);
         updatedState = BlockStateRegistry::withProperty(
-            updatedState,
-            PropIndices::EAST,
-            canConnectedBlockAttachTo(getBlockState(pos.x + 1, pos.y, pos.z))
-                ? PropIndices::EAST_TRUE
-                : PropIndices::EAST_FALSE);
+            updatedState, PropIndices::EAST,
+            canConnectedBlockAttachTo(getBlockState(pos.x + 1, pos.y, pos.z)) ? PropIndices::EAST_TRUE
+                                                                              : PropIndices::EAST_FALSE);
         updatedState = BlockStateRegistry::withProperty(
-            updatedState,
-            PropIndices::WEST,
-            canConnectedBlockAttachTo(getBlockState(pos.x - 1, pos.y, pos.z))
-                ? PropIndices::WEST_TRUE
-                : PropIndices::WEST_FALSE);
+            updatedState, PropIndices::WEST,
+            canConnectedBlockAttachTo(getBlockState(pos.x - 1, pos.y, pos.z)) ? PropIndices::WEST_TRUE
+                                                                              : PropIndices::WEST_FALSE);
     } else if (isRedstoneWireBlock) {
         requireHorizontalConnectionProperties();
         const uint16_t wireChannelId = def.redstoneWireChannelId;
@@ -1225,27 +1137,15 @@ void World::refreshConnectedBlockAt(const glm::ivec3& pos) {
             for (const WireFaceGeometry::ConnectionDirection& connection :
                  WireFaceGeometry::connectionDirections(wireFacing)) {
                 updatedState = BlockStateRegistry::withProperty(
-                    updatedState,
-                    connection.property,
-                    redstoneWireConnectionValueAt(
-                        *this,
-                        pos,
-                        wireChannelId,
-                        PropIndices::FACING_FLOOR,
-                        connection));
+                    updatedState, connection.property,
+                    redstoneWireConnectionValueAt(*this, pos, wireChannelId, PropIndices::FACING_FLOOR, connection));
             }
         } else {
             for (const WireFaceGeometry::ConnectionDirection& connection :
                  WireFaceGeometry::connectionDirections(wireFacing)) {
                 updatedState = BlockStateRegistry::withProperty(
-                    updatedState,
-                    connection.property,
-                    redstoneWireConnectionValueAt(
-                        *this,
-                        pos,
-                        wireChannelId,
-                        wireFacing,
-                        connection));
+                    updatedState, connection.property,
+                    redstoneWireConnectionValueAt(*this, pos, wireChannelId, wireFacing, connection));
             }
         }
     } else if (isStairsBlock) {
@@ -1254,8 +1154,7 @@ void World::refreshConnectedBlockAt(const glm::ivec3& pos) {
         const uint16_t currentFacing = BlockStateRegistry::getPropertyIndex(currentState, PropIndices::FACING);
         const uint16_t currentHalf = BlockStateRegistry::getPropertyIndex(currentState, PropIndices::HALF);
         const uint16_t currentShape = BlockStateRegistry::getPropertyIndex(currentState, PropIndices::SHAPE);
-        if (currentFacing == BlockStateRegistry::INVALID_INDEX ||
-            currentHalf == BlockStateRegistry::INVALID_INDEX ||
+        if (currentFacing == BlockStateRegistry::INVALID_INDEX || currentHalf == BlockStateRegistry::INVALID_INDEX ||
             currentShape == BlockStateRegistry::INVALID_INDEX) {
             failWorld("Stair shape updates require state facing, half, and shape values");
         }
@@ -1297,13 +1196,12 @@ void World::refreshConnectedBlockAt(const glm::ivec3& pos) {
         if (stairNeighborFacing(frontOffset, neighborFacing) &&
             canUseShapeSide(oppositeHorizontalFacing(neighborFacing))) {
             shapeValue = (neighborFacing == counterClockwiseHorizontalFacing(currentFacing))
-                ? PropIndices::SHAPE_OUTER_LEFT
-                : PropIndices::SHAPE_OUTER_RIGHT;
-        } else if (stairNeighborFacing(-frontOffset, neighborFacing) &&
-                   canUseShapeSide(neighborFacing)) {
+                             ? PropIndices::SHAPE_OUTER_LEFT
+                             : PropIndices::SHAPE_OUTER_RIGHT;
+        } else if (stairNeighborFacing(-frontOffset, neighborFacing) && canUseShapeSide(neighborFacing)) {
             shapeValue = (neighborFacing == counterClockwiseHorizontalFacing(currentFacing))
-                ? PropIndices::SHAPE_INNER_LEFT
-                : PropIndices::SHAPE_INNER_RIGHT;
+                             ? PropIndices::SHAPE_INNER_LEFT
+                             : PropIndices::SHAPE_INNER_RIGHT;
         }
 
         updatedState = BlockStateRegistry::withProperty(updatedState, PropIndices::SHAPE, shapeValue);
@@ -1335,19 +1233,23 @@ void World::refreshConnectedBlockAt(const glm::ivec3& pos) {
     markChunkSubChunkAndVerticalNeighborsDirty(chunk, editedScy, localY);
     if (localX == 0) {
         auto nit = m_chunks.find(chunkKey(chunkX - 1, chunkZ));
-        if (nit != m_chunks.end()) markChunkSubChunkAndVerticalNeighborsDirty(*nit->second, editedScy, localY);
+        if (nit != m_chunks.end())
+            markChunkSubChunkAndVerticalNeighborsDirty(*nit->second, editedScy, localY);
     }
     if (localX == Chunk::SIZE_X - 1) {
         auto nit = m_chunks.find(chunkKey(chunkX + 1, chunkZ));
-        if (nit != m_chunks.end()) markChunkSubChunkAndVerticalNeighborsDirty(*nit->second, editedScy, localY);
+        if (nit != m_chunks.end())
+            markChunkSubChunkAndVerticalNeighborsDirty(*nit->second, editedScy, localY);
     }
     if (localZ == 0) {
         auto nit = m_chunks.find(chunkKey(chunkX, chunkZ - 1));
-        if (nit != m_chunks.end()) markChunkSubChunkAndVerticalNeighborsDirty(*nit->second, editedScy, localY);
+        if (nit != m_chunks.end())
+            markChunkSubChunkAndVerticalNeighborsDirty(*nit->second, editedScy, localY);
     }
     if (localZ == Chunk::SIZE_Z - 1) {
         auto nit = m_chunks.find(chunkKey(chunkX, chunkZ + 1));
-        if (nit != m_chunks.end()) markChunkSubChunkAndVerticalNeighborsDirty(*nit->second, editedScy, localY);
+        if (nit != m_chunks.end())
+            markChunkSubChunkAndVerticalNeighborsDirty(*nit->second, editedScy, localY);
     }
 
     if (m_blockChangeCallback) {
@@ -1363,27 +1265,23 @@ void World::refreshConnectedBlocksAround(const glm::ivec3& pos) {
     //   - Wires attached to pos as a support block and outer-corner peers are
     //     covered below.
     static constexpr std::array<glm::ivec3, 7> kRefreshOffsets = {{
-        { 0,  0,  0},
-        { 1,  0,  0},
-        {-1,  0,  0},
-        { 0,  0,  1},
-        { 0,  0, -1},
-        { 0,  1,  0},
-        { 0, -1,  0},
+        {0, 0, 0},
+        {1, 0, 0},
+        {-1, 0, 0},
+        {0, 0, 1},
+        {0, 0, -1},
+        {0, 1, 0},
+        {0, -1, 0},
     }};
 
     for (const glm::ivec3& offset : kRefreshOffsets) {
         refreshConnectedBlockAt(pos + offset);
     }
-    forEachWirePositionOnSupport(pos, [this](const glm::ivec3& wirePosition) {
-        refreshConnectedBlockAt(wirePosition);
-    });
-    forEachWireOuterCornerPeerPosition(pos, [this](const glm::ivec3& peer) {
-        refreshConnectedBlockAt(peer);
-    });
-    forEachWireOuterCornerPositionBlockedBy(pos, [this](const glm::ivec3& wirePosition) {
-        refreshConnectedBlockAt(wirePosition);
-    });
+    forEachWirePositionOnSupport(pos,
+                                 [this](const glm::ivec3& wirePosition) { refreshConnectedBlockAt(wirePosition); });
+    forEachWireOuterCornerPeerPosition(pos, [this](const glm::ivec3& peer) { refreshConnectedBlockAt(peer); });
+    forEachWireOuterCornerPositionBlockedBy(
+        pos, [this](const glm::ivec3& wirePosition) { refreshConnectedBlockAt(wirePosition); });
 }
 
 void World::setThreadPool(ThreadPool* pool) {
@@ -1417,8 +1315,7 @@ void World::markChunkSaveDirty(int cx, int cz) {
 std::vector<save::WireContainerSaveEntry> World::collectWireContainersForChunk(const int cx, const int cz) const {
     std::vector<save::WireContainerSaveEntry> entries;
     m_wireContainerParts.forEach([&](const glm::ivec3& position, const WireContainerParts& parts) {
-        if (worldToChunkCoord(position.x, Chunk::SIZE_X) != cx ||
-            worldToChunkCoord(position.z, Chunk::SIZE_Z) != cz) {
+        if (worldToChunkCoord(position.x, Chunk::SIZE_X) != cx || worldToChunkCoord(position.z, Chunk::SIZE_Z) != cz) {
             return;
         }
         if (parts.empty()) {
@@ -1438,8 +1335,7 @@ std::vector<save::WireContainerSaveEntry> World::collectWireContainersForChunk(c
     return entries;
 }
 
-void World::applyLoadedWireContainers(const int cx,
-                                      const int cz,
+void World::applyLoadedWireContainers(const int cx, const int cz,
                                       const std::vector<save::WireContainerSaveEntry>& wireContainers) {
     eraseWireContainersInChunk(cx, cz);
     for (const save::WireContainerSaveEntry& entry : wireContainers) {
@@ -1465,8 +1361,7 @@ void World::applyLoadedWireContainers(const int cx,
 void World::eraseWireContainersInChunk(const int cx, const int cz) {
     std::vector<glm::ivec3> positions;
     m_wireContainerParts.forEach([&](const glm::ivec3& position, const WireContainerParts&) {
-        if (worldToChunkCoord(position.x, Chunk::SIZE_X) == cx &&
-            worldToChunkCoord(position.z, Chunk::SIZE_Z) == cz) {
+        if (worldToChunkCoord(position.x, Chunk::SIZE_X) == cx && worldToChunkCoord(position.z, Chunk::SIZE_Z) == cz) {
             positions.push_back(position);
         }
     });
@@ -1476,7 +1371,8 @@ void World::eraseWireContainersInChunk(const int cx, const int cz) {
 }
 
 void World::flushSaves() {
-    if (!m_saveManager) return;
+    if (!m_saveManager)
+        return;
 
     // Submit all remaining dirty chunks for saving
     for (int64_t key : m_dirtySaveChunks) {
@@ -1547,10 +1443,7 @@ TerrainBiome World::getBiome(int x, int z) const {
 }
 
 glm::ivec2 World::getChunkCoords(int worldX, int worldZ) const {
-    return {
-        worldToChunkCoord(worldX, Chunk::SIZE_X),
-        worldToChunkCoord(worldZ, Chunk::SIZE_Z)
-    };
+    return {worldToChunkCoord(worldX, Chunk::SIZE_X), worldToChunkCoord(worldZ, Chunk::SIZE_Z)};
 }
 
 World::ChunkLoadProgress World::getChunkLoadProgress(const glm::vec3& center) const {
@@ -1582,16 +1475,11 @@ World::ChunkLoadProgress World::getChunkLoadProgress(const glm::vec3& center) co
 
 const char* World::biomeToString(TerrainBiome biome) {
     switch (biome) {
-        case TerrainBiome::Temperate:
-            return "Temperate";
-        case TerrainBiome::Arid:
-            return "Arid";
-        case TerrainBiome::Mountain:
-            return "Mountain";
-        case TerrainBiome::HighMountain:
-            return "High Mountain";
-        default:
-            return "Unknown";
+    case TerrainBiome::Temperate: return "Temperate";
+    case TerrainBiome::Arid: return "Arid";
+    case TerrainBiome::Mountain: return "Mountain";
+    case TerrainBiome::HighMountain: return "High Mountain";
+    default: return "Unknown";
     }
 }
 
@@ -1601,8 +1489,10 @@ int64_t World::chunkKey(int cx, int cz) {
 
 void World::submitChunkLoad(int cx, int cz) {
     int64_t key = chunkKey(cx, cz);
-    if (m_chunks.find(key) != m_chunks.end()) return;
-    if (m_generationInFlight.count(key)) return;
+    if (m_chunks.find(key) != m_chunks.end())
+        return;
+    if (m_generationInFlight.count(key))
+        return;
     if (!m_threadPool || !m_threadPool->isRunning()) {
         // Without a worker pool, load this chunk synchronously.
         loadChunk(cx, cz);
@@ -1616,32 +1506,34 @@ void World::submitChunkLoad(int cx, int cz) {
     TerrainGenerator* terrainGen = &m_terrainGen;
     save::SaveManager* sm = m_saveManager;
 
-    m_threadPool->submit([chunk, terrainGen, sm, this]() {
-        bool loadedFromDisk = false;
+    m_threadPool->submit(
+        [chunk, terrainGen, sm, this]() {
+            bool loadedFromDisk = false;
 
-        if (sm && sm->chunkFileExists(chunk->m_chunkX, chunk->m_chunkZ)) {
-            save::ChunkLoadData loaded = sm->tryLoadChunkData(chunk->m_chunkX, chunk->m_chunkZ);
-            if (loaded.chunk) {
-                loaded.chunk->seedInitialLightMap();
+            if (sm && sm->chunkFileExists(chunk->m_chunkX, chunk->m_chunkZ)) {
+                save::ChunkLoadData loaded = sm->tryLoadChunkData(chunk->m_chunkX, chunk->m_chunkZ);
+                if (loaded.chunk) {
+                    loaded.chunk->seedInitialLightMap();
+                    {
+                        std::lock_guard<std::mutex> lock(m_completedGenMutex);
+                        m_completedGenQueue.push_back(std::move(loaded));
+                    }
+                    loadedFromDisk = true;
+                }
+            }
+
+            if (!loadedFromDisk) {
+                terrainGen->generateChunk(*chunk);
+                chunk->seedInitialLightMap();
+                save::ChunkLoadData generated;
+                generated.chunk = chunk;
                 {
                     std::lock_guard<std::mutex> lock(m_completedGenMutex);
-                    m_completedGenQueue.push_back(std::move(loaded));
+                    m_completedGenQueue.push_back(std::move(generated));
                 }
-                loadedFromDisk = true;
             }
-        }
-
-        if (!loadedFromDisk) {
-            terrainGen->generateChunk(*chunk);
-            chunk->seedInitialLightMap();
-            save::ChunkLoadData generated;
-            generated.chunk = chunk;
-            {
-                std::lock_guard<std::mutex> lock(m_completedGenMutex);
-                m_completedGenQueue.push_back(std::move(generated));
-            }
-        }
-    }, 0);
+        },
+        0);
 }
 
 void World::finalizeChunkLoad(save::ChunkLoadData loadData) {
@@ -1654,7 +1546,8 @@ void World::finalizeChunkLoad(save::ChunkLoadData loadData) {
     const int64_t key = chunkKey(cx, cz);
 
     // Guard against duplicate finalization (e.g. if loadChunk was called directly)
-    if (m_chunks.find(key) != m_chunks.end()) return;
+    if (m_chunks.find(key) != m_chunks.end())
+        return;
 
     m_chunks[key] = std::move(chunk);
     applyLoadedWireContainers(cx, cz, loadData.wireContainers);
@@ -1699,7 +1592,8 @@ void World::finalizeChunkLoad(save::ChunkLoadData loadData) {
 
 void World::loadChunk(int cx, int cz) {
     int64_t key = chunkKey(cx, cz);
-    if (m_chunks.find(key) != m_chunks.end()) return;
+    if (m_chunks.find(key) != m_chunks.end())
+        return;
 
     save::ChunkLoadData loadData;
     if (m_saveManager && m_saveManager->chunkFileExists(cx, cz)) {
@@ -1747,13 +1641,13 @@ void World::loadChunk(int cx, int cz) {
     if (m_lightService) {
         m_lightService->onChunkLoaded(m_chunks[key]);
     }
-
 }
 
 void World::unloadChunk(int cx, int cz) {
     int64_t key = chunkKey(cx, cz);
     auto it = m_chunks.find(key);
-    if (it == m_chunks.end()) return;
+    if (it == m_chunks.end())
+        return;
 
     // Save dirty chunk to disk before unloading
     if (m_saveManager && m_dirtySaveChunks.count(key)) {
@@ -1782,17 +1676,20 @@ void World::unloadChunk(int cx, int cz) {
         chunk->unlinkExistingSubChunksFromNeighbor(direction);
     }
 
-    if (chunk->neighbors[0]) chunk->neighbors[0]->neighbors[1] = nullptr;
-    if (chunk->neighbors[1]) chunk->neighbors[1]->neighbors[0] = nullptr;
-    if (chunk->neighbors[2]) chunk->neighbors[2]->neighbors[3] = nullptr;
-    if (chunk->neighbors[3]) chunk->neighbors[3]->neighbors[2] = nullptr;
+    if (chunk->neighbors[0])
+        chunk->neighbors[0]->neighbors[1] = nullptr;
+    if (chunk->neighbors[1])
+        chunk->neighbors[1]->neighbors[0] = nullptr;
+    if (chunk->neighbors[2])
+        chunk->neighbors[2]->neighbors[3] = nullptr;
+    if (chunk->neighbors[3])
+        chunk->neighbors[3]->neighbors[2] = nullptr;
 
     m_chunks.erase(it);
     eraseWireContainersInChunk(cx, cz);
     ++m_activeChunkRevision;
     ++m_blockContentRevision;
 }
-
 
 size_t World::getTotalVertexCount() const {
     size_t total = 0;
@@ -1832,10 +1729,8 @@ void World::updateLoadQueue(int playerChunkX, int playerChunkZ) {
 
     std::sort(m_loadQueue.begin(), m_loadQueue.end(),
               [playerChunkX, playerChunkZ](const glm::ivec2& a, const glm::ivec2& b) {
-                  int distA = (a.x - playerChunkX) * (a.x - playerChunkX) +
-                              (a.y - playerChunkZ) * (a.y - playerChunkZ);
-                  int distB = (b.x - playerChunkX) * (b.x - playerChunkX) +
-                              (b.y - playerChunkZ) * (b.y - playerChunkZ);
+                  int distA = (a.x - playerChunkX) * (a.x - playerChunkX) + (a.y - playerChunkZ) * (a.y - playerChunkZ);
+                  int distB = (b.x - playerChunkX) * (b.x - playerChunkX) + (b.y - playerChunkZ) * (b.y - playerChunkZ);
                   return distA > distB;
               });
 }

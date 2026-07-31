@@ -8,7 +8,7 @@ int fail(const char* message) {
     std::cerr << "[crosshair_control_test] FAIL: " << message << '\n';
     return EXIT_FAILURE;
 }
-}
+} // namespace
 
 int main() {
     CrosshairControl crosshair;
@@ -35,4 +35,3 @@ int main() {
     std::cout << "[crosshair_control_test] PASS\n";
     return EXIT_SUCCESS;
 }
-

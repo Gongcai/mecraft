@@ -9,10 +9,7 @@ namespace ecs {
 /// Deplete player food by 1 every 100 in-game seconds.
 class HungerDepletionSystem : public ISystem {
 public:
-    using Dependencies = SystemDependency<
-        std::tuple<LocalPlayerTag, FoodComponent>,
-        std::tuple<FoodComponent>
-    >;
+    using Dependencies = SystemDependency<std::tuple<LocalPlayerTag, FoodComponent>, std::tuple<FoodComponent>>;
 
     void update(SystemContext& ctx) override;
 };

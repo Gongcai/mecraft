@@ -36,7 +36,7 @@ bool hasDanglingNeighbor(const World& world) {
 
     return false;
 }
-}
+} // namespace
 
 int main() {
     BlockRegistry::init(nullptr);
@@ -64,16 +64,21 @@ int main() {
     }
     const BlockStateId topState = world.getBlockState(0, surfaceY, 0);
     const BlockID topBlock = blockIdOf(topState);
-    if (topBlock != BlockRegistry::requireIdByName("minecraft:grass_block") && topBlock != BlockRegistry::requireIdByName("minecraft:sand") &&
-        topBlock != BlockRegistry::requireIdByName("minecraft:dirt") && topBlock != BlockRegistry::requireIdByName("minecraft:stone") &&
-        topBlock != BlockRegistry::requireIdByName("minecraft:oak_log") && topBlock != BlockRegistry::requireIdByName("minecraft:birch_log") &&
-        topBlock != BlockRegistry::requireIdByName("minecraft:oak_leaves") && topBlock != BlockRegistry::requireIdByName("minecraft:birch_leaves") &&
-        !FluidState::isWater(topState) && topBlock != BlockRegistry::requireIdByName("minecraft:tall_grass") &&
+    if (topBlock != BlockRegistry::requireIdByName("minecraft:grass_block") &&
+        topBlock != BlockRegistry::requireIdByName("minecraft:sand") &&
+        topBlock != BlockRegistry::requireIdByName("minecraft:dirt") &&
+        topBlock != BlockRegistry::requireIdByName("minecraft:stone") &&
+        topBlock != BlockRegistry::requireIdByName("minecraft:oak_log") &&
+        topBlock != BlockRegistry::requireIdByName("minecraft:birch_log") &&
+        topBlock != BlockRegistry::requireIdByName("minecraft:oak_leaves") &&
+        topBlock != BlockRegistry::requireIdByName("minecraft:birch_leaves") && !FluidState::isWater(topState) &&
+        topBlock != BlockRegistry::requireIdByName("minecraft:tall_grass") &&
         topBlock != BlockRegistry::requireIdByName("minecraft:rose")) {
         return fail("surface block should be a valid generated terrain block");
     }
 
-    if ((topBlock == BlockRegistry::requireIdByName("minecraft:tall_grass") || topBlock == BlockRegistry::requireIdByName("minecraft:rose")) &&
+    if ((topBlock == BlockRegistry::requireIdByName("minecraft:tall_grass") ||
+         topBlock == BlockRegistry::requireIdByName("minecraft:rose")) &&
         blockIdOf(world.getBlockState(0, surfaceY - 1, 0)) != BlockRegistry::requireIdByName("minecraft:grass_block")) {
         return fail("vegetation surface block should be rooted on grass");
     }
@@ -101,7 +106,6 @@ int main() {
     if (hasDanglingNeighbor(world)) {
         return fail("freshly loaded chunks should not contain dangling neighbor pointers");
     }
-
 
     World world2;
     world2.init(20260324);
@@ -149,4 +153,3 @@ int main() {
     std::cout << "[world_flat_test] PASS\n";
     return EXIT_SUCCESS;
 }
-

@@ -12,8 +12,7 @@ class PlayerIntentBuildSystem : public ISystem {
 public:
     using Dependencies = SystemDependency<
         std::tuple<LocalPlayerTag, CameraStateComponent>,
-        std::tuple<MoveIntentComponent, LookIntentComponent, HotbarIntentComponent, BlockActionIntentComponent>
-    >;
+        std::tuple<MoveIntentComponent, LookIntentComponent, HotbarIntentComponent, BlockActionIntentComponent>>;
 
     void update(SystemContext& ctx) override;
 };

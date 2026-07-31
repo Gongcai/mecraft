@@ -9,11 +9,9 @@ struct TextureAtlas;
 
 namespace resource {
 
-[[nodiscard]] TextureAtlas buildBlockIconAtlas(int iconSize,
-                                               const TextureAtlas& blockAtlas,
+[[nodiscard]] TextureAtlas buildBlockIconAtlas(int iconSize, const TextureAtlas& blockAtlas,
                                                const std::vector<unsigned char>& blockAtlasPixels,
-                                               const BlockTextureLibrary& blockTextures,
-                                               RhiDevice& rhiDevice);
+                                               const BlockTextureLibrary& blockTextures, RhiDevice& rhiDevice);
 
 } // namespace resource
 

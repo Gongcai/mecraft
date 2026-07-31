@@ -25,7 +25,8 @@ void UIToggle::init(ResourceMgr& resourceMgr) {
     m_rhiDevice = &resourceMgr.rhiDevice();
     const auto vertexSource = renderer::rhi::loadShaderSource("assets/shaders/ui_capsule_rhi.vert");
     const auto fragmentSource = renderer::rhi::loadShaderSource("assets/shaders/ui_capsule_rhi.frag");
-    if (!vertexSource || !fragmentSource) std::abort();
+    if (!vertexSource || !fragmentSource)
+        std::abort();
     RhiShaderDesc shaderDesc;
     shaderDesc.debugName = "UiToggle.Vertex";
     shaderDesc.stage = RhiShaderStage::Vertex;
@@ -62,8 +63,9 @@ void UIToggle::init(ResourceMgr& resourceMgr) {
     blend.dstAlpha = RhiBlendFactor::OneMinusSrcAlpha;
     pipelineDesc.blend.attachments.push_back(blend);
     m_pipeline = m_rhiDevice->createGraphicsPipeline(pipelineDesc);
-    if (!m_vertexShader.isValid() || !m_fragmentShader.isValid() ||
-        !m_pipelineLayout.isValid() || !m_pipeline.isValid()) std::abort();
+    if (!m_vertexShader.isValid() || !m_fragmentShader.isValid() || !m_pipelineLayout.isValid() ||
+        !m_pipeline.isValid())
+        std::abort();
     initMesh();
     m_knobTween.start(m_checked ? 1.0f : 0.0f, m_checked ? 1.0f : 0.0f, 0.15f, EasingType::EaseOut);
     m_label.anchor = Anchor::BottomLeft;
@@ -75,10 +77,14 @@ void UIToggle::shutdown() {
     m_label.shutdown();
     cleanupMesh();
     if (m_rhiDevice != nullptr) {
-        if (m_pipeline.isValid()) m_rhiDevice->destroyPipeline(m_pipeline);
-        if (m_pipelineLayout.isValid()) m_rhiDevice->destroyPipelineLayout(m_pipelineLayout);
-        if (m_fragmentShader.isValid()) m_rhiDevice->destroyShader(m_fragmentShader);
-        if (m_vertexShader.isValid()) m_rhiDevice->destroyShader(m_vertexShader);
+        if (m_pipeline.isValid())
+            m_rhiDevice->destroyPipeline(m_pipeline);
+        if (m_pipelineLayout.isValid())
+            m_rhiDevice->destroyPipelineLayout(m_pipelineLayout);
+        if (m_fragmentShader.isValid())
+            m_rhiDevice->destroyShader(m_fragmentShader);
+        if (m_vertexShader.isValid())
+            m_rhiDevice->destroyShader(m_vertexShader);
     }
     m_pipeline = {};
     m_pipelineLayout = {};
@@ -89,7 +95,8 @@ void UIToggle::shutdown() {
 }
 
 void UIToggle::setChecked(bool checked) {
-    if (m_checked == checked) return;
+    if (m_checked == checked)
+        return;
     m_checked = checked;
     m_knobTween.start(m_knobTween.value(), m_checked ? 1.0f : 0.0f, 0.15f, EasingType::EaseOut);
 }
@@ -123,38 +130,36 @@ void UIToggle::setFocused(bool focused) {
 void UIToggle::toggle() {
     m_checked = !m_checked;
     m_knobTween.start(m_knobTween.value(), m_checked ? 1.0f : 0.0f, 0.15f, EasingType::EaseOut);
-    if (onChanged) onChanged(m_checked);
+    if (onChanged)
+        onChanged(m_checked);
 }
 
 void UIToggle::initMesh() {
-    constexpr float vertices[] = {
-        0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 1.0f,
-        0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 1.0f
-    };
+    constexpr float vertices[] = {0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 1.0f};
     RhiBufferDesc desc;
     desc.debugName = "UiToggle.VertexBuffer";
     desc.size = sizeof(vertices);
-    desc.usage = rhiFlag(RhiBufferUsage::Vertex) |
-                 rhiFlag(RhiBufferUsage::TransferDst);
+    desc.usage = rhiFlag(RhiBufferUsage::Vertex) | rhiFlag(RhiBufferUsage::TransferDst);
     desc.memoryUsage = RhiMemoryUsage::GpuOnly;
     desc.initialState = RhiResourceState::VertexBuffer;
     desc.memoryCategory = RhiMemoryCategory::Geometry;
     m_vertexBuffer = m_rhiDevice->createBuffer(desc, vertices, sizeof(vertices));
-    if (!m_vertexBuffer.isValid()) std::abort();
+    if (!m_vertexBuffer.isValid())
+        std::abort();
 }
 
 void UIToggle::cleanupMesh() {
-    if (m_rhiDevice != nullptr && m_vertexBuffer.isValid()) m_rhiDevice->destroyBuffer(m_vertexBuffer);
+    if (m_rhiDevice != nullptr && m_vertexBuffer.isValid())
+        m_rhiDevice->destroyBuffer(m_vertexBuffer);
     m_vertexBuffer = {};
 }
 
 void UIToggle::renderSelf(const UIRenderContext& ctx) const {
     const bool record = ctx.phase == UIRenderPhase::Record;
-    if (record &&
-        (ctx.commandList == nullptr || !m_pipeline.isValid() || !m_vertexBuffer.isValid())) return;
+    if (record && (ctx.commandList == nullptr || !m_pipeline.isValid() || !m_vertexBuffer.isValid()))
+        return;
 
-    const UIResolvedToggleStyle resolved =
-        UIStyleResolver::resolveToggle(resolveBaseStyle(ctx), currentStyleState());
+    const UIResolvedToggleStyle resolved = UIStyleResolver::resolveToggle(resolveBaseStyle(ctx), currentStyleState());
     const Color trackOff = resolved.trackOff;
     const Color trackOn = resolved.trackOn;
     const Color knobCol = resolved.knob;
@@ -189,26 +194,28 @@ void UIToggle::renderSelf(const UIRenderContext& ctx) const {
     if (record) {
         ctx.commandList->setGraphicsPipeline(m_pipeline);
         ctx.commandList->setVertexBuffer(0u, m_vertexBuffer, 0u);
-        auto drawShape = [&](const float x0, const float y0, const float shapeW,
-                             const float shapeH, const float radius, Color shapeColor) {
+        auto drawShape = [&](const float x0, const float y0, const float shapeW, const float shapeH, const float radius,
+                             Color shapeColor) {
             shapeColor[3] *= alpha;
-            struct PushConstants { glm::vec4 screenRect; glm::vec4 rectRadius; glm::vec4 color; };
+            struct PushConstants {
+                glm::vec4 screenRect;
+                glm::vec4 rectRadius;
+                glm::vec4 color;
+            };
             const PushConstants pushConstants{
                 glm::vec4(static_cast<float>(ctx.screenWidth), static_cast<float>(ctx.screenHeight), x0, y0),
                 glm::vec4(shapeW, shapeH, radius, 0.0f),
-                glm::vec4(shapeColor[0], shapeColor[1], shapeColor[2], shapeColor[3])
-            };
+                glm::vec4(shapeColor[0], shapeColor[1], shapeColor[2], shapeColor[3])};
             ctx.commandList->pushConstants(&pushConstants, sizeof(pushConstants),
                                            rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment));
             ctx.commandList->draw(6u, 1u, 0u, 0u);
         };
         drawShape(ax, ay, toggleW, toggleH, trackRadius, trackCol);
-        Color knobShadow {0.0f, 0.0f, 0.0f, active ? 0.30f : 0.20f};
+        Color knobShadow{0.0f, 0.0f, 0.0f, active ? 0.30f : 0.20f};
         const float shadowRadius = knobRadius + 1.5f;
-        drawShape(knobCx - shadowRadius, knobCy - 1.0f - shadowRadius,
-                  shadowRadius * 2.0f, shadowRadius * 2.0f, shadowRadius, knobShadow);
-        drawShape(knobCx - knobRadius, knobCy - knobRadius,
-                  knobRadius * 2.0f, knobRadius * 2.0f, knobRadius, knobCol);
+        drawShape(knobCx - shadowRadius, knobCy - 1.0f - shadowRadius, shadowRadius * 2.0f, shadowRadius * 2.0f,
+                  shadowRadius, knobShadow);
+        drawShape(knobCx - knobRadius, knobCy - knobRadius, knobRadius * 2.0f, knobRadius * 2.0f, knobRadius, knobCol);
     }
 
     // Render label to the right.
@@ -223,11 +230,13 @@ void UIToggle::renderSelf(const UIRenderContext& ctx) const {
 }
 
 UIEventResult UIToggle::onInput(const UIInputEvent& event, const UIRenderContext& ctx) {
-    if (!visible || !interactive) return UIEventResult::Ignored;
+    if (!visible || !interactive)
+        return UIEventResult::Ignored;
 
     // Forward to children first.
     const UIEventResult childResult = UIWidget::onInput(event, ctx);
-    if (childResult == UIEventResult::Consumed) return UIEventResult::Consumed;
+    if (childResult == UIEventResult::Consumed)
+        return UIEventResult::Consumed;
 
     const bool inside = hitTest(event.x, event.y, ctx);
 
@@ -256,8 +265,7 @@ UIEventResult UIToggle::onInput(const UIInputEvent& event, const UIRenderContext
         }
         break;
 
-    default:
-        break;
+    default: break;
     }
 
     return childResult;

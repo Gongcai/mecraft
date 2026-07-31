@@ -38,77 +38,36 @@ namespace {
 
 } // namespace
 
-GameplayState::GameplayState(StateDependencies deps,
-                             const IGameplayModeRules& modeRules,
+GameplayState::GameplayState(StateDependencies deps, const IGameplayModeRules& modeRules,
                              const GameplayMode gameplayMode)
     : GameplayState(
-          GameplayStateContext{
-              deps.fsm,
-              deps.context,
-              deps.input,
-              deps.uiRenderer,
-              deps.ecsRegistry,
-              deps.inventory,
-              deps.localeManager,
-              deps.gameClient,
-              deps.renderScene,
-              &deps.world,
-              [&world = deps.world, &client = deps.gameClient](const int distance) {
-                  world.setRenderDistance(distance);
-                  client.clientWorld().setRenderDistance(distance);
-                  client.sendViewConfig(distance);
-              },
-              deps.isMultiplayer,
-              deps.window,
-              deps.presentationController
-          },
-          InventoryStateContext{
-              deps.fsm,
-              deps.inventory,
-              deps.context,
-              deps.input,
-              deps.uiRenderer,
-              deps.dropSystem,
-              deps.ecsRegistry,
-              &deps.gameClient,
-              deps.isMultiplayer
-          },
-          CommandStateContext{
-              deps.fsm,
-              deps.context,
-              deps.input,
-              deps.uiRenderer,
-              deps.lastSubmittedCommand,
-              deps.world,
-              deps.ecsRegistry,
-              deps.localeManager,
-              deps.gameClient,
-              deps.isMultiplayer
-          },
+          GameplayStateContext{deps.fsm, deps.context, deps.input, deps.uiRenderer, deps.ecsRegistry, deps.inventory,
+                               deps.localeManager, deps.gameClient, deps.renderScene, &deps.world,
+                               [&world = deps.world, &client = deps.gameClient](const int distance) {
+                                   world.setRenderDistance(distance);
+                                   client.clientWorld().setRenderDistance(distance);
+                                   client.sendViewConfig(distance);
+                               },
+                               deps.isMultiplayer, deps.window, deps.presentationController},
+          InventoryStateContext{deps.fsm, deps.inventory, deps.context, deps.input, deps.uiRenderer, deps.dropSystem,
+                                deps.ecsRegistry, &deps.gameClient, deps.isMultiplayer},
+          CommandStateContext{deps.fsm, deps.context, deps.input, deps.uiRenderer, deps.lastSubmittedCommand,
+                              deps.world, deps.ecsRegistry, deps.localeManager, deps.gameClient, deps.isMultiplayer},
           [deps]() -> std::unique_ptr<IGameState> { return std::make_unique<CreativeModeState>(deps); },
-          [deps]() -> std::unique_ptr<IGameState> { return std::make_unique<GameplayState>(deps); },
-          modeRules,
+          [deps]() -> std::unique_ptr<IGameState> { return std::make_unique<GameplayState>(deps); }, modeRules,
           gameplayMode) {}
 
-GameplayState::GameplayState(GameplayStateContext gameplayCtx,
-                             InventoryStateContext inventoryCtx,
-                             CommandStateContext commandCtx,
-                             StateFactory makeCreativeModeState,
-                             StateFactory makeSurvivalModeState,
-                             const IGameplayModeRules& modeRules,
+GameplayState::GameplayState(GameplayStateContext gameplayCtx, InventoryStateContext inventoryCtx,
+                             CommandStateContext commandCtx, StateFactory makeCreativeModeState,
+                             StateFactory makeSurvivalModeState, const IGameplayModeRules& modeRules,
                              const GameplayMode gameplayMode)
-    : m_ctx(gameplayCtx),
-      m_inventoryCtx(inventoryCtx),
-      m_commandCtx(commandCtx),
+    : m_ctx(gameplayCtx), m_inventoryCtx(inventoryCtx), m_commandCtx(commandCtx),
       m_makeCreativeModeState(std::move(makeCreativeModeState)),
-      m_makeSurvivalModeState(std::move(makeSurvivalModeState)),
-      m_modeRules(modeRules),
-      m_gameplayMode(gameplayMode) {}
+      m_makeSurvivalModeState(std::move(makeSurvivalModeState)), m_modeRules(modeRules), m_gameplayMode(gameplayMode) {}
 
-void GameplayState::onEnter()
-{
+void GameplayState::onEnter() {
     if (m_ctx.context.getCurrentContext() != InputContextType::Gameplay) {
-         m_ctx.context.switchContext(InputContextType::Gameplay);
+        m_ctx.context.switchContext(InputContextType::Gameplay);
     }
     m_ctx.input.captureMouse(true);
     m_ctx.uiRenderer.setInventoryPanelVisible(false);
@@ -127,8 +86,7 @@ void GameplayState::onEnter()
     GameplayStateEcsBridge::syncSelectedHotbarSlot(m_ctx.ecsRegistry, m_ctx.inventory);
 }
 
-void GameplayState::update(float dt, const InputSnapshot& snapshot)
-{
+void GameplayState::update(float dt, const InputSnapshot& snapshot) {
     static_cast<void>(snapshot);
     if (handleBlockContainerInteraction(snapshot)) {
         resetBlockBreakSession();
@@ -150,8 +108,7 @@ void GameplayState::update(float dt, const InputSnapshot& snapshot)
     driveLegacyGameplayBridge(dt);
 }
 
-bool GameplayState::handleBlockContainerInteraction(const InputSnapshot& snapshot)
-{
+bool GameplayState::handleBlockContainerInteraction(const InputSnapshot& snapshot) {
     if (!m_ctx.context.isActionTriggered(Action::UseItem) ||
         !snapshot.isMouseButtonJustPressed(GLFW_MOUSE_BUTTON_RIGHT)) {
         return false;
@@ -160,9 +117,7 @@ bool GameplayState::handleBlockContainerInteraction(const InputSnapshot& snapsho
         return false;
     }
 
-    auto view = m_ctx.ecsRegistry.view<ecs::LocalPlayerTag,
-                                       ecs::TransformComponent,
-                                       ecs::BlockTargetComponent,
+    auto view = m_ctx.ecsRegistry.view<ecs::LocalPlayerTag, ecs::TransformComponent, ecs::BlockTargetComponent,
                                        ecs::BlockInteractionRuntimeComponent>();
     for (auto entity : view) {
         const auto& transform = view.get<ecs::TransformComponent>(entity);
@@ -171,8 +126,7 @@ bool GameplayState::handleBlockContainerInteraction(const InputSnapshot& snapsho
         if (!target.hasTarget) {
             continue;
         }
-        if (runtime.postPlaceInteractionSuppressSeconds > 0.0f &&
-            runtime.recentlyPlacedBlock == target.targetBlock) {
+        if (runtime.postPlaceInteractionSuppressSeconds > 0.0f && runtime.recentlyPlacedBlock == target.targetBlock) {
             continue;
         }
 
@@ -180,10 +134,8 @@ bool GameplayState::handleBlockContainerInteraction(const InputSnapshot& snapsho
             failGameplayState("Block interaction requires an active world context");
         }
 
-        const BlockStateId targetState = m_ctx.world->getBlockState(
-            target.targetBlock.x,
-            target.targetBlock.y,
-            target.targetBlock.z);
+        const BlockStateId targetState =
+            m_ctx.world->getBlockState(target.targetBlock.x, target.targetBlock.y, target.targetBlock.z);
         const BlockID targetBlock = BlockStateRegistry::getBlockId(targetState);
         if (game::interaction::hasBlockInteraction(targetBlock)) {
             if (m_ctx.isMultiplayer) {
@@ -195,14 +147,14 @@ bool GameplayState::handleBlockContainerInteraction(const InputSnapshot& snapsho
             } else {
                 game::interaction::applyBlockInteraction(*m_ctx.world, target.targetBlock);
             }
-            runtime.placeCooldownRemaining = std::max(runtime.placeCooldownRemaining,
-                                                      m_modeRules.placeCooldownSeconds());
+            runtime.placeCooldownRemaining =
+                std::max(runtime.placeCooldownRemaining, m_modeRules.placeCooldownSeconds());
             return true;
         }
 
         if (BedBlockLogic::isBedState(targetState)) {
-            runtime.placeCooldownRemaining = std::max(runtime.placeCooldownRemaining,
-                                                      m_modeRules.placeCooldownSeconds());
+            runtime.placeCooldownRemaining =
+                std::max(runtime.placeCooldownRemaining, m_modeRules.placeCooldownSeconds());
             if (m_ctx.isMultiplayer) {
                 m_ctx.uiRenderer.appendWarningLine(m_ctx.localeManager.tr("sleep_singleplayer_only"));
                 return true;
@@ -211,20 +163,14 @@ bool GameplayState::handleBlockContainerInteraction(const InputSnapshot& snapsho
                 m_ctx.uiRenderer.appendWarningLine(m_ctx.localeManager.tr("sleep_night_only"));
                 return true;
             }
-            m_ctx.fsm.pushState(std::make_unique<SleepingState>(
-                m_ctx.fsm,
-                m_ctx.context,
-                m_ctx.input,
-                *m_ctx.world));
+            m_ctx.fsm.pushState(std::make_unique<SleepingState>(m_ctx.fsm, m_ctx.context, m_ctx.input, *m_ctx.world));
             return true;
         }
 
         const BlockDef& targetDef = BlockRegistry::getFast(targetBlock);
         if (!targetDef.containerUi.empty()) {
-            m_ctx.fsm.pushState(ContainerStateFactory::create(
-                m_inventoryCtx,
-                targetDef.containerUi,
-                target.targetBlock));
+            m_ctx.fsm.pushState(
+                ContainerStateFactory::create(m_inventoryCtx, targetDef.containerUi, target.targetBlock));
             return true;
         }
     }
@@ -232,8 +178,7 @@ bool GameplayState::handleBlockContainerInteraction(const InputSnapshot& snapsho
     return false;
 }
 
-bool GameplayState::handleInventoryTransition()
-{
+bool GameplayState::handleInventoryTransition() {
     if (!m_ctx.context.isActionTriggered(Action::Inventory)) {
         return false;
     }
@@ -245,39 +190,34 @@ bool GameplayState::handleInventoryTransition()
     return true;
 }
 
-bool GameplayState::handleMenuTransition()
-{
+bool GameplayState::handleMenuTransition() {
     if (!m_ctx.context.isActionTriggered(Action::Menu)) {
         return false;
     }
 
     // G6: Create UIState with narrow UIStateContext
-    UIStateContext uiCtx{m_ctx.fsm, m_ctx.context, m_ctx.input, m_ctx.uiRenderer, m_ctx.localeManager,
-                         m_ctx.renderScene, m_ctx.world, m_ctx.renderDistanceSetter,
-                         m_ctx.window, m_ctx.presentationController};
+    UIStateContext uiCtx{m_ctx.fsm,           m_ctx.context,
+                         m_ctx.input,         m_ctx.uiRenderer,
+                         m_ctx.localeManager, m_ctx.renderScene,
+                         m_ctx.world,         m_ctx.renderDistanceSetter,
+                         m_ctx.window,        m_ctx.presentationController};
     m_ctx.fsm.pushState(std::make_unique<UIState>(uiCtx));
     return true;
 }
 
-bool GameplayState::handleCommandTransition()
-{
+bool GameplayState::handleCommandTransition() {
     if (!m_ctx.context.isActionTriggered(Action::OpenCommand)) {
         return false;
     }
 
-    m_ctx.fsm.pushState(std::make_unique<CommandState>(
-        m_commandCtx,
-        m_makeCreativeModeState,
-        m_makeSurvivalModeState));
+    m_ctx.fsm.pushState(std::make_unique<CommandState>(m_commandCtx, m_makeCreativeModeState, m_makeSurvivalModeState));
     return true;
 }
 
-void GameplayState::driveLegacyGameplayBridge(float dt)
-{
+void GameplayState::driveLegacyGameplayBridge(float dt) {
     static_cast<void>(dt);
 }
 
-void GameplayState::resetBlockBreakSession()
-{
+void GameplayState::resetBlockBreakSession() {
     GameplayStateEcsBridge::resetBlockBreakSession(m_ctx.ecsRegistry);
 }

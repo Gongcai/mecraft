@@ -6,7 +6,9 @@
 #include <unordered_set>
 #include <vector>
 
-namespace ecs { class GameplayRegistry; }
+namespace ecs {
+class GameplayRegistry;
+}
 
 /// A queue of block positions that need a neighbor-update check.
 /// When a block changes, its 6 neighbors are enqueued; the tick-rate
@@ -31,15 +33,18 @@ private:
         size_t operator()(const glm::ivec3& v) const noexcept {
             // FNV-1a inspired combine
             size_t h = 14695981039346656037ULL;
-            h ^= static_cast<size_t>(v.x); h *= 1099511628211ULL;
-            h ^= static_cast<size_t>(v.y); h *= 1099511628211ULL;
-            h ^= static_cast<size_t>(v.z); h *= 1099511628211ULL;
+            h ^= static_cast<size_t>(v.x);
+            h *= 1099511628211ULL;
+            h ^= static_cast<size_t>(v.y);
+            h *= 1099511628211ULL;
+            h ^= static_cast<size_t>(v.z);
+            h *= 1099511628211ULL;
             return h;
         }
     };
 
     std::queue<glm::ivec3> m_queue;
-    std::unordered_set<glm::ivec3, IVec3Hash> m_queued;  // dedup
+    std::unordered_set<glm::ivec3, IVec3Hash> m_queued; // dedup
 };
 
 #endif // MECRAFT_BLOCK_NEIGHBOR_UPDATE_QUEUE_H

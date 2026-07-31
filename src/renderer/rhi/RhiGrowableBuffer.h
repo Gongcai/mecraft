@@ -15,18 +15,12 @@ public:
     RhiGrowableBuffer();
     ~RhiGrowableBuffer();
 
-    bool init(RhiDevice& rhiDevice,
-              uint64_t initialSize,
-              RhiBufferUsageFlags usage,
-              RhiMemoryCategory memoryCategory,
+    bool init(RhiDevice& rhiDevice, uint64_t initialSize, RhiBufferUsageFlags usage, RhiMemoryCategory memoryCategory,
               const char* debugName);
     void shutdown();
 
     bool ensureCapacity(RhiCommandList& commandList, uint64_t requiredSize);
-    bool write(RhiCommandList& commandList,
-               uint64_t offset,
-               const void* data,
-               size_t size);
+    bool write(RhiCommandList& commandList, uint64_t offset, const void* data, size_t size);
 
     [[nodiscard]] RhiBufferHandle buffer() const { return m_buffer; }
     [[nodiscard]] uint64_t capacity() const { return m_capacity; }

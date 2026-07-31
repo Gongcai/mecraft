@@ -3,10 +3,10 @@
 #include <cstdint>
 
 enum class UIInputModifier {
-    Shift   = 1 << 0,
+    Shift = 1 << 0,
     Control = 1 << 1,
-    Alt     = 1 << 2,
-    Super   = 1 << 3,
+    Alt = 1 << 2,
+    Super = 1 << 3,
 };
 
 [[nodiscard]] inline constexpr int uiInputModifierMask(UIInputModifier modifier) {
@@ -60,4 +60,3 @@ struct UIInputEvent {
     float scrollX = 0.0f;
     float scrollY = 0.0f;
 };
-

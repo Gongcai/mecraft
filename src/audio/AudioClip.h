@@ -32,5 +32,4 @@ private:
     bool m_valid = false;
 };
 
-
 #endif //MECRAFT_AUDIOCLIP_H

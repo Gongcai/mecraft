@@ -39,15 +39,14 @@ public:
 private:
     bool initWindow(int width, int height, const char* title);
     bool initRhiDevice();
-    
+
     [[nodiscard]] AppStateDependencies makeAppStateDependencies();
 
     [[nodiscard]] static double clampFrameTime(double dt);
     [[nodiscard]] bool makeBenchmarkSessionConfig(GameSessionConfig& outConfig) const;
     [[nodiscard]] bool configureInputReplay();
     void activateInputReplayForScope(AppLaunchOptions::InputReplayScope scope);
-    void recordBenchmarkFrame(double measuredFrameSeconds,
-                              bool validationSampleCompleted);
+    void recordBenchmarkFrame(double measuredFrameSeconds, bool validationSampleCompleted);
     void closeWindowIfBenchmarkComplete();
     [[nodiscard]] bool writeBenchmarkReport();
 

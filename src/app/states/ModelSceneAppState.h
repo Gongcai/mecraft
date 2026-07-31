@@ -22,9 +22,7 @@ public:
     void onExit() override;
     void update(double frameTime, double& accumulator) override;
     void render(double frameTime) override;
-    [[nodiscard]] const GpuFrameStats* gpuFrameStats() const override {
-        return m_scene.gpuFrameStats();
-    }
+    [[nodiscard]] const GpuFrameStats* gpuFrameStats() const override { return m_scene.gpuFrameStats(); }
 
 private:
     enum class PendingSceneAction {
@@ -64,16 +62,12 @@ private:
     void markSceneDirty();
     void refreshSceneDirty();
     void recordCreatedEntity(entt::entity entity);
-    void beginTransformCommand(
-        entt::entity entity,
-        const scene::SceneEntityDocument& before,
-        bool fromGizmo);
+    void beginTransformCommand(entt::entity entity, const scene::SceneEntityDocument& before, bool fromGizmo);
     void finishTransformCommand();
     void undoSceneCommand();
     void redoSceneCommand();
     void handleEditorShortcuts(const InputSnapshot& input);
-    void queueEntityAction(PendingEntityAction action,
-                           scene::SceneEntityId entityId);
+    void queueEntityAction(PendingEntityAction action, scene::SceneEntityId entityId);
     void executePendingEntityAction();
     void duplicateSelectedEntity();
     void deleteSelectedEntity();
@@ -117,15 +111,11 @@ private:
     PendingEntityAction m_pendingEntityAction = PendingEntityAction::None;
     scene::SceneEntityId m_pendingEntityId = scene::kInvalidSceneEntityId;
     scene::SceneEntityId m_entityNameEditorId = scene::kInvalidSceneEntityId;
-    scene::SceneEntityId m_transformCommandEntityId =
-        scene::kInvalidSceneEntityId;
+    scene::SceneEntityId m_transformCommandEntityId = scene::kInvalidSceneEntityId;
     scene::SceneEntityDocument m_transformCommandBefore;
-    scene::SceneEntityId m_hierarchyDropChild =
-        scene::kInvalidSceneEntityId;
-    scene::SceneEntityId m_hierarchyDropParent =
-        scene::kInvalidSceneEntityId;
-    std::array<char, 4096> m_importPath{
-        "assets/models/showcase/DamagedHelmet.glb"};
+    scene::SceneEntityId m_hierarchyDropChild = scene::kInvalidSceneEntityId;
+    scene::SceneEntityId m_hierarchyDropParent = scene::kInvalidSceneEntityId;
+    std::array<char, 4096> m_importPath{"assets/models/showcase/DamagedHelmet.glb"};
     std::array<char, 512> m_entityNameBuffer{};
     std::string m_importDialogError;
     std::string m_scenePath;

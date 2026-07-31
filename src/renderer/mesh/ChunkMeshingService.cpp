@@ -45,32 +45,33 @@ void ChunkMeshingService::submit(SubChunkMeshingJob job, const int priority) {
         m_inFlight.fetch_add(1, std::memory_order_relaxed);
     }
 
-    pool->submit([this, epoch, job = std::move(job)]() mutable {
-        SubChunkMeshingResult result;
-        result.chunkKey = job.chunkKey;
-        result.scy = job.scy;
-        result.revision = job.revision;
+    pool->submit(
+        [this, epoch, job = std::move(job)]() mutable {
+            SubChunkMeshingResult result;
+            result.chunkKey = job.chunkKey;
+            result.scy = job.scy;
+            result.revision = job.revision;
 
-        if (job.snapshot) {
-            result.meshData = acquireMeshData();
-            ChunkMesher::buildSubChunkMeshData(*job.snapshot, result.meshData);
-        }
-
-        const bool shouldPublish = m_running.load(std::memory_order_acquire) &&
-            m_epoch.load(std::memory_order_acquire) == epoch;
-        if (shouldPublish) {
-            std::lock_guard<SpinLock> lock(m_completedLock);
-            if (m_running.load(std::memory_order_acquire) &&
-                m_epoch.load(std::memory_order_acquire) == epoch) {
-                m_completed.push(std::move(result));
-                m_inFlight.fetch_sub(1, std::memory_order_release);
-                return;
+            if (job.snapshot) {
+                result.meshData = acquireMeshData();
+                ChunkMesher::buildSubChunkMeshData(*job.snapshot, result.meshData);
             }
-        }
 
-        recycleMeshData(std::move(result.meshData));
-        m_inFlight.fetch_sub(1, std::memory_order_release);
-    }, priority);
+            const bool shouldPublish =
+                m_running.load(std::memory_order_acquire) && m_epoch.load(std::memory_order_acquire) == epoch;
+            if (shouldPublish) {
+                std::lock_guard<SpinLock> lock(m_completedLock);
+                if (m_running.load(std::memory_order_acquire) && m_epoch.load(std::memory_order_acquire) == epoch) {
+                    m_completed.push(std::move(result));
+                    m_inFlight.fetch_sub(1, std::memory_order_release);
+                    return;
+                }
+            }
+
+            recycleMeshData(std::move(result.meshData));
+            m_inFlight.fetch_sub(1, std::memory_order_release);
+        },
+        priority);
 }
 
 bool ChunkMeshingService::tryPopCompleted(SubChunkMeshingResult& out) {

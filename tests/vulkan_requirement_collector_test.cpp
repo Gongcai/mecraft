@@ -9,8 +9,7 @@ namespace {
 
 VkExtensionProperties extension(const char* name) {
     VkExtensionProperties result{};
-    const size_t length = std::min(std::strlen(name),
-                                   static_cast<size_t>(VK_MAX_EXTENSION_NAME_SIZE - 1u));
+    const size_t length = std::min(std::strlen(name), static_cast<size_t>(VK_MAX_EXTENSION_NAME_SIZE - 1u));
     std::memcpy(result.extensionName, name, length);
     return result;
 }

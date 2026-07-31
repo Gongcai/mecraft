@@ -39,13 +39,8 @@ void SoilTillingSystem::update(SystemContext& ctx) {
     const IGameplayModeRules& modeRules = resolveModeRules(registry);
     auto& audioBus = ensureAudioEventBus(registry);
 
-    auto view = registry.view<LocalPlayerTag,
-                              BlockActionIntentComponent,
-                              TransformComponent,
-                              InventoryComponent,
-                              InventoryDataComponent,
-                              BlockTargetComponent,
-                              BlockInteractionRuntimeComponent>();
+    auto view = registry.view<LocalPlayerTag, BlockActionIntentComponent, TransformComponent, InventoryComponent,
+                              InventoryDataComponent, BlockTargetComponent, BlockInteractionRuntimeComponent>();
     for (auto e : view) {
         auto& runtime = view.get<BlockInteractionRuntimeComponent>(e);
         const auto& intent = view.get<BlockActionIntentComponent>(e);

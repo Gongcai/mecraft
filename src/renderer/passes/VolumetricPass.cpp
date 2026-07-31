@@ -99,10 +99,9 @@ void VolumetricPass::invalidateHistory() {
 }
 
 bool VolumetricPass::shouldRenderFog(const FrameContext& ctx, const RenderSettings& settings,
-                                      const bool hasPreviousFrame) const {
+                                     const bool hasPreviousFrame) const {
     const bool underwaterVolumetricActive = ctx.eyeInWater && settings.volumetric.uwLightEnabled;
-    if (underwaterVolumetricActive || !settings.volumetric.temporalEnabled || !hasPreviousFrame ||
-        !m_hasRenderedFog) {
+    if (underwaterVolumetricActive || !settings.volumetric.temporalEnabled || !hasPreviousFrame || !m_hasRenderedFog) {
         return true;
     }
 
@@ -113,8 +112,8 @@ bool VolumetricPass::shouldRenderFog(const FrameContext& ctx, const RenderSettin
 
     const glm::vec3 cameraDelta = ctx.camera.position - m_lastCameraPos;
     const bool movedFar = glm::dot(cameraDelta, cameraDelta) > 4.0f;
-    const float weatherSignal = ctx.weather.wetness + ctx.weather.storm + ctx.weather.fogWetness +
-                                ctx.weather.lightningFlash * 4.0f;
+    const float weatherSignal =
+        ctx.weather.wetness + ctx.weather.storm + ctx.weather.fogWetness + ctx.weather.lightningFlash * 4.0f;
     const bool weatherChanged = std::abs(weatherSignal - m_lastWeatherSignal) > 0.02f;
     if (movedFar || weatherChanged) {
         return true;
@@ -123,37 +122,27 @@ bool VolumetricPass::shouldRenderFog(const FrameContext& ctx, const RenderSettin
     return (ctx.frameIndex % static_cast<uint64_t>(updateInterval)) == 0;
 }
 
-RgPassHandle VolumetricPass::addGraphPreparationPasses(
-    RenderGraph& graph,
-    const FrameContext& ctx,
-    const RenderSettings& settings,
-    DeferredRenderTargets& targets,
-    const bool hasPreviousFrame,
-    const GraphResources& resources,
-    const RgPassHandle dependency) {
+RgPassHandle VolumetricPass::addGraphPreparationPasses(RenderGraph& graph, const FrameContext& ctx,
+                                                       const RenderSettings& settings, DeferredRenderTargets& targets,
+                                                       const bool hasPreviousFrame, const GraphResources& resources,
+                                                       const RgPassHandle dependency) {
     m_graphFramePrepared = false;
     m_graphWritesHistory = false;
-    if (!dependency.isValid() || !resources.depth.isValid() ||
-        !resources.halfRes.isValid()) {
+    if (!dependency.isValid() || !resources.depth.isValid() || !resources.halfRes.isValid()) {
         return {};
     }
 
     const bool renderCurrentFog = shouldRenderFog(ctx, settings, hasPreviousFrame);
-    const bool useTemporalVolumetric = settings.volumetric.temporalEnabled &&
-                                       hasPreviousFrame && hasTemporalShader();
+    const bool useTemporalVolumetric = settings.volumetric.temporalEnabled && hasPreviousFrame && hasTemporalShader();
     RgPassHandle tail = dependency;
     if (renderCurrentFog) {
-        if (!resources.skyCapture.isValid() || !resources.noise.isValid() ||
-            !resources.atmosphereLut.isValid() ||
-            !resources.shadowDepthOpaque.isValid() ||
-            !resources.shadowDepthAll.isValid() ||
-            !resources.shadowColor0.isValid() ||
-            !resources.shadowColor1.isValid()) {
+        if (!resources.skyCapture.isValid() || !resources.noise.isValid() || !resources.atmosphereLut.isValid() ||
+            !resources.shadowDepthOpaque.isValid() || !resources.shadowDepthAll.isValid() ||
+            !resources.shadowColor0.isValid() || !resources.shadowColor1.isValid()) {
             return {};
         }
-        RenderGraphPassBuilder fog = graph.addPass(
-            {"Volumetric.Fog", RgPassType::Graphics, RhiQueueType::Graphics,
-             /*threadSafeRecord=*/true});
+        RenderGraphPassBuilder fog = graph.addPass({"Volumetric.Fog", RgPassType::Graphics, RhiQueueType::Graphics,
+                                                    /*threadSafeRecord=*/true});
         fog.dependsOn(tail)
             .readTexture(resources.depth, RhiResourceState::DepthRead)
             .readTexture(resources.skyCapture, RhiResourceState::ShaderRead)
@@ -164,20 +153,16 @@ RgPassHandle VolumetricPass::addGraphPreparationPasses(
             .readTexture(resources.shadowColor0, RhiResourceState::ShaderRead)
             .readTexture(resources.shadowColor1, RhiResourceState::ShaderRead)
             .writeTexture(resources.halfRes, RhiResourceState::RenderTarget)
-            .setExecute([this, frame = &ctx, frameSettings = settings,
-                         frameTargets = &targets](RgPassContext& pass) {
-                return recordFogPass(pass.commandList(), *frame, frameSettings,
-                                     *frameTargets);
+            .setExecute([this, frame = &ctx, frameSettings = settings, frameTargets = &targets](RgPassContext& pass) {
+                return recordFogPass(pass.commandList(), *frame, frameSettings, *frameTargets);
             });
         tail = fog.handle();
     } else {
-        if (!resources.historyPrevious.isValid() ||
-            !resources.historyCurrent.isValid()) {
+        if (!resources.historyPrevious.isValid() || !resources.historyCurrent.isValid()) {
             return {};
         }
         RenderGraphPassBuilder reuse = graph.addPass(
-            {"Volumetric.HistoryReuse", RgPassType::Copy,
-             RhiQueueType::Graphics, /*threadSafeRecord=*/true});
+            {"Volumetric.HistoryReuse", RgPassType::Copy, RhiQueueType::Graphics, /*threadSafeRecord=*/true});
         reuse.dependsOn(tail)
             .readTexture(resources.historyPrevious, RhiResourceState::TransferSrc)
             .writeTexture(resources.halfRes, RhiResourceState::TransferDst)
@@ -198,15 +183,12 @@ RgPassHandle VolumetricPass::addGraphPreparationPasses(
     }
 
     if (renderCurrentFog && useTemporalVolumetric) {
-        if (!resources.historyPrevious.isValid() ||
-            !resources.historyCurrent.isValid() ||
-            !resources.velocity.isValid() ||
-            !resources.historyDepthPrevious.isValid()) {
+        if (!resources.historyPrevious.isValid() || !resources.historyCurrent.isValid() ||
+            !resources.velocity.isValid() || !resources.historyDepthPrevious.isValid()) {
             return {};
         }
         RenderGraphPassBuilder temporal = graph.addPass(
-            {"Volumetric.Temporal", RgPassType::Graphics,
-             RhiQueueType::Graphics, /*threadSafeRecord=*/true});
+            {"Volumetric.Temporal", RgPassType::Graphics, RhiQueueType::Graphics, /*threadSafeRecord=*/true});
         temporal.dependsOn(tail)
             .readTexture(resources.halfRes, RhiResourceState::ShaderRead)
             .readTexture(resources.historyPrevious, RhiResourceState::ShaderRead)
@@ -214,10 +196,8 @@ RgPassHandle VolumetricPass::addGraphPreparationPasses(
             .readTexture(resources.depth, RhiResourceState::DepthRead)
             .readTexture(resources.historyDepthPrevious, RhiResourceState::DepthRead)
             .writeTexture(resources.historyCurrent, RhiResourceState::RenderTarget)
-            .setExecute([this, frame = &ctx, frameSettings = settings,
-                         frameTargets = &targets](RgPassContext& pass) {
-                return recordTemporalPass(pass.commandList(), *frame,
-                                          frameSettings, *frameTargets);
+            .setExecute([this, frame = &ctx, frameSettings = settings, frameTargets = &targets](RgPassContext& pass) {
+                return recordTemporalPass(pass.commandList(), *frame, frameSettings, *frameTargets);
             });
         tail = temporal.handle();
     }
@@ -226,48 +206,35 @@ RgPassHandle VolumetricPass::addGraphPreparationPasses(
     m_graphWritesHistory = !renderCurrentFog || useTemporalVolumetric;
     m_pendingRenderedFog = renderCurrentFog;
     m_pendingCameraPos = ctx.camera.position;
-    m_pendingWeatherSignal = ctx.weather.wetness + ctx.weather.storm +
-                             ctx.weather.fogWetness +
-                             ctx.weather.lightningFlash * 4.0f;
+    m_pendingWeatherSignal =
+        ctx.weather.wetness + ctx.weather.storm + ctx.weather.fogWetness + ctx.weather.lightningFlash * 4.0f;
     return tail;
 }
 
-RgPassHandle VolumetricPass::addGraphCompositePass(
-    RenderGraph& graph,
-    const FrameContext& ctx,
-    const RenderSettings& settings,
-    DeferredRenderTargets& targets,
-    const bool hasPreviousFrame,
-    const GraphResources& resources,
-    const RgPassHandle dependency) {
-    if (!m_graphFramePrepared || !dependency.isValid() ||
-        !resources.depth.isValid() || !resources.sceneComposite.isValid() ||
-        !resources.sceneResolved.isValid()) {
+RgPassHandle VolumetricPass::addGraphCompositePass(RenderGraph& graph, const FrameContext& ctx,
+                                                   const RenderSettings& settings, DeferredRenderTargets& targets,
+                                                   const bool hasPreviousFrame, const GraphResources& resources,
+                                                   const RgPassHandle dependency) {
+    if (!m_graphFramePrepared || !dependency.isValid() || !resources.depth.isValid() ||
+        !resources.sceneComposite.isValid() || !resources.sceneResolved.isValid()) {
         return {};
     }
 
-    const bool useTemporalVolumetric = settings.volumetric.temporalEnabled &&
-                                       hasPreviousFrame && hasTemporalShader();
-    const RgTextureHandle volumetricInput = useTemporalVolumetric
-        ? resources.historyCurrent
-        : resources.halfRes;
+    const bool useTemporalVolumetric = settings.volumetric.temporalEnabled && hasPreviousFrame && hasTemporalShader();
+    const RgTextureHandle volumetricInput = useTemporalVolumetric ? resources.historyCurrent : resources.halfRes;
     if (!volumetricInput.isValid()) {
         return {};
     }
     RenderGraphPassBuilder composite = graph.addPass(
-        {"Volumetric.Composite", RgPassType::Graphics,
-         RhiQueueType::Graphics, /*threadSafeRecord=*/true});
+        {"Volumetric.Composite", RgPassType::Graphics, RhiQueueType::Graphics, /*threadSafeRecord=*/true});
     composite.dependsOn(dependency)
         .readTexture(resources.sceneComposite, RhiResourceState::ShaderRead)
         .readTexture(volumetricInput, RhiResourceState::ShaderRead)
         .readTexture(resources.depth, RhiResourceState::DepthRead)
         .writeTexture(resources.sceneResolved, RhiResourceState::RenderTarget)
-        .setExecute([this, frame = &ctx, frameSettings = settings,
-                     frameTargets = &targets,
+        .setExecute([this, frame = &ctx, frameSettings = settings, frameTargets = &targets,
                      hasPreviousFrame](RgPassContext& pass) {
-            return recordCompositePass(pass.commandList(), *frame,
-                                       frameSettings, *frameTargets,
-                                       hasPreviousFrame);
+            return recordCompositePass(pass.commandList(), *frame, frameSettings, *frameTargets, hasPreviousFrame);
         });
 
     return composite.handle();
@@ -286,36 +253,29 @@ void VolumetricPass::finishGraphExecution(const bool succeeded) {
     m_pendingWeatherSignal = 0.0f;
 }
 
-bool VolumetricPass::recordFogPass(
-    RhiCommandList& commandList,
-    const FrameContext& ctx,
-    const RenderSettings& settings,
-    DeferredRenderTargets& targets) {
+bool VolumetricPass::recordFogPass(RhiCommandList& commandList, const FrameContext& ctx, const RenderSettings& settings,
+                                   DeferredRenderTargets& targets) {
     if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr || m_shadowRenderer == nullptr) {
         return false;
     }
 
     RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
-    if (!targets.ensureHalfResTextureView(rhiDevice) ||
-        !targets.ensureGBufferTextureViews(rhiDevice) ||
-        !targets.ensureSkyCaptureTextureView(rhiDevice) ||
-        !targets.ensureVolumetricFogTextureViews(rhiDevice) ||
+    if (!targets.ensureHalfResTextureView(rhiDevice) || !targets.ensureGBufferTextureViews(rhiDevice) ||
+        !targets.ensureSkyCaptureTextureView(rhiDevice) || !targets.ensureVolumetricFogTextureViews(rhiDevice) ||
         !ensureFogNoiseTextureView(rhiDevice)) {
         return false;
     }
 
-    const std::array<RhiTextureViewHandle, 10> views = {
-        targets.depthTextureViewHandle(),
-        targets.skyCaptureTextureViewHandle(),
-        m_fogNoiseTextureView,
-        targets.atmosphereLutTextureViewHandle(),
-        targets.csmShadowDepthComparisonArrayTextureViewHandle(),
-        targets.csmShadowDepthArrayTextureViewHandle(),
-        targets.csmShadowDepthAllComparisonArrayTextureViewHandle(),
-        targets.csmShadowDepthAllArrayTextureViewHandle(),
-        targets.csmShadowColor0ArrayTextureViewHandle(),
-        targets.csmShadowColor1ArrayTextureViewHandle()
-    };
+    const std::array<RhiTextureViewHandle, 10> views = {targets.depthTextureViewHandle(),
+                                                        targets.skyCaptureTextureViewHandle(),
+                                                        m_fogNoiseTextureView,
+                                                        targets.atmosphereLutTextureViewHandle(),
+                                                        targets.csmShadowDepthComparisonArrayTextureViewHandle(),
+                                                        targets.csmShadowDepthArrayTextureViewHandle(),
+                                                        targets.csmShadowDepthAllComparisonArrayTextureViewHandle(),
+                                                        targets.csmShadowDepthAllArrayTextureViewHandle(),
+                                                        targets.csmShadowColor0ArrayTextureViewHandle(),
+                                                        targets.csmShadowColor1ArrayTextureViewHandle()};
     if (!ensureFogRhiPipeline(rhiDevice) || !ensureFogBindGroup(rhiDevice, views)) {
         return false;
     }
@@ -334,11 +294,8 @@ bool VolumetricPass::recordFogPass(
     for (int cascadeIndex = 0; cascadeIndex < shadow::ShadowRenderer::CASCADE_COUNT; ++cascadeIndex) {
         const shadow::ShadowRenderer::Cascade& cascade = m_shadowRenderer->cascade(cascadeIndex);
         params.cascades[cascadeIndex].viewProj = cascade.viewProj;
-        params.cascades[cascadeIndex].splitAndScale = glm::vec4(
-            cascade.splitNear,
-            cascade.splitFar,
-            cascade.texelWorldSize,
-            cascadeIndex >= 2 ? 0.5f : 1.0f);
+        params.cascades[cascadeIndex].splitAndScale =
+            glm::vec4(cascade.splitNear, cascade.splitFar, cascade.texelWorldSize, cascadeIndex >= 2 ? 0.5f : 1.0f);
         params.cascades[cascadeIndex].depthExtent = glm::vec4(cascade.depthExtent, 0.0f, 0.0f, 0.0f);
     }
     params.cameraPosSkyIntensity = glm::vec4(ctx.camera.position, ctx.skyIntensity);
@@ -348,60 +305,31 @@ bool VolumetricPass::recordFogPass(
     params.sunLightColor = glm::vec4(ctx.skyColors.sunLightColor, 0.0f);
     params.moonLightColor = glm::vec4(ctx.skyColors.moonLightColor, 0.0f);
     params.horizonScatterColor = glm::vec4(ctx.skyColors.horizonScatterColor, 0.0f);
-    params.atmosphere = glm::vec4(ctx.atmosphere.aerialStrength,
-                                  ctx.atmosphere.horizonScatterStrength,
-                                  ctx.weather.skyWetness,
-                                  ctx.weather.storm);
-    params.fog = glm::vec4(ctx.volumetric.fogStrength,
-                           ctx.volumetric.baseDensity,
-                           ctx.volumetric.maxDistance,
+    params.atmosphere = glm::vec4(ctx.atmosphere.aerialStrength, ctx.atmosphere.horizonScatterStrength,
+                                  ctx.weather.skyWetness, ctx.weather.storm);
+    params.fog = glm::vec4(ctx.volumetric.fogStrength, ctx.volumetric.baseDensity, ctx.volumetric.maxDistance,
                            ctx.weather.lightningFlash);
-    params.shadow0 = glm::vec4(std::max(64.0f, m_shadowRenderer->shadowDistance()),
-                               m_shadowRenderer->shadowExtent(),
-                               m_shadowRenderer->texelWorldSize(),
-                               settings.shadow.constantBias);
-    params.shadow1 = glm::vec4(settings.shadow.slopeBias,
-                               settings.volumetric.shadowBiasScale,
-                               0.0f,
-                               0.0f);
-    params.cloud0 = glm::vec4(ctx.cloud.coverage,
-                              ctx.cloud.density,
-                              ctx.cloud.height,
-                              ctx.cloud.thickness);
-    params.cloud1 = glm::vec4(ctx.weather.cloudWetness,
-                              ctx.cloud.planarCoverage,
-                              ctx.cloud.planarDensity,
+    params.shadow0 = glm::vec4(std::max(64.0f, m_shadowRenderer->shadowDistance()), m_shadowRenderer->shadowExtent(),
+                               m_shadowRenderer->texelWorldSize(), settings.shadow.constantBias);
+    params.shadow1 = glm::vec4(settings.shadow.slopeBias, settings.volumetric.shadowBiasScale, 0.0f, 0.0f);
+    params.cloud0 = glm::vec4(ctx.cloud.coverage, ctx.cloud.density, ctx.cloud.height, ctx.cloud.thickness);
+    params.cloud1 = glm::vec4(ctx.weather.cloudWetness, ctx.cloud.planarCoverage, ctx.cloud.planarDensity,
                               ctx.cloud.planarAltitude);
-    params.cloudDynamicWeather = glm::vec4(ctx.skyIlluminance.cloudDynamicWeather,
-                                           ctx.cloud.timeScale);
-    params.water = glm::vec4(0.4f,
-                             0.14f,
-                             0.08f,
-                             ctx.volumetric.underwaterLightStrength);
-    params.vfog0 = glm::vec4(ctx.volumetric.fogCenterHeight,
-                             ctx.volumetric.fogHeightSpread,
-                             ctx.volumetric.fogNoiseScale,
-                             ctx.volumetric.fogLightStrength);
-    params.vfog1 = glm::vec4(ctx.volumetric.fogDensityScale,
-                             ctx.cloud.shadowStrength,
-                             ctx.cloud.shadowScale,
+    params.cloudDynamicWeather = glm::vec4(ctx.skyIlluminance.cloudDynamicWeather, ctx.cloud.timeScale);
+    params.water = glm::vec4(0.4f, 0.14f, 0.08f, ctx.volumetric.underwaterLightStrength);
+    params.vfog0 = glm::vec4(ctx.volumetric.fogCenterHeight, ctx.volumetric.fogHeightSpread,
+                             ctx.volumetric.fogNoiseScale, ctx.volumetric.fogLightStrength);
+    params.vfog1 = glm::vec4(ctx.volumetric.fogDensityScale, ctx.cloud.shadowStrength, ctx.cloud.shadowScale,
                              ctx.cloud.shadowSpeed);
-    params.flags0 = glm::ivec4(shadow::ShadowRenderer::CASCADE_COUNT,
-                               settings.shadow.enabled ? 1 : 0,
-                               ctx.volumetric.lightEnabled ? 1 : 0,
-                               ctx.volumetric.fogEnabled ? 1 : 0);
-    params.flags1 = glm::ivec4(ctx.moonShadowActive ? 1 : 0,
-                               0,
-                               volumetricDebugMode,
-                               settings.volumetric.skyRayEnabled ? 1 : 0);
-    params.flags2 = glm::ivec4(settings.volumetric.timeFadeEnabled ? 1 : 0,
-                               settings.volumetric.qualityTier,
-                               ctx.volumetric.fogSamples,
-                               (volumetricDebugMode > 0 || settings.volumetric.freezeR1) ? 1 : 0);
-    params.flags3 = glm::ivec4(static_cast<int>(ctx.frameIndex & 0x7fffffffULL),
-                               ctx.eyeInWater ? 1 : 0,
-                               settings.volumetric.uwLightEnabled ? 1 : 0,
-                               ctx.cloud.shadowsEnabled ? 1 : 0);
+    params.flags0 = glm::ivec4(shadow::ShadowRenderer::CASCADE_COUNT, settings.shadow.enabled ? 1 : 0,
+                               ctx.volumetric.lightEnabled ? 1 : 0, ctx.volumetric.fogEnabled ? 1 : 0);
+    params.flags1 =
+        glm::ivec4(ctx.moonShadowActive ? 1 : 0, 0, volumetricDebugMode, settings.volumetric.skyRayEnabled ? 1 : 0);
+    params.flags2 =
+        glm::ivec4(settings.volumetric.timeFadeEnabled ? 1 : 0, settings.volumetric.qualityTier,
+                   ctx.volumetric.fogSamples, (volumetricDebugMode > 0 || settings.volumetric.freezeR1) ? 1 : 0);
+    params.flags3 = glm::ivec4(static_cast<int>(ctx.frameIndex & 0x7fffffffULL), ctx.eyeInWater ? 1 : 0,
+                               settings.volumetric.uwLightEnabled ? 1 : 0, ctx.cloud.shadowsEnabled ? 1 : 0);
 
     RhiColorAttachment colorAttachment;
     colorAttachment.view = targets.halfResTextureViewHandle();
@@ -414,23 +342,17 @@ bool VolumetricPass::recordFogPass(
 
     RhiRenderingInfo renderingInfo;
     renderingInfo.debugName = "VolumetricFog";
-    renderingInfo.renderArea = {
-        0,
-        0,
-        static_cast<uint32_t>(std::max(1, targets.halfWidth())),
-        static_cast<uint32_t>(std::max(1, targets.halfHeight()))
-    };
+    renderingInfo.renderArea = {0, 0, static_cast<uint32_t>(std::max(1, targets.halfWidth())),
+                                static_cast<uint32_t>(std::max(1, targets.halfHeight()))};
     renderingInfo.colorAttachments = &colorAttachment;
     renderingInfo.colorAttachmentCount = 1u;
 
     const GpuTimerSegmentToken timerToken = ctx.debugService != nullptr
-        ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::Volumetric)
-        : GpuTimerSegmentToken{};
-    commandList.bufferBarrier({m_fogUniformBuffer, RhiResourceState::UniformBuffer,
-                               RhiResourceState::TransferDst});
+                                                ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::Volumetric)
+                                                : GpuTimerSegmentToken{};
+    commandList.bufferBarrier({m_fogUniformBuffer, RhiResourceState::UniformBuffer, RhiResourceState::TransferDst});
     commandList.updateBuffer(m_fogUniformBuffer, 0u, &params, sizeof(params));
-    commandList.bufferBarrier({m_fogUniformBuffer, RhiResourceState::TransferDst,
-                               RhiResourceState::UniformBuffer});
+    commandList.bufferBarrier({m_fogUniformBuffer, RhiResourceState::TransferDst, RhiResourceState::UniformBuffer});
     commandList.beginRendering(renderingInfo);
     commandList.setGraphicsPipeline(m_fogPipeline);
     commandList.setBindGroup(0u, m_fogBindGroup);
@@ -516,8 +438,7 @@ bool VolumetricPass::ensureFogRhiPipeline(RhiDevice& rhiDevice) {
     RhiBufferDesc uniformBufferDesc;
     uniformBufferDesc.debugName = "VolumetricFog.Params";
     uniformBufferDesc.size = sizeof(VolumetricFogParams);
-    uniformBufferDesc.usage = rhiFlag(RhiBufferUsage::Uniform) |
-                              rhiFlag(RhiBufferUsage::TransferDst);
+    uniformBufferDesc.usage = rhiFlag(RhiBufferUsage::Uniform) | rhiFlag(RhiBufferUsage::TransferDst);
     uniformBufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
     uniformBufferDesc.initialState = RhiResourceState::UniformBuffer;
     uniformBufferDesc.memoryCategory = RhiMemoryCategory::Uniform;
@@ -527,9 +448,7 @@ bool VolumetricPass::ensureFogRhiPipeline(RhiDevice& rhiDevice) {
         return false;
     }
 
-    auto createSampler = [&](const RhiFilter filter,
-                             const RhiAddressMode addressMode,
-                             const RhiBorderColor borderColor,
+    auto createSampler = [&](const RhiFilter filter, const RhiAddressMode addressMode, const RhiBorderColor borderColor,
                              const bool compareEnabled) {
         RhiSamplerDesc samplerDesc;
         samplerDesc.minFilter = filter;
@@ -544,26 +463,16 @@ bool VolumetricPass::ensureFogRhiPipeline(RhiDevice& rhiDevice) {
         return rhiDevice.createSampler(samplerDesc);
     };
 
-    m_fogNearestClampSampler = createSampler(RhiFilter::Nearest,
-                                             RhiAddressMode::ClampToEdge,
-                                             RhiBorderColor::TransparentBlack,
-                                             false);
-    m_fogLinearClampSampler = createSampler(RhiFilter::Linear,
-                                            RhiAddressMode::ClampToEdge,
-                                            RhiBorderColor::TransparentBlack,
-                                            false);
-    m_fogLinearRepeatSampler = createSampler(RhiFilter::Linear,
-                                             RhiAddressMode::Repeat,
-                                             RhiBorderColor::TransparentBlack,
-                                             false);
-    m_fogNearestBorderSampler = createSampler(RhiFilter::Nearest,
-                                              RhiAddressMode::ClampToBorder,
-                                              RhiBorderColor::OpaqueWhite,
-                                              false);
-    m_fogCompareBorderSampler = createSampler(RhiFilter::Linear,
-                                              RhiAddressMode::ClampToBorder,
-                                              RhiBorderColor::OpaqueWhite,
-                                              true);
+    m_fogNearestClampSampler =
+        createSampler(RhiFilter::Nearest, RhiAddressMode::ClampToEdge, RhiBorderColor::TransparentBlack, false);
+    m_fogLinearClampSampler =
+        createSampler(RhiFilter::Linear, RhiAddressMode::ClampToEdge, RhiBorderColor::TransparentBlack, false);
+    m_fogLinearRepeatSampler =
+        createSampler(RhiFilter::Linear, RhiAddressMode::Repeat, RhiBorderColor::TransparentBlack, false);
+    m_fogNearestBorderSampler =
+        createSampler(RhiFilter::Nearest, RhiAddressMode::ClampToBorder, RhiBorderColor::OpaqueWhite, false);
+    m_fogCompareBorderSampler =
+        createSampler(RhiFilter::Linear, RhiAddressMode::ClampToBorder, RhiBorderColor::OpaqueWhite, true);
     if (!m_fogNearestClampSampler.isValid() || !m_fogLinearClampSampler.isValid() ||
         !m_fogLinearRepeatSampler.isValid() || !m_fogNearestBorderSampler.isValid() ||
         !m_fogCompareBorderSampler.isValid()) {
@@ -574,19 +483,10 @@ bool VolumetricPass::ensureFogRhiPipeline(RhiDevice& rhiDevice) {
     RhiBindGroupLayoutDesc bindGroupLayoutDesc;
     bindGroupLayoutDesc.debugName = "VolumetricFog.BindGroupLayout";
     for (uint32_t binding = 0u; binding < 10u; ++binding) {
-        bindGroupLayoutDesc.entries.push_back({
-            binding,
-            RhiBindingType::CombinedTextureSampler,
-            rhiFlag(RhiShaderStage::Fragment),
-            1u
-        });
+        bindGroupLayoutDesc.entries.push_back(
+            {binding, RhiBindingType::CombinedTextureSampler, rhiFlag(RhiShaderStage::Fragment), 1u});
     }
-    bindGroupLayoutDesc.entries.push_back({
-        10u,
-        RhiBindingType::UniformBuffer,
-        rhiFlag(RhiShaderStage::Fragment),
-        1u
-    });
+    bindGroupLayoutDesc.entries.push_back({10u, RhiBindingType::UniformBuffer, rhiFlag(RhiShaderStage::Fragment), 1u});
     m_fogBindGroupLayout = rhiDevice.createBindGroupLayout(bindGroupLayoutDesc);
     if (!m_fogBindGroupLayout.isValid()) {
         destroyFogRhiResources();
@@ -622,9 +522,7 @@ bool VolumetricPass::ensureFogRhiPipeline(RhiDevice& rhiDevice) {
     return true;
 }
 
-bool VolumetricPass::ensureFogBindGroup(
-    RhiDevice& rhiDevice,
-    const std::array<RhiTextureViewHandle, 10>& views) {
+bool VolumetricPass::ensureFogBindGroup(RhiDevice& rhiDevice, const std::array<RhiTextureViewHandle, 10>& views) {
     if (!ensureFogRhiPipeline(rhiDevice)) {
         return false;
     }
@@ -640,17 +538,9 @@ bool VolumetricPass::ensureFogBindGroup(
     destroyFogBindGroup();
 
     const RhiSamplerHandle samplers[10] = {
-        m_fogNearestClampSampler,
-        m_fogLinearClampSampler,
-        m_fogLinearRepeatSampler,
-        m_fogLinearClampSampler,
-        m_fogCompareBorderSampler,
-        m_fogNearestBorderSampler,
-        m_fogCompareBorderSampler,
-        m_fogNearestBorderSampler,
-        m_fogNearestBorderSampler,
-        m_fogNearestBorderSampler
-    };
+        m_fogNearestClampSampler,  m_fogLinearClampSampler,   m_fogLinearRepeatSampler,  m_fogLinearClampSampler,
+        m_fogCompareBorderSampler, m_fogNearestBorderSampler, m_fogCompareBorderSampler, m_fogNearestBorderSampler,
+        m_fogNearestBorderSampler, m_fogNearestBorderSampler};
 
     RhiBindGroupDesc bindGroupDesc;
     bindGroupDesc.layout = m_fogBindGroupLayout;
@@ -708,13 +598,9 @@ void VolumetricPass::destroyFogRhiResources() {
         if (m_fogUniformBuffer.isValid()) {
             m_fogRhiDevice->destroyBuffer(m_fogUniformBuffer);
         }
-        const RhiSamplerHandle samplers[] = {
-            m_fogNearestClampSampler,
-            m_fogLinearClampSampler,
-            m_fogLinearRepeatSampler,
-            m_fogNearestBorderSampler,
-            m_fogCompareBorderSampler
-        };
+        const RhiSamplerHandle samplers[] = {m_fogNearestClampSampler, m_fogLinearClampSampler,
+                                             m_fogLinearRepeatSampler, m_fogNearestBorderSampler,
+                                             m_fogCompareBorderSampler};
         for (const RhiSamplerHandle sampler : samplers) {
             if (sampler.isValid()) {
                 m_fogRhiDevice->destroySampler(sampler);
@@ -736,33 +622,24 @@ void VolumetricPass::destroyFogRhiResources() {
     m_fogRhiDevice = nullptr;
 }
 
-bool VolumetricPass::recordTemporalPass(
-    RhiCommandList& commandList,
-    const FrameContext& ctx,
-    const RenderSettings& settings,
-    DeferredRenderTargets& targets) {
+bool VolumetricPass::recordTemporalPass(RhiCommandList& commandList, const FrameContext& ctx,
+                                        const RenderSettings& settings, DeferredRenderTargets& targets) {
     if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr) {
         return false;
     }
 
     RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
-    if (!targets.ensureHistoryVolumetricTextureViews(rhiDevice) ||
-        !targets.ensureHistoryDepthTextureViews(rhiDevice) ||
-        !targets.ensureHalfResTextureView(rhiDevice) ||
-        !targets.ensureVelocityTextureView(rhiDevice) ||
+    if (!targets.ensureHistoryVolumetricTextureViews(rhiDevice) || !targets.ensureHistoryDepthTextureViews(rhiDevice) ||
+        !targets.ensureHalfResTextureView(rhiDevice) || !targets.ensureVelocityTextureView(rhiDevice) ||
         !targets.ensureGBufferTextureViews(rhiDevice)) {
         return false;
     }
 
     const std::array<RhiTextureViewHandle, 5> views = {
-        targets.halfResTextureViewHandle(),
-        targets.historyVolumetricTexturePrevViewHandle(),
-        targets.velocityTextureViewHandle(),
-        targets.depthTextureViewHandle(),
-        targets.historyDepthTexturePrevViewHandle()
-    };
-    if (!ensureTemporalRhiPipeline(rhiDevice) ||
-        !ensureTemporalBindGroup(rhiDevice, views)) {
+        targets.halfResTextureViewHandle(), targets.historyVolumetricTexturePrevViewHandle(),
+        targets.velocityTextureViewHandle(), targets.depthTextureViewHandle(),
+        targets.historyDepthTexturePrevViewHandle()};
+    if (!ensureTemporalRhiPipeline(rhiDevice) || !ensureTemporalBindGroup(rhiDevice, views)) {
         return false;
     }
 
@@ -773,26 +650,19 @@ bool VolumetricPass::recordTemporalPass(
 
     RhiRenderingInfo renderingInfo;
     renderingInfo.debugName = "VolumetricTemporal";
-    renderingInfo.renderArea = {
-        0,
-        0,
-        static_cast<uint32_t>(std::max(1, targets.halfWidth())),
-        static_cast<uint32_t>(std::max(1, targets.halfHeight()))
-    };
+    renderingInfo.renderArea = {0, 0, static_cast<uint32_t>(std::max(1, targets.halfWidth())),
+                                static_cast<uint32_t>(std::max(1, targets.halfHeight()))};
     renderingInfo.colorAttachments = &colorAttachment;
     renderingInfo.colorAttachmentCount = 1u;
 
     const GpuTimerSegmentToken timerToken = ctx.debugService != nullptr
-        ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::Volumetric)
-        : GpuTimerSegmentToken{};
+                                                ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::Volumetric)
+                                                : GpuTimerSegmentToken{};
     commandList.beginRendering(renderingInfo);
-    const glm::vec4 pushConstants[2] = {
-        glm::vec4(static_cast<float>(std::max(1, targets.halfWidth())),
-                  static_cast<float>(std::max(1, targets.halfHeight())),
-                  settings.volumetric.temporalWeight,
-                  ctx.camera.nearPlane),
-        glm::vec4(ctx.camera.farPlane, 0.0f, 0.0f, 0.0f)
-    };
+    const glm::vec4 pushConstants[2] = {glm::vec4(static_cast<float>(std::max(1, targets.halfWidth())),
+                                                  static_cast<float>(std::max(1, targets.halfHeight())),
+                                                  settings.volumetric.temporalWeight, ctx.camera.nearPlane),
+                                        glm::vec4(ctx.camera.farPlane, 0.0f, 0.0f, 0.0f)};
     commandList.setGraphicsPipeline(m_temporalPipeline);
     commandList.setBindGroup(0u, m_temporalBindGroup);
     commandList.pushConstants(pushConstants, sizeof(pushConstants), rhiFlag(RhiShaderStage::Fragment));
@@ -804,38 +674,27 @@ bool VolumetricPass::recordTemporalPass(
     return true;
 }
 
-bool VolumetricPass::recordCompositePass(
-    RhiCommandList& commandList,
-    const FrameContext& ctx,
-    const RenderSettings& settings,
-    DeferredRenderTargets& targets,
-    const bool hasPreviousFrame) {
+bool VolumetricPass::recordCompositePass(RhiCommandList& commandList, const FrameContext& ctx,
+                                         const RenderSettings& settings, DeferredRenderTargets& targets,
+                                         const bool hasPreviousFrame) {
     if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr) {
         return false;
     }
 
     RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
-    const bool useTemporalVolumetric = settings.volumetric.temporalEnabled &&
-                                       hasPreviousFrame &&
-                                       hasTemporalShader();
-    if (!targets.ensureSceneResolvedTextureView(rhiDevice) ||
-        !targets.ensureSceneCompositeTextureView(rhiDevice) ||
+    const bool useTemporalVolumetric = settings.volumetric.temporalEnabled && hasPreviousFrame && hasTemporalShader();
+    if (!targets.ensureSceneResolvedTextureView(rhiDevice) || !targets.ensureSceneCompositeTextureView(rhiDevice) ||
         !targets.ensureGBufferTextureViews(rhiDevice) ||
-        !(useTemporalVolumetric
-              ? targets.ensureHistoryVolumetricTextureView(rhiDevice)
-              : targets.ensureHalfResTextureView(rhiDevice))) {
+        !(useTemporalVolumetric ? targets.ensureHistoryVolumetricTextureView(rhiDevice)
+                                : targets.ensureHalfResTextureView(rhiDevice))) {
         return false;
     }
 
     const std::array<RhiTextureViewHandle, 3> views = {
         targets.sceneCompositeTextureViewHandle(),
-        useTemporalVolumetric
-            ? targets.historyVolumetricTextureViewHandle()
-            : targets.halfResTextureViewHandle(),
-        targets.depthTextureViewHandle()
-    };
-    if (!ensureCompositeRhiPipeline(rhiDevice) ||
-        !ensureCompositeBindGroup(rhiDevice, views)) {
+        useTemporalVolumetric ? targets.historyVolumetricTextureViewHandle() : targets.halfResTextureViewHandle(),
+        targets.depthTextureViewHandle()};
+    if (!ensureCompositeRhiPipeline(rhiDevice) || !ensureCompositeBindGroup(rhiDevice, views)) {
         return false;
     }
 
@@ -846,36 +705,27 @@ bool VolumetricPass::recordCompositePass(
 
     RhiRenderingInfo renderingInfo;
     renderingInfo.debugName = "VolumetricComposite";
-    renderingInfo.renderArea = {
-        0,
-        0,
-        static_cast<uint32_t>(std::max(1, targets.width())),
-        static_cast<uint32_t>(std::max(1, targets.height()))
-    };
+    renderingInfo.renderArea = {0, 0, static_cast<uint32_t>(std::max(1, targets.width())),
+                                static_cast<uint32_t>(std::max(1, targets.height()))};
     renderingInfo.colorAttachments = &colorAttachment;
     renderingInfo.colorAttachmentCount = 1u;
 
     const GpuTimerSegmentToken timerToken = ctx.debugService != nullptr
-        ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::Volumetric)
-        : GpuTimerSegmentToken{};
+                                                ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::Volumetric)
+                                                : GpuTimerSegmentToken{};
     commandList.beginRendering(renderingInfo);
 
     const bool underwaterVolumetricActive = ctx.eyeInWater && settings.volumetric.uwLightEnabled;
-    const bool volFogCompositeActive = (underwaterVolumetricActive ||
-                                        settings.volumetric.lightEnabled ||
-                                        (settings.volumetric.fogEnabled &&
-                                         settings.volumetric.fogStrength > 0.001f));
+    const bool volFogCompositeActive = (underwaterVolumetricActive || settings.volumetric.lightEnabled ||
+                                        (settings.volumetric.fogEnabled && settings.volumetric.fogStrength > 0.001f));
     struct CompositePushConstants {
         glm::vec4 depthParams;
         glm::ivec4 flags;
     };
-    const CompositePushConstants pushConstants{
-        glm::vec4(ctx.camera.nearPlane, ctx.camera.farPlane, 0.0f, 0.0f),
-        glm::ivec4(static_cast<int>(ctx.frameIndex & 0x7fffffffULL),
-                   settings.volumetric.freezeBias ? 1 : 0,
-                   ctx.eyeInWater ? 1 : 0,
-                   volFogCompositeActive ? 1 : 0)
-    };
+    const CompositePushConstants pushConstants{glm::vec4(ctx.camera.nearPlane, ctx.camera.farPlane, 0.0f, 0.0f),
+                                               glm::ivec4(static_cast<int>(ctx.frameIndex & 0x7fffffffULL),
+                                                          settings.volumetric.freezeBias ? 1 : 0,
+                                                          ctx.eyeInWater ? 1 : 0, volFogCompositeActive ? 1 : 0)};
     commandList.setGraphicsPipeline(m_compositePipeline);
     commandList.setBindGroup(0u, m_compositeBindGroup);
     commandList.pushConstants(&pushConstants, sizeof(pushConstants), rhiFlag(RhiShaderStage::Fragment));
@@ -947,12 +797,8 @@ bool VolumetricPass::ensureCompositeRhiPipeline(RhiDevice& rhiDevice) {
     RhiBindGroupLayoutDesc bindGroupLayoutDesc;
     bindGroupLayoutDesc.debugName = "VolumetricComposite.BindGroupLayout";
     for (uint32_t binding = 0u; binding < 3u; ++binding) {
-        bindGroupLayoutDesc.entries.push_back({
-            binding,
-            RhiBindingType::CombinedTextureSampler,
-            rhiFlag(RhiShaderStage::Fragment),
-            1u
-        });
+        bindGroupLayoutDesc.entries.push_back(
+            {binding, RhiBindingType::CombinedTextureSampler, rhiFlag(RhiShaderStage::Fragment), 1u});
     }
     m_compositeBindGroupLayout = rhiDevice.createBindGroupLayout(bindGroupLayoutDesc);
     if (!m_compositeBindGroupLayout.isValid()) {
@@ -991,9 +837,7 @@ bool VolumetricPass::ensureCompositeRhiPipeline(RhiDevice& rhiDevice) {
     return true;
 }
 
-bool VolumetricPass::ensureCompositeBindGroup(
-    RhiDevice& rhiDevice,
-    const std::array<RhiTextureViewHandle, 3>& views) {
+bool VolumetricPass::ensureCompositeBindGroup(RhiDevice& rhiDevice, const std::array<RhiTextureViewHandle, 3>& views) {
     if (!ensureCompositeRhiPipeline(rhiDevice)) {
         return false;
     }
@@ -1133,12 +977,8 @@ bool VolumetricPass::ensureTemporalRhiPipeline(RhiDevice& rhiDevice) {
     RhiBindGroupLayoutDesc bindGroupLayoutDesc;
     bindGroupLayoutDesc.debugName = "VolumetricTemporal.BindGroupLayout";
     for (uint32_t binding = 0u; binding < 5u; ++binding) {
-        bindGroupLayoutDesc.entries.push_back({
-            binding,
-            RhiBindingType::CombinedTextureSampler,
-            rhiFlag(RhiShaderStage::Fragment),
-            1u
-        });
+        bindGroupLayoutDesc.entries.push_back(
+            {binding, RhiBindingType::CombinedTextureSampler, rhiFlag(RhiShaderStage::Fragment), 1u});
     }
     m_temporalBindGroupLayout = rhiDevice.createBindGroupLayout(bindGroupLayoutDesc);
     if (!m_temporalBindGroupLayout.isValid()) {
@@ -1177,9 +1017,7 @@ bool VolumetricPass::ensureTemporalRhiPipeline(RhiDevice& rhiDevice) {
     return true;
 }
 
-bool VolumetricPass::ensureTemporalBindGroup(
-    RhiDevice& rhiDevice,
-    const std::array<RhiTextureViewHandle, 5>& views) {
+bool VolumetricPass::ensureTemporalBindGroup(RhiDevice& rhiDevice, const std::array<RhiTextureViewHandle, 5>& views) {
     if (!ensureTemporalRhiPipeline(rhiDevice)) {
         return false;
     }

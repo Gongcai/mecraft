@@ -31,10 +31,8 @@ inline bool isBlockPositionTicking(const SystemContext& ctx, const glm::ivec3& p
         return true;
     }
 
-    const int chunkX = static_cast<int>(std::floor(static_cast<float>(position.x) /
-                                                   static_cast<float>(Chunk::SIZE_X)));
-    const int chunkZ = static_cast<int>(std::floor(static_cast<float>(position.z) /
-                                                   static_cast<float>(Chunk::SIZE_Z)));
+    const int chunkX = static_cast<int>(std::floor(static_cast<float>(position.x) / static_cast<float>(Chunk::SIZE_X)));
+    const int chunkZ = static_cast<int>(std::floor(static_cast<float>(position.z) / static_cast<float>(Chunk::SIZE_Z)));
     return world->ticketManager().shouldTick(chunkX, chunkZ);
 }
 

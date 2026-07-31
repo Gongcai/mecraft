@@ -21,9 +21,7 @@ static void require(bool condition, const char* message) {
 }
 
 static bool nearVec3(const glm::vec3& a, const glm::vec3& b) {
-    return std::fabs(a.x - b.x) < 0.001f &&
-           std::fabs(a.y - b.y) < 0.001f &&
-           std::fabs(a.z - b.z) < 0.001f;
+    return std::fabs(a.x - b.x) < 0.001f && std::fabs(a.y - b.y) < 0.001f && std::fabs(a.z - b.z) < 0.001f;
 }
 
 static void testSpawnBeforeInitIsReplayed() {
@@ -53,9 +51,7 @@ static void testSpawnBeforeInitIsReplayed() {
     require(store.remoteEntityCount() == 1, "pending spawn was not replayed");
     require(store.hasEntity(42), "spawned entity netId missing");
 
-    auto view = registry.view<ecs::EntityNetIdComponent,
-                              ecs::TransformComponent,
-                              ecs::VelocityComponent,
+    auto view = registry.view<ecs::EntityNetIdComponent, ecs::TransformComponent, ecs::VelocityComponent,
                               ecs::NetworkInterpolationComponent>();
     require(view.begin() != view.end(), "spawned entity components missing");
     const auto entity = *view.begin();
@@ -104,24 +100,18 @@ static void testSnapshotBufferIgnoresOutOfOrderTargetRegression() {
     older.entities[0].yaw = 0.5f;
     store.handleSnapshot(older);
 
-    auto view = registry.view<ecs::EntityNetIdComponent,
-                              ecs::TransformComponent,
-                              ecs::NetworkInterpolationComponent>();
+    auto view = registry.view<ecs::EntityNetIdComponent, ecs::TransformComponent, ecs::NetworkInterpolationComponent>();
     require(view.begin() != view.end(), "drop replica components missing");
     const entt::entity entity = *view.begin();
     const auto& transform = registry.get<ecs::TransformComponent>(entity);
     const auto& interpolation = registry.get<ecs::NetworkInterpolationComponent>(entity);
-    require(interpolation.latestServerTick == 10,
-            "out-of-order snapshot should not regress latest server tick");
+    require(interpolation.latestServerTick == 10, "out-of-order snapshot should not regress latest server tick");
     require(nearVec3(interpolation.targetPosition, item.position),
             "out-of-order snapshot should not regress interpolation target");
-    require(interpolation.snapshotCount == 2,
-            "out-of-order snapshot should still be buffered for interpolation");
-    require(interpolation.snapshots[0].serverTick == 9 &&
-            interpolation.snapshots[1].serverTick == 10,
+    require(interpolation.snapshotCount == 2, "out-of-order snapshot should still be buffered for interpolation");
+    require(interpolation.snapshots[0].serverTick == 9 && interpolation.snapshots[1].serverTick == 10,
             "snapshot buffer should stay sorted by server tick");
-    require(transform.position.x == 10.0f,
-            "out-of-order snapshot should not snap transform back to old position");
+    require(transform.position.x == 10.0f, "out-of-order snapshot should not snap transform back to old position");
 }
 
 static void testExistingEntityStaysLocallyAuthoritative() {
@@ -196,38 +186,29 @@ static void testMobSpawnCreatesZombieReplica() {
     require(store.hasEntity(77), "mob netId missing");
 
     auto& raw = registry.registry();
-    auto view = raw.view<ecs::MobTag,
-                         ecs::ChildrenComponent,
-                         ecs::MobAIComponent,
-                         ecs::MobVisualComponent,
-                         ecs::VelocityComponent,
-                         ecs::HealthComponent,
-                         ecs::HurtEffectComponent,
-                         ecs::DeathEffectComponent,
-                         ecs::EntityTypeComponent,
-                         ecs::EntityNetIdComponent,
-                         ecs::NetworkInterpolationComponent>();
+    auto view =
+        raw.view<ecs::MobTag, ecs::ChildrenComponent, ecs::MobAIComponent, ecs::MobVisualComponent,
+                 ecs::VelocityComponent, ecs::HealthComponent, ecs::HurtEffectComponent, ecs::DeathEffectComponent,
+                 ecs::EntityTypeComponent, ecs::EntityNetIdComponent, ecs::NetworkInterpolationComponent>();
     require(view.begin() != view.end(), "mob replica components missing");
     const entt::entity mob = *view.begin();
     require(raw.get<ecs::ChildrenComponent>(mob).children.size() == 1, "mob replica did not create hierarchy");
     require(raw.get<ecs::EntityTypeComponent>(mob).entityId == "minecraft:zombie",
             "mob replica should keep the network entity id");
     const auto& visual = raw.get<ecs::MobVisualComponent>(mob);
-    require(visual.model == "humanoid" &&
-            visual.textureKey == "zombie" &&
-            ecs::entitySkinLayoutId(visual.skinLayout) == "minecraft:classic_64x64" &&
-            std::fabs(visual.scale - 1.0f) < 0.001f,
+    require(visual.model == "humanoid" && visual.textureKey == "zombie" &&
+                ecs::entitySkinLayoutId(visual.skinLayout) == "minecraft:classic_64x64" &&
+                std::fabs(visual.scale - 1.0f) < 0.001f,
             "mob replica should apply configured visual data");
     require(!raw.all_of<ecs::MoveIntentComponent>(mob), "mob replica should not run local AI movement");
-    require(raw.get<ecs::HealthComponent>(mob).current == 20 &&
-            raw.get<ecs::HealthComponent>(mob).max == 20,
+    require(raw.get<ecs::HealthComponent>(mob).current == 20 && raw.get<ecs::HealthComponent>(mob).max == 20,
             "mob replica should initialize configured synced health");
     require(raw.get<ecs::DeathEffectComponent>(mob).particleBlock == BlockRegistry::requireIdByName("minecraft:rose") &&
-            raw.get<ecs::DeathEffectComponent>(mob).particleCount == 28 &&
-            raw.get<ecs::DeathEffectComponent>(mob).soundId == "mob.zombie.death",
+                raw.get<ecs::DeathEffectComponent>(mob).particleCount == 28 &&
+                raw.get<ecs::DeathEffectComponent>(mob).soundId == "mob.zombie.death",
             "mob replica should initialize configured death effect");
     require(raw.get<ecs::HurtEffectComponent>(mob).soundId == "mob.zombie.hurt" &&
-            std::fabs(raw.get<ecs::HurtEffectComponent>(mob).flashDurationSeconds - 0.18f) < 0.001f,
+                std::fabs(raw.get<ecs::HurtEffectComponent>(mob).flashDurationSeconds - 0.18f) < 0.001f,
             "mob replica should initialize configured hurt effect");
 
     net::EntitySnapshotMessage snapshot;
@@ -252,19 +233,15 @@ static void testMobSpawnCreatesZombieReplica() {
             "mob snapshot should update interpolation target position");
     require(nearVec3(interpolation.targetVelocity, item.velocity),
             "mob snapshot should update interpolation target velocity");
-    require(std::fabs(interpolation.targetYaw - 90.0f) < 0.001f,
-            "mob snapshot should update interpolation target yaw");
-    require(raw.get<ecs::HealthComponent>(mob).current == 16,
-            "mob snapshot health was not applied");
+    require(std::fabs(interpolation.targetYaw - 90.0f) < 0.001f, "mob snapshot should update interpolation target yaw");
+    require(raw.get<ecs::HealthComponent>(mob).current == 16, "mob snapshot health was not applied");
     require(raw.get<ecs::HurtEffectComponent>(mob).classicHurtEffectPending,
             "mob snapshot hurt flag should trigger hurt effect");
     require(raw.get<ecs::HurtEffectComponent>(mob).flashSecondsRemaining > 0.0f,
             "mob snapshot hurt flag should trigger visible hurt flash");
-    require(registry.ctxHas<ecs::AudioEventBus>(),
-            "mob snapshot hurt flag should queue audio events");
+    require(registry.ctxHas<ecs::AudioEventBus>(), "mob snapshot hurt flag should queue audio events");
     auto& audioBus = registry.ctxGet<ecs::AudioEventBus>();
-    require(audioBus.size() == 1,
-            "mob snapshot hurt flag should queue exactly one hurt audio event");
+    require(audioBus.size() == 1, "mob snapshot hurt flag should queue exactly one hurt audio event");
     require(audioBus.peek().front().clipName == "mob.zombie.hurt",
             "mob snapshot hurt flag should use configured hurt sound");
     require(nearVec3(audioBus.peek().front().position, item.position),
@@ -278,8 +255,7 @@ static void testMobSpawnCreatesZombieReplica() {
             "duplicate latched hurt snapshot should not retrigger pending hurt effect");
     require(raw.get<ecs::HurtEffectComponent>(mob).flashSecondsRemaining == 0.0f,
             "duplicate latched hurt snapshot should not refresh visible hurt flash");
-    require(audioBus.size() == 1,
-            "duplicate latched hurt snapshot should not queue another hurt audio event");
+    require(audioBus.size() == 1, "duplicate latched hurt snapshot should not queue another hurt audio event");
 
     item.hurt = false;
     snapshot.entities[0] = item;
@@ -290,8 +266,7 @@ static void testMobSpawnCreatesZombieReplica() {
     store.handleSnapshot(snapshot);
     require(raw.get<ecs::HurtEffectComponent>(mob).flashSecondsRemaining > 0.0f,
             "new hurt snapshot after cleared flag should refresh visible hurt flash");
-    require(audioBus.size() == 2,
-            "new hurt snapshot after cleared flag should queue another hurt audio event");
+    require(audioBus.size() == 2, "new hurt snapshot after cleared flag should queue another hurt audio event");
     hurtEffect.classicHurtEffectPending = false;
     hurtEffect.flashSecondsRemaining = 0.0f;
 
@@ -302,19 +277,15 @@ static void testMobSpawnCreatesZombieReplica() {
     impact.particleCount = 28;
     store.handleImpact(impact);
 
-    require(registry.ctxHas<ecs::ParticleEventBus>(),
-            "mob death impact should queue particle events");
+    require(registry.ctxHas<ecs::ParticleEventBus>(), "mob death impact should queue particle events");
     auto& particleBus = registry.ctxGet<ecs::ParticleEventBus>();
-    require(particleBus.size() == 1,
-            "mob death impact should queue exactly one particle event");
+    require(particleBus.size() == 1, "mob death impact should queue exactly one particle event");
     require(particleBus.peek().front().particleCount == 28,
             "mob death impact should use server-provided particle count");
     require(particleBus.peek().front().blockType == BlockRegistry::requireIdByName("minecraft:rose"),
             "mob death impact should use server-provided particle block");
-    require(audioBus.size() == 3,
-            "mob death impact should append one audio event after hurt audio");
-    require(audioBus.peek().back().clipName == "mob.zombie.death",
-            "mob death impact should use zombie death sound");
+    require(audioBus.size() == 3, "mob death impact should append one audio event after hurt audio");
+    require(audioBus.peek().back().clipName == "mob.zombie.death", "mob death impact should use zombie death sound");
 }
 
 static void testMobSpawnCreatesConfiguredHerobrineReplica() {
@@ -335,12 +306,8 @@ static void testMobSpawnCreatesConfiguredHerobrineReplica() {
     require(store.hasEntity(78), "herobrine netId missing");
 
     auto& raw = registry.registry();
-    auto view = raw.view<ecs::MobTag,
-                         ecs::MobVisualComponent,
-                         ecs::HealthComponent,
-                         ecs::DeathEffectComponent,
-                         ecs::EntityTypeComponent,
-                         ecs::EntityNetIdComponent>();
+    auto view = raw.view<ecs::MobTag, ecs::MobVisualComponent, ecs::HealthComponent, ecs::DeathEffectComponent,
+                         ecs::EntityTypeComponent, ecs::EntityNetIdComponent>();
     require(view.begin() != view.end(), "herobrine replica components missing");
     const entt::entity mob = *view.begin();
     const auto& visual = raw.get<ecs::MobVisualComponent>(mob);
@@ -349,16 +316,13 @@ static void testMobSpawnCreatesConfiguredHerobrineReplica() {
 
     require(raw.get<ecs::EntityTypeComponent>(mob).entityId == "minecraft:herobrine",
             "herobrine replica should keep the network entity id");
-    require(visual.model == "humanoid" &&
-            visual.textureKey == "herobrine" &&
-            ecs::entitySkinLayoutId(visual.skinLayout) == "minecraft:steve_64x64" &&
-            std::fabs(visual.scale - 1.0f) < 0.001f,
+    require(visual.model == "humanoid" && visual.textureKey == "herobrine" &&
+                ecs::entitySkinLayoutId(visual.skinLayout) == "minecraft:steve_64x64" &&
+                std::fabs(visual.scale - 1.0f) < 0.001f,
             "herobrine replica should apply configured visual data");
-    require(health.current == 40 && health.max == 40,
-            "herobrine replica should initialize configured synced health");
+    require(health.current == 40 && health.max == 40, "herobrine replica should initialize configured synced health");
     require(deathEffect.particleBlock == BlockRegistry::requireIdByName("minecraft:diamond_ore") &&
-            deathEffect.particleCount == 36 &&
-            deathEffect.soundId == "mob.zombie.death",
+                deathEffect.particleCount == 36 && deathEffect.soundId == "mob.zombie.death",
             "herobrine replica should initialize configured death effect");
 }
 
@@ -380,14 +344,8 @@ static void testMobSpawnCreatesConfiguredCreeperReplica() {
     require(store.hasEntity(79), "creeper netId missing");
 
     auto& raw = registry.registry();
-    auto view = raw.view<ecs::MobTag,
-                         ecs::MobVisualComponent,
-                         ecs::EntityModelComponent,
-                         ecs::ChildrenComponent,
-                         ecs::MobAIComponent,
-                         ecs::HealthComponent,
-                         ecs::DeathEffectComponent,
-                         ecs::EntityTypeComponent,
+    auto view = raw.view<ecs::MobTag, ecs::MobVisualComponent, ecs::EntityModelComponent, ecs::ChildrenComponent,
+                         ecs::MobAIComponent, ecs::HealthComponent, ecs::DeathEffectComponent, ecs::EntityTypeComponent,
                          ecs::EntityNetIdComponent>();
     require(view.begin() != view.end(), "creeper replica components missing");
     const entt::entity mob = *view.begin();
@@ -399,27 +357,20 @@ static void testMobSpawnCreatesConfiguredCreeperReplica() {
 
     require(raw.get<ecs::EntityTypeComponent>(mob).entityId == "minecraft:creeper",
             "creeper replica should keep the network entity id");
-    require(visual.model == "minecraft:creeper" &&
-            visual.textureKey == "creeper" &&
-            std::fabs(visual.scale - 1.0f) < 0.001f,
+    require(visual.model == "minecraft:creeper" && visual.textureKey == "creeper" &&
+                std::fabs(visual.scale - 1.0f) < 0.001f,
             "creeper replica should apply configured visual data");
-    require(model.modelId == "minecraft:creeper" &&
-            model.animationId == "minecraft:creeper_walk" &&
-            model.yawPartName == "root",
+    require(model.modelId == "minecraft:creeper" && model.animationId == "minecraft:creeper_walk" &&
+                model.yawPartName == "root",
             "creeper replica should apply generic model metadata");
-    require(std::fabs(ai.yaw - 120.0f) < 0.001f,
-            "creeper replica should initialize synced yaw");
-    require(health.current == 20 && health.max == 20,
-            "creeper replica should initialize configured synced health");
+    require(std::fabs(ai.yaw - 120.0f) < 0.001f, "creeper replica should initialize synced yaw");
+    require(health.current == 20 && health.max == 20, "creeper replica should initialize configured synced health");
     require(deathEffect.particleBlock == BlockRegistry::requireIdByName("minecraft:coal_ore") &&
-            deathEffect.particleCount == 32 &&
-            deathEffect.soundId == "mob.zombie.death",
+                deathEffect.particleCount == 32 && deathEffect.soundId == "mob.zombie.death",
             "creeper replica should initialize configured death effect");
 
     int genericPartCount = 0;
-    auto partView = raw.view<ecs::EntityModelPartComponent,
-                             ecs::LocalTransformComponent,
-                             ecs::WorldTransformComponent,
+    auto partView = raw.view<ecs::EntityModelPartComponent, ecs::LocalTransformComponent, ecs::WorldTransformComponent,
                              ecs::ParentComponent>();
     for (const entt::entity partEntity : partView) {
         static_cast<void>(partEntity);
@@ -458,14 +409,9 @@ static void testMobSpawnCreatesConfiguredPassiveAnimalReplicas() {
         require(store.hasEntity(100), "passive animal netId missing");
 
         auto& raw = registry.registry();
-        auto view = raw.view<ecs::MobTag,
-                             ecs::MobVisualComponent,
-                             ecs::EntityModelComponent,
-                             ecs::ChildrenComponent,
-                             ecs::MobAIComponent,
-                             ecs::HealthComponent,
-                             ecs::EntityTypeComponent,
-                             ecs::EntityNetIdComponent>();
+        auto view =
+            raw.view<ecs::MobTag, ecs::MobVisualComponent, ecs::EntityModelComponent, ecs::ChildrenComponent,
+                     ecs::MobAIComponent, ecs::HealthComponent, ecs::EntityTypeComponent, ecs::EntityNetIdComponent>();
         require(view.begin() != view.end(), "passive animal replica components missing");
         const entt::entity mob = *view.begin();
         const auto& visual = raw.get<ecs::MobVisualComponent>(mob);
@@ -475,26 +421,20 @@ static void testMobSpawnCreatesConfiguredPassiveAnimalReplicas() {
 
         require(raw.get<ecs::EntityTypeComponent>(mob).entityId == expected.id,
                 "passive animal replica should keep the network entity id");
-        require(visual.model == expected.id &&
-                visual.textureKey == expected.texture &&
-                std::fabs(visual.scale - 1.0f) < 0.001f,
+        require(visual.model == expected.id && visual.textureKey == expected.texture &&
+                    std::fabs(visual.scale - 1.0f) < 0.001f,
                 "passive animal replica should apply configured visual data");
-        require(model.modelId == expected.id &&
-                model.animationId == "minecraft:quadruped_walk" &&
-                model.yawPartName == "root",
+        require(model.modelId == expected.id && model.animationId == "minecraft:quadruped_walk" &&
+                    model.yawPartName == "root",
                 "passive animal replica should apply generic model metadata");
-        require(std::fabs(ai.yaw - 75.0f) < 0.001f,
-                "passive animal replica should initialize synced yaw");
-        require(!ai.targetsPlayers,
-                "passive animal replica should preserve passive AI tuning");
+        require(std::fabs(ai.yaw - 75.0f) < 0.001f, "passive animal replica should initialize synced yaw");
+        require(!ai.targetsPlayers, "passive animal replica should preserve passive AI tuning");
         require(health.current == expected.health && health.max == expected.health,
                 "passive animal replica should initialize configured synced health");
 
         int genericPartCount = 0;
-        auto partView = raw.view<ecs::EntityModelPartComponent,
-                                 ecs::LocalTransformComponent,
-                                 ecs::WorldTransformComponent,
-                                 ecs::ParentComponent>();
+        auto partView = raw.view<ecs::EntityModelPartComponent, ecs::LocalTransformComponent,
+                                 ecs::WorldTransformComponent, ecs::ParentComponent>();
         for (const entt::entity partEntity : partView) {
             static_cast<void>(partEntity);
             ++genericPartCount;
@@ -526,12 +466,8 @@ static void testProjectileSpawnCreatesAppleReplica() {
     require(store.hasEntity(91), "projectile netId missing");
 
     auto& raw = registry.registry();
-    auto view = raw.view<ecs::ProjectileTag,
-                         ecs::ProjectileComponent,
-                         ecs::ItemComponent,
-                         ecs::SpinVisualComponent,
-                         ecs::EntityNetIdComponent,
-                         ecs::NetworkInterpolationComponent>();
+    auto view = raw.view<ecs::ProjectileTag, ecs::ProjectileComponent, ecs::ItemComponent, ecs::SpinVisualComponent,
+                         ecs::EntityNetIdComponent, ecs::NetworkInterpolationComponent>();
     require(view.begin() != view.end(), "projectile replica components missing");
     const entt::entity projectile = *view.begin();
     require(raw.get<ecs::ItemComponent>(projectile).itemId == ItemRegistry::requireIdByName("minecraft:apple"),
@@ -547,13 +483,11 @@ static void testProjectileSpawnCreatesAppleReplica() {
             "projectile replica impact particle count should come from item projectile definition");
     require(projectileComponent.impactSoundId == appleDefinition.impactSoundId,
             "projectile replica impact sound should come from item projectile definition");
-    require(std::fabs(raw.get<ecs::BoundsComponent>(projectile).halfExtents.x -
-                      appleDefinition.boundsHalfExtent) < 0.001f,
+    require(std::fabs(raw.get<ecs::BoundsComponent>(projectile).halfExtents.x - appleDefinition.boundsHalfExtent) <
+                0.001f,
             "projectile replica bounds should come from item projectile definition");
-    require(!raw.all_of<ecs::DropItemTag>(projectile),
-            "projectile replica should not be collectable as a drop");
-    require(registry.ctxHas<ecs::AudioEventBus>(),
-            "projectile spawn should queue a throw sound event");
+    require(!raw.all_of<ecs::DropItemTag>(projectile), "projectile replica should not be collectable as a drop");
+    require(registry.ctxHas<ecs::AudioEventBus>(), "projectile spawn should queue a throw sound event");
     auto& audioBus = registry.ctxGet<ecs::AudioEventBus>();
     require(audioBus.size() == 1, "projectile spawn should queue exactly one throw sound");
     require(audioBus.peek().front().clipName == appleDefinition.throwSoundId,
@@ -618,20 +552,16 @@ static void testProjectileSpawnCreatesAppleReplica() {
     require(audioBus.size() == 2, "projectile despawn should not duplicate explicit impact sounds");
     require(particleBus.peek().front().useWorldPos,
             "projectile impact event should retain server-provided world position");
-    require(particleBus.peek().front().blockType != 0,
-            "projectile impact event should have a particle texture block");
+    require(particleBus.peek().front().blockType != 0, "projectile impact event should have a particle texture block");
 
     ecs::GameplayServices services;
     ecs::SystemContext ctx{registry, services, 1.0f / 60.0f, 0};
     ecs::ParticleSpawnSystem particleSpawn;
     particleSpawn.update(ctx);
 
-    auto particleView = raw.view<ecs::ParticleTag,
-                                 ecs::ParticleComponent,
-                                 ecs::TransformComponent,
-                                 ecs::VelocityComponent>();
-    require(particleView.size_hint() > 0,
-            "projectile impact event should spawn visible particles");
+    auto particleView =
+        raw.view<ecs::ParticleTag, ecs::ParticleComponent, ecs::TransformComponent, ecs::VelocityComponent>();
+    require(particleView.size_hint() > 0, "projectile impact event should spawn visible particles");
     require(particleBus.empty(), "particle spawn system should drain impact events");
 }
 

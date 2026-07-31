@@ -31,49 +31,34 @@ BlockID blockIdOf(const BlockStateId stateId) {
 
 const std::vector<BlockID>& naturalLogIds() {
     static const std::vector<BlockID> ids = {
-        BlockRegistry::findByName("oak_log"),
-        BlockRegistry::findByName("birch_log"),
-        BlockRegistry::findByName("spruce_log"),
-        BlockRegistry::findByName("jungle_log"),
-        BlockRegistry::findByName("acacia_log"),
-        BlockRegistry::findByName("dark_oak_log"),
-        BlockRegistry::findByName("cherry_log"),
-        BlockRegistry::findByName("pale_oak_log"),
+        BlockRegistry::findByName("oak_log"),    BlockRegistry::findByName("birch_log"),
+        BlockRegistry::findByName("spruce_log"), BlockRegistry::findByName("jungle_log"),
+        BlockRegistry::findByName("acacia_log"), BlockRegistry::findByName("dark_oak_log"),
+        BlockRegistry::findByName("cherry_log"), BlockRegistry::findByName("pale_oak_log"),
     };
     return ids;
 }
 
 const std::vector<BlockID>& naturalLeavesIds() {
     static const std::vector<BlockID> ids = {
-        BlockRegistry::findByName("oak_leaves"),
-        BlockRegistry::findByName("birch_leaves"),
-        BlockRegistry::findByName("spruce_leaves"),
-        BlockRegistry::findByName("jungle_leaves"),
-        BlockRegistry::findByName("acacia_leaves"),
-        BlockRegistry::findByName("dark_oak_leaves"),
-        BlockRegistry::findByName("cherry_leaves"),
-        BlockRegistry::findByName("pale_oak_leaves"),
+        BlockRegistry::findByName("oak_leaves"),    BlockRegistry::findByName("birch_leaves"),
+        BlockRegistry::findByName("spruce_leaves"), BlockRegistry::findByName("jungle_leaves"),
+        BlockRegistry::findByName("acacia_leaves"), BlockRegistry::findByName("dark_oak_leaves"),
+        BlockRegistry::findByName("cherry_leaves"), BlockRegistry::findByName("pale_oak_leaves"),
     };
     return ids;
 }
 
 bool isTreeBlock(const BlockID id) {
-    return containsBlockId(naturalLogIds(), id) ||
-           containsBlockId(naturalLeavesIds(), id);
+    return containsBlockId(naturalLogIds(), id) || containsBlockId(naturalLeavesIds(), id);
 }
 
 bool isLog(const BlockID id) {
     return containsBlockId(naturalLogIds(), id);
 }
 
-bool findSampledBlock(const TerrainGenerator& generator,
-                      const std::vector<BlockID>& targets,
-                      const int minX,
-                      const int maxX,
-                      const int minY,
-                      const int maxY,
-                      const int minZ,
-                      const int maxZ) {
+bool findSampledBlock(const TerrainGenerator& generator, const std::vector<BlockID>& targets, const int minX,
+                      const int maxX, const int minY, const int maxY, const int minZ, const int maxZ) {
     for (int z = minZ; z <= maxZ; ++z) {
         for (int x = minX; x <= maxX; ++x) {
             for (int y = minY; y <= maxY; ++y) {
@@ -96,7 +81,8 @@ bool findTreeRoot(const TerrainGenerator& generator, TreeRoot& outRoot) {
     for (int z = -128; z <= 128; ++z) {
         for (int x = -128; x <= 128; ++x) {
             const int surfaceY = generator.sampleSurfaceY(x, z);
-            if (blockIdOf(generator.sampleBlock(x, surfaceY, z)) != BlockRegistry::requireIdByName("minecraft:grass_block")) {
+            if (blockIdOf(generator.sampleBlock(x, surfaceY, z)) !=
+                BlockRegistry::requireIdByName("minecraft:grass_block")) {
                 continue;
             }
             if (isLog(blockIdOf(generator.sampleBlock(x, surfaceY + 1, z)))) {
@@ -108,18 +94,13 @@ bool findTreeRoot(const TerrainGenerator& generator, TreeRoot& outRoot) {
     return false;
 }
 
-bool findCrossChunkTreeBlock(const TerrainGenerator& generator,
-                             TreeRoot& outRoot,
-                             int& outX,
-                             int& outY,
-                             int& outZ,
+bool findCrossChunkTreeBlock(const TerrainGenerator& generator, TreeRoot& outRoot, int& outX, int& outY, int& outZ,
                              BlockStateId& outBlock) {
     for (int z = -192; z <= 192; ++z) {
         for (int x = -192; x <= 192; ++x) {
             const int localX = x - worldToChunkCoord(x, Chunk::SIZE_X) * Chunk::SIZE_X;
             const int localZ = z - worldToChunkCoord(z, Chunk::SIZE_Z) * Chunk::SIZE_Z;
-            if (localX > 1 && localX < Chunk::SIZE_X - 2 &&
-                localZ > 1 && localZ < Chunk::SIZE_Z - 2) {
+            if (localX > 1 && localX < Chunk::SIZE_X - 2 && localZ > 1 && localZ < Chunk::SIZE_Z - 2) {
                 continue;
             }
 
@@ -173,9 +154,7 @@ bool findUnsuitableRoot(const TerrainGenerator& generator, int& outX, int& outZ,
             const int surfaceY = generator.sampleSurfaceY(x, z);
             const TerrainBiome biome = generator.sampleBiome(x, z);
             const BlockStateId surface = generator.sampleBlock(x, surfaceY, z);
-            if (surfaceY < kSeaLevel ||
-                biome == TerrainBiome::Arid ||
-                biome == TerrainBiome::HighMountain ||
+            if (surfaceY < kSeaLevel || biome == TerrainBiome::Arid || biome == TerrainBiome::HighMountain ||
                 FluidState::isWater(surface)) {
                 outX = x;
                 outZ = z;

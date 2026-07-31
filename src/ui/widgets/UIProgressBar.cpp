@@ -28,7 +28,8 @@ void UIProgressBar::init(ResourceMgr& resourceMgr) {
     m_rhiDevice = &resourceMgr.rhiDevice();
     const auto vertexSource = renderer::rhi::loadShaderSource("assets/shaders/ui_capsule_rhi.vert");
     const auto fragmentSource = renderer::rhi::loadShaderSource("assets/shaders/ui_capsule_rhi.frag");
-    if (!vertexSource || !fragmentSource) std::abort();
+    if (!vertexSource || !fragmentSource)
+        std::abort();
 
     RhiShaderDesc shaderDesc;
     shaderDesc.debugName = "UiCapsule.Vertex";
@@ -68,8 +69,9 @@ void UIProgressBar::init(ResourceMgr& resourceMgr) {
     blend.dstAlpha = RhiBlendFactor::OneMinusSrcAlpha;
     pipelineDesc.blend.attachments.push_back(blend);
     m_pipeline = m_rhiDevice->createGraphicsPipeline(pipelineDesc);
-    if (!m_vertexShader.isValid() || !m_fragmentShader.isValid() ||
-        !m_pipelineLayout.isValid() || !m_pipeline.isValid()) std::abort();
+    if (!m_vertexShader.isValid() || !m_fragmentShader.isValid() || !m_pipelineLayout.isValid() ||
+        !m_pipeline.isValid())
+        std::abort();
     initMesh();
     m_progressTween.start(0.0f, m_progress, 0.3f, EasingType::EaseOut);
     UIWidget::init(resourceMgr);
@@ -78,10 +80,14 @@ void UIProgressBar::init(ResourceMgr& resourceMgr) {
 void UIProgressBar::shutdown() {
     cleanupMesh();
     if (m_rhiDevice != nullptr) {
-        if (m_pipeline.isValid()) m_rhiDevice->destroyPipeline(m_pipeline);
-        if (m_pipelineLayout.isValid()) m_rhiDevice->destroyPipelineLayout(m_pipelineLayout);
-        if (m_fragmentShader.isValid()) m_rhiDevice->destroyShader(m_fragmentShader);
-        if (m_vertexShader.isValid()) m_rhiDevice->destroyShader(m_vertexShader);
+        if (m_pipeline.isValid())
+            m_rhiDevice->destroyPipeline(m_pipeline);
+        if (m_pipelineLayout.isValid())
+            m_rhiDevice->destroyPipelineLayout(m_pipelineLayout);
+        if (m_fragmentShader.isValid())
+            m_rhiDevice->destroyShader(m_fragmentShader);
+        if (m_vertexShader.isValid())
+            m_rhiDevice->destroyShader(m_vertexShader);
     }
     m_pipeline = {};
     m_pipelineLayout = {};
@@ -121,20 +127,17 @@ void UIProgressBar::updateAnimations(float dt) {
 }
 
 void UIProgressBar::initMesh() {
-    constexpr float vertices[] = {
-        0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 1.0f,
-        0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 1.0f
-    };
+    constexpr float vertices[] = {0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 1.0f};
     RhiBufferDesc desc;
     desc.debugName = "UiCapsule.VertexBuffer";
     desc.size = sizeof(vertices);
-    desc.usage = rhiFlag(RhiBufferUsage::Vertex) |
-                 rhiFlag(RhiBufferUsage::TransferDst);
+    desc.usage = rhiFlag(RhiBufferUsage::Vertex) | rhiFlag(RhiBufferUsage::TransferDst);
     desc.memoryUsage = RhiMemoryUsage::GpuOnly;
     desc.initialState = RhiResourceState::VertexBuffer;
     desc.memoryCategory = RhiMemoryCategory::Geometry;
     m_vertexBuffer = m_rhiDevice->createBuffer(desc, vertices, sizeof(vertices));
-    if (!m_vertexBuffer.isValid()) std::abort();
+    if (!m_vertexBuffer.isValid())
+        std::abort();
 }
 
 void UIProgressBar::cleanupMesh() {
@@ -146,8 +149,8 @@ void UIProgressBar::cleanupMesh() {
 
 void UIProgressBar::renderSelf(const UIRenderContext& ctx) const {
     const bool record = ctx.phase == UIRenderPhase::Record;
-    if (record &&
-        (ctx.commandList == nullptr || !m_pipeline.isValid() || !m_vertexBuffer.isValid())) return;
+    if (record && (ctx.commandList == nullptr || !m_pipeline.isValid() || !m_vertexBuffer.isValid()))
+        return;
 
     const UIResolvedProgressBarStyle resolved = resolveStyle(ctx);
     const Color trackCol = resolved.track;
@@ -167,12 +170,15 @@ void UIProgressBar::renderSelf(const UIRenderContext& ctx) const {
         ctx.commandList->setVertexBuffer(0u, m_vertexBuffer, 0u);
         auto drawShape = [&](const float x0, const float y0, const float x1, const float y1, Color shapeColor) {
             shapeColor[3] *= alpha;
-            struct PushConstants { glm::vec4 screenRect; glm::vec4 rectRadius; glm::vec4 color; };
+            struct PushConstants {
+                glm::vec4 screenRect;
+                glm::vec4 rectRadius;
+                glm::vec4 color;
+            };
             const PushConstants pushConstants{
                 glm::vec4(static_cast<float>(ctx.screenWidth), static_cast<float>(ctx.screenHeight), x0, y0),
                 glm::vec4(x1 - x0, y1 - y0, std::min((x1 - x0) * 0.5f, (y1 - y0) * 0.5f), 0.0f),
-                glm::vec4(shapeColor[0], shapeColor[1], shapeColor[2], shapeColor[3])
-            };
+                glm::vec4(shapeColor[0], shapeColor[1], shapeColor[2], shapeColor[3])};
             ctx.commandList->pushConstants(&pushConstants, sizeof(pushConstants),
                                            rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment));
             ctx.commandList->draw(6u, 1u, 0u, 0u);
@@ -204,13 +210,8 @@ void UIProgressBar::renderSelf(const UIRenderContext& ctx) const {
             const auto metrics = ctx.textRenderer->measureText(overlayText, textScale);
             const float textX = ax + (aw - metrics.width) * 0.5f;
             const float textY = ay + (ah - metrics.height) * 0.5f;
-            ctx.textRenderer->draw(
-                ctx,
-                overlayText,
-                textX,
-                textY,
-                textScale,
-                {textCol[0], textCol[1], textCol[2], textCol[3] * alpha});
+            ctx.textRenderer->draw(ctx, overlayText, textX, textY, textScale,
+                                   {textCol[0], textCol[1], textCol[2], textCol[3] * alpha});
         }
     }
 }

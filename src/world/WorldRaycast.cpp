@@ -10,17 +10,11 @@
 namespace {
 
 BlockSelectionBox getFluidSelectionBox(const BlockStateId fluidState) {
-    return {glm::vec3(0.0f),
-            glm::vec3(1.0f, FluidState::surfaceHeight(fluidState), 1.0f)};
+    return {glm::vec3(0.0f), glm::vec3(1.0f, FluidState::surfaceHeight(fluidState), 1.0f)};
 }
 
-bool rayIntersectsAabb(const glm::vec3& rayOrigin,
-                       const glm::vec3& rayDir,
-                       const glm::vec3& boxMin,
-                       const glm::vec3& boxMax,
-                       const float maxDist,
-                       float& outDistance,
-                       glm::ivec3& outNormal) {
+bool rayIntersectsAabb(const glm::vec3& rayOrigin, const glm::vec3& rayDir, const glm::vec3& boxMin,
+                       const glm::vec3& boxMax, const float maxDist, float& outDistance, glm::ivec3& outNormal) {
     float tMin = 0.0f;
     float tMax = maxDist;
     glm::ivec3 normal(0);
@@ -67,11 +61,8 @@ bool isWireContainerState(const BlockStateId stateId) {
     return BlockRegistry::getFast(blockId).isWireContainer;
 }
 
-bool rayIntersectsWireContainerParts(const IWorldView& worldView,
-                                     const glm::ivec3& blockPos,
-                                     const glm::vec3& rayOrigin,
-                                     const glm::vec3& rayDir,
-                                     const float maxDist,
+bool rayIntersectsWireContainerParts(const IWorldView& worldView, const glm::ivec3& blockPos,
+                                     const glm::vec3& rayOrigin, const glm::vec3& rayDir, const float maxDist,
                                      RayHit& hitResult) {
     WireContainerParts parts;
     if (!worldView.copyWireContainerParts(blockPos, parts) || parts.empty()) {
@@ -97,9 +88,8 @@ bool rayIntersectsWireContainerParts(const IWorldView& worldView,
 
         found = true;
         bestDistance = distance;
-        bestNormal = (normal.x != 0 || normal.y != 0 || normal.z != 0)
-            ? normal
-            : WireFaceGeometry::surfaceNormal(part.facing);
+        bestNormal =
+            (normal.x != 0 || normal.y != 0 || normal.z != 0) ? normal : WireFaceGeometry::surfaceNormal(part.facing);
     });
 
     if (!found) {
@@ -117,9 +107,7 @@ bool rayIntersectsWireContainerParts(const IWorldView& worldView,
 
 } // namespace
 
-RayHit raycastWorldView(const IWorldView& worldView,
-                        const PhysicsInfo& ray,
-                        const float maxDist,
+RayHit raycastWorldView(const IWorldView& worldView, const PhysicsInfo& ray, const float maxDist,
                         const RaycastFluidMode fluidMode) {
     RayHit hitResult{};
 
@@ -150,25 +138,20 @@ RayHit raycastWorldView(const IWorldView& worldView,
         const bool blockLayerIsFluid = FluidState::isWater(blockState);
         const bool hasSolidSelection = blockState != NULL_BLOCK_STATE && !blockLayerIsFluid;
         const BlockStateId fluidState = (hasSolidSelection || fluidMode == RaycastFluidMode::Ignore)
-            ? NULL_BLOCK_STATE
-            : (blockLayerIsFluid ? blockState : worldView.getFluidState(x, y, z));
+                                            ? NULL_BLOCK_STATE
+                                            : (blockLayerIsFluid ? blockState : worldView.getFluidState(x, y, z));
         const bool hasFluidSelection = FluidState::isWater(fluidState);
 
         if (hasSolidSelection || hasFluidSelection) {
             const bool solidIsWireContainer = hasSolidSelection && isWireContainerState(blockState);
             if (solidIsWireContainer) {
-                if (rayIntersectsWireContainerParts(worldView,
-                                                    glm::ivec3(x, y, z),
-                                                    rayOri,
-                                                    rayDir,
-                                                    maxDist,
+                if (rayIntersectsWireContainerParts(worldView, glm::ivec3(x, y, z), rayOri, rayDir, maxDist,
                                                     hitResult)) {
                     return hitResult;
                 }
             } else {
-                const BlockSelectionBox selectionBox = hasSolidSelection
-                    ? BlockSelection::getBox(blockState)
-                    : getFluidSelectionBox(fluidState);
+                const BlockSelectionBox selectionBox =
+                    hasSolidSelection ? BlockSelection::getBox(blockState) : getFluidSelectionBox(fluidState);
                 const glm::vec3 boxMin = glm::vec3(x, y, z) + selectionBox.min;
                 const glm::vec3 boxMax = glm::vec3(x, y, z) + selectionBox.max;
 
@@ -178,9 +161,8 @@ RayHit raycastWorldView(const IWorldView& worldView,
                     hitResult.hit = true;
                     hitResult.kind = hasSolidSelection ? RayHitKind::Block : RayHitKind::Fluid;
                     hitResult.blockPos = glm::ivec3(x, y, z);
-                    hitResult.normal = (aabbNormal.x != 0 || aabbNormal.y != 0 || aabbNormal.z != 0)
-                        ? aabbNormal
-                        : hitNormal;
+                    hitResult.normal =
+                        (aabbNormal.x != 0 || aabbNormal.y != 0 || aabbNormal.z != 0) ? aabbNormal : hitNormal;
                     hitResult.distance = aabbDistance;
                     hitResult.position = rayOri + rayDir * aabbDistance;
                     return hitResult;

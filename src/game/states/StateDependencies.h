@@ -12,7 +12,9 @@ class UIRenderer;
 class World;
 class AudioEngine;
 class ParticleSystem;
-namespace client { class GameClient; }
+namespace client {
+class GameClient;
+}
 
 namespace physics {
 class PhysicsSystem;
@@ -45,10 +47,9 @@ struct StateDependencies {
     const LocaleManager& localeManager;
     client::GameClient& gameClient;
     bool isMultiplayer;
-    RenderScene* renderScene = nullptr;  ///< Optional; nullable for states that don't need render settings
+    RenderScene* renderScene = nullptr; ///< Optional; nullable for states that don't need render settings
     Window* window = nullptr;
     PresentationController* presentationController = nullptr;
-
 };
 
 #endif // MECRAFT_STATE_DEPENDENCIES_H

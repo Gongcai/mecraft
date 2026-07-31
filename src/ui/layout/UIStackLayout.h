@@ -34,7 +34,8 @@ public:
                 if (totalHeight > child->height) {
                     totalHeight += m_spacing;
                 }
-                if (child->width > maxW) maxW = child->width;
+                if (child->width > maxW)
+                    maxW = child->width;
             }
             height = totalHeight;
             width = maxW;
@@ -54,7 +55,8 @@ public:
                 if (totalWidth > child->width) {
                     totalWidth += m_spacing;
                 }
-                if (child->height > maxH) maxH = child->height;
+                if (child->height > maxH)
+                    maxH = child->height;
             }
             width = totalWidth;
             height = maxH;

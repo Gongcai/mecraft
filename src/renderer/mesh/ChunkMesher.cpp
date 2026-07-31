@@ -96,10 +96,7 @@ struct ModelGeometryCacheKey {
     bool uvLock = false;
 
     bool operator==(const ModelGeometryCacheKey& other) const {
-        return model == other.model &&
-               rotX == other.rotX &&
-               rotY == other.rotY &&
-               rotZ == other.rotZ &&
+        return model == other.model && rotX == other.rotX && rotY == other.rotY && rotZ == other.rotZ &&
                uvLock == other.uvLock;
     }
 };
@@ -116,9 +113,8 @@ struct ModelGeometryCacheKeyHash {
 };
 
 std::mutex g_modelGeometryCacheMutex;
-std::unordered_map<ModelGeometryCacheKey,
-                   std::shared_ptr<const CachedModelGeometry>,
-                   ModelGeometryCacheKeyHash> g_modelGeometryCache;
+std::unordered_map<ModelGeometryCacheKey, std::shared_ptr<const CachedModelGeometry>, ModelGeometryCacheKeyHash>
+    g_modelGeometryCache;
 
 struct FaceMergeKey {
     BlockStateId stateId = NULL_BLOCK_STATE;
@@ -156,15 +152,7 @@ struct MeshFaceInfo {
     uint8_t uvQuarterTurns = 0;
 };
 
-enum class MeshCubeClass : uint8_t {
-    Air,
-    Opaque,
-    Transparent,
-    Water,
-    Cutout,
-    CutoutDistance,
-    Other
-};
+enum class MeshCubeClass : uint8_t { Air, Opaque, Transparent, Water, Cutout, CutoutDistance, Other };
 
 struct MeshBlockInfo {
     const BlockDef* def = nullptr;
@@ -189,17 +177,17 @@ constexpr float kGreedyFaceOverlapEpsilon = 1.0f / 1024.0f;
 
 constexpr std::array<IVec3, 6> kFaceNormals = {{{0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1}, {-1, 0, 0}, {1, 0, 0}}};
 
-constexpr std::array<std::array<glm::vec3, 4>, 6> kFaceCorners = {{
-    {{{0, 1, 1}, {1, 1, 1}, {1, 1, 0}, {0, 1, 0}}},
-    {{{0, 0, 0}, {1, 0, 0}, {1, 0, 1}, {0, 0, 1}}},
-    {{{0, 0, 1}, {1, 0, 1}, {1, 1, 1}, {0, 1, 1}}},
-    {{{1, 0, 0}, {0, 0, 0}, {0, 1, 0}, {1, 1, 0}}},
-    {{{0, 0, 0}, {0, 0, 1}, {0, 1, 1}, {0, 1, 0}}},
-    {{{1, 0, 1}, {1, 0, 0}, {1, 1, 0}, {1, 1, 1}}}
-}};
+constexpr std::array<std::array<glm::vec3, 4>, 6> kFaceCorners = {{{{{0, 1, 1}, {1, 1, 1}, {1, 1, 0}, {0, 1, 0}}},
+                                                                   {{{0, 0, 0}, {1, 0, 0}, {1, 0, 1}, {0, 0, 1}}},
+                                                                   {{{0, 0, 1}, {1, 0, 1}, {1, 1, 1}, {0, 1, 1}}},
+                                                                   {{{1, 0, 0}, {0, 0, 0}, {0, 1, 0}, {1, 1, 0}}},
+                                                                   {{{0, 0, 0}, {0, 0, 1}, {0, 1, 1}, {0, 1, 0}}},
+                                                                   {{{1, 0, 1}, {1, 0, 0}, {1, 1, 0}, {1, 1, 1}}}}};
 
-constexpr std::array<glm::vec3, 4> kCrossQuadA = {{{0.1464f, 0.0f, 0.1464f}, {0.8536f, 0.0f, 0.8536f}, {0.8536f, 1.0f, 0.8536f}, {0.1464f, 1.0f, 0.1464f}}};
-constexpr std::array<glm::vec3, 4> kCrossQuadB = {{{0.8536f, 0.0f, 0.1464f}, {0.1464f, 0.0f, 0.8536f}, {0.1464f, 1.0f, 0.8536f}, {0.8536f, 1.0f, 0.1464f}}};
+constexpr std::array<glm::vec3, 4> kCrossQuadA = {
+    {{0.1464f, 0.0f, 0.1464f}, {0.8536f, 0.0f, 0.8536f}, {0.8536f, 1.0f, 0.8536f}, {0.1464f, 1.0f, 0.1464f}}};
+constexpr std::array<glm::vec3, 4> kCrossQuadB = {
+    {{0.8536f, 0.0f, 0.1464f}, {0.1464f, 0.0f, 0.8536f}, {0.1464f, 1.0f, 0.8536f}, {0.8536f, 1.0f, 0.1464f}}};
 
 void resetMeshData(ChunkMeshData& meshData) {
     meshData.opaqueVertices.clear();
@@ -227,14 +215,12 @@ void reserveDefaultMeshDataCapacity(ChunkMeshData& meshData) {
 
 // Sub-chunk local index (16x16x16)
 MECRAFT_FORCEINLINE std::size_t scToIndex(const int x, const int y, const int z) {
-    return static_cast<std::size_t>(x) +
-           static_cast<std::size_t>(z) * SubChunk::SIZE +
+    return static_cast<std::size_t>(x) + static_cast<std::size_t>(z) * SubChunk::SIZE +
            static_cast<std::size_t>(y) * SubChunk::SIZE * SubChunk::SIZE;
 }
 
 MECRAFT_FORCEINLINE std::size_t haloToIndex(const int x, const int y, const int z) {
-    return static_cast<std::size_t>(x + 1) +
-           static_cast<std::size_t>(z + 1) * SC_HALO_SIZE +
+    return static_cast<std::size_t>(x + 1) + static_cast<std::size_t>(z + 1) * SC_HALO_SIZE +
            static_cast<std::size_t>(y + 1) * SC_HALO_SIZE * SC_HALO_SIZE;
 }
 
@@ -248,23 +234,29 @@ std::size_t toBorderXZIndex(const int x, const int z) {
 BlockStateId getNeighborAwareBlockSC(const SubChunkMeshingSnapshot& snapshot, int x, int y, int z) {
     // Out of Y range — above top = air, below bottom = stone/air
     if (y < 0) {
-        if (snapshot.isBottomSection) return NULL_BLOCK_STATE;
-        if (x < 0 || x >= SubChunk::SIZE || z < 0 || z >= SubChunk::SIZE) return NULL_BLOCK_STATE;
+        if (snapshot.isBottomSection)
+            return NULL_BLOCK_STATE;
+        if (x < 0 || x >= SubChunk::SIZE || z < 0 || z >= SubChunk::SIZE)
+            return NULL_BLOCK_STATE;
         return snapshot.negYBorder[toBorderXZIndex(x, z)];
     }
     if (y >= SubChunk::SIZE) {
-        if (snapshot.isTopSection) return NULL_BLOCK_STATE;  // Above world = air
-        if (x < 0 || x >= SubChunk::SIZE || z < 0 || z >= SubChunk::SIZE) return NULL_BLOCK_STATE;
+        if (snapshot.isTopSection)
+            return NULL_BLOCK_STATE; // Above world = air
+        if (x < 0 || x >= SubChunk::SIZE || z < 0 || z >= SubChunk::SIZE)
+            return NULL_BLOCK_STATE;
         return snapshot.posYBorder[toBorderXZIndex(x, z)];
     }
 
     // X borders
     if (x < 0) {
-        if (z < 0 || z >= SubChunk::SIZE) return NULL_BLOCK_STATE;
+        if (z < 0 || z >= SubChunk::SIZE)
+            return NULL_BLOCK_STATE;
         return snapshot.negXBorder[toBorderXZIndex(y, z)];
     }
     if (x >= SubChunk::SIZE) {
-        if (z < 0 || z >= SubChunk::SIZE) return NULL_BLOCK_STATE;
+        if (z < 0 || z >= SubChunk::SIZE)
+            return NULL_BLOCK_STATE;
         return snapshot.posXBorder[toBorderXZIndex(y, z)];
     }
 
@@ -281,22 +273,28 @@ BlockStateId getNeighborAwareBlockSC(const SubChunkMeshingSnapshot& snapshot, in
 
 uint8_t getNeighborAwareLightSC(const SubChunkMeshingSnapshot& snapshot, int x, int y, int z) {
     if (y < 0) {
-        if (snapshot.isBottomSection) return 0;
-        if (x < 0 || x >= SubChunk::SIZE || z < 0 || z >= SubChunk::SIZE) return 0;
+        if (snapshot.isBottomSection)
+            return 0;
+        if (x < 0 || x >= SubChunk::SIZE || z < 0 || z >= SubChunk::SIZE)
+            return 0;
         return snapshot.negYLightBorder[toBorderXZIndex(x, z)];
     }
     if (y >= SubChunk::SIZE) {
-        if (snapshot.isTopSection) return 0;
-        if (x < 0 || x >= SubChunk::SIZE || z < 0 || z >= SubChunk::SIZE) return 0;
+        if (snapshot.isTopSection)
+            return 0;
+        if (x < 0 || x >= SubChunk::SIZE || z < 0 || z >= SubChunk::SIZE)
+            return 0;
         return snapshot.posYLightBorder[toBorderXZIndex(x, z)];
     }
 
     if (x < 0) {
-        if (z < 0 || z >= SubChunk::SIZE) return 0;
+        if (z < 0 || z >= SubChunk::SIZE)
+            return 0;
         return snapshot.negXLightBorder[toBorderXZIndex(y, z)];
     }
     if (x >= SubChunk::SIZE) {
-        if (z < 0 || z >= SubChunk::SIZE) return 0;
+        if (z < 0 || z >= SubChunk::SIZE)
+            return 0;
         return snapshot.posXLightBorder[toBorderXZIndex(y, z)];
     }
 
@@ -319,18 +317,14 @@ uint8_t getNeighborBlockLightSC(const SubChunkMeshingSnapshot& snapshot, int x, 
 }
 
 MECRAFT_FORCEINLINE BlockStateId getResolvedBlockSC(const SubChunkMeshingSnapshot& snapshot, int x, int y, int z) {
-    if (x < -1 || x > SubChunk::SIZE ||
-        y < -1 || y > SubChunk::SIZE ||
-        z < -1 || z > SubChunk::SIZE) {
+    if (x < -1 || x > SubChunk::SIZE || y < -1 || y > SubChunk::SIZE || z < -1 || z > SubChunk::SIZE) {
         return NULL_BLOCK_STATE;
     }
     return snapshot.haloBlocks[haloToIndex(x, y, z)];
 }
 
 BlockStateId getResolvedFluidSC(const SubChunkMeshingSnapshot& snapshot, int x, int y, int z) {
-    if (x < -1 || x > SubChunk::SIZE ||
-        y < -1 || y > SubChunk::SIZE ||
-        z < -1 || z > SubChunk::SIZE) {
+    if (x < -1 || x > SubChunk::SIZE || y < -1 || y > SubChunk::SIZE || z < -1 || z > SubChunk::SIZE) {
         return NULL_BLOCK_STATE;
     }
     const BlockStateId fluidState = snapshot.haloFluidBlocks[haloToIndex(x, y, z)];
@@ -345,9 +339,7 @@ BlockStateId getResolvedFluidSC(const SubChunkMeshingSnapshot& snapshot, int x, 
 }
 
 MECRAFT_FORCEINLINE uint8_t getResolvedLightSC(const SubChunkMeshingSnapshot& snapshot, int x, int y, int z) {
-    if (x < -1 || x > SubChunk::SIZE ||
-        y < -1 || y > SubChunk::SIZE ||
-        z < -1 || z > SubChunk::SIZE) {
+    if (x < -1 || x > SubChunk::SIZE || y < -1 || y > SubChunk::SIZE || z < -1 || z > SubChunk::SIZE) {
         return 0;
     }
     return snapshot.haloLightMap[haloToIndex(x, y, z)];
@@ -375,12 +367,8 @@ MECRAFT_FORCEINLINE bool isSolidForAO(const SubChunkMeshingSnapshot& snapshot, c
     return getMeshBlockInfo(stateId).isSolid;
 }
 
-MECRAFT_FORCEINLINE uint8_t getSafePackedLightForAO(const SubChunkMeshingSnapshot& snapshot,
-                                                    const int x,
-                                                    const int y,
-                                                    const int z,
-                                                    const bool isSolid,
-                                                    const uint8_t basePacked) {
+MECRAFT_FORCEINLINE uint8_t getSafePackedLightForAO(const SubChunkMeshingSnapshot& snapshot, const int x, const int y,
+                                                    const int z, const bool isSolid, const uint8_t basePacked) {
     if (isSolid) {
         return basePacked;
     }
@@ -394,12 +382,8 @@ MECRAFT_FORCEINLINE float lightToNormalized(const uint8_t level) {
     return static_cast<float>(level) / 15.0f;
 }
 
-MECRAFT_FORCEINLINE float computeVertexNormalized(const uint8_t base,
-                                                  const uint8_t s1,
-                                                  const uint8_t s2,
-                                                  const uint8_t cn,
-                                                  const bool s1Solid,
-                                                  const bool s2Solid) {
+MECRAFT_FORCEINLINE float computeVertexNormalized(const uint8_t base, const uint8_t s1, const uint8_t s2,
+                                                  const uint8_t cn, const bool s1Solid, const bool s2Solid) {
     float avg = 0.0f;
     if (s1Solid && s2Solid) {
         avg = static_cast<float>(base + s1 + s2) / 3.0f;
@@ -409,24 +393,17 @@ MECRAFT_FORCEINLINE float computeVertexNormalized(const uint8_t base,
     return avg / 15.0f;
 }
 
-MECRAFT_FORCEINLINE uint16_t computeVertexLightKey(const uint8_t base,
-                                                   const uint8_t s1,
-                                                   const uint8_t s2,
-                                                   const uint8_t cn,
-                                                   const bool s1Solid,
-                                                   const bool s2Solid) {
+MECRAFT_FORCEINLINE uint16_t computeVertexLightKey(const uint8_t base, const uint8_t s1, const uint8_t s2,
+                                                   const uint8_t cn, const bool s1Solid, const bool s2Solid) {
     const int sum = s1Solid && s2Solid
-        ? static_cast<int>(base) + static_cast<int>(s1) + static_cast<int>(s2)
-        : static_cast<int>(base) + static_cast<int>(s1) + static_cast<int>(s2) + static_cast<int>(cn);
+                        ? static_cast<int>(base) + static_cast<int>(s1) + static_cast<int>(s2)
+                        : static_cast<int>(base) + static_cast<int>(s1) + static_cast<int>(s2) + static_cast<int>(cn);
     const int denominator = s1Solid && s2Solid ? 45 : 60;
     return static_cast<uint16_t>((sum * static_cast<int>(kNormalizedQuantizationScale) + denominator / 2) /
                                  denominator);
 }
 
-void computeTintMapPosition(const SubChunkMeshingSnapshot& snapshot,
-                            const int x,
-                            const int z,
-                            uint8_t& outU,
+void computeTintMapPosition(const SubChunkMeshingSnapshot& snapshot, const int x, const int z, uint8_t& outU,
                             uint8_t& outV) {
     const int worldX = snapshot.worldOffsetX + x;
     const int worldZ = snapshot.worldOffsetZ + z;
@@ -435,26 +412,27 @@ void computeTintMapPosition(const SubChunkMeshingSnapshot& snapshot,
 
     if (snapshot.worldView != nullptr) {
         switch (snapshot.worldView->getBiome(worldX, worldZ)) {
-            case TerrainBiome::Arid:
-                temperature = 0.95;
-                moisture = 0.18;
-                break;
-            case TerrainBiome::Mountain:
-                temperature = 0.55;
-                moisture = 0.50;
-                break;
-            case TerrainBiome::HighMountain:
-                temperature = 0.35;
-                moisture = 0.40;
-                break;
-            case TerrainBiome::Temperate:
-            default:
-                temperature = 0.70;
-                moisture = 0.65;
-                break;
+        case TerrainBiome::Arid:
+            temperature = 0.95;
+            moisture = 0.18;
+            break;
+        case TerrainBiome::Mountain:
+            temperature = 0.55;
+            moisture = 0.50;
+            break;
+        case TerrainBiome::HighMountain:
+            temperature = 0.35;
+            moisture = 0.40;
+            break;
+        case TerrainBiome::Temperate:
+        default:
+            temperature = 0.70;
+            moisture = 0.65;
+            break;
         }
 
-        const double detail = std::sin(static_cast<double>(worldX) * 0.071 + static_cast<double>(worldZ) * 0.043) * 0.035;
+        const double detail =
+            std::sin(static_cast<double>(worldX) * 0.071 + static_cast<double>(worldZ) * 0.043) * 0.035;
         temperature = std::clamp(temperature + detail, 0.0, 1.0);
         moisture = std::clamp(moisture - detail, 0.0, 1.0);
     }
@@ -482,18 +460,17 @@ bool isUnresolvablePosition(const SubChunkMeshingSnapshot& snapshot, int x, int 
 
     // Single-axis Y out of range where the section has no neighbour above/below
     if (yOut) {
-        if (y < 0 && snapshot.isBottomSection) return true;
-        if (y >= SubChunk::SIZE && snapshot.isTopSection) return true;
+        if (y < 0 && snapshot.isBottomSection)
+            return true;
+        if (y >= SubChunk::SIZE && snapshot.isTopSection)
+            return true;
     }
 
     return false;
 }
 
-std::array<VertexLightData, 4> computeFaceVertexData(const SubChunkMeshingSnapshot& snapshot,
-                                                     const int x,
-                                                     const int y,
-                                                     const int z,
-                                                     const int face) {
+std::array<VertexLightData, 4> computeFaceVertexData(const SubChunkMeshingSnapshot& snapshot, const int x, const int y,
+                                                     const int z, const int face) {
     const int nx = kFaceNormals[face].x;
     const int ny = kFaceNormals[face].y;
     const int nz = kFaceNormals[face].z;
@@ -569,13 +546,13 @@ std::array<VertexLightData, 4> computeFaceVertexData(const SubChunkMeshingSnapsh
 
 const AnimatedTextureRef& getFaceTextureRef(const StateTextureIndices& textures, const int face) {
     switch (face) {
-        case FACE_TOP:    return textures.faceTop;
-        case FACE_BOTTOM: return textures.faceBottom;
-        case FACE_FRONT:  return textures.faceFront;
-        case FACE_BACK:   return textures.faceBack;
-        case FACE_LEFT:   return textures.faceLeft;
-        case FACE_RIGHT:  return textures.faceRight;
-        default:          return textures.faceTop;
+    case FACE_TOP: return textures.faceTop;
+    case FACE_BOTTOM: return textures.faceBottom;
+    case FACE_FRONT: return textures.faceFront;
+    case FACE_BACK: return textures.faceBack;
+    case FACE_LEFT: return textures.faceLeft;
+    case FACE_RIGHT: return textures.faceRight;
+    default: return textures.faceTop;
     }
 }
 
@@ -591,23 +568,19 @@ uint8_t getFaceUvQuarterTurns(const BlockStateId stateId, const int face) {
 
     if (axisValue == PropIndices::AXIS_X) {
         switch (face) {
-            case FACE_TOP:
-            case FACE_BOTTOM:
-            case FACE_FRONT:
-            case FACE_BACK:
-                return 1;
-            default:
-                return 0;
+        case FACE_TOP:
+        case FACE_BOTTOM:
+        case FACE_FRONT:
+        case FACE_BACK: return 1;
+        default: return 0;
         }
     }
 
     if (axisValue == PropIndices::AXIS_Z) {
         switch (face) {
-            case FACE_LEFT:
-            case FACE_RIGHT:
-                return 1;
-            default:
-                return 0;
+        case FACE_LEFT:
+        case FACE_RIGHT: return 1;
+        default: return 0;
         }
     }
 
@@ -629,14 +602,9 @@ MeshFaceInfo buildMeshFaceInfo(const BlockStateId stateId, const int face) {
     return info;
 }
 
-FaceRenderData buildFaceRenderData(const SubChunkMeshingSnapshot& snapshot,
-                                   const BlockStateId stateId,
-                                   const BlockDef& def,
-                                   const MeshBlockInfo& info,
-                                   const int x,
-                                   const int y,
-                                   const int z,
-                                   const int face) {
+FaceRenderData buildFaceRenderData(const SubChunkMeshingSnapshot& snapshot, const BlockStateId stateId,
+                                   const BlockDef& def, const MeshBlockInfo& info, const int x, const int y,
+                                   const int z, const int face) {
     FaceRenderData renderData;
     const MeshFaceInfo& faceInfo = info.faces[static_cast<size_t>(face)];
     renderData.tileIndex = faceInfo.tileIndex;
@@ -644,9 +612,8 @@ FaceRenderData buildFaceRenderData(const SubChunkMeshingSnapshot& snapshot,
     renderData.animationFrameCount = faceInfo.animationFrameCount;
     renderData.animationFps = faceInfo.animationFps;
     renderData.animated = faceInfo.animated;
-    renderData.tintKind = faceInfo.tintKind != BlockTintKinds::NONE
-        ? faceInfo.tintKind
-        : blockTintKindFromBiomeTint(def.biomeTint);
+    renderData.tintKind =
+        faceInfo.tintKind != BlockTintKinds::NONE ? faceInfo.tintKind : blockTintKindFromBiomeTint(def.biomeTint);
     renderData.derivativeMaterialId = def.derivativeMaterialId;
     if (renderData.tintKind != BlockTintKinds::NONE) {
         computeTintMapPosition(snapshot, x, z, renderData.tintU, renderData.tintV);
@@ -670,13 +637,8 @@ FaceRenderData buildFaceRenderData(const SubChunkMeshingSnapshot& snapshot,
     return renderData;
 }
 
-FaceRenderData buildFaceRenderData(const SubChunkMeshingSnapshot& snapshot,
-                                   const BlockStateId stateId,
-                                   const BlockDef& def,
-                                   const int x,
-                                   const int y,
-                                   const int z,
-                                   const int face) {
+FaceRenderData buildFaceRenderData(const SubChunkMeshingSnapshot& snapshot, const BlockStateId stateId,
+                                   const BlockDef& def, const int x, const int y, const int z, const int face) {
     return buildFaceRenderData(snapshot, stateId, def, getMeshBlockInfo(stateId), x, y, z, face);
 }
 
@@ -726,28 +688,18 @@ FaceMergeKey buildFaceMergeKey(const BlockStateId stateId, const FaceRenderData&
 }
 
 MECRAFT_FORCEINLINE bool sameMergeKeyPayload(const FaceMergeKey& lhs, const FaceMergeKey& rhs) {
-    return lhs.stateId == rhs.stateId &&
-           lhs.tileIndex == rhs.tileIndex &&
-           lhs.flipDiagonal == rhs.flipDiagonal &&
-           lhs.tintKind == rhs.tintKind &&
-           lhs.tintU == rhs.tintU &&
-           lhs.tintV == rhs.tintV &&
-           lhs.derivativeMaterialId == rhs.derivativeMaterialId &&
-           lhs.uvQuarterTurns == rhs.uvQuarterTurns &&
-           lhs.ao == rhs.ao &&
-           lhs.sun == rhs.sun &&
-           lhs.block == rhs.block;
+    return lhs.stateId == rhs.stateId && lhs.tileIndex == rhs.tileIndex && lhs.flipDiagonal == rhs.flipDiagonal &&
+           lhs.tintKind == rhs.tintKind && lhs.tintU == rhs.tintU && lhs.tintV == rhs.tintV &&
+           lhs.derivativeMaterialId == rhs.derivativeMaterialId && lhs.uvQuarterTurns == rhs.uvQuarterTurns &&
+           lhs.ao == rhs.ao && lhs.sun == rhs.sun && lhs.block == rhs.block;
 }
 
 MECRAFT_FORCEINLINE bool sameMergeKey(const FaceMergeKey& lhs, const FaceMergeKey& rhs) {
-    return lhs.hash == rhs.hash &&
-           sameMergeKeyPayload(lhs, rhs);
+    return lhs.hash == rhs.hash && sameMergeKeyPayload(lhs, rhs);
 }
 
 MECRAFT_FORCEINLINE bool samePlaneFaceCell(const FaceCell& lhs, const FaceCell& rhs) {
-    return rhs.valid &&
-           lhs.key.hash == rhs.key.hash &&
-           sameMergeKeyPayload(lhs.key, rhs.key);
+    return rhs.valid && lhs.key.hash == rhs.key.hash && sameMergeKeyPayload(lhs.key, rhs.key);
 }
 
 std::vector<MeshBlockInfo> g_meshBlockInfoCache;
@@ -811,28 +763,17 @@ SubChunkMeshClassPresence scanMeshClassPresence(const SubChunkMeshingSnapshot& s
         const BlockStateId stateId = snapshot.blocks[i];
         if (stateId != NULL_BLOCK_STATE) {
             switch (getMeshBlockInfo(stateId).cubeClass) {
-                case MeshCubeClass::Opaque:
-                    presence.hasOpaqueCube = true;
-                    break;
-                case MeshCubeClass::Transparent:
-                    presence.hasTransparentCube = true;
-                    break;
-                case MeshCubeClass::Water:
-                    presence.hasWaterCube = true;
-                    presence.hasAnyWater = true;
-                    break;
-                case MeshCubeClass::Cutout:
-                    presence.hasCutoutCube = true;
-                    break;
-                case MeshCubeClass::CutoutDistance:
-                    presence.hasCutoutDistanceCube = true;
-                    break;
-                case MeshCubeClass::Air:
-                case MeshCubeClass::Other:
-                    presence.hasCustomBlock = true;
-                    break;
-                default:
-                    break;
+            case MeshCubeClass::Opaque: presence.hasOpaqueCube = true; break;
+            case MeshCubeClass::Transparent: presence.hasTransparentCube = true; break;
+            case MeshCubeClass::Water:
+                presence.hasWaterCube = true;
+                presence.hasAnyWater = true;
+                break;
+            case MeshCubeClass::Cutout: presence.hasCutoutCube = true; break;
+            case MeshCubeClass::CutoutDistance: presence.hasCutoutDistanceCube = true; break;
+            case MeshCubeClass::Air:
+            case MeshCubeClass::Other: presence.hasCustomBlock = true; break;
+            default: break;
             }
 
             if (!presence.hasAnyWater && FluidState::isWater(stateId)) {
@@ -851,16 +792,10 @@ SubChunkMeshClassPresence scanMeshClassPresence(const SubChunkMeshingSnapshot& s
     return presence;
 }
 
-bool shouldRenderFaceImpl(const SubChunkMeshingSnapshot& snapshot,
-                          const int nx,
-                          const int ny,
-                          const int nz,
-                          const BlockStateId currentState,
-                          const BlockDef& currentDef) {
+bool shouldRenderFaceImpl(const SubChunkMeshingSnapshot& snapshot, const int nx, const int ny, const int nz,
+                          const BlockStateId currentState, const BlockDef& currentDef) {
     const BlockStateId neighborState = getResolvedBlockSC(snapshot, nx, ny, nz);
-    if (currentDef.renderShape == BlockRenderShape::Cube &&
-        currentDef.isTransparent &&
-        neighborState == currentState) {
+    if (currentDef.renderShape == BlockRenderShape::Cube && currentDef.isTransparent && neighborState == currentState) {
         return false;
     }
 
@@ -884,9 +819,7 @@ bool shouldRenderFaceImpl(const SubChunkMeshingSnapshot& snapshot,
     return false;
 }
 
-MECRAFT_FORCEINLINE bool shouldRenderOpaqueCubeFace(const SubChunkMeshingSnapshot& snapshot,
-                                                    const int nx,
-                                                    const int ny,
+MECRAFT_FORCEINLINE bool shouldRenderOpaqueCubeFace(const SubChunkMeshingSnapshot& snapshot, const int nx, const int ny,
                                                     const int nz) {
     const BlockStateId neighborState = getResolvedBlockSC(snapshot, nx, ny, nz);
     if (neighborState == NULL_BLOCK_STATE) {
@@ -899,35 +832,29 @@ MECRAFT_FORCEINLINE bool shouldRenderOpaqueCubeFace(const SubChunkMeshingSnapsho
 
 // ======================== Snapshot capture helpers ========================
 
-const Chunk* getDirectHorizontalNeighbor(const int dx,
-                                         const int dz,
-                                         const Chunk* neighborPosX,
-                                         const Chunk* neighborNegX,
-                                         const Chunk* neighborPosZ,
+const Chunk* getDirectHorizontalNeighbor(const int dx, const int dz, const Chunk* neighborPosX,
+                                         const Chunk* neighborNegX, const Chunk* neighborPosZ,
                                          const Chunk* neighborNegZ) {
-    if (dx > 0) return neighborPosX;
-    if (dx < 0) return neighborNegX;
-    if (dz > 0) return neighborPosZ;
-    if (dz < 0) return neighborNegZ;
+    if (dx > 0)
+        return neighborPosX;
+    if (dx < 0)
+        return neighborNegX;
+    if (dz > 0)
+        return neighborPosZ;
+    if (dz < 0)
+        return neighborNegZ;
     return nullptr;
 }
 
 uint8_t maxPackedLightComponents(const uint8_t lhs, const uint8_t rhs) {
-    const uint8_t sky = std::max(static_cast<uint8_t>((lhs >> 4) & 0x0F),
-                                 static_cast<uint8_t>((rhs >> 4) & 0x0F));
-    const uint8_t block = std::max(static_cast<uint8_t>(lhs & 0x0F),
-                                   static_cast<uint8_t>(rhs & 0x0F));
+    const uint8_t sky = std::max(static_cast<uint8_t>((lhs >> 4) & 0x0F), static_cast<uint8_t>((rhs >> 4) & 0x0F));
+    const uint8_t block = std::max(static_cast<uint8_t>(lhs & 0x0F), static_cast<uint8_t>(rhs & 0x0F));
     return static_cast<uint8_t>((sky << 4) | block);
 }
 
-const Chunk* resolveHorizontalSampleChunk(const int localX,
-                                          const int localZ,
-                                          const Chunk* neighborPosX,
-                                          const Chunk* neighborNegX,
-                                          const Chunk* neighborPosZ,
-                                          const Chunk* neighborNegZ,
-                                          int& outLocalX,
-                                          int& outLocalZ) {
+const Chunk* resolveHorizontalSampleChunk(const int localX, const int localZ, const Chunk* neighborPosX,
+                                          const Chunk* neighborNegX, const Chunk* neighborPosZ,
+                                          const Chunk* neighborNegZ, int& outLocalX, int& outLocalZ) {
     const int dx = localX < 0 ? -1 : (localX >= Chunk::SIZE_X ? 1 : 0);
     const int dz = localZ < 0 ? -1 : (localZ >= Chunk::SIZE_Z ? 1 : 0);
     outLocalX = std::clamp(localX, 0, Chunk::SIZE_X - 1);
@@ -945,21 +872,14 @@ const Chunk* resolveHorizontalSampleChunk(const int localX,
     }
 
     if (dx == 0 || dz == 0) {
-        return getDirectHorizontalNeighbor(dx, dz,
-                                           neighborPosX, neighborNegX,
-                                           neighborPosZ, neighborNegZ);
+        return getDirectHorizontalNeighbor(dx, dz, neighborPosX, neighborNegX, neighborPosZ, neighborNegZ);
     }
 
     return nullptr;
 }
 
-uint8_t fallbackHorizontalEdgeLight(const Chunk& chunk,
-                                    const int localX,
-                                    const int worldY,
-                                    const int localZ,
-                                    const Chunk* neighborPosX,
-                                    const Chunk* neighborNegX,
-                                    const Chunk* neighborPosZ,
+uint8_t fallbackHorizontalEdgeLight(const Chunk& chunk, const int localX, const int worldY, const int localZ,
+                                    const Chunk* neighborPosX, const Chunk* neighborNegX, const Chunk* neighborPosZ,
                                     const Chunk* neighborNegZ) {
     if (worldY < 0 || worldY >= Chunk::SIZE_Y) {
         return 0;
@@ -989,15 +909,9 @@ uint8_t fallbackHorizontalEdgeLight(const Chunk& chunk,
     return best;
 }
 
-BlockStateId sampleHaloBlock(const Chunk& chunk,
-                             const int localX,
-                             const int worldY,
-                             const int localZ,
-                             const Chunk* neighborPosX,
-                             const Chunk* neighborNegX,
-                             const Chunk* neighborPosZ,
-                             const Chunk* neighborNegZ,
-                             const IWorldView* worldView) {
+BlockStateId sampleHaloBlock(const Chunk& chunk, const int localX, const int worldY, const int localZ,
+                             const Chunk* neighborPosX, const Chunk* neighborNegX, const Chunk* neighborPosZ,
+                             const Chunk* neighborNegZ, const IWorldView* worldView) {
     static_cast<void>(worldView);
     const bool xInRange = localX >= 0 && localX < Chunk::SIZE_X;
     const bool zInRange = localZ >= 0 && localZ < Chunk::SIZE_Z;
@@ -1007,25 +921,17 @@ BlockStateId sampleHaloBlock(const Chunk& chunk,
 
     int sampleX = 0;
     int sampleZ = 0;
-    if (const Chunk* sampleChunk = resolveHorizontalSampleChunk(localX, localZ,
-                                                                neighborPosX, neighborNegX,
-                                                                neighborPosZ, neighborNegZ,
-                                                                sampleX, sampleZ)) {
+    if (const Chunk* sampleChunk = resolveHorizontalSampleChunk(localX, localZ, neighborPosX, neighborNegX,
+                                                                neighborPosZ, neighborNegZ, sampleX, sampleZ)) {
         return sampleChunk->getBlock(sampleX, worldY, sampleZ);
     }
 
     return NULL_BLOCK_STATE;
 }
 
-BlockStateId sampleHaloFluid(const Chunk& chunk,
-                             const int localX,
-                             const int worldY,
-                             const int localZ,
-                             const Chunk* neighborPosX,
-                             const Chunk* neighborNegX,
-                             const Chunk* neighborPosZ,
-                             const Chunk* neighborNegZ,
-                             const IWorldView* worldView) {
+BlockStateId sampleHaloFluid(const Chunk& chunk, const int localX, const int worldY, const int localZ,
+                             const Chunk* neighborPosX, const Chunk* neighborNegX, const Chunk* neighborPosZ,
+                             const Chunk* neighborNegZ, const IWorldView* worldView) {
     static_cast<void>(worldView);
     const bool xInRange = localX >= 0 && localX < Chunk::SIZE_X;
     const bool zInRange = localZ >= 0 && localZ < Chunk::SIZE_Z;
@@ -1035,25 +941,17 @@ BlockStateId sampleHaloFluid(const Chunk& chunk,
 
     int sampleX = 0;
     int sampleZ = 0;
-    if (const Chunk* sampleChunk = resolveHorizontalSampleChunk(localX, localZ,
-                                                                neighborPosX, neighborNegX,
-                                                                neighborPosZ, neighborNegZ,
-                                                                sampleX, sampleZ)) {
+    if (const Chunk* sampleChunk = resolveHorizontalSampleChunk(localX, localZ, neighborPosX, neighborNegX,
+                                                                neighborPosZ, neighborNegZ, sampleX, sampleZ)) {
         return sampleChunk->getFluidState(sampleX, worldY, sampleZ);
     }
 
     return NULL_BLOCK_STATE;
 }
 
-uint8_t sampleHaloLight(const Chunk& chunk,
-                        const int localX,
-                        const int worldY,
-                        const int localZ,
-                        const Chunk* neighborPosX,
-                        const Chunk* neighborNegX,
-                        const Chunk* neighborPosZ,
-                        const Chunk* neighborNegZ,
-                        const IWorldView* worldView) {
+uint8_t sampleHaloLight(const Chunk& chunk, const int localX, const int worldY, const int localZ,
+                        const Chunk* neighborPosX, const Chunk* neighborNegX, const Chunk* neighborPosZ,
+                        const Chunk* neighborNegZ, const IWorldView* worldView) {
     static_cast<void>(worldView);
     const bool xInRange = localX >= 0 && localX < Chunk::SIZE_X;
     const bool zInRange = localZ >= 0 && localZ < Chunk::SIZE_Z;
@@ -1063,57 +961,38 @@ uint8_t sampleHaloLight(const Chunk& chunk,
 
     int sampleX = 0;
     int sampleZ = 0;
-    if (const Chunk* sampleChunk = resolveHorizontalSampleChunk(localX, localZ,
-                                                                neighborPosX, neighborNegX,
-                                                                neighborPosZ, neighborNegZ,
-                                                                sampleX, sampleZ)) {
+    if (const Chunk* sampleChunk = resolveHorizontalSampleChunk(localX, localZ, neighborPosX, neighborNegX,
+                                                                neighborPosZ, neighborNegZ, sampleX, sampleZ)) {
         return sampleChunk->getPackedLight(sampleX, worldY, sampleZ);
     }
 
-    return fallbackHorizontalEdgeLight(chunk, localX, worldY, localZ,
-                                       neighborPosX, neighborNegX,
-                                       neighborPosZ, neighborNegZ);
+    return fallbackHorizontalEdgeLight(chunk, localX, worldY, localZ, neighborPosX, neighborNegX, neighborPosZ,
+                                       neighborNegZ);
 }
 
-void captureSubChunkHalo(const Chunk& chunk,
-                         const int scy,
-                         SubChunkMeshingSnapshot& snapshot,
-                         const Chunk* neighborPosX,
-                         const Chunk* neighborNegX,
-                         const Chunk* neighborPosZ,
-                         const Chunk* neighborNegZ,
-                         const IWorldView* worldView) {
+void captureSubChunkHalo(const Chunk& chunk, const int scy, SubChunkMeshingSnapshot& snapshot,
+                         const Chunk* neighborPosX, const Chunk* neighborNegX, const Chunk* neighborPosZ,
+                         const Chunk* neighborNegZ, const IWorldView* worldView) {
     const int yBase = scy * SubChunk::SIZE;
     for (int ly = -1; ly <= SubChunk::SIZE; ++ly) {
         const int worldY = yBase + ly;
         for (int lz = -1; lz <= SubChunk::SIZE; ++lz) {
             for (int lx = -1; lx <= SubChunk::SIZE; ++lx) {
                 const std::size_t haloIdx = haloToIndex(lx, ly, lz);
-                snapshot.haloBlocks[haloIdx] = sampleHaloBlock(chunk, lx, worldY, lz,
-                                                               neighborPosX, neighborNegX,
-                                                               neighborPosZ, neighborNegZ,
-                                                               worldView);
-                snapshot.haloFluidBlocks[haloIdx] = sampleHaloFluid(chunk, lx, worldY, lz,
-                                                                    neighborPosX, neighborNegX,
-                                                                    neighborPosZ, neighborNegZ,
-                                                                    worldView);
-                snapshot.haloLightMap[haloIdx] = sampleHaloLight(chunk, lx, worldY, lz,
-                                                                 neighborPosX, neighborNegX,
-                                                                 neighborPosZ, neighborNegZ,
-                                                                 worldView);
+                snapshot.haloBlocks[haloIdx] = sampleHaloBlock(chunk, lx, worldY, lz, neighborPosX, neighborNegX,
+                                                               neighborPosZ, neighborNegZ, worldView);
+                snapshot.haloFluidBlocks[haloIdx] = sampleHaloFluid(chunk, lx, worldY, lz, neighborPosX, neighborNegX,
+                                                                    neighborPosZ, neighborNegZ, worldView);
+                snapshot.haloLightMap[haloIdx] = sampleHaloLight(chunk, lx, worldY, lz, neighborPosX, neighborNegX,
+                                                                 neighborPosZ, neighborNegZ, worldView);
             }
         }
     }
 }
 
 // Capture horizontal borders for a specific sub-chunk (y in [yBase, yBase+16))
-void captureSubChunkBorders(const Chunk& chunk,
-                            int scy,
-                            SubChunkMeshingSnapshot& snapshot,
-                            const Chunk* neighborPosX,
-                            const Chunk* neighborNegX,
-                            const Chunk* neighborPosZ,
-                            const Chunk* neighborNegZ,
+void captureSubChunkBorders(const Chunk& chunk, int scy, SubChunkMeshingSnapshot& snapshot, const Chunk* neighborPosX,
+                            const Chunk* neighborNegX, const Chunk* neighborPosZ, const Chunk* neighborNegZ,
                             const IWorldView* worldView) {
     static_cast<void>(worldView);
     const int yBase = scy * SubChunk::SIZE;
@@ -1149,29 +1028,21 @@ void captureSubChunkBorders(const Chunk& chunk,
         const int columnY = yBase + ly;
         for (int lz = 0; lz < SubChunk::SIZE; ++lz) {
             const auto idx = toBorderXZIndex(ly, lz);
-            snapshot.posXBorder[idx] = neighborPosX
-                ? neighborPosX->getBlock(0, columnY, lz)
-                : NULL_BLOCK_STATE;
-            snapshot.negXBorder[idx] = neighborNegX
-                ? neighborNegX->getBlock(Chunk::SIZE_X - 1, columnY, lz)
-                : NULL_BLOCK_STATE;
-            snapshot.posXLightBorder[idx] = neighborPosX
-                ? neighborPosX->getPackedLight(0, columnY, lz) : 0;
-            snapshot.negXLightBorder[idx] = neighborNegX
-                ? neighborNegX->getPackedLight(Chunk::SIZE_X - 1, columnY, lz) : 0;
+            snapshot.posXBorder[idx] = neighborPosX ? neighborPosX->getBlock(0, columnY, lz) : NULL_BLOCK_STATE;
+            snapshot.negXBorder[idx] =
+                neighborNegX ? neighborNegX->getBlock(Chunk::SIZE_X - 1, columnY, lz) : NULL_BLOCK_STATE;
+            snapshot.posXLightBorder[idx] = neighborPosX ? neighborPosX->getPackedLight(0, columnY, lz) : 0;
+            snapshot.negXLightBorder[idx] =
+                neighborNegX ? neighborNegX->getPackedLight(Chunk::SIZE_X - 1, columnY, lz) : 0;
         }
         for (int lx = 0; lx < SubChunk::SIZE; ++lx) {
             const auto idx = toBorderXZIndex(ly, lx);
-            snapshot.posZBorder[idx] = neighborPosZ
-                ? neighborPosZ->getBlock(lx, columnY, 0)
-                : NULL_BLOCK_STATE;
-            snapshot.negZBorder[idx] = neighborNegZ
-                ? neighborNegZ->getBlock(lx, columnY, Chunk::SIZE_Z - 1)
-                : NULL_BLOCK_STATE;
-            snapshot.posZLightBorder[idx] = neighborPosZ
-                ? neighborPosZ->getPackedLight(lx, columnY, 0) : 0;
-            snapshot.negZLightBorder[idx] = neighborNegZ
-                ? neighborNegZ->getPackedLight(lx, columnY, Chunk::SIZE_Z - 1) : 0;
+            snapshot.posZBorder[idx] = neighborPosZ ? neighborPosZ->getBlock(lx, columnY, 0) : NULL_BLOCK_STATE;
+            snapshot.negZBorder[idx] =
+                neighborNegZ ? neighborNegZ->getBlock(lx, columnY, Chunk::SIZE_Z - 1) : NULL_BLOCK_STATE;
+            snapshot.posZLightBorder[idx] = neighborPosZ ? neighborPosZ->getPackedLight(lx, columnY, 0) : 0;
+            snapshot.negZLightBorder[idx] =
+                neighborNegZ ? neighborNegZ->getPackedLight(lx, columnY, Chunk::SIZE_Z - 1) : 0;
         }
     }
 }
@@ -1194,77 +1065,59 @@ void expandBounds(ChunkMeshData& meshData, const glm::vec3& blockMin, const glm:
     meshData.boundsMax.z = std::max(meshData.boundsMax.z, blockMax.z);
 }
 
-void appendFaceVertices(std::vector<BlockVertex>& vertices,
-                        const std::array<glm::vec3, 4>& corners,
-                        const std::array<glm::vec2, 4>& faceUV,
-                        const int face,
-                        const FaceRenderData& renderData) {
-    const std::array<int, 6> indices = renderData.flipDiagonal
-        ? std::array<int, 6>{{1, 2, 3, 1, 3, 0}}
-        : std::array<int, 6>{{0, 1, 2, 0, 2, 3}};
+void appendFaceVertices(std::vector<BlockVertex>& vertices, const std::array<glm::vec3, 4>& corners,
+                        const std::array<glm::vec2, 4>& faceUV, const int face, const FaceRenderData& renderData) {
+    const std::array<int, 6> indices =
+        renderData.flipDiagonal ? std::array<int, 6>{{1, 2, 3, 1, 3, 0}} : std::array<int, 6>{{0, 1, 2, 0, 2, 3}};
 
     for (const int index : indices) {
-        vertices.push_back(makeBlockVertex(
-            corners[static_cast<size_t>(index)].x,
-            corners[static_cast<size_t>(index)].y,
-            corners[static_cast<size_t>(index)].z,
-            faceUV[static_cast<size_t>(index)].x,
-            faceUV[static_cast<size_t>(index)].y,
-            static_cast<float>(face),
-            renderData.vertices[static_cast<size_t>(index)].sunNormalized,
-            renderData.vertices[static_cast<size_t>(index)].blockNormalized,
-            static_cast<float>(renderData.vertices[static_cast<size_t>(index)].ao),
-            renderData.layer,
-            renderData.animationFrameCount,
-            renderData.animationFps,
-            renderData.animated,
-            renderData.tintKind,
-            renderData.tintU,
-            renderData.tintV,
-            renderData.derivativeMaterialId
-        ));
+        vertices.push_back(makeBlockVertex(corners[static_cast<size_t>(index)].x, corners[static_cast<size_t>(index)].y,
+                                           corners[static_cast<size_t>(index)].z, faceUV[static_cast<size_t>(index)].x,
+                                           faceUV[static_cast<size_t>(index)].y, static_cast<float>(face),
+                                           renderData.vertices[static_cast<size_t>(index)].sunNormalized,
+                                           renderData.vertices[static_cast<size_t>(index)].blockNormalized,
+                                           static_cast<float>(renderData.vertices[static_cast<size_t>(index)].ao),
+                                           renderData.layer, renderData.animationFrameCount, renderData.animationFps,
+                                           renderData.animated, renderData.tintKind, renderData.tintU, renderData.tintV,
+                                           renderData.derivativeMaterialId));
     }
 }
 
 // Greedy meshing corners — coordinates are in sub-chunk local space
-std::array<glm::vec3, 4> buildGreedyFaceCorners(const int face,
-                                                const int x,
-                                                const int y,
-                                                const int z,
-                                                const int width,
+std::array<glm::vec3, 4> buildGreedyFaceCorners(const int face, const int x, const int y, const int z, const int width,
                                                 const int height) {
     switch (face) {
-        case FACE_TOP:
-            return {{{static_cast<float>(x), static_cast<float>(y + 1), static_cast<float>(z + height)},
-                     {static_cast<float>(x + width), static_cast<float>(y + 1), static_cast<float>(z + height)},
-                     {static_cast<float>(x + width), static_cast<float>(y + 1), static_cast<float>(z)},
-                     {static_cast<float>(x), static_cast<float>(y + 1), static_cast<float>(z)}}};
-        case FACE_BOTTOM:
-            return {{{static_cast<float>(x), static_cast<float>(y), static_cast<float>(z)},
-                     {static_cast<float>(x + width), static_cast<float>(y), static_cast<float>(z)},
-                     {static_cast<float>(x + width), static_cast<float>(y), static_cast<float>(z + height)},
-                     {static_cast<float>(x), static_cast<float>(y), static_cast<float>(z + height)}}};
-        case FACE_FRONT:
-            return {{{static_cast<float>(x), static_cast<float>(y), static_cast<float>(z + 1)},
-                     {static_cast<float>(x + width), static_cast<float>(y), static_cast<float>(z + 1)},
-                     {static_cast<float>(x + width), static_cast<float>(y + height), static_cast<float>(z + 1)},
-                     {static_cast<float>(x), static_cast<float>(y + height), static_cast<float>(z + 1)}}};
-        case FACE_BACK:
-            return {{{static_cast<float>(x + width), static_cast<float>(y), static_cast<float>(z)},
-                     {static_cast<float>(x), static_cast<float>(y), static_cast<float>(z)},
-                     {static_cast<float>(x), static_cast<float>(y + height), static_cast<float>(z)},
-                     {static_cast<float>(x + width), static_cast<float>(y + height), static_cast<float>(z)}}};
-        case FACE_LEFT:
-            return {{{static_cast<float>(x), static_cast<float>(y), static_cast<float>(z)},
-                     {static_cast<float>(x), static_cast<float>(y), static_cast<float>(z + width)},
-                     {static_cast<float>(x), static_cast<float>(y + height), static_cast<float>(z + width)},
-                     {static_cast<float>(x), static_cast<float>(y + height), static_cast<float>(z)}}};
-        case FACE_RIGHT:
-        default:
-            return {{{static_cast<float>(x + 1), static_cast<float>(y), static_cast<float>(z + width)},
-                     {static_cast<float>(x + 1), static_cast<float>(y), static_cast<float>(z)},
-                     {static_cast<float>(x + 1), static_cast<float>(y + height), static_cast<float>(z)},
-                     {static_cast<float>(x + 1), static_cast<float>(y + height), static_cast<float>(z + width)}}};
+    case FACE_TOP:
+        return {{{static_cast<float>(x), static_cast<float>(y + 1), static_cast<float>(z + height)},
+                 {static_cast<float>(x + width), static_cast<float>(y + 1), static_cast<float>(z + height)},
+                 {static_cast<float>(x + width), static_cast<float>(y + 1), static_cast<float>(z)},
+                 {static_cast<float>(x), static_cast<float>(y + 1), static_cast<float>(z)}}};
+    case FACE_BOTTOM:
+        return {{{static_cast<float>(x), static_cast<float>(y), static_cast<float>(z)},
+                 {static_cast<float>(x + width), static_cast<float>(y), static_cast<float>(z)},
+                 {static_cast<float>(x + width), static_cast<float>(y), static_cast<float>(z + height)},
+                 {static_cast<float>(x), static_cast<float>(y), static_cast<float>(z + height)}}};
+    case FACE_FRONT:
+        return {{{static_cast<float>(x), static_cast<float>(y), static_cast<float>(z + 1)},
+                 {static_cast<float>(x + width), static_cast<float>(y), static_cast<float>(z + 1)},
+                 {static_cast<float>(x + width), static_cast<float>(y + height), static_cast<float>(z + 1)},
+                 {static_cast<float>(x), static_cast<float>(y + height), static_cast<float>(z + 1)}}};
+    case FACE_BACK:
+        return {{{static_cast<float>(x + width), static_cast<float>(y), static_cast<float>(z)},
+                 {static_cast<float>(x), static_cast<float>(y), static_cast<float>(z)},
+                 {static_cast<float>(x), static_cast<float>(y + height), static_cast<float>(z)},
+                 {static_cast<float>(x + width), static_cast<float>(y + height), static_cast<float>(z)}}};
+    case FACE_LEFT:
+        return {{{static_cast<float>(x), static_cast<float>(y), static_cast<float>(z)},
+                 {static_cast<float>(x), static_cast<float>(y), static_cast<float>(z + width)},
+                 {static_cast<float>(x), static_cast<float>(y + height), static_cast<float>(z + width)},
+                 {static_cast<float>(x), static_cast<float>(y + height), static_cast<float>(z)}}};
+    case FACE_RIGHT:
+    default:
+        return {{{static_cast<float>(x + 1), static_cast<float>(y), static_cast<float>(z + width)},
+                 {static_cast<float>(x + 1), static_cast<float>(y), static_cast<float>(z)},
+                 {static_cast<float>(x + 1), static_cast<float>(y + height), static_cast<float>(z)},
+                 {static_cast<float>(x + 1), static_cast<float>(y + height), static_cast<float>(z + width)}}};
     }
 }
 
@@ -1280,75 +1133,50 @@ void expandGreedyFaceCornersInPlane(std::array<glm::vec3, 4>& corners, const int
     };
 
     switch (face) {
-        case FACE_TOP:
-        case FACE_BOTTOM:
-            for (glm::vec3& corner : corners) {
-                expandAxis(corner.x, center.x);
-                expandAxis(corner.z, center.z);
-            }
-            break;
-        case FACE_FRONT:
-        case FACE_BACK:
-            for (glm::vec3& corner : corners) {
-                expandAxis(corner.x, center.x);
-                expandAxis(corner.y, center.y);
-            }
-            break;
-        case FACE_LEFT:
-        case FACE_RIGHT:
-            for (glm::vec3& corner : corners) {
-                expandAxis(corner.y, center.y);
-                expandAxis(corner.z, center.z);
-            }
-            break;
-        default:
-            break;
+    case FACE_TOP:
+    case FACE_BOTTOM:
+        for (glm::vec3& corner : corners) {
+            expandAxis(corner.x, center.x);
+            expandAxis(corner.z, center.z);
+        }
+        break;
+    case FACE_FRONT:
+    case FACE_BACK:
+        for (glm::vec3& corner : corners) {
+            expandAxis(corner.x, center.x);
+            expandAxis(corner.y, center.y);
+        }
+        break;
+    case FACE_LEFT:
+    case FACE_RIGHT:
+        for (glm::vec3& corner : corners) {
+            expandAxis(corner.y, center.y);
+            expandAxis(corner.z, center.z);
+        }
+        break;
+    default: break;
     }
 }
 
-std::array<glm::vec2, 4> buildFaceUv(const float width,
-                                     const float height,
-                                     const uint8_t quarterTurns) {
+std::array<glm::vec2, 4> buildFaceUv(const float width, const float height, const uint8_t quarterTurns) {
     switch (quarterTurns % 4) {
-        case 1:
-            return {{{0.0f, 0.0f},
-                     {0.0f, width},
-                     {height, width},
-                     {height, 0.0f}}};
-        case 2:
-            return {{{width, height},
-                     {0.0f, height},
-                     {0.0f, 0.0f},
-                     {width, 0.0f}}};
-        case 3:
-            return {{{height, width},
-                     {height, 0.0f},
-                     {0.0f, 0.0f},
-                     {0.0f, width}}};
-        case 0:
-        default:
-            return {{{0.0f, 0.0f},
-                     {width, 0.0f},
-                     {width, height},
-                     {0.0f, height}}};
+    case 1: return {{{0.0f, 0.0f}, {0.0f, width}, {height, width}, {height, 0.0f}}};
+    case 2: return {{{width, height}, {0.0f, height}, {0.0f, 0.0f}, {width, 0.0f}}};
+    case 3: return {{{height, width}, {height, 0.0f}, {0.0f, 0.0f}, {0.0f, width}}};
+    case 0:
+    default: return {{{0.0f, 0.0f}, {width, 0.0f}, {width, height}, {0.0f, height}}};
     }
 }
 
-void emitGreedyFace(std::vector<BlockVertex>& vertices,
-                    ChunkMeshData& meshData,
-                    const FaceCell& cell,
-                    const int face,
-                    const int width,
-                    const int height) {
+void emitGreedyFace(std::vector<BlockVertex>& vertices, ChunkMeshData& meshData, const FaceCell& cell, const int face,
+                    const int width, const int height) {
     std::array<glm::vec3, 4> corners = buildGreedyFaceCorners(face, cell.x, cell.y, cell.z, width, height);
     // Greedy quads can form T-junctions against neighbouring smaller quads.
     // Expanding them by a tiny amount in-plane hides raster cracks without
     // changing the face depth.
     expandGreedyFaceCornersInPlane(corners, face);
-    const std::array<glm::vec2, 4> faceUV = buildFaceUv(
-        static_cast<float>(width),
-        static_cast<float>(height),
-        cell.renderData.uvQuarterTurns);
+    const std::array<glm::vec2, 4> faceUV =
+        buildFaceUv(static_cast<float>(width), static_cast<float>(height), cell.renderData.uvQuarterTurns);
 
     appendFaceVertices(vertices, corners, faceUV, face, cell.renderData);
 
@@ -1365,9 +1193,7 @@ void emitGreedyFace(std::vector<BlockVertex>& vertices,
     expandBounds(meshData, boundsMin, boundsMax);
 }
 
-void emitUnitFace(std::vector<BlockVertex>& vertices,
-                  const glm::vec3& pos,
-                  const int face,
+void emitUnitFace(std::vector<BlockVertex>& vertices, const glm::vec3& pos, const int face,
                   const FaceRenderData& renderData) {
     const std::array<glm::vec2, 4> faceUV = buildFaceUv(1.0f, 1.0f, renderData.uvQuarterTurns);
     std::array<glm::vec3, 4> corners{};
@@ -1377,9 +1203,7 @@ void emitUnitFace(std::vector<BlockVertex>& vertices,
     appendFaceVertices(vertices, corners, faceUV, face, renderData);
 }
 
-void emitCustomFace(std::vector<BlockVertex>& vertices,
-                    const std::array<glm::vec3, 4>& corners,
-                    const int face,
+void emitCustomFace(std::vector<BlockVertex>& vertices, const std::array<glm::vec3, 4>& corners, const int face,
                     const FaceRenderData& renderData) {
     const std::array<glm::vec2, 4> faceUV = buildFaceUv(1.0f, 1.0f, renderData.uvQuarterTurns);
     appendFaceVertices(vertices, corners, faceUV, face, renderData);
@@ -1387,31 +1211,31 @@ void emitCustomFace(std::vector<BlockVertex>& vertices,
 
 glm::vec3 rotatePointX90(const glm::vec3& p, const uint16_t rotation) {
     switch ((rotation / 90u) % 4u) {
-        case 1: return {p.x, 1.0f - p.z, p.y};
-        case 2: return {p.x, 1.0f - p.y, 1.0f - p.z};
-        case 3: return {p.x, p.z, 1.0f - p.y};
-        case 0:
-        default: return p;
+    case 1: return {p.x, 1.0f - p.z, p.y};
+    case 2: return {p.x, 1.0f - p.y, 1.0f - p.z};
+    case 3: return {p.x, p.z, 1.0f - p.y};
+    case 0:
+    default: return p;
     }
 }
 
 glm::vec3 rotatePointY90(const glm::vec3& p, const uint16_t rotation) {
     switch ((rotation / 90u) % 4u) {
-        case 1: return {1.0f - p.z, p.y, p.x};
-        case 2: return {1.0f - p.x, p.y, 1.0f - p.z};
-        case 3: return {p.z, p.y, 1.0f - p.x};
-        case 0:
-        default: return p;
+    case 1: return {1.0f - p.z, p.y, p.x};
+    case 2: return {1.0f - p.x, p.y, 1.0f - p.z};
+    case 3: return {p.z, p.y, 1.0f - p.x};
+    case 0:
+    default: return p;
     }
 }
 
 glm::vec3 rotatePointZ90(const glm::vec3& p, const uint16_t rotation) {
     switch ((rotation / 90u) % 4u) {
-        case 1: return {1.0f - p.y, p.x, p.z};
-        case 2: return {1.0f - p.x, 1.0f - p.y, p.z};
-        case 3: return {p.y, 1.0f - p.x, p.z};
-        case 0:
-        default: return p;
+    case 1: return {1.0f - p.y, p.x, p.z};
+    case 2: return {1.0f - p.x, 1.0f - p.y, p.z};
+    case 3: return {p.y, 1.0f - p.x, p.z};
+    case 0:
+    default: return p;
     }
 }
 
@@ -1424,31 +1248,31 @@ glm::vec3 applyModelTransform(glm::vec3 p, const ModelTransform& transform) {
 
 IVec3 rotateDirectionX90(const IVec3 direction, const uint16_t rotation) {
     switch ((rotation / 90u) % 4u) {
-        case 1: return {direction.x, -direction.z, direction.y};
-        case 2: return {direction.x, -direction.y, -direction.z};
-        case 3: return {direction.x, direction.z, -direction.y};
-        case 0:
-        default: return direction;
+    case 1: return {direction.x, -direction.z, direction.y};
+    case 2: return {direction.x, -direction.y, -direction.z};
+    case 3: return {direction.x, direction.z, -direction.y};
+    case 0:
+    default: return direction;
     }
 }
 
 IVec3 rotateDirectionY90(const IVec3 direction, const uint16_t rotation) {
     switch ((rotation / 90u) % 4u) {
-        case 1: return {-direction.z, direction.y, direction.x};
-        case 2: return {-direction.x, direction.y, -direction.z};
-        case 3: return {direction.z, direction.y, -direction.x};
-        case 0:
-        default: return direction;
+    case 1: return {-direction.z, direction.y, direction.x};
+    case 2: return {-direction.x, direction.y, -direction.z};
+    case 3: return {direction.z, direction.y, -direction.x};
+    case 0:
+    default: return direction;
     }
 }
 
 IVec3 rotateDirectionZ90(const IVec3 direction, const uint16_t rotation) {
     switch ((rotation / 90u) % 4u) {
-        case 1: return {-direction.y, direction.x, direction.z};
-        case 2: return {-direction.x, -direction.y, direction.z};
-        case 3: return {direction.y, -direction.x, direction.z};
-        case 0:
-        default: return direction;
+    case 1: return {-direction.y, direction.x, direction.z};
+    case 2: return {-direction.x, -direction.y, direction.z};
+    case 3: return {direction.y, -direction.x, direction.z};
+    case 0:
+    default: return direction;
     }
 }
 
@@ -1460,12 +1284,18 @@ IVec3 applyModelTransformToDirection(IVec3 direction, const ModelTransform& tran
 }
 
 int faceFromDirection(const IVec3 direction) {
-    if (direction.x == 0 && direction.y == 1 && direction.z == 0) return FACE_TOP;
-    if (direction.x == 0 && direction.y == -1 && direction.z == 0) return FACE_BOTTOM;
-    if (direction.x == 0 && direction.y == 0 && direction.z == 1) return FACE_FRONT;
-    if (direction.x == 0 && direction.y == 0 && direction.z == -1) return FACE_BACK;
-    if (direction.x == -1 && direction.y == 0 && direction.z == 0) return FACE_LEFT;
-    if (direction.x == 1 && direction.y == 0 && direction.z == 0) return FACE_RIGHT;
+    if (direction.x == 0 && direction.y == 1 && direction.z == 0)
+        return FACE_TOP;
+    if (direction.x == 0 && direction.y == -1 && direction.z == 0)
+        return FACE_BOTTOM;
+    if (direction.x == 0 && direction.y == 0 && direction.z == 1)
+        return FACE_FRONT;
+    if (direction.x == 0 && direction.y == 0 && direction.z == -1)
+        return FACE_BACK;
+    if (direction.x == -1 && direction.y == 0 && direction.z == 0)
+        return FACE_LEFT;
+    if (direction.x == 1 && direction.y == 0 && direction.z == 0)
+        return FACE_RIGHT;
     failChunkMesher("Model transform produced an invalid face direction");
 }
 
@@ -1485,11 +1315,8 @@ uint8_t transformCullfaceBits(const uint8_t bits, const ModelTransform& transfor
     return transformed;
 }
 
-bool shouldCullModelFace(const uint8_t transformedCullfaceBits,
-                         const SubChunkMeshingSnapshot& snapshot,
-                         const int x,
-                         const int y,
-                         const int z) {
+bool shouldCullModelFace(const uint8_t transformedCullfaceBits, const SubChunkMeshingSnapshot& snapshot, const int x,
+                         const int y, const int z) {
     for (int face = 0; face < 6; ++face) {
         if ((transformedCullfaceBits & static_cast<uint8_t>(1u << static_cast<uint8_t>(face))) == 0) {
             continue;
@@ -1513,19 +1340,13 @@ std::array<glm::vec3, 4> buildModelFaceCorners(const ModelElement& element, cons
     const float z1 = element.to[2] / 16.0f;
 
     switch (face) {
-        case FACE_TOP:
-            return {{{x0, y1, z1}, {x1, y1, z1}, {x1, y1, z0}, {x0, y1, z0}}};
-        case FACE_BOTTOM:
-            return {{{x0, y0, z0}, {x1, y0, z0}, {x1, y0, z1}, {x0, y0, z1}}};
-        case FACE_FRONT:
-            return {{{x0, y0, z1}, {x1, y0, z1}, {x1, y1, z1}, {x0, y1, z1}}};
-        case FACE_BACK:
-            return {{{x1, y0, z0}, {x0, y0, z0}, {x0, y1, z0}, {x1, y1, z0}}};
-        case FACE_LEFT:
-            return {{{x0, y0, z0}, {x0, y0, z1}, {x0, y1, z1}, {x0, y1, z0}}};
-        case FACE_RIGHT:
-        default:
-            return {{{x1, y0, z1}, {x1, y0, z0}, {x1, y1, z0}, {x1, y1, z1}}};
+    case FACE_TOP: return {{{x0, y1, z1}, {x1, y1, z1}, {x1, y1, z0}, {x0, y1, z0}}};
+    case FACE_BOTTOM: return {{{x0, y0, z0}, {x1, y0, z0}, {x1, y0, z1}, {x0, y0, z1}}};
+    case FACE_FRONT: return {{{x0, y0, z1}, {x1, y0, z1}, {x1, y1, z1}, {x0, y1, z1}}};
+    case FACE_BACK: return {{{x1, y0, z0}, {x0, y0, z0}, {x0, y1, z0}, {x1, y1, z0}}};
+    case FACE_LEFT: return {{{x0, y0, z0}, {x0, y0, z1}, {x0, y1, z1}, {x0, y1, z0}}};
+    case FACE_RIGHT:
+    default: return {{{x1, y0, z1}, {x1, y0, z0}, {x1, y1, z0}, {x1, y1, z1}}};
     }
 }
 
@@ -1536,20 +1357,15 @@ std::array<glm::vec2, 4> buildModelFaceUv(const ModelFace& face) {
     const float y1 = face.uv[3] / 16.0f;
 
     switch ((face.uvRotation / 90u) % 4u) {
-        case 1:
-            return {{{x1, y0}, {x1, y1}, {x0, y1}, {x0, y0}}};
-        case 2:
-            return {{{x1, y1}, {x0, y1}, {x0, y0}, {x1, y0}}};
-        case 3:
-            return {{{x0, y1}, {x0, y0}, {x1, y0}, {x1, y1}}};
-        case 0:
-        default:
-            return {{{x0, y0}, {x1, y0}, {x1, y1}, {x0, y1}}};
+    case 1: return {{{x1, y0}, {x1, y1}, {x0, y1}, {x0, y0}}};
+    case 2: return {{{x1, y1}, {x0, y1}, {x0, y0}, {x1, y0}}};
+    case 3: return {{{x0, y1}, {x0, y0}, {x1, y0}, {x1, y1}}};
+    case 0:
+    default: return {{{x0, y0}, {x1, y0}, {x1, y1}, {x0, y1}}};
     }
 }
 
-std::array<glm::vec2, 4> applyHorizontalUvLock(std::array<glm::vec2, 4> uv,
-                                               const int face,
+std::array<glm::vec2, 4> applyHorizontalUvLock(std::array<glm::vec2, 4> uv, const int face,
                                                const ModelTransform& transform) {
     if (!transform.uvLock || (face != FACE_TOP && face != FACE_BOTTOM)) {
         return uv;
@@ -1622,11 +1438,7 @@ const CachedModelGeometry& getCachedModelGeometry(const ModelVariant& variant) {
     }
 
     const ModelGeometryCacheKey key{
-        variant.model,
-        variant.transform.rotX,
-        variant.transform.rotY,
-        variant.transform.rotZ,
-        variant.transform.uvLock,
+        variant.model, variant.transform.rotX, variant.transform.rotY, variant.transform.rotZ, variant.transform.uvLock,
     };
 
     {
@@ -1645,11 +1457,8 @@ const CachedModelGeometry& getCachedModelGeometry(const ModelVariant& variant) {
     return *it->second;
 }
 
-std::array<VertexLightData, 4> computeModelFaceVertexData(const SubChunkMeshingSnapshot& snapshot,
-                                                          const int x,
-                                                          const int y,
-                                                          const int z,
-                                                          const int face,
+std::array<VertexLightData, 4> computeModelFaceVertexData(const SubChunkMeshingSnapshot& snapshot, const int x,
+                                                          const int y, const int z, const int face,
                                                           const std::array<glm::vec3, 4>& localCorners,
                                                           const bool ambientOcclusion) {
     const IVec3 normal = kFaceNormals[static_cast<size_t>(face)];
@@ -1715,22 +1524,16 @@ std::array<VertexLightData, 4> computeModelFaceVertexData(const SubChunkMeshingS
 
 std::vector<BlockVertex>& selectModelVertexTarget(ChunkMeshData& meshData, const BlockDef& def) {
     switch (def.renderLayer) {
-        case BlockRenderLayer::Opaque:
-            return meshData.opaqueVertices;
-        case BlockRenderLayer::Cutout:
-            return def.cutoutDistanceCull ? meshData.cutoutDistanceVertices : meshData.cutoutVertices;
-        case BlockRenderLayer::Transparent:
-            return meshData.transparentVertices;
+    case BlockRenderLayer::Opaque: return meshData.opaqueVertices;
+    case BlockRenderLayer::Cutout:
+        return def.cutoutDistanceCull ? meshData.cutoutDistanceVertices : meshData.cutoutVertices;
+    case BlockRenderLayer::Transparent: return meshData.transparentVertices;
     }
     failChunkMesher("Unknown render layer for model block");
 }
 
-FaceRenderData buildCachedModelFaceRenderData(const SubChunkMeshingSnapshot& snapshot,
-                                              const BlockDef& def,
-                                              const CachedModelFace& face,
-                                              const int x,
-                                              const int y,
-                                              const int z) {
+FaceRenderData buildCachedModelFaceRenderData(const SubChunkMeshingSnapshot& snapshot, const BlockDef& def,
+                                              const CachedModelFace& face, const int x, const int y, const int z) {
     const AnimatedTextureRef textureRef = BlockModelRegistry::resolveTextureRef(face.textureName);
 
     FaceRenderData renderData;
@@ -1744,14 +1547,8 @@ FaceRenderData buildCachedModelFaceRenderData(const SubChunkMeshingSnapshot& sna
     if (renderData.tintKind != BlockTintKinds::NONE) {
         computeTintMapPosition(snapshot, x, z, renderData.tintU, renderData.tintV);
     }
-    renderData.vertices = computeModelFaceVertexData(
-        snapshot,
-        x,
-        y,
-        z,
-        face.transformedFace,
-        face.localCorners,
-        face.ambientOcclusion);
+    renderData.vertices =
+        computeModelFaceVertexData(snapshot, x, y, z, face.transformedFace, face.localCorners, face.ambientOcclusion);
 
     int metric02 = 0;
     int metric13 = 0;
@@ -1769,21 +1566,16 @@ FaceRenderData buildCachedModelFaceRenderData(const SubChunkMeshingSnapshot& sna
     return renderData;
 }
 
-bool shouldRenderWaterFace(const SubChunkMeshingSnapshot& snapshot,
-                           const int nx,
-                           const int ny,
-                           const int nz,
+bool shouldRenderWaterFace(const SubChunkMeshingSnapshot& snapshot, const int nx, const int ny, const int nz,
                            const BlockStateId currentState) {
     const BlockStateId neighborState = getResolvedBlockSC(snapshot, nx, ny, nz);
     const DecodedFluid currentFluid = FluidState::decode(currentState);
-    if (currentFluid.kind != FluidKind::None &&
-        FluidState::decode(neighborState).kind == currentFluid.kind) {
+    if (currentFluid.kind != FluidKind::None && FluidState::decode(neighborState).kind == currentFluid.kind) {
         return false;
     }
     // Check fluid layer for waterlogged neighbors
     const BlockStateId neighborFluidState = getResolvedFluidSC(snapshot, nx, ny, nz);
-    if (currentFluid.kind != FluidKind::None &&
-        FluidState::decode(neighborFluidState).kind == currentFluid.kind) {
+    if (currentFluid.kind != FluidKind::None && FluidState::decode(neighborFluidState).kind == currentFluid.kind) {
         return false;
     }
     if (neighborState == NULL_BLOCK_STATE && neighborFluidState == NULL_BLOCK_STATE) {
@@ -1798,10 +1590,7 @@ bool shouldRenderWaterFace(const SubChunkMeshingSnapshot& snapshot,
     return neighborDef.isTransparent;
 }
 
-float sampleWaterColumnSurfaceHeight(const SubChunkMeshingSnapshot& snapshot,
-                                     const int x,
-                                     const int y,
-                                     const int z) {
+float sampleWaterColumnSurfaceHeight(const SubChunkMeshingSnapshot& snapshot, const int x, const int y, const int z) {
     const BlockStateId aboveState = getResolvedFluidSC(snapshot, x, y + 1, z);
     const BlockStateId stateId = getResolvedFluidSC(snapshot, x, y, z);
     const DecodedFluid fluid = FluidState::decode(stateId);
@@ -1826,23 +1615,10 @@ bool isOpenWaterSurfaceSample(const BlockStateId stateId) {
     return !getMeshBlockInfo(stateId).isSolid;
 }
 
-float computeWaterCornerHeight(const SubChunkMeshingSnapshot& snapshot,
-                               const BlockStateId currentState,
-                               const int x0,
-                               const int y,
-                               const int z0,
-                               const int x1,
-                               const int z1,
-                               const int x2,
-                               const int z2,
-                               const int x3,
-                               const int z3) {
-    const std::array<glm::ivec2, 4> samples = {{
-        {x0, z0},
-        {x1, z1},
-        {x2, z2},
-        {x3, z3}
-    }};
+float computeWaterCornerHeight(const SubChunkMeshingSnapshot& snapshot, const BlockStateId currentState, const int x0,
+                               const int y, const int z0, const int x1, const int z1, const int x2, const int z2,
+                               const int x3, const int z3) {
+    const std::array<glm::ivec2, 4> samples = {{{x0, z0}, {x1, z1}, {x2, z2}, {x3, z3}}};
 
     float liquidPercentSum = 0.0f;
     int weightSum = 0;
@@ -1913,9 +1689,7 @@ uint8_t computeWaterTopQuarterTurns(const glm::vec3& flow) {
 }
 
 bool isFlowingWaterVector(const glm::vec3& flow) {
-    return std::abs(flow.x) > 0.001f ||
-           std::abs(flow.y) > 0.001f ||
-           std::abs(flow.z) > 0.001f;
+    return std::abs(flow.x) > 0.001f || std::abs(flow.y) > 0.001f || std::abs(flow.z) > 0.001f;
 }
 
 const AnimatedTextureRef* findNamedWaterTexture(const BlockDef& def, const char* alias) {
@@ -1942,14 +1716,8 @@ void applyTextureRef(FaceRenderData& renderData, const AnimatedTextureRef& textu
     renderData.animated = texture.isAnimated ? 1.0f : 0.0f;
 }
 
-void addWaterFacesImpl(ChunkMeshData& meshData,
-                       const SubChunkMeshingSnapshot& snapshot,
-                       const BlockStateId stateId,
-                       const BlockDef& def,
-                       const int x,
-                       const int y,
-                       const int z,
-                       const bool skipTopFace = false) {
+void addWaterFacesImpl(ChunkMeshData& meshData, const SubChunkMeshingSnapshot& snapshot, const BlockStateId stateId,
+                       const BlockDef& def, const int x, const int y, const int z, const bool skipTopFace = false) {
     const float frontLeft = computeWaterCornerHeight(snapshot, stateId, x - 1, y, z, x, z, x - 1, z + 1, x, z + 1);
     const float frontRight = computeWaterCornerHeight(snapshot, stateId, x, y, z, x + 1, z, x, z + 1, x + 1, z + 1);
     const float backRight = computeWaterCornerHeight(snapshot, stateId, x, y, z - 1, x + 1, z - 1, x, z, x + 1, z);
@@ -1979,61 +1747,33 @@ void addWaterFacesImpl(ChunkMeshData& meshData,
     };
 
     if (!skipTopFace && shouldRenderWaterFace(snapshot, x, y + 1, z, stateId)) {
-        emitWaterFace(FACE_TOP, {{
-            pos + glm::vec3(0.0f, frontLeft, 1.0f),
-            pos + glm::vec3(1.0f, frontRight, 1.0f),
-            pos + glm::vec3(1.0f, backRight, 0.0f),
-            pos + glm::vec3(0.0f, backLeft, 0.0f)
-        }});
+        emitWaterFace(FACE_TOP, {{pos + glm::vec3(0.0f, frontLeft, 1.0f), pos + glm::vec3(1.0f, frontRight, 1.0f),
+                                  pos + glm::vec3(1.0f, backRight, 0.0f), pos + glm::vec3(0.0f, backLeft, 0.0f)}});
     }
 
     if (shouldRenderWaterFace(snapshot, x, y - 1, z, stateId)) {
-        emitWaterFace(FACE_BOTTOM, {{
-            pos + glm::vec3(0.0f, 0.0f, 0.0f),
-            pos + glm::vec3(1.0f, 0.0f, 0.0f),
-            pos + glm::vec3(1.0f, 0.0f, 1.0f),
-            pos + glm::vec3(0.0f, 0.0f, 1.0f)
-        }});
+        emitWaterFace(FACE_BOTTOM, {{pos + glm::vec3(0.0f, 0.0f, 0.0f), pos + glm::vec3(1.0f, 0.0f, 0.0f),
+                                     pos + glm::vec3(1.0f, 0.0f, 1.0f), pos + glm::vec3(0.0f, 0.0f, 1.0f)}});
     }
 
-    if (shouldRenderWaterFace(snapshot, x, y, z + 1, stateId) &&
-        (frontLeft > 0.0f || frontRight > 0.0f)) {
-        emitWaterFace(FACE_FRONT, {{
-            pos + glm::vec3(0.0f, 0.0f, 1.0f),
-            pos + glm::vec3(1.0f, 0.0f, 1.0f),
-            pos + glm::vec3(1.0f, frontRight, 1.0f),
-            pos + glm::vec3(0.0f, frontLeft, 1.0f)
-        }});
+    if (shouldRenderWaterFace(snapshot, x, y, z + 1, stateId) && (frontLeft > 0.0f || frontRight > 0.0f)) {
+        emitWaterFace(FACE_FRONT, {{pos + glm::vec3(0.0f, 0.0f, 1.0f), pos + glm::vec3(1.0f, 0.0f, 1.0f),
+                                    pos + glm::vec3(1.0f, frontRight, 1.0f), pos + glm::vec3(0.0f, frontLeft, 1.0f)}});
     }
 
-    if (shouldRenderWaterFace(snapshot, x, y, z - 1, stateId) &&
-        (backLeft > 0.0f || backRight > 0.0f)) {
-        emitWaterFace(FACE_BACK, {{
-            pos + glm::vec3(1.0f, 0.0f, 0.0f),
-            pos + glm::vec3(0.0f, 0.0f, 0.0f),
-            pos + glm::vec3(0.0f, backLeft, 0.0f),
-            pos + glm::vec3(1.0f, backRight, 0.0f)
-        }});
+    if (shouldRenderWaterFace(snapshot, x, y, z - 1, stateId) && (backLeft > 0.0f || backRight > 0.0f)) {
+        emitWaterFace(FACE_BACK, {{pos + glm::vec3(1.0f, 0.0f, 0.0f), pos + glm::vec3(0.0f, 0.0f, 0.0f),
+                                   pos + glm::vec3(0.0f, backLeft, 0.0f), pos + glm::vec3(1.0f, backRight, 0.0f)}});
     }
 
-    if (shouldRenderWaterFace(snapshot, x - 1, y, z, stateId) &&
-        (frontLeft > 0.0f || backLeft > 0.0f)) {
-        emitWaterFace(FACE_LEFT, {{
-            pos + glm::vec3(0.0f, 0.0f, 0.0f),
-            pos + glm::vec3(0.0f, 0.0f, 1.0f),
-            pos + glm::vec3(0.0f, frontLeft, 1.0f),
-            pos + glm::vec3(0.0f, backLeft, 0.0f)
-        }});
+    if (shouldRenderWaterFace(snapshot, x - 1, y, z, stateId) && (frontLeft > 0.0f || backLeft > 0.0f)) {
+        emitWaterFace(FACE_LEFT, {{pos + glm::vec3(0.0f, 0.0f, 0.0f), pos + glm::vec3(0.0f, 0.0f, 1.0f),
+                                   pos + glm::vec3(0.0f, frontLeft, 1.0f), pos + glm::vec3(0.0f, backLeft, 0.0f)}});
     }
 
-    if (shouldRenderWaterFace(snapshot, x + 1, y, z, stateId) &&
-        (frontRight > 0.0f || backRight > 0.0f)) {
-        emitWaterFace(FACE_RIGHT, {{
-            pos + glm::vec3(1.0f, 0.0f, 1.0f),
-            pos + glm::vec3(1.0f, 0.0f, 0.0f),
-            pos + glm::vec3(1.0f, backRight, 0.0f),
-            pos + glm::vec3(1.0f, frontRight, 1.0f)
-        }});
+    if (shouldRenderWaterFace(snapshot, x + 1, y, z, stateId) && (frontRight > 0.0f || backRight > 0.0f)) {
+        emitWaterFace(FACE_RIGHT, {{pos + glm::vec3(1.0f, 0.0f, 1.0f), pos + glm::vec3(1.0f, 0.0f, 0.0f),
+                                    pos + glm::vec3(1.0f, backRight, 0.0f), pos + glm::vec3(1.0f, frontRight, 1.0f)}});
     }
 }
 
@@ -2053,13 +1793,8 @@ std::vector<BlockVertex>& cutoutTargetFor(ChunkMeshData& meshData, const BlockDe
     return def.cutoutDistanceCull ? meshData.cutoutDistanceVertices : meshData.cutoutVertices;
 }
 
-bool populateTransparentFaceCellForTarget(const SubChunkMeshingSnapshot& snapshot,
-                                          const int face,
-                                          const int x,
-                                          const int y,
-                                          const int z,
-                                          const bool waterTarget,
-                                          FaceCell& outCell) {
+bool populateTransparentFaceCellForTarget(const SubChunkMeshingSnapshot& snapshot, const int face, const int x,
+                                          const int y, const int z, const bool waterTarget, FaceCell& outCell) {
     const BlockStateId stateId = snapshot.blocks[scToIndex(x, y, z)];
     if (stateId == NULL_BLOCK_STATE) {
         return false;
@@ -2086,30 +1821,18 @@ bool populateTransparentFaceCellForTarget(const SubChunkMeshingSnapshot& snapsho
     return true;
 }
 
-bool populateTransparentFaceCell(const SubChunkMeshingSnapshot& snapshot,
-                                 const int face,
-                                 const int x,
-                                 const int y,
-                                 const int z,
-                                 FaceCell& outCell) {
+bool populateTransparentFaceCell(const SubChunkMeshingSnapshot& snapshot, const int face, const int x, const int y,
+                                 const int z, FaceCell& outCell) {
     return populateTransparentFaceCellForTarget(snapshot, face, x, y, z, false, outCell);
 }
 
-bool populateWaterMaterialFaceCell(const SubChunkMeshingSnapshot& snapshot,
-                                   const int face,
-                                   const int x,
-                                   const int y,
-                                   const int z,
-                                   FaceCell& outCell) {
+bool populateWaterMaterialFaceCell(const SubChunkMeshingSnapshot& snapshot, const int face, const int x, const int y,
+                                   const int z, FaceCell& outCell) {
     return populateTransparentFaceCellForTarget(snapshot, face, x, y, z, true, outCell);
 }
 
-bool populateCutoutFaceCell(const SubChunkMeshingSnapshot& snapshot,
-                            const int face,
-                            const int x,
-                            const int y,
-                            const int z,
-                            FaceCell& outCell) {
+bool populateCutoutFaceCell(const SubChunkMeshingSnapshot& snapshot, const int face, const int x, const int y,
+                            const int z, FaceCell& outCell) {
     const BlockStateId stateId = snapshot.blocks[scToIndex(x, y, z)];
     if (stateId == NULL_BLOCK_STATE) {
         return false;
@@ -2135,12 +1858,8 @@ bool populateCutoutFaceCell(const SubChunkMeshingSnapshot& snapshot,
     return true;
 }
 
-bool populateCutoutDistanceFaceCell(const SubChunkMeshingSnapshot& snapshot,
-                                    const int face,
-                                    const int x,
-                                    const int y,
-                                    const int z,
-                                    FaceCell& outCell) {
+bool populateCutoutDistanceFaceCell(const SubChunkMeshingSnapshot& snapshot, const int face, const int x, const int y,
+                                    const int z, FaceCell& outCell) {
     const BlockStateId stateId = snapshot.blocks[scToIndex(x, y, z)];
     if (stateId == NULL_BLOCK_STATE) {
         return false;
@@ -2166,14 +1885,9 @@ bool populateCutoutDistanceFaceCell(const SubChunkMeshingSnapshot& snapshot,
     return true;
 }
 
-void emitGreedyPlaneRuns(ChunkMeshData& meshData,
-                         std::vector<BlockVertex>& targetVertices,
-                         const int face,
-                         const int width,
-                         const int height,
-                         const std::array<FaceCell, kMaxGreedyPlaneSize>& plane,
-                         std::array<uint8_t, kMaxGreedyPlaneSize>& consumed,
-                         uint32_t& faceCountAfterGreedy) {
+void emitGreedyPlaneRuns(ChunkMeshData& meshData, std::vector<BlockVertex>& targetVertices, const int face,
+                         const int width, const int height, const std::array<FaceCell, kMaxGreedyPlaneSize>& plane,
+                         std::array<uint8_t, kMaxGreedyPlaneSize>& consumed, uint32_t& faceCountAfterGreedy) {
     const bool debugDisableGreedy = g_debugDisableGreedyMeshing.load(std::memory_order_relaxed);
 
     for (int v = 0; v < height; ++v) {
@@ -2187,7 +1901,8 @@ void emitGreedyPlaneRuns(ChunkMeshData& meshData,
 
             int runWidth = 1;
             while (u + runWidth < width) {
-                const size_t nextIndex = static_cast<size_t>(u + runWidth) + static_cast<size_t>(v) * static_cast<size_t>(width);
+                const size_t nextIndex =
+                    static_cast<size_t>(u + runWidth) + static_cast<size_t>(v) * static_cast<size_t>(width);
                 if (consumed[nextIndex] != 0 || !samePlaneFaceCell(startCell, plane[nextIndex])) {
                     break;
                 }
@@ -2198,8 +1913,8 @@ void emitGreedyPlaneRuns(ChunkMeshData& meshData,
             bool canGrow = true;
             while (v + runHeight < height && canGrow) {
                 for (int rowX = 0; rowX < runWidth; ++rowX) {
-                    const size_t candidateIndex = static_cast<size_t>(u + rowX) +
-                                                  static_cast<size_t>(v + runHeight) * static_cast<size_t>(width);
+                    const size_t candidateIndex =
+                        static_cast<size_t>(u + rowX) + static_cast<size_t>(v + runHeight) * static_cast<size_t>(width);
                     if (consumed[candidateIndex] != 0 || !samePlaneFaceCell(startCell, plane[candidateIndex])) {
                         canGrow = false;
                         break;
@@ -2212,22 +1927,19 @@ void emitGreedyPlaneRuns(ChunkMeshData& meshData,
 
             for (int dy = 0; dy < runHeight; ++dy) {
                 for (int dx = 0; dx < runWidth; ++dx) {
-                    consumed[static_cast<size_t>(u + dx) +
-                             static_cast<size_t>(v + dy) * static_cast<size_t>(width)] = 1;
+                    consumed[static_cast<size_t>(u + dx) + static_cast<size_t>(v + dy) * static_cast<size_t>(width)] =
+                        1;
                 }
             }
 
             if (debugDisableGreedy) {
                 for (int dy = 0; dy < runHeight; ++dy) {
                     for (int dx = 0; dx < runWidth; ++dx) {
-                        const size_t cellIndex = static_cast<size_t>(u + dx) +
-                                                 static_cast<size_t>(v + dy) * static_cast<size_t>(width);
+                        const size_t cellIndex =
+                            static_cast<size_t>(u + dx) + static_cast<size_t>(v + dy) * static_cast<size_t>(width);
                         const FaceCell& unitCell = plane[cellIndex];
                         const glm::vec3 unitPos(unitCell.x, unitCell.y, unitCell.z);
-                        emitUnitFace(targetVertices,
-                                     unitPos,
-                                     face,
-                                     unitCell.renderData);
+                        emitUnitFace(targetVertices, unitPos, face, unitCell.renderData);
                         expandBounds(meshData, unitPos, unitPos + glm::vec3(1.0f));
                         ++faceCountAfterGreedy;
                     }
@@ -2241,12 +1953,9 @@ void emitGreedyPlaneRuns(ChunkMeshData& meshData,
 }
 
 template <typename PopulateCellFn>
-void buildCubeGreedyFaces(const SubChunkMeshingSnapshot& snapshot,
-                          ChunkMeshData& meshData,
-                          std::vector<BlockVertex>& targetVertices,
-                          uint32_t& faceCountBeforeGreedy,
-                          uint32_t& faceCountAfterGreedy,
-                          PopulateCellFn&& populateCell) {
+void buildCubeGreedyFaces(const SubChunkMeshingSnapshot& snapshot, ChunkMeshData& meshData,
+                          std::vector<BlockVertex>& targetVertices, uint32_t& faceCountBeforeGreedy,
+                          uint32_t& faceCountAfterGreedy, PopulateCellFn&& populateCell) {
     std::array<FaceCell, kMaxGreedyPlaneSize> plane{};
     std::array<uint8_t, kMaxGreedyPlaneSize> consumed{};
 
@@ -2265,55 +1974,54 @@ void buildCubeGreedyFaces(const SubChunkMeshingSnapshot& snapshot,
                     int y = 0;
                     int z = 0;
                     mapper(slice, u, v, x, y, z);
-                    FaceCell& cell = plane[static_cast<size_t>(u) + static_cast<size_t>(v) * static_cast<size_t>(width)];
+                    FaceCell& cell =
+                        plane[static_cast<size_t>(u) + static_cast<size_t>(v) * static_cast<size_t>(width)];
                     if (populateCell(snapshot, face, x, y, z, cell)) {
                         ++faceCountBeforeGreedy;
                     }
                 }
             }
 
-            emitGreedyPlaneRuns(meshData,
-                                targetVertices,
-                                face,
-                                width,
-                                height,
-                                plane,
-                                consumed,
-                                faceCountAfterGreedy);
+            emitGreedyPlaneRuns(meshData, targetVertices, face, width, height, plane, consumed, faceCountAfterGreedy);
         }
     };
 
     constexpr int S = SubChunk::SIZE;
 
-    buildPlane(FACE_TOP, S, S, S,
-               [](const int slice, const int u, const int v, int& x, int& y, int& z) {
-                   x = u; y = slice; z = v;
-               });
-    buildPlane(FACE_BOTTOM, S, S, S,
-               [](const int slice, const int u, const int v, int& x, int& y, int& z) {
-                   x = u; y = slice; z = v;
-               });
-    buildPlane(FACE_FRONT, S, S, S,
-               [](const int slice, const int u, const int v, int& x, int& y, int& z) {
-                   x = u; y = v; z = slice;
-               });
-    buildPlane(FACE_BACK, S, S, S,
-               [](const int slice, const int u, const int v, int& x, int& y, int& z) {
-                   x = u; y = v; z = slice;
-               });
-    buildPlane(FACE_LEFT, S, S, S,
-               [](const int slice, const int u, const int v, int& x, int& y, int& z) {
-                   x = slice; y = v; z = u;
-               });
-    buildPlane(FACE_RIGHT, S, S, S,
-               [](const int slice, const int u, const int v, int& x, int& y, int& z) {
-                   x = slice; y = v; z = u;
-               });
+    buildPlane(FACE_TOP, S, S, S, [](const int slice, const int u, const int v, int& x, int& y, int& z) {
+        x = u;
+        y = slice;
+        z = v;
+    });
+    buildPlane(FACE_BOTTOM, S, S, S, [](const int slice, const int u, const int v, int& x, int& y, int& z) {
+        x = u;
+        y = slice;
+        z = v;
+    });
+    buildPlane(FACE_FRONT, S, S, S, [](const int slice, const int u, const int v, int& x, int& y, int& z) {
+        x = u;
+        y = v;
+        z = slice;
+    });
+    buildPlane(FACE_BACK, S, S, S, [](const int slice, const int u, const int v, int& x, int& y, int& z) {
+        x = u;
+        y = v;
+        z = slice;
+    });
+    buildPlane(FACE_LEFT, S, S, S, [](const int slice, const int u, const int v, int& x, int& y, int& z) {
+        x = slice;
+        y = v;
+        z = u;
+    });
+    buildPlane(FACE_RIGHT, S, S, S, [](const int slice, const int u, const int v, int& x, int& y, int& z) {
+        x = slice;
+        y = v;
+        z = u;
+    });
 }
 
 template <int Face, int NormalX, int NormalY, int NormalZ>
-void buildOpaqueGreedyPlane(const SubChunkMeshingSnapshot& snapshot,
-                            ChunkMeshData& meshData,
+void buildOpaqueGreedyPlane(const SubChunkMeshingSnapshot& snapshot, ChunkMeshData& meshData,
                             std::array<FaceCell, kMaxGreedyPlaneSize>& plane,
                             std::array<uint8_t, kMaxGreedyPlaneSize>& consumed) {
     constexpr int S = SubChunk::SIZE;
@@ -2369,19 +2077,12 @@ void buildOpaqueGreedyPlane(const SubChunkMeshingSnapshot& snapshot,
             }
         }
 
-        emitGreedyPlaneRuns(meshData,
-                            meshData.opaqueVertices,
-                            Face,
-                            S,
-                            S,
-                            plane,
-                            consumed,
+        emitGreedyPlaneRuns(meshData, meshData.opaqueVertices, Face, S, S, plane, consumed,
                             meshData.opaqueFaceCountAfterGreedy);
     }
 }
 
-void buildOpaqueGreedyFaces(const SubChunkMeshingSnapshot& snapshot,
-                            ChunkMeshData& meshData,
+void buildOpaqueGreedyFaces(const SubChunkMeshingSnapshot& snapshot, ChunkMeshData& meshData,
                             const SubChunkMeshClassPresence& presence) {
     if (!presence.hasOpaqueCube) {
         return;
@@ -2398,46 +2099,30 @@ void buildOpaqueGreedyFaces(const SubChunkMeshingSnapshot& snapshot,
     buildOpaqueGreedyPlane<FACE_RIGHT, 1, 0, 0>(snapshot, meshData, plane, consumed);
 }
 
-void buildTransparentGreedyFaces(const SubChunkMeshingSnapshot& snapshot,
-                                 ChunkMeshData& meshData,
+void buildTransparentGreedyFaces(const SubChunkMeshingSnapshot& snapshot, ChunkMeshData& meshData,
                                  const SubChunkMeshClassPresence& presence) {
     if (presence.hasTransparentCube) {
-        buildCubeGreedyFaces(snapshot,
-                             meshData,
-                             meshData.transparentVertices,
-                             meshData.transparentFaceCountBeforeGreedy,
-                             meshData.transparentFaceCountAfterGreedy,
+        buildCubeGreedyFaces(snapshot, meshData, meshData.transparentVertices,
+                             meshData.transparentFaceCountBeforeGreedy, meshData.transparentFaceCountAfterGreedy,
                              populateTransparentFaceCell);
     }
 
     if (presence.hasWaterCube) {
-        buildCubeGreedyFaces(snapshot,
-                             meshData,
-                             meshData.waterVertices,
-                             meshData.transparentFaceCountBeforeGreedy,
-                             meshData.transparentFaceCountAfterGreedy,
-                             populateWaterMaterialFaceCell);
+        buildCubeGreedyFaces(snapshot, meshData, meshData.waterVertices, meshData.transparentFaceCountBeforeGreedy,
+                             meshData.transparentFaceCountAfterGreedy, populateWaterMaterialFaceCell);
     }
 }
 
-void buildCutoutGreedyFaces(const SubChunkMeshingSnapshot& snapshot,
-                            ChunkMeshData& meshData,
+void buildCutoutGreedyFaces(const SubChunkMeshingSnapshot& snapshot, ChunkMeshData& meshData,
                             const SubChunkMeshClassPresence& presence) {
     if (presence.hasCutoutCube) {
-        buildCubeGreedyFaces(snapshot,
-                             meshData,
-                             meshData.cutoutVertices,
-                             meshData.transparentFaceCountBeforeGreedy,
-                             meshData.transparentFaceCountAfterGreedy,
-                             populateCutoutFaceCell);
+        buildCubeGreedyFaces(snapshot, meshData, meshData.cutoutVertices, meshData.transparentFaceCountBeforeGreedy,
+                             meshData.transparentFaceCountAfterGreedy, populateCutoutFaceCell);
     }
 
     if (presence.hasCutoutDistanceCube) {
-        buildCubeGreedyFaces(snapshot,
-                             meshData,
-                             meshData.cutoutDistanceVertices,
-                             meshData.transparentFaceCountBeforeGreedy,
-                             meshData.transparentFaceCountAfterGreedy,
+        buildCubeGreedyFaces(snapshot, meshData, meshData.cutoutDistanceVertices,
+                             meshData.transparentFaceCountBeforeGreedy, meshData.transparentFaceCountAfterGreedy,
                              populateCutoutDistanceFaceCell);
     }
 }
@@ -2455,13 +2140,8 @@ struct WaterTopCell {
     FaceMergeKey key{};
 };
 
-bool isMergeableStillWaterTop(const SubChunkMeshingSnapshot& snapshot,
-                              const int x,
-                              const int y,
-                              const int z,
-                              BlockStateId& outStateId,
-                              const BlockDef*& outDef,
-                              float& outHeight,
+bool isMergeableStillWaterTop(const SubChunkMeshingSnapshot& snapshot, const int x, const int y, const int z,
+                              BlockStateId& outStateId, const BlockDef*& outDef, float& outHeight,
                               uint16_t& outHeightKey) {
     const BlockStateId stateId = getResolvedFluidSC(snapshot, x, y, z);
     if (!FluidState::isWater(stateId) || !FluidState::isSource(stateId) || FluidState::isFalling(stateId)) {
@@ -2479,8 +2159,7 @@ bool isMergeableStillWaterTop(const SubChunkMeshingSnapshot& snapshot,
     const float backRight = computeWaterCornerHeight(snapshot, stateId, x, y, z - 1, x + 1, z - 1, x, z, x + 1, z);
     const float backLeft = computeWaterCornerHeight(snapshot, stateId, x - 1, y, z - 1, x, z - 1, x - 1, z, x, z);
     constexpr float kHeightEpsilon = 1.0f / 1024.0f;
-    if (std::abs(frontLeft - frontRight) > kHeightEpsilon ||
-        std::abs(frontLeft - backRight) > kHeightEpsilon ||
+    if (std::abs(frontLeft - frontRight) > kHeightEpsilon || std::abs(frontLeft - backRight) > kHeightEpsilon ||
         std::abs(frontLeft - backLeft) > kHeightEpsilon) {
         return false;
     }
@@ -2493,8 +2172,7 @@ bool isMergeableStillWaterTop(const SubChunkMeshingSnapshot& snapshot,
     return true;
 }
 
-void buildStillWaterTopGreedyFaces(const SubChunkMeshingSnapshot& snapshot,
-                                   ChunkMeshData& meshData,
+void buildStillWaterTopGreedyFaces(const SubChunkMeshingSnapshot& snapshot, ChunkMeshData& meshData,
                                    WaterTopMask& mergedTopFaces) {
     mergedTopFaces.fill(false);
 
@@ -2525,7 +2203,8 @@ void buildStillWaterTopGreedyFaces(const SubChunkMeshingSnapshot& snapshot,
                 cell.z = z;
                 cell.height = height;
                 cell.heightKey = heightKey;
-                cell.renderData = buildFaceRenderData(snapshot, stateId, *def, getMeshBlockInfo(stateId), x, y, z, FACE_TOP);
+                cell.renderData =
+                    buildFaceRenderData(snapshot, stateId, *def, getMeshBlockInfo(stateId), x, y, z, FACE_TOP);
                 if (const AnimatedTextureRef* waterTexture = findNamedWaterTexture(*def, "still")) {
                     applyWaterTextureRef(cell.renderData, *waterTexture);
                 }
@@ -2546,8 +2225,7 @@ void buildStillWaterTopGreedyFaces(const SubChunkMeshingSnapshot& snapshot,
                 int runWidth = 1;
                 while (x + runWidth < S) {
                     const size_t nextIndex = static_cast<size_t>(x + runWidth) + static_cast<size_t>(z) * S;
-                    if (consumed[nextIndex] || !plane[nextIndex].valid ||
-                        plane[nextIndex].key.hash != startHash ||
+                    if (consumed[nextIndex] || !plane[nextIndex].valid || plane[nextIndex].key.hash != startHash ||
                         plane[nextIndex].heightKey != plane[startIndex].heightKey ||
                         !sameMergeKey(plane[startIndex].key, plane[nextIndex].key)) {
                         break;
@@ -2559,8 +2237,8 @@ void buildStillWaterTopGreedyFaces(const SubChunkMeshingSnapshot& snapshot,
                 bool canGrow = true;
                 while (z + runHeight < S && canGrow) {
                     for (int dx = 0; dx < runWidth; ++dx) {
-                        const size_t candidateIndex = static_cast<size_t>(x + dx) +
-                                                      static_cast<size_t>(z + runHeight) * S;
+                        const size_t candidateIndex =
+                            static_cast<size_t>(x + dx) + static_cast<size_t>(z + runHeight) * S;
                         if (consumed[candidateIndex] || !plane[candidateIndex].valid ||
                             plane[candidateIndex].key.hash != startHash ||
                             plane[candidateIndex].heightKey != plane[startIndex].heightKey ||
@@ -2588,16 +2266,10 @@ void buildStillWaterTopGreedyFaces(const SubChunkMeshingSnapshot& snapshot,
                 const float z0 = static_cast<float>(start.z);
                 const float z1 = static_cast<float>(start.z + runHeight);
                 const float topY = static_cast<float>(start.y) + start.height;
-                const std::array<glm::vec3, 4> corners = {{
-                    {x0, topY, z1},
-                    {x1, topY, z1},
-                    {x1, topY, z0},
-                    {x0, topY, z0}
-                }};
+                const std::array<glm::vec3, 4> corners = {
+                    {{x0, topY, z1}, {x1, topY, z1}, {x1, topY, z0}, {x0, topY, z0}}};
                 const std::array<glm::vec2, 4> faceUV = buildFaceUv(
-                    static_cast<float>(runWidth),
-                    static_cast<float>(runHeight),
-                    start.renderData.uvQuarterTurns);
+                    static_cast<float>(runWidth), static_cast<float>(runHeight), start.renderData.uvQuarterTurns);
                 appendFaceVertices(meshData.waterVertices, corners, faceUV, FACE_TOP, start.renderData);
                 expandBoundsForCorners(meshData, corners);
                 ++meshData.transparentFaceCountAfterGreedy;
@@ -2606,14 +2278,9 @@ void buildStillWaterTopGreedyFaces(const SubChunkMeshingSnapshot& snapshot,
     }
 }
 
-void addCrossedQuadsImpl(std::vector<BlockVertex>& vertices,
-                          const glm::vec3& pos,
-                          const BlockStateId stateId,
-                          const BlockDef& def,
-                          const int x,
-                          const int y,
-                          const int z,
-                          const SubChunkMeshingSnapshot& snapshot) {
+void addCrossedQuadsImpl(std::vector<BlockVertex>& vertices, const glm::vec3& pos, const BlockStateId stateId,
+                         const BlockDef& def, const int x, const int y, const int z,
+                         const SubChunkMeshingSnapshot& snapshot) {
     static_cast<void>(def);
     const StateTextureIndices& textures = BlockStateRegistry::getStateTextures(stateId);
     const float layer = static_cast<float>(textures.faceTop.firstLayer);
@@ -2643,24 +2310,10 @@ void addCrossedQuadsImpl(std::vector<BlockVertex>& vertices,
     const auto emitQuad = [&](const std::array<glm::vec3, 4>& corners) {
         for (const int index : indices) {
             vertices.push_back(makeBlockVertex(
-                pos.x + corners[static_cast<size_t>(index)].x,
-                pos.y + corners[static_cast<size_t>(index)].y,
-                pos.z + corners[static_cast<size_t>(index)].z,
-                quadUV[static_cast<size_t>(index)].x,
-                quadUV[static_cast<size_t>(index)].y,
-                crossMarker,
-                sunNormalized,
-                blockNormalized,
-                3.0f,
-                layer,
-                1.0f,
-                0.0f,
-                0.0f,
-                tintKind,
-                tintU,
-                tintV,
-                def.derivativeMaterialId
-            ));
+                pos.x + corners[static_cast<size_t>(index)].x, pos.y + corners[static_cast<size_t>(index)].y,
+                pos.z + corners[static_cast<size_t>(index)].z, quadUV[static_cast<size_t>(index)].x,
+                quadUV[static_cast<size_t>(index)].y, crossMarker, sunNormalized, blockNormalized, 3.0f, layer, 1.0f,
+                0.0f, 0.0f, tintKind, tintU, tintV, def.derivativeMaterialId));
         }
     };
 
@@ -2703,31 +2356,25 @@ constexpr float kWallTorchTop = kWallTorchBottom + kTorchHeight;
 // Wall offset: how far the torch center sits from the wall
 constexpr float kTorchWallOffset = 1.0f / 16.0f;
 
-void addTorchCuboidImpl(std::vector<BlockVertex>& vertices,
-                        const glm::vec3& pos,
-                        const BlockStateId stateId,
-                        const int x,
-                        const int y,
-                        const int z,
-                        const SubChunkMeshingSnapshot& snapshot) {
+void addTorchCuboidImpl(std::vector<BlockVertex>& vertices, const glm::vec3& pos, const BlockStateId stateId,
+                        const int x, const int y, const int z, const SubChunkMeshingSnapshot& snapshot) {
     const BlockDef& def = *getMeshBlockInfo(stateId).def;
     const StateTextureIndices& textures = BlockStateRegistry::getStateTextures(stateId);
     int tileIndex = textures.faceTop.firstLayer;
-    if (tileIndex < 0) tileIndex = 0;
+    if (tileIndex < 0)
+        tileIndex = 0;
     const float layer = static_cast<float>(tileIndex);
 
     // Lighting: take max of self + all 6 neighbors (same as cross)
     uint8_t sunLevel = getResolvedSunlightSC(snapshot, x, y, z);
     uint8_t blockLevel = getResolvedBlockLightSC(snapshot, x, y, z);
     for (int d = 0; d < 6; ++d) {
-        sunLevel = std::max(sunLevel, getResolvedSunlightSC(snapshot,
-            x + kFaceNormals[static_cast<size_t>(d)].x,
-            y + kFaceNormals[static_cast<size_t>(d)].y,
-            z + kFaceNormals[static_cast<size_t>(d)].z));
-        blockLevel = std::max(blockLevel, getResolvedBlockLightSC(snapshot,
-            x + kFaceNormals[static_cast<size_t>(d)].x,
-            y + kFaceNormals[static_cast<size_t>(d)].y,
-            z + kFaceNormals[static_cast<size_t>(d)].z));
+        sunLevel = std::max(sunLevel, getResolvedSunlightSC(snapshot, x + kFaceNormals[static_cast<size_t>(d)].x,
+                                                            y + kFaceNormals[static_cast<size_t>(d)].y,
+                                                            z + kFaceNormals[static_cast<size_t>(d)].z));
+        blockLevel = std::max(blockLevel, getResolvedBlockLightSC(snapshot, x + kFaceNormals[static_cast<size_t>(d)].x,
+                                                                  y + kFaceNormals[static_cast<size_t>(d)].y,
+                                                                  z + kFaceNormals[static_cast<size_t>(d)].z));
     }
     const float sunNorm = lightToNormalized(sunLevel);
     const float blockNorm = lightToNormalized(blockLevel);
@@ -2740,42 +2387,19 @@ void addTorchCuboidImpl(std::vector<BlockVertex>& vertices,
 
     const std::array<int, 6> indices = {{0, 1, 2, 0, 2, 3}};
 
-    const std::array<glm::vec2, 4> sideUV = {{
-        {kTorchU0, kTorchSideV0},
-        {kTorchU1, kTorchSideV0},
-        {kTorchU1, kTorchSideV1},
-        {kTorchU0, kTorchSideV1}
-    }};
-    const std::array<glm::vec2, 4> topUV = {{
-        {kTorchU0, kTorchTopV0},
-        {kTorchU1, kTorchTopV0},
-        {kTorchU1, kTorchTopV1},
-        {kTorchU0, kTorchTopV1}
-    }};
+    const std::array<glm::vec2, 4> sideUV = {
+        {{kTorchU0, kTorchSideV0}, {kTorchU1, kTorchSideV0}, {kTorchU1, kTorchSideV1}, {kTorchU0, kTorchSideV1}}};
+    const std::array<glm::vec2, 4> topUV = {
+        {{kTorchU0, kTorchTopV0}, {kTorchU1, kTorchTopV0}, {kTorchU1, kTorchTopV1}, {kTorchU0, kTorchTopV1}}};
 
-    const auto emitFace = [&](const std::array<glm::vec3, 4>& corners,
-                              const int face,
+    const auto emitFace = [&](const std::array<glm::vec3, 4>& corners, const int face,
                               const std::array<glm::vec2, 4>& uv) {
         for (const int idx : indices) {
             vertices.push_back(makeBlockVertex(
-                pos.x + corners[static_cast<size_t>(idx)].x,
-                pos.y + corners[static_cast<size_t>(idx)].y,
-                pos.z + corners[static_cast<size_t>(idx)].z,
-                uv[static_cast<size_t>(idx)].x,
-                uv[static_cast<size_t>(idx)].y,
-                static_cast<float>(face),
-                sunNorm,
-                blockNorm,
-                3.0f,
-                layer,
-                1.0f,
-                0.0f,
-                0.0f,
-                BlockTintKinds::NONE,
-                0,
-                0,
-                def.derivativeMaterialId
-            ));
+                pos.x + corners[static_cast<size_t>(idx)].x, pos.y + corners[static_cast<size_t>(idx)].y,
+                pos.z + corners[static_cast<size_t>(idx)].z, uv[static_cast<size_t>(idx)].x,
+                uv[static_cast<size_t>(idx)].y, static_cast<float>(face), sunNorm, blockNorm, 3.0f, layer, 1.0f, 0.0f,
+                0.0f, BlockTintKinds::NONE, 0, 0, def.derivativeMaterialId));
         }
     };
 
@@ -2792,65 +2416,48 @@ void addTorchCuboidImpl(std::vector<BlockVertex>& vertices,
     if (facingValue == PropIndices::FACING_FLOOR) {
         // ── Floor torch: two thin crossed quads, centered ──
         // Quad A: diagonal along (X+Z)
-        emitQuad({{
-            {0.5f - kTorchHW, kFloorTorchBottom, 0.5f - kTorchHW},
-            {0.5f + kTorchHW, kFloorTorchBottom, 0.5f + kTorchHW},
-            {0.5f + kTorchHW, kFloorTorchTop, 0.5f + kTorchHW},
-            {0.5f - kTorchHW, kFloorTorchTop, 0.5f - kTorchHW}
-        }});
+        emitQuad({{{0.5f - kTorchHW, kFloorTorchBottom, 0.5f - kTorchHW},
+                   {0.5f + kTorchHW, kFloorTorchBottom, 0.5f + kTorchHW},
+                   {0.5f + kTorchHW, kFloorTorchTop, 0.5f + kTorchHW},
+                   {0.5f - kTorchHW, kFloorTorchTop, 0.5f - kTorchHW}}});
         // Quad B: diagonal along (X-Z)
-        emitQuad({{
-            {0.5f + kTorchHW, kFloorTorchBottom, 0.5f - kTorchHW},
-            {0.5f - kTorchHW, kFloorTorchBottom, 0.5f + kTorchHW},
-            {0.5f - kTorchHW, kFloorTorchTop, 0.5f + kTorchHW},
-            {0.5f + kTorchHW, kFloorTorchTop, 0.5f - kTorchHW}
-        }});
+        emitQuad({{{0.5f + kTorchHW, kFloorTorchBottom, 0.5f - kTorchHW},
+                   {0.5f - kTorchHW, kFloorTorchBottom, 0.5f + kTorchHW},
+                   {0.5f - kTorchHW, kFloorTorchTop, 0.5f + kTorchHW},
+                   {0.5f + kTorchHW, kFloorTorchTop, 0.5f - kTorchHW}}});
     } else if (facingValue == PropIndices::FACING_NORTH) {
         // ── Wall torch on -Z face ──
         const float cz = kTorchWallOffset;
-        emitQuad({{
-            {0.5f - kTorchHW, kWallTorchBottom, cz - kTorchHW},
-            {0.5f + kTorchHW, kWallTorchBottom, cz + kTorchHW},
-            {0.5f + kTorchHW, kWallTorchTop, cz + kTorchHW},
-            {0.5f - kTorchHW, kWallTorchTop, cz - kTorchHW}
-        }});
+        emitQuad({{{0.5f - kTorchHW, kWallTorchBottom, cz - kTorchHW},
+                   {0.5f + kTorchHW, kWallTorchBottom, cz + kTorchHW},
+                   {0.5f + kTorchHW, kWallTorchTop, cz + kTorchHW},
+                   {0.5f - kTorchHW, kWallTorchTop, cz - kTorchHW}}});
     } else if (facingValue == PropIndices::FACING_SOUTH) {
         // ── Wall torch on +Z face ──
         const float cz = 1.0f - kTorchWallOffset;
-        emitQuad({{
-            {0.5f + kTorchHW, kWallTorchBottom, cz + kTorchHW},
-            {0.5f - kTorchHW, kWallTorchBottom, cz - kTorchHW},
-            {0.5f - kTorchHW, kWallTorchTop, cz - kTorchHW},
-            {0.5f + kTorchHW, kWallTorchTop, cz + kTorchHW}
-        }});
+        emitQuad({{{0.5f + kTorchHW, kWallTorchBottom, cz + kTorchHW},
+                   {0.5f - kTorchHW, kWallTorchBottom, cz - kTorchHW},
+                   {0.5f - kTorchHW, kWallTorchTop, cz - kTorchHW},
+                   {0.5f + kTorchHW, kWallTorchTop, cz + kTorchHW}}});
     } else if (facingValue == PropIndices::FACING_WEST) {
         // ── Wall torch on -X face ──
         const float cx = kTorchWallOffset;
-        emitQuad({{
-            {cx + kTorchHW, kWallTorchBottom, 0.5f - kTorchHW},
-            {cx - kTorchHW, kWallTorchBottom, 0.5f + kTorchHW},
-            {cx - kTorchHW, kWallTorchTop, 0.5f + kTorchHW},
-            {cx + kTorchHW, kWallTorchTop, 0.5f - kTorchHW}
-        }});
+        emitQuad({{{cx + kTorchHW, kWallTorchBottom, 0.5f - kTorchHW},
+                   {cx - kTorchHW, kWallTorchBottom, 0.5f + kTorchHW},
+                   {cx - kTorchHW, kWallTorchTop, 0.5f + kTorchHW},
+                   {cx + kTorchHW, kWallTorchTop, 0.5f - kTorchHW}}});
     } else if (facingValue == PropIndices::FACING_EAST) {
         // ── Wall torch on +X face ──
         const float cx = 1.0f - kTorchWallOffset;
-        emitQuad({{
-            {cx - kTorchHW, kWallTorchBottom, 0.5f + kTorchHW},
-            {cx + kTorchHW, kWallTorchBottom, 0.5f - kTorchHW},
-            {cx + kTorchHW, kWallTorchTop, 0.5f - kTorchHW},
-            {cx - kTorchHW, kWallTorchTop, 0.5f + kTorchHW}
-        }});
+        emitQuad({{{cx - kTorchHW, kWallTorchBottom, 0.5f + kTorchHW},
+                   {cx + kTorchHW, kWallTorchBottom, 0.5f - kTorchHW},
+                   {cx + kTorchHW, kWallTorchTop, 0.5f - kTorchHW},
+                   {cx - kTorchHW, kWallTorchTop, 0.5f + kTorchHW}}});
     }
 }
 
-void addTorchPrismImpl(std::vector<BlockVertex>& vertices,
-                       const glm::vec3& pos,
-                       const BlockStateId stateId,
-                       const int x,
-                       const int y,
-                       const int z,
-                       const SubChunkMeshingSnapshot& snapshot) {
+void addTorchPrismImpl(std::vector<BlockVertex>& vertices, const glm::vec3& pos, const BlockStateId stateId,
+                       const int x, const int y, const int z, const SubChunkMeshingSnapshot& snapshot) {
     const BlockDef& def = *getMeshBlockInfo(stateId).def;
     const StateTextureIndices& textures = BlockStateRegistry::getStateTextures(stateId);
     const float layer = static_cast<float>(textures.faceTop.firstLayer);
@@ -2858,14 +2465,12 @@ void addTorchPrismImpl(std::vector<BlockVertex>& vertices,
     uint8_t sunLevel = getResolvedSunlightSC(snapshot, x, y, z);
     uint8_t blockLevel = getResolvedBlockLightSC(snapshot, x, y, z);
     for (int d = 0; d < 6; ++d) {
-        sunLevel = std::max(sunLevel, getResolvedSunlightSC(snapshot,
-            x + kFaceNormals[static_cast<size_t>(d)].x,
-            y + kFaceNormals[static_cast<size_t>(d)].y,
-            z + kFaceNormals[static_cast<size_t>(d)].z));
-        blockLevel = std::max(blockLevel, getResolvedBlockLightSC(snapshot,
-            x + kFaceNormals[static_cast<size_t>(d)].x,
-            y + kFaceNormals[static_cast<size_t>(d)].y,
-            z + kFaceNormals[static_cast<size_t>(d)].z));
+        sunLevel = std::max(sunLevel, getResolvedSunlightSC(snapshot, x + kFaceNormals[static_cast<size_t>(d)].x,
+                                                            y + kFaceNormals[static_cast<size_t>(d)].y,
+                                                            z + kFaceNormals[static_cast<size_t>(d)].z));
+        blockLevel = std::max(blockLevel, getResolvedBlockLightSC(snapshot, x + kFaceNormals[static_cast<size_t>(d)].x,
+                                                                  y + kFaceNormals[static_cast<size_t>(d)].y,
+                                                                  z + kFaceNormals[static_cast<size_t>(d)].z));
     }
     const float sunNorm = lightToNormalized(sunLevel);
     const float blockNorm = lightToNormalized(blockLevel);
@@ -2876,42 +2481,19 @@ void addTorchPrismImpl(std::vector<BlockVertex>& vertices,
     }
 
     const std::array<int, 6> indices = {{0, 1, 2, 0, 2, 3}};
-    const std::array<glm::vec2, 4> sideUV = {{
-        {kTorchU0, kTorchSideV0},
-        {kTorchU1, kTorchSideV0},
-        {kTorchU1, kTorchSideV1},
-        {kTorchU0, kTorchSideV1}
-    }};
-    const std::array<glm::vec2, 4> topUV = {{
-        {kTorchU0, kTorchTopV0},
-        {kTorchU1, kTorchTopV0},
-        {kTorchU1, kTorchTopV1},
-        {kTorchU0, kTorchTopV1}
-    }};
+    const std::array<glm::vec2, 4> sideUV = {
+        {{kTorchU0, kTorchSideV0}, {kTorchU1, kTorchSideV0}, {kTorchU1, kTorchSideV1}, {kTorchU0, kTorchSideV1}}};
+    const std::array<glm::vec2, 4> topUV = {
+        {{kTorchU0, kTorchTopV0}, {kTorchU1, kTorchTopV0}, {kTorchU1, kTorchTopV1}, {kTorchU0, kTorchTopV1}}};
 
-    const auto emitFace = [&](const std::array<glm::vec3, 4>& corners,
-                              const int face,
+    const auto emitFace = [&](const std::array<glm::vec3, 4>& corners, const int face,
                               const std::array<glm::vec2, 4>& uv) {
         for (const int idx : indices) {
             vertices.push_back(makeBlockVertex(
-                pos.x + corners[static_cast<size_t>(idx)].x,
-                pos.y + corners[static_cast<size_t>(idx)].y,
-                pos.z + corners[static_cast<size_t>(idx)].z,
-                uv[static_cast<size_t>(idx)].x,
-                uv[static_cast<size_t>(idx)].y,
-                static_cast<float>(face),
-                sunNorm,
-                blockNorm,
-                3.0f,
-                layer,
-                1.0f,
-                0.0f,
-                0.0f,
-                BlockTintKinds::NONE,
-                0,
-                0,
-                def.derivativeMaterialId
-            ));
+                pos.x + corners[static_cast<size_t>(idx)].x, pos.y + corners[static_cast<size_t>(idx)].y,
+                pos.z + corners[static_cast<size_t>(idx)].z, uv[static_cast<size_t>(idx)].x,
+                uv[static_cast<size_t>(idx)].y, static_cast<float>(face), sunNorm, blockNorm, 3.0f, layer, 1.0f, 0.0f,
+                0.0f, BlockTintKinds::NONE, 0, 0, def.derivativeMaterialId));
         }
     };
 
@@ -2944,42 +2526,12 @@ void addTorchPrismImpl(std::vector<BlockVertex>& vertices,
         y1 = kWallTorchTop;
     }
 
-    emitFace({{
-        {x0, y1, z1},
-        {x1, y1, z1},
-        {x1, y1, z0},
-        {x0, y1, z0}
-    }}, FACE_TOP, topUV);
-    emitFace({{
-        {x0, y0, z0},
-        {x1, y0, z0},
-        {x1, y0, z1},
-        {x0, y0, z1}
-    }}, FACE_BOTTOM, topUV);
-    emitFace({{
-        {x0, y0, z1},
-        {x1, y0, z1},
-        {x1, y1, z1},
-        {x0, y1, z1}
-    }}, FACE_FRONT, sideUV);
-    emitFace({{
-        {x1, y0, z0},
-        {x0, y0, z0},
-        {x0, y1, z0},
-        {x1, y1, z0}
-    }}, FACE_BACK, sideUV);
-    emitFace({{
-        {x0, y0, z0},
-        {x0, y0, z1},
-        {x0, y1, z1},
-        {x0, y1, z0}
-    }}, FACE_LEFT, sideUV);
-    emitFace({{
-        {x1, y0, z1},
-        {x1, y0, z0},
-        {x1, y1, z0},
-        {x1, y1, z1}
-    }}, FACE_RIGHT, sideUV);
+    emitFace({{{x0, y1, z1}, {x1, y1, z1}, {x1, y1, z0}, {x0, y1, z0}}}, FACE_TOP, topUV);
+    emitFace({{{x0, y0, z0}, {x1, y0, z0}, {x1, y0, z1}, {x0, y0, z1}}}, FACE_BOTTOM, topUV);
+    emitFace({{{x0, y0, z1}, {x1, y0, z1}, {x1, y1, z1}, {x0, y1, z1}}}, FACE_FRONT, sideUV);
+    emitFace({{{x1, y0, z0}, {x0, y0, z0}, {x0, y1, z0}, {x1, y1, z0}}}, FACE_BACK, sideUV);
+    emitFace({{{x0, y0, z0}, {x0, y0, z1}, {x0, y1, z1}, {x0, y1, z0}}}, FACE_LEFT, sideUV);
+    emitFace({{{x1, y0, z1}, {x1, y0, z0}, {x1, y1, z0}, {x1, y1, z1}}}, FACE_RIGHT, sideUV);
 }
 
 constexpr float kTorchModelPixel = 1.0f / 16.0f;
@@ -2994,25 +2546,16 @@ struct TorchModelUvRect {
     float v1;
 };
 
-TorchModelUvRect makeTorchModelSourceUvRect(const float left,
-                                            const float top,
-                                            const float right,
-                                            const float bottom) {
-    return {
-        left * kTorchModelPixel,
-        1.0f - bottom * kTorchModelPixel,
-        right * kTorchModelPixel,
-        1.0f - top * kTorchModelPixel
-    };
+TorchModelUvRect makeTorchModelSourceUvRect(const float left, const float top, const float right, const float bottom) {
+    return {left * kTorchModelPixel, 1.0f - bottom * kTorchModelPixel, right * kTorchModelPixel,
+            1.0f - top * kTorchModelPixel};
 }
 
 glm::vec3 transformTorchModelPoint(const glm::mat4& transform, const glm::vec3& point) {
     return glm::vec3(transform * glm::vec4(point, 1.0f));
 }
 
-glm::mat4 makeTorchModelRotation(const float angleDegrees,
-                                 const glm::vec3& axis,
-                                 const glm::vec3& origin) {
+glm::mat4 makeTorchModelRotation(const float angleDegrees, const glm::vec3& axis, const glm::vec3& origin) {
     glm::mat4 transform(1.0f);
     transform = glm::translate(transform, origin);
     transform = glm::rotate(transform, glm::radians(angleDegrees), axis);
@@ -3021,8 +2564,7 @@ glm::mat4 makeTorchModelRotation(const float angleDegrees,
 }
 
 glm::mat4 buildWallTorchModelTransform(const uint16_t facingValue) {
-    const glm::mat4 tilt = makeTorchModelRotation(-22.5f,
-                                                  glm::vec3(0.0f, 0.0f, 1.0f),
+    const glm::mat4 tilt = makeTorchModelRotation(-22.5f, glm::vec3(0.0f, 0.0f, 1.0f),
                                                   glm::vec3(0.0f, 3.5f * kTorchModelPixel, 8.0f * kTorchModelPixel));
 
     float yDegrees = 0.0f;
@@ -3036,132 +2578,71 @@ glm::mat4 buildWallTorchModelTransform(const uint16_t facingValue) {
         yDegrees = 0.0f;
     }
 
-    const glm::mat4 yaw = makeTorchModelRotation(yDegrees,
-                                                 glm::vec3(0.0f, 1.0f, 0.0f),
-                                                 glm::vec3(0.5f, 0.5f, 0.5f));
+    const glm::mat4 yaw = makeTorchModelRotation(yDegrees, glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(0.5f, 0.5f, 0.5f));
     return yaw * tilt;
 }
 
-void emitTorchModelFace(std::vector<BlockVertex>& vertices,
-                        const glm::vec3& pos,
-                        const float layer,
-                        const float sunNorm,
-                        const float blockNorm,
-                        const int face,
-                        const std::array<glm::vec3, 4>& localCorners,
-                        const TorchModelUvRect& uvRect,
-                        const uint8_t derivativeMaterialId,
-                        const glm::mat4& transform = glm::mat4(1.0f)) {
+void emitTorchModelFace(std::vector<BlockVertex>& vertices, const glm::vec3& pos, const float layer,
+                        const float sunNorm, const float blockNorm, const int face,
+                        const std::array<glm::vec3, 4>& localCorners, const TorchModelUvRect& uvRect,
+                        const uint8_t derivativeMaterialId, const glm::mat4& transform = glm::mat4(1.0f)) {
     const std::array<int, 6> indices = {{0, 1, 2, 0, 2, 3}};
-    const std::array<glm::vec2, 4> uv = {{
-        {uvRect.u0, uvRect.v0},
-        {uvRect.u1, uvRect.v0},
-        {uvRect.u1, uvRect.v1},
-        {uvRect.u0, uvRect.v1}
-    }};
+    const std::array<glm::vec2, 4> uv = {
+        {{uvRect.u0, uvRect.v0}, {uvRect.u1, uvRect.v0}, {uvRect.u1, uvRect.v1}, {uvRect.u0, uvRect.v1}}};
 
     for (const int idx : indices) {
         const glm::vec3 localPos = transformTorchModelPoint(transform, localCorners[static_cast<size_t>(idx)]);
-        vertices.push_back(makeBlockVertex(
-            pos.x + localPos.x,
-            pos.y + localPos.y,
-            pos.z + localPos.z,
-            uv[static_cast<size_t>(idx)].x,
-            uv[static_cast<size_t>(idx)].y,
-            static_cast<float>(face),
-            sunNorm,
-            blockNorm,
-            3.0f,
-            layer,
-            1.0f,
-            0.0f,
-            0.0f,
-            BlockTintKinds::NONE,
-            0,
-            0,
-            derivativeMaterialId
-        ));
+        vertices.push_back(makeBlockVertex(pos.x + localPos.x, pos.y + localPos.y, pos.z + localPos.z,
+                                           uv[static_cast<size_t>(idx)].x, uv[static_cast<size_t>(idx)].y,
+                                           static_cast<float>(face), sunNorm, blockNorm, 3.0f, layer, 1.0f, 0.0f, 0.0f,
+                                           BlockTintKinds::NONE, 0, 0, derivativeMaterialId));
     }
 }
 
-void emitTorchModelCuboidFaces(std::vector<BlockVertex>& vertices,
-                               const glm::vec3& pos,
-                               const float layer,
-                               const float sunNorm,
-                               const float blockNorm,
-                               const glm::vec3& from,
-                               const glm::vec3& to,
-                               const glm::mat4& transform,
-                               const bool emitTop,
-                               const TorchModelUvRect& topUv,
-                               const bool emitBottom,
-                               const TorchModelUvRect& bottomUv,
-                               const bool emitFront,
-                               const TorchModelUvRect& frontUv,
-                               const bool emitBack,
-                               const TorchModelUvRect& backUv,
-                               const bool emitLeft,
-                               const TorchModelUvRect& leftUv,
-                               const bool emitRight,
-                               const TorchModelUvRect& rightUv,
-                               const uint8_t derivativeMaterialId) {
+void emitTorchModelCuboidFaces(std::vector<BlockVertex>& vertices, const glm::vec3& pos, const float layer,
+                               const float sunNorm, const float blockNorm, const glm::vec3& from, const glm::vec3& to,
+                               const glm::mat4& transform, const bool emitTop, const TorchModelUvRect& topUv,
+                               const bool emitBottom, const TorchModelUvRect& bottomUv, const bool emitFront,
+                               const TorchModelUvRect& frontUv, const bool emitBack, const TorchModelUvRect& backUv,
+                               const bool emitLeft, const TorchModelUvRect& leftUv, const bool emitRight,
+                               const TorchModelUvRect& rightUv, const uint8_t derivativeMaterialId) {
     if (emitTop) {
-        emitTorchModelFace(vertices, pos, layer, sunNorm, blockNorm, FACE_TOP, {{
-            {from.x, to.y, to.z},
-            {to.x, to.y, to.z},
-            {to.x, to.y, from.z},
-            {from.x, to.y, from.z}
-        }}, topUv, derivativeMaterialId, transform);
+        emitTorchModelFace(vertices, pos, layer, sunNorm, blockNorm, FACE_TOP,
+                           {{{from.x, to.y, to.z}, {to.x, to.y, to.z}, {to.x, to.y, from.z}, {from.x, to.y, from.z}}},
+                           topUv, derivativeMaterialId, transform);
     }
     if (emitBottom) {
-        emitTorchModelFace(vertices, pos, layer, sunNorm, blockNorm, FACE_BOTTOM, {{
-            {from.x, from.y, from.z},
-            {to.x, from.y, from.z},
-            {to.x, from.y, to.z},
-            {from.x, from.y, to.z}
-        }}, bottomUv, derivativeMaterialId, transform);
+        emitTorchModelFace(
+            vertices, pos, layer, sunNorm, blockNorm, FACE_BOTTOM,
+            {{{from.x, from.y, from.z}, {to.x, from.y, from.z}, {to.x, from.y, to.z}, {from.x, from.y, to.z}}},
+            bottomUv, derivativeMaterialId, transform);
     }
     if (emitFront) {
-        emitTorchModelFace(vertices, pos, layer, sunNorm, blockNorm, FACE_FRONT, {{
-            {from.x, from.y, to.z},
-            {to.x, from.y, to.z},
-            {to.x, to.y, to.z},
-            {from.x, to.y, to.z}
-        }}, frontUv, derivativeMaterialId, transform);
+        emitTorchModelFace(vertices, pos, layer, sunNorm, blockNorm, FACE_FRONT,
+                           {{{from.x, from.y, to.z}, {to.x, from.y, to.z}, {to.x, to.y, to.z}, {from.x, to.y, to.z}}},
+                           frontUv, derivativeMaterialId, transform);
     }
     if (emitBack) {
-        emitTorchModelFace(vertices, pos, layer, sunNorm, blockNorm, FACE_BACK, {{
-            {to.x, from.y, from.z},
-            {from.x, from.y, from.z},
-            {from.x, to.y, from.z},
-            {to.x, to.y, from.z}
-        }}, backUv, derivativeMaterialId, transform);
+        emitTorchModelFace(
+            vertices, pos, layer, sunNorm, blockNorm, FACE_BACK,
+            {{{to.x, from.y, from.z}, {from.x, from.y, from.z}, {from.x, to.y, from.z}, {to.x, to.y, from.z}}}, backUv,
+            derivativeMaterialId, transform);
     }
     if (emitLeft) {
-        emitTorchModelFace(vertices, pos, layer, sunNorm, blockNorm, FACE_LEFT, {{
-            {from.x, from.y, from.z},
-            {from.x, from.y, to.z},
-            {from.x, to.y, to.z},
-            {from.x, to.y, from.z}
-        }}, leftUv, derivativeMaterialId, transform);
+        emitTorchModelFace(
+            vertices, pos, layer, sunNorm, blockNorm, FACE_LEFT,
+            {{{from.x, from.y, from.z}, {from.x, from.y, to.z}, {from.x, to.y, to.z}, {from.x, to.y, from.z}}}, leftUv,
+            derivativeMaterialId, transform);
     }
     if (emitRight) {
-        emitTorchModelFace(vertices, pos, layer, sunNorm, blockNorm, FACE_RIGHT, {{
-            {to.x, from.y, to.z},
-            {to.x, from.y, from.z},
-            {to.x, to.y, from.z},
-            {to.x, to.y, to.z}
-        }}, rightUv, derivativeMaterialId, transform);
+        emitTorchModelFace(vertices, pos, layer, sunNorm, blockNorm, FACE_RIGHT,
+                           {{{to.x, from.y, to.z}, {to.x, from.y, from.z}, {to.x, to.y, from.z}, {to.x, to.y, to.z}}},
+                           rightUv, derivativeMaterialId, transform);
     }
 }
 
-void addTorchTemplateImpl(std::vector<BlockVertex>& vertices,
-                          const glm::vec3& pos,
-                          const BlockStateId stateId,
-                          const int x,
-                          const int y,
-                          const int z,
-                          const SubChunkMeshingSnapshot& snapshot) {
+void addTorchTemplateImpl(std::vector<BlockVertex>& vertices, const glm::vec3& pos, const BlockStateId stateId,
+                          const int x, const int y, const int z, const SubChunkMeshingSnapshot& snapshot) {
     const BlockDef& def = *getMeshBlockInfo(stateId).def;
     const StateTextureIndices& textures = BlockStateRegistry::getStateTextures(stateId);
     const float layer = static_cast<float>(textures.faceTop.firstLayer);
@@ -3169,14 +2650,12 @@ void addTorchTemplateImpl(std::vector<BlockVertex>& vertices,
     uint8_t sunLevel = getResolvedSunlightSC(snapshot, x, y, z);
     uint8_t blockLevel = getResolvedBlockLightSC(snapshot, x, y, z);
     for (int d = 0; d < 6; ++d) {
-        sunLevel = std::max(sunLevel, getResolvedSunlightSC(snapshot,
-            x + kFaceNormals[static_cast<size_t>(d)].x,
-            y + kFaceNormals[static_cast<size_t>(d)].y,
-            z + kFaceNormals[static_cast<size_t>(d)].z));
-        blockLevel = std::max(blockLevel, getResolvedBlockLightSC(snapshot,
-            x + kFaceNormals[static_cast<size_t>(d)].x,
-            y + kFaceNormals[static_cast<size_t>(d)].y,
-            z + kFaceNormals[static_cast<size_t>(d)].z));
+        sunLevel = std::max(sunLevel, getResolvedSunlightSC(snapshot, x + kFaceNormals[static_cast<size_t>(d)].x,
+                                                            y + kFaceNormals[static_cast<size_t>(d)].y,
+                                                            z + kFaceNormals[static_cast<size_t>(d)].z));
+        blockLevel = std::max(blockLevel, getResolvedBlockLightSC(snapshot, x + kFaceNormals[static_cast<size_t>(d)].x,
+                                                                  y + kFaceNormals[static_cast<size_t>(d)].y,
+                                                                  z + kFaceNormals[static_cast<size_t>(d)].z));
     }
     const float sunNorm = lightToNormalized(sunLevel);
     const float blockNorm = lightToNormalized(blockLevel);
@@ -3191,100 +2670,38 @@ void addTorchTemplateImpl(std::vector<BlockVertex>& vertices,
     const TorchModelUvRect kTorchFullUv = makeTorchModelSourceUvRect(0.0f, 0.0f, 16.0f, 16.0f);
 
     if (facingValue == PropIndices::FACING_FLOOR) {
-        emitTorchModelCuboidFaces(vertices,
-                                  pos,
-                                  layer,
-                                  sunNorm,
-                                  blockNorm,
+        emitTorchModelCuboidFaces(vertices, pos, layer, sunNorm, blockNorm,
                                   glm::vec3(kTorchModelCoreMin, 0.0f, kTorchModelCoreMin),
                                   glm::vec3(kTorchModelCoreMax, kTorchModelCoreTop, kTorchModelCoreMax),
-                                  glm::mat4(1.0f),
-                                  true, kTorchTopUv,
-                                  true, kTorchBottomUv,
-                                  false, kTorchFullUv,
-                                  false, kTorchFullUv,
-                                  false, kTorchFullUv,
-                                  false, kTorchFullUv,
-                                  def.derivativeMaterialId);
-        emitTorchModelCuboidFaces(vertices,
-                                  pos,
-                                  layer,
-                                  sunNorm,
-                                  blockNorm,
-                                  glm::vec3(kTorchModelCoreMin, 0.0f, 0.0f),
-                                  glm::vec3(kTorchModelCoreMax, 1.0f, 1.0f),
-                                  glm::mat4(1.0f),
-                                  false, kTorchFullUv,
-                                  false, kTorchFullUv,
-                                  false, kTorchFullUv,
-                                  false, kTorchFullUv,
-                                  true, kTorchFullUv,
-                                  true, kTorchFullUv,
-                                  def.derivativeMaterialId);
-        emitTorchModelCuboidFaces(vertices,
-                                  pos,
-                                  layer,
-                                  sunNorm,
-                                  blockNorm,
-                                  glm::vec3(0.0f, 0.0f, kTorchModelCoreMin),
-                                  glm::vec3(1.0f, 1.0f, kTorchModelCoreMax),
-                                  glm::mat4(1.0f),
-                                  false, kTorchFullUv,
-                                  false, kTorchFullUv,
-                                  true, kTorchFullUv,
-                                  true, kTorchFullUv,
-                                  false, kTorchFullUv,
-                                  false, kTorchFullUv,
-                                  def.derivativeMaterialId);
+                                  glm::mat4(1.0f), true, kTorchTopUv, true, kTorchBottomUv, false, kTorchFullUv, false,
+                                  kTorchFullUv, false, kTorchFullUv, false, kTorchFullUv, def.derivativeMaterialId);
+        emitTorchModelCuboidFaces(vertices, pos, layer, sunNorm, blockNorm, glm::vec3(kTorchModelCoreMin, 0.0f, 0.0f),
+                                  glm::vec3(kTorchModelCoreMax, 1.0f, 1.0f), glm::mat4(1.0f), false, kTorchFullUv,
+                                  false, kTorchFullUv, false, kTorchFullUv, false, kTorchFullUv, true, kTorchFullUv,
+                                  true, kTorchFullUv, def.derivativeMaterialId);
+        emitTorchModelCuboidFaces(vertices, pos, layer, sunNorm, blockNorm, glm::vec3(0.0f, 0.0f, kTorchModelCoreMin),
+                                  glm::vec3(1.0f, 1.0f, kTorchModelCoreMax), glm::mat4(1.0f), false, kTorchFullUv,
+                                  false, kTorchFullUv, true, kTorchFullUv, true, kTorchFullUv, false, kTorchFullUv,
+                                  false, kTorchFullUv, def.derivativeMaterialId);
         return;
     }
 
     const glm::mat4 wallTransform = buildWallTorchModelTransform(facingValue);
-    emitTorchModelCuboidFaces(vertices,
-                              pos,
-                              layer,
-                              sunNorm,
-                              blockNorm,
+    emitTorchModelCuboidFaces(vertices, pos, layer, sunNorm, blockNorm,
                               glm::vec3(-1.0f * kTorchModelPixel, 3.5f * kTorchModelPixel, 7.0f * kTorchModelPixel),
-                              glm::vec3( 1.0f * kTorchModelPixel, 13.5f * kTorchModelPixel, 9.0f * kTorchModelPixel),
-                              wallTransform,
-                              true, kTorchTopUv,
-                              true, kTorchBottomUv,
-                              false, kTorchFullUv,
-                              false, kTorchFullUv,
-                              false, kTorchFullUv,
-                              false, kTorchFullUv,
-                              def.derivativeMaterialId);
-    emitTorchModelCuboidFaces(vertices,
-                              pos,
-                              layer,
-                              sunNorm,
-                              blockNorm,
+                              glm::vec3(1.0f * kTorchModelPixel, 13.5f * kTorchModelPixel, 9.0f * kTorchModelPixel),
+                              wallTransform, true, kTorchTopUv, true, kTorchBottomUv, false, kTorchFullUv, false,
+                              kTorchFullUv, false, kTorchFullUv, false, kTorchFullUv, def.derivativeMaterialId);
+    emitTorchModelCuboidFaces(vertices, pos, layer, sunNorm, blockNorm,
                               glm::vec3(-1.0f * kTorchModelPixel, 3.5f * kTorchModelPixel, 0.0f),
-                              glm::vec3( 1.0f * kTorchModelPixel, 19.5f * kTorchModelPixel, 1.0f),
-                              wallTransform,
-                              false, kTorchFullUv,
-                              false, kTorchFullUv,
-                              false, kTorchFullUv,
-                              false, kTorchFullUv,
-                              true, kTorchFullUv,
-                              true, kTorchFullUv,
-                              def.derivativeMaterialId);
-    emitTorchModelCuboidFaces(vertices,
-                              pos,
-                              layer,
-                              sunNorm,
-                              blockNorm,
+                              glm::vec3(1.0f * kTorchModelPixel, 19.5f * kTorchModelPixel, 1.0f), wallTransform, false,
+                              kTorchFullUv, false, kTorchFullUv, false, kTorchFullUv, false, kTorchFullUv, true,
+                              kTorchFullUv, true, kTorchFullUv, def.derivativeMaterialId);
+    emitTorchModelCuboidFaces(vertices, pos, layer, sunNorm, blockNorm,
                               glm::vec3(-8.0f * kTorchModelPixel, 3.5f * kTorchModelPixel, 7.0f * kTorchModelPixel),
-                              glm::vec3( 8.0f * kTorchModelPixel, 19.5f * kTorchModelPixel, 9.0f * kTorchModelPixel),
-                              wallTransform,
-                              false, kTorchFullUv,
-                              false, kTorchFullUv,
-                              true, kTorchFullUv,
-                              true, kTorchFullUv,
-                              false, kTorchFullUv,
-                              false, kTorchFullUv,
-                              def.derivativeMaterialId);
+                              glm::vec3(8.0f * kTorchModelPixel, 19.5f * kTorchModelPixel, 9.0f * kTorchModelPixel),
+                              wallTransform, false, kTorchFullUv, false, kTorchFullUv, true, kTorchFullUv, true,
+                              kTorchFullUv, false, kTorchFullUv, false, kTorchFullUv, def.derivativeMaterialId);
 }
 
 constexpr float kFacePlaneSurfaceOffset = 1.0f / 128.0f;
@@ -3372,62 +2789,33 @@ std::array<glm::vec3, 4> buildFacePlaneCorners(const glm::vec3& pos, const uint1
 }
 
 void requireRedstoneWireMeshProperties() {
-    if (PropIndices::FACING == PropIndices::INVALID ||
-        PropIndices::POWER == PropIndices::INVALID ||
-        PropIndices::NORTH == PropIndices::INVALID ||
-        PropIndices::SOUTH == PropIndices::INVALID ||
-        PropIndices::EAST == PropIndices::INVALID ||
-        PropIndices::WEST == PropIndices::INVALID ||
-        PropIndices::FACING_FLOOR == PropIndices::INVALID ||
-        PropIndices::FACING_CEILING == PropIndices::INVALID ||
-        PropIndices::NORTH_NONE == PropIndices::INVALID ||
-        PropIndices::NORTH_SIDE == PropIndices::INVALID ||
-        PropIndices::SOUTH_NONE == PropIndices::INVALID ||
-        PropIndices::SOUTH_SIDE == PropIndices::INVALID ||
-        PropIndices::EAST_NONE == PropIndices::INVALID ||
-        PropIndices::EAST_SIDE == PropIndices::INVALID ||
-        PropIndices::WEST_NONE == PropIndices::INVALID ||
-        PropIndices::WEST_SIDE == PropIndices::INVALID ||
-        PropIndices::POWER_0 == PropIndices::INVALID ||
-        PropIndices::POWER_1 == PropIndices::INVALID ||
-        PropIndices::POWER_2 == PropIndices::INVALID ||
-        PropIndices::POWER_3 == PropIndices::INVALID ||
-        PropIndices::POWER_4 == PropIndices::INVALID ||
-        PropIndices::POWER_5 == PropIndices::INVALID ||
-        PropIndices::POWER_6 == PropIndices::INVALID ||
-        PropIndices::POWER_7 == PropIndices::INVALID ||
-        PropIndices::POWER_8 == PropIndices::INVALID ||
-        PropIndices::POWER_9 == PropIndices::INVALID ||
-        PropIndices::POWER_10 == PropIndices::INVALID ||
-        PropIndices::POWER_11 == PropIndices::INVALID ||
-        PropIndices::POWER_12 == PropIndices::INVALID ||
-        PropIndices::POWER_13 == PropIndices::INVALID ||
-        PropIndices::POWER_14 == PropIndices::INVALID ||
-        PropIndices::POWER_15 == PropIndices::INVALID) {
+    if (PropIndices::FACING == PropIndices::INVALID || PropIndices::POWER == PropIndices::INVALID ||
+        PropIndices::NORTH == PropIndices::INVALID || PropIndices::SOUTH == PropIndices::INVALID ||
+        PropIndices::EAST == PropIndices::INVALID || PropIndices::WEST == PropIndices::INVALID ||
+        PropIndices::FACING_FLOOR == PropIndices::INVALID || PropIndices::FACING_CEILING == PropIndices::INVALID ||
+        PropIndices::NORTH_NONE == PropIndices::INVALID || PropIndices::NORTH_SIDE == PropIndices::INVALID ||
+        PropIndices::SOUTH_NONE == PropIndices::INVALID || PropIndices::SOUTH_SIDE == PropIndices::INVALID ||
+        PropIndices::EAST_NONE == PropIndices::INVALID || PropIndices::EAST_SIDE == PropIndices::INVALID ||
+        PropIndices::WEST_NONE == PropIndices::INVALID || PropIndices::WEST_SIDE == PropIndices::INVALID ||
+        PropIndices::POWER_0 == PropIndices::INVALID || PropIndices::POWER_1 == PropIndices::INVALID ||
+        PropIndices::POWER_2 == PropIndices::INVALID || PropIndices::POWER_3 == PropIndices::INVALID ||
+        PropIndices::POWER_4 == PropIndices::INVALID || PropIndices::POWER_5 == PropIndices::INVALID ||
+        PropIndices::POWER_6 == PropIndices::INVALID || PropIndices::POWER_7 == PropIndices::INVALID ||
+        PropIndices::POWER_8 == PropIndices::INVALID || PropIndices::POWER_9 == PropIndices::INVALID ||
+        PropIndices::POWER_10 == PropIndices::INVALID || PropIndices::POWER_11 == PropIndices::INVALID ||
+        PropIndices::POWER_12 == PropIndices::INVALID || PropIndices::POWER_13 == PropIndices::INVALID ||
+        PropIndices::POWER_14 == PropIndices::INVALID || PropIndices::POWER_15 == PropIndices::INVALID) {
         failChunkMesher("Redstone wire mesh requires facing, power, and horizontal connection properties");
     }
 }
 
 uint8_t redstonePowerLevel(const BlockStateId stateId) {
     const uint16_t powerValue = BlockStateRegistry::getPropertyIndex(stateId, PropIndices::POWER);
-    static const std::array<uint16_t, 16> kPowerValues = {{
-        PropIndices::POWER_0,
-        PropIndices::POWER_1,
-        PropIndices::POWER_2,
-        PropIndices::POWER_3,
-        PropIndices::POWER_4,
-        PropIndices::POWER_5,
-        PropIndices::POWER_6,
-        PropIndices::POWER_7,
-        PropIndices::POWER_8,
-        PropIndices::POWER_9,
-        PropIndices::POWER_10,
-        PropIndices::POWER_11,
-        PropIndices::POWER_12,
-        PropIndices::POWER_13,
-        PropIndices::POWER_14,
-        PropIndices::POWER_15
-    }};
+    static const std::array<uint16_t, 16> kPowerValues = {
+        {PropIndices::POWER_0, PropIndices::POWER_1, PropIndices::POWER_2, PropIndices::POWER_3, PropIndices::POWER_4,
+         PropIndices::POWER_5, PropIndices::POWER_6, PropIndices::POWER_7, PropIndices::POWER_8, PropIndices::POWER_9,
+         PropIndices::POWER_10, PropIndices::POWER_11, PropIndices::POWER_12, PropIndices::POWER_13,
+         PropIndices::POWER_14, PropIndices::POWER_15}};
 
     for (size_t i = 0; i < kPowerValues.size(); ++i) {
         if (powerValue == kPowerValues[i]) {
@@ -3440,11 +2828,8 @@ uint8_t redstonePowerLevel(const BlockStateId stateId) {
 
 // Returns 0 for "none" and 1 for "side".
 // Throws if the property value is not one of the recognized connection states.
-uint8_t redstoneWireConnectionLevel(const BlockStateId stateId,
-                                     const uint16_t property,
-                                     const uint16_t noneValue,
-                                     const uint16_t sideValue,
-                                     const char* propertyName) {
+uint8_t redstoneWireConnectionLevel(const BlockStateId stateId, const uint16_t property, const uint16_t noneValue,
+                                    const uint16_t sideValue, const char* propertyName) {
     const uint16_t value = BlockStateRegistry::getPropertyIndex(stateId, property);
     if (value == noneValue) {
         return 0;
@@ -3463,12 +2848,7 @@ const AnimatedTextureRef& requireNamedTextureRef(const BlockDef& def, const char
     return it->second;
 }
 
-enum class PlanarWireSegmentDirection : uint8_t {
-    NegativeA,
-    PositiveA,
-    NegativeB,
-    PositiveB
-};
+enum class PlanarWireSegmentDirection : uint8_t { NegativeA, PositiveA, NegativeB, PositiveB };
 
 struct PlanarWireSegmentRect {
     float a0 = 0.0f;
@@ -3477,19 +2857,13 @@ struct PlanarWireSegmentRect {
     float b1 = 1.0f;
 };
 
-PlanarWireSegmentDirection planarWireSegmentDirection(const uint16_t facing,
-                                                      const uint16_t property) {
-    const bool horizontalFace = facing == PropIndices::FACING_FLOOR ||
-                                facing == PropIndices::FACING_CEILING;
+PlanarWireSegmentDirection planarWireSegmentDirection(const uint16_t facing, const uint16_t property) {
+    const bool horizontalFace = facing == PropIndices::FACING_FLOOR || facing == PropIndices::FACING_CEILING;
     if (property == PropIndices::NORTH) {
-        return horizontalFace
-            ? PlanarWireSegmentDirection::NegativeB
-            : PlanarWireSegmentDirection::PositiveB;
+        return horizontalFace ? PlanarWireSegmentDirection::NegativeB : PlanarWireSegmentDirection::PositiveB;
     }
     if (property == PropIndices::SOUTH) {
-        return horizontalFace
-            ? PlanarWireSegmentDirection::PositiveB
-            : PlanarWireSegmentDirection::NegativeB;
+        return horizontalFace ? PlanarWireSegmentDirection::PositiveB : PlanarWireSegmentDirection::NegativeB;
     }
     if (property == PropIndices::EAST) {
         return PlanarWireSegmentDirection::PositiveA;
@@ -3502,26 +2876,19 @@ PlanarWireSegmentDirection planarWireSegmentDirection(const uint16_t facing,
 
 PlanarWireSegmentRect planarWireSegmentRect(const PlanarWireSegmentDirection direction) {
     switch (direction) {
-        case PlanarWireSegmentDirection::NegativeA:
-            return {0.0f, 0.0f, 0.5f, 1.0f};
-        case PlanarWireSegmentDirection::PositiveA:
-            return {0.5f, 0.0f, 1.0f, 1.0f};
-        case PlanarWireSegmentDirection::NegativeB:
-            return {0.0f, 0.0f, 1.0f, 0.5f};
-        case PlanarWireSegmentDirection::PositiveB:
-            return {0.0f, 0.5f, 1.0f, 1.0f};
+    case PlanarWireSegmentDirection::NegativeA: return {0.0f, 0.0f, 0.5f, 1.0f};
+    case PlanarWireSegmentDirection::PositiveA: return {0.5f, 0.0f, 1.0f, 1.0f};
+    case PlanarWireSegmentDirection::NegativeB: return {0.0f, 0.0f, 1.0f, 0.5f};
+    case PlanarWireSegmentDirection::PositiveB: return {0.0f, 0.5f, 1.0f, 1.0f};
     }
     failChunkMesher("Redstone wire segment received an unsupported planar direction");
 }
 
-std::array<glm::vec2, 4> faceWireQuadLocalCoords(const uint16_t facing,
-                                                  const PlanarWireSegmentRect& rect) {
-    if (facing == PropIndices::FACING_FLOOR ||
-        facing == PropIndices::FACING_NORTH) {
+std::array<glm::vec2, 4> faceWireQuadLocalCoords(const uint16_t facing, const PlanarWireSegmentRect& rect) {
+    if (facing == PropIndices::FACING_FLOOR || facing == PropIndices::FACING_NORTH) {
         return {{{rect.a0, rect.b1}, {rect.a1, rect.b1}, {rect.a1, rect.b0}, {rect.a0, rect.b0}}};
     }
-    if (facing == PropIndices::FACING_CEILING ||
-        facing == PropIndices::FACING_SOUTH ||
+    if (facing == PropIndices::FACING_CEILING || facing == PropIndices::FACING_SOUTH ||
         facing == PropIndices::FACING_WEST) {
         return {{{rect.a0, rect.b0}, {rect.a1, rect.b0}, {rect.a1, rect.b1}, {rect.a0, rect.b1}}};
     }
@@ -3531,23 +2898,17 @@ std::array<glm::vec2, 4> faceWireQuadLocalCoords(const uint16_t facing,
     failChunkMesher("Redstone wire segment received an unsupported facing value");
 }
 
-glm::vec2 planarWireSegmentUv(const PlanarWireSegmentDirection direction,
-                              const glm::vec2& local) {
+glm::vec2 planarWireSegmentUv(const PlanarWireSegmentDirection direction, const glm::vec2& local) {
     switch (direction) {
-        case PlanarWireSegmentDirection::NegativeA:
-            return {1.0f - local.y, 0.5f - local.x};
-        case PlanarWireSegmentDirection::PositiveA:
-            return {local.y, local.x - 0.5f};
-        case PlanarWireSegmentDirection::NegativeB:
-            return {local.x, 0.5f - local.y};
-        case PlanarWireSegmentDirection::PositiveB:
-            return {local.x, 1.5f - local.y};
+    case PlanarWireSegmentDirection::NegativeA: return {1.0f - local.y, 0.5f - local.x};
+    case PlanarWireSegmentDirection::PositiveA: return {local.y, local.x - 0.5f};
+    case PlanarWireSegmentDirection::NegativeB: return {local.x, 0.5f - local.y};
+    case PlanarWireSegmentDirection::PositiveB: return {local.x, 1.5f - local.y};
     }
     failChunkMesher("Redstone wire segment received an unsupported planar direction");
 }
 
-std::array<glm::vec2, 4> buildPlanarWireSegmentUv(const uint16_t facing,
-                                                  const uint16_t property) {
+std::array<glm::vec2, 4> buildPlanarWireSegmentUv(const uint16_t facing, const uint16_t property) {
     const PlanarWireSegmentDirection direction = planarWireSegmentDirection(facing, property);
     const PlanarWireSegmentRect rect = planarWireSegmentRect(direction);
     const std::array<glm::vec2, 4> localCoords = faceWireQuadLocalCoords(facing, rect);
@@ -3559,10 +2920,7 @@ std::array<glm::vec2, 4> buildPlanarWireSegmentUv(const uint16_t facing,
     }};
 }
 
-std::array<glm::vec3, 4> buildFloorWireQuad(const glm::vec3& pos,
-                                            const float x0,
-                                            const float z0,
-                                            const float x1,
+std::array<glm::vec3, 4> buildFloorWireQuad(const glm::vec3& pos, const float x0, const float z0, const float x1,
                                             const float z1) {
     const float y = pos.y + kFacePlaneSurfaceOffset;
     return {{{pos.x + x0, y, pos.z + z1},
@@ -3574,12 +2932,8 @@ std::array<glm::vec3, 4> buildFloorWireQuad(const glm::vec3& pos,
 // Builds a wire quad on any attachable face. The first coordinate maps to X on
 // floor/ceiling/north/south faces and to Z on east/west faces. The second
 // coordinate maps to Z on horizontal faces and to Y on wall faces.
-std::array<glm::vec3, 4> buildFaceWireQuad(const glm::vec3& pos,
-                                           const uint16_t facing,
-                                           const float a0,
-                                           const float b0,
-                                           const float a1,
-                                           const float b1) {
+std::array<glm::vec3, 4> buildFaceWireQuad(const glm::vec3& pos, const uint16_t facing, const float a0, const float b0,
+                                           const float a1, const float b1) {
     const float nearMin = kFacePlaneSurfaceOffset;
     const float nearMax = 1.0f - kFacePlaneSurfaceOffset;
 
@@ -3624,52 +2978,30 @@ std::array<glm::vec3, 4> buildFaceWireQuad(const glm::vec3& pos,
     failChunkMesher("Redstone wire quad received an unsupported facing value");
 }
 
-std::array<glm::vec3, 4> buildPlanarWireSegment(const glm::vec3& pos,
-                                                const uint16_t facing,
-                                                const uint16_t property) {
+std::array<glm::vec3, 4> buildPlanarWireSegment(const glm::vec3& pos, const uint16_t facing, const uint16_t property) {
     const PlanarWireSegmentRect rect = planarWireSegmentRect(planarWireSegmentDirection(facing, property));
     return buildFaceWireQuad(pos, facing, rect.a0, rect.b0, rect.a1, rect.b1);
 }
 
-std::array<glm::vec3, 4> buildRotatedFloorWireSegment(const glm::vec3& pos,
-                                                      const uint16_t rotY) {
+std::array<glm::vec3, 4> buildRotatedFloorWireSegment(const glm::vec3& pos, const uint16_t rotY) {
     const float y = kFacePlaneSurfaceOffset;
-    std::array<glm::vec3, 4> corners = {{{0.0f, y, 0.5f},
-                                          {1.0f, y, 0.5f},
-                                          {1.0f, y, 0.0f},
-                                          {0.0f, y, 0.0f}}};
+    std::array<glm::vec3, 4> corners = {{{0.0f, y, 0.5f}, {1.0f, y, 0.5f}, {1.0f, y, 0.0f}, {0.0f, y, 0.0f}}};
     for (glm::vec3& corner : corners) {
         corner = rotatePointY90(corner, rotY) + pos;
     }
     return corners;
 }
 
-std::array<glm::vec2, 4> buildUvRect(const float u0,
-                                     const float v0,
-                                     const float u1,
-                                     const float v1) {
+std::array<glm::vec2, 4> buildUvRect(const float u0, const float v0, const float u1, const float v1) {
     return {{{u0, v0}, {u1, v0}, {u1, v1}, {u0, v1}}};
 }
 
 uint16_t redstonePowerPropertyValue(const uint8_t power) {
-    static const std::array<uint16_t, 16> kPowerValues = {{
-        PropIndices::POWER_0,
-        PropIndices::POWER_1,
-        PropIndices::POWER_2,
-        PropIndices::POWER_3,
-        PropIndices::POWER_4,
-        PropIndices::POWER_5,
-        PropIndices::POWER_6,
-        PropIndices::POWER_7,
-        PropIndices::POWER_8,
-        PropIndices::POWER_9,
-        PropIndices::POWER_10,
-        PropIndices::POWER_11,
-        PropIndices::POWER_12,
-        PropIndices::POWER_13,
-        PropIndices::POWER_14,
-        PropIndices::POWER_15
-    }};
+    static const std::array<uint16_t, 16> kPowerValues = {
+        {PropIndices::POWER_0, PropIndices::POWER_1, PropIndices::POWER_2, PropIndices::POWER_3, PropIndices::POWER_4,
+         PropIndices::POWER_5, PropIndices::POWER_6, PropIndices::POWER_7, PropIndices::POWER_8, PropIndices::POWER_9,
+         PropIndices::POWER_10, PropIndices::POWER_11, PropIndices::POWER_12, PropIndices::POWER_13,
+         PropIndices::POWER_14, PropIndices::POWER_15}};
     if (power >= kPowerValues.size()) {
         failChunkMesher("Wire container mesh received an unsupported power level");
     }
@@ -3716,36 +3048,26 @@ bool hasConnectionBit(const WirePart& part, const uint8_t bit) {
 
 uint16_t northConnectionValueForPart(const WirePart& part) {
     if (part.facing == PropIndices::FACING_FLOOR || part.facing == PropIndices::FACING_CEILING) {
-        return hasConnectionBit(part, WireConnectionBits::AXIS2_NEG)
-            ? PropIndices::NORTH_SIDE
-            : PropIndices::NORTH_NONE;
+        return hasConnectionBit(part, WireConnectionBits::AXIS2_NEG) ? PropIndices::NORTH_SIDE
+                                                                     : PropIndices::NORTH_NONE;
     }
-    return hasConnectionBit(part, WireConnectionBits::AXIS2_POS)
-        ? PropIndices::NORTH_SIDE
-        : PropIndices::NORTH_NONE;
+    return hasConnectionBit(part, WireConnectionBits::AXIS2_POS) ? PropIndices::NORTH_SIDE : PropIndices::NORTH_NONE;
 }
 
 uint16_t southConnectionValueForPart(const WirePart& part) {
     if (part.facing == PropIndices::FACING_FLOOR || part.facing == PropIndices::FACING_CEILING) {
-        return hasConnectionBit(part, WireConnectionBits::AXIS2_POS)
-            ? PropIndices::SOUTH_SIDE
-            : PropIndices::SOUTH_NONE;
+        return hasConnectionBit(part, WireConnectionBits::AXIS2_POS) ? PropIndices::SOUTH_SIDE
+                                                                     : PropIndices::SOUTH_NONE;
     }
-    return hasConnectionBit(part, WireConnectionBits::AXIS2_NEG)
-        ? PropIndices::SOUTH_SIDE
-        : PropIndices::SOUTH_NONE;
+    return hasConnectionBit(part, WireConnectionBits::AXIS2_NEG) ? PropIndices::SOUTH_SIDE : PropIndices::SOUTH_NONE;
 }
 
 uint16_t eastConnectionValueForPart(const WirePart& part) {
-    return hasConnectionBit(part, WireConnectionBits::AXIS1_POS)
-        ? PropIndices::EAST_SIDE
-        : PropIndices::EAST_NONE;
+    return hasConnectionBit(part, WireConnectionBits::AXIS1_POS) ? PropIndices::EAST_SIDE : PropIndices::EAST_NONE;
 }
 
 uint16_t westConnectionValueForPart(const WirePart& part) {
-    return hasConnectionBit(part, WireConnectionBits::AXIS1_NEG)
-        ? PropIndices::WEST_SIDE
-        : PropIndices::WEST_NONE;
+    return hasConnectionBit(part, WireConnectionBits::AXIS1_NEG) ? PropIndices::WEST_SIDE : PropIndices::WEST_NONE;
 }
 
 BlockStateId stateForWirePart(const WirePart& part) {
@@ -3753,21 +3075,16 @@ BlockStateId stateForWirePart(const WirePart& part) {
         failChunkMesher("Wire container mesh received an unsupported wire facing");
     }
     const BlockID blockId = blockIdForWireChannel(part.channelId);
-    return BlockStateRegistry::getState(
-        blockId,
-        std::vector<std::pair<uint16_t, uint16_t>>{
-            {PropIndices::FACING, part.facing},
-            {PropIndices::POWER, redstonePowerPropertyValue(part.power)},
-            {PropIndices::NORTH, northConnectionValueForPart(part)},
-            {PropIndices::SOUTH, southConnectionValueForPart(part)},
-            {PropIndices::EAST, eastConnectionValueForPart(part)},
-            {PropIndices::WEST, westConnectionValueForPart(part)}
-        });
+    return BlockStateRegistry::getState(blockId, std::vector<std::pair<uint16_t, uint16_t>>{
+                                                     {PropIndices::FACING, part.facing},
+                                                     {PropIndices::POWER, redstonePowerPropertyValue(part.power)},
+                                                     {PropIndices::NORTH, northConnectionValueForPart(part)},
+                                                     {PropIndices::SOUTH, southConnectionValueForPart(part)},
+                                                     {PropIndices::EAST, eastConnectionValueForPart(part)},
+                                                     {PropIndices::WEST, westConnectionValueForPart(part)}});
 }
 
-const WireContainerParts* findWireContainerParts(const SubChunkMeshingSnapshot& snapshot,
-                                                 const int x,
-                                                 const int y,
+const WireContainerParts* findWireContainerParts(const SubChunkMeshingSnapshot& snapshot, const int x, const int y,
                                                  const int z) {
     const uint16_t localIndex = static_cast<uint16_t>(scToIndex(x, y, z));
     for (const WireContainerMeshingEntry& entry : snapshot.wireContainers) {
@@ -3824,57 +3141,39 @@ bool ChunkMesher::debugDisableGreedyMeshing() {
     return g_debugDisableGreedyMeshing.load(std::memory_order_relaxed);
 }
 
-void ChunkMeshBuilders::buildCross(ChunkMeshData& meshData,
-                                   const SubChunkMeshingSnapshot& snapshot,
-                                   const BlockStateId stateId,
-                                   const BlockDef& def,
-                                   const int x,
-                                   const int y,
+void ChunkMeshBuilders::buildCross(ChunkMeshData& meshData, const SubChunkMeshingSnapshot& snapshot,
+                                   const BlockStateId stateId, const BlockDef& def, const int x, const int y,
                                    const int z) {
     addCrossedQuadsImpl(cutoutTargetFor(meshData, def),
-                        glm::vec3(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z)),
-                        stateId, def, x, y, z, snapshot);
-    expandBounds(meshData,
-                 glm::vec3(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z)),
+                        glm::vec3(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z)), stateId, def, x,
+                        y, z, snapshot);
+    expandBounds(meshData, glm::vec3(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z)),
                  glm::vec3(static_cast<float>(x + 1), static_cast<float>(y + 1), static_cast<float>(z + 1)));
 }
 
-void ChunkMeshBuilders::buildTorch(ChunkMeshData& meshData,
-                                    const SubChunkMeshingSnapshot& snapshot,
-                                    const BlockStateId stateId,
-                                    const BlockDef& def,
-                                    const int x,
-                                    const int y,
-                                    const int z) {
+void ChunkMeshBuilders::buildTorch(ChunkMeshData& meshData, const SubChunkMeshingSnapshot& snapshot,
+                                   const BlockStateId stateId, const BlockDef& def, const int x, const int y,
+                                   const int z) {
     addTorchTemplateImpl(cutoutTargetFor(meshData, def),
-                      glm::vec3(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z)),
-                      stateId, x, y, z, snapshot);
-    expandBounds(meshData,
-                 glm::vec3(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z)),
+                         glm::vec3(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z)), stateId, x, y,
+                         z, snapshot);
+    expandBounds(meshData, glm::vec3(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z)),
                  glm::vec3(static_cast<float>(x + 1), static_cast<float>(y + 1), static_cast<float>(z + 1)));
 }
 
-void ChunkMeshBuilders::buildWater(ChunkMeshData& meshData,
-                                   const SubChunkMeshingSnapshot& snapshot,
-                                   const BlockStateId stateId,
-                                   const BlockDef& def,
-                                   const int x,
-                                   const int y,
+void ChunkMeshBuilders::buildWater(ChunkMeshData& meshData, const SubChunkMeshingSnapshot& snapshot,
+                                   const BlockStateId stateId, const BlockDef& def, const int x, const int y,
                                    const int z) {
     addWaterFacesImpl(meshData, snapshot, stateId, def, x, y, z);
 }
 
-void ChunkMeshBuilders::buildModelBlock(ChunkMeshData& meshData,
-                                        const SubChunkMeshingSnapshot& snapshot,
-                                        const BlockStateId stateId,
-                                        const BlockDef& def,
-                                        const int x,
-                                        const int y,
+void ChunkMeshBuilders::buildModelBlock(ChunkMeshData& meshData, const SubChunkMeshingSnapshot& snapshot,
+                                        const BlockStateId stateId, const BlockDef& def, const int x, const int y,
                                         const int z) {
     const ModelVariant* variant = BlockStateRegistry::getModelVariant(stateId);
     if (variant == nullptr || variant->model == nullptr) {
         failChunkMesher("Model block is missing a model variant: " +
-                                 BlockRegistry::getNamespacedId(BlockStateRegistry::getBlockId(stateId)).full());
+                        BlockRegistry::getNamespacedId(BlockStateRegistry::getBlockId(stateId)).full());
     }
 
     const CachedModelGeometry& geometry = getCachedModelGeometry(*variant);
@@ -3897,12 +3196,8 @@ void ChunkMeshBuilders::buildModelBlock(ChunkMeshData& meshData,
     }
 }
 
-void ChunkMeshBuilders::buildBlockEntity(ChunkMeshData& meshData,
-                                         const SubChunkMeshingSnapshot& snapshot,
-                                         const BlockStateId stateId,
-                                         const BlockDef& def,
-                                         const int x,
-                                         const int y,
+void ChunkMeshBuilders::buildBlockEntity(ChunkMeshData& meshData, const SubChunkMeshingSnapshot& snapshot,
+                                         const BlockStateId stateId, const BlockDef& def, const int x, const int y,
                                          const int z) {
     static_cast<void>(meshData);
     static_cast<void>(snapshot);
@@ -3913,12 +3208,8 @@ void ChunkMeshBuilders::buildBlockEntity(ChunkMeshData& meshData,
     static_cast<void>(z);
 }
 
-void ChunkMeshBuilders::buildWireContainer(ChunkMeshData& meshData,
-                                           const SubChunkMeshingSnapshot& snapshot,
-                                           const BlockStateId stateId,
-                                           const BlockDef& def,
-                                           const int x,
-                                           const int y,
+void ChunkMeshBuilders::buildWireContainer(ChunkMeshData& meshData, const SubChunkMeshingSnapshot& snapshot,
+                                           const BlockStateId stateId, const BlockDef& def, const int x, const int y,
                                            const int z) {
     static_cast<void>(stateId);
     static_cast<void>(def);
@@ -3935,12 +3226,8 @@ void ChunkMeshBuilders::buildWireContainer(ChunkMeshData& meshData,
     });
 }
 
-void ChunkMeshBuilders::buildFacePlane(ChunkMeshData& meshData,
-                                       const SubChunkMeshingSnapshot& snapshot,
-                                       const BlockStateId stateId,
-                                       const BlockDef& def,
-                                       const int x,
-                                       const int y,
+void ChunkMeshBuilders::buildFacePlane(ChunkMeshData& meshData, const SubChunkMeshingSnapshot& snapshot,
+                                       const BlockStateId stateId, const BlockDef& def, const int x, const int y,
                                        const int z) {
     const uint16_t facing = requireFacePlaneFacing(stateId);
     const int face = facePlaneRenderFace(facing);
@@ -3953,12 +3240,8 @@ void ChunkMeshBuilders::buildFacePlane(ChunkMeshData& meshData,
     expandBoundsForCorners(meshData, corners);
 }
 
-void ChunkMeshBuilders::buildRedstoneWire(ChunkMeshData& meshData,
-                                          const SubChunkMeshingSnapshot& snapshot,
-                                          const BlockStateId stateId,
-                                          const BlockDef& def,
-                                          const int x,
-                                          const int y,
+void ChunkMeshBuilders::buildRedstoneWire(ChunkMeshData& meshData, const SubChunkMeshingSnapshot& snapshot,
+                                          const BlockStateId stateId, const BlockDef& def, const int x, const int y,
                                           const int z) {
     requireRedstoneWireMeshProperties();
 
@@ -3968,26 +3251,14 @@ void ChunkMeshBuilders::buildRedstoneWire(ChunkMeshData& meshData,
     }
 
     // Connection level per horizontal direction: 0 = none, 1 = side.
-    const uint8_t north = redstoneWireConnectionLevel(stateId,
-                                                       PropIndices::NORTH,
-                                                        PropIndices::NORTH_NONE,
-                                                        PropIndices::NORTH_SIDE,
-                                                        "north");
-    const uint8_t south = redstoneWireConnectionLevel(stateId,
-                                                       PropIndices::SOUTH,
-                                                        PropIndices::SOUTH_NONE,
-                                                        PropIndices::SOUTH_SIDE,
-                                                        "south");
-    const uint8_t east = redstoneWireConnectionLevel(stateId,
-                                                      PropIndices::EAST,
-                                                      PropIndices::EAST_NONE,
-                                                      PropIndices::EAST_SIDE,
-                                                      "east");
-    const uint8_t west = redstoneWireConnectionLevel(stateId,
-                                                      PropIndices::WEST,
-                                                      PropIndices::WEST_NONE,
-                                                      PropIndices::WEST_SIDE,
-                                                      "west");
+    const uint8_t north = redstoneWireConnectionLevel(stateId, PropIndices::NORTH, PropIndices::NORTH_NONE,
+                                                      PropIndices::NORTH_SIDE, "north");
+    const uint8_t south = redstoneWireConnectionLevel(stateId, PropIndices::SOUTH, PropIndices::SOUTH_NONE,
+                                                      PropIndices::SOUTH_SIDE, "south");
+    const uint8_t east =
+        redstoneWireConnectionLevel(stateId, PropIndices::EAST, PropIndices::EAST_NONE, PropIndices::EAST_SIDE, "east");
+    const uint8_t west =
+        redstoneWireConnectionLevel(stateId, PropIndices::WEST, PropIndices::WEST_NONE, PropIndices::WEST_SIDE, "west");
     const bool isolated = north == 0 && south == 0 && east == 0 && west == 0;
     const uint8_t power = redstonePowerLevel(stateId);
 
@@ -4006,37 +3277,28 @@ void ChunkMeshBuilders::buildRedstoneWire(ChunkMeshData& meshData,
         return renderData;
     };
 
-    auto emitWireQuad = [&](const AnimatedTextureRef& texture,
-                            const std::array<glm::vec3, 4>& corners,
-                            const std::array<glm::vec2, 4>& uv,
-                            const int face) {
+    auto emitWireQuad = [&](const AnimatedTextureRef& texture, const std::array<glm::vec3, 4>& corners,
+                            const std::array<glm::vec2, 4>& uv, const int face) {
         const FaceRenderData renderData = renderDataFor(texture, face);
         appendFaceVertices(target, corners, uv, face, renderData);
         expandBoundsForCorners(meshData, corners);
     };
 
-    auto emitFloorWireQuad = [&](const AnimatedTextureRef& texture,
-                                 const std::array<glm::vec3, 4>& corners,
+    auto emitFloorWireQuad = [&](const AnimatedTextureRef& texture, const std::array<glm::vec3, 4>& corners,
                                  const std::array<glm::vec2, 4>& uv) {
         emitWireQuad(texture, corners, uv, FACE_TOP);
     };
 
     if (facing != PropIndices::FACING_FLOOR) {
         const int face = facePlaneRenderFace(facing);
-        const auto emitPlanarSegment = [&](const AnimatedTextureRef& texture,
-                                           const uint16_t property) {
-            emitWireQuad(
-                texture,
-                buildPlanarWireSegment(blockOffset, facing, property),
-                buildPlanarWireSegmentUv(facing, property),
-                face);
+        const auto emitPlanarSegment = [&](const AnimatedTextureRef& texture, const uint16_t property) {
+            emitWireQuad(texture, buildPlanarWireSegment(blockOffset, facing, property),
+                         buildPlanarWireSegmentUv(facing, property), face);
         };
 
         if (isolated) {
-            emitWireQuad(dotTexture,
-                         buildFaceWireQuad(blockOffset, facing, 0.0f, 0.0f, 1.0f, 1.0f),
-                         buildUvRect(0.0f, 0.0f, 1.0f, 1.0f),
-                         face);
+            emitWireQuad(dotTexture, buildFaceWireQuad(blockOffset, facing, 0.0f, 0.0f, 1.0f, 1.0f),
+                         buildUvRect(0.0f, 0.0f, 1.0f, 1.0f), face);
             return;
         }
         if (north >= 1) {
@@ -4055,53 +3317,37 @@ void ChunkMeshBuilders::buildRedstoneWire(ChunkMeshData& meshData,
     }
 
     if (isolated) {
-        emitFloorWireQuad(dotTexture,
-                          buildFloorWireQuad(blockOffset, 0.0f, 0.0f, 1.0f, 1.0f),
+        emitFloorWireQuad(dotTexture, buildFloorWireQuad(blockOffset, 0.0f, 0.0f, 1.0f, 1.0f),
                           buildUvRect(0.0f, 0.0f, 1.0f, 1.0f));
         return;
     }
 
     // Flat floor segments for side connections.
     if (north >= 1) {
-        emitFloorWireQuad(lineTexture,
-                          buildFloorWireQuad(blockOffset, 0.0f, 0.0f, 1.0f, 0.5f),
+        emitFloorWireQuad(lineTexture, buildFloorWireQuad(blockOffset, 0.0f, 0.0f, 1.0f, 0.5f),
                           buildUvRect(0.0f, 0.0f, 1.0f, 0.5f));
     }
     if (south >= 1) {
-        emitFloorWireQuad(lineTexture,
-                          buildFloorWireQuad(blockOffset, 0.0f, 0.5f, 1.0f, 1.0f),
+        emitFloorWireQuad(lineTexture, buildFloorWireQuad(blockOffset, 0.0f, 0.5f, 1.0f, 1.0f),
                           buildUvRect(0.0f, 0.5f, 1.0f, 1.0f));
     }
     if (east >= 1) {
-        emitFloorWireQuad(lineTexture,
-                          buildRotatedFloorWireSegment(blockOffset, 90),
+        emitFloorWireQuad(lineTexture, buildRotatedFloorWireSegment(blockOffset, 90),
                           buildUvRect(0.0f, 0.0f, 1.0f, 0.5f));
     }
     if (west >= 1) {
-        emitFloorWireQuad(lineTexture,
-                          buildRotatedFloorWireSegment(blockOffset, 270),
+        emitFloorWireQuad(lineTexture, buildRotatedFloorWireSegment(blockOffset, 270),
                           buildUvRect(0.0f, 0.0f, 1.0f, 0.5f));
     }
-
 }
 
-void buildWaterSkippingTop(ChunkMeshData& meshData,
-                           const SubChunkMeshingSnapshot& snapshot,
-                           const BlockStateId stateId,
-                           const BlockDef& def,
-                           const int x,
-                           const int y,
-                           const int z,
-                           const bool skipTopFace) {
+void buildWaterSkippingTop(ChunkMeshData& meshData, const SubChunkMeshingSnapshot& snapshot, const BlockStateId stateId,
+                           const BlockDef& def, const int x, const int y, const int z, const bool skipTopFace) {
     addWaterFacesImpl(meshData, snapshot, stateId, def, x, y, z, skipTopFace);
 }
 
-void ChunkMeshBuilders::buildUnitFaces(ChunkMeshData& meshData,
-                                       const SubChunkMeshingSnapshot& snapshot,
-                                       const BlockStateId stateId,
-                                       const BlockDef& def,
-                                       const int x,
-                                       const int y,
+void ChunkMeshBuilders::buildUnitFaces(ChunkMeshData& meshData, const SubChunkMeshingSnapshot& snapshot,
+                                       const BlockStateId stateId, const BlockDef& def, const int x, const int y,
                                        const int z) {
     for (int face = 0; face < 6; ++face) {
         const IVec3 normal = kFaceNormals[static_cast<size_t>(face)];
@@ -4114,31 +3360,23 @@ void ChunkMeshBuilders::buildUnitFaces(ChunkMeshData& meshData,
         }
 
         auto& target = def.renderLayer == BlockRenderLayer::Transparent
-            ? (usesWaterRendering(def) ? meshData.waterVertices : meshData.transparentVertices)
-            : (def.renderLayer == BlockRenderLayer::Cutout
-                ? cutoutTargetFor(meshData, def)
-                : meshData.opaqueVertices);
+                           ? (usesWaterRendering(def) ? meshData.waterVertices : meshData.transparentVertices)
+                           : (def.renderLayer == BlockRenderLayer::Cutout ? cutoutTargetFor(meshData, def)
+                                                                          : meshData.opaqueVertices);
         FaceRenderData renderData = buildFaceRenderData(snapshot, stateId, def, x, y, z, face);
-        emitUnitFace(target,
-                     glm::vec3(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z)),
-                     face, renderData);
-        expandBounds(meshData,
-                     glm::vec3(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z)),
+        emitUnitFace(target, glm::vec3(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z)), face,
+                     renderData);
+        expandBounds(meshData, glm::vec3(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z)),
                      glm::vec3(static_cast<float>(x + 1), static_cast<float>(y + 1), static_cast<float>(z + 1)));
     }
 }
 
-
 // ======================== Public API: Per-sub-chunk ========================
 
-SubChunkMeshingSnapshotPtr ChunkMesher::captureSubChunkSnapshot(
-    const Chunk& chunk,
-    const int scy,
-    const Chunk* neighborPosX,
-    const Chunk* neighborNegX,
-    const Chunk* neighborPosZ,
-    const Chunk* neighborNegZ,
-    const IWorldView* worldView) {
+SubChunkMeshingSnapshotPtr ChunkMesher::captureSubChunkSnapshot(const Chunk& chunk, const int scy,
+                                                                const Chunk* neighborPosX, const Chunk* neighborNegX,
+                                                                const Chunk* neighborPosZ, const Chunk* neighborNegZ,
+                                                                const IWorldView* worldView) {
     auto snapshot = std::make_shared<SubChunkMeshingSnapshot>();
     snapshot->scy = scy;
     snapshot->yBase = scy * SubChunk::SIZE;
@@ -4153,7 +3391,8 @@ SubChunkMeshingSnapshotPtr ChunkMesher::captureSubChunkSnapshot(
     if (!sc) {
         // All-air sub-chunk — blocks and lightMap default to 0
         // Still capture borders for completeness
-        captureSubChunkBorders(chunk, scy, *snapshot, neighborPosX, neighborNegX, neighborPosZ, neighborNegZ, worldView);
+        captureSubChunkBorders(chunk, scy, *snapshot, neighborPosX, neighborNegX, neighborPosZ, neighborNegZ,
+                               worldView);
         captureSubChunkHalo(chunk, scy, *snapshot, neighborPosX, neighborNegX, neighborPosZ, neighborNegZ, worldView);
         captureWireContainerParts(worldView, *snapshot);
         return snapshot;
@@ -4188,14 +3427,10 @@ SubChunkMeshingSnapshotPtr ChunkMesher::captureSubChunkSnapshot(
     return snapshot;
 }
 
-SubChunkMeshingSnapshotPtr ChunkMesher::captureSubChunkSnapshot(
-    const Chunk& chunk,
-    const int scy,
-    const IWorldView* worldView) {
-    return captureSubChunkSnapshot(chunk, scy,
-                                   chunk.neighbors[0], chunk.neighbors[1],
-                                   chunk.neighbors[2], chunk.neighbors[3],
-                                   worldView);
+SubChunkMeshingSnapshotPtr ChunkMesher::captureSubChunkSnapshot(const Chunk& chunk, const int scy,
+                                                                const IWorldView* worldView) {
+    return captureSubChunkSnapshot(chunk, scy, chunk.neighbors[0], chunk.neighbors[1], chunk.neighbors[2],
+                                   chunk.neighbors[3], worldView);
 }
 
 ChunkMeshData ChunkMesher::buildSubChunkMeshData(const SubChunkMeshingSnapshot& snapshot) {
@@ -4244,13 +3479,7 @@ void ChunkMesher::buildSubChunkMeshData(const SubChunkMeshingSnapshot& snapshot,
                                 builder = &ChunkMeshBuilders::buildUnitFaces;
                             }
                             if (FluidState::isWater(stateId)) {
-                                buildWaterSkippingTop(meshData,
-                                                      snapshot,
-                                                      stateId,
-                                                      def,
-                                                      x,
-                                                      y,
-                                                      z,
+                                buildWaterSkippingTop(meshData, snapshot, stateId, def, x, y, z,
                                                       mergedWaterTopFaces[index]);
                             } else {
                                 builder(meshData, snapshot, stateId, def, x, y, z);
@@ -4264,13 +3493,7 @@ void ChunkMesher::buildSubChunkMeshData(const SubChunkMeshingSnapshot& snapshot,
                         // Pure water in the block layer is already handled by the water builder above.
                         if (FluidState::decode(stateId).kind == FluidKind::None) {
                             const BlockDef& fluidDef = *getMeshBlockInfo(fluidState).def;
-                            buildWaterSkippingTop(meshData,
-                                                  snapshot,
-                                                  fluidState,
-                                                  fluidDef,
-                                                  x,
-                                                  y,
-                                                  z,
+                            buildWaterSkippingTop(meshData, snapshot, fluidState, fluidDef, x, y, z,
                                                   mergedWaterTopFaces[index]);
                         }
                     }
@@ -4280,7 +3503,8 @@ void ChunkMesher::buildSubChunkMeshData(const SubChunkMeshingSnapshot& snapshot,
     }
 
     meshData.opaqueVertexCount = static_cast<uint32_t>(meshData.opaqueVertices.size());
-    meshData.buildTimeMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - startTime).count();
+    meshData.buildTimeMs =
+        std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - startTime).count();
 }
 
 bool ChunkMesher::shouldSkipSubChunk(const Chunk& chunk, const int scy) {

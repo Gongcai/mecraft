@@ -16,7 +16,7 @@ class Inventory;
 namespace ecs {
 class GameplayRegistry;
 class GameplayServices;
-}
+} // namespace ecs
 
 struct DropEntity {
     std::size_t id = 0;
@@ -53,8 +53,8 @@ public:
     void restoreDrops(const std::vector<DropEntity>& drops);
 
 private:
-    ecs::GameplayRegistry*      m_registry = nullptr;
-    ecs::GameplayServices*     m_services = nullptr;
+    ecs::GameplayRegistry* m_registry = nullptr;
+    ecs::GameplayServices* m_services = nullptr;
     mutable std::vector<DropEntity> m_dropCache;
 };
 

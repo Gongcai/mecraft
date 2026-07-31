@@ -5,8 +5,7 @@
 
 namespace ecs {
 
-entt::entity MobModelFactory::createHumanoidMob(GameplayRegistry& registry,
-                                                const glm::vec3& worldPosition,
+entt::entity MobModelFactory::createHumanoidMob(GameplayRegistry& registry, const glm::vec3& worldPosition,
                                                 const bool gameplayControlled) {
     auto& reg = registry.registry();
 
@@ -41,10 +40,7 @@ entt::entity MobModelFactory::createHumanoidMob(GameplayRegistry& registry,
     // ── Torso ──
     auto torso = reg.create();
     reg.emplace<StevePartComponent>(torso, StevePartType::Torso);
-    reg.emplace<LocalTransformComponent>(torso,
-        glm::vec3(0.0f, 1.125f, 0.0f),
-        glm::vec3(0.0f),
-        glm::vec3(1.0f));
+    reg.emplace<LocalTransformComponent>(torso, glm::vec3(0.0f, 1.125f, 0.0f), glm::vec3(0.0f), glm::vec3(1.0f));
     reg.emplace<WorldTransformComponent>(torso);
     reg.emplace<ParentComponent>(torso, root);
     auto& torsoChildren = reg.emplace<ChildrenComponent>(torso);
@@ -53,10 +49,7 @@ entt::entity MobModelFactory::createHumanoidMob(GameplayRegistry& registry,
     // ── Head ──
     auto head = reg.create();
     reg.emplace<StevePartComponent>(head, StevePartType::Head);
-    reg.emplace<LocalTransformComponent>(head,
-        glm::vec3(0.0f, 0.375f, 0.0f),
-        glm::vec3(0.0f),
-        glm::vec3(1.0f));
+    reg.emplace<LocalTransformComponent>(head, glm::vec3(0.0f, 0.375f, 0.0f), glm::vec3(0.0f), glm::vec3(1.0f));
     reg.emplace<WorldTransformComponent>(head);
     reg.emplace<ParentComponent>(head, torso);
     torsoChildren.children.push_back(head);
@@ -64,10 +57,7 @@ entt::entity MobModelFactory::createHumanoidMob(GameplayRegistry& registry,
     // ── Right Arm ──
     auto rightArm = reg.create();
     reg.emplace<StevePartComponent>(rightArm, StevePartType::RightArm);
-    reg.emplace<LocalTransformComponent>(rightArm,
-        glm::vec3(-0.3125f, 0.375f, 0.0f),
-        glm::vec3(0.0f),
-        glm::vec3(1.0f));
+    reg.emplace<LocalTransformComponent>(rightArm, glm::vec3(-0.3125f, 0.375f, 0.0f), glm::vec3(0.0f), glm::vec3(1.0f));
     reg.emplace<WorldTransformComponent>(rightArm);
     reg.emplace<ParentComponent>(rightArm, torso);
     torsoChildren.children.push_back(rightArm);
@@ -75,10 +65,7 @@ entt::entity MobModelFactory::createHumanoidMob(GameplayRegistry& registry,
     // ── Left Arm ──
     auto leftArm = reg.create();
     reg.emplace<StevePartComponent>(leftArm, StevePartType::LeftArm);
-    reg.emplace<LocalTransformComponent>(leftArm,
-        glm::vec3(0.3125f, 0.375f, 0.0f),
-        glm::vec3(0.0f),
-        glm::vec3(1.0f));
+    reg.emplace<LocalTransformComponent>(leftArm, glm::vec3(0.3125f, 0.375f, 0.0f), glm::vec3(0.0f), glm::vec3(1.0f));
     reg.emplace<WorldTransformComponent>(leftArm);
     reg.emplace<ParentComponent>(leftArm, torso);
     torsoChildren.children.push_back(leftArm);
@@ -86,10 +73,7 @@ entt::entity MobModelFactory::createHumanoidMob(GameplayRegistry& registry,
     // ── Right Leg ──
     auto rightLeg = reg.create();
     reg.emplace<StevePartComponent>(rightLeg, StevePartType::RightLeg);
-    reg.emplace<LocalTransformComponent>(rightLeg,
-        glm::vec3(-0.125f, -0.375f, 0.0f),
-        glm::vec3(0.0f),
-        glm::vec3(1.0f));
+    reg.emplace<LocalTransformComponent>(rightLeg, glm::vec3(-0.125f, -0.375f, 0.0f), glm::vec3(0.0f), glm::vec3(1.0f));
     reg.emplace<WorldTransformComponent>(rightLeg);
     reg.emplace<ParentComponent>(rightLeg, torso);
     torsoChildren.children.push_back(rightLeg);
@@ -97,10 +81,7 @@ entt::entity MobModelFactory::createHumanoidMob(GameplayRegistry& registry,
     // ── Left Leg ──
     auto leftLeg = reg.create();
     reg.emplace<StevePartComponent>(leftLeg, StevePartType::LeftLeg);
-    reg.emplace<LocalTransformComponent>(leftLeg,
-        glm::vec3(0.125f, -0.375f, 0.0f),
-        glm::vec3(0.0f),
-        glm::vec3(1.0f));
+    reg.emplace<LocalTransformComponent>(leftLeg, glm::vec3(0.125f, -0.375f, 0.0f), glm::vec3(0.0f), glm::vec3(1.0f));
     reg.emplace<WorldTransformComponent>(leftLeg);
     reg.emplace<ParentComponent>(leftLeg, torso);
     torsoChildren.children.push_back(leftLeg);
@@ -108,8 +89,7 @@ entt::entity MobModelFactory::createHumanoidMob(GameplayRegistry& registry,
     return root;
 }
 
-entt::entity MobModelFactory::createHumanoidMobReplica(GameplayRegistry& registry,
-                                                       const glm::vec3& worldPosition,
+entt::entity MobModelFactory::createHumanoidMobReplica(GameplayRegistry& registry, const glm::vec3& worldPosition,
                                                        const float yaw) {
     const entt::entity root = createHumanoidMob(registry, worldPosition, false);
     if (auto* ai = registry.try_get<MobAIComponent>(root)) {
@@ -118,14 +98,12 @@ entt::entity MobModelFactory::createHumanoidMobReplica(GameplayRegistry& registr
     return root;
 }
 
-entt::entity MobModelFactory::createZombie(GameplayRegistry& registry,
-                                           const glm::vec3& worldPosition,
+entt::entity MobModelFactory::createZombie(GameplayRegistry& registry, const glm::vec3& worldPosition,
                                            const bool gameplayControlled) {
     return createHumanoidMob(registry, worldPosition, gameplayControlled);
 }
 
-entt::entity MobModelFactory::createZombieReplica(GameplayRegistry& registry,
-                                                  const glm::vec3& worldPosition,
+entt::entity MobModelFactory::createZombieReplica(GameplayRegistry& registry, const glm::vec3& worldPosition,
                                                   const float yaw) {
     return createHumanoidMobReplica(registry, worldPosition, yaw);
 }

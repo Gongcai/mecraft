@@ -19,7 +19,8 @@ static void require(bool condition, const char* message) {
 }
 
 static BlockStateId targetState(const uint16_t powerValue) {
-    return BlockStateRegistry::getState(BlockRegistry::requireIdByName("minecraft:target"), PropIndices::POWER, powerValue);
+    return BlockStateRegistry::getState(BlockRegistry::requireIdByName("minecraft:target"), PropIndices::POWER,
+                                        powerValue);
 }
 
 static BlockStateId defaultState(const char* name) {
@@ -43,8 +44,8 @@ static void testAddChunk() {
     cw.addChunk(chunk);
 
     assert(cw.loadedChunkCount() == 1);
-    assert(cw.getActiveChunkRevision() == 2);  // Incremented from 1
-    assert(cw.getBlockContentRevision() == 2);  // Incremented from 1
+    assert(cw.getActiveChunkRevision() == 2); // Incremented from 1
+    assert(cw.getBlockContentRevision() == 2); // Incremented from 1
     assert(cw.getActiveChunks().size() == 1);
     std::printf("[PASS] testAddChunk\n");
 }
@@ -57,16 +58,16 @@ static void testRemoveChunk() {
 
     cw.removeChunk(0, 0);
     assert(cw.loadedChunkCount() == 0);
-    assert(cw.getActiveChunkRevision() == 3);  // Incremented twice (add + remove)
-    assert(cw.getBlockContentRevision() == 3);  // Incremented twice (add + remove)
+    assert(cw.getActiveChunkRevision() == 3); // Incremented twice (add + remove)
+    assert(cw.getBlockContentRevision() == 3); // Incremented twice (add + remove)
     std::printf("[PASS] testRemoveChunk\n");
 }
 
 static void testRemoveNonexistentChunk() {
     client::ClientWorld cw;
-    cw.removeChunk(5, 5);  // Should not crash
-    assert(cw.getActiveChunkRevision() == 1);  // No change
-    assert(cw.getBlockContentRevision() == 1);  // No change
+    cw.removeChunk(5, 5); // Should not crash
+    assert(cw.getActiveChunkRevision() == 1); // No change
+    assert(cw.getBlockContentRevision() == 1); // No change
     std::printf("[PASS] testRemoveNonexistentChunk\n");
 }
 
@@ -95,7 +96,7 @@ static void testIsChunkLoadedForBlock() {
     auto chunk = std::make_shared<Chunk>(0, 0);
     cw.addChunk(chunk);
     assert(cw.isChunkLoadedForBlock(0, 0, 0));
-    assert(cw.isChunkLoadedForBlock(15, 128, 15));  // Same chunk
+    assert(cw.isChunkLoadedForBlock(15, 128, 15)); // Same chunk
 
     // Different chunk (1, 0) should not be loaded
     assert(!cw.isChunkLoadedForBlock(16, 0, 0));
@@ -138,12 +139,9 @@ static void testChunkLoadProgressIncludesMeshingHalo() {
         }
     }
 
-    const client::ClientWorld::ChunkLoadProgress progress =
-        world.getChunkLoadProgress(glm::vec3(0.0f));
-    require(progress.target == 13,
-            "client load target should include the one-chunk meshing halo");
-    require(progress.loaded == progress.target,
-            "client load progress should count every loaded halo chunk");
+    const client::ClientWorld::ChunkLoadProgress progress = world.getChunkLoadProgress(glm::vec3(0.0f));
+    require(progress.target == 13, "client load target should include the one-chunk meshing halo");
+    require(progress.loaded == progress.target, "client load progress should count every loaded halo chunk");
     std::printf("[PASS] testChunkLoadProgressIncludesMeshingHalo\n");
 }
 
@@ -244,7 +242,8 @@ static void testApplyBlockUpdateAcceptsVariableLightPatch() {
 
     cw.applyBlockUpdate(4, 64, 4, defaultState("minecraft:torch"), lightPatch);
 
-    require(cw.getBlockState(4, 64, 4) == defaultState("minecraft:torch"), "block update should still apply the block state");
+    require(cw.getBlockState(4, 64, 4) == defaultState("minecraft:torch"),
+            "block update should still apply the block state");
     require(cw.getBlockContentRevision() == 3, "block updates should bump block content revision");
     require(cw.getPackedLight(6, 64, 4) == 0x0C, "client should apply larger odd-cube light patches");
     std::printf("[PASS] testApplyBlockUpdateAcceptsVariableLightPatch\n");
@@ -260,7 +259,8 @@ static void testApplyBlockUpdatePreservesStateId() {
 
     require(cw.getBlockState(5, 64, 5) == poweredTarget,
             "client block updates should preserve non-default block state ids");
-    require(BlockStateRegistry::getBlockId(cw.getBlockState(5, 64, 5)) == BlockRegistry::requireIdByName("minecraft:target"),
+    require(BlockStateRegistry::getBlockId(cw.getBlockState(5, 64, 5)) ==
+                BlockRegistry::requireIdByName("minecraft:target"),
             "client block updates should keep the state mapped to its block id");
     std::printf("[PASS] testApplyBlockUpdatePreservesStateId\n");
 }
@@ -271,17 +271,15 @@ static void testApplyBlockUpdateAcceptsLightSection() {
     cw.addChunk(chunk);
 
     std::vector<uint8_t> sectionLight(SubChunk::BLOCK_COUNT, 0);
-    const int localIndex =
-        4 +
-        4 * SubChunk::SIZE +
-        4 * SubChunk::SIZE * SubChunk::SIZE;
+    const int localIndex = 4 + 4 * SubChunk::SIZE + 4 * SubChunk::SIZE * SubChunk::SIZE;
     sectionLight[localIndex] = 0x0B;
 
     cw.applyBlockUpdate(0, 64, 0, net::BlockUpdateKind::LightOnly, NULL_BLOCK_STATE, sectionLight);
 
     require(cw.getPackedLight(4, 68, 4) == 0x0B, "client should apply subchunk light section updates");
     require(chunk->getLightRevision() > 0, "subchunk light section updates should bump light revision");
-    require(chunk->isSubChunkDirty(Chunk::toSubChunkIndex(68)), "subchunk light section updates should dirty terrain mesh");
+    require(chunk->isSubChunkDirty(Chunk::toSubChunkIndex(68)),
+            "subchunk light section updates should dirty terrain mesh");
     std::printf("[PASS] testApplyBlockUpdateAcceptsLightSection\n");
 }
 
@@ -295,7 +293,8 @@ static void testApplyBlockUpdateAcceptsFullChunkLightSnapshot() {
 
     cw.applyBlockUpdate(4, 64, 4, defaultState("minecraft:stone"), fullLight);
 
-    require(cw.getBlockState(4, 64, 4) == defaultState("minecraft:stone"), "full light snapshot update should still apply the block state");
+    require(cw.getBlockState(4, 64, 4) == defaultState("minecraft:stone"),
+            "full light snapshot update should still apply the block state");
     require(cw.getPackedLight(15, 127, 15) == 0xF0, "client should apply full chunk light snapshots");
     std::printf("[PASS] testApplyBlockUpdateAcceptsFullChunkLightSnapshot\n");
 }
@@ -313,7 +312,8 @@ static void testApplyBlockUpdateCanBeLightOnly() {
     cw.applyBlockUpdate(0, 0, 0, net::BlockUpdateKind::LightOnly, NULL_BLOCK_STATE, fullLight);
 
     require(cw.getBlockState(4, 64, 4) == defaultState("minecraft:stone"), "light-only updates should not edit blocks");
-    require(cw.getBlockContentRevision() == beforeRevision, "light-only updates should not bump block content revision");
+    require(cw.getBlockContentRevision() == beforeRevision,
+            "light-only updates should not bump block content revision");
     require(cw.getPackedLight(4, 64, 4) == 0x0A, "light-only updates should apply packed light");
     std::printf("[PASS] testApplyBlockUpdateCanBeLightOnly\n");
 }

@@ -19,10 +19,7 @@
 
 namespace ecs {
 
-enum class GameplayPipelineProfile {
-    Client,
-    Server
-};
+enum class GameplayPipelineProfile { Client, Server };
 
 struct GameplayPipelineHooks {
     std::function<void(SystemContext&)> afterDamageSystem;
@@ -30,48 +27,36 @@ struct GameplayPipelineHooks {
 
 class GameplayPipeline {
 public:
-    enum class FixedUpdateDebugCategory : size_t {
-        State = 0,
-        Drop = 1,
-        Particle = 2,
-        Count = 3
-    };
+    enum class FixedUpdateDebugCategory : size_t { State = 0, Drop = 1, Particle = 2, Count = 3 };
 
 #ifdef MECRAFT_DEBUG
     struct FixedUpdateProfile {
         std::array<double, static_cast<size_t>(FixedUpdateDebugCategory::Count)> categoryMs{};
 
-        [[nodiscard]] double stateMs() const { return categoryMs[static_cast<size_t>(FixedUpdateDebugCategory::State)]; }
+        [[nodiscard]] double stateMs() const {
+            return categoryMs[static_cast<size_t>(FixedUpdateDebugCategory::State)];
+        }
         [[nodiscard]] double dropMs() const { return categoryMs[static_cast<size_t>(FixedUpdateDebugCategory::Drop)]; }
-        [[nodiscard]] double particleMs() const { return categoryMs[static_cast<size_t>(FixedUpdateDebugCategory::Particle)]; }
+        [[nodiscard]] double particleMs() const {
+            return categoryMs[static_cast<size_t>(FixedUpdateDebugCategory::Particle)];
+        }
     };
 #endif
 
     explicit GameplayPipeline(GameplayPipelineProfile profile);
 
-    void runFixedUpdate(GameplayRegistry& registry,
-                        GameplayServices& services,
-                        float dt,
-                        uint64_t tickIndex = 0,
+    void runFixedUpdate(GameplayRegistry& registry, GameplayServices& services, float dt, uint64_t tickIndex = 0,
                         const GameplayPipelineHooks* hooks = nullptr);
 
 #ifdef MECRAFT_DEBUG
-    [[nodiscard]] FixedUpdateProfile runFixedUpdateProfiled(GameplayRegistry& registry,
-                                                            GameplayServices& services,
-                                                            float dt,
-                                                            uint64_t tickIndex = 0);
+    [[nodiscard]] FixedUpdateProfile runFixedUpdateProfiled(GameplayRegistry& registry, GameplayServices& services,
+                                                            float dt, uint64_t tickIndex = 0);
 #endif
 
-    void runOneTick(GameplayRegistry& registry,
-                    GameplayServices& services,
-                    float dt,
-                    uint64_t tickIndex);
+    void runOneTick(GameplayRegistry& registry, GameplayServices& services, float dt, uint64_t tickIndex);
 
 private:
-    enum class PostSystemHook : uint8_t {
-        None,
-        AfterDamageSystem
-    };
+    enum class PostSystemHook : uint8_t { None, AfterDamageSystem };
 
     struct FixedSystemEntry {
         std::unique_ptr<ISystem> system;
@@ -100,16 +85,14 @@ private:
 
     template <typename Tuple, std::size_t... Is>
     std::vector<uint32_t> getComponentHashesImpl(std::index_sequence<Is...>) {
-        return { entt::type_hash<std::tuple_element_t<Is, Tuple>>::value()... };
+        return {entt::type_hash<std::tuple_element_t<Is, Tuple>>::value()...};
     }
 
-    template <typename Tuple>
-    std::vector<uint32_t> getComponentHashes() {
+    template <typename Tuple> std::vector<uint32_t> getComponentHashes() {
         return getComponentHashesImpl<Tuple>(std::make_index_sequence<std::tuple_size_v<Tuple>>{});
     }
 
-    template <typename TSystem>
-    void registerSystemDep() {
+    template <typename TSystem> void registerSystemDep() {
         SystemDepInfo info;
         info.systemName = entt::type_name<TSystem>::value();
         info.required = getComponentHashes<typename TSystem::Dependencies::Required>();
@@ -130,8 +113,7 @@ private:
 #endif
     }
 
-    template <typename TSystem>
-    void addTickSystem() {
+    template <typename TSystem> void addTickSystem() {
         m_tickSystems.push_back(std::make_unique<TSystem>());
 #ifdef MECRAFT_DEBUG
         registerSystemDep<TSystem>();

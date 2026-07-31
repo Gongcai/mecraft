@@ -23,10 +23,8 @@ int main() {
     require(classic64x32.has_value(), "classic 64x32 skin layout id should parse");
     require(ecs::entitySkinLayoutId(*classic64x32) == "minecraft:classic_64x32",
             "classic 64x32 skin layout should keep its canonical id");
-    require(!ecs::tryParseEntitySkinLayoutId("").has_value(),
-            "empty skin layout id should be rejected");
-    require(!ecs::tryParseEntitySkinLayoutId("steve_64x64").has_value(),
-            "short skin layout id should be rejected");
+    require(!ecs::tryParseEntitySkinLayoutId("").has_value(), "empty skin layout id should be rejected");
+    require(!ecs::tryParseEntitySkinLayoutId("steve_64x64").has_value(), "short skin layout id should be rejected");
     require(!ecs::entitySkinLayoutUsesMirroredLeftLimbs(ecs::EntitySkinLayoutKind::Steve64x64),
             "modern 64x64 skins should use explicit left limb UVs");
     require(ecs::entitySkinLayoutUsesMirroredLeftLimbs(ecs::EntitySkinLayoutKind::Classic64x64),

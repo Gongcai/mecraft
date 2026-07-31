@@ -25,7 +25,7 @@ struct FallRollComponent {
 };
 
 struct HealthComponent {
-    int current = 20;   // 0-20 (half-hearts)
+    int current = 20; // 0-20 (half-hearts)
     int max = 20;
 };
 
@@ -34,15 +34,15 @@ struct PlayerModeComponent {
 };
 
 struct ArmorComponent {
-    int current = 0;    // 0-20
+    int current = 0; // 0-20
     int max = 20;
 };
 
 struct FoodComponent {
-    int current = 20;   // 0-20 (half-drumsticks)
+    int current = 20; // 0-20 (half-drumsticks)
     int max = 20;
     int saturation = 5;
-    double lastHungerTick = 0.0;  // last game-time (seconds) when hunger was depleted
+    double lastHungerTick = 0.0; // last game-time (seconds) when hunger was depleted
 };
 
 struct HurtEffectComponent {

@@ -27,9 +27,7 @@ struct DropTableComponent {
 
     DropTableComponent() = default;
     DropTableComponent(const ItemID itemId, const uint32_t minCount = 1, const uint32_t maxCount = 1)
-        : itemId(itemId),
-          minCount(minCount),
-          maxCount(maxCount) {}
+        : itemId(itemId), minCount(minCount), maxCount(maxCount) {}
 };
 
 struct MeleeAttackComponent {
@@ -48,8 +46,7 @@ struct DamageEvent {
 struct LastDamageSourceComponent {
     LastDamageSourceComponent() = default;
     LastDamageSourceComponent(const entt::entity sourceEntity, const uint64_t tick)
-        : source(sourceEntity),
-          tickIndex(tick) {}
+        : source(sourceEntity), tickIndex(tick) {}
 
     entt::entity source = entt::null;
     uint64_t tickIndex = 0;
@@ -57,14 +54,9 @@ struct LastDamageSourceComponent {
 
 struct DeathEffectComponent {
     DeathEffectComponent() = default;
-    DeathEffectComponent(const BlockID particleBlock,
-                         const int particleCount,
-                         std::string soundId,
+    DeathEffectComponent(const BlockID particleBlock, const int particleCount, std::string soundId,
                          const float volume = 1.0f)
-        : particleBlock(particleBlock),
-          particleCount(particleCount),
-          soundId(std::move(soundId)),
-          volume(volume) {}
+        : particleBlock(particleBlock), particleCount(particleCount), soundId(std::move(soundId)), volume(volume) {}
 
     BlockID particleBlock = 0;
     int particleCount = 24;

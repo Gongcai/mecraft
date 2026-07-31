@@ -50,14 +50,9 @@ public:
     /// When useAsyncCompute is true, every stage is declared on the compute
     /// queue and writes its target through storage images so the chain
     /// overlaps the graphics work scheduled after it.
-    [[nodiscard]] RgPassHandle addGraphPasses(
-        RenderGraph& graph,
-        const FrameContext& ctx,
-        const SsaoSettings& ssao,
-        DeferredRenderTargets& targets,
-        const GraphResources& resources,
-        RgPassHandle dependency,
-        bool useAsyncCompute = false);
+    [[nodiscard]] RgPassHandle addGraphPasses(RenderGraph& graph, const FrameContext& ctx, const SsaoSettings& ssao,
+                                              DeferredRenderTargets& targets, const GraphResources& resources,
+                                              RgPassHandle dependency, bool useAsyncCompute = false);
 
 private:
     /// One async-compute mirror of a fragment stage: same bindings plus a
@@ -71,81 +66,53 @@ private:
         RhiBindGroupHandle bindGroup;
         std::array<RhiTextureViewHandle, 5> boundViews = {};
     };
-    bool ensureComputeStage(RhiDevice& rhiDevice,
-                            ComputeStage& stage,
-                            const char* shaderPath,
-                            const char* debugName,
-                            uint32_t sampledCount,
-                            uint32_t pushConstantBytes);
-    bool ensureComputeStageBindGroup(RhiDevice& rhiDevice,
-                                     ComputeStage& stage,
-                                     const RhiTextureViewHandle* views,
-                                     const RhiSamplerHandle* samplers,
-                                     uint32_t sampledCount,
+    bool ensureComputeStage(RhiDevice& rhiDevice, ComputeStage& stage, const char* shaderPath, const char* debugName,
+                            uint32_t sampledCount, uint32_t pushConstantBytes);
+    bool ensureComputeStageBindGroup(RhiDevice& rhiDevice, ComputeStage& stage, const RhiTextureViewHandle* views,
+                                     const RhiSamplerHandle* samplers, uint32_t sampledCount,
                                      RhiTextureViewHandle storageView);
     void destroyComputeStage(ComputeStage& stage);
-    [[nodiscard]] bool recordSsaoBaseCompute(RhiCommandList& commandList,
-                                             const FrameContext& ctx,
-                                             const SsaoSettings& ssao,
-                                             DeferredRenderTargets& targets);
-    [[nodiscard]] bool recordSsaoFilterCompute(RhiCommandList& commandList,
-                                               const FrameContext& ctx,
+    [[nodiscard]] bool recordSsaoBaseCompute(RhiCommandList& commandList, const FrameContext& ctx,
+                                             const SsaoSettings& ssao, DeferredRenderTargets& targets);
+    [[nodiscard]] bool recordSsaoFilterCompute(RhiCommandList& commandList, const FrameContext& ctx,
                                                DeferredRenderTargets& targets);
-    [[nodiscard]] bool recordSsaoUpsampleCompute(RhiCommandList& commandList,
-                                                 const FrameContext& ctx,
-                                                 const SsaoSettings& ssao,
-                                                 DeferredRenderTargets& targets);
-    [[nodiscard]] bool recordSsaoTemporalCompute(RhiCommandList& commandList,
-                                                 const FrameContext& ctx,
-                                                 const SsaoSettings& ssao,
-                                                 DeferredRenderTargets& targets);
-    [[nodiscard]] bool recordSsaoHistoryCopyCompute(
-        RhiCommandList& commandList,
-        const FrameContext& ctx,
-        DeferredRenderTargets& targets);
+    [[nodiscard]] bool recordSsaoUpsampleCompute(RhiCommandList& commandList, const FrameContext& ctx,
+                                                 const SsaoSettings& ssao, DeferredRenderTargets& targets);
+    [[nodiscard]] bool recordSsaoTemporalCompute(RhiCommandList& commandList, const FrameContext& ctx,
+                                                 const SsaoSettings& ssao, DeferredRenderTargets& targets);
+    [[nodiscard]] bool recordSsaoHistoryCopyCompute(RhiCommandList& commandList, const FrameContext& ctx,
+                                                    DeferredRenderTargets& targets);
     ComputeStage m_computeBase;
     ComputeStage m_computeFilter;
     ComputeStage m_computeUpsample;
     ComputeStage m_computeTemporal;
 
-    [[nodiscard]] bool recordSsaoBase(RhiCommandList& commandList,
-                                      const FrameContext& ctx,
-                                      const SsaoSettings& ssao,
+    [[nodiscard]] bool recordSsaoBase(RhiCommandList& commandList, const FrameContext& ctx, const SsaoSettings& ssao,
                                       DeferredRenderTargets& targets);
-    [[nodiscard]] bool recordSsaoFilter(RhiCommandList& commandList,
-                                        const FrameContext& ctx,
+    [[nodiscard]] bool recordSsaoFilter(RhiCommandList& commandList, const FrameContext& ctx,
                                         DeferredRenderTargets& targets);
-    [[nodiscard]] bool recordSsaoUpsample(RhiCommandList& commandList,
-                                          const FrameContext& ctx,
-                                          const SsaoSettings& ssao,
-                                          DeferredRenderTargets& targets);
-    [[nodiscard]] bool recordSsaoTemporal(RhiCommandList& commandList,
-                                          const FrameContext& ctx,
-                                          const SsaoSettings& ssao,
-                                          DeferredRenderTargets& targets);
-    [[nodiscard]] bool recordSsaoHistoryCopy(RhiCommandList& commandList,
-                                             const FrameContext& ctx,
+    [[nodiscard]] bool recordSsaoUpsample(RhiCommandList& commandList, const FrameContext& ctx,
+                                          const SsaoSettings& ssao, DeferredRenderTargets& targets);
+    [[nodiscard]] bool recordSsaoTemporal(RhiCommandList& commandList, const FrameContext& ctx,
+                                          const SsaoSettings& ssao, DeferredRenderTargets& targets);
+    [[nodiscard]] bool recordSsaoHistoryCopy(RhiCommandList& commandList, const FrameContext& ctx,
                                              DeferredRenderTargets& targets);
     bool ensureBaseRhiPipeline(RhiDevice& rhiDevice);
-    bool ensureBaseBindGroup(RhiDevice& rhiDevice,
-                             const std::array<RhiTextureViewHandle, 3>& views);
+    bool ensureBaseBindGroup(RhiDevice& rhiDevice, const std::array<RhiTextureViewHandle, 3>& views);
     bool ensureNoiseTextureView(RhiDevice& rhiDevice);
     void destroyBaseBindGroup();
     void destroyBaseRhiResources();
     void destroyNoiseTextureView();
     bool ensureFilterRhiPipeline(RhiDevice& rhiDevice);
-    bool ensureFilterBindGroup(RhiDevice& rhiDevice,
-                               const std::array<RhiTextureViewHandle, 3>& views);
+    bool ensureFilterBindGroup(RhiDevice& rhiDevice, const std::array<RhiTextureViewHandle, 3>& views);
     void destroyFilterBindGroup();
     void destroyFilterRhiResources();
     bool ensureUpsampleRhiPipeline(RhiDevice& rhiDevice);
-    bool ensureUpsampleBindGroup(RhiDevice& rhiDevice,
-                                 const std::array<RhiTextureViewHandle, 2>& views);
+    bool ensureUpsampleBindGroup(RhiDevice& rhiDevice, const std::array<RhiTextureViewHandle, 2>& views);
     void destroyUpsampleBindGroup();
     void destroyUpsampleRhiResources();
     bool ensureTemporalRhiPipeline(RhiDevice& rhiDevice);
-    bool ensureTemporalBindGroup(RhiDevice& rhiDevice,
-                                 const std::array<RhiTextureViewHandle, 4>& views);
+    bool ensureTemporalBindGroup(RhiDevice& rhiDevice, const std::array<RhiTextureViewHandle, 4>& views);
     void destroyTemporalBindGroup();
     void destroyTemporalRhiResources();
 

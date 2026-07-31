@@ -83,8 +83,8 @@ int main() {
         UIEventResult::Consumed) {
         return fail("pointer down on top-positioned thumb should start drag");
     }
-    if (area.onInput(pointerEvent(UIInputEventType::PointerMove, 96.0f, kThumbCenterScreenYAtTop + kDragDistance), ctx) !=
-        UIEventResult::Consumed) {
+    if (area.onInput(pointerEvent(UIInputEventType::PointerMove, 96.0f, kThumbCenterScreenYAtTop + kDragDistance),
+                     ctx) != UIEventResult::Consumed) {
         return fail("pointer move while dragging should be consumed");
     }
     if (std::fabs(area.getScrollOffset() - kExpectedOffset) > 0.001f) {
@@ -110,8 +110,7 @@ int main() {
     InputHitWidget* inputChildPtr = inputChild.get();
     clippedArea.addChild(std::move(inputChild));
 
-    if (clippedArea.onInput(pointerEvent(UIInputEventType::PointerDown, 10.0f, 90.0f), ctx) !=
-        UIEventResult::Ignored) {
+    if (clippedArea.onInput(pointerEvent(UIInputEventType::PointerDown, 10.0f, 90.0f), ctx) != UIEventResult::Ignored) {
         return fail("input outside scroll viewport should be ignored even when it hits scrolled child bounds");
     }
     if (inputChildPtr->hitCount != 0) {

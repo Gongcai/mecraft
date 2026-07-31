@@ -29,14 +29,11 @@ static_assert(sizeof(PanelGlassPushConstants) == 64u);
     if (context.hasScissor) {
         return context.scissor;
     }
-    return {
-        0,
-        0,
-        static_cast<uint32_t>(std::max(1.0f,
-            std::round(static_cast<float>(context.screenWidth) * context.pixelScale()))),
-        static_cast<uint32_t>(std::max(1.0f,
-            std::round(static_cast<float>(context.screenHeight) * context.pixelScale())))
-    };
+    return {0, 0,
+            static_cast<uint32_t>(
+                std::max(1.0f, std::round(static_cast<float>(context.screenWidth) * context.pixelScale()))),
+            static_cast<uint32_t>(
+                std::max(1.0f, std::round(static_cast<float>(context.screenHeight) * context.pixelScale())))};
 }
 
 Color scaledColor(Color color, float rgbScale, float alphaScale) {
@@ -63,7 +60,9 @@ UIDropdown::UIDropdown() {
     height = 32.0f;
 }
 
-UIDropdown::~UIDropdown() { shutdown(); }
+UIDropdown::~UIDropdown() {
+    shutdown();
+}
 
 void UIDropdown::init(ResourceMgr& resourceMgr) {
     m_expandTween.setImmediate(0.0f);
@@ -120,16 +119,15 @@ void UIDropdown::updateAnimations(float dt) {
 
 void UIDropdown::renderSelf(const UIRenderContext& ctx) const {
     if (ctx.phase == UIRenderPhase::Record &&
-        (ctx.commandList == nullptr ||
-         !ctx.panelQuadVertexBuffer.isValid() ||
-         !ctx.panelSolidPipeline.isValid())) {
+        (ctx.commandList == nullptr || !ctx.panelQuadVertexBuffer.isValid() || !ctx.panelSolidPipeline.isValid())) {
         return;
     }
     renderCollapsed(ctx);
 }
 
 void UIDropdown::renderOverlay(const UIRenderContext& ctx) const {
-    if (!visible) return;
+    if (!visible)
+        return;
 
     if (m_expanded || m_expandTween.isRunning()) {
         renderExpanded(ctx);
@@ -139,8 +137,10 @@ void UIDropdown::renderOverlay(const UIRenderContext& ctx) const {
 }
 
 UIEventResult UIDropdown::onOverlayInput(const UIInputEvent& event, const UIRenderContext& ctx) {
-    if (!visible || !interactive) return UIEventResult::Ignored;
-    if (!m_expanded) return UIWidget::onOverlayInput(event, ctx);
+    if (!visible || !interactive)
+        return UIEventResult::Ignored;
+    if (!m_expanded)
+        return UIWidget::onOverlayInput(event, ctx);
 
     const UIEventResult result = onInput(event, ctx);
     return result == UIEventResult::Ignored ? UIEventResult::Ignored : UIEventResult::Consumed;
@@ -154,10 +154,7 @@ void UIDropdown::renderCollapsed(const UIRenderContext& ctx) const {
         ctx.commandList->setScissor(dropdownScissor(ctx));
     }
 
-    auto drawSolidRect = [&](const float x,
-                             const float y,
-                             const float rectWidth,
-                             const float rectHeight,
+    auto drawSolidRect = [&](const float x, const float y, const float rectWidth, const float rectHeight,
                              const Color& rectColor) {
         if (rectWidth <= 0.0f || rectHeight <= 0.0f || rectColor[3] <= 0.0f) {
             return;
@@ -166,14 +163,11 @@ void UIDropdown::renderCollapsed(const UIRenderContext& ctx) const {
             return;
         }
         const PanelSolidPushConstants pushConstants{
-            glm::vec4(static_cast<float>(ctx.screenWidth),
-                      static_cast<float>(ctx.screenHeight), x, y),
+            glm::vec4(static_cast<float>(ctx.screenWidth), static_cast<float>(ctx.screenHeight), x, y),
             glm::vec4(rectWidth, rectHeight, 0.0f, 0.0f),
-            glm::vec4(rectColor[0], rectColor[1], rectColor[2], rectColor[3])
-        };
+            glm::vec4(rectColor[0], rectColor[1], rectColor[2], rectColor[3])};
         ctx.commandList->pushConstants(&pushConstants, sizeof(pushConstants),
-                                       rhiFlag(RhiShaderStage::Vertex) |
-                                       rhiFlag(RhiShaderStage::Fragment));
+                                       rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment));
         ctx.commandList->draw(6u, 1u, 0u, 0u);
     };
 
@@ -201,10 +195,8 @@ void UIDropdown::renderCollapsed(const UIRenderContext& ctx) const {
     constexpr float borderWidth = 1.0f;
     drawSolidRect(ax, ay + ah - borderWidth, aw, borderWidth, borderCol);
     drawSolidRect(ax, ay, aw, borderWidth, borderCol);
-    drawSolidRect(ax, ay + borderWidth, borderWidth,
-                  ah - borderWidth * 2.0f, borderCol);
-    drawSolidRect(ax + aw - borderWidth, ay + borderWidth, borderWidth,
-                  ah - borderWidth * 2.0f, borderCol);
+    drawSolidRect(ax, ay + borderWidth, borderWidth, ah - borderWidth * 2.0f, borderCol);
+    drawSolidRect(ax + aw - borderWidth, ay + borderWidth, borderWidth, ah - borderWidth * 2.0f, borderCol);
 
     Color wellCol = scaledColor(bgCol, active ? 0.78f : 0.88f, 1.0f);
     wellCol[3] = std::min(1.0f, wellCol[3] * 0.84f);
@@ -215,12 +207,10 @@ void UIDropdown::renderCollapsed(const UIRenderContext& ctx) const {
     const float arrowCenterY = ay + ah * 0.5f;
     constexpr float rowHeight = 1.2f;
     for (int row = 0; row < 4; ++row) {
-        const float rowWidth = m_expanded
-            ? 8.0f - static_cast<float>(row) * 2.0f
-            : 2.0f + static_cast<float>(row) * 2.0f;
+        const float rowWidth =
+            m_expanded ? 8.0f - static_cast<float>(row) * 2.0f : 2.0f + static_cast<float>(row) * 2.0f;
         const float rowY = arrowCenterY - 2.4f + static_cast<float>(row) * rowHeight;
-        drawSolidRect(arrowCenterX - rowWidth * 0.5f, rowY,
-                      rowWidth, rowHeight, arrowCol);
+        drawSolidRect(arrowCenterX - rowWidth * 0.5f, rowY, rowWidth, rowHeight, arrowCol);
     }
 
     // Selected text
@@ -240,9 +230,8 @@ void UIDropdown::renderExpanded(const UIRenderContext& ctx) const {
         return;
     }
     const bool record = ctx.phase == UIRenderPhase::Record;
-    if (record && (ctx.commandList == nullptr ||
-                   !ctx.panelQuadVertexBuffer.isValid() ||
-                   !ctx.panelSolidPipeline.isValid())) {
+    if (record &&
+        (ctx.commandList == nullptr || !ctx.panelQuadVertexBuffer.isValid() || !ctx.panelSolidPipeline.isValid())) {
         return;
     }
 
@@ -255,13 +244,9 @@ void UIDropdown::renderExpanded(const UIRenderContext& ctx) const {
     const Color accentCol = accentFromSelection(selectedCol);
     const Color textCol = resolved.text;
     const float itemHeight = resolved.itemHeight;
-    const bool useGlass = ctx.panelGlassPipeline.isValid() &&
-                          ctx.panelGlassBindGroup.isValid() &&
-                          ctx.backdropBlurView.isValid() &&
-                          ctx.backdropSourceWidth > 0 &&
-                          ctx.backdropSourceHeight > 0 &&
-                          ctx.backdropBlurWidth > 0 &&
-                          ctx.backdropBlurHeight > 0;
+    const bool useGlass = ctx.panelGlassPipeline.isValid() && ctx.panelGlassBindGroup.isValid() &&
+                          ctx.backdropBlurView.isValid() && ctx.backdropSourceWidth > 0 &&
+                          ctx.backdropSourceHeight > 0 && ctx.backdropBlurWidth > 0 && ctx.backdropBlurHeight > 0;
 
     // A restrained per-row wash keeps the popup readable without flattening the glass.
     std::array<float, 4> itemBgCol = bgCol;
@@ -288,20 +273,15 @@ void UIDropdown::renderExpanded(const UIRenderContext& ctx) const {
     if (record && useGlass) {
         const float tintStrength = std::clamp(bgCol[3] * 0.34f, 0.16f, 0.34f);
         const PanelGlassPushConstants pushConstants{
-            glm::vec4(static_cast<float>(ctx.screenWidth),
-                      static_cast<float>(ctx.screenHeight), ax, panelY),
-            glm::vec4(aw, panelH, 0.0f,
-                      std::clamp(alpha * expandAlpha * 0.96f, 0.0f, 1.0f)),
-            glm::vec4(bgCol[0], bgCol[1], bgCol[2], tintStrength),
-            glm::vec4(0.54f, 0.70f, 0.0f, 0.0f)
-        };
+            glm::vec4(static_cast<float>(ctx.screenWidth), static_cast<float>(ctx.screenHeight), ax, panelY),
+            glm::vec4(aw, panelH, 0.0f, std::clamp(alpha * expandAlpha * 0.96f, 0.0f, 1.0f)),
+            glm::vec4(bgCol[0], bgCol[1], bgCol[2], tintStrength), glm::vec4(0.54f, 0.70f, 0.0f, 0.0f)};
         ctx.commandList->setGraphicsPipeline(ctx.panelGlassPipeline);
         ctx.commandList->setVertexBuffer(0u, ctx.panelQuadVertexBuffer, 0u);
         ctx.commandList->setBindGroup(0u, ctx.panelGlassBindGroup);
         ctx.commandList->setScissor(scissor);
         ctx.commandList->pushConstants(&pushConstants, sizeof(pushConstants),
-                                       rhiFlag(RhiShaderStage::Vertex) |
-                                       rhiFlag(RhiShaderStage::Fragment));
+                                       rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment));
         ctx.commandList->draw(6u, 1u, 0u, 0u);
     }
 
@@ -311,10 +291,7 @@ void UIDropdown::renderExpanded(const UIRenderContext& ctx) const {
         ctx.commandList->setScissor(scissor);
     }
 
-    auto drawSolidRect = [&](const float x,
-                             const float y,
-                             const float rectWidth,
-                             const float rectHeight,
+    auto drawSolidRect = [&](const float x, const float y, const float rectWidth, const float rectHeight,
                              const Color& rectColor) {
         if (rectWidth <= 0.0f || rectHeight <= 0.0f || rectColor[3] <= 0.0f) {
             return;
@@ -323,14 +300,11 @@ void UIDropdown::renderExpanded(const UIRenderContext& ctx) const {
             return;
         }
         const PanelSolidPushConstants pushConstants{
-            glm::vec4(static_cast<float>(ctx.screenWidth),
-                      static_cast<float>(ctx.screenHeight), x, y),
+            glm::vec4(static_cast<float>(ctx.screenWidth), static_cast<float>(ctx.screenHeight), x, y),
             glm::vec4(rectWidth, rectHeight, 0.0f, 0.0f),
-            glm::vec4(rectColor[0], rectColor[1], rectColor[2], rectColor[3])
-        };
+            glm::vec4(rectColor[0], rectColor[1], rectColor[2], rectColor[3])};
         ctx.commandList->pushConstants(&pushConstants, sizeof(pushConstants),
-                                       rhiFlag(RhiShaderStage::Vertex) |
-                                       rhiFlag(RhiShaderStage::Fragment));
+                                       rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment));
         ctx.commandList->draw(6u, 1u, 0u, 0u);
     };
 
@@ -343,10 +317,8 @@ void UIDropdown::renderExpanded(const UIRenderContext& ctx) const {
     constexpr float borderWidth = 1.0f;
     drawSolidRect(ax, panelY + panelH - borderWidth, aw, borderWidth, panelBorder);
     drawSolidRect(ax, panelY, aw, borderWidth, panelBorder);
-    drawSolidRect(ax, panelY + borderWidth, borderWidth,
-                  panelH - borderWidth * 2.0f, panelBorder);
-    drawSolidRect(ax + aw - borderWidth, panelY + borderWidth, borderWidth,
-                  panelH - borderWidth * 2.0f, panelBorder);
+    drawSolidRect(ax, panelY + borderWidth, borderWidth, panelH - borderWidth * 2.0f, panelBorder);
+    drawSolidRect(ax + aw - borderWidth, panelY + borderWidth, borderWidth, panelH - borderWidth * 2.0f, panelBorder);
 
     // Option items
     const int scrollItems = static_cast<int>(m_scrollOffset / itemHeight);
@@ -366,25 +338,21 @@ void UIDropdown::renderExpanded(const UIRenderContext& ctx) const {
         if (isSelected) {
             Color selected = selectedCol;
             selected[3] *= alpha * expandAlpha;
-            drawSolidRect(ax + 2.0f, itemY + 1.0f,
-                          aw - 4.0f, itemHeight - 2.0f, selected);
+            drawSolidRect(ax + 2.0f, itemY + 1.0f, aw - 4.0f, itemHeight - 2.0f, selected);
         }
 
         // 3. Selected left accent bar
         if (isSelected) {
             Color accent = accentCol;
             accent[3] *= alpha * expandAlpha;
-            drawSolidRect(ax + 2.0f, itemY + 3.0f,
-                          2.0f, itemHeight - 6.0f, accent);
+            drawSolidRect(ax + 2.0f, itemY + 3.0f, 2.0f, itemHeight - 6.0f, accent);
         }
 
         // 4. Hover highlight (on top of selected bg)
         if (isHovered) {
-            Color hover = m_hoverColorTween.isRunning()
-                ? m_hoverColorTween.value() : hoverCol;
+            Color hover = m_hoverColorTween.isRunning() ? m_hoverColorTween.value() : hoverCol;
             hover[3] *= alpha * expandAlpha * (useGlass ? 0.84f : 1.0f);
-            drawSolidRect(ax + 3.0f, itemY + 1.0f,
-                          aw - 6.0f, itemHeight - 2.0f, hover);
+            drawSolidRect(ax + 3.0f, itemY + 1.0f, aw - 6.0f, itemHeight - 2.0f, hover);
         }
 
         // 5. Separator line (not after last visible item)
@@ -461,121 +429,125 @@ bool UIDropdown::hitTestExpandedPanel(float px, float py, const UIRenderContext&
 }
 
 UIEventResult UIDropdown::onInput(const UIInputEvent& event, const UIRenderContext& ctx) {
-    if (!visible || !interactive) return UIEventResult::Ignored;
+    if (!visible || !interactive)
+        return UIEventResult::Ignored;
 
     UIEventResult childResult = UIWidget::onInput(event, ctx);
-    if (childResult == UIEventResult::Consumed) return UIEventResult::Consumed;
+    if (childResult == UIEventResult::Consumed)
+        return UIEventResult::Consumed;
 
     bool insideCollapsed = hitTest(event.x, event.y, ctx);
 
     if (m_expanded) {
         switch (event.type) {
-            case UIInputEventType::PointerMove: {
-                m_hoveredCollapsed = insideCollapsed;
-                int newHovered = hitTestOption(event.x, event.y, ctx);
-                if (newHovered != m_hoveredOption) {
-                    m_prevHoveredOption = m_hoveredOption;
-                    m_hoveredOption = newHovered;
-                    const Color hoverCol = resolveStyle(ctx).itemHover;
-                    if (m_hoveredOption >= 0) {
-                        auto fromCol = (m_prevHoveredOption >= 0) ? hoverCol : std::array<float, 4>{hoverCol[0], hoverCol[1], hoverCol[2], 0.0f};
-                        m_hoverColorTween.start(fromCol, hoverCol, 0.1f, EasingType::EaseOut);
-                    }
+        case UIInputEventType::PointerMove: {
+            m_hoveredCollapsed = insideCollapsed;
+            int newHovered = hitTestOption(event.x, event.y, ctx);
+            if (newHovered != m_hoveredOption) {
+                m_prevHoveredOption = m_hoveredOption;
+                m_hoveredOption = newHovered;
+                const Color hoverCol = resolveStyle(ctx).itemHover;
+                if (m_hoveredOption >= 0) {
+                    auto fromCol = (m_prevHoveredOption >= 0)
+                                       ? hoverCol
+                                       : std::array<float, 4>{hoverCol[0], hoverCol[1], hoverCol[2], 0.0f};
+                    m_hoverColorTween.start(fromCol, hoverCol, 0.1f, EasingType::EaseOut);
                 }
+            }
+            return UIEventResult::Handled;
+        }
+        case UIInputEventType::PointerDown: {
+            if (event.button == UIPointerButton::Primary) {
+                int optIdx = hitTestOption(event.x, event.y, ctx);
+                if (optIdx >= 0) {
+                    m_selectedIndex = optIdx;
+                    m_expanded = false;
+                    m_hoveredCollapsed = false;
+                    m_hoveredOption = -1;
+                    m_scrollOffset = 0.0f;
+                    if (m_onSelectionChanged)
+                        m_onSelectionChanged(m_selectedIndex, m_options[m_selectedIndex]);
+                    return UIEventResult::Consumed;
+                }
+                if (!insideCollapsed) {
+                    m_expanded = false;
+                    m_hoveredCollapsed = false;
+                    m_hoveredOption = -1;
+                    m_scrollOffset = 0.0f;
+                    return UIEventResult::Consumed;
+                }
+            }
+            break;
+        }
+        case UIInputEventType::Scroll: {
+            if (hitTestExpandedPanel(event.x, event.y, ctx) || insideCollapsed) {
+                const float itemHeight = resolveStyle(ctx).itemHeight;
+                int visibleCount = std::min(static_cast<int>(m_options.size()), m_maxVisibleItems);
+                float maxScroll = std::max(0.0f, static_cast<float>(m_options.size() - visibleCount) * itemHeight);
+                m_scrollOffset =
+                    std::clamp(m_scrollOffset - static_cast<float>(event.scrollY) * itemHeight, 0.0f, maxScroll);
                 return UIEventResult::Handled;
             }
-            case UIInputEventType::PointerDown: {
-                if (event.button == UIPointerButton::Primary) {
-                    int optIdx = hitTestOption(event.x, event.y, ctx);
-                    if (optIdx >= 0) {
-                        m_selectedIndex = optIdx;
-                        m_expanded = false;
-                        m_hoveredCollapsed = false;
-                        m_hoveredOption = -1;
-                        m_scrollOffset = 0.0f;
-                        if (m_onSelectionChanged) m_onSelectionChanged(m_selectedIndex, m_options[m_selectedIndex]);
-                        return UIEventResult::Consumed;
-                    }
-                    if (!insideCollapsed) {
-                        m_expanded = false;
-                        m_hoveredCollapsed = false;
-                        m_hoveredOption = -1;
-                        m_scrollOffset = 0.0f;
-                        return UIEventResult::Consumed;
-                    }
-                }
-                break;
+            break;
+        }
+        case UIInputEventType::Command: {
+            if (event.command == UICommand::Cancel) {
+                m_expanded = false;
+                m_hoveredCollapsed = false;
+                m_hoveredOption = -1;
+                m_scrollOffset = 0.0f;
+                return UIEventResult::Consumed;
             }
-            case UIInputEventType::Scroll: {
-                if (hitTestExpandedPanel(event.x, event.y, ctx) || insideCollapsed) {
-                    const float itemHeight = resolveStyle(ctx).itemHeight;
-                    int visibleCount = std::min(static_cast<int>(m_options.size()), m_maxVisibleItems);
-                    float maxScroll = std::max(0.0f, static_cast<float>(m_options.size() - visibleCount) * itemHeight);
-                    m_scrollOffset = std::clamp(m_scrollOffset - static_cast<float>(event.scrollY) * itemHeight,
-                                                0.0f, maxScroll);
-                    return UIEventResult::Handled;
-                }
-                break;
+            if (event.command == UICommand::NavigateUp) {
+                m_hoveredOption = std::max(0, (m_hoveredOption < 0 ? m_selectedIndex : m_hoveredOption) - 1);
+                return UIEventResult::Consumed;
             }
-            case UIInputEventType::Command: {
-                if (event.command == UICommand::Cancel) {
-                    m_expanded = false;
-                    m_hoveredCollapsed = false;
-                    m_hoveredOption = -1;
-                    m_scrollOffset = 0.0f;
-                    return UIEventResult::Consumed;
-                }
-                if (event.command == UICommand::NavigateUp) {
-                    m_hoveredOption = std::max(0, (m_hoveredOption < 0 ? m_selectedIndex : m_hoveredOption) - 1);
-                    return UIEventResult::Consumed;
-                }
-                if (event.command == UICommand::NavigateDown) {
-                    int maxIdx = static_cast<int>(m_options.size()) - 1;
-                    m_hoveredOption = std::min(maxIdx, (m_hoveredOption < 0 ? m_selectedIndex : m_hoveredOption) + 1);
-                    return UIEventResult::Consumed;
-                }
-                if (event.command == UICommand::Activate && m_hoveredOption >= 0) {
-                    m_selectedIndex = m_hoveredOption;
-                    m_expanded = false;
-                    m_hoveredCollapsed = false;
-                    m_hoveredOption = -1;
-                    m_scrollOffset = 0.0f;
-                    if (m_onSelectionChanged) m_onSelectionChanged(m_selectedIndex, m_options[m_selectedIndex]);
-                    return UIEventResult::Consumed;
-                }
-                break;
+            if (event.command == UICommand::NavigateDown) {
+                int maxIdx = static_cast<int>(m_options.size()) - 1;
+                m_hoveredOption = std::min(maxIdx, (m_hoveredOption < 0 ? m_selectedIndex : m_hoveredOption) + 1);
+                return UIEventResult::Consumed;
             }
-            default:
-                break;
+            if (event.command == UICommand::Activate && m_hoveredOption >= 0) {
+                m_selectedIndex = m_hoveredOption;
+                m_expanded = false;
+                m_hoveredCollapsed = false;
+                m_hoveredOption = -1;
+                m_scrollOffset = 0.0f;
+                if (m_onSelectionChanged)
+                    m_onSelectionChanged(m_selectedIndex, m_options[m_selectedIndex]);
+                return UIEventResult::Consumed;
+            }
+            break;
+        }
+        default: break;
         }
         return UIEventResult::Handled;
     }
 
     // Collapsed state
     switch (event.type) {
-        case UIInputEventType::PointerMove: {
-            m_hoveredCollapsed = insideCollapsed;
-            return insideCollapsed ? UIEventResult::Handled : UIEventResult::Ignored;
+    case UIInputEventType::PointerMove: {
+        m_hoveredCollapsed = insideCollapsed;
+        return insideCollapsed ? UIEventResult::Handled : UIEventResult::Ignored;
+    }
+    case UIInputEventType::PointerDown: {
+        if (event.button == UIPointerButton::Primary && insideCollapsed) {
+            m_expanded = true;
+            m_hoveredCollapsed = true;
+            m_hoveredOption = m_selectedIndex;
+            return UIEventResult::Consumed;
         }
-        case UIInputEventType::PointerDown: {
-            if (event.button == UIPointerButton::Primary && insideCollapsed) {
-                m_expanded = true;
-                m_hoveredCollapsed = true;
-                m_hoveredOption = m_selectedIndex;
-                return UIEventResult::Consumed;
-            }
-            break;
+        break;
+    }
+    case UIInputEventType::Command: {
+        if (isFocused() && event.command == UICommand::Activate) {
+            m_expanded = true;
+            m_hoveredOption = m_selectedIndex;
+            return UIEventResult::Consumed;
         }
-        case UIInputEventType::Command: {
-            if (isFocused() && event.command == UICommand::Activate) {
-                m_expanded = true;
-                m_hoveredOption = m_selectedIndex;
-                return UIEventResult::Consumed;
-            }
-            break;
-        }
-        default:
-            break;
+        break;
+    }
+    default: break;
     }
 
     return UIEventResult::Ignored;

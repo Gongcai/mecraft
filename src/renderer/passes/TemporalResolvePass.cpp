@@ -32,21 +32,14 @@ void TemporalResolvePass::shutdown() {
     destroyRhiResources();
 }
 
-RgPassHandle TemporalResolvePass::addGraphPasses(
-    RenderGraph& graph,
-    const FrameContext& ctx,
-    const RenderSettings& settings,
-    DeferredRenderTargets& targets,
-    const GraphResources& resources,
-    const RgPassHandle dependency) {
-    if (!dependency.isValid() || !resources.sceneResolved.isValid() ||
-        !resources.temporalCurrent.isValid() ||
+RgPassHandle TemporalResolvePass::addGraphPasses(RenderGraph& graph, const FrameContext& ctx,
+                                                 const RenderSettings& settings, DeferredRenderTargets& targets,
+                                                 const GraphResources& resources, const RgPassHandle dependency) {
+    if (!dependency.isValid() || !resources.sceneResolved.isValid() || !resources.temporalCurrent.isValid() ||
         !resources.historyPrevious.isValid() || !resources.velocity.isValid() ||
         !resources.historyDepthPrevious.isValid() || !resources.depth.isValid() ||
-        !resources.transparentDepth.isValid() ||
-        !resources.reactiveMask.isValid() ||
-        !resources.transparencyMask.isValid() ||
-        !resources.materialAux.isValid()) {
+        !resources.transparentDepth.isValid() || !resources.reactiveMask.isValid() ||
+        !resources.transparencyMask.isValid() || !resources.materialAux.isValid()) {
         return {};
     }
 
@@ -55,14 +48,11 @@ RgPassHandle TemporalResolvePass::addGraphPasses(
     // Scene color ping-pong: sample the current chain buffer directly and
     // resolve into the other one instead of snapshotting through a copy.
     const int inputIndex = targets.sceneColorIndex();
-    const RgTextureHandle inputTexture = inputIndex == 0
-        ? resources.sceneResolved : resources.temporalCurrent;
-    const RgTextureHandle outputTexture = inputIndex == 0
-        ? resources.temporalCurrent : resources.sceneResolved;
+    const RgTextureHandle inputTexture = inputIndex == 0 ? resources.sceneResolved : resources.temporalCurrent;
+    const RgTextureHandle outputTexture = inputIndex == 0 ? resources.temporalCurrent : resources.sceneResolved;
 
-    RenderGraphPassBuilder resolve = graph.addPass(
-        {"TemporalResolve.Resolve", RgPassType::Graphics,
-         RhiQueueType::Graphics});
+    RenderGraphPassBuilder resolve =
+        graph.addPass({"TemporalResolve.Resolve", RgPassType::Graphics, RhiQueueType::Graphics});
     resolve.dependsOn(dependency)
         .readTexture(inputTexture, RhiResourceState::ShaderRead)
         .readTexture(resources.historyPrevious, RhiResourceState::ShaderRead)
@@ -74,51 +64,36 @@ RgPassHandle TemporalResolvePass::addGraphPasses(
         .readTexture(resources.transparencyMask, RhiResourceState::ShaderRead)
         .readTexture(resources.materialAux, RhiResourceState::ShaderRead)
         .writeTexture(outputTexture, RhiResourceState::RenderTarget)
-        .setExecute([this, frame, frameTargets, settings,
-                     inputIndex](RgPassContext& pass) {
-            return recordResolve(
-                pass.commandList(), *frame, settings, *frameTargets,
-                inputIndex);
+        .setExecute([this, frame, frameTargets, settings, inputIndex](RgPassContext& pass) {
+            return recordResolve(pass.commandList(), *frame, settings, *frameTargets, inputIndex);
         });
     targets.flipSceneColor();
     return resolve.handle();
 }
 
-bool TemporalResolvePass::recordResolve(RhiCommandList& commandList,
-                                        const FrameContext& ctx,
-                                        const RenderSettings& settings,
-                                        DeferredRenderTargets& targets,
+bool TemporalResolvePass::recordResolve(RhiCommandList& commandList, const FrameContext& ctx,
+                                        const RenderSettings& settings, DeferredRenderTargets& targets,
                                         const int inputIndex) {
-    if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr ||
-        inputIndex < 0 || inputIndex > 1) {
+    if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr || inputIndex < 0 || inputIndex > 1) {
         return false;
     }
 
     RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
-    if (!targets.ensureSceneResolvedTextureView(rhiDevice) ||
-        !targets.ensureTemporalCurrentTextureView(rhiDevice) ||
-        !targets.ensureHistorySceneTextureViews(rhiDevice) ||
-        !targets.ensureTaaHistoryDepthTextureViews(rhiDevice) ||
-        !targets.ensureVelocityTextureView(rhiDevice) ||
-        !targets.ensureGBufferTextureViews(rhiDevice) ||
+    if (!targets.ensureSceneResolvedTextureView(rhiDevice) || !targets.ensureTemporalCurrentTextureView(rhiDevice) ||
+        !targets.ensureHistorySceneTextureViews(rhiDevice) || !targets.ensureTaaHistoryDepthTextureViews(rhiDevice) ||
+        !targets.ensureVelocityTextureView(rhiDevice) || !targets.ensureGBufferTextureViews(rhiDevice) ||
         !targets.ensureTransparentCompositeTextureViews(rhiDevice) ||
-        !targets.ensureReactiveMaskTextureView(rhiDevice) ||
-        !targets.ensureTransparencyMaskTextureView(rhiDevice) ||
+        !targets.ensureReactiveMaskTextureView(rhiDevice) || !targets.ensureTransparencyMaskTextureView(rhiDevice) ||
         !ensureRhiPipeline(rhiDevice)) {
         return false;
     }
 
     const int historyPrevIndex = 1 - targets.currentHistoryIndex();
-    if (!ensureRhiBindGroup(rhiDevice,
-                            historyPrevIndex,
-                            targets.sceneColorTextureViewHandle(inputIndex),
-                            targets.historySceneTexturePrevViewHandle(),
-                            targets.taaHistoryDepthTexturePrevViewHandle(),
-                            targets.velocityTextureViewHandle(),
-                            targets.depthTextureViewHandle(),
+    if (!ensureRhiBindGroup(rhiDevice, historyPrevIndex, targets.sceneColorTextureViewHandle(inputIndex),
+                            targets.historySceneTexturePrevViewHandle(), targets.taaHistoryDepthTexturePrevViewHandle(),
+                            targets.velocityTextureViewHandle(), targets.depthTextureViewHandle(),
                             targets.transparentCompositeDepthTextureViewHandle(),
-                            targets.reactiveMaskTextureViewHandle(),
-                            targets.transparencyMaskTextureViewHandle(),
+                            targets.reactiveMaskTextureViewHandle(), targets.transparencyMaskTextureViewHandle(),
                             targets.materialAuxTextureViewHandle())) {
         return false;
     }
@@ -130,12 +105,8 @@ bool TemporalResolvePass::recordResolve(RhiCommandList& commandList,
 
     RhiRenderingInfo renderingInfo;
     renderingInfo.debugName = "TemporalResolve";
-    renderingInfo.renderArea = {
-        0,
-        0,
-        static_cast<uint32_t>(std::max(1, targets.width())),
-        static_cast<uint32_t>(std::max(1, targets.height()))
-    };
+    renderingInfo.renderArea = {0, 0, static_cast<uint32_t>(std::max(1, targets.width())),
+                                static_cast<uint32_t>(std::max(1, targets.height()))};
     renderingInfo.colorAttachments = &colorAttachment;
     renderingInfo.colorAttachmentCount = 1u;
     commandList.beginRendering(renderingInfo);
@@ -147,22 +118,14 @@ bool TemporalResolvePass::recordResolve(RhiCommandList& commandList,
     if (rhiDevice.backend() == RhiBackend::Vulkan) {
         textureJitter.y = -textureJitter.y;
     }
-    const bool projectionJitter = usesTemporalProjectionJitter(
-        settings.upscale.type, settings.taa.enabled);
+    const bool projectionJitter = usesTemporalProjectionJitter(settings.upscale.type, settings.taa.enabled);
     const TemporalResolvePushConstants pushConstants{
-        projectionJitter ? ctx.camera.jitteredInvViewProj : ctx.camera.invViewProj,
-        ctx.previousJitteredViewProj,
-        glm::vec4(static_cast<float>(std::max(1, targets.width())),
-                  static_cast<float>(std::max(1, targets.height())),
-                  textureJitter.x,
-                  textureJitter.y),
-        glm::vec4(ctx.weather.surfaceWetness,
-                  settings.weather.rainLinesEnabled ? 1.0f : 0.0f,
-                  ctx.prevCamera.nearPlane,
-                  ctx.prevCamera.farPlane)
-    };
-    commandList.pushConstants(&pushConstants, sizeof(pushConstants),
-                              rhiFlag(RhiShaderStage::Fragment));
+        projectionJitter ? ctx.camera.jitteredInvViewProj : ctx.camera.invViewProj, ctx.previousJitteredViewProj,
+        glm::vec4(static_cast<float>(std::max(1, targets.width())), static_cast<float>(std::max(1, targets.height())),
+                  textureJitter.x, textureJitter.y),
+        glm::vec4(ctx.weather.surfaceWetness, settings.weather.rainLinesEnabled ? 1.0f : 0.0f, ctx.prevCamera.nearPlane,
+                  ctx.prevCamera.farPlane)};
+    commandList.pushConstants(&pushConstants, sizeof(pushConstants), rhiFlag(RhiShaderStage::Fragment));
     commandList.draw(3u, 1u, 0u, 0u);
     commandList.endRendering();
     return true;
@@ -219,12 +182,8 @@ bool TemporalResolvePass::ensureRhiPipeline(RhiDevice& rhiDevice) {
     RhiBindGroupLayoutDesc bindGroupLayoutDesc;
     bindGroupLayoutDesc.debugName = "TemporalResolve.BindGroupLayout";
     for (uint32_t binding = 0u; binding < 9u; ++binding) {
-        bindGroupLayoutDesc.entries.push_back({
-            binding,
-            RhiBindingType::CombinedTextureSampler,
-            rhiFlag(RhiShaderStage::Fragment),
-            1u
-        });
+        bindGroupLayoutDesc.entries.push_back(
+            {binding, RhiBindingType::CombinedTextureSampler, rhiFlag(RhiShaderStage::Fragment), 1u});
     }
     m_bindGroupLayout = rhiDevice.createBindGroupLayout(bindGroupLayoutDesc);
     if (!m_bindGroupLayout.isValid()) {
@@ -235,8 +194,7 @@ bool TemporalResolvePass::ensureRhiPipeline(RhiDevice& rhiDevice) {
     RhiPipelineLayoutDesc pipelineLayoutDesc;
     pipelineLayoutDesc.debugName = "TemporalResolve.PipelineLayout";
     pipelineLayoutDesc.bindGroupLayouts.push_back(m_bindGroupLayout);
-    pipelineLayoutDesc.pushConstantBytes =
-        static_cast<uint32_t>(sizeof(TemporalResolvePushConstants));
+    pipelineLayoutDesc.pushConstantBytes = static_cast<uint32_t>(sizeof(TemporalResolvePushConstants));
     pipelineLayoutDesc.pushConstantStages = rhiFlag(RhiShaderStage::Fragment);
     m_pipelineLayout = rhiDevice.createPipelineLayout(pipelineLayoutDesc);
     if (!m_pipelineLayout.isValid()) {
@@ -264,34 +222,20 @@ bool TemporalResolvePass::ensureRhiPipeline(RhiDevice& rhiDevice) {
     return true;
 }
 
-bool TemporalResolvePass::ensureRhiBindGroup(RhiDevice& rhiDevice,
-                                             const int historyPrevIndex,
-                                             const RhiTextureViewHandle currentView,
-                                             const RhiTextureViewHandle historyView,
-                                             const RhiTextureViewHandle historyDepthView,
-                                             const RhiTextureViewHandle velocityView,
-                                             const RhiTextureViewHandle depthView,
-                                             const RhiTextureViewHandle transparentDepthView,
-                                             const RhiTextureViewHandle reactiveMaskView,
-                                             const RhiTextureViewHandle transparencyMaskView,
-                                             const RhiTextureViewHandle materialAuxView) {
-    if (!ensureRhiPipeline(rhiDevice) ||
-        historyPrevIndex < 0 ||
-        historyPrevIndex >= 2 ||
-        !currentView.isValid() ||
-        !historyView.isValid() ||
-        !historyDepthView.isValid() ||
-        !velocityView.isValid() ||
-        !depthView.isValid() ||
-        !transparentDepthView.isValid() ||
-        !reactiveMaskView.isValid() ||
-        !transparencyMaskView.isValid() ||
+bool TemporalResolvePass::ensureRhiBindGroup(
+    RhiDevice& rhiDevice, const int historyPrevIndex, const RhiTextureViewHandle currentView,
+    const RhiTextureViewHandle historyView, const RhiTextureViewHandle historyDepthView,
+    const RhiTextureViewHandle velocityView, const RhiTextureViewHandle depthView,
+    const RhiTextureViewHandle transparentDepthView, const RhiTextureViewHandle reactiveMaskView,
+    const RhiTextureViewHandle transparencyMaskView, const RhiTextureViewHandle materialAuxView) {
+    if (!ensureRhiPipeline(rhiDevice) || historyPrevIndex < 0 || historyPrevIndex >= 2 || !currentView.isValid() ||
+        !historyView.isValid() || !historyDepthView.isValid() || !velocityView.isValid() || !depthView.isValid() ||
+        !transparentDepthView.isValid() || !reactiveMaskView.isValid() || !transparencyMaskView.isValid() ||
         !materialAuxView.isValid()) {
         return false;
     }
 
-    if (m_bindGroup[historyPrevIndex].isValid() &&
-        sameTextureView(m_boundCurrentView[historyPrevIndex], currentView) &&
+    if (m_bindGroup[historyPrevIndex].isValid() && sameTextureView(m_boundCurrentView[historyPrevIndex], currentView) &&
         sameTextureView(m_boundHistoryView[historyPrevIndex], historyView) &&
         sameTextureView(m_boundHistoryDepthView[historyPrevIndex], historyDepthView) &&
         sameTextureView(m_boundVelocityView[historyPrevIndex], velocityView) &&
@@ -308,17 +252,9 @@ bool TemporalResolvePass::ensureRhiBindGroup(RhiDevice& rhiDevice,
         m_bindGroup[historyPrevIndex] = {};
     }
 
-    const RhiTextureViewHandle views[9] = {
-        currentView,
-        historyView,
-        historyDepthView,
-        velocityView,
-        depthView,
-        transparentDepthView,
-        reactiveMaskView,
-        transparencyMaskView,
-        materialAuxView
-    };
+    const RhiTextureViewHandle views[9] = {currentView,    historyView,          historyDepthView, velocityView,
+                                           depthView,      transparentDepthView, reactiveMaskView, transparencyMaskView,
+                                           materialAuxView};
 
     RhiBindGroupDesc bindGroupDesc;
     bindGroupDesc.layout = m_bindGroupLayout;

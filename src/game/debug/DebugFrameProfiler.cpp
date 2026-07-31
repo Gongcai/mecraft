@@ -9,15 +9,14 @@ void DebugFrameProfiler::publish(double frameTime) {
     m_timing.currentFixedDropUpdateMs = m_timing.frameFixedDropAccumMs;
     m_timing.currentFixedWorldUpdateMs = m_timing.frameFixedWorldAccumMs;
     m_timing.currentFixedUpdateMs = m_timing.currentFixedInputMs + m_timing.currentFixedStateUpdateMs +
-                                     m_timing.currentFixedParticleUpdateMs + m_timing.currentFixedDropUpdateMs +
-                                     m_timing.currentFixedWorldUpdateMs;
+                                    m_timing.currentFixedParticleUpdateMs + m_timing.currentFixedDropUpdateMs +
+                                    m_timing.currentFixedWorldUpdateMs;
     m_timing.currentAudioMs = m_timing.frameAudioAccumMs;
     m_timing.currentRenderMs = m_timing.frameRenderAccumMs;
     m_timing.currentPollEventsMs = m_timing.framePollEventsAccumMs;
     m_timing.currentAppUpdateDispatchMs = m_timing.frameAppUpdateDispatchAccumMs;
     m_timing.currentAppRenderDispatchMs = m_timing.frameAppRenderDispatchAccumMs;
-    m_timing.currentPresentationAcquireMs =
-        m_timing.framePresentationAcquireAccumMs;
+    m_timing.currentPresentationAcquireMs = m_timing.framePresentationAcquireAccumMs;
     m_timing.currentRenderSnapshotMs = m_timing.frameRenderSnapshotAccumMs;
     m_timing.currentRenderSceneMs = m_timing.frameRenderSceneAccumMs;
     m_timing.currentRenderUiMs = m_timing.frameRenderUiAccumMs;
@@ -58,9 +57,9 @@ void DebugFrameProfiler::publish(double frameTime) {
         return steps > 0.0 ? static_cast<float>(accum / steps) : 0.0f;
     };
 
-    m_timing.fixedUpdateMs = avg(m_timing.fixedInputAccumMs + m_timing.fixedStateAccumMs +
-                                  m_timing.fixedParticleAccumMs + m_timing.fixedDropAccumMs +
-                                  m_timing.fixedWorldAccumMs);
+    m_timing.fixedUpdateMs =
+        avg(m_timing.fixedInputAccumMs + m_timing.fixedStateAccumMs + m_timing.fixedParticleAccumMs +
+            m_timing.fixedDropAccumMs + m_timing.fixedWorldAccumMs);
     m_timing.fixedInputMs = avg(m_timing.fixedInputAccumMs);
     m_timing.fixedStateUpdateMs = avg(m_timing.fixedStateAccumMs);
     m_timing.fixedParticleUpdateMs = avg(m_timing.fixedParticleAccumMs);

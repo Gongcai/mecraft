@@ -34,10 +34,7 @@ constexpr const char* kHopperBehaviorId = "minecraft:hopper";
 constexpr int kHopperSlotCount = 5;
 constexpr std::uint64_t kHopperTransferIntervalTicks = 8;
 
-enum class InventoryKind : std::uint8_t {
-    Storage,
-    Machine
-};
+enum class InventoryKind : std::uint8_t { Storage, Machine };
 
 struct InventoryAccess {
     InventoryKind kind = InventoryKind::Storage;
@@ -109,8 +106,7 @@ bool isHopperState(const BlockStateId stateId) {
 
 bool hopperEnabled(const BlockStateId stateId) {
     const uint16_t enabled = requiredProperty(stateId, PropIndices::ENABLED, "enabled");
-    if (PropIndices::ENABLED_TRUE == PropIndices::INVALID ||
-        PropIndices::ENABLED_FALSE == PropIndices::INVALID) {
+    if (PropIndices::ENABLED_TRUE == PropIndices::INVALID || PropIndices::ENABLED_FALSE == PropIndices::INVALID) {
         failHopperSystem("Hopper state requires registered enabled boolean values");
     }
     if (enabled != PropIndices::ENABLED_TRUE && enabled != PropIndices::ENABLED_FALSE) {
@@ -163,9 +159,7 @@ const SmeltingSystem& requireSmeltingSystem(GameplayRegistry& registry, const st
     return registry.ctxGet<SmeltingSystem>();
 }
 
-bool slotAcceptsItem(GameplayRegistry& registry,
-                     const ContainerBehaviorDef& behavior,
-                     const int slot,
+bool slotAcceptsItem(GameplayRegistry& registry, const ContainerBehaviorDef& behavior, const int slot,
                      const ItemID itemId) {
     if (itemId == RUNTIME_ID_NULL) {
         return false;
@@ -212,20 +206,16 @@ bool slotCanExtract(const ContainerBehaviorDef& behavior, const int slot) {
 }
 
 BlockEntityInventoryStore& ensureStorageStore(GameplayRegistry& registry) {
-    return registry.ctxHas<BlockEntityInventoryStore>()
-        ? registry.ctxGet<BlockEntityInventoryStore>()
-        : registry.ctxSet<BlockEntityInventoryStore>();
+    return registry.ctxHas<BlockEntityInventoryStore>() ? registry.ctxGet<BlockEntityInventoryStore>()
+                                                        : registry.ctxSet<BlockEntityInventoryStore>();
 }
 
 MachineInventoryStore& ensureMachineStore(GameplayRegistry& registry) {
-    return registry.ctxHas<MachineInventoryStore>()
-        ? registry.ctxGet<MachineInventoryStore>()
-        : registry.ctxSet<MachineInventoryStore>();
+    return registry.ctxHas<MachineInventoryStore>() ? registry.ctxGet<MachineInventoryStore>()
+                                                    : registry.ctxSet<MachineInventoryStore>();
 }
 
-std::optional<InventoryAccess> containerAt(World& world,
-                                           GameplayRegistry& registry,
-                                           const glm::ivec3& position) {
+std::optional<InventoryAccess> containerAt(World& world, GameplayRegistry& registry, const glm::ivec3& position) {
     if (!world.isChunkLoadedForBlock(position.x, position.y, position.z)) {
         return std::nullopt;
     }
@@ -285,9 +275,7 @@ void setSlotStack(const InventoryAccess& inventory, const int slot, const ItemSt
     inventory.machine->setSlotStack(slot, stack);
 }
 
-bool insertOneItem(GameplayRegistry& registry,
-                   const InventoryAccess& target,
-                   const ItemID itemId,
+bool insertOneItem(GameplayRegistry& registry, const InventoryAccess& target, const ItemID itemId,
                    const uint16_t durability) {
     if (target.behavior == nullptr) {
         failHopperSystem("Hopper transfer target has no container behavior");
@@ -307,9 +295,7 @@ bool insertOneItem(GameplayRegistry& registry,
         }
 
         ItemStack stack = getSlotStack(target, slot);
-        if (stack.isEmpty() ||
-            stack.itemId != itemId ||
-            stack.durability != durability ||
+        if (stack.isEmpty() || stack.itemId != itemId || stack.durability != durability ||
             stack.count >= itemDef.maxStack) {
             continue;
         }
@@ -339,9 +325,7 @@ bool insertOneItem(GameplayRegistry& registry,
     return false;
 }
 
-bool moveOneItem(GameplayRegistry& registry,
-                 const InventoryAccess& source,
-                 const int sourceSlot,
+bool moveOneItem(GameplayRegistry& registry, const InventoryAccess& source, const int sourceSlot,
                  const InventoryAccess& target) {
     if (source.behavior == nullptr) {
         failHopperSystem("Hopper transfer source has no container behavior");
@@ -363,9 +347,7 @@ bool moveOneItem(GameplayRegistry& registry,
     return true;
 }
 
-bool moveFirstAvailableItem(GameplayRegistry& registry,
-                            const InventoryAccess& source,
-                            const InventoryAccess& target) {
+bool moveFirstAvailableItem(GameplayRegistry& registry, const InventoryAccess& source, const InventoryAccess& target) {
     for (int slot = 0; slot < source.slotCount; ++slot) {
         if (moveOneItem(registry, source, slot, target)) {
             return true;
@@ -374,29 +356,21 @@ bool moveFirstAvailableItem(GameplayRegistry& registry,
     return false;
 }
 
-bool aabbIntersects(const glm::vec3& minA,
-                    const glm::vec3& maxA,
-                    const glm::vec3& minB,
-                    const glm::vec3& maxB) {
-    return minA.x < maxB.x && maxA.x > minB.x &&
-           minA.y < maxB.y && maxA.y > minB.y &&
-           minA.z < maxB.z && maxA.z > minB.z;
+bool aabbIntersects(const glm::vec3& minA, const glm::vec3& maxA, const glm::vec3& minB, const glm::vec3& maxB) {
+    return minA.x < maxB.x && maxA.x > minB.x && minA.y < maxB.y && maxA.y > minB.y && minA.z < maxB.z &&
+           maxA.z > minB.z;
 }
 
-bool dropIntersectsHopperInput(const glm::ivec3& hopperPosition,
-                               const TransformComponent& transform,
+bool dropIntersectsHopperInput(const glm::ivec3& hopperPosition, const TransformComponent& transform,
                                const BoundsComponent& bounds) {
     const glm::vec3 hopperMin = glm::vec3(hopperPosition);
-    const glm::vec3 hopperMax =
-        glm::vec3(hopperPosition) + glm::vec3(1.0f, 1.5f, 1.0f);
+    const glm::vec3 hopperMax = glm::vec3(hopperPosition) + glm::vec3(1.0f, 1.5f, 1.0f);
     const glm::vec3 dropMin = transform.position - bounds.halfExtents;
     const glm::vec3 dropMax = transform.position + bounds.halfExtents;
     return aabbIntersects(hopperMin, hopperMax, dropMin, dropMax);
 }
 
-bool tryPickupDropEntity(World& world,
-                         GameplayRegistry& registry,
-                         const glm::ivec3& hopperPosition,
+bool tryPickupDropEntity(World& world, GameplayRegistry& registry, const glm::ivec3& hopperPosition,
                          const InventoryAccess& hopper) {
     auto view = registry.view<DropItemTag, TransformComponent, BoundsComponent, ItemComponent>();
     std::vector<entt::entity> candidates;
@@ -454,11 +428,8 @@ bool tryPickupDropEntity(World& world,
     return false;
 }
 
-bool tryPushFromHopper(World& world,
-                       GameplayRegistry& registry,
-                       const glm::ivec3& hopperPosition,
-                       const BlockStateId hopperState,
-                       const InventoryAccess& hopper) {
+bool tryPushFromHopper(World& world, GameplayRegistry& registry, const glm::ivec3& hopperPosition,
+                       const BlockStateId hopperState, const InventoryAccess& hopper) {
     const glm::ivec3 targetPosition = hopperPosition + hopperFacingDirection(hopperState);
     std::optional<InventoryAccess> target = containerAt(world, registry, targetPosition);
     if (!target.has_value()) {
@@ -468,9 +439,7 @@ bool tryPushFromHopper(World& world,
     return moveFirstAvailableItem(registry, hopper, *target);
 }
 
-bool tryPullIntoHopper(World& world,
-                       GameplayRegistry& registry,
-                       const glm::ivec3& hopperPosition,
+bool tryPullIntoHopper(World& world, GameplayRegistry& registry, const glm::ivec3& hopperPosition,
                        const InventoryAccess& hopper) {
     const glm::ivec3 sourcePosition = hopperPosition + glm::ivec3(0, 1, 0);
     std::optional<InventoryAccess> source = containerAt(world, registry, sourcePosition);
@@ -483,9 +452,7 @@ bool tryPullIntoHopper(World& world,
 
 std::vector<glm::ivec3> collectHopperPositions(BlockEntityInventoryStore& store) {
     std::vector<glm::ivec3> positions;
-    store.forEach([&positions](const glm::ivec3& position,
-                               const std::string& typeId,
-                               const int slotCount,
+    store.forEach([&positions](const glm::ivec3& position, const std::string& typeId, const int slotCount,
                                const BlockEntityInventory&) {
         if (typeId != kHopperBehaviorId) {
             return;
@@ -512,9 +479,7 @@ void HopperSystem::update(SystemContext& ctx) {
     processWorld(*ctx.services.world, ctx.registry, ctx.tickIndex);
 }
 
-std::size_t HopperSystem::processWorld(World& world,
-                                       GameplayRegistry& registry,
-                                       const std::uint64_t gameTick) {
+std::size_t HopperSystem::processWorld(World& world, GameplayRegistry& registry, const std::uint64_t gameTick) {
     if ((gameTick % kHopperTransferIntervalTicks) != 0u) {
         return 0;
     }
@@ -539,16 +504,9 @@ std::size_t HopperSystem::processWorld(World& world,
             continue;
         }
 
-        BlockEntityInventory& hopperInventory =
-            store.getOrCreate(position, kHopperBehaviorId, kHopperSlotCount);
+        BlockEntityInventory& hopperInventory = store.getOrCreate(position, kHopperBehaviorId, kHopperSlotCount);
         const ContainerBehaviorDef& hopperBehavior = ContainerBehaviorRegistry::require(kHopperBehaviorId);
-        InventoryAccess hopper{
-            InventoryKind::Storage,
-            &hopperInventory,
-            nullptr,
-            &hopperBehavior,
-            kHopperSlotCount
-        };
+        InventoryAccess hopper{InventoryKind::Storage, &hopperInventory, nullptr, &hopperBehavior, kHopperSlotCount};
 
         if (tryPushFromHopper(world, registry, position, stateId, hopper) ||
             tryPullIntoHopper(world, registry, position, hopper)) {

@@ -10,8 +10,7 @@ class ProjectileSystem : public ISystem {
 public:
     using Dependencies = SystemDependency<
         std::tuple<TransformComponent, VelocityComponent, ProjectileComponent>,
-        std::tuple<TransformComponent, VelocityComponent, ProjectileThrowerComponent, InventoryDataComponent>
-    >;
+        std::tuple<TransformComponent, VelocityComponent, ProjectileThrowerComponent, InventoryDataComponent>>;
 
     void update(SystemContext& ctx) override;
 };

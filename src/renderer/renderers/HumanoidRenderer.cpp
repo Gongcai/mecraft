@@ -31,19 +31,16 @@ namespace {
 constexpr unsigned int kQuadIndices[] = {0, 1, 2, 0, 2, 3};
 
 constexpr glm::vec3 kFaceNormals[] = {
-    {0, 1, 0},   // top
-    {0, -1, 0},  // bottom
-    {0, 0, 1},   // front
-    {0, 0, -1},  // back
-    {-1, 0, 0},  // left
-    {1, 0, 0}    // right
+    {0, 1, 0}, // top
+    {0, -1, 0}, // bottom
+    {0, 0, 1}, // front
+    {0, 0, -1}, // back
+    {-1, 0, 0}, // left
+    {1, 0, 0} // right
 };
 
-bool shouldRenderSteveRoot(const entt::registry& reg,
-                           entt::entity steveRoot,
-                           HumanoidRenderer::RenderMode mode) {
-    return mode == HumanoidRenderer::kRenderAll
-        || reg.all_of<ecs::EntityNetIdComponent>(steveRoot);
+bool shouldRenderSteveRoot(const entt::registry& reg, entt::entity steveRoot, HumanoidRenderer::RenderMode mode) {
+    return mode == HumanoidRenderer::kRenderAll || reg.all_of<ecs::EntityNetIdComponent>(steveRoot);
 }
 
 float hurtFlashForRoot(const entt::registry& reg, const entt::entity root) {
@@ -54,35 +51,25 @@ float hurtFlashForRoot(const entt::registry& reg, const entt::entity root) {
     return std::clamp(hurt->flashSecondsRemaining / hurt->flashDurationSeconds, 0.0f, 1.0f);
 }
 
-glm::mat4 applyMobVisualScale(const glm::mat4& model,
-                              const glm::vec3& pivot,
-                              const float scale) {
+glm::mat4 applyMobVisualScale(const glm::mat4& model, const glm::vec3& pivot, const float scale) {
     assert(scale > 0.0f);
     if (std::abs(scale - 1.0f) <= 0.0001f) {
         return model;
     }
 
-    return glm::translate(glm::mat4(1.0f), pivot) *
-           glm::scale(glm::mat4(1.0f), glm::vec3(scale)) *
-           glm::translate(glm::mat4(1.0f), -pivot) *
-           model;
+    return glm::translate(glm::mat4(1.0f), pivot) * glm::scale(glm::mat4(1.0f), glm::vec3(scale)) *
+           glm::translate(glm::mat4(1.0f), -pivot) * model;
 }
 
 } // anonymous namespace
 
-HumanoidRenderer::FaceUvRect HumanoidRenderer::pixelRectToUv(float x0, float y0, float x1, float y1,
-                                                             float textureWidth, float textureHeight) {
-    return {
-        x0 / textureWidth,
-        1.0f - y1 / textureHeight,
-        x1 / textureWidth,
-        1.0f - y0 / textureHeight
-    };
+HumanoidRenderer::FaceUvRect HumanoidRenderer::pixelRectToUv(float x0, float y0, float x1, float y1, float textureWidth,
+                                                             float textureHeight) {
+    return {x0 / textureWidth, 1.0f - y1 / textureHeight, x1 / textureWidth, 1.0f - y0 / textureHeight};
 }
 
 HumanoidRenderer::PartMesh HumanoidRenderer::buildPartMesh(const renderer::HumanoidPartMeshDefinition& definition,
-                                                           const float textureWidth,
-                                                           const float textureHeight) const {
+                                                           const float textureWidth, const float textureHeight) const {
     PartMesh mesh;
 
     std::array<FaceUvRect, 6> uv{};
@@ -92,41 +79,35 @@ HumanoidRenderer::PartMesh HumanoidRenderer::buildPartMesh(const renderer::Human
     }
 
     const float ymin = -definition.halfHeight + definition.offsetY;
-    const float ymax =  definition.halfHeight + definition.offsetY;
+    const float ymax = definition.halfHeight + definition.offsetY;
     const float xmin = -definition.halfWidth;
-    const float xmax =  definition.halfWidth;
+    const float xmax = definition.halfWidth;
     const float zmin = -definition.halfDepth;
-    const float zmax =  definition.halfDepth;
+    const float zmax = definition.halfDepth;
 
     struct FaceCorners {
         glm::vec3 pos[4];
     };
 
-    const FaceCorners faces[6] = {
-        // Top (+Y)
-        {{{xmin, ymax, zmax}, {xmax, ymax, zmax}, {xmax, ymax, zmin}, {xmin, ymax, zmin}}},
-        // Bottom (-Y)
-        {{{xmin, ymin, zmin}, {xmax, ymin, zmin}, {xmax, ymin, zmax}, {xmin, ymin, zmax}}},
-        // Front (+Z)
-        {{{xmin, ymin, zmax}, {xmax, ymin, zmax}, {xmax, ymax, zmax}, {xmin, ymax, zmax}}},
-        // Back (-Z)
-        {{{xmax, ymin, zmin}, {xmin, ymin, zmin}, {xmin, ymax, zmin}, {xmax, ymax, zmin}}},
-        // Left (-X)
-        {{{xmin, ymin, zmin}, {xmin, ymin, zmax}, {xmin, ymax, zmax}, {xmin, ymax, zmin}}},
-        // Right (+X)
-        {{{xmax, ymin, zmax}, {xmax, ymin, zmin}, {xmax, ymax, zmin}, {xmax, ymax, zmax}}}
-    };
+    const FaceCorners faces[6] = {// Top (+Y)
+                                  {{{xmin, ymax, zmax}, {xmax, ymax, zmax}, {xmax, ymax, zmin}, {xmin, ymax, zmin}}},
+                                  // Bottom (-Y)
+                                  {{{xmin, ymin, zmin}, {xmax, ymin, zmin}, {xmax, ymin, zmax}, {xmin, ymin, zmax}}},
+                                  // Front (+Z)
+                                  {{{xmin, ymin, zmax}, {xmax, ymin, zmax}, {xmax, ymax, zmax}, {xmin, ymax, zmax}}},
+                                  // Back (-Z)
+                                  {{{xmax, ymin, zmin}, {xmin, ymin, zmin}, {xmin, ymax, zmin}, {xmax, ymax, zmin}}},
+                                  // Left (-X)
+                                  {{{xmin, ymin, zmin}, {xmin, ymin, zmax}, {xmin, ymax, zmax}, {xmin, ymax, zmin}}},
+                                  // Right (+X)
+                                  {{{xmax, ymin, zmax}, {xmax, ymin, zmin}, {xmax, ymax, zmin}, {xmax, ymax, zmax}}}};
 
     std::vector<SteveVertex> vertices;
     vertices.reserve(36);
 
     for (int f = 0; f < 6; ++f) {
         const glm::vec2 faceUvs[4] = {
-            {uv[f].u0, uv[f].v0},
-            {uv[f].u1, uv[f].v0},
-            {uv[f].u1, uv[f].v1},
-            {uv[f].u0, uv[f].v1}
-        };
+            {uv[f].u0, uv[f].v0}, {uv[f].u1, uv[f].v0}, {uv[f].u1, uv[f].v1}, {uv[f].u0, uv[f].v1}};
 
         for (int idx : kQuadIndices) {
             const auto& p = faces[f].pos[idx];
@@ -138,17 +119,15 @@ HumanoidRenderer::PartMesh HumanoidRenderer::buildPartMesh(const renderer::Human
 
     mesh.vertexCount = static_cast<uint32_t>(vertices.size());
 
-
     RhiBufferDesc bufferDesc;
     bufferDesc.debugName = "Humanoid.PartMesh.VertexBuffer";
     bufferDesc.size = vertices.size() * sizeof(SteveVertex);
-    bufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex) |
-                       rhiFlag(RhiBufferUsage::TransferDst);
+    bufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex) | rhiFlag(RhiBufferUsage::TransferDst);
     bufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
     bufferDesc.initialState = RhiResourceState::VertexBuffer;
     bufferDesc.memoryCategory = RhiMemoryCategory::Geometry;
-    mesh.rhiVertexBuffer = m_rhiDevice->createBuffer(
-        bufferDesc, vertices.data(), vertices.size() * sizeof(SteveVertex));
+    mesh.rhiVertexBuffer =
+        m_rhiDevice->createBuffer(bufferDesc, vertices.data(), vertices.size() * sizeof(SteveVertex));
     if (!mesh.rhiVertexBuffer.isValid()) {
         destroyMesh(mesh);
     }
@@ -156,10 +135,9 @@ HumanoidRenderer::PartMesh HumanoidRenderer::buildPartMesh(const renderer::Human
     return mesh;
 }
 
-HumanoidRenderer::PartMesh HumanoidRenderer::buildEntityModelPartMesh(
-    const ecs::EntityModelPartDefinition& definition,
-    const float textureWidth,
-    const float textureHeight) const {
+HumanoidRenderer::PartMesh HumanoidRenderer::buildEntityModelPartMesh(const ecs::EntityModelPartDefinition& definition,
+                                                                      const float textureWidth,
+                                                                      const float textureHeight) const {
     PartMesh mesh;
 
     std::vector<SteveVertex> vertices;
@@ -187,16 +165,11 @@ HumanoidRenderer::PartMesh HumanoidRenderer::buildEntityModelPartMesh(
             {{{xmin, ymin, zmax}, {xmax, ymin, zmax}, {xmax, ymax, zmax}, {xmin, ymax, zmax}}},
             {{{xmax, ymin, zmin}, {xmin, ymin, zmin}, {xmin, ymax, zmin}, {xmax, ymax, zmin}}},
             {{{xmin, ymin, zmin}, {xmin, ymin, zmax}, {xmin, ymax, zmax}, {xmin, ymax, zmin}}},
-            {{{xmax, ymin, zmax}, {xmax, ymin, zmin}, {xmax, ymax, zmin}, {xmax, ymax, zmax}}}
-        };
+            {{{xmax, ymin, zmax}, {xmax, ymin, zmin}, {xmax, ymax, zmin}, {xmax, ymax, zmax}}}};
 
         for (int f = 0; f < 6; ++f) {
             const glm::vec2 faceUvs[4] = {
-                {uv[f].u0, uv[f].v0},
-                {uv[f].u1, uv[f].v0},
-                {uv[f].u1, uv[f].v1},
-                {uv[f].u0, uv[f].v1}
-            };
+                {uv[f].u0, uv[f].v0}, {uv[f].u1, uv[f].v0}, {uv[f].u1, uv[f].v1}, {uv[f].u0, uv[f].v1}};
 
             for (int idx : kQuadIndices) {
                 const auto& p = faces[f].pos[idx];
@@ -213,17 +186,15 @@ HumanoidRenderer::PartMesh HumanoidRenderer::buildEntityModelPartMesh(
 
     mesh.vertexCount = static_cast<uint32_t>(vertices.size());
 
-
     RhiBufferDesc bufferDesc;
     bufferDesc.debugName = "Humanoid.EntityModelPart.VertexBuffer";
     bufferDesc.size = vertices.size() * sizeof(SteveVertex);
-    bufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex) |
-                       rhiFlag(RhiBufferUsage::TransferDst);
+    bufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex) | rhiFlag(RhiBufferUsage::TransferDst);
     bufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
     bufferDesc.initialState = RhiResourceState::VertexBuffer;
     bufferDesc.memoryCategory = RhiMemoryCategory::Geometry;
-    mesh.rhiVertexBuffer = m_rhiDevice->createBuffer(
-        bufferDesc, vertices.data(), vertices.size() * sizeof(SteveVertex));
+    mesh.rhiVertexBuffer =
+        m_rhiDevice->createBuffer(bufferDesc, vertices.data(), vertices.size() * sizeof(SteveVertex));
     if (!mesh.rhiVertexBuffer.isValid()) {
         destroyMesh(mesh);
     }
@@ -240,13 +211,13 @@ void HumanoidRenderer::destroyMesh(PartMesh& mesh) const {
 }
 
 HumanoidRenderer::PartMesh* HumanoidRenderer::getMeshForPart(ecs::StevePartType partType,
-                                                              ecs::EntitySkinLayoutKind skinLayout) {
+                                                             ecs::EntitySkinLayoutKind skinLayout) {
     return &m_skinLayoutMeshes[renderer::humanoidSkinLayoutIndex(skinLayout)]
                               [renderer::humanoidPartTypeIndex(partType)];
 }
 
 HumanoidRenderer::PartMesh* HumanoidRenderer::getMeshForEntityModelPart(const std::string& modelId,
-                                                                         const std::string& partName) {
+                                                                        const std::string& partName) {
     const std::string key = modelId + "#" + partName;
     const auto existing = m_entityModelPartMeshes.find(key);
     if (existing != m_entityModelPartMeshes.end()) {
@@ -268,8 +239,7 @@ HumanoidRenderer::PartMesh* HumanoidRenderer::getMeshForEntityModelPart(const st
     return &inserted.first->second;
 }
 
-const HumanoidRenderer::TextureResource* HumanoidRenderer::requireTextureResource(
-    const std::string& textureKey) {
+const HumanoidRenderer::TextureResource* HumanoidRenderer::requireTextureResource(const std::string& textureKey) {
     const auto existing = m_textureResources.find(textureKey);
     if (existing != m_textureResources.end()) {
         return &existing->second;
@@ -277,8 +247,7 @@ const HumanoidRenderer::TextureResource* HumanoidRenderer::requireTextureResourc
 
     TextureResource resource;
     const std::optional<renderer::contracts::StableMaterialId> materialId =
-        renderer::contracts::allocateStableSceneId<
-            renderer::contracts::StableMaterialIdTag>();
+        renderer::contracts::allocateStableSceneId<renderer::contracts::StableMaterialIdTag>();
     if (!materialId.has_value()) {
         return nullptr;
     }
@@ -298,13 +267,12 @@ const HumanoidRenderer::TextureResource* HumanoidRenderer::requireTextureResourc
     RhiBufferDesc identityBufferDesc;
     identityBufferDesc.debugName = "Humanoid.MaterialIdentity";
     identityBufferDesc.size = sizeof(materialIdentity);
-    identityBufferDesc.usage = rhiFlag(RhiBufferUsage::Uniform) |
-                               rhiFlag(RhiBufferUsage::TransferDst);
+    identityBufferDesc.usage = rhiFlag(RhiBufferUsage::Uniform) | rhiFlag(RhiBufferUsage::TransferDst);
     identityBufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
     identityBufferDesc.initialState = RhiResourceState::UniformBuffer;
     identityBufferDesc.memoryCategory = RhiMemoryCategory::Uniform;
-    resource.materialIdentityBuffer = m_rhiDevice->createBuffer(
-        identityBufferDesc, &materialIdentity, sizeof(materialIdentity));
+    resource.materialIdentityBuffer =
+        m_rhiDevice->createBuffer(identityBufferDesc, &materialIdentity, sizeof(materialIdentity));
     if (!resource.materialIdentityBuffer.isValid()) {
         std::abort();
     }
@@ -344,9 +312,8 @@ bool HumanoidRenderer::init(ResourceMgr& resourceMgr, RhiDevice& rhiDevice) {
     for (std::size_t layout = 0; layout < skinLayouts.size(); ++layout) {
         const renderer::HumanoidSkinLayoutDefinition& skinLayout = skinLayouts[layout];
         for (std::size_t part = 0; part < skinLayout.parts.size(); ++part) {
-            m_skinLayoutMeshes[layout][part] = buildPartMesh(skinLayout.parts[part],
-                                                             skinLayout.textureWidth,
-                                                             skinLayout.textureHeight);
+            m_skinLayoutMeshes[layout][part] =
+                buildPartMesh(skinLayout.parts[part], skinLayout.textureWidth, skinLayout.textureHeight);
         }
     }
     return true;
@@ -385,23 +352,20 @@ void HumanoidRenderer::shutdown() {
     m_resourceMgr = nullptr;
 }
 
-bool HumanoidRenderer::prepareFrame(const IWorldView& worldView,
-                                    ecs::GameplayRegistry& gameplayRegistry,
+bool HumanoidRenderer::prepareFrame(const IWorldView& worldView, ecs::GameplayRegistry& gameplayRegistry,
                                     const RenderMode mode) {
     auto& registry = gameplayRegistry.registry();
     m_preparedPartDraws.clear();
     m_currentModelMatrices.clear();
     std::unordered_set<entt::entity> currentRoots;
 
-    const auto objectIdForRoot = [this](const entt::entity root)
-        -> std::optional<renderer::contracts::StableObjectId> {
+    const auto objectIdForRoot = [this](const entt::entity root) -> std::optional<renderer::contracts::StableObjectId> {
         const auto existing = m_rootObjectIds.find(root);
         if (existing != m_rootObjectIds.end()) {
             return existing->second;
         }
         const std::optional<renderer::contracts::StableObjectId> allocated =
-            renderer::contracts::allocateStableSceneId<
-                renderer::contracts::StableObjectIdTag>();
+            renderer::contracts::allocateStableSceneId<renderer::contracts::StableObjectIdTag>();
         if (!allocated.has_value()) {
             return std::nullopt;
         }
@@ -409,28 +373,16 @@ bool HumanoidRenderer::prepareFrame(const IWorldView& worldView,
         return allocated;
     };
 
-    const auto appendPart = [this](const entt::entity partEntity,
-                                   const PartMesh* mesh,
-                                   const TextureResource& texture,
-                                   const glm::mat4& model,
-                                   const glm::vec3& entityCenter,
-                                   const glm::vec2& light,
-                                   const float hurtFlash,
-                                   const renderer::contracts::StableObjectId objectId) {
+    const auto appendPart = [this](const entt::entity partEntity, const PartMesh* mesh, const TextureResource& texture,
+                                   const glm::mat4& model, const glm::vec3& entityCenter, const glm::vec2& light,
+                                   const float hurtFlash, const renderer::contracts::StableObjectId objectId) {
         if (mesh == nullptr || !mesh->rhiVertexBuffer.isValid() || mesh->vertexCount == 0u) {
             return;
         }
         const auto previous = m_previousModelMatrices.find(partEntity);
-        m_preparedPartDraws.push_back({
-            mesh,
-            &texture,
-            model,
-            previous != m_previousModelMatrices.end() ? previous->second : model,
-            entityCenter,
-            light,
-            hurtFlash,
-            objectId
-        });
+        m_preparedPartDraws.push_back({mesh, &texture, model,
+                                       previous != m_previousModelMatrices.end() ? previous->second : model,
+                                       entityCenter, light, hurtFlash, objectId});
         m_currentModelMatrices[partEntity] = model;
     };
 
@@ -441,8 +393,7 @@ bool HumanoidRenderer::prepareFrame(const IWorldView& worldView,
     auto steveView = registry.view<ecs::SteveTag, ecs::ChildrenComponent>();
     for (const entt::entity root : steveView) {
         currentRoots.insert(root);
-        const std::optional<renderer::contracts::StableObjectId> objectId =
-            objectIdForRoot(root);
+        const std::optional<renderer::contracts::StableObjectId> objectId = objectIdForRoot(root);
         if (!objectId.has_value()) {
             return false;
         }
@@ -472,10 +423,8 @@ bool HumanoidRenderer::prepareFrame(const IWorldView& worldView,
             if (registry.all_of<ecs::StevePartComponent, ecs::WorldTransformComponent>(child)) {
                 const auto& part = registry.get<ecs::StevePartComponent>(child);
                 const auto& transform = registry.get<ecs::WorldTransformComponent>(child);
-                appendPart(child,
-                           getMeshForPart(part.partType, ecs::EntitySkinLayoutKind::Steve64x64),
-                           *steveTexture, transform.worldMatrix, entityCenter,
-                           light, hurtFlash, *objectId);
+                appendPart(child, getMeshForPart(part.partType, ecs::EntitySkinLayoutKind::Steve64x64), *steveTexture,
+                           transform.worldMatrix, entityCenter, light, hurtFlash, *objectId);
             }
             const auto* children = registry.try_get<ecs::ChildrenComponent>(child);
             if (children == nullptr) {
@@ -487,20 +436,17 @@ bool HumanoidRenderer::prepareFrame(const IWorldView& worldView,
                 }
                 const auto& part = registry.get<ecs::StevePartComponent>(partEntity);
                 const auto& transform = registry.get<ecs::WorldTransformComponent>(partEntity);
-                appendPart(partEntity,
-                           getMeshForPart(part.partType, ecs::EntitySkinLayoutKind::Steve64x64),
-                           *steveTexture, transform.worldMatrix, entityCenter,
-                           light, hurtFlash, *objectId);
+                appendPart(partEntity, getMeshForPart(part.partType, ecs::EntitySkinLayoutKind::Steve64x64),
+                           *steveTexture, transform.worldMatrix, entityCenter, light, hurtFlash, *objectId);
             }
         }
     }
 
-    auto mobView = registry.view<ecs::MobTag, ecs::ChildrenComponent,
-                                 ecs::MobVisualComponent, ecs::TransformComponent>();
+    auto mobView =
+        registry.view<ecs::MobTag, ecs::ChildrenComponent, ecs::MobVisualComponent, ecs::TransformComponent>();
     for (const entt::entity root : mobView) {
         currentRoots.insert(root);
-        const std::optional<renderer::contracts::StableObjectId> objectId =
-            objectIdForRoot(root);
+        const std::optional<renderer::contracts::StableObjectId> objectId = objectIdForRoot(root);
         if (!objectId.has_value()) {
             return false;
         }
@@ -511,8 +457,7 @@ bool HumanoidRenderer::prepareFrame(const IWorldView& worldView,
         if (texture == nullptr) {
             return false;
         }
-        const glm::vec3 entityCenter = rootTransform.position +
-            glm::vec3(0.0f, rootTransform.eyeHeight * 0.5f, 0.0f);
+        const glm::vec3 entityCenter = rootTransform.position + glm::vec3(0.0f, rootTransform.eyeHeight * 0.5f, 0.0f);
         const glm::vec2 light = queryWorldLight(worldView, entityCenter);
         const float hurtFlash = hurtFlashForRoot(registry, root);
         const auto* modelComponent = registry.try_get<ecs::EntityModelComponent>(root);
@@ -538,10 +483,8 @@ bool HumanoidRenderer::prepareFrame(const IWorldView& worldView,
                     mesh = getMeshForPart(part->partType, visual.skinLayout);
                 }
             }
-            const glm::mat4 model = applyMobVisualScale(
-                transform->worldMatrix, rootTransform.position, visual.scale);
-            appendPart(partEntity, mesh, *texture, model, entityCenter, light,
-                       hurtFlash, *objectId);
+            const glm::mat4 model = applyMobVisualScale(transform->worldMatrix, rootTransform.position, visual.scale);
+            appendPart(partEntity, mesh, *texture, model, entityCenter, light, hurtFlash, *objectId);
         }
     }
 
@@ -560,24 +503,17 @@ void HumanoidRenderer::finishFrame() {
 }
 
 void HumanoidRenderer::createGBufferRhiResources() {
-    const auto vertexSource = renderer::rhi::loadShaderSource(
-        "assets/shaders/entity_gbuffer_rhi.vert");
-    const auto fragmentSource = renderer::rhi::loadShaderSource(
-        "assets/shaders/entity_gbuffer_rhi.frag");
-    const auto shadowVertexSource = renderer::rhi::loadShaderSource(
-        "assets/shaders/entity_shadow_rhi.vert");
-    const auto shadowFragmentSource = renderer::rhi::loadShaderSource(
-        "assets/shaders/entity_shadow_rhi.frag");
-    const auto forwardVertexSource = renderer::rhi::loadShaderSource(
-        "assets/shaders/entity_forward_rhi.vert");
-    const auto forwardFragmentSource = renderer::rhi::loadShaderSource(
-        "assets/shaders/entity_forward_rhi.frag");
-    if (!vertexSource || !fragmentSource || !shadowVertexSource || !shadowFragmentSource ||
-        !forwardVertexSource || !forwardFragmentSource) {
+    const auto vertexSource = renderer::rhi::loadShaderSource("assets/shaders/entity_gbuffer_rhi.vert");
+    const auto fragmentSource = renderer::rhi::loadShaderSource("assets/shaders/entity_gbuffer_rhi.frag");
+    const auto shadowVertexSource = renderer::rhi::loadShaderSource("assets/shaders/entity_shadow_rhi.vert");
+    const auto shadowFragmentSource = renderer::rhi::loadShaderSource("assets/shaders/entity_shadow_rhi.frag");
+    const auto forwardVertexSource = renderer::rhi::loadShaderSource("assets/shaders/entity_forward_rhi.vert");
+    const auto forwardFragmentSource = renderer::rhi::loadShaderSource("assets/shaders/entity_forward_rhi.frag");
+    if (!vertexSource || !fragmentSource || !shadowVertexSource || !shadowFragmentSource || !forwardVertexSource ||
+        !forwardFragmentSource) {
         std::abort();
     }
-    auto createShader = [this](const char* name, const RhiShaderStage stage,
-                               const std::string& source) {
+    auto createShader = [this](const char* name, const RhiShaderStage stage, const std::string& source) {
         RhiShaderDesc desc;
         desc.debugName = name;
         desc.stage = stage;
@@ -585,18 +521,14 @@ void HumanoidRenderer::createGBufferRhiResources() {
         desc.sourceSize = source.size();
         return m_rhiDevice->createShader(desc);
     };
-    m_gbufferRhiVertexShader = createShader("Humanoid.GBuffer.Vertex", RhiShaderStage::Vertex,
-                                             *vertexSource);
-    m_gbufferRhiFragmentShader = createShader("Humanoid.GBuffer.Fragment", RhiShaderStage::Fragment,
-                                               *fragmentSource);
-    m_shadowRhiVertexShader = createShader("Humanoid.Shadow.Vertex", RhiShaderStage::Vertex,
-                                           *shadowVertexSource);
-    m_shadowRhiFragmentShader = createShader("Humanoid.Shadow.Fragment", RhiShaderStage::Fragment,
-                                             *shadowFragmentSource);
-    m_forwardRhiVertexShader = createShader("Humanoid.Forward.Vertex", RhiShaderStage::Vertex,
-                                            *forwardVertexSource);
-    m_forwardRhiFragmentShader = createShader("Humanoid.Forward.Fragment", RhiShaderStage::Fragment,
-                                              *forwardFragmentSource);
+    m_gbufferRhiVertexShader = createShader("Humanoid.GBuffer.Vertex", RhiShaderStage::Vertex, *vertexSource);
+    m_gbufferRhiFragmentShader = createShader("Humanoid.GBuffer.Fragment", RhiShaderStage::Fragment, *fragmentSource);
+    m_shadowRhiVertexShader = createShader("Humanoid.Shadow.Vertex", RhiShaderStage::Vertex, *shadowVertexSource);
+    m_shadowRhiFragmentShader =
+        createShader("Humanoid.Shadow.Fragment", RhiShaderStage::Fragment, *shadowFragmentSource);
+    m_forwardRhiVertexShader = createShader("Humanoid.Forward.Vertex", RhiShaderStage::Vertex, *forwardVertexSource);
+    m_forwardRhiFragmentShader =
+        createShader("Humanoid.Forward.Fragment", RhiShaderStage::Fragment, *forwardFragmentSource);
     RhiSamplerDesc samplerDesc;
     samplerDesc.minFilter = RhiFilter::Nearest;
     samplerDesc.magFilter = RhiFilter::Nearest;
@@ -606,10 +538,9 @@ void HumanoidRenderer::createGBufferRhiResources() {
     m_gbufferSampler = m_rhiDevice->createSampler(samplerDesc);
     RhiBindGroupLayoutDesc bindGroupLayoutDesc;
     bindGroupLayoutDesc.debugName = "Humanoid.GBuffer.BindGroupLayout";
-    bindGroupLayoutDesc.entries.push_back({0u, RhiBindingType::CombinedTextureSampler,
-                                           rhiFlag(RhiShaderStage::Fragment), 1u});
-    bindGroupLayoutDesc.entries.push_back({1u, RhiBindingType::UniformBuffer,
-                                           rhiFlag(RhiShaderStage::Fragment), 1u});
+    bindGroupLayoutDesc.entries.push_back(
+        {0u, RhiBindingType::CombinedTextureSampler, rhiFlag(RhiShaderStage::Fragment), 1u});
+    bindGroupLayoutDesc.entries.push_back({1u, RhiBindingType::UniformBuffer, rhiFlag(RhiShaderStage::Fragment), 1u});
     m_gbufferRhiBindGroupLayout = m_rhiDevice->createBindGroupLayout(bindGroupLayoutDesc);
     bindGroupLayoutDesc.debugName = "Humanoid.Shadow.BindGroupLayout";
     m_shadowRhiBindGroupLayout = m_rhiDevice->createBindGroupLayout(bindGroupLayoutDesc);
@@ -617,8 +548,7 @@ void HumanoidRenderer::createGBufferRhiResources() {
     pipelineLayoutDesc.debugName = "Humanoid.GBuffer.PipelineLayout";
     pipelineLayoutDesc.bindGroupLayouts.push_back(m_gbufferRhiBindGroupLayout);
     pipelineLayoutDesc.pushConstantBytes = sizeof(glm::mat4) * 3u + sizeof(glm::vec4);
-    pipelineLayoutDesc.pushConstantStages = rhiFlag(RhiShaderStage::Vertex) |
-                                            rhiFlag(RhiShaderStage::Fragment);
+    pipelineLayoutDesc.pushConstantStages = rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment);
     m_gbufferRhiPipelineLayout = m_rhiDevice->createPipelineLayout(pipelineLayoutDesc);
     pipelineLayoutDesc.debugName = "Humanoid.Shadow.PipelineLayout";
     pipelineLayoutDesc.bindGroupLayouts[0] = m_shadowRhiBindGroupLayout;
@@ -628,8 +558,7 @@ void HumanoidRenderer::createGBufferRhiResources() {
     pipelineLayoutDesc.debugName = "Humanoid.Forward.PipelineLayout";
     pipelineLayoutDesc.bindGroupLayouts[0] = m_gbufferRhiBindGroupLayout;
     pipelineLayoutDesc.pushConstantBytes = sizeof(glm::mat4) * 2u + sizeof(glm::vec4);
-    pipelineLayoutDesc.pushConstantStages = rhiFlag(RhiShaderStage::Vertex) |
-                                            rhiFlag(RhiShaderStage::Fragment);
+    pipelineLayoutDesc.pushConstantStages = rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment);
     m_forwardRhiPipelineLayout = m_rhiDevice->createPipelineLayout(pipelineLayoutDesc);
     RhiGraphicsPipelineDesc pipelineDesc;
     pipelineDesc.debugName = "Humanoid.GBuffer.Pipeline";
@@ -637,17 +566,15 @@ void HumanoidRenderer::createGBufferRhiResources() {
     pipelineDesc.fragmentShader = m_gbufferRhiFragmentShader;
     pipelineDesc.layout = m_gbufferRhiPipelineLayout;
     pipelineDesc.vertexInput.bindings = {{0u, sizeof(SteveVertex), RhiVertexInputRate::Vertex}};
-    pipelineDesc.vertexInput.attributes = {
-        {0u, 0u, RhiVertexFormat::Float3, offsetof(SteveVertex, x)},
-        {1u, 0u, RhiVertexFormat::Float2, offsetof(SteveVertex, u)},
-        {2u, 0u, RhiVertexFormat::Float3, offsetof(SteveVertex, nx)}
-    };
+    pipelineDesc.vertexInput.attributes = {{0u, 0u, RhiVertexFormat::Float3, offsetof(SteveVertex, x)},
+                                           {1u, 0u, RhiVertexFormat::Float2, offsetof(SteveVertex, u)},
+                                           {2u, 0u, RhiVertexFormat::Float3, offsetof(SteveVertex, nx)}};
     pipelineDesc.depthStencil.depthTestEnabled = true;
     pipelineDesc.depthStencil.depthWriteEnabled = true;
     pipelineDesc.colorFormats = {RhiTextureFormat::Rgba8Unorm, RhiTextureFormat::Rgb10A2Unorm,
-        RhiTextureFormat::Rg8Unorm, RhiTextureFormat::Rgba8Unorm, RhiTextureFormat::Rgba8Unorm,
-        RhiTextureFormat::Rgba8Unorm, RhiTextureFormat::Rg32Uint,
-        RhiTextureFormat::Rg16Float};
+                                 RhiTextureFormat::Rg8Unorm,   RhiTextureFormat::Rgba8Unorm,
+                                 RhiTextureFormat::Rgba8Unorm, RhiTextureFormat::Rgba8Unorm,
+                                 RhiTextureFormat::Rg32Uint,   RhiTextureFormat::Rg16Float};
     pipelineDesc.depthFormat = RhiTextureFormat::Depth32Float;
     pipelineDesc.blend.attachments.resize(8u);
     m_gbufferRhiPipeline = m_rhiDevice->createGraphicsPipeline(pipelineDesc);
@@ -664,8 +591,7 @@ void HumanoidRenderer::createGBufferRhiResources() {
     pipelineDesc.vertexShader = m_forwardRhiVertexShader;
     pipelineDesc.fragmentShader = m_forwardRhiFragmentShader;
     pipelineDesc.layout = m_forwardRhiPipelineLayout;
-    pipelineDesc.vertexInput.attributes.push_back(
-        {2u, 0u, RhiVertexFormat::Float3, offsetof(SteveVertex, nx)});
+    pipelineDesc.vertexInput.attributes.push_back({2u, 0u, RhiVertexFormat::Float3, offsetof(SteveVertex, nx)});
     pipelineDesc.colorFormats = {RhiTextureFormat::Rgba16Float};
     pipelineDesc.depthFormat = RhiTextureFormat::Depth32Float;
     pipelineDesc.blend.attachments.resize(1u);
@@ -678,10 +604,9 @@ void HumanoidRenderer::createGBufferRhiResources() {
     pipelineDesc.depthStencil.depthWriteEnabled = true;
     pipelineDesc.depthStencil.depthCompare = RhiCompareOp::LessOrEqual;
     m_inventoryPreviewPipeline = m_rhiDevice->createGraphicsPipeline(pipelineDesc);
-    if (!m_gbufferRhiVertexShader.isValid() || !m_gbufferRhiFragmentShader.isValid() ||
-        !m_gbufferSampler.isValid() || !m_gbufferRhiBindGroupLayout.isValid() ||
-        !m_gbufferRhiPipelineLayout.isValid() || !m_gbufferRhiPipeline.isValid() ||
-        !m_shadowRhiVertexShader.isValid() || !m_shadowRhiFragmentShader.isValid() ||
+    if (!m_gbufferRhiVertexShader.isValid() || !m_gbufferRhiFragmentShader.isValid() || !m_gbufferSampler.isValid() ||
+        !m_gbufferRhiBindGroupLayout.isValid() || !m_gbufferRhiPipelineLayout.isValid() ||
+        !m_gbufferRhiPipeline.isValid() || !m_shadowRhiVertexShader.isValid() || !m_shadowRhiFragmentShader.isValid() ||
         !m_shadowRhiBindGroupLayout.isValid() || !m_shadowRhiPipelineLayout.isValid() ||
         !m_shadowRhiPipeline.isValid() || !m_forwardRhiVertexShader.isValid() ||
         !m_forwardRhiFragmentShader.isValid() || !m_forwardRhiPipelineLayout.isValid() ||
@@ -691,22 +616,38 @@ void HumanoidRenderer::createGBufferRhiResources() {
 }
 
 void HumanoidRenderer::destroyGBufferRhiResources() {
-    if (m_inventoryPreviewPipeline.isValid()) m_rhiDevice->destroyPipeline(m_inventoryPreviewPipeline);
-    if (m_forwardRhiPipeline.isValid()) m_rhiDevice->destroyPipeline(m_forwardRhiPipeline);
-    if (m_forwardRhiPipelineLayout.isValid()) m_rhiDevice->destroyPipelineLayout(m_forwardRhiPipelineLayout);
-    if (m_forwardRhiFragmentShader.isValid()) m_rhiDevice->destroyShader(m_forwardRhiFragmentShader);
-    if (m_forwardRhiVertexShader.isValid()) m_rhiDevice->destroyShader(m_forwardRhiVertexShader);
-    if (m_shadowRhiPipeline.isValid()) m_rhiDevice->destroyPipeline(m_shadowRhiPipeline);
-    if (m_shadowRhiPipelineLayout.isValid()) m_rhiDevice->destroyPipelineLayout(m_shadowRhiPipelineLayout);
-    if (m_shadowRhiBindGroupLayout.isValid()) m_rhiDevice->destroyBindGroupLayout(m_shadowRhiBindGroupLayout);
-    if (m_shadowRhiFragmentShader.isValid()) m_rhiDevice->destroyShader(m_shadowRhiFragmentShader);
-    if (m_shadowRhiVertexShader.isValid()) m_rhiDevice->destroyShader(m_shadowRhiVertexShader);
-    if (m_gbufferRhiPipeline.isValid()) m_rhiDevice->destroyPipeline(m_gbufferRhiPipeline);
-    if (m_gbufferRhiPipelineLayout.isValid()) m_rhiDevice->destroyPipelineLayout(m_gbufferRhiPipelineLayout);
-    if (m_gbufferRhiBindGroupLayout.isValid()) m_rhiDevice->destroyBindGroupLayout(m_gbufferRhiBindGroupLayout);
-    if (m_gbufferSampler.isValid()) m_rhiDevice->destroySampler(m_gbufferSampler);
-    if (m_gbufferRhiFragmentShader.isValid()) m_rhiDevice->destroyShader(m_gbufferRhiFragmentShader);
-    if (m_gbufferRhiVertexShader.isValid()) m_rhiDevice->destroyShader(m_gbufferRhiVertexShader);
+    if (m_inventoryPreviewPipeline.isValid())
+        m_rhiDevice->destroyPipeline(m_inventoryPreviewPipeline);
+    if (m_forwardRhiPipeline.isValid())
+        m_rhiDevice->destroyPipeline(m_forwardRhiPipeline);
+    if (m_forwardRhiPipelineLayout.isValid())
+        m_rhiDevice->destroyPipelineLayout(m_forwardRhiPipelineLayout);
+    if (m_forwardRhiFragmentShader.isValid())
+        m_rhiDevice->destroyShader(m_forwardRhiFragmentShader);
+    if (m_forwardRhiVertexShader.isValid())
+        m_rhiDevice->destroyShader(m_forwardRhiVertexShader);
+    if (m_shadowRhiPipeline.isValid())
+        m_rhiDevice->destroyPipeline(m_shadowRhiPipeline);
+    if (m_shadowRhiPipelineLayout.isValid())
+        m_rhiDevice->destroyPipelineLayout(m_shadowRhiPipelineLayout);
+    if (m_shadowRhiBindGroupLayout.isValid())
+        m_rhiDevice->destroyBindGroupLayout(m_shadowRhiBindGroupLayout);
+    if (m_shadowRhiFragmentShader.isValid())
+        m_rhiDevice->destroyShader(m_shadowRhiFragmentShader);
+    if (m_shadowRhiVertexShader.isValid())
+        m_rhiDevice->destroyShader(m_shadowRhiVertexShader);
+    if (m_gbufferRhiPipeline.isValid())
+        m_rhiDevice->destroyPipeline(m_gbufferRhiPipeline);
+    if (m_gbufferRhiPipelineLayout.isValid())
+        m_rhiDevice->destroyPipelineLayout(m_gbufferRhiPipelineLayout);
+    if (m_gbufferRhiBindGroupLayout.isValid())
+        m_rhiDevice->destroyBindGroupLayout(m_gbufferRhiBindGroupLayout);
+    if (m_gbufferSampler.isValid())
+        m_rhiDevice->destroySampler(m_gbufferSampler);
+    if (m_gbufferRhiFragmentShader.isValid())
+        m_rhiDevice->destroyShader(m_gbufferRhiFragmentShader);
+    if (m_gbufferRhiVertexShader.isValid())
+        m_rhiDevice->destroyShader(m_gbufferRhiVertexShader);
     m_gbufferRhiPipeline = {};
     m_gbufferRhiPipelineLayout = {};
     m_gbufferRhiBindGroupLayout = {};
@@ -725,8 +666,7 @@ void HumanoidRenderer::destroyGBufferRhiResources() {
     m_inventoryPreviewPipeline = {};
 }
 
-void HumanoidRenderer::renderPreparedToGBuffer(RhiCommandList& commandList,
-                                               const glm::mat4& viewProj,
+void HumanoidRenderer::renderPreparedToGBuffer(RhiCommandList& commandList, const glm::mat4& viewProj,
                                                const glm::mat4& previousViewProj) {
     struct PushConstants {
         glm::mat4 modelViewProj;
@@ -739,28 +679,23 @@ void HumanoidRenderer::renderPreparedToGBuffer(RhiCommandList& commandList,
     commandList.setGraphicsPipeline(m_gbufferRhiPipeline);
     for (const PreparedPartDraw& draw : m_preparedPartDraws) {
         const PushConstants pushConstants{
-            viewProj * draw.model,
-            previousViewProj * draw.previousModel,
-            draw.model,
-            draw.light,
-            draw.hurtFlash,
-            draw.objectId.value
-        };
+            viewProj * draw.model, previousViewProj * draw.previousModel, draw.model, draw.light, draw.hurtFlash,
+            draw.objectId.value};
         commandList.setBindGroup(0u, draw.texture->gbufferBindGroup);
         commandList.setVertexBuffer(0u, draw.mesh->rhiVertexBuffer, 0u);
         commandList.pushConstants(&pushConstants, sizeof(pushConstants),
-                                  rhiFlag(RhiShaderStage::Vertex) |
-                                  rhiFlag(RhiShaderStage::Fragment));
+                                  rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment));
         commandList.draw(draw.mesh->vertexCount, 1u, 0u, 0u);
     }
 }
 
-void HumanoidRenderer::renderPreparedToShadowMap(RhiCommandList& commandList,
-                                                 const glm::mat4& shadowViewProj,
-                                                 const glm::vec3& cameraPos,
-                                                 const float splitNear,
+void HumanoidRenderer::renderPreparedToShadowMap(RhiCommandList& commandList, const glm::mat4& shadowViewProj,
+                                                 const glm::vec3& cameraPos, const float splitNear,
                                                  const float splitFar) {
-    struct PushConstants { glm::mat4 viewProj; glm::mat4 model; };
+    struct PushConstants {
+        glm::mat4 viewProj;
+        glm::mat4 model;
+    };
     const float minDistance = splitNear - 4.0f;
     const float maxDistance = splitFar + 4.0f;
     commandList.setGraphicsPipeline(m_shadowRhiPipeline);
@@ -772,41 +707,33 @@ void HumanoidRenderer::renderPreparedToShadowMap(RhiCommandList& commandList,
         const PushConstants pushConstants{shadowViewProj, draw.model};
         commandList.setBindGroup(0u, draw.texture->shadowBindGroup);
         commandList.setVertexBuffer(0u, draw.mesh->rhiVertexBuffer, 0u);
-        commandList.pushConstants(&pushConstants, sizeof(pushConstants),
-                                  rhiFlag(RhiShaderStage::Vertex));
+        commandList.pushConstants(&pushConstants, sizeof(pushConstants), rhiFlag(RhiShaderStage::Vertex));
         commandList.draw(draw.mesh->vertexCount, 1u, 0u, 0u);
     }
 }
 
-void HumanoidRenderer::renderPreparedForward(RhiCommandList& commandList,
-                                             const glm::mat4& viewProj,
+void HumanoidRenderer::renderPreparedForward(RhiCommandList& commandList, const glm::mat4& viewProj,
                                              const float skyIntensity) {
-    struct PushConstants { glm::mat4 viewProj; glm::mat4 model; glm::vec4 lighting; };
+    struct PushConstants {
+        glm::mat4 viewProj;
+        glm::mat4 model;
+        glm::vec4 lighting;
+    };
     commandList.setGraphicsPipeline(m_forwardRhiPipeline);
     for (const PreparedPartDraw& draw : m_preparedPartDraws) {
-        const PushConstants pushConstants{
-            viewProj, draw.model, glm::vec4(draw.light, skyIntensity, draw.hurtFlash)
-        };
+        const PushConstants pushConstants{viewProj, draw.model, glm::vec4(draw.light, skyIntensity, draw.hurtFlash)};
         commandList.setBindGroup(0u, draw.texture->gbufferBindGroup);
         commandList.setVertexBuffer(0u, draw.mesh->rhiVertexBuffer, 0u);
         commandList.pushConstants(&pushConstants, sizeof(pushConstants),
-                                  rhiFlag(RhiShaderStage::Vertex) |
-                                  rhiFlag(RhiShaderStage::Fragment));
+                                  rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment));
         commandList.draw(draw.mesh->vertexCount, 1u, 0u, 0u);
     }
 }
 
- void HumanoidRenderer::renderInventoryPreview(RhiCommandList& commandList,
-                                              const float x,
-                                              const float y,
-                                              const float width,
-                                              const float height,
-                                              const float uiScale,
-                                              const float pointerX,
-                                              const float pointerY,
-                                              const float timeSeconds,
-                                              const int screenWidth,
-                                              const int screenHeight) {
+void HumanoidRenderer::renderInventoryPreview(RhiCommandList& commandList, const float x, const float y,
+                                              const float width, const float height, const float uiScale,
+                                              const float pointerX, const float pointerY, const float timeSeconds,
+                                              const int screenWidth, const int screenHeight) {
     if (uiScale <= 0.0f || width <= 0.0f || height <= 0.0f) {
         return;
     }
@@ -822,16 +749,14 @@ void HumanoidRenderer::renderPreparedForward(RhiCommandList& commandList,
 
     const float aspect = static_cast<float>(viewportW) / static_cast<float>(viewportH);
     const glm::mat4 projection = glm::perspective(glm::radians(28.0f), aspect, 0.1f, 20.0f);
-    const glm::mat4 view = glm::lookAt(glm::vec3(0.0f, -0.02f, 4.9f),
-                                       glm::vec3(0.0f, -0.02f, 0.0f),
-                                       glm::vec3(0.0f, 1.0f, 0.0f));
+    const glm::mat4 view =
+        glm::lookAt(glm::vec3(0.0f, -0.02f, 4.9f), glm::vec3(0.0f, -0.02f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
     const float previewCenterX = x + width * 0.5f;
     const float previewCenterY = y + height * 0.58f;
     const float lookX = std::clamp((pointerX - previewCenterX) / std::max(1.0f, width * 1.2f), -1.0f, 1.0f);
     const float lookY = std::clamp((pointerY - previewCenterY) / std::max(1.0f, height * 1.2f), -1.0f, 1.0f);
-    const float dt = m_inventoryPreviewLastTime >= 0.0f
-        ? std::clamp(timeSeconds - m_inventoryPreviewLastTime, 0.0f, 0.1f)
-        : 0.0f;
+    const float dt =
+        m_inventoryPreviewLastTime >= 0.0f ? std::clamp(timeSeconds - m_inventoryPreviewLastTime, 0.0f, 0.1f) : 0.0f;
     m_inventoryPreviewLastTime = timeSeconds;
 
     const float headAlpha = (dt > 0.0f) ? (1.0f - std::exp(-dt * 18.0f)) : 1.0f;
@@ -846,13 +771,16 @@ void HumanoidRenderer::renderPreparedForward(RhiCommandList& commandList,
     const float headYaw = glm::radians(28.0f) * m_inventoryPreviewHeadLookX;
     const float headPitch = glm::radians(-13.0f) * m_inventoryPreviewHeadLookY;
 
-    const glm::mat4 root =
-        glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, -0.96f, 0.0f))
-        * glm::rotate(glm::mat4(1.0f), bodyYaw, glm::vec3(0.0f, 1.0f, 0.0f))
-        * glm::rotate(glm::mat4(1.0f), bodyPitch, glm::vec3(1.0f, 0.0f, 0.0f));
+    const glm::mat4 root = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, -0.96f, 0.0f)) *
+                           glm::rotate(glm::mat4(1.0f), bodyYaw, glm::vec3(0.0f, 1.0f, 0.0f)) *
+                           glm::rotate(glm::mat4(1.0f), bodyPitch, glm::vec3(1.0f, 0.0f, 0.0f));
     const glm::mat4 torso = root * glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 1.125f, 0.0f));
 
-    struct PushConstants { glm::mat4 viewProj; glm::mat4 model; glm::vec4 lighting; };
+    struct PushConstants {
+        glm::mat4 viewProj;
+        glm::mat4 model;
+        glm::vec4 lighting;
+    };
     const auto steveTextureIt = m_textureResources.find("steve");
     if (steveTextureIt == m_textureResources.end()) {
         std::abort();
@@ -870,35 +798,26 @@ void HumanoidRenderer::renderPreparedForward(RhiCommandList& commandList,
         const PushConstants pushConstants{viewProj, model, glm::vec4(1.0f, 0.0f, 1.0f, 0.0f)};
         commandList.setVertexBuffer(0u, mesh->rhiVertexBuffer, 0u);
         commandList.pushConstants(&pushConstants, sizeof(pushConstants),
-                                  rhiFlag(RhiShaderStage::Vertex) |
-                                  rhiFlag(RhiShaderStage::Fragment));
+                                  rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment));
         commandList.draw(mesh->vertexCount, 1u, 0u, 0u);
     };
 
     drawPart(ecs::StevePartType::Torso, torso);
-    drawPart(ecs::StevePartType::Head,
-             torso
-             * glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.375f, 0.0f))
-             * glm::rotate(glm::mat4(1.0f), headYaw, glm::vec3(0.0f, 1.0f, 0.0f))
-             * glm::rotate(glm::mat4(1.0f), headPitch, glm::vec3(1.0f, 0.0f, 0.0f)));
-    drawPart(ecs::StevePartType::RightArm,
-             torso * glm::translate(glm::mat4(1.0f), glm::vec3(-0.3125f, 0.375f, 0.0f)));
-    drawPart(ecs::StevePartType::LeftArm,
-             torso * glm::translate(glm::mat4(1.0f), glm::vec3(0.3125f, 0.375f, 0.0f)));
-    drawPart(ecs::StevePartType::RightLeg,
-             torso * glm::translate(glm::mat4(1.0f), glm::vec3(-0.125f, -0.375f, 0.0f)));
-    drawPart(ecs::StevePartType::LeftLeg,
-             torso * glm::translate(glm::mat4(1.0f), glm::vec3(0.125f, -0.375f, 0.0f)));
+    drawPart(ecs::StevePartType::Head, torso * glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.375f, 0.0f)) *
+                                           glm::rotate(glm::mat4(1.0f), headYaw, glm::vec3(0.0f, 1.0f, 0.0f)) *
+                                           glm::rotate(glm::mat4(1.0f), headPitch, glm::vec3(1.0f, 0.0f, 0.0f)));
+    drawPart(ecs::StevePartType::RightArm, torso * glm::translate(glm::mat4(1.0f), glm::vec3(-0.3125f, 0.375f, 0.0f)));
+    drawPart(ecs::StevePartType::LeftArm, torso * glm::translate(glm::mat4(1.0f), glm::vec3(0.3125f, 0.375f, 0.0f)));
+    drawPart(ecs::StevePartType::RightLeg, torso * glm::translate(glm::mat4(1.0f), glm::vec3(-0.125f, -0.375f, 0.0f)));
+    drawPart(ecs::StevePartType::LeftLeg, torso * glm::translate(glm::mat4(1.0f), glm::vec3(0.125f, -0.375f, 0.0f)));
 
     const uint32_t fullWidth = static_cast<uint32_t>(std::max(1l, std::lround(screenWidth * uiScale)));
     const uint32_t fullHeight = static_cast<uint32_t>(std::max(1l, std::lround(screenHeight * uiScale)));
-    commandList.setViewport({0.0f, 0.0f, static_cast<float>(fullWidth),
-                             static_cast<float>(fullHeight), 0.0f, 1.0f});
+    commandList.setViewport({0.0f, 0.0f, static_cast<float>(fullWidth), static_cast<float>(fullHeight), 0.0f, 1.0f});
     commandList.setScissor({0, 0, fullWidth, fullHeight});
-
 }
 
- glm::vec2 HumanoidRenderer::queryWorldLight(const IWorldView& worldView, const glm::vec3& position) {
+glm::vec2 HumanoidRenderer::queryWorldLight(const IWorldView& worldView, const glm::vec3& position) {
     const int bx = static_cast<int>(std::floor(position.x));
     const int by = static_cast<int>(std::floor(position.y));
     const int bz = static_cast<int>(std::floor(position.z));

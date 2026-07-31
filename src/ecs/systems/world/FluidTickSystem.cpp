@@ -5,8 +5,10 @@
 namespace ecs {
 
 void FluidTickSystem::update(SystemContext& ctx) {
-    if (!ctx.services.world) return;
-    if (ctx.services.gameClient) return;
+    if (!ctx.services.world)
+        return;
+    if (ctx.services.gameClient)
+        return;
     update(*ctx.services.world, ctx.tickIndex);
 }
 

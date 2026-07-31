@@ -4,10 +4,7 @@
 
 #include "../block/Block.h"
 
-enum class FluidKind : uint8_t {
-    None = 0,
-    Water = 1
-};
+enum class FluidKind : uint8_t { None = 0, Water = 1 };
 
 struct FluidDesc {
     FluidKind kind = FluidKind::None;

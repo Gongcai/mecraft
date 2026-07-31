@@ -33,7 +33,6 @@
 #include "../debug/DebugFrameProfiler.h"
 #endif
 
-
 // --------------------------------------------------------------------------
 // PIMPL definition — mirrors the old Game::RenderRuntime struct.
 // All members are default-constructed; actual initialization in init().
@@ -66,43 +65,31 @@ struct GameplayRenderRuntime::Impl {
 namespace {
 
 #if defined(MECRAFT_ENABLE_STREAMLINE)
-[[nodiscard]] StreamlineReflexMode toStreamlineReflexMode(
-    const ReflexLowLatencyMode mode) {
+[[nodiscard]] StreamlineReflexMode toStreamlineReflexMode(const ReflexLowLatencyMode mode) {
     switch (mode) {
-        case ReflexLowLatencyMode::Off:
-            return StreamlineReflexMode::Off;
-        case ReflexLowLatencyMode::On:
-            return StreamlineReflexMode::LowLatency;
-        case ReflexLowLatencyMode::OnWithBoost:
-            return StreamlineReflexMode::LowLatencyWithBoost;
+    case ReflexLowLatencyMode::Off: return StreamlineReflexMode::Off;
+    case ReflexLowLatencyMode::On: return StreamlineReflexMode::LowLatency;
+    case ReflexLowLatencyMode::OnWithBoost: return StreamlineReflexMode::LowLatencyWithBoost;
     }
     return StreamlineReflexMode::Off;
 }
 
-[[nodiscard]] bool applyNvidiaFeatureSettings(
-    const RenderSettings& settings,
-    const RenderScene& renderScene,
-    PresentationController& presentation,
-    std::optional<StreamlineReflexMode>& pendingReflexMode) {
-    const bool frameGenerationEnabled =
-        settings.nvidia.frameGeneration == FrameGenerationType::Dlss;
-    if (frameGenerationEnabled &&
-        settings.nvidia.reflexMode == ReflexLowLatencyMode::Off) {
+[[nodiscard]] bool applyNvidiaFeatureSettings(const RenderSettings& settings, const RenderScene& renderScene,
+                                              PresentationController& presentation,
+                                              std::optional<StreamlineReflexMode>& pendingReflexMode) {
+    const bool frameGenerationEnabled = settings.nvidia.frameGeneration == FrameGenerationType::Dlss;
+    if (frameGenerationEnabled && settings.nvidia.reflexMode == ReflexLowLatencyMode::Off) {
         std::cerr << "GameplayRenderRuntime: DLSS Frame Generation requires NVIDIA Reflex\n";
         return false;
     }
-    if (frameGenerationEnabled &&
-        !supportsDlssFrameGenerationInputs(
-            settings, renderScene.isFsr1Supported())) {
+    if (frameGenerationEnabled && !supportsDlssFrameGenerationInputs(settings, renderScene.isFsr1Supported())) {
         std::cerr << "GameplayRenderRuntime: the selected renderer cannot produce DLSS Frame Generation inputs\n";
         return false;
     }
 
     StreamlineRuntime& streamline = StreamlineRuntime::instance();
-    const StreamlineReflexMode reflexMode =
-        toStreamlineReflexMode(settings.nvidia.reflexMode);
-    const bool frameGenerationWasEnabled =
-        presentation.frameGenerationSwapchainEnabled();
+    const StreamlineReflexMode reflexMode = toStreamlineReflexMode(settings.nvidia.reflexMode);
+    const bool frameGenerationWasEnabled = presentation.frameGenerationSwapchainEnabled();
     if (frameGenerationEnabled) {
         if (!presentation.frameGenerationAvailable()) {
             std::cerr << "GameplayRenderRuntime: DLSS Frame Generation is unavailable\n";
@@ -116,13 +103,11 @@ namespace {
         return presentation.requestFrameGenerationEnabled(true);
     }
 
-    if (presentation.frameGenerationAvailable() &&
-        !presentation.requestFrameGenerationEnabled(false)) {
+    if (presentation.frameGenerationAvailable() && !presentation.requestFrameGenerationEnabled(false)) {
         std::cerr << "GameplayRenderRuntime: the frame-generation disable request was rejected\n";
         return false;
     }
-    if (reflexMode == StreamlineReflexMode::Off &&
-        frameGenerationWasEnabled) {
+    if (reflexMode == StreamlineReflexMode::Off && frameGenerationWasEnabled) {
         pendingReflexMode = reflexMode;
         return true;
     }
@@ -141,21 +126,14 @@ namespace {
 // Lifecycle
 // --------------------------------------------------------------------------
 
-GameplayRenderRuntime::GameplayRenderRuntime()
-    : m_impl(std::make_unique<Impl>()) {
-}
+GameplayRenderRuntime::GameplayRenderRuntime() : m_impl(std::make_unique<Impl>()) {}
 
 GameplayRenderRuntime::~GameplayRenderRuntime() = default;
 
-bool GameplayRenderRuntime::init(ResourceMgr& resourceMgr,
-                                  GameSession& session,
-                                  UIRenderer& uiRenderer,
-                                  ThreadPool& threadPool,
-                                  Window& window,
-                                  RhiDevice& rhiDevice,
-                                  RhiCommandListPool& commandListPool,
-                                  const GameRenderSettingsSource settingsSource,
-                                  const RenderSettings& fixedSettings) {
+bool GameplayRenderRuntime::init(ResourceMgr& resourceMgr, GameSession& session, UIRenderer& uiRenderer,
+                                 ThreadPool& threadPool, Window& window, RhiDevice& rhiDevice,
+                                 RhiCommandListPool& commandListPool, const GameRenderSettingsSource settingsSource,
+                                 const RenderSettings& fixedSettings) {
     auto& renderer = m_impl->resourceHub;
     auto& renderScene = m_impl->scene;
     auto& blockEntityRenderer = m_impl->blockEntityRenderer;
@@ -167,8 +145,7 @@ bool GameplayRenderRuntime::init(ResourceMgr& resourceMgr,
 
 #if defined(MECRAFT_ENABLE_STREAMLINE)
     if (rhiDevice.backend() == RhiBackend::Vulkan) {
-        m_impl->presentationBackend =
-            createDlssFrameGenerationPresentationBackend(rhiDevice);
+        m_impl->presentationBackend = createDlssFrameGenerationPresentationBackend(rhiDevice);
     } else {
         m_impl->presentationBackend = createNativePresentationBackend(rhiDevice);
     }
@@ -178,8 +155,7 @@ bool GameplayRenderRuntime::init(ResourceMgr& resourceMgr,
     if (m_impl->presentationBackend == nullptr) {
         return false;
     }
-    m_impl->presentationController = std::make_unique<PresentationController>(
-        *m_impl->presentationBackend);
+    m_impl->presentationController = std::make_unique<PresentationController>(*m_impl->presentationBackend);
     if (!m_impl->presentationController->initUiComposition(rhiDevice)) {
         return false;
     }
@@ -196,31 +172,19 @@ bool GameplayRenderRuntime::init(ResourceMgr& resourceMgr,
     renderScene.init(resourceMgr);
     RenderSettings initialSettings;
     switch (settingsSource) {
-        case GameRenderSettingsSource::UserProfile:
-            initialSettings = app::loadRenderSettings(renderer.getSettings());
-            break;
-        case GameRenderSettingsSource::FixedProfile:
-            initialSettings = fixedSettings;
-            break;
+    case GameRenderSettingsSource::UserProfile:
+        initialSettings = app::loadRenderSettings(renderer.getSettings());
+        break;
+    case GameRenderSettingsSource::FixedProfile: initialSettings = fixedSettings; break;
     }
-    renderScene.setupResources(
-        &threadPool,
-        &renderer.rhiDevice(),
-        &renderer.commandListPool(),
-        &renderer.getTerrainRenderer(),
-        &renderer.getTerrainRhiPipelineSet(),
-        &renderer.getWorldRenderBuffer(),
-        &renderer.getDeferredRenderTargets(),
-        &renderer.getGameplaySkyRenderer(),
-        &renderer.getShadowRenderer(),
-        initialSettings
-    );
+    renderScene.setupResources(&threadPool, &renderer.rhiDevice(), &renderer.commandListPool(),
+                               &renderer.getTerrainRenderer(), &renderer.getTerrainRhiPipelineSet(),
+                               &renderer.getWorldRenderBuffer(), &renderer.getDeferredRenderTargets(),
+                               &renderer.getGameplaySkyRenderer(), &renderer.getShadowRenderer(), initialSettings);
 #if defined(MECRAFT_ENABLE_STREAMLINE)
     if (rhiDevice.backend() == RhiBackend::Vulkan &&
-        !applyNvidiaFeatureSettings(
-            initialSettings, renderScene,
-            *m_impl->presentationController,
-            m_impl->pendingReflexMode)) {
+        !applyNvidiaFeatureSettings(initialSettings, renderScene, *m_impl->presentationController,
+                                    m_impl->pendingReflexMode)) {
         return false;
     }
 #endif
@@ -228,10 +192,8 @@ bool GameplayRenderRuntime::init(ResourceMgr& resourceMgr,
         renderScene.setSettingsChangedCallback([this](const RenderSettings& settings) {
 #if defined(MECRAFT_ENABLE_STREAMLINE)
             if (m_impl->resourceHub.rhiDevice().backend() == RhiBackend::Vulkan &&
-                !applyNvidiaFeatureSettings(
-                    settings, m_impl->scene,
-                    *m_impl->presentationController,
-                    m_impl->pendingReflexMode)) {
+                !applyNvidiaFeatureSettings(settings, m_impl->scene, *m_impl->presentationController,
+                                            m_impl->pendingReflexMode)) {
                 return false;
             }
 #endif
@@ -294,8 +256,7 @@ void GameplayRenderRuntime::shutdown() {
 #ifdef MECRAFT_DEBUG
     m_impl->dashboard.shutdown();
 #endif
-    if (m_impl->presentationBackend != nullptr &&
-        m_impl->presentationBackend->frameGenerationEnabled() &&
+    if (m_impl->presentationBackend != nullptr && m_impl->presentationBackend->frameGenerationEnabled() &&
         !m_impl->presentationBackend->setFrameGenerationEnabled(false)) {
 #if defined(MECRAFT_ENABLE_STREAMLINE)
         std::cerr << StreamlineRuntime::instance().lastError() << '\n';
@@ -395,9 +356,8 @@ void GameplayRenderRuntime::publishDebugStats(const double frameTime) {
     stats.appUpdateDispatchMs = timing.currentAppUpdateDispatchMs;
     stats.appRenderDispatchMs = timing.currentAppRenderDispatchMs;
     stats.presentationAcquireMs = timing.currentPresentationAcquireMs;
-    stats.renderDispatchOtherMs = std::max(
-        0.0, stats.appRenderDispatchMs - stats.presentationAcquireMs -
-                 stats.renderMs);
+    stats.renderDispatchOtherMs =
+        std::max(0.0, stats.appRenderDispatchMs - stats.presentationAcquireMs - stats.renderMs);
     stats.renderSnapshotMs = timing.currentRenderSnapshotMs;
     stats.renderSceneMs = timing.currentRenderSceneMs;
     stats.renderUiMs = timing.currentRenderUiMs;
@@ -405,8 +365,8 @@ void GameplayRenderRuntime::publishDebugStats(const double frameTime) {
     stats.swapBuffersMs = timing.currentSwapBuffersMs;
     stats.renderOtherMs = std::max(0.0, stats.renderMs - stats.renderSnapshotMs - stats.renderSceneMs -
                                             stats.renderUiMs - stats.renderDashboardMs - stats.swapBuffersMs);
-    stats.untrackedMs = std::max(0.0, stats.frameMs - stats.pollEventsMs -
-                                          stats.appUpdateDispatchMs - stats.appRenderDispatchMs);
+    stats.untrackedMs =
+        std::max(0.0, stats.frameMs - stats.pollEventsMs - stats.appUpdateDispatchMs - stats.appRenderDispatchMs);
     stats.pollInputCallbackMs = timing.currentPollInputCallbackMs;
     stats.pollCursorPosCallbackMs = timing.currentPollCursorPosCallbackMs;
     stats.pollImguiCallbackMs = timing.currentPollImguiCallbackMs;
@@ -423,16 +383,14 @@ void GameplayRenderRuntime::publishDebugStats(const double frameTime) {
     stats.pollScrollEventCount = timing.currentPollEventCounts.scrollEvents;
     stats.pollCharEventCount = timing.currentPollEventCounts.charEvents;
 
-    const PresentationStatistics& presentation =
-        m_impl->presentationController->statistics();
+    const PresentationStatistics& presentation = m_impl->presentationController->statistics();
     stats.presentationMode = presentation.mode;
     stats.realFramesAcquired = presentation.realFramesAcquired;
     stats.realFramesPresented = presentation.realFramesPresented;
     stats.generatedFramesPresented = presentation.generatedFramesPresented;
     stats.displayedFrames = presentation.displayedFrames;
     const std::optional<double> presentedFps =
-        m_impl->presentedFrameRateSampler.update(presentation.displayedFrames,
-                                                 frameTime);
+        m_impl->presentedFrameRateSampler.update(presentation.displayedFrames, frameTime);
     if (presentedFps.has_value()) {
         stats.presentedFps = *presentedFps;
     }
@@ -495,20 +453,20 @@ void GameplayRenderRuntime::publishDebugStats(const double frameTime) {
     };
     copyHistory(history.fpsHistory.data(), stats.fpsHistory.data(), Dashboard::FrameProfilerStats::kFixedHistorySamples,
                 history.frameCount, history.frameWriteIndex);
-    copyHistory(history.renderHistory.data(), stats.renderHistory.data(), Dashboard::FrameProfilerStats::kFixedHistorySamples,
-                history.count, history.writeIndex);
-    copyHistory(history.fixedUpdateHistory.data(), stats.fixedUpdateHistory.data(), Dashboard::FrameProfilerStats::kFixedHistorySamples,
-                history.count, history.writeIndex);
-    copyHistory(history.fixedInputHistory.data(), stats.fixedInputHistory.data(), Dashboard::FrameProfilerStats::kFixedHistorySamples,
-                history.count, history.writeIndex);
-    copyHistory(history.fixedStateHistory.data(), stats.fixedStateHistory.data(), Dashboard::FrameProfilerStats::kFixedHistorySamples,
-                history.count, history.writeIndex);
-    copyHistory(history.fixedParticleHistory.data(), stats.fixedParticleHistory.data(), Dashboard::FrameProfilerStats::kFixedHistorySamples,
-                history.count, history.writeIndex);
-    copyHistory(history.fixedDropHistory.data(), stats.fixedDropHistory.data(), Dashboard::FrameProfilerStats::kFixedHistorySamples,
-                history.count, history.writeIndex);
-    copyHistory(history.fixedWorldHistory.data(), stats.fixedWorldHistory.data(), Dashboard::FrameProfilerStats::kFixedHistorySamples,
-                history.count, history.writeIndex);
+    copyHistory(history.renderHistory.data(), stats.renderHistory.data(),
+                Dashboard::FrameProfilerStats::kFixedHistorySamples, history.count, history.writeIndex);
+    copyHistory(history.fixedUpdateHistory.data(), stats.fixedUpdateHistory.data(),
+                Dashboard::FrameProfilerStats::kFixedHistorySamples, history.count, history.writeIndex);
+    copyHistory(history.fixedInputHistory.data(), stats.fixedInputHistory.data(),
+                Dashboard::FrameProfilerStats::kFixedHistorySamples, history.count, history.writeIndex);
+    copyHistory(history.fixedStateHistory.data(), stats.fixedStateHistory.data(),
+                Dashboard::FrameProfilerStats::kFixedHistorySamples, history.count, history.writeIndex);
+    copyHistory(history.fixedParticleHistory.data(), stats.fixedParticleHistory.data(),
+                Dashboard::FrameProfilerStats::kFixedHistorySamples, history.count, history.writeIndex);
+    copyHistory(history.fixedDropHistory.data(), stats.fixedDropHistory.data(),
+                Dashboard::FrameProfilerStats::kFixedHistorySamples, history.count, history.writeIndex);
+    copyHistory(history.fixedWorldHistory.data(), stats.fixedWorldHistory.data(),
+                Dashboard::FrameProfilerStats::kFixedHistorySamples, history.count, history.writeIndex);
 }
 
 Dashboard* GameplayRenderRuntime::dashboard() {

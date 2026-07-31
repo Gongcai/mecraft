@@ -15,8 +15,7 @@ int fail(const char* message) {
     return EXIT_FAILURE;
 }
 
-template <typename Predicate>
-bool waitUntil(Predicate&& predicate, const int timeoutMs = 2000) {
+template <typename Predicate> bool waitUntil(Predicate&& predicate, const int timeoutMs = 2000) {
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeoutMs);
     while (std::chrono::steady_clock::now() < deadline) {
         if (predicate()) {
@@ -26,7 +25,7 @@ bool waitUntil(Predicate&& predicate, const int timeoutMs = 2000) {
     }
     return predicate();
 }
-}
+} // namespace
 
 int main() {
     {
@@ -35,14 +34,10 @@ int main() {
 
         pool.start();
         for (int i = 0; i < 8; ++i) {
-            pool.submit([&completed]() {
-                completed.fetch_add(1, std::memory_order_relaxed);
-            });
+            pool.submit([&completed]() { completed.fetch_add(1, std::memory_order_relaxed); });
         }
 
-        if (!waitUntil([&completed]() {
-                return completed.load(std::memory_order_relaxed) == 8;
-            })) {
+        if (!waitUntil([&completed]() { return completed.load(std::memory_order_relaxed) == 8; })) {
             return fail("all submitted tasks should complete");
         }
 
@@ -61,39 +56,47 @@ int main() {
         bool gateOpen = false;
 
         pool.start();
-        pool.submit([&]() {
-            std::unique_lock<std::mutex> lock(gateMutex);
-            while (!gateOpen) {
-                lock.unlock();
-                std::this_thread::sleep_for(std::chrono::milliseconds(1));
-                lock.lock();
-            }
-        }, -1);
+        pool.submit(
+            [&]() {
+                std::unique_lock<std::mutex> lock(gateMutex);
+                while (!gateOpen) {
+                    lock.unlock();
+                    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                    lock.lock();
+                }
+            },
+            -1);
 
-        pool.submit([&]() {
-            std::lock_guard<std::mutex> lock(gateMutex);
-            executionOrder.push_back(2);
-            orderedCompleted.fetch_add(1, std::memory_order_relaxed);
-        }, 2);
-        pool.submit([&]() {
-            std::lock_guard<std::mutex> lock(gateMutex);
-            executionOrder.push_back(0);
-            orderedCompleted.fetch_add(1, std::memory_order_relaxed);
-        }, 0);
-        pool.submit([&]() {
-            std::lock_guard<std::mutex> lock(gateMutex);
-            executionOrder.push_back(1);
-            orderedCompleted.fetch_add(1, std::memory_order_relaxed);
-        }, 0);
-        pool.submit([&]() {
-            std::lock_guard<std::mutex> lock(gateMutex);
-            executionOrder.push_back(3);
-            orderedCompleted.fetch_add(1, std::memory_order_relaxed);
-        }, 1);
+        pool.submit(
+            [&]() {
+                std::lock_guard<std::mutex> lock(gateMutex);
+                executionOrder.push_back(2);
+                orderedCompleted.fetch_add(1, std::memory_order_relaxed);
+            },
+            2);
+        pool.submit(
+            [&]() {
+                std::lock_guard<std::mutex> lock(gateMutex);
+                executionOrder.push_back(0);
+                orderedCompleted.fetch_add(1, std::memory_order_relaxed);
+            },
+            0);
+        pool.submit(
+            [&]() {
+                std::lock_guard<std::mutex> lock(gateMutex);
+                executionOrder.push_back(1);
+                orderedCompleted.fetch_add(1, std::memory_order_relaxed);
+            },
+            0);
+        pool.submit(
+            [&]() {
+                std::lock_guard<std::mutex> lock(gateMutex);
+                executionOrder.push_back(3);
+                orderedCompleted.fetch_add(1, std::memory_order_relaxed);
+            },
+            1);
 
-        if (!waitUntil([&pool]() {
-                return pool.pendingCount() == 4;
-            })) {
+        if (!waitUntil([&pool]() { return pool.pendingCount() == 4; })) {
             return fail("priority test should queue all work behind the gate task");
         }
 
@@ -102,9 +105,7 @@ int main() {
             gateOpen = true;
         }
 
-        if (!waitUntil([&orderedCompleted]() {
-                return orderedCompleted.load(std::memory_order_relaxed) == 4;
-            })) {
+        if (!waitUntil([&orderedCompleted]() { return orderedCompleted.load(std::memory_order_relaxed) == 4; })) {
             return fail("priority test tasks should all run after the gate opens");
         }
 
@@ -125,9 +126,7 @@ int main() {
 
         pool.start();
         pool.shutdown();
-        pool.submit([&postShutdownRuns]() {
-            postShutdownRuns.fetch_add(1, std::memory_order_relaxed);
-        });
+        pool.submit([&postShutdownRuns]() { postShutdownRuns.fetch_add(1, std::memory_order_relaxed); });
 
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
         if (postShutdownRuns.load(std::memory_order_relaxed) != 0) {

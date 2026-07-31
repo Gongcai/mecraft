@@ -215,8 +215,7 @@ struct FrameContext {
     // State flags
     bool eyeInWater = false;
     bool moonShadowActive = false;
-    TemporalResetReasons temporalResetReasons =
-        temporalResetReasonBit(TemporalResetReason::FirstFrame);
+    TemporalResetReasons temporalResetReasons = temporalResetReasonBit(TemporalResetReason::FirstFrame);
     float cameraRainVisibility = 1.0f; // 0=indoors, 1=outdoors (from multi-ray check)
 
     // Shared resources (non-owning pointer)

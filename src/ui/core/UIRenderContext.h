@@ -19,10 +19,7 @@ class HumanoidRenderer;
 class RhiCommandList;
 class UIRenderer;
 
-enum class UIRenderPhase {
-    CollectText,
-    Record
-};
+enum class UIRenderPhase { CollectText, Record };
 
 struct PlayerStatsData {
     int health = 20;
@@ -31,7 +28,7 @@ struct PlayerStatsData {
     int maxArmor = 20;
     int food = 20;
     int maxFood = 20;
-    bool showSurvivalStats = true;  // false in creative mode
+    bool showSurvivalStats = true; // false in creative mode
     bool isDead = false;
 };
 
@@ -82,15 +79,15 @@ struct UIRenderContext {
         const float h = static_cast<float>(scaleConfig.virtualHeight);
 
         switch (anchor) {
-            case Anchor::TopLeft:      return {0.0f, h};
-            case Anchor::TopCenter:    return {w * 0.5f, h};
-            case Anchor::TopRight:     return {w, h};
-            case Anchor::CenterLeft:   return {0.0f, h * 0.5f};
-            case Anchor::Center:       return {w * 0.5f, h * 0.5f};
-            case Anchor::CenterRight:  return {w, h * 0.5f};
-            case Anchor::BottomLeft:   return {0.0f, 0.0f};
-            case Anchor::BottomCenter: return {w * 0.5f, 0.0f};
-            case Anchor::BottomRight:  return {w, 0.0f};
+        case Anchor::TopLeft: return {0.0f, h};
+        case Anchor::TopCenter: return {w * 0.5f, h};
+        case Anchor::TopRight: return {w, h};
+        case Anchor::CenterLeft: return {0.0f, h * 0.5f};
+        case Anchor::Center: return {w * 0.5f, h * 0.5f};
+        case Anchor::CenterRight: return {w, h * 0.5f};
+        case Anchor::BottomLeft: return {0.0f, 0.0f};
+        case Anchor::BottomCenter: return {w * 0.5f, 0.0f};
+        case Anchor::BottomRight: return {w, 0.0f};
         }
         return {0.0f, 0.0f};
     }

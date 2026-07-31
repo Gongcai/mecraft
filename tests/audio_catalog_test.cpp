@@ -20,8 +20,7 @@ void touch(const std::filesystem::path& path) {
 } // namespace
 
 int main() {
-    const std::filesystem::path dir =
-        std::filesystem::temp_directory_path() / "mecraft_audio_catalog_test";
+    const std::filesystem::path dir = std::filesystem::temp_directory_path() / "mecraft_audio_catalog_test";
     std::filesystem::remove_all(dir);
     std::filesystem::create_directories(dir);
 

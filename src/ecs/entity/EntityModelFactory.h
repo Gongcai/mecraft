@@ -11,15 +11,11 @@ struct MobEntityDefinition;
 
 class EntityModelFactory {
 public:
-    static entt::entity createMob(GameplayRegistry& registry,
-                                  const MobEntityDefinition& definition,
-                                  const glm::vec3& worldPosition,
-                                  bool gameplayControlled = true);
+    static entt::entity createMob(GameplayRegistry& registry, const MobEntityDefinition& definition,
+                                  const glm::vec3& worldPosition, bool gameplayControlled = true);
 
-    static entt::entity createMobReplica(GameplayRegistry& registry,
-                                         const MobEntityDefinition& definition,
-                                         const glm::vec3& worldPosition,
-                                         float yaw = 0.0f);
+    static entt::entity createMobReplica(GameplayRegistry& registry, const MobEntityDefinition& definition,
+                                         const glm::vec3& worldPosition, float yaw = 0.0f);
 };
 
 } // namespace ecs

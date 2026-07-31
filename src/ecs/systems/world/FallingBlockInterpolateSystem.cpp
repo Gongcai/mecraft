@@ -14,7 +14,8 @@ constexpr float kTickIntervalSeconds = static_cast<float>(1.0 / GameTickClock::D
 } // namespace
 
 void FallingBlockInterpolateSystem::update(SystemContext& ctx) {
-    if (ctx.dt <= 0.0f) return;
+    if (ctx.dt <= 0.0f)
+        return;
     auto& reg = ctx.registry.registry();
 
     auto view = reg.view<FallingBlockComponent, TransformComponent>();

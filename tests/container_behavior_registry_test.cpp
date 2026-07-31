@@ -28,122 +28,94 @@ const ContainerProcessorDef* findProcessor(const ContainerBehaviorDef& def, cons
     }
     return nullptr;
 }
-}
+} // namespace
 
 int main() {
     ContainerBehaviorRegistry::init();
     ui::ContainerUiRegistry::init();
 
     const ContainerBehaviorDef& chest = ContainerBehaviorRegistry::require("minecraft:chest");
-    if (chest.handler != "storage" ||
-        chest.storage.kind != ContainerStorageKind::BlockEntity ||
-        chest.storage.slots != 27 ||
-        !chest.comparatorSignal ||
-        !chest.slotRules.empty() ||
-        !chest.processors.empty()) {
+    if (chest.handler != "storage" || chest.storage.kind != ContainerStorageKind::BlockEntity ||
+        chest.storage.slots != 27 || !chest.comparatorSignal || !chest.slotRules.empty() || !chest.processors.empty()) {
         return fail("chest behavior should describe block-entity storage");
     }
 
     const ContainerBehaviorDef& barrel = ContainerBehaviorRegistry::require("minecraft:barrel");
-    if (barrel.handler != "storage" ||
-        barrel.storage.kind != ContainerStorageKind::BlockEntity ||
-        barrel.storage.slots != 27 ||
-        !barrel.comparatorSignal ||
-        !barrel.slotRules.empty() ||
+    if (barrel.handler != "storage" || barrel.storage.kind != ContainerStorageKind::BlockEntity ||
+        barrel.storage.slots != 27 || !barrel.comparatorSignal || !barrel.slotRules.empty() ||
         !barrel.processors.empty()) {
         return fail("barrel behavior should describe block-entity storage");
     }
 
     const ContainerBehaviorDef& dispenser = ContainerBehaviorRegistry::require("minecraft:dispenser");
-    if (dispenser.handler != "storage" ||
-        dispenser.storage.kind != ContainerStorageKind::BlockEntity ||
-        dispenser.storage.slots != 9 ||
-        !dispenser.comparatorSignal ||
-        !dispenser.slotRules.empty() ||
+    if (dispenser.handler != "storage" || dispenser.storage.kind != ContainerStorageKind::BlockEntity ||
+        dispenser.storage.slots != 9 || !dispenser.comparatorSignal || !dispenser.slotRules.empty() ||
         !dispenser.processors.empty()) {
         return fail("dispenser behavior should describe 9-slot block-entity storage");
     }
 
     const ContainerBehaviorDef& dropper = ContainerBehaviorRegistry::require("minecraft:dropper");
-    if (dropper.handler != "storage" ||
-        dropper.storage.kind != ContainerStorageKind::BlockEntity ||
-        dropper.storage.slots != 9 ||
-        !dropper.comparatorSignal ||
-        !dropper.slotRules.empty() ||
+    if (dropper.handler != "storage" || dropper.storage.kind != ContainerStorageKind::BlockEntity ||
+        dropper.storage.slots != 9 || !dropper.comparatorSignal || !dropper.slotRules.empty() ||
         !dropper.processors.empty()) {
         return fail("dropper behavior should describe 9-slot block-entity storage");
     }
 
     const ContainerBehaviorDef& hopper = ContainerBehaviorRegistry::require("minecraft:hopper");
-    if (hopper.handler != "storage" ||
-        hopper.storage.kind != ContainerStorageKind::BlockEntity ||
-        hopper.storage.slots != 5 ||
-        !hopper.comparatorSignal ||
-        !hopper.slotRules.empty() ||
+    if (hopper.handler != "storage" || hopper.storage.kind != ContainerStorageKind::BlockEntity ||
+        hopper.storage.slots != 5 || !hopper.comparatorSignal || !hopper.slotRules.empty() ||
         !hopper.processors.empty()) {
         return fail("hopper behavior should describe 5-slot block-entity storage");
     }
 
     const ContainerBehaviorDef& furnace = ContainerBehaviorRegistry::require("minecraft:furnace");
-    if (furnace.handler != "smelting" ||
-        furnace.storage.kind != ContainerStorageKind::BlockEntity ||
-        furnace.storage.slots != 3 ||
-        !furnace.comparatorSignal ||
-        furnace.slotRules.size() != 3 ||
+    if (furnace.handler != "smelting" || furnace.storage.kind != ContainerStorageKind::BlockEntity ||
+        furnace.storage.slots != 3 || !furnace.comparatorSignal || furnace.slotRules.size() != 3 ||
         furnace.processors.size() != 1) {
         return fail("furnace behavior should describe smelting storage and processor metadata");
     }
     const ContainerSlotRuleDef* furnaceFuel = findSlotRule(furnace, "fuel");
-    if (furnaceFuel == nullptr ||
-        furnaceFuel->slot != 1 ||
-        furnaceFuel->accepts != "fuel" ||
-        furnaceFuel->outputOnly) {
+    if (furnaceFuel == nullptr || furnaceFuel->slot != 1 || furnaceFuel->accepts != "fuel" || furnaceFuel->outputOnly) {
         return fail("furnace behavior should declare the fuel slot rule");
     }
     const ContainerSlotRuleDef* furnaceOutput = findSlotRule(furnace, "output");
-    if (furnaceOutput == nullptr ||
-        furnaceOutput->slot != 2 ||
-        !furnaceOutput->outputOnly) {
+    if (furnaceOutput == nullptr || furnaceOutput->slot != 2 || !furnaceOutput->outputOnly) {
         return fail("furnace behavior should declare the output slot rule");
     }
     const ContainerProcessorDef* smelting = findProcessor(furnace, "smelting");
-    if (smelting == nullptr ||
-        smelting->type != "smelting" ||
-        smelting->inputSlot != 0 ||
-        smelting->fuelSlot != 1 ||
+    if (smelting == nullptr || smelting->type != "smelting" || smelting->inputSlot != 0 || smelting->fuelSlot != 1 ||
         smelting->outputSlot != 2) {
         return fail("furnace behavior should declare smelting processor slots");
     }
     const SmeltingProcessorRuntime smeltingRuntime =
         SmeltingProcessorRuntime::create(ui::ContainerUiRegistry::require("minecraft:furnace"), furnace, 3);
-    if (smeltingRuntime.processor().inputSlot != 0 ||
-        smeltingRuntime.processor().fuelSlot != 1 ||
+    if (smeltingRuntime.processor().inputSlot != 0 || smeltingRuntime.processor().fuelSlot != 1 ||
         smeltingRuntime.processor().outputSlot != 2) {
         return fail("furnace smelting runtime should resolve processor slots from behavior metadata");
     }
 
     const ContainerBehaviorDef& crafting = ContainerBehaviorRegistry::require("minecraft:crafting_table");
-    if (crafting.handler != "crafting" ||
-        crafting.storage.kind != ContainerStorageKind::Transient ||
-        crafting.storage.slots != 10 ||
-        crafting.comparatorSignal) {
+    if (crafting.handler != "crafting" || crafting.storage.kind != ContainerStorageKind::Transient ||
+        crafting.storage.slots != 10 || crafting.comparatorSignal) {
         return fail("crafting table behavior should describe transient crafting storage");
     }
     const ContainerProcessorDef* craftingProcessor = findProcessor(crafting, "crafting");
-    if (craftingProcessor == nullptr ||
-        craftingProcessor->type != "crafting" ||
-        craftingProcessor->gridSize != 3 ||
+    if (craftingProcessor == nullptr || craftingProcessor->type != "crafting" || craftingProcessor->gridSize != 3 ||
         craftingProcessor->resultSlot != 9) {
         return fail("crafting table behavior should declare crafting processor metadata");
     }
 
     if (&ContainerBehaviorRegistry::require(ui::ContainerUiRegistry::require("minecraft:chest").behavior) != &chest ||
         &ContainerBehaviorRegistry::require(ui::ContainerUiRegistry::require("minecraft:barrel").behavior) != &barrel ||
-        &ContainerBehaviorRegistry::require(ui::ContainerUiRegistry::require("minecraft:dispenser").behavior) != &dispenser ||
-        &ContainerBehaviorRegistry::require(ui::ContainerUiRegistry::require("minecraft:dropper").behavior) != &dropper ||
+        &ContainerBehaviorRegistry::require(ui::ContainerUiRegistry::require("minecraft:dispenser").behavior) !=
+            &dispenser ||
+        &ContainerBehaviorRegistry::require(ui::ContainerUiRegistry::require("minecraft:dropper").behavior) !=
+            &dropper ||
         &ContainerBehaviorRegistry::require(ui::ContainerUiRegistry::require("minecraft:hopper").behavior) != &hopper ||
-        &ContainerBehaviorRegistry::require(ui::ContainerUiRegistry::require("minecraft:furnace").behavior) != &furnace ||
-        &ContainerBehaviorRegistry::require(ui::ContainerUiRegistry::require("minecraft:crafting_table").behavior) != &crafting) {
+        &ContainerBehaviorRegistry::require(ui::ContainerUiRegistry::require("minecraft:furnace").behavior) !=
+            &furnace ||
+        &ContainerBehaviorRegistry::require(ui::ContainerUiRegistry::require("minecraft:crafting_table").behavior) !=
+            &crafting) {
         return fail("container UI behavior bindings should resolve to behavior definitions");
     }
 

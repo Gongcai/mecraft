@@ -21,21 +21,11 @@ public:
     [[nodiscard]] const GpuFrameStats* gpuFrameStats() const;
 
 #ifdef MECRAFT_DEBUG
-    void recordPollEvents(double ms,
-                          unsigned keyEvents,
-                          unsigned mouseButtonEvents,
-                          unsigned cursorPosEvents,
-                          unsigned scrollEvents,
-                          unsigned charEvents,
-                          double inputCallbackMs,
-                          double cursorPosCallbackMs,
-                          double imguiCallbackMs,
-                          double imguiCursorPosCallbackMs,
-                          double imguiCursorPosBackendMs,
-                          double imguiWndProcMs,
-                          double imguiWndProcSlowestMs,
-                          unsigned imguiWndProcSlowestMsg,
-                          unsigned imguiWndProcCount);
+    void recordPollEvents(double ms, unsigned keyEvents, unsigned mouseButtonEvents, unsigned cursorPosEvents,
+                          unsigned scrollEvents, unsigned charEvents, double inputCallbackMs,
+                          double cursorPosCallbackMs, double imguiCallbackMs, double imguiCursorPosCallbackMs,
+                          double imguiCursorPosBackendMs, double imguiWndProcMs, double imguiWndProcSlowestMs,
+                          unsigned imguiWndProcSlowestMsg, unsigned imguiWndProcCount);
     void recordAppUpdateDispatch(double ms);
     void recordAppRenderDispatch(double ms);
 #endif
@@ -43,11 +33,7 @@ public:
     [[nodiscard]] bool isEmpty() const { return m_states.empty(); }
 
 private:
-    enum class PendingOpType {
-        Push,
-        Pop,
-        Change
-    };
+    enum class PendingOpType { Push, Pop, Change };
 
     struct PendingOp {
         PendingOpType type = PendingOpType::Pop;

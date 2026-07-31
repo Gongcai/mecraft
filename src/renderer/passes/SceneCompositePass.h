@@ -45,22 +45,15 @@ public:
     /// @param resources Graph resources read and written by this pass.
     /// @param dependency Pass that must complete before scene composite.
     /// @return The scene composite pass handle, or an invalid handle on setup failure.
-    [[nodiscard]] RgPassHandle addGraphPasses(
-        RenderGraph& graph,
-        const FrameContext& ctx,
-        const RenderSettings& settings,
-        DeferredRenderTargets& targets,
-        const GraphResources& resources,
-        RgPassHandle dependency);
+    [[nodiscard]] RgPassHandle addGraphPasses(RenderGraph& graph, const FrameContext& ctx,
+                                              const RenderSettings& settings, DeferredRenderTargets& targets,
+                                              const GraphResources& resources, RgPassHandle dependency);
 
 private:
     bool ensureRhiPipelines(RhiDevice& rhiDevice);
-    bool ensureBindGroup(RhiDevice& rhiDevice,
-                         const std::array<RhiTextureViewHandle, 10>& views);
-    [[nodiscard]] bool recordGraphPass(RhiCommandList& commandList,
-                                       const FrameContext& ctx,
-                                       const RenderSettings& settings,
-                                       DeferredRenderTargets& targets);
+    bool ensureBindGroup(RhiDevice& rhiDevice, const std::array<RhiTextureViewHandle, 10>& views);
+    [[nodiscard]] bool recordGraphPass(RhiCommandList& commandList, const FrameContext& ctx,
+                                       const RenderSettings& settings, DeferredRenderTargets& targets);
     void destroyBindGroups();
     void destroyRhiResources();
 

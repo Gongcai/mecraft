@@ -8,10 +8,8 @@ namespace ecs {
 
 class DamageSystem : public ISystem {
 public:
-    using Dependencies = SystemDependency<
-        std::tuple<HealthComponent>,
-        std::tuple<HealthComponent, HurtEffectComponent>
-    >;
+    using Dependencies =
+        SystemDependency<std::tuple<HealthComponent>, std::tuple<HealthComponent, HurtEffectComponent>>;
 
     void update(SystemContext& ctx) override;
 };

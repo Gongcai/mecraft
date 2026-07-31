@@ -31,26 +31,18 @@ public:
 
     /// Adds one compute reduction pass per pyramid mip. Each pass declares
     /// its exact mip subresources so the graph plans the inter-mip barriers.
-    [[nodiscard]] RgPassHandle addGraphPasses(RenderGraph& graph,
-                                              const FrameContext& ctx,
-                                              DeferredRenderTargets& targets,
-                                              const GraphResources& resources,
+    [[nodiscard]] RgPassHandle addGraphPasses(RenderGraph& graph, const FrameContext& ctx,
+                                              DeferredRenderTargets& targets, const GraphResources& resources,
                                               RgPassHandle dependency);
 
     /// Adds the occlusion cull pass: one compute thread per indirect terrain
     /// draw, zeroing commands whose sub-chunk box is behind the pyramid.
     /// Latest culled/total command counts, delayed by the readback ring.
-    [[nodiscard]] const HiZCullFrameStats& cullStats() const {
-        return m_cullStats;
-    }
+    [[nodiscard]] const HiZCullFrameStats& cullStats() const { return m_cullStats; }
 
-    [[nodiscard]] RgPassHandle addCullPass(RenderGraph& graph,
-                                           const FrameContext& ctx,
-                                           const RenderSettings& settings,
-                                           DeferredRenderTargets& targets,
-                                           WorldRenderBuffer& worldBuffer,
-                                           RgTextureHandle hiZ,
-                                           RgPassHandle dependency);
+    [[nodiscard]] RgPassHandle addCullPass(RenderGraph& graph, const FrameContext& ctx, const RenderSettings& settings,
+                                           DeferredRenderTargets& targets, WorldRenderBuffer& worldBuffer,
+                                           RgTextureHandle hiZ, RgPassHandle dependency);
 
     /// Commits the readback ring position only after graph submission.
     /// @param succeeded True when every graph command list was submitted.
@@ -58,29 +50,17 @@ public:
 
 private:
     bool ensurePipeline(RhiDevice& rhiDevice);
-    bool ensureMipBindGroup(RhiDevice& rhiDevice,
-                            uint32_t mip,
-                            RhiTextureViewHandle sourceView,
+    bool ensureMipBindGroup(RhiDevice& rhiDevice, uint32_t mip, RhiTextureViewHandle sourceView,
                             RhiTextureViewHandle destView);
-    [[nodiscard]] bool recordMip(RhiCommandList& commandList,
-                                 const FrameContext& ctx,
-                                 DeferredRenderTargets& targets,
+    [[nodiscard]] bool recordMip(RhiCommandList& commandList, const FrameContext& ctx, DeferredRenderTargets& targets,
                                  uint32_t mip);
     void destroyRhiResources();
     bool ensureCullPipeline(RhiDevice& rhiDevice);
     bool ensureCullStatsBuffers(RhiDevice& rhiDevice);
-    bool ensureCullBindGroup(RhiDevice& rhiDevice,
-                             int slot,
-                             RhiBufferHandle commandBuffer,
-                             uint64_t commandCapacity,
-                             RhiBufferHandle metadataBuffer,
-                             uint64_t metadataCapacity,
-                             RhiTextureViewHandle hiZView);
-    [[nodiscard]] bool recordCull(RhiCommandList& commandList,
-                                  const FrameContext& ctx,
-                                  const RenderSettings& settings,
-                                  DeferredRenderTargets& targets,
-                                  WorldRenderBuffer& worldBuffer);
+    bool ensureCullBindGroup(RhiDevice& rhiDevice, int slot, RhiBufferHandle commandBuffer, uint64_t commandCapacity,
+                             RhiBufferHandle metadataBuffer, uint64_t metadataCapacity, RhiTextureViewHandle hiZView);
+    [[nodiscard]] bool recordCull(RhiCommandList& commandList, const FrameContext& ctx, const RenderSettings& settings,
+                                  DeferredRenderTargets& targets, WorldRenderBuffer& worldBuffer);
 
     RhiDevice* m_rhiDevice = nullptr;
     RhiShaderHandle m_shader;

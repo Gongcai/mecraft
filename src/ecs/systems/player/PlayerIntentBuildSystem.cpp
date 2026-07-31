@@ -12,8 +12,8 @@ void PlayerIntentBuildSystem::update(SystemContext& ctx) {
     auto& registry = ctx.registry;
     const InputFrameState& frame = registry.ctxGet<InputFrameState>();
 
-    auto view = registry.view<LocalPlayerTag, MoveIntentComponent, LookIntentComponent,
-                              HotbarIntentComponent, BlockActionIntentComponent, CameraStateComponent>();
+    auto view = registry.view<LocalPlayerTag, MoveIntentComponent, LookIntentComponent, HotbarIntentComponent,
+                              BlockActionIntentComponent, CameraStateComponent>();
 
     if (!frame.gameplayContextActive) {
         for (auto e : view) {
@@ -76,7 +76,7 @@ void PlayerIntentBuildSystem::update(SystemContext& ctx) {
         // Apply gamepad sensitivity multiplier for look input
         // Gamepad stick returns [-1, 1], while mouse returns pixel delta (much larger values)
         // To make gamepad feel responsive, we multiply by a factor
-        constexpr float kGamepadLookMultiplier = 50.0f;  // Adjust this value for sensitivity
+        constexpr float kGamepadLookMultiplier = 50.0f; // Adjust this value for sensitivity
 
         // Check if input is from gamepad (small absolute values indicate analog stick)
         const bool likelyGamepad = (std::abs(frame.lookX) <= 1.5f && std::abs(frame.lookY) <= 1.5f) &&

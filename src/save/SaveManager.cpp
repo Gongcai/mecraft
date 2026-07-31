@@ -144,10 +144,7 @@ bool readBoolField(const nlohmann::json& object, const char* key, bool& out, con
     return true;
 }
 
-bool readStringField(const nlohmann::json& object,
-                     const char* key,
-                     std::string& out,
-                     const bool required = false) {
+bool readStringField(const nlohmann::json& object, const char* key, std::string& out, const bool required = false) {
     const nlohmann::json* value = findField(object, key);
     if (value == nullptr) {
         if (required) {
@@ -164,11 +161,7 @@ bool readStringField(const nlohmann::json& object,
     return true;
 }
 
-bool readFloat3Field(const nlohmann::json& object,
-                     const char* key,
-                     float& x,
-                     float& y,
-                     float& z,
+bool readFloat3Field(const nlohmann::json& object, const char* key, float& x, float& y, float& z,
                      const bool required = false) {
     const nlohmann::json* value = findField(object, key);
     if (value == nullptr) {
@@ -178,8 +171,8 @@ bool readFloat3Field(const nlohmann::json& object,
         }
         return true;
     }
-    if (!value->is_array() || value->size() < 3 ||
-        !(*value)[0].is_number() || !(*value)[1].is_number() || !(*value)[2].is_number()) {
+    if (!value->is_array() || value->size() < 3 || !(*value)[0].is_number() || !(*value)[1].is_number() ||
+        !(*value)[2].is_number()) {
         MECRAFT_LOG_FPRINTF(stderr, "[Save] Invalid vec3 field: %s\n", key);
         return false;
     }
@@ -189,12 +182,7 @@ bool readFloat3Field(const nlohmann::json& object,
     return true;
 }
 
-bool readInt3Field(const nlohmann::json& object,
-                   const char* key,
-                   int& x,
-                   int& y,
-                   int& z,
-                   const bool required = false) {
+bool readInt3Field(const nlohmann::json& object, const char* key, int& x, int& y, int& z, const bool required = false) {
     const nlohmann::json* value = findField(object, key);
     if (value == nullptr) {
         if (required) {
@@ -203,10 +191,8 @@ bool readInt3Field(const nlohmann::json& object,
         }
         return true;
     }
-    if (!value->is_array() || value->size() < 3 ||
-        !(*value)[0].is_number_integer() ||
-        !(*value)[1].is_number_integer() ||
-        !(*value)[2].is_number_integer()) {
+    if (!value->is_array() || value->size() < 3 || !(*value)[0].is_number_integer() ||
+        !(*value)[1].is_number_integer() || !(*value)[2].is_number_integer()) {
         MECRAFT_LOG_FPRINTF(stderr, "[Save] Invalid ivec3 field: %s\n", key);
         return false;
     }
@@ -240,8 +226,7 @@ bool parseJsonFile(std::ifstream& file, const char* label, nlohmann::json& out) 
 
 } // namespace
 
-SaveManager::SaveManager(std::filesystem::path saveRoot)
-    : m_paths(std::move(saveRoot)) {}
+SaveManager::SaveManager(std::filesystem::path saveRoot) : m_paths(std::move(saveRoot)) {}
 
 SaveManager::~SaveManager() {
     // Ensure all pending saves are completed before destruction
@@ -285,8 +270,7 @@ bool SaveManager::loadLevelMeta(LevelMeta& outMeta) {
     }
 
     if (const nlohmann::json* time = findField(j, "time")) {
-        if (!time->is_object() ||
-            !readFloatField(*time, "timeOfDay", outMeta.timeOfDay) ||
+        if (!time->is_object() || !readFloatField(*time, "timeOfDay", outMeta.timeOfDay) ||
             !readDoubleField(*time, "totalGameTime", outMeta.totalGameTime) ||
             !readIntField(*time, "elapsedDays", outMeta.elapsedDays)) {
             MECRAFT_LOG_FPRINTF(stderr, "[Save] Invalid time object in level.json\n");
@@ -295,8 +279,7 @@ bool SaveManager::loadLevelMeta(LevelMeta& outMeta) {
     }
 
     if (const nlohmann::json* weather = findField(j, "weather")) {
-        if (!weather->is_object() ||
-            !readStringField(*weather, "type", outMeta.weatherType) ||
+        if (!weather->is_object() || !readStringField(*weather, "type", outMeta.weatherType) ||
             !readFloatField(*weather, "wetness", outMeta.weatherWetness) ||
             !readFloatField(*weather, "storm", outMeta.weatherStorm) ||
             !readFloatField(*weather, "aerialReduction", outMeta.weatherAerialReduction)) {
@@ -320,16 +303,11 @@ void SaveManager::saveLevelMeta(const LevelMeta& meta) {
     j["displayName"] = meta.displayName;
     j["spawn"] = {meta.spawnX, meta.spawnY, meta.spawnZ};
     j["time"] = {
-        {"timeOfDay", meta.timeOfDay},
-        {"totalGameTime", meta.totalGameTime},
-        {"elapsedDays", meta.elapsedDays}
-    };
-    j["weather"] = {
-        {"type", meta.weatherType},
-        {"wetness", meta.weatherWetness},
-        {"storm", meta.weatherStorm},
-        {"aerialReduction", meta.weatherAerialReduction}
-    };
+        {"timeOfDay", meta.timeOfDay}, {"totalGameTime", meta.totalGameTime}, {"elapsedDays", meta.elapsedDays}};
+    j["weather"] = {{"type", meta.weatherType},
+                    {"wetness", meta.weatherWetness},
+                    {"storm", meta.weatherStorm},
+                    {"aerialReduction", meta.weatherAerialReduction}};
     j["createdUtc"] = meta.createdUtc;
     j["lastSavedUtc"] = meta.lastSavedUtc;
     j["screenshotPath"] = meta.screenshotPath;
@@ -356,14 +334,12 @@ void SaveManager::saveLevelMeta(const LevelMeta& meta) {
     if (std::filesystem::exists(path, ec)) {
         std::filesystem::rename(path, bakPath, ec);
         if (ec) {
-            MECRAFT_LOG_FPRINTF(stderr, "[Save] Failed to rename old level.json to .bak: %s\n",
-                         ec.message().c_str());
+            MECRAFT_LOG_FPRINTF(stderr, "[Save] Failed to rename old level.json to .bak: %s\n", ec.message().c_str());
         }
     }
     std::filesystem::rename(tmpPath, path, ec);
     if (ec) {
-        MECRAFT_LOG_FPRINTF(stderr, "[Save] Failed to rename tmp to level.json: %s\n",
-                     ec.message().c_str());
+        MECRAFT_LOG_FPRINTF(stderr, "[Save] Failed to rename tmp to level.json: %s\n", ec.message().c_str());
     }
 }
 
@@ -384,7 +360,8 @@ RegionFile* SaveManager::getOrCreateRegion(int cx, int cz) const {
 
     const auto path = RegionFile::regionPath(m_paths.chunksDir(), rx, rz);
     auto rf = RegionFile::open(path, rx, rz);
-    if (!rf) return nullptr;
+    if (!rf)
+        return nullptr;
 
     RegionFile* ptr = rf.get();
     m_regionCache[key] = std::move(rf);
@@ -412,15 +389,18 @@ ChunkLoadData SaveManager::tryLoadChunkData(int cx, int cz) {
     }
 
     std::ifstream file(path, std::ios::binary | std::ios::ate);
-    if (!file.is_open()) return loadData;
+    if (!file.is_open())
+        return loadData;
 
     const auto fileSize = file.tellg();
-    if (fileSize <= 0) return loadData;
+    if (fileSize <= 0)
+        return loadData;
     file.seekg(0);
 
     std::vector<uint8_t> data(static_cast<size_t>(fileSize));
     file.read(reinterpret_cast<char*>(data.data()), static_cast<std::streamsize>(fileSize));
-    if (!file) return loadData;
+    if (!file)
+        return loadData;
 
     return ChunkSerializer::deserializeFileData(data.data(), data.size());
 }
@@ -430,13 +410,10 @@ void SaveManager::submitSaveChunk(int cx, int cz, const Chunk& chunk) {
     submitSaveChunk(cx, cz, chunk, kNoWireContainers);
 }
 
-void SaveManager::submitSaveChunk(int cx,
-                                  int cz,
-                                  const Chunk& chunk,
+void SaveManager::submitSaveChunk(int cx, int cz, const Chunk& chunk,
                                   const std::vector<WireContainerSaveEntry>& wireContainers) {
     // Serialize snapshot on calling thread (reads chunk data, no mutation)
-    auto fileData = std::make_shared<std::vector<uint8_t>>(
-        ChunkSerializer::serializeFile(chunk, wireContainers));
+    auto fileData = std::make_shared<std::vector<uint8_t>>(ChunkSerializer::serializeFile(chunk, wireContainers));
     if (fileData->empty()) {
         MECRAFT_LOG_FPRINTF(stderr, "[Save] Failed to serialize chunk (%d, %d)\n", cx, cz);
         return;
@@ -451,11 +428,13 @@ void SaveManager::submitSaveChunk(int cx,
 
     m_pendingSaveCount.fetch_add(1, std::memory_order_relaxed);
 
-    m_threadPool->submit([this, cx, cz, key, saveSequence, fileData]() {
-        writeChunkSnapshotIfCurrent(cx, cz, key, saveSequence, *fileData);
-        m_pendingSaveCount.fetch_sub(1, std::memory_order_release);
-        m_saveCv.notify_all();
-    }, 0);
+    m_threadPool->submit(
+        [this, cx, cz, key, saveSequence, fileData]() {
+            writeChunkSnapshotIfCurrent(cx, cz, key, saveSequence, *fileData);
+            m_pendingSaveCount.fetch_sub(1, std::memory_order_release);
+            m_saveCv.notify_all();
+        },
+        0);
 }
 
 void SaveManager::setThreadPool(ThreadPool* pool) {
@@ -464,9 +443,7 @@ void SaveManager::setThreadPool(ThreadPool* pool) {
 
 void SaveManager::flushPendingSaves() {
     std::unique_lock<std::mutex> lock(m_saveMutex);
-    m_saveCv.wait(lock, [this]() {
-        return m_pendingSaveCount.load(std::memory_order_acquire) == 0;
-    });
+    m_saveCv.wait(lock, [this]() { return m_pendingSaveCount.load(std::memory_order_acquire) == 0; });
 }
 
 bool SaveManager::chunkFileExists(int cx, int cz) const {
@@ -536,11 +513,8 @@ void SaveManager::writeChunkSnapshot(int cx, int cz, const std::vector<uint8_t>&
     writeChunkFileAtomic(cx, cz, fileData);
 }
 
-void SaveManager::writeChunkSnapshotIfCurrent(const int cx,
-                                              const int cz,
-                                              const int64_t chunkKey,
-                                              const uint64_t saveSequence,
-                                              const std::vector<uint8_t>& fileData) {
+void SaveManager::writeChunkSnapshotIfCurrent(const int cx, const int cz, const int64_t chunkKey,
+                                              const uint64_t saveSequence, const std::vector<uint8_t>& fileData) {
     std::lock_guard<std::mutex> writeLock(m_chunkWriteMutex);
     if (!isSaveSequenceCurrent(chunkKey, saveSequence)) {
         return;
@@ -563,13 +537,11 @@ bool SaveManager::loadLocalPlayer(PlayerData& out) {
 }
 
 void SaveManager::savePlayer(uint32_t clientId, const PlayerData& data) {
-    PlayerSerializer::saveToFile(
-        (m_paths.playersDir() / (std::to_string(clientId) + ".json")).string(), data);
+    PlayerSerializer::saveToFile((m_paths.playersDir() / (std::to_string(clientId) + ".json")).string(), data);
 }
 
 bool SaveManager::loadPlayer(uint32_t clientId, PlayerData& out) {
-    return PlayerSerializer::loadFromFile(
-        (m_paths.playersDir() / (std::to_string(clientId) + ".json")).string(), out);
+    return PlayerSerializer::loadFromFile((m_paths.playersDir() / (std::to_string(clientId) + ".json")).string(), out);
 }
 
 void SaveManager::savePersistentEntities(const std::vector<PersistentEntityData>& entities) {
@@ -654,10 +626,7 @@ bool SaveManager::loadPersistentEntities(std::vector<PersistentEntityData>& out)
 
     int version = 0;
     const nlohmann::json* entities = findField(root, "entities");
-    if (!readIntField(root, "version", version) ||
-        version != 1 ||
-        entities == nullptr ||
-        !entities->is_array()) {
+    if (!readIntField(root, "version", version) || version != 1 || entities == nullptr || !entities->is_array()) {
         MECRAFT_LOG_FPRINTF(stderr, "[Save] Unsupported entity save file\n");
         out.clear();
         return false;
@@ -671,21 +640,17 @@ bool SaveManager::loadPersistentEntities(std::vector<PersistentEntityData>& out)
         }
 
         PersistentEntityData entity;
-        if (!readStringField(j, "type", entity.type, true) ||
-            entity.type.empty() ||
+        if (!readStringField(j, "type", entity.type, true) || entity.type.empty() ||
             !readFloat3Field(j, "position", entity.posX, entity.posY, entity.posZ) ||
             !readFloat3Field(j, "velocity", entity.velX, entity.velY, entity.velZ) ||
-            !readFloatField(j, "yaw", entity.yaw) ||
-            !readFloatField(j, "pitch", entity.pitch) ||
-            !readUint64Field(j, "dropId", entity.dropId) ||
-            !readBoolField(j, "grounded", entity.grounded)) {
+            !readFloatField(j, "yaw", entity.yaw) || !readFloatField(j, "pitch", entity.pitch) ||
+            !readUint64Field(j, "dropId", entity.dropId) || !readBoolField(j, "grounded", entity.grounded)) {
             out.clear();
             return false;
         }
 
         if (const nlohmann::json* health = findField(j, "health")) {
-            if (!health->is_object() ||
-                !readIntField(*health, "current", entity.health) ||
+            if (!health->is_object() || !readIntField(*health, "current", entity.health) ||
                 !readIntField(*health, "max", entity.healthMax)) {
                 MECRAFT_LOG_FPRINTF(stderr, "[Save] Invalid persistent entity health object\n");
                 out.clear();
@@ -694,8 +659,7 @@ bool SaveManager::loadPersistentEntities(std::vector<PersistentEntityData>& out)
         }
 
         if (const nlohmann::json* item = findField(j, "item")) {
-            if (!item->is_object() ||
-                !readUint32Field(*item, "id", entity.itemId) ||
+            if (!item->is_object() || !readUint32Field(*item, "id", entity.itemId) ||
                 !readUint32Field(*item, "count", entity.stackCount)) {
                 MECRAFT_LOG_FPRINTF(stderr, "[Save] Invalid persistent entity item object\n");
                 out.clear();
@@ -713,8 +677,7 @@ bool SaveManager::loadPersistentEntities(std::vector<PersistentEntityData>& out)
         }
 
         if (const nlohmann::json* spin = findField(j, "spin")) {
-            if (!spin->is_object() ||
-                !readFloatField(*spin, "yaw", entity.yaw) ||
+            if (!spin->is_object() || !readFloatField(*spin, "yaw", entity.yaw) ||
                 !readFloatField(*spin, "speed", entity.spinSpeed)) {
                 MECRAFT_LOG_FPRINTF(stderr, "[Save] Invalid persistent entity spin object\n");
                 out.clear();
@@ -723,8 +686,7 @@ bool SaveManager::loadPersistentEntities(std::vector<PersistentEntityData>& out)
         }
 
         if (const nlohmann::json* lifetime = findField(j, "lifetime")) {
-            if (!lifetime->is_object() ||
-                !readFloatField(*lifetime, "age", entity.ageSeconds) ||
+            if (!lifetime->is_object() || !readFloatField(*lifetime, "age", entity.ageSeconds) ||
                 !readFloatField(*lifetime, "max", entity.lifeTimeSeconds)) {
                 MECRAFT_LOG_FPRINTF(stderr, "[Save] Invalid persistent entity lifetime object\n");
                 out.clear();
@@ -759,14 +721,8 @@ void SaveManager::saveBlockEntities(const std::vector<BlockEntityData>& entities
             if (slot.slot < 0 || slot.itemId == 0 || slot.count == 0) {
                 continue;
             }
-            slots.push_back({
-                {"slot", slot.slot},
-                {"item", {
-                    {"id", slot.itemId},
-                    {"count", slot.count},
-                    {"durability", slot.durability}
-                }}
-            });
+            slots.push_back({{"slot", slot.slot},
+                             {"item", {{"id", slot.itemId}, {"count", slot.count}, {"durability", slot.durability}}}});
         }
 
         nlohmann::json j;
@@ -829,9 +785,7 @@ bool SaveManager::loadBlockEntities(std::vector<BlockEntityData>& out) {
 
     int version = 0;
     const nlohmann::json* blockEntities = findField(root, "blockEntities");
-    if (!readIntField(root, "version", version) ||
-        version != 1 ||
-        blockEntities == nullptr ||
+    if (!readIntField(root, "version", version) || version != 1 || blockEntities == nullptr ||
         !blockEntities->is_array()) {
         MECRAFT_LOG_FPRINTF(stderr, "[Save] Unsupported block entity save file\n");
         out.clear();
@@ -846,8 +800,7 @@ bool SaveManager::loadBlockEntities(std::vector<BlockEntityData>& out) {
         }
 
         BlockEntityData entity;
-        if (!readStringField(j, "type", entity.type, true) ||
-            entity.type.empty() ||
+        if (!readStringField(j, "type", entity.type, true) || entity.type.empty() ||
             !readInt3Field(j, "position", entity.x, entity.y, entity.z, true)) {
             out.clear();
             return false;
@@ -883,8 +836,7 @@ bool SaveManager::loadBlockEntities(std::vector<BlockEntityData>& out) {
             }
 
             if (const nlohmann::json* item = findField(slotJson, "item")) {
-                if (!item->is_object() ||
-                    !readUint32Field(*item, "id", slot.itemId) ||
+                if (!item->is_object() || !readUint32Field(*item, "id", slot.itemId) ||
                     !readUint32Field(*item, "count", slot.count) ||
                     !readUint32Field(*item, "durability", slot.durability)) {
                     MECRAFT_LOG_FPRINTF(stderr, "[Save] Invalid block entity slot item object\n");
@@ -924,8 +876,7 @@ std::string SaveManager::currentUtcTimestamp() {
     gmtime_r(&time, &utc);
 #endif
     char buf[32];
-    std::snprintf(buf, sizeof(buf), "%04d-%02d-%02dT%02d:%02d:%02dZ",
-                  utc.tm_year + 1900, utc.tm_mon + 1, utc.tm_mday,
+    std::snprintf(buf, sizeof(buf), "%04d-%02d-%02dT%02d:%02d:%02dZ", utc.tm_year + 1900, utc.tm_mon + 1, utc.tm_mday,
                   utc.tm_hour, utc.tm_min, utc.tm_sec);
     return buf;
 }
@@ -941,7 +892,7 @@ void SaveManager::saveScreenshot(const uint8_t* rgbData, int width, int height) 
         rgba[i * 4 + 0] = rgbData[i * 3 + 0]; // R
         rgba[i * 4 + 1] = rgbData[i * 3 + 1]; // G
         rgba[i * 4 + 2] = rgbData[i * 3 + 2]; // B
-        rgba[i * 4 + 3] = 255;                 // A
+        rgba[i * 4 + 3] = 255; // A
     }
 
     // Write PNG using stb_image_write
@@ -977,12 +928,10 @@ void SaveManager::writeChunkFileAtomic(int cx, int cz, const std::vector<uint8_t
     {
         std::ofstream file(tmpPath, std::ios::binary);
         if (!file.is_open()) {
-            MECRAFT_LOG_FPRINTF(stderr, "[Save] Failed to create tmp file %s\n",
-                         tmpPath.string().c_str());
+            MECRAFT_LOG_FPRINTF(stderr, "[Save] Failed to create tmp file %s\n", tmpPath.string().c_str());
             return;
         }
-        file.write(reinterpret_cast<const char*>(fileData.data()),
-                   static_cast<std::streamsize>(fileData.size()));
+        file.write(reinterpret_cast<const char*>(fileData.data()), static_cast<std::streamsize>(fileData.size()));
         file.flush();
         file.close();
     }
@@ -991,8 +940,7 @@ void SaveManager::writeChunkFileAtomic(int cx, int cz, const std::vector<uint8_t
     if (std::filesystem::exists(finalPath, ec)) {
         std::filesystem::rename(finalPath, bakPath, ec);
         if (ec) {
-            MECRAFT_LOG_FPRINTF(stderr, "[Save] Failed to rename old chunk to .bak: %s\n",
-                         ec.message().c_str());
+            MECRAFT_LOG_FPRINTF(stderr, "[Save] Failed to rename old chunk to .bak: %s\n", ec.message().c_str());
             // Continue anyway — the tmp rename below will overwrite
         }
     }
@@ -1000,8 +948,7 @@ void SaveManager::writeChunkFileAtomic(int cx, int cz, const std::vector<uint8_t
     // Rename .tmp to final
     std::filesystem::rename(tmpPath, finalPath, ec);
     if (ec) {
-        MECRAFT_LOG_FPRINTF(stderr, "[Save] Failed to rename tmp to final: %s\n",
-                     ec.message().c_str());
+        MECRAFT_LOG_FPRINTF(stderr, "[Save] Failed to rename tmp to final: %s\n", ec.message().c_str());
     }
 }
 

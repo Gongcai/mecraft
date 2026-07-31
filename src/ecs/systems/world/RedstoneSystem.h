@@ -29,9 +29,7 @@ public:
     /// @param registry  Gameplay registry that owns block-entity inventory stores.
     /// @param budget  Maximum number of dirty positions drained from the redstone queue.
     /// @return Number of block states changed by this processing pass.
-    static size_t processWorld(World& world,
-                               uint64_t redstoneTick,
-                               const GameplayRegistry& registry,
+    static size_t processWorld(World& world, uint64_t redstoneTick, const GameplayRegistry& registry,
                                size_t budget = 4096);
 
     /// Process dirty redstone positions with mutable gameplay entities.
@@ -40,10 +38,7 @@ public:
     /// @param registry  Gameplay registry that owns entities and block-entity inventory stores.
     /// @param budget  Maximum number of dirty positions drained from the redstone queue.
     /// @return Number of block states changed by this processing pass.
-    static size_t processWorld(World& world,
-                               uint64_t redstoneTick,
-                               GameplayRegistry& registry,
-                               size_t budget = 4096);
+    static size_t processWorld(World& world, uint64_t redstoneTick, GameplayRegistry& registry, size_t budget = 4096);
 };
 
 } // namespace ecs

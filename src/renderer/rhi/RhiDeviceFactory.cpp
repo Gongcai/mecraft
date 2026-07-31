@@ -25,20 +25,16 @@ RhiBackend defaultRhiBackend() {
 
 const char* rhiBackendDisplayName(const RhiBackend backend) {
     switch (backend) {
-        case RhiBackend::OpenGL:
-            return "OpenGL";
-        case RhiBackend::Vulkan:
-            return "Vulkan";
+    case RhiBackend::OpenGL: return "OpenGL";
+    case RhiBackend::Vulkan: return "Vulkan";
     }
     std::abort();
 }
 
 const char* rhiBackendConfigName(const RhiBackend backend) {
     switch (backend) {
-        case RhiBackend::OpenGL:
-            return "opengl";
-        case RhiBackend::Vulkan:
-            return "vulkan";
+    case RhiBackend::OpenGL: return "opengl";
+    case RhiBackend::Vulkan: return "vulkan";
     }
     std::abort();
 }
@@ -55,17 +51,17 @@ std::optional<RhiBackend> parseRhiBackend(const std::string_view name) {
 
 bool isRhiBackendAvailable(const RhiBackend backend) {
     switch (backend) {
-        case RhiBackend::OpenGL:
+    case RhiBackend::OpenGL:
 #ifdef MECRAFT_RHI_BACKEND_OPENGL
-            return true;
+        return true;
 #else
-            return false;
+        return false;
 #endif
-        case RhiBackend::Vulkan:
+    case RhiBackend::Vulkan:
 #ifdef MECRAFT_RHI_BACKEND_VULKAN
-            return true;
+        return true;
 #else
-            return false;
+        return false;
 #endif
     }
     return false;
@@ -73,17 +69,17 @@ bool isRhiBackendAvailable(const RhiBackend backend) {
 
 std::unique_ptr<RhiDevice> createRhiDevice(const RhiBackend backend) {
     switch (backend) {
-        case RhiBackend::OpenGL:
+    case RhiBackend::OpenGL:
 #ifdef MECRAFT_RHI_BACKEND_OPENGL
-            return std::make_unique<GlRhiDevice>();
+        return std::make_unique<GlRhiDevice>();
 #else
-            return nullptr;
+        return nullptr;
 #endif
-        case RhiBackend::Vulkan:
+    case RhiBackend::Vulkan:
 #ifdef MECRAFT_RHI_BACKEND_VULKAN
-            return std::make_unique<VkRhiDevice>();
+        return std::make_unique<VkRhiDevice>();
 #else
-            return nullptr;
+        return nullptr;
 #endif
     }
     return nullptr;

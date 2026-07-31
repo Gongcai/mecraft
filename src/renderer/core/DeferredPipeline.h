@@ -41,7 +41,9 @@ class World;
 class Camera;
 class Window;
 
-namespace shadow { class ShadowRenderer; }
+namespace shadow {
+class ShadowRenderer;
+}
 
 /// Container for all extracted deferred rendering passes.
 /// Owns pass lifecycle (init/shutdown) and provides accessors.
@@ -58,8 +60,7 @@ public:
 
     // Held block light value (set from Game)
     void setHeldBlockLightValue(int value) { m_heldBlockLightValue = value; }
-    [[nodiscard]] bool setSceneLights(
-        std::vector<renderer::contracts::SceneLight> lights);
+    [[nodiscard]] bool setSceneLights(std::vector<renderer::contracts::SceneLight> lights);
     void invalidateHistory();
 
     // Pass accessors
@@ -67,21 +68,13 @@ public:
     SsgiPass* ssgiPass() const { return m_ssgiPass.get(); }
     VelocityPass* velocityPass() const { return m_velocityPass.get(); }
     ReflectionPass* reflectionPass() const { return m_reflectionPass.get(); }
-    ReflectionProbeCapturePass* reflectionProbeCapturePass() const {
-        return m_reflectionProbeCapturePass.get();
-    }
-    ReflectionProbeGridPass* reflectionProbeGridPass() const {
-        return m_reflectionProbeGridPass.get();
-    }
+    ReflectionProbeCapturePass* reflectionProbeCapturePass() const { return m_reflectionProbeCapturePass.get(); }
+    ReflectionProbeGridPass* reflectionProbeGridPass() const { return m_reflectionProbeGridPass.get(); }
     TemporalResolvePass* taaPass() const { return m_taaPass.get(); }
     MotionBlurPass* motionBlurPass() const { return m_motionBlurPass.get(); }
     DepthOfFieldPass* dofPass() const { return m_dofPass.get(); }
-    LocalShadowPass* localShadowPass() const {
-        return m_localShadowPass.get();
-    }
-    ClusteredLightingPass* clusteredLightingPass() const {
-        return m_clusteredLightingPass.get();
-    }
+    LocalShadowPass* localShadowPass() const { return m_localShadowPass.get(); }
+    ClusteredLightingPass* clusteredLightingPass() const { return m_clusteredLightingPass.get(); }
     DeferredLightingPass* lightingPass() const { return m_lightingPass.get(); }
     CloudPass* cloudPass() const { return m_cloudPass.get(); }
     SceneCompositePass* sceneCompositePass() const { return m_sceneCompositePass.get(); }
@@ -164,29 +157,18 @@ private:
     bool m_terrainDrawsPrepared = false;
 
     // Private orchestration methods
-    [[nodiscard]] bool recordDeferredAuxiliaryClear(
-        RhiCommandList& commandList,
-        DeferredRenderTargets& targets,
-        bool clearReflection,
-        bool clearSceneComposite,
-        bool clearCloud,
-        bool clearSsaoFiltered);
+    [[nodiscard]] bool recordDeferredAuxiliaryClear(RhiCommandList& commandList, DeferredRenderTargets& targets,
+                                                    bool clearReflection, bool clearSceneComposite, bool clearCloud,
+                                                    bool clearSsaoFiltered);
     void commitDeferredHistoryState();
-    [[nodiscard]] bool recordTerrainDrawPreparation(RhiCommandList& commandList,
-                                                    const FrameContext& ctx);
-    [[nodiscard]] bool executeFrameGraph(const FrameContext& ctx,
-                                         const RenderSettings& settings);
-    [[nodiscard]] bool renderGBufferTerrain(RhiCommandList& commandList,
-                                            const FrameContext& ctx,
+    [[nodiscard]] bool recordTerrainDrawPreparation(RhiCommandList& commandList, const FrameContext& ctx);
+    [[nodiscard]] bool executeFrameGraph(const FrameContext& ctx, const RenderSettings& settings);
+    [[nodiscard]] bool renderGBufferTerrain(RhiCommandList& commandList, const FrameContext& ctx,
                                             const RenderSettings& settings);
-    [[nodiscard]] bool recordGenericTransparentPass(
-        RhiCommandList& commandList,
-        const FrameContext& ctx,
-        RhiTextureViewHandle transmissionSourceView);
+    [[nodiscard]] bool recordGenericTransparentPass(RhiCommandList& commandList, const FrameContext& ctx,
+                                                    RhiTextureViewHandle transmissionSourceView);
     [[nodiscard]] bool hasGenericTransparentGeometry() const;
-    [[nodiscard]] bool recordParticlesPass(
-        RhiCommandList& commandList,
-        const FrameContext& ctx);
+    [[nodiscard]] bool recordParticlesPass(RhiCommandList& commandList, const FrameContext& ctx);
     FrameOutput buildFrameOutput(const FrameContext& ctx);
 };
 

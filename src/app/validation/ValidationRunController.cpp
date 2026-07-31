@@ -21,34 +21,28 @@ bool ValidationRunController::configure(const AppLaunchOptions& options) {
         return true;
     }
 
-    ValidationSceneContractLoadResult loaded =
-        loadValidationSceneContract(options.validationScenePath);
+    ValidationSceneContractLoadResult loaded = loadValidationSceneContract(options.validationScenePath);
     if (!loaded.succeeded()) {
         m_error = ValidationRunError::SceneContractLoadFailed;
-        m_detail = std::string(
-            validationSceneContractErrorStableId(loaded.error)) +
-            ":" + loaded.detail;
+        m_detail = std::string(validationSceneContractErrorStableId(loaded.error)) + ":" + loaded.detail;
         m_phase = Phase::Failed;
         return false;
     }
     m_sceneContract = std::move(loaded.contract);
     m_cameraPath = std::move(loaded.cameraPath);
-    m_renderSettingsProfile =
-        makeValidationRenderSettingsProfile(m_sceneContract.scene);
+    m_renderSettingsProfile = makeValidationRenderSettingsProfile(m_sceneContract.scene);
     m_phase = Phase::Ready;
     return true;
 }
 
 bool ValidationRunController::beginScene(const ValidationScene scene) {
     if (m_phase != Phase::Ready) {
-        fail(ValidationRunError::InvalidState,
-             "validation scene startup requires the ready phase");
+        fail(ValidationRunError::InvalidState, "validation scene startup requires the ready phase");
         return false;
     }
     if (scene != m_sceneContract.scene) {
         fail(ValidationRunError::SceneMismatch,
-             std::string(validationSceneStableId(scene)) + "!=" +
-                 validationSceneStableId(m_sceneContract.scene));
+             std::string(validationSceneStableId(scene)) + "!=" + validationSceneStableId(m_sceneContract.scene));
         return false;
     }
     m_phase = Phase::Running;
@@ -59,12 +53,9 @@ const ValidationFrame* ValidationRunController::currentFrame() const {
     return m_currentFrame ? &*m_currentFrame : nullptr;
 }
 
-bool ValidationRunController::completeFrame(
-    const bool captureSucceeded,
-    std::string captureDetail) {
+bool ValidationRunController::completeFrame(const bool captureSucceeded, std::string captureDetail) {
     if (m_phase != Phase::Running || !m_currentFrame.has_value()) {
-        fail(ValidationRunError::InvalidState,
-             "validation frame completion requires an active frame");
+        fail(ValidationRunError::InvalidState, "validation frame completion requires an active frame");
         return false;
     }
     if (m_currentFrame->captureAfterRender && !captureSucceeded) {
@@ -87,9 +78,7 @@ bool ValidationRunController::completeFrame(
     return buildCurrentFrame();
 }
 
-void ValidationRunController::fail(
-    const ValidationRunError error,
-    std::string detail) {
+void ValidationRunController::fail(const ValidationRunError error, std::string detail) {
     if (error == ValidationRunError::None) {
         std::abort();
     }
@@ -135,18 +124,15 @@ const std::string& ValidationRunController::detail() const {
     return m_detail;
 }
 
-const renderer::contracts::CameraPath&
-ValidationRunController::cameraPath() const {
+const renderer::contracts::CameraPath& ValidationRunController::cameraPath() const {
     return m_cameraPath;
 }
 
-const ValidationSceneContract&
-ValidationRunController::sceneContract() const {
+const ValidationSceneContract& ValidationRunController::sceneContract() const {
     return m_sceneContract;
 }
 
-const ValidationRenderSettingsProfile&
-ValidationRunController::renderSettingsProfile() const {
+const ValidationRenderSettingsProfile& ValidationRunController::renderSettingsProfile() const {
     return m_renderSettingsProfile;
 }
 
@@ -164,36 +150,28 @@ uint32_t ValidationRunController::completedSampleFrames() const {
 
 bool ValidationRunController::buildCurrentFrame() {
     if (m_phase != Phase::Running || m_currentFrame.has_value()) {
-        fail(ValidationRunError::InvalidState,
-             "validation frame construction requires an empty running phase");
+        fail(ValidationRunError::InvalidState, "validation frame construction requires an empty running phase");
         return false;
     }
 
     ValidationFrame frame;
-    frame.sequenceFrameIndex =
-        m_completedWarmupFrames + m_completedSampleFrames;
+    frame.sequenceFrameIndex = m_completedWarmupFrames + m_completedSampleFrames;
     frame.renderTimeSeconds =
-        static_cast<double>(frame.sequenceFrameIndex) *
-        static_cast<double>(kValidationFrameDeltaSeconds);
+        static_cast<double>(frame.sequenceFrameIndex) * static_cast<double>(kValidationFrameDeltaSeconds);
 
     double cameraTimeSeconds = 0.0;
     if (m_completedWarmupFrames == m_options.validationWarmupFrames) {
         frame.collectPerformance = true;
-        const double sampleDenominator = static_cast<double>(
-            m_options.validationSampleFrames - 1u);
-        cameraTimeSeconds = m_cameraPath.durationSeconds *
-            static_cast<double>(m_completedSampleFrames) / sampleDenominator;
-        frame.captureAfterRender =
-            m_completedSampleFrames + 1u ==
-            m_options.validationSampleFrames;
+        const double sampleDenominator = static_cast<double>(m_options.validationSampleFrames - 1u);
+        cameraTimeSeconds =
+            m_cameraPath.durationSeconds * static_cast<double>(m_completedSampleFrames) / sampleDenominator;
+        frame.captureAfterRender = m_completedSampleFrames + 1u == m_options.validationSampleFrames;
     }
 
     const renderer::contracts::CameraPathError sampleError =
-        renderer::contracts::sampleCameraPath(
-            m_cameraPath, cameraTimeSeconds, frame.cameraPose);
+        renderer::contracts::sampleCameraPath(m_cameraPath, cameraTimeSeconds, frame.cameraPose);
     if (sampleError != renderer::contracts::CameraPathError::None) {
-        fail(ValidationRunError::CameraSamplingFailed,
-             renderer::contracts::cameraPathErrorStableId(sampleError));
+        fail(ValidationRunError::CameraSamplingFailed, renderer::contracts::cameraPathErrorStableId(sampleError));
         return false;
     }
     m_currentFrame = frame;
@@ -202,19 +180,15 @@ bool ValidationRunController::buildCurrentFrame() {
 
 const char* validationRunErrorStableId(const ValidationRunError error) {
     switch (error) {
-        case ValidationRunError::None: return "None";
-        case ValidationRunError::SceneContractLoadFailed:
-            return "SceneContractLoadFailed";
-        case ValidationRunError::SceneMismatch: return "SceneMismatch";
-        case ValidationRunError::SceneInitializationFailed:
-            return "SceneInitializationFailed";
-        case ValidationRunError::InvalidState: return "InvalidState";
-        case ValidationRunError::CameraSamplingFailed:
-            return "CameraSamplingFailed";
-        case ValidationRunError::CameraPoseConversionFailed:
-            return "CameraPoseConversionFailed";
-        case ValidationRunError::RenderFailed: return "RenderFailed";
-        case ValidationRunError::CaptureFailed: return "CaptureFailed";
+    case ValidationRunError::None: return "None";
+    case ValidationRunError::SceneContractLoadFailed: return "SceneContractLoadFailed";
+    case ValidationRunError::SceneMismatch: return "SceneMismatch";
+    case ValidationRunError::SceneInitializationFailed: return "SceneInitializationFailed";
+    case ValidationRunError::InvalidState: return "InvalidState";
+    case ValidationRunError::CameraSamplingFailed: return "CameraSamplingFailed";
+    case ValidationRunError::CameraPoseConversionFailed: return "CameraPoseConversionFailed";
+    case ValidationRunError::RenderFailed: return "RenderFailed";
+    case ValidationRunError::CaptureFailed: return "CaptureFailed";
     }
     std::abort();
 }

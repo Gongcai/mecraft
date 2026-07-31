@@ -9,10 +9,8 @@ namespace ecs {
 /// Apply fall damage when the player lands with sufficient impact speed.
 class FallDamageSystem : public ISystem {
 public:
-    using Dependencies = SystemDependency<
-        std::tuple<LocalPlayerTag, LandingStateComponent>,
-        std::tuple<HealthComponent, HurtEffectComponent>
-    >;
+    using Dependencies = SystemDependency<std::tuple<LocalPlayerTag, LandingStateComponent>,
+                                          std::tuple<HealthComponent, HurtEffectComponent>>;
 
     void update(SystemContext& ctx) override;
 };

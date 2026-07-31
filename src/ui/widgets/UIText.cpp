@@ -2,14 +2,13 @@
 
 #include "../font/TextRenderer.h"
 
-float UIText::measureTextWidth(const TextRenderer& tr) const
-{
-    if (m_text.empty()) return 0.0f;
+float UIText::measureTextWidth(const TextRenderer& tr) const {
+    if (m_text.empty())
+        return 0.0f;
     return tr.measureText(m_text, m_textScale).width;
 }
 
-float UIText::measureTextHeight(const TextRenderer& tr) const
-{
+float UIText::measureTextHeight(const TextRenderer& tr) const {
     return tr.measureText(m_text, m_textScale).height;
 }
 
@@ -19,7 +18,8 @@ void UIText::setTone(UITextTone tone) {
 }
 
 void UIText::renderSelf(const UIRenderContext& ctx) const {
-    if (m_text.empty() || !ctx.textRenderer) return;
+    if (m_text.empty() || !ctx.textRenderer)
+        return;
 
     const UIResolvedTextStyle resolved = resolveStyle(ctx);
 
@@ -42,12 +42,8 @@ void UIText::renderSelf(const UIRenderContext& ctx) const {
     if (m_shadowEnabled) {
         std::array<float, 4> shadow = resolved.shadow;
         shadow[3] *= alpha;
-        ctx.textRenderer->draw(ctx,
-                               m_text,
-                               ax + resolved.shadowOffsetX,
-                               ay + resolved.shadowOffsetY,
-                               resolved.textScale,
-                               shadow);
+        ctx.textRenderer->draw(ctx, m_text, ax + resolved.shadowOffsetX, ay + resolved.shadowOffsetY,
+                               resolved.textScale, shadow);
     }
 
     ctx.textRenderer->draw(ctx, m_text, ax, ay, resolved.textScale, col);

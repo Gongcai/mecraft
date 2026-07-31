@@ -22,7 +22,8 @@ void FallRollEffectSystem::update(SystemContext& ctx) {
             roll.elapsed = 0.0f;
         }
 
-        if (!roll.active) continue;
+        if (!roll.active)
+            continue;
 
         roll.elapsed += dt;
         float t = roll.elapsed / FallRollComponent::kDurationSeconds;
@@ -32,8 +33,7 @@ void FallRollEffectSystem::update(SystemContext& ctx) {
             const float phase = t / FallRollComponent::kPeakRatio;
             roll.currentRadians = -FallRollComponent::kMaxRadians * phase;
         } else {
-            const float phase = (t - FallRollComponent::kPeakRatio)
-                                / (1.0f - FallRollComponent::kPeakRatio);
+            const float phase = (t - FallRollComponent::kPeakRatio) / (1.0f - FallRollComponent::kPeakRatio);
             roll.currentRadians = -FallRollComponent::kMaxRadians * (1.0f - phase);
         }
 

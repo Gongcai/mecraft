@@ -21,33 +21,24 @@ bool nearValue(const float lhs, const float rhs) {
 bool testJitterSequence() {
     constexpr TemporalExtent renderExtent{1280u, 720u};
     constexpr TemporalExtent outputExtent{1920u, 1080u};
-    const DlssJitterResult first = queryDlssJitter(
-        0u, renderExtent, outputExtent);
-    const DlssJitterResult wrapped = queryDlssJitter(
-        first.phaseCount, renderExtent, outputExtent);
-    return requireTrue(first.succeeded(),
-                       "DLSS jitter query must accept valid extents") &&
+    const DlssJitterResult first = queryDlssJitter(0u, renderExtent, outputExtent);
+    const DlssJitterResult wrapped = queryDlssJitter(first.phaseCount, renderExtent, outputExtent);
+    return requireTrue(first.succeeded(), "DLSS jitter query must accept valid extents") &&
            requireTrue(first.phaseCount >= 8u && first.phaseIndex == 0u,
                        "DLSS jitter must expose a stable multi-phase sequence") &&
            requireTrue(nearValue(first.jitter.pixels.x, wrapped.jitter.pixels.x) &&
                            nearValue(first.jitter.pixels.y, wrapped.jitter.pixels.y),
                        "DLSS jitter sequence must wrap at the reported phase count") &&
-           requireTrue(nearValue(
-                           first.jitter.projectionOffset.x,
-                           2.0f * first.jitter.pixels.x /
-                               static_cast<float>(renderExtent.width)) &&
-                           nearValue(
-                               first.jitter.projectionOffset.y,
-                               -2.0f * first.jitter.pixels.y /
-                                   static_cast<float>(renderExtent.height)),
+           requireTrue(nearValue(first.jitter.projectionOffset.x,
+                                 2.0f * first.jitter.pixels.x / static_cast<float>(renderExtent.width)) &&
+                           nearValue(first.jitter.projectionOffset.y,
+                                     -2.0f * first.jitter.pixels.y / static_cast<float>(renderExtent.height)),
                        "DLSS jitter projection conversion must match the renderer convention");
 }
 
 bool testInvalidJitterExtent() {
-    return requireTrue(
-        queryDlssJitter(0u, {}, {1920u, 1080u}).status ==
-            DlssVulkanStatus::InvalidExtent,
-        "DLSS jitter must reject an invalid render extent");
+    return requireTrue(queryDlssJitter(0u, {}, {1920u, 1080u}).status == DlssVulkanStatus::InvalidExtent,
+                       "DLSS jitter must reject an invalid render extent");
 }
 
 bool testFrameGenerationInputCompatibility() {
@@ -55,19 +46,20 @@ bool testFrameGenerationInputCompatibility() {
     settings.pipelineMode = PipelineMode::Deferred;
     settings.upscale.fsr1Enabled = true;
     settings.upscale.fsr1RenderScale = 0.77f;
-    return requireTrue(
-               supportsDlssFrameGenerationInputs(settings, false),
-               "an unavailable FSR 1 pass must not block DLSS-G inputs") &&
-           requireTrue(
-               !supportsDlssFrameGenerationInputs(settings, true),
-               "an active sub-native FSR 1 pass must block DLSS-G inputs");
+    return requireTrue(supportsDlssFrameGenerationInputs(settings, false),
+                       "an unavailable FSR 1 pass must not block DLSS-G inputs") &&
+           requireTrue(!supportsDlssFrameGenerationInputs(settings, true),
+                       "an active sub-native FSR 1 pass must block DLSS-G inputs");
 }
 
 } // namespace
 
 int main() {
-    if (!testJitterSequence()) return 1;
-    if (!testInvalidJitterExtent()) return 1;
-    if (!testFrameGenerationInputCompatibility()) return 1;
+    if (!testJitterSequence())
+        return 1;
+    if (!testInvalidJitterExtent())
+        return 1;
+    if (!testFrameGenerationInputCompatibility())
+        return 1;
     return 0;
 }

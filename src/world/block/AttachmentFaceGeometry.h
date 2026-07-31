@@ -22,12 +22,8 @@ inline bool isAttachmentFace(const uint16_t face) {
     if (face == PropIndices::INVALID) {
         return false;
     }
-    return face == PropIndices::FACE_FLOOR ||
-           face == PropIndices::FACE_CEILING ||
-           face == PropIndices::FACE_NORTH ||
-           face == PropIndices::FACE_SOUTH ||
-           face == PropIndices::FACE_EAST ||
-           face == PropIndices::FACE_WEST;
+    return face == PropIndices::FACE_FLOOR || face == PropIndices::FACE_CEILING || face == PropIndices::FACE_NORTH ||
+           face == PropIndices::FACE_SOUTH || face == PropIndices::FACE_EAST || face == PropIndices::FACE_WEST;
 }
 
 /// Returns each attachment face supported by face-oriented devices.

@@ -8,7 +8,8 @@
 namespace ecs {
 
 void SteveSyncSystem::update(SystemContext& ctx) {
-    if (!ctx.services.cameraController) return;
+    if (!ctx.services.cameraController)
+        return;
     auto& registry = ctx.registry;
     auto& cameraController = *ctx.services.cameraController;
 
@@ -24,10 +25,12 @@ void SteveSyncSystem::update(SystemContext& ctx) {
 
     // 2. Sync player position and camera state to Steve entity
     auto playerView = reg.view<LocalPlayerTag, TransformComponent, CameraStateComponent>();
-    if (playerView.begin() == playerView.end()) return;
+    if (playerView.begin() == playerView.end())
+        return;
 
     auto steveView = reg.view<SteveTag, TransformComponent>();
-    if (steveView.begin() == steveView.end()) return;
+    if (steveView.begin() == steveView.end())
+        return;
 
     for (auto playerEntity : playerView) {
         auto& playerTransform = reg.get<TransformComponent>(playerEntity);
@@ -43,7 +46,7 @@ void SteveSyncSystem::update(SystemContext& ctx) {
             // Sync camera state so the head follows the view direction
             if (reg.all_of<CameraStateComponent>(steveEntity)) {
                 auto& steveCam = reg.get<CameraStateComponent>(steveEntity);
-                steveCam.yaw   = playerCam.yaw;
+                steveCam.yaw = playerCam.yaw;
                 steveCam.pitch = playerCam.pitch;
             }
         }

@@ -12,8 +12,8 @@ namespace renderer::rhi {
 namespace {
 [[nodiscard]] const char* backendDefinition(const RhiShaderBackend backend) {
     switch (backend) {
-        case RhiShaderBackend::Vulkan: return "#define RHI_VULKAN 1\n";
-        case RhiShaderBackend::OpenGl: return "#define RHI_OPENGL 1\n";
+    case RhiShaderBackend::Vulkan: return "#define RHI_VULKAN 1\n";
+    case RhiShaderBackend::OpenGl: return "#define RHI_OPENGL 1\n";
     }
     return nullptr;
 }
@@ -22,10 +22,8 @@ namespace {
 // The source parameter must contain one canonical GLSL stage, and backend identifies the device
 // that will execute the compiled shader. The returned source preserves every original line while
 // making exactly one backend macro visible to shared shader helpers.
-[[nodiscard]] std::optional<std::string> injectBackendDefinition(
-    const std::string& source,
-    const RhiShaderBackend backend,
-    std::string& errorMessage) {
+[[nodiscard]] std::optional<std::string>
+injectBackendDefinition(const std::string& source, const RhiShaderBackend backend, std::string& errorMessage) {
     const char* definition = backendDefinition(backend);
     if (definition == nullptr) {
         errorMessage = "shader compilation received an invalid RHI backend";
@@ -35,16 +33,11 @@ namespace {
     size_t lineStart = 0u;
     while (lineStart < source.size()) {
         const size_t lineEnd = source.find('\n', lineStart);
-        const size_t lineLength = lineEnd == std::string::npos
-            ? source.size() - lineStart
-            : lineEnd - lineStart;
+        const size_t lineLength = lineEnd == std::string::npos ? source.size() - lineStart : lineEnd - lineStart;
         const size_t directiveStart = source.find_first_not_of(" \t", lineStart);
-        if (directiveStart != std::string::npos &&
-            directiveStart < lineStart + lineLength &&
+        if (directiveStart != std::string::npos && directiveStart < lineStart + lineLength &&
             source.compare(directiveStart, 8u, "#version") == 0) {
-            const size_t insertionPoint = lineEnd == std::string::npos
-                ? source.size()
-                : lineEnd + 1u;
+            const size_t insertionPoint = lineEnd == std::string::npos ? source.size() : lineEnd + 1u;
             std::string result;
             result.reserve(source.size() + std::char_traits<char>::length(definition));
             result.append(source, 0u, insertionPoint);
@@ -67,9 +60,9 @@ namespace {
 
 [[nodiscard]] EShLanguage toGlslangStage(const RhiShaderStage stage) {
     switch (stage) {
-        case RhiShaderStage::Vertex: return EShLangVertex;
-        case RhiShaderStage::Fragment: return EShLangFragment;
-        case RhiShaderStage::Compute: return EShLangCompute;
+    case RhiShaderStage::Vertex: return EShLangVertex;
+    case RhiShaderStage::Fragment: return EShLangFragment;
+    case RhiShaderStage::Compute: return EShLangCompute;
     }
     return EShLangCount;
 }
@@ -118,26 +111,22 @@ private:
     std::string* m_errorMessage = nullptr;
 };
 
-[[nodiscard]] bool createSpvcCompiler(SpvcContextOwner& owner,
-                                      const std::vector<uint32_t>& spirv,
-                                      const spvc_backend backend,
-                                      spvc_compiler& compiler,
-                                      std::string& errorMessage) {
+[[nodiscard]] bool createSpvcCompiler(SpvcContextOwner& owner, const std::vector<uint32_t>& spirv,
+                                      const spvc_backend backend, spvc_compiler& compiler, std::string& errorMessage) {
     if (!owner.init(errorMessage)) {
         return false;
     }
     spvc_parsed_ir parsedIr = nullptr;
     if (spvc_context_parse_spirv(owner.context(), spirv.data(), spirv.size(), &parsedIr) != SPVC_SUCCESS ||
-        spvc_context_create_compiler(owner.context(), backend, parsedIr,
-                                     SPVC_CAPTURE_MODE_TAKE_OWNERSHIP, &compiler) != SPVC_SUCCESS) {
+        spvc_context_create_compiler(owner.context(), backend, parsedIr, SPVC_CAPTURE_MODE_TAKE_OWNERSHIP, &compiler) !=
+            SPVC_SUCCESS) {
         owner.captureLastError();
         return false;
     }
     return true;
 }
 
-[[nodiscard]] uint32_t reflectedArrayCount(const spvc_compiler compiler,
-                                           const spvc_reflected_resource& resource,
+[[nodiscard]] uint32_t reflectedArrayCount(const spvc_compiler compiler, const spvc_reflected_resource& resource,
                                            std::string& errorMessage) {
     const spvc_type type = spvc_compiler_get_type_handle(compiler, resource.type_id);
     const unsigned dimensions = spvc_type_get_num_array_dimensions(type);
@@ -161,17 +150,14 @@ private:
     return count;
 }
 
-[[nodiscard]] bool appendReflectedBindings(const spvc_compiler compiler,
-                             const spvc_resources resources,
-                             const spvc_resource_type resourceType,
-                             const RhiBindingType type,
-                             const RhiShaderStage stage,
-                             RhiShaderReflection& reflection,
-                             std::string& errorMessage) {
+[[nodiscard]] bool appendReflectedBindings(const spvc_compiler compiler, const spvc_resources resources,
+                                           const spvc_resource_type resourceType, const RhiBindingType type,
+                                           const RhiShaderStage stage, RhiShaderReflection& reflection,
+                                           std::string& errorMessage) {
     const spvc_reflected_resource* resourceList = nullptr;
     size_t resourceCount = 0u;
-    if (spvc_resources_get_resource_list_for_type(resources, resourceType,
-                                                   &resourceList, &resourceCount) != SPVC_SUCCESS) {
+    if (spvc_resources_get_resource_list_for_type(resources, resourceType, &resourceList, &resourceCount) !=
+        SPVC_SUCCESS) {
         errorMessage = "SPIRV-Cross resource reflection failed";
         return false;
     }
@@ -205,31 +191,26 @@ private:
         return false;
     }
 
-    if (!appendReflectedBindings(compiler, resources, SPVC_RESOURCE_TYPE_UNIFORM_BUFFER,
-                                 RhiBindingType::UniformBuffer, shader.stage,
-                                 shader.reflection, errorMessage) ||
-        !appendReflectedBindings(compiler, resources, SPVC_RESOURCE_TYPE_STORAGE_BUFFER,
-                                 RhiBindingType::StorageBuffer, shader.stage,
-                                 shader.reflection, errorMessage) ||
+    if (!appendReflectedBindings(compiler, resources, SPVC_RESOURCE_TYPE_UNIFORM_BUFFER, RhiBindingType::UniformBuffer,
+                                 shader.stage, shader.reflection, errorMessage) ||
+        !appendReflectedBindings(compiler, resources, SPVC_RESOURCE_TYPE_STORAGE_BUFFER, RhiBindingType::StorageBuffer,
+                                 shader.stage, shader.reflection, errorMessage) ||
         !appendReflectedBindings(compiler, resources, SPVC_RESOURCE_TYPE_SAMPLED_IMAGE,
-                                 RhiBindingType::CombinedTextureSampler, shader.stage,
-                                 shader.reflection, errorMessage) ||
-        !appendReflectedBindings(compiler, resources, SPVC_RESOURCE_TYPE_SEPARATE_IMAGE,
-                                 RhiBindingType::SampledTexture, shader.stage,
-                                 shader.reflection, errorMessage) ||
-        !appendReflectedBindings(compiler, resources, SPVC_RESOURCE_TYPE_SEPARATE_SAMPLERS,
-                                 RhiBindingType::Sampler, shader.stage,
-                                 shader.reflection, errorMessage) ||
-        !appendReflectedBindings(compiler, resources, SPVC_RESOURCE_TYPE_STORAGE_IMAGE,
-                                 RhiBindingType::StorageTexture, shader.stage,
-                                 shader.reflection, errorMessage)) {
+                                 RhiBindingType::CombinedTextureSampler, shader.stage, shader.reflection,
+                                 errorMessage) ||
+        !appendReflectedBindings(compiler, resources, SPVC_RESOURCE_TYPE_SEPARATE_IMAGE, RhiBindingType::SampledTexture,
+                                 shader.stage, shader.reflection, errorMessage) ||
+        !appendReflectedBindings(compiler, resources, SPVC_RESOURCE_TYPE_SEPARATE_SAMPLERS, RhiBindingType::Sampler,
+                                 shader.stage, shader.reflection, errorMessage) ||
+        !appendReflectedBindings(compiler, resources, SPVC_RESOURCE_TYPE_STORAGE_IMAGE, RhiBindingType::StorageTexture,
+                                 shader.stage, shader.reflection, errorMessage)) {
         return false;
     }
 
     const spvc_reflected_resource* pushConstants = nullptr;
     size_t pushConstantCount = 0u;
-    if (spvc_resources_get_resource_list_for_type(resources, SPVC_RESOURCE_TYPE_PUSH_CONSTANT,
-                                                   &pushConstants, &pushConstantCount) != SPVC_SUCCESS) {
+    if (spvc_resources_get_resource_list_for_type(resources, SPVC_RESOURCE_TYPE_PUSH_CONSTANT, &pushConstants,
+                                                  &pushConstantCount) != SPVC_SUCCESS) {
         owner.captureLastError();
         return false;
     }
@@ -256,12 +237,11 @@ private:
 
 } // namespace
 
-std::optional<RhiCompiledShader> compileShaderToSpirv(const RhiShaderDesc& desc,
-                                                       const RhiShaderBackend backend,
-                                                       std::string& errorMessage) {
+std::optional<RhiCompiledShader> compileShaderToSpirv(const RhiShaderDesc& desc, const RhiShaderBackend backend,
+                                                      std::string& errorMessage) {
     errorMessage.clear();
-    if (desc.source == nullptr || desc.sourceSize == 0u || desc.bytecode != nullptr ||
-        desc.bytecodeSize != 0u || desc.entryPoint == nullptr || desc.entryPoint[0] == '\0') {
+    if (desc.source == nullptr || desc.sourceSize == 0u || desc.bytecode != nullptr || desc.bytecodeSize != 0u ||
+        desc.entryPoint == nullptr || desc.entryPoint[0] == '\0') {
         errorMessage = "shader compilation requires canonical GLSL source and an entry point";
         return std::nullopt;
     }
@@ -284,8 +264,7 @@ std::optional<RhiCompiledShader> compileShaderToSpirv(const RhiShaderDesc& desc,
         return std::nullopt;
     }
     const std::string canonicalSource(desc.source, static_cast<size_t>(desc.sourceSize));
-    const std::optional<std::string> source =
-        injectBackendDefinition(canonicalSource, backend, errorMessage);
+    const std::optional<std::string> source = injectBackendDefinition(canonicalSource, backend, errorMessage);
     if (!source.has_value()) {
         return std::nullopt;
     }

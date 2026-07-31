@@ -15,8 +15,7 @@ public:
     /// @param displayedFrames Total frames confirmed as displayed by the presentation backend.
     /// @param elapsedSeconds Wall-clock duration since the preceding observation.
     /// @return A new frames-per-second sample when the sampling interval completes.
-    [[nodiscard]] std::optional<double> update(const uint64_t displayedFrames,
-                                               const double elapsedSeconds) {
+    [[nodiscard]] std::optional<double> update(const uint64_t displayedFrames, const double elapsedSeconds) {
         if (!std::isfinite(elapsedSeconds) || elapsedSeconds < 0.0) {
             std::abort();
         }
@@ -34,10 +33,8 @@ public:
             return std::nullopt;
         }
 
-        const uint64_t displayedFrameDelta =
-            displayedFrames - m_previousDisplayedFrames;
-        const double presentedFps =
-            static_cast<double>(displayedFrameDelta) / m_elapsedSeconds;
+        const uint64_t displayedFrameDelta = displayedFrames - m_previousDisplayedFrames;
+        const double presentedFps = static_cast<double>(displayedFrameDelta) / m_elapsedSeconds;
         m_previousDisplayedFrames = displayedFrames;
         m_elapsedSeconds = 0.0;
         return presentedFps;

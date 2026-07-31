@@ -5,8 +5,7 @@
 
 #include "Easing.h"
 
-template<typename T>
-class Tween {
+template <typename T> class Tween {
 public:
     Tween() = default;
 
@@ -21,7 +20,8 @@ public:
     }
 
     void tick(float dt) {
-        if (!m_running) return;
+        if (!m_running)
+            return;
         if (m_forward) {
             m_elapsed += dt;
             if (m_elapsed >= m_duration) {
@@ -52,7 +52,8 @@ public:
     [[nodiscard]] T value() const;
 
     [[nodiscard]] float progress() const {
-        if (m_duration <= 0.0f) return 1.0f;
+        if (m_duration <= 0.0f)
+            return 1.0f;
         return std::clamp(m_elapsed / m_duration, 0.0f, 1.0f);
     }
 
@@ -89,19 +90,13 @@ private:
     bool m_pingPong = false;
 };
 
-template<>
-inline float Tween<float>::value() const {
+template <> inline float Tween<float>::value() const {
     float t = applyEasing(progress(), m_easing);
     return m_from + (m_to - m_from) * t;
 }
 
-template<>
-inline std::array<float, 4> Tween<std::array<float, 4>>::value() const {
+template <> inline std::array<float, 4> Tween<std::array<float, 4>>::value() const {
     float t = applyEasing(progress(), m_easing);
-    return {
-        m_from[0] + (m_to[0] - m_from[0]) * t,
-        m_from[1] + (m_to[1] - m_from[1]) * t,
-        m_from[2] + (m_to[2] - m_from[2]) * t,
-        m_from[3] + (m_to[3] - m_from[3]) * t
-    };
+    return {m_from[0] + (m_to[0] - m_from[0]) * t, m_from[1] + (m_to[1] - m_from[1]) * t,
+            m_from[2] + (m_to[2] - m_from[2]) * t, m_from[3] + (m_to[3] - m_from[3]) * t};
 }

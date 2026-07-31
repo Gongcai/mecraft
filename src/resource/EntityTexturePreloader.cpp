@@ -50,8 +50,7 @@ bool preloadEntityTexturesFromConfig(ResourceMgr& resourceMgr, const std::string
         }
 
         const std::string textureKey = textureIt->get<std::string>();
-        if (textureKey.empty() ||
-            textureKey.find('/') != std::string::npos ||
+        if (textureKey.empty() || textureKey.find('/') != std::string::npos ||
             textureKey.find('\\') != std::string::npos) {
             MECRAFT_LOG_FPRINTF(stderr, "[Resource] Invalid mob entity texture key: %s\n", textureKey.c_str());
             return false;

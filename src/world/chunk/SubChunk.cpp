@@ -11,16 +11,12 @@ uint8_t clampLight(const uint8_t level) {
     return static_cast<uint8_t>(std::min<int>(level, 15));
 }
 
-template <typename Map>
-std::size_t estimateUnorderedMapBytes(const Map& map) {
-    return map.bucket_count() * sizeof(void*) +
-           map.size() * (sizeof(typename Map::value_type) + sizeof(void*) * 2);
+template <typename Map> std::size_t estimateUnorderedMapBytes(const Map& map) {
+    return map.bucket_count() * sizeof(void*) + map.size() * (sizeof(typename Map::value_type) + sizeof(void*) * 2);
 }
 } // namespace
 
-SubChunk::SubChunk()
-    : m_blockData(BLOCK_COUNT, 2)
-    , m_fluidData(BLOCK_COUNT, 1) {
+SubChunk::SubChunk() : m_blockData(BLOCK_COUNT, 2), m_fluidData(BLOCK_COUNT, 1) {
     m_palette.getOrCreateIndex(NULL_BLOCK_STATE);
     m_blockData.fill(0);
     m_fluidPalette.getOrCreateIndex(NULL_BLOCK_STATE);
@@ -35,18 +31,11 @@ SubChunk::~SubChunk() {
 }
 
 SubChunk::SubChunk(SubChunk&& other) noexcept
-    : m_palette(std::move(other.m_palette))
-    , m_blockData(std::move(other.m_blockData))
-    , m_blockCounts(std::move(other.m_blockCounts))
-    , m_fluidPalette(std::move(other.m_fluidPalette))
-    , m_fluidData(std::move(other.m_fluidData))
-    , m_fluidCounts(std::move(other.m_fluidCounts))
-    , m_lightMap(std::move(other.m_lightMap))
-    , m_type(other.m_type)
-    , m_dirty(other.m_dirty)
-    , m_meshRevision(other.m_meshRevision)
-    , m_mesh(std::move(other.m_mesh))
-    , m_subChunkY(other.m_subChunkY) {
+    : m_palette(std::move(other.m_palette)), m_blockData(std::move(other.m_blockData)),
+      m_blockCounts(std::move(other.m_blockCounts)), m_fluidPalette(std::move(other.m_fluidPalette)),
+      m_fluidData(std::move(other.m_fluidData)), m_fluidCounts(std::move(other.m_fluidCounts)),
+      m_lightMap(std::move(other.m_lightMap)), m_type(other.m_type), m_dirty(other.m_dirty),
+      m_meshRevision(other.m_meshRevision), m_mesh(std::move(other.m_mesh)), m_subChunkY(other.m_subChunkY) {
     for (int i = 0; i < 6; ++i) {
         neighbors[i] = other.neighbors[i];
         other.neighbors[i] = nullptr;
@@ -81,9 +70,7 @@ bool SubChunk::isInBounds(const int x, const int y, const int z) {
 }
 
 size_t SubChunk::toIndex(const int x, const int y, const int z) {
-    return static_cast<size_t>(x) +
-           static_cast<size_t>(z) * SIZE +
-           static_cast<size_t>(y) * SIZE * SIZE;
+    return static_cast<size_t>(x) + static_cast<size_t>(z) * SIZE + static_cast<size_t>(y) * SIZE * SIZE;
 }
 
 BlockStateId SubChunk::getBlock(const int x, const int y, const int z) const {
@@ -95,10 +82,7 @@ BlockStateId SubChunk::getBlock(const int x, const int y, const int z) const {
     return m_palette.getStateId(paletteIdx);
 }
 
-void SubChunk::setBlockImpl(const int x,
-                            const int y,
-                            const int z,
-                            const BlockStateId stateId,
+void SubChunk::setBlockImpl(const int x, const int y, const int z, const BlockStateId stateId,
                             const bool markMeshDirty) {
     if (!isInBounds(x, y, z)) {
         return;
@@ -369,7 +353,8 @@ void SubChunk::inferType() {
 
         const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
         const BlockDef& def = BlockRegistry::getFast(blockId);
-        if (only->second == BLOCK_COUNT && def.renderShape == BlockRenderShape::Cube && def.isSolid && !def.isTransparent) {
+        if (only->second == BLOCK_COUNT && def.renderShape == BlockRenderShape::Cube && def.isSolid &&
+            !def.isTransparent) {
             m_type = SubChunkType::Solid;
             return;
         }
@@ -394,13 +379,9 @@ void SubChunk::setMesh(const SubChunkMesh& mesh) {
 }
 
 std::size_t SubChunk::estimatedMemoryBytes() const {
-    return sizeof(SubChunk) +
-           m_blockData.allocatedByteSize() +
-           m_fluidData.allocatedByteSize() +
-           m_palette.dynamicMemoryBytes() +
-           m_fluidPalette.dynamicMemoryBytes() +
-           estimateUnorderedMapBytes(m_blockCounts) +
-           estimateUnorderedMapBytes(m_fluidCounts);
+    return sizeof(SubChunk) + m_blockData.allocatedByteSize() + m_fluidData.allocatedByteSize() +
+           m_palette.dynamicMemoryBytes() + m_fluidPalette.dynamicMemoryBytes() +
+           estimateUnorderedMapBytes(m_blockCounts) + estimateUnorderedMapBytes(m_fluidCounts);
 }
 
 uint64_t SubChunkMesh::computeMetadataFingerprint() const {

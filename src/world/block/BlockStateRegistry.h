@@ -20,9 +20,7 @@ struct BlockStateId {
     using Index = size_t;
 
     constexpr BlockStateId() = default;
-    [[nodiscard]] static constexpr BlockStateId fromRegistryIndex(const Index index) {
-        return BlockStateId(index);
-    }
+    [[nodiscard]] static constexpr BlockStateId fromRegistryIndex(const Index index) { return BlockStateId(index); }
 
     [[nodiscard]] constexpr Index registryIndex() const { return m_index; }
     [[nodiscard]] constexpr bool operator==(const BlockStateId& other) const { return m_index == other.m_index; }
@@ -47,8 +45,7 @@ private:
 };
 
 namespace std {
-template <>
-struct hash<BlockStateId> {
+template <> struct hash<BlockStateId> {
     size_t operator()(const BlockStateId& stateId) const noexcept {
         return hash<BlockStateId::Index>{}(stateId.registryIndex());
     }
@@ -73,13 +70,13 @@ struct StateTextureIndices {
     // Convenience: return the TextureArray first layer for a given face (0=top,1=bottom,2=front,3=back,4=left,5=right)
     [[nodiscard]] int getFaceLayer(int face) const {
         switch (face) {
-            case 0: return faceTop.firstLayer;
-            case 1: return faceBottom.firstLayer;
-            case 2: return faceFront.firstLayer;
-            case 3: return faceBack.firstLayer;
-            case 4: return faceLeft.firstLayer;
-            case 5: return faceRight.firstLayer;
-            default: return faceTop.firstLayer;
+        case 0: return faceTop.firstLayer;
+        case 1: return faceBottom.firstLayer;
+        case 2: return faceFront.firstLayer;
+        case 3: return faceBack.firstLayer;
+        case 4: return faceLeft.firstLayer;
+        case 5: return faceRight.firstLayer;
+        default: return faceTop.firstLayer;
         }
     }
 };
@@ -96,19 +93,16 @@ class BlockStateRegistry {
 public:
     static constexpr uint16_t INVALID_INDEX = UINT16_MAX;
 
-    static void registerBlockProperties(
-        BlockID blockId,
-        std::vector<std::pair<std::string, std::vector<std::string>>> properties,
-        std::map<std::string, std::string> defaultState);
+    static void registerBlockProperties(BlockID blockId,
+                                        std::vector<std::pair<std::string, std::vector<std::string>>> properties,
+                                        std::map<std::string, std::string> defaultState);
 
     static void explodeAllStates();
 
     static BlockStateId getDefaultState(BlockID blockId);
     static BlockStateId getState(BlockID blockId, uint16_t propKey, uint16_t propValue);
-    static BlockStateId getState(BlockID blockId,
-                                 std::initializer_list<std::pair<uint16_t, uint16_t>> props);
-    static BlockStateId getState(BlockID blockId,
-                                 const std::vector<std::pair<uint16_t, uint16_t>>& props);
+    static BlockStateId getState(BlockID blockId, std::initializer_list<std::pair<uint16_t, uint16_t>> props);
+    static BlockStateId getState(BlockID blockId, const std::vector<std::pair<uint16_t, uint16_t>>& props);
     static BlockID getBlockId(BlockStateId stateId);
     static uint16_t getPropertyIndex(BlockStateId stateId, uint16_t nameIndex);
     static uint8_t getPropertyCount(BlockStateId stateId);

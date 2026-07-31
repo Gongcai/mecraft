@@ -32,13 +32,9 @@ void replaceSelectedItem(Inventory& inventory, const ItemID itemId) {
     inventory.setSlotStack(inventory.getSelectedSlot(), replacement);
 }
 
-void sendBucketAction(client::GameClient& client,
-                      BlockInteractionRuntimeComponent& runtime,
-                      const net::ClientBlockActionType actionType,
-                      const glm::ivec3& targetBlock,
-                      const glm::ivec3& placeBlock,
-                      const glm::ivec3& hitNormal,
-                      const glm::vec3& playerPosition,
+void sendBucketAction(client::GameClient& client, BlockInteractionRuntimeComponent& runtime,
+                      const net::ClientBlockActionType actionType, const glm::ivec3& targetBlock,
+                      const glm::ivec3& placeBlock, const glm::ivec3& hitNormal, const glm::vec3& playerPosition,
                       const BlockStateId fluidState) {
     net::ClientBlockAction action;
     action.sequence = ++runtime.heldItemSwingSequence;
@@ -64,13 +60,8 @@ void BucketUseSystem::update(SystemContext& ctx) {
     const IGameplayModeRules& modeRules = resolveModeRules(registry);
     auto& audioBus = ensureAudioEventBus(registry);
 
-    auto view = registry.view<LocalPlayerTag,
-                              BlockActionIntentComponent,
-                              TransformComponent,
-                              InventoryComponent,
-                              InventoryDataComponent,
-                              BlockTargetComponent,
-                              BlockInteractionRuntimeComponent>();
+    auto view = registry.view<LocalPlayerTag, BlockActionIntentComponent, TransformComponent, InventoryComponent,
+                              InventoryDataComponent, BlockTargetComponent, BlockInteractionRuntimeComponent>();
     for (auto e : view) {
         auto& runtime = view.get<BlockInteractionRuntimeComponent>(e);
         const auto& intent = view.get<BlockActionIntentComponent>(e);
@@ -91,10 +82,8 @@ void BucketUseSystem::update(SystemContext& ctx) {
         Inventory& inventory = inventoryData.inventory;
         const ItemID selectedItem = inventory.getSelectedItem();
         const ItemDef& selectedItemDef = ItemRegistry::get(selectedItem);
-        const ItemUseRule* pickupRule =
-            ItemUseRules::findRule(selectedItemDef, ItemUseBehavior::BucketPickupFluid);
-        const ItemUseRule* placeRule =
-            ItemUseRules::findRule(selectedItemDef, ItemUseBehavior::BucketPlaceFluid);
+        const ItemUseRule* pickupRule = ItemUseRules::findRule(selectedItemDef, ItemUseBehavior::BucketPickupFluid);
+        const ItemUseRule* placeRule = ItemUseRules::findRule(selectedItemDef, ItemUseBehavior::BucketPlaceFluid);
         if (pickupRule == nullptr && placeRule == nullptr) {
             continue;
         }
@@ -112,13 +101,8 @@ void BucketUseSystem::update(SystemContext& ctx) {
 
             if (mutableWorld == nullptr) {
                 if (ctx.services.gameClient) {
-                    sendBucketAction(*ctx.services.gameClient,
-                                     runtime,
-                                     net::ClientBlockActionType::BucketPickupWater,
-                                     pickupPos,
-                                     target.fluidPlaceBlock,
-                                     target.fluidHitNormal,
-                                     transform.position,
+                    sendBucketAction(*ctx.services.gameClient, runtime, net::ClientBlockActionType::BucketPickupWater,
+                                     pickupPos, target.fluidPlaceBlock, target.fluidHitNormal, transform.position,
                                      NULL_BLOCK_STATE);
                 } else {
                     ++runtime.heldItemSwingSequence;
@@ -150,14 +134,8 @@ void BucketUseSystem::update(SystemContext& ctx) {
         const BlockStateId sourceFluid = ItemUseDispatcher::makeSourceFluidState(placeRule->resultBlock);
         if (mutableWorld == nullptr) {
             if (ctx.services.gameClient) {
-                sendBucketAction(*ctx.services.gameClient,
-                                 runtime,
-                                 net::ClientBlockActionType::BucketPlaceWater,
-                                 target.targetBlock,
-                                 placePos,
-                                 target.hitNormal,
-                                 transform.position,
-                                 sourceFluid);
+                sendBucketAction(*ctx.services.gameClient, runtime, net::ClientBlockActionType::BucketPlaceWater,
+                                 target.targetBlock, placePos, target.hitNormal, transform.position, sourceFluid);
             } else {
                 ++runtime.heldItemSwingSequence;
             }

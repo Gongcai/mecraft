@@ -9,10 +9,7 @@
 namespace renderer::contracts {
 
 /// Identifies a renderer profile with a fixed backend and feature boundary.
-enum class RenderProfile : uint8_t {
-    OpenGlBase,
-    VulkanModern
-};
+enum class RenderProfile : uint8_t { OpenGlBase, VulkanModern };
 
 /// Identifies every user-visible feature governed by the renderer capability contract.
 enum class RenderFeature : uint8_t {
@@ -35,10 +32,7 @@ enum class RenderFeature : uint8_t {
 };
 
 /// Describes whether a feature belongs to a renderer profile's supported scope.
-enum class RenderFeatureRequirement : uint8_t {
-    Required,
-    Unsupported
-};
+enum class RenderFeatureRequirement : uint8_t { Required, Unsupported };
 
 /// Provides stable machine-readable results for settings, logs, tests, and diagnostics.
 enum class RenderFeatureStatusCode : uint8_t {
@@ -66,9 +60,7 @@ struct RenderFeatureStatus {
 
     /// Reports whether the feature can be selected and executed.
     /// @return True only when the status code is Available.
-    [[nodiscard]] constexpr bool available() const {
-        return code == RenderFeatureStatusCode::Available;
-    }
+    [[nodiscard]] constexpr bool available() const { return code == RenderFeatureStatusCode::Available; }
 };
 
 /// Reports whether every required feature in a renderer profile is available.
@@ -80,9 +72,7 @@ struct RenderProfileStatus {
 
     /// Reports whether the complete profile can be selected and executed.
     /// @return True only when all profile requirements are available.
-    [[nodiscard]] constexpr bool available() const {
-        return code == RenderFeatureStatusCode::Available;
-    }
+    [[nodiscard]] constexpr bool available() const { return code == RenderFeatureStatusCode::Available; }
 };
 
 /// Returns the number of entries in the fixed renderer feature table.
@@ -125,9 +115,7 @@ struct RenderProfileStatus {
 /// @param profile Profile whose fixed table entry is queried.
 /// @param feature Feature whose requirement is queried.
 /// @return Required for profile features and Unsupported outside the profile boundary.
-[[nodiscard]] RenderFeatureRequirement renderFeatureRequirement(
-    RenderProfile profile,
-    RenderFeature feature);
+[[nodiscard]] RenderFeatureRequirement renderFeatureRequirement(RenderProfile profile, RenderFeature feature);
 
 /// Returns optional components compiled into the current executable.
 /// @return Build capability record derived only from compile-time integration switches.
@@ -145,13 +133,10 @@ struct RenderProfileStatus {
 /// @param implementedFeatureMask Product-integrated features represented as feature bits.
 /// @param feature Feature to evaluate.
 /// @return Structured availability code and an English user-facing reason.
-[[nodiscard]] RenderFeatureStatus evaluateRenderFeature(
-    RenderProfile profile,
-    RhiBackend backend,
-    const RhiCapabilities& capabilities,
-    const RenderBuildCapabilities& buildCapabilities,
-    uint64_t implementedFeatureMask,
-    RenderFeature feature);
+[[nodiscard]] RenderFeatureStatus evaluateRenderFeature(RenderProfile profile, RhiBackend backend,
+                                                        const RhiCapabilities& capabilities,
+                                                        const RenderBuildCapabilities& buildCapabilities,
+                                                        uint64_t implementedFeatureMask, RenderFeature feature);
 
 /// Evaluates one feature against the current executable's build and implementation state.
 /// @param profile Profile selected by the caller.
@@ -159,11 +144,9 @@ struct RenderProfileStatus {
 /// @param capabilities Capabilities exposed by the initialized RHI device.
 /// @param feature Feature to evaluate.
 /// @return Structured availability code and an English user-facing reason.
-[[nodiscard]] RenderFeatureStatus evaluateCurrentRenderFeature(
-    RenderProfile profile,
-    RhiBackend backend,
-    const RhiCapabilities& capabilities,
-    RenderFeature feature);
+[[nodiscard]] RenderFeatureStatus evaluateCurrentRenderFeature(RenderProfile profile, RhiBackend backend,
+                                                               const RhiCapabilities& capabilities,
+                                                               RenderFeature feature);
 
 /// Evaluates all required features and returns the first deterministic blocker.
 /// @param profile Profile selected by the caller.
@@ -172,22 +155,18 @@ struct RenderProfileStatus {
 /// @param buildCapabilities Optional components present in the executable.
 /// @param implementedFeatureMask Product-integrated features represented as feature bits.
 /// @return Available when the complete profile is ready, otherwise its first blocking status.
-[[nodiscard]] RenderProfileStatus evaluateRenderProfile(
-    RenderProfile profile,
-    RhiBackend backend,
-    const RhiCapabilities& capabilities,
-    const RenderBuildCapabilities& buildCapabilities,
-    uint64_t implementedFeatureMask);
+[[nodiscard]] RenderProfileStatus evaluateRenderProfile(RenderProfile profile, RhiBackend backend,
+                                                        const RhiCapabilities& capabilities,
+                                                        const RenderBuildCapabilities& buildCapabilities,
+                                                        uint64_t implementedFeatureMask);
 
 /// Evaluates a profile against the current executable's build and implementation state.
 /// @param profile Profile selected by the caller.
 /// @param backend Active RHI backend.
 /// @param capabilities Capabilities exposed by the initialized RHI device.
 /// @return Available when the complete current profile can be selected and executed.
-[[nodiscard]] RenderProfileStatus evaluateCurrentRenderProfile(
-    RenderProfile profile,
-    RhiBackend backend,
-    const RhiCapabilities& capabilities);
+[[nodiscard]] RenderProfileStatus evaluateCurrentRenderProfile(RenderProfile profile, RhiBackend backend,
+                                                               const RhiCapabilities& capabilities);
 
 } // namespace renderer::contracts
 

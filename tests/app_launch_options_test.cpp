@@ -37,16 +37,12 @@ int main() {
         return 1;
     }
 
-    if (!requireTrue(parseValidationScene("voxel") ==
-                         ValidationScene::Voxel &&
-                         parseValidationScene("model") ==
-                         ValidationScene::Model &&
+    if (!requireTrue(parseValidationScene("voxel") == ValidationScene::Voxel &&
+                         parseValidationScene("model") == ValidationScene::Model &&
                          !parseValidationScene("Voxel").has_value(),
                      "validation scene identifiers must use the stable lowercase contract") ||
-        !requireTrue(std::string(validationSceneStableId(
-                             ValidationScene::Voxel)) == "voxel" &&
-                         std::string(validationSceneStableId(
-                             ValidationScene::Model)) == "model",
+        !requireTrue(std::string(validationSceneStableId(ValidationScene::Voxel)) == "voxel" &&
+                         std::string(validationSceneStableId(ValidationScene::Model)) == "model",
                      "validation scene reports must use stable identifiers")) {
         return 1;
     }
@@ -63,58 +59,48 @@ int main() {
 
     AppLaunchOptions invalid = validation;
     invalid.validationScenePath.clear();
-    if (!requireTrue(!validateAppLaunchOptions(invalid, error),
-                     "validation outputs must require a scene descriptor")) {
+    if (!requireTrue(!validateAppLaunchOptions(invalid, error), "validation outputs must require a scene descriptor")) {
         return 1;
     }
     invalid = validation;
     invalid.validationSampleFrames = 1u;
-    if (!requireTrue(!validateAppLaunchOptions(invalid, error),
-                     "validation must include both Camera Path endpoints")) {
+    if (!requireTrue(!validateAppLaunchOptions(invalid, error), "validation must include both Camera Path endpoints")) {
         return 1;
     }
     invalid = validation;
-    invalid.validationWarmupFrames =
-        std::numeric_limits<uint32_t>::max();
-    if (!requireTrue(!validateAppLaunchOptions(invalid, error),
-                     "validation frame counts must not overflow")) {
+    invalid.validationWarmupFrames = std::numeric_limits<uint32_t>::max();
+    if (!requireTrue(!validateAppLaunchOptions(invalid, error), "validation frame counts must not overflow")) {
         return 1;
     }
     invalid = validation;
     invalid.validationWidth = 0u;
-    if (!requireTrue(!validateAppLaunchOptions(invalid, error),
-                     "validation dimensions must be nonzero")) {
+    if (!requireTrue(!validateAppLaunchOptions(invalid, error), "validation dimensions must be nonzero")) {
         return 1;
     }
     invalid = validation;
     invalid.recordInput = true;
-    if (!requireTrue(!validateAppLaunchOptions(invalid, error),
-                     "validation must reject input recording")) {
+    if (!requireTrue(!validateAppLaunchOptions(invalid, error), "validation must reject input recording")) {
         return 1;
     }
     invalid = validation;
     invalid.benchmarkWorldName = "baseline";
-    if (!requireTrue(!validateAppLaunchOptions(invalid, error),
-                     "validation must reject writable benchmark worlds")) {
+    if (!requireTrue(!validateAppLaunchOptions(invalid, error), "validation must reject writable benchmark worlds")) {
         return 1;
     }
     invalid = validation;
     invalid.benchmarkSeedSet = true;
-    if (!requireTrue(!validateAppLaunchOptions(invalid, error),
-                     "scene descriptors must own voxel world options")) {
+    if (!requireTrue(!validateAppLaunchOptions(invalid, error), "scene descriptors must own voxel world options")) {
         return 1;
     }
     invalid = validation;
     invalid.autoStartGameplay = true;
-    if (!requireTrue(!validateAppLaunchOptions(invalid, error),
-                     "validation must reject benchmark gameplay mode")) {
+    if (!requireTrue(!validateAppLaunchOptions(invalid, error), "validation must reject benchmark gameplay mode")) {
         return 1;
     }
 
     AppLaunchOptions pathsWithoutScene;
     pathsWithoutScene.validationReportPath = "report.json";
-    if (!requireTrue(!validateAppLaunchOptions(pathsWithoutScene, error),
-                     "validation paths must require a scene")) {
+    if (!requireTrue(!validateAppLaunchOptions(pathsWithoutScene, error), "validation paths must require a scene")) {
         return 1;
     }
     AppLaunchOptions framesWithoutScene;

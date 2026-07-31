@@ -16,9 +16,7 @@ public:
     [[nodiscard]] static AnimatedTextureRef resolveTextureRef(const std::string& textureName);
 
 private:
-    static bool parseModel(const nlohmann::json& json,
-                           const std::string& name,
-                           std::unique_ptr<BlockModel>& outModel,
+    static bool parseModel(const nlohmann::json& json, const std::string& name, std::unique_ptr<BlockModel>& outModel,
                            std::string& error);
     static bool parseElement(const nlohmann::json& json, ModelElement& outElement, std::string& error);
     static bool parseFace(const nlohmann::json& json, std::unique_ptr<ModelFace>& outFace, std::string& error);

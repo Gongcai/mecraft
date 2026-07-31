@@ -29,12 +29,10 @@ struct ResourceTint {
 
 ResourceTint textureTintColor(const ResourceTextureTint tint) {
     switch (tint) {
-        case ResourceTextureTint::Grass:
-        case ResourceTextureTint::Foliage:
-            return {0.50f, 0.78f, 0.34f};
-        case ResourceTextureTint::None:
-        default:
-            return {};
+    case ResourceTextureTint::Grass:
+    case ResourceTextureTint::Foliage: return {0.50f, 0.78f, 0.34f};
+    case ResourceTextureTint::None:
+    default: return {};
     }
 }
 
@@ -45,16 +43,15 @@ std::vector<std::filesystem::path> collectSortedPngFiles(const std::string& dire
     std::error_code fsError;
     if (!fs::exists(directory, fsError)) {
         if (fsError) {
-            failTextureAtlasBuilders("Failed to inspect texture atlas directory: " +
-                                     directory + ": " + fsError.message());
+            failTextureAtlasBuilders("Failed to inspect texture atlas directory: " + directory + ": " +
+                                     fsError.message());
         }
         failTextureAtlasBuilders("Texture atlas directory does not exist: " + directory);
     }
 
     fs::directory_iterator it(directory, fsError);
     if (fsError) {
-        failTextureAtlasBuilders("Failed to iterate texture atlas directory: " +
-                                 directory + ": " + fsError.message());
+        failTextureAtlasBuilders("Failed to iterate texture atlas directory: " + directory + ": " + fsError.message());
     }
     const fs::directory_iterator end;
     while (it != end) {
@@ -64,15 +61,13 @@ std::vector<std::filesystem::path> collectSortedPngFiles(const std::string& dire
         }
         it.increment(fsError);
         if (fsError) {
-            failTextureAtlasBuilders("Failed to continue iterating texture atlas directory: " +
-                                     directory + ": " + fsError.message());
+            failTextureAtlasBuilders("Failed to continue iterating texture atlas directory: " + directory + ": " +
+                                     fsError.message());
         }
     }
 
     std::sort(imagePaths.begin(), imagePaths.end(),
-              [](const fs::path& a, const fs::path& b) {
-                  return a.filename().string() < b.filename().string();
-              });
+              [](const fs::path& a, const fs::path& b) { return a.filename().string() < b.filename().string(); });
 
     if (imagePaths.empty()) {
         failTextureAtlasBuilders("Texture atlas directory contains no PNG files: " + directory);
@@ -81,13 +76,8 @@ std::vector<std::filesystem::path> collectSortedPngFiles(const std::string& dire
     return imagePaths;
 }
 
-void copyTilePadding(std::vector<unsigned char>& atlasPixels,
-                     const int atlasWidth,
-                     const int innerStartX,
-                     const int innerStartY,
-                     const int copyWidth,
-                     const int copyHeight,
-                     const int tilePadding) {
+void copyTilePadding(std::vector<unsigned char>& atlasPixels, const int atlasWidth, const int innerStartX,
+                     const int innerStartY, const int copyWidth, const int copyHeight, const int tilePadding) {
     for (int y = 0; y < copyHeight; ++y) {
         const int srcY = innerStartY + y;
         const int leftSrcX = innerStartX;
@@ -125,12 +115,8 @@ void copyTilePadding(std::vector<unsigned char>& atlasPixels,
     }
 }
 
-void copyTilePixelsToAtlas(std::vector<unsigned char>& atlasPixels,
-                           const int atlasWidth,
-                           const int innerStartX,
-                           const int innerStartY,
-                           const int tileSize,
-                           const std::vector<unsigned char>& tilePixels) {
+void copyTilePixelsToAtlas(std::vector<unsigned char>& atlasPixels, const int atlasWidth, const int innerStartX,
+                           const int innerStartY, const int tileSize, const std::vector<unsigned char>& tilePixels) {
     if (tilePixels.size() != static_cast<size_t>(tileSize) * static_cast<size_t>(tileSize) * 4U) {
         failTextureAtlasBuilders("Block texture atlas tile pixel buffer size is invalid");
     }
@@ -146,11 +132,8 @@ void copyTilePixelsToAtlas(std::vector<unsigned char>& atlasPixels,
     }
 }
 
-void createAtlasTexture(resource::IndexedTextureAtlas& atlas,
-                        RhiDevice& rhiDevice,
-                        RhiCommandListPool& commandListPool,
-                        const int maxMipmapLevel,
-                        const char* debugName) {
+void createAtlasTexture(resource::IndexedTextureAtlas& atlas, RhiDevice& rhiDevice, RhiCommandListPool& commandListPool,
+                        const int maxMipmapLevel, const char* debugName) {
     RhiTextureDesc desc;
     desc.debugName = debugName;
     desc.dimension = RhiTextureDimension::Texture2D;
@@ -158,17 +141,14 @@ void createAtlasTexture(resource::IndexedTextureAtlas& atlas,
     desc.width = static_cast<uint32_t>(atlas.atlas.atlasWidth);
     desc.height = static_cast<uint32_t>(atlas.atlas.atlasHeight);
     desc.mipLevels = static_cast<uint32_t>(maxMipmapLevel + 1);
-    desc.usage = rhiFlag(RhiTextureUsage::Sampled) |
-                 rhiFlag(RhiTextureUsage::TransferSrc) |
+    desc.usage = rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::TransferSrc) |
                  rhiFlag(RhiTextureUsage::TransferDst);
     desc.memoryCategory = RhiMemoryCategory::Texture;
 
     RhiTextureInitialData initialData;
     initialData.pixels = atlas.pixels.data();
     initialData.sizeBytes = atlas.pixels.size();
-    initialData.finalState = desc.mipLevels > 1u
-        ? RhiResourceState::TransferDst
-        : RhiResourceState::ShaderRead;
+    initialData.finalState = desc.mipLevels > 1u ? RhiResourceState::TransferDst : RhiResourceState::ShaderRead;
     atlas.atlas.texture = rhiDevice.createTexture(desc, &initialData);
     if (!atlas.atlas.texture.isValid()) {
         failTextureAtlasBuilders(std::string("Failed to create ") + debugName);
@@ -181,9 +161,7 @@ void createAtlasTexture(resource::IndexedTextureAtlas& atlas,
     RhiCommandList& commandList = *commandListStorage;
     if (desc.mipLevels > 1u) {
         commandList.generateMipmaps(atlas.atlas.texture);
-        commandList.textureBarrier({atlas.atlas.texture,
-                                    RhiResourceState::TransferDst,
-                                    RhiResourceState::ShaderRead});
+        commandList.textureBarrier({atlas.atlas.texture, RhiResourceState::TransferDst, RhiResourceState::ShaderRead});
     }
     if (!commandList.end()) {
         std::abort();
@@ -198,10 +176,8 @@ void createAtlasTexture(resource::IndexedTextureAtlas& atlas,
 
 namespace resource {
 
-IndexedTextureAtlas buildItemTextureAtlas(const std::string& directory,
-                                          const int tileSize,
-                                          const BlockTextureCatalog& catalog,
-                                          RhiDevice& rhiDevice,
+IndexedTextureAtlas buildItemTextureAtlas(const std::string& directory, const int tileSize,
+                                          const BlockTextureCatalog& catalog, RhiDevice& rhiDevice,
                                           RhiCommandListPool& commandListPool) {
     if (tileSize <= 0) {
         failTextureAtlasBuilders("Item texture atlas tile size must be positive");
@@ -275,19 +251,14 @@ IndexedTextureAtlas buildItemTextureAtlas(const std::string& directory,
     return result;
 }
 
-IndexedTextureAtlas buildBlockTextureAtlas(const std::string& directory,
-                                           const int tileSize,
-                                           const BlockTextureCatalog& catalog,
-                                           RhiDevice& rhiDevice,
+IndexedTextureAtlas buildBlockTextureAtlas(const std::string& directory, const int tileSize,
+                                           const BlockTextureCatalog& catalog, RhiDevice& rhiDevice,
                                            RhiCommandListPool& commandListPool) {
-    return buildBlockTextureAtlas(
-        buildBlockTextureManifest(directory), tileSize, catalog, rhiDevice, commandListPool);
+    return buildBlockTextureAtlas(buildBlockTextureManifest(directory), tileSize, catalog, rhiDevice, commandListPool);
 }
 
-IndexedTextureAtlas buildBlockTextureAtlas(const BlockTextureManifest& manifest,
-                                           const int tileSize,
-                                           const BlockTextureCatalog& catalog,
-                                           RhiDevice& rhiDevice,
+IndexedTextureAtlas buildBlockTextureAtlas(const BlockTextureManifest& manifest, const int tileSize,
+                                           const BlockTextureCatalog& catalog, RhiDevice& rhiDevice,
                                            RhiCommandListPool& commandListPool) {
     if (tileSize <= 0) {
         failTextureAtlasBuilders("Block texture atlas tile size must be positive");
@@ -327,9 +298,7 @@ IndexedTextureAtlas buildBlockTextureAtlas(const BlockTextureManifest& manifest,
         const std::string& textureName = textureEntry.name;
         const BlockTextureCatalogEntry* catalogEntry = catalog.find(textureName);
         const bool useVerticalFrame =
-            catalogEntry != nullptr &&
-            catalogEntry->verticalFrames &&
-            catalogEntry->animation.frameCount > 1;
+            catalogEntry != nullptr && catalogEntry->verticalFrames && catalogEntry->animation.frameCount > 1;
         int sourceHeight = height;
         const unsigned char* sourcePixels = data;
 
@@ -337,7 +306,8 @@ IndexedTextureAtlas buildBlockTextureAtlas(const BlockTextureManifest& manifest,
             const int frameCount = catalogEntry->animation.frameCount;
             if (height != width * frameCount) {
                 stbi_image_free(data);
-                failTextureAtlasBuilders("Texture catalog dimensions do not match atlas source for " + textureEntry.albedoPath.string());
+                failTextureAtlasBuilders("Texture catalog dimensions do not match atlas source for " +
+                                         textureEntry.albedoPath.string());
             }
             const int frameIndex = catalogEntry->topFrameFirst ? frameCount - 1 : 0;
             sourcePixels = data + static_cast<size_t>(frameIndex * width * width) * 4U;
@@ -355,13 +325,8 @@ IndexedTextureAtlas buildBlockTextureAtlas(const BlockTextureManifest& manifest,
         const int innerStartY = tileBaseY + kTilePadding;
 
         const TextureResampleFilter filter = selectTextureTileResampleFilter(width, sourceHeight, tileSize);
-        const std::vector<unsigned char> tilePixels = resampleRgba8(sourcePixels,
-                                                                    width,
-                                                                    sourceHeight,
-                                                                    width,
-                                                                    tileSize,
-                                                                    tileSize,
-                                                                    filter);
+        const std::vector<unsigned char> tilePixels =
+            resampleRgba8(sourcePixels, width, sourceHeight, width, tileSize, tileSize, filter);
         copyTilePixelsToAtlas(result.pixels, atlasWidth, innerStartX, innerStartY, tileSize, tilePixels);
 
         copyTilePadding(result.pixels, atlasWidth, innerStartX, innerStartY, tileSize, tileSize, kTilePadding);
@@ -377,17 +342,15 @@ IndexedTextureAtlas buildBlockTextureAtlas(const BlockTextureManifest& manifest,
     result.atlas.tilePadding = kTilePadding;
     result.atlas.tilesPerRow = tilesPerRow;
 
-    const int fullChainMaxLevel = static_cast<int>(std::floor(std::log2(static_cast<float>(std::max(atlasWidth, atlasHeight)))));
+    const int fullChainMaxLevel =
+        static_cast<int>(std::floor(std::log2(static_cast<float>(std::max(atlasWidth, atlasHeight)))));
     const int paddingSafeMaxLevel = static_cast<int>(std::floor(std::log2(static_cast<float>(kTilePadding))));
     const int clampedMaxLevel = std::max(0, std::min(fullChainMaxLevel, paddingSafeMaxLevel));
-    createAtlasTexture(result, rhiDevice, commandListPool,
-                       clampedMaxLevel, "Resource.BlockTextureAtlas");
+    createAtlasTexture(result, rhiDevice, commandListPool, clampedMaxLevel, "Resource.BlockTextureAtlas");
     return result;
 }
 
-IndexedTextureAtlas buildHudIconAtlas(const std::string& directory,
-                                      const int iconSize,
-                                      RhiDevice& rhiDevice,
+IndexedTextureAtlas buildHudIconAtlas(const std::string& directory, const int iconSize, RhiDevice& rhiDevice,
                                       RhiCommandListPool& commandListPool) {
     if (iconSize <= 0) {
         failTextureAtlasBuilders("HUD icon atlas icon size must be positive");

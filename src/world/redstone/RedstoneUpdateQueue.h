@@ -41,27 +41,21 @@ public:
     /// @param executionTick  Redstone tick at which the action becomes due.
     /// @param position  World-space block position affected by the action.
     /// @param action  Device action to execute when due.
-    void schedule(uint64_t executionTick,
-                  const glm::ivec3& position,
-                  RedstoneScheduledAction action);
+    void schedule(uint64_t executionTick, const glm::ivec3& position, RedstoneScheduledAction action);
 
     /// Schedule one delayed redstone action, replacing a later or earlier
     /// pending action with the same position and action.
     /// @param executionTick  Redstone tick at which the action becomes due.
     /// @param position  World-space block position affected by the action.
     /// @param action  Device action to execute when due.
-    void reschedule(uint64_t executionTick,
-                    const glm::ivec3& position,
-                    RedstoneScheduledAction action);
+    void reschedule(uint64_t executionTick, const glm::ivec3& position, RedstoneScheduledAction action);
 
     /// Drain due actions in execution order.
     /// @param currentTick  Current redstone tick.
     /// @param out  Receives due updates.
     /// @param budget  Maximum number of due updates to drain.
     /// @return Number of due updates drained.
-    size_t drainDue(uint64_t currentTick,
-                    std::vector<RedstoneScheduledUpdate>& out,
-                    size_t budget);
+    size_t drainDue(uint64_t currentTick, std::vector<RedstoneScheduledUpdate>& out, size_t budget);
 
     /// Total delayed updates currently pending.
     [[nodiscard]] size_t size() const;
@@ -94,10 +88,7 @@ private:
         }
     };
 
-    std::priority_queue<
-        RedstoneScheduledUpdate,
-        std::vector<RedstoneScheduledUpdate>,
-        std::greater<>> m_queue;
+    std::priority_queue<RedstoneScheduledUpdate, std::vector<RedstoneScheduledUpdate>, std::greater<>> m_queue;
     std::unordered_map<ScheduledKey, uint32_t, ScheduledKeyHash> m_scheduledKeys;
     uint32_t m_sequenceCounter = 0;
 };

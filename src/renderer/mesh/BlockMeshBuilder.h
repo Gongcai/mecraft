@@ -4,8 +4,8 @@
 #include <cstdint>
 #include <vector>
 
-#include "world/chunk/SubChunk.h"  // BlockVertex
-#include "world/block/Block.h"     // BlockID
+#include "world/chunk/SubChunk.h" // BlockVertex
+#include "world/block/Block.h" // BlockID
 #include "world/block/BlockStateRegistry.h"
 #include "renderer/rhi/RhiHandles.h"
 #include "renderer/rhi/RhiPipeline.h"

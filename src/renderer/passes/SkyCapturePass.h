@@ -33,21 +33,13 @@ public:
     /// @param cameraPos Camera position for cloud rendering
     /// @param cloudTimeScale Cloud time scale from settings
     /// @return True when all resources were prepared and commands were recorded.
-    [[nodiscard]] bool execute(RhiCommandList& commandList,
-                               const DayNightSystem& dayNightSystem,
-                               const WeatherSystem& weatherSystem,
-                               RhiDevice& rhiDevice,
-                               DeferredRenderTargets& targets,
-                               GameplaySkyRenderer& skyRenderer,
-                               ResourceMgr& resourceMgr,
-                               float cameraY,
-                               float shaderTime,
-                               const glm::vec3& cameraPos,
-                               float cloudTimeScale);
+    [[nodiscard]] bool execute(RhiCommandList& commandList, const DayNightSystem& dayNightSystem,
+                               const WeatherSystem& weatherSystem, RhiDevice& rhiDevice, DeferredRenderTargets& targets,
+                               GameplaySkyRenderer& skyRenderer, ResourceMgr& resourceMgr, float cameraY,
+                               float shaderTime, const glm::vec3& cameraPos, float cloudTimeScale);
 
 private:
-    [[nodiscard]] bool ensureMetadataResources(RhiDevice& rhiDevice,
-                                               RhiTextureViewHandle atmosphereLutView);
+    [[nodiscard]] bool ensureMetadataResources(RhiDevice& rhiDevice, RhiTextureViewHandle atmosphereLutView);
     void destroyMetadataResources();
 
     RhiDevice* m_rhiDevice = nullptr;

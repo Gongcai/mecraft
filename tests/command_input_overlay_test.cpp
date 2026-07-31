@@ -9,7 +9,7 @@ int fail(const char* message) {
     std::cerr << "[command_input_overlay_test] FAIL: " << message << '\n';
     return EXIT_FAILURE;
 }
-}
+} // namespace
 
 int main() {
     CommandInputOverlay overlay;
@@ -21,7 +21,8 @@ int main() {
     if (overlay.getText() != "/help") {
         return fail("command input text setter/getter mismatch");
     }
-    if (overlay.onInput({UIInputEventType::PointerMove, 0.0f, 0.0f, UIPointerButton::None}, ctx) != UIEventResult::Ignored) {
+    if (overlay.onInput({UIInputEventType::PointerMove, 0.0f, 0.0f, UIPointerButton::None}, ctx) !=
+        UIEventResult::Ignored) {
         return fail("command input overlay should ignore pointer input");
     }
 
@@ -46,4 +47,3 @@ int main() {
     std::cout << "[command_input_overlay_test] PASS\n";
     return EXIT_SUCCESS;
 }
-

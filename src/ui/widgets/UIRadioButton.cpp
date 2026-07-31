@@ -27,7 +27,8 @@ void UIRadioButtonGroup::init(ResourceMgr& resourceMgr) {
     m_rhiDevice = &resourceMgr.rhiDevice();
     const auto vertexSource = renderer::rhi::loadShaderSource("assets/shaders/ui_capsule_rhi.vert");
     const auto fragmentSource = renderer::rhi::loadShaderSource("assets/shaders/ui_capsule_rhi.frag");
-    if (!vertexSource || !fragmentSource) std::abort();
+    if (!vertexSource || !fragmentSource)
+        std::abort();
 
     RhiShaderDesc shaderDesc;
     shaderDesc.debugName = "UiRadioButton.Vertex";
@@ -67,8 +68,9 @@ void UIRadioButtonGroup::init(ResourceMgr& resourceMgr) {
     blend.dstAlpha = RhiBlendFactor::OneMinusSrcAlpha;
     pipelineDesc.blend.attachments.push_back(blend);
     m_pipeline = m_rhiDevice->createGraphicsPipeline(pipelineDesc);
-    if (!m_vertexShader.isValid() || !m_fragmentShader.isValid() ||
-        !m_pipelineLayout.isValid() || !m_pipeline.isValid()) std::abort();
+    if (!m_vertexShader.isValid() || !m_fragmentShader.isValid() || !m_pipelineLayout.isValid() ||
+        !m_pipeline.isValid())
+        std::abort();
     initMesh();
     UIWidget::init(resourceMgr);
 }
@@ -76,10 +78,14 @@ void UIRadioButtonGroup::init(ResourceMgr& resourceMgr) {
 void UIRadioButtonGroup::shutdown() {
     cleanupMesh();
     if (m_rhiDevice != nullptr) {
-        if (m_pipeline.isValid()) m_rhiDevice->destroyPipeline(m_pipeline);
-        if (m_pipelineLayout.isValid()) m_rhiDevice->destroyPipelineLayout(m_pipelineLayout);
-        if (m_fragmentShader.isValid()) m_rhiDevice->destroyShader(m_fragmentShader);
-        if (m_vertexShader.isValid()) m_rhiDevice->destroyShader(m_vertexShader);
+        if (m_pipeline.isValid())
+            m_rhiDevice->destroyPipeline(m_pipeline);
+        if (m_pipelineLayout.isValid())
+            m_rhiDevice->destroyPipelineLayout(m_pipelineLayout);
+        if (m_fragmentShader.isValid())
+            m_rhiDevice->destroyShader(m_fragmentShader);
+        if (m_vertexShader.isValid())
+            m_rhiDevice->destroyShader(m_vertexShader);
     }
     m_pipeline = {};
     m_pipelineLayout = {};
@@ -102,22 +108,25 @@ int UIRadioButtonGroup::addOption(const std::string& text) {
 }
 
 void UIRadioButtonGroup::setSelectedIndex(int index) {
-    if (index < 0 || index >= static_cast<int>(m_options.size())) return;
-    if (m_selectedIndex == index) return;
+    if (index < 0 || index >= static_cast<int>(m_options.size()))
+        return;
+    if (m_selectedIndex == index)
+        return;
 
     // Animate old selection out.
     if (m_selectedIndex >= 0 && m_selectedIndex < static_cast<int>(m_options.size())) {
-        m_options[m_selectedIndex].selectTween.start(
-            m_options[m_selectedIndex].selectTween.value(), 0.0f, 0.15f, EasingType::EaseOut);
+        m_options[m_selectedIndex].selectTween.start(m_options[m_selectedIndex].selectTween.value(), 0.0f, 0.15f,
+                                                     EasingType::EaseOut);
     }
 
     m_selectedIndex = index;
 
     // Animate new selection in.
-    m_options[m_selectedIndex].selectTween.start(
-        m_options[m_selectedIndex].selectTween.value(), 1.0f, 0.15f, EasingType::EaseOut);
+    m_options[m_selectedIndex].selectTween.start(m_options[m_selectedIndex].selectTween.value(), 1.0f, 0.15f,
+                                                 EasingType::EaseOut);
 
-    if (onSelectionChanged) onSelectionChanged(m_selectedIndex);
+    if (onSelectionChanged)
+        onSelectionChanged(m_selectedIndex);
 }
 
 void UIRadioButtonGroup::setStyle(const UIRadioButtonStyle& style) {
@@ -137,20 +146,17 @@ void UIRadioButtonGroup::updateAnimations(float dt) {
 }
 
 void UIRadioButtonGroup::initMesh() {
-    constexpr float vertices[] = {
-        0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 1.0f,
-        0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 1.0f
-    };
+    constexpr float vertices[] = {0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 1.0f};
     RhiBufferDesc desc;
     desc.debugName = "UiRadioButton.VertexBuffer";
     desc.size = sizeof(vertices);
-    desc.usage = rhiFlag(RhiBufferUsage::Vertex) |
-                 rhiFlag(RhiBufferUsage::TransferDst);
+    desc.usage = rhiFlag(RhiBufferUsage::Vertex) | rhiFlag(RhiBufferUsage::TransferDst);
     desc.memoryUsage = RhiMemoryUsage::GpuOnly;
     desc.initialState = RhiResourceState::VertexBuffer;
     desc.memoryCategory = RhiMemoryCategory::Geometry;
     m_vertexBuffer = m_rhiDevice->createBuffer(desc, vertices, sizeof(vertices));
-    if (!m_vertexBuffer.isValid()) std::abort();
+    if (!m_vertexBuffer.isValid())
+        std::abort();
 }
 
 void UIRadioButtonGroup::cleanupMesh() {
@@ -177,8 +183,7 @@ int UIRadioButtonGroup::hitTestOption(float px, float py, const UIRenderContext&
             return i;
         }
         // Also allow clicking on the label text area.
-        if (px >= ax && px < ax + width * scaleX &&
-            flippedY >= rowY && flippedY < rowY + rowHeight) {
+        if (px >= ax && px < ax + width * scaleX && flippedY >= rowY && flippedY < rowY + rowHeight) {
             return i;
         }
     }
@@ -186,10 +191,11 @@ int UIRadioButtonGroup::hitTestOption(float px, float py, const UIRenderContext&
 }
 
 void UIRadioButtonGroup::renderSelf(const UIRenderContext& ctx) const {
-    if (m_options.empty()) return;
+    if (m_options.empty())
+        return;
     const bool record = ctx.phase == UIRenderPhase::Record;
-    if (record && (ctx.commandList == nullptr || !m_pipeline.isValid() ||
-                   !m_vertexBuffer.isValid())) return;
+    if (record && (ctx.commandList == nullptr || !m_pipeline.isValid() || !m_vertexBuffer.isValid()))
+        return;
 
     const UIResolvedRadioButtonStyle baseResolved = resolveStyle(ctx, false);
     const float radioSz = baseResolved.radioSize;
@@ -214,13 +220,16 @@ void UIRadioButtonGroup::renderSelf(const UIRenderContext& ctx) const {
             auto drawCircle = [&](const float radius, Color circleColor) {
                 const float diameter = radius * 2.0f;
                 circleColor[3] *= alpha;
-                struct PushConstants { glm::vec4 screenRect; glm::vec4 rectRadius; glm::vec4 color; };
-                const PushConstants pushConstants{
-                    glm::vec4(static_cast<float>(ctx.screenWidth), static_cast<float>(ctx.screenHeight),
-                              cx - radius, cy - radius),
-                    glm::vec4(diameter, diameter, radius, 0.0f),
-                    glm::vec4(circleColor[0], circleColor[1], circleColor[2], circleColor[3])
+                struct PushConstants {
+                    glm::vec4 screenRect;
+                    glm::vec4 rectRadius;
+                    glm::vec4 color;
                 };
+                const PushConstants pushConstants{
+                    glm::vec4(static_cast<float>(ctx.screenWidth), static_cast<float>(ctx.screenHeight), cx - radius,
+                              cy - radius),
+                    glm::vec4(diameter, diameter, radius, 0.0f),
+                    glm::vec4(circleColor[0], circleColor[1], circleColor[2], circleColor[3])};
                 ctx.commandList->pushConstants(&pushConstants, sizeof(pushConstants),
                                                rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment));
                 ctx.commandList->draw(6u, 1u, 0u, 0u);
@@ -229,7 +238,7 @@ void UIRadioButtonGroup::renderSelf(const UIRenderContext& ctx) const {
             const Color oc = resolved.outer;
             drawCircle(outerR, oc);
 
-            Color wellCol {
+            Color wellCol{
                 std::clamp(oc[0] * 0.34f, 0.0f, 1.0f),
                 std::clamp(oc[1] * 0.34f, 0.0f, 1.0f),
                 std::clamp(oc[2] * 0.34f, 0.0f, 1.0f),
@@ -254,19 +263,15 @@ void UIRadioButtonGroup::renderSelf(const UIRenderContext& ctx) const {
             const float rowY = ay + static_cast<float>(i) * (rowHeight + m_spacing);
             const auto metrics = ctx.textRenderer->measureText(opt.text, textScale);
             const float textY = rowY + (rowHeight - metrics.height) * 0.5f;
-            ctx.textRenderer->draw(
-                ctx,
-                opt.text,
-                textX,
-                textY,
-                textScale,
-                {txtCol[0], txtCol[1], txtCol[2], txtCol[3] * alpha});
+            ctx.textRenderer->draw(ctx, opt.text, textX, textY, textScale,
+                                   {txtCol[0], txtCol[1], txtCol[2], txtCol[3] * alpha});
         }
     }
 }
 
 UIEventResult UIRadioButtonGroup::onInput(const UIInputEvent& event, const UIRenderContext& ctx) {
-    if (!visible || !interactive) return UIEventResult::Ignored;
+    if (!visible || !interactive)
+        return UIEventResult::Ignored;
 
     switch (event.type) {
     case UIInputEventType::PointerMove: {
@@ -275,7 +280,8 @@ UIEventResult UIRadioButtonGroup::onInput(const UIInputEvent& event, const UIRen
         for (int i = 0; i < static_cast<int>(m_options.size()); ++i) {
             const bool wasHovered = m_options[i].hovered;
             m_options[i].hovered = (i == idx);
-            if (m_options[i].hovered != wasHovered) changed = true;
+            if (m_options[i].hovered != wasHovered)
+                changed = true;
         }
         return (idx >= 0 || changed) ? UIEventResult::Handled : UIEventResult::Ignored;
     }
@@ -290,8 +296,7 @@ UIEventResult UIRadioButtonGroup::onInput(const UIInputEvent& event, const UIRen
         }
         break;
 
-    default:
-        break;
+    default: break;
     }
 
     return UIEventResult::Ignored;

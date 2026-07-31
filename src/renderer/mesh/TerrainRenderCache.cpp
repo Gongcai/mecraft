@@ -23,7 +23,7 @@ int floorDiv(const int value, const int divisor) {
 struct MeshingCandidate {
     int64_t chunkKey = 0;
     Chunk* chunk = nullptr;
-    int scy = 0;  // Sub-chunk index
+    int scy = 0; // Sub-chunk index
     float distanceSq = 0.0f;
     std::shared_ptr<Chunk> chunkRef;
     std::shared_ptr<Chunk> neighborPosX;
@@ -33,8 +33,8 @@ struct MeshingCandidate {
 };
 
 // Expand an AABB to include a candidate bounding box.
-void expandBounds(glm::vec3& minBounds, glm::vec3& maxBounds, bool& hasBounds,
-                  const glm::vec3& candidateMin, const glm::vec3& candidateMax) {
+void expandBounds(glm::vec3& minBounds, glm::vec3& maxBounds, bool& hasBounds, const glm::vec3& candidateMin,
+                  const glm::vec3& candidateMax) {
     if (!hasBounds) {
         minBounds = candidateMin;
         maxBounds = candidateMax;
@@ -88,12 +88,9 @@ void TerrainRenderCache::shutdown() {
     m_transparentPassPlan.clear();
 }
 
-void TerrainRenderCache::setMeshingBudgets(const int submitBudget,
-                                           const int maxInFlight,
-                                           const float submitTimeBudgetMs,
-                                           const int drainBudget,
-                                           const float drainTimeBudgetMs,
-                                           const int drainVertexBudget) {
+void TerrainRenderCache::setMeshingBudgets(const int submitBudget, const int maxInFlight,
+                                           const float submitTimeBudgetMs, const int drainBudget,
+                                           const float drainTimeBudgetMs, const int drainVertexBudget) {
     m_meshingSubmitBudget = std::max(1, submitBudget);
     m_meshingMaxInFlight = std::max(1, maxInFlight);
     m_meshingSubmitTimeBudgetMs = std::max(0.0f, submitTimeBudgetMs);
@@ -109,8 +106,7 @@ void TerrainRenderCache::setMeshingBudgets(const int submitBudget,
 void TerrainRenderCache::syncChunkRenderColumns(const IWorldView& worldView) {
     const uint64_t activeChunkRevision = worldView.getActiveChunkRevision();
     const int regionChunkSize = std::max(1, m_regionChunkSize);
-    if (m_chunkRenderColumnsRevision == activeChunkRevision &&
-        m_chunkRenderColumnsRegionSize == regionChunkSize) {
+    if (m_chunkRenderColumnsRevision == activeChunkRevision && m_chunkRenderColumnsRegionSize == regionChunkSize) {
         return;
     }
 
@@ -171,8 +167,7 @@ void TerrainRenderCache::refreshChunkRenderColumnCache(ChunkRenderColumnCache& c
         const uint64_t revision = column.chunk->getSubChunkMeshRevision(scy);
         const SubChunk* sc = column.chunk->getSubChunk(scy);
         const uint64_t fingerprint = sc ? sc->getMesh().metadataFingerprint : 0ULL;
-        if (!column.stateValid ||
-            column.subChunkMeshRevisions[scy] != revision ||
+        if (!column.stateValid || column.subChunkMeshRevisions[scy] != revision ||
             column.subChunkMeshFingerprints[scy] != fingerprint) {
             column.subChunkMeshRevisions[scy] = revision;
             column.subChunkMeshFingerprints[scy] = fingerprint;
@@ -201,27 +196,20 @@ void TerrainRenderCache::refreshChunkRenderColumnCache(ChunkRenderColumnCache& c
         if (!mesh.inGlobalPool) {
             continue;
         }
-        const bool hasOpaqueOrCutout =
-            mesh.opaqueRange.vertexCount > 0 ||
-            mesh.cutoutRange.vertexCount > 0 ||
-            mesh.cutoutDistanceRange.vertexCount > 0;
-        const bool hasTransparent =
-            mesh.transparentRange.vertexCount > 0 ||
-            mesh.waterRange.vertexCount > 0;
+        const bool hasOpaqueOrCutout = mesh.opaqueRange.vertexCount > 0 || mesh.cutoutRange.vertexCount > 0 ||
+                                       mesh.cutoutDistanceRange.vertexCount > 0;
+        const bool hasTransparent = mesh.transparentRange.vertexCount > 0 || mesh.waterRange.vertexCount > 0;
         if (!hasOpaqueOrCutout && !hasTransparent) {
             continue;
         }
 
         const int yBase = scy * SubChunk::SIZE;
-        const glm::vec3 boundsMin = mesh.hasBounds
-            ? mesh.boundsMin
-            : column.worldOffset + glm::vec3(0.0f, static_cast<float>(yBase), 0.0f);
-        const glm::vec3 boundsMax = mesh.hasBounds
-            ? mesh.boundsMax
-            : column.worldOffset + glm::vec3(
-                Chunk::SIZE_X,
-                static_cast<float>(yBase + SubChunk::SIZE),
-                Chunk::SIZE_Z);
+        const glm::vec3 boundsMin =
+            mesh.hasBounds ? mesh.boundsMin : column.worldOffset + glm::vec3(0.0f, static_cast<float>(yBase), 0.0f);
+        const glm::vec3 boundsMax =
+            mesh.hasBounds ? mesh.boundsMax
+                           : column.worldOffset +
+                                 glm::vec3(Chunk::SIZE_X, static_cast<float>(yBase + SubChunk::SIZE), Chunk::SIZE_Z);
 
         ++column.renderableCount;
         expandBounds(columnMin, columnMax, columnHasBounds, boundsMin, boundsMax);
@@ -263,13 +251,12 @@ void TerrainRenderCache::releaseStaleMdiAllocations(const IWorldView& worldView)
     }
 
     const uint64_t activeChunkRevision = worldView.getActiveChunkRevision();
-    if (m_mdiAllocationSweepInitialized &&
-        m_lastMdiAllocationSweepActiveRevision == activeChunkRevision) {
+    if (m_mdiAllocationSweepInitialized && m_lastMdiAllocationSweepActiveRevision == activeChunkRevision) {
         return;
     }
 
     const auto& activeChunks = worldView.getActiveChunks();
-    for (auto it = m_mdiMeshAllocations.begin(); it != m_mdiMeshAllocations.end(); ) {
+    for (auto it = m_mdiMeshAllocations.begin(); it != m_mdiMeshAllocations.end();) {
         const auto chunkIt = activeChunks.find(it->first.chunkKey);
         bool release = (chunkIt == activeChunks.end() || !chunkIt->second);
         if (!release) {
@@ -278,12 +265,11 @@ void TerrainRenderCache::releaseStaleMdiAllocations(const IWorldView& worldView)
                 release = true;
             } else {
                 const SubChunkMesh& current = sc->getMesh();
-                release =
-                    current.opaqueRange.generation != it->second.mesh.opaque.generation ||
-                    current.cutoutRange.generation != it->second.mesh.cutout.generation ||
-                    current.cutoutDistanceRange.generation != it->second.mesh.cutoutDistance.generation ||
-                    current.transparentRange.generation != it->second.mesh.transparent.generation ||
-                    current.waterRange.generation != it->second.mesh.water.generation;
+                release = current.opaqueRange.generation != it->second.mesh.opaque.generation ||
+                          current.cutoutRange.generation != it->second.mesh.cutout.generation ||
+                          current.cutoutDistanceRange.generation != it->second.mesh.cutoutDistance.generation ||
+                          current.transparentRange.generation != it->second.mesh.transparent.generation ||
+                          current.waterRange.generation != it->second.mesh.water.generation;
             }
         }
 
@@ -336,11 +322,13 @@ void TerrainRenderCache::submitMeshingJobs(const IWorldView& worldView, const gl
         // Check each sub-chunk individually
         for (int scy = 0; scy < Chunk::NUM_SUB_CHUNKS; ++scy) {
             // Skip if not dirty
-            if (!chunk.isSubChunkDirty(scy)) continue;
+            if (!chunk.isSubChunkDirty(scy))
+                continue;
 
             // Skip if already in flight
             const int64_t flightKey = subChunkFlightKey(chunkKey, scy);
-            if (m_meshingInFlight.find(flightKey) != m_meshingInFlight.end()) continue;
+            if (m_meshingInFlight.find(flightKey) != m_meshingInFlight.end())
+                continue;
 
             // Air / fully occluded solid sub-chunks still need to replace any
             // previous mesh with an empty one; otherwise stale border faces
@@ -371,7 +359,8 @@ void TerrainRenderCache::submitMeshingJobs(const IWorldView& worldView, const gl
     }
 
     const int availableInFlightSlots = std::max(0, m_meshingMaxInFlight - static_cast<int>(m_meshingInFlight.size()));
-    const int submitCount = std::min({m_meshingSubmitBudget, availableInFlightSlots, static_cast<int>(candidates.size())});
+    const int submitCount =
+        std::min({m_meshingSubmitBudget, availableInFlightSlots, static_cast<int>(candidates.size())});
     if (submitCount <= 0) {
         return;
     }
@@ -385,15 +374,12 @@ void TerrainRenderCache::submitMeshingJobs(const IWorldView& worldView, const gl
         }
         return lhs.scy < rhs.scy;
     };
-    std::partial_sort(candidates.begin(),
-                      candidates.begin() + submitCount,
-                      candidates.end(),
-                      candidateLess);
+    std::partial_sort(candidates.begin(), candidates.begin() + submitCount, candidates.end(), candidateLess);
 
     const auto submitStartTime = std::chrono::steady_clock::now();
     for (int index = 0; index < submitCount; ++index) {
-        const double elapsedMs = std::chrono::duration<double, std::milli>(
-            std::chrono::steady_clock::now() - submitStartTime).count();
+        const double elapsedMs =
+            std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - submitStartTime).count();
         if (elapsedMs >= static_cast<double>(m_meshingSubmitTimeBudgetMs)) {
             break;
         }
@@ -408,13 +394,8 @@ void TerrainRenderCache::submitMeshingJobs(const IWorldView& worldView, const gl
         job.scy = candidate.scy;
         job.revision = candidate.chunk->getSubChunkMeshRevision(candidate.scy);
         job.snapshot = ChunkMesher::captureSubChunkSnapshot(
-            *candidate.chunk,
-            candidate.scy,
-            candidate.neighborPosX.get(),
-            candidate.neighborNegX.get(),
-            candidate.neighborPosZ.get(),
-            candidate.neighborNegZ.get(),
-            &worldView);
+            *candidate.chunk, candidate.scy, candidate.neighborPosX.get(), candidate.neighborNegX.get(),
+            candidate.neighborPosZ.get(), candidate.neighborNegZ.get(), &worldView);
         if (!job.snapshot) {
             continue;
         }
@@ -431,9 +412,8 @@ void TerrainRenderCache::submitMeshingJobs(const IWorldView& worldView, const gl
 }
 
 bool TerrainRenderCache::isMeshingSettled(const IWorldView& worldView) const {
-    if (m_meshingService == nullptr ||
-        m_meshingService->inFlightCount() != 0 ||
-        !m_meshingInFlight.empty() || !m_deferredMeshResults.empty()) {
+    if (m_meshingService == nullptr || m_meshingService->inFlightCount() != 0 || !m_meshingInFlight.empty() ||
+        !m_deferredMeshResults.empty()) {
         return false;
     }
 
@@ -454,8 +434,7 @@ bool TerrainRenderCache::isMeshingSettled(const IWorldView& worldView) const {
 // Meshing result drain
 // ---------------------------------------------------------------------------
 
-void TerrainRenderCache::drainMeshingResults(const IWorldView& worldView,
-                                             RhiCommandList& commandList) {
+void TerrainRenderCache::drainMeshingResults(const IWorldView& worldView, RhiCommandList& commandList) {
     // Phase 1: Drain all completed results from the service into the deferred buffer.
     // This avoids interleaving tryPopCompleted with budget checks, and lets us
     // process results in order with strict vertex/time budgets.
@@ -480,10 +459,9 @@ void TerrainRenderCache::drainMeshingResults(const IWorldView& worldView,
     // Phase 2: Process from deferred buffer respecting budgets.
     // Over-budget results stay in the buffer for the next frame.
     size_t processIdx = 0;
-    while (processIdx < m_deferredMeshResults.size() &&
-           uploadedCount < m_meshingDrainBudget) {
-        const double elapsedMs = std::chrono::duration<double, std::milli>(
-            std::chrono::steady_clock::now() - drainStartTime).count();
+    while (processIdx < m_deferredMeshResults.size() && uploadedCount < m_meshingDrainBudget) {
+        const double elapsedMs =
+            std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - drainStartTime).count();
         if (elapsedMs >= m_meshingDrainTimeBudgetMs) {
             break;
         }
@@ -496,18 +474,17 @@ void TerrainRenderCache::drainMeshingResults(const IWorldView& worldView,
         };
 
         // Compute vertex count for budget check BEFORE uploading
-        const int currentVertices =
-            static_cast<int>(result.meshData.opaqueVertices.size()) +
-            static_cast<int>(result.meshData.cutoutVertices.size()) +
-            static_cast<int>(result.meshData.cutoutDistanceVertices.size()) +
-            static_cast<int>(result.meshData.transparentVertices.size()) +
-            static_cast<int>(result.meshData.waterVertices.size());
+        const int currentVertices = static_cast<int>(result.meshData.opaqueVertices.size()) +
+                                    static_cast<int>(result.meshData.cutoutVertices.size()) +
+                                    static_cast<int>(result.meshData.cutoutDistanceVertices.size()) +
+                                    static_cast<int>(result.meshData.transparentVertices.size()) +
+                                    static_cast<int>(result.meshData.waterVertices.size());
 
         // Hard vertex budget: if this result would push us over, allow at most
         // one over-budget upload then stop for this frame.
         const bool overBudget = m_meshUploadVerticesThisFrame + currentVertices > m_meshingDrainVertexBudget;
         if (overBudget && uploadedCount > 0) {
-            break;  // Already uploaded something; defer the rest
+            break; // Already uploaded something; defer the rest
         }
 
         // Count result as processed (whether we upload or discard it)
@@ -572,12 +549,8 @@ void TerrainRenderCache::drainMeshingResults(const IWorldView& worldView,
 
         const glm::vec3 boundsWorldOffset(txOff, tyOff + scyYOff, tzOff);
         WorldGpuMesh gpu = m_worldRenderBuffer->uploadSubChunk(
-            commandList,
-            result.meshData.opaqueVertices,
-            result.meshData.cutoutVertices,
-            result.meshData.cutoutDistanceVertices,
-            result.meshData.transparentVertices,
-            result.meshData.waterVertices,
+            commandList, result.meshData.opaqueVertices, result.meshData.cutoutVertices,
+            result.meshData.cutoutDistanceVertices, result.meshData.transparentVertices, result.meshData.waterVertices,
             result.meshData.hasBounds,
             result.meshData.hasBounds ? result.meshData.boundsMin + boundsWorldOffset : glm::vec3(0.0f),
             result.meshData.hasBounds ? result.meshData.boundsMax + boundsWorldOffset : glm::vec3(0.0f));
@@ -612,30 +585,26 @@ void TerrainRenderCache::drainMeshingResults(const IWorldView& worldView,
         recycleResultMeshData();
 
         m_meshUploadVerticesThisFrame += currentVertices;
-        m_meshUploadBytesThisFrame += static_cast<size_t>(currentVertices) *
-            sizeof(PackedBlockVertex);
+        m_meshUploadBytesThisFrame += static_cast<size_t>(currentVertices) * sizeof(PackedBlockVertex);
 
         if (overBudget) {
-            break;  // Allow one over-budget upload, then stop
+            break; // Allow one over-budget upload, then stop
         }
     }
 
     // Record upload time
     m_worldBufferUploadMsThisFrame = static_cast<float>(
-        std::chrono::duration<double, std::milli>(
-            std::chrono::steady_clock::now() - drainStartTime).count());
+        std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - drainStartTime).count());
 
     // Record pool expand count
-    m_worldBufferExpandCountThisFrame = static_cast<int>(
-        m_worldRenderBuffer->opaqueExpandCount() +
-        m_worldRenderBuffer->cutoutExpandCount() +
-        m_worldRenderBuffer->transparentExpandCount());
+    m_worldBufferExpandCountThisFrame =
+        static_cast<int>(m_worldRenderBuffer->opaqueExpandCount() + m_worldRenderBuffer->cutoutExpandCount() +
+                         m_worldRenderBuffer->transparentExpandCount());
 
     // Remove processed results, keep deferred ones
     if (processIdx > 0) {
-        m_deferredMeshResults.erase(
-            m_deferredMeshResults.begin(),
-            m_deferredMeshResults.begin() + static_cast<ptrdiff_t>(processIdx));
+        m_deferredMeshResults.erase(m_deferredMeshResults.begin(),
+                                    m_deferredMeshResults.begin() + static_cast<ptrdiff_t>(processIdx));
     }
 
     m_meshUploadDeferredCount = static_cast<int>(m_deferredMeshResults.size());
@@ -645,8 +614,7 @@ void TerrainRenderCache::drainMeshingResults(const IWorldView& worldView,
 // Transparent batch collection
 // ---------------------------------------------------------------------------
 
-void TerrainRenderCache::addTransparentBatch(const GpuMeshRange& range,
-                                             const float distanceSq,
+void TerrainRenderCache::addTransparentBatch(const GpuMeshRange& range, const float distanceSq,
                                              const TransparentBatchKind kind) {
     if (range.vertexCount == 0) {
         return;

@@ -13,8 +13,7 @@ void rhiHashCombine(uint64_t& hash, uint64_t value) {
     }
 }
 
-template <typename Enum>
-void rhiHashEnum(uint64_t& hash, Enum value) {
+template <typename Enum> void rhiHashEnum(uint64_t& hash, Enum value) {
     rhiHashCombine(hash, static_cast<uint64_t>(value));
 }
 

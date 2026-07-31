@@ -8,7 +8,6 @@
 
 #include <cstdint>
 
-
 class Time {
 public:
     static double currentGameTime;
@@ -24,27 +23,13 @@ public:
         frameIndex = 0u;
         timeSpeed = 1.0;
     }
-    static uint32_t beginFrame() {
-        return ++frameIndex;
-    }
-    static uint32_t getFrameIndex() {
-        return frameIndex;
-    }
-    static void setTimeSpeed(double speed) {
-        timeSpeed = speed < 0.0 ? 0.0 : speed;
-    }
-    static double getTimeSpeed() {
-        return timeSpeed;
-    }
-    static double getRawTime() {
-        return glfwGetTime();
-    }
-    static double getGameTime() {
-        return currentGameTime;
-    }
-    static double getRawDeltaTime() {
-        return rawDeltaTime;
-    }
+    static uint32_t beginFrame() { return ++frameIndex; }
+    static uint32_t getFrameIndex() { return frameIndex; }
+    static void setTimeSpeed(double speed) { timeSpeed = speed < 0.0 ? 0.0 : speed; }
+    static double getTimeSpeed() { return timeSpeed; }
+    static double getRawTime() { return glfwGetTime(); }
+    static double getGameTime() { return currentGameTime; }
+    static double getRawDeltaTime() { return rawDeltaTime; }
     static void advanceGameTime(double dt) {
         if (dt <= 0.0) {
             deltaTime = 0.0;
@@ -58,13 +43,14 @@ public:
         double rawDelta = now - lastRawTime;
         lastRawTime = now;
 
-        if (rawDelta <= 0) rawDelta = 0.0;
+        if (rawDelta <= 0)
+            rawDelta = 0.0;
         rawDeltaTime = rawDelta;
         deltaTime = 0.0;
     }
+
 private:
     static double timeSpeed;
 };
-
 
 #endif //MECRAFT_TIME_H

@@ -43,9 +43,7 @@ struct TemporalUpscaleResult {
     TemporalExtent outputExtent;
     int32_t sdkError = 0;
 
-    [[nodiscard]] bool succeeded() const {
-        return status == TemporalUpscaleStatus::Success;
-    }
+    [[nodiscard]] bool succeeded() const { return status == TemporalUpscaleStatus::Success; }
 };
 
 /// Dispatches the selected HDR temporal reconstruction implementation.
@@ -64,25 +62,17 @@ public:
     /// @param renderExtent Maximum scene-rendering extent for the SDK context.
     /// @param outputExtent Required display-resolution output extent.
     /// @return True when Native needs no target or the SDK target is ready.
-    [[nodiscard]] bool prepareOutputTarget(
-        const UpscaleSettings& settings,
-        TemporalExtent renderExtent,
-        TemporalExtent outputExtent);
+    [[nodiscard]] bool prepareOutputTarget(const UpscaleSettings& settings, TemporalExtent renderExtent,
+                                           TemporalExtent outputExtent);
 
-    [[nodiscard]] RhiTextureHandle outputTextureHandle() const {
-        return m_outputTexture;
-    }
-    [[nodiscard]] RhiTextureViewHandle outputTextureViewHandle() const {
-        return m_outputView;
-    }
+    [[nodiscard]] RhiTextureHandle outputTextureHandle() const { return m_outputTexture; }
+    [[nodiscard]] RhiTextureViewHandle outputTextureViewHandle() const { return m_outputView; }
 
     /// Execute one temporal reconstruction frame.
     /// @param settings Selected implementation and per-dispatch SDK settings.
     /// @param frame Fully populated backend-independent frame contract.
     /// @return Status and HDR output consumed by display post-processing.
-    [[nodiscard]] TemporalUpscaleResult execute(
-        const UpscaleSettings& settings,
-        const TemporalFrameInput& frame);
+    [[nodiscard]] TemporalUpscaleResult execute(const UpscaleSettings& settings, const TemporalFrameInput& frame);
 
     [[nodiscard]] static const char* statusText(TemporalUpscaleStatus status);
 

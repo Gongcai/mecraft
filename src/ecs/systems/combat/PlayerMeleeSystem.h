@@ -8,10 +8,9 @@ namespace ecs {
 
 class PlayerMeleeSystem : public ISystem {
 public:
-    using Dependencies = SystemDependency<
-        std::tuple<LocalPlayerTag, TransformComponent, CameraStateComponent, BlockActionIntentComponent, MeleeAttackComponent>,
-        std::tuple<MeleeAttackComponent, BlockActionIntentComponent>
-    >;
+    using Dependencies = SystemDependency<std::tuple<LocalPlayerTag, TransformComponent, CameraStateComponent,
+                                                     BlockActionIntentComponent, MeleeAttackComponent>,
+                                          std::tuple<MeleeAttackComponent, BlockActionIntentComponent>>;
 
     void update(SystemContext& ctx) override;
 };

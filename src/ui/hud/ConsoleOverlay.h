@@ -13,14 +13,12 @@ class RhiDevice;
 class TextRenderer;
 struct UITheme;
 
-class ConsoleOverlay : public UIWidget
-{
+class ConsoleOverlay : public UIWidget {
 public:
     void init(ResourceMgr& resourceMgr) override;
     void shutdown() override;
 
-    void appendLine(const std::string& message,
-                    double createdAtSec,
+    void appendLine(const std::string& message, double createdAtSec,
                     ConsoleDisplayBox::MessageType type = ConsoleDisplayBox::MessageType::Normal);
     void clear();
     [[nodiscard]] bool empty() const;
@@ -32,13 +30,8 @@ protected:
     void renderSelf(const UIRenderContext& context) const override;
 
 private:
-    void renderMessages(double nowSec, const TextRenderer& textRenderer,
-                        const UIRenderContext& context) const;
-    void drawOverlayRect(const UIRenderContext& context,
-                         int rectX,
-                         int rectY,
-                         int rectW,
-                         int rectH,
+    void renderMessages(double nowSec, const TextRenderer& textRenderer, const UIRenderContext& context) const;
+    void drawOverlayRect(const UIRenderContext& context, int rectX, int rectY, int rectW, int rectH,
                          const std::array<float, 4>& rectColor) const;
 
     RhiDevice* m_rhiDevice = nullptr;

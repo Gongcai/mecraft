@@ -32,9 +32,8 @@ bool ChunkTicketManager::shouldUnload(int cx, int cz) const {
     return !isWithinRadius(cx, cz, m_playerChunk.x, m_playerChunk.y, unloadRadius());
 }
 
-std::vector<glm::ivec2> ChunkTicketManager::getChunksToLoad(
-    int maxCount,
-    const std::unordered_set<int64_t>& alreadyLoaded) const {
+std::vector<glm::ivec2> ChunkTicketManager::getChunksToLoad(int maxCount,
+                                                            const std::unordered_set<int64_t>& alreadyLoaded) const {
 
     const int radius = loadRadius();
     const int centerX = m_playerChunk.x;
@@ -59,12 +58,11 @@ std::vector<glm::ivec2> ChunkTicketManager::getChunksToLoad(
     }
 
     // Sort by distance to center (closest first)
-    std::sort(candidates.begin(), candidates.end(),
-              [centerX, centerZ](const glm::ivec2& a, const glm::ivec2& b) {
-                  const int dA = distanceSq(a.x, a.y, centerX, centerZ);
-                  const int dB = distanceSq(b.x, b.y, centerX, centerZ);
-                  return dA < dB;
-              });
+    std::sort(candidates.begin(), candidates.end(), [centerX, centerZ](const glm::ivec2& a, const glm::ivec2& b) {
+        const int dA = distanceSq(a.x, a.y, centerX, centerZ);
+        const int dB = distanceSq(b.x, b.y, centerX, centerZ);
+        return dA < dB;
+    });
 
     // Truncate to maxCount
     if (static_cast<int>(candidates.size()) > maxCount) {
@@ -74,8 +72,7 @@ std::vector<glm::ivec2> ChunkTicketManager::getChunksToLoad(
     return candidates;
 }
 
-std::vector<int64_t> ChunkTicketManager::getChunksToUnload(
-    const std::unordered_set<int64_t>& loadedChunks) const {
+std::vector<int64_t> ChunkTicketManager::getChunksToUnload(const std::unordered_set<int64_t>& loadedChunks) const {
 
     std::vector<int64_t> toUnload;
     for (const int64_t key : loadedChunks) {

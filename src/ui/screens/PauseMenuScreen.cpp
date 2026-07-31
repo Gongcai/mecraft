@@ -49,7 +49,8 @@ void PauseMenuScreen::buildUI(ResourceMgr& resourceMgr) {
     resumeBtn->height = 45.0f;
     resumeBtn->setTone(UIButtonTone::Success);
     resumeBtn->setOnClick([this]() {
-        if (onResume) onResume();
+        if (onResume)
+            onResume();
     });
     m_resumeButton = resumeBtn.get();
 
@@ -61,7 +62,8 @@ void PauseMenuScreen::buildUI(ResourceMgr& resourceMgr) {
     settingsBtn->height = 45.0f;
     settingsBtn->setTone(UIButtonTone::Primary);
     settingsBtn->setOnClick([this]() {
-        if (onSettings) onSettings();
+        if (onSettings)
+            onSettings();
     });
     m_settingsButton = settingsBtn.get();
 
@@ -73,7 +75,8 @@ void PauseMenuScreen::buildUI(ResourceMgr& resourceMgr) {
     quitBtn->height = 45.0f;
     quitBtn->setTone(UIButtonTone::Danger);
     quitBtn->setOnClick([this]() {
-        if (onQuitToMenu) onQuitToMenu();
+        if (onQuitToMenu)
+            onQuitToMenu();
     });
     m_quitButton = quitBtn.get();
 

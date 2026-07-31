@@ -18,10 +18,10 @@ enum class InputContextType {
 };
 
 enum class Axis {
-    Vertical,   // 控制前后
+    Vertical, // 控制前后
     Horizontal, // 控制左右
-    LookX,      // X轴视角移动
-    LookY       // Y轴视角移动
+    LookX, // X轴视角移动
+    LookY // Y轴视角移动
 };
 
 enum class Action {
@@ -29,10 +29,10 @@ enum class Action {
     Sprint,
     Crouch,
     // Mouse actions
-    Attack,    // e.g. Left Click
-    UseItem,   // e.g. Right Click
+    Attack, // e.g. Left Click
+    UseItem, // e.g. Right Click
     Inventory, // e.g. E or I
-    Menu,      // e.g. ESC
+    Menu, // e.g. ESC
     // Hotbar slot selection
     Hotbar1,
     Hotbar2,
@@ -59,16 +59,11 @@ enum class Action {
     Backspace,
     OpenCommand,
     ToggleViewMode,
-    TabLeft,     // Switch to previous tab
-    TabRight     // Switch to next tab
+    TabLeft, // Switch to previous tab
+    TabRight // Switch to next tab
 };
 
-enum class InputDevice {
-    Keyboard,
-    Mouse,
-    Gamepad,
-    Scroll
-};
+enum class InputDevice { Keyboard, Mouse, Gamepad, Scroll };
 
 enum class TriggerType {
     Pressed,
@@ -113,22 +108,26 @@ public:
     void loadFromFile(const std::string& path);
 
     // Bind a keyboard key to an action with specific trigger type
-    void bindKey(Action action, int keyCode, TriggerType trigger, InputContextType context = InputContextType::Gameplay);
+    void bindKey(Action action, int keyCode, TriggerType trigger,
+                 InputContextType context = InputContextType::Gameplay);
 
     // Bind a keyboard key to an action
     void bindKey(Action action, int keyCode, InputContextType context = InputContextType::Gameplay);
 
     // Bind Axis to key
-    void bindAxisKey(Axis axis, int positiveKeyCode, int negativeKeyCode, InputContextType context = InputContextType::Gameplay, bool invert = false);
+    void bindAxisKey(Axis axis, int positiveKeyCode, int negativeKeyCode,
+                     InputContextType context = InputContextType::Gameplay, bool invert = false);
 
     // Bind Native Axis
-    void bindNativeAxis(Axis axis, NativeAxis native, InputContextType context = InputContextType::Gameplay, bool invert = false);
+    void bindNativeAxis(Axis axis, NativeAxis native, InputContextType context = InputContextType::Gameplay,
+                        bool invert = false);
 
     // Bind a mouse button to an action
     void bindMouseButton(Action action, int buttonCode, InputContextType context = InputContextType::Gameplay);
 
     // Bind a gamepad button to an action
-    void bindGamepadButton(Action action, int buttonCode, TriggerType trigger = TriggerType::Pressed, InputContextType context = InputContextType::Gameplay);
+    void bindGamepadButton(Action action, int buttonCode, TriggerType trigger = TriggerType::Pressed,
+                           InputContextType context = InputContextType::Gameplay);
 
     // Clear all bindings
     void clearAll();
@@ -137,11 +136,11 @@ public:
     // This is the low-level check
     [[nodiscard]] bool isActionTriggered(Action action, InputContextType context, const InputSnapshot& input) const;
     [[nodiscard]] bool isActionDoubleTapped(Action action, InputContextType context, const InputSnapshot& input) const;
-    [[nodiscard]] float getAxisValue(Axis axis,InputContextType context, const InputSnapshot& input) const;
+    [[nodiscard]] float getAxisValue(Axis axis, InputContextType context, const InputSnapshot& input) const;
 
 private:
-   // Store bindings per Action
-   // When checking, we iterate bindings for the Action and check if context matches and input matches.
+    // Store bindings per Action
+    // When checking, we iterate bindings for the Action and check if context matches and input matches.
     std::unordered_map<Action, std::vector<InputBinding>> m_bindings;
     std::unordered_map<Axis, std::vector<AxisBinding>> m_axisBindings;
 

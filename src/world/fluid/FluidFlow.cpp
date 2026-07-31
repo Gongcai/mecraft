@@ -8,12 +8,7 @@
 #include "../World.h"
 
 namespace {
-constexpr std::array<glm::ivec3, 4> kHorizontalOffsets = {{
-    {1, 0, 0},
-    {-1, 0, 0},
-    {0, 0, 1},
-    {0, 0, -1}
-}};
+constexpr std::array<glm::ivec3, 4> kHorizontalOffsets = {{{1, 0, 0}, {-1, 0, 0}, {0, 0, 1}, {0, 0, -1}}};
 
 BlockStateId sampleSnapshotBlock(const SubChunkMeshingSnapshot& snapshot, const int x, const int y, const int z) {
     if (x < -1 || x > SubChunk::SIZE || y < -1 || y > SubChunk::SIZE || z < -1 || z > SubChunk::SIZE) {
@@ -23,8 +18,7 @@ BlockStateId sampleSnapshotBlock(const SubChunkMeshingSnapshot& snapshot, const 
     const int haloX = x + 1;
     const int haloY = y + 1;
     const int haloZ = z + 1;
-    const std::size_t index = static_cast<std::size_t>(haloX) +
-                              static_cast<std::size_t>(haloZ) * SC_HALO_SIZE +
+    const std::size_t index = static_cast<std::size_t>(haloX) + static_cast<std::size_t>(haloZ) * SC_HALO_SIZE +
                               static_cast<std::size_t>(haloY) * SC_HALO_SIZE * SC_HALO_SIZE;
     return snapshot.haloBlocks[index];
 }
@@ -32,8 +26,7 @@ BlockStateId sampleSnapshotBlock(const SubChunkMeshingSnapshot& snapshot, const 
 // Get the effective fluid state at a snapshot position (fluid layer or block layer)
 BlockStateId sampleSnapshotFluid(const SubChunkMeshingSnapshot& snapshot, const int x, const int y, const int z) {
     if (x >= 0 && x < SubChunk::SIZE && y >= 0 && y < SubChunk::SIZE && z >= 0 && z < SubChunk::SIZE) {
-        const std::size_t idx = static_cast<std::size_t>(x) +
-                                static_cast<std::size_t>(z) * SubChunk::SIZE +
+        const std::size_t idx = static_cast<std::size_t>(x) + static_cast<std::size_t>(z) * SubChunk::SIZE +
                                 static_cast<std::size_t>(y) * SubChunk::SIZE * SubChunk::SIZE;
         const BlockStateId fluidState = snapshot.fluidBlocks[idx];
         if (fluidState != NULL_BLOCK_STATE) {
@@ -49,8 +42,7 @@ BlockStateId sampleSnapshotFluid(const SubChunkMeshingSnapshot& snapshot, const 
     const int haloX = x + 1;
     const int haloY = y + 1;
     const int haloZ = z + 1;
-    const std::size_t index = static_cast<std::size_t>(haloX) +
-                              static_cast<std::size_t>(haloZ) * SC_HALO_SIZE +
+    const std::size_t index = static_cast<std::size_t>(haloX) + static_cast<std::size_t>(haloZ) * SC_HALO_SIZE +
                               static_cast<std::size_t>(haloY) * SC_HALO_SIZE * SC_HALO_SIZE;
     const BlockStateId haloFluid = snapshot.haloFluidBlocks[index];
     if (haloFluid != NULL_BLOCK_STATE) {
@@ -85,7 +77,7 @@ glm::vec3 finalizeFlowVector(glm::vec3 flow, const bool falling) {
     }
     return flow / len;
 }
-}
+} // namespace
 
 glm::vec3 computeFluidFlowVector(const World& world, const glm::ivec3 pos, const FluidKind kind) {
     const BlockStateId currentFluidState = world.getFluidState(pos.x, pos.y, pos.z);
@@ -94,8 +86,8 @@ glm::vec3 computeFluidFlowVector(const World& world, const glm::ivec3 pos, const
         return glm::vec3(0.0f);
     }
 
-    const float currentHeight = surfaceHeightForFluidState(
-        currentFluidState, kind, world.getFluidState(pos.x, pos.y + 1, pos.z));
+    const float currentHeight =
+        surfaceHeightForFluidState(currentFluidState, kind, world.getFluidState(pos.x, pos.y + 1, pos.z));
 
     glm::vec3 flow(0.0f);
     for (const glm::ivec3& offset : kHorizontalOffsets) {
@@ -115,10 +107,7 @@ glm::vec3 computeFluidFlowVector(const World& world, const glm::ivec3 pos, const
     return finalizeFlowVector(flow, current.falling);
 }
 
-glm::vec3 computeFluidFlowVector(const SubChunkMeshingSnapshot& snapshot,
-                                 const int x,
-                                 const int y,
-                                 const int z,
+glm::vec3 computeFluidFlowVector(const SubChunkMeshingSnapshot& snapshot, const int x, const int y, const int z,
                                  const FluidKind kind) {
     const BlockStateId currentFluidState = sampleSnapshotFluid(snapshot, x, y, z);
     const DecodedFluid current = FluidState::decode(currentFluidState);
@@ -126,8 +115,8 @@ glm::vec3 computeFluidFlowVector(const SubChunkMeshingSnapshot& snapshot,
         return glm::vec3(0.0f);
     }
 
-    const float currentHeight = surfaceHeightForFluidState(
-        currentFluidState, kind, sampleSnapshotFluid(snapshot, x, y + 1, z));
+    const float currentHeight =
+        surfaceHeightForFluidState(currentFluidState, kind, sampleSnapshotFluid(snapshot, x, y + 1, z));
 
     glm::vec3 flow(0.0f);
     for (const glm::ivec3& offset : kHorizontalOffsets) {

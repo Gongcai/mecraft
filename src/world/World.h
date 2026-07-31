@@ -28,7 +28,9 @@
 #include "../thread/ThreadPool.h"
 #include "IWorldView.h"
 
-namespace save { class SaveManager; }
+namespace save {
+class SaveManager;
+}
 
 class World : public IWorldView {
 public:
@@ -57,8 +59,7 @@ public:
     [[nodiscard]] bool isChunkLoadedForBlock(int x, int y, int z) const override;
 
     [[nodiscard]] RayHit raycast(const PhysicsInfo& ray, float maxDist) const;
-    bool raycast(const PhysicsInfo& ray, float maxDist,
-                 glm::ivec3& hitBlock, glm::ivec3& placeBlock) const;
+    bool raycast(const PhysicsInfo& ray, float maxDist, glm::ivec3& hitBlock, glm::ivec3& placeBlock) const;
 
     [[nodiscard]] const ChunkMap& getActiveChunks() const override { return m_chunks; }
     [[nodiscard]] uint64_t getActiveChunkRevision() const override { return m_activeChunkRevision; }
@@ -183,18 +184,10 @@ private:
     void submitChunkLoad(int cx, int cz);
     void finalizeChunkLoad(save::ChunkLoadData loadData);
     [[nodiscard]] std::vector<save::WireContainerSaveEntry> collectWireContainersForChunk(int cx, int cz) const;
-    void applyLoadedWireContainers(int cx,
-                                   int cz,
-                                   const std::vector<save::WireContainerSaveEntry>& wireContainers);
+    void applyLoadedWireContainers(int cx, int cz, const std::vector<save::WireContainerSaveEntry>& wireContainers);
     void eraseWireContainersInChunk(int cx, int cz);
-    void updateStreaming(const glm::vec3& playerPos,
-                         float dt,
-                         int submitBudget,
-                         int maxGenerationInFlight,
-                         int finalizeBudget,
-                         double finalizeTimeBudgetMs,
-                         int lightSubmitBudget,
-                         int lightMergeBudget,
+    void updateStreaming(const glm::vec3& playerPos, float dt, int submitBudget, int maxGenerationInFlight,
+                         int finalizeBudget, double finalizeTimeBudgetMs, int lightSubmitBudget, int lightMergeBudget,
                          float lightMergeTimeBudgetMs);
 
     std::vector<glm::ivec2> m_loadQueue;

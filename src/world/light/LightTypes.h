@@ -10,10 +10,7 @@
 
 class Chunk;
 
-enum class LightKind : uint8_t {
-    Sky,
-    Block
-};
+enum class LightKind : uint8_t { Sky, Block };
 
 enum class LightDirtyReason : uint8_t {
     ChunkLoaded,
@@ -115,9 +112,7 @@ struct LightFrameStats {
 /// @param stats Current lighting scheduler state.
 /// @return True when lighting can no longer mutate loaded chunk meshes.
 [[nodiscard]] inline bool isLightFrameSettled(const LightFrameStats& stats) {
-    return stats.inFlight == 0 && stats.queued == 0 && stats.dirty == 0 &&
-           stats.pendingCompleted == 0;
+    return stats.inFlight == 0 && stats.queued == 0 && stats.dirty == 0 && stats.pendingCompleted == 0;
 }
 
 #endif // MECRAFT_LIGHTTYPES_H
-

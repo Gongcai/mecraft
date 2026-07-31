@@ -36,25 +36,19 @@ public:
     void setVertexBuffer(uint32_t slot, RhiBufferHandle buffer, uint64_t offset) override;
     void setIndexBuffer(RhiBufferHandle buffer, RhiIndexFormat format, uint64_t offset) override;
     void pushConstants(const void* data, size_t size, RhiShaderStageFlags stages) override;
-    void draw(uint32_t vertexCount, uint32_t instanceCount,
-              uint32_t firstVertex, uint32_t firstInstance) override;
-    void drawIndexed(uint32_t indexCount, uint32_t instanceCount,
-                     uint32_t firstIndex, int32_t vertexOffset,
+    void draw(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance) override;
+    void drawIndexed(uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset,
                      uint32_t firstInstance) override;
-    void drawIndirect(RhiBufferHandle indirectBuffer, uint64_t offset,
-                      uint32_t drawCount, uint32_t stride) override;
+    void drawIndirect(RhiBufferHandle indirectBuffer, uint64_t offset, uint32_t drawCount, uint32_t stride) override;
     void dispatch(uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ) override;
-    void updateBuffer(RhiBufferHandle buffer, uint64_t offset,
-                      const void* data, size_t size) override;
+    void updateBuffer(RhiBufferHandle buffer, uint64_t offset, const void* data, size_t size) override;
     void copyBuffer(const RhiBufferCopy& copy) override;
     void copyBufferToTexture(const RhiBufferTextureCopy& copy) override;
     void copyTextureToBuffer(const RhiTextureBufferCopy& copy) override;
     void copyTexture(const RhiTextureCopy& copy) override;
     void blitTexture(const RhiTextureBlit& blit) override;
     void generateMipmaps(RhiTextureHandle texture) override;
-    void resetQueryPool(RhiQueryPoolHandle pool,
-                        uint32_t firstQuery,
-                        uint32_t queryCount) override;
+    void resetQueryPool(RhiQueryPoolHandle pool, uint32_t firstQuery, uint32_t queryCount) override;
     void writeTimestamp(RhiQueryPoolHandle pool, uint32_t queryIndex) override;
 
 private:

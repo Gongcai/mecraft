@@ -37,9 +37,7 @@ bool isWireContainerState(const BlockStateId stateId) {
     return BlockRegistry::getFast(blockId).isWireContainer;
 }
 
-uint16_t requiredProperty(const BlockStateId stateId,
-                          const uint16_t property,
-                          const char* propertyName) {
+uint16_t requiredProperty(const BlockStateId stateId, const uint16_t property, const char* propertyName) {
     const uint16_t value = BlockStateRegistry::getPropertyIndex(stateId, property);
     if (value == BlockStateRegistry::INVALID_INDEX) {
         failWireContainerPlacement(std::string("Wire container placement requires property: ") + propertyName);
@@ -49,22 +47,10 @@ uint16_t requiredProperty(const BlockStateId stateId,
 
 std::array<uint16_t, 16> powerPropertyValues() {
     return {
-        PropIndices::POWER_0,
-        PropIndices::POWER_1,
-        PropIndices::POWER_2,
-        PropIndices::POWER_3,
-        PropIndices::POWER_4,
-        PropIndices::POWER_5,
-        PropIndices::POWER_6,
-        PropIndices::POWER_7,
-        PropIndices::POWER_8,
-        PropIndices::POWER_9,
-        PropIndices::POWER_10,
-        PropIndices::POWER_11,
-        PropIndices::POWER_12,
-        PropIndices::POWER_13,
-        PropIndices::POWER_14,
-        PropIndices::POWER_15,
+        PropIndices::POWER_0,  PropIndices::POWER_1,  PropIndices::POWER_2,  PropIndices::POWER_3,
+        PropIndices::POWER_4,  PropIndices::POWER_5,  PropIndices::POWER_6,  PropIndices::POWER_7,
+        PropIndices::POWER_8,  PropIndices::POWER_9,  PropIndices::POWER_10, PropIndices::POWER_11,
+        PropIndices::POWER_12, PropIndices::POWER_13, PropIndices::POWER_14, PropIndices::POWER_15,
     };
 }
 
@@ -209,9 +195,7 @@ bool canApplyToBlockState(const BlockStateId existingState, const BlockStateId i
     return true;
 }
 
-bool canApply(const World& world,
-              const glm::ivec3& position,
-              const BlockStateId incomingWireState) {
+bool canApply(const World& world, const glm::ivec3& position, const BlockStateId incomingWireState) {
     if (!world.isChunkLoadedForBlock(position.x, position.y, position.z)) {
         return false;
     }
@@ -237,9 +221,7 @@ bool canApply(const World& world,
     return parts.addPart(incomingPart);
 }
 
-ApplyResult apply(World& world,
-                  const glm::ivec3& position,
-                  const BlockStateId incomingWireState) {
+ApplyResult apply(World& world, const glm::ivec3& position, const BlockStateId incomingWireState) {
     if (!isPlainWireState(incomingWireState)) {
         return ApplyResult::NotWirePlacement;
     }
@@ -276,9 +258,7 @@ ApplyResult apply(World& world,
     return ApplyResult::NotWirePlacement;
 }
 
-WireContainerParts removePartsOnFace(World& world,
-                                     const glm::ivec3& position,
-                                     const uint16_t facing) {
+WireContainerParts removePartsOnFace(World& world, const glm::ivec3& position, const uint16_t facing) {
     if (!WireFaceGeometry::isWireFacing(facing)) {
         failWireContainerPlacement("Wire container part removal received an unsupported wire facing");
     }
@@ -327,9 +307,7 @@ WireContainerParts removePartsOnFace(World& world,
 std::vector<BlockID> wireBlocksForParts(const WireContainerParts& parts) {
     std::vector<BlockID> blockIds;
     blockIds.reserve(parts.size());
-    parts.forEach([&](const WirePart& part) {
-        blockIds.push_back(requireWireBlockForChannel(part.channelId));
-    });
+    parts.forEach([&](const WirePart& part) { blockIds.push_back(requireWireBlockForChannel(part.channelId)); });
     return blockIds;
 }
 

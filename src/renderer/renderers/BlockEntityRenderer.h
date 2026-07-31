@@ -31,18 +31,12 @@ public:
     [[nodiscard]] bool prepareFrame(const IWorldView& worldView);
     [[nodiscard]] bool prepareGBuffer(RhiCommandList& commandList);
     [[nodiscard]] bool prepareForward(RhiCommandList& commandList);
-    [[nodiscard]] bool prepareShadow(RhiCommandList& commandList,
-                                     const glm::vec3& cameraPos,
-                                     float splitNear,
+    [[nodiscard]] bool prepareShadow(RhiCommandList& commandList, const glm::vec3& cameraPos, float splitNear,
                                      float splitFar);
 
-    void renderToGBuffer(RhiCommandList& commandList,
-                         const glm::mat4& viewProj);
-    void renderToShadowMap(RhiCommandList& commandList,
-                           const glm::mat4& shadowViewProj);
-    void renderForward(RhiCommandList& commandList,
-                       const glm::mat4& viewProj,
-                       float skyIntensity);
+    void renderToGBuffer(RhiCommandList& commandList, const glm::mat4& viewProj);
+    void renderToShadowMap(RhiCommandList& commandList, const glm::mat4& shadowViewProj);
+    void renderForward(RhiCommandList& commandList, const glm::mat4& viewProj, float skyIntensity);
 
     struct CuboidDefinition {
         glm::vec3 fromPixels{0.0f};
@@ -106,9 +100,7 @@ private:
         int64_t chunkKey = 0;
         int scy = 0;
 
-        bool operator==(const SectionKey& other) const {
-            return chunkKey == other.chunkKey && scy == other.scy;
-        }
+        bool operator==(const SectionKey& other) const { return chunkKey == other.chunkKey && scy == other.scy; }
     };
 
     struct SectionKeyHash {
@@ -124,18 +116,14 @@ private:
         int y = 0;
         int z = 0;
 
-        bool operator==(const BlockPositionKey& other) const {
-            return x == other.x && y == other.y && z == other.z;
-        }
+        bool operator==(const BlockPositionKey& other) const { return x == other.x && y == other.y && z == other.z; }
     };
 
     struct BlockPositionKeyHash {
         std::size_t operator()(const BlockPositionKey& key) const {
             std::size_t hash = std::hash<int>{}(key.x);
-            hash ^= std::hash<int>{}(key.y) + 0x9e3779b97f4a7c15ull +
-                    (hash << 6u) + (hash >> 2u);
-            hash ^= std::hash<int>{}(key.z) + 0x9e3779b97f4a7c15ull +
-                    (hash << 6u) + (hash >> 2u);
+            hash ^= std::hash<int>{}(key.y) + 0x9e3779b97f4a7c15ull + (hash << 6u) + (hash >> 2u);
+            hash ^= std::hash<int>{}(key.z) + 0x9e3779b97f4a7c15ull + (hash << 6u) + (hash >> 2u);
             return hash;
         }
     };
@@ -151,9 +139,7 @@ private:
     RhiDevice* m_rhiDevice = nullptr;
     std::unordered_map<BlockID, ModelEntry> m_models;
     std::unordered_map<SectionKey, SectionCache, SectionKeyHash> m_sectionCaches;
-    std::unordered_map<BlockPositionKey,
-                       renderer::contracts::StableObjectId,
-                       BlockPositionKeyHash> m_blockObjectIds;
+    std::unordered_map<BlockPositionKey, renderer::contracts::StableObjectId, BlockPositionKeyHash> m_blockObjectIds;
     std::vector<BlockEntityInstance*> m_flatInstances;
     RhiGrowableBuffer m_rhiInstanceBuffer;
     std::vector<InstancedDrawData> m_instanceData;
@@ -186,16 +172,11 @@ private:
     void createGBufferRhiResources();
     void destroyGBufferRhiResources();
     static ModelDefinition makeChestDefinition();
-    static glm::mat4 buildModelMatrix(const ModelEntry& entry,
-                                      BlockStateId stateId,
-                                      const glm::vec3& blockPosition);
+    static glm::mat4 buildModelMatrix(const ModelEntry& entry, BlockStateId stateId, const glm::vec3& blockPosition);
     [[nodiscard]] bool synchronizeInstanceCache(const IWorldView& worldView);
     void rebuildFlatInstanceList();
     void updateInstanceLightsForFrame();
-    [[nodiscard]] bool rebuildSectionCache(const Chunk& chunk,
-                                           const SubChunk& subChunk,
-                                           int scy,
-                                           SectionCache& cache);
+    [[nodiscard]] bool rebuildSectionCache(const Chunk& chunk, const SubChunk& subChunk, int scy, SectionCache& cache);
 };
 
 #endif // MECRAFT_BLOCK_ENTITY_RENDERER_H

@@ -37,9 +37,7 @@ Component& ensureComponentRef(entt::registry& registry, const entt::entity entit
     return registry.get<Component>(entity);
 }
 
-void applyMobDefinition(GameplayRegistry& registry,
-                        const entt::entity entity,
-                        const MobEntityDefinition& definition) {
+void applyMobDefinition(GameplayRegistry& registry, const entt::entity entity, const MobEntityDefinition& definition) {
     entt::registry& reg = registry.registry();
     if (entity == entt::null || !reg.valid(entity)) {
         return;
@@ -96,7 +94,8 @@ void applyMobDefinition(GameplayRegistry& registry,
         const MobDropDefinition& firstDrop = definition.drops.front();
         auto* dropTable = reg.try_get<DropTableComponent>(entity);
         if (dropTable == nullptr) {
-            dropTable = &reg.emplace<DropTableComponent>(entity, firstDrop.itemId, firstDrop.minCount, firstDrop.maxCount);
+            dropTable =
+                &reg.emplace<DropTableComponent>(entity, firstDrop.itemId, firstDrop.minCount, firstDrop.maxCount);
         } else {
             dropTable->itemId = firstDrop.itemId;
             dropTable->minCount = firstDrop.minCount;
@@ -124,11 +123,9 @@ void applyMobDefinition(GameplayRegistry& registry,
     }
 
     if (definition.deathEffect.enabled) {
-        reg.emplace_or_replace<DeathEffectComponent>(entity,
-                                                     definition.deathEffect.particleBlock,
+        reg.emplace_or_replace<DeathEffectComponent>(entity, definition.deathEffect.particleBlock,
                                                      definition.deathEffect.particleCount,
-                                                     definition.deathEffect.soundId,
-                                                     definition.deathEffect.volume);
+                                                     definition.deathEffect.soundId, definition.deathEffect.volume);
     } else if (reg.all_of<DeathEffectComponent>(entity)) {
         reg.remove<DeathEffectComponent>(entity);
     }
@@ -136,8 +133,7 @@ void applyMobDefinition(GameplayRegistry& registry,
 
 } // namespace
 
-entt::entity EntityFactory::createServerPlayerProxy(GameplayRegistry& registry,
-                                                    const glm::vec3& position,
+entt::entity EntityFactory::createServerPlayerProxy(GameplayRegistry& registry, const glm::vec3& position,
                                                     const glm::vec3& velocity) {
     entt::registry& reg = registry.registry();
     const entt::entity entity = reg.create();
@@ -145,10 +141,8 @@ entt::entity EntityFactory::createServerPlayerProxy(GameplayRegistry& registry,
     return entity;
 }
 
-void EntityFactory::ensureServerPlayerProxy(GameplayRegistry& registry,
-                                            const entt::entity entity,
-                                            const glm::vec3& position,
-                                            const glm::vec3& velocity) {
+void EntityFactory::ensureServerPlayerProxy(GameplayRegistry& registry, const entt::entity entity,
+                                            const glm::vec3& position, const glm::vec3& velocity) {
     entt::registry& reg = registry.registry();
     if (entity == entt::null || !reg.valid(entity)) {
         return;
@@ -187,8 +181,7 @@ void EntityFactory::ensureServerPlayerProxy(GameplayRegistry& registry,
     }
 }
 
-entt::entity EntityFactory::createMob(GameplayRegistry& registry,
-                                      const std::string_view entityId,
+entt::entity EntityFactory::createMob(GameplayRegistry& registry, const std::string_view entityId,
                                       const glm::vec3& position) {
     std::string error;
     EntityDefinitionRegistry& definitions = EntityDefinitionRegistry::instance();
@@ -200,8 +193,7 @@ entt::entity EntityFactory::createMob(GameplayRegistry& registry,
 
     const MobEntityDefinition* definition = definitions.findMob(entityId);
     if (definition == nullptr) {
-        MECRAFT_LOG_PRINTF("[EntityFactory] Unknown mob definition: %.*s\n",
-                           static_cast<int>(entityId.size()),
+        MECRAFT_LOG_PRINTF("[EntityFactory] Unknown mob definition: %.*s\n", static_cast<int>(entityId.size()),
                            entityId.data());
         MECRAFT_LOG_FLUSH(stdout);
         return entt::null;
@@ -281,11 +273,7 @@ entt::entity EntityFactory::createFallingBlock(GameplayRegistry& registry, const
     const glm::vec3 renderPos = glm::vec3(params.gridPosition) + glm::vec3(0.5f);
 
     reg.emplace<FallingBlockTag>(entity);
-    reg.emplace<FallingBlockComponent>(entity,
-                                       params.blockId,
-                                       params.gridPosition,
-                                       params.gridPosition,
-                                       0.0f);
+    reg.emplace<FallingBlockComponent>(entity, params.blockId, params.gridPosition, params.gridPosition, 0.0f);
     reg.emplace<TransformComponent>(entity, renderPos, 0.0f);
     reg.emplace<BoundsComponent>(entity, glm::vec3(0.5f));
     reg.emplace<GroundedStateComponent>(entity, GroundedStateComponent{false});
@@ -317,43 +305,28 @@ entt::entity EntityFactory::createMovingBlock(GameplayRegistry& registry, const 
     const glm::vec3 renderPos = glm::vec3(params.sourcePosition) + glm::vec3(0.5f);
 
     reg.emplace<MovingBlockTag>(entity);
-    reg.emplace<MovingBlockComponent>(entity,
-                                      params.stateId,
-                                      params.sourcePosition,
-                                      params.targetPosition,
-                                      params.direction,
-                                      0.0f,
-                                      params.durationSeconds,
-                                      params.placeAtTarget);
+    reg.emplace<MovingBlockComponent>(entity, params.stateId, params.sourcePosition, params.targetPosition,
+                                      params.direction, 0.0f, params.durationSeconds, params.placeAtTarget);
     reg.emplace<TransformComponent>(entity, renderPos, 0.0f);
     reg.emplace<BoundsComponent>(entity, glm::vec3(0.5f));
     reg.emplace<DropEntityIdComponent>(entity, dropId);
     return entity;
 }
 
-entt::entity EntityFactory::createAppleProjectile(GameplayRegistry& registry,
-                                                  const entt::entity owner,
-                                                  const glm::vec3& position,
-                                                  const glm::vec3& velocity) {
+entt::entity EntityFactory::createAppleProjectile(GameplayRegistry& registry, const entt::entity owner,
+                                                  const glm::vec3& position, const glm::vec3& velocity) {
     return createProjectile(registry, owner, position, velocity, makeAppleProjectileDefinition());
 }
 
-entt::entity EntityFactory::createProjectile(GameplayRegistry& registry,
-                                             const entt::entity owner,
-                                             const glm::vec3& position,
-                                             const glm::vec3& velocity,
+entt::entity EntityFactory::createProjectile(GameplayRegistry& registry, const entt::entity owner,
+                                             const glm::vec3& position, const glm::vec3& velocity,
                                              const ProjectileDefinition& definition) {
     entt::registry& reg = registry.registry();
     const entt::entity projectile = reg.create();
 
     reg.emplace<ProjectileTag>(projectile);
-    reg.emplace<ProjectileComponent>(projectile,
-                                     owner,
-                                     definition.damage,
-                                     definition.hitRadius,
-                                     definition.gravity,
-                                     definition.entityImpactParticleBlock,
-                                     definition.entityImpactParticleCount,
+    reg.emplace<ProjectileComponent>(projectile, owner, definition.damage, definition.hitRadius, definition.gravity,
+                                     definition.entityImpactParticleBlock, definition.entityImpactParticleCount,
                                      definition.impactSoundId);
     reg.emplace<TransformComponent>(projectile, position, 0.0f);
     reg.emplace<VelocityComponent>(projectile, velocity);

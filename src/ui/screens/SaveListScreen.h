@@ -25,7 +25,7 @@ public:
         std::string folderName;
         std::string lastPlayedUtc;
         std::string createdUtc;
-        std::string screenshotPath;   // full filesystem path to thumb.png
+        std::string screenshotPath; // full filesystem path to thumb.png
         uint32_t seed = 0;
     };
 

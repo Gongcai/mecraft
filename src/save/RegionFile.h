@@ -50,7 +50,7 @@ struct RegionHeader {
 };
 
 struct ChunkIndexEntry {
-    uint32_t offset = 0;  // 0 means chunk not stored
+    uint32_t offset = 0; // 0 means chunk not stored
     uint32_t size = 0;
     uint32_t crc32 = 0;
     uint32_t timestamp = 0;
@@ -67,12 +67,10 @@ public:
     [[nodiscard]] static int toLocalCoord(int chunkCoord);
 
     // Region file path: <chunksDir>/r.<rx>.<rz>.mcrg
-    [[nodiscard]] static std::filesystem::path regionPath(
-        const std::filesystem::path& chunksDir, int rx, int rz);
+    [[nodiscard]] static std::filesystem::path regionPath(const std::filesystem::path& chunksDir, int rx, int rz);
 
     // Open or create a region file. Returns nullptr on error.
-    [[nodiscard]] static std::unique_ptr<RegionFile> open(
-        const std::filesystem::path& path, int rx, int rz);
+    [[nodiscard]] static std::unique_ptr<RegionFile> open(const std::filesystem::path& path, int rx, int rz);
 
     // Read a chunk from the region. Returns nullptr if not stored.
     [[nodiscard]] std::shared_ptr<Chunk> readChunk(int cx, int cz);

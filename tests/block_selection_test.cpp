@@ -30,7 +30,8 @@ void loadChunks(World& world) {
 int main() {
     BlockRegistry::init(nullptr);
 
-    const BlockStateId floorTorch = BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:torch"));
+    const BlockStateId floorTorch =
+        BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:torch"));
     const BlockSelectionBox floorBox = BlockSelection::getBox(floorTorch);
     if (floorBox.min.x >= 0.45f || floorBox.max.x <= 0.55f || floorBox.max.y >= 0.7f) {
         return fail("floor torch selection box should be a short narrow core");
@@ -38,9 +39,7 @@ int main() {
 
     const BlockStateId northTorch = BlockStateRegistry::getState(
         BlockRegistry::requireIdByName("minecraft:torch"),
-        std::vector<std::pair<uint16_t, uint16_t>>{
-            {PropIndices::FACING, PropIndices::FACING_NORTH}
-        });
+        std::vector<std::pair<uint16_t, uint16_t>>{{PropIndices::FACING, PropIndices::FACING_NORTH}});
     const BlockSelectionBox northBox = BlockSelection::getBox(northTorch);
     if (northBox.min.z <= 0.45f || northBox.max.y < 0.7f) {
         return fail("north wall torch selection box should follow the tilted wall model");
@@ -48,9 +47,7 @@ int main() {
 
     const BlockStateId southTorch = BlockStateRegistry::getState(
         BlockRegistry::requireIdByName("minecraft:torch"),
-        std::vector<std::pair<uint16_t, uint16_t>>{
-            {PropIndices::FACING, PropIndices::FACING_SOUTH}
-        });
+        std::vector<std::pair<uint16_t, uint16_t>>{{PropIndices::FACING, PropIndices::FACING_SOUTH}});
     const BlockSelectionBox southBox = BlockSelection::getBox(southTorch);
     if (southBox.max.z >= 0.55f || southBox.max.y < 0.7f) {
         return fail("south wall torch selection box should mirror the north wall model");
@@ -58,9 +55,7 @@ int main() {
 
     const BlockStateId eastTorch = BlockStateRegistry::getState(
         BlockRegistry::requireIdByName("minecraft:torch"),
-        std::vector<std::pair<uint16_t, uint16_t>>{
-            {PropIndices::FACING, PropIndices::FACING_EAST}
-        });
+        std::vector<std::pair<uint16_t, uint16_t>>{{PropIndices::FACING, PropIndices::FACING_EAST}});
     const BlockSelectionBox eastBox = BlockSelection::getBox(eastTorch);
     if (eastBox.max.x >= 0.55f || eastBox.max.y < 0.7f) {
         return fail("east wall torch selection box should rotate onto the X axis");
@@ -68,9 +63,7 @@ int main() {
 
     const BlockStateId westTorch = BlockStateRegistry::getState(
         BlockRegistry::requireIdByName("minecraft:torch"),
-        std::vector<std::pair<uint16_t, uint16_t>>{
-            {PropIndices::FACING, PropIndices::FACING_WEST}
-        });
+        std::vector<std::pair<uint16_t, uint16_t>>{{PropIndices::FACING, PropIndices::FACING_WEST}});
     const BlockSelectionBox westBox = BlockSelection::getBox(westTorch);
     if (westBox.min.x <= 0.45f || westBox.max.y < 0.7f) {
         return fail("west wall torch selection box should mirror the east wall model");
@@ -78,8 +71,7 @@ int main() {
 
     const BlockSelectionBox crossBox = BlockSelection::getBox(
         BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:tall_grass")));
-    if (crossBox.min.x <= 0.1f || crossBox.max.x >= 0.9f ||
-        crossBox.min.z <= 0.1f || crossBox.max.z >= 0.9f) {
+    if (crossBox.min.x <= 0.1f || crossBox.max.x >= 0.9f || crossBox.min.z <= 0.1f || crossBox.max.z >= 0.9f) {
         return fail("cross-shaped plants should not use a full horizontal voxel selection box");
     }
 
@@ -93,38 +85,29 @@ int main() {
         return fail("bottom slab selection box should cover the lower half");
     }
     const BlockStateId topSlab = BlockStateRegistry::getState(
-        oakSlab,
-        std::vector<std::pair<uint16_t, uint16_t>>{
-            {PropIndices::HALF, PropIndices::HALF_TOP}
-        });
+        oakSlab, std::vector<std::pair<uint16_t, uint16_t>>{{PropIndices::HALF, PropIndices::HALF_TOP}});
     const BlockSelectionBox topSlabBox = BlockSelection::getBox(topSlab);
     if (topSlabBox.min.y != 0.5f || topSlabBox.max.y != 1.0f) {
         return fail("top slab selection box should cover the upper half");
     }
     const BlockStateId doubleSlab = BlockStateRegistry::getState(
-        oakSlab,
-        std::vector<std::pair<uint16_t, uint16_t>>{
-            {PropIndices::HALF, PropIndices::HALF_DOUBLE}
-        });
+        oakSlab, std::vector<std::pair<uint16_t, uint16_t>>{{PropIndices::HALF, PropIndices::HALF_DOUBLE}});
     const BlockSelectionBox doubleSlabBox = BlockSelection::getBox(doubleSlab);
     if (doubleSlabBox.min.y != 0.0f || doubleSlabBox.max.y != 1.0f) {
         return fail("double slab selection box should cover the full block");
     }
     const std::vector<BlockCollisionBox> bottomSlabCollision = BlockCollision::getBoxes(bottomSlab);
-    if (bottomSlabCollision.size() != 1 ||
-        bottomSlabCollision.front().min.y != 0.0f ||
+    if (bottomSlabCollision.size() != 1 || bottomSlabCollision.front().min.y != 0.0f ||
         bottomSlabCollision.front().max.y != 0.5f) {
         return fail("bottom slab collision should use the lower model element");
     }
     const std::vector<BlockCollisionBox> topSlabCollision = BlockCollision::getBoxes(topSlab);
-    if (topSlabCollision.size() != 1 ||
-        topSlabCollision.front().min.y != 0.5f ||
+    if (topSlabCollision.size() != 1 || topSlabCollision.front().min.y != 0.5f ||
         topSlabCollision.front().max.y != 1.0f) {
         return fail("top slab collision should use the upper model element");
     }
     const std::vector<BlockCollisionBox> doubleSlabCollision = BlockCollision::getBoxes(doubleSlab);
-    if (doubleSlabCollision.size() != 1 ||
-        doubleSlabCollision.front().min.y != 0.0f ||
+    if (doubleSlabCollision.size() != 1 || doubleSlabCollision.front().min.y != 0.0f ||
         doubleSlabCollision.front().max.y != 1.0f) {
         return fail("double slab collision should cover the full block");
     }
@@ -134,26 +117,17 @@ int main() {
         return fail("oak_vertical_slab should be registered for selection tests");
     }
     const BlockStateId eastVerticalSlab = BlockStateRegistry::getState(
-        oakVerticalSlab,
-        std::vector<std::pair<uint16_t, uint16_t>>{
-            {PropIndices::HALF, PropIndices::HALF_EAST}
-        });
+        oakVerticalSlab, std::vector<std::pair<uint16_t, uint16_t>>{{PropIndices::HALF, PropIndices::HALF_EAST}});
     const BlockSelectionBox eastVerticalSlabBox = BlockSelection::getBox(eastVerticalSlab);
-    if (eastVerticalSlabBox.min.x != 0.5f || eastVerticalSlabBox.max.x != 1.0f ||
-        eastVerticalSlabBox.min.y != 0.0f || eastVerticalSlabBox.max.y != 1.0f ||
-        eastVerticalSlabBox.min.z != 0.0f || eastVerticalSlabBox.max.z != 1.0f) {
+    if (eastVerticalSlabBox.min.x != 0.5f || eastVerticalSlabBox.max.x != 1.0f || eastVerticalSlabBox.min.y != 0.0f ||
+        eastVerticalSlabBox.max.y != 1.0f || eastVerticalSlabBox.min.z != 0.0f || eastVerticalSlabBox.max.z != 1.0f) {
         return fail("east vertical slab selection box should cover the eastern half");
     }
     const BlockStateId northVerticalSlab = BlockStateRegistry::getState(
-        oakVerticalSlab,
-        std::vector<std::pair<uint16_t, uint16_t>>{
-            {PropIndices::HALF, PropIndices::HALF_NORTH}
-        });
+        oakVerticalSlab, std::vector<std::pair<uint16_t, uint16_t>>{{PropIndices::HALF, PropIndices::HALF_NORTH}});
     const std::vector<BlockCollisionBox> northVerticalSlabCollision = BlockCollision::getBoxes(northVerticalSlab);
-    if (northVerticalSlabCollision.size() != 1 ||
-        northVerticalSlabCollision.front().min.z != 0.0f ||
-        northVerticalSlabCollision.front().max.z != 0.5f ||
-        northVerticalSlabCollision.front().max.y != 1.0f) {
+    if (northVerticalSlabCollision.size() != 1 || northVerticalSlabCollision.front().min.z != 0.0f ||
+        northVerticalSlabCollision.front().max.z != 0.5f || northVerticalSlabCollision.front().max.y != 1.0f) {
         return fail("north vertical slab collision should cover the northern half");
     }
 
@@ -162,24 +136,17 @@ int main() {
         return fail("vine should be registered for face plane selection tests");
     }
     const BlockStateId northVine = BlockStateRegistry::getState(
-        vine,
-        std::vector<std::pair<uint16_t, uint16_t>>{
-            {PropIndices::FACING, PropIndices::FACING_NORTH}
-        });
+        vine, std::vector<std::pair<uint16_t, uint16_t>>{{PropIndices::FACING, PropIndices::FACING_NORTH}});
     const BlockSelectionBox northVineBox = BlockSelection::getBox(northVine);
-    if (northVineBox.min.z != 0.9375f || northVineBox.max.z != 1.0f ||
-        northVineBox.min.x != 0.0f || northVineBox.max.x != 1.0f ||
-        northVineBox.min.y != 0.0f || northVineBox.max.y != 1.0f) {
+    if (northVineBox.min.z != 0.9375f || northVineBox.max.z != 1.0f || northVineBox.min.x != 0.0f ||
+        northVineBox.max.x != 1.0f || northVineBox.min.y != 0.0f || northVineBox.max.y != 1.0f) {
         return fail("north-facing vine selection should hug the attached wall boundary");
     }
     const BlockStateId eastVine = BlockStateRegistry::getState(
-        vine,
-        std::vector<std::pair<uint16_t, uint16_t>>{
-            {PropIndices::FACING, PropIndices::FACING_EAST}
-        });
+        vine, std::vector<std::pair<uint16_t, uint16_t>>{{PropIndices::FACING, PropIndices::FACING_EAST}});
     const BlockSelectionBox eastVineBox = BlockSelection::getBox(eastVine);
-    if (eastVineBox.min.x != 0.0f || eastVineBox.max.x != 0.0625f ||
-        eastVineBox.min.z != 0.0f || eastVineBox.max.z != 1.0f) {
+    if (eastVineBox.min.x != 0.0f || eastVineBox.max.x != 0.0625f || eastVineBox.min.z != 0.0f ||
+        eastVineBox.max.z != 1.0f) {
         return fail("east-facing vine selection should hug the attached wall boundary");
     }
     if (!BlockCollision::getBoxes(northVine).empty() ||
@@ -187,11 +154,11 @@ int main() {
         return fail("face plane blocks should not create movement collision");
     }
 
-    const BlockStateId redstoneWireDefault = BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_wire"));
+    const BlockStateId redstoneWireDefault =
+        BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_wire"));
     const BlockSelectionBox redstoneWireBox = BlockSelection::getBox(redstoneWireDefault);
-    if (redstoneWireBox.min.y != 0.0f || redstoneWireBox.max.y != 0.0625f ||
-        redstoneWireBox.min.x != 0.0f || redstoneWireBox.max.x != 1.0f ||
-        redstoneWireBox.min.z != 0.0f || redstoneWireBox.max.z != 1.0f) {
+    if (redstoneWireBox.min.y != 0.0f || redstoneWireBox.max.y != 0.0625f || redstoneWireBox.min.x != 0.0f ||
+        redstoneWireBox.max.x != 1.0f || redstoneWireBox.min.z != 0.0f || redstoneWireBox.max.z != 1.0f) {
         return fail("redstone_wire selection should stay on the floor face plane");
     }
     if (!BlockCollision::getBoxes(redstoneWireDefault).empty()) {
@@ -204,9 +171,8 @@ int main() {
     }
     const BlockStateId floorPetals = BlockStateRegistry::getDefaultState(pinkPetals);
     const BlockSelectionBox floorPetalBox = BlockSelection::getBox(floorPetals);
-    if (floorPetalBox.min.y != 0.0f || floorPetalBox.max.y != 0.0625f ||
-        floorPetalBox.min.x != 0.0f || floorPetalBox.max.x != 1.0f ||
-        floorPetalBox.min.z != 0.0f || floorPetalBox.max.z != 1.0f) {
+    if (floorPetalBox.min.y != 0.0f || floorPetalBox.max.y != 0.0625f || floorPetalBox.min.x != 0.0f ||
+        floorPetalBox.max.x != 1.0f || floorPetalBox.min.z != 0.0f || floorPetalBox.max.z != 1.0f) {
         return fail("floor face plane selection should hug the ground boundary");
     }
     if (!BlockCollision::getBoxes(floorPetals).empty()) {
@@ -223,18 +189,14 @@ int main() {
         return fail("stairs collision should keep separate model element boxes");
     }
     const BlockStateId northBottomStairs = BlockStateRegistry::getState(
-        oakStairs,
-        std::vector<std::pair<uint16_t, uint16_t>>{
-            {PropIndices::FACING, PropIndices::FACING_NORTH},
-            {PropIndices::HALF, PropIndices::HALF_BOTTOM},
-            {PropIndices::SHAPE, PropIndices::SHAPE_STRAIGHT}
-        });
+        oakStairs, std::vector<std::pair<uint16_t, uint16_t>>{{PropIndices::FACING, PropIndices::FACING_NORTH},
+                                                              {PropIndices::HALF, PropIndices::HALF_BOTTOM},
+                                                              {PropIndices::SHAPE, PropIndices::SHAPE_STRAIGHT}});
     const std::vector<BlockCollisionBox> northStairCollision = BlockCollision::getBoxes(northBottomStairs);
     bool foundNorthUpperHalf = false;
     for (const BlockCollisionBox& box : northStairCollision) {
-        if (box.min.x == 0.0f && box.max.x == 1.0f &&
-            box.min.y == 0.5f && box.max.y == 1.0f &&
-            box.min.z == 0.0f && box.max.z == 0.5f) {
+        if (box.min.x == 0.0f && box.max.x == 1.0f && box.min.y == 0.5f && box.max.y == 1.0f && box.min.z == 0.0f &&
+            box.max.z == 0.5f) {
             foundNorthUpperHalf = true;
         }
     }
@@ -242,54 +204,43 @@ int main() {
         return fail("north-facing stairs collision should place the upper half on the north side");
     }
 
-    const BlockStateId oakDoorClosedEast = BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:oak_door"));
+    const BlockStateId oakDoorClosedEast =
+        BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:oak_door"));
     const BlockSelectionBox oakDoorClosedBox = BlockSelection::getBox(oakDoorClosedEast);
-    if (oakDoorClosedBox.min.x != 0.0f || oakDoorClosedBox.max.x != 0.1875f ||
-        oakDoorClosedBox.min.y != 0.0f || oakDoorClosedBox.max.y != 1.0f ||
-        oakDoorClosedBox.min.z != 0.0f || oakDoorClosedBox.max.z != 1.0f) {
+    if (oakDoorClosedBox.min.x != 0.0f || oakDoorClosedBox.max.x != 0.1875f || oakDoorClosedBox.min.y != 0.0f ||
+        oakDoorClosedBox.max.y != 1.0f || oakDoorClosedBox.min.z != 0.0f || oakDoorClosedBox.max.z != 1.0f) {
         return fail("closed east-facing oak_door should occupy the west-side door slab");
     }
 
     const BlockStateId oakDoorOpenLeftEast = BlockStateRegistry::getState(
         BlockRegistry::requireIdByName("minecraft:oak_door"),
-        std::vector<std::pair<uint16_t, uint16_t>>{
-            {PropIndices::FACING, PropIndices::FACING_EAST},
-            {PropIndices::HALF, PropIndices::HALF_LOWER},
-            {PropIndices::HINGE, PropIndices::HINGE_LEFT},
-            {PropIndices::OPEN, PropIndices::OPEN_TRUE},
-            {PropIndices::POWERED, PropIndices::POWERED_FALSE}
-        });
+        std::vector<std::pair<uint16_t, uint16_t>>{{PropIndices::FACING, PropIndices::FACING_EAST},
+                                                   {PropIndices::HALF, PropIndices::HALF_LOWER},
+                                                   {PropIndices::HINGE, PropIndices::HINGE_LEFT},
+                                                   {PropIndices::OPEN, PropIndices::OPEN_TRUE},
+                                                   {PropIndices::POWERED, PropIndices::POWERED_FALSE}});
     const BlockSelectionBox oakDoorOpenLeftBox = BlockSelection::getBox(oakDoorOpenLeftEast);
-    if (oakDoorOpenLeftBox.min.x != 0.0f || oakDoorOpenLeftBox.max.x != 1.0f ||
-        oakDoorOpenLeftBox.min.y != 0.0f || oakDoorOpenLeftBox.max.y != 1.0f ||
-        oakDoorOpenLeftBox.min.z != 0.0f || oakDoorOpenLeftBox.max.z != 0.1875f) {
+    if (oakDoorOpenLeftBox.min.x != 0.0f || oakDoorOpenLeftBox.max.x != 1.0f || oakDoorOpenLeftBox.min.y != 0.0f ||
+        oakDoorOpenLeftBox.max.y != 1.0f || oakDoorOpenLeftBox.min.z != 0.0f || oakDoorOpenLeftBox.max.z != 0.1875f) {
         return fail("left-hinge open east-facing oak_door selection should rotate onto the north-side slab");
     }
-    const std::vector<BlockCollisionBox> oakDoorOpenLeftCollision =
-        BlockCollision::getBoxes(oakDoorOpenLeftEast);
-    if (oakDoorOpenLeftCollision.size() != 1 ||
-        oakDoorOpenLeftCollision.front().min.x != 0.0f ||
-        oakDoorOpenLeftCollision.front().max.x != 1.0f ||
-        oakDoorOpenLeftCollision.front().min.z != 0.0f ||
+    const std::vector<BlockCollisionBox> oakDoorOpenLeftCollision = BlockCollision::getBoxes(oakDoorOpenLeftEast);
+    if (oakDoorOpenLeftCollision.size() != 1 || oakDoorOpenLeftCollision.front().min.x != 0.0f ||
+        oakDoorOpenLeftCollision.front().max.x != 1.0f || oakDoorOpenLeftCollision.front().min.z != 0.0f ||
         oakDoorOpenLeftCollision.front().max.z != 0.1875f) {
         return fail("left-hinge open east-facing oak_door collision should follow the rotated model slab");
     }
 
     const BlockStateId oakDoorOpenRightEast = BlockStateRegistry::getState(
         BlockRegistry::requireIdByName("minecraft:oak_door"),
-        std::vector<std::pair<uint16_t, uint16_t>>{
-            {PropIndices::FACING, PropIndices::FACING_EAST},
-            {PropIndices::HALF, PropIndices::HALF_LOWER},
-            {PropIndices::HINGE, PropIndices::HINGE_RIGHT},
-            {PropIndices::OPEN, PropIndices::OPEN_TRUE},
-            {PropIndices::POWERED, PropIndices::POWERED_FALSE}
-        });
-    const std::vector<BlockCollisionBox> oakDoorOpenRightCollision =
-        BlockCollision::getBoxes(oakDoorOpenRightEast);
-    if (oakDoorOpenRightCollision.size() != 1 ||
-        oakDoorOpenRightCollision.front().min.x != 0.0f ||
-        oakDoorOpenRightCollision.front().max.x != 1.0f ||
-        oakDoorOpenRightCollision.front().min.z != 0.8125f ||
+        std::vector<std::pair<uint16_t, uint16_t>>{{PropIndices::FACING, PropIndices::FACING_EAST},
+                                                   {PropIndices::HALF, PropIndices::HALF_LOWER},
+                                                   {PropIndices::HINGE, PropIndices::HINGE_RIGHT},
+                                                   {PropIndices::OPEN, PropIndices::OPEN_TRUE},
+                                                   {PropIndices::POWERED, PropIndices::POWERED_FALSE}});
+    const std::vector<BlockCollisionBox> oakDoorOpenRightCollision = BlockCollision::getBoxes(oakDoorOpenRightEast);
+    if (oakDoorOpenRightCollision.size() != 1 || oakDoorOpenRightCollision.front().min.x != 0.0f ||
+        oakDoorOpenRightCollision.front().max.x != 1.0f || oakDoorOpenRightCollision.front().min.z != 0.8125f ||
         oakDoorOpenRightCollision.front().max.z != 1.0f) {
         return fail("right-hinge open east-facing oak_door collision should rotate onto the south-side slab");
     }
@@ -300,9 +251,8 @@ int main() {
     }
     const BlockStateId defaultCauldron = BlockStateRegistry::getDefaultState(cauldron);
     const BlockSelectionBox cauldronBox = BlockSelection::getBox(defaultCauldron);
-    if (cauldronBox.min.y != 0.0f || cauldronBox.max.y != 1.0f ||
-        cauldronBox.min.x != 0.0f || cauldronBox.max.x != 1.0f ||
-        cauldronBox.min.z != 0.0f || cauldronBox.max.z != 1.0f) {
+    if (cauldronBox.min.y != 0.0f || cauldronBox.max.y != 1.0f || cauldronBox.min.x != 0.0f ||
+        cauldronBox.max.x != 1.0f || cauldronBox.min.z != 0.0f || cauldronBox.max.z != 1.0f) {
         return fail("cauldron selection box should cover the full model bounds");
     }
     const std::vector<BlockCollisionBox> cauldronCollision = BlockCollision::getBoxes(defaultCauldron);
@@ -312,13 +262,11 @@ int main() {
     bool foundLeftWall = false;
     bool foundInnerFloor = false;
     for (const BlockCollisionBox& box : cauldronCollision) {
-        if (box.min.x == 0.0f && box.max.x == 0.125f &&
-            box.min.y == 0.1875f && box.max.y == 1.0f &&
+        if (box.min.x == 0.0f && box.max.x == 0.125f && box.min.y == 0.1875f && box.max.y == 1.0f &&
             box.min.z == 0.0f && box.max.z == 1.0f) {
             foundLeftWall = true;
         }
-        if (box.min.x == 0.125f && box.max.x == 0.875f &&
-            box.min.y == 0.1875f && box.max.y == 0.25f &&
+        if (box.min.x == 0.125f && box.max.x == 0.875f && box.min.y == 0.1875f && box.max.y == 0.25f &&
             box.min.z == 0.125f && box.max.z == 0.875f) {
             foundInnerFloor = true;
         }
@@ -332,21 +280,17 @@ int main() {
         return fail("oak_fence should be registered for collision tests");
     }
     const BlockStateId oakFenceEastWest = BlockStateRegistry::getState(
-        oakFence,
-        std::vector<std::pair<uint16_t, uint16_t>>{
-            {PropIndices::NORTH, PropIndices::NORTH_FALSE},
-            {PropIndices::SOUTH, PropIndices::SOUTH_FALSE},
-            {PropIndices::EAST, PropIndices::EAST_TRUE},
-            {PropIndices::WEST, PropIndices::WEST_TRUE}
-        });
+        oakFence, std::vector<std::pair<uint16_t, uint16_t>>{{PropIndices::NORTH, PropIndices::NORTH_FALSE},
+                                                             {PropIndices::SOUTH, PropIndices::SOUTH_FALSE},
+                                                             {PropIndices::EAST, PropIndices::EAST_TRUE},
+                                                             {PropIndices::WEST, PropIndices::WEST_TRUE}});
     const std::vector<BlockCollisionBox> fenceCollision = BlockCollision::getBoxes(oakFenceEastWest);
     if (fenceCollision.size() != 5) {
         return fail("east/west oak fence collision should include post and four rail boxes");
     }
     const BlockSelectionBox fenceSelection = BlockSelection::getBox(oakFenceEastWest);
-    if (fenceSelection.min.x != 0.0f || fenceSelection.max.x != 1.0f ||
-        fenceSelection.min.z != 0.375f || fenceSelection.max.z != 0.625f ||
-        fenceSelection.min.y != 0.0f || fenceSelection.max.y != 1.0f) {
+    if (fenceSelection.min.x != 0.0f || fenceSelection.max.x != 1.0f || fenceSelection.min.z != 0.375f ||
+        fenceSelection.max.z != 0.625f || fenceSelection.min.y != 0.0f || fenceSelection.max.y != 1.0f) {
         return fail("east/west oak fence selection should cover the connected rail span");
     }
 
@@ -355,21 +299,17 @@ int main() {
         return fail("cobblestone_wall should be registered for collision tests");
     }
     const BlockStateId cobblestoneWallNorthSouth = BlockStateRegistry::getState(
-        cobblestoneWall,
-        std::vector<std::pair<uint16_t, uint16_t>>{
-            {PropIndices::NORTH, PropIndices::NORTH_TRUE},
-            {PropIndices::SOUTH, PropIndices::SOUTH_TRUE},
-            {PropIndices::EAST, PropIndices::EAST_FALSE},
-            {PropIndices::WEST, PropIndices::WEST_FALSE}
-        });
+        cobblestoneWall, std::vector<std::pair<uint16_t, uint16_t>>{{PropIndices::NORTH, PropIndices::NORTH_TRUE},
+                                                                    {PropIndices::SOUTH, PropIndices::SOUTH_TRUE},
+                                                                    {PropIndices::EAST, PropIndices::EAST_FALSE},
+                                                                    {PropIndices::WEST, PropIndices::WEST_FALSE}});
     const std::vector<BlockCollisionBox> wallCollision = BlockCollision::getBoxes(cobblestoneWallNorthSouth);
     if (wallCollision.size() != 3) {
         return fail("north/south cobblestone wall collision should include post and two wall arms");
     }
     const BlockSelectionBox wallSelection = BlockSelection::getBox(cobblestoneWallNorthSouth);
-    if (wallSelection.min.x != 0.25f || wallSelection.max.x != 0.75f ||
-        wallSelection.min.z != 0.0f || wallSelection.max.z != 1.0f ||
-        wallSelection.min.y != 0.0f || wallSelection.max.y != 1.0f) {
+    if (wallSelection.min.x != 0.25f || wallSelection.max.x != 0.75f || wallSelection.min.z != 0.0f ||
+        wallSelection.max.z != 1.0f || wallSelection.min.y != 0.0f || wallSelection.max.y != 1.0f) {
         return fail("north/south cobblestone wall selection should cover the connected wall span");
     }
 
@@ -378,14 +318,10 @@ int main() {
         return fail("anvil should be registered for collision tests");
     }
     const BlockStateId anvilEast = BlockStateRegistry::getState(
-        anvil,
-        std::vector<std::pair<uint16_t, uint16_t>>{
-            {PropIndices::FACING, PropIndices::FACING_EAST}
-        });
+        anvil, std::vector<std::pair<uint16_t, uint16_t>>{{PropIndices::FACING, PropIndices::FACING_EAST}});
     const BlockSelectionBox anvilEastBox = BlockSelection::getBox(anvilEast);
-    if (anvilEastBox.min.x != 0.0f || anvilEastBox.max.x != 1.0f ||
-        anvilEastBox.min.z != 0.125f || anvilEastBox.max.z != 0.875f ||
-        anvilEastBox.min.y != 0.0f || anvilEastBox.max.y != 1.0f) {
+    if (anvilEastBox.min.x != 0.0f || anvilEastBox.max.x != 1.0f || anvilEastBox.min.z != 0.125f ||
+        anvilEastBox.max.z != 0.875f || anvilEastBox.min.y != 0.0f || anvilEastBox.max.y != 1.0f) {
         return fail("east-facing anvil selection box should rotate the model bounds");
     }
     const std::vector<BlockCollisionBox> anvilCollision = BlockCollision::getBoxes(anvilEast);
@@ -394,8 +330,7 @@ int main() {
     }
     bool foundRotatedTop = false;
     for (const BlockCollisionBox& box : anvilCollision) {
-        if (box.min.x == 0.0f && box.max.x == 1.0f &&
-            box.min.y == 0.625f && box.max.y == 1.0f &&
+        if (box.min.x == 0.0f && box.max.x == 1.0f && box.min.y == 0.625f && box.max.y == 1.0f &&
             box.min.z == 0.1875f && box.max.z == 0.8125f) {
             foundRotatedTop = true;
         }
@@ -410,8 +345,7 @@ int main() {
     }
     const BlockStateId redBedFoot = BlockStateRegistry::getDefaultState(redBed);
     const BlockSelectionBox redBedBox = BlockSelection::getBox(redBedFoot);
-    if (redBedBox.min.x != 0.0f || redBedBox.max.x != 1.0f ||
-        redBedBox.min.y != 0.0f || redBedBox.max.y != 0.5625f ||
+    if (redBedBox.min.x != 0.0f || redBedBox.max.x != 1.0f || redBedBox.min.y != 0.0f || redBedBox.max.y != 0.5625f ||
         redBedBox.min.z != 0.0f || redBedBox.max.z != 1.0f) {
         return fail("red_bed selection box should cover the low bed model bounds");
     }
@@ -421,8 +355,7 @@ int main() {
     }
     bool foundBedBody = false;
     for (const BlockCollisionBox& box : redBedCollision) {
-        if (box.min.x == 0.0f && box.max.x == 1.0f &&
-            box.min.y == 0.1875f && box.max.y == 0.5625f &&
+        if (box.min.x == 0.0f && box.max.x == 1.0f && box.min.y == 0.1875f && box.max.y == 0.5625f &&
             box.min.z == 0.0f && box.max.z == 1.0f) {
             foundBedBody = true;
         }
@@ -433,21 +366,15 @@ int main() {
 
     const BlockStateId poweredTarget = BlockStateRegistry::getState(
         BlockRegistry::requireIdByName("minecraft:target"),
-        std::vector<std::pair<uint16_t, uint16_t>>{
-            {PropIndices::POWER, PropIndices::POWER_15}
-        });
+        std::vector<std::pair<uint16_t, uint16_t>>{{PropIndices::POWER, PropIndices::POWER_15}});
     const BlockSelectionBox poweredTargetBox = BlockSelection::getBox(poweredTarget);
     if (poweredTargetBox.min != glm::vec3(0.0f) || poweredTargetBox.max != glm::vec3(1.0f)) {
         return fail("powered target selection should keep the target block shape");
     }
     const std::vector<BlockCollisionBox> poweredTargetCollision = BlockCollision::getBoxes(poweredTarget);
-    if (poweredTargetCollision.size() != 1 ||
-        poweredTargetCollision.front().min != glm::vec3(0.0f) ||
+    if (poweredTargetCollision.size() != 1 || poweredTargetCollision.front().min != glm::vec3(0.0f) ||
         poweredTargetCollision.front().max != glm::vec3(1.0f) ||
-        !BlockCollision::intersects(poweredTarget,
-                                    glm::ivec3(0),
-                                    glm::vec3(0.75f),
-                                    glm::vec3(1.25f))) {
+        !BlockCollision::intersects(poweredTarget, glm::ivec3(0), glm::vec3(0.75f), glm::vec3(1.25f))) {
         return fail("powered target collision should resolve through its block definition");
     }
 
@@ -460,8 +387,7 @@ int main() {
     world.setBlockState(13, baseY, 0, NULL_BLOCK_STATE);
     const BedBlockLogic::BedPlacement bedPlacement =
         BedBlockLogic::resolvePlacement(world, glm::ivec3(12, baseY, 0), redBedFoot);
-    if (!bedPlacement.valid ||
-        bedPlacement.footPos != glm::ivec3(12, baseY, 0) ||
+    if (!bedPlacement.valid || bedPlacement.footPos != glm::ivec3(12, baseY, 0) ||
         bedPlacement.headPos != glm::ivec3(13, baseY, 0)) {
         return fail("east-facing red_bed placement should occupy foot and head cells");
     }
@@ -472,21 +398,16 @@ int main() {
     }
     std::vector<glm::ivec3> removedBedPositions;
     const BlockID removedBed = BedBlockLogic::removeBed(world, glm::ivec3(13, baseY, 0), &removedBedPositions);
-    if (removedBed != redBed ||
-        world.getBlockState(12, baseY, 0) != NULL_BLOCK_STATE ||
-        world.getBlockState(13, baseY, 0) != NULL_BLOCK_STATE ||
-        removedBedPositions.size() != 2) {
+    if (removedBed != redBed || world.getBlockState(12, baseY, 0) != NULL_BLOCK_STATE ||
+        world.getBlockState(13, baseY, 0) != NULL_BLOCK_STATE || removedBedPositions.size() != 2) {
         return fail("breaking either red_bed half should remove both bed states");
     }
 
     const auto makeBottomStairs = [&](const uint16_t facing) {
         return BlockStateRegistry::getState(
-            oakStairs,
-            std::vector<std::pair<uint16_t, uint16_t>>{
-                {PropIndices::FACING, facing},
-                {PropIndices::HALF, PropIndices::HALF_BOTTOM},
-                {PropIndices::SHAPE, PropIndices::SHAPE_STRAIGHT}
-            });
+            oakStairs, std::vector<std::pair<uint16_t, uint16_t>>{{PropIndices::FACING, facing},
+                                                                  {PropIndices::HALF, PropIndices::HALF_BOTTOM},
+                                                                  {PropIndices::SHAPE, PropIndices::SHAPE_STRAIGHT}});
     };
 
     world.setBlockState(2, baseY, 0, NULL_BLOCK_STATE);
@@ -589,17 +510,15 @@ int main() {
     world.setBlock(0, baseY, 0, BlockRegistry::requireIdByName("minecraft:stone"));
     world.setBlockState(0, baseY + 1, 0, floorTorch);
 
-    const PhysicsInfo missTorchRay(
-        glm::vec3(0.75f, static_cast<float>(baseY) + 2.5f, 0.75f),
-        glm::vec3(0.0f, -1.0f, 0.0f));
+    const PhysicsInfo missTorchRay(glm::vec3(0.75f, static_cast<float>(baseY) + 2.5f, 0.75f),
+                                   glm::vec3(0.0f, -1.0f, 0.0f));
     const RayHit missTorchHit = world.raycast(missTorchRay, 6.0f);
     if (!missTorchHit.hit || missTorchHit.blockPos != glm::ivec3(0, baseY, 0)) {
         return fail("ray missing torch selection box should continue to the support block below");
     }
 
-    const PhysicsInfo hitTorchRay(
-        glm::vec3(0.5f, static_cast<float>(baseY) + 2.5f, 0.5f),
-        glm::vec3(0.0f, -1.0f, 0.0f));
+    const PhysicsInfo hitTorchRay(glm::vec3(0.5f, static_cast<float>(baseY) + 2.5f, 0.5f),
+                                  glm::vec3(0.0f, -1.0f, 0.0f));
     const RayHit hitTorchHit = world.raycast(hitTorchRay, 6.0f);
     if (!hitTorchHit.hit || hitTorchHit.blockPos != glm::ivec3(0, baseY + 1, 0)) {
         return fail("ray through torch selection box should target the torch");

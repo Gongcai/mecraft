@@ -38,9 +38,7 @@
 
 class ManualTransport final : public net::ITransportEndpoint {
 public:
-    void send(net::Packet packet) override {
-        sent.push(std::move(packet));
-    }
+    void send(net::Packet packet) override { sent.push(std::move(packet)); }
 
     bool tryReceive(net::Packet& out) override {
         if (inbox.empty()) {
@@ -54,9 +52,7 @@ public:
     [[nodiscard]] bool isConnected() const override { return connected; }
     [[nodiscard]] bool hasActiveRemote() const override { return activeRemote; }
 
-    void pushIncoming(net::Packet packet) {
-        inbox.push(std::move(packet));
-    }
+    void pushIncoming(net::Packet packet) { inbox.push(std::move(packet)); }
 
     std::queue<net::Packet> inbox;
     std::queue<net::Packet> sent;
@@ -65,9 +61,7 @@ public:
 };
 
 struct ServerHarness {
-    explicit ServerHarness(int renderDistance = 8) {
-        server.init(1234, nullptr, renderDistance);
-    }
+    explicit ServerHarness(int renderDistance = 8) { server.init(1234, nullptr, renderDistance); }
 
     server::GameServer server;
 };
@@ -89,25 +83,14 @@ static float distanceSq(const glm::vec3& a, const glm::vec3& b) {
 
 static BlockStateId targetState(const uint8_t power) {
     static const std::array<uint16_t, 16> kPowerValues = {
-        PropIndices::POWER_0,
-        PropIndices::POWER_1,
-        PropIndices::POWER_2,
-        PropIndices::POWER_3,
-        PropIndices::POWER_4,
-        PropIndices::POWER_5,
-        PropIndices::POWER_6,
-        PropIndices::POWER_7,
-        PropIndices::POWER_8,
-        PropIndices::POWER_9,
-        PropIndices::POWER_10,
-        PropIndices::POWER_11,
-        PropIndices::POWER_12,
-        PropIndices::POWER_13,
-        PropIndices::POWER_14,
-        PropIndices::POWER_15,
+        PropIndices::POWER_0,  PropIndices::POWER_1,  PropIndices::POWER_2,  PropIndices::POWER_3,
+        PropIndices::POWER_4,  PropIndices::POWER_5,  PropIndices::POWER_6,  PropIndices::POWER_7,
+        PropIndices::POWER_8,  PropIndices::POWER_9,  PropIndices::POWER_10, PropIndices::POWER_11,
+        PropIndices::POWER_12, PropIndices::POWER_13, PropIndices::POWER_14, PropIndices::POWER_15,
     };
     assert(power < kPowerValues.size());
-    return BlockStateRegistry::getState(BlockRegistry::requireIdByName("minecraft:target"), PropIndices::POWER, kPowerValues[power]);
+    return BlockStateRegistry::getState(BlockRegistry::requireIdByName("minecraft:target"), PropIndices::POWER,
+                                        kPowerValues[power]);
 }
 
 static BlockStateId leverState(const bool powered) {
@@ -115,17 +98,14 @@ static BlockStateId leverState(const bool powered) {
         BlockRegistry::requireIdByName("minecraft:lever"),
         std::vector<std::pair<uint16_t, uint16_t>>{
             {PropIndices::FACING, PropIndices::FACING_FLOOR},
-            {PropIndices::POWERED, powered ? PropIndices::POWERED_TRUE : PropIndices::POWERED_FALSE}
-        });
+            {PropIndices::POWERED, powered ? PropIndices::POWERED_TRUE : PropIndices::POWERED_FALSE}});
 }
 
 static BlockStateId pistonState(const BlockID blockId, const uint16_t facing, const bool extended) {
     return BlockStateRegistry::getState(
-        blockId,
-        std::vector<std::pair<uint16_t, uint16_t>>{
-            {PropIndices::FACING, facing},
-            {PropIndices::EXTENDED, extended ? PropIndices::EXTENDED_TRUE : PropIndices::EXTENDED_FALSE}
-        });
+        blockId, std::vector<std::pair<uint16_t, uint16_t>>{
+                     {PropIndices::FACING, facing},
+                     {PropIndices::EXTENDED, extended ? PropIndices::EXTENDED_TRUE : PropIndices::EXTENDED_FALSE}});
 }
 
 static void require(const bool condition, const char* message) {
@@ -165,9 +145,7 @@ static void pushClientHello(ManualTransport& transport) {
     transport.pushIncoming(std::move(helloPacket));
 }
 
-static void pushContainerOpen(ManualTransport& transport,
-                              const uint32_t sequence,
-                              const glm::ivec3& blockPosition,
+static void pushContainerOpen(ManualTransport& transport, const uint32_t sequence, const glm::ivec3& blockPosition,
                               const glm::vec3& playerPosition) {
     net::Packet packet;
     packet.type = net::MessageType::ClientContainerOpenRequest;
@@ -179,11 +157,8 @@ static void pushContainerOpen(ManualTransport& transport,
     transport.pushIncoming(std::move(packet));
 }
 
-static void pushContainerSlotAction(ManualTransport& transport,
-                                    const uint32_t sequence,
-                                    const uint32_t containerId,
-                                    const net::ContainerSlotActionType action,
-                                    const net::ContainerSlotSpace slotSpace,
+static void pushContainerSlotAction(ManualTransport& transport, const uint32_t sequence, const uint32_t containerId,
+                                    const net::ContainerSlotActionType action, const net::ContainerSlotSpace slotSpace,
                                     const int16_t slot) {
     net::Packet packet;
     packet.type = net::MessageType::ClientContainerSlotAction;
@@ -372,7 +347,8 @@ static void testClientAppliesPlayerHealthSnapshot() {
 
     require(raw.get<ecs::HealthComponent>(player).current == 13, "client should apply server player health");
     require(raw.get<ecs::HealthComponent>(player).max == 20, "client should apply server max health");
-    require(raw.get<ecs::HurtEffectComponent>(player).classicHurtEffectPending, "client should apply server hurt event");
+    require(raw.get<ecs::HurtEffectComponent>(player).classicHurtEffectPending,
+            "client should apply server hurt event");
     require(client.lastSnapshot().playerHealth == 13, "client should retain health in last snapshot");
 
     raw.get<ecs::HurtEffectComponent>(player).classicHurtEffectPending = false;
@@ -500,7 +476,8 @@ static void testClientAppliesInventorySnapshot() {
             "client should apply authoritative selected hotbar slot");
     require(raw.get<ecs::InventoryDataComponent>(player).inventory.getSelectedSlot() == 2,
             "client inventory data should apply selected hotbar slot");
-    require(raw.get<ecs::InventoryDataComponent>(player).inventory.getSlotStack(0).itemId == ItemRegistry::requireIdByName("minecraft:coal"),
+    require(raw.get<ecs::InventoryDataComponent>(player).inventory.getSlotStack(0).itemId ==
+                ItemRegistry::requireIdByName("minecraft:coal"),
             "client should apply inventory snapshot item id");
     require(raw.get<ecs::InventoryDataComponent>(player).inventory.getSlotStack(0).count == 7,
             "client should apply inventory snapshot stack count");
@@ -553,8 +530,10 @@ static void testClientBlockActionRoundTrip() {
 
     harness.server.tick(1.0f / 20.0f);
     client.receiveMessages();
-    assert(harness.server.world().getBlockState(placeBlock.x, placeBlock.y, placeBlock.z) == defaultState("minecraft:stone"));
-    assert(client.clientWorld().getBlockState(placeBlock.x, placeBlock.y, placeBlock.z) == defaultState("minecraft:stone"));
+    assert(harness.server.world().getBlockState(placeBlock.x, placeBlock.y, placeBlock.z) ==
+           defaultState("minecraft:stone"));
+    assert(client.clientWorld().getBlockState(placeBlock.x, placeBlock.y, placeBlock.z) ==
+           defaultState("minecraft:stone"));
 
     net::ClientBlockAction breakAction;
     breakAction.sequence = 2;
@@ -593,15 +572,9 @@ static void testClientBlockActionMergesStackedSlabs() {
     require(oakSlab != RUNTIME_ID_NULL, "oak_slab should be registered for server slab merge test");
     const BlockStateId bottomSlab = BlockStateRegistry::getDefaultState(oakSlab);
     const BlockStateId topSlab = BlockStateRegistry::getState(
-        oakSlab,
-        std::vector<std::pair<uint16_t, uint16_t>>{
-            {PropIndices::HALF, PropIndices::HALF_TOP}
-        });
+        oakSlab, std::vector<std::pair<uint16_t, uint16_t>>{{PropIndices::HALF, PropIndices::HALF_TOP}});
     const BlockStateId doubleSlab = BlockStateRegistry::getState(
-        oakSlab,
-        std::vector<std::pair<uint16_t, uint16_t>>{
-            {PropIndices::HALF, PropIndices::HALF_DOUBLE}
-        });
+        oakSlab, std::vector<std::pair<uint16_t, uint16_t>>{{PropIndices::HALF, PropIndices::HALF_DOUBLE}});
 
     harness.server.world().setBlockState(placeBlock.x, placeBlock.y, placeBlock.z, bottomSlab);
 
@@ -655,10 +628,7 @@ static void testClientBlockActionAddsWireContainerPart() {
 
     const BlockStateId redWire = defaultState("minecraft:redstone_wire");
     const BlockStateId blueWire = defaultState("minecraft:blue_redstone_wire");
-    harness.server.world().setBlockState(placeBlock.x,
-                                         placeBlock.y - 1,
-                                         placeBlock.z,
-                                         defaultState("minecraft:stone"));
+    harness.server.world().setBlockState(placeBlock.x, placeBlock.y - 1, placeBlock.z, defaultState("minecraft:stone"));
     harness.server.world().setBlockState(placeBlock.x, placeBlock.y, placeBlock.z, redWire);
 
     net::ClientBlockAction addWire;
@@ -674,9 +644,9 @@ static void testClientBlockActionAddsWireContainerPart() {
     harness.server.tick(1.0f / 20.0f);
     client.receiveMessages();
 
-    const BlockStateId containerState =
-        harness.server.world().getBlockState(placeBlock.x, placeBlock.y, placeBlock.z);
-    require(BlockStateRegistry::getBlockId(containerState) == BlockRegistry::requireIdByName("minecraft:wire_container"),
+    const BlockStateId containerState = harness.server.world().getBlockState(placeBlock.x, placeBlock.y, placeBlock.z);
+    require(BlockStateRegistry::getBlockId(containerState) ==
+                BlockRegistry::requireIdByName("minecraft:wire_container"),
             "server should upgrade a plain wire cell to wire_container when another wire part is placed");
 
     const WireContainerParts* parts = harness.server.world().wireContainerParts().find(placeBlock);
@@ -684,17 +654,14 @@ static void testClientBlockActionAddsWireContainerPart() {
         BlockRegistry::get(BlockRegistry::requireIdByName("minecraft:redstone_wire")).redstoneWireChannelId;
     const uint16_t blueChannel =
         BlockRegistry::get(BlockRegistry::requireIdByName("minecraft:blue_redstone_wire")).redstoneWireChannelId;
-    require(parts != nullptr &&
-                parts->find(redChannel, PropIndices::FACING_FLOOR) != nullptr &&
-                parts->find(blueChannel, PropIndices::FACING_FLOOR) != nullptr &&
-                parts->size() == 2,
+    require(parts != nullptr && parts->find(redChannel, PropIndices::FACING_FLOOR) != nullptr &&
+                parts->find(blueChannel, PropIndices::FACING_FLOOR) != nullptr && parts->size() == 2,
             "server should store both wire parts after the network placement action");
 
     WireContainerParts clientParts;
     require(client.clientWorld().copyWireContainerParts(placeBlock, clientParts) &&
                 clientParts.find(redChannel, PropIndices::FACING_FLOOR) != nullptr &&
-                clientParts.find(blueChannel, PropIndices::FACING_FLOOR) != nullptr &&
-                clientParts.size() == 2,
+                clientParts.find(blueChannel, PropIndices::FACING_FLOOR) != nullptr && clientParts.size() == 2,
             "client should receive both wire container parts after the network placement action");
 
     addWire.sequence = 2;
@@ -729,9 +696,7 @@ static void testClientBlockActionInteractIsServerAuthoritative() {
     require(harness.server.world().isChunkLoadedForBlock(targetBlock.x, targetBlock.y, targetBlock.z),
             "interact authority test chunk should be loaded");
 
-    harness.server.world().setBlock(targetBlock.x,
-                                    targetBlock.y - 1,
-                                    targetBlock.z,
+    harness.server.world().setBlock(targetBlock.x, targetBlock.y - 1, targetBlock.z,
                                     BlockRegistry::requireIdByName("minecraft:stone"));
     harness.server.world().setBlockState(targetBlock.x, targetBlock.y, targetBlock.z, leverState(false));
     harness.server.tick(1.0f / 20.0f);
@@ -762,17 +727,13 @@ static void testClientBlockActionInteractIsServerAuthoritative() {
         }
         const auto& batch = std::any_cast<const net::BlockUpdateBatchMessage&>(packet.inProcessPayload);
         for (const net::BlockUpdateEntry& update : batch.updates) {
-            if (update.x == targetBlock.x &&
-                update.y == targetBlock.y &&
-                update.z == targetBlock.z &&
-                update.kind == net::BlockUpdateKind::BlockState &&
-                update.stateId == leverState(true)) {
+            if (update.x == targetBlock.x && update.y == targetBlock.y && update.z == targetBlock.z &&
+                update.kind == net::BlockUpdateKind::BlockState && update.stateId == leverState(true)) {
                 sawPoweredLeverUpdate = true;
             }
         }
     }
-    require(sawPoweredLeverUpdate,
-            "server should broadcast the powered lever state after an interact request");
+    require(sawPoweredLeverUpdate, "server should broadcast the powered lever state after an interact request");
 
     net::ClientBlockAction farInteract = interact;
     farInteract.sequence = 2;
@@ -794,18 +755,14 @@ static void testMultiplayerContainerSnapshotsStayAuthoritative() {
     World& world = harness.server.world();
 
     const glm::ivec3 chestPos(4, Chunk::SIZE_Y - 8, 4);
-    for (int tick = 0;
-         tick < 240 && !world.isChunkLoadedForBlock(chestPos.x, chestPos.y, chestPos.z);
-         ++tick) {
+    for (int tick = 0; tick < 240 && !world.isChunkLoadedForBlock(chestPos.x, chestPos.y, chestPos.z); ++tick) {
         world.update(glm::vec3(chestPos) + glm::vec3(0.5f));
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
     require(world.isChunkLoadedForBlock(chestPos.x, chestPos.y, chestPos.z),
             "multiplayer container test chunk should be loaded");
 
-    world.setBlockState(chestPos.x,
-                        chestPos.y,
-                        chestPos.z,
+    world.setBlockState(chestPos.x, chestPos.y, chestPos.z,
                         BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:chest")));
 
     auto transportA = std::make_unique<ManualTransport>();
@@ -835,8 +792,7 @@ static void testMultiplayerContainerSnapshotsStayAuthoritative() {
     const std::optional<net::ContainerSnapshotMessage> openedB = drainLatestContainerSnapshot(*clientB);
     require(openedA.has_value(), "client A should receive an opened chest container snapshot");
     require(openedB.has_value(), "client B should receive an opened chest container snapshot");
-    require(openedA->containerId != 0 && openedB->containerId != 0,
-            "container sessions should have non-zero ids");
+    require(openedA->containerId != 0 && openedB->containerId != 0, "container sessions should have non-zero ids");
     require(openedA->blockPosition == chestPos && openedB->blockPosition == chestPos,
             "container snapshots should identify the opened chest position");
     require(openedA->containerUiId == "minecraft:chest" && openedB->containerUiId == "minecraft:chest",
@@ -846,20 +802,16 @@ static void testMultiplayerContainerSnapshotsStayAuthoritative() {
 
     const ItemID apple = ItemRegistry::requireIdByName("minecraft:apple");
     require(openedA->playerSlots.size() == Inventory::INVENTORY_SIZE &&
-            openedA->playerSlots[7].itemId == static_cast<uint16_t>(apple) &&
-            openedA->playerSlots[7].stackCount == 16,
+                openedA->playerSlots[7].itemId == static_cast<uint16_t>(apple) &&
+                openedA->playerSlots[7].stackCount == 16,
             "client A snapshot should include its authoritative default apples");
     require(openedB->playerSlots.size() == Inventory::INVENTORY_SIZE &&
-            openedB->playerSlots[7].itemId == static_cast<uint16_t>(apple) &&
-            openedB->playerSlots[7].stackCount == 16,
+                openedB->playerSlots[7].itemId == static_cast<uint16_t>(apple) &&
+                openedB->playerSlots[7].stackCount == 16,
             "client B snapshot should include its separate authoritative default apples");
 
-    pushContainerSlotAction(*clientA,
-                            2,
-                            openedA->containerId,
-                            net::ContainerSlotActionType::PrimaryClick,
-                            net::ContainerSlotSpace::Player,
-                            7);
+    pushContainerSlotAction(*clientA, 2, openedA->containerId, net::ContainerSlotActionType::PrimaryClick,
+                            net::ContainerSlotSpace::Player, 7);
     harness.server.tick(1.0f / 20.0f);
     const std::optional<net::ContainerSnapshotMessage> pickedA = drainLatestContainerSnapshot(*clientA);
     require(pickedA.has_value(), "client A should receive a cursor snapshot after picking from its inventory");
@@ -868,35 +820,26 @@ static void testMultiplayerContainerSnapshotsStayAuthoritative() {
     require(pickedA->playerSlots[7].itemId == 0 && pickedA->playerSlots[7].stackCount == 0,
             "client A player slot should be empty while apples are on the cursor");
 
-    pushContainerSlotAction(*clientA,
-                            3,
-                            openedA->containerId,
-                            net::ContainerSlotActionType::PrimaryClick,
-                            net::ContainerSlotSpace::Container,
-                            0);
+    pushContainerSlotAction(*clientA, 3, openedA->containerId, net::ContainerSlotActionType::PrimaryClick,
+                            net::ContainerSlotSpace::Container, 0);
     harness.server.tick(1.0f / 20.0f);
     const std::optional<net::ContainerSnapshotMessage> placedA = drainLatestContainerSnapshot(*clientA);
     const std::optional<net::ContainerSnapshotMessage> placedB = drainLatestContainerSnapshot(*clientB);
     require(placedA.has_value(), "client A should receive chest contents after placing apples");
     require(placedB.has_value(), "client B should receive chest contents changed by client A");
     require(placedA->containerSlots[0].itemId == static_cast<uint16_t>(apple) &&
-            placedA->containerSlots[0].stackCount == 16,
+                placedA->containerSlots[0].stackCount == 16,
             "client A should see apples in chest slot 0");
     require(placedB->containerSlots[0].itemId == static_cast<uint16_t>(apple) &&
-            placedB->containerSlots[0].stackCount == 16,
+                placedB->containerSlots[0].stackCount == 16,
             "client B should see the same apples in chest slot 0");
     require(placedA->cursor.itemId == 0 && placedA->cursor.stackCount == 0,
             "client A cursor should clear after placing apples into the chest");
-    require(placedB->playerSlots[7].itemId == static_cast<uint16_t>(apple) &&
-            placedB->playerSlots[7].stackCount == 16,
+    require(placedB->playerSlots[7].itemId == static_cast<uint16_t>(apple) && placedB->playerSlots[7].stackCount == 16,
             "client B player inventory should remain separate from client A operations");
 
-    pushContainerSlotAction(*clientA,
-                            4,
-                            openedA->containerId,
-                            net::ContainerSlotActionType::PrimaryClick,
-                            net::ContainerSlotSpace::Container,
-                            0);
+    pushContainerSlotAction(*clientA, 4, openedA->containerId, net::ContainerSlotActionType::PrimaryClick,
+                            net::ContainerSlotSpace::Container, 0);
     harness.server.tick(1.0f / 20.0f);
     const std::optional<net::ContainerSnapshotMessage> cursorA = drainLatestContainerSnapshot(*clientA);
     const std::optional<net::ContainerSnapshotMessage> emptiedB = drainLatestContainerSnapshot(*clientB);
@@ -927,8 +870,7 @@ static void testMultiplayerContainerSnapshotsStayAuthoritative() {
             "client A should receive a close message for the opened container session");
     require(inventoryA.has_value(), "client A should receive an inventory snapshot after closing with a cursor stack");
     require(inventoryA->slots.size() == Inventory::INVENTORY_SIZE &&
-            inventoryA->slots[7].itemId == static_cast<uint16_t>(apple) &&
-            inventoryA->slots[7].stackCount == 16,
+                inventoryA->slots[7].itemId == static_cast<uint16_t>(apple) && inventoryA->slots[7].stackCount == 16,
             "closing the container should return the cursor apples to client A inventory");
 
     while (!clientB->sent.empty()) {
@@ -958,11 +900,8 @@ static void testMultiplayerContainerSnapshotsStayAuthoritative() {
         } else if (packet.type == net::MessageType::BlockUpdateBatch && packet.inProcessPayload.has_value()) {
             const auto& batch = std::any_cast<const net::BlockUpdateBatchMessage&>(packet.inProcessPayload);
             for (const net::BlockUpdateEntry& update : batch.updates) {
-                if (update.x == chestPos.x &&
-                    update.y == chestPos.y &&
-                    update.z == chestPos.z &&
-                    update.kind == net::BlockUpdateKind::BlockState &&
-                    update.stateId == NULL_BLOCK_STATE) {
+                if (update.x == chestPos.x && update.y == chestPos.y && update.z == chestPos.z &&
+                    update.kind == net::BlockUpdateKind::BlockState && update.stateId == NULL_BLOCK_STATE) {
                     sawAirUpdateB = true;
                 }
             }
@@ -1293,8 +1232,7 @@ static void testGiveCommandRejectsUnknownItem() {
         clientPtr->sent.pop();
         if (packet.type == net::MessageType::CommandResult && packet.inProcessPayload.has_value()) {
             const auto& result = std::any_cast<const net::CommandResultMessage&>(packet.inProcessPayload);
-            if (result.sequence == 33 && !result.success &&
-                result.message.find("Unknown item") != std::string::npos) {
+            if (result.sequence == 33 && !result.success && result.message.find("Unknown item") != std::string::npos) {
                 sawCommandResult = true;
             }
         }
@@ -1364,11 +1302,9 @@ static void testSummonZombieSpawnsNetworkMob() {
     require(sawMobSpawn, "external registry summon should send a mob spawn");
     require(spawnedNetId != 0, "external registry summon should assign a mob net id");
 
-    auto view = registry.registry().view<ecs::MobTag,
-                                        ecs::HealthComponent,
-                                        ecs::EntityTypeComponent,
-                                        ecs::NetworkSyncTag,
-                                        ecs::EntityNetIdComponent>();
+    auto view = registry.registry()
+                    .view<ecs::MobTag, ecs::HealthComponent, ecs::EntityTypeComponent, ecs::NetworkSyncTag,
+                          ecs::EntityNetIdComponent>();
     require(view.begin() != view.end(), "external registry summon should create a networked mob");
     const entt::entity zombie = *view.begin();
     require(registry.registry().get<ecs::EntityNetIdComponent>(zombie).netId == spawnedNetId,
@@ -1465,8 +1401,7 @@ static void testSummonHerobrineUsesOwnedServerEcs() {
         clientPtr->sent.pop();
         if (packet.type == net::MessageType::CommandResult && packet.inProcessPayload.has_value()) {
             const auto& result = std::any_cast<const net::CommandResultMessage&>(packet.inProcessPayload);
-            if (result.sequence == 21 &&
-                result.success &&
+            if (result.sequence == 21 && result.success &&
                 result.message.find("Summoned herobrine") != std::string::npos) {
                 sawCommandResult = true;
             }
@@ -1520,8 +1455,7 @@ static void testSummonCreeperUsesOwnedServerEcs() {
         clientPtr->sent.pop();
         if (packet.type == net::MessageType::CommandResult && packet.inProcessPayload.has_value()) {
             const auto& result = std::any_cast<const net::CommandResultMessage&>(packet.inProcessPayload);
-            if (result.sequence == 22 &&
-                result.success &&
+            if (result.sequence == 22 && result.success &&
                 result.message.find("Summoned creeper") != std::string::npos) {
                 sawCommandResult = true;
             }
@@ -1619,7 +1553,7 @@ static void testOwnedServerZombiePursuesPlayer() {
 
     require(sawMovingSnapshot, "owned ECS zombie should send moving snapshots");
     require(horizontalDistanceSq(latestZombiePosition, playerPosition) <
-            horizontalDistanceSq(initialZombiePosition, playerPosition),
+                horizontalDistanceSq(initialZombiePosition, playerPosition),
             "owned ECS zombie should move closer to the player");
     std::printf("[PASS] testOwnedServerZombiePursuesPlayer\n");
 }
@@ -1745,7 +1679,8 @@ static void testOwnedServerPistonPushCorrectsPlayerPose() {
     clientPtr->pushIncoming(std::move(inputPacket));
 
     world.setBlockState(4, y, 0, leverState(true));
-    world.setBlockState(5, y, 0, pistonState(BlockRegistry::requireIdByName("minecraft:piston"), PropIndices::FACING_EAST, false));
+    world.setBlockState(
+        5, y, 0, pistonState(BlockRegistry::requireIdByName("minecraft:piston"), PropIndices::FACING_EAST, false));
 
     harness.server.tick(1.0f / 20.0f);
     while (!clientPtr->sent.empty()) {
@@ -1865,8 +1800,8 @@ static void testOwnedServerPlayerDiesDropsItemsAndRespawnsOnRequest() {
     uint32_t droppedStackTotal = 0;
     glm::vec3 respawnedPosition(0.0f);
 
-    for (uint32_t i = 2; i < 320 &&
-         !(sawDeathSnapshot && sawDeadInputIgnored && sawDropSpawn && sawClearedInventorySnapshot); ++i) {
+    for (uint32_t i = 2;
+         i < 320 && !(sawDeathSnapshot && sawDeadInputIgnored && sawDropSpawn && sawClearedInventorySnapshot); ++i) {
         const bool spoofThisTick = sawDeathSnapshot;
         pushInput(i, spoofThisTick ? spoofedDeadPosition : playerPosition);
         sentSpoofedDeadInput = sentSpoofedDeadInput || spoofThisTick;
@@ -1959,16 +1894,13 @@ static void testOwnedServerPlayerDiesDropsItemsAndRespawnsOnRequest() {
             sawRespawnSnapshot = true;
             respawnedPosition = snapshot.authoritativePosition;
             require(!snapshot.playerDead, "respawn snapshot should clear dead state");
-            require(snapshot.playerHealth == snapshot.playerMaxHealth,
-                    "respawn snapshot should restore player health");
-            require(snapshot.authoritativeVelocity == glm::vec3(0.0f),
-                    "respawn snapshot should clear player velocity");
+            require(snapshot.playerHealth == snapshot.playerMaxHealth, "respawn snapshot should restore player health");
+            require(snapshot.authoritativeVelocity == glm::vec3(0.0f), "respawn snapshot should clear player velocity");
         }
     }
 
     require(sawRespawnSnapshot, "server should send a player respawn snapshot after request");
-    require(distanceSq(respawnedPosition, spawnPosition) < 0.01f,
-            "server should respawn player at world spawn");
+    require(distanceSq(respawnedPosition, spawnPosition) < 0.01f, "server should respawn player at world spawn");
     std::printf("[PASS] testOwnedServerPlayerDiesDropsItemsAndRespawnsOnRequest\n");
 }
 
@@ -2044,9 +1976,9 @@ static void testOwnedServerPlayerMeleeKillsZombieAndDropsItem() {
             if (packet.type == net::MessageType::EntityImpact && packet.inProcessPayload.has_value()) {
                 const auto& impact = std::any_cast<const net::EntityImpactMessage&>(packet.inProcessPayload);
                 sawZombieDeathImpact = sawZombieDeathImpact ||
-                    (impact.netId == zombieNetId &&
-                     impact.particleBlockId == BlockRegistry::requireIdByName("minecraft:rose") &&
-                     impact.particleCount == 28);
+                                       (impact.netId == zombieNetId &&
+                                        impact.particleBlockId == BlockRegistry::requireIdByName("minecraft:rose") &&
+                                        impact.particleCount == 28);
             }
             if (packet.type == net::MessageType::EntitySpawn && packet.inProcessPayload.has_value()) {
                 const auto& spawn = std::any_cast<const net::EntitySpawnMessage&>(packet.inProcessPayload);
@@ -2213,8 +2145,7 @@ static void testOwnedServerPlayerPicksUpDropDespawnsAndSyncsInventory() {
             net::Packet packet = std::move(clientPtr->sent.front());
             clientPtr->sent.pop();
             if (packet.type == net::MessageType::InventorySnapshot && packet.inProcessPayload.has_value()) {
-                inventoryBeforePickup =
-                    std::any_cast<const net::InventorySnapshotMessage&>(packet.inProcessPayload);
+                inventoryBeforePickup = std::any_cast<const net::InventorySnapshotMessage&>(packet.inProcessPayload);
                 sawInventoryBeforePickup = true;
             }
         }
@@ -2255,8 +2186,7 @@ static void testOwnedServerPlayerPicksUpDropDespawnsAndSyncsInventory() {
         net::Packet packet = std::move(clientPtr->sent.front());
         clientPtr->sent.pop();
         if (packet.type == net::MessageType::InventorySnapshot && packet.inProcessPayload.has_value()) {
-            inventoryBeforePickup =
-                std::any_cast<const net::InventorySnapshotMessage&>(packet.inProcessPayload);
+            inventoryBeforePickup = std::any_cast<const net::InventorySnapshotMessage&>(packet.inProcessPayload);
             sawInventoryBeforePickup = true;
         }
         if (packet.type == net::MessageType::EntitySpawn && packet.inProcessPayload.has_value()) {
@@ -2278,8 +2208,7 @@ static void testOwnedServerPlayerPicksUpDropDespawnsAndSyncsInventory() {
             net::Packet packet = std::move(clientPtr->sent.front());
             clientPtr->sent.pop();
             if (packet.type == net::MessageType::InventorySnapshot && packet.inProcessPayload.has_value()) {
-                inventoryBeforePickup =
-                    std::any_cast<const net::InventorySnapshotMessage&>(packet.inProcessPayload);
+                inventoryBeforePickup = std::any_cast<const net::InventorySnapshotMessage&>(packet.inProcessPayload);
                 sawInventoryBeforePickup = true;
             }
             if (packet.type != net::MessageType::EntitySpawn || !packet.inProcessPayload.has_value()) {
@@ -2365,8 +2294,7 @@ static void testOwnedServerPlayerThrowsAppleProjectileDamagesZombie() {
             net::Packet packet = std::move(clientPtr->sent.front());
             clientPtr->sent.pop();
             if (packet.type == net::MessageType::InventorySnapshot && packet.inProcessPayload.has_value()) {
-                inventoryBeforeThrow =
-                    std::any_cast<const net::InventorySnapshotMessage&>(packet.inProcessPayload);
+                inventoryBeforeThrow = std::any_cast<const net::InventorySnapshotMessage&>(packet.inProcessPayload);
                 sawInventoryBeforeThrow = true;
             }
         }
@@ -2393,7 +2321,8 @@ static void testOwnedServerPlayerThrowsAppleProjectileDamagesZombie() {
     harness.server.tick(1.0f / 20.0f);
     drainBeforeThrowPackets();
     require(sawInventoryBeforeThrow, "apple projectile test should receive initial inventory");
-    const uint32_t applesBeforeThrow = inventoryItemCount(inventoryBeforeThrow, ItemRegistry::requireIdByName("minecraft:apple"));
+    const uint32_t applesBeforeThrow =
+        inventoryItemCount(inventoryBeforeThrow, ItemRegistry::requireIdByName("minecraft:apple"));
     require(applesBeforeThrow > 0, "default loadout should include throwable apples");
 
     net::Packet commandPacket;
@@ -2431,7 +2360,8 @@ static void testOwnedServerPlayerThrowsAppleProjectileDamagesZombie() {
             clientPtr->sent.pop();
             if (packet.type == net::MessageType::EntitySpawn && packet.inProcessPayload.has_value()) {
                 const auto& spawn = std::any_cast<const net::EntitySpawnMessage&>(packet.inProcessPayload);
-                if (spawn.kind == net::EntityKind::Projectile && spawn.itemId == ItemRegistry::requireIdByName("minecraft:apple") && spawn.netId != 0) {
+                if (spawn.kind == net::EntityKind::Projectile &&
+                    spawn.itemId == ItemRegistry::requireIdByName("minecraft:apple") && spawn.netId != 0) {
                     sawProjectileSpawn = true;
                     projectileNetIds.push_back(spawn.netId);
                 }
@@ -2439,21 +2369,21 @@ static void testOwnedServerPlayerThrowsAppleProjectileDamagesZombie() {
             if (packet.type == net::MessageType::EntityDespawn && packet.inProcessPayload.has_value()) {
                 const auto& despawn = std::any_cast<const net::EntityDespawnMessage&>(packet.inProcessPayload);
                 sawZombieDespawn = sawZombieDespawn || despawn.netId == zombieNetId;
-                sawProjectileDespawn =
-                    sawProjectileDespawn ||
-                    std::find(projectileNetIds.begin(), projectileNetIds.end(), despawn.netId) != projectileNetIds.end();
+                sawProjectileDespawn = sawProjectileDespawn ||
+                                       std::find(projectileNetIds.begin(), projectileNetIds.end(), despawn.netId) !=
+                                           projectileNetIds.end();
             }
             if (packet.type == net::MessageType::EntityImpact && packet.inProcessPayload.has_value()) {
                 const auto& impact = std::any_cast<const net::EntityImpactMessage&>(packet.inProcessPayload);
                 sawProjectileImpact =
-                    sawProjectileImpact ||
-                    (impact.particleBlockId != 0 &&
-                     impact.particleCount == 14 &&
-                     std::find(projectileNetIds.begin(), projectileNetIds.end(), impact.netId) != projectileNetIds.end());
+                    sawProjectileImpact || (impact.particleBlockId != 0 && impact.particleCount == 14 &&
+                                            std::find(projectileNetIds.begin(), projectileNetIds.end(), impact.netId) !=
+                                                projectileNetIds.end());
             }
             if (packet.type == net::MessageType::InventorySnapshot && packet.inProcessPayload.has_value()) {
                 const auto& inventory = std::any_cast<const net::InventorySnapshotMessage&>(packet.inProcessPayload);
-                sawAppleConsumed = sawAppleConsumed ||
+                sawAppleConsumed =
+                    sawAppleConsumed ||
                     inventoryItemCount(inventory, ItemRegistry::requireIdByName("minecraft:apple")) < applesBeforeThrow;
             }
         }
@@ -2508,7 +2438,8 @@ static void testCreativeAppleProjectileDoesNotConsumeInventory() {
     };
     drainInitialPackets();
     require(sawInitialInventory, "creative projectile test should receive initial inventory");
-    const uint32_t applesBeforeThrow = inventoryItemCount(initialInventory, ItemRegistry::requireIdByName("minecraft:apple"));
+    const uint32_t applesBeforeThrow =
+        inventoryItemCount(initialInventory, ItemRegistry::requireIdByName("minecraft:apple"));
     require(applesBeforeThrow > 0, "creative projectile test needs throwable apples");
 
     net::Packet commandPacket;
@@ -2548,8 +2479,9 @@ static void testCreativeAppleProjectileDoesNotConsumeInventory() {
             clientPtr->sent.pop();
             if (packet.type == net::MessageType::EntitySpawn && packet.inProcessPayload.has_value()) {
                 const auto& spawn = std::any_cast<const net::EntitySpawnMessage&>(packet.inProcessPayload);
-                sawProjectileSpawn = sawProjectileSpawn ||
-                    (spawn.kind == net::EntityKind::Projectile && spawn.itemId == ItemRegistry::requireIdByName("minecraft:apple"));
+                sawProjectileSpawn =
+                    sawProjectileSpawn || (spawn.kind == net::EntityKind::Projectile &&
+                                           spawn.itemId == ItemRegistry::requireIdByName("minecraft:apple"));
             }
             if (packet.type == net::MessageType::InventorySnapshot && packet.inProcessPayload.has_value()) {
                 inventoryAfterThrow = std::any_cast<const net::InventorySnapshotMessage&>(packet.inProcessPayload);
@@ -2568,7 +2500,8 @@ static void testCreativeAppleProjectileDoesNotConsumeInventory() {
 
     require(sawProjectileSpawn, "creative apple use should still spawn a projectile");
     require(sawInventoryAfterThrow, "slot change should sync inventory after creative throw");
-    require(inventoryItemCount(inventoryAfterThrow, ItemRegistry::requireIdByName("minecraft:apple")) == applesBeforeThrow,
+    require(inventoryItemCount(inventoryAfterThrow, ItemRegistry::requireIdByName("minecraft:apple")) ==
+                applesBeforeThrow,
             "creative apple projectile should not consume authoritative inventory");
     std::printf("[PASS] testCreativeAppleProjectileDoesNotConsumeInventory\n");
 }
@@ -2585,18 +2518,12 @@ static void testEntityFactoryCreatesConfiguredZombie() {
     require(zombie != entt::null, "EntityFactory should create configured zombie");
 
     auto& raw = registry.registry();
-    require(raw.all_of<ecs::MobTag,
-                       ecs::TransformComponent,
-                       ecs::MobAIComponent,
-                       ecs::HealthComponent,
-                       ecs::HurtEffectComponent,
-                       ecs::MobVisualComponent,
-                       ecs::PhysicsBodyComponent,
-                       ecs::DropTableComponent,
-                       ecs::DeathEffectComponent,
-                       ecs::EntityTypeComponent,
-                       ecs::NetworkSyncTag>(zombie),
-            "configured zombie should have gameplay mob components");
+    require(
+        raw.all_of<ecs::MobTag, ecs::TransformComponent, ecs::MobAIComponent, ecs::HealthComponent,
+                   ecs::HurtEffectComponent, ecs::MobVisualComponent, ecs::PhysicsBodyComponent,
+                   ecs::DropTableComponent, ecs::DeathEffectComponent, ecs::EntityTypeComponent, ecs::NetworkSyncTag>(
+            zombie),
+        "configured zombie should have gameplay mob components");
 
     const auto& transform = raw.get<ecs::TransformComponent>(zombie);
     const auto& ai = raw.get<ecs::MobAIComponent>(zombie);
@@ -2609,26 +2536,23 @@ static void testEntityFactoryCreatesConfiguredZombie() {
     const auto& visual = raw.get<ecs::MobVisualComponent>(zombie);
 
     require(type.entityId == "minecraft:zombie", "configured zombie should keep entity definition id");
-    require(visual.model == "humanoid" &&
-            visual.textureKey == "zombie" &&
-            ecs::entitySkinLayoutId(visual.skinLayout) == "minecraft:classic_64x64" &&
-            std::fabs(visual.scale - 1.0f) < 0.001f,
+    require(visual.model == "humanoid" && visual.textureKey == "zombie" &&
+                ecs::entitySkinLayoutId(visual.skinLayout) == "minecraft:classic_64x64" &&
+                std::fabs(visual.scale - 1.0f) < 0.001f,
             "configured zombie should apply visual data");
     require(transform.eyeHeight == 1.62f, "configured zombie should apply eye height");
     require(health.current == 20 && health.max == 20, "configured zombie should apply health");
-    require(ai.attackDamage == 3 && ai.pursueSpeed == 0.85f,
-            "configured zombie should apply AI tuning");
+    require(ai.attackDamage == 3 && ai.pursueSpeed == 0.85f, "configured zombie should apply AI tuning");
     require(body.body.halfExtents.y == 0.9f && body.body.colliderOffset.y == 0.9f,
             "configured zombie should apply physics bounds");
-    require(drops.itemId == ItemRegistry::requireIdByName("minecraft:coal") && drops.minCount == 1 && drops.maxCount == 1,
+    require(drops.itemId == ItemRegistry::requireIdByName("minecraft:coal") && drops.minCount == 1 &&
+                drops.maxCount == 1,
             "configured zombie should apply drop table");
-    require(hurtEffect.soundId == "mob.zombie.hurt" &&
-            hurtEffect.soundVolume == 1.0f &&
-            std::fabs(hurtEffect.flashDurationSeconds - 0.18f) < 0.001f,
+    require(hurtEffect.soundId == "mob.zombie.hurt" && hurtEffect.soundVolume == 1.0f &&
+                std::fabs(hurtEffect.flashDurationSeconds - 0.18f) < 0.001f,
             "configured zombie should apply hurt effect");
     require(deathEffect.particleBlock == BlockRegistry::requireIdByName("minecraft:rose") &&
-            deathEffect.particleCount == 28 &&
-            deathEffect.soundId == "mob.zombie.death",
+                deathEffect.particleCount == 28 && deathEffect.soundId == "mob.zombie.death",
             "configured zombie should apply death effect");
 
     std::printf("[PASS] testEntityFactoryCreatesConfiguredZombie\n");
@@ -2646,16 +2570,9 @@ static void testEntityFactoryCreatesConfiguredHerobrine() {
     require(herobrine != entt::null, "EntityFactory should create configured herobrine");
 
     auto& raw = registry.registry();
-    require(raw.all_of<ecs::MobTag,
-                       ecs::TransformComponent,
-                       ecs::MobAIComponent,
-                       ecs::HealthComponent,
-                       ecs::MobVisualComponent,
-                       ecs::PhysicsBodyComponent,
-                       ecs::DropTableComponent,
-                       ecs::DeathEffectComponent,
-                       ecs::EntityTypeComponent,
-                       ecs::NetworkSyncTag>(herobrine),
+    require(raw.all_of<ecs::MobTag, ecs::TransformComponent, ecs::MobAIComponent, ecs::HealthComponent,
+                       ecs::MobVisualComponent, ecs::PhysicsBodyComponent, ecs::DropTableComponent,
+                       ecs::DeathEffectComponent, ecs::EntityTypeComponent, ecs::NetworkSyncTag>(herobrine),
             "configured herobrine should have gameplay mob components");
 
     const auto& ai = raw.get<ecs::MobAIComponent>(herobrine);
@@ -2666,22 +2583,17 @@ static void testEntityFactoryCreatesConfiguredHerobrine() {
     const auto& visual = raw.get<ecs::MobVisualComponent>(herobrine);
 
     require(type.entityId == "minecraft:herobrine", "configured herobrine should keep entity definition id");
-    require(visual.model == "humanoid" &&
-            visual.textureKey == "herobrine" &&
-            ecs::entitySkinLayoutId(visual.skinLayout) == "minecraft:steve_64x64" &&
-            std::fabs(visual.scale - 1.0f) < 0.001f,
+    require(visual.model == "humanoid" && visual.textureKey == "herobrine" &&
+                ecs::entitySkinLayoutId(visual.skinLayout) == "minecraft:steve_64x64" &&
+                std::fabs(visual.scale - 1.0f) < 0.001f,
             "configured herobrine should apply visual data");
-    require(health.current == 40 && health.max == 40,
-            "configured herobrine should apply health");
+    require(health.current == 40 && health.max == 40, "configured herobrine should apply health");
     require(ai.attackDamage == 6 && std::fabs(ai.pursueSpeed - 1.05f) < 0.001f,
             "configured herobrine should apply AI tuning");
-    require(drops.itemId == ItemRegistry::findByName("minecraft:diamond") &&
-            drops.minCount == 1 &&
-            drops.maxCount == 1,
+    require(drops.itemId == ItemRegistry::findByName("minecraft:diamond") && drops.minCount == 1 && drops.maxCount == 1,
             "configured herobrine should apply drop table");
     require(deathEffect.particleBlock == BlockRegistry::requireIdByName("minecraft:diamond_ore") &&
-            deathEffect.particleCount == 36 &&
-            deathEffect.soundId == "mob.zombie.death",
+                deathEffect.particleCount == 36 && deathEffect.soundId == "mob.zombie.death",
             "configured herobrine should apply death effect");
 
     std::printf("[PASS] testEntityFactoryCreatesConfiguredHerobrine\n");
@@ -2708,18 +2620,10 @@ static void testEntityFactoryCreatesConfiguredCreeper() {
     require(creeper != entt::null, "EntityFactory should create configured creeper");
 
     auto& raw = registry.registry();
-    require(raw.all_of<ecs::MobTag,
-                       ecs::TransformComponent,
-                       ecs::MobAIComponent,
-                       ecs::HealthComponent,
-                       ecs::MobVisualComponent,
-                       ecs::PhysicsBodyComponent,
-                       ecs::DropTableComponent,
-                       ecs::DeathEffectComponent,
-                       ecs::EntityTypeComponent,
-                       ecs::EntityModelComponent,
-                       ecs::ChildrenComponent,
-                       ecs::NetworkSyncTag>(creeper),
+    require(raw.all_of<ecs::MobTag, ecs::TransformComponent, ecs::MobAIComponent, ecs::HealthComponent,
+                       ecs::MobVisualComponent, ecs::PhysicsBodyComponent, ecs::DropTableComponent,
+                       ecs::DeathEffectComponent, ecs::EntityTypeComponent, ecs::EntityModelComponent,
+                       ecs::ChildrenComponent, ecs::NetworkSyncTag>(creeper),
             "configured creeper should have gameplay and generic model components");
 
     const auto& transform = raw.get<ecs::TransformComponent>(creeper);
@@ -2733,34 +2637,28 @@ static void testEntityFactoryCreatesConfiguredCreeper() {
     const auto& modelComponent = raw.get<ecs::EntityModelComponent>(creeper);
 
     require(type.entityId == "minecraft:creeper", "configured creeper should keep entity definition id");
-    require(visual.model == "minecraft:creeper" &&
-            visual.textureKey == "creeper" &&
-            std::fabs(visual.scale - 1.0f) < 0.001f,
+    require(visual.model == "minecraft:creeper" && visual.textureKey == "creeper" &&
+                std::fabs(visual.scale - 1.0f) < 0.001f,
             "configured creeper should apply visual data");
-    require(modelComponent.modelId == "minecraft:creeper" &&
-            modelComponent.animationId == "minecraft:creeper_walk" &&
-            modelComponent.yawPartName == "root",
+    require(modelComponent.modelId == "minecraft:creeper" && modelComponent.animationId == "minecraft:creeper_walk" &&
+                modelComponent.yawPartName == "root",
             "configured creeper should apply generic model metadata");
-    require(std::fabs(transform.eyeHeight - 1.44f) < 0.001f,
-            "configured creeper should apply eye height");
-    require(health.current == 20 && health.max == 20,
-            "configured creeper should apply health");
+    require(std::fabs(transform.eyeHeight - 1.44f) < 0.001f, "configured creeper should apply eye height");
+    require(health.current == 20 && health.max == 20, "configured creeper should apply health");
     require(ai.attackDamage == 4 && std::fabs(ai.pursueSpeed - 0.85f) < 0.001f,
             "configured creeper should apply AI tuning");
     require(std::fabs(body.body.halfExtents.y - 0.85f) < 0.001f &&
-            std::fabs(body.body.colliderOffset.y - 0.85f) < 0.001f,
+                std::fabs(body.body.colliderOffset.y - 0.85f) < 0.001f,
             "configured creeper should apply physics bounds");
-    require(drops.itemId == ItemRegistry::requireIdByName("minecraft:coal") && drops.minCount == 1 && drops.maxCount == 1,
+    require(drops.itemId == ItemRegistry::requireIdByName("minecraft:coal") && drops.minCount == 1 &&
+                drops.maxCount == 1,
             "configured creeper should apply drop table");
     require(deathEffect.particleBlock == BlockRegistry::requireIdByName("minecraft:coal_ore") &&
-            deathEffect.particleCount == 32 &&
-            deathEffect.soundId == "mob.zombie.death",
+                deathEffect.particleCount == 32 && deathEffect.soundId == "mob.zombie.death",
             "configured creeper should apply death effect");
 
     std::size_t genericPartCount = 0;
-    auto partView = raw.view<ecs::EntityModelPartComponent,
-                             ecs::LocalTransformComponent,
-                             ecs::WorldTransformComponent,
+    auto partView = raw.view<ecs::EntityModelPartComponent, ecs::LocalTransformComponent, ecs::WorldTransformComponent,
                              ecs::ParentComponent>();
     for (const entt::entity partEntity : partView) {
         static_cast<void>(partEntity);
@@ -2809,7 +2707,7 @@ static void testEntityFactoryCreatesConfiguredPassiveAnimals() {
         require(model != nullptr, "passive animal model definition should load");
         require(model->parts.size() == 7, "passive animal model should define root, head, body, and four legs");
         require(std::fabs(model->textureWidth - 64.0f) < 0.001f &&
-                std::fabs(model->textureHeight - expected.textureHeight) < 0.001f,
+                    std::fabs(model->textureHeight - expected.textureHeight) < 0.001f,
                 "passive animal model should use the expected texture dimensions");
         require(model->animationId == "minecraft:quadruped_walk" && model->yawPartName == "root",
                 "passive animal model should use quadruped animation metadata");
@@ -2819,49 +2717,35 @@ static void testEntityFactoryCreatesConfiguredPassiveAnimals() {
         const ecs::EntityModelPartDefinition* hindLegPart = model->findPart("right_hind_leg");
         require(headPart != nullptr && bodyPart != nullptr && frontLegPart != nullptr && hindLegPart != nullptr,
                 "passive animal model should expose named body, head, and leg parts");
-        require(headPart->pivot.z > 0.0f &&
-                frontLegPart->pivot.z > 0.0f &&
-                hindLegPart->pivot.z < 0.0f,
+        require(headPart->pivot.z > 0.0f && frontLegPart->pivot.z > 0.0f && hindLegPart->pivot.z < 0.0f,
                 "passive animal model should face local +Z");
         for (const ecs::EntityModelPartDefinition& part : model->parts) {
             for (const ecs::EntityModelBoxDefinition& box : part.boxes) {
                 for (const ecs::EntityModelPixelRect& rect : box.faceUvs) {
-                    require(rect.x0 >= 0.0f && rect.y0 >= 0.0f &&
-                            rect.x1 <= model->textureWidth && rect.y1 <= model->textureHeight &&
-                            rect.x0 <= rect.x1 && rect.y0 <= rect.y1,
+                    require(rect.x0 >= 0.0f && rect.y0 >= 0.0f && rect.x1 <= model->textureWidth &&
+                                rect.y1 <= model->textureHeight && rect.x0 <= rect.x1 && rect.y0 <= rect.y1,
                             "passive animal model face UVs should stay inside the entity texture");
                 }
             }
         }
         if (expected.hasWoolLayer) {
-            require(headPart->boxes.size() >= 2 && bodyPart->boxes.size() >= 2 &&
-                    frontLegPart->boxes.size() >= 2 && hindLegPart->boxes.size() >= 2,
+            require(headPart->boxes.size() >= 2 && bodyPart->boxes.size() >= 2 && frontLegPart->boxes.size() >= 2 &&
+                        hindLegPart->boxes.size() >= 2,
                     "wool sheep model should include outer wool boxes");
-            require(headPart->boxes[1].inflate > 0.0f &&
-                    bodyPart->boxes[1].inflate > 0.0f &&
-                    frontLegPart->boxes[1].inflate > 0.0f &&
-                    hindLegPart->boxes[1].inflate > 0.0f,
+            require(headPart->boxes[1].inflate > 0.0f && bodyPart->boxes[1].inflate > 0.0f &&
+                        frontLegPart->boxes[1].inflate > 0.0f && hindLegPart->boxes[1].inflate > 0.0f,
                     "wool sheep model should inflate outer wool boxes");
         }
 
         ecs::GameplayRegistry registry;
-        const entt::entity animal =
-            ecs::EntityFactory::createMob(registry, expected.id, glm::vec3(3.0f, 64.0f, 2.0f));
+        const entt::entity animal = ecs::EntityFactory::createMob(registry, expected.id, glm::vec3(3.0f, 64.0f, 2.0f));
         require(animal != entt::null, "EntityFactory should create configured passive animal");
 
         auto& raw = registry.registry();
-        require(raw.all_of<ecs::MobTag,
-                           ecs::TransformComponent,
-                           ecs::MobAIComponent,
-                           ecs::HealthComponent,
-                           ecs::MobVisualComponent,
-                           ecs::PhysicsBodyComponent,
-                           ecs::DropTableComponent,
-                           ecs::DeathEffectComponent,
-                           ecs::EntityTypeComponent,
-                           ecs::EntityModelComponent,
-                           ecs::ChildrenComponent,
-                           ecs::NetworkSyncTag>(animal),
+        require(raw.all_of<ecs::MobTag, ecs::TransformComponent, ecs::MobAIComponent, ecs::HealthComponent,
+                           ecs::MobVisualComponent, ecs::PhysicsBodyComponent, ecs::DropTableComponent,
+                           ecs::DeathEffectComponent, ecs::EntityTypeComponent, ecs::EntityModelComponent,
+                           ecs::ChildrenComponent, ecs::NetworkSyncTag>(animal),
                 "configured passive animal should have gameplay and generic model components");
 
         const auto& transform = raw.get<ecs::TransformComponent>(animal);
@@ -2873,13 +2757,11 @@ static void testEntityFactoryCreatesConfiguredPassiveAnimals() {
         const auto& modelComponent = raw.get<ecs::EntityModelComponent>(animal);
 
         require(type.entityId == expected.id, "configured passive animal should keep entity definition id");
-        require(visual.model == expected.id &&
-                visual.textureKey == expected.texture &&
-                std::fabs(visual.scale - 1.0f) < 0.001f,
+        require(visual.model == expected.id && visual.textureKey == expected.texture &&
+                    std::fabs(visual.scale - 1.0f) < 0.001f,
                 "configured passive animal should apply visual data");
-        require(modelComponent.modelId == expected.id &&
-                modelComponent.animationId == "minecraft:quadruped_walk" &&
-                modelComponent.yawPartName == "root",
+        require(modelComponent.modelId == expected.id && modelComponent.animationId == "minecraft:quadruped_walk" &&
+                    modelComponent.yawPartName == "root",
                 "configured passive animal should apply generic model metadata");
         require(std::fabs(transform.eyeHeight - expected.eyeHeight) < 0.001f,
                 "configured passive animal should apply eye height");
@@ -2887,9 +2769,8 @@ static void testEntityFactoryCreatesConfiguredPassiveAnimals() {
                 "configured passive animal should apply health");
         require(!ai.targetsPlayers && ai.attackDamage == 0 && ai.target == entt::null,
                 "configured passive animal should not target players");
-        require(drops.itemId == expected.dropItem &&
-                drops.minCount == expected.minDrop &&
-                drops.maxCount == expected.maxDrop,
+        require(drops.itemId == expected.dropItem && drops.minCount == expected.minDrop &&
+                    drops.maxCount == expected.maxDrop,
                 "configured passive animal should apply drop table");
     }
 
@@ -2924,13 +2805,9 @@ static void testPersistentZombieRestoresFromSave() {
         server.setEcsRegistry(&registry);
         server.restorePersistentEntities();
 
-        auto view = registry.registry().view<ecs::MobTag,
-                                            ecs::TransformComponent,
-                                            ecs::HealthComponent,
-                                            ecs::MobAIComponent,
-                                            ecs::PhysicsBodyComponent,
-                                            ecs::EntityTypeComponent,
-                                            ecs::NetworkSyncTag>();
+        auto view = registry.registry()
+                        .view<ecs::MobTag, ecs::TransformComponent, ecs::HealthComponent, ecs::MobAIComponent,
+                              ecs::PhysicsBodyComponent, ecs::EntityTypeComponent, ecs::NetworkSyncTag>();
         require(view.begin() != view.end(), "persistent zombie restore should create a mob");
         const entt::entity zombie = *view.begin();
         const auto& transform = registry.registry().get<ecs::TransformComponent>(zombie);
@@ -2991,16 +2868,10 @@ static void testPersistentDropRestoresFromSave() {
         server.setEcsRegistry(&registry);
         server.restorePersistentEntities();
 
-        auto view = registry.registry().view<ecs::DropItemTag,
-                                            ecs::DropEntityIdComponent,
-                                            ecs::TransformComponent,
-                                            ecs::ItemComponent,
-                                            ecs::VelocityComponent,
-                                            ecs::BoundsComponent,
-                                            ecs::LifetimeComponent,
-                                            ecs::SpinVisualComponent,
-                                            ecs::GroundedStateComponent,
-                                            ecs::NetworkSyncTag>();
+        auto view = registry.registry()
+                        .view<ecs::DropItemTag, ecs::DropEntityIdComponent, ecs::TransformComponent, ecs::ItemComponent,
+                              ecs::VelocityComponent, ecs::BoundsComponent, ecs::LifetimeComponent,
+                              ecs::SpinVisualComponent, ecs::GroundedStateComponent, ecs::NetworkSyncTag>();
         require(view.begin() != view.end(), "persistent drop restore should create a synced drop");
         const entt::entity drop = *view.begin();
         const auto& id = registry.registry().get<ecs::DropEntityIdComponent>(drop);
@@ -3020,8 +2891,7 @@ static void testPersistentDropRestoresFromSave() {
         require(bounds.halfExtents.y == 0.21f, "persistent drop restore should keep bounds");
         require(lifetime.ageSeconds == 3.0f && lifetime.lifeTimeSeconds == 24.0f,
                 "persistent drop restore should keep lifetime");
-        require(spin.yawRadians == 1.5f && spin.spinSpeedRadians == 2.25f,
-                "persistent drop restore should keep spin");
+        require(spin.yawRadians == 1.5f && spin.spinSpeedRadians == 2.25f, "persistent drop restore should keep spin");
         require(grounded.grounded, "persistent drop restore should keep grounded state");
 
         server.setEcsRegistry(static_cast<ecs::GameplayRegistry*>(nullptr));
@@ -3077,7 +2947,8 @@ static void testPersistentChestInventoryRestoresFromSave() {
                 "persistent chest restore should keep stack item and count");
 
         const ItemStack pickaxe = chest->getSlotStack(17);
-        require(pickaxe.itemId == ItemRegistry::requireIdByName("minecraft:iron_pickaxe") && pickaxe.count == 1 && pickaxe.durability == 44,
+        require(pickaxe.itemId == ItemRegistry::requireIdByName("minecraft:iron_pickaxe") && pickaxe.count == 1 &&
+                    pickaxe.durability == 44,
                 "persistent chest restore should keep tool durability");
 
         server.setEcsRegistry(static_cast<ecs::GameplayRegistry*>(nullptr));
@@ -3147,13 +3018,12 @@ static void testPersistentFurnaceInventoryRestoresFromSave() {
                 "persistent furnace restore should keep the fuel slot");
 
         const ItemStack output = furnace->getSlotStack(MachineInventory::DEFAULT_SMELTING_OUTPUT_SLOT);
-        require(output.itemId == ItemRegistry::requireIdByName("minecraft:iron_pickaxe") && output.count == 1 && output.durability == 17,
+        require(output.itemId == ItemRegistry::requireIdByName("minecraft:iron_pickaxe") && output.count == 1 &&
+                    output.durability == 17,
                 "persistent furnace restore should keep the output slot");
 
-        require(furnace->burnSecondsRemaining() == 4.0f &&
-                furnace->burnSecondsTotal() == 8.0f &&
-                furnace->cookSeconds() == 2.5f &&
-                furnace->cookTargetSeconds() == 10.0f,
+        require(furnace->burnSecondsRemaining() == 4.0f && furnace->burnSecondsTotal() == 8.0f &&
+                    furnace->cookSeconds() == 2.5f && furnace->cookTargetSeconds() == 10.0f,
                 "persistent furnace restore should keep burn and cook progress");
 
         server.setEcsRegistry(static_cast<ecs::GameplayRegistry*>(nullptr));
@@ -3168,17 +3038,14 @@ static void testPersistentChestBlockRestoresFromSave() {
     const std::filesystem::path saveRoot = "test_server_chest_block_save";
     std::filesystem::remove_all(saveRoot);
     const glm::ivec3 chestPos(2, Chunk::SIZE_Y - 8, 3);
-    const BlockStateId eastChest = BlockStateRegistry::getState(
-        BlockRegistry::requireIdByName("minecraft:chest"),
-        PropIndices::FACING,
-        PropIndices::FACING_EAST);
+    const BlockStateId eastChest = BlockStateRegistry::getState(BlockRegistry::requireIdByName("minecraft:chest"),
+                                                                PropIndices::FACING, PropIndices::FACING_EAST);
 
     {
         server::GameServer server;
         server.init(1234, nullptr, 2, saveRoot, "Chest Block Save Test");
 
-        for (int tick = 0;
-             tick < 240 && !server.world().isChunkLoadedForBlock(chestPos.x, chestPos.y, chestPos.z);
+        for (int tick = 0; tick < 240 && !server.world().isChunkLoadedForBlock(chestPos.x, chestPos.y, chestPos.z);
              ++tick) {
             server.tick(1.0f / 20.0f);
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
@@ -3193,30 +3060,24 @@ static void testPersistentChestBlockRestoresFromSave() {
     {
         save::SaveManager mgr(saveRoot);
         std::vector<save::BlockEntityData> blockEntities;
-        require(mgr.loadBlockEntities(blockEntities),
-                "persistent chest block save should write block entity data");
+        require(mgr.loadBlockEntities(blockEntities), "persistent chest block save should write block entity data");
 
         bool sawEmptyChestEntity = false;
         for (const save::BlockEntityData& entity : blockEntities) {
-            if (entity.type == "minecraft:chest" &&
-                entity.x == chestPos.x &&
-                entity.y == chestPos.y &&
-                entity.z == chestPos.z &&
-                entity.slots.empty()) {
+            if (entity.type == "minecraft:chest" && entity.x == chestPos.x && entity.y == chestPos.y &&
+                entity.z == chestPos.z && entity.slots.empty()) {
                 sawEmptyChestEntity = true;
                 break;
             }
         }
-        require(sawEmptyChestEntity,
-                "persistent chest block save should include an empty chest block entity");
+        require(sawEmptyChestEntity, "persistent chest block save should include an empty chest block entity");
     }
 
     {
         server::GameServer server;
         server.init(1234, nullptr, 2, saveRoot, "Chest Block Save Test");
 
-        for (int tick = 0;
-             tick < 240 && !server.world().isChunkLoadedForBlock(chestPos.x, chestPos.y, chestPos.z);
+        for (int tick = 0; tick < 240 && !server.world().isChunkLoadedForBlock(chestPos.x, chestPos.y, chestPos.z);
              ++tick) {
             server.tick(1.0f / 20.0f);
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
@@ -3248,8 +3109,7 @@ static void testPersistentBarrelBlockRestoresFromSave() {
         server::GameServer server;
         server.init(1234, nullptr, 2, saveRoot, "Barrel Block Save Test");
 
-        for (int tick = 0;
-             tick < 240 && !server.world().isChunkLoadedForBlock(barrelPos.x, barrelPos.y, barrelPos.z);
+        for (int tick = 0; tick < 240 && !server.world().isChunkLoadedForBlock(barrelPos.x, barrelPos.y, barrelPos.z);
              ++tick) {
             server.tick(1.0f / 20.0f);
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
@@ -3264,30 +3124,24 @@ static void testPersistentBarrelBlockRestoresFromSave() {
     {
         save::SaveManager mgr(saveRoot);
         std::vector<save::BlockEntityData> blockEntities;
-        require(mgr.loadBlockEntities(blockEntities),
-                "persistent barrel block save should write block entity data");
+        require(mgr.loadBlockEntities(blockEntities), "persistent barrel block save should write block entity data");
 
         bool sawEmptyBarrelEntity = false;
         for (const save::BlockEntityData& entity : blockEntities) {
-            if (entity.type == "minecraft:barrel" &&
-                entity.x == barrelPos.x &&
-                entity.y == barrelPos.y &&
-                entity.z == barrelPos.z &&
-                entity.slots.empty()) {
+            if (entity.type == "minecraft:barrel" && entity.x == barrelPos.x && entity.y == barrelPos.y &&
+                entity.z == barrelPos.z && entity.slots.empty()) {
                 sawEmptyBarrelEntity = true;
                 break;
             }
         }
-        require(sawEmptyBarrelEntity,
-                "persistent barrel block save should include an empty barrel block entity");
+        require(sawEmptyBarrelEntity, "persistent barrel block save should include an empty barrel block entity");
     }
 
     {
         server::GameServer server;
         server.init(1234, nullptr, 2, saveRoot, "Barrel Block Save Test");
 
-        for (int tick = 0;
-             tick < 240 && !server.world().isChunkLoadedForBlock(barrelPos.x, barrelPos.y, barrelPos.z);
+        for (int tick = 0; tick < 240 && !server.world().isChunkLoadedForBlock(barrelPos.x, barrelPos.y, barrelPos.z);
              ++tick) {
             server.tick(1.0f / 20.0f);
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
@@ -3322,8 +3176,7 @@ static void testServerBlockActionBreaksChestLifecycle() {
     harness.server.acceptClient(std::move(clientTransport), 1);
 
     const glm::ivec3 chestPos(0, Chunk::SIZE_Y - 8, 0);
-    for (int tick = 0;
-         tick < 240 && !harness.server.world().isChunkLoadedForBlock(chestPos.x, chestPos.y, chestPos.z);
+    for (int tick = 0; tick < 240 && !harness.server.world().isChunkLoadedForBlock(chestPos.x, chestPos.y, chestPos.z);
          ++tick) {
         harness.server.tick(1.0f / 20.0f);
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
@@ -3331,7 +3184,8 @@ static void testServerBlockActionBreaksChestLifecycle() {
     require(harness.server.world().isChunkLoadedForBlock(chestPos.x, chestPos.y, chestPos.z),
             "test setup should load the target chest chunk");
 
-    const BlockStateId chestState = BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:chest"));
+    const BlockStateId chestState =
+        BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:chest"));
     harness.server.world().setBlockState(chestPos.x, chestPos.y, chestPos.z, chestState);
 
     BlockEntityInventoryStore& store = registry.ctxSet<BlockEntityInventoryStore>();
@@ -3357,13 +3211,13 @@ static void testServerBlockActionBreaksChestLifecycle() {
 
     require(harness.server.world().getBlockState(chestPos.x, chestPos.y, chestPos.z) == NULL_BLOCK_STATE,
             "server block break should remove the chest block");
-    require(store.find(chestPos) == nullptr,
-            "server block break should erase the chest inventory store entry");
+    require(store.find(chestPos) == nullptr, "server block break should erase the chest inventory store entry");
     require(ecsDroppedItemCount(registry, ItemRegistry::requireIdByName("minecraft:apple")) == 3,
             "server chest break should spawn stored apple drops");
     require(ecsDroppedItemCount(registry, ItemRegistry::requireIdByName("minecraft:coal")) == 2,
             "server chest break should spawn stored coal drops");
-    require(ecsDroppedItemCount(registry, ItemRegistry::fromBlock(BlockRegistry::requireIdByName("minecraft:chest"))) == 1,
+    require(ecsDroppedItemCount(registry, ItemRegistry::fromBlock(BlockRegistry::requireIdByName("minecraft:chest"))) ==
+                1,
             "server survival chest break should spawn the chest item drop");
 
     bool sawAirBlockUpdate = false;
@@ -3374,11 +3228,8 @@ static void testServerBlockActionBreaksChestLifecycle() {
         if (packet.type == net::MessageType::BlockUpdateBatch && packet.inProcessPayload.has_value()) {
             const auto& batch = std::any_cast<const net::BlockUpdateBatchMessage&>(packet.inProcessPayload);
             for (const auto& update : batch.updates) {
-                if (update.x == chestPos.x &&
-                    update.y == chestPos.y &&
-                    update.z == chestPos.z &&
-                    update.kind == net::BlockUpdateKind::BlockState &&
-                    update.stateId == NULL_BLOCK_STATE) {
+                if (update.x == chestPos.x && update.y == chestPos.y && update.z == chestPos.z &&
+                    update.kind == net::BlockUpdateKind::BlockState && update.stateId == NULL_BLOCK_STATE) {
                     sawAirBlockUpdate = true;
                 }
             }
@@ -3591,11 +3442,9 @@ static void testOwnedServerEcsRestoresPersistentDrop() {
             clientPtr->sent.pop();
             if (packet.type == net::MessageType::EntitySpawn && packet.inProcessPayload.has_value()) {
                 const auto& spawn = std::any_cast<const net::EntitySpawnMessage&>(packet.inProcessPayload);
-                sawDropSpawn = sawDropSpawn ||
-                    (spawn.kind == net::EntityKind::Drop &&
-                     spawn.itemId == ItemRegistry::requireIdByName("minecraft:coal") &&
-                     spawn.stackCount == 3 &&
-                     spawn.netId != 0);
+                sawDropSpawn = sawDropSpawn || (spawn.kind == net::EntityKind::Drop &&
+                                                spawn.itemId == ItemRegistry::requireIdByName("minecraft:coal") &&
+                                                spawn.stackCount == 3 && spawn.netId != 0);
             }
         }
         require(sawDropSpawn, "owned ECS restore should send restored drop spawn");
@@ -3649,16 +3498,14 @@ static void testClientInputCodecCarriesSelectedHotbarSlot() {
     net::ClientInput decoded;
     require(net::PacketCodec::decodeClientInput(encoded.data(), encoded.size(), decoded),
             "client input codec should decode selected hotbar payload");
-    require(decoded.selectedHotbarSlot == 7,
-            "client input codec should keep selected hotbar slot");
+    require(decoded.selectedHotbarSlot == 7, "client input codec should keep selected hotbar slot");
     require((decoded.actions & net::ClientInputActions::UseItem) != 0,
             "client input codec should keep use item action");
 
     net::ClientInput legacyDecoded;
     require(net::PacketCodec::decodeClientInput(encoded.data(), encoded.size() - 1, legacyDecoded),
             "client input codec should accept payloads without selected slot");
-    require(legacyDecoded.selectedHotbarSlot == 0,
-            "legacy client input payload should default selected slot to zero");
+    require(legacyDecoded.selectedHotbarSlot == 0, "legacy client input payload should default selected slot to zero");
     std::printf("[PASS] testClientInputCodecCarriesSelectedHotbarSlot\n");
 }
 
@@ -3674,16 +3521,13 @@ static void testClientBlockActionCodecCarriesInteract() {
     net::ClientBlockAction decoded;
     require(net::PacketCodec::decodeClientBlockAction(encoded.data(), encoded.size(), decoded),
             "ClientBlockAction codec should decode interact action");
-    require(decoded.sequence == action.sequence,
-            "ClientBlockAction codec should preserve sequence");
+    require(decoded.sequence == action.sequence, "ClientBlockAction codec should preserve sequence");
     require(decoded.action == net::ClientBlockActionType::Interact,
             "ClientBlockAction codec should preserve interact action type");
-    require(decoded.targetBlock == action.targetBlock,
-            "ClientBlockAction codec should preserve interact target block");
+    require(decoded.targetBlock == action.targetBlock, "ClientBlockAction codec should preserve interact target block");
     require(decoded.playerPosition == action.playerPosition,
             "ClientBlockAction codec should preserve interact player position");
-    require(decoded.blockState == action.blockState,
-            "ClientBlockAction codec should preserve block state ids");
+    require(decoded.blockState == action.blockState, "ClientBlockAction codec should preserve block state ids");
 
     std::vector<uint8_t> malformed(encoded.begin(), encoded.begin() + 53);
     for (int i = 0; i < 9; ++i) {
@@ -3743,22 +3587,18 @@ static void testEntityImpactCodecRoundTrip() {
     require(net::PacketCodec::decodeEntityImpact(encoded.data(), encoded.size(), decoded),
             "entity impact codec should decode payload");
     require(decoded.netId == impact.netId, "entity impact codec should keep net id");
-    require(decoded.position.x == impact.position.x &&
-            decoded.position.y == impact.position.y &&
-            decoded.position.z == impact.position.z,
+    require(decoded.position.x == impact.position.x && decoded.position.y == impact.position.y &&
+                decoded.position.z == impact.position.z,
             "entity impact codec should keep impact position");
-    require(decoded.particleBlockId == impact.particleBlockId,
-            "entity impact codec should keep particle block id");
-    require(decoded.particleCount == impact.particleCount,
-            "entity impact codec should keep particle count");
+    require(decoded.particleBlockId == impact.particleBlockId, "entity impact codec should keep particle block id");
+    require(decoded.particleCount == impact.particleCount, "entity impact codec should keep particle count");
 
     net::EntityImpactMessage legacyDecoded;
     require(net::PacketCodec::decodeEntityImpact(encoded.data(), 18, legacyDecoded),
             "entity impact codec should decode legacy impact payload");
     require(legacyDecoded.particleBlockId == impact.particleBlockId,
             "legacy entity impact payload should keep particle block id");
-    require(legacyDecoded.particleCount == 14,
-            "legacy entity impact payload should default particle count");
+    require(legacyDecoded.particleCount == 14, "legacy entity impact payload should default particle count");
 
     net::EntityImpactMessage truncated;
     require(!net::PacketCodec::decodeEntityImpact(encoded.data(), encoded.size() - 1, truncated),
@@ -3789,25 +3629,20 @@ static void testEntitySnapshotCodecCarriesHealthAndHurt() {
     require(decoded.serverTick == snapshot.serverTick, "entity snapshot codec should keep server tick");
     require(decoded.entities.size() == 1, "entity snapshot codec should keep entity count");
     require(decoded.entities.front().netId == entity.netId, "entity snapshot codec should keep net id");
-    require(decoded.entities.front().position.y == entity.position.y,
-            "entity snapshot codec should keep position");
-    require(decoded.entities.front().velocity.z == entity.velocity.z,
-            "entity snapshot codec should keep velocity");
-    require(decoded.entities.front().yaw == entity.yaw &&
-            decoded.entities.front().pitch == entity.pitch,
+    require(decoded.entities.front().position.y == entity.position.y, "entity snapshot codec should keep position");
+    require(decoded.entities.front().velocity.z == entity.velocity.z, "entity snapshot codec should keep velocity");
+    require(decoded.entities.front().yaw == entity.yaw && decoded.entities.front().pitch == entity.pitch,
             "entity snapshot codec should keep rotation");
-    require(decoded.entities.front().health == 16 &&
-            decoded.entities.front().maxHealth == 20 &&
-            decoded.entities.front().hurt,
+    require(decoded.entities.front().health == 16 && decoded.entities.front().maxHealth == 20 &&
+                decoded.entities.front().hurt,
             "entity snapshot codec should keep synced health and hurt state");
 
     net::EntitySnapshotMessage legacyDecoded;
     require(net::PacketCodec::decodeEntitySnapshot(encoded.data(), 44, legacyDecoded),
             "entity snapshot codec should decode legacy pitch payload");
     require(legacyDecoded.entities.size() == 1, "legacy entity snapshot should keep entity count");
-    require(legacyDecoded.entities.front().health == 0 &&
-            legacyDecoded.entities.front().maxHealth == 0 &&
-            !legacyDecoded.entities.front().hurt,
+    require(legacyDecoded.entities.front().health == 0 && legacyDecoded.entities.front().maxHealth == 0 &&
+                !legacyDecoded.entities.front().hurt,
             "legacy entity snapshot should default synced health and hurt state");
 
     net::EntitySnapshotMessage truncated;
@@ -3830,8 +3665,10 @@ static void testServerSnapshotCodecCarriesPlayerHealth() {
     snapshot.playerPoseCorrected = true;
 
     const auto encoded = net::PacketCodec::encodeServerSnapshot(snapshot);
-    require(encoded.size() == 40, "server snapshot codec should include health, respawn, dead, and pose correction bytes");
-    require(encoded[32] == 7 && encoded[33] == 0, "server snapshot codec should write player health after base payload");
+    require(encoded.size() == 40,
+            "server snapshot codec should include health, respawn, dead, and pose correction bytes");
+    require(encoded[32] == 7 && encoded[33] == 0,
+            "server snapshot codec should write player health after base payload");
     require(encoded[34] == 20 && encoded[35] == 0, "server snapshot codec should write max health after health");
     require(encoded[36] == 1, "server snapshot codec should write hurt flag after health values");
     require(encoded[37] == 1, "server snapshot codec should write respawn flag after hurt flag");
@@ -3853,8 +3690,7 @@ static void testServerSnapshotCodecCarriesPlayerHealth() {
     require(net::PacketCodec::decodeServerSnapshot(encoded.data(), 39, legacyDeadDecoded),
             "server snapshot codec should decode legacy dead payload");
     require(legacyDeadDecoded.playerDead, "legacy dead payload should keep dead state");
-    require(!legacyDeadDecoded.playerPoseCorrected,
-            "legacy dead payload should default pose correction state off");
+    require(!legacyDeadDecoded.playerPoseCorrected, "legacy dead payload should default pose correction state off");
 
     net::ServerSnapshot legacyDecoded;
     require(net::PacketCodec::decodeServerSnapshot(encoded.data(), 38, legacyDecoded),
@@ -3891,11 +3727,13 @@ static void testInventorySnapshotCodecRoundTrip() {
             "inventory snapshot codec should decode payload");
     require(decoded.selectedHotbarSlot == 4, "inventory snapshot codec should keep selected slot");
     require(decoded.slots.size() == 3, "inventory snapshot codec should keep slot count");
-    require(decoded.slots[0].itemId == ItemRegistry::requireIdByName("minecraft:coal") && decoded.slots[0].stackCount == 12,
+    require(decoded.slots[0].itemId == ItemRegistry::requireIdByName("minecraft:coal") &&
+                decoded.slots[0].stackCount == 12,
             "inventory snapshot codec should keep first slot");
     require(decoded.slots[1].itemId == 0 && decoded.slots[1].stackCount == 0,
             "inventory snapshot codec should keep empty slot");
-    require(decoded.slots[2].itemId == ItemRegistry::requireIdByName("minecraft:iron_pickaxe") && decoded.slots[2].stackCount == 1,
+    require(decoded.slots[2].itemId == ItemRegistry::requireIdByName("minecraft:iron_pickaxe") &&
+                decoded.slots[2].stackCount == 1,
             "inventory snapshot codec should keep later slot");
 
     net::InventorySnapshotMessage truncated;
@@ -3914,9 +3752,8 @@ static void testContainerMessageCodecRoundTrip() {
     net::ClientContainerOpenRequest decodedOpen;
     require(net::PacketCodec::decodeClientContainerOpenRequest(encodedOpen.data(), encodedOpen.size(), decodedOpen),
             "container open codec should decode payload");
-    require(decodedOpen.sequence == open.sequence &&
-            decodedOpen.blockPosition == open.blockPosition &&
-            decodedOpen.playerPosition == open.playerPosition,
+    require(decodedOpen.sequence == open.sequence && decodedOpen.blockPosition == open.blockPosition &&
+                decodedOpen.playerPosition == open.playerPosition,
             "container open codec should preserve sequence, block position, and player position");
 
     net::ClientContainerSlotAction action;
@@ -3928,21 +3765,19 @@ static void testContainerMessageCodecRoundTrip() {
 
     const auto encodedAction = net::PacketCodec::encodeClientContainerSlotAction(action);
     net::ClientContainerSlotAction decodedAction;
-    require(net::PacketCodec::decodeClientContainerSlotAction(encodedAction.data(), encodedAction.size(), decodedAction),
-            "container slot action codec should decode payload");
-    require(decodedAction.sequence == action.sequence &&
-            decodedAction.containerId == action.containerId &&
-            decodedAction.action == net::ContainerSlotActionType::SecondaryPlace &&
-            decodedAction.slotSpace == net::ContainerSlotSpace::Container &&
-            decodedAction.slot == action.slot,
+    require(
+        net::PacketCodec::decodeClientContainerSlotAction(encodedAction.data(), encodedAction.size(), decodedAction),
+        "container slot action codec should decode payload");
+    require(decodedAction.sequence == action.sequence && decodedAction.containerId == action.containerId &&
+                decodedAction.action == net::ContainerSlotActionType::SecondaryPlace &&
+                decodedAction.slotSpace == net::ContainerSlotSpace::Container && decodedAction.slot == action.slot,
             "container slot action codec should preserve action fields");
 
     net::ClientContainerClose close;
     close.containerId = 55;
     const auto encodedClientClose = net::PacketCodec::encodeClientContainerClose(close);
     net::ClientContainerClose decodedClientClose;
-    require(net::PacketCodec::decodeClientContainerClose(encodedClientClose.data(),
-                                                         encodedClientClose.size(),
+    require(net::PacketCodec::decodeClientContainerClose(encodedClientClose.data(), encodedClientClose.size(),
                                                          decodedClientClose),
             "client container close codec should decode payload");
     require(decodedClientClose.containerId == close.containerId,
@@ -3969,22 +3804,22 @@ static void testContainerMessageCodecRoundTrip() {
     require(net::PacketCodec::decodeContainerSnapshot(encodedSnapshot.data(), encodedSnapshot.size(), decodedSnapshot),
             "container snapshot codec should decode payload");
     require(decodedSnapshot.containerId == snapshot.containerId &&
-            decodedSnapshot.containerUiId == snapshot.containerUiId &&
-            decodedSnapshot.behaviorId == snapshot.behaviorId &&
-            decodedSnapshot.blockPosition == snapshot.blockPosition,
+                decodedSnapshot.containerUiId == snapshot.containerUiId &&
+                decodedSnapshot.behaviorId == snapshot.behaviorId &&
+                decodedSnapshot.blockPosition == snapshot.blockPosition,
             "container snapshot codec should preserve identity fields");
     require(decodedSnapshot.containerSlots.size() == 2 &&
-            decodedSnapshot.containerSlots[0].itemId == snapshot.containerSlots[0].itemId &&
-            decodedSnapshot.containerSlots[0].stackCount == snapshot.containerSlots[0].stackCount,
+                decodedSnapshot.containerSlots[0].itemId == snapshot.containerSlots[0].itemId &&
+                decodedSnapshot.containerSlots[0].stackCount == snapshot.containerSlots[0].stackCount,
             "container snapshot codec should preserve container slots");
     require(decodedSnapshot.playerSlots.size() == 1 &&
-            decodedSnapshot.playerSlots[0].itemId == snapshot.playerSlots[0].itemId &&
-            decodedSnapshot.playerSlots[0].stackCount == snapshot.playerSlots[0].stackCount,
+                decodedSnapshot.playerSlots[0].itemId == snapshot.playerSlots[0].itemId &&
+                decodedSnapshot.playerSlots[0].stackCount == snapshot.playerSlots[0].stackCount,
             "container snapshot codec should preserve player slots");
     require(decodedSnapshot.cursor.itemId == snapshot.cursor.itemId &&
-            decodedSnapshot.cursor.stackCount == snapshot.cursor.stackCount &&
-            decodedSnapshot.burnFraction == snapshot.burnFraction &&
-            decodedSnapshot.cookFraction == snapshot.cookFraction,
+                decodedSnapshot.cursor.stackCount == snapshot.cursor.stackCount &&
+                decodedSnapshot.burnFraction == snapshot.burnFraction &&
+                decodedSnapshot.cookFraction == snapshot.cookFraction,
             "container snapshot codec should preserve cursor and progress");
 
     net::ContainerCloseMessage serverClose;
@@ -3992,12 +3827,11 @@ static void testContainerMessageCodecRoundTrip() {
     serverClose.blockPosition = glm::ivec3(1, 70, 2);
     const auto encodedServerClose = net::PacketCodec::encodeContainerClose(serverClose);
     net::ContainerCloseMessage decodedServerClose;
-    require(net::PacketCodec::decodeContainerClose(encodedServerClose.data(),
-                                                   encodedServerClose.size(),
+    require(net::PacketCodec::decodeContainerClose(encodedServerClose.data(), encodedServerClose.size(),
                                                    decodedServerClose),
             "server container close codec should decode payload");
     require(decodedServerClose.containerId == serverClose.containerId &&
-            decodedServerClose.blockPosition == serverClose.blockPosition,
+                decodedServerClose.blockPosition == serverClose.blockPosition,
             "server container close codec should preserve id and block position");
 
     std::printf("[PASS] testContainerMessageCodecRoundTrip\n");
@@ -4122,28 +3956,21 @@ static void testChunkDataDecodeMarksRenderableSubChunks() {
     const int scy = Chunk::toSubChunkIndex(48);
     const SubChunk* subChunk = decoded.chunk->getSubChunk(scy);
     if (subChunk == nullptr || subChunk->getType() == SubChunkType::Air || !decoded.chunk->isSubChunkDirty(scy)) {
-        std::fprintf(stderr,
-                     "[FAIL] Decoded chunk subchunk not renderable dirty scy=%d hasSub=%d type=%d dirty=%d\n",
-                     scy,
-                     subChunk != nullptr ? 1 : 0,
-                     subChunk != nullptr ? static_cast<int>(subChunk->getType()) : -1,
+        std::fprintf(stderr, "[FAIL] Decoded chunk subchunk not renderable dirty scy=%d hasSub=%d type=%d dirty=%d\n",
+                     scy, subChunk != nullptr ? 1 : 0, subChunk != nullptr ? static_cast<int>(subChunk->getType()) : -1,
                      decoded.chunk->isSubChunkDirty(scy) ? 1 : 0);
         std::abort();
     }
 
-    const SubChunkMeshingSnapshotPtr snapshot =
-        ChunkMesher::captureSubChunkSnapshot(*decoded.chunk, scy, nullptr);
+    const SubChunkMeshingSnapshotPtr snapshot = ChunkMesher::captureSubChunkSnapshot(*decoded.chunk, scy, nullptr);
     if (!snapshot) {
         std::fprintf(stderr, "[FAIL] Decoded chunk meshing snapshot was null\n");
         std::abort();
     }
     const ChunkMeshData meshData = ChunkMesher::buildSubChunkMeshData(*snapshot);
-    const size_t totalVertices =
-        meshData.opaqueVertices.size() +
-        meshData.cutoutVertices.size() +
-        meshData.cutoutDistanceVertices.size() +
-        meshData.transparentVertices.size() +
-        meshData.waterVertices.size();
+    const size_t totalVertices = meshData.opaqueVertices.size() + meshData.cutoutVertices.size() +
+                                 meshData.cutoutDistanceVertices.size() + meshData.transparentVertices.size() +
+                                 meshData.waterVertices.size();
     if (totalVertices == 0) {
         std::fprintf(stderr, "[FAIL] Decoded chunk produced an empty terrain mesh\n");
         std::abort();
@@ -4181,16 +4008,14 @@ static void testBlockUpdateCodecKeepsVariableLightPatch() {
         std::fprintf(stderr, "[FAIL] BlockUpdateBatch decode failed\n");
         std::abort();
     }
-    if (decoded.updates.size() != 2 ||
-        decoded.updates[0].kind != net::BlockUpdateKind::BlockState ||
+    if (decoded.updates.size() != 2 || decoded.updates[0].kind != net::BlockUpdateKind::BlockState ||
         decoded.updates[0].stateId != entry.stateId ||
         decoded.updates[0].packedLightPatch.size() != entry.packedLightPatch.size() ||
         decoded.updates[0].packedLightPatch[124] != entry.packedLightPatch[124]) {
         std::fprintf(stderr, "[FAIL] BlockUpdateBatch variable light patch was not preserved\n");
         std::abort();
     }
-    if (decoded.updates[1].kind != net::BlockUpdateKind::LightOnly ||
-        decoded.updates[1].stateId != NULL_BLOCK_STATE ||
+    if (decoded.updates[1].kind != net::BlockUpdateKind::LightOnly || decoded.updates[1].stateId != NULL_BLOCK_STATE ||
         decoded.updates[1].packedLightPatch != lightOnlyEntry.packedLightPatch) {
         std::fprintf(stderr, "[FAIL] BlockUpdateBatch light-only update was not preserved\n");
         std::abort();
@@ -4213,8 +4038,7 @@ static void testServerBlockUpdateCarriesStateId() {
 
     server.acceptClient(std::move(clientTransport), 1);
     const glm::ivec3 targetPos(0, Chunk::SIZE_Y - 8, 0);
-    for (int tick = 0;
-         tick < 240 && !server.world().isChunkLoadedForBlock(targetPos.x, targetPos.y, targetPos.z);
+    for (int tick = 0; tick < 240 && !server.world().isChunkLoadedForBlock(targetPos.x, targetPos.y, targetPos.z);
          ++tick) {
         server.tick(1.0f / 20.0f);
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
@@ -4239,11 +4063,8 @@ static void testServerBlockUpdateCarriesStateId() {
         }
         const auto& batch = std::any_cast<const net::BlockUpdateBatchMessage&>(packet.inProcessPayload);
         for (const net::BlockUpdateEntry& update : batch.updates) {
-            if (update.x == targetPos.x &&
-                update.y == targetPos.y &&
-                update.z == targetPos.z &&
-                update.kind == net::BlockUpdateKind::BlockState &&
-                update.stateId == poweredTarget) {
+            if (update.x == targetPos.x && update.y == targetPos.y && update.z == targetPos.z &&
+                update.kind == net::BlockUpdateKind::BlockState && update.stateId == poweredTarget) {
                 sawPoweredTargetState = true;
             }
         }
@@ -4271,8 +4092,7 @@ static void testServerEmitsLightPatchAfterTorchPlacement() {
     server.acceptClient(std::move(clientTransport), 1);
     const glm::vec3 spawn = server.getSpawnPosition();
     const glm::ivec3 placeBlock(0, Chunk::SIZE_Y - 8, 0);
-    for (int tick = 0;
-         tick < 240 && !server.world().isChunkLoadedForBlock(placeBlock.x, placeBlock.y, placeBlock.z);
+    for (int tick = 0; tick < 240 && !server.world().isChunkLoadedForBlock(placeBlock.x, placeBlock.y, placeBlock.z);
          ++tick) {
         server.tick(1.0f / 20.0f);
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
@@ -4283,10 +4103,7 @@ static void testServerEmitsLightPatchAfterTorchPlacement() {
     bool lightSettled = false;
     for (int tick = 0; tick < 240; ++tick) {
         const LightFrameStats stats = server.world().getLightFrameStats();
-        if (stats.queued == 0 &&
-            stats.dirty == 0 &&
-            stats.inFlight == 0 &&
-            stats.pendingCompleted == 0) {
+        if (stats.queued == 0 && stats.dirty == 0 && stats.inFlight == 0 && stats.pendingCompleted == 0) {
             lightSettled = true;
             break;
         }
@@ -4323,11 +4140,10 @@ static void testServerEmitsLightPatchAfterTorchPlacement() {
             }
             const auto& batch = std::any_cast<const net::BlockUpdateBatchMessage&>(packet.inProcessPayload);
             for (const auto& update : batch.updates) {
-                if (update.x == placeBlock.x &&
-                    update.y == placeBlock.y &&
-                    update.z == placeBlock.z &&
+                if (update.x == placeBlock.x && update.y == placeBlock.y && update.z == placeBlock.z &&
                     update.kind == net::BlockUpdateKind::BlockState &&
-                    BlockStateRegistry::getBlockId(update.stateId) == BlockRegistry::requireIdByName("minecraft:torch")) {
+                    BlockStateRegistry::getBlockId(update.stateId) ==
+                        BlockRegistry::requireIdByName("minecraft:torch")) {
                     sawTorchBlockUpdate = true;
                 }
                 for (const uint8_t packed : update.packedLightPatch) {
@@ -4397,11 +4213,8 @@ static void testENetChunkStreamingToClient() {
     }
 
     if (client.getClientId() != 1 || client.clientWorld().loadedChunkCount() == 0) {
-        std::fprintf(stderr,
-                     "[FAIL] ENet streaming failed id=%u loaded=%zu active=%zu tick=%u\n",
-                     client.getClientId(),
-                     client.clientWorld().loadedChunkCount(),
-                     harness.server.world().getActiveChunks().size(),
+        std::fprintf(stderr, "[FAIL] ENet streaming failed id=%u loaded=%zu active=%zu tick=%u\n", client.getClientId(),
+                     client.clientWorld().loadedChunkCount(), harness.server.world().getActiveChunks().size(),
                      harness.server.currentTick());
         std::abort();
     }
@@ -4466,10 +4279,8 @@ static void testENetChunkStreamingAfterPreconnectTicks() {
     }
 
     if (client.clientWorld().loadedChunkCount() == 0) {
-        std::fprintf(stderr,
-                     "[FAIL] ENet preconnect streaming failed loaded=%zu active=%zu tick=%u\n",
-                     client.clientWorld().loadedChunkCount(),
-                     harness.server.world().getActiveChunks().size(),
+        std::fprintf(stderr, "[FAIL] ENet preconnect streaming failed loaded=%zu active=%zu tick=%u\n",
+                     client.clientWorld().loadedChunkCount(), harness.server.world().getActiveChunks().size(),
                      harness.server.currentTick());
         std::abort();
     }

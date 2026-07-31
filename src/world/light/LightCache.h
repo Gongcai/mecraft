@@ -25,7 +25,6 @@ CachedBaseLight buildBaseLightFromChunk(const Chunk& chunk);
 void recomputeSkyColumn(const Chunk& chunk, int x, int z, std::vector<uint8_t>& packed);
 
 /// Rebuild all block light in the cache from the sparse sources list.
-void rebuildBlockLightFromSources(const std::vector<LightSourceEntry>& sources,
-                                  std::vector<uint8_t>& packed);
+void rebuildBlockLightFromSources(const std::vector<LightSourceEntry>& sources, std::vector<uint8_t>& packed);
 
 #endif // MECRAFT_LIGHTCACHE_H

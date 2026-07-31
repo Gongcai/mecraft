@@ -38,7 +38,8 @@ void MainMenuScreen::buildUI(ResourceMgr& resourceMgr) {
     startBtn->anchorOffsetY = -20.0f;
     startBtn->setTone(UIButtonTone::Success);
     startBtn->setOnClick([this]() {
-        if (onStartClicked) onStartClicked();
+        if (onStartClicked)
+            onStartClicked();
     });
     m_startButton = startBtn.get();
 
@@ -51,7 +52,8 @@ void MainMenuScreen::buildUI(ResourceMgr& resourceMgr) {
     modelSceneBtn->anchorOffsetY = -80.0f;
     modelSceneBtn->setTone(UIButtonTone::Primary);
     modelSceneBtn->setOnClick([this]() {
-        if (onModelSceneClicked) onModelSceneClicked();
+        if (onModelSceneClicked)
+            onModelSceneClicked();
     });
     m_modelSceneButton = modelSceneBtn.get();
 
@@ -64,9 +66,7 @@ void MainMenuScreen::buildUI(ResourceMgr& resourceMgr) {
     mpBtn->anchor = Anchor::Center;
     mpBtn->anchorOffsetY = -140.0f;
     mpBtn->setTone(UIButtonTone::Primary);
-    mpBtn->setOnClick([this]() {
-        showMultiplayerPanel();
-    });
+    mpBtn->setOnClick([this]() { showMultiplayerPanel(); });
     m_multiplayerButton = mpBtn.get();
 
     // Quit button
@@ -79,7 +79,8 @@ void MainMenuScreen::buildUI(ResourceMgr& resourceMgr) {
     quitBtn->anchorOffsetY = -200.0f;
     quitBtn->setTone(UIButtonTone::Danger);
     quitBtn->setOnClick([this]() {
-        if (onQuitClicked) onQuitClicked();
+        if (onQuitClicked)
+            onQuitClicked();
     });
     m_quitButton = quitBtn.get();
 
@@ -108,7 +109,8 @@ void MainMenuScreen::buildUI(ResourceMgr& resourceMgr) {
     connectBtn->setOnClick([this]() {
         if (m_addressInput && onConnectClicked) {
             std::string addr = m_addressInput->getText();
-            if (addr.empty()) addr = "127.0.0.1";
+            if (addr.empty())
+                addr = "127.0.0.1";
             // Parse host:port
             int port = 25565;
             auto colonPos = addr.find(':');
@@ -134,9 +136,7 @@ void MainMenuScreen::buildUI(ResourceMgr& resourceMgr) {
     backBtn->anchorOffsetY = -140.0f;
     backBtn->setTone(UIButtonTone::Secondary);
     backBtn->visible = false;
-    backBtn->setOnClick([this]() {
-        hideMultiplayerPanel();
-    });
+    backBtn->setOnClick([this]() { hideMultiplayerPanel(); });
     m_backButton = backBtn.get();
 
     // Language dropdown
@@ -190,35 +190,54 @@ void MainMenuScreen::buildUI(ResourceMgr& resourceMgr) {
 }
 
 void MainMenuScreen::refreshTexts() {
-    if (!getLocaleManager()) return;
-    if (m_startButton) m_startButton->setText(getLocaleManager()->tr("start_game"));
-    if (m_modelSceneButton) m_modelSceneButton->setText(getLocaleManager()->tr("model_scene"));
-    if (m_multiplayerButton) m_multiplayerButton->setText(getLocaleManager()->tr("multiplayer"));
-    if (m_quitButton) m_quitButton->setText(getLocaleManager()->tr("quit"));
+    if (!getLocaleManager())
+        return;
+    if (m_startButton)
+        m_startButton->setText(getLocaleManager()->tr("start_game"));
+    if (m_modelSceneButton)
+        m_modelSceneButton->setText(getLocaleManager()->tr("model_scene"));
+    if (m_multiplayerButton)
+        m_multiplayerButton->setText(getLocaleManager()->tr("multiplayer"));
+    if (m_quitButton)
+        m_quitButton->setText(getLocaleManager()->tr("quit"));
 }
 
 void MainMenuScreen::showMultiplayerPanel() {
     // Hide main menu buttons
-    if (m_startButton) m_startButton->visible = false;
-    if (m_modelSceneButton) m_modelSceneButton->visible = false;
-    if (m_multiplayerButton) m_multiplayerButton->visible = false;
-    if (m_quitButton) m_quitButton->visible = false;
+    if (m_startButton)
+        m_startButton->visible = false;
+    if (m_modelSceneButton)
+        m_modelSceneButton->visible = false;
+    if (m_multiplayerButton)
+        m_multiplayerButton->visible = false;
+    if (m_quitButton)
+        m_quitButton->visible = false;
     // Show multiplayer panel
-    if (m_addressInput) m_addressInput->visible = true;
-    if (m_connectButton) m_connectButton->visible = true;
-    if (m_backButton) m_backButton->visible = true;
+    if (m_addressInput)
+        m_addressInput->visible = true;
+    if (m_connectButton)
+        m_connectButton->visible = true;
+    if (m_backButton)
+        m_backButton->visible = true;
 }
 
 void MainMenuScreen::hideMultiplayerPanel() {
     // Show main menu buttons
-    if (m_startButton) m_startButton->visible = true;
-    if (m_modelSceneButton) m_modelSceneButton->visible = true;
-    if (m_multiplayerButton) m_multiplayerButton->visible = true;
-    if (m_quitButton) m_quitButton->visible = true;
+    if (m_startButton)
+        m_startButton->visible = true;
+    if (m_modelSceneButton)
+        m_modelSceneButton->visible = true;
+    if (m_multiplayerButton)
+        m_multiplayerButton->visible = true;
+    if (m_quitButton)
+        m_quitButton->visible = true;
     // Hide multiplayer panel
-    if (m_addressInput) m_addressInput->visible = false;
-    if (m_connectButton) m_connectButton->visible = false;
-    if (m_backButton) m_backButton->visible = false;
+    if (m_addressInput)
+        m_addressInput->visible = false;
+    if (m_connectButton)
+        m_connectButton->visible = false;
+    if (m_backButton)
+        m_backButton->visible = false;
 }
 
 void MainMenuScreen::onSceneEnter() {

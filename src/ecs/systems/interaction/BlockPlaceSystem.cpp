@@ -49,17 +49,14 @@ bool wouldOverlapPlacedState(const PhysicsBody& body, const glm::ivec3& blockPos
     return BlockCollision::intersects(stateId, blockPos, bodyMin, bodyMax);
 }
 
-void recordPostPlaceSuppression(BlockInteractionRuntimeComponent& runtime,
-                                const glm::ivec3& placedBlock) {
+void recordPostPlaceSuppression(BlockInteractionRuntimeComponent& runtime, const glm::ivec3& placedBlock) {
     runtime.recentlyPlacedBlock = placedBlock;
     runtime.postPlaceInteractionSuppressSeconds = 0.25f;
 }
 
-BlockStateId resolvePlacementState(const BlockID blockId,
-                              const CameraStateComponent& camera,
-                              const MoveIntentComponent& moveIntent,
-                              const glm::ivec3& hitNormal,
-                              const glm::vec3& hitPosition) {
+BlockStateId resolvePlacementState(const BlockID blockId, const CameraStateComponent& camera,
+                                   const MoveIntentComponent& moveIntent, const glm::ivec3& hitNormal,
+                                   const glm::vec3& hitPosition) {
     const BlockDef& def = BlockRegistry::get(blockId);
     PlacementStrategyFn strategy = PlacementStrategyRegistry::getStrategy(def.placementStrategy);
     if (strategy == nullptr) {
@@ -91,8 +88,7 @@ bool wouldOverlapPlacement(const PhysicsBody& body, const PlacementResolution& p
         wouldOverlapPlacedState(body, placement.placeBlock, placement.stateId)) {
         return true;
     }
-    return placement.hasSecondaryBlock &&
-           placement.secondaryStateId != NULL_BLOCK_STATE &&
+    return placement.hasSecondaryBlock && placement.secondaryStateId != NULL_BLOCK_STATE &&
            wouldOverlapPlacedState(body, placement.secondaryBlock, placement.secondaryStateId);
 }
 
@@ -104,34 +100,27 @@ bool isPlainWireState(const BlockStateId stateId) {
     return BlockRegistry::getFast(blockId).redstoneBehavior == "wire";
 }
 
-BlockStateId withExistingWireFacing(const BlockStateId existingWireState,
-                                    const BlockStateId incomingWireState) {
+BlockStateId withExistingWireFacing(const BlockStateId existingWireState, const BlockStateId incomingWireState) {
     if (!isPlainWireState(existingWireState) || !isPlainWireState(incomingWireState)) {
         return NULL_BLOCK_STATE;
     }
 
-    const uint16_t existingFacing =
-        BlockStateRegistry::getPropertyIndex(existingWireState, PropIndices::FACING);
+    const uint16_t existingFacing = BlockStateRegistry::getPropertyIndex(existingWireState, PropIndices::FACING);
     if (existingFacing == BlockStateRegistry::INVALID_INDEX) {
         failBlockPlaceSystem("Wire container placement target is missing facing");
     }
     return BlockStateRegistry::withProperty(incomingWireState, PropIndices::FACING, existingFacing);
 }
 
-bool canAddWirePartToTarget(const IWorldView& worldView,
-                            const glm::ivec3& position,
-                            const BlockStateId existingState,
+bool canAddWirePartToTarget(const IWorldView& worldView, const glm::ivec3& position, const BlockStateId existingState,
                             const BlockStateId incomingWireState) {
     const World* concreteWorld = worldView.asWorld();
-    return concreteWorld != nullptr
-        ? WireContainerPlacement::canApply(*concreteWorld, position, incomingWireState)
-        : WireContainerPlacement::canApplyToBlockState(existingState, incomingWireState);
+    return concreteWorld != nullptr ? WireContainerPlacement::canApply(*concreteWorld, position, incomingWireState)
+                                    : WireContainerPlacement::canApplyToBlockState(existingState, incomingWireState);
 }
 
-BlockStateId resolveSameCellWireState(const IWorldView& worldView,
-                                      const glm::ivec3& position,
-                                      const BlockStateId existingState,
-                                      const BlockStateId hitFaceWireState) {
+BlockStateId resolveSameCellWireState(const IWorldView& worldView, const glm::ivec3& position,
+                                      const BlockStateId existingState, const BlockStateId hitFaceWireState) {
     if (!WireContainerPlacement::isContainerPlacementTarget(existingState, hitFaceWireState)) {
         return NULL_BLOCK_STATE;
     }
@@ -140,10 +129,8 @@ BlockStateId resolveSameCellWireState(const IWorldView& worldView,
         return hitFaceWireState;
     }
 
-    const BlockStateId existingFacingWireState =
-        withExistingWireFacing(existingState, hitFaceWireState);
-    if (existingFacingWireState != NULL_BLOCK_STATE &&
-        existingFacingWireState != hitFaceWireState &&
+    const BlockStateId existingFacingWireState = withExistingWireFacing(existingState, hitFaceWireState);
+    if (existingFacingWireState != NULL_BLOCK_STATE && existingFacingWireState != hitFaceWireState &&
         canAddWirePartToTarget(worldView, position, existingState, existingFacingWireState)) {
         return existingFacingWireState;
     }
@@ -151,10 +138,8 @@ BlockStateId resolveSameCellWireState(const IWorldView& worldView,
     return NULL_BLOCK_STATE;
 }
 
-PlacementResolution resolvePlacementTarget(const IWorldView& worldView,
-                                           const BlockTargetComponent& target,
-                                           const BlockID blockId,
-                                           const CameraStateComponent& camera,
+PlacementResolution resolvePlacementTarget(const IWorldView& worldView, const BlockTargetComponent& target,
+                                           const BlockID blockId, const CameraStateComponent& camera,
                                            const MoveIntentComponent& moveIntent) {
     PlacementResolution result;
     result.placeBlock = target.placeBlock;
@@ -240,7 +225,8 @@ PlacementResolution resolvePlacementTarget(const IWorldView& worldView,
 } // namespace
 
 void BlockPlaceSystem::update(SystemContext& ctx) {
-    if (!ctx.services.worldView) return;
+    if (!ctx.services.worldView)
+        return;
     const auto& worldView = *ctx.services.worldView;
     World* mutableWorld = ctx.services.world.get();
     auto& registry = ctx.registry;
@@ -249,16 +235,9 @@ void BlockPlaceSystem::update(SystemContext& ctx) {
     const IGameplayModeRules& modeRules = resolveModeRules(registry);
     auto& audioBus = ensureAudioEventBus(registry);
 
-    auto view = registry.view<LocalPlayerTag,
-                              BlockActionIntentComponent,
-                              MoveIntentComponent,
-                              TransformComponent,
-                              PhysicsBodyComponent,
-                              CameraStateComponent,
-                              InventoryComponent,
-                              InventoryDataComponent,
-                              BlockTargetComponent,
-                              BlockInteractionRuntimeComponent>();
+    auto view = registry.view<LocalPlayerTag, BlockActionIntentComponent, MoveIntentComponent, TransformComponent,
+                              PhysicsBodyComponent, CameraStateComponent, InventoryComponent, InventoryDataComponent,
+                              BlockTargetComponent, BlockInteractionRuntimeComponent>();
     for (auto e : view) {
         auto& runtime = view.get<BlockInteractionRuntimeComponent>(e);
         const auto& intent = view.get<BlockActionIntentComponent>(e);
@@ -270,8 +249,7 @@ void BlockPlaceSystem::update(SystemContext& ctx) {
         auto& inventoryData = view.get<InventoryDataComponent>(e);
 
         runtime.placeCooldownRemaining = std::max(0.0f, runtime.placeCooldownRemaining - dt);
-        runtime.postPlaceInteractionSuppressSeconds =
-            std::max(0.0f, runtime.postPlaceInteractionSuppressSeconds - dt);
+        runtime.postPlaceInteractionSuppressSeconds = std::max(0.0f, runtime.postPlaceInteractionSuppressSeconds - dt);
 
         // Sync selected slot to inventory
         inventoryData.inventory.setSelectedSlot(inventoryState.selectedHotbarSlot);

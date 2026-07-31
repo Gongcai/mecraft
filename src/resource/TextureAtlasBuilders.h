@@ -20,27 +20,19 @@ struct IndexedTextureAtlas {
     std::unordered_map<std::string, int> indices;
 };
 
-[[nodiscard]] IndexedTextureAtlas buildItemTextureAtlas(const std::string& directory,
-                                                        int tileSize,
-                                                        const BlockTextureCatalog& catalog,
-                                                        RhiDevice& rhiDevice,
+[[nodiscard]] IndexedTextureAtlas buildItemTextureAtlas(const std::string& directory, int tileSize,
+                                                        const BlockTextureCatalog& catalog, RhiDevice& rhiDevice,
                                                         RhiCommandListPool& commandListPool);
 
-[[nodiscard]] IndexedTextureAtlas buildBlockTextureAtlas(const std::string& directory,
-                                                         int tileSize,
-                                                         const BlockTextureCatalog& catalog,
-                                                         RhiDevice& rhiDevice,
+[[nodiscard]] IndexedTextureAtlas buildBlockTextureAtlas(const std::string& directory, int tileSize,
+                                                         const BlockTextureCatalog& catalog, RhiDevice& rhiDevice,
                                                          RhiCommandListPool& commandListPool);
 
-[[nodiscard]] IndexedTextureAtlas buildBlockTextureAtlas(const BlockTextureManifest& manifest,
-                                                         int tileSize,
-                                                         const BlockTextureCatalog& catalog,
-                                                         RhiDevice& rhiDevice,
+[[nodiscard]] IndexedTextureAtlas buildBlockTextureAtlas(const BlockTextureManifest& manifest, int tileSize,
+                                                         const BlockTextureCatalog& catalog, RhiDevice& rhiDevice,
                                                          RhiCommandListPool& commandListPool);
 
-[[nodiscard]] IndexedTextureAtlas buildHudIconAtlas(const std::string& directory,
-                                                    int iconSize,
-                                                    RhiDevice& rhiDevice,
+[[nodiscard]] IndexedTextureAtlas buildHudIconAtlas(const std::string& directory, int iconSize, RhiDevice& rhiDevice,
                                                     RhiCommandListPool& commandListPool);
 
 } // namespace resource

@@ -19,18 +19,14 @@ public:
     virtual ~IAudioDecoder() = default;
 
     [[nodiscard]] virtual const std::vector<std::string>& extensions() const = 0;
-    [[nodiscard]] virtual bool decode(const std::string& filepath,
-                                      DecodedAudio& out,
-                                      std::string& error) const = 0;
+    [[nodiscard]] virtual bool decode(const std::string& filepath, DecodedAudio& out, std::string& error) const = 0;
 };
 
 class AudioDecoderRegistry {
 public:
     static const AudioDecoderRegistry& instance();
 
-    [[nodiscard]] bool decodeFile(const std::string& filepath,
-                                  DecodedAudio& out,
-                                  std::string& error) const;
+    [[nodiscard]] bool decodeFile(const std::string& filepath, DecodedAudio& out, std::string& error) const;
     [[nodiscard]] bool isSupportedExtension(const std::string& extension) const;
     [[nodiscard]] int extensionPriority(const std::string& extension) const;
     [[nodiscard]] const std::vector<std::string>& supportedExtensions() const { return m_extensions; }

@@ -79,22 +79,18 @@ void FallingBlockRenderer::shutdown() {
     m_resourceMgr = nullptr;
 }
 
-bool FallingBlockRenderer::prepareFrame(
-    const IWorldView& worldView,
-    const ecs::GameplayRegistry& registry) {
+bool FallingBlockRenderer::prepareFrame(const IWorldView& worldView, const ecs::GameplayRegistry& registry) {
     m_renderInstances.clear();
     m_currentModelMatrices.clear();
     std::unordered_set<std::size_t> currentEntityIds;
     auto& reg = registry.registry();
-    auto appendInstance = [&](const BlockStateId stateId,
-                              const glm::vec3& position,
+    auto appendInstance = [&](const BlockStateId stateId, const glm::vec3& position,
                               const std::size_t entityId) -> bool {
         currentEntityIds.insert(entityId);
         auto objectId = m_objectIds.find(entityId);
         if (objectId == m_objectIds.end()) {
             const std::optional<renderer::contracts::StableObjectId> allocated =
-                renderer::contracts::allocateStableSceneId<
-                    renderer::contracts::StableObjectIdTag>();
+                renderer::contracts::allocateStableSceneId<renderer::contracts::StableObjectIdTag>();
             if (!allocated.has_value()) {
                 return false;
             }
@@ -104,35 +100,26 @@ bool FallingBlockRenderer::prepareFrame(
         model = glm::translate(model, position);
         model = glm::translate(model, glm::vec3(-0.5f));
         const auto previous = m_previousModelMatrices.find(entityId);
-        m_renderInstances.push_back({
-            stateId,
-            model,
-            previous != m_previousModelMatrices.end() ? previous->second : model,
-            queryWorldLight(worldView, position),
-            objectId->second
-        });
+        m_renderInstances.push_back({stateId, model,
+                                     previous != m_previousModelMatrices.end() ? previous->second : model,
+                                     queryWorldLight(worldView, position), objectId->second});
         m_currentModelMatrices[entityId] = model;
         return true;
     };
 
-    auto fallingView = reg.view<ecs::FallingBlockTag,
-                                ecs::FallingBlockComponent,
-                                ecs::TransformComponent,
+    auto fallingView = reg.view<ecs::FallingBlockTag, ecs::FallingBlockComponent, ecs::TransformComponent,
                                 ecs::DropEntityIdComponent>();
     for (const entt::entity entity : fallingView) {
         const auto& block = fallingView.get<ecs::FallingBlockComponent>(entity);
         const auto& transform = fallingView.get<ecs::TransformComponent>(entity);
         const auto& id = fallingView.get<ecs::DropEntityIdComponent>(entity);
-        if (!appendInstance(BlockStateRegistry::getDefaultState(block.blockId),
-                            transform.position, id.dropId)) {
+        if (!appendInstance(BlockStateRegistry::getDefaultState(block.blockId), transform.position, id.dropId)) {
             return false;
         }
     }
 
-    auto movingView = reg.view<ecs::MovingBlockTag,
-                               ecs::MovingBlockComponent,
-                               ecs::TransformComponent,
-                               ecs::DropEntityIdComponent>();
+    auto movingView =
+        reg.view<ecs::MovingBlockTag, ecs::MovingBlockComponent, ecs::TransformComponent, ecs::DropEntityIdComponent>();
     for (const entt::entity entity : movingView) {
         const auto& block = movingView.get<ecs::MovingBlockComponent>(entity);
         const auto& transform = movingView.get<ecs::TransformComponent>(entity);
@@ -162,10 +149,8 @@ const renderer::BlockCubeMesh* FallingBlockRenderer::getOrCreateMesh(BlockStateI
     return &inserted.first->second;
 }
 
-void FallingBlockRenderer::renderToGBuffer(RhiCommandList& commandList,
-                                           const glm::mat4& jitteredViewProj,
-                                           const glm::mat4& previousViewProj,
-                                           float animationTime) {
+void FallingBlockRenderer::renderToGBuffer(RhiCommandList& commandList, const glm::mat4& jitteredViewProj,
+                                           const glm::mat4& previousViewProj, float animationTime) {
     if (!m_gbufferPipeline.isValid() || !m_gbufferBindGroup.isValid()) {
         return;
     }
@@ -177,14 +162,12 @@ void FallingBlockRenderer::renderToGBuffer(RhiCommandList& commandList,
         if (mesh == nullptr || !mesh->valid()) {
             continue;
         }
-        const FallingBlockPushConstants pushConstants{
-            jitteredViewProj * instance.model,
-            previousViewProj * instance.previousModel,
-            instance.model,
-            instance.light,
-            animationTime,
-            instance.objectId.value
-        };
+        const FallingBlockPushConstants pushConstants{jitteredViewProj * instance.model,
+                                                      previousViewProj * instance.previousModel,
+                                                      instance.model,
+                                                      instance.light,
+                                                      animationTime,
+                                                      instance.objectId.value};
         commandList.setVertexBuffer(0u, mesh->rhiVertexBuffer, 0u);
         commandList.pushConstants(&pushConstants, sizeof(pushConstants),
                                   rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment));
@@ -192,8 +175,7 @@ void FallingBlockRenderer::renderToGBuffer(RhiCommandList& commandList,
     }
 }
 
-void FallingBlockRenderer::renderToShadowMap(RhiCommandList& commandList,
-                                             const glm::mat4& shadowViewProj,
+void FallingBlockRenderer::renderToShadowMap(RhiCommandList& commandList, const glm::mat4& shadowViewProj,
                                              float animationTime) {
     if (!m_shadowPipeline.isValid() || !m_shadowBindGroup.isValid()) {
         return;
@@ -206,9 +188,8 @@ void FallingBlockRenderer::renderToShadowMap(RhiCommandList& commandList,
         if (mesh == nullptr || !mesh->valid()) {
             continue;
         }
-        const FallingBlockShadowPushConstants pushConstants{
-            shadowViewProj, instance.model, glm::vec4(animationTime, 0.0f, 0.0f, 0.0f)
-        };
+        const FallingBlockShadowPushConstants pushConstants{shadowViewProj, instance.model,
+                                                            glm::vec4(animationTime, 0.0f, 0.0f, 0.0f)};
         commandList.setVertexBuffer(0u, mesh->rhiVertexBuffer, 0u);
         commandList.pushConstants(&pushConstants, sizeof(pushConstants),
                                   rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment));
@@ -221,9 +202,10 @@ bool FallingBlockRenderer::createGBufferRhiResources() {
     const auto fragmentSource = renderer::rhi::loadShaderSource("assets/shaders/falling_block_gbuffer_rhi.frag");
     const auto shadowVertexSource = renderer::rhi::loadShaderSource("assets/shaders/falling_block_shadow_rhi.vert");
     const auto shadowFragmentSource = renderer::rhi::loadShaderSource("assets/shaders/falling_block_shadow_rhi.frag");
-    if (!vertexSource || !fragmentSource || !shadowVertexSource || !shadowFragmentSource) return false;
-    const RhiTextureHandle textures[] = {m_resourceMgr->getTextureArray().texture,
-        m_resourceMgr->getGrassColormap(), m_resourceMgr->getFoliageColormap()};
+    if (!vertexSource || !fragmentSource || !shadowVertexSource || !shadowFragmentSource)
+        return false;
+    const RhiTextureHandle textures[] = {m_resourceMgr->getTextureArray().texture, m_resourceMgr->getGrassColormap(),
+                                         m_resourceMgr->getFoliageColormap()};
     RhiTextureViewHandle* views[] = {&m_textureArrayView, &m_grassColormapView, &m_foliageColormapView};
     for (uint32_t i = 0; i < 3u; ++i) {
         RhiTextureViewDesc desc;
@@ -241,22 +223,27 @@ bool FallingBlockRenderer::createGBufferRhiResources() {
     m_sampler = m_rhiDevice->createSampler(samplerDesc);
     auto createShader = [&](const char* name, RhiShaderStage stage, const std::string& source) {
         RhiShaderDesc desc;
-        desc.debugName = name; desc.stage = stage; desc.source = source.c_str(); desc.sourceSize = source.size();
+        desc.debugName = name;
+        desc.stage = stage;
+        desc.source = source.c_str();
+        desc.sourceSize = source.size();
         return m_rhiDevice->createShader(desc);
     };
     m_gbufferVertexShader = createShader("FallingBlock.GBuffer.Vertex", RhiShaderStage::Vertex, *vertexSource);
     m_gbufferFragmentShader = createShader("FallingBlock.GBuffer.Fragment", RhiShaderStage::Fragment, *fragmentSource);
     m_shadowVertexShader = createShader("FallingBlock.Shadow.Vertex", RhiShaderStage::Vertex, *shadowVertexSource);
-    m_shadowFragmentShader = createShader("FallingBlock.Shadow.Fragment", RhiShaderStage::Fragment, *shadowFragmentSource);
+    m_shadowFragmentShader =
+        createShader("FallingBlock.Shadow.Fragment", RhiShaderStage::Fragment, *shadowFragmentSource);
     RhiBindGroupLayoutDesc layoutDesc;
     layoutDesc.debugName = "FallingBlock.GBuffer.BindGroupLayout";
-    for (uint32_t i = 0; i < 3u; ++i) layoutDesc.entries.push_back(
-        {i, RhiBindingType::CombinedTextureSampler, rhiFlag(RhiShaderStage::Fragment), 1u});
+    for (uint32_t i = 0; i < 3u; ++i)
+        layoutDesc.entries.push_back(
+            {i, RhiBindingType::CombinedTextureSampler, rhiFlag(RhiShaderStage::Fragment), 1u});
     m_gbufferBindGroupLayout = m_rhiDevice->createBindGroupLayout(layoutDesc);
     RhiBindGroupLayoutDesc shadowLayoutDesc;
     shadowLayoutDesc.debugName = "FallingBlock.Shadow.BindGroupLayout";
-    shadowLayoutDesc.entries.push_back({0u, RhiBindingType::CombinedTextureSampler,
-                                        rhiFlag(RhiShaderStage::Fragment), 1u});
+    shadowLayoutDesc.entries.push_back(
+        {0u, RhiBindingType::CombinedTextureSampler, rhiFlag(RhiShaderStage::Fragment), 1u});
     m_shadowBindGroupLayout = m_rhiDevice->createBindGroupLayout(shadowLayoutDesc);
     RhiPipelineLayoutDesc pipelineLayoutDesc;
     pipelineLayoutDesc.debugName = "FallingBlock.GBuffer.PipelineLayout";
@@ -270,15 +257,17 @@ bool FallingBlockRenderer::createGBufferRhiResources() {
     m_shadowPipelineLayout = m_rhiDevice->createPipelineLayout(pipelineLayoutDesc);
     RhiGraphicsPipelineDesc pipelineDesc;
     pipelineDesc.debugName = "FallingBlock.GBuffer.Pipeline";
-    pipelineDesc.vertexShader = m_gbufferVertexShader; pipelineDesc.fragmentShader = m_gbufferFragmentShader;
+    pipelineDesc.vertexShader = m_gbufferVertexShader;
+    pipelineDesc.fragmentShader = m_gbufferFragmentShader;
     pipelineDesc.layout = m_gbufferPipelineLayout;
     renderer::setBlockVertexInputLayout(pipelineDesc);
     pipelineDesc.raster.cullMode = RhiCullMode::None;
-    pipelineDesc.depthStencil.depthTestEnabled = true; pipelineDesc.depthStencil.depthWriteEnabled = true;
+    pipelineDesc.depthStencil.depthTestEnabled = true;
+    pipelineDesc.depthStencil.depthWriteEnabled = true;
     pipelineDesc.colorFormats = {RhiTextureFormat::Rgba8Unorm, RhiTextureFormat::Rgb10A2Unorm,
-        RhiTextureFormat::Rg8Unorm, RhiTextureFormat::Rgba8Unorm, RhiTextureFormat::Rgba8Unorm,
-        RhiTextureFormat::Rgba8Unorm, RhiTextureFormat::Rg32Uint,
-        RhiTextureFormat::Rg16Float};
+                                 RhiTextureFormat::Rg8Unorm,   RhiTextureFormat::Rgba8Unorm,
+                                 RhiTextureFormat::Rgba8Unorm, RhiTextureFormat::Rgba8Unorm,
+                                 RhiTextureFormat::Rg32Uint,   RhiTextureFormat::Rg16Float};
     pipelineDesc.depthFormat = RhiTextureFormat::Depth32Float;
     pipelineDesc.blend.attachments.resize(8u);
     m_gbufferPipeline = m_rhiDevice->createGraphicsPipeline(pipelineDesc);
@@ -294,7 +283,8 @@ bool FallingBlockRenderer::createGBufferRhiResources() {
     bindGroupDesc.layout = m_gbufferBindGroupLayout;
     const RhiTextureViewHandle textureViews[] = {m_textureArrayView, m_grassColormapView, m_foliageColormapView};
     for (uint32_t i = 0; i < 3u; ++i) {
-        RhiBindGroupEntry entry; entry.binding = i;
+        RhiBindGroupEntry entry;
+        entry.binding = i;
         entry.resource.combinedTextureSampler = {textureViews[i], m_sampler};
         bindGroupDesc.entries.push_back(entry);
     }
@@ -308,39 +298,66 @@ bool FallingBlockRenderer::createGBufferRhiResources() {
     m_shadowBindGroup = m_rhiDevice->createBindGroup(shadowBindGroupDesc);
     if (!m_textureArrayView.isValid() || !m_grassColormapView.isValid() || !m_foliageColormapView.isValid() ||
         !m_sampler.isValid() || !m_gbufferVertexShader.isValid() || !m_gbufferFragmentShader.isValid() ||
-        !m_gbufferBindGroupLayout.isValid() || !m_gbufferPipelineLayout.isValid() ||
-        !m_gbufferPipeline.isValid() || !m_gbufferBindGroup.isValid() ||
-        !m_shadowVertexShader.isValid() || !m_shadowFragmentShader.isValid() ||
-        !m_shadowBindGroupLayout.isValid() || !m_shadowPipelineLayout.isValid() ||
-        !m_shadowPipeline.isValid() || !m_shadowBindGroup.isValid()) {
-        destroyGBufferRhiResources(); return false;
+        !m_gbufferBindGroupLayout.isValid() || !m_gbufferPipelineLayout.isValid() || !m_gbufferPipeline.isValid() ||
+        !m_gbufferBindGroup.isValid() || !m_shadowVertexShader.isValid() || !m_shadowFragmentShader.isValid() ||
+        !m_shadowBindGroupLayout.isValid() || !m_shadowPipelineLayout.isValid() || !m_shadowPipeline.isValid() ||
+        !m_shadowBindGroup.isValid()) {
+        destroyGBufferRhiResources();
+        return false;
     }
     return true;
 }
 
 void FallingBlockRenderer::destroyGBufferRhiResources() {
     if (m_rhiDevice) {
-        if (m_shadowBindGroup.isValid()) m_rhiDevice->destroyBindGroup(m_shadowBindGroup);
-        if (m_shadowPipeline.isValid()) m_rhiDevice->destroyPipeline(m_shadowPipeline);
-        if (m_shadowPipelineLayout.isValid()) m_rhiDevice->destroyPipelineLayout(m_shadowPipelineLayout);
-        if (m_shadowBindGroupLayout.isValid()) m_rhiDevice->destroyBindGroupLayout(m_shadowBindGroupLayout);
-        if (m_shadowFragmentShader.isValid()) m_rhiDevice->destroyShader(m_shadowFragmentShader);
-        if (m_shadowVertexShader.isValid()) m_rhiDevice->destroyShader(m_shadowVertexShader);
-        if (m_gbufferBindGroup.isValid()) m_rhiDevice->destroyBindGroup(m_gbufferBindGroup);
-        if (m_gbufferPipeline.isValid()) m_rhiDevice->destroyPipeline(m_gbufferPipeline);
-        if (m_gbufferPipelineLayout.isValid()) m_rhiDevice->destroyPipelineLayout(m_gbufferPipelineLayout);
-        if (m_gbufferBindGroupLayout.isValid()) m_rhiDevice->destroyBindGroupLayout(m_gbufferBindGroupLayout);
-        if (m_gbufferFragmentShader.isValid()) m_rhiDevice->destroyShader(m_gbufferFragmentShader);
-        if (m_gbufferVertexShader.isValid()) m_rhiDevice->destroyShader(m_gbufferVertexShader);
-        if (m_sampler.isValid()) m_rhiDevice->destroySampler(m_sampler);
-        if (m_foliageColormapView.isValid()) m_rhiDevice->destroyTextureView(m_foliageColormapView);
-        if (m_grassColormapView.isValid()) m_rhiDevice->destroyTextureView(m_grassColormapView);
-        if (m_textureArrayView.isValid()) m_rhiDevice->destroyTextureView(m_textureArrayView);
+        if (m_shadowBindGroup.isValid())
+            m_rhiDevice->destroyBindGroup(m_shadowBindGroup);
+        if (m_shadowPipeline.isValid())
+            m_rhiDevice->destroyPipeline(m_shadowPipeline);
+        if (m_shadowPipelineLayout.isValid())
+            m_rhiDevice->destroyPipelineLayout(m_shadowPipelineLayout);
+        if (m_shadowBindGroupLayout.isValid())
+            m_rhiDevice->destroyBindGroupLayout(m_shadowBindGroupLayout);
+        if (m_shadowFragmentShader.isValid())
+            m_rhiDevice->destroyShader(m_shadowFragmentShader);
+        if (m_shadowVertexShader.isValid())
+            m_rhiDevice->destroyShader(m_shadowVertexShader);
+        if (m_gbufferBindGroup.isValid())
+            m_rhiDevice->destroyBindGroup(m_gbufferBindGroup);
+        if (m_gbufferPipeline.isValid())
+            m_rhiDevice->destroyPipeline(m_gbufferPipeline);
+        if (m_gbufferPipelineLayout.isValid())
+            m_rhiDevice->destroyPipelineLayout(m_gbufferPipelineLayout);
+        if (m_gbufferBindGroupLayout.isValid())
+            m_rhiDevice->destroyBindGroupLayout(m_gbufferBindGroupLayout);
+        if (m_gbufferFragmentShader.isValid())
+            m_rhiDevice->destroyShader(m_gbufferFragmentShader);
+        if (m_gbufferVertexShader.isValid())
+            m_rhiDevice->destroyShader(m_gbufferVertexShader);
+        if (m_sampler.isValid())
+            m_rhiDevice->destroySampler(m_sampler);
+        if (m_foliageColormapView.isValid())
+            m_rhiDevice->destroyTextureView(m_foliageColormapView);
+        if (m_grassColormapView.isValid())
+            m_rhiDevice->destroyTextureView(m_grassColormapView);
+        if (m_textureArrayView.isValid())
+            m_rhiDevice->destroyTextureView(m_textureArrayView);
     }
-    m_shadowBindGroup = {}; m_shadowPipeline = {}; m_shadowPipelineLayout = {};
-    m_shadowBindGroupLayout = {}; m_shadowFragmentShader = {}; m_shadowVertexShader = {};
-    m_gbufferBindGroup = {}; m_gbufferPipeline = {}; m_gbufferPipelineLayout = {};
-    m_gbufferBindGroupLayout = {}; m_gbufferFragmentShader = {}; m_gbufferVertexShader = {};
-    m_sampler = {}; m_foliageColormapView = {}; m_grassColormapView = {}; m_textureArrayView = {};
+    m_shadowBindGroup = {};
+    m_shadowPipeline = {};
+    m_shadowPipelineLayout = {};
+    m_shadowBindGroupLayout = {};
+    m_shadowFragmentShader = {};
+    m_shadowVertexShader = {};
+    m_gbufferBindGroup = {};
+    m_gbufferPipeline = {};
+    m_gbufferPipelineLayout = {};
+    m_gbufferBindGroupLayout = {};
+    m_gbufferFragmentShader = {};
+    m_gbufferVertexShader = {};
+    m_sampler = {};
+    m_foliageColormapView = {};
+    m_grassColormapView = {};
+    m_textureArrayView = {};
     m_rhiDevice = nullptr;
 }

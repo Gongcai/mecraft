@@ -9,7 +9,8 @@ void SteveAnimationSystem::update(SystemContext& ctx) {
     auto& registry = ctx.registry;
     const float dt = ctx.dt;
 
-    if (dt <= 0.0f) return;
+    if (dt <= 0.0f)
+        return;
 
     auto& reg = registry.registry();
     auto view = reg.view<SteveTag, SteveAnimationStateComponent, ChildrenComponent>();

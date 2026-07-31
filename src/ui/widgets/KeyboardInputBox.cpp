@@ -7,11 +7,9 @@
 namespace {
 constexpr float kBackspaceInitialDelaySeconds = 0.28f;
 constexpr float kBackspaceRepeatIntervalSeconds = 0.05f;
-}
+} // namespace
 
-KeyboardInputBox::KeyboardInputBox(size_t maxLength)
-    : m_maxLength(maxLength) {
-}
+KeyboardInputBox::KeyboardInputBox(size_t maxLength) : m_maxLength(maxLength) {}
 
 void KeyboardInputBox::open(const std::string& initialText) {
     m_open = true;
@@ -38,8 +36,7 @@ bool KeyboardInputBox::isOpen() const {
     return m_open;
 }
 
-void KeyboardInputBox::update(const InputSnapshot& snapshot,
-                              const float dtSeconds,
+void KeyboardInputBox::update(const InputSnapshot& snapshot, const float dtSeconds,
                               const InputContextManager* inputContext) {
     if (!m_open) {
         return;
@@ -167,4 +164,3 @@ bool KeyboardInputBox::consumeHistoryNext() {
     m_historyNextRequested = false;
     return true;
 }
-

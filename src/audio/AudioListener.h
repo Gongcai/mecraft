@@ -16,5 +16,4 @@ public:
     static void setGain(float gain);
 };
 
-
 #endif //MECRAFT_AUDIOLISTENER_H

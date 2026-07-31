@@ -10,10 +10,7 @@ class World;
 
 class SleepingState final : public IGameState {
 public:
-    SleepingState(GameStateMachine& fsm,
-                  InputContextManager& context,
-                  InputManager& input,
-                  World& world);
+    SleepingState(GameStateMachine& fsm, InputContextManager& context, InputManager& input, World& world);
 
     void onEnter() override;
     void onExit() override;

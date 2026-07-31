@@ -26,12 +26,9 @@ struct BedPlacement {
 [[nodiscard]] bool isHeadState(BlockStateId stateId);
 [[nodiscard]] glm::ivec3 headOffsetForFacing(uint16_t facingValue);
 [[nodiscard]] BlockStateId makeBedState(BlockID blockId, uint16_t facingValue, uint16_t partValue);
-[[nodiscard]] BedPlacement resolvePlacement(const IWorldView& worldView,
-                                            const glm::ivec3& footPos,
+[[nodiscard]] BedPlacement resolvePlacement(const IWorldView& worldView, const glm::ivec3& footPos,
                                             BlockStateId footState);
-[[nodiscard]] bool tryGetOtherHalfPosition(const glm::ivec3& pos,
-                                           BlockStateId stateId,
-                                           glm::ivec3& outOtherPos);
+[[nodiscard]] bool tryGetOtherHalfPosition(const glm::ivec3& pos, BlockStateId stateId, glm::ivec3& outOtherPos);
 [[nodiscard]] bool isMatchingOtherHalf(BlockStateId stateId, BlockStateId otherState);
 
 void placeBed(World& world, const BedPlacement& placement);

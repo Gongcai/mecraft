@@ -14,11 +14,9 @@ float lerp(const float a, const float b, const float t) {
 }
 
 void updateCameraVectors(CameraStateComponent& camera) {
-    const glm::vec3 front = {
-        cos(glm::radians(camera.yaw)) * cos(glm::radians(camera.pitch)),
-        sin(glm::radians(camera.pitch)),
-        sin(glm::radians(camera.yaw)) * cos(glm::radians(camera.pitch))
-    };
+    const glm::vec3 front = {cos(glm::radians(camera.yaw)) * cos(glm::radians(camera.pitch)),
+                             sin(glm::radians(camera.pitch)),
+                             sin(glm::radians(camera.yaw)) * cos(glm::radians(camera.pitch))};
 
     camera.front = glm::normalize(front);
     camera.right = glm::normalize(glm::cross(camera.front, glm::vec3(0.0f, 1.0f, 0.0f)));
@@ -32,15 +30,15 @@ void applyHotbarIntent(const HotbarIntentComponent& hotbar, InventoryComponent& 
         }
     }
     if (hotbar.scrollUp) {
-        inventory.selectedHotbarSlot = (inventory.selectedHotbarSlot + Inventory::HOTBAR_SIZE - 1) % Inventory::HOTBAR_SIZE;
+        inventory.selectedHotbarSlot =
+            (inventory.selectedHotbarSlot + Inventory::HOTBAR_SIZE - 1) % Inventory::HOTBAR_SIZE;
     }
     if (hotbar.scrollDown) {
         inventory.selectedHotbarSlot = (inventory.selectedHotbarSlot + 1) % Inventory::HOTBAR_SIZE;
     }
 }
 
-void capturePreviousCamera(CameraInterpolationComponent* interpolation,
-                           const CameraStateComponent& camera) {
+void capturePreviousCamera(CameraInterpolationComponent* interpolation, const CameraStateComponent& camera) {
     if (interpolation == nullptr) {
         return;
     }
@@ -56,10 +54,7 @@ void PlayerRuntimeUpdateSystem::update(SystemContext& ctx) {
     auto& registry = ctx.registry;
     const float dt = ctx.dt;
 
-    auto view = registry.view<LocalPlayerTag,
-                              LookIntentComponent,
-                              HotbarIntentComponent,
-                              CameraStateComponent,
+    auto view = registry.view<LocalPlayerTag, LookIntentComponent, HotbarIntentComponent, CameraStateComponent,
                               InventoryComponent>();
     for (auto e : view) {
         const auto& lookIntent = view.get<LookIntentComponent>(e);

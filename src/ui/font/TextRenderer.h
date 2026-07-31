@@ -28,11 +28,7 @@ public:
     void beginFrameCollection(float screenWidth, float screenHeight);
 
     // Collects a text request or records its prepared draw according to context.phase.
-    void draw(const UIRenderContext& context,
-              const std::string& text,
-              float x,
-              float y,
-              float scale,
+    void draw(const UIRenderContext& context, const std::string& text, float x, float y, float scale,
               const std::array<float, 4>& color) const;
 
     // Freezes the atlas, uploads resources, and builds immutable draw ranges.
@@ -70,11 +66,7 @@ private:
     bool ensureVertexCapacity(uint64_t requiredBytes);
     bool rebuildAtlasBinding();
     bool generateRequestVertices(DrawRequest& request);
-    void recordPreparedRequest(const UIRenderContext& context,
-                               const std::string& text,
-                               float x,
-                               float y,
-                               float scale,
+    void recordPreparedRequest(const UIRenderContext& context, const std::string& text, float x, float y, float scale,
                                const std::array<float, 4>& color) const;
     [[nodiscard]] static RhiRect2D resolveScissor(const UIRenderContext& context);
 

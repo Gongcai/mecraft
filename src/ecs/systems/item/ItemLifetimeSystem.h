@@ -8,10 +8,7 @@ namespace ecs {
 
 class ItemLifetimeSystem : public ISystem {
 public:
-    using Dependencies = SystemDependency<
-        std::tuple<DropItemTag, LifetimeComponent>,
-        std::tuple<LifetimeComponent>
-    >;
+    using Dependencies = SystemDependency<std::tuple<DropItemTag, LifetimeComponent>, std::tuple<LifetimeComponent>>;
 
     void update(SystemContext& ctx) override;
 };

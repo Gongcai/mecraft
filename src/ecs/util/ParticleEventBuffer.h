@@ -22,8 +22,7 @@ struct BlockBreakParticleEvent {
     float maxSize = 0.14f;
 };
 
-inline BlockBreakParticleEvent makeImpactParticleEvent(const glm::vec3& worldPos,
-                                                       const BlockID blockType,
+inline BlockBreakParticleEvent makeImpactParticleEvent(const glm::vec3& worldPos, const BlockID blockType,
                                                        const int particleCount = 14) {
     BlockBreakParticleEvent event;
     event.blockType = blockType;

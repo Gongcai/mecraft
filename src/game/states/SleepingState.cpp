@@ -9,14 +9,8 @@ namespace {
 constexpr float kSleepTimeScale = 120.0f;
 }
 
-SleepingState::SleepingState(GameStateMachine& fsm,
-                             InputContextManager& context,
-                             InputManager& input,
-                             World& world)
-    : m_fsm(fsm),
-      m_context(context),
-      m_input(input),
-      m_world(world) {}
+SleepingState::SleepingState(GameStateMachine& fsm, InputContextManager& context, InputManager& input, World& world)
+    : m_fsm(fsm), m_context(context), m_input(input), m_world(world) {}
 
 void SleepingState::onEnter() {
     m_context.pushContext(InputContextType::UI);

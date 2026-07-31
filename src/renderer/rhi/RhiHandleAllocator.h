@@ -7,11 +7,9 @@
 #include <optional>
 #include <vector>
 
-template <typename Handle>
-class RhiHandleAllocator {
+template <typename Handle> class RhiHandleAllocator {
 public:
-    explicit RhiHandleAllocator(const uint32_t firstIndex = 1u)
-        : m_firstIndex(firstIndex) {
+    explicit RhiHandleAllocator(const uint32_t firstIndex = 1u) : m_firstIndex(firstIndex) {
         assert(m_firstIndex != 0u);
     }
 
@@ -35,18 +33,14 @@ public:
         return Handle{m_firstIndex + slot, m_generations[slot]};
     }
 
-    [[nodiscard]] bool isAlive(Handle handle) const {
-        return slotForHandle(handle).has_value();
-    }
+    [[nodiscard]] bool isAlive(Handle handle) const { return slotForHandle(handle).has_value(); }
 
     [[nodiscard]] std::optional<uint32_t> slotForHandle(const Handle handle) const {
         if (handle.index < m_firstIndex) {
             return std::nullopt;
         }
         const uint32_t slot = handle.index - m_firstIndex;
-        if (slot >= m_generations.size() ||
-            !m_alive[slot] ||
-            m_generations[slot] != handle.generation) {
+        if (slot >= m_generations.size() || !m_alive[slot] || m_generations[slot] != handle.generation) {
             return std::nullopt;
         }
         return slot;

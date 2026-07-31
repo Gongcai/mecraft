@@ -13,7 +13,7 @@ int fail(const char* message) {
 bool almostEqual(float a, float b) {
     return std::fabs(a - b) < 0.001f;
 }
-}
+} // namespace
 
 int main() {
     UIRenderer renderer;
@@ -23,21 +23,25 @@ int main() {
         return fail("720p auto GUI scale should use 1x virtual coordinates");
     }
     const UIScaleConfig smallScale = UIScaleConfig::create(640.0f, 360.0f, GUIScale::Auto);
-    if (!almostEqual(smallScale.effectiveScale, 0.5f) || smallScale.virtualWidth != 1280 || smallScale.virtualHeight != 720) {
+    if (!almostEqual(smallScale.effectiveScale, 0.5f) || smallScale.virtualWidth != 1280 ||
+        smallScale.virtualHeight != 720) {
         return fail("sub-720p auto GUI scale should preserve readable virtual coordinates");
     }
     const UIScaleConfig normalScale = UIScaleConfig::create(1920.0f, 1080.0f, GUIScale::Normal);
-    if (!almostEqual(normalScale.effectiveScale, 1.0f) || normalScale.virtualWidth != 1920 || normalScale.virtualHeight != 1080) {
+    if (!almostEqual(normalScale.effectiveScale, 1.0f) || normalScale.virtualWidth != 1920 ||
+        normalScale.virtualHeight != 1080) {
         return fail("explicit normal GUI scale should use 1x coordinates");
     }
 
     // Smoke/API: routing without init should be safe and ignored.
-    if (renderer.routeUIInput({UIInputEventType::PointerMove, 8.0f, 8.0f, UIPointerButton::None}) != UIEventResult::Ignored) {
+    if (renderer.routeUIInput({UIInputEventType::PointerMove, 8.0f, 8.0f, UIPointerButton::None}) !=
+        UIEventResult::Ignored) {
         return fail("routeUIInput should ignore when no visible controls are active");
     }
 
     renderer.setInventoryPanelVisible(true);
-    if (renderer.routeUIInput({UIInputEventType::PointerMove, 8.0f, 8.0f, UIPointerButton::None}) != UIEventResult::Ignored) {
+    if (renderer.routeUIInput({UIInputEventType::PointerMove, 8.0f, 8.0f, UIPointerButton::None}) !=
+        UIEventResult::Ignored) {
         return fail("routeUIInput should still ignore before controls are initialized");
     }
 
@@ -54,4 +58,3 @@ int main() {
     std::cout << "[ui_renderer_scheduler_test] PASS\n";
     return EXIT_SUCCESS;
 }
-

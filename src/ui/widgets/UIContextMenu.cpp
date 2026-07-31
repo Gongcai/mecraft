@@ -30,14 +30,11 @@ static_assert(sizeof(ContextMenuGlassPushConstants) == 64u);
     if (context.hasScissor) {
         return context.scissor;
     }
-    return {
-        0,
-        0,
-        static_cast<uint32_t>(std::max(1.0f,
-            std::round(static_cast<float>(context.screenWidth) * context.pixelScale()))),
-        static_cast<uint32_t>(std::max(1.0f,
-            std::round(static_cast<float>(context.screenHeight) * context.pixelScale())))
-    };
+    return {0, 0,
+            static_cast<uint32_t>(
+                std::max(1.0f, std::round(static_cast<float>(context.screenWidth) * context.pixelScale()))),
+            static_cast<uint32_t>(
+                std::max(1.0f, std::round(static_cast<float>(context.screenHeight) * context.pixelScale())))};
 }
 
 } // namespace
@@ -127,8 +124,10 @@ int UIContextMenu::hitTestItem(float px, float py, const UIRenderContext& ctx) c
     const float menuTop_widget = static_cast<float>(ctx.screenHeight) - m_menuY; // Top in widget coords.
     const float menuBottom_widget = menuTop_widget - menuH;
 
-    if (px < menuLeft || px >= menuLeft + menuW) return -1;
-    if (flippedY < menuBottom_widget || flippedY >= menuTop_widget) return -1;
+    if (px < menuLeft || px >= menuLeft + menuW)
+        return -1;
+    if (flippedY < menuBottom_widget || flippedY >= menuTop_widget)
+        return -1;
 
     float yOff = resolved.padding;
     for (int i = 0; i < static_cast<int>(m_items.size()); ++i) {
@@ -150,12 +149,13 @@ void UIContextMenu::renderSelf(const UIRenderContext& ctx) const {
 }
 
 void UIContextMenu::render(const UIRenderContext& ctx) const {
-    if (!visible || !m_menuVisible) return;
-    if (m_showTween.value() < 0.01f) return;
+    if (!visible || !m_menuVisible)
+        return;
+    if (m_showTween.value() < 0.01f)
+        return;
     const bool record = ctx.phase == UIRenderPhase::Record;
-    if (record && (ctx.commandList == nullptr ||
-                   !ctx.panelQuadVertexBuffer.isValid() ||
-                   !ctx.panelSolidPipeline.isValid())) {
+    if (record &&
+        (ctx.commandList == nullptr || !ctx.panelQuadVertexBuffer.isValid() || !ctx.panelSolidPipeline.isValid())) {
         return;
     }
 
@@ -174,62 +174,48 @@ void UIContextMenu::render(const UIRenderContext& ctx) const {
     const float menuTop_screen = m_menuY;
     const float menuTop_widget = static_cast<float>(ctx.screenHeight) - menuTop_screen;
     const float menuBottom_widget = menuTop_widget - menuH;
-    const bool useGlass = ctx.panelGlassPipeline.isValid() &&
-                          ctx.panelGlassBindGroup.isValid() &&
-                          ctx.backdropBlurView.isValid() &&
-                          ctx.backdropSourceWidth > 0 &&
-                          ctx.backdropSourceHeight > 0 &&
-                          ctx.backdropBlurWidth > 0 &&
-                          ctx.backdropBlurHeight > 0;
+    const bool useGlass = ctx.panelGlassPipeline.isValid() && ctx.panelGlassBindGroup.isValid() &&
+                          ctx.backdropBlurView.isValid() && ctx.backdropSourceWidth > 0 &&
+                          ctx.backdropSourceHeight > 0 && ctx.backdropBlurWidth > 0 && ctx.backdropBlurHeight > 0;
 
     if (record) {
         RhiCommandList& commandList = *ctx.commandList;
         const RhiRect2D scissor = contextMenuScissor(ctx);
 
-    if (useGlass) {
-        const float tintStrength = std::clamp(bgCol[3] * 0.34f, 0.16f, 0.34f);
-        const ContextMenuGlassPushConstants pushConstants{
-            glm::vec4(static_cast<float>(ctx.screenWidth),
-                      static_cast<float>(ctx.screenHeight), menuLeft, menuBottom_widget),
-            glm::vec4(menuW, menuH, 0.0f,
-                      std::clamp(menuAlpha * 0.96f, 0.0f, 1.0f)),
-            glm::vec4(bgCol[0], bgCol[1], bgCol[2], tintStrength),
-            glm::vec4(0.54f, 0.70f, 0.0f, 0.0f)
-        };
+        if (useGlass) {
+            const float tintStrength = std::clamp(bgCol[3] * 0.34f, 0.16f, 0.34f);
+            const ContextMenuGlassPushConstants pushConstants{
+                glm::vec4(static_cast<float>(ctx.screenWidth), static_cast<float>(ctx.screenHeight), menuLeft,
+                          menuBottom_widget),
+                glm::vec4(menuW, menuH, 0.0f, std::clamp(menuAlpha * 0.96f, 0.0f, 1.0f)),
+                glm::vec4(bgCol[0], bgCol[1], bgCol[2], tintStrength), glm::vec4(0.54f, 0.70f, 0.0f, 0.0f)};
 
-        commandList.setGraphicsPipeline(ctx.panelGlassPipeline);
-        commandList.setVertexBuffer(0u, ctx.panelQuadVertexBuffer, 0u);
-        commandList.setBindGroup(0u, ctx.panelGlassBindGroup);
-        commandList.setScissor(scissor);
-        commandList.pushConstants(&pushConstants, sizeof(pushConstants),
-                                  rhiFlag(RhiShaderStage::Vertex) |
-                                  rhiFlag(RhiShaderStage::Fragment));
-        commandList.draw(6u, 1u, 0u, 0u);
-    }
-
-    commandList.setGraphicsPipeline(ctx.panelSolidPipeline);
-    commandList.setVertexBuffer(0u, ctx.panelQuadVertexBuffer, 0u);
-    commandList.setScissor(scissor);
-
-    auto drawSolidRect = [&](const float rectX,
-                             const float rectY,
-                             const float rectWidth,
-                             const float rectHeight,
-                             const Color& rectColor) {
-        if (rectWidth <= 0.0f || rectHeight <= 0.0f || rectColor[3] <= 0.0f) {
-            return;
+            commandList.setGraphicsPipeline(ctx.panelGlassPipeline);
+            commandList.setVertexBuffer(0u, ctx.panelQuadVertexBuffer, 0u);
+            commandList.setBindGroup(0u, ctx.panelGlassBindGroup);
+            commandList.setScissor(scissor);
+            commandList.pushConstants(&pushConstants, sizeof(pushConstants),
+                                      rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment));
+            commandList.draw(6u, 1u, 0u, 0u);
         }
-        const ContextMenuSolidPushConstants pushConstants{
-            glm::vec4(static_cast<float>(ctx.screenWidth),
-                      static_cast<float>(ctx.screenHeight), rectX, rectY),
-            glm::vec4(rectWidth, rectHeight, 0.0f, 0.0f),
-            glm::vec4(rectColor[0], rectColor[1], rectColor[2], rectColor[3])
+
+        commandList.setGraphicsPipeline(ctx.panelSolidPipeline);
+        commandList.setVertexBuffer(0u, ctx.panelQuadVertexBuffer, 0u);
+        commandList.setScissor(scissor);
+
+        auto drawSolidRect = [&](const float rectX, const float rectY, const float rectWidth, const float rectHeight,
+                                 const Color& rectColor) {
+            if (rectWidth <= 0.0f || rectHeight <= 0.0f || rectColor[3] <= 0.0f) {
+                return;
+            }
+            const ContextMenuSolidPushConstants pushConstants{
+                glm::vec4(static_cast<float>(ctx.screenWidth), static_cast<float>(ctx.screenHeight), rectX, rectY),
+                glm::vec4(rectWidth, rectHeight, 0.0f, 0.0f),
+                glm::vec4(rectColor[0], rectColor[1], rectColor[2], rectColor[3])};
+            commandList.pushConstants(&pushConstants, sizeof(pushConstants),
+                                      rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment));
+            commandList.draw(6u, 1u, 0u, 0u);
         };
-        commandList.pushConstants(&pushConstants, sizeof(pushConstants),
-                                  rhiFlag(RhiShaderStage::Vertex) |
-                                  rhiFlag(RhiShaderStage::Fragment));
-        commandList.draw(6u, 1u, 0u, 0u);
-    };
 
         // Background.
         const float bgAlphaScale = useGlass ? 0.42f : 1.0f;
@@ -248,22 +234,21 @@ void UIContextMenu::render(const UIRenderContext& ctx) const {
         // Item highlights and separators.
         float yOff = resolved.padding;
         for (int i = 0; i < static_cast<int>(m_items.size()); ++i) {
-            const float itemH = (m_items[i].type == ItemType::Separator) ? resolved.separatorHeight : resolved.itemHeight;
+            const float itemH =
+                (m_items[i].type == ItemType::Separator) ? resolved.separatorHeight : resolved.itemHeight;
             const float itemTop = menuTop_widget - yOff;
             const float itemBottom = itemTop - itemH;
             if (m_items[i].type == ItemType::Entry && i == m_hoveredItem) {
                 const float hoverAlphaScale = useGlass ? 0.84f : 1.0f;
                 Color hover = hovCol;
                 hover[3] *= menuAlpha * hoverAlphaScale;
-                drawSolidRect(menuLeft + 3.0f, itemBottom + 1.0f,
-                              menuW - 6.0f, itemH - 2.0f, hover);
+                drawSolidRect(menuLeft + 3.0f, itemBottom + 1.0f, menuW - 6.0f, itemH - 2.0f, hover);
             } else if (m_items[i].type == ItemType::Separator) {
                 const float separatorAlphaScale = useGlass ? 0.66f : 1.0f;
                 Color separator = sepCol;
                 separator[3] *= menuAlpha * separatorAlphaScale;
                 const float separatorY = itemTop - itemH * 0.5f;
-                drawSolidRect(menuLeft + 8.0f, separatorY - 0.5f,
-                              menuW - 16.0f, 1.0f, separator);
+                drawSolidRect(menuLeft + 8.0f, separatorY - 0.5f, menuW - 16.0f, 1.0f, separator);
             }
             yOff += itemH;
         }
@@ -274,17 +259,13 @@ void UIContextMenu::render(const UIRenderContext& ctx) const {
         const float textScale = 1.0f;
         float yOff = resolved.padding;
         for (int i = 0; i < static_cast<int>(m_items.size()); ++i) {
-            const float itemH = (m_items[i].type == ItemType::Separator) ? resolved.separatorHeight : resolved.itemHeight;
+            const float itemH =
+                (m_items[i].type == ItemType::Separator) ? resolved.separatorHeight : resolved.itemHeight;
             if (m_items[i].type == ItemType::Entry) {
                 const float textY = menuTop_widget - yOff - itemH * 0.5f -
                                     ctx.textRenderer->measureText(m_items[i].text, textScale).height * 0.5f;
-                ctx.textRenderer->draw(
-                    ctx,
-                    m_items[i].text,
-                    menuLeft + 12.0f,
-                    textY,
-                    textScale,
-                    {txtCol[0], txtCol[1], txtCol[2], txtCol[3] * menuAlpha});
+                ctx.textRenderer->draw(ctx, m_items[i].text, menuLeft + 12.0f, textY, textScale,
+                                       {txtCol[0], txtCol[1], txtCol[2], txtCol[3] * menuAlpha});
             }
             yOff += itemH;
         }
@@ -292,7 +273,8 @@ void UIContextMenu::render(const UIRenderContext& ctx) const {
 }
 
 UIEventResult UIContextMenu::onInput(const UIInputEvent& event, const UIRenderContext& ctx) {
-    if (!visible || !m_menuVisible) return UIEventResult::Ignored;
+    if (!visible || !m_menuVisible)
+        return UIEventResult::Ignored;
 
     switch (event.type) {
     case UIInputEventType::PointerMove: {
@@ -305,7 +287,8 @@ UIEventResult UIContextMenu::onInput(const UIInputEvent& event, const UIRenderCo
             const int idx = hitTestItem(event.x, event.y, ctx);
             if (idx >= 0) {
                 // Execute the item's callback.
-                if (m_items[idx].onClick) m_items[idx].onClick();
+                if (m_items[idx].onClick)
+                    m_items[idx].onClick();
                 hide();
                 return UIEventResult::Consumed;
             }
@@ -323,8 +306,7 @@ UIEventResult UIContextMenu::onInput(const UIInputEvent& event, const UIRenderCo
         }
         break;
 
-    default:
-        break;
+    default: break;
     }
 
     return UIEventResult::Ignored;

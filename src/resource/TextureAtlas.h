@@ -9,11 +9,11 @@
 
 struct TextureAtlas {
     RhiTextureHandle texture;
-    int atlasWidth  = 0;     // Atlas width in pixels.
-    int atlasHeight = 0;     // Atlas height in pixels.
-    int tileSize    = 16;    // Tile size in pixels, excluding padding.
-    int tileStride  = 16;    // Tile cell stride: tileSize + 2 * tilePadding.
-    int tilePadding = 0;     // Copied edge texel padding around each tile.
+    int atlasWidth = 0; // Atlas width in pixels.
+    int atlasHeight = 0; // Atlas height in pixels.
+    int tileSize = 16; // Tile size in pixels, excluding padding.
+    int tileStride = 16; // Tile cell stride: tileSize + 2 * tilePadding.
+    int tilePadding = 0; // Copied edge texel padding around each tile.
     int tilesPerRow = 0;
 
     // Return UV coordinates for the tile as lower-left and upper-right corners.

@@ -53,30 +53,20 @@ struct MovingBlockSpawnParams {
 
 class EntityFactory {
 public:
-    static entt::entity createServerPlayerProxy(GameplayRegistry& registry,
-                                                const glm::vec3& position,
+    static entt::entity createServerPlayerProxy(GameplayRegistry& registry, const glm::vec3& position,
                                                 const glm::vec3& velocity);
-    static void ensureServerPlayerProxy(GameplayRegistry& registry,
-                                        entt::entity entity,
-                                        const glm::vec3& position,
+    static void ensureServerPlayerProxy(GameplayRegistry& registry, entt::entity entity, const glm::vec3& position,
                                         const glm::vec3& velocity);
 
-    static entt::entity createMob(GameplayRegistry& registry,
-                                  std::string_view entityId,
-                                  const glm::vec3& position);
+    static entt::entity createMob(GameplayRegistry& registry, std::string_view entityId, const glm::vec3& position);
     static entt::entity createZombie(GameplayRegistry& registry, const glm::vec3& position);
     static entt::entity createZombie(entt::registry& registry, const glm::vec3& position);
     static entt::entity createItemDrop(GameplayRegistry& registry, const ItemDropSpawnParams& params);
     static entt::entity createFallingBlock(GameplayRegistry& registry, const FallingBlockSpawnParams& params);
     static entt::entity createMovingBlock(GameplayRegistry& registry, const MovingBlockSpawnParams& params);
-    static entt::entity createProjectile(GameplayRegistry& registry,
-                                         entt::entity owner,
-                                         const glm::vec3& position,
-                                         const glm::vec3& velocity,
-                                         const ProjectileDefinition& definition);
-    static entt::entity createAppleProjectile(GameplayRegistry& registry,
-                                              entt::entity owner,
-                                              const glm::vec3& position,
+    static entt::entity createProjectile(GameplayRegistry& registry, entt::entity owner, const glm::vec3& position,
+                                         const glm::vec3& velocity, const ProjectileDefinition& definition);
+    static entt::entity createAppleProjectile(GameplayRegistry& registry, entt::entity owner, const glm::vec3& position,
                                               const glm::vec3& velocity);
 };
 

@@ -22,10 +22,8 @@ bool fail(std::string& error, std::string message) {
     return false;
 }
 
-const nlohmann::json* findRequiredField(const nlohmann::json& owner,
-                                        const std::string& ownerName,
-                                        const char* fieldName,
-                                        std::string& error) {
+const nlohmann::json* findRequiredField(const nlohmann::json& owner, const std::string& ownerName,
+                                        const char* fieldName, std::string& error) {
     const auto it = owner.find(fieldName);
     if (it == owner.end()) {
         fail(error, ownerName + " is missing required field: " + fieldName);
@@ -34,10 +32,7 @@ const nlohmann::json* findRequiredField(const nlohmann::json& owner,
     return &(*it);
 }
 
-bool readString(const nlohmann::json& owner,
-                const std::string& ownerName,
-                const char* fieldName,
-                std::string& out,
+bool readString(const nlohmann::json& owner, const std::string& ownerName, const char* fieldName, std::string& out,
                 std::string& error) {
     const nlohmann::json* value = findRequiredField(owner, ownerName, fieldName, error);
     if (value == nullptr) {
@@ -54,11 +49,8 @@ bool readString(const nlohmann::json& owner,
     return true;
 }
 
-bool readNamespacedField(const nlohmann::json& owner,
-                         const std::string& ownerName,
-                         const char* fieldName,
-                         std::string& out,
-                         std::string& error) {
+bool readNamespacedField(const nlohmann::json& owner, const std::string& ownerName, const char* fieldName,
+                         std::string& out, std::string& error) {
     std::string raw;
     if (!readString(owner, ownerName, fieldName, raw, error)) {
         return false;
@@ -71,9 +63,7 @@ bool readNamespacedField(const nlohmann::json& owner,
     return true;
 }
 
-bool parseActionKind(const std::string& value,
-                     const std::string& ownerName,
-                     BlockInteractionActionKind& out,
+bool parseActionKind(const std::string& value, const std::string& ownerName, BlockInteractionActionKind& out,
                      std::string& error) {
     if (value == "toggle_boolean_property") {
         out = BlockInteractionActionKind::ToggleBooleanProperty;
@@ -90,9 +80,7 @@ bool parseActionKind(const std::string& value,
     return fail(error, ownerName + " has unknown block interaction action: " + value);
 }
 
-bool parsePartnerSync(const std::string& value,
-                      const std::string& ownerName,
-                      BlockInteractionPartnerSync& out,
+bool parsePartnerSync(const std::string& value, const std::string& ownerName, BlockInteractionPartnerSync& out,
                       std::string& error) {
     if (value == "none") {
         out = BlockInteractionPartnerSync::None;
@@ -105,11 +93,8 @@ bool parsePartnerSync(const std::string& value,
     return fail(error, ownerName + " has unknown partner sync mode: " + value);
 }
 
-bool readStringArray(const nlohmann::json& owner,
-                     const std::string& ownerName,
-                     const char* fieldName,
-                     std::vector<std::string>& out,
-                     std::string& error) {
+bool readStringArray(const nlohmann::json& owner, const std::string& ownerName, const char* fieldName,
+                     std::vector<std::string>& out, std::string& error) {
     const nlohmann::json* values = findRequiredField(owner, ownerName, fieldName, error);
     if (values == nullptr) {
         return false;
@@ -138,9 +123,7 @@ bool readStringArray(const nlohmann::json& owner,
     return true;
 }
 
-bool parseBlockInteractionDef(const nlohmann::json& root,
-                              const std::string& sourceName,
-                              BlockInteractionDef& def,
+bool parseBlockInteractionDef(const nlohmann::json& root, const std::string& sourceName, BlockInteractionDef& def,
                               std::string& error) {
     if (!root.is_object()) {
         return fail(error, "Block interaction file must contain an object: " + sourceName);
@@ -149,32 +132,31 @@ bool parseBlockInteractionDef(const nlohmann::json& root,
     def = BlockInteractionDef{};
     std::string action;
     if (!readNamespacedField(root, sourceName, "id", def.id, error) ||
-        !readString(root, def.id, "action", action, error) ||
-        !parseActionKind(action, def.id, def.action, error) ||
+        !readString(root, def.id, "action", action, error) || !parseActionKind(action, def.id, def.action, error) ||
         !readString(root, def.id, "property", def.property, error)) {
         return false;
     }
 
     switch (def.action) {
-        case BlockInteractionActionKind::ToggleBooleanProperty:
-            if (!readString(root, def.id, "falseValue", def.falseValue, error) ||
-                !readString(root, def.id, "trueValue", def.trueValue, error)) {
-                return false;
-            }
-            break;
-        case BlockInteractionActionKind::SetPropertyOnce:
-            if (!readString(root, def.id, "value", def.setValue, error)) {
-                return false;
-            }
-            break;
-        case BlockInteractionActionKind::CycleProperty:
-            if (!readStringArray(root, def.id, "values", def.cycleValues, error)) {
-                return false;
-            }
-            if (def.cycleValues.size() < 2) {
-                return fail(error, def.id + " requires at least two cycle values");
-            }
-            break;
+    case BlockInteractionActionKind::ToggleBooleanProperty:
+        if (!readString(root, def.id, "falseValue", def.falseValue, error) ||
+            !readString(root, def.id, "trueValue", def.trueValue, error)) {
+            return false;
+        }
+        break;
+    case BlockInteractionActionKind::SetPropertyOnce:
+        if (!readString(root, def.id, "value", def.setValue, error)) {
+            return false;
+        }
+        break;
+    case BlockInteractionActionKind::CycleProperty:
+        if (!readStringArray(root, def.id, "values", def.cycleValues, error)) {
+            return false;
+        }
+        if (def.cycleValues.size() < 2) {
+            return fail(error, def.id + " requires at least two cycle values");
+        }
+        break;
     }
 
     const auto syncIt = root.find("partnerSync");
@@ -191,8 +173,7 @@ bool parseBlockInteractionDef(const nlohmann::json& root,
 }
 
 bool loadBlockInteractionFile(const std::filesystem::path& path,
-                              std::unordered_map<std::string, BlockInteractionDef>& defs,
-                              std::string& error) {
+                              std::unordered_map<std::string, BlockInteractionDef>& defs, std::string& error) {
     std::ifstream file(path);
     if (!file.is_open()) {
         return fail(error, "Failed to open block interaction config: " + path.string());
@@ -213,7 +194,7 @@ bool loadBlockInteractionFile(const std::filesystem::path& path,
     defs.emplace(def.id, std::move(def));
     return true;
 }
-}
+} // namespace
 
 bool BlockInteractionRegistry::init() {
     if (s_initialized) {
@@ -222,9 +203,7 @@ bool BlockInteractionRegistry::init() {
 
     const std::filesystem::path configDir(kBlockInteractionConfigDir);
     std::error_code fsError;
-    if (!std::filesystem::exists(configDir, fsError) ||
-        fsError ||
-        !std::filesystem::is_directory(configDir, fsError) ||
+    if (!std::filesystem::exists(configDir, fsError) || fsError || !std::filesystem::is_directory(configDir, fsError) ||
         fsError) {
         std::cerr << "Block interaction config directory is missing: " << configDir.string() << '\n';
         return false;
@@ -233,15 +212,15 @@ bool BlockInteractionRegistry::init() {
     std::unordered_map<std::string, BlockInteractionDef> defs;
     std::filesystem::directory_iterator it(configDir, fsError);
     if (fsError) {
-        std::cerr << "Failed to enumerate block interaction config directory: "
-                  << configDir.string() << ": " << fsError.message() << '\n';
+        std::cerr << "Failed to enumerate block interaction config directory: " << configDir.string() << ": "
+                  << fsError.message() << '\n';
         return false;
     }
     const std::filesystem::directory_iterator end;
     for (; it != end; it.increment(fsError)) {
         if (fsError) {
-            std::cerr << "Failed to advance block interaction config iterator: "
-                      << configDir.string() << ": " << fsError.message() << '\n';
+            std::cerr << "Failed to advance block interaction config iterator: " << configDir.string() << ": "
+                      << fsError.message() << '\n';
             return false;
         }
         const std::filesystem::directory_entry& entry = *it;
@@ -257,8 +236,7 @@ bool BlockInteractionRegistry::init() {
     }
 
     if (defs.empty()) {
-        std::cerr << "Block interaction config directory contains no JSON definitions: "
-                  << configDir.string() << '\n';
+        std::cerr << "Block interaction config directory contains no JSON definitions: " << configDir.string() << '\n';
         return false;
     }
 

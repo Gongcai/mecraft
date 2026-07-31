@@ -17,10 +17,11 @@ constexpr float kGravity = 20.0f;
 constexpr float kTerminalVelocity = 25.0f;
 constexpr float kHorizontalDamping = 0.92f;
 constexpr float kGroundFriction = 0.86f;
-}
+} // namespace
 
 void ItemPhysicsSystem::update(SystemContext& ctx) {
-    if (!ctx.services.world) return;
+    if (!ctx.services.world)
+        return;
     auto& registry = ctx.registry;
     const World& world = *ctx.services.world;
     const float dt = ctx.dt;
@@ -29,11 +30,7 @@ void ItemPhysicsSystem::update(SystemContext& ctx) {
         return;
     }
 
-    auto view = registry.view<DropItemTag,
-                              TransformComponent,
-                              VelocityComponent,
-                              BoundsComponent,
-                              SpinVisualComponent,
+    auto view = registry.view<DropItemTag, TransformComponent, VelocityComponent, BoundsComponent, SpinVisualComponent,
                               GroundedStateComponent>();
     for (const entt::entity e : view) {
         if (!simulation::isEntityTicking(ctx, e)) {

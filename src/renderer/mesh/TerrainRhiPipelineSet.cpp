@@ -16,18 +16,11 @@
 #include <string>
 
 namespace {
-constexpr std::array<uint32_t, 7> kGBufferTextureBindings = {
-    0u, 3u, 4u, 9u, 10u, 11u, 12u
-};
-constexpr std::array<uint32_t, 10> kTransparentTextureBindings = {
-    0u, 1u, 2u, 3u, 4u, 5u, 6u, 7u, 8u, 14u
-};
-constexpr std::array<uint32_t, 9> kWaterTextureBindings = {
-    0u, 5u, 6u, 7u, 8u, 9u, 10u, 11u, 12u
-};
+constexpr std::array<uint32_t, 7> kGBufferTextureBindings = {0u, 3u, 4u, 9u, 10u, 11u, 12u};
+constexpr std::array<uint32_t, 10> kTransparentTextureBindings = {0u, 1u, 2u, 3u, 4u, 5u, 6u, 7u, 8u, 14u};
+constexpr std::array<uint32_t, 9> kWaterTextureBindings = {0u, 5u, 6u, 7u, 8u, 9u, 10u, 11u, 12u};
 
-template <typename Handle>
-bool sameHandle(const Handle lhs, const Handle rhs) {
+template <typename Handle> bool sameHandle(const Handle lhs, const Handle rhs) {
     return lhs.index == rhs.index && lhs.generation == rhs.generation;
 }
 
@@ -39,8 +32,7 @@ struct alignas(16) TerrainGBufferParams {
     glm::ivec4 weatherFlags = glm::ivec4(0);
 };
 
-static_assert(sizeof(TerrainGBufferParams) == 128u,
-              "Terrain GBuffer parameters must match the std140 shader block");
+static_assert(sizeof(TerrainGBufferParams) == 128u, "Terrain GBuffer parameters must match the std140 shader block");
 
 struct alignas(16) TerrainShadowParams {
     glm::mat4 modelView = glm::mat4(1.0f);
@@ -49,8 +41,7 @@ struct alignas(16) TerrainShadowParams {
     glm::vec4 timePass = glm::vec4(0.0f);
 };
 
-static_assert(sizeof(TerrainShadowParams) == 160u,
-              "Terrain shadow parameters must match the std140 shader block");
+static_assert(sizeof(TerrainShadowParams) == 160u, "Terrain shadow parameters must match the std140 shader block");
 
 struct alignas(16) TerrainLitParams {
     glm::mat4 view = glm::mat4(1.0f);
@@ -82,8 +73,7 @@ struct alignas(16) TerrainLitParams {
     glm::uvec4 clusterRenderExtent = glm::uvec4(0u);
 };
 
-static_assert(sizeof(TerrainLitParams) == 528u,
-              "Terrain lit parameters must match the std140 shader block");
+static_assert(sizeof(TerrainLitParams) == 528u, "Terrain lit parameters must match the std140 shader block");
 
 struct alignas(16) TerrainWaterParams {
     glm::mat4 view = glm::mat4(1.0f);
@@ -104,8 +94,7 @@ struct alignas(16) TerrainWaterParams {
     glm::ivec4 controlFlags2 = glm::ivec4(0);
 };
 
-static_assert(sizeof(TerrainWaterParams) == 400u,
-              "Terrain water parameters must match the std140 shader block");
+static_assert(sizeof(TerrainWaterParams) == 400u, "Terrain water parameters must match the std140 shader block");
 
 struct alignas(16) TerrainForwardParams {
     glm::mat4 view = glm::mat4(1.0f);
@@ -116,22 +105,14 @@ struct alignas(16) TerrainForwardParams {
     glm::ivec4 controlFlags = glm::ivec4(0);
 };
 
-static_assert(sizeof(TerrainForwardParams) == 192u,
-              "Terrain forward parameters must match the std140 shader block");
+static_assert(sizeof(TerrainForwardParams) == 192u, "Terrain forward parameters must match the std140 shader block");
 
 void setPackedTerrainVertexInput(RhiGraphicsPipelineDesc& pipelineDesc) {
-    pipelineDesc.vertexInput.bindings.push_back({
-        0u,
-        static_cast<uint32_t>(sizeof(PackedBlockVertex)),
-        RhiVertexInputRate::Vertex
-    });
+    pipelineDesc.vertexInput.bindings.push_back(
+        {0u, static_cast<uint32_t>(sizeof(PackedBlockVertex)), RhiVertexInputRate::Vertex});
     for (uint32_t attribute = 0u; attribute < 4u; ++attribute) {
-        pipelineDesc.vertexInput.attributes.push_back({
-            11u + attribute,
-            0u,
-            RhiVertexFormat::Uint,
-            attribute * static_cast<uint32_t>(sizeof(uint32_t))
-        });
+        pipelineDesc.vertexInput.attributes.push_back(
+            {11u + attribute, 0u, RhiVertexFormat::Uint, attribute * static_cast<uint32_t>(sizeof(uint32_t))});
     }
 }
 } // namespace
@@ -161,21 +142,15 @@ void TerrainRhiPipelineSet::shutdown() {
     m_rhiDevice = nullptr;
 }
 
-bool TerrainRhiPipelineSet::configureClusteredLighting(
-    const RhiBindGroupLayoutHandle bindGroupLayout,
-    const RhiBindGroupHandle bindGroup,
-    const renderer::contracts::ClusterGrid& grid) {
-    if (m_rhiDevice == nullptr ||
-        m_rhiDevice->backend() != RhiBackend::Vulkan ||
-        !bindGroupLayout.isValid() || !bindGroup.isValid() ||
-        grid.clusterCount == 0u ||
-        grid.tileCountX == 0u || grid.tileCountY == 0u ||
-        grid.depthSliceCount !=
-            renderer::contracts::kClusterDepthSliceCount) {
+bool TerrainRhiPipelineSet::configureClusteredLighting(const RhiBindGroupLayoutHandle bindGroupLayout,
+                                                       const RhiBindGroupHandle bindGroup,
+                                                       const renderer::contracts::ClusterGrid& grid) {
+    if (m_rhiDevice == nullptr || m_rhiDevice->backend() != RhiBackend::Vulkan || !bindGroupLayout.isValid() ||
+        !bindGroup.isValid() || grid.clusterCount == 0u || grid.tileCountX == 0u || grid.tileCountY == 0u ||
+        grid.depthSliceCount != renderer::contracts::kClusterDepthSliceCount) {
         return false;
     }
-    if (m_transparentPipeline.isValid() &&
-        !sameHandle(m_transparentClusterLayout, bindGroupLayout)) {
+    if (m_transparentPipeline.isValid() && !sameHandle(m_transparentClusterLayout, bindGroupLayout)) {
         destroyTransparentResources();
     }
     m_transparentClusterLayout = bindGroupLayout;
@@ -184,61 +159,49 @@ bool TerrainRhiPipelineSet::configureClusteredLighting(
     return true;
 }
 
-bool TerrainRhiPipelineSet::prepareGBuffer(RhiCommandList& commandList,
-                                           ResourceMgr& resourceMgr,
-                                           const TerrainFrameData& frame,
-                                           const TerrainRenderSettings& settings) {
-    if (m_rhiDevice == nullptr || !ensureGBufferPipeline(resourceMgr) ||
-        !ensureGBufferTextureViews(resourceMgr) || !ensureGBufferBindGroups()) {
+bool TerrainRhiPipelineSet::prepareGBuffer(RhiCommandList& commandList, ResourceMgr& resourceMgr,
+                                           const TerrainFrameData& frame, const TerrainRenderSettings& settings) {
+    if (m_rhiDevice == nullptr || !ensureGBufferPipeline(resourceMgr) || !ensureGBufferTextureViews(resourceMgr) ||
+        !ensureGBufferBindGroups()) {
         return false;
     }
 
-    const bool normalMapsEnabled = m_hasNormalMaps && settings.blockMaterialMapsEnabled &&
-                                   settings.blockNormalMapsEnabled;
-    const bool specularMapsEnabled = m_hasSpecularMaps && settings.blockMaterialMapsEnabled &&
-                                     settings.blockSpecularMapsEnabled;
-    const bool parallaxEnabled = normalMapsEnabled && settings.blockParallaxMapsEnabled &&
-                                 settings.blockParallaxDepth > 0.0f;
+    const bool normalMapsEnabled =
+        m_hasNormalMaps && settings.blockMaterialMapsEnabled && settings.blockNormalMapsEnabled;
+    const bool specularMapsEnabled =
+        m_hasSpecularMaps && settings.blockMaterialMapsEnabled && settings.blockSpecularMapsEnabled;
+    const bool parallaxEnabled =
+        normalMapsEnabled && settings.blockParallaxMapsEnabled && settings.blockParallaxDepth > 0.0f;
 
     TerrainGBufferParams baseParams;
     baseParams.viewProj = frame.viewProj;
     baseParams.cameraAnimation = glm::vec4(frame.cameraPos, frame.animationTime);
-    baseParams.surfaceParams = glm::vec4(
-        frame.shaderTime,
-        frame.surfaceWetness,
-        parallaxEnabled ? settings.blockParallaxDepth : 0.0f,
-        0.0f);
-    baseParams.materialFlags = glm::ivec4(
-        0,
-        normalMapsEnabled ? 1 : 0,
-        specularMapsEnabled ? 1 : 0,
-        parallaxEnabled ? 1 : 0);
-    baseParams.weatherFlags = glm::ivec4(
-        settings.rainWetSurfacesEnabled ? 1 : 0,
-        settings.rainSurfaceRipplesEnabled ? 1 : 0,
-        0,
-        0);
+    baseParams.surfaceParams =
+        glm::vec4(frame.shaderTime, frame.surfaceWetness, parallaxEnabled ? settings.blockParallaxDepth : 0.0f, 0.0f);
+    baseParams.materialFlags =
+        glm::ivec4(0, normalMapsEnabled ? 1 : 0, specularMapsEnabled ? 1 : 0, parallaxEnabled ? 1 : 0);
+    baseParams.weatherFlags =
+        glm::ivec4(settings.rainWetSurfacesEnabled ? 1 : 0, settings.rainSurfaceRipplesEnabled ? 1 : 0, 0, 0);
 
     TerrainGBufferParams cutoutParams = baseParams;
     cutoutParams.materialFlags.x = 1;
-    commandList.bufferBarrier({m_gbufferParamsBuffers[0], RhiResourceState::UniformBuffer,
-                               RhiResourceState::TransferDst});
-    commandList.bufferBarrier({m_gbufferParamsBuffers[1], RhiResourceState::UniformBuffer,
-                               RhiResourceState::TransferDst});
+    commandList.bufferBarrier(
+        {m_gbufferParamsBuffers[0], RhiResourceState::UniformBuffer, RhiResourceState::TransferDst});
+    commandList.bufferBarrier(
+        {m_gbufferParamsBuffers[1], RhiResourceState::UniformBuffer, RhiResourceState::TransferDst});
     commandList.updateBuffer(m_gbufferParamsBuffers[0], 0u, &baseParams, sizeof(baseParams));
     commandList.updateBuffer(m_gbufferParamsBuffers[1], 0u, &cutoutParams, sizeof(cutoutParams));
-    commandList.bufferBarrier({m_gbufferParamsBuffers[0], RhiResourceState::TransferDst,
-                               RhiResourceState::UniformBuffer});
-    commandList.bufferBarrier({m_gbufferParamsBuffers[1], RhiResourceState::TransferDst,
-                               RhiResourceState::UniformBuffer});
+    commandList.bufferBarrier(
+        {m_gbufferParamsBuffers[0], RhiResourceState::TransferDst, RhiResourceState::UniformBuffer});
+    commandList.bufferBarrier(
+        {m_gbufferParamsBuffers[1], RhiResourceState::TransferDst, RhiResourceState::UniformBuffer});
     return true;
 }
 
-bool TerrainRhiPipelineSet::prepareShadow(RhiCommandList& commandList,
-                                          ResourceMgr& resourceMgr,
+bool TerrainRhiPipelineSet::prepareShadow(RhiCommandList& commandList, ResourceMgr& resourceMgr,
                                           const TerrainShadowFrameData& frame) {
-    if (m_rhiDevice == nullptr || !ensureShadowPipeline(resourceMgr) ||
-        !ensureShadowTextureViews(resourceMgr) || !ensureShadowBindGroup()) {
+    if (m_rhiDevice == nullptr || !ensureShadowPipeline(resourceMgr) || !ensureShadowTextureViews(resourceMgr) ||
+        !ensureShadowBindGroup()) {
         return false;
     }
 
@@ -246,129 +209,81 @@ bool TerrainRhiPipelineSet::prepareShadow(RhiCommandList& commandList,
     params.modelView = frame.modelView;
     params.projection = frame.projection;
     params.lightAnimation = glm::vec4(frame.lightDirection, frame.animationTime);
-    params.timePass = glm::vec4(frame.shaderTime,
-                                static_cast<float>(frame.passMode),
-                                0.0f,
-                                0.0f);
-    commandList.bufferBarrier({m_shadowParamsBuffer, RhiResourceState::UniformBuffer,
-                               RhiResourceState::TransferDst});
+    params.timePass = glm::vec4(frame.shaderTime, static_cast<float>(frame.passMode), 0.0f, 0.0f);
+    commandList.bufferBarrier({m_shadowParamsBuffer, RhiResourceState::UniformBuffer, RhiResourceState::TransferDst});
     commandList.updateBuffer(m_shadowParamsBuffer, 0u, &params, sizeof(params));
-    commandList.bufferBarrier({m_shadowParamsBuffer, RhiResourceState::TransferDst,
-                               RhiResourceState::UniformBuffer});
+    commandList.bufferBarrier({m_shadowParamsBuffer, RhiResourceState::TransferDst, RhiResourceState::UniformBuffer});
     return true;
 }
 
-bool TerrainRhiPipelineSet::prepareTransparent(
-    RhiCommandList& commandList,
-    ResourceMgr& resourceMgr,
-    DeferredRenderTargets& targets,
-    const TerrainFrameData& frame,
-    const TerrainRenderSettings& settings,
-    const int heldBlockLightValue,
-    const bool volumetricFogShadersReady) {
+bool TerrainRhiPipelineSet::prepareTransparent(RhiCommandList& commandList, ResourceMgr& resourceMgr,
+                                               DeferredRenderTargets& targets, const TerrainFrameData& frame,
+                                               const TerrainRenderSettings& settings, const int heldBlockLightValue,
+                                               const bool volumetricFogShadersReady) {
     if (m_rhiDevice == nullptr ||
         (m_rhiDevice->backend() == RhiBackend::Vulkan &&
-         (!m_transparentClusterLayout.isValid() ||
-          !m_transparentClusterBindGroup.isValid() ||
+         (!m_transparentClusterLayout.isValid() || !m_transparentClusterBindGroup.isValid() ||
           m_transparentClusterGrid.clusterCount == 0u)) ||
-        !ensureTransparentPipeline(resourceMgr) ||
-        !ensureTransparentTextureViews(resourceMgr, targets) ||
+        !ensureTransparentPipeline(resourceMgr) || !ensureTransparentTextureViews(resourceMgr, targets) ||
         !ensureTransparentBindGroup()) {
         return false;
     }
 
-    const bool volumetricFogActive =
-        (settings.volumetricLightEnabled ||
-         (settings.volumetricFogEnabled && settings.volumetricFogStrength > 0.001f)) &&
-        volumetricFogShadersReady;
+    const bool volumetricFogActive = (settings.volumetricLightEnabled ||
+                                      (settings.volumetricFogEnabled && settings.volumetricFogStrength > 0.001f)) &&
+                                     volumetricFogShadersReady;
 
     TerrainLitParams params;
     params.view = frame.view;
     params.viewProj = frame.viewProj;
     params.cameraAnimation = glm::vec4(frame.cameraPos, frame.animationTime);
     params.fogColorStart = glm::vec4(frame.fog.color, frame.fog.start);
-    params.fogParams = glm::vec4(
-        frame.fog.end,
-        frame.fog.density,
-        frame.skyLighting.skyIntensity,
-        frame.skyLighting.moonVisibility);
+    params.fogParams =
+        glm::vec4(frame.fog.end, frame.fog.density, frame.skyLighting.skyIntensity, frame.skyLighting.moonVisibility);
     params.sunLightColor = glm::vec4(frame.skyLighting.sunLightColor, 0.0f);
     params.skyAmbientColor = glm::vec4(frame.skyLighting.skyAmbientColor, 0.0f);
     params.shadowTintColor = glm::vec4(frame.skyLighting.shadowTintColor, 0.0f);
     params.horizonScatterColor = glm::vec4(frame.skyLighting.horizonScatterColor, 0.0f);
     params.sunDirection = glm::vec4(frame.skyLighting.sunDirection, 0.0f);
     params.moonDirection = glm::vec4(frame.skyLighting.moonDirection, 0.0f);
-    params.moonLightColor = glm::vec4(
-        frame.skyLighting.moonLightColor,
-        frame.skyLighting.moonPhaseFlux);
-    params.lightingParams0 = glm::vec4(
-        settings.directSunStrength,
-        settings.skyAmbientStrength,
-        settings.weatherSkylightScale,
-        settings.minimumAmbient);
-    params.lightingParams1 = glm::vec4(
-        settings.blockLightStrength,
-        settings.fakeBounceStrength,
-        settings.albedoDesaturation,
-        settings.shadowDesaturation);
-    params.atmosphereParams0 = glm::vec4(
-        frame.atmosphere.sunWarmth,
-        frame.atmosphere.skyCoolness,
-        frame.atmosphere.aerialStrength,
-        frame.atmosphere.horizonScatterStrength);
-    params.atmosphereParams1 = glm::vec4(
-        frame.atmosphere.weatherWetness,
-        frame.atmosphere.weatherStorm,
-        frame.atmosphere.aerialReduction,
-        frame.atmosphere.lightningFlash);
-    params.atmosphereParams2 = glm::vec4(
-        frame.atmosphere.surfaceWetness,
-        frame.atmosphere.skyWetness,
-        frame.atmosphere.fogWetness,
-        frame.atmosphere.cloudWetness);
+    params.moonLightColor = glm::vec4(frame.skyLighting.moonLightColor, frame.skyLighting.moonPhaseFlux);
+    params.lightingParams0 = glm::vec4(settings.directSunStrength, settings.skyAmbientStrength,
+                                       settings.weatherSkylightScale, settings.minimumAmbient);
+    params.lightingParams1 = glm::vec4(settings.blockLightStrength, settings.fakeBounceStrength,
+                                       settings.albedoDesaturation, settings.shadowDesaturation);
+    params.atmosphereParams0 = glm::vec4(frame.atmosphere.sunWarmth, frame.atmosphere.skyCoolness,
+                                         frame.atmosphere.aerialStrength, frame.atmosphere.horizonScatterStrength);
+    params.atmosphereParams1 = glm::vec4(frame.atmosphere.weatherWetness, frame.atmosphere.weatherStorm,
+                                         frame.atmosphere.aerialReduction, frame.atmosphere.lightningFlash);
+    params.atmosphereParams2 = glm::vec4(frame.atmosphere.surfaceWetness, frame.atmosphere.skyWetness,
+                                         frame.atmosphere.fogWetness, frame.atmosphere.cloudWetness);
     params.atmosphereParams3 = glm::vec4(frame.atmosphere.precipitation, 0.0f, 0.0f, 0.0f);
     params.waterAbsorption = glm::vec4(1.0f, 1.0f, 1.0f, 0.0f);
     params.controlFlags0 = glm::ivec4(1, 1, 0, 1);
-    params.controlFlags1 = glm::ivec4(
-        1,
-        frame.fog.enabled ? 1 : 0,
-        frame.fog.mode,
-        0);
-    params.controlFlags2 = glm::ivec4(
-        settings.aerialPerspectiveEnabled ? 1 : 0,
-        settings.volumetricLightEnabled ? 1 : 0,
-        volumetricFogActive ? 1 : 0,
-        heldBlockLightValue);
+    params.controlFlags1 = glm::ivec4(1, frame.fog.enabled ? 1 : 0, frame.fog.mode, 0);
+    params.controlFlags2 =
+        glm::ivec4(settings.aerialPerspectiveEnabled ? 1 : 0, settings.volumetricLightEnabled ? 1 : 0,
+                   volumetricFogActive ? 1 : 0, heldBlockLightValue);
     if (m_rhiDevice->backend() == RhiBackend::Vulkan) {
-        params.clusterGrid = {
-            m_transparentClusterGrid.tileCountX,
-            m_transparentClusterGrid.tileCountY,
-            m_transparentClusterGrid.depthSliceCount,
-            renderer::contracts::kClusterTileWidth};
-        params.clusterDepth = {
-            m_transparentClusterGrid.nearPlane,
-            m_transparentClusterGrid.farPlane,
-            m_transparentClusterGrid.depthLogScale,
-            m_transparentClusterGrid.depthLogBias};
-        params.clusterRenderExtent = {
-            m_transparentClusterGrid.renderWidth,
-            m_transparentClusterGrid.renderHeight, 0u, 0u};
+        params.clusterGrid = {m_transparentClusterGrid.tileCountX, m_transparentClusterGrid.tileCountY,
+                              m_transparentClusterGrid.depthSliceCount, renderer::contracts::kClusterTileWidth};
+        params.clusterDepth = {m_transparentClusterGrid.nearPlane, m_transparentClusterGrid.farPlane,
+                               m_transparentClusterGrid.depthLogScale, m_transparentClusterGrid.depthLogBias};
+        params.clusterRenderExtent = {m_transparentClusterGrid.renderWidth, m_transparentClusterGrid.renderHeight, 0u,
+                                      0u};
     }
-    commandList.bufferBarrier({m_transparentParamsBuffer, RhiResourceState::UniformBuffer,
-                               RhiResourceState::TransferDst});
+    commandList.bufferBarrier(
+        {m_transparentParamsBuffer, RhiResourceState::UniformBuffer, RhiResourceState::TransferDst});
     commandList.updateBuffer(m_transparentParamsBuffer, 0u, &params, sizeof(params));
-    commandList.bufferBarrier({m_transparentParamsBuffer, RhiResourceState::TransferDst,
-                               RhiResourceState::UniformBuffer});
+    commandList.bufferBarrier(
+        {m_transparentParamsBuffer, RhiResourceState::TransferDst, RhiResourceState::UniformBuffer});
     return true;
 }
 
-bool TerrainRhiPipelineSet::prepareWater(
-    RhiCommandList& commandList,
-    ResourceMgr& resourceMgr,
-    DeferredRenderTargets& targets,
-    const TerrainWaterFrameData& frame) {
-    if (m_rhiDevice == nullptr || !ensureWaterPipeline(resourceMgr) ||
-        !ensureWaterTextureViews(resourceMgr, targets) || !ensureWaterBindGroup()) {
+bool TerrainRhiPipelineSet::prepareWater(RhiCommandList& commandList, ResourceMgr& resourceMgr,
+                                         DeferredRenderTargets& targets, const TerrainWaterFrameData& frame) {
+    if (m_rhiDevice == nullptr || !ensureWaterPipeline(resourceMgr) || !ensureWaterTextureViews(resourceMgr, targets) ||
+        !ensureWaterBindGroup()) {
         return false;
     }
 
@@ -386,71 +301,49 @@ bool TerrainRhiPipelineSet::prepareWater(
     params.sunLightSkyIntensity = glm::vec4(frame.sunLightColor, frame.skyIntensity);
     params.moonLightVisibility = glm::vec4(frame.moonLightColor, frame.moonVisibility);
     params.skyAmbientWeather = glm::vec4(frame.skyAmbientColor, frame.weatherWetness);
-    params.wetness = glm::vec4(
-        frame.skyWetness,
-        frame.fogWetness,
-        frame.cloudWetness,
-        frame.surfaceWetness);
+    params.wetness = glm::vec4(frame.skyWetness, frame.fogWetness, frame.cloudWetness, frame.surfaceWetness);
     params.waveParams = glm::vec4(1.0f, 1.0f, 1.33f, frame.moonPhaseFlux);
-    params.waterLayers = glm::vec4(
-        static_cast<float>(still.firstLayer),
-        static_cast<float>(std::max(1, still.frameCount)),
-        static_cast<float>(flow.firstLayer),
-        static_cast<float>(std::max(1, flow.frameCount)));
-    params.controlFlags0 = glm::ivec4(
-        frame.skyCaptureEnabled ? 1 : 0,
-        frame.compositeInputsEnabled ? 1 : 0,
-        frame.compositeInputsEnabled ? 1 : 0,
-        frame.depthSofteningEnabled ? 1 : 0);
-    params.controlFlags1 = glm::ivec4(
-        frame.volumetricFogActive ? 1 : 0,
-        static_cast<int>(frame.frameIndex & 0x7fffffffULL),
-        frame.freezeBias ? 1 : 0,
-        frame.rainSurfaceRipplesEnabled ? 1 : 0);
+    params.waterLayers =
+        glm::vec4(static_cast<float>(still.firstLayer), static_cast<float>(std::max(1, still.frameCount)),
+                  static_cast<float>(flow.firstLayer), static_cast<float>(std::max(1, flow.frameCount)));
+    params.controlFlags0 = glm::ivec4(frame.skyCaptureEnabled ? 1 : 0, frame.compositeInputsEnabled ? 1 : 0,
+                                      frame.compositeInputsEnabled ? 1 : 0, frame.depthSofteningEnabled ? 1 : 0);
+    params.controlFlags1 =
+        glm::ivec4(frame.volumetricFogActive ? 1 : 0, static_cast<int>(frame.frameIndex & 0x7fffffffULL),
+                   frame.freezeBias ? 1 : 0, frame.rainSurfaceRipplesEnabled ? 1 : 0);
     params.controlFlags2 = glm::ivec4(frame.eyeInWater ? 1 : 0, 0, 0, 0);
-    commandList.bufferBarrier({m_waterParamsBuffer, RhiResourceState::UniformBuffer,
-                               RhiResourceState::TransferDst});
+    commandList.bufferBarrier({m_waterParamsBuffer, RhiResourceState::UniformBuffer, RhiResourceState::TransferDst});
     commandList.updateBuffer(m_waterParamsBuffer, 0u, &params, sizeof(params));
-    commandList.bufferBarrier({m_waterParamsBuffer, RhiResourceState::TransferDst,
-                               RhiResourceState::UniformBuffer});
+    commandList.bufferBarrier({m_waterParamsBuffer, RhiResourceState::TransferDst, RhiResourceState::UniformBuffer});
     return true;
 }
 
-bool TerrainRhiPipelineSet::prepareForward(RhiCommandList& commandList,
-                                           ResourceMgr& resourceMgr,
+bool TerrainRhiPipelineSet::prepareForward(RhiCommandList& commandList, ResourceMgr& resourceMgr,
                                            const TerrainFrameData& frame) {
-    if (m_rhiDevice == nullptr || !ensureForwardPipeline(resourceMgr) ||
-        !ensureForwardTextureViews(resourceMgr) || !ensureForwardBindGroups()) {
+    if (m_rhiDevice == nullptr || !ensureForwardPipeline(resourceMgr) || !ensureForwardTextureViews(resourceMgr) ||
+        !ensureForwardBindGroups()) {
         return false;
     }
 
     TerrainForwardParams baseParams;
     baseParams.view = frame.view;
     baseParams.viewProj = frame.viewProj;
-    baseParams.animationSky = glm::vec4(
-        frame.animationTime,
-        frame.skyLighting.skyIntensity,
-        0.0f,
-        0.0f);
+    baseParams.animationSky = glm::vec4(frame.animationTime, frame.skyLighting.skyIntensity, 0.0f, 0.0f);
     baseParams.fogColorStart = glm::vec4(frame.fog.color, frame.fog.start);
     baseParams.fogParams = glm::vec4(frame.fog.end, frame.fog.density, 0.0f, 0.0f);
-    baseParams.controlFlags = glm::ivec4(
-        0,
-        frame.fog.enabled ? 1 : 0,
-        frame.fog.mode,
-        0);
+    baseParams.controlFlags = glm::ivec4(0, frame.fog.enabled ? 1 : 0, frame.fog.mode, 0);
     TerrainForwardParams transparentParams = baseParams;
     transparentParams.controlFlags.x = 1;
-    commandList.bufferBarrier({m_forwardParamsBuffers[0], RhiResourceState::UniformBuffer,
-                               RhiResourceState::TransferDst});
-    commandList.bufferBarrier({m_forwardParamsBuffers[1], RhiResourceState::UniformBuffer,
-                               RhiResourceState::TransferDst});
+    commandList.bufferBarrier(
+        {m_forwardParamsBuffers[0], RhiResourceState::UniformBuffer, RhiResourceState::TransferDst});
+    commandList.bufferBarrier(
+        {m_forwardParamsBuffers[1], RhiResourceState::UniformBuffer, RhiResourceState::TransferDst});
     commandList.updateBuffer(m_forwardParamsBuffers[0], 0u, &baseParams, sizeof(baseParams));
     commandList.updateBuffer(m_forwardParamsBuffers[1], 0u, &transparentParams, sizeof(transparentParams));
-    commandList.bufferBarrier({m_forwardParamsBuffers[0], RhiResourceState::TransferDst,
-                               RhiResourceState::UniformBuffer});
-    commandList.bufferBarrier({m_forwardParamsBuffers[1], RhiResourceState::TransferDst,
-                               RhiResourceState::UniformBuffer});
+    commandList.bufferBarrier(
+        {m_forwardParamsBuffers[0], RhiResourceState::TransferDst, RhiResourceState::UniformBuffer});
+    commandList.bufferBarrier(
+        {m_forwardParamsBuffers[1], RhiResourceState::TransferDst, RhiResourceState::UniformBuffer});
     return true;
 }
 
@@ -458,9 +351,8 @@ bool TerrainRhiPipelineSet::ensureGBufferPipeline(ResourceMgr& resourceMgr) {
     const bool hasNormalMaps = resourceMgr.hasBlockNormalMaps();
     const bool hasSpecularMaps = resourceMgr.hasBlockSpecularMaps();
     const float anisotropy = std::max(1.0f, resourceMgr.getAtlasAnisotropy());
-    if (m_gbufferOpaquePipeline.isValid() && m_gbufferCutoutPipeline.isValid() &&
-        hasNormalMaps == m_hasNormalMaps && hasSpecularMaps == m_hasSpecularMaps &&
-        anisotropy == m_samplerAnisotropy) {
+    if (m_gbufferOpaquePipeline.isValid() && m_gbufferCutoutPipeline.isValid() && hasNormalMaps == m_hasNormalMaps &&
+        hasSpecularMaps == m_hasSpecularMaps && anisotropy == m_samplerAnisotropy) {
         return true;
     }
 
@@ -480,12 +372,10 @@ bool TerrainRhiPipelineSet::ensureGBufferPipeline(ResourceMgr& resourceMgr) {
     if (m_hasSpecularMaps) {
         sourceOptions.preprocessorDefinitions.push_back("RHI_TERRAIN_SPECULAR_MAPS");
     }
-    const std::optional<std::string> vertexSource = renderer::rhi::loadShaderSource(
-        "assets/shaders/chunk_gbuffer.vert",
-        sourceOptions);
-    const std::optional<std::string> fragmentSource = renderer::rhi::loadShaderSource(
-        "assets/shaders/chunk_gbuffer.frag",
-        sourceOptions);
+    const std::optional<std::string> vertexSource =
+        renderer::rhi::loadShaderSource("assets/shaders/chunk_gbuffer.vert", sourceOptions);
+    const std::optional<std::string> fragmentSource =
+        renderer::rhi::loadShaderSource("assets/shaders/chunk_gbuffer.frag", sourceOptions);
     if (!vertexSource.has_value() || !fragmentSource.has_value()) {
         destroyGBufferResources();
         return false;
@@ -512,8 +402,7 @@ bool TerrainRhiPipelineSet::ensureGBufferPipeline(ResourceMgr& resourceMgr) {
     RhiBufferDesc paramsDesc;
     paramsDesc.debugName = "Terrain.GBuffer.Params";
     paramsDesc.size = sizeof(TerrainGBufferParams);
-    paramsDesc.usage = rhiFlag(RhiBufferUsage::Uniform) |
-                       rhiFlag(RhiBufferUsage::TransferDst);
+    paramsDesc.usage = rhiFlag(RhiBufferUsage::Uniform) | rhiFlag(RhiBufferUsage::TransferDst);
     paramsDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
     paramsDesc.initialState = RhiResourceState::UniformBuffer;
     paramsDesc.memoryCategory = RhiMemoryCategory::Uniform;
@@ -546,54 +435,32 @@ bool TerrainRhiPipelineSet::ensureGBufferPipeline(ResourceMgr& resourceMgr) {
     linearRepeatDesc.addressV = RhiAddressMode::Repeat;
     linearRepeatDesc.addressW = RhiAddressMode::Repeat;
     m_linearRepeatSampler = m_rhiDevice->createSampler(linearRepeatDesc);
-    if (!m_blockSampler.isValid() || !m_linearClampSampler.isValid() ||
-        !m_linearRepeatSampler.isValid()) {
+    if (!m_blockSampler.isValid() || !m_linearClampSampler.isValid() || !m_linearRepeatSampler.isValid()) {
         destroyGBufferResources();
         return false;
     }
 
     RhiBindGroupLayoutDesc metadataLayoutDesc;
     metadataLayoutDesc.debugName = "Terrain.MetadataLayout";
-    metadataLayoutDesc.entries.push_back({
-        0u,
-        RhiBindingType::StorageBuffer,
-        rhiFlag(RhiShaderStage::Vertex),
-        1u
-    });
+    metadataLayoutDesc.entries.push_back({0u, RhiBindingType::StorageBuffer, rhiFlag(RhiShaderStage::Vertex), 1u});
     m_metadataLayout = m_rhiDevice->createBindGroupLayout(metadataLayoutDesc);
 
     RhiBindGroupLayoutDesc materialLayoutDesc;
     materialLayoutDesc.debugName = "Terrain.GBufferMaterialLayout";
     for (size_t slot = 0u; slot < 5u; ++slot) {
-        materialLayoutDesc.entries.push_back({
-            kGBufferTextureBindings[slot],
-            RhiBindingType::CombinedTextureSampler,
-            rhiFlag(RhiShaderStage::Fragment),
-            1u
-        });
+        materialLayoutDesc.entries.push_back({kGBufferTextureBindings[slot], RhiBindingType::CombinedTextureSampler,
+                                              rhiFlag(RhiShaderStage::Fragment), 1u});
     }
     if (m_hasNormalMaps) {
-        materialLayoutDesc.entries.push_back({
-            11u,
-            RhiBindingType::CombinedTextureSampler,
-            rhiFlag(RhiShaderStage::Fragment),
-            1u
-        });
+        materialLayoutDesc.entries.push_back(
+            {11u, RhiBindingType::CombinedTextureSampler, rhiFlag(RhiShaderStage::Fragment), 1u});
     }
     if (m_hasSpecularMaps) {
-        materialLayoutDesc.entries.push_back({
-            12u,
-            RhiBindingType::CombinedTextureSampler,
-            rhiFlag(RhiShaderStage::Fragment),
-            1u
-        });
+        materialLayoutDesc.entries.push_back(
+            {12u, RhiBindingType::CombinedTextureSampler, rhiFlag(RhiShaderStage::Fragment), 1u});
     }
-    materialLayoutDesc.entries.push_back({
-        13u,
-        RhiBindingType::UniformBuffer,
-        rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment),
-        1u
-    });
+    materialLayoutDesc.entries.push_back(
+        {13u, RhiBindingType::UniformBuffer, rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment), 1u});
     m_gbufferMaterialLayout = m_rhiDevice->createBindGroupLayout(materialLayoutDesc);
     if (!m_metadataLayout.isValid() || !m_gbufferMaterialLayout.isValid()) {
         destroyGBufferResources();
@@ -618,15 +485,10 @@ bool TerrainRhiPipelineSet::ensureGBufferPipeline(ResourceMgr& resourceMgr) {
     pipelineDesc.depthStencil.depthTestEnabled = true;
     pipelineDesc.depthStencil.depthWriteEnabled = true;
     pipelineDesc.depthStencil.depthCompare = RhiCompareOp::Less;
-    pipelineDesc.colorFormats = {
-        RhiTextureFormat::Rgba8Unorm,
-        RhiTextureFormat::Rgb10A2Unorm,
-        RhiTextureFormat::Rg8Unorm,
-        RhiTextureFormat::Rgba8Unorm,
-        RhiTextureFormat::Rgba8Unorm,
-        RhiTextureFormat::Rgba8Unorm,
-        RhiTextureFormat::Rg32Uint
-    };
+    pipelineDesc.colorFormats = {RhiTextureFormat::Rgba8Unorm, RhiTextureFormat::Rgb10A2Unorm,
+                                 RhiTextureFormat::Rg8Unorm,   RhiTextureFormat::Rgba8Unorm,
+                                 RhiTextureFormat::Rgba8Unorm, RhiTextureFormat::Rgba8Unorm,
+                                 RhiTextureFormat::Rg32Uint};
     pipelineDesc.blend.attachments.resize(7u);
     pipelineDesc.depthFormat = RhiTextureFormat::Depth32Float;
     pipelineDesc.debugName = "Terrain.GBuffer.OpaquePipeline";
@@ -652,15 +514,11 @@ bool TerrainRhiPipelineSet::ensureGBufferTextureViews(ResourceMgr& resourceMgr) 
         return false;
     }
     if (m_hasNormalMaps &&
-        !ensureTextureView(5u,
-                           resourceMgr.getBlockNormalTextureArray().texture,
-                           RhiTextureViewType::Texture2DArray)) {
+        !ensureTextureView(5u, resourceMgr.getBlockNormalTextureArray().texture, RhiTextureViewType::Texture2DArray)) {
         return false;
     }
-    if (m_hasSpecularMaps &&
-        !ensureTextureView(6u,
-                           resourceMgr.getBlockSpecularTextureArray().texture,
-                           RhiTextureViewType::Texture2DArray)) {
+    if (m_hasSpecularMaps && !ensureTextureView(6u, resourceMgr.getBlockSpecularTextureArray().texture,
+                                                RhiTextureViewType::Texture2DArray)) {
         return false;
     }
     return true;
@@ -689,9 +547,8 @@ bool TerrainRhiPipelineSet::ensureGBufferBindGroups() {
             RhiBindGroupEntry entry;
             entry.binding = kGBufferTextureBindings[slot];
             entry.resource.combinedTextureSampler.textureView = m_gbufferTextureViews[slot];
-            entry.resource.combinedTextureSampler.sampler = slot == 0u
-                ? m_blockSampler
-                : (slot <= 2u ? m_linearClampSampler : m_linearRepeatSampler);
+            entry.resource.combinedTextureSampler.sampler =
+                slot == 0u ? m_blockSampler : (slot <= 2u ? m_linearClampSampler : m_linearRepeatSampler);
             desc.entries.push_back(entry);
         }
         if (m_hasNormalMaps) {
@@ -723,8 +580,7 @@ bool TerrainRhiPipelineSet::ensureGBufferBindGroups() {
     return true;
 }
 
-bool TerrainRhiPipelineSet::ensureTextureView(const size_t slot,
-                                              const RhiTextureHandle texture,
+bool TerrainRhiPipelineSet::ensureTextureView(const size_t slot, const RhiTextureHandle texture,
                                               const RhiTextureViewType viewType) {
     if (m_rhiDevice == nullptr || slot >= m_gbufferTextureViews.size() || !texture.isValid()) {
         return false;
@@ -745,8 +601,7 @@ bool TerrainRhiPipelineSet::ensureTextureView(const size_t slot,
     m_gbufferTextureViews[slot] = m_rhiDevice->createTextureView(desc);
     if (!m_gbufferTextureViews[slot].isValid()) {
         std::cerr << "TerrainRhiPipelineSet: failed to create GBuffer texture view"
-                  << " slot=" << slot
-                  << " texture=" << texture.index << ':' << texture.generation
+                  << " slot=" << slot << " texture=" << texture.index << ':' << texture.generation
                   << " viewType=" << static_cast<uint32_t>(viewType) << '\n';
         m_gbufferViewTextures[slot] = {};
         return false;
@@ -770,12 +625,10 @@ bool TerrainRhiPipelineSet::ensureForwardPipeline(ResourceMgr& resourceMgr) {
 
     renderer::rhi::RhiShaderSourceOptions sourceOptions;
     sourceOptions.preprocessorDefinitions.push_back("RHI_TERRAIN_FORWARD_MDI");
-    const std::optional<std::string> vertexSource = renderer::rhi::loadShaderSource(
-        "assets/shaders/chunk_lit.vert",
-        sourceOptions);
-    const std::optional<std::string> fragmentSource = renderer::rhi::loadShaderSource(
-        "assets/shaders/forward_basic_terrain.frag",
-        sourceOptions);
+    const std::optional<std::string> vertexSource =
+        renderer::rhi::loadShaderSource("assets/shaders/chunk_lit.vert", sourceOptions);
+    const std::optional<std::string> fragmentSource =
+        renderer::rhi::loadShaderSource("assets/shaders/forward_basic_terrain.frag", sourceOptions);
     if (!vertexSource.has_value() || !fragmentSource.has_value()) {
         destroyForwardResources();
         return false;
@@ -802,8 +655,7 @@ bool TerrainRhiPipelineSet::ensureForwardPipeline(ResourceMgr& resourceMgr) {
     RhiBufferDesc paramsDesc;
     paramsDesc.debugName = "Terrain.Forward.Params";
     paramsDesc.size = sizeof(TerrainForwardParams);
-    paramsDesc.usage = rhiFlag(RhiBufferUsage::Uniform) |
-                       rhiFlag(RhiBufferUsage::TransferDst);
+    paramsDesc.usage = rhiFlag(RhiBufferUsage::Uniform) | rhiFlag(RhiBufferUsage::TransferDst);
     paramsDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
     paramsDesc.initialState = RhiResourceState::UniformBuffer;
     paramsDesc.memoryCategory = RhiMemoryCategory::Uniform;
@@ -837,30 +689,17 @@ bool TerrainRhiPipelineSet::ensureForwardPipeline(ResourceMgr& resourceMgr) {
 
     RhiBindGroupLayoutDesc metadataLayoutDesc;
     metadataLayoutDesc.debugName = "Terrain.ForwardMetadataLayout";
-    metadataLayoutDesc.entries.push_back({
-        0u,
-        RhiBindingType::StorageBuffer,
-        rhiFlag(RhiShaderStage::Vertex),
-        1u
-    });
+    metadataLayoutDesc.entries.push_back({0u, RhiBindingType::StorageBuffer, rhiFlag(RhiShaderStage::Vertex), 1u});
     m_forwardMetadataLayout = m_rhiDevice->createBindGroupLayout(metadataLayoutDesc);
 
     RhiBindGroupLayoutDesc materialLayoutDesc;
     materialLayoutDesc.debugName = "Terrain.ForwardMaterialLayout";
     for (uint32_t binding = 0u; binding < 5u; ++binding) {
-        materialLayoutDesc.entries.push_back({
-            binding,
-            RhiBindingType::CombinedTextureSampler,
-            rhiFlag(RhiShaderStage::Fragment),
-            1u
-        });
+        materialLayoutDesc.entries.push_back(
+            {binding, RhiBindingType::CombinedTextureSampler, rhiFlag(RhiShaderStage::Fragment), 1u});
     }
-    materialLayoutDesc.entries.push_back({
-        5u,
-        RhiBindingType::UniformBuffer,
-        rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment),
-        1u
-    });
+    materialLayoutDesc.entries.push_back(
+        {5u, RhiBindingType::UniformBuffer, rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment), 1u});
     m_forwardMaterialLayout = m_rhiDevice->createBindGroupLayout(materialLayoutDesc);
     if (!m_forwardMetadataLayout.isValid() || !m_forwardMaterialLayout.isValid()) {
         destroyForwardResources();
@@ -913,26 +752,11 @@ bool TerrainRhiPipelineSet::ensureForwardPipeline(ResourceMgr& resourceMgr) {
 }
 
 bool TerrainRhiPipelineSet::ensureForwardTextureViews(ResourceMgr& resourceMgr) {
-    return ensureForwardTextureView(
-               0u,
-               resourceMgr.getTextureArray().texture,
-               RhiTextureViewType::Texture2DArray) &&
-           ensureForwardTextureView(
-               1u,
-               resourceMgr.getLightmapDay(),
-               RhiTextureViewType::Texture2D) &&
-           ensureForwardTextureView(
-               2u,
-               resourceMgr.getLightmapNight(),
-               RhiTextureViewType::Texture2D) &&
-           ensureForwardTextureView(
-               3u,
-               resourceMgr.getGrassColormap(),
-               RhiTextureViewType::Texture2D) &&
-           ensureForwardTextureView(
-               4u,
-               resourceMgr.getFoliageColormap(),
-               RhiTextureViewType::Texture2D);
+    return ensureForwardTextureView(0u, resourceMgr.getTextureArray().texture, RhiTextureViewType::Texture2DArray) &&
+           ensureForwardTextureView(1u, resourceMgr.getLightmapDay(), RhiTextureViewType::Texture2D) &&
+           ensureForwardTextureView(2u, resourceMgr.getLightmapNight(), RhiTextureViewType::Texture2D) &&
+           ensureForwardTextureView(3u, resourceMgr.getGrassColormap(), RhiTextureViewType::Texture2D) &&
+           ensureForwardTextureView(4u, resourceMgr.getFoliageColormap(), RhiTextureViewType::Texture2D);
 }
 
 bool TerrainRhiPipelineSet::ensureForwardBindGroups() {
@@ -952,9 +776,8 @@ bool TerrainRhiPipelineSet::ensureForwardBindGroups() {
             RhiBindGroupEntry entry;
             entry.binding = static_cast<uint32_t>(slot);
             entry.resource.combinedTextureSampler.textureView = m_forwardTextureViews[slot];
-            entry.resource.combinedTextureSampler.sampler = slot == 0u
-                ? m_forwardBlockSampler
-                : m_forwardLinearClampSampler;
+            entry.resource.combinedTextureSampler.sampler =
+                slot == 0u ? m_forwardBlockSampler : m_forwardLinearClampSampler;
             desc.entries.push_back(entry);
         }
         RhiBindGroupEntry paramsEntry;
@@ -972,10 +795,8 @@ bool TerrainRhiPipelineSet::ensureForwardBindGroups() {
     return true;
 }
 
-bool TerrainRhiPipelineSet::ensureForwardTextureView(
-    const size_t slot,
-    const RhiTextureHandle texture,
-    const RhiTextureViewType viewType) {
+bool TerrainRhiPipelineSet::ensureForwardTextureView(const size_t slot, const RhiTextureHandle texture,
+                                                     const RhiTextureViewType viewType) {
     if (m_rhiDevice == nullptr || slot >= m_forwardTextureViews.size() || !texture.isValid()) {
         return false;
     }
@@ -1029,20 +850,31 @@ void TerrainRhiPipelineSet::destroyForwardResources() {
     destroyForwardBindGroups();
     destroyForwardTextureViews();
     if (m_rhiDevice != nullptr) {
-        if (m_forwardOpaquePipeline.isValid()) m_rhiDevice->destroyPipeline(m_forwardOpaquePipeline);
-        if (m_forwardCutoutPipeline.isValid()) m_rhiDevice->destroyPipeline(m_forwardCutoutPipeline);
-        if (m_forwardTransparentPipeline.isValid()) m_rhiDevice->destroyPipeline(m_forwardTransparentPipeline);
-        if (m_forwardPipelineLayout.isValid()) m_rhiDevice->destroyPipelineLayout(m_forwardPipelineLayout);
-        if (m_forwardMaterialLayout.isValid()) m_rhiDevice->destroyBindGroupLayout(m_forwardMaterialLayout);
-        if (m_forwardMetadataLayout.isValid()) m_rhiDevice->destroyBindGroupLayout(m_forwardMetadataLayout);
-        if (m_forwardFragmentShader.isValid()) m_rhiDevice->destroyShader(m_forwardFragmentShader);
-        if (m_forwardVertexShader.isValid()) m_rhiDevice->destroyShader(m_forwardVertexShader);
+        if (m_forwardOpaquePipeline.isValid())
+            m_rhiDevice->destroyPipeline(m_forwardOpaquePipeline);
+        if (m_forwardCutoutPipeline.isValid())
+            m_rhiDevice->destroyPipeline(m_forwardCutoutPipeline);
+        if (m_forwardTransparentPipeline.isValid())
+            m_rhiDevice->destroyPipeline(m_forwardTransparentPipeline);
+        if (m_forwardPipelineLayout.isValid())
+            m_rhiDevice->destroyPipelineLayout(m_forwardPipelineLayout);
+        if (m_forwardMaterialLayout.isValid())
+            m_rhiDevice->destroyBindGroupLayout(m_forwardMaterialLayout);
+        if (m_forwardMetadataLayout.isValid())
+            m_rhiDevice->destroyBindGroupLayout(m_forwardMetadataLayout);
+        if (m_forwardFragmentShader.isValid())
+            m_rhiDevice->destroyShader(m_forwardFragmentShader);
+        if (m_forwardVertexShader.isValid())
+            m_rhiDevice->destroyShader(m_forwardVertexShader);
         for (RhiBufferHandle& buffer : m_forwardParamsBuffers) {
-            if (buffer.isValid()) m_rhiDevice->destroyBuffer(buffer);
+            if (buffer.isValid())
+                m_rhiDevice->destroyBuffer(buffer);
             buffer = {};
         }
-        if (m_forwardBlockSampler.isValid()) m_rhiDevice->destroySampler(m_forwardBlockSampler);
-        if (m_forwardLinearClampSampler.isValid()) m_rhiDevice->destroySampler(m_forwardLinearClampSampler);
+        if (m_forwardBlockSampler.isValid())
+            m_rhiDevice->destroySampler(m_forwardBlockSampler);
+        if (m_forwardLinearClampSampler.isValid())
+            m_rhiDevice->destroySampler(m_forwardLinearClampSampler);
     }
     m_forwardOpaquePipeline = {};
     m_forwardCutoutPipeline = {};
@@ -1071,12 +903,10 @@ bool TerrainRhiPipelineSet::ensureWaterPipeline(ResourceMgr& resourceMgr) {
 
     renderer::rhi::RhiShaderSourceOptions sourceOptions;
     sourceOptions.preprocessorDefinitions.push_back("RHI_TERRAIN_WATER_MDI");
-    const std::optional<std::string> vertexSource = renderer::rhi::loadShaderSource(
-        "assets/shaders/chunk_lit.vert",
-        sourceOptions);
-    const std::optional<std::string> fragmentSource = renderer::rhi::loadShaderSource(
-        "assets/shaders/water_composite.frag",
-        sourceOptions);
+    const std::optional<std::string> vertexSource =
+        renderer::rhi::loadShaderSource("assets/shaders/chunk_lit.vert", sourceOptions);
+    const std::optional<std::string> fragmentSource =
+        renderer::rhi::loadShaderSource("assets/shaders/water_composite.frag", sourceOptions);
     if (!vertexSource.has_value() || !fragmentSource.has_value()) {
         destroyWaterResources();
         return false;
@@ -1103,8 +933,7 @@ bool TerrainRhiPipelineSet::ensureWaterPipeline(ResourceMgr& resourceMgr) {
     RhiBufferDesc paramsDesc;
     paramsDesc.debugName = "Terrain.Water.Params";
     paramsDesc.size = sizeof(TerrainWaterParams);
-    paramsDesc.usage = rhiFlag(RhiBufferUsage::Uniform) |
-                       rhiFlag(RhiBufferUsage::TransferDst);
+    paramsDesc.usage = rhiFlag(RhiBufferUsage::Uniform) | rhiFlag(RhiBufferUsage::TransferDst);
     paramsDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
     paramsDesc.initialState = RhiResourceState::UniformBuffer;
     paramsDesc.memoryCategory = RhiMemoryCategory::Uniform;
@@ -1149,30 +978,17 @@ bool TerrainRhiPipelineSet::ensureWaterPipeline(ResourceMgr& resourceMgr) {
 
     RhiBindGroupLayoutDesc metadataLayoutDesc;
     metadataLayoutDesc.debugName = "Terrain.WaterMetadataLayout";
-    metadataLayoutDesc.entries.push_back({
-        0u,
-        RhiBindingType::StorageBuffer,
-        rhiFlag(RhiShaderStage::Vertex),
-        1u
-    });
+    metadataLayoutDesc.entries.push_back({0u, RhiBindingType::StorageBuffer, rhiFlag(RhiShaderStage::Vertex), 1u});
     m_waterMetadataLayout = m_rhiDevice->createBindGroupLayout(metadataLayoutDesc);
 
     RhiBindGroupLayoutDesc materialLayoutDesc;
     materialLayoutDesc.debugName = "Terrain.WaterMaterialLayout";
     for (const uint32_t binding : kWaterTextureBindings) {
-        materialLayoutDesc.entries.push_back({
-            binding,
-            RhiBindingType::CombinedTextureSampler,
-            rhiFlag(RhiShaderStage::Fragment),
-            1u
-        });
+        materialLayoutDesc.entries.push_back(
+            {binding, RhiBindingType::CombinedTextureSampler, rhiFlag(RhiShaderStage::Fragment), 1u});
     }
-    materialLayoutDesc.entries.push_back({
-        13u,
-        RhiBindingType::UniformBuffer,
-        rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment),
-        1u
-    });
+    materialLayoutDesc.entries.push_back(
+        {13u, RhiBindingType::UniformBuffer, rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment), 1u});
     m_waterMaterialLayout = m_rhiDevice->createBindGroupLayout(materialLayoutDesc);
     if (!m_waterMetadataLayout.isValid() || !m_waterMaterialLayout.isValid()) {
         destroyWaterResources();
@@ -1199,11 +1015,7 @@ bool TerrainRhiPipelineSet::ensureWaterPipeline(ResourceMgr& resourceMgr) {
     pipelineDesc.depthStencil.depthTestEnabled = true;
     pipelineDesc.depthStencil.depthWriteEnabled = true;
     pipelineDesc.depthStencil.depthCompare = RhiCompareOp::Less;
-    pipelineDesc.colorFormats = {
-        RhiTextureFormat::Rgba16Float,
-        RhiTextureFormat::R8Unorm,
-        RhiTextureFormat::R8Unorm
-    };
+    pipelineDesc.colorFormats = {RhiTextureFormat::Rgba16Float, RhiTextureFormat::R8Unorm, RhiTextureFormat::R8Unorm};
     RhiBlendAttachmentState maskBlend;
     maskBlend.blendEnabled = true;
     maskBlend.srcColor = RhiBlendFactor::One;
@@ -1222,54 +1034,25 @@ bool TerrainRhiPipelineSet::ensureWaterPipeline(ResourceMgr& resourceMgr) {
     return true;
 }
 
-bool TerrainRhiPipelineSet::ensureWaterTextureViews(
-    ResourceMgr& resourceMgr,
-    DeferredRenderTargets& targets) {
-    return ensureWaterTextureView(
-               0u,
-               resourceMgr.getTextureArray().texture,
-               RhiTextureViewType::Texture2DArray,
-               RhiTextureFormat::Rgba8Unorm) &&
-           ensureWaterTextureView(
-               1u,
-               targets.depthTextureHandle(),
-               RhiTextureViewType::Texture2D,
-               RhiTextureFormat::Depth32Float) &&
-           ensureWaterTextureView(
-               2u,
-               targets.skyCaptureTextureHandle(),
-               RhiTextureViewType::Texture2D,
-               RhiTextureFormat::Rgba16Float) &&
-           ensureWaterTextureView(
-               3u,
-               targets.sceneResolvedTextureHandle(),
-               RhiTextureViewType::Texture2D,
-               RhiTextureFormat::Rgba16Float) &&
-           ensureWaterTextureView(
-               4u,
-               resourceMgr.getTexture2DHandle("shader_noise2d"),
-               RhiTextureViewType::Texture2D,
-               RhiTextureFormat::Rgba8Unorm) &&
-           ensureWaterTextureView(
-               5u,
-               targets.reflectionTextureHandle(),
-               RhiTextureViewType::Texture2D,
-               RhiTextureFormat::Rgba16Float) &&
-           ensureWaterTextureView(
-               6u,
-               targets.atmosphereLutTextureHandle(),
-               RhiTextureViewType::Texture3D,
-               RhiTextureFormat::Rgba32Float) &&
-           ensureWaterTextureView(
-               7u,
-               targets.halfResTextureHandle(),
-               RhiTextureViewType::Texture2D,
-               RhiTextureFormat::Rgba16Float) &&
-           ensureWaterTextureView(
-               8u,
-               resourceMgr.getTexture2DHandle("shader_ripple_normal"),
-               RhiTextureViewType::Texture2D,
-               RhiTextureFormat::Rgba8Unorm);
+bool TerrainRhiPipelineSet::ensureWaterTextureViews(ResourceMgr& resourceMgr, DeferredRenderTargets& targets) {
+    return ensureWaterTextureView(0u, resourceMgr.getTextureArray().texture, RhiTextureViewType::Texture2DArray,
+                                  RhiTextureFormat::Rgba8Unorm) &&
+           ensureWaterTextureView(1u, targets.depthTextureHandle(), RhiTextureViewType::Texture2D,
+                                  RhiTextureFormat::Depth32Float) &&
+           ensureWaterTextureView(2u, targets.skyCaptureTextureHandle(), RhiTextureViewType::Texture2D,
+                                  RhiTextureFormat::Rgba16Float) &&
+           ensureWaterTextureView(3u, targets.sceneResolvedTextureHandle(), RhiTextureViewType::Texture2D,
+                                  RhiTextureFormat::Rgba16Float) &&
+           ensureWaterTextureView(4u, resourceMgr.getTexture2DHandle("shader_noise2d"), RhiTextureViewType::Texture2D,
+                                  RhiTextureFormat::Rgba8Unorm) &&
+           ensureWaterTextureView(5u, targets.reflectionTextureHandle(), RhiTextureViewType::Texture2D,
+                                  RhiTextureFormat::Rgba16Float) &&
+           ensureWaterTextureView(6u, targets.atmosphereLutTextureHandle(), RhiTextureViewType::Texture3D,
+                                  RhiTextureFormat::Rgba32Float) &&
+           ensureWaterTextureView(7u, targets.halfResTextureHandle(), RhiTextureViewType::Texture2D,
+                                  RhiTextureFormat::Rgba16Float) &&
+           ensureWaterTextureView(8u, resourceMgr.getTexture2DHandle("shader_ripple_normal"),
+                                  RhiTextureViewType::Texture2D, RhiTextureFormat::Rgba8Unorm);
 }
 
 bool TerrainRhiPipelineSet::ensureWaterBindGroup() {
@@ -1312,11 +1095,8 @@ bool TerrainRhiPipelineSet::ensureWaterBindGroup() {
     return true;
 }
 
-bool TerrainRhiPipelineSet::ensureWaterTextureView(
-    const size_t slot,
-    const RhiTextureHandle texture,
-    const RhiTextureViewType viewType,
-    const RhiTextureFormat format) {
+bool TerrainRhiPipelineSet::ensureWaterTextureView(const size_t slot, const RhiTextureHandle texture,
+                                                   const RhiTextureViewType viewType, const RhiTextureFormat format) {
     if (m_rhiDevice == nullptr || slot >= m_waterTextureViews.size() || !texture.isValid()) {
         return false;
     }
@@ -1366,17 +1146,28 @@ void TerrainRhiPipelineSet::destroyWaterResources() {
     destroyWaterBindGroup();
     destroyWaterTextureViews();
     if (m_rhiDevice != nullptr) {
-        if (m_waterPipeline.isValid()) m_rhiDevice->destroyPipeline(m_waterPipeline);
-        if (m_waterPipelineLayout.isValid()) m_rhiDevice->destroyPipelineLayout(m_waterPipelineLayout);
-        if (m_waterMaterialLayout.isValid()) m_rhiDevice->destroyBindGroupLayout(m_waterMaterialLayout);
-        if (m_waterMetadataLayout.isValid()) m_rhiDevice->destroyBindGroupLayout(m_waterMetadataLayout);
-        if (m_waterFragmentShader.isValid()) m_rhiDevice->destroyShader(m_waterFragmentShader);
-        if (m_waterVertexShader.isValid()) m_rhiDevice->destroyShader(m_waterVertexShader);
-        if (m_waterParamsBuffer.isValid()) m_rhiDevice->destroyBuffer(m_waterParamsBuffer);
-        if (m_waterBlockSampler.isValid()) m_rhiDevice->destroySampler(m_waterBlockSampler);
-        if (m_waterLinearClampSampler.isValid()) m_rhiDevice->destroySampler(m_waterLinearClampSampler);
-        if (m_waterLinearRepeatSampler.isValid()) m_rhiDevice->destroySampler(m_waterLinearRepeatSampler);
-        if (m_waterNearestClampSampler.isValid()) m_rhiDevice->destroySampler(m_waterNearestClampSampler);
+        if (m_waterPipeline.isValid())
+            m_rhiDevice->destroyPipeline(m_waterPipeline);
+        if (m_waterPipelineLayout.isValid())
+            m_rhiDevice->destroyPipelineLayout(m_waterPipelineLayout);
+        if (m_waterMaterialLayout.isValid())
+            m_rhiDevice->destroyBindGroupLayout(m_waterMaterialLayout);
+        if (m_waterMetadataLayout.isValid())
+            m_rhiDevice->destroyBindGroupLayout(m_waterMetadataLayout);
+        if (m_waterFragmentShader.isValid())
+            m_rhiDevice->destroyShader(m_waterFragmentShader);
+        if (m_waterVertexShader.isValid())
+            m_rhiDevice->destroyShader(m_waterVertexShader);
+        if (m_waterParamsBuffer.isValid())
+            m_rhiDevice->destroyBuffer(m_waterParamsBuffer);
+        if (m_waterBlockSampler.isValid())
+            m_rhiDevice->destroySampler(m_waterBlockSampler);
+        if (m_waterLinearClampSampler.isValid())
+            m_rhiDevice->destroySampler(m_waterLinearClampSampler);
+        if (m_waterLinearRepeatSampler.isValid())
+            m_rhiDevice->destroySampler(m_waterLinearRepeatSampler);
+        if (m_waterNearestClampSampler.isValid())
+            m_rhiDevice->destroySampler(m_waterNearestClampSampler);
     }
     m_waterPipeline = {};
     m_waterPipelineLayout = {};
@@ -1407,15 +1198,12 @@ bool TerrainRhiPipelineSet::ensureTransparentPipeline(ResourceMgr& resourceMgr) 
     renderer::rhi::RhiShaderSourceOptions sourceOptions;
     sourceOptions.preprocessorDefinitions.push_back("RHI_TERRAIN_LIT_MDI");
     if (m_rhiDevice->backend() == RhiBackend::Vulkan) {
-        sourceOptions.preprocessorDefinitions.push_back(
-            "MECRAFT_CLUSTERED_LIGHTING");
+        sourceOptions.preprocessorDefinitions.push_back("MECRAFT_CLUSTERED_LIGHTING");
     }
-    const std::optional<std::string> vertexSource = renderer::rhi::loadShaderSource(
-        "assets/shaders/chunk_lit.vert",
-        sourceOptions);
-    const std::optional<std::string> fragmentSource = renderer::rhi::loadShaderSource(
-        "assets/shaders/transparent_composite.frag",
-        sourceOptions);
+    const std::optional<std::string> vertexSource =
+        renderer::rhi::loadShaderSource("assets/shaders/chunk_lit.vert", sourceOptions);
+    const std::optional<std::string> fragmentSource =
+        renderer::rhi::loadShaderSource("assets/shaders/transparent_composite.frag", sourceOptions);
     if (!vertexSource.has_value() || !fragmentSource.has_value()) {
         destroyTransparentResources();
         return false;
@@ -1442,8 +1230,7 @@ bool TerrainRhiPipelineSet::ensureTransparentPipeline(ResourceMgr& resourceMgr) 
     RhiBufferDesc paramsDesc;
     paramsDesc.debugName = "Terrain.Transparent.Params";
     paramsDesc.size = sizeof(TerrainLitParams);
-    paramsDesc.usage = rhiFlag(RhiBufferUsage::Uniform) |
-                       rhiFlag(RhiBufferUsage::TransferDst);
+    paramsDesc.usage = rhiFlag(RhiBufferUsage::Uniform) | rhiFlag(RhiBufferUsage::TransferDst);
     paramsDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
     paramsDesc.initialState = RhiResourceState::UniformBuffer;
     paramsDesc.memoryCategory = RhiMemoryCategory::Uniform;
@@ -1481,43 +1268,27 @@ bool TerrainRhiPipelineSet::ensureTransparentPipeline(ResourceMgr& resourceMgr) 
     nearestClampDesc.mipmapMode = RhiMipmapMode::Nearest;
     m_transparentNearestClampSampler = m_rhiDevice->createSampler(nearestClampDesc);
     if (!m_transparentBlockSampler.isValid() || !m_transparentLinearClampSampler.isValid() ||
-        !m_transparentLinearRepeatSampler.isValid() ||
-        !m_transparentNearestClampSampler.isValid()) {
+        !m_transparentLinearRepeatSampler.isValid() || !m_transparentNearestClampSampler.isValid()) {
         destroyTransparentResources();
         return false;
     }
 
     RhiBindGroupLayoutDesc metadataLayoutDesc;
     metadataLayoutDesc.debugName = "Terrain.TransparentMetadataLayout";
-    metadataLayoutDesc.entries.push_back({
-        0u,
-        RhiBindingType::StorageBuffer,
-        rhiFlag(RhiShaderStage::Vertex),
-        1u
-    });
+    metadataLayoutDesc.entries.push_back({0u, RhiBindingType::StorageBuffer, rhiFlag(RhiShaderStage::Vertex), 1u});
     m_transparentMetadataLayout = m_rhiDevice->createBindGroupLayout(metadataLayoutDesc);
 
     RhiBindGroupLayoutDesc materialLayoutDesc;
     materialLayoutDesc.debugName = "Terrain.TransparentMaterialLayout";
     for (const uint32_t binding : kTransparentTextureBindings) {
-        materialLayoutDesc.entries.push_back({
-            binding,
-            RhiBindingType::CombinedTextureSampler,
-            rhiFlag(RhiShaderStage::Fragment),
-            1u
-        });
+        materialLayoutDesc.entries.push_back(
+            {binding, RhiBindingType::CombinedTextureSampler, rhiFlag(RhiShaderStage::Fragment), 1u});
     }
-    materialLayoutDesc.entries.push_back({
-        15u,
-        RhiBindingType::UniformBuffer,
-        rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment),
-        1u
-    });
+    materialLayoutDesc.entries.push_back(
+        {15u, RhiBindingType::UniformBuffer, rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment), 1u});
     m_transparentMaterialLayout = m_rhiDevice->createBindGroupLayout(materialLayoutDesc);
-    if (!m_transparentMetadataLayout.isValid() ||
-        !m_transparentMaterialLayout.isValid() ||
-        (m_rhiDevice->backend() == RhiBackend::Vulkan &&
-         !m_transparentClusterLayout.isValid())) {
+    if (!m_transparentMetadataLayout.isValid() || !m_transparentMaterialLayout.isValid() ||
+        (m_rhiDevice->backend() == RhiBackend::Vulkan && !m_transparentClusterLayout.isValid())) {
         destroyTransparentResources();
         return false;
     }
@@ -1527,8 +1298,7 @@ bool TerrainRhiPipelineSet::ensureTransparentPipeline(ResourceMgr& resourceMgr) 
     pipelineLayoutDesc.bindGroupLayouts.push_back(m_transparentMetadataLayout);
     pipelineLayoutDesc.bindGroupLayouts.push_back(m_transparentMaterialLayout);
     if (m_rhiDevice->backend() == RhiBackend::Vulkan) {
-        pipelineLayoutDesc.bindGroupLayouts.push_back(
-            m_transparentClusterLayout);
+        pipelineLayoutDesc.bindGroupLayouts.push_back(m_transparentClusterLayout);
     }
     m_transparentPipelineLayout = m_rhiDevice->createPipelineLayout(pipelineLayoutDesc);
     if (!m_transparentPipelineLayout.isValid()) {
@@ -1563,11 +1333,7 @@ bool TerrainRhiPipelineSet::ensureTransparentPipeline(ResourceMgr& resourceMgr) 
     maskBlend.alphaOp = RhiBlendOp::Max;
     pipelineDesc.blend.attachments.push_back(maskBlend);
     pipelineDesc.blend.attachments.push_back(maskBlend);
-    pipelineDesc.colorFormats = {
-        RhiTextureFormat::Rgba16Float,
-        RhiTextureFormat::R8Unorm,
-        RhiTextureFormat::R8Unorm
-    };
+    pipelineDesc.colorFormats = {RhiTextureFormat::Rgba16Float, RhiTextureFormat::R8Unorm, RhiTextureFormat::R8Unorm};
     pipelineDesc.depthFormat = RhiTextureFormat::Depth32Float;
     m_transparentPipeline = m_rhiDevice->createGraphicsPipeline(pipelineDesc);
     if (!m_transparentPipeline.isValid()) {
@@ -1577,66 +1343,33 @@ bool TerrainRhiPipelineSet::ensureTransparentPipeline(ResourceMgr& resourceMgr) 
     return true;
 }
 
-bool TerrainRhiPipelineSet::ensureTransparentTextureViews(
-    ResourceMgr& resourceMgr,
-    DeferredRenderTargets& targets) {
-    return ensureTransparentTextureView(
-               0u,
-               resourceMgr.getTextureArray().texture,
-               RhiTextureViewType::Texture2DArray,
-               RhiTextureFormat::Rgba8Unorm) &&
-           ensureTransparentTextureView(
-               1u,
-               resourceMgr.getLightmapDay(),
-               RhiTextureViewType::Texture2D,
-               RhiTextureFormat::Rgba8Unorm) &&
-           ensureTransparentTextureView(
-               2u,
-               resourceMgr.getLightmapNight(),
-               RhiTextureViewType::Texture2D,
-               RhiTextureFormat::Rgba8Unorm) &&
-           ensureTransparentTextureView(
-               3u,
-               resourceMgr.getGrassColormap(),
-               RhiTextureViewType::Texture2D,
-               RhiTextureFormat::Rgba8Unorm) &&
-           ensureTransparentTextureView(
-               4u,
-               resourceMgr.getFoliageColormap(),
-               RhiTextureViewType::Texture2D,
-               RhiTextureFormat::Rgba8Unorm) &&
-           ensureTransparentTextureView(
-               5u,
-               targets.depthTextureHandle(),
-               RhiTextureViewType::Texture2D,
-               RhiTextureFormat::Depth32Float) &&
-           ensureTransparentTextureView(
-               6u,
-               targets.skyCaptureTextureHandle(),
-               RhiTextureViewType::Texture2D,
-               RhiTextureFormat::Rgba16Float) &&
-           ensureTransparentTextureView(
-               7u,
-               targets.sceneCompositeTextureHandle(),
-               RhiTextureViewType::Texture2D,
-               RhiTextureFormat::Rgba16Float) &&
-           ensureTransparentTextureView(
-               8u,
-               resourceMgr.getTexture2DHandle("shader_noise2d"),
-               RhiTextureViewType::Texture2D,
-               RhiTextureFormat::Rgba8Unorm) &&
-           ensureTransparentTextureView(
-               9u,
-               targets.atmosphereLutTextureHandle(),
-               RhiTextureViewType::Texture3D,
-               RhiTextureFormat::Rgba32Float);
+bool TerrainRhiPipelineSet::ensureTransparentTextureViews(ResourceMgr& resourceMgr, DeferredRenderTargets& targets) {
+    return ensureTransparentTextureView(0u, resourceMgr.getTextureArray().texture, RhiTextureViewType::Texture2DArray,
+                                        RhiTextureFormat::Rgba8Unorm) &&
+           ensureTransparentTextureView(1u, resourceMgr.getLightmapDay(), RhiTextureViewType::Texture2D,
+                                        RhiTextureFormat::Rgba8Unorm) &&
+           ensureTransparentTextureView(2u, resourceMgr.getLightmapNight(), RhiTextureViewType::Texture2D,
+                                        RhiTextureFormat::Rgba8Unorm) &&
+           ensureTransparentTextureView(3u, resourceMgr.getGrassColormap(), RhiTextureViewType::Texture2D,
+                                        RhiTextureFormat::Rgba8Unorm) &&
+           ensureTransparentTextureView(4u, resourceMgr.getFoliageColormap(), RhiTextureViewType::Texture2D,
+                                        RhiTextureFormat::Rgba8Unorm) &&
+           ensureTransparentTextureView(5u, targets.depthTextureHandle(), RhiTextureViewType::Texture2D,
+                                        RhiTextureFormat::Depth32Float) &&
+           ensureTransparentTextureView(6u, targets.skyCaptureTextureHandle(), RhiTextureViewType::Texture2D,
+                                        RhiTextureFormat::Rgba16Float) &&
+           ensureTransparentTextureView(7u, targets.sceneCompositeTextureHandle(), RhiTextureViewType::Texture2D,
+                                        RhiTextureFormat::Rgba16Float) &&
+           ensureTransparentTextureView(8u, resourceMgr.getTexture2DHandle("shader_noise2d"),
+                                        RhiTextureViewType::Texture2D, RhiTextureFormat::Rgba8Unorm) &&
+           ensureTransparentTextureView(9u, targets.atmosphereLutTextureHandle(), RhiTextureViewType::Texture3D,
+                                        RhiTextureFormat::Rgba32Float);
 }
 
 bool TerrainRhiPipelineSet::ensureTransparentBindGroup() {
     bool viewsChanged = false;
     for (size_t slot = 0u; slot < m_transparentTextureViews.size(); ++slot) {
-        viewsChanged = viewsChanged ||
-                       !sameHandle(m_transparentBoundViews[slot], m_transparentTextureViews[slot]);
+        viewsChanged = viewsChanged || !sameHandle(m_transparentBoundViews[slot], m_transparentTextureViews[slot]);
     }
     if (m_transparentBindGroup.isValid() && !viewsChanged) {
         return true;
@@ -1673,17 +1406,13 @@ bool TerrainRhiPipelineSet::ensureTransparentBindGroup() {
     return true;
 }
 
-bool TerrainRhiPipelineSet::ensureTransparentTextureView(
-    const size_t slot,
-    const RhiTextureHandle texture,
-    const RhiTextureViewType viewType,
-    const RhiTextureFormat format) {
-    if (m_rhiDevice == nullptr || slot >= m_transparentTextureViews.size() ||
-        !texture.isValid()) {
+bool TerrainRhiPipelineSet::ensureTransparentTextureView(const size_t slot, const RhiTextureHandle texture,
+                                                         const RhiTextureViewType viewType,
+                                                         const RhiTextureFormat format) {
+    if (m_rhiDevice == nullptr || slot >= m_transparentTextureViews.size() || !texture.isValid()) {
         return false;
     }
-    if (sameHandle(m_transparentViewTextures[slot], texture) &&
-        m_transparentTextureViews[slot].isValid()) {
+    if (sameHandle(m_transparentViewTextures[slot], texture) && m_transparentTextureViews[slot].isValid()) {
         return true;
     }
     if (m_transparentTextureViews[slot].isValid()) {
@@ -1729,17 +1458,28 @@ void TerrainRhiPipelineSet::destroyTransparentResources() {
     destroyTransparentBindGroup();
     destroyTransparentTextureViews();
     if (m_rhiDevice != nullptr) {
-        if (m_transparentPipeline.isValid()) m_rhiDevice->destroyPipeline(m_transparentPipeline);
-        if (m_transparentPipelineLayout.isValid()) m_rhiDevice->destroyPipelineLayout(m_transparentPipelineLayout);
-        if (m_transparentMaterialLayout.isValid()) m_rhiDevice->destroyBindGroupLayout(m_transparentMaterialLayout);
-        if (m_transparentMetadataLayout.isValid()) m_rhiDevice->destroyBindGroupLayout(m_transparentMetadataLayout);
-        if (m_transparentFragmentShader.isValid()) m_rhiDevice->destroyShader(m_transparentFragmentShader);
-        if (m_transparentVertexShader.isValid()) m_rhiDevice->destroyShader(m_transparentVertexShader);
-        if (m_transparentParamsBuffer.isValid()) m_rhiDevice->destroyBuffer(m_transparentParamsBuffer);
-        if (m_transparentBlockSampler.isValid()) m_rhiDevice->destroySampler(m_transparentBlockSampler);
-        if (m_transparentLinearClampSampler.isValid()) m_rhiDevice->destroySampler(m_transparentLinearClampSampler);
-        if (m_transparentLinearRepeatSampler.isValid()) m_rhiDevice->destroySampler(m_transparentLinearRepeatSampler);
-        if (m_transparentNearestClampSampler.isValid()) m_rhiDevice->destroySampler(m_transparentNearestClampSampler);
+        if (m_transparentPipeline.isValid())
+            m_rhiDevice->destroyPipeline(m_transparentPipeline);
+        if (m_transparentPipelineLayout.isValid())
+            m_rhiDevice->destroyPipelineLayout(m_transparentPipelineLayout);
+        if (m_transparentMaterialLayout.isValid())
+            m_rhiDevice->destroyBindGroupLayout(m_transparentMaterialLayout);
+        if (m_transparentMetadataLayout.isValid())
+            m_rhiDevice->destroyBindGroupLayout(m_transparentMetadataLayout);
+        if (m_transparentFragmentShader.isValid())
+            m_rhiDevice->destroyShader(m_transparentFragmentShader);
+        if (m_transparentVertexShader.isValid())
+            m_rhiDevice->destroyShader(m_transparentVertexShader);
+        if (m_transparentParamsBuffer.isValid())
+            m_rhiDevice->destroyBuffer(m_transparentParamsBuffer);
+        if (m_transparentBlockSampler.isValid())
+            m_rhiDevice->destroySampler(m_transparentBlockSampler);
+        if (m_transparentLinearClampSampler.isValid())
+            m_rhiDevice->destroySampler(m_transparentLinearClampSampler);
+        if (m_transparentLinearRepeatSampler.isValid())
+            m_rhiDevice->destroySampler(m_transparentLinearRepeatSampler);
+        if (m_transparentNearestClampSampler.isValid())
+            m_rhiDevice->destroySampler(m_transparentNearestClampSampler);
     }
     m_transparentPipeline = {};
     m_transparentPipelineLayout = {};
@@ -1757,8 +1497,8 @@ void TerrainRhiPipelineSet::destroyTransparentResources() {
 
 bool TerrainRhiPipelineSet::ensureShadowPipeline(ResourceMgr& resourceMgr) {
     const float anisotropy = std::max(1.0f, resourceMgr.getAtlasAnisotropy());
-    if (m_shadowOpaquePipeline.isValid() && m_shadowCutoutPipeline.isValid() &&
-        m_shadowTransparentPipeline.isValid() && anisotropy == m_shadowSamplerAnisotropy) {
+    if (m_shadowOpaquePipeline.isValid() && m_shadowCutoutPipeline.isValid() && m_shadowTransparentPipeline.isValid() &&
+        anisotropy == m_shadowSamplerAnisotropy) {
         return true;
     }
 
@@ -1772,17 +1512,13 @@ bool TerrainRhiPipelineSet::ensureShadowPipeline(ResourceMgr& resourceMgr) {
     sourceOptions.preprocessorDefinitions.push_back("RHI_TERRAIN_SHADOW_MDI");
     renderer::rhi::RhiShaderSourceOptions depthSourceOptions = sourceOptions;
     depthSourceOptions.preprocessorDefinitions.push_back("RHI_TERRAIN_SHADOW_DEPTH_ONLY");
-    const std::optional<std::string> vertexSource = renderer::rhi::loadShaderSource(
-        "assets/shaders/shadow_depth.vert",
-        sourceOptions);
-    const std::optional<std::string> depthFragmentSource = renderer::rhi::loadShaderSource(
-        "assets/shaders/shadow_depth.frag",
-        depthSourceOptions);
-    const std::optional<std::string> colorFragmentSource = renderer::rhi::loadShaderSource(
-        "assets/shaders/shadow_depth.frag",
-        sourceOptions);
-    if (!vertexSource.has_value() || !depthFragmentSource.has_value() ||
-        !colorFragmentSource.has_value()) {
+    const std::optional<std::string> vertexSource =
+        renderer::rhi::loadShaderSource("assets/shaders/shadow_depth.vert", sourceOptions);
+    const std::optional<std::string> depthFragmentSource =
+        renderer::rhi::loadShaderSource("assets/shaders/shadow_depth.frag", depthSourceOptions);
+    const std::optional<std::string> colorFragmentSource =
+        renderer::rhi::loadShaderSource("assets/shaders/shadow_depth.frag", sourceOptions);
+    if (!vertexSource.has_value() || !depthFragmentSource.has_value() || !colorFragmentSource.has_value()) {
         destroyShadowResources();
         return false;
     }
@@ -1813,8 +1549,7 @@ bool TerrainRhiPipelineSet::ensureShadowPipeline(ResourceMgr& resourceMgr) {
     RhiBufferDesc paramsDesc;
     paramsDesc.debugName = "Terrain.Shadow.Params";
     paramsDesc.size = sizeof(TerrainShadowParams);
-    paramsDesc.usage = rhiFlag(RhiBufferUsage::Uniform) |
-                       rhiFlag(RhiBufferUsage::TransferDst);
+    paramsDesc.usage = rhiFlag(RhiBufferUsage::Uniform) | rhiFlag(RhiBufferUsage::TransferDst);
     paramsDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
     paramsDesc.initialState = RhiResourceState::UniformBuffer;
     paramsDesc.memoryCategory = RhiMemoryCategory::Uniform;
@@ -1853,30 +1588,17 @@ bool TerrainRhiPipelineSet::ensureShadowPipeline(ResourceMgr& resourceMgr) {
 
     RhiBindGroupLayoutDesc metadataLayoutDesc;
     metadataLayoutDesc.debugName = "Terrain.ShadowMetadataLayout";
-    metadataLayoutDesc.entries.push_back({
-        0u,
-        RhiBindingType::StorageBuffer,
-        rhiFlag(RhiShaderStage::Vertex),
-        1u
-    });
+    metadataLayoutDesc.entries.push_back({0u, RhiBindingType::StorageBuffer, rhiFlag(RhiShaderStage::Vertex), 1u});
     m_shadowMetadataLayout = m_rhiDevice->createBindGroupLayout(metadataLayoutDesc);
 
     RhiBindGroupLayoutDesc materialLayoutDesc;
     materialLayoutDesc.debugName = "Terrain.ShadowMaterialLayout";
     for (uint32_t binding = 0u; binding < 4u; ++binding) {
-        materialLayoutDesc.entries.push_back({
-            binding,
-            RhiBindingType::CombinedTextureSampler,
-            rhiFlag(RhiShaderStage::Fragment),
-            1u
-        });
+        materialLayoutDesc.entries.push_back(
+            {binding, RhiBindingType::CombinedTextureSampler, rhiFlag(RhiShaderStage::Fragment), 1u});
     }
-    materialLayoutDesc.entries.push_back({
-        4u,
-        RhiBindingType::UniformBuffer,
-        rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment),
-        1u
-    });
+    materialLayoutDesc.entries.push_back(
+        {4u, RhiBindingType::UniformBuffer, rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment), 1u});
     m_shadowMaterialLayout = m_rhiDevice->createBindGroupLayout(materialLayoutDesc);
     if (!m_shadowMetadataLayout.isValid() || !m_shadowMaterialLayout.isValid()) {
         destroyShadowResources();
@@ -1916,10 +1638,7 @@ bool TerrainRhiPipelineSet::ensureShadowPipeline(ResourceMgr& resourceMgr) {
     pipelineDesc.raster.depthBiasEnabled = false;
     pipelineDesc.raster.depthBiasConstantFactor = 0.0f;
     pipelineDesc.raster.depthBiasSlopeFactor = 0.0f;
-    pipelineDesc.colorFormats = {
-        RhiTextureFormat::Rgba8Unorm,
-        RhiTextureFormat::Rgba16Float
-    };
+    pipelineDesc.colorFormats = {RhiTextureFormat::Rgba8Unorm, RhiTextureFormat::Rgba16Float};
     pipelineDesc.fragmentShader = m_shadowColorFragmentShader;
     pipelineDesc.debugName = "Terrain.Shadow.TransparentPipeline";
     m_shadowTransparentPipeline = m_rhiDevice->createGraphicsPipeline(pipelineDesc);
@@ -1932,29 +1651,17 @@ bool TerrainRhiPipelineSet::ensureShadowPipeline(ResourceMgr& resourceMgr) {
 }
 
 bool TerrainRhiPipelineSet::ensureShadowTextureViews(ResourceMgr& resourceMgr) {
-    return ensureShadowTextureView(
-               0u,
-               resourceMgr.getTextureArray().texture,
-               RhiTextureViewType::Texture2DArray) &&
-           ensureShadowTextureView(
-               1u,
-               resourceMgr.getTexture2DHandle("shader_noise2d"),
-               RhiTextureViewType::Texture2D) &&
-           ensureShadowTextureView(
-               2u,
-               resourceMgr.getGrassColormap(),
-               RhiTextureViewType::Texture2D) &&
-           ensureShadowTextureView(
-               3u,
-               resourceMgr.getFoliageColormap(),
-               RhiTextureViewType::Texture2D);
+    return ensureShadowTextureView(0u, resourceMgr.getTextureArray().texture, RhiTextureViewType::Texture2DArray) &&
+           ensureShadowTextureView(1u, resourceMgr.getTexture2DHandle("shader_noise2d"),
+                                   RhiTextureViewType::Texture2D) &&
+           ensureShadowTextureView(2u, resourceMgr.getGrassColormap(), RhiTextureViewType::Texture2D) &&
+           ensureShadowTextureView(3u, resourceMgr.getFoliageColormap(), RhiTextureViewType::Texture2D);
 }
 
 bool TerrainRhiPipelineSet::ensureShadowBindGroup() {
     bool viewsChanged = false;
     for (size_t slot = 0u; slot < m_shadowTextureViews.size(); ++slot) {
-        viewsChanged = viewsChanged ||
-                       !sameHandle(m_shadowBoundViews[slot], m_shadowTextureViews[slot]);
+        viewsChanged = viewsChanged || !sameHandle(m_shadowBoundViews[slot], m_shadowTextureViews[slot]);
     }
     if (m_shadowBindGroup.isValid() && !viewsChanged) {
         return true;
@@ -1967,9 +1674,9 @@ bool TerrainRhiPipelineSet::ensureShadowBindGroup() {
         RhiBindGroupEntry entry;
         entry.binding = binding;
         entry.resource.combinedTextureSampler.textureView = m_shadowTextureViews[binding];
-        entry.resource.combinedTextureSampler.sampler = binding == 0u
-            ? m_shadowBlockSampler
-            : (binding == 1u ? m_shadowLinearRepeatSampler : m_shadowLinearClampSampler);
+        entry.resource.combinedTextureSampler.sampler =
+            binding == 0u ? m_shadowBlockSampler
+                          : (binding == 1u ? m_shadowLinearRepeatSampler : m_shadowLinearClampSampler);
         desc.entries.push_back(entry);
     }
     RhiBindGroupEntry paramsEntry;
@@ -1985,10 +1692,8 @@ bool TerrainRhiPipelineSet::ensureShadowBindGroup() {
     return true;
 }
 
-bool TerrainRhiPipelineSet::ensureShadowTextureView(
-    const size_t slot,
-    const RhiTextureHandle texture,
-    const RhiTextureViewType viewType) {
+bool TerrainRhiPipelineSet::ensureShadowTextureView(const size_t slot, const RhiTextureHandle texture,
+                                                    const RhiTextureViewType viewType) {
     if (m_rhiDevice == nullptr || slot >= m_shadowTextureViews.size() || !texture.isValid()) {
         return false;
     }
@@ -2038,19 +1743,32 @@ void TerrainRhiPipelineSet::destroyShadowResources() {
     destroyShadowBindGroup();
     destroyShadowTextureViews();
     if (m_rhiDevice != nullptr) {
-        if (m_shadowOpaquePipeline.isValid()) m_rhiDevice->destroyPipeline(m_shadowOpaquePipeline);
-        if (m_shadowCutoutPipeline.isValid()) m_rhiDevice->destroyPipeline(m_shadowCutoutPipeline);
-        if (m_shadowTransparentPipeline.isValid()) m_rhiDevice->destroyPipeline(m_shadowTransparentPipeline);
-        if (m_shadowPipelineLayout.isValid()) m_rhiDevice->destroyPipelineLayout(m_shadowPipelineLayout);
-        if (m_shadowMaterialLayout.isValid()) m_rhiDevice->destroyBindGroupLayout(m_shadowMaterialLayout);
-        if (m_shadowMetadataLayout.isValid()) m_rhiDevice->destroyBindGroupLayout(m_shadowMetadataLayout);
-        if (m_shadowColorFragmentShader.isValid()) m_rhiDevice->destroyShader(m_shadowColorFragmentShader);
-        if (m_shadowDepthFragmentShader.isValid()) m_rhiDevice->destroyShader(m_shadowDepthFragmentShader);
-        if (m_shadowVertexShader.isValid()) m_rhiDevice->destroyShader(m_shadowVertexShader);
-        if (m_shadowParamsBuffer.isValid()) m_rhiDevice->destroyBuffer(m_shadowParamsBuffer);
-        if (m_shadowBlockSampler.isValid()) m_rhiDevice->destroySampler(m_shadowBlockSampler);
-        if (m_shadowLinearClampSampler.isValid()) m_rhiDevice->destroySampler(m_shadowLinearClampSampler);
-        if (m_shadowLinearRepeatSampler.isValid()) m_rhiDevice->destroySampler(m_shadowLinearRepeatSampler);
+        if (m_shadowOpaquePipeline.isValid())
+            m_rhiDevice->destroyPipeline(m_shadowOpaquePipeline);
+        if (m_shadowCutoutPipeline.isValid())
+            m_rhiDevice->destroyPipeline(m_shadowCutoutPipeline);
+        if (m_shadowTransparentPipeline.isValid())
+            m_rhiDevice->destroyPipeline(m_shadowTransparentPipeline);
+        if (m_shadowPipelineLayout.isValid())
+            m_rhiDevice->destroyPipelineLayout(m_shadowPipelineLayout);
+        if (m_shadowMaterialLayout.isValid())
+            m_rhiDevice->destroyBindGroupLayout(m_shadowMaterialLayout);
+        if (m_shadowMetadataLayout.isValid())
+            m_rhiDevice->destroyBindGroupLayout(m_shadowMetadataLayout);
+        if (m_shadowColorFragmentShader.isValid())
+            m_rhiDevice->destroyShader(m_shadowColorFragmentShader);
+        if (m_shadowDepthFragmentShader.isValid())
+            m_rhiDevice->destroyShader(m_shadowDepthFragmentShader);
+        if (m_shadowVertexShader.isValid())
+            m_rhiDevice->destroyShader(m_shadowVertexShader);
+        if (m_shadowParamsBuffer.isValid())
+            m_rhiDevice->destroyBuffer(m_shadowParamsBuffer);
+        if (m_shadowBlockSampler.isValid())
+            m_rhiDevice->destroySampler(m_shadowBlockSampler);
+        if (m_shadowLinearClampSampler.isValid())
+            m_rhiDevice->destroySampler(m_shadowLinearClampSampler);
+        if (m_shadowLinearRepeatSampler.isValid())
+            m_rhiDevice->destroySampler(m_shadowLinearRepeatSampler);
     }
     m_shadowOpaquePipeline = {};
     m_shadowCutoutPipeline = {};
@@ -2096,20 +1814,31 @@ void TerrainRhiPipelineSet::destroyGBufferResources() {
     destroyGBufferBindGroups();
     destroyGBufferTextureViews();
     if (m_rhiDevice != nullptr) {
-        if (m_gbufferOpaquePipeline.isValid()) m_rhiDevice->destroyPipeline(m_gbufferOpaquePipeline);
-        if (m_gbufferCutoutPipeline.isValid()) m_rhiDevice->destroyPipeline(m_gbufferCutoutPipeline);
-        if (m_gbufferPipelineLayout.isValid()) m_rhiDevice->destroyPipelineLayout(m_gbufferPipelineLayout);
-        if (m_gbufferMaterialLayout.isValid()) m_rhiDevice->destroyBindGroupLayout(m_gbufferMaterialLayout);
-        if (m_metadataLayout.isValid()) m_rhiDevice->destroyBindGroupLayout(m_metadataLayout);
-        if (m_gbufferFragmentShader.isValid()) m_rhiDevice->destroyShader(m_gbufferFragmentShader);
-        if (m_gbufferVertexShader.isValid()) m_rhiDevice->destroyShader(m_gbufferVertexShader);
+        if (m_gbufferOpaquePipeline.isValid())
+            m_rhiDevice->destroyPipeline(m_gbufferOpaquePipeline);
+        if (m_gbufferCutoutPipeline.isValid())
+            m_rhiDevice->destroyPipeline(m_gbufferCutoutPipeline);
+        if (m_gbufferPipelineLayout.isValid())
+            m_rhiDevice->destroyPipelineLayout(m_gbufferPipelineLayout);
+        if (m_gbufferMaterialLayout.isValid())
+            m_rhiDevice->destroyBindGroupLayout(m_gbufferMaterialLayout);
+        if (m_metadataLayout.isValid())
+            m_rhiDevice->destroyBindGroupLayout(m_metadataLayout);
+        if (m_gbufferFragmentShader.isValid())
+            m_rhiDevice->destroyShader(m_gbufferFragmentShader);
+        if (m_gbufferVertexShader.isValid())
+            m_rhiDevice->destroyShader(m_gbufferVertexShader);
         for (RhiBufferHandle& buffer : m_gbufferParamsBuffers) {
-            if (buffer.isValid()) m_rhiDevice->destroyBuffer(buffer);
+            if (buffer.isValid())
+                m_rhiDevice->destroyBuffer(buffer);
             buffer = {};
         }
-        if (m_blockSampler.isValid()) m_rhiDevice->destroySampler(m_blockSampler);
-        if (m_linearClampSampler.isValid()) m_rhiDevice->destroySampler(m_linearClampSampler);
-        if (m_linearRepeatSampler.isValid()) m_rhiDevice->destroySampler(m_linearRepeatSampler);
+        if (m_blockSampler.isValid())
+            m_rhiDevice->destroySampler(m_blockSampler);
+        if (m_linearClampSampler.isValid())
+            m_rhiDevice->destroySampler(m_linearClampSampler);
+        if (m_linearRepeatSampler.isValid())
+            m_rhiDevice->destroySampler(m_linearRepeatSampler);
     }
     m_gbufferOpaquePipeline = {};
     m_gbufferCutoutPipeline = {};

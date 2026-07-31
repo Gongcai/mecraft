@@ -49,12 +49,7 @@ constexpr float kPistonEntityPushEpsilon = 0.001f;
 constexpr float kPistonEntitySupportContactTolerance = 0.02f;
 constexpr int kMaxPistonEntityDepenetrationIterations = 12;
 constexpr glm::ivec3 kDirections[6] = {
-    { 1,  0,  0},
-    {-1,  0,  0},
-    { 0,  1,  0},
-    { 0, -1,  0},
-    { 0,  0,  1},
-    { 0,  0, -1},
+    {1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1},
 };
 
 [[noreturn]] void failRedstoneSystem(const std::string& message) {
@@ -83,9 +78,7 @@ struct WireNode {
     uint16_t facing = PropIndices::INVALID;
 
     [[nodiscard]] bool operator==(const WireNode& other) const noexcept {
-        return position == other.position &&
-               channelId == other.channelId &&
-               facing == other.facing;
+        return position == other.position && channelId == other.channelId && facing == other.facing;
     }
 };
 
@@ -109,29 +102,17 @@ struct WirePowerMap {
     Map powers;
     const WireNodeSet* evaluatedWires = nullptr;
 
-    void reserve(const size_t count) {
-        powers.reserve(count);
-    }
+    void reserve(const size_t count) { powers.reserve(count); }
 
-    auto emplace(const WireNode& node, const uint8_t power) {
-        return powers.emplace(node, power);
-    }
+    auto emplace(const WireNode& node, const uint8_t power) { return powers.emplace(node, power); }
 
-    [[nodiscard]] auto find(const WireNode& node) {
-        return powers.find(node);
-    }
+    [[nodiscard]] auto find(const WireNode& node) { return powers.find(node); }
 
-    [[nodiscard]] auto find(const WireNode& node) const {
-        return powers.find(node);
-    }
+    [[nodiscard]] auto find(const WireNode& node) const { return powers.find(node); }
 
-    [[nodiscard]] auto end() {
-        return powers.end();
-    }
+    [[nodiscard]] auto end() { return powers.end(); }
 
-    [[nodiscard]] auto end() const {
-        return powers.end();
-    }
+    [[nodiscard]] auto end() const { return powers.end(); }
 
     [[nodiscard]] bool wasEvaluated(const WireNode& node) const {
         return evaluatedWires != nullptr && evaluatedWires->find(node) != evaluatedWires->end();
@@ -188,8 +169,7 @@ void clearRedstoneWorkSet(RedstoneWorkSet& workSet) {
     workSet.sourceSet.clear();
 }
 
-template <typename Set>
-void reserveSetCapacity(Set& set, const size_t count) {
+template <typename Set> void reserveSetCapacity(Set& set, const size_t count) {
     if (static_cast<float>(count) > static_cast<float>(set.bucket_count()) * set.max_load_factor()) {
         set.reserve(count);
     }
@@ -221,9 +201,7 @@ struct PowerNode {
     WireNode wire;
     uint8_t power = 0;
 
-    bool operator<(const PowerNode& other) const {
-        return power < other.power;
-    }
+    bool operator<(const PowerNode& other) const { return power < other.power; }
 };
 
 struct WireSearchNode {
@@ -337,8 +315,7 @@ uint16_t wireFacingForState(const BlockStateId stateId) {
     return facing;
 }
 
-bool isMatchingWireStateWithFacing(const BlockStateId stateId,
-                                   const uint16_t wireChannelId,
+bool isMatchingWireStateWithFacing(const BlockStateId stateId, const uint16_t wireChannelId,
                                    const uint16_t wireFacing) {
     if (!isMatchingWireState(stateId, wireChannelId)) {
         return false;
@@ -363,8 +340,7 @@ bool hasMatchingWireContainerPart(const World& world, const WireNode& node) {
     return findWireContainerPart(world, node) != nullptr;
 }
 
-template <typename Fn>
-void forEachWireNodeAt(const World& world, const glm::ivec3& position, Fn&& fn) {
+template <typename Fn> void forEachWireNodeAt(const World& world, const glm::ivec3& position, Fn&& fn) {
     const BlockStateId stateId = world.getBlockState(position.x, position.y, position.z);
     if (isWireState(stateId)) {
         fn(wireNodeFromState(position, stateId));
@@ -378,9 +354,7 @@ void forEachWireNodeAt(const World& world, const glm::ivec3& position, Fn&& fn) 
     if (parts == nullptr) {
         return;
     }
-    parts->forEach([&](const WirePart& part) {
-        fn(WireNode{position, part.channelId, part.facing});
-    });
+    parts->forEach([&](const WirePart& part) { fn(WireNode{position, part.channelId, part.facing}); });
 }
 
 bool wireNodeExists(const World& world, const WireNode& node) {
@@ -402,21 +376,13 @@ bool isSolidBlockState(const BlockStateId stateId) {
     return BlockRegistry::getFast(blockId).isSolid;
 }
 
-bool isOuterCornerWireConnectionBlocked(const World& world,
-                                        const glm::ivec3& support,
-                                        const uint16_t wireFacing,
+bool isOuterCornerWireConnectionBlocked(const World& world, const glm::ivec3& support, const uint16_t wireFacing,
                                         const uint16_t neighborFacing) {
-    const glm::ivec3 blocker = WireFaceGeometry::outerCornerBlockingPosition(
-        support,
-        wireFacing,
-        neighborFacing);
+    const glm::ivec3 blocker = WireFaceGeometry::outerCornerBlockingPosition(support, wireFacing, neighborFacing);
     return isSolidBlockState(world.getBlockState(blocker.x, blocker.y, blocker.z));
 }
 
-template <typename Fn>
-void forEachOuterCornerWireNeighbor(const World& world,
-                                    const WireNode& wire,
-                                    Fn&& fn) {
+template <typename Fn> void forEachOuterCornerWireNeighbor(const World& world, const WireNode& wire, Fn&& fn) {
     const glm::ivec3 support = WireFaceGeometry::supportPosition(wire.position, wire.facing);
     for (const uint16_t neighborFacing : WireFaceGeometry::wireFacings()) {
         if (!WireFaceGeometry::arePerpendicularFacings(wire.facing, neighborFacing)) {
@@ -440,10 +406,8 @@ void forEachOuterCornerWireNeighbor(const World& world,
     }
 }
 
-BlockStateId withRequiredProperty(const BlockStateId stateId,
-                             const uint16_t property,
-                             const uint16_t value,
-                             const char* propertyName) {
+BlockStateId withRequiredProperty(const BlockStateId stateId, const uint16_t property, const uint16_t value,
+                                  const char* propertyName) {
     const uint16_t current = getRequiredProperty(stateId, property, propertyName);
     if (current == value) {
         return stateId;
@@ -458,22 +422,10 @@ BlockStateId withRequiredProperty(const BlockStateId stateId,
 
 std::array<uint16_t, 16> powerPropertyValues() {
     return {
-        PropIndices::POWER_0,
-        PropIndices::POWER_1,
-        PropIndices::POWER_2,
-        PropIndices::POWER_3,
-        PropIndices::POWER_4,
-        PropIndices::POWER_5,
-        PropIndices::POWER_6,
-        PropIndices::POWER_7,
-        PropIndices::POWER_8,
-        PropIndices::POWER_9,
-        PropIndices::POWER_10,
-        PropIndices::POWER_11,
-        PropIndices::POWER_12,
-        PropIndices::POWER_13,
-        PropIndices::POWER_14,
-        PropIndices::POWER_15,
+        PropIndices::POWER_0,  PropIndices::POWER_1,  PropIndices::POWER_2,  PropIndices::POWER_3,
+        PropIndices::POWER_4,  PropIndices::POWER_5,  PropIndices::POWER_6,  PropIndices::POWER_7,
+        PropIndices::POWER_8,  PropIndices::POWER_9,  PropIndices::POWER_10, PropIndices::POWER_11,
+        PropIndices::POWER_12, PropIndices::POWER_13, PropIndices::POWER_14, PropIndices::POWER_15,
     };
 }
 
@@ -528,9 +480,7 @@ BlockStateId withLocked(const BlockStateId stateId, const bool locked) {
     return withRequiredProperty(stateId, PropIndices::LOCKED, value, "locked");
 }
 
-bool hasBooleanPropertyValue(const BlockStateId stateId,
-                             const uint16_t property,
-                             const uint16_t expectedValue,
+bool hasBooleanPropertyValue(const BlockStateId stateId, const uint16_t property, const uint16_t expectedValue,
                              const char* propertyName) {
     return getRequiredProperty(stateId, property, propertyName) == expectedValue;
 }
@@ -546,18 +496,16 @@ uint8_t sourceOutputPower(const BlockStateId stateId) {
         return 0;
     }
 
-    if (def.redstoneBehavior == "lever" ||
-        def.redstoneBehavior == "button" ||
-        def.redstoneBehavior == "plate") {
+    if (def.redstoneBehavior == "lever" || def.redstoneBehavior == "button" || def.redstoneBehavior == "plate") {
         return hasBooleanPropertyValue(stateId, PropIndices::POWERED, PropIndices::POWERED_TRUE, "powered")
-            ? def.redstonePowerOutput
-            : 0;
+                   ? def.redstonePowerOutput
+                   : 0;
     }
 
     if (def.redstoneBehavior == "torch") {
         return hasBooleanPropertyValue(stateId, PropIndices::LIT, PropIndices::LIT_TRUE, "lit")
-            ? def.redstonePowerOutput
-            : 0;
+                   ? def.redstonePowerOutput
+                   : 0;
     }
 
     if (def.redstoneBehavior == "power_block") {
@@ -582,11 +530,8 @@ bool sourceCanPowerConductiveBlocks(const BlockStateId stateId) {
         return false;
     }
 
-    if (def.redstoneBehavior == "lever" ||
-        def.redstoneBehavior == "button" ||
-        def.redstoneBehavior == "plate" ||
-        def.redstoneBehavior == "power_block" ||
-        def.redstoneBehavior == "target") {
+    if (def.redstoneBehavior == "lever" || def.redstoneBehavior == "button" || def.redstoneBehavior == "plate" ||
+        def.redstoneBehavior == "power_block" || def.redstoneBehavior == "target") {
         return true;
     }
 
@@ -598,14 +543,11 @@ bool sourceCanPowerConductiveBlocks(const BlockStateId stateId) {
 }
 
 bool isHorizontalDirection(const glm::ivec3& direction) {
-    return (direction == glm::ivec3(1, 0, 0)) ||
-           (direction == glm::ivec3(-1, 0, 0)) ||
-           (direction == glm::ivec3(0, 0, 1)) ||
-           (direction == glm::ivec3(0, 0, -1));
+    return (direction == glm::ivec3(1, 0, 0)) || (direction == glm::ivec3(-1, 0, 0)) ||
+           (direction == glm::ivec3(0, 0, 1)) || (direction == glm::ivec3(0, 0, -1));
 }
 
-bool wirePowersConductorToward(const World& world,
-                               const glm::ivec3& wirePosition,
+bool wirePowersConductorToward(const World& world, const glm::ivec3& wirePosition,
                                const glm::ivec3& conductorPosition) {
     const BlockStateId wireState = world.getBlockState(wirePosition.x, wirePosition.y, wirePosition.z);
     if (!isWireState(wireState)) {
@@ -622,8 +564,7 @@ bool wirePowersConductorToward(const World& world,
     return true;
 }
 
-template <typename StackReader>
-uint8_t inventorySignalPower(const int slotCount, StackReader&& stackReader) {
+template <typename StackReader> uint8_t inventorySignalPower(const int slotCount, StackReader&& stackReader) {
     if (slotCount <= 0) {
         failRedstoneSystem("Redstone container signal requires at least one inventory slot");
     }
@@ -656,9 +597,7 @@ uint8_t inventorySignalPower(const int slotCount, StackReader&& stackReader) {
     return static_cast<uint8_t>(std::floor(fullness * 14.0) + 1.0);
 }
 
-uint8_t containerSignalPowerAt(const World& world,
-                               const GameplayRegistry* registry,
-                               const glm::ivec3& position) {
+uint8_t containerSignalPowerAt(const World& world, const GameplayRegistry* registry, const glm::ivec3& position) {
     const BlockStateId stateId = world.getBlockState(position.x, position.y, position.z);
     if (stateId == NULL_BLOCK_STATE) {
         return 0;
@@ -685,9 +624,8 @@ uint8_t containerSignalPowerAt(const World& world,
         if (inventory == nullptr) {
             return 0;
         }
-        return inventorySignalPower(behavior.storage.slots, [inventory](const int slot) {
-            return inventory->getSlotStack(slot);
-        });
+        return inventorySignalPower(behavior.storage.slots,
+                                    [inventory](const int slot) { return inventory->getSlotStack(slot); });
     }
 
     if (behavior.handler == "smelting") {
@@ -699,13 +637,11 @@ uint8_t containerSignalPowerAt(const World& world,
         if (machine == nullptr) {
             return 0;
         }
-        return inventorySignalPower(behavior.storage.slots, [machine](const int slot) {
-            return machine->getSlotStack(slot);
-        });
+        return inventorySignalPower(behavior.storage.slots,
+                                    [machine](const int slot) { return machine->getSlotStack(slot); });
     }
 
-    failRedstoneSystem("Comparator signal is not implemented for container behavior handler: " +
-                             behavior.handler);
+    failRedstoneSystem("Comparator signal is not implemented for container behavior handler: " + behavior.handler);
 }
 
 bool isPotentialSourceState(const BlockStateId stateId) {
@@ -733,8 +669,7 @@ bool isConductiveBlockAt(const World& world, const glm::ivec3& position) {
 // Calls fn for every wire node connected to the wire at pos. Wires connect
 // within their own face plane and same-color wire_container faces connect
 // across the shared edge inside one block space.
-template <typename Fn>
-void forEachWireNeighbor(const World& world, const WireNode& wire, Fn&& fn) {
+template <typename Fn> void forEachWireNeighbor(const World& world, const WireNode& wire, Fn&& fn) {
     if (!wireNodeExists(world, wire)) {
         return;
     }
@@ -852,10 +787,8 @@ bool isEdgeTriggeredDeviceState(const BlockStateId stateId) {
     }
     const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
     const BlockDef& def = BlockRegistry::getFast(blockId);
-    return def.respondsToRedstone &&
-           (def.redstoneBehavior == "note_block" ||
-            def.redstoneBehavior == "dispenser" ||
-            def.redstoneBehavior == "dropper");
+    return def.respondsToRedstone && (def.redstoneBehavior == "note_block" || def.redstoneBehavior == "dispenser" ||
+                                      def.redstoneBehavior == "dropper");
 }
 
 bool isTargetState(const BlockStateId stateId) {
@@ -868,8 +801,7 @@ bool isTargetState(const BlockStateId stateId) {
 }
 
 bool isPistonHeadState(const BlockStateId stateId) {
-    return stateId != NULL_BLOCK_STATE &&
-           BlockStateRegistry::getBlockId(stateId) == pistonHeadBlockId();
+    return stateId != NULL_BLOCK_STATE && BlockStateRegistry::getBlockId(stateId) == pistonHeadBlockId();
 }
 
 uint64_t buttonPulseTicks(const BlockStateId stateId) {
@@ -879,8 +811,7 @@ uint64_t buttonPulseTicks(const BlockStateId stateId) {
         failRedstoneSystem("Redstone pulse duration requires a button block");
     }
     if (def.redstonePulseTicks == 0) {
-        failRedstoneSystem("Redstone button has no configured pulse duration: " +
-                                 def.namespacedId.full());
+        failRedstoneSystem("Redstone button has no configured pulse duration: " + def.namespacedId.full());
     }
     return def.redstonePulseTicks;
 }
@@ -1016,38 +947,33 @@ uint16_t redstoneControlledPropertyIndex(const BlockStateId stateId) {
     const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
     const BlockDef& def = BlockRegistry::getFast(blockId);
     if (!def.respondsToRedstone || def.redstoneControlledProperty.empty()) {
-        failRedstoneSystem(
-            "Redstone controlled state requires respondsToRedstone and redstoneControlledProperty");
+        failRedstoneSystem("Redstone controlled state requires respondsToRedstone and redstoneControlledProperty");
     }
 
     const uint16_t property = BlockStateRegistry::getPropertyNameIndex(def.redstoneControlledProperty);
     if (property == BlockStateRegistry::INVALID_INDEX) {
-        failRedstoneSystem(
-            "Redstone controlled property is not registered: " + def.redstoneControlledProperty);
+        failRedstoneSystem("Redstone controlled property is not registered: " + def.redstoneControlledProperty);
     }
 
     const uint16_t currentValue = BlockStateRegistry::getPropertyIndex(stateId, property);
     if (currentValue == BlockStateRegistry::INVALID_INDEX) {
-        failRedstoneSystem(
-            "Redstone controlled block state is missing property: " + def.redstoneControlledProperty);
+        failRedstoneSystem("Redstone controlled block state is missing property: " + def.redstoneControlledProperty);
     }
 
     const uint16_t falseValue = BlockStateRegistry::getPropertyValueIndex(property, "false");
     const uint16_t trueValue = BlockStateRegistry::getPropertyValueIndex(property, "true");
     if (falseValue == BlockStateRegistry::INVALID_INDEX || trueValue == BlockStateRegistry::INVALID_INDEX) {
-        failRedstoneSystem(
-            "Redstone controlled property must define false and true values: " + def.redstoneControlledProperty);
+        failRedstoneSystem("Redstone controlled property must define false and true values: " +
+                           def.redstoneControlledProperty);
     }
     if (currentValue != falseValue && currentValue != trueValue) {
-        failRedstoneSystem(
-            "Redstone controlled property state must be false or true: " + def.redstoneControlledProperty);
+        failRedstoneSystem("Redstone controlled property state must be false or true: " +
+                           def.redstoneControlledProperty);
     }
     return property;
 }
 
-uint16_t requireBooleanStateProperty(const BlockStateId stateId,
-                                     const std::string& propertyName,
-                                     const char* context) {
+uint16_t requireBooleanStateProperty(const BlockStateId stateId, const std::string& propertyName, const char* context) {
     const uint16_t property = BlockStateRegistry::getPropertyNameIndex(propertyName);
     if (property == BlockStateRegistry::INVALID_INDEX) {
         failRedstoneSystem(std::string(context) + " property is not registered: " + propertyName);
@@ -1086,10 +1012,8 @@ BlockStateId withRedstoneControlledPower(const BlockStateId stateId, const bool 
 
     BlockStateId mirroredState = updatedState;
     for (const std::string& mirrorPropertyName : def.redstoneControlledMirrorProperties) {
-        const uint16_t mirrorProperty = requireBooleanStateProperty(
-            mirroredState,
-            mirrorPropertyName,
-            "Redstone controlled mirror");
+        const uint16_t mirrorProperty =
+            requireBooleanStateProperty(mirroredState, mirrorPropertyName, "Redstone controlled mirror");
         const uint16_t mirrorValue =
             BlockStateRegistry::getPropertyValueIndex(mirrorProperty, propertyValue ? "true" : "false");
         mirroredState = BlockStateRegistry::withProperty(mirroredState, mirrorProperty, mirrorValue);
@@ -1129,11 +1053,9 @@ uint16_t pistonHeadType(const BlockStateId pistonState) {
 
 BlockStateId pistonHeadState(const BlockStateId pistonState) {
     return BlockStateRegistry::getState(
-        pistonHeadBlockId(),
-        std::vector<std::pair<uint16_t, uint16_t>>{
-            {PropIndices::FACING, getRequiredProperty(pistonState, PropIndices::FACING, "facing")},
-            {PropIndices::TYPE, pistonHeadType(pistonState)}
-        });
+        pistonHeadBlockId(), std::vector<std::pair<uint16_t, uint16_t>>{
+                                 {PropIndices::FACING, getRequiredProperty(pistonState, PropIndices::FACING, "facing")},
+                                 {PropIndices::TYPE, pistonHeadType(pistonState)}});
 }
 
 bool isMatchingPistonHead(const BlockStateId headState, const BlockStateId pistonState) {
@@ -1171,8 +1093,7 @@ CollisionAabb physicsBodyAabb(const PhysicsBody& body) {
 }
 
 bool aabbIntersects(const CollisionAabb& lhs, const CollisionAabb& rhs) {
-    return lhs.min.x < rhs.max.x && lhs.max.x > rhs.min.x &&
-           lhs.min.y < rhs.max.y && lhs.max.y > rhs.min.y &&
+    return lhs.min.x < rhs.max.x && lhs.max.x > rhs.min.x && lhs.min.y < rhs.max.y && lhs.max.y > rhs.min.y &&
            lhs.min.z < rhs.max.z && lhs.max.z > rhs.min.z;
 }
 
@@ -1208,8 +1129,7 @@ bool rangesOverlap(const float aMin, const float aMax, const float bMin, const f
     return aMin < bMax && aMax > bMin;
 }
 
-template <typename Fn>
-void forEachWorldCollisionBox(const World& world, const glm::ivec3& blockPosition, Fn&& fn) {
+template <typename Fn> void forEachWorldCollisionBox(const World& world, const glm::ivec3& blockPosition, Fn&& fn) {
     const BlockStateId stateId = world.getBlockState(blockPosition.x, blockPosition.y, blockPosition.z);
     const glm::vec3 blockOffset(blockPosition);
     for (const BlockCollisionBox& localBox : BlockCollision::getBoxes(stateId)) {
@@ -1253,14 +1173,11 @@ void forEachIntersectingWorldCollisionBox(const World& world, const CollisionAab
 
 bool worldCollisionIntersects(const World& world, const CollisionAabb& box) {
     bool intersects = false;
-    forEachIntersectingWorldCollisionBox(world, box, [&](const CollisionAabb&) {
-        intersects = true;
-    });
+    forEachIntersectingWorldCollisionBox(world, box, [&](const CollisionAabb&) { intersects = true; });
     return intersects;
 }
 
-void appendSeparationCandidates(const CollisionAabb& body,
-                                const CollisionAabb& obstacle,
+void appendSeparationCandidates(const CollisionAabb& body, const CollisionAabb& obstacle,
                                 std::vector<glm::vec3>& candidates) {
     candidates.push_back(glm::vec3(obstacle.max.x - body.min.x + kPistonEntityPushEpsilon, 0.0f, 0.0f));
     candidates.push_back(glm::vec3(obstacle.min.x - body.max.x - kPistonEntityPushEpsilon, 0.0f, 0.0f));
@@ -1272,9 +1189,8 @@ void appendSeparationCandidates(const CollisionAabb& body,
 
 bool findWorldDepenetration(const World& world, const CollisionAabb& body, glm::vec3& outDelta) {
     std::vector<glm::vec3> candidates;
-    forEachIntersectingWorldCollisionBox(world, body, [&](const CollisionAabb& obstacle) {
-        appendSeparationCandidates(body, obstacle, candidates);
-    });
+    forEachIntersectingWorldCollisionBox(
+        world, body, [&](const CollisionAabb& obstacle) { appendSeparationCandidates(body, obstacle, candidates); });
 
     if (candidates.empty()) {
         outDelta = glm::vec3(0.0f);
@@ -1350,8 +1266,7 @@ void depenetratePhysicsBodyFromWorld(const World& world, PhysicsBody& body) {
     }
 }
 
-bool pushPhysicsBodyFromMovingCollision(PhysicsBody& body,
-                                        const PistonMovementCollision& collision,
+bool pushPhysicsBodyFromMovingCollision(PhysicsBody& body, const PistonMovementCollision& collision,
                                         const glm::ivec3& movementDirection) {
     const CollisionAabb bodyBox = physicsBodyAabb(body);
     if (!aabbIntersects(bodyBox, collision.sweptBox)) {
@@ -1379,8 +1294,7 @@ bool pushPhysicsBodyFromMovingCollision(PhysicsBody& body,
     return true;
 }
 
-bool physicsBodyRidesMovingCollision(const PhysicsBody& body,
-                                     const PistonMovementCollision& collision,
+bool physicsBodyRidesMovingCollision(const PhysicsBody& body, const PistonMovementCollision& collision,
                                      const glm::ivec3& movementDirection) {
     if (movementDirection.y != 0) {
         return false;
@@ -1395,8 +1309,7 @@ bool physicsBodyRidesMovingCollision(const PhysicsBody& body,
            rangesOverlap(bodyBox.min.z, bodyBox.max.z, collision.sourceBox.min.z, collision.sourceBox.max.z);
 }
 
-bool carryPhysicsBodyOnMovingCollision(PhysicsBody& body,
-                                       const PistonMovementCollision& collision,
+bool carryPhysicsBodyOnMovingCollision(PhysicsBody& body, const PistonMovementCollision& collision,
                                        const glm::ivec3& movementDirection) {
     if (!physicsBodyRidesMovingCollision(body, collision, movementDirection)) {
         return false;
@@ -1406,9 +1319,7 @@ bool carryPhysicsBodyOnMovingCollision(PhysicsBody& body,
     return true;
 }
 
-void pushEntitiesFromMovedBlock(World& world,
-                                GameplayRegistry* registry,
-                                const glm::ivec3& blockPosition,
+void pushEntitiesFromMovedBlock(World& world, GameplayRegistry* registry, const glm::ivec3& blockPosition,
                                 const glm::ivec3& movementDirection) {
     if (registry == nullptr) {
         return;
@@ -1453,9 +1364,7 @@ void pushEntitiesFromMovedBlock(World& world,
     }
 }
 
-bool buildPistonPushPlan(const World& world,
-                         const glm::ivec3& pistonPosition,
-                         const glm::ivec3& pushDirection,
+bool buildPistonPushPlan(const World& world, const glm::ivec3& pistonPosition, const glm::ivec3& pushDirection,
                          PistonPushPlan& plan) {
     plan.movedBlocks.clear();
 
@@ -1477,12 +1386,8 @@ bool buildPistonPushPlan(const World& world,
     failRedstoneSystem("Piston push scan exceeded its configured maximum distance");
 }
 
-void createMovingBlock(GameplayRegistry& registry,
-                       const BlockStateId stateId,
-                       const glm::ivec3& sourcePosition,
-                       const glm::ivec3& targetPosition,
-                       const glm::ivec3& direction,
-                       const bool placeAtTarget) {
+void createMovingBlock(GameplayRegistry& registry, const BlockStateId stateId, const glm::ivec3& sourcePosition,
+                       const glm::ivec3& targetPosition, const glm::ivec3& direction, const bool placeAtTarget) {
     MovingBlockSpawnParams params;
     params.stateId = stateId;
     params.sourcePosition = sourcePosition;
@@ -1493,8 +1398,7 @@ void createMovingBlock(GameplayRegistry& registry,
     EntityFactory::createMovingBlock(registry, params);
 }
 
-bool hasActivePistonMovement(const GameplayRegistry* registry,
-                             const glm::ivec3& pistonPosition,
+bool hasActivePistonMovement(const GameplayRegistry* registry, const glm::ivec3& pistonPosition,
                              const glm::ivec3& facingDirection) {
     if (registry == nullptr) {
         return false;
@@ -1504,22 +1408,16 @@ bool hasActivePistonMovement(const GameplayRegistry* registry,
     const auto view = registry->registry().view<MovingBlockTag, MovingBlockComponent>();
     for (const entt::entity entity : view) {
         const auto& block = view.get<MovingBlockComponent>(entity);
-        if (block.sourcePosition == pistonPosition ||
-            block.targetPosition == pistonPosition ||
-            block.sourcePosition == frontPosition ||
-            block.targetPosition == frontPosition) {
+        if (block.sourcePosition == pistonPosition || block.targetPosition == pistonPosition ||
+            block.sourcePosition == frontPosition || block.targetPosition == frontPosition) {
             return true;
         }
     }
     return false;
 }
 
-size_t applyPistonPush(World& world,
-                       GameplayRegistry* registry,
-                       const glm::ivec3& pistonPosition,
-                       const BlockStateId pistonState,
-                       const glm::ivec3& pushDirection,
-                       const PistonPushPlan& plan) {
+size_t applyPistonPush(World& world, GameplayRegistry* registry, const glm::ivec3& pistonPosition,
+                       const BlockStateId pistonState, const glm::ivec3& pushDirection, const PistonPushPlan& plan) {
     if (registry != nullptr) {
         size_t changed = 0;
         for (const PistonMovedBlock& movedBlock : plan.movedBlocks) {
@@ -1527,13 +1425,8 @@ size_t applyPistonPush(World& world,
             ++changed;
         }
         for (const PistonMovedBlock& movedBlock : plan.movedBlocks) {
-            createMovingBlock(
-                *registry,
-                movedBlock.state,
-                movedBlock.position,
-                movedBlock.position + pushDirection,
-                pushDirection,
-                true);
+            createMovingBlock(*registry, movedBlock.state, movedBlock.position, movedBlock.position + pushDirection,
+                              pushDirection, true);
         }
 
         const glm::ivec3 frontPosition = pistonPosition + pushDirection;
@@ -1563,11 +1456,8 @@ bool isStickyPistonState(const BlockStateId stateId) {
     return BlockStateRegistry::getBlockId(stateId) == stickyPistonBlockId();
 }
 
-size_t applyPistonRetraction(World& world,
-                             GameplayRegistry* registry,
-                             const glm::ivec3& pistonPosition,
-                             const BlockStateId pistonState,
-                             const glm::ivec3& facingDirection) {
+size_t applyPistonRetraction(World& world, GameplayRegistry* registry, const glm::ivec3& pistonPosition,
+                             const BlockStateId pistonState, const glm::ivec3& facingDirection) {
     size_t changed = 0;
     const glm::ivec3 frontPosition = pistonPosition + facingDirection;
     const BlockStateId frontState = world.getBlockState(frontPosition.x, frontPosition.y, frontPosition.z);
@@ -1753,9 +1643,7 @@ void collectEndpointIfPresent(const World& world, const glm::ivec3& position, Re
     if (isWireState(stateId)) {
         collectWireComponent(world, wireNodeFromState(position, stateId), workSet);
     } else if (isWireContainerState(stateId)) {
-        forEachWireNodeAt(world, position, [&](const WireNode& wire) {
-            collectWireComponent(world, wire, workSet);
-        });
+        forEachWireNodeAt(world, position, [&](const WireNode& wire) { collectWireComponent(world, wire, workSet); });
     } else if (isRedstoneControlledState(stateId)) {
         addRedstoneControlledIfPresent(world, position, workSet);
     } else if (isTorchState(stateId)) {
@@ -1776,9 +1664,7 @@ void collectEndpointIfPresent(const World& world, const glm::ivec3& position, Re
 }
 
 void collectWireComponentsAt(const World& world, const glm::ivec3& position, RedstoneWorkSet& workSet) {
-    forEachWireNodeAt(world, position, [&](const WireNode& wire) {
-        collectWireComponent(world, wire, workSet);
-    });
+    forEachWireNodeAt(world, position, [&](const WireNode& wire) { collectWireComponent(world, wire, workSet); });
 }
 
 void collectEndpointsAround(const World& world, const glm::ivec3& position, RedstoneWorkSet& workSet) {
@@ -1787,8 +1673,7 @@ void collectEndpointsAround(const World& world, const glm::ivec3& position, Reds
     }
 }
 
-void collectEndpointsAroundNeighborConductors(const World& world,
-                                              const glm::ivec3& position,
+void collectEndpointsAroundNeighborConductors(const World& world, const glm::ivec3& position,
                                               RedstoneWorkSet& workSet) {
     for (const glm::ivec3& direction : kDirections) {
         const glm::ivec3 conductor = position + direction;
@@ -1984,8 +1869,7 @@ void collectPosition(const World& world, const glm::ivec3& position, RedstoneWor
     collectEndpointsAroundNeighborConductors(world, position, workSet);
 }
 
-void collectRedstoneWorkSet(const World& world,
-                            const std::vector<glm::ivec3>& dirtyPositions,
+void collectRedstoneWorkSet(const World& world, const std::vector<glm::ivec3>& dirtyPositions,
                             RedstoneWorkSet& workSet) {
     clearRedstoneWorkSet(workSet);
     reserveRedstoneWorkSet(workSet, dirtyPositions.size());
@@ -1997,10 +1881,8 @@ void collectRedstoneWorkSet(const World& world,
     }
 }
 
-void appendActiveSources(const World& world,
-                         const std::vector<glm::ivec3>& sourcePositions,
-                         const PositionSet* excludedPositions,
-                         std::vector<RedstoneSource>& sources) {
+void appendActiveSources(const World& world, const std::vector<glm::ivec3>& sourcePositions,
+                         const PositionSet* excludedPositions, std::vector<RedstoneSource>& sources) {
     sources.reserve(sources.size() + sourcePositions.size());
     for (const glm::ivec3& position : sourcePositions) {
         if (excludedPositions != nullptr && excludedPositions->find(position) != excludedPositions->end()) {
@@ -2019,8 +1901,7 @@ void appendActiveSources(const World& world,
     }
 }
 
-void appendPoweredRepeaterSources(const World& world,
-                                  const std::vector<glm::ivec3>& repeaterPositions,
+void appendPoweredRepeaterSources(const World& world, const std::vector<glm::ivec3>& repeaterPositions,
                                   std::vector<RedstoneSource>& sources) {
     sources.reserve(sources.size() + repeaterPositions.size());
     for (const glm::ivec3& position : repeaterPositions) {
@@ -2028,18 +1909,12 @@ void appendPoweredRepeaterSources(const World& world,
         if (!isRepeaterState(stateId) || !isPoweredPropertyTrue(stateId)) {
             continue;
         }
-        sources.push_back({
-            position,
-            kMaxRedstonePower,
-            repeaterOutputDirection(stateId),
-            true,
-            logicUnitWireFacing(stateId, "Repeater")
-        });
+        sources.push_back({position, kMaxRedstonePower, repeaterOutputDirection(stateId), true,
+                           logicUnitWireFacing(stateId, "Repeater")});
     }
 }
 
-void appendPoweredObserverSources(const World& world,
-                                  const std::vector<glm::ivec3>& observerPositions,
+void appendPoweredObserverSources(const World& world, const std::vector<glm::ivec3>& observerPositions,
                                   std::vector<RedstoneSource>& sources) {
     sources.reserve(sources.size() + observerPositions.size());
     for (const glm::ivec3& position : observerPositions) {
@@ -2051,54 +1926,37 @@ void appendPoweredObserverSources(const World& world,
     }
 }
 
-void appendPoweredComparatorStateSources(
-    const World& world,
-    const std::vector<glm::ivec3>& comparatorPositions,
-    std::vector<RedstoneSource>& sources) {
+void appendPoweredComparatorStateSources(const World& world, const std::vector<glm::ivec3>& comparatorPositions,
+                                         std::vector<RedstoneSource>& sources) {
     sources.reserve(sources.size() + comparatorPositions.size());
     for (const glm::ivec3& position : comparatorPositions) {
         const BlockStateId stateId = world.getBlockState(position.x, position.y, position.z);
         if (!isComparatorState(stateId) || !isPoweredPropertyTrue(stateId)) {
             continue;
         }
-        sources.push_back({
-            position,
-            kMaxRedstonePower,
-            comparatorOutputDirection(stateId),
-            true,
-            logicUnitWireFacing(stateId, "Comparator")
-        });
+        sources.push_back({position, kMaxRedstonePower, comparatorOutputDirection(stateId), true,
+                           logicUnitWireFacing(stateId, "Comparator")});
     }
 }
 
-void appendComparatorSources(const World& world,
-                             const std::vector<ComparatorEvaluation>& evaluations,
+void appendComparatorSources(const World& world, const std::vector<ComparatorEvaluation>& evaluations,
                              std::vector<RedstoneSource>& sources) {
     sources.reserve(sources.size() + evaluations.size());
     for (const ComparatorEvaluation& evaluation : evaluations) {
         if (evaluation.outputPower == 0) {
             continue;
         }
-        const BlockStateId stateId = world.getBlockState(
-            evaluation.position.x,
-            evaluation.position.y,
-            evaluation.position.z);
+        const BlockStateId stateId =
+            world.getBlockState(evaluation.position.x, evaluation.position.y, evaluation.position.z);
         if (!isComparatorState(stateId)) {
             continue;
         }
-        sources.push_back({
-            evaluation.position,
-            evaluation.outputPower,
-            comparatorOutputDirection(stateId),
-            true,
-            logicUnitWireFacing(stateId, "Comparator")
-        });
+        sources.push_back({evaluation.position, evaluation.outputPower, comparatorOutputDirection(stateId), true,
+                           logicUnitWireFacing(stateId, "Comparator")});
     }
 }
 
-void setBestWirePower(WirePowerMap& wirePowers,
-                      std::priority_queue<PowerNode>& frontier,
-                      const WireNode& wire,
+void setBestWirePower(WirePowerMap& wirePowers, std::priority_queue<PowerNode>& frontier, const WireNode& wire,
                       const uint8_t power) {
     if (power == 0) {
         return;
@@ -2111,12 +1969,9 @@ void setBestWirePower(WirePowerMap& wirePowers,
     frontier.push({wire, power});
 }
 
-void seedTrackedWirePower(WirePowerMap& wirePowers,
-                           std::priority_queue<PowerNode>& frontier,
-                           const WireNodeSet& wires,
-                           const glm::ivec3& position,
-                           const uint8_t power,
-                           const uint16_t targetWireFacing = PropIndices::INVALID) {
+void seedTrackedWirePower(WirePowerMap& wirePowers, std::priority_queue<PowerNode>& frontier, const WireNodeSet& wires,
+                          const glm::ivec3& position, const uint8_t power,
+                          const uint16_t targetWireFacing = PropIndices::INVALID) {
     for (const WireNode& wire : wires) {
         if (wire.position == position) {
             if (targetWireFacing != PropIndices::INVALID && wire.facing != targetWireFacing) {
@@ -2127,13 +1982,9 @@ void seedTrackedWirePower(WirePowerMap& wirePowers,
     }
 }
 
-void seedWiresPoweredByConductor(const World& world,
-                                 WirePowerMap& wirePowers,
-                                 std::priority_queue<PowerNode>& frontier,
-                                 const WireNodeSet& wires,
-                                 const glm::ivec3& conductor,
-                                 const glm::ivec3& signalPosition,
-                                 const uint8_t power) {
+void seedWiresPoweredByConductor(const World& world, WirePowerMap& wirePowers, std::priority_queue<PowerNode>& frontier,
+                                 const WireNodeSet& wires, const glm::ivec3& conductor,
+                                 const glm::ivec3& signalPosition, const uint8_t power) {
     if (!isConductiveBlockAt(world, conductor)) {
         return;
     }
@@ -2147,25 +1998,19 @@ void seedWiresPoweredByConductor(const World& world,
     }
 }
 
-void seedSourcePowerToward(const World& world,
-                           WirePowerMap& wirePowers,
-                           std::priority_queue<PowerNode>& frontier,
-                           const WireNodeSet& wires,
-    const RedstoneSource& source,
-    const glm::ivec3& target) {
+void seedSourcePowerToward(const World& world, WirePowerMap& wirePowers, std::priority_queue<PowerNode>& frontier,
+                           const WireNodeSet& wires, const RedstoneSource& source, const glm::ivec3& target) {
     seedTrackedWirePower(wirePowers, frontier, wires, target, source.power, source.targetWireFacing);
     const BlockStateId sourceState = world.getBlockState(source.position.x, source.position.y, source.position.z);
-    const bool stronglyPowersTarget =
-        source.directional ||
-        (isTorchState(sourceState) && target == source.position + glm::ivec3(0, 1, 0)) ||
-        sourceCanPowerConductiveBlocks(sourceState);
+    const bool stronglyPowersTarget = source.directional ||
+                                      (isTorchState(sourceState) && target == source.position + glm::ivec3(0, 1, 0)) ||
+                                      sourceCanPowerConductiveBlocks(sourceState);
     if (stronglyPowersTarget) {
         seedWiresPoweredByConductor(world, wirePowers, frontier, wires, target, source.position, source.power);
     }
 }
 
-WirePowerMap propagateWirePower(const World& world,
-                                const WireNodeSet& wires,
+WirePowerMap propagateWirePower(const World& world, const WireNodeSet& wires,
                                 const std::vector<RedstoneSource>& sources) {
     WirePowerMap wirePowers;
     wirePowers.evaluatedWires = &wires;
@@ -2179,13 +2024,7 @@ WirePowerMap propagateWirePower(const World& world,
 
     for (const RedstoneSource& source : sources) {
         if (source.directional) {
-            seedSourcePowerToward(
-                world,
-                wirePowers,
-                frontier,
-                wires,
-                source,
-                source.position + source.outputDirection);
+            seedSourcePowerToward(world, wirePowers, frontier, wires, source, source.position + source.outputDirection);
         } else {
             for (const glm::ivec3& direction : kDirections) {
                 seedSourcePowerToward(world, wirePowers, frontier, wires, source, source.position + direction);
@@ -2255,9 +2094,7 @@ uint8_t storedWireNodePower(const World& world, const WireNode& wire) {
     failRedstoneSystem("Redstone wire node power requires an existing wire node");
 }
 
-uint8_t wirePowerAtPosition(const World& world,
-                            const WirePowerMap& wirePowers,
-                            const glm::ivec3& position) {
+uint8_t wirePowerAtPosition(const World& world, const WirePowerMap& wirePowers, const glm::ivec3& position) {
     uint8_t power = 0;
     forEachWireNodeAt(world, position, [&](const WireNode& wire) {
         const auto computedIt = wirePowers.find(wire);
@@ -2270,9 +2107,7 @@ uint8_t wirePowerAtPosition(const World& world,
     return power;
 }
 
-uint8_t wirePowerAtPositionForFacing(const World& world,
-                                     const WirePowerMap& wirePowers,
-                                     const glm::ivec3& position,
+uint8_t wirePowerAtPositionForFacing(const World& world, const WirePowerMap& wirePowers, const glm::ivec3& position,
                                      const uint16_t wireFacing) {
     uint8_t power = 0;
     forEachWireNodeAt(world, position, [&](const WireNode& wire) {
@@ -2289,33 +2124,26 @@ uint8_t wirePowerAtPositionForFacing(const World& world,
     return power;
 }
 
-uint8_t sourceOutputPowerToward(const World& world,
-                                const glm::ivec3& sourcePosition,
+uint8_t sourceOutputPowerToward(const World& world, const glm::ivec3& sourcePosition,
                                 const glm::ivec3& targetPosition) {
     const BlockStateId sourceState = world.getBlockState(sourcePosition.x, sourcePosition.y, sourcePosition.z);
     if (isRepeaterState(sourceState)) {
         if (!isPoweredPropertyTrue(sourceState)) {
             return 0;
         }
-        return targetPosition == sourcePosition + repeaterOutputDirection(sourceState)
-            ? kMaxRedstonePower
-            : 0;
+        return targetPosition == sourcePosition + repeaterOutputDirection(sourceState) ? kMaxRedstonePower : 0;
     }
     if (isObserverState(sourceState)) {
         if (!isPoweredPropertyTrue(sourceState)) {
             return 0;
         }
-        return targetPosition == sourcePosition + observerOutputDirection(sourceState)
-            ? kMaxRedstonePower
-            : 0;
+        return targetPosition == sourcePosition + observerOutputDirection(sourceState) ? kMaxRedstonePower : 0;
     }
     if (isComparatorState(sourceState)) {
         if (!isPoweredPropertyTrue(sourceState)) {
             return 0;
         }
-        return targetPosition == sourcePosition + comparatorOutputDirection(sourceState)
-            ? kMaxRedstonePower
-            : 0;
+        return targetPosition == sourcePosition + comparatorOutputDirection(sourceState) ? kMaxRedstonePower : 0;
     }
     if (isTorchState(sourceState) && targetPosition == attachedBlockForTorch(sourceState, sourcePosition)) {
         return 0;
@@ -2323,9 +2151,7 @@ uint8_t sourceOutputPowerToward(const World& world,
     return sourceOutputPower(sourceState);
 }
 
-uint8_t directSignalPowerToward(const World& world,
-                                const WirePowerMap& wirePowers,
-                                const glm::ivec3& signalPosition,
+uint8_t directSignalPowerToward(const World& world, const WirePowerMap& wirePowers, const glm::ivec3& signalPosition,
                                 const glm::ivec3& targetPosition) {
     const BlockStateId signalState = world.getBlockState(signalPosition.x, signalPosition.y, signalPosition.z);
     if (isWireState(signalState) || isWireContainerState(signalState)) {
@@ -2334,10 +2160,8 @@ uint8_t directSignalPowerToward(const World& world,
     return sourceOutputPowerToward(world, signalPosition, targetPosition);
 }
 
-uint8_t directSignalPowerTowardWireFacing(const World& world,
-                                          const WirePowerMap& wirePowers,
-                                          const glm::ivec3& signalPosition,
-                                          const glm::ivec3& targetPosition,
+uint8_t directSignalPowerTowardWireFacing(const World& world, const WirePowerMap& wirePowers,
+                                          const glm::ivec3& signalPosition, const glm::ivec3& targetPosition,
                                           const uint16_t targetWireFacing) {
     const BlockStateId signalState = world.getBlockState(signalPosition.x, signalPosition.y, signalPosition.z);
     if (isWireState(signalState) || isWireContainerState(signalState)) {
@@ -2346,8 +2170,7 @@ uint8_t directSignalPowerTowardWireFacing(const World& world,
     return sourceOutputPowerToward(world, signalPosition, targetPosition);
 }
 
-uint8_t sourceStrongPowerTowardConductor(const World& world,
-                                         const glm::ivec3& sourcePosition,
+uint8_t sourceStrongPowerTowardConductor(const World& world, const glm::ivec3& sourcePosition,
                                          const glm::ivec3& conductorPosition) {
     const BlockStateId sourceState = world.getBlockState(sourcePosition.x, sourcePosition.y, sourcePosition.z);
     if (isWireState(sourceState) || isWireContainerState(sourceState) || isConductiveState(sourceState)) {
@@ -2359,9 +2182,7 @@ uint8_t sourceStrongPowerTowardConductor(const World& world,
         }
         return sourceOutputPower(sourceState);
     }
-    if (isRepeaterState(sourceState) ||
-        isObserverState(sourceState) ||
-        isComparatorState(sourceState)) {
+    if (isRepeaterState(sourceState) || isObserverState(sourceState) || isComparatorState(sourceState)) {
         return sourceOutputPowerToward(world, sourcePosition, conductorPosition);
     }
     if (!sourceCanPowerConductiveBlocks(sourceState)) {
@@ -2370,9 +2191,7 @@ uint8_t sourceStrongPowerTowardConductor(const World& world,
     return sourceOutputPowerToward(world, sourcePosition, conductorPosition);
 }
 
-uint8_t wirePowerTowardConductor(const World& world,
-                                 const WirePowerMap& wirePowers,
-                                 const glm::ivec3& wirePosition,
+uint8_t wirePowerTowardConductor(const World& world, const WirePowerMap& wirePowers, const glm::ivec3& wirePosition,
                                  const glm::ivec3& conductorPosition) {
     const BlockStateId stateId = world.getBlockState(wirePosition.x, wirePosition.y, wirePosition.z);
     if (isWireState(stateId) && !wirePowersConductorToward(world, wirePosition, conductorPosition)) {
@@ -2384,10 +2203,8 @@ uint8_t wirePowerTowardConductor(const World& world,
     return wirePowerAtPosition(world, wirePowers, wirePosition);
 }
 
-uint8_t conductiveBlockInputPowerToward(const World& world,
-                                        const WirePowerMap& wirePowers,
-                                        const glm::ivec3& signalPosition,
-                                        const glm::ivec3& conductorPosition) {
+uint8_t conductiveBlockInputPowerToward(const World& world, const WirePowerMap& wirePowers,
+                                        const glm::ivec3& signalPosition, const glm::ivec3& conductorPosition) {
     const BlockStateId signalState = world.getBlockState(signalPosition.x, signalPosition.y, signalPosition.z);
     if (isWireState(signalState) || isWireContainerState(signalState)) {
         return wirePowerTowardConductor(world, wirePowers, signalPosition, conductorPosition);
@@ -2396,9 +2213,7 @@ uint8_t conductiveBlockInputPowerToward(const World& world,
     return sourceStrongPowerTowardConductor(world, signalPosition, conductorPosition);
 }
 
-uint8_t conductedSignalPowerToward(const World& world,
-                                   const WirePowerMap& wirePowers,
-                                   const glm::ivec3& conductor,
+uint8_t conductedSignalPowerToward(const World& world, const WirePowerMap& wirePowers, const glm::ivec3& conductor,
                                    const glm::ivec3& targetPosition) {
     if (!isConductiveBlockAt(world, conductor)) {
         return 0;
@@ -2410,16 +2225,13 @@ uint8_t conductedSignalPowerToward(const World& world,
         if (signalPosition == targetPosition) {
             continue;
         }
-        conductedPower = std::max(
-            conductedPower,
-            conductiveBlockInputPowerToward(world, wirePowers, signalPosition, conductor));
+        conductedPower =
+            std::max(conductedPower, conductiveBlockInputPowerToward(world, wirePowers, signalPosition, conductor));
     }
     return conductedPower;
 }
 
-uint8_t conductiveBlockPowerAt(const World& world,
-                               const WirePowerMap& wirePowers,
-                               const glm::ivec3& conductor,
+uint8_t conductiveBlockPowerAt(const World& world, const WirePowerMap& wirePowers, const glm::ivec3& conductor,
                                const glm::ivec3* excludedPosition = nullptr) {
     if (!isConductiveBlockAt(world, conductor)) {
         return 0;
@@ -2438,9 +2250,7 @@ uint8_t conductiveBlockPowerAt(const World& world,
     return receivedPower;
 }
 
-uint8_t receivedPowerAt(const World& world,
-                        const WirePowerMap& wirePowers,
-                        const glm::ivec3& position,
+uint8_t receivedPowerAt(const World& world, const WirePowerMap& wirePowers, const glm::ivec3& position,
                         const glm::ivec3* excludedPosition = nullptr) {
     uint8_t receivedPower = 0;
     for (const glm::ivec3& direction : kDirections) {
@@ -2452,18 +2262,14 @@ uint8_t receivedPowerAt(const World& world,
         const BlockStateId neighborState = world.getBlockState(neighbor.x, neighbor.y, neighbor.z);
         uint8_t neighborPower = directSignalPowerToward(world, wirePowers, neighbor, position);
         if (isConductiveState(neighborState)) {
-            neighborPower = std::max(
-                neighborPower,
-                conductedSignalPowerToward(world, wirePowers, neighbor, position));
+            neighborPower = std::max(neighborPower, conductedSignalPowerToward(world, wirePowers, neighbor, position));
         }
         receivedPower = std::max(receivedPower, neighborPower);
     }
     return receivedPower;
 }
 
-bool shouldTorchBeLit(const World& world,
-                      const WirePowerMap& inputWirePowers,
-                      const glm::ivec3& torchPosition,
+bool shouldTorchBeLit(const World& world, const WirePowerMap& inputWirePowers, const glm::ivec3& torchPosition,
                       const BlockStateId torchState) {
     const glm::ivec3 attachedBlock = attachedBlockForTorch(torchState, torchPosition);
     if (!isConductiveBlockAt(world, attachedBlock)) {
@@ -2485,9 +2291,7 @@ bool recordTorchTurnOff(RedstoneTorchRuntimeState& torchRuntime, const uint64_t 
     return torchRuntime.turnOffTicks.size() >= kTorchBurnoutTurnOffLimit;
 }
 
-void compactTorchRuntimeState(RedstoneRuntimeState& runtime,
-                              const glm::ivec3& position,
-                              const uint64_t redstoneTick) {
+void compactTorchRuntimeState(RedstoneRuntimeState& runtime, const glm::ivec3& position, const uint64_t redstoneTick) {
     const auto it = runtime.torches.find(position);
     if (it == runtime.torches.end()) {
         return;
@@ -2499,14 +2303,11 @@ void compactTorchRuntimeState(RedstoneRuntimeState& runtime,
     }
 }
 
-size_t applyTorchStates(World& world,
-                        const std::vector<glm::ivec3>& torches,
-                        const WireNodeSet& wires,
+size_t applyTorchStates(World& world, const std::vector<glm::ivec3>& torches, const WireNodeSet& wires,
                         const std::vector<glm::ivec3>& sourcePositions,
                         const std::vector<glm::ivec3>& repeaterPositions,
                         const std::vector<glm::ivec3>& observerPositions,
-                        const std::vector<glm::ivec3>& comparatorPositions,
-                        const uint64_t redstoneTick) {
+                        const std::vector<glm::ivec3>& comparatorPositions, const uint64_t redstoneTick) {
     std::vector<glm::ivec3> orderedTorches = torches;
     std::sort(orderedTorches.begin(), orderedTorches.end(), [](const glm::ivec3& lhs, const glm::ivec3& rhs) {
         if (lhs.y != rhs.y) {
@@ -2522,9 +2323,7 @@ size_t applyTorchStates(World& world,
     PositionSet excludedSources;
     excludedSources.reserve(1);
     std::vector<RedstoneSource> inputSources;
-    inputSources.reserve(sourcePositions.size() +
-                         repeaterPositions.size() +
-                         observerPositions.size() +
+    inputSources.reserve(sourcePositions.size() + repeaterPositions.size() + observerPositions.size() +
                          comparatorPositions.size());
     for (const glm::ivec3& position : orderedTorches) {
         const BlockStateId currentState = world.getBlockState(position.x, position.y, position.z);
@@ -2544,8 +2343,7 @@ size_t applyTorchStates(World& world,
         bool shouldBeLit = shouldTorchBeLit(world, inputWirePowers, position, currentState);
         auto& runtime = world.redstoneRuntimeState();
         auto runtimeIt = runtime.torches.find(position);
-        if (runtimeIt != runtime.torches.end() &&
-            runtimeIt->second.burnedOut &&
+        if (runtimeIt != runtime.torches.end() && runtimeIt->second.burnedOut &&
             redstoneTick >= runtimeIt->second.cooldownEndsAtTick) {
             runtimeIt->second.burnedOut = false;
             pruneTorchTurnOffHistory(runtimeIt->second, redstoneTick);
@@ -2559,10 +2357,8 @@ size_t applyTorchStates(World& world,
             if (recordTorchTurnOff(torchRuntime, redstoneTick)) {
                 torchRuntime.burnedOut = true;
                 torchRuntime.cooldownEndsAtTick = redstoneTick + kTorchBurnoutCooldownTicks;
-                world.redstoneScheduledUpdateQueue().reschedule(
-                    torchRuntime.cooldownEndsAtTick,
-                    position,
-                    RedstoneScheduledAction::ResetTorchBurnout);
+                world.redstoneScheduledUpdateQueue().reschedule(torchRuntime.cooldownEndsAtTick, position,
+                                                                RedstoneScheduledAction::ResetTorchBurnout);
             }
         }
 
@@ -2576,61 +2372,42 @@ size_t applyTorchStates(World& world,
     return changed;
 }
 
-uint8_t repeaterInputPower(const World& world,
-                           const WirePowerMap& wirePowers,
-                           const glm::ivec3& repeaterPosition,
+uint8_t repeaterInputPower(const World& world, const WirePowerMap& wirePowers, const glm::ivec3& repeaterPosition,
                            const BlockStateId repeaterState) {
     const glm::ivec3 inputPosition = repeaterPosition - repeaterOutputDirection(repeaterState);
     const uint16_t targetWireFacing = logicUnitWireFacing(repeaterState, "Repeater");
-    uint8_t inputPower = directSignalPowerTowardWireFacing(
-        world,
-        wirePowers,
-        inputPosition,
-        repeaterPosition,
-        targetWireFacing);
+    uint8_t inputPower =
+        directSignalPowerTowardWireFacing(world, wirePowers, inputPosition, repeaterPosition, targetWireFacing);
     if (isConductiveBlockAt(world, inputPosition)) {
-        inputPower = std::max(
-            inputPower,
-            conductedSignalPowerToward(world, wirePowers, inputPosition, repeaterPosition));
+        inputPower =
+            std::max(inputPower, conductedSignalPowerToward(world, wirePowers, inputPosition, repeaterPosition));
     }
     return inputPower;
 }
 
-uint8_t signalPowerFromNeighbor(const World& world,
-                                const WirePowerMap& wirePowers,
-                                const glm::ivec3& signalPosition,
+uint8_t signalPowerFromNeighbor(const World& world, const WirePowerMap& wirePowers, const glm::ivec3& signalPosition,
                                 const glm::ivec3& targetPosition) {
     uint8_t signalPower = directSignalPowerToward(world, wirePowers, signalPosition, targetPosition);
     if (isConductiveBlockAt(world, signalPosition)) {
-        signalPower = std::max(
-            signalPower,
-            conductedSignalPowerToward(world, wirePowers, signalPosition, targetPosition));
+        signalPower =
+            std::max(signalPower, conductedSignalPowerToward(world, wirePowers, signalPosition, targetPosition));
     }
     return signalPower;
 }
 
-uint8_t signalPowerFromNeighborTowardWireFacing(const World& world,
-                                                const WirePowerMap& wirePowers,
-                                                const glm::ivec3& signalPosition,
-                                                const glm::ivec3& targetPosition,
+uint8_t signalPowerFromNeighborTowardWireFacing(const World& world, const WirePowerMap& wirePowers,
+                                                const glm::ivec3& signalPosition, const glm::ivec3& targetPosition,
                                                 const uint16_t targetWireFacing) {
-    uint8_t signalPower = directSignalPowerTowardWireFacing(
-        world,
-        wirePowers,
-        signalPosition,
-        targetPosition,
-        targetWireFacing);
+    uint8_t signalPower =
+        directSignalPowerTowardWireFacing(world, wirePowers, signalPosition, targetPosition, targetWireFacing);
     if (isConductiveBlockAt(world, signalPosition)) {
-        signalPower = std::max(
-            signalPower,
-            conductedSignalPowerToward(world, wirePowers, signalPosition, targetPosition));
+        signalPower =
+            std::max(signalPower, conductedSignalPowerToward(world, wirePowers, signalPosition, targetPosition));
     }
     return signalPower;
 }
 
-bool repeaterLockInputActive(const World& world,
-                             const glm::ivec3& repeaterPosition,
-                             const BlockStateId repeaterState) {
+bool repeaterLockInputActive(const World& world, const glm::ivec3& repeaterPosition, const BlockStateId repeaterState) {
     for (const glm::ivec3& sideDirection : repeaterSideDirections(repeaterState)) {
         const glm::ivec3 sidePosition = repeaterPosition + sideDirection;
         const BlockStateId sideState = world.getBlockState(sidePosition.x, sidePosition.y, sidePosition.z);
@@ -2644,48 +2421,32 @@ bool repeaterLockInputActive(const World& world,
     return false;
 }
 
-uint8_t comparatorOutputPower(const World& world,
-                              const GameplayRegistry* registry,
-                              const WirePowerMap& inputWirePowers,
-                              const glm::ivec3& comparatorPosition,
-                              const BlockStateId comparatorState) {
+uint8_t comparatorOutputPower(const World& world, const GameplayRegistry* registry, const WirePowerMap& inputWirePowers,
+                              const glm::ivec3& comparatorPosition, const BlockStateId comparatorState) {
     const glm::ivec3 outputDirection = comparatorOutputDirection(comparatorState);
     const uint16_t targetWireFacing = logicUnitWireFacing(comparatorState, "Comparator");
     const glm::ivec3 rearInputPosition = comparatorPosition - outputDirection;
     const uint8_t containerPower = containerSignalPowerAt(world, registry, rearInputPosition);
     const uint8_t rearPower = containerPower > 0
-        ? containerPower
-        : signalPowerFromNeighborTowardWireFacing(
-            world,
-            inputWirePowers,
-            rearInputPosition,
-            comparatorPosition,
-            targetWireFacing);
+                                  ? containerPower
+                                  : signalPowerFromNeighborTowardWireFacing(world, inputWirePowers, rearInputPosition,
+                                                                            comparatorPosition, targetWireFacing);
 
     uint8_t sidePower = 0;
     for (const glm::ivec3& sideDirection : comparatorSideDirections(comparatorState)) {
-        sidePower = std::max(
-            sidePower,
-            signalPowerFromNeighborTowardWireFacing(
-                world,
-                inputWirePowers,
-                comparatorPosition + sideDirection,
-                comparatorPosition,
-                targetWireFacing));
+        sidePower = std::max(sidePower, signalPowerFromNeighborTowardWireFacing(world, inputWirePowers,
+                                                                                comparatorPosition + sideDirection,
+                                                                                comparatorPosition, targetWireFacing));
     }
 
     if (comparatorUsesSubtractMode(comparatorState)) {
-        return rearPower > sidePower
-            ? static_cast<uint8_t>(rearPower - sidePower)
-            : 0;
+        return rearPower > sidePower ? static_cast<uint8_t>(rearPower - sidePower) : 0;
     }
     return rearPower >= sidePower ? rearPower : 0;
 }
 
-void evaluateComparators(const World& world,
-                         const GameplayRegistry* registry,
-                         const std::vector<glm::ivec3>& comparatorPositions,
-                         const WirePowerMap& inputWirePowers,
+void evaluateComparators(const World& world, const GameplayRegistry* registry,
+                         const std::vector<glm::ivec3>& comparatorPositions, const WirePowerMap& inputWirePowers,
                          std::vector<ComparatorEvaluation>& evaluations) {
     evaluations.reserve(evaluations.size() + comparatorPositions.size());
     for (const glm::ivec3& position : comparatorPositions) {
@@ -2700,10 +2461,8 @@ void evaluateComparators(const World& world,
 size_t applyComparatorStates(World& world, const std::vector<ComparatorEvaluation>& evaluations) {
     size_t changed = 0;
     for (const ComparatorEvaluation& evaluation : evaluations) {
-        const BlockStateId currentState = world.getBlockState(
-            evaluation.position.x,
-            evaluation.position.y,
-            evaluation.position.z);
+        const BlockStateId currentState =
+            world.getBlockState(evaluation.position.x, evaluation.position.y, evaluation.position.z);
         if (!isComparatorState(currentState)) {
             continue;
         }
@@ -2719,8 +2478,7 @@ size_t applyComparatorStates(World& world, const std::vector<ComparatorEvaluatio
     return changed;
 }
 
-void scheduleRepeaterEvaluationUpdates(World& world,
-                                       const uint64_t redstoneTick,
+void scheduleRepeaterEvaluationUpdates(World& world, const uint64_t redstoneTick,
                                        const std::vector<glm::ivec3>& repeaterPositions,
                                        const WirePowerMap& wirePowers) {
     for (const glm::ivec3& position : repeaterPositions) {
@@ -2738,23 +2496,18 @@ void scheduleRepeaterEvaluationUpdates(World& world,
             continue;
         }
 
-        world.redstoneScheduledUpdateQueue().schedule(
-            redstoneTick + repeaterDelayTicks(stateId),
-            position,
-            RedstoneScheduledAction::EvaluateRepeater);
+        world.redstoneScheduledUpdateQueue().schedule(redstoneTick + repeaterDelayTicks(stateId), position,
+                                                      RedstoneScheduledAction::EvaluateRepeater);
     }
 }
 
-void scheduleObserverPulseUpdates(World& world,
-                                  const uint64_t redstoneTick,
+void scheduleObserverPulseUpdates(World& world, const uint64_t redstoneTick,
                                   const std::vector<glm::ivec3>& changedPositions) {
     for (const glm::ivec3& changedPosition : changedPositions) {
         for (const glm::ivec3& direction : kDirections) {
             const glm::ivec3 observerPosition = changedPosition - direction;
-            const BlockStateId observerState = world.getBlockState(
-                observerPosition.x,
-                observerPosition.y,
-                observerPosition.z);
+            const BlockStateId observerState =
+                world.getBlockState(observerPosition.x, observerPosition.y, observerPosition.z);
             if (!isObserverState(observerState)) {
                 continue;
             }
@@ -2762,16 +2515,13 @@ void scheduleObserverPulseUpdates(World& world,
                 continue;
             }
 
-            world.redstoneScheduledUpdateQueue().schedule(
-                redstoneTick + kObserverPulseDelayTicks,
-                observerPosition,
-                RedstoneScheduledAction::StartObserverPulse);
+            world.redstoneScheduledUpdateQueue().schedule(redstoneTick + kObserverPulseDelayTicks, observerPosition,
+                                                          RedstoneScheduledAction::StartObserverPulse);
         }
     }
 }
 
-void scheduleButtonReleaseUpdates(World& world,
-                                  const uint64_t redstoneTick,
+void scheduleButtonReleaseUpdates(World& world, const uint64_t redstoneTick,
                                   const std::vector<glm::ivec3>& sourcePositions) {
     for (const glm::ivec3& position : sourcePositions) {
         const BlockStateId stateId = world.getBlockState(position.x, position.y, position.z);
@@ -2782,10 +2532,8 @@ void scheduleButtonReleaseUpdates(World& world,
             continue;
         }
 
-        world.redstoneScheduledUpdateQueue().schedule(
-            redstoneTick + buttonPulseTicks(stateId),
-            position,
-            RedstoneScheduledAction::ReleaseButton);
+        world.redstoneScheduledUpdateQueue().schedule(redstoneTick + buttonPulseTicks(stateId), position,
+                                                      RedstoneScheduledAction::ReleaseButton);
     }
 }
 
@@ -2833,10 +2581,8 @@ bool applyObserverPulseStart(World& world, const glm::ivec3& position, const uin
 
     const BlockStateId updatedState = withPowered(currentState, true);
     world.setBlockState(position.x, position.y, position.z, updatedState);
-    world.redstoneScheduledUpdateQueue().schedule(
-        redstoneTick + kObserverPulseDurationTicks,
-        position,
-        RedstoneScheduledAction::ReleaseObserverPulse);
+    world.redstoneScheduledUpdateQueue().schedule(redstoneTick + kObserverPulseDurationTicks, position,
+                                                  RedstoneScheduledAction::ReleaseObserverPulse);
     return true;
 }
 
@@ -2891,9 +2637,8 @@ bool applyTorchBurnoutReset(World& world, const glm::ivec3& position, const uint
     pruneTorchTurnOffHistory(torchRuntime, redstoneTick);
 
     const WirePowerMap wirePowers;
-    const BlockStateId updatedState = withLit(
-        currentState,
-        shouldTorchBeLit(world, wirePowers, position, currentState));
+    const BlockStateId updatedState =
+        withLit(currentState, shouldTorchBeLit(world, wirePowers, position, currentState));
     compactTorchRuntimeState(runtime, position, redstoneTick);
     if (updatedState == currentState) {
         return false;
@@ -3012,9 +2757,7 @@ size_t applyWirePowers(World& world, const std::vector<WireNode>& wires, const W
     return changed;
 }
 
-size_t applyPistonStates(World& world,
-                         GameplayRegistry* registry,
-                         const std::vector<glm::ivec3>& pistons,
+size_t applyPistonStates(World& world, GameplayRegistry* registry, const std::vector<glm::ivec3>& pistons,
                          const WirePowerMap& wirePowers) {
     size_t changed = 0;
     for (const glm::ivec3& position : pistons) {
@@ -3049,8 +2792,7 @@ size_t applyPistonStates(World& world,
     return changed;
 }
 
-size_t applyRedstoneControlledStates(World& world,
-                                     const std::vector<glm::ivec3>& positions,
+size_t applyRedstoneControlledStates(World& world, const std::vector<glm::ivec3>& positions,
                                      const WirePowerMap& wirePowers) {
     size_t changed = 0;
     for (const glm::ivec3& position : positions) {
@@ -3063,9 +2805,8 @@ size_t applyRedstoneControlledStates(World& world,
         const BlockStateId updatedState = withRedstoneControlledPower(currentState, shouldBePowered);
         if (updatedState != currentState) {
             if (DoorBlockLogic::isDoorState(currentState)) {
-                const bool powered =
-                    BlockStateRegistry::getPropertyIndex(updatedState, PropIndices::POWERED) ==
-                    PropIndices::POWERED_TRUE;
+                const bool powered = BlockStateRegistry::getPropertyIndex(updatedState, PropIndices::POWERED) ==
+                                     PropIndices::POWERED_TRUE;
                 DoorBlockLogic::setDoorPoweredOpen(world, position, powered);
             } else {
                 world.setBlockState(position.x, position.y, position.z, updatedState);
@@ -3076,29 +2817,19 @@ size_t applyRedstoneControlledStates(World& world,
     return changed;
 }
 
-void emitEdgeTriggeredDeviceEvent(GameplayRegistry& registry,
-                                  const BlockStateId stateId,
-                                  const glm::ivec3& position,
+void emitEdgeTriggeredDeviceEvent(GameplayRegistry& registry, const BlockStateId stateId, const glm::ivec3& position,
                                   const uint64_t redstoneTick) {
     const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
     const BlockDef& def = BlockRegistry::getFast(blockId);
-    if (def.redstoneBehavior != "note_block" &&
-        def.redstoneBehavior != "dispenser" &&
+    if (def.redstoneBehavior != "note_block" && def.redstoneBehavior != "dispenser" &&
         def.redstoneBehavior != "dropper") {
         failRedstoneSystem("Unsupported redstone edge-triggered behavior: " + def.redstoneBehavior);
     }
-    ensureRedstoneDeviceActivationEventBus(registry).push({
-        position,
-        blockId,
-        stateId,
-        redstoneTick
-    });
+    ensureRedstoneDeviceActivationEventBus(registry).push({position, blockId, stateId, redstoneTick});
 }
 
-size_t applyEdgeTriggeredDeviceStates(World& world,
-                                      GameplayRegistry* registry,
-                                      const std::vector<glm::ivec3>& positions,
-                                      const WirePowerMap& wirePowers,
+size_t applyEdgeTriggeredDeviceStates(World& world, GameplayRegistry* registry,
+                                      const std::vector<glm::ivec3>& positions, const WirePowerMap& wirePowers,
                                       const uint64_t redstoneTick) {
     size_t changed = 0;
     for (const glm::ivec3& position : positions) {
@@ -3122,11 +2853,8 @@ size_t applyEdgeTriggeredDeviceStates(World& world,
     return changed;
 }
 
-size_t processWorldWithContext(World& world,
-                               const GameplayRegistry* readRegistry,
-                               GameplayRegistry* mutableRegistry,
-                               const uint64_t redstoneTick,
-                               const size_t budget) {
+size_t processWorldWithContext(World& world, const GameplayRegistry* readRegistry, GameplayRegistry* mutableRegistry,
+                               const uint64_t redstoneTick, const size_t budget) {
     if (budget == 0) {
         return 0;
     }
@@ -3159,15 +2887,8 @@ size_t processWorldWithContext(World& world,
     RedstoneWorkSet& workSet = buffers.workSet;
     collectRedstoneWorkSet(world, dirtyPositions, workSet);
 
-    changed += applyTorchStates(
-        world,
-        workSet.torches,
-        workSet.wireSet,
-        workSet.sourcePositions,
-        workSet.repeaters,
-        workSet.observers,
-        workSet.comparators,
-        redstoneTick);
+    changed += applyTorchStates(world, workSet.torches, workSet.wireSet, workSet.sourcePositions, workSet.repeaters,
+                                workSet.observers, workSet.comparators, redstoneTick);
     scheduleButtonReleaseUpdates(world, redstoneTick, workSet.sourcePositions);
 
     std::vector<RedstoneSource>& outputSources = buffers.outputSources;
@@ -3189,12 +2910,8 @@ size_t processWorldWithContext(World& world,
     changed += applyRepeaterLockStates(world, workSet.repeaters);
     scheduleRepeaterEvaluationUpdates(world, redstoneTick, workSet.repeaters, wirePowers);
     changed += applyRedstoneControlledStates(world, workSet.redstoneControlledBlocks, wirePowers);
-    changed += applyEdgeTriggeredDeviceStates(
-        world,
-        mutableRegistry,
-        workSet.edgeTriggeredDevices,
-        wirePowers,
-        redstoneTick);
+    changed +=
+        applyEdgeTriggeredDeviceStates(world, mutableRegistry, workSet.edgeTriggeredDevices, wirePowers, redstoneTick);
     return changed;
 }
 
@@ -3218,16 +2935,12 @@ size_t RedstoneSystem::processWorld(World& world, const uint64_t redstoneTick, c
     return processWorldWithContext(world, nullptr, nullptr, redstoneTick, budget);
 }
 
-size_t RedstoneSystem::processWorld(World& world,
-                                    const uint64_t redstoneTick,
-                                    const GameplayRegistry& registry,
+size_t RedstoneSystem::processWorld(World& world, const uint64_t redstoneTick, const GameplayRegistry& registry,
                                     const size_t budget) {
     return processWorldWithContext(world, &registry, nullptr, redstoneTick, budget);
 }
 
-size_t RedstoneSystem::processWorld(World& world,
-                                    const uint64_t redstoneTick,
-                                    GameplayRegistry& registry,
+size_t RedstoneSystem::processWorld(World& world, const uint64_t redstoneTick, GameplayRegistry& registry,
                                     const size_t budget) {
     return processWorldWithContext(world, &registry, &registry, redstoneTick, budget);
 }

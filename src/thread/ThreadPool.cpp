@@ -2,8 +2,7 @@
 
 #include <algorithm>
 
-ThreadPool::ThreadPool(int numThreads)
-    : m_numThreads(numThreads) {}
+ThreadPool::ThreadPool(int numThreads) : m_numThreads(numThreads) {}
 
 ThreadPool::~ThreadPool() {
     shutdown();
@@ -26,7 +25,7 @@ void ThreadPool::start() {
     m_running.store(true, std::memory_order_release);
 
     for (int i = 0; i < m_numThreads; ++i) {
-          m_workers.emplace_back(&ThreadPool::workerLoop, this);
+        m_workers.emplace_back(&ThreadPool::workerLoop, this);
     }
 }
 
@@ -60,8 +59,7 @@ void ThreadPool::shutdown() {
 }
 
 void ThreadPool::submit(std::function<void()> task, int priority) {
-    if (!m_running.load(std::memory_order_acquire) ||
-        m_stopping.load(std::memory_order_acquire)) {
+    if (!m_running.load(std::memory_order_acquire) || m_stopping.load(std::memory_order_acquire)) {
         return;
     }
 
@@ -90,8 +88,7 @@ int ThreadPool::activeCount() const {
 }
 
 bool ThreadPool::isRunning() const {
-    return m_running.load(std::memory_order_acquire) &&
-           !m_stopping.load(std::memory_order_acquire);
+    return m_running.load(std::memory_order_acquire) && !m_stopping.load(std::memory_order_acquire);
 }
 
 void ThreadPool::workerLoop() {
@@ -100,11 +97,9 @@ void ThreadPool::workerLoop() {
         {
             std::unique_lock<std::mutex> lock(m_stateMutex);
             m_cv.wait(lock, [this] {
-                return m_stopping.load(std::memory_order_acquire) ||
-                       m_pendingCount.load(std::memory_order_acquire) > 0;
+                return m_stopping.load(std::memory_order_acquire) || m_pendingCount.load(std::memory_order_acquire) > 0;
             });
-            if (m_stopping.load(std::memory_order_acquire) &&
-                m_pendingCount.load(std::memory_order_acquire) == 0) {
+            if (m_stopping.load(std::memory_order_acquire) && m_pendingCount.load(std::memory_order_acquire) == 0) {
                 return; // shutdown and no remaining work
             }
         }

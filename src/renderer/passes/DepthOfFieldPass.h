@@ -36,27 +36,17 @@ public:
     /// @param resources Imported graph handles for all depth-of-field resources.
     /// @param dependency Pass that must complete before the copy starts.
     /// @return Final depth-of-field pass handle, or an invalid handle for an invalid contract.
-    [[nodiscard]] RgPassHandle addGraphPasses(
-        RenderGraph& graph,
-        const FrameContext& ctx,
-        const RenderSettings& settings,
-        DeferredRenderTargets& targets,
-        const GraphResources& resources,
-        RgPassHandle dependency);
+    [[nodiscard]] RgPassHandle addGraphPasses(RenderGraph& graph, const FrameContext& ctx,
+                                              const RenderSettings& settings, DeferredRenderTargets& targets,
+                                              const GraphResources& resources, RgPassHandle dependency);
 
 private:
-    [[nodiscard]] bool recordDof(RhiCommandList& commandList,
-                                 const FrameContext& ctx,
-                                 const RenderSettings& settings,
-                                 DeferredRenderTargets& targets,
-                                 int inputIndex);
+    [[nodiscard]] bool recordDof(RhiCommandList& commandList, const FrameContext& ctx, const RenderSettings& settings,
+                                 DeferredRenderTargets& targets, int inputIndex);
     bool ensureRhiPipeline(RhiDevice& rhiDevice);
     bool ensureNoiseTextureView(RhiDevice& rhiDevice);
-    bool ensureRhiBindGroup(RhiDevice& rhiDevice,
-                            int historyIndex,
-                            RhiTextureViewHandle sceneView,
-                            RhiTextureViewHandle depthView,
-                            RhiTextureViewHandle noiseView);
+    bool ensureRhiBindGroup(RhiDevice& rhiDevice, int historyIndex, RhiTextureViewHandle sceneView,
+                            RhiTextureViewHandle depthView, RhiTextureViewHandle noiseView);
     void destroyRhiBindGroup();
     void destroyRhiResources();
 

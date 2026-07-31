@@ -8,19 +8,10 @@
 struct ChunkMeshData;
 struct SubChunkMeshingSnapshot;
 
-using MeshBuilderFn = void(*)(ChunkMeshData& meshData,
-                              const SubChunkMeshingSnapshot& snapshot,
-                              BlockStateId stateId,
-                              const BlockDef& def,
-                              int x,
-                              int y,
-                              int z);
+using MeshBuilderFn = void (*)(ChunkMeshData& meshData, const SubChunkMeshingSnapshot& snapshot, BlockStateId stateId,
+                               const BlockDef& def, int x, int y, int z);
 
-enum class MeshShapeClass : uint8_t {
-    Cube = 0,
-    Cross = 1,
-    Custom = 2
-};
+enum class MeshShapeClass : uint8_t { Cube = 0, Cross = 1, Custom = 2 };
 
 class MeshBuilderRegistry {
 public:
@@ -35,10 +26,7 @@ public:
     static constexpr uint8_t REDSTONE_WIRE_TAG = 7;
     static constexpr uint8_t WIRE_CONTAINER_TAG = 8;
 
-    static void registerBuilder(const std::string& shapeName,
-                                uint8_t tag,
-                                MeshShapeClass shapeClass,
-                                MeshBuilderFn fn);
+    static void registerBuilder(const std::string& shapeName, uint8_t tag, MeshShapeClass shapeClass, MeshBuilderFn fn);
     static MeshBuilderFn getBuilder(const std::string& shapeName);
     static MeshBuilderFn getBuilder(uint8_t tag);
     static uint8_t getShapeTag(const std::string& shapeName);

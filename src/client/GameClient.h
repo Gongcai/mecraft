@@ -14,7 +14,9 @@
 #include <unordered_set>
 
 class ResourceMgr;
-namespace ecs { class GameplayRegistry; }
+namespace ecs {
+class GameplayRegistry;
+}
 
 namespace client {
 
@@ -39,16 +41,11 @@ public:
     void sendViewConfig(int renderDistance);
 
     /// Sample input and send to server. Called at the client's fixed update rate.
-    void sendInput(float dt, const glm::vec3& moveInput,
-                   const glm::vec2& lookDelta, bool jump, bool sneak, bool sprint);
-    void sendInput(float dt, const glm::vec3& moveInput,
-                   const glm::vec2& lookDelta, bool jump, bool sneak, bool sprint,
-                   const glm::vec3& playerPosition,
-                   const glm::vec3& playerVelocity,
-                   float yaw,
-                   float pitch,
-                   uint32_t actions = 0,
-                   uint8_t selectedHotbarSlot = 0);
+    void sendInput(float dt, const glm::vec3& moveInput, const glm::vec2& lookDelta, bool jump, bool sneak,
+                   bool sprint);
+    void sendInput(float dt, const glm::vec3& moveInput, const glm::vec2& lookDelta, bool jump, bool sneak, bool sprint,
+                   const glm::vec3& playerPosition, const glm::vec3& playerVelocity, float yaw, float pitch,
+                   uint32_t actions = 0, uint8_t selectedHotbarSlot = 0);
 
     /// Send an authoritative block action request to the server.
     void sendBlockAction(const net::ClientBlockAction& action);
@@ -91,9 +88,7 @@ public:
 
     /// Get the latest server snapshot.
     [[nodiscard]] const net::ServerSnapshot& lastSnapshot() const { return m_lastSnapshot; }
-    [[nodiscard]] bool isPlayerDead() const {
-        return m_lastSnapshot.playerDead || m_lastSnapshot.playerHealth == 0;
-    }
+    [[nodiscard]] bool isPlayerDead() const { return m_lastSnapshot.playerDead || m_lastSnapshot.playerHealth == 0; }
 
     /// Get the assigned client ID from the server.
     [[nodiscard]] net::ClientId getClientId() const { return m_clientId; }
@@ -125,7 +120,7 @@ private:
     bool m_hasServerHello = false;
     bool m_playerHurtLatched = false;
     int m_chunksReceived = 0;
-    static constexpr int kSpawnChunksThreshold = 25;  // 5x5 area
+    static constexpr int kSpawnChunksThreshold = 25; // 5x5 area
     SystemMessageCallback m_systemMessageCallback;
     ChatMessageCallback m_chatMessageCallback;
     CommandResultCallback m_commandResultCallback;

@@ -9,10 +9,7 @@
 
 class Inventory;
 
-enum class CreativeInventoryTab {
-    PlayerInventory,
-    AllItems
-};
+enum class CreativeInventoryTab { PlayerInventory, AllItems };
 
 struct CreativeInventoryLayout {
     float panelScale = 2.0f;
@@ -93,17 +90,8 @@ private:
     void renderTabs(const UIRenderContext& context, const ResolvedPanelRect& panelRect) const;
     void renderScroller(const UIRenderContext& context, const ResolvedPanelRect& panelRect) const;
     void renderDraggedItem(const UIRenderContext& context) const;
-    void renderGuiTextureQuad(const UIRenderContext& context,
-                              RhiTextureHandle texture,
-                              float x,
-                              float y,
-                              float width,
-                              float height,
-                              float u0,
-                              float v0,
-                              float u1,
-                              float v1,
-                              float opacity) const;
+    void renderGuiTextureQuad(const UIRenderContext& context, RhiTextureHandle texture, float x, float y, float width,
+                              float height, float u0, float v0, float u1, float v1, float opacity) const;
 
     const Inventory* m_inventory = nullptr;
     CreativeInventoryLayout m_layout;

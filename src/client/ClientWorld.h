@@ -58,11 +58,7 @@ public:
     /// Apply a block update from the server.
     void applyBlockUpdate(int x, int y, int z, BlockStateId stateId);
     void applyBlockUpdate(int x, int y, int z, BlockStateId stateId, const std::vector<uint8_t>& packedLightPatch);
-    void applyBlockUpdate(int x,
-                          int y,
-                          int z,
-                          net::BlockUpdateKind kind,
-                          BlockStateId stateId,
+    void applyBlockUpdate(int x, int y, int z, net::BlockUpdateKind kind, BlockStateId stateId,
                           const std::vector<uint8_t>& packedLightPatch);
     void applyWireContainerUpdate(const glm::ivec3& position, const WireContainerParts& parts);
     void eraseWireContainerParts(const glm::ivec3& position);

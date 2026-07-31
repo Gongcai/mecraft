@@ -15,10 +15,7 @@ int fail(const char* message) {
     return EXIT_FAILURE;
 }
 
-void pushSleepingState(GameStateMachine& fsm,
-                       InputContextManager& context,
-                       InputManager& input,
-                       World& world) {
+void pushSleepingState(GameStateMachine& fsm, InputContextManager& context, InputManager& input, World& world) {
     fsm.pushState(std::make_unique<SleepingState>(fsm, context, input, world));
 }
 

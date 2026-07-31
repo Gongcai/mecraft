@@ -32,33 +32,20 @@ void loadOriginChunks(World& world) {
 
 BlockStateId deviceState(const BlockID blockId, const uint16_t facing) {
     return BlockStateRegistry::getState(
-        blockId,
-        {
-            {PropIndices::FACING, facing},
-            {PropIndices::POWERED, PropIndices::POWERED_FALSE}
-        });
+        blockId, {{PropIndices::FACING, facing}, {PropIndices::POWERED, PropIndices::POWERED_FALSE}});
 }
 
-void pushDeviceEvent(ecs::GameplayRegistry& registry,
-                     const glm::ivec3& position,
-                     const BlockID blockId,
-                     const BlockStateId stateId,
-                     const uint64_t redstoneTick) {
-    ecs::ensureRedstoneDeviceActivationEventBus(registry).push({
-        position,
-        blockId,
-        stateId,
-        redstoneTick
-    });
+void pushDeviceEvent(ecs::GameplayRegistry& registry, const glm::ivec3& position, const BlockID blockId,
+                     const BlockStateId stateId, const uint64_t redstoneTick) {
+    ecs::ensureRedstoneDeviceActivationEventBus(registry).push({position, blockId, stateId, redstoneTick});
 }
 
-BlockEntityInventory& inventoryFor(ecs::GameplayRegistry& registry,
-                                   const glm::ivec3& position,
+BlockEntityInventory& inventoryFor(ecs::GameplayRegistry& registry, const glm::ivec3& position,
                                    const char* behaviorId) {
     const ContainerBehaviorDef& behavior = ContainerBehaviorRegistry::require(behaviorId);
     BlockEntityInventoryStore& store = registry.ctxHas<BlockEntityInventoryStore>()
-        ? registry.ctxGet<BlockEntityInventoryStore>()
-        : registry.ctxSet<BlockEntityInventoryStore>();
+                                           ? registry.ctxGet<BlockEntityInventoryStore>()
+                                           : registry.ctxSet<BlockEntityInventoryStore>();
     return store.getOrCreate(position, behavior.id, behavior.storage.slots);
 }
 
@@ -95,10 +82,8 @@ int main() {
         pushDeviceEvent(registry, position, dispenser, state, 10);
         const std::size_t actions = ecs::RedstoneDeviceActionSystem::processEvents(world, registry);
         const ItemStack slot = inventory.getSlotStack(0);
-        if (actions != 1 ||
-            !ecs::ensureRedstoneDeviceActivationEventBus(registry).empty() ||
-            !isSourceWaterAt(world, target) ||
-            slot.itemId != ItemRegistry::requireIdByName("minecraft:bucket") ||
+        if (actions != 1 || !ecs::ensureRedstoneDeviceActivationEventBus(registry).empty() ||
+            !isSourceWaterAt(world, target) || slot.itemId != ItemRegistry::requireIdByName("minecraft:bucket") ||
             slot.count != 1) {
             return fail("dispenser should place water from a water bucket and leave an empty bucket");
         }
@@ -124,10 +109,8 @@ int main() {
         pushDeviceEvent(registry, position, dispenser, state, 11);
         const std::size_t actions = ecs::RedstoneDeviceActionSystem::processEvents(world, registry);
         const ItemStack slot = inventory.getSlotStack(0);
-        if (actions != 1 ||
-            world.getFluidState(target.x, target.y, target.z) != NULL_BLOCK_STATE ||
-            slot.itemId != ItemRegistry::requireIdByName("minecraft:water_bucket") ||
-            slot.count != 1) {
+        if (actions != 1 || world.getFluidState(target.x, target.y, target.z) != NULL_BLOCK_STATE ||
+            slot.itemId != ItemRegistry::requireIdByName("minecraft:water_bucket") || slot.count != 1) {
             return fail("dispenser should pick up source water into an empty bucket");
         }
     }
@@ -150,28 +133,21 @@ int main() {
         pushDeviceEvent(registry, position, dispenser, state, 12);
         const std::size_t actions = ecs::RedstoneDeviceActionSystem::processEvents(world, registry);
         int projectileCount = 0;
-        auto view = registry.view<ecs::ProjectileTag,
-                                  ecs::ItemComponent,
-                                  ecs::VelocityComponent,
-                                  ecs::TransformComponent>();
+        auto view =
+            registry.view<ecs::ProjectileTag, ecs::ItemComponent, ecs::VelocityComponent, ecs::TransformComponent>();
         for (const entt::entity entity : view) {
             static_cast<void>(entity);
             ++projectileCount;
             const ecs::ItemComponent& item = view.get<ecs::ItemComponent>(entity);
             const ecs::VelocityComponent& velocity = view.get<ecs::VelocityComponent>(entity);
-            if (item.itemId != apple ||
-                item.stackCount != 1 ||
-                velocity.velocity.x <= 0.0f ||
+            if (item.itemId != apple || item.stackCount != 1 || velocity.velocity.x <= 0.0f ||
                 glm::length(velocity.velocity) <= 0.0f) {
                 return fail("dispenser projectile should carry the configured item and velocity");
             }
         }
 
         const ItemStack slot = inventory.getSlotStack(0);
-        if (actions != 1 ||
-            projectileCount != 1 ||
-            slot.itemId != apple ||
-            slot.count != 1) {
+        if (actions != 1 || projectileCount != 1 || slot.itemId != apple || slot.count != 1) {
             return fail("dispenser should launch configured throwable items and consume one item");
         }
     }
@@ -203,16 +179,12 @@ int main() {
             ++dropCount;
             const ecs::ItemComponent& item = view.get<ecs::ItemComponent>(entity);
             const ecs::VelocityComponent& velocity = view.get<ecs::VelocityComponent>(entity);
-            if (item.itemId != waterBucket ||
-                item.stackCount != 1 ||
-                velocity.velocity.x <= 0.0f) {
+            if (item.itemId != waterBucket || item.stackCount != 1 || velocity.velocity.x <= 0.0f) {
                 return fail("dropper should eject the water bucket as an item entity");
             }
         }
 
-        if (actions != 1 ||
-            dropCount != 1 ||
-            !inventory.getSlotStack(0).isEmpty() ||
+        if (actions != 1 || dropCount != 1 || !inventory.getSlotStack(0).isEmpty() ||
             world.getFluidState(target.x, target.y, target.z) != NULL_BLOCK_STATE) {
             return fail("dropper should not execute dispenser bucket behavior");
         }

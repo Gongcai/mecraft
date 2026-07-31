@@ -28,20 +28,13 @@ public:
 
     AudioClip* loadClip(const std::string& name);
     AudioClip* getClip(const std::string& name);
-    bool loadCatalog(const std::string& catalogPath,
-                     const std::string& rootDirectory,
-                     const std::string& defaultGroup,
+    bool loadCatalog(const std::string& catalogPath, const std::string& rootDirectory, const std::string& defaultGroup,
                      bool defaultPreload);
     [[nodiscard]] std::vector<std::string> getSoundNamesByGroup(const std::string& group) const;
 
-    AudioSource* playClip(const std::string& clipName,
-                        glm::vec3 position = glm::vec3(0.0f, 0.0f, 0.0f),
-                        bool loop = false,
-                        float volume = 1.0f,
-                        bool spatial = true
-                        );
-    void playSound2D(const std::string& clipName,
-                 float volume = 1.0f);
+    AudioSource* playClip(const std::string& clipName, glm::vec3 position = glm::vec3(0.0f, 0.0f, 0.0f),
+                          bool loop = false, float volume = 1.0f, bool spatial = true);
+    void playSound2D(const std::string& clipName, float volume = 1.0f);
 
     void stopAll();
     void setMasterVolume(float volume);
@@ -71,6 +64,5 @@ private:
     bool initDeviceSwitchExtension();
     void checkDeviceSwitch();
 };
-
 
 #endif //MECRAFT_AUDIOENGINE_H

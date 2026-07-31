@@ -21,8 +21,8 @@ struct UIStateContext {
     InputManager& input;
     UIRenderer& uiRenderer;
     const LocaleManager& localeManager;
-    RenderScene* renderScene = nullptr;  ///< Optional; for settings screen
-    World* world = nullptr;              ///< Optional; for render distance control
+    RenderScene* renderScene = nullptr; ///< Optional; for settings screen
+    World* world = nullptr; ///< Optional; for render distance control
     std::function<void(int)> renderDistanceSetter;
     Window* window = nullptr;
     PresentationController* presentationController = nullptr;

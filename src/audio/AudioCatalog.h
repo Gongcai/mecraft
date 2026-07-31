@@ -24,10 +24,8 @@ struct SoundEntry {
 class AudioCatalog {
 public:
     [[nodiscard]] bool loadFromFile(const std::filesystem::path& manifestPath,
-                                    const std::filesystem::path& rootDirectory,
-                                    const std::string& defaultGroup,
-                                    bool defaultPreload,
-                                    std::string& error);
+                                    const std::filesystem::path& rootDirectory, const std::string& defaultGroup,
+                                    bool defaultPreload, std::string& error);
 
     [[nodiscard]] const SoundEntry* find(const std::string& soundId) const;
     [[nodiscard]] const std::vector<std::string>& soundIds() const { return m_order; }

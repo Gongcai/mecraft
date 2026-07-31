@@ -28,8 +28,7 @@ inline constexpr uint32_t kReflectionProbePrefilterWorkItemCount =
 inline constexpr uint32_t kReflectionProbeCaptureWorkItemCount =
     kReflectionProbeCubeFaceCount + kReflectionProbePrefilterWorkItemCount;
 inline constexpr float kReflectionProbeCaptureNearPlaneMeters = 0.05f;
-inline constexpr uint32_t kReflectionProbeInvalidCubemapIndex =
-    std::numeric_limits<uint32_t>::max();
+inline constexpr uint32_t kReflectionProbeInvalidCubemapIndex = std::numeric_limits<uint32_t>::max();
 inline constexpr uint32_t kReflectionProbeBlendCount = 4u;
 inline constexpr float kReflectionProbeGridCellSizeMeters = 16.0f;
 inline constexpr uint32_t kReflectionProbeGridMaxDimension = 128u;
@@ -40,50 +39,36 @@ inline constexpr uint32_t kReflectionProbeGridMaxIndexCount = 1048576u;
 
 /// Identifies whether one deterministic capture item records source radiance
 /// or generates one prefiltered face/mip product.
-enum class ReflectionProbeCaptureWorkKind : uint8_t {
-    RadianceFace,
-    PrefilterFaceMip
-};
+enum class ReflectionProbeCaptureWorkKind : uint8_t { RadianceFace, PrefilterFaceMip };
 
 /// Returns the stage owned by one bounded capture work item.
-[[nodiscard]] constexpr ReflectionProbeCaptureWorkKind
-reflectionProbeCaptureWorkKind(const uint32_t workItem) {
-    return workItem < kReflectionProbeCubeFaceCount
-        ? ReflectionProbeCaptureWorkKind::RadianceFace
-        : ReflectionProbeCaptureWorkKind::PrefilterFaceMip;
+[[nodiscard]] constexpr ReflectionProbeCaptureWorkKind reflectionProbeCaptureWorkKind(const uint32_t workItem) {
+    return workItem < kReflectionProbeCubeFaceCount ? ReflectionProbeCaptureWorkKind::RadianceFace
+                                                    : ReflectionProbeCaptureWorkKind::PrefilterFaceMip;
 }
 
 /// Maps one bounded capture work item to its destination cubemap face.
-[[nodiscard]] constexpr uint32_t reflectionProbeCaptureFace(
-    const uint32_t workItem) {
-    const uint32_t bounded = std::min(
-        workItem, kReflectionProbeCaptureWorkItemCount - 1u);
+[[nodiscard]] constexpr uint32_t reflectionProbeCaptureFace(const uint32_t workItem) {
+    const uint32_t bounded = std::min(workItem, kReflectionProbeCaptureWorkItemCount - 1u);
     return bounded < kReflectionProbeCubeFaceCount
-        ? bounded
-        : (bounded - kReflectionProbeCubeFaceCount) %
-            kReflectionProbeCubeFaceCount;
+               ? bounded
+               : (bounded - kReflectionProbeCubeFaceCount) % kReflectionProbeCubeFaceCount;
 }
 
 /// Maps one bounded capture work item to its prefilter mip.
 /// Radiance-face work maps to mip zero because it does not write the
 /// prefiltered product.
-[[nodiscard]] constexpr uint32_t reflectionProbeCaptureMip(
-    const uint32_t workItem) {
-    const uint32_t bounded = std::min(
-        workItem, kReflectionProbeCaptureWorkItemCount - 1u);
+[[nodiscard]] constexpr uint32_t reflectionProbeCaptureMip(const uint32_t workItem) {
+    const uint32_t bounded = std::min(workItem, kReflectionProbeCaptureWorkItemCount - 1u);
     return bounded < kReflectionProbeCubeFaceCount
-        ? 0u
-        : (bounded - kReflectionProbeCubeFaceCount) /
-            kReflectionProbeCubeFaceCount;
+               ? 0u
+               : (bounded - kReflectionProbeCubeFaceCount) / kReflectionProbeCubeFaceCount;
 }
 
 /// Converts one prefilter mip into perceptual material roughness.
-[[nodiscard]] constexpr float reflectionProbeRoughnessForMip(
-    const uint32_t mip) {
-    const uint32_t bounded = std::min(
-        mip, kReflectionProbeCubeMipCount - 1u);
-    return static_cast<float>(bounded) /
-        static_cast<float>(kReflectionProbeCubeMipCount - 1u);
+[[nodiscard]] constexpr float reflectionProbeRoughnessForMip(const uint32_t mip) {
+    const uint32_t bounded = std::min(mip, kReflectionProbeCubeMipCount - 1u);
+    return static_cast<float>(bounded) / static_cast<float>(kReflectionProbeCubeMipCount - 1u);
 }
 
 /// Defines the immutable 96-byte CPU/GPU reflection-probe record consumed by
@@ -100,9 +85,7 @@ struct alignas(16) GpuReflectionProbe final {
     /// Box-projection AABB maximum in meters; w is reserved and must be zero.
     glm::vec4 boxProjectionMax{0.0f};
     /// Prefiltered cubemap index, stable ID, capture revision, and version.
-    glm::uvec4 resourcesAndIdentity{
-        kReflectionProbeInvalidCubemapIndex, 0u, 0u,
-        kReflectionProbeContractVersion};
+    glm::uvec4 resourcesAndIdentity{kReflectionProbeInvalidCubemapIndex, 0u, 0u, kReflectionProbeContractVersion};
 };
 
 /// Carries source reflection-probe values into the fixed GPU representation.
@@ -116,8 +99,7 @@ struct ReflectionProbeNormalizationInput final {
     glm::vec3 boxProjectionMinMeters{0.0f};
     glm::vec3 boxProjectionMaxMeters{0.0f};
     float validity = 0.0f;
-    uint32_t prefilteredCubemapIndex =
-        kReflectionProbeInvalidCubemapIndex;
+    uint32_t prefilteredCubemapIndex = kReflectionProbeInvalidCubemapIndex;
     uint32_t captureRevision = 0u;
 };
 
@@ -187,8 +169,7 @@ struct ReflectionProbeSelectionEntry final {
 
 /// Stores the deterministic Top-4 probe selection for one surface.
 struct ReflectionProbeSelection final {
-    std::array<ReflectionProbeSelectionEntry,
-               kReflectionProbeBlendCount> entries{};
+    std::array<ReflectionProbeSelectionEntry, kReflectionProbeBlendCount> entries{};
     uint32_t count = 0u;
 };
 
@@ -209,14 +190,11 @@ struct ReflectionProbeSelectionResult final {
 /// grid from a surface position without scanning the complete probe snapshot.
 struct alignas(16) GpuReflectionProbeGridMetadata final {
     /// Grid origin in camera-relative meters and fixed cubic cell size.
-    glm::vec4 originAndCellSize{0.0f, 0.0f, 0.0f,
-                                kReflectionProbeGridCellSizeMeters};
+    glm::vec4 originAndCellSize{0.0f, 0.0f, 0.0f, kReflectionProbeGridCellSizeMeters};
     /// Grid dimensions in xyz and active packed probe count in w.
     glm::uvec4 dimensionsAndProbeCount{0u};
     /// Cell count, compact index count, per-cell limit, and contract version.
-    glm::uvec4 cellAndIndexCounts{
-        0u, 0u, kReflectionProbeGridMaxProbesPerCell,
-        kReflectionProbeContractVersion};
+    glm::uvec4 cellAndIndexCounts{0u, 0u, kReflectionProbeGridMaxProbesPerCell, kReflectionProbeContractVersion};
     /// Reserved for later streaming metadata and required to remain zero.
     glm::uvec4 reserved{0u};
 };
@@ -265,14 +243,13 @@ struct ReflectionProbeGridBuildResult final {
 /// valid cubemap and non-zero revision.
 /// @param input Fully resolved source probe and capture metadata.
 /// @return Packed probe or a stable field-specific validation error.
-[[nodiscard]] ReflectionProbeNormalizationResult normalizeReflectionProbe(
-    const ReflectionProbeNormalizationInput& input);
+[[nodiscard]] ReflectionProbeNormalizationResult
+normalizeReflectionProbe(const ReflectionProbeNormalizationInput& input);
 
 /// Validates one packed GPU probe before upload or CPU reference evaluation.
 /// @param probe Packed reflection-probe record.
 /// @return Stable semantic validation result.
-[[nodiscard]] ReflectionProbeValidationResult validateReflectionProbe(
-    const GpuReflectionProbe& probe);
+[[nodiscard]] ReflectionProbeValidationResult validateReflectionProbe(const GpuReflectionProbe& probe);
 
 /// Evaluates one probe's unnormalized surface influence.
 /// Weight combines boundary fade, normalized probe distance, surface-facing
@@ -281,10 +258,9 @@ struct ReflectionProbeGridBuildResult final {
 /// @param surfacePosition Camera-relative surface position in meters.
 /// @param surfaceNormal Non-zero surface normal; normalization is performed.
 /// @return Weight in [0, 1], or std::nullopt for a contract violation.
-[[nodiscard]] std::optional<float> reflectionProbeInfluenceWeight(
-    const GpuReflectionProbe& probe,
-    const glm::vec3& surfacePosition,
-    const glm::vec3& surfaceNormal);
+[[nodiscard]] std::optional<float> reflectionProbeInfluenceWeight(const GpuReflectionProbe& probe,
+                                                                  const glm::vec3& surfacePosition,
+                                                                  const glm::vec3& surfaceNormal);
 
 /// Selects and normalizes at most four overlapping probes deterministically.
 /// Positive weights sort descending, with stable ID breaking equal-weight ties.
@@ -292,10 +268,9 @@ struct ReflectionProbeGridBuildResult final {
 /// @param surfacePosition Camera-relative surface position in meters.
 /// @param surfaceNormal Non-zero surface normal; normalization is performed.
 /// @return Top-4 selection or the exact query/probe validation failure.
-[[nodiscard]] ReflectionProbeSelectionResult selectReflectionProbes(
-    const std::vector<GpuReflectionProbe>& probes,
-    const glm::vec3& surfacePosition,
-    const glm::vec3& surfaceNormal);
+[[nodiscard]] ReflectionProbeSelectionResult selectReflectionProbes(const std::vector<GpuReflectionProbe>& probes,
+                                                                    const glm::vec3& surfacePosition,
+                                                                    const glm::vec3& surfaceNormal);
 
 /// Builds a deterministic camera-relative spatial grid for captured probes.
 /// Zero-validity probes are validated but excluded from GPU storage. Active
@@ -303,22 +278,19 @@ struct ReflectionProbeGridBuildResult final {
 /// submission order.
 /// @param probes Complete visible probe snapshot.
 /// @return Packed probes, cells, and compact indices or a structured failure.
-[[nodiscard]] ReflectionProbeGridBuildResult buildReflectionProbeGrid(
-    const std::vector<GpuReflectionProbe>& probes);
+[[nodiscard]] ReflectionProbeGridBuildResult buildReflectionProbeGrid(const std::vector<GpuReflectionProbe>& probes);
 
 /// Converts one valid cell coordinate to the packed linear cell index.
 /// @param metadata Grid metadata returned by buildReflectionProbeGrid().
 /// @param cell Zero-based integer cell coordinate.
 /// @return Linear cell index, or std::nullopt when the coordinate is outside.
-[[nodiscard]] std::optional<uint32_t> reflectionProbeGridCellIndex(
-    const GpuReflectionProbeGridMetadata& metadata,
-    const glm::uvec3& cell);
+[[nodiscard]] std::optional<uint32_t> reflectionProbeGridCellIndex(const GpuReflectionProbeGridMetadata& metadata,
+                                                                   const glm::uvec3& cell);
 
 /// Returns the stable identifier used by diagnostics for one grid error.
 /// @param error Grid construction error to identify.
 /// @return Process-lifetime string containing the stable identifier.
-[[nodiscard]] const char* reflectionProbeGridErrorStableId(
-    ReflectionProbeGridError error);
+[[nodiscard]] const char* reflectionProbeGridErrorStableId(ReflectionProbeGridError error);
 
 /// Corrects a reflection direction against one probe's projection AABB.
 /// The surface must be inside the projection box and the direction must be
@@ -328,22 +300,19 @@ struct ReflectionProbeGridBuildResult final {
 /// @param reflectionDirection Non-zero world-space reflection direction.
 /// @return Unit direction from the probe to the ray-box exit point, or no value
 /// when the query violates the contract.
-[[nodiscard]] std::optional<glm::vec3> boxProjectReflectionDirection(
-    const GpuReflectionProbe& probe,
-    const glm::vec3& surfacePosition,
-    const glm::vec3& reflectionDirection);
+[[nodiscard]] std::optional<glm::vec3> boxProjectReflectionDirection(const GpuReflectionProbe& probe,
+                                                                     const glm::vec3& surfacePosition,
+                                                                     const glm::vec3& reflectionDirection);
 
 /// Returns the stable identifier used by logs and tests for one error.
 /// @param error Error to identify.
 /// @return Process-lifetime string containing the stable identifier.
-[[nodiscard]] const char* reflectionProbeErrorStableId(
-    ReflectionProbeError error);
+[[nodiscard]] const char* reflectionProbeErrorStableId(ReflectionProbeError error);
 
 /// Returns the stable identifier used by diagnostics for one probe field.
 /// @param field Semantic field to identify.
 /// @return Process-lifetime string containing the stable identifier.
-[[nodiscard]] const char* reflectionProbeFieldStableId(
-    ReflectionProbeField field);
+[[nodiscard]] const char* reflectionProbeFieldStableId(ReflectionProbeField field);
 
 static_assert(sizeof(GpuReflectionProbe) == 96u);
 static_assert(alignof(GpuReflectionProbe) == 16u);

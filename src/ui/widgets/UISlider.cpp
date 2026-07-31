@@ -18,13 +18,16 @@ UISlider::UISlider() {
     width = 200.0f;
 }
 
-UISlider::~UISlider() { shutdown(); }
+UISlider::~UISlider() {
+    shutdown();
+}
 
 void UISlider::init(ResourceMgr& resourceMgr) {
     m_rhiDevice = &resourceMgr.rhiDevice();
     const auto vertexSource = renderer::rhi::loadShaderSource("assets/shaders/ui_capsule_rhi.vert");
     const auto fragmentSource = renderer::rhi::loadShaderSource("assets/shaders/ui_capsule_rhi.frag");
-    if (!vertexSource || !fragmentSource) std::abort();
+    if (!vertexSource || !fragmentSource)
+        std::abort();
     RhiShaderDesc shaderDesc;
     shaderDesc.debugName = "UiSlider.Vertex";
     shaderDesc.stage = RhiShaderStage::Vertex;
@@ -62,20 +65,28 @@ void UISlider::init(ResourceMgr& resourceMgr) {
     pipelineDesc.blend.attachments.push_back(blend);
     m_pipeline = m_rhiDevice->createGraphicsPipeline(pipelineDesc);
     initMesh();
-    if (!m_vertexShader.isValid() || !m_fragmentShader.isValid() ||
-        !m_pipelineLayout.isValid() || !m_pipeline.isValid() || !m_vertexBuffer.isValid()) std::abort();
+    if (!m_vertexShader.isValid() || !m_fragmentShader.isValid() || !m_pipelineLayout.isValid() ||
+        !m_pipeline.isValid() || !m_vertexBuffer.isValid())
+        std::abort();
     m_handleScaleTween.setImmediate(1.0f);
 }
 
 void UISlider::shutdown() {
     cleanupMesh();
     if (m_rhiDevice) {
-        if (m_pipeline.isValid()) m_rhiDevice->destroyPipeline(m_pipeline);
-        if (m_pipelineLayout.isValid()) m_rhiDevice->destroyPipelineLayout(m_pipelineLayout);
-        if (m_fragmentShader.isValid()) m_rhiDevice->destroyShader(m_fragmentShader);
-        if (m_vertexShader.isValid()) m_rhiDevice->destroyShader(m_vertexShader);
+        if (m_pipeline.isValid())
+            m_rhiDevice->destroyPipeline(m_pipeline);
+        if (m_pipelineLayout.isValid())
+            m_rhiDevice->destroyPipelineLayout(m_pipelineLayout);
+        if (m_fragmentShader.isValid())
+            m_rhiDevice->destroyShader(m_fragmentShader);
+        if (m_vertexShader.isValid())
+            m_rhiDevice->destroyShader(m_vertexShader);
     }
-    m_pipeline = {}; m_pipelineLayout = {}; m_fragmentShader = {}; m_vertexShader = {};
+    m_pipeline = {};
+    m_pipelineLayout = {};
+    m_fragmentShader = {};
+    m_vertexShader = {};
     m_rhiDevice = nullptr;
 }
 
@@ -116,7 +127,8 @@ void UISlider::updateAnimations(float dt) {
 }
 
 float UISlider::valueToNormalized(float val) const {
-    if (m_max <= m_min) return 0.0f;
+    if (m_max <= m_min)
+        return 0.0f;
     return (val - m_min) / (m_max - m_min);
 }
 
@@ -141,7 +153,8 @@ float UISlider::handleScreenX(const UIRenderContext& ctx) const {
 float UISlider::pointerToValue(float px, const UIRenderContext& ctx) const {
     float tl = trackLeft(ctx);
     float tr = trackRight(ctx);
-    if (tr <= tl) return m_min;
+    if (tr <= tl)
+        return m_min;
     float norm = std::clamp((px - tl) / (tr - tl), 0.0f, 1.0f);
     return normalizedToValue(norm);
 }
@@ -154,12 +167,11 @@ void UISlider::applyStep() {
 }
 
 void UISlider::initMesh() {
-    constexpr float vertices[] = {0,0, 1,0, 1,1, 0,0, 1,1, 0,1};
+    constexpr float vertices[] = {0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1};
     RhiBufferDesc desc;
     desc.debugName = "UiSlider.VertexBuffer";
     desc.size = sizeof(vertices);
-    desc.usage = rhiFlag(RhiBufferUsage::Vertex) |
-                 rhiFlag(RhiBufferUsage::TransferDst);
+    desc.usage = rhiFlag(RhiBufferUsage::Vertex) | rhiFlag(RhiBufferUsage::TransferDst);
     desc.memoryUsage = RhiMemoryUsage::GpuOnly;
     desc.initialState = RhiResourceState::VertexBuffer;
     desc.memoryCategory = RhiMemoryCategory::Geometry;
@@ -167,12 +179,14 @@ void UISlider::initMesh() {
 }
 
 void UISlider::cleanupMesh() {
-    if (m_rhiDevice && m_vertexBuffer.isValid()) m_rhiDevice->destroyBuffer(m_vertexBuffer);
+    if (m_rhiDevice && m_vertexBuffer.isValid())
+        m_rhiDevice->destroyBuffer(m_vertexBuffer);
     m_vertexBuffer = {};
 }
 
 void UISlider::renderSelf(const UIRenderContext& ctx) const {
-    if (!ctx.commandList || !m_pipeline.isValid() || !m_vertexBuffer.isValid()) return;
+    if (!ctx.commandList || !m_pipeline.isValid() || !m_vertexBuffer.isValid())
+        return;
 
     const UIResolvedSliderStyle resolved = resolveStyle(ctx);
     float trackH = resolved.trackHeight;
@@ -197,11 +211,15 @@ void UISlider::renderSelf(const UIRenderContext& ctx) const {
     ctx.commandList->setVertexBuffer(0u, m_vertexBuffer, 0u);
     auto drawShape = [&](float x, float y, float w, float h, float radius, Color shapeColor) {
         shapeColor[3] *= alpha;
-        struct Push { glm::vec4 screenRect; glm::vec4 rectRadius; glm::vec4 color; };
-        const Push push{glm::vec4(ctx.screenWidth, ctx.screenHeight, x, y),
-                        glm::vec4(w, h, radius, 0),
+        struct Push {
+            glm::vec4 screenRect;
+            glm::vec4 rectRadius;
+            glm::vec4 color;
+        };
+        const Push push{glm::vec4(ctx.screenWidth, ctx.screenHeight, x, y), glm::vec4(w, h, radius, 0),
                         glm::vec4(shapeColor[0], shapeColor[1], shapeColor[2], shapeColor[3])};
-        ctx.commandList->pushConstants(&push, sizeof(push), rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment));
+        ctx.commandList->pushConstants(&push, sizeof(push),
+                                       rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment));
         ctx.commandList->draw(6u, 1u, 0u, 0u);
     };
     drawShape(tl, cy - trackH * 0.5f, tr - tl, trackH, trackH * 0.5f, trackCol);
@@ -218,10 +236,12 @@ void UISlider::renderSelf(const UIRenderContext& ctx) const {
 }
 
 UIEventResult UISlider::onInput(const UIInputEvent& event, const UIRenderContext& ctx) {
-    if (!visible || !interactive) return UIEventResult::Ignored;
+    if (!visible || !interactive)
+        return UIEventResult::Ignored;
 
     UIEventResult childResult = UIWidget::onInput(event, ctx);
-    if (childResult == UIEventResult::Consumed) return UIEventResult::Consumed;
+    if (childResult == UIEventResult::Consumed)
+        return UIEventResult::Consumed;
 
     float handleSize = resolveStyle(ctx).handleSize;
     float hx = handleScreenX(ctx);
@@ -234,100 +254,104 @@ UIEventResult UISlider::onInput(const UIInputEvent& event, const UIRenderContext
     float flippedY = static_cast<float>(ctx.screenHeight) - event.y;
 
     switch (event.type) {
-        case UIInputEventType::PointerMove: {
-            if (m_dragging) {
-                float newVal = pointerToValue(event.x, ctx);
-                if (newVal != m_value) {
-                    m_value = newVal;
-                    applyStep();
-                    if (m_onValueChanged) m_onValueChanged(m_value);
-                }
-                return UIEventResult::Consumed;
-            }
-            bool insideWidget = hitTest(event.x, event.y, ctx);
-            bool insideHandle = std::abs(event.x - hx) <= (handleSize * 0.5f + padding)
-                                && std::abs(flippedY - cy) <= (handleSize * 0.5f + padding);
-            bool hovered = insideWidget || insideHandle;
-            if (hovered && !m_handleHovered) {
-                m_handleHovered = true;
-                m_handleScaleTween.start(m_handleScaleTween.value(), 1.12f, 0.1f, EasingType::EaseOut);
-            } else if (!hovered && m_handleHovered) {
-                m_handleHovered = false;
-                m_handleScaleTween.start(m_handleScaleTween.value(), 1.0f, 0.1f, EasingType::EaseOut);
-            }
-            return hovered ? UIEventResult::Handled : UIEventResult::Ignored;
-        }
-        case UIInputEventType::PointerDown: {
-            if (event.button == UIPointerButton::Primary) {
-                bool insideWidget = hitTest(event.x, event.y, ctx);
-                if (insideWidget) {
-                    m_dragging = true;
-                    m_handleHovered = true;
-                    m_handleScaleTween.start(m_handleScaleTween.value(), 1.16f, 0.08f, EasingType::EaseOut);
-                    m_value = pointerToValue(event.x, ctx);
-                    applyStep();
-                    if (m_onValueChanged) m_onValueChanged(m_value);
-                    return UIEventResult::Consumed;
-                }
-            }
-            break;
-        }
-        case UIInputEventType::PointerUp: {
-            if (event.button == UIPointerButton::Primary && m_dragging) {
-                m_dragging = false;
-                m_handleScaleTween.start(m_handleScaleTween.value(),
-                                         m_handleHovered ? 1.12f : 1.0f,
-                                         0.1f,
-                                         EasingType::EaseOut);
-                return UIEventResult::Consumed;
-            }
-            break;
-        }
-        case UIInputEventType::Command: {
-            if (isFocused()) {
-                float stepVal = m_step > 0.0f ? m_step : (m_max - m_min) * 0.05f;
-                // Only consume Left/Right for slider adjustment, let Up/Down pass through for focus navigation
-                if (event.command == UICommand::NavigateLeft) {
-                    m_value = std::max(m_min, m_value - stepVal);
-                    applyStep();
-                    if (m_onValueChanged) m_onValueChanged(m_value);
-                    return UIEventResult::Consumed;
-                }
-                if (event.command == UICommand::NavigateRight) {
-                    m_value = std::min(m_max, m_value + stepVal);
-                    applyStep();
-                    if (m_onValueChanged) m_onValueChanged(m_value);
-                    return UIEventResult::Consumed;
-                }
-                if (event.command == UICommand::Home) {
-                    m_value = m_min;
-                    if (m_onValueChanged) m_onValueChanged(m_value);
-                    return UIEventResult::Consumed;
-                }
-                if (event.command == UICommand::End) {
-                    m_value = m_max;
-                    if (m_onValueChanged) m_onValueChanged(m_value);
-                    return UIEventResult::Consumed;
-                }
-            }
-            break;
-        }
-        case UIInputEventType::Scroll: {
-            if (hitTest(event.x, event.y, ctx) || isFocused()) {
-                float stepVal = m_step > 0.0f ? m_step : (m_max - m_min) * 0.05f;
-                if (event.scrollY > 0) {
-                    m_value = std::min(m_max, m_value + stepVal);
-                } else if (event.scrollY < 0) {
-                    m_value = std::max(m_min, m_value - stepVal);
-                }
+    case UIInputEventType::PointerMove: {
+        if (m_dragging) {
+            float newVal = pointerToValue(event.x, ctx);
+            if (newVal != m_value) {
+                m_value = newVal;
                 applyStep();
-                if (m_onValueChanged) m_onValueChanged(m_value);
-                return UIEventResult::Handled;
+                if (m_onValueChanged)
+                    m_onValueChanged(m_value);
             }
-            break;
+            return UIEventResult::Consumed;
         }
-        default:
-            break;
+        bool insideWidget = hitTest(event.x, event.y, ctx);
+        bool insideHandle = std::abs(event.x - hx) <= (handleSize * 0.5f + padding) &&
+                            std::abs(flippedY - cy) <= (handleSize * 0.5f + padding);
+        bool hovered = insideWidget || insideHandle;
+        if (hovered && !m_handleHovered) {
+            m_handleHovered = true;
+            m_handleScaleTween.start(m_handleScaleTween.value(), 1.12f, 0.1f, EasingType::EaseOut);
+        } else if (!hovered && m_handleHovered) {
+            m_handleHovered = false;
+            m_handleScaleTween.start(m_handleScaleTween.value(), 1.0f, 0.1f, EasingType::EaseOut);
+        }
+        return hovered ? UIEventResult::Handled : UIEventResult::Ignored;
+    }
+    case UIInputEventType::PointerDown: {
+        if (event.button == UIPointerButton::Primary) {
+            bool insideWidget = hitTest(event.x, event.y, ctx);
+            if (insideWidget) {
+                m_dragging = true;
+                m_handleHovered = true;
+                m_handleScaleTween.start(m_handleScaleTween.value(), 1.16f, 0.08f, EasingType::EaseOut);
+                m_value = pointerToValue(event.x, ctx);
+                applyStep();
+                if (m_onValueChanged)
+                    m_onValueChanged(m_value);
+                return UIEventResult::Consumed;
+            }
+        }
+        break;
+    }
+    case UIInputEventType::PointerUp: {
+        if (event.button == UIPointerButton::Primary && m_dragging) {
+            m_dragging = false;
+            m_handleScaleTween.start(m_handleScaleTween.value(), m_handleHovered ? 1.12f : 1.0f, 0.1f,
+                                     EasingType::EaseOut);
+            return UIEventResult::Consumed;
+        }
+        break;
+    }
+    case UIInputEventType::Command: {
+        if (isFocused()) {
+            float stepVal = m_step > 0.0f ? m_step : (m_max - m_min) * 0.05f;
+            // Only consume Left/Right for slider adjustment, let Up/Down pass through for focus navigation
+            if (event.command == UICommand::NavigateLeft) {
+                m_value = std::max(m_min, m_value - stepVal);
+                applyStep();
+                if (m_onValueChanged)
+                    m_onValueChanged(m_value);
+                return UIEventResult::Consumed;
+            }
+            if (event.command == UICommand::NavigateRight) {
+                m_value = std::min(m_max, m_value + stepVal);
+                applyStep();
+                if (m_onValueChanged)
+                    m_onValueChanged(m_value);
+                return UIEventResult::Consumed;
+            }
+            if (event.command == UICommand::Home) {
+                m_value = m_min;
+                if (m_onValueChanged)
+                    m_onValueChanged(m_value);
+                return UIEventResult::Consumed;
+            }
+            if (event.command == UICommand::End) {
+                m_value = m_max;
+                if (m_onValueChanged)
+                    m_onValueChanged(m_value);
+                return UIEventResult::Consumed;
+            }
+        }
+        break;
+    }
+    case UIInputEventType::Scroll: {
+        if (hitTest(event.x, event.y, ctx) || isFocused()) {
+            float stepVal = m_step > 0.0f ? m_step : (m_max - m_min) * 0.05f;
+            if (event.scrollY > 0) {
+                m_value = std::min(m_max, m_value + stepVal);
+            } else if (event.scrollY < 0) {
+                m_value = std::max(m_min, m_value - stepVal);
+            }
+            applyStep();
+            if (m_onValueChanged)
+                m_onValueChanged(m_value);
+            return UIEventResult::Handled;
+        }
+        break;
+    }
+    default: break;
     }
 
     return UIEventResult::Ignored;

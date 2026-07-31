@@ -20,9 +20,7 @@ namespace {
     return (size + kAlignment - 1u) & ~(kAlignment - 1u);
 }
 
-[[nodiscard]] bool multiplyBytes(const uint64_t count,
-                                 const uint64_t stride,
-                                 uint64_t& bytes) {
+[[nodiscard]] bool multiplyBytes(const uint64_t count, const uint64_t stride, uint64_t& bytes) {
     if (stride == 0u || count > std::numeric_limits<uint64_t>::max() / stride) {
         return false;
     }
@@ -30,24 +28,20 @@ namespace {
     return true;
 }
 
-[[nodiscard]] bool sameHandle(const RhiTextureHandle lhs,
-                              const RhiTextureHandle rhs) {
+[[nodiscard]] bool sameHandle(const RhiTextureHandle lhs, const RhiTextureHandle rhs) {
     return lhs.index == rhs.index && lhs.generation == rhs.generation;
 }
 
-[[nodiscard]] bool sameHandle(const RhiTextureViewHandle lhs,
-                              const RhiTextureViewHandle rhs) {
+[[nodiscard]] bool sameHandle(const RhiTextureViewHandle lhs, const RhiTextureViewHandle rhs) {
     return lhs.index == rhs.index && lhs.generation == rhs.generation;
 }
 
 } // namespace
 
-void ReflectionProbeGridPass::setSceneProbes(
-    std::vector<renderer::contracts::GpuReflectionProbe> probes) {
+void ReflectionProbeGridPass::setSceneProbes(std::vector<renderer::contracts::GpuReflectionProbe> probes) {
     if (m_sceneProbes.size() == probes.size() &&
         (probes.empty() ||
-         std::memcmp(m_sceneProbes.data(), probes.data(),
-                     probes.size() * sizeof(probes.front())) == 0)) {
+         std::memcmp(m_sceneProbes.data(), probes.data(), probes.size() * sizeof(probes.front())) == 0)) {
         return;
     }
     m_sceneProbes = std::move(probes);
@@ -55,11 +49,8 @@ void ReflectionProbeGridPass::setSceneProbes(
     m_prepared = false;
 }
 
-void ReflectionProbeGridPass::setPrefilteredCubeArray(
-    const RhiTextureHandle texture,
-    const RhiTextureViewHandle view) {
-    if (sameHandle(m_externalCubeArrayTexture, texture) &&
-        sameHandle(m_externalCubeArrayView, view)) {
+void ReflectionProbeGridPass::setPrefilteredCubeArray(const RhiTextureHandle texture, const RhiTextureViewHandle view) {
+    if (sameHandle(m_externalCubeArrayTexture, texture) && sameHandle(m_externalCubeArrayView, view)) {
         return;
     }
     m_externalCubeArrayTexture = texture;
@@ -84,16 +75,12 @@ bool ReflectionProbeGridPass::prepareGraphFrame(RhiDevice& rhiDevice) {
     const renderer::contracts::ReflectionProbeGridBuildResult built =
         renderer::contracts::buildReflectionProbeGrid(m_sceneProbes);
     if (!built.succeeded()) {
-        m_lastError = renderer::contracts::reflectionProbeGridErrorStableId(
-            built.error);
-        if (built.error ==
-            renderer::contracts::ReflectionProbeGridError::InvalidProbe) {
+        m_lastError = renderer::contracts::reflectionProbeGridErrorStableId(built.error);
+        if (built.error == renderer::contracts::ReflectionProbeGridError::InvalidProbe) {
             m_lastError += ":";
-            m_lastError += renderer::contracts::reflectionProbeErrorStableId(
-                built.probeError);
+            m_lastError += renderer::contracts::reflectionProbeErrorStableId(built.probeError);
             m_lastError += ":";
-            m_lastError += renderer::contracts::reflectionProbeFieldStableId(
-                built.probeField);
+            m_lastError += renderer::contracts::reflectionProbeFieldStableId(built.probeField);
         }
         m_prepared = false;
         return false;
@@ -113,36 +100,24 @@ bool ReflectionProbeGridPass::ensureResources(RhiDevice& rhiDevice) {
     uint64_t probeBytes = 0u;
     uint64_t cellBytes = 0u;
     uint64_t indexBytes = 0u;
-    if (!multiplyBytes(std::max<size_t>(m_grid.probes.size(), 1u),
-                       sizeof(renderer::contracts::GpuReflectionProbe),
+    if (!multiplyBytes(std::max<size_t>(m_grid.probes.size(), 1u), sizeof(renderer::contracts::GpuReflectionProbe),
                        probeBytes) ||
         !multiplyBytes(std::max<size_t>(m_grid.cells.size(), 1u),
-                       sizeof(renderer::contracts::GpuReflectionProbeGridCell),
-                       cellBytes) ||
-        !multiplyBytes(std::max<size_t>(m_grid.probeIndices.size(), 1u),
-                       sizeof(uint32_t), indexBytes)) {
+                       sizeof(renderer::contracts::GpuReflectionProbeGridCell), cellBytes) ||
+        !multiplyBytes(std::max<size_t>(m_grid.probeIndices.size(), 1u), sizeof(uint32_t), indexBytes)) {
         m_lastError = "BufferSizeOverflow";
         return false;
     }
-    return ensureBuffer(rhiDevice, m_probeBuffer, probeBytes,
-                        "ReflectionProbeGrid.Probes") &&
-           ensureBuffer(rhiDevice, m_metadataBuffer,
-                        sizeof(m_grid.metadata),
-                        "ReflectionProbeGrid.Metadata") &&
-           ensureBuffer(rhiDevice, m_cellBuffer, cellBytes,
-                        "ReflectionProbeGrid.Cells") &&
-           ensureBuffer(rhiDevice, m_indexBuffer, indexBytes,
-                        "ReflectionProbeGrid.Indices") &&
+    return ensureBuffer(rhiDevice, m_probeBuffer, probeBytes, "ReflectionProbeGrid.Probes") &&
+           ensureBuffer(rhiDevice, m_metadataBuffer, sizeof(m_grid.metadata), "ReflectionProbeGrid.Metadata") &&
+           ensureBuffer(rhiDevice, m_cellBuffer, cellBytes, "ReflectionProbeGrid.Cells") &&
+           ensureBuffer(rhiDevice, m_indexBuffer, indexBytes, "ReflectionProbeGrid.Indices") &&
            ensureEmptyCubeArray(rhiDevice);
 }
 
-bool ReflectionProbeGridPass::ensureBuffer(
-    RhiDevice& rhiDevice,
-    BufferResource& resource,
-    const uint64_t requiredBytes,
-    const char* const debugName) {
-    if (resource.handle.isValid() &&
-        resource.capacityBytes >= requiredBytes) {
+bool ReflectionProbeGridPass::ensureBuffer(RhiDevice& rhiDevice, BufferResource& resource, const uint64_t requiredBytes,
+                                           const char* const debugName) {
+    if (resource.handle.isValid() && resource.capacityBytes >= requiredBytes) {
         return true;
     }
     const uint64_t capacity = alignBufferSize(requiredBytes);
@@ -153,13 +128,11 @@ bool ReflectionProbeGridPass::ensureBuffer(
     RhiBufferDesc desc;
     desc.debugName = debugName;
     desc.size = capacity;
-    desc.usage = rhiFlag(RhiBufferUsage::Storage) |
-                 rhiFlag(RhiBufferUsage::TransferDst);
+    desc.usage = rhiFlag(RhiBufferUsage::Storage) | rhiFlag(RhiBufferUsage::TransferDst);
     desc.memoryUsage = RhiMemoryUsage::GpuOnly;
     desc.initialState = RhiResourceState::StorageBuffer;
     desc.memoryCategory = RhiMemoryCategory::SceneData;
-    const RhiBufferHandle created =
-        rhiDevice.createBuffer(desc, nullptr, 0u);
+    const RhiBufferHandle created = rhiDevice.createBuffer(desc, nullptr, 0u);
     if (!created.isValid()) {
         m_lastError = "BufferCreationFailed";
         return false;
@@ -173,8 +146,7 @@ bool ReflectionProbeGridPass::ensureBuffer(
 }
 
 bool ReflectionProbeGridPass::ensureEmptyCubeArray(RhiDevice& rhiDevice) {
-    if (m_emptyCubeArrayTexture.isValid() &&
-        m_emptyCubeArrayView.isValid()) {
+    if (m_emptyCubeArrayTexture.isValid() && m_emptyCubeArrayView.isValid()) {
         return true;
     }
     constexpr std::array<uint16_t, 24> kTransparentBlack{};
@@ -186,16 +158,14 @@ bool ReflectionProbeGridPass::ensureEmptyCubeArray(RhiDevice& rhiDevice) {
     desc.height = 1u;
     desc.depthOrLayers = 6u;
     desc.mipLevels = 1u;
-    desc.usage = rhiFlag(RhiTextureUsage::Sampled) |
-                 rhiFlag(RhiTextureUsage::TransferDst);
+    desc.usage = rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::TransferDst);
     desc.memoryCategory = RhiMemoryCategory::SceneData;
     RhiTextureInitialData initialData;
     initialData.pixels = kTransparentBlack.data();
     initialData.sizeBytes = sizeof(kTransparentBlack);
     initialData.layerCount = 6u;
     initialData.finalState = RhiResourceState::ShaderRead;
-    const RhiTextureHandle texture =
-        rhiDevice.createTexture(desc, &initialData);
+    const RhiTextureHandle texture = rhiDevice.createTexture(desc, &initialData);
     if (!texture.isValid()) {
         m_lastError = "EmptyCubeArrayCreationFailed";
         return false;
@@ -222,28 +192,23 @@ bool ReflectionProbeGridPass::selectCubeArray(RhiDevice& rhiDevice) {
         m_consumerCubeArrayView = m_emptyCubeArrayView;
         return true;
     }
-    if (!m_externalCubeArrayTexture.isValid() ||
-        !m_externalCubeArrayView.isValid()) {
+    if (!m_externalCubeArrayTexture.isValid() || !m_externalCubeArrayView.isValid()) {
         m_lastError = "CapturedCubeArrayMissing";
         return false;
     }
     RhiTextureDesc desc;
     if (!rhiDevice.getTextureDesc(m_externalCubeArrayTexture, desc) ||
-        desc.dimension != RhiTextureDimension::CubeArray ||
-        desc.format != RhiTextureFormat::Rgba16Float ||
+        desc.dimension != RhiTextureDimension::CubeArray || desc.format != RhiTextureFormat::Rgba16Float ||
         desc.width != renderer::contracts::kReflectionProbeCubeExtent ||
         desc.height != renderer::contracts::kReflectionProbeCubeExtent ||
-        desc.mipLevels !=
-            renderer::contracts::kReflectionProbeCubeMipCount ||
-        desc.depthOrLayers % 6u != 0u ||
+        desc.mipLevels != renderer::contracts::kReflectionProbeCubeMipCount || desc.depthOrLayers % 6u != 0u ||
         (desc.usage & rhiFlag(RhiTextureUsage::Sampled)) == 0u ||
         (desc.usage & rhiFlag(RhiTextureUsage::ColorAttachment)) == 0u) {
         m_lastError = "CapturedCubeArrayContractMismatch";
         return false;
     }
     const uint32_t capacity = desc.depthOrLayers / 6u;
-    for (const renderer::contracts::GpuReflectionProbe& probe :
-         m_grid.probes) {
+    for (const renderer::contracts::GpuReflectionProbe& probe : m_grid.probes) {
         if (probe.resourcesAndIdentity.x >= capacity) {
             m_lastError = "CapturedCubeArrayIndexOutOfRange";
             return false;
@@ -254,17 +219,12 @@ bool ReflectionProbeGridPass::selectCubeArray(RhiDevice& rhiDevice) {
     return true;
 }
 
-bool ReflectionProbeGridPass::importGraphResources(
-    RenderGraph& graph,
-    GraphResources& resources,
-    const RgTextureHandle capturedCubeArray) const {
-    if (!m_prepared || m_rhiDevice == nullptr ||
-        !m_consumerCubeArrayTexture.isValid() ||
-        !m_consumerCubeArrayView.isValid() ||
-        !importBuffer(graph, m_probeBuffer, resources.probes) ||
+bool ReflectionProbeGridPass::importGraphResources(RenderGraph& graph, GraphResources& resources,
+                                                   const RgTextureHandle capturedCubeArray) const {
+    if (!m_prepared || m_rhiDevice == nullptr || !m_consumerCubeArrayTexture.isValid() ||
+        !m_consumerCubeArrayView.isValid() || !importBuffer(graph, m_probeBuffer, resources.probes) ||
         !importBuffer(graph, m_metadataBuffer, resources.metadata) ||
-        !importBuffer(graph, m_cellBuffer, resources.cells) ||
-        !importBuffer(graph, m_indexBuffer, resources.indices)) {
+        !importBuffer(graph, m_cellBuffer, resources.cells) || !importBuffer(graph, m_indexBuffer, resources.indices)) {
         return false;
     }
     if (capturedCubeArray.isValid()) {
@@ -275,20 +235,14 @@ bool ReflectionProbeGridPass::importGraphResources(
     if (!m_rhiDevice->getTextureDesc(m_consumerCubeArrayTexture, desc)) {
         return false;
     }
-    resources.prefilteredCubeArray = graph.importTexture({
-        "ReflectionProbeGrid.PrefilteredCubeArray",
-        m_consumerCubeArrayTexture,
-        desc,
-        RhiResourceState::ShaderRead,
-        RhiResourceState::ShaderRead,
-        m_consumerCubeArrayView});
+    resources.prefilteredCubeArray =
+        graph.importTexture({"ReflectionProbeGrid.PrefilteredCubeArray", m_consumerCubeArrayTexture, desc,
+                             RhiResourceState::ShaderRead, RhiResourceState::ShaderRead, m_consumerCubeArrayView});
     return resources.prefilteredCubeArray.isValid();
 }
 
-bool ReflectionProbeGridPass::importBuffer(
-    RenderGraph& graph,
-    const BufferResource& resource,
-    RgBufferHandle& graphBuffer) const {
+bool ReflectionProbeGridPass::importBuffer(RenderGraph& graph, const BufferResource& resource,
+                                           RgBufferHandle& graphBuffer) const {
     if (m_rhiDevice == nullptr || !resource.handle.isValid()) {
         return false;
     }
@@ -306,63 +260,47 @@ bool ReflectionProbeGridPass::importBuffer(
     return graphBuffer.isValid();
 }
 
-RgPassHandle ReflectionProbeGridPass::addGraphPasses(
-    RenderGraph& graph,
-    const GraphResources& resources,
-    const RgPassHandle dependency) {
-    if (!m_prepared || !dependency.isValid() ||
-        !resources.probes.isValid() || !resources.metadata.isValid() ||
-        !resources.cells.isValid() || !resources.indices.isValid() ||
-        !resources.prefilteredCubeArray.isValid()) {
+RgPassHandle ReflectionProbeGridPass::addGraphPasses(RenderGraph& graph, const GraphResources& resources,
+                                                     const RgPassHandle dependency) {
+    if (!m_prepared || !dependency.isValid() || !resources.probes.isValid() || !resources.metadata.isValid() ||
+        !resources.cells.isValid() || !resources.indices.isValid() || !resources.prefilteredCubeArray.isValid()) {
         return {};
     }
     m_uploadScheduled = false;
     if (!m_uploadRequired) {
         return dependency;
     }
-    RenderGraphPassBuilder upload = graph.addPass(
-        {"ReflectionProbeGrid.Upload", RgPassType::Copy,
-         RhiQueueType::Graphics});
+    RenderGraphPassBuilder upload =
+        graph.addPass({"ReflectionProbeGrid.Upload", RgPassType::Copy, RhiQueueType::Graphics});
     upload.dependsOn(dependency)
         .writeBuffer(resources.probes, RhiResourceState::TransferDst)
         .writeBuffer(resources.metadata, RhiResourceState::TransferDst)
         .writeBuffer(resources.cells, RhiResourceState::TransferDst)
         .writeBuffer(resources.indices, RhiResourceState::TransferDst)
-        .setExecute([this](RgPassContext& pass) {
-            return recordUpload(pass.commandList());
-        });
+        .setExecute([this](RgPassContext& pass) { return recordUpload(pass.commandList()); });
     m_uploadScheduled = true;
     return upload.handle();
 }
 
-bool ReflectionProbeGridPass::recordUpload(
-    RhiCommandList& commandList) const {
+bool ReflectionProbeGridPass::recordUpload(RhiCommandList& commandList) const {
     const renderer::contracts::GpuReflectionProbe emptyProbe;
     const renderer::contracts::GpuReflectionProbeGridCell emptyCell;
     constexpr uint32_t emptyIndex = 0u;
-    const void* probeData = m_grid.probes.empty()
-        ? static_cast<const void*>(&emptyProbe)
-        : static_cast<const void*>(m_grid.probes.data());
-    const size_t probeBytes = std::max<size_t>(m_grid.probes.size(), 1u) *
-        sizeof(renderer::contracts::GpuReflectionProbe);
-    const void* cellData = m_grid.cells.empty()
-        ? static_cast<const void*>(&emptyCell)
-        : static_cast<const void*>(m_grid.cells.data());
-    const size_t cellBytes = std::max<size_t>(m_grid.cells.size(), 1u) *
-        sizeof(renderer::contracts::GpuReflectionProbeGridCell);
-    const void* indexData = m_grid.probeIndices.empty()
-        ? static_cast<const void*>(&emptyIndex)
-        : static_cast<const void*>(m_grid.probeIndices.data());
-    const size_t indexBytes =
-        std::max<size_t>(m_grid.probeIndices.size(), 1u) * sizeof(uint32_t);
-    commandList.updateBuffer(m_probeBuffer.handle, 0u,
-                             probeData, probeBytes);
-    commandList.updateBuffer(m_metadataBuffer.handle, 0u,
-                             &m_grid.metadata, sizeof(m_grid.metadata));
-    commandList.updateBuffer(m_cellBuffer.handle, 0u,
-                             cellData, cellBytes);
-    commandList.updateBuffer(m_indexBuffer.handle, 0u,
-                             indexData, indexBytes);
+    const void* probeData =
+        m_grid.probes.empty() ? static_cast<const void*>(&emptyProbe) : static_cast<const void*>(m_grid.probes.data());
+    const size_t probeBytes =
+        std::max<size_t>(m_grid.probes.size(), 1u) * sizeof(renderer::contracts::GpuReflectionProbe);
+    const void* cellData =
+        m_grid.cells.empty() ? static_cast<const void*>(&emptyCell) : static_cast<const void*>(m_grid.cells.data());
+    const size_t cellBytes =
+        std::max<size_t>(m_grid.cells.size(), 1u) * sizeof(renderer::contracts::GpuReflectionProbeGridCell);
+    const void* indexData = m_grid.probeIndices.empty() ? static_cast<const void*>(&emptyIndex)
+                                                        : static_cast<const void*>(m_grid.probeIndices.data());
+    const size_t indexBytes = std::max<size_t>(m_grid.probeIndices.size(), 1u) * sizeof(uint32_t);
+    commandList.updateBuffer(m_probeBuffer.handle, 0u, probeData, probeBytes);
+    commandList.updateBuffer(m_metadataBuffer.handle, 0u, &m_grid.metadata, sizeof(m_grid.metadata));
+    commandList.updateBuffer(m_cellBuffer.handle, 0u, cellData, cellBytes);
+    commandList.updateBuffer(m_indexBuffer.handle, 0u, indexData, indexBytes);
     return true;
 }
 
@@ -373,8 +311,7 @@ void ReflectionProbeGridPass::finishGraphExecution(const bool succeeded) {
     m_uploadScheduled = false;
 }
 
-ReflectionProbeGridPass::ConsumerResources
-ReflectionProbeGridPass::consumerResources() const {
+ReflectionProbeGridPass::ConsumerResources ReflectionProbeGridPass::consumerResources() const {
     ConsumerResources resources;
     if (!m_prepared) {
         return resources;
@@ -388,15 +325,13 @@ ReflectionProbeGridPass::consumerResources() const {
     resources.indexBuffer = m_indexBuffer.handle;
     resources.indexBufferBytes = m_indexBuffer.capacityBytes;
     resources.prefilteredCubeArrayView = m_consumerCubeArrayView;
-    resources.activeProbeCount =
-        static_cast<uint32_t>(m_grid.probes.size());
+    resources.activeProbeCount = static_cast<uint32_t>(m_grid.probes.size());
     return resources;
 }
 
 void ReflectionProbeGridPass::destroyOwnedResources() {
     if (m_rhiDevice != nullptr) {
-        BufferResource* buffers[] = {
-            &m_probeBuffer, &m_metadataBuffer, &m_cellBuffer, &m_indexBuffer};
+        BufferResource* buffers[] = {&m_probeBuffer, &m_metadataBuffer, &m_cellBuffer, &m_indexBuffer};
         for (BufferResource* buffer : buffers) {
             if (buffer->handle.isValid()) {
                 m_rhiDevice->destroyBuffer(buffer->handle);

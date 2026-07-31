@@ -20,9 +20,7 @@ int fail(const char* message) {
 
 uint32_t dropStackCount(ecs::GameplayRegistry& registry, const ItemID itemId) {
     uint32_t total = 0;
-    auto view = registry.registry().view<ecs::DropItemTag,
-                                         ecs::ItemComponent,
-                                         ecs::NetworkSyncTag>();
+    auto view = registry.registry().view<ecs::DropItemTag, ecs::ItemComponent, ecs::NetworkSyncTag>();
     for (const entt::entity entity : view) {
         const auto& item = view.get<ecs::ItemComponent>(entity);
         if (item.itemId == itemId) {
@@ -81,7 +79,8 @@ int testNetworkMobDeathQueuesFinalDespawnOnce() {
     raw.emplace<ecs::HealthComponent>(mob, 0, 20);
     raw.emplace<ecs::NetworkSyncTag>(mob);
     raw.emplace<ecs::EntityNetIdComponent>(mob, ecs::EntityNetId{42});
-    raw.emplace<ecs::DeathEffectComponent>(mob, BlockRegistry::requireIdByName("minecraft:rose"), 28, "mob.zombie.death", 1.0f);
+    raw.emplace<ecs::DeathEffectComponent>(mob, BlockRegistry::requireIdByName("minecraft:rose"), 28,
+                                           "mob.zombie.death", 1.0f);
     raw.emplace<ecs::DropTableComponent>(mob, ItemRegistry::requireIdByName("minecraft:coal"), 1u, 1u);
 
     const entt::entity child = raw.create();
@@ -101,7 +100,8 @@ int testNetworkMobDeathQueuesFinalDespawnOnce() {
         return fail("networked dead mob should be marked for final network despawn");
     }
     const auto* impact = raw.try_get<ecs::EntityImpactComponent>(mob);
-    if (impact == nullptr || impact->particleBlock != BlockRegistry::requireIdByName("minecraft:rose") || impact->particleCount != 28) {
+    if (impact == nullptr || impact->particleBlock != BlockRegistry::requireIdByName("minecraft:rose") ||
+        impact->particleCount != 28) {
         return fail("networked dead mob should carry final death impact data");
     }
     if (dropStackCount(registry, ItemRegistry::requireIdByName("minecraft:coal")) != 1) {

@@ -56,13 +56,9 @@ public:
     /// @param resources Imported graph handles for all reflection resources.
     /// @param dependency Pass that must complete before reflection starts.
     /// @return Final reflection pass handle, or an invalid handle for an invalid contract.
-    [[nodiscard]] RgPassHandle addGraphPasses(
-        RenderGraph& graph,
-        const FrameContext& ctx,
-        const RenderSettings& settings,
-        DeferredRenderTargets& targets,
-        const GraphResources& resources,
-        RgPassHandle dependency);
+    [[nodiscard]] RgPassHandle addGraphPasses(RenderGraph& graph, const FrameContext& ctx,
+                                              const RenderSettings& settings, DeferredRenderTargets& targets,
+                                              const GraphResources& resources, RgPassHandle dependency);
 
     /// Injects the pass that owns persistent sky IBL texture views.
     /// @param pass Sky IBL producer whose products outlive each reflection pass.
@@ -70,41 +66,29 @@ public:
 
     /// Injects the pass that owns probe-grid buffers and capture resources.
     /// @param pass Persistent probe-grid producer for deferred reflection.
-    void setReflectionProbeGridPass(ReflectionProbeGridPass* pass) {
-        m_reflectionProbeGridPass = pass;
-    }
+    void setReflectionProbeGridPass(ReflectionProbeGridPass* pass) { m_reflectionProbeGridPass = pass; }
 
 private:
-    [[nodiscard]] bool recordReflection(RhiCommandList& commandList,
-                                        const FrameContext& ctx,
-                                        const RenderSettings& settings,
-                                        DeferredRenderTargets& targets,
+    [[nodiscard]] bool recordReflection(RhiCommandList& commandList, const FrameContext& ctx,
+                                        const RenderSettings& settings, DeferredRenderTargets& targets,
                                         bool writeToScratch);
-    [[nodiscard]] bool recordFilter(RhiCommandList& commandList,
-                                    const FrameContext& ctx,
-                                    const ReflectionSettings& reflection,
-                                    DeferredRenderTargets& targets,
+    [[nodiscard]] bool recordFilter(RhiCommandList& commandList, const FrameContext& ctx,
+                                    const ReflectionSettings& reflection, DeferredRenderTargets& targets,
                                     bool readScratch);
-    [[nodiscard]] bool recordTemporal(RhiCommandList& commandList,
-                                      const FrameContext& ctx,
-                                      const ReflectionSettings& reflection,
-                                      DeferredRenderTargets& targets,
+    [[nodiscard]] bool recordTemporal(RhiCommandList& commandList, const FrameContext& ctx,
+                                      const ReflectionSettings& reflection, DeferredRenderTargets& targets,
                                       bool readScratch);
     bool ensureBaseRhiPipeline(RhiDevice& rhiDevice);
-    bool ensureBaseBindGroup(RhiDevice& rhiDevice,
-                             const std::array<RhiTextureViewHandle, 12>& views,
-                             const ReflectionProbeGridPass::ConsumerResources&
-                                 probeResources);
+    bool ensureBaseBindGroup(RhiDevice& rhiDevice, const std::array<RhiTextureViewHandle, 12>& views,
+                             const ReflectionProbeGridPass::ConsumerResources& probeResources);
     void destroyBaseBindGroup();
     void destroyBaseRhiResources();
     bool ensureFilterRhiPipeline(RhiDevice& rhiDevice);
-    bool ensureFilterBindGroup(RhiDevice& rhiDevice,
-                               const std::array<RhiTextureViewHandle, 5>& views);
+    bool ensureFilterBindGroup(RhiDevice& rhiDevice, const std::array<RhiTextureViewHandle, 5>& views);
     void destroyFilterBindGroup();
     void destroyFilterRhiResources();
     bool ensureTemporalRhiPipeline(RhiDevice& rhiDevice);
-    bool ensureTemporalBindGroup(RhiDevice& rhiDevice,
-                                 const std::array<RhiTextureViewHandle, 7>& views);
+    bool ensureTemporalBindGroup(RhiDevice& rhiDevice, const std::array<RhiTextureViewHandle, 7>& views);
     void destroyTemporalBindGroup();
     void destroyTemporalRhiResources();
 

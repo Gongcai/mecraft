@@ -30,8 +30,7 @@ public:
     // renderDistanceMul: shadowDistanceRenderMul (DerivativeMain: 1.0)
     //   When < 0, uses user video settings (not implemented in Phase 1a).
     // cameraPos: current camera position in world space.
-    void setup(float halfPlaneLength, float renderDistanceMul,
-               const glm::vec3& cameraPos);
+    void setup(float halfPlaneLength, float renderDistanceMul, const glm::vec3& cameraPos);
 
     // Test whether an AABB is visible within the shadow caster domain.
     // Returns false if the AABB is completely outside the camera-centered cube.
@@ -43,11 +42,11 @@ public:
     void recordVisible(float distance);
     void recordCulled();
 
-    int   getVisibleCount() const      { return m_visibleCount; }
-    int   getCulledCount() const       { return m_culledCount; }
+    int getVisibleCount() const { return m_visibleCount; }
+    int getCulledCount() const { return m_culledCount; }
     float getMaxCasterDistance() const { return m_maxCasterDistance; }
     const char* getCullingMode() const { return m_cullingMode; }
-    float getMaxDistance() const       { return m_maxDistance; }
+    float getMaxDistance() const { return m_maxDistance; }
 
 private:
     // Camera-centered cube bounds (Iris BoxCuller minAllowed/maxAllowed)
@@ -61,8 +60,8 @@ private:
     float m_maxDistance = 0.0f;
 
     // Debug
-    int   m_visibleCount = 0;
-    int   m_culledCount = 0;
+    int m_visibleCount = 0;
+    int m_culledCount = 0;
     float m_maxCasterDistance = 0.0f;
     const char* m_cullingMode = "None";
 };

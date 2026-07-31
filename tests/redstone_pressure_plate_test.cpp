@@ -47,30 +47,16 @@ void processRedstoneTicks(World& world, uint64_t& tick, const int count) {
 
 BlockStateId pressurePlateState(const BlockID blockId, const bool powered) {
     return BlockStateRegistry::getState(
-        blockId,
-        std::vector<std::pair<uint16_t, uint16_t>>{
-            {PropIndices::POWERED, powered ? PropIndices::POWERED_TRUE : PropIndices::POWERED_FALSE}
-        });
+        blockId, std::vector<std::pair<uint16_t, uint16_t>>{
+                     {PropIndices::POWERED, powered ? PropIndices::POWERED_TRUE : PropIndices::POWERED_FALSE}});
 }
 
 uint8_t wirePower(const World& world, const int x, const int y, const int z) {
     static const std::array<uint16_t, 16> kPowerValues = {
-        PropIndices::POWER_0,
-        PropIndices::POWER_1,
-        PropIndices::POWER_2,
-        PropIndices::POWER_3,
-        PropIndices::POWER_4,
-        PropIndices::POWER_5,
-        PropIndices::POWER_6,
-        PropIndices::POWER_7,
-        PropIndices::POWER_8,
-        PropIndices::POWER_9,
-        PropIndices::POWER_10,
-        PropIndices::POWER_11,
-        PropIndices::POWER_12,
-        PropIndices::POWER_13,
-        PropIndices::POWER_14,
-        PropIndices::POWER_15,
+        PropIndices::POWER_0,  PropIndices::POWER_1,  PropIndices::POWER_2,  PropIndices::POWER_3,
+        PropIndices::POWER_4,  PropIndices::POWER_5,  PropIndices::POWER_6,  PropIndices::POWER_7,
+        PropIndices::POWER_8,  PropIndices::POWER_9,  PropIndices::POWER_10, PropIndices::POWER_11,
+        PropIndices::POWER_12, PropIndices::POWER_13, PropIndices::POWER_14, PropIndices::POWER_15,
     };
 
     const BlockStateId state = world.getBlockState(x, y, z);
@@ -127,17 +113,17 @@ int main() {
 
     const int stoneY = 96;
     prepareFlatTestLine(world, stoneY);
-    world.setBlockState(0, stoneY, 0, pressurePlateState(BlockRegistry::requireIdByName("minecraft:stone_pressure_plate"), false));
-    world.setBlockState(1, stoneY, 0, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_wire")));
+    world.setBlockState(0, stoneY, 0,
+                        pressurePlateState(BlockRegistry::requireIdByName("minecraft:stone_pressure_plate"), false));
+    world.setBlockState(1, stoneY, 0,
+                        BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_wire")));
 
-    const entt::entity player = createStandingPlayer(
-        registry,
-        glm::vec3(0.5f, static_cast<float>(stoneY) + (1.0f / 16.0f), 0.5f));
+    const entt::entity player =
+        createStandingPlayer(registry, glm::vec3(0.5f, static_cast<float>(stoneY) + (1.0f / 16.0f), 0.5f));
     ecs::PressurePlateSystem::processWorldEntities(world, registry);
     processRedstoneTicks(world, redstoneTick, 2);
 
-    if (!powered(world, 0, stoneY, 0) ||
-        wirePower(world, 1, stoneY, 0) != 15) {
+    if (!powered(world, 0, stoneY, 0) || wirePower(world, 1, stoneY, 0) != 15) {
         return fail("standing player should power a stone pressure plate and adjacent redstone wire");
     }
 
@@ -148,17 +134,16 @@ int main() {
     ecs::PressurePlateSystem::processWorldEntities(world, registry);
     processRedstoneTicks(world, redstoneTick, 2);
 
-    if (powered(world, 0, stoneY, 0) ||
-        wirePower(world, 1, stoneY, 0) != 0) {
+    if (powered(world, 0, stoneY, 0) || wirePower(world, 1, stoneY, 0) != 0) {
         return fail("stone pressure plate should release when the player leaves");
     }
 
     const int itemStoneY = 80;
     prepareFlatTestLine(world, itemStoneY);
-    world.setBlockState(0, itemStoneY, 0, pressurePlateState(BlockRegistry::requireIdByName("minecraft:stone_pressure_plate"), false));
-    const entt::entity stoneDrop = createDrop(
-        registry,
-        glm::vec3(0.5f, static_cast<float>(itemStoneY) + (1.0f / 16.0f) + 0.175f, 0.5f));
+    world.setBlockState(0, itemStoneY, 0,
+                        pressurePlateState(BlockRegistry::requireIdByName("minecraft:stone_pressure_plate"), false));
+    const entt::entity stoneDrop =
+        createDrop(registry, glm::vec3(0.5f, static_cast<float>(itemStoneY) + (1.0f / 16.0f) + 0.175f, 0.5f));
     ecs::PressurePlateSystem::processWorldEntities(world, registry);
 
     if (powered(world, 0, itemStoneY, 0)) {
@@ -169,16 +154,15 @@ int main() {
 
     const int oakY = 64;
     prepareFlatTestLine(world, oakY);
-    world.setBlockState(0, oakY, 0, pressurePlateState(BlockRegistry::requireIdByName("minecraft:oak_pressure_plate"), false));
-    world.setBlockState(1, oakY, 0, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_wire")));
-    createDrop(
-        registry,
-        glm::vec3(0.5f, static_cast<float>(oakY) + (1.0f / 16.0f) + 0.175f, 0.5f));
+    world.setBlockState(0, oakY, 0,
+                        pressurePlateState(BlockRegistry::requireIdByName("minecraft:oak_pressure_plate"), false));
+    world.setBlockState(1, oakY, 0,
+                        BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_wire")));
+    createDrop(registry, glm::vec3(0.5f, static_cast<float>(oakY) + (1.0f / 16.0f) + 0.175f, 0.5f));
     ecs::PressurePlateSystem::processWorldEntities(world, registry);
     processRedstoneTicks(world, redstoneTick, 2);
 
-    if (!powered(world, 0, oakY, 0) ||
-        wirePower(world, 1, oakY, 0) != 15) {
+    if (!powered(world, 0, oakY, 0) || wirePower(world, 1, oakY, 0) != 15) {
         return fail("oak pressure plate should respond to item drops and power redstone wire");
     }
 

@@ -59,9 +59,8 @@ static void testSnapsWhenTargetIsTooFar() {
     system.update(ctx);
 
     const glm::vec3 position = raw.get<ecs::TransformComponent>(entity).position;
-    require(std::fabs(position.x - 20.0f) < 0.001f &&
-            std::fabs(position.y - 2.0f) < 0.001f &&
-            std::fabs(position.z + 3.0f) < 0.001f,
+    require(std::fabs(position.x - 20.0f) < 0.001f && std::fabs(position.y - 2.0f) < 0.001f &&
+                std::fabs(position.z + 3.0f) < 0.001f,
             "interpolation should snap large corrections");
 }
 
@@ -103,12 +102,9 @@ static void testSamplesBufferedPoseBetweenServerTicks() {
     const auto& updatedCamera = raw.get<ecs::CameraStateComponent>(entity);
     require(std::fabs(transform.position.x - 5.0f) < 0.001f,
             "buffered interpolation should sample halfway between server ticks");
-    require(std::fabs(mobAI.yaw - 45.0f) < 0.001f,
-            "buffered mob yaw should interpolate in degrees");
-    require(std::fabs(updatedCamera.yaw - 45.0f) < 0.001f,
-            "buffered camera yaw should interpolate in degrees");
-    require(std::fabs(updatedCamera.pitch - 15.0f) < 0.001f,
-            "buffered camera pitch should interpolate linearly");
+    require(std::fabs(mobAI.yaw - 45.0f) < 0.001f, "buffered mob yaw should interpolate in degrees");
+    require(std::fabs(updatedCamera.yaw - 45.0f) < 0.001f, "buffered camera yaw should interpolate in degrees");
+    require(std::fabs(updatedCamera.pitch - 15.0f) < 0.001f, "buffered camera pitch should interpolate linearly");
 }
 
 static void testBufferedRenderTickDoesNotRegressForLateOldSnapshot() {
@@ -167,12 +163,10 @@ static void testInterpolatesHumanoidAnglesOnShortestPath() {
 
     const auto& mobAI = raw.get<ecs::MobAIComponent>(entity);
     const auto& updatedCamera = raw.get<ecs::CameraStateComponent>(entity);
-    require(mobAI.yaw > 350.0f && mobAI.yaw < 370.0f,
-            "mob yaw should use shortest path across zero degrees");
+    require(mobAI.yaw > 350.0f && mobAI.yaw < 370.0f, "mob yaw should use shortest path across zero degrees");
     require(updatedCamera.yaw > 350.0f && updatedCamera.yaw < 370.0f,
             "camera yaw should use shortest path across zero degrees");
-    require(updatedCamera.pitch > 0.0f && updatedCamera.pitch < 30.0f,
-            "camera pitch should interpolate toward target");
+    require(updatedCamera.pitch > 0.0f && updatedCamera.pitch < 30.0f, "camera pitch should interpolate toward target");
 }
 
 static void testInterpolatesSpinAnglesOnShortestPath() {
@@ -194,8 +188,7 @@ static void testInterpolatesSpinAnglesOnShortestPath() {
     system.update(ctx);
 
     const float yaw = raw.get<ecs::SpinVisualComponent>(entity).yawRadians;
-    require(yaw > 6.2f && yaw < 6.4f,
-            "spin yaw should use shortest path across zero radians");
+    require(yaw > 6.2f && yaw < 6.4f, "spin yaw should use shortest path across zero radians");
 }
 
 static void testSamplesBufferedSpinAnglesInRadians() {
@@ -226,8 +219,7 @@ static void testSamplesBufferedSpinAnglesInRadians() {
     system.update(ctx);
 
     const float yaw = raw.get<ecs::SpinVisualComponent>(entity).yawRadians;
-    require(yaw > 6.2f && yaw < 6.4f,
-            "buffered spin yaw should interpolate across zero in radians");
+    require(yaw > 6.2f && yaw < 6.4f, "buffered spin yaw should interpolate across zero in radians");
 }
 
 int main() {

@@ -26,25 +26,21 @@ public:
     /// @return Backend snapshot with exact or explicitly estimated byte totals.
     [[nodiscard]] virtual RhiMemoryStats memoryStats() const = 0;
 
-    virtual RhiBufferHandle createBuffer(const RhiBufferDesc& desc,
-                                         const void* initialData,
+    virtual RhiBufferHandle createBuffer(const RhiBufferDesc& desc, const void* initialData,
                                          size_t initialDataSize) = 0;
-    virtual RhiTextureHandle createTexture(const RhiTextureDesc& desc,
-                                           const RhiTextureInitialData* initialData) = 0;
+    virtual RhiTextureHandle createTexture(const RhiTextureDesc& desc, const RhiTextureInitialData* initialData) = 0;
 
     /// Returns the immutable creation description for a live buffer.
     /// @param buffer Buffer handle owned by this device.
     /// @param desc Receives the exact description used to create the buffer.
     /// @return True when the handle identifies a live buffer on this device.
-    [[nodiscard]] virtual bool getBufferDesc(RhiBufferHandle buffer,
-                                             RhiBufferDesc& desc) const = 0;
+    [[nodiscard]] virtual bool getBufferDesc(RhiBufferHandle buffer, RhiBufferDesc& desc) const = 0;
 
     /// Returns the immutable creation description for a live texture.
     /// @param texture Texture handle owned by this device.
     /// @param desc Receives the exact description used to create the texture.
     /// @return True when the handle identifies a live texture on this device.
-    [[nodiscard]] virtual bool getTextureDesc(RhiTextureHandle texture,
-                                              RhiTextureDesc& desc) const = 0;
+    [[nodiscard]] virtual bool getTextureDesc(RhiTextureHandle texture, RhiTextureDesc& desc) const = 0;
 
     // --- Placed textures on shared memory (memory aliasing) ---
     // Optional feature gated by capabilities().textureAliasing. Backends that
@@ -56,9 +52,8 @@ public:
     /// @param desc Texture description to measure; never creates the texture.
     /// @param requirements Receives size, alignment, and the type mask.
     /// @return False when the backend cannot place textures on shared memory.
-    [[nodiscard]] virtual bool getTextureMemoryRequirements(
-        const RhiTextureDesc& desc,
-        RhiTextureMemoryRequirements& requirements) {
+    [[nodiscard]] virtual bool getTextureMemoryRequirements(const RhiTextureDesc& desc,
+                                                            RhiTextureMemoryRequirements& requirements) {
         (void)desc;
         (void)requirements;
         return false;
@@ -71,10 +66,8 @@ public:
     /// @param category Explicit ownership category for the backing allocation.
     /// @param debugName Optional label for tooling.
     /// @return Invalid handle when aliasing is unsupported or allocation fails.
-    virtual RhiMemoryHandle allocateTextureMemory(
-        const RhiTextureMemoryRequirements& requirements,
-        RhiMemoryCategory category,
-        const char* debugName) {
+    virtual RhiMemoryHandle allocateTextureMemory(const RhiTextureMemoryRequirements& requirements,
+                                                  RhiMemoryCategory category, const char* debugName) {
         (void)requirements;
         (void)category;
         (void)debugName;
@@ -88,8 +81,7 @@ public:
     /// @param desc Texture description whose requirements fit the block.
     /// @param memory Block returned by allocateTextureMemory on this device.
     /// @return Invalid handle when the block cannot host the description.
-    virtual RhiTextureHandle createPlacedTexture(const RhiTextureDesc& desc,
-                                                 RhiMemoryHandle memory) {
+    virtual RhiTextureHandle createPlacedTexture(const RhiTextureDesc& desc, RhiMemoryHandle memory) {
         (void)desc;
         (void)memory;
         return {};
@@ -114,17 +106,14 @@ public:
     /// @param firstQuery Index of the first query to reset.
     /// @param queryCount Number of queries in the reset range.
     /// @return True when the complete range was reset on the device thread.
-    virtual bool resetQueryPool(RhiQueryPoolHandle pool,
-                                uint32_t firstQuery,
-                                uint32_t queryCount) = 0;
+    virtual bool resetQueryPool(RhiQueryPoolHandle pool, uint32_t firstQuery, uint32_t queryCount) = 0;
     virtual void* mapBuffer(RhiBufferHandle buffer, uint64_t offset, uint64_t size) = 0;
     virtual void unmapBuffer(RhiBufferHandle buffer) = 0;
-    [[nodiscard]] virtual bool areQueryResultsAvailable(RhiQueryPoolHandle pool,
-                                                        uint32_t firstQuery,
+    [[nodiscard]] virtual bool areQueryResultsAvailable(RhiQueryPoolHandle pool, uint32_t firstQuery,
                                                         uint32_t queryCount) const = 0;
     // Timestamp query results are returned in nanoseconds on every backend.
-    virtual bool getQueryResults(RhiQueryPoolHandle pool, uint32_t firstQuery,
-                                 uint32_t queryCount, uint64_t* results) const = 0;
+    virtual bool getQueryResults(RhiQueryPoolHandle pool, uint32_t firstQuery, uint32_t queryCount,
+                                 uint64_t* results) const = 0;
 
     /// Returns the color view for the acquired frame until that frame is presented.
     [[nodiscard]] virtual RhiTextureViewHandle currentSwapchainColorView() const = 0;
@@ -165,23 +154,20 @@ public:
     virtual void destroyBindGroup(RhiBindGroupHandle handle) = 0;
     virtual void destroyQueryPool(RhiQueryPoolHandle handle) = 0;
 
-
-    [[nodiscard]] virtual std::unique_ptr<RhiCommandListPool> createCommandListPool(
-        const RhiCommandListPoolDesc& desc) = 0;
+    [[nodiscard]] virtual std::unique_ptr<RhiCommandListPool>
+    createCommandListPool(const RhiCommandListPoolDesc& desc) = 0;
 
     /// Submits executable command lists to the device queue in array order.
     /// @param info Command lists and diagnostic name for this queue submission.
     /// @param completionToken Optional destination for the submission completion identity.
     /// @return True when the complete submission was accepted atomically.
-    virtual bool submit(const RhiSubmitInfo& info,
-                        RhiSubmissionToken* completionToken = nullptr) = 0;
+    virtual bool submit(const RhiSubmitInfo& info, RhiSubmissionToken* completionToken = nullptr) = 0;
 
     /// Queries one submission without blocking the calling thread.
     /// @param token Token returned by this device instance.
     /// @param complete Receives true only after every command in the submission has completed.
     /// @return False when the token or calling thread violates the device contract.
-    [[nodiscard]] virtual bool isSubmissionComplete(RhiSubmissionToken token,
-                                                    bool& complete) = 0;
+    [[nodiscard]] virtual bool isSubmissionComplete(RhiSubmissionToken token, bool& complete) = 0;
 
     /// Blocks until one submission and every earlier queue submission have completed.
     /// @param token Token returned by this device instance.

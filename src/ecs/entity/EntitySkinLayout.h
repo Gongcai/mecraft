@@ -7,11 +7,7 @@
 
 namespace ecs {
 
-enum class EntitySkinLayoutKind {
-    Steve64x64,
-    Classic64x64,
-    Classic64x32
-};
+enum class EntitySkinLayoutKind { Steve64x64, Classic64x64, Classic64x32 };
 
 namespace EntitySkinLayoutIds {
 inline constexpr std::string_view STEVE_64X64 = "minecraft:steve_64x64";
@@ -34,24 +30,18 @@ inline std::optional<EntitySkinLayoutKind> tryParseEntitySkinLayoutId(const std:
 
 inline std::string_view entitySkinLayoutId(const EntitySkinLayoutKind kind) {
     switch (kind) {
-    case EntitySkinLayoutKind::Steve64x64:
-        return EntitySkinLayoutIds::STEVE_64X64;
-    case EntitySkinLayoutKind::Classic64x64:
-        return EntitySkinLayoutIds::CLASSIC_64X64;
-    case EntitySkinLayoutKind::Classic64x32:
-        return EntitySkinLayoutIds::CLASSIC_64X32;
+    case EntitySkinLayoutKind::Steve64x64: return EntitySkinLayoutIds::STEVE_64X64;
+    case EntitySkinLayoutKind::Classic64x64: return EntitySkinLayoutIds::CLASSIC_64X64;
+    case EntitySkinLayoutKind::Classic64x32: return EntitySkinLayoutIds::CLASSIC_64X32;
     }
     std::abort();
 }
 
 inline bool entitySkinLayoutUsesMirroredLeftLimbs(const EntitySkinLayoutKind kind) {
     switch (kind) {
-    case EntitySkinLayoutKind::Steve64x64:
-        return false;
-    case EntitySkinLayoutKind::Classic64x64:
-        return true;
-    case EntitySkinLayoutKind::Classic64x32:
-        return true;
+    case EntitySkinLayoutKind::Steve64x64: return false;
+    case EntitySkinLayoutKind::Classic64x64: return true;
+    case EntitySkinLayoutKind::Classic64x32: return true;
     }
     std::abort();
 }

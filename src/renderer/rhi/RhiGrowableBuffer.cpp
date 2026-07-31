@@ -8,21 +8,17 @@
 
 namespace {
 
-[[nodiscard]] bool resolveSteadyState(const RhiBufferUsageFlags usage,
-                                      RhiResourceState& state) {
+[[nodiscard]] bool resolveSteadyState(const RhiBufferUsageFlags usage, RhiResourceState& state) {
     // Indirect buffers may additionally be storage-writable (GPU occlusion
     // culling patches draw commands in place); their resting state between
     // uses stays IndirectArgument, the storage role is transient.
-    if ((usage & rhiFlag(RhiBufferUsage::Indirect)) != 0u &&
-        (usage & rhiFlag(RhiBufferUsage::Storage)) != 0u) {
+    if ((usage & rhiFlag(RhiBufferUsage::Indirect)) != 0u && (usage & rhiFlag(RhiBufferUsage::Storage)) != 0u) {
         state = RhiResourceState::IndirectArgument;
-        return (usage & (rhiFlag(RhiBufferUsage::Vertex) |
-                         rhiFlag(RhiBufferUsage::Index) |
+        return (usage & (rhiFlag(RhiBufferUsage::Vertex) | rhiFlag(RhiBufferUsage::Index) |
                          rhiFlag(RhiBufferUsage::Uniform))) == 0u;
     }
     uint32_t stateCount = 0u;
-    const auto select = [&](const RhiBufferUsage bufferUsage,
-                            const RhiResourceState candidate) {
+    const auto select = [&](const RhiBufferUsage bufferUsage, const RhiResourceState candidate) {
         if ((usage & rhiFlag(bufferUsage)) != 0u) {
             state = candidate;
             ++stateCount;
@@ -44,23 +40,17 @@ RhiGrowableBuffer::~RhiGrowableBuffer() {
     shutdown();
 }
 
-bool RhiGrowableBuffer::init(RhiDevice& rhiDevice,
-                             const uint64_t initialSize,
-                             const RhiBufferUsageFlags usage,
-                             const RhiMemoryCategory memoryCategory,
-                             const char* debugName) {
+bool RhiGrowableBuffer::init(RhiDevice& rhiDevice, const uint64_t initialSize, const RhiBufferUsageFlags usage,
+                             const RhiMemoryCategory memoryCategory, const char* debugName) {
     shutdown();
-    if (initialSize == 0u || usage == 0u ||
-        !rhiMemoryCategoryValid(memoryCategory)) {
+    if (initialSize == 0u || usage == 0u || !rhiMemoryCategoryValid(memoryCategory)) {
         return false;
     }
     if (!resolveSteadyState(usage, m_steadyState)) {
         return false;
     }
 
-    m_usage = usage |
-              rhiFlag(RhiBufferUsage::TransferSrc) |
-              rhiFlag(RhiBufferUsage::TransferDst);
+    m_usage = usage | rhiFlag(RhiBufferUsage::TransferSrc) | rhiFlag(RhiBufferUsage::TransferDst);
     RhiBufferDesc desc;
     desc.debugName = debugName;
     desc.size = initialSize;
@@ -101,8 +91,7 @@ void RhiGrowableBuffer::shutdown() {
     m_retiredBuffers.clear();
 }
 
-bool RhiGrowableBuffer::ensureCapacity(RhiCommandList& commandList,
-                                       const uint64_t requiredSize) {
+bool RhiGrowableBuffer::ensureCapacity(RhiCommandList& commandList, const uint64_t requiredSize) {
     if (m_rhiDevice == nullptr || !m_buffer.isValid() || requiredSize == 0u) {
         return false;
     }
@@ -111,8 +100,8 @@ bool RhiGrowableBuffer::ensureCapacity(RhiCommandList& commandList,
     }
 
     const uint64_t doubledCapacity = m_capacity <= std::numeric_limits<uint64_t>::max() / 2u
-        ? m_capacity * 2u
-        : std::numeric_limits<uint64_t>::max();
+                                         ? m_capacity * 2u
+                                         : std::numeric_limits<uint64_t>::max();
     const uint64_t newCapacity = std::max(requiredSize, doubledCapacity);
 
     RhiBufferDesc desc;
@@ -141,10 +130,7 @@ bool RhiGrowableBuffer::ensureCapacity(RhiCommandList& commandList,
     return true;
 }
 
-bool RhiGrowableBuffer::write(RhiCommandList& commandList,
-                              const uint64_t offset,
-                              const void* data,
-                              const size_t size) {
+bool RhiGrowableBuffer::write(RhiCommandList& commandList, const uint64_t offset, const void* data, const size_t size) {
     if (data == nullptr || size == 0u || (offset & 3u) != 0u || (size & 3u) != 0u ||
         offset > std::numeric_limits<uint64_t>::max() - size) {
         return false;

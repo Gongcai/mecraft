@@ -32,11 +32,10 @@ struct IVec3Hash {
 };
 
 glm::ivec3 toCell(const glm::vec3& pos) {
-    return {static_cast<int>(std::floor(pos.x * kInvCellSize)),
-            static_cast<int>(std::floor(pos.y * kInvCellSize)),
+    return {static_cast<int>(std::floor(pos.x * kInvCellSize)), static_cast<int>(std::floor(pos.y * kInvCellSize)),
             static_cast<int>(std::floor(pos.z * kInvCellSize))};
 }
-}
+} // namespace
 
 void ItemMergeSystem::update(SystemContext& ctx) {
     auto& registry = ctx.registry;
@@ -46,13 +45,8 @@ void ItemMergeSystem::update(SystemContext& ctx) {
         return;
     }
 
-    auto view = registry.view<DropItemTag,
-                              DropEntityIdComponent,
-                              TransformComponent,
-                              ItemComponent,
-                              VelocityComponent,
-                              LifetimeComponent,
-                              GroundedStateComponent>();
+    auto view = registry.view<DropItemTag, DropEntityIdComponent, TransformComponent, ItemComponent, VelocityComponent,
+                              LifetimeComponent, GroundedStateComponent>();
 
     std::vector<entt::entity> entities;
     for (const entt::entity e : view) {
@@ -130,8 +124,12 @@ void ItemMergeSystem::update(SystemContext& ctx) {
                         const float candidateWeight = static_cast<float>(candidateItem.stackCount);
                         const float invTotal = 1.0f / static_cast<float>(totalCount);
 
-                        baseTransform.position = (baseTransform.position * baseWeight + candidateTransform.position * candidateWeight) * invTotal;
-                        baseVelocity.velocity = (baseVelocity.velocity * baseWeight + candidateVelocity.velocity * candidateWeight) * invTotal;
+                        baseTransform.position =
+                            (baseTransform.position * baseWeight + candidateTransform.position * candidateWeight) *
+                            invTotal;
+                        baseVelocity.velocity =
+                            (baseVelocity.velocity * baseWeight + candidateVelocity.velocity * candidateWeight) *
+                            invTotal;
                         baseLifetime.ageSeconds = std::min(baseLifetime.ageSeconds, candidateLifetime.ageSeconds);
                         baseGrounded.grounded = baseGrounded.grounded || candidateGrounded.grounded;
                         baseItem.stackCount = totalCount;

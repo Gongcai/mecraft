@@ -33,10 +33,7 @@ int main() {
     auto chunk = std::make_shared<Chunk>(0, 0);
     const int y = 64;
     const int scy = Chunk::toSubChunkIndex(y);
-    chunk->setBlock(
-        0, y, 0,
-        BlockStateRegistry::getDefaultState(
-            BlockRegistry::requireIdByName("minecraft:stone")));
+    chunk->setBlock(0, y, 0, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:stone")));
     world.addChunk(chunk);
 
     ChunkMeshingService meshingService;

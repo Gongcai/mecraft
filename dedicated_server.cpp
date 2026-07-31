@@ -38,9 +38,12 @@ int main(int argc, char* argv[]) {
     uint32_t seed = 1234;
     int renderDistance = 8;
 
-    if (argc > 1) port = static_cast<uint16_t>(std::atoi(argv[1]));
-    if (argc > 2) seed = static_cast<uint32_t>(std::atoi(argv[2]));
-    if (argc > 3) renderDistance = std::atoi(argv[3]);
+    if (argc > 1)
+        port = static_cast<uint16_t>(std::atoi(argv[1]));
+    if (argc > 2)
+        seed = static_cast<uint32_t>(std::atoi(argv[2]));
+    if (argc > 3)
+        renderDistance = std::atoi(argv[3]);
 
     MECRAFT_LOG_PRINTF("=== Mecraft Dedicated Server ===\n");
     MECRAFT_LOG_PRINTF("Port: %d\n", port);
@@ -86,7 +89,7 @@ int main(int argc, char* argv[]) {
 
     // Server loop
     constexpr float kServerTickDt = 1.0f / 20.0f;
-    constexpr auto kTickInterval = std::chrono::milliseconds(50);  // 20 TPS
+    constexpr auto kTickInterval = std::chrono::milliseconds(50); // 20 TPS
 
     while (g_running) {
         const auto tickStart = std::chrono::steady_clock::now();
@@ -100,10 +103,9 @@ int main(int argc, char* argv[]) {
 
         // Print status periodically
         static int statusCounter = 0;
-        if (++statusCounter >= 200) {  // Every 10 seconds
+        if (++statusCounter >= 200) { // Every 10 seconds
             statusCounter = 0;
-            MECRAFT_LOG_PRINTF("[Status] Tick: %u, Chunks: %zu\n",
-                               server.currentTick(),
+            MECRAFT_LOG_PRINTF("[Status] Tick: %u, Chunks: %zu\n", server.currentTick(),
                                server.world().getActiveChunks().size());
         }
 

@@ -138,4 +138,4 @@ extern uint16_t HINGE_RIGHT;
 
 void init();
 
-}
+} // namespace PropIndices

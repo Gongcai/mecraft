@@ -43,11 +43,8 @@ bool advanceUntil(World& world, uint64_t& currentTick, const uint64_t maxTicks, 
     return predicate();
 }
 
-void fillBox(World& world,
-             const int minX, const int maxX,
-             const int minY, const int maxY,
-             const int minZ, const int maxZ,
-             const BlockID block) {
+void fillBox(World& world, const int minX, const int maxX, const int minY, const int maxY, const int minZ,
+             const int maxZ, const BlockID block) {
     for (int x = minX; x <= maxX; ++x) {
         for (int y = minY; y <= maxY; ++y) {
             for (int z = minZ; z <= maxZ; ++z) {
@@ -57,7 +54,7 @@ void fillBox(World& world,
     }
 }
 
-}
+} // namespace
 
 int main() {
     BlockRegistry::init(nullptr);
@@ -115,8 +112,7 @@ int main() {
 
     world.setBlock(0, baseY, 0, RUNTIME_ID_NULL);
     const auto baseWaterRetracted = [&]() {
-        return world.fluidSystem().pendingTickCount() == 0 &&
-               world.getBlock(1, baseY, 0) == NULL_BLOCK_STATE &&
+        return world.fluidSystem().pendingTickCount() == 0 && world.getBlock(1, baseY, 0) == NULL_BLOCK_STATE &&
                world.getBlock(1, baseY - 1, 0) == NULL_BLOCK_STATE;
     };
     if (!advanceUntil(world, currentTick, 128, baseWaterRetracted)) {
@@ -134,8 +130,7 @@ int main() {
         const auto waterFoundNearestHole = [&]() {
             return FluidState::isWater(world.getBlock(1, seekY, 0)) &&
                    world.getBlock(-1, seekY, 0) == NULL_BLOCK_STATE &&
-                   world.getBlock(0, seekY, 1) == NULL_BLOCK_STATE &&
-                   world.getBlock(0, seekY, -1) == NULL_BLOCK_STATE;
+                   world.getBlock(0, seekY, 1) == NULL_BLOCK_STATE && world.getBlock(0, seekY, -1) == NULL_BLOCK_STATE;
         };
         if (!advanceUntil(world, currentTick, 128, waterFoundNearestHole)) {
             return fail("water should seek the nearest hole instead of spreading evenly across flat ground");
@@ -193,8 +188,7 @@ int main() {
 
         world.setBlockState(21, flatY, 0, source);
         advanceTicks(world, currentTick, 8);
-        if (!FluidState::isWater(world.getBlock(22, flatY, 0)) ||
-            !FluidState::isWater(world.getBlock(20, flatY, 0)) ||
+        if (!FluidState::isWater(world.getBlock(22, flatY, 0)) || !FluidState::isWater(world.getBlock(20, flatY, 0)) ||
             !FluidState::isWater(world.getBlock(21, flatY, 1))) {
             return fail("water should still spread normally when no downhill hole is found");
         }
@@ -203,7 +197,8 @@ int main() {
     {
         const int naturalPoolY = 168;
         fillBox(world, -4, 4, naturalPoolY - 1, naturalPoolY + 2, -2, 2, RUNTIME_ID_NULL);
-        fillBox(world, -4, 4, naturalPoolY - 2, naturalPoolY - 2, -2, 2, BlockRegistry::requireIdByName("minecraft:stone"));
+        fillBox(world, -4, 4, naturalPoolY - 2, naturalPoolY - 2, -2, 2,
+                BlockRegistry::requireIdByName("minecraft:stone"));
         fillBox(world, 1, 1, naturalPoolY, naturalPoolY + 1, 0, 0, BlockRegistry::requireIdByName("minecraft:stone"));
         advanceTicks(world, currentTick, 4);
 
@@ -238,7 +233,8 @@ int main() {
     {
         const int unsupportedInfiniteY = 152;
         fillBox(world, 19, 31, unsupportedInfiniteY, unsupportedInfiniteY + 2, -6, 6, RUNTIME_ID_NULL);
-        fillBox(world, 19, 31, unsupportedInfiniteY - 1, unsupportedInfiniteY - 1, -6, 6, BlockRegistry::requireIdByName("minecraft:stone"));
+        fillBox(world, 19, 31, unsupportedInfiniteY - 1, unsupportedInfiniteY - 1, -6, 6,
+                BlockRegistry::requireIdByName("minecraft:stone"));
         world.setBlock(25, unsupportedInfiniteY - 1, 0, RUNTIME_ID_NULL);
         advanceTicks(world, currentTick, 4);
 

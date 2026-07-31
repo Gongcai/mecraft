@@ -36,9 +36,7 @@ public:
 
     void submitJobs(const glm::vec3& cameraPos, int submitBudget);
     void drainCompleted(World& world, int mergeBudget = 32, float timeBudgetMs = 1.0f);
-    int processInteractiveJobsInline(const glm::vec3& cameraPos,
-                                     int jobBudget,
-                                     int mergeBudget = 8,
+    int processInteractiveJobsInline(const glm::vec3& cameraPos, int jobBudget, int mergeBudget = 8,
                                      float mergeTimeBudgetMs = 2.0f);
 
     using LightChangeCallback = std::function<void(int64_t chunkKey, uint32_t dirtySubChunkMask)>;
@@ -75,8 +73,8 @@ private:
     static std::vector<BlockID> captureBlockSnapshot(const Chunk& chunk);
     static std::vector<uint8_t> capturePackedLightSnapshot(const Chunk& chunk);
     static std::vector<BorderUpdateBatch> collectBoundaryInputs(const LightChunkState& state);
-    static std::vector<BorderUpdateBatch> collectBoundaryInputs(
-        const std::array<std::optional<BorderUpdateBatch>, 4>& cache);
+    static std::vector<BorderUpdateBatch>
+    collectBoundaryInputs(const std::array<std::optional<BorderUpdateBatch>, 4>& cache);
     static void clearBoundaryInputs(std::array<std::optional<BorderUpdateBatch>, 4>& cache);
     void markChunkDirty(int64_t chunkKey, LightDirtyReason reason);
     void onWorkerCompleted(CompletedTicket ticket);
@@ -85,9 +83,8 @@ private:
     // workers never pay the full buildCurrentBasePacked() cost.
     void ensureBaseLightCache(const std::shared_ptr<Chunk>& chunk);
     void invalidateBaseLightCache(int64_t chunkKey);
-    void updateBaseLightCacheForBlockChange(const Chunk& chunk,
-                                            int localX, int y, int localZ,
-                                            BlockID oldId, BlockID newId);
+    void updateBaseLightCacheForBlockChange(const Chunk& chunk, int localX, int y, int localZ, BlockID oldId,
+                                            BlockID newId);
 
     World& m_world;
     ThreadPool* m_pool = nullptr;
@@ -104,9 +101,3 @@ private:
 };
 
 #endif // MECRAFT_LIGHTSERVICE_H
-
-
-
-
-
-

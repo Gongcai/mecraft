@@ -60,13 +60,9 @@ public:
     // Scale strategy (controls how this widget scales with GUI scale)
     UIScaleStrategy scaleStrategy = UIScaleStrategy::Uniform;
 
-    void setScaleStrategy(UIScaleStrategy strategy) {
-        scaleStrategy = strategy;
-    }
+    void setScaleStrategy(UIScaleStrategy strategy) { scaleStrategy = strategy; }
 
-    [[nodiscard]] UIScaleStrategy getScaleStrategy() const {
-        return scaleStrategy;
-    }
+    [[nodiscard]] UIScaleStrategy getScaleStrategy() const { return scaleStrategy; }
 
     // Get effective scale for this widget based on strategy
     [[nodiscard]] float getEffectiveScale(const UIRenderContext& ctx) const {
@@ -172,7 +168,8 @@ public:
 
     // Rendering
     virtual void render(const UIRenderContext& ctx) const {
-        if (!visible) return;
+        if (!visible)
+            return;
         renderSelf(ctx);
         for (const auto& child : m_children) {
             child->render(ctx);
@@ -180,19 +177,22 @@ public:
     }
 
     virtual void renderOverlay(const UIRenderContext& ctx) const {
-        if (!visible) return;
+        if (!visible)
+            return;
         for (const auto& child : m_children) {
             child->renderOverlay(ctx);
         }
     }
 
     virtual UIEventResult onOverlayInput(const UIInputEvent& event, const UIRenderContext& ctx) {
-        if (!visible) return UIEventResult::Ignored;
+        if (!visible)
+            return UIEventResult::Ignored;
         UIEventResult aggregate = UIEventResult::Ignored;
         // Overlay input follows overlay draw order and gives floating panels first chance.
         for (auto it = m_children.rbegin(); it != m_children.rend(); ++it) {
             UIEventResult result = (*it)->onOverlayInput(event, ctx);
-            if (result == UIEventResult::Consumed) return UIEventResult::Consumed;
+            if (result == UIEventResult::Consumed)
+                return UIEventResult::Consumed;
             if (result == UIEventResult::Handled) {
                 aggregate = UIEventResult::Handled;
             }
@@ -202,12 +202,14 @@ public:
 
     // Input
     virtual UIEventResult onInput(const UIInputEvent& event, const UIRenderContext& ctx) {
-        if (!visible) return UIEventResult::Ignored;
+        if (!visible)
+            return UIEventResult::Ignored;
         UIEventResult aggregate = UIEventResult::Ignored;
         // Reverse order child dispatch (top-most first)
         for (auto it = m_children.rbegin(); it != m_children.rend(); ++it) {
             UIEventResult result = (*it)->onInput(event, ctx);
-            if (result == UIEventResult::Consumed) return UIEventResult::Consumed;
+            if (result == UIEventResult::Consumed)
+                return UIEventResult::Consumed;
             if (result == UIEventResult::Handled) {
                 aggregate = UIEventResult::Handled;
             }
@@ -228,9 +230,7 @@ protected:
         return px >= ax && px < ax + aw && flippedY >= ay && flippedY < ay + ah;
     }
 
-    [[nodiscard]] virtual bool clipsDescendantInput() const {
-        return false;
-    }
+    [[nodiscard]] virtual bool clipsDescendantInput() const { return false; }
 
     [[nodiscard]] virtual bool hitTestDescendantInputClip(float px, float py, const UIRenderContext& ctx) const {
         (void)px;
@@ -239,51 +239,37 @@ protected:
         return true;
     }
 
-    virtual void renderSelf(const UIRenderContext& ctx) const {
-        (void)ctx;
-    }
+    virtual void renderSelf(const UIRenderContext& ctx) const { (void)ctx; }
 
     // Resolve position within a parent or screen using anchor
-    [[nodiscard]] static float resolveInParent(float parentX, float parentW, float controlW,
-                                                Anchor a, float offset) {
+    [[nodiscard]] static float resolveInParent(float parentX, float parentW, float controlW, Anchor a, float offset) {
         float base = parentX;
         switch (a) {
-            case Anchor::TopLeft:
-            case Anchor::CenterLeft:
-            case Anchor::BottomLeft:
-                break;
-            case Anchor::TopCenter:
-            case Anchor::Center:
-            case Anchor::BottomCenter:
-                base += (parentW - controlW) * 0.5f;
-                break;
-            case Anchor::TopRight:
-            case Anchor::CenterRight:
-            case Anchor::BottomRight:
-                base += parentW - controlW;
-                break;
+        case Anchor::TopLeft:
+        case Anchor::CenterLeft:
+        case Anchor::BottomLeft: break;
+        case Anchor::TopCenter:
+        case Anchor::Center:
+        case Anchor::BottomCenter: base += (parentW - controlW) * 0.5f; break;
+        case Anchor::TopRight:
+        case Anchor::CenterRight:
+        case Anchor::BottomRight: base += parentW - controlW; break;
         }
         return base + offset;
     }
 
-    [[nodiscard]] static float resolveInParentY(float parentY, float parentH, float controlH,
-                                                 Anchor a, float offset) {
+    [[nodiscard]] static float resolveInParentY(float parentY, float parentH, float controlH, Anchor a, float offset) {
         float base = parentY;
         switch (a) {
-            case Anchor::BottomLeft:
-            case Anchor::BottomCenter:
-            case Anchor::BottomRight:
-                break;
-            case Anchor::CenterLeft:
-            case Anchor::Center:
-            case Anchor::CenterRight:
-                base += (parentH - controlH) * 0.5f;
-                break;
-            case Anchor::TopLeft:
-            case Anchor::TopCenter:
-            case Anchor::TopRight:
-                base += parentH - controlH;
-                break;
+        case Anchor::BottomLeft:
+        case Anchor::BottomCenter:
+        case Anchor::BottomRight: break;
+        case Anchor::CenterLeft:
+        case Anchor::Center:
+        case Anchor::CenterRight: base += (parentH - controlH) * 0.5f; break;
+        case Anchor::TopLeft:
+        case Anchor::TopCenter:
+        case Anchor::TopRight: base += parentH - controlH; break;
         }
         return base + offset;
     }
@@ -291,8 +277,7 @@ protected:
 private:
     [[nodiscard]] bool isInsideAncestorInputClip(float px, float py, const UIRenderContext& ctx) const {
         for (const UIWidget* ancestor = m_parent; ancestor; ancestor = ancestor->m_parent) {
-            if (ancestor->clipsDescendantInput() &&
-                !ancestor->hitTestDescendantInputClip(px, py, ctx)) {
+            if (ancestor->clipsDescendantInput() && !ancestor->hitTestDescendantInputClip(px, py, ctx)) {
                 return false;
             }
         }

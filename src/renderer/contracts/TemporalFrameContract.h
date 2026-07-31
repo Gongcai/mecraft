@@ -17,9 +17,7 @@ struct TemporalExtent {
 
     /// Determine whether both pixel dimensions contain at least one pixel.
     /// @return True when width and height are both non-zero.
-    [[nodiscard]] constexpr bool isValid() const {
-        return width > 0u && height > 0u;
-    }
+    [[nodiscard]] constexpr bool isValid() const { return width > 0u && height > 0u; }
 };
 
 /// Compare two pixel extents component by component.
@@ -49,9 +47,8 @@ struct TemporalRect {
     /// @param resourceExtent Allocated resource dimensions containing the rectangle.
     /// @return True when every pixel addressed by the rectangle exists in the resource.
     [[nodiscard]] constexpr bool isValidWithin(const TemporalExtent resourceExtent) const {
-        return width > 0u && height > 0u && x <= resourceExtent.width &&
-               y <= resourceExtent.height && width <= resourceExtent.width - x &&
-               height <= resourceExtent.height - y;
+        return width > 0u && height > 0u && x <= resourceExtent.width && y <= resourceExtent.height &&
+               width <= resourceExtent.width - x && height <= resourceExtent.height - y;
     }
 };
 
@@ -60,8 +57,7 @@ struct TemporalRect {
 /// @param rhs Right rectangle.
 /// @return True when origin and dimensions are equal.
 [[nodiscard]] constexpr bool operator==(const TemporalRect lhs, const TemporalRect rhs) {
-    return lhs.x == rhs.x && lhs.y == rhs.y && lhs.width == rhs.width &&
-           lhs.height == rhs.height;
+    return lhs.x == rhs.x && lhs.y == rhs.y && lhs.width == rhs.width && lhs.height == rhs.height;
 }
 
 /// Compare two active rectangles for inequality.
@@ -90,11 +86,10 @@ struct TemporalFrameExtents {
     /// Validate relationships between allocated resources, active dimensions, and rectangles.
     /// @return True when every extent is valid and both active rectangles match their domains.
     [[nodiscard]] constexpr bool isValid() const {
-        return resourceExtent.isValid() && renderExtent.isValid() && signalExtent.isValid() &&
-               outputExtent.isValid() && renderRect.isValidWithin(resourceExtent) &&
-               signalRect.isValidWithin(resourceExtent) && renderRect.width == renderExtent.width &&
-               renderRect.height == renderExtent.height && signalRect.width == signalExtent.width &&
-               signalRect.height == signalExtent.height;
+        return resourceExtent.isValid() && renderExtent.isValid() && signalExtent.isValid() && outputExtent.isValid() &&
+               renderRect.isValidWithin(resourceExtent) && signalRect.isValidWithin(resourceExtent) &&
+               renderRect.width == renderExtent.width && renderRect.height == renderExtent.height &&
+               signalRect.width == signalExtent.width && signalRect.height == signalExtent.height;
     }
 };
 
@@ -104,19 +99,16 @@ struct TemporalFrameExtents {
 /// @param signalExtent Active dimensions of the temporal signal consumed this frame.
 /// @param outputExtent Presentation dimensions after reconstruction.
 /// @return A complete extent contract with origin-aligned active rectangles.
-[[nodiscard]] constexpr TemporalFrameExtents makeTemporalFrameExtents(
-    const TemporalExtent resourceExtent,
-    const TemporalExtent renderExtent,
-    const TemporalExtent signalExtent,
-    const TemporalExtent outputExtent) {
-    return {
-        resourceExtent,
-        renderExtent,
-        signalExtent,
-        outputExtent,
-        {0u, 0u, renderExtent.width, renderExtent.height},
-        {0u, 0u, signalExtent.width, signalExtent.height}
-    };
+[[nodiscard]] constexpr TemporalFrameExtents makeTemporalFrameExtents(const TemporalExtent resourceExtent,
+                                                                      const TemporalExtent renderExtent,
+                                                                      const TemporalExtent signalExtent,
+                                                                      const TemporalExtent outputExtent) {
+    return {resourceExtent,
+            renderExtent,
+            signalExtent,
+            outputExtent,
+            {0u, 0u, renderExtent.width, renderExtent.height},
+            {0u, 0u, signalExtent.width, signalExtent.height}};
 }
 
 /// Stable causes that invalidate temporal history or require temporal resource replacement.
@@ -141,8 +133,7 @@ using TemporalResetReasons = uint32_t;
 /// Convert one reset reason into its bitmask representation.
 /// @param reason Reset cause whose bit is requested.
 /// @return Bitmask containing only the selected cause, or zero for None.
-[[nodiscard]] constexpr TemporalResetReasons temporalResetReasonBit(
-    const TemporalResetReason reason) {
+[[nodiscard]] constexpr TemporalResetReasons temporalResetReasonBit(const TemporalResetReason reason) {
     return static_cast<TemporalResetReasons>(reason);
 }
 
@@ -150,9 +141,7 @@ using TemporalResetReasons = uint32_t;
 /// @param lhs Left reset cause.
 /// @param rhs Right reset cause.
 /// @return Bitmask containing both causes.
-[[nodiscard]] constexpr TemporalResetReasons operator|(
-    const TemporalResetReason lhs,
-    const TemporalResetReason rhs) {
+[[nodiscard]] constexpr TemporalResetReasons operator|(const TemporalResetReason lhs, const TemporalResetReason rhs) {
     return temporalResetReasonBit(lhs) | temporalResetReasonBit(rhs);
 }
 
@@ -160,9 +149,7 @@ using TemporalResetReasons = uint32_t;
 /// @param lhs Existing reset-reason bitmask.
 /// @param rhs Reset cause to add.
 /// @return Bitmask containing the previous and added causes.
-[[nodiscard]] constexpr TemporalResetReasons operator|(
-    const TemporalResetReasons lhs,
-    const TemporalResetReason rhs) {
+[[nodiscard]] constexpr TemporalResetReasons operator|(const TemporalResetReasons lhs, const TemporalResetReason rhs) {
     return lhs | temporalResetReasonBit(rhs);
 }
 
@@ -170,9 +157,8 @@ using TemporalResetReasons = uint32_t;
 /// @param reasons Reset-reason bitmask to inspect.
 /// @param reason Cause whose presence is queried.
 /// @return True when the selected cause is present.
-[[nodiscard]] constexpr bool hasTemporalResetReason(
-    const TemporalResetReasons reasons,
-    const TemporalResetReason reason) {
+[[nodiscard]] constexpr bool hasTemporalResetReason(const TemporalResetReasons reasons,
+                                                    const TemporalResetReason reason) {
     return (reasons & temporalResetReasonBit(reason)) != 0u;
 }
 
@@ -200,26 +186,23 @@ struct TemporalResetReasonDescriptor {
 };
 
 /// Fixed metadata table for every observable non-zero reset cause.
-inline constexpr std::array<TemporalResetReasonDescriptor, 12u>
-    kTemporalResetReasonDescriptors{{
-        {TemporalResetReason::FirstFrame, "first_frame"},
-        {TemporalResetReason::CameraCut, "camera_cut"},
-        {TemporalResetReason::Teleport, "teleport"},
-        {TemporalResetReason::WorldReload, "world_reload"},
-        {TemporalResetReason::WorldOriginShift, "world_origin_shift"},
-        {TemporalResetReason::ResourceExtent, "resource_extent"},
-        {TemporalResetReason::PipelineMode, "pipeline_mode"},
-        {TemporalResetReason::Method, "method"},
-        {TemporalResetReason::Projection, "projection"},
-        {TemporalResetReason::FrameDiscontinuity, "frame_discontinuity"},
-        {TemporalResetReason::AssetRevision, "asset_revision"},
-        {TemporalResetReason::ActiveRect, "active_rect"}
-    }};
+inline constexpr std::array<TemporalResetReasonDescriptor, 12u> kTemporalResetReasonDescriptors{
+    {{TemporalResetReason::FirstFrame, "first_frame"},
+     {TemporalResetReason::CameraCut, "camera_cut"},
+     {TemporalResetReason::Teleport, "teleport"},
+     {TemporalResetReason::WorldReload, "world_reload"},
+     {TemporalResetReason::WorldOriginShift, "world_origin_shift"},
+     {TemporalResetReason::ResourceExtent, "resource_extent"},
+     {TemporalResetReason::PipelineMode, "pipeline_mode"},
+     {TemporalResetReason::Method, "method"},
+     {TemporalResetReason::Projection, "projection"},
+     {TemporalResetReason::FrameDiscontinuity, "frame_discontinuity"},
+     {TemporalResetReason::AssetRevision, "asset_revision"},
+     {TemporalResetReason::ActiveRect, "active_rect"}}};
 
 /// Return the fixed table of observable temporal reset causes.
 /// @return Compile-time table containing every non-zero reason and its stable identifier.
-[[nodiscard]] constexpr const std::array<TemporalResetReasonDescriptor, 12u>&
-temporalResetReasonDescriptors() {
+[[nodiscard]] constexpr const std::array<TemporalResetReasonDescriptor, 12u>& temporalResetReasonDescriptors() {
     return kTemporalResetReasonDescriptors;
 }
 
@@ -230,18 +213,16 @@ temporalResetReasonDescriptors() {
 /// @param explicitReasons Event-driven reset causes supplied by scene and asset systems.
 /// @param policy Active-area changes accepted by the temporal history consumer.
 /// @return Bitmask containing every reason that invalidates this consumer's history.
-[[nodiscard]] constexpr TemporalResetReasons evaluateTemporalResetReasons(
-    const bool hasPreviousFrame,
-    const TemporalFrameExtents& previousExtents,
-    const TemporalFrameExtents& currentExtents,
-    TemporalResetReasons explicitReasons,
-    const TemporalHistoryPolicy policy) {
+[[nodiscard]] constexpr TemporalResetReasons evaluateTemporalResetReasons(const bool hasPreviousFrame,
+                                                                          const TemporalFrameExtents& previousExtents,
+                                                                          const TemporalFrameExtents& currentExtents,
+                                                                          TemporalResetReasons explicitReasons,
+                                                                          const TemporalHistoryPolicy policy) {
     if (!hasPreviousFrame && !requiresTemporalReset(explicitReasons)) {
         explicitReasons = explicitReasons | TemporalResetReason::FirstFrame;
     }
-    if (hasPreviousFrame &&
-        (previousExtents.resourceExtent != currentExtents.resourceExtent ||
-         previousExtents.outputExtent != currentExtents.outputExtent)) {
+    if (hasPreviousFrame && (previousExtents.resourceExtent != currentExtents.resourceExtent ||
+                             previousExtents.outputExtent != currentExtents.outputExtent)) {
         explicitReasons = explicitReasons | TemporalResetReason::ResourceExtent;
     }
     if (hasPreviousFrame && !policy.acceptsRenderRectChange &&
@@ -355,8 +336,8 @@ enum class TemporalFrameValidationError {
 /// Validate that a temporal frame is complete before it reaches a native SDK bridge.
 /// @param frame Frame contract populated by the renderer.
 /// @return Empty when valid, otherwise the first violated contract requirement.
-[[nodiscard]] inline std::optional<TemporalFrameValidationError> validateTemporalFrame(
-    const TemporalFrameInput& frame) {
+[[nodiscard]] inline std::optional<TemporalFrameValidationError>
+validateTemporalFrame(const TemporalFrameInput& frame) {
     if (!frame.extents.resourceExtent.isValid()) {
         return TemporalFrameValidationError::InvalidResourceExtent;
     }
@@ -379,14 +360,11 @@ enum class TemporalFrameValidationError {
         frame.extents.signalRect.height != frame.extents.signalExtent.height) {
         return TemporalFrameValidationError::InvalidSignalRect;
     }
-    if (!std::isfinite(frame.jitter.pixels.x) ||
-        !std::isfinite(frame.jitter.pixels.y) ||
-        !std::isfinite(frame.jitter.projectionOffset.x) ||
-        !std::isfinite(frame.jitter.projectionOffset.y)) {
+    if (!std::isfinite(frame.jitter.pixels.x) || !std::isfinite(frame.jitter.pixels.y) ||
+        !std::isfinite(frame.jitter.projectionOffset.x) || !std::isfinite(frame.jitter.projectionOffset.y)) {
         return TemporalFrameValidationError::InvalidJitter;
     }
-    if (!std::isfinite(frame.motionVectorScale.x) ||
-        !std::isfinite(frame.motionVectorScale.y) ||
+    if (!std::isfinite(frame.motionVectorScale.x) || !std::isfinite(frame.motionVectorScale.y) ||
         frame.motionVectorScale.x != static_cast<float>(frame.extents.renderExtent.width) ||
         frame.motionVectorScale.y != static_cast<float>(frame.extents.renderExtent.height)) {
         return TemporalFrameValidationError::InvalidMotionVectorScale;
@@ -397,8 +375,8 @@ enum class TemporalFrameValidationError {
     if (!std::isfinite(frame.preExposure) || frame.preExposure <= 0.0f) {
         return TemporalFrameValidationError::InvalidPreExposure;
     }
-    if (!std::isfinite(frame.cameraNear) || !std::isfinite(frame.cameraFar) ||
-        frame.cameraNear <= 0.0f || frame.cameraFar <= frame.cameraNear) {
+    if (!std::isfinite(frame.cameraNear) || !std::isfinite(frame.cameraFar) || frame.cameraNear <= 0.0f ||
+        frame.cameraFar <= frame.cameraNear) {
         return TemporalFrameValidationError::InvalidCameraRange;
     }
     if (!std::isfinite(frame.verticalFovRadians) || frame.verticalFovRadians <= 0.0f) {
@@ -407,12 +385,8 @@ enum class TemporalFrameValidationError {
     if (!std::isfinite(frame.cameraAspectRatio) || frame.cameraAspectRatio <= 0.0f) {
         return TemporalFrameValidationError::InvalidCameraAspectRatio;
     }
-    const glm::mat4 matrices[] = {
-        frame.cameraViewToClip,
-        frame.clipToCameraView,
-        frame.clipToPrevClip,
-        frame.prevClipToClip
-    };
+    const glm::mat4 matrices[] = {frame.cameraViewToClip, frame.clipToCameraView, frame.clipToPrevClip,
+                                  frame.prevClipToClip};
     for (const glm::mat4& matrix : matrices) {
         for (uint32_t column = 0u; column < 4u; ++column) {
             for (uint32_t row = 0u; row < 4u; ++row) {
@@ -422,46 +396,47 @@ enum class TemporalFrameValidationError {
             }
         }
     }
-    const glm::vec3 vectors[] = {
-        frame.cameraPosition,
-        frame.cameraUp,
-        frame.cameraRight,
-        frame.cameraForward
-    };
+    const glm::vec3 vectors[] = {frame.cameraPosition, frame.cameraUp, frame.cameraRight, frame.cameraForward};
     for (const glm::vec3& vector : vectors) {
-        if (!std::isfinite(vector.x) || !std::isfinite(vector.y) ||
-            !std::isfinite(vector.z)) {
+        if (!std::isfinite(vector.x) || !std::isfinite(vector.y) || !std::isfinite(vector.z)) {
             return TemporalFrameValidationError::InvalidCameraVectors;
         }
     }
-    if (glm::dot(frame.cameraUp, frame.cameraUp) <= 0.0f ||
-        glm::dot(frame.cameraRight, frame.cameraRight) <= 0.0f ||
+    if (glm::dot(frame.cameraUp, frame.cameraUp) <= 0.0f || glm::dot(frame.cameraRight, frame.cameraRight) <= 0.0f ||
         glm::dot(frame.cameraForward, frame.cameraForward) <= 0.0f) {
         return TemporalFrameValidationError::InvalidCameraVectors;
     }
-    if (!frame.textures.hdrColor.isValid()) return TemporalFrameValidationError::MissingHdrColor;
+    if (!frame.textures.hdrColor.isValid())
+        return TemporalFrameValidationError::MissingHdrColor;
     if (!frame.textures.hdrColorView.isValid()) {
         return TemporalFrameValidationError::MissingHdrColorView;
     }
-    if (!frame.textures.depth.isValid()) return TemporalFrameValidationError::MissingDepth;
-    if (!frame.textures.depthView.isValid()) return TemporalFrameValidationError::MissingDepthView;
-    if (!frame.textures.velocity.isValid()) return TemporalFrameValidationError::MissingVelocity;
+    if (!frame.textures.depth.isValid())
+        return TemporalFrameValidationError::MissingDepth;
+    if (!frame.textures.depthView.isValid())
+        return TemporalFrameValidationError::MissingDepthView;
+    if (!frame.textures.velocity.isValid())
+        return TemporalFrameValidationError::MissingVelocity;
     if (!frame.textures.velocityView.isValid()) {
         return TemporalFrameValidationError::MissingVelocityView;
     }
-    if (!frame.textures.exposure.isValid()) return TemporalFrameValidationError::MissingExposure;
+    if (!frame.textures.exposure.isValid())
+        return TemporalFrameValidationError::MissingExposure;
     if (!frame.textures.exposureView.isValid()) {
         return TemporalFrameValidationError::MissingExposureView;
     }
-    if (!frame.textures.reactiveMask.isValid()) return TemporalFrameValidationError::MissingReactiveMask;
+    if (!frame.textures.reactiveMask.isValid())
+        return TemporalFrameValidationError::MissingReactiveMask;
     if (!frame.textures.reactiveMaskView.isValid()) {
         return TemporalFrameValidationError::MissingReactiveMaskView;
     }
-    if (!frame.textures.transparencyMask.isValid()) return TemporalFrameValidationError::MissingTransparencyMask;
+    if (!frame.textures.transparencyMask.isValid())
+        return TemporalFrameValidationError::MissingTransparencyMask;
     if (!frame.textures.transparencyMaskView.isValid()) {
         return TemporalFrameValidationError::MissingTransparencyMaskView;
     }
-    if (!frame.textures.outputHdrColor.isValid()) return TemporalFrameValidationError::MissingOutputHdrColor;
+    if (!frame.textures.outputHdrColor.isValid())
+        return TemporalFrameValidationError::MissingOutputHdrColor;
     if (!frame.textures.outputHdrColorView.isValid()) {
         return TemporalFrameValidationError::MissingOutputHdrColorView;
     }

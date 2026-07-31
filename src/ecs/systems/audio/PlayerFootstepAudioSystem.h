@@ -10,10 +10,8 @@ namespace ecs {
 /// Successor of PlayerAudioBridgeSystem with the unified ISystem interface.
 class PlayerFootstepAudioSystem : public ISystem {
 public:
-    using Dependencies = SystemDependency<
-        std::tuple<LocalPlayerTag, LandingStateComponent>,
-        std::tuple<FootstepStateComponent, HurtEffectComponent>
-    >;
+    using Dependencies = SystemDependency<std::tuple<LocalPlayerTag, LandingStateComponent>,
+                                          std::tuple<FootstepStateComponent, HurtEffectComponent>>;
 
     void update(SystemContext& ctx) override;
 };

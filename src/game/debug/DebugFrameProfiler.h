@@ -149,21 +149,11 @@ public:
         m_timing.frameRenderAccumMs += ms;
         ++m_timing.frameSampleCount;
     }
-    void recordPollEvents(double ms,
-                          unsigned keyEvents,
-                          unsigned mouseButtonEvents,
-                          unsigned cursorPosEvents,
-                          unsigned scrollEvents,
-                          unsigned charEvents,
-                          double inputCallbackMs,
-                          double cursorPosCallbackMs,
-                          double imguiCallbackMs,
-                          double imguiCursorPosCallbackMs,
-                          double imguiCursorPosBackendMs,
-                          double imguiWndProcMs,
-                          double imguiWndProcSlowestMs,
-                          unsigned imguiWndProcSlowestMsg,
-                          unsigned imguiWndProcCount) {
+    void recordPollEvents(double ms, unsigned keyEvents, unsigned mouseButtonEvents, unsigned cursorPosEvents,
+                          unsigned scrollEvents, unsigned charEvents, double inputCallbackMs,
+                          double cursorPosCallbackMs, double imguiCallbackMs, double imguiCursorPosCallbackMs,
+                          double imguiCursorPosBackendMs, double imguiWndProcMs, double imguiWndProcSlowestMs,
+                          unsigned imguiWndProcSlowestMsg, unsigned imguiWndProcCount) {
         m_timing.pollEventsAccumMs += ms;
         m_timing.framePollEventsAccumMs += ms;
         m_timing.framePollInputCallbackAccumMs += inputCallbackMs;
@@ -191,9 +181,7 @@ public:
         m_timing.appRenderDispatchAccumMs += ms;
         m_timing.frameAppRenderDispatchAccumMs += ms;
     }
-    void recordPresentationAcquire(double ms) {
-        m_timing.framePresentationAcquireAccumMs += ms;
-    }
+    void recordPresentationAcquire(double ms) { m_timing.framePresentationAcquireAccumMs += ms; }
     void recordRenderSnapshot(double ms) { m_timing.frameRenderSnapshotAccumMs += ms; }
     void recordRenderScene(double ms) { m_timing.frameRenderSceneAccumMs += ms; }
     void recordRenderUi(double ms) { m_timing.frameRenderUiAccumMs += ms; }

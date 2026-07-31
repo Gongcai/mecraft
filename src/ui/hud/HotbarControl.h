@@ -14,8 +14,7 @@ class ResourceMgr;
 class TextRenderer;
 class LocaleManager;
 
-class HotbarControl : public UIWidget
-{
+class HotbarControl : public UIWidget {
 public:
     void init(ResourceMgr& resourceMgr) override;
     void shutdown() override;
@@ -42,29 +41,22 @@ protected:
 
 private:
     void renderInternal(const UIRenderContext& context, const Inventory& inventory) const;
-    void renderCountText(const UIRenderContext& context,
-                         const int* slotCounts,
-                         int slotCount,
-                         float slotStride,
-                         float startX,
-                         float startY,
-                         const TextRenderer& textRenderer) const;
-    void renderItemName(const UIRenderContext& context,
-                        const Inventory& inventory,
-                        const TextRenderer& textRenderer,
+    void renderCountText(const UIRenderContext& context, const int* slotCounts, int slotCount, float slotStride,
+                         float startX, float startY, const TextRenderer& textRenderer) const;
+    void renderItemName(const UIRenderContext& context, const Inventory& inventory, const TextRenderer& textRenderer,
                         float timeSeconds) const;
     void checkSlotChange(const Inventory& inventory, const LocaleManager* localeManager = nullptr) const;
 
     ResourceMgr* m_resourceMgr = nullptr;
     const Inventory* m_inventory = nullptr;
 
-    std::array<float, 4> m_bgColor {1.0f, 1.0f, 1.0f, 1.0f};
-    std::array<float, 4> m_borderColor {1.0f, 1.0f, 1.0f, 0.9f};
-    std::array<float, 4> m_iconTintColor {1.0f, 1.0f, 1.0f, 1.0f};
+    std::array<float, 4> m_bgColor{1.0f, 1.0f, 1.0f, 1.0f};
+    std::array<float, 4> m_borderColor{1.0f, 1.0f, 1.0f, 0.9f};
+    std::array<float, 4> m_iconTintColor{1.0f, 1.0f, 1.0f, 1.0f};
 
     // Count text layout parameters.
     // Actual font scale = countTextScale * slotSize / 8.0 (8 = base glyph pixel size).
-    float m_countTextScale = 0.35f;     // Ratio of slot size for text height
+    float m_countTextScale = 0.35f; // Ratio of slot size for text height
 
     // Item name popup state (mutable to allow updates in const render method)
     mutable int m_lastSelectedSlot = -1;

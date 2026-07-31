@@ -21,9 +21,9 @@ public:
     // These are in the shaderpack's internal atmosphere units, not real-world lux.
     struct SkyIlluminanceData {
         glm::vec3 directIlluminance = glm::vec3(0.0f);
-        glm::vec3 skyIlluminance    = glm::vec3(0.0f);
-        glm::vec3 sunIlluminance    = glm::vec3(0.0f);
-        glm::vec3 moonIlluminance   = glm::vec3(0.0f);
+        glm::vec3 skyIlluminance = glm::vec3(0.0f);
+        glm::vec3 sunIlluminance = glm::vec3(0.0f);
+        glm::vec3 moonIlluminance = glm::vec3(0.0f);
         glm::vec3 cloudDynamicWeather = glm::vec3(0.0f);
     };
 
@@ -79,18 +79,14 @@ public:
 
     void init(ResourceMgr& resourceMgr, RhiDevice& rhiDevice);
     void shutdown();
-    void render(const Camera& camera, float aspect, const DayNightSystem& dayNight,
-                RhiCommandList& commandList);
-    void renderCloudySkyCapture(const SkyColors& colors, RhiCommandList& commandList,
-                                RhiTextureViewHandle targetView, int skyCaptureWidth,
-                                int skyCaptureHeight, RhiTextureViewHandle atmosphereLutView,
-                                RhiTextureHandle noiseTexture,
-                                const SkyIlluminanceData& illuminance,
+    void render(const Camera& camera, float aspect, const DayNightSystem& dayNight, RhiCommandList& commandList);
+    void renderCloudySkyCapture(const SkyColors& colors, RhiCommandList& commandList, RhiTextureViewHandle targetView,
+                                int skyCaptureWidth, int skyCaptureHeight, RhiTextureViewHandle atmosphereLutView,
+                                RhiTextureHandle noiseTexture, const SkyIlluminanceData& illuminance,
                                 const CloudySkyCaptureParams& params);
     [[nodiscard]] SkyColors computeSkyColors(const DayNightSystem& dayNight) const;
-    [[nodiscard]] SkyIlluminanceData computeSkyIlluminance(const SkyColors& colors,
-                                                            float weatherWetness = 0.0f,
-                                                            float weatherStorm = 0.0f) const;
+    [[nodiscard]] SkyIlluminanceData computeSkyIlluminance(const SkyColors& colors, float weatherWetness = 0.0f,
+                                                           float weatherStorm = 0.0f) const;
     [[nodiscard]] static glm::vec3 computeCloudDynamicWeather(int worldDay, int worldTime);
     [[nodiscard]] glm::vec3 getLastFogColor() const;
     [[nodiscard]] static std::pair<glm::vec2, glm::vec2> getMoonPhaseUv(int phaseIndex);
@@ -125,12 +121,11 @@ private:
     void initMeshes();
     void destroyMeshes();
     void initCloudMesh();
-    void synchronizeCaptureResources(RhiTextureViewHandle atmosphereLutView,
-                                     RhiTextureHandle noiseTexture);
-    void renderClouds(const Camera& camera, float aspect, const DayNightSystem& dayNight,
-                      const SkyColors& colors, RhiCommandList& commandList);
-    void renderHalo(const Camera& camera, float aspect, const DayNightSystem& dayNight,
-                    const SkyColors& colors, RhiCommandList& commandList);
+    void synchronizeCaptureResources(RhiTextureViewHandle atmosphereLutView, RhiTextureHandle noiseTexture);
+    void renderClouds(const Camera& camera, float aspect, const DayNightSystem& dayNight, const SkyColors& colors,
+                      RhiCommandList& commandList);
+    void renderHalo(const Camera& camera, float aspect, const DayNightSystem& dayNight, const SkyColors& colors,
+                    RhiCommandList& commandList);
     [[nodiscard]] glm::mat4 buildSkyView(const Camera& camera) const;
     [[nodiscard]] glm::vec3 directionFromAngle(float angleRadians) const;
 

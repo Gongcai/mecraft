@@ -9,24 +9,17 @@
 #include "../../world/fluid/FluidState.h"
 
 namespace gameplay_state_detail {
-    inline std::string getRandomName(const std::string& name, int maxRandomLength) {
-        static std::random_device rd;
-        static std::mt19937 gen(rd());
-        std::uniform_int_distribution<> dist(1, maxRandomLength);
-        return name + std::to_string(dist(gen));
-    }
+inline std::string getRandomName(const std::string& name, int maxRandomLength) {
+    static std::random_device rd;
+    static std::mt19937 gen(rd());
+    std::uniform_int_distribution<> dist(1, maxRandomLength);
+    return name + std::to_string(dist(gen));
 }
+} // namespace gameplay_state_detail
 
-enum class GameplayBlockAction {
-    None,
-    Break,
-    Place
-};
+enum class GameplayBlockAction { None, Break, Place };
 
-enum class GameplayMode {
-    Survival,
-    Creative
-};
+enum class GameplayMode { Survival, Creative };
 
 struct GameplayBlockActionRequest {
     bool hasHit = false;
@@ -39,30 +32,29 @@ struct GameplayBlockActionRequest {
 };
 
 namespace gameplay_mode_rules_detail {
-    inline GameplayBlockAction decideDefaultBlockAction(const GameplayBlockActionRequest& request) {
-        if (!request.hasHit) {
-            return GameplayBlockAction::None;
-        }
-        if (request.wantsBreak) {
-            return GameplayBlockAction::Break;
-        }
-        if (!request.wantsPlace) {
-            return GameplayBlockAction::None;
-        }
-        if (request.placeCooldownRemaining > 0.0f) {
-            return GameplayBlockAction::None;
-        }
-        if (request.targetBlock != NULL_BLOCK_STATE &&
-            !FluidState::isWater(request.targetBlock) &&
-            !request.placementReplacesTarget) {
-            return GameplayBlockAction::None;
-        }
-        if (request.playerWouldOverlapPlaceBlock) {
-            return GameplayBlockAction::None;
-        }
-        return GameplayBlockAction::Place;
+inline GameplayBlockAction decideDefaultBlockAction(const GameplayBlockActionRequest& request) {
+    if (!request.hasHit) {
+        return GameplayBlockAction::None;
     }
+    if (request.wantsBreak) {
+        return GameplayBlockAction::Break;
+    }
+    if (!request.wantsPlace) {
+        return GameplayBlockAction::None;
+    }
+    if (request.placeCooldownRemaining > 0.0f) {
+        return GameplayBlockAction::None;
+    }
+    if (request.targetBlock != NULL_BLOCK_STATE && !FluidState::isWater(request.targetBlock) &&
+        !request.placementReplacesTarget) {
+        return GameplayBlockAction::None;
+    }
+    if (request.playerWouldOverlapPlaceBlock) {
+        return GameplayBlockAction::None;
+    }
+    return GameplayBlockAction::Place;
 }
+} // namespace gameplay_mode_rules_detail
 
 class IGameplayModeRules {
 public:
@@ -84,17 +76,13 @@ public:
         return gameplay_mode_rules_detail::decideDefaultBlockAction(request);
     }
 
-    [[nodiscard]] float placeCooldownSeconds() const override {
-        return 0.18f;
-    }
+    [[nodiscard]] float placeCooldownSeconds() const override { return 0.18f; }
 
     [[nodiscard]] float breakDurationMs(BlockID targetBlock) const override {
         return std::max(1.0f, static_cast<float>(BlockRegistry::get(targetBlock).timeToBreak));
     }
 
-    [[nodiscard]] bool shouldReportBreakProgress() const override {
-        return true;
-    }
+    [[nodiscard]] bool shouldReportBreakProgress() const override { return true; }
 
 private:
     SurvivalModeRules() = default;
@@ -111,23 +99,17 @@ public:
         return gameplay_mode_rules_detail::decideDefaultBlockAction(request);
     }
 
-    [[nodiscard]] float placeCooldownSeconds() const override {
-        return 0.18f;
-    }
+    [[nodiscard]] float placeCooldownSeconds() const override { return 0.18f; }
 
     [[nodiscard]] float breakDurationMs(BlockID /*targetBlock*/) const override {
         // Creative uses a fixed break speed and ignores per-block hardness.
         return 180.0f;
     }
 
-    [[nodiscard]] bool shouldReportBreakProgress() const override {
-        return false;
-    }
+    [[nodiscard]] bool shouldReportBreakProgress() const override { return false; }
 
 private:
     CreativeModeRules() = default;
 };
 
 #endif //MECRAFT_GAMEPLAYMODERULES_H
-
-

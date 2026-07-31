@@ -13,10 +13,14 @@
 // Helper: Get active modifiers from snapshot
 static int getActiveModifiers(const InputSnapshot& input) {
     int mods = 0;
-    if (input.isKeyHeld(GLFW_KEY_LEFT_SHIFT) || input.isKeyHeld(GLFW_KEY_RIGHT_SHIFT)) mods |= GLFW_MOD_SHIFT;
-    if (input.isKeyHeld(GLFW_KEY_LEFT_CONTROL) || input.isKeyHeld(GLFW_KEY_RIGHT_CONTROL)) mods |= GLFW_MOD_CONTROL;
-    if (input.isKeyHeld(GLFW_KEY_LEFT_ALT) || input.isKeyHeld(GLFW_KEY_RIGHT_ALT)) mods |= GLFW_MOD_ALT;
-    if (input.isKeyHeld(GLFW_KEY_LEFT_SUPER) || input.isKeyHeld(GLFW_KEY_RIGHT_SUPER)) mods |= GLFW_MOD_SUPER;
+    if (input.isKeyHeld(GLFW_KEY_LEFT_SHIFT) || input.isKeyHeld(GLFW_KEY_RIGHT_SHIFT))
+        mods |= GLFW_MOD_SHIFT;
+    if (input.isKeyHeld(GLFW_KEY_LEFT_CONTROL) || input.isKeyHeld(GLFW_KEY_RIGHT_CONTROL))
+        mods |= GLFW_MOD_CONTROL;
+    if (input.isKeyHeld(GLFW_KEY_LEFT_ALT) || input.isKeyHeld(GLFW_KEY_RIGHT_ALT))
+        mods |= GLFW_MOD_ALT;
+    if (input.isKeyHeld(GLFW_KEY_LEFT_SUPER) || input.isKeyHeld(GLFW_KEY_RIGHT_SUPER))
+        mods |= GLFW_MOD_SUPER;
     return mods;
 }
 
@@ -24,7 +28,8 @@ void ActionMap::bindKey(Action action, int keyCode, InputContextType context) {
     bindKey(action, keyCode, TriggerType::Held, context);
 }
 
-void ActionMap::bindAxisKey(Axis axis, int positiveKeyCode, int negativeKeyCode, InputContextType context, bool invert) {
+void ActionMap::bindAxisKey(Axis axis, int positiveKeyCode, int negativeKeyCode, InputContextType context,
+                            bool invert) {
     AxisBinding binding;
     binding.context = context;
     binding.positiveKey = positiveKeyCode;
@@ -91,51 +96,27 @@ bool ActionMap::evaluateBinding(const InputBinding& binding, const InputSnapshot
     bool active = false;
     if (binding.device == InputDevice::Keyboard) {
         switch (binding.trigger) {
-            case TriggerType::Pressed:
-                active = input.isKeyJustPressed(binding.control);
-                break;
-            case TriggerType::Released:
-                active = input.isKeyJustReleased(binding.control);
-                break;
-            case TriggerType::Held:
-                active = input.isKeyHeld(binding.control);
-                break;
-            case TriggerType::DoubleTap:
-                active = input.isKeyDoubleTapped(binding.control);
-                break;
+        case TriggerType::Pressed: active = input.isKeyJustPressed(binding.control); break;
+        case TriggerType::Released: active = input.isKeyJustReleased(binding.control); break;
+        case TriggerType::Held: active = input.isKeyHeld(binding.control); break;
+        case TriggerType::DoubleTap: active = input.isKeyDoubleTapped(binding.control); break;
         }
     } else if (binding.device == InputDevice::Mouse) {
         switch (binding.trigger) {
-            case TriggerType::Pressed:
-                active = input.isMouseButtonJustPressed(binding.control);
-                break;
-            case TriggerType::Released:
-                active = input.isMouseButtonJustReleased(binding.control);
-                break;
-            case TriggerType::Held:
-                active = input.isMouseButtonHeld(binding.control);
-                break;
-            case TriggerType::DoubleTap:
-                active = input.isMouseButtonDoubleTapped(binding.control);
-                break;
+        case TriggerType::Pressed: active = input.isMouseButtonJustPressed(binding.control); break;
+        case TriggerType::Released: active = input.isMouseButtonJustReleased(binding.control); break;
+        case TriggerType::Held: active = input.isMouseButtonHeld(binding.control); break;
+        case TriggerType::DoubleTap: active = input.isMouseButtonDoubleTapped(binding.control); break;
         }
     } else if (binding.device == InputDevice::Gamepad) {
         if (!input.isGamepadConnected()) {
             return false;
         }
         switch (binding.trigger) {
-            case TriggerType::Pressed:
-                active = input.isGamepadButtonJustPressed(binding.control);
-                break;
-            case TriggerType::Released:
-                active = input.isGamepadButtonJustReleased(binding.control);
-                break;
-            case TriggerType::Held:
-                active = input.isGamepadButtonHeld(binding.control);
-                break;
-            case TriggerType::DoubleTap:
-                active = input.isGamepadButtonDoubleTapped(binding.control);
-                break;
+        case TriggerType::Pressed: active = input.isGamepadButtonJustPressed(binding.control); break;
+        case TriggerType::Released: active = input.isGamepadButtonJustReleased(binding.control); break;
+        case TriggerType::Held: active = input.isGamepadButtonHeld(binding.control); break;
+        case TriggerType::DoubleTap: active = input.isGamepadButtonDoubleTapped(binding.control); break;
         }
     } else if (binding.device == InputDevice::Scroll) {
         // control: 1 = scroll up, -1 = scroll down
@@ -151,7 +132,8 @@ bool ActionMap::evaluateBinding(const InputBinding& binding, const InputSnapshot
 
 bool ActionMap::isActionTriggered(Action action, InputContextType context, const InputSnapshot& input) const {
     auto it = m_bindings.find(action);
-    if (it == m_bindings.end()) return false;
+    if (it == m_bindings.end())
+        return false;
 
     for (const auto& binding : it->second) {
         if (binding.context == context) {
@@ -165,7 +147,8 @@ bool ActionMap::isActionTriggered(Action action, InputContextType context, const
 
 bool ActionMap::isActionDoubleTapped(Action action, InputContextType context, const InputSnapshot& input) const {
     auto it = m_bindings.find(action);
-    if (it == m_bindings.end()) return false;
+    if (it == m_bindings.end())
+        return false;
 
     for (const auto& binding : it->second) {
         if (binding.context == context && binding.trigger == TriggerType::DoubleTap) {
@@ -177,7 +160,7 @@ bool ActionMap::isActionDoubleTapped(Action action, InputContextType context, co
     return false;
 }
 
-float ActionMap::getAxisValue(Axis axis, InputContextType context, const InputSnapshot &input) const {
+float ActionMap::getAxisValue(Axis axis, InputContextType context, const InputSnapshot& input) const {
     auto it = m_axisBindings.find(axis);
     if (it != m_axisBindings.end()) {
         for (const auto& binding : it->second) {
@@ -214,8 +197,10 @@ float ActionMap::getAxisValue(Axis axis, InputContextType context, const InputSn
                     }
                 } else if (binding.nativeAxis == NativeAxis::None) {
                     // Only check keyboard keys when nativeAxis is None (keyboard binding)
-                    if (input.isKeyHeld(binding.positiveKey)) value += 1.0f;
-                    if (input.isKeyHeld(binding.negativeKey)) value -= 1.0f;
+                    if (input.isKeyHeld(binding.positiveKey))
+                        value += 1.0f;
+                    if (input.isKeyHeld(binding.negativeKey))
+                        value -= 1.0f;
                 }
 
                 if (value != 0.0f) {
@@ -229,52 +214,55 @@ float ActionMap::getAxisValue(Axis axis, InputContextType context, const InputSn
 
 // Helper to map string to Action
 static Action stringToAction(const std::string& str) {
-    static const std::map<std::string, Action> lookup = {
-        {"Jump", Action::Jump},
-        {"Sprint", Action::Sprint},
-        {"Crouch", Action::Crouch},
-        {"Attack", Action::Attack},
-        {"UseItem", Action::UseItem},
-        {"Inventory", Action::Inventory},
-        {"Menu", Action::Menu},
-        {"Hotbar1", Action::Hotbar1},
-        {"Hotbar2", Action::Hotbar2},
-        {"Hotbar3", Action::Hotbar3},
-        {"Hotbar4", Action::Hotbar4},
-        {"Hotbar5", Action::Hotbar5},
-        {"Hotbar6", Action::Hotbar6},
-        {"Hotbar7", Action::Hotbar7},
-        {"Hotbar8", Action::Hotbar8},
-        {"Hotbar9", Action::Hotbar9},
-        {"HotbarScrollUp", Action::HotbarScrollUp},
-        {"HotbarScrollDown", Action::HotbarScrollDown},
-        {"Confirm", Action::Confirm},
-        {"Cancel", Action::Cancel},
-        {"UIPrimaryClick", Action::UIPrimaryClick},
-        {"UISecondaryClick", Action::UISecondaryClick},
-        {"UIPrimaryRelease", Action::UIPrimaryRelease},
-        {"UISecondaryRelease", Action::UISecondaryRelease},
-        {"Up", Action::Up},
-        {"Down", Action::Down},
-        {"Left", Action::Left},
-        {"Right", Action::Right},
-        {"Backspace",Action::Backspace},
-        {"OpenCommand", Action::OpenCommand},
-        {"ToggleViewMode", Action::ToggleViewMode},
-        {"TabLeft", Action::TabLeft},
-        {"TabRight", Action::TabRight}
-    };
+    static const std::map<std::string, Action> lookup = {{"Jump", Action::Jump},
+                                                         {"Sprint", Action::Sprint},
+                                                         {"Crouch", Action::Crouch},
+                                                         {"Attack", Action::Attack},
+                                                         {"UseItem", Action::UseItem},
+                                                         {"Inventory", Action::Inventory},
+                                                         {"Menu", Action::Menu},
+                                                         {"Hotbar1", Action::Hotbar1},
+                                                         {"Hotbar2", Action::Hotbar2},
+                                                         {"Hotbar3", Action::Hotbar3},
+                                                         {"Hotbar4", Action::Hotbar4},
+                                                         {"Hotbar5", Action::Hotbar5},
+                                                         {"Hotbar6", Action::Hotbar6},
+                                                         {"Hotbar7", Action::Hotbar7},
+                                                         {"Hotbar8", Action::Hotbar8},
+                                                         {"Hotbar9", Action::Hotbar9},
+                                                         {"HotbarScrollUp", Action::HotbarScrollUp},
+                                                         {"HotbarScrollDown", Action::HotbarScrollDown},
+                                                         {"Confirm", Action::Confirm},
+                                                         {"Cancel", Action::Cancel},
+                                                         {"UIPrimaryClick", Action::UIPrimaryClick},
+                                                         {"UISecondaryClick", Action::UISecondaryClick},
+                                                         {"UIPrimaryRelease", Action::UIPrimaryRelease},
+                                                         {"UISecondaryRelease", Action::UISecondaryRelease},
+                                                         {"Up", Action::Up},
+                                                         {"Down", Action::Down},
+                                                         {"Left", Action::Left},
+                                                         {"Right", Action::Right},
+                                                         {"Backspace", Action::Backspace},
+                                                         {"OpenCommand", Action::OpenCommand},
+                                                         {"ToggleViewMode", Action::ToggleViewMode},
+                                                         {"TabLeft", Action::TabLeft},
+                                                         {"TabRight", Action::TabRight}};
     auto it = lookup.find(str);
-    if (it != lookup.end()) return it->second;
+    if (it != lookup.end())
+        return it->second;
     // Fallback or warning
     return Action::Menu;
 }
 // 在现有的 stringToAction 下面新增
 static Axis stringToAxis(const std::string& str) {
-    if (str == "Vertical") return Axis::Vertical;
-    if (str == "Horizontal") return Axis::Horizontal;
-    if (str == "LookX") return Axis::LookX;
-    if (str == "LookY") return Axis::LookY;
+    if (str == "Vertical")
+        return Axis::Vertical;
+    if (str == "Horizontal")
+        return Axis::Horizontal;
+    if (str == "LookX")
+        return Axis::LookX;
+    if (str == "LookY")
+        return Axis::LookY;
     return Axis::Vertical; // 或者随便选个默认
 }
 
@@ -282,27 +270,44 @@ static Axis stringToAxis(const std::string& str) {
 static int stringToKey(const std::string& str) {
     if (str.length() == 1) {
         char c = std::toupper(str[0]);
-        if (c >= 'A' && c <= 'Z') return GLFW_KEY_A + (c - 'A');
-        if (c >= '0' && c <= '9') return GLFW_KEY_0 + (c - '0');
+        if (c >= 'A' && c <= 'Z')
+            return GLFW_KEY_A + (c - 'A');
+        if (c >= '0' && c <= '9')
+            return GLFW_KEY_0 + (c - '0');
     }
-    if (str == "SPACE") return GLFW_KEY_SPACE;
-    if (str == "ESCAPE") return GLFW_KEY_ESCAPE;
-    if (str == "ENTER") return GLFW_KEY_ENTER;
-    if (str == "KP_ENTER") return GLFW_KEY_KP_ENTER;
-    if (str == "LEFT_SHIFT") return GLFW_KEY_LEFT_SHIFT;
-    if (str == "LEFT_CONTROL") return GLFW_KEY_LEFT_CONTROL;
-    if (str == "TAB") return GLFW_KEY_TAB;
-    if (str == "W") return GLFW_KEY_W; // specific override if length==1 fails
-    if (str == "BACKSPACE") return GLFW_KEY_BACKSPACE;
-    if (str == "SLASH") return GLFW_KEY_SLASH;
-    if (str == "UP") return GLFW_KEY_UP;
-    if (str == "DOWN") return GLFW_KEY_DOWN;
-    if (str == "LEFT") return GLFW_KEY_LEFT;
-    if (str == "RIGHT") return GLFW_KEY_RIGHT;
+    if (str == "SPACE")
+        return GLFW_KEY_SPACE;
+    if (str == "ESCAPE")
+        return GLFW_KEY_ESCAPE;
+    if (str == "ENTER")
+        return GLFW_KEY_ENTER;
+    if (str == "KP_ENTER")
+        return GLFW_KEY_KP_ENTER;
+    if (str == "LEFT_SHIFT")
+        return GLFW_KEY_LEFT_SHIFT;
+    if (str == "LEFT_CONTROL")
+        return GLFW_KEY_LEFT_CONTROL;
+    if (str == "TAB")
+        return GLFW_KEY_TAB;
+    if (str == "W")
+        return GLFW_KEY_W; // specific override if length==1 fails
+    if (str == "BACKSPACE")
+        return GLFW_KEY_BACKSPACE;
+    if (str == "SLASH")
+        return GLFW_KEY_SLASH;
+    if (str == "UP")
+        return GLFW_KEY_UP;
+    if (str == "DOWN")
+        return GLFW_KEY_DOWN;
+    if (str == "LEFT")
+        return GLFW_KEY_LEFT;
+    if (str == "RIGHT")
+        return GLFW_KEY_RIGHT;
     // Function keys
     if (str.length() >= 2 && str.length() <= 3 && str[0] == 'F') {
         int num = std::atoi(str.c_str() + 1);
-        if (num >= 1 && num <= 12) return GLFW_KEY_F1 + (num - 1);
+        if (num >= 1 && num <= 12)
+            return GLFW_KEY_F1 + (num - 1);
     }
 
     // ... add more as needed
@@ -310,48 +315,76 @@ static int stringToKey(const std::string& str) {
 }
 
 static InputContextType stringToContext(const std::string& str) {
-    if (str == "UI") return InputContextType::UI;
-    if (str == "Pause") return InputContextType::Pause;
+    if (str == "UI")
+        return InputContextType::UI;
+    if (str == "Pause")
+        return InputContextType::Pause;
     return InputContextType::Gameplay;
 }
 
 static TriggerType stringToTrigger(const std::string& str) {
-    if (str == "Pressed") return TriggerType::Pressed;
-    if (str == "Released") return TriggerType::Released;
-    if (str == "DoubleTap") return TriggerType::DoubleTap;
+    if (str == "Pressed")
+        return TriggerType::Pressed;
+    if (str == "Released")
+        return TriggerType::Released;
+    if (str == "DoubleTap")
+        return TriggerType::DoubleTap;
     return TriggerType::Held;
 }
 
 // Helper for string to gamepad button code
 static int stringToGamepadButton(const std::string& str) {
-    if (str == "A" || str == "CROSS") return GLFW_GAMEPAD_BUTTON_A;
-    if (str == "B" || str == "CIRCLE") return GLFW_GAMEPAD_BUTTON_B;
-    if (str == "X" || str == "SQUARE") return GLFW_GAMEPAD_BUTTON_X;
-    if (str == "Y" || str == "TRIANGLE") return GLFW_GAMEPAD_BUTTON_Y;
-    if (str == "LB" || str == "LEFT_BUMPER") return GLFW_GAMEPAD_BUTTON_LEFT_BUMPER;
-    if (str == "RB" || str == "RIGHT_BUMPER") return GLFW_GAMEPAD_BUTTON_RIGHT_BUMPER;
-    if (str == "BACK" || str == "SELECT") return GLFW_GAMEPAD_BUTTON_BACK;
-    if (str == "START") return GLFW_GAMEPAD_BUTTON_START;
-    if (str == "GUIDE" || str == "HOME") return GLFW_GAMEPAD_BUTTON_GUIDE;
-    if (str == "LEFT_THUMB" || str == "L3") return GLFW_GAMEPAD_BUTTON_LEFT_THUMB;
-    if (str == "RIGHT_THUMB" || str == "R3") return GLFW_GAMEPAD_BUTTON_RIGHT_THUMB;
-    if (str == "DPAD_UP") return GLFW_GAMEPAD_BUTTON_DPAD_UP;
-    if (str == "DPAD_RIGHT") return GLFW_GAMEPAD_BUTTON_DPAD_RIGHT;
-    if (str == "DPAD_DOWN") return GLFW_GAMEPAD_BUTTON_DPAD_DOWN;
-    if (str == "DPAD_LEFT") return GLFW_GAMEPAD_BUTTON_DPAD_LEFT;
+    if (str == "A" || str == "CROSS")
+        return GLFW_GAMEPAD_BUTTON_A;
+    if (str == "B" || str == "CIRCLE")
+        return GLFW_GAMEPAD_BUTTON_B;
+    if (str == "X" || str == "SQUARE")
+        return GLFW_GAMEPAD_BUTTON_X;
+    if (str == "Y" || str == "TRIANGLE")
+        return GLFW_GAMEPAD_BUTTON_Y;
+    if (str == "LB" || str == "LEFT_BUMPER")
+        return GLFW_GAMEPAD_BUTTON_LEFT_BUMPER;
+    if (str == "RB" || str == "RIGHT_BUMPER")
+        return GLFW_GAMEPAD_BUTTON_RIGHT_BUMPER;
+    if (str == "BACK" || str == "SELECT")
+        return GLFW_GAMEPAD_BUTTON_BACK;
+    if (str == "START")
+        return GLFW_GAMEPAD_BUTTON_START;
+    if (str == "GUIDE" || str == "HOME")
+        return GLFW_GAMEPAD_BUTTON_GUIDE;
+    if (str == "LEFT_THUMB" || str == "L3")
+        return GLFW_GAMEPAD_BUTTON_LEFT_THUMB;
+    if (str == "RIGHT_THUMB" || str == "R3")
+        return GLFW_GAMEPAD_BUTTON_RIGHT_THUMB;
+    if (str == "DPAD_UP")
+        return GLFW_GAMEPAD_BUTTON_DPAD_UP;
+    if (str == "DPAD_RIGHT")
+        return GLFW_GAMEPAD_BUTTON_DPAD_RIGHT;
+    if (str == "DPAD_DOWN")
+        return GLFW_GAMEPAD_BUTTON_DPAD_DOWN;
+    if (str == "DPAD_LEFT")
+        return GLFW_GAMEPAD_BUTTON_DPAD_LEFT;
     return GLFW_GAMEPAD_BUTTON_A; // Default fallback
 }
 
 // Helper for string to native axis
 static NativeAxis stringToNativeAxis(const std::string& str) {
-    if (str == "X" || str == "MouseX") return NativeAxis::MouseX;
-    if (str == "Y" || str == "MouseY") return NativeAxis::MouseY;
-    if (str == "LStickX" || str == "LeftStickX") return NativeAxis::GamepadLeftStickX;
-    if (str == "LStickY" || str == "LeftStickY") return NativeAxis::GamepadLeftStickY;
-    if (str == "RStickX" || str == "RightStickX") return NativeAxis::GamepadRightStickX;
-    if (str == "RStickY" || str == "RightStickY") return NativeAxis::GamepadRightStickY;
-    if (str == "LT" || str == "LeftTrigger") return NativeAxis::GamepadLeftTrigger;
-    if (str == "RT" || str == "RightTrigger") return NativeAxis::GamepadRightTrigger;
+    if (str == "X" || str == "MouseX")
+        return NativeAxis::MouseX;
+    if (str == "Y" || str == "MouseY")
+        return NativeAxis::MouseY;
+    if (str == "LStickX" || str == "LeftStickX")
+        return NativeAxis::GamepadLeftStickX;
+    if (str == "LStickY" || str == "LeftStickY")
+        return NativeAxis::GamepadLeftStickY;
+    if (str == "RStickX" || str == "RightStickX")
+        return NativeAxis::GamepadRightStickX;
+    if (str == "RStickY" || str == "RightStickY")
+        return NativeAxis::GamepadRightStickY;
+    if (str == "LT" || str == "LeftTrigger")
+        return NativeAxis::GamepadLeftTrigger;
+    if (str == "RT" || str == "RightTrigger")
+        return NativeAxis::GamepadRightTrigger;
     return NativeAxis::None;
 }
 
@@ -368,13 +401,16 @@ void ActionMap::loadFromFile(const std::string& path) {
 
     std::string line;
     while (std::getline(file, line)) {
-        if (line.empty() || line[0] == '#') continue;
+        if (line.empty() || line[0] == '#')
+            continue;
         std::stringstream ss(line);
         std::string token;
         std::vector<std::string> tokens;
-        while (ss >> token) tokens.push_back(token);
+        while (ss >> token)
+            tokens.push_back(token);
 
-        if (tokens.empty()) continue;
+        if (tokens.empty())
+            continue;
 
         // 如果明确标注这是虚拟轴的配置
         // 格式: Axis Context AxisName Device PositiveKey/NativeAxis NegativeKey/Ignored [Invert]
@@ -389,12 +425,10 @@ void ActionMap::loadFromFile(const std::string& path) {
                 int posKey = stringToKey(tokens[4]);
                 int negKey = stringToKey(tokens[5]);
                 bindAxisKey(axis, posKey, negKey, ctx, invert);
-            }
-            else if (tokens[3] == "Mouse") {
+            } else if (tokens[3] == "Mouse") {
                 NativeAxis nAxis = stringToNativeAxis(tokens[4]);
                 bindNativeAxis(axis, nAxis, ctx, invert);
-            }
-            else if (tokens[3] == "Gamepad") {
+            } else if (tokens[3] == "Gamepad") {
                 NativeAxis nAxis = stringToNativeAxis(tokens[4]);
                 bindNativeAxis(axis, nAxis, ctx, invert);
             }
@@ -404,34 +438,46 @@ void ActionMap::loadFromFile(const std::string& path) {
         // 以往 Action 配置逻辑，兼容 6个Token情况
         // 因为没加前缀，所以直接处理
         if (tokens.size() >= 6) {
-             InputBinding binding;
-             binding.context = stringToContext(tokens[0]);
-             Action action = stringToAction(tokens[1]);
+            InputBinding binding;
+            binding.context = stringToContext(tokens[0]);
+            Action action = stringToAction(tokens[1]);
 
-             if (tokens[2] == "Keyboard") binding.device = InputDevice::Keyboard;
-             else if (tokens[2] == "Mouse") binding.device = InputDevice::Mouse;
-             else if (tokens[2] == "Scroll") binding.device = InputDevice::Scroll;
-             else if (tokens[2] == "Gamepad") binding.device = InputDevice::Gamepad;
+            if (tokens[2] == "Keyboard")
+                binding.device = InputDevice::Keyboard;
+            else if (tokens[2] == "Mouse")
+                binding.device = InputDevice::Mouse;
+            else if (tokens[2] == "Scroll")
+                binding.device = InputDevice::Scroll;
+            else if (tokens[2] == "Gamepad")
+                binding.device = InputDevice::Gamepad;
 
-             if (binding.device == InputDevice::Keyboard) binding.control = stringToKey(tokens[3]);
-             else if (binding.device == InputDevice::Mouse) {
-                 if (tokens[3] == "LEFT") binding.control = GLFW_MOUSE_BUTTON_LEFT;
-                 else if (tokens[3] == "RIGHT") binding.control = GLFW_MOUSE_BUTTON_RIGHT;
-             } else if (binding.device == InputDevice::Scroll) {
-                 if (tokens[3] == "UP") binding.control = 1;
-                 else if (tokens[3] == "DOWN") binding.control = -1;
-             } else if (binding.device == InputDevice::Gamepad) {
-                 binding.control = stringToGamepadButton(tokens[3]);
-             }
+            if (binding.device == InputDevice::Keyboard)
+                binding.control = stringToKey(tokens[3]);
+            else if (binding.device == InputDevice::Mouse) {
+                if (tokens[3] == "LEFT")
+                    binding.control = GLFW_MOUSE_BUTTON_LEFT;
+                else if (tokens[3] == "RIGHT")
+                    binding.control = GLFW_MOUSE_BUTTON_RIGHT;
+            } else if (binding.device == InputDevice::Scroll) {
+                if (tokens[3] == "UP")
+                    binding.control = 1;
+                else if (tokens[3] == "DOWN")
+                    binding.control = -1;
+            } else if (binding.device == InputDevice::Gamepad) {
+                binding.control = stringToGamepadButton(tokens[3]);
+            }
 
-             binding.trigger = stringToTrigger(tokens[4]);
+            binding.trigger = stringToTrigger(tokens[4]);
 
-             binding.modifiers = 0;
-             if (tokens[5].find("SHIFT") != std::string::npos) binding.modifiers |= GLFW_MOD_SHIFT;
-             if (tokens[5].find("CTRL") != std::string::npos) binding.modifiers |= GLFW_MOD_CONTROL;
-             if (tokens[5].find("ALT") != std::string::npos) binding.modifiers |= GLFW_MOD_ALT;
+            binding.modifiers = 0;
+            if (tokens[5].find("SHIFT") != std::string::npos)
+                binding.modifiers |= GLFW_MOD_SHIFT;
+            if (tokens[5].find("CTRL") != std::string::npos)
+                binding.modifiers |= GLFW_MOD_CONTROL;
+            if (tokens[5].find("ALT") != std::string::npos)
+                binding.modifiers |= GLFW_MOD_ALT;
 
-             m_bindings[action].push_back(binding);
+            m_bindings[action].push_back(binding);
         }
     }
 }

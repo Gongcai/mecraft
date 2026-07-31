@@ -39,4 +39,4 @@ bool isSameWater(BlockStateId a, BlockStateId b);
 BlockStateId getFluidState(BlockStateId cellState);
 FluidCellView getCombinedCell(BlockStateId cellState);
 
-}
+} // namespace FluidState

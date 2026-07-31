@@ -18,15 +18,11 @@ int RegionFile::toLocalCoord(int chunkCoord) {
     return chunkCoord & 31; // chunkCoord % 32, works for negatives
 }
 
-std::filesystem::path RegionFile::regionPath(
-    const std::filesystem::path& chunksDir, int rx, int rz)
-{
+std::filesystem::path RegionFile::regionPath(const std::filesystem::path& chunksDir, int rx, int rz) {
     return chunksDir / ("r." + std::to_string(rx) + "." + std::to_string(rz) + ".mcrg");
 }
 
-std::unique_ptr<RegionFile> RegionFile::open(
-    const std::filesystem::path& path, int rx, int rz)
-{
+std::unique_ptr<RegionFile> RegionFile::open(const std::filesystem::path& path, int rx, int rz) {
     auto rf = std::unique_ptr<RegionFile>(new RegionFile());
     rf->m_path = path;
 
@@ -57,8 +53,7 @@ std::unique_ptr<RegionFile> RegionFile::open(
         }
 
         // Read chunk index
-        file.read(reinterpret_cast<char*>(rf->m_index.data()),
-                  sizeof(ChunkIndexEntry) * CHUNKS_PER_REGION);
+        file.read(reinterpret_cast<char*>(rf->m_index.data()), sizeof(ChunkIndexEntry) * CHUNKS_PER_REGION);
         if (!file) {
             MECRAFT_LOG_FPRINTF(stderr, "[Save] Failed to read chunk index\n");
             return nullptr;
@@ -81,8 +76,7 @@ std::unique_ptr<RegionFile> RegionFile::open(
         }
 
         file.write(reinterpret_cast<const char*>(&rf->m_header), sizeof(RegionHeader));
-        file.write(reinterpret_cast<const char*>(rf->m_index.data()),
-                   sizeof(ChunkIndexEntry) * CHUNKS_PER_REGION);
+        file.write(reinterpret_cast<const char*>(rf->m_index.data()), sizeof(ChunkIndexEntry) * CHUNKS_PER_REGION);
         file.flush();
     }
 
@@ -108,7 +102,8 @@ ChunkLoadData RegionFile::readChunkWithData(int cx, int cz) {
     }
 
     std::vector<uint8_t> data = readChunkData(lx, lz);
-    if (data.empty()) return loadData;
+    if (data.empty())
+        return loadData;
 
     // Validate CRC
     const uint32_t computedCrc = detail::crc32(data.data(), data.size());
@@ -156,12 +151,14 @@ std::vector<uint8_t> RegionFile::readChunkData(int localX, int localZ) const {
     }
 
     std::ifstream file(m_path, std::ios::binary);
-    if (!file.is_open()) return {};
+    if (!file.is_open())
+        return {};
 
     file.seekg(entry.offset);
     std::vector<uint8_t> data(entry.size);
     file.read(reinterpret_cast<char*>(data.data()), entry.size);
-    if (!file) return {};
+    if (!file)
+        return {};
 
     return data;
 }
@@ -179,17 +176,18 @@ bool RegionFile::writeChunkData(int localX, int localZ, const std::vector<uint8_
         if (!file.is_open()) {
             // Write header and index first
             file.write(reinterpret_cast<const char*>(&m_header), sizeof(RegionHeader));
-            file.write(reinterpret_cast<const char*>(m_index.data()),
-                       sizeof(ChunkIndexEntry) * CHUNKS_PER_REGION);
+            file.write(reinterpret_cast<const char*>(m_index.data()), sizeof(ChunkIndexEntry) * CHUNKS_PER_REGION);
         }
         file.close();
         file.open(m_path, std::ios::binary | std::ios::ate | std::ios::in);
-        if (!file.is_open()) return false;
+        if (!file.is_open())
+            return false;
     }
 
     const uint32_t offset = static_cast<uint32_t>(file.tellp());
     file.write(reinterpret_cast<const char*>(data.data()), data.size());
-    if (!file) return false;
+    if (!file)
+        return false;
     file.flush();
 
     // Update index

@@ -23,11 +23,7 @@ std::string describeEntry(const std::size_t index) {
     return "entities[" + std::to_string(index) + "]";
 }
 
-bool readString(const json& node,
-                const char* key,
-                std::string& out,
-                const std::string& context,
-                std::string* error,
+bool readString(const json& node, const char* key, std::string& out, const std::string& context, std::string* error,
                 const bool required = false) {
     const auto it = node.find(key);
     if (it == node.end()) {
@@ -45,11 +41,7 @@ bool readString(const json& node,
     return true;
 }
 
-bool readInt(const json& node,
-             const char* key,
-             int& out,
-             const std::string& context,
-             std::string* error) {
+bool readInt(const json& node, const char* key, int& out, const std::string& context, std::string* error) {
     const auto it = node.find(key);
     if (it == node.end()) {
         return true;
@@ -62,11 +54,7 @@ bool readInt(const json& node,
     return true;
 }
 
-bool readUInt(const json& node,
-              const char* key,
-              uint32_t& out,
-              const std::string& context,
-              std::string* error) {
+bool readUInt(const json& node, const char* key, uint32_t& out, const std::string& context, std::string* error) {
     int value = static_cast<int>(out);
     if (!readInt(node, key, value, context, error)) {
         return false;
@@ -79,11 +67,7 @@ bool readUInt(const json& node,
     return true;
 }
 
-bool readFloat(const json& node,
-               const char* key,
-               float& out,
-               const std::string& context,
-               std::string* error) {
+bool readFloat(const json& node, const char* key, float& out, const std::string& context, std::string* error) {
     const auto it = node.find(key);
     if (it == node.end()) {
         return true;
@@ -96,11 +80,7 @@ bool readFloat(const json& node,
     return true;
 }
 
-bool readBool(const json& node,
-              const char* key,
-              bool& out,
-              const std::string& context,
-              std::string* error) {
+bool readBool(const json& node, const char* key, bool& out, const std::string& context, std::string* error) {
     const auto it = node.find(key);
     if (it == node.end()) {
         return true;
@@ -113,11 +93,7 @@ bool readBool(const json& node,
     return true;
 }
 
-bool readVec3(const json& node,
-              const char* key,
-              glm::vec3& out,
-              const std::string& context,
-              std::string* error) {
+bool readVec3(const json& node, const char* key, glm::vec3& out, const std::string& context, std::string* error) {
     const auto it = node.find(key);
     if (it == node.end()) {
         return true;
@@ -136,10 +112,7 @@ bool readVec3(const json& node,
     return true;
 }
 
-bool parseHealth(const json& node,
-                 MobEntityDefinition& definition,
-                 const std::string& context,
-                 std::string* error) {
+bool parseHealth(const json& node, MobEntityDefinition& definition, const std::string& context, std::string* error) {
     const auto it = node.find("health");
     if (it == node.end()) {
         return true;
@@ -165,10 +138,7 @@ bool parseHealth(const json& node,
     return true;
 }
 
-bool parsePhysics(const json& node,
-                  MobEntityDefinition& definition,
-                  const std::string& context,
-                  std::string* error) {
+bool parsePhysics(const json& node, MobEntityDefinition& definition, const std::string& context, std::string* error) {
     const auto it = node.find("physics");
     if (it == node.end()) {
         return true;
@@ -183,10 +153,7 @@ bool parsePhysics(const json& node,
            readFloat(*it, "eyeOffsetY", definition.physics.eyeOffsetY, context + ".physics", error);
 }
 
-bool parseAI(const json& node,
-             MobEntityDefinition& definition,
-             const std::string& context,
-             std::string* error) {
+bool parseAI(const json& node, MobEntityDefinition& definition, const std::string& context, std::string* error) {
     const auto it = node.find("ai");
     if (it == node.end()) {
         return true;
@@ -208,16 +175,14 @@ bool parseAI(const json& node,
            readBool(*it, "retaliates", definition.ai.retaliates, context + ".ai", error) &&
            readFloat(*it, "lineOfSightMemorySeconds", definition.ai.lineOfSightMemorySeconds, context + ".ai", error) &&
            readFloat(*it, "hearingRange", definition.ai.hearingRange, context + ".ai", error) &&
-           readFloat(*it, "stuckJumpThresholdSeconds", definition.ai.stuckJumpThresholdSeconds, context + ".ai", error) &&
+           readFloat(*it, "stuckJumpThresholdSeconds", definition.ai.stuckJumpThresholdSeconds, context + ".ai",
+                     error) &&
            readFloat(*it, "jumpCooldownSeconds", definition.ai.jumpCooldownSeconds, context + ".ai", error) &&
            readFloat(*it, "avoidanceSeconds", definition.ai.avoidanceSeconds, context + ".ai", error) &&
            readFloat(*it, "avoidanceStrength", definition.ai.avoidanceStrength, context + ".ai", error);
 }
 
-bool parseDrops(const json& node,
-                MobEntityDefinition& definition,
-                const std::string& context,
-                std::string* error) {
+bool parseDrops(const json& node, MobEntityDefinition& definition, const std::string& context, std::string* error) {
     const auto it = node.find("drops");
     if (it == node.end()) {
         return true;
@@ -263,9 +228,7 @@ bool parseDrops(const json& node,
     return true;
 }
 
-bool parseDeathEffect(const json& node,
-                      MobEntityDefinition& definition,
-                      const std::string& context,
+bool parseDeathEffect(const json& node, MobEntityDefinition& definition, const std::string& context,
                       std::string* error) {
     const auto it = node.find("deathEffect");
     if (it == node.end()) {
@@ -288,10 +251,8 @@ bool parseDeathEffect(const json& node,
     }
 
     if (!particleBlockName.empty()) {
-        if (!BlockRegistry::tryGetIdByName(particleBlockName, effect.particleBlock) ||
-            effect.particleBlock == 0) {
-            setError(error, context + ".deathEffect.particleBlock references an unknown block: " +
-                                particleBlockName);
+        if (!BlockRegistry::tryGetIdByName(particleBlockName, effect.particleBlock) || effect.particleBlock == 0) {
+            setError(error, context + ".deathEffect.particleBlock references an unknown block: " + particleBlockName);
             return false;
         }
     }
@@ -309,9 +270,7 @@ bool parseDeathEffect(const json& node,
     return true;
 }
 
-bool parseHurtEffect(const json& node,
-                     MobEntityDefinition& definition,
-                     const std::string& context,
+bool parseHurtEffect(const json& node, MobEntityDefinition& definition, const std::string& context,
                      std::string* error) {
     const auto it = node.find("hurtEffect");
     if (it == node.end()) {
@@ -343,9 +302,7 @@ bool parseHurtEffect(const json& node,
     return true;
 }
 
-bool parseMobDefinition(const json& node,
-                        const std::size_t index,
-                        MobEntityDefinition& definition,
+bool parseMobDefinition(const json& node, const std::size_t index, MobEntityDefinition& definition,
                         std::string* error) {
     const std::string context = describeEntry(index);
     if (!node.is_object()) {
@@ -388,12 +345,9 @@ bool parseMobDefinition(const json& node,
     }
 
     if (!readFloat(node, "eyeHeight", definition.eyeHeight, context, error) ||
-        !parseHealth(node, definition, context, error) ||
-        !parsePhysics(node, definition, context, error) ||
-        !parseAI(node, definition, context, error) ||
-        !parseDrops(node, definition, context, error) ||
-        !parseHurtEffect(node, definition, context, error) ||
-        !parseDeathEffect(node, definition, context, error)) {
+        !parseHealth(node, definition, context, error) || !parsePhysics(node, definition, context, error) ||
+        !parseAI(node, definition, context, error) || !parseDrops(node, definition, context, error) ||
+        !parseHurtEffect(node, definition, context, error) || !parseDeathEffect(node, definition, context, error)) {
         return false;
     }
 

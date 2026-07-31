@@ -17,14 +17,10 @@ class GameplayState : public IGameState {
 public:
     using StateFactory = std::function<std::unique_ptr<IGameState>()>;
 
-    explicit GameplayState(StateDependencies deps,
-                           const IGameplayModeRules& modeRules = SurvivalModeRules::instance(),
+    explicit GameplayState(StateDependencies deps, const IGameplayModeRules& modeRules = SurvivalModeRules::instance(),
                            GameplayMode gameplayMode = GameplayMode::Survival);
-    GameplayState(GameplayStateContext gameplayCtx,
-                  InventoryStateContext inventoryCtx,
-                  CommandStateContext commandCtx,
-                  StateFactory makeCreativeModeState,
-                  StateFactory makeSurvivalModeState,
+    GameplayState(GameplayStateContext gameplayCtx, InventoryStateContext inventoryCtx, CommandStateContext commandCtx,
+                  StateFactory makeCreativeModeState, StateFactory makeSurvivalModeState,
                   const IGameplayModeRules& modeRules = SurvivalModeRules::instance(),
                   GameplayMode gameplayMode = GameplayMode::Survival);
 

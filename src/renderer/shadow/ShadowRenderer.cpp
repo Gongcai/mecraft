@@ -7,20 +7,16 @@
 
 namespace shadow {
 
-glm::vec3 ShadowRenderer::computeLightDirection(
-        const glm::vec3& sunDirection,
-        const float sunVisibility,
-        const glm::vec3& moonDirection,
-        const float moonVisibility,
-        bool* moonShadowActive) {
+glm::vec3 ShadowRenderer::computeLightDirection(const glm::vec3& sunDirection, const float sunVisibility,
+                                                const glm::vec3& moonDirection, const float moonVisibility,
+                                                bool* moonShadowActive) {
     const bool useMoonShadow = moonVisibility > sunVisibility;
     glm::vec3 direction = useMoonShadow ? moonDirection : sunDirection;
     direction = glm::normalize(direction);
     if (direction.y < 0.12f) {
         const glm::vec3 horizontal = glm::normalize(glm::vec3(direction.x, 0.0f, direction.z));
         constexpr float kMinShadowElevation = 0.12f;
-        const float horizontalScale = std::sqrt(
-            std::max(0.0f, 1.0f - kMinShadowElevation * kMinShadowElevation));
+        const float horizontalScale = std::sqrt(std::max(0.0f, 1.0f - kMinShadowElevation * kMinShadowElevation));
         direction = horizontal * horizontalScale + glm::vec3(0.0f, kMinShadowElevation, 0.0f);
     }
     if (moonShadowActive != nullptr) {
@@ -34,10 +30,8 @@ void ShadowRenderer::setLightDirection(const glm::vec3& direction) {
     m_lightDirection = glm::normalize(direction);
 }
 
-void ShadowRenderer::update(const Camera& camera,
-                             const ShadowMatrices::Settings& settings,
-                             int framebufferWidth,
-                             int framebufferHeight) {
+void ShadowRenderer::update(const Camera& camera, const ShadowMatrices::Settings& settings, int framebufferWidth,
+                            int framebufferHeight) {
     ShadowMatrices::CameraBasis basis;
     basis.position = camera.getPosition();
     basis.forward = camera.getFront();
@@ -45,8 +39,8 @@ void ShadowRenderer::update(const Camera& camera,
     basis.up = camera.getUp();
     basis.nearPlane = camera.getNear();
     basis.verticalFovDegrees = camera.getFOV();
-    basis.aspectRatio = static_cast<float>(std::max(1, framebufferWidth)) /
-                        static_cast<float>(std::max(1, framebufferHeight));
+    basis.aspectRatio =
+        static_cast<float>(std::max(1, framebufferWidth)) / static_cast<float>(std::max(1, framebufferHeight));
 
     m_cascades = ShadowMatrices::buildCascades(basis, m_lightDirection, settings);
 
@@ -60,15 +54,13 @@ void ShadowRenderer::update(const Camera& camera,
     m_shadowDistance = settings.shadowDistance;
 }
 
-void ShadowRenderer::updateFromBasis(const ShadowMatrices::CameraBasis& basis,
-                                     const ShadowMatrices::Settings& settings,
+void ShadowRenderer::updateFromBasis(const ShadowMatrices::CameraBasis& basis, const ShadowMatrices::Settings& settings,
                                      const std::array<bool, CASCADE_COUNT>& updateCascade) {
     const std::array<Cascade, CASCADE_COUNT> freshCascades =
         ShadowMatrices::buildCascades(basis, m_lightDirection, settings);
     for (int cascade = 0; cascade < CASCADE_COUNT; ++cascade) {
         if (updateCascade[static_cast<size_t>(cascade)]) {
-            m_cascades[static_cast<size_t>(cascade)] =
-                freshCascades[static_cast<size_t>(cascade)];
+            m_cascades[static_cast<size_t>(cascade)] = freshCascades[static_cast<size_t>(cascade)];
         }
     }
 

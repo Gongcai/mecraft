@@ -3,14 +3,15 @@
 
 class BgmSystem;
 class AudioEngine;
-namespace ecs { class GameplayRegistry; }
+namespace ecs {
+class GameplayRegistry;
+}
 
 /// Synchronizes audio listener position/orientation from player ECS state.
 /// Extracted from Game::syncAudioListener() to decouple audio from Game.
 class AudioListenerSyncSystem {
 public:
-    AudioListenerSyncSystem(BgmSystem& bgm, AudioEngine& audio)
-        : m_bgmSystem(bgm), m_audioEngine(audio) {}
+    AudioListenerSyncSystem(BgmSystem& bgm, AudioEngine& audio) : m_bgmSystem(bgm), m_audioEngine(audio) {}
 
     /// Update audio systems and sync listener position from ECS.
     /// @param deltaTime Time since last frame

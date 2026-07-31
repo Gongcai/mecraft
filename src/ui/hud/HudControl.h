@@ -14,12 +14,8 @@ protected:
     void renderSelf(const UIRenderContext& context) const override;
 
 private:
-    void drawIconRow(const UIRenderContext& context,
-                       const TextureAtlas& atlas,
-                       float startX, float startY,
-                       int current, int max,
-                       int fullIndex, int halfIndex,
-                       float iconSize) const;
+    void drawIconRow(const UIRenderContext& context, const TextureAtlas& atlas, float startX, float startY, int current,
+                     int max, int fullIndex, int halfIndex, float iconSize) const;
 
     ResourceMgr* m_resourceMgr = nullptr;
 
@@ -30,5 +26,4 @@ private:
     int m_armorHalf = -1;
     int m_foodFull = -1;
     int m_foodHalf = -1;
-
 };

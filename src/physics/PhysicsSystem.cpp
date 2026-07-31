@@ -50,7 +50,6 @@ float waterTopY(const IWorldView& world, const int x, const int y, const int z) 
     return static_cast<float>(y) + FluidState::surfaceHeight(fluidState);
 }
 
-
 float overlapLen(float aMin, float aMax, float bMin, float bMax);
 
 float queryWaterFillRatio(const PhysicsBody& body, const IWorldView& world) {
@@ -178,19 +177,12 @@ float collisionOverlapScore(const IWorldView& world, const AABB& box) {
     return score;
 }
 
-bool aabbIntersects(const glm::vec3& aMin,
-                    const glm::vec3& aMax,
-                    const glm::vec3& bMin,
-                    const glm::vec3& bMax) {
-    return aMin.x < bMax.x && aMax.x > bMin.x &&
-           aMin.y < bMax.y && aMax.y > bMin.y &&
-           aMin.z < bMax.z && aMax.z > bMin.z;
+bool aabbIntersects(const glm::vec3& aMin, const glm::vec3& aMax, const glm::vec3& bMin, const glm::vec3& bMax) {
+    return aMin.x < bMax.x && aMax.x > bMin.x && aMin.y < bMax.y && aMax.y > bMin.y && aMin.z < bMax.z &&
+           aMax.z > bMin.z;
 }
 
-bool computeRequiredStepLift(const IWorldView& world,
-                             const AABB& box,
-                             const float maxStepHeight,
-                             float& outLift) {
+bool computeRequiredStepLift(const IWorldView& world, const AABB& box, const float maxStepHeight, float& outLift) {
     outLift = 0.0f;
     const int minX = static_cast<int>(std::floor(box.min.x));
     const int maxX = static_cast<int>(std::floor(box.max.x - kContactEpsilon));
@@ -257,23 +249,16 @@ bool hasGroundSupportAt(const PhysicsBody& body, const IWorldView& world, const 
     const float centerZ = (minZ + maxZ) * 0.5f;
 
     const std::array<glm::vec2, 5> probes = {
-        glm::vec2(centerX, centerZ),
-        glm::vec2(minX, minZ),
-        glm::vec2(minX, maxZ),
-        glm::vec2(maxX, minZ),
-        glm::vec2(maxX, maxZ),
+        glm::vec2(centerX, centerZ), glm::vec2(minX, minZ), glm::vec2(minX, maxZ),
+        glm::vec2(maxX, minZ),       glm::vec2(maxX, maxZ),
     };
 
     for (const glm::vec2& probe : probes) {
         const int bx = static_cast<int>(std::floor(probe.x));
         const int bz = static_cast<int>(std::floor(probe.y));
         constexpr float kProbeRadius = 0.005f;
-        const glm::vec3 probeMin(probe.x - kProbeRadius,
-                                 box.min.y - kSupportProbeDepth,
-                                 probe.y - kProbeRadius);
-        const glm::vec3 probeMax(probe.x + kProbeRadius,
-                                 box.min.y,
-                                 probe.y + kProbeRadius);
+        const glm::vec3 probeMin(probe.x - kProbeRadius, box.min.y - kSupportProbeDepth, probe.y - kProbeRadius);
+        const glm::vec3 probeMax(probe.x + kProbeRadius, box.min.y, probe.y + kProbeRadius);
         for (int by = supportMinY; by <= supportMaxY; ++by) {
             const BlockStateId stateId = world.getBlockState(bx, by, bz);
             if (BlockCollision::intersects(stateId, glm::ivec3(bx, by, bz), probeMin, probeMax)) {
@@ -305,11 +290,8 @@ SurfacePhysics querySurfacePhysics(const PhysicsBody& body, const IWorldView& wo
     const float centerZ = (minZ + maxZ) * 0.5f;
 
     const std::array<glm::vec2, 5> probes = {
-        glm::vec2(centerX, centerZ),
-        glm::vec2(minX, minZ),
-        glm::vec2(minX, maxZ),
-        glm::vec2(maxX, minZ),
-        glm::vec2(maxX, maxZ),
+        glm::vec2(centerX, centerZ), glm::vec2(minX, minZ), glm::vec2(minX, maxZ),
+        glm::vec2(maxX, minZ),       glm::vec2(maxX, maxZ),
     };
 
     float frictionSum = 0.0f;
@@ -320,12 +302,8 @@ SurfacePhysics querySurfacePhysics(const PhysicsBody& body, const IWorldView& wo
         const int bx = static_cast<int>(std::floor(probe.x));
         const int bz = static_cast<int>(std::floor(probe.y));
         constexpr float kProbeRadius = 0.005f;
-        const glm::vec3 probeMin(probe.x - kProbeRadius,
-                                 box.min.y - kSupportProbeDepth,
-                                 probe.y - kProbeRadius);
-        const glm::vec3 probeMax(probe.x + kProbeRadius,
-                                 box.min.y,
-                                 probe.y + kProbeRadius);
+        const glm::vec3 probeMin(probe.x - kProbeRadius, box.min.y - kSupportProbeDepth, probe.y - kProbeRadius);
+        const glm::vec3 probeMax(probe.x + kProbeRadius, box.min.y, probe.y + kProbeRadius);
         for (int by = supportMinY; by <= supportMaxY; ++by) {
             const BlockStateId stateId = world.getBlockState(bx, by, bz);
             if (stateId == NULL_BLOCK_STATE ||
@@ -351,10 +329,7 @@ SurfacePhysics querySurfacePhysics(const PhysicsBody& body, const IWorldView& wo
     return surface;
 }
 
-bool tryStepUp(PhysicsBody& body,
-               const IWorldView& world,
-               const MoveIntent& intent,
-               const float maxStepHeight) {
+bool tryStepUp(PhysicsBody& body, const IWorldView& world, const MoveIntent& intent, const float maxStepHeight) {
     const bool canGroundStep = body.isGrounded && !body.isInWater;
     const bool canWaterLedgeStep = body.isInWater && intent.wantsJump;
     if (intent.isFlying || (!canGroundStep && !canWaterLedgeStep) || maxStepHeight <= 0.0f) {
@@ -471,8 +446,8 @@ void applyVerticalForces(PhysicsBody& body, const MoveIntent& intent, const Phys
     body.velocity.y = std::clamp(body.velocity.y, -tuning.terminalVelocity, tuning.terminalVelocity);
 }
 
-void applyDrag(PhysicsBody& body, const MoveIntent& intent, const PhysicsTuning& tuning,
-               const SurfacePhysics& surface, const bool wasGrounded, const float dt) {
+void applyDrag(PhysicsBody& body, const MoveIntent& intent, const PhysicsTuning& tuning, const SurfacePhysics& surface,
+               const bool wasGrounded, const float dt) {
     if (intent.isFlying) {
         const float factor = std::exp(-tuning.flyingDrag * dt);
         body.velocity *= factor;
@@ -493,9 +468,8 @@ void applyDrag(PhysicsBody& body, const MoveIntent& intent, const PhysicsTuning&
     body.velocity *= factor;
 }
 
-void applyFluidFlow(PhysicsBody& body, const IWorldView& world, const MoveIntent& intent,
-                    const PhysicsTuning& tuning, const float waterFillRatio, const float dt,
-                    const World* concreteWorld) {
+void applyFluidFlow(PhysicsBody& body, const IWorldView& world, const MoveIntent& intent, const PhysicsTuning& tuning,
+                    const float waterFillRatio, const float dt, const World* concreteWorld) {
     if (intent.isFlying || !body.isInWater || waterFillRatio <= 0.0f) {
         return;
     }
@@ -505,18 +479,12 @@ void applyFluidFlow(PhysicsBody& body, const IWorldView& world, const MoveIntent
         return;
     }
 
-    const float pushScale = body.isFullySubmerged
-        ? 1.0f
-        : std::max(0.8f, std::clamp(waterFillRatio, 0.0f, 1.0f));
+    const float pushScale = body.isFullySubmerged ? 1.0f : std::max(0.8f, std::clamp(waterFillRatio, 0.0f, 1.0f));
     body.velocity += flow * (tuning.waterFlowPush * pushScale * dt);
 }
 
-void moveAndCollideAxis(PhysicsBody& body,
-                        const IWorldView& world,
-                        const MoveIntent& intent,
-                        const PhysicsTuning& tuning,
-                        const float dt,
-                        const int axis) {
+void moveAndCollideAxis(PhysicsBody& body, const IWorldView& world, const MoveIntent& intent,
+                        const PhysicsTuning& tuning, const float dt, const int axis) {
     const float delta = body.velocity[axis] * dt;
     if (std::abs(delta) <= 0.0f) {
         return;
@@ -527,8 +495,8 @@ void moveAndCollideAxis(PhysicsBody& body,
 
     for (int i = 0; i < steps; ++i) {
         const glm::vec3 prevPos = body.position;
-        const bool protectLedge = axis != 1 && intent.wantsCrouch && !intent.isFlying &&
-                                  body.isGrounded && !body.isInWater;
+        const bool protectLedge =
+            axis != 1 && intent.wantsCrouch && !intent.isFlying && body.isGrounded && !body.isInWater;
         if (protectLedge) {
             glm::vec3 candidatePos = body.position;
             candidatePos[axis] += stepDelta;
@@ -546,14 +514,12 @@ void moveAndCollideAxis(PhysicsBody& body,
             continue;
         }
 
-        if (axis != 1 && body.isGrounded && !body.isInWater &&
-            tryStepUp(body, world, intent, tuning.stepHeight)) {
+        if (axis != 1 && body.isGrounded && !body.isInWater && tryStepUp(body, world, intent, tuning.stepHeight)) {
             continue;
         }
 
         const bool canWaterLedgeStep = body.isInWater && intent.wantsJump;
-        if (axis != 1 && canWaterLedgeStep &&
-            tryStepUp(body, world, intent, tuning.waterLedgeStepHeight)) {
+        if (axis != 1 && canWaterLedgeStep && tryStepUp(body, world, intent, tuning.waterLedgeStepHeight)) {
             continue;
         }
 
@@ -584,10 +550,8 @@ void moveAndCollideAxis(PhysicsBody& body,
 
 namespace physics {
 
-
 PhysicsSystem::PhysicsSystem(const IWorldView* worldView)
-    : m_worldView(worldView),
-      m_concreteWorld(worldView ? worldView->asWorld() : nullptr) {}
+    : m_worldView(worldView), m_concreteWorld(worldView ? worldView->asWorld() : nullptr) {}
 
 void PhysicsSystem::updateBody(PhysicsBody& body, const MoveIntent& intent, const float dt) {
     updateBody(body, intent, dt, tuning);
@@ -633,6 +597,4 @@ void PhysicsSystem::updateBody(PhysicsBody& body, const MoveIntent& intent, cons
     body.isEyesInWater = queryEyesInWater(body, *m_worldView);
 }
 
-
 } // namespace physics
-

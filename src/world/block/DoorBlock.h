@@ -24,18 +24,11 @@ struct DoorPlacement {
 [[nodiscard]] bool isDoorState(BlockStateId stateId);
 [[nodiscard]] bool isLowerState(BlockStateId stateId);
 [[nodiscard]] bool isUpperState(BlockStateId stateId);
-[[nodiscard]] BlockStateId makeDoorState(BlockID blockId,
-                                    uint16_t facingValue,
-                                    uint16_t halfValue,
-                                    uint16_t hingeValue,
-                                    bool open,
-                                    bool powered);
-[[nodiscard]] DoorPlacement resolvePlacement(const IWorldView& worldView,
-                                             const glm::ivec3& lowerPos,
+[[nodiscard]] BlockStateId makeDoorState(BlockID blockId, uint16_t facingValue, uint16_t halfValue, uint16_t hingeValue,
+                                         bool open, bool powered);
+[[nodiscard]] DoorPlacement resolvePlacement(const IWorldView& worldView, const glm::ivec3& lowerPos,
                                              BlockStateId lowerState);
-[[nodiscard]] bool tryGetOtherHalfPosition(const glm::ivec3& pos,
-                                           BlockStateId stateId,
-                                           glm::ivec3& outOtherPos);
+[[nodiscard]] bool tryGetOtherHalfPosition(const glm::ivec3& pos, BlockStateId stateId, glm::ivec3& outOtherPos);
 [[nodiscard]] bool isMatchingOtherHalf(BlockStateId stateId, BlockStateId otherState);
 
 void placeDoor(World& world, const DoorPlacement& placement);

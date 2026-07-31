@@ -40,27 +40,9 @@ constexpr const char* kBlocksConfigPath = BLOCKS_CONFIG_PATH;
 
 bool isKnownRedstoneBehavior(const std::string_view behavior) {
     constexpr std::string_view kKnownBehaviors[] = {
-        "",
-        "wire",
-        "torch",
-        "repeater",
-        "comparator",
-        "piston",
-        "observer",
-        "lever",
-        "button",
-        "plate",
-        "lamp",
-        "door",
-        "trapdoor",
-        "fence_gate",
-        "power_block",
-        "target",
-        "dispenser",
-        "dropper",
-        "hopper",
-        "note_block",
-        "wire_container",
+        "",          "wire",    "torch",  "repeater",   "comparator",     "piston",     "observer",    "lever",
+        "button",    "plate",   "lamp",   "door",       "trapdoor",       "fence_gate", "power_block", "target",
+        "dispenser", "dropper", "hopper", "note_block", "wire_container",
     };
     return std::find(std::begin(kKnownBehaviors), std::end(kKnownBehaviors), behavior) != std::end(kKnownBehaviors);
 }
@@ -73,8 +55,7 @@ bool isKnownPressurePlateEntityFilter(const std::string_view filter) {
     return filter == "living" || filter == "all";
 }
 
-AnimatedTextureRef makeStaticWorldTexture(const int layer,
-                                          const BiomeTintKind tint = BiomeTintKind::None) {
+AnimatedTextureRef makeStaticWorldTexture(const int layer, const BiomeTintKind tint = BiomeTintKind::None) {
     AnimatedTextureRef ref;
     ref.firstLayer = layer;
     ref.frameCount = 1;
@@ -190,27 +171,14 @@ BiomeTintKind parseBiomeTintKind(const nlohmann::json& blockJson) {
     return BiomeTintKind::None;
 }
 
-glm::vec3 parseRequiredFiniteVec3(const nlohmann::json& object,
-                                  const char* field,
-                                  const NamespacedId& blockId) {
-    if (!object.contains(field) || !object[field].is_array() ||
-        object[field].size() != 3u ||
-        !object[field][0].is_number() ||
-        !object[field][1].is_number() ||
-        !object[field][2].is_number()) {
-        failBlockRegistry(
-            "Block " + blockId.full() + " analyticLight." + field +
-            " must be an array of three numbers");
+glm::vec3 parseRequiredFiniteVec3(const nlohmann::json& object, const char* field, const NamespacedId& blockId) {
+    if (!object.contains(field) || !object[field].is_array() || object[field].size() != 3u ||
+        !object[field][0].is_number() || !object[field][1].is_number() || !object[field][2].is_number()) {
+        failBlockRegistry("Block " + blockId.full() + " analyticLight." + field + " must be an array of three numbers");
     }
-    const glm::vec3 value{
-        object[field][0].get<float>(),
-        object[field][1].get<float>(),
-        object[field][2].get<float>()};
-    if (!std::isfinite(value.x) || !std::isfinite(value.y) ||
-        !std::isfinite(value.z)) {
-        failBlockRegistry(
-            "Block " + blockId.full() + " analyticLight." + field +
-            " must contain finite values");
+    const glm::vec3 value{object[field][0].get<float>(), object[field][1].get<float>(), object[field][2].get<float>()};
+    if (!std::isfinite(value.x) || !std::isfinite(value.y) || !std::isfinite(value.z)) {
+        failBlockRegistry("Block " + blockId.full() + " analyticLight." + field + " must contain finite values");
     }
     return value;
 }
@@ -221,64 +189,44 @@ struct ParsedBlockAnalyticLightDefinition {
     std::string enabledStateValue;
 };
 
-std::optional<ParsedBlockAnalyticLightDefinition> parseAnalyticLight(
-    const nlohmann::json& blockJson,
-    const NamespacedId& blockId) {
+std::optional<ParsedBlockAnalyticLightDefinition> parseAnalyticLight(const nlohmann::json& blockJson,
+                                                                     const NamespacedId& blockId) {
     if (!blockJson.contains("analyticLight")) {
         return std::nullopt;
     }
     const nlohmann::json& object = blockJson["analyticLight"];
     if (!object.is_object()) {
-        failBlockRegistry(
-            "Block " + blockId.full() + " analyticLight must be an object");
+        failBlockRegistry("Block " + blockId.full() + " analyticLight must be an object");
     }
 
     ParsedBlockAnalyticLightDefinition parsed;
     BlockAnalyticLightDefinition& definition = parsed.definition;
-    definition.colorLinear = parseRequiredFiniteVec3(
-        object, "colorLinear", blockId);
-    definition.positionOffsetMeters = parseRequiredFiniteVec3(
-        object, "positionOffsetMeters", blockId);
-    if (!object.contains("luminousFluxLumens") ||
-        !object["luminousFluxLumens"].is_number() ||
-        !object.contains("rangeMeters") ||
-        !object["rangeMeters"].is_number()) {
-        failBlockRegistry(
-            "Block " + blockId.full() +
-            " analyticLight requires numeric luminousFluxLumens and rangeMeters");
+    definition.colorLinear = parseRequiredFiniteVec3(object, "colorLinear", blockId);
+    definition.positionOffsetMeters = parseRequiredFiniteVec3(object, "positionOffsetMeters", blockId);
+    if (!object.contains("luminousFluxLumens") || !object["luminousFluxLumens"].is_number() ||
+        !object.contains("rangeMeters") || !object["rangeMeters"].is_number()) {
+        failBlockRegistry("Block " + blockId.full() +
+                          " analyticLight requires numeric luminousFluxLumens and rangeMeters");
     }
-    definition.luminousFluxLumens =
-        object["luminousFluxLumens"].get<float>();
+    definition.luminousFluxLumens = object["luminousFluxLumens"].get<float>();
     definition.rangeMeters = object["rangeMeters"].get<float>();
-    if (!object.contains("shadowPolicy") ||
-        !object["shadowPolicy"].is_string()) {
-        failBlockRegistry(
-            "Block " + blockId.full() +
-            " analyticLight.shadowPolicy must be an explicit string");
+    if (!object.contains("shadowPolicy") || !object["shadowPolicy"].is_string()) {
+        failBlockRegistry("Block " + blockId.full() + " analyticLight.shadowPolicy must be an explicit string");
     }
-    const std::string shadowPolicy =
-        object["shadowPolicy"].get<std::string>();
+    const std::string shadowPolicy = object["shadowPolicy"].get<std::string>();
     if (shadowPolicy == "none") {
-        definition.shadowPolicy =
-            BlockAnalyticLightShadowPolicy::None;
+        definition.shadowPolicy = BlockAnalyticLightShadowPolicy::None;
     } else if (shadowPolicy == "raster_cached") {
-        definition.shadowPolicy =
-            BlockAnalyticLightShadowPolicy::RasterCached;
+        definition.shadowPolicy = BlockAnalyticLightShadowPolicy::RasterCached;
     } else {
-        failBlockRegistry(
-            "Block " + blockId.full() +
-            " analyticLight.shadowPolicy must be none or raster_cached");
+        failBlockRegistry("Block " + blockId.full() + " analyticLight.shadowPolicy must be none or raster_cached");
     }
-    if (!std::isfinite(definition.luminousFluxLumens) ||
-        definition.luminousFluxLumens <= 0.0f ||
-        !std::isfinite(definition.rangeMeters) ||
-        definition.rangeMeters <= 0.0f ||
+    if (!std::isfinite(definition.luminousFluxLumens) || definition.luminousFluxLumens <= 0.0f ||
+        !std::isfinite(definition.rangeMeters) || definition.rangeMeters <= 0.0f ||
         glm::any(glm::lessThan(definition.colorLinear, glm::vec3(0.0f))) ||
         glm::all(glm::equal(definition.colorLinear, glm::vec3(0.0f))) ||
-        glm::any(glm::lessThan(definition.positionOffsetMeters,
-                               glm::vec3(0.0f))) ||
-        glm::any(glm::greaterThan(definition.positionOffsetMeters,
-                                  glm::vec3(1.0f)))) {
+        glm::any(glm::lessThan(definition.positionOffsetMeters, glm::vec3(0.0f))) ||
+        glm::any(glm::greaterThan(definition.positionOffsetMeters, glm::vec3(1.0f)))) {
         failBlockRegistry(
             "Block " + blockId.full() +
             " analyticLight requires positive flux, range, color energy, and a position inside the unit block");
@@ -286,24 +234,16 @@ std::optional<ParsedBlockAnalyticLightDefinition> parseAnalyticLight(
 
     const bool hasEnabledProperty = object.contains("enabledStateProperty");
     const bool hasEnabledValue = object.contains("enabledStateValue");
-    if (hasEnabledProperty != hasEnabledValue ||
-        (hasEnabledProperty &&
-         (!object["enabledStateProperty"].is_string() ||
-          !object["enabledStateValue"].is_string()))) {
-        failBlockRegistry(
-            "Block " + blockId.full() +
-            " analyticLight state activation requires string property and value fields");
+    if (hasEnabledProperty != hasEnabledValue || (hasEnabledProperty && (!object["enabledStateProperty"].is_string() ||
+                                                                         !object["enabledStateValue"].is_string()))) {
+        failBlockRegistry("Block " + blockId.full() +
+                          " analyticLight state activation requires string property and value fields");
     }
     if (hasEnabledProperty) {
-        parsed.enabledStateProperty =
-            object["enabledStateProperty"].get<std::string>();
-        parsed.enabledStateValue =
-            object["enabledStateValue"].get<std::string>();
-        if (parsed.enabledStateProperty.empty() ||
-            parsed.enabledStateValue.empty()) {
-            failBlockRegistry(
-                "Block " + blockId.full() +
-                " analyticLight state activation fields must be non-empty");
+        parsed.enabledStateProperty = object["enabledStateProperty"].get<std::string>();
+        parsed.enabledStateValue = object["enabledStateValue"].get<std::string>();
+        if (parsed.enabledStateProperty.empty() || parsed.enabledStateValue.empty()) {
+            failBlockRegistry("Block " + blockId.full() + " analyticLight state activation fields must be non-empty");
         }
     }
     return parsed;
@@ -311,13 +251,10 @@ std::optional<ParsedBlockAnalyticLightDefinition> parseAnalyticLight(
 
 BiomeTintKind biomeTintKindFromResourceTint(const ResourceTextureTint tint) {
     switch (tint) {
-        case ResourceTextureTint::Grass:
-            return BiomeTintKind::Grass;
-        case ResourceTextureTint::Foliage:
-            return BiomeTintKind::Foliage;
-        case ResourceTextureTint::None:
-        default:
-            return BiomeTintKind::None;
+    case ResourceTextureTint::Grass: return BiomeTintKind::Grass;
+    case ResourceTextureTint::Foliage: return BiomeTintKind::Foliage;
+    case ResourceTextureTint::None:
+    default: return BiomeTintKind::None;
     }
 }
 
@@ -336,10 +273,12 @@ bool containsAnyToken(const std::string_view value, std::initializer_list<std::s
 
 uint8_t inferBlockMaterialKind(const BlockDef& def) {
     const std::string_view path = def.namespacedId.path();
-    if (def.isLightSource || def.lightLevel > 0 || containsAnyToken(path, {"torch", "lava", "glowstone", "sea_lantern", "lantern", "magma", "shroomlight"})) {
+    if (def.isLightSource || def.lightLevel > 0 ||
+        containsAnyToken(path, {"torch", "lava", "glowstone", "sea_lantern", "lantern", "magma", "shroomlight"})) {
         return BlockMaterialKinds::EMISSIVE;
     }
-    if (def.renderShape == BlockRenderShape::Cross || containsAnyToken(path, {"flower", "rose", "dandelion", "fern", "sapling", "bush"})) {
+    if (def.renderShape == BlockRenderShape::Cross ||
+        containsAnyToken(path, {"flower", "rose", "dandelion", "fern", "sapling", "bush"})) {
         return BlockMaterialKinds::PLANT;
     }
     if (def.renderLayer == BlockRenderLayer::Transparent) {
@@ -359,7 +298,8 @@ uint8_t inferBlockMaterialKind(const BlockDef& def) {
     if (containsAnyToken(path, {"ore", "diamond", "coal", "emerald", "lapis", "redstone", "amethyst", "quartz"})) {
         return BlockMaterialKinds::ORE;
     }
-    if (containsAnyToken(path, {"iron_block", "gold_block", "copper_block", "cut_copper", "raw_iron_block", "raw_gold_block", "raw_copper_block"})) {
+    if (containsAnyToken(path, {"iron_block", "gold_block", "copper_block", "cut_copper", "raw_iron_block",
+                                "raw_gold_block", "raw_copper_block"})) {
         return BlockMaterialKinds::METAL;
     }
     if (containsAnyToken(path, {"log", "wood", "planks", "stem", "hyphae", "bamboo"})) {
@@ -371,7 +311,8 @@ uint8_t inferBlockMaterialKind(const BlockDef& def) {
     if (containsAnyToken(path, {"dirt", "mud", "clay", "podzol", "mycelium"})) {
         return BlockMaterialKinds::DIRT;
     }
-    if (containsAnyToken(path, {"stone", "bedrock", "deepslate", "andesite", "diorite", "granite", "tuff", "basalt", "brick", "concrete"})) {
+    if (containsAnyToken(path, {"stone", "bedrock", "deepslate", "andesite", "diorite", "granite", "tuff", "basalt",
+                                "brick", "concrete"})) {
         return BlockMaterialKinds::STONE;
     }
     return BlockMaterialKinds::DEFAULT;
@@ -392,8 +333,8 @@ uint8_t inferDerivativeMaterialId(const BlockDef& def) {
     if (path == "ice") {
         return DerivativeMaterialIds::ICE;
     }
-    if (path == "snow" || path == "snow_block" || path == "powder_snow" ||
-        path == "frosted_ice" || path == "packed_ice" || path == "blue_ice") {
+    if (path == "snow" || path == "snow_block" || path == "powder_snow" || path == "frosted_ice" ||
+        path == "packed_ice" || path == "blue_ice") {
         return DerivativeMaterialIds::SNOW_ICE_SSS;
     }
     if (containsToken(path, "lava")) {
@@ -402,32 +343,27 @@ uint8_t inferDerivativeMaterialId(const BlockDef& def) {
     if (path == "fire" || containsToken(path, "lava_cauldron")) {
         return DerivativeMaterialIds::FIRE;
     }
-    if (path == "torch" || path == "wall_torch" || path == "campfire" ||
-        path == "lantern" || path == "furnace" || path == "blast_furnace" || path == "smoker") {
+    if (path == "torch" || path == "wall_torch" || path == "campfire" || path == "lantern" || path == "furnace" ||
+        path == "blast_furnace" || path == "smoker") {
         return DerivativeMaterialIds::TORCH_LIKE;
     }
-    if (path == "glowstone" || path == "magma_block" || path == "shroomlight" ||
-        path == "redstone_lamp" || path == "jack_o_lantern" ||
-        path == "crimson_stem" || path == "crimson_hyphae") {
+    if (path == "glowstone" || path == "magma_block" || path == "shroomlight" || path == "redstone_lamp" ||
+        path == "jack_o_lantern" || path == "crimson_stem" || path == "crimson_hyphae") {
         return DerivativeMaterialIds::GLOWSTONE_LIKE;
     }
-    if (path == "sea_lantern" || path == "warped_stem" || path == "warped_hyphae" ||
-        path == "redstone_wire") {
+    if (path == "sea_lantern" || path == "warped_stem" || path == "warped_hyphae" || path == "redstone_wire") {
         return DerivativeMaterialIds::SEA_LANTERN_LIKE;
     }
-    if (path == "redstone_torch" || path == "redstone_wall_torch" ||
-        path == "repeater" || path == "comparator") {
+    if (path == "redstone_torch" || path == "redstone_wall_torch" || path == "repeater" || path == "comparator") {
         return DerivativeMaterialIds::REDSTONE;
     }
-    if (path == "redstone_block" || containsToken(path, "powered_rail") ||
-        containsToken(path, "activator_rail") || containsToken(path, "detector_rail") ||
-        path == "observer") {
+    if (path == "redstone_block" || containsToken(path, "powered_rail") || containsToken(path, "activator_rail") ||
+        containsToken(path, "detector_rail") || path == "observer") {
         return DerivativeMaterialIds::RAILS;
     }
-    if (path == "soul_campfire" || path == "soul_torch" || path == "soul_wall_torch" ||
-        path == "soul_lantern" || path == "soul_fire" || path == "sea_pickle" ||
-        path == "dragon_head" || path == "spawner" || path == "enchanting_table" ||
-        path == "respawn_anchor" || path == "crying_obsidian") {
+    if (path == "soul_campfire" || path == "soul_torch" || path == "soul_wall_torch" || path == "soul_lantern" ||
+        path == "soul_fire" || path == "sea_pickle" || path == "dragon_head" || path == "spawner" ||
+        path == "enchanting_table" || path == "respawn_anchor" || path == "crying_obsidian") {
         return DerivativeMaterialIds::SOUL_FIRE;
     }
     if (containsToken(path, "amethyst") || path == "calibrated_sculk_sensor") {
@@ -448,12 +384,12 @@ uint8_t inferDerivativeMaterialId(const BlockDef& def) {
     if (path == "end_portal" || path == "end_gateway") {
         return DerivativeMaterialIds::END_PORTAL;
     }
-    if (containsToken(path, "froglight") || path == "end_rod" ||
-        path == "lapis_block" || path == "emerald_block" || containsToken(path, "candle")) {
+    if (containsToken(path, "froglight") || path == "end_rod" || path == "lapis_block" || path == "emerald_block" ||
+        containsToken(path, "candle")) {
         return DerivativeMaterialIds::TOTAL_GLOWING;
     }
-    if (containsToken(path, "weeping_vines") || path == "chorus_plant" ||
-        path == "chorus_flower" || path == "crimson_fungus" || path == "warped_fungus") {
+    if (containsToken(path, "weeping_vines") || path == "chorus_plant" || path == "chorus_flower" ||
+        path == "crimson_fungus" || path == "warped_fungus") {
         return DerivativeMaterialIds::PARTIAL_GLOWING;
     }
     if (path == "brewing_stand" || containsToken(path, "candle_cake")) {
@@ -462,36 +398,34 @@ uint8_t inferDerivativeMaterialId(const BlockDef& def) {
     if (path == "nether_gold_ore" || path == "nether_quartz_ore") {
         return DerivativeMaterialIds::NETHER_ORE;
     }
-    if (path == "iron_ore" || path == "deepslate_iron_ore" ||
-        path == "copper_ore" || path == "deepslate_copper_ore" ||
-        path == "gold_ore" || path == "deepslate_gold_ore" ||
-        path == "redstone_ore" || path == "deepslate_redstone_ore" ||
-        path == "lapis_ore" || path == "deepslate_lapis_ore" ||
-        path == "emerald_ore" || path == "deepslate_emerald_ore" ||
-        path == "diamond_ore" || path == "deepslate_diamond_ore" ||
-        path == "gilded_blackstone") {
+    if (path == "iron_ore" || path == "deepslate_iron_ore" || path == "copper_ore" || path == "deepslate_copper_ore" ||
+        path == "gold_ore" || path == "deepslate_gold_ore" || path == "redstone_ore" ||
+        path == "deepslate_redstone_ore" || path == "lapis_ore" || path == "deepslate_lapis_ore" ||
+        path == "emerald_ore" || path == "deepslate_emerald_ore" || path == "diamond_ore" ||
+        path == "deepslate_diamond_ore" || path == "gilded_blackstone") {
         return DerivativeMaterialIds::ORE;
     }
-    if (def.biomeTint == BiomeTintKind::Foliage || containsToken(path, "leaves") ||
-        path == "vine" || containsToken(path, "_vine")) {
+    if (def.biomeTint == BiomeTintKind::Foliage || containsToken(path, "leaves") || path == "vine" ||
+        containsToken(path, "_vine")) {
         return DerivativeMaterialIds::LEAVES;
     }
-    if (path == "wheat" || path == "carrots" || path == "potatoes" ||
-        path == "beetroots" || path == "seagrass") {
+    if (path == "wheat" || path == "carrots" || path == "potatoes" || path == "beetroots" || path == "seagrass") {
         return DerivativeMaterialIds::WHEAT;
     }
-    if (containsAnyToken(path, {"dandelion", "poppy", "orchid", "allium", "bluet", "tulip", "daisy", "cornflower", "rose", "torchflower"})) {
+    if (containsAnyToken(path, {"dandelion", "poppy", "orchid", "allium", "bluet", "tulip", "daisy", "cornflower",
+                                "rose", "torchflower"})) {
         return DerivativeMaterialIds::FLOWER;
     }
-    if (path == "tall_grass" || path == "large_fern" || path == "sunflower" ||
-        path == "lilac" || path == "rose_bush" || path == "peony" ||
-        path == "tall_seagrass" || path == "pitcher_plant") {
+    if (path == "tall_grass" || path == "large_fern" || path == "sunflower" || path == "lilac" || path == "rose_bush" ||
+        path == "peony" || path == "tall_seagrass" || path == "pitcher_plant") {
         return DerivativeMaterialIds::GRASS_LOWER;
     }
     if (path == "fern" || path == "grass" || path == "short_grass") {
         return DerivativeMaterialIds::GRASS;
     }
-    if (containsAnyToken(path, {"sapling", "dead_bush", "deadbush", "bamboo", "sugar_cane", "mangrove_roots", "cactus", "pumpkin_stem", "melon_stem", "kelp", "spore_blossom", "dripleaf", "pink_petals", "coral_block", "azalea"})) {
+    if (containsAnyToken(path, {"sapling", "dead_bush", "deadbush", "bamboo", "sugar_cane", "mangrove_roots", "cactus",
+                                "pumpkin_stem", "melon_stem", "kelp", "spore_blossom", "dripleaf", "pink_petals",
+                                "coral_block", "azalea"})) {
         return DerivativeMaterialIds::GRASS_LIKE;
     }
 
@@ -566,7 +500,7 @@ BlockRenderLayer parseRenderLayer(const nlohmann::json& blockJson, const bool is
 
     return isTransparent ? BlockRenderLayer::Transparent : BlockRenderLayer::Opaque;
 }
-}
+} // namespace
 
 void BlockRegistry::init(ResourceMgr* resourceMgr) {
     if (s_initialized) {
@@ -727,10 +661,8 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
         if (analyticLight.has_value()) {
             def.analyticLight = analyticLight->definition;
             if (!analyticLight->enabledStateProperty.empty()) {
-                pendingAnalyticLightStates.push_back({
-                    id,
-                    analyticLight->enabledStateProperty,
-                    analyticLight->enabledStateValue});
+                pendingAnalyticLightStates.push_back(
+                    {id, analyticLight->enabledStateProperty, analyticLight->enabledStateValue});
             }
         }
         if (blockJson.contains("isSelectable") && blockJson["isSelectable"].is_boolean()) {
@@ -751,16 +683,10 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
             }
 
             switch (MeshBuilderRegistry::getShapeClass(def.renderShapeTag)) {
-                case MeshShapeClass::Cross:
-                    def.renderShape = BlockRenderShape::Cross;
-                    break;
-                case MeshShapeClass::Custom:
-                    def.renderShape = BlockRenderShape::Custom;
-                    break;
-                case MeshShapeClass::Cube:
-                default:
-                    def.renderShape = BlockRenderShape::Cube;
-                    break;
+            case MeshShapeClass::Cross: def.renderShape = BlockRenderShape::Cross; break;
+            case MeshShapeClass::Custom: def.renderShape = BlockRenderShape::Custom; break;
+            case MeshShapeClass::Cube:
+            default: def.renderShape = BlockRenderShape::Cube; break;
             }
         }
         if (blockJson.contains("placementStrategy") && blockJson["placementStrategy"].is_string()) {
@@ -800,9 +726,7 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
         }
         def.tags = parseTagList(blockJson, def.namespacedId.full());
         const bool hasExplicitBiomeTint =
-            blockJson.contains("biomeTint") ||
-            blockJson.contains("useBiomeTint") ||
-            blockJson.contains("useGrassTint");
+            blockJson.contains("biomeTint") || blockJson.contains("useBiomeTint") || blockJson.contains("useGrassTint");
         def.biomeTint = parseBiomeTintKind(blockJson);
         if (blockJson.contains("timeToBreak") && blockJson["timeToBreak"].is_number_integer()) {
             def.timeToBreak = blockJson["timeToBreak"].get<int>();
@@ -878,12 +802,13 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
             }
             def.redstoneBehavior = blockJson["redstoneBehavior"].get<std::string>();
             if (!isKnownRedstoneBehavior(def.redstoneBehavior)) {
-                failBlockRegistry("Unknown redstoneBehavior '" + def.redstoneBehavior + "' for block: " + def.namespacedId.full());
+                failBlockRegistry("Unknown redstoneBehavior '" + def.redstoneBehavior +
+                                  "' for block: " + def.namespacedId.full());
             }
         }
         if (def.redstoneBehavior == "button" && def.redstonePulseTicks == 0) {
             failBlockRegistry("redstoneBehavior=button requires redstonePulseTicks for block: " +
-                                     def.namespacedId.full());
+                              def.namespacedId.full());
         }
         if (blockJson.contains("isWireContainer")) {
             if (!blockJson["isWireContainer"].is_boolean()) {
@@ -893,85 +818,77 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
         }
         if (def.isWireContainer && def.redstoneBehavior != "wire_container") {
             failBlockRegistry("isWireContainer requires redstoneBehavior=wire_container for block: " +
-                                     def.namespacedId.full());
+                              def.namespacedId.full());
         }
         if (def.redstoneBehavior == "wire_container" && !def.isWireContainer) {
             failBlockRegistry("redstoneBehavior=wire_container requires isWireContainer=true for block: " +
-                                     def.namespacedId.full());
+                              def.namespacedId.full());
         }
         if (blockJson.contains("redstoneWireChannel")) {
             if (!blockJson["redstoneWireChannel"].is_string()) {
-                failBlockRegistry("redstoneWireChannel must be a string for block: " +
-                                         def.namespacedId.full());
+                failBlockRegistry("redstoneWireChannel must be a string for block: " + def.namespacedId.full());
             }
             if (def.redstoneBehavior != "wire") {
                 failBlockRegistry("redstoneWireChannel requires redstoneBehavior=wire for block: " +
-                                         def.namespacedId.full());
+                                  def.namespacedId.full());
             }
             def.redstoneWireChannel = blockJson["redstoneWireChannel"].get<std::string>();
             if (def.redstoneWireChannel.empty()) {
-                failBlockRegistry("redstoneWireChannel must not be empty for block: " +
-                                         def.namespacedId.full());
+                failBlockRegistry("redstoneWireChannel must not be empty for block: " + def.namespacedId.full());
             }
-            def.redstoneWireChannelId =
-                assignRedstoneWireChannelId(def.redstoneWireChannel, def.namespacedId.full());
+            def.redstoneWireChannelId = assignRedstoneWireChannelId(def.redstoneWireChannel, def.namespacedId.full());
         }
         if (blockJson.contains("redstoneWireTint")) {
             if (!blockJson["redstoneWireTint"].is_number_integer()) {
-                failBlockRegistry("redstoneWireTint must be an integer for block: " +
-                                         def.namespacedId.full());
+                failBlockRegistry("redstoneWireTint must be an integer for block: " + def.namespacedId.full());
             }
             if (def.redstoneBehavior != "wire") {
                 failBlockRegistry("redstoneWireTint requires redstoneBehavior=wire for block: " +
-                                         def.namespacedId.full());
+                                  def.namespacedId.full());
             }
             const int tint = blockJson["redstoneWireTint"].get<int>();
             if (tint < 0 || tint > 15) {
-                failBlockRegistry("redstoneWireTint must be between 0 and 15 for block: " +
-                                         def.namespacedId.full());
+                failBlockRegistry("redstoneWireTint must be between 0 and 15 for block: " + def.namespacedId.full());
             }
             def.redstoneWireTint = static_cast<uint8_t>(tint);
         }
         if (def.redstoneBehavior == "wire" && def.redstoneWireChannel.empty()) {
             failBlockRegistry("redstoneBehavior=wire requires redstoneWireChannel for block: " +
-                                     def.namespacedId.full());
+                              def.namespacedId.full());
         }
         if (def.redstoneBehavior == "wire" && !blockJson.contains("redstoneWireTint")) {
-            failBlockRegistry("redstoneBehavior=wire requires redstoneWireTint for block: " +
-                                     def.namespacedId.full());
+            failBlockRegistry("redstoneBehavior=wire requires redstoneWireTint for block: " + def.namespacedId.full());
         }
         if (def.redstoneBehavior == "wire" && def.redstoneWireChannelId == 0) {
             failBlockRegistry("redstoneBehavior=wire requires a parsed redstoneWireChannelId for block: " +
-                                     def.namespacedId.full());
+                              def.namespacedId.full());
         }
         if (blockJson.contains("pressurePlateEntityFilter")) {
             if (!blockJson["pressurePlateEntityFilter"].is_string()) {
-                failBlockRegistry("pressurePlateEntityFilter must be a string for block: " +
-                                         def.namespacedId.full());
+                failBlockRegistry("pressurePlateEntityFilter must be a string for block: " + def.namespacedId.full());
             }
             if (def.redstoneBehavior != "plate") {
                 failBlockRegistry("pressurePlateEntityFilter requires redstoneBehavior=plate for block: " +
-                                         def.namespacedId.full());
+                                  def.namespacedId.full());
             }
             def.pressurePlateEntityFilter = blockJson["pressurePlateEntityFilter"].get<std::string>();
             if (!isKnownPressurePlateEntityFilter(def.pressurePlateEntityFilter)) {
                 failBlockRegistry("Unknown pressurePlateEntityFilter '" + def.pressurePlateEntityFilter +
-                                         "' for block: " + def.namespacedId.full());
+                                  "' for block: " + def.namespacedId.full());
             }
         }
         if (def.redstoneBehavior == "plate" && def.pressurePlateEntityFilter.empty()) {
             failBlockRegistry("redstoneBehavior=plate requires pressurePlateEntityFilter for block: " +
-                                     def.namespacedId.full());
+                              def.namespacedId.full());
         }
         if (blockJson.contains("pistonPushReaction")) {
             if (!blockJson["pistonPushReaction"].is_string()) {
-                failBlockRegistry("pistonPushReaction must be a string for block: " +
-                                         def.namespacedId.full());
+                failBlockRegistry("pistonPushReaction must be a string for block: " + def.namespacedId.full());
             }
             def.pistonPushReaction = blockJson["pistonPushReaction"].get<std::string>();
             if (!isKnownPistonPushReaction(def.pistonPushReaction)) {
                 failBlockRegistry("Unknown pistonPushReaction '" + def.pistonPushReaction +
-                                         "' for block: " + def.namespacedId.full());
+                                  "' for block: " + def.namespacedId.full());
             }
         }
         if (blockJson.contains("redstoneControlledProperty")) {
@@ -983,37 +900,39 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
                 failBlockRegistry("redstoneControlledProperty must not be empty for block: " + def.namespacedId.full());
             }
             if (!def.respondsToRedstone) {
-                failBlockRegistry("redstoneControlledProperty requires respondsToRedstone=true for block: " + def.namespacedId.full());
+                failBlockRegistry("redstoneControlledProperty requires respondsToRedstone=true for block: " +
+                                  def.namespacedId.full());
             }
         }
         if (blockJson.contains("redstoneControlledMirrorProperties")) {
             if (!blockJson["redstoneControlledMirrorProperties"].is_array()) {
                 failBlockRegistry("redstoneControlledMirrorProperties must be an array for block: " +
-                                         def.namespacedId.full());
+                                  def.namespacedId.full());
             }
             if (def.redstoneControlledProperty.empty()) {
                 failBlockRegistry("redstoneControlledMirrorProperties requires redstoneControlledProperty for block: " +
-                                         def.namespacedId.full());
+                                  def.namespacedId.full());
             }
             for (const nlohmann::json& mirrorJson : blockJson["redstoneControlledMirrorProperties"]) {
                 if (!mirrorJson.is_string()) {
                     failBlockRegistry("redstoneControlledMirrorProperties entries must be strings for block: " +
-                                             def.namespacedId.full());
+                                      def.namespacedId.full());
                 }
                 const std::string mirrorProperty = mirrorJson.get<std::string>();
                 if (mirrorProperty.empty()) {
                     failBlockRegistry("redstoneControlledMirrorProperties entries must not be empty for block: " +
-                                             def.namespacedId.full());
+                                      def.namespacedId.full());
                 }
                 if (mirrorProperty == def.redstoneControlledProperty) {
-                    failBlockRegistry("redstoneControlledMirrorProperties must not repeat redstoneControlledProperty for block: " +
-                                             def.namespacedId.full());
+                    failBlockRegistry(
+                        "redstoneControlledMirrorProperties must not repeat redstoneControlledProperty for block: " +
+                        def.namespacedId.full());
                 }
                 if (std::find(def.redstoneControlledMirrorProperties.begin(),
                               def.redstoneControlledMirrorProperties.end(),
                               mirrorProperty) != def.redstoneControlledMirrorProperties.end()) {
                     failBlockRegistry("redstoneControlledMirrorProperties must not contain duplicates for block: " +
-                                             def.namespacedId.full());
+                                      def.namespacedId.full());
                 }
                 def.redstoneControlledMirrorProperties.push_back(mirrorProperty);
             }
@@ -1021,12 +940,11 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
         if (blockJson.contains("redstoneControlledPowerInverted")) {
             if (!blockJson["redstoneControlledPowerInverted"].is_boolean()) {
                 failBlockRegistry("redstoneControlledPowerInverted must be a boolean for block: " +
-                                         def.namespacedId.full());
+                                  def.namespacedId.full());
             }
             if (def.redstoneControlledProperty.empty()) {
-                failBlockRegistry(
-                    "redstoneControlledPowerInverted requires redstoneControlledProperty for block: " +
-                    def.namespacedId.full());
+                failBlockRegistry("redstoneControlledPowerInverted requires redstoneControlledProperty for block: " +
+                                  def.namespacedId.full());
             }
             def.redstoneControlledPowerInverted = blockJson["redstoneControlledPowerInverted"].get<bool>();
         }
@@ -1060,8 +978,7 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
 #endif
         };
 
-        auto resolveTextureKey = [&](const nlohmann::json& tex,
-                                     const char* key,
+        auto resolveTextureKey = [&](const nlohmann::json& tex, const char* key,
                                      const std::string& context) -> AnimatedTextureRef {
             if (!tex.contains(key)) {
                 return makeStaticWorldTexture(0);
@@ -1072,8 +989,7 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
             return resolveTextureName(tex[key].get<std::string>());
         };
 
-        auto applyTextureObjectToBlock = [&](const nlohmann::json& tex,
-                                             const std::string& context) {
+        auto applyTextureObjectToBlock = [&](const nlohmann::json& tex, const std::string& context) {
             for (auto it = tex.begin(); it != tex.end(); ++it) {
                 if (!it.value().is_string()) {
                     failBlockRegistry("Block texture key must be a string: " + context + "." + it.key());
@@ -1110,8 +1026,7 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
             }
         };
 
-        auto parseTextureFaces = [&](const nlohmann::json& tex,
-                                     const BlockDef& baseDef,
+        auto parseTextureFaces = [&](const nlohmann::json& tex, const BlockDef& baseDef,
                                      const std::string& context) -> BlockTextureFaces {
             if (!tex.is_object()) {
                 failBlockRegistry("State texture entry must be an object: " + context);
@@ -1159,12 +1074,11 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
                 failBlockRegistry("stateTextures must be an object for block: " + def.namespacedId.full());
             }
 
-            for (auto propertyIt = blockJson["stateTextures"].begin();
-                 propertyIt != blockJson["stateTextures"].end();
+            for (auto propertyIt = blockJson["stateTextures"].begin(); propertyIt != blockJson["stateTextures"].end();
                  ++propertyIt) {
                 if (!propertyIt.value().is_object()) {
-                    failBlockRegistry("stateTextures property entry must be an object: " +
-                                             def.namespacedId.full() + "." + propertyIt.key());
+                    failBlockRegistry("stateTextures property entry must be an object: " + def.namespacedId.full() +
+                                      "." + propertyIt.key());
                 }
 
                 StateTextureRule rule;
@@ -1172,8 +1086,7 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
                 for (auto valueIt = propertyIt.value().begin(); valueIt != propertyIt.value().end(); ++valueIt) {
                     rule.texturesByValue.emplace(
                         valueIt.key(),
-                        parseTextureFaces(valueIt.value(),
-                                          def,
+                        parseTextureFaces(valueIt.value(), def,
                                           def.namespacedId.full() + "." + propertyIt.key() + "=" + valueIt.key()));
                 }
                 def.stateTextureRules.push_back(std::move(rule));
@@ -1208,7 +1121,8 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
                 }
                 def.randomTick.chance = chanceIt->get<float>();
                 if (def.randomTick.chance < 0.0f || def.randomTick.chance > 1.0f) {
-                    failBlockRegistry("randomTick.chance must be between 0 and 1 for block: " + def.namespacedId.full());
+                    failBlockRegistry("randomTick.chance must be between 0 and 1 for block: " +
+                                      def.namespacedId.full());
                 }
             }
         }
@@ -1225,9 +1139,8 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
                 const auto textureIt = it.value().find("texture");
                 const auto framesIt = it.value().find("frames");
                 const auto fpsIt = it.value().find("fps");
-                if (textureIt == it.value().end() || !textureIt->is_string() ||
-                    framesIt == it.value().end() || !framesIt->is_number_integer() ||
-                    fpsIt == it.value().end() || !fpsIt->is_number()) {
+                if (textureIt == it.value().end() || !textureIt->is_string() || framesIt == it.value().end() ||
+                    !framesIt->is_number_integer() || fpsIt == it.value().end() || !fpsIt->is_number()) {
                     continue;
                 }
 
@@ -1242,7 +1155,7 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
                     const TextureAnimationInfo resolved = resourceMgr->getTextureAnimation(animation.textureName);
                     if (!resolved.isAnimated) {
                         failBlockRegistry("Block animated texture is not declared as animated: " +
-                                                 def.namespacedId.full() + "." + it.key());
+                                          def.namespacedId.full() + "." + it.key());
                     }
                     animation.ref.firstLayer = resolved.firstLayer;
                     animation.ref.frameCount = static_cast<uint16_t>(resolved.frameCount);
@@ -1283,43 +1196,37 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
             }
 
             if (!def.redstoneControlledProperty.empty()) {
-                const auto propertyIt = std::find_if(
-                    properties.begin(),
-                    properties.end(),
-                    [&](const auto& property) {
-                        return property.first == def.redstoneControlledProperty;
-                    });
+                const auto propertyIt = std::find_if(properties.begin(), properties.end(), [&](const auto& property) {
+                    return property.first == def.redstoneControlledProperty;
+                });
                 if (propertyIt == properties.end()) {
                     failBlockRegistry("redstoneControlledProperty must be declared in properties for block: " +
-                                             def.namespacedId.full());
+                                      def.namespacedId.full());
                 }
                 const auto& values = propertyIt->second;
                 if (std::find(values.begin(), values.end(), "false") == values.end() ||
                     std::find(values.begin(), values.end(), "true") == values.end()) {
-                    failBlockRegistry(
-                        "redstoneControlledProperty must declare false and true values for block: " +
-                        def.namespacedId.full());
+                    failBlockRegistry("redstoneControlledProperty must declare false and true values for block: " +
+                                      def.namespacedId.full());
                 }
                 redstoneControlledPropertyValidated = true;
             }
             if (!def.redstoneControlledMirrorProperties.empty()) {
                 for (const std::string& mirrorProperty : def.redstoneControlledMirrorProperties) {
-                    const auto propertyIt = std::find_if(
-                        properties.begin(),
-                        properties.end(),
-                        [&](const auto& property) {
-                            return property.first == mirrorProperty;
-                        });
+                    const auto propertyIt =
+                        std::find_if(properties.begin(), properties.end(),
+                                     [&](const auto& property) { return property.first == mirrorProperty; });
                     if (propertyIt == properties.end()) {
-                        failBlockRegistry("redstoneControlledMirrorProperties entry must be declared in properties for block: " +
-                                                 def.namespacedId.full() + "." + mirrorProperty);
+                        failBlockRegistry(
+                            "redstoneControlledMirrorProperties entry must be declared in properties for block: " +
+                            def.namespacedId.full() + "." + mirrorProperty);
                     }
                     const auto& values = propertyIt->second;
                     if (std::find(values.begin(), values.end(), "false") == values.end() ||
                         std::find(values.begin(), values.end(), "true") == values.end()) {
-                        failBlockRegistry(
-                            "redstoneControlledMirrorProperties entries must declare false and true values for block: " +
-                            def.namespacedId.full() + "." + mirrorProperty);
+                        failBlockRegistry("redstoneControlledMirrorProperties entries must declare false and true "
+                                          "values for block: " +
+                                          def.namespacedId.full() + "." + mirrorProperty);
                     }
                 }
                 redstoneControlledMirrorPropertiesValidated = true;
@@ -1339,11 +1246,11 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
         }
         if (!redstoneControlledPropertyValidated) {
             failBlockRegistry("redstoneControlledProperty requires a properties object for block: " +
-                                     def.namespacedId.full());
+                              def.namespacedId.full());
         }
         if (!redstoneControlledMirrorPropertiesValidated) {
             failBlockRegistry("redstoneControlledMirrorProperties requires a properties object for block: " +
-                                     def.namespacedId.full());
+                              def.namespacedId.full());
         }
 
         if (blockJson.contains("modelVariants")) {
@@ -1362,34 +1269,23 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
 
     BlockStateRegistry::explodeAllStates();
     PropIndices::init();
-    for (const PendingAnalyticLightState& pending :
-         pendingAnalyticLightStates) {
-        const uint16_t propertyIndex =
-            BlockStateRegistry::getPropertyNameIndex(pending.property);
-        const uint16_t valueIndex =
-            BlockStateRegistry::getPropertyValueIndex(
-                propertyIndex, pending.value);
+    for (const PendingAnalyticLightState& pending : pendingAnalyticLightStates) {
+        const uint16_t propertyIndex = BlockStateRegistry::getPropertyNameIndex(pending.property);
+        const uint16_t valueIndex = BlockStateRegistry::getPropertyValueIndex(propertyIndex, pending.value);
         bool propertyDeclared = false;
         bool valueDeclared = false;
-        for (const BlockStateId state :
-             BlockStateRegistry::getStatesForBlock(pending.blockId)) {
-            const uint16_t stateValue =
-                BlockStateRegistry::getPropertyIndex(state, propertyIndex);
-            propertyDeclared = propertyDeclared ||
-                stateValue != BlockStateRegistry::INVALID_INDEX;
+        for (const BlockStateId state : BlockStateRegistry::getStatesForBlock(pending.blockId)) {
+            const uint16_t stateValue = BlockStateRegistry::getPropertyIndex(state, propertyIndex);
+            propertyDeclared = propertyDeclared || stateValue != BlockStateRegistry::INVALID_INDEX;
             valueDeclared = valueDeclared || stateValue == valueIndex;
         }
-        if (propertyIndex == BlockStateRegistry::INVALID_INDEX ||
-            valueIndex == BlockStateRegistry::INVALID_INDEX ||
-            !propertyDeclared || !valueDeclared ||
-            pending.blockId >= s_blocks.size() ||
+        if (propertyIndex == BlockStateRegistry::INVALID_INDEX || valueIndex == BlockStateRegistry::INVALID_INDEX ||
+            !propertyDeclared || !valueDeclared || pending.blockId >= s_blocks.size() ||
             !s_blocks[pending.blockId].analyticLight.has_value()) {
-            failBlockRegistry(
-                "Block " + BlockRegistry::getNamespacedId(pending.blockId).full() +
-                " analyticLight state activation references an undeclared property value");
+            failBlockRegistry("Block " + BlockRegistry::getNamespacedId(pending.blockId).full() +
+                              " analyticLight state activation references an undeclared property value");
         }
-        BlockAnalyticLightDefinition& definition =
-            *s_blocks[pending.blockId].analyticLight;
+        BlockAnalyticLightDefinition& definition = *s_blocks[pending.blockId].analyticLight;
         definition.enabledStatePropertyIndex = propertyIndex;
         definition.enabledStateValueIndex = valueIndex;
     }

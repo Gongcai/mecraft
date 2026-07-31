@@ -77,29 +77,21 @@ bool resolveBlockToken(const nlohmann::json& value, BlockID& outId) {
     return BlockRegistry::tryGetIdByName(token, outId);
 }
 
-bool readItemToken(const nlohmann::json& value,
-                   const std::string& context,
-                   ItemID& outId,
-                   std::string& error) {
+bool readItemToken(const nlohmann::json& value, const std::string& context, ItemID& outId, std::string& error) {
     if (!resolveItemToken(value, outId)) {
         return fail(error, "Unknown item id in " + context);
     }
     return true;
 }
 
-bool readBlockToken(const nlohmann::json& value,
-                    const std::string& context,
-                    BlockID& outId,
-                    std::string& error) {
+bool readBlockToken(const nlohmann::json& value, const std::string& context, BlockID& outId, std::string& error) {
     if (!resolveBlockToken(value, outId)) {
         return fail(error, "Unknown block id in " + context);
     }
     return true;
 }
 
-const nlohmann::json* findRequiredField(const nlohmann::json& owner,
-                                        const std::string& context,
-                                        const char* fieldName,
+const nlohmann::json* findRequiredField(const nlohmann::json& owner, const std::string& context, const char* fieldName,
                                         std::string& error) {
     const auto it = owner.find(fieldName);
     if (it == owner.end()) {
@@ -109,9 +101,7 @@ const nlohmann::json* findRequiredField(const nlohmann::json& owner,
     return &(*it);
 }
 
-bool parseItemUseBehavior(const nlohmann::json& value,
-                          const std::string& context,
-                          ItemUseBehavior& out,
+bool parseItemUseBehavior(const nlohmann::json& value, const std::string& context, ItemUseBehavior& out,
                           std::string& error) {
     if (!value.is_string()) {
         return fail(error, context + ".behavior must be a string");
@@ -133,9 +123,7 @@ bool parseItemUseBehavior(const nlohmann::json& value,
     return fail(error, "Unknown item use behavior in " + context + ": " + behavior);
 }
 
-bool parseMatchBlocks(const nlohmann::json& ruleJson,
-                      const std::string& context,
-                      std::vector<BlockID>& outBlocks,
+bool parseMatchBlocks(const nlohmann::json& ruleJson, const std::string& context, std::vector<BlockID>& outBlocks,
                       std::string& error) {
     const nlohmann::json* matchJson = findRequiredField(ruleJson, context, "match", error);
     if (matchJson == nullptr) {
@@ -177,10 +165,7 @@ bool parseMatchBlocks(const nlohmann::json& ruleJson,
     return true;
 }
 
-bool readDurabilityCost(const nlohmann::json& ruleJson,
-                        const std::string& context,
-                        uint16_t& out,
-                        std::string& error) {
+bool readDurabilityCost(const nlohmann::json& ruleJson, const std::string& context, uint16_t& out, std::string& error) {
     const nlohmann::json* value = findRequiredField(ruleJson, context, "consume_durability", error);
     if (value == nullptr) {
         return false;
@@ -203,10 +188,7 @@ bool validateFluidResultBlock(const ItemUseRule& rule, const std::string& contex
     return true;
 }
 
-bool readConditionFlag(const nlohmann::json& ruleJson,
-                       const std::string& context,
-                       const char* conditionName,
-                       bool& out,
+bool readConditionFlag(const nlohmann::json& ruleJson, const std::string& context, const char* conditionName, bool& out,
                        std::string& error) {
     const nlohmann::json* conditionsJson = findRequiredField(ruleJson, context, "conditions", error);
     if (conditionsJson == nullptr) {
@@ -215,10 +197,8 @@ bool readConditionFlag(const nlohmann::json& ruleJson,
     if (!conditionsJson->is_object()) {
         return fail(error, context + ".conditions must be an object");
     }
-    const nlohmann::json* conditionJson = findRequiredField(*conditionsJson,
-                                                            context + ".conditions",
-                                                            conditionName,
-                                                            error);
+    const nlohmann::json* conditionJson =
+        findRequiredField(*conditionsJson, context + ".conditions", conditionName, error);
     if (conditionJson == nullptr) {
         return false;
     }
@@ -229,10 +209,8 @@ bool readConditionFlag(const nlohmann::json& ruleJson,
     return true;
 }
 
-bool parseUseOnBlockRules(const nlohmann::json& itemJson,
-                          const std::string& itemName,
-                          std::vector<ItemUseRule>& outRules,
-                          std::string& error) {
+bool parseUseOnBlockRules(const nlohmann::json& itemJson, const std::string& itemName,
+                          std::vector<ItemUseRule>& outRules, std::string& error) {
     const auto rulesIt = itemJson.find("use_on_block");
     if (rulesIt == itemJson.end()) {
         outRules.clear();
@@ -258,43 +236,40 @@ bool parseUseOnBlockRules(const nlohmann::json& itemJson,
         }
 
         switch (rule.behavior) {
-            case ItemUseBehavior::TillSoil: {
-                const nlohmann::json* resultBlock = findRequiredField(ruleJson, context, "result_block", error);
-                if (!parseMatchBlocks(ruleJson, context, rule.matchBlocks, error) ||
-                    resultBlock == nullptr ||
-                    !readBlockToken(*resultBlock, context + ".result_block", rule.resultBlock, error) ||
-                    !readDurabilityCost(ruleJson, context, rule.consumeDurability, error) ||
-                    !readConditionFlag(ruleJson, context, "empty_above", rule.requiresEmptyAbove, error)) {
-                    return false;
-                }
-                break;
+        case ItemUseBehavior::TillSoil: {
+            const nlohmann::json* resultBlock = findRequiredField(ruleJson, context, "result_block", error);
+            if (!parseMatchBlocks(ruleJson, context, rule.matchBlocks, error) || resultBlock == nullptr ||
+                !readBlockToken(*resultBlock, context + ".result_block", rule.resultBlock, error) ||
+                !readDurabilityCost(ruleJson, context, rule.consumeDurability, error) ||
+                !readConditionFlag(ruleJson, context, "empty_above", rule.requiresEmptyAbove, error)) {
+                return false;
             }
-            case ItemUseBehavior::BucketPickupFluid: {
-                const nlohmann::json* resultBlock = findRequiredField(ruleJson, context, "result_block", error);
-                const nlohmann::json* resultItem = findRequiredField(ruleJson, context, "result_item", error);
-                if (!parseMatchBlocks(ruleJson, context, rule.matchBlocks, error) ||
-                    resultBlock == nullptr ||
-                    resultItem == nullptr ||
-                    !readBlockToken(*resultBlock, context + ".result_block", rule.resultBlock, error) ||
-                    !readItemToken(*resultItem, context + ".result_item", rule.resultItem, error) ||
-                    !readConditionFlag(ruleJson, context, "source_fluid", rule.requiresSourceFluid, error)) {
-                    return false;
-                }
-                break;
+            break;
+        }
+        case ItemUseBehavior::BucketPickupFluid: {
+            const nlohmann::json* resultBlock = findRequiredField(ruleJson, context, "result_block", error);
+            const nlohmann::json* resultItem = findRequiredField(ruleJson, context, "result_item", error);
+            if (!parseMatchBlocks(ruleJson, context, rule.matchBlocks, error) || resultBlock == nullptr ||
+                resultItem == nullptr ||
+                !readBlockToken(*resultBlock, context + ".result_block", rule.resultBlock, error) ||
+                !readItemToken(*resultItem, context + ".result_item", rule.resultItem, error) ||
+                !readConditionFlag(ruleJson, context, "source_fluid", rule.requiresSourceFluid, error)) {
+                return false;
             }
-            case ItemUseBehavior::BucketPlaceFluid: {
-                const nlohmann::json* resultBlock = findRequiredField(ruleJson, context, "result_block", error);
-                const nlohmann::json* resultItem = findRequiredField(ruleJson, context, "result_item", error);
-                if (resultBlock == nullptr ||
-                    resultItem == nullptr ||
-                    !readBlockToken(*resultBlock, context + ".result_block", rule.resultBlock, error) ||
-                    !validateFluidResultBlock(rule, context, error) ||
-                    !readItemToken(*resultItem, context + ".result_item", rule.resultItem, error) ||
-                    !readConditionFlag(ruleJson, context, "can_place_fluid", rule.requiresFluidPlacement, error)) {
-                    return false;
-                }
-                break;
+            break;
+        }
+        case ItemUseBehavior::BucketPlaceFluid: {
+            const nlohmann::json* resultBlock = findRequiredField(ruleJson, context, "result_block", error);
+            const nlohmann::json* resultItem = findRequiredField(ruleJson, context, "result_item", error);
+            if (resultBlock == nullptr || resultItem == nullptr ||
+                !readBlockToken(*resultBlock, context + ".result_block", rule.resultBlock, error) ||
+                !validateFluidResultBlock(rule, context, error) ||
+                !readItemToken(*resultItem, context + ".result_item", rule.resultItem, error) ||
+                !readConditionFlag(ruleJson, context, "can_place_fluid", rule.requiresFluidPlacement, error)) {
+                return false;
             }
+            break;
+        }
         }
 
         rules.push_back(std::move(rule));
@@ -303,9 +278,7 @@ bool parseUseOnBlockRules(const nlohmann::json& itemJson,
     return true;
 }
 
-bool parseItemTagList(const nlohmann::json& ownerJson,
-                      const std::string& ownerName,
-                      std::vector<NamespacedId>& outTags,
+bool parseItemTagList(const nlohmann::json& ownerJson, const std::string& ownerName, std::vector<NamespacedId>& outTags,
                       std::string& error) {
     std::vector<NamespacedId> tags;
     const auto tagsIt = ownerJson.find("tags");
@@ -334,7 +307,7 @@ void appendUniqueTags(std::vector<NamespacedId>& target, const std::vector<Names
         }
     }
 }
-}
+} // namespace
 
 bool ItemRegistry::init() {
     if (s_initialized || s_initializing) {
@@ -469,7 +442,8 @@ bool ItemRegistry::init() {
             }
         }
 
-        if (!found) continue;
+        if (!found)
+            continue;
 
         if (id >= s_items.size()) {
             s_items.resize(id + 1);
@@ -576,7 +550,7 @@ const ItemDef& ItemRegistry::get(const ItemID id) {
         }
     }
     if (id >= s_items.size()) {
-        return s_items[0];  // AIR
+        return s_items[0]; // AIR
     }
     return s_items[id];
 }
@@ -657,7 +631,7 @@ ItemID ItemRegistry::fromBlock(const BlockID blockId) {
     if (it != s_blockToItem.end()) {
         return it->second;
     }
-    return 0;  // AIR
+    return 0; // AIR
 }
 
 BlockID ItemRegistry::toPlaceBlock(const ItemID itemId) {
@@ -665,7 +639,7 @@ BlockID ItemRegistry::toPlaceBlock(const ItemID itemId) {
     if (it != s_itemToPlaceBlock.end()) {
         return it->second;
     }
-    return 0;  // AIR
+    return 0; // AIR
 }
 
 BlockID ItemRegistry::toRenderBlock(const ItemID itemId) {
@@ -673,7 +647,7 @@ BlockID ItemRegistry::toRenderBlock(const ItemID itemId) {
     if (it != s_itemToRenderBlock.end()) {
         return it->second;
     }
-    return 0;  // AIR
+    return 0; // AIR
 }
 
 bool ItemRegistry::hasTag(const ItemID itemId, const NamespacedId& tag) {
@@ -717,7 +691,8 @@ size_t ItemRegistry::getItemCount() {
 // ─── BlockDropTable ──────────────────────────────────────────────────────────
 
 void BlockDropTable::init() {
-    if (s_initialized) return;
+    if (s_initialized)
+        return;
 
     // Default: each block drops its block-backed item
     for (size_t i = 0; i < BlockRegistry::getBlockCount(); ++i) {
@@ -740,14 +715,17 @@ void BlockDropTable::init() {
 }
 
 ItemID BlockDropTable::getDropItem(const BlockID blockId) {
-    if (!s_initialized) init();
+    if (!s_initialized)
+        init();
     auto it = s_drops.find(resolveDropBlockId(blockId));
-    if (it == s_drops.end()) return 0;
+    if (it == s_drops.end())
+        return 0;
     return it->second.dropItem;
 }
 
 const BlockDropEntry& BlockDropTable::get(const BlockID blockId) {
-    if (!s_initialized) init();
+    if (!s_initialized)
+        init();
     auto it = s_drops.find(resolveDropBlockId(blockId));
     if (it == s_drops.end()) {
         static BlockDropEntry empty{0, 1, 1};

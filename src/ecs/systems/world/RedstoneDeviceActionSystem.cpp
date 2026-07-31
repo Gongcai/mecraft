@@ -32,9 +32,7 @@ constexpr float kDispensedItemSpeed = 4.0f;
 constexpr float kDispensedItemOffset = 0.72f;
 constexpr float kDispensedItemSpinRadians = 2.6f;
 
-uint16_t requiredPropertyValue(const BlockStateId stateId,
-                               const uint16_t property,
-                               const char* propertyName) {
+uint16_t requiredPropertyValue(const BlockStateId stateId, const uint16_t property, const char* propertyName) {
     if (property == PropIndices::INVALID) {
         failRedstoneDeviceActionSystem(std::string("Redstone device property is not registered: ") + propertyName);
     }
@@ -85,8 +83,7 @@ std::size_t eventHash(const RedstoneDeviceActivationEvent& event) {
     return static_cast<std::size_t>(seed);
 }
 
-int selectTriggeredSlot(const BlockEntityInventory& inventory,
-                        const int slotCount,
+int selectTriggeredSlot(const BlockEntityInventory& inventory, const int slotCount,
                         const RedstoneDeviceActivationEvent& event) {
     std::array<int, BlockEntityInventory::SLOT_COUNT> nonEmptySlots{};
     int nonEmptyCount = 0;
@@ -107,7 +104,8 @@ int selectTriggeredSlot(const BlockEntityInventory& inventory,
 
 const ContainerBehaviorDef& storageBehaviorForDevice(const BlockDef& blockDef) {
     if (blockDef.containerUi.empty()) {
-        failRedstoneDeviceActionSystem(blockDef.namespacedId.full() + " redstone device requires a container UI binding");
+        failRedstoneDeviceActionSystem(blockDef.namespacedId.full() +
+                                       " redstone device requires a container UI binding");
     }
 
     const ui::ContainerUiDef& uiDef = ui::ContainerUiRegistry::require(blockDef.containerUi);
@@ -128,9 +126,7 @@ BlockEntityInventoryStore& ensureInventoryStore(GameplayRegistry& registry) {
     return registry.ctxGet<BlockEntityInventoryStore>();
 }
 
-void consumeOneFromSlot(BlockEntityInventory& inventory,
-                        const int slot,
-                        const ItemStack& stack) {
+void consumeOneFromSlot(BlockEntityInventory& inventory, const int slot, const ItemStack& stack) {
     if (stack.count <= 1) {
         inventory.setSlotStack(slot, {});
         return;
@@ -141,9 +137,7 @@ void consumeOneFromSlot(BlockEntityInventory& inventory,
     inventory.setSlotStack(slot, remaining);
 }
 
-void replaceSingleItemInSlot(BlockEntityInventory& inventory,
-                             const int slot,
-                             const ItemStack& stack,
+void replaceSingleItemInSlot(BlockEntityInventory& inventory, const int slot, const ItemStack& stack,
                              const ItemID resultItem) {
     if (stack.count != 1) {
         failRedstoneDeviceActionSystem("Single-result redstone device action received a multi-item stack");
@@ -157,19 +151,12 @@ void replaceSingleItemInSlot(BlockEntityInventory& inventory,
     ItemStack result;
     result.itemId = resultItem;
     result.count = 1;
-    result.durability = ItemRegistry::get(resultItem).isTool
-        ? ItemRegistry::get(resultItem).maxDurability
-        : 0;
+    result.durability = ItemRegistry::get(resultItem).isTool ? ItemRegistry::get(resultItem).maxDurability : 0;
     inventory.setSlotStack(slot, result);
 }
 
-bool placeFluidFromBucket(World& world,
-                          GameplayRegistry& registry,
-                          BlockEntityInventory& inventory,
-                          const int slot,
-                          const ItemStack& stack,
-                          const ItemDef& itemDef,
-                          const glm::ivec3& targetPosition) {
+bool placeFluidFromBucket(World& world, GameplayRegistry& registry, BlockEntityInventory& inventory, const int slot,
+                          const ItemStack& stack, const ItemDef& itemDef, const glm::ivec3& targetPosition) {
     const ItemUseRule* rule = ItemUseRules::findRule(itemDef, ItemUseBehavior::BucketPlaceFluid);
     if (rule == nullptr) {
         return false;
@@ -181,22 +168,12 @@ bool placeFluidFromBucket(World& world,
     const BlockStateId sourceFluid = ItemUseDispatcher::makeSourceFluidState(rule->resultBlock);
     world.setFluidState(targetPosition.x, targetPosition.y, targetPosition.z, sourceFluid);
     replaceSingleItemInSlot(inventory, slot, stack, rule->resultItem);
-    ensureAudioEventBus(registry).push({
-        "item.bucket.empty",
-        glm::vec3(targetPosition) + glm::vec3(0.5f),
-        true,
-        1.0f
-    });
+    ensureAudioEventBus(registry).push({"item.bucket.empty", glm::vec3(targetPosition) + glm::vec3(0.5f), true, 1.0f});
     return true;
 }
 
-bool pickupFluidIntoBucket(World& world,
-                           GameplayRegistry& registry,
-                           BlockEntityInventory& inventory,
-                           const int slot,
-                           const ItemStack& stack,
-                           const ItemDef& itemDef,
-                           const glm::ivec3& targetPosition) {
+bool pickupFluidIntoBucket(World& world, GameplayRegistry& registry, BlockEntityInventory& inventory, const int slot,
+                           const ItemStack& stack, const ItemDef& itemDef, const glm::ivec3& targetPosition) {
     const ItemUseRule* rule = ItemUseRules::findRule(itemDef, ItemUseBehavior::BucketPickupFluid);
     if (rule == nullptr) {
         return false;
@@ -207,21 +184,12 @@ bool pickupFluidIntoBucket(World& world,
 
     world.setFluidState(targetPosition.x, targetPosition.y, targetPosition.z, NULL_BLOCK_STATE);
     replaceSingleItemInSlot(inventory, slot, stack, rule->resultItem);
-    ensureAudioEventBus(registry).push({
-        "item.bucket.fill",
-        glm::vec3(targetPosition) + glm::vec3(0.5f),
-        true,
-        1.0f
-    });
+    ensureAudioEventBus(registry).push({"item.bucket.fill", glm::vec3(targetPosition) + glm::vec3(0.5f), true, 1.0f});
     return true;
 }
 
-bool launchProjectile(GameplayRegistry& registry,
-                      BlockEntityInventory& inventory,
-                      const int slot,
-                      const ItemStack& stack,
-                      const ItemID itemId,
-                      const glm::ivec3& devicePosition,
+bool launchProjectile(GameplayRegistry& registry, BlockEntityInventory& inventory, const int slot,
+                      const ItemStack& stack, const ItemID itemId, const glm::ivec3& devicePosition,
                       const glm::ivec3& direction) {
     std::string projectileLoadError;
     if (!ensureThrowableProjectileDefinitionsLoaded(&projectileLoadError)) {
@@ -240,22 +208,13 @@ bool launchProjectile(GameplayRegistry& registry,
     EntityFactory::createProjectile(registry, entt::null, spawnPosition, velocity, definition);
     consumeOneFromSlot(inventory, slot, stack);
     if (!definition.throwSoundId.empty()) {
-        ensureAudioEventBus(registry).push({
-            definition.throwSoundId,
-            spawnPosition,
-            true,
-            1.0f
-        });
+        ensureAudioEventBus(registry).push({definition.throwSoundId, spawnPosition, true, 1.0f});
     }
     return true;
 }
 
-void ejectItem(GameplayRegistry& registry,
-               BlockEntityInventory& inventory,
-               const int slot,
-               const ItemStack& stack,
-               const glm::ivec3& devicePosition,
-               const glm::ivec3& direction) {
+void ejectItem(GameplayRegistry& registry, BlockEntityInventory& inventory, const int slot, const ItemStack& stack,
+               const glm::ivec3& devicePosition, const glm::ivec3& direction) {
     const glm::vec3 directionVector = glm::normalize(glm::vec3(direction));
     ItemDropSpawnParams params;
     params.itemId = stack.itemId;
@@ -272,9 +231,7 @@ void ejectItem(GameplayRegistry& registry,
     consumeOneFromSlot(inventory, slot, stack);
 }
 
-bool executeDispenser(World& world,
-                      GameplayRegistry& registry,
-                      const RedstoneDeviceActivationEvent& event,
+bool executeDispenser(World& world, GameplayRegistry& registry, const RedstoneDeviceActivationEvent& event,
                       const bool useItemBehaviors) {
     const BlockDef& blockDef = BlockRegistry::getFast(event.blockId);
     const ContainerBehaviorDef& behavior = storageBehaviorForDevice(blockDef);
@@ -304,22 +261,13 @@ bool executeDispenser(World& world,
 }
 
 bool executeNoteBlock(GameplayRegistry& registry, const glm::ivec3& position) {
-    ensureAudioEventBus(registry).push({
-        "block.note_block.harp",
-        glm::vec3(position) + glm::vec3(0.5f),
-        true,
-        1.0f
-    });
+    ensureAudioEventBus(registry).push({"block.note_block.harp", glm::vec3(position) + glm::vec3(0.5f), true, 1.0f});
     return true;
 }
 
-bool executeDeviceEvent(World& world,
-                        GameplayRegistry& registry,
-                        const RedstoneDeviceActivationEvent& event) {
-    const BlockStateId currentState =
-        world.getBlockState(event.position.x, event.position.y, event.position.z);
-    if (currentState == NULL_BLOCK_STATE ||
-        BlockStateRegistry::getBlockId(currentState) != event.blockId) {
+bool executeDeviceEvent(World& world, GameplayRegistry& registry, const RedstoneDeviceActivationEvent& event) {
+    const BlockStateId currentState = world.getBlockState(event.position.x, event.position.y, event.position.z);
+    if (currentState == NULL_BLOCK_STATE || BlockStateRegistry::getBlockId(currentState) != event.blockId) {
         failRedstoneDeviceActionSystem("Redstone device activation event does not match the current block state");
     }
 
@@ -354,8 +302,7 @@ std::size_t RedstoneDeviceActionSystem::processEvents(World& world, GameplayRegi
         return 0;
     }
 
-    std::vector<RedstoneDeviceActivationEvent> events =
-        registry.ctxGet<RedstoneDeviceActivationEventBus>().drain();
+    std::vector<RedstoneDeviceActivationEvent> events = registry.ctxGet<RedstoneDeviceActivationEventBus>().drain();
     std::size_t actionCount = 0;
     for (const RedstoneDeviceActivationEvent& event : events) {
         if (executeDeviceEvent(world, registry, event)) {

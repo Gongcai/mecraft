@@ -8,4 +8,4 @@ inline bool shouldUseBakedBlockIcon(const ItemDef& itemDef) {
     return itemDef.renderBlock != 0;
 }
 
-}
+} // namespace ui

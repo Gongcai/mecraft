@@ -69,15 +69,15 @@ bool isPlacementSolid(const World& world, const int x, const int y, const int z)
         return true;
     }
     const BlockStateId stateId = world.getBlock(x, y, z);
-    return stateId != NULL_BLOCK_STATE &&
-           BlockRegistry::getFast(BlockStateRegistry::getBlockId(stateId)).isSolid;
+    return stateId != NULL_BLOCK_STATE && BlockRegistry::getFast(BlockStateRegistry::getBlockId(stateId)).isSolid;
 }
 
 bool arePlacementChunksLoaded(const World& world, const PlayerPlacementBox& box) {
     const int minX = static_cast<int>(std::floor(box.min.x));
     const int maxX = static_cast<int>(std::floor(box.max.x - kPlacementContactEpsilon));
     const int minY = std::clamp(static_cast<int>(std::floor(box.min.y)), 0, Chunk::SIZE_Y - 1);
-    const int maxY = std::clamp(static_cast<int>(std::floor(box.max.y - kPlacementContactEpsilon)), 0, Chunk::SIZE_Y - 1);
+    const int maxY =
+        std::clamp(static_cast<int>(std::floor(box.max.y - kPlacementContactEpsilon)), 0, Chunk::SIZE_Y - 1);
     const int minZ = static_cast<int>(std::floor(box.min.z));
     const int maxZ = static_cast<int>(std::floor(box.max.z - kPlacementContactEpsilon));
 
@@ -131,11 +131,8 @@ bool placementHasGroundSupport(const World& world, const PhysicsBody& body, cons
     const float centerZ = (minZ + maxZ) * 0.5f;
 
     const std::array<glm::vec2, 5> probes = {
-        glm::vec2(centerX, centerZ),
-        glm::vec2(minX, minZ),
-        glm::vec2(minX, maxZ),
-        glm::vec2(maxX, minZ),
-        glm::vec2(maxX, maxZ),
+        glm::vec2(centerX, centerZ), glm::vec2(minX, minZ), glm::vec2(minX, maxZ),
+        glm::vec2(maxX, minZ),       glm::vec2(maxX, maxZ),
     };
 
     for (const glm::vec2& probe : probes) {
@@ -183,8 +180,7 @@ glm::vec3 findSafeTerrainPlacement(const World& world, const PhysicsBody& body, 
         candidate.y += 1.0f;
     }
 
-    return glm::vec3(preferredPosition.x,
-                     static_cast<float>(std::min(surfaceY + 2, Chunk::SIZE_Y - 2)),
+    return glm::vec3(preferredPosition.x, static_cast<float>(std::min(surfaceY + 2, Chunk::SIZE_Y - 2)),
                      preferredPosition.z);
 }
 
@@ -194,7 +190,7 @@ GameSession::GameSession() = default;
 GameSession::~GameSession() = default;
 
 void GameSession::init(const GameSessionConfig& config, ResourceMgr& resourceMgr, ThreadPool* threadPool) {
-    (void)resourceMgr;  // Resource-dependent init deferred to Game::initRenderers()
+    (void)resourceMgr; // Resource-dependent init deferred to Game::initRenderers()
 
     m_isMultiplayer = config.isMultiplayer();
 
@@ -208,9 +204,8 @@ void GameSession::init(const GameSessionConfig& config, ResourceMgr& resourceMgr
         // Create ENet transport and connect to remote server
         auto enetTransport = std::make_unique<net::ENetTransport>();
         if (!enetTransport->connect(config.serverAddress, config.serverPort)) {
-            failGameSession("Failed to connect to multiplayer server " +
-                                     config.serverAddress + ":" +
-                                     std::to_string(config.serverPort));
+            failGameSession("Failed to connect to multiplayer server " + config.serverAddress + ":" +
+                            std::to_string(config.serverPort));
         }
         // ENetTransport inherits ITransportEndpoint; transfer ownership
         std::unique_ptr<net::ITransportEndpoint> base(std::move(enetTransport));
@@ -223,15 +218,13 @@ void GameSession::init(const GameSessionConfig& config, ResourceMgr& resourceMgr
 
         bool loggedHandshakeWait = false;
         bool loggedChunkWait = false;
-        for (int i = 0; i < 4000 &&
-             (!m_client->hasServerHello() || !m_client->areSpawnChunksReady()); ++i) {
+        for (int i = 0; i < 4000 && (!m_client->hasServerHello() || !m_client->areSpawnChunksReady()); ++i) {
             if (!m_client->hasServerHello() && i > 0 && i % 100 == 0) {
                 m_client->sendHello();
                 m_client->sendViewConfig(config.renderDistance);
                 if (!loggedHandshakeWait) {
                     MECRAFT_LOG_PRINTF("[Client] Waiting for ServerHello; resending handshake to %s:%u\n",
-                                       config.serverAddress.c_str(),
-                                       static_cast<unsigned>(config.serverPort));
+                                       config.serverAddress.c_str(), static_cast<unsigned>(config.serverPort));
                     MECRAFT_LOG_FLUSH(stdout);
                     loggedHandshakeWait = true;
                 }
@@ -248,8 +241,7 @@ void GameSession::init(const GameSessionConfig& config, ResourceMgr& resourceMgr
         }
         if (!m_client->hasServerHello()) {
             failGameSession("Connected to multiplayer server but did not receive ServerHello from " +
-                                     config.serverAddress + ":" +
-                                     std::to_string(config.serverPort));
+                            config.serverAddress + ":" + std::to_string(config.serverPort));
         }
         if (!m_client->areSpawnChunksReady()) {
             MECRAFT_LOG_PRINTF("[Client] Entering gameplay while spawn chunks are still streaming; loaded=%zu\n",
@@ -269,9 +261,8 @@ void GameSession::init(const GameSessionConfig& config, ResourceMgr& resourceMgr
         }
 
         if (!worldSavePath.empty()) {
-            m_server->init(static_cast<uint32_t>(config.seed), threadPool,
-                           config.renderDistance, std::move(worldSavePath),
-                           config.worldDisplayName);
+            m_server->init(static_cast<uint32_t>(config.seed), threadPool, config.renderDistance,
+                           std::move(worldSavePath), config.worldDisplayName);
         } else {
             m_server->init(static_cast<uint32_t>(config.seed), threadPool, config.renderDistance);
         }
@@ -456,17 +447,17 @@ void GameSession::initWorld(int seed) {
 
 void GameSession::initECS(const GameSessionDependencies& deps) {
     auto& svc = m_gameplayScene->services();
-    svc.world              = m_isMultiplayer ? nullptr : &world();
-    svc.worldView          = &worldView();
-    svc.gameClient         = m_client.get();
-    svc.audioEngine        = &deps.audioEngine;
+    svc.world = m_isMultiplayer ? nullptr : &world();
+    svc.worldView = &worldView();
+    svc.gameClient = m_client.get();
+    svc.audioEngine = &deps.audioEngine;
     svc.inputContextManager = &deps.contextManager;
-    svc.resourceMgr        = &deps.resourceMgr;
-    svc.dropSystem         = m_dropSystem.get();
-    svc.particleSystem     = m_particleSystem.get();
-    svc.uiRenderer         = &deps.uiRenderer;
-    svc.physicsSystem      = m_physicsSystem.get();
-    svc.cameraController   = m_cameraController.get();
+    svc.resourceMgr = &deps.resourceMgr;
+    svc.dropSystem = m_dropSystem.get();
+    svc.particleSystem = m_particleSystem.get();
+    svc.uiRenderer = &deps.uiRenderer;
+    svc.physicsSystem = m_physicsSystem.get();
+    svc.cameraController = m_cameraController.get();
 
     // Load recipes
     m_craftingSystem->loadRecipes(RECIPES_CONFIG_PATH);
@@ -493,17 +484,14 @@ void GameSession::initECS(const GameSessionDependencies& deps) {
         uiRenderer.appendOutputLine(message.message, type);
     });
     m_client->setCommandResultCallback([&uiRenderer = deps.uiRenderer](const net::CommandResultMessage& result) {
-        uiRenderer.appendOutputLine(result.message,
-                                    result.success ? ConsoleDisplayBox::MessageType::Success
-                                                   : ConsoleDisplayBox::MessageType::Warning);
+        uiRenderer.appendOutputLine(result.message, result.success ? ConsoleDisplayBox::MessageType::Success
+                                                                   : ConsoleDisplayBox::MessageType::Warning);
     });
     m_dropSystem->bindRegistry(reg);
     m_dropSystem->bindServices(svc);
     m_particleSystem->bindRegistry(reg);
 
-    const glm::vec3 spawnPos = m_isMultiplayer
-        ? m_client->getAuthoritativePosition()
-        : m_server->getSpawnPosition();
+    const glm::vec3 spawnPos = m_isMultiplayer ? m_client->getAuthoritativePosition() : m_server->getSpawnPosition();
     m_gameplayScene->initLocalPlayer(spawnPos);
 
     ecs::PlayerQuery query(reg);
@@ -528,26 +516,15 @@ void GameSession::initStateMachine(const GameSessionDependencies& deps) {
             return;
         }
         if (mode == net::NetworkGameplayMode::Creative) {
-            StateDependencies stateDeps{
-                *m_stateMachine,
-                getPlayerInventory(),
-                deps.contextManager,
-                deps.input,
-                deps.uiRenderer,
-                m_lastSubmittedCommand,
-                physicsSystem(),
-                world(),
-                deps.audioEngine,
-                particleSystem(),
-                dropSystem(),
-                gameplayScene().registry(),
-                deps.localeManager,
-                client(),
-                m_isMultiplayer,
-                m_renderScene,
-                &deps.window,
-                deps.presentationController
-            };
+            StateDependencies stateDeps{*m_stateMachine,     getPlayerInventory(),
+                                        deps.contextManager, deps.input,
+                                        deps.uiRenderer,     m_lastSubmittedCommand,
+                                        physicsSystem(),     world(),
+                                        deps.audioEngine,    particleSystem(),
+                                        dropSystem(),        gameplayScene().registry(),
+                                        deps.localeManager,  client(),
+                                        m_isMultiplayer,     m_renderScene,
+                                        &deps.window,        deps.presentationController};
             m_stateMachine->changeState(std::make_unique<CreativeModeState>(stateDeps));
             deps.uiRenderer.appendSuccessLine("Switched to creative mode.");
             syncLocalPlayerMode();
@@ -560,26 +537,15 @@ void GameSession::initStateMachine(const GameSessionDependencies& deps) {
 }
 
 std::unique_ptr<IGameState> GameSession::createInitialGameplayState(const GameSessionDependencies& deps) {
-    StateDependencies stateDeps{
-        *m_stateMachine,
-        getPlayerInventory(),
-        deps.contextManager,
-        deps.input,
-        deps.uiRenderer,
-        m_lastSubmittedCommand,
-        physicsSystem(),
-        world(),
-        deps.audioEngine,
-        particleSystem(),
-        dropSystem(),
-        gameplayScene().registry(),
-        deps.localeManager,
-        client(),
-        m_isMultiplayer,
-        m_renderScene,
-        &deps.window,
-        deps.presentationController
-    };
+    StateDependencies stateDeps{*m_stateMachine,     getPlayerInventory(),
+                                deps.contextManager, deps.input,
+                                deps.uiRenderer,     m_lastSubmittedCommand,
+                                physicsSystem(),     world(),
+                                deps.audioEngine,    particleSystem(),
+                                dropSystem(),        gameplayScene().registry(),
+                                deps.localeManager,  client(),
+                                m_isMultiplayer,     m_renderScene,
+                                &deps.window,        deps.presentationController};
     return std::make_unique<GameplayState>(stateDeps);
 }
 
@@ -628,18 +594,15 @@ GameSession::InitialLoadProgress GameSession::getInitialLoadProgress() const {
     if (!m_isMultiplayer && m_server) {
         const auto serverProgress = m_server->getWorldLoadProgress(loadCenter);
         const auto clientProgress = m_client->clientWorld().getChunkLoadProgress(loadCenter);
-        const LightFrameStats lightStats =
-            m_server->world().getLightFrameStats();
+        const LightFrameStats lightStats = m_server->world().getLightFrameStats();
         progress.serverLoaded = serverProgress.loaded;
         progress.clientLoaded = clientProgress.loaded;
         progress.target = std::max(serverProgress.target, clientProgress.target);
-        progress.inFlight = serverProgress.inFlight + lightStats.inFlight +
-                            lightStats.queued + lightStats.pendingCompleted;
+        progress.inFlight =
+            serverProgress.inFlight + lightStats.inFlight + lightStats.queued + lightStats.pendingCompleted;
         progress.lightingSettled = isLightFrameSettled(lightStats);
-        progress.complete = progress.target > 0 &&
-                            progress.serverLoaded >= progress.target &&
-                            progress.clientLoaded >= progress.target &&
-                            serverProgress.inFlight == 0 &&
+        progress.complete = progress.target > 0 && progress.serverLoaded >= progress.target &&
+                            progress.clientLoaded >= progress.target && serverProgress.inFlight == 0 &&
                             progress.lightingSettled;
         return progress;
     }
@@ -699,7 +662,8 @@ bool GameSession::stabilizeLocalPlayerAfterInitialLoad() {
         const auto* flight = ecsReg.try_get<ecs::FlightStateComponent>(e);
         const bool isFlying = flight != nullptr && flight->isFlying;
 
-        if (!arePlacementChunksLoaded(m_server->world(), makePlayerPlacementBox(physicsBody.body, transform.position))) {
+        if (!arePlacementChunksLoaded(m_server->world(),
+                                      makePlayerPlacementBox(physicsBody.body, transform.position))) {
             return false;
         }
 
@@ -713,7 +677,8 @@ bool GameSession::stabilizeLocalPlayerAfterInitialLoad() {
         transform.position = stablePosition;
         physicsBody.body.position = stablePosition;
         physicsBody.body.velocity.y = 0.0f;
-        physicsBody.body.isGrounded = !isFlying && placementHasGroundSupport(m_server->world(), physicsBody.body, stablePosition);
+        physicsBody.body.isGrounded =
+            !isFlying && placementHasGroundSupport(m_server->world(), physicsBody.body, stablePosition);
         physicsBody.body.landingImpactSpeed = 0.0f;
 
         if (repositioned) {
@@ -733,10 +698,7 @@ bool GameSession::stabilizeLocalPlayerAfterInitialLoad() {
 
         m_server->setClientLoadCenter(stablePosition);
         MECRAFT_LOG_PRINTF("[Save] Stabilized local player after initial load: pos=(%.2f, %.2f, %.2f)%s\n",
-                           stablePosition.x,
-                           stablePosition.y,
-                           stablePosition.z,
-                           repositioned ? " adjusted" : "");
+                           stablePosition.x, stablePosition.y, stablePosition.z, repositioned ? " adjusted" : "");
         MECRAFT_LOG_FLUSH(stdout);
         return true;
     }
@@ -777,10 +739,12 @@ void GameSession::shutdown() {
 }
 
 void GameSession::saveLocalPlayer() {
-    if (!m_server || !m_gameplayScene) return;
+    if (!m_server || !m_gameplayScene)
+        return;
 
     auto* sm = m_server->saveManager();
-    if (!sm) return;
+    if (!sm)
+        return;
 
     auto& ecsReg = m_gameplayScene->registry().registry();
     auto view = ecsReg.view<ecs::LocalPlayerTag, ecs::TransformComponent>();
@@ -862,13 +826,16 @@ void GameSession::saveLocalPlayer() {
 }
 
 void GameSession::loadLocalPlayer() {
-    if (!m_server || !m_gameplayScene) return;
+    if (!m_server || !m_gameplayScene)
+        return;
 
     auto* sm = m_server->saveManager();
-    if (!sm) return;
+    if (!sm)
+        return;
 
     save::PlayerData data;
-    if (!sm->loadLocalPlayer(data)) return;
+    if (!sm->loadLocalPlayer(data))
+        return;
 
     auto& ecsReg = m_gameplayScene->registry().registry();
     auto view = ecsReg.view<ecs::LocalPlayerTag, ecs::TransformComponent>();
@@ -937,8 +904,7 @@ void GameSession::loadLocalPlayer() {
             }
         }
 
-        MECRAFT_LOG_PRINTF("[Save] Loaded local player: pos=(%.1f, %.1f, %.1f)\n",
-                           data.posX, data.posY, data.posZ);
+        MECRAFT_LOG_PRINTF("[Save] Loaded local player: pos=(%.1f, %.1f, %.1f)\n", data.posX, data.posY, data.posZ);
 
         // Best-effort mode sync; the state machine may not exist yet (it is
         // created in the next init phase). The authoritative sync happens in the
@@ -949,7 +915,8 @@ void GameSession::loadLocalPlayer() {
 }
 
 void GameSession::syncLocalPlayerMode() {
-    if (!m_gameplayScene || !m_stateMachine) return;
+    if (!m_gameplayScene || !m_stateMachine)
+        return;
 
     bool creative = false;
     if (auto* base = m_stateMachine->baseState()) {

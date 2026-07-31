@@ -106,17 +106,13 @@ bool readStringField(const nlohmann::json& object, const char* key, std::string&
     return true;
 }
 
-bool readFloat3Field(const nlohmann::json& object,
-                     const char* key,
-                     float& x,
-                     float& y,
-                     float& z) {
+bool readFloat3Field(const nlohmann::json& object, const char* key, float& x, float& y, float& z) {
     const nlohmann::json* value = findField(object, key);
     if (value == nullptr) {
         return true;
     }
-    if (!value->is_array() || value->size() < 3 ||
-        !(*value)[0].is_number() || !(*value)[1].is_number() || !(*value)[2].is_number()) {
+    if (!value->is_array() || value->size() < 3 || !(*value)[0].is_number() || !(*value)[1].is_number() ||
+        !(*value)[2].is_number()) {
         MECRAFT_LOG_FPRINTF(stderr, "[Save] Invalid vec3 field: %s\n", key);
         return false;
     }
@@ -139,11 +135,7 @@ nlohmann::json PlayerSerializer::serialize(const PlayerData& data) {
 
     j["health"] = {{"current", data.health}, {"max", data.healthMax}};
     j["armor"] = {{"current", data.armor}, {"max", data.armorMax}};
-    j["food"] = {
-        {"current", data.food},
-        {"max", data.foodMax},
-        {"saturation", data.saturation}
-    };
+    j["food"] = {{"current", data.food}, {"max", data.foodMax}, {"saturation", data.saturation}};
     j["flight"] = {{"isFlying", data.isFlying}};
 
     // Serialize non-empty inventory slots
@@ -182,16 +174,13 @@ bool PlayerSerializer::deserialize(const nlohmann::json& j, PlayerData& out) {
     }
 
     if (!readFloat3Field(j, "position", out.posX, out.posY, out.posZ) ||
-        !readFloat3Field(j, "velocity", out.velX, out.velY, out.velZ) ||
-        !readFloatField(j, "yaw", out.yaw) ||
-        !readFloatField(j, "pitch", out.pitch) ||
-        !readIntField(j, "selectedSlot", out.selectedSlot)) {
+        !readFloat3Field(j, "velocity", out.velX, out.velY, out.velZ) || !readFloatField(j, "yaw", out.yaw) ||
+        !readFloatField(j, "pitch", out.pitch) || !readIntField(j, "selectedSlot", out.selectedSlot)) {
         return false;
     }
 
     if (const nlohmann::json* health = findField(j, "health")) {
-        if (!health->is_object() ||
-            !readIntField(*health, "current", out.health) ||
+        if (!health->is_object() || !readIntField(*health, "current", out.health) ||
             !readIntField(*health, "max", out.healthMax)) {
             MECRAFT_LOG_FPRINTF(stderr, "[Save] Invalid health object\n");
             return false;
@@ -199,8 +188,7 @@ bool PlayerSerializer::deserialize(const nlohmann::json& j, PlayerData& out) {
     }
 
     if (const nlohmann::json* armor = findField(j, "armor")) {
-        if (!armor->is_object() ||
-            !readIntField(*armor, "current", out.armor) ||
+        if (!armor->is_object() || !readIntField(*armor, "current", out.armor) ||
             !readIntField(*armor, "max", out.armorMax)) {
             MECRAFT_LOG_FPRINTF(stderr, "[Save] Invalid armor object\n");
             return false;
@@ -208,10 +196,8 @@ bool PlayerSerializer::deserialize(const nlohmann::json& j, PlayerData& out) {
     }
 
     if (const nlohmann::json* food = findField(j, "food")) {
-        if (!food->is_object() ||
-            !readIntField(*food, "current", out.food) ||
-            !readIntField(*food, "max", out.foodMax) ||
-            !readIntField(*food, "saturation", out.saturation)) {
+        if (!food->is_object() || !readIntField(*food, "current", out.food) ||
+            !readIntField(*food, "max", out.foodMax) || !readIntField(*food, "saturation", out.saturation)) {
             MECRAFT_LOG_FPRINTF(stderr, "[Save] Invalid food object\n");
             return false;
         }
@@ -238,8 +224,7 @@ bool PlayerSerializer::deserialize(const nlohmann::json& j, PlayerData& out) {
 
             int slot = -1;
             PlayerData::Slot slotData;
-            if (!readIntField(s, "slot", slot) ||
-                !readStringField(s, "item", slotData.item) ||
+            if (!readIntField(s, "slot", slot) || !readStringField(s, "item", slotData.item) ||
                 !readUint16Field(s, "count", slotData.count) ||
                 !readUint16Field(s, "durability", slotData.durability)) {
                 return false;

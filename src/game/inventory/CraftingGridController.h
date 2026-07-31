@@ -34,8 +34,7 @@ public:
 
             if (!dragged.active) {
                 if (craftGrid.consumeOneCraft()) {
-                    m_deps.input.beginUIDragItem(static_cast<int>(resultItem),
-                        resultCount, kCraftingSlotBase + 4);
+                    m_deps.input.beginUIDragItem(static_cast<int>(resultItem), resultCount, kCraftingSlotBase + 4);
                 }
                 return;
             }
@@ -45,8 +44,7 @@ public:
                 const int maxStack = static_cast<int>(def.maxStack);
                 if (maxStack > 0 && dragged.count <= maxStack - resultCount) {
                     if (craftGrid.consumeOneCraft()) {
-                        m_deps.input.beginUIDragItem(dragged.itemId,
-                            dragged.count + resultCount, dragged.sourceSlot);
+                        m_deps.input.beginUIDragItem(dragged.itemId, dragged.count + resultCount, dragged.sourceSlot);
                     }
                 }
             }
@@ -59,8 +57,8 @@ public:
             if (current != 0) {
                 uint16_t currentCount = craftGrid.getCraftingSlotCount(slotIndex);
                 craftGrid.setCraftingSlot(slotIndex, 0);
-                m_deps.input.beginUIDragItem(static_cast<int>(current),
-                    static_cast<int>(currentCount), kCraftingSlotBase + slotIndex);
+                m_deps.input.beginUIDragItem(static_cast<int>(current), static_cast<int>(currentCount),
+                                             kCraftingSlotBase + slotIndex);
             }
         } else {
             // Place or swap into crafting slot
@@ -71,12 +69,11 @@ public:
                 m_dragCtrl.beginPrimaryDragToSlot(kCraftingSlotBase + slotIndex);
             } else if (current == static_cast<ItemID>(dragged.itemId)) {
                 const ItemDef& def = ItemRegistry::get(current);
-                const uint16_t freeSpace = (def.maxStack > currentCount)
-                    ? static_cast<uint16_t>(def.maxStack - currentCount) : 0;
+                const uint16_t freeSpace =
+                    (def.maxStack > currentCount) ? static_cast<uint16_t>(def.maxStack - currentCount) : 0;
                 const int toAdd = (dragged.count < freeSpace) ? dragged.count : static_cast<int>(freeSpace);
                 if (toAdd > 0) {
-                    craftGrid.setCraftingSlot(slotIndex, current,
-                        static_cast<uint16_t>(currentCount + toAdd));
+                    craftGrid.setCraftingSlot(slotIndex, current, static_cast<uint16_t>(currentCount + toAdd));
                     const int remaining = dragged.count - toAdd;
                     if (remaining <= 0) {
                         m_deps.input.clearUIDragItem();
@@ -86,9 +83,9 @@ public:
                 }
             } else {
                 craftGrid.setCraftingSlot(slotIndex, static_cast<ItemID>(dragged.itemId),
-                    static_cast<uint16_t>(dragged.count));
-                m_deps.input.beginUIDragItem(static_cast<int>(current),
-                    static_cast<int>(currentCount), kCraftingSlotBase + slotIndex);
+                                          static_cast<uint16_t>(dragged.count));
+                m_deps.input.beginUIDragItem(static_cast<int>(current), static_cast<int>(currentCount),
+                                             kCraftingSlotBase + slotIndex);
             }
         }
     }
@@ -124,9 +121,8 @@ private:
     void spawnItemDropAtPlayer(ItemID itemId, uint32_t count) {
         ecs::PlayerQuery query(m_deps.ecsRegistry);
         const glm::vec3 playerPos = query.getPosition();
-        const glm::ivec3 blockPos(static_cast<int>(std::floor(playerPos.x)),
-                                   static_cast<int>(std::floor(playerPos.y)),
-                                   static_cast<int>(std::floor(playerPos.z)));
+        const glm::ivec3 blockPos(static_cast<int>(std::floor(playerPos.x)), static_cast<int>(std::floor(playerPos.y)),
+                                  static_cast<int>(std::floor(playerPos.z)));
         m_deps.dropSystem.spawnItemDrop(itemId, blockPos, count);
     }
 

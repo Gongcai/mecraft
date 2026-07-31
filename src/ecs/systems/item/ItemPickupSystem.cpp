@@ -24,18 +24,13 @@ void ItemPickupSystem::update(SystemContext& ctx) {
     }
 }
 
-uint32_t ItemPickupSystem::pickup(GameplayRegistry& registry,
-                                  const glm::vec3& position,
-                                  const float radius,
+uint32_t ItemPickupSystem::pickup(GameplayRegistry& registry, const glm::vec3& position, const float radius,
                                   Inventory& inventory) {
     return pickup(registry, position, radius, inventory, 0.0f);
 }
 
-uint32_t ItemPickupSystem::pickup(GameplayRegistry& registry,
-                                  const glm::vec3& position,
-                                  const float radius,
-                                  Inventory& inventory,
-                                  const float minAgeSeconds) {
+uint32_t ItemPickupSystem::pickup(GameplayRegistry& registry, const glm::vec3& position, const float radius,
+                                  Inventory& inventory, const float minAgeSeconds) {
     if (radius <= 0.0f) {
         return 0;
     }

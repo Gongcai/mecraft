@@ -32,14 +32,14 @@ using TickId = uint32_t;
 namespace ClientInputActions {
 constexpr uint32_t Attack = 1u << 0;
 constexpr uint32_t UseItem = 1u << 1;
-}
+} // namespace ClientInputActions
 
 /// Network channel types, mapped to ENet channels in Phase 6.
 enum class PacketChannel : uint8_t {
-    ReliableControl = 0,  // Login, handshake, disconnect, config
-    ReliableWorld = 1,    // Chunk data, block updates, inventory
-    UnreliableState = 2,  // High-frequency entity snapshots, player input
-    ReliableChat = 3,     // Chat, commands, system messages
+    ReliableControl = 0, // Login, handshake, disconnect, config
+    ReliableWorld = 1, // Chunk data, block updates, inventory
+    UnreliableState = 2, // High-frequency entity snapshots, player input
+    ReliableChat = 3, // Chat, commands, system messages
 };
 
 /// Message type discriminator for the protocol.
@@ -88,7 +88,7 @@ struct Packet {
     PacketChannel channel = PacketChannel::ReliableControl;
     MessageType type = MessageType::ClientHello;
     std::vector<uint8_t> payload;
-    std::any inProcessPayload;  // Zero-copy for in-process transport
+    std::any inProcessPayload; // Zero-copy for in-process transport
 };
 
 // ===========================================================================
@@ -113,7 +113,7 @@ struct ClientInput {
     bool jump = false;
     bool sneak = false;
     bool sprint = false;
-    uint32_t actions = 0;  // Bitfield for break/place etc.
+    uint32_t actions = 0; // Bitfield for break/place etc.
     uint8_t selectedHotbarSlot = 0;
 };
 
@@ -206,7 +206,7 @@ struct ChunkDataMessage {
     int32_t chunkX = 0;
     int32_t chunkZ = 0;
     uint32_t revision = 0;
-    std::shared_ptr<Chunk> chunk;  // In-process zero-copy; null for network path
+    std::shared_ptr<Chunk> chunk; // In-process zero-copy; null for network path
 };
 
 /// Notification that a chunk should be unloaded on the client.
@@ -217,8 +217,8 @@ struct ChunkUnloadMessage {
 
 /// Batch of block updates.
 enum class BlockUpdateKind : uint8_t {
-    BlockState = 0,  // Entry carries a real block state.
-    LightOnly = 1,   // Entry only carries light data; stateId is ignored.
+    BlockState = 0, // Entry carries a real block state.
+    LightOnly = 1, // Entry only carries light data; stateId is ignored.
 };
 
 struct BlockUpdateEntry {
@@ -269,9 +269,9 @@ struct EntitySpawnMessage {
     glm::vec3 velocity = glm::vec3(0.0f);
     float yaw = 0.0f;
     float pitch = 0.0f;
-    uint16_t itemId = 0;      // For drops/projectiles
-    uint16_t stackCount = 0;  // For drops/projectiles
-    std::string entityId;     // For mobs, e.g. minecraft:zombie
+    uint16_t itemId = 0; // For drops/projectiles
+    uint16_t stackCount = 0; // For drops/projectiles
+    std::string entityId; // For mobs, e.g. minecraft:zombie
 };
 
 /// Server tells client to destroy an entity.
@@ -294,8 +294,8 @@ struct EntitySnapshotItem {
     glm::vec3 velocity = glm::vec3(0.0f);
     float yaw = 0.0f;
     float pitch = 0.0f;
-    uint16_t health = 0;     // 0 means this entity has no synced health
-    uint16_t maxHealth = 0;  // 0 means this entity has no synced health
+    uint16_t health = 0; // 0 means this entity has no synced health
+    uint16_t maxHealth = 0; // 0 means this entity has no synced health
     bool hurt = false;
 };
 
@@ -314,7 +314,7 @@ struct InventorySlotData {
 /// Server sends authoritative inventory state to client.
 struct InventorySnapshotMessage {
     uint8_t selectedHotbarSlot = 0;
-    std::vector<InventorySlotData> slots;  // 36 slots (hotbar + main inventory)
+    std::vector<InventorySlotData> slots; // 36 slots (hotbar + main inventory)
 };
 
 struct ContainerSnapshotMessage {

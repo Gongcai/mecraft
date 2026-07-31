@@ -53,10 +53,8 @@ constexpr float kWorldDaySeconds = 1200.0f;
             }
             codePoint = (codePoint << 6u) | (continuation & 0x3fu);
         }
-        const uint32_t minimum = count == 2u ? 0x80u :
-                                 count == 3u ? 0x800u : 0x10000u;
-        if (codePoint < minimum || codePoint > 0x10ffffu ||
-            (codePoint >= 0xd800u && codePoint <= 0xdfffu)) {
+        const uint32_t minimum = count == 2u ? 0x80u : count == 3u ? 0x800u : 0x10000u;
+        if (codePoint < minimum || codePoint > 0x10ffffu || (codePoint >= 0xd800u && codePoint <= 0xdfffu)) {
             return false;
         }
         index += count;
@@ -69,18 +67,14 @@ constexpr float kWorldDaySeconds = 1200.0f;
 }
 
 [[nodiscard]] bool finiteVec3(const glm::vec3& value) {
-    return std::isfinite(value.x) && std::isfinite(value.y) &&
-           std::isfinite(value.z);
+    return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
 }
 
 [[nodiscard]] json vec3ToJson(const glm::vec3& value) {
     return json::array({value.x, value.y, value.z});
 }
 
-[[nodiscard]] bool readObject(const json& owner,
-                              const char* key,
-                              const json*& value,
-                              const std::string& context,
+[[nodiscard]] bool readObject(const json& owner, const char* key, const json*& value, const std::string& context,
                               std::string& error) {
     const auto it = owner.find(key);
     if (it == owner.end()) {
@@ -95,10 +89,7 @@ constexpr float kWorldDaySeconds = 1200.0f;
     return true;
 }
 
-[[nodiscard]] bool readArray(const json& owner,
-                             const char* key,
-                             const json*& value,
-                             const std::string& context,
+[[nodiscard]] bool readArray(const json& owner, const char* key, const json*& value, const std::string& context,
                              std::string& error) {
     const auto it = owner.find(key);
     if (it == owner.end()) {
@@ -113,10 +104,7 @@ constexpr float kWorldDaySeconds = 1200.0f;
     return true;
 }
 
-[[nodiscard]] bool readString(const json& owner,
-                              const char* key,
-                              std::string& value,
-                              const std::string& context,
+[[nodiscard]] bool readString(const json& owner, const char* key, std::string& value, const std::string& context,
                               std::string& error) {
     const auto it = owner.find(key);
     if (it == owner.end()) {
@@ -136,10 +124,7 @@ constexpr float kWorldDaySeconds = 1200.0f;
 }
 
 template <typename UInt>
-[[nodiscard]] bool readUnsigned(const json& owner,
-                                const char* key,
-                                UInt& value,
-                                const std::string& context,
+[[nodiscard]] bool readUnsigned(const json& owner, const char* key, UInt& value, const std::string& context,
                                 std::string& error) {
     const auto it = owner.find(key);
     if (it == owner.end()) {
@@ -159,10 +144,7 @@ template <typename UInt>
     return true;
 }
 
-[[nodiscard]] bool readFloat(const json& owner,
-                             const char* key,
-                             float& value,
-                             const std::string& context,
+[[nodiscard]] bool readFloat(const json& owner, const char* key, float& value, const std::string& context,
                              std::string& error) {
     const auto it = owner.find(key);
     if (it == owner.end()) {
@@ -174,8 +156,7 @@ template <typename UInt>
         return false;
     }
     const double raw = it->get<double>();
-    if (!std::isfinite(raw) ||
-        std::abs(raw) > static_cast<double>(std::numeric_limits<float>::max())) {
+    if (!std::isfinite(raw) || std::abs(raw) > static_cast<double>(std::numeric_limits<float>::max())) {
         error = context + "." + key + " must be a finite 32-bit float";
         return false;
     }
@@ -183,10 +164,7 @@ template <typename UInt>
     return true;
 }
 
-[[nodiscard]] bool readBool(const json& owner,
-                            const char* key,
-                            bool& value,
-                            const std::string& context,
+[[nodiscard]] bool readBool(const json& owner, const char* key, bool& value, const std::string& context,
                             std::string& error) {
     const auto it = owner.find(key);
     if (it == owner.end()) {
@@ -201,10 +179,7 @@ template <typename UInt>
     return true;
 }
 
-[[nodiscard]] bool readVec3(const json& owner,
-                            const char* key,
-                            glm::vec3& value,
-                            const std::string& context,
+[[nodiscard]] bool readVec3(const json& owner, const char* key, glm::vec3& value, const std::string& context,
                             std::string& error) {
     const auto it = owner.find(key);
     if (it == owner.end()) {
@@ -223,8 +198,7 @@ template <typename UInt>
             return false;
         }
         const double raw = item.get<double>();
-        if (!std::isfinite(raw) ||
-            std::abs(raw) > static_cast<double>(std::numeric_limits<float>::max())) {
+        if (!std::isfinite(raw) || std::abs(raw) > static_cast<double>(std::numeric_limits<float>::max())) {
             error = context + "." + key + " must contain finite 32-bit floats";
             return false;
         }
@@ -235,11 +209,8 @@ template <typename UInt>
 }
 
 template <typename Id>
-[[nodiscard]] bool readOptionalId(const json& owner,
-                                  const char* key,
-                                  std::optional<Id>& value,
-                                  const std::string& context,
-                                  std::string& error) {
+[[nodiscard]] bool readOptionalId(const json& owner, const char* key, std::optional<Id>& value,
+                                  const std::string& context, std::string& error) {
     const auto it = owner.find(key);
     if (it == owner.end()) {
         error = context + "." + key + " is required";
@@ -262,9 +233,8 @@ template <typename Id>
     return true;
 }
 
-[[nodiscard]] bool validateHierarchy(
-    const std::unordered_map<SceneEntityId, SceneEntityId>& parents,
-    std::string& error) {
+[[nodiscard]] bool validateHierarchy(const std::unordered_map<SceneEntityId, SceneEntityId>& parents,
+                                     std::string& error) {
     std::unordered_map<SceneEntityId, uint8_t> states;
     states.reserve(parents.size());
     for (const auto& pair : parents) {
@@ -276,16 +246,13 @@ template <typename Id>
                 break;
             }
             if (state == 1u) {
-                error = "scene entity hierarchy contains a cycle at ID " +
-                        std::to_string(current);
+                error = "scene entity hierarchy contains a cycle at ID " + std::to_string(current);
                 return false;
             }
             states[current] = 1u;
             path.push_back(current);
             const auto parentIt = parents.find(current);
-            current = parentIt != parents.end()
-                ? parentIt->second
-                : kInvalidSceneEntityId;
+            current = parentIt != parents.end() ? parentIt->second : kInvalidSceneEntityId;
         }
         for (const SceneEntityId id : path) {
             states[id] = 2u;
@@ -296,8 +263,7 @@ template <typename Id>
 
 } // namespace
 
-bool ModelSceneSerializer::validate(const ModelSceneDocument& document,
-                                    std::string& error) {
+bool ModelSceneSerializer::validate(const ModelSceneDocument& document, std::string& error) {
     error.clear();
     if (document.format != ModelSceneDocument::kFormat) {
         error = "scene format must be mecraft.scene";
@@ -313,8 +279,7 @@ bool ModelSceneSerializer::validate(const ModelSceneDocument& document,
     for (std::size_t index = 0u; index < document.assets.size(); ++index) {
         const SceneAssetDocument& asset = document.assets[index];
         const std::string context = "assets[" + std::to_string(index) + "]";
-        if (asset.id == kInvalidSceneAssetId ||
-            asset.id == std::numeric_limits<SceneAssetId>::max()) {
+        if (asset.id == kInvalidSceneAssetId || asset.id == std::numeric_limits<SceneAssetId>::max()) {
             error = context + ".id is invalid";
             return false;
         }
@@ -339,8 +304,7 @@ bool ModelSceneSerializer::validate(const ModelSceneDocument& document,
     for (std::size_t index = 0u; index < document.entities.size(); ++index) {
         const SceneEntityDocument& entity = document.entities[index];
         const std::string context = "entities[" + std::to_string(index) + "]";
-        if (entity.id == kInvalidSceneEntityId ||
-            entity.id == std::numeric_limits<SceneEntityId>::max()) {
+        if (entity.id == kInvalidSceneEntityId || entity.id == std::numeric_limits<SceneEntityId>::max()) {
             error = context + ".id is invalid";
             return false;
         }
@@ -352,8 +316,7 @@ bool ModelSceneSerializer::validate(const ModelSceneDocument& document,
             error = context + ".name must be non-empty valid UTF-8";
             return false;
         }
-        if (!finiteVec3(entity.transform.position) ||
-            !finiteVec3(entity.transform.rotation) ||
+        if (!finiteVec3(entity.transform.position) || !finiteVec3(entity.transform.rotation) ||
             !finiteVec3(entity.transform.scale)) {
             error = context + ".transform must contain finite values";
             return false;
@@ -364,15 +327,12 @@ bool ModelSceneSerializer::validate(const ModelSceneDocument& document,
             error = context + ".transform.scale must be non-singular";
             return false;
         }
-        parents.emplace(
-            entity.id,
-            entity.parentId.value_or(kInvalidSceneEntityId));
+        parents.emplace(entity.id, entity.parentId.value_or(kInvalidSceneEntityId));
     }
     for (std::size_t index = 0u; index < document.entities.size(); ++index) {
         const SceneEntityDocument& entity = document.entities[index];
         const std::string context = "entities[" + std::to_string(index) + "]";
-        if (entity.parentId.has_value() &&
-            entityIds.find(*entity.parentId) == entityIds.end()) {
+        if (entity.parentId.has_value() && entityIds.find(*entity.parentId) == entityIds.end()) {
             error = context + ".parentId references an unknown entity";
             return false;
         }
@@ -380,8 +340,7 @@ bool ModelSceneSerializer::validate(const ModelSceneDocument& document,
             error = context + ".parentId cannot reference itself";
             return false;
         }
-        if (entity.assetId.has_value() &&
-            assetIds.find(*entity.assetId) == assetIds.end()) {
+        if (entity.assetId.has_value() && assetIds.find(*entity.assetId) == assetIds.end()) {
             error = context + ".assetId references an unknown asset";
             return false;
         }
@@ -390,40 +349,31 @@ bool ModelSceneSerializer::validate(const ModelSceneDocument& document,
         return false;
     }
 
-    if (!std::isfinite(document.environment.timeOfDay) ||
-        document.environment.timeOfDay < 0.0f ||
+    if (!std::isfinite(document.environment.timeOfDay) || document.environment.timeOfDay < 0.0f ||
         document.environment.timeOfDay >= kWorldDaySeconds) {
         error = "environment.timeOfDay must be within [0, 1200)";
         return false;
     }
-    if (!std::isfinite(document.environment.timeScale) ||
-        document.environment.timeScale <= 0.0f ||
+    if (!std::isfinite(document.environment.timeScale) || document.environment.timeScale <= 0.0f ||
         document.environment.timeScale > 100.0f) {
         error = "environment.timeScale must be within (0, 100]";
         return false;
     }
-    if (document.environment.weather < WeatherType::Clear ||
-        document.environment.weather > WeatherType::Snow) {
+    if (document.environment.weather < WeatherType::Clear || document.environment.weather > WeatherType::Snow) {
         error = "environment.weather is invalid";
         return false;
     }
     RenderSettings verifiedSettings;
-    if (!app::deserializeRenderSettings(
-            app::serializeRenderSettings(document.environment.renderSettings),
-            verifiedSettings, error)) {
+    if (!app::deserializeRenderSettings(app::serializeRenderSettings(document.environment.renderSettings),
+                                        verifiedSettings, error)) {
         error = "environment." + error;
         return false;
     }
-    if (!finiteVec3(document.editorCamera.target) ||
-        !std::isfinite(document.editorCamera.distance) ||
-        !std::isfinite(document.editorCamera.yaw) ||
-        !std::isfinite(document.editorCamera.pitch) ||
-        !std::isfinite(document.editorCamera.nearPlane) ||
-        !std::isfinite(document.editorCamera.farPlane) ||
-        document.editorCamera.distance <= 0.0f ||
-        document.editorCamera.nearPlane <= 0.0f ||
-        document.editorCamera.farPlane <= document.editorCamera.nearPlane ||
-        document.editorCamera.pitch < -89.9f ||
+    if (!finiteVec3(document.editorCamera.target) || !std::isfinite(document.editorCamera.distance) ||
+        !std::isfinite(document.editorCamera.yaw) || !std::isfinite(document.editorCamera.pitch) ||
+        !std::isfinite(document.editorCamera.nearPlane) || !std::isfinite(document.editorCamera.farPlane) ||
+        document.editorCamera.distance <= 0.0f || document.editorCamera.nearPlane <= 0.0f ||
+        document.editorCamera.farPlane <= document.editorCamera.nearPlane || document.editorCamera.pitch < -89.9f ||
         document.editorCamera.pitch > 89.9f) {
         error = "editorCamera contains invalid navigation values";
         return false;
@@ -431,8 +381,7 @@ bool ModelSceneSerializer::validate(const ModelSceneDocument& document,
     return true;
 }
 
-nlohmann::json ModelSceneSerializer::serialize(
-    const ModelSceneDocument& document) {
+nlohmann::json ModelSceneSerializer::serialize(const ModelSceneDocument& document) {
     json assets = json::array();
     for (const SceneAssetDocument& asset : document.assets) {
         assets.push_back({
@@ -447,15 +396,14 @@ nlohmann::json ModelSceneSerializer::serialize(
         entities.push_back({
             {"id", entity.id},
             {"name", entity.name},
-            {"parentId", entity.parentId.has_value()
-                ? json(*entity.parentId) : json(nullptr)},
-            {"assetId", entity.assetId.has_value()
-                ? json(*entity.assetId) : json(nullptr)},
-            {"transform", {
-                {"position", vec3ToJson(entity.transform.position)},
-                {"rotation", vec3ToJson(entity.transform.rotation)},
-                {"scale", vec3ToJson(entity.transform.scale)},
-            }},
+            {"parentId", entity.parentId.has_value() ? json(*entity.parentId) : json(nullptr)},
+            {"assetId", entity.assetId.has_value() ? json(*entity.assetId) : json(nullptr)},
+            {"transform",
+             {
+                 {"position", vec3ToJson(entity.transform.position)},
+                 {"rotation", vec3ToJson(entity.transform.rotation)},
+                 {"scale", vec3ToJson(entity.transform.scale)},
+             }},
         });
     }
 
@@ -464,30 +412,28 @@ nlohmann::json ModelSceneSerializer::serialize(
         {"version", document.version},
         {"assets", std::move(assets)},
         {"entities", std::move(entities)},
-        {"environment", {
-            {"timeOfDay", document.environment.timeOfDay},
-            {"timePaused", document.environment.timePaused},
-            {"timeScale", document.environment.timeScale},
-            {"weather", static_cast<uint32_t>(document.environment.weather)},
-            {"weatherTransitionInstant",
-             document.environment.weatherTransitionInstant},
-            {"renderSettings", app::serializeRenderSettings(
-                document.environment.renderSettings)},
-        }},
-        {"editorCamera", {
-            {"target", vec3ToJson(document.editorCamera.target)},
-            {"distance", document.editorCamera.distance},
-            {"yaw", document.editorCamera.yaw},
-            {"pitch", document.editorCamera.pitch},
-            {"nearPlane", document.editorCamera.nearPlane},
-            {"farPlane", document.editorCamera.farPlane},
-        }},
+        {"environment",
+         {
+             {"timeOfDay", document.environment.timeOfDay},
+             {"timePaused", document.environment.timePaused},
+             {"timeScale", document.environment.timeScale},
+             {"weather", static_cast<uint32_t>(document.environment.weather)},
+             {"weatherTransitionInstant", document.environment.weatherTransitionInstant},
+             {"renderSettings", app::serializeRenderSettings(document.environment.renderSettings)},
+         }},
+        {"editorCamera",
+         {
+             {"target", vec3ToJson(document.editorCamera.target)},
+             {"distance", document.editorCamera.distance},
+             {"yaw", document.editorCamera.yaw},
+             {"pitch", document.editorCamera.pitch},
+             {"nearPlane", document.editorCamera.nearPlane},
+             {"farPlane", document.editorCamera.farPlane},
+         }},
     };
 }
 
-bool ModelSceneSerializer::deserialize(const nlohmann::json& value,
-                                       ModelSceneDocument& document,
-                                       std::string& error) {
+bool ModelSceneSerializer::deserialize(const nlohmann::json& value, ModelSceneDocument& document, std::string& error) {
     error.clear();
     if (!value.is_object()) {
         error = "scene root must be an object";
@@ -500,8 +446,7 @@ bool ModelSceneSerializer::deserialize(const nlohmann::json& value,
         return false;
     }
     const uint32_t sourceVersion = parsed.version;
-    if (sourceVersion != 1u &&
-        sourceVersion != ModelSceneDocument::kCurrentVersion) {
+    if (sourceVersion != 1u && sourceVersion != ModelSceneDocument::kCurrentVersion) {
         error = "scene version is not supported";
         return false;
     }
@@ -548,46 +493,27 @@ bool ModelSceneSerializer::deserialize(const nlohmann::json& value,
             !readOptionalId(item, "parentId", entity.parentId, context, error) ||
             !readOptionalId(item, "assetId", entity.assetId, context, error) ||
             !readObject(item, "transform", transform, context, error) ||
-            !readVec3(
-                *transform, "position", entity.transform.position,
-                context + ".transform", error) ||
-            !readVec3(
-                *transform, "rotation", entity.transform.rotation,
-                context + ".transform", error) ||
-            !readVec3(
-                *transform, "scale", entity.transform.scale,
-                context + ".transform", error)) {
+            !readVec3(*transform, "position", entity.transform.position, context + ".transform", error) ||
+            !readVec3(*transform, "rotation", entity.transform.rotation, context + ".transform", error) ||
+            !readVec3(*transform, "scale", entity.transform.scale, context + ".transform", error)) {
             return false;
         }
         parsed.entities.push_back(std::move(entity));
     }
 
     const json* renderSettings = nullptr;
-    if (!readFloat(
-            *environment, "timeOfDay", parsed.environment.timeOfDay,
-            "scene.environment", error) ||
-        !readObject(
-            *environment, "renderSettings", renderSettings,
-            "scene.environment", error) ||
-        !app::deserializeRenderSettings(
-            *renderSettings, parsed.environment.renderSettings, error)) {
+    if (!readFloat(*environment, "timeOfDay", parsed.environment.timeOfDay, "scene.environment", error) ||
+        !readObject(*environment, "renderSettings", renderSettings, "scene.environment", error) ||
+        !app::deserializeRenderSettings(*renderSettings, parsed.environment.renderSettings, error)) {
         return false;
     }
     if (sourceVersion >= 2u) {
         uint32_t weather = 0u;
-        if (!readBool(
-                *environment, "timePaused", parsed.environment.timePaused,
-                "scene.environment", error) ||
-            !readFloat(
-                *environment, "timeScale", parsed.environment.timeScale,
-                "scene.environment", error) ||
-            !readUnsigned(
-                *environment, "weather", weather,
-                "scene.environment", error) ||
-            !readBool(
-                *environment, "weatherTransitionInstant",
-                parsed.environment.weatherTransitionInstant,
-                "scene.environment", error)) {
+        if (!readBool(*environment, "timePaused", parsed.environment.timePaused, "scene.environment", error) ||
+            !readFloat(*environment, "timeScale", parsed.environment.timeScale, "scene.environment", error) ||
+            !readUnsigned(*environment, "weather", weather, "scene.environment", error) ||
+            !readBool(*environment, "weatherTransitionInstant", parsed.environment.weatherTransitionInstant,
+                      "scene.environment", error)) {
             return false;
         }
         if (weather > static_cast<uint32_t>(WeatherType::Snow)) {
@@ -596,27 +522,15 @@ bool ModelSceneSerializer::deserialize(const nlohmann::json& value,
         }
         parsed.environment.weather = static_cast<WeatherType>(weather);
     }
-    if (!readVec3(
-            *editorCamera, "target", parsed.editorCamera.target,
-            "scene.editorCamera", error) ||
-        !readFloat(
-            *editorCamera, "distance", parsed.editorCamera.distance,
-            "scene.editorCamera", error) ||
-        !readFloat(
-            *editorCamera, "yaw", parsed.editorCamera.yaw,
-            "scene.editorCamera", error) ||
-        !readFloat(
-            *editorCamera, "pitch", parsed.editorCamera.pitch,
-            "scene.editorCamera", error)) {
+    if (!readVec3(*editorCamera, "target", parsed.editorCamera.target, "scene.editorCamera", error) ||
+        !readFloat(*editorCamera, "distance", parsed.editorCamera.distance, "scene.editorCamera", error) ||
+        !readFloat(*editorCamera, "yaw", parsed.editorCamera.yaw, "scene.editorCamera", error) ||
+        !readFloat(*editorCamera, "pitch", parsed.editorCamera.pitch, "scene.editorCamera", error)) {
         return false;
     }
     if (sourceVersion >= 2u &&
-        (!readFloat(
-             *editorCamera, "nearPlane", parsed.editorCamera.nearPlane,
-             "scene.editorCamera", error) ||
-         !readFloat(
-             *editorCamera, "farPlane", parsed.editorCamera.farPlane,
-             "scene.editorCamera", error))) {
+        (!readFloat(*editorCamera, "nearPlane", parsed.editorCamera.nearPlane, "scene.editorCamera", error) ||
+         !readFloat(*editorCamera, "farPlane", parsed.editorCamera.farPlane, "scene.editorCamera", error))) {
         return false;
     }
     parsed.version = ModelSceneDocument::kCurrentVersion;
@@ -627,9 +541,7 @@ bool ModelSceneSerializer::deserialize(const nlohmann::json& value,
     return true;
 }
 
-bool ModelSceneSerializer::saveToFile(const std::string& path,
-                                      const ModelSceneDocument& document,
-                                      std::string& error) {
+bool ModelSceneSerializer::saveToFile(const std::string& path, const ModelSceneDocument& document, std::string& error) {
     error.clear();
     if (path.empty()) {
         error = "scene save path must not be empty";
@@ -640,38 +552,31 @@ bool ModelSceneSerializer::saveToFile(const std::string& path,
     }
 
     std::error_code filesystemError;
-    std::filesystem::path finalPath = std::filesystem::absolute(
-        std::filesystem::u8path(path), filesystemError);
+    std::filesystem::path finalPath = std::filesystem::absolute(std::filesystem::u8path(path), filesystemError);
     if (filesystemError) {
-        error = "failed to resolve scene save path: " +
-                filesystemError.message();
+        error = "failed to resolve scene save path: " + filesystemError.message();
         return false;
     }
-    finalPath = std::filesystem::weakly_canonical(
-        finalPath, filesystemError);
+    finalPath = std::filesystem::weakly_canonical(finalPath, filesystemError);
     if (filesystemError) {
-        error = "failed to normalize scene save path: " +
-                filesystemError.message();
+        error = "failed to normalize scene save path: " + filesystemError.message();
         return false;
     }
     ModelSceneDocument storedDocument = document;
     for (SceneAssetDocument& asset : storedDocument.assets) {
-        std::filesystem::path assetPath = std::filesystem::absolute(
-            std::filesystem::u8path(asset.path), filesystemError);
+        std::filesystem::path assetPath =
+            std::filesystem::absolute(std::filesystem::u8path(asset.path), filesystemError);
         if (filesystemError) {
-            error = "failed to resolve scene asset path for saving: " +
-                    filesystemError.message();
+            error = "failed to resolve scene asset path for saving: " + filesystemError.message();
             return false;
         }
-        assetPath = std::filesystem::weakly_canonical(
-            assetPath, filesystemError);
+        assetPath = std::filesystem::weakly_canonical(assetPath, filesystemError);
         if (filesystemError) {
-            error = "failed to normalize scene asset path for saving: " +
-                    filesystemError.message();
+            error = "failed to normalize scene asset path for saving: " + filesystemError.message();
             return false;
         }
-        const std::filesystem::path relativePath = std::filesystem::relative(
-            assetPath, finalPath.parent_path(), filesystemError);
+        const std::filesystem::path relativePath =
+            std::filesystem::relative(assetPath, finalPath.parent_path(), filesystemError);
         if (filesystemError || relativePath.empty()) {
             error = "failed to make scene asset path relative to the scene file";
             return false;
@@ -683,11 +588,9 @@ bool ModelSceneSerializer::saveToFile(const std::string& path,
     std::filesystem::path backupPath = finalPath;
     backupPath += ".bak";
     if (finalPath.has_parent_path()) {
-        std::filesystem::create_directories(
-            finalPath.parent_path(), filesystemError);
+        std::filesystem::create_directories(finalPath.parent_path(), filesystemError);
         if (filesystemError) {
-            error = "failed to create scene directory: " +
-                    filesystemError.message();
+            error = "failed to create scene directory: " + filesystemError.message();
             return false;
         }
     }
@@ -711,29 +614,25 @@ bool ModelSceneSerializer::saveToFile(const std::string& path,
     bool movedOriginal = false;
     if (std::filesystem::exists(finalPath, filesystemError)) {
         if (filesystemError) {
-            error = "failed to inspect existing scene file: " +
-                    filesystemError.message();
+            error = "failed to inspect existing scene file: " + filesystemError.message();
             std::filesystem::remove(tempPath, filesystemError);
             return false;
         }
         std::filesystem::remove(backupPath, filesystemError);
         if (filesystemError) {
-            error = "failed to replace previous scene backup: " +
-                    filesystemError.message();
+            error = "failed to replace previous scene backup: " + filesystemError.message();
             std::filesystem::remove(tempPath, filesystemError);
             return false;
         }
         std::filesystem::rename(finalPath, backupPath, filesystemError);
         if (filesystemError) {
-            error = "failed to preserve existing scene file: " +
-                    filesystemError.message();
+            error = "failed to preserve existing scene file: " + filesystemError.message();
             std::filesystem::remove(tempPath, filesystemError);
             return false;
         }
         movedOriginal = true;
     } else if (filesystemError) {
-        error = "failed to inspect scene save path: " +
-                filesystemError.message();
+        error = "failed to inspect scene save path: " + filesystemError.message();
         std::filesystem::remove(tempPath, filesystemError);
         return false;
     }
@@ -747,8 +646,8 @@ bool ModelSceneSerializer::saveToFile(const std::string& path,
         filesystemError.clear();
         std::filesystem::rename(backupPath, finalPath, filesystemError);
         if (filesystemError) {
-            error = "failed to install scene file and restore the original: " +
-                    renameError + "; restore error: " + filesystemError.message();
+            error = "failed to install scene file and restore the original: " + renameError +
+                    "; restore error: " + filesystemError.message();
             return false;
         }
     }
@@ -758,9 +657,7 @@ bool ModelSceneSerializer::saveToFile(const std::string& path,
     return false;
 }
 
-bool ModelSceneSerializer::loadFromFile(const std::string& path,
-                                        ModelSceneDocument& document,
-                                        std::string& error) {
+bool ModelSceneSerializer::loadFromFile(const std::string& path, ModelSceneDocument& document, std::string& error) {
     error.clear();
     if (path.empty()) {
         error = "scene load path must not be empty";
@@ -782,18 +679,14 @@ bool ModelSceneSerializer::loadFromFile(const std::string& path,
     }
 
     std::error_code filesystemError;
-    std::filesystem::path scenePath = std::filesystem::absolute(
-        std::filesystem::u8path(path), filesystemError);
+    std::filesystem::path scenePath = std::filesystem::absolute(std::filesystem::u8path(path), filesystemError);
     if (filesystemError) {
-        error = "failed to resolve scene file path: " +
-                filesystemError.message();
+        error = "failed to resolve scene file path: " + filesystemError.message();
         return false;
     }
-    scenePath = std::filesystem::weakly_canonical(
-        scenePath, filesystemError);
+    scenePath = std::filesystem::weakly_canonical(scenePath, filesystemError);
     if (filesystemError) {
-        error = "failed to normalize scene file path: " +
-                filesystemError.message();
+        error = "failed to normalize scene file path: " + filesystemError.message();
         return false;
     }
     for (SceneAssetDocument& asset : parsed.assets) {
@@ -801,11 +694,9 @@ bool ModelSceneSerializer::loadFromFile(const std::string& path,
         if (assetPath.is_relative()) {
             assetPath = scenePath.parent_path() / assetPath;
         }
-        assetPath = std::filesystem::weakly_canonical(
-            assetPath, filesystemError);
+        assetPath = std::filesystem::weakly_canonical(assetPath, filesystemError);
         if (filesystemError) {
-            error = "failed to normalize scene asset path: " +
-                    filesystemError.message();
+            error = "failed to normalize scene asset path: " + filesystemError.message();
             return false;
         }
         asset.path = assetPath.generic_u8string();

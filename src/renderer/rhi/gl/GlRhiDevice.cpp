@@ -23,13 +23,8 @@
 namespace {
 std::atomic<uint64_t> g_nextRhiDeviceId{1u};
 
-void APIENTRY openGlDebugMessageCallback(const GLenum source,
-                                         const GLenum type,
-                                         const GLuint id,
-                                         const GLenum severity,
-                                         const GLsizei length,
-                                         const GLchar* message,
-                                         const void* userParam) {
+void APIENTRY openGlDebugMessageCallback(const GLenum source, const GLenum type, const GLuint id, const GLenum severity,
+                                         const GLsizei length, const GLchar* message, const void* userParam) {
     (void)source;
     (void)id;
     (void)length;
@@ -37,8 +32,7 @@ void APIENTRY openGlDebugMessageCallback(const GLenum source,
     if (severity == GL_DEBUG_SEVERITY_NOTIFICATION || type == GL_DEBUG_TYPE_PERFORMANCE) {
         return;
     }
-    MECRAFT_LOG_STREAM(std::cerr << "OpenGL debug: "
-                                 << (message != nullptr ? message : "") << '\n');
+    MECRAFT_LOG_STREAM(std::cerr << "OpenGL debug: " << (message != nullptr ? message : "") << '\n');
 }
 
 struct GlFormatInfo {
@@ -58,8 +52,7 @@ void logRhiError(const char* message) {
 }
 
 void logFramebufferStatus(const char* context, const GLenum status) {
-    std::cerr << "GlRhiDevice: " << context << " framebuffer status=0x"
-              << std::hex << status << std::dec << '\n';
+    std::cerr << "GlRhiDevice: " << context << " framebuffer status=0x" << std::hex << status << std::dec << '\n';
 }
 
 void labelGlObject(const GLenum identifier, const GLuint name, const char* label) {
@@ -77,9 +70,7 @@ void clearFramebufferColor(const GLuint framebuffer, const GLint drawBuffer, con
     glClearNamedFramebufferfv(framebuffer, GL_COLOR, drawBuffer, color);
 }
 
-void clearFramebufferColorUint(const GLuint framebuffer,
-                               const GLint drawBuffer,
-                               const uint32_t* color) {
+void clearFramebufferColorUint(const GLuint framebuffer, const GLint drawBuffer, const uint32_t* color) {
     if (framebuffer == 0u) {
         glClearBufferuiv(GL_COLOR, drawBuffer, color);
         return;
@@ -114,156 +105,123 @@ void invalidateFramebufferData(const GLuint framebuffer, const std::vector<GLenu
     glInvalidateNamedFramebufferData(framebuffer, static_cast<GLsizei>(attachments.size()), attachments.data());
 }
 
-template <typename Handle>
-[[nodiscard]] bool sameHandle(const Handle a, const Handle b) {
+template <typename Handle> [[nodiscard]] bool sameHandle(const Handle a, const Handle b) {
     return a.index == b.index && a.generation == b.generation;
 }
 
 [[nodiscard]] GLenum toGlShaderStage(const RhiShaderStage stage) {
     switch (stage) {
-        case RhiShaderStage::Vertex: return GL_VERTEX_SHADER;
-        case RhiShaderStage::Fragment: return GL_FRAGMENT_SHADER;
-        case RhiShaderStage::Compute: return GL_COMPUTE_SHADER;
+    case RhiShaderStage::Vertex: return GL_VERTEX_SHADER;
+    case RhiShaderStage::Fragment: return GL_FRAGMENT_SHADER;
+    case RhiShaderStage::Compute: return GL_COMPUTE_SHADER;
     }
     return 0u;
 }
 
 [[nodiscard]] GLenum toGlTextureTarget(const RhiTextureDimension dimension) {
     switch (dimension) {
-        case RhiTextureDimension::Texture2D: return GL_TEXTURE_2D;
-        case RhiTextureDimension::Texture2DArray: return GL_TEXTURE_2D_ARRAY;
-        case RhiTextureDimension::Texture3D: return GL_TEXTURE_3D;
-        case RhiTextureDimension::Cube: return GL_TEXTURE_CUBE_MAP;
-        case RhiTextureDimension::CubeArray: return GL_TEXTURE_CUBE_MAP_ARRAY;
+    case RhiTextureDimension::Texture2D: return GL_TEXTURE_2D;
+    case RhiTextureDimension::Texture2DArray: return GL_TEXTURE_2D_ARRAY;
+    case RhiTextureDimension::Texture3D: return GL_TEXTURE_3D;
+    case RhiTextureDimension::Cube: return GL_TEXTURE_CUBE_MAP;
+    case RhiTextureDimension::CubeArray: return GL_TEXTURE_CUBE_MAP_ARRAY;
     }
     return 0u;
 }
 
 [[nodiscard]] GLenum toGlTextureViewTarget(const RhiTextureViewType viewType) {
     switch (viewType) {
-        case RhiTextureViewType::Texture2D: return GL_TEXTURE_2D;
-        case RhiTextureViewType::Texture2DArray: return GL_TEXTURE_2D_ARRAY;
-        case RhiTextureViewType::Texture3D: return GL_TEXTURE_3D;
-        case RhiTextureViewType::Cube: return GL_TEXTURE_CUBE_MAP;
-        case RhiTextureViewType::CubeArray: return GL_TEXTURE_CUBE_MAP_ARRAY;
+    case RhiTextureViewType::Texture2D: return GL_TEXTURE_2D;
+    case RhiTextureViewType::Texture2DArray: return GL_TEXTURE_2D_ARRAY;
+    case RhiTextureViewType::Texture3D: return GL_TEXTURE_3D;
+    case RhiTextureViewType::Cube: return GL_TEXTURE_CUBE_MAP;
+    case RhiTextureViewType::CubeArray: return GL_TEXTURE_CUBE_MAP_ARRAY;
     }
     return 0u;
 }
 
 [[nodiscard]] bool toGlFormatInfo(const RhiTextureFormat format, GlFormatInfo& out) {
     switch (format) {
-        case RhiTextureFormat::R8Unorm:
-            out = {GL_R8, GL_RED, GL_UNSIGNED_BYTE, false, false};
-            return true;
-        case RhiTextureFormat::Rg8Unorm:
-            out = {GL_RG8, GL_RG, GL_UNSIGNED_BYTE, false, false};
-            return true;
-        case RhiTextureFormat::Rgba8Unorm:
-            out = {GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE, false, false};
-            return true;
-        case RhiTextureFormat::Rgba8Srgb:
-            out = {GL_SRGB8_ALPHA8, GL_RGBA, GL_UNSIGNED_BYTE, false, false};
-            return true;
-        case RhiTextureFormat::Bgra8Unorm:
-            out = {GL_RGBA8, GL_BGRA, GL_UNSIGNED_BYTE, false, false};
-            return true;
-        case RhiTextureFormat::Bgra8Srgb:
-            out = {GL_SRGB8_ALPHA8, GL_BGRA, GL_UNSIGNED_BYTE, false, false};
-            return true;
-        case RhiTextureFormat::Rgb10A2Unorm:
-            out = {GL_RGB10_A2, GL_RGBA, GL_UNSIGNED_INT_2_10_10_10_REV, false, false};
-            return true;
-        case RhiTextureFormat::Rg16Float:
-            out = {GL_RG16F, GL_RG, GL_HALF_FLOAT, false, false};
-            return true;
-        case RhiTextureFormat::Rgba16Float:
-            out = {GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT, false, false};
-            return true;
-        case RhiTextureFormat::Rgba32Float:
-            out = {GL_RGBA32F, GL_RGBA, GL_FLOAT, false, false};
-            return true;
-        case RhiTextureFormat::R16Float:
-            out = {GL_R16F, GL_RED, GL_HALF_FLOAT, false, false};
-            return true;
-        case RhiTextureFormat::R32Float:
-            out = {GL_R32F, GL_RED, GL_FLOAT, false, false};
-            return true;
-        case RhiTextureFormat::R32Uint:
-            out = {GL_R32UI, GL_RED_INTEGER, GL_UNSIGNED_INT, false, false};
-            return true;
-        case RhiTextureFormat::Rg32Uint:
-            out = {GL_RG32UI, GL_RG_INTEGER, GL_UNSIGNED_INT, false, false};
-            return true;
-        case RhiTextureFormat::Depth16:
-            out = {GL_DEPTH_COMPONENT16, GL_DEPTH_COMPONENT, GL_UNSIGNED_SHORT, true, false};
-            return true;
-        case RhiTextureFormat::Depth24:
-            out = {GL_DEPTH_COMPONENT24, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT, true, false};
-            return true;
-        case RhiTextureFormat::Depth24Stencil8:
-            out = {GL_DEPTH24_STENCIL8, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, true, true};
-            return true;
-        case RhiTextureFormat::Depth32Float:
-            out = {GL_DEPTH_COMPONENT32F, GL_DEPTH_COMPONENT, GL_FLOAT, true, false};
-            return true;
-        case RhiTextureFormat::Undefined:
-            return false;
+    case RhiTextureFormat::R8Unorm: out = {GL_R8, GL_RED, GL_UNSIGNED_BYTE, false, false}; return true;
+    case RhiTextureFormat::Rg8Unorm: out = {GL_RG8, GL_RG, GL_UNSIGNED_BYTE, false, false}; return true;
+    case RhiTextureFormat::Rgba8Unorm: out = {GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE, false, false}; return true;
+    case RhiTextureFormat::Rgba8Srgb: out = {GL_SRGB8_ALPHA8, GL_RGBA, GL_UNSIGNED_BYTE, false, false}; return true;
+    case RhiTextureFormat::Bgra8Unorm: out = {GL_RGBA8, GL_BGRA, GL_UNSIGNED_BYTE, false, false}; return true;
+    case RhiTextureFormat::Bgra8Srgb: out = {GL_SRGB8_ALPHA8, GL_BGRA, GL_UNSIGNED_BYTE, false, false}; return true;
+    case RhiTextureFormat::Rgb10A2Unorm:
+        out = {GL_RGB10_A2, GL_RGBA, GL_UNSIGNED_INT_2_10_10_10_REV, false, false};
+        return true;
+    case RhiTextureFormat::Rg16Float: out = {GL_RG16F, GL_RG, GL_HALF_FLOAT, false, false}; return true;
+    case RhiTextureFormat::Rgba16Float: out = {GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT, false, false}; return true;
+    case RhiTextureFormat::Rgba32Float: out = {GL_RGBA32F, GL_RGBA, GL_FLOAT, false, false}; return true;
+    case RhiTextureFormat::R16Float: out = {GL_R16F, GL_RED, GL_HALF_FLOAT, false, false}; return true;
+    case RhiTextureFormat::R32Float: out = {GL_R32F, GL_RED, GL_FLOAT, false, false}; return true;
+    case RhiTextureFormat::R32Uint: out = {GL_R32UI, GL_RED_INTEGER, GL_UNSIGNED_INT, false, false}; return true;
+    case RhiTextureFormat::Rg32Uint: out = {GL_RG32UI, GL_RG_INTEGER, GL_UNSIGNED_INT, false, false}; return true;
+    case RhiTextureFormat::Depth16:
+        out = {GL_DEPTH_COMPONENT16, GL_DEPTH_COMPONENT, GL_UNSIGNED_SHORT, true, false};
+        return true;
+    case RhiTextureFormat::Depth24:
+        out = {GL_DEPTH_COMPONENT24, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT, true, false};
+        return true;
+    case RhiTextureFormat::Depth24Stencil8:
+        out = {GL_DEPTH24_STENCIL8, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, true, true};
+        return true;
+    case RhiTextureFormat::Depth32Float:
+        out = {GL_DEPTH_COMPONENT32F, GL_DEPTH_COMPONENT, GL_FLOAT, true, false};
+        return true;
+    case RhiTextureFormat::Undefined: return false;
     }
     return false;
 }
 
 [[nodiscard]] size_t textureFormatSizeBytes(const RhiTextureFormat format) {
     switch (format) {
-        case RhiTextureFormat::R8Unorm: return 1u;
-        case RhiTextureFormat::Rg8Unorm: return 2u;
-        case RhiTextureFormat::Rgba8Unorm:
-        case RhiTextureFormat::Rgba8Srgb:
-        case RhiTextureFormat::Bgra8Unorm:
-        case RhiTextureFormat::Bgra8Srgb:
-        case RhiTextureFormat::Rgb10A2Unorm:
-        case RhiTextureFormat::R32Float:
-        case RhiTextureFormat::R32Uint:
-        case RhiTextureFormat::Depth24:
-        case RhiTextureFormat::Depth24Stencil8:
-        case RhiTextureFormat::Depth32Float: return 4u;
-        case RhiTextureFormat::R16Float:
-        case RhiTextureFormat::Depth16: return 2u;
-        case RhiTextureFormat::Rg16Float: return 4u;
-        case RhiTextureFormat::Rg32Uint:
-        case RhiTextureFormat::Rgba16Float: return 8u;
-        case RhiTextureFormat::Rgba32Float: return 16u;
-        case RhiTextureFormat::Undefined: return 0u;
+    case RhiTextureFormat::R8Unorm: return 1u;
+    case RhiTextureFormat::Rg8Unorm: return 2u;
+    case RhiTextureFormat::Rgba8Unorm:
+    case RhiTextureFormat::Rgba8Srgb:
+    case RhiTextureFormat::Bgra8Unorm:
+    case RhiTextureFormat::Bgra8Srgb:
+    case RhiTextureFormat::Rgb10A2Unorm:
+    case RhiTextureFormat::R32Float:
+    case RhiTextureFormat::R32Uint:
+    case RhiTextureFormat::Depth24:
+    case RhiTextureFormat::Depth24Stencil8:
+    case RhiTextureFormat::Depth32Float: return 4u;
+    case RhiTextureFormat::R16Float:
+    case RhiTextureFormat::Depth16: return 2u;
+    case RhiTextureFormat::Rg16Float: return 4u;
+    case RhiTextureFormat::Rg32Uint:
+    case RhiTextureFormat::Rgba16Float: return 8u;
+    case RhiTextureFormat::Rgba32Float: return 16u;
+    case RhiTextureFormat::Undefined: return 0u;
     }
     return 0u;
 }
 
-[[nodiscard]] RhiTextureAspectFlags textureFormatAspectFlags(
-    const RhiTextureFormat format) {
+[[nodiscard]] RhiTextureAspectFlags textureFormatAspectFlags(const RhiTextureFormat format) {
     switch (format) {
-        case RhiTextureFormat::Depth16:
-        case RhiTextureFormat::Depth24:
-        case RhiTextureFormat::Depth32Float:
-            return rhiFlag(RhiTextureAspect::Depth);
-        case RhiTextureFormat::Depth24Stencil8:
-            return rhiFlag(RhiTextureAspect::Depth) |
-                   rhiFlag(RhiTextureAspect::Stencil);
-        case RhiTextureFormat::R8Unorm:
-        case RhiTextureFormat::Rg8Unorm:
-        case RhiTextureFormat::Rgba8Unorm:
-        case RhiTextureFormat::Rgba8Srgb:
-        case RhiTextureFormat::Bgra8Unorm:
-        case RhiTextureFormat::Bgra8Srgb:
-        case RhiTextureFormat::Rgb10A2Unorm:
-        case RhiTextureFormat::Rg16Float:
-        case RhiTextureFormat::Rgba16Float:
-        case RhiTextureFormat::Rgba32Float:
-        case RhiTextureFormat::R16Float:
-        case RhiTextureFormat::R32Float:
-        case RhiTextureFormat::R32Uint:
-        case RhiTextureFormat::Rg32Uint:
-            return rhiFlag(RhiTextureAspect::Color);
-        case RhiTextureFormat::Undefined:
-            return 0u;
+    case RhiTextureFormat::Depth16:
+    case RhiTextureFormat::Depth24:
+    case RhiTextureFormat::Depth32Float: return rhiFlag(RhiTextureAspect::Depth);
+    case RhiTextureFormat::Depth24Stencil8:
+        return rhiFlag(RhiTextureAspect::Depth) | rhiFlag(RhiTextureAspect::Stencil);
+    case RhiTextureFormat::R8Unorm:
+    case RhiTextureFormat::Rg8Unorm:
+    case RhiTextureFormat::Rgba8Unorm:
+    case RhiTextureFormat::Rgba8Srgb:
+    case RhiTextureFormat::Bgra8Unorm:
+    case RhiTextureFormat::Bgra8Srgb:
+    case RhiTextureFormat::Rgb10A2Unorm:
+    case RhiTextureFormat::Rg16Float:
+    case RhiTextureFormat::Rgba16Float:
+    case RhiTextureFormat::Rgba32Float:
+    case RhiTextureFormat::R16Float:
+    case RhiTextureFormat::R32Float:
+    case RhiTextureFormat::R32Uint:
+    case RhiTextureFormat::Rg32Uint: return rhiFlag(RhiTextureAspect::Color);
+    case RhiTextureFormat::Undefined: return 0u;
     }
     return 0u;
 }
@@ -286,95 +244,94 @@ template <typename Handle>
 
 [[nodiscard]] GLenum toGlMagFilter(const RhiFilter filter) {
     switch (filter) {
-        case RhiFilter::Nearest: return GL_NEAREST;
-        case RhiFilter::Linear: return GL_LINEAR;
+    case RhiFilter::Nearest: return GL_NEAREST;
+    case RhiFilter::Linear: return GL_LINEAR;
     }
     return 0u;
 }
 
 [[nodiscard]] GLenum toGlAddressMode(const RhiAddressMode mode) {
     switch (mode) {
-        case RhiAddressMode::Repeat: return GL_REPEAT;
-        case RhiAddressMode::MirroredRepeat: return GL_MIRRORED_REPEAT;
-        case RhiAddressMode::ClampToEdge: return GL_CLAMP_TO_EDGE;
-        case RhiAddressMode::ClampToBorder: return GL_CLAMP_TO_BORDER;
+    case RhiAddressMode::Repeat: return GL_REPEAT;
+    case RhiAddressMode::MirroredRepeat: return GL_MIRRORED_REPEAT;
+    case RhiAddressMode::ClampToEdge: return GL_CLAMP_TO_EDGE;
+    case RhiAddressMode::ClampToBorder: return GL_CLAMP_TO_BORDER;
     }
     return 0u;
 }
 
 [[nodiscard]] bool toGlBorderColor(const RhiBorderColor color, std::array<GLfloat, 4>& out) {
     switch (color) {
-        case RhiBorderColor::TransparentBlack: out = {0.0f, 0.0f, 0.0f, 0.0f}; return true;
-        case RhiBorderColor::OpaqueBlack: out = {0.0f, 0.0f, 0.0f, 1.0f}; return true;
-        case RhiBorderColor::OpaqueWhite: out = {1.0f, 1.0f, 1.0f, 1.0f}; return true;
+    case RhiBorderColor::TransparentBlack: out = {0.0f, 0.0f, 0.0f, 0.0f}; return true;
+    case RhiBorderColor::OpaqueBlack: out = {0.0f, 0.0f, 0.0f, 1.0f}; return true;
+    case RhiBorderColor::OpaqueWhite: out = {1.0f, 1.0f, 1.0f, 1.0f}; return true;
     }
     return false;
 }
 
 [[nodiscard]] GLenum toGlCompareOp(const RhiCompareOp op) {
     switch (op) {
-        case RhiCompareOp::Never: return GL_NEVER;
-        case RhiCompareOp::Less: return GL_LESS;
-        case RhiCompareOp::Equal: return GL_EQUAL;
-        case RhiCompareOp::LessOrEqual: return GL_LEQUAL;
-        case RhiCompareOp::Greater: return GL_GREATER;
-        case RhiCompareOp::NotEqual: return GL_NOTEQUAL;
-        case RhiCompareOp::GreaterOrEqual: return GL_GEQUAL;
-        case RhiCompareOp::Always: return GL_ALWAYS;
+    case RhiCompareOp::Never: return GL_NEVER;
+    case RhiCompareOp::Less: return GL_LESS;
+    case RhiCompareOp::Equal: return GL_EQUAL;
+    case RhiCompareOp::LessOrEqual: return GL_LEQUAL;
+    case RhiCompareOp::Greater: return GL_GREATER;
+    case RhiCompareOp::NotEqual: return GL_NOTEQUAL;
+    case RhiCompareOp::GreaterOrEqual: return GL_GEQUAL;
+    case RhiCompareOp::Always: return GL_ALWAYS;
     }
     return 0u;
 }
 
 [[nodiscard]] GLenum toGlTopology(const RhiPrimitiveTopology topology) {
     switch (topology) {
-        case RhiPrimitiveTopology::TriangleList: return GL_TRIANGLES;
-        case RhiPrimitiveTopology::TriangleStrip: return GL_TRIANGLE_STRIP;
-        case RhiPrimitiveTopology::LineList: return GL_LINES;
-        case RhiPrimitiveTopology::LineStrip: return GL_LINE_STRIP;
+    case RhiPrimitiveTopology::TriangleList: return GL_TRIANGLES;
+    case RhiPrimitiveTopology::TriangleStrip: return GL_TRIANGLE_STRIP;
+    case RhiPrimitiveTopology::LineList: return GL_LINES;
+    case RhiPrimitiveTopology::LineStrip: return GL_LINE_STRIP;
     }
     return 0u;
 }
 
 [[nodiscard]] GLenum toGlBlendFactor(const RhiBlendFactor factor) {
     switch (factor) {
-        case RhiBlendFactor::Zero: return GL_ZERO;
-        case RhiBlendFactor::One: return GL_ONE;
-        case RhiBlendFactor::SrcAlpha: return GL_SRC_ALPHA;
-        case RhiBlendFactor::OneMinusSrcAlpha: return GL_ONE_MINUS_SRC_ALPHA;
-        case RhiBlendFactor::SrcColor: return GL_SRC_COLOR;
-        case RhiBlendFactor::OneMinusSrcColor: return GL_ONE_MINUS_SRC_COLOR;
-        case RhiBlendFactor::DstAlpha: return GL_DST_ALPHA;
-        case RhiBlendFactor::OneMinusDstAlpha: return GL_ONE_MINUS_DST_ALPHA;
-        case RhiBlendFactor::DstColor: return GL_DST_COLOR;
-        case RhiBlendFactor::OneMinusDstColor: return GL_ONE_MINUS_DST_COLOR;
+    case RhiBlendFactor::Zero: return GL_ZERO;
+    case RhiBlendFactor::One: return GL_ONE;
+    case RhiBlendFactor::SrcAlpha: return GL_SRC_ALPHA;
+    case RhiBlendFactor::OneMinusSrcAlpha: return GL_ONE_MINUS_SRC_ALPHA;
+    case RhiBlendFactor::SrcColor: return GL_SRC_COLOR;
+    case RhiBlendFactor::OneMinusSrcColor: return GL_ONE_MINUS_SRC_COLOR;
+    case RhiBlendFactor::DstAlpha: return GL_DST_ALPHA;
+    case RhiBlendFactor::OneMinusDstAlpha: return GL_ONE_MINUS_DST_ALPHA;
+    case RhiBlendFactor::DstColor: return GL_DST_COLOR;
+    case RhiBlendFactor::OneMinusDstColor: return GL_ONE_MINUS_DST_COLOR;
     }
     return 0u;
 }
 
 [[nodiscard]] bool isValidBlendFactor(const RhiBlendFactor factor) {
     switch (factor) {
-        case RhiBlendFactor::Zero:
-        case RhiBlendFactor::One:
-        case RhiBlendFactor::SrcAlpha:
-        case RhiBlendFactor::OneMinusSrcAlpha:
-        case RhiBlendFactor::SrcColor:
-        case RhiBlendFactor::OneMinusSrcColor:
-        case RhiBlendFactor::DstAlpha:
-        case RhiBlendFactor::OneMinusDstAlpha:
-        case RhiBlendFactor::DstColor:
-        case RhiBlendFactor::OneMinusDstColor:
-            return true;
+    case RhiBlendFactor::Zero:
+    case RhiBlendFactor::One:
+    case RhiBlendFactor::SrcAlpha:
+    case RhiBlendFactor::OneMinusSrcAlpha:
+    case RhiBlendFactor::SrcColor:
+    case RhiBlendFactor::OneMinusSrcColor:
+    case RhiBlendFactor::DstAlpha:
+    case RhiBlendFactor::OneMinusDstAlpha:
+    case RhiBlendFactor::DstColor:
+    case RhiBlendFactor::OneMinusDstColor: return true;
     }
     return false;
 }
 
 [[nodiscard]] GLenum toGlBlendOp(const RhiBlendOp op) {
     switch (op) {
-        case RhiBlendOp::Add: return GL_FUNC_ADD;
-        case RhiBlendOp::Subtract: return GL_FUNC_SUBTRACT;
-        case RhiBlendOp::ReverseSubtract: return GL_FUNC_REVERSE_SUBTRACT;
-        case RhiBlendOp::Min: return GL_MIN;
-        case RhiBlendOp::Max: return GL_MAX;
+    case RhiBlendOp::Add: return GL_FUNC_ADD;
+    case RhiBlendOp::Subtract: return GL_FUNC_SUBTRACT;
+    case RhiBlendOp::ReverseSubtract: return GL_FUNC_REVERSE_SUBTRACT;
+    case RhiBlendOp::Min: return GL_MIN;
+    case RhiBlendOp::Max: return GL_MAX;
     }
     return 0u;
 }
@@ -388,26 +345,26 @@ struct GlVertexFormatInfo {
 
 [[nodiscard]] GlVertexFormatInfo toGlVertexFormat(const RhiVertexFormat format) {
     switch (format) {
-        case RhiVertexFormat::Float: return {1, GL_FLOAT, false, false};
-        case RhiVertexFormat::Float2: return {2, GL_FLOAT, false, false};
-        case RhiVertexFormat::Float3: return {3, GL_FLOAT, false, false};
-        case RhiVertexFormat::Float4: return {4, GL_FLOAT, false, false};
-        case RhiVertexFormat::Uint: return {1, GL_UNSIGNED_INT, true, false};
-        case RhiVertexFormat::Uint2: return {2, GL_UNSIGNED_INT, true, false};
-        case RhiVertexFormat::Uint3: return {3, GL_UNSIGNED_INT, true, false};
-        case RhiVertexFormat::Uint4: return {4, GL_UNSIGNED_INT, true, false};
-        case RhiVertexFormat::Sint8: return {1, GL_BYTE, true, false};
-        case RhiVertexFormat::Unorm8: return {1, GL_UNSIGNED_BYTE, false, true};
-        case RhiVertexFormat::Uint8: return {1, GL_UNSIGNED_BYTE, true, false};
-        case RhiVertexFormat::Uint16: return {1, GL_UNSIGNED_SHORT, true, false};
+    case RhiVertexFormat::Float: return {1, GL_FLOAT, false, false};
+    case RhiVertexFormat::Float2: return {2, GL_FLOAT, false, false};
+    case RhiVertexFormat::Float3: return {3, GL_FLOAT, false, false};
+    case RhiVertexFormat::Float4: return {4, GL_FLOAT, false, false};
+    case RhiVertexFormat::Uint: return {1, GL_UNSIGNED_INT, true, false};
+    case RhiVertexFormat::Uint2: return {2, GL_UNSIGNED_INT, true, false};
+    case RhiVertexFormat::Uint3: return {3, GL_UNSIGNED_INT, true, false};
+    case RhiVertexFormat::Uint4: return {4, GL_UNSIGNED_INT, true, false};
+    case RhiVertexFormat::Sint8: return {1, GL_BYTE, true, false};
+    case RhiVertexFormat::Unorm8: return {1, GL_UNSIGNED_BYTE, false, true};
+    case RhiVertexFormat::Uint8: return {1, GL_UNSIGNED_BYTE, true, false};
+    case RhiVertexFormat::Uint16: return {1, GL_UNSIGNED_SHORT, true, false};
     }
     return {};
 }
 
 [[nodiscard]] uint64_t indexElementSize(const RhiIndexFormat format) {
     switch (format) {
-        case RhiIndexFormat::Uint16: return 2u;
-        case RhiIndexFormat::Uint32: return 4u;
+    case RhiIndexFormat::Uint16: return 2u;
+    case RhiIndexFormat::Uint32: return 4u;
     }
     return 0u;
 }
@@ -426,116 +383,93 @@ struct GlVertexFormatInfo {
 
 [[nodiscard]] const char* resourceStateName(const RhiResourceState state) {
     switch (state) {
-        case RhiResourceState::Undefined: return "Undefined";
-        case RhiResourceState::Present: return "Present";
-        case RhiResourceState::RenderTarget: return "RenderTarget";
-        case RhiResourceState::DepthWrite: return "DepthWrite";
-        case RhiResourceState::DepthRead: return "DepthRead";
-        case RhiResourceState::ShaderRead: return "ShaderRead";
-        case RhiResourceState::ShaderWrite: return "ShaderWrite";
-        case RhiResourceState::TransferSrc: return "TransferSrc";
-        case RhiResourceState::TransferDst: return "TransferDst";
-        case RhiResourceState::VertexBuffer: return "VertexBuffer";
-        case RhiResourceState::IndexBuffer: return "IndexBuffer";
-        case RhiResourceState::IndirectArgument: return "IndirectArgument";
-        case RhiResourceState::UniformBuffer: return "UniformBuffer";
-        case RhiResourceState::StorageBuffer: return "StorageBuffer";
-        case RhiResourceState::HostRead: return "HostRead";
-        case RhiResourceState::HostWrite: return "HostWrite";
+    case RhiResourceState::Undefined: return "Undefined";
+    case RhiResourceState::Present: return "Present";
+    case RhiResourceState::RenderTarget: return "RenderTarget";
+    case RhiResourceState::DepthWrite: return "DepthWrite";
+    case RhiResourceState::DepthRead: return "DepthRead";
+    case RhiResourceState::ShaderRead: return "ShaderRead";
+    case RhiResourceState::ShaderWrite: return "ShaderWrite";
+    case RhiResourceState::TransferSrc: return "TransferSrc";
+    case RhiResourceState::TransferDst: return "TransferDst";
+    case RhiResourceState::VertexBuffer: return "VertexBuffer";
+    case RhiResourceState::IndexBuffer: return "IndexBuffer";
+    case RhiResourceState::IndirectArgument: return "IndirectArgument";
+    case RhiResourceState::UniformBuffer: return "UniformBuffer";
+    case RhiResourceState::StorageBuffer: return "StorageBuffer";
+    case RhiResourceState::HostRead: return "HostRead";
+    case RhiResourceState::HostWrite: return "HostWrite";
     }
     return "Invalid";
 }
 
-[[nodiscard]] bool textureUsageSupportsState(const RhiTextureUsageFlags usage,
-                                             const RhiResourceState state) {
+[[nodiscard]] bool textureUsageSupportsState(const RhiTextureUsageFlags usage, const RhiResourceState state) {
     switch (state) {
-        case RhiResourceState::ShaderRead:
-            return (usage & rhiFlag(RhiTextureUsage::Sampled)) != 0u;
-        case RhiResourceState::ShaderWrite:
-            return (usage & rhiFlag(RhiTextureUsage::Storage)) != 0u;
-        case RhiResourceState::TransferSrc:
-            return (usage & rhiFlag(RhiTextureUsage::TransferSrc)) != 0u;
-        case RhiResourceState::TransferDst:
-            return (usage & rhiFlag(RhiTextureUsage::TransferDst)) != 0u;
-        case RhiResourceState::RenderTarget:
-            return (usage & rhiFlag(RhiTextureUsage::ColorAttachment)) != 0u;
-        case RhiResourceState::DepthWrite:
-        case RhiResourceState::DepthRead:
-            return (usage & rhiFlag(RhiTextureUsage::DepthStencilAttachment)) != 0u;
-        case RhiResourceState::Present:
-            return (usage & rhiFlag(RhiTextureUsage::Present)) != 0u;
-        case RhiResourceState::Undefined:
-        case RhiResourceState::VertexBuffer:
-        case RhiResourceState::IndexBuffer:
-        case RhiResourceState::IndirectArgument:
-        case RhiResourceState::UniformBuffer:
-        case RhiResourceState::StorageBuffer:
-        case RhiResourceState::HostRead:
-        case RhiResourceState::HostWrite:
-            return false;
+    case RhiResourceState::ShaderRead: return (usage & rhiFlag(RhiTextureUsage::Sampled)) != 0u;
+    case RhiResourceState::ShaderWrite: return (usage & rhiFlag(RhiTextureUsage::Storage)) != 0u;
+    case RhiResourceState::TransferSrc: return (usage & rhiFlag(RhiTextureUsage::TransferSrc)) != 0u;
+    case RhiResourceState::TransferDst: return (usage & rhiFlag(RhiTextureUsage::TransferDst)) != 0u;
+    case RhiResourceState::RenderTarget: return (usage & rhiFlag(RhiTextureUsage::ColorAttachment)) != 0u;
+    case RhiResourceState::DepthWrite:
+    case RhiResourceState::DepthRead: return (usage & rhiFlag(RhiTextureUsage::DepthStencilAttachment)) != 0u;
+    case RhiResourceState::Present: return (usage & rhiFlag(RhiTextureUsage::Present)) != 0u;
+    case RhiResourceState::Undefined:
+    case RhiResourceState::VertexBuffer:
+    case RhiResourceState::IndexBuffer:
+    case RhiResourceState::IndirectArgument:
+    case RhiResourceState::UniformBuffer:
+    case RhiResourceState::StorageBuffer:
+    case RhiResourceState::HostRead:
+    case RhiResourceState::HostWrite: return false;
     }
     return false;
 }
 
-[[nodiscard]] bool bufferUsageSupportsState(const RhiBufferUsageFlags usage,
-                                            const RhiResourceState state) {
+[[nodiscard]] bool bufferUsageSupportsState(const RhiBufferUsageFlags usage, const RhiResourceState state) {
     switch (state) {
-        case RhiResourceState::TransferSrc:
-            return (usage & rhiFlag(RhiBufferUsage::TransferSrc)) != 0u;
-        case RhiResourceState::TransferDst:
-            return (usage & rhiFlag(RhiBufferUsage::TransferDst)) != 0u;
-        case RhiResourceState::VertexBuffer:
-            return (usage & rhiFlag(RhiBufferUsage::Vertex)) != 0u;
-        case RhiResourceState::IndexBuffer:
-            return (usage & rhiFlag(RhiBufferUsage::Index)) != 0u;
-        case RhiResourceState::IndirectArgument:
-            return (usage & rhiFlag(RhiBufferUsage::Indirect)) != 0u;
-        case RhiResourceState::UniformBuffer:
-            return (usage & rhiFlag(RhiBufferUsage::Uniform)) != 0u;
-        case RhiResourceState::StorageBuffer:
-            return (usage & rhiFlag(RhiBufferUsage::Storage)) != 0u;
-        case RhiResourceState::HostRead:
-            return (usage & rhiFlag(RhiBufferUsage::MapRead)) != 0u;
-        case RhiResourceState::HostWrite:
-            return (usage & rhiFlag(RhiBufferUsage::MapWrite)) != 0u;
-        case RhiResourceState::Undefined:
-            return true;
-        case RhiResourceState::Present:
-        case RhiResourceState::RenderTarget:
-        case RhiResourceState::DepthWrite:
-        case RhiResourceState::DepthRead:
-        case RhiResourceState::ShaderRead:
-        case RhiResourceState::ShaderWrite:
-            return false;
+    case RhiResourceState::TransferSrc: return (usage & rhiFlag(RhiBufferUsage::TransferSrc)) != 0u;
+    case RhiResourceState::TransferDst: return (usage & rhiFlag(RhiBufferUsage::TransferDst)) != 0u;
+    case RhiResourceState::VertexBuffer: return (usage & rhiFlag(RhiBufferUsage::Vertex)) != 0u;
+    case RhiResourceState::IndexBuffer: return (usage & rhiFlag(RhiBufferUsage::Index)) != 0u;
+    case RhiResourceState::IndirectArgument: return (usage & rhiFlag(RhiBufferUsage::Indirect)) != 0u;
+    case RhiResourceState::UniformBuffer: return (usage & rhiFlag(RhiBufferUsage::Uniform)) != 0u;
+    case RhiResourceState::StorageBuffer: return (usage & rhiFlag(RhiBufferUsage::Storage)) != 0u;
+    case RhiResourceState::HostRead: return (usage & rhiFlag(RhiBufferUsage::MapRead)) != 0u;
+    case RhiResourceState::HostWrite: return (usage & rhiFlag(RhiBufferUsage::MapWrite)) != 0u;
+    case RhiResourceState::Undefined: return true;
+    case RhiResourceState::Present:
+    case RhiResourceState::RenderTarget:
+    case RhiResourceState::DepthWrite:
+    case RhiResourceState::DepthRead:
+    case RhiResourceState::ShaderRead:
+    case RhiResourceState::ShaderWrite: return false;
     }
     return false;
 }
 
 [[nodiscard]] GLbitfield barrierBitsForState(const RhiResourceState state) {
     switch (state) {
-        case RhiResourceState::RenderTarget: return GL_FRAMEBUFFER_BARRIER_BIT;
-        case RhiResourceState::DepthWrite: return GL_FRAMEBUFFER_BARRIER_BIT;
-        case RhiResourceState::DepthRead: return GL_TEXTURE_FETCH_BARRIER_BIT;
-        case RhiResourceState::ShaderRead: return GL_TEXTURE_FETCH_BARRIER_BIT | GL_SHADER_STORAGE_BARRIER_BIT;
-        case RhiResourceState::ShaderWrite: return GL_SHADER_IMAGE_ACCESS_BARRIER_BIT | GL_SHADER_STORAGE_BARRIER_BIT;
-        case RhiResourceState::TransferSrc: return GL_TEXTURE_UPDATE_BARRIER_BIT | GL_BUFFER_UPDATE_BARRIER_BIT;
-        case RhiResourceState::TransferDst: return GL_TEXTURE_UPDATE_BARRIER_BIT | GL_BUFFER_UPDATE_BARRIER_BIT;
-        case RhiResourceState::VertexBuffer: return GL_VERTEX_ATTRIB_ARRAY_BARRIER_BIT;
-        case RhiResourceState::IndexBuffer: return GL_ELEMENT_ARRAY_BARRIER_BIT;
-        case RhiResourceState::IndirectArgument: return GL_COMMAND_BARRIER_BIT;
-        case RhiResourceState::UniformBuffer: return GL_UNIFORM_BARRIER_BIT;
-        case RhiResourceState::StorageBuffer: return GL_SHADER_STORAGE_BARRIER_BIT;
-        case RhiResourceState::HostRead: return GL_CLIENT_MAPPED_BUFFER_BARRIER_BIT;
-        case RhiResourceState::HostWrite: return GL_CLIENT_MAPPED_BUFFER_BARRIER_BIT;
-        case RhiResourceState::Undefined:
-        case RhiResourceState::Present:
-            return 0u;
+    case RhiResourceState::RenderTarget: return GL_FRAMEBUFFER_BARRIER_BIT;
+    case RhiResourceState::DepthWrite: return GL_FRAMEBUFFER_BARRIER_BIT;
+    case RhiResourceState::DepthRead: return GL_TEXTURE_FETCH_BARRIER_BIT;
+    case RhiResourceState::ShaderRead: return GL_TEXTURE_FETCH_BARRIER_BIT | GL_SHADER_STORAGE_BARRIER_BIT;
+    case RhiResourceState::ShaderWrite: return GL_SHADER_IMAGE_ACCESS_BARRIER_BIT | GL_SHADER_STORAGE_BARRIER_BIT;
+    case RhiResourceState::TransferSrc: return GL_TEXTURE_UPDATE_BARRIER_BIT | GL_BUFFER_UPDATE_BARRIER_BIT;
+    case RhiResourceState::TransferDst: return GL_TEXTURE_UPDATE_BARRIER_BIT | GL_BUFFER_UPDATE_BARRIER_BIT;
+    case RhiResourceState::VertexBuffer: return GL_VERTEX_ATTRIB_ARRAY_BARRIER_BIT;
+    case RhiResourceState::IndexBuffer: return GL_ELEMENT_ARRAY_BARRIER_BIT;
+    case RhiResourceState::IndirectArgument: return GL_COMMAND_BARRIER_BIT;
+    case RhiResourceState::UniformBuffer: return GL_UNIFORM_BARRIER_BIT;
+    case RhiResourceState::StorageBuffer: return GL_SHADER_STORAGE_BARRIER_BIT;
+    case RhiResourceState::HostRead: return GL_CLIENT_MAPPED_BUFFER_BARRIER_BIT;
+    case RhiResourceState::HostWrite: return GL_CLIENT_MAPPED_BUFFER_BARRIER_BIT;
+    case RhiResourceState::Undefined:
+    case RhiResourceState::Present: return 0u;
     }
     return 0u;
 }
 
-[[nodiscard]] GLuint compileShaderObject(const RhiShaderStage shaderStage,
-                                         const std::string& sourceText,
+[[nodiscard]] GLuint compileShaderObject(const RhiShaderStage shaderStage, const std::string& sourceText,
                                          const char* debugName) {
     const GLenum stage = toGlShaderStage(shaderStage);
     if (stage == 0u || sourceText.empty()) {
@@ -558,8 +492,8 @@ struct GlVertexFormatInfo {
 
     std::array<char, 2048> infoLog{};
     glGetShaderInfoLog(shader, static_cast<GLsizei>(infoLog.size()), nullptr, infoLog.data());
-    std::cerr << "GlRhiDevice: shader compilation failed [" << rhiDebugName(debugName)
-              << "]\n" << infoLog.data() << '\n';
+    std::cerr << "GlRhiDevice: shader compilation failed [" << rhiDebugName(debugName) << "]\n"
+              << infoLog.data() << '\n';
     glDeleteShader(shader);
     return 0u;
 }
@@ -676,9 +610,8 @@ struct GlRetiredResources {
     std::vector<GLuint> framebuffers;
 
     [[nodiscard]] bool empty() const {
-        return buffers.empty() && textures.empty() && samplers.empty() &&
-               programs.empty() && vertexArrays.empty() && queries.empty() &&
-               framebuffers.empty();
+        return buffers.empty() && textures.empty() && samplers.empty() && programs.empty() && vertexArrays.empty() &&
+               queries.empty() && framebuffers.empty();
     }
 };
 
@@ -690,8 +623,7 @@ struct GlRetirementBatch {
 };
 
 template <typename Handle, typename Record>
-[[nodiscard]] Record* recordForHandle(RhiHandleAllocator<Handle>& allocator,
-                                      std::vector<Record>& records,
+[[nodiscard]] Record* recordForHandle(RhiHandleAllocator<Handle>& allocator, std::vector<Record>& records,
                                       const Handle handle) {
     if (!allocator.isAlive(handle)) {
         return nullptr;
@@ -706,8 +638,7 @@ template <typename Handle, typename Record>
 
 template <typename Handle, typename Record>
 [[nodiscard]] const Record* recordForHandle(const RhiHandleAllocator<Handle>& allocator,
-                                            const std::vector<Record>& records,
-                                            const Handle handle) {
+                                            const std::vector<Record>& records, const Handle handle) {
     if (!allocator.isAlive(handle)) {
         return nullptr;
     }
@@ -719,38 +650,32 @@ template <typename Handle, typename Record>
     return &records[slot];
 }
 
-[[nodiscard]] const RhiBindGroupLayoutEntry* findLayoutEntry(
-    const GlBindGroupLayoutRecord& layout,
-    const uint32_t binding) {
+[[nodiscard]] const RhiBindGroupLayoutEntry* findLayoutEntry(const GlBindGroupLayoutRecord& layout,
+                                                             const uint32_t binding) {
     const auto it = std::find_if(layout.desc.entries.begin(), layout.desc.entries.end(),
-                                 [&](const RhiBindGroupLayoutEntry& entry) {
-                                     return entry.binding == binding;
-                                 });
+                                 [&](const RhiBindGroupLayoutEntry& entry) { return entry.binding == binding; });
     return it == layout.desc.entries.end() ? nullptr : &*it;
 }
 
 [[nodiscard]] uint32_t bindingNamespace(const RhiBindingType type) {
     switch (type) {
-        case RhiBindingType::UniformBuffer: return 0u;
-        case RhiBindingType::StorageBuffer: return 1u;
-        case RhiBindingType::SampledTexture:
-        case RhiBindingType::Sampler:
-        case RhiBindingType::CombinedTextureSampler: return 2u;
-        case RhiBindingType::StorageTexture: return 3u;
+    case RhiBindingType::UniformBuffer: return 0u;
+    case RhiBindingType::StorageBuffer: return 1u;
+    case RhiBindingType::SampledTexture:
+    case RhiBindingType::Sampler:
+    case RhiBindingType::CombinedTextureSampler: return 2u;
+    case RhiBindingType::StorageTexture: return 3u;
     }
     return 4u;
 }
 
-[[nodiscard]] bool buildPipelineBindingMappings(
-    const RhiHandleAllocator<RhiBindGroupLayoutHandle>& bindGroupLayouts,
-    const std::vector<GlBindGroupLayoutRecord>& bindGroupLayoutRecords,
-    const std::array<uint32_t, 4>& bindingLimits,
-    const GlPipelineLayoutRecord& pipelineLayout,
-    const std::vector<const GlShaderRecord*>& shaders,
-    const char* const pipelineDebugName,
-    std::vector<GlPipelineRecord::BindingMapping>& mappings,
-    std::optional<uint32_t>& pushConstantBinding,
-    uint32_t& pushConstantSize) {
+[[nodiscard]] bool
+buildPipelineBindingMappings(const RhiHandleAllocator<RhiBindGroupLayoutHandle>& bindGroupLayouts,
+                             const std::vector<GlBindGroupLayoutRecord>& bindGroupLayoutRecords,
+                             const std::array<uint32_t, 4>& bindingLimits, const GlPipelineLayoutRecord& pipelineLayout,
+                             const std::vector<const GlShaderRecord*>& shaders, const char* const pipelineDebugName,
+                             std::vector<GlPipelineRecord::BindingMapping>& mappings,
+                             std::optional<uint32_t>& pushConstantBinding, uint32_t& pushConstantSize) {
     std::vector<renderer::rhi::RhiShaderBindingInfo> reflectedBindings;
     uint32_t reflectedPushConstantSize = 0u;
     RhiShaderStageFlags reflectedPushConstantStages = 0u;
@@ -760,35 +685,30 @@ template <typename Handle, typename Record>
             logRhiError("pipeline binding reflection received an invalid shader");
             return false;
         }
-        for (const renderer::rhi::RhiShaderBindingInfo& binding :
-             shaderRecord->shader.reflection.bindings) {
+        for (const renderer::rhi::RhiShaderBindingInfo& binding : shaderRecord->shader.reflection.bindings) {
             if (binding.set >= pipelineLayout.desc.bindGroupLayouts.size()) {
                 logRhiError("shader descriptor set is not declared by the pipeline layout");
                 return false;
             }
             const GlBindGroupLayoutRecord* setLayout = recordForHandle(
-                bindGroupLayouts,
-                bindGroupLayoutRecords,
-                pipelineLayout.desc.bindGroupLayouts[binding.set]);
+                bindGroupLayouts, bindGroupLayoutRecords, pipelineLayout.desc.bindGroupLayouts[binding.set]);
             const RhiBindGroupLayoutEntry* layoutEntry =
                 setLayout != nullptr ? findLayoutEntry(*setLayout, binding.binding) : nullptr;
             if (layoutEntry == nullptr || layoutEntry->type != binding.type ||
                 layoutEntry->arrayCount != binding.arrayCount ||
                 (layoutEntry->stages & binding.stages) != binding.stages) {
                 std::cerr << "GlRhiDevice: shader descriptor reflection does not match pipeline layout"
-                          << " (set=" << binding.set
-                          << ", binding=" << binding.binding
-                          << ", type=" << static_cast<uint32_t>(binding.type)
-                          << ", stages=" << binding.stages
+                          << " (set=" << binding.set << ", binding=" << binding.binding
+                          << ", type=" << static_cast<uint32_t>(binding.type) << ", stages=" << binding.stages
                           << ", name=" << binding.name << ")\n";
                 return false;
             }
 
-            const auto existing = std::find_if(
-                reflectedBindings.begin(), reflectedBindings.end(),
-                [&](const renderer::rhi::RhiShaderBindingInfo& candidate) {
-                    return candidate.set == binding.set && candidate.binding == binding.binding;
-                });
+            const auto existing =
+                std::find_if(reflectedBindings.begin(), reflectedBindings.end(),
+                             [&](const renderer::rhi::RhiShaderBindingInfo& candidate) {
+                                 return candidate.set == binding.set && candidate.binding == binding.binding;
+                             });
             if (existing == reflectedBindings.end()) {
                 reflectedBindings.push_back(binding);
             } else if (existing->type != binding.type || existing->arrayCount != binding.arrayCount) {
@@ -800,8 +720,7 @@ template <typename Handle, typename Record>
         }
 
         if (shaderRecord->shader.reflection.pushConstant.has_value()) {
-            const renderer::rhi::RhiPushConstantInfo& pushConstant =
-                *shaderRecord->shader.reflection.pushConstant;
+            const renderer::rhi::RhiPushConstantInfo& pushConstant = *shaderRecord->shader.reflection.pushConstant;
             if (reflectedPushConstantSize != 0u && reflectedPushConstantSize != pushConstant.size) {
                 logRhiError("shader stages declare incompatible push-constant blocks");
                 return false;
@@ -813,8 +732,7 @@ template <typename Handle, typename Record>
 
     if (reflectedPushConstantSize != 0u &&
         (pipelineLayout.desc.pushConstantBytes < reflectedPushConstantSize ||
-         (pipelineLayout.desc.pushConstantStages & reflectedPushConstantStages) !=
-             reflectedPushConstantStages)) {
+         (pipelineLayout.desc.pushConstantStages & reflectedPushConstantStages) != reflectedPushConstantStages)) {
         std::cerr << "GlRhiDevice: shader push-constant reflection does not match the pipeline layout"
                   << " pipeline=[" << rhiDebugName(pipelineDebugName) << ']'
                   << " reflectedBytes=" << reflectedPushConstantSize
@@ -825,13 +743,14 @@ template <typename Handle, typename Record>
     }
 
     std::sort(reflectedBindings.begin(), reflectedBindings.end(),
-              [](const renderer::rhi::RhiShaderBindingInfo& lhs,
-                 const renderer::rhi::RhiShaderBindingInfo& rhs) {
+              [](const renderer::rhi::RhiShaderBindingInfo& lhs, const renderer::rhi::RhiShaderBindingInfo& rhs) {
                   if (bindingNamespace(lhs.type) != bindingNamespace(rhs.type)) {
                       return bindingNamespace(lhs.type) < bindingNamespace(rhs.type);
                   }
-                  if (lhs.set != rhs.set) return lhs.set < rhs.set;
-                  if (lhs.binding != rhs.binding) return lhs.binding < rhs.binding;
+                  if (lhs.set != rhs.set)
+                      return lhs.set < rhs.set;
+                  if (lhs.binding != rhs.binding)
+                      return lhs.binding < rhs.binding;
                   return static_cast<uint32_t>(lhs.type) < static_cast<uint32_t>(rhs.type);
               });
 
@@ -858,18 +777,16 @@ template <typename Handle, typename Record>
         pushConstantBinding.reset();
     }
     pushConstantSize = reflectedPushConstantSize;
-    if (nextPhysicalBinding[0u] > bindingLimits[0u] ||
-        nextPhysicalBinding[1u] > bindingLimits[1u] ||
-        nextPhysicalBinding[2u] > bindingLimits[2u] ||
-        nextPhysicalBinding[3u] > bindingLimits[3u]) {
+    if (nextPhysicalBinding[0u] > bindingLimits[0u] || nextPhysicalBinding[1u] > bindingLimits[1u] ||
+        nextPhysicalBinding[2u] > bindingLimits[2u] || nextPhysicalBinding[3u] > bindingLimits[3u]) {
         logRhiError("pipeline descriptor bindings exceed OpenGL hardware limits");
         return false;
     }
     return true;
 }
 
-[[nodiscard]] std::vector<renderer::rhi::gl::GlRhiShaderBindingRemap> makeShaderRemaps(
-    const std::vector<GlPipelineRecord::BindingMapping>& mappings) {
+[[nodiscard]] std::vector<renderer::rhi::gl::GlRhiShaderBindingRemap>
+makeShaderRemaps(const std::vector<GlPipelineRecord::BindingMapping>& mappings) {
     std::vector<renderer::rhi::gl::GlRhiShaderBindingRemap> remaps;
     remaps.reserve(mappings.size());
     for (const GlPipelineRecord::BindingMapping& mapping : mappings) {
@@ -950,53 +867,52 @@ struct GlRhiCommandResourceReferences {
     std::vector<RhiBindGroupHandle> bindGroups;
     std::vector<RhiQueryPoolHandle> queryPools;
 
-    template <typename Handle>
-    void add(std::vector<Handle>& handles, const Handle handle) {
+    template <typename Handle> void add(std::vector<Handle>& handles, const Handle handle) {
         handles.push_back(handle);
     }
 
     void reference(GlRhiDeviceData& data, const RhiBufferHandle handle) {
-        (void) data;
+        (void)data;
         add(buffers, handle);
     }
 
     void reference(GlRhiDeviceData& data, const RhiTextureHandle handle) {
-        (void) data;
+        (void)data;
         add(textures, handle);
     }
 
     void reference(GlRhiDeviceData& data, const RhiTextureViewHandle handle) {
-        (void) data;
+        (void)data;
         add(textureViews, handle);
     }
 
     void reference(GlRhiDeviceData& data, const RhiSamplerHandle handle) {
-        (void) data;
+        (void)data;
         add(samplers, handle);
     }
 
     void reference(GlRhiDeviceData& data, const RhiBindGroupLayoutHandle handle) {
-        (void) data;
+        (void)data;
         add(bindGroupLayouts, handle);
     }
 
     void reference(GlRhiDeviceData& data, const RhiPipelineLayoutHandle handle) {
-        (void) data;
+        (void)data;
         add(pipelineLayouts, handle);
     }
 
     void reference(GlRhiDeviceData& data, const RhiPipelineHandle handle) {
-        (void) data;
+        (void)data;
         add(pipelines, handle);
     }
 
     void reference(GlRhiDeviceData& data, const RhiBindGroupHandle handle) {
-        (void) data;
+        (void)data;
         add(bindGroups, handle);
     }
 
     void reference(GlRhiDeviceData& data, const RhiQueryPoolHandle handle) {
-        (void) data;
+        (void)data;
         add(queryPools, handle);
     }
 
@@ -1013,140 +929,113 @@ struct GlRhiCommandResourceReferences {
     }
 
     [[nodiscard]] bool validate(const GlRhiDeviceData& data) const {
-        const auto allAlive = [](const auto& handles, const auto& allocator,
-                                 const auto& records) {
-            return std::all_of(handles.begin(), handles.end(),
-                               [&](const auto handle) {
-                                   return recordForHandle(allocator, records, handle) != nullptr;
-                               });
+        const auto allAlive = [](const auto& handles, const auto& allocator, const auto& records) {
+            return std::all_of(handles.begin(), handles.end(), [&](const auto handle) {
+                return recordForHandle(allocator, records, handle) != nullptr;
+            });
         };
         const auto textureViewAlive = [&data](const RhiTextureViewHandle handle) {
-            const GlTextureViewRecord* view = recordForHandle(
-                data.textureViews, data.textureViewRecords, handle);
+            const GlTextureViewRecord* view = recordForHandle(data.textureViews, data.textureViewRecords, handle);
             return view != nullptr &&
                    (!view->desc.texture.isValid() ||
-                    recordForHandle(data.textures, data.textureRecords,
-                                    view->desc.texture) != nullptr);
+                    recordForHandle(data.textures, data.textureRecords, view->desc.texture) != nullptr);
         };
         const auto pipelineLayoutAlive = [&data](const RhiPipelineLayoutHandle handle) {
-            const GlPipelineLayoutRecord* layout = recordForHandle(
-                data.pipelineLayouts, data.pipelineLayoutRecords, handle);
+            const GlPipelineLayoutRecord* layout =
+                recordForHandle(data.pipelineLayouts, data.pipelineLayoutRecords, handle);
             return layout != nullptr &&
-                   std::all_of(layout->desc.bindGroupLayouts.begin(),
-                               layout->desc.bindGroupLayouts.end(),
+                   std::all_of(layout->desc.bindGroupLayouts.begin(), layout->desc.bindGroupLayouts.end(),
                                [&data](const RhiBindGroupLayoutHandle setLayout) {
-                                   return recordForHandle(data.bindGroupLayouts,
-                                                          data.bindGroupLayoutRecords,
+                                   return recordForHandle(data.bindGroupLayouts, data.bindGroupLayoutRecords,
                                                           setLayout) != nullptr;
                                });
         };
         const auto pipelineAlive = [&data, &pipelineLayoutAlive](const RhiPipelineHandle handle) {
-            const GlPipelineRecord* pipeline = recordForHandle(
-                data.pipelines, data.pipelineRecords, handle);
-            return pipeline != nullptr && pipelineLayoutAlive(
-                pipeline->compute ? pipeline->computeDesc.layout
-                                  : pipeline->graphicsDesc.layout);
+            const GlPipelineRecord* pipeline = recordForHandle(data.pipelines, data.pipelineRecords, handle);
+            return pipeline != nullptr && pipelineLayoutAlive(pipeline->compute ? pipeline->computeDesc.layout
+                                                                                : pipeline->graphicsDesc.layout);
         };
         const auto bindGroupAlive = [&data, &textureViewAlive](const RhiBindGroupHandle handle) {
-            const GlBindGroupRecord* group = recordForHandle(
-                data.bindGroups, data.bindGroupRecords, handle);
+            const GlBindGroupRecord* group = recordForHandle(data.bindGroups, data.bindGroupRecords, handle);
             if (group == nullptr) {
                 return false;
             }
-            const GlBindGroupLayoutRecord* layout = recordForHandle(
-                data.bindGroupLayouts, data.bindGroupLayoutRecords, group->desc.layout);
+            const GlBindGroupLayoutRecord* layout =
+                recordForHandle(data.bindGroupLayouts, data.bindGroupLayoutRecords, group->desc.layout);
             if (layout == nullptr) {
                 return false;
             }
             for (const RhiBindGroupEntry& entry : group->desc.entries) {
-                const RhiBindGroupLayoutEntry* layoutEntry =
-                    findLayoutEntry(*layout, entry.binding);
+                const RhiBindGroupLayoutEntry* layoutEntry = findLayoutEntry(*layout, entry.binding);
                 if (layoutEntry == nullptr) {
                     return false;
                 }
                 switch (layoutEntry->type) {
-                    case RhiBindingType::UniformBuffer:
-                    case RhiBindingType::StorageBuffer:
-                        if (recordForHandle(data.buffers, data.bufferRecords,
-                                            entry.resource.buffer.buffer) == nullptr) {
-                            return false;
-                        }
-                        break;
-                    case RhiBindingType::SampledTexture:
-                    case RhiBindingType::StorageTexture:
-                        if (!textureViewAlive(entry.resource.textureView)) {
-                            return false;
-                        }
-                        break;
-                    case RhiBindingType::Sampler:
-                        if (recordForHandle(data.samplers, data.samplerRecords,
-                                            entry.resource.sampler) == nullptr) {
-                            return false;
-                        }
-                        break;
-                    case RhiBindingType::CombinedTextureSampler:
-                        if (!textureViewAlive(entry.resource.combinedTextureSampler.textureView) ||
-                            recordForHandle(data.samplers, data.samplerRecords,
-                                            entry.resource.combinedTextureSampler.sampler) == nullptr) {
-                            return false;
-                        }
-                        break;
+                case RhiBindingType::UniformBuffer:
+                case RhiBindingType::StorageBuffer:
+                    if (recordForHandle(data.buffers, data.bufferRecords, entry.resource.buffer.buffer) == nullptr) {
+                        return false;
+                    }
+                    break;
+                case RhiBindingType::SampledTexture:
+                case RhiBindingType::StorageTexture:
+                    if (!textureViewAlive(entry.resource.textureView)) {
+                        return false;
+                    }
+                    break;
+                case RhiBindingType::Sampler:
+                    if (recordForHandle(data.samplers, data.samplerRecords, entry.resource.sampler) == nullptr) {
+                        return false;
+                    }
+                    break;
+                case RhiBindingType::CombinedTextureSampler:
+                    if (!textureViewAlive(entry.resource.combinedTextureSampler.textureView) ||
+                        recordForHandle(data.samplers, data.samplerRecords,
+                                        entry.resource.combinedTextureSampler.sampler) == nullptr) {
+                        return false;
+                    }
+                    break;
                 }
             }
             return true;
         };
-        const auto validateDirect = [&allAlive](const char* type,
-                                                const auto& handles,
-                                                const auto& allocator,
+        const auto validateDirect = [&allAlive](const char* type, const auto& handles, const auto& allocator,
                                                 const auto& records) {
             const bool alive = allAlive(handles, allocator, records);
             if (!alive) {
                 for (const auto handle : handles) {
                     if (recordForHandle(allocator, records, handle) == nullptr) {
-                        std::cerr << "GlRhiDevice: recorded " << type
-                                  << " is no longer alive (index=" << handle.index
+                        std::cerr << "GlRhiDevice: recorded " << type << " is no longer alive (index=" << handle.index
                                   << ", generation=" << handle.generation << ")\n";
                     }
                 }
             }
             return alive;
         };
-        const auto validateResolved = [](const char* type,
-                                         const auto& handles,
-                                         const auto& predicate) {
+        const auto validateResolved = [](const char* type, const auto& handles, const auto& predicate) {
             bool alive = true;
             for (const auto handle : handles) {
                 if (!predicate(handle)) {
                     std::cerr << "GlRhiDevice: recorded " << type
-                              << " or one of its dependencies is no longer alive (index="
-                              << handle.index << ", generation=" << handle.generation << ")\n";
+                              << " or one of its dependencies is no longer alive (index=" << handle.index
+                              << ", generation=" << handle.generation << ")\n";
                     alive = false;
                 }
             }
             return alive;
         };
-        const bool buffersAlive = validateDirect(
-            "buffer", buffers, data.buffers, data.bufferRecords);
-        const bool texturesAlive = validateDirect(
-            "texture", textures, data.textures, data.textureRecords);
-        const bool textureViewsAlive = validateResolved(
-            "texture view", textureViews, textureViewAlive);
-        const bool samplersAlive = validateDirect(
-            "sampler", samplers, data.samplers, data.samplerRecords);
-        const bool bindGroupLayoutsAlive = validateDirect(
-            "bind-group layout", bindGroupLayouts,
-            data.bindGroupLayouts, data.bindGroupLayoutRecords);
-        const bool pipelineLayoutsAlive = validateResolved(
-            "pipeline layout", pipelineLayouts, pipelineLayoutAlive);
-        const bool pipelinesAlive = validateResolved(
-            "pipeline", pipelines, pipelineAlive);
-        const bool bindGroupsAlive = validateResolved(
-            "bind group", bindGroups, bindGroupAlive);
-        const bool queryPoolsAlive = validateDirect(
-            "query pool", queryPools, data.queryPools, data.queryPoolRecords);
-        return buffersAlive && texturesAlive && textureViewsAlive && samplersAlive &&
-               bindGroupLayoutsAlive && pipelineLayoutsAlive && pipelinesAlive &&
-               bindGroupsAlive && queryPoolsAlive;
+        const bool buffersAlive = validateDirect("buffer", buffers, data.buffers, data.bufferRecords);
+        const bool texturesAlive = validateDirect("texture", textures, data.textures, data.textureRecords);
+        const bool textureViewsAlive = validateResolved("texture view", textureViews, textureViewAlive);
+        const bool samplersAlive = validateDirect("sampler", samplers, data.samplers, data.samplerRecords);
+        const bool bindGroupLayoutsAlive =
+            validateDirect("bind-group layout", bindGroupLayouts, data.bindGroupLayouts, data.bindGroupLayoutRecords);
+        const bool pipelineLayoutsAlive = validateResolved("pipeline layout", pipelineLayouts, pipelineLayoutAlive);
+        const bool pipelinesAlive = validateResolved("pipeline", pipelines, pipelineAlive);
+        const bool bindGroupsAlive = validateResolved("bind group", bindGroups, bindGroupAlive);
+        const bool queryPoolsAlive = validateDirect("query pool", queryPools, data.queryPools, data.queryPoolRecords);
+        return buffersAlive && texturesAlive && textureViewsAlive && samplersAlive && bindGroupLayoutsAlive &&
+               pipelineLayoutsAlive && pipelinesAlive && bindGroupsAlive && queryPoolsAlive;
     }
 };
 
@@ -1154,31 +1043,25 @@ namespace {
 
 void deleteRetiredResources(GlRetiredResources& resources) {
     if (!resources.framebuffers.empty()) {
-        glDeleteFramebuffers(static_cast<GLsizei>(resources.framebuffers.size()),
-                             resources.framebuffers.data());
+        glDeleteFramebuffers(static_cast<GLsizei>(resources.framebuffers.size()), resources.framebuffers.data());
     }
     if (!resources.vertexArrays.empty()) {
-        glDeleteVertexArrays(static_cast<GLsizei>(resources.vertexArrays.size()),
-                             resources.vertexArrays.data());
+        glDeleteVertexArrays(static_cast<GLsizei>(resources.vertexArrays.size()), resources.vertexArrays.data());
     }
     for (const GLuint program : resources.programs) {
         glDeleteProgram(program);
     }
     if (!resources.samplers.empty()) {
-        glDeleteSamplers(static_cast<GLsizei>(resources.samplers.size()),
-                         resources.samplers.data());
+        glDeleteSamplers(static_cast<GLsizei>(resources.samplers.size()), resources.samplers.data());
     }
     if (!resources.textures.empty()) {
-        glDeleteTextures(static_cast<GLsizei>(resources.textures.size()),
-                         resources.textures.data());
+        glDeleteTextures(static_cast<GLsizei>(resources.textures.size()), resources.textures.data());
     }
     if (!resources.buffers.empty()) {
-        glDeleteBuffers(static_cast<GLsizei>(resources.buffers.size()),
-                        resources.buffers.data());
+        glDeleteBuffers(static_cast<GLsizei>(resources.buffers.size()), resources.buffers.data());
     }
     if (!resources.queries.empty()) {
-        glDeleteQueries(static_cast<GLsizei>(resources.queries.size()),
-                        resources.queries.data());
+        glDeleteQueries(static_cast<GLsizei>(resources.queries.size()), resources.queries.data());
     }
     resources = {};
 }
@@ -1195,8 +1078,7 @@ void reclaimCompletedRetirementBatches(GlRhiDeviceData& data) {
             return;
         }
         deleteRetiredResources(batch.resources);
-        data.completedCommandLists.insert(data.completedCommandLists.end(),
-                                          batch.commandLists.begin(),
+        data.completedCommandLists.insert(data.completedCommandLists.end(), batch.commandLists.begin(),
                                           batch.commandLists.end());
         data.completedSubmissionSequence = batch.submissionSequence;
         glDeleteSync(batch.fence);
@@ -1207,8 +1089,7 @@ void reclaimCompletedRetirementBatches(GlRhiDeviceData& data) {
 void reclaimAllRetiredResources(GlRhiDeviceData& data) {
     for (GlRetirementBatch& batch : data.retirementBatches) {
         deleteRetiredResources(batch.resources);
-        data.completedCommandLists.insert(data.completedCommandLists.end(),
-                                          batch.commandLists.begin(),
+        data.completedCommandLists.insert(data.completedCommandLists.end(), batch.commandLists.begin(),
                                           batch.commandLists.end());
         data.completedSubmissionSequence = batch.submissionSequence;
         if (batch.fence != nullptr) {
@@ -1247,50 +1128,37 @@ struct GlTextureSubresourceRange {
     uint32_t layerCount = 0u;
 };
 
-[[nodiscard]] bool resolveTextureSubresourceRange(
-    const RhiTextureDesc& desc,
-    const uint32_t baseMip,
-    const uint32_t mipCount,
-    const uint32_t baseLayer,
-    const uint32_t layerCount,
-    GlTextureSubresourceRange& resolved) {
+[[nodiscard]] bool resolveTextureSubresourceRange(const RhiTextureDesc& desc, const uint32_t baseMip,
+                                                  const uint32_t mipCount, const uint32_t baseLayer,
+                                                  const uint32_t layerCount, GlTextureSubresourceRange& resolved) {
     const bool texture3D = desc.dimension == RhiTextureDimension::Texture3D;
     const uint32_t logicalLayerCount = texture3D ? 1u : desc.depthOrLayers;
     if (baseMip >= desc.mipLevels || baseLayer >= logicalLayerCount) {
         return false;
     }
     resolved.baseMip = baseMip;
-    resolved.mipCount = mipCount == kRhiRemainingMipLevels
-                            ? desc.mipLevels - baseMip
-                            : mipCount;
+    resolved.mipCount = mipCount == kRhiRemainingMipLevels ? desc.mipLevels - baseMip : mipCount;
     if (texture3D) {
         // RHI 3D ranges have one logical layer; OpenGL state tracking stores every depth slice.
         if (baseLayer != 0u ||
-            (layerCount != 1u && layerCount != kRhiRemainingArrayLayers &&
-             layerCount != desc.depthOrLayers)) {
+            (layerCount != 1u && layerCount != kRhiRemainingArrayLayers && layerCount != desc.depthOrLayers)) {
             return false;
         }
         resolved.baseLayer = 0u;
         resolved.layerCount = desc.depthOrLayers;
     } else {
         resolved.baseLayer = baseLayer;
-        resolved.layerCount = layerCount == kRhiRemainingArrayLayers
-                                  ? desc.depthOrLayers - baseLayer
-                                  : layerCount;
+        resolved.layerCount = layerCount == kRhiRemainingArrayLayers ? desc.depthOrLayers - baseLayer : layerCount;
     }
-    return resolved.mipCount != 0u && resolved.layerCount != 0u &&
-           resolved.mipCount <= desc.mipLevels - baseMip &&
+    return resolved.mipCount != 0u && resolved.layerCount != 0u && resolved.mipCount <= desc.mipLevels - baseMip &&
            resolved.layerCount <= desc.depthOrLayers - resolved.baseLayer;
 }
 
-[[nodiscard]] size_t textureSubresourceIndex(const RhiTextureDesc& desc,
-                                             const uint32_t mip,
-                                             const uint32_t layer) {
+[[nodiscard]] size_t textureSubresourceIndex(const RhiTextureDesc& desc, const uint32_t mip, const uint32_t layer) {
     return static_cast<size_t>(mip) * desc.depthOrLayers + layer;
 }
 
-[[nodiscard]] bool textureRangeHasState(const GlTextureRecord& record,
-                                        const GlTextureSubresourceRange& range,
+[[nodiscard]] bool textureRangeHasState(const GlTextureRecord& record, const GlTextureSubresourceRange& range,
                                         const RhiResourceState state) {
     for (uint32_t mip = range.baseMip; mip < range.baseMip + range.mipCount; ++mip) {
         for (uint32_t layer = range.baseLayer; layer < range.baseLayer + range.layerCount; ++layer) {
@@ -1302,8 +1170,7 @@ struct GlTextureSubresourceRange {
     return true;
 }
 
-void setTextureRangeState(GlTextureRecord& record,
-                          const GlTextureSubresourceRange& range,
+void setTextureRangeState(GlTextureRecord& record, const GlTextureSubresourceRange& range,
                           const RhiResourceState state) {
     for (uint32_t mip = range.baseMip; mip < range.baseMip + range.mipCount; ++mip) {
         for (uint32_t layer = range.baseLayer; layer < range.baseLayer + range.layerCount; ++layer) {
@@ -1312,42 +1179,29 @@ void setTextureRangeState(GlTextureRecord& record,
     }
 }
 
-[[nodiscard]] bool textureHandleRangeHasState(
-    const GlRhiDeviceData& data,
-    const RhiTextureHandle texture,
-    const GlTextureSubresourceRange& range,
-    const RhiResourceState state) {
-    const GlTextureRecord* record = recordForHandle(
-        data.textures, data.textureRecords, texture);
+[[nodiscard]] bool textureHandleRangeHasState(const GlRhiDeviceData& data, const RhiTextureHandle texture,
+                                              const GlTextureSubresourceRange& range, const RhiResourceState state) {
+    const GlTextureRecord* record = recordForHandle(data.textures, data.textureRecords, texture);
     return record != nullptr && textureRangeHasState(*record, range, state);
 }
 
-[[nodiscard]] bool textureViewHasState(
-    const GlRhiDeviceData& data,
-    const RhiTextureViewHandle viewHandle,
-    const RhiResourceState state) {
-    const GlTextureViewRecord* view = recordForHandle(
-        data.textureViews, data.textureViewRecords, viewHandle);
+[[nodiscard]] bool textureViewHasState(const GlRhiDeviceData& data, const RhiTextureViewHandle viewHandle,
+                                       const RhiResourceState state) {
+    const GlTextureViewRecord* view = recordForHandle(data.textureViews, data.textureViewRecords, viewHandle);
     if (view == nullptr || !view->desc.texture.isValid()) {
         return false;
     }
-    const GlTextureRecord* texture = recordForHandle(
-        data.textures, data.textureRecords, view->desc.texture);
+    const GlTextureRecord* texture = recordForHandle(data.textures, data.textureRecords, view->desc.texture);
     if (texture == nullptr) {
         return false;
     }
     GlTextureSubresourceRange range;
-    return resolveTextureSubresourceRange(texture->desc,
-                                          view->desc.baseMip,
-                                          view->desc.mipCount,
-                                          view->desc.baseLayer,
-                                          view->desc.layerCount,
-                                          range) &&
+    return resolveTextureSubresourceRange(texture->desc, view->desc.baseMip, view->desc.mipCount, view->desc.baseLayer,
+                                          view->desc.layerCount, range) &&
            textureRangeHasState(*texture, range, state);
 }
 
-[[nodiscard]] bool resolveTextureRecord(GlRhiDeviceData& data,
-                                        const RhiTextureHandle handle,
+[[nodiscard]] bool resolveTextureRecord(GlRhiDeviceData& data, const RhiTextureHandle handle,
                                         GlResolvedTextureRecord& resolved) {
     resolved = {};
     if (!handle.isValid()) {
@@ -1369,10 +1223,8 @@ void setTextureRangeState(GlTextureRecord& record,
     return true;
 }
 
-[[nodiscard]] bool resolveTextureHandleForBlit(GlRhiDeviceData& data,
-                                               const RhiTextureHandle handle,
-                                               const uint32_t mipLevel,
-                                               GlBlitEndpoint& endpoint) {
+[[nodiscard]] bool resolveTextureHandleForBlit(GlRhiDeviceData& data, const RhiTextureHandle handle,
+                                               const uint32_t mipLevel, GlBlitEndpoint& endpoint) {
     GlResolvedTextureRecord resolved;
     if (!resolveTextureRecord(data, handle, resolved)) {
         logRhiError("blitTexture received an invalid texture handle");
@@ -1400,15 +1252,13 @@ void setTextureRangeState(GlTextureRecord& record,
     return true;
 }
 
-[[nodiscard]] bool resolveTextureViewForBlit(GlRhiDeviceData& data,
-                                             const RhiTextureViewHandle view,
+[[nodiscard]] bool resolveTextureViewForBlit(GlRhiDeviceData& data, const RhiTextureViewHandle view,
                                              GlBlitEndpoint& endpoint) {
     if (!view.isValid()) {
         return false;
     }
 
-    const GlTextureViewRecord* viewRecord =
-        recordForHandle(data.textureViews, data.textureViewRecords, view);
+    const GlTextureViewRecord* viewRecord = recordForHandle(data.textureViews, data.textureViewRecords, view);
     if (viewRecord == nullptr) {
         return false;
     }
@@ -1424,9 +1274,9 @@ void setTextureRangeState(GlTextureRecord& record,
         endpoint.desc.mipLevels = 1u;
         endpoint.desc.sampleCount = 1u;
         endpoint.desc.usage = viewRecord->swapchainBackbuffer
-            ? rhiFlag(RhiTextureUsage::Present) | rhiFlag(RhiTextureUsage::ColorAttachment) |
-                  rhiFlag(RhiTextureUsage::TransferSrc) | rhiFlag(RhiTextureUsage::TransferDst)
-            : rhiFlag(RhiTextureUsage::DepthStencilAttachment);
+                                  ? rhiFlag(RhiTextureUsage::Present) | rhiFlag(RhiTextureUsage::ColorAttachment) |
+                                        rhiFlag(RhiTextureUsage::TransferSrc) | rhiFlag(RhiTextureUsage::TransferDst)
+                                  : rhiFlag(RhiTextureUsage::DepthStencilAttachment);
         endpoint.format = viewRecord->format;
         endpoint.stateTexture = viewRecord->desc.texture;
         endpoint.stateMip = 0u;
@@ -1461,10 +1311,8 @@ void setTextureRangeState(GlTextureRecord& record,
     return true;
 }
 
-[[nodiscard]] bool resolveBlitEndpoint(GlRhiDeviceData& data,
-                                       const RhiTextureHandle texture,
-                                       const RhiTextureViewHandle view,
-                                       const uint32_t mipLevel,
+[[nodiscard]] bool resolveBlitEndpoint(GlRhiDeviceData& data, const RhiTextureHandle texture,
+                                       const RhiTextureViewHandle view, const uint32_t mipLevel,
                                        GlBlitEndpoint& endpoint) {
     const bool hasTexture = texture.isValid();
     const bool hasView = view.isValid();
@@ -1472,91 +1320,73 @@ void setTextureRangeState(GlTextureRecord& record,
         return false;
     }
 
-    return hasTexture
-        ? resolveTextureHandleForBlit(data, texture, mipLevel, endpoint)
-        : resolveTextureViewForBlit(data, view, endpoint);
+    return hasTexture ? resolveTextureHandleForBlit(data, texture, mipLevel, endpoint)
+                      : resolveTextureViewForBlit(data, view, endpoint);
 }
 
-[[nodiscard]] bool validatePipelineTextureStates(
-    const GlRhiDeviceData& data,
-    const GlPipelineRecord& pipeline,
-    const std::vector<RhiBindGroupHandle>& boundGroups,
-    const char* commandName) {
+[[nodiscard]] bool validatePipelineTextureStates(const GlRhiDeviceData& data, const GlPipelineRecord& pipeline,
+                                                 const std::vector<RhiBindGroupHandle>& boundGroups,
+                                                 const char* commandName) {
     for (const GlPipelineRecord::BindingMapping& mapping : pipeline.bindingMappings) {
-        if (mapping.type != RhiBindingType::SampledTexture &&
-            mapping.type != RhiBindingType::StorageTexture &&
+        if (mapping.type != RhiBindingType::SampledTexture && mapping.type != RhiBindingType::StorageTexture &&
             mapping.type != RhiBindingType::CombinedTextureSampler) {
             continue;
         }
         if (mapping.set >= boundGroups.size()) {
             return false;
         }
-        const GlBindGroupRecord* group = recordForHandle(
-            data.bindGroups, data.bindGroupRecords, boundGroups[mapping.set]);
+        const GlBindGroupRecord* group =
+            recordForHandle(data.bindGroups, data.bindGroupRecords, boundGroups[mapping.set]);
         if (group == nullptr) {
             return false;
         }
-        const auto entryIt = std::find_if(
-            group->desc.entries.begin(), group->desc.entries.end(),
-            [&](const RhiBindGroupEntry& entry) { return entry.binding == mapping.binding; });
+        const auto entryIt =
+            std::find_if(group->desc.entries.begin(), group->desc.entries.end(),
+                         [&](const RhiBindGroupEntry& entry) { return entry.binding == mapping.binding; });
         if (entryIt == group->desc.entries.end()) {
             return false;
         }
         const RhiTextureViewHandle view = mapping.type == RhiBindingType::CombinedTextureSampler
-            ? entryIt->resource.combinedTextureSampler.textureView
-            : entryIt->resource.textureView;
-        const GlTextureViewRecord* viewRecord = recordForHandle(
-            data.textureViews, data.textureViewRecords, view);
-        const RhiResourceState requiredState = mapping.type == RhiBindingType::StorageTexture
-            ? RhiResourceState::ShaderWrite
-            : (viewRecord != nullptr && viewRecord->format.depth
-                ? RhiResourceState::DepthRead
-                : RhiResourceState::ShaderRead);
+                                              ? entryIt->resource.combinedTextureSampler.textureView
+                                              : entryIt->resource.textureView;
+        const GlTextureViewRecord* viewRecord = recordForHandle(data.textureViews, data.textureViewRecords, view);
+        const RhiResourceState requiredState =
+            mapping.type == RhiBindingType::StorageTexture
+                ? RhiResourceState::ShaderWrite
+                : (viewRecord != nullptr && viewRecord->format.depth ? RhiResourceState::DepthRead
+                                                                     : RhiResourceState::ShaderRead);
         if (!textureViewHasState(data, view, requiredState)) {
-            const GlTextureRecord* textureRecord = viewRecord != nullptr
-                ? recordForHandle(data.textures, data.textureRecords, viewRecord->desc.texture)
-                : nullptr;
-            std::cerr << "GlRhiDevice: " << commandName
-                      << " texture descriptor state does not match its binding type"
+            const GlTextureRecord* textureRecord =
+                viewRecord != nullptr ? recordForHandle(data.textures, data.textureRecords, viewRecord->desc.texture)
+                                      : nullptr;
+            std::cerr << "GlRhiDevice: " << commandName << " texture descriptor state does not match its binding type"
                       << " pipeline=["
-                      << rhiDebugName(pipeline.compute
-                              ? pipeline.computeDesc.debugName
-                              : pipeline.graphicsDesc.debugName)
+                      << rhiDebugName(pipeline.compute ? pipeline.computeDesc.debugName
+                                                       : pipeline.graphicsDesc.debugName)
                       << "]"
-                      << " set=" << mapping.set
-                      << " binding=" << mapping.binding
+                      << " set=" << mapping.set << " binding=" << mapping.binding
                       << " bindGroupHandle=" << boundGroups[mapping.set].index << ':'
-                      << boundGroups[mapping.set].generation
-                      << " viewHandle=" << view.index << ':' << view.generation;
+                      << boundGroups[mapping.set].generation << " viewHandle=" << view.index << ':' << view.generation;
             if (viewRecord != nullptr) {
                 std::cerr << " textureHandle=" << viewRecord->desc.texture.index << ':'
-                          << viewRecord->desc.texture.generation
-                          << " mipRange=" << viewRecord->desc.baseMip << '+'
-                          << viewRecord->desc.mipCount
-                          << " layerRange=" << viewRecord->desc.baseLayer << '+'
+                          << viewRecord->desc.texture.generation << " mipRange=" << viewRecord->desc.baseMip << '+'
+                          << viewRecord->desc.mipCount << " layerRange=" << viewRecord->desc.baseLayer << '+'
                           << viewRecord->desc.layerCount;
             }
             if (textureRecord != nullptr) {
                 std::cerr << " texture=[" << rhiDebugName(textureRecord->debugName.c_str()) << ']';
                 GlTextureSubresourceRange range;
-                if (resolveTextureSubresourceRange(textureRecord->desc,
-                                                   viewRecord->desc.baseMip,
-                                                   viewRecord->desc.mipCount,
-                                                   viewRecord->desc.baseLayer,
-                                                   viewRecord->desc.layerCount,
-                                                   range)) {
+                if (resolveTextureSubresourceRange(textureRecord->desc, viewRecord->desc.baseMip,
+                                                   viewRecord->desc.mipCount, viewRecord->desc.baseLayer,
+                                                   viewRecord->desc.layerCount, range)) {
                     bool foundMismatch = false;
-                    for (uint32_t mip = range.baseMip;
-                         mip < range.baseMip + range.mipCount && !foundMismatch;
-                         ++mip) {
-                        for (uint32_t layer = range.baseLayer;
-                             layer < range.baseLayer + range.layerCount;
-                             ++layer) {
-                            const RhiResourceState tracked = textureRecord->subresourceStates[
-                                textureSubresourceIndex(textureRecord->desc, mip, layer)];
+                    for (uint32_t mip = range.baseMip; mip < range.baseMip + range.mipCount && !foundMismatch; ++mip) {
+                        for (uint32_t layer = range.baseLayer; layer < range.baseLayer + range.layerCount; ++layer) {
+                            const RhiResourceState tracked =
+                                textureRecord
+                                    ->subresourceStates[textureSubresourceIndex(textureRecord->desc, mip, layer)];
                             if (tracked != requiredState) {
-                                std::cerr << " mismatchMip=" << mip
-                                          << " mismatchLayer=" << layer
+                                std::cerr << " mismatchMip=" << mip << " mismatchLayer=" << layer
                                           << " required=" << resourceStateName(requiredState)
                                           << " tracked=" << resourceStateName(tracked);
                                 foundMismatch = true;
@@ -1573,48 +1403,40 @@ void setTextureRangeState(GlTextureRecord& record,
     return true;
 }
 
-[[nodiscard]] bool validatePipelineBufferStates(
-    const GlRhiDeviceData& data,
-    const GlPipelineRecord& pipeline,
-    const std::vector<RhiBindGroupHandle>& boundGroups,
-    const char* commandName) {
+[[nodiscard]] bool validatePipelineBufferStates(const GlRhiDeviceData& data, const GlPipelineRecord& pipeline,
+                                                const std::vector<RhiBindGroupHandle>& boundGroups,
+                                                const char* commandName) {
     for (const GlPipelineRecord::BindingMapping& mapping : pipeline.bindingMappings) {
-        if (mapping.type != RhiBindingType::UniformBuffer &&
-            mapping.type != RhiBindingType::StorageBuffer) {
+        if (mapping.type != RhiBindingType::UniformBuffer && mapping.type != RhiBindingType::StorageBuffer) {
             continue;
         }
         if (mapping.set >= boundGroups.size()) {
             return false;
         }
-        const GlBindGroupRecord* group = recordForHandle(
-            data.bindGroups, data.bindGroupRecords, boundGroups[mapping.set]);
+        const GlBindGroupRecord* group =
+            recordForHandle(data.bindGroups, data.bindGroupRecords, boundGroups[mapping.set]);
         if (group == nullptr) {
             return false;
         }
-        const auto entryIt = std::find_if(
-            group->desc.entries.begin(), group->desc.entries.end(),
-            [&](const RhiBindGroupEntry& entry) { return entry.binding == mapping.binding; });
+        const auto entryIt =
+            std::find_if(group->desc.entries.begin(), group->desc.entries.end(),
+                         [&](const RhiBindGroupEntry& entry) { return entry.binding == mapping.binding; });
         if (entryIt == group->desc.entries.end()) {
             return false;
         }
-        const GlBufferRecord* buffer = recordForHandle(
-            data.buffers, data.bufferRecords, entryIt->resource.buffer.buffer);
+        const GlBufferRecord* buffer =
+            recordForHandle(data.buffers, data.bufferRecords, entryIt->resource.buffer.buffer);
         const RhiResourceState requiredState = mapping.type == RhiBindingType::UniformBuffer
-            ? RhiResourceState::UniformBuffer
-            : RhiResourceState::StorageBuffer;
+                                                   ? RhiResourceState::UniformBuffer
+                                                   : RhiResourceState::StorageBuffer;
         if (buffer == nullptr || buffer->state != requiredState) {
-            std::cerr << "GlRhiDevice: " << commandName
-                      << " buffer descriptor state does not match its binding type"
+            std::cerr << "GlRhiDevice: " << commandName << " buffer descriptor state does not match its binding type"
                       << " pipeline=["
-                      << rhiDebugName(pipeline.compute
-                              ? pipeline.computeDesc.debugName
-                              : pipeline.graphicsDesc.debugName)
-                      << "] set=" << mapping.set
-                      << " binding=" << mapping.binding
-                      << " required=" << resourceStateName(requiredState)
-                      << " tracked=" << resourceStateName(
-                             buffer != nullptr ? buffer->state : RhiResourceState::Undefined)
-                      << '\n';
+                      << rhiDebugName(pipeline.compute ? pipeline.computeDesc.debugName
+                                                       : pipeline.graphicsDesc.debugName)
+                      << "] set=" << mapping.set << " binding=" << mapping.binding
+                      << " required=" << resourceStateName(requiredState) << " tracked="
+                      << resourceStateName(buffer != nullptr ? buffer->state : RhiResourceState::Undefined) << '\n';
             return false;
         }
     }
@@ -1623,8 +1445,7 @@ void setTextureRangeState(GlTextureRecord& record,
 
 } // namespace
 
-GlRhiCommandList::GlRhiCommandList()
-    : m_resourceReferences(std::make_unique<GlRhiCommandResourceReferences>()) {}
+GlRhiCommandList::GlRhiCommandList() : m_resourceReferences(std::make_unique<GlRhiCommandResourceReferences>()) {}
 
 GlRhiCommandList::~GlRhiCommandList() = default;
 
@@ -1736,8 +1557,8 @@ bool GlRhiCommandList::beginRecordedCommand(const CommandType type) {
     }
     if (!renderingScopeSupports(type)) {
         std::cerr << "GlRhiDevice: command is not valid in the current rendering scope"
-                  << " commandType=" << static_cast<uint32_t>(type)
-                  << " rendering=" << (m_recordingRendering ? 1 : 0) << '\n';
+                  << " commandType=" << static_cast<uint32_t>(type) << " rendering=" << (m_recordingRendering ? 1 : 0)
+                  << '\n';
         m_recordingValid = false;
         return false;
     }
@@ -1773,10 +1594,8 @@ bool GlRhiCommandList::commandTypeSupports(const CommandType type) const {
         case CommandType::BlitTexture:
         case CommandType::GenerateMipmaps:
         case CommandType::ResetQueryPool:
-        case CommandType::WriteTimestamp:
-            return true;
-        default:
-            return false;
+        case CommandType::WriteTimestamp: return true;
+        default: return false;
         }
     };
     if (isSharedCommand(type)) {
@@ -1788,10 +1607,8 @@ bool GlRhiCommandList::commandTypeSupports(const CommandType type) const {
         case CommandType::SetComputePipeline:
         case CommandType::SetBindGroup:
         case CommandType::PushConstants:
-        case CommandType::Dispatch:
-            return true;
-        default:
-            return false;
+        case CommandType::Dispatch: return true;
+        default: return false;
         }
     };
     if (m_acquiredType == RhiCommandListType::Transfer) {
@@ -1815,20 +1632,15 @@ bool GlRhiCommandList::commandTypeSupports(const CommandType type) const {
     case CommandType::SetIndexBuffer:
     case CommandType::Draw:
     case CommandType::DrawIndexed:
-    case CommandType::DrawIndirect:
-        return true;
-    default:
-        return false;
+    case CommandType::DrawIndirect: return true;
+    default: return false;
     }
 }
 
 bool GlRhiCommandList::renderingScopeSupports(const CommandType type) const {
     if (!m_recordingRendering) {
-        return type != CommandType::EndRendering &&
-               type != CommandType::ClearDepthAttachment &&
-               type != CommandType::Draw &&
-               type != CommandType::DrawIndexed &&
-               type != CommandType::DrawIndirect;
+        return type != CommandType::EndRendering && type != CommandType::ClearDepthAttachment &&
+               type != CommandType::Draw && type != CommandType::DrawIndexed && type != CommandType::DrawIndirect;
     }
 
     switch (type) {
@@ -1847,10 +1659,8 @@ bool GlRhiCommandList::renderingScopeSupports(const CommandType type) const {
     case CommandType::Draw:
     case CommandType::DrawIndexed:
     case CommandType::DrawIndirect:
-    case CommandType::WriteTimestamp:
-        return true;
-    default:
-        return false;
+    case CommandType::WriteTimestamp: return true;
+    default: return false;
     }
 }
 
@@ -1883,14 +1693,11 @@ void GlRhiCommandList::recordString(const char* value) {
 
 bool GlRhiCommandList::readString(size_t& offset, const char*& value) const {
     uint64_t length = 0u;
-    if (!readValue(offset, length) ||
-        length > static_cast<uint64_t>(m_commandStream.size() - offset)) {
+    if (!readValue(offset, length) || length > static_cast<uint64_t>(m_commandStream.size() - offset)) {
         logRhiError("command stream string is truncated");
         return false;
     }
-    value = length == 0u
-        ? nullptr
-        : reinterpret_cast<const char*>(m_commandStream.data() + offset);
+    value = length == 0u ? nullptr : reinterpret_cast<const char*>(m_commandStream.data() + offset);
     offset += static_cast<size_t>(length);
     return true;
 }
@@ -1950,8 +1757,7 @@ void GlRhiCommandList::referenceResource(const RhiQueryPoolHandle handle) {
 }
 
 bool GlRhiCommandList::validateForSubmit() const {
-    return m_state == RhiCommandListState::Executable &&
-           m_device != nullptr && m_device->m_data &&
+    return m_state == RhiCommandListState::Executable && m_device != nullptr && m_device->m_data &&
            m_resourceReferences->validate(*m_device->m_data);
 }
 
@@ -1960,8 +1766,7 @@ bool GlRhiCommandList::replay(const bool validationOnly) {
         logRhiError("command list replay requires Executable state");
         return false;
     }
-    if (m_device == nullptr || !m_device->m_data ||
-        !m_resourceReferences->validate(*m_device->m_data)) {
+    if (m_device == nullptr || !m_device->m_data || !m_resourceReferences->validate(*m_device->m_data)) {
         logRhiError("command list references a resource destroyed before submission");
         return false;
     }
@@ -1984,235 +1789,248 @@ bool GlRhiCommandList::replay(const bool validationOnly) {
             break;
         }
         switch (type) {
-            case CommandType::BeginDebugLabel: {
-                glm::vec4 color{};
-                const char* name = nullptr;
-                valid = readValue(offset, color) && readString(offset, name);
-                if (valid) beginDebugLabel(name, color);
-                break;
-            }
-            case CommandType::EndDebugLabel:
-                endDebugLabel();
-                break;
-            case CommandType::InsertDebugMarker: {
-                glm::vec4 color{};
-                const char* name = nullptr;
-                valid = readValue(offset, color) && readString(offset, name);
-                if (valid) insertDebugMarker(name, color);
-                break;
-            }
-            case CommandType::TextureBarrier: {
-                RhiTextureBarrier barrier{};
-                valid = readValue(offset, barrier);
-                if (valid) textureBarrier(barrier);
-                break;
-            }
-            case CommandType::BufferBarrier: {
-                RhiBufferBarrier barrier{};
-                valid = readValue(offset, barrier);
-                if (valid) bufferBarrier(barrier);
-                break;
-            }
-            case CommandType::BeginRendering: {
-                RhiRenderingInfo info{};
-                bool hasDepth = false;
-                uint64_t colorCount = 0u;
-                valid = readValue(offset, info.renderArea) &&
-                        readValue(offset, colorCount) &&
-                        readValue(offset, hasDepth);
-                if (!valid || colorCount > static_cast<uint64_t>(std::numeric_limits<uint32_t>::max()) ||
-                    colorCount > static_cast<uint64_t>(m_commandStream.size() / sizeof(RhiColorAttachment))) {
-                    valid = false;
-                    break;
-                }
-                std::vector<RhiColorAttachment> colors(static_cast<size_t>(colorCount));
-                valid = readBytes(offset, colors.data(), colors.size() * sizeof(RhiColorAttachment));
-                RhiDepthStencilAttachment depth{};
-                if (valid && hasDepth) {
-                    valid = readValue(offset, depth);
-                }
-                const char* debugName = nullptr;
-                if (valid) {
-                    valid = readString(offset, debugName);
-                }
-                if (valid) {
-                    info.debugName = debugName;
-                    info.colorAttachments = colors.empty() ? nullptr : colors.data();
-                    info.colorAttachmentCount = static_cast<uint32_t>(colors.size());
-                    info.depthStencilAttachment = hasDepth ? &depth : nullptr;
-                    beginRendering(info);
-                }
-                break;
-            }
-            case CommandType::EndRendering:
-                endRendering();
-                break;
-            case CommandType::ClearDepthAttachment: {
-                float depth = 1.0f;
-                RhiRect2D rect{};
-                valid = readValue(offset, depth) && readValue(offset, rect);
-                if (valid) clearDepthAttachment(depth, rect);
-                break;
-            }
-            case CommandType::SetViewport: {
-                RhiViewport viewport{};
-                valid = readValue(offset, viewport);
-                if (valid) setViewport(viewport);
-                break;
-            }
-            case CommandType::SetScissor: {
-                RhiRect2D rect{};
-                valid = readValue(offset, rect);
-                if (valid) setScissor(rect);
-                break;
-            }
-            case CommandType::SetGraphicsPipeline: {
-                RhiPipelineHandle pipeline{};
-                valid = readValue(offset, pipeline);
-                if (valid) setGraphicsPipeline(pipeline);
-                break;
-            }
-            case CommandType::SetComputePipeline: {
-                RhiPipelineHandle pipeline{};
-                valid = readValue(offset, pipeline);
-                if (valid) setComputePipeline(pipeline);
-                break;
-            }
-            case CommandType::SetBindGroup: {
-                uint32_t setIndex = 0u;
-                RhiBindGroupHandle bindGroup{};
-                valid = readValue(offset, setIndex) && readValue(offset, bindGroup);
-                if (valid) setBindGroup(setIndex, bindGroup);
-                break;
-            }
-            case CommandType::SetVertexBuffer: {
-                uint32_t slot = 0u;
-                RhiBufferHandle buffer{};
-                uint64_t bufferOffset = 0u;
-                valid = readValue(offset, slot) && readValue(offset, buffer) &&
-                        readValue(offset, bufferOffset);
-                if (valid) setVertexBuffer(slot, buffer, bufferOffset);
-                break;
-            }
-            case CommandType::SetIndexBuffer: {
-                RhiBufferHandle buffer{};
-                RhiIndexFormat format = RhiIndexFormat::Uint32;
-                uint64_t bufferOffset = 0u;
-                valid = readValue(offset, buffer) && readValue(offset, format) &&
-                        readValue(offset, bufferOffset);
-                if (valid) setIndexBuffer(buffer, format, bufferOffset);
-                break;
-            }
-            case CommandType::PushConstants: {
-                uint64_t size = 0u;
-                RhiShaderStageFlags stages = 0u;
-                valid = readValue(offset, size) && readValue(offset, stages) &&
-                        size <= static_cast<uint64_t>(m_commandStream.size() - offset);
-                if (valid) {
-                    pushConstants(m_commandStream.data() + offset, static_cast<size_t>(size), stages);
-                    offset += static_cast<size_t>(size);
-                }
-                break;
-            }
-            case CommandType::Draw: {
-                uint32_t vertexCount = 0u, instanceCount = 0u, firstVertex = 0u, firstInstance = 0u;
-                valid = readValue(offset, vertexCount) && readValue(offset, instanceCount) &&
-                        readValue(offset, firstVertex) && readValue(offset, firstInstance);
-                if (valid) draw(vertexCount, instanceCount, firstVertex, firstInstance);
-                break;
-            }
-            case CommandType::DrawIndexed: {
-                uint32_t indexCount = 0u, instanceCount = 0u, firstIndex = 0u, firstInstance = 0u;
-                int32_t vertexOffset = 0;
-                valid = readValue(offset, indexCount) && readValue(offset, instanceCount) &&
-                        readValue(offset, firstIndex) && readValue(offset, vertexOffset) &&
-                        readValue(offset, firstInstance);
-                if (valid) drawIndexed(indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
-                break;
-            }
-            case CommandType::DrawIndirect: {
-                RhiBufferHandle buffer{};
-                uint64_t bufferOffset = 0u;
-                uint32_t drawCount = 0u, stride = 0u;
-                valid = readValue(offset, buffer) && readValue(offset, bufferOffset) &&
-                        readValue(offset, drawCount) && readValue(offset, stride);
-                if (valid) drawIndirect(buffer, bufferOffset, drawCount, stride);
-                break;
-            }
-            case CommandType::Dispatch: {
-                uint32_t x = 0u, y = 0u, z = 0u;
-                valid = readValue(offset, x) && readValue(offset, y) && readValue(offset, z);
-                if (valid) dispatch(x, y, z);
-                break;
-            }
-            case CommandType::UpdateBuffer: {
-                RhiBufferHandle buffer{};
-                uint64_t bufferOffset = 0u, size = 0u;
-                valid = readValue(offset, buffer) && readValue(offset, bufferOffset) &&
-                        readValue(offset, size) &&
-                        size <= static_cast<uint64_t>(m_commandStream.size() - offset);
-                if (valid) {
-                    updateBuffer(buffer, bufferOffset, m_commandStream.data() + offset,
-                                 static_cast<size_t>(size));
-                    offset += static_cast<size_t>(size);
-                }
-                break;
-            }
-            case CommandType::CopyBuffer: {
-                RhiBufferCopy copy{};
-                valid = readValue(offset, copy);
-                if (valid) copyBuffer(copy);
-                break;
-            }
-            case CommandType::CopyBufferToTexture: {
-                RhiBufferTextureCopy copy{};
-                valid = readValue(offset, copy);
-                if (valid) copyBufferToTexture(copy);
-                break;
-            }
-            case CommandType::CopyTextureToBuffer: {
-                RhiTextureBufferCopy copy{};
-                valid = readValue(offset, copy);
-                if (valid) copyTextureToBuffer(copy);
-                break;
-            }
-            case CommandType::CopyTexture: {
-                RhiTextureCopy copy{};
-                valid = readValue(offset, copy);
-                if (valid) copyTexture(copy);
-                break;
-            }
-            case CommandType::BlitTexture: {
-                RhiTextureBlit blit{};
-                valid = readValue(offset, blit);
-                if (valid) blitTexture(blit);
-                break;
-            }
-            case CommandType::GenerateMipmaps: {
-                RhiTextureHandle texture{};
-                valid = readValue(offset, texture);
-                if (valid) generateMipmaps(texture);
-                break;
-            }
-            case CommandType::ResetQueryPool: {
-                RhiQueryPoolHandle pool{};
-                uint32_t firstQuery = 0u, queryCount = 0u;
-                valid = readValue(offset, pool) && readValue(offset, firstQuery) &&
-                        readValue(offset, queryCount);
-                if (valid) resetQueryPool(pool, firstQuery, queryCount);
-                break;
-            }
-            case CommandType::WriteTimestamp: {
-                RhiQueryPoolHandle pool{};
-                uint32_t queryIndex = 0u;
-                valid = readValue(offset, pool) && readValue(offset, queryIndex);
-                if (valid) writeTimestamp(pool, queryIndex);
-                break;
-            }
-            default:
-                logRhiError("command stream contains an invalid command type");
+        case CommandType::BeginDebugLabel: {
+            glm::vec4 color{};
+            const char* name = nullptr;
+            valid = readValue(offset, color) && readString(offset, name);
+            if (valid)
+                beginDebugLabel(name, color);
+            break;
+        }
+        case CommandType::EndDebugLabel: endDebugLabel(); break;
+        case CommandType::InsertDebugMarker: {
+            glm::vec4 color{};
+            const char* name = nullptr;
+            valid = readValue(offset, color) && readString(offset, name);
+            if (valid)
+                insertDebugMarker(name, color);
+            break;
+        }
+        case CommandType::TextureBarrier: {
+            RhiTextureBarrier barrier{};
+            valid = readValue(offset, barrier);
+            if (valid)
+                textureBarrier(barrier);
+            break;
+        }
+        case CommandType::BufferBarrier: {
+            RhiBufferBarrier barrier{};
+            valid = readValue(offset, barrier);
+            if (valid)
+                bufferBarrier(barrier);
+            break;
+        }
+        case CommandType::BeginRendering: {
+            RhiRenderingInfo info{};
+            bool hasDepth = false;
+            uint64_t colorCount = 0u;
+            valid = readValue(offset, info.renderArea) && readValue(offset, colorCount) && readValue(offset, hasDepth);
+            if (!valid || colorCount > static_cast<uint64_t>(std::numeric_limits<uint32_t>::max()) ||
+                colorCount > static_cast<uint64_t>(m_commandStream.size() / sizeof(RhiColorAttachment))) {
                 valid = false;
                 break;
+            }
+            std::vector<RhiColorAttachment> colors(static_cast<size_t>(colorCount));
+            valid = readBytes(offset, colors.data(), colors.size() * sizeof(RhiColorAttachment));
+            RhiDepthStencilAttachment depth{};
+            if (valid && hasDepth) {
+                valid = readValue(offset, depth);
+            }
+            const char* debugName = nullptr;
+            if (valid) {
+                valid = readString(offset, debugName);
+            }
+            if (valid) {
+                info.debugName = debugName;
+                info.colorAttachments = colors.empty() ? nullptr : colors.data();
+                info.colorAttachmentCount = static_cast<uint32_t>(colors.size());
+                info.depthStencilAttachment = hasDepth ? &depth : nullptr;
+                beginRendering(info);
+            }
+            break;
+        }
+        case CommandType::EndRendering: endRendering(); break;
+        case CommandType::ClearDepthAttachment: {
+            float depth = 1.0f;
+            RhiRect2D rect{};
+            valid = readValue(offset, depth) && readValue(offset, rect);
+            if (valid)
+                clearDepthAttachment(depth, rect);
+            break;
+        }
+        case CommandType::SetViewport: {
+            RhiViewport viewport{};
+            valid = readValue(offset, viewport);
+            if (valid)
+                setViewport(viewport);
+            break;
+        }
+        case CommandType::SetScissor: {
+            RhiRect2D rect{};
+            valid = readValue(offset, rect);
+            if (valid)
+                setScissor(rect);
+            break;
+        }
+        case CommandType::SetGraphicsPipeline: {
+            RhiPipelineHandle pipeline{};
+            valid = readValue(offset, pipeline);
+            if (valid)
+                setGraphicsPipeline(pipeline);
+            break;
+        }
+        case CommandType::SetComputePipeline: {
+            RhiPipelineHandle pipeline{};
+            valid = readValue(offset, pipeline);
+            if (valid)
+                setComputePipeline(pipeline);
+            break;
+        }
+        case CommandType::SetBindGroup: {
+            uint32_t setIndex = 0u;
+            RhiBindGroupHandle bindGroup{};
+            valid = readValue(offset, setIndex) && readValue(offset, bindGroup);
+            if (valid)
+                setBindGroup(setIndex, bindGroup);
+            break;
+        }
+        case CommandType::SetVertexBuffer: {
+            uint32_t slot = 0u;
+            RhiBufferHandle buffer{};
+            uint64_t bufferOffset = 0u;
+            valid = readValue(offset, slot) && readValue(offset, buffer) && readValue(offset, bufferOffset);
+            if (valid)
+                setVertexBuffer(slot, buffer, bufferOffset);
+            break;
+        }
+        case CommandType::SetIndexBuffer: {
+            RhiBufferHandle buffer{};
+            RhiIndexFormat format = RhiIndexFormat::Uint32;
+            uint64_t bufferOffset = 0u;
+            valid = readValue(offset, buffer) && readValue(offset, format) && readValue(offset, bufferOffset);
+            if (valid)
+                setIndexBuffer(buffer, format, bufferOffset);
+            break;
+        }
+        case CommandType::PushConstants: {
+            uint64_t size = 0u;
+            RhiShaderStageFlags stages = 0u;
+            valid = readValue(offset, size) && readValue(offset, stages) &&
+                    size <= static_cast<uint64_t>(m_commandStream.size() - offset);
+            if (valid) {
+                pushConstants(m_commandStream.data() + offset, static_cast<size_t>(size), stages);
+                offset += static_cast<size_t>(size);
+            }
+            break;
+        }
+        case CommandType::Draw: {
+            uint32_t vertexCount = 0u, instanceCount = 0u, firstVertex = 0u, firstInstance = 0u;
+            valid = readValue(offset, vertexCount) && readValue(offset, instanceCount) &&
+                    readValue(offset, firstVertex) && readValue(offset, firstInstance);
+            if (valid)
+                draw(vertexCount, instanceCount, firstVertex, firstInstance);
+            break;
+        }
+        case CommandType::DrawIndexed: {
+            uint32_t indexCount = 0u, instanceCount = 0u, firstIndex = 0u, firstInstance = 0u;
+            int32_t vertexOffset = 0;
+            valid = readValue(offset, indexCount) && readValue(offset, instanceCount) &&
+                    readValue(offset, firstIndex) && readValue(offset, vertexOffset) &&
+                    readValue(offset, firstInstance);
+            if (valid)
+                drawIndexed(indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
+            break;
+        }
+        case CommandType::DrawIndirect: {
+            RhiBufferHandle buffer{};
+            uint64_t bufferOffset = 0u;
+            uint32_t drawCount = 0u, stride = 0u;
+            valid = readValue(offset, buffer) && readValue(offset, bufferOffset) && readValue(offset, drawCount) &&
+                    readValue(offset, stride);
+            if (valid)
+                drawIndirect(buffer, bufferOffset, drawCount, stride);
+            break;
+        }
+        case CommandType::Dispatch: {
+            uint32_t x = 0u, y = 0u, z = 0u;
+            valid = readValue(offset, x) && readValue(offset, y) && readValue(offset, z);
+            if (valid)
+                dispatch(x, y, z);
+            break;
+        }
+        case CommandType::UpdateBuffer: {
+            RhiBufferHandle buffer{};
+            uint64_t bufferOffset = 0u, size = 0u;
+            valid = readValue(offset, buffer) && readValue(offset, bufferOffset) && readValue(offset, size) &&
+                    size <= static_cast<uint64_t>(m_commandStream.size() - offset);
+            if (valid) {
+                updateBuffer(buffer, bufferOffset, m_commandStream.data() + offset, static_cast<size_t>(size));
+                offset += static_cast<size_t>(size);
+            }
+            break;
+        }
+        case CommandType::CopyBuffer: {
+            RhiBufferCopy copy{};
+            valid = readValue(offset, copy);
+            if (valid)
+                copyBuffer(copy);
+            break;
+        }
+        case CommandType::CopyBufferToTexture: {
+            RhiBufferTextureCopy copy{};
+            valid = readValue(offset, copy);
+            if (valid)
+                copyBufferToTexture(copy);
+            break;
+        }
+        case CommandType::CopyTextureToBuffer: {
+            RhiTextureBufferCopy copy{};
+            valid = readValue(offset, copy);
+            if (valid)
+                copyTextureToBuffer(copy);
+            break;
+        }
+        case CommandType::CopyTexture: {
+            RhiTextureCopy copy{};
+            valid = readValue(offset, copy);
+            if (valid)
+                copyTexture(copy);
+            break;
+        }
+        case CommandType::BlitTexture: {
+            RhiTextureBlit blit{};
+            valid = readValue(offset, blit);
+            if (valid)
+                blitTexture(blit);
+            break;
+        }
+        case CommandType::GenerateMipmaps: {
+            RhiTextureHandle texture{};
+            valid = readValue(offset, texture);
+            if (valid)
+                generateMipmaps(texture);
+            break;
+        }
+        case CommandType::ResetQueryPool: {
+            RhiQueryPoolHandle pool{};
+            uint32_t firstQuery = 0u, queryCount = 0u;
+            valid = readValue(offset, pool) && readValue(offset, firstQuery) && readValue(offset, queryCount);
+            if (valid)
+                resetQueryPool(pool, firstQuery, queryCount);
+            break;
+        }
+        case CommandType::WriteTimestamp: {
+            RhiQueryPoolHandle pool{};
+            uint32_t queryIndex = 0u;
+            valid = readValue(offset, pool) && readValue(offset, queryIndex);
+            if (valid)
+                writeTimestamp(pool, queryIndex);
+            break;
+        }
+        default:
+            logRhiError("command stream contains an invalid command type");
+            valid = false;
+            break;
         }
         valid = valid && m_replayValid;
     }
@@ -2230,23 +2048,25 @@ bool GlRhiCommandList::replay(const bool validationOnly) {
     m_state = valid ? RhiCommandListState::Pending : RhiCommandListState::Initial;
     m_commandStream.clear();
     m_resourceReferences->clear();
-    if (!valid) m_acquired = false;
+    if (!valid)
+        m_acquired = false;
     return valid;
 }
 
 void GlRhiCommandList::beginDebugLabel(const char* name, const glm::vec4& color) {
     if (!m_replaying) {
         if (name == nullptr || name[0] == '\0') {
-            (void) rejectRecordedCommand("beginDebugLabel requires a non-empty name");
+            (void)rejectRecordedCommand("beginDebugLabel requires a non-empty name");
             return;
         }
-        if (!beginRecordedCommand(CommandType::BeginDebugLabel)) return;
+        if (!beginRecordedCommand(CommandType::BeginDebugLabel))
+            return;
         appendValue(color);
         recordString(name);
         ++m_recordingDebugLabelDepth;
         return;
     }
-    (void) color;
+    (void)color;
     if (!m_validationOnly && name != nullptr && name[0] != '\0' && GLAD_GL_VERSION_4_3) {
         glPushDebugGroup(GL_DEBUG_SOURCE_APPLICATION, 0u, -1, name);
     }
@@ -2255,10 +2075,11 @@ void GlRhiCommandList::beginDebugLabel(const char* name, const glm::vec4& color)
 void GlRhiCommandList::endDebugLabel() {
     if (!m_replaying) {
         if (m_recordingDebugLabelDepth == 0u) {
-            (void) rejectRecordedCommand("endDebugLabel requires an active debug label");
+            (void)rejectRecordedCommand("endDebugLabel requires an active debug label");
             return;
         }
-        if (!beginRecordedCommand(CommandType::EndDebugLabel)) return;
+        if (!beginRecordedCommand(CommandType::EndDebugLabel))
+            return;
         --m_recordingDebugLabelDepth;
         return;
     }
@@ -2270,73 +2091,63 @@ void GlRhiCommandList::endDebugLabel() {
 void GlRhiCommandList::insertDebugMarker(const char* name, const glm::vec4& color) {
     if (!m_replaying) {
         if (name == nullptr || name[0] == '\0') {
-            (void) rejectRecordedCommand("insertDebugMarker requires a non-empty name");
+            (void)rejectRecordedCommand("insertDebugMarker requires a non-empty name");
             return;
         }
-        if (!beginRecordedCommand(CommandType::InsertDebugMarker)) return;
+        if (!beginRecordedCommand(CommandType::InsertDebugMarker))
+            return;
         appendValue(color);
         recordString(name);
         return;
     }
-    (void) color;
+    (void)color;
     if (!m_validationOnly && name != nullptr && name[0] != '\0' && GLAD_GL_VERSION_4_3) {
-        glDebugMessageInsert(GL_DEBUG_SOURCE_APPLICATION,
-                             GL_DEBUG_TYPE_MARKER,
-                             0u,
-                             GL_DEBUG_SEVERITY_NOTIFICATION,
-                             -1,
+        glDebugMessageInsert(GL_DEBUG_SOURCE_APPLICATION, GL_DEBUG_TYPE_MARKER, 0u, GL_DEBUG_SEVERITY_NOTIFICATION, -1,
                              name);
     }
 }
 
 void GlRhiCommandList::textureBarrier(const RhiTextureBarrier& barrier) {
     if (!m_replaying) {
-        if (!beginRecordedCommand(CommandType::TextureBarrier)) return;
+        if (!beginRecordedCommand(CommandType::TextureBarrier))
+            return;
         appendValue(barrier);
         referenceResource(barrier.texture);
         return;
     }
     if (m_device == nullptr || !m_device->m_data) {
-        (void) rejectReplayCommand("textureBarrier requires an initialized device");
+        (void)rejectReplayCommand("textureBarrier requires an initialized device");
         return;
     }
-    GlTextureRecord* record = recordForHandle(
-        m_device->m_data->textures, m_device->m_data->textureRecords, barrier.texture);
+    GlTextureRecord* record =
+        recordForHandle(m_device->m_data->textures, m_device->m_data->textureRecords, barrier.texture);
     if (record == nullptr) {
-        (void) rejectReplayCommand("textureBarrier received an invalid texture handle");
+        (void)rejectReplayCommand("textureBarrier received an invalid texture handle");
         return;
     }
     const RhiTextureAspectFlags formatAspects = textureFormatAspectFlags(record->desc.format);
-    const RhiTextureAspectFlags barrierAspects = barrier.aspect == 0u
-        ? formatAspects
-        : barrier.aspect;
+    const RhiTextureAspectFlags barrierAspects = barrier.aspect == 0u ? formatAspects : barrier.aspect;
     if (barrierAspects == 0u || (barrierAspects & ~formatAspects) != 0u ||
         barrier.srcQueueFamilyIndex != kRhiQueueFamilyIgnored ||
-        barrier.dstQueueFamilyIndex != kRhiQueueFamilyIgnored ||
-        barrier.phase != RhiBarrierPhase::Full) {
-        (void) rejectReplayCommand("textureBarrier received invalid aspects or queue ownership");
+        barrier.dstQueueFamilyIndex != kRhiQueueFamilyIgnored || barrier.phase != RhiBarrierPhase::Full) {
+        (void)rejectReplayCommand("textureBarrier received invalid aspects or queue ownership");
         return;
     }
     GlTextureSubresourceRange range;
-    if (!resolveTextureSubresourceRange(record->desc,
-                                        barrier.baseMip,
-                                        barrier.mipCount,
-                                        barrier.baseLayer,
-                                        barrier.layerCount,
-                                        range)) {
-        (void) rejectReplayCommand("textureBarrier received an invalid subresource range");
+    if (!resolveTextureSubresourceRange(record->desc, barrier.baseMip, barrier.mipCount, barrier.baseLayer,
+                                        barrier.layerCount, range)) {
+        (void)rejectReplayCommand("textureBarrier received an invalid subresource range");
         return;
     }
     if (!textureRangeHasState(*record, range, barrier.oldState)) {
         for (uint32_t mip = range.baseMip; mip < range.baseMip + range.mipCount; ++mip) {
             for (uint32_t layer = range.baseLayer; layer < range.baseLayer + range.layerCount; ++layer) {
-                const RhiResourceState trackedState = record->subresourceStates[
-                    textureSubresourceIndex(record->desc, mip, layer)];
+                const RhiResourceState trackedState =
+                    record->subresourceStates[textureSubresourceIndex(record->desc, mip, layer)];
                 if (trackedState != barrier.oldState) {
                     std::cerr << "GlRhiDevice: textureBarrier oldState mismatch texture=["
-                              << rhiDebugName(record->debugName.c_str()) << "] handle="
-                              << barrier.texture.index << ':' << barrier.texture.generation
-                              << " mip=" << mip << " layer=" << layer
+                              << rhiDebugName(record->debugName.c_str()) << "] handle=" << barrier.texture.index << ':'
+                              << barrier.texture.generation << " mip=" << mip << " layer=" << layer
                               << " expected=" << resourceStateName(barrier.oldState)
                               << " tracked=" << resourceStateName(trackedState)
                               << " new=" << resourceStateName(barrier.newState) << '\n';
@@ -2357,45 +2168,42 @@ void GlRhiCommandList::textureBarrier(const RhiTextureBarrier& barrier) {
 
 void GlRhiCommandList::bufferBarrier(const RhiBufferBarrier& barrier) {
     if (!m_replaying) {
-        if (!beginRecordedCommand(CommandType::BufferBarrier)) return;
+        if (!beginRecordedCommand(CommandType::BufferBarrier))
+            return;
         appendValue(barrier);
         referenceResource(barrier.buffer);
         return;
     }
     if (m_device == nullptr || !m_device->m_data) {
-        (void) rejectReplayCommand("bufferBarrier requires an initialized device");
+        (void)rejectReplayCommand("bufferBarrier requires an initialized device");
         return;
     }
-    GlBufferRecord* record = recordForHandle(
-        m_device->m_data->buffers, m_device->m_data->bufferRecords, barrier.buffer);
+    GlBufferRecord* record =
+        recordForHandle(m_device->m_data->buffers, m_device->m_data->bufferRecords, barrier.buffer);
     if (record == nullptr) {
-        (void) rejectReplayCommand("bufferBarrier received an invalid buffer handle");
+        (void)rejectReplayCommand("bufferBarrier received an invalid buffer handle");
         return;
     }
-    const uint64_t barrierSize = barrier.size == kRhiWholeSize
-        ? record->desc.size - std::min(barrier.offset, record->desc.size)
-        : barrier.size;
-    if (barrier.offset >= record->desc.size || barrierSize == 0u ||
-        barrierSize > record->desc.size - barrier.offset ||
+    const uint64_t barrierSize =
+        barrier.size == kRhiWholeSize ? record->desc.size - std::min(barrier.offset, record->desc.size) : barrier.size;
+    if (barrier.offset >= record->desc.size || barrierSize == 0u || barrierSize > record->desc.size - barrier.offset ||
         barrier.srcQueueFamilyIndex != kRhiQueueFamilyIgnored ||
-        barrier.dstQueueFamilyIndex != kRhiQueueFamilyIgnored ||
-        barrier.phase != RhiBarrierPhase::Full) {
-        (void) rejectReplayCommand("bufferBarrier received an invalid range or queue ownership");
+        barrier.dstQueueFamilyIndex != kRhiQueueFamilyIgnored || barrier.phase != RhiBarrierPhase::Full) {
+        (void)rejectReplayCommand("bufferBarrier received an invalid range or queue ownership");
         return;
     }
     if (record->mapped || record->state != barrier.oldState) {
         std::cerr << "GlRhiDevice: bufferBarrier oldState does not match the tracked buffer state"
-                  << " buffer=[" << rhiDebugName(record->debugName.c_str()) << ']'
-                  << " handle=" << barrier.buffer.index << ':' << barrier.buffer.generation
-                  << " expected=" << resourceStateName(barrier.oldState)
-                  << " tracked=" << resourceStateName(record->state)
-                  << " new=" << resourceStateName(barrier.newState) << '\n';
+                  << " buffer=[" << rhiDebugName(record->debugName.c_str()) << ']' << " handle=" << barrier.buffer.index
+                  << ':' << barrier.buffer.generation << " expected=" << resourceStateName(barrier.oldState)
+                  << " tracked=" << resourceStateName(record->state) << " new=" << resourceStateName(barrier.newState)
+                  << '\n';
         m_replayValid = false;
         return;
     }
     if (barrier.newState == RhiResourceState::Undefined ||
         !bufferUsageSupportsState(record->desc.usage, barrier.newState)) {
-        (void) rejectReplayCommand("bufferBarrier newState is incompatible with the buffer usage");
+        (void)rejectReplayCommand("bufferBarrier newState is incompatible with the buffer usage");
         return;
     }
 
@@ -2409,24 +2217,23 @@ void GlRhiCommandList::bufferBarrier(const RhiBufferBarrier& barrier) {
 void GlRhiCommandList::beginRendering(const RhiRenderingInfo& info) {
     if (!m_replaying) {
         if (m_recordingRendering) {
-            (void) rejectRecordedCommand("beginRendering cannot nest rendering scopes");
+            (void)rejectRecordedCommand("beginRendering cannot nest rendering scopes");
             return;
         }
         if (info.colorAttachmentCount != 0u && info.colorAttachments == nullptr) {
-            (void) rejectRecordedCommand("beginRendering requires color attachment storage");
+            (void)rejectRecordedCommand("beginRendering requires color attachment storage");
             return;
         }
-        if (info.depthStencilAttachment != nullptr &&
-            !info.depthStencilAttachment->view.isValid()) {
-            (void) rejectRecordedCommand("beginRendering requires a valid depth attachment view");
+        if (info.depthStencilAttachment != nullptr && !info.depthStencilAttachment->view.isValid()) {
+            (void)rejectRecordedCommand("beginRendering requires a valid depth attachment view");
             return;
         }
-        if (!beginRecordedCommand(CommandType::BeginRendering)) return;
+        if (!beginRecordedCommand(CommandType::BeginRendering))
+            return;
         appendValue(info.renderArea);
         appendValue(static_cast<uint64_t>(info.colorAttachmentCount));
         appendValue(info.depthStencilAttachment != nullptr);
-        appendBytes(info.colorAttachments,
-                    static_cast<size_t>(info.colorAttachmentCount) * sizeof(RhiColorAttachment));
+        appendBytes(info.colorAttachments, static_cast<size_t>(info.colorAttachmentCount) * sizeof(RhiColorAttachment));
         if (info.depthStencilAttachment != nullptr) {
             appendValue(*info.depthStencilAttachment);
         }
@@ -2434,8 +2241,7 @@ void GlRhiCommandList::beginRendering(const RhiRenderingInfo& info) {
         for (uint32_t i = 0u; i < info.colorAttachmentCount; ++i) {
             referenceResource(info.colorAttachments[i].view);
         }
-        if (info.depthStencilAttachment != nullptr &&
-            info.depthStencilAttachment->view.isValid()) {
+        if (info.depthStencilAttachment != nullptr && info.depthStencilAttachment->view.isValid()) {
             referenceResource(info.depthStencilAttachment->view);
         }
         m_recordingRendering = true;
@@ -2443,60 +2249,48 @@ void GlRhiCommandList::beginRendering(const RhiRenderingInfo& info) {
         return;
     }
     if (m_device == nullptr || !m_device->m_data) {
-        (void) rejectReplayCommand("beginRendering requires an initialized device");
+        (void)rejectReplayCommand("beginRendering requires an initialized device");
         return;
     }
 
     auto& data = *m_device->m_data;
-    const auto viewHasState = [&data](const GlTextureViewRecord& viewRecord,
-                                      const RhiResourceState requiredState) {
+    const auto viewHasState = [&data](const GlTextureViewRecord& viewRecord, const RhiResourceState requiredState) {
         if (viewRecord.swapchainDepthStencil) {
             return data.swapchainDepthStencilState == requiredState;
         }
-        GlTextureRecord* textureRecord = recordForHandle(
-            data.textures, data.textureRecords, viewRecord.desc.texture);
+        GlTextureRecord* textureRecord = recordForHandle(data.textures, data.textureRecords, viewRecord.desc.texture);
         if (textureRecord == nullptr) {
             return false;
         }
         GlTextureSubresourceRange range;
-        return resolveTextureSubresourceRange(textureRecord->desc,
-                                              viewRecord.desc.baseMip,
-                                              viewRecord.desc.mipCount,
-                                              viewRecord.desc.baseLayer,
-                                              viewRecord.desc.layerCount,
-                                              range) &&
+        return resolveTextureSubresourceRange(textureRecord->desc, viewRecord.desc.baseMip, viewRecord.desc.mipCount,
+                                              viewRecord.desc.baseLayer, viewRecord.desc.layerCount, range) &&
                textureRangeHasState(*textureRecord, range, requiredState);
     };
     std::vector<RhiTextureViewHandle> colorViews;
     colorViews.reserve(info.colorAttachmentCount);
     for (uint32_t i = 0u; i < info.colorAttachmentCount; ++i) {
         const RhiTextureViewHandle view = info.colorAttachments[i].view;
-        const GlTextureViewRecord* viewRecord =
-            recordForHandle(data.textureViews, data.textureViewRecords, view);
+        const GlTextureViewRecord* viewRecord = recordForHandle(data.textureViews, data.textureViewRecords, view);
         if (viewRecord == nullptr) {
-            (void) rejectReplayCommand("beginRendering received an invalid color attachment view");
+            (void)rejectReplayCommand("beginRendering received an invalid color attachment view");
             return;
         }
         if (!viewHasState(*viewRecord, RhiResourceState::RenderTarget)) {
-            const GlTextureRecord* textureRecord = recordForHandle(
-                data.textures, data.textureRecords, viewRecord->desc.texture);
+            const GlTextureRecord* textureRecord =
+                recordForHandle(data.textures, data.textureRecords, viewRecord->desc.texture);
             std::cerr << "GlRhiDevice: beginRendering color attachment state mismatch"
-                      << " scope=[" << rhiDebugName(info.debugName) << ']'
-                      << " attachment=" << i
+                      << " scope=[" << rhiDebugName(info.debugName) << ']' << " attachment=" << i
                       << " viewHandle=" << view.index << ':' << view.generation
                       << " textureHandle=" << viewRecord->desc.texture.index << ':'
-                      << viewRecord->desc.texture.generation
-                      << " texture=["
-                      << (textureRecord != nullptr
-                              ? rhiDebugName(textureRecord->debugName.c_str())
-                              : "<invalid>")
+                      << viewRecord->desc.texture.generation << " texture=["
+                      << (textureRecord != nullptr ? rhiDebugName(textureRecord->debugName.c_str()) : "<invalid>")
                       << "] tracked="
-                      << resourceStateName(
-                             textureRecord != nullptr && !textureRecord->subresourceStates.empty()
-                                 ? textureRecord->subresourceStates.front()
-                                 : RhiResourceState::Undefined)
+                      << resourceStateName(textureRecord != nullptr && !textureRecord->subresourceStates.empty()
+                                               ? textureRecord->subresourceStates.front()
+                                               : RhiResourceState::Undefined)
                       << " required=RenderTarget\n";
-            (void) rejectReplayCommand("beginRendering requires color attachments in RenderTarget state");
+            (void)rejectReplayCommand("beginRendering requires color attachments in RenderTarget state");
             return;
         }
         colorViews.push_back(view);
@@ -2508,11 +2302,11 @@ void GlRhiCommandList::beginRendering(const RhiRenderingInfo& info) {
         depthView = info.depthStencilAttachment->view;
         depthViewRecord = recordForHandle(data.textureViews, data.textureViewRecords, depthView);
         if (depthViewRecord == nullptr) {
-            (void) rejectReplayCommand("beginRendering received an invalid depth attachment view");
+            (void)rejectReplayCommand("beginRendering received an invalid depth attachment view");
             return;
         }
         if (!viewHasState(*depthViewRecord, RhiResourceState::DepthWrite)) {
-            (void) rejectReplayCommand("beginRendering requires the depth attachment in DepthWrite state");
+            (void)rejectReplayCommand("beginRendering requires the depth attachment in DepthWrite state");
             return;
         }
     }
@@ -2526,16 +2320,17 @@ void GlRhiCommandList::beginRendering(const RhiRenderingInfo& info) {
         }
     }
     if (renderToSwapchain && colorViews.size() != 1u) {
-        (void) rejectReplayCommand("beginRendering requires exactly one swapchain color attachment");
+        (void)rejectReplayCommand("beginRendering requires exactly one swapchain color attachment");
         return;
     }
     if (renderToSwapchain && depthView.isValid() &&
         (depthViewRecord == nullptr || !depthViewRecord->swapchainDepthStencil)) {
-        (void) rejectReplayCommand("beginRendering requires the swapchain depth-stencil view for swapchain depth output");
+        (void)rejectReplayCommand(
+            "beginRendering requires the swapchain depth-stencil view for swapchain depth output");
         return;
     }
     if (!renderToSwapchain && depthViewRecord != nullptr && depthViewRecord->swapchainDepthStencil) {
-        (void) rejectReplayCommand("beginRendering requires swapchain depth-stencil with swapchain color output");
+        (void)rejectReplayCommand("beginRendering requires swapchain depth-stencil with swapchain color output");
         return;
     }
 
@@ -2543,23 +2338,17 @@ void GlRhiCommandList::beginRendering(const RhiRenderingInfo& info) {
     m_renderingColorFormats.reserve(colorViews.size());
     for (size_t index = 0u; index < colorViews.size(); ++index) {
         const RhiTextureViewHandle view = colorViews[index];
-        const GlTextureViewRecord* viewRecord =
-            recordForHandle(data.textureViews, data.textureViewRecords, view);
+        const GlTextureViewRecord* viewRecord = recordForHandle(data.textureViews, data.textureViewRecords, view);
         const RhiColorAttachment& attachment = info.colorAttachments[index];
-        const bool unsignedInteger =
-            rhiTextureFormatIsUnsignedInteger(viewRecord->resolvedFormat);
+        const bool unsignedInteger = rhiTextureFormatIsUnsignedInteger(viewRecord->resolvedFormat);
         if (attachment.loadOp == RhiLoadOp::Clear &&
-            unsignedInteger !=
-                (attachment.clearValueType == RhiColorClearValueType::Uint)) {
-            (void) rejectReplayCommand(
-                "beginRendering clear value type does not match the color attachment format");
+            unsignedInteger != (attachment.clearValueType == RhiColorClearValueType::Uint)) {
+            (void)rejectReplayCommand("beginRendering clear value type does not match the color attachment format");
             return;
         }
         m_renderingColorFormats.push_back(viewRecord->resolvedFormat);
     }
-    m_renderingDepthFormat = depthViewRecord != nullptr
-        ? depthViewRecord->resolvedFormat
-        : RhiTextureFormat::Undefined;
+    m_renderingDepthFormat = depthViewRecord != nullptr ? depthViewRecord->resolvedFormat : RhiTextureFormat::Undefined;
     if (m_validationOnly) {
         m_rendering = true;
         return;
@@ -2599,7 +2388,8 @@ void GlRhiCommandList::beginRendering(const RhiRenderingInfo& info) {
             if (depthView.isValid()) {
                 const GlTextureViewRecord* viewRecord =
                     recordForHandle(data.textureViews, data.textureViewRecords, depthView);
-                const GLenum attachment = viewRecord->format.stencil ? GL_DEPTH_STENCIL_ATTACHMENT : GL_DEPTH_ATTACHMENT;
+                const GLenum attachment =
+                    viewRecord->format.stencil ? GL_DEPTH_STENCIL_ATTACHMENT : GL_DEPTH_ATTACHMENT;
                 glNamedFramebufferTexture(record.framebuffer, attachment, viewRecord->texture, 0);
             }
 
@@ -2609,16 +2399,14 @@ void GlRhiCommandList::beginRendering(const RhiRenderingInfo& info) {
                 drawBuffers.push_back(GL_COLOR_ATTACHMENT0 + i);
             }
             if (!drawBuffers.empty()) {
-                glNamedFramebufferDrawBuffers(record.framebuffer,
-                                              static_cast<GLsizei>(drawBuffers.size()),
+                glNamedFramebufferDrawBuffers(record.framebuffer, static_cast<GLsizei>(drawBuffers.size()),
                                               drawBuffers.data());
             } else {
                 glNamedFramebufferDrawBuffer(record.framebuffer, GL_NONE);
                 glNamedFramebufferReadBuffer(record.framebuffer, GL_NONE);
             }
 
-            const GLenum framebufferStatus =
-                glCheckNamedFramebufferStatus(record.framebuffer, GL_FRAMEBUFFER);
+            const GLenum framebufferStatus = glCheckNamedFramebufferStatus(record.framebuffer, GL_FRAMEBUFFER);
             if (framebufferStatus != GL_FRAMEBUFFER_COMPLETE) {
                 glDeleteFramebuffers(1, &record.framebuffer);
                 logFramebufferStatus("beginRendering", framebufferStatus);
@@ -2639,29 +2427,18 @@ void GlRhiCommandList::beginRendering(const RhiRenderingInfo& info) {
     }
     data.currentFramebuffer = framebuffer;
     data.currentStoreDiscardAttachments.clear();
-    glViewport(info.renderArea.x,
-               info.renderArea.y,
-               static_cast<GLsizei>(info.renderArea.width),
+    glViewport(info.renderArea.x, info.renderArea.y, static_cast<GLsizei>(info.renderArea.width),
                static_cast<GLsizei>(info.renderArea.height));
     glEnable(GL_SCISSOR_TEST);
-    glScissor(info.renderArea.x,
-              info.renderArea.y,
-              static_cast<GLsizei>(info.renderArea.width),
+    glScissor(info.renderArea.x, info.renderArea.y, static_cast<GLsizei>(info.renderArea.width),
               static_cast<GLsizei>(info.renderArea.height));
 
     for (uint32_t i = 0u; i < info.colorAttachmentCount; ++i) {
         if (info.colorAttachments[i].loadOp == RhiLoadOp::Clear) {
-            if (info.colorAttachments[i].clearValueType ==
-                RhiColorClearValueType::Uint) {
-                clearFramebufferColorUint(
-                    framebuffer,
-                    static_cast<GLint>(i),
-                    info.colorAttachments[i].clearColorUint);
+            if (info.colorAttachments[i].clearValueType == RhiColorClearValueType::Uint) {
+                clearFramebufferColorUint(framebuffer, static_cast<GLint>(i), info.colorAttachments[i].clearColorUint);
             } else {
-                clearFramebufferColor(
-                    framebuffer,
-                    static_cast<GLint>(i),
-                    info.colorAttachments[i].clearColor);
+                clearFramebufferColor(framebuffer, static_cast<GLint>(i), info.colorAttachments[i].clearColor);
             }
         }
         if (info.colorAttachments[i].storeOp == RhiStoreOp::DontCare) {
@@ -2671,8 +2448,7 @@ void GlRhiCommandList::beginRendering(const RhiRenderingInfo& info) {
 
     if (info.depthStencilAttachment != nullptr && depthView.isValid()) {
         const auto* attachment = info.depthStencilAttachment;
-        const GlTextureViewRecord* viewRecord =
-            recordForHandle(data.textureViews, data.textureViewRecords, depthView);
+        const GlTextureViewRecord* viewRecord = recordForHandle(data.textureViews, data.textureViewRecords, depthView);
         if (attachment->depthLoadOp == RhiLoadOp::Clear) {
             const bool restoreDepthWriteMask = !data.depthWriteMaskEnabled;
             if (restoreDepthWriteMask) {
@@ -2690,8 +2466,8 @@ void GlRhiCommandList::beginRendering(const RhiRenderingInfo& info) {
             }
         }
         if (attachment->depthStoreOp == RhiStoreOp::DontCare) {
-            data.currentStoreDiscardAttachments.push_back(
-                viewRecord->format.stencil ? GL_DEPTH_STENCIL_ATTACHMENT : GL_DEPTH_ATTACHMENT);
+            data.currentStoreDiscardAttachments.push_back(viewRecord->format.stencil ? GL_DEPTH_STENCIL_ATTACHMENT
+                                                                                     : GL_DEPTH_ATTACHMENT);
         }
     }
 
@@ -2701,16 +2477,17 @@ void GlRhiCommandList::beginRendering(const RhiRenderingInfo& info) {
 void GlRhiCommandList::endRendering() {
     if (!m_replaying) {
         if (!m_recordingRendering) {
-            (void) rejectRecordedCommand("endRendering requires an active rendering scope");
+            (void)rejectRecordedCommand("endRendering requires an active rendering scope");
             return;
         }
-        if (!beginRecordedCommand(CommandType::EndRendering)) return;
+        if (!beginRecordedCommand(CommandType::EndRendering))
+            return;
         m_recordingRendering = false;
         m_recordingHasDepthAttachment = false;
         return;
     }
     if (m_device == nullptr || !m_device->m_data) {
-        (void) rejectReplayCommand("endRendering requires an initialized device");
+        (void)rejectReplayCommand("endRendering requires an initialized device");
         return;
     }
 
@@ -2728,31 +2505,31 @@ void GlRhiCommandList::endRendering() {
 void GlRhiCommandList::clearDepthAttachment(const float depth, const RhiRect2D& rect) {
     if (!m_replaying) {
         if (!m_recordingRendering) {
-            (void) rejectRecordedCommand("clearDepthAttachment requires an active rendering scope");
+            (void)rejectRecordedCommand("clearDepthAttachment requires an active rendering scope");
             return;
         }
         if (!m_recordingHasDepthAttachment) {
-            (void) rejectRecordedCommand("clearDepthAttachment requires a depth attachment");
+            (void)rejectRecordedCommand("clearDepthAttachment requires a depth attachment");
             return;
         }
-        if (!beginRecordedCommand(CommandType::ClearDepthAttachment)) return;
+        if (!beginRecordedCommand(CommandType::ClearDepthAttachment))
+            return;
         appendValue(depth);
         appendValue(rect);
         return;
     }
     if (!m_rendering) {
-        (void) rejectReplayCommand("clearDepthAttachment requires an active rendering scope");
+        (void)rejectReplayCommand("clearDepthAttachment requires an active rendering scope");
         return;
     }
     if (m_renderingDepthFormat == RhiTextureFormat::Undefined) {
-        (void) rejectReplayCommand("clearDepthAttachment requires a depth attachment");
+        (void)rejectReplayCommand("clearDepthAttachment requires a depth attachment");
         return;
     }
-    if (m_validationOnly) return;
+    if (m_validationOnly)
+        return;
     glEnable(GL_SCISSOR_TEST);
-    glScissor(rect.x, rect.y,
-              static_cast<GLsizei>(rect.width),
-              static_cast<GLsizei>(rect.height));
+    glScissor(rect.x, rect.y, static_cast<GLsizei>(rect.width), static_cast<GLsizei>(rect.height));
     auto& data = *m_device->m_data;
     const bool restoreDepthWriteMask = !data.depthWriteMaskEnabled;
     if (restoreDepthWriteMask) {
@@ -2768,63 +2545,64 @@ void GlRhiCommandList::clearDepthAttachment(const float depth, const RhiRect2D& 
 
 void GlRhiCommandList::setViewport(const RhiViewport& viewport) {
     if (!m_replaying) {
-        if (!beginRecordedCommand(CommandType::SetViewport)) return;
+        if (!beginRecordedCommand(CommandType::SetViewport))
+            return;
         appendValue(viewport);
         return;
     }
-    if (m_validationOnly) return;
-    glViewport(static_cast<GLint>(viewport.x),
-               static_cast<GLint>(viewport.y),
-               static_cast<GLsizei>(viewport.width),
+    if (m_validationOnly)
+        return;
+    glViewport(static_cast<GLint>(viewport.x), static_cast<GLint>(viewport.y), static_cast<GLsizei>(viewport.width),
                static_cast<GLsizei>(viewport.height));
     glDepthRange(viewport.minDepth, viewport.maxDepth);
 }
 
 void GlRhiCommandList::setScissor(const RhiRect2D& rect) {
     if (!m_replaying) {
-        if (!beginRecordedCommand(CommandType::SetScissor)) return;
+        if (!beginRecordedCommand(CommandType::SetScissor))
+            return;
         appendValue(rect);
         return;
     }
-    if (m_validationOnly) return;
+    if (m_validationOnly)
+        return;
     glEnable(GL_SCISSOR_TEST);
     glScissor(rect.x, rect.y, static_cast<GLsizei>(rect.width), static_cast<GLsizei>(rect.height));
 }
 
 void GlRhiCommandList::setGraphicsPipeline(RhiPipelineHandle pipeline) {
     if (!m_replaying) {
-        if (!beginRecordedCommand(CommandType::SetGraphicsPipeline)) return;
+        if (!beginRecordedCommand(CommandType::SetGraphicsPipeline))
+            return;
         appendValue(pipeline);
         referenceResource(pipeline);
         return;
     }
     if (m_device == nullptr || !m_device->m_data) {
-        (void) rejectReplayCommand("setGraphicsPipeline requires an initialized device");
+        (void)rejectReplayCommand("setGraphicsPipeline requires an initialized device");
         return;
     }
 
     const GlPipelineRecord* record =
         recordForHandle(m_device->m_data->pipelines, m_device->m_data->pipelineRecords, pipeline);
     if (record == nullptr || record->compute) {
-        (void) rejectReplayCommand("setGraphicsPipeline received an invalid graphics pipeline");
+        (void)rejectReplayCommand("setGraphicsPipeline received an invalid graphics pipeline");
         return;
     }
 
     auto& data = *m_device->m_data;
     const RhiPipelineLayoutHandle newLayout = record->graphicsDesc.layout;
-    const bool layoutCompatible = sameHandle(m_graphicsPipeline, pipeline) &&
-        sameHandle(m_boundPipelineLayout, newLayout);
-    const GlPipelineRecord* previous = recordForHandle(
-        data.pipelines, data.pipelineRecords, m_graphicsPipeline);
-    bool vertexBindingsCompatible = previous != nullptr && !previous->compute &&
-        previous->graphicsDesc.vertexInput.bindings.size() ==
-            record->graphicsDesc.vertexInput.bindings.size();
+    const bool layoutCompatible =
+        sameHandle(m_graphicsPipeline, pipeline) && sameHandle(m_boundPipelineLayout, newLayout);
+    const GlPipelineRecord* previous = recordForHandle(data.pipelines, data.pipelineRecords, m_graphicsPipeline);
+    bool vertexBindingsCompatible =
+        previous != nullptr && !previous->compute &&
+        previous->graphicsDesc.vertexInput.bindings.size() == record->graphicsDesc.vertexInput.bindings.size();
     if (vertexBindingsCompatible) {
         for (size_t i = 0u; i < record->graphicsDesc.vertexInput.bindings.size(); ++i) {
             const RhiVertexBinding& lhs = previous->graphicsDesc.vertexInput.bindings[i];
             const RhiVertexBinding& rhs = record->graphicsDesc.vertexInput.bindings[i];
-            if (lhs.binding != rhs.binding || lhs.stride != rhs.stride ||
-                lhs.inputRate != rhs.inputRate) {
+            if (lhs.binding != rhs.binding || lhs.stride != rhs.stride || lhs.inputRate != rhs.inputRate) {
                 vertexBindingsCompatible = false;
                 break;
             }
@@ -2853,11 +2631,9 @@ void GlRhiCommandList::setGraphicsPipeline(RhiPipelineHandle pipeline) {
             if (!binding.valid) {
                 continue;
             }
-            const GlBufferRecord* buffer = recordForHandle(
-                data.buffers, data.bufferRecords, binding.buffer);
+            const GlBufferRecord* buffer = recordForHandle(data.buffers, data.bufferRecords, binding.buffer);
             const auto vertexBinding = std::find_if(
-                record->graphicsDesc.vertexInput.bindings.begin(),
-                record->graphicsDesc.vertexInput.bindings.end(),
+                record->graphicsDesc.vertexInput.bindings.begin(), record->graphicsDesc.vertexInput.bindings.end(),
                 [slot](const RhiVertexBinding& candidate) { return candidate.binding == slot; });
             if (buffer != nullptr && vertexBinding != record->graphicsDesc.vertexInput.bindings.end()) {
                 glVertexArrayVertexBuffer(record->vertexArray, slot, buffer->buffer,
@@ -2866,8 +2642,7 @@ void GlRhiCommandList::setGraphicsPipeline(RhiPipelineHandle pipeline) {
             }
         }
         if (m_indexBuffer.valid) {
-            const GlBufferRecord* indexBuffer = recordForHandle(
-                data.buffers, data.bufferRecords, m_indexBuffer.buffer);
+            const GlBufferRecord* indexBuffer = recordForHandle(data.buffers, data.bufferRecords, m_indexBuffer.buffer);
             if (indexBuffer != nullptr) {
                 glVertexArrayElementBuffer(record->vertexArray, indexBuffer->buffer);
             }
@@ -2891,8 +2666,7 @@ void GlRhiCommandList::setGraphicsPipeline(RhiPipelineHandle pipeline) {
         glFrontFace(desc.raster.frontFace == RhiFrontFace::CounterClockwise ? GL_CCW : GL_CW);
         if (desc.raster.depthBiasEnabled) {
             glEnable(GL_POLYGON_OFFSET_FILL);
-            glPolygonOffset(desc.raster.depthBiasSlopeFactor,
-                            desc.raster.depthBiasConstantFactor);
+            glPolygonOffset(desc.raster.depthBiasSlopeFactor, desc.raster.depthBiasConstantFactor);
         } else {
             glDisable(GL_POLYGON_OFFSET_FILL);
         }
@@ -2906,13 +2680,10 @@ void GlRhiCommandList::setGraphicsPipeline(RhiPipelineHandle pipeline) {
             if (hasBlend) {
                 const RhiBlendAttachmentState& blend = desc.blend.attachments[i];
                 glEnablei(GL_BLEND, static_cast<GLuint>(i));
-                glBlendFuncSeparatei(static_cast<GLuint>(i),
-                                     toGlBlendFactor(blend.srcColor),
-                                     toGlBlendFactor(blend.dstColor),
-                                     toGlBlendFactor(blend.srcAlpha),
+                glBlendFuncSeparatei(static_cast<GLuint>(i), toGlBlendFactor(blend.srcColor),
+                                     toGlBlendFactor(blend.dstColor), toGlBlendFactor(blend.srcAlpha),
                                      toGlBlendFactor(blend.dstAlpha));
-                glBlendEquationSeparatei(static_cast<GLuint>(i),
-                                         toGlBlendOp(blend.colorOp),
+                glBlendEquationSeparatei(static_cast<GLuint>(i), toGlBlendOp(blend.colorOp),
                                          toGlBlendOp(blend.alphaOp));
             } else {
                 glDisablei(GL_BLEND, static_cast<GLuint>(i));
@@ -2927,26 +2698,26 @@ void GlRhiCommandList::setGraphicsPipeline(RhiPipelineHandle pipeline) {
 
 void GlRhiCommandList::setComputePipeline(RhiPipelineHandle pipeline) {
     if (!m_replaying) {
-        if (!beginRecordedCommand(CommandType::SetComputePipeline)) return;
+        if (!beginRecordedCommand(CommandType::SetComputePipeline))
+            return;
         appendValue(pipeline);
         referenceResource(pipeline);
         return;
     }
     if (m_device == nullptr || !m_device->m_data) {
-        (void) rejectReplayCommand("setComputePipeline requires an initialized device");
+        (void)rejectReplayCommand("setComputePipeline requires an initialized device");
         return;
     }
 
     const GlPipelineRecord* record =
         recordForHandle(m_device->m_data->pipelines, m_device->m_data->pipelineRecords, pipeline);
     if (record == nullptr || !record->compute) {
-        (void) rejectReplayCommand("setComputePipeline received an invalid compute pipeline");
+        (void)rejectReplayCommand("setComputePipeline received an invalid compute pipeline");
         return;
     }
 
     const RhiPipelineLayoutHandle newLayout = record->computeDesc.layout;
-    if (!sameHandle(m_computePipeline, pipeline) ||
-        !sameHandle(m_boundPipelineLayout, newLayout)) {
+    if (!sameHandle(m_computePipeline, pipeline) || !sameHandle(m_boundPipelineLayout, newLayout)) {
         m_bindGroups.clear();
         m_pushConstantLayout = {};
         m_pushConstantSize = 0u;
@@ -2957,7 +2728,8 @@ void GlRhiCommandList::setComputePipeline(RhiPipelineHandle pipeline) {
         m_indexBuffer = {};
     }
 
-    if (!m_validationOnly) glUseProgram(record->program);
+    if (!m_validationOnly)
+        glUseProgram(record->program);
     m_computePipeline = pipeline;
     m_graphicsPipeline = {};
     m_boundPipelineLayout = newLayout;
@@ -2965,28 +2737,29 @@ void GlRhiCommandList::setComputePipeline(RhiPipelineHandle pipeline) {
 
 void GlRhiCommandList::setBindGroup(uint32_t setIndex, RhiBindGroupHandle bindGroup) {
     if (!m_replaying) {
-        if (!beginRecordedCommand(CommandType::SetBindGroup)) return;
+        if (!beginRecordedCommand(CommandType::SetBindGroup))
+            return;
         appendValue(setIndex);
         appendValue(bindGroup);
         referenceResource(bindGroup);
         return;
     }
     if (m_device == nullptr || !m_device->m_data) {
-        (void) rejectReplayCommand("setBindGroup requires an initialized device");
+        (void)rejectReplayCommand("setBindGroup requires an initialized device");
         return;
     }
 
     auto& data = *m_device->m_data;
     const GlBindGroupRecord* record = recordForHandle(data.bindGroups, data.bindGroupRecords, bindGroup);
     if (record == nullptr) {
-        (void) rejectReplayCommand("setBindGroup received an invalid bind group");
+        (void)rejectReplayCommand("setBindGroup received an invalid bind group");
         return;
     }
 
     const GlBindGroupLayoutRecord* layoutRecord =
         recordForHandle(data.bindGroupLayouts, data.bindGroupLayoutRecords, record->desc.layout);
     if (layoutRecord == nullptr) {
-        (void) rejectReplayCommand("setBindGroup references an invalid layout");
+        (void)rejectReplayCommand("setBindGroup references an invalid layout");
         return;
     }
 
@@ -2997,7 +2770,7 @@ void GlRhiCommandList::setBindGroup(uint32_t setIndex, RhiBindGroupHandle bindGr
         pipeline = recordForHandle(data.pipelines, data.pipelineRecords, m_computePipeline);
     }
     if (pipeline == nullptr) {
-        (void) rejectReplayCommand("setBindGroup requires a bound pipeline");
+        (void)rejectReplayCommand("setBindGroup requires a bound pipeline");
         return;
     }
     const RhiPipelineLayoutHandle pipelineLayoutHandle =
@@ -3006,141 +2779,127 @@ void GlRhiCommandList::setBindGroup(uint32_t setIndex, RhiBindGroupHandle bindGr
         recordForHandle(data.pipelineLayouts, data.pipelineLayoutRecords, pipelineLayoutHandle);
     if (pipelineLayout == nullptr || setIndex >= pipelineLayout->desc.bindGroupLayouts.size() ||
         !sameHandle(pipelineLayout->desc.bindGroupLayouts[setIndex], record->desc.layout)) {
-        (void) rejectReplayCommand("setBindGroup is incompatible with the bound pipeline layout set");
+        (void)rejectReplayCommand("setBindGroup is incompatible with the bound pipeline layout set");
         return;
     }
 
     for (const RhiBindGroupEntry& entry : record->desc.entries) {
-        const auto layoutIt = std::find_if(layoutRecord->desc.entries.begin(),
-                                           layoutRecord->desc.entries.end(),
-                                           [&](const RhiBindGroupLayoutEntry& layoutEntry) {
-                                               return layoutEntry.binding == entry.binding;
-                                           });
+        const auto layoutIt = std::find_if(
+            layoutRecord->desc.entries.begin(), layoutRecord->desc.entries.end(),
+            [&](const RhiBindGroupLayoutEntry& layoutEntry) { return layoutEntry.binding == entry.binding; });
         if (layoutIt == layoutRecord->desc.entries.end()) {
-            (void) rejectReplayCommand("setBindGroup entry is not declared by its layout");
+            (void)rejectReplayCommand("setBindGroup entry is not declared by its layout");
             return;
         }
-        const auto mappingIt = std::find_if(
-            pipeline->bindingMappings.begin(), pipeline->bindingMappings.end(),
-            [&](const GlPipelineRecord::BindingMapping& mapping) {
-                return mapping.set == setIndex && mapping.binding == entry.binding &&
-                       mapping.type == layoutIt->type;
-            });
+        const auto mappingIt = std::find_if(pipeline->bindingMappings.begin(), pipeline->bindingMappings.end(),
+                                            [&](const GlPipelineRecord::BindingMapping& mapping) {
+                                                return mapping.set == setIndex && mapping.binding == entry.binding &&
+                                                       mapping.type == layoutIt->type;
+                                            });
         if (mappingIt == pipeline->bindingMappings.end()) {
             continue;
         }
         const GLuint physicalBinding = static_cast<GLuint>(mappingIt->physicalBinding);
 
         switch (layoutIt->type) {
-            case RhiBindingType::UniformBuffer: {
-                const GlBufferRecord* buffer =
-                    recordForHandle(data.buffers, data.bufferRecords, entry.resource.buffer.buffer);
-                const uint64_t range = buffer != nullptr && entry.resource.buffer.range != 0u
-                    ? entry.resource.buffer.range
-                    : (buffer != nullptr && entry.resource.buffer.offset <= buffer->desc.size
-                        ? buffer->desc.size - entry.resource.buffer.offset
-                        : 0u);
-                if (buffer == nullptr ||
-                    (buffer->desc.usage & rhiFlag(RhiBufferUsage::Uniform)) == 0u ||
-                    entry.resource.buffer.offset % data.uniformBufferOffsetAlignment != 0u ||
-                    range == 0u || entry.resource.buffer.offset > buffer->desc.size ||
-                    range > buffer->desc.size - entry.resource.buffer.offset) {
-                    (void) rejectReplayCommand("setBindGroup received an invalid uniform buffer binding");
-                    return;
-                }
-                if (!m_validationOnly) {
-                    glBindBufferRange(GL_UNIFORM_BUFFER,
-                                      physicalBinding,
-                                      buffer->buffer,
-                                      static_cast<GLintptr>(entry.resource.buffer.offset),
-                                      static_cast<GLsizeiptr>(range));
-                }
-                break;
+        case RhiBindingType::UniformBuffer: {
+            const GlBufferRecord* buffer =
+                recordForHandle(data.buffers, data.bufferRecords, entry.resource.buffer.buffer);
+            const uint64_t range = buffer != nullptr && entry.resource.buffer.range != 0u
+                                       ? entry.resource.buffer.range
+                                       : (buffer != nullptr && entry.resource.buffer.offset <= buffer->desc.size
+                                              ? buffer->desc.size - entry.resource.buffer.offset
+                                              : 0u);
+            if (buffer == nullptr || (buffer->desc.usage & rhiFlag(RhiBufferUsage::Uniform)) == 0u ||
+                entry.resource.buffer.offset % data.uniformBufferOffsetAlignment != 0u || range == 0u ||
+                entry.resource.buffer.offset > buffer->desc.size ||
+                range > buffer->desc.size - entry.resource.buffer.offset) {
+                (void)rejectReplayCommand("setBindGroup received an invalid uniform buffer binding");
+                return;
             }
-            case RhiBindingType::StorageBuffer: {
-                const GlBufferRecord* buffer =
-                    recordForHandle(data.buffers, data.bufferRecords, entry.resource.buffer.buffer);
-                const uint64_t range = buffer != nullptr && entry.resource.buffer.range != 0u
-                    ? entry.resource.buffer.range
-                    : (buffer != nullptr && entry.resource.buffer.offset <= buffer->desc.size
-                        ? buffer->desc.size - entry.resource.buffer.offset
-                        : 0u);
-                if (buffer == nullptr ||
-                    (buffer->desc.usage & rhiFlag(RhiBufferUsage::Storage)) == 0u ||
-                    entry.resource.buffer.offset % data.storageBufferOffsetAlignment != 0u ||
-                    range == 0u || entry.resource.buffer.offset > buffer->desc.size ||
-                    range > buffer->desc.size - entry.resource.buffer.offset) {
-                    (void) rejectReplayCommand("setBindGroup received an invalid storage buffer binding");
-                    return;
-                }
-                if (!m_validationOnly) {
-                    glBindBufferRange(GL_SHADER_STORAGE_BUFFER,
-                                      physicalBinding,
-                                      buffer->buffer,
-                                      static_cast<GLintptr>(entry.resource.buffer.offset),
-                                      static_cast<GLsizeiptr>(range));
-                }
-                break;
+            if (!m_validationOnly) {
+                glBindBufferRange(GL_UNIFORM_BUFFER, physicalBinding, buffer->buffer,
+                                  static_cast<GLintptr>(entry.resource.buffer.offset), static_cast<GLsizeiptr>(range));
             }
-            case RhiBindingType::SampledTexture: {
-                const GlTextureViewRecord* view =
-                    recordForHandle(data.textureViews, data.textureViewRecords, entry.resource.textureView);
-                GlResolvedTextureRecord texture;
-                if (view == nullptr || !resolveTextureRecord(data, view->desc.texture, texture) ||
-                    (texture.desc.usage & rhiFlag(RhiTextureUsage::Sampled)) == 0u) {
-                    (void) rejectReplayCommand("setBindGroup received an invalid sampled texture view");
-                    return;
-                }
-                if (!m_validationOnly) glBindTextureUnit(physicalBinding, view->texture);
-                break;
+            break;
+        }
+        case RhiBindingType::StorageBuffer: {
+            const GlBufferRecord* buffer =
+                recordForHandle(data.buffers, data.bufferRecords, entry.resource.buffer.buffer);
+            const uint64_t range = buffer != nullptr && entry.resource.buffer.range != 0u
+                                       ? entry.resource.buffer.range
+                                       : (buffer != nullptr && entry.resource.buffer.offset <= buffer->desc.size
+                                              ? buffer->desc.size - entry.resource.buffer.offset
+                                              : 0u);
+            if (buffer == nullptr || (buffer->desc.usage & rhiFlag(RhiBufferUsage::Storage)) == 0u ||
+                entry.resource.buffer.offset % data.storageBufferOffsetAlignment != 0u || range == 0u ||
+                entry.resource.buffer.offset > buffer->desc.size ||
+                range > buffer->desc.size - entry.resource.buffer.offset) {
+                (void)rejectReplayCommand("setBindGroup received an invalid storage buffer binding");
+                return;
             }
-            case RhiBindingType::StorageTexture: {
-                const GlTextureViewRecord* view =
-                    recordForHandle(data.textureViews, data.textureViewRecords, entry.resource.textureView);
-                GlResolvedTextureRecord texture;
-                if (view == nullptr || !resolveTextureRecord(data, view->desc.texture, texture) ||
-                    (texture.desc.usage & rhiFlag(RhiTextureUsage::Storage)) == 0u) {
-                    (void) rejectReplayCommand("setBindGroup received an invalid storage texture view");
-                    return;
-                }
-                if (!m_validationOnly) {
-                    glBindImageTexture(physicalBinding, view->texture, 0, GL_FALSE, 0,
-                                       GL_READ_WRITE, view->format.internalFormat);
-                }
-                break;
+            if (!m_validationOnly) {
+                glBindBufferRange(GL_SHADER_STORAGE_BUFFER, physicalBinding, buffer->buffer,
+                                  static_cast<GLintptr>(entry.resource.buffer.offset), static_cast<GLsizeiptr>(range));
             }
-            case RhiBindingType::Sampler: {
-                const GlSamplerRecord* sampler =
-                    recordForHandle(data.samplers, data.samplerRecords, entry.resource.sampler);
-                if (sampler == nullptr) {
-                    (void) rejectReplayCommand("setBindGroup received an invalid sampler");
-                    return;
-                }
-                if (!m_validationOnly) glBindSampler(physicalBinding, sampler->sampler);
-                break;
+            break;
+        }
+        case RhiBindingType::SampledTexture: {
+            const GlTextureViewRecord* view =
+                recordForHandle(data.textureViews, data.textureViewRecords, entry.resource.textureView);
+            GlResolvedTextureRecord texture;
+            if (view == nullptr || !resolveTextureRecord(data, view->desc.texture, texture) ||
+                (texture.desc.usage & rhiFlag(RhiTextureUsage::Sampled)) == 0u) {
+                (void)rejectReplayCommand("setBindGroup received an invalid sampled texture view");
+                return;
             }
-            case RhiBindingType::CombinedTextureSampler: {
-                const GlTextureViewRecord* view =
-                    recordForHandle(data.textureViews,
-                                    data.textureViewRecords,
-                                    entry.resource.combinedTextureSampler.textureView);
-                const GlSamplerRecord* sampler =
-                    recordForHandle(data.samplers,
-                                    data.samplerRecords,
-                                    entry.resource.combinedTextureSampler.sampler);
-                GlResolvedTextureRecord texture;
-                if (view == nullptr || !resolveTextureRecord(data, view->desc.texture, texture) ||
-                    sampler == nullptr ||
-                    (texture.desc.usage & rhiFlag(RhiTextureUsage::Sampled)) == 0u) {
-                    (void) rejectReplayCommand("setBindGroup received an invalid combined texture sampler");
-                    return;
-                }
-                if (!m_validationOnly) {
-                    glBindTextureUnit(physicalBinding, view->texture);
-                    glBindSampler(physicalBinding, sampler->sampler);
-                }
-                break;
+            if (!m_validationOnly)
+                glBindTextureUnit(physicalBinding, view->texture);
+            break;
+        }
+        case RhiBindingType::StorageTexture: {
+            const GlTextureViewRecord* view =
+                recordForHandle(data.textureViews, data.textureViewRecords, entry.resource.textureView);
+            GlResolvedTextureRecord texture;
+            if (view == nullptr || !resolveTextureRecord(data, view->desc.texture, texture) ||
+                (texture.desc.usage & rhiFlag(RhiTextureUsage::Storage)) == 0u) {
+                (void)rejectReplayCommand("setBindGroup received an invalid storage texture view");
+                return;
             }
+            if (!m_validationOnly) {
+                glBindImageTexture(physicalBinding, view->texture, 0, GL_FALSE, 0, GL_READ_WRITE,
+                                   view->format.internalFormat);
+            }
+            break;
+        }
+        case RhiBindingType::Sampler: {
+            const GlSamplerRecord* sampler =
+                recordForHandle(data.samplers, data.samplerRecords, entry.resource.sampler);
+            if (sampler == nullptr) {
+                (void)rejectReplayCommand("setBindGroup received an invalid sampler");
+                return;
+            }
+            if (!m_validationOnly)
+                glBindSampler(physicalBinding, sampler->sampler);
+            break;
+        }
+        case RhiBindingType::CombinedTextureSampler: {
+            const GlTextureViewRecord* view = recordForHandle(data.textureViews, data.textureViewRecords,
+                                                              entry.resource.combinedTextureSampler.textureView);
+            const GlSamplerRecord* sampler =
+                recordForHandle(data.samplers, data.samplerRecords, entry.resource.combinedTextureSampler.sampler);
+            GlResolvedTextureRecord texture;
+            if (view == nullptr || !resolveTextureRecord(data, view->desc.texture, texture) || sampler == nullptr ||
+                (texture.desc.usage & rhiFlag(RhiTextureUsage::Sampled)) == 0u) {
+                (void)rejectReplayCommand("setBindGroup received an invalid combined texture sampler");
+                return;
+            }
+            if (!m_validationOnly) {
+                glBindTextureUnit(physicalBinding, view->texture);
+                glBindSampler(physicalBinding, sampler->sampler);
+            }
+            break;
+        }
         }
     }
 
@@ -3152,7 +2911,8 @@ void GlRhiCommandList::setBindGroup(uint32_t setIndex, RhiBindGroupHandle bindGr
 
 void GlRhiCommandList::setVertexBuffer(uint32_t slot, RhiBufferHandle buffer, uint64_t offset) {
     if (!m_replaying) {
-        if (!beginRecordedCommand(CommandType::SetVertexBuffer)) return;
+        if (!beginRecordedCommand(CommandType::SetVertexBuffer))
+            return;
         appendValue(slot);
         appendValue(buffer);
         appendValue(offset);
@@ -3160,7 +2920,7 @@ void GlRhiCommandList::setVertexBuffer(uint32_t slot, RhiBufferHandle buffer, ui
         return;
     }
     if (m_device == nullptr || !m_device->m_data) {
-        (void) rejectReplayCommand("setVertexBuffer requires an initialized device");
+        (void)rejectReplayCommand("setVertexBuffer requires an initialized device");
         return;
     }
 
@@ -3169,16 +2929,15 @@ void GlRhiCommandList::setVertexBuffer(uint32_t slot, RhiBufferHandle buffer, ui
     const GlBufferRecord* bufferRecord =
         recordForHandle(m_device->m_data->buffers, m_device->m_data->bufferRecords, buffer);
     if (pipeline == nullptr || pipeline->compute || bufferRecord == nullptr ||
-        (bufferRecord->desc.usage & rhiFlag(RhiBufferUsage::Vertex)) == 0u ||
-        offset >= bufferRecord->desc.size) {
+        (bufferRecord->desc.usage & rhiFlag(RhiBufferUsage::Vertex)) == 0u || offset >= bufferRecord->desc.size) {
         std::cerr << "GlRhiDevice: setVertexBuffer requires a graphics pipeline and a valid vertex buffer range"
-                  << " pipeline=[" << (pipeline != nullptr ? rhiDebugName(pipeline->graphicsDesc.debugName) : "<invalid>") << ']'
+                  << " pipeline=["
+                  << (pipeline != nullptr ? rhiDebugName(pipeline->graphicsDesc.debugName) : "<invalid>") << ']'
                   << " pipelineHandle=" << m_graphicsPipeline.index << ':' << m_graphicsPipeline.generation
-                  << " buffer=[" << (bufferRecord != nullptr ? rhiDebugName(bufferRecord->debugName.c_str()) : "<invalid>") << ']'
-                  << " bufferHandle=" << buffer.index << ':' << buffer.generation
-                  << " slot=" << slot
-                  << " offset=" << offset
-                  << " size=" << (bufferRecord != nullptr ? bufferRecord->desc.size : 0u)
+                  << " buffer=["
+                  << (bufferRecord != nullptr ? rhiDebugName(bufferRecord->debugName.c_str()) : "<invalid>") << ']'
+                  << " bufferHandle=" << buffer.index << ':' << buffer.generation << " slot=" << slot
+                  << " offset=" << offset << " size=" << (bufferRecord != nullptr ? bufferRecord->desc.size : 0u)
                   << " usage=" << (bufferRecord != nullptr ? bufferRecord->desc.usage : 0u) << '\n';
         m_replayValid = false;
         return;
@@ -3192,15 +2951,12 @@ void GlRhiCommandList::setVertexBuffer(uint32_t slot, RhiBufferHandle buffer, ui
         }
     }
     if (stride == 0u) {
-        (void) rejectReplayCommand("setVertexBuffer slot is not declared by the graphics pipeline");
+        (void)rejectReplayCommand("setVertexBuffer slot is not declared by the graphics pipeline");
         return;
     }
 
     if (!m_validationOnly) {
-        glVertexArrayVertexBuffer(pipeline->vertexArray,
-                                  slot,
-                                  bufferRecord->buffer,
-                                  static_cast<GLintptr>(offset),
+        glVertexArrayVertexBuffer(pipeline->vertexArray, slot, bufferRecord->buffer, static_cast<GLintptr>(offset),
                                   static_cast<GLsizei>(stride));
     }
     if (slot >= m_vertexBuffers.size()) {
@@ -3211,7 +2967,8 @@ void GlRhiCommandList::setVertexBuffer(uint32_t slot, RhiBufferHandle buffer, ui
 
 void GlRhiCommandList::setIndexBuffer(RhiBufferHandle buffer, RhiIndexFormat format, uint64_t offset) {
     if (!m_replaying) {
-        if (!beginRecordedCommand(CommandType::SetIndexBuffer)) return;
+        if (!beginRecordedCommand(CommandType::SetIndexBuffer))
+            return;
         appendValue(buffer);
         appendValue(format);
         appendValue(offset);
@@ -3219,7 +2976,7 @@ void GlRhiCommandList::setIndexBuffer(RhiBufferHandle buffer, RhiIndexFormat for
         return;
     }
     if (m_device == nullptr || !m_device->m_data) {
-        (void) rejectReplayCommand("setIndexBuffer requires an initialized device");
+        (void)rejectReplayCommand("setIndexBuffer requires an initialized device");
         return;
     }
 
@@ -3229,13 +2986,14 @@ void GlRhiCommandList::setIndexBuffer(RhiBufferHandle buffer, RhiIndexFormat for
         recordForHandle(m_device->m_data->buffers, m_device->m_data->bufferRecords, buffer);
     const uint64_t elementSize = indexElementSize(format);
     if (pipeline == nullptr || pipeline->compute || bufferRecord == nullptr ||
-        (bufferRecord->desc.usage & rhiFlag(RhiBufferUsage::Index)) == 0u ||
-        elementSize == 0u || offset >= bufferRecord->desc.size || (offset % elementSize) != 0u) {
-        (void) rejectReplayCommand("setIndexBuffer requires a graphics pipeline and a valid index buffer range");
+        (bufferRecord->desc.usage & rhiFlag(RhiBufferUsage::Index)) == 0u || elementSize == 0u ||
+        offset >= bufferRecord->desc.size || (offset % elementSize) != 0u) {
+        (void)rejectReplayCommand("setIndexBuffer requires a graphics pipeline and a valid index buffer range");
         return;
     }
 
-    if (!m_validationOnly) glVertexArrayElementBuffer(pipeline->vertexArray, bufferRecord->buffer);
+    if (!m_validationOnly)
+        glVertexArrayElementBuffer(pipeline->vertexArray, bufferRecord->buffer);
     m_indexBuffer = {buffer, format, offset, true};
 }
 
@@ -3245,21 +3003,22 @@ void GlRhiCommandList::pushConstants(const void* data, size_t size, RhiShaderSta
             logRhiError("pushConstants requires non-null payload storage");
             return;
         }
-        if (!beginRecordedCommand(CommandType::PushConstants)) return;
+        if (!beginRecordedCommand(CommandType::PushConstants))
+            return;
         appendValue(static_cast<uint64_t>(size));
         appendValue(stages);
         appendBytes(data, size);
         return;
     }
     if (m_device == nullptr || !m_device->m_data) {
-        (void) rejectReplayCommand("pushConstants requires an initialized device");
+        (void)rejectReplayCommand("pushConstants requires an initialized device");
         return;
     }
     if (size == 0u) {
         return;
     }
     if (data == nullptr) {
-        (void) rejectReplayCommand("pushConstants received null data");
+        (void)rejectReplayCommand("pushConstants received null data");
         return;
     }
 
@@ -3271,7 +3030,7 @@ void GlRhiCommandList::pushConstants(const void* data, size_t size, RhiShaderSta
         pipeline = recordForHandle(deviceData.pipelines, deviceData.pipelineRecords, m_computePipeline);
     }
     if (pipeline == nullptr) {
-        (void) rejectReplayCommand("pushConstants requires a bound pipeline");
+        (void)rejectReplayCommand("pushConstants requires a bound pipeline");
         return;
     }
 
@@ -3279,12 +3038,9 @@ void GlRhiCommandList::pushConstants(const void* data, size_t size, RhiShaderSta
         pipeline->compute ? pipeline->computeDesc.layout : pipeline->graphicsDesc.layout;
     const GlPipelineLayoutRecord* layout =
         recordForHandle(deviceData.pipelineLayouts, deviceData.pipelineLayoutRecords, layoutHandle);
-    if (layout == nullptr ||
-        layout->desc.pushConstantBytes == 0u ||
-        size != pipeline->pushConstantSize ||
-        (stages & ~layout->desc.pushConstantStages) != 0u ||
-        !pipeline->pushConstantBinding.has_value()) {
-        (void) rejectReplayCommand("pushConstants exceeds the bound pipeline layout contract");
+    if (layout == nullptr || layout->desc.pushConstantBytes == 0u || size != pipeline->pushConstantSize ||
+        (stages & ~layout->desc.pushConstantStages) != 0u || !pipeline->pushConstantBinding.has_value()) {
+        (void)rejectReplayCommand("pushConstants exceeds the bound pipeline layout contract");
         return;
     }
 
@@ -3298,10 +3054,7 @@ void GlRhiCommandList::pushConstants(const void* data, size_t size, RhiShaderSta
             deviceData.pushConstantCapacity = static_cast<uint32_t>(size);
         }
         glNamedBufferSubData(deviceData.pushConstantBuffer, 0, byteSize, data);
-        glBindBufferRange(GL_UNIFORM_BUFFER,
-                          *pipeline->pushConstantBinding,
-                          deviceData.pushConstantBuffer,
-                          0,
+        glBindBufferRange(GL_UNIFORM_BUFFER, *pipeline->pushConstantBinding, deviceData.pushConstantBuffer, 0,
                           byteSize);
     }
     m_pushConstantLayout = layoutHandle;
@@ -3316,24 +3069,19 @@ bool GlRhiCommandList::validateGraphicsDrawState(const bool indexed) const {
     }
 
     const auto& data = *m_device->m_data;
-    const GlPipelineRecord* pipeline =
-        recordForHandle(data.pipelines, data.pipelineRecords, m_graphicsPipeline);
+    const GlPipelineRecord* pipeline = recordForHandle(data.pipelines, data.pipelineRecords, m_graphicsPipeline);
     if (pipeline == nullptr || pipeline->compute) {
         logRhiError("graphics draw requires a bound graphics pipeline");
         return false;
     }
     const bool pipelineUsesDepth =
-        pipeline->graphicsDesc.depthStencil.depthTestEnabled ||
-        pipeline->graphicsDesc.depthStencil.depthWriteEnabled;
+        pipeline->graphicsDesc.depthStencil.depthTestEnabled || pipeline->graphicsDesc.depthStencil.depthWriteEnabled;
     const bool depthFormatMatches =
         pipeline->graphicsDesc.depthFormat == m_renderingDepthFormat ||
-        (!pipelineUsesDepth &&
-         pipeline->graphicsDesc.depthFormat == RhiTextureFormat::Undefined);
-    if (pipeline->graphicsDesc.colorFormats != m_renderingColorFormats ||
-        !depthFormatMatches) {
+        (!pipelineUsesDepth && pipeline->graphicsDesc.depthFormat == RhiTextureFormat::Undefined);
+    if (pipeline->graphicsDesc.colorFormats != m_renderingColorFormats || !depthFormatMatches) {
         std::cerr << "GlRhiDevice: graphics draw pipeline attachment formats do not match the rendering scope"
-                  << " pipeline=[" << rhiDebugName(pipeline->graphicsDesc.debugName) << ']'
-                  << " pipelineColors=";
+                  << " pipeline=[" << rhiDebugName(pipeline->graphicsDesc.debugName) << ']' << " pipelineColors=";
         for (const RhiTextureFormat format : pipeline->graphicsDesc.colorFormats) {
             std::cerr << static_cast<uint32_t>(format) << ',';
         }
@@ -3346,8 +3094,8 @@ bool GlRhiCommandList::validateGraphicsDrawState(const bool indexed) const {
         return false;
     }
 
-    const GlPipelineLayoutRecord* layout = recordForHandle(
-        data.pipelineLayouts, data.pipelineLayoutRecords, pipeline->graphicsDesc.layout);
+    const GlPipelineLayoutRecord* layout =
+        recordForHandle(data.pipelineLayouts, data.pipelineLayoutRecords, pipeline->graphicsDesc.layout);
     if (layout == nullptr || !sameHandle(m_boundPipelineLayout, pipeline->graphicsDesc.layout)) {
         logRhiError("graphics draw requires the graphics pipeline layout to be active");
         return false;
@@ -3357,8 +3105,8 @@ bool GlRhiCommandList::validateGraphicsDrawState(const bool indexed) const {
             logRhiError("graphics draw requires every reflected descriptor set to be bound");
             return false;
         }
-        const GlBindGroupRecord* group = recordForHandle(
-            data.bindGroups, data.bindGroupRecords, m_bindGroups[mapping.set]);
+        const GlBindGroupRecord* group =
+            recordForHandle(data.bindGroups, data.bindGroupRecords, m_bindGroups[mapping.set]);
         if (group == nullptr || mapping.set >= layout->desc.bindGroupLayouts.size() ||
             !sameHandle(group->desc.layout, layout->desc.bindGroupLayouts[mapping.set])) {
             logRhiError("graphics draw has a missing or incompatible bind group");
@@ -3372,32 +3120,26 @@ bool GlRhiCommandList::validateGraphicsDrawState(const bool indexed) const {
         return false;
     }
     for (const RhiVertexBinding& required : pipeline->graphicsDesc.vertexInput.bindings) {
-        if (required.binding >= m_vertexBuffers.size() ||
-            !m_vertexBuffers[required.binding].valid) {
+        if (required.binding >= m_vertexBuffers.size() || !m_vertexBuffers[required.binding].valid) {
             std::cerr << "GlRhiDevice: graphics draw requires every declared vertex buffer binding"
                       << " pipeline=[" << rhiDebugName(pipeline->graphicsDesc.debugName) << ']'
                       << " pipelineHandle=" << m_graphicsPipeline.index << ':' << m_graphicsPipeline.generation
-                      << " missingBinding=" << required.binding
-                      << " stride=" << required.stride << '\n';
+                      << " missingBinding=" << required.binding << " stride=" << required.stride << '\n';
             return false;
         }
         const VertexBufferBindingState& binding = m_vertexBuffers[required.binding];
-        const GlBufferRecord* buffer = recordForHandle(
-            data.buffers, data.bufferRecords, binding.buffer);
+        const GlBufferRecord* buffer = recordForHandle(data.buffers, data.bufferRecords, binding.buffer);
         if (buffer == nullptr || buffer->state != RhiResourceState::VertexBuffer ||
-            (buffer->desc.usage & rhiFlag(RhiBufferUsage::Vertex)) == 0u ||
-            binding.offset >= buffer->desc.size) {
+            (buffer->desc.usage & rhiFlag(RhiBufferUsage::Vertex)) == 0u || binding.offset >= buffer->desc.size) {
             logRhiError("graphics draw requires vertex buffers in VertexBuffer state");
             return false;
         }
     }
     if (indexed) {
-        const GlBufferRecord* buffer = m_indexBuffer.valid
-            ? recordForHandle(data.buffers, data.bufferRecords, m_indexBuffer.buffer)
-            : nullptr;
+        const GlBufferRecord* buffer =
+            m_indexBuffer.valid ? recordForHandle(data.buffers, data.bufferRecords, m_indexBuffer.buffer) : nullptr;
         if (buffer == nullptr || buffer->state != RhiResourceState::IndexBuffer ||
-            (buffer->desc.usage & rhiFlag(RhiBufferUsage::Index)) == 0u ||
-            m_indexBuffer.offset >= buffer->desc.size) {
+            (buffer->desc.usage & rhiFlag(RhiBufferUsage::Index)) == 0u || m_indexBuffer.offset >= buffer->desc.size) {
             logRhiError("indexed draw requires an index buffer in IndexBuffer state");
             return false;
         }
@@ -3418,14 +3160,13 @@ bool GlRhiCommandList::validateComputeDispatchState() const {
     }
 
     const auto& data = *m_device->m_data;
-    const GlPipelineRecord* pipeline =
-        recordForHandle(data.pipelines, data.pipelineRecords, m_computePipeline);
+    const GlPipelineRecord* pipeline = recordForHandle(data.pipelines, data.pipelineRecords, m_computePipeline);
     if (pipeline == nullptr || !pipeline->compute) {
         logRhiError("dispatch requires a bound compute pipeline");
         return false;
     }
-    const GlPipelineLayoutRecord* layout = recordForHandle(
-        data.pipelineLayouts, data.pipelineLayoutRecords, pipeline->computeDesc.layout);
+    const GlPipelineLayoutRecord* layout =
+        recordForHandle(data.pipelineLayouts, data.pipelineLayoutRecords, pipeline->computeDesc.layout);
     if (layout == nullptr || !sameHandle(m_boundPipelineLayout, pipeline->computeDesc.layout)) {
         logRhiError("dispatch requires the compute pipeline layout to be active");
         return false;
@@ -3435,8 +3176,8 @@ bool GlRhiCommandList::validateComputeDispatchState() const {
             logRhiError("dispatch requires every reflected descriptor set to be bound");
             return false;
         }
-        const GlBindGroupRecord* group = recordForHandle(
-            data.bindGroups, data.bindGroupRecords, m_bindGroups[mapping.set]);
+        const GlBindGroupRecord* group =
+            recordForHandle(data.bindGroups, data.bindGroupRecords, m_bindGroups[mapping.set]);
         if (group == nullptr || mapping.set >= layout->desc.bindGroupLayouts.size() ||
             !sameHandle(group->desc.layout, layout->desc.bindGroupLayouts[mapping.set])) {
             logRhiError("dispatch has a missing or incompatible bind group");
@@ -3458,10 +3199,11 @@ bool GlRhiCommandList::validateComputeDispatchState() const {
     return true;
 }
 
-void GlRhiCommandList::draw(uint32_t vertexCount, uint32_t instanceCount,
-                            uint32_t firstVertex, uint32_t firstInstance) {
+void GlRhiCommandList::draw(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex,
+                            uint32_t firstInstance) {
     if (!m_replaying) {
-        if (!beginRecordedCommand(CommandType::Draw)) return;
+        if (!beginRecordedCommand(CommandType::Draw))
+            return;
         appendValue(vertexCount);
         appendValue(instanceCount);
         appendValue(firstVertex);
@@ -3472,23 +3214,21 @@ void GlRhiCommandList::draw(uint32_t vertexCount, uint32_t instanceCount,
         m_replayValid = false;
         return;
     }
-    const GlPipelineRecord* pipeline = recordForHandle(
-        m_device->m_data->pipelines, m_device->m_data->pipelineRecords, m_graphicsPipeline);
+    const GlPipelineRecord* pipeline =
+        recordForHandle(m_device->m_data->pipelines, m_device->m_data->pipelineRecords, m_graphicsPipeline);
 
     if (!m_validationOnly) {
         glDrawArraysInstancedBaseInstance(toGlTopology(pipeline->graphicsDesc.topology),
-                                          static_cast<GLint>(firstVertex),
-                                          static_cast<GLsizei>(vertexCount),
-                                          static_cast<GLsizei>(instanceCount),
-                                          firstInstance);
+                                          static_cast<GLint>(firstVertex), static_cast<GLsizei>(vertexCount),
+                                          static_cast<GLsizei>(instanceCount), firstInstance);
     }
 }
 
-void GlRhiCommandList::drawIndexed(uint32_t indexCount, uint32_t instanceCount,
-                                   uint32_t firstIndex, int32_t vertexOffset,
-                                   uint32_t firstInstance) {
+void GlRhiCommandList::drawIndexed(uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex,
+                                   int32_t vertexOffset, uint32_t firstInstance) {
     if (!m_replaying) {
-        if (!beginRecordedCommand(CommandType::DrawIndexed)) return;
+        if (!beginRecordedCommand(CommandType::DrawIndexed))
+            return;
         appendValue(indexCount);
         appendValue(instanceCount);
         appendValue(firstIndex);
@@ -3500,36 +3240,33 @@ void GlRhiCommandList::drawIndexed(uint32_t indexCount, uint32_t instanceCount,
         m_replayValid = false;
         return;
     }
-    const GlPipelineRecord* pipeline = recordForHandle(
-        m_device->m_data->pipelines, m_device->m_data->pipelineRecords, m_graphicsPipeline);
-    const GlBufferRecord* indexBuffer = recordForHandle(
-        m_device->m_data->buffers, m_device->m_data->bufferRecords, m_indexBuffer.buffer);
+    const GlPipelineRecord* pipeline =
+        recordForHandle(m_device->m_data->pipelines, m_device->m_data->pipelineRecords, m_graphicsPipeline);
+    const GlBufferRecord* indexBuffer =
+        recordForHandle(m_device->m_data->buffers, m_device->m_data->bufferRecords, m_indexBuffer.buffer);
     const uint64_t elementSize = indexElementSize(m_indexBuffer.format);
     const uint64_t firstIndexBytes = static_cast<uint64_t>(firstIndex) * elementSize;
     const uint64_t indexBytes = static_cast<uint64_t>(indexCount) * elementSize;
     if (firstIndexBytes > indexBuffer->desc.size - m_indexBuffer.offset ||
         indexBytes > indexBuffer->desc.size - m_indexBuffer.offset - firstIndexBytes) {
-        (void) rejectReplayCommand("drawIndexed index range exceeds the bound index buffer");
+        (void)rejectReplayCommand("drawIndexed index range exceeds the bound index buffer");
         return;
     }
     const uint64_t byteOffset = m_indexBuffer.offset + firstIndexBytes;
     if (!m_validationOnly) {
-        glDrawElementsInstancedBaseVertexBaseInstance(toGlTopology(pipeline->graphicsDesc.topology),
-                                                     static_cast<GLsizei>(indexCount),
-                                                     m_indexBuffer.format == RhiIndexFormat::Uint16
-                                                         ? GL_UNSIGNED_SHORT
-                                                         : GL_UNSIGNED_INT,
-                                                     reinterpret_cast<const void*>(byteOffset),
-                                                     static_cast<GLsizei>(instanceCount),
-                                                     vertexOffset,
-                                                     firstInstance);
+        glDrawElementsInstancedBaseVertexBaseInstance(
+            toGlTopology(pipeline->graphicsDesc.topology), static_cast<GLsizei>(indexCount),
+            m_indexBuffer.format == RhiIndexFormat::Uint16 ? GL_UNSIGNED_SHORT : GL_UNSIGNED_INT,
+            reinterpret_cast<const void*>(byteOffset), static_cast<GLsizei>(instanceCount), vertexOffset,
+            firstInstance);
     }
 }
 
-void GlRhiCommandList::drawIndirect(RhiBufferHandle indirectBuffer, uint64_t offset,
-                                    uint32_t drawCount, uint32_t stride) {
+void GlRhiCommandList::drawIndirect(RhiBufferHandle indirectBuffer, uint64_t offset, uint32_t drawCount,
+                                    uint32_t stride) {
     if (!m_replaying) {
-        if (!beginRecordedCommand(CommandType::DrawIndirect)) return;
+        if (!beginRecordedCommand(CommandType::DrawIndirect))
+            return;
         appendValue(indirectBuffer);
         appendValue(offset);
         appendValue(drawCount);
@@ -3548,31 +3285,28 @@ void GlRhiCommandList::drawIndirect(RhiBufferHandle indirectBuffer, uint64_t off
         recordForHandle(m_device->m_data->buffers, m_device->m_data->bufferRecords, indirectBuffer);
     constexpr uint64_t kDrawCommandSize = sizeof(uint32_t) * 4u;
     const uint64_t commandStride = stride == 0u ? kDrawCommandSize : stride;
-    const uint64_t requiredBytes = drawCount == 0u
-        ? 0u
-        : kDrawCommandSize + static_cast<uint64_t>(drawCount - 1u) * commandStride;
+    const uint64_t requiredBytes =
+        drawCount == 0u ? 0u : kDrawCommandSize + static_cast<uint64_t>(drawCount - 1u) * commandStride;
     if (pipeline == nullptr || pipeline->compute || buffer == nullptr ||
-        (buffer->desc.usage & rhiFlag(RhiBufferUsage::Indirect)) == 0u ||
-        drawCount == 0u || commandStride < kDrawCommandSize || (commandStride & 3u) != 0u ||
-        (offset & 3u) != 0u || offset > buffer->desc.size ||
-        requiredBytes > buffer->desc.size - offset ||
+        (buffer->desc.usage & rhiFlag(RhiBufferUsage::Indirect)) == 0u || drawCount == 0u ||
+        commandStride < kDrawCommandSize || (commandStride & 3u) != 0u || (offset & 3u) != 0u ||
+        offset > buffer->desc.size || requiredBytes > buffer->desc.size - offset ||
         buffer->state != RhiResourceState::IndirectArgument) {
-        (void) rejectReplayCommand("drawIndirect requires a graphics pipeline and a valid indirect buffer range");
+        (void)rejectReplayCommand("drawIndirect requires a graphics pipeline and a valid indirect buffer range");
         return;
     }
 
     if (!m_validationOnly) {
         glBindBuffer(GL_DRAW_INDIRECT_BUFFER, buffer->buffer);
-        glMultiDrawArraysIndirect(toGlTopology(pipeline->graphicsDesc.topology),
-                                  reinterpret_cast<const void*>(offset),
-                                  static_cast<GLsizei>(drawCount),
-                                  static_cast<GLsizei>(stride));
+        glMultiDrawArraysIndirect(toGlTopology(pipeline->graphicsDesc.topology), reinterpret_cast<const void*>(offset),
+                                  static_cast<GLsizei>(drawCount), static_cast<GLsizei>(stride));
     }
 }
 
 void GlRhiCommandList::dispatch(uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ) {
     if (!m_replaying) {
-        if (!beginRecordedCommand(CommandType::Dispatch)) return;
+        if (!beginRecordedCommand(CommandType::Dispatch))
+            return;
         appendValue(groupCountX);
         appendValue(groupCountY);
         appendValue(groupCountZ);
@@ -3583,19 +3317,19 @@ void GlRhiCommandList::dispatch(uint32_t groupCountX, uint32_t groupCountY, uint
         return;
     }
 
-    if (!m_validationOnly) glDispatchCompute(groupCountX, groupCountY, groupCountZ);
+    if (!m_validationOnly)
+        glDispatchCompute(groupCountX, groupCountY, groupCountZ);
 }
 
-void GlRhiCommandList::updateBuffer(const RhiBufferHandle buffer,
-                                    const uint64_t offset,
-                                    const void* data,
+void GlRhiCommandList::updateBuffer(const RhiBufferHandle buffer, const uint64_t offset, const void* data,
                                     const size_t size) {
     if (!m_replaying) {
         if (size != 0u && data == nullptr) {
             logRhiError("updateBuffer requires non-null payload storage");
             return;
         }
-        if (!beginRecordedCommand(CommandType::UpdateBuffer)) return;
+        if (!beginRecordedCommand(CommandType::UpdateBuffer))
+            return;
         appendValue(buffer);
         appendValue(offset);
         appendValue(static_cast<uint64_t>(size));
@@ -3604,43 +3338,39 @@ void GlRhiCommandList::updateBuffer(const RhiBufferHandle buffer,
         return;
     }
     if (m_device == nullptr || !m_device->m_data) {
-        (void) rejectReplayCommand("updateBuffer requires an initialized device");
+        (void)rejectReplayCommand("updateBuffer requires an initialized device");
         return;
     }
     if (m_rendering) {
-        (void) rejectReplayCommand("updateBuffer cannot be recorded inside a rendering scope");
+        (void)rejectReplayCommand("updateBuffer cannot be recorded inside a rendering scope");
         return;
     }
 
-    const GlBufferRecord* record =
-        recordForHandle(m_device->m_data->buffers, m_device->m_data->bufferRecords, buffer);
-    if (record == nullptr || data == nullptr || size == 0u ||
-        (offset & 3u) != 0u || (size & 3u) != 0u || offset > record->desc.size ||
-        size > record->desc.size - offset ||
+    const GlBufferRecord* record = recordForHandle(m_device->m_data->buffers, m_device->m_data->bufferRecords, buffer);
+    if (record == nullptr || data == nullptr || size == 0u || (offset & 3u) != 0u || (size & 3u) != 0u ||
+        offset > record->desc.size || size > record->desc.size - offset ||
         (record->desc.usage & rhiFlag(RhiBufferUsage::TransferDst)) == 0u ||
         record->state != RhiResourceState::TransferDst) {
-        (void) rejectReplayCommand("updateBuffer received an invalid buffer, range, or transfer contract");
+        (void)rejectReplayCommand("updateBuffer received an invalid buffer, range, or transfer contract");
         return;
     }
 
     if (!m_validationOnly) {
-        glNamedBufferSubData(record->buffer,
-                             static_cast<GLintptr>(offset),
-                             static_cast<GLsizeiptr>(size),
-                             data);
+        glNamedBufferSubData(record->buffer, static_cast<GLintptr>(offset), static_cast<GLsizeiptr>(size), data);
     }
 }
 
 void GlRhiCommandList::copyBuffer(const RhiBufferCopy& copy) {
     if (!m_replaying) {
-        if (!beginRecordedCommand(CommandType::CopyBuffer)) return;
+        if (!beginRecordedCommand(CommandType::CopyBuffer))
+            return;
         appendValue(copy);
         referenceResource(copy.src);
         referenceResource(copy.dst);
         return;
     }
     if (m_device == nullptr || !m_device->m_data) {
-        (void) rejectReplayCommand("copyBuffer requires an initialized device");
+        (void)rejectReplayCommand("copyBuffer requires an initialized device");
         return;
     }
 
@@ -3648,34 +3378,31 @@ void GlRhiCommandList::copyBuffer(const RhiBufferCopy& copy) {
     const GlBufferRecord* dst = recordForHandle(m_device->m_data->buffers, m_device->m_data->bufferRecords, copy.dst);
     if (src == nullptr || dst == nullptr || copy.size == 0u ||
         (src->desc.usage & rhiFlag(RhiBufferUsage::TransferSrc)) == 0u ||
-        (dst->desc.usage & rhiFlag(RhiBufferUsage::TransferDst)) == 0u ||
-        copy.srcOffset > src->desc.size || copy.size > src->desc.size - copy.srcOffset ||
-        copy.dstOffset > dst->desc.size || copy.size > dst->desc.size - copy.dstOffset ||
-        src->state != RhiResourceState::TransferSrc ||
+        (dst->desc.usage & rhiFlag(RhiBufferUsage::TransferDst)) == 0u || copy.srcOffset > src->desc.size ||
+        copy.size > src->desc.size - copy.srcOffset || copy.dstOffset > dst->desc.size ||
+        copy.size > dst->desc.size - copy.dstOffset || src->state != RhiResourceState::TransferSrc ||
         dst->state != RhiResourceState::TransferDst) {
-        (void) rejectReplayCommand("copyBuffer received invalid buffers or ranges");
+        (void)rejectReplayCommand("copyBuffer received invalid buffers or ranges");
         return;
     }
 
     if (!m_validationOnly) {
-        glCopyNamedBufferSubData(src->buffer,
-                                 dst->buffer,
-                                 static_cast<GLintptr>(copy.srcOffset),
-                                 static_cast<GLintptr>(copy.dstOffset),
-                                 static_cast<GLsizeiptr>(copy.size));
+        glCopyNamedBufferSubData(src->buffer, dst->buffer, static_cast<GLintptr>(copy.srcOffset),
+                                 static_cast<GLintptr>(copy.dstOffset), static_cast<GLsizeiptr>(copy.size));
     }
 }
 
 void GlRhiCommandList::copyBufferToTexture(const RhiBufferTextureCopy& copy) {
     if (!m_replaying) {
-        if (!beginRecordedCommand(CommandType::CopyBufferToTexture)) return;
+        if (!beginRecordedCommand(CommandType::CopyBufferToTexture))
+            return;
         appendValue(copy);
         referenceResource(copy.srcBuffer);
         referenceResource(copy.dstTexture);
         return;
     }
     if (m_device == nullptr || !m_device->m_data) {
-        (void) rejectReplayCommand("copyBufferToTexture requires an initialized device");
+        (void)rejectReplayCommand("copyBufferToTexture requires an initialized device");
         return;
     }
 
@@ -3685,69 +3412,53 @@ void GlRhiCommandList::copyBufferToTexture(const RhiBufferTextureCopy& copy) {
         recordForHandle(m_device->m_data->textures, m_device->m_data->textureRecords, copy.dstTexture);
     if (m_rendering || src == nullptr || dst == nullptr ||
         (src->desc.usage & rhiFlag(RhiBufferUsage::TransferSrc)) == 0u ||
-        (dst->desc.usage & rhiFlag(RhiTextureUsage::TransferDst)) == 0u ||
-        copy.mipLevel >= dst->desc.mipLevels || copy.width == 0u || copy.height == 0u ||
-        copy.depth == 0u || src->state != RhiResourceState::TransferSrc) {
-        (void) rejectReplayCommand("copyBufferToTexture received an invalid resource or transfer contract");
+        (dst->desc.usage & rhiFlag(RhiTextureUsage::TransferDst)) == 0u || copy.mipLevel >= dst->desc.mipLevels ||
+        copy.width == 0u || copy.height == 0u || copy.depth == 0u || src->state != RhiResourceState::TransferSrc) {
+        (void)rejectReplayCommand("copyBufferToTexture received an invalid resource or transfer contract");
         return;
     }
 
     const uint32_t mipWidth = std::max(1u, dst->desc.width >> copy.mipLevel);
     const uint32_t mipHeight = std::max(1u, dst->desc.height >> copy.mipLevel);
     const uint32_t mipDepth = dst->desc.dimension == RhiTextureDimension::Texture3D
-        ? std::max(1u, dst->desc.depthOrLayers >> copy.mipLevel)
-        : dst->desc.depthOrLayers;
-    const uint32_t targetZ = dst->desc.dimension == RhiTextureDimension::Texture2D
-        ? copy.dstZ
-        : copy.arrayLayer + copy.dstZ;
+                                  ? std::max(1u, dst->desc.depthOrLayers >> copy.mipLevel)
+                                  : dst->desc.depthOrLayers;
+    const uint32_t targetZ =
+        dst->desc.dimension == RhiTextureDimension::Texture2D ? copy.dstZ : copy.arrayLayer + copy.dstZ;
     const bool invalid2D = dst->desc.dimension == RhiTextureDimension::Texture2D &&
                            (copy.arrayLayer != 0u || targetZ != 0u || copy.depth != 1u);
-    const size_t copySize = static_cast<size_t>(copy.width) * copy.height * copy.depth *
-                            textureFormatSizeBytes(dst->desc.format);
-    if (invalid2D || copy.dstX > mipWidth || copy.width > mipWidth - copy.dstX ||
-        copy.dstY > mipHeight || copy.height > mipHeight - copy.dstY ||
-        targetZ > mipDepth || copy.depth > mipDepth - targetZ ||
+    const size_t copySize =
+        static_cast<size_t>(copy.width) * copy.height * copy.depth * textureFormatSizeBytes(dst->desc.format);
+    if (invalid2D || copy.dstX > mipWidth || copy.width > mipWidth - copy.dstX || copy.dstY > mipHeight ||
+        copy.height > mipHeight - copy.dstY || targetZ > mipDepth || copy.depth > mipDepth - targetZ ||
         copy.bufferOffset > src->desc.size || copySize > src->desc.size - copy.bufferOffset) {
-        (void) rejectReplayCommand("copyBufferToTexture received an out-of-range copy region");
+        (void)rejectReplayCommand("copyBufferToTexture received an out-of-range copy region");
         return;
     }
     const GlTextureSubresourceRange destinationRange{
-        copy.mipLevel,
-        1u,
-        dst->desc.dimension == RhiTextureDimension::Texture2D ? 0u : targetZ,
-        dst->desc.dimension == RhiTextureDimension::Texture2D ? 1u : copy.depth
-    };
+        copy.mipLevel, 1u, dst->desc.dimension == RhiTextureDimension::Texture2D ? 0u : targetZ,
+        dst->desc.dimension == RhiTextureDimension::Texture2D ? 1u : copy.depth};
     if (!textureRangeHasState(*dst, destinationRange, RhiResourceState::TransferDst)) {
-        (void) rejectReplayCommand("copyBufferToTexture requires destination subresources in TransferDst state");
+        (void)rejectReplayCommand("copyBufferToTexture requires destination subresources in TransferDst state");
         return;
     }
-    if (m_validationOnly) return;
+    if (m_validationOnly)
+        return;
 
     GLint previousUnpackAlignment = 4;
     glGetIntegerv(GL_UNPACK_ALIGNMENT, &previousUnpackAlignment);
     glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
     glBindBuffer(GL_PIXEL_UNPACK_BUFFER, src->buffer);
     if (dst->desc.dimension == RhiTextureDimension::Texture2D) {
-        glTextureSubImage2D(dst->texture,
-                            static_cast<GLint>(copy.mipLevel),
-                            static_cast<GLint>(copy.dstX),
-                            static_cast<GLint>(copy.dstY),
-                            static_cast<GLsizei>(copy.width),
-                            static_cast<GLsizei>(copy.height),
-                            dst->format.externalFormat,
-                            dst->format.type,
+        glTextureSubImage2D(dst->texture, static_cast<GLint>(copy.mipLevel), static_cast<GLint>(copy.dstX),
+                            static_cast<GLint>(copy.dstY), static_cast<GLsizei>(copy.width),
+                            static_cast<GLsizei>(copy.height), dst->format.externalFormat, dst->format.type,
                             reinterpret_cast<const void*>(copy.bufferOffset));
     } else {
-        glTextureSubImage3D(dst->texture,
-                            static_cast<GLint>(copy.mipLevel),
-                            static_cast<GLint>(copy.dstX),
-                            static_cast<GLint>(copy.dstY),
-                            static_cast<GLint>(targetZ),
-                            static_cast<GLsizei>(copy.width),
-                            static_cast<GLsizei>(copy.height),
-                            static_cast<GLsizei>(copy.depth),
-                            dst->format.externalFormat,
-                            dst->format.type,
+        glTextureSubImage3D(dst->texture, static_cast<GLint>(copy.mipLevel), static_cast<GLint>(copy.dstX),
+                            static_cast<GLint>(copy.dstY), static_cast<GLint>(targetZ),
+                            static_cast<GLsizei>(copy.width), static_cast<GLsizei>(copy.height),
+                            static_cast<GLsizei>(copy.depth), dst->format.externalFormat, dst->format.type,
                             reinterpret_cast<const void*>(copy.bufferOffset));
     }
     glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0u);
@@ -3756,35 +3467,33 @@ void GlRhiCommandList::copyBufferToTexture(const RhiBufferTextureCopy& copy) {
 
 void GlRhiCommandList::copyTextureToBuffer(const RhiTextureBufferCopy& copy) {
     if (!m_replaying) {
-        if (!beginRecordedCommand(CommandType::CopyTextureToBuffer)) return;
+        if (!beginRecordedCommand(CommandType::CopyTextureToBuffer))
+            return;
         appendValue(copy);
         referenceResource(copy.srcTexture);
         referenceResource(copy.dstBuffer);
         return;
     }
     if (m_device == nullptr || !m_device->m_data) {
-        (void) rejectReplayCommand("copyTextureToBuffer requires an initialized device");
+        (void)rejectReplayCommand("copyTextureToBuffer requires an initialized device");
         return;
     }
 
     GlResolvedTextureRecord src;
-    const bool textureResolved = resolveTextureRecord(
-        *m_device->m_data, copy.srcTexture, src);
-    const GlBufferRecord* dst = recordForHandle(
-        m_device->m_data->buffers, m_device->m_data->bufferRecords, copy.dstBuffer);
+    const bool textureResolved = resolveTextureRecord(*m_device->m_data, copy.srcTexture, src);
+    const GlBufferRecord* dst =
+        recordForHandle(m_device->m_data->buffers, m_device->m_data->bufferRecords, copy.dstBuffer);
     if (m_rendering || !textureResolved || dst == nullptr ||
         (src.desc.usage & rhiFlag(RhiTextureUsage::TransferSrc)) == 0u ||
-        (dst->desc.usage & rhiFlag(RhiBufferUsage::TransferDst)) == 0u ||
-        copy.mipLevel >= src.desc.mipLevels || copy.width == 0u ||
-        copy.height == 0u || copy.depth == 0u ||
-        dst->state != RhiResourceState::TransferDst) {
-        (void) rejectReplayCommand("copyTextureToBuffer received an invalid resource or transfer contract");
+        (dst->desc.usage & rhiFlag(RhiBufferUsage::TransferDst)) == 0u || copy.mipLevel >= src.desc.mipLevels ||
+        copy.width == 0u || copy.height == 0u || copy.depth == 0u || dst->state != RhiResourceState::TransferDst) {
+        (void)rejectReplayCommand("copyTextureToBuffer received an invalid resource or transfer contract");
         return;
     }
 
     const uint32_t bytesPerTexel = textureFormatSizeBytes(src.desc.format);
     if (bytesPerTexel == 0u) {
-        (void) rejectReplayCommand("copyTextureToBuffer does not support the source texture format");
+        (void)rejectReplayCommand("copyTextureToBuffer does not support the source texture format");
         return;
     }
 
@@ -3794,65 +3503,54 @@ void GlRhiCommandList::copyTextureToBuffer(const RhiTextureBufferCopy& copy) {
     const uint32_t mipWidth = std::max(1u, src.desc.width >> copy.mipLevel);
     const uint32_t mipHeight = std::max(1u, src.desc.height >> copy.mipLevel);
     const uint32_t mipDepth = src.desc.dimension == RhiTextureDimension::Texture3D
-        ? std::max(1u, src.desc.depthOrLayers >> copy.mipLevel)
-        : src.desc.depthOrLayers;
+                                  ? std::max(1u, src.desc.depthOrLayers >> copy.mipLevel)
+                                  : src.desc.depthOrLayers;
     const uint64_t sourceZ = src.desc.dimension == RhiTextureDimension::Texture2D
-        ? copy.srcZ
-        : static_cast<uint64_t>(copy.arrayLayer) + copy.srcZ;
+                                 ? copy.srcZ
+                                 : static_cast<uint64_t>(copy.arrayLayer) + copy.srcZ;
     const bool invalid2D = src.desc.dimension == RhiTextureDimension::Texture2D &&
                            (copy.arrayLayer != 0u || sourceZ != 0u || copy.depth != 1u);
     if (bytesPerRow < tightRowBytes || bytesPerRow % bytesPerTexel != 0u ||
         bytesPerRow / bytesPerTexel > static_cast<uint64_t>(std::numeric_limits<GLint>::max()) ||
-        rowsPerImage > static_cast<uint64_t>(std::numeric_limits<GLint>::max()) ||
-        rowsPerImage < copy.height || invalid2D ||
-        copy.srcX > mipWidth || copy.width > mipWidth - copy.srcX ||
-        copy.srcY > mipHeight || copy.height > mipHeight - copy.srcY ||
-        sourceZ > mipDepth || copy.depth > mipDepth - sourceZ ||
+        rowsPerImage > static_cast<uint64_t>(std::numeric_limits<GLint>::max()) || rowsPerImage < copy.height ||
+        invalid2D || copy.srcX > mipWidth || copy.width > mipWidth - copy.srcX || copy.srcY > mipHeight ||
+        copy.height > mipHeight - copy.srcY || sourceZ > mipDepth || copy.depth > mipDepth - sourceZ ||
         sourceZ > static_cast<uint64_t>(std::numeric_limits<GLint>::max())) {
-        (void) rejectReplayCommand("copyTextureToBuffer received an out-of-range copy region");
+        (void)rejectReplayCommand("copyTextureToBuffer received an out-of-range copy region");
         return;
     }
 
     constexpr uint64_t kMaxSize = std::numeric_limits<uint64_t>::max();
     if (rowsPerImage > kMaxSize / bytesPerRow) {
-        (void) rejectReplayCommand("copyTextureToBuffer size calculation overflowed");
+        (void)rejectReplayCommand("copyTextureToBuffer size calculation overflowed");
         return;
     }
     const uint64_t imageStride = bytesPerRow * rowsPerImage;
-    if (copy.depth - 1u > kMaxSize / imageStride ||
-        copy.height - 1u > kMaxSize / bytesPerRow) {
-        (void) rejectReplayCommand("copyTextureToBuffer size calculation overflowed");
+    if (copy.depth - 1u > kMaxSize / imageStride || copy.height - 1u > kMaxSize / bytesPerRow) {
+        (void)rejectReplayCommand("copyTextureToBuffer size calculation overflowed");
         return;
     }
     const uint64_t precedingImages = imageStride * (copy.depth - 1u);
     const uint64_t precedingRows = bytesPerRow * (copy.height - 1u);
-    if (precedingRows > kMaxSize - tightRowBytes ||
-        precedingImages > kMaxSize - precedingRows - tightRowBytes) {
-        (void) rejectReplayCommand("copyTextureToBuffer size calculation overflowed");
+    if (precedingRows > kMaxSize - tightRowBytes || precedingImages > kMaxSize - precedingRows - tightRowBytes) {
+        (void)rejectReplayCommand("copyTextureToBuffer size calculation overflowed");
         return;
     }
     const uint64_t requiredSize = precedingImages + precedingRows + tightRowBytes;
     if (copy.bufferOffset > dst->desc.size || requiredSize > dst->desc.size - copy.bufferOffset ||
         requiredSize > static_cast<uint64_t>(std::numeric_limits<GLsizei>::max())) {
-        (void) rejectReplayCommand("copyTextureToBuffer destination range is too small");
+        (void)rejectReplayCommand("copyTextureToBuffer destination range is too small");
         return;
     }
     const GlTextureSubresourceRange sourceRange{
-        copy.mipLevel,
-        1u,
-        src.desc.dimension == RhiTextureDimension::Texture2D
-            ? 0u
-            : static_cast<uint32_t>(sourceZ),
-        src.desc.dimension == RhiTextureDimension::Texture2D ? 1u : copy.depth
-    };
-    if (!textureHandleRangeHasState(*m_device->m_data,
-                                    copy.srcTexture,
-                                    sourceRange,
-                                    RhiResourceState::TransferSrc)) {
-        (void) rejectReplayCommand("copyTextureToBuffer requires source subresources in TransferSrc state");
+        copy.mipLevel, 1u, src.desc.dimension == RhiTextureDimension::Texture2D ? 0u : static_cast<uint32_t>(sourceZ),
+        src.desc.dimension == RhiTextureDimension::Texture2D ? 1u : copy.depth};
+    if (!textureHandleRangeHasState(*m_device->m_data, copy.srcTexture, sourceRange, RhiResourceState::TransferSrc)) {
+        (void)rejectReplayCommand("copyTextureToBuffer requires source subresources in TransferSrc state");
         return;
     }
-    if (m_validationOnly) return;
+    if (m_validationOnly)
+        return;
 
     GLint previousPackBuffer = 0;
     GLint previousPackAlignment = 4;
@@ -3869,26 +3567,14 @@ void GlRhiCommandList::copyTextureToBuffer(const RhiTextureBufferCopy& copy) {
 
     void* bufferOffset = reinterpret_cast<void*>(copy.bufferOffset);
     if (src.swapchainBackbuffer) {
-        glReadPixels(static_cast<GLint>(copy.srcX),
-                     static_cast<GLint>(copy.srcY),
-                     static_cast<GLsizei>(copy.width),
-                     static_cast<GLsizei>(copy.height),
-                     src.format.externalFormat,
-                     src.format.type,
-                     bufferOffset);
+        glReadPixels(static_cast<GLint>(copy.srcX), static_cast<GLint>(copy.srcY), static_cast<GLsizei>(copy.width),
+                     static_cast<GLsizei>(copy.height), src.format.externalFormat, src.format.type, bufferOffset);
     } else {
-        glGetTextureSubImage(src.texture,
-                             static_cast<GLint>(copy.mipLevel),
-                             static_cast<GLint>(copy.srcX),
-                             static_cast<GLint>(copy.srcY),
-                             static_cast<GLint>(sourceZ),
-                             static_cast<GLsizei>(copy.width),
-                             static_cast<GLsizei>(copy.height),
-                             static_cast<GLsizei>(copy.depth),
-                             src.format.externalFormat,
-                             src.format.type,
-                             static_cast<GLsizei>(requiredSize),
-                             bufferOffset);
+        glGetTextureSubImage(src.texture, static_cast<GLint>(copy.mipLevel), static_cast<GLint>(copy.srcX),
+                             static_cast<GLint>(copy.srcY), static_cast<GLint>(sourceZ),
+                             static_cast<GLsizei>(copy.width), static_cast<GLsizei>(copy.height),
+                             static_cast<GLsizei>(copy.depth), src.format.externalFormat, src.format.type,
+                             static_cast<GLsizei>(requiredSize), bufferOffset);
     }
 
     glBindBuffer(GL_PIXEL_PACK_BUFFER, static_cast<GLuint>(previousPackBuffer));
@@ -3899,14 +3585,15 @@ void GlRhiCommandList::copyTextureToBuffer(const RhiTextureBufferCopy& copy) {
 
 void GlRhiCommandList::copyTexture(const RhiTextureCopy& copy) {
     if (!m_replaying) {
-        if (!beginRecordedCommand(CommandType::CopyTexture)) return;
+        if (!beginRecordedCommand(CommandType::CopyTexture))
+            return;
         appendValue(copy);
         referenceResource(copy.src);
         referenceResource(copy.dst);
         return;
     }
     if (m_device == nullptr || !m_device->m_data) {
-        (void) rejectReplayCommand("copyTexture requires an initialized device");
+        (void)rejectReplayCommand("copyTexture requires an initialized device");
         return;
     }
 
@@ -3914,119 +3601,93 @@ void GlRhiCommandList::copyTexture(const RhiTextureCopy& copy) {
     GlResolvedTextureRecord dst;
     if (!resolveTextureRecord(*m_device->m_data, copy.src, src) ||
         !resolveTextureRecord(*m_device->m_data, copy.dst, dst)) {
-        (void) rejectReplayCommand("copyTexture received invalid texture handles");
+        (void)rejectReplayCommand("copyTexture received invalid texture handles");
         return;
     }
-    if (m_rendering ||
-        (src.desc.usage & rhiFlag(RhiTextureUsage::TransferSrc)) == 0u ||
+    if (m_rendering || (src.desc.usage & rhiFlag(RhiTextureUsage::TransferSrc)) == 0u ||
         (dst.desc.usage & rhiFlag(RhiTextureUsage::TransferDst)) == 0u) {
-        (void) rejectReplayCommand("copyTexture received an invalid transfer contract");
+        (void)rejectReplayCommand("copyTexture received an invalid transfer contract");
         return;
     }
 
     const auto validateSubresource = [](const GlResolvedTextureRecord& texture,
-                                        const RhiTextureSubresourceLayers& subresource,
-                                        const RhiOffset3D& offset,
+                                        const RhiTextureSubresourceLayers& subresource, const RhiOffset3D& offset,
                                         const RhiExtent3D& extent) {
-        if (subresource.mipLevel >= texture.desc.mipLevels ||
-            subresource.layerCount == 0u || extent.width == 0u ||
+        if (subresource.mipLevel >= texture.desc.mipLevels || subresource.layerCount == 0u || extent.width == 0u ||
             extent.height == 0u || extent.depth == 0u) {
             return false;
         }
         const uint32_t width = mipExtent(texture.desc.width, subresource.mipLevel);
         const uint32_t height = mipExtent(texture.desc.height, subresource.mipLevel);
-        if (offset.x > width || extent.width > width - offset.x ||
-            offset.y > height || extent.height > height - offset.y) {
+        if (offset.x > width || extent.width > width - offset.x || offset.y > height ||
+            extent.height > height - offset.y) {
             return false;
         }
         if (texture.desc.dimension == RhiTextureDimension::Texture3D) {
             const uint32_t depth = mipExtent(texture.desc.depthOrLayers, subresource.mipLevel);
-            return subresource.baseArrayLayer == 0u && subresource.layerCount == 1u &&
-                   offset.z <= depth && extent.depth <= depth - offset.z;
+            return subresource.baseArrayLayer == 0u && subresource.layerCount == 1u && offset.z <= depth &&
+                   extent.depth <= depth - offset.z;
         }
-        return offset.z == 0u && extent.depth == 1u &&
-               subresource.baseArrayLayer < texture.desc.depthOrLayers &&
+        return offset.z == 0u && extent.depth == 1u && subresource.baseArrayLayer < texture.desc.depthOrLayers &&
                subresource.layerCount <= texture.desc.depthOrLayers - subresource.baseArrayLayer;
     };
-    if (src.desc.format != dst.desc.format ||
-        copy.srcSubresource.layerCount != copy.dstSubresource.layerCount ||
+    if (src.desc.format != dst.desc.format || copy.srcSubresource.layerCount != copy.dstSubresource.layerCount ||
         !validateSubresource(src, copy.srcSubresource, copy.srcOffset, copy.extent) ||
         !validateSubresource(dst, copy.dstSubresource, copy.dstOffset, copy.extent)) {
-        (void) rejectReplayCommand("copyTexture received an invalid copy region");
+        (void)rejectReplayCommand("copyTexture received an invalid copy region");
         return;
     }
-    const auto stateRange = [](const GlResolvedTextureRecord& texture,
-                               const RhiTextureSubresourceLayers& subresource,
-                               const RhiOffset3D& offset,
-                               const RhiExtent3D& extent) {
+    const auto stateRange = [](const GlResolvedTextureRecord& texture, const RhiTextureSubresourceLayers& subresource,
+                               const RhiOffset3D& offset, const RhiExtent3D& extent) {
         return GlTextureSubresourceRange{
-            subresource.mipLevel,
-            1u,
-            texture.desc.dimension == RhiTextureDimension::Texture3D
-                ? offset.z
-                : subresource.baseArrayLayer,
-            texture.desc.dimension == RhiTextureDimension::Texture3D
-                ? extent.depth
-                : subresource.layerCount
-        };
+            subresource.mipLevel, 1u,
+            texture.desc.dimension == RhiTextureDimension::Texture3D ? offset.z : subresource.baseArrayLayer,
+            texture.desc.dimension == RhiTextureDimension::Texture3D ? extent.depth : subresource.layerCount};
     };
-    const GlTextureSubresourceRange sourceRange =
-        stateRange(src, copy.srcSubresource, copy.srcOffset, copy.extent);
+    const GlTextureSubresourceRange sourceRange = stateRange(src, copy.srcSubresource, copy.srcOffset, copy.extent);
     const GlTextureSubresourceRange destinationRange =
         stateRange(dst, copy.dstSubresource, copy.dstOffset, copy.extent);
-    if (!textureHandleRangeHasState(*m_device->m_data,
-                                    copy.src,
-                                    sourceRange,
-                                    RhiResourceState::TransferSrc) ||
-        !textureHandleRangeHasState(*m_device->m_data,
-                                    copy.dst,
-                                    destinationRange,
-                                    RhiResourceState::TransferDst)) {
-        (void) rejectReplayCommand("copyTexture requires TransferSrc and TransferDst subresource states");
+    if (!textureHandleRangeHasState(*m_device->m_data, copy.src, sourceRange, RhiResourceState::TransferSrc) ||
+        !textureHandleRangeHasState(*m_device->m_data, copy.dst, destinationRange, RhiResourceState::TransferDst)) {
+        (void)rejectReplayCommand("copyTexture requires TransferSrc and TransferDst subresource states");
         return;
     }
-    if (m_validationOnly) return;
+    if (m_validationOnly)
+        return;
 
-    const auto copyZ = [](const GlResolvedTextureRecord& texture,
-                          const RhiTextureSubresourceLayers& subresource,
+    const auto copyZ = [](const GlResolvedTextureRecord& texture, const RhiTextureSubresourceLayers& subresource,
                           const RhiOffset3D& offset) {
-        return texture.desc.dimension == RhiTextureDimension::Texture3D
-            ? offset.z
-            : subresource.baseArrayLayer;
+        return texture.desc.dimension == RhiTextureDimension::Texture3D ? offset.z : subresource.baseArrayLayer;
     };
-    const uint32_t copyDepth = src.desc.dimension == RhiTextureDimension::Texture3D
-        ? copy.extent.depth
-        : copy.srcSubresource.layerCount;
+    const uint32_t copyDepth =
+        src.desc.dimension == RhiTextureDimension::Texture3D ? copy.extent.depth : copy.srcSubresource.layerCount;
 
-    glCopyImageSubData(src.texture,
-                       src.target,
-                       static_cast<GLint>(copy.srcSubresource.mipLevel),
-                       static_cast<GLint>(copy.srcOffset.x),
-                       static_cast<GLint>(copy.srcOffset.y),
-                       static_cast<GLint>(copyZ(src, copy.srcSubresource, copy.srcOffset)),
-                       dst.texture,
-                       dst.target,
-                       static_cast<GLint>(copy.dstSubresource.mipLevel),
-                       static_cast<GLint>(copy.dstOffset.x),
-                       static_cast<GLint>(copy.dstOffset.y),
-                       static_cast<GLint>(copyZ(dst, copy.dstSubresource, copy.dstOffset)),
-                       static_cast<GLsizei>(copy.extent.width),
-                       static_cast<GLsizei>(copy.extent.height),
-                       static_cast<GLsizei>(copyDepth));
+    glCopyImageSubData(
+        src.texture, src.target, static_cast<GLint>(copy.srcSubresource.mipLevel), static_cast<GLint>(copy.srcOffset.x),
+        static_cast<GLint>(copy.srcOffset.y), static_cast<GLint>(copyZ(src, copy.srcSubresource, copy.srcOffset)),
+        dst.texture, dst.target, static_cast<GLint>(copy.dstSubresource.mipLevel), static_cast<GLint>(copy.dstOffset.x),
+        static_cast<GLint>(copy.dstOffset.y), static_cast<GLint>(copyZ(dst, copy.dstSubresource, copy.dstOffset)),
+        static_cast<GLsizei>(copy.extent.width), static_cast<GLsizei>(copy.extent.height),
+        static_cast<GLsizei>(copyDepth));
 }
 
 void GlRhiCommandList::blitTexture(const RhiTextureBlit& blit) {
     if (!m_replaying) {
-        if (!beginRecordedCommand(CommandType::BlitTexture)) return;
+        if (!beginRecordedCommand(CommandType::BlitTexture))
+            return;
         appendValue(blit);
-        if (blit.src.isValid()) referenceResource(blit.src);
-        if (blit.dst.isValid()) referenceResource(blit.dst);
-        if (blit.srcView.isValid()) referenceResource(blit.srcView);
-        if (blit.dstView.isValid()) referenceResource(blit.dstView);
+        if (blit.src.isValid())
+            referenceResource(blit.src);
+        if (blit.dst.isValid())
+            referenceResource(blit.dst);
+        if (blit.srcView.isValid())
+            referenceResource(blit.srcView);
+        if (blit.dstView.isValid())
+            referenceResource(blit.dstView);
         return;
     }
     if (m_device == nullptr || !m_device->m_data) {
-        (void) rejectReplayCommand("blitTexture requires an initialized device");
+        (void)rejectReplayCommand("blitTexture requires an initialized device");
         return;
     }
 
@@ -4034,37 +3695,26 @@ void GlRhiCommandList::blitTexture(const RhiTextureBlit& blit) {
     GlBlitEndpoint src;
     GlBlitEndpoint dst;
     if (!resolveBlitEndpoint(data, blit.src, blit.srcView, blit.srcMipLevel, src) ||
-        !resolveBlitEndpoint(data, blit.dst, blit.dstView, blit.dstMipLevel, dst) ||
-        !src.valid || !dst.valid ||
-        src.desc.dimension != RhiTextureDimension::Texture2D ||
-        dst.desc.dimension != RhiTextureDimension::Texture2D ||
-        src.format.depth != dst.format.depth ||
-        src.format.stencil != dst.format.stencil) {
-        (void) rejectReplayCommand("blitTexture requires valid 2D source and destination endpoints");
+        !resolveBlitEndpoint(data, blit.dst, blit.dstView, blit.dstMipLevel, dst) || !src.valid || !dst.valid ||
+        src.desc.dimension != RhiTextureDimension::Texture2D || dst.desc.dimension != RhiTextureDimension::Texture2D ||
+        src.format.depth != dst.format.depth || src.format.stencil != dst.format.stencil) {
+        (void)rejectReplayCommand("blitTexture requires valid 2D source and destination endpoints");
         return;
     }
-    if (m_rendering ||
-        (src.desc.usage & rhiFlag(RhiTextureUsage::TransferSrc)) == 0u ||
+    if (m_rendering || (src.desc.usage & rhiFlag(RhiTextureUsage::TransferSrc)) == 0u ||
         (dst.desc.usage & rhiFlag(RhiTextureUsage::TransferDst)) == 0u) {
-        (void) rejectReplayCommand("blitTexture received an invalid transfer contract");
+        (void)rejectReplayCommand("blitTexture received an invalid transfer contract");
         return;
     }
-    const GlTextureSubresourceRange sourceRange{
-        src.stateMip, 1u, src.stateBaseLayer, src.stateLayerCount};
-    const GlTextureSubresourceRange destinationRange{
-        dst.stateMip, 1u, dst.stateBaseLayer, dst.stateLayerCount};
-    if (!textureHandleRangeHasState(data,
-                                    src.stateTexture,
-                                    sourceRange,
-                                    RhiResourceState::TransferSrc) ||
-        !textureHandleRangeHasState(data,
-                                    dst.stateTexture,
-                                    destinationRange,
-                                    RhiResourceState::TransferDst)) {
-        (void) rejectReplayCommand("blitTexture requires TransferSrc and TransferDst subresource states");
+    const GlTextureSubresourceRange sourceRange{src.stateMip, 1u, src.stateBaseLayer, src.stateLayerCount};
+    const GlTextureSubresourceRange destinationRange{dst.stateMip, 1u, dst.stateBaseLayer, dst.stateLayerCount};
+    if (!textureHandleRangeHasState(data, src.stateTexture, sourceRange, RhiResourceState::TransferSrc) ||
+        !textureHandleRangeHasState(data, dst.stateTexture, destinationRange, RhiResourceState::TransferDst)) {
+        (void)rejectReplayCommand("blitTexture requires TransferSrc and TransferDst subresource states");
         return;
     }
-    if (m_validationOnly) return;
+    if (m_validationOnly)
+        return;
 
     GLuint readFramebuffer = 0u;
     GLuint drawFramebuffer = 0u;
@@ -4100,9 +3750,7 @@ void GlRhiCommandList::blitTexture(const RhiTextureBlit& blit) {
         filter = GL_NEAREST;
     } else {
         if (!src.swapchain) {
-            glNamedFramebufferTexture(readFramebuffer,
-                                      GL_COLOR_ATTACHMENT0,
-                                      src.texture,
+            glNamedFramebufferTexture(readFramebuffer, GL_COLOR_ATTACHMENT0, src.texture,
                                       static_cast<GLint>(src.attachmentMip));
             glNamedFramebufferReadBuffer(readFramebuffer, GL_COLOR_ATTACHMENT0);
         } else {
@@ -4110,9 +3758,7 @@ void GlRhiCommandList::blitTexture(const RhiTextureBlit& blit) {
             glReadBuffer(GL_BACK);
         }
         if (!dst.swapchain) {
-            glNamedFramebufferTexture(drawFramebuffer,
-                                      GL_COLOR_ATTACHMENT0,
-                                      dst.texture,
+            glNamedFramebufferTexture(drawFramebuffer, GL_COLOR_ATTACHMENT0, dst.texture,
                                       static_cast<GLint>(dst.attachmentMip));
             glNamedFramebufferDrawBuffer(drawFramebuffer, GL_COLOR_ATTACHMENT0);
         } else {
@@ -4121,12 +3767,10 @@ void GlRhiCommandList::blitTexture(const RhiTextureBlit& blit) {
         }
     }
 
-    const GLenum readStatus = src.swapchain
-        ? GL_FRAMEBUFFER_COMPLETE
-        : glCheckNamedFramebufferStatus(readFramebuffer, GL_READ_FRAMEBUFFER);
-    const GLenum drawStatus = dst.swapchain
-        ? GL_FRAMEBUFFER_COMPLETE
-        : glCheckNamedFramebufferStatus(drawFramebuffer, GL_DRAW_FRAMEBUFFER);
+    const GLenum readStatus =
+        src.swapchain ? GL_FRAMEBUFFER_COMPLETE : glCheckNamedFramebufferStatus(readFramebuffer, GL_READ_FRAMEBUFFER);
+    const GLenum drawStatus =
+        dst.swapchain ? GL_FRAMEBUFFER_COMPLETE : glCheckNamedFramebufferStatus(drawFramebuffer, GL_DRAW_FRAMEBUFFER);
     if (readStatus != GL_FRAMEBUFFER_COMPLETE || drawStatus != GL_FRAMEBUFFER_COMPLETE) {
         destroyFramebuffers();
         if (readStatus != GL_FRAMEBUFFER_COMPLETE) {
@@ -4139,53 +3783,45 @@ void GlRhiCommandList::blitTexture(const RhiTextureBlit& blit) {
         return;
     }
 
-    glBlitNamedFramebuffer(readFramebuffer,
-                           drawFramebuffer,
-                           0,
-                           0,
-                           static_cast<GLint>(src.desc.width),
-                           static_cast<GLint>(src.desc.height),
-                           0,
-                           0,
-                           static_cast<GLint>(dst.desc.width),
-                           static_cast<GLint>(dst.desc.height),
-                           mask,
-                           filter);
+    glBlitNamedFramebuffer(readFramebuffer, drawFramebuffer, 0, 0, static_cast<GLint>(src.desc.width),
+                           static_cast<GLint>(src.desc.height), 0, 0, static_cast<GLint>(dst.desc.width),
+                           static_cast<GLint>(dst.desc.height), mask, filter);
     destroyFramebuffers();
 }
 
 void GlRhiCommandList::generateMipmaps(const RhiTextureHandle texture) {
     if (!m_replaying) {
-        if (!beginRecordedCommand(CommandType::GenerateMipmaps)) return;
+        if (!beginRecordedCommand(CommandType::GenerateMipmaps))
+            return;
         appendValue(texture);
         referenceResource(texture);
         return;
     }
     if (m_device == nullptr) {
-        (void) rejectReplayCommand("generateMipmaps requires an attached device");
+        (void)rejectReplayCommand("generateMipmaps requires an attached device");
         return;
     }
-    const GlTextureRecord* record = recordForHandle(
-        m_device->m_data->textures, m_device->m_data->textureRecords, texture);
+    const GlTextureRecord* record =
+        recordForHandle(m_device->m_data->textures, m_device->m_data->textureRecords, texture);
     if (record == nullptr || record->desc.mipLevels <= 1u || record->format.depth ||
         (record->desc.usage & rhiFlag(RhiTextureUsage::TransferDst)) == 0u) {
-        (void) rejectReplayCommand("generateMipmaps requires a valid color texture with multiple mip levels");
+        (void)rejectReplayCommand("generateMipmaps requires a valid color texture with multiple mip levels");
         return;
     }
-    const GlTextureSubresourceRange fullRange{
-        0u, record->desc.mipLevels, 0u, record->desc.depthOrLayers};
+    const GlTextureSubresourceRange fullRange{0u, record->desc.mipLevels, 0u, record->desc.depthOrLayers};
     if (!textureRangeHasState(*record, fullRange, RhiResourceState::TransferDst)) {
-        (void) rejectReplayCommand("generateMipmaps requires every texture subresource in TransferDst state");
+        (void)rejectReplayCommand("generateMipmaps requires every texture subresource in TransferDst state");
         return;
     }
-    if (!m_validationOnly) glGenerateTextureMipmap(record->texture);
+    if (!m_validationOnly)
+        glGenerateTextureMipmap(record->texture);
 }
 
-void GlRhiCommandList::resetQueryPool(const RhiQueryPoolHandle pool,
-                                      const uint32_t firstQuery,
+void GlRhiCommandList::resetQueryPool(const RhiQueryPoolHandle pool, const uint32_t firstQuery,
                                       const uint32_t queryCount) {
     if (!m_replaying) {
-        if (!beginRecordedCommand(CommandType::ResetQueryPool)) return;
+        if (!beginRecordedCommand(CommandType::ResetQueryPool))
+            return;
         appendValue(pool);
         appendValue(firstQuery);
         appendValue(queryCount);
@@ -4193,41 +3829,37 @@ void GlRhiCommandList::resetQueryPool(const RhiQueryPoolHandle pool,
         return;
     }
     if (m_device == nullptr) {
-        (void) rejectReplayCommand("resetQueryPool requires an attached device");
+        (void)rejectReplayCommand("resetQueryPool requires an attached device");
         return;
     }
-    GlQueryPoolRecord* record = recordForHandle(
-        m_device->m_data->queryPools, m_device->m_data->queryPoolRecords, pool);
+    GlQueryPoolRecord* record = recordForHandle(m_device->m_data->queryPools, m_device->m_data->queryPoolRecords, pool);
     if (record == nullptr || queryCount == 0u || firstQuery > record->queries.size() ||
         queryCount > record->queries.size() - firstQuery) {
-        (void) rejectReplayCommand("resetQueryPool received an invalid query pool range");
+        (void)rejectReplayCommand("resetQueryPool received an invalid query pool range");
         return;
     }
 
     if (!m_validationOnly) {
-        std::fill(record->issued.begin() + firstQuery,
-                  record->issued.begin() + firstQuery + queryCount,
-                  false);
+        std::fill(record->issued.begin() + firstQuery, record->issued.begin() + firstQuery + queryCount, false);
     }
 }
 
 void GlRhiCommandList::writeTimestamp(RhiQueryPoolHandle pool, uint32_t queryIndex) {
     if (!m_replaying) {
-        if (!beginRecordedCommand(CommandType::WriteTimestamp)) return;
+        if (!beginRecordedCommand(CommandType::WriteTimestamp))
+            return;
         appendValue(pool);
         appendValue(queryIndex);
         referenceResource(pool);
         return;
     }
     if (m_device == nullptr) {
-        (void) rejectReplayCommand("writeTimestamp requires an attached device");
+        (void)rejectReplayCommand("writeTimestamp requires an attached device");
         return;
     }
-    GlQueryPoolRecord* record = recordForHandle(
-        m_device->m_data->queryPools, m_device->m_data->queryPoolRecords, pool);
-    if (record == nullptr || record->type != RhiQueryType::Timestamp ||
-        queryIndex >= record->queries.size()) {
-        (void) rejectReplayCommand("writeTimestamp received an invalid query pool range");
+    GlQueryPoolRecord* record = recordForHandle(m_device->m_data->queryPools, m_device->m_data->queryPoolRecords, pool);
+    if (record == nullptr || record->type != RhiQueryType::Timestamp || queryIndex >= record->queries.size()) {
+        (void)rejectReplayCommand("writeTimestamp received an invalid query pool range");
         return;
     }
     if (!m_validationOnly) {
@@ -4236,11 +3868,8 @@ void GlRhiCommandList::writeTimestamp(RhiQueryPoolHandle pool, uint32_t queryInd
     }
 }
 
-GlRhiCommandListPool::GlRhiCommandListPool(GlRhiDevice& device,
-                                           const RhiCommandListPoolDesc& desc)
-    : m_device(&device),
-      m_registry(device.m_commandPoolRegistry),
-      m_ownerThread(std::this_thread::get_id()),
+GlRhiCommandListPool::GlRhiCommandListPool(GlRhiDevice& device, const RhiCommandListPoolDesc& desc)
+    : m_device(&device), m_registry(device.m_commandPoolRegistry), m_ownerThread(std::this_thread::get_id()),
       m_initialArenaCapacity(desc.initialArenaCapacity) {
     m_commandLists.reserve(desc.initialCommandListCapacity);
     std::lock_guard<std::mutex> poolRegistryLock(m_registry->mutex);
@@ -4285,8 +3914,7 @@ RhiCommandList* GlRhiCommandListPool::acquire(const RhiCommandListType type) {
         logRhiError("command-list pool acquire requires its owner thread and an initialized device");
         return nullptr;
     }
-    if (type != RhiCommandListType::Graphics &&
-        type != RhiCommandListType::Compute &&
+    if (type != RhiCommandListType::Graphics && type != RhiCommandListType::Compute &&
         type != RhiCommandListType::Transfer) {
         logRhiError("command-list pool acquire received an invalid command-list type");
         return nullptr;
@@ -4342,8 +3970,7 @@ void GlRhiCommandListPool::detachDevice() {
 }
 
 GlRhiDevice::GlRhiDevice()
-    : m_data(std::make_unique<GlRhiDeviceData>()),
-      m_commandPoolRegistry(std::make_shared<GlRhiCommandPoolRegistry>()) {
+    : m_data(std::make_unique<GlRhiDeviceData>()), m_commandPoolRegistry(std::make_shared<GlRhiCommandPoolRegistry>()) {
     m_commandPoolRegistry->device = this;
 }
 
@@ -4383,12 +4010,9 @@ bool GlRhiDevice::init(const RhiDeviceDesc& desc) {
     }
     const auto* glVersion = reinterpret_cast<const char*>(glGetString(GL_VERSION));
     const auto* glslVersion = reinterpret_cast<const char*>(glGetString(GL_SHADING_LANGUAGE_VERSION));
-    MECRAFT_LOG_STREAM(std::cout << "OpenGL: "
-                                 << (glVersion != nullptr ? glVersion : "unknown") << '\n');
-    MECRAFT_LOG_STREAM(std::cout << "GLSL: "
-                                 << (glslVersion != nullptr ? glslVersion : "unknown") << '\n');
-    MECRAFT_LOG_STREAM(std::cout << "GLAD OpenGL 4.5: "
-                                 << (GLAD_GL_VERSION_4_5 ? "yes" : "no") << '\n');
+    MECRAFT_LOG_STREAM(std::cout << "OpenGL: " << (glVersion != nullptr ? glVersion : "unknown") << '\n');
+    MECRAFT_LOG_STREAM(std::cout << "GLSL: " << (glslVersion != nullptr ? glslVersion : "unknown") << '\n');
+    MECRAFT_LOG_STREAM(std::cout << "GLAD OpenGL 4.5: " << (GLAD_GL_VERSION_4_5 ? "yes" : "no") << '\n');
     if (!GLAD_GL_VERSION_4_5) {
         logRhiError("OpenGL 4.5 core profile is required");
         m_data->nativeWindow = nullptr;
@@ -4399,10 +4023,8 @@ bool GlRhiDevice::init(const RhiDeviceDesc& desc) {
         glEnable(GL_DEBUG_OUTPUT);
         glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
         glDebugMessageCallback(openGlDebugMessageCallback, nullptr);
-        glDebugMessageControl(
-            GL_DONT_CARE, GL_DONT_CARE, GL_DEBUG_SEVERITY_NOTIFICATION, 0, nullptr, GL_FALSE);
-        glDebugMessageControl(
-            GL_DONT_CARE, GL_DEBUG_TYPE_PERFORMANCE, GL_DONT_CARE, 0, nullptr, GL_FALSE);
+        glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DEBUG_SEVERITY_NOTIFICATION, 0, nullptr, GL_FALSE);
+        glDebugMessageControl(GL_DONT_CARE, GL_DEBUG_TYPE_PERFORMANCE, GL_DONT_CARE, 0, nullptr, GL_FALSE);
     }
 #else
     (void)desc.enableDebugOutput;
@@ -4427,8 +4049,7 @@ bool GlRhiDevice::init(const RhiDeviceDesc& desc) {
     glGetIntegerv(GL_MAX_IMAGE_UNITS, &maxImageUnits);
     glGetIntegerv(GL_UNIFORM_BUFFER_OFFSET_ALIGNMENT, &uniformBufferOffsetAlignment);
     glGetIntegerv(GL_SHADER_STORAGE_BUFFER_OFFSET_ALIGNMENT, &storageBufferOffsetAlignment);
-    if (maxUniformBufferBindings <= 0 || maxStorageBufferBindings <= 0 ||
-        maxTextureUnits <= 0 || maxImageUnits <= 0 ||
+    if (maxUniformBufferBindings <= 0 || maxStorageBufferBindings <= 0 || maxTextureUnits <= 0 || maxImageUnits <= 0 ||
         uniformBufferOffsetAlignment <= 0 || storageBufferOffsetAlignment <= 0) {
         logRhiError("init requires valid OpenGL descriptor binding limits");
         return false;
@@ -4462,8 +4083,7 @@ bool GlRhiDevice::init(const RhiDeviceDesc& desc) {
     m_capabilities.maxSampledTexturesPerStage = static_cast<uint32_t>(maxTextureUnits);
     m_capabilities.swapchainImageCount = 1u;
     m_capabilities.swapchainColorSpace = RhiColorSpace::SrgbNonlinear;
-    m_capabilities.swapchainPresentMode = m_data->vsyncEnabled
-        ? RhiPresentMode::Fifo : RhiPresentMode::Immediate;
+    m_capabilities.swapchainPresentMode = m_data->vsyncEnabled ? RhiPresentMode::Fifo : RhiPresentMode::Immediate;
     m_capabilities.vsyncControl = true;
     glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY, &m_capabilities.maxSamplerAnisotropy);
 
@@ -4481,10 +4101,8 @@ bool GlRhiDevice::init(const RhiDeviceDesc& desc) {
     swapchainTextureDesc.depthOrLayers = 1u;
     swapchainTextureDesc.mipLevels = 1u;
     swapchainTextureDesc.sampleCount = 1u;
-    swapchainTextureDesc.usage = rhiFlag(RhiTextureUsage::Present) |
-                                 rhiFlag(RhiTextureUsage::ColorAttachment) |
-                                 rhiFlag(RhiTextureUsage::TransferSrc) |
-                                 rhiFlag(RhiTextureUsage::TransferDst);
+    swapchainTextureDesc.usage = rhiFlag(RhiTextureUsage::Present) | rhiFlag(RhiTextureUsage::ColorAttachment) |
+                                 rhiFlag(RhiTextureUsage::TransferSrc) | rhiFlag(RhiTextureUsage::TransferDst);
 
     RhiTextureViewDesc swapchainViewDesc;
     swapchainViewDesc.viewType = RhiTextureViewType::Texture2D;
@@ -4510,16 +4128,14 @@ bool GlRhiDevice::init(const RhiDeviceDesc& desc) {
     if (textureSlot >= m_data->textureRecords.size()) {
         m_data->textureRecords.resize(textureSlot + 1u);
     }
-    m_data->textureRecords[textureSlot] = {
-        0u,
-        GL_TEXTURE_2D,
-        swapchainTextureDesc,
-        rhiDebugName(swapchainTextureDesc.debugName),
-        swapchainFormat,
-        std::vector<RhiResourceState>(1u, RhiResourceState::Present),
-        true,
-        true
-    };
+    m_data->textureRecords[textureSlot] = {0u,
+                                           GL_TEXTURE_2D,
+                                           swapchainTextureDesc,
+                                           rhiDebugName(swapchainTextureDesc.debugName),
+                                           swapchainFormat,
+                                           std::vector<RhiResourceState>(1u, RhiResourceState::Present),
+                                           true,
+                                           true};
 
     m_data->swapchainColorView = m_data->textureViews.allocate();
     swapchainViewDesc.texture = m_data->swapchainColorTexture;
@@ -4528,33 +4144,22 @@ bool GlRhiDevice::init(const RhiDeviceDesc& desc) {
         m_data->textureViewRecords.resize(colorSlot + 1u);
     }
     m_data->textureViewRecords[colorSlot] = {
-        0u,
-        GL_TEXTURE_2D,
-        swapchainViewDesc,
-        m_data->swapchainFormat,
-        swapchainFormat,
-        true,
-        false,
-        false,
-        true
-    };
+        0u, GL_TEXTURE_2D, swapchainViewDesc, m_data->swapchainFormat, swapchainFormat, true, false, false, true};
 
     m_data->swapchainDepthStencilView = m_data->textureViews.allocate();
     const uint32_t depthSlot = m_data->swapchainDepthStencilView.index - 1u;
     if (depthSlot >= m_data->textureViewRecords.size()) {
         m_data->textureViewRecords.resize(depthSlot + 1u);
     }
-    m_data->textureViewRecords[depthSlot] = {
-        0u,
-        GL_TEXTURE_2D,
-        swapchainDepthViewDesc,
-        m_data->swapchainDepthStencilFormat,
-        swapchainDepthFormat,
-        false,
-        true,
-        false,
-        true
-    };
+    m_data->textureViewRecords[depthSlot] = {0u,
+                                             GL_TEXTURE_2D,
+                                             swapchainDepthViewDesc,
+                                             m_data->swapchainDepthStencilFormat,
+                                             swapchainDepthFormat,
+                                             false,
+                                             true,
+                                             false,
+                                             true};
     return true;
 }
 
@@ -4574,8 +4179,7 @@ void GlRhiDevice::shutdown() {
         glFinish();
     }
     reclaimAllRetiredResources(*m_data);
-    for (const std::shared_ptr<GlRhiCommandList>& commandList :
-         m_data->completedCommandLists) {
+    for (const std::shared_ptr<GlRhiCommandList>& commandList : m_data->completedCommandLists) {
         if (commandList != nullptr && commandList->m_state == RhiCommandListState::Pending) {
             commandList->resetForPoolReuse();
         }
@@ -4601,7 +4205,8 @@ void GlRhiDevice::shutdown() {
         }
         record = {};
     }
-    for (GlShaderRecord& record : m_data->shaderRecords) record = {};
+    for (GlShaderRecord& record : m_data->shaderRecords)
+        record = {};
     for (GlSamplerRecord& record : m_data->samplerRecords) {
         if (record.active && record.sampler != 0u) {
             glDeleteSamplers(1, &record.sampler);
@@ -4715,27 +4320,20 @@ RhiMemoryStats GlRhiDevice::memoryStats() const {
         if (!record.active || record.swapchainBackbuffer) {
             continue;
         }
-        const std::optional<uint64_t> bytes =
-            rhiEstimateTextureBytes(record.desc);
-        if (!bytes.has_value() ||
-            !stats.add(record.desc.memoryCategory, *bytes, 1u, 1u)) {
+        const std::optional<uint64_t> bytes = rhiEstimateTextureBytes(record.desc);
+        if (!bytes.has_value() || !stats.add(record.desc.memoryCategory, *bytes, 1u, 1u)) {
             return {};
         }
     }
     return stats;
 }
 
-RhiBufferHandle GlRhiDevice::createBuffer(const RhiBufferDesc& desc,
-                                          const void* initialData,
-                                          size_t initialDataSize) {
-    if (!m_initialized || !rhiMemoryCategoryValid(desc.memoryCategory) ||
-        desc.size == 0u || desc.usage == 0u ||
-        (initialData == nullptr && initialDataSize != 0u) ||
-        initialDataSize > desc.size ||
+RhiBufferHandle GlRhiDevice::createBuffer(const RhiBufferDesc& desc, const void* initialData, size_t initialDataSize) {
+    if (!m_initialized || !rhiMemoryCategoryValid(desc.memoryCategory) || desc.size == 0u || desc.usage == 0u ||
+        (initialData == nullptr && initialDataSize != 0u) || initialDataSize > desc.size ||
         !bufferUsageSupportsState(desc.usage, desc.initialState) ||
-        (initialData != nullptr &&
-         ((desc.usage & rhiFlag(RhiBufferUsage::TransferDst)) == 0u ||
-          desc.initialState == RhiResourceState::Undefined || initialDataSize == 0u))) {
+        (initialData != nullptr && ((desc.usage & rhiFlag(RhiBufferUsage::TransferDst)) == 0u ||
+                                    desc.initialState == RhiResourceState::Undefined || initialDataSize == 0u))) {
         logRhiError("createBuffer received an invalid descriptor");
         return {};
     }
@@ -4754,64 +4352,41 @@ RhiBufferHandle GlRhiDevice::createBuffer(const RhiBufferDesc& desc,
     if (slot >= m_data->bufferRecords.size()) {
         m_data->bufferRecords.resize(slot + 1u);
     }
-    m_data->bufferRecords[slot] = {
-        buffer,
-        desc,
-        rhiDebugName(desc.debugName),
-        desc.initialState,
-        false,
-        true
-    };
+    m_data->bufferRecords[slot] = {buffer, desc, rhiDebugName(desc.debugName), desc.initialState, false, true};
     return handle;
 }
 
-RhiTextureHandle GlRhiDevice::createTexture(const RhiTextureDesc& desc,
-                                            const RhiTextureInitialData* initialData) {
+RhiTextureHandle GlRhiDevice::createTexture(const RhiTextureDesc& desc, const RhiTextureInitialData* initialData) {
     GlFormatInfo format;
     const GLenum target = toGlTextureTarget(desc.dimension);
-    if (!m_initialized || !rhiMemoryCategoryValid(desc.memoryCategory) ||
-        target == 0u || !toGlFormatInfo(desc.format, format) ||
-        desc.width == 0u || desc.height == 0u || desc.depthOrLayers == 0u ||
+    if (!m_initialized || !rhiMemoryCategoryValid(desc.memoryCategory) || target == 0u ||
+        !toGlFormatInfo(desc.format, format) || desc.width == 0u || desc.height == 0u || desc.depthOrLayers == 0u ||
         desc.mipLevels == 0u || desc.sampleCount != 1u || desc.usage == 0u) {
         logRhiError("createTexture received an invalid descriptor");
         return {};
     }
 
     const bool cube = desc.dimension == RhiTextureDimension::Cube;
-    const bool cubeArray =
-        desc.dimension == RhiTextureDimension::CubeArray;
-    if ((cube || cubeArray) &&
-        (desc.width != desc.height ||
-         (cube && desc.depthOrLayers != 6u) ||
-         (cubeArray && desc.depthOrLayers % 6u != 0u))) {
+    const bool cubeArray = desc.dimension == RhiTextureDimension::CubeArray;
+    if ((cube || cubeArray) && (desc.width != desc.height || (cube && desc.depthOrLayers != 6u) ||
+                                (cubeArray && desc.depthOrLayers % 6u != 0u))) {
         logRhiError("createTexture received an invalid cube descriptor");
         return {};
     }
 
     GLuint texture = 0u;
     glCreateTextures(target, 1, &texture);
-    if (desc.dimension == RhiTextureDimension::Texture2D ||
-        desc.dimension == RhiTextureDimension::Cube) {
-        glTextureStorage2D(texture,
-                           static_cast<GLsizei>(desc.mipLevels),
-                           format.internalFormat,
-                           static_cast<GLsizei>(desc.width),
-                           static_cast<GLsizei>(desc.height));
+    if (desc.dimension == RhiTextureDimension::Texture2D || desc.dimension == RhiTextureDimension::Cube) {
+        glTextureStorage2D(texture, static_cast<GLsizei>(desc.mipLevels), format.internalFormat,
+                           static_cast<GLsizei>(desc.width), static_cast<GLsizei>(desc.height));
     } else {
-        glTextureStorage3D(texture,
-                           static_cast<GLsizei>(desc.mipLevels),
-                           format.internalFormat,
-                           static_cast<GLsizei>(desc.width),
-                           static_cast<GLsizei>(desc.height),
+        glTextureStorage3D(texture, static_cast<GLsizei>(desc.mipLevels), format.internalFormat,
+                           static_cast<GLsizei>(desc.width), static_cast<GLsizei>(desc.height),
                            static_cast<GLsizei>(desc.depthOrLayers));
     }
     glTextureParameteri(texture, GL_TEXTURE_BASE_LEVEL, 0);
-    glTextureParameteri(texture,
-                        GL_TEXTURE_MAX_LEVEL,
-                        static_cast<GLint>(desc.mipLevels - 1u));
-    glTextureParameteri(texture,
-                        GL_TEXTURE_MIN_FILTER,
-                        desc.mipLevels > 1u ? GL_NEAREST_MIPMAP_NEAREST : GL_NEAREST);
+    glTextureParameteri(texture, GL_TEXTURE_MAX_LEVEL, static_cast<GLint>(desc.mipLevels - 1u));
+    glTextureParameteri(texture, GL_TEXTURE_MIN_FILTER, desc.mipLevels > 1u ? GL_NEAREST_MIPMAP_NEAREST : GL_NEAREST);
     glTextureParameteri(texture, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glTextureParameteri(texture, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTextureParameteri(texture, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
@@ -4820,8 +4395,7 @@ RhiTextureHandle GlRhiDevice::createTexture(const RhiTextureDesc& desc,
 
     if (initialData != nullptr) {
         if (initialData->pixels == nullptr || initialData->mipLevel >= desc.mipLevels ||
-            initialData->layerCount == 0u ||
-            (desc.usage & rhiFlag(RhiTextureUsage::TransferDst)) == 0u ||
+            initialData->layerCount == 0u || (desc.usage & rhiFlag(RhiTextureUsage::TransferDst)) == 0u ||
             !textureUsageSupportsState(desc.usage, initialData->finalState)) {
             glDeleteTextures(1, &texture);
             logRhiError("createTexture received invalid initial texture data");
@@ -4830,8 +4404,8 @@ RhiTextureHandle GlRhiDevice::createTexture(const RhiTextureDesc& desc,
         const uint32_t mipWidth = std::max(1u, desc.width >> initialData->mipLevel);
         const uint32_t mipHeight = std::max(1u, desc.height >> initialData->mipLevel);
         const uint32_t availableLayers = desc.dimension == RhiTextureDimension::Texture3D
-            ? std::max(1u, desc.depthOrLayers >> initialData->mipLevel)
-            : desc.depthOrLayers;
+                                             ? std::max(1u, desc.depthOrLayers >> initialData->mipLevel)
+                                             : desc.depthOrLayers;
         if (initialData->arrayLayer >= availableLayers ||
             initialData->layerCount > availableLayers - initialData->arrayLayer ||
             (desc.dimension == RhiTextureDimension::Texture2D &&
@@ -4840,36 +4414,22 @@ RhiTextureHandle GlRhiDevice::createTexture(const RhiTextureDesc& desc,
             logRhiError("createTexture received an invalid initial texture layer range");
             return {};
         }
-        const size_t expectedSize = static_cast<size_t>(mipWidth) * mipHeight *
-                                    initialData->layerCount *
-                                    textureFormatSizeBytes(desc.format);
+        const size_t expectedSize =
+            static_cast<size_t>(mipWidth) * mipHeight * initialData->layerCount * textureFormatSizeBytes(desc.format);
         if (initialData->sizeBytes != expectedSize) {
             glDeleteTextures(1, &texture);
             logRhiError("createTexture received invalid initial texture data");
             return {};
         }
         if (desc.dimension == RhiTextureDimension::Texture2D) {
-            glTextureSubImage2D(texture,
-                                static_cast<GLint>(initialData->mipLevel),
-                                0,
-                                0,
-                                static_cast<GLsizei>(mipWidth),
-                                static_cast<GLsizei>(mipHeight),
-                                format.externalFormat,
-                                format.type,
-                                initialData->pixels);
+            glTextureSubImage2D(texture, static_cast<GLint>(initialData->mipLevel), 0, 0,
+                                static_cast<GLsizei>(mipWidth), static_cast<GLsizei>(mipHeight), format.externalFormat,
+                                format.type, initialData->pixels);
         } else {
-            glTextureSubImage3D(texture,
-                                static_cast<GLint>(initialData->mipLevel),
-                                0,
-                                0,
-                                static_cast<GLint>(initialData->arrayLayer),
-                                static_cast<GLsizei>(mipWidth),
-                                static_cast<GLsizei>(mipHeight),
-                                static_cast<GLsizei>(initialData->layerCount),
-                                format.externalFormat,
-                                format.type,
-                                initialData->pixels);
+            glTextureSubImage3D(texture, static_cast<GLint>(initialData->mipLevel), 0, 0,
+                                static_cast<GLint>(initialData->arrayLayer), static_cast<GLsizei>(mipWidth),
+                                static_cast<GLsizei>(mipHeight), static_cast<GLsizei>(initialData->layerCount),
+                                format.externalFormat, format.type, initialData->pixels);
         }
     }
 
@@ -4879,37 +4439,28 @@ RhiTextureHandle GlRhiDevice::createTexture(const RhiTextureDesc& desc,
         m_data->textureRecords.resize(slot + 1u);
     }
     const size_t subresourceCount = static_cast<size_t>(desc.mipLevels) * desc.depthOrLayers;
-    const RhiResourceState initialState = initialData != nullptr
-        ? initialData->finalState
-        : RhiResourceState::Undefined;
-    m_data->textureRecords[slot] = {
-        texture,
-        target,
-        desc,
-        rhiDebugName(desc.debugName),
-        format,
-        std::vector<RhiResourceState>(subresourceCount, initialState),
-        false,
-        true
-    };
+    const RhiResourceState initialState =
+        initialData != nullptr ? initialData->finalState : RhiResourceState::Undefined;
+    m_data->textureRecords[slot] = {texture, target,
+                                    desc,    rhiDebugName(desc.debugName),
+                                    format,  std::vector<RhiResourceState>(subresourceCount, initialState),
+                                    false,   true};
     return handle;
 }
 
-bool GlRhiDevice::getBufferDesc(const RhiBufferHandle buffer,
-                                RhiBufferDesc& desc) const {
-    const GlBufferRecord* record =
-        recordForHandle(m_data->buffers, m_data->bufferRecords, buffer);
-    if (!m_initialized || record == nullptr) return false;
+bool GlRhiDevice::getBufferDesc(const RhiBufferHandle buffer, RhiBufferDesc& desc) const {
+    const GlBufferRecord* record = recordForHandle(m_data->buffers, m_data->bufferRecords, buffer);
+    if (!m_initialized || record == nullptr)
+        return false;
     desc = record->desc;
     desc.debugName = record->debugName.c_str();
     return true;
 }
 
-bool GlRhiDevice::getTextureDesc(const RhiTextureHandle texture,
-                                 RhiTextureDesc& desc) const {
-    const GlTextureRecord* record =
-        recordForHandle(m_data->textures, m_data->textureRecords, texture);
-    if (!m_initialized || record == nullptr) return false;
+bool GlRhiDevice::getTextureDesc(const RhiTextureHandle texture, RhiTextureDesc& desc) const {
+    const GlTextureRecord* record = recordForHandle(m_data->textures, m_data->textureRecords, texture);
+    if (!m_initialized || record == nullptr)
+        return false;
     desc = record->desc;
     desc.debugName = record->debugName.c_str();
     return true;
@@ -4919,8 +4470,7 @@ RhiTextureViewHandle GlRhiDevice::createTextureView(const RhiTextureViewDesc& de
     GlResolvedTextureRecord textureRecord;
     const bool textureResolved = resolveTextureRecord(*m_data, desc.texture, textureRecord);
     RhiTextureViewDesc resolvedDesc = desc;
-    if (textureResolved && desc.baseMip < textureRecord.desc.mipLevels &&
-        desc.mipCount == kRhiRemainingMipLevels) {
+    if (textureResolved && desc.baseMip < textureRecord.desc.mipLevels && desc.mipCount == kRhiRemainingMipLevels) {
         resolvedDesc.mipCount = textureRecord.desc.mipLevels - desc.baseMip;
     }
     if (textureResolved && desc.baseLayer < textureRecord.desc.depthOrLayers &&
@@ -4932,32 +4482,25 @@ RhiTextureViewHandle GlRhiDevice::createTextureView(const RhiTextureViewDesc& de
     GlFormatInfo format;
     const GLenum viewTarget = toGlTextureViewTarget(desc.viewType);
     const bool cubeRangeValid = desc.viewType != RhiTextureViewType::Cube ||
-                                (resolvedDesc.baseLayer % 6u == 0u &&
-                                 resolvedDesc.layerCount == 6u);
-    const bool cubeArrayRangeValid =
-        desc.viewType != RhiTextureViewType::CubeArray ||
-        (resolvedDesc.baseLayer % 6u == 0u &&
-         resolvedDesc.layerCount % 6u == 0u);
-    const bool cubeTexture = textureResolved &&
-        (textureRecord.desc.dimension == RhiTextureDimension::Cube ||
-         textureRecord.desc.dimension == RhiTextureDimension::CubeArray);
+                                (resolvedDesc.baseLayer % 6u == 0u && resolvedDesc.layerCount == 6u);
+    const bool cubeArrayRangeValid = desc.viewType != RhiTextureViewType::CubeArray ||
+                                     (resolvedDesc.baseLayer % 6u == 0u && resolvedDesc.layerCount % 6u == 0u);
+    const bool cubeTexture = textureResolved && (textureRecord.desc.dimension == RhiTextureDimension::Cube ||
+                                                 textureRecord.desc.dimension == RhiTextureDimension::CubeArray);
     if (!m_initialized || !textureResolved || textureRecord.swapchainBackbuffer || viewTarget == 0u ||
-        !toGlFormatInfo(resolvedFormat, format) || resolvedDesc.mipCount == 0u ||
-        resolvedDesc.layerCount == 0u || resolvedDesc.baseMip >= textureRecord.desc.mipLevels ||
+        !toGlFormatInfo(resolvedFormat, format) || resolvedDesc.mipCount == 0u || resolvedDesc.layerCount == 0u ||
+        resolvedDesc.baseMip >= textureRecord.desc.mipLevels ||
         resolvedDesc.mipCount > textureRecord.desc.mipLevels - resolvedDesc.baseMip ||
         resolvedDesc.baseLayer >= textureRecord.desc.depthOrLayers ||
-        resolvedDesc.layerCount > textureRecord.desc.depthOrLayers - resolvedDesc.baseLayer ||
-        !cubeRangeValid || !cubeArrayRangeValid ||
-        ((desc.viewType == RhiTextureViewType::Cube ||
-          desc.viewType == RhiTextureViewType::CubeArray) && !cubeTexture)) {
+        resolvedDesc.layerCount > textureRecord.desc.depthOrLayers - resolvedDesc.baseLayer || !cubeRangeValid ||
+        !cubeArrayRangeValid ||
+        ((desc.viewType == RhiTextureViewType::Cube || desc.viewType == RhiTextureViewType::CubeArray) &&
+         !cubeTexture)) {
         std::cerr << "GlRhiDevice: invalid texture view"
                   << " handle=" << desc.texture.index << ':' << desc.texture.generation
-                  << " resolved=" << textureResolved
-                  << " viewType=" << static_cast<uint32_t>(desc.viewType)
-                  << " format=" << static_cast<uint32_t>(resolvedFormat)
-                  << " baseMip=" << resolvedDesc.baseMip
-                  << " mipCount=" << resolvedDesc.mipCount
-                  << " baseLayer=" << resolvedDesc.baseLayer
+                  << " resolved=" << textureResolved << " viewType=" << static_cast<uint32_t>(desc.viewType)
+                  << " format=" << static_cast<uint32_t>(resolvedFormat) << " baseMip=" << resolvedDesc.baseMip
+                  << " mipCount=" << resolvedDesc.mipCount << " baseLayer=" << resolvedDesc.baseLayer
                   << " layerCount=" << resolvedDesc.layerCount;
         if (textureResolved) {
             std::cerr << " textureDimension=" << static_cast<uint32_t>(textureRecord.desc.dimension)
@@ -4969,30 +4512,21 @@ RhiTextureViewHandle GlRhiDevice::createTextureView(const RhiTextureViewDesc& de
         return {};
     }
 
-    const bool aliasesWholeTexture =
-        resolvedFormat == textureRecord.desc.format &&
-        resolvedDesc.baseMip == 0u && resolvedDesc.mipCount == textureRecord.desc.mipLevels &&
-        resolvedDesc.baseLayer == 0u && resolvedDesc.layerCount == textureRecord.desc.depthOrLayers &&
-        viewTarget == textureRecord.target && !resolvedDesc.depthCompare;
+    const bool aliasesWholeTexture = resolvedFormat == textureRecord.desc.format && resolvedDesc.baseMip == 0u &&
+                                     resolvedDesc.mipCount == textureRecord.desc.mipLevels &&
+                                     resolvedDesc.baseLayer == 0u &&
+                                     resolvedDesc.layerCount == textureRecord.desc.depthOrLayers &&
+                                     viewTarget == textureRecord.target && !resolvedDesc.depthCompare;
 
     GLuint textureView = textureRecord.texture;
     bool ownsTexture = false;
     if (!aliasesWholeTexture) {
         glGenTextures(1, &textureView);
-        glTextureView(textureView,
-                      viewTarget,
-                      textureRecord.texture,
-                      format.internalFormat,
-                      resolvedDesc.baseMip,
-                      resolvedDesc.mipCount,
-                      resolvedDesc.baseLayer,
-                      resolvedDesc.layerCount);
+        glTextureView(textureView, viewTarget, textureRecord.texture, format.internalFormat, resolvedDesc.baseMip,
+                      resolvedDesc.mipCount, resolvedDesc.baseLayer, resolvedDesc.layerCount);
         glTextureParameteri(textureView, GL_TEXTURE_BASE_LEVEL, 0);
-        glTextureParameteri(textureView,
-                            GL_TEXTURE_MAX_LEVEL,
-                            static_cast<GLint>(resolvedDesc.mipCount - 1u));
-        glTextureParameteri(textureView,
-                            GL_TEXTURE_MIN_FILTER,
+        glTextureParameteri(textureView, GL_TEXTURE_MAX_LEVEL, static_cast<GLint>(resolvedDesc.mipCount - 1u));
+        glTextureParameteri(textureView, GL_TEXTURE_MIN_FILTER,
                             resolvedDesc.mipCount > 1u ? GL_NEAREST_MIPMAP_NEAREST : GL_NEAREST);
         glTextureParameteri(textureView, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
         glTextureParameteri(textureView, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
@@ -5011,17 +4545,8 @@ RhiTextureViewHandle GlRhiDevice::createTextureView(const RhiTextureViewDesc& de
     if (slot >= m_data->textureViewRecords.size()) {
         m_data->textureViewRecords.resize(slot + 1u);
     }
-    m_data->textureViewRecords[slot] = {
-        textureView,
-        viewTarget,
-        resolvedDesc,
-        resolvedFormat,
-        format,
-        false,
-        false,
-        ownsTexture,
-        true
-    };
+    m_data->textureViewRecords[slot] = {textureView, viewTarget,  resolvedDesc, resolvedFormat, format, false,
+                                        false,       ownsTexture, true};
     return handle;
 }
 
@@ -5033,9 +4558,8 @@ RhiSamplerHandle GlRhiDevice::createSampler(const RhiSamplerDesc& desc) {
     const GLenum addressV = toGlAddressMode(desc.addressV);
     const GLenum addressW = toGlAddressMode(desc.addressW);
     const GLenum compareOp = toGlCompareOp(desc.compareOp);
-    if (!m_initialized || desc.maxAnisotropy < 1.0f || minFilter == 0u || magFilter == 0u ||
-        addressU == 0u || addressV == 0u || addressW == 0u ||
-        !toGlBorderColor(desc.borderColor, borderColor) || compareOp == 0u) {
+    if (!m_initialized || desc.maxAnisotropy < 1.0f || minFilter == 0u || magFilter == 0u || addressU == 0u ||
+        addressV == 0u || addressW == 0u || !toGlBorderColor(desc.borderColor, borderColor) || compareOp == 0u) {
         logRhiError("createSampler received an invalid descriptor");
         return {};
     }
@@ -5073,11 +4597,10 @@ RhiShaderHandle GlRhiDevice::createShader(const RhiShaderDesc& desc) {
 
     std::string errorMessage;
     std::optional<renderer::rhi::RhiCompiledShader> shader =
-        renderer::rhi::compileShaderToSpirv(
-            desc, renderer::rhi::RhiShaderBackend::OpenGl, errorMessage);
+        renderer::rhi::compileShaderToSpirv(desc, renderer::rhi::RhiShaderBackend::OpenGl, errorMessage);
     if (!shader.has_value()) {
-        std::cerr << "GlRhiDevice: canonical shader compilation failed ["
-                  << rhiDebugName(desc.debugName) << "]\n" << errorMessage << '\n';
+        std::cerr << "GlRhiDevice: canonical shader compilation failed [" << rhiDebugName(desc.debugName) << "]\n"
+                  << errorMessage << '\n';
         return {};
     }
 
@@ -5105,11 +4628,9 @@ RhiBindGroupLayoutHandle GlRhiDevice::createBindGroupLayout(const RhiBindGroupLa
             logRhiError("createBindGroupLayout requires non-empty stages and scalar bindings");
             return {};
         }
-        const auto duplicate = std::find_if(desc.entries.begin() + static_cast<std::ptrdiff_t>(i + 1u),
-                                            desc.entries.end(),
-                                            [&](const RhiBindGroupLayoutEntry& candidate) {
-                                                return candidate.binding == entry.binding;
-                                            });
+        const auto duplicate =
+            std::find_if(desc.entries.begin() + static_cast<std::ptrdiff_t>(i + 1u), desc.entries.end(),
+                         [&](const RhiBindGroupLayoutEntry& candidate) { return candidate.binding == entry.binding; });
         if (duplicate != desc.entries.end()) {
             logRhiError("createBindGroupLayout received duplicate binding numbers");
             return {};
@@ -5136,8 +4657,7 @@ RhiPipelineLayoutHandle GlRhiDevice::createPipelineLayout(const RhiPipelineLayou
             return {};
         }
     }
-    if ((desc.pushConstantBytes == 0u) != (desc.pushConstantStages == 0u) ||
-        (desc.pushConstantBytes % 4u) != 0u) {
+    if ((desc.pushConstantBytes == 0u) != (desc.pushConstantStages == 0u) || (desc.pushConstantBytes % 4u) != 0u) {
         logRhiError("createPipelineLayout received an invalid push-constant range");
         return {};
     }
@@ -5152,10 +4672,8 @@ RhiPipelineLayoutHandle GlRhiDevice::createPipelineLayout(const RhiPipelineLayou
 }
 
 RhiPipelineHandle GlRhiDevice::createGraphicsPipeline(const RhiGraphicsPipelineDesc& desc) {
-    const GlShaderRecord* vertexShader =
-        recordForHandle(m_data->shaders, m_data->shaderRecords, desc.vertexShader);
-    const GlShaderRecord* fragmentShader =
-        recordForHandle(m_data->shaders, m_data->shaderRecords, desc.fragmentShader);
+    const GlShaderRecord* vertexShader = recordForHandle(m_data->shaders, m_data->shaderRecords, desc.vertexShader);
+    const GlShaderRecord* fragmentShader = recordForHandle(m_data->shaders, m_data->shaderRecords, desc.fragmentShader);
     const GlPipelineLayoutRecord* pipelineLayout =
         recordForHandle(m_data->pipelineLayouts, m_data->pipelineLayoutRecords, desc.layout);
     if (!m_initialized || vertexShader == nullptr || fragmentShader == nullptr ||
@@ -5193,47 +4711,36 @@ RhiPipelineHandle GlRhiDevice::createGraphicsPipeline(const RhiGraphicsPipelineD
     std::vector<GlPipelineRecord::BindingMapping> bindingMappings;
     std::optional<uint32_t> pushConstantBinding;
     uint32_t pushConstantSize = 0u;
-    const std::array<uint32_t, 4> bindingLimits = {
-        m_data->maxUniformBufferBindings,
-        m_data->maxStorageBufferBindings,
-        m_data->maxTextureUnits,
-        m_data->maxImageUnits
-    };
-    if (!buildPipelineBindingMappings(m_data->bindGroupLayouts,
-                                      m_data->bindGroupLayoutRecords,
-                                      bindingLimits,
-                                      *pipelineLayout,
-                                      {vertexShader, fragmentShader},
-                                      desc.debugName,
-                                      bindingMappings,
-                                      pushConstantBinding,
-                                      pushConstantSize)) {
+    const std::array<uint32_t, 4> bindingLimits = {m_data->maxUniformBufferBindings, m_data->maxStorageBufferBindings,
+                                                   m_data->maxTextureUnits, m_data->maxImageUnits};
+    if (!buildPipelineBindingMappings(m_data->bindGroupLayouts, m_data->bindGroupLayoutRecords, bindingLimits,
+                                      *pipelineLayout, {vertexShader, fragmentShader}, desc.debugName, bindingMappings,
+                                      pushConstantBinding, pushConstantSize)) {
         return {};
     }
-    const std::vector<renderer::rhi::gl::GlRhiShaderBindingRemap> remaps =
-        makeShaderRemaps(bindingMappings);
+    const std::vector<renderer::rhi::gl::GlRhiShaderBindingRemap> remaps = makeShaderRemaps(bindingMappings);
     std::string errorMessage;
-    const std::optional<std::string> vertexSource = renderer::rhi::gl::crossCompileShaderToOpenGl(
-        vertexShader->shader, remaps, pushConstantBinding, errorMessage);
+    const std::optional<std::string> vertexSource =
+        renderer::rhi::gl::crossCompileShaderToOpenGl(vertexShader->shader, remaps, pushConstantBinding, errorMessage);
     if (!vertexSource.has_value()) {
-        std::cerr << "GlRhiDevice: vertex shader OpenGL generation failed ["
-                  << rhiDebugName(desc.debugName) << "]\n" << errorMessage << '\n';
+        std::cerr << "GlRhiDevice: vertex shader OpenGL generation failed [" << rhiDebugName(desc.debugName) << "]\n"
+                  << errorMessage << '\n';
         return {};
     }
     const std::optional<std::string> fragmentSource = renderer::rhi::gl::crossCompileShaderToOpenGl(
         fragmentShader->shader, remaps, pushConstantBinding, errorMessage);
     if (!fragmentSource.has_value()) {
-        std::cerr << "GlRhiDevice: fragment shader OpenGL generation failed ["
-                  << rhiDebugName(desc.debugName) << "]\n" << errorMessage << '\n';
+        std::cerr << "GlRhiDevice: fragment shader OpenGL generation failed [" << rhiDebugName(desc.debugName) << "]\n"
+                  << errorMessage << '\n';
         return {};
     }
-    const GLuint vertexObject = compileShaderObject(
-        RhiShaderStage::Vertex, *vertexSource, vertexShader->debugName.c_str());
+    const GLuint vertexObject =
+        compileShaderObject(RhiShaderStage::Vertex, *vertexSource, vertexShader->debugName.c_str());
     if (vertexObject == 0u) {
         return {};
     }
-    const GLuint fragmentObject = compileShaderObject(
-        RhiShaderStage::Fragment, *fragmentSource, fragmentShader->debugName.c_str());
+    const GLuint fragmentObject =
+        compileShaderObject(RhiShaderStage::Fragment, *fragmentSource, fragmentShader->debugName.c_str());
     if (fragmentObject == 0u) {
         glDeleteShader(vertexObject);
         return {};
@@ -5251,8 +4758,8 @@ RhiPipelineHandle GlRhiDevice::createGraphicsPipeline(const RhiGraphicsPipelineD
     if (linked != GL_TRUE) {
         std::array<char, 2048> infoLog{};
         glGetProgramInfoLog(program, static_cast<GLsizei>(infoLog.size()), nullptr, infoLog.data());
-        std::cerr << "GlRhiDevice: graphics pipeline link failed [" << rhiDebugName(desc.debugName)
-                  << "]\n" << infoLog.data() << '\n';
+        std::cerr << "GlRhiDevice: graphics pipeline link failed [" << rhiDebugName(desc.debugName) << "]\n"
+                  << infoLog.data() << '\n';
         glDeleteProgram(program);
         return {};
     }
@@ -5260,8 +4767,7 @@ RhiPipelineHandle GlRhiDevice::createGraphicsPipeline(const RhiGraphicsPipelineD
     GLuint vertexArray = 0u;
     glCreateVertexArrays(1, &vertexArray);
     for (const RhiVertexBinding& binding : desc.vertexInput.bindings) {
-        glVertexArrayBindingDivisor(vertexArray,
-                                    binding.binding,
+        glVertexArrayBindingDivisor(vertexArray, binding.binding,
                                     binding.inputRate == RhiVertexInputRate::Instance ? 1u : 0u);
     }
     for (const RhiVertexAttribute& attribute : desc.vertexInput.attributes) {
@@ -5269,18 +4775,11 @@ RhiPipelineHandle GlRhiDevice::createGraphicsPipeline(const RhiGraphicsPipelineD
         glEnableVertexArrayAttrib(vertexArray, attribute.location);
         glVertexArrayAttribBinding(vertexArray, attribute.location, attribute.binding);
         if (format.integer) {
-            glVertexArrayAttribIFormat(vertexArray,
-                                       attribute.location,
-                                       format.componentCount,
-                                       format.type,
+            glVertexArrayAttribIFormat(vertexArray, attribute.location, format.componentCount, format.type,
                                        attribute.offset);
         } else {
-            glVertexArrayAttribFormat(vertexArray,
-                                      attribute.location,
-                                      format.componentCount,
-                                      format.type,
-                                      format.normalized ? GL_TRUE : GL_FALSE,
-                                      attribute.offset);
+            glVertexArrayAttribFormat(vertexArray, attribute.location, format.componentCount, format.type,
+                                      format.normalized ? GL_TRUE : GL_FALSE, attribute.offset);
         }
     }
     labelGlObject(GL_PROGRAM, program, desc.debugName);
@@ -5305,12 +4804,11 @@ RhiPipelineHandle GlRhiDevice::createGraphicsPipeline(const RhiGraphicsPipelineD
 }
 
 RhiPipelineHandle GlRhiDevice::createComputePipeline(const RhiComputePipelineDesc& desc) {
-    const GlShaderRecord* computeShader =
-        recordForHandle(m_data->shaders, m_data->shaderRecords, desc.computeShader);
+    const GlShaderRecord* computeShader = recordForHandle(m_data->shaders, m_data->shaderRecords, desc.computeShader);
     const GlPipelineLayoutRecord* pipelineLayout =
         recordForHandle(m_data->pipelineLayouts, m_data->pipelineLayoutRecords, desc.layout);
-    if (!m_initialized || computeShader == nullptr ||
-        computeShader->shader.stage != RhiShaderStage::Compute || pipelineLayout == nullptr) {
+    if (!m_initialized || computeShader == nullptr || computeShader->shader.stage != RhiShaderStage::Compute ||
+        pipelineLayout == nullptr) {
         logRhiError("createComputePipeline received an invalid descriptor");
         return {};
     }
@@ -5318,35 +4816,24 @@ RhiPipelineHandle GlRhiDevice::createComputePipeline(const RhiComputePipelineDes
     std::vector<GlPipelineRecord::BindingMapping> bindingMappings;
     std::optional<uint32_t> pushConstantBinding;
     uint32_t pushConstantSize = 0u;
-    const std::array<uint32_t, 4> bindingLimits = {
-        m_data->maxUniformBufferBindings,
-        m_data->maxStorageBufferBindings,
-        m_data->maxTextureUnits,
-        m_data->maxImageUnits
-    };
-    if (!buildPipelineBindingMappings(m_data->bindGroupLayouts,
-                                      m_data->bindGroupLayoutRecords,
-                                      bindingLimits,
-                                      *pipelineLayout,
-                                      {computeShader},
-                                      desc.debugName,
-                                      bindingMappings,
-                                      pushConstantBinding,
-                                      pushConstantSize)) {
+    const std::array<uint32_t, 4> bindingLimits = {m_data->maxUniformBufferBindings, m_data->maxStorageBufferBindings,
+                                                   m_data->maxTextureUnits, m_data->maxImageUnits};
+    if (!buildPipelineBindingMappings(m_data->bindGroupLayouts, m_data->bindGroupLayoutRecords, bindingLimits,
+                                      *pipelineLayout, {computeShader}, desc.debugName, bindingMappings,
+                                      pushConstantBinding, pushConstantSize)) {
         return {};
     }
-    const std::vector<renderer::rhi::gl::GlRhiShaderBindingRemap> remaps =
-        makeShaderRemaps(bindingMappings);
+    const std::vector<renderer::rhi::gl::GlRhiShaderBindingRemap> remaps = makeShaderRemaps(bindingMappings);
     std::string errorMessage;
-    const std::optional<std::string> computeSource = renderer::rhi::gl::crossCompileShaderToOpenGl(
-        computeShader->shader, remaps, pushConstantBinding, errorMessage);
+    const std::optional<std::string> computeSource =
+        renderer::rhi::gl::crossCompileShaderToOpenGl(computeShader->shader, remaps, pushConstantBinding, errorMessage);
     if (!computeSource.has_value()) {
-        std::cerr << "GlRhiDevice: compute shader OpenGL generation failed ["
-                  << rhiDebugName(desc.debugName) << "]\n" << errorMessage << '\n';
+        std::cerr << "GlRhiDevice: compute shader OpenGL generation failed [" << rhiDebugName(desc.debugName) << "]\n"
+                  << errorMessage << '\n';
         return {};
     }
-    const GLuint computeObject = compileShaderObject(
-        RhiShaderStage::Compute, *computeSource, computeShader->debugName.c_str());
+    const GLuint computeObject =
+        compileShaderObject(RhiShaderStage::Compute, *computeSource, computeShader->debugName.c_str());
     if (computeObject == 0u) {
         return {};
     }
@@ -5360,8 +4847,8 @@ RhiPipelineHandle GlRhiDevice::createComputePipeline(const RhiComputePipelineDes
     if (linked != GL_TRUE) {
         std::array<char, 2048> infoLog{};
         glGetProgramInfoLog(program, static_cast<GLsizei>(infoLog.size()), nullptr, infoLog.data());
-        std::cerr << "GlRhiDevice: compute pipeline link failed [" << rhiDebugName(desc.debugName)
-                  << "]\n" << infoLog.data() << '\n';
+        std::cerr << "GlRhiDevice: compute pipeline link failed [" << rhiDebugName(desc.debugName) << "]\n"
+                  << infoLog.data() << '\n';
         glDeleteProgram(program);
         return {};
     }
@@ -5398,9 +4885,9 @@ RhiBindGroupHandle GlRhiDevice::createBindGroup(const RhiBindGroupDesc& desc) {
 
     for (size_t i = 0u; i < desc.entries.size(); ++i) {
         const RhiBindGroupEntry& entry = desc.entries[i];
-        const auto duplicate = std::find_if(
-            desc.entries.begin() + static_cast<std::ptrdiff_t>(i + 1u), desc.entries.end(),
-            [&](const RhiBindGroupEntry& candidate) { return candidate.binding == entry.binding; });
+        const auto duplicate =
+            std::find_if(desc.entries.begin() + static_cast<std::ptrdiff_t>(i + 1u), desc.entries.end(),
+                         [&](const RhiBindGroupEntry& candidate) { return candidate.binding == entry.binding; });
         const RhiBindGroupLayoutEntry* layoutEntry = findLayoutEntry(*layout, entry.binding);
         if (duplicate != desc.entries.end() || layoutEntry == nullptr) {
             logRhiError("createBindGroup received a duplicate or undeclared binding");
@@ -5408,66 +4895,63 @@ RhiBindGroupHandle GlRhiDevice::createBindGroup(const RhiBindGroupDesc& desc) {
         }
 
         switch (layoutEntry->type) {
-            case RhiBindingType::UniformBuffer:
-            case RhiBindingType::StorageBuffer: {
-                const GlBufferRecord* buffer = recordForHandle(
-                    m_data->buffers, m_data->bufferRecords, entry.resource.buffer.buffer);
-                const RhiBufferUsage requiredUsage = layoutEntry->type == RhiBindingType::UniformBuffer
-                    ? RhiBufferUsage::Uniform
-                    : RhiBufferUsage::Storage;
-                const uint32_t requiredAlignment = layoutEntry->type == RhiBindingType::UniformBuffer
-                    ? m_data->uniformBufferOffsetAlignment
-                    : m_data->storageBufferOffsetAlignment;
-                const uint64_t range = buffer != nullptr && entry.resource.buffer.range != 0u
-                    ? entry.resource.buffer.range
-                    : (buffer != nullptr && entry.resource.buffer.offset <= buffer->desc.size
-                        ? buffer->desc.size - entry.resource.buffer.offset
-                        : 0u);
-                if (buffer == nullptr || (buffer->desc.usage & rhiFlag(requiredUsage)) == 0u ||
-                    entry.resource.buffer.offset % requiredAlignment != 0u ||
-                    range == 0u || entry.resource.buffer.offset > buffer->desc.size ||
-                    range > buffer->desc.size - entry.resource.buffer.offset) {
-                    logRhiError("createBindGroup received an invalid buffer resource");
-                    return {};
-                }
-                break;
+        case RhiBindingType::UniformBuffer:
+        case RhiBindingType::StorageBuffer: {
+            const GlBufferRecord* buffer =
+                recordForHandle(m_data->buffers, m_data->bufferRecords, entry.resource.buffer.buffer);
+            const RhiBufferUsage requiredUsage =
+                layoutEntry->type == RhiBindingType::UniformBuffer ? RhiBufferUsage::Uniform : RhiBufferUsage::Storage;
+            const uint32_t requiredAlignment = layoutEntry->type == RhiBindingType::UniformBuffer
+                                                   ? m_data->uniformBufferOffsetAlignment
+                                                   : m_data->storageBufferOffsetAlignment;
+            const uint64_t range = buffer != nullptr && entry.resource.buffer.range != 0u
+                                       ? entry.resource.buffer.range
+                                       : (buffer != nullptr && entry.resource.buffer.offset <= buffer->desc.size
+                                              ? buffer->desc.size - entry.resource.buffer.offset
+                                              : 0u);
+            if (buffer == nullptr || (buffer->desc.usage & rhiFlag(requiredUsage)) == 0u ||
+                entry.resource.buffer.offset % requiredAlignment != 0u || range == 0u ||
+                entry.resource.buffer.offset > buffer->desc.size ||
+                range > buffer->desc.size - entry.resource.buffer.offset) {
+                logRhiError("createBindGroup received an invalid buffer resource");
+                return {};
             }
-            case RhiBindingType::SampledTexture:
-            case RhiBindingType::StorageTexture: {
-                const GlTextureViewRecord* view = recordForHandle(
-                    m_data->textureViews, m_data->textureViewRecords, entry.resource.textureView);
-                GlResolvedTextureRecord texture;
-                const RhiTextureUsage requiredUsage = layoutEntry->type == RhiBindingType::SampledTexture
-                    ? RhiTextureUsage::Sampled
-                    : RhiTextureUsage::Storage;
-                if (view == nullptr || !resolveTextureRecord(*m_data, view->desc.texture, texture) ||
-                    (texture.desc.usage & rhiFlag(requiredUsage)) == 0u) {
-                    logRhiError("createBindGroup received an invalid texture-view resource");
-                    return {};
-                }
-                break;
+            break;
+        }
+        case RhiBindingType::SampledTexture:
+        case RhiBindingType::StorageTexture: {
+            const GlTextureViewRecord* view =
+                recordForHandle(m_data->textureViews, m_data->textureViewRecords, entry.resource.textureView);
+            GlResolvedTextureRecord texture;
+            const RhiTextureUsage requiredUsage = layoutEntry->type == RhiBindingType::SampledTexture
+                                                      ? RhiTextureUsage::Sampled
+                                                      : RhiTextureUsage::Storage;
+            if (view == nullptr || !resolveTextureRecord(*m_data, view->desc.texture, texture) ||
+                (texture.desc.usage & rhiFlag(requiredUsage)) == 0u) {
+                logRhiError("createBindGroup received an invalid texture-view resource");
+                return {};
             }
-            case RhiBindingType::Sampler:
-                if (recordForHandle(m_data->samplers, m_data->samplerRecords,
-                                    entry.resource.sampler) == nullptr) {
-                    logRhiError("createBindGroup received an invalid sampler resource");
-                    return {};
-                }
-                break;
-            case RhiBindingType::CombinedTextureSampler: {
-                const GlTextureViewRecord* view = recordForHandle(
-                    m_data->textureViews, m_data->textureViewRecords,
-                    entry.resource.combinedTextureSampler.textureView);
-                GlResolvedTextureRecord texture;
-                if (view == nullptr || !resolveTextureRecord(*m_data, view->desc.texture, texture) ||
-                    (texture.desc.usage & rhiFlag(RhiTextureUsage::Sampled)) == 0u ||
-                    recordForHandle(m_data->samplers, m_data->samplerRecords,
-                                    entry.resource.combinedTextureSampler.sampler) == nullptr) {
-                    logRhiError("createBindGroup received an invalid combined texture-sampler resource");
-                    return {};
-                }
-                break;
+            break;
+        }
+        case RhiBindingType::Sampler:
+            if (recordForHandle(m_data->samplers, m_data->samplerRecords, entry.resource.sampler) == nullptr) {
+                logRhiError("createBindGroup received an invalid sampler resource");
+                return {};
             }
+            break;
+        case RhiBindingType::CombinedTextureSampler: {
+            const GlTextureViewRecord* view = recordForHandle(m_data->textureViews, m_data->textureViewRecords,
+                                                              entry.resource.combinedTextureSampler.textureView);
+            GlResolvedTextureRecord texture;
+            if (view == nullptr || !resolveTextureRecord(*m_data, view->desc.texture, texture) ||
+                (texture.desc.usage & rhiFlag(RhiTextureUsage::Sampled)) == 0u ||
+                recordForHandle(m_data->samplers, m_data->samplerRecords,
+                                entry.resource.combinedTextureSampler.sampler) == nullptr) {
+                logRhiError("createBindGroup received an invalid combined texture-sampler resource");
+                return {};
+            }
+            break;
+        }
         }
     }
 
@@ -5490,25 +4974,22 @@ RhiQueryPoolHandle GlRhiDevice::createQueryPool(const RhiQueryPoolDesc& desc) {
     std::vector<bool> issued(desc.queryCount, false);
     const RhiQueryPoolHandle handle = m_data->queryPools.allocate();
     const uint32_t slot = handle.index - 1u;
-    if (slot >= m_data->queryPoolRecords.size()) m_data->queryPoolRecords.resize(slot + 1u);
-    m_data->queryPoolRecords[slot] = {
-        std::move(queries), std::move(issued), desc.type, true};
+    if (slot >= m_data->queryPoolRecords.size())
+        m_data->queryPoolRecords.resize(slot + 1u);
+    m_data->queryPoolRecords[slot] = {std::move(queries), std::move(issued), desc.type, true};
     return handle;
 }
 
-void* GlRhiDevice::mapBuffer(const RhiBufferHandle buffer,
-                             const uint64_t offset,
-                             const uint64_t size) {
+void* GlRhiDevice::mapBuffer(const RhiBufferHandle buffer, const uint64_t offset, const uint64_t size) {
     GlBufferRecord* record = recordForHandle(m_data->buffers, m_data->bufferRecords, buffer);
-    if (!m_initialized || record == nullptr || record->mapped || size == 0u ||
-        offset > record->desc.size || size > record->desc.size - offset) {
+    if (!m_initialized || record == nullptr || record->mapped || size == 0u || offset > record->desc.size ||
+        size > record->desc.size - offset) {
         logRhiError("mapBuffer received an invalid buffer or range");
         return nullptr;
     }
 
     GLbitfield access = 0u;
-    if (record->state == RhiResourceState::HostRead &&
-        (record->desc.usage & rhiFlag(RhiBufferUsage::MapRead)) != 0u &&
+    if (record->state == RhiResourceState::HostRead && (record->desc.usage & rhiFlag(RhiBufferUsage::MapRead)) != 0u &&
         record->desc.memoryUsage == RhiMemoryUsage::GpuToCpu) {
         access |= GL_MAP_READ_BIT;
     }
@@ -5523,10 +5004,8 @@ void* GlRhiDevice::mapBuffer(const RhiBufferHandle buffer,
         return nullptr;
     }
 
-    void* mapped = glMapNamedBufferRange(record->buffer,
-                                         static_cast<GLintptr>(offset),
-                                         static_cast<GLsizeiptr>(size),
-                                         access);
+    void* mapped =
+        glMapNamedBufferRange(record->buffer, static_cast<GLintptr>(offset), static_cast<GLsizeiptr>(size), access);
     if (mapped == nullptr) {
         logRhiError("mapBuffer failed to map the native buffer");
         return nullptr;
@@ -5545,43 +5024,37 @@ void GlRhiDevice::unmapBuffer(const RhiBufferHandle buffer) {
     record->mapped = false;
 }
 
-bool GlRhiDevice::resetQueryPool(const RhiQueryPoolHandle pool,
-                                 const uint32_t firstQuery,
-                                 const uint32_t queryCount) {
-    GlQueryPoolRecord* record =
-        recordForHandle(m_data->queryPools, m_data->queryPoolRecords, pool);
-    if (!m_initialized || std::this_thread::get_id() != m_deviceThread ||
-        record == nullptr || queryCount == 0u ||
-        firstQuery > record->queries.size() ||
-        queryCount > record->queries.size() - firstQuery) {
+bool GlRhiDevice::resetQueryPool(const RhiQueryPoolHandle pool, const uint32_t firstQuery, const uint32_t queryCount) {
+    GlQueryPoolRecord* record = recordForHandle(m_data->queryPools, m_data->queryPoolRecords, pool);
+    if (!m_initialized || std::this_thread::get_id() != m_deviceThread || record == nullptr || queryCount == 0u ||
+        firstQuery > record->queries.size() || queryCount > record->queries.size() - firstQuery) {
         return false;
     }
-    std::fill(record->issued.begin() + firstQuery,
-              record->issued.begin() + firstQuery + queryCount, false);
+    std::fill(record->issued.begin() + firstQuery, record->issued.begin() + firstQuery + queryCount, false);
     return true;
 }
 
-bool GlRhiDevice::areQueryResultsAvailable(RhiQueryPoolHandle pool,
-                                           uint32_t firstQuery,
-                                           uint32_t queryCount) const {
-    const GlQueryPoolRecord* record = recordForHandle(
-        m_data->queryPools, m_data->queryPoolRecords, pool);
-    if (record == nullptr || queryCount == 0u ||
-        firstQuery > record->queries.size() || queryCount > record->queries.size() - firstQuery) return false;
+bool GlRhiDevice::areQueryResultsAvailable(RhiQueryPoolHandle pool, uint32_t firstQuery, uint32_t queryCount) const {
+    const GlQueryPoolRecord* record = recordForHandle(m_data->queryPools, m_data->queryPoolRecords, pool);
+    if (record == nullptr || queryCount == 0u || firstQuery > record->queries.size() ||
+        queryCount > record->queries.size() - firstQuery)
+        return false;
     for (uint32_t i = 0; i < queryCount; ++i) {
-        if (!record->issued[firstQuery + i]) return false;
+        if (!record->issued[firstQuery + i])
+            return false;
         GLint available = GL_FALSE;
         glGetQueryObjectiv(record->queries[firstQuery + i], GL_QUERY_RESULT_AVAILABLE, &available);
-        if (available == GL_FALSE) return false;
+        if (available == GL_FALSE)
+            return false;
     }
     return true;
 }
 
-bool GlRhiDevice::getQueryResults(RhiQueryPoolHandle pool, uint32_t firstQuery,
-                                  uint32_t queryCount, uint64_t* results) const {
-    if (results == nullptr || !areQueryResultsAvailable(pool, firstQuery, queryCount)) return false;
-    const GlQueryPoolRecord* record = recordForHandle(
-        m_data->queryPools, m_data->queryPoolRecords, pool);
+bool GlRhiDevice::getQueryResults(RhiQueryPoolHandle pool, uint32_t firstQuery, uint32_t queryCount,
+                                  uint64_t* results) const {
+    if (results == nullptr || !areQueryResultsAvailable(pool, firstQuery, queryCount))
+        return false;
+    const GlQueryPoolRecord* record = recordForHandle(m_data->queryPools, m_data->queryPoolRecords, pool);
     for (uint32_t i = 0; i < queryCount; ++i) {
         GLuint64 value = 0u;
         glGetQueryObjectui64v(record->queries[firstQuery + i], GL_QUERY_RESULT, &value);
@@ -5592,21 +5065,15 @@ bool GlRhiDevice::getQueryResults(RhiQueryPoolHandle pool, uint32_t firstQuery,
 }
 
 RhiTextureViewHandle GlRhiDevice::currentSwapchainColorView() const {
-    return m_initialized && m_data && m_frameAcquired
-        ? m_data->swapchainColorView
-        : RhiTextureViewHandle{};
+    return m_initialized && m_data && m_frameAcquired ? m_data->swapchainColorView : RhiTextureViewHandle{};
 }
 
 RhiTextureViewHandle GlRhiDevice::currentSwapchainDepthStencilView() const {
-    return m_initialized && m_data && m_frameAcquired
-        ? m_data->swapchainDepthStencilView
-        : RhiTextureViewHandle{};
+    return m_initialized && m_data && m_frameAcquired ? m_data->swapchainDepthStencilView : RhiTextureViewHandle{};
 }
 
 RhiTextureHandle GlRhiDevice::currentSwapchainColorTexture() const {
-    return m_initialized && m_data && m_frameAcquired
-        ? m_data->swapchainColorTexture
-        : RhiTextureHandle{};
+    return m_initialized && m_data && m_frameAcquired ? m_data->swapchainColorTexture : RhiTextureHandle{};
 }
 
 RhiTextureFormat GlRhiDevice::swapchainColorFormat() const {
@@ -5631,8 +5098,7 @@ bool GlRhiDevice::setVsyncEnabled(const bool enabled) {
     }
     glfwSwapInterval(enabled ? 1 : 0);
     m_data->vsyncEnabled = enabled;
-    m_capabilities.swapchainPresentMode = enabled
-        ? RhiPresentMode::Fifo : RhiPresentMode::Immediate;
+    m_capabilities.swapchainPresentMode = enabled ? RhiPresentMode::Fifo : RhiPresentMode::Immediate;
     return true;
 }
 
@@ -5641,8 +5107,7 @@ bool GlRhiDevice::resizeSwapchain(const uint32_t width, const uint32_t height) {
         logRhiError("resizeSwapchain received invalid dimensions");
         return false;
     }
-    if (m_frameAcquired &&
-        (width != m_data->swapchainWidth || height != m_data->swapchainHeight)) {
+    if (m_frameAcquired && (width != m_data->swapchainWidth || height != m_data->swapchainHeight)) {
         logRhiError("resizeSwapchain cannot change dimensions while a frame is acquired");
         return false;
     }
@@ -5660,8 +5125,8 @@ bool GlRhiDevice::resizeSwapchain(const uint32_t width, const uint32_t height) {
         return false;
     }
 
-    GlTextureRecord* swapchainTexture = recordForHandle(
-        m_data->textures, m_data->textureRecords, m_data->swapchainColorTexture);
+    GlTextureRecord* swapchainTexture =
+        recordForHandle(m_data->textures, m_data->textureRecords, m_data->swapchainColorTexture);
     if (swapchainTexture == nullptr || !swapchainTexture->swapchainBackbuffer) {
         logRhiError("resizeSwapchain requires a live swapchain color texture");
         return false;
@@ -5727,7 +5192,7 @@ void GlRhiDevice::destroyBuffer(RhiBufferHandle handle) {
         }
         *record = {};
     }
-    (void) m_data->buffers.release(handle);
+    (void)m_data->buffers.release(handle);
 }
 
 void GlRhiDevice::destroyTexture(RhiTextureHandle handle) {
@@ -5742,7 +5207,7 @@ void GlRhiDevice::destroyTexture(RhiTextureHandle handle) {
         }
         *record = {};
     }
-    (void) m_data->textures.release(handle);
+    (void)m_data->textures.release(handle);
 }
 
 void GlRhiDevice::destroyTextureView(RhiTextureViewHandle handle) {
@@ -5758,11 +5223,8 @@ void GlRhiDevice::destroyTextureView(RhiTextureViewHandle handle) {
             continue;
         }
         const bool usesDepth = sameHandle(framebuffer.depthView, handle);
-        const bool usesColor = std::any_of(framebuffer.colorViews.begin(),
-                                           framebuffer.colorViews.end(),
-                                           [&](const RhiTextureViewHandle view) {
-                                               return sameHandle(view, handle);
-        });
+        const bool usesColor = std::any_of(framebuffer.colorViews.begin(), framebuffer.colorViews.end(),
+                                           [&](const RhiTextureViewHandle view) { return sameHandle(view, handle); });
         if (usesDepth || usesColor) {
             if (framebuffer.framebuffer != 0u) {
                 m_data->pendingRetirements.framebuffers.push_back(framebuffer.framebuffer);
@@ -5770,7 +5232,7 @@ void GlRhiDevice::destroyTextureView(RhiTextureViewHandle handle) {
             framebuffer = {};
         }
     }
-    (void) m_data->textureViews.release(handle);
+    (void)m_data->textureViews.release(handle);
 }
 
 void GlRhiDevice::destroySampler(RhiSamplerHandle handle) {
@@ -5781,7 +5243,7 @@ void GlRhiDevice::destroySampler(RhiSamplerHandle handle) {
         }
         *record = {};
     }
-    (void) m_data->samplers.release(handle);
+    (void)m_data->samplers.release(handle);
 }
 
 void GlRhiDevice::destroyShader(RhiShaderHandle handle) {
@@ -5789,25 +5251,23 @@ void GlRhiDevice::destroyShader(RhiShaderHandle handle) {
     if (record != nullptr) {
         *record = {};
     }
-    (void) m_data->shaders.release(handle);
+    (void)m_data->shaders.release(handle);
 }
 
 void GlRhiDevice::destroyBindGroupLayout(RhiBindGroupLayoutHandle handle) {
-    GlBindGroupLayoutRecord* record =
-        recordForHandle(m_data->bindGroupLayouts, m_data->bindGroupLayoutRecords, handle);
+    GlBindGroupLayoutRecord* record = recordForHandle(m_data->bindGroupLayouts, m_data->bindGroupLayoutRecords, handle);
     if (record != nullptr) {
         *record = {};
     }
-    (void) m_data->bindGroupLayouts.release(handle);
+    (void)m_data->bindGroupLayouts.release(handle);
 }
 
 void GlRhiDevice::destroyPipelineLayout(RhiPipelineLayoutHandle handle) {
-    GlPipelineLayoutRecord* record =
-        recordForHandle(m_data->pipelineLayouts, m_data->pipelineLayoutRecords, handle);
+    GlPipelineLayoutRecord* record = recordForHandle(m_data->pipelineLayouts, m_data->pipelineLayoutRecords, handle);
     if (record != nullptr) {
         *record = {};
     }
-    (void) m_data->pipelineLayouts.release(handle);
+    (void)m_data->pipelineLayouts.release(handle);
 }
 
 void GlRhiDevice::destroyPipeline(RhiPipelineHandle handle) {
@@ -5821,7 +5281,7 @@ void GlRhiDevice::destroyPipeline(RhiPipelineHandle handle) {
         }
         *record = {};
     }
-    (void) m_data->pipelines.release(handle);
+    (void)m_data->pipelines.release(handle);
 }
 
 void GlRhiDevice::destroyBindGroup(RhiBindGroupHandle handle) {
@@ -5829,26 +5289,22 @@ void GlRhiDevice::destroyBindGroup(RhiBindGroupHandle handle) {
     if (record != nullptr) {
         *record = {};
     }
-    (void) m_data->bindGroups.release(handle);
+    (void)m_data->bindGroups.release(handle);
 }
 
 void GlRhiDevice::destroyQueryPool(RhiQueryPoolHandle handle) {
-    GlQueryPoolRecord* record = recordForHandle(
-        m_data->queryPools, m_data->queryPoolRecords, handle);
+    GlQueryPoolRecord* record = recordForHandle(m_data->queryPools, m_data->queryPoolRecords, handle);
     if (record != nullptr) {
         if (!record->queries.empty()) {
-            m_data->pendingRetirements.queries.insert(
-                m_data->pendingRetirements.queries.end(),
-                record->queries.begin(),
-                record->queries.end());
+            m_data->pendingRetirements.queries.insert(m_data->pendingRetirements.queries.end(), record->queries.begin(),
+                                                      record->queries.end());
         }
         *record = {};
     }
-    (void) m_data->queryPools.release(handle);
+    (void)m_data->queryPools.release(handle);
 }
 
-std::unique_ptr<RhiCommandListPool> GlRhiDevice::createCommandListPool(
-    const RhiCommandListPoolDesc& desc) {
+std::unique_ptr<RhiCommandListPool> GlRhiDevice::createCommandListPool(const RhiCommandListPoolDesc& desc) {
     if (!m_initialized) {
         logRhiError("createCommandListPool requires an initialized device");
         return nullptr;
@@ -5858,8 +5314,7 @@ std::unique_ptr<RhiCommandListPool> GlRhiDevice::createCommandListPool(
 
 void GlRhiDevice::reclaimCompletedCommandLists() {
     reclaimCompletedRetirementBatches(*m_data);
-    for (const std::shared_ptr<GlRhiCommandList>& commandList :
-         m_data->completedCommandLists) {
+    for (const std::shared_ptr<GlRhiCommandList>& commandList : m_data->completedCommandLists) {
         if (commandList != nullptr && commandList->m_state == RhiCommandListState::Pending) {
             commandList->resetForPoolReuse();
         }
@@ -5867,14 +5322,12 @@ void GlRhiDevice::reclaimCompletedCommandLists() {
     m_data->completedCommandLists.clear();
 }
 
-bool GlRhiDevice::submit(const RhiSubmitInfo& info,
-                         RhiSubmissionToken* completionToken) {
+bool GlRhiDevice::submit(const RhiSubmitInfo& info, RhiSubmissionToken* completionToken) {
     if (completionToken != nullptr) {
         *completionToken = {};
     }
-    if (!m_initialized || std::this_thread::get_id() != m_deviceThread ||
-        info.commandLists == nullptr || info.commandListCount == 0u ||
-        info.queue != RhiQueueType::Graphics ||
+    if (!m_initialized || std::this_thread::get_id() != m_deviceThread || info.commandLists == nullptr ||
+        info.commandListCount == 0u || info.queue != RhiQueueType::Graphics ||
         (info.waitCount == 0u) != (info.waits == nullptr)) {
         logRhiError("submit requires a valid graphics queue submission on the device thread");
         return false;
@@ -5905,11 +5358,10 @@ bool GlRhiDevice::submit(const RhiSubmitInfo& info,
             RhiCommandList* baseCommandList = info.commandLists[index];
             auto* commandList = reinterpret_cast<GlRhiCommandList*>(baseCommandList);
             const auto registered = m_data->commandLists.find(commandList);
-            const bool duplicate = std::any_of(
-                commandLists.begin(), commandLists.end(),
-                [commandList](const std::shared_ptr<GlRhiCommandList>& candidate) {
-                    return candidate.get() == commandList;
-                });
+            const bool duplicate = std::any_of(commandLists.begin(), commandLists.end(),
+                                               [commandList](const std::shared_ptr<GlRhiCommandList>& candidate) {
+                                                   return candidate.get() == commandList;
+                                               });
             const std::shared_ptr<GlRhiCommandList> retained =
                 registered != m_data->commandLists.end() ? registered->second.lock() : nullptr;
             if (baseCommandList == nullptr || !retained || duplicate) {
@@ -5922,8 +5374,7 @@ bool GlRhiDevice::submit(const RhiSubmitInfo& info,
 
     for (const std::shared_ptr<GlRhiCommandList>& commandList : commandLists) {
         if (!commandList->m_acquired || commandList->m_device != this ||
-            commandList->m_state != RhiCommandListState::Executable ||
-            !commandList->validateForSubmit()) {
+            commandList->m_state != RhiCommandListState::Executable || !commandList->validateForSubmit()) {
             logRhiError("submit requires executable command lists with live resource references");
             return false;
         }
@@ -5948,8 +5399,7 @@ bool GlRhiDevice::submit(const RhiSubmitInfo& info,
             m_data->bufferRecords[index].state = bufferStateSnapshot[index];
         }
         for (size_t index = 0u; index < textureStateSnapshot.size(); ++index) {
-            m_data->textureRecords[index].subresourceStates =
-                std::move(textureStateSnapshot[index]);
+            m_data->textureRecords[index].subresourceStates = std::move(textureStateSnapshot[index]);
         }
     };
     bool validationSucceeded = true;
@@ -5985,22 +5435,18 @@ bool GlRhiDevice::submit(const RhiSubmitInfo& info,
     m_data->pendingRetirements = {};
     m_data->retirementBatches.push_back(std::move(batch));
     if (completionToken != nullptr) {
-    *completionToken = {m_deviceId, m_lastSubmittedSequence,
-                        RhiQueueType::Graphics, m_lastSubmittedSequence};
+        *completionToken = {m_deviceId, m_lastSubmittedSequence, RhiQueueType::Graphics, m_lastSubmittedSequence};
     }
     glFlush();
     return true;
 }
 
 bool GlRhiDevice::validateSubmissionToken(const RhiSubmissionToken token) const {
-    return m_initialized && token.isValid() && token.deviceId == m_deviceId &&
-         token.queue == RhiQueueType::Graphics &&
-         token.sequence <= m_lastSubmittedSequence &&
-         token.timelineValue() <= m_lastSubmittedSequence;
+    return m_initialized && token.isValid() && token.deviceId == m_deviceId && token.queue == RhiQueueType::Graphics &&
+           token.sequence <= m_lastSubmittedSequence && token.timelineValue() <= m_lastSubmittedSequence;
 }
 
-bool GlRhiDevice::isSubmissionComplete(const RhiSubmissionToken token,
-                                       bool& complete) {
+bool GlRhiDevice::isSubmissionComplete(const RhiSubmissionToken token, bool& complete) {
     complete = false;
     if (std::this_thread::get_id() != m_deviceThread || !validateSubmissionToken(token)) {
         logRhiError("submission completion query received an invalid or foreign token");
@@ -6022,15 +5468,12 @@ bool GlRhiDevice::waitForSubmission(const RhiSubmissionToken token) {
 
     const auto batch = std::find_if(
         m_data->retirementBatches.begin(), m_data->retirementBatches.end(),
-        [token](const GlRetirementBatch& candidate) {
-            return candidate.submissionSequence == token.sequence;
-        });
+        [token](const GlRetirementBatch& candidate) { return candidate.submissionSequence == token.sequence; });
     if (batch == m_data->retirementBatches.end()) {
         logRhiError("submission wait could not find the pending submission");
         return false;
     }
-    const GLenum result = glClientWaitSync(
-        batch->fence, GL_SYNC_FLUSH_COMMANDS_BIT, GL_TIMEOUT_IGNORED);
+    const GLenum result = glClientWaitSync(batch->fence, GL_SYNC_FLUSH_COMMANDS_BIT, GL_TIMEOUT_IGNORED);
     if (result == GL_WAIT_FAILED) {
         logRhiError("submission fence wait failed");
         return false;
@@ -6047,8 +5490,7 @@ void GlRhiDevice::waitIdle() {
     if (m_initialized) {
         glFinish();
         reclaimAllRetiredResources(*m_data);
-        for (const std::shared_ptr<GlRhiCommandList>& commandList :
-             m_data->completedCommandLists) {
+        for (const std::shared_ptr<GlRhiCommandList>& commandList : m_data->completedCommandLists) {
             if (commandList != nullptr && commandList->m_state == RhiCommandListState::Pending) {
                 commandList->resetForPoolReuse();
             }
@@ -6058,23 +5500,19 @@ void GlRhiDevice::waitIdle() {
 }
 
 bool GlRhiDevice::cancelFrame(const RhiPresentInfo& info) {
-    if (!m_initialized || m_data == nullptr ||
-        std::this_thread::get_id() != m_deviceThread ||
-        !m_frameAcquired || info.frameIndex != m_acquiredFrameIndex ||
-        info.imageIndex != m_acquiredImageIndex) {
+    if (!m_initialized || m_data == nullptr || std::this_thread::get_id() != m_deviceThread || !m_frameAcquired ||
+        info.frameIndex != m_acquiredFrameIndex || info.imageIndex != m_acquiredImageIndex) {
         logRhiError("cancelFrame requires the currently acquired frame identity");
         return false;
     }
     glFinish();
-    GlTextureRecord* swapchain = recordForHandle(
-        m_data->textures, m_data->textureRecords,
-        m_data->swapchainColorTexture);
+    GlTextureRecord* swapchain =
+        recordForHandle(m_data->textures, m_data->textureRecords, m_data->swapchainColorTexture);
     if (swapchain == nullptr) {
         logRhiError("cancelFrame requires a live swapchain color texture");
         return false;
     }
-    setTextureRangeState(
-        *swapchain, {0u, 1u, 0u, 1u}, RhiResourceState::Present);
+    setTextureRangeState(*swapchain, {0u, 1u, 0u, 1u}, RhiResourceState::Present);
     m_frameAcquired = false;
     reclaimAllRetiredResources(*m_data);
     return true;
@@ -6085,16 +5523,14 @@ RhiFrameStatus GlRhiDevice::presentFrame(const RhiPresentInfo& info) {
         logRhiError("presentFrame requires an initialized device on the device thread");
         return RhiFrameStatus::Error;
     }
-    if (!m_frameAcquired || info.frameIndex != m_acquiredFrameIndex ||
-        info.imageIndex != m_acquiredImageIndex) {
+    if (!m_frameAcquired || info.frameIndex != m_acquiredFrameIndex || info.imageIndex != m_acquiredImageIndex) {
         logRhiError("presentFrame requires the currently acquired frame identity");
         return RhiFrameStatus::Error;
     }
-    const GlTextureRecord* swapchain = recordForHandle(
-        m_data->textures, m_data->textureRecords, m_data->swapchainColorTexture);
+    const GlTextureRecord* swapchain =
+        recordForHandle(m_data->textures, m_data->textureRecords, m_data->swapchainColorTexture);
     const GlTextureSubresourceRange colorRange{0u, 1u, 0u, 1u};
-    if (swapchain == nullptr ||
-        !textureRangeHasState(*swapchain, colorRange, RhiResourceState::Present)) {
+    if (swapchain == nullptr || !textureRangeHasState(*swapchain, colorRange, RhiResourceState::Present)) {
         logRhiError("presentFrame requires the swapchain color texture in Present state");
         return RhiFrameStatus::Error;
     }

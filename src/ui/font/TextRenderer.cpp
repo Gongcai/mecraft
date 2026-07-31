@@ -62,8 +62,7 @@ bool decodeUtf8Codepoint(const char*& cursor, const char* end, uint32_t& codepoi
         }
         value = (value << 6u) | (byte & 0x3fu);
     }
-    if (value < minimum || value > 0x10ffffu ||
-        (value >= 0xd800u && value <= 0xdfffu)) {
+    if (value < minimum || value > 0x10ffffu || (value >= 0xd800u && value <= 0xdfffu)) {
         return false;
     }
     cursor += continuationCount + 1;
@@ -85,15 +84,24 @@ bool TextRenderer::init(RhiDevice& rhiDevice, const char* fontPath) {
 
 void TextRenderer::shutdown() {
     if (m_rhiDevice != nullptr) {
-        if (m_vertexBuffer.isValid()) m_rhiDevice->destroyBuffer(m_vertexBuffer);
-        if (m_atlasBindGroup.isValid()) m_rhiDevice->destroyBindGroup(m_atlasBindGroup);
-        if (m_atlasView.isValid()) m_rhiDevice->destroyTextureView(m_atlasView);
-        if (m_sampler.isValid()) m_rhiDevice->destroySampler(m_sampler);
-        if (m_pipeline.isValid()) m_rhiDevice->destroyPipeline(m_pipeline);
-        if (m_pipelineLayout.isValid()) m_rhiDevice->destroyPipelineLayout(m_pipelineLayout);
-        if (m_bindGroupLayout.isValid()) m_rhiDevice->destroyBindGroupLayout(m_bindGroupLayout);
-        if (m_fragmentShader.isValid()) m_rhiDevice->destroyShader(m_fragmentShader);
-        if (m_vertexShader.isValid()) m_rhiDevice->destroyShader(m_vertexShader);
+        if (m_vertexBuffer.isValid())
+            m_rhiDevice->destroyBuffer(m_vertexBuffer);
+        if (m_atlasBindGroup.isValid())
+            m_rhiDevice->destroyBindGroup(m_atlasBindGroup);
+        if (m_atlasView.isValid())
+            m_rhiDevice->destroyTextureView(m_atlasView);
+        if (m_sampler.isValid())
+            m_rhiDevice->destroySampler(m_sampler);
+        if (m_pipeline.isValid())
+            m_rhiDevice->destroyPipeline(m_pipeline);
+        if (m_pipelineLayout.isValid())
+            m_rhiDevice->destroyPipelineLayout(m_pipelineLayout);
+        if (m_bindGroupLayout.isValid())
+            m_rhiDevice->destroyBindGroupLayout(m_bindGroupLayout);
+        if (m_fragmentShader.isValid())
+            m_rhiDevice->destroyShader(m_fragmentShader);
+        if (m_vertexShader.isValid())
+            m_rhiDevice->destroyShader(m_vertexShader);
     }
     m_atlas.shutdown();
     m_rhiDevice = nullptr;
@@ -118,8 +126,7 @@ void TextRenderer::shutdown() {
 }
 
 bool TextRenderer::createPipelineResources() {
-    const std::optional<std::string> vertexSource =
-        renderer::rhi::loadShaderSource("assets/shaders/ui_text_rhi.vert");
+    const std::optional<std::string> vertexSource = renderer::rhi::loadShaderSource("assets/shaders/ui_text_rhi.vert");
     const std::optional<std::string> fragmentSource =
         renderer::rhi::loadShaderSource("assets/shaders/ui_text_rhi.frag");
     if (!vertexSource || !fragmentSource) {
@@ -140,8 +147,8 @@ bool TextRenderer::createPipelineResources() {
 
     RhiBindGroupLayoutDesc bindGroupLayoutDesc;
     bindGroupLayoutDesc.debugName = "UiText.BindGroupLayout";
-    bindGroupLayoutDesc.entries.push_back({0u, RhiBindingType::CombinedTextureSampler,
-                                           rhiFlag(RhiShaderStage::Fragment), 1u});
+    bindGroupLayoutDesc.entries.push_back(
+        {0u, RhiBindingType::CombinedTextureSampler, rhiFlag(RhiShaderStage::Fragment), 1u});
     m_bindGroupLayout = m_rhiDevice->createBindGroupLayout(bindGroupLayoutDesc);
 
     RhiPipelineLayoutDesc pipelineLayoutDesc;
@@ -184,9 +191,8 @@ bool TextRenderer::createPipelineResources() {
     samplerDesc.addressW = RhiAddressMode::ClampToEdge;
     m_sampler = m_rhiDevice->createSampler(samplerDesc);
 
-    return m_vertexShader.isValid() && m_fragmentShader.isValid() &&
-           m_bindGroupLayout.isValid() && m_pipelineLayout.isValid() &&
-           m_pipeline.isValid() && m_sampler.isValid();
+    return m_vertexShader.isValid() && m_fragmentShader.isValid() && m_bindGroupLayout.isValid() &&
+           m_pipelineLayout.isValid() && m_pipeline.isValid() && m_sampler.isValid();
 }
 
 bool TextRenderer::ensureVertexCapacity(const uint64_t requiredBytes) {
@@ -241,20 +247,13 @@ RhiRect2D TextRenderer::resolveScissor(const UIRenderContext& context) {
         return context.scissor;
     }
     const float pixelScale = context.pixelScale();
-    return {
-        0,
-        0,
-        static_cast<uint32_t>(std::max(1l, std::lround(static_cast<float>(context.screenWidth) * pixelScale))),
-        static_cast<uint32_t>(std::max(1l, std::lround(static_cast<float>(context.screenHeight) * pixelScale)))
-    };
+    return {0, 0,
+            static_cast<uint32_t>(std::max(1l, std::lround(static_cast<float>(context.screenWidth) * pixelScale))),
+            static_cast<uint32_t>(std::max(1l, std::lround(static_cast<float>(context.screenHeight) * pixelScale)))};
 }
 
-void TextRenderer::draw(const UIRenderContext& context,
-                        const std::string& text,
-                        const float x,
-                        const float y,
-                        const float scale,
-                        const std::array<float, 4>& color) const {
+void TextRenderer::draw(const UIRenderContext& context, const std::string& text, const float x, const float y,
+                        const float scale, const std::array<float, 4>& color) const {
     if (text.empty()) {
         return;
     }
@@ -312,8 +311,7 @@ bool TextRenderer::prepareFrame(RhiCommandList& commandList) {
         }
         commandList.bufferBarrier({m_vertexBuffer, m_vertexBufferState, RhiResourceState::TransferDst});
         commandList.updateBuffer(m_vertexBuffer, 0u, m_vertices.data(), static_cast<size_t>(byteSize));
-        commandList.bufferBarrier({m_vertexBuffer, RhiResourceState::TransferDst,
-                                   RhiResourceState::VertexBuffer});
+        commandList.bufferBarrier({m_vertexBuffer, RhiResourceState::TransferDst, RhiResourceState::VertexBuffer});
         m_vertexBufferState = RhiResourceState::VertexBuffer;
         if (!rebuildAtlasBinding()) {
             return false;
@@ -380,8 +378,7 @@ bool TextRenderer::generateRequestVertices(DrawRequest& request) {
     const char* cursor = request.text.data();
     const char* const end = cursor + request.text.size();
     auto append = [&](const float x, const float y, const float u, const float v) {
-        m_vertices.push_back({x, y, u, v, request.color[0], request.color[1],
-                              request.color[2], request.color[3]});
+        m_vertices.push_back({x, y, u, v, request.color[0], request.color[1], request.color[2], request.color[3]});
     };
     while (cursor < end) {
         if (*cursor == '\n') {
@@ -403,8 +400,7 @@ bool TextRenderer::generateRequestVertices(DrawRequest& request) {
             return false;
         }
         const float x = std::round(cursorX + static_cast<float>(glyph->bearingX) * pixelScale);
-        const float y = std::round(cursorY -
-                                   static_cast<float>(glyph->bitmapHeight - glyph->bearingY) * pixelScale);
+        const float y = std::round(cursorY - static_cast<float>(glyph->bitmapHeight - glyph->bearingY) * pixelScale);
         const float width = static_cast<float>(glyph->bitmapWidth) * pixelScale;
         const float height = static_cast<float>(glyph->bitmapHeight) * pixelScale;
         if (glyph->bitmapWidth > 0 && glyph->bitmapHeight > 0) {
@@ -429,18 +425,13 @@ void TextRenderer::beginFrameRecording() {
     m_recording = true;
 }
 
-void TextRenderer::recordPreparedRequest(const UIRenderContext& context,
-                                         const std::string& text,
-                                         const float x,
-                                         const float y,
-                                         const float scale,
-                                         const std::array<float, 4>& color) const {
+void TextRenderer::recordPreparedRequest(const UIRenderContext& context, const std::string& text, const float x,
+                                         const float y, const float scale, const std::array<float, 4>& color) const {
     if (!m_recording || context.commandList == nullptr || m_recordIndex >= m_requests.size()) {
         std::abort();
     }
     const DrawRequest& request = m_requests[m_recordIndex++];
-    if (request.text != text || request.x != x || request.y != y ||
-        request.scale != scale || request.color != color) {
+    if (request.text != text || request.x != x || request.y != y || request.scale != scale || request.color != color) {
         std::abort();
     }
     if (request.vertexCount == 0u) {
@@ -464,8 +455,7 @@ bool TextRenderer::endFrameRecording() const {
     return m_recordIndex == m_requests.size();
 }
 
-TextRenderer::TextMetrics TextRenderer::measureText(const std::string& text,
-                                                    const float scale) const {
+TextRenderer::TextMetrics TextRenderer::measureText(const std::string& text, const float scale) const {
     TextMetrics result;
     if (text.empty()) {
         return result;
@@ -482,8 +472,7 @@ TextRenderer::TextMetrics TextRenderer::measureText(const std::string& text,
                 continue;
             }
             uint32_t codepoint = 0u;
-            if (!decodeUtf8Codepoint(cursor, end, codepoint) ||
-                m_atlas.findGlyph(codepoint) == nullptr) {
+            if (!decodeUtf8Codepoint(cursor, end, codepoint) || m_atlas.findGlyph(codepoint) == nullptr) {
                 std::abort();
             }
         }

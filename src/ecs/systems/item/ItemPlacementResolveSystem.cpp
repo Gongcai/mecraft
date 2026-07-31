@@ -6,18 +6,13 @@
 
 namespace ecs {
 
-void ItemPlacementResolveSystem::update(GameplayRegistry& registry,
-                                        const World& world,
-                                        const glm::ivec3& blockPos) {
+void ItemPlacementResolveSystem::update(GameplayRegistry& registry, const World& world, const glm::ivec3& blockPos) {
     if (!drop_detail::hasCollisionBlock(world, blockPos.x, blockPos.y, blockPos.z)) {
         return;
     }
 
-    auto view = registry.view<DropItemTag,
-                              TransformComponent,
-                              VelocityComponent,
-                              BoundsComponent,
-                              GroundedStateComponent>();
+    auto view =
+        registry.view<DropItemTag, TransformComponent, VelocityComponent, BoundsComponent, GroundedStateComponent>();
     for (const entt::entity e : view) {
         auto& transform = view.get<TransformComponent>(e);
         auto& velocity = view.get<VelocityComponent>(e);
@@ -28,8 +23,8 @@ void ItemPlacementResolveSystem::update(GameplayRegistry& registry,
             continue;
         }
 
-        const float baseY = drop_detail::collisionTopY(world, blockPos) + bounds.halfExtents.y +
-                            drop_detail::kContactEpsilon;
+        const float baseY =
+            drop_detail::collisionTopY(world, blockPos) + bounds.halfExtents.y + drop_detail::kContactEpsilon;
         glm::vec3 resolvedPos = transform.position;
         resolvedPos.y = baseY;
 

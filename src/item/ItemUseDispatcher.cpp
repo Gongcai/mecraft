@@ -20,26 +20,20 @@ bool canPlaceFluidAt(const IWorldView& worldView, const glm::ivec3& pos, const F
     }
 
     const BlockStateId blockState = worldView.getBlockState(pos.x, pos.y, pos.z);
-    return FluidState::canReplace(fluidDesc, blockState) ||
-           FluidState::canCoexist(fluidDesc, blockState);
+    return FluidState::canReplace(fluidDesc, blockState) || FluidState::canCoexist(fluidDesc, blockState);
 }
-}
+} // namespace
 
 namespace ItemUseDispatcher {
-bool isWithinReach(const glm::vec3& actorPosition,
-                   const glm::ivec3& blockPosition,
-                   const float maxDistance) {
+bool isWithinReach(const glm::vec3& actorPosition, const glm::ivec3& blockPosition, const float maxDistance) {
     const glm::vec3 blockCenter = glm::vec3(blockPosition) + glm::vec3(0.5f);
     const glm::vec3 diff = actorPosition - blockCenter;
     const float distSq = diff.x * diff.x + diff.y * diff.y + diff.z * diff.z;
     return distSq <= maxDistance * maxDistance;
 }
 
-bool canApplyBlockRule(const IWorldView& worldView,
-                       const glm::ivec3& blockPosition,
-                       const ItemUseRule& rule) {
-    const BlockStateId targetState =
-        worldView.getBlockState(blockPosition.x, blockPosition.y, blockPosition.z);
+bool canApplyBlockRule(const IWorldView& worldView, const glm::ivec3& blockPosition, const ItemUseRule& rule) {
+    const BlockStateId targetState = worldView.getBlockState(blockPosition.x, blockPosition.y, blockPosition.z);
     const BlockID targetBlock = BlockStateRegistry::getBlockId(targetState);
     if (!ItemUseRules::matchesBlock(rule, targetBlock)) {
         return false;
@@ -47,11 +41,8 @@ bool canApplyBlockRule(const IWorldView& worldView,
     return !rule.requiresEmptyAbove || hasEmptySpaceAbove(worldView, blockPosition);
 }
 
-bool canPickupFluid(const IWorldView& worldView,
-                    const glm::ivec3& blockPosition,
-                    const ItemUseRule& rule) {
-    const BlockStateId fluidState =
-        worldView.getFluidState(blockPosition.x, blockPosition.y, blockPosition.z);
+bool canPickupFluid(const IWorldView& worldView, const glm::ivec3& blockPosition, const ItemUseRule& rule) {
+    const BlockStateId fluidState = worldView.getFluidState(blockPosition.x, blockPosition.y, blockPosition.z);
     const DecodedFluid fluid = FluidState::decode(fluidState);
     if (fluid.kind == FluidKind::None) {
         return false;
@@ -64,9 +55,7 @@ bool canPickupFluid(const IWorldView& worldView,
     return ItemUseRules::matchesBlock(rule, fluidBlock);
 }
 
-bool canPlaceFluid(const IWorldView& worldView,
-                   const glm::ivec3& blockPosition,
-                   const ItemUseRule& rule) {
+bool canPlaceFluid(const IWorldView& worldView, const glm::ivec3& blockPosition, const ItemUseRule& rule) {
     if (!rule.requiresFluidPlacement) {
         return true;
     }
@@ -88,4 +77,4 @@ BlockStateId makeSourceFluidState(const BlockID fluidBlock) {
     }
     return FluidState::encode(DecodedFluid{fluidKind, 0, false, true});
 }
-}
+} // namespace ItemUseDispatcher

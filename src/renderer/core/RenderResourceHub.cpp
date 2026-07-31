@@ -35,7 +35,7 @@ namespace {
 struct MeshingCandidate {
     int64_t chunkKey = 0;
     Chunk* chunk = nullptr;
-    int scy = 0;  // Sub-chunk index
+    int scy = 0; // Sub-chunk index
     float distanceSq = 0.0f;
     std::shared_ptr<Chunk> chunkRef;
     std::shared_ptr<Chunk> neighborPosX;
@@ -67,15 +67,13 @@ std::string resolveAtmosphereFinalLutPath() {
     }
     return candidates.front();
 }
-}
+} // namespace
 
 RenderResourceHub::~RenderResourceHub() {
     shutdown();
 }
 
-bool RenderResourceHub::init(ResourceMgr& resourceMgr,
-                             ThreadPool& threadPool,
-                             RhiDevice& rhiDevice,
+bool RenderResourceHub::init(ResourceMgr& resourceMgr, ThreadPool& threadPool, RhiDevice& rhiDevice,
                              RhiCommandListPool& commandListPool) {
     m_resourceMgr = &resourceMgr;
     m_rhiDevice = &rhiDevice;
@@ -117,12 +115,9 @@ bool RenderResourceHub::init(ResourceMgr& resourceMgr,
         m_meshingDrainTimeBudgetMs = 0.5;
 #endif
     }
-    m_terrainCache.setMeshingBudgets(m_meshingSubmitBudget,
-                                     m_meshingMaxInFlight,
-                                     static_cast<float>(m_meshingSubmitTimeBudgetMs),
-                                     m_meshingDrainBudget,
-                                     static_cast<float>(m_meshingDrainTimeBudgetMs),
-                                     m_meshingDrainVertexBudget);
+    m_terrainCache.setMeshingBudgets(m_meshingSubmitBudget, m_meshingMaxInFlight,
+                                     static_cast<float>(m_meshingSubmitTimeBudgetMs), m_meshingDrainBudget,
+                                     static_cast<float>(m_meshingDrainTimeBudgetMs), m_meshingDrainVertexBudget);
     m_meshingService.start(&threadPool);
     return true;
 }
@@ -164,12 +159,9 @@ void RenderResourceHub::setMeshingSubmitBudget(const int budget) {
     }
     m_meshingSubmitBudget = std::max(1, budget);
     m_meshingSubmitBudgetOverridden = true;
-    m_terrainCache.setMeshingBudgets(m_meshingSubmitBudget,
-                                     m_meshingMaxInFlight,
-                                     static_cast<float>(m_meshingSubmitTimeBudgetMs),
-                                     m_meshingDrainBudget,
-                                     static_cast<float>(m_meshingDrainTimeBudgetMs),
-                                     m_meshingDrainVertexBudget);
+    m_terrainCache.setMeshingBudgets(m_meshingSubmitBudget, m_meshingMaxInFlight,
+                                     static_cast<float>(m_meshingSubmitTimeBudgetMs), m_meshingDrainBudget,
+                                     static_cast<float>(m_meshingDrainTimeBudgetMs), m_meshingDrainVertexBudget);
 }
 
 void RenderResourceHub::setRegionChunkSize(const int chunkSize) {
@@ -247,8 +239,8 @@ RenderResourceHub::MeshingFrameStats RenderResourceHub::getMeshingFrameStats() c
     stats.deferredResults = m_terrainCache.deferredMeshResultCount();
     stats.lastBuildMs = m_lastMeshingBuildMs;
     stats.averageBuildMs = m_meshingCompletedThisFrame > 0
-        ? (m_meshingBuildMsThisFrame / static_cast<double>(m_meshingCompletedThisFrame))
-        : 0.0;
+                               ? (m_meshingBuildMsThisFrame / static_cast<double>(m_meshingCompletedThisFrame))
+                               : 0.0;
     stats.lastOpaqueFacesBeforeGreedy = m_lastOpaqueFacesBeforeGreedy;
     stats.lastOpaqueFacesAfterGreedy = m_lastOpaqueFacesAfterGreedy;
     stats.lastTransparentFacesBeforeGreedy = m_lastTransparentFacesBeforeGreedy;
@@ -314,7 +306,8 @@ RenderWorkStats RenderResourceHub::getRenderWorkStats() const {
     stats.cutoutPoolCapacityBytes = stats.cutoutPoolCapacityVertices * stats.blockVertexBytes;
     stats.transparentPoolCapacityBytes = stats.transparentPoolCapacityVertices * stats.blockVertexBytes;
     stats.terrainPoolUsedBytes = stats.opaquePoolUsedBytes + stats.cutoutPoolUsedBytes + stats.transparentPoolUsedBytes;
-    stats.terrainPoolCapacityBytes = stats.opaquePoolCapacityBytes + stats.cutoutPoolCapacityBytes + stats.transparentPoolCapacityBytes;
+    stats.terrainPoolCapacityBytes =
+        stats.opaquePoolCapacityBytes + stats.cutoutPoolCapacityBytes + stats.transparentPoolCapacityBytes;
     stats.terrainMetadataBytes = m_worldRenderBuffer.metadataBytes();
     stats.terrainMetadataSlots = m_worldRenderBuffer.metadataSlotCount();
     stats.terrainMetadataFreeSlots = m_worldRenderBuffer.metadataFreeSlotCount();
@@ -329,7 +322,8 @@ RenderWorkStats RenderResourceHub::getRenderWorkStats() const {
     stats.opaqueVertexReadBytes = stats.opaqueVertices * stats.blockVertexBytes;
     stats.cutoutVertexReadBytes = stats.cutoutVertices * stats.blockVertexBytes;
     stats.transparentVertexReadBytes = stats.transparentVertices * stats.blockVertexBytes;
-    stats.terrainVertexReadBytes = stats.opaqueVertexReadBytes + stats.cutoutVertexReadBytes + stats.transparentVertexReadBytes;
+    stats.terrainVertexReadBytes =
+        stats.opaqueVertexReadBytes + stats.cutoutVertexReadBytes + stats.transparentVertexReadBytes;
     stats.cutoutCandidates = m_terrainRenderer.cutoutCandidatesThisFrame();
     stats.cutoutSkippedByDistance = m_terrainRenderer.cutoutSkippedByDistanceThisFrame();
     stats.mdiSubChunkTests = m_terrainRenderer.mdiSubChunkTestsThisFrame();
@@ -376,14 +370,16 @@ float RenderResourceHub::getCutoutRenderDistanceChunks() const {
     return m_terrainRenderer.cutoutRenderDistanceChunks();
 }
 
-const std::array<float, RenderResourceHub::MESHING_HISTORY_SIZE>& RenderResourceHub::getMeshingSubmittedHistory() const {
+const std::array<float, RenderResourceHub::MESHING_HISTORY_SIZE>&
+RenderResourceHub::getMeshingSubmittedHistory() const {
     if (m_terrainStreamingService) {
         return m_terrainStreamingService->getMeshingSubmittedHistory();
     }
     return m_meshingSubmittedHistory;
 }
 
-const std::array<float, RenderResourceHub::MESHING_HISTORY_SIZE>& RenderResourceHub::getMeshingCompletedHistory() const {
+const std::array<float, RenderResourceHub::MESHING_HISTORY_SIZE>&
+RenderResourceHub::getMeshingCompletedHistory() const {
     if (m_terrainStreamingService) {
         return m_terrainStreamingService->getMeshingCompletedHistory();
     }

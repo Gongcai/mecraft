@@ -5,7 +5,6 @@
 #ifndef MECRAFT_INPUTMANAGER_H
 #define MECRAFT_INPUTMANAGER_H
 
-
 #ifndef GLFW_INCLUDE_NONE
 #define GLFW_INCLUDE_NONE
 #endif
@@ -24,16 +23,16 @@ struct InputSnapshot {
     bool keys[GLFW_KEY_LAST + 1] = {};
     bool keysJustPressed[GLFW_KEY_LAST + 1] = {};
     bool keysJustReleased[GLFW_KEY_LAST + 1] = {};
-    bool keysDoubleTapped[GLFW_KEY_LAST + 1] = {};  // 本帧检测到键盘双击
+    bool keysDoubleTapped[GLFW_KEY_LAST + 1] = {}; // 本帧检测到键盘双击
 
     bool mouseButtons[GLFW_MOUSE_BUTTON_LAST + 1] = {};
     bool mouseButtonsJustPressed[GLFW_MOUSE_BUTTON_LAST + 1] = {};
     bool mouseButtonsJustReleased[GLFW_MOUSE_BUTTON_LAST + 1] = {};
-    bool mouseButtonsDoubleTapped[GLFW_MOUSE_BUTTON_LAST + 1] = {};  // 本帧检测到鼠标双击
+    bool mouseButtonsDoubleTapped[GLFW_MOUSE_BUTTON_LAST + 1] = {}; // 本帧检测到鼠标双击
 
     glm::vec2 mousePosition{0.0f, 0.0f};
     glm::vec2 mouseDelta{0.0f, 0.0f};
-    double scrollDelta = 0.0;  // >0 = scroll up, <0 = scroll down
+    double scrollDelta = 0.0; // >0 = scroll up, <0 = scroll down
     std::array<uint32_t, kMaxTypedCharsPerFrame> typedChars{};
     size_t typedCharCount = 0;
 
@@ -85,11 +84,7 @@ struct InputSnapshot {
 
 class InputManager {
 public:
-    enum class ReplayMode {
-        None,
-        Recording,
-        Playback
-    };
+    enum class ReplayMode { None, Recording, Playback };
 
 #ifdef MECRAFT_DEBUG
     struct DebugEventStats {
@@ -131,8 +126,8 @@ public:
     [[nodiscard]] double inputReplayActiveSeconds() const;
 
     // ── 鼠标模式 ──
-    void captureMouse(bool capture);       // true → GLFW_CURSOR_DISABLED
-    void resetMouseDelta();              // 重置鼠标位移
+    void captureMouse(bool capture); // true → GLFW_CURSOR_DISABLED
+    void resetMouseDelta(); // 重置鼠标位移
 
     // Shared UI drag payload channel for inventory/other UI systems.
     void beginUIDragItem(int itemId, int count, int sourceSlot);
@@ -218,6 +213,5 @@ private:
     static void scrollCallback(GLFWwindow* w, double xoffset, double yoffset);
     static void charCallback(GLFWwindow* w, unsigned int codepoint);
 };
-
 
 #endif //MECRAFT_INPUTMANAGER_H

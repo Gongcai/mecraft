@@ -12,9 +12,7 @@
 
 class CreativeInventoryState final : public IGameState {
 public:
-    explicit CreativeInventoryState(InventoryStateContext deps)
-        : m_deps(deps),
-          m_dragCtrl(m_deps) {
+    explicit CreativeInventoryState(InventoryStateContext deps) : m_deps(deps), m_dragCtrl(m_deps) {
         m_dragCtrl.setCraftingGrid(&deps.uiRenderer.getCraftingGrid());
     }
 
@@ -50,10 +48,8 @@ public:
         const bool primaryReleased = uiRouteResult.primaryReleased;
         const bool secondaryPressed = uiRouteResult.secondaryPressed;
 
-        if (m_deps.context.isActionTriggered(Action::Inventory) ||
-            m_deps.context.isActionTriggered(Action::Menu) ||
-            (m_deps.context.isActionTriggered(Action::Cancel) &&
-             uiRouteResult.aggregate != UIEventResult::Consumed)) {
+        if (m_deps.context.isActionTriggered(Action::Inventory) || m_deps.context.isActionTriggered(Action::Menu) ||
+            (m_deps.context.isActionTriggered(Action::Cancel) && uiRouteResult.aggregate != UIEventResult::Consumed)) {
             m_deps.fsm.popState();
             return;
         }

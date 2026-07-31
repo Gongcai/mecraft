@@ -27,18 +27,14 @@ namespace {
 
 /// 6 cardinal neighbor offsets (in the same order Minecraft uses).
 constexpr glm::ivec3 kNeighborOffsets[6] = {
-    { 1,  0,  0},
-    {-1,  0,  0},
-    { 0,  1,  0},
-    { 0, -1,  0},
-    { 0,  0,  1},
-    { 0,  0, -1},
+    {1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1},
 };
 
 /// Check if a block at `supportPos` can provide support (solid block).
 bool isSupportive(const World& world, const glm::ivec3& supportPos) {
     const BlockStateId stateId = world.getBlockState(supportPos.x, supportPos.y, supportPos.z);
-    if (stateId == NULL_BLOCK_STATE) return false;
+    if (stateId == NULL_BLOCK_STATE)
+        return false;
     const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
     return BlockRegistry::getFast(blockId).isSolid;
 }
@@ -96,7 +92,8 @@ bool checkFaceAttachment(const World& world, const glm::ivec3& pos, BlockStateId
 /// Returns true if the block at `pos` can survive given its supportRule.
 bool canSurvive(const World& world, const glm::ivec3& pos) {
     const BlockStateId stateId = world.getBlockState(pos.x, pos.y, pos.z);
-    if (stateId == NULL_BLOCK_STATE) return true;  // air always survives
+    if (stateId == NULL_BLOCK_STATE)
+        return true; // air always survives
     const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
 
     const BlockDef& def = BlockRegistry::getFast(blockId);
@@ -106,7 +103,8 @@ bool canSurvive(const World& world, const glm::ivec3& pos) {
         return checkGround(world, pos);
     }
 
-    if (def.supportRule.empty()) return true;  // no rule = always survives
+    if (def.supportRule.empty())
+        return true; // no rule = always survives
 
     if (def.supportRule == "ground") {
         return checkGround(world, pos);
@@ -131,9 +129,7 @@ struct SupportEventSinks {
     FallingBlockSpawnEventBus* fallingBlockBus = nullptr;
 };
 
-size_t processQueuedPositions(World& world,
-                              const size_t budget,
-                              const SupportEventSinks& sinks) {
+size_t processQueuedPositions(World& world, const size_t budget, const SupportEventSinks& sinks) {
     auto& updateQueue = world.neighborUpdateQueue();
     if (updateQueue.size() == 0 || budget == 0) {
         return 0;
@@ -177,8 +173,10 @@ size_t processQueuedPositions(World& world,
 } // namespace
 
 void BlockSupportSystem::update(SystemContext& ctx) {
-    if (!ctx.services.world) return;
-    if (ctx.services.gameClient) return;
+    if (!ctx.services.world)
+        return;
+    if (ctx.services.gameClient)
+        return;
     auto& world = *ctx.services.world;
     auto& registry = ctx.registry;
 

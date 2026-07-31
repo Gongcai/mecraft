@@ -16,12 +16,8 @@ namespace ecs {
 struct HumanoidAnimationHelper {
     /// @param torsoYaw   World-space yaw for the torso rotation (degrees).
     /// @param headPitch  Pitch applied to the head (degrees). 0 for mobs.
-    static void update(entt::registry& reg,
-                       entt::entity entity,
-                       SteveAnimationStateComponent& anim,
-                       float dt,
-                       float torsoYaw,
-                       float headPitch) {
+    static void update(entt::registry& reg, entt::entity entity, SteveAnimationStateComponent& anim, float dt,
+                       float torsoYaw, float headPitch) {
         // Detect walking from position change
         if (reg.all_of<TransformComponent>(entity)) {
             auto& transform = reg.get<TransformComponent>(entity);
@@ -51,7 +47,8 @@ struct HumanoidAnimationHelper {
         // Rotate torso to face yaw direction
         auto& rootChildren = reg.get<ChildrenComponent>(entity);
         for (auto child : rootChildren.children) {
-            if (!reg.all_of<StevePartComponent, LocalTransformComponent>(child)) continue;
+            if (!reg.all_of<StevePartComponent, LocalTransformComponent>(child))
+                continue;
             auto& part = reg.get<StevePartComponent>(child);
             auto& local = reg.get<LocalTransformComponent>(child);
             if (part.partType == StevePartType::Torso) {
@@ -62,32 +59,25 @@ struct HumanoidAnimationHelper {
 
         // Update each child part's local rotation
         for (auto child : rootChildren.children) {
-            if (!reg.all_of<ChildrenComponent>(child)) continue;
+            if (!reg.all_of<ChildrenComponent>(child))
+                continue;
             auto& partChildren = reg.get<ChildrenComponent>(child);
             for (auto partEntity : partChildren.children) {
-                if (!reg.all_of<StevePartComponent, LocalTransformComponent>(partEntity)) continue;
+                if (!reg.all_of<StevePartComponent, LocalTransformComponent>(partEntity))
+                    continue;
                 auto& part = reg.get<StevePartComponent>(partEntity);
                 auto& local = reg.get<LocalTransformComponent>(partEntity);
 
                 switch (part.partType) {
-                case StevePartType::LeftArm:
-                    local.localRotation.x = swing;
-                    break;
-                case StevePartType::RightArm:
-                    local.localRotation.x = -swing;
-                    break;
-                case StevePartType::LeftLeg:
-                    local.localRotation.x = -swing;
-                    break;
-                case StevePartType::RightLeg:
-                    local.localRotation.x = swing;
-                    break;
+                case StevePartType::LeftArm: local.localRotation.x = swing; break;
+                case StevePartType::RightArm: local.localRotation.x = -swing; break;
+                case StevePartType::LeftLeg: local.localRotation.x = -swing; break;
+                case StevePartType::RightLeg: local.localRotation.x = swing; break;
                 case StevePartType::Head:
                     local.localRotation.x = -headPitch;
                     local.localRotation.y = 0.0f;
                     break;
-                default:
-                    break;
+                default: break;
                 }
             }
         }

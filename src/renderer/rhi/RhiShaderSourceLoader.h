@@ -12,9 +12,8 @@ struct RhiShaderSourceOptions {
 };
 
 [[nodiscard]] std::optional<std::string> loadShaderSource(const std::string& path);
-[[nodiscard]] std::optional<std::string> loadShaderSource(
-    const std::string& path,
-    const RhiShaderSourceOptions& options);
+[[nodiscard]] std::optional<std::string> loadShaderSource(const std::string& path,
+                                                          const RhiShaderSourceOptions& options);
 
 } // namespace renderer::rhi
 

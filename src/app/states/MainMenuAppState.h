@@ -23,9 +23,7 @@ public:
     void onExit() override;
     void update(double frameTime, double& accumulator) override;
     void render(double frameTime) override;
-    [[nodiscard]] const GpuFrameStats* gpuFrameStats() const override {
-        return nullptr;
-    }
+    [[nodiscard]] const GpuFrameStats* gpuFrameStats() const override { return nullptr; }
 
 private:
     enum class Page { MainMenu, SaveList, CreateWorld };
@@ -35,8 +33,8 @@ private:
 
     AppStateDependencies m_deps;
 
-    MainMenuScreen   m_mainMenuScreen;
-    SaveListScreen   m_saveListScreen;
+    MainMenuScreen m_mainMenuScreen;
+    SaveListScreen m_saveListScreen;
     CreateWorldScreen m_createWorldScreen;
 
     Page m_currentPage = Page::MainMenu;

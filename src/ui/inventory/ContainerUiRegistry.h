@@ -6,17 +6,9 @@
 
 namespace ui {
 
-enum class ContainerSlotGroupKind {
-    Container,
-    PlayerInventory,
-    CraftingInput,
-    CraftingResult
-};
+enum class ContainerSlotGroupKind { Container, PlayerInventory, CraftingInput, CraftingResult };
 
-enum class ContainerProgressKind {
-    Burn,
-    Cook
-};
+enum class ContainerProgressKind { Burn, Cook };
 
 struct ContainerSlotGroupDef {
     std::string id;

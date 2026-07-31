@@ -15,47 +15,26 @@
 namespace renderer::contracts {
 
 inline constexpr uint32_t kGpuLightContractVersion = 3u;
-inline constexpr uint32_t kGpuLightInvalidResourceIndex =
-    std::numeric_limits<uint32_t>::max();
+inline constexpr uint32_t kGpuLightInvalidResourceIndex = std::numeric_limits<uint32_t>::max();
 
 /// Selects the analytic light shape evaluated by raster and ray paths.
-enum class GpuLightType : uint32_t {
-    Directional = 0u,
-    Point = 1u,
-    Spot = 2u,
-    Rect = 3u
-};
+enum class GpuLightType : uint32_t { Directional = 0u, Point = 1u, Spot = 2u, Rect = 3u };
 
 /// Identifies the physical unit supplied by an authoring or asset source.
-enum class GpuLightIntensityUnit : uint32_t {
-    Lux = 0u,
-    Lumen = 1u,
-    Candela = 2u,
-    Nit = 3u
-};
+enum class GpuLightIntensityUnit : uint32_t { Lux = 0u, Lumen = 1u, Candela = 2u, Nit = 3u };
 
 /// Selects how one light obtains and updates its shadow allocation.
-enum class GpuLightShadowPolicy : uint32_t {
-    None = 0u,
-    RasterDynamic = 1u,
-    RasterCached = 2u,
-    RayQuery = 3u
-};
+enum class GpuLightShadowPolicy : uint32_t { None = 0u, RasterDynamic = 1u, RasterCached = 2u, RayQuery = 3u };
 
 /// Controls which lighting products receive energy from one light.
-enum class GpuLightContributionFlag : uint32_t {
-    Diffuse = 1u << 0u,
-    Specular = 1u << 1u,
-    Volumetric = 1u << 2u
-};
+enum class GpuLightContributionFlag : uint32_t { Diffuse = 1u << 0u, Specular = 1u << 1u, Volumetric = 1u << 2u };
 
 using GpuLightContributionFlags = uint32_t;
 
 /// Returns the bit corresponding to one light contribution channel.
 /// @param flag Contribution channel to encode.
 /// @return Unsigned mask containing exactly one contribution bit.
-[[nodiscard]] constexpr GpuLightContributionFlags gpuLightContributionFlagBit(
-    const GpuLightContributionFlag flag) {
+[[nodiscard]] constexpr GpuLightContributionFlags gpuLightContributionFlagBit(const GpuLightContributionFlag flag) {
     return static_cast<GpuLightContributionFlags>(flag);
 }
 
@@ -68,9 +47,8 @@ inline constexpr GpuLightContributionFlags kGpuLightKnownContributionFlags =
 /// @param flags Complete packed contribution mask.
 /// @param flag Contribution channel to test.
 /// @return True when the requested contribution bit is present.
-[[nodiscard]] constexpr bool hasGpuLightContributionFlag(
-    const GpuLightContributionFlags flags,
-    const GpuLightContributionFlag flag) {
+[[nodiscard]] constexpr bool hasGpuLightContributionFlag(const GpuLightContributionFlags flags,
+                                                         const GpuLightContributionFlag flag) {
     return (flags & gpuLightContributionFlagBit(flag)) != 0u;
 }
 
@@ -90,13 +68,11 @@ struct alignas(16) GpuLight final {
     /// Spot cosine inner/outer angles and Rect width/height in meters.
     glm::vec4 spotCosinesAndRectSize{0.0f};
     /// Type, stable light ID, shadow policy, and shadow allocation index.
-    glm::uvec4 classificationAndIdentity{
-        static_cast<uint32_t>(GpuLightType::Directional), 0u,
-        static_cast<uint32_t>(GpuLightShadowPolicy::None),
-        kGpuLightInvalidResourceIndex};
+    glm::uvec4 classificationAndIdentity{static_cast<uint32_t>(GpuLightType::Directional), 0u,
+                                         static_cast<uint32_t>(GpuLightShadowPolicy::None),
+                                         kGpuLightInvalidResourceIndex};
     /// Cookie index, IES profile index, contribution flags, and contract version.
-    glm::uvec4 resourcesAndFlags{kGpuLightInvalidResourceIndex,
-                                 kGpuLightInvalidResourceIndex, 0u,
+    glm::uvec4 resourcesAndFlags{kGpuLightInvalidResourceIndex, kGpuLightInvalidResourceIndex, 0u,
                                  kGpuLightContractVersion};
 };
 
@@ -105,8 +81,7 @@ struct alignas(16) GpuLight final {
 /// carry the None policy and invalid shadow index while it is scene input.
 struct SceneLight final {
     GpuLight light;
-    GpuLightShadowPolicy requestedShadowPolicy =
-        GpuLightShadowPolicy::None;
+    GpuLightShadowPolicy requestedShadowPolicy = GpuLightShadowPolicy::None;
 };
 
 /// Carries source-level light values into strict physical-unit normalization.
@@ -126,9 +101,8 @@ struct GpuLightNormalizationInput final {
     uint32_t shadowIndex = kGpuLightInvalidResourceIndex;
     uint32_t cookieIndex = kGpuLightInvalidResourceIndex;
     uint32_t iesProfileIndex = kGpuLightInvalidResourceIndex;
-    GpuLightContributionFlags contributionFlags =
-        gpuLightContributionFlagBit(GpuLightContributionFlag::Diffuse) |
-        gpuLightContributionFlagBit(GpuLightContributionFlag::Specular);
+    GpuLightContributionFlags contributionFlags = gpuLightContributionFlagBit(GpuLightContributionFlag::Diffuse) |
+                                                  gpuLightContributionFlagBit(GpuLightContributionFlag::Specular);
 };
 
 /// Identifies every deterministic GPU light normalization failure.
@@ -186,15 +160,13 @@ struct AnalyticLightSourceDefinition final {
     float rangeMeters = 0.0f;
     glm::vec3 colorLinear{1.0f};
     float intensity = 0.0f;
-    GpuLightIntensityUnit intensityUnit =
-        GpuLightIntensityUnit::Candela;
+    GpuLightIntensityUnit intensityUnit = GpuLightIntensityUnit::Candela;
     float innerConeAngleRadians = 0.0f;
     float outerConeAngleRadians = 0.0f;
     glm::vec2 rectSizeMeters{0.0f};
     GpuLightShadowPolicy shadowPolicy = GpuLightShadowPolicy::None;
-    GpuLightContributionFlags contributionFlags =
-        gpuLightContributionFlagBit(GpuLightContributionFlag::Diffuse) |
-        gpuLightContributionFlagBit(GpuLightContributionFlag::Specular);
+    GpuLightContributionFlags contributionFlags = gpuLightContributionFlagBit(GpuLightContributionFlag::Diffuse) |
+                                                  gpuLightContributionFlagBit(GpuLightContributionFlag::Specular);
 };
 
 /// Identifies failures while transforming an asset-local analytic light into
@@ -213,10 +185,8 @@ enum class AnalyticLightInstantiationError : uint8_t {
 /// error without publishing a partial record.
 struct AnalyticLightInstantiationResult final {
     SceneLight sceneLight;
-    AnalyticLightInstantiationError error =
-        AnalyticLightInstantiationError::None;
-    GpuLightNormalizationError normalizationError =
-        GpuLightNormalizationError::None;
+    AnalyticLightInstantiationError error = AnalyticLightInstantiationError::None;
+    GpuLightNormalizationError normalizationError = GpuLightNormalizationError::None;
     GpuLightField normalizationField = GpuLightField::None;
 
     /// Reports whether the source transform and physical light values are valid.
@@ -229,8 +199,7 @@ struct AnalyticLightInstantiationResult final {
 /// candela, and Rect intensity as nit.
 /// @param input Fully resolved source light and resource indices.
 /// @return Packed light or a stable field-specific validation error.
-[[nodiscard]] GpuLightNormalizationResult
-normalizeGpuLight(const GpuLightNormalizationInput& input);
+[[nodiscard]] GpuLightNormalizationResult normalizeGpuLight(const GpuLightNormalizationInput& input);
 
 /// Validates the packed inverse squared range against the finite range.
 /// @param light Normalized GPU light record.
@@ -248,17 +217,15 @@ normalizeGpuLight(const GpuLightNormalizationInput& input);
 /// @param localToWorld Complete affine transform of the scene instance.
 /// @param cameraPositionMeters World-space camera position subtracted before upload.
 /// @return Camera-relative GPU light or a structured failure.
-[[nodiscard]] AnalyticLightInstantiationResult instantiateAnalyticLight(
-    const AnalyticLightSourceDefinition& source,
-    StableLightId lightId,
-    const glm::mat4& localToWorld,
-    const glm::vec3& cameraPositionMeters);
+[[nodiscard]] AnalyticLightInstantiationResult instantiateAnalyticLight(const AnalyticLightSourceDefinition& source,
+                                                                        StableLightId lightId,
+                                                                        const glm::mat4& localToWorld,
+                                                                        const glm::vec3& cameraPositionMeters);
 
 /// Returns the stable identifier used by logs and tests for one error.
 /// @param error Error to identify.
 /// @return Process-lifetime string containing the stable identifier.
-[[nodiscard]] const char*
-gpuLightNormalizationErrorStableId(GpuLightNormalizationError error);
+[[nodiscard]] const char* gpuLightNormalizationErrorStableId(GpuLightNormalizationError error);
 
 /// Returns the stable identifier used by diagnostics for one light field.
 /// @param field Semantic field to identify.
@@ -268,8 +235,7 @@ gpuLightNormalizationErrorStableId(GpuLightNormalizationError error);
 /// Returns the stable identifier for one analytic-light instantiation error.
 /// @param error Error to identify.
 /// @return Process-lifetime string containing the stable identifier.
-[[nodiscard]] const char* analyticLightInstantiationErrorStableId(
-    AnalyticLightInstantiationError error);
+[[nodiscard]] const char* analyticLightInstantiationErrorStableId(AnalyticLightInstantiationError error);
 
 static_assert(sizeof(GpuLight) == 96u);
 static_assert(alignof(GpuLight) == 16u);

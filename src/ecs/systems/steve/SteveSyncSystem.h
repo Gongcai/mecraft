@@ -9,10 +9,9 @@ namespace ecs {
 /// Handle view mode toggle from input, and sync player position/camera to Steve entity.
 class SteveSyncSystem : public ISystem {
 public:
-    using Dependencies = SystemDependency<
-        std::tuple<LocalPlayerTag, TransformComponent, CameraStateComponent, SteveTag>,
-        std::tuple<TransformComponent, CameraStateComponent>
-    >;
+    using Dependencies =
+        SystemDependency<std::tuple<LocalPlayerTag, TransformComponent, CameraStateComponent, SteveTag>,
+                         std::tuple<TransformComponent, CameraStateComponent>>;
 
     void update(SystemContext& ctx) override;
 };

@@ -23,8 +23,7 @@ public:
     [[nodiscard]] bool isAtSavedState() const;
 
     /// Records an exact entity state transition such as rename, transform, or reparent.
-    void recordEntityState(const SceneEntityDocument& before,
-                           const SceneEntityDocument& after);
+    void recordEntityState(const SceneEntityDocument& before, const SceneEntityDocument& after);
 
     /// Records a hierarchy that was created and currently exists in the runtime.
     void recordCreatedSubtree(std::vector<SceneEntityDocument> states);
@@ -51,9 +50,7 @@ private:
     static constexpr std::size_t kMaximumCommands = 256u;
 
     void record(Command command);
-    [[nodiscard]] static bool apply(ModelSceneRuntime& runtime,
-                                    const Command& command,
-                                    bool forward);
+    [[nodiscard]] static bool apply(ModelSceneRuntime& runtime, const Command& command, bool forward);
 
     std::vector<Command> m_commands;
     std::size_t m_cursor = 0u;

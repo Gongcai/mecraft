@@ -12,7 +12,7 @@ struct SystemContext {
     GameplayRegistry& registry;
     GameplayServices& services;
     float dt = 0.0f;
-    uint64_t tickIndex = 0;  ///< Current 20 TPS tick index visible to fixed and tick systems.
+    uint64_t tickIndex = 0; ///< Current 20 TPS tick index visible to fixed and tick systems.
 };
 
 } // namespace ecs

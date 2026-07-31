@@ -46,7 +46,8 @@ bool CommandState::executeCommand(const std::string& command) {
                 return false;
             }
             m_ctx.world.getDayNightSystem().setTimeOfDay(value);
-            m_ctx.uiRenderer.appendCommandLine(m_ctx.localeManager.tr("time_set_to") + std::to_string(static_cast<int>(value)));
+            m_ctx.uiRenderer.appendCommandLine(m_ctx.localeManager.tr("time_set_to") +
+                                               std::to_string(static_cast<int>(value)));
             return false;
         } else {
             m_ctx.uiRenderer.appendWarningLine(m_ctx.localeManager.tr("usage_time_set"));

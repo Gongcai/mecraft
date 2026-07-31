@@ -47,27 +47,19 @@ void SceneCompositePass::shutdown() {
     destroyRhiResources();
 }
 
-RgPassHandle SceneCompositePass::addGraphPasses(
-    RenderGraph& graph,
-    const FrameContext& ctx,
-    const RenderSettings& settings,
-    DeferredRenderTargets& targets,
-    const GraphResources& resources,
-    const RgPassHandle dependency) {
-    if (!dependency.isValid() || !resources.sceneLighting.isValid() ||
-        !resources.reflection.isValid() || !resources.cloud.isValid() ||
-        !resources.depth.isValid() || !resources.normalAo.isValid() ||
-        !resources.material.isValid() || !resources.materialAux.isValid() ||
-        !resources.skyCapture.isValid() || !resources.albedo.isValid() ||
-        !resources.ssgi.isValid() || !resources.output.isValid() ||
-        !resources.reactiveMask.isValid() ||
-        !resources.transparencyMask.isValid()) {
+RgPassHandle SceneCompositePass::addGraphPasses(RenderGraph& graph, const FrameContext& ctx,
+                                                const RenderSettings& settings, DeferredRenderTargets& targets,
+                                                const GraphResources& resources, const RgPassHandle dependency) {
+    if (!dependency.isValid() || !resources.sceneLighting.isValid() || !resources.reflection.isValid() ||
+        !resources.cloud.isValid() || !resources.depth.isValid() || !resources.normalAo.isValid() ||
+        !resources.material.isValid() || !resources.materialAux.isValid() || !resources.skyCapture.isValid() ||
+        !resources.albedo.isValid() || !resources.ssgi.isValid() || !resources.output.isValid() ||
+        !resources.reactiveMask.isValid() || !resources.transparencyMask.isValid()) {
         return {};
     }
 
-    RenderGraphPassBuilder composite = graph.addPass(
-        {"SceneComposite", RgPassType::Graphics, RhiQueueType::Graphics,
-         /*threadSafeRecord=*/true});
+    RenderGraphPassBuilder composite = graph.addPass({"SceneComposite", RgPassType::Graphics, RhiQueueType::Graphics,
+                                                      /*threadSafeRecord=*/true});
     composite.dependsOn(dependency)
         .readTexture(resources.sceneLighting, RhiResourceState::ShaderRead)
         .readTexture(resources.reflection, RhiResourceState::ShaderRead)
@@ -82,19 +74,14 @@ RgPassHandle SceneCompositePass::addGraphPasses(
         .writeTexture(resources.output, RhiResourceState::RenderTarget)
         .writeTexture(resources.reactiveMask, RhiResourceState::RenderTarget)
         .writeTexture(resources.transparencyMask, RhiResourceState::RenderTarget)
-        .setExecute([this, frame = &ctx, frameTargets = &targets,
-                     frameSettings = settings](RgPassContext& pass) {
-            return recordGraphPass(pass.commandList(), *frame, frameSettings,
-                                   *frameTargets);
+        .setExecute([this, frame = &ctx, frameTargets = &targets, frameSettings = settings](RgPassContext& pass) {
+            return recordGraphPass(pass.commandList(), *frame, frameSettings, *frameTargets);
         });
     return composite.handle();
 }
 
-bool SceneCompositePass::recordGraphPass(
-    RhiCommandList& commandList,
-    const FrameContext& ctx,
-    const RenderSettings& settings,
-    DeferredRenderTargets& targets) {
+bool SceneCompositePass::recordGraphPass(RhiCommandList& commandList, const FrameContext& ctx,
+                                         const RenderSettings& settings, DeferredRenderTargets& targets) {
     if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr ||
         !targets.ensureSceneCompositeTextureView(*ctx.shared->rhiDevice) ||
         !targets.ensureSceneLightingTextureView(*ctx.shared->rhiDevice) ||
@@ -113,48 +100,28 @@ bool SceneCompositePass::recordGraphPass(
         return false;
     }
     const std::array<RhiTextureViewHandle, 10> views = {
-        targets.sceneLightingTextureViewHandle(),
-        targets.reflectionTextureViewHandle(),
-        targets.cloudTextureViewHandle(),
-        targets.depthTextureViewHandle(),
-        targets.normalAoTextureViewHandle(),
-        targets.materialTextureViewHandle(),
-        targets.materialAuxTextureViewHandle(),
-        targets.skyCaptureTextureViewHandle(),
-        targets.albedoTextureViewHandle(),
-        targets.ssgiTextureViewHandle()
-    };
+        targets.sceneLightingTextureViewHandle(), targets.reflectionTextureViewHandle(),
+        targets.cloudTextureViewHandle(),         targets.depthTextureViewHandle(),
+        targets.normalAoTextureViewHandle(),      targets.materialTextureViewHandle(),
+        targets.materialAuxTextureViewHandle(),   targets.skyCaptureTextureViewHandle(),
+        targets.albedoTextureViewHandle(),        targets.ssgiTextureViewHandle()};
     if (!ensureBindGroup(rhiDevice, views)) {
         return false;
     }
 
     SceneCompositeParams params{};
-    params.invViewProj = usesTemporalProjectionJitter(
-        settings.upscale.type, settings.taa.enabled)
-        ? ctx.camera.jitteredInvViewProj
-        : ctx.camera.invViewProj;
+    params.invViewProj = usesTemporalProjectionJitter(settings.upscale.type, settings.taa.enabled)
+                             ? ctx.camera.jitteredInvViewProj
+                             : ctx.camera.invViewProj;
     params.cameraPosSkyIntensity = glm::vec4(ctx.camera.position, ctx.skyIntensity);
-    params.sunDirectionVisibility = glm::vec4(ctx.skyColors.sunDirection,
-                                              ctx.skyColors.sunVisibility);
-    params.moonDirectionVisibility = glm::vec4(ctx.skyColors.moonDirection,
-                                               ctx.skyColors.moonVisibility);
-    params.atmosphereComposite = glm::vec4(ctx.skyColors.moonPhaseAngle,
-                                           ctx.weather.skyWetness,
-                                           ctx.weather.wetness,
+    params.sunDirectionVisibility = glm::vec4(ctx.skyColors.sunDirection, ctx.skyColors.sunVisibility);
+    params.moonDirectionVisibility = glm::vec4(ctx.skyColors.moonDirection, ctx.skyColors.moonVisibility);
+    params.atmosphereComposite = glm::vec4(ctx.skyColors.moonPhaseAngle, ctx.weather.skyWetness, ctx.weather.wetness,
                                            settings.cloud.sceneCloudCompositeStrength);
-    params.reflectionWater = glm::vec4(settings.reflection.sceneReflectionCompositeStrength,
-                                       0.4f,
-                                       0.14f,
-                                       0.08f);
+    params.reflectionWater = glm::vec4(settings.reflection.sceneReflectionCompositeStrength, 0.4f, 0.14f, 0.08f);
     params.status = glm::vec4(0.0f);
-    params.flags0 = glm::ivec4(settings.ssgi.enabled ? 1 : 0,
-                               0,
-                               0,
-                               0);
-    params.flags1 = glm::ivec4(settings.debug.reflectionDebugMode,
-                               ctx.eyeInWater ? 1 : 0,
-                               0,
-                               0);
+    params.flags0 = glm::ivec4(settings.ssgi.enabled ? 1 : 0, 0, 0, 0);
+    params.flags1 = glm::ivec4(settings.debug.reflectionDebugMode, ctx.eyeInWater ? 1 : 0, 0, 0);
 
     RhiColorAttachment colorAttachments[3];
     colorAttachments[0].view = targets.sceneCompositeTextureViewHandle();
@@ -177,20 +144,14 @@ bool SceneCompositePass::recordGraphPass(
 
     RhiRenderingInfo renderingInfo;
     renderingInfo.debugName = "SceneComposite";
-    renderingInfo.renderArea = {
-        0,
-        0,
-        static_cast<uint32_t>(std::max(1, targets.width())),
-        static_cast<uint32_t>(std::max(1, targets.height()))
-    };
+    renderingInfo.renderArea = {0, 0, static_cast<uint32_t>(std::max(1, targets.width())),
+                                static_cast<uint32_t>(std::max(1, targets.height()))};
     renderingInfo.colorAttachments = colorAttachments;
     renderingInfo.colorAttachmentCount = 3u;
 
-    commandList.bufferBarrier({m_uniformBuffer, RhiResourceState::UniformBuffer,
-                               RhiResourceState::TransferDst});
+    commandList.bufferBarrier({m_uniformBuffer, RhiResourceState::UniformBuffer, RhiResourceState::TransferDst});
     commandList.updateBuffer(m_uniformBuffer, 0u, &params, sizeof(params));
-    commandList.bufferBarrier({m_uniformBuffer, RhiResourceState::TransferDst,
-                               RhiResourceState::UniformBuffer});
+    commandList.bufferBarrier({m_uniformBuffer, RhiResourceState::TransferDst, RhiResourceState::UniformBuffer});
     commandList.beginRendering(renderingInfo);
     commandList.setGraphicsPipeline(m_pipeline);
     commandList.setBindGroup(0u, m_bindGroup);
@@ -237,8 +198,7 @@ bool SceneCompositePass::ensureRhiPipelines(RhiDevice& rhiDevice) {
     RhiBufferDesc uniformBufferDesc;
     uniformBufferDesc.debugName = "SceneComposite.Params";
     uniformBufferDesc.size = sizeof(SceneCompositeParams);
-    uniformBufferDesc.usage = rhiFlag(RhiBufferUsage::Uniform) |
-                              rhiFlag(RhiBufferUsage::TransferDst);
+    uniformBufferDesc.usage = rhiFlag(RhiBufferUsage::Uniform) | rhiFlag(RhiBufferUsage::TransferDst);
     uniformBufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
     uniformBufferDesc.initialState = RhiResourceState::UniformBuffer;
     uniformBufferDesc.memoryCategory = RhiMemoryCategory::Uniform;
@@ -268,19 +228,10 @@ bool SceneCompositePass::ensureRhiPipelines(RhiDevice& rhiDevice) {
     RhiBindGroupLayoutDesc bindGroupLayoutDesc;
     bindGroupLayoutDesc.debugName = "SceneComposite.BindGroupLayout";
     for (uint32_t binding = 0u; binding < 10u; ++binding) {
-        bindGroupLayoutDesc.entries.push_back({
-            binding,
-            RhiBindingType::CombinedTextureSampler,
-            rhiFlag(RhiShaderStage::Fragment),
-            1u
-        });
+        bindGroupLayoutDesc.entries.push_back(
+            {binding, RhiBindingType::CombinedTextureSampler, rhiFlag(RhiShaderStage::Fragment), 1u});
     }
-    bindGroupLayoutDesc.entries.push_back({
-        10u,
-        RhiBindingType::UniformBuffer,
-        rhiFlag(RhiShaderStage::Fragment),
-        1u
-    });
+    bindGroupLayoutDesc.entries.push_back({10u, RhiBindingType::UniformBuffer, rhiFlag(RhiShaderStage::Fragment), 1u});
     m_bindGroupLayout = rhiDevice.createBindGroupLayout(bindGroupLayoutDesc);
     if (!m_bindGroupLayout.isValid()) {
         destroyRhiResources();
@@ -305,11 +256,7 @@ bool SceneCompositePass::ensureRhiPipelines(RhiDevice& rhiDevice) {
     pipelineDesc.raster.cullMode = RhiCullMode::None;
     pipelineDesc.depthStencil.depthTestEnabled = false;
     pipelineDesc.depthStencil.depthWriteEnabled = false;
-    pipelineDesc.colorFormats = {
-        RhiTextureFormat::Rgba16Float,
-        RhiTextureFormat::R8Unorm,
-        RhiTextureFormat::R8Unorm
-    };
+    pipelineDesc.colorFormats = {RhiTextureFormat::Rgba16Float, RhiTextureFormat::R8Unorm, RhiTextureFormat::R8Unorm};
     pipelineDesc.blend.attachments.resize(3u);
     m_pipeline = rhiDevice.createGraphicsPipeline(pipelineDesc);
     if (!m_pipeline.isValid()) {
@@ -320,9 +267,7 @@ bool SceneCompositePass::ensureRhiPipelines(RhiDevice& rhiDevice) {
     return true;
 }
 
-bool SceneCompositePass::ensureBindGroup(
-    RhiDevice& rhiDevice,
-    const std::array<RhiTextureViewHandle, 10>& views) {
+bool SceneCompositePass::ensureBindGroup(RhiDevice& rhiDevice, const std::array<RhiTextureViewHandle, 10>& views) {
     if (!ensureRhiPipelines(rhiDevice)) {
         return false;
     }
@@ -340,18 +285,9 @@ bool SceneCompositePass::ensureBindGroup(
         m_bindGroup = {};
     }
 
-    const RhiSamplerHandle samplers[10] = {
-        m_linearSampler,
-        m_linearSampler,
-        m_linearSampler,
-        m_nearestSampler,
-        m_nearestSampler,
-        m_nearestSampler,
-        m_nearestSampler,
-        m_linearSampler,
-        m_nearestSampler,
-        m_linearSampler
-    };
+    const RhiSamplerHandle samplers[10] = {m_linearSampler,  m_linearSampler,  m_linearSampler,  m_nearestSampler,
+                                           m_nearestSampler, m_nearestSampler, m_nearestSampler, m_linearSampler,
+                                           m_nearestSampler, m_linearSampler};
     RhiBindGroupDesc bindGroupDesc;
     bindGroupDesc.layout = m_bindGroupLayout;
     for (uint32_t binding = 0u; binding < views.size(); ++binding) {

@@ -36,9 +36,7 @@ size_t BitPackedArray::wordCountFor(const size_t count, const uint8_t bitsPerEnt
 }
 
 uint64_t BitPackedArray::valueMask(const uint8_t bitsPerEntry) {
-    return bitsPerEntry == 32
-        ? 0xFFFFFFFFULL
-        : ((1ULL << bitsPerEntry) - 1ULL);
+    return bitsPerEntry == 32 ? 0xFFFFFFFFULL : ((1ULL << bitsPerEntry) - 1ULL);
 }
 
 BitPackedArray::BitPackedArray(size_t count, uint8_t bitsPerEntry)
@@ -47,7 +45,8 @@ BitPackedArray::BitPackedArray(size_t count, uint8_t bitsPerEntry)
 }
 
 uint32_t BitPackedArray::get(size_t index) const {
-    if (index >= m_count || m_bitsPerEntry == 0) return 0;
+    if (index >= m_count || m_bitsPerEntry == 0)
+        return 0;
 
     size_t bitIndex = index * m_bitsPerEntry;
     size_t wordIndex = bitIndex / BITS_PER_WORD;
@@ -70,7 +69,8 @@ uint32_t BitPackedArray::get(size_t index) const {
 }
 
 void BitPackedArray::set(size_t index, uint32_t value) {
-    if (index >= m_count || m_bitsPerEntry == 0) return;
+    if (index >= m_count || m_bitsPerEntry == 0)
+        return;
 
     size_t bitIndex = index * m_bitsPerEntry;
     size_t wordIndex = bitIndex / BITS_PER_WORD;
@@ -105,7 +105,8 @@ void BitPackedArray::set(size_t index, uint32_t value) {
 }
 
 void BitPackedArray::resize(uint8_t newBitsPerEntry) {
-    if (newBitsPerEntry == m_bitsPerEntry) return;
+    if (newBitsPerEntry == m_bitsPerEntry)
+        return;
     newBitsPerEntry = normalizeBitsPerEntry(newBitsPerEntry);
 
     // Copy out all existing values

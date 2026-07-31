@@ -44,9 +44,7 @@ public:
     static constexpr std::size_t MAX_PARTS = 24;
 
     [[nodiscard]] static bool isValidPart(const WirePart& part) {
-        return part.channelId != 0 &&
-               WireFaceGeometry::isWireFacing(part.facing) &&
-               part.power <= 15 &&
+        return part.channelId != 0 && WireFaceGeometry::isWireFacing(part.facing) && part.power <= 15 &&
                (part.connections & ~WireConnectionBits::ALL) == 0;
     }
 
@@ -100,13 +98,9 @@ public:
         return true;
     }
 
-    [[nodiscard]] std::size_t size() const {
-        return m_count;
-    }
+    [[nodiscard]] std::size_t size() const { return m_count; }
 
-    [[nodiscard]] bool empty() const {
-        return m_count == 0;
-    }
+    [[nodiscard]] bool empty() const { return m_count == 0; }
 
     void clear() {
         for (std::size_t i = 0; i < m_count; ++i) {
@@ -115,15 +109,13 @@ public:
         m_count = 0;
     }
 
-    template <typename Fn>
-    void forEach(Fn&& fn) const {
+    template <typename Fn> void forEach(Fn&& fn) const {
         for (std::size_t i = 0; i < m_count; ++i) {
             fn(m_parts[i]);
         }
     }
 
-    template <typename Fn>
-    void forEachMutable(Fn&& fn) {
+    template <typename Fn> void forEachMutable(Fn&& fn) {
         for (std::size_t i = 0; i < m_count; ++i) {
             fn(m_parts[i]);
             validatePart(m_parts[i]);
@@ -131,9 +123,7 @@ public:
     }
 
 private:
-    static constexpr std::size_t npos() {
-        return static_cast<std::size_t>(-1);
-    }
+    static constexpr std::size_t npos() { return static_cast<std::size_t>(-1); }
 
     static void validatePart(const WirePart& part) {
         if (!isValidPart(part)) {
@@ -156,9 +146,7 @@ private:
 
 class WireContainerPartStore {
 public:
-    [[nodiscard]] WireContainerParts& getOrCreate(const glm::ivec3& position) {
-        return m_entries[toKey(position)];
-    }
+    [[nodiscard]] WireContainerParts& getOrCreate(const glm::ivec3& position) { return m_entries[toKey(position)]; }
 
     [[nodiscard]] const WireContainerParts* find(const glm::ivec3& position) const {
         const auto it = m_entries.find(toKey(position));
@@ -181,24 +169,15 @@ public:
         return parts;
     }
 
-    void erase(const glm::ivec3& position) {
-        m_entries.erase(toKey(position));
-    }
+    void erase(const glm::ivec3& position) { m_entries.erase(toKey(position)); }
 
-    void clear() {
-        m_entries.clear();
-    }
+    void clear() { m_entries.clear(); }
 
-    [[nodiscard]] bool empty() const {
-        return m_entries.empty();
-    }
+    [[nodiscard]] bool empty() const { return m_entries.empty(); }
 
-    [[nodiscard]] std::size_t size() const {
-        return m_entries.size();
-    }
+    [[nodiscard]] std::size_t size() const { return m_entries.size(); }
 
-    template <typename Fn>
-    void forEach(Fn&& fn) const {
+    template <typename Fn> void forEach(Fn&& fn) const {
         for (const auto& [key, parts] : m_entries) {
             fn(glm::ivec3(key.x, key.y, key.z), parts);
         }
@@ -210,9 +189,7 @@ private:
         int y = 0;
         int z = 0;
 
-        [[nodiscard]] bool operator==(const Key& other) const {
-            return x == other.x && y == other.y && z == other.z;
-        }
+        [[nodiscard]] bool operator==(const Key& other) const { return x == other.x && y == other.y && z == other.z; }
     };
 
     struct KeyHash {
@@ -220,14 +197,11 @@ private:
             const std::size_t hx = std::hash<int>{}(key.x);
             const std::size_t hy = std::hash<int>{}(key.y);
             const std::size_t hz = std::hash<int>{}(key.z);
-            return hx ^ (hy + 0x9e3779b9u + (hx << 6u) + (hx >> 2u)) ^
-                   (hz + 0x9e3779b9u + (hy << 6u) + (hy >> 2u));
+            return hx ^ (hy + 0x9e3779b9u + (hx << 6u) + (hx >> 2u)) ^ (hz + 0x9e3779b9u + (hy << 6u) + (hy >> 2u));
         }
     };
 
-    [[nodiscard]] static Key toKey(const glm::ivec3& position) {
-        return {position.x, position.y, position.z};
-    }
+    [[nodiscard]] static Key toKey(const glm::ivec3& position) { return {position.x, position.y, position.z}; }
 
     std::unordered_map<Key, WireContainerParts, KeyHash> m_entries;
 };

@@ -48,23 +48,15 @@ void SsaoPass::shutdown() {
     m_noiseTexture = {};
 }
 
-RgPassHandle SsaoPass::addGraphPasses(RenderGraph& graph,
-                                      const FrameContext& ctx,
-                                      const SsaoSettings& ssao,
-                                      DeferredRenderTargets& targets,
-                                      const GraphResources& resources,
-                                      const RgPassHandle dependency,
-                                      const bool useAsyncCompute) {
-    const bool temporalEnabled =
-        ssao.temporalEnabled && !requiresTemporalReset(ctx.temporalResetReasons);
-    if (!dependency.isValid() || !resources.depth.isValid() ||
-        !resources.normalAo.isValid() || !resources.velocity.isValid() ||
-        !resources.noise.isValid() || !resources.halfRes.isValid() ||
-        !resources.filtered.isValid() ||
-        (ssao.filterEnabled && !resources.halfResFiltered.isValid()) ||
-        (temporalEnabled &&
-         (!resources.temporal.isValid() || !resources.historyCurrent.isValid() ||
-          !resources.historyPrevious.isValid()))) {
+RgPassHandle SsaoPass::addGraphPasses(RenderGraph& graph, const FrameContext& ctx, const SsaoSettings& ssao,
+                                      DeferredRenderTargets& targets, const GraphResources& resources,
+                                      const RgPassHandle dependency, const bool useAsyncCompute) {
+    const bool temporalEnabled = ssao.temporalEnabled && !requiresTemporalReset(ctx.temporalResetReasons);
+    if (!dependency.isValid() || !resources.depth.isValid() || !resources.normalAo.isValid() ||
+        !resources.velocity.isValid() || !resources.noise.isValid() || !resources.halfRes.isValid() ||
+        !resources.filtered.isValid() || (ssao.filterEnabled && !resources.halfResFiltered.isValid()) ||
+        (temporalEnabled && (!resources.temporal.isValid() || !resources.historyCurrent.isValid() ||
+                             !resources.historyPrevious.isValid()))) {
         return {};
     }
 
@@ -75,138 +67,114 @@ RgPassHandle SsaoPass::addGraphPasses(RenderGraph& graph,
         // sampled read-only layout, and the history copy uses vkCmdCopyImage,
         // which is legal on compute queues. The whole chain therefore stays
         // on one queue without blocking graphics before shadow rendering.
-        RenderGraphPassBuilder base = graph.addPass(
-            {"SSAO.Base", RgPassType::Compute, RhiQueueType::Compute,
-             /*threadSafeRecord=*/true});
+        RenderGraphPassBuilder base = graph.addPass({"SSAO.Base", RgPassType::Compute, RhiQueueType::Compute,
+                                                     /*threadSafeRecord=*/true});
         base.dependsOn(dependency)
             .readTexture(resources.depth, RhiResourceState::DepthRead)
             .readTexture(resources.normalAo, RhiResourceState::ShaderRead)
             .readTexture(resources.noise, RhiResourceState::ShaderRead)
             .writeTexture(resources.halfRes, RhiResourceState::ShaderWrite)
             .setExecute([this, frame, frameTargets, ssao](RgPassContext& pass) {
-                return recordSsaoBaseCompute(
-                    pass.commandList(), *frame, ssao, *frameTargets);
+                return recordSsaoBaseCompute(pass.commandList(), *frame, ssao, *frameTargets);
             });
         RgPassHandle previous = base.handle();
 
         if (ssao.filterEnabled) {
-            RenderGraphPassBuilder filter = graph.addPass(
-                {"SSAO.Filter", RgPassType::Compute, RhiQueueType::Compute,
-                 /*threadSafeRecord=*/true});
+            RenderGraphPassBuilder filter = graph.addPass({"SSAO.Filter", RgPassType::Compute, RhiQueueType::Compute,
+                                                           /*threadSafeRecord=*/true});
             filter.dependsOn(previous)
                 .readTexture(resources.halfRes, RhiResourceState::ShaderRead)
                 .readTexture(resources.depth, RhiResourceState::DepthRead)
                 .readTexture(resources.normalAo, RhiResourceState::ShaderRead)
-                .writeTexture(resources.halfResFiltered,
-                              RhiResourceState::ShaderWrite)
+                .writeTexture(resources.halfResFiltered, RhiResourceState::ShaderWrite)
                 .setExecute([this, frame, frameTargets](RgPassContext& pass) {
-                    return recordSsaoFilterCompute(
-                        pass.commandList(), *frame, *frameTargets);
+                    return recordSsaoFilterCompute(pass.commandList(), *frame, *frameTargets);
                 });
             previous = filter.handle();
         }
 
-        const RgTextureHandle halfInput = ssao.filterEnabled
-            ? resources.halfResFiltered
-            : resources.halfRes;
-        RenderGraphPassBuilder upsample = graph.addPass(
-            {"SSAO.Upsample", RgPassType::Compute, RhiQueueType::Compute,
-             /*threadSafeRecord=*/true});
+        const RgTextureHandle halfInput = ssao.filterEnabled ? resources.halfResFiltered : resources.halfRes;
+        RenderGraphPassBuilder upsample = graph.addPass({"SSAO.Upsample", RgPassType::Compute, RhiQueueType::Compute,
+                                                         /*threadSafeRecord=*/true});
         upsample.dependsOn(previous)
             .readTexture(halfInput, RhiResourceState::ShaderRead)
             .readTexture(resources.depth, RhiResourceState::DepthRead)
             .writeTexture(resources.filtered, RhiResourceState::ShaderWrite)
             .setExecute([this, frame, frameTargets, ssao](RgPassContext& pass) {
-                return recordSsaoUpsampleCompute(
-                    pass.commandList(), *frame, ssao, *frameTargets);
+                return recordSsaoUpsampleCompute(pass.commandList(), *frame, ssao, *frameTargets);
             });
         previous = upsample.handle();
 
         if (temporalEnabled) {
-            RenderGraphPassBuilder temporal = graph.addPass(
-                {"SSAO.Temporal", RgPassType::Compute, RhiQueueType::Compute,
-                 /*threadSafeRecord=*/true});
+            RenderGraphPassBuilder temporal =
+                graph.addPass({"SSAO.Temporal", RgPassType::Compute, RhiQueueType::Compute,
+                               /*threadSafeRecord=*/true});
             temporal.dependsOn(previous)
                 .readTexture(resources.filtered, RhiResourceState::ShaderRead)
-                .readTexture(resources.historyPrevious,
-                             RhiResourceState::ShaderRead)
+                .readTexture(resources.historyPrevious, RhiResourceState::ShaderRead)
                 .readTexture(resources.velocity, RhiResourceState::ShaderRead)
                 .readTexture(resources.depth, RhiResourceState::DepthRead)
                 .writeTexture(resources.temporal, RhiResourceState::ShaderWrite)
-                .setExecute(
-                    [this, frame, frameTargets, ssao](RgPassContext& pass) {
-                        return recordSsaoTemporalCompute(
-                            pass.commandList(), *frame, ssao, *frameTargets);
-                    });
+                .setExecute([this, frame, frameTargets, ssao](RgPassContext& pass) {
+                    return recordSsaoTemporalCompute(pass.commandList(), *frame, ssao, *frameTargets);
+                });
             previous = temporal.handle();
 
-            RenderGraphPassBuilder historyCopy = graph.addPass(
-                {"SSAO.HistoryCopy", RgPassType::Copy, RhiQueueType::Compute,
-                 /*threadSafeRecord=*/true});
+            RenderGraphPassBuilder historyCopy =
+                graph.addPass({"SSAO.HistoryCopy", RgPassType::Copy, RhiQueueType::Compute,
+                               /*threadSafeRecord=*/true});
             historyCopy.dependsOn(previous)
                 .readTexture(resources.temporal, RhiResourceState::TransferSrc)
-                .writeTexture(resources.historyCurrent,
-                              RhiResourceState::TransferDst)
+                .writeTexture(resources.historyCurrent, RhiResourceState::TransferDst)
                 .setExecute([this, frame, frameTargets](RgPassContext& pass) {
-                    return recordSsaoHistoryCopyCompute(
-                        pass.commandList(), *frame, *frameTargets);
+                    return recordSsaoHistoryCopyCompute(pass.commandList(), *frame, *frameTargets);
                 });
             previous = historyCopy.handle();
         }
         return previous;
     }
 
-    RenderGraphPassBuilder base = graph.addPass(
-        {"SSAO.Base", RgPassType::Graphics, RhiQueueType::Graphics,
-         /*threadSafeRecord=*/true});
+    RenderGraphPassBuilder base = graph.addPass({"SSAO.Base", RgPassType::Graphics, RhiQueueType::Graphics,
+                                                 /*threadSafeRecord=*/true});
     base.dependsOn(dependency)
         .readTexture(resources.depth, RhiResourceState::DepthRead)
         .readTexture(resources.normalAo, RhiResourceState::ShaderRead)
         .readTexture(resources.noise, RhiResourceState::ShaderRead)
         .writeTexture(resources.halfRes, RhiResourceState::RenderTarget)
         .setExecute([this, frame, frameTargets, ssao](RgPassContext& pass) {
-            return recordSsaoBase(
-                pass.commandList(), *frame, ssao, *frameTargets);
+            return recordSsaoBase(pass.commandList(), *frame, ssao, *frameTargets);
         });
     RgPassHandle previous = base.handle();
 
     if (ssao.filterEnabled) {
-        RenderGraphPassBuilder filter = graph.addPass(
-            {"SSAO.Filter", RgPassType::Graphics, RhiQueueType::Graphics,
-             /*threadSafeRecord=*/true});
+        RenderGraphPassBuilder filter = graph.addPass({"SSAO.Filter", RgPassType::Graphics, RhiQueueType::Graphics,
+                                                       /*threadSafeRecord=*/true});
         filter.dependsOn(previous)
             .readTexture(resources.halfRes, RhiResourceState::ShaderRead)
             .readTexture(resources.depth, RhiResourceState::DepthRead)
             .readTexture(resources.normalAo, RhiResourceState::ShaderRead)
-            .writeTexture(resources.halfResFiltered,
-                          RhiResourceState::RenderTarget)
+            .writeTexture(resources.halfResFiltered, RhiResourceState::RenderTarget)
             .setExecute([this, frame, frameTargets](RgPassContext& pass) {
-                return recordSsaoFilter(
-                    pass.commandList(), *frame, *frameTargets);
+                return recordSsaoFilter(pass.commandList(), *frame, *frameTargets);
             });
         previous = filter.handle();
     }
 
-    const RgTextureHandle halfResInput = ssao.filterEnabled
-        ? resources.halfResFiltered
-        : resources.halfRes;
-    RenderGraphPassBuilder upsample = graph.addPass(
-        {"SSAO.Upsample", RgPassType::Graphics, RhiQueueType::Graphics,
-         /*threadSafeRecord=*/true});
+    const RgTextureHandle halfResInput = ssao.filterEnabled ? resources.halfResFiltered : resources.halfRes;
+    RenderGraphPassBuilder upsample = graph.addPass({"SSAO.Upsample", RgPassType::Graphics, RhiQueueType::Graphics,
+                                                     /*threadSafeRecord=*/true});
     upsample.dependsOn(previous)
         .readTexture(halfResInput, RhiResourceState::ShaderRead)
         .readTexture(resources.depth, RhiResourceState::DepthRead)
         .writeTexture(resources.filtered, RhiResourceState::RenderTarget)
         .setExecute([this, frame, frameTargets, ssao](RgPassContext& pass) {
-            return recordSsaoUpsample(
-                pass.commandList(), *frame, ssao, *frameTargets);
+            return recordSsaoUpsample(pass.commandList(), *frame, ssao, *frameTargets);
         });
     previous = upsample.handle();
 
     if (temporalEnabled) {
-        RenderGraphPassBuilder temporal = graph.addPass(
-            {"SSAO.Temporal", RgPassType::Graphics, RhiQueueType::Graphics,
-             /*threadSafeRecord=*/true});
+        RenderGraphPassBuilder temporal = graph.addPass({"SSAO.Temporal", RgPassType::Graphics, RhiQueueType::Graphics,
+                                                         /*threadSafeRecord=*/true});
         temporal.dependsOn(previous)
             .readTexture(resources.filtered, RhiResourceState::ShaderRead)
             .readTexture(resources.historyPrevious, RhiResourceState::ShaderRead)
@@ -214,31 +182,26 @@ RgPassHandle SsaoPass::addGraphPasses(RenderGraph& graph,
             .readTexture(resources.depth, RhiResourceState::DepthRead)
             .writeTexture(resources.temporal, RhiResourceState::RenderTarget)
             .setExecute([this, frame, frameTargets, ssao](RgPassContext& pass) {
-                return recordSsaoTemporal(
-                    pass.commandList(), *frame, ssao, *frameTargets);
+                return recordSsaoTemporal(pass.commandList(), *frame, ssao, *frameTargets);
             });
         previous = temporal.handle();
 
-        RenderGraphPassBuilder historyCopy = graph.addPass(
-            {"SSAO.HistoryCopy", RgPassType::Copy, RhiQueueType::Graphics,
-             /*threadSafeRecord=*/true});
+        RenderGraphPassBuilder historyCopy =
+            graph.addPass({"SSAO.HistoryCopy", RgPassType::Copy, RhiQueueType::Graphics,
+                           /*threadSafeRecord=*/true});
         historyCopy.dependsOn(previous)
             .readTexture(resources.temporal, RhiResourceState::TransferSrc)
             .writeTexture(resources.historyCurrent, RhiResourceState::TransferDst)
             .setExecute([this, frame, frameTargets](RgPassContext& pass) {
-                return recordSsaoHistoryCopy(
-                    pass.commandList(), *frame, *frameTargets);
+                return recordSsaoHistoryCopy(pass.commandList(), *frame, *frameTargets);
             });
         previous = historyCopy.handle();
     }
     return previous;
 }
 
-bool SsaoPass::ensureComputeStage(RhiDevice& rhiDevice,
-                                  ComputeStage& stage,
-                                  const char* shaderPath,
-                                  const char* debugName,
-                                  const uint32_t sampledCount,
+bool SsaoPass::ensureComputeStage(RhiDevice& rhiDevice, ComputeStage& stage, const char* shaderPath,
+                                  const char* debugName, const uint32_t sampledCount,
                                   const uint32_t pushConstantBytes) {
     if (stage.device != nullptr && stage.device != &rhiDevice) {
         destroyComputeStage(stage);
@@ -248,8 +211,7 @@ bool SsaoPass::ensureComputeStage(RhiDevice& rhiDevice,
     }
     stage.device = &rhiDevice;
 
-    const std::optional<std::string> source =
-        renderer::rhi::loadShaderSource(shaderPath);
+    const std::optional<std::string> source = renderer::rhi::loadShaderSource(shaderPath);
     if (!source.has_value()) {
         return false;
     }
@@ -266,19 +228,10 @@ bool SsaoPass::ensureComputeStage(RhiDevice& rhiDevice,
     RhiBindGroupLayoutDesc layoutDesc;
     layoutDesc.debugName = debugName;
     for (uint32_t binding = 0u; binding < sampledCount; ++binding) {
-        layoutDesc.entries.push_back({
-            binding,
-            RhiBindingType::CombinedTextureSampler,
-            rhiFlag(RhiShaderStage::Compute),
-            1u
-        });
+        layoutDesc.entries.push_back(
+            {binding, RhiBindingType::CombinedTextureSampler, rhiFlag(RhiShaderStage::Compute), 1u});
     }
-    layoutDesc.entries.push_back({
-        sampledCount,
-        RhiBindingType::StorageTexture,
-        rhiFlag(RhiShaderStage::Compute),
-        1u
-    });
+    layoutDesc.entries.push_back({sampledCount, RhiBindingType::StorageTexture, rhiFlag(RhiShaderStage::Compute), 1u});
     stage.bindGroupLayout = rhiDevice.createBindGroupLayout(layoutDesc);
     if (!stage.bindGroupLayout.isValid()) {
         return false;
@@ -304,15 +257,10 @@ bool SsaoPass::ensureComputeStage(RhiDevice& rhiDevice,
     return stage.pipeline.isValid();
 }
 
-bool SsaoPass::ensureComputeStageBindGroup(
-    RhiDevice& rhiDevice,
-    ComputeStage& stage,
-    const RhiTextureViewHandle* views,
-    const RhiSamplerHandle* samplers,
-    const uint32_t sampledCount,
-    const RhiTextureViewHandle storageView) {
-    if (!stage.pipeline.isValid() || !storageView.isValid() ||
-        sampledCount + 1u > stage.boundViews.size()) {
+bool SsaoPass::ensureComputeStageBindGroup(RhiDevice& rhiDevice, ComputeStage& stage, const RhiTextureViewHandle* views,
+                                           const RhiSamplerHandle* samplers, const uint32_t sampledCount,
+                                           const RhiTextureViewHandle storageView) {
+    if (!stage.pipeline.isValid() || !storageView.isValid() || sampledCount + 1u > stage.boundViews.size()) {
         return false;
     }
     std::array<RhiTextureViewHandle, 5> boundViews = {};
@@ -323,8 +271,7 @@ bool SsaoPass::ensureComputeStageBindGroup(
         boundViews[i] = views[i];
     }
     boundViews[sampledCount] = storageView;
-    if (stage.bindGroup.isValid() &&
-        sameTextureViews(stage.boundViews, boundViews)) {
+    if (stage.bindGroup.isValid() && sameTextureViews(stage.boundViews, boundViews)) {
         return true;
     }
 
@@ -376,9 +323,7 @@ void SsaoPass::destroyComputeStage(ComputeStage& stage) {
     stage = {};
 }
 
-bool SsaoPass::recordSsaoBaseCompute(RhiCommandList& commandList,
-                                     const FrameContext& ctx,
-                                     const SsaoSettings& ssao,
+bool SsaoPass::recordSsaoBaseCompute(RhiCommandList& commandList, const FrameContext& ctx, const SsaoSettings& ssao,
                                      DeferredRenderTargets& targets) {
     if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr ||
         !targets.ensureSsaoHalfResTextureView(*ctx.shared->rhiDevice) ||
@@ -396,23 +341,14 @@ bool SsaoPass::recordSsaoBaseCompute(RhiCommandList& commandList,
         glm::vec4 params0;
         glm::ivec4 params1;
     };
-    if (!ensureComputeStage(rhiDevice, m_computeBase,
-                            "assets/shaders/ssao.comp", "SSAO.BaseCompute", 3u,
+    if (!ensureComputeStage(rhiDevice, m_computeBase, "assets/shaders/ssao.comp", "SSAO.BaseCompute", 3u,
                             static_cast<uint32_t>(sizeof(BasePushConstants)))) {
         return false;
     }
-    const RhiTextureViewHandle views[3] = {
-        targets.depthTextureViewHandle(),
-        targets.normalAoTextureViewHandle(),
-        m_noiseTextureView
-    };
-    const RhiSamplerHandle samplers[3] = {
-        m_baseNearestSampler,
-        m_baseNearestSampler,
-        m_baseNoiseSampler
-    };
-    if (!ensureComputeStageBindGroup(rhiDevice, m_computeBase, views, samplers,
-                                     3u,
+    const RhiTextureViewHandle views[3] = {targets.depthTextureViewHandle(), targets.normalAoTextureViewHandle(),
+                                           m_noiseTextureView};
+    const RhiSamplerHandle samplers[3] = {m_baseNearestSampler, m_baseNearestSampler, m_baseNoiseSampler};
+    if (!ensureComputeStageBindGroup(rhiDevice, m_computeBase, views, samplers, 3u,
                                      targets.ssaoHalfResTextureViewHandle())) {
         return false;
     }
@@ -421,34 +357,23 @@ bool SsaoPass::recordSsaoBaseCompute(RhiCommandList& commandList,
     const int halfH = std::max(1, targets.height() / 2);
     const glm::mat4& projection = ctx.camera.projection;
     const BasePushConstants pushConstants{
-        projection,
-        glm::inverse(projection),
-        glm::vec4(1.0f / static_cast<float>(halfW),
-                  1.0f / static_cast<float>(halfH),
-                  ssao.radius,
-                  ssao.strength),
-        glm::ivec4(static_cast<int>(ctx.frameIndex % 64),
-                   std::clamp(ssao.samples, 1, 64),
-                   0,
-                   0)
-    };
+        projection, glm::inverse(projection),
+        glm::vec4(1.0f / static_cast<float>(halfW), 1.0f / static_cast<float>(halfH), ssao.radius, ssao.strength),
+        glm::ivec4(static_cast<int>(ctx.frameIndex % 64), std::clamp(ssao.samples, 1, 64), 0, 0)};
     const GpuTimerSegmentToken timerToken = ctx.debugService != nullptr
-        ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::Ssao)
-        : GpuTimerSegmentToken{};
+                                                ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::Ssao)
+                                                : GpuTimerSegmentToken{};
     commandList.setComputePipeline(m_computeBase.pipeline);
     commandList.setBindGroup(0u, m_computeBase.bindGroup);
-    commandList.pushConstants(&pushConstants, sizeof(pushConstants),
-                              rhiFlag(RhiShaderStage::Compute));
-    commandList.dispatch((static_cast<uint32_t>(halfW) + 7u) / 8u,
-                         (static_cast<uint32_t>(halfH) + 7u) / 8u, 1u);
+    commandList.pushConstants(&pushConstants, sizeof(pushConstants), rhiFlag(RhiShaderStage::Compute));
+    commandList.dispatch((static_cast<uint32_t>(halfW) + 7u) / 8u, (static_cast<uint32_t>(halfH) + 7u) / 8u, 1u);
     if (ctx.debugService != nullptr) {
         ctx.debugService->endGpuTimer(commandList, timerToken);
     }
     return true;
 }
 
-bool SsaoPass::recordSsaoFilterCompute(RhiCommandList& commandList,
-                                       const FrameContext& ctx,
+bool SsaoPass::recordSsaoFilterCompute(RhiCommandList& commandList, const FrameContext& ctx,
                                        DeferredRenderTargets& targets) {
     if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr ||
         !targets.ensureSsaoHalfResTextureView(*ctx.shared->rhiDevice) ||
@@ -458,99 +383,69 @@ bool SsaoPass::recordSsaoFilterCompute(RhiCommandList& commandList,
     }
     RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
     if (!ensureFilterRhiPipeline(rhiDevice) ||
-        !ensureComputeStage(rhiDevice, m_computeFilter,
-                            "assets/shaders/ssao_filter.comp",
-                            "SSAO.FilterCompute", 3u,
+        !ensureComputeStage(rhiDevice, m_computeFilter, "assets/shaders/ssao_filter.comp", "SSAO.FilterCompute", 3u,
                             static_cast<uint32_t>(sizeof(glm::vec4)))) {
         return false;
     }
-    const RhiTextureViewHandle views[3] = {
-        targets.ssaoHalfResTextureViewHandle(),
-        targets.depthTextureViewHandle(),
-        targets.normalAoTextureViewHandle()
-    };
-    const RhiSamplerHandle samplers[3] = {
-        m_filterSampler, m_filterSampler, m_filterSampler
-    };
-    if (!ensureComputeStageBindGroup(
-            rhiDevice, m_computeFilter, views, samplers, 3u,
-            targets.ssaoHalfResFilteredTextureViewHandle())) {
+    const RhiTextureViewHandle views[3] = {targets.ssaoHalfResTextureViewHandle(), targets.depthTextureViewHandle(),
+                                           targets.normalAoTextureViewHandle()};
+    const RhiSamplerHandle samplers[3] = {m_filterSampler, m_filterSampler, m_filterSampler};
+    if (!ensureComputeStageBindGroup(rhiDevice, m_computeFilter, views, samplers, 3u,
+                                     targets.ssaoHalfResFilteredTextureViewHandle())) {
         return false;
     }
 
     const int halfW = std::max(1, targets.width() / 2);
     const int halfH = std::max(1, targets.height() / 2);
-    const glm::vec4 pushConstants(
-        static_cast<float>(halfW),
-        static_cast<float>(halfH),
-        ctx.camera.nearPlane,
-        0.0f);
+    const glm::vec4 pushConstants(static_cast<float>(halfW), static_cast<float>(halfH), ctx.camera.nearPlane, 0.0f);
     const GpuTimerSegmentToken timerToken = ctx.debugService != nullptr
-        ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::Ssao)
-        : GpuTimerSegmentToken{};
+                                                ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::Ssao)
+                                                : GpuTimerSegmentToken{};
     commandList.setComputePipeline(m_computeFilter.pipeline);
     commandList.setBindGroup(0u, m_computeFilter.bindGroup);
-    commandList.pushConstants(&pushConstants, sizeof(pushConstants),
-                              rhiFlag(RhiShaderStage::Compute));
-    commandList.dispatch((static_cast<uint32_t>(halfW) + 7u) / 8u,
-                         (static_cast<uint32_t>(halfH) + 7u) / 8u, 1u);
+    commandList.pushConstants(&pushConstants, sizeof(pushConstants), rhiFlag(RhiShaderStage::Compute));
+    commandList.dispatch((static_cast<uint32_t>(halfW) + 7u) / 8u, (static_cast<uint32_t>(halfH) + 7u) / 8u, 1u);
     if (ctx.debugService != nullptr) {
         ctx.debugService->endGpuTimer(commandList, timerToken);
     }
     return true;
 }
 
-bool SsaoPass::recordSsaoUpsampleCompute(RhiCommandList& commandList,
-                                         const FrameContext& ctx,
-                                         const SsaoSettings& ssao,
+bool SsaoPass::recordSsaoUpsampleCompute(RhiCommandList& commandList, const FrameContext& ctx, const SsaoSettings& ssao,
                                          DeferredRenderTargets& targets) {
     if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr ||
         !targets.ensureSsaoFilteredTextureView(*ctx.shared->rhiDevice) ||
         !targets.ensureSsaoHalfResTextureView(*ctx.shared->rhiDevice) ||
-        (ssao.filterEnabled &&
-         !targets.ensureSsaoHalfResFilteredTextureView(*ctx.shared->rhiDevice)) ||
+        (ssao.filterEnabled && !targets.ensureSsaoHalfResFilteredTextureView(*ctx.shared->rhiDevice)) ||
         !targets.ensureGBufferTextureViews(*ctx.shared->rhiDevice)) {
         return false;
     }
     RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
     if (!ensureUpsampleRhiPipeline(rhiDevice) ||
-        !ensureComputeStage(rhiDevice, m_computeUpsample,
-                            "assets/shaders/ssao_upsample.comp",
-                            "SSAO.UpsampleCompute", 2u,
-                            static_cast<uint32_t>(sizeof(glm::vec4)))) {
+        !ensureComputeStage(rhiDevice, m_computeUpsample, "assets/shaders/ssao_upsample.comp", "SSAO.UpsampleCompute",
+                            2u, static_cast<uint32_t>(sizeof(glm::vec4)))) {
         return false;
     }
-    const RhiTextureViewHandle views[2] = {
-        ssao.filterEnabled
-            ? targets.ssaoHalfResFilteredTextureViewHandle()
-            : targets.ssaoHalfResTextureViewHandle(),
-        targets.depthTextureViewHandle()
-    };
-    const RhiSamplerHandle samplers[2] = {
-        m_upsampleNearestSampler, m_upsampleLinearSampler
-    };
-    if (!ensureComputeStageBindGroup(rhiDevice, m_computeUpsample, views,
-                                     samplers, 2u,
+    const RhiTextureViewHandle views[2] = {ssao.filterEnabled ? targets.ssaoHalfResFilteredTextureViewHandle()
+                                                              : targets.ssaoHalfResTextureViewHandle(),
+                                           targets.depthTextureViewHandle()};
+    const RhiSamplerHandle samplers[2] = {m_upsampleNearestSampler, m_upsampleLinearSampler};
+    if (!ensureComputeStageBindGroup(rhiDevice, m_computeUpsample, views, samplers, 2u,
                                      targets.ssaoFilteredTextureViewHandle())) {
         return false;
     }
 
     const int halfW = std::max(1, targets.width() / 2);
     const int halfH = std::max(1, targets.height() / 2);
-    const glm::vec4 pushConstants(
-        static_cast<float>(halfW),
-        static_cast<float>(halfH),
-        ctx.camera.nearPlane,
-        0.0f);
+    const glm::vec4 pushConstants(static_cast<float>(halfW), static_cast<float>(halfH), ctx.camera.nearPlane, 0.0f);
     const uint32_t width = static_cast<uint32_t>(std::max(1, targets.width()));
     const uint32_t height = static_cast<uint32_t>(std::max(1, targets.height()));
     const GpuTimerSegmentToken timerToken = ctx.debugService != nullptr
-        ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::Ssao)
-        : GpuTimerSegmentToken{};
+                                                ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::Ssao)
+                                                : GpuTimerSegmentToken{};
     commandList.setComputePipeline(m_computeUpsample.pipeline);
     commandList.setBindGroup(0u, m_computeUpsample.bindGroup);
-    commandList.pushConstants(&pushConstants, sizeof(pushConstants),
-                              rhiFlag(RhiShaderStage::Compute));
+    commandList.pushConstants(&pushConstants, sizeof(pushConstants), rhiFlag(RhiShaderStage::Compute));
     commandList.dispatch((width + 7u) / 8u, (height + 7u) / 8u, 1u);
     if (ctx.debugService != nullptr) {
         ctx.debugService->endGpuTimer(commandList, timerToken);
@@ -558,9 +453,7 @@ bool SsaoPass::recordSsaoUpsampleCompute(RhiCommandList& commandList,
     return true;
 }
 
-bool SsaoPass::recordSsaoTemporalCompute(RhiCommandList& commandList,
-                                         const FrameContext& ctx,
-                                         const SsaoSettings& ssao,
+bool SsaoPass::recordSsaoTemporalCompute(RhiCommandList& commandList, const FrameContext& ctx, const SsaoSettings& ssao,
                                          DeferredRenderTargets& targets) {
     if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr ||
         !targets.ensureSsaoFilteredTextureView(*ctx.shared->rhiDevice) ||
@@ -572,44 +465,30 @@ bool SsaoPass::recordSsaoTemporalCompute(RhiCommandList& commandList,
     }
     RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
     if (!ensureTemporalRhiPipeline(rhiDevice) ||
-        !ensureComputeStage(rhiDevice, m_computeTemporal,
-                            "assets/shaders/ssao_temporal.comp",
-                            "SSAO.TemporalCompute", 4u,
-                            static_cast<uint32_t>(sizeof(glm::vec4)))) {
+        !ensureComputeStage(rhiDevice, m_computeTemporal, "assets/shaders/ssao_temporal.comp", "SSAO.TemporalCompute",
+                            4u, static_cast<uint32_t>(sizeof(glm::vec4)))) {
         return false;
     }
-    const RhiTextureViewHandle views[4] = {
-        targets.ssaoFilteredTextureViewHandle(),
-        targets.ssaoHistoryTexturePrevViewHandle(),
-        targets.velocityTextureViewHandle(),
-        targets.depthTextureViewHandle()
-    };
-    const RhiSamplerHandle samplers[4] = {
-        m_temporalNearestSampler,
-        m_temporalLinearSampler,
-        m_temporalNearestSampler,
-        m_temporalNearestSampler
-    };
-    if (!ensureComputeStageBindGroup(rhiDevice, m_computeTemporal, views,
-                                     samplers, 4u,
+    const RhiTextureViewHandle views[4] = {targets.ssaoFilteredTextureViewHandle(),
+                                           targets.ssaoHistoryTexturePrevViewHandle(),
+                                           targets.velocityTextureViewHandle(), targets.depthTextureViewHandle()};
+    const RhiSamplerHandle samplers[4] = {m_temporalNearestSampler, m_temporalLinearSampler, m_temporalNearestSampler,
+                                          m_temporalNearestSampler};
+    if (!ensureComputeStageBindGroup(rhiDevice, m_computeTemporal, views, samplers, 4u,
                                      targets.ssaoTemporalTextureViewHandle())) {
         return false;
     }
 
     const uint32_t width = static_cast<uint32_t>(std::max(1, targets.width()));
     const uint32_t height = static_cast<uint32_t>(std::max(1, targets.height()));
-    const glm::vec4 pushConstants(
-        static_cast<float>(width),
-        static_cast<float>(height),
-        ssao.historyWeight,
-        ctx.camera.nearPlane);
+    const glm::vec4 pushConstants(static_cast<float>(width), static_cast<float>(height), ssao.historyWeight,
+                                  ctx.camera.nearPlane);
     const GpuTimerSegmentToken timerToken = ctx.debugService != nullptr
-        ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::Ssao)
-        : GpuTimerSegmentToken{};
+                                                ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::Ssao)
+                                                : GpuTimerSegmentToken{};
     commandList.setComputePipeline(m_computeTemporal.pipeline);
     commandList.setBindGroup(0u, m_computeTemporal.bindGroup);
-    commandList.pushConstants(&pushConstants, sizeof(pushConstants),
-                              rhiFlag(RhiShaderStage::Compute));
+    commandList.pushConstants(&pushConstants, sizeof(pushConstants), rhiFlag(RhiShaderStage::Compute));
     commandList.dispatch((width + 7u) / 8u, (height + 7u) / 8u, 1u);
     if (ctx.debugService != nullptr) {
         ctx.debugService->endGpuTimer(commandList, timerToken);
@@ -617,12 +496,11 @@ bool SsaoPass::recordSsaoTemporalCompute(RhiCommandList& commandList,
     return true;
 }
 
-bool SsaoPass::recordSsaoHistoryCopyCompute(RhiCommandList& commandList,
-                                            const FrameContext& ctx,
+bool SsaoPass::recordSsaoHistoryCopyCompute(RhiCommandList& commandList, const FrameContext& ctx,
                                             DeferredRenderTargets& targets) {
     const GpuTimerSegmentToken timerToken = ctx.debugService != nullptr
-        ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::Ssao)
-        : GpuTimerSegmentToken{};
+                                                ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::Ssao)
+                                                : GpuTimerSegmentToken{};
     // vkCmdCopyImage is legal on compute queues (blits are not), which keeps
     // the SSAO chain on one queue instead of forcing a graphics wait.
     RhiTextureCopy copy;
@@ -637,9 +515,7 @@ bool SsaoPass::recordSsaoHistoryCopyCompute(RhiCommandList& commandList,
     return true;
 }
 
-bool SsaoPass::recordSsaoBase(RhiCommandList& commandList,
-                              const FrameContext& ctx,
-                              const SsaoSettings& ssao,
+bool SsaoPass::recordSsaoBase(RhiCommandList& commandList, const FrameContext& ctx, const SsaoSettings& ssao,
                               DeferredRenderTargets& targets) {
     if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr ||
         !targets.ensureSsaoHalfResTextureView(*ctx.shared->rhiDevice) ||
@@ -659,12 +535,8 @@ bool SsaoPass::recordSsaoBase(RhiCommandList& commandList,
 
     RhiRenderingInfo renderingInfo;
     renderingInfo.debugName = "SsaoHalfRes";
-    renderingInfo.renderArea = {
-        0,
-        0,
-        static_cast<uint32_t>(std::max(1, targets.halfWidth())),
-        static_cast<uint32_t>(std::max(1, targets.halfHeight()))
-    };
+    renderingInfo.renderArea = {0, 0, static_cast<uint32_t>(std::max(1, targets.halfWidth())),
+                                static_cast<uint32_t>(std::max(1, targets.halfHeight()))};
     renderingInfo.colorAttachments = &colorAttachment;
     renderingInfo.colorAttachmentCount = 1u;
 
@@ -672,19 +544,15 @@ bool SsaoPass::recordSsaoBase(RhiCommandList& commandList,
     if (!ensureNoiseTextureView(rhiDevice)) {
         return false;
     }
-    const std::array<RhiTextureViewHandle, 3> views = {
-        targets.depthTextureViewHandle(),
-        targets.normalAoTextureViewHandle(),
-        m_noiseTextureView
-    };
-    if (!ensureBaseRhiPipeline(rhiDevice) ||
-        !ensureBaseBindGroup(rhiDevice, views)) {
+    const std::array<RhiTextureViewHandle, 3> views = {targets.depthTextureViewHandle(),
+                                                       targets.normalAoTextureViewHandle(), m_noiseTextureView};
+    if (!ensureBaseRhiPipeline(rhiDevice) || !ensureBaseBindGroup(rhiDevice, views)) {
         return false;
     }
 
     const GpuTimerSegmentToken timerToken = ctx.debugService != nullptr
-        ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::Ssao)
-        : GpuTimerSegmentToken{};
+                                                ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::Ssao)
+                                                : GpuTimerSegmentToken{};
     commandList.beginRendering(renderingInfo);
 
     // Half-res: invResolution refers to the half-res viewport for UV computation
@@ -698,17 +566,9 @@ bool SsaoPass::recordSsaoBase(RhiCommandList& commandList,
     };
     const glm::mat4& projection = ctx.camera.projection;
     const BasePushConstants pushConstants{
-        projection,
-        glm::inverse(projection),
-        glm::vec4(1.0f / static_cast<float>(halfW),
-                  1.0f / static_cast<float>(halfH),
-                  ssao.radius,
-                  ssao.strength),
-        glm::ivec4(static_cast<int>(ctx.frameIndex % 64),
-                   std::clamp(ssao.samples, 1, 64),
-                   0,
-                   0)
-    };
+        projection, glm::inverse(projection),
+        glm::vec4(1.0f / static_cast<float>(halfW), 1.0f / static_cast<float>(halfH), ssao.radius, ssao.strength),
+        glm::ivec4(static_cast<int>(ctx.frameIndex % 64), std::clamp(ssao.samples, 1, 64), 0, 0)};
     commandList.setGraphicsPipeline(m_basePipeline);
     commandList.setBindGroup(0u, m_baseBindGroup);
     commandList.pushConstants(&pushConstants, sizeof(pushConstants), rhiFlag(RhiShaderStage::Fragment));
@@ -720,9 +580,7 @@ bool SsaoPass::recordSsaoBase(RhiCommandList& commandList,
     return true;
 }
 
-bool SsaoPass::recordSsaoFilter(RhiCommandList& commandList,
-                                const FrameContext& ctx,
-                                DeferredRenderTargets& targets) {
+bool SsaoPass::recordSsaoFilter(RhiCommandList& commandList, const FrameContext& ctx, DeferredRenderTargets& targets) {
     if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr ||
         !targets.ensureSsaoHalfResFilteredTextureView(*ctx.shared->rhiDevice) ||
         !targets.ensureSsaoHalfResTextureView(*ctx.shared->rhiDevice) ||
@@ -737,38 +595,26 @@ bool SsaoPass::recordSsaoFilter(RhiCommandList& commandList,
 
     RhiRenderingInfo renderingInfo;
     renderingInfo.debugName = "SsaoHalfResFilter";
-    renderingInfo.renderArea = {
-        0,
-        0,
-        static_cast<uint32_t>(std::max(1, targets.halfWidth())),
-        static_cast<uint32_t>(std::max(1, targets.halfHeight()))
-    };
+    renderingInfo.renderArea = {0, 0, static_cast<uint32_t>(std::max(1, targets.halfWidth())),
+                                static_cast<uint32_t>(std::max(1, targets.halfHeight()))};
     renderingInfo.colorAttachments = &colorAttachment;
     renderingInfo.colorAttachmentCount = 1u;
 
     RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
     const std::array<RhiTextureViewHandle, 3> views = {
-        targets.ssaoHalfResTextureViewHandle(),
-        targets.depthTextureViewHandle(),
-        targets.normalAoTextureViewHandle()
-    };
-    if (!ensureFilterRhiPipeline(rhiDevice) ||
-        !ensureFilterBindGroup(rhiDevice, views)) {
+        targets.ssaoHalfResTextureViewHandle(), targets.depthTextureViewHandle(), targets.normalAoTextureViewHandle()};
+    if (!ensureFilterRhiPipeline(rhiDevice) || !ensureFilterBindGroup(rhiDevice, views)) {
         return false;
     }
 
     const GpuTimerSegmentToken timerToken = ctx.debugService != nullptr
-        ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::Ssao)
-        : GpuTimerSegmentToken{};
+                                                ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::Ssao)
+                                                : GpuTimerSegmentToken{};
     commandList.beginRendering(renderingInfo);
 
     const int halfW = std::max(1, targets.width() / 2);
     const int halfH = std::max(1, targets.height() / 2);
-    const glm::vec4 pushConstants(
-        static_cast<float>(halfW),
-        static_cast<float>(halfH),
-        ctx.camera.nearPlane,
-        0.0f);
+    const glm::vec4 pushConstants(static_cast<float>(halfW), static_cast<float>(halfH), ctx.camera.nearPlane, 0.0f);
     commandList.setGraphicsPipeline(m_filterPipeline);
     commandList.setBindGroup(0u, m_filterBindGroup);
     commandList.pushConstants(&pushConstants, sizeof(pushConstants), rhiFlag(RhiShaderStage::Fragment));
@@ -780,16 +626,13 @@ bool SsaoPass::recordSsaoFilter(RhiCommandList& commandList,
     return true;
 }
 
-bool SsaoPass::recordSsaoUpsample(RhiCommandList& commandList,
-                                  const FrameContext& ctx,
-                                  const SsaoSettings& ssao,
+bool SsaoPass::recordSsaoUpsample(RhiCommandList& commandList, const FrameContext& ctx, const SsaoSettings& ssao,
                                   DeferredRenderTargets& targets) {
     if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr ||
         !targets.ensureSsaoFilteredTextureView(*ctx.shared->rhiDevice) ||
         !targets.ensureGBufferTextureViews(*ctx.shared->rhiDevice) ||
-        !(ssao.filterEnabled
-              ? targets.ensureSsaoHalfResFilteredTextureView(*ctx.shared->rhiDevice)
-              : targets.ensureSsaoHalfResTextureView(*ctx.shared->rhiDevice))) {
+        !(ssao.filterEnabled ? targets.ensureSsaoHalfResFilteredTextureView(*ctx.shared->rhiDevice)
+                             : targets.ensureSsaoHalfResTextureView(*ctx.shared->rhiDevice))) {
         return false;
     }
 
@@ -800,39 +643,27 @@ bool SsaoPass::recordSsaoUpsample(RhiCommandList& commandList,
 
     RhiRenderingInfo renderingInfo;
     renderingInfo.debugName = "SsaoUpsample";
-    renderingInfo.renderArea = {
-        0,
-        0,
-        static_cast<uint32_t>(std::max(1, targets.width())),
-        static_cast<uint32_t>(std::max(1, targets.height()))
-    };
+    renderingInfo.renderArea = {0, 0, static_cast<uint32_t>(std::max(1, targets.width())),
+                                static_cast<uint32_t>(std::max(1, targets.height()))};
     renderingInfo.colorAttachments = &colorAttachment;
     renderingInfo.colorAttachmentCount = 1u;
 
     RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
     const std::array<RhiTextureViewHandle, 2> views = {
-        ssao.filterEnabled
-            ? targets.ssaoHalfResFilteredTextureViewHandle()
-            : targets.ssaoHalfResTextureViewHandle(),
-        targets.depthTextureViewHandle()
-    };
-    if (!ensureUpsampleRhiPipeline(rhiDevice) ||
-        !ensureUpsampleBindGroup(rhiDevice, views)) {
+        ssao.filterEnabled ? targets.ssaoHalfResFilteredTextureViewHandle() : targets.ssaoHalfResTextureViewHandle(),
+        targets.depthTextureViewHandle()};
+    if (!ensureUpsampleRhiPipeline(rhiDevice) || !ensureUpsampleBindGroup(rhiDevice, views)) {
         return false;
     }
 
     const GpuTimerSegmentToken timerToken = ctx.debugService != nullptr
-        ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::Ssao)
-        : GpuTimerSegmentToken{};
+                                                ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::Ssao)
+                                                : GpuTimerSegmentToken{};
     commandList.beginRendering(renderingInfo);
 
     const int halfW = std::max(1, targets.width() / 2);
     const int halfH = std::max(1, targets.height() / 2);
-    const glm::vec4 pushConstants(
-        static_cast<float>(halfW),
-        static_cast<float>(halfH),
-        ctx.camera.nearPlane,
-        0.0f);
+    const glm::vec4 pushConstants(static_cast<float>(halfW), static_cast<float>(halfH), ctx.camera.nearPlane, 0.0f);
     commandList.setGraphicsPipeline(m_upsamplePipeline);
     commandList.setBindGroup(0u, m_upsampleBindGroup);
     commandList.pushConstants(&pushConstants, sizeof(pushConstants), rhiFlag(RhiShaderStage::Fragment));
@@ -844,9 +675,7 @@ bool SsaoPass::recordSsaoUpsample(RhiCommandList& commandList,
     return true;
 }
 
-bool SsaoPass::recordSsaoTemporal(RhiCommandList& commandList,
-                                  const FrameContext& ctx,
-                                  const SsaoSettings& ssao,
+bool SsaoPass::recordSsaoTemporal(RhiCommandList& commandList, const FrameContext& ctx, const SsaoSettings& ssao,
                                   DeferredRenderTargets& targets) {
     if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr ||
         !targets.ensureSsaoTemporalTextureView(*ctx.shared->rhiDevice) ||
@@ -864,38 +693,28 @@ bool SsaoPass::recordSsaoTemporal(RhiCommandList& commandList,
 
     RhiRenderingInfo renderingInfo;
     renderingInfo.debugName = "SsaoTemporal";
-    renderingInfo.renderArea = {
-        0,
-        0,
-        static_cast<uint32_t>(std::max(1, targets.width())),
-        static_cast<uint32_t>(std::max(1, targets.height()))
-    };
+    renderingInfo.renderArea = {0, 0, static_cast<uint32_t>(std::max(1, targets.width())),
+                                static_cast<uint32_t>(std::max(1, targets.height()))};
     renderingInfo.colorAttachments = &colorAttachment;
     renderingInfo.colorAttachmentCount = 1u;
 
     RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
     const std::array<RhiTextureViewHandle, 4> views = {
-        targets.ssaoFilteredTextureViewHandle(),
-        targets.ssaoHistoryTexturePrevViewHandle(),
-        targets.velocityTextureViewHandle(),
-        targets.depthTextureViewHandle()
-    };
-    if (!ensureTemporalRhiPipeline(rhiDevice) ||
-        !ensureTemporalBindGroup(rhiDevice, views)) {
+        targets.ssaoFilteredTextureViewHandle(), targets.ssaoHistoryTexturePrevViewHandle(),
+        targets.velocityTextureViewHandle(), targets.depthTextureViewHandle()};
+    if (!ensureTemporalRhiPipeline(rhiDevice) || !ensureTemporalBindGroup(rhiDevice, views)) {
         return false;
     }
 
     const GpuTimerSegmentToken timerToken = ctx.debugService != nullptr
-        ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::Ssao)
-        : GpuTimerSegmentToken{};
+                                                ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::Ssao)
+                                                : GpuTimerSegmentToken{};
     commandList.beginRendering(renderingInfo);
     commandList.setGraphicsPipeline(m_temporalPipeline);
     commandList.setBindGroup(0u, m_temporalBindGroup);
-    const glm::vec4 pushConstants(
-        static_cast<float>(std::max(1, targets.width())),
-        static_cast<float>(std::max(1, targets.height())),
-        ssao.historyWeight,
-        ctx.camera.nearPlane);
+    const glm::vec4 pushConstants(static_cast<float>(std::max(1, targets.width())),
+                                  static_cast<float>(std::max(1, targets.height())), ssao.historyWeight,
+                                  ctx.camera.nearPlane);
     commandList.pushConstants(&pushConstants, sizeof(pushConstants), rhiFlag(RhiShaderStage::Fragment));
     commandList.draw(3u, 1u, 0u, 0u);
     commandList.endRendering();
@@ -905,12 +724,11 @@ bool SsaoPass::recordSsaoTemporal(RhiCommandList& commandList,
     return true;
 }
 
-bool SsaoPass::recordSsaoHistoryCopy(RhiCommandList& commandList,
-                                     const FrameContext& ctx,
+bool SsaoPass::recordSsaoHistoryCopy(RhiCommandList& commandList, const FrameContext& ctx,
                                      DeferredRenderTargets& targets) {
     const GpuTimerSegmentToken timerToken = ctx.debugService != nullptr
-        ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::Ssao)
-        : GpuTimerSegmentToken{};
+                                                ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::Ssao)
+                                                : GpuTimerSegmentToken{};
     RhiTextureBlit blit;
     blit.src = targets.ssaoTemporalTextureHandle();
     blit.dst = targets.ssaoHistoryTextureHandle();
@@ -968,8 +786,7 @@ bool SsaoPass::ensureBaseRhiPipeline(RhiDevice& rhiDevice) {
 
     const std::optional<std::string> vertexSource =
         renderer::rhi::loadShaderSource("assets/shaders/fullscreen_triangle_rhi.vert");
-    const std::optional<std::string> fragmentSource =
-        renderer::rhi::loadShaderSource("assets/shaders/ssao.frag");
+    const std::optional<std::string> fragmentSource = renderer::rhi::loadShaderSource("assets/shaders/ssao.frag");
     if (!vertexSource.has_value() || !fragmentSource.has_value()) {
         return false;
     }
@@ -1017,12 +834,8 @@ bool SsaoPass::ensureBaseRhiPipeline(RhiDevice& rhiDevice) {
     RhiBindGroupLayoutDesc bindGroupLayoutDesc;
     bindGroupLayoutDesc.debugName = "SsaoBase.BindGroupLayout";
     for (uint32_t binding = 0u; binding < 3u; ++binding) {
-        bindGroupLayoutDesc.entries.push_back({
-            binding,
-            RhiBindingType::CombinedTextureSampler,
-            rhiFlag(RhiShaderStage::Fragment),
-            1u
-        });
+        bindGroupLayoutDesc.entries.push_back(
+            {binding, RhiBindingType::CombinedTextureSampler, rhiFlag(RhiShaderStage::Fragment), 1u});
     }
     m_baseBindGroupLayout = rhiDevice.createBindGroupLayout(bindGroupLayoutDesc);
     if (!m_baseBindGroupLayout.isValid()) {
@@ -1033,9 +846,8 @@ bool SsaoPass::ensureBaseRhiPipeline(RhiDevice& rhiDevice) {
     RhiPipelineLayoutDesc pipelineLayoutDesc;
     pipelineLayoutDesc.debugName = "SsaoBase.PipelineLayout";
     pipelineLayoutDesc.bindGroupLayouts.push_back(m_baseBindGroupLayout);
-    pipelineLayoutDesc.pushConstantBytes = static_cast<uint32_t>(sizeof(glm::mat4) * 2u +
-                                                                 sizeof(glm::vec4) +
-                                                                 sizeof(glm::ivec4));
+    pipelineLayoutDesc.pushConstantBytes =
+        static_cast<uint32_t>(sizeof(glm::mat4) * 2u + sizeof(glm::vec4) + sizeof(glm::ivec4));
     pipelineLayoutDesc.pushConstantStages = rhiFlag(RhiShaderStage::Fragment);
     m_basePipelineLayout = rhiDevice.createPipelineLayout(pipelineLayoutDesc);
     if (!m_basePipelineLayout.isValid()) {
@@ -1063,8 +875,7 @@ bool SsaoPass::ensureBaseRhiPipeline(RhiDevice& rhiDevice) {
     return true;
 }
 
-bool SsaoPass::ensureBaseBindGroup(RhiDevice& rhiDevice,
-                                   const std::array<RhiTextureViewHandle, 3>& views) {
+bool SsaoPass::ensureBaseBindGroup(RhiDevice& rhiDevice, const std::array<RhiTextureViewHandle, 3>& views) {
     if (!ensureBaseRhiPipeline(rhiDevice)) {
         return false;
     }
@@ -1085,8 +896,7 @@ bool SsaoPass::ensureBaseBindGroup(RhiDevice& rhiDevice,
         RhiBindGroupEntry entry;
         entry.binding = binding;
         entry.resource.combinedTextureSampler.textureView = views[binding];
-        entry.resource.combinedTextureSampler.sampler =
-            binding == 2u ? m_baseNoiseSampler : m_baseNearestSampler;
+        entry.resource.combinedTextureSampler.sampler = binding == 2u ? m_baseNoiseSampler : m_baseNearestSampler;
         bindGroupDesc.entries.push_back(entry);
     }
 
@@ -1195,12 +1005,8 @@ bool SsaoPass::ensureFilterRhiPipeline(RhiDevice& rhiDevice) {
     RhiBindGroupLayoutDesc bindGroupLayoutDesc;
     bindGroupLayoutDesc.debugName = "SsaoFilter.BindGroupLayout";
     for (uint32_t binding = 0u; binding < 3u; ++binding) {
-        bindGroupLayoutDesc.entries.push_back({
-            binding,
-            RhiBindingType::CombinedTextureSampler,
-            rhiFlag(RhiShaderStage::Fragment),
-            1u
-        });
+        bindGroupLayoutDesc.entries.push_back(
+            {binding, RhiBindingType::CombinedTextureSampler, rhiFlag(RhiShaderStage::Fragment), 1u});
     }
     m_filterBindGroupLayout = rhiDevice.createBindGroupLayout(bindGroupLayoutDesc);
     if (!m_filterBindGroupLayout.isValid()) {
@@ -1239,8 +1045,7 @@ bool SsaoPass::ensureFilterRhiPipeline(RhiDevice& rhiDevice) {
     return true;
 }
 
-bool SsaoPass::ensureFilterBindGroup(RhiDevice& rhiDevice,
-                                     const std::array<RhiTextureViewHandle, 3>& views) {
+bool SsaoPass::ensureFilterBindGroup(RhiDevice& rhiDevice, const std::array<RhiTextureViewHandle, 3>& views) {
     if (!ensureFilterRhiPipeline(rhiDevice)) {
         return false;
     }
@@ -1375,12 +1180,8 @@ bool SsaoPass::ensureUpsampleRhiPipeline(RhiDevice& rhiDevice) {
     RhiBindGroupLayoutDesc bindGroupLayoutDesc;
     bindGroupLayoutDesc.debugName = "SsaoUpsample.BindGroupLayout";
     for (uint32_t binding = 0u; binding < 2u; ++binding) {
-        bindGroupLayoutDesc.entries.push_back({
-            binding,
-            RhiBindingType::CombinedTextureSampler,
-            rhiFlag(RhiShaderStage::Fragment),
-            1u
-        });
+        bindGroupLayoutDesc.entries.push_back(
+            {binding, RhiBindingType::CombinedTextureSampler, rhiFlag(RhiShaderStage::Fragment), 1u});
     }
     m_upsampleBindGroupLayout = rhiDevice.createBindGroupLayout(bindGroupLayoutDesc);
     if (!m_upsampleBindGroupLayout.isValid()) {
@@ -1419,8 +1220,7 @@ bool SsaoPass::ensureUpsampleRhiPipeline(RhiDevice& rhiDevice) {
     return true;
 }
 
-bool SsaoPass::ensureUpsampleBindGroup(RhiDevice& rhiDevice,
-                                       const std::array<RhiTextureViewHandle, 2>& views) {
+bool SsaoPass::ensureUpsampleBindGroup(RhiDevice& rhiDevice, const std::array<RhiTextureViewHandle, 2>& views) {
     if (!ensureUpsampleRhiPipeline(rhiDevice)) {
         return false;
     }
@@ -1560,12 +1360,8 @@ bool SsaoPass::ensureTemporalRhiPipeline(RhiDevice& rhiDevice) {
     RhiBindGroupLayoutDesc bindGroupLayoutDesc;
     bindGroupLayoutDesc.debugName = "SsaoTemporal.BindGroupLayout";
     for (uint32_t binding = 0u; binding < 4u; ++binding) {
-        bindGroupLayoutDesc.entries.push_back({
-            binding,
-            RhiBindingType::CombinedTextureSampler,
-            rhiFlag(RhiShaderStage::Fragment),
-            1u
-        });
+        bindGroupLayoutDesc.entries.push_back(
+            {binding, RhiBindingType::CombinedTextureSampler, rhiFlag(RhiShaderStage::Fragment), 1u});
     }
     m_temporalBindGroupLayout = rhiDevice.createBindGroupLayout(bindGroupLayoutDesc);
     if (!m_temporalBindGroupLayout.isValid()) {
@@ -1604,8 +1400,7 @@ bool SsaoPass::ensureTemporalRhiPipeline(RhiDevice& rhiDevice) {
     return true;
 }
 
-bool SsaoPass::ensureTemporalBindGroup(RhiDevice& rhiDevice,
-                                       const std::array<RhiTextureViewHandle, 4>& views) {
+bool SsaoPass::ensureTemporalBindGroup(RhiDevice& rhiDevice, const std::array<RhiTextureViewHandle, 4>& views) {
     if (!ensureTemporalRhiPipeline(rhiDevice)) {
         return false;
     }

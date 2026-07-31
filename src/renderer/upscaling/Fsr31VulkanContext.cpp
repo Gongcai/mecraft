@@ -43,16 +43,12 @@ void receiveFsrMessage(const FfxMsgType type, const wchar_t* const message) {
     if (message == nullptr) {
         return;
     }
-    const wchar_t* const level = type == FFX_MESSAGE_TYPE_ERROR
-        ? L"error" : L"warning";
+    const wchar_t* const level = type == FFX_MESSAGE_TYPE_ERROR ? L"error" : L"warning";
     std::wcerr << L"[FSR 3.1 " << level << L"] " << message << L'\n';
 }
 
-[[nodiscard]] FfxResource makeFsrResource(
-    const VkRhiTextureInteropInfo& resource,
-    const FfxResourceUsage usage,
-    const FfxResourceStates state,
-    const wchar_t* const name) {
+[[nodiscard]] FfxResource makeFsrResource(const VkRhiTextureInteropInfo& resource, const FfxResourceUsage usage,
+                                          const FfxResourceStates state, const wchar_t* const name) {
     FfxResourceDescription description{};
     description.type = FFX_RESOURCE_TYPE_TEXTURE2D;
     description.format = ffxGetSurfaceFormatVK(resource.format);
@@ -62,8 +58,7 @@ void receiveFsrMessage(const FfxMsgType type, const wchar_t* const message) {
     description.mipCount = 1u;
     description.flags = FFX_RESOURCE_FLAGS_NONE;
     description.usage = usage;
-    return ffxGetResourceVK(
-        reinterpret_cast<void*>(resource.image), description, name, state);
+    return ffxGetResourceVK(reinterpret_cast<void*>(resource.image), description, name, state);
 }
 
 struct Fsr31SharedTexture {
@@ -71,21 +66,16 @@ struct Fsr31SharedTexture {
     RhiTextureViewHandle view;
 };
 
-[[nodiscard]] bool createFsrSharedTexture(
-    VkRhiDevice& device,
-    const char* const debugName,
-    const RhiTextureFormat format,
-    const TemporalExtent extent,
-    Fsr31SharedTexture& output) {
+[[nodiscard]] bool createFsrSharedTexture(VkRhiDevice& device, const char* const debugName,
+                                          const RhiTextureFormat format, const TemporalExtent extent,
+                                          Fsr31SharedTexture& output) {
     RhiTextureDesc textureDesc;
     textureDesc.debugName = debugName;
     textureDesc.format = format;
     textureDesc.width = extent.width;
     textureDesc.height = extent.height;
-    textureDesc.usage = rhiFlag(RhiTextureUsage::Sampled) |
-                        rhiFlag(RhiTextureUsage::Storage) |
-                        rhiFlag(RhiTextureUsage::TransferSrc) |
-                        rhiFlag(RhiTextureUsage::TransferDst);
+    textureDesc.usage = rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::Storage) |
+                        rhiFlag(RhiTextureUsage::TransferSrc) | rhiFlag(RhiTextureUsage::TransferDst);
     textureDesc.memoryCategory = RhiMemoryCategory::Sdk;
     output.texture = device.createTexture(textureDesc, nullptr);
     if (!output.texture.isValid()) {
@@ -105,9 +95,7 @@ struct Fsr31SharedTexture {
     return true;
 }
 
-void destroyFsrSharedTexture(
-    VkRhiDevice& device,
-    Fsr31SharedTexture& resource) {
+void destroyFsrSharedTexture(VkRhiDevice& device, Fsr31SharedTexture& resource) {
     if (resource.view.isValid()) {
         device.destroyTextureView(resource.view);
     }
@@ -117,16 +105,12 @@ void destroyFsrSharedTexture(
     resource = {};
 }
 
-[[nodiscard]] bool matchesSharedResourceDescription(
-    const FfxCreateResourceDescription& description,
-    const FfxSurfaceFormat format,
-    const TemporalExtent extent) {
+[[nodiscard]] bool matchesSharedResourceDescription(const FfxCreateResourceDescription& description,
+                                                    const FfxSurfaceFormat format, const TemporalExtent extent) {
     const FfxResourceDescription& resource = description.resourceDescription;
-    return resource.type == FFX_RESOURCE_TYPE_TEXTURE2D &&
-           resource.format == format && resource.width == extent.width &&
-           resource.height == extent.height && resource.depth == 1u &&
-           resource.mipCount == 1u &&
-           (resource.usage & FFX_RESOURCE_USAGE_UAV) != 0;
+    return resource.type == FFX_RESOURCE_TYPE_TEXTURE2D && resource.format == format &&
+           resource.width == extent.width && resource.height == extent.height && resource.depth == 1u &&
+           resource.mipCount == 1u && (resource.usage & FFX_RESOURCE_USAGE_UAV) != 0;
 }
 
 } // namespace
@@ -145,8 +129,7 @@ struct Fsr31VulkanContext::Impl {
     bool initialized = false;
 };
 
-Fsr31VulkanContext::Fsr31VulkanContext()
-    : m_impl(std::make_unique<Impl>()) {}
+Fsr31VulkanContext::Fsr31VulkanContext() : m_impl(std::make_unique<Impl>()) {}
 
 Fsr31VulkanContext::~Fsr31VulkanContext() {
     if (m_impl->initialized) {
@@ -154,9 +137,7 @@ Fsr31VulkanContext::~Fsr31VulkanContext() {
     }
 }
 
-Fsr31VulkanContextCreateResult Fsr31VulkanContext::initialize(
-    VkRhiDevice& device,
-    const Fsr31VulkanContextDesc& desc) {
+Fsr31VulkanContextCreateResult Fsr31VulkanContext::initialize(VkRhiDevice& device, const Fsr31VulkanContextDesc& desc) {
     if (m_impl->initialized) {
         return {Fsr31VulkanContextCreateStatus::AlreadyInitialized, 0};
     }
@@ -168,36 +149,28 @@ Fsr31VulkanContextCreateResult Fsr31VulkanContext::initialize(
     }
     if (desc.maxRenderExtent.width > desc.maxOutputExtent.width ||
         desc.maxRenderExtent.height > desc.maxOutputExtent.height) {
-        return {
-            Fsr31VulkanContextCreateStatus::RenderExtentExceedsOutputExtent, 0};
+        return {Fsr31VulkanContextCreateStatus::RenderExtentExceedsOutputExtent, 0};
     }
 
     const auto deviceInfo = VkRhiInterop::deviceInfo(device);
     if (!deviceInfo.has_value()) {
         return {Fsr31VulkanContextCreateStatus::MissingVulkanDevice, 0};
     }
-    const size_t scratchMemorySize = ffxGetScratchMemorySizeVK(
-        deviceInfo->physicalDevice, FFX_FSR3UPSCALER_CONTEXT_COUNT);
+    const size_t scratchMemorySize =
+        ffxGetScratchMemorySizeVK(deviceInfo->physicalDevice, FFX_FSR3UPSCALER_CONTEXT_COUNT);
     if (scratchMemorySize == 0u) {
         return {Fsr31VulkanContextCreateStatus::InvalidScratchMemorySize, 0};
     }
     const size_t alignedScratchMemorySize =
-        (scratchMemorySize + kFsrScratchAlignment - 1u) &
-        ~(kFsrScratchAlignment - 1u);
-    m_impl->scratchMemory.reset(
-        allocateFsrScratchMemory(alignedScratchMemorySize));
+        (scratchMemorySize + kFsrScratchAlignment - 1u) & ~(kFsrScratchAlignment - 1u);
+    m_impl->scratchMemory.reset(allocateFsrScratchMemory(alignedScratchMemorySize));
     if (m_impl->scratchMemory == nullptr) {
         return {Fsr31VulkanContextCreateStatus::ScratchMemoryAllocationError, 0};
     }
-    std::memset(
-        m_impl->scratchMemory.get(), 0, alignedScratchMemorySize);
+    std::memset(m_impl->scratchMemory.get(), 0, alignedScratchMemorySize);
     m_impl->scratchMemorySize = scratchMemorySize;
 
-    VkDeviceContext deviceContext{
-        deviceInfo->device,
-        deviceInfo->physicalDevice,
-        vkGetDeviceProcAddr
-    };
+    VkDeviceContext deviceContext{deviceInfo->device, deviceInfo->physicalDevice, vkGetDeviceProcAddr};
     const FfxDevice ffxDevice = ffxGetDeviceVK(&deviceContext);
     if (ffxDevice == nullptr) {
         m_impl->scratchMemory.reset();
@@ -206,19 +179,12 @@ Fsr31VulkanContextCreateResult Fsr31VulkanContext::initialize(
     }
 
     FfxInterface backendInterface{};
-    const FfxErrorCode interfaceError = ffxGetInterfaceVK(
-        &backendInterface,
-        ffxDevice,
-        m_impl->scratchMemory.get(),
-        m_impl->scratchMemorySize,
-        FFX_FSR3UPSCALER_CONTEXT_COUNT);
+    const FfxErrorCode interfaceError = ffxGetInterfaceVK(&backendInterface, ffxDevice, m_impl->scratchMemory.get(),
+                                                          m_impl->scratchMemorySize, FFX_FSR3UPSCALER_CONTEXT_COUNT);
     if (interfaceError != FFX_OK) {
         m_impl->scratchMemory.reset();
         m_impl->scratchMemorySize = 0u;
-        return {
-            Fsr31VulkanContextCreateStatus::BackendInterfaceError,
-            interfaceError
-        };
+        return {Fsr31VulkanContextCreateStatus::BackendInterfaceError, interfaceError};
     }
 
     FfxFsr3UpscalerContextDescription contextDesc{};
@@ -230,68 +196,50 @@ Fsr31VulkanContextCreateResult Fsr31VulkanContext::initialize(
         contextDesc.flags |= FFX_FSR3UPSCALER_ENABLE_DEBUG_CHECKING;
         contextDesc.fpMessage = receiveFsrMessage;
     }
-    contextDesc.maxRenderSize = {
-        desc.maxRenderExtent.width, desc.maxRenderExtent.height};
-    contextDesc.maxUpscaleSize = {
-        desc.maxOutputExtent.width, desc.maxOutputExtent.height};
+    contextDesc.maxRenderSize = {desc.maxRenderExtent.width, desc.maxRenderExtent.height};
+    contextDesc.maxUpscaleSize = {desc.maxOutputExtent.width, desc.maxOutputExtent.height};
     contextDesc.backendInterface = backendInterface;
 
-    const FfxErrorCode contextError = ffxFsr3UpscalerContextCreate(
-        &m_impl->context, &contextDesc);
+    const FfxErrorCode contextError = ffxFsr3UpscalerContextCreate(&m_impl->context, &contextDesc);
     if (contextError != FFX_OK) {
         m_impl->context = {};
         m_impl->scratchMemory.reset();
         m_impl->scratchMemorySize = 0u;
-        return {
-            Fsr31VulkanContextCreateStatus::ContextCreationError,
-            contextError
-        };
+        return {Fsr31VulkanContextCreateStatus::ContextCreationError, contextError};
     }
 
     FfxFsr3UpscalerSharedResourceDescriptions sharedDescriptions{};
     const FfxErrorCode sharedDescriptionError =
-        ffxFsr3UpscalerGetSharedResourceDescriptions(
-            &m_impl->context, &sharedDescriptions);
+        ffxFsr3UpscalerGetSharedResourceDescriptions(&m_impl->context, &sharedDescriptions);
     if (sharedDescriptionError != FFX_OK) {
         static_cast<void>(ffxFsr3UpscalerContextDestroy(&m_impl->context));
         m_impl->context = {};
         m_impl->scratchMemory.reset();
         m_impl->scratchMemorySize = 0u;
-        return {
-            Fsr31VulkanContextCreateStatus::SharedResourceDescriptionError,
-            sharedDescriptionError
-        };
+        return {Fsr31VulkanContextCreateStatus::SharedResourceDescriptionError, sharedDescriptionError};
     }
-    const bool sharedDescriptionsValid = matchesSharedResourceDescription(
-            sharedDescriptions.dilatedDepth, FFX_SURFACE_FORMAT_R32_FLOAT,
-            desc.maxRenderExtent) &&
-        matchesSharedResourceDescription(
-            sharedDescriptions.dilatedMotionVectors,
-            FFX_SURFACE_FORMAT_R16G16_FLOAT, desc.maxRenderExtent) &&
-        matchesSharedResourceDescription(
-            sharedDescriptions.reconstructedPrevNearestDepth,
-            FFX_SURFACE_FORMAT_R32_UINT, desc.maxRenderExtent);
+    const bool sharedDescriptionsValid =
+        matchesSharedResourceDescription(sharedDescriptions.dilatedDepth, FFX_SURFACE_FORMAT_R32_FLOAT,
+                                         desc.maxRenderExtent) &&
+        matchesSharedResourceDescription(sharedDescriptions.dilatedMotionVectors, FFX_SURFACE_FORMAT_R16G16_FLOAT,
+                                         desc.maxRenderExtent) &&
+        matchesSharedResourceDescription(sharedDescriptions.reconstructedPrevNearestDepth, FFX_SURFACE_FORMAT_R32_UINT,
+                                         desc.maxRenderExtent);
     if (!sharedDescriptionsValid) {
         static_cast<void>(ffxFsr3UpscalerContextDestroy(&m_impl->context));
         m_impl->context = {};
         m_impl->scratchMemory.reset();
         m_impl->scratchMemorySize = 0u;
-        return {
-            Fsr31VulkanContextCreateStatus::InvalidSharedResourceDescription,
-            0
-        };
+        return {Fsr31VulkanContextCreateStatus::InvalidSharedResourceDescription, 0};
     }
 
-    const bool sharedResourcesCreated = createFsrSharedTexture(
-            device, "FSR31.DilatedDepth", RhiTextureFormat::R32Float,
-            desc.maxRenderExtent, m_impl->dilatedDepth) &&
-        createFsrSharedTexture(
-            device, "FSR31.DilatedMotionVectors", RhiTextureFormat::Rg16Float,
-            desc.maxRenderExtent, m_impl->dilatedMotionVectors) &&
-        createFsrSharedTexture(
-            device, "FSR31.ReconstructedPrevNearestDepth",
-            RhiTextureFormat::R32Uint, desc.maxRenderExtent,
-            m_impl->reconstructedPrevNearestDepth);
+    const bool sharedResourcesCreated =
+        createFsrSharedTexture(device, "FSR31.DilatedDepth", RhiTextureFormat::R32Float, desc.maxRenderExtent,
+                               m_impl->dilatedDepth) &&
+        createFsrSharedTexture(device, "FSR31.DilatedMotionVectors", RhiTextureFormat::Rg16Float, desc.maxRenderExtent,
+                               m_impl->dilatedMotionVectors) &&
+        createFsrSharedTexture(device, "FSR31.ReconstructedPrevNearestDepth", RhiTextureFormat::R32Uint,
+                               desc.maxRenderExtent, m_impl->reconstructedPrevNearestDepth);
     if (!sharedResourcesCreated) {
         destroyFsrSharedTexture(device, m_impl->reconstructedPrevNearestDepth);
         destroyFsrSharedTexture(device, m_impl->dilatedMotionVectors);
@@ -300,10 +248,7 @@ Fsr31VulkanContextCreateResult Fsr31VulkanContext::initialize(
         m_impl->context = {};
         m_impl->scratchMemory.reset();
         m_impl->scratchMemorySize = 0u;
-        return {
-            Fsr31VulkanContextCreateStatus::SharedResourceCreationError,
-            0
-        };
+        return {Fsr31VulkanContextCreateStatus::SharedResourceCreationError, 0};
     }
     m_impl->maxRenderExtent = desc.maxRenderExtent;
     m_impl->maxOutputExtent = desc.maxOutputExtent;
@@ -320,8 +265,7 @@ Fsr31VulkanContextDestroyResult Fsr31VulkanContext::shutdown() {
     if (error != FFX_OK) {
         return {Fsr31VulkanContextDestroyStatus::ContextDestroyError, error};
     }
-    destroyFsrSharedTexture(
-        *m_impl->device, m_impl->reconstructedPrevNearestDepth);
+    destroyFsrSharedTexture(*m_impl->device, m_impl->reconstructedPrevNearestDepth);
     destroyFsrSharedTexture(*m_impl->device, m_impl->dilatedMotionVectors);
     destroyFsrSharedTexture(*m_impl->device, m_impl->dilatedDepth);
     m_impl->context = {};
@@ -335,30 +279,23 @@ Fsr31VulkanContextDestroyResult Fsr31VulkanContext::shutdown() {
     return {Fsr31VulkanContextDestroyStatus::Success, 0};
 }
 
-Fsr31VulkanDispatchResult Fsr31VulkanContext::dispatch(
-    const VkRhiDevice& device,
-    RhiCommandList& commandList,
-    const TemporalFrameInput& frame,
-    const Fsr31VulkanDispatchDesc& desc) {
+Fsr31VulkanDispatchResult Fsr31VulkanContext::dispatch(const VkRhiDevice& device, RhiCommandList& commandList,
+                                                       const TemporalFrameInput& frame,
+                                                       const Fsr31VulkanDispatchDesc& desc) {
     if (!m_impl->initialized) {
-        return Fsr31VulkanDispatchResult{
-            Fsr31VulkanDispatchStatus::NotInitialized};
+        return Fsr31VulkanDispatchResult{Fsr31VulkanDispatchStatus::NotInitialized};
     }
-    if (!std::isfinite(desc.sharpness) || desc.sharpness < 0.0f ||
-        desc.sharpness > 1.0f) {
-        return Fsr31VulkanDispatchResult{
-            Fsr31VulkanDispatchStatus::InvalidSettings};
+    if (!std::isfinite(desc.sharpness) || desc.sharpness < 0.0f || desc.sharpness > 1.0f) {
+        return Fsr31VulkanDispatchResult{Fsr31VulkanDispatchStatus::InvalidSettings};
     }
     if (frame.extents.resourceExtent.width > m_impl->maxRenderExtent.width ||
         frame.extents.resourceExtent.height > m_impl->maxRenderExtent.height ||
         frame.extents.outputExtent.width > m_impl->maxOutputExtent.width ||
         frame.extents.outputExtent.height > m_impl->maxOutputExtent.height) {
-        return Fsr31VulkanDispatchResult{
-            Fsr31VulkanDispatchStatus::ContextExtentExceeded};
+        return Fsr31VulkanDispatchResult{Fsr31VulkanDispatchStatus::ContextExtentExceeded};
     }
 
-    const Fsr31ResourceResolveResult resolved = resolveFsr31VulkanResourceSet(
-        device, frame);
+    const Fsr31ResourceResolveResult resolved = resolveFsr31VulkanResourceSet(device, frame);
     if (!resolved.succeeded()) {
         Fsr31VulkanDispatchResult result;
         result.status = Fsr31VulkanDispatchStatus::InvalidResources;
@@ -370,83 +307,58 @@ Fsr31VulkanDispatchResult Fsr31VulkanContext::dispatch(
     }
     const auto nativeCommandBuffer = VkRhiInterop::commandBuffer(device, commandList);
     if (!nativeCommandBuffer.has_value()) {
-        return Fsr31VulkanDispatchResult{
-            Fsr31VulkanDispatchStatus::MissingCommandBuffer};
+        return Fsr31VulkanDispatchResult{Fsr31VulkanDispatchStatus::MissingCommandBuffer};
     }
 
-    const auto dilatedDepth = VkRhiInterop::textureInfo(
-        device, m_impl->dilatedDepth.texture, m_impl->dilatedDepth.view);
-    const auto dilatedMotionVectors = VkRhiInterop::textureInfo(
-        device, m_impl->dilatedMotionVectors.texture,
-        m_impl->dilatedMotionVectors.view);
+    const auto dilatedDepth =
+        VkRhiInterop::textureInfo(device, m_impl->dilatedDepth.texture, m_impl->dilatedDepth.view);
+    const auto dilatedMotionVectors =
+        VkRhiInterop::textureInfo(device, m_impl->dilatedMotionVectors.texture, m_impl->dilatedMotionVectors.view);
     const auto reconstructedPrevNearestDepth = VkRhiInterop::textureInfo(
-        device, m_impl->reconstructedPrevNearestDepth.texture,
-        m_impl->reconstructedPrevNearestDepth.view);
-    if (!dilatedDepth.has_value() || !dilatedMotionVectors.has_value() ||
-        !reconstructedPrevNearestDepth.has_value()) {
-        return Fsr31VulkanDispatchResult{
-            Fsr31VulkanDispatchStatus::InvalidResources};
+        device, m_impl->reconstructedPrevNearestDepth.texture, m_impl->reconstructedPrevNearestDepth.view);
+    if (!dilatedDepth.has_value() || !dilatedMotionVectors.has_value() || !reconstructedPrevNearestDepth.has_value()) {
+        return Fsr31VulkanDispatchResult{Fsr31VulkanDispatchStatus::InvalidResources};
     }
 
-    const RhiTextureHandle sharedTextures[] = {
-        m_impl->dilatedDepth.texture,
-        m_impl->dilatedMotionVectors.texture,
-        m_impl->reconstructedPrevNearestDepth.texture
-    };
+    const RhiTextureHandle sharedTextures[] = {m_impl->dilatedDepth.texture, m_impl->dilatedMotionVectors.texture,
+                                               m_impl->reconstructedPrevNearestDepth.texture};
     for (const RhiTextureHandle texture : sharedTextures) {
-        commandList.textureBarrier({
-            texture,
-            m_impl->sharedResourcesInitialized
-                ? RhiResourceState::ShaderWrite
-                : RhiResourceState::Undefined,
-            RhiResourceState::ShaderWrite
-        });
+        commandList.textureBarrier(
+            {texture, m_impl->sharedResourcesInitialized ? RhiResourceState::ShaderWrite : RhiResourceState::Undefined,
+             RhiResourceState::ShaderWrite});
     }
 
     const Fsr31VulkanResourceSet& resources = resolved.resources;
     FfxFsr3UpscalerDispatchDescription dispatchDesc{};
     dispatchDesc.commandList = ffxGetCommandListVK(*nativeCommandBuffer);
-    dispatchDesc.color = makeFsrResource(
-        resources.hdrColor, FFX_RESOURCE_USAGE_READ_ONLY,
-        FFX_RESOURCE_STATE_COMPUTE_READ, L"Mecraft FSR HDR color");
-    dispatchDesc.depth = makeFsrResource(
-        resources.depth, FFX_RESOURCE_USAGE_DEPTHTARGET,
-        FFX_RESOURCE_STATE_COMPUTE_READ, L"Mecraft FSR depth");
-    dispatchDesc.motionVectors = makeFsrResource(
-        resources.velocity, FFX_RESOURCE_USAGE_READ_ONLY,
-        FFX_RESOURCE_STATE_COMPUTE_READ, L"Mecraft FSR velocity");
-    dispatchDesc.exposure = makeFsrResource(
-        resources.exposure, FFX_RESOURCE_USAGE_READ_ONLY,
-        FFX_RESOURCE_STATE_COMPUTE_READ, L"Mecraft FSR exposure");
-    dispatchDesc.reactive = makeFsrResource(
-        resources.reactiveMask, FFX_RESOURCE_USAGE_READ_ONLY,
-        FFX_RESOURCE_STATE_COMPUTE_READ, L"Mecraft FSR reactive mask");
-    dispatchDesc.transparencyAndComposition = makeFsrResource(
-        resources.transparencyMask, FFX_RESOURCE_USAGE_READ_ONLY,
-        FFX_RESOURCE_STATE_COMPUTE_READ, L"Mecraft FSR transparency mask");
-    dispatchDesc.dilatedDepth = makeFsrResource(
-        *dilatedDepth, FFX_RESOURCE_USAGE_UAV,
-        FFX_RESOURCE_STATE_UNORDERED_ACCESS, L"Mecraft FSR dilated depth");
-    dispatchDesc.dilatedMotionVectors = makeFsrResource(
-        *dilatedMotionVectors, FFX_RESOURCE_USAGE_UAV,
-        FFX_RESOURCE_STATE_UNORDERED_ACCESS,
-        L"Mecraft FSR dilated motion vectors");
-    dispatchDesc.reconstructedPrevNearestDepth = makeFsrResource(
-        *reconstructedPrevNearestDepth, FFX_RESOURCE_USAGE_UAV,
-        FFX_RESOURCE_STATE_UNORDERED_ACCESS,
-        L"Mecraft FSR reconstructed previous nearest depth");
-    dispatchDesc.output = makeFsrResource(
-        resources.outputHdrColor, FFX_RESOURCE_USAGE_UAV,
-        FFX_RESOURCE_STATE_UNORDERED_ACCESS, L"Mecraft FSR output");
+    dispatchDesc.color = makeFsrResource(resources.hdrColor, FFX_RESOURCE_USAGE_READ_ONLY,
+                                         FFX_RESOURCE_STATE_COMPUTE_READ, L"Mecraft FSR HDR color");
+    dispatchDesc.depth = makeFsrResource(resources.depth, FFX_RESOURCE_USAGE_DEPTHTARGET,
+                                         FFX_RESOURCE_STATE_COMPUTE_READ, L"Mecraft FSR depth");
+    dispatchDesc.motionVectors = makeFsrResource(resources.velocity, FFX_RESOURCE_USAGE_READ_ONLY,
+                                                 FFX_RESOURCE_STATE_COMPUTE_READ, L"Mecraft FSR velocity");
+    dispatchDesc.exposure = makeFsrResource(resources.exposure, FFX_RESOURCE_USAGE_READ_ONLY,
+                                            FFX_RESOURCE_STATE_COMPUTE_READ, L"Mecraft FSR exposure");
+    dispatchDesc.reactive = makeFsrResource(resources.reactiveMask, FFX_RESOURCE_USAGE_READ_ONLY,
+                                            FFX_RESOURCE_STATE_COMPUTE_READ, L"Mecraft FSR reactive mask");
+    dispatchDesc.transparencyAndComposition =
+        makeFsrResource(resources.transparencyMask, FFX_RESOURCE_USAGE_READ_ONLY, FFX_RESOURCE_STATE_COMPUTE_READ,
+                        L"Mecraft FSR transparency mask");
+    dispatchDesc.dilatedDepth = makeFsrResource(*dilatedDepth, FFX_RESOURCE_USAGE_UAV,
+                                                FFX_RESOURCE_STATE_UNORDERED_ACCESS, L"Mecraft FSR dilated depth");
+    dispatchDesc.dilatedMotionVectors =
+        makeFsrResource(*dilatedMotionVectors, FFX_RESOURCE_USAGE_UAV, FFX_RESOURCE_STATE_UNORDERED_ACCESS,
+                        L"Mecraft FSR dilated motion vectors");
+    dispatchDesc.reconstructedPrevNearestDepth =
+        makeFsrResource(*reconstructedPrevNearestDepth, FFX_RESOURCE_USAGE_UAV, FFX_RESOURCE_STATE_UNORDERED_ACCESS,
+                        L"Mecraft FSR reconstructed previous nearest depth");
+    dispatchDesc.output = makeFsrResource(resources.outputHdrColor, FFX_RESOURCE_USAGE_UAV,
+                                          FFX_RESOURCE_STATE_UNORDERED_ACCESS, L"Mecraft FSR output");
     dispatchDesc.jitterOffset = {frame.jitter.pixels.x, frame.jitter.pixels.y};
-    const glm::vec2 motionVectorScale = fsr31MotionVectorScale(
-        frame.motionVectorScale);
-    dispatchDesc.motionVectorScale = {
-        motionVectorScale.x, motionVectorScale.y};
-    dispatchDesc.renderSize = {
-        frame.extents.renderRect.width, frame.extents.renderRect.height};
-    dispatchDesc.upscaleSize = {
-        frame.extents.outputExtent.width, frame.extents.outputExtent.height};
+    const glm::vec2 motionVectorScale = fsr31MotionVectorScale(frame.motionVectorScale);
+    dispatchDesc.motionVectorScale = {motionVectorScale.x, motionVectorScale.y};
+    dispatchDesc.renderSize = {frame.extents.renderRect.width, frame.extents.renderRect.height};
+    dispatchDesc.upscaleSize = {frame.extents.outputExtent.width, frame.extents.outputExtent.height};
     dispatchDesc.enableSharpening = desc.enableSharpening;
     dispatchDesc.sharpness = desc.sharpness;
     dispatchDesc.frameTimeDelta = frame.frameDeltaMilliseconds;
@@ -456,19 +368,14 @@ Fsr31VulkanDispatchResult Fsr31VulkanContext::dispatch(
     dispatchDesc.cameraFar = frame.cameraFar;
     dispatchDesc.cameraFovAngleVertical = frame.verticalFovRadians;
     dispatchDesc.viewSpaceToMetersFactor = 1.0f;
-    dispatchDesc.flags = desc.drawDebugView
-        ? static_cast<uint32_t>(FFX_FSR3UPSCALER_DISPATCH_DRAW_DEBUG_VIEW)
-        : 0u;
+    dispatchDesc.flags = desc.drawDebugView ? static_cast<uint32_t>(FFX_FSR3UPSCALER_DISPATCH_DRAW_DEBUG_VIEW) : 0u;
 
-    const FfxErrorCode error = ffxFsr3UpscalerContextDispatch(
-        &m_impl->context, &dispatchDesc);
+    const FfxErrorCode error = ffxFsr3UpscalerContextDispatch(&m_impl->context, &dispatchDesc);
     if (error != FFX_OK) {
-        return Fsr31VulkanDispatchResult{
-            Fsr31VulkanDispatchStatus::SdkError, error};
+        return Fsr31VulkanDispatchResult{Fsr31VulkanDispatchStatus::SdkError, error};
     }
     m_impl->sharedResourcesInitialized = true;
-    return Fsr31VulkanDispatchResult{
-        Fsr31VulkanDispatchStatus::Success};
+    return Fsr31VulkanDispatchResult{Fsr31VulkanDispatchStatus::Success};
 }
 
 bool Fsr31VulkanContext::isInitialized() const {

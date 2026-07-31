@@ -25,7 +25,7 @@ struct FlightStateComponent;
 struct CameraStateComponent;
 struct InventoryComponent;
 struct InventoryDataComponent;
-}
+} // namespace ecs
 
 namespace save {
 
@@ -49,11 +49,11 @@ struct PlayerData {
     int selectedSlot = 0;
 
     struct Slot {
-        std::string item;   // NamespacedId, e.g. "minecraft:stone"
+        std::string item; // NamespacedId, e.g. "minecraft:stone"
         uint16_t count = 0;
         uint16_t durability = 0;
     };
-    std::vector<Slot> inventory;  // Only non-empty slots
+    std::vector<Slot> inventory; // Only non-empty slots
 };
 
 class PlayerSerializer {

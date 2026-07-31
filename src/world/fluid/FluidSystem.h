@@ -58,9 +58,8 @@ private:
     [[nodiscard]] uint64_t resolveNeighborhoodTickDelay(const glm::ivec3& pos) const;
 
     World& m_world;
-    std::priority_queue<ScheduledBlockTick,
-                        std::vector<ScheduledBlockTick>,
-                        ScheduledBlockTickCompare> m_scheduledBlockTickQueue;
+    std::priority_queue<ScheduledBlockTick, std::vector<ScheduledBlockTick>, ScheduledBlockTickCompare>
+        m_scheduledBlockTickQueue;
     std::unordered_map<ScheduledBlockTickPos, uint64_t, ScheduledBlockTickPosHash> m_scheduledBlockTickDue;
     uint64_t m_lastProcessedGameTick = 0;
 };

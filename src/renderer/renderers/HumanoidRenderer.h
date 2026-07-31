@@ -31,38 +31,22 @@ class GameplayRegistry;
 class HumanoidRenderer {
 public:
     enum RenderMode : uint8_t {
-        kRenderAll,       // render local Steve, remote Steve, and mob entities
-        kRenderMobsOnly   // hide only the local Steve model (first-person view)
+        kRenderAll, // render local Steve, remote Steve, and mob entities
+        kRenderMobsOnly // hide only the local Steve model (first-person view)
     };
 
     [[nodiscard]] bool init(ResourceMgr& resourceMgr, RhiDevice& rhiDevice);
     void shutdown();
-    [[nodiscard]] bool prepareFrame(const IWorldView& worldView,
-                                    ecs::GameplayRegistry& registry,
+    [[nodiscard]] bool prepareFrame(const IWorldView& worldView, ecs::GameplayRegistry& registry,
                                     RenderMode mode = kRenderAll);
     void finishFrame();
-    void renderPreparedToGBuffer(RhiCommandList& commandList,
-                                 const glm::mat4& viewProj,
+    void renderPreparedToGBuffer(RhiCommandList& commandList, const glm::mat4& viewProj,
                                  const glm::mat4& previousViewProj);
-    void renderPreparedToShadowMap(RhiCommandList& commandList,
-                                   const glm::mat4& shadowViewProj,
-                                   const glm::vec3& cameraPos,
-                                   float splitNear,
-                                   float splitFar);
-    void renderPreparedForward(RhiCommandList& commandList,
-                               const glm::mat4& viewProj,
-                               float skyIntensity);
-    void renderInventoryPreview(RhiCommandList& commandList,
-                                float x,
-                                float y,
-                                float width,
-                                float height,
-                                float uiScale,
-                                float pointerX,
-                                float pointerY,
-                                float timeSeconds,
-                                int screenWidth,
-                                int screenHeight);
+    void renderPreparedToShadowMap(RhiCommandList& commandList, const glm::mat4& shadowViewProj,
+                                   const glm::vec3& cameraPos, float splitNear, float splitFar);
+    void renderPreparedForward(RhiCommandList& commandList, const glm::mat4& viewProj, float skyIntensity);
+    void renderInventoryPreview(RhiCommandList& commandList, float x, float y, float width, float height, float uiScale,
+                                float pointerX, float pointerY, float timeSeconds, int screenWidth, int screenHeight);
 
 private:
     struct PartMesh {
@@ -80,7 +64,8 @@ private:
         float u0, v0, u1, v1;
     };
 
-    std::array<std::array<PartMesh, renderer::kHumanoidPartTypeCount>, renderer::kHumanoidSkinLayoutCount> m_skinLayoutMeshes{};
+    std::array<std::array<PartMesh, renderer::kHumanoidPartTypeCount>, renderer::kHumanoidSkinLayoutCount>
+        m_skinLayoutMeshes{};
     std::unordered_map<std::string, PartMesh> m_entityModelPartMeshes;
 
     struct TextureResource {
@@ -131,28 +116,23 @@ private:
 
     void destroyMesh(PartMesh& mesh) const;
 
-    PartMesh buildPartMesh(const renderer::HumanoidPartMeshDefinition& definition,
-                           float textureWidth,
+    PartMesh buildPartMesh(const renderer::HumanoidPartMeshDefinition& definition, float textureWidth,
                            float textureHeight) const;
-    PartMesh buildEntityModelPartMesh(const ecs::EntityModelPartDefinition& definition,
-                                      float textureWidth,
+    PartMesh buildEntityModelPartMesh(const ecs::EntityModelPartDefinition& definition, float textureWidth,
                                       float textureHeight) const;
 
-    static FaceUvRect pixelRectToUv(float x0, float y0, float x1, float y1,
-                                    float textureWidth, float textureHeight);
+    static FaceUvRect pixelRectToUv(float x0, float y0, float x1, float y1, float textureWidth, float textureHeight);
 
     PartMesh* getMeshForPart(ecs::StevePartType partType, ecs::EntitySkinLayoutKind skinLayout);
     PartMesh* getMeshForEntityModelPart(const std::string& modelId, const std::string& partName);
-    [[nodiscard]] const TextureResource* requireTextureResource(
-        const std::string& textureKey);
+    [[nodiscard]] const TextureResource* requireTextureResource(const std::string& textureKey);
     void createGBufferRhiResources();
     void destroyGBufferRhiResources();
 
     // Per-object velocity: stores previous-frame model matrix per entity part.
     std::unordered_map<entt::entity, glm::mat4> m_previousModelMatrices;
     std::unordered_map<entt::entity, glm::mat4> m_currentModelMatrices;
-    std::unordered_map<entt::entity, renderer::contracts::StableObjectId>
-        m_rootObjectIds;
+    std::unordered_map<entt::entity, renderer::contracts::StableObjectId> m_rootObjectIds;
 
     // Query world light at a block position. Returns (sunlight, blocklight) normalized to [0,1].
     static glm::vec2 queryWorldLight(const IWorldView& worldView, const glm::vec3& position);

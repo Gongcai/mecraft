@@ -24,11 +24,8 @@ void loadChunks(World& world, const uint32_t seed) {
     }
 }
 
-void fillBox(World& world,
-             const int minX, const int maxX,
-             const int minY, const int maxY,
-             const int minZ, const int maxZ,
-             const BlockID block) {
+void fillBox(World& world, const int minX, const int maxX, const int minY, const int maxY, const int minZ,
+             const int maxZ, const BlockID block) {
     for (int x = minX; x <= maxX; ++x) {
         for (int y = minY; y <= maxY; ++y) {
             for (int z = minZ; z <= maxZ; ++z) {

@@ -2,8 +2,7 @@
 
 #include <algorithm>
 
-NamespacedId::NamespacedId()
-    : m_ns("minecraft"), m_path("air") {
+NamespacedId::NamespacedId() : m_ns("minecraft"), m_path("air") {
     m_hash = computeHash(m_ns, m_path);
 }
 
@@ -20,8 +19,7 @@ NamespacedId::NamespacedId(std::string_view full) {
     m_hash = computeHash(m_ns, m_path);
 }
 
-NamespacedId::NamespacedId(std::string_view ns, std::string_view path)
-    : m_ns(ns), m_path(path) {
+NamespacedId::NamespacedId(std::string_view ns, std::string_view path) : m_ns(ns), m_path(path) {
     m_hash = computeHash(m_ns, m_path);
 }
 
@@ -30,7 +28,8 @@ std::string NamespacedId::full() const {
 }
 
 bool NamespacedId::operator==(const NamespacedId& other) const {
-    if (m_hash != other.m_hash) return false;
+    if (m_hash != other.m_hash)
+        return false;
     return m_ns == other.m_ns && m_path == other.m_path;
 }
 
@@ -39,7 +38,8 @@ bool NamespacedId::operator!=(const NamespacedId& other) const {
 }
 
 bool NamespacedId::operator<(const NamespacedId& other) const {
-    if (m_ns != other.m_ns) return m_ns < other.m_ns;
+    if (m_ns != other.m_ns)
+        return m_ns < other.m_ns;
     return m_path < other.m_path;
 }
 

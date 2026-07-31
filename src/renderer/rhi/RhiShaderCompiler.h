@@ -11,10 +11,7 @@
 
 namespace renderer::rhi {
 
-enum class RhiShaderBackend {
-    Vulkan,
-    OpenGl
-};
+enum class RhiShaderBackend { Vulkan, OpenGl };
 
 struct RhiShaderBindingInfo {
     uint32_t set = 0;
@@ -45,10 +42,8 @@ struct RhiCompiledShader {
 
 // Compiles one canonical Vulkan GLSL stage to SPIR-V and reflects its resource contract.
 // The selected backend macro is injected by the shared compiler before parsing the source.
-[[nodiscard]] std::optional<RhiCompiledShader> compileShaderToSpirv(
-    const RhiShaderDesc& desc,
-    RhiShaderBackend backend,
-    std::string& errorMessage);
+[[nodiscard]] std::optional<RhiCompiledShader> compileShaderToSpirv(const RhiShaderDesc& desc, RhiShaderBackend backend,
+                                                                    std::string& errorMessage);
 
 } // namespace renderer::rhi
 

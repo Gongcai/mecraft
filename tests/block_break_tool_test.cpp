@@ -81,7 +81,8 @@ int main() {
     }
 
     const ItemStack held = registry.get<ecs::InventoryDataComponent>(player).inventory.getSlotStack(0);
-    if (held.itemId != ItemRegistry::requireIdByName("minecraft:iron_pickaxe") || held.count != 1 || held.durability != 1) {
+    if (held.itemId != ItemRegistry::requireIdByName("minecraft:iron_pickaxe") || held.count != 1 ||
+        held.durability != 1) {
         return fail("successful block break should consume one point of tool durability");
     }
 

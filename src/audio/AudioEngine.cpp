@@ -19,9 +19,8 @@ LPALCEVENTCONTROLSOFT g_alcEventControlSoft = nullptr;
 LPALCREOPENDEVICESOFT g_alcReopenDeviceSoft = nullptr;
 
 // Receives OpenAL device events from the OpenAL internal thread.
-void ALC_APIENTRY onDeviceEvent(ALCenum eventType, ALCenum deviceType,
-                                 ALCdevice* device, ALCsizei length,
-                                 const ALCchar* message, void* userPtr) noexcept{
+void ALC_APIENTRY onDeviceEvent(ALCenum eventType, ALCenum deviceType, ALCdevice* device, ALCsizei length,
+                                const ALCchar* message, void* userPtr) noexcept {
     (void)deviceType;
     (void)device;
     (void)length;
@@ -30,7 +29,8 @@ void ALC_APIENTRY onDeviceEvent(ALCenum eventType, ALCenum deviceType,
 
     if (eventType == ALC_EVENT_TYPE_DEFAULT_DEVICE_CHANGED_SOFT) {
 #ifdef MECRAFT_ENABLE_CONSOLE_OUTPUT
-        MECRAFT_LOG_STREAM(std::cout << "[Audio] 系统默认音频设备已更改: " << (message ? message : "unknown") << std::endl);
+        MECRAFT_LOG_STREAM(std::cout << "[Audio] 系统默认音频设备已更改: " << (message ? message : "unknown")
+                                     << std::endl);
 #endif
         AudioEngine::s_needDeviceReopen = true;
     }
@@ -149,10 +149,8 @@ AudioClip* AudioEngine::getClip(const std::string& name) {
     return nullptr;
 }
 
-bool AudioEngine::loadCatalog(const std::string& catalogPath,
-                              const std::string& rootDirectory,
-                              const std::string& defaultGroup,
-                              const bool defaultPreload) {
+bool AudioEngine::loadCatalog(const std::string& catalogPath, const std::string& rootDirectory,
+                              const std::string& defaultGroup, const bool defaultPreload) {
     const fs::path manifestPath = catalogPath;
     const std::string catalogKey = audio::pathToUtf8(manifestPath.lexically_normal());
     if (m_loadedCatalogs.find(catalogKey) != m_loadedCatalogs.end()) {
@@ -168,8 +166,8 @@ bool AudioEngine::loadCatalog(const std::string& catalogPath,
     m_loadedCatalogs.insert(catalogKey);
     preloadCatalogSounds();
 #ifdef MECRAFT_ENABLE_CONSOLE_OUTPUT
-    MECRAFT_LOG_STREAM(std::cout << "[Audio] Loaded audio catalog: " << catalogKey
-                                << " (" << m_catalog.size() << " sound event(s))" << std::endl);
+    MECRAFT_LOG_STREAM(std::cout << "[Audio] Loaded audio catalog: " << catalogKey << " (" << m_catalog.size()
+                                 << " sound event(s))" << std::endl);
 #endif
     return true;
 }
@@ -178,7 +176,8 @@ std::vector<std::string> AudioEngine::getSoundNamesByGroup(const std::string& gr
     return m_catalog.soundIdsByGroup(group);
 }
 
-AudioSource* AudioEngine::playClip(const std::string& clipName, glm::vec3 position, bool loop, float volume, bool spatial) {
+AudioSource* AudioEngine::playClip(const std::string& clipName, glm::vec3 position, bool loop, float volume,
+                                   bool spatial) {
     const audio::SoundEntry* entry = m_catalog.find(clipName);
     if (entry == nullptr) {
         MECRAFT_LOG_STREAM(std::cerr << "[Audio] Sound event not found in catalog: " << clipName << std::endl);
@@ -353,7 +352,8 @@ bool AudioEngine::initDeviceSwitchExtension() {
 }
 
 void AudioEngine::checkDeviceSwitch() {
-    if (!m_deviceSwitchSupported) return;
+    if (!m_deviceSwitchSupported)
+        return;
 
     if (s_needDeviceReopen.exchange(false)) {
 #ifdef MECRAFT_ENABLE_CONSOLE_OUTPUT

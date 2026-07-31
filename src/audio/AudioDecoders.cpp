@@ -21,9 +21,7 @@ public:
         return kExtensions;
     }
 
-    [[nodiscard]] bool decode(const std::string& filepath,
-                              DecodedAudio& out,
-                              std::string& error) const override {
+    [[nodiscard]] bool decode(const std::string& filepath, DecodedAudio& out, std::string& error) const override {
         std::ifstream file(filepath, std::ios::binary);
         if (!file.is_open()) {
             error = "failed to open file";
@@ -38,9 +36,7 @@ public:
         file.read(wave, sizeof(wave));
         static_cast<void>(fileSize);
 
-        if (!file ||
-            std::strncmp(riff, "RIFF", 4) != 0 ||
-            std::strncmp(wave, "WAVE", 4) != 0) {
+        if (!file || std::strncmp(riff, "RIFF", 4) != 0 || std::strncmp(wave, "WAVE", 4) != 0) {
             error = "invalid RIFF/WAVE header";
             return false;
         }
@@ -64,8 +60,7 @@ public:
                 break;
             }
 
-            const std::streamoff paddedChunkSize =
-                static_cast<std::streamoff>(chunkSize + (chunkSize & 1u));
+            const std::streamoff paddedChunkSize = static_cast<std::streamoff>(chunkSize + (chunkSize & 1u));
 
             if (std::strncmp(chunkId, "fmt ", 4) == 0) {
                 if (chunkSize < 16) {
@@ -152,9 +147,7 @@ public:
         return kExtensions;
     }
 
-    [[nodiscard]] bool decode(const std::string& filepath,
-                              DecodedAudio& out,
-                              std::string& error) const override {
+    [[nodiscard]] bool decode(const std::string& filepath, DecodedAudio& out, std::string& error) const override {
         OggVorbis_File vorbisFile{};
         const int openResult = ov_fopen(filepath.c_str(), &vorbisFile);
         if (openResult < 0) {
@@ -178,8 +171,7 @@ public:
         }
 
         std::vector<char> pcm;
-        constexpr size_t kMaxDecodedPcmBytes =
-            static_cast<size_t>(std::numeric_limits<int32_t>::max());
+        constexpr size_t kMaxDecodedPcmBytes = static_cast<size_t>(std::numeric_limits<int32_t>::max());
         const ogg_int64_t totalSamples = ov_pcm_total(&vorbisFile, -1);
         if (totalSamples > 0) {
             const ogg_int64_t reserveBytes = totalSamples * channels * static_cast<ogg_int64_t>(sizeof(int16_t));
@@ -191,13 +183,8 @@ public:
         std::array<char, 32768> buffer{};
         int currentSection = 0;
         while (true) {
-            const long bytesRead = ov_read(&vorbisFile,
-                                           buffer.data(),
-                                           static_cast<int>(buffer.size()),
-                                           0,
-                                           2,
-                                           1,
-                                           &currentSection);
+            const long bytesRead =
+                ov_read(&vorbisFile, buffer.data(), static_cast<int>(buffer.size()), 0, 2, 1, &currentSection);
             if (bytesRead == 0) {
                 break;
             }
@@ -237,9 +224,7 @@ std::string normalizeAudioExtension(std::string extension) {
     if (extension.empty()) {
         return extension;
     }
-    std::transform(extension.begin(),
-                   extension.end(),
-                   extension.begin(),
+    std::transform(extension.begin(), extension.end(), extension.begin(),
                    [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
     if (extension.front() != '.') {
         extension.insert(extension.begin(), '.');
@@ -279,11 +264,8 @@ const IAudioDecoder* AudioDecoderRegistry::decoderForExtension(const std::string
     return nullptr;
 }
 
-bool AudioDecoderRegistry::decodeFile(const std::string& filepath,
-                                      DecodedAudio& out,
-                                      std::string& error) const {
-    const std::string extension =
-        normalizeAudioExtension(std::filesystem::path(filepath).extension().string());
+bool AudioDecoderRegistry::decodeFile(const std::string& filepath, DecodedAudio& out, std::string& error) const {
+    const std::string extension = normalizeAudioExtension(std::filesystem::path(filepath).extension().string());
     const IAudioDecoder* decoder = decoderForExtension(extension);
     if (decoder == nullptr) {
         error = "unsupported audio extension: " + extension;

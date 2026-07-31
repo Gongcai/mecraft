@@ -33,11 +33,8 @@ float lerpAngleDegrees(const float from, const float to, const float t) {
 }
 
 glm::vec3 cameraFrontFromYawPitch(const float yaw, const float pitch) {
-    const glm::vec3 front = {
-        std::cos(glm::radians(yaw)) * std::cos(glm::radians(pitch)),
-        std::sin(glm::radians(pitch)),
-        std::sin(glm::radians(yaw)) * std::cos(glm::radians(pitch))
-    };
+    const glm::vec3 front = {std::cos(glm::radians(yaw)) * std::cos(glm::radians(pitch)), std::sin(glm::radians(pitch)),
+                             std::sin(glm::radians(yaw)) * std::cos(glm::radians(pitch))};
     return glm::normalize(front);
 }
 
@@ -47,11 +44,10 @@ glm::vec3 cameraRightFromFront(const glm::vec3& front) {
 
 } // namespace
 
-GameplayPresentationSnapshot GameplayPresentationBuilder::build(
-    ecs::GameplayRegistry& reg,
-    const CameraController& cameraController,
-    const IWorldView& worldView,
-    const float interpolationAlpha) {
+GameplayPresentationSnapshot GameplayPresentationBuilder::build(ecs::GameplayRegistry& reg,
+                                                                const CameraController& cameraController,
+                                                                const IWorldView& worldView,
+                                                                const float interpolationAlpha) {
 
     GameplayPresentationSnapshot snap;
     auto& registry = reg.registry();
@@ -103,8 +99,7 @@ GameplayPresentationSnapshot GameplayPresentationBuilder::build(
             renderCamera.setFOV(renderFov);
 
             // Eye position with view bob offsets
-            eyePosition = renderPosition +
-                glm::vec3(0.0f, renderEyeHeight + viewBob.verticalOffset, 0.0f);
+            eyePosition = renderPosition + glm::vec3(0.0f, renderEyeHeight + viewBob.verticalOffset, 0.0f);
 
             // Apply horizontal bob
             renderRight.y = 0.0f;

@@ -53,10 +53,7 @@ struct EntityContactBox {
     glm::vec3 max{};
 };
 
-enum class PressurePlateEntityKind : uint8_t {
-    Living,
-    LooseItem
-};
+enum class PressurePlateEntityKind : uint8_t { Living, LooseItem };
 
 uint16_t getRequiredProperty(const BlockStateId stateId, const uint16_t property, const char* propertyName) {
     if (property == PropIndices::INVALID) {
@@ -115,19 +112,15 @@ bool horizontalFootprintIntersectsPlate(const EntityContactBox& box, const glm::
     const float plateMinZ = static_cast<float>(platePos.z) + kPlateInset;
     const float plateMaxZ = static_cast<float>(platePos.z + 1) - kPlateInset;
 
-    return box.min.x < plateMaxX && box.max.x > plateMinX &&
-           box.min.z < plateMaxZ && box.max.z > plateMinZ;
+    return box.min.x < plateMaxX && box.max.x > plateMinX && box.min.z < plateMaxZ && box.max.z > plateMinZ;
 }
 
 bool bottomTouchesPlateHeight(const EntityContactBox& box, const glm::ivec3& platePos) {
     const float plateY = static_cast<float>(platePos.y);
-    return box.min.y >= plateY - kCellBoundaryEpsilon &&
-           box.min.y <= plateY + kPlateMaxContactHeight;
+    return box.min.y >= plateY - kCellBoundaryEpsilon && box.min.y <= plateY + kPlateMaxContactHeight;
 }
 
-void addContactingPlates(const World& world,
-                         const EntityContactBox& box,
-                         const PressurePlateEntityKind entityKind,
+void addContactingPlates(const World& world, const EntityContactBox& box, const PressurePlateEntityKind entityKind,
                          PositionSet& occupiedPlates) {
     const int y = static_cast<int>(std::floor(box.min.y + kCellBoundaryEpsilon));
     const int minX = static_cast<int>(std::floor(box.min.x));
@@ -145,8 +138,7 @@ void addContactingPlates(const World& world,
             if (!pressurePlateAcceptsEntity(stateId, entityKind)) {
                 continue;
             }
-            if (!horizontalFootprintIntersectsPlate(box, platePos) ||
-                !bottomTouchesPlateHeight(box, platePos)) {
+            if (!horizontalFootprintIntersectsPlate(box, platePos) || !bottomTouchesPlateHeight(box, platePos)) {
                 continue;
             }
             occupiedPlates.insert(platePos);
@@ -197,7 +189,8 @@ void collectLooseItemPressurePlateContacts(SystemContext& ctx, PositionSet& occu
         }
         const auto& transform = dropView.get<TransformComponent>(entity);
         const auto& bounds = dropView.get<BoundsComponent>(entity);
-        addContactingPlates(world, contactBoxFromBounds(transform, bounds), PressurePlateEntityKind::LooseItem, occupiedPlates);
+        addContactingPlates(world, contactBoxFromBounds(transform, bounds), PressurePlateEntityKind::LooseItem,
+                            occupiedPlates);
     }
 
     auto projectileView = reg.view<ProjectileTag, TransformComponent, BoundsComponent>();
@@ -207,7 +200,8 @@ void collectLooseItemPressurePlateContacts(SystemContext& ctx, PositionSet& occu
         }
         const auto& transform = projectileView.get<TransformComponent>(entity);
         const auto& bounds = projectileView.get<BoundsComponent>(entity);
-        addContactingPlates(world, contactBoxFromBounds(transform, bounds), PressurePlateEntityKind::LooseItem, occupiedPlates);
+        addContactingPlates(world, contactBoxFromBounds(transform, bounds), PressurePlateEntityKind::LooseItem,
+                            occupiedPlates);
     }
 
     auto fallingBlockView = reg.view<FallingBlockTag, TransformComponent, BoundsComponent>();
@@ -217,7 +211,8 @@ void collectLooseItemPressurePlateContacts(SystemContext& ctx, PositionSet& occu
         }
         const auto& transform = fallingBlockView.get<TransformComponent>(entity);
         const auto& bounds = fallingBlockView.get<BoundsComponent>(entity);
-        addContactingPlates(world, contactBoxFromBounds(transform, bounds), PressurePlateEntityKind::LooseItem, occupiedPlates);
+        addContactingPlates(world, contactBoxFromBounds(transform, bounds), PressurePlateEntityKind::LooseItem,
+                            occupiedPlates);
     }
 }
 
@@ -236,9 +231,7 @@ size_t applyPressurePlateState(World& world, const glm::ivec3& position, const b
     return 1;
 }
 
-size_t applyPressurePlateStates(World& world,
-                                PressurePlateRuntimeState& runtime,
-                                const PositionSet& occupiedPlates) {
+size_t applyPressurePlateStates(World& world, PressurePlateRuntimeState& runtime, const PositionSet& occupiedPlates) {
     std::vector<glm::ivec3> releasedPlates;
     releasedPlates.reserve(runtime.activePlates.size());
     for (const glm::ivec3& position : runtime.activePlates) {

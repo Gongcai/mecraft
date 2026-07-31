@@ -12,8 +12,5 @@ void AudioListenerSyncSystem::update(float deltaTime, ecs::GameplayRegistry& reg
     // Sync listener position/orientation from player ECS state
     ecs::PlayerQuery query(reg);
     AudioListener::setPosition(query.getEyePosition());
-    AudioListener::setOrientation(
-        query.getCameraFront(),
-        query.getCameraUp()
-    );
+    AudioListener::setOrientation(query.getCameraFront(), query.getCameraUp());
 }

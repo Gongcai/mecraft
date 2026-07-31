@@ -19,16 +19,11 @@ inline constexpr uint32_t kLocalShadowSpotTileResolution = 512u;
 inline constexpr uint32_t kLocalShadowPointFaceResolution = 256u;
 inline constexpr uint32_t kLocalShadowMaxSpotLightCount = 64u;
 inline constexpr uint32_t kLocalShadowMaxPointLightCount = 64u;
-inline constexpr uint32_t kLocalShadowPointMetadataBase =
-    kLocalShadowMaxSpotLightCount;
-inline constexpr uint32_t kLocalShadowMetadataCount =
-    kLocalShadowMaxSpotLightCount + kLocalShadowMaxPointLightCount;
+inline constexpr uint32_t kLocalShadowPointMetadataBase = kLocalShadowMaxSpotLightCount;
+inline constexpr uint32_t kLocalShadowMetadataCount = kLocalShadowMaxSpotLightCount + kLocalShadowMaxPointLightCount;
 
 /// Classifies the persistent raster resource used by one local light.
-enum class LocalShadowType : uint32_t {
-    Spot = 0u,
-    Point = 1u
-};
+enum class LocalShadowType : uint32_t { Spot = 0u, Point = 1u };
 
 /// Mirrors one fixed-size local-shadow metadata record consumed by GLSL.
 struct alignas(16) LocalShadowMetadata final {
@@ -82,17 +77,14 @@ public:
     /// @param sceneLights Complete unallocated scene-light snapshot.
     /// @param allocations Destination replaced only after a successful commit.
     /// @return True when every raster request received a stable slot.
-    [[nodiscard]] bool allocate(
-        const std::vector<SceneLight>& sceneLights,
-        std::vector<LocalShadowAllocation>& allocations);
+    [[nodiscard]] bool allocate(const std::vector<SceneLight>& sceneLights,
+                                std::vector<LocalShadowAllocation>& allocations);
 
     /// Clears all persistent stable-ID ownership and failure state.
     void reset();
 
     /// Returns the most recent structured allocation failure.
-    [[nodiscard]] const LocalShadowAllocationFailure& failure() const {
-        return m_failure;
-    }
+    [[nodiscard]] const LocalShadowAllocationFailure& failure() const { return m_failure; }
 
 private:
     struct Record final {
@@ -108,19 +100,14 @@ private:
 /// @param type Raster shadow resource class.
 /// @param resourceSlot Zero-based slot within that resource class.
 /// @return Fixed metadata index shared by CPU and GLSL.
-[[nodiscard]] constexpr uint32_t localShadowMetadataIndex(
-    const LocalShadowType type,
-    const uint32_t resourceSlot) {
-    return type == LocalShadowType::Spot
-        ? resourceSlot
-        : kLocalShadowPointMetadataBase + resourceSlot;
+[[nodiscard]] constexpr uint32_t localShadowMetadataIndex(const LocalShadowType type, const uint32_t resourceSlot) {
+    return type == LocalShadowType::Spot ? resourceSlot : kLocalShadowPointMetadataBase + resourceSlot;
 }
 
 /// Returns the stable identifier used by logs and tests for one failure.
 /// @param error Allocation error to identify.
 /// @return Process-lifetime string containing the stable identifier.
-[[nodiscard]] const char* localShadowAllocationErrorStableId(
-    LocalShadowAllocationError error);
+[[nodiscard]] const char* localShadowAllocationErrorStableId(LocalShadowAllocationError error);
 
 static_assert(sizeof(LocalShadowMetadata) == 432u);
 static_assert(alignof(LocalShadowMetadata) == 16u);

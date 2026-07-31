@@ -8,10 +8,7 @@ namespace ecs {
 
 class HurtEffectDecaySystem : public ISystem {
 public:
-    using Dependencies = SystemDependency<
-        std::tuple<HurtEffectComponent>,
-        std::tuple<HurtEffectComponent>
-    >;
+    using Dependencies = SystemDependency<std::tuple<HurtEffectComponent>, std::tuple<HurtEffectComponent>>;
 
     void update(SystemContext& ctx) override;
 };

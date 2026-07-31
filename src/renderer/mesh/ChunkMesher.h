@@ -16,12 +16,11 @@ class IWorldView;
 class World;
 
 // Per-sub-chunk snapshot constants
-constexpr std::size_t SC_BLOCK_COUNT = static_cast<std::size_t>(SubChunk::SIZE) *
-                                        SubChunk::SIZE * SubChunk::SIZE;  // 4096
-constexpr std::size_t SC_BORDER_SIZE = static_cast<std::size_t>(SubChunk::SIZE) * SubChunk::SIZE;  // 256
+constexpr std::size_t SC_BLOCK_COUNT =
+    static_cast<std::size_t>(SubChunk::SIZE) * SubChunk::SIZE * SubChunk::SIZE; // 4096
+constexpr std::size_t SC_BORDER_SIZE = static_cast<std::size_t>(SubChunk::SIZE) * SubChunk::SIZE; // 256
 constexpr int SC_HALO_SIZE = SubChunk::SIZE + 2;
-constexpr std::size_t SC_HALO_BLOCK_COUNT = static_cast<std::size_t>(SC_HALO_SIZE) *
-                                            SC_HALO_SIZE * SC_HALO_SIZE;
+constexpr std::size_t SC_HALO_BLOCK_COUNT = static_cast<std::size_t>(SC_HALO_SIZE) * SC_HALO_SIZE * SC_HALO_SIZE;
 
 struct WireContainerMeshingEntry {
     uint16_t localIndex = 0;
@@ -95,19 +94,13 @@ public:
     [[nodiscard]] static bool debugDisableGreedyMeshing();
 
     // --- Per-sub-chunk snapshot capture ---
-    static SubChunkMeshingSnapshotPtr captureSubChunkSnapshot(
-        const Chunk& chunk,
-        int scy,
-        const Chunk* neighborPosX,
-        const Chunk* neighborNegX,
-        const Chunk* neighborPosZ,
-        const Chunk* neighborNegZ,
-        const IWorldView* worldView = nullptr);
+    static SubChunkMeshingSnapshotPtr captureSubChunkSnapshot(const Chunk& chunk, int scy, const Chunk* neighborPosX,
+                                                              const Chunk* neighborNegX, const Chunk* neighborPosZ,
+                                                              const Chunk* neighborNegZ,
+                                                              const IWorldView* worldView = nullptr);
 
-    static SubChunkMeshingSnapshotPtr captureSubChunkSnapshot(
-        const Chunk& chunk,
-        int scy,
-        const IWorldView* worldView = nullptr);
+    static SubChunkMeshingSnapshotPtr captureSubChunkSnapshot(const Chunk& chunk, int scy,
+                                                              const IWorldView* worldView = nullptr);
 
     // --- Per-sub-chunk mesh building ---
     static ChunkMeshData buildSubChunkMeshData(const SubChunkMeshingSnapshot& snapshot);
@@ -118,70 +111,24 @@ public:
 };
 
 namespace ChunkMeshBuilders {
-void buildCross(ChunkMeshData& meshData,
-                const SubChunkMeshingSnapshot& snapshot,
-                BlockStateId stateId,
-                const BlockDef& def,
-                int x,
-                int y,
-                int z);
-void buildTorch(ChunkMeshData& meshData,
-                const SubChunkMeshingSnapshot& snapshot,
-                BlockStateId stateId,
-                const BlockDef& def,
-                int x,
-                int y,
-                int z);
-void buildWater(ChunkMeshData& meshData,
-                const SubChunkMeshingSnapshot& snapshot,
-                BlockStateId stateId,
-                const BlockDef& def,
-                int x,
-                int y,
-                int z);
-void buildModelBlock(ChunkMeshData& meshData,
-                     const SubChunkMeshingSnapshot& snapshot,
-                     BlockStateId stateId,
-                     const BlockDef& def,
-                     int x,
-                     int y,
-                     int z);
-void buildBlockEntity(ChunkMeshData& meshData,
-                      const SubChunkMeshingSnapshot& snapshot,
-                      BlockStateId stateId,
-                      const BlockDef& def,
-                      int x,
-                      int y,
-                      int z);
-void buildFacePlane(ChunkMeshData& meshData,
-                    const SubChunkMeshingSnapshot& snapshot,
-                    BlockStateId stateId,
-                    const BlockDef& def,
-                    int x,
-                    int y,
-                    int z);
-void buildRedstoneWire(ChunkMeshData& meshData,
-                       const SubChunkMeshingSnapshot& snapshot,
-                       BlockStateId stateId,
-                       const BlockDef& def,
-                       int x,
-                       int y,
-                       int z);
-void buildWireContainer(ChunkMeshData& meshData,
-                        const SubChunkMeshingSnapshot& snapshot,
-                        BlockStateId stateId,
-                        const BlockDef& def,
-                        int x,
-                        int y,
-                        int z);
-void buildUnitFaces(ChunkMeshData& meshData,
-                    const SubChunkMeshingSnapshot& snapshot,
-                    BlockStateId stateId,
-                    const BlockDef& def,
-                    int x,
-                    int y,
-                    int z);
-}
-
+void buildCross(ChunkMeshData& meshData, const SubChunkMeshingSnapshot& snapshot, BlockStateId stateId,
+                const BlockDef& def, int x, int y, int z);
+void buildTorch(ChunkMeshData& meshData, const SubChunkMeshingSnapshot& snapshot, BlockStateId stateId,
+                const BlockDef& def, int x, int y, int z);
+void buildWater(ChunkMeshData& meshData, const SubChunkMeshingSnapshot& snapshot, BlockStateId stateId,
+                const BlockDef& def, int x, int y, int z);
+void buildModelBlock(ChunkMeshData& meshData, const SubChunkMeshingSnapshot& snapshot, BlockStateId stateId,
+                     const BlockDef& def, int x, int y, int z);
+void buildBlockEntity(ChunkMeshData& meshData, const SubChunkMeshingSnapshot& snapshot, BlockStateId stateId,
+                      const BlockDef& def, int x, int y, int z);
+void buildFacePlane(ChunkMeshData& meshData, const SubChunkMeshingSnapshot& snapshot, BlockStateId stateId,
+                    const BlockDef& def, int x, int y, int z);
+void buildRedstoneWire(ChunkMeshData& meshData, const SubChunkMeshingSnapshot& snapshot, BlockStateId stateId,
+                       const BlockDef& def, int x, int y, int z);
+void buildWireContainer(ChunkMeshData& meshData, const SubChunkMeshingSnapshot& snapshot, BlockStateId stateId,
+                        const BlockDef& def, int x, int y, int z);
+void buildUnitFaces(ChunkMeshData& meshData, const SubChunkMeshingSnapshot& snapshot, BlockStateId stateId,
+                    const BlockDef& def, int x, int y, int z);
+} // namespace ChunkMeshBuilders
 
 #endif // MECRAFT_CHUNKMESHER_H

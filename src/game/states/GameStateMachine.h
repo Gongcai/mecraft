@@ -30,9 +30,7 @@ public:
     /// Pointer to the base gameplay state (bottom of the stack). Always a
     /// GameplayState or CreativeModeState; pushed UI states sit on top of it.
     /// Returns nullptr before the first state is pushed. Not owned - do not delete.
-    [[nodiscard]] IGameState* baseState() const {
-        return m_states.empty() ? nullptr : m_states.front().get();
-    }
+    [[nodiscard]] IGameState* baseState() const { return m_states.empty() ? nullptr : m_states.front().get(); }
 
     // Quit-to-menu signaling
     void requestQuitToMenu() { m_quitToMenuRequested = true; }
@@ -40,11 +38,7 @@ public:
     void clearQuitToMenuRequest() { m_quitToMenuRequested = false; }
 
 private:
-    enum class PendingOpType {
-        Push,
-        Pop,
-        Change
-    };
+    enum class PendingOpType { Push, Pop, Change };
 
     struct PendingOp {
         PendingOpType type = PendingOpType::Pop;
@@ -63,4 +57,3 @@ private:
 };
 
 #endif //MECRAFT_GAMESTATEMACHINE_H
-

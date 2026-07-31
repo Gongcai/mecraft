@@ -15,13 +15,10 @@ int fail(const char* message) {
 }
 
 BlockStateId stateForBlockId(const BlockID blockId) {
-    return blockId == RUNTIME_ID_NULL
-        ? NULL_BLOCK_STATE
-        : BlockStateRegistry::getDefaultState(blockId);
+    return blockId == RUNTIME_ID_NULL ? NULL_BLOCK_STATE : BlockStateRegistry::getDefaultState(blockId);
 }
 
-template <typename Predicate>
-bool waitUntil(Predicate&& predicate, const int timeoutMs = 4000) {
+template <typename Predicate> bool waitUntil(Predicate&& predicate, const int timeoutMs = 4000) {
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeoutMs);
     while (std::chrono::steady_clock::now() < deadline) {
         if (predicate()) {
@@ -32,10 +29,7 @@ bool waitUntil(Predicate&& predicate, const int timeoutMs = 4000) {
     return predicate();
 }
 
-SubChunkMeshingJob makeDenseJob(const int64_t chunkKey,
-                                const int chunkX,
-                                const int chunkZ,
-                                const int scy,
+SubChunkMeshingJob makeDenseJob(const int64_t chunkKey, const int chunkX, const int chunkZ, const int scy,
                                 const BlockID blockId = BlockRegistry::requireIdByName("minecraft:dirt")) {
     auto chunkPtr = std::make_shared<Chunk>(chunkX, chunkZ);
     const int yBase = scy * SubChunk::SIZE;

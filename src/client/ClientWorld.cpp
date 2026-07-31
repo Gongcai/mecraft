@@ -62,28 +62,32 @@ uint64_t ClientWorld::getBlockContentRevision() const {
 }
 
 BlockStateId ClientWorld::getBlock(int x, int y, int z) const {
-    if (y < 0 || y >= 256) return NULL_BLOCK_STATE;
+    if (y < 0 || y >= 256)
+        return NULL_BLOCK_STATE;
     const int cx = static_cast<int>(std::floor(static_cast<float>(x) / 16.0f));
     const int cz = static_cast<int>(std::floor(static_cast<float>(z) / 16.0f));
     const int64_t key = chunkKey(cx, cz);
 
     std::lock_guard lock(m_chunksMutex);
     auto it = m_chunks.find(key);
-    if (it == m_chunks.end() || !it->second) return NULL_BLOCK_STATE;
+    if (it == m_chunks.end() || !it->second)
+        return NULL_BLOCK_STATE;
     const int lx = x - cx * 16;
     const int lz = z - cz * 16;
     return it->second->getBlock(lx, y, lz);
 }
 
 uint8_t ClientWorld::getPackedLight(int x, int y, int z) const {
-    if (y < 0 || y >= 256) return 0;
+    if (y < 0 || y >= 256)
+        return 0;
     const int cx = static_cast<int>(std::floor(static_cast<float>(x) / 16.0f));
     const int cz = static_cast<int>(std::floor(static_cast<float>(z) / 16.0f));
     const int64_t key = chunkKey(cx, cz);
 
     std::lock_guard lock(m_chunksMutex);
     auto it = m_chunks.find(key);
-    if (it == m_chunks.end() || !it->second) return 0;
+    if (it == m_chunks.end() || !it->second)
+        return 0;
     const int lx = x - cx * 16;
     const int lz = z - cz * 16;
     return it->second->getPackedLight(lx, y, lz);
@@ -94,14 +98,16 @@ BlockStateId ClientWorld::getBlockState(int x, int y, int z) const {
 }
 
 BlockStateId ClientWorld::getFluidState(int x, int y, int z) const {
-    if (y < 0 || y >= 256) return NULL_BLOCK_STATE;
+    if (y < 0 || y >= 256)
+        return NULL_BLOCK_STATE;
     const int cx = static_cast<int>(std::floor(static_cast<float>(x) / 16.0f));
     const int cz = static_cast<int>(std::floor(static_cast<float>(z) / 16.0f));
     const int64_t key = chunkKey(cx, cz);
 
     std::lock_guard lock(m_chunksMutex);
     auto it = m_chunks.find(key);
-    if (it == m_chunks.end() || !it->second) return NULL_BLOCK_STATE;
+    if (it == m_chunks.end() || !it->second)
+        return NULL_BLOCK_STATE;
     const int lx = x - cx * 16;
     const int lz = z - cz * 16;
     const BlockStateId fluidState = it->second->getFluidState(lx, y, lz);
@@ -126,10 +132,8 @@ int ClientWorld::getRenderDistance() const {
 }
 
 glm::ivec2 ClientWorld::getChunkCoords(int worldX, int worldZ) const {
-    return {
-        static_cast<int>(std::floor(static_cast<float>(worldX) / 16.0f)),
-        static_cast<int>(std::floor(static_cast<float>(worldZ) / 16.0f))
-    };
+    return {static_cast<int>(std::floor(static_cast<float>(worldX) / 16.0f)),
+            static_cast<int>(std::floor(static_cast<float>(worldZ) / 16.0f))};
 }
 
 TerrainBiome ClientWorld::getBiome(int x, int z) const {
@@ -153,7 +157,8 @@ bool ClientWorld::copyWireContainerParts(const glm::ivec3& position, WireContain
 }
 
 void ClientWorld::addChunk(std::shared_ptr<Chunk> chunk) {
-    if (!chunk) return;
+    if (!chunk)
+        return;
     const int cx = chunk->m_chunkX;
     const int cz = chunk->m_chunkZ;
     const int64_t key = chunkKey(chunk->m_chunkX, chunk->m_chunkZ);
@@ -224,24 +229,23 @@ void ClientWorld::applyBlockUpdate(int x, int y, int z, BlockStateId stateId) {
     applyBlockUpdate(x, y, z, stateId, kNoLightPatch);
 }
 
-void ClientWorld::applyBlockUpdate(int x, int y, int z, BlockStateId stateId, const std::vector<uint8_t>& packedLightPatch) {
+void ClientWorld::applyBlockUpdate(int x, int y, int z, BlockStateId stateId,
+                                   const std::vector<uint8_t>& packedLightPatch) {
     applyBlockUpdate(x, y, z, net::BlockUpdateKind::BlockState, stateId, packedLightPatch);
 }
 
-void ClientWorld::applyBlockUpdate(const int x,
-                                   const int y,
-                                   const int z,
-                                   const net::BlockUpdateKind kind,
-                                   const BlockStateId stateId,
-                                   const std::vector<uint8_t>& packedLightPatch) {
-    if (y < 0 || y >= 256) return;
+void ClientWorld::applyBlockUpdate(const int x, const int y, const int z, const net::BlockUpdateKind kind,
+                                   const BlockStateId stateId, const std::vector<uint8_t>& packedLightPatch) {
+    if (y < 0 || y >= 256)
+        return;
     const int cx = static_cast<int>(std::floor(static_cast<float>(x) / 16.0f));
     const int cz = static_cast<int>(std::floor(static_cast<float>(z) / 16.0f));
     const int64_t key = chunkKey(cx, cz);
 
     std::lock_guard lock(m_chunksMutex);
     auto it = m_chunks.find(key);
-    if (it == m_chunks.end() || !it->second) return;
+    if (it == m_chunks.end() || !it->second)
+        return;
     const int lx = x - cx * 16;
     const int lz = z - cz * 16;
     Chunk& chunk = *it->second;
@@ -269,8 +273,7 @@ void ClientWorld::applyBlockUpdate(const int x,
         if (packedLightPatch.size() == Chunk::BLOCK_COUNT) {
             chunk.replacePackedLight(packedLightPatch.data(), packedLightPatch.size());
         } else if (packedLightPatch.size() == SubChunk::BLOCK_COUNT) {
-            chunk.replacePackedLightSection(Chunk::toSubChunkIndex(y),
-                                            packedLightPatch.data(),
+            chunk.replacePackedLightSection(Chunk::toSubChunkIndex(y), packedLightPatch.data(),
                                             packedLightPatch.size());
         } else if (const int patchSide = inferOddCubeSide(packedLightPatch.size()); patchSide > 0) {
             const int patchRadius = patchSide / 2;

@@ -69,9 +69,11 @@ int main() {
     }
 
     const glm::ivec3 chestPos(0, 122, 0);
-    const BlockStateId chestState = BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:chest"));
+    const BlockStateId chestState =
+        BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:chest"));
     world.setBlockState(chestPos.x, chestPos.y, chestPos.z, chestState);
-    if (BlockStateRegistry::getBlockId(world.getBlock(chestPos.x, chestPos.y, chestPos.z)) != BlockRegistry::requireIdByName("minecraft:chest")) {
+    if (BlockStateRegistry::getBlockId(world.getBlock(chestPos.x, chestPos.y, chestPos.z)) !=
+        BlockRegistry::requireIdByName("minecraft:chest")) {
         return fail("test setup should place a chest block in the world");
     }
 

@@ -15,10 +15,7 @@ class RhiDevice;
 namespace renderer::capture {
 
 /// Identifies the row origin of texels returned by a graphics backend.
-enum class TextureCaptureOrigin : uint8_t {
-    TopLeft,
-    BottomLeft
-};
+enum class TextureCaptureOrigin : uint8_t { TopLeft, BottomLeft };
 
 /// Identifies every deterministic texture readback or PNG writing failure.
 enum class TextureCaptureError : uint8_t {
@@ -69,31 +66,23 @@ struct TextureCaptureResult {
 /// @param origin Row origin used by the source backend.
 /// @param rgba Receives width * height * 4 tightly packed bytes.
 /// @return Stable normalization error, or None on success.
-[[nodiscard]] TextureCaptureError normalizeTextureCapturePixels(
-    const uint8_t* source,
-    size_t sourceSize,
-    uint32_t bytesPerRow,
-    uint32_t width,
-    uint32_t height,
-    RhiTextureFormat format,
-    TextureCaptureOrigin origin,
-    std::vector<uint8_t>& rgba);
+[[nodiscard]] TextureCaptureError normalizeTextureCapturePixels(const uint8_t* source, size_t sourceSize,
+                                                                uint32_t bytesPerRow, uint32_t width, uint32_t height,
+                                                                RhiTextureFormat format, TextureCaptureOrigin origin,
+                                                                std::vector<uint8_t>& rgba);
 
 /// Reads one texture synchronously and writes a deterministic PNG file.
 /// @param rhiDevice Device that owns the source texture and readback buffer.
 /// @param commandListPool Graphics command-list pool for copy submission.
 /// @param request Complete source-state, format, extent, and output contract.
 /// @return Stable capture result with operation-specific detail.
-[[nodiscard]] TextureCaptureResult captureTextureToPng(
-    RhiDevice& rhiDevice,
-    RhiCommandListPool& commandListPool,
-    const TextureCaptureRequest& request);
+[[nodiscard]] TextureCaptureResult captureTextureToPng(RhiDevice& rhiDevice, RhiCommandListPool& commandListPool,
+                                                       const TextureCaptureRequest& request);
 
 /// Returns the stable identifier used by validation logs and reports.
 /// @param error Texture capture error to identify.
 /// @return Process-lifetime string containing the stable error identifier.
-[[nodiscard]] const char* textureCaptureErrorStableId(
-    TextureCaptureError error);
+[[nodiscard]] const char* textureCaptureErrorStableId(TextureCaptureError error);
 
 } // namespace renderer::capture
 

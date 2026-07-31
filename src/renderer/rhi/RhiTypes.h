@@ -10,30 +10,13 @@
 
 class RhiCommandList;
 
-enum class RhiBackend {
-    OpenGL,
-    Vulkan
-};
+enum class RhiBackend { OpenGL, Vulkan };
 
-enum class RhiCommandListType {
-    Graphics,
-    Compute,
-    Transfer
-};
+enum class RhiCommandListType { Graphics, Compute, Transfer };
 
-enum class RhiQueueType {
-    Graphics,
-    Compute,
-    Transfer,
-    Present
-};
+enum class RhiQueueType { Graphics, Compute, Transfer, Present };
 
-enum class RhiCommandListState {
-    Initial,
-    Recording,
-    Executable,
-    Pending
-};
+enum class RhiCommandListState { Initial, Recording, Executable, Pending };
 
 struct RhiCommandListDesc {
     const char* debugName = nullptr;
@@ -65,9 +48,7 @@ struct RhiSubmissionToken {
     /// Returns the signal value on the token's logical queue timeline.
     /// Legacy tokens use the global submission sequence as their timeline value.
     /// @return Non-zero timeline value used for queue waits and completion queries.
-    [[nodiscard]] constexpr uint64_t timelineValue() const {
-        return queueValue != 0u ? queueValue : sequence;
-    }
+    [[nodiscard]] constexpr uint64_t timelineValue() const { return queueValue != 0u ? queueValue : sequence; }
 };
 
 struct RhiQueueDependency {
@@ -84,15 +65,7 @@ struct RhiSubmitInfo {
     uint32_t waitCount = 0u;
 };
 
-enum class RhiFrameStatus {
-    Success,
-    Suboptimal,
-    OutOfDate,
-    Minimized,
-    SurfaceLost,
-    DeviceLost,
-    Error
-};
+enum class RhiFrameStatus { Success, Suboptimal, OutOfDate, Minimized, SurfaceLost, DeviceLost, Error };
 
 struct RhiFrameAcquireResult {
     RhiFrameStatus status = RhiFrameStatus::Error;
@@ -111,19 +84,9 @@ struct RhiPresentInfo {
     uint32_t trackingFrameIndex = 0u;
 };
 
-enum class RhiColorSpace {
-    SrgbNonlinear,
-    DisplayP3Nonlinear,
-    ExtendedSrgbLinear,
-    Hdr10St2084
-};
+enum class RhiColorSpace { SrgbNonlinear, DisplayP3Nonlinear, ExtendedSrgbLinear, Hdr10St2084 };
 
-enum class RhiPresentMode {
-    Immediate,
-    Mailbox,
-    Fifo,
-    FifoRelaxed
-};
+enum class RhiPresentMode { Immediate, Mailbox, Fifo, FifoRelaxed };
 
 struct RhiDeviceDesc {
     const char* debugName = nullptr;
@@ -188,29 +151,13 @@ struct RhiCapabilities {
     bool textureAliasing = false;
 };
 
-enum class RhiShaderStage : uint32_t {
-    Vertex = 1u << 0u,
-    Fragment = 1u << 1u,
-    Compute = 1u << 2u
-};
+enum class RhiShaderStage : uint32_t { Vertex = 1u << 0u, Fragment = 1u << 1u, Compute = 1u << 2u };
 
 using RhiShaderStageFlags = uint32_t;
 
-enum class RhiTextureDimension {
-    Texture2D,
-    Texture2DArray,
-    Texture3D,
-    Cube,
-    CubeArray
-};
+enum class RhiTextureDimension { Texture2D, Texture2DArray, Texture3D, Cube, CubeArray };
 
-enum class RhiTextureViewType {
-    Texture2D,
-    Texture2DArray,
-    Texture3D,
-    Cube,
-    CubeArray
-};
+enum class RhiTextureViewType { Texture2D, Texture2DArray, Texture3D, Cube, CubeArray };
 
 enum class RhiTextureFormat {
     Undefined,
@@ -260,60 +207,23 @@ enum class RhiBufferUsage : uint32_t {
 
 using RhiBufferUsageFlags = uint32_t;
 
-enum class RhiMemoryUsage {
-    GpuOnly,
-    CpuToGpu,
-    GpuToCpu
-};
+enum class RhiMemoryUsage { GpuOnly, CpuToGpu, GpuToCpu };
 
-enum class RhiQueryType {
-    Timestamp
-};
+enum class RhiQueryType { Timestamp };
 
-enum class RhiFilter {
-    Nearest,
-    Linear
-};
+enum class RhiFilter { Nearest, Linear };
 
-enum class RhiMipmapMode {
-    Nearest,
-    Linear
-};
+enum class RhiMipmapMode { Nearest, Linear };
 
-enum class RhiAddressMode {
-    Repeat,
-    MirroredRepeat,
-    ClampToEdge,
-    ClampToBorder
-};
+enum class RhiAddressMode { Repeat, MirroredRepeat, ClampToEdge, ClampToBorder };
 
-enum class RhiBorderColor {
-    TransparentBlack,
-    OpaqueBlack,
-    OpaqueWhite
-};
+enum class RhiBorderColor { TransparentBlack, OpaqueBlack, OpaqueWhite };
 
-enum class RhiCompareOp {
-    Never,
-    Less,
-    Equal,
-    LessOrEqual,
-    Greater,
-    NotEqual,
-    GreaterOrEqual,
-    Always
-};
+enum class RhiCompareOp { Never, Less, Equal, LessOrEqual, Greater, NotEqual, GreaterOrEqual, Always };
 
-enum class RhiLoadOp {
-    Load,
-    Clear,
-    DontCare
-};
+enum class RhiLoadOp { Load, Clear, DontCare };
 
-enum class RhiStoreOp {
-    Store,
-    DontCare
-};
+enum class RhiStoreOp { Store, DontCare };
 
 enum class RhiResourceState {
     Undefined,
@@ -334,28 +244,13 @@ enum class RhiResourceState {
     HostWrite
 };
 
-enum class RhiIndexFormat {
-    Uint16,
-    Uint32
-};
+enum class RhiIndexFormat { Uint16, Uint32 };
 
-enum class RhiPrimitiveTopology {
-    TriangleList,
-    TriangleStrip,
-    LineList,
-    LineStrip
-};
+enum class RhiPrimitiveTopology { TriangleList, TriangleStrip, LineList, LineStrip };
 
-enum class RhiCullMode {
-    None,
-    Front,
-    Back
-};
+enum class RhiCullMode { None, Front, Back };
 
-enum class RhiFrontFace {
-    CounterClockwise,
-    Clockwise
-};
+enum class RhiFrontFace { CounterClockwise, Clockwise };
 
 enum class RhiBlendFactor {
     Zero,
@@ -370,33 +265,11 @@ enum class RhiBlendFactor {
     OneMinusDstColor
 };
 
-enum class RhiBlendOp {
-    Add,
-    Subtract,
-    ReverseSubtract,
-    Min,
-    Max
-};
+enum class RhiBlendOp { Add, Subtract, ReverseSubtract, Min, Max };
 
-enum class RhiVertexFormat {
-    Float,
-    Float2,
-    Float3,
-    Float4,
-    Uint,
-    Uint2,
-    Uint3,
-    Uint4,
-    Sint8,
-    Unorm8,
-    Uint8,
-    Uint16
-};
+enum class RhiVertexFormat { Float, Float2, Float3, Float4, Uint, Uint2, Uint3, Uint4, Sint8, Unorm8, Uint8, Uint16 };
 
-enum class RhiVertexInputRate {
-    Vertex,
-    Instance
-};
+enum class RhiVertexInputRate { Vertex, Instance };
 
 struct RhiViewport {
     float x = 0.0f;

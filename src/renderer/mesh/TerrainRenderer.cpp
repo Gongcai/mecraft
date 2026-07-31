@@ -9,9 +9,7 @@
 
 namespace {
 
-bool isCascadeAabbVisible(const glm::vec3& boundsMin,
-                          const glm::vec3& boundsMax,
-                          const CascadeAabbCuller& culler) {
+bool isCascadeAabbVisible(const glm::vec3& boundsMin, const glm::vec3& boundsMax, const CascadeAabbCuller& culler) {
     const glm::vec3 center = (boundsMin + boundsMax) * 0.5f;
     const glm::vec3 extents = (boundsMax - boundsMin) * 0.5f;
     const glm::mat4& m = culler.viewProj;
@@ -20,8 +18,7 @@ bool isCascadeAabbVisible(const glm::vec3& boundsMin,
     const float invW = 1.0f / clipCenter.w;
 
     // Orthographic shadow cascades are affine, so projecting center/extents gives the exact AABB in clip space.
-    const glm::vec3 clipExtents(glm::dot(culler.absClipExtentX, extents),
-                                glm::dot(culler.absClipExtentY, extents),
+    const glm::vec3 clipExtents(glm::dot(culler.absClipExtentX, extents), glm::dot(culler.absClipExtentY, extents),
                                 glm::dot(culler.absClipExtentZ, extents));
 
     const glm::vec3 ndcCenter(clipCenter.x * invW, clipCenter.y * invW, clipCenter.z * invW);
@@ -31,16 +28,15 @@ bool isCascadeAabbVisible(const glm::vec3& boundsMin,
 
     const float xyPad = culler.xyPaddingNdc;
     const float zPad = culler.zPaddingNdc;
-    bool visible = !(maxNdc.x < -1.0f - xyPad || minNdc.x > 1.0f + xyPad ||
-                     maxNdc.y < -1.0f - xyPad || minNdc.y > 1.0f + xyPad);
+    bool visible =
+        !(maxNdc.x < -1.0f - xyPad || minNdc.x > 1.0f + xyPad || maxNdc.y < -1.0f - xyPad || minNdc.y > 1.0f + xyPad);
     if (visible && culler.useZCulling) {
         visible = !(maxNdc.z < -1.0f - zPad || minNdc.z > 1.0f + zPad);
     }
     return visible;
 }
 
-unsigned int buildCascadeVisibilityMask(const glm::vec3& boundsMin,
-                                        const glm::vec3& boundsMax,
+unsigned int buildCascadeVisibilityMask(const glm::vec3& boundsMin, const glm::vec3& boundsMax,
                                         const std::array<CascadeAabbCuller, 4>& cascadeCullers,
                                         const unsigned int candidateMask = 0xFu) {
     unsigned int mask = 0;
@@ -55,25 +51,19 @@ unsigned int buildCascadeVisibilityMask(const glm::vec3& boundsMin,
     return mask;
 }
 
-[[nodiscard]] bool sphereIntersectsAabb(
-    const glm::vec3& center,
-    const float radius,
-    const glm::vec3& boundsMin,
-    const glm::vec3& boundsMax) {
+[[nodiscard]] bool sphereIntersectsAabb(const glm::vec3& center, const float radius, const glm::vec3& boundsMin,
+                                        const glm::vec3& boundsMax) {
     const glm::vec3 closest = glm::clamp(center, boundsMin, boundsMax);
     const glm::vec3 delta = center - closest;
     return glm::dot(delta, delta) <= radius * radius;
 }
 
-[[nodiscard]] bool frustumIntersectsAabb(
-    const std::array<glm::vec4, 6>& planes,
-    const glm::vec3& boundsMin,
-    const glm::vec3& boundsMax) {
+[[nodiscard]] bool frustumIntersectsAabb(const std::array<glm::vec4, 6>& planes, const glm::vec3& boundsMin,
+                                         const glm::vec3& boundsMax) {
     for (const glm::vec4& plane : planes) {
-        const glm::vec3 positive{
-            plane.x >= 0.0f ? boundsMax.x : boundsMin.x,
-            plane.y >= 0.0f ? boundsMax.y : boundsMin.y,
-            plane.z >= 0.0f ? boundsMax.z : boundsMin.z};
+        const glm::vec3 positive{plane.x >= 0.0f ? boundsMax.x : boundsMin.x,
+                                 plane.y >= 0.0f ? boundsMax.y : boundsMin.y,
+                                 plane.z >= 0.0f ? boundsMax.z : boundsMin.z};
         if (glm::dot(glm::vec3(plane), positive) + plane.w < 0.0f) {
             return false;
         }
@@ -81,16 +71,12 @@ unsigned int buildCascadeVisibilityMask(const glm::vec3& boundsMin,
     return true;
 }
 
-[[nodiscard]] bool localShadowVolumeIntersectsAabb(
-    const LocalShadowCullVolume& volume,
-    const glm::vec3& boundsMin,
-    const glm::vec3& boundsMax) {
+[[nodiscard]] bool localShadowVolumeIntersectsAabb(const LocalShadowCullVolume& volume, const glm::vec3& boundsMin,
+                                                   const glm::vec3& boundsMax) {
     if (volume.type == renderer::contracts::LocalShadowType::Point) {
-        return sphereIntersectsAabb(
-            volume.position, volume.range, boundsMin, boundsMax);
+        return sphereIntersectsAabb(volume.position, volume.range, boundsMin, boundsMax);
     }
-    return frustumIntersectsAabb(
-        volume.frustumPlanes, boundsMin, boundsMax);
+    return frustumIntersectsAabb(volume.frustumPlanes, boundsMin, boundsMax);
 }
 
 } // namespace
@@ -122,7 +108,7 @@ void TerrainRenderer::updateFrustum(const glm::mat4& viewProj) {
         row3 + row1, // bottom
         row3 - row1, // top
         row3 + row2, // near
-        row3 - row2  // far
+        row3 - row2 // far
     };
 
     for (size_t i = 0; i < rawPlanes.size(); ++i) {
@@ -139,13 +125,11 @@ void TerrainRenderer::updateFrustum(const glm::mat4& viewProj) {
 }
 
 bool TerrainRenderer::isChunkInFrustum(const glm::vec3& chunkMin, const glm::vec3& chunkMax,
-                                        FrustumPlane* culledPlane) const {
+                                       FrustumPlane* culledPlane) const {
     for (const Plane& plane : m_frustumPlanes) {
-        const glm::vec3 positive(
-            plane.normal.x >= 0.0f ? chunkMax.x : chunkMin.x,
-            plane.normal.y >= 0.0f ? chunkMax.y : chunkMin.y,
-            plane.normal.z >= 0.0f ? chunkMax.z : chunkMin.z
-        );
+        const glm::vec3 positive(plane.normal.x >= 0.0f ? chunkMax.x : chunkMin.x,
+                                 plane.normal.y >= 0.0f ? chunkMax.y : chunkMin.y,
+                                 plane.normal.z >= 0.0f ? chunkMax.z : chunkMin.z);
 
         if (glm::dot(plane.normal, positive) + plane.distance < 0.0f) {
             if (culledPlane != nullptr) {
@@ -175,7 +159,7 @@ void TerrainRenderer::recordChunkCull(const FrustumPlane plane, const int count)
 }
 
 void TerrainRenderer::expandBounds(glm::vec3& minBounds, glm::vec3& maxBounds, bool& hasBounds,
-                                    const glm::vec3& candidateMin, const glm::vec3& candidateMax) {
+                                   const glm::vec3& candidateMin, const glm::vec3& candidateMax) {
     if (!hasBounds) {
         minBounds = candidateMin;
         maxBounds = candidateMax;
@@ -215,13 +199,11 @@ void TerrainRenderer::resetDebugCounters() {
 // Opaque chunk traversal with hierarchical frustum culling
 // ============================================================================
 
-void TerrainRenderer::renderOpaqueChunksAndCollectPasses(
-    const IWorldView& worldView,
-    const bool frustumCull,
-    const float maxCameraDistance,
-    shadow::ShadowCasterCuller* shadowCuller,
-    AabbVisibilityFn extraAabbCuller,
-    void* extraAabbCullerUserData) {
+void TerrainRenderer::renderOpaqueChunksAndCollectPasses(const IWorldView& worldView, const bool frustumCull,
+                                                         const float maxCameraDistance,
+                                                         shadow::ShadowCasterCuller* shadowCuller,
+                                                         AabbVisibilityFn extraAabbCuller,
+                                                         void* extraAabbCullerUserData) {
     resetDebugCounters();
     m_terrainCache->syncChunkRenderColumns(worldView);
     std::vector<ChunkRenderColumnCache>& chunkRenderColumns = m_terrainCache->chunkRenderColumns();
@@ -258,8 +240,7 @@ void TerrainRenderer::renderOpaqueChunksAndCollectPasses(
     };
 
     auto boundsVisibleToExtraCuller = [&](const glm::vec3& boundsMin, const glm::vec3& boundsMax) {
-        return extraAabbCuller == nullptr ||
-               extraAabbCuller(boundsMin, boundsMax, extraAabbCullerUserData);
+        return extraAabbCuller == nullptr || extraAabbCuller(boundsMin, boundsMax, extraAabbCullerUserData);
     };
 
     size_t regionBegin = 0;
@@ -305,7 +286,8 @@ void TerrainRenderer::renderOpaqueChunksAndCollectPasses(
 #ifdef MECRAFT_DEBUG
         ++m_regionTestsThisFrame;
         FrustumPlane culledPlane = FrustumPlane::Count;
-        if (frustumCull && !isChunkInFrustum(regionMin, regionMax, m_chunkCullingDebugEnabled ? &culledPlane : nullptr)) {
+        if (frustumCull &&
+            !isChunkInFrustum(regionMin, regionMax, m_chunkCullingDebugEnabled ? &culledPlane : nullptr)) {
             if (m_chunkCullingDebugEnabled) {
                 recordChunkCull(culledPlane, regionCandidateCount);
             }
@@ -339,7 +321,7 @@ void TerrainRenderer::renderOpaqueChunksAndCollectPasses(
             ++m_columnTestsThisFrame;
             FrustumPlane culledPlane = FrustumPlane::Count;
             if (frustumCull && !isChunkInFrustum(column.columnBoundsMin, column.columnBoundsMax,
-                                  m_chunkCullingDebugEnabled ? &culledPlane : nullptr)) {
+                                                 m_chunkCullingDebugEnabled ? &culledPlane : nullptr)) {
                 if (m_chunkCullingDebugEnabled) {
                     recordChunkCull(culledPlane, columnCandidateCount);
                 }
@@ -357,9 +339,11 @@ void TerrainRenderer::renderOpaqueChunksAndCollectPasses(
             const float cutoutLimitSq = cutoutLimitBlocks * cutoutLimitBlocks;
             for (int scy = 0; scy < Chunk::NUM_SUB_CHUNKS; ++scy) {
                 const SubChunk* sc = column.chunk->getSubChunk(scy);
-                if (!sc) continue;
+                if (!sc)
+                    continue;
                 const SubChunkMesh& mesh = sc->getMesh();
-                if (!mesh.inGlobalPool) continue;
+                if (!mesh.inGlobalPool)
+                    continue;
                 if (mesh.opaqueRange.vertexCount == 0 && mesh.cutoutRange.vertexCount == 0 &&
                     mesh.cutoutDistanceRange.vertexCount == 0 && mesh.transparentRange.vertexCount == 0 &&
                     mesh.waterRange.vertexCount == 0) {
@@ -448,16 +432,12 @@ void TerrainRenderer::renderOpaqueChunksAndCollectPasses(
     }
 }
 
-void TerrainRenderer::collectShadowChunks(
-    const IWorldView& worldView,
-    const glm::vec3& cameraPos,
-    float maxShadowDistance,
-    shadow::ShadowCasterCuller* shadowCuller,
-    const std::array<CascadeAabbCuller, 4>& cascadeCullers,
-    std::array<std::vector<GpuMeshRange>, 4>& outOpaqueRanges,
-    std::array<std::vector<GpuMeshRange>, 4>& outCutoutRanges,
-    std::array<std::vector<GpuMeshRange>, 4>& outTransparentRanges
-) {
+void TerrainRenderer::collectShadowChunks(const IWorldView& worldView, const glm::vec3& cameraPos,
+                                          float maxShadowDistance, shadow::ShadowCasterCuller* shadowCuller,
+                                          const std::array<CascadeAabbCuller, 4>& cascadeCullers,
+                                          std::array<std::vector<GpuMeshRange>, 4>& outOpaqueRanges,
+                                          std::array<std::vector<GpuMeshRange>, 4>& outCutoutRanges,
+                                          std::array<std::vector<GpuMeshRange>, 4>& outTransparentRanges) {
     resetDebugCounters();
     m_terrainCache->syncChunkRenderColumns(worldView);
     std::vector<ChunkRenderColumnCache>& chunkRenderColumns = m_terrainCache->chunkRenderColumns();
@@ -539,10 +519,7 @@ void TerrainRenderer::collectShadowChunks(
                 continue;
             }
             const unsigned int columnCascadeMask = buildCascadeVisibilityMask(
-                column.columnBoundsMin,
-                column.columnBoundsMax,
-                cascadeCullers,
-                regionCascadeMask);
+                column.columnBoundsMin, column.columnBoundsMax, cascadeCullers, regionCascadeMask);
             if (columnCascadeMask == 0) {
                 continue;
             }
@@ -552,9 +529,11 @@ void TerrainRenderer::collectShadowChunks(
             const float cutoutLimitSq = cutoutLimitBlocks * cutoutLimitBlocks;
             for (int scy = 0; scy < Chunk::NUM_SUB_CHUNKS; ++scy) {
                 const SubChunk* sc = column.chunk->getSubChunk(scy);
-                if (!sc) continue;
+                if (!sc)
+                    continue;
                 const SubChunkMesh& mesh = sc->getMesh();
-                if (!mesh.inGlobalPool) continue;
+                if (!mesh.inGlobalPool)
+                    continue;
                 if (mesh.opaqueRange.vertexCount == 0 && mesh.cutoutRange.vertexCount == 0 &&
                     mesh.cutoutDistanceRange.vertexCount == 0 && mesh.transparentRange.vertexCount == 0 &&
                     mesh.waterRange.vertexCount == 0) {
@@ -622,10 +601,9 @@ void TerrainRenderer::collectShadowChunks(
     }
 }
 
-void TerrainRenderer::collectLocalShadowChunks(
-    const IWorldView& worldView,
-    const std::vector<LocalShadowCullVolume>& volumes,
-    std::vector<LocalShadowChunkRanges>& ranges) {
+void TerrainRenderer::collectLocalShadowChunks(const IWorldView& worldView,
+                                               const std::vector<LocalShadowCullVolume>& volumes,
+                                               std::vector<LocalShadowChunkRanges>& ranges) {
     ranges.clear();
     ranges.resize(volumes.size());
     if (volumes.empty()) {
@@ -633,8 +611,7 @@ void TerrainRenderer::collectLocalShadowChunks(
     }
 
     m_terrainCache->syncChunkRenderColumns(worldView);
-    std::vector<ChunkRenderColumnCache>& columns =
-        m_terrainCache->chunkRenderColumns();
+    std::vector<ChunkRenderColumnCache>& columns = m_terrainCache->chunkRenderColumns();
     if (columns.empty()) {
         return;
     }
@@ -645,8 +622,7 @@ void TerrainRenderer::collectLocalShadowChunks(
     while (regionBegin < columns.size()) {
         size_t regionEnd = regionBegin + 1u;
         const ChunkRenderColumnCache& regionFirst = columns[regionBegin];
-        while (regionEnd < columns.size() &&
-               columns[regionEnd].regionX == regionFirst.regionX &&
+        while (regionEnd < columns.size() && columns[regionEnd].regionX == regionFirst.regionX &&
                columns[regionEnd].regionZ == regionFirst.regionZ) {
             ++regionEnd;
         }
@@ -658,9 +634,7 @@ void TerrainRenderer::collectLocalShadowChunks(
             ChunkRenderColumnCache& column = columns[index];
             m_terrainCache->refreshChunkRenderColumnCache(column);
             if (column.columnHasBounds) {
-                expandBounds(regionMin, regionMax, regionHasBounds,
-                             column.columnBoundsMin,
-                             column.columnBoundsMax);
+                expandBounds(regionMin, regionMax, regionHasBounds, column.columnBoundsMin, column.columnBoundsMax);
             }
         }
         if (!regionHasBounds) {
@@ -669,13 +643,10 @@ void TerrainRenderer::collectLocalShadowChunks(
         }
 
         bool anyRegionVisible = false;
-        for (size_t lightIndex = 0u;
-             lightIndex < volumes.size(); ++lightIndex) {
-            regionVisible[lightIndex] = static_cast<uint8_t>(
-                localShadowVolumeIntersectsAabb(
-                    volumes[lightIndex], regionMin, regionMax));
-            anyRegionVisible = anyRegionVisible ||
-                regionVisible[lightIndex] != 0u;
+        for (size_t lightIndex = 0u; lightIndex < volumes.size(); ++lightIndex) {
+            regionVisible[lightIndex] =
+                static_cast<uint8_t>(localShadowVolumeIntersectsAabb(volumes[lightIndex], regionMin, regionMax));
+            anyRegionVisible = anyRegionVisible || regionVisible[lightIndex] != 0u;
         }
         if (!anyRegionVisible) {
             regionBegin = regionEnd;
@@ -688,53 +659,39 @@ void TerrainRenderer::collectLocalShadowChunks(
                 continue;
             }
             bool anyColumnVisible = false;
-            for (size_t lightIndex = 0u;
-                 lightIndex < volumes.size(); ++lightIndex) {
-                columnVisible[lightIndex] = static_cast<uint8_t>(
-                    regionVisible[lightIndex] != 0u &&
-                    localShadowVolumeIntersectsAabb(
-                        volumes[lightIndex], column.columnBoundsMin,
-                        column.columnBoundsMax));
-                anyColumnVisible = anyColumnVisible ||
-                    columnVisible[lightIndex] != 0u;
+            for (size_t lightIndex = 0u; lightIndex < volumes.size(); ++lightIndex) {
+                columnVisible[lightIndex] =
+                    static_cast<uint8_t>(regionVisible[lightIndex] != 0u &&
+                                         localShadowVolumeIntersectsAabb(volumes[lightIndex], column.columnBoundsMin,
+                                                                         column.columnBoundsMax));
+                anyColumnVisible = anyColumnVisible || columnVisible[lightIndex] != 0u;
             }
             if (!anyColumnVisible) {
                 continue;
             }
 
             const glm::vec3 offset = column.worldOffset;
-            for (int sectionY = 0;
-                 sectionY < Chunk::NUM_SUB_CHUNKS; ++sectionY) {
-                const SubChunk* subChunk =
-                    column.chunk->getSubChunk(sectionY);
+            for (int sectionY = 0; sectionY < Chunk::NUM_SUB_CHUNKS; ++sectionY) {
+                const SubChunk* subChunk = column.chunk->getSubChunk(sectionY);
                 if (subChunk == nullptr) {
                     continue;
                 }
                 const SubChunkMesh& mesh = subChunk->getMesh();
-                if (!mesh.inGlobalPool ||
-                    (mesh.opaqueRange.vertexCount == 0u &&
-                     mesh.cutoutRange.vertexCount == 0u &&
-                     mesh.cutoutDistanceRange.vertexCount == 0u)) {
+                if (!mesh.inGlobalPool || (mesh.opaqueRange.vertexCount == 0u && mesh.cutoutRange.vertexCount == 0u &&
+                                           mesh.cutoutDistanceRange.vertexCount == 0u)) {
                     continue;
                 }
                 const int yBase = sectionY * SubChunk::SIZE;
-                const glm::vec3 derivedMin{
-                    offset.x, offset.y + static_cast<float>(yBase),
-                    offset.z};
-                const glm::vec3 derivedMax{
-                    offset.x + static_cast<float>(Chunk::SIZE_X),
-                    offset.y + static_cast<float>(yBase + SubChunk::SIZE),
-                    offset.z + static_cast<float>(Chunk::SIZE_Z)};
-                const glm::vec3 boundsMin =
-                    mesh.hasBounds ? mesh.boundsMin : derivedMin;
-                const glm::vec3 boundsMax =
-                    mesh.hasBounds ? mesh.boundsMax : derivedMax;
+                const glm::vec3 derivedMin{offset.x, offset.y + static_cast<float>(yBase), offset.z};
+                const glm::vec3 derivedMax{offset.x + static_cast<float>(Chunk::SIZE_X),
+                                           offset.y + static_cast<float>(yBase + SubChunk::SIZE),
+                                           offset.z + static_cast<float>(Chunk::SIZE_Z)};
+                const glm::vec3 boundsMin = mesh.hasBounds ? mesh.boundsMin : derivedMin;
+                const glm::vec3 boundsMax = mesh.hasBounds ? mesh.boundsMax : derivedMax;
 
-                for (size_t lightIndex = 0u;
-                     lightIndex < volumes.size(); ++lightIndex) {
+                for (size_t lightIndex = 0u; lightIndex < volumes.size(); ++lightIndex) {
                     if (columnVisible[lightIndex] == 0u ||
-                        !localShadowVolumeIntersectsAabb(
-                            volumes[lightIndex], boundsMin, boundsMax)) {
+                        !localShadowVolumeIntersectsAabb(volumes[lightIndex], boundsMin, boundsMax)) {
                         continue;
                     }
                     LocalShadowChunkRanges& output = ranges[lightIndex];

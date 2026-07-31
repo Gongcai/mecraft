@@ -44,8 +44,8 @@ int main() {
         return fail("AudioClip duration should be positive");
     }
 
-    std::cout << "[audio_test] Clip '" << walkClip->getName()
-              << "' loaded, duration: " << walkClip->getDuration() << "s\n";
+    std::cout << "[audio_test] Clip '" << walkClip->getName() << "' loaded, duration: " << walkClip->getDuration()
+              << "s\n";
 
     // 循环播放测试
     {
@@ -58,7 +58,7 @@ int main() {
         source.setPosition(glm::vec3(0.0f, 0.0f, 0.0f));
         source.setVolume(0.5f);
         source.setPitch(1.0f);
-        source.setLooping(true);  // 循环播放
+        source.setLooping(true); // 循环播放
         source.setRolloffFactor(1.0f);
         source.setReferenceDistance(1.0f);
 
@@ -74,7 +74,7 @@ int main() {
         std::this_thread::sleep_for(std::chrono::seconds(5));
 
         source.stop();
-    }  // source 在这里析构，此时 clip 还存在
+    } // source 在这里析构，此时 clip 还存在
 
     // 清理
     audio.shutdown();

@@ -5,31 +5,26 @@
 // Derived values (precipitation, surfaceWetness, skyWetness, lightningFlash)
 // are computed each frame and consumed by Renderer to feed shader uniforms.
 
-enum class WeatherType {
-    Clear,
-    Rain,
-    Storm,
-    Snow
-};
+enum class WeatherType { Clear, Rain, Storm, Snow };
 
 struct WeatherState {
     WeatherType type = WeatherType::Clear;
-    float wetness = 0.0f;        // [0, 1] surface wetness (affects specular, albedo)
-    float storm = 0.0f;          // [0, 1] storm intensity (lightning, wind)
+    float wetness = 0.0f; // [0, 1] surface wetness (affects specular, albedo)
+    float storm = 0.0f; // [0, 1] storm intensity (lightning, wind)
     float aerialReduction = 0.55f; // [0, 1] reduces aerial perspective in rain
 };
 
 // Derived weather values consumed by shaders and gameplay systems.
 struct WeatherDerived {
-    float precipitation = 0.0f;     // [0, 1] combined rain+snow intensity
-    float rainStrength = 0.0f;      // [0, 1] rain-only intensity (no snow)
-    float snowStrength = 0.0f;      // [0, 1] snow-only intensity
-    float thunderStrength = 0.0f;   // [0, 1] thunder/lightning intensity
-    float surfaceWetness = 0.0f;    // [0, 1] wetness for terrain surface effects
-    float skyWetness = 0.0f;        // [0, 1] sky/post rain occlusion, equivalent to wetness+storm
-    float fogWetness = 0.0f;        // [0, 1] aerial/volumetric haze weighting
-    float cloudWetness = 0.0f;      // [0, 1] cloud coverage/weather shaping
-    float lightningFlash = 0.0f;    // [0, 1] lightning brightness (quick attack, slow decay)
+    float precipitation = 0.0f; // [0, 1] combined rain+snow intensity
+    float rainStrength = 0.0f; // [0, 1] rain-only intensity (no snow)
+    float snowStrength = 0.0f; // [0, 1] snow-only intensity
+    float thunderStrength = 0.0f; // [0, 1] thunder/lightning intensity
+    float surfaceWetness = 0.0f; // [0, 1] wetness for terrain surface effects
+    float skyWetness = 0.0f; // [0, 1] sky/post rain occlusion, equivalent to wetness+storm
+    float fogWetness = 0.0f; // [0, 1] aerial/volumetric haze weighting
+    float cloudWetness = 0.0f; // [0, 1] cloud coverage/weather shaping
+    float lightningFlash = 0.0f; // [0, 1] lightning brightness (quick attack, slow decay)
 };
 
 class WeatherSystem {
@@ -69,8 +64,8 @@ private:
     WeatherType m_targetType = WeatherType::Clear;
 
     // Lightning state.
-    float m_lightningFlash = 0.0f;      // current flash brightness [0,1]
-    float m_lightningCooldown = 0.0f;   // seconds until next possible flash
+    float m_lightningFlash = 0.0f; // current flash brightness [0,1]
+    float m_lightningCooldown = 0.0f; // seconds until next possible flash
 
     // Interpolation halflife in seconds (DerivativeMain: wetnessHalflife=180, drynessHalflife=60).
     static constexpr float kWetnessRiseHalflife = 180.0f;

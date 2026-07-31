@@ -6,11 +6,7 @@
 #include "../item/Item.h"
 
 struct CraftingIngredient {
-    enum class Kind {
-        Empty,
-        Item,
-        Tag
-    };
+    enum class Kind { Empty, Item, Tag };
 
     Kind kind = Kind::Empty;
     ItemID itemId = 0;

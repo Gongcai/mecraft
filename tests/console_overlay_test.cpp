@@ -9,7 +9,7 @@ int fail(const char* message) {
     std::cerr << "[console_overlay_test] FAIL: " << message << '\n';
     return EXIT_FAILURE;
 }
-}
+} // namespace
 
 int main() {
     ConsoleOverlay console;
@@ -20,7 +20,8 @@ int main() {
     if (!console.visible) {
         return fail("console should default to visible");
     }
-    if (console.onInput({UIInputEventType::PointerMove, 0.0f, 0.0f, UIPointerButton::None}, ctx) != UIEventResult::Ignored) {
+    if (console.onInput({UIInputEventType::PointerMove, 0.0f, 0.0f, UIPointerButton::None}, ctx) !=
+        UIEventResult::Ignored) {
         return fail("console should ignore pointer input");
     }
 
@@ -45,4 +46,3 @@ int main() {
     std::cout << "[console_overlay_test] PASS\n";
     return EXIT_SUCCESS;
 }
-

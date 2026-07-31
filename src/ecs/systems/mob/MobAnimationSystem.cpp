@@ -11,9 +11,7 @@
 namespace ecs {
 namespace {
 
-void updateWalkState(entt::registry& reg,
-                     const entt::entity entity,
-                     SteveAnimationStateComponent& anim,
+void updateWalkState(entt::registry& reg, const entt::entity entity, SteveAnimationStateComponent& anim,
                      const float dt) {
     if (!reg.all_of<TransformComponent>(entity)) {
         return;
@@ -40,8 +38,7 @@ void updateWalkState(entt::registry& reg,
     }
 }
 
-LocalTransformComponent* findGenericPartTransform(entt::registry& reg,
-                                                  const entt::entity root,
+LocalTransformComponent* findGenericPartTransform(entt::registry& reg, const entt::entity root,
                                                   const std::string& partName) {
     const auto* rootChildren = reg.try_get<ChildrenComponent>(root);
     if (rootChildren == nullptr) {
@@ -73,21 +70,14 @@ LocalTransformComponent* findGenericPartTransform(entt::registry& reg,
     return nullptr;
 }
 
-void setGenericPartRotationX(entt::registry& reg,
-                             const entt::entity root,
-                             const char* partName,
-                             const float degrees) {
+void setGenericPartRotationX(entt::registry& reg, const entt::entity root, const char* partName, const float degrees) {
     if (LocalTransformComponent* transform = findGenericPartTransform(reg, root, partName)) {
         transform->localRotation.x = degrees;
     }
 }
 
-void updateGenericModelAnimation(entt::registry& reg,
-                                 const entt::entity entity,
-                                 const EntityModelComponent& model,
-                                 SteveAnimationStateComponent& anim,
-                                 const float dt,
-                                 const float yaw) {
+void updateGenericModelAnimation(entt::registry& reg, const entt::entity entity, const EntityModelComponent& model,
+                                 SteveAnimationStateComponent& anim, const float dt, const float yaw) {
     updateWalkState(reg, entity, anim, dt);
 
     if (!model.yawPartName.empty()) {
@@ -96,8 +86,7 @@ void updateGenericModelAnimation(entt::registry& reg,
         }
     }
 
-    if (model.animationId == "minecraft:creeper_walk" ||
-        model.animationId == "minecraft:quadruped_walk") {
+    if (model.animationId == "minecraft:creeper_walk" || model.animationId == "minecraft:quadruped_walk") {
         const float swing = glm::sin(anim.walkCyclePhase) * 35.0f;
         setGenericPartRotationX(reg, entity, "right_hind_leg", swing);
         setGenericPartRotationX(reg, entity, "left_front_leg", swing);
@@ -112,7 +101,8 @@ void MobAnimationSystem::update(SystemContext& ctx) {
     auto& registry = ctx.registry;
     const float dt = ctx.dt;
 
-    if (dt <= 0.0f) return;
+    if (dt <= 0.0f)
+        return;
 
     auto& reg = registry.registry();
     auto view = reg.view<MobTag, SteveAnimationStateComponent, ChildrenComponent>();

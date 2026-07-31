@@ -43,10 +43,7 @@ bool isLivingPlayerTarget(entt::registry& reg, const entt::entity target) {
     return health.current > 0;
 }
 
-bool isTargetUsable(entt::registry& reg,
-                    const entt::entity target,
-                    const glm::vec3& mobPos,
-                    const float loseRange) {
+bool isTargetUsable(entt::registry& reg, const entt::entity target, const glm::vec3& mobPos, const float loseRange) {
     if (!isLivingPlayerTarget(reg, target)) {
         return false;
     }
@@ -54,8 +51,7 @@ bool isTargetUsable(entt::registry& reg,
     return horizontalDistanceSq(mobPos, targetTransform.position) <= loseRange * loseRange;
 }
 
-bool hasLineOfSight(const SystemContext& ctx,
-                    const TransformComponent& mobTransform,
+bool hasLineOfSight(const SystemContext& ctx, const TransformComponent& mobTransform,
                     const TransformComponent& targetTransform) {
     const IWorldView* worldView = ctx.services.worldView.get();
     if (worldView == nullptr) {
@@ -70,10 +66,8 @@ bool hasLineOfSight(const SystemContext& ctx,
         return true;
     }
 
-    const RayHit hit = raycastWorldView(*worldView,
-                                        PhysicsInfo(origin, delta / distance),
-                                        distance,
-                                        RaycastFluidMode::Ignore);
+    const RayHit hit =
+        raycastWorldView(*worldView, PhysicsInfo(origin, delta / distance), distance, RaycastFluidMode::Ignore);
     return !hit.hit || hit.distance >= distance - kLineOfSightSlack;
 }
 
@@ -87,9 +81,7 @@ void setRememberedTarget(MobAIComponent& ai, const entt::entity target) {
     ai.targetMemoryRemaining = std::max(0.0f, ai.lineOfSightMemorySeconds);
 }
 
-bool refreshCurrentTarget(SystemContext& ctx,
-                          entt::registry& reg,
-                          const TransformComponent& mobTransform,
+bool refreshCurrentTarget(SystemContext& ctx, entt::registry& reg, const TransformComponent& mobTransform,
                           MobAIComponent& ai) {
     if (ai.target == entt::null) {
         return false;
@@ -112,9 +104,7 @@ bool refreshCurrentTarget(SystemContext& ctx,
     return true;
 }
 
-bool tryRetaliate(entt::registry& reg,
-                  const entt::entity entity,
-                  const TransformComponent& mobTransform,
+bool tryRetaliate(entt::registry& reg, const entt::entity entity, const TransformComponent& mobTransform,
                   MobAIComponent& ai) {
     if (!ai.retaliates) {
         return false;
@@ -140,9 +130,7 @@ bool tryRetaliate(entt::registry& reg,
     return true;
 }
 
-entt::entity findNearestTarget(SystemContext& ctx,
-                               entt::registry& reg,
-                               const TransformComponent& mobTransform,
+entt::entity findNearestTarget(SystemContext& ctx, entt::registry& reg, const TransformComponent& mobTransform,
                                const float acquisitionRange) {
     entt::entity best = entt::null;
     const float maxDistSq = acquisitionRange * acquisitionRange;
@@ -166,11 +154,8 @@ entt::entity findNearestTarget(SystemContext& ctx,
     return best;
 }
 
-void updateTargetSelection(SystemContext& ctx,
-                           entt::registry& reg,
-                           const entt::entity entity,
-                           const TransformComponent& mobTransform,
-                           MobAIComponent& ai) {
+void updateTargetSelection(SystemContext& ctx, entt::registry& reg, const entt::entity entity,
+                           const TransformComponent& mobTransform, MobAIComponent& ai) {
     if (!ai.targetsPlayers && ai.target != entt::null && ai.targetMemoryRemaining <= 0.0f) {
         clearTarget(ai);
     }
@@ -186,13 +171,9 @@ void updateTargetSelection(SystemContext& ctx,
     }
 }
 
-glm::vec2 pursuitDirectionWithObstacleResponse(entt::registry& reg,
-                                               const entt::entity entity,
-                                               const glm::vec3& mobPosition,
-                                               const glm::vec2& targetDir,
-                                               MobAIComponent& ai,
-                                               MoveIntentComponent& moveIntent,
-                                               const float dt) {
+glm::vec2 pursuitDirectionWithObstacleResponse(entt::registry& reg, const entt::entity entity,
+                                               const glm::vec3& mobPosition, const glm::vec2& targetDir,
+                                               MobAIComponent& ai, MoveIntentComponent& moveIntent, const float dt) {
     const auto* physicsBody = reg.try_get<PhysicsBodyComponent>(entity);
     if (physicsBody == nullptr) {
         return targetDir;
@@ -220,9 +201,7 @@ glm::vec2 pursuitDirectionWithObstacleResponse(entt::registry& reg,
         ai.avoidanceTimer = std::max(0.0f, ai.avoidanceSeconds);
 
         const glm::vec2 perpendicular(-targetDir.y, targetDir.x);
-        ai.avoidanceDir = glm::length(ai.avoidanceDir) > kDirectionEpsilon
-            ? -ai.avoidanceDir
-            : perpendicular;
+        ai.avoidanceDir = glm::length(ai.avoidanceDir) > kDirectionEpsilon ? -ai.avoidanceDir : perpendicular;
     }
 
     if (ai.avoidanceTimer > 0.0f && glm::length(ai.avoidanceDir) > kDirectionEpsilon) {
@@ -255,7 +234,8 @@ void chooseWanderDirection(MobAIComponent& ai) {
 void MobAISystem::update(SystemContext& ctx) {
     auto& registry = ctx.registry;
     float dt = ctx.dt;
-    if (dt <= 0.0f) return;
+    if (dt <= 0.0f)
+        return;
 
     auto& reg = registry.registry();
     auto view = reg.view<MobTag, TransformComponent, MobAIComponent, MoveIntentComponent>();
@@ -304,13 +284,8 @@ void MobAISystem::update(SystemContext& ctx) {
             }
 
             ai.state = MobAIComponent::State::Pursue;
-            const glm::vec2 pursuitDir = pursuitDirectionWithObstacleResponse(reg,
-                                                                              entity,
-                                                                              transform.position,
-                                                                              toTarget,
-                                                                              ai,
-                                                                              moveIntent,
-                                                                              dt);
+            const glm::vec2 pursuitDir =
+                pursuitDirectionWithObstacleResponse(reg, entity, transform.position, toTarget, ai, moveIntent, dt);
             moveIntent.move = pursuitDir * ai.pursueSpeed;
             ai.lastPosition = transform.position;
             continue;

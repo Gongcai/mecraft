@@ -11,8 +11,7 @@ class SoilTillingSystem : public ISystem {
 public:
     using Dependencies = SystemDependency<
         std::tuple<LocalPlayerTag, BlockActionIntentComponent, TransformComponent, BlockTargetComponent>,
-        std::tuple<InventoryComponent, InventoryDataComponent, BlockInteractionRuntimeComponent>
-    >;
+        std::tuple<InventoryComponent, InventoryDataComponent, BlockInteractionRuntimeComponent>>;
 
     void update(SystemContext& ctx) override;
 };

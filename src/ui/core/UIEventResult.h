@@ -5,4 +5,3 @@ enum class UIEventResult {
     Handled,
     Consumed,
 };
-

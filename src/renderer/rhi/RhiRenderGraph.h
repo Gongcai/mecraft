@@ -20,8 +20,7 @@ class RhiCommandListPool;
 class RhiDevice;
 class ThreadPool;
 
-inline constexpr uint32_t kRgInvalidPassIndex =
-    std::numeric_limits<uint32_t>::max();
+inline constexpr uint32_t kRgInvalidPassIndex = std::numeric_limits<uint32_t>::max();
 
 /// Bounds the number of compiled passes recorded in one queue submission.
 /// Keeping command replay bounded prevents a frame graph from producing an
@@ -30,30 +29,24 @@ inline constexpr uint32_t kRgInvalidPassIndex =
 inline constexpr uint32_t kRgMaxPassesPerSubmissionBatch = 8u;
 
 struct RgTextureHandle {
-  uint32_t index = 0u;
-  uint32_t generation = 0u;
+    uint32_t index = 0u;
+    uint32_t generation = 0u;
 
-  [[nodiscard]] constexpr bool isValid() const {
-    return index != 0u && generation != 0u;
-  }
+    [[nodiscard]] constexpr bool isValid() const { return index != 0u && generation != 0u; }
 };
 
 struct RgBufferHandle {
-  uint32_t index = 0u;
-  uint32_t generation = 0u;
+    uint32_t index = 0u;
+    uint32_t generation = 0u;
 
-  [[nodiscard]] constexpr bool isValid() const {
-    return index != 0u && generation != 0u;
-  }
+    [[nodiscard]] constexpr bool isValid() const { return index != 0u && generation != 0u; }
 };
 
 struct RgPassHandle {
-  uint32_t index = 0u;
-  uint32_t generation = 0u;
+    uint32_t index = 0u;
+    uint32_t generation = 0u;
 
-  [[nodiscard]] constexpr bool isValid() const {
-    return index != 0u && generation != 0u;
-  }
+    [[nodiscard]] constexpr bool isValid() const { return index != 0u && generation != 0u; }
 };
 
 enum class RgPassType { Graphics, Compute, Copy, External };
@@ -61,511 +54,467 @@ enum class RgPassType { Graphics, Compute, Copy, External };
 enum class RgAccessType { Read, Write, ReadWrite };
 
 enum class RgCompileError {
-  None,
-  EmptyName,
-  InvalidTextureHandle,
-  InvalidBufferHandle,
-  InvalidPassHandle,
-  DuplicateResourceAccess,
-  InvalidTextureAccess,
-  InvalidBufferAccess,
-  ReadBeforeWrite,
-  MissingExecuteCallback,
-  CyclicDependency
+    None,
+    EmptyName,
+    InvalidTextureHandle,
+    InvalidBufferHandle,
+    InvalidPassHandle,
+    DuplicateResourceAccess,
+    InvalidTextureAccess,
+    InvalidBufferAccess,
+    ReadBeforeWrite,
+    MissingExecuteCallback,
+    CyclicDependency
 };
 
 enum class RgExecuteError {
-  None,
-  NotCompiled,
-  DeviceMismatch,
-  ResourceCreationFailed,
-  TextureAliasingFailed,
-  CommandListUnavailable,
-  CommandRecordingFailed,
-  PassExecutionFailed,
-  SubmissionFailed,
-  TimestampUnsupported,
-  TimestampQueryFailed
+    None,
+    NotCompiled,
+    DeviceMismatch,
+    ResourceCreationFailed,
+    TextureAliasingFailed,
+    CommandListUnavailable,
+    CommandRecordingFailed,
+    PassExecutionFailed,
+    SubmissionFailed,
+    TimestampUnsupported,
+    TimestampQueryFailed
 };
 
 enum class RgTimingPollResult { Unavailable, Available, Error };
 
 struct RgTextureSubresourceRange {
-  uint32_t baseMip = 0u;
-  uint32_t mipCount = kRhiRemainingMipLevels;
-  uint32_t baseLayer = 0u;
-  uint32_t layerCount = kRhiRemainingArrayLayers;
-  RhiTextureAspectFlags aspect = 0u;
+    uint32_t baseMip = 0u;
+    uint32_t mipCount = kRhiRemainingMipLevels;
+    uint32_t baseLayer = 0u;
+    uint32_t layerCount = kRhiRemainingArrayLayers;
+    RhiTextureAspectFlags aspect = 0u;
 };
 
 struct RgBufferRange {
-  uint64_t offset = 0u;
-  uint64_t size = kRhiWholeSize;
+    uint64_t offset = 0u;
+    uint64_t size = kRhiWholeSize;
 };
 
 struct RgImportedTextureDesc {
-  const char *name = nullptr;
-  RhiTextureHandle texture;
-  RhiTextureDesc desc;
-  RhiResourceState initialState = RhiResourceState::Undefined;
-  RhiResourceState finalState = RhiResourceState::Undefined;
-  RhiTextureViewHandle defaultView;
-  RhiQueueType initialQueue = RhiQueueType::Graphics;
-  RhiQueueType finalQueue = RhiQueueType::Graphics;
+    const char* name = nullptr;
+    RhiTextureHandle texture;
+    RhiTextureDesc desc;
+    RhiResourceState initialState = RhiResourceState::Undefined;
+    RhiResourceState finalState = RhiResourceState::Undefined;
+    RhiTextureViewHandle defaultView;
+    RhiQueueType initialQueue = RhiQueueType::Graphics;
+    RhiQueueType finalQueue = RhiQueueType::Graphics;
 };
 
 struct RgTransientTextureDesc {
-  const char *name = nullptr;
-  RhiTextureDesc desc;
-  RhiResourceState finalState = RhiResourceState::Undefined;
+    const char* name = nullptr;
+    RhiTextureDesc desc;
+    RhiResourceState finalState = RhiResourceState::Undefined;
 };
 
 struct RgImportedBufferDesc {
-  const char *name = nullptr;
-  RhiBufferHandle buffer;
-  RhiBufferDesc desc;
-  RhiResourceState initialState = RhiResourceState::Undefined;
-  RhiResourceState finalState = RhiResourceState::Undefined;
-  RhiQueueType initialQueue = RhiQueueType::Graphics;
-  RhiQueueType finalQueue = RhiQueueType::Graphics;
+    const char* name = nullptr;
+    RhiBufferHandle buffer;
+    RhiBufferDesc desc;
+    RhiResourceState initialState = RhiResourceState::Undefined;
+    RhiResourceState finalState = RhiResourceState::Undefined;
+    RhiQueueType initialQueue = RhiQueueType::Graphics;
+    RhiQueueType finalQueue = RhiQueueType::Graphics;
 };
 
 struct RgTransientBufferDesc {
-  const char *name = nullptr;
-  RhiBufferDesc desc;
-  RhiResourceState finalState = RhiResourceState::Undefined;
+    const char* name = nullptr;
+    RhiBufferDesc desc;
+    RhiResourceState finalState = RhiResourceState::Undefined;
 };
 
 struct RgPassDesc {
-  const char *name = nullptr;
-  RgPassType type = RgPassType::Graphics;
-  RhiQueueType queue = RhiQueueType::Graphics;
-  /// Declares the execute callback safe to record from a worker thread: it
-  /// must not mutate CPU state shared with other passes and may only reach
-  /// the device through thread-safe entry points. Batches containing any
-  /// pass without this flag always record on the calling thread.
-  bool threadSafeRecord = false;
+    const char* name = nullptr;
+    RgPassType type = RgPassType::Graphics;
+    RhiQueueType queue = RhiQueueType::Graphics;
+    /// Declares the execute callback safe to record from a worker thread: it
+    /// must not mutate CPU state shared with other passes and may only reach
+    /// the device through thread-safe entry points. Batches containing any
+    /// pass without this flag always record on the calling thread.
+    bool threadSafeRecord = false;
 };
 
 struct RgTextureAccess {
-  RgTextureHandle texture;
-  RgAccessType access = RgAccessType::Read;
-  RhiResourceState state = RhiResourceState::ShaderRead;
-  RgTextureSubresourceRange range;
+    RgTextureHandle texture;
+    RgAccessType access = RgAccessType::Read;
+    RhiResourceState state = RhiResourceState::ShaderRead;
+    RgTextureSubresourceRange range;
 };
 
 struct RgBufferAccess {
-  RgBufferHandle buffer;
-  RgAccessType access = RgAccessType::Read;
-  RhiResourceState state = RhiResourceState::StorageBuffer;
-  RgBufferRange range;
+    RgBufferHandle buffer;
+    RgAccessType access = RgAccessType::Read;
+    RhiResourceState state = RhiResourceState::StorageBuffer;
+    RgBufferRange range;
 };
 
 struct RgTextureBarrierPlan {
-  RgTextureHandle texture;
-  RhiResourceState oldState = RhiResourceState::Undefined;
-  RhiResourceState newState = RhiResourceState::Undefined;
-  RgTextureSubresourceRange range;
-  RhiQueueType sourceQueue = RhiQueueType::Graphics;
-  RhiQueueType destinationQueue = RhiQueueType::Graphics;
-  uint32_t sourcePass = kRgInvalidPassIndex;
+    RgTextureHandle texture;
+    RhiResourceState oldState = RhiResourceState::Undefined;
+    RhiResourceState newState = RhiResourceState::Undefined;
+    RgTextureSubresourceRange range;
+    RhiQueueType sourceQueue = RhiQueueType::Graphics;
+    RhiQueueType destinationQueue = RhiQueueType::Graphics;
+    uint32_t sourcePass = kRgInvalidPassIndex;
 };
 
 struct RgBufferBarrierPlan {
-  RgBufferHandle buffer;
-  RhiResourceState oldState = RhiResourceState::Undefined;
-  RhiResourceState newState = RhiResourceState::Undefined;
-  RgBufferRange range;
-  RhiQueueType sourceQueue = RhiQueueType::Graphics;
-  RhiQueueType destinationQueue = RhiQueueType::Graphics;
-  uint32_t sourcePass = kRgInvalidPassIndex;
+    RgBufferHandle buffer;
+    RhiResourceState oldState = RhiResourceState::Undefined;
+    RhiResourceState newState = RhiResourceState::Undefined;
+    RgBufferRange range;
+    RhiQueueType sourceQueue = RhiQueueType::Graphics;
+    RhiQueueType destinationQueue = RhiQueueType::Graphics;
+    uint32_t sourcePass = kRgInvalidPassIndex;
 };
 
 struct RgResourceLifetime {
-  uint32_t firstPass = 0u;
-  uint32_t lastPass = 0u;
-  bool used = false;
-  /// True while every access to the resource runs on the graphics queue;
-  /// only such transients may alias shared memory (cross-queue overlap is
-  /// not ordered by the in-batch barrier chain).
-  bool graphicsOnly = true;
+    uint32_t firstPass = 0u;
+    uint32_t lastPass = 0u;
+    bool used = false;
+    /// True while every access to the resource runs on the graphics queue;
+    /// only such transients may alias shared memory (cross-queue overlap is
+    /// not ordered by the in-batch barrier chain).
+    bool graphicsOnly = true;
 };
 
 /// Per-frame transient memory accounting for the aliasing allocator.
 struct RgTransientMemoryStats {
-  /// Bytes the transients claimed this frame would need as dedicated images.
-  uint64_t aliasedRequestBytes = 0u;
-  /// Bytes of the shared pages those claims actually landed on.
-  uint64_t aliasedPageBytes = 0u;
-  /// Total bytes allocated across all live shared pages.
-  uint64_t totalPageBytes = 0u;
-  uint32_t pageCount = 0u;
-  uint32_t aliasedTextureCount = 0u;
+    /// Bytes the transients claimed this frame would need as dedicated images.
+    uint64_t aliasedRequestBytes = 0u;
+    /// Bytes of the shared pages those claims actually landed on.
+    uint64_t aliasedPageBytes = 0u;
+    /// Total bytes allocated across all live shared pages.
+    uint64_t totalPageBytes = 0u;
+    uint32_t pageCount = 0u;
+    uint32_t aliasedTextureCount = 0u;
 };
 
 struct RgCompiledPass {
-  RgPassHandle handle;
-  std::string name;
-  RgPassType type = RgPassType::Graphics;
-  RhiQueueType queue = RhiQueueType::Graphics;
-  /// Mirrors RgPassDesc::threadSafeRecord for batch scheduling decisions.
-  bool threadSafeRecord = false;
-  std::vector<uint32_t> dependencies;
-  std::vector<RgTextureBarrierPlan> textureBarriers;
-  std::vector<RgBufferBarrierPlan> bufferBarriers;
-  std::vector<RgTextureBarrierPlan> releaseTextureBarriers;
-  std::vector<RgBufferBarrierPlan> releaseBufferBarriers;
+    RgPassHandle handle;
+    std::string name;
+    RgPassType type = RgPassType::Graphics;
+    RhiQueueType queue = RhiQueueType::Graphics;
+    /// Mirrors RgPassDesc::threadSafeRecord for batch scheduling decisions.
+    bool threadSafeRecord = false;
+    std::vector<uint32_t> dependencies;
+    std::vector<RgTextureBarrierPlan> textureBarriers;
+    std::vector<RgBufferBarrierPlan> bufferBarriers;
+    std::vector<RgTextureBarrierPlan> releaseTextureBarriers;
+    std::vector<RgBufferBarrierPlan> releaseBufferBarriers;
 };
 
 struct RgCompileResult {
-  RgCompileError error = RgCompileError::None;
-  std::string message;
+    RgCompileError error = RgCompileError::None;
+    std::string message;
 
-  [[nodiscard]] bool succeeded() const { return error == RgCompileError::None; }
+    [[nodiscard]] bool succeeded() const { return error == RgCompileError::None; }
 };
 
 struct RgSubmissionBatchPlan {
-  /// Logical queue that records and executes all passes in this batch.
-  RhiQueueType queue = RhiQueueType::Graphics;
-  /// Compiled pass indices recorded into the batch command list in order.
-  std::vector<uint32_t> passes;
-  /// Earlier batch indices whose timeline tokens must complete before execution.
-  std::vector<uint32_t> dependencies;
+    /// Logical queue that records and executes all passes in this batch.
+    RhiQueueType queue = RhiQueueType::Graphics;
+    /// Compiled pass indices recorded into the batch command list in order.
+    std::vector<uint32_t> passes;
+    /// Earlier batch indices whose timeline tokens must complete before execution.
+    std::vector<uint32_t> dependencies;
 };
 
 struct RgExecuteResult {
-  RgExecuteError error = RgExecuteError::None;
-  std::string message;
-  std::vector<RhiSubmissionToken> submissions;
-  /// CPU milliseconds spent resolving transient resources and recording
-  /// every batch command list, measured on the successful path only.
-  double recordMilliseconds = 0.0;
-  /// CPU milliseconds spent submitting recorded batches to device queues.
-  double submitMilliseconds = 0.0;
-  /// Submission batches whose command lists were recorded on worker threads.
-  uint32_t workerRecordedBatchCount = 0u;
+    RgExecuteError error = RgExecuteError::None;
+    std::string message;
+    std::vector<RhiSubmissionToken> submissions;
+    /// CPU milliseconds spent resolving transient resources and recording
+    /// every batch command list, measured on the successful path only.
+    double recordMilliseconds = 0.0;
+    /// CPU milliseconds spent submitting recorded batches to device queues.
+    double submitMilliseconds = 0.0;
+    /// Submission batches whose command lists were recorded on worker threads.
+    uint32_t workerRecordedBatchCount = 0u;
 
-  /// Reports whether every command list was recorded and submitted successfully.
-  /// @return True only when no execution error was reported.
-  [[nodiscard]] bool succeeded() const { return error == RgExecuteError::None; }
+    /// Reports whether every command list was recorded and submitted successfully.
+    /// @return True only when no execution error was reported.
+    [[nodiscard]] bool succeeded() const { return error == RgExecuteError::None; }
 
-  /// Returns the token for the final graph submission in execution order.
-  /// @return Final submission token, or an invalid token when nothing was submitted.
-  [[nodiscard]] RhiSubmissionToken completionToken() const {
-    return submissions.empty() ? RhiSubmissionToken{} : submissions.back();
-  }
+    /// Returns the token for the final graph submission in execution order.
+    /// @return Final submission token, or an invalid token when nothing was submitted.
+    [[nodiscard]] RhiSubmissionToken completionToken() const {
+        return submissions.empty() ? RhiSubmissionToken{} : submissions.back();
+    }
 };
 
 struct RgPassTiming {
-  /// Debug name supplied by the pass declaration.
-  std::string name;
-  /// Logical queue that executed the measured pass.
-  RhiQueueType queue = RhiQueueType::Graphics;
-  /// GPU timestamp difference converted to nanoseconds by the RHI backend.
-  uint64_t durationNanoseconds = 0u;
-  /// Absolute GPU clock nanoseconds sampled when the pass started and ended.
-  /// Values within one snapshot share a clock, so consumers can measure the
-  /// scheduling gap between consecutive passes and the whole graph span.
-  uint64_t beginNanoseconds = 0u;
-  uint64_t endNanoseconds = 0u;
+    /// Debug name supplied by the pass declaration.
+    std::string name;
+    /// Logical queue that executed the measured pass.
+    RhiQueueType queue = RhiQueueType::Graphics;
+    /// GPU timestamp difference converted to nanoseconds by the RHI backend.
+    uint64_t durationNanoseconds = 0u;
+    /// Absolute GPU clock nanoseconds sampled when the pass started and ended.
+    /// Values within one snapshot share a clock, so consumers can measure the
+    /// scheduling gap between consecutive passes and the whole graph span.
+    uint64_t beginNanoseconds = 0u;
+    uint64_t endNanoseconds = 0u;
 };
 
 struct RgTimingSnapshot {
-  /// Monotonic Render Graph execution identity associated with this snapshot.
-  uint64_t execution = 0u;
-  /// Timings in compiled pass execution order.
-  std::vector<RgPassTiming> passes;
+    /// Monotonic Render Graph execution identity associated with this snapshot.
+    uint64_t execution = 0u;
+    /// Timings in compiled pass execution order.
+    std::vector<RgPassTiming> passes;
 
-  /// Reports whether this snapshot contains a completed execution.
-  /// @return True when the execution identity is non-zero.
-  [[nodiscard]] bool isValid() const { return execution != 0u; }
+    /// Reports whether this snapshot contains a completed execution.
+    /// @return True when the execution identity is non-zero.
+    [[nodiscard]] bool isValid() const { return execution != 0u; }
 };
 
 class RgPassContext {
 public:
-  [[nodiscard]] RhiCommandList &commandList() const;
-  [[nodiscard]] RhiTextureHandle texture(RgTextureHandle handle) const;
+    [[nodiscard]] RhiCommandList& commandList() const;
+    [[nodiscard]] RhiTextureHandle texture(RgTextureHandle handle) const;
 
-  /// Resolves the default texture view for an imported or transient graph texture.
-  /// @param handle Texture handle declared by the executing pass.
-  /// @return RHI view owned by the imported resource or transient allocation.
-  [[nodiscard]] RhiTextureViewHandle textureView(RgTextureHandle handle) const;
-  [[nodiscard]] RhiBufferHandle buffer(RgBufferHandle handle) const;
+    /// Resolves the default texture view for an imported or transient graph texture.
+    /// @param handle Texture handle declared by the executing pass.
+    /// @return RHI view owned by the imported resource or transient allocation.
+    [[nodiscard]] RhiTextureViewHandle textureView(RgTextureHandle handle) const;
+    [[nodiscard]] RhiBufferHandle buffer(RgBufferHandle handle) const;
 
 private:
-  friend class RenderGraph;
-  RgPassContext(RhiCommandList &commandList,
-                const std::vector<RhiTextureHandle> &textures,
-                const std::vector<RhiTextureViewHandle> &textureViews,
-                const std::vector<RhiBufferHandle> &buffers);
+    friend class RenderGraph;
+    RgPassContext(RhiCommandList& commandList, const std::vector<RhiTextureHandle>& textures,
+                  const std::vector<RhiTextureViewHandle>& textureViews, const std::vector<RhiBufferHandle>& buffers);
 
-  RhiCommandList *m_commandList = nullptr;
-  const std::vector<RhiTextureHandle> *m_textures = nullptr;
-  const std::vector<RhiTextureViewHandle> *m_textureViews = nullptr;
-  const std::vector<RhiBufferHandle> *m_buffers = nullptr;
+    RhiCommandList* m_commandList = nullptr;
+    const std::vector<RhiTextureHandle>* m_textures = nullptr;
+    const std::vector<RhiTextureViewHandle>* m_textureViews = nullptr;
+    const std::vector<RhiBufferHandle>* m_buffers = nullptr;
 };
 
-using RgExecuteCallback = std::function<bool(RgPassContext &)>;
+using RgExecuteCallback = std::function<bool(RgPassContext&)>;
 
 class RenderGraph;
 
 class RenderGraphPassBuilder {
 public:
-  RenderGraphPassBuilder &
-  readTexture(RgTextureHandle texture,
-              RhiResourceState state = RhiResourceState::ShaderRead,
-              RgTextureSubresourceRange range = {});
-  RenderGraphPassBuilder &writeTexture(RgTextureHandle texture,
-                                       RhiResourceState state,
-                                       RgTextureSubresourceRange range = {});
-  RenderGraphPassBuilder &
-  readWriteTexture(RgTextureHandle texture, RhiResourceState state,
-                   RgTextureSubresourceRange range = {});
-  RenderGraphPassBuilder &readBuffer(RgBufferHandle buffer,
-                                     RhiResourceState state,
-                                     RgBufferRange range = {});
-  RenderGraphPassBuilder &writeBuffer(RgBufferHandle buffer,
-                                      RhiResourceState state,
-                                      RgBufferRange range = {});
-  RenderGraphPassBuilder &readWriteBuffer(RgBufferHandle buffer,
-                                          RhiResourceState state,
-                                          RgBufferRange range = {});
-  RenderGraphPassBuilder &dependsOn(RgPassHandle dependency);
-  RenderGraphPassBuilder &setExecute(RgExecuteCallback callback);
+    RenderGraphPassBuilder& readTexture(RgTextureHandle texture, RhiResourceState state = RhiResourceState::ShaderRead,
+                                        RgTextureSubresourceRange range = {});
+    RenderGraphPassBuilder& writeTexture(RgTextureHandle texture, RhiResourceState state,
+                                         RgTextureSubresourceRange range = {});
+    RenderGraphPassBuilder& readWriteTexture(RgTextureHandle texture, RhiResourceState state,
+                                             RgTextureSubresourceRange range = {});
+    RenderGraphPassBuilder& readBuffer(RgBufferHandle buffer, RhiResourceState state, RgBufferRange range = {});
+    RenderGraphPassBuilder& writeBuffer(RgBufferHandle buffer, RhiResourceState state, RgBufferRange range = {});
+    RenderGraphPassBuilder& readWriteBuffer(RgBufferHandle buffer, RhiResourceState state, RgBufferRange range = {});
+    RenderGraphPassBuilder& dependsOn(RgPassHandle dependency);
+    RenderGraphPassBuilder& setExecute(RgExecuteCallback callback);
 
-  [[nodiscard]] RgPassHandle handle() const { return m_handle; }
+    [[nodiscard]] RgPassHandle handle() const { return m_handle; }
 
 private:
-  friend class RenderGraph;
-  RenderGraphPassBuilder(RenderGraph &graph, RgPassHandle handle);
+    friend class RenderGraph;
+    RenderGraphPassBuilder(RenderGraph& graph, RgPassHandle handle);
 
-  RenderGraph *m_graph = nullptr;
-  RgPassHandle m_handle;
+    RenderGraph* m_graph = nullptr;
+    RgPassHandle m_handle;
 };
 
 class RenderGraph {
 public:
-  RenderGraph();
-  ~RenderGraph();
-  RenderGraph(const RenderGraph &) = delete;
-  RenderGraph &operator=(const RenderGraph &) = delete;
+    RenderGraph();
+    ~RenderGraph();
+    RenderGraph(const RenderGraph&) = delete;
+    RenderGraph& operator=(const RenderGraph&) = delete;
 
-  [[nodiscard]] RgTextureHandle
-  importTexture(const RgImportedTextureDesc &desc);
-  [[nodiscard]] RgTextureHandle
-  createTexture(const RgTransientTextureDesc &desc);
-  [[nodiscard]] RgBufferHandle importBuffer(const RgImportedBufferDesc &desc);
-  [[nodiscard]] RgBufferHandle createBuffer(const RgTransientBufferDesc &desc);
-  [[nodiscard]] RenderGraphPassBuilder addPass(const RgPassDesc &desc);
-  [[nodiscard]] RenderGraphPassBuilder editPass(RgPassHandle pass);
+    [[nodiscard]] RgTextureHandle importTexture(const RgImportedTextureDesc& desc);
+    [[nodiscard]] RgTextureHandle createTexture(const RgTransientTextureDesc& desc);
+    [[nodiscard]] RgBufferHandle importBuffer(const RgImportedBufferDesc& desc);
+    [[nodiscard]] RgBufferHandle createBuffer(const RgTransientBufferDesc& desc);
+    [[nodiscard]] RenderGraphPassBuilder addPass(const RgPassDesc& desc);
+    [[nodiscard]] RenderGraphPassBuilder editPass(RgPassHandle pass);
 
-  [[nodiscard]] RgCompileResult compile();
+    [[nodiscard]] RgCompileResult compile();
 
-  /// Records compiled passes, creates required transient resources, and submits
-  /// dependency batches to their declared logical queues.
-  /// @param device Device that owns imported and transient graph resources.
-  /// @param commandListPool Pool used to allocate one command list per batch.
-  /// @return Execution status and submission tokens in submission order.
-  [[nodiscard]] RgExecuteResult execute(RhiDevice &device,
-                                        RhiCommandListPool &commandListPool);
+    /// Records compiled passes, creates required transient resources, and submits
+    /// dependency batches to their declared logical queues.
+    /// @param device Device that owns imported and transient graph resources.
+    /// @param commandListPool Pool used to allocate one command list per batch.
+    /// @return Execution status and submission tokens in submission order.
+    [[nodiscard]] RgExecuteResult execute(RhiDevice& device, RhiCommandListPool& commandListPool);
 
-  /// Collects completed GPU pass timestamps without blocking for pending work.
-  /// @param device Device used by the matching execute calls.
-  /// @return Available after collecting at least one execution, Unavailable while
-  /// work is pending, or Error when the device or query contract is violated.
-  [[nodiscard]] RgTimingPollResult pollTimings(RhiDevice &device);
+    /// Collects completed GPU pass timestamps without blocking for pending work.
+    /// @param device Device used by the matching execute calls.
+    /// @return Available after collecting at least one execution, Unavailable while
+    /// work is pending, or Error when the device or query contract is violated.
+    [[nodiscard]] RgTimingPollResult pollTimings(RhiDevice& device);
 
-  /// Returns the most recently collected complete timing snapshot.
-  /// @return Stable snapshot retained until a newer execution is collected or
-  /// transient resources are released.
-  [[nodiscard]] const RgTimingSnapshot &latestTimings() const {
-    return m_latestTimings;
-  }
+    /// Returns the most recently collected complete timing snapshot.
+    /// @return Stable snapshot retained until a newer execution is collected or
+    /// transient resources are released.
+    [[nodiscard]] const RgTimingSnapshot& latestTimings() const { return m_latestTimings; }
 
-  /// Destroys pooled transient resources and timestamp queries owned by a device.
-  /// @param device Device passed to previous execute calls for this graph.
-  void releaseTransientResources(RhiDevice &device);
-  void reset();
+    /// Destroys pooled transient resources and timestamp queries owned by a device.
+    /// @param device Device passed to previous execute calls for this graph.
+    void releaseTransientResources(RhiDevice& device);
+    void reset();
 
-  [[nodiscard]] const std::vector<RgCompiledPass> &compiledPasses() const {
-    return m_compiledPasses;
-  }
-  [[nodiscard]] const std::vector<RgResourceLifetime> &
-  textureLifetimes() const {
-    return m_textureLifetimes;
-  }
-  [[nodiscard]] const std::vector<RgResourceLifetime> &bufferLifetimes() const {
-    return m_bufferLifetimes;
-  }
-  [[nodiscard]] const std::vector<RgTextureBarrierPlan> &
-  epilogueTextureBarriers() const {
-    return m_epilogueTextureBarriers;
-  }
-  [[nodiscard]] const std::vector<RgBufferBarrierPlan> &
-  epilogueBufferBarriers() const {
-    return m_epilogueBufferBarriers;
-  }
-  [[nodiscard]] const std::vector<RgSubmissionBatchPlan> &
-  submissionBatches() const {
-    return m_submissionBatches;
-  }
-  [[nodiscard]] bool isCompiled() const { return m_compiled; }
+    [[nodiscard]] const std::vector<RgCompiledPass>& compiledPasses() const { return m_compiledPasses; }
+    [[nodiscard]] const std::vector<RgResourceLifetime>& textureLifetimes() const { return m_textureLifetimes; }
+    [[nodiscard]] const std::vector<RgResourceLifetime>& bufferLifetimes() const { return m_bufferLifetimes; }
+    [[nodiscard]] const std::vector<RgTextureBarrierPlan>& epilogueTextureBarriers() const {
+        return m_epilogueTextureBarriers;
+    }
+    [[nodiscard]] const std::vector<RgBufferBarrierPlan>& epilogueBufferBarriers() const {
+        return m_epilogueBufferBarriers;
+    }
+    [[nodiscard]] const std::vector<RgSubmissionBatchPlan>& submissionBatches() const { return m_submissionBatches; }
+    [[nodiscard]] bool isCompiled() const { return m_compiled; }
 
-  /// Enables placing lifetime-disjoint transient textures on shared memory
-  /// pages. Effective only when the device reports textureAliasing; any
-  /// per-texture failure falls back to a dedicated allocation.
-  void setTextureAliasingEnabled(const bool enabled) {
-    m_textureAliasingEnabled = enabled;
-  }
+    /// Enables placing lifetime-disjoint transient textures on shared memory
+    /// pages. Effective only when the device reports textureAliasing; any
+    /// per-texture failure falls back to a dedicated allocation.
+    void setTextureAliasingEnabled(const bool enabled) { m_textureAliasingEnabled = enabled; }
 
-  /// Enables recording eligible submission batches on worker threads. A
-  /// batch is eligible only when every contained pass declared
-  /// threadSafeRecord and the device backend supports recording off the
-  /// device thread (Vulkan). Pass nullptr to record everything serially.
-  /// @param pool Thread pool that runs worker recording tasks; must outlive
-  /// every subsequent execute call, or be cleared beforehand.
-  void setRecordThreading(ThreadPool *pool) { m_recordThreadPool = pool; }
+    /// Enables recording eligible submission batches on worker threads. A
+    /// batch is eligible only when every contained pass declared
+    /// threadSafeRecord and the device backend supports recording off the
+    /// device thread (Vulkan). Pass nullptr to record everything serially.
+    /// @param pool Thread pool that runs worker recording tasks; must outlive
+    /// every subsequent execute call, or be cleared beforehand.
+    void setRecordThreading(ThreadPool* pool) { m_recordThreadPool = pool; }
 
-  /// Invoked by execute() after transient resources are resolved and before
-  /// any pass records, so pipelines can publish per-frame transient handles
-  /// into pass-visible storage. resolvedTexture/resolvedTextureView are
-  /// valid only inside the callback and inside pass execute callbacks.
-  void setPreRecordCallback(std::function<void()> callback) {
-    m_preRecordCallback = std::move(callback);
-  }
-  /// Returns the texture backing a graph handle for the current execution.
-  /// @return Invalid handle outside execute() or for an invalid input.
-  [[nodiscard]] RhiTextureHandle resolvedTexture(RgTextureHandle handle) const;
-  /// Returns the default whole-texture view for the current execution.
-  /// @return Invalid handle outside execute() or for an invalid input.
-  [[nodiscard]] RhiTextureViewHandle
-  resolvedTextureView(RgTextureHandle handle) const;
-  [[nodiscard]] const RgTransientMemoryStats &transientMemoryStats() const {
-    return m_transientMemoryStats;
-  }
+    /// Invoked by execute() after transient resources are resolved and before
+    /// any pass records, so pipelines can publish per-frame transient handles
+    /// into pass-visible storage. resolvedTexture/resolvedTextureView are
+    /// valid only inside the callback and inside pass execute callbacks.
+    void setPreRecordCallback(std::function<void()> callback) { m_preRecordCallback = std::move(callback); }
+    /// Returns the texture backing a graph handle for the current execution.
+    /// @return Invalid handle outside execute() or for an invalid input.
+    [[nodiscard]] RhiTextureHandle resolvedTexture(RgTextureHandle handle) const;
+    /// Returns the default whole-texture view for the current execution.
+    /// @return Invalid handle outside execute() or for an invalid input.
+    [[nodiscard]] RhiTextureViewHandle resolvedTextureView(RgTextureHandle handle) const;
+    [[nodiscard]] const RgTransientMemoryStats& transientMemoryStats() const { return m_transientMemoryStats; }
 
 private:
-  friend class RenderGraphPassBuilder;
+    friend class RenderGraphPassBuilder;
 
-  struct TextureRecord;
-  struct BufferRecord;
-  struct PassRecord;
-  struct TransientTexture;
-  struct TransientBuffer;
-  struct TimingSlot;
+    struct TextureRecord;
+    struct BufferRecord;
+    struct PassRecord;
+    struct TransientTexture;
+    struct TransientBuffer;
+    struct TimingSlot;
 
-  [[nodiscard]] bool addTextureAccess(RgPassHandle pass,
-                                      const RgTextureAccess &access);
-  [[nodiscard]] bool addBufferAccess(RgPassHandle pass,
-                                     const RgBufferAccess &access);
-  [[nodiscard]] bool addDependency(RgPassHandle pass, RgPassHandle dependency);
-  [[nodiscard]] bool setExecute(RgPassHandle pass, RgExecuteCallback callback);
-  void setBuilderError(RgCompileError error, const char *message);
+    [[nodiscard]] bool addTextureAccess(RgPassHandle pass, const RgTextureAccess& access);
+    [[nodiscard]] bool addBufferAccess(RgPassHandle pass, const RgBufferAccess& access);
+    [[nodiscard]] bool addDependency(RgPassHandle pass, RgPassHandle dependency);
+    [[nodiscard]] bool setExecute(RgPassHandle pass, RgExecuteCallback callback);
+    void setBuilderError(RgCompileError error, const char* message);
 
-  [[nodiscard]] TextureRecord *textureRecord(RgTextureHandle handle);
-  [[nodiscard]] const TextureRecord *
-  textureRecord(RgTextureHandle handle) const;
-  [[nodiscard]] BufferRecord *bufferRecord(RgBufferHandle handle);
-  [[nodiscard]] const BufferRecord *bufferRecord(RgBufferHandle handle) const;
-  [[nodiscard]] PassRecord *passRecord(RgPassHandle handle);
-  [[nodiscard]] const PassRecord *passRecord(RgPassHandle handle) const;
+    [[nodiscard]] TextureRecord* textureRecord(RgTextureHandle handle);
+    [[nodiscard]] const TextureRecord* textureRecord(RgTextureHandle handle) const;
+    [[nodiscard]] BufferRecord* bufferRecord(RgBufferHandle handle);
+    [[nodiscard]] const BufferRecord* bufferRecord(RgBufferHandle handle) const;
+    [[nodiscard]] PassRecord* passRecord(RgPassHandle handle);
+    [[nodiscard]] const PassRecord* passRecord(RgPassHandle handle) const;
 
-  std::vector<TextureRecord> m_textures;
-  std::vector<BufferRecord> m_buffers;
-  std::vector<PassRecord> m_passes;
-  std::vector<RgCompiledPass> m_compiledPasses;
-  std::vector<RgResourceLifetime> m_textureLifetimes;
-  std::vector<RgResourceLifetime> m_bufferLifetimes;
-  std::vector<RgTextureBarrierPlan> m_epilogueTextureBarriers;
-  std::vector<RgBufferBarrierPlan> m_epilogueBufferBarriers;
-  std::vector<RgSubmissionBatchPlan> m_submissionBatches;
-  std::vector<uint32_t> m_passToBatch;
-  std::vector<std::vector<uint32_t>> m_textureLastPasses;
-  std::vector<uint32_t> m_bufferLastPasses;
-  /// Compiled artifacts cached by structural fingerprint. Frame graphs are
-  /// redeclared every frame but alternate between a handful of topologies
-  /// (half-rate passes, interleaved cascades); replaying a cached plan skips
-  /// the dependency/barrier compilation entirely.
-  struct CompiledPlan {
-    std::vector<RgCompiledPass> compiledPasses;
-    std::vector<RgResourceLifetime> textureLifetimes;
-    std::vector<RgResourceLifetime> bufferLifetimes;
-    std::vector<RgTextureBarrierPlan> epilogueTextureBarriers;
-    std::vector<RgBufferBarrierPlan> epilogueBufferBarriers;
-    std::vector<RgSubmissionBatchPlan> submissionBatches;
-    std::vector<uint32_t> passToBatch;
-    std::vector<std::vector<uint32_t>> textureLastPasses;
-    std::vector<uint32_t> bufferLastPasses;
-  };
-  [[nodiscard]] uint64_t computeStructuralFingerprint() const;
-  std::unordered_map<uint64_t, CompiledPlan> m_compiledPlanCache;
+    std::vector<TextureRecord> m_textures;
+    std::vector<BufferRecord> m_buffers;
+    std::vector<PassRecord> m_passes;
+    std::vector<RgCompiledPass> m_compiledPasses;
+    std::vector<RgResourceLifetime> m_textureLifetimes;
+    std::vector<RgResourceLifetime> m_bufferLifetimes;
+    std::vector<RgTextureBarrierPlan> m_epilogueTextureBarriers;
+    std::vector<RgBufferBarrierPlan> m_epilogueBufferBarriers;
+    std::vector<RgSubmissionBatchPlan> m_submissionBatches;
+    std::vector<uint32_t> m_passToBatch;
+    std::vector<std::vector<uint32_t>> m_textureLastPasses;
+    std::vector<uint32_t> m_bufferLastPasses;
+    /// Compiled artifacts cached by structural fingerprint. Frame graphs are
+    /// redeclared every frame but alternate between a handful of topologies
+    /// (half-rate passes, interleaved cascades); replaying a cached plan skips
+    /// the dependency/barrier compilation entirely.
+    struct CompiledPlan {
+        std::vector<RgCompiledPass> compiledPasses;
+        std::vector<RgResourceLifetime> textureLifetimes;
+        std::vector<RgResourceLifetime> bufferLifetimes;
+        std::vector<RgTextureBarrierPlan> epilogueTextureBarriers;
+        std::vector<RgBufferBarrierPlan> epilogueBufferBarriers;
+        std::vector<RgSubmissionBatchPlan> submissionBatches;
+        std::vector<uint32_t> passToBatch;
+        std::vector<std::vector<uint32_t>> textureLastPasses;
+        std::vector<uint32_t> bufferLastPasses;
+    };
+    [[nodiscard]] uint64_t computeStructuralFingerprint() const;
+    std::unordered_map<uint64_t, CompiledPlan> m_compiledPlanCache;
 
-  std::vector<TransientTexture> m_transientTextures;
-  std::vector<TransientBuffer> m_transientBuffers;
+    std::vector<TransientTexture> m_transientTextures;
+    std::vector<TransientBuffer> m_transientBuffers;
 
-  /// One shared memory block hosting placed transient textures whose frame
-  /// lifetimes never overlap. Claims are re-collected every frame; members
-  /// live in m_transientTextures tagged with the page index.
-  struct AliasPageClaim {
-    uint32_t firstPass = 0u;
-    uint32_t lastPass = 0u;
-  };
-  struct AliasPage {
-    RhiMemoryHandle memory;
-    RhiTextureMemoryRequirements requirements;
-    std::vector<AliasPageClaim> frameClaims;
-    uint32_t claimsGeneration = 0u;
-  };
-  struct TextureRequirementsCacheEntry {
-    RhiTextureDesc desc{};
-    RhiTextureMemoryRequirements requirements{};
-    bool supported = false;
-  };
-  [[nodiscard]] bool lookupTextureRequirements(
-      RhiDevice &device, const RhiTextureDesc &desc,
-      RhiTextureMemoryRequirements &requirements);
+    /// One shared memory block hosting placed transient textures whose frame
+    /// lifetimes never overlap. Claims are re-collected every frame; members
+    /// live in m_transientTextures tagged with the page index.
+    struct AliasPageClaim {
+        uint32_t firstPass = 0u;
+        uint32_t lastPass = 0u;
+    };
+    struct AliasPage {
+        RhiMemoryHandle memory;
+        RhiTextureMemoryRequirements requirements;
+        std::vector<AliasPageClaim> frameClaims;
+        uint32_t claimsGeneration = 0u;
+    };
+    struct TextureRequirementsCacheEntry {
+        RhiTextureDesc desc{};
+        RhiTextureMemoryRequirements requirements{};
+        bool supported = false;
+    };
+    [[nodiscard]] bool lookupTextureRequirements(RhiDevice& device, const RhiTextureDesc& desc,
+                                                 RhiTextureMemoryRequirements& requirements);
 
-  /// Returns this worker thread's command list pool, creating it on first
-  /// use. Pools must be constructed on the recording thread because backend
-  /// pools bind their owner thread at construction time.
-  [[nodiscard]] RhiCommandListPool *
-  acquireWorkerCommandListPool(RhiDevice &device);
-  /// Destroys every worker-thread pool; called from the teardown paths so
-  /// device objects never outlive the device. Pools are recreated lazily.
-  void destroyWorkerCommandListPools();
-  [[nodiscard]] TransientTexture *
-  resolveAliasedTransient(RhiDevice &device, const TextureRecord &record,
-                          const RgResourceLifetime &lifetime,
-                          const RhiTextureMemoryRequirements &requirements);
-  std::vector<AliasPage> m_aliasPages;
-  std::vector<TextureRequirementsCacheEntry> m_textureRequirementsCache;
-  RgTransientMemoryStats m_transientMemoryStats;
-  bool m_textureAliasingEnabled = true;
-  std::function<void()> m_preRecordCallback;
-  /// Set while execute() runs so resolvedTexture/resolvedTextureView work
-  /// from the pre-record callback and pass callbacks.
-  const std::vector<RhiTextureHandle> *m_currentResolvedTextures = nullptr;
-  const std::vector<RhiTextureViewHandle> *m_currentResolvedTextureViews =
-      nullptr;
+    /// Returns this worker thread's command list pool, creating it on first
+    /// use. Pools must be constructed on the recording thread because backend
+    /// pools bind their owner thread at construction time.
+    [[nodiscard]] RhiCommandListPool* acquireWorkerCommandListPool(RhiDevice& device);
+    /// Destroys every worker-thread pool; called from the teardown paths so
+    /// device objects never outlive the device. Pools are recreated lazily.
+    void destroyWorkerCommandListPools();
+    [[nodiscard]] TransientTexture* resolveAliasedTransient(RhiDevice& device, const TextureRecord& record,
+                                                            const RgResourceLifetime& lifetime,
+                                                            const RhiTextureMemoryRequirements& requirements);
+    std::vector<AliasPage> m_aliasPages;
+    std::vector<TextureRequirementsCacheEntry> m_textureRequirementsCache;
+    RgTransientMemoryStats m_transientMemoryStats;
+    bool m_textureAliasingEnabled = true;
+    std::function<void()> m_preRecordCallback;
+    /// Set while execute() runs so resolvedTexture/resolvedTextureView work
+    /// from the pre-record callback and pass callbacks.
+    const std::vector<RhiTextureHandle>* m_currentResolvedTextures = nullptr;
+    const std::vector<RhiTextureViewHandle>* m_currentResolvedTextureViews = nullptr;
 
-  /// Optional pool for worker-thread batch recording; not owned.
-  ThreadPool *m_recordThreadPool = nullptr;
-  /// One command list pool per worker thread that has recorded for this
-  /// graph. Guarded by m_workerPoolMutex; pools are created inside worker
-  /// tasks and destroyed with the graph's transient resources.
-  std::mutex m_workerPoolMutex;
-  std::unordered_map<std::thread::id, std::unique_ptr<RhiCommandListPool>>
-      m_workerCommandListPools;
+    /// Optional pool for worker-thread batch recording; not owned.
+    ThreadPool* m_recordThreadPool = nullptr;
+    /// One command list pool per worker thread that has recorded for this
+    /// graph. Guarded by m_workerPoolMutex; pools are created inside worker
+    /// tasks and destroyed with the graph's transient resources.
+    std::mutex m_workerPoolMutex;
+    std::unordered_map<std::thread::id, std::unique_ptr<RhiCommandListPool>> m_workerCommandListPools;
 
-  std::vector<TimingSlot> m_timingSlots;
-  RgTimingSnapshot m_latestTimings;
-  RhiDevice *m_runtimeDevice = nullptr;
-  bool m_compiled = false;
-  bool m_builderError = false;
-  RgCompileError m_builderErrorCode = RgCompileError::None;
-  std::string m_builderErrorMessage;
-  uint32_t m_generation = 1u;
-  uint64_t m_execution = 0u;
+    std::vector<TimingSlot> m_timingSlots;
+    RgTimingSnapshot m_latestTimings;
+    RhiDevice* m_runtimeDevice = nullptr;
+    bool m_compiled = false;
+    bool m_builderError = false;
+    RgCompileError m_builderErrorCode = RgCompileError::None;
+    std::string m_builderErrorMessage;
+    uint32_t m_generation = 1u;
+    uint64_t m_execution = 0u;
 };
 
 #endif // MECRAFT_RHI_RENDER_GRAPH_H

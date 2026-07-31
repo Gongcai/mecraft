@@ -15,7 +15,9 @@ class ResourceMgr;
 class RhiDevice;
 class RhiCommandList;
 
-namespace shadow { class ShadowRenderer; }
+namespace shadow {
+class ShadowRenderer;
+}
 
 /// Volumetric fog pass: ray-marched fog with temporal reprojection and scene composite.
 class VolumetricPass : public RenderPass {
@@ -27,9 +29,7 @@ public:
     void setShadowRenderer(shadow::ShadowRenderer* sr) { m_shadowRenderer = sr; }
 
     /// Check if all required shaders are loaded.
-    [[nodiscard]] bool hasShaders() const {
-        return m_resourceMgr != nullptr;
-    }
+    [[nodiscard]] bool hasShaders() const { return m_resourceMgr != nullptr; }
 
     /// Check if temporal shader is available.
     [[nodiscard]] bool hasTemporalShader() const { return m_resourceMgr != nullptr; }
@@ -62,14 +62,10 @@ public:
     /// @param resources Graph handles required by volumetric preparation.
     /// @param dependency Pass that must complete before preparation starts.
     /// @return Final preparation pass, or an invalid handle for an invalid contract.
-    [[nodiscard]] RgPassHandle addGraphPreparationPasses(
-        RenderGraph& graph,
-        const FrameContext& ctx,
-        const RenderSettings& settings,
-        DeferredRenderTargets& targets,
-        bool hasPreviousFrame,
-        const GraphResources& resources,
-        RgPassHandle dependency);
+    [[nodiscard]] RgPassHandle addGraphPreparationPasses(RenderGraph& graph, const FrameContext& ctx,
+                                                         const RenderSettings& settings, DeferredRenderTargets& targets,
+                                                         bool hasPreviousFrame, const GraphResources& resources,
+                                                         RgPassHandle dependency);
 
     /// Adds the final scene composite after transparent geometry has completed.
     /// @param graph Render graph receiving the composite pass.
@@ -80,50 +76,35 @@ public:
     /// @param resources Graph handles required by the composite pass.
     /// @param dependency Pass that must complete before compositing starts.
     /// @return Composite pass handle, or an invalid handle for an invalid contract.
-    [[nodiscard]] RgPassHandle addGraphCompositePass(
-        RenderGraph& graph,
-        const FrameContext& ctx,
-        const RenderSettings& settings,
-        DeferredRenderTargets& targets,
-        bool hasPreviousFrame,
-        const GraphResources& resources,
-        RgPassHandle dependency);
+    [[nodiscard]] RgPassHandle addGraphCompositePass(RenderGraph& graph, const FrameContext& ctx,
+                                                     const RenderSettings& settings, DeferredRenderTargets& targets,
+                                                     bool hasPreviousFrame, const GraphResources& resources,
+                                                     RgPassHandle dependency);
     void finishGraphExecution(bool succeeded);
     [[nodiscard]] bool graphFramePrepared() const { return m_graphFramePrepared; }
-    [[nodiscard]] bool graphWritesHistory() const {
-        return m_graphWritesHistory;
-    }
+    [[nodiscard]] bool graphWritesHistory() const { return m_graphWritesHistory; }
     void invalidateHistory();
 
 private:
     [[nodiscard]] bool shouldRenderFog(const FrameContext& ctx, const RenderSettings& settings,
                                        bool hasPreviousFrame) const;
-    [[nodiscard]] bool recordFogPass(RhiCommandList& commandList,
-                                     const FrameContext& ctx,
-                                     const RenderSettings& settings,
-                                     DeferredRenderTargets& targets);
-    [[nodiscard]] bool recordTemporalPass(RhiCommandList& commandList,
-                                          const FrameContext& ctx,
-                                          const RenderSettings& settings,
-                                          DeferredRenderTargets& targets);
-    [[nodiscard]] bool recordCompositePass(RhiCommandList& commandList,
-                                           const FrameContext& ctx,
-                                           const RenderSettings& settings,
-                                           DeferredRenderTargets& targets,
+    [[nodiscard]] bool recordFogPass(RhiCommandList& commandList, const FrameContext& ctx,
+                                     const RenderSettings& settings, DeferredRenderTargets& targets);
+    [[nodiscard]] bool recordTemporalPass(RhiCommandList& commandList, const FrameContext& ctx,
+                                          const RenderSettings& settings, DeferredRenderTargets& targets);
+    [[nodiscard]] bool recordCompositePass(RhiCommandList& commandList, const FrameContext& ctx,
+                                           const RenderSettings& settings, DeferredRenderTargets& targets,
                                            bool hasPreviousFrame);
     bool ensureCompositeRhiPipeline(RhiDevice& rhiDevice);
-    bool ensureCompositeBindGroup(RhiDevice& rhiDevice,
-                                  const std::array<RhiTextureViewHandle, 3>& views);
+    bool ensureCompositeBindGroup(RhiDevice& rhiDevice, const std::array<RhiTextureViewHandle, 3>& views);
     void destroyCompositeBindGroup();
     void destroyCompositeRhiResources();
     bool ensureTemporalRhiPipeline(RhiDevice& rhiDevice);
-    bool ensureTemporalBindGroup(RhiDevice& rhiDevice,
-                                 const std::array<RhiTextureViewHandle, 5>& views);
+    bool ensureTemporalBindGroup(RhiDevice& rhiDevice, const std::array<RhiTextureViewHandle, 5>& views);
     void destroyTemporalBindGroup();
     void destroyTemporalRhiResources();
     bool ensureFogRhiPipeline(RhiDevice& rhiDevice);
-    bool ensureFogBindGroup(RhiDevice& rhiDevice,
-                            const std::array<RhiTextureViewHandle, 10>& views);
+    bool ensureFogBindGroup(RhiDevice& rhiDevice, const std::array<RhiTextureViewHandle, 10>& views);
     bool ensureFogNoiseTextureView(RhiDevice& rhiDevice);
     void destroyFogBindGroup();
     void destroyFogRhiResources();

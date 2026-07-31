@@ -97,13 +97,9 @@ public:
         event.scissor = rect;
         events.push_back(event);
     }
-    void setGraphicsPipeline(RhiPipelineHandle) override {
-        events.push_back({EventType::SetGraphicsPipeline});
-    }
+    void setGraphicsPipeline(RhiPipelineHandle) override { events.push_back({EventType::SetGraphicsPipeline}); }
     void setComputePipeline(RhiPipelineHandle) override {}
-    void setBindGroup(uint32_t, RhiBindGroupHandle) override {
-        events.push_back({EventType::SetBindGroup});
-    }
+    void setBindGroup(uint32_t, RhiBindGroupHandle) override { events.push_back({EventType::SetBindGroup}); }
     void setVertexBuffer(uint32_t, RhiBufferHandle, uint64_t) override {
         events.push_back({EventType::SetVertexBuffer});
     }
@@ -157,12 +153,10 @@ public:
 
 class RecordingCommandListPool final : public RhiCommandListPool {
 public:
-    explicit RecordingCommandListPool(RecordingCommandList& commandList)
-        : m_commandList(commandList) {}
+    explicit RecordingCommandListPool(RecordingCommandList& commandList) : m_commandList(commandList) {}
 
     [[nodiscard]] RhiCommandList* acquire(RhiCommandListType type) override {
-        if (type != RhiCommandListType::Graphics ||
-            m_commandList.state() == RhiCommandListState::Recording) {
+        if (type != RhiCommandListType::Graphics || m_commandList.state() == RhiCommandListState::Recording) {
             return nullptr;
         }
         return &m_commandList;
@@ -190,29 +184,24 @@ public:
     [[nodiscard]] const RhiCapabilities& capabilities() const override { return m_capabilities; }
     [[nodiscard]] RhiMemoryStats memoryStats() const override { return {}; }
 
-    RhiBufferHandle createBuffer(const RhiBufferDesc& desc,
-                                 const void*,
-                                 const size_t initialDataSize) override {
+    RhiBufferHandle createBuffer(const RhiBufferDesc& desc, const void*, const size_t initialDataSize) override {
         bufferDescs.push_back(desc);
         bufferInitialDataSizes.push_back(initialDataSize);
         return {m_nextBuffer++, 1u};
     }
-    RhiTextureHandle createTexture(const RhiTextureDesc& desc,
-                                   const RhiTextureInitialData*) override {
+    RhiTextureHandle createTexture(const RhiTextureDesc& desc, const RhiTextureInitialData*) override {
         textureDescs.push_back(desc);
         return {m_nextTexture++, 1u};
     }
-    [[nodiscard]] bool getBufferDesc(const RhiBufferHandle buffer,
-                                     RhiBufferDesc& desc) const override {
-        if (!buffer.isValid() || buffer.generation != 1u ||
-            buffer.index > bufferDescs.size()) return false;
+    [[nodiscard]] bool getBufferDesc(const RhiBufferHandle buffer, RhiBufferDesc& desc) const override {
+        if (!buffer.isValid() || buffer.generation != 1u || buffer.index > bufferDescs.size())
+            return false;
         desc = bufferDescs[buffer.index - 1u];
         return true;
     }
-    [[nodiscard]] bool getTextureDesc(const RhiTextureHandle texture,
-                                      RhiTextureDesc& desc) const override {
-        if (!texture.isValid() || texture.generation != 1u ||
-            texture.index > textureDescs.size()) return false;
+    [[nodiscard]] bool getTextureDesc(const RhiTextureHandle texture, RhiTextureDesc& desc) const override {
+        if (!texture.isValid() || texture.generation != 1u || texture.index > textureDescs.size())
+            return false;
         desc = textureDescs[texture.index - 1u];
         return true;
     }
@@ -240,46 +229,30 @@ public:
         graphicsPipelineDescs.push_back(desc);
         return {m_nextPipeline++, 1u};
     }
-    RhiPipelineHandle createComputePipeline(const RhiComputePipelineDesc&) override {
-        return {m_nextPipeline++, 1u};
-    }
+    RhiPipelineHandle createComputePipeline(const RhiComputePipelineDesc&) override { return {m_nextPipeline++, 1u}; }
     RhiBindGroupHandle createBindGroup(const RhiBindGroupDesc& desc) override {
         bindGroupDescs.push_back(desc);
         return {m_nextBindGroup++, 1u};
     }
-    RhiQueryPoolHandle createQueryPool(const RhiQueryPoolDesc&) override {
-        return {m_nextQueryPool++, 1u};
-    }
-    bool resetQueryPool(RhiQueryPoolHandle, uint32_t, uint32_t) override {
-        return true;
-    }
+    RhiQueryPoolHandle createQueryPool(const RhiQueryPoolDesc&) override { return {m_nextQueryPool++, 1u}; }
+    bool resetQueryPool(RhiQueryPoolHandle, uint32_t, uint32_t) override { return true; }
     void* mapBuffer(RhiBufferHandle, uint64_t, uint64_t) override { return nullptr; }
     void unmapBuffer(RhiBufferHandle) override {}
-    [[nodiscard]] bool areQueryResultsAvailable(RhiQueryPoolHandle, uint32_t, uint32_t) const override {
-        return false;
-    }
-    bool getQueryResults(RhiQueryPoolHandle, uint32_t, uint32_t, uint64_t*) const override {
-        return false;
-    }
+    [[nodiscard]] bool areQueryResultsAvailable(RhiQueryPoolHandle, uint32_t, uint32_t) const override { return false; }
+    bool getQueryResults(RhiQueryPoolHandle, uint32_t, uint32_t, uint64_t*) const override { return false; }
 
     [[nodiscard]] RhiTextureViewHandle currentSwapchainColorView() const override { return {}; }
     [[nodiscard]] RhiTextureViewHandle currentSwapchainDepthStencilView() const override { return {}; }
     [[nodiscard]] RhiTextureHandle currentSwapchainColorTexture() const override { return {}; }
-    [[nodiscard]] RhiTextureFormat swapchainColorFormat() const override {
-        return RhiTextureFormat::Rgba8Unorm;
-    }
-    [[nodiscard]] RhiTextureFormat swapchainDepthStencilFormat() const override {
-        return RhiTextureFormat::Depth24;
-    }
+    [[nodiscard]] RhiTextureFormat swapchainColorFormat() const override { return RhiTextureFormat::Rgba8Unorm; }
+    [[nodiscard]] RhiTextureFormat swapchainDepthStencilFormat() const override { return RhiTextureFormat::Depth24; }
     [[nodiscard]] bool vsyncEnabled() const override { return false; }
     bool setVsyncEnabled(bool) override { return true; }
     bool resizeSwapchain(uint32_t, uint32_t) override { return true; }
     [[nodiscard]] RhiFrameAcquireResult acquireFrame() override {
         return {RhiFrameStatus::Success, 0u, 0u, 1u, 1u, {}, {}, {}};
     }
-    RhiFrameStatus presentFrame(const RhiPresentInfo&) override {
-        return RhiFrameStatus::Success;
-    }
+    RhiFrameStatus presentFrame(const RhiPresentInfo&) override { return RhiFrameStatus::Success; }
     bool cancelFrame(const RhiPresentInfo&) override { return true; }
 
     void destroyBuffer(const RhiBufferHandle handle) override { destroyedBuffers.push_back(handle); }
@@ -293,26 +266,21 @@ public:
     void destroyBindGroup(RhiBindGroupHandle) override {}
     void destroyQueryPool(RhiQueryPoolHandle) override {}
 
-    [[nodiscard]] std::unique_ptr<RhiCommandListPool> createCommandListPool(
-        const RhiCommandListPoolDesc&) override {
+    [[nodiscard]] std::unique_ptr<RhiCommandListPool> createCommandListPool(const RhiCommandListPoolDesc&) override {
         return std::make_unique<RecordingCommandListPool>(commandList);
     }
     bool submit(const RhiSubmitInfo& info, RhiSubmissionToken* completionToken = nullptr) override {
         if (completionToken != nullptr) {
             *completionToken = {1u, 1u};
         }
-        return info.commandListCount == 1u && info.commandLists != nullptr &&
-               info.commandLists[0] == &commandList &&
+        return info.commandListCount == 1u && info.commandLists != nullptr && info.commandLists[0] == &commandList &&
                commandList.state() == RhiCommandListState::Executable;
     }
-    [[nodiscard]] bool isSubmissionComplete(RhiSubmissionToken token,
-                                            bool& complete) override {
+    [[nodiscard]] bool isSubmissionComplete(RhiSubmissionToken token, bool& complete) override {
         complete = token.deviceId == 1u && token.sequence == 1u;
         return complete;
     }
-    bool waitForSubmission(RhiSubmissionToken token) override {
-        return token.deviceId == 1u && token.sequence == 1u;
-    }
+    bool waitForSubmission(RhiSubmissionToken token) override { return token.deviceId == 1u && token.sequence == 1u; }
     void waitIdle() override {}
 
     RecordingCommandList commandList;
@@ -353,22 +321,19 @@ bool testUnicodeRasterizationAndStrictUtf8() {
     }
 
     constexpr std::string_view kUnicodeText = u8"中文界面";
-    if (!requireTrue(atlas.ensureGlyphs(kUnicodeText),
-                     "valid multi-byte UTF-8 text must rasterize")) {
+    if (!requireTrue(atlas.ensureGlyphs(kUnicodeText), "valid multi-byte UTF-8 text must rasterize")) {
         return false;
     }
     const GlyphInfo* chineseGlyph = atlas.findGlyph(0x4e2du);
-    if (!requireTrue(chineseGlyph != nullptr && chineseGlyph->bitmapWidth > 0 &&
-                         chineseGlyph->bitmapHeight > 0 && chineseGlyph->advanceX > 0,
+    if (!requireTrue(chineseGlyph != nullptr && chineseGlyph->bitmapWidth > 0 && chineseGlyph->bitmapHeight > 0 &&
+                         chineseGlyph->advanceX > 0,
                      "a CJK codepoint must produce visible glyph metrics")) {
         return false;
     }
     if (!requireTrue(nearlyEqual(chineseGlyph->uvMinX,
-                                 static_cast<float>(chineseGlyph->atlasX) /
-                                     static_cast<float>(atlas.atlasWidth())) &&
+                                 static_cast<float>(chineseGlyph->atlasX) / static_cast<float>(atlas.atlasWidth())) &&
                          nearlyEqual(chineseGlyph->uvMaxY,
-                                     static_cast<float>(chineseGlyph->atlasY +
-                                                        chineseGlyph->bitmapHeight) /
+                                     static_cast<float>(chineseGlyph->atlasY + chineseGlyph->bitmapHeight) /
                                          static_cast<float>(atlas.atlasHeight())),
                      "Unicode glyph UVs must derive from their atlas pixel rectangle")) {
         return false;
@@ -380,8 +345,7 @@ bool testUnicodeRasterizationAndStrictUtf8() {
                      "truncated UTF-8 must be rejected")) {
         return false;
     }
-    if (!requireTrue(atlas.revision() == revisionBeforeMalformedInput,
-                     "rejected UTF-8 must not mutate the atlas")) {
+    if (!requireTrue(atlas.revision() == revisionBeforeMalformedInput, "rejected UTF-8 must not mutate the atlas")) {
         return false;
     }
 
@@ -392,8 +356,7 @@ bool testUnicodeRasterizationAndStrictUtf8() {
 bool testAtlasGrowthRefreshesExistingGlyphUvs() {
     RecordingDevice device;
     GlyphAtlas atlas;
-    if (!requireTrue(atlas.init(device, DEFAULT_FONT_PATH, 64),
-                     "large glyph atlas test must initialize")) {
+    if (!requireTrue(atlas.init(device, DEFAULT_FONT_PATH, 64), "large glyph atlas test must initialize")) {
         return false;
     }
     if (!requireTrue(atlas.ensureGlyphs(u8"中"), "seed glyph must rasterize")) {
@@ -407,34 +370,27 @@ bool testAtlasGrowthRefreshesExistingGlyphUvs() {
     for (uint32_t codepoint = 0x4e00u; codepoint < 0x4f80u; ++codepoint) {
         appendUtf8(manyGlyphs, codepoint);
     }
-    if (!requireTrue(atlas.ensureGlyphs(manyGlyphs),
-                     "a large Unicode set must rasterize and grow the atlas")) {
+    if (!requireTrue(atlas.ensureGlyphs(manyGlyphs), "a large Unicode set must rasterize and grow the atlas")) {
         return false;
     }
-    if (!requireTrue(atlas.atlasWidth() > widthBeforeGrowth ||
-                         atlas.atlasHeight() > heightBeforeGrowth,
+    if (!requireTrue(atlas.atlasWidth() > widthBeforeGrowth || atlas.atlasHeight() > heightBeforeGrowth,
                      "the large Unicode set must exceed initial atlas capacity")) {
         return false;
     }
 
     const GlyphInfo* seedAfterGrowth = atlas.findGlyph(0x4e2du);
-    if (!requireTrue(seedAfterGrowth != nullptr &&
-                         seedAfterGrowth->atlasX == seedBeforeGrowth.atlasX &&
+    if (!requireTrue(seedAfterGrowth != nullptr && seedAfterGrowth->atlasX == seedBeforeGrowth.atlasX &&
                          seedAfterGrowth->atlasY == seedBeforeGrowth.atlasY &&
                          seedAfterGrowth->bitmapWidth == seedBeforeGrowth.bitmapWidth &&
                          seedAfterGrowth->bitmapHeight == seedBeforeGrowth.bitmapHeight,
                      "atlas growth must preserve the seed glyph pixel rectangle")) {
         return false;
     }
-    const float expectedMinX = static_cast<float>(seedAfterGrowth->atlasX) /
+    const float expectedMinX = static_cast<float>(seedAfterGrowth->atlasX) / static_cast<float>(atlas.atlasWidth());
+    const float expectedMinY = static_cast<float>(seedAfterGrowth->atlasY) / static_cast<float>(atlas.atlasHeight());
+    const float expectedMaxX = static_cast<float>(seedAfterGrowth->atlasX + seedAfterGrowth->bitmapWidth) /
                                static_cast<float>(atlas.atlasWidth());
-    const float expectedMinY = static_cast<float>(seedAfterGrowth->atlasY) /
-                               static_cast<float>(atlas.atlasHeight());
-    const float expectedMaxX = static_cast<float>(seedAfterGrowth->atlasX +
-                                                  seedAfterGrowth->bitmapWidth) /
-                               static_cast<float>(atlas.atlasWidth());
-    const float expectedMaxY = static_cast<float>(seedAfterGrowth->atlasY +
-                                                  seedAfterGrowth->bitmapHeight) /
+    const float expectedMaxY = static_cast<float>(seedAfterGrowth->atlasY + seedAfterGrowth->bitmapHeight) /
                                static_cast<float>(atlas.atlasHeight());
     if (!requireTrue(nearlyEqual(seedAfterGrowth->uvMinX, expectedMinX) &&
                          nearlyEqual(seedAfterGrowth->uvMinY, expectedMinY) &&
@@ -451,18 +407,15 @@ bool testAtlasGrowthRefreshesExistingGlyphUvs() {
 bool testAtlasUploadIsExplicitAndIdempotent() {
     RecordingDevice device;
     GlyphAtlas atlas;
-    if (!requireTrue(atlas.init(device, DEFAULT_FONT_PATH, 48) &&
-                         atlas.ensureGlyphs(u8"显式上传"),
+    if (!requireTrue(atlas.init(device, DEFAULT_FONT_PATH, 48) && atlas.ensureGlyphs(u8"显式上传"),
                      "glyphs must be collected before explicit upload")) {
         return false;
     }
-    if (!requireTrue(!atlas.textureHandle().isValid(),
-                     "CPU glyph collection must not create a GPU texture")) {
+    if (!requireTrue(!atlas.textureHandle().isValid(), "CPU glyph collection must not create a GPU texture")) {
         return false;
     }
     const uint64_t revisionBeforeUpload = atlas.revision();
-    if (!requireTrue(atlas.prepareUpload(device.commandList),
-                     "explicit atlas preparation must succeed")) {
+    if (!requireTrue(atlas.prepareUpload(device.commandList), "explicit atlas preparation must succeed")) {
         return false;
     }
     if (!requireTrue(atlas.textureHandle().isValid() && device.textureDescs.size() == 1u,
@@ -470,8 +423,8 @@ bool testAtlasUploadIsExplicitAndIdempotent() {
         return false;
     }
     const RhiTextureDesc& textureDesc = device.textureDescs.front();
-    const RhiTextureUsageFlags expectedUsage = rhiFlag(RhiTextureUsage::Sampled) |
-                                               rhiFlag(RhiTextureUsage::TransferDst);
+    const RhiTextureUsageFlags expectedUsage =
+        rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::TransferDst);
     if (!requireTrue(textureDesc.format == RhiTextureFormat::R8Unorm &&
                          textureDesc.width == static_cast<uint32_t>(atlas.atlasWidth()) &&
                          textureDesc.height == static_cast<uint32_t>(atlas.atlasHeight()) &&
@@ -480,34 +433,27 @@ bool testAtlasUploadIsExplicitAndIdempotent() {
         return false;
     }
     if (!requireTrue(device.commandList.textureBarriers.size() == 2u &&
-                         device.commandList.textureBarriers[0].oldState ==
-                             RhiResourceState::Undefined &&
-                         device.commandList.textureBarriers[0].newState ==
-                             RhiResourceState::TransferDst &&
-                         device.commandList.textureBarriers[1].oldState ==
-                             RhiResourceState::TransferDst &&
-                         device.commandList.textureBarriers[1].newState ==
-                             RhiResourceState::ShaderRead,
+                         device.commandList.textureBarriers[0].oldState == RhiResourceState::Undefined &&
+                         device.commandList.textureBarriers[0].newState == RhiResourceState::TransferDst &&
+                         device.commandList.textureBarriers[1].oldState == RhiResourceState::TransferDst &&
+                         device.commandList.textureBarriers[1].newState == RhiResourceState::ShaderRead,
                      "atlas upload must record explicit transfer state transitions")) {
         return false;
     }
-    if (!requireTrue(device.commandList.bufferTextureCopies.size() == 1u &&
-                         device.commandList.bufferTextureCopies.front().width ==
-                             static_cast<uint32_t>(atlas.atlasWidth()) &&
-                         device.commandList.bufferTextureCopies.front().height ==
-                             static_cast<uint32_t>(atlas.atlasHeight()),
-                     "atlas upload must copy the complete CPU atlas into the RHI texture")) {
+    if (!requireTrue(
+            device.commandList.bufferTextureCopies.size() == 1u &&
+                device.commandList.bufferTextureCopies.front().width == static_cast<uint32_t>(atlas.atlasWidth()) &&
+                device.commandList.bufferTextureCopies.front().height == static_cast<uint32_t>(atlas.atlasHeight()),
+            "atlas upload must copy the complete CPU atlas into the RHI texture")) {
         return false;
     }
-    if (!requireTrue(atlas.revision() == revisionBeforeUpload,
-                     "GPU upload must not mutate the CPU glyph revision")) {
+    if (!requireTrue(atlas.revision() == revisionBeforeUpload, "GPU upload must not mutate the CPU glyph revision")) {
         return false;
     }
 
     const size_t eventCountAfterUpload = device.commandList.events.size();
     if (!requireTrue(atlas.prepareUpload(device.commandList) &&
-                         device.commandList.events.size() == eventCountAfterUpload &&
-                         device.textureDescs.size() == 1u,
+                         device.commandList.events.size() == eventCountAfterUpload && device.textureDescs.size() == 1u,
                      "preparing a clean atlas must record no resource commands")) {
         return false;
     }
@@ -517,19 +463,16 @@ bool testAtlasUploadIsExplicitAndIdempotent() {
 }
 
 bool sameRect(const RhiRect2D& left, const RhiRect2D& right) {
-    return left.x == right.x && left.y == right.y &&
-           left.width == right.width && left.height == right.height;
+    return left.x == right.x && left.y == right.y && left.width == right.width && left.height == right.height;
 }
 
 bool testTextRendererCollectPrepareRecordSequence() {
     RecordingDevice device;
     TextRenderer renderer;
-    if (!requireTrue(renderer.init(device, DEFAULT_FONT_PATH),
-                     "text renderer must initialize through RHI resources")) {
+    if (!requireTrue(renderer.init(device, DEFAULT_FONT_PATH), "text renderer must initialize through RHI resources")) {
         return false;
     }
-    if (!requireTrue(device.shaderStages.size() == 2u &&
-                         device.graphicsPipelineDescs.size() == 1u &&
+    if (!requireTrue(device.shaderStages.size() == 2u && device.graphicsPipelineDescs.size() == 1u &&
                          device.graphicsPipelineDescs.front().raster.scissorEnabled,
                      "text renderer must create a scissor-enabled RHI pipeline")) {
         return false;
@@ -556,8 +499,7 @@ bool testTextRendererCollectPrepareRecordSequence() {
     renderer.beginFrameCollection(kScreenWidth, kScreenHeight);
     renderer.draw(firstContext, u8"中", 20.0f, 30.0f, 1.0f, kFirstColor);
     renderer.draw(secondContext, "AB", 80.0f, 90.0f, 1.5f, kSecondColor);
-    if (!requireTrue(renderer.atlas().revision() == 0u,
-                     "collection must queue text without rasterizing glyphs")) {
+    if (!requireTrue(renderer.atlas().revision() == 0u, "collection must queue text without rasterizing glyphs")) {
         return false;
     }
     if (!requireTrue(renderer.prepareFrame(device.commandList),
@@ -569,8 +511,7 @@ bool testTextRendererCollectPrepareRecordSequence() {
         return false;
     }
     if (!requireTrue(device.commandList.updatedByteCounts.size() == 1u &&
-                         device.commandList.updatedByteCounts.front() ==
-                             static_cast<size_t>(18u * 8u * sizeof(float)),
+                         device.commandList.updatedByteCounts.front() == static_cast<size_t>(18u * 8u * sizeof(float)),
                      "frame preparation must upload one immutable vertex stream for all requests")) {
         return false;
     }
@@ -584,8 +525,7 @@ bool testTextRendererCollectPrepareRecordSequence() {
     renderer.beginFrameRecording();
     renderer.draw(firstContext, u8"中", 20.0f, 30.0f, 1.0f, kFirstColor);
     renderer.draw(secondContext, "AB", 80.0f, 90.0f, 1.5f, kSecondColor);
-    if (!requireTrue(renderer.endFrameRecording(),
-                     "recording must consume every collected request in order")) {
+    if (!requireTrue(renderer.endFrameRecording(), "recording must consume every collected request in order")) {
         return false;
     }
     if (!requireTrue(renderer.atlas().revision() == preparedRevision,
@@ -600,20 +540,15 @@ bool testTextRendererCollectPrepareRecordSequence() {
                      "every text request must record its explicit or full-screen scissor")) {
         return false;
     }
-    if (!requireTrue(device.commandList.drawVertexCounts ==
-                         std::vector<uint32_t>({6u, 12u}),
+    if (!requireTrue(device.commandList.drawVertexCounts == std::vector<uint32_t>({6u, 12u}),
                      "recording must preserve request order and vertex ranges")) {
         return false;
     }
 
     constexpr std::array<RecordingCommandList::EventType, 6> kRequestSequence = {
-        RecordingCommandList::EventType::SetScissor,
-        RecordingCommandList::EventType::SetGraphicsPipeline,
-        RecordingCommandList::EventType::SetBindGroup,
-        RecordingCommandList::EventType::SetVertexBuffer,
-        RecordingCommandList::EventType::PushConstants,
-        RecordingCommandList::EventType::Draw
-    };
+        RecordingCommandList::EventType::SetScissor,    RecordingCommandList::EventType::SetGraphicsPipeline,
+        RecordingCommandList::EventType::SetBindGroup,  RecordingCommandList::EventType::SetVertexBuffer,
+        RecordingCommandList::EventType::PushConstants, RecordingCommandList::EventType::Draw};
     if (!requireTrue(device.commandList.events.size() == kRequestSequence.size() * 2u,
                      "each prepared request must emit one complete draw command sequence")) {
         return false;
@@ -635,10 +570,8 @@ bool testTextRendererCollectPrepareRecordSequence() {
 } // namespace
 
 int main() {
-    if (!testUnicodeRasterizationAndStrictUtf8() ||
-        !testAtlasGrowthRefreshesExistingGlyphUvs() ||
-        !testAtlasUploadIsExplicitAndIdempotent() ||
-        !testTextRendererCollectPrepareRecordSequence()) {
+    if (!testUnicodeRasterizationAndStrictUtf8() || !testAtlasGrowthRefreshesExistingGlyphUvs() ||
+        !testAtlasUploadIsExplicitAndIdempotent() || !testTextRendererCollectPrepareRecordSequence()) {
         return EXIT_FAILURE;
     }
 

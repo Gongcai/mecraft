@@ -63,72 +63,53 @@ BlockStateId strategyAttachWall(const PlacementContext& ctx) {
 }
 
 void requireWallFacePlanePlacementProperties() {
-    if (PropIndices::FACING == PropIndices::INVALID ||
-        PropIndices::FACING_NORTH == PropIndices::INVALID ||
-        PropIndices::FACING_SOUTH == PropIndices::INVALID ||
-        PropIndices::FACING_EAST == PropIndices::INVALID ||
+    if (PropIndices::FACING == PropIndices::INVALID || PropIndices::FACING_NORTH == PropIndices::INVALID ||
+        PropIndices::FACING_SOUTH == PropIndices::INVALID || PropIndices::FACING_EAST == PropIndices::INVALID ||
         PropIndices::FACING_WEST == PropIndices::INVALID) {
         failPlacement("Wall face plane placement requires facing=north/south/east/west properties");
     }
 }
 
 void requireFloorFacePlanePlacementProperties() {
-    if (PropIndices::FACING == PropIndices::INVALID ||
-        PropIndices::FACING_FLOOR == PropIndices::INVALID) {
+    if (PropIndices::FACING == PropIndices::INVALID || PropIndices::FACING_FLOOR == PropIndices::INVALID) {
         failPlacement("Floor face plane placement requires facing=floor properties");
     }
 }
 
 void requireRedstoneWireFacePlacementProperties() {
-    if (PropIndices::FACING == PropIndices::INVALID ||
-        PropIndices::FACING_FLOOR == PropIndices::INVALID ||
-        PropIndices::FACING_CEILING == PropIndices::INVALID ||
-        PropIndices::FACING_NORTH == PropIndices::INVALID ||
-        PropIndices::FACING_SOUTH == PropIndices::INVALID ||
-        PropIndices::FACING_EAST == PropIndices::INVALID ||
+    if (PropIndices::FACING == PropIndices::INVALID || PropIndices::FACING_FLOOR == PropIndices::INVALID ||
+        PropIndices::FACING_CEILING == PropIndices::INVALID || PropIndices::FACING_NORTH == PropIndices::INVALID ||
+        PropIndices::FACING_SOUTH == PropIndices::INVALID || PropIndices::FACING_EAST == PropIndices::INVALID ||
         PropIndices::FACING_WEST == PropIndices::INVALID) {
         failPlacement("Redstone wire placement requires floor, ceiling, and wall facing values");
     }
 }
 
 void requireRedstoneLogicUnitFacePlacementProperties() {
-    if (PropIndices::FACE == PropIndices::INVALID ||
-        PropIndices::FACE_FLOOR == PropIndices::INVALID ||
-        PropIndices::FACE_CEILING == PropIndices::INVALID ||
-        PropIndices::FACE_NORTH == PropIndices::INVALID ||
-        PropIndices::FACE_SOUTH == PropIndices::INVALID ||
-        PropIndices::FACE_EAST == PropIndices::INVALID ||
-        PropIndices::FACE_WEST == PropIndices::INVALID ||
-        PropIndices::FACING == PropIndices::INVALID ||
-        PropIndices::FACING_NORTH == PropIndices::INVALID ||
-        PropIndices::FACING_SOUTH == PropIndices::INVALID ||
-        PropIndices::FACING_EAST == PropIndices::INVALID ||
-        PropIndices::FACING_WEST == PropIndices::INVALID ||
-        PropIndices::FACING_UP == PropIndices::INVALID ||
-        PropIndices::FACING_DOWN == PropIndices::INVALID) {
+    if (PropIndices::FACE == PropIndices::INVALID || PropIndices::FACE_FLOOR == PropIndices::INVALID ||
+        PropIndices::FACE_CEILING == PropIndices::INVALID || PropIndices::FACE_NORTH == PropIndices::INVALID ||
+        PropIndices::FACE_SOUTH == PropIndices::INVALID || PropIndices::FACE_EAST == PropIndices::INVALID ||
+        PropIndices::FACE_WEST == PropIndices::INVALID || PropIndices::FACING == PropIndices::INVALID ||
+        PropIndices::FACING_NORTH == PropIndices::INVALID || PropIndices::FACING_SOUTH == PropIndices::INVALID ||
+        PropIndices::FACING_EAST == PropIndices::INVALID || PropIndices::FACING_WEST == PropIndices::INVALID ||
+        PropIndices::FACING_UP == PropIndices::INVALID || PropIndices::FACING_DOWN == PropIndices::INVALID) {
         failPlacement("Redstone logic unit placement requires face values and six-way facing values");
     }
 }
 
 void requireSixWayFacingPlacementProperties() {
-    if (PropIndices::FACING == PropIndices::INVALID ||
-        PropIndices::FACING_NORTH == PropIndices::INVALID ||
-        PropIndices::FACING_SOUTH == PropIndices::INVALID ||
-        PropIndices::FACING_EAST == PropIndices::INVALID ||
-        PropIndices::FACING_WEST == PropIndices::INVALID ||
-        PropIndices::FACING_UP == PropIndices::INVALID ||
+    if (PropIndices::FACING == PropIndices::INVALID || PropIndices::FACING_NORTH == PropIndices::INVALID ||
+        PropIndices::FACING_SOUTH == PropIndices::INVALID || PropIndices::FACING_EAST == PropIndices::INVALID ||
+        PropIndices::FACING_WEST == PropIndices::INVALID || PropIndices::FACING_UP == PropIndices::INVALID ||
         PropIndices::FACING_DOWN == PropIndices::INVALID) {
         failPlacement("Six-way placement requires facing=north/south/east/west/up/down properties");
     }
 }
 
 void requireHopperFacingPlacementProperties() {
-    if (PropIndices::FACING == PropIndices::INVALID ||
-        PropIndices::FACING_NORTH == PropIndices::INVALID ||
-        PropIndices::FACING_SOUTH == PropIndices::INVALID ||
-        PropIndices::FACING_EAST == PropIndices::INVALID ||
-        PropIndices::FACING_WEST == PropIndices::INVALID ||
-        PropIndices::FACING_DOWN == PropIndices::INVALID) {
+    if (PropIndices::FACING == PropIndices::INVALID || PropIndices::FACING_NORTH == PropIndices::INVALID ||
+        PropIndices::FACING_SOUTH == PropIndices::INVALID || PropIndices::FACING_EAST == PropIndices::INVALID ||
+        PropIndices::FACING_WEST == PropIndices::INVALID || PropIndices::FACING_DOWN == PropIndices::INVALID) {
         failPlacement("Hopper placement requires facing=north/south/east/west/down properties");
     }
 }
@@ -207,9 +188,7 @@ uint16_t oppositeHorizontalFacing(const uint16_t facing) {
 }
 
 uint16_t applyPlacementFacingRevert(const BlockID blockId, const uint16_t facing) {
-    return BlockRegistry::get(blockId).revertPlacementFacing
-        ? oppositeHorizontalFacing(facing)
-        : facing;
+    return BlockRegistry::get(blockId).revertPlacementFacing ? oppositeHorizontalFacing(facing) : facing;
 }
 
 uint16_t planeFacingFromPlacement(const PlacementContext& ctx, const uint16_t face) {
@@ -219,29 +198,19 @@ uint16_t planeFacingFromPlacement(const PlacementContext& ctx, const uint16_t fa
 
     const float localY = ctx.hitPosition.y - std::floor(ctx.hitPosition.y);
     const float verticalOffset = localY - 0.5f;
-    const uint16_t verticalFacing = verticalOffset >= 0.0f
-        ? PropIndices::FACING_UP
-        : PropIndices::FACING_DOWN;
+    const uint16_t verticalFacing = verticalOffset >= 0.0f ? PropIndices::FACING_UP : PropIndices::FACING_DOWN;
 
     if (face == PropIndices::FACE_NORTH || face == PropIndices::FACE_SOUTH) {
         const float localX = ctx.hitPosition.x - std::floor(ctx.hitPosition.x);
         const float horizontalOffset = localX - 0.5f;
-        const uint16_t yawFacing = horizontalOffset >= 0.0f
-            ? PropIndices::FACING_EAST
-            : PropIndices::FACING_WEST;
-        return std::abs(verticalOffset) > std::abs(horizontalOffset)
-            ? verticalFacing
-            : yawFacing;
+        const uint16_t yawFacing = horizontalOffset >= 0.0f ? PropIndices::FACING_EAST : PropIndices::FACING_WEST;
+        return std::abs(verticalOffset) > std::abs(horizontalOffset) ? verticalFacing : yawFacing;
     }
     if (face == PropIndices::FACE_EAST || face == PropIndices::FACE_WEST) {
         const float localZ = ctx.hitPosition.z - std::floor(ctx.hitPosition.z);
         const float horizontalOffset = localZ - 0.5f;
-        const uint16_t yawFacing = horizontalOffset >= 0.0f
-            ? PropIndices::FACING_SOUTH
-            : PropIndices::FACING_NORTH;
-        return std::abs(verticalOffset) > std::abs(horizontalOffset)
-            ? verticalFacing
-            : yawFacing;
+        const uint16_t yawFacing = horizontalOffset >= 0.0f ? PropIndices::FACING_SOUTH : PropIndices::FACING_NORTH;
+        return std::abs(verticalOffset) > std::abs(horizontalOffset) ? verticalFacing : yawFacing;
     }
 
     failPlacement("Redstone logic unit placement produced a facing outside the attachment plane");
@@ -265,13 +234,11 @@ float totalBoxVolume(const std::vector<BlockCollisionBox>& boxes) {
 }
 
 bool boxesIntersect(const BlockCollisionBox& a, const BlockCollisionBox& b) {
-    return a.min.x < b.max.x && a.max.x > b.min.x &&
-           a.min.y < b.max.y && a.max.y > b.min.y &&
-           a.min.z < b.max.z && a.max.z > b.min.z;
+    return a.min.x < b.max.x && a.max.x > b.min.x && a.min.y < b.max.y && a.max.y > b.min.y && a.min.z < b.max.z &&
+           a.max.z > b.min.z;
 }
 
-bool anyBoxesIntersect(const std::vector<BlockCollisionBox>& a,
-                       const std::vector<BlockCollisionBox>& b) {
+bool anyBoxesIntersect(const std::vector<BlockCollisionBox>& a, const std::vector<BlockCollisionBox>& b) {
     for (const BlockCollisionBox& aBox : a) {
         for (const BlockCollisionBox& bBox : b) {
             if (boxesIntersect(aBox, bBox)) {
@@ -283,16 +250,12 @@ bool anyBoxesIntersect(const std::vector<BlockCollisionBox>& a,
 }
 
 bool containsBox(const BlockCollisionBox& container, const BlockCollisionBox& box) {
-    return container.min.x <= box.min.x + kPlacementEpsilon &&
-           container.min.y <= box.min.y + kPlacementEpsilon &&
-           container.min.z <= box.min.z + kPlacementEpsilon &&
-           container.max.x + kPlacementEpsilon >= box.max.x &&
-           container.max.y + kPlacementEpsilon >= box.max.y &&
-           container.max.z + kPlacementEpsilon >= box.max.z;
+    return container.min.x <= box.min.x + kPlacementEpsilon && container.min.y <= box.min.y + kPlacementEpsilon &&
+           container.min.z <= box.min.z + kPlacementEpsilon && container.max.x + kPlacementEpsilon >= box.max.x &&
+           container.max.y + kPlacementEpsilon >= box.max.y && container.max.z + kPlacementEpsilon >= box.max.z;
 }
 
-bool boxesCoverAll(const std::vector<BlockCollisionBox>& containers,
-                   const std::vector<BlockCollisionBox>& boxes) {
+bool boxesCoverAll(const std::vector<BlockCollisionBox>& containers, const std::vector<BlockCollisionBox>& boxes) {
     for (const BlockCollisionBox& box : boxes) {
         bool covered = false;
         for (const BlockCollisionBox& container : containers) {
@@ -309,8 +272,7 @@ bool boxesCoverAll(const std::vector<BlockCollisionBox>& containers,
 }
 
 uint16_t halfFromHit(const PlacementContext& ctx) {
-    if (PropIndices::HALF == PropIndices::INVALID ||
-        PropIndices::HALF_TOP == PropIndices::INVALID ||
+    if (PropIndices::HALF == PropIndices::INVALID || PropIndices::HALF_TOP == PropIndices::INVALID ||
         PropIndices::HALF_BOTTOM == PropIndices::INVALID) {
         failPlacement("Half-block placement requires registered half=top/bottom properties");
     }
@@ -378,10 +340,8 @@ uint16_t verticalHalfFromHitPosition(const PlacementContext& ctx) {
 }
 
 uint16_t verticalHalfFromHit(const PlacementContext& ctx) {
-    if (PropIndices::HALF == PropIndices::INVALID ||
-        PropIndices::HALF_NORTH == PropIndices::INVALID ||
-        PropIndices::HALF_SOUTH == PropIndices::INVALID ||
-        PropIndices::HALF_EAST == PropIndices::INVALID ||
+    if (PropIndices::HALF == PropIndices::INVALID || PropIndices::HALF_NORTH == PropIndices::INVALID ||
+        PropIndices::HALF_SOUTH == PropIndices::INVALID || PropIndices::HALF_EAST == PropIndices::INVALID ||
         PropIndices::HALF_WEST == PropIndices::INVALID) {
         failPlacement("Vertical slab placement requires registered horizontal half properties");
     }
@@ -401,8 +361,7 @@ uint16_t verticalHalfFromHit(const PlacementContext& ctx) {
 
 BlockStateId strategyHorizontalFacing(const PlacementContext& ctx) {
     return BlockStateRegistry::getState(
-        ctx.blockId,
-        PropIndices::FACING,
+        ctx.blockId, PropIndices::FACING,
         applyPlacementFacingRevert(ctx.blockId, horizontalFacingFromYaw(ctx.playerYaw)));
 }
 
@@ -415,8 +374,7 @@ BlockStateId strategySixWayFacing(const PlacementContext& ctx) {
         return BlockStateRegistry::getState(ctx.blockId, PropIndices::FACING, PropIndices::FACING_DOWN);
     }
     return BlockStateRegistry::getState(
-        ctx.blockId,
-        PropIndices::FACING,
+        ctx.blockId, PropIndices::FACING,
         applyPlacementFacingRevert(ctx.blockId, horizontalFacingFromYaw(ctx.playerYaw)));
 }
 
@@ -425,10 +383,8 @@ BlockStateId strategyHopperFacing(const PlacementContext& ctx) {
     if (ctx.hitNormal.y != 0) {
         return BlockStateRegistry::getState(ctx.blockId, PropIndices::FACING, PropIndices::FACING_DOWN);
     }
-    return BlockStateRegistry::getState(
-        ctx.blockId,
-        PropIndices::FACING,
-        oppositeHorizontalFacing(facingFromSideNormal(ctx.hitNormal)));
+    return BlockStateRegistry::getState(ctx.blockId, PropIndices::FACING,
+                                        oppositeHorizontalFacing(facingFromSideNormal(ctx.hitNormal)));
 }
 
 BlockStateId strategyAxisOriented(const PlacementContext& ctx) {
@@ -443,23 +399,18 @@ BlockStateId strategyAxisOriented(const PlacementContext& ctx) {
 }
 
 BlockStateId strategyStairs(const PlacementContext& ctx) {
-    if (PropIndices::SHAPE == PropIndices::INVALID ||
-        PropIndices::SHAPE_STRAIGHT == PropIndices::INVALID) {
+    if (PropIndices::SHAPE == PropIndices::INVALID || PropIndices::SHAPE_STRAIGHT == PropIndices::INVALID) {
         failPlacement("Stair placement requires registered shape=straight property");
     }
 
-    const uint16_t facingValue = (ctx.hitNormal.y == 0)
-        ? stairFacingFromSideNormal(ctx.blockId, ctx.hitNormal)
-        : horizontalFacingFromYaw(ctx.playerYaw);
+    const uint16_t facingValue = (ctx.hitNormal.y == 0) ? stairFacingFromSideNormal(ctx.blockId, ctx.hitNormal)
+                                                        : horizontalFacingFromYaw(ctx.playerYaw);
     const uint16_t halfValue = halfFromHit(ctx);
 
     return BlockStateRegistry::getState(
-        ctx.blockId,
-        std::vector<std::pair<uint16_t, uint16_t>>{
-            {PropIndices::FACING, facingValue},
-            {PropIndices::HALF, halfValue},
-            {PropIndices::SHAPE, PropIndices::SHAPE_STRAIGHT}
-        });
+        ctx.blockId, std::vector<std::pair<uint16_t, uint16_t>>{{PropIndices::FACING, facingValue},
+                                                                {PropIndices::HALF, halfValue},
+                                                                {PropIndices::SHAPE, PropIndices::SHAPE_STRAIGHT}});
 }
 
 BlockStateId strategySlab(const PlacementContext& ctx) {
@@ -475,34 +426,23 @@ BlockStateId strategyBed(const PlacementContext& ctx) {
 }
 
 BlockStateId strategyDoor(const PlacementContext& ctx) {
-    return DoorBlockLogic::makeDoorState(
-        ctx.blockId,
-        horizontalFacingFromYaw(ctx.playerYaw),
-        PropIndices::HALF_LOWER,
-        PropIndices::HINGE_LEFT,
-        false,
-        false);
+    return DoorBlockLogic::makeDoorState(ctx.blockId, horizontalFacingFromYaw(ctx.playerYaw), PropIndices::HALF_LOWER,
+                                         PropIndices::HINGE_LEFT, false, false);
 }
 
 BlockStateId strategyTrapdoor(const PlacementContext& ctx) {
-    if (PropIndices::OPEN == PropIndices::INVALID ||
-        PropIndices::OPEN_FALSE == PropIndices::INVALID ||
-        PropIndices::POWERED == PropIndices::INVALID ||
-        PropIndices::POWERED_FALSE == PropIndices::INVALID) {
+    if (PropIndices::OPEN == PropIndices::INVALID || PropIndices::OPEN_FALSE == PropIndices::INVALID ||
+        PropIndices::POWERED == PropIndices::INVALID || PropIndices::POWERED_FALSE == PropIndices::INVALID) {
         failPlacement("Trapdoor placement requires open=false and powered=false properties");
     }
 
-    const uint16_t facing = ctx.hitNormal.y == 0
-        ? facingFromSideNormal(ctx.hitNormal)
-        : horizontalFacingFromYaw(ctx.playerYaw);
+    const uint16_t facing =
+        ctx.hitNormal.y == 0 ? facingFromSideNormal(ctx.hitNormal) : horizontalFacingFromYaw(ctx.playerYaw);
     return BlockStateRegistry::getState(
-        ctx.blockId,
-        std::vector<std::pair<uint16_t, uint16_t>>{
-            {PropIndices::FACING, facing},
-            {PropIndices::HALF, halfFromHit(ctx)},
-            {PropIndices::OPEN, PropIndices::OPEN_FALSE},
-            {PropIndices::POWERED, PropIndices::POWERED_FALSE}
-        });
+        ctx.blockId, std::vector<std::pair<uint16_t, uint16_t>>{{PropIndices::FACING, facing},
+                                                                {PropIndices::HALF, halfFromHit(ctx)},
+                                                                {PropIndices::OPEN, PropIndices::OPEN_FALSE},
+                                                                {PropIndices::POWERED, PropIndices::POWERED_FALSE}});
 }
 
 BlockStateId strategyFence(const PlacementContext& ctx) {
@@ -552,18 +492,15 @@ BlockStateId strategyRedstoneLogicUnitFace(const PlacementContext& ctx) {
     const uint16_t face = attachmentFaceFromHitNormal(ctx.hitNormal);
     const uint16_t facing = planeFacingFromPlacement(ctx, face);
 
-    return BlockStateRegistry::getState(
-        ctx.blockId,
-        std::vector<std::pair<uint16_t, uint16_t>>{
-            {PropIndices::FACE, face},
-            {PropIndices::FACING, facing},
-        });
+    return BlockStateRegistry::getState(ctx.blockId, std::vector<std::pair<uint16_t, uint16_t>>{
+                                                         {PropIndices::FACE, face},
+                                                         {PropIndices::FACING, facing},
+                                                     });
 }
 
 } // namespace
 
-bool tryMergePlacementStates(const BlockStateId existingState,
-                             const BlockStateId incomingState,
+bool tryMergePlacementStates(const BlockStateId existingState, const BlockStateId incomingState,
                              BlockStateId& mergedState) {
     const BlockID blockId = BlockStateRegistry::getBlockId(existingState);
     if (blockId == RUNTIME_ID_NULL || blockId != BlockStateRegistry::getBlockId(incomingState)) {
@@ -585,8 +522,7 @@ bool tryMergePlacementStates(const BlockStateId existingState,
         if (std::abs(totalBoxVolume(candidateBoxes) - mergedVolume) > kPlacementEpsilon) {
             continue;
         }
-        if (!boxesCoverAll(candidateBoxes, existingBoxes) ||
-            !boxesCoverAll(candidateBoxes, incomingBoxes)) {
+        if (!boxesCoverAll(candidateBoxes, existingBoxes) || !boxesCoverAll(candidateBoxes, incomingBoxes)) {
             continue;
         }
 
@@ -597,8 +533,7 @@ bool tryMergePlacementStates(const BlockStateId existingState,
     return false;
 }
 
-bool canReplaceWithMergedPlacementResult(const BlockStateId existingState,
-                                         const BlockStateId resultState) {
+bool canReplaceWithMergedPlacementResult(const BlockStateId existingState, const BlockStateId resultState) {
     const BlockID blockId = BlockStateRegistry::getBlockId(existingState);
     if (blockId == RUNTIME_ID_NULL || blockId != BlockStateRegistry::getBlockId(resultState)) {
         return false;
@@ -606,8 +541,7 @@ bool canReplaceWithMergedPlacementResult(const BlockStateId existingState,
 
     for (const BlockStateId incomingState : BlockStateRegistry::getStatesForBlock(blockId)) {
         BlockStateId mergedState = NULL_BLOCK_STATE;
-        if (tryMergePlacementStates(existingState, incomingState, mergedState) &&
-            mergedState == resultState) {
+        if (tryMergePlacementStates(existingState, incomingState, mergedState) && mergedState == resultState) {
             return true;
         }
     }

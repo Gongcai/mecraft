@@ -27,8 +27,7 @@ struct CascadeAabbCuller {
 
 /// World-space culling volume for one local-shadow allocation.
 struct LocalShadowCullVolume final {
-    renderer::contracts::LocalShadowType type =
-        renderer::contracts::LocalShadowType::Spot;
+    renderer::contracts::LocalShadowType type = renderer::contracts::LocalShadowType::Spot;
     glm::vec3 position{0.0f};
     float range = 0.0f;
     std::array<glm::vec4, 6> frustumPlanes{};
@@ -46,7 +45,9 @@ class IWorldView;
 class World;
 class WorldRenderBuffer;
 
-namespace shadow { class ShadowCasterCuller; }
+namespace shadow {
+class ShadowCasterCuller;
+}
 
 /// Terrain material and lighting controls consumed by RHI terrain pipelines.
 struct TerrainRenderSettings {
@@ -94,7 +95,7 @@ struct TerrainSkyLightingData {
 /// Fog parameters consumed by RHI terrain pipelines.
 struct TerrainFogData {
     bool enabled = true;
-    int mode = 0;           // FogMode enum value
+    int mode = 0; // FogMode enum value
     glm::vec3 color = glm::vec3(0.67f, 0.84f, 1.0f);
     float start = 0.0f;
     float end = 1.0f;
@@ -137,9 +138,7 @@ struct TerrainFrameData {
 /// Non-owning class: receives dependencies via pointers/references.
 class TerrainRenderer {
 public:
-    using AabbVisibilityFn = bool (*)(const glm::vec3& boundsMin,
-                                      const glm::vec3& boundsMax,
-                                      void* userData);
+    using AabbVisibilityFn = bool (*)(const glm::vec3& boundsMin, const glm::vec3& boundsMax, void* userData);
 
     void init();
     void shutdown();
@@ -155,13 +154,11 @@ public:
     // --- Main rendering methods ---
     /// Traverses chunk columns with hierarchical frustum culling.
     /// Adds visible draw ranges to WorldRenderBuffer and transparent batches.
-    void renderOpaqueChunksAndCollectPasses(
-        const IWorldView& worldView,
-        bool frustumCull = true,
-        float maxCameraDistance = 0.0f,
-        shadow::ShadowCasterCuller* shadowCuller = nullptr,
-        AabbVisibilityFn extraAabbCuller = nullptr,
-        void* extraAabbCullerUserData = nullptr);
+    void renderOpaqueChunksAndCollectPasses(const IWorldView& worldView, bool frustumCull = true,
+                                            float maxCameraDistance = 0.0f,
+                                            shadow::ShadowCasterCuller* shadowCuller = nullptr,
+                                            AabbVisibilityFn extraAabbCuller = nullptr,
+                                            void* extraAabbCullerUserData = nullptr);
 
     // --- Transparent batch management ---
     void syncTransparentBatches();
@@ -170,16 +167,12 @@ public:
     [[nodiscard]] const TransparentPassPlan& transparentPassPlan() const;
 
     /// Collect chunks/ranges for all 4 shadow cascades in a single scene traversal.
-    void collectShadowChunks(
-        const IWorldView& worldView,
-        const glm::vec3& cameraPos,
-        float maxShadowDistance,
-        shadow::ShadowCasterCuller* shadowCuller,
-        const std::array<CascadeAabbCuller, 4>& cascadeCullers,
-        std::array<std::vector<GpuMeshRange>, 4>& outOpaqueRanges,
-        std::array<std::vector<GpuMeshRange>, 4>& outCutoutRanges,
-        std::array<std::vector<GpuMeshRange>, 4>& outTransparentRanges
-    );
+    void collectShadowChunks(const IWorldView& worldView, const glm::vec3& cameraPos, float maxShadowDistance,
+                             shadow::ShadowCasterCuller* shadowCuller,
+                             const std::array<CascadeAabbCuller, 4>& cascadeCullers,
+                             std::array<std::vector<GpuMeshRange>, 4>& outOpaqueRanges,
+                             std::array<std::vector<GpuMeshRange>, 4>& outCutoutRanges,
+                             std::array<std::vector<GpuMeshRange>, 4>& outTransparentRanges);
 
     /// Traverses active terrain once and bins opaque/cutout ranges for every
     /// local-shadow volume. Point lights use sphere-AABB intersection; Spot
@@ -187,10 +180,8 @@ public:
     /// @param worldView Active chunk set supplying render-column revisions.
     /// @param volumes Complete local-light culling volume array.
     /// @param ranges Destination resized to match volumes on success.
-    void collectLocalShadowChunks(
-        const IWorldView& worldView,
-        const std::vector<LocalShadowCullVolume>& volumes,
-        std::vector<LocalShadowChunkRanges>& ranges);
+    void collectLocalShadowChunks(const IWorldView& worldView, const std::vector<LocalShadowCullVolume>& volumes,
+                                  std::vector<LocalShadowChunkRanges>& ranges);
 
     // --- Accessors ---
     [[nodiscard]] const std::vector<ChunkRenderColumnCache>& chunkRenderColumns() const;
@@ -210,7 +201,9 @@ public:
     [[nodiscard]] int cutoutSkippedByDistanceThisFrame() const { return m_cutoutSkippedByDistanceThisFrame; }
     [[nodiscard]] int mdiSubChunkTestsThisFrame() const { return m_mdiSubChunkTestsThisFrame; }
     [[nodiscard]] int mdiSubChunksCulledThisFrame() const { return m_mdiSubChunksCulledThisFrame; }
-    [[nodiscard]] const std::array<int, 6>& chunkCulledByPlaneThisFrame() const { return m_chunkCulledByPlaneThisFrame; }
+    [[nodiscard]] const std::array<int, 6>& chunkCulledByPlaneThisFrame() const {
+        return m_chunkCulledByPlaneThisFrame;
+    }
 
     // --- Configuration ---
     [[nodiscard]] float cutoutRenderDistanceChunks() const { return m_cutoutRenderDistanceChunks; }
@@ -220,24 +213,14 @@ public:
 
 private:
     // --- Frustum culling ---
-    enum class FrustumPlane : size_t {
-        Left = 0,
-        Right = 1,
-        Bottom = 2,
-        Top = 3,
-        Near = 4,
-        Far = 5,
-        Count = 6
-    };
+    enum class FrustumPlane : size_t { Left = 0, Right = 1, Bottom = 2, Top = 3, Near = 4, Far = 5, Count = 6 };
 
     struct Plane {
         glm::vec3 normal = glm::vec3(0.0f);
         float distance = 0.0f;
     };
 
-    static constexpr FrustumPlane kPlaneFromIndex(size_t index) {
-        return static_cast<FrustumPlane>(index);
-    }
+    static constexpr FrustumPlane kPlaneFromIndex(size_t index) { return static_cast<FrustumPlane>(index); }
 
     /// Returns true if AABB intersects the view frustum.
     /// When culledPlane is non-null and the AABB is culled, writes the culling plane index.
@@ -248,8 +231,8 @@ private:
     void recordChunkCull(FrustumPlane plane, int count);
 
     // --- Inline helper: expand AABB ---
-    static void expandBounds(glm::vec3& minBounds, glm::vec3& maxBounds, bool& hasBounds,
-                             const glm::vec3& candidateMin, const glm::vec3& candidateMax);
+    static void expandBounds(glm::vec3& minBounds, glm::vec3& maxBounds, bool& hasBounds, const glm::vec3& candidateMin,
+                             const glm::vec3& candidateMax);
 
     // --- Non-owning dependencies ---
     WorldRenderBuffer* m_worldRenderBuffer = nullptr;

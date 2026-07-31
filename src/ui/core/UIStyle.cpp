@@ -9,11 +9,8 @@ Color toastBorderFromBackground(const Color& background) {
 }
 
 Color scaledColor(const Color& color, float rgbScale, float alpha) {
-    return {
-        std::clamp(color[0] * rgbScale, 0.0f, 1.0f),
-        std::clamp(color[1] * rgbScale, 0.0f, 1.0f),
-        std::clamp(color[2] * rgbScale, 0.0f, 1.0f),
-        alpha};
+    return {std::clamp(color[0] * rgbScale, 0.0f, 1.0f), std::clamp(color[1] * rgbScale, 0.0f, 1.0f),
+            std::clamp(color[2] * rgbScale, 0.0f, 1.0f), alpha};
 }
 
 Color scaledAlpha(Color color, float alphaScale) {
@@ -23,17 +20,12 @@ Color scaledAlpha(Color color, float alphaScale) {
 
 Color accentForButtonTone(const UITheme* theme, UIButtonTone tone) {
     switch (tone) {
-    case UIButtonTone::Primary:
-        return theme ? theme->accentPrimary : Color{0.2f, 0.8f, 1.0f, 1.0f};
-    case UIButtonTone::Secondary:
-        return theme ? theme->buttonNormal : Color{0.28f, 0.28f, 0.28f, 0.92f};
-    case UIButtonTone::Success:
-        return theme ? theme->accentSuccess : Color{0.3f, 0.7f, 0.3f, 1.0f};
-    case UIButtonTone::Danger:
-        return theme ? theme->accentDanger : Color{0.7f, 0.3f, 0.3f, 1.0f};
+    case UIButtonTone::Primary: return theme ? theme->accentPrimary : Color{0.2f, 0.8f, 1.0f, 1.0f};
+    case UIButtonTone::Secondary: return theme ? theme->buttonNormal : Color{0.28f, 0.28f, 0.28f, 0.92f};
+    case UIButtonTone::Success: return theme ? theme->accentSuccess : Color{0.3f, 0.7f, 0.3f, 1.0f};
+    case UIButtonTone::Danger: return theme ? theme->accentDanger : Color{0.7f, 0.3f, 0.3f, 1.0f};
     case UIButtonTone::Default:
-    default:
-        return theme ? theme->buttonNormal : Color{0.28f, 0.28f, 0.28f, 0.92f};
+    default: return theme ? theme->buttonNormal : Color{0.28f, 0.28f, 0.28f, 0.92f};
     }
 }
 
@@ -420,27 +412,16 @@ UITextStyle textStyleFromTheme(const UITheme* theme) {
 UITextStyle textStyleFromTheme(const UITheme* theme, UITextTone tone) {
     UITextStyle style = textStyleFromTheme(theme);
     switch (tone) {
-    case UITextTone::Secondary:
-        style.text = theme ? theme->textSecondary : Color{0.7f, 0.7f, 0.7f, 1.0f};
-        break;
+    case UITextTone::Secondary: style.text = theme ? theme->textSecondary : Color{0.7f, 0.7f, 0.7f, 1.0f}; break;
     case UITextTone::Muted:
         style.text = scaledAlpha(theme ? theme->textSecondary : Color{0.7f, 0.7f, 0.7f, 1.0f}, 0.78f);
         break;
-    case UITextTone::Accent:
-        style.text = theme ? theme->textLink : Color{0.3f, 0.7f, 1.0f, 1.0f};
-        break;
-    case UITextTone::OnOverlay:
-        style.text = {1.0f, 1.0f, 1.0f, 1.0f};
-        break;
-    case UITextTone::OnOverlaySecondary:
-        style.text = {0.84f, 0.86f, 0.84f, 1.0f};
-        break;
-    case UITextTone::OnOverlayMuted:
-        style.text = {0.58f, 0.64f, 0.62f, 1.0f};
-        break;
+    case UITextTone::Accent: style.text = theme ? theme->textLink : Color{0.3f, 0.7f, 1.0f, 1.0f}; break;
+    case UITextTone::OnOverlay: style.text = {1.0f, 1.0f, 1.0f, 1.0f}; break;
+    case UITextTone::OnOverlaySecondary: style.text = {0.84f, 0.86f, 0.84f, 1.0f}; break;
+    case UITextTone::OnOverlayMuted: style.text = {0.58f, 0.64f, 0.62f, 1.0f}; break;
     case UITextTone::Primary:
-    default:
-        break;
+    default: break;
     }
     return style;
 }
@@ -555,11 +536,8 @@ UIResolvedTabControlStyle resolveTabControl(const UITabControlStyle& style, int 
     return resolved;
 }
 
-UIResolvedNumericSpinnerStyle resolveNumericSpinner(
-    const UINumericSpinnerStyle& style,
-    int minusState,
-    int plusState,
-    int valueState) {
+UIResolvedNumericSpinnerStyle resolveNumericSpinner(const UINumericSpinnerStyle& style, int minusState, int plusState,
+                                                    int valueState) {
     UIResolvedNumericSpinnerStyle resolved;
     const UIResolvedStyle minus = resolve(style.button, minusState);
     const UIResolvedStyle plus = resolve(style.button, plusState);
@@ -596,18 +574,10 @@ UIResolvedToastStyle resolveToast(const UIToastStyle& style, UIToastTone tone) {
     resolved.textPadding = style.textPadding;
 
     switch (tone) {
-    case UIToastTone::Info:
-        resolved.accent = style.info;
-        break;
-    case UIToastTone::Success:
-        resolved.accent = style.success;
-        break;
-    case UIToastTone::Warning:
-        resolved.accent = style.warning;
-        break;
-    case UIToastTone::Error:
-        resolved.accent = style.error;
-        break;
+    case UIToastTone::Info: resolved.accent = style.info; break;
+    case UIToastTone::Success: resolved.accent = style.success; break;
+    case UIToastTone::Warning: resolved.accent = style.warning; break;
+    case UIToastTone::Error: resolved.accent = style.error; break;
     }
     return resolved;
 }

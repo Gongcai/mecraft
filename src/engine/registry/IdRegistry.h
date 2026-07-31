@@ -23,5 +23,5 @@ public:
 
 private:
     std::unordered_map<NamespacedId, RuntimeId> m_toRuntime;
-    std::vector<NamespacedId> m_toNamespaced;  // index = RuntimeId
+    std::vector<NamespacedId> m_toNamespaced; // index = RuntimeId
 };

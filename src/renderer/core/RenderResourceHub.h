@@ -41,18 +41,18 @@ class ParticleSystem;
 class DropSystem;
 class RhiCommandListPool;
 
-namespace ecs { class GameplayRegistry; }
-namespace shadow { class ShadowCasterCuller; }
+namespace ecs {
+class GameplayRegistry;
+}
+namespace shadow {
+class ShadowCasterCuller;
+}
 
 // BlockTargetRenderData and BlockBreakRenderData are now defined in BlockInteractionOverlayRenderer.h
 
 class RenderResourceHub {
 public:
-    enum class FogMode : int {
-        Linear = 0,
-        Exp = 1,
-        Exp2 = 2
-    };
+    enum class FogMode : int { Linear = 0, Exp = 1, Exp2 = 2 };
 
     struct FogSettings {
         bool enabled = true;
@@ -94,12 +94,12 @@ public:
         float heightFalloff = 0.022f;
         float maxDistance = 260.0f;
         // DerivativeMain-style VFog independent profile (decoupled from weather)
-        float fogCenterHeight = 63.0f;   // SEA_LEVEL: y-level where fog is densest
-        float fogHeightSpread = 100.0f;  // DerivativeMain falloff denominator: 100 -> exponent 0.01
-        float fogNoiseScale = 0.04f;     // noise sampling scale for structured fog
-        float fogLightStrength = 0.2f;   // DerivativeMain VOLUMETRIC_LIGHT_STRENGTH
-        float fogDensityScale = 1.0f;    // user density multiplier (volFogDensity equivalent)
-        int fogSamples = 8;              // DerivativeMain VOLUMETRIC_FOG_SAMPLES: march step count
+        float fogCenterHeight = 63.0f; // SEA_LEVEL: y-level where fog is densest
+        float fogHeightSpread = 100.0f; // DerivativeMain falloff denominator: 100 -> exponent 0.01
+        float fogNoiseScale = 0.04f; // noise sampling scale for structured fog
+        float fogLightStrength = 0.2f; // DerivativeMain VOLUMETRIC_LIGHT_STRENGTH
+        float fogDensityScale = 1.0f; // user density multiplier (volFogDensity equivalent)
+        int fogSamples = 8; // DerivativeMain VOLUMETRIC_FOG_SAMPLES: march step count
     };
 
     struct CloudSettings {
@@ -110,8 +110,8 @@ public:
         float timeScale = 0.35f;
         float coverage = 0.35f;
         float density = 1.0f;
-        float height = 1000.0f;     // DerivativeMain CLOUD_CUMULUS_CLEAR_ALTITUDE
-        float thickness = 1400.0f;  // DerivativeMain CLOUD_CUMULUS_CLEAR_THICKNESS
+        float height = 1000.0f; // DerivativeMain CLOUD_CUMULUS_CLEAR_ALTITUDE
+        float thickness = 1400.0f; // DerivativeMain CLOUD_CUMULUS_CLEAR_THICKNESS
         // Planar clouds (cirrus)
         float planarCoverage = 0.5f;
         float planarDensity = 1.0f;
@@ -130,9 +130,7 @@ public:
 #endif
 
     ~RenderResourceHub();
-    [[nodiscard]] bool init(ResourceMgr& resourceMgr,
-                            ThreadPool& threadPool,
-                            RhiDevice& rhiDevice,
+    [[nodiscard]] bool init(ResourceMgr& resourceMgr, ThreadPool& threadPool, RhiDevice& rhiDevice,
                             RhiCommandListPool& commandListPool);
     void shutdown();
     void setMeshingSubmitBudget(int budget);
@@ -178,6 +176,7 @@ public:
     [[nodiscard]] int getTerrainRhiSubmitCount() const;
     [[nodiscard]] float getAtlasAnisotropy() const;
     [[nodiscard]] float getAtlasMaxAnisotropy() const;
+
 private:
     struct Plane {
         glm::vec3 n = glm::vec3(0.0f);
@@ -214,7 +213,7 @@ private:
     double m_meshingSubmitTimeBudgetMs = 0.75;
     int m_meshingDrainBudget = 2;
     double m_meshingDrainTimeBudgetMs = 1.0;
-    int m_meshingDrainVertexBudget = 65536;  // ~2MB vertex data per frame upload limit
+    int m_meshingDrainVertexBudget = 65536; // ~2MB vertex data per frame upload limit
     int m_regionChunkSize = 4;
 #ifdef MECRAFT_DEBUG
     bool m_chunkCullingDebugEnabled = false;
@@ -246,7 +245,5 @@ private:
     uint64_t m_chunkRenderColumnsRevision = 0;
     int m_chunkRenderColumnsRegionSize = 0;
 };
-
-
 
 #endif //MECRAFT_RENDERER_H

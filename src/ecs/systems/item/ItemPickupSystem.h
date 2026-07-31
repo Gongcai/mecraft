@@ -14,23 +14,16 @@ namespace ecs {
 /// Queries LocalPlayer entity directly from the registry.
 class ItemPickupSystem : public ISystem {
 public:
-    using Dependencies = SystemDependency<
-        std::tuple<LocalPlayerTag, TransformComponent, DropItemTag, ItemComponent>,
-        std::tuple<InventoryDataComponent>
-    >;
+    using Dependencies = SystemDependency<std::tuple<LocalPlayerTag, TransformComponent, DropItemTag, ItemComponent>,
+                                          std::tuple<InventoryDataComponent>>;
 
     void update(SystemContext& ctx) override;
 
     /// Core pickup logic — can also be called directly.
-    static uint32_t pickup(GameplayRegistry& registry,
-                           const glm::vec3& position,
-                           float radius,
+    static uint32_t pickup(GameplayRegistry& registry, const glm::vec3& position, float radius,
                            class ::Inventory& inventory);
-    static uint32_t pickup(GameplayRegistry& registry,
-                           const glm::vec3& position,
-                           float radius,
-                           class ::Inventory& inventory,
-                           float minAgeSeconds);
+    static uint32_t pickup(GameplayRegistry& registry, const glm::vec3& position, float radius,
+                           class ::Inventory& inventory, float minAgeSeconds);
 };
 
 } // namespace ecs

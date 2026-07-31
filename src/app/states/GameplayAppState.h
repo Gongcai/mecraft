@@ -21,21 +21,11 @@ public:
     void render(double frameTime) override;
     [[nodiscard]] const GpuFrameStats* gpuFrameStats() const override;
 #ifdef MECRAFT_DEBUG
-    void recordPollEvents(double ms,
-                          unsigned keyEvents,
-                          unsigned mouseButtonEvents,
-                          unsigned cursorPosEvents,
-                          unsigned scrollEvents,
-                          unsigned charEvents,
-                          double inputCallbackMs,
-                          double cursorPosCallbackMs,
-                          double imguiCallbackMs,
-                          double imguiCursorPosCallbackMs,
-                          double imguiCursorPosBackendMs,
-                          double imguiWndProcMs,
-                          double imguiWndProcSlowestMs,
-                          unsigned imguiWndProcSlowestMsg,
-                          unsigned imguiWndProcCount) override;
+    void recordPollEvents(double ms, unsigned keyEvents, unsigned mouseButtonEvents, unsigned cursorPosEvents,
+                          unsigned scrollEvents, unsigned charEvents, double inputCallbackMs,
+                          double cursorPosCallbackMs, double imguiCallbackMs, double imguiCursorPosCallbackMs,
+                          double imguiCursorPosBackendMs, double imguiWndProcMs, double imguiWndProcSlowestMs,
+                          unsigned imguiWndProcSlowestMsg, unsigned imguiWndProcCount) override;
     void recordAppUpdateDispatch(double ms) override;
     void recordAppRenderDispatch(double ms) override;
 #endif

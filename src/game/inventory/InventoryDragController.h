@@ -16,8 +16,7 @@ class CraftingGridControl;
 
 class InventoryDragController {
 public:
-    explicit InventoryDragController(InventoryStateContext& deps)
-        : m_deps(deps) {}
+    explicit InventoryDragController(InventoryStateContext& deps) : m_deps(deps) {}
 
     void setCraftingGrid(CraftingGridControl* grid) { m_craftGrid = grid; }
 
@@ -30,15 +29,16 @@ public:
     // Handle left-click on a regular inventory slot (slotIndex in inventory space).
     void handleSlotClick(int inventorySlot) {
         Inventory& inventory = m_deps.inventory;
-        if (!inventory.isValidSlot(inventorySlot)) return;
+        if (!inventory.isValidSlot(inventorySlot))
+            return;
 
         const auto& dragged = m_deps.input.getUIDragItem();
         if (!dragged.active) {
             const ItemStack pickedStack = inventory.getSlotStack(inventorySlot);
             if (pickedStack.itemId != 0) {
                 inventory.setSlotItem(inventorySlot, 0, 0);
-                m_deps.input.beginUIDragItem(static_cast<int>(pickedStack.itemId),
-                    static_cast<int>(pickedStack.count), inventorySlot);
+                m_deps.input.beginUIDragItem(static_cast<int>(pickedStack.itemId), static_cast<int>(pickedStack.count),
+                                             inventorySlot);
             }
             return;
         }
@@ -52,12 +52,12 @@ public:
         const ItemStack targetStack = inventory.getSlotStack(inventorySlot);
         if (targetStack.itemId == static_cast<ItemID>(dragged.itemId)) {
             const ItemDef& def = ItemRegistry::get(targetStack.itemId);
-            const uint16_t freeSpace = (def.maxStack > targetStack.count)
-                ? static_cast<uint16_t>(def.maxStack - targetStack.count) : 0;
+            const uint16_t freeSpace =
+                (def.maxStack > targetStack.count) ? static_cast<uint16_t>(def.maxStack - targetStack.count) : 0;
             const int toAdd = (dragged.count < freeSpace) ? dragged.count : static_cast<int>(freeSpace);
             if (toAdd > 0) {
                 inventory.setSlotItem(inventorySlot, targetStack.itemId,
-                    static_cast<uint16_t>(targetStack.count + toAdd));
+                                      static_cast<uint16_t>(targetStack.count + toAdd));
                 const int remaining = dragged.count - toAdd;
                 if (remaining <= 0) {
                     m_deps.input.clearUIDragItem();
@@ -69,20 +69,21 @@ public:
         }
 
         // Swap items
-        inventory.setSlotItem(inventorySlot, static_cast<ItemID>(dragged.itemId),
-            static_cast<uint16_t>(dragged.count));
-        m_deps.input.beginUIDragItem(static_cast<int>(targetStack.itemId),
-            static_cast<int>(targetStack.count), inventorySlot);
+        inventory.setSlotItem(inventorySlot, static_cast<ItemID>(dragged.itemId), static_cast<uint16_t>(dragged.count));
+        m_deps.input.beginUIDragItem(static_cast<int>(targetStack.itemId), static_cast<int>(targetStack.count),
+                                     inventorySlot);
     }
 
     // Swap hovered inventory slot with hotbar slot.
     void handleHotbarSwap(int hotbarIndex) {
         const int hoveredGridIndex = m_deps.uiRenderer.getInventoryPanelHoveredSlot();
-        if (hoveredGridIndex < 0) return;
+        if (hoveredGridIndex < 0)
+            return;
 
         const int hoveredSlot = Inventory::toInventoryIndexFromGridSlot(hoveredGridIndex);
         Inventory& inventory = m_deps.inventory;
-        if (!inventory.isValidSlot(hoveredSlot)) return;
+        if (!inventory.isValidSlot(hoveredSlot))
+            return;
 
         cancelDraggedItemToSource();
         inventory.swapSlots(hoveredSlot, hotbarIndex);
@@ -91,13 +92,16 @@ public:
     // Place one item from drag stack into the hovered empty slot (right-click).
     void handleSecondaryPlace() {
         int unifiedSlot = findUnifiedHoveredEmptySlot();
-        if (unifiedSlot < 0) return;
+        if (unifiedSlot < 0)
+            return;
 
-        if (unifiedSlot == m_lastSecondaryPlaceSlot) return;
+        if (unifiedSlot == m_lastSecondaryPlaceSlot)
+            return;
         m_lastSecondaryPlaceSlot = unifiedSlot;
 
         const auto& dragged = m_deps.input.getUIDragItem();
-        if (!dragged.active || dragged.itemId <= 0 || dragged.count <= 0) return;
+        if (!dragged.active || dragged.itemId <= 0 || dragged.count <= 0)
+            return;
 
         const ItemID itemId = static_cast<ItemID>(dragged.itemId);
         if (unifiedSlot >= kCraftingSlotBase) {
@@ -117,22 +121,22 @@ public:
     // Return dragged item to its source slot (right-click with no target).
     void cancelDraggedItemToSource() {
         const auto& dragged = m_deps.input.getUIDragItem();
-        if (!dragged.active || dragged.itemId <= 0) return;
+        if (!dragged.active || dragged.itemId <= 0)
+            return;
 
         if (dragged.sourceSlot >= kCraftingSlotBase && m_craftGrid != nullptr) {
             const int craftIdx = dragged.sourceSlot - kCraftingSlotBase;
             if (craftIdx < m_craftGrid->getCraftingCellCount()) {
                 m_craftGrid->setCraftingSlot(craftIdx, static_cast<ItemID>(dragged.itemId),
-                    static_cast<uint16_t>(dragged.count));
+                                             static_cast<uint16_t>(dragged.count));
             } else if (craftIdx == m_craftGrid->getResultSlotIndex()) {
-                m_craftGrid->setResultSlot(static_cast<ItemID>(dragged.itemId),
-                    static_cast<uint16_t>(dragged.count));
+                m_craftGrid->setResultSlot(static_cast<ItemID>(dragged.itemId), static_cast<uint16_t>(dragged.count));
             }
         } else {
             Inventory& inventory = m_deps.inventory;
             if (inventory.isValidSlot(dragged.sourceSlot)) {
                 inventory.setSlotItem(dragged.sourceSlot, static_cast<ItemID>(dragged.itemId),
-                    static_cast<uint16_t>(dragged.count));
+                                      static_cast<uint16_t>(dragged.count));
             }
         }
         m_deps.input.clearUIDragItem();
@@ -141,7 +145,8 @@ public:
     // Return dragged item to inventory or drop at player's feet.
     void returnDraggedItemToInventory() {
         const auto& dragged = m_deps.input.getUIDragItem();
-        if (!dragged.active || dragged.itemId <= 0) return;
+        if (!dragged.active || dragged.itemId <= 0)
+            return;
 
         Inventory& inventory = m_deps.inventory;
         const ItemID itemId = static_cast<ItemID>(dragged.itemId);
@@ -171,17 +176,22 @@ public:
     void handleDoubleClickStack(int targetSlot) {
         Inventory& inventory = m_deps.inventory;
         const ItemID targetItemId = inventory.getSlotItem(targetSlot);
-        if (targetItemId == 0) return;
+        if (targetItemId == 0)
+            return;
 
         const ItemDef& def = ItemRegistry::get(targetItemId);
-        if (def.maxStack == 0) return;
+        if (def.maxStack == 0)
+            return;
 
         uint16_t totalCount = inventory.getSlotStack(targetSlot).count;
 
         for (int i = 0; i < Inventory::INVENTORY_SIZE; ++i) {
-            if (i == targetSlot) continue;
-            if (inventory.getSlotItem(i) != targetItemId) continue;
-            if (totalCount >= def.maxStack) break;
+            if (i == targetSlot)
+                continue;
+            if (inventory.getSlotItem(i) != targetItemId)
+                continue;
+            if (totalCount >= def.maxStack)
+                break;
 
             const uint16_t sourceCount = inventory.getSlotStack(i).count;
             const uint16_t freeSpace = def.maxStack - totalCount;
@@ -202,10 +212,12 @@ public:
     // Track which empty slots the primary drag has visited.
     void trackPrimaryDragSlot() {
         int unifiedSlot = findUnifiedHoveredEmptySlot();
-        if (unifiedSlot < 0) return;
+        if (unifiedSlot < 0)
+            return;
 
         for (int slot : m_primaryDragEmptySlots) {
-            if (slot == unifiedSlot) return;
+            if (slot == unifiedSlot)
+                return;
         }
         m_primaryDragEmptySlots.push_back(unifiedSlot);
         redistributePrimaryDrag();
@@ -234,8 +246,7 @@ private:
     // Find hovered empty slot in unified space (inventory or crafting grid).
     int findUnifiedHoveredEmptySlot() {
         const int hoveredCraftingSlot = m_deps.uiRenderer.getCraftingGridHoveredSlot();
-        if (m_craftGrid != nullptr &&
-            hoveredCraftingSlot >= 0 &&
+        if (m_craftGrid != nullptr && hoveredCraftingSlot >= 0 &&
             hoveredCraftingSlot < m_craftGrid->getCraftingCellCount()) {
             if (m_craftGrid->getCraftingSlot(hoveredCraftingSlot) == 0) {
                 return kCraftingSlotBase + hoveredCraftingSlot;
@@ -243,12 +254,15 @@ private:
         }
 
         const int hoveredGridIndex = m_deps.uiRenderer.getInventoryPanelHoveredSlot();
-        if (hoveredGridIndex < 0) return -1;
+        if (hoveredGridIndex < 0)
+            return -1;
 
         const int inventorySlot = Inventory::toInventoryIndexFromGridSlot(hoveredGridIndex);
         Inventory& inventory = m_deps.inventory;
-        if (!inventory.isValidSlot(inventorySlot)) return -1;
-        if (inventory.getSlotItem(inventorySlot) != 0) return -1;
+        if (!inventory.isValidSlot(inventorySlot))
+            return -1;
+        if (inventory.getSlotItem(inventorySlot) != 0)
+            return -1;
 
         return inventorySlot;
     }
@@ -256,7 +270,8 @@ private:
     // Redistribute dragged items evenly across tracked empty slots.
     void redistributePrimaryDrag() {
         const auto& dragged = m_deps.input.getUIDragItem();
-        if (!dragged.active || dragged.itemId <= 0 || dragged.count <= 0 || m_primaryDragEmptySlots.empty()) return;
+        if (!dragged.active || dragged.itemId <= 0 || dragged.count <= 0 || m_primaryDragEmptySlots.empty())
+            return;
 
         const ItemID itemId = static_cast<ItemID>(dragged.itemId);
         const int total = dragged.count;
@@ -268,8 +283,7 @@ private:
             const int count = base + (i >= n - remainder ? 1 : 0);
             const int slot = m_primaryDragEmptySlots[i];
             if (slot >= kCraftingSlotBase && m_craftGrid != nullptr) {
-                m_craftGrid->setCraftingSlot(slot - kCraftingSlotBase, itemId,
-                    static_cast<uint16_t>(count));
+                m_craftGrid->setCraftingSlot(slot - kCraftingSlotBase, itemId, static_cast<uint16_t>(count));
             } else {
                 m_deps.inventory.setSlotItem(slot, itemId, static_cast<uint16_t>(count));
             }
@@ -279,9 +293,8 @@ private:
     void spawnItemDropAtPlayer(ItemID itemId, uint32_t count) {
         ecs::PlayerQuery query(m_deps.ecsRegistry);
         const glm::vec3 playerPos = query.getPosition();
-        const glm::ivec3 blockPos(static_cast<int>(std::floor(playerPos.x)),
-                                   static_cast<int>(std::floor(playerPos.y)),
-                                   static_cast<int>(std::floor(playerPos.z)));
+        const glm::ivec3 blockPos(static_cast<int>(std::floor(playerPos.x)), static_cast<int>(std::floor(playerPos.y)),
+                                  static_cast<int>(std::floor(playerPos.z)));
         m_deps.dropSystem.spawnItemDrop(itemId, blockPos, count);
     }
 

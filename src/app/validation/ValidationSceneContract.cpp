@@ -26,31 +26,24 @@ constexpr int kMaximumRenderDistance = 32;
 constexpr double kWorldDaySeconds = 1200.0;
 
 [[nodiscard]] bool validIdentifier(const std::string_view identifier) {
-    if (identifier.empty() || identifier.size() > kMaximumIdentifierLength ||
-        identifier.front() < 'a' || identifier.front() > 'z') {
+    if (identifier.empty() || identifier.size() > kMaximumIdentifierLength || identifier.front() < 'a' ||
+        identifier.front() > 'z') {
         return false;
     }
-    return std::all_of(
-        identifier.begin(), identifier.end(), [](const char value) {
-            return (value >= 'a' && value <= 'z') ||
-                   (value >= '0' && value <= '9') || value == '_' ||
-                   value == '-' || value == '.';
-        });
+    return std::all_of(identifier.begin(), identifier.end(), [](const char value) {
+        return (value >= 'a' && value <= 'z') || (value >= '0' && value <= '9') || value == '_' || value == '-' ||
+               value == '.';
+    });
 }
 
-[[nodiscard]] bool expectedField(
-    const std::string_view name,
-    const std::initializer_list<const char*> expectedFields) {
-    return std::any_of(
-        expectedFields.begin(), expectedFields.end(),
-        [name](const char* field) { return name == field; });
+[[nodiscard]] bool expectedField(const std::string_view name, const std::initializer_list<const char*> expectedFields) {
+    return std::any_of(expectedFields.begin(), expectedFields.end(),
+                       [name](const char* field) { return name == field; });
 }
 
-[[nodiscard]] ValidationSceneContractError validateFields(
-    const Json& object,
-    const std::initializer_list<const char*> expectedFields,
-    const std::string_view objectPath,
-    std::string& detail) {
+[[nodiscard]] ValidationSceneContractError validateFields(const Json& object,
+                                                          const std::initializer_list<const char*> expectedFields,
+                                                          const std::string_view objectPath, std::string& detail) {
     for (const char* field : expectedFields) {
         if (object.find(field) == object.end()) {
             detail = std::string(objectPath) + "." + field;
@@ -70,12 +63,8 @@ constexpr double kWorldDaySeconds = 1200.0;
     return ValidationSceneContractError::UnexpectedField;
 }
 
-[[nodiscard]] bool readString(
-    const Json& object,
-    const char* field,
-    const std::string_view fieldPath,
-    std::string& output,
-    ValidationSceneContractLoadResult& result) {
+[[nodiscard]] bool readString(const Json& object, const char* field, const std::string_view fieldPath,
+                              std::string& output, ValidationSceneContractLoadResult& result) {
     const Json& value = *object.find(field);
     if (!value.is_string()) {
         result.error = ValidationSceneContractError::InvalidFieldType;
@@ -86,12 +75,8 @@ constexpr double kWorldDaySeconds = 1200.0;
     return true;
 }
 
-[[nodiscard]] bool readUint32(
-    const Json& object,
-    const char* field,
-    const std::string_view fieldPath,
-    uint32_t& output,
-    ValidationSceneContractLoadResult& result) {
+[[nodiscard]] bool readUint32(const Json& object, const char* field, const std::string_view fieldPath, uint32_t& output,
+                              ValidationSceneContractLoadResult& result) {
     const Json& value = *object.find(field);
     uint64_t parsed = 0u;
     if (value.is_number_unsigned()) {
@@ -118,12 +103,8 @@ constexpr double kWorldDaySeconds = 1200.0;
     return true;
 }
 
-[[nodiscard]] bool readInt(
-    const Json& object,
-    const char* field,
-    const std::string_view fieldPath,
-    int& output,
-    ValidationSceneContractLoadResult& result) {
+[[nodiscard]] bool readInt(const Json& object, const char* field, const std::string_view fieldPath, int& output,
+                           ValidationSceneContractLoadResult& result) {
     const Json& value = *object.find(field);
     if (!value.is_number_integer()) {
         result.error = ValidationSceneContractError::InvalidFieldType;
@@ -131,8 +112,7 @@ constexpr double kWorldDaySeconds = 1200.0;
         return false;
     }
     const int64_t parsed = value.get<int64_t>();
-    if (parsed < std::numeric_limits<int>::min() ||
-        parsed > std::numeric_limits<int>::max()) {
+    if (parsed < std::numeric_limits<int>::min() || parsed > std::numeric_limits<int>::max()) {
         result.error = ValidationSceneContractError::InvalidFieldType;
         result.detail = fieldPath;
         return false;
@@ -141,12 +121,8 @@ constexpr double kWorldDaySeconds = 1200.0;
     return true;
 }
 
-[[nodiscard]] bool readDouble(
-    const Json& object,
-    const char* field,
-    const std::string_view fieldPath,
-    double& output,
-    ValidationSceneContractLoadResult& result) {
+[[nodiscard]] bool readDouble(const Json& object, const char* field, const std::string_view fieldPath, double& output,
+                              ValidationSceneContractLoadResult& result) {
     const Json& value = *object.find(field);
     if (!value.is_number()) {
         result.error = ValidationSceneContractError::InvalidFieldType;
@@ -162,12 +138,8 @@ constexpr double kWorldDaySeconds = 1200.0;
     return true;
 }
 
-[[nodiscard]] bool readHash(
-    const Json& object,
-    const char* field,
-    const std::string_view fieldPath,
-    StableContentHash& output,
-    ValidationSceneContractLoadResult& result) {
+[[nodiscard]] bool readHash(const Json& object, const char* field, const std::string_view fieldPath,
+                            StableContentHash& output, ValidationSceneContractLoadResult& result) {
     std::string text;
     if (!readString(object, field, fieldPath, text, result)) {
         return false;
@@ -180,14 +152,9 @@ constexpr double kWorldDaySeconds = 1200.0;
     return true;
 }
 
-[[nodiscard]] bool readRelativePath(
-    const Json& object,
-    const char* field,
-    const std::string_view fieldPath,
-    const std::filesystem::path& baseDirectory,
-    std::filesystem::path& source,
-    std::filesystem::path& resolved,
-    ValidationSceneContractLoadResult& result) {
+[[nodiscard]] bool readRelativePath(const Json& object, const char* field, const std::string_view fieldPath,
+                                    const std::filesystem::path& baseDirectory, std::filesystem::path& source,
+                                    std::filesystem::path& resolved, ValidationSceneContractLoadResult& result) {
     std::string text;
     if (!readString(object, field, fieldPath, text, result)) {
         return false;
@@ -202,11 +169,9 @@ constexpr double kWorldDaySeconds = 1200.0;
     return true;
 }
 
-[[nodiscard]] StableContentHash renderSettingsContentHash(
-    const RenderSettings& settings) {
+[[nodiscard]] StableContentHash renderSettingsContentHash(const RenderSettings& settings) {
     const std::string serialized = app::serializeRenderSettings(settings).dump();
-    return renderer::contracts::stableContentHashBytes(
-        serialized.data(), serialized.size());
+    return renderer::contracts::stableContentHashBytes(serialized.data(), serialized.size());
 }
 
 void configureCommonValidationSettings(RenderSettings& settings) {
@@ -231,18 +196,15 @@ void configureCommonValidationSettings(RenderSettings& settings) {
     settings.debug = {};
 }
 
-[[nodiscard]] ValidationSceneContractLoadResult parseRoot(
-    const Json& root,
-    const std::filesystem::path& sourcePath) {
+[[nodiscard]] ValidationSceneContractLoadResult parseRoot(const Json& root, const std::filesystem::path& sourcePath) {
     ValidationSceneContractLoadResult result;
     if (!root.is_object()) {
         result.error = ValidationSceneContractError::InvalidRoot;
         result.detail = "root";
         return result;
     }
-    for (const char* field : {"kind", "version", "id", "scene",
-                              "content_hash", "camera_path",
-                              "render_settings", "environment"}) {
+    for (const char* field :
+         {"kind", "version", "id", "scene", "content_hash", "camera_path", "render_settings", "environment"}) {
         if (root.find(field) == root.end()) {
             result.error = ValidationSceneContractError::MissingField;
             result.detail = std::string("root.") + field;
@@ -260,17 +222,21 @@ void configureCommonValidationSettings(RenderSettings& settings) {
         result.detail = "root.scene";
         return result;
     }
-    const auto expectedRootFields = *scene == ValidationScene::Voxel
-        ? std::initializer_list<const char*>{
-              "kind", "version", "id", "scene", "content_hash",
-              "camera_path", "render_settings", "environment",
-              "voxel_world"}
-        : std::initializer_list<const char*>{
-              "kind", "version", "id", "scene", "content_hash",
-              "camera_path", "render_settings", "environment",
-              "model_asset"};
-    result.error = validateFields(
-        root, expectedRootFields, "root", result.detail);
+    const auto expectedRootFields =
+        *scene == ValidationScene::Voxel
+            ? std::initializer_list<const char*>{"kind",
+                                                 "version",
+                                                 "id",
+                                                 "scene",
+                                                 "content_hash",
+                                                 "camera_path",
+                                                 "render_settings",
+                                                 "environment",
+                                                 "voxel_world"}
+            : std::initializer_list<const char*>{
+                  "kind",        "version",         "id",          "scene",      "content_hash",
+                  "camera_path", "render_settings", "environment", "model_asset"};
+    result.error = validateFields(root, expectedRootFields, "root", result.detail);
     if (result.error != ValidationSceneContractError::None) {
         return result;
     }
@@ -280,11 +246,9 @@ void configureCommonValidationSettings(RenderSettings& settings) {
     contract.scene = *scene;
     std::string kind;
     if (!readString(root, "kind", "root.kind", kind, result) ||
-        !readUint32(root, "version", "root.version", contract.version,
-                    result) ||
+        !readUint32(root, "version", "root.version", contract.version, result) ||
         !readString(root, "id", "root.id", contract.id, result) ||
-        !readHash(root, "content_hash", "root.content_hash",
-                  contract.contentHash, result)) {
+        !readHash(root, "content_hash", "root.content_hash", contract.contentHash, result)) {
         return result;
     }
     if (kind != kValidationSceneContractKind) {
@@ -303,26 +267,19 @@ void configureCommonValidationSettings(RenderSettings& settings) {
         return result;
     }
 
-    const std::filesystem::path baseDirectory =
-        contract.sourcePath.parent_path();
+    const std::filesystem::path baseDirectory = contract.sourcePath.parent_path();
     const Json& camera = *root.find("camera_path");
     if (!camera.is_object()) {
         result.error = ValidationSceneContractError::InvalidFieldType;
         result.detail = "root.camera_path";
         return result;
     }
-    result.error = validateFields(
-        camera, {"source", "id", "content_hash"},
-        "root.camera_path", result.detail);
+    result.error = validateFields(camera, {"source", "id", "content_hash"}, "root.camera_path", result.detail);
     if (result.error != ValidationSceneContractError::None ||
-        !readRelativePath(
-            camera, "source", "root.camera_path.source", baseDirectory,
-            contract.cameraPath.source, contract.cameraPath.resolvedPath,
-            result) ||
-        !readString(camera, "id", "root.camera_path.id",
-                    contract.cameraPath.id, result) ||
-        !readHash(camera, "content_hash", "root.camera_path.content_hash",
-                  contract.cameraPath.contentHash, result)) {
+        !readRelativePath(camera, "source", "root.camera_path.source", baseDirectory, contract.cameraPath.source,
+                          contract.cameraPath.resolvedPath, result) ||
+        !readString(camera, "id", "root.camera_path.id", contract.cameraPath.id, result) ||
+        !readHash(camera, "content_hash", "root.camera_path.content_hash", contract.cameraPath.contentHash, result)) {
         return result;
     }
     if (!validIdentifier(contract.cameraPath.id)) {
@@ -337,16 +294,13 @@ void configureCommonValidationSettings(RenderSettings& settings) {
         result.detail = "root.render_settings";
         return result;
     }
-    result.error = validateFields(
-        renderSettings, {"id", "version", "content_hash"},
-        "root.render_settings", result.detail);
+    result.error =
+        validateFields(renderSettings, {"id", "version", "content_hash"}, "root.render_settings", result.detail);
     if (result.error != ValidationSceneContractError::None ||
-        !readString(renderSettings, "id", "root.render_settings.id",
-                    contract.renderSettings.id, result) ||
-        !readUint32(renderSettings, "version", "root.render_settings.version",
-                    contract.renderSettings.version, result) ||
-        !readHash(renderSettings, "content_hash",
-                  "root.render_settings.content_hash",
+        !readString(renderSettings, "id", "root.render_settings.id", contract.renderSettings.id, result) ||
+        !readUint32(renderSettings, "version", "root.render_settings.version", contract.renderSettings.version,
+                    result) ||
+        !readHash(renderSettings, "content_hash", "root.render_settings.content_hash",
                   contract.renderSettings.contentHash, result)) {
         return result;
     }
@@ -362,25 +316,18 @@ void configureCommonValidationSettings(RenderSettings& settings) {
         result.detail = "root.environment";
         return result;
     }
-    result.error = validateFields(
-        environment, {"time_of_day_seconds", "weather"},
-        "root.environment", result.detail);
+    result.error = validateFields(environment, {"time_of_day_seconds", "weather"}, "root.environment", result.detail);
     std::string weather;
     if (result.error != ValidationSceneContractError::None ||
-        !readDouble(environment, "time_of_day_seconds",
-                    "root.environment.time_of_day_seconds",
+        !readDouble(environment, "time_of_day_seconds", "root.environment.time_of_day_seconds",
                     contract.environment.timeOfDaySeconds, result) ||
-        !readString(environment, "weather", "root.environment.weather",
-                    weather, result)) {
+        !readString(environment, "weather", "root.environment.weather", weather, result)) {
         return result;
     }
-    if (contract.environment.timeOfDaySeconds < 0.0 ||
-        contract.environment.timeOfDaySeconds >= kWorldDaySeconds ||
+    if (contract.environment.timeOfDaySeconds < 0.0 || contract.environment.timeOfDaySeconds >= kWorldDaySeconds ||
         weather != "clear") {
         result.error = ValidationSceneContractError::InvalidEnvironment;
-        result.detail = weather != "clear"
-            ? "root.environment.weather"
-            : "root.environment.time_of_day_seconds";
+        result.detail = weather != "clear" ? "root.environment.weather" : "root.environment.time_of_day_seconds";
         return result;
     }
 
@@ -391,9 +338,8 @@ void configureCommonValidationSettings(RenderSettings& settings) {
             result.detail = "root.voxel_world";
             return result;
         }
-        result.error = validateFields(
-            voxel, {"generator", "seed", "render_distance", "content_hash"},
-            "root.voxel_world", result.detail);
+        result.error = validateFields(voxel, {"generator", "seed", "render_distance", "content_hash"},
+                                      "root.voxel_world", result.detail);
         if (result.error != ValidationSceneContractError::None) {
             return result;
         }
@@ -403,40 +349,27 @@ void configureCommonValidationSettings(RenderSettings& settings) {
             result.detail = "root.voxel_world.generator";
             return result;
         }
-        result.error = validateFields(
-            generator, {"id", "version"}, "root.voxel_world.generator",
-            result.detail);
+        result.error = validateFields(generator, {"id", "version"}, "root.voxel_world.generator", result.detail);
         ValidationVoxelWorldIdentity world;
         if (result.error != ValidationSceneContractError::None ||
-            !readString(generator, "id", "root.voxel_world.generator.id",
-                        world.generatorId, result) ||
-            !readUint32(generator, "version",
-                        "root.voxel_world.generator.version",
-                        world.generatorVersion, result) ||
-            !readInt(voxel, "seed", "root.voxel_world.seed", world.seed,
-                     result) ||
-            !readInt(voxel, "render_distance",
-                     "root.voxel_world.render_distance",
-                     world.renderDistance, result) ||
-            !readHash(voxel, "content_hash",
-                      "root.voxel_world.content_hash", world.contentHash,
-                      result)) {
+            !readString(generator, "id", "root.voxel_world.generator.id", world.generatorId, result) ||
+            !readUint32(generator, "version", "root.voxel_world.generator.version", world.generatorVersion, result) ||
+            !readInt(voxel, "seed", "root.voxel_world.seed", world.seed, result) ||
+            !readInt(voxel, "render_distance", "root.voxel_world.render_distance", world.renderDistance, result) ||
+            !readHash(voxel, "content_hash", "root.voxel_world.content_hash", world.contentHash, result)) {
             return result;
         }
         if (world.generatorId != kValidationVoxelGeneratorId ||
             world.generatorVersion != kValidationVoxelGeneratorVersion ||
-            world.renderDistance < kMinimumRenderDistance ||
-            world.renderDistance > kMaximumRenderDistance) {
+            world.renderDistance < kMinimumRenderDistance || world.renderDistance > kMaximumRenderDistance) {
             result.error = ValidationSceneContractError::InvalidWorld;
             result.detail = "root.voxel_world";
             return result;
         }
-        const StableContentHash actualWorldHash =
-            validationVoxelWorldContentHash(world);
+        const StableContentHash actualWorldHash = validationVoxelWorldContentHash(world);
         if (actualWorldHash != world.contentHash) {
             result.error = ValidationSceneContractError::WorldHashMismatch;
-            result.detail = renderer::contracts::stableContentHashHex(
-                actualWorldHash);
+            result.detail = renderer::contracts::stableContentHashHex(actualWorldHash);
             return result;
         }
         contract.voxelWorld = std::move(world);
@@ -447,77 +380,59 @@ void configureCommonValidationSettings(RenderSettings& settings) {
             result.detail = "root.model_asset";
             return result;
         }
-        result.error = validateFields(
-            asset, {"source", "content_hash"}, "root.model_asset",
-            result.detail);
+        result.error = validateFields(asset, {"source", "content_hash"}, "root.model_asset", result.detail);
         ValidationModelAssetIdentity modelAsset;
         if (result.error != ValidationSceneContractError::None ||
-            !readRelativePath(
-                asset, "source", "root.model_asset.source", baseDirectory,
-                modelAsset.source, modelAsset.resolvedPath, result) ||
-            !readHash(asset, "content_hash", "root.model_asset.content_hash",
-                      modelAsset.contentHash, result)) {
+            !readRelativePath(asset, "source", "root.model_asset.source", baseDirectory, modelAsset.source,
+                              modelAsset.resolvedPath, result) ||
+            !readHash(asset, "content_hash", "root.model_asset.content_hash", modelAsset.contentHash, result)) {
             return result;
         }
         const renderer::contracts::FileContentHashResult assetHash =
-            renderer::contracts::stableFileContentHash(
-                modelAsset.resolvedPath);
+            renderer::contracts::stableFileContentHash(modelAsset.resolvedPath);
         if (!assetHash.succeeded()) {
             result.error = ValidationSceneContractError::AssetHashFailed;
-            result.detail = std::string(
-                renderer::contracts::contentHashErrorStableId(
-                    assetHash.error)) + ":" +
-                modelAsset.resolvedPath.generic_u8string();
+            result.detail = std::string(renderer::contracts::contentHashErrorStableId(assetHash.error)) + ":" +
+                            modelAsset.resolvedPath.generic_u8string();
             return result;
         }
         if (assetHash.hash != modelAsset.contentHash) {
             result.error = ValidationSceneContractError::AssetHashMismatch;
-            result.detail = renderer::contracts::stableContentHashHex(
-                assetHash.hash);
+            result.detail = renderer::contracts::stableContentHashHex(assetHash.hash);
             return result;
         }
         contract.modelAsset = std::move(modelAsset);
     }
 
     const renderer::contracts::CameraPathLoadResult cameraPath =
-        renderer::contracts::loadCameraPath(
-            contract.cameraPath.resolvedPath);
+        renderer::contracts::loadCameraPath(contract.cameraPath.resolvedPath);
     if (!cameraPath.succeeded()) {
         result.error = ValidationSceneContractError::CameraPathLoadFailed;
-        result.detail = std::string(
-            renderer::contracts::cameraPathErrorStableId(cameraPath.error)) +
-            ":" + cameraPath.detail;
+        result.detail =
+            std::string(renderer::contracts::cameraPathErrorStableId(cameraPath.error)) + ":" + cameraPath.detail;
         return result;
     }
     if (cameraPath.path.id != contract.cameraPath.id ||
         cameraPath.path.contentHash != contract.cameraPath.contentHash) {
-        result.error =
-            ValidationSceneContractError::CameraPathIdentityMismatch;
-        result.detail = cameraPath.path.id + ":" +
-            renderer::contracts::cameraPathContentHashHex(
-                cameraPath.path.contentHash);
+        result.error = ValidationSceneContractError::CameraPathIdentityMismatch;
+        result.detail =
+            cameraPath.path.id + ":" + renderer::contracts::cameraPathContentHashHex(cameraPath.path.contentHash);
         return result;
     }
     result.cameraPath = cameraPath.path;
 
-    const ValidationRenderSettingsProfile profile =
-        makeValidationRenderSettingsProfile(contract.scene);
-    if (profile.id != contract.renderSettings.id ||
-        profile.version != contract.renderSettings.version ||
+    const ValidationRenderSettingsProfile profile = makeValidationRenderSettingsProfile(contract.scene);
+    if (profile.id != contract.renderSettings.id || profile.version != contract.renderSettings.version ||
         profile.contentHash != contract.renderSettings.contentHash) {
-        result.error =
-            ValidationSceneContractError::RenderSettingsIdentityMismatch;
-        result.detail = profile.id + ":" +
-            renderer::contracts::stableContentHashHex(profile.contentHash);
+        result.error = ValidationSceneContractError::RenderSettingsIdentityMismatch;
+        result.detail = profile.id + ":" + renderer::contracts::stableContentHashHex(profile.contentHash);
         return result;
     }
 
-    const StableContentHash actualSceneHash =
-        validationSceneContentHash(contract);
+    const StableContentHash actualSceneHash = validationSceneContentHash(contract);
     if (actualSceneHash != contract.contentHash) {
         result.error = ValidationSceneContractError::SceneHashMismatch;
-        result.detail = renderer::contracts::stableContentHashHex(
-            actualSceneHash);
+        result.detail = renderer::contracts::stableContentHashHex(actualSceneHash);
         return result;
     }
     return result;
@@ -527,52 +442,42 @@ void configureCommonValidationSettings(RenderSettings& settings) {
 
 bool ValidationSceneContract::isValid() const {
     const bool sceneIdentityValid =
-        (scene == ValidationScene::Voxel && voxelWorld.has_value() &&
-         !modelAsset.has_value()) ||
-        (scene == ValidationScene::Model && modelAsset.has_value() &&
-         !voxelWorld.has_value());
-    return version == kValidationSceneContractVersion && !id.empty() &&
-        !sourcePath.empty() && contentHash != 0u &&
-        !cameraPath.source.empty() && !cameraPath.resolvedPath.empty() &&
-        !cameraPath.id.empty() && cameraPath.contentHash != 0u &&
-        !renderSettings.id.empty() && renderSettings.version != 0u &&
-        renderSettings.contentHash != 0u && sceneIdentityValid;
+        (scene == ValidationScene::Voxel && voxelWorld.has_value() && !modelAsset.has_value()) ||
+        (scene == ValidationScene::Model && modelAsset.has_value() && !voxelWorld.has_value());
+    return version == kValidationSceneContractVersion && !id.empty() && !sourcePath.empty() && contentHash != 0u &&
+           !cameraPath.source.empty() && !cameraPath.resolvedPath.empty() && !cameraPath.id.empty() &&
+           cameraPath.contentHash != 0u && !renderSettings.id.empty() && renderSettings.version != 0u &&
+           renderSettings.contentHash != 0u && sceneIdentityValid;
 }
 
 bool ValidationSceneContractLoadResult::succeeded() const {
-    return error == ValidationSceneContractError::None &&
-        contract.isValid() && cameraPath.isValid();
+    return error == ValidationSceneContractError::None && contract.isValid() && cameraPath.isValid();
 }
 
-ValidationRenderSettingsProfile makeValidationRenderSettingsProfile(
-    const ValidationScene scene) {
+ValidationRenderSettingsProfile makeValidationRenderSettingsProfile(const ValidationScene scene) {
     ValidationRenderSettingsProfile profile;
     profile.version = kValidationRenderSettingsVersion;
     configureCommonValidationSettings(profile.settings);
     switch (scene) {
-        case ValidationScene::Voxel:
-            profile.id = "m0_voxel_render_settings";
-            break;
-        case ValidationScene::Model:
-            profile.id = "m0_model_render_settings";
-            profile.settings.occlusion.hiZEnabled = false;
-            profile.settings.transparent.waterEffectsEnabled = false;
-            profile.settings.transparent.compositeEnabled = false;
-            profile.settings.weather.particlesEnabled = false;
-            profile.settings.weather.rainLinesEnabled = false;
-            profile.settings.taa.enabled = false;
-            profile.settings.shadow.gpuCascadeCullEnabled = false;
-            profile.settings.fog.autoDistanceByRenderDistance = false;
-            break;
-        case ValidationScene::None:
-            std::abort();
+    case ValidationScene::Voxel: profile.id = "m0_voxel_render_settings"; break;
+    case ValidationScene::Model:
+        profile.id = "m0_model_render_settings";
+        profile.settings.occlusion.hiZEnabled = false;
+        profile.settings.transparent.waterEffectsEnabled = false;
+        profile.settings.transparent.compositeEnabled = false;
+        profile.settings.weather.particlesEnabled = false;
+        profile.settings.weather.rainLinesEnabled = false;
+        profile.settings.taa.enabled = false;
+        profile.settings.shadow.gpuCascadeCullEnabled = false;
+        profile.settings.fog.autoDistanceByRenderDistance = false;
+        break;
+    case ValidationScene::None: std::abort();
     }
     profile.contentHash = renderSettingsContentHash(profile.settings);
     return profile;
 }
 
-StableContentHash validationVoxelWorldContentHash(
-    const ValidationVoxelWorldIdentity& world) {
+StableContentHash validationVoxelWorldContentHash(const ValidationVoxelWorldIdentity& world) {
     StableContentHashBuilder hash;
     hash.addString(world.generatorId);
     hash.addUint64(world.generatorVersion);
@@ -581,8 +486,7 @@ StableContentHash validationVoxelWorldContentHash(
     return hash.value();
 }
 
-StableContentHash validationSceneContentHash(
-    const ValidationSceneContract& contract) {
+StableContentHash validationSceneContentHash(const ValidationSceneContract& contract) {
     StableContentHashBuilder hash;
     hash.addString(kValidationSceneContractKind);
     hash.addUint64(contract.version);
@@ -618,11 +522,9 @@ StableContentHash validationSceneContentHash(
     return hash.value();
 }
 
-ValidationSceneContractLoadResult parseValidationSceneContractJson(
-    const std::string_view jsonText,
-    const std::filesystem::path& sourcePath) {
-    const Json root = Json::parse(
-        jsonText.begin(), jsonText.end(), nullptr, false);
+ValidationSceneContractLoadResult parseValidationSceneContractJson(const std::string_view jsonText,
+                                                                   const std::filesystem::path& sourcePath) {
+    const Json root = Json::parse(jsonText.begin(), jsonText.end(), nullptr, false);
     if (root.is_discarded()) {
         ValidationSceneContractLoadResult result;
         result.error = ValidationSceneContractError::InvalidJson;
@@ -632,8 +534,7 @@ ValidationSceneContractLoadResult parseValidationSceneContractJson(
     return parseRoot(root, sourcePath);
 }
 
-ValidationSceneContractLoadResult loadValidationSceneContract(
-    const std::filesystem::path& path) {
+ValidationSceneContractLoadResult loadValidationSceneContract(const std::filesystem::path& path) {
     std::ifstream input(path, std::ios::binary);
     if (!input) {
         ValidationSceneContractLoadResult result;
@@ -654,55 +555,36 @@ ValidationSceneContractLoadResult loadValidationSceneContract(
 
 const char* validationWeatherStableId(const ValidationWeather weather) {
     switch (weather) {
-        case ValidationWeather::Clear: return "clear";
+    case ValidationWeather::Clear: return "clear";
     }
     std::abort();
 }
 
-const char* validationSceneContractErrorStableId(
-    const ValidationSceneContractError error) {
+const char* validationSceneContractErrorStableId(const ValidationSceneContractError error) {
     switch (error) {
-        case ValidationSceneContractError::None: return "None";
-        case ValidationSceneContractError::FileOpenFailed:
-            return "FileOpenFailed";
-        case ValidationSceneContractError::FileReadFailed:
-            return "FileReadFailed";
-        case ValidationSceneContractError::InvalidJson: return "InvalidJson";
-        case ValidationSceneContractError::InvalidRoot: return "InvalidRoot";
-        case ValidationSceneContractError::MissingField:
-            return "MissingField";
-        case ValidationSceneContractError::UnexpectedField:
-            return "UnexpectedField";
-        case ValidationSceneContractError::InvalidFieldType:
-            return "InvalidFieldType";
-        case ValidationSceneContractError::InvalidKind: return "InvalidKind";
-        case ValidationSceneContractError::UnsupportedVersion:
-            return "UnsupportedVersion";
-        case ValidationSceneContractError::InvalidIdentifier:
-            return "InvalidIdentifier";
-        case ValidationSceneContractError::InvalidScene:
-            return "InvalidScene";
-        case ValidationSceneContractError::InvalidContentHash:
-            return "InvalidContentHash";
-        case ValidationSceneContractError::InvalidPath: return "InvalidPath";
-        case ValidationSceneContractError::CameraPathLoadFailed:
-            return "CameraPathLoadFailed";
-        case ValidationSceneContractError::CameraPathIdentityMismatch:
-            return "CameraPathIdentityMismatch";
-        case ValidationSceneContractError::RenderSettingsIdentityMismatch:
-            return "RenderSettingsIdentityMismatch";
-        case ValidationSceneContractError::InvalidEnvironment:
-            return "InvalidEnvironment";
-        case ValidationSceneContractError::InvalidWorld:
-            return "InvalidWorld";
-        case ValidationSceneContractError::WorldHashMismatch:
-            return "WorldHashMismatch";
-        case ValidationSceneContractError::AssetHashFailed:
-            return "AssetHashFailed";
-        case ValidationSceneContractError::AssetHashMismatch:
-            return "AssetHashMismatch";
-        case ValidationSceneContractError::SceneHashMismatch:
-            return "SceneHashMismatch";
+    case ValidationSceneContractError::None: return "None";
+    case ValidationSceneContractError::FileOpenFailed: return "FileOpenFailed";
+    case ValidationSceneContractError::FileReadFailed: return "FileReadFailed";
+    case ValidationSceneContractError::InvalidJson: return "InvalidJson";
+    case ValidationSceneContractError::InvalidRoot: return "InvalidRoot";
+    case ValidationSceneContractError::MissingField: return "MissingField";
+    case ValidationSceneContractError::UnexpectedField: return "UnexpectedField";
+    case ValidationSceneContractError::InvalidFieldType: return "InvalidFieldType";
+    case ValidationSceneContractError::InvalidKind: return "InvalidKind";
+    case ValidationSceneContractError::UnsupportedVersion: return "UnsupportedVersion";
+    case ValidationSceneContractError::InvalidIdentifier: return "InvalidIdentifier";
+    case ValidationSceneContractError::InvalidScene: return "InvalidScene";
+    case ValidationSceneContractError::InvalidContentHash: return "InvalidContentHash";
+    case ValidationSceneContractError::InvalidPath: return "InvalidPath";
+    case ValidationSceneContractError::CameraPathLoadFailed: return "CameraPathLoadFailed";
+    case ValidationSceneContractError::CameraPathIdentityMismatch: return "CameraPathIdentityMismatch";
+    case ValidationSceneContractError::RenderSettingsIdentityMismatch: return "RenderSettingsIdentityMismatch";
+    case ValidationSceneContractError::InvalidEnvironment: return "InvalidEnvironment";
+    case ValidationSceneContractError::InvalidWorld: return "InvalidWorld";
+    case ValidationSceneContractError::WorldHashMismatch: return "WorldHashMismatch";
+    case ValidationSceneContractError::AssetHashFailed: return "AssetHashFailed";
+    case ValidationSceneContractError::AssetHashMismatch: return "AssetHashMismatch";
+    case ValidationSceneContractError::SceneHashMismatch: return "SceneHashMismatch";
     }
     std::abort();
 }

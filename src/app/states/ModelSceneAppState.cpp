@@ -40,14 +40,11 @@ constexpr float kPi = 3.14159265358979323846f;
 constexpr float kCameraLookSensitivity = 0.25f;
 constexpr float kCameraMoveSpeed = 3.0f;
 constexpr float kCameraFastMoveMultiplier = 4.0f;
-constexpr const char* kDefaultModelPath =
-    "assets/models/showcase/DamagedHelmet.glb";
+constexpr const char* kDefaultModelPath = "assets/models/showcase/DamagedHelmet.glb";
 
-[[nodiscard]] std::string normalizedScenePath(const std::string& path,
-                                              std::string& error) {
+[[nodiscard]] std::string normalizedScenePath(const std::string& path, std::string& error) {
     std::error_code filesystemError;
-    std::filesystem::path normalized = std::filesystem::absolute(
-        std::filesystem::u8path(path), filesystemError);
+    std::filesystem::path normalized = std::filesystem::absolute(std::filesystem::u8path(path), filesystemError);
     if (filesystemError) {
         error = "Failed to resolve scene path: " + filesystemError.message();
         return {};
@@ -68,70 +65,55 @@ constexpr const char* kDefaultModelPath =
     return result.generic_u8string();
 }
 
-[[nodiscard]] uint32_t viewportDimension(const float logicalSize,
-                                         const float framebufferScale) {
-    return static_cast<uint32_t>(std::max(
-        1.0f, std::floor(logicalSize * framebufferScale)));
+[[nodiscard]] uint32_t viewportDimension(const float logicalSize, const float framebufferScale) {
+    return static_cast<uint32_t>(std::max(1.0f, std::floor(logicalSize * framebufferScale)));
 }
 
 [[nodiscard]] ImGuizmo::OPERATION gizmoOperation(const int operation) {
     switch (operation) {
-        case 0: return ImGuizmo::TRANSLATE;
-        case 1: return ImGuizmo::ROTATE;
-        case 2: return ImGuizmo::SCALE;
-        default: std::abort();
+    case 0: return ImGuizmo::TRANSLATE;
+    case 1: return ImGuizmo::ROTATE;
+    case 2: return ImGuizmo::SCALE;
+    default: std::abort();
     }
 }
 } // namespace
 
-ModelSceneAppState::ModelSceneAppState(AppStateDependencies deps)
-    : m_deps(deps) {}
+ModelSceneAppState::ModelSceneAppState(AppStateDependencies deps) : m_deps(deps) {}
 
 void ModelSceneAppState::onEnter() {
     const auto failValidationInitialization = [this](std::string detail) {
-        if (m_deps.validationRun.enabled() &&
-            !m_deps.validationRun.failed()) {
-            m_deps.validationRun.fail(
-                app::validation::ValidationRunError::SceneInitializationFailed,
-                std::move(detail));
+        if (m_deps.validationRun.enabled() && !m_deps.validationRun.failed()) {
+            m_deps.validationRun.fail(app::validation::ValidationRunError::SceneInitializationFailed,
+                                      std::move(detail));
         }
     };
     m_deps.contextManager.pushContext(InputContextType::UI);
     m_cameraControlActive = false;
     m_deps.input.captureMouse(false);
     m_returnRequested = false;
-    if (!m_imguiRenderer.init(m_deps.window, m_deps.rhiDevice, true,
-                              "model_scene_imgui.ini")) {
-        MECRAFT_LOG_STREAM(
-            std::cerr << "[ModelSceneAppState] Failed to initialize ImGui\n");
-        failValidationInitialization(
-            "model validation ImGui renderer initialization failed");
+    if (!m_imguiRenderer.init(m_deps.window, m_deps.rhiDevice, true, "model_scene_imgui.ini")) {
+        MECRAFT_LOG_STREAM(std::cerr << "[ModelSceneAppState] Failed to initialize ImGui\n");
+        failValidationInitialization("model validation ImGui renderer initialization failed");
         return;
     }
-    if (!m_scene.init(m_deps.resourceMgr, m_deps.rhiDevice,
-                      m_deps.commandListPool, m_imguiRenderer)) {
-        MECRAFT_LOG_STREAM(
-            std::cerr << "[ModelSceneAppState] " << m_scene.lastError() << '\n');
+    if (!m_scene.init(m_deps.resourceMgr, m_deps.rhiDevice, m_deps.commandListPool, m_imguiRenderer)) {
+        MECRAFT_LOG_STREAM(std::cerr << "[ModelSceneAppState] " << m_scene.lastError() << '\n');
         failValidationInitialization(m_scene.lastError());
         return;
     }
     std::string initialModelPath = kDefaultModelPath;
     if (m_deps.validationRun.enabled()) {
-        const app::validation::ValidationSceneContract& contract =
-            m_deps.validationRun.sceneContract();
-        if (contract.scene != ValidationScene::Model ||
-            !contract.modelAsset.has_value()) {
-            failValidationInitialization(
-                "model validation requires one verified model asset");
+        const app::validation::ValidationSceneContract& contract = m_deps.validationRun.sceneContract();
+        if (contract.scene != ValidationScene::Model || !contract.modelAsset.has_value()) {
+            failValidationInitialization("model validation requires one verified model asset");
             m_scene.shutdown();
             return;
         }
-        initialModelPath =
-            contract.modelAsset->resolvedPath.generic_u8string();
+        initialModelPath = contract.modelAsset->resolvedPath.generic_u8string();
     }
     if (m_scene.importModel(initialModelPath) == entt::null) {
-        MECRAFT_LOG_STREAM(
-            std::cerr << "[ModelSceneAppState] " << m_scene.lastError() << '\n');
+        MECRAFT_LOG_STREAM(std::cerr << "[ModelSceneAppState] " << m_scene.lastError() << '\n');
         failValidationInitialization(m_scene.lastError());
         m_scene.shutdown();
         return;
@@ -150,15 +132,12 @@ void ModelSceneAppState::onEnter() {
     m_transformCommandFromGizmo = false;
     m_transformCommandEntityId = scene::kInvalidSceneEntityId;
     if (m_deps.validationRun.enabled()) {
-        const app::validation::ValidationSceneContract& contract =
-            m_deps.validationRun.sceneContract();
-        if (!m_scene.setRenderSettings(
-                m_deps.validationRun.renderSettingsProfile().settings)) {
+        const app::validation::ValidationSceneContract& contract = m_deps.validationRun.sceneContract();
+        if (!m_scene.setRenderSettings(m_deps.validationRun.renderSettingsProfile().settings)) {
             failValidationInitialization(m_scene.lastError());
             return;
         }
-        m_scene.setTimeOfDay(
-            static_cast<float>(contract.environment.timeOfDaySeconds));
+        m_scene.setTimeOfDay(static_cast<float>(contract.environment.timeOfDaySeconds));
         m_scene.setTimePaused(true);
         m_scene.setTimeScale(1.0f);
         m_scene.setWeather(WeatherType::Clear, true);
@@ -193,8 +172,7 @@ void ModelSceneAppState::markSceneDirty() {
 }
 
 void ModelSceneAppState::refreshSceneDirty() {
-    m_sceneDirty =
-        m_nonHistoryDirty || !m_history.isAtSavedState();
+    m_sceneDirty = m_nonHistoryDirty || !m_history.isAtSavedState();
 }
 
 void ModelSceneAppState::recordCreatedEntity(const entt::entity entity) {
@@ -206,10 +184,8 @@ void ModelSceneAppState::recordCreatedEntity(const entt::entity entity) {
     refreshSceneDirty();
 }
 
-void ModelSceneAppState::beginTransformCommand(
-    const entt::entity entity,
-    const scene::SceneEntityDocument& before,
-    const bool fromGizmo) {
+void ModelSceneAppState::beginTransformCommand(const entt::entity entity, const scene::SceneEntityDocument& before,
+                                               const bool fromGizmo) {
     if (m_transformCommandActive) {
         return;
     }
@@ -223,8 +199,7 @@ void ModelSceneAppState::finishTransformCommand() {
     if (!m_transformCommandActive) {
         return;
     }
-    const entt::entity entity =
-        m_scene.findEntity(m_transformCommandEntityId);
+    const entt::entity entity = m_scene.findEntity(m_transformCommandEntityId);
     scene::SceneEntityDocument after;
     if (entity != entt::null && m_scene.captureEntityState(entity, after)) {
         m_history.recordEntityState(m_transformCommandBefore, after);
@@ -256,19 +231,12 @@ void ModelSceneAppState::redoSceneCommand() {
 }
 
 void ModelSceneAppState::handleEditorShortcuts(const InputSnapshot& input) {
-    if (m_cameraControlActive || ImGuizmo::IsUsing() ||
-        ImGui::GetIO().WantTextInput ||
-        ImGui::IsPopupOpen(
-            nullptr,
-            ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel)) {
+    if (m_cameraControlActive || ImGuizmo::IsUsing() || ImGui::GetIO().WantTextInput ||
+        ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel)) {
         return;
     }
-    const bool control =
-        input.isKeyHeld(GLFW_KEY_LEFT_CONTROL) ||
-        input.isKeyHeld(GLFW_KEY_RIGHT_CONTROL);
-    const bool shift =
-        input.isKeyHeld(GLFW_KEY_LEFT_SHIFT) ||
-        input.isKeyHeld(GLFW_KEY_RIGHT_SHIFT);
+    const bool control = input.isKeyHeld(GLFW_KEY_LEFT_CONTROL) || input.isKeyHeld(GLFW_KEY_RIGHT_CONTROL);
+    const bool shift = input.isKeyHeld(GLFW_KEY_LEFT_SHIFT) || input.isKeyHeld(GLFW_KEY_RIGHT_SHIFT);
     if (control && input.isKeyJustPressed(GLFW_KEY_S)) {
         static_cast<void>(shift ? saveSceneAs() : saveScene());
         return;
@@ -306,9 +274,7 @@ void ModelSceneAppState::handleEditorShortcuts(const InputSnapshot& input) {
     }
 }
 
-void ModelSceneAppState::queueEntityAction(
-    const PendingEntityAction action,
-    const scene::SceneEntityId entityId) {
+void ModelSceneAppState::queueEntityAction(const PendingEntityAction action, const scene::SceneEntityId entityId) {
     m_pendingEntityAction = action;
     m_pendingEntityId = entityId;
 }
@@ -326,19 +292,11 @@ void ModelSceneAppState::executePendingEntityAction() {
     }
     m_scene.setSelectedEntity(entity);
     switch (action) {
-        case PendingEntityAction::None:
-            return;
-        case PendingEntityAction::Duplicate:
-            duplicateSelectedEntity();
-            return;
-        case PendingEntityAction::Delete:
-            deleteSelectedEntity();
-            return;
-        case PendingEntityAction::Focus:
-            focusSelectedEntity();
-            return;
-        default:
-            std::abort();
+    case PendingEntityAction::None: return;
+    case PendingEntityAction::Duplicate: duplicateSelectedEntity(); return;
+    case PendingEntityAction::Delete: deleteSelectedEntity(); return;
+    case PendingEntityAction::Focus: focusSelectedEntity(); return;
+    default: std::abort();
     }
 }
 
@@ -377,15 +335,12 @@ void ModelSceneAppState::focusSelectedEntity() {
     }
     m_cameraTarget = (boundsMin + boundsMax) * 0.5f;
     const float radius = glm::length(boundsMax - boundsMin) * 0.5f;
-    const float framingDistance =
-        radius / std::tan(glm::radians(27.5f)) * 1.2f;
-    m_cameraDistance = std::clamp(
-        std::max(2.0f, framingDistance), 0.6f, 80.0f);
+    const float framingDistance = radius / std::tan(glm::radians(27.5f)) * 1.2f;
+    m_cameraDistance = std::clamp(std::max(2.0f, framingDistance), 0.6f, 80.0f);
     markSceneDirty();
 }
 
-scene::SceneEditorCameraDocument
-ModelSceneAppState::captureEditorCamera() const {
+scene::SceneEditorCameraDocument ModelSceneAppState::captureEditorCamera() const {
     scene::SceneEditorCameraDocument camera;
     camera.target = m_cameraTarget;
     camera.distance = m_cameraDistance;
@@ -396,8 +351,7 @@ ModelSceneAppState::captureEditorCamera() const {
     return camera;
 }
 
-void ModelSceneAppState::applyEditorCamera(
-    const scene::SceneEditorCameraDocument& camera) {
+void ModelSceneAppState::applyEditorCamera(const scene::SceneEditorCameraDocument& camera) {
     m_cameraTarget = camera.target;
     m_cameraDistance = camera.distance;
     m_cameraYaw = camera.yaw;
@@ -406,8 +360,7 @@ void ModelSceneAppState::applyEditorCamera(
     m_cameraFarPlane = camera.farPlane;
 }
 
-void ModelSceneAppState::requestSceneAction(
-    const PendingSceneAction action) {
+void ModelSceneAppState::requestSceneAction(const PendingSceneAction action) {
     if (action == PendingSceneAction::None) {
         return;
     }
@@ -419,22 +372,13 @@ void ModelSceneAppState::requestSceneAction(
     m_openUnsavedPopup = true;
 }
 
-void ModelSceneAppState::executeSceneAction(
-    const PendingSceneAction action) {
+void ModelSceneAppState::executeSceneAction(const PendingSceneAction action) {
     switch (action) {
-        case PendingSceneAction::None:
-            return;
-        case PendingSceneAction::NewScene:
-            newScene();
-            return;
-        case PendingSceneAction::OpenScene:
-            openSceneDialog();
-            return;
-        case PendingSceneAction::ReturnToMenu:
-            requestReturnToMenu();
-            return;
-        default:
-            std::abort();
+    case PendingSceneAction::None: return;
+    case PendingSceneAction::NewScene: newScene(); return;
+    case PendingSceneAction::OpenScene: openSceneDialog(); return;
+    case PendingSceneAction::ReturnToMenu: requestReturnToMenu(); return;
+    default: std::abort();
     }
 }
 
@@ -460,8 +404,7 @@ bool ModelSceneAppState::loadScenePath(const std::string& path) {
         return false;
     }
     scene::ModelSceneDocument document;
-    if (!scene::ModelSceneSerializer::loadFromFile(
-            normalized, document, m_sceneIoError)) {
+    if (!scene::ModelSceneSerializer::loadFromFile(normalized, document, m_sceneIoError)) {
         return false;
     }
     if (!m_scene.loadDocument(document)) {
@@ -490,12 +433,10 @@ void ModelSceneAppState::openSceneDialog() {
     nfdchar_t* selectedPath = nullptr;
     std::string defaultPath;
     if (!m_scenePath.empty()) {
-        defaultPath = std::filesystem::u8path(m_scenePath)
-            .parent_path().generic_u8string();
+        defaultPath = std::filesystem::u8path(m_scenePath).parent_path().generic_u8string();
     }
-    const nfdresult_t result = NFD_OpenDialog(
-        &selectedPath, filters, std::size(filters),
-        defaultPath.empty() ? nullptr : defaultPath.c_str());
+    const nfdresult_t result =
+        NFD_OpenDialog(&selectedPath, filters, std::size(filters), defaultPath.empty() ? nullptr : defaultPath.c_str());
     if (result == NFD_OKAY) {
         const std::string path(selectedPath);
         NFD_FreePath(selectedPath);
@@ -512,15 +453,12 @@ void ModelSceneAppState::openSceneDialog() {
 bool ModelSceneAppState::saveSceneToPath(const std::string& path) {
     m_sceneIoError.clear();
     const std::string withExtension = scenePathWithExtension(path);
-    const std::string normalized = normalizedScenePath(
-        withExtension, m_sceneIoError);
+    const std::string normalized = normalizedScenePath(withExtension, m_sceneIoError);
     if (normalized.empty()) {
         return false;
     }
-    const scene::ModelSceneDocument document =
-        m_scene.captureDocument(captureEditorCamera());
-    if (!scene::ModelSceneSerializer::saveToFile(
-            normalized, document, m_sceneIoError)) {
+    const scene::ModelSceneDocument document = m_scene.captureDocument(captureEditorCamera());
+    if (!scene::ModelSceneSerializer::saveToFile(normalized, document, m_sceneIoError)) {
         return false;
     }
     m_scenePath = normalized;
@@ -541,15 +479,12 @@ bool ModelSceneAppState::saveSceneAs() {
     std::string defaultPath;
     std::string defaultName = "Untitled.scene";
     if (!m_scenePath.empty()) {
-        const std::filesystem::path current =
-            std::filesystem::u8path(m_scenePath);
+        const std::filesystem::path current = std::filesystem::u8path(m_scenePath);
         defaultPath = current.parent_path().generic_u8string();
         defaultName = current.filename().generic_u8string();
     }
-    const nfdresult_t result = NFD_SaveDialog(
-        &selectedPath, filters, std::size(filters),
-        defaultPath.empty() ? nullptr : defaultPath.c_str(),
-        defaultName.c_str());
+    const nfdresult_t result = NFD_SaveDialog(&selectedPath, filters, std::size(filters),
+                                              defaultPath.empty() ? nullptr : defaultPath.c_str(), defaultName.c_str());
     if (result == NFD_OKAY) {
         const std::string path(selectedPath);
         NFD_FreePath(selectedPath);
@@ -564,9 +499,7 @@ bool ModelSceneAppState::saveSceneAs() {
 }
 
 bool ModelSceneAppState::saveScene() {
-    return m_scenePath.empty()
-        ? saveSceneAs()
-        : saveSceneToPath(m_scenePath);
+    return m_scenePath.empty() ? saveSceneAs() : saveSceneToPath(m_scenePath);
 }
 
 void ModelSceneAppState::update(const double frameTime, double& accumulator) {
@@ -592,11 +525,11 @@ void ModelSceneAppState::update(const double frameTime, double& accumulator) {
     }
     handleEditorShortcuts(input);
     updateCamera(input, frameTime);
-    if (m_viewportHovered && !m_cameraControlActive &&
-        !ImGuizmo::IsUsing() &&
-        !ImGui::GetIO().WantTextInput) {
-        if (input.isKeyJustPressed(GLFW_KEY_W)) m_gizmoOperation = 0;
-        if (input.isKeyJustPressed(GLFW_KEY_E)) m_gizmoOperation = 1;
+    if (m_viewportHovered && !m_cameraControlActive && !ImGuizmo::IsUsing() && !ImGui::GetIO().WantTextInput) {
+        if (input.isKeyJustPressed(GLFW_KEY_W))
+            m_gizmoOperation = 0;
+        if (input.isKeyJustPressed(GLFW_KEY_E))
+            m_gizmoOperation = 1;
         if (input.isKeyJustPressed(GLFW_KEY_R)) {
             m_gizmoOperation = 2;
             m_gizmoMode = 0;
@@ -608,10 +541,7 @@ void ModelSceneAppState::update(const double frameTime, double& accumulator) {
 glm::vec3 ModelSceneAppState::cameraPosition() const {
     const float yaw = glm::radians(m_cameraYaw);
     const float pitch = glm::radians(m_cameraPitch);
-    const glm::vec3 direction{
-        std::cos(pitch) * std::cos(yaw),
-        std::sin(pitch),
-        std::cos(pitch) * std::sin(yaw)};
+    const glm::vec3 direction{std::cos(pitch) * std::cos(yaw), std::sin(pitch), std::cos(pitch) * std::sin(yaw)};
     return m_cameraTarget + direction * m_cameraDistance;
 }
 
@@ -623,67 +553,53 @@ void ModelSceneAppState::setCameraControlActive(const bool active) {
     m_deps.input.captureMouse(active);
 }
 
-void ModelSceneAppState::updateCamera(const InputSnapshot& input,
-                                      const double frameTime) {
+void ModelSceneAppState::updateCamera(const InputSnapshot& input, const double frameTime) {
     const glm::vec3 previousTarget = m_cameraTarget;
     const float previousDistance = m_cameraDistance;
     const float previousYaw = m_cameraYaw;
     const float previousPitch = m_cameraPitch;
-    const bool canStartControl =
-        m_viewportHovered && !ImGuizmo::IsUsing() &&
-        !ImGui::GetIO().WantTextInput;
+    const bool canStartControl = m_viewportHovered && !ImGuizmo::IsUsing() && !ImGui::GetIO().WantTextInput;
     const bool startingControl =
-        !m_cameraControlActive && canStartControl &&
-        input.isMouseButtonJustPressed(GLFW_MOUSE_BUTTON_RIGHT);
+        !m_cameraControlActive && canStartControl && input.isMouseButtonJustPressed(GLFW_MOUSE_BUTTON_RIGHT);
     if (startingControl) {
         setCameraControlActive(true);
     }
-    if (m_cameraControlActive &&
-        input.isMouseButtonJustReleased(GLFW_MOUSE_BUTTON_RIGHT)) {
+    if (m_cameraControlActive && input.isMouseButtonJustReleased(GLFW_MOUSE_BUTTON_RIGHT)) {
         setCameraControlActive(false);
         return;
     }
 
     if (m_cameraControlActive) {
         if (!startingControl) {
-            m_cameraYaw = std::remainder(
-                m_cameraYaw + input.mouseDelta.x * kCameraLookSensitivity,
-                360.0f);
-            m_cameraPitch = std::clamp(
-                m_cameraPitch + input.mouseDelta.y * kCameraLookSensitivity,
-                -85.0f, 85.0f);
+            m_cameraYaw = std::remainder(m_cameraYaw + input.mouseDelta.x * kCameraLookSensitivity, 360.0f);
+            m_cameraPitch = std::clamp(m_cameraPitch + input.mouseDelta.y * kCameraLookSensitivity, -85.0f, 85.0f);
         }
 
         const glm::vec3 position = cameraPosition();
         const glm::vec3 forward = glm::normalize(m_cameraTarget - position);
-        const glm::vec3 right = glm::normalize(glm::cross(
-            forward, glm::vec3(0.0f, 1.0f, 0.0f)));
+        const glm::vec3 right = glm::normalize(glm::cross(forward, glm::vec3(0.0f, 1.0f, 0.0f)));
         glm::vec3 movement{0.0f};
-        if (input.isKeyHeld(GLFW_KEY_W)) movement += forward;
-        if (input.isKeyHeld(GLFW_KEY_S)) movement -= forward;
-        if (input.isKeyHeld(GLFW_KEY_D)) movement += right;
-        if (input.isKeyHeld(GLFW_KEY_A)) movement -= right;
+        if (input.isKeyHeld(GLFW_KEY_W))
+            movement += forward;
+        if (input.isKeyHeld(GLFW_KEY_S))
+            movement -= forward;
+        if (input.isKeyHeld(GLFW_KEY_D))
+            movement += right;
+        if (input.isKeyHeld(GLFW_KEY_A))
+            movement -= right;
         if (glm::dot(movement, movement) > 0.0f) {
-            const bool fastMove =
-                input.isKeyHeld(GLFW_KEY_LEFT_SHIFT) ||
-                input.isKeyHeld(GLFW_KEY_RIGHT_SHIFT);
-            const float speed = kCameraMoveSpeed *
-                (fastMove ? kCameraFastMoveMultiplier : 1.0f);
-            m_cameraTarget += glm::normalize(movement) * speed *
-                static_cast<float>(frameTime);
+            const bool fastMove = input.isKeyHeld(GLFW_KEY_LEFT_SHIFT) || input.isKeyHeld(GLFW_KEY_RIGHT_SHIFT);
+            const float speed = kCameraMoveSpeed * (fastMove ? kCameraFastMoveMultiplier : 1.0f);
+            m_cameraTarget += glm::normalize(movement) * speed * static_cast<float>(frameTime);
         }
     }
 
-    if ((m_viewportHovered || m_cameraControlActive) &&
-        input.scrollDelta != 0.0) {
-        const float zoomFactor = std::exp(
-            static_cast<float>(-input.scrollDelta) * 0.12f);
-        m_cameraDistance = std::clamp(
-            m_cameraDistance * zoomFactor, 0.6f, 80.0f);
+    if ((m_viewportHovered || m_cameraControlActive) && input.scrollDelta != 0.0) {
+        const float zoomFactor = std::exp(static_cast<float>(-input.scrollDelta) * 0.12f);
+        m_cameraDistance = std::clamp(m_cameraDistance * zoomFactor, 0.6f, 80.0f);
     }
-    if (previousTarget != m_cameraTarget ||
-        previousDistance != m_cameraDistance ||
-        previousYaw != m_cameraYaw || previousPitch != m_cameraPitch) {
+    if (previousTarget != m_cameraTarget || previousDistance != m_cameraDistance || previousYaw != m_cameraYaw ||
+        previousPitch != m_cameraPitch) {
         markSceneDirty();
     }
 }
@@ -695,20 +611,16 @@ void ModelSceneAppState::buildInitialDockLayout(const ImGuiID dockspaceId) {
     }
     const ImGuiViewport* viewport = ImGui::GetMainViewport();
     ImGui::DockBuilderRemoveNode(dockspaceId);
-    ImGui::DockBuilderAddNode(
-        dockspaceId, ImGuiDockNodeFlags_DockSpace);
+    ImGui::DockBuilderAddNode(dockspaceId, ImGuiDockNodeFlags_DockSpace);
     ImGui::DockBuilderSetNodePos(dockspaceId, viewport->WorkPos);
     ImGui::DockBuilderSetNodeSize(dockspaceId, viewport->WorkSize);
     ImGuiID center = dockspaceId;
     ImGuiID left = 0u;
     ImGuiID right = 0u;
     ImGuiID bottom = 0u;
-    ImGui::DockBuilderSplitNode(
-        center, ImGuiDir_Left, 0.20f, &left, &center);
-    ImGui::DockBuilderSplitNode(
-        center, ImGuiDir_Right, 0.25f, &right, &center);
-    ImGui::DockBuilderSplitNode(
-        center, ImGuiDir_Down, 0.24f, &bottom, &center);
+    ImGui::DockBuilderSplitNode(center, ImGuiDir_Left, 0.20f, &left, &center);
+    ImGui::DockBuilderSplitNode(center, ImGuiDir_Right, 0.25f, &right, &center);
+    ImGui::DockBuilderSplitNode(center, ImGuiDir_Down, 0.24f, &bottom, &center);
     ImGui::DockBuilderDockWindow("Scene Hierarchy", left);
     ImGui::DockBuilderDockWindow("Inspector", right);
     ImGui::DockBuilderDockWindow("Render Settings", right);
@@ -740,42 +652,34 @@ void ModelSceneAppState::buildEditorUi() {
             ImGui::EndMenu();
         }
         const entt::entity selected = m_scene.selectedEntity();
-        const bool hasSelection =
-            selected != entt::null && m_scene.registry().valid(selected);
+        const bool hasSelection = selected != entt::null && m_scene.registry().valid(selected);
         if (ImGui::BeginMenu("Edit")) {
-            if (ImGui::MenuItem(
-                    "Undo", nullptr, false, m_history.canUndo())) {
+            if (ImGui::MenuItem("Undo", nullptr, false, m_history.canUndo())) {
                 undoSceneCommand();
             }
-            if (ImGui::MenuItem(
-                    "Redo", nullptr, false, m_history.canRedo())) {
+            if (ImGui::MenuItem("Redo", nullptr, false, m_history.canRedo())) {
                 redoSceneCommand();
             }
             ImGui::Separator();
-            if (ImGui::MenuItem(
-                    "Duplicate Entity", nullptr, false, hasSelection)) {
+            if (ImGui::MenuItem("Duplicate Entity", nullptr, false, hasSelection)) {
                 duplicateSelectedEntity();
             }
-            if (ImGui::MenuItem(
-                    "Delete Entity", nullptr, false, hasSelection)) {
+            if (ImGui::MenuItem("Delete Entity", nullptr, false, hasSelection)) {
                 deleteSelectedEntity();
             }
             ImGui::Separator();
-            if (ImGui::MenuItem(
-                    "Focus Selection", nullptr, false, hasSelection)) {
+            if (ImGui::MenuItem("Focus Selection", nullptr, false, hasSelection)) {
                 focusSelectedEntity();
             }
             ImGui::EndMenu();
         }
-        const std::string sceneName = m_scenePath.empty()
-            ? "Untitled"
-            : std::filesystem::u8path(m_scenePath).filename().generic_u8string();
+        const std::string sceneName =
+            m_scenePath.empty() ? "Untitled" : std::filesystem::u8path(m_scenePath).filename().generic_u8string();
         ImGui::TextDisabled("%s%s", sceneName.c_str(), m_sceneDirty ? " *" : "");
         ImGui::EndMainMenuBar();
     }
     const ImGuiID dockspaceId = ImGui::GetID("ModelSceneDockspaceV2");
-    ImGui::DockSpaceOverViewport(
-        dockspaceId, ImGui::GetMainViewport(), ImGuiDockNodeFlags_None);
+    ImGui::DockSpaceOverViewport(dockspaceId, ImGui::GetMainViewport(), ImGuiDockNodeFlags_None);
     buildInitialDockLayout(dockspaceId);
     showHierarchyPanel();
     showInspectorPanel();
@@ -790,8 +694,7 @@ void ModelSceneAppState::showUnsavedChangesModal() {
         ImGui::OpenPopup("Unsaved Scene");
         m_openUnsavedPopup = false;
     }
-    if (!ImGui::BeginPopupModal(
-            "Unsaved Scene", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+    if (!ImGui::BeginPopupModal("Unsaved Scene", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
         return;
     }
     ImGui::TextUnformatted("Save changes to the current scene?");
@@ -817,9 +720,7 @@ void ModelSceneAppState::showUnsavedChangesModal() {
         ImGui::CloseCurrentPopup();
     }
     if (!m_sceneIoError.empty()) {
-        ImGui::TextColored(
-            ImVec4(1.0f, 0.35f, 0.30f, 1.0f),
-            "%s", m_sceneIoError.c_str());
+        ImGui::TextColored(ImVec4(1.0f, 0.35f, 0.30f, 1.0f), "%s", m_sceneIoError.c_str());
     }
     ImGui::EndPopup();
 }
@@ -829,33 +730,25 @@ void ModelSceneAppState::showRenderSettingsPanel() {
     RenderSettings settings = m_scene.renderSettings();
     bool changed = false;
 
-    if (ImGui::CollapsingHeader(
-            "Camera", ImGuiTreeNodeFlags_DefaultOpen)) {
+    if (ImGui::CollapsingHeader("Camera", ImGuiTreeNodeFlags_DefaultOpen)) {
         float nearPlane = m_cameraNearPlane;
         float farPlane = m_cameraFarPlane;
         ImGui::SetNextItemWidth(-1.0f);
-        bool cameraChanged = ImGui::DragFloat(
-            "Near Plane", &nearPlane, 0.005f, 0.001f,
-            std::max(0.001f, farPlane - 0.001f), "%.3f");
+        bool cameraChanged =
+            ImGui::DragFloat("Near Plane", &nearPlane, 0.005f, 0.001f, std::max(0.001f, farPlane - 0.001f), "%.3f");
         ImGui::SetNextItemWidth(-1.0f);
-        cameraChanged |= ImGui::DragFloat(
-            "Far Plane", &farPlane, 1.0f, nearPlane + 0.001f,
-            100000.0f, "%.1f");
+        cameraChanged |= ImGui::DragFloat("Far Plane", &farPlane, 1.0f, nearPlane + 0.001f, 100000.0f, "%.1f");
         if (cameraChanged) {
-            m_cameraNearPlane = std::clamp(
-                nearPlane, 0.001f, farPlane - 0.001f);
-            m_cameraFarPlane = std::clamp(
-                farPlane, m_cameraNearPlane + 0.001f, 100000.0f);
+            m_cameraNearPlane = std::clamp(nearPlane, 0.001f, farPlane - 0.001f);
+            m_cameraFarPlane = std::clamp(farPlane, m_cameraNearPlane + 0.001f, 100000.0f);
             markSceneDirty();
         }
     }
 
-    if (ImGui::CollapsingHeader(
-            "Environment", ImGuiTreeNodeFlags_DefaultOpen)) {
+    if (ImGui::CollapsingHeader("Environment", ImGuiTreeNodeFlags_DefaultOpen)) {
         float timeOfDay = m_scene.timeOfDay();
         ImGui::SetNextItemWidth(-1.0f);
-        if (ImGui::SliderFloat(
-                "Time of Day", &timeOfDay, 0.0f, 1199.0f, "%.0f s")) {
+        if (ImGui::SliderFloat("Time of Day", &timeOfDay, 0.0f, 1199.0f, "%.0f s")) {
             m_scene.setTimeOfDay(timeOfDay);
             markSceneDirty();
         }
@@ -867,30 +760,23 @@ void ModelSceneAppState::showRenderSettingsPanel() {
         float timeScale = m_scene.timeScale();
         ImGui::BeginDisabled(!advanceTime);
         ImGui::SetNextItemWidth(-1.0f);
-        if (ImGui::DragFloat(
-                "Time Scale", &timeScale, 0.05f, 0.05f, 100.0f, "%.2fx")) {
+        if (ImGui::DragFloat("Time Scale", &timeScale, 0.05f, 0.05f, 100.0f, "%.2fx")) {
             m_scene.setTimeScale(std::clamp(timeScale, 0.05f, 100.0f));
             markSceneDirty();
         }
         ImGui::EndDisabled();
 
-        constexpr const char* weatherNames[] = {
-            "Clear", "Rain", "Storm", "Snow"};
+        constexpr const char* weatherNames[] = {"Clear", "Rain", "Storm", "Snow"};
         int weather = static_cast<int>(m_scene.weather());
         ImGui::SetNextItemWidth(-1.0f);
-        if (ImGui::Combo("Weather", &weather, weatherNames,
-                         static_cast<int>(std::size(weatherNames)))) {
-            m_scene.setWeather(
-                static_cast<WeatherType>(weather),
-                m_scene.weatherTransitionInstant());
+        if (ImGui::Combo("Weather", &weather, weatherNames, static_cast<int>(std::size(weatherNames)))) {
+            m_scene.setWeather(static_cast<WeatherType>(weather), m_scene.weatherTransitionInstant());
             markSceneDirty();
         }
-        constexpr const char* transitionNames[] = {
-            "Immediate", "Gradual"};
+        constexpr const char* transitionNames[] = {"Immediate", "Gradual"};
         int transition = m_scene.weatherTransitionInstant() ? 0 : 1;
         ImGui::SetNextItemWidth(-1.0f);
-        if (ImGui::Combo("Weather Transition", &transition,
-                         transitionNames,
+        if (ImGui::Combo("Weather Transition", &transition, transitionNames,
                          static_cast<int>(std::size(transitionNames)))) {
             m_scene.setWeather(m_scene.weather(), transition == 0);
             markSceneDirty();
@@ -900,10 +786,8 @@ void ModelSceneAppState::showRenderSettingsPanel() {
     if (ImGui::CollapsingHeader("Graphics Backend")) {
         const RhiBackend currentBackend = m_deps.rhiDevice.backend();
         const app::RhiBackendSettingResult configured = app::loadRhiBackend();
-        const RhiBackend selectedBackend =
-            configured.backend.value_or(currentBackend);
-        constexpr std::array<RhiBackend, 2> knownBackends = {
-            RhiBackend::OpenGL, RhiBackend::Vulkan};
+        const RhiBackend selectedBackend = configured.backend.value_or(currentBackend);
+        constexpr std::array<RhiBackend, 2> knownBackends = {RhiBackend::OpenGL, RhiBackend::Vulkan};
         std::vector<RhiBackend> availableBackends;
         std::vector<const char*> backendNames;
         int selectedIndex = 0;
@@ -917,55 +801,40 @@ void ModelSceneAppState::showRenderSettingsPanel() {
             availableBackends.push_back(backend);
             backendNames.push_back(renderer::rhi::rhiBackendDisplayName(backend));
         }
-        ImGui::Text("Current: %s",
-                    renderer::rhi::rhiBackendDisplayName(currentBackend));
+        ImGui::Text("Current: %s", renderer::rhi::rhiBackendDisplayName(currentBackend));
         ImGui::SetNextItemWidth(-1.0f);
-        if (!availableBackends.empty() && ImGui::Combo(
-                "Backend", &selectedIndex, backendNames.data(),
-                static_cast<int>(backendNames.size()))) {
-            if (!app::saveRhiBackend(
-                    availableBackends[static_cast<std::size_t>(selectedIndex)])) {
+        if (!availableBackends.empty() &&
+            ImGui::Combo("Backend", &selectedIndex, backendNames.data(), static_cast<int>(backendNames.size()))) {
+            if (!app::saveRhiBackend(availableBackends[static_cast<std::size_t>(selectedIndex)])) {
                 m_sceneIoError = "Failed to save graphics backend setting";
             }
         }
         ImGui::TextDisabled("Backend changes apply after restart.");
     }
 
-    if (ImGui::CollapsingHeader(
-            "Upscaling", ImGuiTreeNodeFlags_DefaultOpen)) {
+    if (ImGui::CollapsingHeader("Upscaling", ImGuiTreeNodeFlags_DefaultOpen)) {
         const bool fsr31Supported = m_scene.isFsr31Supported();
-        bool fsr31Enabled =
-            settings.upscale.type == TemporalUpscalerType::Fsr31;
+        bool fsr31Enabled = settings.upscale.type == TemporalUpscalerType::Fsr31;
         ImGui::BeginDisabled(!fsr31Supported);
         if (ImGui::Checkbox("FSR 3.1", &fsr31Enabled)) {
-            settings.upscale.type = fsr31Enabled
-                ? TemporalUpscalerType::Fsr31
-                : TemporalUpscalerType::Native;
+            settings.upscale.type = fsr31Enabled ? TemporalUpscalerType::Fsr31 : TemporalUpscalerType::Native;
             if (fsr31Enabled) {
                 settings.upscale.fsr1Enabled = false;
-                if (settings.upscale.quality ==
-                    TemporalUpscaleQuality::Native) {
-                    settings.upscale.quality =
-                        TemporalUpscaleQuality::Quality;
+                if (settings.upscale.quality == TemporalUpscaleQuality::Native) {
+                    settings.upscale.quality = TemporalUpscaleQuality::Quality;
                 }
             }
             changed = true;
         }
-        constexpr const char* temporalQualityNames[] = {
-            "Quality", "Balanced", "Performance", "Ultra Performance"};
+        constexpr const char* temporalQualityNames[] = {"Quality", "Balanced", "Performance", "Ultra Performance"};
         int temporalQuality = std::clamp(
-            static_cast<int>(settings.upscale.quality) -
-                static_cast<int>(TemporalUpscaleQuality::Quality),
-            0, 3);
+            static_cast<int>(settings.upscale.quality) - static_cast<int>(TemporalUpscaleQuality::Quality), 0, 3);
         ImGui::BeginDisabled(!fsr31Enabled);
         ImGui::SetNextItemWidth(-1.0f);
-        if (ImGui::Combo(
-                "FSR 3.1 Quality", &temporalQuality,
-                temporalQualityNames,
-                static_cast<int>(std::size(temporalQualityNames)))) {
+        if (ImGui::Combo("FSR 3.1 Quality", &temporalQuality, temporalQualityNames,
+                         static_cast<int>(std::size(temporalQualityNames)))) {
             settings.upscale.quality = static_cast<TemporalUpscaleQuality>(
-                static_cast<int>(TemporalUpscaleQuality::Quality) +
-                temporalQuality);
+                static_cast<int>(TemporalUpscaleQuality::Quality) + temporalQuality);
             changed = true;
         }
         ImGui::EndDisabled();
@@ -981,16 +850,12 @@ void ModelSceneAppState::showRenderSettingsPanel() {
             }
             changed = true;
         }
-        constexpr const char* fsr1QualityNames[] = {
-            "Ultra Quality", "Quality", "Balanced", "Performance"};
-        constexpr std::array<float, 4> fsr1Scales = {
-            0.77f, 0.67f, 0.59f, 0.50f};
+        constexpr const char* fsr1QualityNames[] = {"Ultra Quality", "Quality", "Balanced", "Performance"};
+        constexpr std::array<float, 4> fsr1Scales = {0.77f, 0.67f, 0.59f, 0.50f};
         int fsr1Quality = 0;
-        float closestScaleDistance = std::abs(
-            settings.upscale.fsr1RenderScale - fsr1Scales[0]);
+        float closestScaleDistance = std::abs(settings.upscale.fsr1RenderScale - fsr1Scales[0]);
         for (std::size_t index = 1u; index < fsr1Scales.size(); ++index) {
-            const float distance = std::abs(
-                settings.upscale.fsr1RenderScale - fsr1Scales[index]);
+            const float distance = std::abs(settings.upscale.fsr1RenderScale - fsr1Scales[index]);
             if (distance < closestScaleDistance) {
                 closestScaleDistance = distance;
                 fsr1Quality = static_cast<int>(index);
@@ -998,11 +863,9 @@ void ModelSceneAppState::showRenderSettingsPanel() {
         }
         ImGui::BeginDisabled(!fsr1Enabled);
         ImGui::SetNextItemWidth(-1.0f);
-        if (ImGui::Combo(
-                "FSR 1 Quality", &fsr1Quality, fsr1QualityNames,
-                static_cast<int>(std::size(fsr1QualityNames)))) {
-            settings.upscale.fsr1RenderScale =
-                fsr1Scales[static_cast<std::size_t>(fsr1Quality)];
+        if (ImGui::Combo("FSR 1 Quality", &fsr1Quality, fsr1QualityNames,
+                         static_cast<int>(std::size(fsr1QualityNames)))) {
+            settings.upscale.fsr1RenderScale = fsr1Scales[static_cast<std::size_t>(fsr1Quality)];
             changed = true;
         }
         ImGui::EndDisabled();
@@ -1016,32 +879,23 @@ void ModelSceneAppState::showRenderSettingsPanel() {
         }
     }
 
-    if (ImGui::CollapsingHeader(
-            "Debug View", ImGuiTreeNodeFlags_DefaultOpen)) {
+    if (ImGui::CollapsingHeader("Debug View", ImGuiTreeNodeFlags_DefaultOpen)) {
         ImGui::PushID("DebugViewSettings");
         ImGui::SetNextItemWidth(-1.0f);
         changed |= render_settings_imgui::showDeferredDebugView(settings);
         ImGui::PopID();
     }
-    if (ImGui::CollapsingHeader(
-            "Reflections", ImGuiTreeNodeFlags_DefaultOpen)) {
+    if (ImGui::CollapsingHeader("Reflections", ImGuiTreeNodeFlags_DefaultOpen)) {
         ImGui::PushID("ReflectionSettings");
         changed |= render_settings_imgui::showReflectionSettings(settings);
-        const ReflectionProbeCaptureFrameStats capture =
-            m_scene.reflectionProbeCaptureStats();
+        const ReflectionProbeCaptureFrameStats capture = m_scene.reflectionProbeCaptureStats();
         ImGui::SeparatorText("Probe Capture Queue");
-        ImGui::Text("Sources %u  Active %u  Building %u  Pending %u",
-                    capture.sourceCount,
-                    capture.activeProbeCount,
-                    capture.buildingProbeCount,
-                    capture.pendingWorkItemCount);
+        ImGui::Text("Sources %u  Active %u  Building %u  Pending %u", capture.sourceCount, capture.activeProbeCount,
+                    capture.buildingProbeCount, capture.pendingWorkItemCount);
         if (capture.currentProbeId.isValid()) {
-            ImGui::Text("Probe %u  Work %u/%u  Revision %u -> %u",
-                        capture.currentProbeId.value,
-                        capture.currentWorkItem,
-                        renderer::contracts::kReflectionProbeCaptureWorkItemCount,
-                        capture.activeRevision,
-                        capture.buildRevision);
+            ImGui::Text("Probe %u  Work %u/%u  Revision %u -> %u", capture.currentProbeId.value,
+                        capture.currentWorkItem, renderer::contracts::kReflectionProbeCaptureWorkItemCount,
+                        capture.activeRevision, capture.buildRevision);
         }
         ImGui::PopID();
     }
@@ -1065,8 +919,7 @@ void ModelSceneAppState::showRenderSettingsPanel() {
         changed |= render_settings_imgui::showSsgiSettings(settings);
         ImGui::PopID();
     }
-    if (ImGui::CollapsingHeader(
-            "Post Process / Picture", ImGuiTreeNodeFlags_DefaultOpen)) {
+    if (ImGui::CollapsingHeader("Post Process / Picture", ImGuiTreeNodeFlags_DefaultOpen)) {
         ImGui::PushID("PostProcessSettings");
         changed |= render_settings_imgui::showPostProcessSettings(settings);
         ImGui::PopID();
@@ -1078,9 +931,7 @@ void ModelSceneAppState::showRenderSettingsPanel() {
         }
     }
     if (!m_scene.lastError().empty()) {
-        ImGui::TextColored(
-            ImVec4(1.0f, 0.35f, 0.30f, 1.0f),
-            "%s", m_scene.lastError().c_str());
+        ImGui::TextColored(ImVec4(1.0f, 0.35f, 0.30f, 1.0f), "%s", m_scene.lastError().c_str());
     }
     ImGui::End();
 }
@@ -1088,8 +939,7 @@ void ModelSceneAppState::showRenderSettingsPanel() {
 void ModelSceneAppState::showHierarchyPanel() {
     ImGui::Begin("Scene Hierarchy");
     if (ImGui::Button("Create Empty")) {
-        const entt::entity created =
-            m_scene.createEmptyEntity("Empty Entity");
+        const entt::entity created = m_scene.createEmptyEntity("Empty Entity");
         if (created != entt::null) {
             recordCreatedEntity(created);
         }
@@ -1098,16 +948,12 @@ void ModelSceneAppState::showHierarchyPanel() {
 
     m_hierarchyDropPending = false;
     const ImGuiTreeNodeFlags rootFlags =
-        ImGuiTreeNodeFlags_DefaultOpen |
-        ImGuiTreeNodeFlags_OpenOnArrow |
-        ImGuiTreeNodeFlags_SpanAvailWidth;
+        ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth;
     const bool rootOpen = ImGui::TreeNodeEx("Scene##SceneRoot", rootFlags);
     if (ImGui::BeginDragDropTarget()) {
-        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(
-                "MODEL_SCENE_ENTITY_ID")) {
+        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("MODEL_SCENE_ENTITY_ID")) {
             if (payload->DataSize == sizeof(scene::SceneEntityId)) {
-                m_hierarchyDropChild =
-                    *static_cast<const scene::SceneEntityId*>(payload->Data);
+                m_hierarchyDropChild = *static_cast<const scene::SceneEntityId*>(payload->Data);
                 m_hierarchyDropParent = scene::kInvalidSceneEntityId;
                 m_hierarchyDropPending = true;
             }
@@ -1116,29 +962,23 @@ void ModelSceneAppState::showHierarchyPanel() {
     }
     if (rootOpen) {
         std::vector<entt::entity> roots;
-        const auto rootView = m_scene.registry().view<
-            scene::SceneEntityIdComponent,
-            scene::NameComponent,
-            ecs::ChildrenComponent>(entt::exclude<ecs::ParentComponent>);
+        const auto rootView =
+            m_scene.registry().view<scene::SceneEntityIdComponent, scene::NameComponent, ecs::ChildrenComponent>(
+                entt::exclude<ecs::ParentComponent>);
         roots.assign(rootView.begin(), rootView.end());
-        std::sort(
-            roots.begin(), roots.end(), [this](const entt::entity lhs,
-                                               const entt::entity rhs) {
-                return m_scene.entityId(lhs) < m_scene.entityId(rhs);
-            });
+        std::sort(roots.begin(), roots.end(), [this](const entt::entity lhs, const entt::entity rhs) {
+            return m_scene.entityId(lhs) < m_scene.entityId(rhs);
+        });
         for (const entt::entity entity : roots) {
             showHierarchyEntity(entity);
         }
         ImGui::TreePop();
     }
     if (m_hierarchyDropPending) {
-        const entt::entity child =
-            m_scene.findEntity(m_hierarchyDropChild);
-        const entt::entity parent =
-            m_scene.findEntity(m_hierarchyDropParent);
+        const entt::entity child = m_scene.findEntity(m_hierarchyDropChild);
+        const entt::entity parent = m_scene.findEntity(m_hierarchyDropParent);
         scene::SceneEntityDocument before;
-        if (child != entt::null &&
-            !m_scene.captureEntityState(child, before)) {
+        if (child != entt::null && !m_scene.captureEntityState(child, before)) {
             std::abort();
         }
         if (m_scene.setParent(child, parent)) {
@@ -1152,31 +992,23 @@ void ModelSceneAppState::showHierarchyPanel() {
     }
     executePendingEntityAction();
     if (!m_scene.lastError().empty()) {
-        ImGui::TextColored(
-            ImVec4(1.0f, 0.35f, 0.30f, 1.0f),
-            "%s", m_scene.lastError().c_str());
+        ImGui::TextColored(ImVec4(1.0f, 0.35f, 0.30f, 1.0f), "%s", m_scene.lastError().c_str());
     }
     ImGui::End();
 }
 
 void ModelSceneAppState::showHierarchyEntity(const entt::entity entity) {
     const scene::SceneEntityId id = m_scene.entityId(entity);
-    const auto& name =
-        m_scene.registry().get<scene::NameComponent>(entity).value;
-    const auto& children =
-        m_scene.registry().get<ecs::ChildrenComponent>(entity).children;
-    ImGuiTreeNodeFlags flags =
-        ImGuiTreeNodeFlags_OpenOnArrow |
-        ImGuiTreeNodeFlags_SpanAvailWidth;
+    const auto& name = m_scene.registry().get<scene::NameComponent>(entity).value;
+    const auto& children = m_scene.registry().get<ecs::ChildrenComponent>(entity).children;
+    ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth;
     if (children.empty()) {
-        flags |= ImGuiTreeNodeFlags_Leaf |
-                 ImGuiTreeNodeFlags_NoTreePushOnOpen;
+        flags |= ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen;
     }
     if (entity == m_scene.selectedEntity()) {
         flags |= ImGuiTreeNodeFlags_Selected;
     }
-    const std::string label =
-        name + "###SceneEntity" + std::to_string(id);
+    const std::string label = name + "###SceneEntity" + std::to_string(id);
     const bool open = ImGui::TreeNodeEx(label.c_str(), flags);
     if (ImGui::IsItemClicked()) {
         m_scene.setSelectedEntity(entity);
@@ -1196,17 +1028,14 @@ void ModelSceneAppState::showHierarchyEntity(const entt::entity entity) {
         ImGui::EndPopup();
     }
     if (ImGui::BeginDragDropSource()) {
-        ImGui::SetDragDropPayload(
-            "MODEL_SCENE_ENTITY_ID", &id, sizeof(id));
+        ImGui::SetDragDropPayload("MODEL_SCENE_ENTITY_ID", &id, sizeof(id));
         ImGui::TextUnformatted(name.c_str());
         ImGui::EndDragDropSource();
     }
     if (ImGui::BeginDragDropTarget()) {
-        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(
-                "MODEL_SCENE_ENTITY_ID")) {
+        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("MODEL_SCENE_ENTITY_ID")) {
             if (payload->DataSize == sizeof(scene::SceneEntityId)) {
-                m_hierarchyDropChild =
-                    *static_cast<const scene::SceneEntityId*>(payload->Data);
+                m_hierarchyDropChild = *static_cast<const scene::SceneEntityId*>(payload->Data);
                 m_hierarchyDropParent = id;
                 m_hierarchyDropPending = true;
             }
@@ -1230,29 +1059,20 @@ void ModelSceneAppState::showInspectorPanel() {
         return;
     }
     auto* name = m_scene.registry().try_get<scene::NameComponent>(selected);
-    auto* transform =
-        m_scene.registry().try_get<ecs::LocalTransformComponent>(selected);
+    auto* transform = m_scene.registry().try_get<ecs::LocalTransformComponent>(selected);
     if (name != nullptr) {
         const scene::SceneEntityId selectedId = m_scene.entityId(selected);
         if (m_entityNameEditorId != selectedId) {
-            std::fill(
-                m_entityNameBuffer.begin(), m_entityNameBuffer.end(), '\0');
-            const std::size_t copyLength = std::min(
-                name->value.size(), m_entityNameBuffer.size() - 1u);
-            std::copy_n(
-                name->value.begin(), copyLength, m_entityNameBuffer.begin());
+            std::fill(m_entityNameBuffer.begin(), m_entityNameBuffer.end(), '\0');
+            const std::size_t copyLength = std::min(name->value.size(), m_entityNameBuffer.size() - 1u);
+            std::copy_n(name->value.begin(), copyLength, m_entityNameBuffer.begin());
             m_entityNameEditorId = selectedId;
         }
-        const float nameLabelWidth =
-            ImGui::CalcTextSize("Name").x +
-            ImGui::GetStyle().ItemInnerSpacing.x;
+        const float nameLabelWidth = ImGui::CalcTextSize("Name").x + ImGui::GetStyle().ItemInnerSpacing.x;
         ImGui::SetNextItemWidth(-nameLabelWidth);
-        const bool submitted = ImGui::InputText(
-            "Name",
-            m_entityNameBuffer.data(),
-            m_entityNameBuffer.size(),
-            ImGuiInputTextFlags_EnterReturnsTrue |
-                ImGuiInputTextFlags_AutoSelectAll);
+        const bool submitted =
+            ImGui::InputText("Name", m_entityNameBuffer.data(), m_entityNameBuffer.size(),
+                             ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll);
         const bool finishedEditing = ImGui::IsItemDeactivatedAfterEdit();
         if (submitted || finishedEditing) {
             scene::SceneEntityDocument before;
@@ -1266,20 +1086,12 @@ void ModelSceneAppState::showInspectorPanel() {
                 }
                 m_history.recordEntityState(before, after);
                 refreshSceneDirty();
-                std::fill(
-                    m_entityNameBuffer.begin(),
-                    m_entityNameBuffer.end(), '\0');
-                const std::size_t copyLength = std::min(
-                    name->value.size(), m_entityNameBuffer.size() - 1u);
-                std::copy_n(
-                    name->value.begin(),
-                    copyLength,
-                    m_entityNameBuffer.begin());
+                std::fill(m_entityNameBuffer.begin(), m_entityNameBuffer.end(), '\0');
+                const std::size_t copyLength = std::min(name->value.size(), m_entityNameBuffer.size() - 1u);
+                std::copy_n(name->value.begin(), copyLength, m_entityNameBuffer.begin());
             }
         }
-        ImGui::TextDisabled(
-            "Entity ID: %llu",
-            static_cast<unsigned long long>(m_scene.entityId(selected)));
+        ImGui::TextDisabled("Entity ID: %llu", static_cast<unsigned long long>(m_scene.entityId(selected)));
         ImGui::Separator();
     }
     if (transform != nullptr) {
@@ -1291,17 +1103,13 @@ void ModelSceneAppState::showInspectorPanel() {
         bool changed = false;
         bool activated = false;
         bool deactivated = false;
-        changed |= ImGui::DragFloat3(
-            "Position", glm::value_ptr(editedTransform.localPosition), 0.02f);
+        changed |= ImGui::DragFloat3("Position", glm::value_ptr(editedTransform.localPosition), 0.02f);
         activated |= ImGui::IsItemActivated();
         deactivated |= ImGui::IsItemDeactivated();
-        changed |= ImGui::DragFloat3(
-            "Rotation", glm::value_ptr(editedTransform.localRotation), 0.25f);
+        changed |= ImGui::DragFloat3("Rotation", glm::value_ptr(editedTransform.localRotation), 0.25f);
         activated |= ImGui::IsItemActivated();
         deactivated |= ImGui::IsItemDeactivated();
-        changed |= ImGui::DragFloat3(
-            "Scale", glm::value_ptr(editedTransform.localScale),
-            0.01f, 0.001f, 1000.0f);
+        changed |= ImGui::DragFloat3("Scale", glm::value_ptr(editedTransform.localScale), 0.01f, 0.001f, 1000.0f);
         activated |= ImGui::IsItemActivated();
         deactivated |= ImGui::IsItemDeactivated();
         if (activated) {
@@ -1316,27 +1124,19 @@ void ModelSceneAppState::showInspectorPanel() {
                 m_sceneDirty = true;
             }
         }
-        if (deactivated && m_transformCommandActive &&
-            !m_transformCommandFromGizmo) {
+        if (deactivated && m_transformCommandActive && !m_transformCommandFromGizmo) {
             finishTransformCommand();
         }
     }
-    const auto* pickable =
-        m_scene.registry().try_get<scene::PickableComponent>(selected);
+    const auto* pickable = m_scene.registry().try_get<scene::PickableComponent>(selected);
     if (pickable != nullptr && ImGui::CollapsingHeader("Local Bounds")) {
-        ImGui::Text("Min: %.3f, %.3f, %.3f",
-                    pickable->localBoundsMin.x,
-                    pickable->localBoundsMin.y,
+        ImGui::Text("Min: %.3f, %.3f, %.3f", pickable->localBoundsMin.x, pickable->localBoundsMin.y,
                     pickable->localBoundsMin.z);
-        ImGui::Text("Max: %.3f, %.3f, %.3f",
-                    pickable->localBoundsMax.x,
-                    pickable->localBoundsMax.y,
+        ImGui::Text("Max: %.3f, %.3f, %.3f", pickable->localBoundsMax.x, pickable->localBoundsMax.y,
                     pickable->localBoundsMax.z);
     }
     if (!m_scene.lastError().empty()) {
-        ImGui::TextColored(
-            ImVec4(1.0f, 0.35f, 0.30f, 1.0f),
-            "%s", m_scene.lastError().c_str());
+        ImGui::TextColored(ImVec4(1.0f, 0.35f, 0.30f, 1.0f), "%s", m_scene.lastError().c_str());
     }
     ImGui::Separator();
     if (ImGui::Button("Duplicate Entity")) {
@@ -1352,13 +1152,9 @@ void ModelSceneAppState::showInspectorPanel() {
 void ModelSceneAppState::showAssetsPanel() {
     ImGui::Begin("Assets");
     const ImGuiStyle& style = ImGui::GetStyle();
-    const float browseButtonWidth =
-        ImGui::CalcTextSize("Browse...").x + style.FramePadding.x * 2.0f;
-    const float importButtonWidth =
-        ImGui::CalcTextSize("Import Model").x + style.FramePadding.x * 2.0f;
-    ImGui::SetNextItemWidth(-(
-        browseButtonWidth + importButtonWidth +
-        style.ItemSpacing.x * 2.0f));
+    const float browseButtonWidth = ImGui::CalcTextSize("Browse...").x + style.FramePadding.x * 2.0f;
+    const float importButtonWidth = ImGui::CalcTextSize("Import Model").x + style.FramePadding.x * 2.0f;
+    ImGui::SetNextItemWidth(-(browseButtonWidth + importButtonWidth + style.ItemSpacing.x * 2.0f));
     ImGui::InputText("##ModelPath", m_importPath.data(), m_importPath.size());
     ImGui::SameLine();
     if (ImGui::Button("Browse...")) {
@@ -1370,22 +1166,17 @@ void ModelSceneAppState::showAssetsPanel() {
     }
     if (!m_importDialogError.empty()) {
         ImGui::PushTextWrapPos(0.0f);
-        ImGui::TextColored(
-            ImVec4(1.0f, 0.35f, 0.30f, 1.0f),
-            "%s", m_importDialogError.c_str());
+        ImGui::TextColored(ImVec4(1.0f, 0.35f, 0.30f, 1.0f), "%s", m_importDialogError.c_str());
         ImGui::PopTextWrapPos();
     }
     if (!m_sceneIoError.empty()) {
-        ImGui::TextColored(
-            ImVec4(1.0f, 0.35f, 0.30f, 1.0f),
-            "%s", m_sceneIoError.c_str());
+        ImGui::TextColored(ImVec4(1.0f, 0.35f, 0.30f, 1.0f), "%s", m_sceneIoError.c_str());
     }
     ImGui::Separator();
     for (size_t index = 0u; index < m_scene.assetCount(); ++index) {
         ImGui::PushID(static_cast<int>(index));
         if (ImGui::SmallButton("+")) {
-            const entt::entity created =
-                m_scene.createAssetInstance(m_scene.assetId(index));
+            const entt::entity created = m_scene.createAssetInstance(m_scene.assetId(index));
             if (created != entt::null) {
                 recordCreatedEntity(created);
                 m_entityNameEditorId = scene::kInvalidSceneEntityId;
@@ -1413,8 +1204,7 @@ void ModelSceneAppState::browseAndImportModel() {
 
     const nfdfilteritem_t filters[] = {{"glTF Model", "gltf,glb"}};
     nfdchar_t* selectedPath = nullptr;
-    const nfdresult_t result = NFD_OpenDialog(
-        &selectedPath, filters, std::size(filters), nullptr);
+    const nfdresult_t result = NFD_OpenDialog(&selectedPath, filters, std::size(filters), nullptr);
     if (result == NFD_OKAY) {
         const std::string path(selectedPath);
         NFD_FreePath(selectedPath);
@@ -1450,13 +1240,11 @@ void ModelSceneAppState::importModelPath(const std::string& path) {
 }
 
 void ModelSceneAppState::showViewportPanel() {
-    if (m_transformCommandActive && m_transformCommandFromGizmo &&
-        !ImGuizmo::IsUsing()) {
+    if (m_transformCommandActive && m_transformCommandFromGizmo && !ImGuizmo::IsUsing()) {
         finishTransformCommand();
     }
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
-    ImGui::Begin("Scene Viewport", nullptr,
-                 ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+    ImGui::Begin("Scene Viewport", nullptr, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
     const ImVec2 available = ImGui::GetContentRegionAvail();
     if (available.x < 1.0f || available.y < 1.0f) {
         ImGui::End();
@@ -1474,40 +1262,29 @@ void ModelSceneAppState::showViewportPanel() {
     }
     m_viewportPosition = ImGui::GetCursorScreenPos();
     m_viewportSize = available;
-    const bool flipTextureVertically =
-        m_deps.rhiDevice.backend() == RhiBackend::OpenGL;
-    const ImVec2 uv0 = flipTextureVertically
-        ? ImVec2(0.0f, 1.0f) : ImVec2(0.0f, 0.0f);
-    const ImVec2 uv1 = flipTextureVertically
-        ? ImVec2(1.0f, 0.0f) : ImVec2(1.0f, 1.0f);
-    ImGui::Image(
-        static_cast<ImTextureID>(m_scene.viewportTextureId()),
-        available, uv0, uv1);
+    const bool flipTextureVertically = m_deps.rhiDevice.backend() == RhiBackend::OpenGL;
+    const ImVec2 uv0 = flipTextureVertically ? ImVec2(0.0f, 1.0f) : ImVec2(0.0f, 0.0f);
+    const ImVec2 uv1 = flipTextureVertically ? ImVec2(1.0f, 0.0f) : ImVec2(1.0f, 1.0f);
+    ImGui::Image(static_cast<ImTextureID>(m_scene.viewportTextureId()), available, uv0, uv1);
     const bool viewportImageHovered = ImGui::IsItemHovered();
     const bool gizmoToolbarHovered = showGizmoToolbar();
     m_viewportHovered = viewportImageHovered && !gizmoToolbarHovered;
 
     const float aspect = available.x / available.y;
-    m_view = glm::lookAt(
-        cameraPosition(), m_cameraTarget, glm::vec3(0.0f, 1.0f, 0.0f));
-    m_projection = glm::perspective(
-        glm::radians(55.0f), aspect, m_cameraNearPlane, m_cameraFarPlane);
+    m_view = glm::lookAt(cameraPosition(), m_cameraTarget, glm::vec3(0.0f, 1.0f, 0.0f));
+    m_projection = glm::perspective(glm::radians(55.0f), aspect, m_cameraNearPlane, m_cameraFarPlane);
 
     ImGuizmo::SetOrthographic(false);
     ImGuizmo::SetDrawlist(ImGui::GetWindowDrawList());
-    ImGuizmo::SetRect(
-        m_viewportPosition.x, m_viewportPosition.y, available.x, available.y);
+    ImGuizmo::SetRect(m_viewportPosition.x, m_viewportPosition.y, available.x, available.y);
     const entt::entity selected = m_scene.selectedEntity();
     if (selected != entt::null && m_scene.registry().valid(selected)) {
-        auto* world =
-            m_scene.registry().try_get<ecs::WorldTransformComponent>(selected);
+        auto* world = m_scene.registry().try_get<ecs::WorldTransformComponent>(selected);
         if (world != nullptr) {
             glm::mat4 manipulated = world->worldMatrix;
             if (ImGuizmo::Manipulate(
-                    glm::value_ptr(m_view), glm::value_ptr(m_projection),
-                    gizmoOperation(m_gizmoOperation),
-                    m_gizmoMode == 0 ? ImGuizmo::LOCAL : ImGuizmo::WORLD,
-                    glm::value_ptr(manipulated))) {
+                    glm::value_ptr(m_view), glm::value_ptr(m_projection), gizmoOperation(m_gizmoOperation),
+                    m_gizmoMode == 0 ? ImGuizmo::LOCAL : ImGuizmo::WORLD, glm::value_ptr(manipulated))) {
                 if (!m_transformCommandActive) {
                     scene::SceneEntityDocument before;
                     if (!m_scene.captureEntityState(selected, before)) {
@@ -1521,12 +1298,10 @@ void ModelSceneAppState::showViewportPanel() {
             }
         }
     }
-    if (m_transformCommandActive && m_transformCommandFromGizmo &&
-        !ImGuizmo::IsUsing()) {
+    if (m_transformCommandActive && m_transformCommandFromGizmo && !ImGuizmo::IsUsing()) {
         finishTransformCommand();
     }
-    if (m_viewportHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left) &&
-        !gizmoToolbarHovered &&
+    if (m_viewportHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !gizmoToolbarHovered &&
         !ImGuizmo::IsOver() && !ImGuizmo::IsUsing()) {
         selectFromViewport(ImGui::GetMousePos());
     }
@@ -1535,24 +1310,18 @@ void ModelSceneAppState::showViewportPanel() {
 }
 
 bool ModelSceneAppState::showGizmoToolbar() {
-    ImGui::SetCursorScreenPos(ImVec2(
-        m_viewportPosition.x + 8.0f, m_viewportPosition.y + 8.0f));
+    ImGui::SetCursorScreenPos(ImVec2(m_viewportPosition.x + 8.0f, m_viewportPosition.y + 8.0f));
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(3.0f, 0.0f));
     ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 3.0f);
-    ImGui::PushStyleColor(
-        ImGuiCol_ChildBg, ImVec4(0.055f, 0.060f, 0.070f, 0.94f));
-    ImGui::BeginChild(
-        "##GizmoToolbar", ImVec2(196.0f, 38.0f), true,
-        ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.055f, 0.060f, 0.070f, 0.94f));
+    ImGui::BeginChild("##GizmoToolbar", ImVec2(196.0f, 38.0f), true,
+                      ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
 
     bool hovered = ImGui::IsWindowHovered();
-    const auto operationButton = [&](const char* label,
-                                     const int operation,
-                                     const char* tooltip) {
+    const auto operationButton = [&](const char* label, const int operation, const char* tooltip) {
         const bool active = m_gizmoOperation == operation;
         if (active) {
-            ImGui::PushStyleColor(
-                ImGuiCol_Button, ImVec4(0.16f, 0.42f, 0.68f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.16f, 0.42f, 0.68f, 1.0f));
         }
         if (ImGui::Button(label, ImVec2(28.0f, 24.0f))) {
             m_gizmoOperation = operation;
@@ -1577,15 +1346,12 @@ bool ModelSceneAppState::showGizmoToolbar() {
     ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
     ImGui::SameLine(0.0f, 8.0f);
 
-    const auto modeButton = [&](const char* label,
-                                const int mode,
-                                const char* tooltip) {
+    const auto modeButton = [&](const char* label, const int mode, const char* tooltip) {
         const bool disabled = m_gizmoOperation == 2 && mode == 1;
         const bool active = m_gizmoMode == mode;
         ImGui::BeginDisabled(disabled);
         if (active) {
-            ImGui::PushStyleColor(
-                ImGuiCol_Button, ImVec4(0.16f, 0.42f, 0.68f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.16f, 0.42f, 0.68f, 1.0f));
         }
         if (ImGui::Button(label, ImVec2(28.0f, 24.0f))) {
             m_gizmoMode = mode;
@@ -1610,22 +1376,17 @@ bool ModelSceneAppState::showGizmoToolbar() {
 }
 
 void ModelSceneAppState::selectFromViewport(const ImVec2& mousePosition) {
-    const float normalizedX =
-        (mousePosition.x - m_viewportPosition.x) / m_viewportSize.x;
-    const float normalizedY =
-        (mousePosition.y - m_viewportPosition.y) / m_viewportSize.y;
+    const float normalizedX = (mousePosition.x - m_viewportPosition.x) / m_viewportSize.x;
+    const float normalizedY = (mousePosition.y - m_viewportPosition.y) / m_viewportSize.y;
     const float clipX = normalizedX * 2.0f - 1.0f;
     const float clipY = 1.0f - normalizedY * 2.0f;
     const glm::mat4 inverseViewProjection = glm::inverse(m_projection * m_view);
-    glm::vec4 nearPoint =
-        inverseViewProjection * glm::vec4(clipX, clipY, -1.0f, 1.0f);
-    glm::vec4 farPoint =
-        inverseViewProjection * glm::vec4(clipX, clipY, 1.0f, 1.0f);
+    glm::vec4 nearPoint = inverseViewProjection * glm::vec4(clipX, clipY, -1.0f, 1.0f);
+    glm::vec4 farPoint = inverseViewProjection * glm::vec4(clipX, clipY, 1.0f, 1.0f);
     nearPoint /= nearPoint.w;
     farPoint /= farPoint.w;
     const glm::vec3 origin = glm::vec3(nearPoint);
-    const glm::vec3 direction = glm::normalize(
-        glm::vec3(farPoint - nearPoint));
+    const glm::vec3 direction = glm::normalize(glm::vec3(farPoint - nearPoint));
     m_scene.setSelectedEntity(m_scene.pick(origin, direction));
 }
 
@@ -1634,53 +1395,36 @@ void ModelSceneAppState::render(const double frameTime) {
         return;
     }
     if (m_validationActive) {
-        const app::validation::ValidationFrame* validationFrame =
-            m_deps.validationRun.currentFrame();
+        const app::validation::ValidationFrame* validationFrame = m_deps.validationRun.currentFrame();
         if (validationFrame == nullptr) {
-            m_deps.validationRun.fail(
-                app::validation::ValidationRunError::InvalidState,
-                "model validation has no active frame");
+            m_deps.validationRun.fail(app::validation::ValidationRunError::InvalidState,
+                                      "model validation has no active frame");
             return;
         }
         const AppLaunchOptions& options = m_deps.validationRun.options();
-        if (!m_scene.ensureViewport(
-                options.validationWidth, options.validationHeight)) {
-            m_deps.validationRun.fail(
-                app::validation::ValidationRunError::RenderFailed,
-                m_scene.lastError());
+        if (!m_scene.ensureViewport(options.validationWidth, options.validationHeight)) {
+            m_deps.validationRun.fail(app::validation::ValidationRunError::RenderFailed, m_scene.lastError());
             return;
         }
 
         Camera camera;
-        if (!camera.setViewPose(
-                glm::vec3(validationFrame->cameraPose.position),
-                glm::vec3(validationFrame->cameraPose.forward),
-                glm::vec3(validationFrame->cameraPose.up),
-                static_cast<float>(
-                    validationFrame->cameraPose.verticalFovDegrees))) {
-            m_deps.validationRun.fail(
-                app::validation::ValidationRunError::CameraPoseConversionFailed,
-                "model Camera Path pose cannot be represented by the float render camera");
+        if (!camera.setViewPose(glm::vec3(validationFrame->cameraPose.position),
+                                glm::vec3(validationFrame->cameraPose.forward),
+                                glm::vec3(validationFrame->cameraPose.up),
+                                static_cast<float>(validationFrame->cameraPose.verticalFovDegrees))) {
+            m_deps.validationRun.fail(app::validation::ValidationRunError::CameraPoseConversionFailed,
+                                      "model Camera Path pose cannot be represented by the float render camera");
             return;
         }
-        const float aspect =
-            static_cast<float>(options.validationWidth) /
-            static_cast<float>(options.validationHeight);
+        const float aspect = static_cast<float>(options.validationWidth) / static_cast<float>(options.validationHeight);
         const glm::mat4 view = camera.getViewMatrix();
-        const glm::mat4 projection = glm::perspective(
-            glm::radians(camera.getFOV()), aspect,
-            m_cameraNearPlane, m_cameraFarPlane);
-        const RenderFrameClock clock{
-            validationFrame->sequenceFrameIndex,
-            validationFrame->deltaTimeSeconds,
-            validationFrame->renderTimeSeconds,
-            validationFrame->renderTimeSeconds};
-        if (!m_scene.renderViewport(
-                view, projection, camera.getPosition(),
-                m_cameraNearPlane, m_cameraFarPlane, camera.getFOV(), clock)) {
-            m_deps.validationRun.fail(
-                app::validation::ValidationRunError::RenderFailed,
-                m_scene.lastError());
+        const glm::mat4 projection =
+            glm::perspective(glm::radians(camera.getFOV()), aspect, m_cameraNearPlane, m_cameraFarPlane);
+        const RenderFrameClock clock{validationFrame->sequenceFrameIndex, validationFrame->deltaTimeSeconds,
+                                     validationFrame->renderTimeSeconds, validationFrame->renderTimeSeconds};
+        if (!m_scene.renderViewport(view, projection, camera.getPosition(), m_cameraNearPlane, m_cameraFarPlane,
+                                    camera.getFOV(), clock)) {
+            m_deps.validationRun.fail(app::validation::ValidationRunError::RenderFailed, m_scene.lastError());
             return;
         }
 
@@ -1694,77 +1438,57 @@ void ModelSceneAppState::render(const double frameTime) {
             request.width = options.validationWidth;
             request.height = options.validationHeight;
             request.origin = m_deps.rhiDevice.backend() == RhiBackend::OpenGL
-                ? renderer::capture::TextureCaptureOrigin::BottomLeft
-                : renderer::capture::TextureCaptureOrigin::TopLeft;
+                                 ? renderer::capture::TextureCaptureOrigin::BottomLeft
+                                 : renderer::capture::TextureCaptureOrigin::TopLeft;
             request.outputPath = options.validationCapturePath;
             const renderer::capture::TextureCaptureResult result =
-                renderer::capture::captureTextureToPng(
-                    m_deps.rhiDevice, m_deps.commandListPool, request);
+                renderer::capture::captureTextureToPng(m_deps.rhiDevice, m_deps.commandListPool, request);
             captureSucceeded = result.succeeded();
             if (!captureSucceeded) {
-                captureDetail = std::string(
-                    renderer::capture::textureCaptureErrorStableId(
-                        result.error)) + ":" + result.detail;
+                captureDetail =
+                    std::string(renderer::capture::textureCaptureErrorStableId(result.error)) + ":" + result.detail;
             }
         }
-        static_cast<void>(m_deps.validationRun.completeFrame(
-            captureSucceeded, std::move(captureDetail)));
+        static_cast<void>(m_deps.validationRun.completeFrame(captureSucceeded, std::move(captureDetail)));
         return;
     }
-    const Window::FramebufferSize framebufferSize =
-        m_deps.window.getFramebufferSize();
+    const Window::FramebufferSize framebufferSize = m_deps.window.getFramebufferSize();
     if (framebufferSize.width <= 0 || framebufferSize.height <= 0) {
         return;
     }
-    if (!m_deps.rhiDevice.resizeSwapchain(
-            static_cast<uint32_t>(framebufferSize.width),
-            static_cast<uint32_t>(framebufferSize.height))) {
-        MECRAFT_LOG_STREAM(
-            std::cerr << "[ModelSceneAppState] Failed to resize swapchain\n");
+    if (!m_deps.rhiDevice.resizeSwapchain(static_cast<uint32_t>(framebufferSize.width),
+                                          static_cast<uint32_t>(framebufferSize.height))) {
+        MECRAFT_LOG_STREAM(std::cerr << "[ModelSceneAppState] Failed to resize swapchain\n");
         return;
     }
     const RhiFrameAcquireResult frame = m_deps.rhiDevice.acquireFrame();
-    if (frame.status == RhiFrameStatus::Minimized ||
-        frame.status == RhiFrameStatus::OutOfDate) {
+    if (frame.status == RhiFrameStatus::Minimized || frame.status == RhiFrameStatus::OutOfDate) {
         return;
     }
-    if (frame.status != RhiFrameStatus::Success &&
-        frame.status != RhiFrameStatus::Suboptimal) {
-        MECRAFT_LOG_STREAM(
-            std::cerr << "[ModelSceneAppState] Failed to acquire frame\n");
+    if (frame.status != RhiFrameStatus::Success && frame.status != RhiFrameStatus::Suboptimal) {
+        MECRAFT_LOG_STREAM(std::cerr << "[ModelSceneAppState] Failed to acquire frame\n");
         return;
     }
-    if (!m_imguiRenderer.beginFrame(
-            static_cast<int>(frame.width), static_cast<int>(frame.height))) {
+    if (!m_imguiRenderer.beginFrame(static_cast<int>(frame.width), static_cast<int>(frame.height))) {
         std::abort();
     }
     ImGuizmo::BeginFrame();
     buildEditorUi();
     if (m_scene.viewportWidth() != 0u &&
-        !m_scene.renderViewport(
-            m_view, m_projection, cameraPosition(),
-            m_cameraNearPlane, m_cameraFarPlane,
-            55.0f,
-            RenderFrameClock{
-                Time::getFrameIndex(),
-                static_cast<float>(frameTime),
-                Time::getGameTime(),
-                Time::getRawTime()})) {
+        !m_scene.renderViewport(m_view, m_projection, cameraPosition(), m_cameraNearPlane, m_cameraFarPlane, 55.0f,
+                                RenderFrameClock{Time::getFrameIndex(), static_cast<float>(frameTime),
+                                                 Time::getGameTime(), Time::getRawTime()})) {
         std::abort();
     }
-    RhiCommandList* commandList =
-        m_deps.commandListPool.acquire(RhiCommandListType::Graphics);
-    if (commandList == nullptr ||
-        !commandList->begin({"ModelScene.Commands", RhiCommandListType::Graphics})) {
+    RhiCommandList* commandList = m_deps.commandListPool.acquire(RhiCommandListType::Graphics);
+    if (commandList == nullptr || !commandList->begin({"ModelScene.Commands", RhiCommandListType::Graphics})) {
         std::abort();
     }
     if (!m_imguiRenderer.prepareDrawData(*commandList)) {
         std::abort();
     }
-    commandList->textureBarrier({
-        m_deps.rhiDevice.currentSwapchainColorTexture(),
-        RhiResourceState::Present,
-        RhiResourceState::RenderTarget});
+    commandList->textureBarrier(
+        {m_deps.rhiDevice.currentSwapchainColorTexture(), RhiResourceState::Present, RhiResourceState::RenderTarget});
     RhiColorAttachment colorAttachment;
     colorAttachment.view = m_deps.rhiDevice.currentSwapchainColorView();
     colorAttachment.loadOp = RhiLoadOp::Clear;
@@ -1774,8 +1498,7 @@ void ModelSceneAppState::render(const double frameTime) {
     colorAttachment.clearColor[2] = 0.045f;
     colorAttachment.clearColor[3] = 1.0f;
     RhiDepthStencilAttachment depthAttachment;
-    depthAttachment.view =
-        m_deps.rhiDevice.currentSwapchainDepthStencilView();
+    depthAttachment.view = m_deps.rhiDevice.currentSwapchainDepthStencilView();
     depthAttachment.depthLoadOp = RhiLoadOp::Clear;
     depthAttachment.depthStoreOp = RhiStoreOp::Store;
     RhiRenderingInfo renderingInfo;
@@ -1787,25 +1510,19 @@ void ModelSceneAppState::render(const double frameTime) {
     commandList->beginRendering(renderingInfo);
     m_imguiRenderer.recordDraws(*commandList);
     commandList->endRendering();
-    commandList->textureBarrier({
-        m_deps.rhiDevice.currentSwapchainColorTexture(),
-        RhiResourceState::RenderTarget,
-        RhiResourceState::Present});
+    commandList->textureBarrier(
+        {m_deps.rhiDevice.currentSwapchainColorTexture(), RhiResourceState::RenderTarget, RhiResourceState::Present});
     if (!commandList->end()) {
         std::abort();
     }
     RhiCommandList* submitted[] = {commandList};
-    if (!m_deps.rhiDevice.submit(
-            {"ModelScene.Submit", submitted, 1u, RhiQueueType::Graphics})) {
+    if (!m_deps.rhiDevice.submit({"ModelScene.Submit", submitted, 1u, RhiQueueType::Graphics})) {
         std::abort();
     }
-    const RhiFrameStatus presentStatus = m_deps.rhiDevice.presentFrame(
-        {frame.frameIndex, frame.imageIndex, Time::getFrameIndex()});
-    if (presentStatus != RhiFrameStatus::Success &&
-        presentStatus != RhiFrameStatus::Suboptimal &&
-        presentStatus != RhiFrameStatus::OutOfDate &&
-        presentStatus != RhiFrameStatus::Minimized) {
-        MECRAFT_LOG_STREAM(
-            std::cerr << "[ModelSceneAppState] Failed to present frame\n");
+    const RhiFrameStatus presentStatus =
+        m_deps.rhiDevice.presentFrame({frame.frameIndex, frame.imageIndex, Time::getFrameIndex()});
+    if (presentStatus != RhiFrameStatus::Success && presentStatus != RhiFrameStatus::Suboptimal &&
+        presentStatus != RhiFrameStatus::OutOfDate && presentStatus != RhiFrameStatus::Minimized) {
+        MECRAFT_LOG_STREAM(std::cerr << "[ModelSceneAppState] Failed to present frame\n");
     }
 }

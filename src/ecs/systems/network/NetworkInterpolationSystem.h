@@ -12,10 +12,9 @@ namespace ecs {
 
 class NetworkInterpolationSystem : public ISystem {
 public:
-    using Dependencies = SystemDependency<
-        std::tuple<NetworkInterpolationComponent, TransformComponent>,
-        std::tuple<TransformComponent, SpinVisualComponent, MobAIComponent, CameraStateComponent>
-    >;
+    using Dependencies =
+        SystemDependency<std::tuple<NetworkInterpolationComponent, TransformComponent>,
+                         std::tuple<TransformComponent, SpinVisualComponent, MobAIComponent, CameraStateComponent>>;
 
     void update(SystemContext& ctx) override;
 };

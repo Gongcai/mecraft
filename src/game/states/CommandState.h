@@ -22,11 +22,8 @@ public:
     using StateFactory = std::function<std::unique_ptr<IGameState>()>;
 
     CommandState(CommandStateContext ctx, StateFactory makeCreativeModeState, StateFactory makeSurvivalModeState)
-        : m_ctx(ctx),
-          m_makeCreativeModeState(std::move(makeCreativeModeState)),
-          m_makeSurvivalModeState(std::move(makeSurvivalModeState)),
-          m_inputBox(128) {
-    }
+        : m_ctx(ctx), m_makeCreativeModeState(std::move(makeCreativeModeState)),
+          m_makeSurvivalModeState(std::move(makeSurvivalModeState)), m_inputBox(128) {}
 
     void onEnter() override {
         m_ctx.context.pushContext(InputContextType::UI);

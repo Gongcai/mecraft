@@ -88,48 +88,33 @@ public:
     /// @param width HDR input width in pixels.
     /// @param height HDR input height in pixels.
     /// @return True when the input is valid and processing targets match its extent.
-    [[nodiscard]] bool setHdrInput(RhiTextureHandle texture,
-                                   RhiTextureViewHandle view,
-                                   int width,
-                                   int height);
+    [[nodiscard]] bool setHdrInput(RhiTextureHandle texture, RhiTextureViewHandle view, int width, int height);
 
     /// Allocates the stable LDR texture view used by texture composition.
     /// @param rhiDevice Active device that owns the post-process resources.
     /// @param width Requested output width in pixels.
     /// @param height Requested output height in pixels.
     /// @return True when the texture and view are ready for external binding.
-    [[nodiscard]] bool prepareTextureOutput(RhiDevice& rhiDevice,
-                                            int width,
-                                            int height);
+    [[nodiscard]] bool prepareTextureOutput(RhiDevice& rhiDevice, int width, int height);
 
     /// Composite captured scene to back buffer with active effects.
-    [[nodiscard]] bool compositeToBackbuffer(
-        RhiDevice& rhiDevice,
-        RhiTextureViewHandle swapchainColorView,
-        RhiTextureFormat swapchainColorFormat,
-        int outputWidth,
-        int outputHeight,
-        float frameTime,
-        RhiTextureHandle gbufferDepthTexture,
-        RenderDebugService& debugService);
+    [[nodiscard]] bool compositeToBackbuffer(RhiDevice& rhiDevice, RhiTextureViewHandle swapchainColorView,
+                                             RhiTextureFormat swapchainColorFormat, int outputWidth, int outputHeight,
+                                             float frameTime, RhiTextureHandle gbufferDepthTexture,
+                                             RenderDebugService& debugService);
 
     /// Composite captured scene into an internal LDR texture instead of the back buffer.
-    [[nodiscard]] RhiTextureHandle compositeToTexture(RhiDevice& rhiDevice,
-                                                      float frameTime,
+    [[nodiscard]] RhiTextureHandle compositeToTexture(RhiDevice& rhiDevice, float frameTime,
                                                       RhiTextureHandle gbufferDepthTexture,
                                                       RenderDebugService& debugService);
 
     /// Blit captured scene directly to back buffer without any postprocessing.
-    [[nodiscard]] bool blitSceneCaptureToBackbuffer(
-        RhiDevice& rhiDevice,
-        RhiTextureViewHandle swapchainColorView,
-        RenderDebugService& debugService);
+    [[nodiscard]] bool blitSceneCaptureToBackbuffer(RhiDevice& rhiDevice, RhiTextureViewHandle swapchainColorView,
+                                                    RenderDebugService& debugService);
 
     /// Blit the internal composited LDR texture to the back buffer.
-    [[nodiscard]] bool blitCompositeToBackbuffer(
-        RhiDevice& rhiDevice,
-        RhiTextureViewHandle swapchainColorView,
-        RenderDebugService& debugService);
+    [[nodiscard]] bool blitCompositeToBackbuffer(RhiDevice& rhiDevice, RhiTextureViewHandle swapchainColorView,
+                                                 RenderDebugService& debugService);
 
     /// Set effects configuration for the current frame.
     void setFrameEffects(const PostProcessEffects& effects);
@@ -162,21 +147,15 @@ private:
     static constexpr int kExposureMipCount = 13;
     static constexpr int kAutoExposureLod = 6;
     static constexpr double kAutoExposureSampleIntervalSeconds = 0.25;
-    enum class CompositeDestination {
-        Backbuffer,
-        Texture
-    };
+    enum class CompositeDestination { Backbuffer, Texture };
     struct PostProcessCompositeParams;
     [[nodiscard]] RhiCommandList& beginCommandList(const char* debugName) const;
-    void submitCommandList(RhiDevice& rhiDevice,
-                           RhiCommandList& commandList,
-                           const char* debugName) const;
+    void submitCommandList(RhiDevice& rhiDevice, RhiCommandList& commandList, const char* debugName) const;
     bool ensureSceneCaptureTargets(RhiDevice& rhiDevice, int width, int height);
     bool ensureProcessingTargets(RhiDevice& rhiDevice, int width, int height);
     bool ensureCompositeTarget(RhiDevice& rhiDevice, int width, int height);
     bool ensureRhiPipelines(RhiDevice& rhiDevice);
-    bool ensureSwapchainCompositePipeline(RhiDevice& rhiDevice,
-                                          RhiTextureFormat colorFormat);
+    bool ensureSwapchainCompositePipeline(RhiDevice& rhiDevice, RhiTextureFormat colorFormat);
     bool ensureNoiseTextureView(RhiDevice& rhiDevice);
     bool ensureGbufferDepthTextureView(RhiDevice& rhiDevice, RhiTextureHandle texture);
     bool rebuildTargetBindGroups();
@@ -186,53 +165,26 @@ private:
     void destroyTargetBindGroups();
     void destroyCompositeBindGroups();
     void destroyRhiResources();
-    [[nodiscard]] bool executeCompositeGraph(
-        RhiDevice& rhiDevice,
-        CompositeDestination destination,
-        RhiTextureViewHandle outputView,
-        int outputWidth,
-        int outputHeight,
-        float frameTime,
-        RenderDebugService& debugService);
-    [[nodiscard]] bool executeBlitGraph(
-        RhiDevice& rhiDevice,
-        RhiTextureHandle sourceTexture,
-        RhiTextureViewHandle swapchainColorView,
-        RenderDebugService& debugService);
-    void recordExposureStateInitialization(RhiCommandList& commandList,
-                                           float manualExposure);
-    void recordExposureDownsample(RhiCommandList& commandList,
-                                  int mip,
-                                  const glm::ivec2& sourceSize,
-                                  bool sourceIsScene,
-                                  int sourceLod);
-    void recordExposureResolve(RhiCommandList& commandList,
-                               int readIndex,
-                               int writeIndex,
-                               float elapsedFrameTime,
-                               float manualExposure,
-                               bool historyAvailable,
-                               bool reuseExposure);
+    [[nodiscard]] bool executeCompositeGraph(RhiDevice& rhiDevice, CompositeDestination destination,
+                                             RhiTextureViewHandle outputView, int outputWidth, int outputHeight,
+                                             float frameTime, RenderDebugService& debugService);
+    [[nodiscard]] bool executeBlitGraph(RhiDevice& rhiDevice, RhiTextureHandle sourceTexture,
+                                        RhiTextureViewHandle swapchainColorView, RenderDebugService& debugService);
+    void recordExposureStateInitialization(RhiCommandList& commandList, float manualExposure);
+    void recordExposureDownsample(RhiCommandList& commandList, int mip, const glm::ivec2& sourceSize,
+                                  bool sourceIsScene, int sourceLod);
+    void recordExposureResolve(RhiCommandList& commandList, int readIndex, int writeIndex, float elapsedFrameTime,
+                               float manualExposure, bool historyAvailable, bool reuseExposure);
     void recordBloomExtract(RhiCommandList& commandList, int mip);
-    void recordBloomBlur(RhiCommandList& commandList,
-                         int mip,
-                         bool horizontal);
+    void recordBloomBlur(RhiCommandList& commandList, int mip, bool horizontal);
 
     /// Apply final composite (tonemap, color grading, underwater, etc.)
-    void renderComposite(RhiCommandList& commandList,
-                         RhiPipelineHandle pipeline,
-                         int exposureStateIndex);
-    void uploadCompositeParams(
-        RhiCommandList& commandList,
-        const PostProcessCompositeParams& params);
-    [[nodiscard]] PostProcessCompositeParams buildCompositeParams(
-        bool useAutoExposureTexture, bool hasBloom) const;
+    void renderComposite(RhiCommandList& commandList, RhiPipelineHandle pipeline, int exposureStateIndex);
+    void uploadCompositeParams(RhiCommandList& commandList, const PostProcessCompositeParams& params);
+    [[nodiscard]] PostProcessCompositeParams buildCompositeParams(bool useAutoExposureTexture, bool hasBloom) const;
     void bindCompositeOutput(RhiCommandList& commandList, int width, int height);
-    void bindBackbufferOutput(RhiCommandList& commandList,
-                              RhiTextureViewHandle swapchainColorView,
-                              int width,
-                              int height,
-                              bool clearColor);
+    void bindBackbufferOutput(RhiCommandList& commandList, RhiTextureViewHandle swapchainColorView, int width,
+                              int height, bool clearColor);
 
     struct alignas(16) PostProcessCompositeParams {
         glm::ivec4 flags0;

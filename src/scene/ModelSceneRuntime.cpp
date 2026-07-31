@@ -26,11 +26,8 @@
 
 namespace {
 
-[[nodiscard]] bool intersectLocalBounds(const glm::vec3& origin,
-                                        const glm::vec3& direction,
-                                        const glm::vec3& boundsMin,
-                                        const glm::vec3& boundsMax,
-                                        float& distance) {
+[[nodiscard]] bool intersectLocalBounds(const glm::vec3& origin, const glm::vec3& direction, const glm::vec3& boundsMin,
+                                        const glm::vec3& boundsMax, float& distance) {
     float nearDistance = 0.0f;
     float farDistance = std::numeric_limits<float>::max();
     for (int axis = 0; axis < 3; ++axis) {
@@ -57,22 +54,19 @@ namespace {
 }
 
 [[nodiscard]] bool syncRegistryTransforms(entt::registry& registry) {
-    const auto view = registry.view<
-        ecs::LocalTransformComponent,
-        ecs::WorldTransformComponent,
-        scene::PreviousWorldTransformComponent>();
+    const auto view =
+        registry
+            .view<ecs::LocalTransformComponent, ecs::WorldTransformComponent, scene::PreviousWorldTransformComponent>();
     for (const entt::entity entity : view) {
         auto& world = view.get<ecs::WorldTransformComponent>(entity);
-        auto& previous =
-            view.get<scene::PreviousWorldTransformComponent>(entity);
+        auto& previous = view.get<scene::PreviousWorldTransformComponent>(entity);
         previous.worldMatrix = world.worldMatrix;
     }
 
     std::vector<entt::entity> queue;
-    const auto roots = registry.view<
-        ecs::LocalTransformComponent,
-        ecs::WorldTransformComponent,
-        ecs::ChildrenComponent>(entt::exclude<ecs::ParentComponent>);
+    const auto roots =
+        registry.view<ecs::LocalTransformComponent, ecs::WorldTransformComponent, ecs::ChildrenComponent>(
+            entt::exclude<ecs::ParentComponent>);
     queue.reserve(view.size_hint());
     for (const entt::entity root : roots) {
         roots.get<ecs::WorldTransformComponent>(root).worldMatrix =
@@ -87,41 +81,29 @@ namespace {
         if (!visited.insert(entity).second) {
             return false;
         }
-        const glm::mat4& parentWorld =
-            registry.get<ecs::WorldTransformComponent>(entity).worldMatrix;
-        const auto& children =
-            registry.get<ecs::ChildrenComponent>(entity).children;
+        const glm::mat4& parentWorld = registry.get<ecs::WorldTransformComponent>(entity).worldMatrix;
+        const auto& children = registry.get<ecs::ChildrenComponent>(entity).children;
         for (const entt::entity child : children) {
             if (!registry.valid(child) ||
-                !registry.all_of<
-                    ecs::LocalTransformComponent,
-                    ecs::WorldTransformComponent,
-                    ecs::ChildrenComponent,
-                    ecs::ParentComponent>(child) ||
+                !registry.all_of<ecs::LocalTransformComponent, ecs::WorldTransformComponent, ecs::ChildrenComponent,
+                                 ecs::ParentComponent>(child) ||
                 registry.get<ecs::ParentComponent>(child).parent != entity) {
                 return false;
             }
             registry.get<ecs::WorldTransformComponent>(child).worldMatrix =
-                parentWorld *
-                registry.get<ecs::LocalTransformComponent>(child).toMatrix();
+                parentWorld * registry.get<ecs::LocalTransformComponent>(child).toMatrix();
             queue.push_back(child);
         }
     }
     return visited.size() == view.size_hint();
 }
 
-[[nodiscard]] bool validDocumentTransform(
-    const scene::SceneTransformDocument& transform) {
+[[nodiscard]] bool validDocumentTransform(const scene::SceneTransformDocument& transform) {
     const auto finite = [](const glm::vec3& value) {
-        return std::isfinite(value.x) &&
-               std::isfinite(value.y) &&
-               std::isfinite(value.z);
+        return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
     };
-    return finite(transform.position) &&
-           finite(transform.rotation) &&
-           finite(transform.scale) &&
-           std::abs(transform.scale.x) > 1e-8f &&
-           std::abs(transform.scale.y) > 1e-8f &&
+    return finite(transform.position) && finite(transform.rotation) && finite(transform.scale) &&
+           std::abs(transform.scale.x) > 1e-8f && std::abs(transform.scale.y) > 1e-8f &&
            std::abs(transform.scale.z) > 1e-8f;
 }
 } // namespace
@@ -132,26 +114,21 @@ ModelSceneRuntime::~ModelSceneRuntime() {
 
 ModelSceneRuntime::ModelSceneRuntime() = default;
 
-bool ModelSceneRuntime::init(ResourceMgr& resourceMgr,
-                             RhiDevice& rhiDevice,
-                             RhiCommandListPool& commandListPool,
+bool ModelSceneRuntime::init(ResourceMgr& resourceMgr, RhiDevice& rhiDevice, RhiCommandListPool& commandListPool,
                              ImGuiRhiRenderer& imguiRenderer) {
     shutdown();
     m_resourceMgr = &resourceMgr;
-    const std::optional<renderer::contracts::StableReflectionProbeId>
-        probeId = renderer::contracts::allocateStableSceneId<
-            renderer::contracts::StableReflectionProbeIdTag>();
+    const std::optional<renderer::contracts::StableReflectionProbeId> probeId =
+        renderer::contracts::allocateStableSceneId<renderer::contracts::StableReflectionProbeIdTag>();
     if (!probeId.has_value()) {
-        const std::string error =
-            "stable model scene reflection-probe identity space is exhausted";
+        const std::string error = "stable model scene reflection-probe identity space is exhausted";
         shutdown();
         m_lastError = error;
         return false;
     }
     m_reflectionProbeId = *probeId;
     m_deferredRenderer = std::make_unique<ModelSceneDeferredRenderer>();
-    if (!m_deferredRenderer->init(
-            resourceMgr, rhiDevice, commandListPool, imguiRenderer, *this)) {
+    if (!m_deferredRenderer->init(resourceMgr, rhiDevice, commandListPool, imguiRenderer, *this)) {
         const std::string error = m_deferredRenderer->lastError();
         shutdown();
         m_lastError = error;
@@ -161,9 +138,7 @@ bool ModelSceneRuntime::init(ResourceMgr& resourceMgr,
     return true;
 }
 
-entt::entity ModelSceneRuntime::instantiateAsset(
-    const scene::SceneAssetId assetId,
-    const std::string& instanceName) {
+entt::entity ModelSceneRuntime::instantiateAsset(const scene::SceneAssetId assetId, const std::string& instanceName) {
     const auto assetIt = m_assetIndices.find(assetId);
     if (assetIt == m_assetIndices.end()) {
         setError("cannot instantiate an unknown model scene asset");
@@ -177,18 +152,14 @@ entt::entity ModelSceneRuntime::instantiateAsset(
     if (entity == entt::null) {
         return entt::null;
     }
-    m_registry.emplace<scene::StaticMeshComponent>(
-        entity, scene::StaticMeshComponent{assetId});
-    auto& transform =
-        m_registry.get<ecs::LocalTransformComponent>(entity);
+    m_registry.emplace<scene::StaticMeshComponent>(entity, scene::StaticMeshComponent{assetId});
+    auto& transform = m_registry.get<ecs::LocalTransformComponent>(entity);
     transform.localPosition = -center * scale;
     transform.localScale = glm::vec3(scale);
     const glm::mat4 world = transform.toMatrix();
     m_registry.get<ecs::WorldTransformComponent>(entity).worldMatrix = world;
-    m_registry.get<scene::PreviousWorldTransformComponent>(entity).worldMatrix =
-        world;
-    m_registry.emplace<scene::PickableComponent>(
-        entity, scene::PickableComponent{asset.boundsMin, asset.boundsMax});
+    m_registry.get<scene::PreviousWorldTransformComponent>(entity).worldMatrix = world;
+    m_registry.emplace<scene::PickableComponent>(entity, scene::PickableComponent{asset.boundsMin, asset.boundsMax});
     m_selectedEntity = entity;
     return entity;
 }
@@ -199,19 +170,15 @@ entt::entity ModelSceneRuntime::createEntity(const std::string& baseName) {
         return entt::null;
     }
     const std::optional<renderer::contracts::StableObjectId> objectId =
-        renderer::contracts::allocateStableSceneId<
-            renderer::contracts::StableObjectIdTag>();
+        renderer::contracts::allocateStableSceneId<renderer::contracts::StableObjectIdTag>();
     if (!objectId.has_value()) {
         setError("stable model scene object identity space is exhausted");
         return entt::null;
     }
     const entt::entity entity = m_registry.create();
-    m_registry.emplace<scene::SceneEntityIdComponent>(
-        entity, scene::SceneEntityIdComponent{m_nextEntityId++});
-    m_registry.emplace<scene::NameComponent>(
-        entity, scene::NameComponent{makeUniqueInstanceName(baseName)});
-    m_registry.emplace<scene::StableObjectIdComponent>(
-        entity, scene::StableObjectIdComponent{*objectId});
+    m_registry.emplace<scene::SceneEntityIdComponent>(entity, scene::SceneEntityIdComponent{m_nextEntityId++});
+    m_registry.emplace<scene::NameComponent>(entity, scene::NameComponent{makeUniqueInstanceName(baseName)});
+    m_registry.emplace<scene::StableObjectIdComponent>(entity, scene::StableObjectIdComponent{*objectId});
     m_registry.emplace<ecs::LocalTransformComponent>(entity);
     m_registry.emplace<ecs::WorldTransformComponent>(entity);
     m_registry.emplace<scene::PreviousWorldTransformComponent>(entity);
@@ -232,31 +199,25 @@ entt::entity ModelSceneRuntime::createEmptyEntity(const std::string& baseName) {
     return entity;
 }
 
-entt::entity ModelSceneRuntime::createAssetInstance(
-    const scene::SceneAssetId assetId) {
+entt::entity ModelSceneRuntime::createAssetInstance(const scene::SceneAssetId assetId) {
     const auto assetIt = m_assetIndices.find(assetId);
     if (assetIt == m_assetIndices.end()) {
         setError("cannot instantiate an unknown model scene asset");
         return entt::null;
     }
-    const entt::entity entity = instantiateAsset(
-        assetId, m_assets[assetIt->second].name);
+    const entt::entity entity = instantiateAsset(assetId, m_assets[assetIt->second].name);
     if (entity != entt::null) {
         m_lastError.clear();
     }
     return entity;
 }
 
-bool ModelSceneRuntime::renameEntity(
-    const entt::entity entity,
-    const std::string& requestedName) {
-    if (!m_registry.valid(entity) ||
-        !m_registry.all_of<scene::NameComponent>(entity)) {
+bool ModelSceneRuntime::renameEntity(const entt::entity entity, const std::string& requestedName) {
+    if (!m_registry.valid(entity) || !m_registry.all_of<scene::NameComponent>(entity)) {
         setError("entity renaming requires a valid scene entity");
         return false;
     }
-    if (requestedName.empty() ||
-        requestedName.find('\0') != std::string::npos) {
+    if (requestedName.empty() || requestedName.find('\0') != std::string::npos) {
         setError("scene entity names must be non-empty text");
         return false;
     }
@@ -272,13 +233,9 @@ bool ModelSceneRuntime::renameEntity(
 
 entt::entity ModelSceneRuntime::duplicateEntity(const entt::entity source) {
     if (!m_registry.valid(source) ||
-        !m_registry.all_of<
-            scene::SceneEntityIdComponent,
-            scene::NameComponent,
-            scene::StableObjectIdComponent,
-            ecs::LocalTransformComponent,
-            ecs::WorldTransformComponent,
-            ecs::ChildrenComponent>(source)) {
+        !m_registry.all_of<scene::SceneEntityIdComponent, scene::NameComponent, scene::StableObjectIdComponent,
+                           ecs::LocalTransformComponent, ecs::WorldTransformComponent, ecs::ChildrenComponent>(
+            source)) {
         setError("entity duplication requires a valid scene entity");
         return entt::null;
     }
@@ -288,19 +245,14 @@ entt::entity ModelSceneRuntime::duplicateEntity(const entt::entity source) {
     for (std::size_t index = 0u; index < originals.size(); ++index) {
         const entt::entity entity = originals[index];
         if (!m_registry.valid(entity) ||
-            !m_registry.all_of<
-                scene::SceneEntityIdComponent,
-                scene::NameComponent,
-                scene::StableObjectIdComponent,
-                ecs::LocalTransformComponent,
-                ecs::WorldTransformComponent,
-                ecs::ChildrenComponent>(entity) ||
+            !m_registry.all_of<scene::SceneEntityIdComponent, scene::NameComponent, scene::StableObjectIdComponent,
+                               ecs::LocalTransformComponent, ecs::WorldTransformComponent, ecs::ChildrenComponent>(
+                entity) ||
             !visited.insert(entity).second) {
             setError("entity duplication found an invalid scene hierarchy");
             return entt::null;
         }
-        const auto& children =
-            m_registry.get<ecs::ChildrenComponent>(entity).children;
+        const auto& children = m_registry.get<ecs::ChildrenComponent>(entity).children;
         for (const entt::entity child : children) {
             const auto* parent = m_registry.try_get<ecs::ParentComponent>(child);
             if (parent == nullptr || parent->parent != entity) {
@@ -311,8 +263,7 @@ entt::entity ModelSceneRuntime::duplicateEntity(const entt::entity source) {
         }
     }
 
-    const auto maximumId =
-        std::numeric_limits<scene::SceneEntityId>::max();
+    const auto maximumId = std::numeric_limits<scene::SceneEntityId>::max();
     if (originals.size() > maximumId - m_nextEntityId) {
         setError("model scene entity ID space cannot fit the duplicated hierarchy");
         return entt::null;
@@ -322,8 +273,7 @@ entt::entity ModelSceneRuntime::duplicateEntity(const entt::entity source) {
     duplicates.reserve(originals.size());
     const scene::SceneEntityId originalNextEntityId = m_nextEntityId;
     for (const entt::entity original : originals) {
-        const auto& originalName =
-            m_registry.get<scene::NameComponent>(original).value;
+        const auto& originalName = m_registry.get<scene::NameComponent>(original).value;
         const entt::entity duplicate = createEntity(originalName);
         if (duplicate == entt::null) {
             for (const auto& pair : duplicates) {
@@ -335,15 +285,12 @@ entt::entity ModelSceneRuntime::duplicateEntity(const entt::entity source) {
             return entt::null;
         }
         duplicates.emplace(original, duplicate);
-        m_registry.replace<ecs::LocalTransformComponent>(
-            duplicate,
-            m_registry.get<ecs::LocalTransformComponent>(original));
-        if (const auto* mesh =
-                m_registry.try_get<scene::StaticMeshComponent>(original)) {
+        m_registry.replace<ecs::LocalTransformComponent>(duplicate,
+                                                         m_registry.get<ecs::LocalTransformComponent>(original));
+        if (const auto* mesh = m_registry.try_get<scene::StaticMeshComponent>(original)) {
             m_registry.emplace<scene::StaticMeshComponent>(duplicate, *mesh);
         }
-        if (const auto* pickable =
-                m_registry.try_get<scene::PickableComponent>(original)) {
+        if (const auto* pickable = m_registry.try_get<scene::PickableComponent>(original)) {
             m_registry.emplace<scene::PickableComponent>(duplicate, *pickable);
         }
     }
@@ -351,30 +298,24 @@ entt::entity ModelSceneRuntime::duplicateEntity(const entt::entity source) {
     for (const entt::entity original : originals) {
         const entt::entity duplicate = duplicates.at(original);
         entt::entity duplicateParent = entt::null;
-        if (const auto* originalParent =
-                m_registry.try_get<ecs::ParentComponent>(original)) {
+        if (const auto* originalParent = m_registry.try_get<ecs::ParentComponent>(original)) {
             const auto duplicateParentIt = duplicates.find(originalParent->parent);
-            duplicateParent = duplicateParentIt != duplicates.end()
-                ? duplicateParentIt->second
-                : originalParent->parent;
+            duplicateParent =
+                duplicateParentIt != duplicates.end() ? duplicateParentIt->second : originalParent->parent;
         }
         if (duplicateParent != entt::null) {
-            if (!m_registry.valid(duplicateParent) ||
-                !m_registry.all_of<ecs::ChildrenComponent>(duplicateParent)) {
+            if (!m_registry.valid(duplicateParent) || !m_registry.all_of<ecs::ChildrenComponent>(duplicateParent)) {
                 std::abort();
             }
             m_registry.emplace<ecs::ParentComponent>(duplicate, duplicateParent);
-            m_registry.get<ecs::ChildrenComponent>(duplicateParent)
-                .children.push_back(duplicate);
+            m_registry.get<ecs::ChildrenComponent>(duplicateParent).children.push_back(duplicate);
         }
     }
 
     syncTransforms();
     for (const auto& pair : duplicates) {
-        const glm::mat4& world =
-            m_registry.get<ecs::WorldTransformComponent>(pair.second).worldMatrix;
-        m_registry.get<scene::PreviousWorldTransformComponent>(pair.second)
-            .worldMatrix = world;
+        const glm::mat4& world = m_registry.get<ecs::WorldTransformComponent>(pair.second).worldMatrix;
+        m_registry.get<scene::PreviousWorldTransformComponent>(pair.second).worldMatrix = world;
     }
     const entt::entity duplicateRoot = duplicates.at(source);
     m_selectedEntity = duplicateRoot;
@@ -382,34 +323,24 @@ entt::entity ModelSceneRuntime::duplicateEntity(const entt::entity source) {
     return duplicateRoot;
 }
 
-bool ModelSceneRuntime::captureEntityState(
-    const entt::entity entity,
-    scene::SceneEntityDocument& state) const {
-    if (!m_registry.valid(entity) ||
-        !m_registry.all_of<
-            scene::SceneEntityIdComponent,
-            scene::NameComponent,
-            ecs::LocalTransformComponent,
-            ecs::ChildrenComponent>(entity)) {
+bool ModelSceneRuntime::captureEntityState(const entt::entity entity, scene::SceneEntityDocument& state) const {
+    if (!m_registry.valid(entity) || !m_registry.all_of<scene::SceneEntityIdComponent, scene::NameComponent,
+                                                        ecs::LocalTransformComponent, ecs::ChildrenComponent>(entity)) {
         return false;
     }
     scene::SceneEntityDocument captured;
-    captured.id =
-        m_registry.get<scene::SceneEntityIdComponent>(entity).value;
+    captured.id = m_registry.get<scene::SceneEntityIdComponent>(entity).value;
     captured.name = m_registry.get<scene::NameComponent>(entity).value;
-    if (const auto* parent =
-            m_registry.try_get<ecs::ParentComponent>(entity)) {
+    if (const auto* parent = m_registry.try_get<ecs::ParentComponent>(entity)) {
         captured.parentId = entityId(parent->parent);
         if (*captured.parentId == scene::kInvalidSceneEntityId) {
             return false;
         }
     }
-    if (const auto* mesh =
-            m_registry.try_get<scene::StaticMeshComponent>(entity)) {
+    if (const auto* mesh = m_registry.try_get<scene::StaticMeshComponent>(entity)) {
         captured.assetId = mesh->assetId;
     }
-    const auto& transform =
-        m_registry.get<ecs::LocalTransformComponent>(entity);
+    const auto& transform = m_registry.get<ecs::LocalTransformComponent>(entity);
     captured.transform.position = transform.localPosition;
     captured.transform.rotation = transform.localRotation;
     captured.transform.scale = transform.localScale;
@@ -417,9 +348,8 @@ bool ModelSceneRuntime::captureEntityState(
     return true;
 }
 
-bool ModelSceneRuntime::captureEntitySubtree(
-    const entt::entity root,
-    std::vector<scene::SceneEntityDocument>& states) const {
+bool ModelSceneRuntime::captureEntitySubtree(const entt::entity root,
+                                             std::vector<scene::SceneEntityDocument>& states) const {
     states.clear();
     if (!m_registry.valid(root)) {
         return false;
@@ -438,8 +368,7 @@ bool ModelSceneRuntime::captureEntitySubtree(
             return false;
         }
         states.push_back(std::move(state));
-        const auto& children =
-            m_registry.get<ecs::ChildrenComponent>(entity).children;
+        const auto& children = m_registry.get<ecs::ChildrenComponent>(entity).children;
         for (const entt::entity child : children) {
             const auto* parent = m_registry.try_get<ecs::ParentComponent>(child);
             if (parent == nullptr || parent->parent != entity) {
@@ -452,29 +381,23 @@ bool ModelSceneRuntime::captureEntitySubtree(
     return true;
 }
 
-bool ModelSceneRuntime::applyEntityState(
-    const scene::SceneEntityDocument& state) {
+bool ModelSceneRuntime::applyEntityState(const scene::SceneEntityDocument& state) {
     const entt::entity entity = findEntity(state.id);
-    if (entity == entt::null || state.name.empty() ||
-        state.name.find('\0') != std::string::npos ||
+    if (entity == entt::null || state.name.empty() || state.name.find('\0') != std::string::npos ||
         !validDocumentTransform(state.transform)) {
         setError("entity state command contains invalid entity data");
         return false;
     }
-    const auto* mesh =
-        m_registry.try_get<scene::StaticMeshComponent>(entity);
+    const auto* mesh = m_registry.try_get<scene::StaticMeshComponent>(entity);
     const std::optional<scene::SceneAssetId> currentAsset =
-        mesh != nullptr
-            ? std::optional<scene::SceneAssetId>(mesh->assetId)
-            : std::nullopt;
+        mesh != nullptr ? std::optional<scene::SceneAssetId>(mesh->assetId) : std::nullopt;
     if (currentAsset != state.assetId) {
         setError("entity state command cannot change mesh asset ownership");
         return false;
     }
     const auto names = m_registry.view<scene::NameComponent>();
     for (const entt::entity namedEntity : names) {
-        if (namedEntity != entity &&
-            names.get<scene::NameComponent>(namedEntity).value == state.name) {
+        if (namedEntity != entity && names.get<scene::NameComponent>(namedEntity).value == state.name) {
             setError("entity state command would create a duplicate name");
             return false;
         }
@@ -488,14 +411,12 @@ bool ModelSceneRuntime::applyEntityState(
             return false;
         }
         std::unordered_set<entt::entity> ancestors;
-        for (entt::entity ancestor = parent;
-             ancestor != entt::null;) {
+        for (entt::entity ancestor = parent; ancestor != entt::null;) {
             if (ancestor == entity || !ancestors.insert(ancestor).second) {
                 setError("entity state command would create a hierarchy cycle");
                 return false;
             }
-            const auto* next =
-                m_registry.try_get<ecs::ParentComponent>(ancestor);
+            const auto* next = m_registry.try_get<ecs::ParentComponent>(ancestor);
             ancestor = next != nullptr ? next->parent : entt::null;
         }
     }
@@ -517,8 +438,7 @@ bool ModelSceneRuntime::applyEntityState(
     return true;
 }
 
-entt::entity ModelSceneRuntime::restoreEntitySubtree(
-    const std::vector<scene::SceneEntityDocument>& states) {
+entt::entity ModelSceneRuntime::restoreEntitySubtree(const std::vector<scene::SceneEntityDocument>& states) {
     if (states.empty()) {
         setError("entity subtree restoration requires at least one entity");
         return entt::null;
@@ -531,26 +451,20 @@ entt::entity ModelSceneRuntime::restoreEntitySubtree(
     const auto existingNames = m_registry.view<scene::NameComponent>();
     for (std::size_t index = 0u; index < states.size(); ++index) {
         const scene::SceneEntityDocument& state = states[index];
-        if (state.id == scene::kInvalidSceneEntityId ||
-            state.id == std::numeric_limits<scene::SceneEntityId>::max() ||
-            findEntity(state.id) != entt::null ||
-            !restoredIds.insert(state.id).second ||
-            state.name.empty() ||
-            state.name.find('\0') != std::string::npos ||
-            !restoredNames.insert(state.name).second ||
+        if (state.id == scene::kInvalidSceneEntityId || state.id == std::numeric_limits<scene::SceneEntityId>::max() ||
+            findEntity(state.id) != entt::null || !restoredIds.insert(state.id).second || state.name.empty() ||
+            state.name.find('\0') != std::string::npos || !restoredNames.insert(state.name).second ||
             !validDocumentTransform(state.transform)) {
             setError("entity subtree restoration contains invalid or conflicting data");
             return entt::null;
         }
         for (const entt::entity existing : existingNames) {
-            if (existingNames.get<scene::NameComponent>(existing).value ==
-                state.name) {
+            if (existingNames.get<scene::NameComponent>(existing).value == state.name) {
                 setError("entity subtree restoration would create a duplicate name");
                 return entt::null;
             }
         }
-        if (state.assetId.has_value() &&
-            m_assetIndices.find(*state.assetId) == m_assetIndices.end()) {
+        if (state.assetId.has_value() && m_assetIndices.find(*state.assetId) == m_assetIndices.end()) {
             setError("entity subtree restoration references an unknown asset");
             return entt::null;
         }
@@ -572,8 +486,7 @@ entt::entity ModelSceneRuntime::restoreEntitySubtree(
             setError("restored subtree entity cannot parent itself");
             return entt::null;
         }
-        const bool parentIsRestored =
-            restoredIds.find(*state.parentId) != restoredIds.end();
+        const bool parentIsRestored = restoredIds.find(*state.parentId) != restoredIds.end();
         if (index == 0u) {
             if (parentIsRestored) {
                 setError("restored subtree root cannot reference a descendant");
@@ -605,8 +518,7 @@ entt::entity ModelSceneRuntime::restoreEntitySubtree(
     stableObjectIds.reserve(states.size());
     for (std::size_t index = 0u; index < states.size(); ++index) {
         const std::optional<renderer::contracts::StableObjectId> objectId =
-            renderer::contracts::allocateStableSceneId<
-                renderer::contracts::StableObjectIdTag>();
+            renderer::contracts::allocateStableSceneId<renderer::contracts::StableObjectIdTag>();
         if (!objectId.has_value()) {
             setError("stable model scene object identity space is exhausted");
             return entt::null;
@@ -620,13 +532,10 @@ entt::entity ModelSceneRuntime::restoreEntitySubtree(
         const scene::SceneEntityDocument& state = states[index];
         const entt::entity entity = m_registry.create();
         restored.emplace(state.id, entity);
-        m_registry.emplace<scene::SceneEntityIdComponent>(
-            entity, scene::SceneEntityIdComponent{state.id});
-        m_registry.emplace<scene::NameComponent>(
-            entity, scene::NameComponent{state.name});
-        m_registry.emplace<scene::StableObjectIdComponent>(
-            entity,
-            scene::StableObjectIdComponent{stableObjectIds[index]});
+        m_registry.emplace<scene::SceneEntityIdComponent>(entity, scene::SceneEntityIdComponent{state.id});
+        m_registry.emplace<scene::NameComponent>(entity, scene::NameComponent{state.name});
+        m_registry.emplace<scene::StableObjectIdComponent>(entity,
+                                                           scene::StableObjectIdComponent{stableObjectIds[index]});
         ecs::LocalTransformComponent transform;
         transform.localPosition = state.transform.position;
         transform.localRotation = state.transform.rotation;
@@ -636,13 +545,10 @@ entt::entity ModelSceneRuntime::restoreEntitySubtree(
         m_registry.emplace<scene::PreviousWorldTransformComponent>(entity);
         m_registry.emplace<ecs::ChildrenComponent>(entity);
         if (state.assetId.has_value()) {
-            const MeshAsset& asset =
-                m_assets[m_assetIndices.at(*state.assetId)];
-            m_registry.emplace<scene::StaticMeshComponent>(
-                entity, scene::StaticMeshComponent{*state.assetId});
-            m_registry.emplace<scene::PickableComponent>(
-                entity,
-                scene::PickableComponent{asset.boundsMin, asset.boundsMax});
+            const MeshAsset& asset = m_assets[m_assetIndices.at(*state.assetId)];
+            m_registry.emplace<scene::StaticMeshComponent>(entity, scene::StaticMeshComponent{*state.assetId});
+            m_registry.emplace<scene::PickableComponent>(entity,
+                                                         scene::PickableComponent{asset.boundsMin, asset.boundsMax});
         }
     }
     for (const scene::SceneEntityDocument& state : states) {
@@ -651,11 +557,9 @@ entt::entity ModelSceneRuntime::restoreEntitySubtree(
         }
         const entt::entity child = restored.at(state.id);
         const auto restoredParent = restored.find(*state.parentId);
-        const entt::entity parent = restoredParent != restored.end()
-            ? restoredParent->second
-            : findEntity(*state.parentId);
-        if (parent == entt::null ||
-            !m_registry.all_of<ecs::ChildrenComponent>(parent)) {
+        const entt::entity parent =
+            restoredParent != restored.end() ? restoredParent->second : findEntity(*state.parentId);
+        if (parent == entt::null || !m_registry.all_of<ecs::ChildrenComponent>(parent)) {
             std::abort();
         }
         m_registry.emplace<ecs::ParentComponent>(child, parent);
@@ -663,10 +567,8 @@ entt::entity ModelSceneRuntime::restoreEntitySubtree(
     }
     syncTransforms();
     for (const auto& pair : restored) {
-        const glm::mat4& world =
-            m_registry.get<ecs::WorldTransformComponent>(pair.second).worldMatrix;
-        m_registry.get<scene::PreviousWorldTransformComponent>(pair.second)
-            .worldMatrix = world;
+        const glm::mat4& world = m_registry.get<ecs::WorldTransformComponent>(pair.second).worldMatrix;
+        m_registry.get<scene::PreviousWorldTransformComponent>(pair.second).worldMatrix = world;
     }
     for (const scene::SceneEntityDocument& state : states) {
         m_nextEntityId = std::max(m_nextEntityId, state.id + 1u);
@@ -677,26 +579,22 @@ entt::entity ModelSceneRuntime::restoreEntitySubtree(
     return root;
 }
 
-std::string ModelSceneRuntime::makeUniqueInstanceName(
-    const std::string& baseName,
-    const entt::entity ignoredEntity) const {
+std::string ModelSceneRuntime::makeUniqueInstanceName(const std::string& baseName,
+                                                      const entt::entity ignoredEntity) const {
     const auto names = m_registry.view<scene::NameComponent>();
     const auto nameExists = [&names, ignoredEntity](const std::string& candidate) {
-        return std::any_of(
-            names.begin(), names.end(),
-            [&names, &candidate, ignoredEntity](const entt::entity entity) {
-                if (entity == ignoredEntity) {
-                    return false;
-                }
-                return names.get<scene::NameComponent>(entity).value == candidate;
-            });
+        return std::any_of(names.begin(), names.end(), [&names, &candidate, ignoredEntity](const entt::entity entity) {
+            if (entity == ignoredEntity) {
+                return false;
+            }
+            return names.get<scene::NameComponent>(entity).value == candidate;
+        });
     };
     if (!nameExists(baseName)) {
         return baseName;
     }
     for (size_t suffix = 2u;; ++suffix) {
-        std::string candidate =
-            baseName + " (" + std::to_string(suffix) + ")";
+        std::string candidate = baseName + " (" + std::to_string(suffix) + ")";
         if (!nameExists(candidate)) {
             return candidate;
         }
@@ -710,8 +608,7 @@ entt::entity ModelSceneRuntime::importModel(const std::string& path) {
     }
     std::error_code pathError;
     const std::filesystem::path filesystemPath =
-        std::filesystem::weakly_canonical(
-            std::filesystem::u8path(path), pathError);
+        std::filesystem::weakly_canonical(std::filesystem::u8path(path), pathError);
     if (pathError) {
         setError("failed to resolve model import path: " + pathError.message());
         return entt::null;
@@ -722,15 +619,12 @@ entt::entity ModelSceneRuntime::importModel(const std::string& path) {
         setError("model import path must contain a file name");
         return entt::null;
     }
-    const auto existing = std::find_if(
-        m_assets.begin(), m_assets.end(),
-        [&normalizedPath](const MeshAsset& asset) {
-            return asset.path == normalizedPath;
-        });
+    const auto existing = std::find_if(m_assets.begin(), m_assets.end(), [&normalizedPath](const MeshAsset& asset) {
+        return asset.path == normalizedPath;
+    });
     scene::SceneAssetId assetId = scene::kInvalidSceneAssetId;
     if (existing == m_assets.end()) {
-        if (!loadMeshAsset(
-                *m_resourceMgr, name, normalizedPath, assetId)) {
+        if (!loadMeshAsset(*m_resourceMgr, name, normalizedPath, assetId)) {
             return entt::null;
         }
     } else {
@@ -748,15 +642,12 @@ void ModelSceneRuntime::destroyEntity(const entt::entity entity) {
     detachFromParent(entity);
     std::vector<entt::entity> entities{entity};
     for (size_t index = 0u; index < entities.size(); ++index) {
-        const auto* children =
-            m_registry.try_get<ecs::ChildrenComponent>(entities[index]);
+        const auto* children = m_registry.try_get<ecs::ChildrenComponent>(entities[index]);
         if (children != nullptr) {
-            entities.insert(
-                entities.end(), children->children.begin(), children->children.end());
+            entities.insert(entities.end(), children->children.begin(), children->children.end());
         }
     }
-    if (std::find(entities.begin(), entities.end(), m_selectedEntity) !=
-        entities.end()) {
+    if (std::find(entities.begin(), entities.end(), m_selectedEntity) != entities.end()) {
         m_selectedEntity = entt::null;
     }
     for (auto it = entities.rbegin(); it != entities.rend(); ++it) {
@@ -766,26 +657,22 @@ void ModelSceneRuntime::destroyEntity(const entt::entity entity) {
     }
 }
 
-scene::SceneEntityId ModelSceneRuntime::entityId(
-    const entt::entity entity) const {
+scene::SceneEntityId ModelSceneRuntime::entityId(const entt::entity entity) const {
     if (!m_registry.valid(entity)) {
         return scene::kInvalidSceneEntityId;
     }
-    const auto* id =
-        m_registry.try_get<scene::SceneEntityIdComponent>(entity);
+    const auto* id = m_registry.try_get<scene::SceneEntityIdComponent>(entity);
     return id != nullptr ? id->value : scene::kInvalidSceneEntityId;
 }
 
-entt::entity ModelSceneRuntime::findEntity(
-    const scene::SceneEntityId id) const {
+entt::entity ModelSceneRuntime::findEntity(const scene::SceneEntityId id) const {
     if (id == scene::kInvalidSceneEntityId) {
         return entt::null;
     }
     const auto view = m_registry.view<scene::SceneEntityIdComponent>();
-    const auto found = std::find_if(
-        view.begin(), view.end(), [&view, id](const entt::entity entity) {
-            return view.get<scene::SceneEntityIdComponent>(entity).value == id;
-        });
+    const auto found = std::find_if(view.begin(), view.end(), [&view, id](const entt::entity entity) {
+        return view.get<scene::SceneEntityIdComponent>(entity).value == id;
+    });
     return found != view.end() ? *found : entt::null;
 }
 
@@ -795,62 +682,47 @@ void ModelSceneRuntime::detachFromParent(const entt::entity entity) {
         return;
     }
     if (m_registry.valid(parent->parent)) {
-        auto* siblings =
-            m_registry.try_get<ecs::ChildrenComponent>(parent->parent);
+        auto* siblings = m_registry.try_get<ecs::ChildrenComponent>(parent->parent);
         if (siblings != nullptr) {
-            siblings->children.erase(
-                std::remove(
-                    siblings->children.begin(), siblings->children.end(), entity),
-                siblings->children.end());
+            siblings->children.erase(std::remove(siblings->children.begin(), siblings->children.end(), entity),
+                                     siblings->children.end());
         }
     }
     m_registry.remove<ecs::ParentComponent>(entity);
 }
 
-bool ModelSceneRuntime::localTransformFromMatrix(
-    const glm::mat4& matrix,
-    ecs::LocalTransformComponent& transform) const {
-    if (std::abs(matrix[0][3]) > 1e-5f ||
-        std::abs(matrix[1][3]) > 1e-5f ||
-        std::abs(matrix[2][3]) > 1e-5f ||
+bool ModelSceneRuntime::localTransformFromMatrix(const glm::mat4& matrix,
+                                                 ecs::LocalTransformComponent& transform) const {
+    if (std::abs(matrix[0][3]) > 1e-5f || std::abs(matrix[1][3]) > 1e-5f || std::abs(matrix[2][3]) > 1e-5f ||
         std::abs(matrix[3][3] - 1.0f) > 1e-5f) {
         return false;
     }
-    glm::vec3 basis[3] = {
-        glm::vec3(matrix[0]),
-        glm::vec3(matrix[1]),
-        glm::vec3(matrix[2])};
-    glm::vec3 scale{
-        glm::length(basis[0]),
-        glm::length(basis[1]),
-        glm::length(basis[2])};
+    glm::vec3 basis[3] = {glm::vec3(matrix[0]), glm::vec3(matrix[1]), glm::vec3(matrix[2])};
+    glm::vec3 scale{glm::length(basis[0]), glm::length(basis[1]), glm::length(basis[2])};
     if (scale.x <= 1e-8f || scale.y <= 1e-8f || scale.z <= 1e-8f) {
         return false;
     }
     basis[0] /= scale.x;
     basis[1] /= scale.y;
     basis[2] /= scale.z;
-    if (std::abs(glm::dot(basis[0], basis[1])) > 1e-4f ||
-        std::abs(glm::dot(basis[0], basis[2])) > 1e-4f ||
+    if (std::abs(glm::dot(basis[0], basis[1])) > 1e-4f || std::abs(glm::dot(basis[0], basis[2])) > 1e-4f ||
         std::abs(glm::dot(basis[1], basis[2])) > 1e-4f) {
         return false;
     }
     if (glm::determinant(glm::mat3(basis[0], basis[1], basis[2])) < 0.0f) {
         int reflectionAxis = 0;
-        if (scale.y > scale.x) reflectionAxis = 1;
-        if (scale.z > scale[reflectionAxis]) reflectionAxis = 2;
+        if (scale.y > scale.x)
+            reflectionAxis = 1;
+        if (scale.z > scale[reflectionAxis])
+            reflectionAxis = 2;
         scale[reflectionAxis] = -scale[reflectionAxis];
         basis[reflectionAxis] = -basis[reflectionAxis];
     }
-    const glm::quat orientation = glm::quat_cast(
-        glm::mat3(basis[0], basis[1], basis[2]));
-    const glm::vec3 rotation = glm::degrees(
-        glm::eulerAngles(glm::normalize(orientation)));
+    const glm::quat orientation = glm::quat_cast(glm::mat3(basis[0], basis[1], basis[2]));
+    const glm::vec3 rotation = glm::degrees(glm::eulerAngles(glm::normalize(orientation)));
     const glm::vec3 translation = glm::vec3(matrix[3]);
     const auto finite = [](const glm::vec3& value) {
-        return std::isfinite(value.x) &&
-               std::isfinite(value.y) &&
-               std::isfinite(value.z);
+        return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
     };
     if (!finite(translation) || !finite(rotation) || !finite(scale)) {
         return false;
@@ -864,11 +736,8 @@ bool ModelSceneRuntime::localTransformFromMatrix(
     float largestMagnitude = 1.0f;
     for (int column = 0; column < 4; ++column) {
         for (int row = 0; row < 4; ++row) {
-            largestDifference = std::max(
-                largestDifference,
-                std::abs(reconstructed[column][row] - matrix[column][row]));
-            largestMagnitude = std::max(
-                largestMagnitude, std::abs(matrix[column][row]));
+            largestDifference = std::max(largestDifference, std::abs(reconstructed[column][row] - matrix[column][row]));
+            largestMagnitude = std::max(largestMagnitude, std::abs(matrix[column][row]));
         }
     }
     if (largestDifference > largestMagnitude * 1e-3f) {
@@ -878,18 +747,13 @@ bool ModelSceneRuntime::localTransformFromMatrix(
     return true;
 }
 
-bool ModelSceneRuntime::setParent(const entt::entity child,
-                                  const entt::entity parent) {
+bool ModelSceneRuntime::setParent(const entt::entity child, const entt::entity parent) {
     const auto isSceneEntity = [this](const entt::entity entity) {
         return m_registry.valid(entity) &&
-               m_registry.all_of<
-                   scene::SceneEntityIdComponent,
-                   ecs::LocalTransformComponent,
-                   ecs::WorldTransformComponent,
-                   ecs::ChildrenComponent>(entity);
+               m_registry.all_of<scene::SceneEntityIdComponent, ecs::LocalTransformComponent,
+                                 ecs::WorldTransformComponent, ecs::ChildrenComponent>(entity);
     };
-    if (!isSceneEntity(child) ||
-        (parent != entt::null && !isSceneEntity(parent))) {
+    if (!isSceneEntity(child) || (parent != entt::null && !isSceneEntity(parent))) {
         setError("scene hierarchy requires valid scene entities");
         return false;
     }
@@ -899,8 +763,7 @@ bool ModelSceneRuntime::setParent(const entt::entity child,
     }
 
     std::unordered_set<entt::entity> ancestors;
-    for (entt::entity ancestor = parent;
-         ancestor != entt::null;) {
+    for (entt::entity ancestor = parent; ancestor != entt::null;) {
         if (ancestor == child) {
             setError("scene hierarchy reparenting would create a cycle");
             return false;
@@ -909,18 +772,15 @@ bool ModelSceneRuntime::setParent(const entt::entity child,
             setError("scene hierarchy contains an existing cycle");
             return false;
         }
-        const auto* next =
-            m_registry.try_get<ecs::ParentComponent>(ancestor);
+        const auto* next = m_registry.try_get<ecs::ParentComponent>(ancestor);
         ancestor = next != nullptr ? next->parent : entt::null;
     }
 
     syncTransforms();
-    const glm::mat4 childWorld =
-        m_registry.get<ecs::WorldTransformComponent>(child).worldMatrix;
+    const glm::mat4 childWorld = m_registry.get<ecs::WorldTransformComponent>(child).worldMatrix;
     glm::mat4 localMatrix = childWorld;
     if (parent != entt::null) {
-        const glm::mat4& parentWorld =
-            m_registry.get<ecs::WorldTransformComponent>(parent).worldMatrix;
+        const glm::mat4& parentWorld = m_registry.get<ecs::WorldTransformComponent>(parent).worldMatrix;
         const float determinant = glm::determinant(glm::mat3(parentWorld));
         if (!std::isfinite(determinant) || std::abs(determinant) < 1e-8f) {
             setError("cannot parent under a singular world transform");
@@ -945,26 +805,19 @@ bool ModelSceneRuntime::setParent(const entt::entity child,
     return true;
 }
 
-bool ModelSceneRuntime::setWorldTransform(
-    const entt::entity entity,
-    const glm::mat4& worldMatrix) {
+bool ModelSceneRuntime::setWorldTransform(const entt::entity entity, const glm::mat4& worldMatrix) {
     if (!m_registry.valid(entity) ||
-        !m_registry.all_of<
-            ecs::LocalTransformComponent,
-            ecs::WorldTransformComponent>(entity)) {
+        !m_registry.all_of<ecs::LocalTransformComponent, ecs::WorldTransformComponent>(entity)) {
         setError("world transform editing requires a valid scene entity");
         return false;
     }
     glm::mat4 localMatrix = worldMatrix;
-    if (const auto* parent =
-            m_registry.try_get<ecs::ParentComponent>(entity)) {
-        if (!m_registry.valid(parent->parent) ||
-            !m_registry.all_of<ecs::WorldTransformComponent>(parent->parent)) {
+    if (const auto* parent = m_registry.try_get<ecs::ParentComponent>(entity)) {
+        if (!m_registry.valid(parent->parent) || !m_registry.all_of<ecs::WorldTransformComponent>(parent->parent)) {
             setError("world transform editing found an invalid parent entity");
             return false;
         }
-        const glm::mat4& parentWorld =
-            m_registry.get<ecs::WorldTransformComponent>(parent->parent).worldMatrix;
+        const glm::mat4& parentWorld = m_registry.get<ecs::WorldTransformComponent>(parent->parent).worldMatrix;
         const float determinant = glm::determinant(glm::mat3(parentWorld));
         if (!std::isfinite(determinant) || std::abs(determinant) < 1e-8f) {
             setError("cannot edit a child under a singular parent transform");
@@ -1047,8 +900,7 @@ void ModelSceneRuntime::resetEnvironment() {
     }
 }
 
-bool ModelSceneRuntime::loadDocument(
-    const scene::ModelSceneDocument& document) {
+bool ModelSceneRuntime::loadDocument(const scene::ModelSceneDocument& document) {
     if (m_resourceMgr == nullptr || !m_deferredRenderer) {
         setError("scene document loading requires an initialized model scene");
         return false;
@@ -1058,18 +910,15 @@ bool ModelSceneRuntime::loadDocument(
         setError(std::move(validationError));
         return false;
     }
-    if (!ModelSceneDeferredRenderer::validateSettings(
-            document.environment.renderSettings, validationError)) {
+    if (!ModelSceneDeferredRenderer::validateSettings(document.environment.renderSettings, validationError)) {
         setError(std::move(validationError));
         return false;
     }
-    if (document.environment.renderSettings.upscale.fsr1Enabled &&
-        !m_deferredRenderer->isFsr1Supported()) {
+    if (document.environment.renderSettings.upscale.fsr1Enabled && !m_deferredRenderer->isFsr1Supported()) {
         setError("FSR 1 requires the OpenGL graphics backend");
         return false;
     }
-    if (document.environment.renderSettings.upscale.type ==
-            TemporalUpscalerType::Fsr31 &&
+    if (document.environment.renderSettings.upscale.type == TemporalUpscalerType::Fsr31 &&
         !m_deferredRenderer->isFsr31Supported()) {
         setError("FSR 3.1 requires an enabled Vulkan FSR 3.1 build");
         return false;
@@ -1081,8 +930,7 @@ bool ModelSceneRuntime::loadDocument(
     loadedAssetIndices.reserve(document.assets.size());
     for (const scene::SceneAssetDocument& entry : document.assets) {
         MeshAsset asset;
-        if (!createMeshAsset(
-                *m_resourceMgr, entry.id, entry.name, entry.path, asset)) {
+        if (!createMeshAsset(*m_resourceMgr, entry.id, entry.name, entry.path, asset)) {
             for (MeshAsset& loaded : loadedAssets) {
                 loaded.renderer->shutdown();
             }
@@ -1098,8 +946,7 @@ bool ModelSceneRuntime::loadDocument(
     stableObjectIds.reserve(document.entities.size());
     for (std::size_t index = 0u; index < document.entities.size(); ++index) {
         const std::optional<renderer::contracts::StableObjectId> objectId =
-            renderer::contracts::allocateStableSceneId<
-                renderer::contracts::StableObjectIdTag>();
+            renderer::contracts::allocateStableSceneId<renderer::contracts::StableObjectIdTag>();
         if (!objectId.has_value()) {
             for (MeshAsset& loaded : loadedAssets) {
                 loaded.renderer->shutdown();
@@ -1112,19 +959,15 @@ bool ModelSceneRuntime::loadDocument(
     std::unordered_map<scene::SceneEntityId, entt::entity> loadedEntities;
     loadedEntities.reserve(document.entities.size());
     entt::entity selectedEntity = entt::null;
-    scene::SceneEntityId selectedId =
-        std::numeric_limits<scene::SceneEntityId>::max();
+    scene::SceneEntityId selectedId = std::numeric_limits<scene::SceneEntityId>::max();
     for (std::size_t index = 0u; index < document.entities.size(); ++index) {
         const scene::SceneEntityDocument& entry = document.entities[index];
         const entt::entity entity = loadedRegistry.create();
         loadedEntities.emplace(entry.id, entity);
-        loadedRegistry.emplace<scene::SceneEntityIdComponent>(
-            entity, scene::SceneEntityIdComponent{entry.id});
-        loadedRegistry.emplace<scene::NameComponent>(
-            entity, scene::NameComponent{entry.name});
-        loadedRegistry.emplace<scene::StableObjectIdComponent>(
-            entity,
-            scene::StableObjectIdComponent{stableObjectIds[index]});
+        loadedRegistry.emplace<scene::SceneEntityIdComponent>(entity, scene::SceneEntityIdComponent{entry.id});
+        loadedRegistry.emplace<scene::NameComponent>(entity, scene::NameComponent{entry.name});
+        loadedRegistry.emplace<scene::StableObjectIdComponent>(entity,
+                                                               scene::StableObjectIdComponent{stableObjectIds[index]});
         ecs::LocalTransformComponent transform;
         transform.localPosition = entry.transform.position;
         transform.localRotation = entry.transform.rotation;
@@ -1136,11 +979,9 @@ bool ModelSceneRuntime::loadDocument(
         if (entry.assetId.has_value()) {
             const uint32_t assetIndex = loadedAssetIndices.at(*entry.assetId);
             const MeshAsset& asset = loadedAssets[assetIndex];
-            loadedRegistry.emplace<scene::StaticMeshComponent>(
-                entity, scene::StaticMeshComponent{*entry.assetId});
+            loadedRegistry.emplace<scene::StaticMeshComponent>(entity, scene::StaticMeshComponent{*entry.assetId});
             loadedRegistry.emplace<scene::PickableComponent>(
-                entity,
-                scene::PickableComponent{asset.boundsMin, asset.boundsMax});
+                entity, scene::PickableComponent{asset.boundsMin, asset.boundsMax});
         }
         if (entry.id < selectedId) {
             selectedId = entry.id;
@@ -1182,8 +1023,7 @@ bool ModelSceneRuntime::loadDocument(
     setTimeOfDay(document.environment.timeOfDay);
     setTimePaused(document.environment.timePaused);
     setTimeScale(document.environment.timeScale);
-    setWeather(document.environment.weather,
-               document.environment.weatherTransitionInstant);
+    setWeather(document.environment.weather, document.environment.weatherTransitionInstant);
     if (!setRenderSettings(document.environment.renderSettings)) {
         std::abort();
     }
@@ -1191,9 +1031,7 @@ bool ModelSceneRuntime::loadDocument(
     return true;
 }
 
-bool ModelSceneRuntime::loadMeshAsset(ResourceMgr& resourceMgr,
-                                      const std::string& name,
-                                      const std::string& path,
+bool ModelSceneRuntime::loadMeshAsset(ResourceMgr& resourceMgr, const std::string& name, const std::string& path,
                                       scene::SceneAssetId& assetId) {
     if (m_nextAssetId == std::numeric_limits<scene::SceneAssetId>::max()) {
         setError("model scene asset ID space is exhausted");
@@ -1211,11 +1049,8 @@ bool ModelSceneRuntime::loadMeshAsset(ResourceMgr& resourceMgr,
     return true;
 }
 
-bool ModelSceneRuntime::createMeshAsset(ResourceMgr& resourceMgr,
-                                        const scene::SceneAssetId assetId,
-                                        const std::string& name,
-                                        const std::string& path,
-                                        MeshAsset& asset) {
+bool ModelSceneRuntime::createMeshAsset(ResourceMgr& resourceMgr, const scene::SceneAssetId assetId,
+                                        const std::string& name, const std::string& path, MeshAsset& asset) {
     auto renderer = std::make_unique<StaticMeshRenderer>();
     if (!renderer->init(resourceMgr, path)) {
         setError(renderer->lastError());
@@ -1229,8 +1064,7 @@ bool ModelSceneRuntime::createMeshAsset(ResourceMgr& resourceMgr,
     return true;
 }
 
-uint32_t ModelSceneRuntime::assetIndex(
-    const scene::SceneAssetId id) const {
+uint32_t ModelSceneRuntime::assetIndex(const scene::SceneAssetId id) const {
     const auto found = m_assetIndices.find(id);
     if (found == m_assetIndices.end()) {
         std::abort();
@@ -1238,8 +1072,7 @@ uint32_t ModelSceneRuntime::assetIndex(
     return found->second;
 }
 
-bool ModelSceneRuntime::ensureViewport(const uint32_t width,
-                                       const uint32_t height) {
+bool ModelSceneRuntime::ensureViewport(const uint32_t width, const uint32_t height) {
     if (!m_deferredRenderer || width == 0u || height == 0u) {
         return false;
     }
@@ -1251,13 +1084,9 @@ bool ModelSceneRuntime::ensureViewport(const uint32_t width,
     return true;
 }
 
-bool ModelSceneRuntime::renderViewport(const glm::mat4& view,
-                                       const glm::mat4& projection,
-                                       const glm::vec3& cameraPosition,
-                                       const float nearPlane,
-                                       const float farPlane,
-                                       const float verticalFovDegrees,
-                                       const RenderFrameClock& frameClock) {
+bool ModelSceneRuntime::renderViewport(const glm::mat4& view, const glm::mat4& projection,
+                                       const glm::vec3& cameraPosition, const float nearPlane, const float farPlane,
+                                       const float verticalFovDegrees, const RenderFrameClock& frameClock) {
     if (!m_deferredRenderer) {
         setError("model scene deferred renderer is unavailable");
         return false;
@@ -1265,9 +1094,8 @@ bool ModelSceneRuntime::renderViewport(const glm::mat4& view,
     if (!configureReflectionProbeCapture()) {
         return false;
     }
-    if (!m_deferredRenderer->render(
-            view, projection, cameraPosition, nearPlane, farPlane,
-            verticalFovDegrees, frameClock)) {
+    if (!m_deferredRenderer->render(view, projection, cameraPosition, nearPlane, farPlane, verticalFovDegrees,
+                                    frameClock)) {
         setError(m_deferredRenderer->lastError());
         return false;
     }
@@ -1275,40 +1103,29 @@ bool ModelSceneRuntime::renderViewport(const glm::mat4& view,
     return true;
 }
 
-bool ModelSceneRuntime::prepareGBuffer(
-    RhiCommandList& commandList,
-    const FrameContext& context) {
+bool ModelSceneRuntime::prepareGBuffer(RhiCommandList& commandList, const FrameContext& context) {
     for (MeshAsset& asset : m_assets) {
         asset.renderer->prepareStandaloneFrame();
-        if (!asset.renderer->prepareGBuffer(
-                commandList, context.camera.jitteredViewProj,
-                context.previousViewProjWithCurrentJitter, context)) {
+        if (!asset.renderer->prepareGBuffer(commandList, context.camera.jitteredViewProj,
+                                            context.previousViewProjWithCurrentJitter, context)) {
             return false;
         }
     }
     return true;
 }
 
-void ModelSceneRuntime::renderToGBuffer(
-    RhiCommandList& commandList,
-    const glm::mat4& viewProjection,
-    const glm::mat4& previousViewProjection) {
+void ModelSceneRuntime::renderToGBuffer(RhiCommandList& commandList, const glm::mat4& viewProjection,
+                                        const glm::mat4& previousViewProjection) {
     (void)viewProjection;
     (void)previousViewProjection;
-    const auto view = m_registry.view<
-        scene::StaticMeshComponent,
-        scene::StableObjectIdComponent,
-        ecs::WorldTransformComponent,
-        scene::PreviousWorldTransformComponent>();
+    const auto view = m_registry.view<scene::StaticMeshComponent, scene::StableObjectIdComponent,
+                                      ecs::WorldTransformComponent, scene::PreviousWorldTransformComponent>();
     for (const entt::entity entity : view) {
         const auto& mesh = view.get<scene::StaticMeshComponent>(entity);
-        const auto& objectId =
-            view.get<scene::StableObjectIdComponent>(entity).value;
+        const auto& objectId = view.get<scene::StableObjectIdComponent>(entity).value;
         const auto& world = view.get<ecs::WorldTransformComponent>(entity);
-        const auto& previous =
-            view.get<scene::PreviousWorldTransformComponent>(entity);
-        StaticMeshRenderer& renderer =
-            *m_assets[assetIndex(mesh.assetId)].renderer;
+        const auto& previous = view.get<scene::PreviousWorldTransformComponent>(entity);
+        StaticMeshRenderer& renderer = *m_assets[assetIndex(mesh.assetId)].renderer;
         renderer.setInstanceTransform(world.worldMatrix, previous.worldMatrix);
         if (!renderer.setStableObjectId(objectId)) {
             std::abort();
@@ -1317,20 +1134,15 @@ void ModelSceneRuntime::renderToGBuffer(
     }
 }
 
-void ModelSceneRuntime::renderToShadowMap(
-    RhiCommandList& commandList,
-    const glm::mat4& shadowViewProjection) {
-    const auto view = m_registry.view<
-        scene::StaticMeshComponent,
-        ecs::WorldTransformComponent,
-        scene::PreviousWorldTransformComponent>();
+void ModelSceneRuntime::renderToShadowMap(RhiCommandList& commandList, const glm::mat4& shadowViewProjection) {
+    const auto view =
+        m_registry
+            .view<scene::StaticMeshComponent, ecs::WorldTransformComponent, scene::PreviousWorldTransformComponent>();
     for (const entt::entity entity : view) {
         const auto& mesh = view.get<scene::StaticMeshComponent>(entity);
-        StaticMeshRenderer& renderer =
-            *m_assets[assetIndex(mesh.assetId)].renderer;
-        renderer.setInstanceTransform(
-            view.get<ecs::WorldTransformComponent>(entity).worldMatrix,
-            view.get<scene::PreviousWorldTransformComponent>(entity).worldMatrix);
+        StaticMeshRenderer& renderer = *m_assets[assetIndex(mesh.assetId)].renderer;
+        renderer.setInstanceTransform(view.get<ecs::WorldTransformComponent>(entity).worldMatrix,
+                                      view.get<scene::PreviousWorldTransformComponent>(entity).worldMatrix);
         renderer.renderToShadowMap(commandList, shadowViewProjection);
     }
 }
@@ -1346,21 +1158,16 @@ bool ModelSceneRuntime::prepareShadowFrame() {
     return true;
 }
 
-bool ModelSceneRuntime::collectSceneLights(
-    const glm::vec3& cameraPosition,
-    std::vector<renderer::contracts::SceneLight>& lights,
-    std::string& error) {
+bool ModelSceneRuntime::collectSceneLights(const glm::vec3& cameraPosition,
+                                           std::vector<renderer::contracts::SceneLight>& lights, std::string& error) {
     struct LightEntityEntry final {
-        scene::SceneEntityId sceneEntityId =
-            scene::kInvalidSceneEntityId;
+        scene::SceneEntityId sceneEntityId = scene::kInvalidSceneEntityId;
         entt::entity entity = entt::null;
         StaticMeshRenderer* renderer = nullptr;
     };
 
-    const auto view = m_registry.view<
-        scene::StaticMeshComponent,
-        scene::SceneEntityIdComponent,
-        ecs::WorldTransformComponent>();
+    const auto view =
+        m_registry.view<scene::StaticMeshComponent, scene::SceneEntityIdComponent, ecs::WorldTransformComponent>();
     std::vector<LightEntityEntry> entries;
     entries.reserve(view.size_hint());
     std::size_t totalLightCount = 0u;
@@ -1368,71 +1175,50 @@ bool ModelSceneRuntime::collectSceneLights(
     for (const entt::entity entity : view) {
         const auto& mesh = view.get<scene::StaticMeshComponent>(entity);
         const auto assetIt = m_assetIndices.find(mesh.assetId);
-        if (assetIt == m_assetIndices.end() ||
-            assetIt->second >= m_assets.size() ||
+        if (assetIt == m_assetIndices.end() || assetIt->second >= m_assets.size() ||
             m_assets[assetIt->second].renderer == nullptr) {
-            error =
-                "model scene light collection references an unknown mesh asset";
+            error = "model scene light collection references an unknown mesh asset";
             return false;
         }
-        StaticMeshRenderer* const renderer =
-            m_assets[assetIt->second].renderer.get();
-        const std::size_t assetLightCount =
-            renderer->punctualLightCount();
+        StaticMeshRenderer* const renderer = m_assets[assetIt->second].renderer.get();
+        const std::size_t assetLightCount = renderer->punctualLightCount();
         if (assetLightCount > collected.max_size() - totalLightCount) {
             error = "model scene punctual-light count exceeds vector capacity";
             return false;
         }
         totalLightCount += assetLightCount;
-        entries.push_back({
-            view.get<scene::SceneEntityIdComponent>(entity).value,
-            entity,
-            renderer});
+        entries.push_back({view.get<scene::SceneEntityIdComponent>(entity).value, entity, renderer});
     }
-    std::sort(
-        entries.begin(), entries.end(),
-        [](const LightEntityEntry& lhs, const LightEntityEntry& rhs) {
-            return lhs.sceneEntityId < rhs.sceneEntityId;
-        });
+    std::sort(entries.begin(), entries.end(), [](const LightEntityEntry& lhs, const LightEntityEntry& rhs) {
+        return lhs.sceneEntityId < rhs.sceneEntityId;
+    });
 
     collected.reserve(totalLightCount);
     for (const LightEntityEntry& entry : entries) {
         const entt::entity entity = entry.entity;
         StaticMeshRenderer& renderer = *entry.renderer;
-        auto* identities =
-            m_registry.try_get<scene::StaticMeshLightIdentityComponent>(
-                entity);
+        auto* identities = m_registry.try_get<scene::StaticMeshLightIdentityComponent>(entity);
         if (identities == nullptr) {
             scene::StaticMeshLightIdentityComponent created;
             created.values.reserve(renderer.punctualLightCount());
-            for (std::size_t index = 0u;
-                 index < renderer.punctualLightCount(); ++index) {
+            for (std::size_t index = 0u; index < renderer.punctualLightCount(); ++index) {
                 const std::optional<renderer::contracts::StableLightId> id =
-                    renderer::contracts::allocateStableSceneId<
-                        renderer::contracts::StableLightIdTag>();
+                    renderer::contracts::allocateStableSceneId<renderer::contracts::StableLightIdTag>();
                 if (!id.has_value()) {
-                    error =
-                        "stable model punctual-light identity space is exhausted";
+                    error = "stable model punctual-light identity space is exhausted";
                     return false;
                 }
                 created.values.push_back(*id);
             }
-            identities =
-                &m_registry.emplace<
-                    scene::StaticMeshLightIdentityComponent>(
-                    entity, std::move(created));
+            identities = &m_registry.emplace<scene::StaticMeshLightIdentityComponent>(entity, std::move(created));
         }
         if (identities->values.size() != renderer.punctualLightCount()) {
-            error =
-                "model scene punctual-light identity count changed after asset creation";
+            error = "model scene punctual-light identity count changed after asset creation";
             return false;
         }
         std::string assetError;
-        if (!renderer.appendPunctualLights(
-                m_registry.get<ecs::WorldTransformComponent>(entity)
-                    .worldMatrix,
-                cameraPosition, identities->values, collected,
-                assetError)) {
+        if (!renderer.appendPunctualLights(m_registry.get<ecs::WorldTransformComponent>(entity).worldMatrix,
+                                           cameraPosition, identities->values, collected, assetError)) {
             error = std::move(assetError);
             return false;
         }
@@ -1442,12 +1228,10 @@ bool ModelSceneRuntime::collectSceneLights(
     return true;
 }
 
-bool ModelSceneRuntime::configureClusteredLighting(
-    const DeferredClusteredLightingResources& resources) {
+bool ModelSceneRuntime::configureClusteredLighting(const DeferredClusteredLightingResources& resources) {
     for (MeshAsset& asset : m_assets) {
-        if (!asset.renderer->configureClusteredLighting(
-                resources.bindGroupLayout, resources.bindGroup,
-                resources.grid)) {
+        if (!asset.renderer->configureClusteredLighting(resources.bindGroupLayout, resources.bindGroup,
+                                                        resources.grid)) {
             setError(asset.renderer->lastError());
             return false;
         }
@@ -1457,23 +1241,17 @@ bool ModelSceneRuntime::configureClusteredLighting(
 
 bool ModelSceneRuntime::hasTransparentGeometry() const {
     const auto view = m_registry.view<scene::StaticMeshComponent>();
-    return std::any_of(
-        view.begin(), view.end(),
-        [this, &view](const entt::entity entity) {
-            const auto& mesh = view.get<scene::StaticMeshComponent>(entity);
-            return m_assets[assetIndex(mesh.assetId)]
-                .renderer->hasTransparentPrimitives();
-        });
+    return std::any_of(view.begin(), view.end(), [this, &view](const entt::entity entity) {
+        const auto& mesh = view.get<scene::StaticMeshComponent>(entity);
+        return m_assets[assetIndex(mesh.assetId)].renderer->hasTransparentPrimitives();
+    });
 }
 
-bool ModelSceneRuntime::prepareTransparentResources(
-    const DeferredTransparentResources& resources) {
+bool ModelSceneRuntime::prepareTransparentResources(const DeferredTransparentResources& resources) {
     for (MeshAsset& asset : m_assets) {
         if (asset.renderer->hasTransparentPrimitives() &&
-            !asset.renderer->prepareTransparentResources(
-                resources.sceneColor,
-                resources.opaqueDepth,
-                resources.skyCapture)) {
+            !asset.renderer->prepareTransparentResources(resources.sceneColor, resources.opaqueDepth,
+                                                         resources.skyCapture)) {
             setError(asset.renderer->lastError());
             return false;
         }
@@ -1481,40 +1259,31 @@ bool ModelSceneRuntime::prepareTransparentResources(
     return true;
 }
 
-void ModelSceneRuntime::renderTransparent(
-    RhiCommandList& commandList,
-    const glm::vec3& cameraPosition,
-    const float reflectionCompositeStrength) {
+void ModelSceneRuntime::renderTransparent(RhiCommandList& commandList, const glm::vec3& cameraPosition,
+                                          const float reflectionCompositeStrength) {
     struct QueuedDraw {
         StaticMeshRenderer* renderer = nullptr;
         StaticMeshRenderer::TransparentDraw draw;
     };
     std::vector<QueuedDraw> queued;
     std::vector<StaticMeshRenderer::TransparentDraw> assetDraws;
-    const auto view = m_registry.view<
-        scene::StaticMeshComponent,
-        ecs::WorldTransformComponent>();
+    const auto view = m_registry.view<scene::StaticMeshComponent, ecs::WorldTransformComponent>();
     for (const entt::entity entity : view) {
         const auto& mesh = view.get<scene::StaticMeshComponent>(entity);
         const auto& world = view.get<ecs::WorldTransformComponent>(entity);
-        StaticMeshRenderer& renderer =
-            *m_assets[assetIndex(mesh.assetId)].renderer;
+        StaticMeshRenderer& renderer = *m_assets[assetIndex(mesh.assetId)].renderer;
         assetDraws.clear();
-        renderer.appendTransparentDraws(
-            world.worldMatrix, cameraPosition, assetDraws);
+        renderer.appendTransparentDraws(world.worldMatrix, cameraPosition, assetDraws);
         queued.reserve(queued.size() + assetDraws.size());
         for (StaticMeshRenderer::TransparentDraw& draw : assetDraws) {
             queued.push_back({&renderer, std::move(draw)});
         }
     }
-    std::sort(
-        queued.begin(), queued.end(),
-        [](const QueuedDraw& lhs, const QueuedDraw& rhs) {
-            return lhs.draw.distanceSquared > rhs.draw.distanceSquared;
-        });
+    std::sort(queued.begin(), queued.end(), [](const QueuedDraw& lhs, const QueuedDraw& rhs) {
+        return lhs.draw.distanceSquared > rhs.draw.distanceSquared;
+    });
     for (const QueuedDraw& queuedDraw : queued) {
-        queuedDraw.renderer->renderTransparentDraw(
-            commandList, queuedDraw.draw, reflectionCompositeStrength);
+        queuedDraw.renderer->renderTransparentDraw(commandList, queuedDraw.draw, reflectionCompositeStrength);
     }
 }
 
@@ -1532,27 +1301,18 @@ bool ModelSceneRuntime::configureReflectionProbeCapture() {
         glm::vec3 localBoundsMax{0.0f};
     };
     std::vector<SignatureEntry> entries;
-    const auto meshView = m_registry.view<
-        scene::SceneEntityIdComponent,
-        scene::StaticMeshComponent,
-        scene::PickableComponent,
-        ecs::WorldTransformComponent>();
+    const auto meshView = m_registry.view<scene::SceneEntityIdComponent, scene::StaticMeshComponent,
+                                          scene::PickableComponent, ecs::WorldTransformComponent>();
     entries.reserve(meshView.size_hint());
     for (const entt::entity entity : meshView) {
         const auto& mesh = meshView.get<scene::StaticMeshComponent>(entity);
         const auto& bounds = meshView.get<scene::PickableComponent>(entity);
-        entries.push_back({
-            meshView.get<scene::SceneEntityIdComponent>(entity).value,
-            mesh.assetId,
-            meshView.get<ecs::WorldTransformComponent>(entity).worldMatrix,
-            bounds.localBoundsMin,
-            bounds.localBoundsMax});
+        entries.push_back({meshView.get<scene::SceneEntityIdComponent>(entity).value, mesh.assetId,
+                           meshView.get<ecs::WorldTransformComponent>(entity).worldMatrix, bounds.localBoundsMin,
+                           bounds.localBoundsMax});
     }
-    std::sort(
-        entries.begin(), entries.end(),
-        [](const SignatureEntry& lhs, const SignatureEntry& rhs) {
-            return lhs.entityId < rhs.entityId;
-        });
+    std::sort(entries.begin(), entries.end(),
+              [](const SignatureEntry& lhs, const SignatureEntry& rhs) { return lhs.entityId < rhs.entityId; });
 
     uint64_t signature = 1469598103934665603ull;
     const auto appendSignature = [&signature](const auto& value) {
@@ -1572,10 +1332,8 @@ bool ModelSceneRuntime::configureReflectionProbeCapture() {
     if (!m_reflectionProbeSignatureValid) {
         m_reflectionProbeSceneSignature = signature;
         m_reflectionProbeSignatureValid = true;
-    } else if (m_reflectionProbeRevisionInvalidated ||
-               signature != m_reflectionProbeSceneSignature) {
-        if (m_reflectionProbeCaptureRevision ==
-            std::numeric_limits<uint32_t>::max()) {
+    } else if (m_reflectionProbeRevisionInvalidated || signature != m_reflectionProbeSceneSignature) {
+        if (m_reflectionProbeCaptureRevision == std::numeric_limits<uint32_t>::max()) {
             setError("model scene reflection-probe capture revision is exhausted");
             return false;
         }
@@ -1590,25 +1348,16 @@ bool ModelSceneRuntime::configureReflectionProbeCapture() {
         glm::vec3 boundsMax(std::numeric_limits<float>::lowest());
         for (const SignatureEntry& entry : entries) {
             for (uint32_t corner = 0u; corner < 8u; ++corner) {
-                const glm::vec3 local{
-                    (corner & 1u) != 0u
-                        ? entry.localBoundsMax.x
-                        : entry.localBoundsMin.x,
-                    (corner & 2u) != 0u
-                        ? entry.localBoundsMax.y
-                        : entry.localBoundsMin.y,
-                    (corner & 4u) != 0u
-                        ? entry.localBoundsMax.z
-                        : entry.localBoundsMin.z};
-                const glm::vec3 world = glm::vec3(
-                    entry.world * glm::vec4(local, 1.0f));
+                const glm::vec3 local{(corner & 1u) != 0u ? entry.localBoundsMax.x : entry.localBoundsMin.x,
+                                      (corner & 2u) != 0u ? entry.localBoundsMax.y : entry.localBoundsMin.y,
+                                      (corner & 4u) != 0u ? entry.localBoundsMax.z : entry.localBoundsMin.z};
+                const glm::vec3 world = glm::vec3(entry.world * glm::vec4(local, 1.0f));
                 boundsMin = glm::min(boundsMin, world);
                 boundsMax = glm::max(boundsMax, world);
             }
         }
         const glm::vec3 extent = boundsMax - boundsMin;
-        const float padding = std::max(
-            0.5f, std::max({extent.x, extent.y, extent.z}) * 0.1f);
+        const float padding = std::max(0.5f, std::max({extent.x, extent.y, extent.z}) * 0.1f);
         boundsMin -= glm::vec3(padding);
         boundsMax += glm::vec3(padding);
         const glm::vec3 probePosition = (boundsMin + boundsMax) * 0.5f;
@@ -1619,23 +1368,18 @@ bool ModelSceneRuntime::configureReflectionProbeCapture() {
         source.positionWorldMeters = probePosition;
         source.influenceMinWorldMeters = boundsMin;
         source.influenceMaxWorldMeters = boundsMax;
-        source.blendDistanceMeters = std::min({
-            paddedExtent.x, paddedExtent.y, paddedExtent.z}) * 0.2f;
+        source.blendDistanceMeters = std::min({paddedExtent.x, paddedExtent.y, paddedExtent.z}) * 0.2f;
         source.boxProjectionMinWorldMeters = boundsMin;
         source.boxProjectionMaxWorldMeters = boundsMax;
         source.requestedRevision = m_reflectionProbeCaptureRevision;
         sources.push_back(source);
 
         std::string lightError;
-        if (!collectSceneLights(
-                probePosition, m_reflectionProbeLights, lightError)) {
-            setError(lightError.empty()
-                ? "failed to collect model scene probe-capture lights"
-                : std::move(lightError));
+        if (!collectSceneLights(probePosition, m_reflectionProbeLights, lightError)) {
+            setError(lightError.empty() ? "failed to collect model scene probe-capture lights" : std::move(lightError));
             return false;
         }
-        if (m_reflectionProbeLights.size() >
-            renderer::contracts::kClusterMaxLightCount) {
+        if (m_reflectionProbeLights.size() > renderer::contracts::kClusterMaxLightCount) {
             setError("model scene probe-capture light capacity is exceeded");
             return false;
         }
@@ -1649,18 +1393,15 @@ bool ModelSceneRuntime::configureReflectionProbeCapture() {
     } else {
         m_reflectionProbeLights.clear();
     }
-    if (!m_deferredRenderer->configureReflectionProbeCapture(
-            *this, std::move(sources))) {
+    if (!m_deferredRenderer->configureReflectionProbeCapture(*this, std::move(sources))) {
         setError(m_deferredRenderer->lastError());
         return false;
     }
     return true;
 }
 
-bool ModelSceneRuntime::recordReflectionProbeRadianceFace(
-    RhiCommandList& commandList,
-    const FrameContext& context,
-    const ReflectionProbeCaptureWork& work) {
+bool ModelSceneRuntime::recordReflectionProbeRadianceFace(RhiCommandList& commandList, const FrameContext& context,
+                                                          const ReflectionProbeCaptureWork& work) {
     if (!work.targetView.isValid() || !work.depthTargetView.isValid() ||
         work.face >= renderer::contracts::kReflectionProbeCubeFaceCount) {
         setError("model scene reflection-probe capture work is invalid");
@@ -1668,10 +1409,8 @@ bool ModelSceneRuntime::recordReflectionProbeRadianceFace(
     }
     for (MeshAsset& asset : m_assets) {
         asset.renderer->prepareStandaloneFrame();
-        if (!asset.renderer->prepareReflectionProbeCapture(
-                commandList, work.viewProjection,
-                work.positionWorldMeters, context,
-                m_reflectionProbeLights)) {
+        if (!asset.renderer->prepareReflectionProbeCapture(commandList, work.viewProjection, work.positionWorldMeters,
+                                                           context, m_reflectionProbeLights)) {
             setError("failed to prepare model scene probe-capture material resources");
             return false;
         }
@@ -1681,8 +1420,7 @@ bool ModelSceneRuntime::recordReflectionProbeRadianceFace(
     colorAttachment.view = work.targetView;
     colorAttachment.loadOp = RhiLoadOp::Clear;
     colorAttachment.storeOp = RhiStoreOp::Store;
-    const glm::vec3 skyRadiance =
-        context.skyColors.horizon * context.skyIntensity;
+    const glm::vec3 skyRadiance = context.skyColors.horizon * context.skyIntensity;
     colorAttachment.clearColor[0] = skyRadiance.r;
     colorAttachment.clearColor[1] = skyRadiance.g;
     colorAttachment.clearColor[2] = skyRadiance.b;
@@ -1694,19 +1432,14 @@ bool ModelSceneRuntime::recordReflectionProbeRadianceFace(
     depthAttachment.clearDepth = 1.0f;
     RhiRenderingInfo renderingInfo;
     renderingInfo.debugName = "ModelScene.ReflectionProbeCapture";
-    renderingInfo.renderArea = {
-        0, 0,
-        renderer::contracts::kReflectionProbeCubeExtent,
-        renderer::contracts::kReflectionProbeCubeExtent};
+    renderingInfo.renderArea = {0, 0, renderer::contracts::kReflectionProbeCubeExtent,
+                                renderer::contracts::kReflectionProbeCubeExtent};
     renderingInfo.colorAttachments = &colorAttachment;
     renderingInfo.colorAttachmentCount = 1u;
     renderingInfo.depthStencilAttachment = &depthAttachment;
     commandList.beginRendering(renderingInfo);
-    commandList.setViewport({
-        0.0f, 0.0f,
-        static_cast<float>(renderer::contracts::kReflectionProbeCubeExtent),
-        static_cast<float>(renderer::contracts::kReflectionProbeCubeExtent),
-        0.0f, 1.0f});
+    commandList.setViewport({0.0f, 0.0f, static_cast<float>(renderer::contracts::kReflectionProbeCubeExtent),
+                             static_cast<float>(renderer::contracts::kReflectionProbeCubeExtent), 0.0f, 1.0f});
     commandList.setScissor(renderingInfo.renderArea);
 
     struct QueuedDraw final {
@@ -1715,38 +1448,27 @@ bool ModelSceneRuntime::recordReflectionProbeRadianceFace(
     };
     std::vector<QueuedDraw> transparentDraws;
     std::vector<StaticMeshRenderer::TransparentDraw> assetDraws;
-    const auto meshView = m_registry.view<
-        scene::StaticMeshComponent,
-        ecs::WorldTransformComponent,
-        scene::PreviousWorldTransformComponent>();
+    const auto meshView =
+        m_registry
+            .view<scene::StaticMeshComponent, ecs::WorldTransformComponent, scene::PreviousWorldTransformComponent>();
     for (const entt::entity entity : meshView) {
         const auto& mesh = meshView.get<scene::StaticMeshComponent>(entity);
-        const glm::mat4& world =
-            meshView.get<ecs::WorldTransformComponent>(entity).worldMatrix;
-        StaticMeshRenderer& renderer =
-            *m_assets[assetIndex(mesh.assetId)].renderer;
-        renderer.setInstanceTransform(
-            world,
-            meshView.get<scene::PreviousWorldTransformComponent>(entity)
-                .worldMatrix);
+        const glm::mat4& world = meshView.get<ecs::WorldTransformComponent>(entity).worldMatrix;
+        StaticMeshRenderer& renderer = *m_assets[assetIndex(mesh.assetId)].renderer;
+        renderer.setInstanceTransform(world, meshView.get<scene::PreviousWorldTransformComponent>(entity).worldMatrix);
         renderer.renderReflectionProbeCaptureOpaque(commandList);
         assetDraws.clear();
-        renderer.appendTransparentDraws(
-            world, work.positionWorldMeters, assetDraws);
-        transparentDraws.reserve(
-            transparentDraws.size() + assetDraws.size());
+        renderer.appendTransparentDraws(world, work.positionWorldMeters, assetDraws);
+        transparentDraws.reserve(transparentDraws.size() + assetDraws.size());
         for (StaticMeshRenderer::TransparentDraw& draw : assetDraws) {
             transparentDraws.push_back({&renderer, std::move(draw)});
         }
     }
-    std::sort(
-        transparentDraws.begin(), transparentDraws.end(),
-        [](const QueuedDraw& lhs, const QueuedDraw& rhs) {
-            return lhs.draw.distanceSquared > rhs.draw.distanceSquared;
-        });
+    std::sort(transparentDraws.begin(), transparentDraws.end(), [](const QueuedDraw& lhs, const QueuedDraw& rhs) {
+        return lhs.draw.distanceSquared > rhs.draw.distanceSquared;
+    });
     for (const QueuedDraw& queued : transparentDraws) {
-        queued.renderer->renderReflectionProbeCaptureTransparent(
-            commandList, queued.draw);
+        queued.renderer->renderReflectionProbeCaptureTransparent(commandList, queued.draw);
     }
     commandList.endRendering();
     return true;
@@ -1778,28 +1500,19 @@ uint32_t ModelSceneRuntime::viewportHeight() const {
 }
 
 RhiTextureHandle ModelSceneRuntime::captureTextureHandle() const {
-    return m_deferredRenderer
-        ? m_deferredRenderer->captureTextureHandle()
-        : RhiTextureHandle{};
+    return m_deferredRenderer ? m_deferredRenderer->captureTextureHandle() : RhiTextureHandle{};
 }
 
 RhiTextureFormat ModelSceneRuntime::captureTextureFormat() const {
-    return m_deferredRenderer
-        ? m_deferredRenderer->captureTextureFormat()
-        : RhiTextureFormat::Undefined;
+    return m_deferredRenderer ? m_deferredRenderer->captureTextureFormat() : RhiTextureFormat::Undefined;
 }
 
 const GpuFrameStats* ModelSceneRuntime::gpuFrameStats() const {
-    return m_deferredRenderer
-        ? m_deferredRenderer->gpuFrameStats()
-        : nullptr;
+    return m_deferredRenderer ? m_deferredRenderer->gpuFrameStats() : nullptr;
 }
 
-ReflectionProbeCaptureFrameStats
-ModelSceneRuntime::reflectionProbeCaptureStats() const {
-    return m_deferredRenderer
-        ? m_deferredRenderer->reflectionProbeCaptureStats()
-        : ReflectionProbeCaptureFrameStats{};
+ReflectionProbeCaptureFrameStats ModelSceneRuntime::reflectionProbeCaptureStats() const {
+    return m_deferredRenderer ? m_deferredRenderer->reflectionProbeCaptureStats() : ReflectionProbeCaptureFrameStats{};
 }
 
 void ModelSceneRuntime::setTimeOfDay(const float timeOfDaySeconds) {
@@ -1840,8 +1553,7 @@ float ModelSceneRuntime::timeScale() const {
     return m_deferredRenderer->timeScale();
 }
 
-void ModelSceneRuntime::setWeather(const WeatherType weather,
-                                   const bool instant) {
+void ModelSceneRuntime::setWeather(const WeatherType weather, const bool instant) {
     if (!m_deferredRenderer) {
         std::abort();
     }
@@ -1875,18 +1587,15 @@ bool ModelSceneRuntime::setRenderSettings(const RenderSettings& settings) {
         std::abort();
     }
     std::string validationError;
-    if (!ModelSceneDeferredRenderer::validateSettings(
-            settings, validationError)) {
+    if (!ModelSceneDeferredRenderer::validateSettings(settings, validationError)) {
         setError(std::move(validationError));
         return false;
     }
-    if (settings.upscale.fsr1Enabled &&
-        !m_deferredRenderer->isFsr1Supported()) {
+    if (settings.upscale.fsr1Enabled && !m_deferredRenderer->isFsr1Supported()) {
         setError("FSR 1 requires the OpenGL graphics backend");
         return false;
     }
-    if (settings.upscale.type == TemporalUpscalerType::Fsr31 &&
-        !m_deferredRenderer->isFsr31Supported()) {
+    if (settings.upscale.type == TemporalUpscalerType::Fsr31 && !m_deferredRenderer->isFsr31Supported()) {
         setError("FSR 3.1 requires an enabled Vulkan FSR 3.1 build");
         return false;
     }
@@ -1910,29 +1619,23 @@ bool ModelSceneRuntime::isFsr31Supported() const {
     return m_deferredRenderer && m_deferredRenderer->isFsr31Supported();
 }
 
-entt::entity ModelSceneRuntime::pick(const glm::vec3& rayOrigin,
-                                     const glm::vec3& rayDirection) const {
+entt::entity ModelSceneRuntime::pick(const glm::vec3& rayOrigin, const glm::vec3& rayDirection) const {
     entt::entity nearestEntity = entt::null;
     float nearestDistance = std::numeric_limits<float>::max();
-    const auto view = m_registry.view<
-        scene::PickableComponent, ecs::WorldTransformComponent>();
+    const auto view = m_registry.view<scene::PickableComponent, ecs::WorldTransformComponent>();
     for (const entt::entity entity : view) {
         const auto& bounds = view.get<scene::PickableComponent>(entity);
-        const glm::mat4& world =
-            view.get<ecs::WorldTransformComponent>(entity).worldMatrix;
+        const glm::mat4& world = view.get<ecs::WorldTransformComponent>(entity).worldMatrix;
         const float determinant = glm::determinant(glm::mat3(world));
         if (!std::isfinite(determinant) || std::abs(determinant) < 1e-8f) {
             continue;
         }
         const glm::mat4 inverseWorld = glm::inverse(world);
-        const glm::vec3 localOrigin = glm::vec3(
-            inverseWorld * glm::vec4(rayOrigin, 1.0f));
-        const glm::vec3 localDirection = glm::vec3(
-            inverseWorld * glm::vec4(rayDirection, 0.0f));
+        const glm::vec3 localOrigin = glm::vec3(inverseWorld * glm::vec4(rayOrigin, 1.0f));
+        const glm::vec3 localDirection = glm::vec3(inverseWorld * glm::vec4(rayDirection, 0.0f));
         float distance = 0.0f;
-        if (intersectLocalBounds(localOrigin, localDirection,
-                                 bounds.localBoundsMin, bounds.localBoundsMax,
-                                 distance) && distance < nearestDistance) {
+        if (intersectLocalBounds(localOrigin, localDirection, bounds.localBoundsMin, bounds.localBoundsMax, distance) &&
+            distance < nearestDistance) {
             nearestDistance = distance;
             nearestEntity = entity;
         }
@@ -1940,14 +1643,8 @@ entt::entity ModelSceneRuntime::pick(const glm::vec3& rayOrigin,
     return nearestEntity;
 }
 
-bool ModelSceneRuntime::entityWorldBounds(
-    const entt::entity entity,
-    glm::vec3& boundsMin,
-    glm::vec3& boundsMax) const {
-    if (!m_registry.valid(entity) ||
-        !m_registry.all_of<
-            ecs::WorldTransformComponent,
-            ecs::ChildrenComponent>(entity)) {
+bool ModelSceneRuntime::entityWorldBounds(const entt::entity entity, glm::vec3& boundsMin, glm::vec3& boundsMax) const {
+    if (!m_registry.valid(entity) || !m_registry.all_of<ecs::WorldTransformComponent, ecs::ChildrenComponent>(entity)) {
         return false;
     }
 
@@ -1967,33 +1664,21 @@ bool ModelSceneRuntime::entityWorldBounds(
     for (std::size_t index = 0u; index < entities.size(); ++index) {
         const entt::entity current = entities[index];
         if (!m_registry.valid(current) ||
-            !m_registry.all_of<
-                ecs::WorldTransformComponent,
-                ecs::ChildrenComponent>(current) ||
+            !m_registry.all_of<ecs::WorldTransformComponent, ecs::ChildrenComponent>(current) ||
             !visited.insert(current).second) {
             return false;
         }
-        const glm::mat4& world =
-            m_registry.get<ecs::WorldTransformComponent>(current).worldMatrix;
+        const glm::mat4& world = m_registry.get<ecs::WorldTransformComponent>(current).worldMatrix;
         includePoint(glm::vec3(world[3]));
-        if (const auto* pickable =
-                m_registry.try_get<scene::PickableComponent>(current)) {
+        if (const auto* pickable = m_registry.try_get<scene::PickableComponent>(current)) {
             for (uint32_t corner = 0u; corner < 8u; ++corner) {
-                const glm::vec3 local{
-                    (corner & 1u) != 0u
-                        ? pickable->localBoundsMax.x
-                        : pickable->localBoundsMin.x,
-                    (corner & 2u) != 0u
-                        ? pickable->localBoundsMax.y
-                        : pickable->localBoundsMin.y,
-                    (corner & 4u) != 0u
-                        ? pickable->localBoundsMax.z
-                        : pickable->localBoundsMin.z};
+                const glm::vec3 local{(corner & 1u) != 0u ? pickable->localBoundsMax.x : pickable->localBoundsMin.x,
+                                      (corner & 2u) != 0u ? pickable->localBoundsMax.y : pickable->localBoundsMin.y,
+                                      (corner & 4u) != 0u ? pickable->localBoundsMax.z : pickable->localBoundsMin.z};
                 includePoint(glm::vec3(world * glm::vec4(local, 1.0f)));
             }
         }
-        const auto& children =
-            m_registry.get<ecs::ChildrenComponent>(current).children;
+        const auto& children = m_registry.get<ecs::ChildrenComponent>(current).children;
         for (const entt::entity child : children) {
             const auto* parent = m_registry.try_get<ecs::ParentComponent>(child);
             if (parent == nullptr || parent->parent != current) {
@@ -2011,8 +1696,8 @@ void ModelSceneRuntime::syncTransforms() {
     }
 }
 
-scene::ModelSceneDocument ModelSceneRuntime::captureDocument(
-    const scene::SceneEditorCameraDocument& editorCamera) const {
+scene::ModelSceneDocument
+ModelSceneRuntime::captureDocument(const scene::SceneEditorCameraDocument& editorCamera) const {
     if (!m_deferredRenderer) {
         std::abort();
     }
@@ -2022,30 +1707,25 @@ scene::ModelSceneDocument ModelSceneRuntime::captureDocument(
         document.assets.push_back({asset.id, asset.name, asset.path});
     }
 
-    const auto entities = m_registry.view<
-        scene::SceneEntityIdComponent,
-        scene::NameComponent,
-        ecs::LocalTransformComponent>();
+    const auto entities =
+        m_registry.view<scene::SceneEntityIdComponent, scene::NameComponent, ecs::LocalTransformComponent>();
     document.entities.reserve(entities.size_hint());
     for (const entt::entity entity : entities) {
         scene::SceneEntityDocument entry;
         entry.id = entities.get<scene::SceneEntityIdComponent>(entity).value;
         entry.name = entities.get<scene::NameComponent>(entity).value;
-        const auto& transform =
-            entities.get<ecs::LocalTransformComponent>(entity);
+        const auto& transform = entities.get<ecs::LocalTransformComponent>(entity);
         entry.transform.position = transform.localPosition;
         entry.transform.rotation = transform.localRotation;
         entry.transform.scale = transform.localScale;
-        if (const auto* parent =
-                m_registry.try_get<ecs::ParentComponent>(entity)) {
+        if (const auto* parent = m_registry.try_get<ecs::ParentComponent>(entity)) {
             const scene::SceneEntityId parentId = this->entityId(parent->parent);
             if (parentId == scene::kInvalidSceneEntityId) {
                 std::abort();
             }
             entry.parentId = parentId;
         }
-        if (const auto* mesh =
-                m_registry.try_get<scene::StaticMeshComponent>(entity)) {
+        if (const auto* mesh = m_registry.try_get<scene::StaticMeshComponent>(entity)) {
             if (m_assetIndices.find(mesh->assetId) == m_assetIndices.end()) {
                 std::abort();
             }
@@ -2055,10 +1735,7 @@ scene::ModelSceneDocument ModelSceneRuntime::captureDocument(
     }
     std::sort(
         document.entities.begin(), document.entities.end(),
-        [](const scene::SceneEntityDocument& lhs,
-           const scene::SceneEntityDocument& rhs) {
-            return lhs.id < rhs.id;
-        });
+        [](const scene::SceneEntityDocument& lhs, const scene::SceneEntityDocument& rhs) { return lhs.id < rhs.id; });
     document.environment.timeOfDay = timeOfDay();
     document.environment.timePaused = timePaused();
     document.environment.timeScale = timeScale();

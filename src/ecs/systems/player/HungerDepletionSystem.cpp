@@ -7,13 +7,14 @@
 namespace ecs {
 
 namespace {
-constexpr double kHungerInterval = 100.0;  // game seconds per food point
+constexpr double kHungerInterval = 100.0; // game seconds per food point
 } // namespace
 
 void HungerDepletionSystem::update(SystemContext& ctx) {
     auto& registry = ctx.registry;
 
-    if (!ctx.services.world) return;
+    if (!ctx.services.world)
+        return;
 
     // No hunger depletion in creative mode
     if (registry.ctxHas<GameplayRuntimeContext>()) {
@@ -28,7 +29,8 @@ void HungerDepletionSystem::update(SystemContext& ctx) {
     for (auto e : view) {
         auto& food = view.get<FoodComponent>(e);
 
-        if (food.current <= 0) continue;
+        if (food.current <= 0)
+            continue;
 
         const double elapsed = gameTime - food.lastHungerTick;
         const int ticks = static_cast<int>(elapsed / kHungerInterval);

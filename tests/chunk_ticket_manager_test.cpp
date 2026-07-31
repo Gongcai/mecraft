@@ -11,12 +11,12 @@ static void testInitialState() {
     assert(mgr.shouldLoad(0, 0));
     assert(mgr.shouldLoad(1, 0));
     assert(mgr.shouldLoad(-1, 0));
-    assert(!mgr.shouldLoad(20, 0));  // Outside viewRadius + 1
+    assert(!mgr.shouldLoad(20, 0)); // Outside viewRadius + 1
 
     // Ticking requires simulation radius
     assert(mgr.shouldTick(0, 0));
-    assert(mgr.shouldTick(7, 0));    // Edge of sim radius
-    assert(!mgr.shouldTick(10, 0));  // Outside sim radius
+    assert(mgr.shouldTick(7, 0)); // Edge of sim radius
+    assert(!mgr.shouldTick(10, 0)); // Outside sim radius
 
     std::printf("[PASS] testInitialState\n");
 }
@@ -86,7 +86,7 @@ static void testGetChunksToLoadExcludesLoaded() {
     }
 
     auto chunks2 = mgr.getChunksToLoad(100, loaded);
-    assert(chunks2.empty());  // All already loaded
+    assert(chunks2.empty()); // All already loaded
 
     std::printf("[PASS] testGetChunksToLoadExcludesLoaded\n");
 }
@@ -101,13 +101,13 @@ static void testGetChunksToUnload() {
 
     std::unordered_set<int64_t> loaded;
     // Add some chunks: some inside, some outside unload radius
-    loaded.insert(ChunkTicketManager::chunkKey(0, 0));   // Inside
-    loaded.insert(ChunkTicketManager::chunkKey(3, 0));   // Inside
-    loaded.insert(ChunkTicketManager::chunkKey(8, 0));   // Outside
-    loaded.insert(ChunkTicketManager::chunkKey(0, 10));  // Outside
+    loaded.insert(ChunkTicketManager::chunkKey(0, 0)); // Inside
+    loaded.insert(ChunkTicketManager::chunkKey(3, 0)); // Inside
+    loaded.insert(ChunkTicketManager::chunkKey(8, 0)); // Outside
+    loaded.insert(ChunkTicketManager::chunkKey(0, 10)); // Outside
 
     auto toUnload = mgr.getChunksToUnload(loaded);
-    assert(toUnload.size() == 2);  // Only the two outside
+    assert(toUnload.size() == 2); // Only the two outside
 
     std::printf("[PASS] testGetChunksToUnload\n");
 }
@@ -123,12 +123,12 @@ static void testPlayerPositionUpdate() {
     // Chunk at (10,10) should be loadable
     assert(mgr.shouldLoad(10, 10));
     assert(mgr.shouldLoad(12, 10));
-    assert(!mgr.shouldLoad(0, 0));  // Far from player
+    assert(!mgr.shouldLoad(0, 0)); // Far from player
 
     // Move player to (0,0)
     mgr.updatePlayerPosition(0, 0);
     assert(mgr.shouldLoad(0, 0));
-    assert(!mgr.shouldLoad(10, 10));  // Now far from player
+    assert(!mgr.shouldLoad(10, 10)); // Now far from player
 
     std::printf("[PASS] testPlayerPositionUpdate\n");
 }

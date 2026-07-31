@@ -42,8 +42,7 @@ int main() {
                      "Vulkan config name must parse to the Vulkan backend")) {
         return 1;
     }
-    if (!requireTrue(!renderer::rhi::parseRhiBackend("invalid"),
-                     "invalid backend config names must be rejected")) {
+    if (!requireTrue(!renderer::rhi::parseRhiBackend("invalid"), "invalid backend config names must be rejected")) {
         return 1;
     }
     if (!requireTrue(std::string_view(renderer::rhi::rhiBackendConfigName(RhiBackend::OpenGL)) == "opengl",

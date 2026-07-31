@@ -39,20 +39,16 @@ uint16_t requirePropertyIndex(const BlockInteractionDef& def) {
     return property;
 }
 
-uint16_t requirePropertyValue(const BlockInteractionDef& def,
-                              const uint16_t property,
-                              const std::string& value) {
+uint16_t requirePropertyValue(const BlockInteractionDef& def, const uint16_t property, const std::string& value) {
     const uint16_t valueIndex = BlockStateRegistry::getPropertyValueIndex(property, value);
     if (valueIndex == BlockStateRegistry::INVALID_INDEX) {
         failBlockInteractionDispatcher(def.id + " references unknown value '" + value +
-                                 "' for property: " + def.property);
+                                       "' for property: " + def.property);
     }
     return valueIndex;
 }
 
-uint16_t requireCurrentValue(const BlockStateId currentState,
-                             const BlockInteractionDef& def,
-                             const uint16_t property) {
+uint16_t requireCurrentValue(const BlockStateId currentState, const BlockInteractionDef& def, const uint16_t property) {
     const uint16_t currentValue = BlockStateRegistry::getPropertyIndex(currentState, property);
     if (currentValue == BlockStateRegistry::INVALID_INDEX) {
         failBlockInteractionDispatcher(def.id + " target state is missing property: " + def.property);
@@ -60,10 +56,8 @@ uint16_t requireCurrentValue(const BlockStateId currentState,
     return currentValue;
 }
 
-BlockStateId withInteractionProperty(const BlockStateId currentState,
-                                const BlockInteractionDef& def,
-                                const uint16_t property,
-                                const uint16_t value) {
+BlockStateId withInteractionProperty(const BlockStateId currentState, const BlockInteractionDef& def,
+                                     const uint16_t property, const uint16_t value) {
     const BlockStateId updated = BlockStateRegistry::withProperty(currentState, property, value);
     if (BlockStateRegistry::getPropertyIndex(updated, property) != value) {
         failBlockInteractionDispatcher(def.id + " failed to update property: " + def.property);
@@ -71,9 +65,8 @@ BlockStateId withInteractionProperty(const BlockStateId currentState,
     return updated;
 }
 
-BlockStateId nextToggleBooleanState(const BlockStateId currentState,
-                               const BlockInteractionDef& def,
-                               const uint16_t property) {
+BlockStateId nextToggleBooleanState(const BlockStateId currentState, const BlockInteractionDef& def,
+                                    const uint16_t property) {
     const uint16_t falseValue = requirePropertyValue(def, property, def.falseValue);
     const uint16_t trueValue = requirePropertyValue(def, property, def.trueValue);
     const uint16_t currentValue = requireCurrentValue(currentState, def, property);
@@ -87,17 +80,15 @@ BlockStateId nextToggleBooleanState(const BlockStateId currentState,
     failBlockInteractionDispatcher(def.id + " target state contains an unknown boolean value");
 }
 
-BlockStateId nextSetPropertyOnceState(const BlockStateId currentState,
-                                 const BlockInteractionDef& def,
-                                 const uint16_t property) {
+BlockStateId nextSetPropertyOnceState(const BlockStateId currentState, const BlockInteractionDef& def,
+                                      const uint16_t property) {
     const uint16_t value = requirePropertyValue(def, property, def.setValue);
     static_cast<void>(requireCurrentValue(currentState, def, property));
     return withInteractionProperty(currentState, def, property, value);
 }
 
-BlockStateId nextCyclePropertyState(const BlockStateId currentState,
-                               const BlockInteractionDef& def,
-                               const uint16_t property) {
+BlockStateId nextCyclePropertyState(const BlockStateId currentState, const BlockInteractionDef& def,
+                                    const uint16_t property) {
     std::vector<uint16_t> values;
     values.reserve(def.cycleValues.size());
     for (const std::string& value : def.cycleValues) {
@@ -117,21 +108,15 @@ BlockStateId nextCyclePropertyState(const BlockStateId currentState,
 BlockStateId nextStateForDef(const BlockStateId currentState, const BlockInteractionDef& def) {
     const uint16_t property = requirePropertyIndex(def);
     switch (def.action) {
-        case BlockInteractionActionKind::ToggleBooleanProperty:
-            return nextToggleBooleanState(currentState, def, property);
-        case BlockInteractionActionKind::SetPropertyOnce:
-            return nextSetPropertyOnceState(currentState, def, property);
-        case BlockInteractionActionKind::CycleProperty:
-            return nextCyclePropertyState(currentState, def, property);
+    case BlockInteractionActionKind::ToggleBooleanProperty: return nextToggleBooleanState(currentState, def, property);
+    case BlockInteractionActionKind::SetPropertyOnce: return nextSetPropertyOnceState(currentState, def, property);
+    case BlockInteractionActionKind::CycleProperty: return nextCyclePropertyState(currentState, def, property);
     }
     failBlockInteractionDispatcher(def.id + " has an unsupported action");
 }
 
-void applyPartnerSync(World& world,
-                      const glm::ivec3& position,
-                      const BlockStateId currentState,
-                      const BlockStateId updatedState,
-                      const BlockInteractionDef& def) {
+void applyPartnerSync(World& world, const glm::ivec3& position, const BlockStateId currentState,
+                      const BlockStateId updatedState, const BlockInteractionDef& def) {
     if (def.partnerSync == BlockInteractionPartnerSync::None) {
         if (updatedState != currentState) {
             world.setBlockState(position.x, position.y, position.z, updatedState);

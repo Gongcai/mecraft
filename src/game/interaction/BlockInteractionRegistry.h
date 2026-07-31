@@ -4,16 +4,9 @@
 #include <unordered_map>
 #include <vector>
 
-enum class BlockInteractionActionKind {
-    ToggleBooleanProperty,
-    SetPropertyOnce,
-    CycleProperty
-};
+enum class BlockInteractionActionKind { ToggleBooleanProperty, SetPropertyOnce, CycleProperty };
 
-enum class BlockInteractionPartnerSync {
-    None,
-    DoorOpen
-};
+enum class BlockInteractionPartnerSync { None, DoorOpen };
 
 struct BlockInteractionDef {
     std::string id;

@@ -65,11 +65,8 @@ void appendString(std::vector<uint8_t>& out, const std::string& value) {
     out.insert(out.end(), value.begin(), value.end());
 }
 
-std::vector<uint8_t> buildSinglePaletteStateFile(const int32_t cx,
-                                                 const int32_t cz,
-                                                 const uint8_t scy,
-                                                 const BlockStateId::Index stateIndex,
-                                                 const uint8_t bitsPerEntry,
+std::vector<uint8_t> buildSinglePaletteStateFile(const int32_t cx, const int32_t cz, const uint8_t scy,
+                                                 const BlockStateId::Index stateIndex, const uint8_t bitsPerEntry,
                                                  const std::vector<uint8_t>& packedData) {
     std::vector<uint8_t> payload;
     appendU8(payload, save::MCHK_ENCODING_PALLETIZED);
@@ -100,11 +97,8 @@ std::vector<uint8_t> buildSinglePaletteStateFile(const int32_t cx,
     return file;
 }
 
-std::vector<uint8_t> buildLegacyStringPaletteStateFile(const int32_t cx,
-                                                       const int32_t cz,
-                                                       const uint8_t scy,
-                                                       const std::string& stateName,
-                                                       const uint8_t bitsPerEntry,
+std::vector<uint8_t> buildLegacyStringPaletteStateFile(const int32_t cx, const int32_t cz, const uint8_t scy,
+                                                       const std::string& stateName, const uint8_t bitsPerEntry,
                                                        const std::vector<uint8_t>& packedData) {
     std::vector<uint8_t> payload;
     appendU8(payload, save::MCHK_ENCODING_PALLETIZED);
@@ -134,9 +128,7 @@ std::vector<uint8_t> buildLegacyStringPaletteStateFile(const int32_t cx,
     return file;
 }
 
-std::vector<uint8_t> buildMalformedPaletteCountFile(const int32_t cx,
-                                                    const int32_t cz,
-                                                    const uint8_t scy) {
+std::vector<uint8_t> buildMalformedPaletteCountFile(const int32_t cx, const int32_t cz, const uint8_t scy) {
     std::vector<uint8_t> payload;
     appendU8(payload, save::MCHK_ENCODING_PALLETIZED);
     appendU16(payload, static_cast<uint16_t>(1u << scy));
@@ -350,12 +342,9 @@ static void testBlockStateRoundTrip() {
         std::abort();
     }
     const BlockStateId northBottomStairs = BlockStateRegistry::getState(
-        oakStairs,
-        std::vector<std::pair<uint16_t, uint16_t>>{
-            {PropIndices::FACING, PropIndices::FACING_NORTH},
-            {PropIndices::HALF, PropIndices::HALF_BOTTOM},
-            {PropIndices::SHAPE, PropIndices::SHAPE_OUTER_LEFT}
-        });
+        oakStairs, std::vector<std::pair<uint16_t, uint16_t>>{{PropIndices::FACING, PropIndices::FACING_NORTH},
+                                                              {PropIndices::HALF, PropIndices::HALF_BOTTOM},
+                                                              {PropIndices::SHAPE, PropIndices::SHAPE_OUTER_LEFT}});
     original->setBlock(4, 64, 4, northBottomStairs);
 
     std::vector<uint8_t> fileData = save::ChunkSerializer::serializeFile(*original);
@@ -370,8 +359,7 @@ static void testBlockStateRoundTrip() {
         BlockStateRegistry::getPropertyIndex(loadedState, PropIndices::FACING) != PropIndices::FACING_NORTH ||
         BlockStateRegistry::getPropertyIndex(loadedState, PropIndices::HALF) != PropIndices::HALF_BOTTOM ||
         BlockStateRegistry::getPropertyIndex(loadedState, PropIndices::SHAPE) != PropIndices::SHAPE_OUTER_LEFT) {
-        std::fprintf(stderr,
-                     "[FAIL] chunk serializer should preserve full stair state: expected=%s loaded=%s\n",
+        std::fprintf(stderr, "[FAIL] chunk serializer should preserve full stair state: expected=%s loaded=%s\n",
                      BlockStateRegistry::stateToString(northBottomStairs).c_str(),
                      BlockStateRegistry::stateToString(loadedState).c_str());
         std::abort();
@@ -382,10 +370,8 @@ static void testBlockStateRoundTrip() {
 static void testChestBlockStateRoundTrip() {
     auto original = std::make_shared<Chunk>(0, 0);
 
-    const BlockStateId eastChest = BlockStateRegistry::getState(
-        BlockRegistry::requireIdByName("minecraft:chest"),
-        PropIndices::FACING,
-        PropIndices::FACING_EAST);
+    const BlockStateId eastChest = BlockStateRegistry::getState(BlockRegistry::requireIdByName("minecraft:chest"),
+                                                                PropIndices::FACING, PropIndices::FACING_EAST);
     original->setBlock(6, 70, 5, eastChest);
 
     const std::vector<uint8_t> fileData = save::ChunkSerializer::serializeFile(*original);
@@ -398,8 +384,7 @@ static void testChestBlockStateRoundTrip() {
     const BlockStateId loadedState = loaded->getBlock(6, 70, 5);
     if (BlockStateRegistry::getBlockId(loadedState) != BlockRegistry::requireIdByName("minecraft:chest") ||
         BlockStateRegistry::getPropertyIndex(loadedState, PropIndices::FACING) != PropIndices::FACING_EAST) {
-        std::fprintf(stderr,
-                     "[FAIL] chunk serializer should preserve chest state: expected=%s loaded=%s\n",
+        std::fprintf(stderr, "[FAIL] chunk serializer should preserve chest state: expected=%s loaded=%s\n",
                      BlockStateRegistry::stateToString(eastChest).c_str(),
                      BlockStateRegistry::stateToString(loadedState).c_str());
         std::abort();
@@ -414,10 +399,8 @@ static void testWireContainerPartsRoundTrip() {
     const int localX = 5;
     const int y = 70;
     const int localZ = 11;
-    const glm::ivec3 worldPosition(
-        original->m_chunkX * Chunk::SIZE_X + localX,
-        y,
-        original->m_chunkZ * Chunk::SIZE_Z + localZ);
+    const glm::ivec3 worldPosition(original->m_chunkX * Chunk::SIZE_X + localX, y,
+                                   original->m_chunkZ * Chunk::SIZE_Z + localZ);
 
     const BlockID wireContainerBlock = BlockRegistry::requireIdByName("minecraft:wire_container");
     original->setBlock(localX, y, localZ, BlockStateRegistry::getDefaultState(wireContainerBlock));
@@ -455,11 +438,8 @@ static void testWireContainerPartsRoundTrip() {
 
     const save::WireContainerSaveEntry& loadedEntry = loaded.wireContainers.front();
     const WirePart* loadedPart = loadedEntry.parts.find(redChannel, PropIndices::FACING_FLOOR);
-    if (loadedEntry.position != worldPosition ||
-        loadedEntry.parts.size() != 1 ||
-        loadedPart == nullptr ||
-        loadedPart->power != 12 ||
-        loadedPart->connections != part.connections) {
+    if (loadedEntry.position != worldPosition || loadedEntry.parts.size() != 1 || loadedPart == nullptr ||
+        loadedPart->power != 12 || loadedPart->connections != part.connections) {
         std::fprintf(stderr, "[FAIL] chunk serializer should preserve wire container part data\n");
         std::abort();
     }
@@ -468,13 +448,7 @@ static void testWireContainerPartsRoundTrip() {
 }
 
 static void testOldStringPaletteFormatRejected() {
-    const std::vector<uint8_t> fileData = buildLegacyStringPaletteStateFile(
-        0,
-        0,
-        4,
-        "minecraft:oak_stairs",
-        0,
-        {});
+    const std::vector<uint8_t> fileData = buildLegacyStringPaletteStateFile(0, 0, 4, "minecraft:oak_stairs", 0, {});
     auto loaded = save::ChunkSerializer::deserializeFile(fileData.data(), fileData.size());
     if (loaded != nullptr) {
         std::fprintf(stderr, "[FAIL] legacy string palette chunks should be rejected\n");
@@ -486,13 +460,7 @@ static void testOldStringPaletteFormatRejected() {
 static void testInvalidPackedPaletteIndexRejected() {
     const std::vector<uint8_t> packedData(512, 0xFFu);
     const BlockStateId::Index stoneState = defaultState("minecraft:stone").registryIndex();
-    const std::vector<uint8_t> fileData = buildSinglePaletteStateFile(
-        0,
-        0,
-        4,
-        stoneState,
-        1,
-        packedData);
+    const std::vector<uint8_t> fileData = buildSinglePaletteStateFile(0, 0, 4, stoneState, 1, packedData);
 
     auto loaded = save::ChunkSerializer::deserializeFile(fileData.data(), fileData.size());
     if (loaded != nullptr) {
@@ -504,13 +472,7 @@ static void testInvalidPackedPaletteIndexRejected() {
 
 static void testInvalidPaletteStateIndexRejected() {
     const BlockStateId::Index invalidState = BlockStateRegistry::getStateCount() + 1;
-    const std::vector<uint8_t> fileData = buildSinglePaletteStateFile(
-        0,
-        0,
-        4,
-        invalidState,
-        0,
-        {});
+    const std::vector<uint8_t> fileData = buildSinglePaletteStateFile(0, 0, 4, invalidState, 0, {});
 
     auto loaded = save::ChunkSerializer::deserializeFile(fileData.data(), fileData.size());
     if (loaded != nullptr) {
@@ -563,14 +525,14 @@ static void testFluidLayerRoundTrip() {
         std::fprintf(stderr, "[FAIL] chunk with fluid layer should deserialize\n");
         std::abort();
     }
-    if (BlockStateRegistry::getBlockId(loaded->getBlock(5, 64, 5)) != BlockRegistry::requireIdByName("minecraft:stone")) {
+    if (BlockStateRegistry::getBlockId(loaded->getBlock(5, 64, 5)) !=
+        BlockRegistry::requireIdByName("minecraft:stone")) {
         std::fprintf(stderr, "[FAIL] fluid layer round trip should preserve the block layer\n");
         std::abort();
     }
 
     const SubChunk* loadedSub = loaded->getSubChunk(Chunk::toSubChunkIndex(65));
-    if (loadedSub == nullptr ||
-        loadedSub->getFluidLayer(5, Chunk::toSubChunkLocalY(65), 5) != waterState) {
+    if (loadedSub == nullptr || loadedSub->getFluidLayer(5, Chunk::toSubChunkLocalY(65), 5) != waterState) {
         std::fprintf(stderr, "[FAIL] fluid layer round trip should preserve the fluid layer\n");
         std::abort();
     }
@@ -786,12 +748,8 @@ static void testSaveManagerConcurrentRegionWritesRoundTrip() {
         std::vector<ExpectedBlock> blocks;
     };
 
-    const std::vector<BlockStateId> states = {
-        defaultState("minecraft:stone"),
-        defaultState("minecraft:dirt"),
-        defaultState("minecraft:oak_planks"),
-        defaultState("minecraft:glass")
-    };
+    const std::vector<BlockStateId> states = {defaultState("minecraft:stone"), defaultState("minecraft:dirt"),
+                                              defaultState("minecraft:oak_planks"), defaultState("minecraft:glass")};
 
     std::vector<ExpectedChunk> expectedChunks;
     expectedChunks.reserve(32);
@@ -821,23 +779,16 @@ static void testSaveManagerConcurrentRegionWritesRoundTrip() {
     for (const ExpectedChunk& expected : expectedChunks) {
         auto loaded = mgr.tryLoadChunk(expected.cx, expected.cz);
         if (loaded == nullptr) {
-            std::fprintf(stderr,
-                         "[FAIL] concurrently saved chunk (%d,%d) should load from the region file\n",
-                         expected.cx,
-                         expected.cz);
+            std::fprintf(stderr, "[FAIL] concurrently saved chunk (%d,%d) should load from the region file\n",
+                         expected.cx, expected.cz);
             std::abort();
         }
 
         for (const ExpectedBlock& block : expected.blocks) {
             const BlockStateId loadedState = loaded->getBlock(block.x, block.y, block.z);
             if (loadedState != block.state) {
-                std::fprintf(stderr,
-                             "[FAIL] chunk (%d,%d) marker (%d,%d,%d) mismatch: expected=%s loaded=%s\n",
-                             expected.cx,
-                             expected.cz,
-                             block.x,
-                             block.y,
-                             block.z,
+                std::fprintf(stderr, "[FAIL] chunk (%d,%d) marker (%d,%d,%d) mismatch: expected=%s loaded=%s\n",
+                             expected.cx, expected.cz, block.x, block.y, block.z,
                              BlockStateRegistry::stateToString(block.state).c_str(),
                              BlockStateRegistry::stateToString(loadedState).c_str());
                 std::abort();
@@ -860,10 +811,7 @@ static void testSaveManagerWireContainerPartsRoundTrip() {
     const int localX = 9;
     const int y = 66;
     const int localZ = 3;
-    const glm::ivec3 worldPosition(
-        chunkX * Chunk::SIZE_X + localX,
-        y,
-        chunkZ * Chunk::SIZE_Z + localZ);
+    const glm::ivec3 worldPosition(chunkX * Chunk::SIZE_X + localX, y, chunkZ * Chunk::SIZE_Z + localZ);
 
     auto chunk = std::make_shared<Chunk>(chunkX, chunkZ);
     const BlockID wireContainerBlock = BlockRegistry::requireIdByName("minecraft:wire_container");
@@ -894,9 +842,7 @@ static void testSaveManagerWireContainerPartsRoundTrip() {
     }
     const save::WireContainerSaveEntry& loadedEntry = loaded.wireContainers.front();
     const WirePart* loadedPart = loadedEntry.parts.find(redChannel, PropIndices::FACING_FLOOR);
-    if (loadedEntry.position != worldPosition ||
-        loadedPart == nullptr ||
-        loadedPart->power != part.power ||
+    if (loadedEntry.position != worldPosition || loadedPart == nullptr || loadedPart->power != part.power ||
         loadedPart->connections != part.connections) {
         std::fprintf(stderr, "[FAIL] SaveManager should preserve wire container part data\n");
         std::abort();

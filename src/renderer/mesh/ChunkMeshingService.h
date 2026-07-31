@@ -14,8 +14,8 @@ class World;
 // Per-sub-chunk meshing job
 struct SubChunkMeshingJob {
     int64_t chunkKey = 0;
-    int scy = 0;                // Sub-chunk index (0..15)
-    uint64_t revision = 0;      // Sub-chunk mesh revision for stale-check
+    int scy = 0; // Sub-chunk index (0..15)
+    uint64_t revision = 0; // Sub-chunk mesh revision for stale-check
     SubChunkMeshingSnapshotPtr snapshot;
 };
 
@@ -37,7 +37,6 @@ public:
     void submit(SubChunkMeshingJob job, int priority);
     bool tryPopCompleted(SubChunkMeshingResult& out);
     void recycleMeshData(ChunkMeshData&& meshData);
-
 
     [[nodiscard]] int inFlightCount() const;
 

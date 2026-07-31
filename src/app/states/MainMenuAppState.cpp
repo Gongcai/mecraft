@@ -14,11 +14,8 @@
 
 namespace {
 
-bool beginMenuClearPass(RhiDevice& rhiDevice,
-                        RhiCommandListPool& commandListPool,
-                        const uint32_t width,
-                        const uint32_t height,
-                        RhiCommandList*& commandList) {
+bool beginMenuClearPass(RhiDevice& rhiDevice, RhiCommandListPool& commandListPool, const uint32_t width,
+                        const uint32_t height, RhiCommandList*& commandList) {
     const RhiTextureViewHandle colorView = rhiDevice.currentSwapchainColorView();
     const RhiTextureViewHandle depthView = rhiDevice.currentSwapchainDepthStencilView();
     if (!colorView.isValid() || !depthView.isValid()) {
@@ -42,36 +39,23 @@ bool beginMenuClearPass(RhiDevice& rhiDevice,
 
     RhiRenderingInfo renderingInfo;
     renderingInfo.debugName = "MainMenuClear";
-    renderingInfo.renderArea = {
-        0,
-        0,
-        width,
-        height
-    };
+    renderingInfo.renderArea = {0, 0, width, height};
     renderingInfo.colorAttachments = &colorAttachment;
     renderingInfo.colorAttachmentCount = 1u;
     renderingInfo.depthStencilAttachment = &depthAttachment;
 
     commandList = commandListPool.acquire(RhiCommandListType::Graphics);
-    if (commandList == nullptr ||
-        !commandList->begin({"MainMenuClear.Commands", RhiCommandListType::Graphics})) {
+    if (commandList == nullptr || !commandList->begin({"MainMenuClear.Commands", RhiCommandListType::Graphics})) {
         return false;
     }
-    commandList->textureBarrier({
-        rhiDevice.currentSwapchainColorTexture(),
-        RhiResourceState::Present,
-        RhiResourceState::RenderTarget
-    });
+    commandList->textureBarrier(
+        {rhiDevice.currentSwapchainColorTexture(), RhiResourceState::Present, RhiResourceState::RenderTarget});
     commandList->beginRendering(renderingInfo);
     return true;
 }
 
-bool beginMenuOverlayPass(RhiDevice& rhiDevice,
-                          RhiCommandListPool& commandListPool,
-                          const uint32_t width,
-                          const uint32_t height,
-                          UIRenderer& uiRenderer,
-                          RhiCommandList*& commandList) {
+bool beginMenuOverlayPass(RhiDevice& rhiDevice, RhiCommandListPool& commandListPool, const uint32_t width,
+                          const uint32_t height, UIRenderer& uiRenderer, RhiCommandList*& commandList) {
     const RhiTextureViewHandle colorView = rhiDevice.currentSwapchainColorView();
     const RhiTextureViewHandle depthView = rhiDevice.currentSwapchainDepthStencilView();
     if (!colorView.isValid() || !depthView.isValid()) {
@@ -90,47 +74,33 @@ bool beginMenuOverlayPass(RhiDevice& rhiDevice,
 
     RhiRenderingInfo renderingInfo;
     renderingInfo.debugName = "MainMenuOverlay";
-    renderingInfo.renderArea = {
-        0,
-        0,
-        width,
-        height
-    };
+    renderingInfo.renderArea = {0, 0, width, height};
     renderingInfo.colorAttachments = &colorAttachment;
     renderingInfo.colorAttachmentCount = 1u;
     renderingInfo.depthStencilAttachment = &depthAttachment;
 
     commandList = commandListPool.acquire(RhiCommandListType::Graphics);
-    if (commandList == nullptr ||
-        !commandList->begin({"MainMenuOverlay.Commands", RhiCommandListType::Graphics})) {
+    if (commandList == nullptr || !commandList->begin({"MainMenuOverlay.Commands", RhiCommandListType::Graphics})) {
         return false;
     }
     if (!uiRenderer.prepareTextFrame(*commandList)) {
         return false;
     }
-    commandList->textureBarrier({
-        rhiDevice.currentSwapchainColorTexture(),
-        RhiResourceState::Present,
-        RhiResourceState::RenderTarget
-    });
+    commandList->textureBarrier(
+        {rhiDevice.currentSwapchainColorTexture(), RhiResourceState::Present, RhiResourceState::RenderTarget});
     commandList->beginRendering(renderingInfo);
     return true;
 }
 
-void endMenuPass(RhiDevice& rhiDevice,
-                 RhiCommandList*& commandList,
-                 const bool transitionToPresent) {
+void endMenuPass(RhiDevice& rhiDevice, RhiCommandList*& commandList, const bool transitionToPresent) {
     if (commandList == nullptr) {
         return;
     }
 
     commandList->endRendering();
     if (transitionToPresent) {
-        commandList->textureBarrier({
-            rhiDevice.currentSwapchainColorTexture(),
-            RhiResourceState::RenderTarget,
-            RhiResourceState::Present
-        });
+        commandList->textureBarrier(
+            {rhiDevice.currentSwapchainColorTexture(), RhiResourceState::RenderTarget, RhiResourceState::Present});
     }
     if (!commandList->end()) {
         std::abort();
@@ -148,8 +118,7 @@ void endMenuPass(RhiDevice& rhiDevice,
 // Construction
 // ---------------------------------------------------------------------------
 
-MainMenuAppState::MainMenuAppState(AppStateDependencies deps)
-    : m_deps(deps) {}
+MainMenuAppState::MainMenuAppState(AppStateDependencies deps) : m_deps(deps) {}
 
 // ---------------------------------------------------------------------------
 // Lifecycle
@@ -229,8 +198,7 @@ void MainMenuAppState::onEnter() {
 
     // "Start New Game" → create world and start
     m_createWorldScreen.onCreateWorld = [this](int seed, const std::string& displayName) {
-        std::string worldName =
-            CreateWorldScreen::generateWorldName(m_savesRoot);
+        std::string worldName = CreateWorldScreen::generateWorldName(m_savesRoot);
         startGameWithWorld(worldName, seed, displayName.empty() ? worldName : displayName);
     };
 
@@ -275,15 +243,9 @@ void MainMenuAppState::onExit() {
 void MainMenuAppState::switchToPage(Page page) {
     // Exit current screen
     switch (m_currentPage) {
-    case Page::MainMenu:
-        m_mainMenuScreen.exitScene();
-        break;
-    case Page::SaveList:
-        m_saveListScreen.exitScene();
-        break;
-    case Page::CreateWorld:
-        m_createWorldScreen.exitScene();
-        break;
+    case Page::MainMenu: m_mainMenuScreen.exitScene(); break;
+    case Page::SaveList: m_saveListScreen.exitScene(); break;
+    case Page::CreateWorld: m_createWorldScreen.exitScene(); break;
     }
 
     m_currentPage = page;
@@ -309,15 +271,13 @@ void MainMenuAppState::switchToPage(Page page) {
 // Start game with a specific world
 // ---------------------------------------------------------------------------
 
-void MainMenuAppState::startGameWithWorld(const std::string& worldName,
-                                          int seed,
-                                          const std::string& displayName) {
+void MainMenuAppState::startGameWithWorld(const std::string& worldName, int seed, const std::string& displayName) {
     m_pendingConfig = GameSessionConfig{};
     m_pendingConfig.seed = seed;
     m_pendingConfig.renderDistance = app::loadRenderDistance();
     m_pendingConfig.worldName = worldName;
     m_pendingConfig.worldDisplayName = displayName;
-    m_pendingConfig.saveRoot  = m_savesRoot.string();
+    m_pendingConfig.saveRoot = m_savesRoot.string();
     m_transitioningToGame = true;
     m_transition.startFadeOut(0.5f);
 }
@@ -334,7 +294,7 @@ void MainMenuAppState::update(double frameTime, double& accumulator) {
         UIInputAdapter::routeInput(m_deps.uiRenderer, snapshot, m_deps.contextManager);
 
     const bool cancel = m_deps.contextManager.isActionTriggered(Action::Cancel);
-    const bool menu   = m_deps.contextManager.isActionTriggered(Action::Menu);
+    const bool menu = m_deps.contextManager.isActionTriggered(Action::Menu);
 
     // Escape / Cancel handling depends on current page
     if ((menu || cancel) && uiRouteResult.aggregate != UIEventResult::Consumed) {
@@ -357,15 +317,9 @@ void MainMenuAppState::update(double frameTime, double& accumulator) {
 
     // Update animations on the active screen
     switch (m_currentPage) {
-    case Page::MainMenu:
-        m_mainMenuScreen.updateAnimations(static_cast<float>(frameTime));
-        break;
-    case Page::SaveList:
-        m_saveListScreen.updateAnimations(static_cast<float>(frameTime));
-        break;
-    case Page::CreateWorld:
-        m_createWorldScreen.updateAnimations(static_cast<float>(frameTime));
-        break;
+    case Page::MainMenu: m_mainMenuScreen.updateAnimations(static_cast<float>(frameTime)); break;
+    case Page::SaveList: m_saveListScreen.updateAnimations(static_cast<float>(frameTime)); break;
+    case Page::CreateWorld: m_createWorldScreen.updateAnimations(static_cast<float>(frameTime)); break;
     }
 
     m_skyboxYaw += static_cast<float>(frameTime) * 3.0f;
@@ -374,8 +328,7 @@ void MainMenuAppState::update(double frameTime, double& accumulator) {
     if (m_transitioningToGame) {
         m_transition.tick(static_cast<float>(frameTime));
         if (m_transition.isDone()) {
-            m_deps.appFsm.changeState(
-                std::make_unique<LoadingAppState>(m_deps, m_pendingConfig));
+            m_deps.appFsm.changeState(std::make_unique<LoadingAppState>(m_deps, m_pendingConfig));
             accumulator = 0.0;
             return;
         }
@@ -401,58 +354,46 @@ void MainMenuAppState::render(double frameTime) {
         return;
     }
     const RhiFrameAcquireResult frame = m_deps.rhiDevice.acquireFrame();
-    if (frame.status == RhiFrameStatus::Minimized ||
-        frame.status == RhiFrameStatus::OutOfDate) {
+    if (frame.status == RhiFrameStatus::Minimized || frame.status == RhiFrameStatus::OutOfDate) {
         return;
     }
-    if (frame.status != RhiFrameStatus::Success &&
-        frame.status != RhiFrameStatus::Suboptimal) {
+    if (frame.status != RhiFrameStatus::Success && frame.status != RhiFrameStatus::Suboptimal) {
         MECRAFT_LOG_STREAM(std::cerr << "[MainMenuAppState] Failed to acquire the RHI frame\n");
         return;
     }
 
     RhiCommandList* commandList = nullptr;
-    if (!beginMenuClearPass(m_deps.rhiDevice, m_deps.commandListPool,
-                            frame.width, frame.height, commandList)) {
+    if (!beginMenuClearPass(m_deps.rhiDevice, m_deps.commandListPool, frame.width, frame.height, commandList)) {
         MECRAFT_LOG_STREAM(std::cerr << "[MainMenuAppState] Failed to begin RHI menu clear pass\n");
-        (void)m_deps.rhiDevice.presentFrame(
-            {frame.frameIndex, frame.imageIndex, Time::getFrameIndex()});
+        (void)m_deps.rhiDevice.presentFrame({frame.frameIndex, frame.imageIndex, Time::getFrameIndex()});
         return;
     }
     endMenuPass(m_deps.rhiDevice, commandList, true);
 
     m_skyboxRenderer.render(static_cast<int>(frame.width), static_cast<int>(frame.height),
-                            static_cast<float>(frame.width) / static_cast<float>(frame.height),
-                            m_skyboxYaw, 10.0f,
+                            static_cast<float>(frame.width) / static_cast<float>(frame.height), m_skyboxYaw, 10.0f,
                             m_deps.rhiDevice);
-    UIRenderContext sceneContext =
-        m_deps.uiRenderer.prepareSceneContext(static_cast<int>(frame.width),
-                                              static_cast<int>(frame.height),
-                                              m_deps.rhiDevice,
-                                              m_deps.input.snapshot());
+    UIRenderContext sceneContext = m_deps.uiRenderer.prepareSceneContext(
+        static_cast<int>(frame.width), static_cast<int>(frame.height), m_deps.rhiDevice, m_deps.input.snapshot());
 
-    if (!beginMenuOverlayPass(m_deps.rhiDevice, m_deps.commandListPool,
-                              frame.width, frame.height, m_deps.uiRenderer, commandList)) {
+    if (!beginMenuOverlayPass(m_deps.rhiDevice, m_deps.commandListPool, frame.width, frame.height, m_deps.uiRenderer,
+                              commandList)) {
         MECRAFT_LOG_STREAM(std::cerr << "[MainMenuAppState] Failed to begin RHI menu overlay pass\n");
-        (void)m_deps.rhiDevice.presentFrame(
-            {frame.frameIndex, frame.imageIndex, Time::getFrameIndex()});
+        (void)m_deps.rhiDevice.presentFrame({frame.frameIndex, frame.imageIndex, Time::getFrameIndex()});
         return;
     }
     sceneContext.commandList = commandList;
     m_deps.uiRenderer.renderSceneOnlyPrepared(sceneContext);
 
     if (m_transitioningToGame) {
-        m_transition.render(static_cast<int>(frame.width), static_cast<int>(frame.height),
-                            *commandList);
+        m_transition.render(static_cast<int>(frame.width), static_cast<int>(frame.height), *commandList);
     }
 
     endMenuPass(m_deps.rhiDevice, commandList, true);
-    const RhiFrameStatus presentStatus = m_deps.rhiDevice.presentFrame(
-        {frame.frameIndex, frame.imageIndex, Time::getFrameIndex()});
-    if (presentStatus != RhiFrameStatus::Success &&
-        presentStatus != RhiFrameStatus::Suboptimal &&
-        presentStatus != RhiFrameStatus::OutOfDate &&
-        presentStatus != RhiFrameStatus::Minimized) {
+    const RhiFrameStatus presentStatus =
+        m_deps.rhiDevice.presentFrame({frame.frameIndex, frame.imageIndex, Time::getFrameIndex()});
+    if (presentStatus != RhiFrameStatus::Success && presentStatus != RhiFrameStatus::Suboptimal &&
+        presentStatus != RhiFrameStatus::OutOfDate && presentStatus != RhiFrameStatus::Minimized) {
         MECRAFT_LOG_STREAM(std::cerr << "[MainMenuAppState] Failed to present the RHI frame\n");
     }
 }

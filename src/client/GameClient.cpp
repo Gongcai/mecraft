@@ -31,7 +31,8 @@ void GameClient::initEntityStore(ecs::GameplayRegistry& registry, ResourceMgr* r
 }
 
 void GameClient::sendHello() {
-    if (!m_transport) return;
+    if (!m_transport)
+        return;
 
     net::Packet packet;
     packet.channel = net::PacketChannel::ReliableControl;
@@ -43,7 +44,8 @@ void GameClient::sendHello() {
 }
 
 void GameClient::sendViewConfig(int renderDistance) {
-    if (!m_transport) return;
+    if (!m_transport)
+        return;
 
     net::Packet packet;
     packet.channel = net::PacketChannel::ReliableControl;
@@ -54,31 +56,16 @@ void GameClient::sendViewConfig(int renderDistance) {
     m_transport->send(std::move(packet));
 }
 
-void GameClient::sendInput(float dt, const glm::vec3& moveInput,
-                           const glm::vec2& lookDelta,
-                           bool jump, bool sneak, bool sprint) {
-    sendInput(dt,
-              moveInput,
-              lookDelta,
-              jump,
-              sneak,
-              sprint,
-              glm::vec3(0.0f),
-              glm::vec3(0.0f),
-              0.0f,
-              0.0f);
+void GameClient::sendInput(float dt, const glm::vec3& moveInput, const glm::vec2& lookDelta, bool jump, bool sneak,
+                           bool sprint) {
+    sendInput(dt, moveInput, lookDelta, jump, sneak, sprint, glm::vec3(0.0f), glm::vec3(0.0f), 0.0f, 0.0f);
 }
 
-void GameClient::sendInput(float dt, const glm::vec3& moveInput,
-                           const glm::vec2& lookDelta,
-                           bool jump, bool sneak, bool sprint,
-                           const glm::vec3& playerPosition,
-                           const glm::vec3& playerVelocity,
-                           float yaw,
-                           float pitch,
-                           const uint32_t actions,
-                           const uint8_t selectedHotbarSlot) {
-    if (!m_transport) return;
+void GameClient::sendInput(float dt, const glm::vec3& moveInput, const glm::vec2& lookDelta, bool jump, bool sneak,
+                           bool sprint, const glm::vec3& playerPosition, const glm::vec3& playerVelocity, float yaw,
+                           float pitch, const uint32_t actions, const uint8_t selectedHotbarSlot) {
+    if (!m_transport)
+        return;
 
     ++m_inputSequence;
 
@@ -104,7 +91,8 @@ void GameClient::sendInput(float dt, const glm::vec3& moveInput,
 }
 
 void GameClient::sendBlockAction(const net::ClientBlockAction& action) {
-    if (!m_transport) return;
+    if (!m_transport)
+        return;
 
     net::Packet packet;
     packet.channel = net::PacketChannel::ReliableWorld;
@@ -114,7 +102,8 @@ void GameClient::sendBlockAction(const net::ClientBlockAction& action) {
 }
 
 void GameClient::sendContainerOpenRequest(const glm::ivec3& blockPosition, const glm::vec3& playerPosition) {
-    if (!m_transport) return;
+    if (!m_transport)
+        return;
 
     net::Packet packet;
     packet.channel = net::PacketChannel::ReliableWorld;
@@ -128,7 +117,8 @@ void GameClient::sendContainerOpenRequest(const glm::ivec3& blockPosition, const
 }
 
 void GameClient::sendContainerSlotAction(const net::ClientContainerSlotAction& action) {
-    if (!m_transport) return;
+    if (!m_transport)
+        return;
 
     net::Packet packet;
     packet.channel = net::PacketChannel::ReliableWorld;
@@ -140,7 +130,8 @@ void GameClient::sendContainerSlotAction(const net::ClientContainerSlotAction& a
 }
 
 void GameClient::sendContainerClose(const uint32_t containerId) {
-    if (!m_transport || containerId == 0) return;
+    if (!m_transport || containerId == 0)
+        return;
 
     net::Packet packet;
     packet.channel = net::PacketChannel::ReliableWorld;
@@ -152,7 +143,8 @@ void GameClient::sendContainerClose(const uint32_t containerId) {
 }
 
 void GameClient::sendChatMessage(const std::string& message) {
-    if (!m_transport || message.empty()) return;
+    if (!m_transport || message.empty())
+        return;
 
     net::Packet packet;
     packet.channel = net::PacketChannel::ReliableChat;
@@ -164,7 +156,8 @@ void GameClient::sendChatMessage(const std::string& message) {
 }
 
 void GameClient::sendCommandRequest(const std::string& command) {
-    if (!m_transport || command.empty()) return;
+    if (!m_transport || command.empty())
+        return;
 
     net::Packet packet;
     packet.channel = net::PacketChannel::ReliableChat;
@@ -177,7 +170,8 @@ void GameClient::sendCommandRequest(const std::string& command) {
 }
 
 void GameClient::sendRespawnRequest() {
-    if (!m_transport) return;
+    if (!m_transport)
+        return;
 
     net::Packet packet;
     packet.channel = net::PacketChannel::ReliableControl;
@@ -189,7 +183,8 @@ void GameClient::sendRespawnRequest() {
 }
 
 void GameClient::receiveMessages() {
-    if (!m_transport) return;
+    if (!m_transport)
+        return;
 
     net::Packet packet;
     while (m_transport->tryReceive(packet)) {
@@ -200,11 +195,8 @@ void GameClient::receiveMessages() {
                 m_clientId = hello.assignedId;
                 m_authPosition = hello.spawnPosition;
                 m_hasServerHello = true;
-                MECRAFT_LOG_PRINTF("[Client] ServerHello id=%u spawn=(%.1f, %.1f, %.1f)\n",
-                                   m_clientId,
-                                   m_authPosition.x,
-                                   m_authPosition.y,
-                                   m_authPosition.z);
+                MECRAFT_LOG_PRINTF("[Client] ServerHello id=%u spawn=(%.1f, %.1f, %.1f)\n", m_clientId,
+                                   m_authPosition.x, m_authPosition.y, m_authPosition.z);
                 MECRAFT_LOG_FLUSH(stdout);
             } else {
                 MECRAFT_LOG_PRINTF("[Client] Received ServerHello without decoded payload bytes=%zu\n",
@@ -231,9 +223,7 @@ void GameClient::receiveMessages() {
             if (packet.inProcessPayload.has_value()) {
                 const auto& batch = std::any_cast<const net::BlockUpdateBatchMessage&>(packet.inProcessPayload);
                 for (const auto& update : batch.updates) {
-                    m_clientWorld.applyBlockUpdate(update.x, update.y, update.z,
-                                                   update.kind,
-                                                   update.stateId,
+                    m_clientWorld.applyBlockUpdate(update.x, update.y, update.z, update.kind, update.stateId,
                                                    update.packedLightPatch);
                 }
             }
@@ -337,8 +327,7 @@ void GameClient::receiveMessages() {
             }
             break;
         }
-        default:
-            break;
+        default: break;
         }
     }
 }
@@ -348,11 +337,8 @@ void GameClient::handleChunkData(const net::ChunkDataMessage& data) {
         m_clientWorld.addChunk(data.chunk);
         ++m_chunksReceived;
         if (m_chunksReceived <= 12 || m_chunksReceived % 25 == 0) {
-            MECRAFT_LOG_PRINTF("[Client] Received ChunkData chunk=(%d,%d) count=%d loaded=%zu\n",
-                               data.chunkX,
-                               data.chunkZ,
-                               m_chunksReceived,
-                               m_clientWorld.loadedChunkCount());
+            MECRAFT_LOG_PRINTF("[Client] Received ChunkData chunk=(%d,%d) count=%d loaded=%zu\n", data.chunkX,
+                               data.chunkZ, m_chunksReceived, m_clientWorld.loadedChunkCount());
             MECRAFT_LOG_FLUSH(stdout);
         }
 
@@ -415,9 +401,8 @@ void GameClient::handleInventorySnapshot(const net::InventorySnapshotMessage& sn
             inventoryState = &m_ecsRegistry->emplace<ecs::InventoryComponent>(player);
         }
 
-        const int selectedSlot = std::clamp(static_cast<int>(snapshot.selectedHotbarSlot),
-                                            0,
-                                            Inventory::HOTBAR_SIZE - 1);
+        const int selectedSlot =
+            std::clamp(static_cast<int>(snapshot.selectedHotbarSlot), 0, Inventory::HOTBAR_SIZE - 1);
         inventoryState->selectedHotbarSlot = selectedSlot;
 
         auto* inventoryData = m_ecsRegistry->try_get<ecs::InventoryDataComponent>(player);
@@ -483,19 +468,11 @@ void GameClient::handleWorldStateSnapshot(const net::WorldStateSnapshotMessage& 
     if (WeatherSystem* weather = m_clientWorld.mutableWeatherSystem()) {
         WeatherType type = WeatherType::Clear;
         switch (snapshot.weather) {
-        case net::NetworkWeatherType::Rain:
-            type = WeatherType::Rain;
-            break;
-        case net::NetworkWeatherType::Storm:
-            type = WeatherType::Storm;
-            break;
-        case net::NetworkWeatherType::Snow:
-            type = WeatherType::Snow;
-            break;
+        case net::NetworkWeatherType::Rain: type = WeatherType::Rain; break;
+        case net::NetworkWeatherType::Storm: type = WeatherType::Storm; break;
+        case net::NetworkWeatherType::Snow: type = WeatherType::Snow; break;
         case net::NetworkWeatherType::Clear:
-        default:
-            type = WeatherType::Clear;
-            break;
+        default: type = WeatherType::Clear; break;
         }
         weather->setDebugWeatherPresetInstant(type);
     }

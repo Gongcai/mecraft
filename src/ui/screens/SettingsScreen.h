@@ -27,9 +27,7 @@ public:
     void setRenderScene(RenderScene* rs) { m_renderScene = rs; }
     void setWorld(World* world) { m_world = world; }
     void setWindow(Window* window) { m_window = window; }
-    void setPresentationController(PresentationController* controller) {
-        m_presentationController = controller;
-    }
+    void setPresentationController(PresentationController* controller) { m_presentationController = controller; }
     void setRenderDistanceSetter(std::function<void(int)> setter) { m_renderDistanceSetter = std::move(setter); }
 
     void layout(const UIRenderContext& ctx) override;
@@ -53,27 +51,21 @@ private:
     void buildPostProcessTab(UIWidget* contentPanel, ResourceMgr& resourceMgr);
     void buildVolumetricTab(UIWidget* contentPanel, ResourceMgr& resourceMgr);
     void buildUpscaleTab(UIWidget* contentPanel, ResourceMgr& resourceMgr);
-    SettingsTabLayout setupScrollableTab(UIWidget* contentPanel,
-                                         ResourceMgr& resourceMgr,
-                                         float tabWidth,
+    SettingsTabLayout setupScrollableTab(UIWidget* contentPanel, ResourceMgr& resourceMgr, float tabWidth,
                                          float tabHeight);
 
     // Helper to create a labeled slider row
-    void addSliderRow(UIWidget* parent, ResourceMgr& resourceMgr,
-                      const std::string& label, float minVal, float maxVal,
-                      float currentVal, float step, std::function<void(float)> onValueChanged,
-                      bool interactive = true);
+    void addSliderRow(UIWidget* parent, ResourceMgr& resourceMgr, const std::string& label, float minVal, float maxVal,
+                      float currentVal, float step, std::function<void(float)> onValueChanged, bool interactive = true);
 
     // Helper to create a labeled dropdown row
-    void addDropdownRow(UIWidget* parent, ResourceMgr& resourceMgr,
-                        const std::string& label, const std::vector<std::string>& options,
-                        int currentIndex, std::function<void(int, const std::string&)> onSelectionChanged,
-                        bool interactive = true);
+    void addDropdownRow(UIWidget* parent, ResourceMgr& resourceMgr, const std::string& label,
+                        const std::vector<std::string>& options, int currentIndex,
+                        std::function<void(int, const std::string&)> onSelectionChanged, bool interactive = true);
 
     // Helper to create a toggle
-    void addToggle(UIWidget* parent, ResourceMgr& resourceMgr,
-                   const std::string& label, bool checked, std::function<void(bool)> onChanged,
-                   bool interactive = true);
+    void addToggle(UIWidget* parent, ResourceMgr& resourceMgr, const std::string& label, bool checked,
+                   std::function<void(bool)> onChanged, bool interactive = true);
 
     // Helper to create a section header
     void addSectionHeader(UIWidget* parent, ResourceMgr& resourceMgr, const std::string& text);

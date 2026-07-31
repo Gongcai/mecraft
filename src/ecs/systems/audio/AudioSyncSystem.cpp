@@ -53,8 +53,7 @@ bool shouldRecreate(const TrackedAudioSource& tracked, const AudioSourceComponen
     return false;
 }
 
-glm::vec3 resolveAudioPosition(GameplayRegistry& registry,
-                               const entt::entity entity,
+glm::vec3 resolveAudioPosition(GameplayRegistry& registry, const entt::entity entity,
                                const AudioSourceComponent& component) {
     if (!component.spatial) {
         return glm::vec3(0.0f);
@@ -68,7 +67,8 @@ glm::vec3 resolveAudioPosition(GameplayRegistry& registry,
 } // namespace
 
 void AudioSyncSystem::update(SystemContext& ctx) {
-    if (!ctx.services.audioEngine) return;
+    if (!ctx.services.audioEngine)
+        return;
     auto& registry = ctx.registry;
     auto& audioEngine = *ctx.services.audioEngine;
 
@@ -102,8 +102,8 @@ void AudioSyncSystem::update(SystemContext& ctx) {
             continue;
         }
 
-        if (trackedIt != runtime.trackedSources.end()
-            && (trackedIt->second.source == nullptr || trackedIt->second.source->isStopped())) {
+        if (trackedIt != runtime.trackedSources.end() &&
+            (trackedIt->second.source == nullptr || trackedIt->second.source->isStopped())) {
             stopTracked(trackedIt->second);
             if (!component.loop) {
                 component.desiredPlaying = false;
@@ -120,11 +120,8 @@ void AudioSyncSystem::update(SystemContext& ctx) {
         if (shouldRecreate(tracked, component)) {
             stopTracked(tracked);
             const glm::vec3 spawnPos = resolveAudioPosition(registry, entity, component);
-            tracked.source = audioEngine.playClip(component.clipName,
-                                                  spawnPos,
-                                                  component.loop,
-                                                  component.volume,
-                                                  component.spatial);
+            tracked.source =
+                audioEngine.playClip(component.clipName, spawnPos, component.loop, component.volume, component.spatial);
             if (tracked.source == nullptr) {
                 runtime.trackedSources.erase(trackedIt);
                 continue;

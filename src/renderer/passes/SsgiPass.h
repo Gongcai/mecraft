@@ -51,60 +51,40 @@ public:
     /// @param resources Imported graph handles for all SSGI resources.
     /// @param dependency Pass that must complete before SSGI starts.
     /// @return Final SSGI pass handle, or an invalid handle for an invalid contract.
-    [[nodiscard]] RgPassHandle addGraphPasses(
-        RenderGraph& graph,
-        const FrameContext& ctx,
-        const RenderSettings& settings,
-        DeferredRenderTargets& targets,
-        const GraphResources& resources,
-        RgPassHandle dependency);
+    [[nodiscard]] RgPassHandle addGraphPasses(RenderGraph& graph, const FrameContext& ctx,
+                                              const RenderSettings& settings, DeferredRenderTargets& targets,
+                                              const GraphResources& resources, RgPassHandle dependency);
 
 private:
-    [[nodiscard]] bool recordSsgiBase(RhiCommandList& commandList,
-                                      const FrameContext& ctx,
-                                      const RenderSettings& settings,
-                                      DeferredRenderTargets& targets);
-    [[nodiscard]] bool recordSsgiUpsample(RhiCommandList& commandList,
-                                          const FrameContext& ctx,
+    [[nodiscard]] bool recordSsgiBase(RhiCommandList& commandList, const FrameContext& ctx,
+                                      const RenderSettings& settings, DeferredRenderTargets& targets);
+    [[nodiscard]] bool recordSsgiUpsample(RhiCommandList& commandList, const FrameContext& ctx,
                                           DeferredRenderTargets& targets);
-    [[nodiscard]] bool recordSsgiDenoiseIteration(
-        RhiCommandList& commandList,
-        const FrameContext& ctx,
-        const SsgiSettings& ssgi,
-        DeferredRenderTargets& targets,
-        bool momentsEnabled,
-        int iteration);
-    [[nodiscard]] bool recordSsgiTemporal(RhiCommandList& commandList,
-                                          const FrameContext& ctx,
-                                          const SsgiSettings& ssgi,
-                                          DeferredRenderTargets& targets);
-    [[nodiscard]] bool recordSsgiHistoryCopy(RhiCommandList& commandList,
-                                             const FrameContext& ctx,
+    [[nodiscard]] bool recordSsgiDenoiseIteration(RhiCommandList& commandList, const FrameContext& ctx,
+                                                  const SsgiSettings& ssgi, DeferredRenderTargets& targets,
+                                                  bool momentsEnabled, int iteration);
+    [[nodiscard]] bool recordSsgiTemporal(RhiCommandList& commandList, const FrameContext& ctx,
+                                          const SsgiSettings& ssgi, DeferredRenderTargets& targets);
+    [[nodiscard]] bool recordSsgiHistoryCopy(RhiCommandList& commandList, const FrameContext& ctx,
                                              DeferredRenderTargets& targets);
-    [[nodiscard]] bool recordSsgiOutputCopy(RhiCommandList& commandList,
-                                            const FrameContext& ctx,
-                                            DeferredRenderTargets& targets,
-                                            RhiTextureHandle source);
+    [[nodiscard]] bool recordSsgiOutputCopy(RhiCommandList& commandList, const FrameContext& ctx,
+                                            DeferredRenderTargets& targets, RhiTextureHandle source);
     bool ensureBaseRhiPipeline(RhiDevice& rhiDevice);
-    bool ensureBaseBindGroup(RhiDevice& rhiDevice,
-                             const std::array<RhiTextureViewHandle, 6>& views);
+    bool ensureBaseBindGroup(RhiDevice& rhiDevice, const std::array<RhiTextureViewHandle, 6>& views);
     bool ensureNoiseTextureView(RhiDevice& rhiDevice);
     void destroyBaseBindGroup();
     void destroyBaseRhiResources();
     void destroyNoiseTextureView();
     bool ensureUpsampleRhiPipeline(RhiDevice& rhiDevice);
-    bool ensureUpsampleBindGroup(RhiDevice& rhiDevice,
-                                 const std::array<RhiTextureViewHandle, 2>& views);
+    bool ensureUpsampleBindGroup(RhiDevice& rhiDevice, const std::array<RhiTextureViewHandle, 2>& views);
     void destroyUpsampleBindGroup();
     void destroyUpsampleRhiResources();
     bool ensureTemporalRhiPipeline(RhiDevice& rhiDevice);
-    bool ensureTemporalBindGroup(RhiDevice& rhiDevice,
-                                 const std::array<RhiTextureViewHandle, 7>& views);
+    bool ensureTemporalBindGroup(RhiDevice& rhiDevice, const std::array<RhiTextureViewHandle, 7>& views);
     void destroyTemporalBindGroup();
     void destroyTemporalRhiResources();
     bool ensureDenoiseRhiPipelines(RhiDevice& rhiDevice);
-    bool ensureDenoiseBindGroup(RhiDevice& rhiDevice, bool momentsEnabled,
-                                uint32_t cacheIndex,
+    bool ensureDenoiseBindGroup(RhiDevice& rhiDevice, bool momentsEnabled, uint32_t cacheIndex,
                                 const std::array<RhiTextureViewHandle, 4>& views);
     void destroyDenoiseBindGroups();
     void destroyDenoiseRhiResources();

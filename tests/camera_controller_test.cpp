@@ -10,21 +10,13 @@ namespace {
 
 class FakeWorldView final : public IWorldView {
 public:
-    void addSolidBlock(const glm::ivec3& pos) {
-        m_solidBlocks.push_back(pos);
-    }
+    void addSolidBlock(const glm::ivec3& pos) { m_solidBlocks.push_back(pos); }
 
-    [[nodiscard]] const ChunkMap& getActiveChunks() const override {
-        return m_chunks;
-    }
+    [[nodiscard]] const ChunkMap& getActiveChunks() const override { return m_chunks; }
 
-    [[nodiscard]] uint64_t getActiveChunkRevision() const override {
-        return 1;
-    }
+    [[nodiscard]] uint64_t getActiveChunkRevision() const override { return 1; }
 
-    [[nodiscard]] uint64_t getBlockContentRevision() const override {
-        return 1;
-    }
+    [[nodiscard]] uint64_t getBlockContentRevision() const override { return 1; }
 
     [[nodiscard]] BlockStateId getBlock(const int x, const int y, const int z) const override {
         const glm::ivec3 pos(x, y, z);
@@ -36,33 +28,23 @@ public:
         return NULL_BLOCK_STATE;
     }
 
-    [[nodiscard]] uint8_t getPackedLight(int, int, int) const override {
-        return 0;
-    }
+    [[nodiscard]] uint8_t getPackedLight(int, int, int) const override { return 0; }
 
     [[nodiscard]] BlockStateId getBlockState(const int x, const int y, const int z) const override {
         return getBlock(x, y, z);
     }
 
-    [[nodiscard]] BlockStateId getFluidState(int, int, int) const override {
-        return NULL_BLOCK_STATE;
-    }
+    [[nodiscard]] BlockStateId getFluidState(int, int, int) const override { return NULL_BLOCK_STATE; }
 
-    [[nodiscard]] bool isChunkLoadedForBlock(int, int, int) const override {
-        return true;
-    }
+    [[nodiscard]] bool isChunkLoadedForBlock(int, int, int) const override { return true; }
 
-    [[nodiscard]] int getRenderDistance() const override {
-        return 8;
-    }
+    [[nodiscard]] int getRenderDistance() const override { return 8; }
 
     [[nodiscard]] glm::ivec2 getChunkCoords(const int worldX, const int worldZ) const override {
         return {worldX >> 4, worldZ >> 4};
     }
 
-    [[nodiscard]] TerrainBiome getBiome(int, int) const override {
-        return TerrainBiome::Temperate;
-    }
+    [[nodiscard]] TerrainBiome getBiome(int, int) const override { return TerrainBiome::Temperate; }
 
 private:
     ChunkMap m_chunks;
@@ -79,9 +61,7 @@ bool nearlyEqual(const float a, const float b, const float epsilon = 0.001f) {
 }
 
 bool nearlyEqualVec3(const glm::vec3& a, const glm::vec3& b, const float epsilon = 0.001f) {
-    return nearlyEqual(a.x, b.x, epsilon) &&
-           nearlyEqual(a.y, b.y, epsilon) &&
-           nearlyEqual(a.z, b.z, epsilon);
+    return nearlyEqual(a.x, b.x, epsilon) && nearlyEqual(a.y, b.y, epsilon) && nearlyEqual(a.z, b.z, epsilon);
 }
 
 } // namespace
@@ -91,22 +71,14 @@ int main() {
 
     {
         Camera explicitPose;
-        if (!explicitPose.setViewPose(
-                {1.0f, 2.0f, 3.0f}, {0.0f, 0.0f, -2.0f},
-                {1.0f, 1.0f, 0.0f}, 60.0f) ||
-            !nearlyEqualVec3(explicitPose.getPosition(),
-                             {1.0f, 2.0f, 3.0f}) ||
-            !nearlyEqualVec3(explicitPose.getFront(),
-                             {0.0f, 0.0f, -1.0f}) ||
-            !nearlyEqual(glm::dot(explicitPose.getFront(),
-                                  explicitPose.getUp()),
-                         0.0f) ||
+        if (!explicitPose.setViewPose({1.0f, 2.0f, 3.0f}, {0.0f, 0.0f, -2.0f}, {1.0f, 1.0f, 0.0f}, 60.0f) ||
+            !nearlyEqualVec3(explicitPose.getPosition(), {1.0f, 2.0f, 3.0f}) ||
+            !nearlyEqualVec3(explicitPose.getFront(), {0.0f, 0.0f, -1.0f}) ||
+            !nearlyEqual(glm::dot(explicitPose.getFront(), explicitPose.getUp()), 0.0f) ||
             !nearlyEqual(explicitPose.getFOV(), 60.0f)) {
             return fail("explicit Camera Path poses must preserve an orthonormal view basis");
         }
-        if (explicitPose.setViewPose(
-                {0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, -1.0f},
-                {0.0f, 0.0f, -1.0f}, 60.0f)) {
+        if (explicitPose.setViewPose({0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, -1.0f}, {0.0f, 0.0f, -1.0f}, 60.0f)) {
             return fail("parallel forward and up vectors must be rejected");
         }
     }

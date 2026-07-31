@@ -12,8 +12,7 @@ void EnvironmentTextureLibrary::init(RhiDevice& rhiDevice) {
     m_rhiDevice = &rhiDevice;
 }
 
-RhiTextureHandle EnvironmentTextureLibrary::loadTexture(const std::string& path,
-                                                         const char* label) const {
+RhiTextureHandle EnvironmentTextureLibrary::loadTexture(const std::string& path, const char* label) const {
     assert(m_rhiDevice != nullptr);
     int width = 0;
     int height = 0;
@@ -34,8 +33,7 @@ RhiTextureHandle EnvironmentTextureLibrary::loadTexture(const std::string& path,
     textureDesc.format = RhiTextureFormat::Rgba8Unorm;
     textureDesc.width = static_cast<uint32_t>(width);
     textureDesc.height = static_cast<uint32_t>(height);
-    textureDesc.usage = rhiFlag(RhiTextureUsage::Sampled) |
-                        rhiFlag(RhiTextureUsage::TransferDst);
+    textureDesc.usage = rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::TransferDst);
     textureDesc.memoryCategory = RhiMemoryCategory::Texture;
     RhiTextureInitialData initialData;
     initialData.pixels = data;
@@ -44,8 +42,7 @@ RhiTextureHandle EnvironmentTextureLibrary::loadTexture(const std::string& path,
     RhiTextureHandle texture = m_rhiDevice->createTexture(textureDesc, &initialData);
     stbi_image_free(data);
     if (!texture.isValid()) {
-        MECRAFT_LOG_FPRINTF(stderr, "[Resource] Failed to create %s RHI texture: %s\n",
-                            label, path.c_str());
+        MECRAFT_LOG_FPRINTF(stderr, "[Resource] Failed to create %s RHI texture: %s\n", label, path.c_str());
         return {};
     }
 

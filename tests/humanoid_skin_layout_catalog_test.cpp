@@ -19,16 +19,11 @@ static void require(const bool condition, const char* message) {
     }
 }
 
-static bool rectEquals(const renderer::HumanoidSkinPixelRect& lhs,
-                       const renderer::HumanoidSkinPixelRect& rhs) {
-    return lhs.x0 == rhs.x0 &&
-           lhs.y0 == rhs.y0 &&
-           lhs.x1 == rhs.x1 &&
-           lhs.y1 == rhs.y1;
+static bool rectEquals(const renderer::HumanoidSkinPixelRect& lhs, const renderer::HumanoidSkinPixelRect& rhs) {
+    return lhs.x0 == rhs.x0 && lhs.y0 == rhs.y0 && lhs.x1 == rhs.x1 && lhs.y1 == rhs.y1;
 }
 
-static void requireRectInsideTexture(const renderer::HumanoidSkinPixelRect& rect,
-                                     const float textureWidth,
+static void requireRectInsideTexture(const renderer::HumanoidSkinPixelRect& rect, const float textureWidth,
                                      const float textureHeight) {
     require(rect.x0 >= 0.0f && rect.x0 < rect.x1, "UV rect x range should be valid");
     require(rect.y0 >= 0.0f && rect.y0 < rect.y1, "UV rect y range should be valid");
@@ -52,18 +47,15 @@ static PngDimensions readPngDimensions(const char* path) {
             "entity texture PNG should start with IHDR");
 
     const auto readBigEndianU32 = [&header](const std::size_t offset) {
-        return (static_cast<uint32_t>(header[offset]) << 24U) |
-               (static_cast<uint32_t>(header[offset + 1]) << 16U) |
-               (static_cast<uint32_t>(header[offset + 2]) << 8U) |
-               static_cast<uint32_t>(header[offset + 3]);
+        return (static_cast<uint32_t>(header[offset]) << 24U) | (static_cast<uint32_t>(header[offset + 1]) << 16U) |
+               (static_cast<uint32_t>(header[offset + 2]) << 8U) | static_cast<uint32_t>(header[offset + 3]);
     };
 
     return {readBigEndianU32(16), readBigEndianU32(20)};
 }
 
 static void requireTextureMatchesLayout(const PngDimensions dimensions,
-                                        const renderer::HumanoidSkinLayoutDefinition& layout,
-                                        const char* message) {
+                                        const renderer::HumanoidSkinLayoutDefinition& layout, const char* message) {
     require(static_cast<float>(dimensions.width) == layout.textureWidth, message);
     require(static_cast<float>(dimensions.height) == layout.textureHeight, message);
 }

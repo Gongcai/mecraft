@@ -38,8 +38,7 @@ public:
     /// @param channelCount Number of channels (default 4)
     /// @param timeoutMs Connection timeout in milliseconds
     /// @return true if connection initiated successfully
-    bool connect(const std::string& host, uint16_t port,
-                 size_t channelCount = 4, uint32_t timeoutMs = 5000);
+    bool connect(const std::string& host, uint16_t port, size_t channelCount = 4, uint32_t timeoutMs = 5000);
 
     /// Start listening for incoming connections (server mode).
     /// @param port Port to listen on
@@ -98,7 +97,7 @@ private:
     static void encodeTypedPayload(Packet& packet);
 
     ENetHost* m_host = nullptr;
-    ENetPeer* m_peer = nullptr;  // Client: connected peer. Server: not used.
+    ENetPeer* m_peer = nullptr; // Client: connected peer. Server: not used.
     std::shared_ptr<PeerState> m_peerState;
     std::unordered_map<ENetPeer*, std::shared_ptr<PeerState>> m_peerStates;
     std::queue<std::shared_ptr<PeerState>> m_pendingAccepted;

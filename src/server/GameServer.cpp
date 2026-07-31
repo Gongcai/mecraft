@@ -94,8 +94,8 @@ std::string trimCommand(std::string command) {
     while (!command.empty() && (command.front() == ' ' || command.front() == '\t')) {
         command.erase(command.begin());
     }
-    while (!command.empty() && (command.back() == ' ' || command.back() == '\t' ||
-                                command.back() == '\r' || command.back() == '\n')) {
+    while (!command.empty() &&
+           (command.back() == ' ' || command.back() == '\t' || command.back() == '\r' || command.back() == '\n')) {
         command.pop_back();
     }
     return command;
@@ -123,8 +123,7 @@ struct BlockEntityPositionHash {
         const std::size_t hx = std::hash<int>{}(key.x);
         const std::size_t hy = std::hash<int>{}(key.y);
         const std::size_t hz = std::hash<int>{}(key.z);
-        return hx ^ (hy + 0x9e3779b9u + (hx << 6u) + (hx >> 2u)) ^
-               (hz + 0x9e3779b9u + (hy << 6u) + (hy >> 2u));
+        return hx ^ (hy + 0x9e3779b9u + (hx << 6u) + (hx >> 2u)) ^ (hz + 0x9e3779b9u + (hy << 6u) + (hy >> 2u));
     }
 };
 
@@ -134,8 +133,7 @@ net::NetworkWeatherType toNetworkWeather(const WeatherType type) {
     case WeatherType::Storm: return net::NetworkWeatherType::Storm;
     case WeatherType::Snow: return net::NetworkWeatherType::Snow;
     case WeatherType::Clear:
-    default:
-        return net::NetworkWeatherType::Clear;
+    default: return net::NetworkWeatherType::Clear;
     }
 }
 
@@ -194,8 +192,7 @@ const char* weatherName(const WeatherType type) {
     case WeatherType::Storm: return "storm";
     case WeatherType::Snow: return "snow";
     case WeatherType::Clear:
-    default:
-        return "clear";
+    default: return "clear";
     }
 }
 
@@ -234,17 +231,11 @@ ItemStack stackFromSlotData(const net::InventorySlotData& slot) {
     return stack;
 }
 
-bool containerSnapshotsEqual(const net::ContainerSnapshotMessage& a,
-                             const net::ContainerSnapshotMessage& b) {
-    return a.containerId == b.containerId &&
-           a.containerUiId == b.containerUiId &&
-           a.behaviorId == b.behaviorId &&
-           a.blockPosition == b.blockPosition &&
-           inventorySnapshotSlotsEqual(a.containerSlots, b.containerSlots) &&
-           inventorySnapshotSlotsEqual(a.playerSlots, b.playerSlots) &&
-           a.cursor.itemId == b.cursor.itemId &&
-           a.cursor.stackCount == b.cursor.stackCount &&
-           a.burnFraction == b.burnFraction &&
+bool containerSnapshotsEqual(const net::ContainerSnapshotMessage& a, const net::ContainerSnapshotMessage& b) {
+    return a.containerId == b.containerId && a.containerUiId == b.containerUiId && a.behaviorId == b.behaviorId &&
+           a.blockPosition == b.blockPosition && inventorySnapshotSlotsEqual(a.containerSlots, b.containerSlots) &&
+           inventorySnapshotSlotsEqual(a.playerSlots, b.playerSlots) && a.cursor.itemId == b.cursor.itemId &&
+           a.cursor.stackCount == b.cursor.stackCount && a.burnFraction == b.burnFraction &&
            a.cookFraction == b.cookFraction;
 }
 
@@ -271,24 +262,21 @@ bool persistentBlockEntityTypeForBlock(const BlockID blockId, std::string& outTy
     return true;
 }
 
-void updateCameraStateFromClient(ecs::CameraStateComponent& camera,
-                                 const float yaw,
-                                 const float pitch) {
+void updateCameraStateFromClient(ecs::CameraStateComponent& camera, const float yaw, const float pitch) {
     constexpr float kDegreesToRadians = 0.017453292519943295f;
     camera.yaw = yaw;
     camera.pitch = pitch;
 
     const float yawRad = yaw * kDegreesToRadians;
     const float pitchRad = pitch * kDegreesToRadians;
-    const glm::vec3 front(std::cos(yawRad) * std::cos(pitchRad),
-                          std::sin(pitchRad),
+    const glm::vec3 front(std::cos(yawRad) * std::cos(pitchRad), std::sin(pitchRad),
                           std::sin(yawRad) * std::cos(pitchRad));
     camera.front = glm::length(front) > 0.001f ? glm::normalize(front) : glm::vec3(1.0f, 0.0f, 0.0f);
     const glm::vec3 right = glm::cross(camera.front, glm::vec3(0.0f, 1.0f, 0.0f));
     camera.right = glm::length(right) > 0.001f ? glm::normalize(right) : glm::vec3(1.0f, 0.0f, 0.0f);
     camera.up = glm::normalize(glm::cross(camera.right, camera.front));
 }
-}
+} // namespace
 
 GameServer::GameServer() = default;
 
@@ -386,8 +374,7 @@ entt::entity GameServer::resolvePlayerEntity(const ConnectedClient& client) cons
     return entt::null;
 }
 
-bool GameServer::buildInventorySnapshot(const ConnectedClient& client,
-                                        net::InventorySnapshotMessage& out) const {
+bool GameServer::buildInventorySnapshot(const ConnectedClient& client, net::InventorySnapshotMessage& out) const {
     if (m_ecsRegistry == nullptr) {
         return false;
     }
@@ -423,15 +410,13 @@ bool GameServer::buildInventorySnapshot(const ConnectedClient& client,
     return true;
 }
 
-bool GameServer::buildContainerSnapshot(const ConnectedClient& client,
-                                        net::ContainerSnapshotMessage& out) const {
+bool GameServer::buildContainerSnapshot(const ConnectedClient& client, net::ContainerSnapshotMessage& out) const {
     if (m_ecsRegistry == nullptr || client.openContainerId == 0) {
         return false;
     }
 
-    const BlockStateId state = m_world.getBlockState(client.openContainerPosition.x,
-                                                client.openContainerPosition.y,
-                                                client.openContainerPosition.z);
+    const BlockStateId state = m_world.getBlockState(client.openContainerPosition.x, client.openContainerPosition.y,
+                                                     client.openContainerPosition.z);
     if (state == NULL_BLOCK_STATE) {
         return false;
     }
@@ -609,9 +594,7 @@ void GameServer::updatePlayerLifecycle(const float dt) {
 
     auto& reg = *m_ecsRegistry;
     for (auto& client : m_clients) {
-        const bool active = client.receivedHello &&
-                            client.transport &&
-                            client.transport->hasActiveRemote();
+        const bool active = client.receivedHello && client.transport && client.transport->hasActiveRemote();
         if (!active) {
             continue;
         }
@@ -663,33 +646,26 @@ void GameServer::syncOwnedPlayerProxies() {
 
     auto& reg = m_ownedGameplayRegistry->registry();
     for (auto& client : m_clients) {
-        const bool active = client.receivedHello &&
-                            client.transport &&
-                            client.transport->hasActiveRemote();
+        const bool active = client.receivedHello && client.transport && client.transport->hasActiveRemote();
         if (!active) {
             destroyOwnedPlayerProxy(client);
             continue;
         }
 
         if (client.ecsPlayerEntity == entt::null || !reg.valid(client.ecsPlayerEntity)) {
-            client.ecsPlayerEntity =
-                ecs::EntityFactory::createServerPlayerProxy(*m_gameplayRegistry,
-                                                            client.lastPosition,
-                                                            client.lastVelocity);
+            client.ecsPlayerEntity = ecs::EntityFactory::createServerPlayerProxy(
+                *m_gameplayRegistry, client.lastPosition, client.lastVelocity);
         } else {
-            ecs::EntityFactory::ensureServerPlayerProxy(*m_gameplayRegistry,
-                                                        client.ecsPlayerEntity,
-                                                        client.lastPosition,
-                                                        client.lastVelocity);
+            ecs::EntityFactory::ensureServerPlayerProxy(*m_gameplayRegistry, client.ecsPlayerEntity,
+                                                        client.lastPosition, client.lastVelocity);
         }
 
         auto& camera = reg.get<ecs::CameraStateComponent>(client.ecsPlayerEntity);
         updateCameraStateFromClient(camera, client.lastYaw, client.lastPitch);
 
         auto& inventoryState = reg.get<ecs::InventoryComponent>(client.ecsPlayerEntity);
-        inventoryState.selectedHotbarSlot = std::clamp(static_cast<int>(client.selectedHotbarSlot),
-                                                       0,
-                                                       Inventory::HOTBAR_SIZE - 1);
+        inventoryState.selectedHotbarSlot =
+            std::clamp(static_cast<int>(client.selectedHotbarSlot), 0, Inventory::HOTBAR_SIZE - 1);
 
         auto& playerMode = reg.get<ecs::PlayerModeComponent>(client.ecsPlayerEntity);
         playerMode.creative = client.gameplayMode == net::NetworkGameplayMode::Creative;
@@ -707,9 +683,7 @@ void GameServer::syncClientsFromPlayerProxies() {
 
     auto& reg = *m_ecsRegistry;
     for (auto& client : m_clients) {
-        const bool active = client.receivedHello &&
-                            client.transport &&
-                            client.transport->hasActiveRemote();
+        const bool active = client.receivedHello && client.transport && client.transport->hasActiveRemote();
         if (!active || client.awaitingRespawn || client.respawnSnapshotTicksRemaining > 0) {
             continue;
         }
@@ -778,9 +752,8 @@ void GameServer::init(uint32_t seed, ThreadPool* threadPool, int renderDistance)
         m_pendingBlockUpdates.push_back(makeBlockOnlyUpdateEntry(x, y, z, newStateId));
     });
 
-    m_world.setWireContainerChangeCallback([this](const glm::ivec3& position) {
-        m_pendingWireContainerUpdates.push_back(position);
-    });
+    m_world.setWireContainerChangeCallback(
+        [this](const glm::ivec3& position) { m_pendingWireContainerUpdates.push_back(position); });
 
     m_world.setLightChangeCallback([this](int64_t chunkKey, uint32_t dirtySubChunkMask) {
         for (int scy = 0; scy < Chunk::NUM_SUB_CHUNKS; ++scy) {
@@ -798,20 +771,16 @@ void GameServer::init(uint32_t seed, ThreadPool* threadPool, int renderDistance)
     constexpr float kSpawnHeightOffset = 2.0f;
     const int surfaceY = m_world.getSurfaceY(0, 0);
     m_spawnPosition = glm::vec3(0.0f, static_cast<float>(surfaceY + kSpawnHeightOffset), 0.0f);
-    MECRAFT_LOG_PRINTF("[Server] World initialized seed=%u renderDistance=%d spawn=(%.1f, %.1f, %.1f)\n",
-                       seed,
-                       renderDistance,
-                       m_spawnPosition.x,
-                       m_spawnPosition.y,
-                       m_spawnPosition.z);
+    MECRAFT_LOG_PRINTF("[Server] World initialized seed=%u renderDistance=%d spawn=(%.1f, %.1f, %.1f)\n", seed,
+                       renderDistance, m_spawnPosition.x, m_spawnPosition.y, m_spawnPosition.z);
     MECRAFT_LOG_FLUSH(stdout);
     ensureOwnedEcsRuntime();
     m_entitiesRestorePending = m_saveManager != nullptr;
     m_blockEntitiesRestorePending = m_saveManager != nullptr;
 }
 
-void GameServer::init(uint32_t seed, ThreadPool* threadPool, int renderDistance,
-                      std::filesystem::path savePath, std::string displayName) {
+void GameServer::init(uint32_t seed, ThreadPool* threadPool, int renderDistance, std::filesystem::path savePath,
+                      std::string displayName) {
     // Create save manager if path is provided
     if (!savePath.empty()) {
         if (displayName.empty()) {
@@ -835,8 +804,7 @@ void GameServer::init(uint32_t seed, ThreadPool* threadPool, int renderDistance,
             net::NetworkGameplayMode savedMode = net::NetworkGameplayMode::Survival;
             parseGameplayMode(meta.gameMode, savedMode);
             m_defaultGameplayMode = savedMode;
-            MECRAFT_LOG_PRINTF("[Server] Loaded existing world (seed=%u, mode=%s)\n",
-                               seed,
+            MECRAFT_LOG_PRINTF("[Server] Loaded existing world (seed=%u, mode=%s)\n", seed,
                                modeName(m_defaultGameplayMode));
         } else {
             // New world - set creation timestamp
@@ -858,14 +826,14 @@ void GameServer::init(uint32_t seed, ThreadPool* threadPool, int renderDistance,
     // Restore time and weather from loaded metadata
     if (m_hasLoadedMeta) {
         m_world.getDayNightSystem().setTimeOfDay(m_loadedMeta.timeOfDay);
-        m_world.getWeatherSystem().setDebugWeatherPresetInstant(
-            weatherTypeFromString(m_loadedMeta.weatherType));
+        m_world.getWeatherSystem().setDebugWeatherPresetInstant(weatherTypeFromString(m_loadedMeta.weatherType));
         m_spawnPosition = glm::vec3(m_loadedMeta.spawnX, m_loadedMeta.spawnY, m_loadedMeta.spawnZ);
     }
 }
 
 void GameServer::shutdown() {
-    if (m_shutdownDone) return;
+    if (m_shutdownDone)
+        return;
     m_shutdownDone = true;
 
     // Flush all pending chunk saves
@@ -880,7 +848,8 @@ void GameServer::shutdown() {
 }
 
 void GameServer::saveLevelMeta() {
-    if (!m_saveManager) return;
+    if (!m_saveManager)
+        return;
 
     save::LevelMeta meta;
     meta.seed = m_world.getSeed();
@@ -928,7 +897,7 @@ void GameServer::acceptClient(std::unique_ptr<net::ITransportEndpoint> transport
     client.playerNetId = kPlayerNetIdBase | id;
     client.isAdmin = id == 1;
     client.viewDistance = m_world.getRenderDistance();
-    client.gameplayMode = m_defaultGameplayMode;  // restored from level.json at init
+    client.gameplayMode = m_defaultGameplayMode; // restored from level.json at init
     m_clients.push_back(std::move(client));
     MECRAFT_LOG_PRINTF("[Server] Accepted transport slot for client %u admin=%d\n", id, id == 1 ? 1 : 0);
     MECRAFT_LOG_FLUSH(stdout);
@@ -1073,8 +1042,7 @@ void GameServer::processClientMessages() {
                 client.totalChunksSent = 0;
                 if (packet.inProcessPayload.has_value()) {
                     const auto& hello = std::any_cast<const net::ClientHello&>(packet.inProcessPayload);
-                    MECRAFT_LOG_PRINTF("[Server] ClientHello client=%u protocol=%u\n",
-                                       client.id,
+                    MECRAFT_LOG_PRINTF("[Server] ClientHello client=%u protocol=%u\n", client.id,
                                        hello.protocolVersion);
                 } else {
                     MECRAFT_LOG_PRINTF("[Server] ClientHello client=%u without decoded payload\n", client.id);
@@ -1091,9 +1059,7 @@ void GameServer::processClientMessages() {
                 hello.spawnPosition = m_spawnPosition;
                 response.inProcessPayload = hello;
                 client.transport->send(std::move(response));
-                sendSystemMessage(client,
-                                  "Connected as " + playerName(client.id) +
-                                      (client.isAdmin ? " (admin)" : ""),
+                sendSystemMessage(client, "Connected as " + playerName(client.id) + (client.isAdmin ? " (admin)" : ""),
                                   net::ChatMessageKind::Success);
                 broadcastWorldState();
                 broadcastPlayerMode(client.id, client.gameplayMode);
@@ -1108,10 +1074,9 @@ void GameServer::processClientMessages() {
                     client.selectedHotbarSlot = static_cast<uint8_t>(
                         std::clamp(static_cast<int>(input.selectedHotbarSlot), 0, Inventory::HOTBAR_SIZE - 1));
                     if (!client.awaitingRespawn && client.respawnSnapshotTicksRemaining <= 0) {
-                        const bool acceptsReportedPose =
-                            !client.playerPoseCorrectionPending ||
-                            distanceSquared(input.playerPosition, client.lastPosition) <=
-                                kPlayerPoseCorrectionAcceptDistanceSq;
+                        const bool acceptsReportedPose = !client.playerPoseCorrectionPending ||
+                                                         distanceSquared(input.playerPosition, client.lastPosition) <=
+                                                             kPlayerPoseCorrectionAcceptDistanceSq;
                         if (acceptsReportedPose) {
                             client.lastPosition = input.playerPosition;
                             client.lastVelocity = input.playerVelocity;
@@ -1134,9 +1099,7 @@ void GameServer::processClientMessages() {
                         m_world.setRenderDistance(client.viewDistance);
                     }
                     MECRAFT_LOG_PRINTF("[Server] ClientViewConfig client=%u renderDistance=%d worldRenderDistance=%d\n",
-                                       client.id,
-                                       client.viewDistance,
-                                       m_world.getRenderDistance());
+                                       client.id, client.viewDistance, m_world.getRenderDistance());
                     MECRAFT_LOG_FLUSH(stdout);
                 }
                 break;
@@ -1162,8 +1125,7 @@ void GameServer::processClientMessages() {
             }
             case net::MessageType::ClientContainerSlotAction: {
                 if (packet.inProcessPayload.has_value()) {
-                    const auto& action =
-                        std::any_cast<const net::ClientContainerSlotAction&>(packet.inProcessPayload);
+                    const auto& action = std::any_cast<const net::ClientContainerSlotAction&>(packet.inProcessPayload);
                     if (!client.awaitingRespawn && client.respawnSnapshotTicksRemaining <= 0) {
                         handleClientContainerSlotAction(client, action);
                     }
@@ -1197,8 +1159,7 @@ void GameServer::processClientMessages() {
                 }
                 break;
             }
-            default:
-                break;
+            default: break;
             }
         }
     }
@@ -1214,7 +1175,8 @@ void GameServer::broadcastPlayerDespawn(const net::EntityNetId playerNetId, cons
     }
 
     for (auto& client : m_clients) {
-        if (client.id == exceptClientId || !client.receivedHello || !client.transport || !client.transport->hasActiveRemote()) {
+        if (client.id == exceptClientId || !client.receivedHello || !client.transport ||
+            !client.transport->hasActiveRemote()) {
             continue;
         }
 
@@ -1235,9 +1197,7 @@ void GameServer::cleanupDisconnectedClients() {
         }
 
         if (client.receivedHello) {
-            MECRAFT_LOG_PRINTF("[Server] Removing disconnected client %u netId=%u\n",
-                               client.id,
-                               client.playerNetId);
+            MECRAFT_LOG_PRINTF("[Server] Removing disconnected client %u netId=%u\n", client.id, client.playerNetId);
             MECRAFT_LOG_FLUSH(stdout);
             broadcastPlayerDespawn(client.playerNetId, client.id);
         }
@@ -1246,18 +1206,18 @@ void GameServer::cleanupDisconnectedClients() {
         client.receivedHello = false;
     }
 
-    m_clients.erase(std::remove_if(m_clients.begin(), m_clients.end(), [](const ConnectedClient& client) {
-        return !client.transport || !client.transport->isConnected();
-    }), m_clients.end());
+    m_clients.erase(std::remove_if(m_clients.begin(), m_clients.end(),
+                                   [](const ConnectedClient& client) {
+                                       return !client.transport || !client.transport->isConnected();
+                                   }),
+                    m_clients.end());
 
     for (auto& client : m_clients) {
         if (!client.receivedHello || !client.transport || client.transport->hasActiveRemote()) {
             continue;
         }
 
-        MECRAFT_LOG_PRINTF("[Server] Client %u lost remote peer netId=%u\n",
-                           client.id,
-                           client.playerNetId);
+        MECRAFT_LOG_PRINTF("[Server] Client %u lost remote peer netId=%u\n", client.id, client.playerNetId);
         MECRAFT_LOG_FLUSH(stdout);
         broadcastPlayerDespawn(client.playerNetId, client.id);
         destroyOwnedPlayerProxy(client);
@@ -1339,10 +1299,9 @@ void GameServer::executeServerCommand(ConnectedClient& client, const net::Client
     }
 
     if (primary == "help") {
-        sendCommandResult(client,
-                          request.sequence,
-                          true,
-                          "Commands: /help, /list, /gamemode <survival|creative> [clientId], /give <item> [count] [clientId], /time set <0..1200>, /weather <clear|rain|storm|snow>, /summon <entity>");
+        sendCommandResult(client, request.sequence, true,
+                          "Commands: /help, /list, /gamemode <survival|creative> [clientId], /give <item> [count] "
+                          "[clientId], /time set <0..1200>, /weather <clear|rain|storm|snow>, /summon <entity>");
         return;
     }
 
@@ -1469,8 +1428,8 @@ void GameServer::executeServerCommand(ConnectedClient& client, const net::Client
 
         target->hasLastInventorySnapshot = false;
         const std::string message = "Gave " + std::to_string(added) + " " +
-                                    ItemRegistry::getNamespacedId(itemId).full() +
-                                    " to " + playerName(target->id) + ".";
+                                    ItemRegistry::getNamespacedId(itemId).full() + " to " + playerName(target->id) +
+                                    ".";
         sendCommandResult(client, request.sequence, true, message);
         sendInventorySnapshotsToClients();
         return;
@@ -1547,9 +1506,7 @@ void GameServer::executeServerCommand(ConnectedClient& client, const net::Client
     sendCommandResult(client, request.sequence, false, "Unknown command: " + primary);
 }
 
-void GameServer::sendCommandResult(ConnectedClient& client,
-                                   const uint32_t sequence,
-                                   const bool success,
+void GameServer::sendCommandResult(ConnectedClient& client, const uint32_t sequence, const bool success,
                                    const std::string& message) {
     if (!client.transport || !client.transport->hasActiveRemote()) {
         return;
@@ -1565,8 +1522,7 @@ void GameServer::sendCommandResult(ConnectedClient& client,
     client.transport->send(std::move(packet));
 }
 
-void GameServer::sendSystemMessage(ConnectedClient& client,
-                                   const std::string& message,
+void GameServer::sendSystemMessage(ConnectedClient& client, const std::string& message,
                                    const net::ChatMessageKind kind) {
     if (!client.transport || !client.transport->hasActiveRemote()) {
         return;
@@ -1636,9 +1592,7 @@ void replaceSelectedServerItem(ecs::InventoryDataComponent& inventoryData, const
     inventoryData.inventory.setSlotStack(inventoryData.inventory.getSelectedSlot(), replacement);
 }
 
-BlockID removeServerTargetBlock(World& world,
-                                const glm::ivec3& hitBlock,
-                                std::vector<glm::ivec3>& removedPositions) {
+BlockID removeServerTargetBlock(World& world, const glm::ivec3& hitBlock, std::vector<glm::ivec3>& removedPositions) {
     const BlockStateId targetState = world.getBlockState(hitBlock.x, hitBlock.y, hitBlock.z);
     if (BedBlockLogic::isBedState(targetState)) {
         return BedBlockLogic::removeBed(world, hitBlock, &removedPositions);
@@ -1672,18 +1626,12 @@ bool isWireContainerState(const BlockStateId stateId) {
 }
 
 bool isAxisNormal(const glm::ivec3& normal) {
-    const int components =
-        (normal.x == 0 ? 0 : 1) +
-        (normal.y == 0 ? 0 : 1) +
-        (normal.z == 0 ? 0 : 1);
-    return components == 1 &&
-           normal.x >= -1 && normal.x <= 1 &&
-           normal.y >= -1 && normal.y <= 1 &&
-           normal.z >= -1 && normal.z <= 1;
+    const int components = (normal.x == 0 ? 0 : 1) + (normal.y == 0 ? 0 : 1) + (normal.z == 0 ? 0 : 1);
+    return components == 1 && normal.x >= -1 && normal.x <= 1 && normal.y >= -1 && normal.y <= 1 && normal.z >= -1 &&
+           normal.z <= 1;
 }
 
-WireContainerParts removeTargetWireContainerParts(World& world,
-                                                  const glm::ivec3& hitBlock,
+WireContainerParts removeTargetWireContainerParts(World& world, const glm::ivec3& hitBlock,
                                                   const glm::ivec3& hitNormal) {
     const BlockStateId targetState = world.getBlockState(hitBlock.x, hitBlock.y, hitBlock.z);
     if (!isWireContainerState(targetState)) {
@@ -1697,14 +1645,13 @@ WireContainerParts removeTargetWireContainerParts(World& world,
     return WireContainerPlacement::removePartsOnFace(world, hitBlock, facing);
 }
 
-void spawnWireContainerPartDrops(ecs::GameplayRegistry& registry,
-                                 const WireContainerParts& parts,
+void spawnWireContainerPartDrops(ecs::GameplayRegistry& registry, const WireContainerParts& parts,
                                  const glm::ivec3& position) {
     for (const BlockID blockId : WireContainerPlacement::wireBlocksForParts(parts)) {
         const ItemID dropItem = BlockDropTable::getDropItem(blockId);
         if (dropItem == RUNTIME_ID_NULL) {
             failGameServer("Wire container part block has no drop item: " +
-                                     BlockRegistry::getFast(blockId).namespacedId.full());
+                           BlockRegistry::getFast(blockId).namespacedId.full());
         }
         ecs::ItemSpawnSystem::spawn(registry, dropItem, position, 1);
     }
@@ -1763,9 +1710,8 @@ void GameServer::handleClientContainerOpenRequest(ConnectedClient& client,
         handleClientContainerClose(client, net::ClientContainerClose{client.openContainerId});
     }
 
-    const BlockStateId state = m_world.getBlockState(request.blockPosition.x,
-                                                request.blockPosition.y,
-                                                request.blockPosition.z);
+    const BlockStateId state =
+        m_world.getBlockState(request.blockPosition.x, request.blockPosition.y, request.blockPosition.z);
     if (state == NULL_BLOCK_STATE) {
         return;
     }
@@ -1783,13 +1729,13 @@ void GameServer::handleClientContainerOpenRequest(ConnectedClient& client,
 
     if (behavior.handler == "storage") {
         BlockEntityInventoryStore& store = m_ecsRegistry->ctx().contains<BlockEntityInventoryStore>()
-            ? m_ecsRegistry->ctx().get<BlockEntityInventoryStore>()
-            : m_ecsRegistry->ctx().emplace<BlockEntityInventoryStore>();
+                                               ? m_ecsRegistry->ctx().get<BlockEntityInventoryStore>()
+                                               : m_ecsRegistry->ctx().emplace<BlockEntityInventoryStore>();
         static_cast<void>(store.getOrCreate(request.blockPosition, behavior.id, behavior.storage.slots));
     } else if (behavior.handler == "smelting") {
         MachineInventoryStore& store = m_ecsRegistry->ctx().contains<MachineInventoryStore>()
-            ? m_ecsRegistry->ctx().get<MachineInventoryStore>()
-            : m_ecsRegistry->ctx().emplace<MachineInventoryStore>();
+                                           ? m_ecsRegistry->ctx().get<MachineInventoryStore>()
+                                           : m_ecsRegistry->ctx().emplace<MachineInventoryStore>();
         static_cast<void>(store.getOrCreate(request.blockPosition, behavior.id, behavior.storage.slots));
     } else {
         return;
@@ -1809,9 +1755,7 @@ void GameServer::handleClientContainerOpenRequest(ConnectedClient& client,
 
 void GameServer::handleClientContainerSlotAction(ConnectedClient& client,
                                                  const net::ClientContainerSlotAction& action) {
-    if (m_ecsRegistry == nullptr ||
-        client.openContainerId == 0 ||
-        action.containerId != client.openContainerId) {
+    if (m_ecsRegistry == nullptr || client.openContainerId == 0 || action.containerId != client.openContainerId) {
         return;
     }
 
@@ -1894,9 +1838,7 @@ void GameServer::handleClientContainerSlotAction(ConnectedClient& client,
         }
         return smeltingSystem != nullptr && smeltingRuntime.acceptsItem(slot, itemId, *smeltingSystem);
     };
-    const auto addToSlot = [&](const net::ContainerSlotSpace space,
-                               const int slot,
-                               const ItemID itemId,
+    const auto addToSlot = [&](const net::ContainerSlotSpace space, const int slot, const ItemID itemId,
                                const uint32_t count) -> uint32_t {
         if (!validSlot(space, slot) || !acceptsItem(space, slot, itemId)) {
             return count;
@@ -1964,8 +1906,7 @@ void GameServer::handleClientContainerClose(ConnectedClient& client, const net::
                 if (remaining > 0) {
                     const ui::ContainerUiDef& uiDef = ui::ContainerUiRegistry::require(client.openContainerUiId);
                     const ContainerBehaviorDef& behavior = ContainerBehaviorRegistry::require(uiDef.behavior);
-                    if (behavior.handler == "storage" &&
-                        m_ecsRegistry->ctx().contains<BlockEntityInventoryStore>()) {
+                    if (behavior.handler == "storage" && m_ecsRegistry->ctx().contains<BlockEntityInventoryStore>()) {
                         BlockEntityInventoryStore& store = m_ecsRegistry->ctx().get<BlockEntityInventoryStore>();
                         if (BlockEntityInventory* storage = store.findMutable(client.openContainerPosition)) {
                             remaining = storage->addItem(cursor.itemId, remaining);
@@ -1994,7 +1935,8 @@ void GameServer::handleClientContainerClose(ConnectedClient& client, const net::
                     }
                 }
                 if (remaining > 0 && m_gameplayRegistry != nullptr) {
-                    ecs::ItemSpawnSystem::spawnAtPosition(*m_gameplayRegistry, cursor.itemId, client.lastPosition, remaining);
+                    ecs::ItemSpawnSystem::spawnAtPosition(*m_gameplayRegistry, cursor.itemId, client.lastPosition,
+                                                          remaining);
                 }
             }
         }
@@ -2022,11 +1964,10 @@ void GameServer::closeOpenContainersAtPositions(const std::vector<glm::ivec3>& p
 }
 
 void GameServer::handleClientBlockAction(ConnectedClient& client, const net::ClientBlockAction& action) {
-    const glm::ivec3 actionBlock =
-        (action.action == net::ClientBlockActionType::Place ||
-         action.action == net::ClientBlockActionType::BucketPlaceWater)
-        ? action.placeBlock
-        : action.targetBlock;
+    const glm::ivec3 actionBlock = (action.action == net::ClientBlockActionType::Place ||
+                                    action.action == net::ClientBlockActionType::BucketPlaceWater)
+                                       ? action.placeBlock
+                                       : action.targetBlock;
     if (!ItemUseDispatcher::isWithinReach(action.playerPosition, actionBlock)) {
         return;
     }
@@ -2037,17 +1978,15 @@ void GameServer::handleClientBlockAction(ConnectedClient& client, const net::Cli
         if (!game::interaction::applyBlockInteraction(m_world, action.targetBlock)) {
             return;
         }
-        MECRAFT_LOG_PRINTF("[Server] ClientBlockAction interact client=%u block=(%d,%d,%d)\n",
-                           client.id,
-                           action.targetBlock.x,
-                           action.targetBlock.y,
-                           action.targetBlock.z);
+        MECRAFT_LOG_PRINTF("[Server] ClientBlockAction interact client=%u block=(%d,%d,%d)\n", client.id,
+                           action.targetBlock.x, action.targetBlock.y, action.targetBlock.z);
         MECRAFT_LOG_FLUSH(stdout);
         return;
     }
 
     if (action.action == net::ClientBlockActionType::Break) {
-        const BlockStateId targetState = m_world.getBlockState(action.targetBlock.x, action.targetBlock.y, action.targetBlock.z);
+        const BlockStateId targetState =
+            m_world.getBlockState(action.targetBlock.x, action.targetBlock.y, action.targetBlock.z);
         const BlockID target = BlockStateRegistry::getBlockId(targetState);
         if (targetState == NULL_BLOCK_STATE || !BlockRegistry::get(target).isSelectable) {
             return;
@@ -2060,10 +1999,7 @@ void GameServer::handleClientBlockAction(ConnectedClient& client, const net::Cli
                 spawnWireContainerPartDrops(*m_gameplayRegistry, removedWireParts, action.targetBlock);
             }
             MECRAFT_LOG_PRINTF("[Server] ClientBlockAction break wire_container_part client=%u block=(%d,%d,%d)\n",
-                               client.id,
-                               action.targetBlock.x,
-                               action.targetBlock.y,
-                               action.targetBlock.z);
+                               client.id, action.targetBlock.x, action.targetBlock.y, action.targetBlock.z);
             MECRAFT_LOG_FLUSH(stdout);
             return;
         }
@@ -2080,16 +2016,10 @@ void GameServer::handleClientBlockAction(ConnectedClient& client, const net::Cli
         const bool brokeBed = BedBlockLogic::isBedBlock(brokenBlock);
         const bool brokeDoor = DoorBlockLogic::isDoorBlock(brokenBlock);
         if (m_gameplayRegistry != nullptr) {
-            brokeStorage = handleBlockEntityInventoryBreak(
-                *m_gameplayRegistry,
-                brokenBlock,
-                action.targetBlock,
-                dropContainerContents);
-            brokeMachine = handleMachineInventoryBreak(
-                *m_gameplayRegistry,
-                brokenBlock,
-                action.targetBlock,
-                dropContainerContents);
+            brokeStorage = handleBlockEntityInventoryBreak(*m_gameplayRegistry, brokenBlock, action.targetBlock,
+                                                           dropContainerContents);
+            brokeMachine = handleMachineInventoryBreak(*m_gameplayRegistry, brokenBlock, action.targetBlock,
+                                                       dropContainerContents);
             if (brokeStorage && dropBrokenBlockItem) {
                 const ItemID storageItem = BlockDropTable::getDropItem(brokenBlock);
                 if (storageItem != RUNTIME_ID_NULL) {
@@ -2125,11 +2055,8 @@ void GameServer::handleClientBlockAction(ConnectedClient& client, const net::Cli
                 static_cast<void>(discardedContents);
             }
         }
-        MECRAFT_LOG_PRINTF("[Server] ClientBlockAction break client=%u block=(%d,%d,%d)\n",
-                           client.id,
-                           action.targetBlock.x,
-                           action.targetBlock.y,
-                           action.targetBlock.z);
+        MECRAFT_LOG_PRINTF("[Server] ClientBlockAction break client=%u block=(%d,%d,%d)\n", client.id,
+                           action.targetBlock.x, action.targetBlock.y, action.targetBlock.z);
         MECRAFT_LOG_FLUSH(stdout);
         return;
     }
@@ -2144,9 +2071,8 @@ void GameServer::handleClientBlockAction(ConnectedClient& client, const net::Cli
             return;
         }
 
-        inventoryState->selectedHotbarSlot = std::clamp(static_cast<int>(client.selectedHotbarSlot),
-                                                        0,
-                                                        Inventory::HOTBAR_SIZE - 1);
+        inventoryState->selectedHotbarSlot =
+            std::clamp(static_cast<int>(client.selectedHotbarSlot), 0, Inventory::HOTBAR_SIZE - 1);
         inventoryData->inventory.setSelectedSlot(inventoryState->selectedHotbarSlot);
 
         const ItemDef& selectedItemDef = ItemRegistry::get(inventoryData->inventory.getSelectedItem());
@@ -2159,15 +2085,10 @@ void GameServer::handleClientBlockAction(ConnectedClient& client, const net::Cli
             return;
         }
 
-        m_world.setBlockState(action.targetBlock.x,
-                              action.targetBlock.y,
-                              action.targetBlock.z,
+        m_world.setBlockState(action.targetBlock.x, action.targetBlock.y, action.targetBlock.z,
                               BlockStateRegistry::getDefaultState(tillRule->resultBlock));
-        MECRAFT_LOG_PRINTF("[Server] ClientBlockAction till client=%u block=(%d,%d,%d)\n",
-                           client.id,
-                           action.targetBlock.x,
-                           action.targetBlock.y,
-                           action.targetBlock.z);
+        MECRAFT_LOG_PRINTF("[Server] ClientBlockAction till client=%u block=(%d,%d,%d)\n", client.id,
+                           action.targetBlock.x, action.targetBlock.y, action.targetBlock.z);
         MECRAFT_LOG_FLUSH(stdout);
         return;
     }
@@ -2183,59 +2104,41 @@ void GameServer::handleClientBlockAction(ConnectedClient& client, const net::Cli
             return;
         }
 
-        inventoryState->selectedHotbarSlot = std::clamp(static_cast<int>(client.selectedHotbarSlot),
-                                                        0,
-                                                        Inventory::HOTBAR_SIZE - 1);
+        inventoryState->selectedHotbarSlot =
+            std::clamp(static_cast<int>(client.selectedHotbarSlot), 0, Inventory::HOTBAR_SIZE - 1);
         inventoryData->inventory.setSelectedSlot(inventoryState->selectedHotbarSlot);
 
         const ItemDef& selectedItemDef = ItemRegistry::get(inventoryData->inventory.getSelectedItem());
         if (action.action == net::ClientBlockActionType::BucketPickupWater) {
-            const ItemUseRule* pickupRule =
-                ItemUseRules::findRule(selectedItemDef, ItemUseBehavior::BucketPickupFluid);
-            if (pickupRule == nullptr ||
-                !ItemUseDispatcher::canPickupFluid(m_world, action.targetBlock, *pickupRule)) {
+            const ItemUseRule* pickupRule = ItemUseRules::findRule(selectedItemDef, ItemUseBehavior::BucketPickupFluid);
+            if (pickupRule == nullptr || !ItemUseDispatcher::canPickupFluid(m_world, action.targetBlock, *pickupRule)) {
                 return;
             }
 
-            m_world.setFluidState(action.targetBlock.x,
-                                  action.targetBlock.y,
-                                  action.targetBlock.z,
-                                  NULL_BLOCK_STATE);
+            m_world.setFluidState(action.targetBlock.x, action.targetBlock.y, action.targetBlock.z, NULL_BLOCK_STATE);
             if (client.gameplayMode != net::NetworkGameplayMode::Creative) {
                 replaceSelectedServerItem(*inventoryData, pickupRule->resultItem);
             }
-            MECRAFT_LOG_PRINTF("[Server] ClientBlockAction bucket_pickup_water client=%u block=(%d,%d,%d)\n",
-                               client.id,
-                               action.targetBlock.x,
-                               action.targetBlock.y,
-                               action.targetBlock.z);
+            MECRAFT_LOG_PRINTF("[Server] ClientBlockAction bucket_pickup_water client=%u block=(%d,%d,%d)\n", client.id,
+                               action.targetBlock.x, action.targetBlock.y, action.targetBlock.z);
             MECRAFT_LOG_FLUSH(stdout);
             return;
         }
 
-        const ItemUseRule* placeRule =
-            ItemUseRules::findRule(selectedItemDef, ItemUseBehavior::BucketPlaceFluid);
-        const BlockStateId sourceFluid = placeRule != nullptr
-            ? ItemUseDispatcher::makeSourceFluidState(placeRule->resultBlock)
-            : NULL_BLOCK_STATE;
-        if (placeRule == nullptr ||
-            action.blockState != sourceFluid ||
+        const ItemUseRule* placeRule = ItemUseRules::findRule(selectedItemDef, ItemUseBehavior::BucketPlaceFluid);
+        const BlockStateId sourceFluid =
+            placeRule != nullptr ? ItemUseDispatcher::makeSourceFluidState(placeRule->resultBlock) : NULL_BLOCK_STATE;
+        if (placeRule == nullptr || action.blockState != sourceFluid ||
             !ItemUseDispatcher::canPlaceFluid(m_world, action.placeBlock, *placeRule)) {
             return;
         }
 
-        m_world.setFluidState(action.placeBlock.x,
-                              action.placeBlock.y,
-                              action.placeBlock.z,
-                              sourceFluid);
+        m_world.setFluidState(action.placeBlock.x, action.placeBlock.y, action.placeBlock.z, sourceFluid);
         if (client.gameplayMode != net::NetworkGameplayMode::Creative) {
             replaceSelectedServerItem(*inventoryData, placeRule->resultItem);
         }
-        MECRAFT_LOG_PRINTF("[Server] ClientBlockAction bucket_place_water client=%u block=(%d,%d,%d)\n",
-                           client.id,
-                           action.placeBlock.x,
-                           action.placeBlock.y,
-                           action.placeBlock.z);
+        MECRAFT_LOG_PRINTF("[Server] ClientBlockAction bucket_place_water client=%u block=(%d,%d,%d)\n", client.id,
+                           action.placeBlock.x, action.placeBlock.y, action.placeBlock.z);
         MECRAFT_LOG_FLUSH(stdout);
         return;
     }
@@ -2252,13 +2155,8 @@ void GameServer::handleClientBlockAction(ConnectedClient& client, const net::Cli
 
         BedBlockLogic::placeBed(m_world, bedPlacement);
         MECRAFT_LOG_PRINTF("[Server] ClientBlockAction place bed client=%u foot=(%d,%d,%d) head=(%d,%d,%d)\n",
-                           client.id,
-                           bedPlacement.footPos.x,
-                           bedPlacement.footPos.y,
-                           bedPlacement.footPos.z,
-                           bedPlacement.headPos.x,
-                           bedPlacement.headPos.y,
-                           bedPlacement.headPos.z);
+                           client.id, bedPlacement.footPos.x, bedPlacement.footPos.y, bedPlacement.footPos.z,
+                           bedPlacement.headPos.x, bedPlacement.headPos.y, bedPlacement.headPos.z);
         MECRAFT_LOG_FLUSH(stdout);
         return;
     }
@@ -2271,13 +2169,8 @@ void GameServer::handleClientBlockAction(ConnectedClient& client, const net::Cli
 
         DoorBlockLogic::placeDoor(m_world, doorPlacement);
         MECRAFT_LOG_PRINTF("[Server] ClientBlockAction place door client=%u lower=(%d,%d,%d) upper=(%d,%d,%d)\n",
-                           client.id,
-                           doorPlacement.lowerPos.x,
-                           doorPlacement.lowerPos.y,
-                           doorPlacement.lowerPos.z,
-                           doorPlacement.upperPos.x,
-                           doorPlacement.upperPos.y,
-                           doorPlacement.upperPos.z);
+                           client.id, doorPlacement.lowerPos.x, doorPlacement.lowerPos.y, doorPlacement.lowerPos.z,
+                           doorPlacement.upperPos.x, doorPlacement.upperPos.y, doorPlacement.upperPos.z);
         MECRAFT_LOG_FLUSH(stdout);
         return;
     }
@@ -2285,12 +2178,10 @@ void GameServer::handleClientBlockAction(ConnectedClient& client, const net::Cli
         const WireContainerPlacement::ApplyResult targetWirePlacementResult =
             WireContainerPlacement::apply(m_world, action.targetBlock, action.blockState);
         if (targetWirePlacementResult == WireContainerPlacement::ApplyResult::Applied) {
-            MECRAFT_LOG_PRINTF("[Server] ClientBlockAction place wire_container_part client=%u block=(%d,%d,%d) state=%zu\n",
-                               client.id,
-                               action.targetBlock.x,
-                               action.targetBlock.y,
-                               action.targetBlock.z,
-                               action.blockState.registryIndex());
+            MECRAFT_LOG_PRINTF(
+                "[Server] ClientBlockAction place wire_container_part client=%u block=(%d,%d,%d) state=%zu\n",
+                client.id, action.targetBlock.x, action.targetBlock.y, action.targetBlock.z,
+                action.blockState.registryIndex());
             MECRAFT_LOG_FLUSH(stdout);
             return;
         }
@@ -2301,12 +2192,9 @@ void GameServer::handleClientBlockAction(ConnectedClient& client, const net::Cli
     const WireContainerPlacement::ApplyResult wirePlacementResult =
         WireContainerPlacement::apply(m_world, action.placeBlock, action.blockState);
     if (wirePlacementResult == WireContainerPlacement::ApplyResult::Applied) {
-        MECRAFT_LOG_PRINTF("[Server] ClientBlockAction place wire_container_part client=%u block=(%d,%d,%d) state=%zu\n",
-                           client.id,
-                           action.placeBlock.x,
-                           action.placeBlock.y,
-                           action.placeBlock.z,
-                           action.blockState.registryIndex());
+        MECRAFT_LOG_PRINTF(
+            "[Server] ClientBlockAction place wire_container_part client=%u block=(%d,%d,%d) state=%zu\n", client.id,
+            action.placeBlock.x, action.placeBlock.y, action.placeBlock.z, action.blockState.registryIndex());
         MECRAFT_LOG_FLUSH(stdout);
         return;
     }
@@ -2315,27 +2203,18 @@ void GameServer::handleClientBlockAction(ConnectedClient& client, const net::Cli
     }
     const BlockStateId existingPlaceState =
         m_world.getBlockState(action.placeBlock.x, action.placeBlock.y, action.placeBlock.z);
-    if (existingPlaceState != NULL_BLOCK_STATE &&
-        !FluidState::isWater(existingPlaceState) &&
+    if (existingPlaceState != NULL_BLOCK_STATE && !FluidState::isWater(existingPlaceState) &&
         !canReplaceWithMergedPlacementResult(existingPlaceState, action.blockState)) {
         return;
     }
 
-    m_world.setBlockState(action.placeBlock.x,
-                          action.placeBlock.y,
-                          action.placeBlock.z,
-                          action.blockState);
+    m_world.setBlockState(action.placeBlock.x, action.placeBlock.y, action.placeBlock.z, action.blockState);
     if (m_gameplayRegistry != nullptr) {
         static_cast<void>(ensureBlockEntityInventoryForPlacedBlock(
-            *m_gameplayRegistry,
-            BlockStateRegistry::getBlockId(action.blockState),
-            action.placeBlock));
+            *m_gameplayRegistry, BlockStateRegistry::getBlockId(action.blockState), action.placeBlock));
     }
-    MECRAFT_LOG_PRINTF("[Server] ClientBlockAction place client=%u block=(%d,%d,%d) state=%zu\n",
-                       client.id,
-                       action.placeBlock.x,
-                       action.placeBlock.y,
-                       action.placeBlock.z,
+    MECRAFT_LOG_PRINTF("[Server] ClientBlockAction place client=%u block=(%d,%d,%d) state=%zu\n", client.id,
+                       action.placeBlock.x, action.placeBlock.y, action.placeBlock.z,
                        action.blockState.registryIndex());
     MECRAFT_LOG_FLUSH(stdout);
 }
@@ -2363,11 +2242,11 @@ void GameServer::sendNewChunksToClients() {
         int sent = 0;
 
         // Get prioritized chunks to send
-        const auto chunksToSend = clientTicketMgr.getChunksToLoad(
-            maxChunkSendsPerTick * 2, client.sentChunks);
+        const auto chunksToSend = clientTicketMgr.getChunksToLoad(maxChunkSendsPerTick * 2, client.sentChunks);
 
         for (const auto& pos : chunksToSend) {
-            if (sent >= maxChunkSendsPerTick) break;
+            if (sent >= maxChunkSendsPerTick)
+                break;
 
             const int64_t key = ChunkTicketManager::chunkKey(pos.x, pos.y);
             auto it = activeChunks.find(key);
@@ -2489,9 +2368,7 @@ void GameServer::sendInventorySnapshotsToClients() {
 }
 
 void GameServer::sendContainerClose(ConnectedClient& client) {
-    if (client.openContainerId == 0 ||
-        !client.receivedHello ||
-        !client.transport ||
+    if (client.openContainerId == 0 || !client.receivedHello || !client.transport ||
         !client.transport->hasActiveRemote()) {
         return;
     }
@@ -2508,9 +2385,7 @@ void GameServer::sendContainerClose(ConnectedClient& client) {
 
 void GameServer::sendContainerSnapshotsToClients() {
     for (auto& client : m_clients) {
-        if (!client.receivedHello ||
-            !client.transport ||
-            !client.transport->hasActiveRemote() ||
+        if (!client.receivedHello || !client.transport || !client.transport->hasActiveRemote() ||
             client.openContainerId == 0) {
             continue;
         }
@@ -2521,8 +2396,8 @@ void GameServer::sendContainerSnapshotsToClients() {
             continue;
         }
 
-        const bool changed = !client.hasLastContainerSnapshot ||
-                             !containerSnapshotsEqual(client.lastContainerSnapshot, snapshot);
+        const bool changed =
+            !client.hasLastContainerSnapshot || !containerSnapshotsEqual(client.lastContainerSnapshot, snapshot);
         if (!changed) {
             continue;
         }
@@ -2650,7 +2525,8 @@ void GameServer::sendWireContainersInChunkToClient(ConnectedClient& client, cons
     });
 }
 
-net::BlockUpdateEntry GameServer::makeBlockOnlyUpdateEntry(const int x, const int y, const int z, const BlockStateId stateId) const {
+net::BlockUpdateEntry GameServer::makeBlockOnlyUpdateEntry(const int x, const int y, const int z,
+                                                           const BlockStateId stateId) const {
     net::BlockUpdateEntry entry;
     entry.x = x;
     entry.y = y;
@@ -2660,11 +2536,11 @@ net::BlockUpdateEntry GameServer::makeBlockOnlyUpdateEntry(const int x, const in
     return entry;
 }
 
-std::optional<net::BlockUpdateEntry> GameServer::makeSubChunkLightUpdateEntry(const int64_t chunkKey, const int scy) const {
+std::optional<net::BlockUpdateEntry> GameServer::makeSubChunkLightUpdateEntry(const int64_t chunkKey,
+                                                                              const int scy) const {
     net::BlockUpdateEntry entry;
     const auto chunkIt = m_world.getActiveChunks().find(chunkKey);
-    if (scy < 0 || scy >= Chunk::NUM_SUB_CHUNKS ||
-        chunkIt == m_world.getActiveChunks().end() || !chunkIt->second) {
+    if (scy < 0 || scy >= Chunk::NUM_SUB_CHUNKS || chunkIt == m_world.getActiveChunks().end() || !chunkIt->second) {
         return std::nullopt;
     }
 
@@ -2681,17 +2557,14 @@ std::optional<net::BlockUpdateEntry> GameServer::makeSubChunkLightUpdateEntry(co
         const int yPos = yBase + ly;
         for (int zPos = 0; zPos < Chunk::SIZE_Z; ++zPos) {
             for (int xPos = 0; xPos < Chunk::SIZE_X; ++xPos) {
-                entry.packedLightPatch[index++] =
-                    chunk.getPackedLight(xPos, yPos, zPos);
+                entry.packedLightPatch[index++] = chunk.getPackedLight(xPos, yPos, zPos);
             }
         }
     }
     return entry;
 }
 
-std::optional<net::BlockUpdateEntry> GameServer::makeBlockUpdateEntry(const int x,
-                                                                      const int y,
-                                                                      const int z,
+std::optional<net::BlockUpdateEntry> GameServer::makeBlockUpdateEntry(const int x, const int y, const int z,
                                                                       const BlockStateId stateId,
                                                                       const int lightPatchRadius) const {
     net::BlockUpdateEntry entry;
@@ -2702,8 +2575,7 @@ std::optional<net::BlockUpdateEntry> GameServer::makeBlockUpdateEntry(const int 
     entry.stateId = stateId;
     if (lightPatchRadius < 0) {
         const glm::ivec2 chunkCoords = m_world.getChunkCoords(x, z);
-        return makeSubChunkLightUpdateEntry(World::chunkKey(chunkCoords.x, chunkCoords.y),
-                                            Chunk::toSubChunkIndex(y));
+        return makeSubChunkLightUpdateEntry(World::chunkKey(chunkCoords.x, chunkCoords.y), Chunk::toSubChunkIndex(y));
     }
     const int patchSide = lightPatchRadius * 2 + 1;
     entry.packedLightPatch.reserve(static_cast<size_t>(patchSide * patchSide * patchSide));
@@ -2728,7 +2600,8 @@ void GameServer::syncPlayersToClients() {
         }
 
         for (auto& other : m_clients) {
-            if (other.id == receiver.id || !other.receivedHello || !other.transport || !other.transport->hasActiveRemote()) {
+            if (other.id == receiver.id || !other.receivedHello || !other.transport ||
+                !other.transport->hasActiveRemote()) {
                 continue;
             }
 
@@ -2745,10 +2618,8 @@ void GameServer::syncPlayersToClients() {
                 spawn.pitch = other.lastPitch;
                 spawnPacket.inProcessPayload = spawn;
                 receiver.transport->send(std::move(spawnPacket));
-                MECRAFT_LOG_PRINTF("[Server] Sent PlayerSpawn receiver=%u sourceClient=%u netId=%u\n",
-                                   receiver.id,
-                                   other.id,
-                                   other.playerNetId);
+                MECRAFT_LOG_PRINTF("[Server] Sent PlayerSpawn receiver=%u sourceClient=%u netId=%u\n", receiver.id,
+                                   other.id, other.playerNetId);
                 MECRAFT_LOG_FLUSH(stdout);
             }
         }
@@ -2839,15 +2710,9 @@ std::vector<save::PersistentEntityData> GameServer::snapshotPersistentEntities()
         entities.push_back(data);
     }
 
-    auto dropView = reg.view<ecs::DropItemTag,
-                             ecs::DropEntityIdComponent,
-                             ecs::TransformComponent,
-                             ecs::ItemComponent,
-                             ecs::VelocityComponent,
-                             ecs::BoundsComponent,
-                             ecs::LifetimeComponent,
-                             ecs::SpinVisualComponent,
-                             ecs::GroundedStateComponent>();
+    auto dropView = reg.view<ecs::DropItemTag, ecs::DropEntityIdComponent, ecs::TransformComponent, ecs::ItemComponent,
+                             ecs::VelocityComponent, ecs::BoundsComponent, ecs::LifetimeComponent,
+                             ecs::SpinVisualComponent, ecs::GroundedStateComponent>();
     for (const entt::entity entity : dropView) {
         const auto& item = dropView.get<ecs::ItemComponent>(entity);
         if (item.itemId == 0 || item.stackCount == 0) {
@@ -2892,8 +2757,7 @@ std::vector<save::BlockEntityData> GameServer::snapshotBlockEntities() const {
     std::unordered_map<BlockEntityPositionKey, std::size_t, BlockEntityPositionHash> entityByPosition;
 
     const auto ensureBlockEntityEntry =
-        [&entities, &entityByPosition](const glm::ivec3& position,
-                                       const std::string& type) -> save::BlockEntityData& {
+        [&entities, &entityByPosition](const glm::ivec3& position, const std::string& type) -> save::BlockEntityData& {
         const BlockEntityPositionKey key{position.x, position.y, position.z};
         const auto found = entityByPosition.find(key);
         if (found != entityByPosition.end()) {
@@ -2932,9 +2796,7 @@ std::vector<save::BlockEntityData> GameServer::snapshotBlockEntities() const {
                         const BlockID blockId = BlockStateRegistry::getBlockId(state);
                         std::string blockEntityType;
                         if (persistentBlockEntityTypeForBlock(blockId, blockEntityType)) {
-                            ensureBlockEntityEntry(glm::ivec3(worldOffset.x + x,
-                                                              yBase + ly,
-                                                              worldOffset.z + z),
+                            ensureBlockEntityEntry(glm::ivec3(worldOffset.x + x, yBase + ly, worldOffset.z + z),
                                                    blockEntityType);
                         }
                     }
@@ -2949,10 +2811,8 @@ std::vector<save::BlockEntityData> GameServer::snapshotBlockEntities() const {
 
     if (m_ecsRegistry->ctx().contains<BlockEntityInventoryStore>()) {
         const BlockEntityInventoryStore& store = m_ecsRegistry->ctx().get<BlockEntityInventoryStore>();
-        store.forEach([&ensureBlockEntityEntry](const glm::ivec3& position,
-                                                 const std::string& typeId,
-                                                 const int slotCount,
-                                                 const BlockEntityInventory& inventory) {
+        store.forEach([&ensureBlockEntityEntry](const glm::ivec3& position, const std::string& typeId,
+                                                const int slotCount, const BlockEntityInventory& inventory) {
             save::BlockEntityData& data = ensureBlockEntityEntry(position, typeId);
             data.type = typeId;
             data.slots.clear();
@@ -2975,9 +2835,8 @@ std::vector<save::BlockEntityData> GameServer::snapshotBlockEntities() const {
 
     if (m_ecsRegistry->ctx().contains<MachineInventoryStore>()) {
         const MachineInventoryStore& store = m_ecsRegistry->ctx().get<MachineInventoryStore>();
-        store.forEach([&ensureBlockEntityEntry](const glm::ivec3& position,
-                                                 const std::string& typeId,
-                                                 const MachineInventory& machine) {
+        store.forEach([&ensureBlockEntityEntry](const glm::ivec3& position, const std::string& typeId,
+                                                const MachineInventory& machine) {
             save::BlockEntityData& data = ensureBlockEntityEntry(position, typeId);
             data.type = typeId;
             data.slots.clear();
@@ -3108,20 +2967,14 @@ void GameServer::restoreBlockEntities() {
 
         if (behavior.handler == "smelting") {
             MachineInventoryStore& store = m_ecsRegistry->ctx().contains<MachineInventoryStore>()
-                ? m_ecsRegistry->ctx().get<MachineInventoryStore>()
-                : m_ecsRegistry->ctx().emplace<MachineInventoryStore>();
-            MachineInventory& machine = store.getOrCreate(
-                glm::ivec3(data.x, data.y, data.z),
-                behavior.id,
-                behavior.storage.slots);
-            machine.setProgress(data.burnSecondsRemaining,
-                                data.burnSecondsTotal,
-                                data.cookSeconds,
+                                               ? m_ecsRegistry->ctx().get<MachineInventoryStore>()
+                                               : m_ecsRegistry->ctx().emplace<MachineInventoryStore>();
+            MachineInventory& machine =
+                store.getOrCreate(glm::ivec3(data.x, data.y, data.z), behavior.id, behavior.storage.slots);
+            machine.setProgress(data.burnSecondsRemaining, data.burnSecondsTotal, data.cookSeconds,
                                 data.cookTargetSeconds);
             for (const save::BlockEntitySlotData& slot : data.slots) {
-                if (!machine.isValidSlot(slot.slot) ||
-                    slot.slot >= behavior.storage.slots ||
-                    slot.itemId == 0 ||
+                if (!machine.isValidSlot(slot.slot) || slot.slot >= behavior.storage.slots || slot.itemId == 0 ||
                     slot.count == 0) {
                     continue;
                 }
@@ -3140,16 +2993,12 @@ void GameServer::restoreBlockEntities() {
         }
 
         BlockEntityInventoryStore& store = m_ecsRegistry->ctx().contains<BlockEntityInventoryStore>()
-            ? m_ecsRegistry->ctx().get<BlockEntityInventoryStore>()
-            : m_ecsRegistry->ctx().emplace<BlockEntityInventoryStore>();
-        BlockEntityInventory& inventory = store.getOrCreate(
-            glm::ivec3(data.x, data.y, data.z),
-            behavior.id,
-            behavior.storage.slots);
+                                               ? m_ecsRegistry->ctx().get<BlockEntityInventoryStore>()
+                                               : m_ecsRegistry->ctx().emplace<BlockEntityInventoryStore>();
+        BlockEntityInventory& inventory =
+            store.getOrCreate(glm::ivec3(data.x, data.y, data.z), behavior.id, behavior.storage.slots);
         for (const save::BlockEntitySlotData& slot : data.slots) {
-            if (!inventory.isValidSlot(slot.slot) ||
-                slot.slot >= behavior.storage.slots ||
-                slot.itemId == 0 ||
+            if (!inventory.isValidSlot(slot.slot) || slot.slot >= behavior.storage.slots || slot.itemId == 0 ||
                 slot.count == 0) {
                 continue;
             }
@@ -3380,10 +3229,12 @@ void GameServer::syncEntitiesToClients() {
     std::vector<entt::entity> hurtEventsSent;
 
     for (const auto& [netId, entity] : m_syncedEntities) {
-        if (!reg.valid(entity)) continue;
+        if (!reg.valid(entity))
+            continue;
 
         auto* transform = reg.try_get<ecs::TransformComponent>(entity);
-        if (!transform) continue;
+        if (!transform)
+            continue;
 
         net::EntitySnapshotItem item;
         item.netId = netId;
@@ -3457,19 +3308,15 @@ void GameServer::sendChunkDataToClient(ConnectedClient& client, int cx, int cz) 
     data.chunkX = cx;
     data.chunkZ = cz;
     data.revision = static_cast<uint32_t>(m_world.getActiveChunkRevision());
-    data.chunk = it->second;  // Zero-copy: share the Chunk pointer
+    data.chunk = it->second; // Zero-copy: share the Chunk pointer
     packet.inProcessPayload = std::move(data);
     client.transport->send(std::move(packet));
     sendWireContainersInChunkToClient(client, cx, cz);
 
     ++client.totalChunksSent;
     if (client.chunkSendLogCount < 12 || client.totalChunksSent % 25 == 0) {
-        MECRAFT_LOG_PRINTF("[Server] Sent ChunkData client=%u chunk=(%d,%d) total=%d active=%zu\n",
-                           client.id,
-                           cx,
-                           cz,
-                           client.totalChunksSent,
-                           m_world.getActiveChunks().size());
+        MECRAFT_LOG_PRINTF("[Server] Sent ChunkData client=%u chunk=(%d,%d) total=%d active=%zu\n", client.id, cx, cz,
+                           client.totalChunksSent, m_world.getActiveChunks().size());
         MECRAFT_LOG_FLUSH(stdout);
         ++client.chunkSendLogCount;
     }

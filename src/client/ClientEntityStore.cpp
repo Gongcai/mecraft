@@ -27,9 +27,7 @@ void collectEntityTree(entt::registry& registry, const entt::entity entity, std:
     }
 }
 
-void queueAudioEvent(ecs::GameplayRegistry* gameplayRegistry,
-                     const std::string& soundId,
-                     const glm::vec3& position,
+void queueAudioEvent(ecs::GameplayRegistry* gameplayRegistry, const std::string& soundId, const glm::vec3& position,
                      const float volume = 1.0f) {
     if (gameplayRegistry == nullptr || soundId.empty()) {
         return;
@@ -37,8 +35,7 @@ void queueAudioEvent(ecs::GameplayRegistry* gameplayRegistry,
     ecs::ensureAudioEventBus(*gameplayRegistry).push({soundId, position, true, volume});
 }
 
-bool consumeHurtFlag(std::unordered_set<net::EntityNetId>& latchedNetIds,
-                     const net::EntityNetId netId,
+bool consumeHurtFlag(std::unordered_set<net::EntityNetId>& latchedNetIds, const net::EntityNetId netId,
                      const bool hurtFlag) {
     if (!hurtFlag) {
         latchedNetIds.erase(netId);
@@ -47,8 +44,7 @@ bool consumeHurtFlag(std::unordered_set<net::EntityNetId>& latchedNetIds,
     return latchedNetIds.insert(netId).second;
 }
 
-void applyMobHurtEffect(entt::registry& registry,
-                        const entt::entity entity,
+void applyMobHurtEffect(entt::registry& registry, const entt::entity entity,
                         const ecs::MobEntityDefinition* definition) {
     if (entity == entt::null || !registry.valid(entity)) {
         return;
@@ -68,8 +64,7 @@ void applyMobHurtEffect(entt::registry& registry,
     }
 }
 
-void applyMobDeathEffect(entt::registry& registry,
-                         const entt::entity entity,
+void applyMobDeathEffect(entt::registry& registry, const entt::entity entity,
                          const ecs::MobEntityDefinition* definition) {
     if (entity == entt::null || !registry.valid(entity)) {
         return;
@@ -77,19 +72,14 @@ void applyMobDeathEffect(entt::registry& registry,
 
     if (definition != nullptr && definition->deathEffect.enabled) {
         registry.emplace_or_replace<ecs::DeathEffectComponent>(
-            entity,
-            definition->deathEffect.particleBlock,
-            definition->deathEffect.particleCount,
-            definition->deathEffect.soundId,
-            definition->deathEffect.volume);
+            entity, definition->deathEffect.particleBlock, definition->deathEffect.particleCount,
+            definition->deathEffect.soundId, definition->deathEffect.volume);
     } else if (registry.all_of<ecs::DeathEffectComponent>(entity)) {
         registry.remove<ecs::DeathEffectComponent>(entity);
     }
 }
 
-void applyMobVisual(entt::registry& registry,
-                    const entt::entity entity,
-                    const ecs::MobEntityDefinition* definition) {
+void applyMobVisual(entt::registry& registry, const entt::entity entity, const ecs::MobEntityDefinition* definition) {
     if (entity == entt::null || !registry.valid(entity)) {
         return;
     }
@@ -106,9 +96,7 @@ void applyMobVisual(entt::registry& registry,
     }
 }
 
-void applyMobAI(entt::registry& registry,
-                const entt::entity entity,
-                const ecs::MobEntityDefinition* definition) {
+void applyMobAI(entt::registry& registry, const entt::entity entity, const ecs::MobEntityDefinition* definition) {
     if (entity == entt::null || !registry.valid(entity) || definition == nullptr) {
         return;
     }
@@ -149,10 +137,7 @@ ImpactAudio impactAudioForEntity(entt::registry& registry, const entt::entity en
     return {};
 }
 
-void setSyncedHealth(entt::registry& registry,
-                     const entt::entity entity,
-                     const uint16_t current,
-                     const uint16_t max) {
+void setSyncedHealth(entt::registry& registry, const entt::entity entity, const uint16_t current, const uint16_t max) {
     if (max == 0 || entity == entt::null || !registry.valid(entity)) {
         return;
     }
@@ -165,9 +150,7 @@ void setSyncedHealth(entt::registry& registry,
     }
 }
 
-void triggerReplicaHurt(ecs::GameplayRegistry* gameplayRegistry,
-                        entt::registry& registry,
-                        const entt::entity entity) {
+void triggerReplicaHurt(ecs::GameplayRegistry* gameplayRegistry, entt::registry& registry, const entt::entity entity) {
     if (entity == entt::null || !registry.valid(entity)) {
         return;
     }
@@ -187,12 +170,9 @@ void triggerReplicaHurt(ecs::GameplayRegistry* gameplayRegistry,
     }
 }
 
-ecs::NetworkInterpolationComponent& ensureNetworkInterpolation(entt::registry& registry,
-                                                                const entt::entity entity,
-                                                                const glm::vec3& position,
-                                                                const glm::vec3& velocity,
-                                                                const float yaw,
-                                                                const float pitch) {
+ecs::NetworkInterpolationComponent& ensureNetworkInterpolation(entt::registry& registry, const entt::entity entity,
+                                                               const glm::vec3& position, const glm::vec3& velocity,
+                                                               const float yaw, const float pitch) {
     auto* interpolation = registry.try_get<ecs::NetworkInterpolationComponent>(entity);
     if (interpolation == nullptr) {
         interpolation = &registry.emplace<ecs::NetworkInterpolationComponent>(entity);
@@ -204,8 +184,7 @@ ecs::NetworkInterpolationComponent& ensureNetworkInterpolation(entt::registry& r
     return *interpolation;
 }
 
-void setNetworkInterpolationTarget(ecs::NetworkInterpolationComponent& interpolation,
-                                   const uint32_t serverTick,
+void setNetworkInterpolationTarget(ecs::NetworkInterpolationComponent& interpolation, const uint32_t serverTick,
                                    const net::EntitySnapshotItem& item) {
     interpolation.targetPosition = item.position;
     interpolation.targetVelocity = item.velocity;
@@ -215,17 +194,10 @@ void setNetworkInterpolationTarget(ecs::NetworkInterpolationComponent& interpola
     interpolation.hasTarget = true;
 }
 
-void insertNetworkSnapshot(ecs::NetworkInterpolationComponent& interpolation,
-                           const uint32_t serverTick,
+void insertNetworkSnapshot(ecs::NetworkInterpolationComponent& interpolation, const uint32_t serverTick,
                            const net::EntitySnapshotItem& item) {
     const bool firstBufferedSnapshot = interpolation.snapshotCount == 0;
-    const ecs::NetworkSnapshotSample sample{
-        serverTick,
-        item.position,
-        item.velocity,
-        item.yaw,
-        item.pitch
-    };
+    const ecs::NetworkSnapshotSample sample{serverTick, item.position, item.velocity, item.yaw, item.pitch};
 
     if (interpolation.snapshotCount == 0 || serverTick >= interpolation.latestServerTick) {
         setNetworkInterpolationTarget(interpolation, serverTick, item);
@@ -257,9 +229,7 @@ void insertNetworkSnapshot(ecs::NetworkInterpolationComponent& interpolation,
               });
 }
 
-void snapReplicaToSnapshot(entt::registry& registry,
-                           const entt::entity entity,
-                           const net::EntitySnapshotItem& item) {
+void snapReplicaToSnapshot(entt::registry& registry, const entt::entity entity, const net::EntitySnapshotItem& item) {
     if (auto* transform = registry.try_get<ecs::TransformComponent>(entity)) {
         transform->position = item.position;
     }
@@ -300,11 +270,9 @@ void ClientEntityStore::init(ecs::GameplayRegistry& registry, ResourceMgr* resou
 
 void ClientEntityStore::handleSpawn(const net::EntitySpawnMessage& msg) {
     if (!m_registry) {
-        const auto alreadyPending = std::any_of(m_pendingSpawns.begin(),
-                                                m_pendingSpawns.end(),
-                                                [&msg](const net::EntitySpawnMessage& pending) {
-                                                    return pending.netId == msg.netId;
-                                                });
+        const auto alreadyPending =
+            std::any_of(m_pendingSpawns.begin(), m_pendingSpawns.end(),
+                        [&msg](const net::EntitySpawnMessage& pending) { return pending.netId == msg.netId; });
         if (!alreadyPending) {
             m_pendingSpawns.push_back(msg);
         }
@@ -312,7 +280,7 @@ void ClientEntityStore::handleSpawn(const net::EntitySpawnMessage& msg) {
     }
 
     if (!m_registry || hasEntity(msg.netId)) {
-        return;  // Already tracked or not initialized
+        return; // Already tracked or not initialized
     }
 
     if (const entt::entity existing = findExistingEntity(msg.netId); existing != entt::null) {
@@ -324,29 +292,19 @@ void ClientEntityStore::handleSpawn(const net::EntitySpawnMessage& msg) {
     m_locallyAuthoritativeNetIds.erase(msg.netId);
 
     switch (msg.kind) {
-    case net::EntityKind::Drop:
-        createDropEntity(msg);
-        break;
-    case net::EntityKind::Projectile:
-        createProjectileEntity(msg);
-        break;
-    case net::EntityKind::Player:
-        createPlayerEntity(msg);
-        break;
-    case net::EntityKind::Mob:
-        createMobEntity(msg);
-        break;
+    case net::EntityKind::Drop: createDropEntity(msg); break;
+    case net::EntityKind::Projectile: createProjectileEntity(msg); break;
+    case net::EntityKind::Player: createPlayerEntity(msg); break;
+    case net::EntityKind::Mob: createMobEntity(msg); break;
     }
 }
 
 void ClientEntityStore::handleDespawn(const net::EntityDespawnMessage& msg) {
     if (!m_registry) {
-        m_pendingSpawns.erase(std::remove_if(m_pendingSpawns.begin(),
-                                             m_pendingSpawns.end(),
-                                             [&msg](const net::EntitySpawnMessage& pending) {
-                                                 return pending.netId == msg.netId;
-                                             }),
-                              m_pendingSpawns.end());
+        m_pendingSpawns.erase(
+            std::remove_if(m_pendingSpawns.begin(), m_pendingSpawns.end(),
+                           [&msg](const net::EntitySpawnMessage& pending) { return pending.netId == msg.netId; }),
+            m_pendingSpawns.end());
         m_pendingDespawns.push_back(msg);
         return;
     }
@@ -361,8 +319,7 @@ void ClientEntityStore::handleDespawn(const net::EntityDespawnMessage& msg) {
 
     if (m_registry->valid(it->second) && !isLocallyAuthoritative(msg.netId)) {
         const bool explicitImpactReceived = m_explicitImpactNetIds.erase(msg.netId) > 0;
-        if (!explicitImpactReceived &&
-            m_gameplayRegistry &&
+        if (!explicitImpactReceived && m_gameplayRegistry &&
             m_registry->all_of<ecs::ProjectileTag, ecs::TransformComponent>(it->second)) {
             const auto& transform = m_registry->get<ecs::TransformComponent>(it->second);
             BlockID particleBlock = ecs::defaultProjectileEntityImpactParticleBlock();
@@ -413,8 +370,7 @@ void ClientEntityStore::handleImpact(const net::EntityImpactMessage& msg) {
 
     if (msg.particleBlockId != 0) {
         ecs::ensureParticleEventBus(*m_gameplayRegistry)
-            .push(ecs::makeImpactParticleEvent(msg.position,
-                                               static_cast<BlockID>(msg.particleBlockId),
+            .push(ecs::makeImpactParticleEvent(msg.position, static_cast<BlockID>(msg.particleBlockId),
                                                msg.particleCount));
     }
 
@@ -435,7 +391,7 @@ void ClientEntityStore::handleSnapshot(const net::EntitySnapshotMessage& msg) {
     for (const auto& item : msg.entities) {
         auto it = m_netIdToEntity.find(item.netId);
         if (it == m_netIdToEntity.end()) {
-            continue;  // Unknown entity, skip
+            continue; // Unknown entity, skip
         }
 
         if (!m_registry->valid(it->second)) {
@@ -449,12 +405,8 @@ void ClientEntityStore::handleSnapshot(const net::EntitySnapshotMessage& msg) {
             continue;
         }
 
-        auto& interpolation = ensureNetworkInterpolation(*m_registry,
-                                                         it->second,
-                                                         item.position,
-                                                         item.velocity,
-                                                         item.yaw,
-                                                         item.pitch);
+        auto& interpolation =
+            ensureNetworkInterpolation(*m_registry, it->second, item.position, item.velocity, item.yaw, item.pitch);
         const bool firstSnapshotTarget = !interpolation.hasTarget;
         insertNetworkSnapshot(interpolation, msg.serverTick, item);
         if (firstSnapshotTarget) {
@@ -469,8 +421,8 @@ void ClientEntityStore::handleSnapshot(const net::EntitySnapshotMessage& msg) {
 
         if (item.maxHealth > 0) {
             const auto* previousHealth = m_registry->try_get<ecs::HealthComponent>(it->second);
-            const bool healthDropped = previousHealth != nullptr &&
-                                       static_cast<int>(item.health) < previousHealth->current;
+            const bool healthDropped =
+                previousHealth != nullptr && static_cast<int>(item.health) < previousHealth->current;
             setSyncedHealth(*m_registry, it->second, item.health, item.maxHealth);
             const bool hurtFlagRising = consumeHurtFlag(m_latchedHurtNetIds, item.netId, item.hurt);
             if (hurtFlagRising || healthDropped) {
@@ -540,8 +492,7 @@ void ClientEntityStore::createDropEntity(const net::EntitySpawnMessage& msg) {
     // Minimal components for rendering a drop
     m_registry->emplace<ecs::TransformComponent>(entity, msg.position, 0.25f);
     m_registry->emplace<ecs::VelocityComponent>(entity, msg.velocity);
-    m_registry->emplace<ecs::ItemComponent>(entity,
-        static_cast<ItemID>(msg.itemId), msg.stackCount);
+    m_registry->emplace<ecs::ItemComponent>(entity, static_cast<ItemID>(msg.itemId), msg.stackCount);
     m_registry->emplace<ecs::SpinVisualComponent>(entity, 0.0f, 3.0f);
     m_registry->emplace<ecs::DropItemTag>(entity);
     m_registry->emplace<ecs::NetworkSyncTag>(entity);
@@ -557,18 +508,12 @@ void ClientEntityStore::createProjectileEntity(const net::EntitySpawnMessage& ms
     const auto definition = ecs::projectileDefinitionForItemOrDefault(static_cast<ItemID>(msg.itemId));
 
     m_registry->emplace<ecs::ProjectileTag>(entity);
-    m_registry->emplace<ecs::ProjectileComponent>(entity,
-                                                  entt::null,
-                                                  definition.damage,
-                                                  definition.hitRadius,
-                                                  definition.gravity,
-                                                  definition.entityImpactParticleBlock,
-                                                  definition.entityImpactParticleCount,
-                                                  definition.impactSoundId);
+    m_registry->emplace<ecs::ProjectileComponent>(entity, entt::null, definition.damage, definition.hitRadius,
+                                                  definition.gravity, definition.entityImpactParticleBlock,
+                                                  definition.entityImpactParticleCount, definition.impactSoundId);
     m_registry->emplace<ecs::TransformComponent>(entity, msg.position, 0.0f);
     m_registry->emplace<ecs::VelocityComponent>(entity, msg.velocity);
-    m_registry->emplace<ecs::ItemComponent>(entity,
-        static_cast<ItemID>(msg.itemId), stackCount);
+    m_registry->emplace<ecs::ItemComponent>(entity, static_cast<ItemID>(msg.itemId), stackCount);
     m_registry->emplace<ecs::SpinVisualComponent>(entity, msg.yaw, definition.spinSpeedRadians);
     m_registry->emplace<ecs::BoundsComponent>(entity, glm::vec3(definition.boundsHalfExtent));
     m_registry->emplace<ecs::LifetimeComponent>(entity, 0.0f, definition.lifetimeSeconds);

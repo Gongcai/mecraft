@@ -47,11 +47,8 @@ const char* messageTypeName(MessageType type) {
 ENetTransport::ENetTransport() = default;
 
 ENetTransport::ENetTransport(ENetHost* sharedHost, std::shared_ptr<PeerState> peerState)
-    : m_host(sharedHost),
-      m_peer(peerState ? peerState->peer : nullptr),
-      m_peerState(std::move(peerState)),
-      m_isServer(false),
-      m_ownsHost(false) {}
+    : m_host(sharedHost), m_peer(peerState ? peerState->peer : nullptr), m_peerState(std::move(peerState)),
+      m_isServer(false), m_ownsHost(false) {}
 
 ENetTransport::~ENetTransport() {
     disconnect();
@@ -69,8 +66,7 @@ void ENetTransport::deinitialize() {
     enet_deinitialize();
 }
 
-bool ENetTransport::connect(const std::string& host, uint16_t port,
-                             size_t channelCount, uint32_t timeoutMs) {
+bool ENetTransport::connect(const std::string& host, uint16_t port, size_t channelCount, uint32_t timeoutMs) {
     if (m_host) {
         enet_host_destroy(m_host);
         m_host = nullptr;
@@ -99,8 +95,7 @@ bool ENetTransport::connect(const std::string& host, uint16_t port,
 
     // Wait for connection with timeout
     ENetEvent event;
-    if (enet_host_service(m_host, &event, timeoutMs) > 0 &&
-        event.type == ENET_EVENT_TYPE_CONNECT) {
+    if (enet_host_service(m_host, &event, timeoutMs) > 0 && event.type == ENET_EVENT_TYPE_CONNECT) {
         m_isServer = false;
         MECRAFT_LOG_PRINTF("[ENet] Connected to %s:%u\n", host.c_str(), port);
         MECRAFT_LOG_FLUSH(stdout);
@@ -135,10 +130,7 @@ bool ENetTransport::listen(uint16_t port, size_t maxClients, size_t channelCount
     }
 
     m_isServer = true;
-    MECRAFT_LOG_PRINTF("[ENet] Listening on port %u maxClients=%zu channels=%zu\n",
-                       port,
-                       maxClients,
-                       channelCount);
+    MECRAFT_LOG_PRINTF("[ENet] Listening on port %u maxClients=%zu channels=%zu\n", port, maxClients, channelCount);
     MECRAFT_LOG_FLUSH(stdout);
     return true;
 }
@@ -161,7 +153,8 @@ std::unique_ptr<ITransportEndpoint> ENetTransport::takeAcceptedEndpoint() {
 }
 
 void ENetTransport::send(Packet packet) {
-    if (!m_host) return;
+    if (!m_host)
+        return;
 
     const MessageType originalType = packet.type;
 
@@ -179,7 +172,8 @@ void ENetTransport::send(Packet packet) {
     // Encode the packet into binary
     std::vector<uint8_t> data = PacketCodec::encode(packet);
 
-    if (data.size() <= 6) return;  // Header only, no payload
+    if (data.size() <= 6)
+        return; // Header only, no payload
 
     const auto [channelId, flags] = mapChannel(packet.channel);
     ENetPacket* enetPacket = enet_packet_create(data.data(), data.size(), flags);
@@ -191,13 +185,10 @@ void ENetTransport::send(Packet packet) {
         // Client: send to server
         enet_peer_send(m_peer, channelId, enetPacket);
     }
-    if (originalType == MessageType::ClientHello ||
-        originalType == MessageType::ClientViewConfig ||
+    if (originalType == MessageType::ClientHello || originalType == MessageType::ClientViewConfig ||
         originalType == MessageType::ServerHello) {
-        MECRAFT_LOG_PRINTF("[ENet] Sent %s bytes=%zu channel=%u reliable=%s\n",
-                           messageTypeName(originalType),
-                           data.size(),
-                           static_cast<unsigned>(channelId),
+        MECRAFT_LOG_PRINTF("[ENet] Sent %s bytes=%zu channel=%u reliable=%s\n", messageTypeName(originalType),
+                           data.size(), static_cast<unsigned>(channelId),
                            (flags & ENET_PACKET_FLAG_RELIABLE) ? "yes" : "no");
         MECRAFT_LOG_FLUSH(stdout);
     }
@@ -243,7 +234,8 @@ bool ENetTransport::hasActiveRemote() const {
 }
 
 void ENetTransport::poll() {
-    if (!m_host) return;
+    if (!m_host)
+        return;
 
     ENetEvent event;
     while (enet_host_service(m_host, &event, 0) > 0) {
@@ -258,9 +250,7 @@ void ENetTransport::poll() {
                 m_pendingAccepted.push(peerState);
                 char host[256] = {};
                 enet_address_get_host_ip_new(&event.peer->address, host, sizeof(host));
-                MECRAFT_LOG_PRINTF("[ENet] Client connected from %s:%u\n",
-                                   host,
-                                   event.peer->address.port);
+                MECRAFT_LOG_PRINTF("[ENet] Client connected from %s:%u\n", host, event.peer->address.port);
                 MECRAFT_LOG_FLUSH(stdout);
             }
             break;
@@ -370,14 +360,16 @@ void ENetTransport::poll() {
                 }
                 case MessageType::ClientContainerOpenRequest: {
                     ClientContainerOpenRequest msg;
-                    if (PacketCodec::decodeClientContainerOpenRequest(packet.payload.data(), packet.payload.size(), msg)) {
+                    if (PacketCodec::decodeClientContainerOpenRequest(packet.payload.data(), packet.payload.size(),
+                                                                      msg)) {
                         packet.inProcessPayload = msg;
                     }
                     break;
                 }
                 case MessageType::ClientContainerSlotAction: {
                     ClientContainerSlotAction msg;
-                    if (PacketCodec::decodeClientContainerSlotAction(packet.payload.data(), packet.payload.size(), msg)) {
+                    if (PacketCodec::decodeClientContainerSlotAction(packet.payload.data(), packet.payload.size(),
+                                                                     msg)) {
                         packet.inProcessPayload = msg;
                     }
                     break;
@@ -466,14 +458,11 @@ void ENetTransport::poll() {
                     }
                     break;
                 }
-                default:
-                    break;
+                default: break;
                 }
-                if (packet.type == MessageType::ClientHello ||
-                    packet.type == MessageType::ClientViewConfig ||
+                if (packet.type == MessageType::ClientHello || packet.type == MessageType::ClientViewConfig ||
                     packet.type == MessageType::ServerHello) {
-                    MECRAFT_LOG_PRINTF("[ENet] Received %s bytes=%zu decoded=%s\n",
-                                       messageTypeName(packet.type),
+                    MECRAFT_LOG_PRINTF("[ENet] Received %s bytes=%zu decoded=%s\n", messageTypeName(packet.type),
                                        static_cast<size_t>(event.packet->dataLength),
                                        packet.inProcessPayload.has_value() ? "yes" : "no");
                     MECRAFT_LOG_FLUSH(stdout);
@@ -522,8 +511,7 @@ void ENetTransport::poll() {
             m_peerStates.erase(event.peer);
             break;
 
-        default:
-            break;
+        default: break;
         }
     }
 }
@@ -582,23 +570,22 @@ void ENetTransport::disconnect() {
 }
 
 void ENetTransport::sendToPeer(ENetPeer* peer, Packet packet) {
-    if (!m_host || !peer) return;
+    if (!m_host || !peer)
+        return;
 
     const MessageType originalType = packet.type;
     encodeTypedPayload(packet);
     std::vector<uint8_t> data = PacketCodec::encode(packet);
-    if (data.size() <= 6) return;
+    if (data.size() <= 6)
+        return;
 
     const auto [channelId, flags] = mapChannel(packet.channel);
     ENetPacket* enetPacket = enet_packet_create(data.data(), data.size(), flags);
     enet_peer_send(peer, channelId, enetPacket);
-    if (originalType == MessageType::ClientHello ||
-        originalType == MessageType::ClientViewConfig ||
+    if (originalType == MessageType::ClientHello || originalType == MessageType::ClientViewConfig ||
         originalType == MessageType::ServerHello) {
-        MECRAFT_LOG_PRINTF("[ENet] Sent %s bytes=%zu channel=%u reliable=%s\n",
-                           messageTypeName(originalType),
-                           data.size(),
-                           static_cast<unsigned>(channelId),
+        MECRAFT_LOG_PRINTF("[ENet] Sent %s bytes=%zu channel=%u reliable=%s\n", messageTypeName(originalType),
+                           data.size(), static_cast<unsigned>(channelId),
                            (flags & ENET_PACKET_FLAG_RELIABLE) ? "yes" : "no");
         MECRAFT_LOG_FLUSH(stdout);
     }
@@ -612,56 +599,52 @@ void ENetTransport::encodeTypedPayload(Packet& packet) {
     std::vector<uint8_t> typedPayload;
     switch (packet.type) {
     case MessageType::ServerHello:
-        typedPayload = PacketCodec::encodeServerHello(
-            std::any_cast<const ServerHello&>(packet.inProcessPayload));
+        typedPayload = PacketCodec::encodeServerHello(std::any_cast<const ServerHello&>(packet.inProcessPayload));
         break;
     case MessageType::ServerSnapshot:
-        typedPayload = PacketCodec::encodeServerSnapshot(
-            std::any_cast<const ServerSnapshot&>(packet.inProcessPayload));
+        typedPayload = PacketCodec::encodeServerSnapshot(std::any_cast<const ServerSnapshot&>(packet.inProcessPayload));
         break;
     case MessageType::ClientInput:
-        typedPayload = PacketCodec::encodeClientInput(
-            std::any_cast<const ClientInput&>(packet.inProcessPayload));
+        typedPayload = PacketCodec::encodeClientInput(std::any_cast<const ClientInput&>(packet.inProcessPayload));
         break;
     case MessageType::ClientHello:
-        typedPayload = PacketCodec::encodeClientHello(
-            std::any_cast<const ClientHello&>(packet.inProcessPayload));
+        typedPayload = PacketCodec::encodeClientHello(std::any_cast<const ClientHello&>(packet.inProcessPayload));
         break;
     case MessageType::BlockUpdateBatch:
-        typedPayload = PacketCodec::encodeBlockUpdateBatch(
-            std::any_cast<const BlockUpdateBatchMessage&>(packet.inProcessPayload));
+        typedPayload =
+            PacketCodec::encodeBlockUpdateBatch(std::any_cast<const BlockUpdateBatchMessage&>(packet.inProcessPayload));
         break;
     case MessageType::WireContainerUpdate:
         typedPayload = PacketCodec::encodeWireContainerUpdate(
             std::any_cast<const WireContainerUpdateMessage&>(packet.inProcessPayload));
         break;
     case MessageType::ChunkUnload:
-        typedPayload = PacketCodec::encodeChunkUnload(
-            std::any_cast<const ChunkUnloadMessage&>(packet.inProcessPayload));
+        typedPayload =
+            PacketCodec::encodeChunkUnload(std::any_cast<const ChunkUnloadMessage&>(packet.inProcessPayload));
         break;
     case MessageType::EntitySpawn:
-        typedPayload = PacketCodec::encodeEntitySpawn(
-            std::any_cast<const EntitySpawnMessage&>(packet.inProcessPayload));
+        typedPayload =
+            PacketCodec::encodeEntitySpawn(std::any_cast<const EntitySpawnMessage&>(packet.inProcessPayload));
         break;
     case MessageType::EntityDespawn:
-        typedPayload = PacketCodec::encodeEntityDespawn(
-            std::any_cast<const EntityDespawnMessage&>(packet.inProcessPayload));
+        typedPayload =
+            PacketCodec::encodeEntityDespawn(std::any_cast<const EntityDespawnMessage&>(packet.inProcessPayload));
         break;
     case MessageType::EntityImpact:
-        typedPayload = PacketCodec::encodeEntityImpact(
-            std::any_cast<const EntityImpactMessage&>(packet.inProcessPayload));
+        typedPayload =
+            PacketCodec::encodeEntityImpact(std::any_cast<const EntityImpactMessage&>(packet.inProcessPayload));
         break;
     case MessageType::EntitySnapshot:
-        typedPayload = PacketCodec::encodeEntitySnapshot(
-            std::any_cast<const EntitySnapshotMessage&>(packet.inProcessPayload));
+        typedPayload =
+            PacketCodec::encodeEntitySnapshot(std::any_cast<const EntitySnapshotMessage&>(packet.inProcessPayload));
         break;
     case MessageType::ClientViewConfig:
-        typedPayload = PacketCodec::encodeClientViewConfig(
-            std::any_cast<const ClientViewConfig&>(packet.inProcessPayload));
+        typedPayload =
+            PacketCodec::encodeClientViewConfig(std::any_cast<const ClientViewConfig&>(packet.inProcessPayload));
         break;
     case MessageType::ClientBlockAction:
-        typedPayload = PacketCodec::encodeClientBlockAction(
-            std::any_cast<const ClientBlockAction&>(packet.inProcessPayload));
+        typedPayload =
+            PacketCodec::encodeClientBlockAction(std::any_cast<const ClientBlockAction&>(packet.inProcessPayload));
         break;
     case MessageType::ClientContainerOpenRequest:
         typedPayload = PacketCodec::encodeClientContainerOpenRequest(
@@ -676,8 +659,8 @@ void ENetTransport::encodeTypedPayload(Packet& packet) {
             std::any_cast<const ClientContainerClose&>(packet.inProcessPayload));
         break;
     case MessageType::ClientChatMessage:
-        typedPayload = PacketCodec::encodeClientChatMessage(
-            std::any_cast<const ClientChatMessage&>(packet.inProcessPayload));
+        typedPayload =
+            PacketCodec::encodeClientChatMessage(std::any_cast<const ClientChatMessage&>(packet.inProcessPayload));
         break;
     case MessageType::ClientCommandRequest:
         typedPayload = PacketCodec::encodeClientCommandRequest(
@@ -688,28 +671,27 @@ void ENetTransport::encodeTypedPayload(Packet& packet) {
             std::any_cast<const ClientRespawnRequest&>(packet.inProcessPayload));
         break;
     case MessageType::ChunkData:
-        typedPayload = PacketCodec::encodeChunkData(
-            std::any_cast<const ChunkDataMessage&>(packet.inProcessPayload));
+        typedPayload = PacketCodec::encodeChunkData(std::any_cast<const ChunkDataMessage&>(packet.inProcessPayload));
         break;
     case MessageType::ServerChatMessage:
-        typedPayload = PacketCodec::encodeServerChatMessage(
-            std::any_cast<const ServerChatMessage&>(packet.inProcessPayload));
+        typedPayload =
+            PacketCodec::encodeServerChatMessage(std::any_cast<const ServerChatMessage&>(packet.inProcessPayload));
         break;
     case MessageType::ServerSystemMessage:
-        typedPayload = PacketCodec::encodeServerSystemMessage(
-            std::any_cast<const ServerSystemMessage&>(packet.inProcessPayload));
+        typedPayload =
+            PacketCodec::encodeServerSystemMessage(std::any_cast<const ServerSystemMessage&>(packet.inProcessPayload));
         break;
     case MessageType::CommandResult:
-        typedPayload = PacketCodec::encodeCommandResult(
-            std::any_cast<const CommandResultMessage&>(packet.inProcessPayload));
+        typedPayload =
+            PacketCodec::encodeCommandResult(std::any_cast<const CommandResultMessage&>(packet.inProcessPayload));
         break;
     case MessageType::WorldStateSnapshot:
         typedPayload = PacketCodec::encodeWorldStateSnapshot(
             std::any_cast<const WorldStateSnapshotMessage&>(packet.inProcessPayload));
         break;
     case MessageType::PlayerModeUpdate:
-        typedPayload = PacketCodec::encodePlayerModeUpdate(
-            std::any_cast<const PlayerModeUpdateMessage&>(packet.inProcessPayload));
+        typedPayload =
+            PacketCodec::encodePlayerModeUpdate(std::any_cast<const PlayerModeUpdateMessage&>(packet.inProcessPayload));
         break;
     case MessageType::InventorySnapshot:
         typedPayload = PacketCodec::encodeInventorySnapshot(
@@ -720,11 +702,10 @@ void ENetTransport::encodeTypedPayload(Packet& packet) {
             std::any_cast<const ContainerSnapshotMessage&>(packet.inProcessPayload));
         break;
     case MessageType::ContainerClose:
-        typedPayload = PacketCodec::encodeContainerClose(
-            std::any_cast<const ContainerCloseMessage&>(packet.inProcessPayload));
+        typedPayload =
+            PacketCodec::encodeContainerClose(std::any_cast<const ContainerCloseMessage&>(packet.inProcessPayload));
         break;
-    default:
-        break;
+    default: break;
     }
 
     if (!typedPayload.empty()) {
@@ -734,16 +715,11 @@ void ENetTransport::encodeTypedPayload(Packet& packet) {
 
 ENetTransport::ChannelMapping ENetTransport::mapChannel(PacketChannel channel) {
     switch (channel) {
-    case PacketChannel::ReliableControl:
-        return {0, ENET_PACKET_FLAG_RELIABLE};
-    case PacketChannel::ReliableWorld:
-        return {1, ENET_PACKET_FLAG_RELIABLE};
-    case PacketChannel::UnreliableState:
-        return {2, 0};  // Unreliable, no flags
-    case PacketChannel::ReliableChat:
-        return {3, ENET_PACKET_FLAG_RELIABLE};
-    default:
-        return {0, ENET_PACKET_FLAG_RELIABLE};
+    case PacketChannel::ReliableControl: return {0, ENET_PACKET_FLAG_RELIABLE};
+    case PacketChannel::ReliableWorld: return {1, ENET_PACKET_FLAG_RELIABLE};
+    case PacketChannel::UnreliableState: return {2, 0}; // Unreliable, no flags
+    case PacketChannel::ReliableChat: return {3, ENET_PACKET_FLAG_RELIABLE};
+    default: return {0, ENET_PACKET_FLAG_RELIABLE};
     }
 }
 

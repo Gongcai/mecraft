@@ -24,9 +24,7 @@ public:
     /// @param settings Current temporal reconstruction settings.
     /// @param targets Persistent deferred render targets used by this pass.
     /// @return True when pipeline preparation and command recording succeeded.
-    [[nodiscard]] bool execute(RhiCommandList& commandList,
-                               const FrameContext& ctx,
-                               const RenderSettings& settings,
+    [[nodiscard]] bool execute(RhiCommandList& commandList, const FrameContext& ctx, const RenderSettings& settings,
                                DeferredRenderTargets& targets);
 
     /// Overwrites the shared velocity buffer for visible transparent surfaces.
@@ -35,19 +33,15 @@ public:
     /// @param settings Current temporal reconstruction settings.
     /// @param targets Persistent deferred render targets used by this pass.
     /// @return True when the transparent velocity pipeline was recorded successfully.
-    [[nodiscard]] bool executeTransparent(RhiCommandList& commandList,
-                                          const FrameContext& ctx,
-                                          const RenderSettings& settings,
-                                          DeferredRenderTargets& targets);
+    [[nodiscard]] bool executeTransparent(RhiCommandList& commandList, const FrameContext& ctx,
+                                          const RenderSettings& settings, DeferredRenderTargets& targets);
 
 private:
     bool ensureRhiPipeline(RhiDevice& rhiDevice);
     bool ensureTransparentRhiPipeline(RhiDevice& rhiDevice);
-    bool ensureRhiBindGroup(RhiDevice& rhiDevice,
-                            RhiTextureViewHandle depthView,
+    bool ensureRhiBindGroup(RhiDevice& rhiDevice, RhiTextureViewHandle depthView,
                             RhiTextureViewHandle perObjectVelocityView);
-    bool ensureTransparentRhiBindGroup(RhiDevice& rhiDevice,
-                                       RhiTextureViewHandle opaqueDepthView,
+    bool ensureTransparentRhiBindGroup(RhiDevice& rhiDevice, RhiTextureViewHandle opaqueDepthView,
                                        RhiTextureViewHandle transparentDepthView,
                                        RhiTextureViewHandle transparencyMaskView);
     void destroyRhiBindGroup();

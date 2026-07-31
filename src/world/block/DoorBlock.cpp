@@ -17,28 +17,20 @@ namespace {
 }
 
 void requireDoorProperties() {
-    if (PropIndices::FACING == PropIndices::INVALID ||
-        PropIndices::HALF == PropIndices::INVALID ||
-        PropIndices::HALF_LOWER == PropIndices::INVALID ||
-        PropIndices::HALF_UPPER == PropIndices::INVALID ||
-        PropIndices::HINGE == PropIndices::INVALID ||
-        PropIndices::HINGE_LEFT == PropIndices::INVALID ||
-        PropIndices::HINGE_RIGHT == PropIndices::INVALID ||
-        PropIndices::OPEN == PropIndices::INVALID ||
-        PropIndices::OPEN_TRUE == PropIndices::INVALID ||
-        PropIndices::OPEN_FALSE == PropIndices::INVALID ||
-        PropIndices::POWERED == PropIndices::INVALID ||
-        PropIndices::POWERED_TRUE == PropIndices::INVALID ||
+    if (PropIndices::FACING == PropIndices::INVALID || PropIndices::HALF == PropIndices::INVALID ||
+        PropIndices::HALF_LOWER == PropIndices::INVALID || PropIndices::HALF_UPPER == PropIndices::INVALID ||
+        PropIndices::HINGE == PropIndices::INVALID || PropIndices::HINGE_LEFT == PropIndices::INVALID ||
+        PropIndices::HINGE_RIGHT == PropIndices::INVALID || PropIndices::OPEN == PropIndices::INVALID ||
+        PropIndices::OPEN_TRUE == PropIndices::INVALID || PropIndices::OPEN_FALSE == PropIndices::INVALID ||
+        PropIndices::POWERED == PropIndices::INVALID || PropIndices::POWERED_TRUE == PropIndices::INVALID ||
         PropIndices::POWERED_FALSE == PropIndices::INVALID) {
         failDoorBlock("Door blocks require facing, half=lower/upper, hinge, open, and powered properties");
     }
 }
 
 bool isHorizontalFacingValue(const uint16_t facingValue) {
-    return facingValue == PropIndices::FACING_NORTH ||
-           facingValue == PropIndices::FACING_SOUTH ||
-           facingValue == PropIndices::FACING_EAST ||
-           facingValue == PropIndices::FACING_WEST;
+    return facingValue == PropIndices::FACING_NORTH || facingValue == PropIndices::FACING_SOUTH ||
+           facingValue == PropIndices::FACING_EAST || facingValue == PropIndices::FACING_WEST;
 }
 
 void requireHorizontalFacingValue(const uint16_t facingValue) {
@@ -55,10 +47,8 @@ bool isBooleanValue(const uint16_t value, const uint16_t falseValue, const uint1
     return value == falseValue || value == trueValue;
 }
 
-BlockStateId withRequiredProperty(const BlockStateId stateId,
-                             const uint16_t property,
-                             const uint16_t value,
-                             const char* context) {
+BlockStateId withRequiredProperty(const BlockStateId stateId, const uint16_t property, const uint16_t value,
+                                  const char* context) {
     const BlockStateId updated = BlockStateRegistry::withProperty(stateId, property, value);
     if (BlockStateRegistry::getPropertyIndex(updated, property) != value) {
         failDoorBlock(context);
@@ -125,12 +115,8 @@ bool isEmptyDoorCell(const IWorldView& worldView, const glm::ivec3& pos) {
            worldView.getFluidState(pos.x, pos.y, pos.z) == NULL_BLOCK_STATE;
 }
 
-bool tryGetDoorHalves(World& world,
-                      const glm::ivec3& hitPos,
-                      glm::ivec3& outLowerPos,
-                      BlockStateId& outLowerState,
-                      glm::ivec3& outUpperPos,
-                      BlockStateId& outUpperState) {
+bool tryGetDoorHalves(World& world, const glm::ivec3& hitPos, glm::ivec3& outLowerPos, BlockStateId& outLowerState,
+                      glm::ivec3& outUpperPos, BlockStateId& outUpperState) {
     const BlockStateId hitState = world.getBlockState(hitPos.x, hitPos.y, hitPos.z);
     if (!isDoorState(hitState)) {
         return false;
@@ -169,10 +155,8 @@ bool isDoorState(const BlockStateId stateId) {
     const uint16_t hinge = BlockStateRegistry::getPropertyIndex(stateId, PropIndices::HINGE);
     const uint16_t open = BlockStateRegistry::getPropertyIndex(stateId, PropIndices::OPEN);
     const uint16_t powered = BlockStateRegistry::getPropertyIndex(stateId, PropIndices::POWERED);
-    return (half == PropIndices::HALF_LOWER || half == PropIndices::HALF_UPPER) &&
-           isHorizontalFacingValue(facing) &&
-           isHingeValue(hinge) &&
-           isBooleanValue(open, PropIndices::OPEN_FALSE, PropIndices::OPEN_TRUE) &&
+    return (half == PropIndices::HALF_LOWER || half == PropIndices::HALF_UPPER) && isHorizontalFacingValue(facing) &&
+           isHingeValue(hinge) && isBooleanValue(open, PropIndices::OPEN_FALSE, PropIndices::OPEN_TRUE) &&
            isBooleanValue(powered, PropIndices::POWERED_FALSE, PropIndices::POWERED_TRUE);
 }
 
@@ -184,12 +168,8 @@ bool isUpperState(const BlockStateId stateId) {
     return isDoorState(stateId) && halfValue(stateId) == PropIndices::HALF_UPPER;
 }
 
-BlockStateId makeDoorState(const BlockID blockId,
-                      const uint16_t facingValue,
-                      const uint16_t halfValue,
-                      const uint16_t hingeValue,
-                      const bool open,
-                      const bool powered) {
+BlockStateId makeDoorState(const BlockID blockId, const uint16_t facingValue, const uint16_t halfValue,
+                           const uint16_t hingeValue, const bool open, const bool powered) {
     requireDoorProperties();
     requireHorizontalFacingValue(facingValue);
     if (!isDoorBlock(blockId)) {
@@ -206,22 +186,15 @@ BlockStateId makeDoorState(const BlockID blockId,
     stateId = withRequiredProperty(stateId, PropIndices::FACING, facingValue, "Door state is missing facing");
     stateId = withRequiredProperty(stateId, PropIndices::HALF, halfValue, "Door state is missing half");
     stateId = withRequiredProperty(stateId, PropIndices::HINGE, hingeValue, "Door state is missing hinge");
-    stateId = withRequiredProperty(
-        stateId,
-        PropIndices::OPEN,
-        open ? PropIndices::OPEN_TRUE : PropIndices::OPEN_FALSE,
-        "Door state is missing open");
-    stateId = withRequiredProperty(
-        stateId,
-        PropIndices::POWERED,
-        powered ? PropIndices::POWERED_TRUE : PropIndices::POWERED_FALSE,
-        "Door state is missing powered");
+    stateId = withRequiredProperty(stateId, PropIndices::OPEN, open ? PropIndices::OPEN_TRUE : PropIndices::OPEN_FALSE,
+                                   "Door state is missing open");
+    stateId = withRequiredProperty(stateId, PropIndices::POWERED,
+                                   powered ? PropIndices::POWERED_TRUE : PropIndices::POWERED_FALSE,
+                                   "Door state is missing powered");
     return stateId;
 }
 
-DoorPlacement resolvePlacement(const IWorldView& worldView,
-                               const glm::ivec3& lowerPos,
-                               const BlockStateId lowerState) {
+DoorPlacement resolvePlacement(const IWorldView& worldView, const glm::ivec3& lowerPos, const BlockStateId lowerState) {
     DoorPlacement placement;
     if (!isLowerState(lowerState)) {
         return placement;
@@ -237,21 +210,17 @@ DoorPlacement resolvePlacement(const IWorldView& worldView,
     placement.upperPos = lowerPos + glm::ivec3(0, 1, 0);
     placement.lowerState = lowerState;
     placement.upperState = makeDoorState(blockId, facing, PropIndices::HALF_UPPER, hinge, open, powered);
-    placement.valid = isEmptyDoorCell(worldView, placement.lowerPos) &&
-                      isEmptyDoorCell(worldView, placement.upperPos);
+    placement.valid = isEmptyDoorCell(worldView, placement.lowerPos) && isEmptyDoorCell(worldView, placement.upperPos);
     return placement;
 }
 
-bool tryGetOtherHalfPosition(const glm::ivec3& pos,
-                             const BlockStateId stateId,
-                             glm::ivec3& outOtherPos) {
+bool tryGetOtherHalfPosition(const glm::ivec3& pos, const BlockStateId stateId, glm::ivec3& outOtherPos) {
     if (!isDoorState(stateId)) {
         return false;
     }
 
-    outOtherPos = halfValue(stateId) == PropIndices::HALF_LOWER
-        ? pos + glm::ivec3(0, 1, 0)
-        : pos + glm::ivec3(0, -1, 0);
+    outOtherPos =
+        halfValue(stateId) == PropIndices::HALF_LOWER ? pos + glm::ivec3(0, 1, 0) : pos + glm::ivec3(0, -1, 0);
     return true;
 }
 
@@ -262,10 +231,8 @@ bool isMatchingOtherHalf(const BlockStateId stateId, const BlockStateId otherSta
     if (BlockStateRegistry::getBlockId(stateId) != BlockStateRegistry::getBlockId(otherState)) {
         return false;
     }
-    if (facingValue(stateId) != facingValue(otherState) ||
-        hingeValue(stateId) != hingeValue(otherState) ||
-        openValue(stateId) != openValue(otherState) ||
-        poweredValue(stateId) != poweredValue(otherState)) {
+    if (facingValue(stateId) != facingValue(otherState) || hingeValue(stateId) != hingeValue(otherState) ||
+        openValue(stateId) != openValue(otherState) || poweredValue(stateId) != poweredValue(otherState)) {
         return false;
     }
     return halfValue(otherState) == oppositeHalfValue(halfValue(stateId));
@@ -288,20 +255,12 @@ void setDoorOpen(World& world, const glm::ivec3& hitPos, const bool open) {
         return;
     }
 
-    const BlockStateId updatedLower = makeDoorState(
-        BlockStateRegistry::getBlockId(lowerState),
-        facingValue(lowerState),
-        PropIndices::HALF_LOWER,
-        hingeValue(lowerState),
-        open,
-        poweredValue(lowerState));
-    const BlockStateId updatedUpper = makeDoorState(
-        BlockStateRegistry::getBlockId(upperState),
-        facingValue(upperState),
-        PropIndices::HALF_UPPER,
-        hingeValue(upperState),
-        open,
-        poweredValue(upperState));
+    const BlockStateId updatedLower =
+        makeDoorState(BlockStateRegistry::getBlockId(lowerState), facingValue(lowerState), PropIndices::HALF_LOWER,
+                      hingeValue(lowerState), open, poweredValue(lowerState));
+    const BlockStateId updatedUpper =
+        makeDoorState(BlockStateRegistry::getBlockId(upperState), facingValue(upperState), PropIndices::HALF_UPPER,
+                      hingeValue(upperState), open, poweredValue(upperState));
     world.setBlockState(lowerPos.x, lowerPos.y, lowerPos.z, updatedLower);
     world.setBlockState(upperPos.x, upperPos.y, upperPos.z, updatedUpper);
 }
@@ -315,20 +274,10 @@ void setDoorPoweredOpen(World& world, const glm::ivec3& hitPos, const bool power
         return;
     }
 
-    const BlockStateId updatedLower = makeDoorState(
-        BlockStateRegistry::getBlockId(lowerState),
-        facingValue(lowerState),
-        PropIndices::HALF_LOWER,
-        hingeValue(lowerState),
-        powered,
-        powered);
-    const BlockStateId updatedUpper = makeDoorState(
-        BlockStateRegistry::getBlockId(upperState),
-        facingValue(upperState),
-        PropIndices::HALF_UPPER,
-        hingeValue(upperState),
-        powered,
-        powered);
+    const BlockStateId updatedLower = makeDoorState(BlockStateRegistry::getBlockId(lowerState), facingValue(lowerState),
+                                                    PropIndices::HALF_LOWER, hingeValue(lowerState), powered, powered);
+    const BlockStateId updatedUpper = makeDoorState(BlockStateRegistry::getBlockId(upperState), facingValue(upperState),
+                                                    PropIndices::HALF_UPPER, hingeValue(upperState), powered, powered);
     world.setBlockState(lowerPos.x, lowerPos.y, lowerPos.z, updatedLower);
     world.setBlockState(upperPos.x, upperPos.y, upperPos.z, updatedUpper);
 }
@@ -342,9 +291,8 @@ BlockID removeDoor(World& world, const glm::ivec3& hitPos, std::vector<glm::ivec
     const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
     glm::ivec3 otherPos{};
     const bool hasOtherPos = tryGetOtherHalfPosition(hitPos, stateId, otherPos);
-    const BlockStateId otherState = hasOtherPos
-        ? world.getBlockState(otherPos.x, otherPos.y, otherPos.z)
-        : NULL_BLOCK_STATE;
+    const BlockStateId otherState =
+        hasOtherPos ? world.getBlockState(otherPos.x, otherPos.y, otherPos.z) : NULL_BLOCK_STATE;
     const bool removeOther = hasOtherPos && isMatchingOtherHalf(stateId, otherState);
 
     world.setBlockState(hitPos.x, hitPos.y, hitPos.z, NULL_BLOCK_STATE);

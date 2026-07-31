@@ -21,9 +21,18 @@ public:
     void setText(const std::string& text);
     void setOnClick(std::function<void()> callback) { m_onClick = std::move(callback); }
 
-    void setNormalColor(const std::array<float, 4>& c) { m_normalColor = c; m_hasLocalColors = true; }
-    void setHoverColor(const std::array<float, 4>& c) { m_hoverColor = c; m_hasLocalColors = true; }
-    void setPressedColor(const std::array<float, 4>& c) { m_pressedColor = c; m_hasLocalColors = true; }
+    void setNormalColor(const std::array<float, 4>& c) {
+        m_normalColor = c;
+        m_hasLocalColors = true;
+    }
+    void setHoverColor(const std::array<float, 4>& c) {
+        m_hoverColor = c;
+        m_hasLocalColors = true;
+    }
+    void setPressedColor(const std::array<float, 4>& c) {
+        m_pressedColor = c;
+        m_hasLocalColors = true;
+    }
     void setTextColor(const std::array<float, 4>& c);
     void clearLocalColors() { m_hasLocalColors = false; }
     void setTone(UIButtonTone tone);

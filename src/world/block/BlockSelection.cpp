@@ -44,9 +44,8 @@ glm::mat4 makeRotation(const float angleDegrees, const glm::vec3& axis, const gl
 }
 
 glm::mat4 buildWallTorchTransform(const uint16_t facingValue) {
-    const glm::mat4 tilt = makeRotation(-22.5f,
-                                        glm::vec3(0.0f, 0.0f, 1.0f),
-                                        glm::vec3(0.0f, 3.5f * kPixel, 8.0f * kPixel));
+    const glm::mat4 tilt =
+        makeRotation(-22.5f, glm::vec3(0.0f, 0.0f, 1.0f), glm::vec3(0.0f, 3.5f * kPixel, 8.0f * kPixel));
 
     float yDegrees = 0.0f;
     if (facingValue == PropIndices::FACING_NORTH) {
@@ -59,14 +58,11 @@ glm::mat4 buildWallTorchTransform(const uint16_t facingValue) {
         yDegrees = 0.0f;
     }
 
-    const glm::mat4 yaw = makeRotation(yDegrees,
-                                       glm::vec3(0.0f, 1.0f, 0.0f),
-                                       glm::vec3(0.5f, 0.5f, 0.5f));
+    const glm::mat4 yaw = makeRotation(yDegrees, glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(0.5f, 0.5f, 0.5f));
     return yaw * tilt;
 }
 
-BlockSelectionBox makeTransformedBox(const glm::vec3& from,
-                                     const glm::vec3& to,
+BlockSelectionBox makeTransformedBox(const glm::vec3& from, const glm::vec3& to,
                                      const glm::mat4& transform = glm::mat4(1.0f)) {
     const std::array<glm::vec3, 8> corners = {{
         {from.x, from.y, from.z},
@@ -101,43 +97,41 @@ BlockSelectionBox getTorchBox(const BlockStateId stateId) {
     }
 
     if (facingValue == PropIndices::FACING_FLOOR) {
-        return {glm::vec3(kTorchCoreMin, 0.0f, kTorchCoreMin),
-                glm::vec3(kTorchCoreMax, kTorchCoreTop, kTorchCoreMax)};
+        return {glm::vec3(kTorchCoreMin, 0.0f, kTorchCoreMin), glm::vec3(kTorchCoreMax, kTorchCoreTop, kTorchCoreMax)};
     }
 
-    return makeTransformedBox(
-        glm::vec3(-1.0f * kPixel, 3.5f * kPixel, 7.0f * kPixel),
-        glm::vec3( 1.0f * kPixel, 13.5f * kPixel, 9.0f * kPixel),
-        buildWallTorchTransform(facingValue));
+    return makeTransformedBox(glm::vec3(-1.0f * kPixel, 3.5f * kPixel, 7.0f * kPixel),
+                              glm::vec3(1.0f * kPixel, 13.5f * kPixel, 9.0f * kPixel),
+                              buildWallTorchTransform(facingValue));
 }
 
 glm::vec3 rotateModelPointX90(const glm::vec3& point, const uint16_t rotation) {
     switch ((rotation / 90u) % 4u) {
-        case 1: return {point.x, 1.0f - point.z, point.y};
-        case 2: return {point.x, 1.0f - point.y, 1.0f - point.z};
-        case 3: return {point.x, point.z, 1.0f - point.y};
-        case 0:
-        default: return point;
+    case 1: return {point.x, 1.0f - point.z, point.y};
+    case 2: return {point.x, 1.0f - point.y, 1.0f - point.z};
+    case 3: return {point.x, point.z, 1.0f - point.y};
+    case 0:
+    default: return point;
     }
 }
 
 glm::vec3 rotateModelPointY90(const glm::vec3& point, const uint16_t rotation) {
     switch ((rotation / 90u) % 4u) {
-        case 1: return {1.0f - point.z, point.y, point.x};
-        case 2: return {1.0f - point.x, point.y, 1.0f - point.z};
-        case 3: return {point.z, point.y, 1.0f - point.x};
-        case 0:
-        default: return point;
+    case 1: return {1.0f - point.z, point.y, point.x};
+    case 2: return {1.0f - point.x, point.y, 1.0f - point.z};
+    case 3: return {point.z, point.y, 1.0f - point.x};
+    case 0:
+    default: return point;
     }
 }
 
 glm::vec3 rotateModelPointZ90(const glm::vec3& point, const uint16_t rotation) {
     switch ((rotation / 90u) % 4u) {
-        case 1: return {1.0f - point.y, point.x, point.z};
-        case 2: return {1.0f - point.x, 1.0f - point.y, point.z};
-        case 3: return {point.y, 1.0f - point.x, point.z};
-        case 0:
-        default: return point;
+    case 1: return {1.0f - point.y, point.x, point.z};
+    case 2: return {1.0f - point.x, 1.0f - point.y, point.z};
+    case 3: return {point.y, 1.0f - point.x, point.z};
+    case 0:
+    default: return point;
     }
 }
 
@@ -209,28 +203,22 @@ BlockSelectionBox getFacePlaneBox(const BlockStateId stateId) {
 
 BlockSelectionBox BlockSelection::getFacePlaneBoxForFacing(const uint16_t facing) {
     if (facing == PropIndices::FACING_FLOOR) {
-        return {glm::vec3(0.0f, 0.0f, 0.0f),
-                glm::vec3(1.0f, kFacePlaneSelectionThickness, 1.0f)};
+        return {glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(1.0f, kFacePlaneSelectionThickness, 1.0f)};
     }
     if (facing == PropIndices::FACING_CEILING) {
-        return {glm::vec3(0.0f, 1.0f - kFacePlaneSelectionThickness, 0.0f),
-                glm::vec3(1.0f, 1.0f, 1.0f)};
+        return {glm::vec3(0.0f, 1.0f - kFacePlaneSelectionThickness, 0.0f), glm::vec3(1.0f, 1.0f, 1.0f)};
     }
     if (facing == PropIndices::FACING_NORTH) {
-        return {glm::vec3(0.0f, 0.0f, 1.0f - kFacePlaneSelectionThickness),
-                glm::vec3(1.0f, 1.0f, 1.0f)};
+        return {glm::vec3(0.0f, 0.0f, 1.0f - kFacePlaneSelectionThickness), glm::vec3(1.0f, 1.0f, 1.0f)};
     }
     if (facing == PropIndices::FACING_SOUTH) {
-        return {glm::vec3(0.0f, 0.0f, 0.0f),
-                glm::vec3(1.0f, 1.0f, kFacePlaneSelectionThickness)};
+        return {glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(1.0f, 1.0f, kFacePlaneSelectionThickness)};
     }
     if (facing == PropIndices::FACING_EAST) {
-        return {glm::vec3(0.0f, 0.0f, 0.0f),
-                glm::vec3(kFacePlaneSelectionThickness, 1.0f, 1.0f)};
+        return {glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(kFacePlaneSelectionThickness, 1.0f, 1.0f)};
     }
     if (facing == PropIndices::FACING_WEST) {
-        return {glm::vec3(1.0f - kFacePlaneSelectionThickness, 0.0f, 0.0f),
-                glm::vec3(1.0f, 1.0f, 1.0f)};
+        return {glm::vec3(1.0f - kFacePlaneSelectionThickness, 0.0f, 0.0f), glm::vec3(1.0f, 1.0f, 1.0f)};
     }
     failBlockSelection("Face plane selection received an unsupported facing value");
 }
@@ -242,8 +230,7 @@ BlockSelectionBox BlockSelection::getBox(const BlockStateId stateId) {
         return getTorchBox(stateId);
     }
     if (def.renderShape == BlockRenderShape::Cross) {
-        return {glm::vec3(kCrossInset, 0.0f, kCrossInset),
-                glm::vec3(1.0f - kCrossInset, 1.0f, 1.0f - kCrossInset)};
+        return {glm::vec3(kCrossInset, 0.0f, kCrossInset), glm::vec3(1.0f - kCrossInset, 1.0f, 1.0f - kCrossInset)};
     }
     if (def.renderShapeName == "model") {
         return getModelBox(stateId);

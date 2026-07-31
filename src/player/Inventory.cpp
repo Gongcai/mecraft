@@ -20,7 +20,7 @@ ItemID requiredBlockItem(const char* blockName) {
 ItemID requiredItem(const char* itemName) {
     return ItemRegistry::requireIdByName(itemName);
 }
-}
+} // namespace
 
 Inventory::Inventory() : m_slots{} {
     for (ItemStack& stack : m_slots) {
@@ -69,8 +69,10 @@ int Inventory::getSelectedSlot() const {
 
 void Inventory::scrollSlot(int direction) {
     m_selectedSlot += direction;
-    if (m_selectedSlot < 0) m_selectedSlot = HOTBAR_SIZE - 1;
-    if (m_selectedSlot >= HOTBAR_SIZE) m_selectedSlot = 0;
+    if (m_selectedSlot < 0)
+        m_selectedSlot = HOTBAR_SIZE - 1;
+    if (m_selectedSlot >= HOTBAR_SIZE)
+        m_selectedSlot = 0;
 }
 
 ItemID Inventory::getSlotItem(const int slot) const {

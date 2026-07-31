@@ -16,9 +16,7 @@ namespace {
 }
 
 BlockStateId stateForBlockId(const BlockID blockId) {
-    return blockId == RUNTIME_ID_NULL
-        ? NULL_BLOCK_STATE
-        : BlockStateRegistry::getDefaultState(blockId);
+    return blockId == RUNTIME_ID_NULL ? NULL_BLOCK_STATE : BlockStateRegistry::getDefaultState(blockId);
 }
 
 BlockStateId stateForBlockName(const char* name) {
@@ -64,17 +62,18 @@ uint8_t blockAt(const std::vector<uint8_t>& packed, const int x, const int y, co
 }
 
 BorderUpdateBatch findOutgoingToPosXNeighbor(const LightResult& result, const int64_t expectedKey) {
-    const auto it = std::find_if(result.outgoing.begin(), result.outgoing.end(),
-                                 [expectedKey](const BorderUpdateBatch& batch) {
-                                     return batch.targetChunkKey == expectedKey && batch.fromDirection == 0;
-                                 });
+    const auto it =
+        std::find_if(result.outgoing.begin(), result.outgoing.end(), [expectedKey](const BorderUpdateBatch& batch) {
+            return batch.targetChunkKey == expectedKey && batch.fromDirection == 0;
+        });
     if (it == result.outgoing.end()) {
         fail("expected +X outgoing boundary batch");
     }
     return *it;
 }
 
-void buildSealedTunnel(const std::shared_ptr<Chunk>& left, const std::shared_ptr<Chunk>& right, const int y, const int z) {
+void buildSealedTunnel(const std::shared_ptr<Chunk>& left, const std::shared_ptr<Chunk>& right, const int y,
+                       const int z) {
     for (int iy = 0; iy <= 40; ++iy) {
         for (int iz = 0; iz < Chunk::SIZE_Z; ++iz) {
             for (int ix = 0; ix < Chunk::SIZE_X; ++ix) {
@@ -169,12 +168,10 @@ void testGlowLichenPropagationAndRemovalUsesRemovePass() {
     for (int x = 6; x <= 10; ++x) {
         chunk->setBlockFast(x, y, z, NULL_BLOCK_STATE);
     }
-    chunk->setBlockFast(
-        8, y, z, stateForBlockName("minecraft:glow_lichen"));
+    chunk->setBlockFast(8, y, z, stateForBlockName("minecraft:glow_lichen"));
 
     const LightResult lit = LightSolver::solve(buildJob(chunk));
-    if (blockAt(lit.selfDelta.packedLight, 9, y, z) == 0 ||
-        blockAt(lit.selfDelta.packedLight, 10, y, z) == 0) {
+    if (blockAt(lit.selfDelta.packedLight, 9, y, z) == 0 || blockAt(lit.selfDelta.packedLight, 10, y, z) == 0) {
         fail("glow lichen block light should propagate through the local tunnel");
     }
     chunk->replacePackedLight(lit.selfDelta.packedLight.data(), lit.selfDelta.packedLight.size(), nullptr);
@@ -182,17 +179,11 @@ void testGlowLichenPropagationAndRemovalUsesRemovePass() {
     chunk->setBlockFast(8, y, z, NULL_BLOCK_STATE);
     LightJob removedJob = buildJob(chunk);
     removedJob.reason = LightDirtyReason::BlockChanged;
-    removedJob.blockChanges.push_back({
-        static_cast<uint8_t>(8),
-        static_cast<uint8_t>(y),
-        static_cast<uint8_t>(z),
-        BlockRegistry::requireIdByName("minecraft:glow_lichen"),
-        RUNTIME_ID_NULL
-    });
+    removedJob.blockChanges.push_back({static_cast<uint8_t>(8), static_cast<uint8_t>(y), static_cast<uint8_t>(z),
+                                       BlockRegistry::requireIdByName("minecraft:glow_lichen"), RUNTIME_ID_NULL});
 
     const LightResult cleared = LightSolver::solve(removedJob);
-    if (blockAt(cleared.selfDelta.packedLight, 8, y, z) != 0 ||
-        blockAt(cleared.selfDelta.packedLight, 9, y, z) != 0 ||
+    if (blockAt(cleared.selfDelta.packedLight, 8, y, z) != 0 || blockAt(cleared.selfDelta.packedLight, 9, y, z) != 0 ||
         blockAt(cleared.selfDelta.packedLight, 10, y, z) != 0) {
         fail("glow lichen block light should clear after deleting the emitter");
     }

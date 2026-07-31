@@ -72,8 +72,7 @@ bool BlockTextureLibrary::loadCatalog(const std::string& textureConfigPath) {
     return m_catalog.load(textureConfigPath);
 }
 
-bool BlockTextureLibrary::loadCatalog(const std::string& textureConfigPath,
-                                      const std::string& packConfigPath) {
+bool BlockTextureLibrary::loadCatalog(const std::string& textureConfigPath, const std::string& packConfigPath) {
     if (!m_catalog.load(textureConfigPath)) {
         return false;
     }
@@ -84,8 +83,7 @@ void BlockTextureLibrary::buildTextures(const std::string& directory, const int 
     buildTextures(directory, tileSize, {});
 }
 
-void BlockTextureLibrary::buildTextures(const std::string& directory,
-                                        const int tileSize,
+void BlockTextureLibrary::buildTextures(const std::string& directory, const int tileSize,
                                         const std::unordered_set<std::string>& registeredTextureNames) {
     deleteTextureAtlas(m_atlas);
     deleteTextureArray(m_textureArray);
@@ -93,19 +91,19 @@ void BlockTextureLibrary::buildTextures(const std::string& directory,
     deleteTextureArray(m_specularTextureArray);
 
     m_manifest = registeredTextureNames.empty()
-        ? resource::buildBlockTextureManifest(directory)
-        : resource::buildBlockTextureManifest(directory, registeredTextureNames);
+                     ? resource::buildBlockTextureManifest(directory)
+                     : resource::buildBlockTextureManifest(directory, registeredTextureNames);
 
     const int resolvedTileSize = validateBlockTextureTileSize(tileSize);
 
     assert(m_rhiDevice != nullptr);
-    resource::IndexedTextureAtlas atlasResult = resource::buildBlockTextureAtlas(
-        m_manifest, resolvedTileSize, m_catalog, *m_rhiDevice, *m_commandListPool);
+    resource::IndexedTextureAtlas atlasResult =
+        resource::buildBlockTextureAtlas(m_manifest, resolvedTileSize, m_catalog, *m_rhiDevice, *m_commandListPool);
     m_atlas = atlasResult.atlas;
     m_atlasPixels = std::move(atlasResult.pixels);
 
-    resource::BlockTextureArraySet textureArrayResult = resource::buildBlockTextureArraySet(
-        m_manifest, resolvedTileSize, m_catalog, *m_rhiDevice, *m_commandListPool);
+    resource::BlockTextureArraySet textureArrayResult =
+        resource::buildBlockTextureArraySet(m_manifest, resolvedTileSize, m_catalog, *m_rhiDevice, *m_commandListPool);
     m_textureArray = textureArrayResult.albedoArray;
     m_normalTextureArray = textureArrayResult.normalArray;
     m_specularTextureArray = textureArrayResult.specularArray;
@@ -124,8 +122,8 @@ void BlockTextureLibrary::buildAtlas(const std::string& directory, const int til
     m_manifest = resource::buildBlockTextureManifest(directory);
     const int resolvedTileSize = validateBlockTextureTileSize(tileSize);
     assert(m_rhiDevice != nullptr);
-    resource::IndexedTextureAtlas atlasResult = resource::buildBlockTextureAtlas(
-        m_manifest, resolvedTileSize, m_catalog, *m_rhiDevice, *m_commandListPool);
+    resource::IndexedTextureAtlas atlasResult =
+        resource::buildBlockTextureAtlas(m_manifest, resolvedTileSize, m_catalog, *m_rhiDevice, *m_commandListPool);
     m_atlas = atlasResult.atlas;
     m_atlasPixels = std::move(atlasResult.pixels);
 
@@ -140,8 +138,8 @@ void BlockTextureLibrary::buildTextureArray(const std::string& directory, const 
     m_manifest = resource::buildBlockTextureManifest(directory);
     const int resolvedTileSize = validateBlockTextureTileSize(tileSize);
     assert(m_rhiDevice != nullptr);
-    resource::BlockTextureArraySet textureArrayResult = resource::buildBlockTextureArraySet(
-        m_manifest, resolvedTileSize, m_catalog, *m_rhiDevice, *m_commandListPool);
+    resource::BlockTextureArraySet textureArrayResult =
+        resource::buildBlockTextureArraySet(m_manifest, resolvedTileSize, m_catalog, *m_rhiDevice, *m_commandListPool);
     m_textureArray = textureArrayResult.albedoArray;
     m_normalTextureArray = textureArrayResult.normalArray;
     m_specularTextureArray = textureArrayResult.specularArray;
@@ -233,7 +231,8 @@ int BlockTextureLibrary::arrayLayerToAtlasTile(const int arrayLayer) const {
         return it->second;
     }
 #ifdef MECRAFT_DEBUG
-    MECRAFT_LOG_STREAM(std::cerr << "[BlockTextureLibrary] arrayLayerToAtlasTile: unmapped layer " << arrayLayer << "\n");
+    MECRAFT_LOG_STREAM(std::cerr << "[BlockTextureLibrary] arrayLayerToAtlasTile: unmapped layer " << arrayLayer
+                                 << "\n");
 #endif
     return -1;
 }

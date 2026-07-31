@@ -5,8 +5,7 @@
 namespace {
 
 inline std::size_t packedIndex(int x, int y, int z) {
-    return static_cast<std::size_t>(x) +
-           static_cast<std::size_t>(z) * Chunk::SIZE_X +
+    return static_cast<std::size_t>(x) + static_cast<std::size_t>(z) * Chunk::SIZE_X +
            static_cast<std::size_t>(y) * Chunk::SIZE_X * Chunk::SIZE_Z;
 }
 
@@ -43,9 +42,7 @@ CachedBaseLight buildBaseLightFromChunk(const Chunk& chunk) {
                     continue;
                 }
                 if (skyLevel > 0) {
-                    skyLevel = (skyLevel > opacity)
-                        ? static_cast<uint8_t>(skyLevel - opacity)
-                        : 0;
+                    skyLevel = (skyLevel > opacity) ? static_cast<uint8_t>(skyLevel - opacity) : 0;
                 }
                 if (skyLevel > 0) {
                     const std::size_t idx = packedIndex(x, y, z);
@@ -93,9 +90,7 @@ void recomputeSkyColumn(const Chunk& chunk, int x, int z, std::vector<uint8_t>& 
             continue;
         }
         if (skyLevel > 0) {
-            skyLevel = (skyLevel > opacity)
-                ? static_cast<uint8_t>(skyLevel - opacity)
-                : 0;
+            skyLevel = (skyLevel > opacity) ? static_cast<uint8_t>(skyLevel - opacity) : 0;
         }
         if (skyLevel > 0) {
             setSky(packed, idx, skyLevel);
@@ -105,8 +100,7 @@ void recomputeSkyColumn(const Chunk& chunk, int x, int z, std::vector<uint8_t>& 
     }
 }
 
-void rebuildBlockLightFromSources(const std::vector<LightSourceEntry>& sources,
-                                  std::vector<uint8_t>& packed) {
+void rebuildBlockLightFromSources(const std::vector<LightSourceEntry>& sources, std::vector<uint8_t>& packed) {
     // Clear only the block-light nibble across the entire volume.
     for (std::size_t i = 0; i < packed.size(); ++i) {
         packed[i] &= 0xF0;
@@ -115,9 +109,7 @@ void rebuildBlockLightFromSources(const std::vector<LightSourceEntry>& sources,
     for (const auto& src : sources) {
         const uint8_t current = static_cast<uint8_t>(packed[src.packedIndex] & 0x0F);
         if (src.level > current) {
-            packed[src.packedIndex] = static_cast<uint8_t>(
-                (packed[src.packedIndex] & 0xF0) | (src.level & 0x0F));
+            packed[src.packedIndex] = static_cast<uint8_t>((packed[src.packedIndex] & 0xF0) | (src.level & 0x0F));
         }
     }
 }
-

@@ -31,12 +31,8 @@ struct VkRhiCommandResourceReferences {
     void reference(const RhiTextureHandle handle) { addUnique(textures, handle); }
     void reference(const RhiTextureViewHandle handle) { addUnique(textureViews, handle); }
     void reference(const RhiSamplerHandle handle) { addUnique(samplers, handle); }
-    void reference(const RhiBindGroupLayoutHandle handle) {
-        addUnique(bindGroupLayouts, handle);
-    }
-    void reference(const RhiPipelineLayoutHandle handle) {
-        addUnique(pipelineLayouts, handle);
-    }
+    void reference(const RhiBindGroupLayoutHandle handle) { addUnique(bindGroupLayouts, handle); }
+    void reference(const RhiPipelineLayoutHandle handle) { addUnique(pipelineLayouts, handle); }
     void reference(const RhiPipelineHandle handle) { addUnique(pipelines, handle); }
     void reference(const RhiBindGroupHandle handle) { addUnique(bindGroups, handle); }
     void reference(const RhiQueryPoolHandle handle) { addUnique(queryPools, handle); }
@@ -54,23 +50,19 @@ struct VkRhiCommandResourceReferences {
     }
 
     [[nodiscard]] bool empty() const {
-        return buffers.empty() && textures.empty() && textureViews.empty() &&
-               samplers.empty() && bindGroupLayouts.empty() &&
-               pipelineLayouts.empty() && pipelines.empty() &&
-               bindGroups.empty() && queryPools.empty();
+        return buffers.empty() && textures.empty() && textureViews.empty() && samplers.empty() &&
+               bindGroupLayouts.empty() && pipelineLayouts.empty() && pipelines.empty() && bindGroups.empty() &&
+               queryPools.empty();
     }
 
 private:
-    template <typename Handle>
-    static void addUnique(std::vector<Handle>& handles, const Handle handle) {
+    template <typename Handle> static void addUnique(std::vector<Handle>& handles, const Handle handle) {
         if (!handle.isValid()) {
             return;
         }
-        const auto existing = std::find_if(
-            handles.begin(), handles.end(), [handle](const Handle candidate) {
-                return candidate.index == handle.index &&
-                       candidate.generation == handle.generation;
-            });
+        const auto existing = std::find_if(handles.begin(), handles.end(), [handle](const Handle candidate) {
+            return candidate.index == handle.index && candidate.generation == handle.generation;
+        });
         if (existing == handles.end()) {
             handles.push_back(handle);
         }
@@ -97,20 +89,54 @@ struct VkRhiDeviceData {
         VkRhiResourceLifetime lifetime{};
         uint64_t allocationBytes = 0u;
     };
-    struct TextureView { VkImageView view = VK_NULL_HANDLE; RhiTextureViewDesc desc{}; VkRhiResourceLifetime lifetime{}; };
-    struct Sampler { VkSampler sampler = VK_NULL_HANDLE; VkRhiResourceLifetime lifetime{}; };
-    struct Shader { VkShaderModule module = VK_NULL_HANDLE; RhiShaderStage stage = RhiShaderStage::Vertex; std::string entryPoint; renderer::rhi::RhiShaderReflection reflection; VkRhiResourceLifetime lifetime{}; };
-    struct BindGroupLayout { VkDescriptorSetLayout layout = VK_NULL_HANDLE; RhiBindGroupLayoutDesc desc{}; VkRhiResourceLifetime lifetime{}; };
-    struct PipelineLayout { VkPipelineLayout layout = VK_NULL_HANDLE; RhiPipelineLayoutDesc desc{}; VkRhiResourceLifetime lifetime{}; };
+    struct TextureView {
+        VkImageView view = VK_NULL_HANDLE;
+        RhiTextureViewDesc desc{};
+        VkRhiResourceLifetime lifetime{};
+    };
+    struct Sampler {
+        VkSampler sampler = VK_NULL_HANDLE;
+        VkRhiResourceLifetime lifetime{};
+    };
+    struct Shader {
+        VkShaderModule module = VK_NULL_HANDLE;
+        RhiShaderStage stage = RhiShaderStage::Vertex;
+        std::string entryPoint;
+        renderer::rhi::RhiShaderReflection reflection;
+        VkRhiResourceLifetime lifetime{};
+    };
+    struct BindGroupLayout {
+        VkDescriptorSetLayout layout = VK_NULL_HANDLE;
+        RhiBindGroupLayoutDesc desc{};
+        VkRhiResourceLifetime lifetime{};
+    };
+    struct PipelineLayout {
+        VkPipelineLayout layout = VK_NULL_HANDLE;
+        RhiPipelineLayoutDesc desc{};
+        VkRhiResourceLifetime lifetime{};
+    };
     struct Pipeline {
         VkPipeline pipeline = VK_NULL_HANDLE;
         VkPipelineBindPoint bindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
         RhiPipelineLayoutHandle layoutHandle{};
         VkRhiResourceLifetime lifetime{};
     };
-    struct BindGroup { VkDescriptorSet set = VK_NULL_HANDLE; RhiBindGroupLayoutHandle layoutHandle{}; RhiBindGroupDesc desc{}; VkRhiResourceLifetime lifetime{}; };
-    struct QueryPool { VkQueryPool pool = VK_NULL_HANDLE; uint32_t count = 0u; VkRhiResourceLifetime lifetime{}; };
-    struct FrameContext { VkSemaphore imageAvailable = VK_NULL_HANDLE; VkFence fence = VK_NULL_HANDLE; bool fencePending = false; };
+    struct BindGroup {
+        VkDescriptorSet set = VK_NULL_HANDLE;
+        RhiBindGroupLayoutHandle layoutHandle{};
+        RhiBindGroupDesc desc{};
+        VkRhiResourceLifetime lifetime{};
+    };
+    struct QueryPool {
+        VkQueryPool pool = VK_NULL_HANDLE;
+        uint32_t count = 0u;
+        VkRhiResourceLifetime lifetime{};
+    };
+    struct FrameContext {
+        VkSemaphore imageAvailable = VK_NULL_HANDLE;
+        VkFence fence = VK_NULL_HANDLE;
+        bool fencePending = false;
+    };
     /// Shared memory block hosting placed textures; the allocation stays
     /// alive until explicitly destroyed, independent of member textures.
     struct TextureMemory {
@@ -119,15 +145,26 @@ struct VkRhiDeviceData {
         RhiMemoryCategory category = RhiMemoryCategory::Unclassified;
         std::string debugName;
     };
-    struct DeferredBuffer { uint64_t sequence; VkBuffer buffer; VmaAllocation allocation; };
-    struct DeferredMemory { uint64_t sequence; VmaAllocation allocation; };
+    struct DeferredBuffer {
+        uint64_t sequence;
+        VkBuffer buffer;
+        VmaAllocation allocation;
+    };
+    struct DeferredMemory {
+        uint64_t sequence;
+        VmaAllocation allocation;
+    };
     struct DeferredImage {
         uint64_t sequence;
         uint64_t textureKey;
         VkImage image;
         VmaAllocation allocation;
     };
-    struct DeferredObject { uint64_t sequence = 0u; VkObjectType type = VK_OBJECT_TYPE_UNKNOWN; uint64_t object = 0u; };
+    struct DeferredObject {
+        uint64_t sequence = 0u;
+        VkObjectType type = VK_OBJECT_TYPE_UNKNOWN;
+        uint64_t object = 0u;
+    };
     struct PendingList {
         uint64_t sequence = 0u;
         RhiQueueType queue = RhiQueueType::Graphics;
@@ -258,38 +295,37 @@ struct VkRhiCommandListData {
 };
 
 namespace {
-template <typename Map, typename Handle>
-[[nodiscard]] auto* findRecord(Map& map, const Handle handle) {
+template <typename Map, typename Handle> [[nodiscard]] auto* findRecord(Map& map, const Handle handle) {
     const auto it = map.find(handleKey(handle));
     return it == map.end() ? nullptr : &it->second;
 }
-template <typename Map, typename Handle>
-[[nodiscard]] const auto* findRecord(const Map& map, const Handle handle) {
+template <typename Map, typename Handle> [[nodiscard]] const auto* findRecord(const Map& map, const Handle handle) {
     const auto it = map.find(handleKey(handle));
     return it == map.end() ? nullptr : &it->second;
 }
 void nameObject(VkRhiDeviceData& data, VkObjectType type, uint64_t object, const char* name) {
-    if (data.setObjectName == nullptr || object == 0u || name == nullptr || name[0] == '\0') return;
-    const VkDebugUtilsObjectNameInfoEXT info{VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
-                                             nullptr, type, object, name};
+    if (data.setObjectName == nullptr || object == 0u || name == nullptr || name[0] == '\0')
+        return;
+    const VkDebugUtilsObjectNameInfoEXT info{VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT, nullptr, type, object,
+                                             name};
     data.setObjectName(data.device, &info);
 }
 [[nodiscard]] VkQueue queueForType(VkRhiDeviceData& data, RhiQueueType type) {
     switch (type) {
-        case RhiQueueType::Graphics: return data.graphicsQueue;
-        case RhiQueueType::Compute: return data.computeQueue;
-        case RhiQueueType::Transfer: return data.transferQueue;
-        case RhiQueueType::Present: return data.presentQueue;
+    case RhiQueueType::Graphics: return data.graphicsQueue;
+    case RhiQueueType::Compute: return data.computeQueue;
+    case RhiQueueType::Transfer: return data.transferQueue;
+    case RhiQueueType::Present: return data.presentQueue;
     }
     return VK_NULL_HANDLE;
 }
 
 [[nodiscard]] size_t queueTimelineIndex(const RhiQueueType type) {
     switch (type) {
-        case RhiQueueType::Graphics: return 0u;
-        case RhiQueueType::Compute: return 1u;
-        case RhiQueueType::Transfer: return 2u;
-        case RhiQueueType::Present: return 3u;
+    case RhiQueueType::Graphics: return 0u;
+    case RhiQueueType::Compute: return 1u;
+    case RhiQueueType::Transfer: return 2u;
+    case RhiQueueType::Present: return 3u;
     }
     return 3u;
 }

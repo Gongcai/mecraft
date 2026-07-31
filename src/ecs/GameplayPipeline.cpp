@@ -61,9 +61,7 @@ GameplayPipeline::GameplayPipeline(const GameplayPipelineProfile profile) {
         buildClientFixedUpdateSystems();
         buildClientTickSystems();
         break;
-    case GameplayPipelineProfile::Server:
-        buildServerFixedUpdateSystems();
-        break;
+    case GameplayPipelineProfile::Server: buildServerFixedUpdateSystems(); break;
     }
 
 #ifdef MECRAFT_DEBUG
@@ -157,11 +155,8 @@ void GameplayPipeline::buildClientTickSystems() {
     addTickSystem<FallingBlockTickSystem>();
 }
 
-void GameplayPipeline::runFixedUpdate(GameplayRegistry& registry,
-                                      GameplayServices& services,
-                                      const float dt,
-                                      const uint64_t tickIndex,
-                                      const GameplayPipelineHooks* hooks) {
+void GameplayPipeline::runFixedUpdate(GameplayRegistry& registry, GameplayServices& services, const float dt,
+                                      const uint64_t tickIndex, const GameplayPipelineHooks* hooks) {
     SystemContext ctx{registry, services, dt, tickIndex};
     for (auto& entry : m_fixedUpdateSystems) {
         entry.system->update(ctx);
@@ -182,9 +177,8 @@ GameplayPipeline::FixedUpdateProfile GameplayPipeline::runFixedUpdateProfiled(Ga
         entry.system->update(ctx);
         const auto end = std::chrono::steady_clock::now();
 
-        const auto category = i < m_fixedUpdateDebugCategories.size()
-            ? m_fixedUpdateDebugCategories[i]
-            : FixedUpdateDebugCategory::State;
+        const auto category =
+            i < m_fixedUpdateDebugCategories.size() ? m_fixedUpdateDebugCategories[i] : FixedUpdateDebugCategory::State;
         profile.categoryMs[static_cast<size_t>(category)] +=
             std::chrono::duration<double, std::milli>(end - start).count();
     }
@@ -192,9 +186,7 @@ GameplayPipeline::FixedUpdateProfile GameplayPipeline::runFixedUpdateProfiled(Ga
 }
 #endif
 
-void GameplayPipeline::runOneTick(GameplayRegistry& registry,
-                                  GameplayServices& services,
-                                  const float dt,
+void GameplayPipeline::runOneTick(GameplayRegistry& registry, GameplayServices& services, const float dt,
                                   const uint64_t tickIndex) {
     SystemContext ctx{registry, services, dt, tickIndex};
     for (auto& system : m_tickSystems) {
@@ -202,9 +194,7 @@ void GameplayPipeline::runOneTick(GameplayRegistry& registry,
     }
 }
 
-void GameplayPipeline::runPostHook(const PostSystemHook hook,
-                                   SystemContext& ctx,
-                                   const GameplayPipelineHooks* hooks) {
+void GameplayPipeline::runPostHook(const PostSystemHook hook, SystemContext& ctx, const GameplayPipelineHooks* hooks) {
     if (hooks == nullptr) {
         return;
     }
@@ -216,8 +206,7 @@ void GameplayPipeline::runPostHook(const PostSystemHook hook,
         }
         break;
     case PostSystemHook::None:
-    default:
-        break;
+    default: break;
     }
 }
 

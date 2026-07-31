@@ -240,7 +240,8 @@ BlockStateId requireFacingState(const char* path, const uint16_t facing) {
     const BlockID blockId = requireBlockId(path);
     const BlockStateId state = BlockStateRegistry::getState(blockId, PropIndices::FACING, facing);
     if (state == NULL_BLOCK_STATE || BlockStateRegistry::getBlockId(state) != blockId) {
-        failTerrainGenerator(std::string("Missing required facing state for world generation block: minecraft:") + path);
+        failTerrainGenerator(std::string("Missing required facing state for world generation block: minecraft:") +
+                             path);
     }
     return state;
 }
@@ -473,8 +474,8 @@ double fbm3D(double x, double y, double z, double firstCell, int octaves, uint32
 }
 
 double sampleCaveNoise(int worldX, int y, int worldZ, uint32_t seed) {
-    return fbm3D(static_cast<double>(worldX), static_cast<double>(y), static_cast<double>(worldZ),
-                 44.0, 3, seed ^ 0x510e527fU);
+    return fbm3D(static_cast<double>(worldX), static_cast<double>(y), static_cast<double>(worldZ), 44.0, 3,
+                 seed ^ 0x510e527fU);
 }
 
 bool shouldCarveCaveFromNoise(double cave, int y, int surfaceY) {
@@ -494,10 +495,7 @@ double interpolateNoiseXZSlice(int x0, int x1, int y, int z0, int z1, double tx,
     return nx0 + (nx1 - nx0) * tz;
 }
 
-void buildCaveMaskColumn(int worldX,
-                         int worldZ,
-                         int surfaceY,
-                         uint32_t seed,
+void buildCaveMaskColumn(int worldX, int worldZ, int surfaceY, uint32_t seed,
                          std::array<uint8_t, Chunk::SIZE_Y>& outMask) {
     constexpr double kFirstCell = 44.0;
     constexpr int kOctaves = 3;
@@ -712,21 +710,12 @@ __m256d fbm2D4(double x0, double x1, double x2, double x3, double z, double firs
 }
 #endif
 
-void finalizeSurfaceSample(double continental,
-                           double detail,
-                           double rough,
-                           double ridgeBase,
-                           double mountainNoise,
-                           double moisture,
-                           int seaLevel,
-                           int& outSurfaceY,
-                           double& outMoisture,
-                           TerrainBiome& outSurfaceKind,
-                           double& outRuggedness);
+void finalizeSurfaceSample(double continental, double detail, double rough, double ridgeBase, double mountainNoise,
+                           double moisture, int seaLevel, int& outSurfaceY, double& outMoisture,
+                           TerrainBiome& outSurfaceKind, double& outRuggedness);
 
-void sampleSurfaceAndMoistureScalar(int worldX, int worldZ, uint32_t seed, int seaLevel,
-                                    int& outSurfaceY, double& outMoisture,
-                                    TerrainBiome& outSurfaceKind, double& outRuggedness) {
+void sampleSurfaceAndMoistureScalar(int worldX, int worldZ, uint32_t seed, int seaLevel, int& outSurfaceY,
+                                    double& outMoisture, TerrainBiome& outSurfaceKind, double& outRuggedness) {
     const auto x = static_cast<double>(worldX);
     const auto z = static_cast<double>(worldZ);
 
@@ -736,24 +725,17 @@ void sampleSurfaceAndMoistureScalar(int worldX, int worldZ, uint32_t seed, int s
     const double ridgeBase = fbm2D(x, z, 96.0, 4, seed ^ 0x510e527fU);
     const double mountainNoise = fbm2D(x, z, 220.0, 3, seed ^ 0x1f83d9abU);
     const double moisture = fbm2D(x, z, 420.0, 3, seed ^ 0xa54ff53aU);
-    finalizeSurfaceSample(continental, detail, rough, ridgeBase, mountainNoise, moisture,
-                          seaLevel, outSurfaceY, outMoisture, outSurfaceKind, outRuggedness);
+    finalizeSurfaceSample(continental, detail, rough, ridgeBase, mountainNoise, moisture, seaLevel, outSurfaceY,
+                          outMoisture, outSurfaceKind, outRuggedness);
 }
 
-void finalizeSurfaceSample(double continental,
-                           double detail,
-                           double rough,
-                           double ridgeBase,
-                           double mountainNoise,
-                           double moisture,
-                           int seaLevel,
-                           int& outSurfaceY,
-                           double& outMoisture,
-                           TerrainBiome& outSurfaceKind,
-                           double& outRuggedness) {
+void finalizeSurfaceSample(double continental, double detail, double rough, double ridgeBase, double mountainNoise,
+                           double moisture, int seaLevel, int& outSurfaceY, double& outMoisture,
+                           TerrainBiome& outSurfaceKind, double& outRuggedness) {
     const double ridge = 1.0 - std::abs(ridgeBase * 2.0 - 1.0);
     const double mountainMask = smoothRange(continental, 0.50, 0.66);
-    const double highMountainMask = mountainMask * smoothRange(ridge, 0.58, 0.88) * smoothRange(mountainNoise, 0.45, 0.75);
+    const double highMountainMask =
+        mountainMask * smoothRange(ridge, 0.58, 0.88) * smoothRange(mountainNoise, 0.45, 0.75);
 
     double height = static_cast<double>(seaLevel);
     height += (continental - 0.5) * 42.0;
@@ -787,8 +769,8 @@ void finalizeSurfaceSample(double continental,
 
 #if defined(MECRAFT_HAS_AVX2)
 void sampleSurfaceAndMoisture4(int worldX0, int worldX1, int worldX2, int worldX3, int worldZ, uint32_t seed,
-                               int seaLevel, int outSurfaceY[4], double outMoisture[4],
-                               TerrainBiome outSurfaceKind[4], double outRuggedness[4]) {
+                               int seaLevel, int outSurfaceY[4], double outMoisture[4], TerrainBiome outSurfaceKind[4],
+                               double outRuggedness[4]) {
     const double z = static_cast<double>(worldZ);
     const double x0 = static_cast<double>(worldX0);
     const double x1 = static_cast<double>(worldX1);
@@ -816,9 +798,8 @@ void sampleSurfaceAndMoisture4(int worldX0, int worldX1, int worldX2, int worldX
 }
 #endif
 
-void sampleSurfaceAndMoisture2(int worldX0, int worldX1, int worldZ, uint32_t seed, int seaLevel,
-                               int outSurfaceY[2], double outMoisture[2],
-                               TerrainBiome outSurfaceKind[2], double outRuggedness[2]) {
+void sampleSurfaceAndMoisture2(int worldX0, int worldX1, int worldZ, uint32_t seed, int seaLevel, int outSurfaceY[2],
+                               double outMoisture[2], TerrainBiome outSurfaceKind[2], double outRuggedness[2]) {
 #if defined(MECRAFT_HAS_SSE2)
     const double z = static_cast<double>(worldZ);
     const double x0 = static_cast<double>(worldX0);
@@ -843,10 +824,10 @@ void sampleSurfaceAndMoisture2(int worldX0, int worldX1, int worldZ, uint32_t se
                               seaLevel, outSurfaceY[i], outMoisture[i], outSurfaceKind[i], outRuggedness[i]);
     }
 #else
-    sampleSurfaceAndMoistureScalar(worldX0, worldZ, seed, seaLevel,
-                                   outSurfaceY[0], outMoisture[0], outSurfaceKind[0], outRuggedness[0]);
-    sampleSurfaceAndMoistureScalar(worldX1, worldZ, seed, seaLevel,
-                                   outSurfaceY[1], outMoisture[1], outSurfaceKind[1], outRuggedness[1]);
+    sampleSurfaceAndMoistureScalar(worldX0, worldZ, seed, seaLevel, outSurfaceY[0], outMoisture[0], outSurfaceKind[0],
+                                   outRuggedness[0]);
+    sampleSurfaceAndMoistureScalar(worldX1, worldZ, seed, seaLevel, outSurfaceY[1], outMoisture[1], outSurfaceKind[1],
+                                   outRuggedness[1]);
 #endif
 }
 
@@ -881,21 +862,15 @@ uint32_t hashRockCell(const int worldX, const int y, const int worldZ, const uin
     return hash32(h);
 }
 
-SurfaceProfile sampleSurfaceProfile(const int worldX,
-                                    const int worldZ,
-                                    const uint32_t seed,
-                                    const int seaLevel,
-                                    const int surfaceY,
-                                    const double moisture,
-                                    const TerrainBiome biome,
-                                    const double ruggedness,
-                                    const WorldGenBlocks& blocks) {
+SurfaceProfile sampleSurfaceProfile(const int worldX, const int worldZ, const uint32_t seed, const int seaLevel,
+                                    const int surfaceY, const double moisture, const TerrainBiome biome,
+                                    const double ruggedness, const WorldGenBlocks& blocks) {
     SurfaceProfile profile{blocks.grass, blocks.dirt, 0, 3, 0};
     const bool belowSeaLevel = surfaceY < seaLevel;
 
     if (belowSeaLevel) {
-        const double sedimentNoise = fbm2D(static_cast<double>(worldX), static_cast<double>(worldZ),
-                                           34.0, 2, seed ^ kSurfaceSaltSediment);
+        const double sedimentNoise =
+            fbm2D(static_cast<double>(worldX), static_cast<double>(worldZ), 34.0, 2, seed ^ kSurfaceSaltSediment);
         if (sedimentNoise > 0.73) {
             profile.topBlock = blocks.gravel;
             profile.fillBlock = blocks.gravel;
@@ -917,8 +892,8 @@ SurfaceProfile sampleSurfaceProfile(const int worldX,
     }
 
     if (biome == TerrainBiome::Arid || moisture < 0.34) {
-        const double redSandNoise = fbm2D(static_cast<double>(worldX), static_cast<double>(worldZ),
-                                          180.0, 2, seed ^ kSurfaceSaltRedSand);
+        const double redSandNoise =
+            fbm2D(static_cast<double>(worldX), static_cast<double>(worldZ), 180.0, 2, seed ^ kSurfaceSaltRedSand);
         const bool useRedSand = moisture < 0.26 || redSandNoise > 0.66;
         profile.topBlock = useRedSand ? blocks.redSand : blocks.sand;
         profile.fillBlock = profile.topBlock;
@@ -929,8 +904,7 @@ SurfaceProfile sampleSurfaceProfile(const int worldX,
     }
 
     if (biome == TerrainBiome::HighMountain) {
-        const bool snowCap = surfaceY >= seaLevel + 42 ||
-                             (surfaceY >= seaLevel + 30 && moisture > 0.48);
+        const bool snowCap = surfaceY >= seaLevel + 42 || (surfaceY >= seaLevel + 30 && moisture > 0.48);
         if (snowCap) {
             profile.topBlock = blocks.snowBlock;
             profile.fillBlock = blocks.stone;
@@ -938,8 +912,8 @@ SurfaceProfile sampleSurfaceProfile(const int worldX,
             return profile;
         }
 
-        const double dirtPatchNoise = fbm2D(static_cast<double>(worldX), static_cast<double>(worldZ),
-                                            24.0, 2, seed ^ kSurfaceSaltDirtPatch);
+        const double dirtPatchNoise =
+            fbm2D(static_cast<double>(worldX), static_cast<double>(worldZ), 24.0, 2, seed ^ kSurfaceSaltDirtPatch);
         const bool dirtPatch = dirtPatchNoise > 0.62 && moisture > 0.40;
         profile.topBlock = blocks.grass;
         profile.fillBlock = dirtPatch ? blocks.dirt : blocks.stone;
@@ -956,8 +930,8 @@ SurfaceProfile sampleSurfaceProfile(const int worldX,
             return profile;
         }
 
-        const double gravelNoise = fbm2D(static_cast<double>(worldX), static_cast<double>(worldZ),
-                                         30.0, 2, seed ^ kSurfaceSaltSediment);
+        const double gravelNoise =
+            fbm2D(static_cast<double>(worldX), static_cast<double>(worldZ), 30.0, 2, seed ^ kSurfaceSaltSediment);
         const bool gravelPatch = ruggedness > 0.70 && moisture < 0.56 && gravelNoise > 0.58;
         const bool rockyTop = ruggedness > 0.62 && moisture < 0.55;
         profile.topBlock = gravelPatch ? blocks.gravel : blocks.grass;
@@ -966,8 +940,8 @@ SurfaceProfile sampleSurfaceProfile(const int worldX,
         return profile;
     }
 
-    const double soilNoise = fbm2D(static_cast<double>(worldX), static_cast<double>(worldZ),
-                                   18.0, 2, seed ^ kSurfaceSaltSoil);
+    const double soilNoise =
+        fbm2D(static_cast<double>(worldX), static_cast<double>(worldZ), 18.0, 2, seed ^ kSurfaceSaltSoil);
     if (soilNoise > 0.74) {
         profile.coverDepth = 4;
     } else if (soilNoise < 0.30) {
@@ -976,24 +950,17 @@ SurfaceProfile sampleSurfaceProfile(const int worldX,
     return profile;
 }
 
-TerrainColumnSample sampleTerrainColumn(const int worldX,
-                                        const int worldZ,
-                                        const uint32_t seed,
-                                        const int seaLevel,
+TerrainColumnSample sampleTerrainColumn(const int worldX, const int worldZ, const uint32_t seed, const int seaLevel,
                                         const WorldGenBlocks& blocks) {
     TerrainColumnSample column;
-    sampleSurfaceAndMoistureScalar(worldX, worldZ, seed, seaLevel,
-                                   column.surfaceY, column.moisture, column.biome, column.ruggedness);
-    column.surface = sampleSurfaceProfile(worldX, worldZ, seed, seaLevel,
-                                          column.surfaceY, column.moisture,
+    sampleSurfaceAndMoistureScalar(worldX, worldZ, seed, seaLevel, column.surfaceY, column.moisture, column.biome,
+                                   column.ruggedness);
+    column.surface = sampleSurfaceProfile(worldX, worldZ, seed, seaLevel, column.surfaceY, column.moisture,
                                           column.biome, column.ruggedness, blocks);
     return column;
 }
 
-BlockID sampleStoneLayerBlock(const int worldX,
-                              const int y,
-                              const int worldZ,
-                              const uint32_t seed,
+BlockID sampleStoneLayerBlock(const int worldX, const int y, const int worldZ, const uint32_t seed,
                               const WorldGenBlocks& blocks) {
     const uint32_t columnHash = hashColumn(worldX, worldZ, seed) ^ kDeepLayerSalt;
     const int deepslateTop = 20 + static_cast<int>(hash32(columnHash) % 10U);
@@ -1005,16 +972,12 @@ BlockID sampleStoneLayerBlock(const int worldX,
         return blocks.stone;
     }
 
-    const double deepslateChance =
-        static_cast<double>(stoneFloor - y) / static_cast<double>(stoneFloor - deepslateTop);
+    const double deepslateChance = static_cast<double>(stoneFloor - y) / static_cast<double>(stoneFloor - deepslateTop);
     const uint32_t mixHash = hash32(columnHash ^ hash32(static_cast<uint32_t>(y) * kOreYMul));
     return mixHash < probabilityToCutoff(deepslateChance) ? blocks.deepslate : blocks.stone;
 }
 
-BlockID sampleRockBlock(const int worldX,
-                        const int y,
-                        const int worldZ,
-                        const uint32_t seed,
+BlockID sampleRockBlock(const int worldX, const int y, const int worldZ, const uint32_t seed,
                         const WorldGenBlocks& blocks) {
     const BlockID layerBlock = sampleStoneLayerBlock(worldX, y, worldZ, seed, blocks);
     const uint32_t cellHash = hashRockCell(worldX, y, worldZ, seed);
@@ -1033,23 +996,16 @@ BlockID sampleRockBlock(const int worldX,
     const uint32_t variantRoll = hash32(cellHash ^ kRockSaltVariant);
     if (variantRoll < probabilityToCutoff(0.16)) {
         switch (hash32(cellHash ^ 0x94d049bbU) % 3U) {
-            case 0U:
-                return blocks.granite;
-            case 1U:
-                return blocks.diorite;
-            default:
-                return blocks.andesite;
+        case 0U: return blocks.granite;
+        case 1U: return blocks.diorite;
+        default: return blocks.andesite;
         }
     }
     return blocks.stone;
 }
 
-BlockID sampleTerrainSolidBlock(const int worldX,
-                                const int y,
-                                const int worldZ,
-                                const uint32_t seed,
-                                const TerrainColumnSample& column,
-                                const WorldGenBlocks& blocks) {
+BlockID sampleTerrainSolidBlock(const int worldX, const int y, const int worldZ, const uint32_t seed,
+                                const TerrainColumnSample& column, const WorldGenBlocks& blocks) {
     if (y == 0) {
         return blocks.bedrock;
     }
@@ -1067,14 +1023,8 @@ BlockID sampleTerrainSolidBlock(const int worldX,
 }
 
 bool isCaveCarvableBlock(const BlockID id, const WorldGenBlocks& blocks) {
-    return id == blocks.stone ||
-           id == blocks.deepslate ||
-           id == blocks.granite ||
-           id == blocks.diorite ||
-           id == blocks.andesite ||
-           id == blocks.tuff ||
-           id == blocks.calcite ||
-           id == blocks.dripstoneBlock;
+    return id == blocks.stone || id == blocks.deepslate || id == blocks.granite || id == blocks.diorite ||
+           id == blocks.andesite || id == blocks.tuff || id == blocks.calcite || id == blocks.dripstoneBlock;
 }
 
 struct CaveWallSupportCandidate {
@@ -1083,11 +1033,7 @@ struct CaveWallSupportCandidate {
     BlockStateId decorationState = NULL_BLOCK_STATE;
 };
 
-bool isSolidCaveWallSupport(const int worldX,
-                            const int y,
-                            const int worldZ,
-                            const uint32_t seed,
-                            const int seaLevel,
+bool isSolidCaveWallSupport(const int worldX, const int y, const int worldZ, const uint32_t seed, const int seaLevel,
                             const WorldGenBlocks& blocks) {
     if (y <= 0 || y >= Chunk::SIZE_Y) {
         return false;
@@ -1103,8 +1049,7 @@ bool isSolidCaveWallSupport(const int worldX,
         return false;
     }
 
-    if (y >= 10 &&
-        y <= column.surfaceY - 5 &&
+    if (y >= 10 && y <= column.surfaceY - 5 &&
         shouldCarveCaveFromNoise(sampleCaveNoise(worldX, y, worldZ, seed), y, column.surfaceY)) {
         return false;
     }
@@ -1112,12 +1057,8 @@ bool isSolidCaveWallSupport(const int worldX,
     return true;
 }
 
-BlockStateId sampleCaveWallDecorationState(const int worldX,
-                                           const int y,
-                                           const int worldZ,
-                                           const uint32_t seed,
-                                           const int seaLevel,
-                                           const WorldGenBlocks& blocks) {
+BlockStateId sampleCaveWallDecorationState(const int worldX, const int y, const int worldZ, const uint32_t seed,
+                                           const int seaLevel, const WorldGenBlocks& blocks) {
     if (y < 10 || y >= Chunk::SIZE_Y) {
         return NULL_BLOCK_STATE;
     }
@@ -1145,9 +1086,7 @@ BlockStateId sampleCaveWallDecorationState(const int worldX,
     return NULL_BLOCK_STATE;
 }
 
-BlockID sampleOreBlockFromHash(const int y,
-                               const BlockID baseBlock,
-                               const uint32_t oreColumnSeed,
+BlockID sampleOreBlockFromHash(const int y, const BlockID baseBlock, const uint32_t oreColumnSeed,
                                const WorldGenBlocks& blocks) {
     const std::array<OreRule, 8>* rules = nullptr;
     if (baseBlock == blocks.stone) {
@@ -1164,9 +1103,7 @@ BlockID sampleOreBlockFromHash(const int y,
 
     const uint32_t oreHash = oreColumnSeed ^ hash32(static_cast<uint32_t>(y) * kOreYMul);
     for (const OreRule& rule : *rules) {
-        if (baseBlock == rule.targetBlock &&
-            y >= rule.minY &&
-            y <= rule.maxY &&
+        if (baseBlock == rule.targetBlock && y >= rule.minY && y <= rule.maxY &&
             hash32(oreHash ^ rule.salt) < rule.cutoff) {
             return rule.outputBlock;
         }
@@ -1188,32 +1125,21 @@ bool surfaceCanHostTree(const TerrainBiome biome, const double moisture, const i
     }
 
     switch (biome) {
-        case TerrainBiome::Temperate:
-            return moisture >= 0.38;
-        case TerrainBiome::Mountain:
-            return moisture >= 0.40;
-        case TerrainBiome::Arid:
-            return moisture >= 0.28;
-        case TerrainBiome::HighMountain:
-        default:
-            return false;
+    case TerrainBiome::Temperate: return moisture >= 0.38;
+    case TerrainBiome::Mountain: return moisture >= 0.40;
+    case TerrainBiome::Arid: return moisture >= 0.28;
+    case TerrainBiome::HighMountain:
+    default: return false;
     }
 }
 
-bool selectTreeSpecies(const TerrainBiome biome,
-                       const double moisture,
-                       const double ruggedness,
-                       const uint32_t columnHash,
-                       const WorldGenBlocks& blocks,
-                       TreeSpeciesChoice& outSpecies) {
+bool selectTreeSpecies(const TerrainBiome biome, const double moisture, const double ruggedness,
+                       const uint32_t columnHash, const WorldGenBlocks& blocks, TreeSpeciesChoice& outSpecies) {
     std::array<TreeSpeciesChoice, 8> choices{};
     int count = 0;
     uint32_t totalWeight = 0;
 
-    const auto addChoice = [&](const BlockID log,
-                               const BlockID leaves,
-                               const int minHeight,
-                               const int heightSpan,
+    const auto addChoice = [&](const BlockID log, const BlockID leaves, const int minHeight, const int heightSpan,
                                const uint32_t weight) {
         choices[static_cast<size_t>(count)] = TreeSpeciesChoice{log, leaves, minHeight, heightSpan, weight};
         ++count;
@@ -1259,17 +1185,12 @@ bool selectTreeSpecies(const TerrainBiome biome,
     return true;
 }
 
-TreeCandidate sampleTreeCandidate(int worldX,
-                                  int worldZ,
-                                  uint32_t seed,
-                                  int seaLevel,
-                                  const WorldGenBlocks& blocks) {
+TreeCandidate sampleTreeCandidate(int worldX, int worldZ, uint32_t seed, int seaLevel, const WorldGenBlocks& blocks) {
     int surfaceY = 0;
     double moisture = 0.0;
     double ruggedness = 0.0;
     TerrainBiome biome = TerrainBiome::Temperate;
-    sampleSurfaceAndMoistureScalar(worldX, worldZ, seed, seaLevel,
-                                   surfaceY, moisture, biome, ruggedness);
+    sampleSurfaceAndMoistureScalar(worldX, worldZ, seed, seaLevel, surfaceY, moisture, biome, ruggedness);
 
     if (!surfaceCanHostTree(biome, moisture, seaLevel, surfaceY)) {
         return {};
@@ -1294,8 +1215,8 @@ TreeCandidate sampleTreeCandidate(int worldX,
         return {};
     }
 
-    const int height = species.minHeight + static_cast<int>(hash32(h ^ kTreeSaltHeight) %
-                                                            static_cast<uint32_t>(species.heightSpan));
+    const int height =
+        species.minHeight + static_cast<int>(hash32(h ^ kTreeSaltHeight) % static_cast<uint32_t>(species.heightSpan));
     if (surfaceY + height + 1 >= Chunk::SIZE_Y) {
         return {};
     }
@@ -1345,12 +1266,7 @@ BlockID sampleTreeBlockFromCandidate(const TreeCandidate& tree, int worldX, int 
     return tree.leaves;
 }
 
-BlockID sampleTreeBlock(int worldX,
-                        int y,
-                        int worldZ,
-                        uint32_t seed,
-                        int seaLevel,
-                        const WorldGenBlocks& blocks) {
+BlockID sampleTreeBlock(int worldX, int y, int worldZ, uint32_t seed, int seaLevel, const WorldGenBlocks& blocks) {
     BlockID firstLeaves = 0;
     for (int anchorX = worldX - kTreeScanRadius; anchorX <= worldX + kTreeScanRadius; ++anchorX) {
         for (int anchorZ = worldZ - kTreeScanRadius; anchorZ <= worldZ + kTreeScanRadius; ++anchorZ) {
@@ -1368,63 +1284,33 @@ BlockID sampleTreeBlock(int worldX,
 }
 
 bool isTreeLeavesBlock(const BlockID id, const WorldGenBlocks& blocks) {
-    return id == blocks.oakLeaves ||
-           id == blocks.birchLeaves ||
-           id == blocks.spruceLeaves ||
-           id == blocks.jungleLeaves ||
-           id == blocks.acaciaLeaves ||
-           id == blocks.darkOakLeaves ||
-           id == blocks.cherryLeaves ||
-           id == blocks.paleOakLeaves;
+    return id == blocks.oakLeaves || id == blocks.birchLeaves || id == blocks.spruceLeaves ||
+           id == blocks.jungleLeaves || id == blocks.acaciaLeaves || id == blocks.darkOakLeaves ||
+           id == blocks.cherryLeaves || id == blocks.paleOakLeaves;
 }
 
 bool isReplaceableDecoration(const BlockID id, const WorldGenBlocks& blocks) {
-    return id == blocks.tallGrass ||
-           id == blocks.shortGrass ||
-           id == blocks.fern ||
-           id == blocks.rose ||
-           id == blocks.poppy ||
-           id == blocks.dandelion ||
-           id == blocks.blueOrchid ||
-           id == blocks.allium ||
-           id == blocks.azureBluet ||
-           id == blocks.oxeyeDaisy ||
-           id == blocks.cornflower ||
-           id == blocks.lilyOfTheValley ||
-           id == blocks.redTulip ||
-           id == blocks.orangeTulip ||
-           id == blocks.whiteTulip ||
-           id == blocks.pinkTulip ||
-           id == blocks.deadBush ||
-           id == blocks.bush ||
-           id == blocks.shortDryGrass ||
-           id == blocks.brownMushroom ||
-           id == blocks.redMushroom ||
+    return id == blocks.tallGrass || id == blocks.shortGrass || id == blocks.fern || id == blocks.rose ||
+           id == blocks.poppy || id == blocks.dandelion || id == blocks.blueOrchid || id == blocks.allium ||
+           id == blocks.azureBluet || id == blocks.oxeyeDaisy || id == blocks.cornflower ||
+           id == blocks.lilyOfTheValley || id == blocks.redTulip || id == blocks.orangeTulip ||
+           id == blocks.whiteTulip || id == blocks.pinkTulip || id == blocks.deadBush || id == blocks.bush ||
+           id == blocks.shortDryGrass || id == blocks.brownMushroom || id == blocks.redMushroom ||
            id == BlockStateRegistry::getBlockId(blocks.wildflowers) ||
            id == BlockStateRegistry::getBlockId(blocks.leafLitter) ||
            id == BlockStateRegistry::getBlockId(blocks.glowLichenNorth);
 }
 
 bool canTreeLogReplace(const BlockID id, const WorldGenBlocks& blocks) {
-    return id == 0 ||
-           isReplaceableDecoration(id, blocks) ||
-           isTreeLeavesBlock(id, blocks);
+    return id == 0 || isReplaceableDecoration(id, blocks) || isTreeLeavesBlock(id, blocks);
 }
 
 bool canTreeLeavesReplace(const BlockID id, const WorldGenBlocks& blocks) {
-    return id == 0 ||
-           isReplaceableDecoration(id, blocks);
+    return id == 0 || isReplaceableDecoration(id, blocks);
 }
 
-BlockStateId sampleVegetationState(int worldX,
-                                   int worldZ,
-                                   uint32_t seed,
-                                   TerrainBiome biome,
-                                   double moisture,
-                                   int seaLevel,
-                                   int surfaceY,
-                                   BlockID surfaceBlock,
-                                   const WorldGenBlocks& blocks) {
+BlockStateId sampleVegetationState(int worldX, int worldZ, uint32_t seed, TerrainBiome biome, double moisture,
+                                   int seaLevel, int surfaceY, BlockID surfaceBlock, const WorldGenBlocks& blocks) {
     if (surfaceY < seaLevel) {
         return NULL_BLOCK_STATE;
     }
@@ -1471,37 +1357,22 @@ BlockStateId sampleVegetationState(int worldX,
         return (variant & 1U) == 0U ? blocks.wildflowers : blocks.leafLitter;
     }
 
-    const double flowerChance = biome == TerrainBiome::Temperate
-                                    ? (0.06 + moisture * 0.06)
-                                    : (0.02 + moisture * 0.02);
+    const double flowerChance = biome == TerrainBiome::Temperate ? (0.06 + moisture * 0.06) : (0.02 + moisture * 0.02);
     if (hash32(h ^ kDecorSaltFlower) < probabilityToCutoff(flowerChance)) {
         switch (variant % 13U) {
-            case 0U:
-                return stateForBlockId(blocks.rose);
-            case 1U:
-                return stateForBlockId(blocks.poppy);
-            case 2U:
-                return stateForBlockId(blocks.blueOrchid);
-            case 3U:
-                return stateForBlockId(blocks.allium);
-            case 4U:
-                return stateForBlockId(blocks.azureBluet);
-            case 5U:
-                return stateForBlockId(blocks.oxeyeDaisy);
-            case 6U:
-                return stateForBlockId(blocks.cornflower);
-            case 7U:
-                return stateForBlockId(blocks.lilyOfTheValley);
-            case 8U:
-                return stateForBlockId(blocks.redTulip);
-            case 9U:
-                return stateForBlockId(blocks.orangeTulip);
-            case 10U:
-                return stateForBlockId(blocks.whiteTulip);
-            case 11U:
-                return stateForBlockId(blocks.pinkTulip);
-            default:
-                return stateForBlockId(blocks.dandelion);
+        case 0U: return stateForBlockId(blocks.rose);
+        case 1U: return stateForBlockId(blocks.poppy);
+        case 2U: return stateForBlockId(blocks.blueOrchid);
+        case 3U: return stateForBlockId(blocks.allium);
+        case 4U: return stateForBlockId(blocks.azureBluet);
+        case 5U: return stateForBlockId(blocks.oxeyeDaisy);
+        case 6U: return stateForBlockId(blocks.cornflower);
+        case 7U: return stateForBlockId(blocks.lilyOfTheValley);
+        case 8U: return stateForBlockId(blocks.redTulip);
+        case 9U: return stateForBlockId(blocks.orangeTulip);
+        case 10U: return stateForBlockId(blocks.whiteTulip);
+        case 11U: return stateForBlockId(blocks.pinkTulip);
+        default: return stateForBlockId(blocks.dandelion);
         }
     }
 
@@ -1564,11 +1435,8 @@ BlockStateId TerrainGenerator::sampleBlock(const int worldX, const int y, const 
     }
 
     const int vegetationY = column.surfaceY + 1;
-    if (id == 0 &&
-        y == vegetationY) {
-        return sampleVegetationState(worldX, worldZ, m_seed,
-                                     column.biome, column.moisture,
-                                     m_seaLevel, column.surfaceY,
+    if (id == 0 && y == vegetationY) {
+        return sampleVegetationState(worldX, worldZ, m_seed, column.biome, column.moisture, m_seaLevel, column.surfaceY,
                                      column.surface.topBlock, blocks);
     }
 
@@ -1601,16 +1469,16 @@ void TerrainGenerator::sampleSurfaceYBatch(int startWorldX, int worldZ, int coun
         double moisture[2] = {};
         double ruggedness[2] = {};
         TerrainBiome kind[2] = {};
-        sampleSurfaceAndMoisture2(startWorldX + i, startWorldX + i + 1, worldZ, m_seed, m_seaLevel,
-                                  outSurfaceY + i, moisture, kind, ruggedness);
+        sampleSurfaceAndMoisture2(startWorldX + i, startWorldX + i + 1, worldZ, m_seed, m_seaLevel, outSurfaceY + i,
+                                  moisture, kind, ruggedness);
     }
 #endif
     for (; i < count; ++i) {
         double moisture = 0.0;
         double ruggedness = 0.0;
         TerrainBiome kind = TerrainBiome::Temperate;
-        sampleSurfaceAndMoistureScalar(startWorldX + i, worldZ, m_seed, m_seaLevel,
-                                       outSurfaceY[i], moisture, kind, ruggedness);
+        sampleSurfaceAndMoistureScalar(startWorldX + i, worldZ, m_seed, m_seaLevel, outSurfaceY[i], moisture, kind,
+                                       ruggedness);
     }
 }
 
@@ -1663,20 +1531,18 @@ void TerrainGenerator::generateChunk(Chunk& chunk) const {
             if (remaining >= 4) {
                 laneCount = 4;
                 sampleSurfaceAndMoisture4(offset.x + x, offset.x + x + 1, offset.x + x + 2, offset.x + x + 3,
-                                          offset.z + z, m_seed, m_seaLevel,
-                                          sampledSurface, sampledMoisture,
+                                          offset.z + z, m_seed, m_seaLevel, sampledSurface, sampledMoisture,
                                           sampledSurfaceKind, sampledRuggedness);
             } else
 #endif
-            if (remaining >= 2) {
+                if (remaining >= 2) {
                 laneCount = 2;
                 sampleSurfaceAndMoisture2(offset.x + x, offset.x + x + 1, offset.z + z, m_seed, m_seaLevel,
                                           sampledSurface, sampledMoisture, sampledSurfaceKind, sampledRuggedness);
             } else {
                 laneCount = 1;
-                sampleSurfaceAndMoistureScalar(offset.x + x, offset.z + z, m_seed, m_seaLevel,
-                                               sampledSurface[0], sampledMoisture[0],
-                                               sampledSurfaceKind[0], sampledRuggedness[0]);
+                sampleSurfaceAndMoistureScalar(offset.x + x, offset.z + z, m_seed, m_seaLevel, sampledSurface[0],
+                                               sampledMoisture[0], sampledSurfaceKind[0], sampledRuggedness[0]);
             }
 
             for (int lane = 0; lane < laneCount; ++lane) {
@@ -1696,9 +1562,8 @@ void TerrainGenerator::generateChunk(Chunk& chunk) const {
                 column.moisture = moisture;
                 column.ruggedness = ruggedness;
                 column.biome = surfaceKind;
-                column.surface = sampleSurfaceProfile(worldX, worldZ, m_seed, m_seaLevel,
-                                                      surfaceY, moisture, surfaceKind,
-                                                      ruggedness, blocks);
+                column.surface = sampleSurfaceProfile(worldX, worldZ, m_seed, m_seaLevel, surfaceY, moisture,
+                                                      surfaceKind, ruggedness, blocks);
 
                 const int columnTop = std::max(surfaceY, m_seaLevel);
                 if (surfaceY - 5 >= 10) {
@@ -1726,7 +1591,8 @@ void TerrainGenerator::generateChunk(Chunk& chunk) const {
                     }
 
                     if (id == 0 && carvedCave) {
-                        caveDecorationState = sampleCaveWallDecorationState(worldX, y, worldZ, m_seed, m_seaLevel, blocks);
+                        caveDecorationState =
+                            sampleCaveWallDecorationState(worldX, y, worldZ, m_seed, m_seaLevel, blocks);
                     }
 
                     if (id != RUNTIME_ID_NULL) {
@@ -1752,16 +1618,16 @@ void TerrainGenerator::generateChunk(Chunk& chunk) const {
                     const BlockID surfaceBlock = BlockStateRegistry::getBlockId(
                         generatedBlocks[surfaceScy][SubChunk::toIndex(localX, Chunk::toSubChunkLocalY(surfaceY), z)]);
                     const BlockStateId blockAbove =
-                        generatedBlocks[vegetationScy][SubChunk::toIndex(localX, Chunk::toSubChunkLocalY(vegetationY), z)];
+                        generatedBlocks[vegetationScy]
+                                       [SubChunk::toIndex(localX, Chunk::toSubChunkLocalY(vegetationY), z)];
 
                     if (blockAbove == NULL_BLOCK_STATE) {
-                        const BlockStateId vegetation = sampleVegetationState(worldX, worldZ, m_seed,
-                                                                              surfaceKind, moisture,
-                                                                              m_seaLevel, surfaceY,
-                                                                              surfaceBlock, blocks);
+                        const BlockStateId vegetation = sampleVegetationState(
+                            worldX, worldZ, m_seed, surfaceKind, moisture, m_seaLevel, surfaceY, surfaceBlock, blocks);
                         if (vegetation != NULL_BLOCK_STATE) {
-                            generatedBlocks[vegetationScy][SubChunk::toIndex(localX, Chunk::toSubChunkLocalY(vegetationY), z)] =
-                                vegetation;
+                            generatedBlocks[vegetationScy]
+                                           [SubChunk::toIndex(localX, Chunk::toSubChunkLocalY(vegetationY), z)] =
+                                               vegetation;
                             hasGeneratedBlocks[vegetationScy] = true;
                             if (BlockRegistry::getOpacityFast(BlockStateRegistry::getBlockId(vegetation)) >= 15) {
                                 highestOpaqueY = std::max(highestOpaqueY, vegetationY);
@@ -1779,7 +1645,8 @@ void TerrainGenerator::generateChunk(Chunk& chunk) const {
     }
 
     for (int anchorX = offset.x - kTreeScanRadius; anchorX < offset.x + Chunk::SIZE_X + kTreeScanRadius; ++anchorX) {
-        for (int anchorZ = offset.z - kTreeScanRadius; anchorZ < offset.z + Chunk::SIZE_Z + kTreeScanRadius; ++anchorZ) {
+        for (int anchorZ = offset.z - kTreeScanRadius; anchorZ < offset.z + Chunk::SIZE_Z + kTreeScanRadius;
+             ++anchorZ) {
             const TreeCandidate tree = sampleTreeCandidate(anchorX, anchorZ, m_seed, m_seaLevel, blocks);
             if (!tree.valid) {
                 continue;
@@ -1810,9 +1677,8 @@ void TerrainGenerator::generateChunk(Chunk& chunk) const {
                         const int scy = Chunk::toSubChunkIndex(y);
                         const std::size_t index = SubChunk::toIndex(localX, Chunk::toSubChunkLocalY(y), localZ);
                         const BlockID current = BlockStateRegistry::getBlockId(generatedBlocks[scy][index]);
-                        const bool canReplace = treeBlock == tree.log
-                                                    ? canTreeLogReplace(current, blocks)
-                                                    : canTreeLeavesReplace(current, blocks);
+                        const bool canReplace = treeBlock == tree.log ? canTreeLogReplace(current, blocks)
+                                                                      : canTreeLeavesReplace(current, blocks);
                         if (!canReplace) {
                             continue;
                         }
@@ -1820,8 +1686,7 @@ void TerrainGenerator::generateChunk(Chunk& chunk) const {
                         generatedBlocks[scy][index] = BlockStateRegistry::getDefaultState(treeBlock);
                         hasGeneratedBlocks[scy] = true;
                         if (BlockRegistry::getOpacityFast(treeBlock) >= 15) {
-                            chunk.setHeightMap(localX, localZ,
-                                               std::max(chunk.getHeightMap(localX, localZ), y));
+                            chunk.setHeightMap(localX, localZ, std::max(chunk.getHeightMap(localX, localZ), y));
                         }
                     }
                 }

@@ -31,14 +31,11 @@ static_assert(sizeof(ImageSolidPushConstants) == 48u);
     if (context.hasScissor) {
         return context.scissor;
     }
-    return {
-        0,
-        0,
-        static_cast<uint32_t>(std::max(1.0f,
-            std::round(static_cast<float>(context.screenWidth) * context.pixelScale()))),
-        static_cast<uint32_t>(std::max(1.0f,
-            std::round(static_cast<float>(context.screenHeight) * context.pixelScale())))
-    };
+    return {0, 0,
+            static_cast<uint32_t>(
+                std::max(1.0f, std::round(static_cast<float>(context.screenWidth) * context.pixelScale()))),
+            static_cast<uint32_t>(
+                std::max(1.0f, std::round(static_cast<float>(context.screenHeight) * context.pixelScale())))};
 }
 
 } // namespace
@@ -91,9 +88,7 @@ void UIImage::setSolidColor(const std::array<float, 4>& c) {
 }
 
 void UIImage::renderSelf(const UIRenderContext& ctx) const {
-    if (ctx.commandList == nullptr ||
-        !ctx.panelQuadVertexBuffer.isValid() ||
-        ctx.uiRenderer == nullptr) {
+    if (ctx.commandList == nullptr || !ctx.panelQuadVertexBuffer.isValid() || ctx.uiRenderer == nullptr) {
         return;
     }
 
@@ -114,40 +109,31 @@ void UIImage::renderSelf(const UIRenderContext& ctx) const {
         if (!ctx.imageTexturePipeline.isValid()) {
             return;
         }
-        const RhiBindGroupHandle bindGroup =
-            ctx.uiRenderer->resolveImageBindGroup(m_texture);
+        const RhiBindGroupHandle bindGroup = ctx.uiRenderer->resolveImageBindGroup(m_texture);
         if (!bindGroup.isValid()) {
             return;
         }
         const ImageTexturePushConstants pushConstants{
-            glm::vec4(static_cast<float>(ctx.screenWidth),
-                      static_cast<float>(ctx.screenHeight), ax, ay),
-            glm::vec4(aw, ah, 0.0f, 0.0f),
-            glm::vec4(m_u0, m_v0, m_u1, m_v1),
-            glm::vec4(tint[0], tint[1], tint[2], tint[3])
-        };
+            glm::vec4(static_cast<float>(ctx.screenWidth), static_cast<float>(ctx.screenHeight), ax, ay),
+            glm::vec4(aw, ah, 0.0f, 0.0f), glm::vec4(m_u0, m_v0, m_u1, m_v1),
+            glm::vec4(tint[0], tint[1], tint[2], tint[3])};
         commandList.setGraphicsPipeline(ctx.imageTexturePipeline);
         commandList.setVertexBuffer(0u, ctx.panelQuadVertexBuffer, 0u);
         commandList.setBindGroup(0u, bindGroup);
         commandList.pushConstants(&pushConstants, sizeof(pushConstants),
-                                  rhiFlag(RhiShaderStage::Vertex) |
-                                  rhiFlag(RhiShaderStage::Fragment));
+                                  rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment));
         commandList.draw(6u, 1u, 0u, 0u);
         return;
     }
 
     if (!m_useTexture && ctx.panelSolidPipeline.isValid()) {
         const ImageSolidPushConstants pushConstants{
-            glm::vec4(static_cast<float>(ctx.screenWidth),
-                      static_cast<float>(ctx.screenHeight), ax, ay),
-            glm::vec4(aw, ah, 0.0f, 0.0f),
-            glm::vec4(tint[0], tint[1], tint[2], tint[3])
-        };
+            glm::vec4(static_cast<float>(ctx.screenWidth), static_cast<float>(ctx.screenHeight), ax, ay),
+            glm::vec4(aw, ah, 0.0f, 0.0f), glm::vec4(tint[0], tint[1], tint[2], tint[3])};
         commandList.setGraphicsPipeline(ctx.panelSolidPipeline);
         commandList.setVertexBuffer(0u, ctx.panelQuadVertexBuffer, 0u);
         commandList.pushConstants(&pushConstants, sizeof(pushConstants),
-                                  rhiFlag(RhiShaderStage::Vertex) |
-                                  rhiFlag(RhiShaderStage::Fragment));
+                                  rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment));
         commandList.draw(6u, 1u, 0u, 0u);
     }
 }

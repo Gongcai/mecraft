@@ -16,7 +16,9 @@ class ResourceMgr;
 class RhiDevice;
 class RhiCommandList;
 
-namespace shadow { class ShadowRenderer; }
+namespace shadow {
+class ShadowRenderer;
+}
 
 /// Debug visualization pass: renders GBuffer/lighting/shadow/SSAO debug overlays.
 /// Displays all intermediate render targets for visual inspection.
@@ -44,22 +46,14 @@ public:
     /// @param resources Imported graph handles matching the shader bindings.
     /// @param dependency Pass that must complete before debug visualization.
     /// @return Debug pass handle, or an invalid handle for an invalid contract.
-    [[nodiscard]] RgPassHandle addGraphPass(
-        RenderGraph& graph,
-        const FrameContext& ctx,
-        const RenderSettings& settings,
-        DeferredRenderTargets& targets,
-        const GraphResources& resources,
-        RgPassHandle dependency);
+    [[nodiscard]] RgPassHandle addGraphPass(RenderGraph& graph, const FrameContext& ctx, const RenderSettings& settings,
+                                            DeferredRenderTargets& targets, const GraphResources& resources,
+                                            RgPassHandle dependency);
 
     /// Records the debug visualization into an existing graph command list.
-    [[nodiscard]] bool recordGraphPass(
-        const FrameContext& ctx,
-        const RenderSettings& settings,
-        DeferredRenderTargets& targets,
-        int width,
-        int height,
-        RhiCommandList& commandList);
+    [[nodiscard]] bool recordGraphPass(const FrameContext& ctx, const RenderSettings& settings,
+                                       DeferredRenderTargets& targets, int width, int height,
+                                       RhiCommandList& commandList);
 
 private:
     bool ensureRhiPipeline(RhiDevice& rhiDevice);

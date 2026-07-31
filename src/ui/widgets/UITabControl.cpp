@@ -30,14 +30,11 @@ static_assert(sizeof(TabGlassPushConstants) == 64u);
     if (context.hasScissor) {
         return context.scissor;
     }
-    return {
-        0,
-        0,
-        static_cast<uint32_t>(std::max(1.0f,
-            std::round(static_cast<float>(context.screenWidth) * context.pixelScale()))),
-        static_cast<uint32_t>(std::max(1.0f,
-            std::round(static_cast<float>(context.screenHeight) * context.pixelScale())))
-    };
+    return {0, 0,
+            static_cast<uint32_t>(
+                std::max(1.0f, std::round(static_cast<float>(context.screenWidth) * context.pixelScale()))),
+            static_cast<uint32_t>(
+                std::max(1.0f, std::round(static_cast<float>(context.screenHeight) * context.pixelScale())))};
 }
 
 } // namespace
@@ -85,20 +82,24 @@ int UITabControl::addTab(const std::string& title) {
 }
 
 UIWidget* UITabControl::getContentPanel(int index) {
-    if (index < 0 || index >= static_cast<int>(m_tabs.size())) return nullptr;
+    if (index < 0 || index >= static_cast<int>(m_tabs.size()))
+        return nullptr;
     return m_tabs[index].contentPanel;
 }
 
 void UITabControl::setActiveTab(int index) {
-    if (index < 0 || index >= static_cast<int>(m_tabs.size())) return;
-    if (m_activeIndex == index) return;
+    if (index < 0 || index >= static_cast<int>(m_tabs.size()))
+        return;
+    if (m_activeIndex == index)
+        return;
     m_activeIndex = index;
     for (int i = 0; i < static_cast<int>(m_tabs.size()); ++i) {
         if (m_tabs[i].contentPanel) {
             m_tabs[i].contentPanel->visible = (i == m_activeIndex);
         }
     }
-    if (onTabChanged) onTabChanged(m_activeIndex);
+    if (onTabChanged)
+        onTabChanged(m_activeIndex);
 }
 
 float UITabControl::getHeaderHeight(const UIRenderContext& ctx) const {
@@ -147,7 +148,8 @@ void UITabControl::clearLocalStyle() {
 }
 
 int UITabControl::hitTestHeader(float px, float py, const UIRenderContext& ctx) const {
-    if (m_tabs.empty()) return -1;
+    if (m_tabs.empty())
+        return -1;
     const float flippedY = static_cast<float>(ctx.screenHeight) - py;
     const float ax = getAbsoluteX(ctx);
     const float ay = getAbsoluteY(ctx);
@@ -155,13 +157,16 @@ int UITabControl::hitTestHeader(float px, float py, const UIRenderContext& ctx) 
     const float headerH = resolveStyle(ctx, UIStyleState_Normal).headerHeight;
 
     // Header area is at the top of the widget.
-    if (flippedY < ay + (height * scaleY - headerH) || flippedY >= ay + height * scaleY) return -1;
-    if (px < ax || px >= ax + aw) return -1;
+    if (flippedY < ay + (height * scaleY - headerH) || flippedY >= ay + height * scaleY)
+        return -1;
+    if (px < ax || px >= ax + aw)
+        return -1;
 
     const float tabW = aw / static_cast<float>(m_tabs.size());
     const float localX = px - ax;
     const int idx = static_cast<int>(localX / tabW);
-    if (idx >= 0 && idx < static_cast<int>(m_tabs.size())) return idx;
+    if (idx >= 0 && idx < static_cast<int>(m_tabs.size()))
+        return idx;
     return -1;
 }
 
@@ -172,9 +177,8 @@ void UITabControl::renderSelf(const UIRenderContext& ctx) const {
         return;
     }
     const bool record = ctx.phase == UIRenderPhase::Record;
-    if (record && (ctx.commandList == nullptr ||
-                   !ctx.panelQuadVertexBuffer.isValid() ||
-                   !ctx.panelSolidPipeline.isValid())) {
+    if (record &&
+        (ctx.commandList == nullptr || !ctx.panelQuadVertexBuffer.isValid() || !ctx.panelSolidPipeline.isValid())) {
         return;
     }
 
@@ -198,61 +202,46 @@ void UITabControl::renderSelf(const UIRenderContext& ctx) const {
 
     const float indX0 = ax + static_cast<float>(m_activeIndex) * tabW;
     const float indX1 = indX0 + tabW;
-    const bool useGlass = ctx.panelGlassPipeline.isValid() &&
-                          ctx.panelGlassBindGroup.isValid() &&
-                          ctx.backdropBlurView.isValid() &&
-                          ctx.backdropSourceWidth > 0 &&
-                          ctx.backdropSourceHeight > 0 &&
-                          ctx.backdropBlurWidth > 0 &&
-                          ctx.backdropBlurHeight > 0;
+    const bool useGlass = ctx.panelGlassPipeline.isValid() && ctx.panelGlassBindGroup.isValid() &&
+                          ctx.backdropBlurView.isValid() && ctx.backdropSourceWidth > 0 &&
+                          ctx.backdropSourceHeight > 0 && ctx.backdropBlurWidth > 0 && ctx.backdropBlurHeight > 0;
 
     if (record) {
         RhiCommandList& commandList = *ctx.commandList;
         const RhiRect2D scissor = tabScissor(ctx);
 
-    if (useGlass) {
-        const float tintStrength = std::clamp(contentCol[3] * 0.40f, 0.18f, 0.40f);
-        const TabGlassPushConstants pushConstants{
-            glm::vec4(static_cast<float>(ctx.screenWidth),
-                      static_cast<float>(ctx.screenHeight), ax, ay),
-            glm::vec4(aw, headerBottomY - ay, 0.0f,
-                      std::clamp(alpha * 0.94f, 0.0f, 1.0f)),
-            glm::vec4(contentCol[0], contentCol[1], contentCol[2], tintStrength),
-            glm::vec4(0.58f, 0.74f, 0.0f, 0.0f)
-        };
-        commandList.setGraphicsPipeline(ctx.panelGlassPipeline);
-        commandList.setVertexBuffer(0u, ctx.panelQuadVertexBuffer, 0u);
-        commandList.setBindGroup(0u, ctx.panelGlassBindGroup);
-        commandList.setScissor(scissor);
-        commandList.pushConstants(&pushConstants, sizeof(pushConstants),
-                                  rhiFlag(RhiShaderStage::Vertex) |
-                                  rhiFlag(RhiShaderStage::Fragment));
-        commandList.draw(6u, 1u, 0u, 0u);
-    }
-
-    commandList.setGraphicsPipeline(ctx.panelSolidPipeline);
-    commandList.setVertexBuffer(0u, ctx.panelQuadVertexBuffer, 0u);
-    commandList.setScissor(scissor);
-
-    auto drawSolidRect = [&](const float x,
-                             const float y,
-                             const float rectWidth,
-                             const float rectHeight,
-                             const Color& color) {
-        if (rectWidth <= 0.0f || rectHeight <= 0.0f || color[3] <= 0.0f) {
-            return;
+        if (useGlass) {
+            const float tintStrength = std::clamp(contentCol[3] * 0.40f, 0.18f, 0.40f);
+            const TabGlassPushConstants pushConstants{
+                glm::vec4(static_cast<float>(ctx.screenWidth), static_cast<float>(ctx.screenHeight), ax, ay),
+                glm::vec4(aw, headerBottomY - ay, 0.0f, std::clamp(alpha * 0.94f, 0.0f, 1.0f)),
+                glm::vec4(contentCol[0], contentCol[1], contentCol[2], tintStrength),
+                glm::vec4(0.58f, 0.74f, 0.0f, 0.0f)};
+            commandList.setGraphicsPipeline(ctx.panelGlassPipeline);
+            commandList.setVertexBuffer(0u, ctx.panelQuadVertexBuffer, 0u);
+            commandList.setBindGroup(0u, ctx.panelGlassBindGroup);
+            commandList.setScissor(scissor);
+            commandList.pushConstants(&pushConstants, sizeof(pushConstants),
+                                      rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment));
+            commandList.draw(6u, 1u, 0u, 0u);
         }
-        const TabSolidPushConstants pushConstants{
-            glm::vec4(static_cast<float>(ctx.screenWidth),
-                      static_cast<float>(ctx.screenHeight), x, y),
-            glm::vec4(rectWidth, rectHeight, 0.0f, 0.0f),
-            glm::vec4(color[0], color[1], color[2], color[3])
+
+        commandList.setGraphicsPipeline(ctx.panelSolidPipeline);
+        commandList.setVertexBuffer(0u, ctx.panelQuadVertexBuffer, 0u);
+        commandList.setScissor(scissor);
+
+        auto drawSolidRect = [&](const float x, const float y, const float rectWidth, const float rectHeight,
+                                 const Color& color) {
+            if (rectWidth <= 0.0f || rectHeight <= 0.0f || color[3] <= 0.0f) {
+                return;
+            }
+            const TabSolidPushConstants pushConstants{
+                glm::vec4(static_cast<float>(ctx.screenWidth), static_cast<float>(ctx.screenHeight), x, y),
+                glm::vec4(rectWidth, rectHeight, 0.0f, 0.0f), glm::vec4(color[0], color[1], color[2], color[3])};
+            commandList.pushConstants(&pushConstants, sizeof(pushConstants),
+                                      rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment));
+            commandList.draw(6u, 1u, 0u, 0u);
         };
-        commandList.pushConstants(&pushConstants, sizeof(pushConstants),
-                                  rhiFlag(RhiShaderStage::Vertex) |
-                                  rhiFlag(RhiShaderStage::Fragment));
-        commandList.draw(6u, 1u, 0u, 0u);
-    };
 
         // Draw content background, then headers and the active indicator.
         Color contentDraw = contentCol;
@@ -260,7 +249,8 @@ void UITabControl::renderSelf(const UIRenderContext& ctx) const {
         drawSolidRect(ax, ay, aw, headerBottomY - ay, contentDraw);
 
         for (int i = 0; i < static_cast<int>(m_tabs.size()); ++i) {
-            int tabState = interactive ? static_cast<int>(UIStyleState_Normal) : static_cast<int>(UIStyleState_Disabled);
+            int tabState =
+                interactive ? static_cast<int>(UIStyleState_Normal) : static_cast<int>(UIStyleState_Disabled);
             if (i == m_activeIndex) {
                 tabState |= static_cast<int>(UIStyleState_Selected);
             } else if (i == m_hoveredTab) {
@@ -275,8 +265,7 @@ void UITabControl::renderSelf(const UIRenderContext& ctx) const {
         // Draw indicator.
         Color indicatorDraw = indCol;
         indicatorDraw[3] *= alpha;
-        drawSolidRect(indX0, headerBottomY - indicatorH,
-                      indX1 - indX0, indicatorH, indicatorDraw);
+        drawSolidRect(indX0, headerBottomY - indicatorH, indX1 - indX0, indicatorH, indicatorDraw);
     }
 
     // Render header text.
@@ -287,19 +276,15 @@ void UITabControl::renderSelf(const UIRenderContext& ctx) const {
             const float x0 = ax + static_cast<float>(i) * tabW;
             const float textX = x0 + (tabW - m.width) * 0.5f;
             const float textY = headerBottomY + (headerH - m.height) * 0.5f;
-            ctx.textRenderer->draw(
-                ctx,
-                m_tabs[i].title,
-                textX,
-                textY,
-                textScale,
-                {txtCol[0], txtCol[1], txtCol[2], txtCol[3] * alpha});
+            ctx.textRenderer->draw(ctx, m_tabs[i].title, textX, textY, textScale,
+                                   {txtCol[0], txtCol[1], txtCol[2], txtCol[3] * alpha});
         }
     }
 }
 
 void UITabControl::render(const UIRenderContext& ctx) const {
-    if (!visible) return;
+    if (!visible)
+        return;
 
     // Render the tab headers (renderSelf).
     renderSelf(ctx);
@@ -325,7 +310,8 @@ void UITabControl::render(const UIRenderContext& ctx) const {
 }
 
 UIEventResult UITabControl::onInput(const UIInputEvent& event, const UIRenderContext& ctx) {
-    if (!visible || !interactive) return UIEventResult::Ignored;
+    if (!visible || !interactive)
+        return UIEventResult::Ignored;
 
     UIEventResult aggregate = UIEventResult::Ignored;
 
@@ -334,8 +320,10 @@ UIEventResult UITabControl::onInput(const UIInputEvent& event, const UIRenderCon
         auto& panel = m_tabs[m_activeIndex].contentPanel;
         if (panel) {
             const UIEventResult contentResult = panel->onInput(event, ctx);
-            if (contentResult == UIEventResult::Consumed) return UIEventResult::Consumed;
-            if (contentResult == UIEventResult::Handled) aggregate = UIEventResult::Handled;
+            if (contentResult == UIEventResult::Consumed)
+                return UIEventResult::Consumed;
+            if (contentResult == UIEventResult::Handled)
+                aggregate = UIEventResult::Handled;
         }
     }
 
@@ -358,7 +346,8 @@ UIEventResult UITabControl::onInput(const UIInputEvent& event, const UIRenderCon
 
     case UIInputEventType::Command:
         if (event.command == UICommand::TabLeft) {
-            const int newIndex = (m_activeIndex - 1 + static_cast<int>(m_tabs.size())) % static_cast<int>(m_tabs.size());
+            const int newIndex =
+                (m_activeIndex - 1 + static_cast<int>(m_tabs.size())) % static_cast<int>(m_tabs.size());
             setActiveTab(newIndex);
             return UIEventResult::Consumed;
         }
@@ -369,8 +358,7 @@ UIEventResult UITabControl::onInput(const UIInputEvent& event, const UIRenderCon
         }
         break;
 
-    default:
-        break;
+    default: break;
     }
 
     return aggregate;

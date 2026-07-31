@@ -48,8 +48,7 @@ void DeferredRenderTargets::shutdown() {
     m_commandListPool = nullptr;
 }
 
-void DeferredRenderTargets::transitionTexture(RhiCommandList& commandList,
-                                              const RhiTextureHandle texture,
+void DeferredRenderTargets::transitionTexture(RhiCommandList& commandList, const RhiTextureHandle texture,
                                               const RhiResourceState newState) const {
     assert(texture.isValid());
     const uint64_t key = textureStateKey(texture);
@@ -65,8 +64,7 @@ void DeferredRenderTargets::transitionTexture(RhiCommandList& commandList,
     m_textureStates[key] = newState;
 }
 
-void DeferredRenderTargets::initializeTextureState(RhiCommandList& commandList,
-                                                   const RhiTextureHandle texture,
+void DeferredRenderTargets::initializeTextureState(RhiCommandList& commandList, const RhiTextureHandle texture,
                                                    const RhiResourceState stableState) const {
     assert(texture.isValid());
     commandList.textureBarrier({texture, RhiResourceState::Undefined, stableState});
@@ -149,70 +147,33 @@ void DeferredRenderTargets::initializePersistentTextureStates() {
     assert(m_rhiDevice != nullptr);
 
     const RhiTextureHandle colorTextures[] = {
-        m_gAlbedoHandle,
-        m_gNormalAoHandle,
-        m_gVoxelLightHandle,
-        m_gMaterialHandle,
-        m_gMaterialAuxHandle,
-        m_gF0MetallicHandle,
-        m_gObjectMaterialIdHandle,
+        m_gAlbedoHandle, m_gNormalAoHandle, m_gVoxelLightHandle, m_gMaterialHandle, m_gMaterialAuxHandle,
+        m_gF0MetallicHandle, m_gObjectMaterialIdHandle,
         // SceneLighting/SceneComposite/TransparentComposite/Reflection/Cloud
         // are render-graph transients now; the graph tracks their states.
-        m_sceneResolvedHandle,
-        m_halfResHandle,
-        m_reflectionTemporalScratchHandle,
-        m_skyCaptureHandle,
-        m_historySceneHandle[0],
-        m_historySceneHandle[1],
-        m_historyReflectionHandle[0],
-        m_historyReflectionHandle[1],
-        m_historyCloudHandle[0],
-        m_historyCloudHandle[1],
-        m_historyVolumetricHandle[0],
-        m_historyVolumetricHandle[1],
-        m_temporalCurrentHandle,
-        m_velocityHandle,
-        m_perObjectVelocityHandle,
-        m_weatherMaskHandle,
-        m_reactiveMaskHandle,
-        m_transparencyMaskHandle,
-        m_ssaoFilteredHandle,
-        m_ssaoHalfResHandle,
-        m_ssaoHalfResFilteredHandle,
-        m_ssaoHistoryHandle[0],
-        m_ssaoHistoryHandle[1],
-        m_ssaoTemporalHandle,
-        m_ssgiHandle,
-        m_ssgiHalfResHandle,
-        m_ssgiDenoiseHandle[0],
-        m_ssgiDenoiseHandle[1],
-        m_ssgiHistoryHandle[0],
-        m_ssgiHistoryHandle[1],
-        m_ssgiMomentsHistoryHandle[0],
-        m_ssgiMomentsHistoryHandle[1],
-        m_ssgiTemporalHandle,
-        m_ssgiTemporalMomentsHandle,
-        m_csmShadowColor0Handle,
-        m_csmShadowColor1Handle
-    };
-    const RhiTextureHandle depthTextures[] = {
-        m_gDepthHandle,
-        m_historyDepthHandle[0],
-        m_historyDepthHandle[1],
-        m_taaHistoryDepthHandle[0],
-        m_taaHistoryDepthHandle[1],
-        m_csmShadowDepthHandle,
-        m_csmShadowDepthAllHandle
-    };
+        m_sceneResolvedHandle, m_halfResHandle, m_reflectionTemporalScratchHandle, m_skyCaptureHandle,
+        m_historySceneHandle[0], m_historySceneHandle[1], m_historyReflectionHandle[0], m_historyReflectionHandle[1],
+        m_historyCloudHandle[0], m_historyCloudHandle[1], m_historyVolumetricHandle[0], m_historyVolumetricHandle[1],
+        m_temporalCurrentHandle, m_velocityHandle, m_perObjectVelocityHandle, m_weatherMaskHandle, m_reactiveMaskHandle,
+        m_transparencyMaskHandle, m_ssaoFilteredHandle, m_ssaoHalfResHandle, m_ssaoHalfResFilteredHandle,
+        m_ssaoHistoryHandle[0], m_ssaoHistoryHandle[1], m_ssaoTemporalHandle, m_ssgiHandle, m_ssgiHalfResHandle,
+        m_ssgiDenoiseHandle[0], m_ssgiDenoiseHandle[1], m_ssgiHistoryHandle[0], m_ssgiHistoryHandle[1],
+        m_ssgiMomentsHistoryHandle[0], m_ssgiMomentsHistoryHandle[1], m_ssgiTemporalHandle, m_ssgiTemporalMomentsHandle,
+        m_csmShadowColor0Handle, m_csmShadowColor1Handle};
+    const RhiTextureHandle depthTextures[] = {m_gDepthHandle,
+                                              m_historyDepthHandle[0],
+                                              m_historyDepthHandle[1],
+                                              m_taaHistoryDepthHandle[0],
+                                              m_taaHistoryDepthHandle[1],
+                                              m_csmShadowDepthHandle,
+                                              m_csmShadowDepthAllHandle};
 
     if (m_commandListPool == nullptr || m_rhiDevice == nullptr) {
         std::abort();
     }
-    RhiCommandList* const commandListStorage =
-        m_commandListPool->acquire(RhiCommandListType::Graphics);
+    RhiCommandList* const commandListStorage = m_commandListPool->acquire(RhiCommandListType::Graphics);
     if (commandListStorage == nullptr ||
-        !commandListStorage->begin(
-            {"DeferredTargets.InitializeStates", RhiCommandListType::Graphics})) {
+        !commandListStorage->begin({"DeferredTargets.InitializeStates", RhiCommandListType::Graphics})) {
         std::abort();
     }
     RhiCommandList& commandList = *commandListStorage;
@@ -226,16 +187,13 @@ void DeferredRenderTargets::initializePersistentTextureStates() {
         std::abort();
     }
     RhiCommandList* submittedCommandLists[] = {&commandList};
-    if (!m_rhiDevice->submit(
-            {"DeferredTargets.InitializeStates", submittedCommandLists, 1u})) {
+    if (!m_rhiDevice->submit({"DeferredTargets.InitializeStates", submittedCommandLists, 1u})) {
         std::abort();
     }
 }
 
-void DeferredRenderTargets::publishTransientTarget(
-    const DeferredTransientTarget target,
-    const RhiTextureHandle texture,
-    const RhiTextureViewHandle view) {
+void DeferredRenderTargets::publishTransientTarget(const DeferredTransientTarget target, const RhiTextureHandle texture,
+                                                   const RhiTextureViewHandle view) {
     switch (target) {
     case DeferredTransientTarget::SceneLighting:
         m_sceneLightingHandle = texture;
@@ -264,8 +222,7 @@ void DeferredRenderTargets::publishTransientTarget(
     }
 }
 
-RhiTextureDesc DeferredRenderTargets::transientTargetDesc(
-    const DeferredTransientTarget target) const {
+RhiTextureDesc DeferredRenderTargets::transientTargetDesc(const DeferredTransientTarget target) const {
     RhiTextureDesc desc;
     // The caller names the graph resource; the shared pool must not point at
     // a string whose storage may outlive this call site.
@@ -278,10 +235,8 @@ RhiTextureDesc DeferredRenderTargets::transientTargetDesc(
     desc.mipLevels = 1u;
     desc.sampleCount = 1u;
     const RhiTextureUsageFlags colorUsage =
-        rhiFlag(RhiTextureUsage::Sampled) |
-        rhiFlag(RhiTextureUsage::ColorAttachment) |
-        rhiFlag(RhiTextureUsage::TransferSrc) |
-        rhiFlag(RhiTextureUsage::TransferDst);
+        rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment) |
+        rhiFlag(RhiTextureUsage::TransferSrc) | rhiFlag(RhiTextureUsage::TransferDst);
     switch (target) {
     case DeferredTransientTarget::SceneLighting:
     case DeferredTransientTarget::SceneComposite:
@@ -294,10 +249,8 @@ RhiTextureDesc DeferredRenderTargets::transientTargetDesc(
         // A separate depth attachment prevents feedback while the G-buffer
         // depth is sampled.
         desc.format = RhiTextureFormat::Depth32Float;
-        desc.usage = rhiFlag(RhiTextureUsage::Sampled) |
-                     rhiFlag(RhiTextureUsage::DepthStencilAttachment) |
-                     rhiFlag(RhiTextureUsage::TransferSrc) |
-                     rhiFlag(RhiTextureUsage::TransferDst);
+        desc.usage = rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::DepthStencilAttachment) |
+                     rhiFlag(RhiTextureUsage::TransferSrc) | rhiFlag(RhiTextureUsage::TransferDst);
         break;
     case DeferredTransientTarget::Cloud:
         // Half-resolution raymarch target; Storage lets the async-compute
@@ -326,12 +279,9 @@ bool DeferredRenderTargets::createGBufferTextures() {
         return false;
     }
 
-    const auto createTexture = [this](const char* debugName,
-                                      const RhiTextureFormat format,
-                                      const RhiTextureUsageFlags usage,
-                                      RhiTextureHandle& handle,
-                                      const RhiTextureQueueSharing
-                                          queueSharing) {
+    const auto createTexture = [this](const char* debugName, const RhiTextureFormat format,
+                                      const RhiTextureUsageFlags usage, RhiTextureHandle& handle,
+                                      const RhiTextureQueueSharing queueSharing) {
         RhiTextureDesc desc;
         desc.debugName = debugName;
         desc.memoryCategory = RhiMemoryCategory::GBufferHistory;
@@ -349,41 +299,27 @@ bool DeferredRenderTargets::createGBufferTextures() {
     };
 
     const RhiTextureUsageFlags colorUsage =
-        rhiFlag(RhiTextureUsage::Sampled) |
-        rhiFlag(RhiTextureUsage::ColorAttachment) |
-        rhiFlag(RhiTextureUsage::TransferSrc) |
-        rhiFlag(RhiTextureUsage::TransferDst);
+        rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment) |
+        rhiFlag(RhiTextureUsage::TransferSrc) | rhiFlag(RhiTextureUsage::TransferDst);
     const RhiTextureUsageFlags depthUsage =
-        rhiFlag(RhiTextureUsage::Sampled) |
-        rhiFlag(RhiTextureUsage::DepthStencilAttachment) |
-        rhiFlag(RhiTextureUsage::TransferSrc) |
-        rhiFlag(RhiTextureUsage::TransferDst);
+        rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::DepthStencilAttachment) |
+        rhiFlag(RhiTextureUsage::TransferSrc) | rhiFlag(RhiTextureUsage::TransferDst);
 
-    if (!createTexture("DeferredTargets.GBufferAlbedo",
-                       RhiTextureFormat::Rgba8Unorm, colorUsage,
-                       m_gAlbedoHandle, RhiTextureQueueSharing::Exclusive) ||
-        !createTexture("DeferredTargets.GBufferNormalAo",
-                       RhiTextureFormat::Rgb10A2Unorm, colorUsage,
-                       m_gNormalAoHandle, RhiTextureQueueSharing::Exclusive) ||
-        !createTexture("DeferredTargets.GBufferVoxelLight",
-                       RhiTextureFormat::Rg8Unorm, colorUsage,
-                       m_gVoxelLightHandle, RhiTextureQueueSharing::Exclusive) ||
-        !createTexture("DeferredTargets.GBufferMaterial",
-                       RhiTextureFormat::Rgba8Unorm, colorUsage,
-                       m_gMaterialHandle, RhiTextureQueueSharing::Exclusive) ||
-        !createTexture("DeferredTargets.GBufferMaterialAux",
-                       RhiTextureFormat::Rgba8Unorm, colorUsage,
-                       m_gMaterialAuxHandle, RhiTextureQueueSharing::Exclusive) ||
-        !createTexture("DeferredTargets.GBufferF0Metallic",
-                       RhiTextureFormat::Rgba8Unorm, colorUsage,
-                       m_gF0MetallicHandle, RhiTextureQueueSharing::Exclusive) ||
-        !createTexture("DeferredTargets.GBufferObjectMaterialId",
-                       RhiTextureFormat::Rg32Uint, colorUsage,
-                       m_gObjectMaterialIdHandle,
+    if (!createTexture("DeferredTargets.GBufferAlbedo", RhiTextureFormat::Rgba8Unorm, colorUsage, m_gAlbedoHandle,
                        RhiTextureQueueSharing::Exclusive) ||
-        !createTexture("DeferredTargets.GBufferDepth",
-                       RhiTextureFormat::Depth32Float, depthUsage,
-                       m_gDepthHandle,
+        !createTexture("DeferredTargets.GBufferNormalAo", RhiTextureFormat::Rgb10A2Unorm, colorUsage, m_gNormalAoHandle,
+                       RhiTextureQueueSharing::Exclusive) ||
+        !createTexture("DeferredTargets.GBufferVoxelLight", RhiTextureFormat::Rg8Unorm, colorUsage, m_gVoxelLightHandle,
+                       RhiTextureQueueSharing::Exclusive) ||
+        !createTexture("DeferredTargets.GBufferMaterial", RhiTextureFormat::Rgba8Unorm, colorUsage, m_gMaterialHandle,
+                       RhiTextureQueueSharing::Exclusive) ||
+        !createTexture("DeferredTargets.GBufferMaterialAux", RhiTextureFormat::Rgba8Unorm, colorUsage,
+                       m_gMaterialAuxHandle, RhiTextureQueueSharing::Exclusive) ||
+        !createTexture("DeferredTargets.GBufferF0Metallic", RhiTextureFormat::Rgba8Unorm, colorUsage,
+                       m_gF0MetallicHandle, RhiTextureQueueSharing::Exclusive) ||
+        !createTexture("DeferredTargets.GBufferObjectMaterialId", RhiTextureFormat::Rg32Uint, colorUsage,
+                       m_gObjectMaterialIdHandle, RhiTextureQueueSharing::Exclusive) ||
+        !createTexture("DeferredTargets.GBufferDepth", RhiTextureFormat::Depth32Float, depthUsage, m_gDepthHandle,
                        RhiTextureQueueSharing::GraphicsComputeConcurrent)) {
         destroyGBufferTextures();
         return false;
@@ -396,16 +332,9 @@ void DeferredRenderTargets::destroyGBufferTextures() {
         return;
     }
 
-    RhiTextureHandle* textures[] = {
-        &m_gAlbedoHandle,
-        &m_gNormalAoHandle,
-        &m_gVoxelLightHandle,
-        &m_gMaterialHandle,
-        &m_gMaterialAuxHandle,
-        &m_gF0MetallicHandle,
-        &m_gObjectMaterialIdHandle,
-        &m_gDepthHandle
-    };
+    RhiTextureHandle* textures[] = {&m_gAlbedoHandle,           &m_gNormalAoHandle,    &m_gVoxelLightHandle,
+                                    &m_gMaterialHandle,         &m_gMaterialAuxHandle, &m_gF0MetallicHandle,
+                                    &m_gObjectMaterialIdHandle, &m_gDepthHandle};
     for (RhiTextureHandle* texture : textures) {
         if (texture->isValid()) {
             m_rhiDevice->destroyTexture(*texture);
@@ -430,10 +359,8 @@ bool DeferredRenderTargets::createSceneTextures() {
         desc.depthOrLayers = 1u;
         desc.mipLevels = 1u;
         desc.sampleCount = 1u;
-        desc.usage = rhiFlag(RhiTextureUsage::Sampled) |
-                     rhiFlag(RhiTextureUsage::ColorAttachment) |
-                     rhiFlag(RhiTextureUsage::TransferSrc) |
-                     rhiFlag(RhiTextureUsage::TransferDst);
+        desc.usage = rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment) |
+                     rhiFlag(RhiTextureUsage::TransferSrc) | rhiFlag(RhiTextureUsage::TransferDst);
         handle = m_rhiDevice->createTexture(desc, nullptr);
         return handle.isValid();
     };
@@ -464,12 +391,8 @@ bool DeferredRenderTargets::createScreenEffectTextures() {
         return false;
     }
 
-    const auto createTexture = [this](const char* debugName,
-                                      const uint32_t width,
-                                      const uint32_t height,
-                                      RhiTextureHandle& handle,
-                                      const RhiTextureUsageFlags extraUsage =
-                                          0u) {
+    const auto createTexture = [this](const char* debugName, const uint32_t width, const uint32_t height,
+                                      RhiTextureHandle& handle, const RhiTextureUsageFlags extraUsage = 0u) {
         RhiTextureDesc desc;
         desc.debugName = debugName;
         desc.memoryCategory = RhiMemoryCategory::GBufferHistory;
@@ -480,10 +403,8 @@ bool DeferredRenderTargets::createScreenEffectTextures() {
         desc.depthOrLayers = 1u;
         desc.mipLevels = 1u;
         desc.sampleCount = 1u;
-        desc.usage = rhiFlag(RhiTextureUsage::Sampled) |
-                     rhiFlag(RhiTextureUsage::ColorAttachment) |
-                     rhiFlag(RhiTextureUsage::TransferSrc) |
-                     rhiFlag(RhiTextureUsage::TransferDst) | extraUsage;
+        desc.usage = rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment) |
+                     rhiFlag(RhiTextureUsage::TransferSrc) | rhiFlag(RhiTextureUsage::TransferDst) | extraUsage;
         handle = m_rhiDevice->createTexture(desc, nullptr);
         return handle.isValid();
     };
@@ -495,8 +416,7 @@ bool DeferredRenderTargets::createScreenEffectTextures() {
     // Reflection itself is a frame-scoped render-graph transient now; only
     // the persistent helpers remain here.
     if (!createTexture("DeferredTargets.HalfRes", halfWidth, halfHeight, m_halfResHandle) ||
-        !createTexture("DeferredTargets.ReflectionTemporalScratch", width, height,
-                       m_reflectionTemporalScratchHandle)) {
+        !createTexture("DeferredTargets.ReflectionTemporalScratch", width, height, m_reflectionTemporalScratchHandle)) {
         destroyScreenEffectTextures();
         return false;
     }
@@ -508,10 +428,7 @@ void DeferredRenderTargets::destroyScreenEffectTextures() {
         return;
     }
 
-    RhiTextureHandle* textures[] = {
-        &m_halfResHandle,
-        &m_reflectionTemporalScratchHandle
-    };
+    RhiTextureHandle* textures[] = {&m_halfResHandle, &m_reflectionTemporalScratchHandle};
     for (RhiTextureHandle* texture : textures) {
         if (texture->isValid()) {
             m_rhiDevice->destroyTexture(*texture);
@@ -525,12 +442,8 @@ bool DeferredRenderTargets::createAtmosphereTextures() {
         return false;
     }
 
-    const auto createTexture = [this](const char* debugName,
-                                      const uint32_t width,
-                                      const uint32_t height,
-                                      RhiTextureHandle& handle,
-                                      const RhiTextureUsageFlags extraUsage =
-                                          0u) {
+    const auto createTexture = [this](const char* debugName, const uint32_t width, const uint32_t height,
+                                      RhiTextureHandle& handle, const RhiTextureUsageFlags extraUsage = 0u) {
         RhiTextureDesc desc;
         desc.debugName = debugName;
         desc.memoryCategory = RhiMemoryCategory::GBufferHistory;
@@ -541,22 +454,17 @@ bool DeferredRenderTargets::createAtmosphereTextures() {
         desc.depthOrLayers = 1u;
         desc.mipLevels = 1u;
         desc.sampleCount = 1u;
-        desc.usage = rhiFlag(RhiTextureUsage::Sampled) |
-                     rhiFlag(RhiTextureUsage::ColorAttachment) |
-                     rhiFlag(RhiTextureUsage::TransferSrc) |
-                     rhiFlag(RhiTextureUsage::TransferDst) | extraUsage;
-        desc.queueSharing =
-            RhiTextureQueueSharing::GraphicsComputeConcurrent;
+        desc.usage = rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment) |
+                     rhiFlag(RhiTextureUsage::TransferSrc) | rhiFlag(RhiTextureUsage::TransferDst) | extraUsage;
+        desc.queueSharing = RhiTextureQueueSharing::GraphicsComputeConcurrent;
         handle = m_rhiDevice->createTexture(desc, nullptr);
         return handle.isValid();
     };
 
     // Cloud is a frame-scoped render-graph transient now (half resolution
     // with Storage usage); only the persistent sky capture stays here.
-    if (!createTexture("DeferredTargets.SkyCapture",
-                       static_cast<uint32_t>(kSkyCaptureWidth),
-                       static_cast<uint32_t>(kSkyCaptureHeight),
-                       m_skyCaptureHandle)) {
+    if (!createTexture("DeferredTargets.SkyCapture", static_cast<uint32_t>(kSkyCaptureWidth),
+                       static_cast<uint32_t>(kSkyCaptureHeight), m_skyCaptureHandle)) {
         destroyAtmosphereTextures();
         return false;
     }
@@ -579,10 +487,8 @@ bool DeferredRenderTargets::createSceneHistoryTextures() {
         return false;
     }
 
-    const auto createTexture = [this](const char* debugName,
-                                      const RhiTextureFormat format,
-                                      const RhiTextureUsageFlags usage,
-                                      RhiTextureHandle& handle) {
+    const auto createTexture = [this](const char* debugName, const RhiTextureFormat format,
+                                      const RhiTextureUsageFlags usage, RhiTextureHandle& handle) {
         RhiTextureDesc desc;
         desc.debugName = debugName;
         desc.memoryCategory = RhiMemoryCategory::GBufferHistory;
@@ -599,29 +505,18 @@ bool DeferredRenderTargets::createSceneHistoryTextures() {
     };
 
     const RhiTextureUsageFlags colorUsage =
-        rhiFlag(RhiTextureUsage::Sampled) |
-        rhiFlag(RhiTextureUsage::ColorAttachment) |
-        rhiFlag(RhiTextureUsage::TransferSrc) |
-        rhiFlag(RhiTextureUsage::TransferDst);
+        rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment) |
+        rhiFlag(RhiTextureUsage::TransferSrc) | rhiFlag(RhiTextureUsage::TransferDst);
     const RhiTextureUsageFlags depthUsage =
-        rhiFlag(RhiTextureUsage::Sampled) |
-        rhiFlag(RhiTextureUsage::DepthStencilAttachment) |
-        rhiFlag(RhiTextureUsage::TransferSrc) |
-        rhiFlag(RhiTextureUsage::TransferDst);
+        rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::DepthStencilAttachment) |
+        rhiFlag(RhiTextureUsage::TransferSrc) | rhiFlag(RhiTextureUsage::TransferDst);
     for (int i = 0; i < 2; ++i) {
-        const char* sceneName = i == 0
-            ? "DeferredTargets.HistoryScene[0]"
-            : "DeferredTargets.HistoryScene[1]";
-        const char* depthName = i == 0
-            ? "DeferredTargets.HistoryDepth[0]"
-            : "DeferredTargets.HistoryDepth[1]";
-        const char* taaDepthName = i == 0
-            ? "DeferredTargets.TaaHistoryDepth[0]"
-            : "DeferredTargets.TaaHistoryDepth[1]";
+        const char* sceneName = i == 0 ? "DeferredTargets.HistoryScene[0]" : "DeferredTargets.HistoryScene[1]";
+        const char* depthName = i == 0 ? "DeferredTargets.HistoryDepth[0]" : "DeferredTargets.HistoryDepth[1]";
+        const char* taaDepthName = i == 0 ? "DeferredTargets.TaaHistoryDepth[0]" : "DeferredTargets.TaaHistoryDepth[1]";
         if (!createTexture(sceneName, RhiTextureFormat::Rgba16Float, colorUsage, m_historySceneHandle[i]) ||
             !createTexture(depthName, RhiTextureFormat::Depth32Float, depthUsage, m_historyDepthHandle[i]) ||
-            !createTexture(taaDepthName, RhiTextureFormat::Depth32Float, depthUsage,
-                           m_taaHistoryDepthHandle[i])) {
+            !createTexture(taaDepthName, RhiTextureFormat::Depth32Float, depthUsage, m_taaHistoryDepthHandle[i])) {
             destroySceneHistoryTextures();
             return false;
         }
@@ -655,12 +550,8 @@ bool DeferredRenderTargets::createEffectHistoryTextures() {
         return false;
     }
 
-    const auto createTexture = [this](const char* debugName,
-                                      const uint32_t width,
-                                      const uint32_t height,
-                                      RhiTextureHandle& handle,
-                                      const RhiTextureUsageFlags extraUsage =
-                                          0u) {
+    const auto createTexture = [this](const char* debugName, const uint32_t width, const uint32_t height,
+                                      RhiTextureHandle& handle, const RhiTextureUsageFlags extraUsage = 0u) {
         RhiTextureDesc desc;
         desc.debugName = debugName;
         desc.memoryCategory = RhiMemoryCategory::GBufferHistory;
@@ -671,10 +562,8 @@ bool DeferredRenderTargets::createEffectHistoryTextures() {
         desc.depthOrLayers = 1u;
         desc.mipLevels = 1u;
         desc.sampleCount = 1u;
-        desc.usage = rhiFlag(RhiTextureUsage::Sampled) |
-                     rhiFlag(RhiTextureUsage::ColorAttachment) |
-                     rhiFlag(RhiTextureUsage::TransferSrc) |
-                     rhiFlag(RhiTextureUsage::TransferDst) | extraUsage;
+        desc.usage = rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment) |
+                     rhiFlag(RhiTextureUsage::TransferSrc) | rhiFlag(RhiTextureUsage::TransferDst) | extraUsage;
         handle = m_rhiDevice->createTexture(desc, nullptr);
         return handle.isValid();
     };
@@ -684,15 +573,11 @@ bool DeferredRenderTargets::createEffectHistoryTextures() {
     const uint32_t halfWidth = static_cast<uint32_t>(std::max(1, m_width / 2));
     const uint32_t halfHeight = static_cast<uint32_t>(std::max(1, m_height / 2));
     for (int i = 0; i < 2; ++i) {
-        const char* reflectionName = i == 0
-            ? "DeferredTargets.HistoryReflection[0]"
-            : "DeferredTargets.HistoryReflection[1]";
-        const char* cloudName = i == 0
-            ? "DeferredTargets.HistoryCloud[0]"
-            : "DeferredTargets.HistoryCloud[1]";
-        const char* volumetricName = i == 0
-            ? "DeferredTargets.HistoryVolumetric[0]"
-            : "DeferredTargets.HistoryVolumetric[1]";
+        const char* reflectionName =
+            i == 0 ? "DeferredTargets.HistoryReflection[0]" : "DeferredTargets.HistoryReflection[1]";
+        const char* cloudName = i == 0 ? "DeferredTargets.HistoryCloud[0]" : "DeferredTargets.HistoryCloud[1]";
+        const char* volumetricName =
+            i == 0 ? "DeferredTargets.HistoryVolumetric[0]" : "DeferredTargets.HistoryVolumetric[1]";
         if (!createTexture(reflectionName, width, height, m_historyReflectionHandle[i]) ||
             !createTexture(cloudName, halfWidth, halfHeight, m_historyCloudHandle[i]) ||
             !createTexture(volumetricName, halfWidth, halfHeight, m_historyVolumetricHandle[i])) {
@@ -709,11 +594,8 @@ void DeferredRenderTargets::destroyEffectHistoryTextures() {
     }
 
     for (int i = 0; i < 2; ++i) {
-        RhiTextureHandle* textures[] = {
-            &m_historyReflectionHandle[i],
-            &m_historyCloudHandle[i],
-            &m_historyVolumetricHandle[i]
-        };
+        RhiTextureHandle* textures[] = {&m_historyReflectionHandle[i], &m_historyCloudHandle[i],
+                                        &m_historyVolumetricHandle[i]};
         for (RhiTextureHandle* texture : textures) {
             if (texture->isValid()) {
                 m_rhiDevice->destroyTexture(*texture);
@@ -728,10 +610,8 @@ bool DeferredRenderTargets::createMotionTextures() {
         return false;
     }
 
-    const auto createTexture = [this](const char* debugName,
-                                      const RhiTextureFormat format,
-                                      const RhiTextureUsageFlags usage,
-                                      RhiTextureHandle& handle) {
+    const auto createTexture = [this](const char* debugName, const RhiTextureFormat format,
+                                      const RhiTextureUsageFlags usage, RhiTextureHandle& handle) {
         RhiTextureDesc desc;
         desc.debugName = debugName;
         desc.memoryCategory = RhiMemoryCategory::GBufferHistory;
@@ -748,8 +628,7 @@ bool DeferredRenderTargets::createMotionTextures() {
     };
 
     const RhiTextureUsageFlags attachmentUsage =
-        rhiFlag(RhiTextureUsage::Sampled) |
-        rhiFlag(RhiTextureUsage::ColorAttachment);
+        rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment);
     // TemporalCurrent doubles as the second scene color ping-pong buffer:
     // TAA/motion blur/DoF render into it and downstream copies blit from it,
     // so it needs the same usage set as SceneResolved.
@@ -758,9 +637,7 @@ bool DeferredRenderTargets::createMotionTextures() {
         // would fall below a useful footprint, but allocating the full chain
         // keeps the view bookkeeping trivial across resizes.
         uint32_t mipCount = 1u;
-        for (uint32_t extent = static_cast<uint32_t>(
-                 std::max(m_width, m_height));
-             extent > 1u; extent >>= 1u) {
+        for (uint32_t extent = static_cast<uint32_t>(std::max(m_width, m_height)); extent > 1u; extent >>= 1u) {
             ++mipCount;
         }
         m_hiZMipCount = mipCount;
@@ -774,31 +651,26 @@ bool DeferredRenderTargets::createMotionTextures() {
         desc.depthOrLayers = 1u;
         desc.mipLevels = mipCount;
         desc.sampleCount = 1u;
-        desc.usage = rhiFlag(RhiTextureUsage::Sampled) |
-                     rhiFlag(RhiTextureUsage::Storage);
+        desc.usage = rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::Storage);
         m_hiZHandle = m_rhiDevice->createTexture(desc, nullptr);
         if (!m_hiZHandle.isValid()) {
             destroyMotionTextures();
             return false;
         }
     }
-    if (!createTexture("DeferredTargets.TemporalCurrent",
-                       RhiTextureFormat::Rgba16Float,
-                       rhiFlag(RhiTextureUsage::Sampled) |
-                           rhiFlag(RhiTextureUsage::ColorAttachment) |
-                           rhiFlag(RhiTextureUsage::TransferSrc) |
-                           rhiFlag(RhiTextureUsage::TransferDst),
+    if (!createTexture("DeferredTargets.TemporalCurrent", RhiTextureFormat::Rgba16Float,
+                       rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment) |
+                           rhiFlag(RhiTextureUsage::TransferSrc) | rhiFlag(RhiTextureUsage::TransferDst),
                        m_temporalCurrentHandle) ||
-        !createTexture("DeferredTargets.Velocity", RhiTextureFormat::Rg16Float,
-                       attachmentUsage, m_velocityHandle) ||
-        !createTexture("DeferredTargets.PerObjectVelocity", RhiTextureFormat::Rg16Float,
-                       attachmentUsage, m_perObjectVelocityHandle) ||
-        !createTexture("DeferredTargets.WeatherMask", RhiTextureFormat::R8Unorm,
-                       attachmentUsage, m_weatherMaskHandle) ||
-        !createTexture("DeferredTargets.ReactiveMask", RhiTextureFormat::R8Unorm,
-                       attachmentUsage, m_reactiveMaskHandle) ||
-        !createTexture("DeferredTargets.TransparencyMask", RhiTextureFormat::R8Unorm,
-                       attachmentUsage, m_transparencyMaskHandle)) {
+        !createTexture("DeferredTargets.Velocity", RhiTextureFormat::Rg16Float, attachmentUsage, m_velocityHandle) ||
+        !createTexture("DeferredTargets.PerObjectVelocity", RhiTextureFormat::Rg16Float, attachmentUsage,
+                       m_perObjectVelocityHandle) ||
+        !createTexture("DeferredTargets.WeatherMask", RhiTextureFormat::R8Unorm, attachmentUsage,
+                       m_weatherMaskHandle) ||
+        !createTexture("DeferredTargets.ReactiveMask", RhiTextureFormat::R8Unorm, attachmentUsage,
+                       m_reactiveMaskHandle) ||
+        !createTexture("DeferredTargets.TransparencyMask", RhiTextureFormat::R8Unorm, attachmentUsage,
+                       m_transparencyMaskHandle)) {
         destroyMotionTextures();
         return false;
     }
@@ -811,14 +683,8 @@ void DeferredRenderTargets::destroyMotionTextures() {
     }
 
     RhiTextureHandle* textures[] = {
-        &m_hiZHandle,
-        &m_temporalCurrentHandle,
-        &m_velocityHandle,
-        &m_perObjectVelocityHandle,
-        &m_weatherMaskHandle,
-        &m_reactiveMaskHandle,
-        &m_transparencyMaskHandle
-    };
+        &m_hiZHandle,         &m_temporalCurrentHandle, &m_velocityHandle,        &m_perObjectVelocityHandle,
+        &m_weatherMaskHandle, &m_reactiveMaskHandle,    &m_transparencyMaskHandle};
     for (RhiTextureHandle* texture : textures) {
         if (texture->isValid()) {
             m_rhiDevice->destroyTexture(*texture);
@@ -832,11 +698,8 @@ bool DeferredRenderTargets::createSsaoTextures() {
         return false;
     }
 
-    const auto createTexture = [this](const char* debugName,
-                                      const uint32_t width,
-                                      const uint32_t height,
-                                      const RhiTextureUsageFlags usage,
-                                      RhiTextureHandle& handle) {
+    const auto createTexture = [this](const char* debugName, const uint32_t width, const uint32_t height,
+                                      const RhiTextureUsageFlags usage, RhiTextureHandle& handle) {
         RhiTextureDesc desc;
         desc.debugName = debugName;
         desc.memoryCategory = RhiMemoryCategory::GBufferHistory;
@@ -857,28 +720,19 @@ bool DeferredRenderTargets::createSsaoTextures() {
     const uint32_t halfWidth = static_cast<uint32_t>(std::max(1, m_width / 2));
     const uint32_t halfHeight = static_cast<uint32_t>(std::max(1, m_height / 2));
     const RhiTextureUsageFlags attachmentUsage =
-        rhiFlag(RhiTextureUsage::Sampled) |
-        rhiFlag(RhiTextureUsage::ColorAttachment);
-    const RhiTextureUsageFlags historyUsage =
-        attachmentUsage | rhiFlag(RhiTextureUsage::TransferDst);
-    const RhiTextureUsageFlags temporalUsage =
-        attachmentUsage | rhiFlag(RhiTextureUsage::TransferSrc);
+        rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment);
+    const RhiTextureUsageFlags historyUsage = attachmentUsage | rhiFlag(RhiTextureUsage::TransferDst);
+    const RhiTextureUsageFlags temporalUsage = attachmentUsage | rhiFlag(RhiTextureUsage::TransferSrc);
 
     // Storage usage lets the async-compute SSAO chain write these directly.
-    const RhiTextureUsageFlags ssaoComputeUsage =
-        attachmentUsage | rhiFlag(RhiTextureUsage::Storage);
-    if (!createTexture("DeferredTargets.SSAOFiltered", width, height,
-                       ssaoComputeUsage, m_ssaoFilteredHandle) ||
-        !createTexture("DeferredTargets.SSAOHalfRes", halfWidth, halfHeight,
-                       ssaoComputeUsage, m_ssaoHalfResHandle) ||
-        !createTexture("DeferredTargets.SSAOHalfResFiltered", halfWidth, halfHeight,
-                       ssaoComputeUsage, m_ssaoHalfResFilteredHandle) ||
-        !createTexture("DeferredTargets.SSAOHistory[0]", width, height,
-                       historyUsage, m_ssaoHistoryHandle[0]) ||
-        !createTexture("DeferredTargets.SSAOHistory[1]", width, height,
-                       historyUsage, m_ssaoHistoryHandle[1]) ||
-        !createTexture("DeferredTargets.SSAOTemporal", width, height,
-                       temporalUsage | rhiFlag(RhiTextureUsage::Storage),
+    const RhiTextureUsageFlags ssaoComputeUsage = attachmentUsage | rhiFlag(RhiTextureUsage::Storage);
+    if (!createTexture("DeferredTargets.SSAOFiltered", width, height, ssaoComputeUsage, m_ssaoFilteredHandle) ||
+        !createTexture("DeferredTargets.SSAOHalfRes", halfWidth, halfHeight, ssaoComputeUsage, m_ssaoHalfResHandle) ||
+        !createTexture("DeferredTargets.SSAOHalfResFiltered", halfWidth, halfHeight, ssaoComputeUsage,
+                       m_ssaoHalfResFilteredHandle) ||
+        !createTexture("DeferredTargets.SSAOHistory[0]", width, height, historyUsage, m_ssaoHistoryHandle[0]) ||
+        !createTexture("DeferredTargets.SSAOHistory[1]", width, height, historyUsage, m_ssaoHistoryHandle[1]) ||
+        !createTexture("DeferredTargets.SSAOTemporal", width, height, temporalUsage | rhiFlag(RhiTextureUsage::Storage),
                        m_ssaoTemporalHandle)) {
         destroySsaoTextures();
         return false;
@@ -891,14 +745,8 @@ void DeferredRenderTargets::destroySsaoTextures() {
         return;
     }
 
-    RhiTextureHandle* textures[] = {
-        &m_ssaoFilteredHandle,
-        &m_ssaoHalfResHandle,
-        &m_ssaoHalfResFilteredHandle,
-        &m_ssaoHistoryHandle[0],
-        &m_ssaoHistoryHandle[1],
-        &m_ssaoTemporalHandle
-    };
+    RhiTextureHandle* textures[] = {&m_ssaoFilteredHandle,   &m_ssaoHalfResHandle,    &m_ssaoHalfResFilteredHandle,
+                                    &m_ssaoHistoryHandle[0], &m_ssaoHistoryHandle[1], &m_ssaoTemporalHandle};
     for (RhiTextureHandle* texture : textures) {
         if (texture->isValid()) {
             m_rhiDevice->destroyTexture(*texture);
@@ -912,11 +760,8 @@ bool DeferredRenderTargets::createSsgiTextures() {
         return false;
     }
 
-    const auto createTexture = [this](const char* debugName,
-                                      const uint32_t width,
-                                      const uint32_t height,
-                                      const RhiTextureUsageFlags usage,
-                                      RhiTextureHandle& handle) {
+    const auto createTexture = [this](const char* debugName, const uint32_t width, const uint32_t height,
+                                      const RhiTextureUsageFlags usage, RhiTextureHandle& handle) {
         RhiTextureDesc desc;
         desc.debugName = debugName;
         desc.memoryCategory = RhiMemoryCategory::GBufferHistory;
@@ -937,33 +782,25 @@ bool DeferredRenderTargets::createSsgiTextures() {
     const uint32_t halfWidth = static_cast<uint32_t>(std::max(1, m_width / 2));
     const uint32_t halfHeight = static_cast<uint32_t>(std::max(1, m_height / 2));
     const RhiTextureUsageFlags attachmentUsage =
-        rhiFlag(RhiTextureUsage::Sampled) |
-        rhiFlag(RhiTextureUsage::ColorAttachment);
-    const RhiTextureUsageFlags transferSourceUsage =
-        attachmentUsage | rhiFlag(RhiTextureUsage::TransferSrc);
-    const RhiTextureUsageFlags transferDestinationUsage =
-        attachmentUsage | rhiFlag(RhiTextureUsage::TransferDst);
+        rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment);
+    const RhiTextureUsageFlags transferSourceUsage = attachmentUsage | rhiFlag(RhiTextureUsage::TransferSrc);
+    const RhiTextureUsageFlags transferDestinationUsage = attachmentUsage | rhiFlag(RhiTextureUsage::TransferDst);
 
-    if (!createTexture("DeferredTargets.SSGI", width, height,
-                       transferDestinationUsage, m_ssgiHandle) ||
-        !createTexture("DeferredTargets.SSGIHalfRes", halfWidth, halfHeight,
-                       attachmentUsage, m_ssgiHalfResHandle) ||
-        !createTexture("DeferredTargets.SSGIDenoise[0]", width, height,
-                       transferSourceUsage, m_ssgiDenoiseHandle[0]) ||
-        !createTexture("DeferredTargets.SSGIDenoise[1]", width, height,
-                       transferSourceUsage, m_ssgiDenoiseHandle[1]) ||
-        !createTexture("DeferredTargets.SSGIHistory[0]", width, height,
-                       transferDestinationUsage, m_ssgiHistoryHandle[0]) ||
-        !createTexture("DeferredTargets.SSGIHistory[1]", width, height,
-                       transferDestinationUsage, m_ssgiHistoryHandle[1]) ||
-        !createTexture("DeferredTargets.SSGIMomentsHistory[0]", width, height,
-                       transferDestinationUsage, m_ssgiMomentsHistoryHandle[0]) ||
-        !createTexture("DeferredTargets.SSGIMomentsHistory[1]", width, height,
-                       transferDestinationUsage, m_ssgiMomentsHistoryHandle[1]) ||
-        !createTexture("DeferredTargets.SSGITemporal", width, height,
-                       transferSourceUsage, m_ssgiTemporalHandle) ||
-        !createTexture("DeferredTargets.SSGITemporalMoments", width, height,
-                       transferSourceUsage, m_ssgiTemporalMomentsHandle)) {
+    if (!createTexture("DeferredTargets.SSGI", width, height, transferDestinationUsage, m_ssgiHandle) ||
+        !createTexture("DeferredTargets.SSGIHalfRes", halfWidth, halfHeight, attachmentUsage, m_ssgiHalfResHandle) ||
+        !createTexture("DeferredTargets.SSGIDenoise[0]", width, height, transferSourceUsage, m_ssgiDenoiseHandle[0]) ||
+        !createTexture("DeferredTargets.SSGIDenoise[1]", width, height, transferSourceUsage, m_ssgiDenoiseHandle[1]) ||
+        !createTexture("DeferredTargets.SSGIHistory[0]", width, height, transferDestinationUsage,
+                       m_ssgiHistoryHandle[0]) ||
+        !createTexture("DeferredTargets.SSGIHistory[1]", width, height, transferDestinationUsage,
+                       m_ssgiHistoryHandle[1]) ||
+        !createTexture("DeferredTargets.SSGIMomentsHistory[0]", width, height, transferDestinationUsage,
+                       m_ssgiMomentsHistoryHandle[0]) ||
+        !createTexture("DeferredTargets.SSGIMomentsHistory[1]", width, height, transferDestinationUsage,
+                       m_ssgiMomentsHistoryHandle[1]) ||
+        !createTexture("DeferredTargets.SSGITemporal", width, height, transferSourceUsage, m_ssgiTemporalHandle) ||
+        !createTexture("DeferredTargets.SSGITemporalMoments", width, height, transferSourceUsage,
+                       m_ssgiTemporalMomentsHandle)) {
         destroySsgiTextures();
         return false;
     }
@@ -975,18 +812,16 @@ void DeferredRenderTargets::destroySsgiTextures() {
         return;
     }
 
-    RhiTextureHandle* textures[] = {
-        &m_ssgiHandle,
-        &m_ssgiHalfResHandle,
-        &m_ssgiDenoiseHandle[0],
-        &m_ssgiDenoiseHandle[1],
-        &m_ssgiHistoryHandle[0],
-        &m_ssgiHistoryHandle[1],
-        &m_ssgiMomentsHistoryHandle[0],
-        &m_ssgiMomentsHistoryHandle[1],
-        &m_ssgiTemporalHandle,
-        &m_ssgiTemporalMomentsHandle
-    };
+    RhiTextureHandle* textures[] = {&m_ssgiHandle,
+                                    &m_ssgiHalfResHandle,
+                                    &m_ssgiDenoiseHandle[0],
+                                    &m_ssgiDenoiseHandle[1],
+                                    &m_ssgiHistoryHandle[0],
+                                    &m_ssgiHistoryHandle[1],
+                                    &m_ssgiMomentsHistoryHandle[0],
+                                    &m_ssgiMomentsHistoryHandle[1],
+                                    &m_ssgiTemporalHandle,
+                                    &m_ssgiTemporalMomentsHandle};
     for (RhiTextureHandle* texture : textures) {
         if (texture->isValid()) {
             m_rhiDevice->destroyTexture(*texture);
@@ -1000,10 +835,8 @@ bool DeferredRenderTargets::createCsmShadowTextures() {
         return false;
     }
 
-    const auto createTexture = [this](const char* debugName,
-                                      const RhiTextureFormat format,
-                                      const RhiTextureUsageFlags usage,
-                                      RhiTextureHandle& handle) {
+    const auto createTexture = [this](const char* debugName, const RhiTextureFormat format,
+                                      const RhiTextureUsageFlags usage, RhiTextureHandle& handle) {
         RhiTextureDesc desc;
         desc.debugName = debugName;
         desc.memoryCategory = RhiMemoryCategory::GBufferHistory;
@@ -1017,20 +850,19 @@ bool DeferredRenderTargets::createCsmShadowTextures() {
         return handle.isValid();
     };
 
-    const RhiTextureUsageFlags depthUsage = rhiFlag(RhiTextureUsage::Sampled) |
-                                            rhiFlag(RhiTextureUsage::DepthStencilAttachment) |
-                                            rhiFlag(RhiTextureUsage::TransferSrc) |
-                                            rhiFlag(RhiTextureUsage::TransferDst);
-    const RhiTextureUsageFlags colorUsage = rhiFlag(RhiTextureUsage::Sampled) |
-                                            rhiFlag(RhiTextureUsage::ColorAttachment);
-    if (!createTexture("DeferredTargets.CSMDepthArray", RhiTextureFormat::Depth32Float,
-                       depthUsage, m_csmShadowDepthHandle) ||
-        !createTexture("DeferredTargets.CSMDepthAll", RhiTextureFormat::Depth32Float,
-                       depthUsage, m_csmShadowDepthAllHandle) ||
-        !createTexture("DeferredTargets.CSMColor0", RhiTextureFormat::Rgba8Unorm,
-                       colorUsage, m_csmShadowColor0Handle) ||
-        !createTexture("DeferredTargets.CSMColor1", RhiTextureFormat::Rgba16Float,
-                       colorUsage, m_csmShadowColor1Handle)) {
+    const RhiTextureUsageFlags depthUsage =
+        rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::DepthStencilAttachment) |
+        rhiFlag(RhiTextureUsage::TransferSrc) | rhiFlag(RhiTextureUsage::TransferDst);
+    const RhiTextureUsageFlags colorUsage =
+        rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment);
+    if (!createTexture("DeferredTargets.CSMDepthArray", RhiTextureFormat::Depth32Float, depthUsage,
+                       m_csmShadowDepthHandle) ||
+        !createTexture("DeferredTargets.CSMDepthAll", RhiTextureFormat::Depth32Float, depthUsage,
+                       m_csmShadowDepthAllHandle) ||
+        !createTexture("DeferredTargets.CSMColor0", RhiTextureFormat::Rgba8Unorm, colorUsage,
+                       m_csmShadowColor0Handle) ||
+        !createTexture("DeferredTargets.CSMColor1", RhiTextureFormat::Rgba16Float, colorUsage,
+                       m_csmShadowColor1Handle)) {
         destroyCsmShadowTextures();
         return false;
     }
@@ -1041,12 +873,8 @@ void DeferredRenderTargets::destroyCsmShadowTextures() {
     if (m_rhiDevice == nullptr) {
         return;
     }
-    RhiTextureHandle* textures[] = {
-        &m_csmShadowDepthHandle,
-        &m_csmShadowDepthAllHandle,
-        &m_csmShadowColor0Handle,
-        &m_csmShadowColor1Handle
-    };
+    RhiTextureHandle* textures[] = {&m_csmShadowDepthHandle, &m_csmShadowDepthAllHandle, &m_csmShadowColor0Handle,
+                                    &m_csmShadowColor1Handle};
     for (RhiTextureHandle* texture : textures) {
         if (texture->isValid()) {
             m_rhiDevice->destroyTexture(*texture);
@@ -1056,57 +884,26 @@ void DeferredRenderTargets::destroyCsmShadowTextures() {
 }
 
 bool DeferredRenderTargets::registerRhiTextures() {
-    const bool registered = m_gAlbedoHandle.isValid() &&
-                            m_gNormalAoHandle.isValid() &&
-                            m_gVoxelLightHandle.isValid() &&
-                            m_gMaterialHandle.isValid() &&
-                            m_gMaterialAuxHandle.isValid() &&
-                            m_gF0MetallicHandle.isValid() &&
-                            m_gObjectMaterialIdHandle.isValid() &&
-                            m_gDepthHandle.isValid() &&
-                            m_sceneResolvedHandle.isValid() &&
-                            m_halfResHandle.isValid() &&
-                            m_reflectionTemporalScratchHandle.isValid() &&
-                            m_historySceneHandle[0].isValid() &&
-                            m_historySceneHandle[1].isValid() &&
-                            m_historyDepthHandle[0].isValid() &&
-                            m_historyDepthHandle[1].isValid() &&
-                            m_taaHistoryDepthHandle[0].isValid() &&
-                            m_taaHistoryDepthHandle[1].isValid() &&
-                            m_historyReflectionHandle[0].isValid() &&
-                            m_historyReflectionHandle[1].isValid() &&
-                            m_historyCloudHandle[0].isValid() &&
-                            m_historyCloudHandle[1].isValid() &&
-                            m_historyVolumetricHandle[0].isValid() &&
-                            m_historyVolumetricHandle[1].isValid() &&
-                            m_temporalCurrentHandle.isValid() &&
-                            m_velocityHandle.isValid() &&
-                            m_perObjectVelocityHandle.isValid() &&
-                            m_weatherMaskHandle.isValid() &&
-                            m_reactiveMaskHandle.isValid() &&
-                            m_transparencyMaskHandle.isValid() &&
-                            m_skyCaptureHandle.isValid() &&
-                            m_atmosphereLutHandle.isValid() &&
-                            m_ssaoFilteredHandle.isValid() &&
-                            m_ssaoHalfResHandle.isValid() &&
-                            m_ssaoHalfResFilteredHandle.isValid() &&
-                            m_ssaoHistoryHandle[0].isValid() &&
-                            m_ssaoHistoryHandle[1].isValid() &&
-                            m_ssaoTemporalHandle.isValid() &&
-                            m_ssgiHandle.isValid() &&
-                            m_ssgiHalfResHandle.isValid() &&
-                            m_ssgiDenoiseHandle[0].isValid() &&
-                            m_ssgiDenoiseHandle[1].isValid() &&
-                            m_ssgiHistoryHandle[0].isValid() &&
-                            m_ssgiHistoryHandle[1].isValid() &&
-                            m_ssgiMomentsHistoryHandle[0].isValid() &&
-                            m_ssgiMomentsHistoryHandle[1].isValid() &&
-                            m_ssgiTemporalHandle.isValid() &&
-                            m_ssgiTemporalMomentsHandle.isValid() &&
-                            m_csmShadowDepthHandle.isValid() &&
-                            m_csmShadowDepthAllHandle.isValid() &&
-                            m_csmShadowColor0Handle.isValid() &&
-                            m_csmShadowColor1Handle.isValid();
+    const bool registered =
+        m_gAlbedoHandle.isValid() && m_gNormalAoHandle.isValid() && m_gVoxelLightHandle.isValid() &&
+        m_gMaterialHandle.isValid() && m_gMaterialAuxHandle.isValid() && m_gF0MetallicHandle.isValid() &&
+        m_gObjectMaterialIdHandle.isValid() && m_gDepthHandle.isValid() && m_sceneResolvedHandle.isValid() &&
+        m_halfResHandle.isValid() && m_reflectionTemporalScratchHandle.isValid() && m_historySceneHandle[0].isValid() &&
+        m_historySceneHandle[1].isValid() && m_historyDepthHandle[0].isValid() && m_historyDepthHandle[1].isValid() &&
+        m_taaHistoryDepthHandle[0].isValid() && m_taaHistoryDepthHandle[1].isValid() &&
+        m_historyReflectionHandle[0].isValid() && m_historyReflectionHandle[1].isValid() &&
+        m_historyCloudHandle[0].isValid() && m_historyCloudHandle[1].isValid() &&
+        m_historyVolumetricHandle[0].isValid() && m_historyVolumetricHandle[1].isValid() &&
+        m_temporalCurrentHandle.isValid() && m_velocityHandle.isValid() && m_perObjectVelocityHandle.isValid() &&
+        m_weatherMaskHandle.isValid() && m_reactiveMaskHandle.isValid() && m_transparencyMaskHandle.isValid() &&
+        m_skyCaptureHandle.isValid() && m_atmosphereLutHandle.isValid() && m_ssaoFilteredHandle.isValid() &&
+        m_ssaoHalfResHandle.isValid() && m_ssaoHalfResFilteredHandle.isValid() && m_ssaoHistoryHandle[0].isValid() &&
+        m_ssaoHistoryHandle[1].isValid() && m_ssaoTemporalHandle.isValid() && m_ssgiHandle.isValid() &&
+        m_ssgiHalfResHandle.isValid() && m_ssgiDenoiseHandle[0].isValid() && m_ssgiDenoiseHandle[1].isValid() &&
+        m_ssgiHistoryHandle[0].isValid() && m_ssgiHistoryHandle[1].isValid() &&
+        m_ssgiMomentsHistoryHandle[0].isValid() && m_ssgiMomentsHistoryHandle[1].isValid() &&
+        m_ssgiTemporalHandle.isValid() && m_ssgiTemporalMomentsHandle.isValid() && m_csmShadowDepthHandle.isValid() &&
+        m_csmShadowDepthAllHandle.isValid() && m_csmShadowColor0Handle.isValid() && m_csmShadowColor1Handle.isValid();
     if (!registered) {
         MECRAFT_LOG_STREAM(std::cerr << "DeferredRenderTargets: failed to register RHI texture handles\n");
         unregisterRhiTextures();
@@ -1169,22 +966,19 @@ bool DeferredRenderTargets::ensureCsmShadowDepthTextureView(RhiDevice& rhiDevice
     return true;
 }
 
-bool DeferredRenderTargets::ensureCsmShadowTransparentTextureViews(RhiDevice& rhiDevice,
-                                                                   const int cascadeIndex) {
+bool DeferredRenderTargets::ensureCsmShadowTransparentTextureViews(RhiDevice& rhiDevice, const int cascadeIndex) {
     const std::lock_guard<std::recursive_mutex> viewLock(m_rhiViewMutex);
     assert(cascadeIndex >= 0 && cascadeIndex < kShadowCascadeCount);
     if (m_rhiViewDevice != nullptr && m_rhiViewDevice != &rhiDevice) {
         destroyRhiTextureViews();
     }
 
-    if (m_csmShadowDepthAllView[cascadeIndex].isValid() &&
-        m_csmShadowColor0View[cascadeIndex].isValid() &&
+    if (m_csmShadowDepthAllView[cascadeIndex].isValid() && m_csmShadowColor0View[cascadeIndex].isValid() &&
         m_csmShadowColor1View[cascadeIndex].isValid()) {
         return true;
     }
 
-    if (!m_csmShadowDepthAllHandle.isValid() ||
-        !m_csmShadowColor0Handle.isValid() ||
+    if (!m_csmShadowDepthAllHandle.isValid() || !m_csmShadowColor0Handle.isValid() ||
         !m_csmShadowColor1Handle.isValid()) {
         return false;
     }
@@ -1207,8 +1001,7 @@ bool DeferredRenderTargets::ensureCsmShadowTransparentTextureViews(RhiDevice& rh
         color1View = {};
     };
 
-    if (m_csmShadowDepthAllView[cascadeIndex].isValid() ||
-        m_csmShadowColor0View[cascadeIndex].isValid() ||
+    if (m_csmShadowDepthAllView[cascadeIndex].isValid() || m_csmShadowColor0View[cascadeIndex].isValid() ||
         m_csmShadowColor1View[cascadeIndex].isValid()) {
         destroyCascadeViews();
     }
@@ -1232,8 +1025,7 @@ bool DeferredRenderTargets::ensureCsmShadowTransparentTextureViews(RhiDevice& rh
     desc.format = RhiTextureFormat::Rgba16Float;
     m_csmShadowColor1View[cascadeIndex] = rhiDevice.createTextureView(desc);
 
-    if (!m_csmShadowDepthAllView[cascadeIndex].isValid() ||
-        !m_csmShadowColor0View[cascadeIndex].isValid() ||
+    if (!m_csmShadowDepthAllView[cascadeIndex].isValid() || !m_csmShadowColor0View[cascadeIndex].isValid() ||
         !m_csmShadowColor1View[cascadeIndex].isValid()) {
         destroyCascadeViews();
         return false;
@@ -1249,28 +1041,24 @@ bool DeferredRenderTargets::ensureVolumetricFogTextureViews(RhiDevice& rhiDevice
         destroyRhiTextureViews();
     }
     if (m_atmosphereLutView.isValid() && m_csmShadowDepthArrayView.isValid() &&
-        m_csmShadowDepthComparisonArrayView.isValid() &&
-        m_csmShadowDepthAllArrayView.isValid() &&
-        m_csmShadowDepthAllComparisonArrayView.isValid() &&
-        m_csmShadowColor0ArrayView.isValid() && m_csmShadowColor1ArrayView.isValid()) {
+        m_csmShadowDepthComparisonArrayView.isValid() && m_csmShadowDepthAllArrayView.isValid() &&
+        m_csmShadowDepthAllComparisonArrayView.isValid() && m_csmShadowColor0ArrayView.isValid() &&
+        m_csmShadowColor1ArrayView.isValid()) {
         return true;
     }
-    if (!m_atmosphereLutHandle.isValid() || !m_csmShadowDepthHandle.isValid() ||
-        !m_csmShadowDepthAllHandle.isValid() || !m_csmShadowColor0Handle.isValid() ||
-        !m_csmShadowColor1Handle.isValid()) {
+    if (!m_atmosphereLutHandle.isValid() || !m_csmShadowDepthHandle.isValid() || !m_csmShadowDepthAllHandle.isValid() ||
+        !m_csmShadowColor0Handle.isValid() || !m_csmShadowColor1Handle.isValid()) {
         return false;
     }
 
     auto destroyCreatedViews = [&]() {
-        RhiTextureViewHandle* views[] = {
-            &m_atmosphereLutView,
-            &m_csmShadowDepthArrayView,
-            &m_csmShadowDepthComparisonArrayView,
-            &m_csmShadowDepthAllArrayView,
-            &m_csmShadowDepthAllComparisonArrayView,
-            &m_csmShadowColor0ArrayView,
-            &m_csmShadowColor1ArrayView
-        };
+        RhiTextureViewHandle* views[] = {&m_atmosphereLutView,
+                                         &m_csmShadowDepthArrayView,
+                                         &m_csmShadowDepthComparisonArrayView,
+                                         &m_csmShadowDepthAllArrayView,
+                                         &m_csmShadowDepthAllComparisonArrayView,
+                                         &m_csmShadowColor0ArrayView,
+                                         &m_csmShadowColor1ArrayView};
         for (RhiTextureViewHandle* view : views) {
             if (view->isValid()) {
                 rhiDevice.destroyTextureView(*view);
@@ -1313,10 +1101,9 @@ bool DeferredRenderTargets::ensureVolumetricFogTextureViews(RhiDevice& rhiDevice
     m_csmShadowColor1ArrayView = rhiDevice.createTextureView(viewDesc);
 
     if (!m_atmosphereLutView.isValid() || !m_csmShadowDepthArrayView.isValid() ||
-        !m_csmShadowDepthComparisonArrayView.isValid() ||
-        !m_csmShadowDepthAllArrayView.isValid() ||
-        !m_csmShadowDepthAllComparisonArrayView.isValid() ||
-        !m_csmShadowColor0ArrayView.isValid() || !m_csmShadowColor1ArrayView.isValid()) {
+        !m_csmShadowDepthComparisonArrayView.isValid() || !m_csmShadowDepthAllArrayView.isValid() ||
+        !m_csmShadowDepthAllComparisonArrayView.isValid() || !m_csmShadowColor0ArrayView.isValid() ||
+        !m_csmShadowColor1ArrayView.isValid()) {
         destroyCreatedViews();
         return false;
     }
@@ -1331,26 +1118,17 @@ bool DeferredRenderTargets::ensureGBufferTextureViews(RhiDevice& rhiDevice) {
         destroyRhiTextureViews();
     }
 
-    const bool allViewsValid = m_gAlbedoView.isValid() &&
-                               m_gNormalAoView.isValid() &&
-                               m_gVoxelLightView.isValid() &&
-                               m_gMaterialView.isValid() &&
-                               m_gMaterialAuxView.isValid() &&
-                               m_gF0MetallicView.isValid() &&
-                               m_gObjectMaterialIdView.isValid() &&
+    const bool allViewsValid = m_gAlbedoView.isValid() && m_gNormalAoView.isValid() && m_gVoxelLightView.isValid() &&
+                               m_gMaterialView.isValid() && m_gMaterialAuxView.isValid() &&
+                               m_gF0MetallicView.isValid() && m_gObjectMaterialIdView.isValid() &&
                                m_gDepthView.isValid();
     if (allViewsValid) {
         return true;
     }
 
-    if (!m_gAlbedoHandle.isValid() ||
-        !m_gNormalAoHandle.isValid() ||
-        !m_gVoxelLightHandle.isValid() ||
-        !m_gMaterialHandle.isValid() ||
-        !m_gMaterialAuxHandle.isValid() ||
-        !m_gF0MetallicHandle.isValid() ||
-        !m_gObjectMaterialIdHandle.isValid() ||
-        !m_gDepthHandle.isValid()) {
+    if (!m_gAlbedoHandle.isValid() || !m_gNormalAoHandle.isValid() || !m_gVoxelLightHandle.isValid() ||
+        !m_gMaterialHandle.isValid() || !m_gMaterialAuxHandle.isValid() || !m_gF0MetallicHandle.isValid() ||
+        !m_gObjectMaterialIdHandle.isValid() || !m_gDepthHandle.isValid()) {
         return false;
     }
 
@@ -1389,13 +1167,9 @@ bool DeferredRenderTargets::ensureGBufferTextureViews(RhiDevice& rhiDevice) {
         m_gDepthView = {};
     };
 
-    const bool anyViewValid = m_gAlbedoView.isValid() ||
-                              m_gNormalAoView.isValid() ||
-                              m_gVoxelLightView.isValid() ||
-                              m_gMaterialView.isValid() ||
-                              m_gMaterialAuxView.isValid() ||
-                              m_gF0MetallicView.isValid() ||
-                              m_gObjectMaterialIdView.isValid() ||
+    const bool anyViewValid = m_gAlbedoView.isValid() || m_gNormalAoView.isValid() || m_gVoxelLightView.isValid() ||
+                              m_gMaterialView.isValid() || m_gMaterialAuxView.isValid() ||
+                              m_gF0MetallicView.isValid() || m_gObjectMaterialIdView.isValid() ||
                               m_gDepthView.isValid();
     if (anyViewValid) {
         destroyGBufferViews();
@@ -1440,14 +1214,9 @@ bool DeferredRenderTargets::ensureGBufferTextureViews(RhiDevice& rhiDevice) {
     desc.format = RhiTextureFormat::Depth32Float;
     m_gDepthView = rhiDevice.createTextureView(desc);
 
-    if (!m_gAlbedoView.isValid() ||
-        !m_gNormalAoView.isValid() ||
-        !m_gVoxelLightView.isValid() ||
-        !m_gMaterialView.isValid() ||
-        !m_gMaterialAuxView.isValid() ||
-        !m_gF0MetallicView.isValid() ||
-        !m_gObjectMaterialIdView.isValid() ||
-        !m_gDepthView.isValid()) {
+    if (!m_gAlbedoView.isValid() || !m_gNormalAoView.isValid() || !m_gVoxelLightView.isValid() ||
+        !m_gMaterialView.isValid() || !m_gMaterialAuxView.isValid() || !m_gF0MetallicView.isValid() ||
+        !m_gObjectMaterialIdView.isValid() || !m_gDepthView.isValid()) {
         destroyGBufferViews();
         return false;
     }
@@ -1883,8 +1652,8 @@ bool DeferredRenderTargets::ensureSsgiHistoryTextureViews(RhiDevice& rhiDevice) 
     if (m_rhiViewDevice != nullptr && m_rhiViewDevice != &rhiDevice) {
         destroyRhiTextureViews();
     }
-    if (m_ssgiHistoryView[0].isValid() && m_ssgiHistoryView[1].isValid() &&
-        m_ssgiMomentsHistoryView[0].isValid() && m_ssgiMomentsHistoryView[1].isValid()) {
+    if (m_ssgiHistoryView[0].isValid() && m_ssgiHistoryView[1].isValid() && m_ssgiMomentsHistoryView[0].isValid() &&
+        m_ssgiMomentsHistoryView[1].isValid()) {
         return true;
     }
     if (!m_ssgiHistoryHandle[0].isValid() || !m_ssgiHistoryHandle[1].isValid() ||
@@ -1924,8 +1693,7 @@ bool DeferredRenderTargets::ensureSsgiHistoryTextureViews(RhiDevice& rhiDevice) 
             desc.texture = m_ssgiMomentsHistoryHandle[historyIndex];
             m_ssgiMomentsHistoryView[historyIndex] = rhiDevice.createTextureView(desc);
         }
-        if (!m_ssgiHistoryView[historyIndex].isValid() ||
-            !m_ssgiMomentsHistoryView[historyIndex].isValid()) {
+        if (!m_ssgiHistoryView[historyIndex].isValid() || !m_ssgiMomentsHistoryView[historyIndex].isValid()) {
             destroyCreatedViews();
             return false;
         }
@@ -2171,12 +1939,10 @@ bool DeferredRenderTargets::ensureTaaHistoryDepthTextureViews(RhiDevice& rhiDevi
     if (m_rhiViewDevice != nullptr && m_rhiViewDevice != &rhiDevice) {
         destroyRhiTextureViews();
     }
-    if (m_taaHistoryDepthView[0].isValid() &&
-        m_taaHistoryDepthView[1].isValid()) {
+    if (m_taaHistoryDepthView[0].isValid() && m_taaHistoryDepthView[1].isValid()) {
         return true;
     }
-    if (!m_taaHistoryDepthHandle[0].isValid() ||
-        !m_taaHistoryDepthHandle[1].isValid()) {
+    if (!m_taaHistoryDepthHandle[0].isValid() || !m_taaHistoryDepthHandle[1].isValid()) {
         return false;
     }
 
@@ -2299,8 +2065,7 @@ bool DeferredRenderTargets::ensureTransparentCompositeTextureViews(RhiDevice&) {
     // TransparentComposite and its depth are render-graph transients: the
     // graph publishes their default views per frame, so this class never
     // creates or destroys them.
-    return m_transparentCompositeView.isValid() &&
-           m_transparentCompositeDepthView.isValid();
+    return m_transparentCompositeView.isValid() && m_transparentCompositeDepthView.isValid();
 }
 
 bool DeferredRenderTargets::ensureHalfResTextureView(RhiDevice& rhiDevice) {
@@ -2587,15 +2352,13 @@ void DeferredRenderTargets::destroyRhiTextureViews() {
         }
         view = {};
     }
-    RhiTextureViewHandle* volumetricFogViews[] = {
-        &m_atmosphereLutView,
-        &m_csmShadowDepthArrayView,
-        &m_csmShadowDepthComparisonArrayView,
-        &m_csmShadowDepthAllArrayView,
-        &m_csmShadowDepthAllComparisonArrayView,
-        &m_csmShadowColor0ArrayView,
-        &m_csmShadowColor1ArrayView
-    };
+    RhiTextureViewHandle* volumetricFogViews[] = {&m_atmosphereLutView,
+                                                  &m_csmShadowDepthArrayView,
+                                                  &m_csmShadowDepthComparisonArrayView,
+                                                  &m_csmShadowDepthAllArrayView,
+                                                  &m_csmShadowDepthAllComparisonArrayView,
+                                                  &m_csmShadowColor0ArrayView,
+                                                  &m_csmShadowColor1ArrayView};
     for (RhiTextureViewHandle* view : volumetricFogViews) {
         if (m_rhiViewDevice != nullptr && view->isValid()) {
             m_rhiViewDevice->destroyTextureView(*view);
@@ -2835,8 +2598,8 @@ bool DeferredRenderTargets::loadAtmosphereLut(const char* path) {
 
     const auto fileSize = static_cast<size_t>(file.tellg());
     if (fileSize != kExpectedSize) {
-        MECRAFT_LOG_STREAM(std::cerr << "AtmosphereLUT: unexpected file size " << fileSize
-                                     << " (expected " << kExpectedSize << ")\n");
+        MECRAFT_LOG_STREAM(std::cerr << "AtmosphereLUT: unexpected file size " << fileSize << " (expected "
+                                     << kExpectedSize << ")\n");
         return false;
     }
 
@@ -2862,8 +2625,7 @@ bool DeferredRenderTargets::loadAtmosphereLut(const char* path) {
     desc.depthOrLayers = static_cast<uint32_t>(kAtmosphereLutDepth);
     desc.mipLevels = 1u;
     desc.sampleCount = 1u;
-    desc.usage = rhiFlag(RhiTextureUsage::Sampled) |
-                 rhiFlag(RhiTextureUsage::TransferDst);
+    desc.usage = rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::TransferDst);
 
     RhiTextureInitialData initialData;
     initialData.pixels = data.data();

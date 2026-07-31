@@ -43,9 +43,7 @@ public:
     /// @param target Transient target slot to publish.
     /// @param texture Graph-resolved texture backing the target this frame.
     /// @param view Graph-owned default view for that texture.
-    void publishTransientTarget(DeferredTransientTarget target,
-                                RhiTextureHandle texture,
-                                RhiTextureViewHandle view);
+    void publishTransientTarget(DeferredTransientTarget target, RhiTextureHandle texture, RhiTextureViewHandle view);
 
     /// Builds the texture description a frame-scoped transient target needs.
     /// The returned desc matches the layout previously used for the
@@ -53,8 +51,7 @@ public:
     /// debugName so the caller can name the graph resource.
     /// @param target Transient target slot to describe.
     /// @return Complete texture description sized for the current targets.
-    [[nodiscard]] RhiTextureDesc transientTargetDesc(
-        DeferredTransientTarget target) const;
+    [[nodiscard]] RhiTextureDesc transientTargetDesc(DeferredTransientTarget target) const;
 
     [[nodiscard]] RhiTextureHandle albedoTextureHandle() const { return m_gAlbedoHandle; }
     [[nodiscard]] RhiTextureHandle normalAoTextureHandle() const { return m_gNormalAoHandle; }
@@ -79,7 +76,9 @@ public:
     bool ensureCsmShadowDepthTextureView(RhiDevice& rhiDevice, int cascadeIndex);
     // CSM transparent shadow contract (DerivativeMain shadowtex0/shadowcolor0/1 equivalent)
     [[nodiscard]] RhiTextureHandle csmShadowDepthAllTextureHandle() const { return m_csmShadowDepthAllHandle; }
-    [[nodiscard]] RhiTextureHandle csmShadowDepthAllComparisonTextureHandle() const { return m_csmShadowDepthAllHandle; }
+    [[nodiscard]] RhiTextureHandle csmShadowDepthAllComparisonTextureHandle() const {
+        return m_csmShadowDepthAllHandle;
+    }
     [[nodiscard]] RhiTextureHandle csmShadowColor0TextureHandle() const { return m_csmShadowColor0Handle; }
     [[nodiscard]] RhiTextureHandle csmShadowColor1TextureHandle() const { return m_csmShadowColor1Handle; }
     [[nodiscard]] RhiTextureViewHandle csmShadowDepthAllTextureViewHandle(int cascadeIndex) const;
@@ -93,13 +92,19 @@ public:
     [[nodiscard]] RhiTextureViewHandle ssaoHalfResTextureViewHandle() const { return m_ssaoHalfResView; }
     bool ensureSsaoHalfResTextureView(RhiDevice& rhiDevice);
     [[nodiscard]] RhiTextureHandle ssaoHalfResFilteredTextureHandle() const { return m_ssaoHalfResFilteredHandle; }
-    [[nodiscard]] RhiTextureViewHandle ssaoHalfResFilteredTextureViewHandle() const { return m_ssaoHalfResFilteredView; }
+    [[nodiscard]] RhiTextureViewHandle ssaoHalfResFilteredTextureViewHandle() const {
+        return m_ssaoHalfResFilteredView;
+    }
     bool ensureSsaoHalfResFilteredTextureView(RhiDevice& rhiDevice);
     [[nodiscard]] int halfWidth() const { return m_width / 2; }
     [[nodiscard]] int halfHeight() const { return m_height / 2; }
     [[nodiscard]] RhiTextureHandle ssaoHistoryTextureHandle() const { return m_ssaoHistoryHandle[m_ssaoHistoryIndex]; }
-    [[nodiscard]] RhiTextureHandle ssaoHistoryTexturePrevHandle() const { return m_ssaoHistoryHandle[1 - m_ssaoHistoryIndex]; }
-    [[nodiscard]] RhiTextureViewHandle ssaoHistoryTexturePrevViewHandle() const { return m_ssaoHistoryView[1 - m_ssaoHistoryIndex]; }
+    [[nodiscard]] RhiTextureHandle ssaoHistoryTexturePrevHandle() const {
+        return m_ssaoHistoryHandle[1 - m_ssaoHistoryIndex];
+    }
+    [[nodiscard]] RhiTextureViewHandle ssaoHistoryTexturePrevViewHandle() const {
+        return m_ssaoHistoryView[1 - m_ssaoHistoryIndex];
+    }
     [[nodiscard]] RhiTextureHandle ssaoTemporalTextureHandle() const { return m_ssaoTemporalHandle; }
     [[nodiscard]] RhiTextureViewHandle ssaoTemporalTextureViewHandle() const { return m_ssaoTemporalView; }
     bool ensureSsaoTemporalTextureView(RhiDevice& rhiDevice);
@@ -113,15 +118,27 @@ public:
     bool ensureSsgiHalfResTextureView(RhiDevice& rhiDevice);
     [[nodiscard]] RhiTextureHandle ssgiDenoiseTextureHandle(int slot) const;
     [[nodiscard]] RhiTextureHandle ssgiHistoryTextureHandle() const { return m_ssgiHistoryHandle[m_ssgiHistoryIndex]; }
-    [[nodiscard]] RhiTextureHandle ssgiHistoryTexturePrevHandle() const { return m_ssgiHistoryHandle[1 - m_ssgiHistoryIndex]; }
-    [[nodiscard]] RhiTextureViewHandle ssgiHistoryTexturePrevViewHandle() const { return m_ssgiHistoryView[1 - m_ssgiHistoryIndex]; }
-    [[nodiscard]] RhiTextureHandle ssgiMomentsHistoryTextureHandle() const { return m_ssgiMomentsHistoryHandle[m_ssgiHistoryIndex]; }
-    [[nodiscard]] RhiTextureHandle ssgiMomentsHistoryTexturePrevHandle() const { return m_ssgiMomentsHistoryHandle[1 - m_ssgiHistoryIndex]; }
-    [[nodiscard]] RhiTextureViewHandle ssgiMomentsHistoryTexturePrevViewHandle() const { return m_ssgiMomentsHistoryView[1 - m_ssgiHistoryIndex]; }
+    [[nodiscard]] RhiTextureHandle ssgiHistoryTexturePrevHandle() const {
+        return m_ssgiHistoryHandle[1 - m_ssgiHistoryIndex];
+    }
+    [[nodiscard]] RhiTextureViewHandle ssgiHistoryTexturePrevViewHandle() const {
+        return m_ssgiHistoryView[1 - m_ssgiHistoryIndex];
+    }
+    [[nodiscard]] RhiTextureHandle ssgiMomentsHistoryTextureHandle() const {
+        return m_ssgiMomentsHistoryHandle[m_ssgiHistoryIndex];
+    }
+    [[nodiscard]] RhiTextureHandle ssgiMomentsHistoryTexturePrevHandle() const {
+        return m_ssgiMomentsHistoryHandle[1 - m_ssgiHistoryIndex];
+    }
+    [[nodiscard]] RhiTextureViewHandle ssgiMomentsHistoryTexturePrevViewHandle() const {
+        return m_ssgiMomentsHistoryView[1 - m_ssgiHistoryIndex];
+    }
     [[nodiscard]] RhiTextureHandle ssgiTemporalTextureHandle() const { return m_ssgiTemporalHandle; }
     [[nodiscard]] RhiTextureViewHandle ssgiTemporalTextureViewHandle() const { return m_ssgiTemporalView; }
     [[nodiscard]] RhiTextureHandle ssgiTemporalMomentsTextureHandle() const { return m_ssgiTemporalMomentsHandle; }
-    [[nodiscard]] RhiTextureViewHandle ssgiTemporalMomentsTextureViewHandle() const { return m_ssgiTemporalMomentsView; }
+    [[nodiscard]] RhiTextureViewHandle ssgiTemporalMomentsTextureViewHandle() const {
+        return m_ssgiTemporalMomentsView;
+    }
     bool ensureSsgiTemporalTextureViews(RhiDevice& rhiDevice);
     bool ensureSsgiHistoryTextureViews(RhiDevice& rhiDevice);
     [[nodiscard]] RhiTextureViewHandle ssgiDenoiseTextureViewHandle(int slot) const;
@@ -137,9 +154,15 @@ public:
     [[nodiscard]] RhiTextureViewHandle sceneResolvedTextureViewHandle() const { return m_sceneResolvedView; }
     bool ensureSceneResolvedTextureView(RhiDevice& rhiDevice);
     [[nodiscard]] RhiTextureHandle transparentCompositeTextureHandle() const { return m_transparentCompositeHandle; }
-    [[nodiscard]] RhiTextureViewHandle transparentCompositeTextureViewHandle() const { return m_transparentCompositeView; }
-    [[nodiscard]] RhiTextureHandle transparentCompositeDepthTextureHandle() const { return m_transparentCompositeDepthHandle; }
-    [[nodiscard]] RhiTextureViewHandle transparentCompositeDepthTextureViewHandle() const { return m_transparentCompositeDepthView; }
+    [[nodiscard]] RhiTextureViewHandle transparentCompositeTextureViewHandle() const {
+        return m_transparentCompositeView;
+    }
+    [[nodiscard]] RhiTextureHandle transparentCompositeDepthTextureHandle() const {
+        return m_transparentCompositeDepthHandle;
+    }
+    [[nodiscard]] RhiTextureViewHandle transparentCompositeDepthTextureViewHandle() const {
+        return m_transparentCompositeDepthView;
+    }
     bool ensureTransparentCompositeTextureViews(RhiDevice& rhiDevice);
     [[nodiscard]] RhiTextureHandle halfResTextureHandle() const { return m_halfResHandle; }
     [[nodiscard]] RhiTextureViewHandle halfResTextureViewHandle() const { return m_halfResView; }
@@ -147,8 +170,12 @@ public:
     [[nodiscard]] RhiTextureHandle reflectionTextureHandle() const { return m_reflectionHandle; }
     [[nodiscard]] RhiTextureViewHandle reflectionTextureViewHandle() const { return m_reflectionView; }
     bool ensureReflectionTextureView(RhiDevice& rhiDevice);
-    [[nodiscard]] RhiTextureHandle reflectionTemporalScratchTextureHandle() const { return m_reflectionTemporalScratchHandle; }
-    [[nodiscard]] RhiTextureViewHandle reflectionTemporalScratchTextureViewHandle() const { return m_reflectionTemporalScratchView; }
+    [[nodiscard]] RhiTextureHandle reflectionTemporalScratchTextureHandle() const {
+        return m_reflectionTemporalScratchHandle;
+    }
+    [[nodiscard]] RhiTextureViewHandle reflectionTemporalScratchTextureViewHandle() const {
+        return m_reflectionTemporalScratchView;
+    }
     bool ensureReflectionTemporalScratchTextureView(RhiDevice& rhiDevice);
     [[nodiscard]] RhiTextureHandle cloudTextureHandle() const { return m_cloudHandle; }
     [[nodiscard]] RhiTextureViewHandle cloudTextureViewHandle() const { return m_cloudView; }
@@ -159,33 +186,73 @@ public:
     [[nodiscard]] int skyCaptureWidth() const { return kSkyCaptureWidth; }
     [[nodiscard]] int skyCaptureHeight() const { return kSkyCaptureHeight; }
     // History ping-pong for temporal accumulation
-    [[nodiscard]] RhiTextureHandle historySceneTextureHandle() const { return m_historySceneHandle[m_currentHistoryIndex]; }
-    [[nodiscard]] RhiTextureHandle historySceneTexturePrevHandle() const { return m_historySceneHandle[1 - m_currentHistoryIndex]; }
-    [[nodiscard]] RhiTextureViewHandle historySceneTextureViewHandle() const { return m_historySceneView[m_currentHistoryIndex]; }
-    [[nodiscard]] RhiTextureViewHandle historySceneTexturePrevViewHandle() const { return m_historySceneView[1 - m_currentHistoryIndex]; }
+    [[nodiscard]] RhiTextureHandle historySceneTextureHandle() const {
+        return m_historySceneHandle[m_currentHistoryIndex];
+    }
+    [[nodiscard]] RhiTextureHandle historySceneTexturePrevHandle() const {
+        return m_historySceneHandle[1 - m_currentHistoryIndex];
+    }
+    [[nodiscard]] RhiTextureViewHandle historySceneTextureViewHandle() const {
+        return m_historySceneView[m_currentHistoryIndex];
+    }
+    [[nodiscard]] RhiTextureViewHandle historySceneTexturePrevViewHandle() const {
+        return m_historySceneView[1 - m_currentHistoryIndex];
+    }
     bool ensureHistorySceneTextureView(RhiDevice& rhiDevice);
     bool ensureHistorySceneTextureViews(RhiDevice& rhiDevice);
-    [[nodiscard]] RhiTextureHandle historyDepthTextureHandle() const { return m_historyDepthHandle[m_currentHistoryIndex]; }
-    [[nodiscard]] RhiTextureHandle historyDepthTexturePrevHandle() const { return m_historyDepthHandle[1 - m_currentHistoryIndex]; }
-    [[nodiscard]] RhiTextureViewHandle historyDepthTexturePrevViewHandle() const { return m_historyDepthView[1 - m_currentHistoryIndex]; }
+    [[nodiscard]] RhiTextureHandle historyDepthTextureHandle() const {
+        return m_historyDepthHandle[m_currentHistoryIndex];
+    }
+    [[nodiscard]] RhiTextureHandle historyDepthTexturePrevHandle() const {
+        return m_historyDepthHandle[1 - m_currentHistoryIndex];
+    }
+    [[nodiscard]] RhiTextureViewHandle historyDepthTexturePrevViewHandle() const {
+        return m_historyDepthView[1 - m_currentHistoryIndex];
+    }
     bool ensureHistoryDepthTextureViews(RhiDevice& rhiDevice);
     // Native TAA history depth tracks the visible surface after transparent composition.
-    [[nodiscard]] RhiTextureHandle taaHistoryDepthTextureHandle() const { return m_taaHistoryDepthHandle[m_currentHistoryIndex]; }
-    [[nodiscard]] RhiTextureHandle taaHistoryDepthTexturePrevHandle() const { return m_taaHistoryDepthHandle[1 - m_currentHistoryIndex]; }
-    [[nodiscard]] RhiTextureViewHandle taaHistoryDepthTexturePrevViewHandle() const { return m_taaHistoryDepthView[1 - m_currentHistoryIndex]; }
+    [[nodiscard]] RhiTextureHandle taaHistoryDepthTextureHandle() const {
+        return m_taaHistoryDepthHandle[m_currentHistoryIndex];
+    }
+    [[nodiscard]] RhiTextureHandle taaHistoryDepthTexturePrevHandle() const {
+        return m_taaHistoryDepthHandle[1 - m_currentHistoryIndex];
+    }
+    [[nodiscard]] RhiTextureViewHandle taaHistoryDepthTexturePrevViewHandle() const {
+        return m_taaHistoryDepthView[1 - m_currentHistoryIndex];
+    }
     bool ensureTaaHistoryDepthTextureViews(RhiDevice& rhiDevice);
-    [[nodiscard]] RhiTextureHandle historyReflectionTextureHandle() const { return m_historyReflectionHandle[m_currentHistoryIndex]; }
-    [[nodiscard]] RhiTextureHandle historyReflectionTexturePrevHandle() const { return m_historyReflectionHandle[1 - m_currentHistoryIndex]; }
-    [[nodiscard]] RhiTextureViewHandle historyReflectionTexturePrevViewHandle() const { return m_historyReflectionView[1 - m_currentHistoryIndex]; }
+    [[nodiscard]] RhiTextureHandle historyReflectionTextureHandle() const {
+        return m_historyReflectionHandle[m_currentHistoryIndex];
+    }
+    [[nodiscard]] RhiTextureHandle historyReflectionTexturePrevHandle() const {
+        return m_historyReflectionHandle[1 - m_currentHistoryIndex];
+    }
+    [[nodiscard]] RhiTextureViewHandle historyReflectionTexturePrevViewHandle() const {
+        return m_historyReflectionView[1 - m_currentHistoryIndex];
+    }
     bool ensureHistoryReflectionTextureViews(RhiDevice& rhiDevice);
-    [[nodiscard]] RhiTextureHandle historyCloudTextureHandle() const { return m_historyCloudHandle[m_currentHistoryIndex]; }
-    [[nodiscard]] RhiTextureHandle historyCloudTexturePrevHandle() const { return m_historyCloudHandle[1 - m_currentHistoryIndex]; }
-    [[nodiscard]] RhiTextureViewHandle historyCloudTexturePrevViewHandle() const { return m_historyCloudView[1 - m_currentHistoryIndex]; }
+    [[nodiscard]] RhiTextureHandle historyCloudTextureHandle() const {
+        return m_historyCloudHandle[m_currentHistoryIndex];
+    }
+    [[nodiscard]] RhiTextureHandle historyCloudTexturePrevHandle() const {
+        return m_historyCloudHandle[1 - m_currentHistoryIndex];
+    }
+    [[nodiscard]] RhiTextureViewHandle historyCloudTexturePrevViewHandle() const {
+        return m_historyCloudView[1 - m_currentHistoryIndex];
+    }
     bool ensureHistoryCloudTextureViews(RhiDevice& rhiDevice);
-    [[nodiscard]] RhiTextureHandle historyVolumetricTextureHandle() const { return m_historyVolumetricHandle[m_currentHistoryIndex]; }
-    [[nodiscard]] RhiTextureHandle historyVolumetricTexturePrevHandle() const { return m_historyVolumetricHandle[1 - m_currentHistoryIndex]; }
-    [[nodiscard]] RhiTextureViewHandle historyVolumetricTextureViewHandle() const { return m_historyVolumetricView[m_currentHistoryIndex]; }
-    [[nodiscard]] RhiTextureViewHandle historyVolumetricTexturePrevViewHandle() const { return m_historyVolumetricView[1 - m_currentHistoryIndex]; }
+    [[nodiscard]] RhiTextureHandle historyVolumetricTextureHandle() const {
+        return m_historyVolumetricHandle[m_currentHistoryIndex];
+    }
+    [[nodiscard]] RhiTextureHandle historyVolumetricTexturePrevHandle() const {
+        return m_historyVolumetricHandle[1 - m_currentHistoryIndex];
+    }
+    [[nodiscard]] RhiTextureViewHandle historyVolumetricTextureViewHandle() const {
+        return m_historyVolumetricView[m_currentHistoryIndex];
+    }
+    [[nodiscard]] RhiTextureViewHandle historyVolumetricTexturePrevViewHandle() const {
+        return m_historyVolumetricView[1 - m_currentHistoryIndex];
+    }
     bool ensureHistoryVolumetricTextureView(RhiDevice& rhiDevice);
     bool ensureHistoryVolumetricTextureViews(RhiDevice& rhiDevice);
     [[nodiscard]] RhiTextureHandle temporalCurrentTextureHandle() const { return m_temporalCurrentHandle; }
@@ -197,8 +264,7 @@ public:
     [[nodiscard]] RhiTextureHandle hiZTextureHandle() const { return m_hiZHandle; }
     [[nodiscard]] uint32_t hiZMipCount() const { return m_hiZMipCount; }
     [[nodiscard]] RhiTextureViewHandle hiZMipTextureViewHandle(const uint32_t mip) const {
-        return mip < m_hiZMipViews.size() ? m_hiZMipViews[mip]
-                                          : RhiTextureViewHandle{};
+        return mip < m_hiZMipViews.size() ? m_hiZMipViews[mip] : RhiTextureViewHandle{};
     }
     [[nodiscard]] RhiTextureViewHandle hiZFullTextureViewHandle() const { return m_hiZFullView; }
     bool ensureHiZTextureViews(RhiDevice& rhiDevice);
@@ -242,12 +308,24 @@ public:
     bool ensureTransparencyMaskTextureView(RhiDevice& rhiDevice);
     [[nodiscard]] RhiTextureHandle atmosphereLutTextureHandle() const { return m_atmosphereLutHandle; }
     [[nodiscard]] RhiTextureViewHandle atmosphereLutTextureViewHandle() const { return m_atmosphereLutView; }
-    [[nodiscard]] RhiTextureViewHandle csmShadowDepthArrayTextureViewHandle() const { return m_csmShadowDepthArrayView; }
-    [[nodiscard]] RhiTextureViewHandle csmShadowDepthComparisonArrayTextureViewHandle() const { return m_csmShadowDepthComparisonArrayView; }
-    [[nodiscard]] RhiTextureViewHandle csmShadowDepthAllArrayTextureViewHandle() const { return m_csmShadowDepthAllArrayView; }
-    [[nodiscard]] RhiTextureViewHandle csmShadowDepthAllComparisonArrayTextureViewHandle() const { return m_csmShadowDepthAllComparisonArrayView; }
-    [[nodiscard]] RhiTextureViewHandle csmShadowColor0ArrayTextureViewHandle() const { return m_csmShadowColor0ArrayView; }
-    [[nodiscard]] RhiTextureViewHandle csmShadowColor1ArrayTextureViewHandle() const { return m_csmShadowColor1ArrayView; }
+    [[nodiscard]] RhiTextureViewHandle csmShadowDepthArrayTextureViewHandle() const {
+        return m_csmShadowDepthArrayView;
+    }
+    [[nodiscard]] RhiTextureViewHandle csmShadowDepthComparisonArrayTextureViewHandle() const {
+        return m_csmShadowDepthComparisonArrayView;
+    }
+    [[nodiscard]] RhiTextureViewHandle csmShadowDepthAllArrayTextureViewHandle() const {
+        return m_csmShadowDepthAllArrayView;
+    }
+    [[nodiscard]] RhiTextureViewHandle csmShadowDepthAllComparisonArrayTextureViewHandle() const {
+        return m_csmShadowDepthAllComparisonArrayView;
+    }
+    [[nodiscard]] RhiTextureViewHandle csmShadowColor0ArrayTextureViewHandle() const {
+        return m_csmShadowColor0ArrayView;
+    }
+    [[nodiscard]] RhiTextureViewHandle csmShadowColor1ArrayTextureViewHandle() const {
+        return m_csmShadowColor1ArrayView;
+    }
     bool ensureVolumetricFogTextureViews(RhiDevice& rhiDevice);
     bool loadAtmosphereLut(const char* path);
     [[nodiscard]] int currentHistoryIndex() const { return m_currentHistoryIndex; }
@@ -259,15 +337,16 @@ public:
     [[nodiscard]] bool isReady() const { return m_ready; }
     // Returns true if ensureSize() performed a rebuild since the last call.
     // Consumes the flag — second call returns false until next rebuild.
-    [[nodiscard]] bool consumeRebuiltFlag() { bool v = m_rebuiltSinceCheck; m_rebuiltSinceCheck = false; return v; }
+    [[nodiscard]] bool consumeRebuiltFlag() {
+        bool v = m_rebuiltSinceCheck;
+        m_rebuiltSinceCheck = false;
+        return v;
+    }
 
-    void transitionTexture(RhiCommandList& commandList,
-                           RhiTextureHandle texture,
-                           RhiResourceState newState) const;
+    void transitionTexture(RhiCommandList& commandList, RhiTextureHandle texture, RhiResourceState newState) const;
     /// Registers a freshly created texture's stable state after moving it
     /// out of the Undefined layout; required before transitionTexture use.
-    void initializeTextureState(RhiCommandList& commandList,
-                                RhiTextureHandle texture,
+    void initializeTextureState(RhiCommandList& commandList, RhiTextureHandle texture,
                                 RhiResourceState stableState) const;
 
 private:

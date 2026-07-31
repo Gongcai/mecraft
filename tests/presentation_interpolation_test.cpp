@@ -12,49 +12,29 @@ namespace {
 
 class EmptyWorldView final : public IWorldView {
 public:
-    [[nodiscard]] const ChunkMap& getActiveChunks() const override {
-        return m_chunks;
-    }
+    [[nodiscard]] const ChunkMap& getActiveChunks() const override { return m_chunks; }
 
-    [[nodiscard]] uint64_t getActiveChunkRevision() const override {
-        return 1;
-    }
+    [[nodiscard]] uint64_t getActiveChunkRevision() const override { return 1; }
 
-    [[nodiscard]] uint64_t getBlockContentRevision() const override {
-        return 1;
-    }
+    [[nodiscard]] uint64_t getBlockContentRevision() const override { return 1; }
 
-    [[nodiscard]] BlockStateId getBlock(int, int, int) const override {
-        return NULL_BLOCK_STATE;
-    }
+    [[nodiscard]] BlockStateId getBlock(int, int, int) const override { return NULL_BLOCK_STATE; }
 
-    [[nodiscard]] uint8_t getPackedLight(int, int, int) const override {
-        return 0;
-    }
+    [[nodiscard]] uint8_t getPackedLight(int, int, int) const override { return 0; }
 
-    [[nodiscard]] BlockStateId getBlockState(int, int, int) const override {
-        return NULL_BLOCK_STATE;
-    }
+    [[nodiscard]] BlockStateId getBlockState(int, int, int) const override { return NULL_BLOCK_STATE; }
 
-    [[nodiscard]] BlockStateId getFluidState(int, int, int) const override {
-        return NULL_BLOCK_STATE;
-    }
+    [[nodiscard]] BlockStateId getFluidState(int, int, int) const override { return NULL_BLOCK_STATE; }
 
-    [[nodiscard]] bool isChunkLoadedForBlock(int, int, int) const override {
-        return true;
-    }
+    [[nodiscard]] bool isChunkLoadedForBlock(int, int, int) const override { return true; }
 
-    [[nodiscard]] int getRenderDistance() const override {
-        return 8;
-    }
+    [[nodiscard]] int getRenderDistance() const override { return 8; }
 
     [[nodiscard]] glm::ivec2 getChunkCoords(const int worldX, const int worldZ) const override {
         return {worldX >> 4, worldZ >> 4};
     }
 
-    [[nodiscard]] TerrainBiome getBiome(int, int) const override {
-        return TerrainBiome::Temperate;
-    }
+    [[nodiscard]] TerrainBiome getBiome(int, int) const override { return TerrainBiome::Temperate; }
 
 private:
     ChunkMap m_chunks;

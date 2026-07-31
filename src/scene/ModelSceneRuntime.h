@@ -32,8 +32,7 @@ struct LocalTransformComponent;
 }
 
 /// Owns editor scene entities, mesh assets, picking data, and offscreen targets.
-class ModelSceneRuntime : public IDeferredGeometryProvider,
-                          public IReflectionProbeCaptureRenderer {
+class ModelSceneRuntime : public IDeferredGeometryProvider, public IReflectionProbeCaptureRenderer {
 public:
     ModelSceneRuntime();
     ~ModelSceneRuntime();
@@ -42,9 +41,7 @@ public:
     ModelSceneRuntime& operator=(const ModelSceneRuntime&) = delete;
 
     /// Initializes rendering resources for an empty editable scene.
-    [[nodiscard]] bool init(ResourceMgr& resourceMgr,
-                            RhiDevice& rhiDevice,
-                            RhiCommandListPool& commandListPool,
+    [[nodiscard]] bool init(ResourceMgr& resourceMgr, RhiDevice& rhiDevice, RhiCommandListPool& commandListPool,
                             ImGuiRhiRenderer& imguiRenderer);
     void shutdown();
 
@@ -52,42 +49,25 @@ public:
     [[nodiscard]] bool ensureViewport(uint32_t width, uint32_t height);
 
     /// Renders all ECS mesh instances through the deferred viewport pipeline.
-    [[nodiscard]] bool renderViewport(const glm::mat4& view,
-                                      const glm::mat4& projection,
-                                      const glm::vec3& cameraPosition,
-                                      float nearPlane,
-                                      float farPlane,
-                                      float verticalFovDegrees,
-                                      const RenderFrameClock& frameClock);
+    [[nodiscard]] bool renderViewport(const glm::mat4& view, const glm::mat4& projection,
+                                      const glm::vec3& cameraPosition, float nearPlane, float farPlane,
+                                      float verticalFovDegrees, const RenderFrameClock& frameClock);
 
-    [[nodiscard]] bool prepareGBuffer(
-        RhiCommandList& commandList,
-        const FrameContext& context) override;
-    void renderToGBuffer(
-        RhiCommandList& commandList,
-        const glm::mat4& viewProjection,
-        const glm::mat4& previousViewProjection) override;
-    void renderToShadowMap(
-        RhiCommandList& commandList,
-        const glm::mat4& shadowViewProjection) override;
+    [[nodiscard]] bool prepareGBuffer(RhiCommandList& commandList, const FrameContext& context) override;
+    void renderToGBuffer(RhiCommandList& commandList, const glm::mat4& viewProjection,
+                         const glm::mat4& previousViewProjection) override;
+    void renderToShadowMap(RhiCommandList& commandList, const glm::mat4& shadowViewProjection) override;
     [[nodiscard]] bool prepareShadowFrame() override;
-    [[nodiscard]] bool collectSceneLights(
-        const glm::vec3& cameraPosition,
-        std::vector<renderer::contracts::SceneLight>& lights,
-        std::string& error) override;
-    [[nodiscard]] bool configureClusteredLighting(
-        const DeferredClusteredLightingResources& resources) override;
+    [[nodiscard]] bool collectSceneLights(const glm::vec3& cameraPosition,
+                                          std::vector<renderer::contracts::SceneLight>& lights,
+                                          std::string& error) override;
+    [[nodiscard]] bool configureClusteredLighting(const DeferredClusteredLightingResources& resources) override;
     [[nodiscard]] bool hasTransparentGeometry() const override;
-    [[nodiscard]] bool prepareTransparentResources(
-        const DeferredTransparentResources& resources) override;
-    void renderTransparent(
-        RhiCommandList& commandList,
-        const glm::vec3& cameraPosition,
-        float reflectionCompositeStrength) override;
-    [[nodiscard]] bool recordReflectionProbeRadianceFace(
-        RhiCommandList& commandList,
-        const FrameContext& context,
-        const ReflectionProbeCaptureWork& work) override;
+    [[nodiscard]] bool prepareTransparentResources(const DeferredTransparentResources& resources) override;
+    void renderTransparent(RhiCommandList& commandList, const glm::vec3& cameraPosition,
+                           float reflectionCompositeStrength) override;
+    [[nodiscard]] bool recordReflectionProbeRadianceFace(RhiCommandList& commandList, const FrameContext& context,
+                                                         const ReflectionProbeCaptureWork& work) override;
 
     /// Imports or reuses one glTF asset and creates an independent ECS instance.
     /// @param path Filesystem path to a GLB or glTF document.
@@ -106,8 +86,7 @@ public:
     /// @param entity Scene entity whose display name changes.
     /// @param requestedName Non-empty requested display name.
     /// @return True when the entity name was updated or already matched.
-    [[nodiscard]] bool renameEntity(entt::entity entity,
-                                    const std::string& requestedName);
+    [[nodiscard]] bool renameEntity(entt::entity entity, const std::string& requestedName);
 
     /// Duplicates an entity and its complete descendant hierarchy.
     /// Mesh assets remain shared while every duplicate receives a new stable ID.
@@ -115,24 +94,18 @@ public:
     [[nodiscard]] entt::entity duplicateEntity(entt::entity source);
 
     /// Captures one entity using stable document identifiers and local state.
-    [[nodiscard]] bool captureEntityState(
-        entt::entity entity,
-        scene::SceneEntityDocument& state) const;
+    [[nodiscard]] bool captureEntityState(entt::entity entity, scene::SceneEntityDocument& state) const;
 
     /// Captures an entity and all descendants in parent-before-child order.
-    [[nodiscard]] bool captureEntitySubtree(
-        entt::entity root,
-        std::vector<scene::SceneEntityDocument>& states) const;
+    [[nodiscard]] bool captureEntitySubtree(entt::entity root, std::vector<scene::SceneEntityDocument>& states) const;
 
     /// Applies an exact name, local transform, and parent from a stable snapshot.
     /// The mesh asset association must match the existing entity.
-    [[nodiscard]] bool applyEntityState(
-        const scene::SceneEntityDocument& state);
+    [[nodiscard]] bool applyEntityState(const scene::SceneEntityDocument& state);
 
     /// Restores a previously removed hierarchy while preserving stable IDs.
     /// @return Root entity from the first snapshot, or entt::null on validation failure.
-    [[nodiscard]] entt::entity restoreEntitySubtree(
-        const std::vector<scene::SceneEntityDocument>& states);
+    [[nodiscard]] entt::entity restoreEntitySubtree(const std::vector<scene::SceneEntityDocument>& states);
 
     /// Removes all entities and loaded assets while keeping rendering initialized.
     void clearScene();
@@ -151,8 +124,7 @@ public:
     [[nodiscard]] bool setParent(entt::entity child, entt::entity parent);
 
     /// Applies a world-space transform and derives the corresponding local transform.
-    [[nodiscard]] bool setWorldTransform(entt::entity entity,
-                                         const glm::mat4& worldMatrix);
+    [[nodiscard]] bool setWorldTransform(entt::entity entity, const glm::mat4& worldMatrix);
 
     /// Destroys one scene instance without affecting shared mesh assets.
     void destroyEntity(entt::entity entity);
@@ -161,21 +133,17 @@ public:
     /// @param rayOrigin World-space ray origin.
     /// @param rayDirection Normalized world-space direction.
     /// @return Nearest intersected entity, or entt::null.
-    [[nodiscard]] entt::entity pick(const glm::vec3& rayOrigin,
-                                    const glm::vec3& rayDirection) const;
+    [[nodiscard]] entt::entity pick(const glm::vec3& rayOrigin, const glm::vec3& rayDirection) const;
 
     /// Computes world-space bounds for an entity pivot, meshes, and descendants.
     /// @return True when entity is a valid scene entity and bounds were produced.
-    [[nodiscard]] bool entityWorldBounds(entt::entity entity,
-                                         glm::vec3& boundsMin,
-                                         glm::vec3& boundsMax) const;
+    [[nodiscard]] bool entityWorldBounds(entt::entity entity, glm::vec3& boundsMin, glm::vec3& boundsMax) const;
 
     /// Rebuilds world and previous-world matrices from editable local transforms.
     void syncTransforms();
 
     /// Captures stable scene data without serializing runtime entity handles.
-    [[nodiscard]] scene::ModelSceneDocument captureDocument(
-        const scene::SceneEditorCameraDocument& editorCamera) const;
+    [[nodiscard]] scene::ModelSceneDocument captureDocument(const scene::SceneEditorCameraDocument& editorCamera) const;
 
     [[nodiscard]] entt::registry& registry() { return m_registry; }
     [[nodiscard]] const entt::registry& registry() const { return m_registry; }
@@ -189,8 +157,7 @@ public:
     [[nodiscard]] RhiTextureHandle captureTextureHandle() const;
     [[nodiscard]] RhiTextureFormat captureTextureFormat() const;
     [[nodiscard]] const GpuFrameStats* gpuFrameStats() const;
-    [[nodiscard]] ReflectionProbeCaptureFrameStats
-    reflectionProbeCaptureStats() const;
+    [[nodiscard]] ReflectionProbeCaptureFrameStats reflectionProbeCaptureStats() const;
 
     /// Updates the deferred environment time used by sky and lighting passes.
     /// @param timeOfDaySeconds Time within the 1200-second world day.
@@ -231,25 +198,16 @@ private:
         glm::vec3 boundsMax{0.0f};
     };
 
-    [[nodiscard]] bool createMeshAsset(ResourceMgr& resourceMgr,
-                                       scene::SceneAssetId assetId,
-                                       const std::string& name,
-                                       const std::string& path,
-                                       MeshAsset& asset);
-    [[nodiscard]] bool loadMeshAsset(ResourceMgr& resourceMgr,
-                                     const std::string& name,
-                                     const std::string& path,
+    [[nodiscard]] bool createMeshAsset(ResourceMgr& resourceMgr, scene::SceneAssetId assetId, const std::string& name,
+                                       const std::string& path, MeshAsset& asset);
+    [[nodiscard]] bool loadMeshAsset(ResourceMgr& resourceMgr, const std::string& name, const std::string& path,
                                      scene::SceneAssetId& assetId);
-    [[nodiscard]] entt::entity instantiateAsset(scene::SceneAssetId assetId,
-                                                const std::string& instanceName);
+    [[nodiscard]] entt::entity instantiateAsset(scene::SceneAssetId assetId, const std::string& instanceName);
     [[nodiscard]] entt::entity createEntity(const std::string& baseName);
-    [[nodiscard]] std::string makeUniqueInstanceName(
-        const std::string& baseName,
-        entt::entity ignoredEntity = entt::null) const;
+    [[nodiscard]] std::string makeUniqueInstanceName(const std::string& baseName,
+                                                     entt::entity ignoredEntity = entt::null) const;
     [[nodiscard]] uint32_t assetIndex(scene::SceneAssetId id) const;
-    [[nodiscard]] bool localTransformFromMatrix(
-        const glm::mat4& matrix,
-        ecs::LocalTransformComponent& transform) const;
+    [[nodiscard]] bool localTransformFromMatrix(const glm::mat4& matrix, ecs::LocalTransformComponent& transform) const;
     [[nodiscard]] bool configureReflectionProbeCapture();
     void invalidateReflectionProbeCapture();
     void detachFromParent(entt::entity entity);

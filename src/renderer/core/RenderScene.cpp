@@ -83,9 +83,7 @@ SkyIlluminanceData toSkyIlluminanceData(const GameplaySkyRenderer::SkyIlluminanc
 }
 
 glm::vec2 decodePackedLight(const uint8_t packed) {
-    return glm::vec2(
-        static_cast<float>((packed >> 4) & 0x0F) / 15.0f,
-        static_cast<float>(packed & 0x0F) / 15.0f);
+    return glm::vec2(static_cast<float>((packed >> 4) & 0x0F) / 15.0f, static_cast<float>(packed & 0x0F) / 15.0f);
 }
 
 glm::vec2 mixLight(const glm::vec2& a, const glm::vec2& b, const float t) {
@@ -96,28 +94,22 @@ float luminance(const glm::vec3& color) {
     return glm::dot(color, glm::vec3(0.2126f, 0.7152f, 0.0722f));
 }
 
-float computeHeldItemSceneHdrScale(const FrameContext& ctx,
-                                   const RenderSettings& settings,
+float computeHeldItemSceneHdrScale(const FrameContext& ctx, const RenderSettings& settings,
                                    const PipelineMode pipelineMode) {
     if (pipelineMode == PipelineMode::Forward) {
         return 1.0f;
     }
 
-    const float directEnergy = luminance(ctx.skyIlluminance.directIlluminance) *
-                               settings.postProcess.directSunStrength;
-    const float skyEnergy = luminance(ctx.skyIlluminance.skyIlluminance) *
-                            settings.postProcess.skyAmbientStrength *
+    const float directEnergy = luminance(ctx.skyIlluminance.directIlluminance) * settings.postProcess.directSunStrength;
+    const float skyEnergy = luminance(ctx.skyIlluminance.skyIlluminance) * settings.postProcess.skyAmbientStrength *
                             settings.weather.skylightScale;
-    const float weatherAttenuation = 1.0f - std::clamp(ctx.weather.wetness * 0.35f + ctx.weather.storm * 0.45f,
-                                                       0.0f,
-                                                       0.70f);
+    const float weatherAttenuation =
+        1.0f - std::clamp(ctx.weather.wetness * 0.35f + ctx.weather.storm * 0.45f, 0.0f, 0.70f);
     const float scale = 1.0f + directEnergy * 2.25f * weatherAttenuation + skyEnergy * 1.20f;
     return std::clamp(scale, 1.0f, 6.5f);
 }
 
-bool beginSceneCaptureRendering(RhiCommandList& commandList,
-                                const FrameContext& ctx,
-                                const char* debugName) {
+bool beginSceneCaptureRendering(RhiCommandList& commandList, const FrameContext& ctx, const char* debugName) {
     if (!ctx.sceneCaptureColorView.isValid() || !ctx.sceneCaptureDepthView.isValid()) {
         return false;
     }
@@ -134,12 +126,7 @@ bool beginSceneCaptureRendering(RhiCommandList& commandList,
 
     RhiRenderingInfo renderingInfo;
     renderingInfo.debugName = debugName;
-    renderingInfo.renderArea = {
-        0,
-        0,
-        ctx.temporalExtents.renderExtent.width,
-        ctx.temporalExtents.renderExtent.height
-    };
+    renderingInfo.renderArea = {0, 0, ctx.temporalExtents.renderExtent.width, ctx.temporalExtents.renderExtent.height};
     renderingInfo.colorAttachments = &colorAttachment;
     renderingInfo.colorAttachmentCount = 1u;
     renderingInfo.depthStencilAttachment = &depthAttachment;
@@ -148,15 +135,12 @@ bool beginSceneCaptureRendering(RhiCommandList& commandList,
     return true;
 }
 
-bool beginWeatherRendering(RhiCommandList& commandList,
-                           const FrameContext& ctx,
-                           DeferredRenderTargets* targets,
+bool beginWeatherRendering(RhiCommandList& commandList, const FrameContext& ctx, DeferredRenderTargets* targets,
                            const bool writeTemporalMasks) {
     if (!writeTemporalMasks) {
         return beginSceneCaptureRendering(commandList, ctx, "SceneCapture.Weather");
     }
-    if (targets == nullptr || !ctx.sceneCaptureColorView.isValid() ||
-        !ctx.sceneCaptureDepthView.isValid() ||
+    if (targets == nullptr || !ctx.sceneCaptureColorView.isValid() || !ctx.sceneCaptureDepthView.isValid() ||
         !targets->reactiveMaskTextureViewHandle().isValid() ||
         !targets->transparencyMaskTextureViewHandle().isValid()) {
         return false;
@@ -180,8 +164,7 @@ bool beginWeatherRendering(RhiCommandList& commandList,
 
     RhiRenderingInfo renderingInfo;
     renderingInfo.debugName = "SceneCapture.Weather";
-    renderingInfo.renderArea = {
-        0, 0, ctx.temporalExtents.renderExtent.width, ctx.temporalExtents.renderExtent.height};
+    renderingInfo.renderArea = {0, 0, ctx.temporalExtents.renderExtent.width, ctx.temporalExtents.renderExtent.height};
     renderingInfo.colorAttachments = colorAttachments;
     renderingInfo.colorAttachmentCount = 3u;
     renderingInfo.depthStencilAttachment = &depthAttachment;
@@ -280,23 +263,17 @@ void RenderScene::shutdown() {
     m_temporalUpscalePass.shutdown();
     m_postProcessPass.shutdown();
     m_hasPreviousContext = false;
-    m_pendingTemporalResetReasons =
-        temporalResetReasonBit(TemporalResetReason::FirstFrame);
+    m_pendingTemporalResetReasons = temporalResetReasonBit(TemporalResetReason::FirstFrame);
     m_temporalFrameInput.reset();
     m_temporalUpscaleResult.reset();
     m_lastFrameOutput = {};
     m_voxelLightRegistry.reset();
 }
 
-bool RenderScene::renderFrame(const IWorldView& worldView,
-                              const Camera& camera,
-                              const Window& window,
-                              const glm::ivec2& frameRenderSize,
-                              const glm::ivec2& frameOutputSize,
-                              const float frameAspectRatio,
-                              const DayNightSystem& dayNightSystem,
-                              const WeatherSystem& weatherSystem,
-                              const std::optional<RenderFrameClock>& frameClock) {
+bool RenderScene::renderFrame(const IWorldView& worldView, const Camera& camera, const Window& window,
+                              const glm::ivec2& frameRenderSize, const glm::ivec2& frameOutputSize,
+                              const float frameAspectRatio, const DayNightSystem& dayNightSystem,
+                              const WeatherSystem& weatherSystem, const std::optional<RenderFrameClock>& frameClock) {
     if (!prepareFrameResources(frameRenderSize)) {
         return false;
     }
@@ -314,14 +291,13 @@ bool RenderScene::renderFrame(const IWorldView& worldView,
 
     // Build frame context
     const auto contextBuildStart = std::chrono::steady_clock::now();
-    const std::optional<FrameContext> frameContext = buildFrameContext(
-        worldView, camera, window, frameRenderSize, frameOutputSize, frameAspectRatio,
-        dayNightSystem, weatherSystem, frameClock);
-    m_contextCpuMs = std::chrono::duration<double, std::milli>(
-        std::chrono::steady_clock::now() - contextBuildStart).count();
+    const std::optional<FrameContext> frameContext =
+        buildFrameContext(worldView, camera, window, frameRenderSize, frameOutputSize, frameAspectRatio, dayNightSystem,
+                          weatherSystem, frameClock);
+    m_contextCpuMs =
+        std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - contextBuildStart).count();
     if (!frameContext.has_value()) {
-        MECRAFT_LOG_STREAM(
-            std::cerr << "[RenderScene] Failed to resolve temporal frame parameters\n");
+        MECRAFT_LOG_STREAM(std::cerr << "[RenderScene] Failed to resolve temporal frame parameters\n");
         m_terrainStreamingService.endFrame();
         return false;
     }
@@ -338,8 +314,7 @@ bool RenderScene::renderFrame(const IWorldView& worldView,
     }
 
     m_lastFrameOutput = m_activePipeline->renderFrame(m_currentContext, m_settings);
-    if (!m_lastFrameOutput.sceneColor.isValid() ||
-        !m_lastFrameOutput.sceneDepth.isValid()) {
+    if (!m_lastFrameOutput.sceneColor.isValid() || !m_lastFrameOutput.sceneDepth.isValid()) {
         m_terrainStreamingService.endFrame();
         return false;
     }
@@ -352,8 +327,8 @@ bool RenderScene::executeFrameBeginGraph() {
     }
 
     m_frameBeginGraph.reset();
-    RenderGraphPassBuilder timerReset = m_frameBeginGraph.addPass(
-        {"RenderDebug.TimerReset", RgPassType::Graphics, RhiQueueType::Graphics});
+    RenderGraphPassBuilder timerReset =
+        m_frameBeginGraph.addPass({"RenderDebug.TimerReset", RgPassType::Graphics, RhiQueueType::Graphics});
     timerReset.setExecute([this](RgPassContext& pass) {
         m_debugService.beginFrame(pass.commandList());
         return true;
@@ -361,78 +336,59 @@ bool RenderScene::executeFrameBeginGraph() {
 
     const RgCompileResult compiled = m_frameBeginGraph.compile();
     if (!compiled.succeeded()) {
-        MECRAFT_LOG_STREAM(
-            std::cerr << "[RenderScene] Frame-begin Render Graph compile failed: "
-                      << compiled.message << '\n');
+        MECRAFT_LOG_STREAM(std::cerr << "[RenderScene] Frame-begin Render Graph compile failed: " << compiled.message
+                                     << '\n');
         return false;
     }
-    const RgExecuteResult executed = m_frameBeginGraph.execute(
-        *m_shared.rhiDevice, *m_shared.commandListPool);
+    const RgExecuteResult executed = m_frameBeginGraph.execute(*m_shared.rhiDevice, *m_shared.commandListPool);
     if (!executed.succeeded()) {
-        MECRAFT_LOG_STREAM(
-            std::cerr << "[RenderScene] Frame-begin Render Graph execution failed: "
-                      << executed.message << '\n');
+        MECRAFT_LOG_STREAM(std::cerr << "[RenderScene] Frame-begin Render Graph execution failed: " << executed.message
+                                     << '\n');
         return false;
     }
     return true;
 }
 
-bool RenderScene::executeSceneOverlayGraph(
-    const RenderGameplayFrameRequest& request,
-    const glm::ivec2& frameRenderSize,
-    const bool lightDebugActive,
-    float& cameraRainVisibility) {
+bool RenderScene::executeSceneOverlayGraph(const RenderGameplayFrameRequest& request, const glm::ivec2& frameRenderSize,
+                                           const bool lightDebugActive, float& cameraRainVisibility) {
     if (m_shared.rhiDevice == nullptr || m_shared.commandListPool == nullptr) {
         return false;
     }
 
     const WeatherDerived weather = request.weatherSystem.getDerived();
-    const bool precipitationConfigured =
-        !lightDebugActive && m_settings.weather.rainLinesEnabled;
+    const bool precipitationConfigured = !lightDebugActive && m_settings.weather.rainLinesEnabled;
     const bool precipitationVisible =
-        precipitationConfigured &&
-        (weather.rainStrength > 0.01f || weather.snowStrength > 0.01f);
+        precipitationConfigured && (weather.rainStrength > 0.01f || weather.snowStrength > 0.01f);
     if (!lightDebugActive) {
         cameraRainVisibility = m_currentContext.cameraRainVisibility;
     }
 
     const glm::mat4 weatherView = request.camera.getViewMatrix();
     if (precipitationConfigured) {
-        request.rainRenderer.prepareFrame(
-            request.camera.getPosition(), weatherView,
-            weather.rainStrength, weather.snowStrength, request.frameTime);
+        request.rainRenderer.prepareFrame(request.camera.getPosition(), weatherView, weather.rainStrength,
+                                          weather.snowStrength, request.frameTime);
     }
 
-    const bool heldItemVisible = request.renderFirstPersonHeldItem &&
-                                 request.firstPersonHeldItemRenderer != nullptr &&
+    const bool heldItemVisible = request.renderFirstPersonHeldItem && request.firstPersonHeldItemRenderer != nullptr &&
                                  request.firstPersonInventory != nullptr &&
                                  request.firstPersonHeldItemMotion != nullptr;
     if (heldItemVisible) {
         request.firstPersonHeldItemRenderer->setShadowData(
-            FirstPersonHeldItemRenderer::fromFirstPersonShadowData(
-                getHeldItemShadowData()));
-        const glm::vec2 heldLight = sampleHeldItemLight(
-            request.worldView, request.camera.getPosition());
-        request.firstPersonHeldItemRenderer->setEnvironmentLight(
-            heldLight.x, heldLight.y);
+            FirstPersonHeldItemRenderer::fromFirstPersonShadowData(getHeldItemShadowData()));
+        const glm::vec2 heldLight = sampleHeldItemLight(request.worldView, request.camera.getPosition());
+        request.firstPersonHeldItemRenderer->setEnvironmentLight(heldLight.x, heldLight.y);
         request.firstPersonHeldItemRenderer->setSceneHdrScale(
-            computeHeldItemSceneHdrScale(
-                m_currentContext, m_settings, getPipelineMode()));
-        request.firstPersonHeldItemRenderer->prepareFrameResources(
-            *request.firstPersonInventory);
+            computeHeldItemSceneHdrScale(m_currentContext, m_settings, getPipelineMode()));
+        request.firstPersonHeldItemRenderer->prepareFrameResources(*request.firstPersonInventory);
         request.firstPersonHeldItemRenderer->prepareFrame(
-            frameRenderSize.x, frameRenderSize.y,
-            *request.firstPersonInventory,
-            *request.firstPersonHeldItemMotion,
+            frameRenderSize.x, frameRenderSize.y, *request.firstPersonInventory, *request.firstPersonHeldItemMotion,
             static_cast<float>(Time::getGameTime()));
     }
 
     RhiDevice& rhiDevice = *m_shared.rhiDevice;
     m_sceneOverlayGraph.reset();
-    const auto importTexture = [&](const RhiTextureHandle texture,
-                                   const RhiTextureViewHandle view,
-                                   const RhiResourceState stableState,
-                                   RgTextureHandle& graphTexture) {
+    const auto importTexture = [&](const RhiTextureHandle texture, const RhiTextureViewHandle view,
+                                   const RhiResourceState stableState, RgTextureHandle& graphTexture) {
         RhiTextureDesc desc;
         if (!rhiDevice.getTextureDesc(texture, desc)) {
             return false;
@@ -450,38 +406,27 @@ bool RenderScene::executeSceneOverlayGraph(
 
     RgTextureHandle sceneColor;
     RgTextureHandle sceneDepth;
-    if (!importTexture(m_currentContext.sceneCaptureColorTexture,
-                       m_currentContext.sceneCaptureColorView,
-                       RhiResourceState::ShaderRead,
-                       sceneColor) ||
-        !importTexture(m_currentContext.sceneCaptureDepthTexture,
-                       m_currentContext.sceneCaptureDepthView,
-                       RhiResourceState::DepthRead,
-                       sceneDepth)) {
+    if (!importTexture(m_currentContext.sceneCaptureColorTexture, m_currentContext.sceneCaptureColorView,
+                       RhiResourceState::ShaderRead, sceneColor) ||
+        !importTexture(m_currentContext.sceneCaptureDepthTexture, m_currentContext.sceneCaptureDepthView,
+                       RhiResourceState::DepthRead, sceneDepth)) {
         return false;
     }
 
-    const glm::mat4 viewProj =
-        m_currentContext.camera.projection * m_currentContext.camera.view;
+    const glm::mat4 viewProj = m_currentContext.camera.projection * m_currentContext.camera.view;
     const IWorldView* overlayWorldView = &request.worldView;
     const BlockTargetRenderData* overlayTarget = &request.target;
     const BlockBreakRenderData* overlayBlockBreak = &request.blockBreak;
-    RenderGraphPassBuilder overlay = m_sceneOverlayGraph.addPass(
-        {"SceneOverlay.BlockInteraction", RgPassType::Graphics,
-         RhiQueueType::Graphics});
+    RenderGraphPassBuilder overlay =
+        m_sceneOverlayGraph.addPass({"SceneOverlay.BlockInteraction", RgPassType::Graphics, RhiQueueType::Graphics});
     overlay.readWriteTexture(sceneColor, RhiResourceState::RenderTarget)
         .readWriteTexture(sceneDepth, RhiResourceState::DepthWrite)
-        .setExecute([this, overlayWorldView, overlayTarget, overlayBlockBreak,
-                     viewProj](RgPassContext& pass) {
+        .setExecute([this, overlayWorldView, overlayTarget, overlayBlockBreak, viewProj](RgPassContext& pass) {
             RhiCommandList& commandList = pass.commandList();
-            if (!beginSceneCaptureRendering(
-                    commandList, m_currentContext,
-                    "SceneCapture.BlockOverlay")) {
+            if (!beginSceneCaptureRendering(commandList, m_currentContext, "SceneCapture.BlockOverlay")) {
                 return false;
             }
-            m_overlayRenderer.render(
-                *overlayWorldView, viewProj,
-                *overlayTarget, *overlayBlockBreak, commandList);
+            m_overlayRenderer.render(*overlayWorldView, viewProj, *overlayTarget, *overlayBlockBreak, commandList);
             commandList.endRendering();
             return true;
         });
@@ -491,10 +436,8 @@ bool RenderScene::executeSceneOverlayGraph(
         const bool hardwareDepthTest = getPipelineMode() == PipelineMode::Forward;
         const bool writeTemporalMasks = !hardwareDepthTest;
         DeferredRenderTargets* targets = m_shared.deferredTargets;
-        if (writeTemporalMasks &&
-            (targets == nullptr ||
-             !targets->ensureReactiveMaskTextureView(rhiDevice) ||
-             !targets->ensureTransparencyMaskTextureView(rhiDevice))) {
+        if (writeTemporalMasks && (targets == nullptr || !targets->ensureReactiveMaskTextureView(rhiDevice) ||
+                                   !targets->ensureTransparencyMaskTextureView(rhiDevice))) {
             return false;
         }
 
@@ -502,76 +445,55 @@ bool RenderScene::executeSceneOverlayGraph(
         RgTextureHandle reactiveMask;
         RgTextureHandle transparencyMask;
         if (!hardwareDepthTest &&
-            !importTexture(m_lastFrameOutput.gbufferDepth, {},
-                           RhiResourceState::DepthRead,
-                           precipitationDepth)) {
+            !importTexture(m_lastFrameOutput.gbufferDepth, {}, RhiResourceState::DepthRead, precipitationDepth)) {
             return false;
         }
         if (writeTemporalMasks &&
-            (!importTexture(targets->reactiveMaskTextureHandle(),
-                            targets->reactiveMaskTextureViewHandle(),
-                            RhiResourceState::ShaderRead,
-                            reactiveMask) ||
-             !importTexture(targets->transparencyMaskTextureHandle(),
-                            targets->transparencyMaskTextureViewHandle(),
-                            RhiResourceState::ShaderRead,
-                            transparencyMask))) {
+            (!importTexture(targets->reactiveMaskTextureHandle(), targets->reactiveMaskTextureViewHandle(),
+                            RhiResourceState::ShaderRead, reactiveMask) ||
+             !importTexture(targets->transparencyMaskTextureHandle(), targets->transparencyMaskTextureViewHandle(),
+                            RhiResourceState::ShaderRead, transparencyMask))) {
             return false;
         }
 
-        const float frameAspect = static_cast<float>(frameRenderSize.x) /
-                                  static_cast<float>(std::max(1, frameRenderSize.y));
-        const glm::mat4 weatherProjection =
-            request.camera.getProjectionMatrix(frameAspect);
+        const float frameAspect =
+            static_cast<float>(frameRenderSize.x) / static_cast<float>(std::max(1, frameRenderSize.y));
+        const glm::mat4 weatherProjection = request.camera.getProjectionMatrix(frameAspect);
         const float alphaScale = m_settings.weather.rainAlphaScale;
-        const glm::vec2 precipitationScreenSize(
-            static_cast<float>(frameRenderSize.x),
-            static_cast<float>(frameRenderSize.y));
-        const RhiTextureHandle depthTexture = hardwareDepthTest
-            ? RhiTextureHandle{}
-            : m_lastFrameOutput.gbufferDepth;
+        const glm::vec2 precipitationScreenSize(static_cast<float>(frameRenderSize.x),
+                                                static_cast<float>(frameRenderSize.y));
+        const RhiTextureHandle depthTexture = hardwareDepthTest ? RhiTextureHandle{} : m_lastFrameOutput.gbufferDepth;
         RainRenderer* precipitationRenderer = &request.rainRenderer;
 
-        RenderGraphPassBuilder precipitation = m_sceneOverlayGraph.addPass(
-            {"SceneOverlay.Precipitation", RgPassType::Graphics,
-             RhiQueueType::Graphics});
+        RenderGraphPassBuilder precipitation =
+            m_sceneOverlayGraph.addPass({"SceneOverlay.Precipitation", RgPassType::Graphics, RhiQueueType::Graphics});
         precipitation.dependsOn(graphTail)
             .readWriteTexture(sceneColor, RhiResourceState::RenderTarget)
             .readWriteTexture(sceneDepth, RhiResourceState::DepthWrite);
         if (!hardwareDepthTest) {
-            precipitation.readTexture(
-                precipitationDepth, RhiResourceState::DepthRead);
+            precipitation.readTexture(precipitationDepth, RhiResourceState::DepthRead);
         }
         if (writeTemporalMasks) {
-            precipitation
-                .readWriteTexture(reactiveMask, RhiResourceState::RenderTarget)
-                .readWriteTexture(transparencyMask,
-                                  RhiResourceState::RenderTarget);
+            precipitation.readWriteTexture(reactiveMask, RhiResourceState::RenderTarget)
+                .readWriteTexture(transparencyMask, RhiResourceState::RenderTarget);
         }
-        precipitation.setExecute(
-            [this, precipitationRenderer, weather, weatherProjection, weatherView,
-             targets, writeTemporalMasks, hardwareDepthTest, cameraRainVisibility,
-             alphaScale, depthTexture, precipitationScreenSize](RgPassContext& pass) {
+        precipitation.setExecute([this, precipitationRenderer, weather, weatherProjection, weatherView, targets,
+                                  writeTemporalMasks, hardwareDepthTest, cameraRainVisibility, alphaScale, depthTexture,
+                                  precipitationScreenSize](RgPassContext& pass) {
             RhiCommandList& commandList = pass.commandList();
             precipitationRenderer->uploadFrame(commandList);
-            if (!beginWeatherRendering(
-                    commandList, m_currentContext, targets,
-                    writeTemporalMasks)) {
+            if (!beginWeatherRendering(commandList, m_currentContext, targets, writeTemporalMasks)) {
                 return false;
             }
             if (weather.rainStrength > 0.01f) {
-                precipitationRenderer->render(
-                    commandList, weatherProjection, weatherView,
-                    weather.rainStrength, cameraRainVisibility,
-                    alphaScale, depthTexture,
-                    precipitationScreenSize, hardwareDepthTest);
+                precipitationRenderer->render(commandList, weatherProjection, weatherView, weather.rainStrength,
+                                              cameraRainVisibility, alphaScale, depthTexture, precipitationScreenSize,
+                                              hardwareDepthTest);
             }
             if (weather.snowStrength > 0.01f) {
-                precipitationRenderer->renderSnow(
-                    commandList, weatherProjection, weatherView,
-                    weather.snowStrength, cameraRainVisibility,
-                    alphaScale * 0.6f, depthTexture,
-                    precipitationScreenSize, hardwareDepthTest);
+                precipitationRenderer->renderSnow(commandList, weatherProjection, weatherView, weather.snowStrength,
+                                                  cameraRainVisibility, alphaScale * 0.6f, depthTexture,
+                                                  precipitationScreenSize, hardwareDepthTest);
             }
             commandList.endRendering();
             return true;
@@ -587,30 +509,21 @@ bool RenderScene::executeSceneOverlayGraph(
         RgTextureHandle shadowColor1;
         if (shadowData.shadowsEnabled != 0) {
             const bool matchingDepthHandles =
-                shadowData.shadowTextureHandle.index ==
-                    shadowData.shadowDepthRawHandle.index &&
-                shadowData.shadowTextureHandle.generation ==
-                    shadowData.shadowDepthRawHandle.generation &&
-                shadowData.shadowDepthAllHandle.index ==
-                    shadowData.shadowDepthAllRawHandle.index &&
-                shadowData.shadowDepthAllHandle.generation ==
-                    shadowData.shadowDepthAllRawHandle.generation;
+                shadowData.shadowTextureHandle.index == shadowData.shadowDepthRawHandle.index &&
+                shadowData.shadowTextureHandle.generation == shadowData.shadowDepthRawHandle.generation &&
+                shadowData.shadowDepthAllHandle.index == shadowData.shadowDepthAllRawHandle.index &&
+                shadowData.shadowDepthAllHandle.generation == shadowData.shadowDepthAllRawHandle.generation;
             if (!matchingDepthHandles ||
-                !importTexture(shadowData.shadowDepthRawHandle, {},
-                               RhiResourceState::DepthRead, shadowDepth) ||
-                !importTexture(shadowData.shadowDepthAllRawHandle, {},
-                               RhiResourceState::DepthRead, shadowDepthAll) ||
-                !importTexture(shadowData.shadowColor0Handle, {},
-                               RhiResourceState::ShaderRead, shadowColor0) ||
-                !importTexture(shadowData.shadowColor1Handle, {},
-                               RhiResourceState::ShaderRead, shadowColor1)) {
+                !importTexture(shadowData.shadowDepthRawHandle, {}, RhiResourceState::DepthRead, shadowDepth) ||
+                !importTexture(shadowData.shadowDepthAllRawHandle, {}, RhiResourceState::DepthRead, shadowDepthAll) ||
+                !importTexture(shadowData.shadowColor0Handle, {}, RhiResourceState::ShaderRead, shadowColor0) ||
+                !importTexture(shadowData.shadowColor1Handle, {}, RhiResourceState::ShaderRead, shadowColor1)) {
                 return false;
             }
         }
 
         RenderGraphPassBuilder heldItem = m_sceneOverlayGraph.addPass(
-            {"SceneOverlay.FirstPersonHeldItem", RgPassType::Graphics,
-             RhiQueueType::Graphics});
+            {"SceneOverlay.FirstPersonHeldItem", RgPassType::Graphics, RhiQueueType::Graphics});
         heldItem.dependsOn(graphTail)
             .readWriteTexture(sceneColor, RhiResourceState::RenderTarget)
             .readWriteTexture(sceneDepth, RhiResourceState::DepthWrite);
@@ -620,14 +533,11 @@ bool RenderScene::executeSceneOverlayGraph(
                 .readTexture(shadowColor0, RhiResourceState::ShaderRead)
                 .readTexture(shadowColor1, RhiResourceState::ShaderRead);
         }
-        FirstPersonHeldItemRenderer* heldItemRenderer =
-            request.firstPersonHeldItemRenderer;
+        FirstPersonHeldItemRenderer* heldItemRenderer = request.firstPersonHeldItemRenderer;
         heldItem.setExecute([this, heldItemRenderer](RgPassContext& pass) {
             RhiCommandList& commandList = pass.commandList();
             heldItemRenderer->prepareRhiFrame(commandList);
-            if (!beginSceneCaptureRendering(
-                    commandList, m_currentContext,
-                    "SceneCapture.FirstPersonHeldItem")) {
+            if (!beginSceneCaptureRendering(commandList, m_currentContext, "SceneCapture.FirstPersonHeldItem")) {
                 return false;
             }
             heldItemRenderer->renderPrepared(commandList);
@@ -638,17 +548,14 @@ bool RenderScene::executeSceneOverlayGraph(
 
     const RgCompileResult compiled = m_sceneOverlayGraph.compile();
     if (!compiled.succeeded()) {
-        MECRAFT_LOG_STREAM(
-            std::cerr << "[RenderScene] Scene-overlay Render Graph compile failed: "
-                      << compiled.message << '\n');
+        MECRAFT_LOG_STREAM(std::cerr << "[RenderScene] Scene-overlay Render Graph compile failed: " << compiled.message
+                                     << '\n');
         return false;
     }
-    const RgExecuteResult executed = m_sceneOverlayGraph.execute(
-        rhiDevice, *m_shared.commandListPool);
+    const RgExecuteResult executed = m_sceneOverlayGraph.execute(rhiDevice, *m_shared.commandListPool);
     if (!executed.succeeded()) {
         MECRAFT_LOG_STREAM(
-            std::cerr << "[RenderScene] Scene-overlay Render Graph execution failed: "
-                      << executed.message << '\n');
+            std::cerr << "[RenderScene] Scene-overlay Render Graph execution failed: " << executed.message << '\n');
         return false;
     }
     return true;
@@ -661,24 +568,18 @@ bool RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
     }
 
     const bool skipPostProcess = getPipelineMode() == PipelineMode::Forward;
-    const glm::ivec2 displaySize(std::max(1, request.framebufferWidth),
-                                std::max(1, request.framebufferHeight));
+    const glm::ivec2 displaySize(std::max(1, request.framebufferWidth), std::max(1, request.framebufferHeight));
     glm::ivec2 frameRenderSize = displaySize;
     if (!skipPostProcess) {
-        const std::optional<glm::ivec2> resolvedRenderSize =
-            internalRenderSize(displaySize);
+        const std::optional<glm::ivec2> resolvedRenderSize = internalRenderSize(displaySize);
         if (!resolvedRenderSize.has_value()) {
-            MECRAFT_LOG_STREAM(
-                std::cerr << "[RenderScene] Invalid temporal upscaler resolution settings\n");
+            MECRAFT_LOG_STREAM(std::cerr << "[RenderScene] Invalid temporal upscaler resolution settings\n");
             return false;
         }
         frameRenderSize = *resolvedRenderSize;
     }
-    const float frameAspectRatio = static_cast<float>(displaySize.x) /
-                                   static_cast<float>(displaySize.y);
-    if (!m_postProcessPass.beginSceneCapture(*m_shared.rhiDevice,
-                                             frameRenderSize.x,
-                                             frameRenderSize.y)) {
+    const float frameAspectRatio = static_cast<float>(displaySize.x) / static_cast<float>(displaySize.y);
+    if (!m_postProcessPass.beginSceneCapture(*m_shared.rhiDevice, frameRenderSize.x, frameRenderSize.y)) {
         MECRAFT_LOG_STREAM(std::cerr << "[RenderScene] Failed to begin post-process scene capture\n");
         return false;
     }
@@ -686,17 +587,13 @@ bool RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
     const bool lightDebugActive = isLightDebugActive();
     float cameraRainVisibility = 1.0f;
 
-    const bool clusteredVoxelLightsRequired =
-        getPipelineMode() == PipelineMode::Deferred &&
-        m_shared.rhiDevice != nullptr &&
-        m_shared.rhiDevice->backend() == RhiBackend::Vulkan;
+    const bool clusteredVoxelLightsRequired = getPipelineMode() == PipelineMode::Deferred &&
+                                              m_shared.rhiDevice != nullptr &&
+                                              m_shared.rhiDevice->backend() == RhiBackend::Vulkan;
     if (clusteredVoxelLightsRequired) {
         std::vector<renderer::contracts::SceneLight> lights;
-        if (!m_voxelLightRegistry.buildSceneLights(
-                request.worldView, request.camera.getPosition(), lights)) {
-            MECRAFT_LOG_STREAM(
-                std::cerr << "[RenderScene] "
-                          << m_voxelLightRegistry.lastError() << '\n');
+        if (!m_voxelLightRegistry.buildSceneLights(request.worldView, request.camera.getPosition(), lights)) {
+            MECRAFT_LOG_STREAM(std::cerr << "[RenderScene] " << m_voxelLightRegistry.lastError() << '\n');
             return false;
         }
         if (!setSceneLights(std::move(lights))) {
@@ -706,24 +603,18 @@ bool RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
         }
     }
 
-    if (!renderFrame(request.worldView, request.camera, request.window,
-                     frameRenderSize, displaySize, frameAspectRatio,
-                     request.dayNightSystem, request.weatherSystem,
-                     request.frameClock)) {
+    if (!renderFrame(request.worldView, request.camera, request.window, frameRenderSize, displaySize, frameAspectRatio,
+                     request.dayNightSystem, request.weatherSystem, request.frameClock)) {
         return false;
     }
-    if (!executeSceneOverlayGraph(request, frameRenderSize,
-                                  lightDebugActive, cameraRainVisibility)) {
+    if (!executeSceneOverlayGraph(request, frameRenderSize, lightDebugActive, cameraRainVisibility)) {
         m_terrainStreamingService.endFrame();
         return false;
     }
 
-    if (!m_temporalUpscalePass.prepareOutputTarget(
-            m_settings.upscale,
-            m_currentContext.temporalExtents.renderExtent,
-            m_currentContext.temporalExtents.outputExtent)) {
-        MECRAFT_LOG_STREAM(
-            std::cerr << "[RenderScene] Failed to prepare temporal HDR output target\n");
+    if (!m_temporalUpscalePass.prepareOutputTarget(m_settings.upscale, m_currentContext.temporalExtents.renderExtent,
+                                                   m_currentContext.temporalExtents.outputExtent)) {
+        MECRAFT_LOG_STREAM(std::cerr << "[RenderScene] Failed to prepare temporal HDR output target\n");
         m_terrainStreamingService.endFrame();
         return false;
     }
@@ -733,53 +624,41 @@ bool RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
     }
     m_temporalUpscaleResult.reset();
     if (m_temporalFrameInput.has_value()) {
-        m_temporalUpscaleResult = m_temporalUpscalePass.execute(
-            m_settings.upscale,
-            *m_temporalFrameInput);
+        m_temporalUpscaleResult = m_temporalUpscalePass.execute(m_settings.upscale, *m_temporalFrameInput);
         if (!m_temporalUpscaleResult->succeeded()) {
-            MECRAFT_LOG_STREAM(
-                std::cerr << "[RenderScene] "
-                          << TemporalUpscalePass::statusText(m_temporalUpscaleResult->status)
-                          << '\n');
+            MECRAFT_LOG_STREAM(std::cerr << "[RenderScene] "
+                                         << TemporalUpscalePass::statusText(m_temporalUpscaleResult->status) << '\n');
             m_terrainStreamingService.endFrame();
             return false;
         }
-        if (!m_postProcessPass.setHdrInput(
-                m_temporalUpscaleResult->outputHdrColor,
-                m_temporalUpscaleResult->outputHdrColorView,
-                static_cast<int>(m_temporalUpscaleResult->outputExtent.width),
-                static_cast<int>(m_temporalUpscaleResult->outputExtent.height))) {
-            MECRAFT_LOG_STREAM(
-                std::cerr << "[RenderScene] Failed to configure the post-process HDR input\n");
+        if (!m_postProcessPass.setHdrInput(m_temporalUpscaleResult->outputHdrColor,
+                                           m_temporalUpscaleResult->outputHdrColorView,
+                                           static_cast<int>(m_temporalUpscaleResult->outputExtent.width),
+                                           static_cast<int>(m_temporalUpscaleResult->outputExtent.height))) {
+            MECRAFT_LOG_STREAM(std::cerr << "[RenderScene] Failed to configure the post-process HDR input\n");
             m_terrainStreamingService.endFrame();
             return false;
         }
     } else if (!skipPostProcess && !isFsr1RuntimeEnabled()) {
-        MECRAFT_LOG_STREAM(
-            std::cerr << "[RenderScene] Temporal frame input is unavailable\n");
+        MECRAFT_LOG_STREAM(std::cerr << "[RenderScene] Temporal frame input is unavailable\n");
         m_terrainStreamingService.endFrame();
         return false;
     }
 
     if (skipPostProcess) {
-        if (!m_postProcessPass.blitSceneCaptureToBackbuffer(
-                *m_shared.rhiDevice,
-                m_currentContext.swapchainColorView,
-                m_debugService)) {
+        if (!m_postProcessPass.blitSceneCaptureToBackbuffer(*m_shared.rhiDevice, m_currentContext.swapchainColorView,
+                                                            m_debugService)) {
             m_terrainStreamingService.endFrame();
             return false;
         }
     } else {
-        PostProcessEffects effects = buildPostProcessEffects(
-            request.worldView, request.camera, frameAspectRatio,
-            cameraRainVisibility, request.screenRollRadians,
-            request.dayNightSystem, request.weatherSystem);
+        PostProcessEffects effects =
+            buildPostProcessEffects(request.worldView, request.camera, frameAspectRatio, cameraRainVisibility,
+                                    request.screenRollRadians, request.dayNightSystem, request.weatherSystem);
         m_postProcessPass.setFrameEffects(effects);
         if (lightDebugActive) {
-            if (!m_postProcessPass.blitSceneCaptureToBackbuffer(
-                    *m_shared.rhiDevice,
-                    m_currentContext.swapchainColorView,
-                    m_debugService)) {
+            if (!m_postProcessPass.blitSceneCaptureToBackbuffer(*m_shared.rhiDevice,
+                                                                m_currentContext.swapchainColorView, m_debugService)) {
                 m_terrainStreamingService.endFrame();
                 return false;
             }
@@ -787,40 +666,25 @@ bool RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
             const bool fsrEnabled = isFsr1RuntimeEnabled();
             if (fsrEnabled) {
                 const RhiTextureHandle postTexture = m_postProcessPass.compositeToTexture(
-                    *m_shared.rhiDevice,
-                    request.frameTime,
-                    m_lastFrameOutput.gbufferDepth,
-                    m_debugService);
+                    *m_shared.rhiDevice, request.frameTime, m_lastFrameOutput.gbufferDepth, m_debugService);
                 if (!postTexture.isValid()) {
                     m_terrainStreamingService.endFrame();
                     return false;
                 }
                 const int inputWidth = m_postProcessPass.targetWidth();
                 const int inputHeight = m_postProcessPass.targetHeight();
-                if (!m_fsr1Pass.execute(
-                        *m_shared.rhiDevice,
-                        m_currentContext.swapchainColorView,
-                        postTexture,
-                        m_postProcessPass.compositeTextureViewHandle(),
-                        inputWidth,
-                        inputHeight,
-                        displaySize.x,
-                        displaySize.y,
-                        m_settings.upscale.fsr1Sharpness,
-                        m_debugService)) {
+                if (!m_fsr1Pass.execute(*m_shared.rhiDevice, m_currentContext.swapchainColorView, postTexture,
+                                        m_postProcessPass.compositeTextureViewHandle(), inputWidth, inputHeight,
+                                        displaySize.x, displaySize.y, m_settings.upscale.fsr1Sharpness,
+                                        m_debugService)) {
                     m_terrainStreamingService.endFrame();
                     return false;
                 }
             } else {
-                if (!m_postProcessPass.compositeToBackbuffer(
-                        *m_shared.rhiDevice,
-                        m_currentContext.swapchainColorView,
-                        m_currentContext.swapchainColorFormat,
-                        displaySize.x,
-                        displaySize.y,
-                        request.frameTime,
-                        m_lastFrameOutput.gbufferDepth,
-                        m_debugService)) {
+                if (!m_postProcessPass.compositeToBackbuffer(*m_shared.rhiDevice, m_currentContext.swapchainColorView,
+                                                             m_currentContext.swapchainColorFormat, displaySize.x,
+                                                             displaySize.y, request.frameTime,
+                                                             m_lastFrameOutput.gbufferDepth, m_debugService)) {
                     m_terrainStreamingService.endFrame();
                     return false;
                 }
@@ -833,7 +697,8 @@ bool RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
 }
 
 void RenderScene::setPipelineMode(PipelineMode mode) {
-    if (m_settings.pipelineMode == mode) return;
+    if (m_settings.pipelineMode == mode)
+        return;
 
     m_settings.pipelineMode = mode;
     invalidateFrameHistory(temporalResetReasonBit(TemporalResetReason::PipelineMode));
@@ -847,9 +712,8 @@ void RenderScene::setPipelineMode(PipelineMode mode) {
         }
 
         // Switch to new pipeline
-        m_activePipeline = (mode == PipelineMode::Deferred)
-            ? static_cast<RenderPipeline*>(m_deferredPipeline.get())
-            : static_cast<RenderPipeline*>(m_forwardPipeline.get());
+        m_activePipeline = (mode == PipelineMode::Deferred) ? static_cast<RenderPipeline*>(m_deferredPipeline.get())
+                                                            : static_cast<RenderPipeline*>(m_forwardPipeline.get());
 
         // Initialize when all shared resources required by the active path are present.
         if (isNewPipelineReady()) {
@@ -875,9 +739,9 @@ const char* RenderScene::activePipelineName() const {
 
     // Fallback to settings-based name
     switch (m_settings.pipelineMode) {
-        case PipelineMode::Forward: return "Forward (Vanilla)";
-        case PipelineMode::Deferred: return "Deferred (Shader Effects)";
-        default: return "Unknown";
+    case PipelineMode::Forward: return "Forward (Vanilla)";
+    case PipelineMode::Deferred: return "Deferred (Shader Effects)";
+    default: return "Unknown";
     }
 }
 
@@ -890,21 +754,17 @@ void RenderScene::setSettings(const RenderSettings& settings) {
         setPipelineMode(settings.pipelineMode);
     }
 
-    TemporalResetReasons resetReasons =
-        temporalResetReasonBit(TemporalResetReason::None);
+    TemporalResetReasons resetReasons = temporalResetReasonBit(TemporalResetReason::None);
     if (settings.upscale.type != m_settings.upscale.type ||
-        settings.upscale.debugVisualizationEnabled !=
-            m_settings.upscale.debugVisualizationEnabled ||
+        settings.upscale.debugVisualizationEnabled != m_settings.upscale.debugVisualizationEnabled ||
         settings.upscale.fsr1Enabled != m_settings.upscale.fsr1Enabled) {
         resetReasons = resetReasons | TemporalResetReason::Method;
     }
     if (settings.upscale.quality != m_settings.upscale.quality ||
         settings.upscale.outputWidth != m_settings.upscale.outputWidth ||
         settings.upscale.outputHeight != m_settings.upscale.outputHeight ||
-        settings.upscale.dynamicResolutionEnabled !=
-            m_settings.upscale.dynamicResolutionEnabled ||
-        std::abs(settings.upscale.fsr1RenderScale -
-                 m_settings.upscale.fsr1RenderScale) > 0.0001f) {
+        settings.upscale.dynamicResolutionEnabled != m_settings.upscale.dynamicResolutionEnabled ||
+        std::abs(settings.upscale.fsr1RenderScale - m_settings.upscale.fsr1RenderScale) > 0.0001f) {
         resetReasons = resetReasons | TemporalResetReason::ResourceExtent;
     }
 
@@ -913,7 +773,6 @@ void RenderScene::setSettings(const RenderSettings& settings) {
     if (requiresTemporalReset(resetReasons)) {
         invalidateFrameHistory(resetReasons);
     }
-
 }
 
 const RenderSettings& RenderScene::getSettings() const {
@@ -922,8 +781,7 @@ const RenderSettings& RenderScene::getSettings() const {
 
 bool RenderScene::isFsr31Supported() const {
 #if defined(MECRAFT_ENABLE_FSR31)
-    return m_shared.rhiDevice != nullptr &&
-           m_shared.rhiDevice->backend() == RhiBackend::Vulkan &&
+    return m_shared.rhiDevice != nullptr && m_shared.rhiDevice->backend() == RhiBackend::Vulkan &&
            m_settings.pipelineMode == PipelineMode::Deferred;
 #else
     return false;
@@ -933,10 +791,9 @@ bool RenderScene::isFsr31Supported() const {
 bool RenderScene::isDlssSupported() const {
 #if defined(MECRAFT_ENABLE_STREAMLINE)
     const StreamlineRuntime& streamline = StreamlineRuntime::instance();
-    return m_shared.rhiDevice != nullptr &&
-           m_shared.rhiDevice->backend() == RhiBackend::Vulkan &&
-           m_settings.pipelineMode == PipelineMode::Deferred &&
-           streamline.initialized() && streamline.vulkanDeviceSet();
+    return m_shared.rhiDevice != nullptr && m_shared.rhiDevice->backend() == RhiBackend::Vulkan &&
+           m_settings.pipelineMode == PipelineMode::Deferred && streamline.initialized() &&
+           streamline.vulkanDeviceSet();
 #else
     return false;
 #endif
@@ -945,8 +802,7 @@ bool RenderScene::isDlssSupported() const {
 bool RenderScene::isReflexSupported() const {
 #if defined(MECRAFT_ENABLE_STREAMLINE)
     const StreamlineRuntime& streamline = StreamlineRuntime::instance();
-    return m_shared.rhiDevice != nullptr &&
-           m_shared.rhiDevice->backend() == RhiBackend::Vulkan &&
+    return m_shared.rhiDevice != nullptr && m_shared.rhiDevice->backend() == RhiBackend::Vulkan &&
            streamline.reflexLowLatencyAvailable();
 #else
     return false;
@@ -954,12 +810,10 @@ bool RenderScene::isReflexSupported() const {
 }
 
 bool RenderScene::supportsFrameGenerationInputs() const {
-    return supportsDlssFrameGenerationInputs(
-        m_settings, m_fsr1Supported);
+    return supportsDlssFrameGenerationInputs(m_settings, m_fsr1Supported);
 }
 
-void RenderScene::setSettingsChangedCallback(
-    std::function<bool(const RenderSettings&)> callback) {
+void RenderScene::setSettingsChangedCallback(std::function<bool(const RenderSettings&)> callback) {
     m_settingsChangedCallback = std::move(callback);
 }
 
@@ -1028,29 +882,24 @@ const FrameOutput& RenderScene::getLastFrameOutput() const {
     return m_lastFrameOutput;
 }
 
-void RenderScene::setupResources(
-    ThreadPool* threadPool,
-    RhiDevice* rhiDevice,
-    RhiCommandListPool* commandListPool,
-    TerrainRenderer* terrain,
-    TerrainRhiPipelineSet* terrainRhiPipelines,
-    WorldRenderBuffer* worldRenderBuffer,
-    DeferredRenderTargets* deferredTargets,
-    GameplaySkyRenderer* sky,
-    shadow::ShadowRenderer* shadowRenderer,
-    const RenderSettings& initialSettings) {
+void RenderScene::setupResources(ThreadPool* threadPool, RhiDevice* rhiDevice, RhiCommandListPool* commandListPool,
+                                 TerrainRenderer* terrain, TerrainRhiPipelineSet* terrainRhiPipelines,
+                                 WorldRenderBuffer* worldRenderBuffer, DeferredRenderTargets* deferredTargets,
+                                 GameplaySkyRenderer* sky, shadow::ShadowRenderer* shadowRenderer,
+                                 const RenderSettings& initialSettings) {
 
     m_settings = initialSettings;
     m_activePipeline = (m_settings.pipelineMode == PipelineMode::Deferred)
-        ? static_cast<RenderPipeline*>(m_deferredPipeline.get())
-        : static_cast<RenderPipeline*>(m_forwardPipeline.get());
+                           ? static_cast<RenderPipeline*>(m_deferredPipeline.get())
+                           : static_cast<RenderPipeline*>(m_forwardPipeline.get());
 
     m_terrainStreamingService.init(threadPool, worldRenderBuffer);
     m_shared.overlayRenderer = &m_overlayRenderer;
 
     m_shared.rhiDevice = rhiDevice;
     m_shared.commandListPool = commandListPool;
-    if (rhiDevice == nullptr || commandListPool == nullptr) std::abort();
+    if (rhiDevice == nullptr || commandListPool == nullptr)
+        std::abort();
     m_temporalUpscalePass.init(*rhiDevice, *commandListPool);
     m_postProcessPass.init(*m_shared.resources, *commandListPool);
     m_fsr1Supported = Fsr1Pass::isSupported(*rhiDevice);
@@ -1084,10 +933,8 @@ void RenderScene::setHeldBlockLightValue(int value) {
     }
 }
 
-bool RenderScene::setSceneLights(
-    std::vector<renderer::contracts::SceneLight> lights) {
-    return m_deferredPipeline != nullptr &&
-           m_deferredPipeline->setSceneLights(std::move(lights));
+bool RenderScene::setSceneLights(std::vector<renderer::contracts::SceneLight> lights) {
+    return m_deferredPipeline != nullptr && m_deferredPipeline->setSceneLights(std::move(lights));
 }
 
 // R7: Legacy bridge methods removed — use renderFrame() instead
@@ -1105,15 +952,12 @@ RenderGraphFrameStats RenderScene::renderGraphFrameStats() const {
     return stats;
 }
 
-RenderScene::ClusteredLightingDebugInfo
-RenderScene::clusteredLightingDebugInfo() const {
+RenderScene::ClusteredLightingDebugInfo RenderScene::clusteredLightingDebugInfo() const {
     ClusteredLightingDebugInfo info;
-    if (m_deferredPipeline == nullptr ||
-        m_deferredPipeline->clusteredLightingPass() == nullptr) {
+    if (m_deferredPipeline == nullptr || m_deferredPipeline->clusteredLightingPass() == nullptr) {
         return info;
     }
-    const ClusteredLightingPass& pass =
-        *m_deferredPipeline->clusteredLightingPass();
+    const ClusteredLightingPass& pass = *m_deferredPipeline->clusteredLightingPass();
     const ClusteredLightingFrameStats& stats = pass.frameStats();
     if (!stats.valid) {
         return info;
@@ -1136,8 +980,7 @@ RenderScene::clusteredLightingDebugInfo() const {
 }
 
 ReflectionProbeCaptureFrameStats RenderScene::reflectionProbeCaptureStats() const {
-    if (m_deferredPipeline == nullptr ||
-        m_deferredPipeline->reflectionProbeCapturePass() == nullptr) {
+    if (m_deferredPipeline == nullptr || m_deferredPipeline->reflectionProbeCapturePass() == nullptr) {
         return {};
     }
     return m_deferredPipeline->reflectionProbeCapturePass()->frameStats();
@@ -1151,8 +994,7 @@ HiZCullFrameStats RenderScene::hiZCullStats() const {
 }
 
 ShadowCullFrameStats RenderScene::shadowCullStats() const {
-    if (m_deferredPipeline == nullptr ||
-        m_deferredPipeline->shadowPass() == nullptr) {
+    if (m_deferredPipeline == nullptr || m_deferredPipeline->shadowPass() == nullptr) {
         return {};
     }
     return m_deferredPipeline->shadowPass()->cullStats();
@@ -1172,10 +1014,9 @@ RenderScene::PresentationDebugInfo RenderScene::presentationDebugInfo() const {
 }
 
 bool RenderScene::isNewPipelineReady() const {
-    if (!m_activePipeline || !m_shared.rhiDevice ||
-        !m_shared.rhiDevice->currentSwapchainColorView().isValid() ||
-        !m_shared.rhiDevice->currentSwapchainDepthStencilView().isValid() ||
-        !m_shared.terrain || !m_shared.sky || !m_shared.resources) {
+    if (!m_activePipeline || !m_shared.rhiDevice || !m_shared.rhiDevice->currentSwapchainColorView().isValid() ||
+        !m_shared.rhiDevice->currentSwapchainDepthStencilView().isValid() || !m_shared.terrain || !m_shared.sky ||
+        !m_shared.resources) {
         return false;
     }
     // Deferred pipeline requires deferredTargets; forward pipeline does not.
@@ -1193,22 +1034,31 @@ void RenderScene::setNewPipelineActive(bool active) {
     }
     m_newPipelineActive = active && isNewPipelineReady() && m_activePipelineInitialized;
     if (m_newPipelineActive && !wasActive) {
-        invalidateFrameHistory(
-            temporalResetReasonBit(TemporalResetReason::PipelineMode));
+        invalidateFrameHistory(temporalResetReasonBit(TemporalResetReason::PipelineMode));
     }
 }
 
 const char* RenderScene::getPipelineStatus() const {
-    if (!m_activePipeline) return "No active pipeline";
-    if (!m_shared.rhiDevice) return "Missing: rhiDevice";
-    if (!m_shared.rhiDevice->currentSwapchainColorView().isValid()) return "Missing: swapchainColorView";
-    if (!m_shared.rhiDevice->currentSwapchainDepthStencilView().isValid()) return "Missing: swapchainDepthStencilView";
-    if (!m_shared.terrain) return "Missing: terrain";
-    if (!m_shared.sky) return "Missing: sky";
-    if (!m_shared.resources) return "Missing: resources";
-    if (m_activePipeline->supportsDeferred() && !m_shared.deferredTargets) return "Missing: deferredTargets";
-    if (!m_activePipelineInitialized) return "Ready (not initialized)";
-    if (!m_newPipelineActive) return "Ready (inactive)";
+    if (!m_activePipeline)
+        return "No active pipeline";
+    if (!m_shared.rhiDevice)
+        return "Missing: rhiDevice";
+    if (!m_shared.rhiDevice->currentSwapchainColorView().isValid())
+        return "Missing: swapchainColorView";
+    if (!m_shared.rhiDevice->currentSwapchainDepthStencilView().isValid())
+        return "Missing: swapchainDepthStencilView";
+    if (!m_shared.terrain)
+        return "Missing: terrain";
+    if (!m_shared.sky)
+        return "Missing: sky";
+    if (!m_shared.resources)
+        return "Missing: resources";
+    if (m_activePipeline->supportsDeferred() && !m_shared.deferredTargets)
+        return "Missing: deferredTargets";
+    if (!m_activePipelineInitialized)
+        return "Ready (not initialized)";
+    if (!m_newPipelineActive)
+        return "Ready (inactive)";
     return "Active";
 }
 
@@ -1222,10 +1072,9 @@ bool RenderScene::prepareFrameResources(const glm::ivec2& frameRenderSize) {
 }
 
 PostProcessEffects RenderScene::buildPostProcessEffects(const IWorldView& worldView, const Camera& camera,
-                                                         const float frameAspectRatio, float cameraRainVisibility,
-                                                         float screenRollRadians,
-                                                         const DayNightSystem& dayNightSystem,
-                                                         const WeatherSystem& weatherSystem) const {
+                                                        const float frameAspectRatio, float cameraRainVisibility,
+                                                        float screenRollRadians, const DayNightSystem& dayNightSystem,
+                                                        const WeatherSystem& weatherSystem) const {
     PostProcessEffects effects;
 
     // Basic state
@@ -1252,9 +1101,8 @@ PostProcessEffects RenderScene::buildPostProcessEffects(const IWorldView& worldV
     effects.highlightCompression = m_settings.postProcess.highlightCompression;
     effects.filmEmulationStrength = m_settings.postProcess.filmEmulationStrength;
     effects.redModifierStrength = m_settings.postProcess.redModifierStrength;
-    effects.colorLuma = glm::vec3(m_settings.postProcess.colorLumaR,
-                                   m_settings.postProcess.colorLumaG,
-                                   m_settings.postProcess.colorLumaB);
+    effects.colorLuma = glm::vec3(m_settings.postProcess.colorLumaR, m_settings.postProcess.colorLumaG,
+                                  m_settings.postProcess.colorLumaB);
     effects.splitToneStrength = m_settings.postProcess.splitToneStrength;
     effects.vignetteStrength = m_settings.postProcess.vignetteStrength;
     effects.noiseDitherStrength = m_settings.postProcess.noiseDitherStrength;
@@ -1295,8 +1143,7 @@ PostProcessEffects RenderScene::buildPostProcessEffects(const IWorldView& worldV
         const glm::vec4 clip = viewProj * glm::vec4(camera.getPosition() + sunDirection * 256.0f, 1.0f);
         if (clip.w > 0.0001f) {
             const glm::vec3 ndc = glm::vec3(clip) / clip.w;
-            effects.sunScreenPos = glm::vec2(ndc.x * 0.5f + 0.5f,
-                                             1.0f - (ndc.y * 0.5f + 0.5f));
+            effects.sunScreenPos = glm::vec2(ndc.x * 0.5f + 0.5f, 1.0f - (ndc.y * 0.5f + 0.5f));
             const float onScreenX = 1.0f - std::clamp(std::abs(effects.sunScreenPos.x - 0.5f) * 2.0f, 0.0f, 1.0f);
             const float onScreenY = 1.0f - std::clamp(std::abs(effects.sunScreenPos.y - 0.5f) * 2.0f, 0.0f, 1.0f);
             const float horizonFade = std::clamp((sunDirection.y + 0.05f) / 0.45f, 0.0f, 1.0f);
@@ -1307,16 +1154,11 @@ PostProcessEffects RenderScene::buildPostProcessEffects(const IWorldView& worldV
     return effects;
 }
 
-std::optional<FrameContext> RenderScene::buildFrameContext(
-    const IWorldView& worldView,
-    const Camera& camera,
-    const Window& window,
-    const glm::ivec2& frameRenderSize,
-    const glm::ivec2& frameOutputSize,
-    const float frameAspectRatio,
-    const DayNightSystem& dayNightSystem,
-    const WeatherSystem& weatherSystem,
-    const std::optional<RenderFrameClock>& frameClock) {
+std::optional<FrameContext>
+RenderScene::buildFrameContext(const IWorldView& worldView, const Camera& camera, const Window& window,
+                               const glm::ivec2& frameRenderSize, const glm::ivec2& frameOutputSize,
+                               const float frameAspectRatio, const DayNightSystem& dayNightSystem,
+                               const WeatherSystem& weatherSystem, const std::optional<RenderFrameClock>& frameClock) {
     FrameContext ctx;
 
     // Camera matrices
@@ -1333,16 +1175,11 @@ std::optional<FrameContext> RenderScene::buildFrameContext(
     ctx.debugService = &m_debugService;
     ctx.renderLocalPlayerModel = m_renderLocalPlayerModel;
 
-    const TemporalExtent renderExtent{
-        static_cast<uint32_t>(std::max(1, frameRenderSize.x)),
-        static_cast<uint32_t>(std::max(1, frameRenderSize.y))
-    };
-    const TemporalExtent outputExtent{
-        static_cast<uint32_t>(std::max(1, frameOutputSize.x)),
-        static_cast<uint32_t>(std::max(1, frameOutputSize.y))
-    };
-    ctx.temporalExtents = makeTemporalFrameExtents(
-        renderExtent, renderExtent, renderExtent, outputExtent);
+    const TemporalExtent renderExtent{static_cast<uint32_t>(std::max(1, frameRenderSize.x)),
+                                      static_cast<uint32_t>(std::max(1, frameRenderSize.y))};
+    const TemporalExtent outputExtent{static_cast<uint32_t>(std::max(1, frameOutputSize.x)),
+                                      static_cast<uint32_t>(std::max(1, frameOutputSize.y))};
+    ctx.temporalExtents = makeTemporalFrameExtents(renderExtent, renderExtent, renderExtent, outputExtent);
     ctx.swapchainColorTexture = m_shared.rhiDevice->currentSwapchainColorTexture();
     ctx.swapchainColorView = m_shared.rhiDevice->currentSwapchainColorView();
     ctx.swapchainDepthStencilView = m_shared.rhiDevice->currentSwapchainDepthStencilView();
@@ -1354,27 +1191,17 @@ std::optional<FrameContext> RenderScene::buildFrameContext(
     ctx.sceneCaptureDepthView = m_postProcessPass.sceneDepthTextureViewHandle();
 
     // Frame timing
-    ctx.frameIndex = frameClock.has_value()
-        ? frameClock->frameIndex
-        : Time::getFrameIndex();
-    ctx.deltaTime = frameClock.has_value()
-        ? frameClock->deltaTimeSeconds
-        : static_cast<float>(Time::deltaTime);
-    const double gameTime = frameClock.has_value()
-        ? frameClock->animationTimeSeconds
-        : Time::getGameTime();
-    const double visualTime = frameClock.has_value()
-        ? frameClock->shaderTimeSeconds
-        : Time::getRawTime();
+    ctx.frameIndex = frameClock.has_value() ? frameClock->frameIndex : Time::getFrameIndex();
+    ctx.deltaTime = frameClock.has_value() ? frameClock->deltaTimeSeconds : static_cast<float>(Time::deltaTime);
+    const double gameTime = frameClock.has_value() ? frameClock->animationTimeSeconds : Time::getGameTime();
+    const double visualTime = frameClock.has_value() ? frameClock->shaderTimeSeconds : Time::getRawTime();
     ctx.animationTime = static_cast<float>(std::fmod(gameTime, 16.0));
     ctx.shaderTime = static_cast<float>(std::fmod(visualTime, 8192.0));
 
     if (m_settings.upscale.type == TemporalUpscalerType::Fsr31) {
 #if defined(MECRAFT_ENABLE_FSR31)
-        const Fsr31JitterResult jitter = queryFsr31Jitter(
-            ctx.frameIndex,
-            ctx.temporalExtents.renderExtent,
-            ctx.temporalExtents.outputExtent);
+        const Fsr31JitterResult jitter =
+            queryFsr31Jitter(ctx.frameIndex, ctx.temporalExtents.renderExtent, ctx.temporalExtents.outputExtent);
         if (!jitter.succeeded()) {
             return std::nullopt;
         }
@@ -1384,10 +1211,8 @@ std::optional<FrameContext> RenderScene::buildFrameContext(
 #endif
     } else if (m_settings.upscale.type == TemporalUpscalerType::Dlss) {
 #if defined(MECRAFT_ENABLE_STREAMLINE)
-        const DlssJitterResult jitter = queryDlssJitter(
-            ctx.frameIndex,
-            ctx.temporalExtents.renderExtent,
-            ctx.temporalExtents.outputExtent);
+        const DlssJitterResult jitter =
+            queryDlssJitter(ctx.frameIndex, ctx.temporalExtents.renderExtent, ctx.temporalExtents.outputExtent);
         if (!jitter.succeeded()) {
             return std::nullopt;
         }
@@ -1401,9 +1226,7 @@ std::optional<FrameContext> RenderScene::buildFrameContext(
         // can be attributed to reprojection instead of sub-pixel jitter.
         const float invW = 1.0f / static_cast<float>(std::max(1, m_shared.deferredTargets->width()));
         const float invH = 1.0f / static_cast<float>(std::max(1, m_shared.deferredTargets->height()));
-        const float frameCounter = m_settings.taa.freezeJitter
-            ? 0.0f
-            : static_cast<float>(ctx.frameIndex);
+        const float frameCounter = m_settings.taa.freezeJitter ? 0.0f : static_cast<float>(ctx.frameIndex);
         const float frameX = glm::fract(frameCounter / 1.3247179572f + 0.5f) * 2.0f - 1.0f;
         const float frameY = glm::fract(frameCounter / 1.7548776662f + 0.5f) * 2.0f - 1.0f;
         ctx.jitter.projectionOffset.x = frameX * invW;
@@ -1428,21 +1251,14 @@ std::optional<FrameContext> RenderScene::buildFrameContext(
     if (m_hasPreviousContext && m_previousContext.worldView != &worldView) {
         explicitResetReasons = explicitResetReasons | TemporalResetReason::WorldReload;
     }
-    if (m_hasPreviousContext &&
-        m_previousContext.camera.projection != ctx.camera.projection) {
+    if (m_hasPreviousContext && m_previousContext.camera.projection != ctx.camera.projection) {
         explicitResetReasons = explicitResetReasons | TemporalResetReason::Projection;
     }
-    if (m_hasPreviousContext &&
-        m_previousContext.frameIndex + 1u != ctx.frameIndex) {
-        explicitResetReasons =
-            explicitResetReasons | TemporalResetReason::FrameDiscontinuity;
+    if (m_hasPreviousContext && m_previousContext.frameIndex + 1u != ctx.frameIndex) {
+        explicitResetReasons = explicitResetReasons | TemporalResetReason::FrameDiscontinuity;
     }
-    ctx.temporalResetReasons = evaluateTemporalResetReasons(
-        m_hasPreviousContext,
-        m_previousContext.temporalExtents,
-        ctx.temporalExtents,
-        explicitResetReasons,
-        {});
+    ctx.temporalResetReasons = evaluateTemporalResetReasons(m_hasPreviousContext, m_previousContext.temporalExtents,
+                                                            ctx.temporalExtents, explicitResetReasons, {});
     if (!requiresTemporalReset(ctx.temporalResetReasons)) {
         ctx.prevCamera = m_previousContext.camera;
         ctx.previousJitter = m_previousContext.jitter;
@@ -1477,15 +1293,11 @@ std::optional<FrameContext> RenderScene::buildFrameContext(
     // that otherwise leaks a per-frame sub-pixel offset into the velocity
     // buffer and makes the whole image shimmer under TAA.
     {
-        const bool projectionJitter = usesTemporalProjectionJitter(
-            m_settings.upscale.type, m_settings.taa.enabled);
-        const glm::dmat4 currentRaster = glm::dmat4(
-            projectionJitter ? ctx.camera.jitteredViewProj
-                             : ctx.camera.viewProj);
-        const glm::dmat4 previousRaster =
-            glm::dmat4(ctx.previousViewProjWithCurrentJitter);
-        ctx.velocityClipToPrevClip =
-            glm::mat4(previousRaster * glm::inverse(currentRaster));
+        const bool projectionJitter = usesTemporalProjectionJitter(m_settings.upscale.type, m_settings.taa.enabled);
+        const glm::dmat4 currentRaster =
+            glm::dmat4(projectionJitter ? ctx.camera.jitteredViewProj : ctx.camera.viewProj);
+        const glm::dmat4 previousRaster = glm::dmat4(ctx.previousViewProjWithCurrentJitter);
+        ctx.velocityClipToPrevClip = glm::mat4(previousRaster * glm::inverse(currentRaster));
     }
 
     // Weather state from WeatherSystem
@@ -1584,28 +1396,22 @@ std::optional<FrameContext> RenderScene::buildFrameContext(
     // Store current context as previous for next frame
     m_previousContext = ctx;
     m_hasPreviousContext = true;
-    m_pendingTemporalResetReasons =
-        temporalResetReasonBit(TemporalResetReason::None);
+    m_pendingTemporalResetReasons = temporalResetReasonBit(TemporalResetReason::None);
 
     return ctx;
 }
 
-std::optional<glm::ivec2> RenderScene::internalRenderSize(
-    const glm::ivec2& displaySize) const {
+std::optional<glm::ivec2> RenderScene::internalRenderSize(const glm::ivec2& displaySize) const {
     const int displayWidth = std::max(1, displaySize.x);
     const int displayHeight = std::max(1, displaySize.y);
     if (m_settings.upscale.type == TemporalUpscalerType::Fsr31) {
 #if defined(MECRAFT_ENABLE_FSR31)
         const Fsr31RenderExtentResult renderExtent = queryFsr31RenderExtent(
-            m_settings.upscale.quality,
-            {static_cast<uint32_t>(displayWidth),
-             static_cast<uint32_t>(displayHeight)});
+            m_settings.upscale.quality, {static_cast<uint32_t>(displayWidth), static_cast<uint32_t>(displayHeight)});
         if (!renderExtent.succeeded()) {
             return std::nullopt;
         }
-        return glm::ivec2(
-            static_cast<int>(renderExtent.extent.width),
-            static_cast<int>(renderExtent.extent.height));
+        return glm::ivec2(static_cast<int>(renderExtent.extent.width), static_cast<int>(renderExtent.extent.height));
 #else
         return std::nullopt;
 #endif
@@ -1613,15 +1419,11 @@ std::optional<glm::ivec2> RenderScene::internalRenderSize(
     if (m_settings.upscale.type == TemporalUpscalerType::Dlss) {
 #if defined(MECRAFT_ENABLE_STREAMLINE)
         const DlssRenderExtentResult renderExtent = queryDlssRenderExtent(
-            m_settings.upscale.quality,
-            {static_cast<uint32_t>(displayWidth),
-             static_cast<uint32_t>(displayHeight)});
+            m_settings.upscale.quality, {static_cast<uint32_t>(displayWidth), static_cast<uint32_t>(displayHeight)});
         if (!renderExtent.succeeded()) {
             return std::nullopt;
         }
-        return glm::ivec2(
-            static_cast<int>(renderExtent.extent.width),
-            static_cast<int>(renderExtent.extent.height));
+        return glm::ivec2(static_cast<int>(renderExtent.extent.width), static_cast<int>(renderExtent.extent.height));
 #else
         return std::nullopt;
 #endif
@@ -1635,8 +1437,7 @@ std::optional<glm::ivec2> RenderScene::internalRenderSize(
 }
 
 bool RenderScene::isFsr1RuntimeEnabled() const {
-    return m_fsr1Supported && m_settings.upscale.fsr1Enabled &&
-           m_settings.upscale.fsr1RenderScale < 0.999f &&
+    return m_fsr1Supported && m_settings.upscale.fsr1Enabled && m_settings.upscale.fsr1RenderScale < 0.999f &&
            m_settings.pipelineMode == PipelineMode::Deferred;
 }
 
@@ -1653,8 +1454,7 @@ void RenderScene::invalidateFrameHistory(const TemporalResetReasons reasons) {
 
 void RenderScene::refreshTemporalFrameInput() {
     m_temporalFrameInput.reset();
-    if (!m_lastFrameOutput.hasDeferredInputs || m_shared.deferredTargets == nullptr ||
-        isFsr1RuntimeEnabled()) {
+    if (!m_lastFrameOutput.hasDeferredInputs || m_shared.deferredTargets == nullptr || isFsr1RuntimeEnabled()) {
         return;
     }
 
@@ -1662,22 +1462,18 @@ void RenderScene::refreshTemporalFrameInput() {
     input.frameIndex = m_currentContext.frameIndex;
     input.extents = m_currentContext.temporalExtents;
     input.jitter = m_currentContext.jitter;
-    input.motionVectorScale = {
-        static_cast<float>(m_currentContext.temporalExtents.renderExtent.width),
-        static_cast<float>(m_currentContext.temporalExtents.renderExtent.height)
-    };
+    input.motionVectorScale = {static_cast<float>(m_currentContext.temporalExtents.renderExtent.width),
+                               static_cast<float>(m_currentContext.temporalExtents.renderExtent.height)};
     input.frameDeltaMilliseconds = m_currentContext.deltaTime * 1000.0f;
     input.preExposure = 1.0f;
     input.cameraNear = m_currentContext.camera.nearPlane;
     input.cameraFar = m_currentContext.camera.farPlane;
     input.verticalFovRadians = glm::radians(m_currentContext.camera.fovDegrees);
-    input.cameraAspectRatio =
-        static_cast<float>(m_currentContext.temporalExtents.outputExtent.width) /
-        static_cast<float>(m_currentContext.temporalExtents.outputExtent.height);
+    input.cameraAspectRatio = static_cast<float>(m_currentContext.temporalExtents.outputExtent.width) /
+                              static_cast<float>(m_currentContext.temporalExtents.outputExtent.height);
     input.cameraViewToClip = m_currentContext.camera.projection;
     input.clipToCameraView = glm::inverse(m_currentContext.camera.projection);
-    input.clipToPrevClip = m_currentContext.previousViewProj *
-                           glm::inverse(m_currentContext.camera.viewProj);
+    input.clipToPrevClip = m_currentContext.previousViewProj * glm::inverse(m_currentContext.camera.viewProj);
     input.prevClipToClip = glm::inverse(input.clipToPrevClip);
     const glm::mat4 inverseView = glm::inverse(m_currentContext.camera.view);
     input.cameraPosition = m_currentContext.camera.position;
@@ -1695,19 +1491,15 @@ void RenderScene::refreshTemporalFrameInput() {
     input.textures.exposure = m_postProcessPass.exposureTextureHandle();
     input.textures.exposureView = m_postProcessPass.exposureTextureViewHandle();
     input.textures.reactiveMask = m_lastFrameOutput.reactiveMask;
-    input.textures.reactiveMaskView =
-        m_shared.deferredTargets->reactiveMaskTextureViewHandle();
+    input.textures.reactiveMaskView = m_shared.deferredTargets->reactiveMaskTextureViewHandle();
     input.textures.transparencyMask = m_lastFrameOutput.transparencyMask;
-    input.textures.transparencyMaskView =
-        m_shared.deferredTargets->transparencyMaskTextureViewHandle();
+    input.textures.transparencyMaskView = m_shared.deferredTargets->transparencyMaskTextureViewHandle();
     if (m_settings.upscale.type == TemporalUpscalerType::Native) {
         input.textures.outputHdrColor = m_lastFrameOutput.sceneColor;
-        input.textures.outputHdrColorView =
-            m_postProcessPass.sceneColorTextureViewHandle();
+        input.textures.outputHdrColorView = m_postProcessPass.sceneColorTextureViewHandle();
     } else {
         input.textures.outputHdrColor = m_temporalUpscalePass.outputTextureHandle();
-        input.textures.outputHdrColorView =
-            m_temporalUpscalePass.outputTextureViewHandle();
+        input.textures.outputHdrColorView = m_temporalUpscalePass.outputTextureViewHandle();
     }
     m_temporalFrameInput = input;
 }
@@ -1723,13 +1515,13 @@ float RenderScene::computeCameraRainVisibility(const IWorldView& worldView, cons
         bool blocked = false;
         for (int y = startY; y < 256; ++y) {
             const BlockStateId above = worldView.getBlock(bx, y, bz);
-            if (above != NULL_BLOCK_STATE &&
-                BlockRegistry::getOpacityFast(BlockStateRegistry::getBlockId(above)) > 0) {
+            if (above != NULL_BLOCK_STATE && BlockRegistry::getOpacityFast(BlockStateRegistry::getBlockId(above)) > 0) {
                 blocked = true;
                 break;
             }
         }
-        if (!blocked) ++skyHits;
+        if (!blocked)
+            ++skyHits;
     }
     return static_cast<float>(skyHits) / static_cast<float>(kRayCount);
 }

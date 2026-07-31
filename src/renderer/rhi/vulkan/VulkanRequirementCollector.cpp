@@ -8,8 +8,7 @@ void VulkanRequirementCollector::requireInstanceExtension(const char* extension)
         return;
     }
     const std::string value(extension);
-    if (std::find(m_instanceExtensions.begin(), m_instanceExtensions.end(), value) ==
-        m_instanceExtensions.end()) {
+    if (std::find(m_instanceExtensions.begin(), m_instanceExtensions.end(), value) == m_instanceExtensions.end()) {
         m_instanceExtensions.push_back(value);
     }
 }
@@ -19,8 +18,7 @@ void VulkanRequirementCollector::requireDeviceExtension(const char* extension) {
         return;
     }
     const std::string value(extension);
-    if (std::find(m_deviceExtensions.begin(), m_deviceExtensions.end(), value) ==
-        m_deviceExtensions.end()) {
+    if (std::find(m_deviceExtensions.begin(), m_deviceExtensions.end(), value) == m_deviceExtensions.end()) {
         m_deviceExtensions.push_back(value);
     }
 }
@@ -30,8 +28,7 @@ void VulkanRequirementCollector::requireVulkan12Feature(const char* feature) {
         return;
     }
     const std::string value(feature);
-    if (std::find(m_vulkan12Features.begin(), m_vulkan12Features.end(), value) ==
-        m_vulkan12Features.end()) {
+    if (std::find(m_vulkan12Features.begin(), m_vulkan12Features.end(), value) == m_vulkan12Features.end()) {
         m_vulkan12Features.push_back(value);
     }
 }
@@ -41,8 +38,7 @@ void VulkanRequirementCollector::requireVulkan13Feature(const char* feature) {
         return;
     }
     const std::string value(feature);
-    if (std::find(m_vulkan13Features.begin(), m_vulkan13Features.end(), value) ==
-        m_vulkan13Features.end()) {
+    if (std::find(m_vulkan13Features.begin(), m_vulkan13Features.end(), value) == m_vulkan13Features.end()) {
         m_vulkan13Features.push_back(value);
     }
 }
@@ -50,24 +46,23 @@ void VulkanRequirementCollector::requireVulkan13Feature(const char* feature) {
 void VulkanRequirementCollector::requireQueue(const RhiQueueType queue, const uint32_t count) {
     uint32_t* target = nullptr;
     switch (queue) {
-        case RhiQueueType::Graphics: target = &m_graphicsQueueCount; break;
-        case RhiQueueType::Compute: target = &m_computeQueueCount; break;
-        case RhiQueueType::Transfer: target = &m_transferQueueCount; break;
-        case RhiQueueType::Present: target = &m_presentQueueCount; break;
+    case RhiQueueType::Graphics: target = &m_graphicsQueueCount; break;
+    case RhiQueueType::Compute: target = &m_computeQueueCount; break;
+    case RhiQueueType::Transfer: target = &m_transferQueueCount; break;
+    case RhiQueueType::Present: target = &m_presentQueueCount; break;
     }
     if (target != nullptr && count > *target) {
         *target = count;
     }
 }
 
-void VulkanRequirementCollector::requireAdditionalQueues(const RhiQueueType queue,
-                                                          const uint32_t count) {
+void VulkanRequirementCollector::requireAdditionalQueues(const RhiQueueType queue, const uint32_t count) {
     uint32_t* target = nullptr;
     switch (queue) {
-        case RhiQueueType::Graphics: target = &m_additionalGraphicsQueueCount; break;
-        case RhiQueueType::Compute: target = &m_additionalComputeQueueCount; break;
-        case RhiQueueType::Transfer: target = &m_additionalTransferQueueCount; break;
-        case RhiQueueType::Present: target = &m_additionalPresentQueueCount; break;
+    case RhiQueueType::Graphics: target = &m_additionalGraphicsQueueCount; break;
+    case RhiQueueType::Compute: target = &m_additionalComputeQueueCount; break;
+    case RhiQueueType::Transfer: target = &m_additionalTransferQueueCount; break;
+    case RhiQueueType::Present: target = &m_additionalPresentQueueCount; break;
     }
     if (target != nullptr) {
         *target += count;
@@ -114,9 +109,8 @@ std::vector<const char*> VulkanRequirementCollector::vulkan13FeatureNames() cons
     return names;
 }
 
-bool VulkanRequirementCollector::validateInstanceExtensions(
-    const std::vector<VkExtensionProperties>& available,
-    std::string& missing) const {
+bool VulkanRequirementCollector::validateInstanceExtensions(const std::vector<VkExtensionProperties>& available,
+                                                            std::string& missing) const {
     for (const std::string& required : m_instanceExtensions) {
         if (!containsExtension(available, required)) {
             missing = required;
@@ -127,9 +121,8 @@ bool VulkanRequirementCollector::validateInstanceExtensions(
     return true;
 }
 
-bool VulkanRequirementCollector::validateDeviceExtensions(
-    const std::vector<VkExtensionProperties>& available,
-    std::string& missing) const {
+bool VulkanRequirementCollector::validateDeviceExtensions(const std::vector<VkExtensionProperties>& available,
+                                                          std::string& missing) const {
     for (const std::string& required : m_deviceExtensions) {
         if (!containsExtension(available, required)) {
             missing = required;
@@ -142,20 +135,20 @@ bool VulkanRequirementCollector::validateDeviceExtensions(
 
 uint32_t VulkanRequirementCollector::requiredQueueCount(const RhiQueueType queue) const {
     switch (queue) {
-        case RhiQueueType::Graphics: return m_graphicsQueueCount;
-        case RhiQueueType::Compute: return m_computeQueueCount;
-        case RhiQueueType::Transfer: return m_transferQueueCount;
-        case RhiQueueType::Present: return m_presentQueueCount;
+    case RhiQueueType::Graphics: return m_graphicsQueueCount;
+    case RhiQueueType::Compute: return m_computeQueueCount;
+    case RhiQueueType::Transfer: return m_transferQueueCount;
+    case RhiQueueType::Present: return m_presentQueueCount;
     }
     return 0u;
 }
 
 uint32_t VulkanRequirementCollector::additionalQueueCount(const RhiQueueType queue) const {
     switch (queue) {
-        case RhiQueueType::Graphics: return m_additionalGraphicsQueueCount;
-        case RhiQueueType::Compute: return m_additionalComputeQueueCount;
-        case RhiQueueType::Transfer: return m_additionalTransferQueueCount;
-        case RhiQueueType::Present: return m_additionalPresentQueueCount;
+    case RhiQueueType::Graphics: return m_additionalGraphicsQueueCount;
+    case RhiQueueType::Compute: return m_additionalComputeQueueCount;
+    case RhiQueueType::Transfer: return m_additionalTransferQueueCount;
+    case RhiQueueType::Present: return m_additionalPresentQueueCount;
     }
     return 0u;
 }
@@ -164,9 +157,8 @@ uint32_t VulkanRequirementCollector::opticalFlowQueueCount() const {
     return m_opticalFlowQueueCount;
 }
 
-bool VulkanRequirementCollector::containsExtension(
-    const std::vector<VkExtensionProperties>& available,
-    const std::string& required) {
+bool VulkanRequirementCollector::containsExtension(const std::vector<VkExtensionProperties>& available,
+                                                   const std::string& required) {
     return std::any_of(available.begin(), available.end(), [&required](const auto& extension) {
         return std::strcmp(extension.extensionName, required.c_str()) == 0;
     });

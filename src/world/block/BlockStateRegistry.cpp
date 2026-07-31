@@ -73,9 +73,7 @@ void applyTextureFaces(StateTextureIndices& textures, const BlockTextureFaces& f
     textures.faceBack = faces.faceBack;
 }
 
-void applyStateTextureRules(StateTextureIndices& textures,
-                            const BlockDef& def,
-                            const std::vector<PropertyKey>& props) {
+void applyStateTextureRules(StateTextureIndices& textures, const BlockDef& def, const std::vector<PropertyKey>& props) {
     if (def.stateTextureRules.empty()) {
         return;
     }
@@ -95,8 +93,7 @@ void applyStateTextureRules(StateTextureIndices& textures,
     }
 }
 
-void applyFurnaceFacingTextures(StateTextureIndices& textures,
-                                const BlockDef& def,
+void applyFurnaceFacingTextures(StateTextureIndices& textures, const BlockDef& def,
                                 const std::vector<PropertyKey>& props) {
     if (def.namespacedId != NamespacedId("minecraft", "furnace")) {
         return;
@@ -121,9 +118,8 @@ void applyFurnaceFacingTextures(StateTextureIndices& textures,
     textures.faceFront = sideRef;
     textures.faceBack = sideRef;
 
-    const std::string& value = BlockStateRegistry::getPropertyValue(
-        BlockStateRegistry::getPropertyNameIndex("facing"),
-        facingValue);
+    const std::string& value =
+        BlockStateRegistry::getPropertyValue(BlockStateRegistry::getPropertyNameIndex("facing"), facingValue);
     if (value == "north") {
         textures.faceBack = def.faceFront;
     } else if (value == "south") {
@@ -137,8 +133,7 @@ void applyFurnaceFacingTextures(StateTextureIndices& textures,
     }
 }
 
-StateTextureIndices makeTexturesForState(const BlockID blockId,
-                                          const std::vector<PropertyKey>& props) {
+StateTextureIndices makeTexturesForState(const BlockID blockId, const std::vector<PropertyKey>& props) {
     StateTextureIndices textures = makeTexturesForBlock(blockId);
     const BlockDef& def = BlockRegistry::getFast(blockId);
 
@@ -220,12 +215,11 @@ StateTextureIndices makeTexturesForState(const BlockID blockId,
 }
 
 std::string trimCopy(const std::string& value) {
-    const auto first = std::find_if_not(value.begin(), value.end(), [](const unsigned char ch) {
-        return std::isspace(ch) != 0;
-    });
+    const auto first =
+        std::find_if_not(value.begin(), value.end(), [](const unsigned char ch) { return std::isspace(ch) != 0; });
     const auto last = std::find_if_not(value.rbegin(), value.rend(), [](const unsigned char ch) {
-        return std::isspace(ch) != 0;
-    }).base();
+                          return std::isspace(ch) != 0;
+                      }).base();
     if (first >= last) {
         return {};
     }
@@ -321,31 +315,31 @@ size_t stateIndex(const BlockStateId stateId) {
 
 glm::ivec3 rotateDirectionX90(const glm::ivec3 direction, const uint16_t rotation) {
     switch ((rotation / 90u) % 4u) {
-        case 1: return {direction.x, -direction.z, direction.y};
-        case 2: return {direction.x, -direction.y, -direction.z};
-        case 3: return {direction.x, direction.z, -direction.y};
-        case 0:
-        default: return direction;
+    case 1: return {direction.x, -direction.z, direction.y};
+    case 2: return {direction.x, -direction.y, -direction.z};
+    case 3: return {direction.x, direction.z, -direction.y};
+    case 0:
+    default: return direction;
     }
 }
 
 glm::ivec3 rotateDirectionY90(const glm::ivec3 direction, const uint16_t rotation) {
     switch ((rotation / 90u) % 4u) {
-        case 1: return {-direction.z, direction.y, direction.x};
-        case 2: return {-direction.x, direction.y, -direction.z};
-        case 3: return {direction.z, direction.y, -direction.x};
-        case 0:
-        default: return direction;
+    case 1: return {-direction.z, direction.y, direction.x};
+    case 2: return {-direction.x, direction.y, -direction.z};
+    case 3: return {direction.z, direction.y, -direction.x};
+    case 0:
+    default: return direction;
     }
 }
 
 glm::ivec3 rotateDirectionZ90(const glm::ivec3 direction, const uint16_t rotation) {
     switch ((rotation / 90u) % 4u) {
-        case 1: return {-direction.y, direction.x, direction.z};
-        case 2: return {-direction.x, -direction.y, direction.z};
-        case 3: return {direction.y, -direction.x, direction.z};
-        case 0:
-        default: return direction;
+    case 1: return {-direction.y, direction.x, direction.z};
+    case 2: return {-direction.x, -direction.y, direction.z};
+    case 3: return {direction.y, -direction.x, direction.z};
+    case 0:
+    default: return direction;
     }
 }
 
@@ -386,7 +380,7 @@ std::optional<ModelTransform> makeFaceOrientedModelTransform(const uint16_t face
     failBlockStateRegistry("Face-oriented model transform table is incomplete");
 }
 
-}
+} // namespace
 
 uint16_t BlockStateRegistry::internPropertyName(const std::string& name) {
     const auto it = s_propertyNameLookup.find(name);
@@ -421,8 +415,7 @@ uint16_t BlockStateRegistry::internPropertyValue(const uint16_t nameIndex, const
 }
 
 void BlockStateRegistry::registerBlockProperties(
-    const BlockID blockId,
-    std::vector<std::pair<std::string, std::vector<std::string>>> properties,
+    const BlockID blockId, std::vector<std::pair<std::string, std::vector<std::string>>> properties,
     std::map<std::string, std::string> defaultState) {
     RegisteredBlockProperties registered;
     registered.propertyNameIndices.reserve(properties.size());
@@ -501,13 +494,7 @@ void BlockStateRegistry::explodeAllStates() {
     for (BlockID blockId = 0; blockId < blockCount; ++blockId) {
         const size_t textureOffset = s_stateTextures.size();
         s_stateTextures.push_back(makeTexturesForBlock(blockId));
-        s_states[blockId] = BlockStateEntry{
-            makeBlockStateId(blockId),
-            blockId,
-            0,
-            0,
-            textureOffset
-        };
+        s_states[blockId] = BlockStateEntry{makeBlockStateId(blockId), blockId, 0, 0, textureOffset};
     }
 
     size_t nextStateId = blockCount;
@@ -529,17 +516,14 @@ void BlockStateRegistry::explodeAllStates() {
         layout.valueOrdinals.resize(registered.propertyNameIndices.size());
 
         size_t runningStride = 1;
-        for (int propertyIndex = static_cast<int>(registered.propertyNameIndices.size()) - 1;
-             propertyIndex >= 0;
+        for (int propertyIndex = static_cast<int>(registered.propertyNameIndices.size()) - 1; propertyIndex >= 0;
              --propertyIndex) {
             const uint16_t nameIndex = registered.propertyNameIndices[propertyIndex];
             const auto& values = registered.propertyValueIndices[propertyIndex];
             layout.propertyPosition[nameIndex] = static_cast<uint8_t>(propertyIndex);
             layout.propertyStride[nameIndex] = runningStride;
             layout.valueCounts[nameIndex] = static_cast<uint16_t>(values.size());
-            layout.valueOrdinals[propertyIndex].assign(
-                s_propertyValuePool[nameIndex].size(),
-                INVALID_INDEX);
+            layout.valueOrdinals[propertyIndex].assign(s_propertyValuePool[nameIndex].size(), INVALID_INDEX);
             for (uint16_t ordinal = 0; ordinal < values.size(); ++ordinal) {
                 const uint16_t valueIndex = values[ordinal];
                 if (valueIndex < layout.valueOrdinals[propertyIndex].size()) {
@@ -563,13 +547,8 @@ void BlockStateRegistry::explodeAllStates() {
 
                 const BlockStateId stateId = makeBlockStateId(nextStateId);
                 ++nextStateId;
-                s_states.push_back(BlockStateEntry{
-                    stateId,
-                    blockId,
-                    static_cast<uint8_t>(props.size()),
-                    propertiesOffset,
-                    textureOffset
-                });
+                s_states.push_back(BlockStateEntry{stateId, blockId, static_cast<uint8_t>(props.size()),
+                                                   propertiesOffset, textureOffset});
                 s_stateLookup[computeStateKey(blockId, props)] = stateId;
                 if (isDefaultPath) {
                     s_defaultState[blockId] = stateId;
@@ -653,8 +632,7 @@ uint8_t BlockStateRegistry::getPropertyCount(const BlockStateId stateId) {
     return 0;
 }
 
-BlockStateId BlockStateRegistry::withProperty(const BlockStateId currentState,
-                                              const uint16_t propKey,
+BlockStateId BlockStateRegistry::withProperty(const BlockStateId currentState, const uint16_t propKey,
                                               const uint16_t newValue) {
     const size_t currentIndex = stateIndex(currentState);
     if (propKey == INVALID_INDEX || currentIndex >= s_states.size()) {
@@ -687,8 +665,7 @@ BlockStateId BlockStateRegistry::withProperty(const BlockStateId currentState,
     }
 
     const uint16_t currentValue = getPropertyIndex(currentState, propKey);
-    if (currentValue == INVALID_INDEX ||
-        currentValue >= layout.valueOrdinals[propertyPosition].size()) {
+    if (currentValue == INVALID_INDEX || currentValue >= layout.valueOrdinals[propertyPosition].size()) {
         return currentState;
     }
 
@@ -702,16 +679,15 @@ BlockStateId BlockStateRegistry::withProperty(const BlockStateId currentState,
         return currentState;
     }
 
-    const int64_t nextState = static_cast<int64_t>(currentIndex) +
-                              delta * static_cast<int64_t>(layout.propertyStride[propKey]);
+    const int64_t nextState =
+        static_cast<int64_t>(currentIndex) + delta * static_cast<int64_t>(layout.propertyStride[propKey]);
     if (nextState < 0 || static_cast<size_t>(nextState) >= s_states.size()) {
         return currentState;
     }
     return makeBlockStateId(static_cast<size_t>(nextState));
 }
 
-BlockStateId BlockStateRegistry::withProperty(const BlockStateId currentState,
-                                              const uint16_t propKey,
+BlockStateId BlockStateRegistry::withProperty(const BlockStateId currentState, const uint16_t propKey,
                                               const std::string& newValue) {
     return withProperty(currentState, propKey, getPropertyValueIndex(propKey, newValue));
 }
@@ -730,7 +706,7 @@ const StateTextureIndices& BlockStateRegistry::getStateTextures(const BlockState
 void BlockStateRegistry::registerBlockModelVariants(const BlockID blockId, const nlohmann::json& variantsJson) {
     if (!variantsJson.is_object()) {
         failBlockStateRegistry("modelVariants must be an object for block: " +
-                                 BlockRegistry::getNamespacedId(blockId).full());
+                               BlockRegistry::getNamespacedId(blockId).full());
     }
 
     if (s_stateModelVariants.size() < s_states.size()) {
@@ -788,7 +764,7 @@ void BlockStateRegistry::registerBlockModelVariants(const BlockID blockId, const
         const uint16_t facing = getPropertyIndex(stateId, PropIndices::FACING);
         if (face == INVALID_INDEX || facing == INVALID_INDEX) {
             failBlockStateRegistry("Face-oriented model block is missing face or facing state values: " +
-                                     def.namespacedId.full());
+                                   def.namespacedId.full());
         }
 
         const size_t index = stateIndex(stateId);
@@ -801,7 +777,7 @@ void BlockStateRegistry::registerBlockModelVariants(const BlockID blockId, const
             const ModelVariant* baseVariant = getModelVariant(baseState);
             if (baseVariant == nullptr || baseVariant->model == nullptr) {
                 failBlockStateRegistry("Face-oriented model state is missing a base south-facing variant: " +
-                                         stateToString(stateId));
+                                       stateToString(stateId));
             }
             variant = *baseVariant;
         }
@@ -887,8 +863,7 @@ std::vector<BlockStateId> BlockStateRegistry::getStatesForBlock(const BlockID bl
     std::vector<BlockStateId> states;
     const bool hasExpandedStates = s_blockPropertyLayouts.find(blockId) != s_blockPropertyLayouts.end();
     for (const BlockStateEntry& entry : s_states) {
-        if (entry.blockId == blockId &&
-            (!hasExpandedStates || entry.propertyCount > 0)) {
+        if (entry.blockId == blockId && (!hasExpandedStates || entry.propertyCount > 0)) {
             states.push_back(entry.stateId);
         }
     }

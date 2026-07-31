@@ -32,7 +32,7 @@ bool prefersBlockMeshForItem(const BlockID renderBlock) {
     const BlockDef& def = BlockRegistry::get(renderBlock);
     return isTorchShape(def) || def.renderShapeName == "model";
 }
-}
+} // namespace
 
 void DropRenderer::init(ResourceMgr& resourceMgr) {
     m_resourceMgr = &resourceMgr;
@@ -52,14 +52,13 @@ void DropRenderer::shutdown() {
     m_itemMeshes.clear();
     m_preparedDrops.clear();
     m_previousModelMatrices.clear();
-	m_currentModelMatrices.clear();
-	m_dropObjectIds.clear();
+    m_currentModelMatrices.clear();
+    m_dropObjectIds.clear();
     m_resourceMgr = nullptr;
     m_rhiDevice = nullptr;
 }
 
-bool DropRenderer::prepareFrame(const IWorldView& worldView,
-                                const DropSystem& dropSystem) {
+bool DropRenderer::prepareFrame(const IWorldView& worldView, const DropSystem& dropSystem) {
     m_preparedDrops.clear();
     const auto& drops = dropSystem.getDrops();
     m_preparedDrops.reserve(drops.size());
@@ -74,8 +73,7 @@ bool DropRenderer::prepareFrame(const IWorldView& worldView,
         const BlockID renderBlock = ItemRegistry::toRenderBlock(drop.itemId);
         const bool useItemMesh = !prefersBlockMeshForItem(renderBlock) && itemTileIndex >= 0;
 
-        Mesh* mesh = useItemMesh ? getOrCreateItemMesh(drop.itemId)
-                                 : getOrCreateBlockMesh(renderBlock);
+        Mesh* mesh = useItemMesh ? getOrCreateItemMesh(drop.itemId) : getOrCreateBlockMesh(renderBlock);
         if (mesh == nullptr) {
             return false;
         }
@@ -87,8 +85,7 @@ bool DropRenderer::prepareFrame(const IWorldView& worldView,
         auto objectId = m_dropObjectIds.find(drop.id);
         if (objectId == m_dropObjectIds.end()) {
             const std::optional<renderer::contracts::StableObjectId> allocated =
-                renderer::contracts::allocateStableSceneId<
-                    renderer::contracts::StableObjectIdTag>();
+                renderer::contracts::allocateStableSceneId<renderer::contracts::StableObjectIdTag>();
             if (!allocated.has_value()) {
                 return false;
             }
@@ -101,15 +98,9 @@ bool DropRenderer::prepareFrame(const IWorldView& worldView,
         model = glm::scale(model, glm::vec3(drop.halfExtents * 2.0f));
         model = glm::translate(model, glm::vec3(-0.5f));
         const auto previous = m_previousModelMatrices.find(drop.id);
-        m_preparedDrops.push_back({
-            mesh,
-            model,
-            previous != m_previousModelMatrices.end() ? previous->second : model,
-            queryWorldLight(worldView, drop.position),
-            objectId->second,
-            mesh->materialId,
-            useItemMesh
-        });
+        m_preparedDrops.push_back({mesh, model, previous != m_previousModelMatrices.end() ? previous->second : model,
+                                   queryWorldLight(worldView, drop.position), objectId->second, mesh->materialId,
+                                   useItemMesh});
         m_currentModelMatrices.emplace(drop.id, model);
     }
 
@@ -127,8 +118,7 @@ void DropRenderer::finishGBufferFrame() {
     m_previousModelMatrices = m_currentModelMatrices;
 }
 
-void DropRenderer::renderItemsToGBuffer(RhiCommandList& commandList,
-                                        const glm::mat4& viewProj,
+void DropRenderer::renderItemsToGBuffer(RhiCommandList& commandList, const glm::mat4& viewProj,
                                         const glm::mat4& previousViewProj) {
     struct PushConstants {
         glm::mat4 modelViewProj;
@@ -143,38 +133,27 @@ void DropRenderer::renderItemsToGBuffer(RhiCommandList& commandList,
         if (!drop.itemMesh) {
             continue;
         }
-        const PushConstants pushConstants{
-            viewProj * drop.model, previousViewProj * drop.previousModel,
-            drop.model, drop.light,
-            glm::uvec2(drop.objectId.value, drop.materialId.value)
-        };
+        const PushConstants pushConstants{viewProj * drop.model, previousViewProj * drop.previousModel, drop.model,
+                                          drop.light, glm::uvec2(drop.objectId.value, drop.materialId.value)};
         commandList.setVertexBuffer(0u, drop.mesh->rhiVertexBuffer, 0u);
         commandList.pushConstants(&pushConstants, sizeof(pushConstants),
-                                  rhiFlag(RhiShaderStage::Vertex) |
-                                  rhiFlag(RhiShaderStage::Fragment));
+                                  rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment));
         commandList.draw(drop.mesh->vertexCount, 1u, 0u, 0u);
     }
 }
 
-bool DropRenderer::prepareBlockGBuffer(RhiCommandList& commandList,
-                                       const float animationTime) {
+bool DropRenderer::prepareBlockGBuffer(RhiCommandList& commandList, const float animationTime) {
     if (!m_blockAnimationBuffer.isValid()) {
         return false;
     }
     const glm::vec4 animationParams(animationTime, 0.0f, 0.0f, 0.0f);
-    commandList.bufferBarrier({m_blockAnimationBuffer,
-                               RhiResourceState::UniformBuffer,
-                               RhiResourceState::TransferDst});
-    commandList.updateBuffer(
-        m_blockAnimationBuffer, 0u, &animationParams, sizeof(animationParams));
-    commandList.bufferBarrier({m_blockAnimationBuffer,
-                               RhiResourceState::TransferDst,
-                               RhiResourceState::UniformBuffer});
+    commandList.bufferBarrier({m_blockAnimationBuffer, RhiResourceState::UniformBuffer, RhiResourceState::TransferDst});
+    commandList.updateBuffer(m_blockAnimationBuffer, 0u, &animationParams, sizeof(animationParams));
+    commandList.bufferBarrier({m_blockAnimationBuffer, RhiResourceState::TransferDst, RhiResourceState::UniformBuffer});
     return true;
 }
 
-void DropRenderer::renderBlocksToGBuffer(RhiCommandList& commandList,
-                                         const glm::mat4& viewProj,
+void DropRenderer::renderBlocksToGBuffer(RhiCommandList& commandList, const glm::mat4& viewProj,
                                          const glm::mat4& previousViewProj) {
     struct PushConstants {
         glm::mat4 modelViewProj;
@@ -189,22 +168,16 @@ void DropRenderer::renderBlocksToGBuffer(RhiCommandList& commandList,
         if (drop.itemMesh) {
             continue;
         }
-        const PushConstants pushConstants{
-            viewProj * drop.model, previousViewProj * drop.previousModel,
-            drop.model, drop.light,
-            glm::uvec2(drop.objectId.value, drop.materialId.value)
-        };
+        const PushConstants pushConstants{viewProj * drop.model, previousViewProj * drop.previousModel, drop.model,
+                                          drop.light, glm::uvec2(drop.objectId.value, drop.materialId.value)};
         commandList.setVertexBuffer(0u, drop.mesh->rhiVertexBuffer, 0u);
         commandList.pushConstants(&pushConstants, sizeof(pushConstants),
-                                  rhiFlag(RhiShaderStage::Vertex) |
-                                  rhiFlag(RhiShaderStage::Fragment));
+                                  rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment));
         commandList.draw(drop.mesh->vertexCount, 1u, 0u, 0u);
     }
 }
 
-void DropRenderer::renderForward(RhiCommandList& commandList,
-                                 const glm::mat4& viewProj,
-                                 const float skyIntensity,
+void DropRenderer::renderForward(RhiCommandList& commandList, const glm::mat4& viewProj, const float skyIntensity,
                                  const float animationTime) {
     struct PushConstants {
         glm::mat4 viewProj;
@@ -212,18 +185,12 @@ void DropRenderer::renderForward(RhiCommandList& commandList,
         glm::vec4 lightingAnimation;
     };
     for (const PreparedDrop& drop : m_preparedDrops) {
-        const PushConstants pushConstants{
-            viewProj, drop.model,
-            glm::vec4(drop.light, skyIntensity, animationTime)
-        };
-        commandList.setGraphicsPipeline(drop.itemMesh ? m_itemForwardPipeline
-                                                      : m_blockForwardPipeline);
-        commandList.setBindGroup(0u, drop.itemMesh ? m_itemGBufferBindGroup
-                                                   : m_blockGBufferBindGroup);
+        const PushConstants pushConstants{viewProj, drop.model, glm::vec4(drop.light, skyIntensity, animationTime)};
+        commandList.setGraphicsPipeline(drop.itemMesh ? m_itemForwardPipeline : m_blockForwardPipeline);
+        commandList.setBindGroup(0u, drop.itemMesh ? m_itemGBufferBindGroup : m_blockGBufferBindGroup);
         commandList.setVertexBuffer(0u, drop.mesh->rhiVertexBuffer, 0u);
         commandList.pushConstants(&pushConstants, sizeof(pushConstants),
-                                  rhiFlag(RhiShaderStage::Vertex) |
-                                  rhiFlag(RhiShaderStage::Fragment));
+                                  rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment));
         commandList.draw(drop.mesh->vertexCount, 1u, 0u, 0u);
     }
 }
@@ -235,8 +202,7 @@ DropRenderer::Mesh* DropRenderer::getOrCreateItemMesh(const ItemID itemId) {
     }
 
     const std::optional<renderer::contracts::StableMaterialId> materialId =
-        renderer::contracts::allocateStableSceneId<
-            renderer::contracts::StableMaterialIdTag>();
+        renderer::contracts::allocateStableSceneId<renderer::contracts::StableMaterialIdTag>();
     if (!materialId.has_value()) {
         return nullptr;
     }
@@ -259,9 +225,7 @@ DropRenderer::Mesh DropRenderer::buildItemMesh(const ItemID itemId) const {
     }
 
     std::vector<ItemModelVertex> vertices;
-    if (!buildExtrudedItemMesh(m_resourceMgr->getItemTextureAtlas(),
-                               m_resourceMgr->getItemTexturePixels(),
-                               tileIndex,
+    if (!buildExtrudedItemMesh(m_resourceMgr->getItemTextureAtlas(), m_resourceMgr->getItemTexturePixels(), tileIndex,
                                vertices)) {
         return mesh;
     }
@@ -270,14 +234,13 @@ DropRenderer::Mesh DropRenderer::buildItemMesh(const ItemID itemId) const {
     RhiBufferDesc bufferDesc;
     bufferDesc.debugName = "Drop.ItemMesh.VertexBuffer";
     bufferDesc.size = vertices.size() * sizeof(ItemModelVertex);
-    bufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex) |
-                       rhiFlag(RhiBufferUsage::TransferDst);
+    bufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex) | rhiFlag(RhiBufferUsage::TransferDst);
     bufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
     bufferDesc.initialState = RhiResourceState::VertexBuffer;
     bufferDesc.memoryCategory = RhiMemoryCategory::Geometry;
     RhiDevice& rhiDevice = m_resourceMgr->rhiDevice();
-    mesh.rhiVertexBuffer = rhiDevice.createBuffer(
-        bufferDesc, vertices.data(), vertices.size() * sizeof(ItemModelVertex));
+    mesh.rhiVertexBuffer =
+        rhiDevice.createBuffer(bufferDesc, vertices.data(), vertices.size() * sizeof(ItemModelVertex));
     mesh.rhiDevice = &rhiDevice;
     if (!mesh.rhiVertexBuffer.isValid()) {
         destroyMesh(mesh);
@@ -292,8 +255,7 @@ DropRenderer::Mesh* DropRenderer::getOrCreateBlockMesh(const BlockID blockId) {
     }
 
     const std::optional<renderer::contracts::StableMaterialId> materialId =
-        renderer::contracts::allocateStableSceneId<
-            renderer::contracts::StableMaterialIdTag>();
+        renderer::contracts::allocateStableSceneId<renderer::contracts::StableMaterialIdTag>();
     if (!materialId.has_value()) {
         return nullptr;
     }
@@ -319,44 +281,44 @@ DropRenderer::Mesh DropRenderer::buildBlockMesh(const BlockID blockId) const {
     return mesh;
 }
 
-void DropRenderer::renderToShadowMap(RhiCommandList& commandList,
-                                     const glm::mat4& shadowViewProj,
+void DropRenderer::renderToShadowMap(RhiCommandList& commandList, const glm::mat4& shadowViewProj,
                                      const float animationTime) {
-    struct ItemPushConstants { glm::mat4 viewProj; glm::mat4 model; };
-    struct BlockPushConstants { glm::mat4 viewProj; glm::mat4 model; glm::vec4 animationTime; };
+    struct ItemPushConstants {
+        glm::mat4 viewProj;
+        glm::mat4 model;
+    };
+    struct BlockPushConstants {
+        glm::mat4 viewProj;
+        glm::mat4 model;
+        glm::vec4 animationTime;
+    };
     for (const PreparedDrop& drop : m_preparedDrops) {
         if (drop.itemMesh) {
             const ItemPushConstants pushConstants{shadowViewProj, drop.model};
             commandList.setGraphicsPipeline(m_itemShadowPipeline);
             commandList.setBindGroup(0u, m_itemShadowBindGroup);
             commandList.setVertexBuffer(0u, drop.mesh->rhiVertexBuffer, 0u);
-            commandList.pushConstants(&pushConstants, sizeof(pushConstants),
-                                      rhiFlag(RhiShaderStage::Vertex));
+            commandList.pushConstants(&pushConstants, sizeof(pushConstants), rhiFlag(RhiShaderStage::Vertex));
         } else {
-            const BlockPushConstants pushConstants{
-                shadowViewProj, drop.model, glm::vec4(animationTime, 0.0f, 0.0f, 0.0f)
-            };
+            const BlockPushConstants pushConstants{shadowViewProj, drop.model,
+                                                   glm::vec4(animationTime, 0.0f, 0.0f, 0.0f)};
             commandList.setGraphicsPipeline(m_blockShadowPipeline);
             commandList.setBindGroup(0u, m_blockShadowBindGroup);
             commandList.setVertexBuffer(0u, drop.mesh->rhiVertexBuffer, 0u);
             commandList.pushConstants(&pushConstants, sizeof(pushConstants),
-                                      rhiFlag(RhiShaderStage::Vertex) |
-                                      rhiFlag(RhiShaderStage::Fragment));
+                                      rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment));
         }
         commandList.draw(drop.mesh->vertexCount, 1u, 0u, 0u);
     }
 }
 
 void DropRenderer::createItemGBufferRhiResources() {
-    const auto vertexSource = renderer::rhi::loadShaderSource(
-        "assets/shaders/item_drop_gbuffer_rhi.vert");
-    const auto fragmentSource = renderer::rhi::loadShaderSource(
-        "assets/shaders/item_drop_gbuffer_rhi.frag");
+    const auto vertexSource = renderer::rhi::loadShaderSource("assets/shaders/item_drop_gbuffer_rhi.vert");
+    const auto fragmentSource = renderer::rhi::loadShaderSource("assets/shaders/item_drop_gbuffer_rhi.frag");
     if (!vertexSource || !fragmentSource) {
         std::abort();
     }
-    auto createShader = [this](const char* name, const RhiShaderStage stage,
-                               const std::string& source) {
+    auto createShader = [this](const char* name, const RhiShaderStage stage, const std::string& source) {
         RhiShaderDesc desc;
         desc.debugName = name;
         desc.stage = stage;
@@ -364,59 +326,48 @@ void DropRenderer::createItemGBufferRhiResources() {
         desc.sourceSize = source.size();
         return m_rhiDevice->createShader(desc);
     };
-    m_itemGBufferVertexShader = createShader("Drop.ItemGBuffer.Vertex", RhiShaderStage::Vertex,
-                                              *vertexSource);
-    m_itemGBufferFragmentShader = createShader("Drop.ItemGBuffer.Fragment", RhiShaderStage::Fragment,
-                                                *fragmentSource);
+    m_itemGBufferVertexShader = createShader("Drop.ItemGBuffer.Vertex", RhiShaderStage::Vertex, *vertexSource);
+    m_itemGBufferFragmentShader = createShader("Drop.ItemGBuffer.Fragment", RhiShaderStage::Fragment, *fragmentSource);
     renderer::rhi::RhiShaderSourceOptions blockGBufferOptions;
     blockGBufferOptions.preprocessorDefinitions.push_back("RHI_DROP_BLOCK");
-    const auto blockVertexSource = renderer::rhi::loadShaderSource(
-        "assets/shaders/falling_block_gbuffer_rhi.vert", blockGBufferOptions);
-    const auto blockFragmentSource = renderer::rhi::loadShaderSource(
-        "assets/shaders/falling_block_gbuffer_rhi.frag", blockGBufferOptions);
-    const auto itemShadowVertexSource = renderer::rhi::loadShaderSource(
-        "assets/shaders/item_drop_shadow_rhi.vert");
-    const auto itemShadowFragmentSource = renderer::rhi::loadShaderSource(
-        "assets/shaders/item_drop_shadow_rhi.frag");
-    const auto blockShadowVertexSource = renderer::rhi::loadShaderSource(
-        "assets/shaders/falling_block_shadow_rhi.vert");
-    const auto blockShadowFragmentSource = renderer::rhi::loadShaderSource(
-        "assets/shaders/falling_block_shadow_rhi.frag");
-    const auto itemForwardVertexSource = renderer::rhi::loadShaderSource(
-        "assets/shaders/item_drop_forward_rhi.vert");
-    const auto itemForwardFragmentSource = renderer::rhi::loadShaderSource(
-        "assets/shaders/item_drop_forward_rhi.frag");
-    const auto blockForwardVertexSource = renderer::rhi::loadShaderSource(
-        "assets/shaders/block_drop_forward_rhi.vert");
-    const auto blockForwardFragmentSource = renderer::rhi::loadShaderSource(
-        "assets/shaders/block_drop_forward_rhi.frag");
-    if (!blockVertexSource || !blockFragmentSource ||
-        !itemShadowVertexSource || !itemShadowFragmentSource ||
-        !blockShadowVertexSource || !blockShadowFragmentSource ||
-        !itemForwardVertexSource || !itemForwardFragmentSource ||
-        !blockForwardVertexSource || !blockForwardFragmentSource) {
+    const auto blockVertexSource =
+        renderer::rhi::loadShaderSource("assets/shaders/falling_block_gbuffer_rhi.vert", blockGBufferOptions);
+    const auto blockFragmentSource =
+        renderer::rhi::loadShaderSource("assets/shaders/falling_block_gbuffer_rhi.frag", blockGBufferOptions);
+    const auto itemShadowVertexSource = renderer::rhi::loadShaderSource("assets/shaders/item_drop_shadow_rhi.vert");
+    const auto itemShadowFragmentSource = renderer::rhi::loadShaderSource("assets/shaders/item_drop_shadow_rhi.frag");
+    const auto blockShadowVertexSource =
+        renderer::rhi::loadShaderSource("assets/shaders/falling_block_shadow_rhi.vert");
+    const auto blockShadowFragmentSource =
+        renderer::rhi::loadShaderSource("assets/shaders/falling_block_shadow_rhi.frag");
+    const auto itemForwardVertexSource = renderer::rhi::loadShaderSource("assets/shaders/item_drop_forward_rhi.vert");
+    const auto itemForwardFragmentSource = renderer::rhi::loadShaderSource("assets/shaders/item_drop_forward_rhi.frag");
+    const auto blockForwardVertexSource = renderer::rhi::loadShaderSource("assets/shaders/block_drop_forward_rhi.vert");
+    const auto blockForwardFragmentSource =
+        renderer::rhi::loadShaderSource("assets/shaders/block_drop_forward_rhi.frag");
+    if (!blockVertexSource || !blockFragmentSource || !itemShadowVertexSource || !itemShadowFragmentSource ||
+        !blockShadowVertexSource || !blockShadowFragmentSource || !itemForwardVertexSource ||
+        !itemForwardFragmentSource || !blockForwardVertexSource || !blockForwardFragmentSource) {
         std::abort();
     }
-    m_blockGBufferVertexShader = createShader("Drop.BlockGBuffer.Vertex", RhiShaderStage::Vertex,
-                                               *blockVertexSource);
-    m_blockGBufferFragmentShader = createShader("Drop.BlockGBuffer.Fragment", RhiShaderStage::Fragment,
-                                                 *blockFragmentSource);
-    m_itemShadowVertexShader = createShader("Drop.ItemShadow.Vertex", RhiShaderStage::Vertex,
-                                            *itemShadowVertexSource);
-    m_itemShadowFragmentShader = createShader("Drop.ItemShadow.Fragment", RhiShaderStage::Fragment,
-                                              *itemShadowFragmentSource);
-    m_blockShadowVertexShader = createShader("Drop.BlockShadow.Vertex", RhiShaderStage::Vertex,
-                                             *blockShadowVertexSource);
-    m_blockShadowFragmentShader = createShader("Drop.BlockShadow.Fragment", RhiShaderStage::Fragment,
-                                               *blockShadowFragmentSource);
-    m_itemForwardVertexShader = createShader("Drop.ItemForward.Vertex", RhiShaderStage::Vertex,
-                                             *itemForwardVertexSource);
-    m_itemForwardFragmentShader = createShader("Drop.ItemForward.Fragment", RhiShaderStage::Fragment,
-                                               *itemForwardFragmentSource);
-    m_blockForwardVertexShader = createShader("Drop.BlockForward.Vertex", RhiShaderStage::Vertex,
-                                              *blockForwardVertexSource);
-    m_blockForwardFragmentShader = createShader("Drop.BlockForward.Fragment", RhiShaderStage::Fragment,
-                                                *blockForwardFragmentSource);
+    m_blockGBufferVertexShader = createShader("Drop.BlockGBuffer.Vertex", RhiShaderStage::Vertex, *blockVertexSource);
+    m_blockGBufferFragmentShader =
+        createShader("Drop.BlockGBuffer.Fragment", RhiShaderStage::Fragment, *blockFragmentSource);
+    m_itemShadowVertexShader = createShader("Drop.ItemShadow.Vertex", RhiShaderStage::Vertex, *itemShadowVertexSource);
+    m_itemShadowFragmentShader =
+        createShader("Drop.ItemShadow.Fragment", RhiShaderStage::Fragment, *itemShadowFragmentSource);
+    m_blockShadowVertexShader =
+        createShader("Drop.BlockShadow.Vertex", RhiShaderStage::Vertex, *blockShadowVertexSource);
+    m_blockShadowFragmentShader =
+        createShader("Drop.BlockShadow.Fragment", RhiShaderStage::Fragment, *blockShadowFragmentSource);
+    m_itemForwardVertexShader =
+        createShader("Drop.ItemForward.Vertex", RhiShaderStage::Vertex, *itemForwardVertexSource);
+    m_itemForwardFragmentShader =
+        createShader("Drop.ItemForward.Fragment", RhiShaderStage::Fragment, *itemForwardFragmentSource);
+    m_blockForwardVertexShader =
+        createShader("Drop.BlockForward.Vertex", RhiShaderStage::Vertex, *blockForwardVertexSource);
+    m_blockForwardFragmentShader =
+        createShader("Drop.BlockForward.Fragment", RhiShaderStage::Fragment, *blockForwardFragmentSource);
     RhiTextureViewDesc textureViewDesc;
     textureViewDesc.texture = m_resourceMgr->getItemTextureAtlas().texture;
     textureViewDesc.viewType = RhiTextureViewType::Texture2D;
@@ -428,19 +379,13 @@ void DropRenderer::createItemGBufferRhiResources() {
     samplerDesc.addressU = RhiAddressMode::Repeat;
     samplerDesc.addressV = RhiAddressMode::Repeat;
     m_blockSampler = m_rhiDevice->createSampler(samplerDesc);
-    const RhiTextureHandle blockTextures[] = {
-        m_resourceMgr->getTextureArray().texture,
-        m_resourceMgr->getGrassColormap(),
-        m_resourceMgr->getFoliageColormap()
-    };
-    RhiTextureViewHandle* blockViews[] = {
-        &m_blockTextureArrayView, &m_grassColormapView, &m_foliageColormapView
-    };
+    const RhiTextureHandle blockTextures[] = {m_resourceMgr->getTextureArray().texture,
+                                              m_resourceMgr->getGrassColormap(), m_resourceMgr->getFoliageColormap()};
+    RhiTextureViewHandle* blockViews[] = {&m_blockTextureArrayView, &m_grassColormapView, &m_foliageColormapView};
     for (uint32_t index = 0u; index < 3u; ++index) {
         RhiTextureViewDesc viewDesc;
         viewDesc.texture = blockTextures[index];
-        viewDesc.viewType = index == 0u ? RhiTextureViewType::Texture2DArray
-                                       : RhiTextureViewType::Texture2D;
+        viewDesc.viewType = index == 0u ? RhiTextureViewType::Texture2DArray : RhiTextureViewType::Texture2D;
         if (viewDesc.viewType == RhiTextureViewType::Texture2DArray) {
             viewDesc.mipCount = kRhiRemainingMipLevels;
             viewDesc.layerCount = kRhiRemainingArrayLayers;
@@ -450,35 +395,32 @@ void DropRenderer::createItemGBufferRhiResources() {
 
     RhiBindGroupLayoutDesc bindGroupLayoutDesc;
     bindGroupLayoutDesc.debugName = "Drop.ItemGBuffer.BindGroupLayout";
-    bindGroupLayoutDesc.entries.push_back({0u, RhiBindingType::CombinedTextureSampler,
-                                           rhiFlag(RhiShaderStage::Fragment), 1u});
+    bindGroupLayoutDesc.entries.push_back(
+        {0u, RhiBindingType::CombinedTextureSampler, rhiFlag(RhiShaderStage::Fragment), 1u});
     m_itemGBufferBindGroupLayout = m_rhiDevice->createBindGroupLayout(bindGroupLayoutDesc);
     bindGroupLayoutDesc.debugName = "Drop.BlockGBuffer.BindGroupLayout";
     bindGroupLayoutDesc.entries.clear();
     for (uint32_t binding = 0u; binding < 3u; ++binding) {
-        bindGroupLayoutDesc.entries.push_back({binding, RhiBindingType::CombinedTextureSampler,
-                                               rhiFlag(RhiShaderStage::Fragment), 1u});
+        bindGroupLayoutDesc.entries.push_back(
+            {binding, RhiBindingType::CombinedTextureSampler, rhiFlag(RhiShaderStage::Fragment), 1u});
     }
-    bindGroupLayoutDesc.entries.push_back({3u, RhiBindingType::UniformBuffer,
-                                           rhiFlag(RhiShaderStage::Fragment), 1u});
+    bindGroupLayoutDesc.entries.push_back({3u, RhiBindingType::UniformBuffer, rhiFlag(RhiShaderStage::Fragment), 1u});
     m_blockGBufferBindGroupLayout = m_rhiDevice->createBindGroupLayout(bindGroupLayoutDesc);
     const glm::vec4 initialAnimation(0.0f);
     RhiBufferDesc animationBufferDesc;
     animationBufferDesc.debugName = "Drop.BlockAnimation";
     animationBufferDesc.size = sizeof(initialAnimation);
-    animationBufferDesc.usage = rhiFlag(RhiBufferUsage::Uniform) |
-                                rhiFlag(RhiBufferUsage::TransferDst);
+    animationBufferDesc.usage = rhiFlag(RhiBufferUsage::Uniform) | rhiFlag(RhiBufferUsage::TransferDst);
     animationBufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
     animationBufferDesc.initialState = RhiResourceState::UniformBuffer;
     animationBufferDesc.memoryCategory = RhiMemoryCategory::Uniform;
-    m_blockAnimationBuffer = m_rhiDevice->createBuffer(
-        animationBufferDesc, &initialAnimation, sizeof(initialAnimation));
+    m_blockAnimationBuffer =
+        m_rhiDevice->createBuffer(animationBufferDesc, &initialAnimation, sizeof(initialAnimation));
     RhiPipelineLayoutDesc pipelineLayoutDesc;
     pipelineLayoutDesc.debugName = "Drop.ItemGBuffer.PipelineLayout";
     pipelineLayoutDesc.bindGroupLayouts.push_back(m_itemGBufferBindGroupLayout);
     pipelineLayoutDesc.pushConstantBytes = sizeof(glm::mat4) * 3u + sizeof(glm::vec4);
-    pipelineLayoutDesc.pushConstantStages = rhiFlag(RhiShaderStage::Vertex) |
-                                            rhiFlag(RhiShaderStage::Fragment);
+    pipelineLayoutDesc.pushConstantStages = rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment);
     m_itemGBufferPipelineLayout = m_rhiDevice->createPipelineLayout(pipelineLayoutDesc);
     pipelineLayoutDesc.debugName = "Drop.BlockGBuffer.PipelineLayout";
     pipelineLayoutDesc.bindGroupLayouts[0] = m_blockGBufferBindGroupLayout;
@@ -491,8 +433,7 @@ void DropRenderer::createItemGBufferRhiResources() {
     pipelineLayoutDesc.debugName = "Drop.BlockShadow.PipelineLayout";
     pipelineLayoutDesc.bindGroupLayouts[0] = m_blockGBufferBindGroupLayout;
     pipelineLayoutDesc.pushConstantBytes = sizeof(glm::mat4) * 2u + sizeof(glm::vec4);
-    pipelineLayoutDesc.pushConstantStages = rhiFlag(RhiShaderStage::Vertex) |
-                                            rhiFlag(RhiShaderStage::Fragment);
+    pipelineLayoutDesc.pushConstantStages = rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment);
     m_blockShadowPipelineLayout = m_rhiDevice->createPipelineLayout(pipelineLayoutDesc);
     pipelineLayoutDesc.debugName = "Drop.ItemForward.PipelineLayout";
     pipelineLayoutDesc.bindGroupLayouts[0] = m_itemGBufferBindGroupLayout;
@@ -507,21 +448,18 @@ void DropRenderer::createItemGBufferRhiResources() {
     pipelineDesc.vertexShader = m_itemGBufferVertexShader;
     pipelineDesc.fragmentShader = m_itemGBufferFragmentShader;
     pipelineDesc.layout = m_itemGBufferPipelineLayout;
-    pipelineDesc.vertexInput.bindings.push_back(
-        {0u, sizeof(ItemModelVertex), RhiVertexInputRate::Vertex});
-    pipelineDesc.vertexInput.attributes = {
-        {0u, 0u, RhiVertexFormat::Float3, offsetof(ItemModelVertex, x)},
-        {1u, 0u, RhiVertexFormat::Float2, offsetof(ItemModelVertex, u)},
-        {2u, 0u, RhiVertexFormat::Float, offsetof(ItemModelVertex, shade)},
-        {3u, 0u, RhiVertexFormat::Float3, offsetof(ItemModelVertex, nx)}
-    };
+    pipelineDesc.vertexInput.bindings.push_back({0u, sizeof(ItemModelVertex), RhiVertexInputRate::Vertex});
+    pipelineDesc.vertexInput.attributes = {{0u, 0u, RhiVertexFormat::Float3, offsetof(ItemModelVertex, x)},
+                                           {1u, 0u, RhiVertexFormat::Float2, offsetof(ItemModelVertex, u)},
+                                           {2u, 0u, RhiVertexFormat::Float, offsetof(ItemModelVertex, shade)},
+                                           {3u, 0u, RhiVertexFormat::Float3, offsetof(ItemModelVertex, nx)}};
     pipelineDesc.raster.cullMode = RhiCullMode::None;
     pipelineDesc.depthStencil.depthTestEnabled = true;
     pipelineDesc.depthStencil.depthWriteEnabled = true;
     pipelineDesc.colorFormats = {RhiTextureFormat::Rgba8Unorm, RhiTextureFormat::Rgb10A2Unorm,
-        RhiTextureFormat::Rg8Unorm, RhiTextureFormat::Rgba8Unorm, RhiTextureFormat::Rgba8Unorm,
-        RhiTextureFormat::Rgba8Unorm, RhiTextureFormat::Rg32Uint,
-        RhiTextureFormat::Rg16Float};
+                                 RhiTextureFormat::Rg8Unorm,   RhiTextureFormat::Rgba8Unorm,
+                                 RhiTextureFormat::Rgba8Unorm, RhiTextureFormat::Rgba8Unorm,
+                                 RhiTextureFormat::Rg32Uint,   RhiTextureFormat::Rg16Float};
     pipelineDesc.depthFormat = RhiTextureFormat::Depth32Float;
     pipelineDesc.blend.attachments.resize(8u);
     m_itemGBufferPipeline = m_rhiDevice->createGraphicsPipeline(pipelineDesc);
@@ -537,10 +475,8 @@ void DropRenderer::createItemGBufferRhiResources() {
     pipelineDesc.fragmentShader = m_itemShadowFragmentShader;
     pipelineDesc.layout = m_itemShadowPipelineLayout;
     pipelineDesc.vertexInput.bindings = {{0u, sizeof(ItemModelVertex), RhiVertexInputRate::Vertex}};
-    pipelineDesc.vertexInput.attributes = {
-        {0u, 0u, RhiVertexFormat::Float3, offsetof(ItemModelVertex, x)},
-        {1u, 0u, RhiVertexFormat::Float2, offsetof(ItemModelVertex, u)}
-    };
+    pipelineDesc.vertexInput.attributes = {{0u, 0u, RhiVertexFormat::Float3, offsetof(ItemModelVertex, x)},
+                                           {1u, 0u, RhiVertexFormat::Float2, offsetof(ItemModelVertex, u)}};
     pipelineDesc.colorFormats.clear();
     pipelineDesc.blend.attachments.clear();
     pipelineDesc.depthFormat = RhiTextureFormat::Depth32Float;
@@ -557,11 +493,9 @@ void DropRenderer::createItemGBufferRhiResources() {
     pipelineDesc.fragmentShader = m_itemForwardFragmentShader;
     pipelineDesc.layout = m_itemForwardPipelineLayout;
     pipelineDesc.vertexInput.bindings = {{0u, sizeof(ItemModelVertex), RhiVertexInputRate::Vertex}};
-    pipelineDesc.vertexInput.attributes = {
-        {0u, 0u, RhiVertexFormat::Float3, offsetof(ItemModelVertex, x)},
-        {1u, 0u, RhiVertexFormat::Float2, offsetof(ItemModelVertex, u)},
-        {2u, 0u, RhiVertexFormat::Float, offsetof(ItemModelVertex, shade)}
-    };
+    pipelineDesc.vertexInput.attributes = {{0u, 0u, RhiVertexFormat::Float3, offsetof(ItemModelVertex, x)},
+                                           {1u, 0u, RhiVertexFormat::Float2, offsetof(ItemModelVertex, u)},
+                                           {2u, 0u, RhiVertexFormat::Float, offsetof(ItemModelVertex, shade)}};
     pipelineDesc.colorFormats = {RhiTextureFormat::Rgba16Float};
     pipelineDesc.depthFormat = RhiTextureFormat::Depth32Float;
     pipelineDesc.blend.attachments.resize(1u);
@@ -573,11 +507,9 @@ void DropRenderer::createItemGBufferRhiResources() {
     pipelineDesc.vertexInput = {};
     renderer::setBlockVertexInputLayout(pipelineDesc);
     pipelineDesc.vertexInput.attributes.erase(
-        std::remove_if(pipelineDesc.vertexInput.attributes.begin(),
-                       pipelineDesc.vertexInput.attributes.end(),
-                       [](const RhiVertexAttribute& attribute) {
-                           return attribute.location == 3u || attribute.location == 4u;
-                       }),
+        std::remove_if(
+            pipelineDesc.vertexInput.attributes.begin(), pipelineDesc.vertexInput.attributes.end(),
+            [](const RhiVertexAttribute& attribute) { return attribute.location == 3u || attribute.location == 4u; }),
         pipelineDesc.vertexInput.attributes.end());
     m_blockForwardPipeline = m_rhiDevice->createGraphicsPipeline(pipelineDesc);
 
@@ -590,9 +522,8 @@ void DropRenderer::createItemGBufferRhiResources() {
     m_itemGBufferBindGroup = m_rhiDevice->createBindGroup(bindGroupDesc);
     RhiBindGroupDesc blockBindGroupDesc;
     blockBindGroupDesc.layout = m_blockGBufferBindGroupLayout;
-    const RhiTextureViewHandle blockTextureViews[] = {
-        m_blockTextureArrayView, m_grassColormapView, m_foliageColormapView
-    };
+    const RhiTextureViewHandle blockTextureViews[] = {m_blockTextureArrayView, m_grassColormapView,
+                                                      m_foliageColormapView};
     for (uint32_t binding = 0u; binding < 3u; ++binding) {
         RhiBindGroupEntry entry;
         entry.binding = binding;
@@ -608,67 +539,101 @@ void DropRenderer::createItemGBufferRhiResources() {
     m_blockGBufferBindGroup = m_rhiDevice->createBindGroup(blockBindGroupDesc);
     m_itemShadowBindGroup = m_rhiDevice->createBindGroup(bindGroupDesc);
     m_blockShadowBindGroup = m_rhiDevice->createBindGroup(blockBindGroupDesc);
-    if (!m_itemGBufferVertexShader.isValid() || !m_itemGBufferFragmentShader.isValid() ||
-        !m_itemAtlasView.isValid() || !m_itemSampler.isValid() ||
-        !m_itemGBufferBindGroupLayout.isValid() || !m_itemGBufferPipelineLayout.isValid() ||
-        !m_itemGBufferPipeline.isValid() || !m_itemGBufferBindGroup.isValid() ||
-        !m_blockTextureArrayView.isValid() || !m_grassColormapView.isValid() ||
-        !m_foliageColormapView.isValid() || !m_blockSampler.isValid() ||
-        !m_blockAnimationBuffer.isValid() ||
-        !m_blockGBufferVertexShader.isValid() || !m_blockGBufferFragmentShader.isValid() ||
-        !m_blockGBufferBindGroupLayout.isValid() || !m_blockGBufferPipelineLayout.isValid() ||
-        !m_blockGBufferPipeline.isValid() || !m_blockGBufferBindGroup.isValid() ||
-        !m_itemShadowVertexShader.isValid() || !m_itemShadowFragmentShader.isValid() ||
-        !m_itemShadowPipelineLayout.isValid() || !m_itemShadowPipeline.isValid() ||
-        !m_itemShadowBindGroup.isValid() || !m_blockShadowVertexShader.isValid() ||
+    if (!m_itemGBufferVertexShader.isValid() || !m_itemGBufferFragmentShader.isValid() || !m_itemAtlasView.isValid() ||
+        !m_itemSampler.isValid() || !m_itemGBufferBindGroupLayout.isValid() || !m_itemGBufferPipelineLayout.isValid() ||
+        !m_itemGBufferPipeline.isValid() || !m_itemGBufferBindGroup.isValid() || !m_blockTextureArrayView.isValid() ||
+        !m_grassColormapView.isValid() || !m_foliageColormapView.isValid() || !m_blockSampler.isValid() ||
+        !m_blockAnimationBuffer.isValid() || !m_blockGBufferVertexShader.isValid() ||
+        !m_blockGBufferFragmentShader.isValid() || !m_blockGBufferBindGroupLayout.isValid() ||
+        !m_blockGBufferPipelineLayout.isValid() || !m_blockGBufferPipeline.isValid() ||
+        !m_blockGBufferBindGroup.isValid() || !m_itemShadowVertexShader.isValid() ||
+        !m_itemShadowFragmentShader.isValid() || !m_itemShadowPipelineLayout.isValid() ||
+        !m_itemShadowPipeline.isValid() || !m_itemShadowBindGroup.isValid() || !m_blockShadowVertexShader.isValid() ||
         !m_blockShadowFragmentShader.isValid() || !m_blockShadowPipelineLayout.isValid() ||
-        !m_blockShadowPipeline.isValid() || !m_blockShadowBindGroup.isValid() ||
-        !m_itemForwardVertexShader.isValid() || !m_itemForwardFragmentShader.isValid() ||
-        !m_itemForwardPipelineLayout.isValid() || !m_itemForwardPipeline.isValid() ||
-        !m_blockForwardVertexShader.isValid() || !m_blockForwardFragmentShader.isValid() ||
-        !m_blockForwardPipelineLayout.isValid() || !m_blockForwardPipeline.isValid()) {
+        !m_blockShadowPipeline.isValid() || !m_blockShadowBindGroup.isValid() || !m_itemForwardVertexShader.isValid() ||
+        !m_itemForwardFragmentShader.isValid() || !m_itemForwardPipelineLayout.isValid() ||
+        !m_itemForwardPipeline.isValid() || !m_blockForwardVertexShader.isValid() ||
+        !m_blockForwardFragmentShader.isValid() || !m_blockForwardPipelineLayout.isValid() ||
+        !m_blockForwardPipeline.isValid()) {
         std::abort();
     }
 }
 
 void DropRenderer::destroyItemGBufferRhiResources() {
-    if (m_blockForwardPipeline.isValid()) m_rhiDevice->destroyPipeline(m_blockForwardPipeline);
-    if (m_blockForwardPipelineLayout.isValid()) m_rhiDevice->destroyPipelineLayout(m_blockForwardPipelineLayout);
-    if (m_blockForwardFragmentShader.isValid()) m_rhiDevice->destroyShader(m_blockForwardFragmentShader);
-    if (m_blockForwardVertexShader.isValid()) m_rhiDevice->destroyShader(m_blockForwardVertexShader);
-    if (m_itemForwardPipeline.isValid()) m_rhiDevice->destroyPipeline(m_itemForwardPipeline);
-    if (m_itemForwardPipelineLayout.isValid()) m_rhiDevice->destroyPipelineLayout(m_itemForwardPipelineLayout);
-    if (m_itemForwardFragmentShader.isValid()) m_rhiDevice->destroyShader(m_itemForwardFragmentShader);
-    if (m_itemForwardVertexShader.isValid()) m_rhiDevice->destroyShader(m_itemForwardVertexShader);
-    if (m_blockShadowBindGroup.isValid()) m_rhiDevice->destroyBindGroup(m_blockShadowBindGroup);
-    if (m_blockShadowPipeline.isValid()) m_rhiDevice->destroyPipeline(m_blockShadowPipeline);
-    if (m_blockShadowPipelineLayout.isValid()) m_rhiDevice->destroyPipelineLayout(m_blockShadowPipelineLayout);
-    if (m_blockShadowFragmentShader.isValid()) m_rhiDevice->destroyShader(m_blockShadowFragmentShader);
-    if (m_blockShadowVertexShader.isValid()) m_rhiDevice->destroyShader(m_blockShadowVertexShader);
-    if (m_itemShadowBindGroup.isValid()) m_rhiDevice->destroyBindGroup(m_itemShadowBindGroup);
-    if (m_itemShadowPipeline.isValid()) m_rhiDevice->destroyPipeline(m_itemShadowPipeline);
-    if (m_itemShadowPipelineLayout.isValid()) m_rhiDevice->destroyPipelineLayout(m_itemShadowPipelineLayout);
-    if (m_itemShadowFragmentShader.isValid()) m_rhiDevice->destroyShader(m_itemShadowFragmentShader);
-    if (m_itemShadowVertexShader.isValid()) m_rhiDevice->destroyShader(m_itemShadowVertexShader);
-    if (m_blockGBufferBindGroup.isValid()) m_rhiDevice->destroyBindGroup(m_blockGBufferBindGroup);
-    if (m_blockGBufferPipeline.isValid()) m_rhiDevice->destroyPipeline(m_blockGBufferPipeline);
-    if (m_blockGBufferPipelineLayout.isValid()) m_rhiDevice->destroyPipelineLayout(m_blockGBufferPipelineLayout);
-    if (m_blockGBufferBindGroupLayout.isValid()) m_rhiDevice->destroyBindGroupLayout(m_blockGBufferBindGroupLayout);
-    if (m_blockAnimationBuffer.isValid()) m_rhiDevice->destroyBuffer(m_blockAnimationBuffer);
-    if (m_blockSampler.isValid()) m_rhiDevice->destroySampler(m_blockSampler);
-    if (m_foliageColormapView.isValid()) m_rhiDevice->destroyTextureView(m_foliageColormapView);
-    if (m_grassColormapView.isValid()) m_rhiDevice->destroyTextureView(m_grassColormapView);
-    if (m_blockTextureArrayView.isValid()) m_rhiDevice->destroyTextureView(m_blockTextureArrayView);
-    if (m_blockGBufferFragmentShader.isValid()) m_rhiDevice->destroyShader(m_blockGBufferFragmentShader);
-    if (m_blockGBufferVertexShader.isValid()) m_rhiDevice->destroyShader(m_blockGBufferVertexShader);
-    if (m_itemGBufferBindGroup.isValid()) m_rhiDevice->destroyBindGroup(m_itemGBufferBindGroup);
-    if (m_itemGBufferPipeline.isValid()) m_rhiDevice->destroyPipeline(m_itemGBufferPipeline);
-    if (m_itemGBufferPipelineLayout.isValid()) m_rhiDevice->destroyPipelineLayout(m_itemGBufferPipelineLayout);
-    if (m_itemGBufferBindGroupLayout.isValid()) m_rhiDevice->destroyBindGroupLayout(m_itemGBufferBindGroupLayout);
-    if (m_itemSampler.isValid()) m_rhiDevice->destroySampler(m_itemSampler);
-    if (m_itemAtlasView.isValid()) m_rhiDevice->destroyTextureView(m_itemAtlasView);
-    if (m_itemGBufferFragmentShader.isValid()) m_rhiDevice->destroyShader(m_itemGBufferFragmentShader);
-    if (m_itemGBufferVertexShader.isValid()) m_rhiDevice->destroyShader(m_itemGBufferVertexShader);
+    if (m_blockForwardPipeline.isValid())
+        m_rhiDevice->destroyPipeline(m_blockForwardPipeline);
+    if (m_blockForwardPipelineLayout.isValid())
+        m_rhiDevice->destroyPipelineLayout(m_blockForwardPipelineLayout);
+    if (m_blockForwardFragmentShader.isValid())
+        m_rhiDevice->destroyShader(m_blockForwardFragmentShader);
+    if (m_blockForwardVertexShader.isValid())
+        m_rhiDevice->destroyShader(m_blockForwardVertexShader);
+    if (m_itemForwardPipeline.isValid())
+        m_rhiDevice->destroyPipeline(m_itemForwardPipeline);
+    if (m_itemForwardPipelineLayout.isValid())
+        m_rhiDevice->destroyPipelineLayout(m_itemForwardPipelineLayout);
+    if (m_itemForwardFragmentShader.isValid())
+        m_rhiDevice->destroyShader(m_itemForwardFragmentShader);
+    if (m_itemForwardVertexShader.isValid())
+        m_rhiDevice->destroyShader(m_itemForwardVertexShader);
+    if (m_blockShadowBindGroup.isValid())
+        m_rhiDevice->destroyBindGroup(m_blockShadowBindGroup);
+    if (m_blockShadowPipeline.isValid())
+        m_rhiDevice->destroyPipeline(m_blockShadowPipeline);
+    if (m_blockShadowPipelineLayout.isValid())
+        m_rhiDevice->destroyPipelineLayout(m_blockShadowPipelineLayout);
+    if (m_blockShadowFragmentShader.isValid())
+        m_rhiDevice->destroyShader(m_blockShadowFragmentShader);
+    if (m_blockShadowVertexShader.isValid())
+        m_rhiDevice->destroyShader(m_blockShadowVertexShader);
+    if (m_itemShadowBindGroup.isValid())
+        m_rhiDevice->destroyBindGroup(m_itemShadowBindGroup);
+    if (m_itemShadowPipeline.isValid())
+        m_rhiDevice->destroyPipeline(m_itemShadowPipeline);
+    if (m_itemShadowPipelineLayout.isValid())
+        m_rhiDevice->destroyPipelineLayout(m_itemShadowPipelineLayout);
+    if (m_itemShadowFragmentShader.isValid())
+        m_rhiDevice->destroyShader(m_itemShadowFragmentShader);
+    if (m_itemShadowVertexShader.isValid())
+        m_rhiDevice->destroyShader(m_itemShadowVertexShader);
+    if (m_blockGBufferBindGroup.isValid())
+        m_rhiDevice->destroyBindGroup(m_blockGBufferBindGroup);
+    if (m_blockGBufferPipeline.isValid())
+        m_rhiDevice->destroyPipeline(m_blockGBufferPipeline);
+    if (m_blockGBufferPipelineLayout.isValid())
+        m_rhiDevice->destroyPipelineLayout(m_blockGBufferPipelineLayout);
+    if (m_blockGBufferBindGroupLayout.isValid())
+        m_rhiDevice->destroyBindGroupLayout(m_blockGBufferBindGroupLayout);
+    if (m_blockAnimationBuffer.isValid())
+        m_rhiDevice->destroyBuffer(m_blockAnimationBuffer);
+    if (m_blockSampler.isValid())
+        m_rhiDevice->destroySampler(m_blockSampler);
+    if (m_foliageColormapView.isValid())
+        m_rhiDevice->destroyTextureView(m_foliageColormapView);
+    if (m_grassColormapView.isValid())
+        m_rhiDevice->destroyTextureView(m_grassColormapView);
+    if (m_blockTextureArrayView.isValid())
+        m_rhiDevice->destroyTextureView(m_blockTextureArrayView);
+    if (m_blockGBufferFragmentShader.isValid())
+        m_rhiDevice->destroyShader(m_blockGBufferFragmentShader);
+    if (m_blockGBufferVertexShader.isValid())
+        m_rhiDevice->destroyShader(m_blockGBufferVertexShader);
+    if (m_itemGBufferBindGroup.isValid())
+        m_rhiDevice->destroyBindGroup(m_itemGBufferBindGroup);
+    if (m_itemGBufferPipeline.isValid())
+        m_rhiDevice->destroyPipeline(m_itemGBufferPipeline);
+    if (m_itemGBufferPipelineLayout.isValid())
+        m_rhiDevice->destroyPipelineLayout(m_itemGBufferPipelineLayout);
+    if (m_itemGBufferBindGroupLayout.isValid())
+        m_rhiDevice->destroyBindGroupLayout(m_itemGBufferBindGroupLayout);
+    if (m_itemSampler.isValid())
+        m_rhiDevice->destroySampler(m_itemSampler);
+    if (m_itemAtlasView.isValid())
+        m_rhiDevice->destroyTextureView(m_itemAtlasView);
+    if (m_itemGBufferFragmentShader.isValid())
+        m_rhiDevice->destroyShader(m_itemGBufferFragmentShader);
+    if (m_itemGBufferVertexShader.isValid())
+        m_rhiDevice->destroyShader(m_itemGBufferVertexShader);
     m_itemGBufferBindGroup = {};
     m_itemGBufferPipeline = {};
     m_itemGBufferPipelineLayout = {};

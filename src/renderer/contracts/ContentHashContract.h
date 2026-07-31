@@ -47,11 +47,7 @@ private:
 };
 
 /// Identifies file hashing failures without exceptions.
-enum class ContentHashError : uint8_t {
-    None,
-    FileOpenFailed,
-    FileReadFailed
-};
+enum class ContentHashError : uint8_t { None, FileOpenFailed, FileReadFailed };
 
 /// Returns either a complete file hash or one stable I/O error.
 struct FileContentHashResult {
@@ -67,23 +63,18 @@ struct FileContentHashResult {
 /// @param data Address of size readable bytes; null is valid only for zero bytes.
 /// @param size Number of bytes to hash.
 /// @return Stable FNV-1a content hash.
-[[nodiscard]] StableContentHash stableContentHashBytes(
-    const void* data,
-    size_t size);
+[[nodiscard]] StableContentHash stableContentHashBytes(const void* data, size_t size);
 
 /// Hashes every byte of one file using bounded streaming memory.
 /// @param path File whose exact contents define the returned identity.
 /// @return Complete content hash or a stable file error.
-[[nodiscard]] FileContentHashResult stableFileContentHash(
-    const std::filesystem::path& path);
+[[nodiscard]] FileContentHashResult stableFileContentHash(const std::filesystem::path& path);
 
 /// Parses the canonical sixteen-digit lowercase hexadecimal representation.
 /// @param text Hash text to validate and decode.
 /// @param hash Receives the decoded value when parsing succeeds.
 /// @return True only for exactly sixteen lowercase hexadecimal digits.
-[[nodiscard]] bool parseStableContentHashHex(
-    std::string_view text,
-    StableContentHash& hash);
+[[nodiscard]] bool parseStableContentHashHex(std::string_view text, StableContentHash& hash);
 
 /// Formats one stable hash for scene assets, reports, and manifests.
 /// @param hash Stable content hash to format.

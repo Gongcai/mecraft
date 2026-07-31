@@ -349,10 +349,8 @@ void applyTaaSettings(const json& j, TaaSettings& s) {
 
 json toJson(const TaaSettings& s) {
     return {
-        {"enabled", s.enabled},
-        {"blendMin", s.blendMin},
-        {"blendMax", s.blendMax},
-        {"forceZeroVelocity", s.forceZeroVelocity},
+        {"enabled", s.enabled},           {"blendMin", s.blendMin},
+        {"blendMax", s.blendMax},         {"forceZeroVelocity", s.forceZeroVelocity},
         {"freezeJitter", s.freezeJitter},
     };
 }
@@ -513,15 +511,12 @@ json toJson(const UpscaleSettings& s) {
     };
 }
 
-void applyNvidiaFeatureSettings(
-    const json& j,
-    NvidiaFeatureSettings& settings) {
+void applyNvidiaFeatureSettings(const json& j, NvidiaFeatureSettings& settings) {
     int frameGeneration = static_cast<int>(settings.frameGeneration);
     readInt(j, "frameGeneration", frameGeneration);
     if (frameGeneration >= static_cast<int>(FrameGenerationType::Disabled) &&
         frameGeneration <= static_cast<int>(FrameGenerationType::Dlss)) {
-        settings.frameGeneration =
-            static_cast<FrameGenerationType>(frameGeneration);
+        settings.frameGeneration = static_cast<FrameGenerationType>(frameGeneration);
     }
     int reflexMode = static_cast<int>(settings.reflexMode);
     readInt(j, "reflexMode", reflexMode);
@@ -532,10 +527,8 @@ void applyNvidiaFeatureSettings(
 }
 
 json toJson(const NvidiaFeatureSettings& settings) {
-    return {
-        {"frameGeneration", static_cast<int>(settings.frameGeneration)},
-        {"reflexMode", static_cast<int>(settings.reflexMode)}
-    };
+    return {{"frameGeneration", static_cast<int>(settings.frameGeneration)},
+            {"reflexMode", static_cast<int>(settings.reflexMode)}};
 }
 
 void applyDebugSettings(const json& j, DebugSettings& s) {
@@ -633,9 +626,8 @@ json toJson(const BlockMaterialMapSettings& s) {
 void applyRenderSettings(const json& j, RenderSettings& s) {
     int pipelineMode = static_cast<int>(s.pipelineMode);
     readInt(j, "pipelineMode", pipelineMode);
-    s.pipelineMode = pipelineMode == static_cast<int>(PipelineMode::Forward)
-        ? PipelineMode::Forward
-        : PipelineMode::Deferred;
+    s.pipelineMode =
+        pipelineMode == static_cast<int>(PipelineMode::Forward) ? PipelineMode::Forward : PipelineMode::Deferred;
 
     auto applyObject = [&j](const char* key, auto&& apply) {
         auto it = j.find(key);
@@ -653,13 +645,12 @@ void applyRenderSettings(const json& j, RenderSettings& s) {
     applyObject("renderGraph", [&s](const json& value) { applyRenderGraphSettings(value, s.renderGraph); });
     applyObject("reflection", [&s](const json& value) { applyReflectionSettings(value, s.reflection); });
     applyObject("transparent", [&s](const json& value) { applyTransparentSettings(value, s.transparent); });
-    applyObject("blockMaterialMaps", [&s](const json& value) { applyBlockMaterialMapSettings(value, s.blockMaterialMaps); });
+    applyObject("blockMaterialMaps",
+                [&s](const json& value) { applyBlockMaterialMapSettings(value, s.blockMaterialMaps); });
     applyObject("taa", [&s](const json& value) { applyTaaSettings(value, s.taa); });
     applyObject("postProcess", [&s](const json& value) { applyPostProcessSettings(value, s.postProcess); });
     applyObject("upscale", [&s](const json& value) { applyUpscaleSettings(value, s.upscale); });
-    applyObject("nvidia", [&s](const json& value) {
-        applyNvidiaFeatureSettings(value, s.nvidia);
-    });
+    applyObject("nvidia", [&s](const json& value) { applyNvidiaFeatureSettings(value, s.nvidia); });
     applyObject("debug", [&s](const json& value) { applyDebugSettings(value, s.debug); });
     applyObject("fog", [&s](const json& value) { applyFogSettings(value, s.fog); });
     applyObject("weather", [&s](const json& value) { applyWeatherSettings(value, s.weather); });
@@ -688,10 +679,7 @@ json toJson(const RenderSettings& s) {
     };
 }
 
-bool validateJsonShape(const json& value,
-                       const json& schema,
-                       const std::string& context,
-                       std::string& error) {
+bool validateJsonShape(const json& value, const json& schema, const std::string& context, std::string& error) {
     if (schema.is_object()) {
         if (!value.is_object()) {
             error = context + " must be an object";
@@ -703,8 +691,7 @@ bool validateJsonShape(const json& value,
                 error = context + "." + it.key() + " is required";
                 return false;
             }
-            if (!validateJsonShape(
-                    *valueIt, it.value(), context + "." + it.key(), error)) {
+            if (!validateJsonShape(*valueIt, it.value(), context + "." + it.key(), error)) {
                 return false;
             }
         }
@@ -716,9 +703,7 @@ bool validateJsonShape(const json& value,
             return false;
         }
         for (std::size_t index = 0u; index < schema.size(); ++index) {
-            if (!validateJsonShape(
-                    value[index], schema[index],
-                    context + "[" + std::to_string(index) + "]", error)) {
+            if (!validateJsonShape(value[index], schema[index], context + "[" + std::to_string(index) + "]", error)) {
                 return false;
             }
         }
@@ -733,8 +718,7 @@ bool validateJsonShape(const json& value,
     }
     if (schema.is_number_unsigned()) {
         if (!value.is_number_unsigned() ||
-            value.get<uint64_t>() >
-                static_cast<uint64_t>(std::numeric_limits<uint32_t>::max())) {
+            value.get<uint64_t>() > static_cast<uint64_t>(std::numeric_limits<uint32_t>::max())) {
             error = context + " must be a 32-bit unsigned integer";
             return false;
         }
@@ -746,8 +730,7 @@ bool validateJsonShape(const json& value,
             return false;
         }
         if (value.is_number_unsigned()) {
-            if (value.get<uint64_t>() >
-                static_cast<uint64_t>(std::numeric_limits<int>::max())) {
+            if (value.get<uint64_t>() > static_cast<uint64_t>(std::numeric_limits<int>::max())) {
                 error = context + " exceeds the 32-bit signed integer range";
                 return false;
             }
@@ -767,9 +750,7 @@ bool validateJsonShape(const json& value,
             return false;
         }
         const double number = value.get<double>();
-        if (!std::isfinite(number) ||
-            std::abs(number) >
-                static_cast<double>(std::numeric_limits<float>::max())) {
+        if (!std::isfinite(number) || std::abs(number) > static_cast<double>(std::numeric_limits<float>::max())) {
             error = context + " must be a finite 32-bit float";
             return false;
         }
@@ -779,20 +760,15 @@ bool validateJsonShape(const json& value,
     return false;
 }
 
-bool validateEnumValue(const json& owner,
-                       const char* key,
-                       const int minimum,
-                       const int maximum,
-                       const std::string& context,
-                       std::string& error) {
+bool validateEnumValue(const json& owner, const char* key, const int minimum, const int maximum,
+                       const std::string& context, std::string& error) {
     const auto it = owner.find(key);
     if (it == owner.end() || !it->is_number_integer()) {
         error = context + "." + key + " must be an integer";
         return false;
     }
-    const int value = it->is_number_unsigned()
-        ? static_cast<int>(it->get<uint64_t>())
-        : static_cast<int>(it->get<int64_t>());
+    const int value =
+        it->is_number_unsigned() ? static_cast<int>(it->get<uint64_t>()) : static_cast<int>(it->get<int64_t>());
     if (value < minimum || value > maximum) {
         error = context + "." + key + " is outside the supported range";
         return false;
@@ -839,43 +815,27 @@ nlohmann::json serializeRenderSettings(const RenderSettings& settings) {
     return toJson(settings);
 }
 
-bool deserializeRenderSettings(const nlohmann::json& value,
-                               RenderSettings& settings,
-                               std::string& error) {
+bool deserializeRenderSettings(const nlohmann::json& value, RenderSettings& settings, std::string& error) {
     error.clear();
     const json schema = toJson(RenderSettings{});
     if (!validateJsonShape(value, schema, "renderSettings", error) ||
-        !validateEnumValue(
-            value, "pipelineMode",
-            static_cast<int>(PipelineMode::Forward),
-            static_cast<int>(PipelineMode::Deferred),
-            "renderSettings", error)) {
+        !validateEnumValue(value, "pipelineMode", static_cast<int>(PipelineMode::Forward),
+                           static_cast<int>(PipelineMode::Deferred), "renderSettings", error)) {
         return false;
     }
     const auto& upscale = value.at("upscale");
-    if (!validateEnumValue(
-            upscale, "type",
-            static_cast<int>(TemporalUpscalerType::Native),
-            static_cast<int>(TemporalUpscalerType::Dlss),
-            "renderSettings.upscale", error) ||
-        !validateEnumValue(
-            upscale, "quality",
-            static_cast<int>(TemporalUpscaleQuality::Native),
-            static_cast<int>(TemporalUpscaleQuality::UltraPerformance),
-            "renderSettings.upscale", error)) {
+    if (!validateEnumValue(upscale, "type", static_cast<int>(TemporalUpscalerType::Native),
+                           static_cast<int>(TemporalUpscalerType::Dlss), "renderSettings.upscale", error) ||
+        !validateEnumValue(upscale, "quality", static_cast<int>(TemporalUpscaleQuality::Native),
+                           static_cast<int>(TemporalUpscaleQuality::UltraPerformance), "renderSettings.upscale",
+                           error)) {
         return false;
     }
     const auto& nvidia = value.at("nvidia");
-    if (!validateEnumValue(
-            nvidia, "frameGeneration",
-            static_cast<int>(FrameGenerationType::Disabled),
-            static_cast<int>(FrameGenerationType::Dlss),
-            "renderSettings.nvidia", error) ||
-        !validateEnumValue(
-            nvidia, "reflexMode",
-            static_cast<int>(ReflexLowLatencyMode::Off),
-            static_cast<int>(ReflexLowLatencyMode::OnWithBoost),
-            "renderSettings.nvidia", error)) {
+    if (!validateEnumValue(nvidia, "frameGeneration", static_cast<int>(FrameGenerationType::Disabled),
+                           static_cast<int>(FrameGenerationType::Dlss), "renderSettings.nvidia", error) ||
+        !validateEnumValue(nvidia, "reflexMode", static_cast<int>(ReflexLowLatencyMode::Off),
+                           static_cast<int>(ReflexLowLatencyMode::OnWithBoost), "renderSettings.nvidia", error)) {
         return false;
     }
 
@@ -901,8 +861,7 @@ RhiBackendSettingResult loadRhiBackend() {
     if (!backendIt->is_string()) {
         return {false, std::nullopt};
     }
-    const std::optional<RhiBackend> backend =
-        renderer::rhi::parseRhiBackend(backendIt->get<std::string>());
+    const std::optional<RhiBackend> backend = renderer::rhi::parseRhiBackend(backendIt->get<std::string>());
     return {backend.has_value(), backend};
 }
 

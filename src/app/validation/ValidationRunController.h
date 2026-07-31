@@ -56,9 +56,7 @@ public:
     /// @param captureSucceeded True when a requested final capture was written.
     /// @param captureDetail Capture failure detail when captureSucceeded is false.
     /// @return True when the frame was accepted and the next state was built.
-    [[nodiscard]] bool completeFrame(
-        bool captureSucceeded,
-        std::string captureDetail = {});
+    [[nodiscard]] bool completeFrame(bool captureSucceeded, std::string captureDetail = {});
 
     /// Terminates the run with a stable runtime error.
     /// @param error Non-success error describing the failed operation.
@@ -78,20 +76,13 @@ public:
     [[nodiscard]] const std::string& detail() const;
     [[nodiscard]] const renderer::contracts::CameraPath& cameraPath() const;
     [[nodiscard]] const ValidationSceneContract& sceneContract() const;
-    [[nodiscard]] const ValidationRenderSettingsProfile&
-    renderSettingsProfile() const;
+    [[nodiscard]] const ValidationRenderSettingsProfile& renderSettingsProfile() const;
     [[nodiscard]] const AppLaunchOptions& options() const;
     [[nodiscard]] uint32_t completedWarmupFrames() const;
     [[nodiscard]] uint32_t completedSampleFrames() const;
 
 private:
-    enum class Phase : uint8_t {
-        Inactive,
-        Ready,
-        Running,
-        Complete,
-        Failed
-    };
+    enum class Phase : uint8_t { Inactive, Ready, Running, Complete, Failed };
 
     [[nodiscard]] bool buildCurrentFrame();
 

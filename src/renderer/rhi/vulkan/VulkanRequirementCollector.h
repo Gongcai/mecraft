@@ -60,16 +60,14 @@ public:
     /// Checks collected instance extensions against enumerated driver properties.
     /// @param available Enumerated instance extension properties.
     /// @param missing Receives the first missing extension name.
-    [[nodiscard]] bool validateInstanceExtensions(
-        const std::vector<VkExtensionProperties>& available,
-        std::string& missing) const;
+    [[nodiscard]] bool validateInstanceExtensions(const std::vector<VkExtensionProperties>& available,
+                                                  std::string& missing) const;
 
     /// Checks collected device extensions against enumerated driver properties.
     /// @param available Enumerated device extension properties.
     /// @param missing Receives the first missing extension name.
-    [[nodiscard]] bool validateDeviceExtensions(
-        const std::vector<VkExtensionProperties>& available,
-        std::string& missing) const;
+    [[nodiscard]] bool validateDeviceExtensions(const std::vector<VkExtensionProperties>& available,
+                                                std::string& missing) const;
 
     /// Returns the minimum queue count requested for one queue role.
     [[nodiscard]] uint32_t requiredQueueCount(RhiQueueType queue) const;
@@ -81,9 +79,8 @@ public:
     [[nodiscard]] uint32_t opticalFlowQueueCount() const;
 
 private:
-    [[nodiscard]] static bool containsExtension(
-        const std::vector<VkExtensionProperties>& available,
-        const std::string& required);
+    [[nodiscard]] static bool containsExtension(const std::vector<VkExtensionProperties>& available,
+                                                const std::string& required);
 
     std::vector<std::string> m_instanceExtensions;
     std::vector<std::string> m_deviceExtensions;

@@ -13,19 +13,9 @@ class RhiDevice;
 class RhiCommandList;
 class Window;
 
-enum class PresentationMode {
-    Native,
-    Fsr31FrameGeneration,
-    DlssFrameGeneration
-};
+enum class PresentationMode { Native, Fsr31FrameGeneration, DlssFrameGeneration };
 
-enum class PresentationResult {
-    Ready,
-    Presented,
-    Skipped,
-    Failed,
-    ContractViolation
-};
+enum class PresentationResult { Ready, Presented, Skipped, Failed, ContractViolation };
 
 enum class PresentationFailure {
     None,
@@ -54,15 +44,12 @@ struct PresentationFrame {
 
     /// Reports whether rendering commands may target the acquired frame.
     /// @return True only when the controller owns a live acquired frame.
-    [[nodiscard]] bool shouldRender() const {
-        return result == PresentationResult::Ready;
-    }
+    [[nodiscard]] bool shouldRender() const { return result == PresentationResult::Ready; }
 
     /// Reports whether the application may continue its frame loop.
     /// @return True for a renderable frame or a non-fatal skipped frame.
     [[nodiscard]] bool shouldContinue() const {
-        return result == PresentationResult::Ready ||
-               result == PresentationResult::Skipped;
+        return result == PresentationResult::Ready || result == PresentationResult::Skipped;
     }
 };
 
@@ -75,8 +62,7 @@ struct PresentationCompleteResult {
     /// Reports whether the application may continue its frame loop.
     /// @return True after a successful present or a non-fatal presentation skip.
     [[nodiscard]] bool shouldContinue() const {
-        return result == PresentationResult::Presented ||
-               result == PresentationResult::Skipped;
+        return result == PresentationResult::Presented || result == PresentationResult::Skipped;
     }
 };
 
@@ -145,8 +131,7 @@ public:
     /// Acquires one real frame for rendering.
     [[nodiscard]] virtual RhiFrameAcquireResult acquireFrame() = 0;
     /// Presents the matching acquired real frame.
-    virtual PresentationBackendPresentResult presentFrame(
-        const RhiPresentInfo& info) = 0;
+    virtual PresentationBackendPresentResult presentFrame(const RhiPresentInfo& info) = 0;
     /// Cancels the matching acquired frame without displaying it.
     virtual bool cancelFrame(const RhiPresentInfo& info) = 0;
     /// Reports the currently active vertical synchronization state.
@@ -168,16 +153,14 @@ public:
     /// Reports whether the current frame must preserve and tag DLSS-G inputs.
     [[nodiscard]] virtual bool requiresFrameGenerationInputs() const = 0;
     /// Tags complete output-resolution and temporal resources for the next present.
-    virtual bool prepareFrameGeneration(
-        const PresentationFrameResources& resources,
-        const TemporalFrameInput& temporalFrame) = 0;
+    virtual bool prepareFrameGeneration(const PresentationFrameResources& resources,
+                                        const TemporalFrameInput& temporalFrame) = 0;
 };
 
 /// Creates the native RHI swapchain presentation backend.
 /// @param rhiDevice Device whose swapchain lifecycle is controlled by the backend.
 /// @return A backend bound to the supplied device.
-[[nodiscard]] std::unique_ptr<PresentationBackend> createNativePresentationBackend(
-    RhiDevice& rhiDevice);
+[[nodiscard]] std::unique_ptr<PresentationBackend> createNativePresentationBackend(RhiDevice& rhiDevice);
 
 /// Owns frame acquisition, presentation state, and presentation statistics.
 class PresentationController {
@@ -204,8 +187,7 @@ public:
     /// Presents and closes the matching frame returned by beginFrame().
     /// @param frame Live frame identity returned by this controller.
     /// @return Presentation completion state and backend status.
-    [[nodiscard]] PresentationCompleteResult presentFrame(
-        const PresentationFrame& frame);
+    [[nodiscard]] PresentationCompleteResult presentFrame(const PresentationFrame& frame);
 
     /// Cancels and closes a matching acquired frame without displaying it.
     /// @param frame Live frame identity returned by beginFrame().
@@ -272,60 +254,48 @@ public:
     /// Acquires one reusable output-resolution UI target for a real frame.
     /// @param frame Real frame currently owned by the controller.
     /// @return A UI target identity, or no value when the contract is invalid.
-    [[nodiscard]] std::optional<PresentationUiFrame> acquireUiFrame(
-        const PresentationFrame& frame);
+    [[nodiscard]] std::optional<PresentationUiFrame> acquireUiFrame(const PresentationFrame& frame);
 
     /// Resolves the HUD-less scene and UI resources for one real frame.
     /// @param frame Matching real frame returned by beginFrame().
     /// @param uiFrame Matching UI target returned by acquireUiFrame().
     /// @return Validated presentation resources, or no value on contract mismatch.
-    [[nodiscard]] std::optional<PresentationFrameResources> frameResources(
-        const PresentationFrame& frame,
-        const PresentationUiFrame& uiFrame) const;
+    [[nodiscard]] std::optional<PresentationFrameResources> frameResources(const PresentationFrame& frame,
+                                                                           const PresentationUiFrame& uiFrame) const;
 
     /// Begins rendering into an acquired transparent UI target.
     /// @param commandList Command list that records the UI pass.
     /// @param uiFrame Target identity returned by acquireUiFrame().
     /// @return True when barriers and the rendering scope were recorded.
-    [[nodiscard]] bool beginUiRendering(RhiCommandList& commandList,
-                                         const PresentationUiFrame& uiFrame);
+    [[nodiscard]] bool beginUiRendering(RhiCommandList& commandList, const PresentationUiFrame& uiFrame);
 
     /// Ends UI rendering and records premultiplied-alpha composition to the swapchain.
     /// @param commandList Command list containing the UI pass.
     /// @param frame Matching real frame returned by beginFrame().
     /// @param uiFrame Matching UI target returned by acquireUiFrame().
     /// @return True when composition and final resource barriers were recorded.
-    [[nodiscard]] bool endUiRenderingAndComposite(
-        RhiCommandList& commandList,
-        const PresentationFrame& frame,
-        const PresentationUiFrame& uiFrame);
+    [[nodiscard]] bool endUiRenderingAndComposite(RhiCommandList& commandList, const PresentationFrame& frame,
+                                                  const PresentationUiFrame& uiFrame);
 
     /// Closes and submits the command list containing UI and composition work.
     /// @param commandList Executable UI command list to submit.
     /// @param uiFrame UI target whose reuse is tracked by the submission token.
     /// @return True when the submission was accepted.
-    [[nodiscard]] bool submitUiFrame(RhiCommandList& commandList,
-                                      const PresentationUiFrame& uiFrame);
+    [[nodiscard]] bool submitUiFrame(RhiCommandList& commandList, const PresentationUiFrame& uiFrame);
 
     /// Validates and tags presentation and temporal inputs for DLSS-G.
     /// @param frame Matching real frame returned by beginFrame().
     /// @param uiFrame Matching UI target returned by acquireUiFrame().
     /// @param temporalFrame Complete temporal resources and common camera constants.
     /// @return True when DLSS-G inputs are ready or interpolation is inactive.
-    [[nodiscard]] bool prepareFrameGeneration(
-        const PresentationFrame& frame,
-        const PresentationUiFrame& uiFrame,
-        const TemporalFrameInput& temporalFrame);
+    [[nodiscard]] bool prepareFrameGeneration(const PresentationFrame& frame, const PresentationUiFrame& uiFrame,
+                                              const TemporalFrameInput& temporalFrame);
 
     /// Returns the immutable cumulative presentation statistics.
-    [[nodiscard]] const PresentationStatistics& statistics() const {
-        return m_statistics;
-    }
+    [[nodiscard]] const PresentationStatistics& statistics() const { return m_statistics; }
 
     /// Returns the active presentation technology.
-    [[nodiscard]] PresentationMode mode() const {
-        return m_statistics.mode;
-    }
+    [[nodiscard]] PresentationMode mode() const { return m_statistics.mode; }
 
 private:
     struct UiSlot {
@@ -341,12 +311,10 @@ private:
         RhiSubmissionToken completionToken;
     };
 
-    [[nodiscard]] PresentationFrame failBegin(
-        PresentationFailure failure,
-        RhiFrameStatus status = RhiFrameStatus::Error);
-    [[nodiscard]] PresentationCompleteResult failPresent(
-        PresentationFailure failure,
-        RhiFrameStatus status = RhiFrameStatus::Error);
+    [[nodiscard]] PresentationFrame failBegin(PresentationFailure failure,
+                                              RhiFrameStatus status = RhiFrameStatus::Error);
+    [[nodiscard]] PresentationCompleteResult failPresent(PresentationFailure failure,
+                                                         RhiFrameStatus status = RhiFrameStatus::Error);
     void invalidateExtentForStatus(RhiFrameStatus status);
     [[nodiscard]] bool validateUiFrame(const PresentationUiFrame& uiFrame) const;
     [[nodiscard]] bool ensureUiTargets(uint32_t width, uint32_t height);

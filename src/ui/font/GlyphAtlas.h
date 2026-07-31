@@ -46,8 +46,7 @@ public:
     [[nodiscard]] int atlasHeight() const { return m_atlasHeight; }
     [[nodiscard]] uint64_t revision() const { return m_revision; }
     [[nodiscard]] bool requiresTextureRecreation() const {
-        return m_texture.isValid() &&
-               (m_uploadedWidth != m_atlasWidth || m_uploadedHeight != m_atlasHeight);
+        return m_texture.isValid() && (m_uploadedWidth != m_atlasWidth || m_uploadedHeight != m_atlasHeight);
     }
 
 private:

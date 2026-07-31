@@ -1,6 +1,5 @@
 #include "UIScene.h"
 
-
 #include <algorithm>
 
 void UIScene::init(ResourceMgr& resourceMgr) {
@@ -61,8 +60,7 @@ UIEventResult UIScene::onInput(const UIInputEvent& event, const UIRenderContext&
     }
 
     if (event.type == UIInputEventType::PointerMove) {
-        if (m_focusEngaged &&
-            (event.x != m_lastPointerX || event.y != m_lastPointerY)) {
+        if (m_focusEngaged && (event.x != m_lastPointerX || event.y != m_lastPointerY)) {
             m_focusEngaged = false;
             setFocusedWidget(nullptr);
         }
@@ -86,10 +84,8 @@ UIEventResult UIScene::onInput(const UIInputEvent& event, const UIRenderContext&
     }
 
     if (event.type == UIInputEventType::Command &&
-        (event.command == UICommand::NavigateUp ||
-         event.command == UICommand::NavigateDown ||
-         event.command == UICommand::NavigateLeft ||
-         event.command == UICommand::NavigateRight)) {
+        (event.command == UICommand::NavigateUp || event.command == UICommand::NavigateDown ||
+         event.command == UICommand::NavigateLeft || event.command == UICommand::NavigateRight)) {
         if (m_focusedWidget) {
             const UIEventResult focusedResult = m_focusedWidget->onInput(event, m_currentContext);
             if (focusedResult == UIEventResult::Consumed) {
@@ -115,12 +111,9 @@ UIEventResult UIScene::onInput(const UIInputEvent& event, const UIRenderContext&
     }
 
     // Focused widget gets priority for keyboard, command, text, and scroll events
-    if (m_focusedWidget &&
-        (event.type == UIInputEventType::KeyDown ||
-         event.type == UIInputEventType::KeyUp ||
-         event.type == UIInputEventType::Command ||
-         event.type == UIInputEventType::TextInput ||
-         event.type == UIInputEventType::Scroll)) {
+    if (m_focusedWidget && (event.type == UIInputEventType::KeyDown || event.type == UIInputEventType::KeyUp ||
+                            event.type == UIInputEventType::Command || event.type == UIInputEventType::TextInput ||
+                            event.type == UIInputEventType::Scroll)) {
         const UIEventResult focusedResult = m_focusedWidget->onInput(event, m_currentContext);
         if (focusedResult == UIEventResult::Consumed) {
             applyPendingFocusRequests();

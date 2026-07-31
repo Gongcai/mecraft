@@ -19,22 +19,16 @@ namespace {
     return lhs.index == rhs.index && lhs.generation == rhs.generation;
 }
 
-[[nodiscard]] bool sameBuffer(const RhiBufferHandle lhs,
-                              const RhiBufferHandle rhs) {
+[[nodiscard]] bool sameBuffer(const RhiBufferHandle lhs, const RhiBufferHandle rhs) {
     return lhs.index == rhs.index && lhs.generation == rhs.generation;
 }
 
-[[nodiscard]] bool sameProbeResources(
-    const ReflectionProbeGridPass::ConsumerResources& lhs,
-    const ReflectionProbeGridPass::ConsumerResources& rhs) {
-    return sameBuffer(lhs.probeBuffer, rhs.probeBuffer) &&
-           lhs.probeBufferBytes == rhs.probeBufferBytes &&
-           sameBuffer(lhs.metadataBuffer, rhs.metadataBuffer) &&
-           lhs.metadataBufferBytes == rhs.metadataBufferBytes &&
-           sameBuffer(lhs.cellBuffer, rhs.cellBuffer) &&
-           lhs.cellBufferBytes == rhs.cellBufferBytes &&
-           sameBuffer(lhs.indexBuffer, rhs.indexBuffer) &&
-           lhs.indexBufferBytes == rhs.indexBufferBytes;
+[[nodiscard]] bool sameProbeResources(const ReflectionProbeGridPass::ConsumerResources& lhs,
+                                      const ReflectionProbeGridPass::ConsumerResources& rhs) {
+    return sameBuffer(lhs.probeBuffer, rhs.probeBuffer) && lhs.probeBufferBytes == rhs.probeBufferBytes &&
+           sameBuffer(lhs.metadataBuffer, rhs.metadataBuffer) && lhs.metadataBufferBytes == rhs.metadataBufferBytes &&
+           sameBuffer(lhs.cellBuffer, rhs.cellBuffer) && lhs.cellBufferBytes == rhs.cellBufferBytes &&
+           sameBuffer(lhs.indexBuffer, rhs.indexBuffer) && lhs.indexBufferBytes == rhs.indexBufferBytes;
 }
 
 template <size_t Count>
@@ -68,37 +62,21 @@ void ReflectionPass::shutdown() {
     m_reflectionProbeGridPass = nullptr;
 }
 
-RgPassHandle ReflectionPass::addGraphPasses(
-    RenderGraph& graph,
-    const FrameContext& ctx,
-    const RenderSettings& settings,
-    DeferredRenderTargets& targets,
-    const GraphResources& resources,
-    const RgPassHandle dependency) {
-    const bool filterActive = settings.reflection.filterEnabled &&
-        settings.debug.reflectionDebugMode == 0;
-    const bool temporalActive = settings.reflection.temporalEnabled &&
-        settings.debug.reflectionDebugMode == 0 &&
-        !requiresTemporalReset(ctx.temporalResetReasons);
-    if (!dependency.isValid() || !resources.sceneLighting.isValid() ||
-        !resources.albedo.isValid() ||
-        !resources.depth.isValid() || !resources.normalAo.isValid() ||
-        !resources.material.isValid() || !resources.materialAux.isValid() ||
-        !resources.f0Metallic.isValid() ||
-        !resources.skyCapture.isValid() ||
-        !resources.skySpecularPrefilter.isValid() ||
-        !resources.skyDfgLut.isValid() ||
-        !resources.probeSpecularPrefilter.isValid() ||
-        !resources.probes.isValid() ||
-        !resources.probeGridMetadata.isValid() ||
-        !resources.probeGridCells.isValid() ||
-        !resources.probeGridIndices.isValid() ||
-        !resources.voxelLight.isValid() ||
-        !resources.reflection.isValid() ||
+RgPassHandle ReflectionPass::addGraphPasses(RenderGraph& graph, const FrameContext& ctx, const RenderSettings& settings,
+                                            DeferredRenderTargets& targets, const GraphResources& resources,
+                                            const RgPassHandle dependency) {
+    const bool filterActive = settings.reflection.filterEnabled && settings.debug.reflectionDebugMode == 0;
+    const bool temporalActive = settings.reflection.temporalEnabled && settings.debug.reflectionDebugMode == 0 &&
+                                !requiresTemporalReset(ctx.temporalResetReasons);
+    if (!dependency.isValid() || !resources.sceneLighting.isValid() || !resources.albedo.isValid() ||
+        !resources.depth.isValid() || !resources.normalAo.isValid() || !resources.material.isValid() ||
+        !resources.materialAux.isValid() || !resources.f0Metallic.isValid() || !resources.skyCapture.isValid() ||
+        !resources.skySpecularPrefilter.isValid() || !resources.skyDfgLut.isValid() ||
+        !resources.probeSpecularPrefilter.isValid() || !resources.probes.isValid() ||
+        !resources.probeGridMetadata.isValid() || !resources.probeGridCells.isValid() ||
+        !resources.probeGridIndices.isValid() || !resources.voxelLight.isValid() || !resources.reflection.isValid() ||
         ((filterActive || temporalActive) && !resources.scratch.isValid()) ||
-        (temporalActive &&
-         (!resources.historyPrevious.isValid() ||
-          !resources.velocity.isValid()))) {
+        (temporalActive && (!resources.historyPrevious.isValid() || !resources.velocity.isValid()))) {
         return {};
     }
 
@@ -108,14 +86,12 @@ RgPassHandle ReflectionPass::addGraphPasses(
     // of post-stages the base pass renders into scratch, so the chain always
     // ends on `reflection`, the binding external consumers rely on. This
     // replaces the former FilterCopy/TemporalCopy snapshot blits.
-    const int postStageCount =
-        (filterActive ? 1 : 0) + (temporalActive ? 1 : 0);
+    const int postStageCount = (filterActive ? 1 : 0) + (temporalActive ? 1 : 0);
     bool currentIsScratch = (postStageCount % 2) == 1;
     const bool baseWritesScratch = currentIsScratch;
 
-    RenderGraphPassBuilder base = graph.addPass(
-        {"Reflection.Base", RgPassType::Graphics, RhiQueueType::Graphics,
-         /*threadSafeRecord=*/true});
+    RenderGraphPassBuilder base = graph.addPass({"Reflection.Base", RgPassType::Graphics, RhiQueueType::Graphics,
+                                                 /*threadSafeRecord=*/true});
     base.dependsOn(dependency)
         .readTexture(resources.sceneLighting, RhiResourceState::ShaderRead)
         .readTexture(resources.albedo, RhiResourceState::ShaderRead)
@@ -125,53 +101,34 @@ RgPassHandle ReflectionPass::addGraphPasses(
         .readTexture(resources.materialAux, RhiResourceState::ShaderRead)
         .readTexture(resources.f0Metallic, RhiResourceState::ShaderRead)
         .readTexture(resources.skyCapture, RhiResourceState::ShaderRead)
-        .readTexture(resources.skySpecularPrefilter,
-                     RhiResourceState::ShaderRead)
+        .readTexture(resources.skySpecularPrefilter, RhiResourceState::ShaderRead)
         .readTexture(resources.skyDfgLut, RhiResourceState::ShaderRead)
-        .readTexture(resources.probeSpecularPrefilter,
-                     RhiResourceState::ShaderRead)
+        .readTexture(resources.probeSpecularPrefilter, RhiResourceState::ShaderRead)
         .readBuffer(resources.probes, RhiResourceState::StorageBuffer)
-        .readBuffer(resources.probeGridMetadata,
-                    RhiResourceState::StorageBuffer)
-        .readBuffer(resources.probeGridCells,
-                    RhiResourceState::StorageBuffer)
-        .readBuffer(resources.probeGridIndices,
-                    RhiResourceState::StorageBuffer)
+        .readBuffer(resources.probeGridMetadata, RhiResourceState::StorageBuffer)
+        .readBuffer(resources.probeGridCells, RhiResourceState::StorageBuffer)
+        .readBuffer(resources.probeGridIndices, RhiResourceState::StorageBuffer)
         .readTexture(resources.voxelLight, RhiResourceState::ShaderRead)
-        .writeTexture(baseWritesScratch ? resources.scratch
-                                        : resources.reflection,
-                      RhiResourceState::RenderTarget)
-        .setExecute([this, frame, frameTargets, settings,
-                     baseWritesScratch](RgPassContext& pass) {
-            return recordReflection(
-                pass.commandList(), *frame, settings, *frameTargets,
-                baseWritesScratch);
+        .writeTexture(baseWritesScratch ? resources.scratch : resources.reflection, RhiResourceState::RenderTarget)
+        .setExecute([this, frame, frameTargets, settings, baseWritesScratch](RgPassContext& pass) {
+            return recordReflection(pass.commandList(), *frame, settings, *frameTargets, baseWritesScratch);
         });
     RgPassHandle previous = base.handle();
 
     if (filterActive) {
         const bool readScratch = currentIsScratch;
         RenderGraphPassBuilder filter = graph.addPass(
-            {"Reflection.Filter", RgPassType::Graphics,
-             RhiQueueType::Graphics, /*threadSafeRecord=*/true});
+            {"Reflection.Filter", RgPassType::Graphics, RhiQueueType::Graphics, /*threadSafeRecord=*/true});
         filter.dependsOn(previous)
-            .readTexture(readScratch ? resources.scratch
-                                     : resources.reflection,
-                         RhiResourceState::ShaderRead)
+            .readTexture(readScratch ? resources.scratch : resources.reflection, RhiResourceState::ShaderRead)
             .readTexture(resources.depth, RhiResourceState::DepthRead)
             .readTexture(resources.normalAo, RhiResourceState::ShaderRead)
             .readTexture(resources.material, RhiResourceState::ShaderRead)
             .readTexture(resources.materialAux, RhiResourceState::ShaderRead)
-            .writeTexture(readScratch ? resources.reflection
-                                      : resources.scratch,
-                          RhiResourceState::RenderTarget)
-            .setExecute(
-                [this, frame, frameTargets, settings,
-                 readScratch](RgPassContext& pass) {
-                    return recordFilter(
-                        pass.commandList(), *frame, settings.reflection,
-                        *frameTargets, readScratch);
-                });
+            .writeTexture(readScratch ? resources.reflection : resources.scratch, RhiResourceState::RenderTarget)
+            .setExecute([this, frame, frameTargets, settings, readScratch](RgPassContext& pass) {
+                return recordFilter(pass.commandList(), *frame, settings.reflection, *frameTargets, readScratch);
+            });
         currentIsScratch = !currentIsScratch;
         previous = filter.handle();
     }
@@ -179,29 +136,19 @@ RgPassHandle ReflectionPass::addGraphPasses(
     if (temporalActive) {
         const bool readScratch = currentIsScratch;
         RenderGraphPassBuilder temporal = graph.addPass(
-            {"Reflection.Temporal", RgPassType::Graphics,
-             RhiQueueType::Graphics, /*threadSafeRecord=*/true});
+            {"Reflection.Temporal", RgPassType::Graphics, RhiQueueType::Graphics, /*threadSafeRecord=*/true});
         temporal.dependsOn(previous)
-            .readTexture(readScratch ? resources.scratch
-                                     : resources.reflection,
-                         RhiResourceState::ShaderRead)
-            .readTexture(resources.historyPrevious,
-                         RhiResourceState::ShaderRead)
+            .readTexture(readScratch ? resources.scratch : resources.reflection, RhiResourceState::ShaderRead)
+            .readTexture(resources.historyPrevious, RhiResourceState::ShaderRead)
             .readTexture(resources.velocity, RhiResourceState::ShaderRead)
             .readTexture(resources.depth, RhiResourceState::DepthRead)
             .readTexture(resources.normalAo, RhiResourceState::ShaderRead)
             .readTexture(resources.material, RhiResourceState::ShaderRead)
             .readTexture(resources.materialAux, RhiResourceState::ShaderRead)
-            .writeTexture(readScratch ? resources.reflection
-                                      : resources.scratch,
-                          RhiResourceState::RenderTarget)
-            .setExecute(
-                [this, frame, frameTargets, settings,
-                 readScratch](RgPassContext& pass) {
-                    return recordTemporal(
-                        pass.commandList(), *frame, settings.reflection,
-                        *frameTargets, readScratch);
-                });
+            .writeTexture(readScratch ? resources.reflection : resources.scratch, RhiResourceState::RenderTarget)
+            .setExecute([this, frame, frameTargets, settings, readScratch](RgPassContext& pass) {
+                return recordTemporal(pass.commandList(), *frame, settings.reflection, *frameTargets, readScratch);
+            });
         currentIsScratch = !currentIsScratch;
         previous = temporal.handle();
     }
@@ -209,67 +156,48 @@ RgPassHandle ReflectionPass::addGraphPasses(
     return previous;
 }
 
-bool ReflectionPass::recordReflection(RhiCommandList& commandList,
-                                      const FrameContext& ctx,
-                                      const RenderSettings& settings,
-                                      DeferredRenderTargets& targets,
+bool ReflectionPass::recordReflection(RhiCommandList& commandList, const FrameContext& ctx,
+                                      const RenderSettings& settings, DeferredRenderTargets& targets,
                                       const bool writeToScratch) {
     if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr ||
         !targets.ensureReflectionTextureView(*ctx.shared->rhiDevice) ||
-        (writeToScratch &&
-         !targets.ensureReflectionTemporalScratchTextureView(
-             *ctx.shared->rhiDevice)) ||
+        (writeToScratch && !targets.ensureReflectionTemporalScratchTextureView(*ctx.shared->rhiDevice)) ||
         !targets.ensureSceneLightingTextureView(*ctx.shared->rhiDevice) ||
         !targets.ensureGBufferTextureViews(*ctx.shared->rhiDevice) ||
-        !targets.ensureSkyCaptureTextureView(*ctx.shared->rhiDevice) ||
-        m_skyIblPass == nullptr || m_reflectionProbeGridPass == nullptr) {
+        !targets.ensureSkyCaptureTextureView(*ctx.shared->rhiDevice) || m_skyIblPass == nullptr ||
+        m_reflectionProbeGridPass == nullptr) {
         return false;
     }
 
     RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
-    const ReflectionProbeGridPass::ConsumerResources probeResources =
-        m_reflectionProbeGridPass->consumerResources();
-    const std::array<RhiTextureViewHandle, 12> views = {
-        targets.sceneLightingTextureViewHandle(),
-        targets.albedoTextureViewHandle(),
-        targets.depthTextureViewHandle(),
-        targets.normalAoTextureViewHandle(),
-        targets.materialTextureViewHandle(),
-        targets.materialAuxTextureViewHandle(),
-        targets.skyCaptureTextureViewHandle(),
-        targets.voxelLightTextureViewHandle(),
-        targets.f0MetallicTextureViewHandle(),
-        m_skyIblPass->specularPrefilterView(),
-        m_skyIblPass->dfgLutView(),
-        probeResources.prefilteredCubeArrayView
-    };
-    if (!ensureBaseRhiPipeline(rhiDevice) ||
-        !ensureBaseBindGroup(rhiDevice, views, probeResources)) {
+    const ReflectionProbeGridPass::ConsumerResources probeResources = m_reflectionProbeGridPass->consumerResources();
+    const std::array<RhiTextureViewHandle, 12> views = {targets.sceneLightingTextureViewHandle(),
+                                                        targets.albedoTextureViewHandle(),
+                                                        targets.depthTextureViewHandle(),
+                                                        targets.normalAoTextureViewHandle(),
+                                                        targets.materialTextureViewHandle(),
+                                                        targets.materialAuxTextureViewHandle(),
+                                                        targets.skyCaptureTextureViewHandle(),
+                                                        targets.voxelLightTextureViewHandle(),
+                                                        targets.f0MetallicTextureViewHandle(),
+                                                        m_skyIblPass->specularPrefilterView(),
+                                                        m_skyIblPass->dfgLutView(),
+                                                        probeResources.prefilteredCubeArrayView};
+    if (!ensureBaseRhiPipeline(rhiDevice) || !ensureBaseBindGroup(rhiDevice, views, probeResources)) {
         return false;
     }
 
     ReflectionBaseParams params{};
-    const bool projectionJitter = usesTemporalProjectionJitter(
-        settings.upscale.type, settings.taa.enabled);
-    params.viewProj = projectionJitter
-        ? ctx.camera.jitteredViewProj : ctx.camera.viewProj;
-    params.invViewProj = projectionJitter
-        ? ctx.camera.jitteredInvViewProj
-        : ctx.camera.invViewProj;
+    const bool projectionJitter = usesTemporalProjectionJitter(settings.upscale.type, settings.taa.enabled);
+    params.viewProj = projectionJitter ? ctx.camera.jitteredViewProj : ctx.camera.viewProj;
+    params.invViewProj = projectionJitter ? ctx.camera.jitteredInvViewProj : ctx.camera.invViewProj;
     params.cameraPosNear = glm::vec4(ctx.camera.position, ctx.camera.nearPlane);
-    params.farSurfaceTime = glm::vec4(ctx.camera.farPlane,
-                                      ctx.weather.surfaceWetness,
-                                      ctx.shaderTime,
-                                      0.0f);
-    params.controls = glm::ivec4(settings.debug.reflectionDebugMode,
-                                 settings.weather.rainLinesEnabled ? 1 : 0,
-                                 0,
-                                 0);
+    params.farSurfaceTime = glm::vec4(ctx.camera.farPlane, ctx.weather.surfaceWetness, ctx.shaderTime, 0.0f);
+    params.controls = glm::ivec4(settings.debug.reflectionDebugMode, settings.weather.rainLinesEnabled ? 1 : 0, 0, 0);
 
     RhiColorAttachment colorAttachment;
-    colorAttachment.view = writeToScratch
-        ? targets.reflectionTemporalScratchTextureViewHandle()
-        : targets.reflectionTextureViewHandle();
+    colorAttachment.view =
+        writeToScratch ? targets.reflectionTemporalScratchTextureViewHandle() : targets.reflectionTextureViewHandle();
     colorAttachment.loadOp = RhiLoadOp::Clear;
     colorAttachment.storeOp = RhiStoreOp::Store;
     colorAttachment.clearColor[0] = 0.0f;
@@ -279,23 +207,17 @@ bool ReflectionPass::recordReflection(RhiCommandList& commandList,
 
     RhiRenderingInfo renderingInfo;
     renderingInfo.debugName = "Reflection";
-    renderingInfo.renderArea = {
-        0,
-        0,
-        static_cast<uint32_t>(std::max(1, targets.width())),
-        static_cast<uint32_t>(std::max(1, targets.height()))
-    };
+    renderingInfo.renderArea = {0, 0, static_cast<uint32_t>(std::max(1, targets.width())),
+                                static_cast<uint32_t>(std::max(1, targets.height()))};
     renderingInfo.colorAttachments = &colorAttachment;
     renderingInfo.colorAttachmentCount = 1u;
 
     const GpuTimerSegmentToken timerToken = ctx.debugService != nullptr
-        ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::Reflection)
-        : GpuTimerSegmentToken{};
-    commandList.bufferBarrier({m_baseUniformBuffer, RhiResourceState::UniformBuffer,
-                               RhiResourceState::TransferDst});
+                                                ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::Reflection)
+                                                : GpuTimerSegmentToken{};
+    commandList.bufferBarrier({m_baseUniformBuffer, RhiResourceState::UniformBuffer, RhiResourceState::TransferDst});
     commandList.updateBuffer(m_baseUniformBuffer, 0u, &params, sizeof(params));
-    commandList.bufferBarrier({m_baseUniformBuffer, RhiResourceState::TransferDst,
-                               RhiResourceState::UniformBuffer});
+    commandList.bufferBarrier({m_baseUniformBuffer, RhiResourceState::TransferDst, RhiResourceState::UniformBuffer});
     commandList.beginRendering(renderingInfo);
     commandList.setGraphicsPipeline(m_basePipeline);
     commandList.setBindGroup(0u, m_baseBindGroup);
@@ -345,8 +267,7 @@ bool ReflectionPass::ensureBaseRhiPipeline(RhiDevice& rhiDevice) {
     RhiBufferDesc uniformBufferDesc;
     uniformBufferDesc.debugName = "ReflectionBase.Params";
     uniformBufferDesc.size = sizeof(ReflectionBaseParams);
-    uniformBufferDesc.usage = rhiFlag(RhiBufferUsage::Uniform) |
-                              rhiFlag(RhiBufferUsage::TransferDst);
+    uniformBufferDesc.usage = rhiFlag(RhiBufferUsage::Uniform) | rhiFlag(RhiBufferUsage::TransferDst);
     uniformBufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
     uniformBufferDesc.initialState = RhiResourceState::UniformBuffer;
     uniformBufferDesc.memoryCategory = RhiMemoryCategory::Uniform;
@@ -376,27 +297,14 @@ bool ReflectionPass::ensureBaseRhiPipeline(RhiDevice& rhiDevice) {
     RhiBindGroupLayoutDesc bindGroupLayoutDesc;
     bindGroupLayoutDesc.debugName = "ReflectionBase.BindGroupLayout";
     for (uint32_t binding = 0u; binding < 12u; ++binding) {
-        bindGroupLayoutDesc.entries.push_back({
-            binding,
-            RhiBindingType::CombinedTextureSampler,
-            rhiFlag(RhiShaderStage::Fragment),
-            1u
-        });
+        bindGroupLayoutDesc.entries.push_back(
+            {binding, RhiBindingType::CombinedTextureSampler, rhiFlag(RhiShaderStage::Fragment), 1u});
     }
     for (uint32_t binding = 12u; binding < 16u; ++binding) {
-        bindGroupLayoutDesc.entries.push_back({
-            binding,
-            RhiBindingType::StorageBuffer,
-            rhiFlag(RhiShaderStage::Fragment),
-            1u
-        });
+        bindGroupLayoutDesc.entries.push_back(
+            {binding, RhiBindingType::StorageBuffer, rhiFlag(RhiShaderStage::Fragment), 1u});
     }
-    bindGroupLayoutDesc.entries.push_back({
-        16u,
-        RhiBindingType::UniformBuffer,
-        rhiFlag(RhiShaderStage::Fragment),
-        1u
-    });
+    bindGroupLayoutDesc.entries.push_back({16u, RhiBindingType::UniformBuffer, rhiFlag(RhiShaderStage::Fragment), 1u});
     m_baseBindGroupLayout = rhiDevice.createBindGroupLayout(bindGroupLayoutDesc);
     if (!m_baseBindGroupLayout.isValid()) {
         destroyBaseRhiResources();
@@ -432,10 +340,8 @@ bool ReflectionPass::ensureBaseRhiPipeline(RhiDevice& rhiDevice) {
     return true;
 }
 
-bool ReflectionPass::ensureBaseBindGroup(
-    RhiDevice& rhiDevice,
-    const std::array<RhiTextureViewHandle, 12>& views,
-    const ReflectionProbeGridPass::ConsumerResources& probeResources) {
+bool ReflectionPass::ensureBaseBindGroup(RhiDevice& rhiDevice, const std::array<RhiTextureViewHandle, 12>& views,
+                                         const ReflectionProbeGridPass::ConsumerResources& probeResources) {
     if (!ensureBaseRhiPipeline(rhiDevice)) {
         return false;
     }
@@ -444,37 +350,22 @@ bool ReflectionPass::ensureBaseBindGroup(
             return false;
         }
     }
-    if (!probeResources.probeBuffer.isValid() ||
-        !probeResources.metadataBuffer.isValid() ||
-        !probeResources.cellBuffer.isValid() ||
-        !probeResources.indexBuffer.isValid() ||
-        probeResources.probeBufferBytes == 0u ||
-        probeResources.metadataBufferBytes == 0u ||
-        probeResources.cellBufferBytes == 0u ||
-        probeResources.indexBufferBytes == 0u) {
+    if (!probeResources.probeBuffer.isValid() || !probeResources.metadataBuffer.isValid() ||
+        !probeResources.cellBuffer.isValid() || !probeResources.indexBuffer.isValid() ||
+        probeResources.probeBufferBytes == 0u || probeResources.metadataBufferBytes == 0u ||
+        probeResources.cellBufferBytes == 0u || probeResources.indexBufferBytes == 0u) {
         return false;
     }
-    if (m_baseBindGroup.isValid() &&
-        sameTextureViews(m_baseBoundViews, views) &&
+    if (m_baseBindGroup.isValid() && sameTextureViews(m_baseBoundViews, views) &&
         sameProbeResources(m_baseBoundProbeResources, probeResources)) {
         return true;
     }
 
     destroyBaseBindGroup();
-    const RhiSamplerHandle samplers[12] = {
-        m_baseLinearSampler,
-        m_baseNearestSampler,
-        m_baseNearestSampler,
-        m_baseNearestSampler,
-        m_baseNearestSampler,
-        m_baseNearestSampler,
-        m_baseLinearSampler,
-        m_baseNearestSampler,
-        m_baseNearestSampler,
-        m_baseLinearSampler,
-        m_baseLinearSampler,
-        m_baseLinearSampler
-    };
+    const RhiSamplerHandle samplers[12] = {m_baseLinearSampler,  m_baseNearestSampler, m_baseNearestSampler,
+                                           m_baseNearestSampler, m_baseNearestSampler, m_baseNearestSampler,
+                                           m_baseLinearSampler,  m_baseNearestSampler, m_baseNearestSampler,
+                                           m_baseLinearSampler,  m_baseLinearSampler,  m_baseLinearSampler};
     RhiBindGroupDesc bindGroupDesc;
     bindGroupDesc.layout = m_baseBindGroupLayout;
     for (uint32_t binding = 0u; binding < static_cast<uint32_t>(views.size()); ++binding) {
@@ -485,16 +376,10 @@ bool ReflectionPass::ensureBaseBindGroup(
         bindGroupDesc.entries.push_back(entry);
     }
 
-    const RhiBufferHandle buffers[4] = {
-        probeResources.probeBuffer,
-        probeResources.metadataBuffer,
-        probeResources.cellBuffer,
-        probeResources.indexBuffer};
-    const uint64_t bufferBytes[4] = {
-        probeResources.probeBufferBytes,
-        probeResources.metadataBufferBytes,
-        probeResources.cellBufferBytes,
-        probeResources.indexBufferBytes};
+    const RhiBufferHandle buffers[4] = {probeResources.probeBuffer, probeResources.metadataBuffer,
+                                        probeResources.cellBuffer, probeResources.indexBuffer};
+    const uint64_t bufferBytes[4] = {probeResources.probeBufferBytes, probeResources.metadataBufferBytes,
+                                     probeResources.cellBufferBytes, probeResources.indexBufferBytes};
     for (uint32_t index = 0u; index < 4u; ++index) {
         RhiBindGroupEntry entry;
         entry.binding = 12u + index;
@@ -572,10 +457,8 @@ void ReflectionPass::destroyBaseRhiResources() {
     m_baseRhiDevice = nullptr;
 }
 
-bool ReflectionPass::recordFilter(RhiCommandList& commandList,
-                                  const FrameContext& ctx,
-                                  const ReflectionSettings& reflection,
-                                  DeferredRenderTargets& targets,
+bool ReflectionPass::recordFilter(RhiCommandList& commandList, const FrameContext& ctx,
+                                  const ReflectionSettings& reflection, DeferredRenderTargets& targets,
                                   const bool readScratch) {
     if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr ||
         !targets.ensureReflectionTextureView(*ctx.shared->rhiDevice) ||
@@ -585,68 +468,45 @@ bool ReflectionPass::recordFilter(RhiCommandList& commandList,
     }
 
     RhiColorAttachment colorAttachment;
-    colorAttachment.view = readScratch
-        ? targets.reflectionTextureViewHandle()
-        : targets.reflectionTemporalScratchTextureViewHandle();
+    colorAttachment.view =
+        readScratch ? targets.reflectionTextureViewHandle() : targets.reflectionTemporalScratchTextureViewHandle();
     colorAttachment.loadOp = RhiLoadOp::DontCare;
     colorAttachment.storeOp = RhiStoreOp::Store;
 
     RhiRenderingInfo renderingInfo;
     renderingInfo.debugName = "ReflectionFilter";
-    renderingInfo.renderArea = {
-        0,
-        0,
-        static_cast<uint32_t>(std::max(1, targets.width())),
-        static_cast<uint32_t>(std::max(1, targets.height()))
-    };
+    renderingInfo.renderArea = {0, 0, static_cast<uint32_t>(std::max(1, targets.width())),
+                                static_cast<uint32_t>(std::max(1, targets.height()))};
     renderingInfo.colorAttachments = &colorAttachment;
     renderingInfo.colorAttachmentCount = 1u;
 
     RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
     const std::array<RhiTextureViewHandle, 5> views = {
-        readScratch ? targets.reflectionTemporalScratchTextureViewHandle()
-                    : targets.reflectionTextureViewHandle(),
-        targets.depthTextureViewHandle(),
-        targets.normalAoTextureViewHandle(),
-        targets.materialTextureViewHandle(),
-        targets.materialAuxTextureViewHandle()
-    };
-    if (!ensureFilterRhiPipeline(rhiDevice) ||
-        !ensureFilterBindGroup(rhiDevice, views)) {
+        readScratch ? targets.reflectionTemporalScratchTextureViewHandle() : targets.reflectionTextureViewHandle(),
+        targets.depthTextureViewHandle(), targets.normalAoTextureViewHandle(), targets.materialTextureViewHandle(),
+        targets.materialAuxTextureViewHandle()};
+    if (!ensureFilterRhiPipeline(rhiDevice) || !ensureFilterBindGroup(rhiDevice, views)) {
         return false;
     }
 
     const GpuTimerSegmentToken timerToken = ctx.debugService != nullptr
-        ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::Reflection)
-        : GpuTimerSegmentToken{};
+                                                ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::Reflection)
+                                                : GpuTimerSegmentToken{};
     commandList.beginRendering(renderingInfo);
     commandList.setGraphicsPipeline(m_filterPipeline);
     commandList.setBindGroup(0u, m_filterBindGroup);
-    const glm::vec4 pushConstants[4] = {
-        glm::vec4(static_cast<float>(std::max(1, targets.width())),
-                  static_cast<float>(std::max(1, targets.height())),
-                  reflection.filterStrength,
-                  ctx.weather.surfaceWetness),
-        glm::vec4(ctx.camera.position, ctx.camera.nearPlane),
-        glm::vec4(ctx.camera.farPlane, 0.0f, 0.0f, 0.0f),
-        glm::vec4(0.0f)
-    };
+    const glm::vec4 pushConstants[4] = {glm::vec4(static_cast<float>(std::max(1, targets.width())),
+                                                  static_cast<float>(std::max(1, targets.height())),
+                                                  reflection.filterStrength, ctx.weather.surfaceWetness),
+                                        glm::vec4(ctx.camera.position, ctx.camera.nearPlane),
+                                        glm::vec4(ctx.camera.farPlane, 0.0f, 0.0f, 0.0f), glm::vec4(0.0f)};
     struct FilterPushConstants {
         glm::mat4 invViewProj;
         glm::vec4 params[4];
     };
     const FilterPushConstants filterPushConstants{
-        ctx.camera.invViewProj,
-        {
-            pushConstants[0],
-            pushConstants[1],
-            pushConstants[2],
-            pushConstants[3]
-        }
-    };
-    commandList.pushConstants(&filterPushConstants,
-                              sizeof(filterPushConstants),
-                              rhiFlag(RhiShaderStage::Fragment));
+        ctx.camera.invViewProj, {pushConstants[0], pushConstants[1], pushConstants[2], pushConstants[3]}};
+    commandList.pushConstants(&filterPushConstants, sizeof(filterPushConstants), rhiFlag(RhiShaderStage::Fragment));
     commandList.draw(3u, 1u, 0u, 0u);
     commandList.endRendering();
     if (ctx.debugService != nullptr) {
@@ -655,10 +515,8 @@ bool ReflectionPass::recordFilter(RhiCommandList& commandList,
     return true;
 }
 
-bool ReflectionPass::recordTemporal(RhiCommandList& commandList,
-                                    const FrameContext& ctx,
-                                    const ReflectionSettings& reflection,
-                                    DeferredRenderTargets& targets,
+bool ReflectionPass::recordTemporal(RhiCommandList& commandList, const FrameContext& ctx,
+                                    const ReflectionSettings& reflection, DeferredRenderTargets& targets,
                                     const bool readScratch) {
     if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr ||
         !targets.ensureReflectionTextureView(*ctx.shared->rhiDevice) ||
@@ -670,50 +528,40 @@ bool ReflectionPass::recordTemporal(RhiCommandList& commandList,
     }
 
     RhiColorAttachment colorAttachment;
-    colorAttachment.view = readScratch
-        ? targets.reflectionTextureViewHandle()
-        : targets.reflectionTemporalScratchTextureViewHandle();
+    colorAttachment.view =
+        readScratch ? targets.reflectionTextureViewHandle() : targets.reflectionTemporalScratchTextureViewHandle();
     colorAttachment.loadOp = RhiLoadOp::DontCare;
     colorAttachment.storeOp = RhiStoreOp::Store;
 
     RhiRenderingInfo renderingInfo;
     renderingInfo.debugName = "ReflectionTemporal";
-    renderingInfo.renderArea = {
-        0,
-        0,
-        static_cast<uint32_t>(std::max(1, targets.width())),
-        static_cast<uint32_t>(std::max(1, targets.height()))
-    };
+    renderingInfo.renderArea = {0, 0, static_cast<uint32_t>(std::max(1, targets.width())),
+                                static_cast<uint32_t>(std::max(1, targets.height()))};
     renderingInfo.colorAttachments = &colorAttachment;
     renderingInfo.colorAttachmentCount = 1u;
 
     RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
     const std::array<RhiTextureViewHandle, 7> views = {
-        readScratch ? targets.reflectionTemporalScratchTextureViewHandle()
-                    : targets.reflectionTextureViewHandle(),
+        readScratch ? targets.reflectionTemporalScratchTextureViewHandle() : targets.reflectionTextureViewHandle(),
         targets.historyReflectionTexturePrevViewHandle(),
         targets.velocityTextureViewHandle(),
         targets.depthTextureViewHandle(),
         targets.normalAoTextureViewHandle(),
         targets.materialTextureViewHandle(),
-        targets.materialAuxTextureViewHandle()
-    };
-    if (!ensureTemporalRhiPipeline(rhiDevice) ||
-        !ensureTemporalBindGroup(rhiDevice, views)) {
+        targets.materialAuxTextureViewHandle()};
+    if (!ensureTemporalRhiPipeline(rhiDevice) || !ensureTemporalBindGroup(rhiDevice, views)) {
         return false;
     }
 
     const GpuTimerSegmentToken timerToken = ctx.debugService != nullptr
-        ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::Reflection)
-        : GpuTimerSegmentToken{};
+                                                ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::Reflection)
+                                                : GpuTimerSegmentToken{};
     commandList.beginRendering(renderingInfo);
     commandList.setGraphicsPipeline(m_temporalPipeline);
     commandList.setBindGroup(0u, m_temporalBindGroup);
-    const glm::vec4 pushConstants(
-        static_cast<float>(std::max(1, targets.width())),
-        static_cast<float>(std::max(1, targets.height())),
-        reflection.historyWeight,
-        ctx.camera.nearPlane);
+    const glm::vec4 pushConstants(static_cast<float>(std::max(1, targets.width())),
+                                  static_cast<float>(std::max(1, targets.height())), reflection.historyWeight,
+                                  ctx.camera.nearPlane);
     commandList.pushConstants(&pushConstants, sizeof(pushConstants), rhiFlag(RhiShaderStage::Fragment));
     commandList.draw(3u, 1u, 0u, 0u);
     commandList.endRendering();
@@ -783,12 +631,8 @@ bool ReflectionPass::ensureFilterRhiPipeline(RhiDevice& rhiDevice) {
     RhiBindGroupLayoutDesc bindGroupLayoutDesc;
     bindGroupLayoutDesc.debugName = "ReflectionFilter.BindGroupLayout";
     for (uint32_t binding = 0u; binding < 5u; ++binding) {
-        bindGroupLayoutDesc.entries.push_back({
-            binding,
-            RhiBindingType::CombinedTextureSampler,
-            rhiFlag(RhiShaderStage::Fragment),
-            1u
-        });
+        bindGroupLayoutDesc.entries.push_back(
+            {binding, RhiBindingType::CombinedTextureSampler, rhiFlag(RhiShaderStage::Fragment), 1u});
     }
     m_filterBindGroupLayout = rhiDevice.createBindGroupLayout(bindGroupLayoutDesc);
     if (!m_filterBindGroupLayout.isValid()) {
@@ -827,8 +671,7 @@ bool ReflectionPass::ensureFilterRhiPipeline(RhiDevice& rhiDevice) {
     return true;
 }
 
-bool ReflectionPass::ensureFilterBindGroup(RhiDevice& rhiDevice,
-                                           const std::array<RhiTextureViewHandle, 5>& views) {
+bool ReflectionPass::ensureFilterBindGroup(RhiDevice& rhiDevice, const std::array<RhiTextureViewHandle, 5>& views) {
     if (!ensureFilterRhiPipeline(rhiDevice)) {
         return false;
     }
@@ -849,8 +692,7 @@ bool ReflectionPass::ensureFilterBindGroup(RhiDevice& rhiDevice,
         RhiBindGroupEntry entry;
         entry.binding = binding;
         entry.resource.combinedTextureSampler.textureView = views[binding];
-        entry.resource.combinedTextureSampler.sampler =
-            binding == 0u ? m_filterLinearSampler : m_filterNearestSampler;
+        entry.resource.combinedTextureSampler.sampler = binding == 0u ? m_filterLinearSampler : m_filterNearestSampler;
         bindGroupDesc.entries.push_back(entry);
     }
 
@@ -968,12 +810,8 @@ bool ReflectionPass::ensureTemporalRhiPipeline(RhiDevice& rhiDevice) {
     RhiBindGroupLayoutDesc bindGroupLayoutDesc;
     bindGroupLayoutDesc.debugName = "ReflectionTemporal.BindGroupLayout";
     for (uint32_t binding = 0u; binding < 7u; ++binding) {
-        bindGroupLayoutDesc.entries.push_back({
-            binding,
-            RhiBindingType::CombinedTextureSampler,
-            rhiFlag(RhiShaderStage::Fragment),
-            1u
-        });
+        bindGroupLayoutDesc.entries.push_back(
+            {binding, RhiBindingType::CombinedTextureSampler, rhiFlag(RhiShaderStage::Fragment), 1u});
     }
     m_temporalBindGroupLayout = rhiDevice.createBindGroupLayout(bindGroupLayoutDesc);
     if (!m_temporalBindGroupLayout.isValid()) {
@@ -1012,8 +850,7 @@ bool ReflectionPass::ensureTemporalRhiPipeline(RhiDevice& rhiDevice) {
     return true;
 }
 
-bool ReflectionPass::ensureTemporalBindGroup(RhiDevice& rhiDevice,
-                                             const std::array<RhiTextureViewHandle, 7>& views) {
+bool ReflectionPass::ensureTemporalBindGroup(RhiDevice& rhiDevice, const std::array<RhiTextureViewHandle, 7>& views) {
     if (!ensureTemporalRhiPipeline(rhiDevice)) {
         return false;
     }

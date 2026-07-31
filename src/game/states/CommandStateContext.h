@@ -9,7 +9,9 @@ class InputManager;
 class UIRenderer;
 class World;
 class LocaleManager;
-namespace client { class GameClient; }
+namespace client {
+class GameClient;
+}
 
 namespace ecs {
 class GameplayRegistry;

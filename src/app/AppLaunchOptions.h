@@ -9,19 +9,12 @@
 #include <string>
 #include <string_view>
 
-enum class ValidationScene : uint8_t {
-    None,
-    Voxel,
-    Model
-};
+enum class ValidationScene : uint8_t { None, Voxel, Model };
 
 struct AppLaunchOptions {
     AppLaunchOptions();
 
-    enum class InputReplayScope {
-        App,
-        Gameplay
-    };
+    enum class InputReplayScope { App, Gameplay };
 
     bool recordInput = false;
     bool replayInput = false;
@@ -63,15 +56,13 @@ struct AppLaunchOptions {
     [[nodiscard]] bool validationEnabled() const;
 };
 
-[[nodiscard]] RhiBackend resolveLaunchRhiBackend(
-    const AppLaunchOptions& options,
-    std::optional<RhiBackend> savedBackend);
+[[nodiscard]] RhiBackend resolveLaunchRhiBackend(const AppLaunchOptions& options,
+                                                 std::optional<RhiBackend> savedBackend);
 
 /// Parses the stable command-line identifier for a validation scene class.
 /// @param value Lowercase scene identifier supplied by the user.
 /// @return Parsed scene class, or no value when the identifier is invalid.
-[[nodiscard]] std::optional<ValidationScene> parseValidationScene(
-    std::string_view value);
+[[nodiscard]] std::optional<ValidationScene> parseValidationScene(std::string_view value);
 
 /// Returns the stable identifier used by reports and diagnostics.
 /// @param scene Validation scene class to identify.
@@ -82,8 +73,6 @@ struct AppLaunchOptions {
 /// @param options Complete launch configuration after command-line parsing.
 /// @param error Receives a user-facing validation error on failure.
 /// @return True when the launch configuration is internally consistent.
-[[nodiscard]] bool validateAppLaunchOptions(
-    const AppLaunchOptions& options,
-    std::string& error);
+[[nodiscard]] bool validateAppLaunchOptions(const AppLaunchOptions& options, std::string& error);
 
 #endif // MECRAFT_APP_LAUNCH_OPTIONS_H

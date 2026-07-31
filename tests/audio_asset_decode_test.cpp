@@ -25,9 +25,8 @@ int main(const int argc, char** argv) {
 
     const int bytesPerSample = decoded.bitsPerSample / 8;
     const int byteRate = decoded.sampleRate * decoded.channels * bytesPerSample;
-    const double duration = byteRate > 0
-        ? static_cast<double>(decoded.pcm.size()) / static_cast<double>(byteRate)
-        : 0.0;
+    const double duration =
+        byteRate > 0 ? static_cast<double>(decoded.pcm.size()) / static_cast<double>(byteRate) : 0.0;
 
     std::cout << "[audio_asset_decode_test] PASS: " << path.string() << '\n';
     std::cout << "  channels: " << decoded.channels << '\n';

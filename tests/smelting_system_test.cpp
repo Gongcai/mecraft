@@ -15,7 +15,7 @@ int fail(const char* message) {
 bool item(const char* name, ItemID& outId) {
     return ItemRegistry::tryGetIdByName(name, outId);
 }
-}
+} // namespace
 
 int main() {
     BlockRegistry::init(nullptr);
@@ -29,11 +29,8 @@ int main() {
     ItemID coal = 0;
     ItemID sand = 0;
     ItemID glass = 0;
-    if (!item("minecraft:raw_iron", rawIron) ||
-        !item("minecraft:iron_ingot", ironIngot) ||
-        !item("minecraft:coal", coal) ||
-        !item("minecraft:sand", sand) ||
-        !item("minecraft:glass", glass)) {
+    if (!item("minecraft:raw_iron", rawIron) || !item("minecraft:iron_ingot", ironIngot) ||
+        !item("minecraft:coal", coal) || !item("minecraft:sand", sand) || !item("minecraft:glass", glass)) {
         return fail("expected smelting test item ids to exist");
     }
 

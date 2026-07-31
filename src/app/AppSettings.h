@@ -34,9 +34,7 @@ struct AppSettingsData {
 [[nodiscard]] int loadRenderDistance();
 [[nodiscard]] RenderSettings loadRenderSettings(const RenderSettings& fallback = RenderSettings{});
 [[nodiscard]] nlohmann::json serializeRenderSettings(const RenderSettings& settings);
-[[nodiscard]] bool deserializeRenderSettings(const nlohmann::json& value,
-                                             RenderSettings& settings,
-                                             std::string& error);
+[[nodiscard]] bool deserializeRenderSettings(const nlohmann::json& value, RenderSettings& settings, std::string& error);
 [[nodiscard]] RhiBackendSettingResult loadRhiBackend();
 [[nodiscard]] VsyncSettingResult loadVsyncEnabled();
 [[nodiscard]] FullscreenSettingResult loadFullscreenEnabled();

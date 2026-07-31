@@ -30,10 +30,7 @@ public:
     /// @param dockingEnabled Enables docking for this context only.
     /// @param iniFile Persistent layout file owned by this renderer instance.
     /// @return True when the context and every GPU resource are ready.
-    [[nodiscard]] bool init(const Window& window,
-                            RhiDevice& rhiDevice,
-                            bool dockingEnabled,
-                            std::string iniFile);
+    [[nodiscard]] bool init(const Window& window, RhiDevice& rhiDevice, bool dockingEnabled, std::string iniFile);
 
     /// Releases the ImGui context and all renderer-owned GPU resources.
     void shutdown();
@@ -51,8 +48,7 @@ public:
 
     /// Registers a sampled texture for use as an ImGui image.
     /// @return Stable ImGui texture ID, or ImTextureID_Invalid on failure.
-    [[nodiscard]] ImTextureID registerTexture(RhiTextureViewHandle textureView,
-                                              RhiSamplerHandle sampler);
+    [[nodiscard]] ImTextureID registerTexture(RhiTextureViewHandle textureView, RhiSamplerHandle sampler);
 
     /// Removes a previously registered sampled texture and its bind group.
     void unregisterTexture(ImTextureID textureId);

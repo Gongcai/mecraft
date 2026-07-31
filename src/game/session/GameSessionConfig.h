@@ -23,10 +23,7 @@ class ThreadPool;
 class PresentationController;
 
 /// Selects the authoritative source of renderer settings for one game session.
-enum class GameRenderSettingsSource : uint8_t {
-    UserProfile,
-    FixedProfile
-};
+enum class GameRenderSettingsSource : uint8_t { UserProfile, FixedProfile };
 
 /// Configuration for a gameplay session (seed, render distance, etc.)
 struct GameSessionConfig {
@@ -40,14 +37,13 @@ struct GameSessionConfig {
     bool isMultiplayer() const { return !serverAddress.empty(); }
 
     /// Save system settings.
-    std::string worldName;              // Empty = no save (ephemeral world)
-    std::string worldDisplayName;       // User-visible displayName stored in level.json for new worlds
-    std::filesystem::path saveRoot;     // Root directory for all saves (e.g. "saves/")
+    std::string worldName; // Empty = no save (ephemeral world)
+    std::string worldDisplayName; // User-visible displayName stored in level.json for new worlds
+    std::filesystem::path saveRoot; // Root directory for all saves (e.g. "saves/")
     bool enableSaving = true;
 
     /// Renderer settings source selected before GPU runtime initialization.
-    GameRenderSettingsSource renderSettingsSource =
-        GameRenderSettingsSource::UserProfile;
+    GameRenderSettingsSource renderSettingsSource = GameRenderSettingsSource::UserProfile;
     /// Immutable renderer configuration used when renderSettingsSource is FixedProfile.
     RenderSettings fixedRenderSettings;
 };

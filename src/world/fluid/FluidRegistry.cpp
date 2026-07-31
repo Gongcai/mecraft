@@ -26,21 +26,17 @@ bool parseFluidKind(const std::string& id, FluidKind& outKind) {
     return false;
 }
 
-const nlohmann::json* findField(const nlohmann::json& fluidJson,
-                                const std::string& fluidId,
-                                const char* fieldName) {
+const nlohmann::json* findField(const nlohmann::json& fluidJson, const std::string& fluidId, const char* fieldName) {
     const auto it = fluidJson.find(fieldName);
     if (it == fluidJson.end()) {
-        MECRAFT_LOG_FPRINTF(stderr, "[FluidRegistry] Fluid %s is missing required field: %s\n",
-                            fluidId.c_str(), fieldName);
+        MECRAFT_LOG_FPRINTF(stderr, "[FluidRegistry] Fluid %s is missing required field: %s\n", fluidId.c_str(),
+                            fieldName);
         return nullptr;
     }
     return &(*it);
 }
 
-bool readUnsignedInteger(const nlohmann::json& value,
-                         const std::string& fluidId,
-                         const char* fieldName,
+bool readUnsignedInteger(const nlohmann::json& value, const std::string& fluidId, const char* fieldName,
                          uint64_t& outValue) {
     if (value.is_number_unsigned()) {
         outValue = value.get<uint64_t>();
@@ -49,65 +45,54 @@ bool readUnsignedInteger(const nlohmann::json& value,
     if (value.is_number_integer()) {
         const int64_t parsed = value.get<int64_t>();
         if (parsed < 0) {
-            MECRAFT_LOG_FPRINTF(stderr, "[FluidRegistry] Fluid %s requires unsigned field: %s\n",
-                                fluidId.c_str(), fieldName);
+            MECRAFT_LOG_FPRINTF(stderr, "[FluidRegistry] Fluid %s requires unsigned field: %s\n", fluidId.c_str(),
+                                fieldName);
             return false;
         }
         outValue = static_cast<uint64_t>(parsed);
         return true;
     }
-    MECRAFT_LOG_FPRINTF(stderr, "[FluidRegistry] Fluid %s requires integer field: %s\n",
-                        fluidId.c_str(), fieldName);
+    MECRAFT_LOG_FPRINTF(stderr, "[FluidRegistry] Fluid %s requires integer field: %s\n", fluidId.c_str(), fieldName);
     return false;
 }
 
-bool readPositiveInteger(const nlohmann::json& fluidJson,
-                         const std::string& fluidId,
-                         const char* fieldName,
+bool readPositiveInteger(const nlohmann::json& fluidJson, const std::string& fluidId, const char* fieldName,
                          uint64_t& outValue) {
     const nlohmann::json* value = findField(fluidJson, fluidId, fieldName);
     if (value == nullptr || !readUnsignedInteger(*value, fluidId, fieldName, outValue)) {
         return false;
     }
     if (outValue == 0) {
-        MECRAFT_LOG_FPRINTF(stderr, "[FluidRegistry] Fluid %s requires positive field: %s\n",
-                            fluidId.c_str(), fieldName);
+        MECRAFT_LOG_FPRINTF(stderr, "[FluidRegistry] Fluid %s requires positive field: %s\n", fluidId.c_str(),
+                            fieldName);
         return false;
     }
     return true;
 }
 
-bool readIntegerInRange(const nlohmann::json& fluidJson,
-                        const std::string& fluidId,
-                        const char* fieldName,
-                        const int minValue,
-                        const int maxValue,
-                        uint8_t& outValue) {
+bool readIntegerInRange(const nlohmann::json& fluidJson, const std::string& fluidId, const char* fieldName,
+                        const int minValue, const int maxValue, uint8_t& outValue) {
     const nlohmann::json* value = findField(fluidJson, fluidId, fieldName);
     uint64_t parsed = 0;
     if (value == nullptr || !readUnsignedInteger(*value, fluidId, fieldName, parsed)) {
         return false;
     }
     if (parsed < static_cast<uint64_t>(minValue) || parsed > static_cast<uint64_t>(maxValue)) {
-        MECRAFT_LOG_FPRINTF(stderr, "[FluidRegistry] Fluid %s field is out of range: %s\n",
-                            fluidId.c_str(), fieldName);
+        MECRAFT_LOG_FPRINTF(stderr, "[FluidRegistry] Fluid %s field is out of range: %s\n", fluidId.c_str(), fieldName);
         return false;
     }
     outValue = static_cast<uint8_t>(parsed);
     return true;
 }
 
-bool readBoolean(const nlohmann::json& fluidJson,
-                 const std::string& fluidId,
-                 const char* fieldName,
-                 bool& outValue) {
+bool readBoolean(const nlohmann::json& fluidJson, const std::string& fluidId, const char* fieldName, bool& outValue) {
     const nlohmann::json* value = findField(fluidJson, fluidId, fieldName);
     if (value == nullptr) {
         return false;
     }
     if (!value->is_boolean()) {
-        MECRAFT_LOG_FPRINTF(stderr, "[FluidRegistry] Fluid %s requires boolean field: %s\n",
-                            fluidId.c_str(), fieldName);
+        MECRAFT_LOG_FPRINTF(stderr, "[FluidRegistry] Fluid %s requires boolean field: %s\n", fluidId.c_str(),
+                            fieldName);
         return false;
     }
     outValue = value->get<bool>();
@@ -121,10 +106,9 @@ bool applyConfigValues(FluidDesc& desc, const nlohmann::json& fluidJson, const s
            readBoolean(fluidJson, fluidId, "canCreateInfiniteSource", desc.canCreateInfiniteSource) &&
            readIntegerInRange(fluidJson, fluidId, "infiniteSourceNeighborCount", 0, 4,
                               desc.infiniteSourceNeighborCount) &&
-           readBoolean(fluidJson, fluidId, "requiresSupportForInfiniteSource",
-                       desc.requiresSupportForInfiniteSource);
+           readBoolean(fluidJson, fluidId, "requiresSupportForInfiniteSource", desc.requiresSupportForInfiniteSource);
 }
-}
+} // namespace
 
 bool FluidRegistry::init() {
     if (s_initialized) {
@@ -170,15 +154,14 @@ bool FluidRegistry::init() {
             return false;
         }
         switch (kind) {
-            case FluidKind::Water:
-                if (!applyConfigValues(s_water, fluidJson, fluidId)) {
-                    return false;
-                }
-                foundWater = true;
-                break;
-            case FluidKind::None:
-            default:
-                break;
+        case FluidKind::Water:
+            if (!applyConfigValues(s_water, fluidJson, fluidId)) {
+                return false;
+            }
+            foundWater = true;
+            break;
+        case FluidKind::None:
+        default: break;
         }
     }
 
@@ -210,11 +193,9 @@ const FluidDesc* FluidRegistry::tryGet(const FluidKind kind) {
         return nullptr;
     }
     switch (kind) {
-        case FluidKind::Water:
-            return &s_water;
-        case FluidKind::None:
-        default:
-            return nullptr;
+    case FluidKind::Water: return &s_water;
+    case FluidKind::None:
+    default: return nullptr;
     }
 }
 

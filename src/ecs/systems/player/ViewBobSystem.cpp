@@ -12,11 +12,9 @@ void ViewBobSystem::update(SystemContext& ctx) {
     auto& registry = ctx.registry;
     const float dt = ctx.dt;
 
-    auto view = registry.view<LocalPlayerTag,
-                              MoveIntentComponent,
-                              PhysicsBodyComponent,
-                              CameraStateComponent,
-                              ViewBobComponent>();
+    auto view =
+        registry
+            .view<LocalPlayerTag, MoveIntentComponent, PhysicsBodyComponent, CameraStateComponent, ViewBobComponent>();
     for (auto e : view) {
         const auto& moveIntent = view.get<MoveIntentComponent>(e);
         const auto& physicsBody = view.get<PhysicsBodyComponent>(e);
@@ -34,8 +32,8 @@ void ViewBobSystem::update(SystemContext& ctx) {
         const float verticalBob = viewBob.amplitude * static_cast<float>(std::sin(phase)) * viewBob.blend;
         viewBob.verticalOffset = verticalBob * verticalBob;
 
-        viewBob.horizontalOffset = viewBob.horizontalAmplitude *
-            static_cast<float>(std::cos(phase + viewBob.phaseOffset)) * viewBob.blend;
+        viewBob.horizontalOffset =
+            viewBob.horizontalAmplitude * static_cast<float>(std::cos(phase + viewBob.phaseOffset)) * viewBob.blend;
     }
 }
 

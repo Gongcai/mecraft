@@ -13,10 +13,8 @@ int fail(const char* message) {
 }
 
 int failFocus(const char* message, UIEventResult result, bool firstFocused, bool secondFocused) {
-    std::cerr << "[ui_focus_navigation_test] FAIL: " << message
-              << " result=" << static_cast<int>(result)
-              << " firstFocused=" << firstFocused
-              << " secondFocused=" << secondFocused << '\n';
+    std::cerr << "[ui_focus_navigation_test] FAIL: " << message << " result=" << static_cast<int>(result)
+              << " firstFocused=" << firstFocused << " secondFocused=" << secondFocused << '\n';
     return EXIT_FAILURE;
 }
 
@@ -72,9 +70,7 @@ int main() {
 
     const UIEventResult navigateDownResult = scene.onInput(command(0.0f, 0.0f, UICommand::NavigateDown), context);
     if (navigateDownResult != UIEventResult::Handled) {
-        return failFocus("navigate down should move focus and be handled",
-                         navigateDownResult,
-                         firstPtr->isFocused(),
+        return failFocus("navigate down should move focus and be handled", navigateDownResult, firstPtr->isFocused(),
                          secondPtr->isFocused());
     }
     if (!secondPtr->isFocused()) {
@@ -89,7 +85,8 @@ int main() {
     }
 
     // Pointer coordinates are top-left origin. This lands inside the first button.
-    const UIEventResult pointerDown = scene.onInput({UIInputEventType::PointerDown, 20.0f, 80.0f, UIPointerButton::Primary}, context);
+    const UIEventResult pointerDown =
+        scene.onInput({UIInputEventType::PointerDown, 20.0f, 80.0f, UIPointerButton::Primary}, context);
     if (pointerDown != UIEventResult::Handled) {
         return fail("pointer down inside button should be handled");
     }

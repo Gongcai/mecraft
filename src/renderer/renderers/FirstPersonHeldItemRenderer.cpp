@@ -40,18 +40,14 @@ struct FaceUvRect {
 };
 
 void setHeldBlockVertexInputLayout(RhiGraphicsPipelineDesc& pipelineDesc) {
-    pipelineDesc.vertexInput.bindings.push_back({
-        0u,
-        static_cast<uint32_t>(sizeof(BlockVertex)),
-        RhiVertexInputRate::Vertex
-    });
+    pipelineDesc.vertexInput.bindings.push_back(
+        {0u, static_cast<uint32_t>(sizeof(BlockVertex)), RhiVertexInputRate::Vertex});
     pipelineDesc.vertexInput.attributes = {
         {0u, 0u, RhiVertexFormat::Float3, static_cast<uint32_t>(offsetof(BlockVertex, x))},
         {1u, 0u, RhiVertexFormat::Float2, static_cast<uint32_t>(offsetof(BlockVertex, u))},
         {5u, 0u, RhiVertexFormat::Uint8, static_cast<uint32_t>(offsetof(BlockVertex, ao))},
         {6u, 0u, RhiVertexFormat::Uint16, static_cast<uint32_t>(offsetof(BlockVertex, layer))},
-        {10u, 0u, RhiVertexFormat::Uint16, static_cast<uint32_t>(offsetof(BlockVertex, tintPacked))}
-    };
+        {10u, 0u, RhiVertexFormat::Uint16, static_cast<uint32_t>(offsetof(BlockVertex, tintPacked))}};
 }
 
 bool isTorchShape(const BlockDef& def) {
@@ -66,33 +62,17 @@ bool prefersBlockMeshForItem(const BlockID renderBlock) {
     return isTorchShape(def) || def.renderShapeName == "model";
 }
 
-FaceUvRect pixelRectToUv(const float x0,
-                         const float y0,
-                         const float x1,
-                         const float y1) {
+FaceUvRect pixelRectToUv(const float x0, const float y0, const float x1, const float y1) {
     constexpr float skinW = 64.0f;
     constexpr float skinH = 64.0f;
-    return {
-        x0 / skinW,
-        1.0f - y1 / skinH,
-        x1 / skinW,
-        1.0f - y0 / skinH
-    };
+    return {x0 / skinW, 1.0f - y1 / skinH, x1 / skinW, 1.0f - y0 / skinH};
 }
 
-void addSteveQuad(std::vector<FirstPersonHeldItemRenderer::SteveVertex>& vertices,
-                  const glm::vec3& a,
-                  const glm::vec3& b,
-                  const glm::vec3& c,
-                  const glm::vec3& d,
-                  const FaceUvRect& uvRect,
+void addSteveQuad(std::vector<FirstPersonHeldItemRenderer::SteveVertex>& vertices, const glm::vec3& a,
+                  const glm::vec3& b, const glm::vec3& c, const glm::vec3& d, const FaceUvRect& uvRect,
                   const glm::vec3& normal) {
-    const std::array<glm::vec2, 4> uv = {{
-        {uvRect.u0, uvRect.v0},
-        {uvRect.u1, uvRect.v0},
-        {uvRect.u1, uvRect.v1},
-        {uvRect.u0, uvRect.v1}
-    }};
+    const std::array<glm::vec2, 4> uv = {
+        {{uvRect.u0, uvRect.v0}, {uvRect.u1, uvRect.v0}, {uvRect.u1, uvRect.v1}, {uvRect.u0, uvRect.v1}}};
     const std::array<glm::vec3, 4> pos = {{a, b, c, d}};
     for (const int idx : kFaceIndices) {
         const glm::vec3& p = pos[static_cast<size_t>(idx)];
@@ -101,7 +81,7 @@ void addSteveQuad(std::vector<FirstPersonHeldItemRenderer::SteveVertex>& vertice
     }
 }
 
-}
+} // namespace
 
 void FirstPersonHeldItemRenderer::init(ResourceMgr& resourceMgr, RhiDevice& rhiDevice) {
     if (m_initialized) {
@@ -174,7 +154,7 @@ float wrapDegrees(float degrees) {
     }
     return degrees;
 }
-}
+} // namespace
 
 void FirstPersonHeldItemRenderer::loadConfig() {
     std::ifstream file(FIRST_PERSON_HELD_ITEM_CONFIG_PATH);
@@ -362,31 +342,20 @@ void FirstPersonHeldItemRenderer::prepareFrameResources(const Inventory& invento
 
 void FirstPersonHeldItemRenderer::createRhiTextureResources() {
     const RhiTextureHandle textures[] = {
-        m_resourceMgr->getGuiTextureHandle("steve"),
-        m_resourceMgr->getItemTextureAtlas().texture,
-        m_resourceMgr->getTextureArray().texture,
-        m_resourceMgr->getLightmapDay(),
-        m_resourceMgr->getLightmapNight(),
-        m_resourceMgr->getGrassColormap(),
-        m_resourceMgr->getFoliageColormap()
-    };
-    RhiTextureViewHandle* views[] = {
-        &m_steveTextureView,
-        &m_itemAtlasView,
-        &m_blockTextureArrayView,
-        &m_lightmapDayView,
-        &m_lightmapNightView,
-        &m_grassColormapView,
-        &m_foliageColormapView
-    };
+        m_resourceMgr->getGuiTextureHandle("steve"), m_resourceMgr->getItemTextureAtlas().texture,
+        m_resourceMgr->getTextureArray().texture,    m_resourceMgr->getLightmapDay(),
+        m_resourceMgr->getLightmapNight(),           m_resourceMgr->getGrassColormap(),
+        m_resourceMgr->getFoliageColormap()};
+    RhiTextureViewHandle* views[] = {&m_steveTextureView,   &m_itemAtlasView,     &m_blockTextureArrayView,
+                                     &m_lightmapDayView,    &m_lightmapNightView, &m_grassColormapView,
+                                     &m_foliageColormapView};
     for (uint32_t index = 0u; index < 7u; ++index) {
         if (!textures[index].isValid()) {
             std::abort();
         }
         RhiTextureViewDesc viewDesc;
         viewDesc.texture = textures[index];
-        viewDesc.viewType = index == 2u ? RhiTextureViewType::Texture2DArray
-                                       : RhiTextureViewType::Texture2D;
+        viewDesc.viewType = index == 2u ? RhiTextureViewType::Texture2DArray : RhiTextureViewType::Texture2D;
         if (viewDesc.viewType == RhiTextureViewType::Texture2DArray) {
             viewDesc.mipCount = kRhiRemainingMipLevels;
             viewDesc.layerCount = kRhiRemainingArrayLayers;
@@ -416,25 +385,21 @@ void FirstPersonHeldItemRenderer::createRhiTextureResources() {
     RhiBufferDesc uniformBufferDesc;
     uniformBufferDesc.debugName = "FirstPerson.ShadowUniformBuffer";
     uniformBufferDesc.size = sizeof(ShadowUniforms);
-    uniformBufferDesc.usage = rhiFlag(RhiBufferUsage::Uniform) |
-                              rhiFlag(RhiBufferUsage::TransferDst);
+    uniformBufferDesc.usage = rhiFlag(RhiBufferUsage::Uniform) | rhiFlag(RhiBufferUsage::TransferDst);
     uniformBufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
     uniformBufferDesc.initialState = RhiResourceState::UniformBuffer;
     uniformBufferDesc.memoryCategory = RhiMemoryCategory::Uniform;
     m_shadowUniformBuffer = m_rhiDevice->createBuffer(uniformBufferDesc, nullptr, 0u);
-    if (!m_textureSampler.isValid() || !m_blockTextureSampler.isValid() ||
-        !m_shadowCompareSampler.isValid() || !m_shadowRawSampler.isValid() ||
-        !m_shadowUniformBuffer.isValid()) {
+    if (!m_textureSampler.isValid() || !m_blockTextureSampler.isValid() || !m_shadowCompareSampler.isValid() ||
+        !m_shadowRawSampler.isValid() || !m_shadowUniformBuffer.isValid()) {
         std::abort();
     }
 }
 
 void FirstPersonHeldItemRenderer::synchronizeShadowTextureViews() {
-    const std::array<RhiTextureHandle, 6> textures = {
-        m_shadowData.shadowTexture, m_shadowData.shadowDepthRaw,
-        m_shadowData.shadowDepthAll, m_shadowData.shadowDepthAllRaw,
-        m_shadowData.shadowColor0, m_shadowData.shadowColor1
-    };
+    const std::array<RhiTextureHandle, 6> textures = {m_shadowData.shadowTexture,  m_shadowData.shadowDepthRaw,
+                                                      m_shadowData.shadowDepthAll, m_shadowData.shadowDepthAllRaw,
+                                                      m_shadowData.shadowColor0,   m_shadowData.shadowColor1};
     if (m_shadowData.shadowsEnabled == 0) {
         destroyShadowTextureViews();
         return;
@@ -446,9 +411,8 @@ void FirstPersonHeldItemRenderer::synchronizeShadowTextureViews() {
     }
     bool unchanged = true;
     for (std::size_t index = 0u; index < textures.size(); ++index) {
-        unchanged = unchanged &&
-            textures[index].index == m_shadowTextureHandles[index].index &&
-            textures[index].generation == m_shadowTextureHandles[index].generation;
+        unchanged = unchanged && textures[index].index == m_shadowTextureHandles[index].index &&
+                    textures[index].generation == m_shadowTextureHandles[index].generation;
     }
     if (unchanged) {
         return;
@@ -482,18 +446,30 @@ void FirstPersonHeldItemRenderer::destroyShadowTextureViews() {
 
 void FirstPersonHeldItemRenderer::destroyRhiTextureResources() {
     destroyShadowTextureViews();
-    if (m_shadowUniformBuffer.isValid()) m_rhiDevice->destroyBuffer(m_shadowUniformBuffer);
-    if (m_shadowRawSampler.isValid()) m_rhiDevice->destroySampler(m_shadowRawSampler);
-    if (m_shadowCompareSampler.isValid()) m_rhiDevice->destroySampler(m_shadowCompareSampler);
-    if (m_blockTextureSampler.isValid()) m_rhiDevice->destroySampler(m_blockTextureSampler);
-    if (m_textureSampler.isValid()) m_rhiDevice->destroySampler(m_textureSampler);
-    if (m_foliageColormapView.isValid()) m_rhiDevice->destroyTextureView(m_foliageColormapView);
-    if (m_grassColormapView.isValid()) m_rhiDevice->destroyTextureView(m_grassColormapView);
-    if (m_lightmapNightView.isValid()) m_rhiDevice->destroyTextureView(m_lightmapNightView);
-    if (m_lightmapDayView.isValid()) m_rhiDevice->destroyTextureView(m_lightmapDayView);
-    if (m_blockTextureArrayView.isValid()) m_rhiDevice->destroyTextureView(m_blockTextureArrayView);
-    if (m_itemAtlasView.isValid()) m_rhiDevice->destroyTextureView(m_itemAtlasView);
-    if (m_steveTextureView.isValid()) m_rhiDevice->destroyTextureView(m_steveTextureView);
+    if (m_shadowUniformBuffer.isValid())
+        m_rhiDevice->destroyBuffer(m_shadowUniformBuffer);
+    if (m_shadowRawSampler.isValid())
+        m_rhiDevice->destroySampler(m_shadowRawSampler);
+    if (m_shadowCompareSampler.isValid())
+        m_rhiDevice->destroySampler(m_shadowCompareSampler);
+    if (m_blockTextureSampler.isValid())
+        m_rhiDevice->destroySampler(m_blockTextureSampler);
+    if (m_textureSampler.isValid())
+        m_rhiDevice->destroySampler(m_textureSampler);
+    if (m_foliageColormapView.isValid())
+        m_rhiDevice->destroyTextureView(m_foliageColormapView);
+    if (m_grassColormapView.isValid())
+        m_rhiDevice->destroyTextureView(m_grassColormapView);
+    if (m_lightmapNightView.isValid())
+        m_rhiDevice->destroyTextureView(m_lightmapNightView);
+    if (m_lightmapDayView.isValid())
+        m_rhiDevice->destroyTextureView(m_lightmapDayView);
+    if (m_blockTextureArrayView.isValid())
+        m_rhiDevice->destroyTextureView(m_blockTextureArrayView);
+    if (m_itemAtlasView.isValid())
+        m_rhiDevice->destroyTextureView(m_itemAtlasView);
+    if (m_steveTextureView.isValid())
+        m_rhiDevice->destroyTextureView(m_steveTextureView);
     m_blockTextureSampler = {};
     m_textureSampler = {};
     m_foliageColormapView = {};
@@ -509,10 +485,8 @@ void FirstPersonHeldItemRenderer::destroyRhiTextureResources() {
 }
 
 void FirstPersonHeldItemRenderer::createArmRhiResources() {
-    const auto vertexSource = renderer::rhi::loadShaderSource(
-        "assets/shaders/held_arm_rhi.vert");
-    const auto fragmentSource = renderer::rhi::loadShaderSource(
-        "assets/shaders/held_arm_rhi.frag");
+    const auto vertexSource = renderer::rhi::loadShaderSource("assets/shaders/held_arm_rhi.vert");
+    const auto fragmentSource = renderer::rhi::loadShaderSource("assets/shaders/held_arm_rhi.frag");
     if (!vertexSource || !fragmentSource) {
         std::abort();
     }
@@ -530,16 +504,15 @@ void FirstPersonHeldItemRenderer::createArmRhiResources() {
 
     RhiBindGroupLayoutDesc bindGroupLayoutDesc;
     bindGroupLayoutDesc.debugName = "FirstPerson.Arm.BindGroupLayout";
-    bindGroupLayoutDesc.entries.push_back({0u, RhiBindingType::CombinedTextureSampler,
-                                           rhiFlag(RhiShaderStage::Fragment), 1u});
+    bindGroupLayoutDesc.entries.push_back(
+        {0u, RhiBindingType::CombinedTextureSampler, rhiFlag(RhiShaderStage::Fragment), 1u});
     m_armBindGroupLayout = m_rhiDevice->createBindGroupLayout(bindGroupLayoutDesc);
 
     RhiPipelineLayoutDesc pipelineLayoutDesc;
     pipelineLayoutDesc.debugName = "FirstPerson.Arm.PipelineLayout";
     pipelineLayoutDesc.bindGroupLayouts.push_back(m_armBindGroupLayout);
     pipelineLayoutDesc.pushConstantBytes = sizeof(glm::mat4) * 2u + sizeof(glm::vec4);
-    pipelineLayoutDesc.pushConstantStages = rhiFlag(RhiShaderStage::Vertex) |
-                                            rhiFlag(RhiShaderStage::Fragment);
+    pipelineLayoutDesc.pushConstantStages = rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment);
     m_armPipelineLayout = m_rhiDevice->createPipelineLayout(pipelineLayoutDesc);
 
     RhiGraphicsPipelineDesc pipelineDesc;
@@ -548,11 +521,9 @@ void FirstPersonHeldItemRenderer::createArmRhiResources() {
     pipelineDesc.fragmentShader = m_armFragmentShader;
     pipelineDesc.layout = m_armPipelineLayout;
     pipelineDesc.vertexInput.bindings = {{0u, sizeof(SteveVertex), RhiVertexInputRate::Vertex}};
-    pipelineDesc.vertexInput.attributes = {
-        {0u, 0u, RhiVertexFormat::Float3, offsetof(SteveVertex, x)},
-        {1u, 0u, RhiVertexFormat::Float2, offsetof(SteveVertex, u)},
-        {2u, 0u, RhiVertexFormat::Float3, offsetof(SteveVertex, nx)}
-    };
+    pipelineDesc.vertexInput.attributes = {{0u, 0u, RhiVertexFormat::Float3, offsetof(SteveVertex, x)},
+                                           {1u, 0u, RhiVertexFormat::Float2, offsetof(SteveVertex, u)},
+                                           {2u, 0u, RhiVertexFormat::Float3, offsetof(SteveVertex, nx)}};
     pipelineDesc.depthStencil.depthTestEnabled = true;
     pipelineDesc.depthStencil.depthWriteEnabled = true;
     pipelineDesc.depthStencil.depthCompare = RhiCompareOp::Always;
@@ -574,20 +545,25 @@ void FirstPersonHeldItemRenderer::createArmRhiResources() {
     textureEntry.resource.combinedTextureSampler = {m_steveTextureView, m_textureSampler};
     bindGroupDesc.entries.push_back(textureEntry);
     m_armBindGroup = m_rhiDevice->createBindGroup(bindGroupDesc);
-    if (!m_armVertexShader.isValid() || !m_armFragmentShader.isValid() ||
-        !m_armBindGroupLayout.isValid() || !m_armPipelineLayout.isValid() ||
-        !m_armPipeline.isValid() || !m_armBindGroup.isValid()) {
+    if (!m_armVertexShader.isValid() || !m_armFragmentShader.isValid() || !m_armBindGroupLayout.isValid() ||
+        !m_armPipelineLayout.isValid() || !m_armPipeline.isValid() || !m_armBindGroup.isValid()) {
         std::abort();
     }
 }
 
 void FirstPersonHeldItemRenderer::destroyArmRhiResources() {
-    if (m_armBindGroup.isValid()) m_rhiDevice->destroyBindGroup(m_armBindGroup);
-    if (m_armPipeline.isValid()) m_rhiDevice->destroyPipeline(m_armPipeline);
-    if (m_armPipelineLayout.isValid()) m_rhiDevice->destroyPipelineLayout(m_armPipelineLayout);
-    if (m_armBindGroupLayout.isValid()) m_rhiDevice->destroyBindGroupLayout(m_armBindGroupLayout);
-    if (m_armFragmentShader.isValid()) m_rhiDevice->destroyShader(m_armFragmentShader);
-    if (m_armVertexShader.isValid()) m_rhiDevice->destroyShader(m_armVertexShader);
+    if (m_armBindGroup.isValid())
+        m_rhiDevice->destroyBindGroup(m_armBindGroup);
+    if (m_armPipeline.isValid())
+        m_rhiDevice->destroyPipeline(m_armPipeline);
+    if (m_armPipelineLayout.isValid())
+        m_rhiDevice->destroyPipelineLayout(m_armPipelineLayout);
+    if (m_armBindGroupLayout.isValid())
+        m_rhiDevice->destroyBindGroupLayout(m_armBindGroupLayout);
+    if (m_armFragmentShader.isValid())
+        m_rhiDevice->destroyShader(m_armFragmentShader);
+    if (m_armVertexShader.isValid())
+        m_rhiDevice->destroyShader(m_armVertexShader);
     m_armBindGroup = {};
     m_armPipeline = {};
     m_armPipelineLayout = {};
@@ -597,11 +573,10 @@ void FirstPersonHeldItemRenderer::destroyArmRhiResources() {
 }
 
 void FirstPersonHeldItemRenderer::createItemRhiResources() {
-    const auto vertexSource = renderer::rhi::loadShaderSource(
-        "assets/shaders/held_item_rhi.vert");
-    const auto fragmentSource = renderer::rhi::loadShaderSource(
-        "assets/shaders/held_item_rhi.frag");
-    if (!vertexSource || !fragmentSource) std::abort();
+    const auto vertexSource = renderer::rhi::loadShaderSource("assets/shaders/held_item_rhi.vert");
+    const auto fragmentSource = renderer::rhi::loadShaderSource("assets/shaders/held_item_rhi.frag");
+    if (!vertexSource || !fragmentSource)
+        std::abort();
     RhiShaderDesc shaderDesc;
     shaderDesc.debugName = "FirstPerson.Item.Vertex";
     shaderDesc.stage = RhiShaderStage::Vertex;
@@ -615,15 +590,14 @@ void FirstPersonHeldItemRenderer::createItemRhiResources() {
     m_itemFragmentShader = m_rhiDevice->createShader(shaderDesc);
     RhiBindGroupLayoutDesc bindGroupLayoutDesc;
     bindGroupLayoutDesc.debugName = "FirstPerson.Item.BindGroupLayout";
-    bindGroupLayoutDesc.entries.push_back({0u, RhiBindingType::CombinedTextureSampler,
-                                           rhiFlag(RhiShaderStage::Fragment), 1u});
+    bindGroupLayoutDesc.entries.push_back(
+        {0u, RhiBindingType::CombinedTextureSampler, rhiFlag(RhiShaderStage::Fragment), 1u});
     m_itemBindGroupLayout = m_rhiDevice->createBindGroupLayout(bindGroupLayoutDesc);
     RhiPipelineLayoutDesc pipelineLayoutDesc;
     pipelineLayoutDesc.debugName = "FirstPerson.Item.PipelineLayout";
     pipelineLayoutDesc.bindGroupLayouts.push_back(m_itemBindGroupLayout);
     pipelineLayoutDesc.pushConstantBytes = sizeof(glm::mat4) * 2u + sizeof(glm::vec4);
-    pipelineLayoutDesc.pushConstantStages = rhiFlag(RhiShaderStage::Vertex) |
-                                            rhiFlag(RhiShaderStage::Fragment);
+    pipelineLayoutDesc.pushConstantStages = rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment);
     m_itemPipelineLayout = m_rhiDevice->createPipelineLayout(pipelineLayoutDesc);
     RhiGraphicsPipelineDesc pipelineDesc;
     pipelineDesc.debugName = "FirstPerson.Item.Pipeline";
@@ -631,12 +605,10 @@ void FirstPersonHeldItemRenderer::createItemRhiResources() {
     pipelineDesc.fragmentShader = m_itemFragmentShader;
     pipelineDesc.layout = m_itemPipelineLayout;
     pipelineDesc.vertexInput.bindings = {{0u, sizeof(ItemModelVertex), RhiVertexInputRate::Vertex}};
-    pipelineDesc.vertexInput.attributes = {
-        {0u, 0u, RhiVertexFormat::Float3, offsetof(ItemModelVertex, x)},
-        {1u, 0u, RhiVertexFormat::Float2, offsetof(ItemModelVertex, u)},
-        {2u, 0u, RhiVertexFormat::Float, offsetof(ItemModelVertex, shade)},
-        {3u, 0u, RhiVertexFormat::Float3, offsetof(ItemModelVertex, nx)}
-    };
+    pipelineDesc.vertexInput.attributes = {{0u, 0u, RhiVertexFormat::Float3, offsetof(ItemModelVertex, x)},
+                                           {1u, 0u, RhiVertexFormat::Float2, offsetof(ItemModelVertex, u)},
+                                           {2u, 0u, RhiVertexFormat::Float, offsetof(ItemModelVertex, shade)},
+                                           {3u, 0u, RhiVertexFormat::Float3, offsetof(ItemModelVertex, nx)}};
     pipelineDesc.depthStencil.depthCompare = RhiCompareOp::Always;
     pipelineDesc.colorFormats = {RhiTextureFormat::Rgba16Float};
     pipelineDesc.depthFormat = RhiTextureFormat::Depth32Float;
@@ -655,18 +627,24 @@ void FirstPersonHeldItemRenderer::createItemRhiResources() {
     textureEntry.resource.combinedTextureSampler = {m_itemAtlasView, m_textureSampler};
     bindGroupDesc.entries.push_back(textureEntry);
     m_itemBindGroup = m_rhiDevice->createBindGroup(bindGroupDesc);
-    if (!m_itemVertexShader.isValid() || !m_itemFragmentShader.isValid() ||
-        !m_itemBindGroupLayout.isValid() || !m_itemPipelineLayout.isValid() ||
-        !m_itemPipeline.isValid() || !m_itemBindGroup.isValid()) std::abort();
+    if (!m_itemVertexShader.isValid() || !m_itemFragmentShader.isValid() || !m_itemBindGroupLayout.isValid() ||
+        !m_itemPipelineLayout.isValid() || !m_itemPipeline.isValid() || !m_itemBindGroup.isValid())
+        std::abort();
 }
 
 void FirstPersonHeldItemRenderer::destroyItemRhiResources() {
-    if (m_itemBindGroup.isValid()) m_rhiDevice->destroyBindGroup(m_itemBindGroup);
-    if (m_itemPipeline.isValid()) m_rhiDevice->destroyPipeline(m_itemPipeline);
-    if (m_itemPipelineLayout.isValid()) m_rhiDevice->destroyPipelineLayout(m_itemPipelineLayout);
-    if (m_itemBindGroupLayout.isValid()) m_rhiDevice->destroyBindGroupLayout(m_itemBindGroupLayout);
-    if (m_itemFragmentShader.isValid()) m_rhiDevice->destroyShader(m_itemFragmentShader);
-    if (m_itemVertexShader.isValid()) m_rhiDevice->destroyShader(m_itemVertexShader);
+    if (m_itemBindGroup.isValid())
+        m_rhiDevice->destroyBindGroup(m_itemBindGroup);
+    if (m_itemPipeline.isValid())
+        m_rhiDevice->destroyPipeline(m_itemPipeline);
+    if (m_itemPipelineLayout.isValid())
+        m_rhiDevice->destroyPipelineLayout(m_itemPipelineLayout);
+    if (m_itemBindGroupLayout.isValid())
+        m_rhiDevice->destroyBindGroupLayout(m_itemBindGroupLayout);
+    if (m_itemFragmentShader.isValid())
+        m_rhiDevice->destroyShader(m_itemFragmentShader);
+    if (m_itemVertexShader.isValid())
+        m_rhiDevice->destroyShader(m_itemVertexShader);
     m_itemBindGroup = {};
     m_itemPipeline = {};
     m_itemPipelineLayout = {};
@@ -676,11 +654,10 @@ void FirstPersonHeldItemRenderer::destroyItemRhiResources() {
 }
 
 void FirstPersonHeldItemRenderer::createBlockRhiResources() {
-    const auto vertexSource = renderer::rhi::loadShaderSource(
-        "assets/shaders/held_block_rhi.vert");
-    const auto fragmentSource = renderer::rhi::loadShaderSource(
-        "assets/shaders/held_block_rhi.frag");
-    if (!vertexSource || !fragmentSource) std::abort();
+    const auto vertexSource = renderer::rhi::loadShaderSource("assets/shaders/held_block_rhi.vert");
+    const auto fragmentSource = renderer::rhi::loadShaderSource("assets/shaders/held_block_rhi.frag");
+    if (!vertexSource || !fragmentSource)
+        std::abort();
     RhiShaderDesc shaderDesc;
     shaderDesc.debugName = "FirstPerson.Block.Vertex";
     shaderDesc.stage = RhiShaderStage::Vertex;
@@ -695,16 +672,15 @@ void FirstPersonHeldItemRenderer::createBlockRhiResources() {
     RhiBindGroupLayoutDesc bindGroupLayoutDesc;
     bindGroupLayoutDesc.debugName = "FirstPerson.Block.BindGroupLayout";
     for (uint32_t binding = 0u; binding < 3u; ++binding) {
-        bindGroupLayoutDesc.entries.push_back({binding, RhiBindingType::CombinedTextureSampler,
-                                               rhiFlag(RhiShaderStage::Fragment), 1u});
+        bindGroupLayoutDesc.entries.push_back(
+            {binding, RhiBindingType::CombinedTextureSampler, rhiFlag(RhiShaderStage::Fragment), 1u});
     }
     m_blockBindGroupLayout = m_rhiDevice->createBindGroupLayout(bindGroupLayoutDesc);
     RhiPipelineLayoutDesc pipelineLayoutDesc;
     pipelineLayoutDesc.debugName = "FirstPerson.Block.PipelineLayout";
     pipelineLayoutDesc.bindGroupLayouts.push_back(m_blockBindGroupLayout);
     pipelineLayoutDesc.pushConstantBytes = sizeof(glm::mat4) * 2u + sizeof(glm::vec4);
-    pipelineLayoutDesc.pushConstantStages = rhiFlag(RhiShaderStage::Vertex) |
-                                            rhiFlag(RhiShaderStage::Fragment);
+    pipelineLayoutDesc.pushConstantStages = rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment);
     m_blockPipelineLayout = m_rhiDevice->createPipelineLayout(pipelineLayoutDesc);
     RhiGraphicsPipelineDesc pipelineDesc;
     pipelineDesc.debugName = "FirstPerson.Block.Pipeline";
@@ -725,30 +701,34 @@ void FirstPersonHeldItemRenderer::createBlockRhiResources() {
     m_blockPipeline = m_rhiDevice->createGraphicsPipeline(pipelineDesc);
     RhiBindGroupDesc bindGroupDesc;
     bindGroupDesc.layout = m_blockBindGroupLayout;
-    const std::array<RhiTextureViewHandle, 3> views = {
-        m_blockTextureArrayView, m_grassColormapView, m_foliageColormapView
-    };
+    const std::array<RhiTextureViewHandle, 3> views = {m_blockTextureArrayView, m_grassColormapView,
+                                                       m_foliageColormapView};
     for (uint32_t binding = 0u; binding < views.size(); ++binding) {
         RhiBindGroupEntry entry;
         entry.binding = binding;
-        entry.resource.combinedTextureSampler = {
-            views[binding], binding == 0u ? m_blockTextureSampler : m_textureSampler
-        };
+        entry.resource.combinedTextureSampler = {views[binding],
+                                                 binding == 0u ? m_blockTextureSampler : m_textureSampler};
         bindGroupDesc.entries.push_back(entry);
     }
     m_blockBindGroup = m_rhiDevice->createBindGroup(bindGroupDesc);
-    if (!m_blockVertexShader.isValid() || !m_blockFragmentShader.isValid() ||
-        !m_blockBindGroupLayout.isValid() || !m_blockPipelineLayout.isValid() ||
-        !m_blockPipeline.isValid() || !m_blockBindGroup.isValid()) std::abort();
+    if (!m_blockVertexShader.isValid() || !m_blockFragmentShader.isValid() || !m_blockBindGroupLayout.isValid() ||
+        !m_blockPipelineLayout.isValid() || !m_blockPipeline.isValid() || !m_blockBindGroup.isValid())
+        std::abort();
 }
 
 void FirstPersonHeldItemRenderer::destroyBlockRhiResources() {
-    if (m_blockBindGroup.isValid()) m_rhiDevice->destroyBindGroup(m_blockBindGroup);
-    if (m_blockPipeline.isValid()) m_rhiDevice->destroyPipeline(m_blockPipeline);
-    if (m_blockPipelineLayout.isValid()) m_rhiDevice->destroyPipelineLayout(m_blockPipelineLayout);
-    if (m_blockBindGroupLayout.isValid()) m_rhiDevice->destroyBindGroupLayout(m_blockBindGroupLayout);
-    if (m_blockFragmentShader.isValid()) m_rhiDevice->destroyShader(m_blockFragmentShader);
-    if (m_blockVertexShader.isValid()) m_rhiDevice->destroyShader(m_blockVertexShader);
+    if (m_blockBindGroup.isValid())
+        m_rhiDevice->destroyBindGroup(m_blockBindGroup);
+    if (m_blockPipeline.isValid())
+        m_rhiDevice->destroyPipeline(m_blockPipeline);
+    if (m_blockPipelineLayout.isValid())
+        m_rhiDevice->destroyPipelineLayout(m_blockPipelineLayout);
+    if (m_blockBindGroupLayout.isValid())
+        m_rhiDevice->destroyBindGroupLayout(m_blockBindGroupLayout);
+    if (m_blockFragmentShader.isValid())
+        m_rhiDevice->destroyShader(m_blockFragmentShader);
+    if (m_blockVertexShader.isValid())
+        m_rhiDevice->destroyShader(m_blockVertexShader);
     m_blockBindGroup = {};
     m_blockPipeline = {};
     m_blockPipelineLayout = {};
@@ -762,7 +742,8 @@ void FirstPersonHeldItemRenderer::setShadowData(const ShadowData& data) {
     synchronizeShadowTextureViews();
 }
 
-FirstPersonHeldItemRenderer::ShadowData FirstPersonHeldItemRenderer::fromFirstPersonShadowData(const FirstPersonShadowData& sd) {
+FirstPersonHeldItemRenderer::ShadowData
+FirstPersonHeldItemRenderer::fromFirstPersonShadowData(const FirstPersonShadowData& sd) {
     ShadowData shadow{};
     for (int i = 0; i < 4; ++i) {
         shadow.cascadeViewProj[i] = sd.cascadeViewProj[i];
@@ -793,11 +774,8 @@ FirstPersonHeldItemRenderer::ShadowData FirstPersonHeldItemRenderer::fromFirstPe
     return shadow;
 }
 
-void FirstPersonHeldItemRenderer::prepareFrame(const int width,
-                                               const int height,
-                                               const Inventory& inventory,
-                                               const FirstPersonHeldItemMotion& motion,
-                                               const float timeSeconds) {
+void FirstPersonHeldItemRenderer::prepareFrame(const int width, const int height, const Inventory& inventory,
+                                               const FirstPersonHeldItemMotion& motion, const float timeSeconds) {
     m_preparedFrame = {};
     if (!m_initialized || m_resourceMgr == nullptr) {
         return;
@@ -826,11 +804,9 @@ void FirstPersonHeldItemRenderer::prepareFrame(const int width,
     m_lagYawDegrees += wrapDegrees(motion.cameraYawDegrees - m_lagYawDegrees) * lagBlend;
     m_lagPitchDegrees += (motion.cameraPitchDegrees - m_lagPitchDegrees) * lagBlend;
 
-    const float yawLag = std::clamp(wrapDegrees(motion.cameraYawDegrees - m_lagYawDegrees),
-                                    -m_config.viewLagMaxDegrees,
+    const float yawLag = std::clamp(wrapDegrees(motion.cameraYawDegrees - m_lagYawDegrees), -m_config.viewLagMaxDegrees,
                                     m_config.viewLagMaxDegrees);
-    const float pitchLag = std::clamp(motion.cameraPitchDegrees - m_lagPitchDegrees,
-                                      -m_config.viewLagMaxDegrees,
+    const float pitchLag = std::clamp(motion.cameraPitchDegrees - m_lagPitchDegrees, -m_config.viewLagMaxDegrees,
                                       m_config.viewLagMaxDegrees);
     const float lagX = yawLag * m_config.viewLagOffsetX;
     const float lagY = -pitchLag * m_config.viewLagOffsetY;
@@ -879,12 +855,22 @@ void FirstPersonHeldItemRenderer::prepareFrame(const int width,
 
     if (m_visibleItemId == 0) {
         glm::mat4 armModel(1.0f);
-        armModel = glm::translate(armModel, glm::vec3(m_config.armPosX + bobX + lagX + swingSin * m_config.armSwingX,
-                                                      m_config.armPosY + bobY + lagY - equipDrop + swingSinFull * m_config.armSwingY,
-                                                      m_config.armPosZ + swingSin * m_config.armSwingZ));
-        armModel = glm::rotate(armModel, glm::radians(m_config.armPitchDegrees - pitchLag * m_config.viewLagPitchDegrees) + swingSin * glm::radians(m_config.armSwingPitchDegrees), glm::vec3(1.0f, 0.0f, 0.0f));
-        armModel = glm::rotate(armModel, glm::radians(m_config.armYawDegrees - yawLag * m_config.viewLagYawDegrees) + swingSin * glm::radians(m_config.armSwingYawDegrees), glm::vec3(0.0f, 1.0f, 0.0f));
-        armModel = glm::rotate(armModel, glm::radians(m_config.armRollDegrees) + bobRoll + swingSinFull * glm::radians(m_config.armSwingRollDegrees), glm::vec3(0.0f, 0.0f, 1.0f));
+        armModel = glm::translate(
+            armModel, glm::vec3(m_config.armPosX + bobX + lagX + swingSin * m_config.armSwingX,
+                                m_config.armPosY + bobY + lagY - equipDrop + swingSinFull * m_config.armSwingY,
+                                m_config.armPosZ + swingSin * m_config.armSwingZ));
+        armModel = glm::rotate(armModel,
+                               glm::radians(m_config.armPitchDegrees - pitchLag * m_config.viewLagPitchDegrees) +
+                                   swingSin * glm::radians(m_config.armSwingPitchDegrees),
+                               glm::vec3(1.0f, 0.0f, 0.0f));
+        armModel = glm::rotate(armModel,
+                               glm::radians(m_config.armYawDegrees - yawLag * m_config.viewLagYawDegrees) +
+                                   swingSin * glm::radians(m_config.armSwingYawDegrees),
+                               glm::vec3(0.0f, 1.0f, 0.0f));
+        armModel = glm::rotate(armModel,
+                               glm::radians(m_config.armRollDegrees) + bobRoll +
+                                   swingSinFull * glm::radians(m_config.armSwingRollDegrees),
+                               glm::vec3(0.0f, 0.0f, 1.0f));
         armModel = glm::scale(armModel, glm::vec3(m_config.armScale));
         m_preparedFrame = {PreparedDrawKind::Arm, view, viewProj, armModel, 0, width, height};
         return;
@@ -901,12 +887,22 @@ void FirstPersonHeldItemRenderer::prepareFrame(const int width,
     const float yawDegrees = useBlockMesh ? m_config.blockYawDegrees : m_config.itemYawDegrees;
 
     glm::mat4 itemModel(1.0f);
-    itemModel = glm::translate(itemModel, glm::vec3(m_config.itemPosX + bobX + lagX + swingSin * m_config.itemSwingX,
-                                                    m_config.itemPosY + bobY + lagY - equipDrop + swingSinFull * m_config.itemSwingY,
-                                                    m_config.itemPosZ + swingSin * m_config.itemSwingZ));
-    itemModel = glm::rotate(itemModel, glm::radians(pitchDegrees - pitchLag * m_config.viewLagPitchDegrees) + swingSin * glm::radians(m_config.itemSwingPitchDegrees), glm::vec3(1.0f, 0.0f, 0.0f));
-    itemModel = glm::rotate(itemModel, glm::radians(yawDegrees - yawLag * m_config.viewLagYawDegrees) + swingSin * glm::radians(m_config.itemSwingYawDegrees), glm::vec3(0.0f, 1.0f, 0.0f));
-    itemModel = glm::rotate(itemModel, glm::radians(m_config.itemRollDegrees) + bobRoll + swingSinFull * glm::radians(m_config.itemSwingRollDegrees), glm::vec3(0.0f, 0.0f, 1.0f));
+    itemModel = glm::translate(
+        itemModel, glm::vec3(m_config.itemPosX + bobX + lagX + swingSin * m_config.itemSwingX,
+                             m_config.itemPosY + bobY + lagY - equipDrop + swingSinFull * m_config.itemSwingY,
+                             m_config.itemPosZ + swingSin * m_config.itemSwingZ));
+    itemModel = glm::rotate(itemModel,
+                            glm::radians(pitchDegrees - pitchLag * m_config.viewLagPitchDegrees) +
+                                swingSin * glm::radians(m_config.itemSwingPitchDegrees),
+                            glm::vec3(1.0f, 0.0f, 0.0f));
+    itemModel = glm::rotate(itemModel,
+                            glm::radians(yawDegrees - yawLag * m_config.viewLagYawDegrees) +
+                                swingSin * glm::radians(m_config.itemSwingYawDegrees),
+                            glm::vec3(0.0f, 1.0f, 0.0f));
+    itemModel = glm::rotate(itemModel,
+                            glm::radians(m_config.itemRollDegrees) + bobRoll +
+                                swingSinFull * glm::radians(m_config.itemSwingRollDegrees),
+                            glm::vec3(0.0f, 0.0f, 1.0f));
 
     if (useBlockMesh) {
         itemModel = glm::scale(itemModel, glm::vec3(m_config.blockScale));
@@ -918,8 +914,7 @@ void FirstPersonHeldItemRenderer::prepareFrame(const int width,
     if (!useItemMesh && !useBlockMesh) {
         return;
     }
-    const PreparedDrawKind drawKind = useBlockMesh ? PreparedDrawKind::Block
-                                                   : PreparedDrawKind::Item;
+    const PreparedDrawKind drawKind = useBlockMesh ? PreparedDrawKind::Block : PreparedDrawKind::Item;
     m_preparedFrame = {drawKind, view, viewProj, itemModel, m_visibleItemId, width, height};
 }
 
@@ -932,44 +927,23 @@ void FirstPersonHeldItemRenderer::prepareRhiFrame(RhiCommandList& commandList) {
     for (std::size_t index = 0u; index < uniforms.cascades.size(); ++index) {
         const float splitNear = index == 0u ? 0.0f : m_shadowData.cascadeSplitFar[index - 1u];
         uniforms.cascades[index].viewProj = m_shadowData.cascadeViewProj[index];
-        uniforms.cascades[index].splitNearFarTexelResolution = {
-            splitNear,
-            m_shadowData.cascadeSplitFar[index],
-            m_shadowData.cascadeTexelWorldSize[index],
-            index >= 2u ? 0.5f : 1.0f
-        };
+        uniforms.cascades[index].splitNearFarTexelResolution = {splitNear, m_shadowData.cascadeSplitFar[index],
+                                                                m_shadowData.cascadeTexelWorldSize[index],
+                                                                index >= 2u ? 0.5f : 1.0f};
         uniforms.cascades[index].depthExtentPadding.x = m_shadowData.cascadeDepthExtent[index];
     }
-    uniforms.cameraPosShadowDistance = {
-        m_shadowData.cameraPos, m_shadowData.shadowDistance
-    };
-    uniforms.sunDirectionConstantBias = {
-        m_shadowData.sunDirection, m_shadowData.constantBias
-    };
-    uniforms.shadowParams = {
-        m_shadowData.slopeBias,
-        m_shadowData.normalOffset,
-        m_shadowData.softness,
-        m_shadowData.pcssStrength
-    };
-    uniforms.shadowFlags = {
-        m_shadowData.cascadeCount,
-        m_shadowData.softShadowsEnabled,
-        m_shadowData.pcssShadowsEnabled,
-        m_shadowData.shadowsEnabled
-    };
-    uniforms.lighting = {
-        m_shadowData.skyIntensity,
-        m_shadowData.ambientStrength,
-        m_environmentSunlight,
-        m_environmentBlockLight
-    };
+    uniforms.cameraPosShadowDistance = {m_shadowData.cameraPos, m_shadowData.shadowDistance};
+    uniforms.sunDirectionConstantBias = {m_shadowData.sunDirection, m_shadowData.constantBias};
+    uniforms.shadowParams = {m_shadowData.slopeBias, m_shadowData.normalOffset, m_shadowData.softness,
+                             m_shadowData.pcssStrength};
+    uniforms.shadowFlags = {m_shadowData.cascadeCount, m_shadowData.softShadowsEnabled, m_shadowData.pcssShadowsEnabled,
+                            m_shadowData.shadowsEnabled};
+    uniforms.lighting = {m_shadowData.skyIntensity, m_shadowData.ambientStrength, m_environmentSunlight,
+                         m_environmentBlockLight};
     uniforms.hdrScalePadding.x = m_sceneHdrScale;
-    commandList.bufferBarrier({m_shadowUniformBuffer, RhiResourceState::UniformBuffer,
-                               RhiResourceState::TransferDst});
+    commandList.bufferBarrier({m_shadowUniformBuffer, RhiResourceState::UniformBuffer, RhiResourceState::TransferDst});
     commandList.updateBuffer(m_shadowUniformBuffer, 0u, &uniforms, sizeof(uniforms));
-    commandList.bufferBarrier({m_shadowUniformBuffer, RhiResourceState::TransferDst,
-                               RhiResourceState::UniformBuffer});
+    commandList.bufferBarrier({m_shadowUniformBuffer, RhiResourceState::TransferDst, RhiResourceState::UniformBuffer});
 }
 
 void FirstPersonHeldItemRenderer::renderPrepared(RhiCommandList& commandList) {
@@ -985,19 +959,16 @@ void FirstPersonHeldItemRenderer::renderPrepared(RhiCommandList& commandList) {
         const PushConstants constants{
             m_preparedFrame.viewProj,
             m_preparedFrame.model,
-            {m_environmentSunlight, m_environmentBlockLight,
-             m_shadowData.skyIntensity, m_sceneHdrScale}
-        };
-        commandList.setViewport({0.0f, 0.0f,
-            static_cast<float>(m_preparedFrame.width),
-            static_cast<float>(m_preparedFrame.height), 0.0f, 0.08f});
-        commandList.setScissor({0, 0, static_cast<uint32_t>(m_preparedFrame.width),
-                                static_cast<uint32_t>(m_preparedFrame.height)});
+            {m_environmentSunlight, m_environmentBlockLight, m_shadowData.skyIntensity, m_sceneHdrScale}};
+        commandList.setViewport({0.0f, 0.0f, static_cast<float>(m_preparedFrame.width),
+                                 static_cast<float>(m_preparedFrame.height), 0.0f, 0.08f});
+        commandList.setScissor(
+            {0, 0, static_cast<uint32_t>(m_preparedFrame.width), static_cast<uint32_t>(m_preparedFrame.height)});
         commandList.setGraphicsPipeline(m_armPipeline);
         commandList.setBindGroup(0u, m_armBindGroup);
         commandList.setVertexBuffer(0u, m_rightArmMesh.rhiVertexBuffer, 0u);
         commandList.pushConstants(&constants, sizeof(constants),
-            rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment));
+                                  rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment));
         commandList.draw(m_rightArmMesh.vertexCount, 1u, 0u, 0u);
         return;
     }
@@ -1015,26 +986,23 @@ void FirstPersonHeldItemRenderer::renderPrepared(RhiCommandList& commandList) {
         const PushConstants constants{
             m_preparedFrame.viewProj,
             m_preparedFrame.model,
-            {m_environmentSunlight, m_environmentBlockLight,
-             m_shadowData.skyIntensity, m_sceneHdrScale}
-        };
-        commandList.setViewport({0.0f, 0.0f,
-            static_cast<float>(m_preparedFrame.width),
-            static_cast<float>(m_preparedFrame.height), 0.0f, 0.08f});
-        commandList.setScissor({0, 0, static_cast<uint32_t>(m_preparedFrame.width),
-                                static_cast<uint32_t>(m_preparedFrame.height)});
+            {m_environmentSunlight, m_environmentBlockLight, m_shadowData.skyIntensity, m_sceneHdrScale}};
+        commandList.setViewport({0.0f, 0.0f, static_cast<float>(m_preparedFrame.width),
+                                 static_cast<float>(m_preparedFrame.height), 0.0f, 0.08f});
+        commandList.setScissor(
+            {0, 0, static_cast<uint32_t>(m_preparedFrame.width), static_cast<uint32_t>(m_preparedFrame.height)});
         commandList.setGraphicsPipeline(m_itemPipeline);
         commandList.setBindGroup(0u, m_itemBindGroup);
         commandList.setVertexBuffer(0u, meshIt->second.rhiVertexBuffer, 0u);
         commandList.pushConstants(&constants, sizeof(constants),
-            rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment));
+                                  rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment));
         commandList.draw(meshIt->second.vertexCount, 1u, 0u, 0u);
         return;
     }
     const BlockID blockId = ItemRegistry::toRenderBlock(m_preparedFrame.itemId);
     const auto meshIt = m_blockMeshes.find(blockId);
-    if (blockId == 0 || meshIt == m_blockMeshes.end() ||
-        !meshIt->second.rhiVertexBuffer.isValid() || meshIt->second.vertexCount == 0u) {
+    if (blockId == 0 || meshIt == m_blockMeshes.end() || !meshIt->second.rhiVertexBuffer.isValid() ||
+        meshIt->second.vertexCount == 0u) {
         std::abort();
     }
     struct PushConstants {
@@ -1045,19 +1013,16 @@ void FirstPersonHeldItemRenderer::renderPrepared(RhiCommandList& commandList) {
     const PushConstants constants{
         m_preparedFrame.viewProj,
         m_preparedFrame.model,
-        {m_environmentSunlight, m_environmentBlockLight,
-         m_shadowData.skyIntensity, m_sceneHdrScale}
-    };
-    commandList.setViewport({0.0f, 0.0f,
-        static_cast<float>(m_preparedFrame.width),
-        static_cast<float>(m_preparedFrame.height), 0.0f, 0.08f});
-    commandList.setScissor({0, 0, static_cast<uint32_t>(m_preparedFrame.width),
-                            static_cast<uint32_t>(m_preparedFrame.height)});
+        {m_environmentSunlight, m_environmentBlockLight, m_shadowData.skyIntensity, m_sceneHdrScale}};
+    commandList.setViewport({0.0f, 0.0f, static_cast<float>(m_preparedFrame.width),
+                             static_cast<float>(m_preparedFrame.height), 0.0f, 0.08f});
+    commandList.setScissor(
+        {0, 0, static_cast<uint32_t>(m_preparedFrame.width), static_cast<uint32_t>(m_preparedFrame.height)});
     commandList.setGraphicsPipeline(m_blockPipeline);
     commandList.setBindGroup(0u, m_blockBindGroup);
     commandList.setVertexBuffer(0u, meshIt->second.rhiVertexBuffer, 0u);
     commandList.pushConstants(&constants, sizeof(constants),
-        rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment));
+                              rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment));
     commandList.draw(meshIt->second.vertexCount, 1u, 0u, 0u);
 }
 
@@ -1112,9 +1077,7 @@ FirstPersonHeldItemRenderer::Mesh FirstPersonHeldItemRenderer::buildItemMesh(con
     }
 
     std::vector<ItemModelVertex> vertices;
-    if (!buildExtrudedItemMesh(m_resourceMgr->getItemTextureAtlas(),
-                               m_resourceMgr->getItemTexturePixels(),
-                               tileIndex,
+    if (!buildExtrudedItemMesh(m_resourceMgr->getItemTextureAtlas(), m_resourceMgr->getItemTexturePixels(), tileIndex,
                                vertices)) {
         return mesh;
     }
@@ -1123,13 +1086,12 @@ FirstPersonHeldItemRenderer::Mesh FirstPersonHeldItemRenderer::buildItemMesh(con
     RhiBufferDesc bufferDesc;
     bufferDesc.debugName = "FirstPerson.ItemMesh.VertexBuffer";
     bufferDesc.size = vertices.size() * sizeof(ItemModelVertex);
-    bufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex) |
-                       rhiFlag(RhiBufferUsage::TransferDst);
+    bufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex) | rhiFlag(RhiBufferUsage::TransferDst);
     bufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
     bufferDesc.initialState = RhiResourceState::VertexBuffer;
     bufferDesc.memoryCategory = RhiMemoryCategory::Geometry;
-    mesh.rhiVertexBuffer = m_rhiDevice->createBuffer(
-        bufferDesc, vertices.data(), vertices.size() * sizeof(ItemModelVertex));
+    mesh.rhiVertexBuffer =
+        m_rhiDevice->createBuffer(bufferDesc, vertices.data(), vertices.size() * sizeof(ItemModelVertex));
     mesh.rhiDevice = m_rhiDevice;
     if (!mesh.rhiVertexBuffer.isValid()) {
         destroyMesh(mesh);
@@ -1148,33 +1110,33 @@ FirstPersonHeldItemRenderer::Mesh FirstPersonHeldItemRenderer::buildRightArmMesh
     const float ymax = 0.0f;
     const float zmin = -0.125f;
     const float zmax = 0.125f;
-    const FaceUvRect uv[6] = {
-        pixelRectToUv(44, 16, 48, 20),
-        pixelRectToUv(48, 16, 52, 20),
-        pixelRectToUv(44, 20, 48, 32),
-        pixelRectToUv(52, 20, 56, 32),
-        pixelRectToUv(40, 20, 44, 32),
-        pixelRectToUv(48, 20, 52, 32)
-    };
+    const FaceUvRect uv[6] = {pixelRectToUv(44, 16, 48, 20), pixelRectToUv(48, 16, 52, 20),
+                              pixelRectToUv(44, 20, 48, 32), pixelRectToUv(52, 20, 56, 32),
+                              pixelRectToUv(40, 20, 44, 32), pixelRectToUv(48, 20, 52, 32)};
 
-    addSteveQuad(vertices, {xmin, ymax, zmax}, {xmax, ymax, zmax}, {xmax, ymax, zmin}, {xmin, ymax, zmin}, uv[0], {0.0f, 1.0f, 0.0f});
-    addSteveQuad(vertices, {xmin, ymin, zmin}, {xmax, ymin, zmin}, {xmax, ymin, zmax}, {xmin, ymin, zmax}, uv[1], {0.0f, -1.0f, 0.0f});
-    addSteveQuad(vertices, {xmin, ymin, zmax}, {xmax, ymin, zmax}, {xmax, ymax, zmax}, {xmin, ymax, zmax}, uv[2], {0.0f, 0.0f, 1.0f});
-    addSteveQuad(vertices, {xmax, ymin, zmin}, {xmin, ymin, zmin}, {xmin, ymax, zmin}, {xmax, ymax, zmin}, uv[3], {0.0f, 0.0f, -1.0f});
-    addSteveQuad(vertices, {xmin, ymin, zmin}, {xmin, ymin, zmax}, {xmin, ymax, zmax}, {xmin, ymax, zmin}, uv[4], {-1.0f, 0.0f, 0.0f});
-    addSteveQuad(vertices, {xmax, ymin, zmax}, {xmax, ymin, zmin}, {xmax, ymax, zmin}, {xmax, ymax, zmax}, uv[5], {1.0f, 0.0f, 0.0f});
+    addSteveQuad(vertices, {xmin, ymax, zmax}, {xmax, ymax, zmax}, {xmax, ymax, zmin}, {xmin, ymax, zmin}, uv[0],
+                 {0.0f, 1.0f, 0.0f});
+    addSteveQuad(vertices, {xmin, ymin, zmin}, {xmax, ymin, zmin}, {xmax, ymin, zmax}, {xmin, ymin, zmax}, uv[1],
+                 {0.0f, -1.0f, 0.0f});
+    addSteveQuad(vertices, {xmin, ymin, zmax}, {xmax, ymin, zmax}, {xmax, ymax, zmax}, {xmin, ymax, zmax}, uv[2],
+                 {0.0f, 0.0f, 1.0f});
+    addSteveQuad(vertices, {xmax, ymin, zmin}, {xmin, ymin, zmin}, {xmin, ymax, zmin}, {xmax, ymax, zmin}, uv[3],
+                 {0.0f, 0.0f, -1.0f});
+    addSteveQuad(vertices, {xmin, ymin, zmin}, {xmin, ymin, zmax}, {xmin, ymax, zmax}, {xmin, ymax, zmin}, uv[4],
+                 {-1.0f, 0.0f, 0.0f});
+    addSteveQuad(vertices, {xmax, ymin, zmax}, {xmax, ymin, zmin}, {xmax, ymax, zmin}, {xmax, ymax, zmax}, uv[5],
+                 {1.0f, 0.0f, 0.0f});
 
     mesh.vertexCount = static_cast<uint32_t>(vertices.size());
     RhiBufferDesc bufferDesc;
     bufferDesc.debugName = "FirstPerson.ArmMesh.VertexBuffer";
     bufferDesc.size = vertices.size() * sizeof(SteveVertex);
-    bufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex) |
-                       rhiFlag(RhiBufferUsage::TransferDst);
+    bufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex) | rhiFlag(RhiBufferUsage::TransferDst);
     bufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
     bufferDesc.initialState = RhiResourceState::VertexBuffer;
     bufferDesc.memoryCategory = RhiMemoryCategory::Geometry;
-    mesh.rhiVertexBuffer = m_rhiDevice->createBuffer(
-        bufferDesc, vertices.data(), vertices.size() * sizeof(SteveVertex));
+    mesh.rhiVertexBuffer =
+        m_rhiDevice->createBuffer(bufferDesc, vertices.data(), vertices.size() * sizeof(SteveVertex));
     mesh.rhiDevice = m_rhiDevice;
     if (!mesh.rhiVertexBuffer.isValid()) {
         destroyMesh(mesh);

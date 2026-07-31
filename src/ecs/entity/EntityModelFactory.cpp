@@ -16,9 +16,7 @@ namespace {
 
 constexpr float kEntityModelUnit = 1.0f / 16.0f;
 
-void applyVisualDefinition(entt::registry& reg,
-                           const entt::entity entity,
-                           const MobEntityDefinition& definition) {
+void applyVisualDefinition(entt::registry& reg, const entt::entity entity, const MobEntityDefinition& definition) {
     auto* visual = reg.try_get<MobVisualComponent>(entity);
     if (visual == nullptr) {
         visual = &reg.emplace<MobVisualComponent>(entity);
@@ -29,10 +27,8 @@ void applyVisualDefinition(entt::registry& reg,
     visual->scale = definition.visualScale;
 }
 
-entt::entity createGenericMob(GameplayRegistry& registry,
-                              const MobEntityDefinition& definition,
-                              const glm::vec3& worldPosition,
-                              const bool gameplayControlled) {
+entt::entity createGenericMob(GameplayRegistry& registry, const MobEntityDefinition& definition,
+                              const glm::vec3& worldPosition, const bool gameplayControlled) {
     std::string error;
     EntityModelRegistry& modelRegistry = EntityModelRegistry::instance();
     if (!modelRegistry.ensureLoaded(&error)) {
@@ -78,10 +74,7 @@ entt::entity createGenericMob(GameplayRegistry& registry,
     for (const EntityModelPartDefinition& part : model->parts) {
         const entt::entity partEntity = reg.create();
         reg.emplace<EntityModelPartComponent>(partEntity, part.name);
-        reg.emplace<LocalTransformComponent>(partEntity,
-                                             part.pivot * kEntityModelUnit,
-                                             part.rotation,
-                                             glm::vec3(1.0f));
+        reg.emplace<LocalTransformComponent>(partEntity, part.pivot * kEntityModelUnit, part.rotation, glm::vec3(1.0f));
         reg.emplace<WorldTransformComponent>(partEntity);
         reg.emplace<ChildrenComponent>(partEntity);
 
@@ -102,10 +95,8 @@ entt::entity createGenericMob(GameplayRegistry& registry,
 
 } // namespace
 
-entt::entity EntityModelFactory::createMob(GameplayRegistry& registry,
-                                           const MobEntityDefinition& definition,
-                                           const glm::vec3& worldPosition,
-                                           const bool gameplayControlled) {
+entt::entity EntityModelFactory::createMob(GameplayRegistry& registry, const MobEntityDefinition& definition,
+                                           const glm::vec3& worldPosition, const bool gameplayControlled) {
     if (definition.model == "humanoid") {
         const entt::entity entity = MobModelFactory::createHumanoidMob(registry, worldPosition, gameplayControlled);
         if (entity != entt::null) {
@@ -117,10 +108,8 @@ entt::entity EntityModelFactory::createMob(GameplayRegistry& registry,
     return createGenericMob(registry, definition, worldPosition, gameplayControlled);
 }
 
-entt::entity EntityModelFactory::createMobReplica(GameplayRegistry& registry,
-                                                  const MobEntityDefinition& definition,
-                                                  const glm::vec3& worldPosition,
-                                                  const float yaw) {
+entt::entity EntityModelFactory::createMobReplica(GameplayRegistry& registry, const MobEntityDefinition& definition,
+                                                  const glm::vec3& worldPosition, const float yaw) {
     const entt::entity root = createMob(registry, definition, worldPosition, false);
     if (root == entt::null) {
         return entt::null;

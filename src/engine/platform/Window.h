@@ -5,7 +5,6 @@
 #ifndef MECRAFT_WINDOW_H
 #define MECRAFT_WINDOW_H
 
-
 #include <string>
 
 struct GLFWwindow;
@@ -55,6 +54,5 @@ private:
     int m_windowedHeight = 0;
     bool m_fullscreen = false;
 };
-
 
 #endif //MECRAFT_WINDOW_H

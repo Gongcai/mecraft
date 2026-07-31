@@ -17,7 +17,9 @@ class GameplayHudPresenter;
 class Camera;
 struct RenderFrameClock;
 
-namespace ecs { class GameplayRegistry; }
+namespace ecs {
+class GameplayRegistry;
+}
 
 /// Orchestrates the per-frame update/render sequence for a gameplay session.
 /// Extracted from Game to reduce its responsibilities.
@@ -26,26 +28,17 @@ class GameFrameOrchestrator {
 public:
     /// Run a fixed timestep update (physics, ECS, world, state machine).
     /// @return true if quit-to-menu was requested
-    bool runFixedUpdate(GameSession& session,
-                        InputManager& input,
-                        GameplayRenderRuntime* renderRuntime,
-                        double fixedStep,
-                        double& accumulator);
+    bool runFixedUpdate(GameSession& session, InputManager& input, GameplayRenderRuntime* renderRuntime,
+                        double fixedStep, double& accumulator);
 
     /// Update audio listener position/orientation from player state.
-    void syncAudioListener(AudioListenerSyncSystem& audioSync,
-                           float deltaTime,
-                           GameSession& session);
+    void syncAudioListener(AudioListenerSyncSystem& audioSync, float deltaTime, GameSession& session);
 
     /// Render a full frame (scene, precipitation, UI).
-    [[nodiscard]] bool renderFrame(GameSession& session,
-                     GameplayRenderRuntime& renderRuntime,
-                     GameplayHudPresenter* hudPresenter,
-                     Window& window,
-                     float frameTime,
-                     float interpolationAlpha,
-                     const Camera* cameraOverride,
-                     const RenderFrameClock* frameClock);
+    [[nodiscard]] bool renderFrame(GameSession& session, GameplayRenderRuntime& renderRuntime,
+                                   GameplayHudPresenter* hudPresenter, Window& window, float frameTime,
+                                   float interpolationAlpha, const Camera* cameraOverride,
+                                   const RenderFrameClock* frameClock);
 
     /// Set a callback to be invoked after 3D scene render but before UI overlay.
     /// Used for screenshot capture.

@@ -35,20 +35,10 @@ enum class GpuMaterialTextureSemantic : uint32_t {
 
 /// Selects the material equations used to interpret factors and property
 /// textures.
-enum class GpuMaterialWorkflow : uint32_t {
-    MetallicRoughness = 0u,
-    SpecularGlossiness = 1u,
-    LabPbr = 2u
-};
+enum class GpuMaterialWorkflow : uint32_t { MetallicRoughness = 0u, SpecularGlossiness = 1u, LabPbr = 2u };
 
 /// Selects the coverage or optical composition path used by one material.
-enum class GpuMaterialAlphaMode : uint32_t {
-    Opaque = 0u,
-    Mask = 1u,
-    Blend = 2u,
-    Transmission = 3u,
-    Additive = 4u
-};
+enum class GpuMaterialAlphaMode : uint32_t { Opaque = 0u, Mask = 1u, Blend = 2u, Transmission = 3u, Additive = 4u };
 
 /// Records optional material capabilities without changing the fixed GPU
 /// layout.
@@ -72,19 +62,16 @@ using GpuMaterialFlags = uint32_t;
 }
 
 inline constexpr GpuMaterialFlags kGpuMaterialKnownFlags =
-    gpuMaterialFlagBit(GpuMaterialFlag::DoubleSided) |
-    gpuMaterialFlagBit(GpuMaterialFlag::Specular) | gpuMaterialFlagBit(GpuMaterialFlag::Ior) |
-    gpuMaterialFlagBit(GpuMaterialFlag::Clearcoat) |
-    gpuMaterialFlagBit(GpuMaterialFlag::Transmission) |
-    gpuMaterialFlagBit(GpuMaterialFlag::Volume) |
+    gpuMaterialFlagBit(GpuMaterialFlag::DoubleSided) | gpuMaterialFlagBit(GpuMaterialFlag::Specular) |
+    gpuMaterialFlagBit(GpuMaterialFlag::Ior) | gpuMaterialFlagBit(GpuMaterialFlag::Clearcoat) |
+    gpuMaterialFlagBit(GpuMaterialFlag::Transmission) | gpuMaterialFlagBit(GpuMaterialFlag::Volume) |
     gpuMaterialFlagBit(GpuMaterialFlag::InfiniteAttenuationDistance);
 
 /// Tests whether a material capability is present in a packed flag mask.
 /// @param flags Complete packed capability mask.
 /// @param flag Capability to test.
 /// @return True when the requested capability bit is set.
-[[nodiscard]] constexpr bool hasGpuMaterialFlag(const GpuMaterialFlags flags,
-                                                const GpuMaterialFlag flag) {
+[[nodiscard]] constexpr bool hasGpuMaterialFlag(const GpuMaterialFlags flags, const GpuMaterialFlag flag) {
     return (flags & gpuMaterialFlagBit(flag)) != 0u;
 }
 
@@ -248,8 +235,7 @@ struct LabPbrSpecularDecodeResult final {
 /// error.
 /// @param error Error to identify.
 /// @return Process-lifetime string containing the stable identifier.
-[[nodiscard]] const char*
-gpuMaterialNormalizationErrorStableId(GpuMaterialNormalizationError error);
+[[nodiscard]] const char* gpuMaterialNormalizationErrorStableId(GpuMaterialNormalizationError error);
 
 /// Returns the stable identifier used by diagnostics for one material field.
 /// @param field Semantic field to identify.
@@ -260,21 +246,18 @@ gpuMaterialNormalizationErrorStableId(GpuMaterialNormalizationError error);
 /// @param semantic Texture meaning to classify.
 /// @param workflow Workflow that determines the second texture's encoding.
 /// @return True for color data and false for linearly encoded property data.
-[[nodiscard]] bool gpuMaterialTextureUsesSrgb(GpuMaterialTextureSemantic semantic,
-                                              GpuMaterialWorkflow workflow);
+[[nodiscard]] bool gpuMaterialTextureUsesSrgb(GpuMaterialTextureSemantic semantic, GpuMaterialWorkflow workflow);
 
 /// Returns the explicit one-pixel texture used when one glTF texture is absent.
 /// @param semantic Texture meaning whose multiplicative identity is required.
 /// @return RGBA8 texel with the exact identity value for the semantic.
-[[nodiscard]] std::array<uint8_t, 4>
-gpuMaterialDefaultTexturePixel(GpuMaterialTextureSemantic semantic);
+[[nodiscard]] std::array<uint8_t, 4> gpuMaterialDefaultTexturePixel(GpuMaterialTextureSemantic semantic);
 
 /// Validates and packs glTF material factors into the fixed GPU record.
 /// @param input Fully resolved glTF factors, extension flags, and table
 /// bindings.
 /// @return Packed material or a stable field-specific validation error.
-[[nodiscard]] GpuMaterialNormalizationResult
-normalizeGltfMaterial(const GltfMaterialNormalizationInput& input);
+[[nodiscard]] GpuMaterialNormalizationResult normalizeGltfMaterial(const GltfMaterialNormalizationInput& input);
 
 /// Decodes a DirectX-oriented LabPBR 1.3 normal/AO/height texel.
 /// @param texel Exact RGBA8 source texel after image decoding.
@@ -286,8 +269,7 @@ normalizeGltfMaterial(const GltfMaterialNormalizationInput& input);
 /// @param rgbaPixels Mutable tightly packed RGBA8 tile pixels.
 /// @param pixelCount Number of RGBA8 pixels in the tile.
 /// @param sourceHasAlpha True when the decoded source image authored alpha.
-void normalizeLabPbrBlockHeightRange(uint8_t* rgbaPixels, size_t pixelCount,
-                                     bool sourceHasAlpha);
+void normalizeLabPbrBlockHeightRange(uint8_t* rgbaPixels, size_t pixelCount, bool sourceHasAlpha);
 
 /// Validates whether one LabPBR green-channel value has defined metal
 /// semantics.
@@ -302,8 +284,7 @@ void normalizeLabPbrBlockHeightRange(uint8_t* rgbaPixels, size_t pixelCount,
 [[nodiscard]] LabPbrSpecularDecodeResult decodeLabPbrSpecular(const std::array<uint8_t, 4>& texel,
                                                               const glm::vec3& baseColor);
 
-static_assert(kGpuMaterialTextureSemanticCount ==
-              static_cast<size_t>(GpuMaterialTextureSemantic::Count));
+static_assert(kGpuMaterialTextureSemanticCount == static_cast<size_t>(GpuMaterialTextureSemantic::Count));
 static_assert(static_cast<uint32_t>(GpuMaterialTextureSemantic::BaseColor) == 0u);
 static_assert(static_cast<uint32_t>(GpuMaterialTextureSemantic::Thickness) == 11u);
 static_assert(static_cast<uint32_t>(GpuMaterialAlphaMode::Additive) == 4u);

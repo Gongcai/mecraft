@@ -12,15 +12,12 @@ namespace renderer::contracts {
 /// Strong 32-bit identifier whose non-zero value remains unchanged for one visible lifetime.
 /// Scene owners allocate values and retire all referencing histories before reusing a value.
 /// @tparam Tag Unique type tag that prevents IDs from different scene domains being mixed.
-template <typename Tag>
-struct StableSceneId final {
+template <typename Tag> struct StableSceneId final {
     uint32_t value = 0u;
 
     /// Determine whether this ID names a scene record.
     /// @return True for non-zero IDs; zero is reserved as the explicit invalid value.
-    [[nodiscard]] constexpr bool isValid() const {
-        return value != 0u;
-    }
+    [[nodiscard]] constexpr bool isValid() const { return value != 0u; }
 };
 
 /// Compare stable IDs within the same scene-identity domain.
@@ -28,8 +25,7 @@ struct StableSceneId final {
 /// @param rhs Right stable ID.
 /// @return True when both IDs contain the same numeric identity.
 template <typename Tag>
-[[nodiscard]] constexpr bool operator==(const StableSceneId<Tag> lhs,
-                                        const StableSceneId<Tag> rhs) {
+[[nodiscard]] constexpr bool operator==(const StableSceneId<Tag> lhs, const StableSceneId<Tag> rhs) {
     return lhs.value == rhs.value;
 }
 
@@ -38,8 +34,7 @@ template <typename Tag>
 /// @param rhs Right stable ID.
 /// @return True when the numeric identities differ.
 template <typename Tag>
-[[nodiscard]] constexpr bool operator!=(const StableSceneId<Tag> lhs,
-                                        const StableSceneId<Tag> rhs) {
+[[nodiscard]] constexpr bool operator!=(const StableSceneId<Tag> lhs, const StableSceneId<Tag> rhs) {
     return !(lhs == rhs);
 }
 
@@ -60,13 +55,11 @@ using StableReflectionProbeId = StableSceneId<StableReflectionProbeIdTag>;
 /// converted to a stable ID directly in both CPU and shader code.
 inline constexpr uint32_t kVoxelMaterialIdCapacity = 1u << 20u;
 
-template <typename Tag>
-struct StableSceneIdAllocationStart final {
+template <typename Tag> struct StableSceneIdAllocationStart final {
     static constexpr uint32_t value = 1u;
 };
 
-template <>
-struct StableSceneIdAllocationStart<StableMaterialIdTag> final {
+template <> struct StableSceneIdAllocationStart<StableMaterialIdTag> final {
     static constexpr uint32_t value = kVoxelMaterialIdCapacity + 1u;
 };
 
@@ -75,17 +68,12 @@ struct StableSceneIdAllocationStart<StableMaterialIdTag> final {
 /// @tparam Tag Identity domain selected by StableSceneId aliases.
 /// @return Newly allocated non-zero ID, or std::nullopt after exhausting the
 /// complete representable range.
-template <typename Tag>
-[[nodiscard]] std::optional<StableSceneId<Tag>> allocateStableSceneId() {
-    static std::atomic<uint32_t> next{
-        StableSceneIdAllocationStart<Tag>::value};
+template <typename Tag> [[nodiscard]] std::optional<StableSceneId<Tag>> allocateStableSceneId() {
+    static std::atomic<uint32_t> next{StableSceneIdAllocationStart<Tag>::value};
     uint32_t candidate = next.load(std::memory_order_relaxed);
     while (candidate != std::numeric_limits<uint32_t>::max()) {
-        if (next.compare_exchange_weak(
-                candidate,
-                candidate + 1u,
-                std::memory_order_relaxed,
-                std::memory_order_relaxed)) {
+        if (next.compare_exchange_weak(candidate, candidate + 1u, std::memory_order_relaxed,
+                                       std::memory_order_relaxed)) {
             return StableSceneId<Tag>{candidate};
         }
     }
@@ -97,11 +85,9 @@ template <typename Tag>
 /// @param baseLayer Base texture-array layer before animation frame selection.
 /// @return Stable non-zero material ID, or std::nullopt when the layer exceeds
 /// the frozen voxel material range.
-[[nodiscard]] constexpr std::optional<StableMaterialId>
-stableMaterialIdForVoxelLayer(const uint32_t baseLayer) {
-    return baseLayer < kVoxelMaterialIdCapacity
-        ? std::optional<StableMaterialId>{StableMaterialId{baseLayer + 1u}}
-        : std::nullopt;
+[[nodiscard]] constexpr std::optional<StableMaterialId> stableMaterialIdForVoxelLayer(const uint32_t baseLayer) {
+    return baseLayer < kVoxelMaterialIdCapacity ? std::optional<StableMaterialId>{StableMaterialId{baseLayer + 1u}}
+                                                : std::nullopt;
 }
 
 static_assert(sizeof(StableObjectId) == sizeof(uint32_t));

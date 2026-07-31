@@ -13,9 +13,7 @@ namespace ecs {
 
 namespace {
 
-bool tryMergeDropAtSpawn(GameplayRegistry& registry,
-                         const ItemID itemId,
-                         const glm::vec3& spawnPos,
+bool tryMergeDropAtSpawn(GameplayRegistry& registry, const ItemID itemId, const glm::vec3& spawnPos,
                          const uint32_t stackCount) {
     auto view = registry.view<DropItemTag, TransformComponent, ItemComponent, LifetimeComponent>();
     entt::entity bestMatch = entt::null;
@@ -58,21 +56,22 @@ bool tryMergeDropAtSpawn(GameplayRegistry& registry,
 void ItemSpawnSystem::update(SystemContext& ctx) {
     auto& registry = ctx.registry;
 
-    if (!registry.ctxHas<DropSpawnEventBus>()) return;
+    if (!registry.ctxHas<DropSpawnEventBus>())
+        return;
     auto& dropBus = registry.ctxGet<DropSpawnEventBus>();
 
     for (const auto& req : dropBus.events) {
-        if (req.blockId == 0) continue;
+        if (req.blockId == 0)
+            continue;
         const BlockDropEntry& drop = BlockDropTable::get(req.blockId);
-        if (drop.dropItem == 0) continue;
+        if (drop.dropItem == 0)
+            continue;
         spawn(registry, drop.dropItem, req.blockPos, drop.minCount);
     }
     dropBus.clear();
 }
 
-void ItemSpawnSystem::spawn(GameplayRegistry& registry,
-                            const ItemID itemId,
-                            const glm::ivec3& blockPos,
+void ItemSpawnSystem::spawn(GameplayRegistry& registry, const ItemID itemId, const glm::ivec3& blockPos,
                             const uint32_t stackCount) {
     if (itemId == 0 || stackCount == 0) {
         return;
@@ -82,9 +81,7 @@ void ItemSpawnSystem::spawn(GameplayRegistry& registry,
     spawnAtPosition(registry, itemId, spawnPos, stackCount);
 }
 
-void ItemSpawnSystem::spawnAtPosition(GameplayRegistry& registry,
-                                      const ItemID itemId,
-                                      const glm::vec3& spawnPos,
+void ItemSpawnSystem::spawnAtPosition(GameplayRegistry& registry, const ItemID itemId, const glm::vec3& spawnPos,
                                       const uint32_t stackCount) {
     if (itemId == 0 || stackCount == 0) {
         return;

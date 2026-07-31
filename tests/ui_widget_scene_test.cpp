@@ -18,8 +18,7 @@ bool almostEqual(float a, float b) {
 
 class FixedResultWidget final : public UIWidget {
 public:
-    explicit FixedResultWidget(UIEventResult result)
-        : m_result(result) {}
+    explicit FixedResultWidget(UIEventResult result) : m_result(result) {}
 
     UIEventResult onInput(const UIInputEvent&, const UIRenderContext&) override {
         ++m_callCount;
@@ -110,7 +109,8 @@ int main() {
     FixedResultWidget* ignoredPtr = ignoredChild.get();
     eventRoot.addChild(std::move(handledChild));
     eventRoot.addChild(std::move(ignoredChild));
-    if (eventRoot.onInput({UIInputEventType::PointerMove, 0.0f, 0.0f, UIPointerButton::None}, context) != UIEventResult::Handled) {
+    if (eventRoot.onInput({UIInputEventType::PointerMove, 0.0f, 0.0f, UIPointerButton::None}, context) !=
+        UIEventResult::Handled) {
         return fail("UIWidget should propagate Handled from children");
     }
     if (handledPtr->callCount() != 1 || ignoredPtr->callCount() != 1) {
@@ -124,7 +124,8 @@ int main() {
     FixedResultWidget* topConsumedPtr = topConsumed.get();
     consumedRoot.addChild(std::move(lowerHandled));
     consumedRoot.addChild(std::move(topConsumed));
-    if (consumedRoot.onInput({UIInputEventType::PointerDown, 0.0f, 0.0f, UIPointerButton::Primary}, context) != UIEventResult::Consumed) {
+    if (consumedRoot.onInput({UIInputEventType::PointerDown, 0.0f, 0.0f, UIPointerButton::Primary}, context) !=
+        UIEventResult::Consumed) {
         return fail("UIWidget should stop dispatch when a child consumes input");
     }
     if (topConsumedPtr->callCount() != 1 || lowerHandledPtr->callCount() != 0) {
@@ -136,7 +137,8 @@ int main() {
     ContextAwareWidget* sceneWidgetPtr = sceneWidget.get();
     scene.addRoot(std::move(sceneWidget));
 
-    if (scene.onInput({UIInputEventType::PointerMove, 0.0f, 0.0f, UIPointerButton::None}, context) != UIEventResult::Ignored) {
+    if (scene.onInput({UIInputEventType::PointerMove, 0.0f, 0.0f, UIPointerButton::None}, context) !=
+        UIEventResult::Ignored) {
         return fail("UIScene should ignore input before any context is set");
     }
     if (sceneWidgetPtr->callCount() != 0) {
@@ -144,7 +146,8 @@ int main() {
     }
 
     scene.setInputContext(context);
-    if (scene.onInput({UIInputEventType::PointerMove, 1.0f, 1.0f, UIPointerButton::None}, context) != UIEventResult::Handled) {
+    if (scene.onInput({UIInputEventType::PointerMove, 1.0f, 1.0f, UIPointerButton::None}, context) !=
+        UIEventResult::Handled) {
         return fail("UIScene should dispatch input with an explicit context");
     }
     if (sceneWidgetPtr->callCount() != 1) {
@@ -157,7 +160,8 @@ int main() {
     FixedResultWidget* consumedRootPtr = consumedRootWidget.get();
     scene.addRoot(std::move(handledRoot));
     scene.addRoot(std::move(consumedRootWidget));
-    if (scene.onInput({UIInputEventType::PointerUp, 0.0f, 0.0f, UIPointerButton::Primary}, context) != UIEventResult::Consumed) {
+    if (scene.onInput({UIInputEventType::PointerUp, 0.0f, 0.0f, UIPointerButton::Primary}, context) !=
+        UIEventResult::Consumed) {
         return fail("UIScene should return Consumed when top-most root consumes input");
     }
     if (consumedRootPtr->callCount() != 1 || handledRootPtr->callCount() != 0) {
@@ -172,7 +176,8 @@ int main() {
     overlayScene.addRoot(std::move(overlayRoot));
     overlayScene.addRoot(std::move(normalTopRoot));
     overlayScene.setInputContext(context);
-    if (overlayScene.onInput({UIInputEventType::PointerDown, 0.0f, 0.0f, UIPointerButton::Primary}, context) != UIEventResult::Consumed) {
+    if (overlayScene.onInput({UIInputEventType::PointerDown, 0.0f, 0.0f, UIPointerButton::Primary}, context) !=
+        UIEventResult::Consumed) {
         return fail("UIScene should let overlay input consume before normal roots");
     }
     if (overlayRootPtr->overlayCallCount() != 1 || overlayRootPtr->inputCallCount() != 0 ||

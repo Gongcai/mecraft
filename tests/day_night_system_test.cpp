@@ -8,7 +8,7 @@ int fail(const char* message) {
     std::cerr << "[day_night_system_test] FAIL: " << message << '\n';
     return EXIT_FAILURE;
 }
-}
+} // namespace
 
 int main() {
     DayNightSystem dayNight;

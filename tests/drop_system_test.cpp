@@ -35,7 +35,7 @@ uint32_t inventoryItemCount(const Inventory& inventory, const ItemID itemId) {
 bool nearlyEqual(const float a, const float b) {
     return std::fabs(a - b) < 0.0001f;
 }
-}
+} // namespace
 
 int main() {
     BlockRegistry::init(nullptr);
@@ -77,7 +77,8 @@ int main() {
         return fail("merged drop should accumulate stack count");
     }
 
-    if (dropSystem.getDrops().front().itemId != BlockDropTable::getDropItem(BlockRegistry::requireIdByName("minecraft:stone"))) {
+    if (dropSystem.getDrops().front().itemId !=
+        BlockDropTable::getDropItem(BlockRegistry::requireIdByName("minecraft:stone"))) {
         return fail("drop payload should preserve spawned item id from BlockDropTable");
     }
 
@@ -104,14 +105,13 @@ int main() {
     stateDropSystem.bindRegistry(stateDropRegistry);
     const BlockStateId birchLogX = BlockStateRegistry::getState(
         BlockRegistry::requireIdByName("minecraft:birch_log"),
-        std::vector<std::pair<uint16_t, uint16_t>>{
-            {PropIndices::AXIS, PropIndices::AXIS_X}
-        });
+        std::vector<std::pair<uint16_t, uint16_t>>{{PropIndices::AXIS, PropIndices::AXIS_X}});
     stateDropSystem.spawnBlockDrop(BlockStateRegistry::getBlockId(birchLogX), glm::ivec3(1, 122, 1));
     if (stateDropSystem.getDrops().empty()) {
         return fail("stateful blocks should still spawn drops");
     }
-    if (stateDropSystem.getDrops().front().itemId != ItemRegistry::fromBlock(BlockRegistry::requireIdByName("minecraft:birch_log"))) {
+    if (stateDropSystem.getDrops().front().itemId !=
+        ItemRegistry::fromBlock(BlockRegistry::requireIdByName("minecraft:birch_log"))) {
         return fail("stateful blocks should resolve drops through their owning base block");
     }
 
@@ -124,7 +124,8 @@ int main() {
         return fail("placement test setup failed to spawn drop");
     }
 
-    world.setBlock(placementCell.x, placementCell.y, placementCell.z, BlockRegistry::requireIdByName("minecraft:stone"));
+    world.setBlock(placementCell.x, placementCell.y, placementCell.z,
+                   BlockRegistry::requireIdByName("minecraft:stone"));
     placementDropSystem.onBlockPlaced(placementCell, world);
 
     const DropEntity& moved = placementDropSystem.getDrops().front();
@@ -170,10 +171,9 @@ int main() {
     inactiveDropSystem.bindRegistry(inactiveDropRegistry);
     inactiveDropSystem.bindServices(services);
     inactiveDropSystem.spawnItemDrop(ItemRegistry::requireIdByName("minecraft:coal"), glm::ivec3(48, 122, 0), 1);
-    auto inactiveView = inactiveDropRegistry.view<ecs::DropItemTag,
-                                                   ecs::TransformComponent,
-                                                   ecs::VelocityComponent,
-                                                   ecs::LifetimeComponent>();
+    auto inactiveView =
+        inactiveDropRegistry
+            .view<ecs::DropItemTag, ecs::TransformComponent, ecs::VelocityComponent, ecs::LifetimeComponent>();
     if (inactiveView.begin() == inactiveView.end()) {
         return fail("inactive simulation setup should spawn a drop entity");
     }
@@ -183,8 +183,7 @@ int main() {
     inactiveView.get<ecs::LifetimeComponent>(inactiveEntity).ageSeconds = 4.0f;
     inactiveDropSystem.update(1.0f, world);
     const DropEntity& inactiveDrop = inactiveDropSystem.getDrops().front();
-    if (!nearlyEqual(inactiveDrop.position.y, 122.42f) ||
-        !nearlyEqual(inactiveDrop.velocity.y, 5.0f) ||
+    if (!nearlyEqual(inactiveDrop.position.y, 122.42f) || !nearlyEqual(inactiveDrop.velocity.y, 5.0f) ||
         !nearlyEqual(inactiveDrop.ageSeconds, 4.0f)) {
         return fail("drops outside simulation distance should not run physics or lifetime updates");
     }
@@ -212,20 +211,19 @@ int main() {
         return fail("restoreDrops should restore a visible ECS drop");
     }
     const DropEntity& restored = restoredDrops.front();
-    if (restored.id != savedDrop.id || restored.itemId != savedDrop.itemId || restored.stackCount != savedDrop.stackCount) {
+    if (restored.id != savedDrop.id || restored.itemId != savedDrop.itemId ||
+        restored.stackCount != savedDrop.stackCount) {
         return fail("restoreDrops should preserve saved drop identity and item stack");
     }
     if (!nearlyEqual(restored.position.x, savedDrop.position.x) ||
         !nearlyEqual(restored.halfExtents.x, savedDrop.halfExtents.x) ||
-        !nearlyEqual(restored.ageSeconds, savedDrop.ageSeconds) ||
-        !restored.grounded) {
+        !nearlyEqual(restored.ageSeconds, savedDrop.ageSeconds) || !restored.grounded) {
         return fail("restoreDrops should preserve saved transform, bounds, lifetime, and grounded state");
     }
 
-    auto restoredView = restoreDropRegistry.registry().view<ecs::DropItemTag,
-                                                            ecs::DropEntityIdComponent,
-                                                            ecs::BoundsComponent,
-                                                            ecs::NetworkSyncTag>();
+    auto restoredView =
+        restoreDropRegistry.registry()
+            .view<ecs::DropItemTag, ecs::DropEntityIdComponent, ecs::BoundsComponent, ecs::NetworkSyncTag>();
     if (restoredView.begin() == restoredView.end()) {
         return fail("restored drops should include required ECS and network sync components");
     }

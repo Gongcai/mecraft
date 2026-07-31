@@ -21,11 +21,8 @@ struct BenchmarkStats {
     uint64_t checksum = 0;
 };
 
-BenchmarkStats runBenchmark(const std::string& caseName,
-                            int warmupRounds,
-                            int measureRounds,
-                            const std::string& workloadLabel,
-                            uint32_t seed,
+BenchmarkStats runBenchmark(const std::string& caseName, int warmupRounds, int measureRounds,
+                            const std::string& workloadLabel, uint32_t seed,
                             const std::function<uint64_t()>& workload) {
     for (int i = 0; i < warmupRounds; ++i) {
         (void)workload();
@@ -59,17 +56,10 @@ BenchmarkStats runBenchmark(const std::string& caseName,
     }
 
     std::cout << "[terrain_perf_test] "
-              << "case=" << caseName
-              << " seed=" << seed
-              << " warmup=" << warmupRounds
-              << " rounds=" << measureRounds
-              << " workload=" << workloadLabel
-              << " median_ms=" << std::fixed << std::setprecision(3) << stats.medianMs
-              << " avg_ms=" << stats.avgMs
-              << " min_ms=" << stats.minMs
-              << " max_ms=" << stats.maxMs
-              << " checksum=" << stats.checksum
-              << "\n";
+              << "case=" << caseName << " seed=" << seed << " warmup=" << warmupRounds << " rounds=" << measureRounds
+              << " workload=" << workloadLabel << " median_ms=" << std::fixed << std::setprecision(3) << stats.medianMs
+              << " avg_ms=" << stats.avgMs << " min_ms=" << stats.minMs << " max_ms=" << stats.maxMs
+              << " checksum=" << stats.checksum << "\n";
 
     return stats;
 }
@@ -99,7 +89,7 @@ std::vector<SurfaceRun> buildSurfaceRuns(int sampleCount, int batchSize) {
 
     return runs;
 }
-}
+} // namespace
 
 int main() {
     constexpr uint32_t seed = 12345;
@@ -108,9 +98,7 @@ int main() {
     constexpr int measureRounds = 10;
 
     std::cout << "[terrain_perf_test] Starting terrain generation performance tests"
-              << " (seed=" << seed
-              << ", seaLevel=" << seaLevel
-              << ", warmup=" << warmupRounds
+              << " (seed=" << seed << ", seaLevel=" << seaLevel << ", warmup=" << warmupRounds
               << ", rounds=" << measureRounds << ")\n";
 
     TerrainGenerator generator;
@@ -120,23 +108,18 @@ int main() {
 
     // Case 1: single chunk generation (stability-focused)
     {
-        const BenchmarkStats stats = runBenchmark(
-                "single_chunk",
-                warmupRounds,
-                measureRounds,
-                "1_chunk",
-                seed,
-                [&generator]() -> uint64_t {
-                    Chunk chunk(0, 0);
-                    generator.generateChunk(chunk);
-                    uint64_t checksum = 0;
-                    checksum ^= static_cast<uint64_t>(chunk.getBlock(0, 0, 0).registryIndex());
-                    checksum ^= static_cast<uint64_t>(chunk.getBlock(0, Chunk::SIZE_Y / 2, 0).registryIndex()) << 8U;
-                    checksum ^= static_cast<uint64_t>(
-                                    chunk.getBlock(Chunk::SIZE_X - 1, 0, Chunk::SIZE_Z - 1).registryIndex())
-                                << 16U;
-                    return checksum;
-                });
+        const BenchmarkStats stats =
+            runBenchmark("single_chunk", warmupRounds, measureRounds, "1_chunk", seed, [&generator]() -> uint64_t {
+                Chunk chunk(0, 0);
+                generator.generateChunk(chunk);
+                uint64_t checksum = 0;
+                checksum ^= static_cast<uint64_t>(chunk.getBlock(0, 0, 0).registryIndex());
+                checksum ^= static_cast<uint64_t>(chunk.getBlock(0, Chunk::SIZE_Y / 2, 0).registryIndex()) << 8U;
+                checksum ^=
+                    static_cast<uint64_t>(chunk.getBlock(Chunk::SIZE_X - 1, 0, Chunk::SIZE_Z - 1).registryIndex())
+                    << 16U;
+                return checksum;
+            });
         globalChecksum ^= stats.checksum;
     }
 
@@ -144,21 +127,16 @@ int main() {
     {
         constexpr int chunkCount = 100;
         const BenchmarkStats stats = runBenchmark(
-                "batch_chunks",
-                warmupRounds,
-                measureRounds,
-                "100_chunks",
-                seed,
-                [&generator, chunkCount]() -> uint64_t {
-                    uint64_t checksum = 0;
-                    for (int i = 0; i < chunkCount; ++i) {
-                        Chunk chunk(i, i / 10);
-                        generator.generateChunk(chunk);
-                        checksum ^= static_cast<uint64_t>(
-                            chunk.getBlock(i % Chunk::SIZE_X, 0, (i * 3) % Chunk::SIZE_Z).registryIndex());
-                    }
-                    return checksum;
-                });
+            "batch_chunks", warmupRounds, measureRounds, "100_chunks", seed, [&generator, chunkCount]() -> uint64_t {
+                uint64_t checksum = 0;
+                for (int i = 0; i < chunkCount; ++i) {
+                    Chunk chunk(i, i / 10);
+                    generator.generateChunk(chunk);
+                    checksum ^= static_cast<uint64_t>(
+                        chunk.getBlock(i % Chunk::SIZE_X, 0, (i * 3) % Chunk::SIZE_Z).registryIndex());
+                }
+                return checksum;
+            });
         globalChecksum ^= stats.checksum;
     }
 
@@ -171,40 +149,33 @@ int main() {
             const std::vector<SurfaceRun> runs = buildSurfaceRuns(sampleCount, batchSize);
             std::vector<int> sampledSurface(static_cast<size_t>(batchSize));
 
-            const BenchmarkStats scalarStats = runBenchmark(
-                    "surface_sampling_scalar",
-                    warmupRounds,
-                    measureRounds,
-                    "1,000,000_samples_shared_input",
-                    seed,
-                    [&generator, &runs]() -> uint64_t {
-                        uint64_t checksum = 0;
-                        for (const SurfaceRun& run : runs) {
-                            for (int i = 0; i < run.count; ++i) {
-                                checksum += static_cast<uint64_t>(generator.sampleSurfaceY(run.startX + i, run.z));
-                            }
-                        }
-                        return checksum;
-                    });
+            const BenchmarkStats scalarStats =
+                runBenchmark("surface_sampling_scalar", warmupRounds, measureRounds, "1,000,000_samples_shared_input",
+                             seed, [&generator, &runs]() -> uint64_t {
+                                 uint64_t checksum = 0;
+                                 for (const SurfaceRun& run : runs) {
+                                     for (int i = 0; i < run.count; ++i) {
+                                         checksum +=
+                                             static_cast<uint64_t>(generator.sampleSurfaceY(run.startX + i, run.z));
+                                     }
+                                 }
+                                 return checksum;
+                             });
             globalChecksum ^= scalarStats.checksum;
 
             const std::string workload = "1,000,000_samples_batch" + std::to_string(batchSize);
-            const BenchmarkStats batchStats = runBenchmark(
-                    "surface_sampling_batch",
-                    warmupRounds,
-                    measureRounds,
-                    workload,
-                    seed,
-                    [&generator, &runs, &sampledSurface]() -> uint64_t {
-                        uint64_t checksum = 0;
-                        for (const SurfaceRun& run : runs) {
-                            generator.sampleSurfaceYBatch(run.startX, run.z, run.count, sampledSurface.data());
-                            for (int i = 0; i < run.count; ++i) {
-                                checksum += static_cast<uint64_t>(sampledSurface[static_cast<size_t>(i)]);
-                            }
-                        }
-                        return checksum;
-                    });
+            const BenchmarkStats batchStats =
+                runBenchmark("surface_sampling_batch", warmupRounds, measureRounds, workload, seed,
+                             [&generator, &runs, &sampledSurface]() -> uint64_t {
+                                 uint64_t checksum = 0;
+                                 for (const SurfaceRun& run : runs) {
+                                     generator.sampleSurfaceYBatch(run.startX, run.z, run.count, sampledSurface.data());
+                                     for (int i = 0; i < run.count; ++i) {
+                                         checksum += static_cast<uint64_t>(sampledSurface[static_cast<size_t>(i)]);
+                                     }
+                                 }
+                                 return checksum;
+                             });
             globalChecksum ^= batchStats.checksum;
         }
     }

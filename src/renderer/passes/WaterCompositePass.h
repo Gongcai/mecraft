@@ -26,20 +26,12 @@ public:
 
     /// Record water rendering into a caller-owned graphics command list.
     /// The caller owns resource transitions, input copies, and submission.
-    [[nodiscard]] bool recordGraphPass(
-        const FrameContext& ctx,
-        const RenderSettings& settings,
-        DeferredRenderTargets& targets,
-        bool deferredFrameActive,
-        bool preTemporalResolve,
-        bool transparentCompositeEnabled,
-        bool waterEffectsEnabled,
-        bool rainSurfaceRipplesEnabled,
-        bool volumetricFogActive,
-        RhiCommandList& commandList,
-        WorldRenderBuffer& worldRenderBuffer,
-        const std::vector<DrawBatchEntry>& transparentBatch,
-        const TransparentPassPlan& transparentPlan);
+    [[nodiscard]] bool
+    recordGraphPass(const FrameContext& ctx, const RenderSettings& settings, DeferredRenderTargets& targets,
+                    bool deferredFrameActive, bool preTemporalResolve, bool transparentCompositeEnabled,
+                    bool waterEffectsEnabled, bool rainSurfaceRipplesEnabled, bool volumetricFogActive,
+                    RhiCommandList& commandList, WorldRenderBuffer& worldRenderBuffer,
+                    const std::vector<DrawBatchEntry>& transparentBatch, const TransparentPassPlan& transparentPlan);
 
 private:
     ResourceMgr* m_resourceMgr = nullptr;

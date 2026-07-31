@@ -40,32 +40,19 @@ public:
     /// @param resources Imported graph handles for all temporal resources.
     /// @param dependency Pass that must complete before the copy starts.
     /// @return Final temporal resolve pass handle, or an invalid handle for an invalid contract.
-    [[nodiscard]] RgPassHandle addGraphPasses(
-        RenderGraph& graph,
-        const FrameContext& ctx,
-        const RenderSettings& settings,
-        DeferredRenderTargets& targets,
-        const GraphResources& resources,
-        RgPassHandle dependency);
+    [[nodiscard]] RgPassHandle addGraphPasses(RenderGraph& graph, const FrameContext& ctx,
+                                              const RenderSettings& settings, DeferredRenderTargets& targets,
+                                              const GraphResources& resources, RgPassHandle dependency);
 
 private:
-    [[nodiscard]] bool recordResolve(RhiCommandList& commandList,
-                                     const FrameContext& ctx,
-                                     const RenderSettings& settings,
-                                     DeferredRenderTargets& targets,
-                                     int inputIndex);
+    [[nodiscard]] bool recordResolve(RhiCommandList& commandList, const FrameContext& ctx,
+                                     const RenderSettings& settings, DeferredRenderTargets& targets, int inputIndex);
     bool ensureRhiPipeline(RhiDevice& rhiDevice);
-    bool ensureRhiBindGroup(RhiDevice& rhiDevice,
-                            int historyPrevIndex,
-                            RhiTextureViewHandle currentView,
-                            RhiTextureViewHandle historyView,
-                            RhiTextureViewHandle historyDepthView,
-                            RhiTextureViewHandle velocityView,
-                            RhiTextureViewHandle depthView,
-                            RhiTextureViewHandle transparentDepthView,
-                            RhiTextureViewHandle reactiveMaskView,
-                            RhiTextureViewHandle transparencyMaskView,
-                            RhiTextureViewHandle materialAuxView);
+    bool ensureRhiBindGroup(RhiDevice& rhiDevice, int historyPrevIndex, RhiTextureViewHandle currentView,
+                            RhiTextureViewHandle historyView, RhiTextureViewHandle historyDepthView,
+                            RhiTextureViewHandle velocityView, RhiTextureViewHandle depthView,
+                            RhiTextureViewHandle transparentDepthView, RhiTextureViewHandle reactiveMaskView,
+                            RhiTextureViewHandle transparencyMaskView, RhiTextureViewHandle materialAuxView);
     void destroyRhiBindGroup();
     void destroyRhiResources();
 

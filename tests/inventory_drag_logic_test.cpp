@@ -9,7 +9,7 @@ int fail(const char* message) {
     std::cerr << "[inventory_drag_logic_test] FAIL: " << message << '\n';
     return EXIT_FAILURE;
 }
-}
+} // namespace
 
 int main() {
     BlockRegistry::init(nullptr);
@@ -53,7 +53,8 @@ int main() {
     InputManager input;
     input.beginUIDragItem(static_cast<int>(picked), 1, 11);
     const auto& dragged = input.getUIDragItem();
-    if (!dragged.active || dragged.itemId != static_cast<int>(picked) || dragged.count != 1 || dragged.sourceSlot != 11) {
+    if (!dragged.active || dragged.itemId != static_cast<int>(picked) || dragged.count != 1 ||
+        dragged.sourceSlot != 11) {
         return fail("beginUIDragItem should publish active drag payload");
     }
 

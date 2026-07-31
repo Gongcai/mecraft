@@ -17,10 +17,7 @@ struct ItemModelVertex {
     float nz;
 };
 
-bool buildExtrudedItemMesh(const TextureAtlas& atlas,
-                           const std::vector<unsigned char>& atlasPixels,
-                           int tileIndex,
+bool buildExtrudedItemMesh(const TextureAtlas& atlas, const std::vector<unsigned char>& atlasPixels, int tileIndex,
                            std::vector<ItemModelVertex>& outVertices);
 
 #endif // MECRAFT_ITEMMODELMESH_H
-

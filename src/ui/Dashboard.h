@@ -142,20 +142,13 @@ public:
     [[nodiscard]] bool init(const Window& window, RhiDevice& rhiDevice);
     void shutdown();
     void setFirstPersonHeldItemRenderer(FirstPersonHeldItemRenderer* renderer);
-    [[nodiscard]] bool prepareFrame(
-        RhiCommandList& commandList,
-        int framebufferWidth,
-        int framebufferHeight,
-        ecs::GameplayRegistry& registry,
-        World& world,
-        Camera& camera,
-        RenderResourceHub& render,
-        RenderScene& renderScene,
-        PostProcessPass& postProcess,
-        UIRenderer& uiRenderer,
-        FrameProfilerStats& profilerStats,
-        const std::function<void(int)>& renderDistanceSetter = {});
+    [[nodiscard]] bool prepareFrame(RhiCommandList& commandList, int framebufferWidth, int framebufferHeight,
+                                    ecs::GameplayRegistry& registry, World& world, Camera& camera,
+                                    RenderResourceHub& render, RenderScene& renderScene, PostProcessPass& postProcess,
+                                    UIRenderer& uiRenderer, FrameProfilerStats& profilerStats,
+                                    const std::function<void(int)>& renderDistanceSetter = {});
     void recordDraws(RhiCommandList& commandList) const;
+
 private:
     struct PreparedDraw {
         RhiRect2D scissor;
@@ -174,11 +167,11 @@ private:
     };
 
     void showPlayerStats(ecs::GameplayRegistry& registry);
-    void showWorldStats(World& world,
-                        ecs::GameplayRegistry& registry,
+    void showWorldStats(World& world, ecs::GameplayRegistry& registry,
                         const std::function<void(int)>& renderDistanceSetter);
-    void showCameraStats( Camera& camera);
-    void showPerformanceStats(World& world, RenderResourceHub &render, RenderScene& renderScene, PostProcessPass& postProcess, FrameProfilerStats& profilerStats);
+    void showCameraStats(Camera& camera);
+    void showPerformanceStats(World& world, RenderResourceHub& render, RenderScene& renderScene,
+                              PostProcessPass& postProcess, FrameProfilerStats& profilerStats);
     void showGUIScaleSettings(UIRenderer& uiRenderer);
     void showCrosshairSettings(UIRenderer& uiRenderer);
     void showHotbarSettings(UIRenderer& uiRenderer);
@@ -189,9 +182,7 @@ private:
     void refreshWorldMetricsIfNeeded(World& world, double now, bool forceRefresh);
     [[nodiscard]] bool createRhiResources(RhiDevice& rhiDevice);
     void destroyRhiResources();
-    [[nodiscard]] bool buildPreparedDraws(const ImDrawData& drawData,
-                                          int framebufferWidth,
-                                          int framebufferHeight);
+    [[nodiscard]] bool buildPreparedDraws(const ImDrawData& drawData, int framebufferWidth, int framebufferHeight);
     [[nodiscard]] bool uploadDrawBuffers(RhiCommandList& commandList);
     void bindRenderState(RhiCommandList& commandList) const;
 
@@ -226,8 +217,7 @@ private:
     GpuTimingWindowStats m_displayGpuTimingWindowStats{};
     ShadowFrameStats m_displayShadowStats{};
     RenderGraphFrameStats m_displayRenderGraphStats{};
-    RenderScene::ClusteredLightingDebugInfo
-        m_displayClusteredLightingStats{};
+    RenderScene::ClusteredLightingDebugInfo m_displayClusteredLightingStats{};
     ReflectionProbeCaptureFrameStats m_displayReflectionProbeCaptureStats{};
     HiZCullFrameStats m_displayHiZCullStats{};
     ShadowCullFrameStats m_displayShadowCullStats{};
@@ -246,6 +236,5 @@ private:
 };
 
 #endif // NDEBUG
-
 
 #endif //MECRAFT_DASHBOARD_H

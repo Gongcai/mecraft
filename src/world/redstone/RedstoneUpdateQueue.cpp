@@ -1,7 +1,6 @@
 #include "RedstoneUpdateQueue.h"
 
-void RedstoneUpdateQueue::schedule(const uint64_t executionTick,
-                                   const glm::ivec3& position,
+void RedstoneUpdateQueue::schedule(const uint64_t executionTick, const glm::ivec3& position,
                                    const RedstoneScheduledAction action) {
     const ScheduledKey key{position, action};
     if (m_scheduledKeys.find(key) != m_scheduledKeys.end()) {
@@ -10,30 +9,18 @@ void RedstoneUpdateQueue::schedule(const uint64_t executionTick,
 
     const uint32_t sequence = m_sequenceCounter++;
     m_scheduledKeys.emplace(key, sequence);
-    m_queue.push(RedstoneScheduledUpdate{
-        executionTick,
-        position,
-        action,
-        sequence
-    });
+    m_queue.push(RedstoneScheduledUpdate{executionTick, position, action, sequence});
 }
 
-void RedstoneUpdateQueue::reschedule(const uint64_t executionTick,
-                                     const glm::ivec3& position,
+void RedstoneUpdateQueue::reschedule(const uint64_t executionTick, const glm::ivec3& position,
                                      const RedstoneScheduledAction action) {
     const ScheduledKey key{position, action};
     const uint32_t sequence = m_sequenceCounter++;
     m_scheduledKeys[key] = sequence;
-    m_queue.push(RedstoneScheduledUpdate{
-        executionTick,
-        position,
-        action,
-        sequence
-    });
+    m_queue.push(RedstoneScheduledUpdate{executionTick, position, action, sequence});
 }
 
-size_t RedstoneUpdateQueue::drainDue(const uint64_t currentTick,
-                                     std::vector<RedstoneScheduledUpdate>& out,
+size_t RedstoneUpdateQueue::drainDue(const uint64_t currentTick, std::vector<RedstoneScheduledUpdate>& out,
                                      const size_t budget) {
     size_t count = 0;
     while (!m_queue.empty() && count < budget) {

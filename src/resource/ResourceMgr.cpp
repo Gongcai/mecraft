@@ -25,12 +25,9 @@ struct ResourceMgr::Impl {
     CubemapLibrary cubemaps;
 };
 
-ResourceMgr::ResourceMgr()
-    : m_impl(std::make_unique<Impl>()) {
-}
+ResourceMgr::ResourceMgr() : m_impl(std::make_unique<Impl>()) {}
 
-ResourceMgr::~ResourceMgr() {
-}
+ResourceMgr::~ResourceMgr() {}
 
 ResourceMgr::ResourceMgr(ResourceMgr&&) noexcept = default;
 
@@ -44,12 +41,8 @@ void ResourceMgr::init(RhiDevice& rhiDevice, RhiCommandListPool& commandListPool
     m_impl->environmentTextures.init(rhiDevice);
     m_impl->blockTextures.init(rhiDevice, commandListPool);
     m_impl->uiTextures.init(rhiDevice, commandListPool);
-    loadCubemap("menu_skybox",
-                SKYBOX_TEXTURES_DIR "/right.png",
-                SKYBOX_TEXTURES_DIR "/left.png",
-                SKYBOX_TEXTURES_DIR "/top.png",
-                SKYBOX_TEXTURES_DIR "/bottom.png",
-                SKYBOX_TEXTURES_DIR "/front.png",
+    loadCubemap("menu_skybox", SKYBOX_TEXTURES_DIR "/right.png", SKYBOX_TEXTURES_DIR "/left.png",
+                SKYBOX_TEXTURES_DIR "/top.png", SKYBOX_TEXTURES_DIR "/bottom.png", SKYBOX_TEXTURES_DIR "/front.png",
                 SKYBOX_TEXTURES_DIR "/back.png");
 }
 
@@ -82,14 +75,9 @@ RhiCommandListPool& ResourceMgr::commandListPool() {
     return *m_impl->commandListPool;
 }
 
-RhiTextureHandle ResourceMgr::loadTexture2D(const std::string& name,
-                                            const std::string& path,
-                                            const bool srgb,
-                                            const bool flipVertically,
-                                            const RhiTextureQueueSharing
-                                                queueSharing) {
-    return m_impl->texture2D.load(name, path, srgb, flipVertically,
-                                  queueSharing);
+RhiTextureHandle ResourceMgr::loadTexture2D(const std::string& name, const std::string& path, const bool srgb,
+                                            const bool flipVertically, const RhiTextureQueueSharing queueSharing) {
+    return m_impl->texture2D.load(name, path, srgb, flipVertically, queueSharing);
 }
 
 RhiTextureHandle ResourceMgr::getTexture2DHandle(const std::string& name) const {
@@ -100,7 +88,8 @@ RhiTextureHandle ResourceMgr::loadGuiTexture(const std::string& name, const std:
     return m_impl->texture2D.loadGui(name, path, flipVertically);
 }
 
-RhiTextureHandle ResourceMgr::loadGuiTexture(const std::string& name, const std::string& path, int& outWidth, int& outHeight, bool flipVertically) {
+RhiTextureHandle ResourceMgr::loadGuiTexture(const std::string& name, const std::string& path, int& outWidth,
+                                             int& outHeight, bool flipVertically) {
     return m_impl->texture2D.loadGui(name, path, outWidth, outHeight, flipVertically);
 }
 
@@ -112,21 +101,20 @@ void ResourceMgr::buildBlockTextureResources(const std::string& directory, int t
     m_impl->blockTextures.buildTextures(directory, tileSize);
 }
 
-void ResourceMgr::buildBlockTextureResources(const std::string& directory,
-                                             const int tileSize,
+void ResourceMgr::buildBlockTextureResources(const std::string& directory, const int tileSize,
                                              const std::unordered_set<std::string>& registeredTextureNames) {
     m_impl->blockTextures.buildTextures(directory, tileSize, registeredTextureNames);
 }
 
-void ResourceMgr::buildTextureAtlas(const std::string &directory, int tileSize) {
+void ResourceMgr::buildTextureAtlas(const std::string& directory, int tileSize) {
     m_impl->blockTextures.buildAtlas(directory, tileSize);
 }
 
-const TextureAtlas & ResourceMgr::getAtlas() const {
+const TextureAtlas& ResourceMgr::getAtlas() const {
     return m_impl->blockTextures.atlas();
 }
 
-void ResourceMgr::buildTextureArray(const std::string &directory, int tileSize) {
+void ResourceMgr::buildTextureArray(const std::string& directory, int tileSize) {
     m_impl->blockTextures.buildTextureArray(directory, tileSize);
 }
 
@@ -154,8 +142,7 @@ bool ResourceMgr::loadBlockTextureCatalog(const std::string& textureConfigPath) 
     return m_impl->blockTextures.loadCatalog(textureConfigPath);
 }
 
-bool ResourceMgr::loadBlockTextureCatalog(const std::string& textureConfigPath,
-                                          const std::string& packConfigPath) {
+bool ResourceMgr::loadBlockTextureCatalog(const std::string& textureConfigPath, const std::string& packConfigPath) {
     return m_impl->blockTextures.loadCatalog(textureConfigPath, packConfigPath);
 }
 
@@ -211,10 +198,10 @@ RhiTextureHandle ResourceMgr::getFoliageColormap() const {
     return m_impl->environmentTextures.getFoliageColormap();
 }
 
-RhiTextureHandle ResourceMgr::loadCubemap(const std::string& name,
-                                          const std::string& rightPath, const std::string& leftPath,
-                                          const std::string& topPath, const std::string& bottomPath,
-                                          const std::string& frontPath, const std::string& backPath) {
+RhiTextureHandle ResourceMgr::loadCubemap(const std::string& name, const std::string& rightPath,
+                                          const std::string& leftPath, const std::string& topPath,
+                                          const std::string& bottomPath, const std::string& frontPath,
+                                          const std::string& backPath) {
     return m_impl->cubemaps.load(name, rightPath, leftPath, topPath, bottomPath, frontPath, backPath);
 }
 

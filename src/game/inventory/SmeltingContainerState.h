@@ -27,13 +27,9 @@
 
 class SmeltingContainerState final : public IGameState {
 public:
-    SmeltingContainerState(InventoryStateContext deps,
-                           std::string containerUiId,
-                           std::string behaviorId,
+    SmeltingContainerState(InventoryStateContext deps, std::string containerUiId, std::string behaviorId,
                            const glm::ivec3 machinePosition)
-        : m_deps(deps),
-          m_containerUiId(std::move(containerUiId)),
-          m_behaviorId(std::move(behaviorId)),
+        : m_deps(deps), m_containerUiId(std::move(containerUiId)), m_behaviorId(std::move(behaviorId)),
           m_machinePosition(machinePosition) {}
 
     void onEnter() override {
@@ -77,10 +73,8 @@ public:
         const UIInputRouteResult uiRouteResult =
             UIInputAdapter::routeInput(m_deps.uiRenderer, snapshot, m_deps.context);
 
-        if (m_deps.context.isActionTriggered(Action::Inventory) ||
-            m_deps.context.isActionTriggered(Action::Menu) ||
-            (m_deps.context.isActionTriggered(Action::Cancel) &&
-             uiRouteResult.aggregate != UIEventResult::Consumed)) {
+        if (m_deps.context.isActionTriggered(Action::Inventory) || m_deps.context.isActionTriggered(Action::Menu) ||
+            (m_deps.context.isActionTriggered(Action::Cancel) && uiRouteResult.aggregate != UIEventResult::Consumed)) {
             m_deps.fsm.popState();
             return;
         }
@@ -104,8 +98,7 @@ public:
             }
         }
 
-        if (!uiRouteResult.primaryPressed ||
-            uiRouteResult.primaryDown != UIEventResult::Consumed) {
+        if (!uiRouteResult.primaryPressed || uiRouteResult.primaryDown != UIEventResult::Consumed) {
             return;
         }
 
@@ -128,9 +121,7 @@ private:
         SlotSpace space = SlotSpace::None;
         int index = -1;
 
-        [[nodiscard]] bool valid() const {
-            return space != SlotSpace::None && index >= 0;
-        }
+        [[nodiscard]] bool valid() const { return space != SlotSpace::None && index >= 0; }
     };
 
     MachineInventoryStore& ensureStore() {
@@ -170,19 +161,15 @@ private:
 
     [[nodiscard]] static int encodeSlot(const SlotRef slot) {
         switch (slot.space) {
-            case SlotSpace::Machine:
-                return kMachineSlotBase + slot.index;
-            case SlotSpace::Player:
-                return slot.index;
-            case SlotSpace::None:
-            default:
-                return -1;
+        case SlotSpace::Machine: return kMachineSlotBase + slot.index;
+        case SlotSpace::Player: return slot.index;
+        case SlotSpace::None:
+        default: return -1;
         }
     }
 
     [[nodiscard]] SlotRef decodeSlot(const int encodedSlot) const {
-        if (m_machine != nullptr &&
-            encodedSlot >= kMachineSlotBase &&
+        if (m_machine != nullptr && encodedSlot >= kMachineSlotBase &&
             encodedSlot < kMachineSlotBase + m_machine->slotCount()) {
             return {SlotSpace::Machine, encodedSlot - kMachineSlotBase};
         }
@@ -215,9 +202,7 @@ private:
         m_deps.inventory.setSlotStack(slot.index, stack);
     }
 
-    [[nodiscard]] bool acceptsItem(const SlotRef slot,
-                                   const ItemID itemId,
-                                   const SmeltingSystem& smelting) const {
+    [[nodiscard]] bool acceptsItem(const SlotRef slot, const ItemID itemId, const SmeltingSystem& smelting) const {
         if (!slot.valid() || itemId == 0) {
             return false;
         }
@@ -227,9 +212,7 @@ private:
         return m_runtime.acceptsItem(slot.index, itemId, smelting);
     }
 
-    [[nodiscard]] uint32_t addToSlot(const SlotRef slot,
-                                     const ItemID itemId,
-                                     const uint32_t count,
+    [[nodiscard]] uint32_t addToSlot(const SlotRef slot, const ItemID itemId, const uint32_t count,
                                      const SmeltingSystem& smelting) {
         if (!slot.valid() || itemId == 0 || count == 0 || !acceptsItem(slot, itemId, smelting)) {
             return count;
@@ -272,8 +255,7 @@ private:
             const ItemStack picked = getSlotStack(slot);
             if (!picked.isEmpty()) {
                 setSlotStack(slot, {});
-                m_deps.input.beginUIDragItem(static_cast<int>(picked.itemId),
-                                             static_cast<int>(picked.count),
+                m_deps.input.beginUIDragItem(static_cast<int>(picked.itemId), static_cast<int>(picked.count),
                                              encodeSlot(slot));
             }
             return;
@@ -288,9 +270,7 @@ private:
 
         const ItemStack target = getSlotStack(slot);
         if (target.itemId == draggedItemId) {
-            m_deps.input.beginUIDragItem(dragged.itemId,
-                                         static_cast<int>(remaining),
-                                         dragged.sourceSlot);
+            m_deps.input.beginUIDragItem(dragged.itemId, static_cast<int>(remaining), dragged.sourceSlot);
             return;
         }
         if (!target.isEmpty() && acceptsItem(slot, draggedItemId, smelting)) {
@@ -298,8 +278,7 @@ private:
             incoming.itemId = draggedItemId;
             incoming.count = static_cast<uint16_t>(std::min<uint32_t>(dragged.count, 65535u));
             setSlotStack(slot, incoming);
-            m_deps.input.beginUIDragItem(static_cast<int>(target.itemId),
-                                         static_cast<int>(target.count),
+            m_deps.input.beginUIDragItem(static_cast<int>(target.itemId), static_cast<int>(target.count),
                                          encodeSlot(slot));
         }
     }
@@ -354,8 +333,7 @@ private:
     void spawnItemDropAtPlayer(const ItemID itemId, const uint32_t count) {
         ecs::PlayerQuery query(m_deps.ecsRegistry);
         const glm::vec3 playerPos = query.getPosition();
-        const glm::ivec3 blockPos(static_cast<int>(std::floor(playerPos.x)),
-                                  static_cast<int>(std::floor(playerPos.y)),
+        const glm::ivec3 blockPos(static_cast<int>(std::floor(playerPos.x)), static_cast<int>(std::floor(playerPos.y)),
                                   static_cast<int>(std::floor(playerPos.z)));
         m_deps.dropSystem.spawnItemDrop(itemId, blockPos, count);
     }

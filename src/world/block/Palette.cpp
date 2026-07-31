@@ -15,10 +15,8 @@ namespace {
     std::abort();
 }
 
-template <typename Map>
-size_t estimateUnorderedMapBytes(const Map& map) {
-    return map.bucket_count() * sizeof(void*) +
-           map.size() * (sizeof(typename Map::value_type) + sizeof(void*) * 2);
+template <typename Map> size_t estimateUnorderedMapBytes(const Map& map) {
+    return map.bucket_count() * sizeof(void*) + map.size() * (sizeof(typename Map::value_type) + sizeof(void*) * 2);
 }
 } // namespace
 
@@ -59,8 +57,7 @@ uint8_t Palette::bitsPerEntry() const {
 }
 
 size_t Palette::dynamicMemoryBytes() const {
-    return m_indexToId.capacity() * sizeof(BlockStateId) +
-           estimateUnorderedMapBytes(m_idToIndex);
+    return m_indexToId.capacity() * sizeof(BlockStateId) + estimateUnorderedMapBytes(m_idToIndex);
 }
 
 std::vector<uint32_t> Palette::compact(const std::vector<BlockStateId>& usedIds) {

@@ -16,12 +16,8 @@
 
 namespace {
 
-bool beginLoadingPass(RhiDevice& rhiDevice,
-                      RhiCommandListPool& commandListPool,
-                      const uint32_t width,
-                      const uint32_t height,
-                      UIRenderer& uiRenderer,
-                      RhiCommandList*& commandList) {
+bool beginLoadingPass(RhiDevice& rhiDevice, RhiCommandListPool& commandListPool, const uint32_t width,
+                      const uint32_t height, UIRenderer& uiRenderer, RhiCommandList*& commandList) {
     const RhiTextureViewHandle colorView = rhiDevice.currentSwapchainColorView();
     const RhiTextureViewHandle depthView = rhiDevice.currentSwapchainDepthStencilView();
     if (!colorView.isValid() || !depthView.isValid()) {
@@ -45,26 +41,17 @@ bool beginLoadingPass(RhiDevice& rhiDevice,
 
     RhiRenderingInfo renderingInfo;
     renderingInfo.debugName = "LoadingScreen";
-    renderingInfo.renderArea = {
-        0,
-        0,
-        width,
-        height
-    };
+    renderingInfo.renderArea = {0, 0, width, height};
     renderingInfo.colorAttachments = &colorAttachment;
     renderingInfo.colorAttachmentCount = 1u;
     renderingInfo.depthStencilAttachment = &depthAttachment;
 
     commandList = commandListPool.acquire(RhiCommandListType::Graphics);
-    if (commandList == nullptr ||
-        !commandList->begin({"LoadingScreen.Commands", RhiCommandListType::Graphics})) {
+    if (commandList == nullptr || !commandList->begin({"LoadingScreen.Commands", RhiCommandListType::Graphics})) {
         return false;
     }
-    commandList->textureBarrier({
-        rhiDevice.currentSwapchainColorTexture(),
-        RhiResourceState::Present,
-        RhiResourceState::RenderTarget
-    });
+    commandList->textureBarrier(
+        {rhiDevice.currentSwapchainColorTexture(), RhiResourceState::Present, RhiResourceState::RenderTarget});
     if (!uiRenderer.prepareTextFrame(*commandList)) {
         return false;
     }
@@ -72,18 +59,14 @@ bool beginLoadingPass(RhiDevice& rhiDevice,
     return true;
 }
 
-void endLoadingPass(RhiDevice& rhiDevice,
-                    RhiCommandList*& commandList) {
+void endLoadingPass(RhiDevice& rhiDevice, RhiCommandList*& commandList) {
     if (commandList == nullptr) {
         return;
     }
 
     commandList->endRendering();
-    commandList->textureBarrier({
-        rhiDevice.currentSwapchainColorTexture(),
-        RhiResourceState::RenderTarget,
-        RhiResourceState::Present
-    });
+    commandList->textureBarrier(
+        {rhiDevice.currentSwapchainColorTexture(), RhiResourceState::RenderTarget, RhiResourceState::Present});
     if (!commandList->end()) {
         std::abort();
     }
@@ -97,8 +80,7 @@ void endLoadingPass(RhiDevice& rhiDevice,
 } // namespace
 
 LoadingAppState::LoadingAppState(AppStateDependencies deps, GameSessionConfig config)
-    : m_deps(deps), m_config(std::move(config)) {
-}
+    : m_deps(deps), m_config(std::move(config)) {}
 
 LoadingAppState::~LoadingAppState() {
     if (m_game) {
@@ -107,11 +89,8 @@ LoadingAppState::~LoadingAppState() {
 }
 
 void LoadingAppState::failValidationLoading(const char* detail) {
-    if (m_deps.validationRun.enabled() &&
-        !m_deps.validationRun.failed()) {
-        m_deps.validationRun.fail(
-            app::validation::ValidationRunError::SceneInitializationFailed,
-            detail);
+    if (m_deps.validationRun.enabled() && !m_deps.validationRun.failed()) {
+        m_deps.validationRun.fail(app::validation::ValidationRunError::SceneInitializationFailed, detail);
     }
 }
 
@@ -163,8 +142,7 @@ void LoadingAppState::update(const double frameTime, double& accumulator) {
     refreshScreen();
 
     if (m_game && m_game->isLoadingComplete()) {
-        m_deps.appFsm.changeState(
-            std::make_unique<GameplayAppState>(m_deps, std::move(m_game)));
+        m_deps.appFsm.changeState(std::make_unique<GameplayAppState>(m_deps, std::move(m_game)));
         accumulator = 0.0;
         return;
     }
@@ -182,75 +160,61 @@ void LoadingAppState::render(const double frameTime) {
     const uint32_t height = static_cast<uint32_t>(framebufferSize.height);
     if (!m_deps.rhiDevice.resizeSwapchain(width, height)) {
         MECRAFT_LOG_STREAM(std::cerr << "[LoadingAppState] Failed to resize the RHI swapchain\n");
-        failValidationLoading(
-            "gameplay validation loading swapchain resize failed");
+        failValidationLoading("gameplay validation loading swapchain resize failed");
         return;
     }
     const RhiFrameAcquireResult frame = m_deps.rhiDevice.acquireFrame();
-    if (frame.status == RhiFrameStatus::Minimized ||
-        frame.status == RhiFrameStatus::OutOfDate) {
+    if (frame.status == RhiFrameStatus::Minimized || frame.status == RhiFrameStatus::OutOfDate) {
         return;
     }
-    if (frame.status != RhiFrameStatus::Success &&
-        frame.status != RhiFrameStatus::Suboptimal) {
+    if (frame.status != RhiFrameStatus::Success && frame.status != RhiFrameStatus::Suboptimal) {
         MECRAFT_LOG_STREAM(std::cerr << "[LoadingAppState] Failed to acquire the RHI frame\n");
-        failValidationLoading(
-            "gameplay validation loading frame acquisition failed");
+        failValidationLoading("gameplay validation loading frame acquisition failed");
         return;
     }
 
-    UIRenderContext sceneContext =
-        m_deps.uiRenderer.prepareSceneContext(static_cast<int>(frame.width),
-                                              static_cast<int>(frame.height),
-                                              m_deps.rhiDevice,
-                                              m_deps.input.snapshot());
+    UIRenderContext sceneContext = m_deps.uiRenderer.prepareSceneContext(
+        static_cast<int>(frame.width), static_cast<int>(frame.height), m_deps.rhiDevice, m_deps.input.snapshot());
 
     RhiCommandList* commandList = nullptr;
-    if (!beginLoadingPass(m_deps.rhiDevice, m_deps.commandListPool,
-                          frame.width, frame.height, m_deps.uiRenderer, commandList)) {
+    if (!beginLoadingPass(m_deps.rhiDevice, m_deps.commandListPool, frame.width, frame.height, m_deps.uiRenderer,
+                          commandList)) {
         MECRAFT_LOG_STREAM(std::cerr << "[LoadingAppState] Failed to begin RHI loading pass\n");
-        failValidationLoading(
-            "gameplay validation loading pass recording failed");
-        (void)m_deps.rhiDevice.presentFrame(
-            {frame.frameIndex, frame.imageIndex, Time::getFrameIndex()});
+        failValidationLoading("gameplay validation loading pass recording failed");
+        (void)m_deps.rhiDevice.presentFrame({frame.frameIndex, frame.imageIndex, Time::getFrameIndex()});
         return;
     }
 
     sceneContext.commandList = commandList;
     m_deps.uiRenderer.renderSceneOnlyPrepared(sceneContext);
     endLoadingPass(m_deps.rhiDevice, commandList);
-    const RhiFrameStatus presentStatus = m_deps.rhiDevice.presentFrame(
-        {frame.frameIndex, frame.imageIndex, Time::getFrameIndex()});
-    if (presentStatus == RhiFrameStatus::OutOfDate ||
-        presentStatus == RhiFrameStatus::Minimized) {
+    const RhiFrameStatus presentStatus =
+        m_deps.rhiDevice.presentFrame({frame.frameIndex, frame.imageIndex, Time::getFrameIndex()});
+    if (presentStatus == RhiFrameStatus::OutOfDate || presentStatus == RhiFrameStatus::Minimized) {
         return;
     }
-    if (presentStatus != RhiFrameStatus::Success &&
-        presentStatus != RhiFrameStatus::Suboptimal) {
+    if (presentStatus != RhiFrameStatus::Success && presentStatus != RhiFrameStatus::Suboptimal) {
         MECRAFT_LOG_STREAM(std::cerr << "[LoadingAppState] Failed to present the RHI frame\n");
-        failValidationLoading(
-            "gameplay validation loading frame presentation failed");
+        failValidationLoading("gameplay validation loading frame presentation failed");
         return;
     }
     m_firstFrameRendered = true;
 }
 
 std::unique_ptr<Game> LoadingAppState::createGame() const {
-    GameSessionDependencies deps{
-        m_deps.window,
-        m_deps.input,
-        m_deps.actionMap,
-        m_deps.contextManager,
-        m_deps.resourceMgr,
-        m_deps.audioEngine,
-        m_deps.bgmSystem,
-        m_deps.uiRenderer,
-        m_deps.localeManager,
-        m_deps.threadPool,
-        m_deps.rhiDevice,
-        m_deps.commandListPool,
-        m_deps.enableDebugDashboard
-    };
+    GameSessionDependencies deps{m_deps.window,
+                                 m_deps.input,
+                                 m_deps.actionMap,
+                                 m_deps.contextManager,
+                                 m_deps.resourceMgr,
+                                 m_deps.audioEngine,
+                                 m_deps.bgmSystem,
+                                 m_deps.uiRenderer,
+                                 m_deps.localeManager,
+                                 m_deps.threadPool,
+                                 m_deps.rhiDevice,
+                                 m_deps.commandListPool,
+                                 m_deps.enableDebugDashboard};
     return std::make_unique<Game>(m_config, deps);
 }
 
@@ -268,9 +232,7 @@ void LoadingAppState::refreshScreen() {
 
     if (progress.targetChunks > 0) {
         char detail[96];
-        std::snprintf(detail, sizeof(detail), "%d / %d chunks ready",
-                      progress.loadedChunks,
-                      progress.targetChunks);
+        std::snprintf(detail, sizeof(detail), "%d / %d chunks ready", progress.loadedChunks, progress.targetChunks);
         m_screen.setDetailText(detail);
     } else if (m_failed) {
         m_screen.setDetailText("Returning to menu");

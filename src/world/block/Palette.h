@@ -12,9 +12,7 @@ public:
     uint32_t getOrCreateIndex(BlockStateId stateId);
     [[nodiscard]] BlockStateId getStateId(uint32_t paletteIndex) const;
     // Read a block state id when the caller has already validated the palette index.
-    [[nodiscard]] BlockStateId getStateIdUnchecked(uint32_t paletteIndex) const {
-        return m_indexToId[paletteIndex];
-    }
+    [[nodiscard]] BlockStateId getStateIdUnchecked(uint32_t paletteIndex) const { return m_indexToId[paletteIndex]; }
     [[nodiscard]] size_t size() const;
     [[nodiscard]] uint8_t bitsPerEntry() const;
     [[nodiscard]] size_t dynamicMemoryBytes() const;

@@ -22,11 +22,8 @@ bool colorEqual(const Color& a, const Color& b) {
 }
 
 Color scaledColor(const Color& color, float rgbScale, float alpha) {
-    return {
-        std::clamp(color[0] * rgbScale, 0.0f, 1.0f),
-        std::clamp(color[1] * rgbScale, 0.0f, 1.0f),
-        std::clamp(color[2] * rgbScale, 0.0f, 1.0f),
-        alpha};
+    return {std::clamp(color[0] * rgbScale, 0.0f, 1.0f), std::clamp(color[1] * rgbScale, 0.0f, 1.0f),
+            std::clamp(color[2] * rgbScale, 0.0f, 1.0f), alpha};
 }
 
 } // namespace
@@ -45,14 +42,12 @@ int main() {
     style.borderWidth = 3.0f;
 
     const UIResolvedStyle hovered = UIStyleResolver::resolve(style, UIStyleState_Hovered);
-    if (!colorEqual(hovered.background, style.backgroundHover) ||
-        !colorEqual(hovered.text, style.textNormal) ||
+    if (!colorEqual(hovered.background, style.backgroundHover) || !colorEqual(hovered.text, style.textNormal) ||
         std::fabs(hovered.borderWidth - 3.0f) > 0.001f) {
         return fail("hover state should resolve hover background and preserve text/border width");
     }
 
-    const int pressedFocusedState = static_cast<int>(UIStyleState_Hovered) |
-                                    static_cast<int>(UIStyleState_Pressed) |
+    const int pressedFocusedState = static_cast<int>(UIStyleState_Hovered) | static_cast<int>(UIStyleState_Pressed) |
                                     static_cast<int>(UIStyleState_Focused);
     const UIResolvedStyle pressedFocused = UIStyleResolver::resolve(style, pressedFocusedState);
     if (!colorEqual(pressedFocused.background, style.backgroundPressed) ||
@@ -60,13 +55,11 @@ int main() {
         return fail("pressed should win background while focused wins border");
     }
 
-    const int disabledState = static_cast<int>(UIStyleState_Disabled) |
-                              static_cast<int>(UIStyleState_Hovered) |
+    const int disabledState = static_cast<int>(UIStyleState_Disabled) | static_cast<int>(UIStyleState_Hovered) |
                               static_cast<int>(UIStyleState_Focused);
     const UIResolvedStyle disabled = UIStyleResolver::resolve(style, disabledState);
     if (!colorEqual(disabled.background, style.backgroundDisabled) ||
-        !colorEqual(disabled.border, style.borderDisabled) ||
-        !colorEqual(disabled.text, style.textDisabled)) {
+        !colorEqual(disabled.border, style.borderDisabled) || !colorEqual(disabled.text, style.textDisabled)) {
         return fail("disabled state should override interactive states");
     }
 
@@ -162,34 +155,29 @@ int main() {
 
     const UIComponentStyle panelStyle = UIStyleResolver::panelStyleFromTheme(&theme);
     const UIResolvedStyle panel = UIStyleResolver::resolve(panelStyle, UIStyleState_Normal);
-    if (!colorEqual(panel.background, theme.panelBackground) ||
-        !colorEqual(panel.border, theme.panelBorder) ||
+    if (!colorEqual(panel.background, theme.panelBackground) || !colorEqual(panel.border, theme.panelBorder) ||
         std::fabs(panel.borderWidth - 4.0f) > 0.001f) {
         return fail("panel style should map background, border, and border width from theme");
     }
 
     const UIComponentStyle overlayPanelStyle = UIStyleResolver::panelStyleFromTheme(&theme, UIPanelTone::Overlay);
     const UIResolvedStyle overlayPanel = UIStyleResolver::resolve(overlayPanelStyle, UIStyleState_Normal);
-    if (!colorEqual(overlayPanel.background, theme.overlayDim) ||
-        overlayPanel.border[3] > 0.001f ||
+    if (!colorEqual(overlayPanel.background, theme.overlayDim) || overlayPanel.border[3] > 0.001f ||
         std::fabs(overlayPanel.borderWidth) > 0.001f) {
         return fail("overlay panel tone should map to overlay dim without a border");
     }
 
     const UIComponentStyle screenBackgroundStyle =
         UIStyleResolver::panelStyleFromTheme(&theme, UIPanelTone::ScreenBackground);
-    const UIResolvedStyle screenBackgroundPanel =
-        UIStyleResolver::resolve(screenBackgroundStyle, UIStyleState_Normal);
+    const UIResolvedStyle screenBackgroundPanel = UIStyleResolver::resolve(screenBackgroundStyle, UIStyleState_Normal);
     if (!colorEqual(screenBackgroundPanel.background, theme.screenBackground) ||
-        screenBackgroundPanel.border[3] > 0.001f ||
-        std::fabs(screenBackgroundPanel.borderWidth) > 0.001f) {
+        screenBackgroundPanel.border[3] > 0.001f || std::fabs(screenBackgroundPanel.borderWidth) > 0.001f) {
         return fail("screen background panel tone should map to screen background without a border");
     }
 
     const UIComponentStyle overlaySurfaceStyle =
         UIStyleResolver::panelStyleFromTheme(&theme, UIPanelTone::OverlaySurface);
-    const UIResolvedStyle overlaySurfacePanel =
-        UIStyleResolver::resolve(overlaySurfaceStyle, UIStyleState_Normal);
+    const UIResolvedStyle overlaySurfacePanel = UIStyleResolver::resolve(overlaySurfaceStyle, UIStyleState_Normal);
     if (!colorEqual(overlaySurfacePanel.background, theme.overlaySurface) ||
         !colorEqual(overlaySurfacePanel.border, theme.overlaySurfaceBorder) ||
         std::fabs(overlaySurfacePanel.borderWidth - 1.0f) > 0.001f) {
@@ -244,10 +232,8 @@ int main() {
     textStyle.shadowOffsetX = 2.0f;
     textStyle.shadowOffsetY = -2.0f;
     const UIResolvedTextStyle text = UIStyleResolver::resolveText(textStyle);
-    if (!colorEqual(text.text, theme.textPrimary) ||
-        !colorEqual(text.shadow, textStyle.shadow) ||
-        std::fabs(text.textScale - 1.75f) > 0.001f ||
-        std::fabs(text.shadowOffsetX - 2.0f) > 0.001f ||
+    if (!colorEqual(text.text, theme.textPrimary) || !colorEqual(text.shadow, textStyle.shadow) ||
+        std::fabs(text.textScale - 1.75f) > 0.001f || std::fabs(text.shadowOffsetX - 2.0f) > 0.001f ||
         std::fabs(text.shadowOffsetY + 2.0f) > 0.001f) {
         return fail("text style should map theme text and preserve local metrics");
     }
@@ -257,24 +243,19 @@ int main() {
     const UITextStyle accentTextStyle = UIStyleResolver::textStyleFromTheme(&theme, UITextTone::Accent);
     const UITextStyle overlayTextStyle = UIStyleResolver::textStyleFromTheme(&theme, UITextTone::OnOverlay);
     const UITextStyle overlayMutedTextStyle = UIStyleResolver::textStyleFromTheme(&theme, UITextTone::OnOverlayMuted);
-    const Color expectedMutedText{
-        theme.textSecondary[0],
-        theme.textSecondary[1],
-        theme.textSecondary[2],
-        theme.textSecondary[3] * 0.78f};
+    const Color expectedMutedText{theme.textSecondary[0], theme.textSecondary[1], theme.textSecondary[2],
+                                  theme.textSecondary[3] * 0.78f};
     const Color expectedOverlayText{1.0f, 1.0f, 1.0f, 1.0f};
     const Color expectedOverlayMutedText{0.58f, 0.64f, 0.62f, 1.0f};
     if (!colorEqual(secondaryTextStyle.text, theme.textSecondary) ||
-        !colorEqual(mutedTextStyle.text, expectedMutedText) ||
-        !colorEqual(accentTextStyle.text, theme.textLink) ||
+        !colorEqual(mutedTextStyle.text, expectedMutedText) || !colorEqual(accentTextStyle.text, theme.textLink) ||
         !colorEqual(overlayTextStyle.text, expectedOverlayText) ||
         !colorEqual(overlayMutedTextStyle.text, expectedOverlayMutedText)) {
         return fail("text tones should map to theme semantic text colors");
     }
 
     const UITextInputStyle inputStyle = UIStyleResolver::textInputStyleFromTheme(&theme);
-    const UIResolvedTextInputStyle focusedInput =
-        UIStyleResolver::resolveTextInput(inputStyle, UIStyleState_Focused);
+    const UIResolvedTextInputStyle focusedInput = UIStyleResolver::resolveTextInput(inputStyle, UIStyleState_Focused);
     if (!colorEqual(focusedInput.frame.background, theme.inputBackground) ||
         !colorEqual(focusedInput.frame.border, theme.inputBorderFocused) ||
         !colorEqual(focusedInput.frame.text, theme.inputText) ||
@@ -285,24 +266,19 @@ int main() {
         return fail("text input style should map focused frame and auxiliary colors from theme");
     }
 
-    const UIResolvedTextInputStyle disabledInput =
-        UIStyleResolver::resolveTextInput(inputStyle, UIStyleState_Disabled);
+    const UIResolvedTextInputStyle disabledInput = UIStyleResolver::resolveTextInput(inputStyle, UIStyleState_Disabled);
     if (!colorEqual(disabledInput.frame.text, theme.textDisabled) ||
         !colorEqual(disabledInput.placeholder, theme.textDisabled) ||
-        !(disabledInput.selection[3] < theme.inputSelection[3]) ||
-        !(disabledInput.cursor[3] < theme.inputCursor[3])) {
+        !(disabledInput.selection[3] < theme.inputSelection[3]) || !(disabledInput.cursor[3] < theme.inputCursor[3])) {
         return fail("disabled text input should use disabled text and muted selection/cursor colors");
     }
 
     const UIToggleStyle toggleStyle = UIStyleResolver::toggleStyleFromTheme(&theme);
-    const UIResolvedToggleStyle hoveredToggle =
-        UIStyleResolver::resolveToggle(toggleStyle, UIStyleState_Hovered);
+    const UIResolvedToggleStyle hoveredToggle = UIStyleResolver::resolveToggle(toggleStyle, UIStyleState_Hovered);
     if (!colorEqual(hoveredToggle.trackOff, theme.toggleTrackOff) ||
         !colorEqual(hoveredToggle.trackOn, theme.toggleTrackOn) ||
-        !colorEqual(hoveredToggle.knob, theme.toggleKnobHover) ||
-        !colorEqual(hoveredToggle.text, theme.textPrimary) ||
-        std::fabs(hoveredToggle.width - 48.0f) > 0.001f ||
-        std::fabs(hoveredToggle.height - 24.0f) > 0.001f) {
+        !colorEqual(hoveredToggle.knob, theme.toggleKnobHover) || !colorEqual(hoveredToggle.text, theme.textPrimary) ||
+        std::fabs(hoveredToggle.width - 48.0f) > 0.001f || std::fabs(hoveredToggle.height - 24.0f) > 0.001f) {
         return fail("toggle style should map theme colors, hover knob, and dimensions");
     }
 
@@ -319,8 +295,7 @@ int main() {
     if (!colorEqual(hoveredCheckbox.box, theme.checkboxBoxHover) ||
         !colorEqual(hoveredCheckbox.border, theme.checkboxBoxBorder) ||
         !colorEqual(hoveredCheckbox.check, theme.checkboxCheck) ||
-        !colorEqual(hoveredCheckbox.text, theme.textPrimary) ||
-        std::fabs(hoveredCheckbox.boxSize - 26.0f) > 0.001f ||
+        !colorEqual(hoveredCheckbox.text, theme.textPrimary) || std::fabs(hoveredCheckbox.boxSize - 26.0f) > 0.001f ||
         std::fabs(hoveredCheckbox.borderWidth - 1.0f) > 0.001f) {
         return fail("checkbox style should map hover box, border, check, text, and size");
     }
@@ -333,13 +308,10 @@ int main() {
     }
 
     const UISliderStyle sliderStyle = UIStyleResolver::sliderStyleFromTheme(&theme);
-    const UIResolvedSliderStyle hoveredSlider =
-        UIStyleResolver::resolveSlider(sliderStyle, UIStyleState_Hovered);
-    if (!colorEqual(hoveredSlider.track, theme.sliderTrack) ||
-        !colorEqual(hoveredSlider.fill, theme.sliderFill) ||
+    const UIResolvedSliderStyle hoveredSlider = UIStyleResolver::resolveSlider(sliderStyle, UIStyleState_Hovered);
+    if (!colorEqual(hoveredSlider.track, theme.sliderTrack) || !colorEqual(hoveredSlider.fill, theme.sliderFill) ||
         !colorEqual(hoveredSlider.handle, theme.sliderHandleHover) ||
-        std::fabs(hoveredSlider.trackHeight - 6.0f) > 0.001f ||
-        std::fabs(hoveredSlider.handleSize - 18.0f) > 0.001f) {
+        std::fabs(hoveredSlider.trackHeight - 6.0f) > 0.001f || std::fabs(hoveredSlider.handleSize - 18.0f) > 0.001f) {
         return fail("slider style should map theme colors, hover handle, and dimensions");
     }
 
@@ -354,10 +326,8 @@ int main() {
 
     const UIProgressBarStyle progressBarStyle = UIStyleResolver::progressBarStyleFromTheme(&theme);
     const UIResolvedProgressBarStyle progressBar = UIStyleResolver::resolveProgressBar(progressBarStyle);
-    if (!colorEqual(progressBar.track, theme.progressTrack) ||
-        !colorEqual(progressBar.fill, theme.progressFill) ||
-        !colorEqual(progressBar.text, theme.progressText) ||
-        std::fabs(progressBar.textHeightRatio - 0.6f) > 0.001f ||
+    if (!colorEqual(progressBar.track, theme.progressTrack) || !colorEqual(progressBar.fill, theme.progressFill) ||
+        !colorEqual(progressBar.text, theme.progressText) || std::fabs(progressBar.textHeightRatio - 0.6f) > 0.001f ||
         std::fabs(progressBar.fontPixelHeight - 40.0f) > 0.001f) {
         return fail("progress bar style should map colors and typography metrics from theme");
     }
@@ -373,18 +343,15 @@ int main() {
     const UIRadioButtonStyle radioStyle = UIStyleResolver::radioButtonStyleFromTheme(&theme);
     const UIResolvedRadioButtonStyle hoveredRadio =
         UIStyleResolver::resolveRadioButton(radioStyle, UIStyleState_Hovered);
-    if (!colorEqual(hoveredRadio.outer, theme.radioOuterHover) ||
-        !colorEqual(hoveredRadio.inner, theme.radioInner) ||
-        !colorEqual(hoveredRadio.text, theme.textPrimary) ||
-        std::fabs(hoveredRadio.radioSize - 22.0f) > 0.001f) {
+    if (!colorEqual(hoveredRadio.outer, theme.radioOuterHover) || !colorEqual(hoveredRadio.inner, theme.radioInner) ||
+        !colorEqual(hoveredRadio.text, theme.textPrimary) || std::fabs(hoveredRadio.radioSize - 22.0f) > 0.001f) {
         return fail("radio button style should map hover outer, inner, text, and size");
     }
 
     const UIResolvedRadioButtonStyle disabledRadio =
         UIStyleResolver::resolveRadioButton(radioStyle, UIStyleState_Disabled | UIStyleState_Hovered);
     if (!colorEqual(disabledRadio.outer, theme.buttonDisabled) ||
-        !colorEqual(disabledRadio.inner, theme.textDisabled) ||
-        !colorEqual(disabledRadio.text, theme.textDisabled) ||
+        !colorEqual(disabledRadio.inner, theme.textDisabled) || !colorEqual(disabledRadio.text, theme.textDisabled) ||
         colorEqual(disabledRadio.outer, theme.radioOuterHover)) {
         return fail("disabled radio button should override hover state");
     }
@@ -392,13 +359,10 @@ int main() {
     const UIDropdownStyle dropdownStyle = UIStyleResolver::dropdownStyleFromTheme(&theme);
     const UIResolvedDropdownStyle dropdown = UIStyleResolver::resolveDropdown(dropdownStyle);
     if (!colorEqual(dropdown.background, theme.dropdownBackground) ||
-        !colorEqual(dropdown.border, theme.dropdownBorder) ||
-        !colorEqual(dropdown.text, theme.textPrimary) ||
-        !colorEqual(dropdown.arrow, theme.dropdownArrow) ||
-        !colorEqual(dropdown.itemHover, theme.dropdownItemHover) ||
+        !colorEqual(dropdown.border, theme.dropdownBorder) || !colorEqual(dropdown.text, theme.textPrimary) ||
+        !colorEqual(dropdown.arrow, theme.dropdownArrow) || !colorEqual(dropdown.itemHover, theme.dropdownItemHover) ||
         !colorEqual(dropdown.itemSelected, theme.dropdownItemSelected) ||
-        !colorEqual(dropdown.separator, theme.dropdownSeparator) ||
-        !colorEqual(dropdown.accent, theme.accentPrimary) ||
+        !colorEqual(dropdown.separator, theme.dropdownSeparator) || !colorEqual(dropdown.accent, theme.accentPrimary) ||
         std::fabs(dropdown.itemHeight - 28.0f) > 0.001f) {
         return fail("dropdown style should map theme colors and preserve default item height");
     }
@@ -409,12 +373,9 @@ int main() {
         !colorEqual(contextMenu.border, theme.contextMenuBorder) ||
         !colorEqual(contextMenu.itemHover, theme.contextMenuItemHover) ||
         !colorEqual(contextMenu.separator, theme.contextMenuSeparator) ||
-        !colorEqual(contextMenu.text, theme.textPrimary) ||
-        std::fabs(contextMenu.width - 220.0f) > 0.001f ||
-        std::fabs(contextMenu.borderWidth - 4.0f) > 0.001f ||
-        std::fabs(contextMenu.itemHeight - 32.0f) > 0.001f ||
-        std::fabs(contextMenu.separatorHeight - 6.0f) > 0.001f ||
-        std::fabs(contextMenu.padding - 4.0f) > 0.001f) {
+        !colorEqual(contextMenu.text, theme.textPrimary) || std::fabs(contextMenu.width - 220.0f) > 0.001f ||
+        std::fabs(contextMenu.borderWidth - 4.0f) > 0.001f || std::fabs(contextMenu.itemHeight - 32.0f) > 0.001f ||
+        std::fabs(contextMenu.separatorHeight - 6.0f) > 0.001f || std::fabs(contextMenu.padding - 4.0f) > 0.001f) {
         return fail("context menu style should map theme colors and dimensions");
     }
 
@@ -437,12 +398,9 @@ int main() {
     const UITabControlStyle tabControlStyle = UIStyleResolver::tabControlStyleFromTheme(&theme);
     const UIResolvedTabControlStyle hoveredTab =
         UIStyleResolver::resolveTabControl(tabControlStyle, UIStyleState_Hovered);
-    if (!colorEqual(hoveredTab.header, theme.tabHeaderHover) ||
-        !colorEqual(hoveredTab.indicator, theme.tabIndicator) ||
-        !colorEqual(hoveredTab.content, theme.tabContent) ||
-        !colorEqual(hoveredTab.text, theme.textPrimary) ||
-        std::fabs(hoveredTab.headerHeight - 42.0f) > 0.001f ||
-        std::fabs(hoveredTab.indicatorHeight - 3.0f) > 0.001f) {
+    if (!colorEqual(hoveredTab.header, theme.tabHeaderHover) || !colorEqual(hoveredTab.indicator, theme.tabIndicator) ||
+        !colorEqual(hoveredTab.content, theme.tabContent) || !colorEqual(hoveredTab.text, theme.textPrimary) ||
+        std::fabs(hoveredTab.headerHeight - 42.0f) > 0.001f || std::fabs(hoveredTab.indicatorHeight - 3.0f) > 0.001f) {
         return fail("tab control style should map hover, shared colors, and dimensions");
     }
 
@@ -454,28 +412,21 @@ int main() {
 
     const UIResolvedTabControlStyle disabledTab =
         UIStyleResolver::resolveTabControl(tabControlStyle, UIStyleState_Disabled | UIStyleState_Selected);
-    if (!colorEqual(disabledTab.header, theme.buttonDisabled) ||
-        !colorEqual(disabledTab.text, theme.textDisabled) ||
+    if (!colorEqual(disabledTab.header, theme.buttonDisabled) || !colorEqual(disabledTab.text, theme.textDisabled) ||
         colorEqual(disabledTab.header, theme.tabHeaderActive)) {
         return fail("disabled tab should override selected state");
     }
 
     const UINumericSpinnerStyle spinnerStyle = UIStyleResolver::numericSpinnerStyleFromTheme(&theme);
-    const UIResolvedNumericSpinnerStyle focusedSpinner =
-        UIStyleResolver::resolveNumericSpinner(
-            spinnerStyle,
-            UIStyleState_Hovered,
-            UIStyleState_Normal,
-            UIStyleState_Focused);
+    const UIResolvedNumericSpinnerStyle focusedSpinner = UIStyleResolver::resolveNumericSpinner(
+        spinnerStyle, UIStyleState_Hovered, UIStyleState_Normal, UIStyleState_Focused);
     if (!colorEqual(focusedSpinner.minusBackground, theme.buttonHover) ||
         !colorEqual(focusedSpinner.minusBorder, theme.buttonBorder) ||
         !colorEqual(focusedSpinner.plusBackground, theme.buttonNormal) ||
         !colorEqual(focusedSpinner.valueBackground, theme.inputBackground) ||
         !colorEqual(focusedSpinner.valueBorder, theme.inputBorderFocused) ||
-        !colorEqual(focusedSpinner.text, theme.inputText) ||
-        !colorEqual(focusedSpinner.cursor, theme.inputCursor) ||
-        std::fabs(focusedSpinner.buttonWidth - 28.0f) > 0.001f ||
-        std::fabs(focusedSpinner.gap - 2.0f) > 0.001f ||
+        !colorEqual(focusedSpinner.text, theme.inputText) || !colorEqual(focusedSpinner.cursor, theme.inputCursor) ||
+        std::fabs(focusedSpinner.buttonWidth - 28.0f) > 0.001f || std::fabs(focusedSpinner.gap - 2.0f) > 0.001f ||
         std::fabs(focusedSpinner.borderWidth - 5.0f) > 0.001f ||
         std::fabs(focusedSpinner.textPadding - 6.0f) > 0.001f ||
         std::fabs(focusedSpinner.cursorWidth - 1.5f) > 0.001f ||
@@ -484,11 +435,8 @@ int main() {
     }
 
     const UIResolvedNumericSpinnerStyle disabledSpinner =
-        UIStyleResolver::resolveNumericSpinner(
-            spinnerStyle,
-            UIStyleState_Disabled | UIStyleState_Hovered,
-            UIStyleState_Disabled,
-            UIStyleState_Disabled | UIStyleState_Focused);
+        UIStyleResolver::resolveNumericSpinner(spinnerStyle, UIStyleState_Disabled | UIStyleState_Hovered,
+                                               UIStyleState_Disabled, UIStyleState_Disabled | UIStyleState_Focused);
     if (!colorEqual(disabledSpinner.minusBackground, theme.buttonDisabled) ||
         !colorEqual(disabledSpinner.valueBorder, theme.buttonBorder) ||
         !colorEqual(disabledSpinner.text, theme.textDisabled) ||
@@ -497,65 +445,43 @@ int main() {
     }
 
     const UIToastStyle toastStyle = UIStyleResolver::toastStyleFromTheme(&theme);
-    const UIResolvedToastStyle warningToast =
-        UIStyleResolver::resolveToast(toastStyle, UIToastTone::Warning);
-    const Color expectedToastBorder{
-        theme.toastBackground[0] * 1.3f,
-        theme.toastBackground[1] * 1.3f,
-        theme.toastBackground[2] * 1.3f,
-        0.5f};
+    const UIResolvedToastStyle warningToast = UIStyleResolver::resolveToast(toastStyle, UIToastTone::Warning);
+    const Color expectedToastBorder{theme.toastBackground[0] * 1.3f, theme.toastBackground[1] * 1.3f,
+                                    theme.toastBackground[2] * 1.3f, 0.5f};
     if (!colorEqual(warningToast.background, theme.toastBackground) ||
-        !colorEqual(warningToast.border, expectedToastBorder) ||
-        !colorEqual(warningToast.text, theme.toastText) ||
-        !colorEqual(warningToast.accent, theme.toastWarning) ||
-        std::fabs(warningToast.width - 340.0f) > 0.001f ||
-        std::fabs(warningToast.height - 44.0f) > 0.001f ||
-        std::fabs(warningToast.spacing - 8.0f) > 0.001f ||
-        std::fabs(warningToast.bottomMargin - 60.0f) > 0.001f ||
-        std::fabs(warningToast.borderWidth - 1.0f) > 0.001f ||
-        std::fabs(warningToast.accentWidth - 3.0f) > 0.001f ||
-        std::fabs(warningToast.textPadding - 10.0f) > 0.001f) {
+        !colorEqual(warningToast.border, expectedToastBorder) || !colorEqual(warningToast.text, theme.toastText) ||
+        !colorEqual(warningToast.accent, theme.toastWarning) || std::fabs(warningToast.width - 340.0f) > 0.001f ||
+        std::fabs(warningToast.height - 44.0f) > 0.001f || std::fabs(warningToast.spacing - 8.0f) > 0.001f ||
+        std::fabs(warningToast.bottomMargin - 60.0f) > 0.001f || std::fabs(warningToast.borderWidth - 1.0f) > 0.001f ||
+        std::fabs(warningToast.accentWidth - 3.0f) > 0.001f || std::fabs(warningToast.textPadding - 10.0f) > 0.001f) {
         return fail("toast style should map theme colors, derived border, tone, and metrics");
     }
 
     const UIResolvedToastStyle errorToast = UIStyleResolver::resolveToast(toastStyle, UIToastTone::Error);
-    if (!colorEqual(errorToast.accent, theme.toastError) ||
-        colorEqual(errorToast.accent, theme.toastWarning)) {
+    if (!colorEqual(errorToast.accent, theme.toastError) || colorEqual(errorToast.accent, theme.toastWarning)) {
         return fail("toast tone should select the matching accent color");
     }
 
     const UITooltipStyle tooltipStyle = UIStyleResolver::tooltipStyleFromTheme(&theme);
     const UIResolvedTooltipStyle tooltip = UIStyleResolver::resolveTooltip(tooltipStyle);
-    if (!colorEqual(tooltip.background, theme.tooltipBackground) ||
-        !colorEqual(tooltip.border, theme.tooltipBorder) ||
-        !colorEqual(tooltip.text, theme.textPrimary) ||
-        !colorEqual(tooltip.shadow, Color{0.0f, 0.0f, 0.0f, 0.75f}) ||
-        std::fabs(tooltip.borderWidth - 3.0f) > 0.001f ||
-        std::fabs(tooltip.textScale - 2.0f) > 0.001f ||
-        std::fabs(tooltip.paddingX - 10.0f) > 0.001f ||
-        std::fabs(tooltip.paddingY - 6.0f) > 0.001f ||
-        std::fabs(tooltip.offsetX - 12.0f) > 0.001f ||
-        std::fabs(tooltip.offsetY - 16.0f) > 0.001f ||
-        std::fabs(tooltip.margin - 4.0f) > 0.001f ||
-        std::fabs(tooltip.shadowOffsetX - 1.0f) > 0.001f ||
+    if (!colorEqual(tooltip.background, theme.tooltipBackground) || !colorEqual(tooltip.border, theme.tooltipBorder) ||
+        !colorEqual(tooltip.text, theme.textPrimary) || !colorEqual(tooltip.shadow, Color{0.0f, 0.0f, 0.0f, 0.75f}) ||
+        std::fabs(tooltip.borderWidth - 3.0f) > 0.001f || std::fabs(tooltip.textScale - 2.0f) > 0.001f ||
+        std::fabs(tooltip.paddingX - 10.0f) > 0.001f || std::fabs(tooltip.paddingY - 6.0f) > 0.001f ||
+        std::fabs(tooltip.offsetX - 12.0f) > 0.001f || std::fabs(tooltip.offsetY - 16.0f) > 0.001f ||
+        std::fabs(tooltip.margin - 4.0f) > 0.001f || std::fabs(tooltip.shadowOffsetX - 1.0f) > 0.001f ||
         std::fabs(tooltip.shadowOffsetY + 1.0f) > 0.001f) {
         return fail("tooltip style should map theme colors and preserve layout metrics");
     }
 
     const UIModalStyle modalStyle = UIStyleResolver::modalStyleFromTheme(&theme);
     const UIResolvedModalStyle modal = UIStyleResolver::resolveModal(modalStyle);
-    if (!colorEqual(modal.overlay, theme.overlayDim) ||
-        !colorEqual(modal.panel.background, theme.panelBackground) ||
-        !colorEqual(modal.panel.border, theme.panelBorder) ||
-        !colorEqual(modal.titleText, theme.textPrimary) ||
-        std::fabs(modal.panel.borderWidth - 4.0f) > 0.001f ||
-        std::fabs(modal.panelWidth - 360.0f) > 0.001f ||
-        std::fabs(modal.panelMinHeight - 180.0f) > 0.001f ||
-        std::fabs(modal.titleHeight - 40.0f) > 0.001f ||
-        std::fabs(modal.buttonWidth - 100.0f) > 0.001f ||
-        std::fabs(modal.buttonHeight - 32.0f) > 0.001f ||
-        std::fabs(modal.buttonSpacing - 10.0f) > 0.001f ||
-        std::fabs(modal.padding - 16.0f) > 0.001f ||
+    if (!colorEqual(modal.overlay, theme.overlayDim) || !colorEqual(modal.panel.background, theme.panelBackground) ||
+        !colorEqual(modal.panel.border, theme.panelBorder) || !colorEqual(modal.titleText, theme.textPrimary) ||
+        std::fabs(modal.panel.borderWidth - 4.0f) > 0.001f || std::fabs(modal.panelWidth - 360.0f) > 0.001f ||
+        std::fabs(modal.panelMinHeight - 180.0f) > 0.001f || std::fabs(modal.titleHeight - 40.0f) > 0.001f ||
+        std::fabs(modal.buttonWidth - 100.0f) > 0.001f || std::fabs(modal.buttonHeight - 32.0f) > 0.001f ||
+        std::fabs(modal.buttonSpacing - 10.0f) > 0.001f || std::fabs(modal.padding - 16.0f) > 0.001f ||
         std::fabs(modal.titleTextScale - 2.0f) > 0.001f) {
         return fail("modal style should map overlay, panel, title, and layout metrics");
     }
@@ -574,21 +500,12 @@ int main() {
     consoleStyle.boxWidthRatio = 0.72f;
     consoleStyle.textScale = 1.75f;
     const UIResolvedConsoleStyle console = UIStyleResolver::resolveConsole(consoleStyle);
-    if (!colorEqual(console.box, theme.consoleBox) ||
-        !colorEqual(console.textNormal, theme.consoleTextNormal) ||
+    if (!colorEqual(console.box, theme.consoleBox) || !colorEqual(console.textNormal, theme.consoleTextNormal) ||
         !colorEqual(console.textWarning, theme.consoleTextWarning) ||
-        !colorEqual(console.textSuccess, theme.consoleTextSuccess) ||
-        console.x != 18 ||
-        console.inputY != 22 ||
-        console.inputBoxHeight != 36 ||
-        console.inputToFirstBoxGap != 14 ||
-        console.boxHeight != 38 ||
-        console.boxGap != 3 ||
-        console.horizontalMargin != 24 ||
-        console.minBoxWidth != 320 ||
-        console.textPaddingX != 12 ||
-        console.textPaddingY != 5 ||
-        std::fabs(console.boxWidthRatio - 0.72f) > 0.001f ||
+        !colorEqual(console.textSuccess, theme.consoleTextSuccess) || console.x != 18 || console.inputY != 22 ||
+        console.inputBoxHeight != 36 || console.inputToFirstBoxGap != 14 || console.boxHeight != 38 ||
+        console.boxGap != 3 || console.horizontalMargin != 24 || console.minBoxWidth != 320 ||
+        console.textPaddingX != 12 || console.textPaddingY != 5 || std::fabs(console.boxWidthRatio - 0.72f) > 0.001f ||
         std::fabs(console.textScale - 1.75f) > 0.001f) {
         return fail("console style should map theme colors and preserve layout metrics");
     }

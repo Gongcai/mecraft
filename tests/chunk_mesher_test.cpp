@@ -19,9 +19,7 @@ int fail(const char* message) {
 }
 
 BlockStateId stateForBlockId(const BlockID blockId) {
-    return blockId == RUNTIME_ID_NULL
-        ? NULL_BLOCK_STATE
-        : BlockStateRegistry::getDefaultState(blockId);
+    return blockId == RUNTIME_ID_NULL ? NULL_BLOCK_STATE : BlockStateRegistry::getDefaultState(blockId);
 }
 
 BlockStateId stateForBlockName(const char* name) {
@@ -58,30 +56,39 @@ ChunkMeshData buildMeshDataFor(const Chunk& chunk) {
 
         ChunkMeshData scMeshData = ChunkMesher::buildSubChunkMeshData(*snapshot);
         const float yOffset = static_cast<float>(scy * SubChunk::SIZE);
-        for (auto& vertex : scMeshData.opaqueVertices) { vertex.y += yOffset; }
-        for (auto& vertex : scMeshData.cutoutVertices) { vertex.y += yOffset; }
-        for (auto& vertex : scMeshData.cutoutDistanceVertices) { vertex.y += yOffset; }
-        for (auto& vertex : scMeshData.transparentVertices) { vertex.y += yOffset; }
-        for (auto& vertex : scMeshData.waterVertices) { vertex.y += yOffset; }
+        for (auto& vertex : scMeshData.opaqueVertices) {
+            vertex.y += yOffset;
+        }
+        for (auto& vertex : scMeshData.cutoutVertices) {
+            vertex.y += yOffset;
+        }
+        for (auto& vertex : scMeshData.cutoutDistanceVertices) {
+            vertex.y += yOffset;
+        }
+        for (auto& vertex : scMeshData.transparentVertices) {
+            vertex.y += yOffset;
+        }
+        for (auto& vertex : scMeshData.waterVertices) {
+            vertex.y += yOffset;
+        }
 
-        merged.opaqueVertices.insert(merged.opaqueVertices.end(),
-                                     scMeshData.opaqueVertices.begin(), scMeshData.opaqueVertices.end());
-        merged.cutoutVertices.insert(merged.cutoutVertices.end(),
-                                     scMeshData.cutoutVertices.begin(), scMeshData.cutoutVertices.end());
+        merged.opaqueVertices.insert(merged.opaqueVertices.end(), scMeshData.opaqueVertices.begin(),
+                                     scMeshData.opaqueVertices.end());
+        merged.cutoutVertices.insert(merged.cutoutVertices.end(), scMeshData.cutoutVertices.begin(),
+                                     scMeshData.cutoutVertices.end());
         merged.cutoutDistanceVertices.insert(merged.cutoutDistanceVertices.end(),
                                              scMeshData.cutoutDistanceVertices.begin(),
                                              scMeshData.cutoutDistanceVertices.end());
-        merged.transparentVertices.insert(merged.transparentVertices.end(),
-                                          scMeshData.transparentVertices.begin(), scMeshData.transparentVertices.end());
-        merged.waterVertices.insert(merged.waterVertices.end(),
-                                    scMeshData.waterVertices.begin(), scMeshData.waterVertices.end());
+        merged.transparentVertices.insert(merged.transparentVertices.end(), scMeshData.transparentVertices.begin(),
+                                          scMeshData.transparentVertices.end());
+        merged.waterVertices.insert(merged.waterVertices.end(), scMeshData.waterVertices.begin(),
+                                    scMeshData.waterVertices.end());
         merged.opaqueFaceCountBeforeGreedy += scMeshData.opaqueFaceCountBeforeGreedy;
         merged.opaqueFaceCountAfterGreedy += scMeshData.opaqueFaceCountAfterGreedy;
         merged.transparentFaceCountBeforeGreedy += scMeshData.transparentFaceCountBeforeGreedy;
         merged.transparentFaceCountAfterGreedy += scMeshData.transparentFaceCountAfterGreedy;
         if (scMeshData.hasBounds) {
-            expandBounds(merged,
-                         scMeshData.boundsMin + glm::vec3(0.0f, yOffset, 0.0f),
+            expandBounds(merged, scMeshData.boundsMin + glm::vec3(0.0f, yOffset, 0.0f),
                          scMeshData.boundsMax + glm::vec3(0.0f, yOffset, 0.0f));
         }
     }
@@ -95,8 +102,7 @@ bool approxEqual(const float lhs, const float rhs, const float epsilon = 0.001f)
 }
 
 std::size_t snapshotHaloIndex(const int x, const int y, const int z) {
-    return static_cast<std::size_t>(x + 1) +
-           static_cast<std::size_t>(z + 1) * SC_HALO_SIZE +
+    return static_cast<std::size_t>(x + 1) + static_cast<std::size_t>(z + 1) * SC_HALO_SIZE +
            static_cast<std::size_t>(y + 1) * SC_HALO_SIZE * SC_HALO_SIZE;
 }
 
@@ -104,18 +110,13 @@ std::size_t snapshotBorderIndex(const int y, const int xz) {
     return static_cast<std::size_t>(y) + static_cast<std::size_t>(xz) * SubChunk::SIZE;
 }
 
-std::vector<const BlockVertex*> collectTopFaceVertices(const ChunkMeshData& meshData,
-                                                       const float minX,
-                                                       const float maxX,
-                                                       const float y,
-                                                       const float minZ,
+std::vector<const BlockVertex*> collectTopFaceVertices(const ChunkMeshData& meshData, const float minX,
+                                                       const float maxX, const float y, const float minZ,
                                                        const float maxZ) {
     std::vector<const BlockVertex*> matches;
     for (const BlockVertex& vertex : meshData.opaqueVertices) {
-        if (!approxEqual(vertex.normal, 0.0f) ||
-            !approxEqual(vertex.y, y) ||
-            vertex.x < minX - 0.001f || vertex.x > maxX + 0.001f ||
-            vertex.z < minZ - 0.001f || vertex.z > maxZ + 0.001f) {
+        if (!approxEqual(vertex.normal, 0.0f) || !approxEqual(vertex.y, y) || vertex.x < minX - 0.001f ||
+            vertex.x > maxX + 0.001f || vertex.z < minZ - 0.001f || vertex.z > maxZ + 0.001f) {
             continue;
         }
         matches.push_back(&vertex);
@@ -123,20 +124,14 @@ std::vector<const BlockVertex*> collectTopFaceVertices(const ChunkMeshData& mesh
     return matches;
 }
 
-std::vector<const BlockVertex*> collectFaceVertices(const std::vector<BlockVertex>& vertices,
-                                                    const float face,
-                                                    const float minX,
-                                                    const float maxX,
-                                                    const float minY,
-                                                    const float maxY,
-                                                    const float minZ,
-                                                    const float maxZ) {
+std::vector<const BlockVertex*> collectFaceVertices(const std::vector<BlockVertex>& vertices, const float face,
+                                                    const float minX, const float maxX, const float minY,
+                                                    const float maxY, const float minZ, const float maxZ) {
     std::vector<const BlockVertex*> matches;
     for (const BlockVertex& vertex : vertices) {
-        if (!approxEqual(vertex.normal, face) ||
-            vertex.x < minX - 0.001f || vertex.x > maxX + 0.001f ||
-            vertex.y < minY - 0.001f || vertex.y > maxY + 0.001f ||
-            vertex.z < minZ - 0.001f || vertex.z > maxZ + 0.001f) {
+        if (!approxEqual(vertex.normal, face) || vertex.x < minX - 0.001f || vertex.x > maxX + 0.001f ||
+            vertex.y < minY - 0.001f || vertex.y > maxY + 0.001f || vertex.z < minZ - 0.001f ||
+            vertex.z > maxZ + 0.001f) {
             continue;
         }
         matches.push_back(&vertex);
@@ -229,9 +224,10 @@ int main() {
         }
 
         Chunk center(0, 0);
-        center.setBlock(0, sampleY, 0, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:stone")));
-        const SubChunkMeshingSnapshotPtr snapshot = ChunkMesher::captureSubChunkSnapshot(
-            center, 0, nullptr, nullptr, nullptr, nullptr, &world);
+        center.setBlock(0, sampleY, 0,
+                        BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:stone")));
+        const SubChunkMeshingSnapshotPtr snapshot =
+            ChunkMesher::captureSubChunkSnapshot(center, 0, nullptr, nullptr, nullptr, nullptr, &world);
         if (!snapshot) {
             return fail("snapshot fallback test should capture a sub-chunk");
         }
@@ -247,13 +243,14 @@ int main() {
 
         Chunk posX(1, 0);
         posX.setBlock(0, sampleY, 0, stateForBlockName("minecraft:dirt"));
-        const SubChunkMeshingSnapshotPtr snapshotWithNeighbor = ChunkMesher::captureSubChunkSnapshot(
-            center, 0, &posX, nullptr, nullptr, nullptr, &world);
+        const SubChunkMeshingSnapshotPtr snapshotWithNeighbor =
+            ChunkMesher::captureSubChunkSnapshot(center, 0, &posX, nullptr, nullptr, nullptr, &world);
         if (!snapshotWithNeighbor) {
             return fail("snapshot fallback test should capture with a held neighbor");
         }
         if (snapshotWithNeighbor->posXBorder[snapshotBorderIndex(sampleY, 0)] != stateForBlockName("minecraft:dirt") ||
-            snapshotWithNeighbor->haloBlocks[snapshotHaloIndex(Chunk::SIZE_X, sampleY, 0)] != stateForBlockName("minecraft:dirt")) {
+            snapshotWithNeighbor->haloBlocks[snapshotHaloIndex(Chunk::SIZE_X, sampleY, 0)] !=
+                stateForBlockName("minecraft:dirt")) {
             return fail("held +X neighbor should still be sampled from the job snapshot");
         }
     }
@@ -381,15 +378,13 @@ int main() {
 
     {
         Chunk chunk(0, 0);
-        chunk.setBlock(0, 32, 0, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:chest")));
+        chunk.setBlock(0, 32, 0,
+                       BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:chest")));
 
         const ChunkMeshData meshData = buildMeshDataFor(chunk);
-        if (!meshData.opaqueVertices.empty() ||
-            !meshData.cutoutVertices.empty() ||
-            !meshData.cutoutDistanceVertices.empty() ||
-            !meshData.transparentVertices.empty() ||
-            !meshData.waterVertices.empty() ||
-            meshData.hasBounds) {
+        if (!meshData.opaqueVertices.empty() || !meshData.cutoutVertices.empty() ||
+            !meshData.cutoutDistanceVertices.empty() || !meshData.transparentVertices.empty() ||
+            !meshData.waterVertices.empty() || meshData.hasBounds) {
             return fail("chest block entities should not emit terrain mesh geometry");
         }
     }
@@ -448,9 +443,7 @@ int main() {
 
         center.setSubChunkMesh(1, SubChunkMesh{});
         const SubChunkMesh& clearedMesh = center.getSubChunkMesh(1);
-        if (center.isSubChunkDirty(1) ||
-            clearedMesh.opaqueRange.vertexCount != 0 ||
-            clearedMesh.hasBounds) {
+        if (center.isSubChunkDirty(1) || clearedMesh.opaqueRange.vertexCount != 0 || clearedMesh.hasBounds) {
             return fail("skipped dirty sub-chunks should clear stale mesh ranges and bounds");
         }
     }
@@ -523,7 +516,8 @@ int main() {
 
         chunk.setBlockLight(0, 16, 0, 5);
         SubChunk* middle = chunk.getSubChunk(1);
-        if (!middle || bottom->neighbors[2] != middle || middle->neighbors[3] != bottom || top->neighbors[3] != middle || middle->neighbors[2] != top) {
+        if (!middle || bottom->neighbors[2] != middle || middle->neighbors[3] != bottom ||
+            top->neighbors[3] != middle || middle->neighbors[2] != top) {
             return fail("materialized light-only sub-chunks should wire vertical neighbors while alive");
         }
 
@@ -548,10 +542,9 @@ int main() {
             return fail("expected one top face worth of vertices for boundary AO regression case");
         }
 
-        const bool hasOccludedCorner = std::any_of(faceVertices.begin(), faceVertices.end(),
-                                                   [](const BlockVertex* vertex) {
-                                                       return vertex && vertex->ao < 3.0f - 0.001f;
-                                                   });
+        const bool hasOccludedCorner =
+            std::any_of(faceVertices.begin(), faceVertices.end(),
+                        [](const BlockVertex* vertex) { return vertex && vertex->ao < 3.0f - 0.001f; });
         if (!hasOccludedCorner) {
             return fail("top-face AO should account for neighbor blocks across chunk and sub-chunk edges");
         }
@@ -572,10 +565,9 @@ int main() {
             return fail("expected one top face worth of vertices for boundary block-light regression case");
         }
 
-        const bool receivedNeighborLight = std::any_of(faceVertices.begin(), faceVertices.end(),
-                                                       [](const BlockVertex* vertex) {
-                                                           return vertex && vertex->blockLight > 0.001f;
-                                                       });
+        const bool receivedNeighborLight =
+            std::any_of(faceVertices.begin(), faceVertices.end(),
+                        [](const BlockVertex* vertex) { return vertex && vertex->blockLight > 0.001f; });
         if (!receivedNeighborLight) {
             return fail("top-face block light should sample across chunk and sub-chunk halo positions");
         }
@@ -601,8 +593,7 @@ int main() {
         if (meshData.transparentFaceCountBeforeGreedy != 0 || meshData.transparentFaceCountAfterGreedy != 0) {
             return fail("opaque strip should not contribute transparent greedy stats");
         }
-        if (!meshData.transparentVertices.empty() ||
-            !meshData.cutoutVertices.empty() ||
+        if (!meshData.transparentVertices.empty() || !meshData.cutoutVertices.empty() ||
             !meshData.cutoutDistanceVertices.empty()) {
             return fail("opaque strip should not emit transparent or cutout geometry");
         }
@@ -632,13 +623,10 @@ int main() {
         if (!meshData.transparentVertices.empty()) {
             return fail("water strip should not emit generic transparent geometry");
         }
-        const bool hasAnimatedWaterVertex = std::any_of(meshData.waterVertices.begin(),
-                                                        meshData.waterVertices.end(),
-                                                        [](const BlockVertex& vertex) {
-                                                            return vertex.animated > 0.5f &&
-                                                                   vertex.animationFrameCount >= 32.0f &&
-                                                                   vertex.animationFps > 0.0f;
-                                                        });
+        const bool hasAnimatedWaterVertex =
+            std::any_of(meshData.waterVertices.begin(), meshData.waterVertices.end(), [](const BlockVertex& vertex) {
+                return vertex.animated > 0.5f && vertex.animationFrameCount >= 32.0f && vertex.animationFps > 0.0f;
+            });
         if (!hasAnimatedWaterVertex) {
             return fail("water vertices should carry animation sampling metadata");
         }
@@ -659,12 +647,10 @@ int main() {
         if (meshData.transparentVertices.size() != 36) {
             return fail("isolated glass block should emit six transparent faces");
         }
-        const bool allGlassMaterial = std::all_of(meshData.transparentVertices.begin(),
-                                                  meshData.transparentVertices.end(),
-                                                  [](const BlockVertex& vertex) {
-                                                      return ((vertex.tintPacked >> 8U) & 0x3FU) ==
-                                                             DerivativeMaterialIds::STAINED_GLASS;
-                                                  });
+        const bool allGlassMaterial = std::all_of(
+            meshData.transparentVertices.begin(), meshData.transparentVertices.end(), [](const BlockVertex& vertex) {
+                return ((vertex.tintPacked >> 8U) & 0x3FU) == DerivativeMaterialIds::STAINED_GLASS;
+            });
         if (!allGlassMaterial) {
             return fail("glass transparent vertices should carry stained-glass material id");
         }
@@ -709,20 +695,15 @@ int main() {
         chunk.setBlock(Chunk::SIZE_X - 1, 32, Chunk::SIZE_Z - 1, FluidState::makeWater(0, false));
 
         const ChunkMeshData meshData = buildMeshDataFor(chunk);
-        const auto topFaceVertices = collectFaceVertices(
-            meshData.waterVertices,
-            0.0f,
-            15.0f, 16.0f,
-            32.0f, 33.0f,
-            15.0f, 16.0f);
+        const auto topFaceVertices =
+            collectFaceVertices(meshData.waterVertices, 0.0f, 15.0f, 16.0f, 32.0f, 33.0f, 15.0f, 16.0f);
         if (topFaceVertices.size() != 6) {
             return fail("expected one top face worth of vertices for water chunk-corner light regression case");
         }
 
-        const bool hasDarkCorner = std::any_of(topFaceVertices.begin(), topFaceVertices.end(),
-                                               [](const BlockVertex* vertex) {
-                                                   return vertex != nullptr && vertex->sunlight < 250;
-                                               });
+        const bool hasDarkCorner =
+            std::any_of(topFaceVertices.begin(), topFaceVertices.end(),
+                        [](const BlockVertex* vertex) { return vertex != nullptr && vertex->sunlight < 250; });
         if (hasDarkCorner) {
             return fail("water top faces at chunk corners should not average missing halo light as darkness");
         }
@@ -753,10 +734,8 @@ int main() {
         }
         const uint16_t ageProperty = BlockStateRegistry::getPropertyNameIndex("age");
         const BlockStateId matureWheat = BlockStateRegistry::getState(
-            wheat,
-            std::vector<std::pair<uint16_t, uint16_t>>{
-                {ageProperty, BlockStateRegistry::getPropertyValueIndex(ageProperty, "7")}
-        });
+            wheat, std::vector<std::pair<uint16_t, uint16_t>>{
+                       {ageProperty, BlockStateRegistry::getPropertyValueIndex(ageProperty, "7")}});
 
         Chunk chunk(0, 0);
         chunk.setBlock(1, 32, 1, matureWheat);
@@ -799,34 +778,25 @@ int main() {
         eastFlowChunk.setBlock(0, 32, 0, FluidState::makeWater(0, false));
         eastFlowChunk.setBlock(1, 32, 0, FluidState::makeWater(3, false));
         const ChunkMeshData meshData = buildMeshDataFor(eastFlowChunk);
-        const auto topFaceVertices = collectFaceVertices(
-            meshData.waterVertices,
-            0.0f,
-            0.0f, 1.0f,
-            32.0f, 33.0f,
-            0.0f, 1.0f);
+        const auto topFaceVertices =
+            collectFaceVertices(meshData.waterVertices, 0.0f, 0.0f, 1.0f, 32.0f, 33.0f, 0.0f, 1.0f);
         if (topFaceVertices.size() < 6) {
             return fail("expected water top-face vertices for flow-direction UV test");
         }
-        const bool hasFlowAnimatedTopVertex = std::any_of(topFaceVertices.begin(), topFaceVertices.end(),
-                                                          [](const BlockVertex* vertex) {
-                                                              return vertex != nullptr &&
-                                                                     vertex->animated > 0.5f &&
-                                                                     vertex->animationFrameCount >= 32.0f &&
-                                                                     vertex->animationFps >= 8.0f;
-                                                          });
+        const bool hasFlowAnimatedTopVertex =
+            std::any_of(topFaceVertices.begin(), topFaceVertices.end(), [](const BlockVertex* vertex) {
+                return vertex != nullptr && vertex->animated > 0.5f && vertex->animationFrameCount >= 32.0f &&
+                       vertex->animationFps >= 8.0f;
+            });
         if (!hasFlowAnimatedTopVertex) {
             return fail("flowing water top face should use flow animation metadata after meshing");
         }
 
-        const bool hasEastFlowUv = std::any_of(topFaceVertices.begin(), topFaceVertices.end(),
-                                               [](const BlockVertex* vertex) {
-                                                   return vertex != nullptr &&
-                                                          approxEqual(vertex->x, 1.0f) &&
-                                                          approxEqual(vertex->z, 1.0f) &&
-                                                          approxEqual(vertex->u, 0.0f) &&
-                                                          approxEqual(vertex->v, 1.0f);
-                                               });
+        const bool hasEastFlowUv =
+            std::any_of(topFaceVertices.begin(), topFaceVertices.end(), [](const BlockVertex* vertex) {
+                return vertex != nullptr && approxEqual(vertex->x, 1.0f) && approxEqual(vertex->z, 1.0f) &&
+                       approxEqual(vertex->u, 0.0f) && approxEqual(vertex->v, 1.0f);
+            });
         if (!hasEastFlowUv) {
             return fail("east-flowing water top face should rotate UVs along the flow direction");
         }
@@ -836,12 +806,8 @@ int main() {
         Chunk fallingChunk(0, 0);
         fallingChunk.setBlock(0, 32, 0, FluidState::makeWater(0, true));
         const ChunkMeshData meshData = buildMeshDataFor(fallingChunk);
-        const auto frontFaceVertices = collectFaceVertices(
-            meshData.waterVertices,
-            2.0f,
-            0.0f, 1.0f,
-            32.0f, 33.0f,
-            1.0f, 1.0f);
+        const auto frontFaceVertices =
+            collectFaceVertices(meshData.waterVertices, 2.0f, 0.0f, 1.0f, 32.0f, 33.0f, 1.0f, 1.0f);
         if (frontFaceVertices.size() < 6) {
             return fail("expected falling water front-face vertices for flow-direction UV test");
         }
@@ -856,38 +822,28 @@ int main() {
             maxFallingY = std::max(maxFallingY, vertex->y);
         }
 
-        const bool hasBottomLowV = std::any_of(frontFaceVertices.begin(), frontFaceVertices.end(),
-                                               [minFallingY](const BlockVertex* vertex) {
-                                                   return vertex != nullptr &&
-                                                          approxEqual(vertex->y, minFallingY) &&
-                                                          approxEqual(vertex->v, 0.0f);
-                                               });
-        const bool hasTopHighV = std::any_of(frontFaceVertices.begin(), frontFaceVertices.end(),
-                                             [maxFallingY](const BlockVertex* vertex) {
-                                                 return vertex != nullptr &&
-                                                        approxEqual(vertex->y, maxFallingY) &&
-                                                        approxEqual(vertex->v, 1.0f);
-                                             });
+        const bool hasBottomLowV =
+            std::any_of(frontFaceVertices.begin(), frontFaceVertices.end(), [minFallingY](const BlockVertex* vertex) {
+                return vertex != nullptr && approxEqual(vertex->y, minFallingY) && approxEqual(vertex->v, 0.0f);
+            });
+        const bool hasTopHighV =
+            std::any_of(frontFaceVertices.begin(), frontFaceVertices.end(), [maxFallingY](const BlockVertex* vertex) {
+                return vertex != nullptr && approxEqual(vertex->y, maxFallingY) && approxEqual(vertex->v, 1.0f);
+            });
         if (!hasBottomLowV || !hasTopHighV) {
             return fail("falling water front face should keep its vertical UV direction");
         }
 
-        const bool hasFlowAnimation = std::any_of(frontFaceVertices.begin(), frontFaceVertices.end(),
-                                                  [](const BlockVertex* vertex) {
-                                                      return vertex != nullptr &&
-                                                             vertex->animated > 0.5f &&
-                                                             vertex->animationFps >= 8.0f;
-                                                  });
+        const bool hasFlowAnimation =
+            std::any_of(frontFaceVertices.begin(), frontFaceVertices.end(), [](const BlockVertex* vertex) {
+                return vertex != nullptr && vertex->animated > 0.5f && vertex->animationFps >= 8.0f;
+            });
         if (!hasFlowAnimation) {
             return fail("falling water side face should use flow animation metadata");
         }
 
-        const auto backFaceVertices = collectFaceVertices(
-            meshData.waterVertices,
-            3.0f,
-            0.0f, 1.0f,
-            32.0f, 33.0f,
-            0.0f, 0.0f);
+        const auto backFaceVertices =
+            collectFaceVertices(meshData.waterVertices, 3.0f, 0.0f, 1.0f, 32.0f, 33.0f, 0.0f, 0.0f);
         if (backFaceVertices.size() < 6) {
             return fail("expected falling water back-face vertices for flow-direction UV test");
         }
@@ -902,28 +858,20 @@ int main() {
             maxBackY = std::max(maxBackY, vertex->y);
         }
 
-        const bool hasBackBottomHighV = std::any_of(backFaceVertices.begin(), backFaceVertices.end(),
-                                                    [minBackY](const BlockVertex* vertex) {
-                                                        return vertex != nullptr &&
-                                                               approxEqual(vertex->y, minBackY) &&
-                                                               approxEqual(vertex->v, 1.0f);
-                                                    });
-        const bool hasBackTopLowV = std::any_of(backFaceVertices.begin(), backFaceVertices.end(),
-                                                [maxBackY](const BlockVertex* vertex) {
-                                                    return vertex != nullptr &&
-                                                           approxEqual(vertex->y, maxBackY) &&
-                                                           approxEqual(vertex->v, 0.0f);
-                                                });
+        const bool hasBackBottomHighV =
+            std::any_of(backFaceVertices.begin(), backFaceVertices.end(), [minBackY](const BlockVertex* vertex) {
+                return vertex != nullptr && approxEqual(vertex->y, minBackY) && approxEqual(vertex->v, 1.0f);
+            });
+        const bool hasBackTopLowV =
+            std::any_of(backFaceVertices.begin(), backFaceVertices.end(), [maxBackY](const BlockVertex* vertex) {
+                return vertex != nullptr && approxEqual(vertex->y, maxBackY) && approxEqual(vertex->v, 0.0f);
+            });
         if (!hasBackBottomHighV || !hasBackTopLowV) {
             return fail("falling water back face should flip vertical UVs to match flow direction");
         }
 
-        const auto rightFaceVertices = collectFaceVertices(
-            meshData.waterVertices,
-            5.0f,
-            1.0f, 1.0f,
-            32.0f, 33.0f,
-            0.0f, 1.0f);
+        const auto rightFaceVertices =
+            collectFaceVertices(meshData.waterVertices, 5.0f, 1.0f, 1.0f, 32.0f, 33.0f, 0.0f, 1.0f);
         if (rightFaceVertices.size() < 6) {
             return fail("expected falling water right-face vertices for flow-direction UV test");
         }
@@ -938,18 +886,14 @@ int main() {
             maxRightY = std::max(maxRightY, vertex->y);
         }
 
-        const bool hasRightBottomHighV = std::any_of(rightFaceVertices.begin(), rightFaceVertices.end(),
-                                                     [minRightY](const BlockVertex* vertex) {
-                                                         return vertex != nullptr &&
-                                                                approxEqual(vertex->y, minRightY) &&
-                                                                approxEqual(vertex->v, 1.0f);
-                                                     });
-        const bool hasRightTopLowV = std::any_of(rightFaceVertices.begin(), rightFaceVertices.end(),
-                                                 [maxRightY](const BlockVertex* vertex) {
-                                                     return vertex != nullptr &&
-                                                            approxEqual(vertex->y, maxRightY) &&
-                                                            approxEqual(vertex->v, 0.0f);
-                                                 });
+        const bool hasRightBottomHighV =
+            std::any_of(rightFaceVertices.begin(), rightFaceVertices.end(), [minRightY](const BlockVertex* vertex) {
+                return vertex != nullptr && approxEqual(vertex->y, minRightY) && approxEqual(vertex->v, 1.0f);
+            });
+        const bool hasRightTopLowV =
+            std::any_of(rightFaceVertices.begin(), rightFaceVertices.end(), [maxRightY](const BlockVertex* vertex) {
+                return vertex != nullptr && approxEqual(vertex->y, maxRightY) && approxEqual(vertex->v, 0.0f);
+            });
         if (!hasRightBottomHighV || !hasRightTopLowV) {
             return fail("falling water side faces should flip vertical UVs to match flow direction");
         }
@@ -959,18 +903,12 @@ int main() {
         Chunk chunk(0, 0);
         const BlockStateId birchLogX = BlockStateRegistry::getState(
             BlockRegistry::requireIdByName("minecraft:birch_log"),
-            std::vector<std::pair<uint16_t, uint16_t>>{
-                {PropIndices::AXIS, PropIndices::AXIS_X}
-            });
+            std::vector<std::pair<uint16_t, uint16_t>>{{PropIndices::AXIS, PropIndices::AXIS_X}});
         chunk.setBlock(0, 32, 0, birchLogX);
 
         const ChunkMeshData meshData = buildMeshDataFor(chunk);
-        const auto frontFaceVertices = collectFaceVertices(
-            meshData.opaqueVertices,
-            2.0f,
-            0.0f, 1.0f,
-            32.0f, 32.0f,
-            1.0f, 1.0f);
+        const auto frontFaceVertices =
+            collectFaceVertices(meshData.opaqueVertices, 2.0f, 0.0f, 1.0f, 32.0f, 32.0f, 1.0f, 1.0f);
 
         if (frontFaceVertices.size() != 3) {
             return fail("expected one front-face triangle worth of bottom-edge vertices for rotated log UV test");
@@ -996,7 +934,8 @@ int main() {
         constexpr float kTorchTopV1 = 1.0f - 6.0f / 16.0f;
 
         Chunk chunk(0, 0);
-        chunk.setBlock(0, 32, 0, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:torch")));
+        chunk.setBlock(0, 32, 0,
+                       BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:torch")));
 
         const ChunkMeshData meshData = buildMeshDataFor(chunk);
         if (meshData.cutoutVertices.size() != 36) {
@@ -1026,19 +965,14 @@ int main() {
             minV = std::min(minV, vertex.v);
             maxV = std::max(maxV, vertex.v);
         }
-        if (!approxEqual(minU, 0.0f) || !approxEqual(maxU, 1.0f) ||
-            !approxEqual(minV, 0.0f) || !approxEqual(maxV, 1.0f)) {
+        if (!approxEqual(minU, 0.0f) || !approxEqual(maxU, 1.0f) || !approxEqual(minV, 0.0f) ||
+            !approxEqual(maxV, 1.0f)) {
             return fail("torch planes should sample the full torch texture after rebuild");
         }
 
-        const auto topFaceVertices = collectFaceVertices(meshData.cutoutVertices,
-                                                         0.0f,
-                                                         0.5f - kTorchHalfWidth,
-                                                         0.5f + kTorchHalfWidth,
-                                                         32.0f + kTorchHeight,
-                                                         32.0f + kTorchHeight,
-                                                         0.5f - kTorchHalfWidth,
-                                                         0.5f + kTorchHalfWidth);
+        const auto topFaceVertices = collectFaceVertices(
+            meshData.cutoutVertices, 0.0f, 0.5f - kTorchHalfWidth, 0.5f + kTorchHalfWidth, 32.0f + kTorchHeight,
+            32.0f + kTorchHeight, 0.5f - kTorchHalfWidth, 0.5f + kTorchHalfWidth);
         if (topFaceVertices.size() != 6) {
             return fail("floor torch should keep a 2x2 core top face");
         }
@@ -1062,9 +996,7 @@ int main() {
         Chunk chunk(0, 0);
         const BlockStateId northTorch = BlockStateRegistry::getState(
             BlockRegistry::requireIdByName("minecraft:torch"),
-            std::vector<std::pair<uint16_t, uint16_t>>{
-                {PropIndices::FACING, PropIndices::FACING_NORTH}
-            });
+            std::vector<std::pair<uint16_t, uint16_t>>{{PropIndices::FACING, PropIndices::FACING_NORTH}});
         chunk.setBlock(0, 32, 0, northTorch);
 
         const ChunkMeshData meshData = buildMeshDataFor(chunk);
@@ -1086,10 +1018,7 @@ int main() {
     {
         const BlockID vine = BlockRegistry::findByName("vine");
         const BlockStateId northVine = BlockStateRegistry::getState(
-            vine,
-            std::vector<std::pair<uint16_t, uint16_t>>{
-                {PropIndices::FACING, PropIndices::FACING_NORTH}
-            });
+            vine, std::vector<std::pair<uint16_t, uint16_t>>{{PropIndices::FACING, PropIndices::FACING_NORTH}});
 
         Chunk chunk(0, 0);
         chunk.setBlock(0, 32, 0, northVine);
@@ -1100,10 +1029,8 @@ int main() {
         }
         for (const BlockVertex& vertex : meshData.cutoutDistanceVertices) {
             const uint8_t tintKind = static_cast<uint8_t>((vertex.tintPacked >> 14u) & 0x03u);
-            if (!approxEqual(vertex.normal, 3.0f) ||
-                tintKind != BlockTintKinds::FOLIAGE ||
-                vertex.x < 0.0f || vertex.x > 1.0f ||
-                vertex.y < 32.0f || vertex.y > 33.0f ||
+            if (!approxEqual(vertex.normal, 3.0f) || tintKind != BlockTintKinds::FOLIAGE || vertex.x < 0.0f ||
+                vertex.x > 1.0f || vertex.y < 32.0f || vertex.y > 33.0f ||
                 !approxEqual(vertex.z, 1.0f - 1.0f / 128.0f)) {
                 return fail("north-facing face plane should hug the attached wall boundary with foliage tint");
             }
@@ -1122,10 +1049,8 @@ int main() {
             return fail("floor face plane should emit one cutout quad");
         }
         for (const BlockVertex& vertex : meshData.cutoutDistanceVertices) {
-            if (!approxEqual(vertex.normal, 0.0f) ||
-                vertex.x < 0.0f || vertex.x > 1.0f ||
-                !approxEqual(vertex.y, 32.0f + 1.0f / 128.0f) ||
-                vertex.z < 0.0f || vertex.z > 1.0f) {
+            if (!approxEqual(vertex.normal, 0.0f) || vertex.x < 0.0f || vertex.x > 1.0f ||
+                !approxEqual(vertex.y, 32.0f + 1.0f / 128.0f) || vertex.z < 0.0f || vertex.z > 1.0f) {
                 return fail("floor face plane should hug the ground boundary");
             }
         }
@@ -1134,8 +1059,7 @@ int main() {
     {
         const BlockStateId redstoneWire = BlockStateRegistry::withProperty(
             BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_wire")),
-            PropIndices::POWER,
-            PropIndices::POWER_15);
+            PropIndices::POWER, PropIndices::POWER_15);
 
         Chunk chunk(0, 0);
         chunk.setBlock(0, 32, 0, redstoneWire);
@@ -1147,9 +1071,7 @@ int main() {
         for (const BlockVertex& vertex : meshData.cutoutDistanceVertices) {
             const uint8_t tintKind = static_cast<uint8_t>((vertex.tintPacked >> 14u) & 0x03u);
             const uint8_t tintU = static_cast<uint8_t>((vertex.tintPacked >> 4u) & 0x0fu);
-            if (tintKind != BlockTintKinds::REDSTONE ||
-                tintU != 15 ||
-                !approxEqual(vertex.normal, 0.0f) ||
+            if (tintKind != BlockTintKinds::REDSTONE || tintU != 15 || !approxEqual(vertex.normal, 0.0f) ||
                 !approxEqual(vertex.y, 32.0f + 1.0f / 128.0f)) {
                 return fail("redstone wire vertices should encode redstone tint and lie on the floor plane");
             }
@@ -1159,9 +1081,7 @@ int main() {
     {
         const BlockID blueRedstoneWireBlock = BlockRegistry::requireIdByName("minecraft:blue_redstone_wire");
         const BlockStateId blueRedstoneWire = BlockStateRegistry::withProperty(
-            BlockStateRegistry::getDefaultState(blueRedstoneWireBlock),
-            PropIndices::POWER,
-            PropIndices::POWER_15);
+            BlockStateRegistry::getDefaultState(blueRedstoneWireBlock), PropIndices::POWER, PropIndices::POWER_15);
 
         Chunk chunk(0, 0);
         chunk.setBlock(0, 32, 0, blueRedstoneWire);
@@ -1174,9 +1094,7 @@ int main() {
             const uint8_t tintKind = static_cast<uint8_t>((vertex.tintPacked >> 14u) & 0x03u);
             const uint8_t tintU = static_cast<uint8_t>((vertex.tintPacked >> 4u) & 0x0fu);
             const uint8_t tintV = static_cast<uint8_t>(vertex.tintPacked & 0x0fu);
-            if (tintKind != BlockTintKinds::REDSTONE ||
-                tintU != 15 ||
-                tintV != 1 ||
+            if (tintKind != BlockTintKinds::REDSTONE || tintU != 15 || tintV != 1 ||
                 !approxEqual(vertex.y, 32.0f + 1.0f / 128.0f)) {
                 return fail("blue redstone wire vertices should encode redstone tint color slot");
             }
@@ -1187,14 +1105,12 @@ int main() {
         const BlockID redstoneWireBlock = BlockRegistry::requireIdByName("minecraft:redstone_wire");
         const BlockStateId ceilingWire = BlockStateRegistry::getState(
             redstoneWireBlock,
-            std::vector<std::pair<uint16_t, uint16_t>>{
-                {PropIndices::FACING, PropIndices::FACING_CEILING},
-                {PropIndices::POWER, PropIndices::POWER_15},
-                {PropIndices::NORTH, PropIndices::NORTH_NONE},
-                {PropIndices::SOUTH, PropIndices::SOUTH_NONE},
-                {PropIndices::EAST, PropIndices::EAST_NONE},
-                {PropIndices::WEST, PropIndices::WEST_NONE}
-            });
+            std::vector<std::pair<uint16_t, uint16_t>>{{PropIndices::FACING, PropIndices::FACING_CEILING},
+                                                       {PropIndices::POWER, PropIndices::POWER_15},
+                                                       {PropIndices::NORTH, PropIndices::NORTH_NONE},
+                                                       {PropIndices::SOUTH, PropIndices::SOUTH_NONE},
+                                                       {PropIndices::EAST, PropIndices::EAST_NONE},
+                                                       {PropIndices::WEST, PropIndices::WEST_NONE}});
 
         Chunk chunk(0, 0);
         chunk.setBlock(0, 32, 0, ceilingWire);
@@ -1206,9 +1122,7 @@ int main() {
         for (const BlockVertex& vertex : meshData.cutoutDistanceVertices) {
             const uint8_t tintKind = static_cast<uint8_t>((vertex.tintPacked >> 14u) & 0x03u);
             const uint8_t tintU = static_cast<uint8_t>((vertex.tintPacked >> 4u) & 0x0fu);
-            if (tintKind != BlockTintKinds::REDSTONE ||
-                tintU != 15 ||
-                !approxEqual(vertex.normal, 1.0f) ||
+            if (tintKind != BlockTintKinds::REDSTONE || tintU != 15 || !approxEqual(vertex.normal, 1.0f) ||
                 !approxEqual(vertex.y, 33.0f - 1.0f / 128.0f)) {
                 return fail("ceiling redstone wire vertices should encode tint and lie on the ceiling plane");
             }
@@ -1219,14 +1133,12 @@ int main() {
         const BlockID redstoneWireBlock = BlockRegistry::requireIdByName("minecraft:redstone_wire");
         const BlockStateId northWallWire = BlockStateRegistry::getState(
             redstoneWireBlock,
-            std::vector<std::pair<uint16_t, uint16_t>>{
-                {PropIndices::FACING, PropIndices::FACING_NORTH},
-                {PropIndices::POWER, PropIndices::POWER_0},
-                {PropIndices::NORTH, PropIndices::NORTH_NONE},
-                {PropIndices::SOUTH, PropIndices::SOUTH_NONE},
-                {PropIndices::EAST, PropIndices::EAST_NONE},
-                {PropIndices::WEST, PropIndices::WEST_NONE}
-            });
+            std::vector<std::pair<uint16_t, uint16_t>>{{PropIndices::FACING, PropIndices::FACING_NORTH},
+                                                       {PropIndices::POWER, PropIndices::POWER_0},
+                                                       {PropIndices::NORTH, PropIndices::NORTH_NONE},
+                                                       {PropIndices::SOUTH, PropIndices::SOUTH_NONE},
+                                                       {PropIndices::EAST, PropIndices::EAST_NONE},
+                                                       {PropIndices::WEST, PropIndices::WEST_NONE}});
 
         Chunk chunk(0, 0);
         chunk.setBlock(0, 32, 0, northWallWire);
@@ -1236,8 +1148,7 @@ int main() {
             return fail("isolated north-wall redstone wire should emit one tinted wall quad");
         }
         for (const BlockVertex& vertex : meshData.cutoutDistanceVertices) {
-            if (!approxEqual(vertex.normal, 3.0f) ||
-                !approxEqual(vertex.z, 1.0f - 1.0f / 128.0f)) {
+            if (!approxEqual(vertex.normal, 3.0f) || !approxEqual(vertex.z, 1.0f - 1.0f / 128.0f)) {
                 return fail("north-wall redstone wire vertices should lie on the north wall plane");
             }
         }
@@ -1246,14 +1157,12 @@ int main() {
     {
         const BlockStateId northWallWireEast = BlockStateRegistry::getState(
             BlockRegistry::requireIdByName("minecraft:redstone_wire"),
-            std::vector<std::pair<uint16_t, uint16_t>>{
-                {PropIndices::FACING, PropIndices::FACING_NORTH},
-                {PropIndices::POWER, PropIndices::POWER_0},
-                {PropIndices::NORTH, PropIndices::NORTH_NONE},
-                {PropIndices::SOUTH, PropIndices::SOUTH_NONE},
-                {PropIndices::EAST, PropIndices::EAST_SIDE},
-                {PropIndices::WEST, PropIndices::WEST_NONE}
-            });
+            std::vector<std::pair<uint16_t, uint16_t>>{{PropIndices::FACING, PropIndices::FACING_NORTH},
+                                                       {PropIndices::POWER, PropIndices::POWER_0},
+                                                       {PropIndices::NORTH, PropIndices::NORTH_NONE},
+                                                       {PropIndices::SOUTH, PropIndices::SOUTH_NONE},
+                                                       {PropIndices::EAST, PropIndices::EAST_SIDE},
+                                                       {PropIndices::WEST, PropIndices::WEST_NONE}});
 
         Chunk chunk(0, 0);
         chunk.setBlock(0, 32, 0, northWallWireEast);
@@ -1272,8 +1181,7 @@ int main() {
             minY = std::min(minY, vertex.y);
             maxX = std::max(maxX, vertex.x);
             maxY = std::max(maxY, vertex.y);
-            if (!approxEqual(vertex.normal, 3.0f) ||
-                !approxEqual(vertex.z, 1.0f - 1.0f / 128.0f)) {
+            if (!approxEqual(vertex.normal, 3.0f) || !approxEqual(vertex.z, 1.0f - 1.0f / 128.0f)) {
                 return fail("east north-wall redstone segment should remain on the north wall plane");
             }
             if (approxEqual(vertex.x, 0.5f) && !approxEqual(vertex.v, 0.0f)) {
@@ -1289,9 +1197,7 @@ int main() {
                 return fail("east north-wall redstone segment should keep the texture upright on the wall");
             }
         }
-        if (!approxEqual(minX, 0.5f) ||
-            !approxEqual(maxX, 1.0f) ||
-            !approxEqual(minY, 32.0f) ||
+        if (!approxEqual(minX, 0.5f) || !approxEqual(maxX, 1.0f) || !approxEqual(minY, 32.0f) ||
             !approxEqual(maxY, 33.0f)) {
             return fail("east north-wall redstone segment should occupy the horizontal half of the wall face");
         }
@@ -1300,14 +1206,12 @@ int main() {
     {
         const BlockStateId northWallWireUp = BlockStateRegistry::getState(
             BlockRegistry::requireIdByName("minecraft:redstone_wire"),
-            std::vector<std::pair<uint16_t, uint16_t>>{
-                {PropIndices::FACING, PropIndices::FACING_NORTH},
-                {PropIndices::POWER, PropIndices::POWER_0},
-                {PropIndices::NORTH, PropIndices::NORTH_SIDE},
-                {PropIndices::SOUTH, PropIndices::SOUTH_NONE},
-                {PropIndices::EAST, PropIndices::EAST_NONE},
-                {PropIndices::WEST, PropIndices::WEST_NONE}
-            });
+            std::vector<std::pair<uint16_t, uint16_t>>{{PropIndices::FACING, PropIndices::FACING_NORTH},
+                                                       {PropIndices::POWER, PropIndices::POWER_0},
+                                                       {PropIndices::NORTH, PropIndices::NORTH_SIDE},
+                                                       {PropIndices::SOUTH, PropIndices::SOUTH_NONE},
+                                                       {PropIndices::EAST, PropIndices::EAST_NONE},
+                                                       {PropIndices::WEST, PropIndices::WEST_NONE}});
 
         Chunk chunk(0, 0);
         chunk.setBlock(0, 32, 0, northWallWireUp);
@@ -1327,9 +1231,7 @@ int main() {
             maxX = std::max(maxX, vertex.x);
             maxY = std::max(maxY, vertex.y);
         }
-        if (!approxEqual(minX, 0.0f) ||
-            !approxEqual(maxX, 1.0f) ||
-            !approxEqual(minY, 32.5f) ||
+        if (!approxEqual(minX, 0.0f) || !approxEqual(maxX, 1.0f) || !approxEqual(minY, 32.5f) ||
             !approxEqual(maxY, 33.0f)) {
             return fail("upward north-wall redstone segment should occupy the upper half of the wall face");
         }
@@ -1338,14 +1240,12 @@ int main() {
     {
         const BlockStateId redstoneWireEast = BlockStateRegistry::getState(
             BlockRegistry::requireIdByName("minecraft:redstone_wire"),
-            std::vector<std::pair<uint16_t, uint16_t>>{
-                {PropIndices::FACING, PropIndices::FACING_FLOOR},
-                {PropIndices::POWER, PropIndices::POWER_0},
-                {PropIndices::NORTH, PropIndices::NORTH_NONE},
-                {PropIndices::SOUTH, PropIndices::SOUTH_NONE},
-                {PropIndices::EAST, PropIndices::EAST_SIDE},
-                {PropIndices::WEST, PropIndices::WEST_NONE}
-            });
+            std::vector<std::pair<uint16_t, uint16_t>>{{PropIndices::FACING, PropIndices::FACING_FLOOR},
+                                                       {PropIndices::POWER, PropIndices::POWER_0},
+                                                       {PropIndices::NORTH, PropIndices::NORTH_NONE},
+                                                       {PropIndices::SOUTH, PropIndices::SOUTH_NONE},
+                                                       {PropIndices::EAST, PropIndices::EAST_SIDE},
+                                                       {PropIndices::WEST, PropIndices::WEST_NONE}});
 
         Chunk chunk(0, 0);
         chunk.setBlock(0, 32, 0, redstoneWireEast);
@@ -1373,14 +1273,9 @@ int main() {
             maxU = std::max(maxU, vertex.u);
             maxV = std::max(maxV, vertex.v);
         }
-        if (!approxEqual(minX, 0.5f) ||
-            !approxEqual(maxX, 1.0f) ||
-            !approxEqual(minZ, 0.0f) ||
-            !approxEqual(maxZ, 1.0f) ||
-            !approxEqual(minU, 0.0f) ||
-            !approxEqual(maxU, 1.0f) ||
-            !approxEqual(minV, 0.0f) ||
-            !approxEqual(maxV, 0.5f)) {
+        if (!approxEqual(minX, 0.5f) || !approxEqual(maxX, 1.0f) || !approxEqual(minZ, 0.0f) ||
+            !approxEqual(maxZ, 1.0f) || !approxEqual(minU, 0.0f) || !approxEqual(maxU, 1.0f) ||
+            !approxEqual(minV, 0.0f) || !approxEqual(maxV, 0.5f)) {
             return fail("east redstone wire segment should rotate the half-tile line texture horizontally");
         }
     }
@@ -1400,25 +1295,17 @@ int main() {
 
         World world;
         WireContainerParts& parts = world.wireContainerParts().getOrCreate(glm::ivec3(0, 32, 0));
-        if (!parts.addPart(WirePart{
-                redstoneWireDef.redstoneWireChannelId,
-                PropIndices::FACING_FLOOR,
-                15,
-                WireConnectionBits::AXIS1_POS
-            })) {
+        if (!parts.addPart(WirePart{redstoneWireDef.redstoneWireChannelId, PropIndices::FACING_FLOOR, 15,
+                                    WireConnectionBits::AXIS1_POS})) {
             return fail("wire container test should add the red floor part");
         }
-        if (!parts.addPart(WirePart{
-                blueRedstoneWireDef.redstoneWireChannelId,
-                PropIndices::FACING_NORTH,
-                7,
-                WireConnectionBits::AXIS2_POS
-            })) {
+        if (!parts.addPart(WirePart{blueRedstoneWireDef.redstoneWireChannelId, PropIndices::FACING_NORTH, 7,
+                                    WireConnectionBits::AXIS2_POS})) {
             return fail("wire container test should add the blue north-wall part");
         }
 
-        const SubChunkMeshingSnapshotPtr snapshot = ChunkMesher::captureSubChunkSnapshot(
-            chunk, 2, nullptr, nullptr, nullptr, nullptr, &world);
+        const SubChunkMeshingSnapshotPtr snapshot =
+            ChunkMesher::captureSubChunkSnapshot(chunk, 2, nullptr, nullptr, nullptr, nullptr, &world);
         if (!snapshot || snapshot->wireContainers.size() != 1) {
             return fail("wire container snapshot should capture parts from the world store");
         }
@@ -1437,13 +1324,10 @@ int main() {
             if (tintKind != BlockTintKinds::REDSTONE) {
                 return fail("wire container parts should render with redstone tint");
             }
-            if (tintU == 15 && tintV == 0 &&
-                approxEqual(vertex.normal, 0.0f) &&
-                approxEqual(vertex.y, 1.0f / 128.0f)) {
+            if (tintU == 15 && tintV == 0 && approxEqual(vertex.normal, 0.0f) && approxEqual(vertex.y, 1.0f / 128.0f)) {
                 foundRedFloor = true;
             }
-            if (tintU == 7 && tintV == 1 &&
-                approxEqual(vertex.normal, 3.0f) &&
+            if (tintU == 7 && tintV == 1 && approxEqual(vertex.normal, 3.0f) &&
                 approxEqual(vertex.z, 1.0f - 1.0f / 128.0f)) {
                 foundBlueNorthWall = true;
             }

@@ -35,26 +35,16 @@ public:
     /// @param resources Imported graph handles for all motion resources.
     /// @param dependency Pass that must complete before the copy starts.
     /// @return Final motion-blur pass handle, or an invalid handle for an invalid contract.
-    [[nodiscard]] RgPassHandle addGraphPasses(
-        RenderGraph& graph,
-        const FrameContext& ctx,
-        const RenderSettings& settings,
-        DeferredRenderTargets& targets,
-        const GraphResources& resources,
-        RgPassHandle dependency);
+    [[nodiscard]] RgPassHandle addGraphPasses(RenderGraph& graph, const FrameContext& ctx,
+                                              const RenderSettings& settings, DeferredRenderTargets& targets,
+                                              const GraphResources& resources, RgPassHandle dependency);
 
 private:
-    [[nodiscard]] bool recordBlur(RhiCommandList& commandList,
-                                  const FrameContext& ctx,
-                                  const RenderSettings& settings,
-                                  DeferredRenderTargets& targets,
-                                  int inputIndex);
+    [[nodiscard]] bool recordBlur(RhiCommandList& commandList, const FrameContext& ctx, const RenderSettings& settings,
+                                  DeferredRenderTargets& targets, int inputIndex);
     bool ensureRhiPipeline(RhiDevice& rhiDevice);
-    bool ensureRhiBindGroup(RhiDevice& rhiDevice,
-                            int historyIndex,
-                            RhiTextureViewHandle sceneView,
-                            RhiTextureViewHandle velocityView,
-                            RhiTextureViewHandle depthView);
+    bool ensureRhiBindGroup(RhiDevice& rhiDevice, int historyIndex, RhiTextureViewHandle sceneView,
+                            RhiTextureViewHandle velocityView, RhiTextureViewHandle depthView);
     void destroyRhiBindGroup();
     void destroyRhiResources();
 

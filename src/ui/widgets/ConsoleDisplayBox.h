@@ -5,8 +5,7 @@
 #include <functional>
 #include <string>
 
-class ConsoleDisplayBox
-{
+class ConsoleDisplayBox {
 public:
     enum class MessageType {
         Normal,
@@ -44,22 +43,17 @@ public:
     };
     using DrawRectFn = std::function<void(int, int, int, int, const std::array<float, 4>&)>;
     using SetClipRectFn = std::function<void(int, int, int, int)>;
-    using RenderTextFn = std::function<void(const std::string&, float, float, float, const std::array<float, 4>&, float, float)>;
+    using RenderTextFn =
+        std::function<void(const std::string&, float, float, float, const std::array<float, 4>&, float, float)>;
     using MeasureTextFn = std::function<TextMetricsResult(const std::string&, float)>;
 
-    void appendLine(const std::string& message,
-                    double createdAtSec,
-                    MessageType type = MessageType::Normal);
+    void appendLine(const std::string& message, double createdAtSec, MessageType type = MessageType::Normal);
     void clear();
     void setMaxLines(std::size_t maxLines);
     [[nodiscard]] bool empty() const;
 
-    void render(double nowSec,
-                const RenderParams& params,
-                const DrawRectFn& drawRect,
-                const SetClipRectFn& setClipRect,
-                const RenderTextFn& renderText,
-                const MeasureTextFn& measureText);
+    void render(double nowSec, const RenderParams& params, const DrawRectFn& drawRect, const SetClipRectFn& setClipRect,
+                const RenderTextFn& renderText, const MeasureTextFn& measureText);
 
 private:
     struct Line {

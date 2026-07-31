@@ -32,8 +32,8 @@ struct GameplayStateContext {
     Inventory& inventory;
     const LocaleManager& localeManager;
     client::GameClient& gameClient;
-    RenderScene* renderScene = nullptr;  ///< Optional; for in-game settings screen
-    World* world = nullptr;              ///< Optional; active world for settings and world interactions
+    RenderScene* renderScene = nullptr; ///< Optional; for in-game settings screen
+    World* world = nullptr; ///< Optional; active world for settings and world interactions
     std::function<void(int)> renderDistanceSetter;
     bool isMultiplayer = false;
     Window* window = nullptr;

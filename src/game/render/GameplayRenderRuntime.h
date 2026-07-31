@@ -39,14 +39,9 @@ public:
     GameplayRenderRuntime& operator=(const GameplayRenderRuntime&) = delete;
 
     /// Initialize all renderers and connect to session systems.
-    [[nodiscard]] bool init(ResourceMgr& resourceMgr,
-                            GameSession& session,
-                            UIRenderer& uiRenderer,
-                            ThreadPool& threadPool,
-                            Window& window,
-                            RhiDevice& rhiDevice,
-                            RhiCommandListPool& commandListPool,
-                            GameRenderSettingsSource settingsSource,
+    [[nodiscard]] bool init(ResourceMgr& resourceMgr, GameSession& session, UIRenderer& uiRenderer,
+                            ThreadPool& threadPool, Window& window, RhiDevice& rhiDevice,
+                            RhiCommandListPool& commandListPool, GameRenderSettingsSource settingsSource,
                             const RenderSettings& fixedSettings);
 
     /// Shutdown all renderers in reverse order of initialization.

@@ -24,31 +24,31 @@ void expand(BlockCollisionBox& box, const glm::vec3& point) {
 
 glm::vec3 rotateModelPointX90(const glm::vec3& point, const uint16_t rotation) {
     switch ((rotation / 90u) % 4u) {
-        case 1: return {point.x, 1.0f - point.z, point.y};
-        case 2: return {point.x, 1.0f - point.y, 1.0f - point.z};
-        case 3: return {point.x, point.z, 1.0f - point.y};
-        case 0:
-        default: return point;
+    case 1: return {point.x, 1.0f - point.z, point.y};
+    case 2: return {point.x, 1.0f - point.y, 1.0f - point.z};
+    case 3: return {point.x, point.z, 1.0f - point.y};
+    case 0:
+    default: return point;
     }
 }
 
 glm::vec3 rotateModelPointY90(const glm::vec3& point, const uint16_t rotation) {
     switch ((rotation / 90u) % 4u) {
-        case 1: return {1.0f - point.z, point.y, point.x};
-        case 2: return {1.0f - point.x, point.y, 1.0f - point.z};
-        case 3: return {point.z, point.y, 1.0f - point.x};
-        case 0:
-        default: return point;
+    case 1: return {1.0f - point.z, point.y, point.x};
+    case 2: return {1.0f - point.x, point.y, 1.0f - point.z};
+    case 3: return {point.z, point.y, 1.0f - point.x};
+    case 0:
+    default: return point;
     }
 }
 
 glm::vec3 rotateModelPointZ90(const glm::vec3& point, const uint16_t rotation) {
     switch ((rotation / 90u) % 4u) {
-        case 1: return {1.0f - point.y, point.x, point.z};
-        case 2: return {1.0f - point.x, 1.0f - point.y, point.z};
-        case 3: return {point.y, 1.0f - point.x, point.z};
-        case 0:
-        default: return point;
+    case 1: return {1.0f - point.y, point.x, point.z};
+    case 2: return {1.0f - point.x, 1.0f - point.y, point.z};
+    case 3: return {point.y, 1.0f - point.x, point.z};
+    case 0:
+    default: return point;
     }
 }
 
@@ -94,18 +94,13 @@ BlockCollisionBox makeElementBox(const ModelElement& element, const ModelTransfo
     return box;
 }
 
-bool aabbIntersects(const glm::vec3& aMin,
-                    const glm::vec3& aMax,
-                    const glm::vec3& bMin,
-                    const glm::vec3& bMax) {
-    return aMin.x < bMax.x && aMax.x > bMin.x &&
-           aMin.y < bMax.y && aMax.y > bMin.y &&
-           aMin.z < bMax.z && aMax.z > bMin.z;
+bool aabbIntersects(const glm::vec3& aMin, const glm::vec3& aMax, const glm::vec3& bMin, const glm::vec3& bMax) {
+    return aMin.x < bMax.x && aMax.x > bMin.x && aMin.y < bMax.y && aMax.y > bMin.y && aMin.z < bMax.z &&
+           aMax.z > bMin.z;
 }
 
 bool pointInside(const glm::vec3& point, const glm::vec3& boxMin, const glm::vec3& boxMax) {
-    return point.x >= boxMin.x && point.x <= boxMax.x &&
-           point.y >= boxMin.y && point.y <= boxMax.y &&
+    return point.x >= boxMin.x && point.x <= boxMax.x && point.y >= boxMin.y && point.y <= boxMax.y &&
            point.z >= boxMin.z && point.z <= boxMax.z;
 }
 
@@ -154,9 +149,7 @@ std::vector<BlockCollisionBox> getBoxes(const BlockStateId stateId) {
     return boxes;
 }
 
-bool intersects(const BlockStateId stateId,
-                const glm::ivec3& blockPos,
-                const glm::vec3& queryMin,
+bool intersects(const BlockStateId stateId, const glm::ivec3& blockPos, const glm::vec3& queryMin,
                 const glm::vec3& queryMax) {
     const glm::vec3 blockOffset(blockPos);
 
@@ -187,9 +180,7 @@ bool intersects(const BlockStateId stateId,
     return false;
 }
 
-bool containsPoint(const BlockStateId stateId,
-                   const glm::ivec3& blockPos,
-                   const glm::vec3& point) {
+bool containsPoint(const BlockStateId stateId, const glm::ivec3& blockPos, const glm::vec3& point) {
     const glm::vec3 blockOffset(blockPos);
 
     if (stateId == NULL_BLOCK_STATE) {

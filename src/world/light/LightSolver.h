@@ -9,4 +9,3 @@ public:
 };
 
 #endif // MECRAFT_LIGHTSOLVER_H
-

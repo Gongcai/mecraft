@@ -29,36 +29,27 @@ public:
     ~ModelSceneDeferredRenderer();
 
     ModelSceneDeferredRenderer(const ModelSceneDeferredRenderer&) = delete;
-    ModelSceneDeferredRenderer& operator=(
-        const ModelSceneDeferredRenderer&) = delete;
+    ModelSceneDeferredRenderer& operator=(const ModelSceneDeferredRenderer&) = delete;
 
     /// Initializes deferred targets, atmosphere, shadows, and post-processing.
-    [[nodiscard]] bool init(ResourceMgr& resourceMgr,
-                            RhiDevice& rhiDevice,
-                            RhiCommandListPool& commandListPool,
-                            ImGuiRhiRenderer& imguiRenderer,
-                            IDeferredGeometryProvider& geometryProvider);
+    [[nodiscard]] bool init(ResourceMgr& resourceMgr, RhiDevice& rhiDevice, RhiCommandListPool& commandListPool,
+                            ImGuiRhiRenderer& imguiRenderer, IDeferredGeometryProvider& geometryProvider);
     void shutdown();
 
     /// Allocates render targets and a stable ImGui texture binding for the viewport.
     [[nodiscard]] bool ensureViewport(uint32_t width, uint32_t height);
 
     /// Renders one deferred scene frame and composites it into the viewport texture.
-    [[nodiscard]] bool render(const glm::mat4& view,
-                              const glm::mat4& projection,
-                              const glm::vec3& cameraPosition,
-                              float nearPlane,
-                              float farPlane,
-                              float verticalFovDegrees,
+    [[nodiscard]] bool render(const glm::mat4& view, const glm::mat4& projection, const glm::vec3& cameraPosition,
+                              float nearPlane, float farPlane, float verticalFovDegrees,
                               const RenderFrameClock& frameClock);
 
     /// Publishes the model scene's complete reflection-probe source snapshot.
     /// @param renderer Scene callback that records one HDR cubemap face.
     /// @param sources Stable model-scene probe placement and capture revisions.
     /// @return True when the deferred capture pass accepted the configuration.
-    [[nodiscard]] bool configureReflectionProbeCapture(
-        IReflectionProbeCaptureRenderer& renderer,
-        std::vector<ReflectionProbeCaptureSource> sources);
+    [[nodiscard]] bool configureReflectionProbeCapture(IReflectionProbeCaptureRenderer& renderer,
+                                                       std::vector<ReflectionProbeCaptureSource> sources);
 
     /// Changes the standalone environment time and invalidates temporal history.
     /// @param timeOfDaySeconds Time within the 1200-second world day.
@@ -88,8 +79,7 @@ public:
     [[nodiscard]] static RenderSettings defaultSettings();
 
     /// Verifies that settings do not require gameplay-only rendering resources.
-    [[nodiscard]] static bool validateSettings(const RenderSettings& settings,
-                                               std::string& error);
+    [[nodiscard]] static bool validateSettings(const RenderSettings& settings, std::string& error);
 
     /// Returns the active standalone renderer configuration.
     [[nodiscard]] const RenderSettings& settings() const;
@@ -102,8 +92,7 @@ public:
     [[nodiscard]] RhiTextureHandle captureTextureHandle() const;
     [[nodiscard]] RhiTextureFormat captureTextureFormat() const;
     [[nodiscard]] const GpuFrameStats* gpuFrameStats() const;
-    [[nodiscard]] ReflectionProbeCaptureFrameStats
-    reflectionProbeCaptureStats() const;
+    [[nodiscard]] ReflectionProbeCaptureFrameStats reflectionProbeCaptureStats() const;
     [[nodiscard]] const std::string& lastError() const;
 
 private:

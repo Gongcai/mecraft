@@ -35,8 +35,8 @@ private:
 };
 
 [[nodiscard]] BlockTextureManifest buildBlockTextureManifest(const std::string& directory);
-[[nodiscard]] BlockTextureManifest buildBlockTextureManifest(const std::string& directory,
-                                                             const std::unordered_set<std::string>& registeredTextureNames);
+[[nodiscard]] BlockTextureManifest
+buildBlockTextureManifest(const std::string& directory, const std::unordered_set<std::string>& registeredTextureNames);
 
 } // namespace resource
 

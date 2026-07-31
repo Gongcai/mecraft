@@ -31,9 +31,13 @@ class WorldRenderBuffer;
 class RhiCommandList;
 class IDeferredGeometryProvider;
 
-namespace ecs { class GameplayRegistry; }
+namespace ecs {
+class GameplayRegistry;
+}
 
-namespace shadow { class ShadowRenderer; }
+namespace shadow {
+class ShadowRenderer;
+}
 
 /// Shadow pass: renders CSM shadow maps for all cascades.
 /// Handles opaque terrain, cutout, entity, drop, and transparent shadow casting.
@@ -69,18 +73,15 @@ public:
     /// @param targets Persistent shadow textures and per-layer attachment views.
     /// @param worldView World query interface for gameplay geometry, or null for external geometry.
     /// @return True when all CPU data and attachment views are ready for graph recording.
-    [[nodiscard]] bool prepareGraphFrame(const FrameContext& ctx,
-                                         const RenderSettings& settings,
-                                         DeferredRenderTargets& targets,
-                                         const IWorldView* worldView);
+    [[nodiscard]] bool prepareGraphFrame(const FrameContext& ctx, const RenderSettings& settings,
+                                         DeferredRenderTargets& targets, const IWorldView* worldView);
 
     /// Adds opaque, depth-copy, and transparent passes for every cascade.
     /// @param graph Graph that owns the frame pass declarations.
     /// @param resources Imported CSM texture handles declared by the pipeline.
     /// @param dependency Pass that must finish before shadow command recording starts.
     /// @return Final transparent pass handle for downstream dependencies.
-    [[nodiscard]] RgPassHandle addGraphPasses(RenderGraph& graph,
-                                              const GraphResources& resources,
+    [[nodiscard]] RgPassHandle addGraphPasses(RenderGraph& graph, const GraphResources& resources,
                                               RgPassHandle dependency);
 
     /// Opens optional debug timestamp state immediately before graph execution.
@@ -95,29 +96,20 @@ public:
 
 private:
     /// Render humanoid/mob entities into the current shadow cascade layer.
-    void renderShadowEntities(RhiCommandList& commandList,
-                              const glm::mat4& shadowViewProj,
-                              const glm::vec3& cameraPos,
-                              float splitNear,
-                              float splitFar);
+    void renderShadowEntities(RhiCommandList& commandList, const glm::mat4& shadowViewProj, const glm::vec3& cameraPos,
+                              float splitNear, float splitFar);
 
     /// Render block entity models into the current shadow cascade layer.
-    void renderShadowBlockEntities(RhiCommandList& commandList,
-                                   const glm::mat4& shadowViewProj);
+    void renderShadowBlockEntities(RhiCommandList& commandList, const glm::mat4& shadowViewProj);
 
     /// Renders the static showcase model into the current cascade depth layer.
-    void renderShadowStaticMeshes(RhiCommandList& commandList,
-                                  const glm::mat4& shadowViewProj);
+    void renderShadowStaticMeshes(RhiCommandList& commandList, const glm::mat4& shadowViewProj);
 
     /// Render dropped items/blocks into the current shadow cascade layer.
-    void renderShadowDrops(RhiCommandList& commandList,
-                           const glm::mat4& shadowViewProj,
-                           float animationTime);
+    void renderShadowDrops(RhiCommandList& commandList, const glm::mat4& shadowViewProj, float animationTime);
 
     /// Render falling-block entities into the current shadow cascade layer.
-    void renderShadowFallingBlocks(RhiCommandList& commandList,
-                                   const glm::mat4& shadowViewProj,
-                                   float animationTime);
+    void renderShadowFallingBlocks(RhiCommandList& commandList, const glm::mat4& shadowViewProj, float animationTime);
 
     /// Records opaque and cutout casters into one cascade's primary depth layer.
     [[nodiscard]] bool recordOpaquePass(RhiCommandList& commandList, int cascade);
@@ -128,22 +120,18 @@ private:
     [[nodiscard]] bool ensureCullStatsBuffers(RhiDevice& rhiDevice);
     /// (Re)binds one command buffer slot (0 opaque, 1 cutout, 2 transparent)
     /// for the cull dispatch; rebuilt when either bound buffer reallocates.
-    [[nodiscard]] bool ensureCullBindGroup(RhiDevice& rhiDevice, int slot,
-                                           RhiBufferHandle commandBuffer,
-                                           uint64_t commandCapacity,
-                                           RhiBufferHandle metadataBuffer,
+    [[nodiscard]] bool ensureCullBindGroup(RhiDevice& rhiDevice, int slot, RhiBufferHandle commandBuffer,
+                                           uint64_t commandCapacity, RhiBufferHandle metadataBuffer,
                                            uint64_t metadataCapacity);
     /// Dispatches the light-frustum cull over this cascade's freshly uploaded
     /// indirect commands, between the upload and the multi-draw. Consumes the
     /// oldest readback slot on the first rendered cascade and ships this
     /// frame's counters on the last one. Failures degrade to an uncalled draw.
-    void recordCascadeCull(RhiCommandList& commandList, const FrameContext& ctx,
-                           int cascade, bool renderCutoutCasters);
+    void recordCascadeCull(RhiCommandList& commandList, const FrameContext& ctx, int cascade, bool renderCutoutCasters);
     /// Dispatches the same light-frustum cull over the cascade's transparent
     /// (including water) shadow commands between their upload and multi-draw.
     /// Counts land in the cascade's counter slot, zeroed by the opaque pass.
-    void recordTransparentCull(RhiCommandList& commandList,
-                               const FrameContext& ctx, int cascade);
+    void recordTransparentCull(RhiCommandList& commandList, const FrameContext& ctx, int cascade);
     /// Destroys all GPU cull resources (pipeline, bind groups, buffers).
     void destroyCullResources();
     /// Copies one cascade's primary depth layer into its transparent depth layer.

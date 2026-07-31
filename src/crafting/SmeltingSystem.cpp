@@ -16,7 +16,7 @@ bool parseItemToken(const json& token, ItemID& outItemId) {
     const std::string text = token.get<std::string>();
     return ItemRegistry::tryGetIdByName(text, outItemId);
 }
-}
+} // namespace
 
 void SmeltingSystem::loadRecipes(const std::string& configPath) {
     ItemRegistry::init();
@@ -35,12 +35,9 @@ void SmeltingSystem::loadRecipes(const std::string& configPath) {
         for (const auto& recipeJson : root["recipes"]) {
             ItemID input = 0;
             ItemID result = 0;
-            if (!recipeJson.contains("input") ||
-                !recipeJson.contains("result") ||
-                !parseItemToken(recipeJson["input"], input) ||
-                !parseItemToken(recipeJson["result"], result) ||
-                input == 0 ||
-                result == 0) {
+            if (!recipeJson.contains("input") || !recipeJson.contains("result") ||
+                !parseItemToken(recipeJson["input"], input) || !parseItemToken(recipeJson["result"], result) ||
+                input == 0 || result == 0) {
                 continue;
             }
 
@@ -65,9 +62,7 @@ void SmeltingSystem::loadRecipes(const std::string& configPath) {
     if (root.contains("fuels") && root["fuels"].is_array()) {
         for (const auto& fuelJson : root["fuels"]) {
             ItemID item = 0;
-            if (!fuelJson.contains("item") ||
-                !parseItemToken(fuelJson["item"], item) ||
-                item == 0) {
+            if (!fuelJson.contains("item") || !parseItemToken(fuelJson["item"], item) || item == 0) {
                 continue;
             }
 

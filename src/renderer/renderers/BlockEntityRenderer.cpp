@@ -45,31 +45,19 @@ struct FaceUvRect {
     float v1 = 0.0f;
 };
 
-constexpr std::array<glm::vec3, 6> kFaceNormals = {{
-    {0.0f, 1.0f, 0.0f},
-    {0.0f, -1.0f, 0.0f},
-    {0.0f, 0.0f, 1.0f},
-    {0.0f, 0.0f, -1.0f},
-    {-1.0f, 0.0f, 0.0f},
-    {1.0f, 0.0f, 0.0f}
-}};
+constexpr std::array<glm::vec3, 6> kFaceNormals = {{{0.0f, 1.0f, 0.0f},
+                                                    {0.0f, -1.0f, 0.0f},
+                                                    {0.0f, 0.0f, 1.0f},
+                                                    {0.0f, 0.0f, -1.0f},
+                                                    {-1.0f, 0.0f, 0.0f},
+                                                    {1.0f, 0.0f, 0.0f}}};
 
-FaceUvRect pixelRectToUv(const float x0,
-                         const float y0,
-                         const float x1,
-                         const float y1,
-                         const float textureWidth,
+FaceUvRect pixelRectToUv(const float x0, const float y0, const float x1, const float y1, const float textureWidth,
                          const float textureHeight) {
-    return {
-        x0 / textureWidth,
-        1.0f - y1 / textureHeight,
-        x1 / textureWidth,
-        1.0f - y0 / textureHeight
-    };
+    return {x0 / textureWidth, 1.0f - y1 / textureHeight, x1 / textureWidth, 1.0f - y0 / textureHeight};
 }
 
-std::array<FaceUvRect, 6> buildBoxUvs(const BlockEntityRenderer::CuboidDefinition& cuboid,
-                                      const float textureWidth,
+std::array<FaceUvRect, 6> buildBoxUvs(const BlockEntityRenderer::CuboidDefinition& cuboid, const float textureWidth,
                                       const float textureHeight) {
     const float width = cuboid.toPixels.x - cuboid.fromPixels.x;
     const float height = cuboid.toPixels.y - cuboid.fromPixels.y;
@@ -77,20 +65,18 @@ std::array<FaceUvRect, 6> buildBoxUvs(const BlockEntityRenderer::CuboidDefinitio
     const float u = cuboid.textureU;
     const float v = cuboid.textureV;
 
-    return {{
-        pixelRectToUv(u + depth + width, v, u + depth + width + width, v + depth, textureWidth, textureHeight),
-        pixelRectToUv(u + depth, v, u + depth + width, v + depth, textureWidth, textureHeight),
-        pixelRectToUv(u + depth, v + depth, u + depth + width, v + depth + height, textureWidth, textureHeight),
-        pixelRectToUv(u + depth + width + depth, v + depth, u + depth + width + depth + width, v + depth + height, textureWidth, textureHeight),
-        pixelRectToUv(u, v + depth, u + depth, v + depth + height, textureWidth, textureHeight),
-        pixelRectToUv(u + depth + width, v + depth, u + depth + width + depth, v + depth + height, textureWidth, textureHeight)
-    }};
+    return {{pixelRectToUv(u + depth + width, v, u + depth + width + width, v + depth, textureWidth, textureHeight),
+             pixelRectToUv(u + depth, v, u + depth + width, v + depth, textureWidth, textureHeight),
+             pixelRectToUv(u + depth, v + depth, u + depth + width, v + depth + height, textureWidth, textureHeight),
+             pixelRectToUv(u + depth + width + depth, v + depth, u + depth + width + depth + width, v + depth + height,
+                           textureWidth, textureHeight),
+             pixelRectToUv(u, v + depth, u + depth, v + depth + height, textureWidth, textureHeight),
+             pixelRectToUv(u + depth + width, v + depth, u + depth + width + depth, v + depth + height, textureWidth,
+                           textureHeight)}};
 }
 
-void appendCuboidVertices(std::vector<BlockEntityVertex>& vertices,
-                          const BlockEntityRenderer::CuboidDefinition& cuboid,
-                          const float textureWidth,
-                          const float textureHeight) {
+void appendCuboidVertices(std::vector<BlockEntityVertex>& vertices, const BlockEntityRenderer::CuboidDefinition& cuboid,
+                          const float textureWidth, const float textureHeight) {
     const std::array<FaceUvRect, 6> uv = buildBoxUvs(cuboid, textureWidth, textureHeight);
 
     const float xmin = cuboid.fromPixels.x * kPixel;
@@ -104,22 +90,18 @@ void appendCuboidVertices(std::vector<BlockEntityVertex>& vertices,
         glm::vec3 pos[4];
     };
 
-    const FaceCorners faces[6] = {
-        {{{xmin, ymax, zmax}, {xmax, ymax, zmax}, {xmax, ymax, zmin}, {xmin, ymax, zmin}}},
-        {{{xmin, ymin, zmin}, {xmax, ymin, zmin}, {xmax, ymin, zmax}, {xmin, ymin, zmax}}},
-        {{{xmin, ymin, zmax}, {xmax, ymin, zmax}, {xmax, ymax, zmax}, {xmin, ymax, zmax}}},
-        {{{xmax, ymin, zmin}, {xmin, ymin, zmin}, {xmin, ymax, zmin}, {xmax, ymax, zmin}}},
-        {{{xmin, ymin, zmin}, {xmin, ymin, zmax}, {xmin, ymax, zmax}, {xmin, ymax, zmin}}},
-        {{{xmax, ymin, zmax}, {xmax, ymin, zmin}, {xmax, ymax, zmin}, {xmax, ymax, zmax}}}
-    };
+    const FaceCorners faces[6] = {{{{xmin, ymax, zmax}, {xmax, ymax, zmax}, {xmax, ymax, zmin}, {xmin, ymax, zmin}}},
+                                  {{{xmin, ymin, zmin}, {xmax, ymin, zmin}, {xmax, ymin, zmax}, {xmin, ymin, zmax}}},
+                                  {{{xmin, ymin, zmax}, {xmax, ymin, zmax}, {xmax, ymax, zmax}, {xmin, ymax, zmax}}},
+                                  {{{xmax, ymin, zmin}, {xmin, ymin, zmin}, {xmin, ymax, zmin}, {xmax, ymax, zmin}}},
+                                  {{{xmin, ymin, zmin}, {xmin, ymin, zmax}, {xmin, ymax, zmax}, {xmin, ymax, zmin}}},
+                                  {{{xmax, ymin, zmax}, {xmax, ymin, zmin}, {xmax, ymax, zmin}, {xmax, ymax, zmax}}}};
 
     for (int face = 0; face < 6; ++face) {
-        const glm::vec2 faceUvs[4] = {
-            {uv[face].u0, uv[face].v0},
-            {uv[face].u1, uv[face].v0},
-            {uv[face].u1, uv[face].v1},
-            {uv[face].u0, uv[face].v1}
-        };
+        const glm::vec2 faceUvs[4] = {{uv[face].u0, uv[face].v0},
+                                      {uv[face].u1, uv[face].v0},
+                                      {uv[face].u1, uv[face].v1},
+                                      {uv[face].u0, uv[face].v1}};
 
         for (const int idx : kQuadIndices) {
             const glm::vec3& p = faces[face].pos[idx];
@@ -157,18 +139,14 @@ float chestYawRadians(const BlockStateId stateId) {
 bool BlockEntityRenderer::init(ResourceMgr& resourceMgr) {
     m_resourceMgr = &resourceMgr;
     m_rhiDevice = &resourceMgr.rhiDevice();
-    if (!m_rhiInstanceBuffer.init(*m_rhiDevice,
-                                  256u * sizeof(InstancedDrawData),
-                                  rhiFlag(RhiBufferUsage::Vertex),
-                                  RhiMemoryCategory::SceneData,
-                                  "BlockEntity.InstanceBuffer")) {
+    if (!m_rhiInstanceBuffer.init(*m_rhiDevice, 256u * sizeof(InstancedDrawData), rhiFlag(RhiBufferUsage::Vertex),
+                                  RhiMemoryCategory::SceneData, "BlockEntity.InstanceBuffer")) {
         return false;
     }
     createGBufferRhiResources();
 
     const std::optional<renderer::contracts::StableMaterialId> materialId =
-        renderer::contracts::allocateStableSceneId<
-            renderer::contracts::StableMaterialIdTag>();
+        renderer::contracts::allocateStableSceneId<renderer::contracts::StableMaterialIdTag>();
     if (!materialId.has_value()) {
         shutdown();
         return false;
@@ -266,15 +244,12 @@ bool BlockEntityRenderer::prepareGBuffer(RhiCommandList& commandList) {
         const uint64_t instanceOffset = m_instanceData.size() * sizeof(InstancedDrawData);
         for (const BlockEntityInstance* instance : m_flatInstances) {
             if (instance->model == &model) {
-                m_instanceData.push_back({
-                    instance->modelMatrix,
-                    instance->light,
-                    glm::uvec2(instance->objectId.value, model.materialId.value)});
+                m_instanceData.push_back({instance->modelMatrix, instance->light,
+                                          glm::uvec2(instance->objectId.value, model.materialId.value)});
             }
         }
         const uint64_t instanceCount =
-            (m_instanceData.size() * sizeof(InstancedDrawData) - instanceOffset) /
-            sizeof(InstancedDrawData);
+            (m_instanceData.size() * sizeof(InstancedDrawData) - instanceOffset) / sizeof(InstancedDrawData);
         if (instanceCount != 0u) {
             m_gbufferBatches.push_back({&model, instanceOffset, static_cast<uint32_t>(instanceCount)});
         }
@@ -290,9 +265,7 @@ bool BlockEntityRenderer::prepareForward(RhiCommandList& commandList) {
     return prepareGBuffer(commandList);
 }
 
-bool BlockEntityRenderer::prepareShadow(RhiCommandList& commandList,
-                                        const glm::vec3& cameraPos,
-                                        const float splitNear,
+bool BlockEntityRenderer::prepareShadow(RhiCommandList& commandList, const glm::vec3& cameraPos, const float splitNear,
                                         const float splitFar) {
     m_instanceData.clear();
     m_shadowBatches.clear();
@@ -309,18 +282,14 @@ bool BlockEntityRenderer::prepareShadow(RhiCommandList& commandList,
             }
             const glm::vec3 delta = instance->center - cameraPos;
             const float distanceSq = glm::dot(delta, delta);
-            if ((minDistance > 0.0f && distanceSq < minDistanceSq) ||
-                distanceSq > maxDistanceSq) {
+            if ((minDistance > 0.0f && distanceSq < minDistanceSq) || distanceSq > maxDistanceSq) {
                 continue;
             }
-            m_instanceData.push_back({
-                instance->modelMatrix,
-                instance->light,
-                glm::uvec2(instance->objectId.value, model.materialId.value)});
+            m_instanceData.push_back(
+                {instance->modelMatrix, instance->light, glm::uvec2(instance->objectId.value, model.materialId.value)});
         }
         const uint64_t instanceCount =
-            (m_instanceData.size() * sizeof(InstancedDrawData) - instanceOffset) /
-            sizeof(InstancedDrawData);
+            (m_instanceData.size() * sizeof(InstancedDrawData) - instanceOffset) / sizeof(InstancedDrawData);
         if (instanceCount != 0u) {
             m_shadowBatches.push_back({&model, instanceOffset, static_cast<uint32_t>(instanceCount)});
         }
@@ -333,24 +302,17 @@ bool BlockEntityRenderer::prepareShadow(RhiCommandList& commandList,
 }
 
 void BlockEntityRenderer::createGBufferRhiResources() {
-    const auto vertexSource = renderer::rhi::loadShaderSource(
-        "assets/shaders/block_entity_gbuffer_rhi.vert");
-    const auto fragmentSource = renderer::rhi::loadShaderSource(
-        "assets/shaders/block_entity_gbuffer_rhi.frag");
-    const auto shadowVertexSource = renderer::rhi::loadShaderSource(
-        "assets/shaders/block_entity_shadow_rhi.vert");
-    const auto shadowFragmentSource = renderer::rhi::loadShaderSource(
-        "assets/shaders/block_entity_shadow_rhi.frag");
-    const auto forwardVertexSource = renderer::rhi::loadShaderSource(
-        "assets/shaders/block_entity_forward_rhi.vert");
-    const auto forwardFragmentSource = renderer::rhi::loadShaderSource(
-        "assets/shaders/block_entity_forward_rhi.frag");
-    if (!vertexSource || !fragmentSource || !shadowVertexSource || !shadowFragmentSource ||
-        !forwardVertexSource || !forwardFragmentSource) {
+    const auto vertexSource = renderer::rhi::loadShaderSource("assets/shaders/block_entity_gbuffer_rhi.vert");
+    const auto fragmentSource = renderer::rhi::loadShaderSource("assets/shaders/block_entity_gbuffer_rhi.frag");
+    const auto shadowVertexSource = renderer::rhi::loadShaderSource("assets/shaders/block_entity_shadow_rhi.vert");
+    const auto shadowFragmentSource = renderer::rhi::loadShaderSource("assets/shaders/block_entity_shadow_rhi.frag");
+    const auto forwardVertexSource = renderer::rhi::loadShaderSource("assets/shaders/block_entity_forward_rhi.vert");
+    const auto forwardFragmentSource = renderer::rhi::loadShaderSource("assets/shaders/block_entity_forward_rhi.frag");
+    if (!vertexSource || !fragmentSource || !shadowVertexSource || !shadowFragmentSource || !forwardVertexSource ||
+        !forwardFragmentSource) {
         failBlockEntityRenderer("Failed to load block entity RHI shaders");
     }
-    auto createShader = [this](const char* name, const RhiShaderStage stage,
-                               const std::string& source) {
+    auto createShader = [this](const char* name, const RhiShaderStage stage, const std::string& source) {
         RhiShaderDesc desc;
         desc.debugName = name;
         desc.stage = stage;
@@ -358,18 +320,14 @@ void BlockEntityRenderer::createGBufferRhiResources() {
         desc.sourceSize = source.size();
         return m_rhiDevice->createShader(desc);
     };
-    m_gbufferVertexShader = createShader("BlockEntity.GBuffer.Vertex", RhiShaderStage::Vertex,
-                                         *vertexSource);
-    m_gbufferFragmentShader = createShader("BlockEntity.GBuffer.Fragment", RhiShaderStage::Fragment,
-                                           *fragmentSource);
-    m_shadowVertexShader = createShader("BlockEntity.Shadow.Vertex", RhiShaderStage::Vertex,
-                                        *shadowVertexSource);
-    m_shadowFragmentShader = createShader("BlockEntity.Shadow.Fragment", RhiShaderStage::Fragment,
-                                          *shadowFragmentSource);
-    m_forwardVertexShader = createShader("BlockEntity.Forward.Vertex", RhiShaderStage::Vertex,
-                                         *forwardVertexSource);
-    m_forwardFragmentShader = createShader("BlockEntity.Forward.Fragment", RhiShaderStage::Fragment,
-                                           *forwardFragmentSource);
+    m_gbufferVertexShader = createShader("BlockEntity.GBuffer.Vertex", RhiShaderStage::Vertex, *vertexSource);
+    m_gbufferFragmentShader = createShader("BlockEntity.GBuffer.Fragment", RhiShaderStage::Fragment, *fragmentSource);
+    m_shadowVertexShader = createShader("BlockEntity.Shadow.Vertex", RhiShaderStage::Vertex, *shadowVertexSource);
+    m_shadowFragmentShader =
+        createShader("BlockEntity.Shadow.Fragment", RhiShaderStage::Fragment, *shadowFragmentSource);
+    m_forwardVertexShader = createShader("BlockEntity.Forward.Vertex", RhiShaderStage::Vertex, *forwardVertexSource);
+    m_forwardFragmentShader =
+        createShader("BlockEntity.Forward.Fragment", RhiShaderStage::Fragment, *forwardFragmentSource);
     RhiSamplerDesc samplerDesc;
     samplerDesc.addressU = RhiAddressMode::ClampToEdge;
     samplerDesc.addressV = RhiAddressMode::ClampToEdge;
@@ -377,8 +335,8 @@ void BlockEntityRenderer::createGBufferRhiResources() {
 
     RhiBindGroupLayoutDesc bindGroupLayoutDesc;
     bindGroupLayoutDesc.debugName = "BlockEntity.GBuffer.BindGroupLayout";
-    bindGroupLayoutDesc.entries.push_back({0u, RhiBindingType::CombinedTextureSampler,
-                                           rhiFlag(RhiShaderStage::Fragment), 1u});
+    bindGroupLayoutDesc.entries.push_back(
+        {0u, RhiBindingType::CombinedTextureSampler, rhiFlag(RhiShaderStage::Fragment), 1u});
     m_gbufferBindGroupLayout = m_rhiDevice->createBindGroupLayout(bindGroupLayoutDesc);
     bindGroupLayoutDesc.debugName = "BlockEntity.Shadow.BindGroupLayout";
     m_shadowBindGroupLayout = m_rhiDevice->createBindGroupLayout(bindGroupLayoutDesc);
@@ -394,8 +352,7 @@ void BlockEntityRenderer::createGBufferRhiResources() {
     pipelineLayoutDesc.debugName = "BlockEntity.Forward.PipelineLayout";
     pipelineLayoutDesc.bindGroupLayouts[0] = m_gbufferBindGroupLayout;
     pipelineLayoutDesc.pushConstantBytes = sizeof(glm::mat4) + sizeof(glm::vec4);
-    pipelineLayoutDesc.pushConstantStages = rhiFlag(RhiShaderStage::Vertex) |
-                                            rhiFlag(RhiShaderStage::Fragment);
+    pipelineLayoutDesc.pushConstantStages = rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment);
     m_forwardPipelineLayout = m_rhiDevice->createPipelineLayout(pipelineLayoutDesc);
 
     RhiGraphicsPipelineDesc pipelineDesc;
@@ -403,10 +360,8 @@ void BlockEntityRenderer::createGBufferRhiResources() {
     pipelineDesc.vertexShader = m_gbufferVertexShader;
     pipelineDesc.fragmentShader = m_gbufferFragmentShader;
     pipelineDesc.layout = m_gbufferPipelineLayout;
-    pipelineDesc.vertexInput.bindings = {
-        {0u, sizeof(BlockEntityVertex), RhiVertexInputRate::Vertex},
-        {1u, sizeof(InstancedDrawData), RhiVertexInputRate::Instance}
-    };
+    pipelineDesc.vertexInput.bindings = {{0u, sizeof(BlockEntityVertex), RhiVertexInputRate::Vertex},
+                                         {1u, sizeof(InstancedDrawData), RhiVertexInputRate::Instance}};
     pipelineDesc.vertexInput.attributes = {
         {0u, 0u, RhiVertexFormat::Float3, offsetof(BlockEntityVertex, x)},
         {1u, 0u, RhiVertexFormat::Float2, offsetof(BlockEntityVertex, u)},
@@ -416,14 +371,13 @@ void BlockEntityRenderer::createGBufferRhiResources() {
         {5u, 1u, RhiVertexFormat::Float4, offsetof(InstancedDrawData, modelMatrix) + sizeof(glm::vec4) * 2u},
         {6u, 1u, RhiVertexFormat::Float4, offsetof(InstancedDrawData, modelMatrix) + sizeof(glm::vec4) * 3u},
         {7u, 1u, RhiVertexFormat::Float2, offsetof(InstancedDrawData, light)},
-        {8u, 1u, RhiVertexFormat::Uint2, offsetof(InstancedDrawData, identity)}
-    };
+        {8u, 1u, RhiVertexFormat::Uint2, offsetof(InstancedDrawData, identity)}};
     pipelineDesc.depthStencil.depthTestEnabled = true;
     pipelineDesc.depthStencil.depthWriteEnabled = true;
     pipelineDesc.colorFormats = {RhiTextureFormat::Rgba8Unorm, RhiTextureFormat::Rgb10A2Unorm,
-        RhiTextureFormat::Rg8Unorm, RhiTextureFormat::Rgba8Unorm, RhiTextureFormat::Rgba8Unorm,
-        RhiTextureFormat::Rgba8Unorm, RhiTextureFormat::Rg32Uint,
-        RhiTextureFormat::Rg16Float};
+                                 RhiTextureFormat::Rg8Unorm,   RhiTextureFormat::Rgba8Unorm,
+                                 RhiTextureFormat::Rgba8Unorm, RhiTextureFormat::Rgba8Unorm,
+                                 RhiTextureFormat::Rg32Uint,   RhiTextureFormat::Rg16Float};
     pipelineDesc.depthFormat = RhiTextureFormat::Depth32Float;
     pipelineDesc.blend.attachments.resize(8u);
     m_gbufferPipeline = m_rhiDevice->createGraphicsPipeline(pipelineDesc);
@@ -443,34 +397,46 @@ void BlockEntityRenderer::createGBufferRhiResources() {
     pipelineDesc.depthFormat = RhiTextureFormat::Depth32Float;
     pipelineDesc.blend.attachments.resize(1u);
     m_forwardPipeline = m_rhiDevice->createGraphicsPipeline(pipelineDesc);
-    if (!m_gbufferVertexShader.isValid() || !m_gbufferFragmentShader.isValid() ||
-        !m_shadowVertexShader.isValid() || !m_shadowFragmentShader.isValid() ||
-        !m_rhiSampler.isValid() || !m_gbufferBindGroupLayout.isValid() ||
-        !m_shadowBindGroupLayout.isValid() || !m_gbufferPipelineLayout.isValid() ||
-        !m_shadowPipelineLayout.isValid() || !m_forwardVertexShader.isValid() ||
-        !m_forwardFragmentShader.isValid() || !m_forwardPipelineLayout.isValid() ||
-        !m_gbufferPipeline.isValid() || !m_shadowPipeline.isValid() ||
-        !m_forwardPipeline.isValid()) {
+    if (!m_gbufferVertexShader.isValid() || !m_gbufferFragmentShader.isValid() || !m_shadowVertexShader.isValid() ||
+        !m_shadowFragmentShader.isValid() || !m_rhiSampler.isValid() || !m_gbufferBindGroupLayout.isValid() ||
+        !m_shadowBindGroupLayout.isValid() || !m_gbufferPipelineLayout.isValid() || !m_shadowPipelineLayout.isValid() ||
+        !m_forwardVertexShader.isValid() || !m_forwardFragmentShader.isValid() || !m_forwardPipelineLayout.isValid() ||
+        !m_gbufferPipeline.isValid() || !m_shadowPipeline.isValid() || !m_forwardPipeline.isValid()) {
         failBlockEntityRenderer("Failed to create block entity GBuffer RHI resources");
     }
 }
 
 void BlockEntityRenderer::destroyGBufferRhiResources() {
-    if (m_forwardPipeline.isValid()) m_rhiDevice->destroyPipeline(m_forwardPipeline);
-    if (m_forwardPipelineLayout.isValid()) m_rhiDevice->destroyPipelineLayout(m_forwardPipelineLayout);
-    if (m_forwardFragmentShader.isValid()) m_rhiDevice->destroyShader(m_forwardFragmentShader);
-    if (m_forwardVertexShader.isValid()) m_rhiDevice->destroyShader(m_forwardVertexShader);
-    if (m_shadowPipeline.isValid()) m_rhiDevice->destroyPipeline(m_shadowPipeline);
-    if (m_shadowPipelineLayout.isValid()) m_rhiDevice->destroyPipelineLayout(m_shadowPipelineLayout);
-    if (m_shadowBindGroupLayout.isValid()) m_rhiDevice->destroyBindGroupLayout(m_shadowBindGroupLayout);
-    if (m_shadowFragmentShader.isValid()) m_rhiDevice->destroyShader(m_shadowFragmentShader);
-    if (m_shadowVertexShader.isValid()) m_rhiDevice->destroyShader(m_shadowVertexShader);
-    if (m_gbufferPipeline.isValid()) m_rhiDevice->destroyPipeline(m_gbufferPipeline);
-    if (m_gbufferPipelineLayout.isValid()) m_rhiDevice->destroyPipelineLayout(m_gbufferPipelineLayout);
-    if (m_gbufferBindGroupLayout.isValid()) m_rhiDevice->destroyBindGroupLayout(m_gbufferBindGroupLayout);
-    if (m_rhiSampler.isValid()) m_rhiDevice->destroySampler(m_rhiSampler);
-    if (m_gbufferFragmentShader.isValid()) m_rhiDevice->destroyShader(m_gbufferFragmentShader);
-    if (m_gbufferVertexShader.isValid()) m_rhiDevice->destroyShader(m_gbufferVertexShader);
+    if (m_forwardPipeline.isValid())
+        m_rhiDevice->destroyPipeline(m_forwardPipeline);
+    if (m_forwardPipelineLayout.isValid())
+        m_rhiDevice->destroyPipelineLayout(m_forwardPipelineLayout);
+    if (m_forwardFragmentShader.isValid())
+        m_rhiDevice->destroyShader(m_forwardFragmentShader);
+    if (m_forwardVertexShader.isValid())
+        m_rhiDevice->destroyShader(m_forwardVertexShader);
+    if (m_shadowPipeline.isValid())
+        m_rhiDevice->destroyPipeline(m_shadowPipeline);
+    if (m_shadowPipelineLayout.isValid())
+        m_rhiDevice->destroyPipelineLayout(m_shadowPipelineLayout);
+    if (m_shadowBindGroupLayout.isValid())
+        m_rhiDevice->destroyBindGroupLayout(m_shadowBindGroupLayout);
+    if (m_shadowFragmentShader.isValid())
+        m_rhiDevice->destroyShader(m_shadowFragmentShader);
+    if (m_shadowVertexShader.isValid())
+        m_rhiDevice->destroyShader(m_shadowVertexShader);
+    if (m_gbufferPipeline.isValid())
+        m_rhiDevice->destroyPipeline(m_gbufferPipeline);
+    if (m_gbufferPipelineLayout.isValid())
+        m_rhiDevice->destroyPipelineLayout(m_gbufferPipelineLayout);
+    if (m_gbufferBindGroupLayout.isValid())
+        m_rhiDevice->destroyBindGroupLayout(m_gbufferBindGroupLayout);
+    if (m_rhiSampler.isValid())
+        m_rhiDevice->destroySampler(m_rhiSampler);
+    if (m_gbufferFragmentShader.isValid())
+        m_rhiDevice->destroyShader(m_gbufferFragmentShader);
+    if (m_gbufferVertexShader.isValid())
+        m_rhiDevice->destroyShader(m_gbufferVertexShader);
     m_gbufferPipeline = {};
     m_gbufferPipelineLayout = {};
     m_gbufferBindGroupLayout = {};
@@ -494,11 +460,9 @@ BlockEntityRenderer::ModelDefinition BlockEntityRenderer::makeChestDefinition() 
     definition.textureWidth = 64.0f;
     definition.textureHeight = 64.0f;
     definition.usesHorizontalFacing = true;
-    definition.cuboids = {
-        {{1.0f, 0.0f, 1.0f}, {15.0f, 10.0f, 15.0f}, 0.0f, 19.0f},
-        {{1.0f, 9.0f, 1.0f}, {15.0f, 14.0f, 15.0f}, 0.0f, 0.0f},
-        {{7.0f, 7.0f, 15.0f}, {9.0f, 11.0f, 16.0f}, 0.0f, 0.0f}
-    };
+    definition.cuboids = {{{1.0f, 0.0f, 1.0f}, {15.0f, 10.0f, 15.0f}, 0.0f, 19.0f},
+                          {{1.0f, 9.0f, 1.0f}, {15.0f, 14.0f, 15.0f}, 0.0f, 0.0f},
+                          {{7.0f, 7.0f, 15.0f}, {9.0f, 11.0f, 16.0f}, 0.0f, 0.0f}};
     return definition;
 }
 
@@ -514,13 +478,12 @@ BlockEntityRenderer::Mesh BlockEntityRenderer::buildMesh(const ModelDefinition& 
     RhiBufferDesc rhiBufferDesc;
     rhiBufferDesc.debugName = "BlockEntity.MeshVertexBuffer";
     rhiBufferDesc.size = vertices.size() * sizeof(BlockEntityVertex);
-    rhiBufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex) |
-                          rhiFlag(RhiBufferUsage::TransferDst);
+    rhiBufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex) | rhiFlag(RhiBufferUsage::TransferDst);
     rhiBufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
     rhiBufferDesc.initialState = RhiResourceState::VertexBuffer;
     rhiBufferDesc.memoryCategory = RhiMemoryCategory::Geometry;
-    mesh.rhiVertexBuffer = m_rhiDevice->createBuffer(
-        rhiBufferDesc, vertices.data(), vertices.size() * sizeof(BlockEntityVertex));
+    mesh.rhiVertexBuffer =
+        m_rhiDevice->createBuffer(rhiBufferDesc, vertices.data(), vertices.size() * sizeof(BlockEntityVertex));
     if (!mesh.rhiVertexBuffer.isValid()) {
         failBlockEntityRenderer("Failed to create block entity RHI mesh buffer");
     }
@@ -536,22 +499,18 @@ void BlockEntityRenderer::destroyMesh(Mesh& mesh) {
     mesh.vertexCount = 0;
 }
 
-glm::mat4 BlockEntityRenderer::buildModelMatrix(const ModelEntry& entry,
-                                                const BlockStateId stateId,
+glm::mat4 BlockEntityRenderer::buildModelMatrix(const ModelEntry& entry, const BlockStateId stateId,
                                                 const glm::vec3& blockPosition) {
     glm::mat4 model = glm::translate(glm::mat4(1.0f), blockPosition);
     if (entry.usesHorizontalFacing) {
-        model = model
-            * glm::translate(glm::mat4(1.0f), glm::vec3(0.5f, 0.0f, 0.5f))
-            * glm::rotate(glm::mat4(1.0f), chestYawRadians(stateId), glm::vec3(0.0f, 1.0f, 0.0f))
-            * glm::translate(glm::mat4(1.0f), glm::vec3(-0.5f, 0.0f, -0.5f));
+        model = model * glm::translate(glm::mat4(1.0f), glm::vec3(0.5f, 0.0f, 0.5f)) *
+                glm::rotate(glm::mat4(1.0f), chestYawRadians(stateId), glm::vec3(0.0f, 1.0f, 0.0f)) *
+                glm::translate(glm::mat4(1.0f), glm::vec3(-0.5f, 0.0f, -0.5f));
     }
     return model;
 }
 
-bool BlockEntityRenderer::rebuildSectionCache(const Chunk& chunk,
-                                              const SubChunk& subChunk,
-                                              const int scy,
+bool BlockEntityRenderer::rebuildSectionCache(const Chunk& chunk, const SubChunk& subChunk, const int scy,
                                               SectionCache& cache) {
     std::vector<BlockEntityInstance> rebuiltInstances;
 
@@ -572,16 +531,13 @@ bool BlockEntityRenderer::rebuildSectionCache(const Chunk& chunk,
                     continue;
                 }
 
-                const glm::vec3 blockPosition(static_cast<float>(chunkOffset.x + lx),
-                                              static_cast<float>(columnY),
+                const glm::vec3 blockPosition(static_cast<float>(chunkOffset.x + lx), static_cast<float>(columnY),
                                               static_cast<float>(chunkOffset.z + lz));
-                const BlockPositionKey positionKey{
-                    chunkOffset.x + lx, columnY, chunkOffset.z + lz};
+                const BlockPositionKey positionKey{chunkOffset.x + lx, columnY, chunkOffset.z + lz};
                 auto objectId = m_blockObjectIds.find(positionKey);
                 if (objectId == m_blockObjectIds.end()) {
                     const std::optional<renderer::contracts::StableObjectId> allocated =
-                        renderer::contracts::allocateStableSceneId<
-                            renderer::contracts::StableObjectIdTag>();
+                        renderer::contracts::allocateStableSceneId<renderer::contracts::StableObjectIdTag>();
                     if (!allocated.has_value()) {
                         return false;
                     }
@@ -624,12 +580,10 @@ void BlockEntityRenderer::updateInstanceLightsForFrame() {
     m_instanceLightsSyncedThisFrame = true;
 
     for (BlockEntityInstance* instance : m_flatInstances) {
-        const uint8_t packedLight = instance->chunk->getPackedLight(instance->localX,
-                                                                    instance->columnY,
-                                                                    instance->localZ);
-        instance->light = glm::vec2(
-            static_cast<float>((packedLight >> 4) & 0x0F) / 15.0f,
-            static_cast<float>(packedLight & 0x0F) / 15.0f);
+        const uint8_t packedLight =
+            instance->chunk->getPackedLight(instance->localX, instance->columnY, instance->localZ);
+        instance->light = glm::vec2(static_cast<float>((packedLight >> 4) & 0x0F) / 15.0f,
+                                    static_cast<float>(packedLight & 0x0F) / 15.0f);
     }
 }
 
@@ -641,8 +595,7 @@ bool BlockEntityRenderer::synchronizeInstanceCache(const IWorldView& worldView) 
 
     const uint64_t activeChunkRevision = worldView.getActiveChunkRevision();
     const uint64_t blockContentRevision = worldView.getBlockContentRevision();
-    if (m_hasSyncedRevisions &&
-        m_syncedActiveChunkRevision == activeChunkRevision &&
+    if (m_hasSyncedRevisions && m_syncedActiveChunkRevision == activeChunkRevision &&
         m_syncedBlockContentRevision == blockContentRevision) {
         return true;
     }
@@ -691,10 +644,9 @@ bool BlockEntityRenderer::synchronizeInstanceCache(const IWorldView& worldView) 
     std::unordered_set<BlockPositionKey, BlockPositionKeyHash> visiblePositions;
     for (const auto& cachePair : m_sectionCaches) {
         for (const BlockEntityInstance& instance : cachePair.second.instances) {
-            visiblePositions.insert({
-                static_cast<int>(instance.blockPosition.x),
-                static_cast<int>(instance.blockPosition.y),
-                static_cast<int>(instance.blockPosition.z)});
+            visiblePositions.insert({static_cast<int>(instance.blockPosition.x),
+                                     static_cast<int>(instance.blockPosition.y),
+                                     static_cast<int>(instance.blockPosition.z)});
         }
     }
     for (auto it = m_blockObjectIds.begin(); it != m_blockObjectIds.end();) {
@@ -712,8 +664,7 @@ bool BlockEntityRenderer::synchronizeInstanceCache(const IWorldView& worldView) 
     return true;
 }
 
-void BlockEntityRenderer::renderToGBuffer(RhiCommandList& commandList,
-                                          const glm::mat4& viewProj) {
+void BlockEntityRenderer::renderToGBuffer(RhiCommandList& commandList, const glm::mat4& viewProj) {
     commandList.setGraphicsPipeline(m_gbufferPipeline);
     commandList.pushConstants(&viewProj, sizeof(viewProj), rhiFlag(RhiShaderStage::Vertex));
     commandList.setVertexBuffer(1u, m_rhiInstanceBuffer.buffer(), 0u);
@@ -725,8 +676,7 @@ void BlockEntityRenderer::renderToGBuffer(RhiCommandList& commandList,
     }
 }
 
-void BlockEntityRenderer::renderToShadowMap(RhiCommandList& commandList,
-                                            const glm::mat4& shadowViewProj) {
+void BlockEntityRenderer::renderToShadowMap(RhiCommandList& commandList, const glm::mat4& shadowViewProj) {
     commandList.setGraphicsPipeline(m_shadowPipeline);
     commandList.pushConstants(&shadowViewProj, sizeof(shadowViewProj), rhiFlag(RhiShaderStage::Vertex));
     for (const PreparedModelBatch& batch : m_shadowBatches) {
@@ -737,8 +687,7 @@ void BlockEntityRenderer::renderToShadowMap(RhiCommandList& commandList,
     }
 }
 
-void BlockEntityRenderer::renderForward(RhiCommandList& commandList,
-                                        const glm::mat4& viewProj,
+void BlockEntityRenderer::renderForward(RhiCommandList& commandList, const glm::mat4& viewProj,
                                         const float skyIntensity) {
     struct ForwardPushConstants {
         glm::mat4 viewProj;

@@ -9,8 +9,7 @@ namespace ecs {
 
 /// Frame-scoped event bus for one-producer-to-many-consumer patterns.
 /// Producers push events during the frame; consumers drain at frame end.
-template <typename T>
-struct EventBus {
+template <typename T> struct EventBus {
     std::vector<T> events;
 
     void push(const T& event) { events.push_back(event); }
@@ -28,8 +27,7 @@ struct EventBus {
 };
 
 /// Helper: ensure an EventBus<T> exists in the registry context and return a reference.
-template <typename T>
-EventBus<T>& ensureEventBus(GameplayRegistry& registry) {
+template <typename T> EventBus<T>& ensureEventBus(GameplayRegistry& registry) {
     if (!registry.ctxHas<EventBus<T>>()) {
         registry.ctxSet<EventBus<T>>();
     }

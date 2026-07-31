@@ -81,7 +81,7 @@ struct BlockEntityData {
 /// World-level metadata persisted in level.json.
 struct LevelMeta {
     uint32_t seed = 0;
-    std::string displayName;          // User-visible save name (may differ from folder name)
+    std::string displayName; // User-visible save name (may differ from folder name)
     float spawnX = 0.0f;
     float spawnY = 68.0f;
     float spawnZ = 0.0f;
@@ -92,10 +92,10 @@ struct LevelMeta {
     float weatherWetness = 0.0f;
     float weatherStorm = 0.0f;
     float weatherAerialReduction = 0.55f;
-    std::string gameMode = "survival";  // "survival" | "creative" - world default gameplay mode
-    std::string createdUtc;           // ISO 8601 UTC timestamp
-    std::string lastSavedUtc;         // ISO 8601 UTC timestamp
-    std::string screenshotPath;       // Relative path to thumbnail PNG (e.g. "thumb.png")
+    std::string gameMode = "survival"; // "survival" | "creative" - world default gameplay mode
+    std::string createdUtc; // ISO 8601 UTC timestamp
+    std::string lastSavedUtc; // ISO 8601 UTC timestamp
+    std::string screenshotPath; // Relative path to thumbnail PNG (e.g. "thumb.png")
 };
 
 class SaveManager {
@@ -127,10 +127,7 @@ public:
     /// on the calling thread (snapshot), then the file write is dispatched to the
     /// thread pool. Must have called setThreadPool() first.
     void submitSaveChunk(int cx, int cz, const Chunk& chunk);
-    void submitSaveChunk(int cx,
-                         int cz,
-                         const Chunk& chunk,
-                         const std::vector<WireContainerSaveEntry>& wireContainers);
+    void submitSaveChunk(int cx, int cz, const Chunk& chunk, const std::vector<WireContainerSaveEntry>& wireContainers);
 
     /// Set the thread pool for async saves.
     void setThreadPool(ThreadPool* pool);
@@ -180,10 +177,7 @@ private:
     /// Write a chunk file atomically: write .tmp, flush, rename old to .bak, rename .tmp to final.
     void writeChunkFileAtomic(int cx, int cz, const std::vector<uint8_t>& fileData);
     void writeChunkSnapshot(int cx, int cz, const std::vector<uint8_t>& fileData);
-    void writeChunkSnapshotIfCurrent(int cx,
-                                     int cz,
-                                     int64_t chunkKey,
-                                     uint64_t saveSequence,
+    void writeChunkSnapshotIfCurrent(int cx, int cz, int64_t chunkKey, uint64_t saveSequence,
                                      const std::vector<uint8_t>& fileData);
     [[nodiscard]] static int64_t makeChunkKey(int cx, int cz);
     [[nodiscard]] uint64_t registerSaveSequence(int64_t chunkKey);

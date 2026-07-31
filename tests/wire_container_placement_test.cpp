@@ -26,32 +26,28 @@ void loadOriginChunks(World& world) {
     }
 }
 
-BlockStateId wireState(const char* blockName,
-                       const uint16_t facing,
-                       const uint16_t power = PropIndices::POWER_0) {
-    return BlockStateRegistry::getState(
-        BlockRegistry::requireIdByName(blockName),
-        std::vector<std::pair<uint16_t, uint16_t>>{
-            {PropIndices::FACING, facing},
-            {PropIndices::POWER, power},
-            {PropIndices::NORTH, PropIndices::NORTH_NONE},
-            {PropIndices::SOUTH, PropIndices::SOUTH_NONE},
-            {PropIndices::EAST, PropIndices::EAST_NONE},
-            {PropIndices::WEST, PropIndices::WEST_NONE},
-        });
+BlockStateId wireState(const char* blockName, const uint16_t facing, const uint16_t power = PropIndices::POWER_0) {
+    return BlockStateRegistry::getState(BlockRegistry::requireIdByName(blockName),
+                                        std::vector<std::pair<uint16_t, uint16_t>>{
+                                            {PropIndices::FACING, facing},
+                                            {PropIndices::POWER, power},
+                                            {PropIndices::NORTH, PropIndices::NORTH_NONE},
+                                            {PropIndices::SOUTH, PropIndices::SOUTH_NONE},
+                                            {PropIndices::EAST, PropIndices::EAST_NONE},
+                                            {PropIndices::WEST, PropIndices::WEST_NONE},
+                                        });
 }
 
 BlockStateId redFloorWithEastConnection() {
-    return BlockStateRegistry::getState(
-        BlockRegistry::requireIdByName("minecraft:redstone_wire"),
-        std::vector<std::pair<uint16_t, uint16_t>>{
-            {PropIndices::FACING, PropIndices::FACING_FLOOR},
-            {PropIndices::POWER, PropIndices::POWER_7},
-            {PropIndices::NORTH, PropIndices::NORTH_NONE},
-            {PropIndices::SOUTH, PropIndices::SOUTH_NONE},
-            {PropIndices::EAST, PropIndices::EAST_SIDE},
-            {PropIndices::WEST, PropIndices::WEST_NONE},
-        });
+    return BlockStateRegistry::getState(BlockRegistry::requireIdByName("minecraft:redstone_wire"),
+                                        std::vector<std::pair<uint16_t, uint16_t>>{
+                                            {PropIndices::FACING, PropIndices::FACING_FLOOR},
+                                            {PropIndices::POWER, PropIndices::POWER_7},
+                                            {PropIndices::NORTH, PropIndices::NORTH_NONE},
+                                            {PropIndices::SOUTH, PropIndices::SOUTH_NONE},
+                                            {PropIndices::EAST, PropIndices::EAST_SIDE},
+                                            {PropIndices::WEST, PropIndices::WEST_NONE},
+                                        });
 }
 
 uint16_t channelId(const char* blockName) {
@@ -93,7 +89,8 @@ uint8_t wirePower(const World& world, const glm::ivec3& position) {
             return power;
         }
     }
-    std::cerr << "[wire_container_placement_test] FAIL: Wire container placement test found an unknown wire power value\n";
+    std::cerr
+        << "[wire_container_placement_test] FAIL: Wire container placement test found an unknown wire power value\n";
     std::abort();
 }
 
@@ -110,13 +107,9 @@ int main() {
     const glm::ivec3 eastNeighbor = pos + glm::ivec3(1, 0, 0);
     world.setBlockState(pos.x, pos.y, pos.z, NULL_BLOCK_STATE);
     world.setBlockState(eastNeighbor.x, eastNeighbor.y, eastNeighbor.z, NULL_BLOCK_STATE);
-    world.setBlockState(pos.x,
-                        pos.y - 1,
-                        pos.z,
+    world.setBlockState(pos.x, pos.y - 1, pos.z,
                         BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:stone")));
-    world.setBlockState(eastNeighbor.x,
-                        eastNeighbor.y - 1,
-                        eastNeighbor.z,
+    world.setBlockState(eastNeighbor.x, eastNeighbor.y - 1, eastNeighbor.z,
                         BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:stone")));
 
     const uint16_t redChannel = channelId("minecraft:redstone_wire");
@@ -126,8 +119,8 @@ int main() {
     const BlockStateId blueNorth = wireState("minecraft:blue_redstone_wire", PropIndices::FACING_NORTH);
 
     world.setBlockState(pos.x, pos.y, pos.z, redFloor);
-    world.setBlockState(eastNeighbor.x, eastNeighbor.y, eastNeighbor.z, wireState("minecraft:redstone_wire",
-                                                                                  PropIndices::FACING_FLOOR));
+    world.setBlockState(eastNeighbor.x, eastNeighbor.y, eastNeighbor.z,
+                        wireState("minecraft:redstone_wire", PropIndices::FACING_FLOOR));
     if (!WireContainerPlacement::canApply(world, pos, blueFloor)) {
         return fail("blue floor wire should be addable to a red floor wire cell");
     }
@@ -141,10 +134,8 @@ int main() {
     }
 
     const WireContainerParts* parts = world.wireContainerParts().find(pos);
-    if (parts == nullptr ||
-        parts->find(redChannel, PropIndices::FACING_FLOOR) == nullptr ||
-        parts->find(blueChannel, PropIndices::FACING_FLOOR) == nullptr ||
-        parts->size() != 2) {
+    if (parts == nullptr || parts->find(redChannel, PropIndices::FACING_FLOOR) == nullptr ||
+        parts->find(blueChannel, PropIndices::FACING_FLOOR) == nullptr || parts->size() != 2) {
         return fail("wire container should store the migrated red part and incoming blue part");
     }
     const WirePart* migratedRed = parts->find(redChannel, PropIndices::FACING_FLOOR);
@@ -160,9 +151,7 @@ int main() {
         return fail("wire container part append should mark world block content dirty");
     }
     parts = world.wireContainerParts().find(pos);
-    if (parts == nullptr ||
-        parts->find(blueChannel, PropIndices::FACING_NORTH) == nullptr ||
-        parts->size() != 3) {
+    if (parts == nullptr || parts->find(blueChannel, PropIndices::FACING_NORTH) == nullptr || parts->size() != 3) {
         return fail("wire container should store appended wall-face wire parts");
     }
 
@@ -172,9 +161,7 @@ int main() {
     }
 
     const glm::ivec3 duplicatePos(1, 120, 0);
-    world.setBlockState(duplicatePos.x,
-                        duplicatePos.y - 1,
-                        duplicatePos.z,
+    world.setBlockState(duplicatePos.x, duplicatePos.y - 1, duplicatePos.z,
                         BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:stone")));
     world.setBlockState(duplicatePos.x, duplicatePos.y, duplicatePos.z, redFloor);
     if (WireContainerPlacement::canApply(world, duplicatePos, redFloor) ||
@@ -190,34 +177,25 @@ int main() {
     const glm::ivec3 redOutputPos(1, signalY, 2);
     const glm::ivec3 blueOutputPos(0, signalY, 3);
     for (const glm::ivec3& signalPos : {leverPos, inputWirePos, signalContainerPos, redOutputPos, blueOutputPos}) {
-        world.setBlockState(signalPos.x,
-                            signalPos.y - 1,
-                            signalPos.z,
+        world.setBlockState(signalPos.x, signalPos.y - 1, signalPos.z,
                             BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:stone")));
         world.setBlockState(signalPos.x, signalPos.y, signalPos.z, NULL_BLOCK_STATE);
     }
     world.setBlockState(leverPos.x, leverPos.y, leverPos.z, leverState(true));
-    world.setBlockState(inputWirePos.x,
-                        inputWirePos.y,
-                        inputWirePos.z,
+    world.setBlockState(inputWirePos.x, inputWirePos.y, inputWirePos.z,
                         wireState("minecraft:redstone_wire", PropIndices::FACING_FLOOR));
-    world.setBlockState(signalContainerPos.x,
-                        signalContainerPos.y,
-                        signalContainerPos.z,
-                        BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:wire_container")));
+    world.setBlockState(
+        signalContainerPos.x, signalContainerPos.y, signalContainerPos.z,
+        BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:wire_container")));
     WireContainerParts& signalParts = world.wireContainerParts().getOrCreate(signalContainerPos);
     if (!signalParts.addPart(WirePart{redChannel, PropIndices::FACING_FLOOR, 0, 0}) ||
         !signalParts.addPart(WirePart{blueChannel, PropIndices::FACING_FLOOR, 0, 0})) {
         return fail("wire container signal test should create red and blue floor parts");
     }
     world.notifyWireContainerPartsChanged(signalContainerPos);
-    world.setBlockState(redOutputPos.x,
-                        redOutputPos.y,
-                        redOutputPos.z,
+    world.setBlockState(redOutputPos.x, redOutputPos.y, redOutputPos.z,
                         wireState("minecraft:redstone_wire", PropIndices::FACING_FLOOR));
-    world.setBlockState(blueOutputPos.x,
-                        blueOutputPos.y,
-                        blueOutputPos.z,
+    world.setBlockState(blueOutputPos.x, blueOutputPos.y, blueOutputPos.z,
                         wireState("minecraft:blue_redstone_wire", PropIndices::FACING_FLOOR));
 
     ecs::RedstoneSystem::processWorld(world, 0);
@@ -227,18 +205,15 @@ int main() {
     }
     const WirePart* poweredRedPart = signalResult->find(redChannel, PropIndices::FACING_FLOOR);
     const WirePart* idleBluePart = signalResult->find(blueChannel, PropIndices::FACING_FLOOR);
-    if (poweredRedPart == nullptr || idleBluePart == nullptr ||
-        poweredRedPart->power == 0 ||
+    if (poweredRedPart == nullptr || idleBluePart == nullptr || poweredRedPart->power == 0 ||
         idleBluePart->power != 0 ||
         poweredRedPart->connections != (WireConnectionBits::AXIS1_NEG | WireConnectionBits::AXIS1_POS) ||
-        idleBluePart->connections != WireConnectionBits::AXIS2_POS ||
-        wirePower(world, redOutputPos) == 0 ||
+        idleBluePart->connections != WireConnectionBits::AXIS2_POS || wirePower(world, redOutputPos) == 0 ||
         wirePower(world, blueOutputPos) != 0) {
         return fail("wire container parts should propagate only through matching wire channels");
     }
-    if (BlockStateRegistry::getPropertyIndex(
-            world.getBlockState(redOutputPos.x, redOutputPos.y, redOutputPos.z),
-            PropIndices::WEST) != PropIndices::WEST_SIDE) {
+    if (BlockStateRegistry::getPropertyIndex(world.getBlockState(redOutputPos.x, redOutputPos.y, redOutputPos.z),
+                                             PropIndices::WEST) != PropIndices::WEST_SIDE) {
         return fail("ordinary redstone wire should visually connect to matching wire container parts");
     }
 

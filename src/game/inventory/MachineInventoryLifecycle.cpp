@@ -31,11 +31,9 @@ const ContainerBehaviorDef* machineBehaviorForBlock(const BlockID blockId) {
     }
     return &behavior;
 }
-}
+} // namespace
 
-bool handleMachineInventoryBreak(ecs::GameplayRegistry& registry,
-                                 const BlockID brokenBlock,
-                                 const glm::ivec3& blockPos,
+bool handleMachineInventoryBreak(ecs::GameplayRegistry& registry, const BlockID brokenBlock, const glm::ivec3& blockPos,
                                  const bool dropContents) {
     const ContainerBehaviorDef* behavior = machineBehaviorForBlock(brokenBlock);
     if (behavior == nullptr) {

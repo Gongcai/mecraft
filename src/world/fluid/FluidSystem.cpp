@@ -13,31 +13,17 @@
 
 namespace {
 
-constexpr std::array<glm::ivec3, 7> kFluidUpdateOffsets = {{
-    {0, 0, 0},
-    {1, 0, 0},
-    {-1, 0, 0},
-    {0, 1, 0},
-    {0, -1, 0},
-    {0, 0, 1},
-    {0, 0, -1}
-}};
+constexpr std::array<glm::ivec3, 7> kFluidUpdateOffsets = {
+    {{0, 0, 0}, {1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1}}};
 
-constexpr std::array<glm::ivec3, 4> kHorizontalFluidOffsets = {{
-    {1, 0, 0},
-    {-1, 0, 0},
-    {0, 0, 1},
-    {0, 0, -1}
-}};
+constexpr std::array<glm::ivec3, 4> kHorizontalFluidOffsets = {{{1, 0, 0}, {-1, 0, 0}, {0, 0, 1}, {0, 0, -1}}};
 
 struct FlowDirections {
     uint8_t allowedMask = 0;
     bool foundHole = false;
     bool hasAnyPassable = false;
 
-    [[nodiscard]] bool allows(const int directionIndex) const {
-        return (allowedMask & (1u << directionIndex)) != 0u;
-    }
+    [[nodiscard]] bool allows(const int directionIndex) const { return (allowedMask & (1u << directionIndex)) != 0u; }
 };
 
 struct SearchNode {
@@ -61,8 +47,7 @@ bool canFluidReplaceAt(const World& world, const glm::ivec3& pos, const FluidDes
     if (FluidState::decode(cell.fluidState).kind == desc.kind) {
         return true;
     }
-    if (cell.hasBlock() && cell.fluidState == NULL_BLOCK_STATE &&
-        FluidState::canCoexist(desc, cell.blockState)) {
+    if (cell.hasBlock() && cell.fluidState == NULL_BLOCK_STATE && FluidState::canCoexist(desc, cell.blockState)) {
         return true;
     }
     return FluidState::canReplace(desc, cell.blockState);
@@ -103,8 +88,7 @@ bool isUnfilledDownhillPath(const World& world, const glm::ivec3& pos, const Flu
         return true;
     }
     if (below.hasBlock()) {
-        return FluidState::canReplace(desc, below.blockState) ||
-               FluidState::canCoexist(desc, below.blockState);
+        return FluidState::canReplace(desc, below.blockState) || FluidState::canCoexist(desc, below.blockState);
     }
     return false;
 }
@@ -130,8 +114,8 @@ FluidKind resolveTargetFluidKind(const World& world, const glm::ivec3& pos) {
         if (!isPositionLoaded(world, neighborPos)) {
             continue;
         }
-        const FluidKind neighborKind = FluidState::decode(
-            world.getFluidState(neighborPos.x, neighborPos.y, neighborPos.z)).kind;
+        const FluidKind neighborKind =
+            FluidState::decode(world.getFluidState(neighborPos.x, neighborPos.y, neighborPos.z)).kind;
         if (neighborKind != FluidKind::None) {
             return neighborKind;
         }
@@ -173,8 +157,7 @@ FlowDirections computeFlowDirections(const World& world, const glm::ivec3& sourc
             return static_cast<size_t>(dx + dz * gridSize);
         };
         auto inSearchBounds = [&](const glm::ivec3& pos) -> bool {
-            return std::abs(pos.x - sourcePos.x) <= maxDistance &&
-                   std::abs(pos.z - sourcePos.z) <= maxDistance;
+            return std::abs(pos.x - sourcePos.x) <= maxDistance && std::abs(pos.z - sourcePos.z) <= maxDistance;
         };
 
         std::queue<SearchNode> queue;
@@ -234,9 +217,7 @@ FlowDirections computeFlowDirections(const World& world, const glm::ivec3& sourc
     return result;
 }
 
-int countHorizontalSourceNeighbors(const World& world,
-                                   const glm::ivec3& pos,
-                                   const FluidKind kind) {
+int countHorizontalSourceNeighbors(const World& world, const glm::ivec3& pos, const FluidKind kind) {
     int sourceCount = 0;
     for (const glm::ivec3& offset : kHorizontalFluidOffsets) {
         const glm::ivec3 neighborPos = pos + offset;
@@ -244,8 +225,8 @@ int countHorizontalSourceNeighbors(const World& world,
             continue;
         }
 
-        const DecodedFluid neighbor = FluidState::decode(
-            world.getFluidState(neighborPos.x, neighborPos.y, neighborPos.z));
+        const DecodedFluid neighbor =
+            FluidState::decode(world.getFluidState(neighborPos.x, neighborPos.y, neighborPos.z));
         if (neighbor.kind == kind && neighbor.isSource) {
             ++sourceCount;
         }
@@ -253,7 +234,7 @@ int countHorizontalSourceNeighbors(const World& world,
     return sourceCount;
 }
 
-}
+} // namespace
 
 void FluidSystem::reset() {
     m_scheduledBlockTickQueue = {};
@@ -314,8 +295,7 @@ void FluidSystem::processScheduledBlockTicks(const uint64_t currentTick, const u
     m_lastProcessedGameTick = currentTick;
 
     uint32_t processed = 0;
-    while (!m_scheduledBlockTickQueue.empty() &&
-           m_scheduledBlockTickQueue.top().dueTick <= currentTick &&
+    while (!m_scheduledBlockTickQueue.empty() && m_scheduledBlockTickQueue.top().dueTick <= currentTick &&
            processed < budget) {
         const ScheduledBlockTick scheduled = m_scheduledBlockTickQueue.top();
         m_scheduledBlockTickQueue.pop();
@@ -347,7 +327,8 @@ void FluidSystem::updateFluidCell(const glm::ivec3& pos) {
     const FluidCellView cell = m_world.getCombinedCell(pos.x, pos.y, pos.z);
     const BlockStateId currentFluidState = cell.fluidState;
     const BlockStateId currentBlockState = cell.blockState;
-    const BlockStateId effectiveCurrentState = (currentFluidState != NULL_BLOCK_STATE) ? currentFluidState : currentBlockState;
+    const BlockStateId effectiveCurrentState =
+        (currentFluidState != NULL_BLOCK_STATE) ? currentFluidState : currentBlockState;
 
     const FluidKind targetKind = resolveTargetFluidKind(m_world, pos);
     if (targetKind == FluidKind::None) {
@@ -400,8 +381,8 @@ BlockStateId FluidSystem::computeTargetFluidState(const glm::ivec3& pos, const B
     const bool supportBelow = hasSupportBelow(m_world, pos, desc);
     const glm::ivec3 abovePos = pos + glm::ivec3(0, 1, 0);
     const BlockStateId aboveState = isPositionLoaded(m_world, abovePos)
-        ? m_world.getFluidState(abovePos.x, abovePos.y, abovePos.z)
-        : NULL_BLOCK_STATE;
+                                        ? m_world.getFluidState(abovePos.x, abovePos.y, abovePos.z)
+                                        : NULL_BLOCK_STATE;
     const DecodedFluid above = FluidState::decode(aboveState);
 
     if (above.kind == kind) {
@@ -411,8 +392,7 @@ BlockStateId FluidSystem::computeTargetFluidState(const glm::ivec3& pos, const B
         return FluidState::encode(DecodedFluid{kind, 1, false, false});
     }
 
-    if (desc.canCreateInfiniteSource && !current.falling &&
-        (!desc.requiresSupportForInfiniteSource || supportBelow) &&
+    if (desc.canCreateInfiniteSource && !current.falling && (!desc.requiresSupportForInfiniteSource || supportBelow) &&
         countHorizontalSourceNeighbors(m_world, pos, kind) >= desc.infiniteSourceNeighborCount) {
         return FluidState::encode(DecodedFluid{kind, 0, false, true});
     }
@@ -448,12 +428,7 @@ BlockStateId FluidSystem::computeTargetFluidState(const glm::ivec3& pos, const B
         return NULL_BLOCK_STATE;
     }
 
-    return FluidState::encode(DecodedFluid{
-        kind,
-        static_cast<uint8_t>(minNeighborLevel + 1),
-        !supportBelow,
-        false
-    });
+    return FluidState::encode(DecodedFluid{kind, static_cast<uint8_t>(minNeighborLevel + 1), !supportBelow, false});
 }
 
 uint64_t FluidSystem::resolveNeighborhoodTickDelay(const glm::ivec3& pos) const {
@@ -464,8 +439,7 @@ uint64_t FluidSystem::resolveNeighborhoodTickDelay(const glm::ivec3& pos) const 
             continue;
         }
 
-        const DecodedFluid fluid = FluidState::decode(
-            m_world.getFluidState(samplePos.x, samplePos.y, samplePos.z));
+        const DecodedFluid fluid = FluidState::decode(m_world.getFluidState(samplePos.x, samplePos.y, samplePos.z));
         if (fluid.kind == FluidKind::None) {
             continue;
         }

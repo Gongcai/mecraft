@@ -54,9 +54,8 @@ bool incrementNumericProperty(const BlockRandomTickRule& rule, const BlockRandom
         failBlockRandomTick("increment_property random tick requires decimal property values: " + rule.propertyName);
     }
 
-    const uint16_t nextValueIndex = BlockStateRegistry::getPropertyValueIndex(
-        property,
-        std::to_string(currentValue + 1));
+    const uint16_t nextValueIndex =
+        BlockStateRegistry::getPropertyValueIndex(property, std::to_string(currentValue + 1));
     if (nextValueIndex == BlockStateRegistry::INVALID_INDEX) {
         return false;
     }
@@ -104,9 +103,8 @@ bool updateFarmlandMoisture(const BlockRandomTickRule& rule, const BlockRandomTi
     }
 
     if (currentMoisture > 0) {
-        const uint16_t nextValueIndex = BlockStateRegistry::getPropertyValueIndex(
-            moisture,
-            std::to_string(currentMoisture - 1));
+        const uint16_t nextValueIndex =
+            BlockStateRegistry::getPropertyValueIndex(moisture, std::to_string(currentMoisture - 1));
         if (nextValueIndex == BlockStateRegistry::INVALID_INDEX) {
             failBlockRandomTick("farmland_moisture random tick could not resolve the next moisture value");
         }

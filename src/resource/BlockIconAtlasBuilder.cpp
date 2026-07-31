@@ -65,42 +65,40 @@ inline int clampInt(const int value, const int minValue, const int maxValue) {
 
 IconTint biomeIconTint(const BiomeTintKind tint) {
     switch (tint) {
-        case BiomeTintKind::Grass:
-        case BiomeTintKind::Foliage:
-            return {0.50f, 0.78f, 0.34f};
-        case BiomeTintKind::None:
-        default:
-            return {};
+    case BiomeTintKind::Grass:
+    case BiomeTintKind::Foliage: return {0.50f, 0.78f, 0.34f};
+    case BiomeTintKind::None:
+    default: return {};
     }
 }
 
 glm::vec3 rotateIconPointX90(const glm::vec3& p, const uint16_t rotation) {
     switch ((rotation / 90u) % 4u) {
-        case 1: return {p.x, 1.0f - p.z, p.y};
-        case 2: return {p.x, 1.0f - p.y, 1.0f - p.z};
-        case 3: return {p.x, p.z, 1.0f - p.y};
-        case 0:
-        default: return p;
+    case 1: return {p.x, 1.0f - p.z, p.y};
+    case 2: return {p.x, 1.0f - p.y, 1.0f - p.z};
+    case 3: return {p.x, p.z, 1.0f - p.y};
+    case 0:
+    default: return p;
     }
 }
 
 glm::vec3 rotateIconPointY90(const glm::vec3& p, const uint16_t rotation) {
     switch ((rotation / 90u) % 4u) {
-        case 1: return {1.0f - p.z, p.y, p.x};
-        case 2: return {1.0f - p.x, p.y, 1.0f - p.z};
-        case 3: return {p.z, p.y, 1.0f - p.x};
-        case 0:
-        default: return p;
+    case 1: return {1.0f - p.z, p.y, p.x};
+    case 2: return {1.0f - p.x, p.y, 1.0f - p.z};
+    case 3: return {p.z, p.y, 1.0f - p.x};
+    case 0:
+    default: return p;
     }
 }
 
 glm::vec3 rotateIconPointZ90(const glm::vec3& p, const uint16_t rotation) {
     switch ((rotation / 90u) % 4u) {
-        case 1: return {1.0f - p.y, p.x, p.z};
-        case 2: return {1.0f - p.x, 1.0f - p.y, p.z};
-        case 3: return {p.y, 1.0f - p.x, p.z};
-        case 0:
-        default: return p;
+    case 1: return {1.0f - p.y, p.x, p.z};
+    case 2: return {1.0f - p.x, 1.0f - p.y, p.z};
+    case 3: return {p.y, 1.0f - p.x, p.z};
+    case 0:
+    default: return p;
     }
 }
 
@@ -113,31 +111,31 @@ glm::vec3 applyIconModelTransform(glm::vec3 p, const ModelTransform& transform) 
 
 IVec3 rotateIconDirectionX90(const IVec3 direction, const uint16_t rotation) {
     switch ((rotation / 90u) % 4u) {
-        case 1: return {direction.x, -direction.z, direction.y};
-        case 2: return {direction.x, -direction.y, -direction.z};
-        case 3: return {direction.x, direction.z, -direction.y};
-        case 0:
-        default: return direction;
+    case 1: return {direction.x, -direction.z, direction.y};
+    case 2: return {direction.x, -direction.y, -direction.z};
+    case 3: return {direction.x, direction.z, -direction.y};
+    case 0:
+    default: return direction;
     }
 }
 
 IVec3 rotateIconDirectionY90(const IVec3 direction, const uint16_t rotation) {
     switch ((rotation / 90u) % 4u) {
-        case 1: return {-direction.z, direction.y, direction.x};
-        case 2: return {-direction.x, direction.y, -direction.z};
-        case 3: return {direction.z, direction.y, -direction.x};
-        case 0:
-        default: return direction;
+    case 1: return {-direction.z, direction.y, direction.x};
+    case 2: return {-direction.x, direction.y, -direction.z};
+    case 3: return {direction.z, direction.y, -direction.x};
+    case 0:
+    default: return direction;
     }
 }
 
 IVec3 rotateIconDirectionZ90(const IVec3 direction, const uint16_t rotation) {
     switch ((rotation / 90u) % 4u) {
-        case 1: return {-direction.y, direction.x, direction.z};
-        case 2: return {-direction.x, -direction.y, direction.z};
-        case 3: return {direction.y, -direction.x, direction.z};
-        case 0:
-        default: return direction;
+    case 1: return {-direction.y, direction.x, direction.z};
+    case 2: return {-direction.x, -direction.y, direction.z};
+    case 3: return {direction.y, -direction.x, direction.z};
+    case 0:
+    default: return direction;
     }
 }
 
@@ -149,17 +147,24 @@ IVec3 applyIconModelTransformToDirection(IVec3 direction, const ModelTransform& 
 }
 
 int iconFaceFromDirection(const IVec3 direction) {
-    if (direction.x == 0 && direction.y == 1 && direction.z == 0) return 0;
-    if (direction.x == 0 && direction.y == -1 && direction.z == 0) return 1;
-    if (direction.x == 0 && direction.y == 0 && direction.z == 1) return 2;
-    if (direction.x == 0 && direction.y == 0 && direction.z == -1) return 3;
-    if (direction.x == -1 && direction.y == 0 && direction.z == 0) return 4;
-    if (direction.x == 1 && direction.y == 0 && direction.z == 0) return 5;
+    if (direction.x == 0 && direction.y == 1 && direction.z == 0)
+        return 0;
+    if (direction.x == 0 && direction.y == -1 && direction.z == 0)
+        return 1;
+    if (direction.x == 0 && direction.y == 0 && direction.z == 1)
+        return 2;
+    if (direction.x == 0 && direction.y == 0 && direction.z == -1)
+        return 3;
+    if (direction.x == -1 && direction.y == 0 && direction.z == 0)
+        return 4;
+    if (direction.x == 1 && direction.y == 0 && direction.z == 0)
+        return 5;
     failBlockIconAtlasBuilder("Model transform produced an invalid icon face direction");
 }
 
 int transformIconFaceIndex(const int face, const ModelTransform& transform) {
-    return iconFaceFromDirection(applyIconModelTransformToDirection(kFaceNormals[static_cast<size_t>(face)], transform));
+    return iconFaceFromDirection(
+        applyIconModelTransformToDirection(kFaceNormals[static_cast<size_t>(face)], transform));
 }
 
 bool isVisibleIconFace(const int transformedFace) {
@@ -180,10 +185,7 @@ float iconFaceShade(const int transformedFace) {
 }
 
 Vec2f projectIconPoint(const glm::vec3& p, const float unit) {
-    return {
-        (16.0f + p.x * 12.0f - p.z * 12.0f) * unit,
-        (1.0f + p.x * 6.0f + p.y * 14.0f + p.z * 6.0f) * unit
-    };
+    return {(16.0f + p.x * 12.0f - p.z * 12.0f) * unit, (1.0f + p.x * 6.0f + p.y * 14.0f + p.z * 6.0f) * unit};
 }
 
 std::array<glm::vec3, 4> buildIconModelFaceCorners(const ModelElement& element, const int face) {
@@ -195,19 +197,13 @@ std::array<glm::vec3, 4> buildIconModelFaceCorners(const ModelElement& element, 
     const float z1 = element.to[2] / 16.0f;
 
     switch (face) {
-        case 0:
-            return {{{x0, y1, z1}, {x1, y1, z1}, {x1, y1, z0}, {x0, y1, z0}}};
-        case 1:
-            return {{{x0, y0, z0}, {x1, y0, z0}, {x1, y0, z1}, {x0, y0, z1}}};
-        case 2:
-            return {{{x0, y0, z1}, {x1, y0, z1}, {x1, y1, z1}, {x0, y1, z1}}};
-        case 3:
-            return {{{x1, y0, z0}, {x0, y0, z0}, {x0, y1, z0}, {x1, y1, z0}}};
-        case 4:
-            return {{{x0, y0, z0}, {x0, y0, z1}, {x0, y1, z1}, {x0, y1, z0}}};
-        case 5:
-        default:
-            return {{{x1, y0, z1}, {x1, y0, z0}, {x1, y1, z0}, {x1, y1, z1}}};
+    case 0: return {{{x0, y1, z1}, {x1, y1, z1}, {x1, y1, z0}, {x0, y1, z0}}};
+    case 1: return {{{x0, y0, z0}, {x1, y0, z0}, {x1, y0, z1}, {x0, y0, z1}}};
+    case 2: return {{{x0, y0, z1}, {x1, y0, z1}, {x1, y1, z1}, {x0, y1, z1}}};
+    case 3: return {{{x1, y0, z0}, {x0, y0, z0}, {x0, y1, z0}, {x1, y1, z0}}};
+    case 4: return {{{x0, y0, z0}, {x0, y0, z1}, {x0, y1, z1}, {x0, y1, z0}}};
+    case 5:
+    default: return {{{x1, y0, z1}, {x1, y0, z0}, {x1, y1, z0}, {x1, y1, z1}}};
     }
 }
 
@@ -218,15 +214,11 @@ std::array<Vec2f, 4> buildIconModelFaceUv(const ModelFace& face) {
     const float y1 = face.uv[3] / 16.0f;
 
     switch ((face.uvRotation / 90u) % 4u) {
-        case 1:
-            return {{{x1, y0}, {x1, y1}, {x0, y1}, {x0, y0}}};
-        case 2:
-            return {{{x1, y1}, {x0, y1}, {x0, y0}, {x1, y0}}};
-        case 3:
-            return {{{x0, y1}, {x0, y0}, {x1, y0}, {x1, y1}}};
-        case 0:
-        default:
-            return {{{x0, y0}, {x1, y0}, {x1, y1}, {x0, y1}}};
+    case 1: return {{{x1, y0}, {x1, y1}, {x0, y1}, {x0, y0}}};
+    case 2: return {{{x1, y1}, {x0, y1}, {x0, y0}, {x1, y0}}};
+    case 3: return {{{x0, y1}, {x0, y0}, {x1, y0}, {x1, y1}}};
+    case 0:
+    default: return {{{x0, y0}, {x1, y0}, {x1, y1}, {x0, y1}}};
     }
 }
 
@@ -234,16 +226,14 @@ std::string resolveIconModelFaceTextureName(const BlockModel& model, const Model
     const std::string textureKey = face.textureVar.substr(1);
     const auto it = model.textures.find(textureKey);
     if (it == model.textures.end()) {
-        failBlockIconAtlasBuilder("Model icon face references unknown texture variable: " + model.name + "." + textureKey);
+        failBlockIconAtlasBuilder("Model icon face references unknown texture variable: " + model.name + "." +
+                                  textureKey);
     }
     return it->second;
 }
 
-std::array<uint8_t, 4> sampleTileNearest(const TextureAtlas& atlas,
-                                         const std::vector<unsigned char>& pixels,
-                                         const int tileIndex,
-                                         const int tx,
-                                         const int ty) {
+std::array<uint8_t, 4> sampleTileNearest(const TextureAtlas& atlas, const std::vector<unsigned char>& pixels,
+                                         const int tileIndex, const int tx, const int ty) {
     if (atlas.tilesPerRow <= 0 || atlas.atlasWidth <= 0 || atlas.atlasHeight <= 0 || atlas.tileSize <= 0) {
         return {0, 0, 0, 0};
     }
@@ -269,11 +259,7 @@ std::array<uint8_t, 4> sampleTileNearest(const TextureAtlas& atlas,
     return {pixels[idx + 0], pixels[idx + 1], pixels[idx + 2], pixels[idx + 3]};
 }
 
-void alphaBlendOver(std::vector<unsigned char>& dst,
-                    const int dstWidth,
-                    const int dstHeight,
-                    const int x,
-                    const int y,
+void alphaBlendOver(std::vector<unsigned char>& dst, const int dstWidth, const int dstHeight, const int x, const int y,
                     const std::array<uint8_t, 4>& src) {
     if (x < 0 || y < 0 || x >= dstWidth || y >= dstHeight || src[3] == 0) {
         return;
@@ -304,34 +290,23 @@ void alphaBlendOver(std::vector<unsigned char>& dst,
     dst[idx + 3] = static_cast<unsigned char>(std::round(std::clamp(outA, 0.0f, 1.0f) * 255.0f));
 }
 
-void drawTexturedParallelogram(std::vector<unsigned char>& iconAtlasPixels,
-                               const int atlasWidth,
-                               const int atlasHeight,
-                               const TextureAtlas& srcAtlas,
-                               const std::vector<unsigned char>& srcPixels,
-                               const int tileIndex,
-                               const int iconOriginX,
-                               const int iconOriginY,
-                               const Vec2f& a,
-                               const Vec2f& b,
-                               const Vec2f& d,
-                               const Vec2f& uvA,
-                               const Vec2f& uvB,
-                               const Vec2f& uvD,
-                               const float shade,
-                               const IconTint& tint) {
+void drawTexturedParallelogram(std::vector<unsigned char>& iconAtlasPixels, const int atlasWidth, const int atlasHeight,
+                               const TextureAtlas& srcAtlas, const std::vector<unsigned char>& srcPixels,
+                               const int tileIndex, const int iconOriginX, const int iconOriginY, const Vec2f& a,
+                               const Vec2f& b, const Vec2f& d, const Vec2f& uvA, const Vec2f& uvB, const Vec2f& uvD,
+                               const float shade, const IconTint& tint) {
     if (tileIndex < 0) {
         return;
     }
 
-    const Vec2f ab { b.x - a.x, b.y - a.y };
-    const Vec2f ad { d.x - a.x, d.y - a.y };
+    const Vec2f ab{b.x - a.x, b.y - a.y};
+    const Vec2f ad{d.x - a.x, d.y - a.y};
     const float det = ab.x * ad.y - ab.y * ad.x;
     if (std::abs(det) < 1e-6f) {
         return;
     }
 
-    const Vec2f c { b.x + d.x - a.x, b.y + d.y - a.y };
+    const Vec2f c{b.x + d.x - a.x, b.y + d.y - a.y};
     const float minX = std::floor(std::min(std::min(a.x, b.x), std::min(c.x, d.x)));
     const float maxX = std::ceil(std::max(std::max(a.x, b.x), std::max(c.x, d.x)));
     const float minY = std::floor(std::min(std::min(a.y, b.y), std::min(c.y, d.y)));
@@ -352,115 +327,68 @@ void drawTexturedParallelogram(std::vector<unsigned char>& iconAtlasPixels,
 
             const float sampleU = uvA.x + (uvB.x - uvA.x) * u + (uvD.x - uvA.x) * v;
             const float sampleV = uvA.y + (uvB.y - uvA.y) * u + (uvD.y - uvA.y) * v;
-            const int tx = static_cast<int>(std::round(std::clamp(sampleU, 0.0f, 1.0f) * static_cast<float>(srcAtlas.tileSize - 1)));
-            const int ty = static_cast<int>(std::round(std::clamp(sampleV, 0.0f, 1.0f) * static_cast<float>(srcAtlas.tileSize - 1)));
+            const int tx = static_cast<int>(
+                std::round(std::clamp(sampleU, 0.0f, 1.0f) * static_cast<float>(srcAtlas.tileSize - 1)));
+            const int ty = static_cast<int>(
+                std::round(std::clamp(sampleV, 0.0f, 1.0f) * static_cast<float>(srcAtlas.tileSize - 1)));
 
             auto rgba = sampleTileNearest(srcAtlas, srcPixels, tileIndex, tx, ty);
             if (rgba[3] == 0) {
                 continue;
             }
 
-            rgba[0] = static_cast<uint8_t>(std::round(std::clamp(static_cast<float>(rgba[0]) * shade * tint.r, 0.0f, 255.0f)));
-            rgba[1] = static_cast<uint8_t>(std::round(std::clamp(static_cast<float>(rgba[1]) * shade * tint.g, 0.0f, 255.0f)));
-            rgba[2] = static_cast<uint8_t>(std::round(std::clamp(static_cast<float>(rgba[2]) * shade * tint.b, 0.0f, 255.0f)));
+            rgba[0] = static_cast<uint8_t>(
+                std::round(std::clamp(static_cast<float>(rgba[0]) * shade * tint.r, 0.0f, 255.0f)));
+            rgba[1] = static_cast<uint8_t>(
+                std::round(std::clamp(static_cast<float>(rgba[1]) * shade * tint.g, 0.0f, 255.0f)));
+            rgba[2] = static_cast<uint8_t>(
+                std::round(std::clamp(static_cast<float>(rgba[2]) * shade * tint.b, 0.0f, 255.0f)));
 
-            alphaBlendOver(iconAtlasPixels,
-                           atlasWidth,
-                           atlasHeight,
-                           iconOriginX + px,
-                           iconOriginY + py,
-                           rgba);
+            alphaBlendOver(iconAtlasPixels, atlasWidth, atlasHeight, iconOriginX + px, iconOriginY + py, rgba);
         }
     }
 }
 
-void drawFaceParallelogram(std::vector<unsigned char>& iconAtlasPixels,
-                           const int atlasWidth,
-                           const int atlasHeight,
-                           const TextureAtlas& srcAtlas,
-                           const std::vector<unsigned char>& srcPixels,
-                           const int tileIndex,
-                           const int iconOriginX,
-                           const int iconOriginY,
-                           const Vec2f& a,
-                           const Vec2f& b,
-                           const Vec2f& d,
-                           const float shade,
-                           const bool flipV = false,
+void drawFaceParallelogram(std::vector<unsigned char>& iconAtlasPixels, const int atlasWidth, const int atlasHeight,
+                           const TextureAtlas& srcAtlas, const std::vector<unsigned char>& srcPixels,
+                           const int tileIndex, const int iconOriginX, const int iconOriginY, const Vec2f& a,
+                           const Vec2f& b, const Vec2f& d, const float shade, const bool flipV = false,
                            const IconTint& tint = {}) {
-    const Vec2f uvA {0.0f, flipV ? 1.0f : 0.0f};
-    const Vec2f uvB {1.0f, flipV ? 1.0f : 0.0f};
-    const Vec2f uvD {0.0f, flipV ? 0.0f : 1.0f};
-    drawTexturedParallelogram(iconAtlasPixels,
-                              atlasWidth,
-                              atlasHeight,
-                              srcAtlas,
-                              srcPixels,
-                              tileIndex,
-                              iconOriginX,
-                              iconOriginY,
-                              a,
-                              b,
-                              d,
-                              uvA,
-                              uvB,
-                              uvD,
-                              shade,
-                              tint);
+    const Vec2f uvA{0.0f, flipV ? 1.0f : 0.0f};
+    const Vec2f uvB{1.0f, flipV ? 1.0f : 0.0f};
+    const Vec2f uvD{0.0f, flipV ? 0.0f : 1.0f};
+    drawTexturedParallelogram(iconAtlasPixels, atlasWidth, atlasHeight, srcAtlas, srcPixels, tileIndex, iconOriginX,
+                              iconOriginY, a, b, d, uvA, uvB, uvD, shade, tint);
 }
 
-void drawCrossPlantIcon(std::vector<unsigned char>& iconAtlasPixels,
-                        const int atlasWidth,
-                        const int atlasHeight,
-                        const TextureAtlas& srcAtlas,
-                        const std::vector<unsigned char>& srcPixels,
-                        const int tileIndex,
-                        const int iconOriginX,
-                        const int iconOriginY,
-                        const float unit,
-                        const bool applyBiomeTint) {
+void drawCrossPlantIcon(std::vector<unsigned char>& iconAtlasPixels, const int atlasWidth, const int atlasHeight,
+                        const TextureAtlas& srcAtlas, const std::vector<unsigned char>& srcPixels, const int tileIndex,
+                        const int iconOriginX, const int iconOriginY, const float unit, const bool applyBiomeTint) {
     const IconTint tint = applyBiomeTint ? biomeIconTint(BiomeTintKind::Foliage) : IconTint{};
 
-    const Vec2f a1 { 8.0f * unit, 5.0f * unit };
-    const Vec2f b1 { 22.0f * unit, 11.0f * unit };
-    const Vec2f d1 { 8.0f * unit, 29.0f * unit };
+    const Vec2f a1{8.0f * unit, 5.0f * unit};
+    const Vec2f b1{22.0f * unit, 11.0f * unit};
+    const Vec2f d1{8.0f * unit, 29.0f * unit};
 
-    const Vec2f a2 { 24.0f * unit, 5.0f * unit };
-    const Vec2f b2 { 10.0f * unit, 11.0f * unit };
-    const Vec2f d2 { 24.0f * unit, 29.0f * unit };
+    const Vec2f a2{24.0f * unit, 5.0f * unit};
+    const Vec2f b2{10.0f * unit, 11.0f * unit};
+    const Vec2f d2{24.0f * unit, 29.0f * unit};
 
-    drawFaceParallelogram(iconAtlasPixels, atlasWidth, atlasHeight,
-                          srcAtlas, srcPixels, tileIndex,
-                          iconOriginX, iconOriginY,
-                          a1, b1, d1,
-                          0.92f,
-                          false,
-                          tint);
-    drawFaceParallelogram(iconAtlasPixels, atlasWidth, atlasHeight,
-                          srcAtlas, srcPixels, tileIndex,
-                          iconOriginX, iconOriginY,
-                          a2, b2, d2,
-                          0.78f,
-                          false,
-                          tint);
+    drawFaceParallelogram(iconAtlasPixels, atlasWidth, atlasHeight, srcAtlas, srcPixels, tileIndex, iconOriginX,
+                          iconOriginY, a1, b1, d1, 0.92f, false, tint);
+    drawFaceParallelogram(iconAtlasPixels, atlasWidth, atlasHeight, srcAtlas, srcPixels, tileIndex, iconOriginX,
+                          iconOriginY, a2, b2, d2, 0.78f, false, tint);
 }
 
-void drawModelBlockIcon(std::vector<unsigned char>& iconAtlasPixels,
-                        const int atlasWidth,
-                        const int atlasHeight,
-                        const TextureAtlas& srcAtlas,
-                        const std::vector<unsigned char>& srcPixels,
-                        const BlockTextureLibrary& blockTextures,
-                        const BlockID blockId,
-                        const BlockDef& def,
-                        const int iconOriginX,
-                        const int iconOriginY,
-                        const float unit) {
+void drawModelBlockIcon(std::vector<unsigned char>& iconAtlasPixels, const int atlasWidth, const int atlasHeight,
+                        const TextureAtlas& srcAtlas, const std::vector<unsigned char>& srcPixels,
+                        const BlockTextureLibrary& blockTextures, const BlockID blockId, const BlockDef& def,
+                        const int iconOriginX, const int iconOriginY, const float unit) {
     const BlockStateId stateId = BlockStateRegistry::getDefaultState(blockId);
     const ModelVariant* variant = BlockStateRegistry::getModelVariant(stateId);
     if (variant == nullptr || variant->model == nullptr) {
         failBlockIconAtlasBuilder("Model block is missing an icon model variant: " +
-                                 BlockRegistry::getNamespacedId(blockId).full());
+                                  BlockRegistry::getNamespacedId(blockId).full());
     }
 
     std::vector<IconModelFace> faces;
@@ -517,22 +445,9 @@ void drawModelBlockIcon(std::vector<unsigned char>& iconAtlasPixels,
     });
 
     for (const IconModelFace& face : faces) {
-        drawTexturedParallelogram(iconAtlasPixels,
-                                  atlasWidth,
-                                  atlasHeight,
-                                  srcAtlas,
-                                  srcPixels,
-                                  face.tileIndex,
-                                  iconOriginX,
-                                  iconOriginY,
-                                  face.a,
-                                  face.b,
-                                  face.d,
-                                  face.uvA,
-                                  face.uvB,
-                                  face.uvD,
-                                  face.shade,
-                                  face.tint);
+        drawTexturedParallelogram(iconAtlasPixels, atlasWidth, atlasHeight, srcAtlas, srcPixels, face.tileIndex,
+                                  iconOriginX, iconOriginY, face.a, face.b, face.d, face.uvA, face.uvB, face.uvD,
+                                  face.shade, face.tint);
     }
 }
 
@@ -540,11 +455,9 @@ void drawModelBlockIcon(std::vector<unsigned char>& iconAtlasPixels,
 
 namespace resource {
 
-TextureAtlas buildBlockIconAtlas(int iconSize,
-                                 const TextureAtlas& blockAtlas,
+TextureAtlas buildBlockIconAtlas(int iconSize, const TextureAtlas& blockAtlas,
                                  const std::vector<unsigned char>& blockAtlasPixels,
-                                 const BlockTextureLibrary& blockTextures,
-                                 RhiDevice& rhiDevice) {
+                                 const BlockTextureLibrary& blockTextures, RhiDevice& rhiDevice) {
     if (iconSize < 16) {
         iconSize = 16;
     }
@@ -554,22 +467,24 @@ TextureAtlas buildBlockIconAtlas(int iconSize,
 
     const int kBlockTypeCount = static_cast<int>(BlockRegistry::getBlockCount());
     const int tilesPerRow = static_cast<int>(std::ceil(std::sqrt(static_cast<float>(kBlockTypeCount))));
-    const int numRows = static_cast<int>(std::ceil(static_cast<float>(kBlockTypeCount) / static_cast<float>(tilesPerRow)));
+    const int numRows =
+        static_cast<int>(std::ceil(static_cast<float>(kBlockTypeCount) / static_cast<float>(tilesPerRow)));
     const int atlasWidth = tilesPerRow * iconSize;
     const int atlasHeight = numRows * iconSize;
 
-    std::vector<unsigned char> iconAtlasPixels(static_cast<size_t>(atlasWidth) * static_cast<size_t>(atlasHeight) * 4, 0);
+    std::vector<unsigned char> iconAtlasPixels(static_cast<size_t>(atlasWidth) * static_cast<size_t>(atlasHeight) * 4,
+                                               0);
 
     const float unit = static_cast<float>(iconSize) / 32.0f;
-    const Vec2f topA { 4.0f * unit, 21.0f * unit };
-    const Vec2f topB { 16.0f * unit, 27.0f * unit };
-    const Vec2f topD { 16.0f * unit, 15.0f * unit };
-    const Vec2f rightA { 16.0f * unit, 15.0f * unit };
-    const Vec2f rightB { 28.0f * unit, 21.0f * unit };
-    const Vec2f rightD { 16.0f * unit, 1.0f * unit };
-    const Vec2f leftA { 4.0f * unit, 21.0f * unit };
-    const Vec2f leftB { 16.0f * unit, 15.0f * unit };
-    const Vec2f leftD { 4.0f * unit, 7.0f * unit };
+    const Vec2f topA{4.0f * unit, 21.0f * unit};
+    const Vec2f topB{16.0f * unit, 27.0f * unit};
+    const Vec2f topD{16.0f * unit, 15.0f * unit};
+    const Vec2f rightA{16.0f * unit, 15.0f * unit};
+    const Vec2f rightB{28.0f * unit, 21.0f * unit};
+    const Vec2f rightD{16.0f * unit, 1.0f * unit};
+    const Vec2f leftA{4.0f * unit, 21.0f * unit};
+    const Vec2f leftB{16.0f * unit, 15.0f * unit};
+    const Vec2f leftD{4.0f * unit, 7.0f * unit};
 
     for (int id = 0; id < kBlockTypeCount; ++id) {
         const BlockID blockId = static_cast<BlockID>(id);
@@ -584,17 +499,8 @@ TextureAtlas buildBlockIconAtlas(int iconSize,
         const int iconOriginY = tileRow * iconSize;
 
         if (def.renderShapeName == "model") {
-            drawModelBlockIcon(iconAtlasPixels,
-                               atlasWidth,
-                               atlasHeight,
-                               blockAtlas,
-                               blockAtlasPixels,
-                               blockTextures,
-                               blockId,
-                               def,
-                               iconOriginX,
-                               iconOriginY,
-                               unit);
+            drawModelBlockIcon(iconAtlasPixels, atlasWidth, atlasHeight, blockAtlas, blockAtlasPixels, blockTextures,
+                               blockId, def, iconOriginX, iconOriginY, unit);
             continue;
         }
 
@@ -607,16 +513,8 @@ TextureAtlas buildBlockIconAtlas(int iconSize,
                 continue;
             }
 
-            drawCrossPlantIcon(iconAtlasPixels,
-                               atlasWidth,
-                               atlasHeight,
-                               blockAtlas,
-                               blockAtlasPixels,
-                               crossTex,
-                               iconOriginX,
-                               iconOriginY,
-                               unit,
-                               def.biomeTint != BiomeTintKind::None);
+            drawCrossPlantIcon(iconAtlasPixels, atlasWidth, atlasHeight, blockAtlas, blockAtlasPixels, crossTex,
+                               iconOriginX, iconOriginY, unit, def.biomeTint != BiomeTintKind::None);
             continue;
         }
 
@@ -639,27 +537,12 @@ TextureAtlas buildBlockIconAtlas(int iconSize,
 
         const IconTint tint = biomeIconTint(def.biomeTint);
 
-        drawFaceParallelogram(iconAtlasPixels, atlasWidth, atlasHeight,
-                              blockAtlas, blockAtlasPixels, leftTex,
-                              iconOriginX, iconOriginY,
-                              leftA, leftB, leftD,
-                              0.68f,
-                              true,
-                              tint);
-        drawFaceParallelogram(iconAtlasPixels, atlasWidth, atlasHeight,
-                              blockAtlas, blockAtlasPixels, rightTex,
-                              iconOriginX, iconOriginY,
-                              rightA, rightB, rightD,
-                              0.83f,
-                              true,
-                              tint);
-        drawFaceParallelogram(iconAtlasPixels, atlasWidth, atlasHeight,
-                              blockAtlas, blockAtlasPixels, topTex,
-                              iconOriginX, iconOriginY,
-                              topA, topB, topD,
-                              1.0f,
-                              false,
-                              tint);
+        drawFaceParallelogram(iconAtlasPixels, atlasWidth, atlasHeight, blockAtlas, blockAtlasPixels, leftTex,
+                              iconOriginX, iconOriginY, leftA, leftB, leftD, 0.68f, true, tint);
+        drawFaceParallelogram(iconAtlasPixels, atlasWidth, atlasHeight, blockAtlas, blockAtlasPixels, rightTex,
+                              iconOriginX, iconOriginY, rightA, rightB, rightD, 0.83f, true, tint);
+        drawFaceParallelogram(iconAtlasPixels, atlasWidth, atlasHeight, blockAtlas, blockAtlasPixels, topTex,
+                              iconOriginX, iconOriginY, topA, topB, topD, 1.0f, false, tint);
     }
 
     TextureAtlas atlas;
@@ -675,8 +558,7 @@ TextureAtlas buildBlockIconAtlas(int iconSize,
     desc.format = RhiTextureFormat::Rgba8Unorm;
     desc.width = static_cast<uint32_t>(atlasWidth);
     desc.height = static_cast<uint32_t>(atlasHeight);
-    desc.usage = rhiFlag(RhiTextureUsage::Sampled) |
-                 rhiFlag(RhiTextureUsage::TransferDst);
+    desc.usage = rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::TransferDst);
     desc.memoryCategory = RhiMemoryCategory::Texture;
     RhiTextureInitialData initialData;
     initialData.pixels = iconAtlasPixels.data();

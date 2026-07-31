@@ -14,15 +14,13 @@ class InProcessTransport : public ITransportEndpoint {
 public:
     /// Create a connected pair of endpoints.
     /// @return {clientEndpoint, serverEndpoint}
-    static std::pair<std::unique_ptr<InProcessTransport>,
-                     std::unique_ptr<InProcessTransport>> createPair();
+    static std::pair<std::unique_ptr<InProcessTransport>, std::unique_ptr<InProcessTransport>> createPair();
 
     void send(Packet packet) override;
     bool tryReceive(Packet& out) override;
 
 private:
-    InProcessTransport(std::shared_ptr<std::mutex> mutex,
-                       std::shared_ptr<std::queue<Packet>> inbox,
+    InProcessTransport(std::shared_ptr<std::mutex> mutex, std::shared_ptr<std::queue<Packet>> inbox,
                        std::shared_ptr<std::queue<Packet>> outbox);
 
     std::shared_ptr<std::mutex> m_mutex;

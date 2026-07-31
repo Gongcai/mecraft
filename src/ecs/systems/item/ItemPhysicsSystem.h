@@ -10,8 +10,7 @@ class ItemPhysicsSystem : public ISystem {
 public:
     using Dependencies = SystemDependency<
         std::tuple<DropItemTag, TransformComponent, BoundsComponent, GroundedStateComponent>,
-        std::tuple<TransformComponent, VelocityComponent, SpinVisualComponent, GroundedStateComponent>
-    >;
+        std::tuple<TransformComponent, VelocityComponent, SpinVisualComponent, GroundedStateComponent>>;
 
     void update(SystemContext& ctx) override;
 };

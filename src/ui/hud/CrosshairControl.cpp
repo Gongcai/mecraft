@@ -14,12 +14,12 @@
 #include "../../resource/ResourceMgr.h"
 #include "../core/UITheme.h"
 
-void CrosshairControl::init(ResourceMgr& resourceMgr)
-{
+void CrosshairControl::init(ResourceMgr& resourceMgr) {
     m_rhiDevice = &resourceMgr.rhiDevice();
     const auto vertexSource = renderer::rhi::loadShaderSource("assets/shaders/crosshair_rhi.vert");
     const auto fragmentSource = renderer::rhi::loadShaderSource("assets/shaders/crosshair_rhi.frag");
-    if (!vertexSource || !fragmentSource) std::abort();
+    if (!vertexSource || !fragmentSource)
+        std::abort();
 
     RhiShaderDesc shaderDesc;
     shaderDesc.debugName = "Crosshair.Vertex";
@@ -59,19 +59,23 @@ void CrosshairControl::init(ResourceMgr& resourceMgr)
     blend.dstAlpha = RhiBlendFactor::OneMinusSrcAlpha;
     pipelineDesc.blend.attachments.push_back(blend);
     m_pipeline = m_rhiDevice->createGraphicsPipeline(pipelineDesc);
-    if (!m_vertexShader.isValid() || !m_fragmentShader.isValid() ||
-        !m_pipelineLayout.isValid() || !m_pipeline.isValid()) std::abort();
+    if (!m_vertexShader.isValid() || !m_fragmentShader.isValid() || !m_pipelineLayout.isValid() ||
+        !m_pipeline.isValid())
+        std::abort();
     initMesh();
 }
 
-void CrosshairControl::shutdown()
-{
+void CrosshairControl::shutdown() {
     cleanupMesh();
     if (m_rhiDevice != nullptr) {
-        if (m_pipeline.isValid()) m_rhiDevice->destroyPipeline(m_pipeline);
-        if (m_pipelineLayout.isValid()) m_rhiDevice->destroyPipelineLayout(m_pipelineLayout);
-        if (m_fragmentShader.isValid()) m_rhiDevice->destroyShader(m_fragmentShader);
-        if (m_vertexShader.isValid()) m_rhiDevice->destroyShader(m_vertexShader);
+        if (m_pipeline.isValid())
+            m_rhiDevice->destroyPipeline(m_pipeline);
+        if (m_pipelineLayout.isValid())
+            m_rhiDevice->destroyPipelineLayout(m_pipelineLayout);
+        if (m_fragmentShader.isValid())
+            m_rhiDevice->destroyShader(m_fragmentShader);
+        if (m_vertexShader.isValid())
+            m_rhiDevice->destroyShader(m_vertexShader);
     }
     m_pipeline = {};
     m_pipelineLayout = {};
@@ -80,8 +84,7 @@ void CrosshairControl::shutdown()
     m_rhiDevice = nullptr;
 }
 
-void CrosshairControl::setSize(float size)
-{
+void CrosshairControl::setSize(float size) {
     const float clamped = std::clamp(size, 0.5f, 4.0f);
     if (m_size == clamped) {
         return;
@@ -91,23 +94,19 @@ void CrosshairControl::setSize(float size)
     rebuildMesh();
 }
 
-float CrosshairControl::getSize() const
-{
+float CrosshairControl::getSize() const {
     return m_size;
 }
 
-void CrosshairControl::setColor(const std::array<float, 4>& color)
-{
+void CrosshairControl::setColor(const std::array<float, 4>& color) {
     m_color = color;
 }
 
-const std::array<float, 4>& CrosshairControl::getColor() const
-{
+const std::array<float, 4>& CrosshairControl::getColor() const {
     return m_color;
 }
 
-void CrosshairControl::initMesh()
-{
+void CrosshairControl::initMesh() {
     constexpr int kBaseArmLen = 7;
     constexpr int kBaseThickness = 2;
 
@@ -116,19 +115,24 @@ void CrosshairControl::initMesh()
     const int halfT = thickness / 2;
 
     std::vector<float> vertices;
-    auto addQuad = [&](int x0, int y0, int x1, int y1)
-    {
+    auto addQuad = [&](int x0, int y0, int x1, int y1) {
         const auto fx0 = static_cast<float>(x0);
         const auto fy0 = static_cast<float>(y0);
         const auto fx1 = static_cast<float>(x1);
         const auto fy1 = static_cast<float>(y1);
 
-        vertices.push_back(fx0); vertices.push_back(fy0);
-        vertices.push_back(fx1); vertices.push_back(fy0);
-        vertices.push_back(fx1); vertices.push_back(fy1);
-        vertices.push_back(fx0); vertices.push_back(fy0);
-        vertices.push_back(fx1); vertices.push_back(fy1);
-        vertices.push_back(fx0); vertices.push_back(fy1);
+        vertices.push_back(fx0);
+        vertices.push_back(fy0);
+        vertices.push_back(fx1);
+        vertices.push_back(fy0);
+        vertices.push_back(fx1);
+        vertices.push_back(fy1);
+        vertices.push_back(fx0);
+        vertices.push_back(fy0);
+        vertices.push_back(fx1);
+        vertices.push_back(fy1);
+        vertices.push_back(fx0);
+        vertices.push_back(fy1);
     };
 
     addQuad(-halfT, -halfT, halfT, halfT);
@@ -142,17 +146,16 @@ void CrosshairControl::initMesh()
     RhiBufferDesc bufferDesc;
     bufferDesc.debugName = "Crosshair.VertexBuffer";
     bufferDesc.size = vertices.size() * sizeof(float);
-    bufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex) |
-                       rhiFlag(RhiBufferUsage::TransferDst);
+    bufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex) | rhiFlag(RhiBufferUsage::TransferDst);
     bufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
     bufferDesc.initialState = RhiResourceState::VertexBuffer;
     bufferDesc.memoryCategory = RhiMemoryCategory::Geometry;
     m_vertexBuffer = m_rhiDevice->createBuffer(bufferDesc, vertices.data(), bufferDesc.size);
-    if (!m_vertexBuffer.isValid()) std::abort();
+    if (!m_vertexBuffer.isValid())
+        std::abort();
 }
 
-void CrosshairControl::rebuildMesh()
-{
+void CrosshairControl::rebuildMesh() {
     if (!m_vertexBuffer.isValid()) {
         return;
     }
@@ -160,8 +163,7 @@ void CrosshairControl::rebuildMesh()
     initMesh();
 }
 
-void CrosshairControl::cleanupMesh()
-{
+void CrosshairControl::cleanupMesh() {
     if (m_rhiDevice != nullptr && m_vertexBuffer.isValid()) {
         m_rhiDevice->destroyBuffer(m_vertexBuffer);
     }
@@ -169,10 +171,8 @@ void CrosshairControl::cleanupMesh()
     m_vertexCount = 0;
 }
 
-void CrosshairControl::renderSelf(const UIRenderContext& ctx) const
-{
-    if (ctx.commandList == nullptr || !m_pipeline.isValid() ||
-        !m_vertexBuffer.isValid() || m_vertexCount == 0) {
+void CrosshairControl::renderSelf(const UIRenderContext& ctx) const {
+    if (ctx.commandList == nullptr || !m_pipeline.isValid() || !m_vertexBuffer.isValid() || m_vertexCount == 0) {
         return;
     }
 
@@ -185,10 +185,8 @@ void CrosshairControl::renderSelf(const UIRenderContext& ctx) const
         glm::vec4 screenAndOffset;
         glm::vec4 color;
     };
-    const PushConstants pushConstants{
-        glm::vec4(screenW, screenH, screenW * 0.5f, screenH * 0.5f),
-        glm::vec4(col[0], col[1], col[2], col[3])
-    };
+    const PushConstants pushConstants{glm::vec4(screenW, screenH, screenW * 0.5f, screenH * 0.5f),
+                                      glm::vec4(col[0], col[1], col[2], col[3])};
     ctx.commandList->setGraphicsPipeline(m_pipeline);
     ctx.commandList->setVertexBuffer(0u, m_vertexBuffer, 0u);
     ctx.commandList->pushConstants(&pushConstants, sizeof(pushConstants),

@@ -12,9 +12,7 @@
 namespace {
 struct ThreadPoolGuard {
     ThreadPool& pool;
-    ~ThreadPoolGuard() {
-        pool.shutdown();
-    }
+    ~ThreadPoolGuard() { pool.shutdown(); }
 };
 
 [[noreturn]] void fail(const char* message) {
@@ -36,10 +34,7 @@ void tickWorld(World& world, const glm::vec3& playerPos, const int frames) {
     }
 }
 
-bool waitUntil(World& world,
-               const glm::vec3& playerPos,
-               const int maxFrames,
-               const std::function<bool()>& predicate) {
+bool waitUntil(World& world, const glm::vec3& playerPos, const int maxFrames, const std::function<bool()>& predicate) {
     for (int i = 0; i < maxFrames; ++i) {
         world.update(playerPos);
         if (predicate()) {
@@ -103,10 +98,10 @@ void testAdjacentChunksCanBeInFlightTogether() {
         Chunk* leftChunk = findChunk(world, 0, 0);
         Chunk* rightChunk = findChunk(world, 1, 0);
         if (leftChunk && rightChunk) {
-            const bool leftToRight = rightChunk->getBlockLight(0, torchY, zA) > 0 &&
-                                     rightChunk->getBlockLight(1, torchY, zA) > 0;
-            const bool rightToLeft = leftChunk->getBlockLight(15, torchY, zB) > 0 &&
-                                     leftChunk->getBlockLight(14, torchY, zB) > 0;
+            const bool leftToRight =
+                rightChunk->getBlockLight(0, torchY, zA) > 0 && rightChunk->getBlockLight(1, torchY, zA) > 0;
+            const bool rightToLeft =
+                leftChunk->getBlockLight(15, torchY, zB) > 0 && leftChunk->getBlockLight(14, torchY, zB) > 0;
             bothCrossChunkLit = leftToRight && rightToLeft;
         }
 
@@ -193,7 +188,8 @@ void testUnloadDropsLateLightingResults() {
     const bool cleanReload = waitUntil(world, nearPos, 120, [&]() {
         Chunk* chunk = findChunk(world, 0, 0);
         return chunk != nullptr &&
-               BlockStateRegistry::getBlockId(world.getBlock(8, torchY, 8)) != BlockRegistry::requireIdByName("minecraft:torch") &&
+               BlockStateRegistry::getBlockId(world.getBlock(8, torchY, 8)) !=
+                   BlockRegistry::requireIdByName("minecraft:torch") &&
                chunk->getBlockLight(8, torchY, 8) == 0;
     });
     if (!cleanReload) {
@@ -237,8 +233,10 @@ void testHighFrequencyContinuousBlockChangesRequeueCleanly() {
 
     bool sawRequeue = false;
     for (int i = 0; i < 48; ++i) {
-        world.setBlock(torchX, torchY, torchZ, (i % 2 == 0) ? BlockRegistry::requireIdByName("minecraft:torch") : RUNTIME_ID_NULL);
-        world.setBlock(helperX, torchY, torchZ, (i % 3 == 0) ? BlockRegistry::requireIdByName("minecraft:stone") : RUNTIME_ID_NULL);
+        world.setBlock(torchX, torchY, torchZ,
+                       (i % 2 == 0) ? BlockRegistry::requireIdByName("minecraft:torch") : RUNTIME_ID_NULL);
+        world.setBlock(helperX, torchY, torchZ,
+                       (i % 3 == 0) ? BlockRegistry::requireIdByName("minecraft:stone") : RUNTIME_ID_NULL);
     }
 
     world.setBlock(torchX, torchY, torchZ, RUNTIME_ID_NULL);
@@ -250,10 +248,9 @@ void testHighFrequencyContinuousBlockChangesRequeueCleanly() {
             sawRequeue = true;
         }
         Chunk* chunk = findChunk(world, 0, 0);
-        const bool finalStateClean = chunk != nullptr &&
-            world.getBlock(torchX, torchY, torchZ) == NULL_BLOCK_STATE &&
-            chunk->getBlockLight(torchX, torchY, torchZ) == 0 &&
-            chunk->getBlockLight(helperX, torchY, torchZ) == 0;
+        const bool finalStateClean = chunk != nullptr && world.getBlock(torchX, torchY, torchZ) == NULL_BLOCK_STATE &&
+                                     chunk->getBlockLight(torchX, torchY, torchZ) == 0 &&
+                                     chunk->getBlockLight(helperX, torchY, torchZ) == 0;
         if (sawRequeue && finalStateClean) {
             break;
         }
@@ -264,10 +261,9 @@ void testHighFrequencyContinuousBlockChangesRequeueCleanly() {
         fail("same chunk should requeue lighting when blocks change continuously");
     }
     Chunk* chunk = findChunk(world, 0, 0);
-    const bool finalStateClean = chunk != nullptr &&
-        world.getBlock(torchX, torchY, torchZ) == NULL_BLOCK_STATE &&
-        chunk->getBlockLight(torchX, torchY, torchZ) == 0 &&
-        chunk->getBlockLight(helperX, torchY, torchZ) == 0;
+    const bool finalStateClean = chunk != nullptr && world.getBlock(torchX, torchY, torchZ) == NULL_BLOCK_STATE &&
+                                 chunk->getBlockLight(torchX, torchY, torchZ) == 0 &&
+                                 chunk->getBlockLight(helperX, torchY, torchZ) == 0;
     if (!finalStateClean) {
         fail("final lighting should match the last high-frequency block edits");
     }

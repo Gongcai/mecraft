@@ -86,9 +86,15 @@ public:
     };
 
     [[nodiscard]] MeshingFrameStats getMeshingFrameStats() const;
-    [[nodiscard]] const std::array<float, MESHING_HISTORY_SIZE>& getMeshingSubmittedHistory() const { return m_meshingSubmittedHistory; }
-    [[nodiscard]] const std::array<float, MESHING_HISTORY_SIZE>& getMeshingCompletedHistory() const { return m_meshingCompletedHistory; }
-    [[nodiscard]] const std::array<float, MESHING_HISTORY_SIZE>& getMeshingInFlightHistory() const { return m_meshingInFlightHistory; }
+    [[nodiscard]] const std::array<float, MESHING_HISTORY_SIZE>& getMeshingSubmittedHistory() const {
+        return m_meshingSubmittedHistory;
+    }
+    [[nodiscard]] const std::array<float, MESHING_HISTORY_SIZE>& getMeshingCompletedHistory() const {
+        return m_meshingCompletedHistory;
+    }
+    [[nodiscard]] const std::array<float, MESHING_HISTORY_SIZE>& getMeshingInFlightHistory() const {
+        return m_meshingInFlightHistory;
+    }
     [[nodiscard]] size_t getMeshingHistoryCount() const { return m_meshingHistoryCount; }
 #endif
 

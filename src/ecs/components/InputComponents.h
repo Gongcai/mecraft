@@ -6,21 +6,21 @@
 namespace ecs {
 
 struct MoveIntentComponent {
-    glm::vec2 move{0.0f};     // world-space X/Z wish direction
-    bool wantsJump   = false;
+    glm::vec2 move{0.0f}; // world-space X/Z wish direction
+    bool wantsJump = false;
     bool wantsSprint = false;
     bool wantsCrouch = false;
     bool toggleFlightMode = false;
 };
 
 struct LookIntentComponent {
-    float deltaX = 0.0f;      // horizontal mouse delta
-    float deltaY = 0.0f;      // vertical mouse delta
+    float deltaX = 0.0f; // horizontal mouse delta
+    float deltaY = 0.0f; // vertical mouse delta
 };
 
 struct HotbarIntentComponent {
-    bool slotSelected[9] = {};      // Hotbar1~9 triggered
-    bool scrollUp   = false;
+    bool slotSelected[9] = {}; // Hotbar1~9 triggered
+    bool scrollUp = false;
     bool scrollDown = false;
 };
 

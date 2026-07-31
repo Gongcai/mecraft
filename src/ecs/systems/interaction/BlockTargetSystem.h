@@ -11,8 +11,7 @@ class BlockTargetSystem : public ISystem {
 public:
     using Dependencies = SystemDependency<
         std::tuple<LocalPlayerTag, BlockActionIntentComponent, TransformComponent, CameraStateComponent>,
-        std::tuple<BlockTargetComponent>
-    >;
+        std::tuple<BlockTargetComponent>>;
 
     void update(SystemContext& ctx) override;
 };

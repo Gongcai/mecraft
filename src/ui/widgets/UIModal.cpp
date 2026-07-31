@@ -100,11 +100,13 @@ void UIModal::close() {
     m_open = false;
     m_overlayAlpha.start(m_overlayAlpha.value(), 0.0f, 0.2f, EasingType::EaseIn);
     m_panelScale.start(m_panelScale.value(), 0.8f, 0.2f, EasingType::EaseIn);
-    if (onClose) onClose();
+    if (onClose)
+        onClose();
 }
 
 void UIModal::layoutButtons() {
-    if (m_buttons.empty()) return;
+    if (m_buttons.empty())
+        return;
     const UIResolvedModalStyle style = fallbackStyle();
     const float totalWidth = static_cast<float>(m_buttons.size()) * style.buttonWidth +
                              static_cast<float>(m_buttons.size() - 1) * style.buttonSpacing;
@@ -129,7 +131,8 @@ void UIModal::updateAnimations(float dt) {
 }
 
 void UIModal::render(const UIRenderContext& ctx) const {
-    if (!visible) return;
+    if (!visible)
+        return;
 
     const UIResolvedModalStyle style = resolveStyle(ctx);
 
@@ -139,7 +142,8 @@ void UIModal::render(const UIRenderContext& ctx) const {
     const_cast<UIPanel&>(m_overlayPanel).setBackgroundColor(overlayBg);
     m_overlayPanel.render(ctx);
 
-    if (!m_open && m_overlayAlpha.value() < 0.01f) return;
+    if (!m_open && m_overlayAlpha.value() < 0.01f)
+        return;
 
     // Render content panel with scale animation.
     const float panelW = style.panelWidth;
@@ -195,11 +199,11 @@ void UIModal::render(const UIRenderContext& ctx) const {
 }
 
 UIEventResult UIModal::onInput(const UIInputEvent& event, const UIRenderContext& ctx) {
-    if (!visible || !m_open) return UIEventResult::Ignored;
+    if (!visible || !m_open)
+        return UIEventResult::Ignored;
 
     // Hit-test buttons manually (onInput is protected in UIButton).
-    if (event.type == UIInputEventType::PointerDown &&
-        event.button == UIPointerButton::Primary && !m_buttons.empty()) {
+    if (event.type == UIInputEventType::PointerDown && event.button == UIPointerButton::Primary && !m_buttons.empty()) {
         const UIResolvedModalStyle style = resolveStyle(ctx);
         const float cx = static_cast<float>(ctx.screenWidth) * 0.5f;
         const float cy = static_cast<float>(ctx.screenHeight) * 0.5f;
@@ -212,8 +216,7 @@ UIEventResult UIModal::onInput(const UIInputEvent& event, const UIRenderContext&
         const float btnY = cy - style.panelMinHeight * 0.5f * scale + style.padding * scale;
         const float flippedY = static_cast<float>(ctx.screenHeight) - event.y;
         for (size_t i = 0; i < m_buttons.size(); ++i) {
-            if (event.x >= btnX && event.x < btnX + btnW &&
-                flippedY >= btnY && flippedY < btnY + btnH) {
+            if (event.x >= btnX && event.x < btnX + btnW && flippedY >= btnY && flippedY < btnY + btnH) {
                 if (i < m_buttonCallbacks.size() && m_buttonCallbacks[i]) {
                     m_buttonCallbacks[i]();
                 }
@@ -225,11 +228,12 @@ UIEventResult UIModal::onInput(const UIInputEvent& event, const UIRenderContext&
 
     // Forward to content panel.
     const UIEventResult contentResult = m_contentPanel.onInput(event, ctx);
-    if (contentResult == UIEventResult::Consumed) return UIEventResult::Consumed;
+    if (contentResult == UIEventResult::Consumed)
+        return UIEventResult::Consumed;
 
     // Handle overlay click to close.
-    if (event.type == UIInputEventType::PointerDown &&
-        event.button == UIPointerButton::Primary && m_closeOnOverlayClick) {
+    if (event.type == UIInputEventType::PointerDown && event.button == UIPointerButton::Primary &&
+        m_closeOnOverlayClick) {
         // Check if click is outside the content panel.
         const UIResolvedModalStyle style = resolveStyle(ctx);
         const float cx = static_cast<float>(ctx.screenWidth) * 0.5f;

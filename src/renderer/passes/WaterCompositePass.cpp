@@ -19,33 +19,25 @@ void WaterCompositePass::shutdown() {
     m_resourceMgr = nullptr;
 }
 
-bool WaterCompositePass::recordGraphPass(
-    const FrameContext& ctx,
-    const RenderSettings& settings,
-    DeferredRenderTargets& targets,
-    const bool deferredFrameActive,
-    const bool preTemporalResolve,
-    const bool transparentCompositeEnabled,
-    const bool waterEffectsEnabled,
-    const bool rainSurfaceRipplesEnabled,
-    const bool volumetricFogActive,
-    RhiCommandList& commandList,
-    WorldRenderBuffer& worldRenderBuffer,
-    const std::vector<DrawBatchEntry>& transparentBatch,
-    const TransparentPassPlan& transparentPlan) {
+bool WaterCompositePass::recordGraphPass(const FrameContext& ctx, const RenderSettings& settings,
+                                         DeferredRenderTargets& targets, const bool deferredFrameActive,
+                                         const bool preTemporalResolve, const bool transparentCompositeEnabled,
+                                         const bool waterEffectsEnabled, const bool rainSurfaceRipplesEnabled,
+                                         const bool volumetricFogActive, RhiCommandList& commandList,
+                                         WorldRenderBuffer& worldRenderBuffer,
+                                         const std::vector<DrawBatchEntry>& transparentBatch,
+                                         const TransparentPassPlan& transparentPlan) {
     if (!waterEffectsEnabled || !transparentPlan.hasWater()) {
         return true;
     }
-    if (m_resourceMgr == nullptr || ctx.shared == nullptr ||
-        ctx.shared->rhiDevice == nullptr ||
+    if (m_resourceMgr == nullptr || ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr ||
         ctx.shared->terrainRhiPipelines == nullptr) {
         return false;
     }
 
     RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
     const bool deferredInputsEnabled = deferredFrameActive && targets.isReady();
-    const bool compositeInputsEnabled = deferredInputsEnabled &&
-                                        (preTemporalResolve || transparentCompositeEnabled);
+    const bool compositeInputsEnabled = deferredInputsEnabled && (preTemporalResolve || transparentCompositeEnabled);
 
     RhiColorAttachment colorAttachments[3];
     RhiDepthStencilAttachment depthAttachment;
@@ -61,12 +53,8 @@ bool WaterCompositePass::recordGraphPass(
         colorAttachments[2].view = targets.transparencyMaskTextureViewHandle();
         depthAttachment.view = targets.transparentCompositeDepthTextureViewHandle();
         renderingInfo.debugName = "WaterComposite.TransparentComposite";
-        renderingInfo.renderArea = {
-            0,
-            0,
-            static_cast<uint32_t>(std::max(1, targets.width())),
-            static_cast<uint32_t>(std::max(1, targets.height()))
-        };
+        renderingInfo.renderArea = {0, 0, static_cast<uint32_t>(std::max(1, targets.width())),
+                                    static_cast<uint32_t>(std::max(1, targets.height()))};
     } else if (deferredFrameActive) {
         if (!ctx.sceneCaptureColorView.isValid() || !ctx.sceneCaptureDepthView.isValid() ||
             !targets.ensureReactiveMaskTextureView(rhiDevice) ||
@@ -78,12 +66,8 @@ bool WaterCompositePass::recordGraphPass(
         colorAttachments[2].view = targets.transparencyMaskTextureViewHandle();
         depthAttachment.view = ctx.sceneCaptureDepthView;
         renderingInfo.debugName = "WaterComposite.SceneCapture";
-        renderingInfo.renderArea = {
-            0,
-            0,
-            ctx.temporalExtents.renderExtent.width,
-            ctx.temporalExtents.renderExtent.height
-        };
+        renderingInfo.renderArea = {0, 0, ctx.temporalExtents.renderExtent.width,
+                                    ctx.temporalExtents.renderExtent.height};
     } else {
         return true;
     }
@@ -106,9 +90,7 @@ bool WaterCompositePass::recordGraphPass(
         }
     }
     std::sort(waterEntries.begin(), waterEntries.end(),
-              [](const DrawBatchEntry* lhs, const DrawBatchEntry* rhs) {
-                  return lhs->distanceSq > rhs->distanceSq;
-              });
+              [](const DrawBatchEntry* lhs, const DrawBatchEntry* rhs) { return lhs->distanceSq > rhs->distanceSq; });
     if (waterEntries.empty()) {
         return true;
     }
@@ -118,8 +100,8 @@ bool WaterCompositePass::recordGraphPass(
         worldRenderBuffer.addWater(entry->range);
     }
 
-    const bool useJitteredWater = preTemporalResolve &&
-        usesTemporalProjectionJitter(settings.upscale.type, settings.taa.enabled);
+    const bool useJitteredWater =
+        preTemporalResolve && usesTemporalProjectionJitter(settings.upscale.type, settings.taa.enabled);
     TerrainWaterFrameData waterFrame;
     waterFrame.view = ctx.camera.view;
     waterFrame.viewProj = useJitteredWater ? ctx.camera.jitteredViewProj : ctx.camera.viewProj;
@@ -136,8 +118,7 @@ bool WaterCompositePass::recordGraphPass(
     waterFrame.skyAmbientColor = ctx.skyColors.skyAmbientColor;
     waterFrame.skyIntensity = ctx.skyIntensity;
     waterFrame.moonVisibility = ctx.skyColors.moonVisibility;
-    waterFrame.moonPhaseFlux =
-        (std::abs(ctx.skyColors.moonPhaseAngle) / glm::pi<float>() + 0.2f) * 0.0005f;
+    waterFrame.moonPhaseFlux = (std::abs(ctx.skyColors.moonPhaseAngle) / glm::pi<float>() + 0.2f) * 0.0005f;
     waterFrame.weatherWetness = ctx.weather.wetness;
     waterFrame.skyWetness = ctx.weather.skyWetness;
     waterFrame.fogWetness = ctx.weather.fogWetness;
@@ -153,12 +134,10 @@ bool WaterCompositePass::recordGraphPass(
     waterFrame.eyeInWater = ctx.eyeInWater;
 
     const GpuTimerSegmentToken gpuTimer = ctx.debugService != nullptr
-        ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::Water)
-        : GpuTimerSegmentToken{};
-    if (!ctx.shared->terrainRhiPipelines->prepareWater(
-            commandList, *m_resourceMgr, targets, waterFrame) ||
-        !worldRenderBuffer.prepareRhiWater(
-            commandList, ctx.shared->terrainRhiPipelines->waterMetadataLayout())) {
+                                              ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::Water)
+                                              : GpuTimerSegmentToken{};
+    if (!ctx.shared->terrainRhiPipelines->prepareWater(commandList, *m_resourceMgr, targets, waterFrame) ||
+        !worldRenderBuffer.prepareRhiWater(commandList, ctx.shared->terrainRhiPipelines->waterMetadataLayout())) {
         if (ctx.debugService != nullptr) {
             ctx.debugService->cancelGpuTimer(gpuTimer);
         }
@@ -166,10 +145,8 @@ bool WaterCompositePass::recordGraphPass(
     }
 
     commandList.beginRendering(renderingInfo);
-    worldRenderBuffer.recordRhiWater(
-        commandList,
-        ctx.shared->terrainRhiPipelines->waterPipeline(),
-        ctx.shared->terrainRhiPipelines->waterBindGroup());
+    worldRenderBuffer.recordRhiWater(commandList, ctx.shared->terrainRhiPipelines->waterPipeline(),
+                                     ctx.shared->terrainRhiPipelines->waterBindGroup());
     worldRenderBuffer.mergeSceneWaterFrameStats();
     commandList.endRendering();
     if (ctx.debugService != nullptr) {

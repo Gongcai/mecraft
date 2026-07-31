@@ -13,8 +13,7 @@
 /// Manages both the pause menu and the settings screen (sub-screen approach).
 class UIState : public IGameState {
 public:
-    explicit UIState(UIStateContext ctx)
-            : m_ctx(ctx) {}
+    explicit UIState(UIStateContext ctx) : m_ctx(ctx) {}
 
     void onEnter() override {
         m_ctx.context.pushContext(InputContextType::UI);
@@ -65,8 +64,7 @@ public:
     }
 
     void update(float dt, const InputSnapshot& snapshot) override {
-        const UIInputRouteResult uiRouteResult =
-            UIInputAdapter::routeInput(m_ctx.uiRenderer, snapshot, m_ctx.context);
+        const UIInputRouteResult uiRouteResult = UIInputAdapter::routeInput(m_ctx.uiRenderer, snapshot, m_ctx.context);
 
         const bool cancel = m_ctx.context.isActionTriggered(Action::Cancel);
         const bool menu = m_ctx.context.isActionTriggered(Action::Menu);

@@ -42,46 +42,35 @@ bool requireTrue(const bool condition, const char* message) {
 
 class ScopedErrorCapture {
 public:
-    ScopedErrorCapture()
-        : m_previous(std::cerr.rdbuf(m_stream.rdbuf())) {}
+    ScopedErrorCapture() : m_previous(std::cerr.rdbuf(m_stream.rdbuf())) {}
 
-    ~ScopedErrorCapture() {
-        std::cerr.rdbuf(m_previous);
-    }
+    ~ScopedErrorCapture() { std::cerr.rdbuf(m_previous); }
 
-    [[nodiscard]] std::string output() const {
-        return m_stream.str();
-    }
+    [[nodiscard]] std::string output() const { return m_stream.str(); }
 
 private:
     std::ostringstream m_stream;
     std::streambuf* m_previous = nullptr;
 };
 
-RhiCommandList& beginTestCommands(
-    RhiDevice& device,
-    std::unique_ptr<RhiCommandListPool>& commandPool) {
+RhiCommandList& beginTestCommands(RhiDevice& device, std::unique_ptr<RhiCommandListPool>& commandPool) {
     commandPool = device.createCommandListPool({"rhi-core-test-command-pool", 1u, 64u * 1024u});
     if (commandPool == nullptr) {
         std::cerr << "test command list pool must be created\n";
         std::abort();
     }
     RhiCommandList* commandList = commandPool->acquire(RhiCommandListType::Graphics);
-    if (commandList == nullptr ||
-        !commandList->begin({"rhi-core-test-command-list", RhiCommandListType::Graphics})) {
+    if (commandList == nullptr || !commandList->begin({"rhi-core-test-command-list", RhiCommandListType::Graphics})) {
         std::cerr << "test graphics command list must be acquired and begun\n";
         std::abort();
     }
     return *commandList;
 }
 
-void submitTestCommands(
-    RhiDevice& device,
-    std::unique_ptr<RhiCommandListPool>& commandPool,
-    RhiCommandList& commandList) {
+void submitTestCommands(RhiDevice& device, std::unique_ptr<RhiCommandListPool>& commandPool,
+                        RhiCommandList& commandList) {
     RhiCommandList* commandLists[] = {&commandList};
-    if (!commandList.end() ||
-        !device.submit({"rhi-core-test-submit", commandLists, 1u})) {
+    if (!commandList.end() || !device.submit({"rhi-core-test-submit", commandLists, 1u})) {
         std::cerr << "test graphics command list must end and submit\n";
         std::abort();
     }
@@ -94,9 +83,7 @@ void submitTestCommands(
 
 class GlTestContext {
 public:
-    ~GlTestContext() {
-        shutdown();
-    }
+    ~GlTestContext() { shutdown(); }
 
     [[nodiscard]] bool init() {
         if (!glfwInit()) {
@@ -178,12 +165,10 @@ bool testHandleGeneration() {
 
     RhiHandleAllocator<RhiTextureHandle> externalAllocator{0x80000000u};
     const RhiTextureHandle external = externalAllocator.allocate();
-    if (!requireTrue(external.index == 0x80000000u,
-                     "allocator must honor its configured first handle index")) {
+    if (!requireTrue(external.index == 0x80000000u, "allocator must honor its configured first handle index")) {
         return false;
     }
-    if (!requireTrue(external.index != second.index,
-                     "allocators with disjoint index ranges must not collide")) {
+    if (!requireTrue(external.index != second.index, "allocators with disjoint index ranges must not collide")) {
         return false;
     }
     return requireTrue(externalAllocator.slotForHandle(external) == 0u,
@@ -263,8 +248,7 @@ bool testDescHashStability() {
     }
     const uint64_t categoryHash = rhiHashTextureDesc(desc);
     desc.memoryCategory = RhiMemoryCategory::Texture;
-    if (!requireTrue(categoryHash != rhiHashTextureDesc(desc),
-                     "texture desc hash must include the memory category")) {
+    if (!requireTrue(categoryHash != rhiHashTextureDesc(desc), "texture desc hash must include the memory category")) {
         return false;
     }
 
@@ -288,17 +272,10 @@ bool testDescHashStability() {
 }
 
 bool testMemoryStatsContract() {
-    if (!requireTrue(kRhiMemoryCategoryCount == 12u,
-                     "memory category count must remain stable") ||
-        !requireTrue(std::strcmp(
-                         rhiMemoryCategoryStableId(
-                             RhiMemoryCategory::GBufferHistory),
-                         "gbuffer_history") == 0,
+    if (!requireTrue(kRhiMemoryCategoryCount == 12u, "memory category count must remain stable") ||
+        !requireTrue(std::strcmp(rhiMemoryCategoryStableId(RhiMemoryCategory::GBufferHistory), "gbuffer_history") == 0,
                      "GBuffer/history category must expose its stable id") ||
-        !requireTrue(std::strcmp(
-                         rhiMemoryStatsAccuracyStableId(
-                             RhiMemoryStatsAccuracy::Exact),
-                         "exact") == 0,
+        !requireTrue(std::strcmp(rhiMemoryStatsAccuracyStableId(RhiMemoryStatsAccuracy::Exact), "exact") == 0,
                      "exact memory statistics must expose a stable id")) {
         return false;
     }
@@ -308,8 +285,7 @@ bool testMemoryStatsContract() {
     textureDesc.width = 4u;
     textureDesc.height = 4u;
     textureDesc.mipLevels = 3u;
-    const std::optional<uint64_t> textureBytes =
-        rhiEstimateTextureBytes(textureDesc);
+    const std::optional<uint64_t> textureBytes = rhiEstimateTextureBytes(textureDesc);
     if (!requireTrue(textureBytes.has_value() && *textureBytes == 84u,
                      "texture byte estimation must include every mip")) {
         return false;
@@ -324,16 +300,12 @@ bool testMemoryStatsContract() {
                      "memory snapshot must accumulate another category") ||
         !requireTrue(!stats.add(RhiMemoryCategory::Count, 1u, 1u, 1u),
                      "memory snapshot must reject the Count sentinel") ||
-        !requireTrue(stats.totalBytes == 768u &&
-                         stats.totalAllocationCount == 2u &&
-                         stats.totalResourceCount == 3u,
+        !requireTrue(stats.totalBytes == 768u && stats.totalAllocationCount == 2u && stats.totalResourceCount == 3u,
                      "memory snapshot totals must equal category contributions")) {
         return false;
     }
-    return requireTrue(
-        stats.categories[static_cast<size_t>(RhiMemoryCategory::Transient)]
-                .bytes == 512u,
-        "memory snapshot must retain per-category bytes");
+    return requireTrue(stats.categories[static_cast<size_t>(RhiMemoryCategory::Transient)].bytes == 512u,
+                       "memory snapshot must retain per-category bytes");
 }
 
 bool testGlRhiDeviceHandles() {
@@ -383,25 +355,18 @@ bool testGlRhiDeviceHandles() {
 
     const RhiMemoryStats allocatedStats = device.memoryStats();
     const RhiMemoryCategoryStats& geometryStats =
-        allocatedStats.categories[static_cast<size_t>(
-            RhiMemoryCategory::Geometry)];
+        allocatedStats.categories[static_cast<size_t>(RhiMemoryCategory::Geometry)];
     const RhiMemoryCategoryStats& textureStats =
-        allocatedStats.categories[static_cast<size_t>(
-            RhiMemoryCategory::Texture)];
-    if (!requireTrue(allocatedStats.valid &&
-                         allocatedStats.accuracy ==
-                             RhiMemoryStatsAccuracy::Estimated,
+        allocatedStats.categories[static_cast<size_t>(RhiMemoryCategory::Texture)];
+    if (!requireTrue(allocatedStats.valid && allocatedStats.accuracy == RhiMemoryStatsAccuracy::Estimated,
                      "OpenGL memory statistics must be marked estimated") ||
-        !requireTrue(geometryStats.bytes == 256u &&
-                         geometryStats.allocationCount == 1u &&
+        !requireTrue(geometryStats.bytes == 256u && geometryStats.allocationCount == 1u &&
                          geometryStats.resourceCount == 1u,
                      "OpenGL buffer bytes must enter the explicit category") ||
-        !requireTrue(textureStats.bytes == 84u &&
-                         textureStats.allocationCount == 1u &&
+        !requireTrue(textureStats.bytes == 84u && textureStats.allocationCount == 1u &&
                          textureStats.resourceCount == 1u,
                      "OpenGL texture estimate must include its mip chain") ||
-        !requireTrue(allocatedStats.totalBytes == 340u,
-                     "OpenGL memory total must sum tracked resources")) {
+        !requireTrue(allocatedStats.totalBytes == 340u, "OpenGL memory total must sum tracked resources")) {
         return false;
     }
 
@@ -409,8 +374,7 @@ bool testGlRhiDeviceHandles() {
     device.destroyTexture(texture);
     device.destroyBuffer(buffer);
     const RhiMemoryStats releasedStats = device.memoryStats();
-    if (!requireTrue(releasedStats.valid && releasedStats.totalBytes == 0u &&
-                         releasedStats.totalResourceCount == 0u,
+    if (!requireTrue(releasedStats.valid && releasedStats.totalBytes == 0u && releasedStats.totalResourceCount == 0u,
                      "destroyed OpenGL resources must leave the live snapshot")) {
         return false;
     }
@@ -420,8 +384,7 @@ bool testGlRhiDeviceHandles() {
 
 bool testGlRhiDeferredResourceRetirement() {
     GlTestContext context;
-    if (!requireTrue(context.init(),
-                     "OpenGL test context must initialize for deferred resource retirement")) {
+    if (!requireTrue(context.init(), "OpenGL test context must initialize for deferred resource retirement")) {
         return false;
     }
 
@@ -429,29 +392,23 @@ bool testGlRhiDeferredResourceRetirement() {
     std::unique_ptr<RhiCommandListPool> commandPool;
     RhiDeviceDesc deviceDesc = makeDeviceDesc();
     deviceDesc.debugName = "rhi_deferred_resource_retirement_test";
-    if (!requireTrue(device.init(deviceDesc),
-                     "OpenGL RHI device must initialize for deferred resource retirement")) {
+    if (!requireTrue(device.init(deviceDesc), "OpenGL RHI device must initialize for deferred resource retirement")) {
         return false;
     }
 
-    constexpr std::array<uint32_t, 8> sourceData = {
-        0x10203040u, 0x50607080u, 0x90a0b0c0u, 0xd0e0f000u,
-        0x13579bdfu, 0x2468ace0u, 0xdeadbeefu, 0xc001d00du
-    };
+    constexpr std::array<uint32_t, 8> sourceData = {0x10203040u, 0x50607080u, 0x90a0b0c0u, 0xd0e0f000u,
+                                                    0x13579bdfu, 0x2468ace0u, 0xdeadbeefu, 0xc001d00du};
     RhiBufferDesc sourceDesc;
     sourceDesc.debugName = "deferred-retirement-source";
     sourceDesc.size = sizeof(sourceData);
-    sourceDesc.usage = rhiFlag(RhiBufferUsage::TransferSrc) |
-                       rhiFlag(RhiBufferUsage::TransferDst);
+    sourceDesc.usage = rhiFlag(RhiBufferUsage::TransferSrc) | rhiFlag(RhiBufferUsage::TransferDst);
     sourceDesc.initialState = RhiResourceState::TransferSrc;
-    const RhiBufferHandle source = device.createBuffer(
-        sourceDesc, sourceData.data(), sizeof(sourceData));
+    const RhiBufferHandle source = device.createBuffer(sourceDesc, sourceData.data(), sizeof(sourceData));
 
     RhiBufferDesc destinationDesc;
     destinationDesc.debugName = "deferred-retirement-destination";
     destinationDesc.size = sizeof(sourceData);
-    destinationDesc.usage = rhiFlag(RhiBufferUsage::TransferDst) |
-                            rhiFlag(RhiBufferUsage::MapRead);
+    destinationDesc.usage = rhiFlag(RhiBufferUsage::TransferDst) | rhiFlag(RhiBufferUsage::MapRead);
     destinationDesc.memoryUsage = RhiMemoryUsage::GpuToCpu;
     destinationDesc.initialState = RhiResourceState::TransferDst;
     const RhiBufferHandle destination = device.createBuffer(destinationDesc, nullptr, 0u);
@@ -463,13 +420,9 @@ bool testGlRhiDeferredResourceRetirement() {
 
     RhiCommandList& commandList = beginTestCommands(device, commandPool);
     commandList.copyBuffer({source, destination, 0u, 0u, sizeof(sourceData)});
-    commandList.bufferBarrier({destination,
-                               RhiResourceState::TransferDst,
-                               RhiResourceState::HostRead});
+    commandList.bufferBarrier({destination, RhiResourceState::TransferDst, RhiResourceState::HostRead});
     RhiCommandList* commandLists[] = {&commandList};
-    if (!requireTrue(commandList.end() &&
-                     device.submit({"deferred-resource-retirement-submit",
-                                    commandLists, 1u}),
+    if (!requireTrue(commandList.end() && device.submit({"deferred-resource-retirement-submit", commandLists, 1u}),
                      "resource retirement commands must submit")) {
         device.shutdown();
         return false;
@@ -478,21 +431,19 @@ bool testGlRhiDeferredResourceRetirement() {
 
     const RhiBufferHandle replacement = device.createBuffer(sourceDesc, nullptr, 0u);
     if (!requireTrue(replacement.isValid() && replacement.index == source.index &&
-                     replacement.generation != source.generation,
+                         replacement.generation != source.generation,
                      "destroyBuffer must invalidate the logical handle after submission")) {
         device.shutdown();
         return false;
     }
 
     device.waitIdle();
-    if (!requireTrue(commandPool->reset(),
-                     "resource retirement command pool must reset after completion")) {
+    if (!requireTrue(commandPool->reset(), "resource retirement command pool must reset after completion")) {
         device.shutdown();
         return false;
     }
     const void* mapped = device.mapBuffer(destination, 0u, sizeof(sourceData));
-    if (!requireTrue(mapped != nullptr &&
-                     std::memcmp(mapped, sourceData.data(), sizeof(sourceData)) == 0,
+    if (!requireTrue(mapped != nullptr && std::memcmp(mapped, sourceData.data(), sizeof(sourceData)) == 0,
                      "destroyed source storage must remain alive through its submission fence")) {
         if (mapped != nullptr) {
             device.unmapBuffer(destination);
@@ -518,8 +469,7 @@ bool testGlRhiTextureDescriptorUsageValidation() {
     std::unique_ptr<RhiCommandListPool> commandPool;
     RhiDeviceDesc deviceDesc = makeDeviceDesc();
     deviceDesc.debugName = "rhi_texture_descriptor_usage_test";
-    if (!requireTrue(device.init(deviceDesc),
-                     "OpenGL RHI device must initialize for descriptor validation")) {
+    if (!requireTrue(device.init(deviceDesc), "OpenGL RHI device must initialize for descriptor validation")) {
         return false;
     }
 
@@ -536,12 +486,8 @@ bool testGlRhiTextureDescriptorUsageValidation() {
     const RhiSamplerHandle sampler = device.createSampler({});
 
     RhiBindGroupLayoutDesc sampledLayoutDesc;
-    sampledLayoutDesc.entries.push_back({
-        0u,
-        RhiBindingType::CombinedTextureSampler,
-        rhiFlag(RhiShaderStage::Fragment),
-        1u
-    });
+    sampledLayoutDesc.entries.push_back(
+        {0u, RhiBindingType::CombinedTextureSampler, rhiFlag(RhiShaderStage::Fragment), 1u});
     const RhiBindGroupLayoutHandle sampledLayout = device.createBindGroupLayout(sampledLayoutDesc);
     RhiBindGroupDesc sampledGroupDesc;
     sampledGroupDesc.layout = sampledLayout;
@@ -551,19 +497,13 @@ bool testGlRhiTextureDescriptorUsageValidation() {
     sampledEntry.resource.combinedTextureSampler.sampler = sampler;
     sampledGroupDesc.entries.push_back(sampledEntry);
     const RhiBindGroupHandle sampledGroup = device.createBindGroup(sampledGroupDesc);
-    if (!requireTrue(!sampledGroup.isValid(),
-                     "sampled descriptors must reject textures without sampled usage")) {
+    if (!requireTrue(!sampledGroup.isValid(), "sampled descriptors must reject textures without sampled usage")) {
         device.shutdown();
         return false;
     }
 
     RhiBindGroupLayoutDesc storageLayoutDesc;
-    storageLayoutDesc.entries.push_back({
-        0u,
-        RhiBindingType::StorageTexture,
-        rhiFlag(RhiShaderStage::Compute),
-        1u
-    });
+    storageLayoutDesc.entries.push_back({0u, RhiBindingType::StorageTexture, rhiFlag(RhiShaderStage::Compute), 1u});
     const RhiBindGroupLayoutHandle storageLayout = device.createBindGroupLayout(storageLayoutDesc);
     RhiBindGroupDesc storageGroupDesc;
     storageGroupDesc.layout = storageLayout;
@@ -572,8 +512,7 @@ bool testGlRhiTextureDescriptorUsageValidation() {
     storageEntry.resource.textureView = view;
     storageGroupDesc.entries.push_back(storageEntry);
     const RhiBindGroupHandle storageGroup = device.createBindGroup(storageGroupDesc);
-    if (!requireTrue(!storageGroup.isValid(),
-                     "storage descriptors must reject textures without storage usage")) {
+    if (!requireTrue(!storageGroup.isValid(), "storage descriptors must reject textures without storage usage")) {
         device.shutdown();
         return false;
     }
@@ -597,8 +536,7 @@ bool testGlRhiShaderLayoutContracts() {
     std::unique_ptr<RhiCommandListPool> commandPool;
     RhiDeviceDesc deviceDesc = makeDeviceDesc();
     deviceDesc.debugName = "rhi_shader_layout_contract_test";
-    if (!requireTrue(device.init(deviceDesc),
-                     "OpenGL RHI device must initialize for shader layout contracts")) {
+    if (!requireTrue(device.init(deviceDesc), "OpenGL RHI device must initialize for shader layout contracts")) {
         return false;
     }
 
@@ -630,33 +568,18 @@ void main() {
     fragmentDesc.source = kFragmentShader;
     fragmentDesc.sourceSize = sizeof(kFragmentShader) - 1u;
     const RhiShaderHandle fragmentShader = device.createShader(fragmentDesc);
-    if (!requireTrue(vertexShader.isValid() && fragmentShader.isValid(),
-                     "canonical multi-set shaders must compile")) {
+    if (!requireTrue(vertexShader.isValid() && fragmentShader.isValid(), "canonical multi-set shaders must compile")) {
         device.shutdown();
         return false;
     }
 
     RhiBindGroupLayoutDesc firstSetDesc;
-    firstSetDesc.entries.push_back({
-        0u,
-        RhiBindingType::CombinedTextureSampler,
-        rhiFlag(RhiShaderStage::Fragment),
-        1u
-    });
+    firstSetDesc.entries.push_back({0u, RhiBindingType::CombinedTextureSampler, rhiFlag(RhiShaderStage::Fragment), 1u});
     const RhiBindGroupLayoutHandle firstSet = device.createBindGroupLayout(firstSetDesc);
     RhiBindGroupLayoutDesc secondSetDesc;
-    secondSetDesc.entries.push_back({
-        0u,
-        RhiBindingType::CombinedTextureSampler,
-        rhiFlag(RhiShaderStage::Fragment),
-        1u
-    });
-    secondSetDesc.entries.push_back({
-        15u,
-        RhiBindingType::UniformBuffer,
-        rhiFlag(RhiShaderStage::Fragment),
-        1u
-    });
+    secondSetDesc.entries.push_back(
+        {0u, RhiBindingType::CombinedTextureSampler, rhiFlag(RhiShaderStage::Fragment), 1u});
+    secondSetDesc.entries.push_back({15u, RhiBindingType::UniformBuffer, rhiFlag(RhiShaderStage::Fragment), 1u});
     const RhiBindGroupLayoutHandle secondSet = device.createBindGroupLayout(secondSetDesc);
 
     RhiPipelineLayoutDesc layoutDesc;
@@ -711,8 +634,7 @@ bool testGlRhiUiSharedPipelines() {
     std::unique_ptr<RhiCommandListPool> commandPool;
     RhiDeviceDesc deviceDesc = makeDeviceDesc();
     deviceDesc.debugName = "rhi_ui_shared_pipeline_test";
-    if (!requireTrue(device.init(deviceDesc),
-                     "OpenGL RHI device must initialize for shared UI pipelines")) {
+    if (!requireTrue(device.init(deviceDesc), "OpenGL RHI device must initialize for shared UI pipelines")) {
         return false;
     }
 
@@ -724,9 +646,8 @@ bool testGlRhiUiSharedPipelines() {
     const auto imageFragmentSource = renderer::rhi::loadShaderSource("assets/shaders/ui_image_rhi.frag");
     const auto dashboardVertexSource = renderer::rhi::loadShaderSource("assets/shaders/imgui_rhi.vert");
     const auto dashboardFragmentSource = renderer::rhi::loadShaderSource("assets/shaders/imgui_rhi.frag");
-    if (!requireTrue(solidVertexSource && solidFragmentSource && glassVertexSource &&
-                     glassFragmentSource && imageVertexSource && imageFragmentSource &&
-                     dashboardVertexSource && dashboardFragmentSource,
+    if (!requireTrue(solidVertexSource && solidFragmentSource && glassVertexSource && glassFragmentSource &&
+                         imageVertexSource && imageFragmentSource && dashboardVertexSource && dashboardFragmentSource,
                      "shared UI canonical shader sources must load")) {
         device.shutdown();
         return false;
@@ -745,47 +666,36 @@ bool testGlRhiUiSharedPipelines() {
     const RhiShaderHandle glassFragment = createShader(RhiShaderStage::Fragment, *glassFragmentSource);
     const RhiShaderHandle imageVertex = createShader(RhiShaderStage::Vertex, *imageVertexSource);
     const RhiShaderHandle imageFragment = createShader(RhiShaderStage::Fragment, *imageFragmentSource);
-    const RhiShaderHandle dashboardVertex = createShader(
-        RhiShaderStage::Vertex, *dashboardVertexSource);
-    const RhiShaderHandle dashboardFragment = createShader(
-        RhiShaderStage::Fragment, *dashboardFragmentSource);
-    if (!requireTrue(solidVertex.isValid() && solidFragment.isValid() &&
-                     glassVertex.isValid() && glassFragment.isValid() &&
-                     imageVertex.isValid() && imageFragment.isValid() &&
-                     dashboardVertex.isValid() && dashboardFragment.isValid(),
+    const RhiShaderHandle dashboardVertex = createShader(RhiShaderStage::Vertex, *dashboardVertexSource);
+    const RhiShaderHandle dashboardFragment = createShader(RhiShaderStage::Fragment, *dashboardFragmentSource);
+    if (!requireTrue(solidVertex.isValid() && solidFragment.isValid() && glassVertex.isValid() &&
+                         glassFragment.isValid() && imageVertex.isValid() && imageFragment.isValid() &&
+                         dashboardVertex.isValid() && dashboardFragment.isValid(),
                      "shared UI canonical shaders must compile")) {
         device.shutdown();
         return false;
     }
 
     RhiBindGroupLayoutDesc textureLayoutDesc;
-    textureLayoutDesc.entries.push_back({
-        0u,
-        RhiBindingType::CombinedTextureSampler,
-        rhiFlag(RhiShaderStage::Fragment),
-        1u
-    });
+    textureLayoutDesc.entries.push_back(
+        {0u, RhiBindingType::CombinedTextureSampler, rhiFlag(RhiShaderStage::Fragment), 1u});
     const RhiBindGroupLayoutHandle textureLayout = device.createBindGroupLayout(textureLayoutDesc);
     RhiPipelineLayoutDesc solidLayoutDesc;
     solidLayoutDesc.pushConstantBytes = 48u;
-    solidLayoutDesc.pushConstantStages =
-        rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment);
+    solidLayoutDesc.pushConstantStages = rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment);
     const RhiPipelineLayoutHandle solidLayout = device.createPipelineLayout(solidLayoutDesc);
     RhiPipelineLayoutDesc texturedLayoutDesc;
     texturedLayoutDesc.bindGroupLayouts.push_back(textureLayout);
     texturedLayoutDesc.pushConstantBytes = 64u;
-    texturedLayoutDesc.pushConstantStages =
-        rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment);
+    texturedLayoutDesc.pushConstantStages = rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment);
     const RhiPipelineLayoutHandle texturedLayout = device.createPipelineLayout(texturedLayoutDesc);
     RhiPipelineLayoutDesc dashboardLayoutDesc;
     dashboardLayoutDesc.bindGroupLayouts.push_back(textureLayout);
     dashboardLayoutDesc.pushConstantBytes = 16u;
     dashboardLayoutDesc.pushConstantStages = rhiFlag(RhiShaderStage::Vertex);
-    const RhiPipelineLayoutHandle dashboardLayout =
-        device.createPipelineLayout(dashboardLayoutDesc);
+    const RhiPipelineLayoutHandle dashboardLayout = device.createPipelineLayout(dashboardLayoutDesc);
 
-    auto createPipeline = [&](const RhiShaderHandle vertex,
-                              const RhiShaderHandle fragment,
+    auto createPipeline = [&](const RhiShaderHandle vertex, const RhiShaderHandle fragment,
                               const RhiPipelineLayoutHandle layout) {
         RhiGraphicsPipelineDesc desc;
         desc.vertexShader = vertex;
@@ -807,18 +717,10 @@ bool testGlRhiUiSharedPipelines() {
     dashboardPipelineDesc.vertexShader = dashboardVertex;
     dashboardPipelineDesc.fragmentShader = dashboardFragment;
     dashboardPipelineDesc.layout = dashboardLayout;
-    dashboardPipelineDesc.vertexInput.bindings.push_back({
-        0u, 20u, RhiVertexInputRate::Vertex
-    });
-    dashboardPipelineDesc.vertexInput.attributes.push_back({
-        0u, 0u, RhiVertexFormat::Float2, 0u
-    });
-    dashboardPipelineDesc.vertexInput.attributes.push_back({
-        1u, 0u, RhiVertexFormat::Float2, 8u
-    });
-    dashboardPipelineDesc.vertexInput.attributes.push_back({
-        2u, 0u, RhiVertexFormat::Uint, 16u
-    });
+    dashboardPipelineDesc.vertexInput.bindings.push_back({0u, 20u, RhiVertexInputRate::Vertex});
+    dashboardPipelineDesc.vertexInput.attributes.push_back({0u, 0u, RhiVertexFormat::Float2, 0u});
+    dashboardPipelineDesc.vertexInput.attributes.push_back({1u, 0u, RhiVertexFormat::Float2, 8u});
+    dashboardPipelineDesc.vertexInput.attributes.push_back({2u, 0u, RhiVertexFormat::Uint, 16u});
     dashboardPipelineDesc.raster.cullMode = RhiCullMode::None;
     dashboardPipelineDesc.raster.scissorEnabled = true;
     dashboardPipelineDesc.depthStencil.depthTestEnabled = false;
@@ -831,10 +733,9 @@ bool testGlRhiUiSharedPipelines() {
     dashboardBlend.dstAlpha = RhiBlendFactor::OneMinusSrcAlpha;
     dashboardPipelineDesc.blend.attachments.push_back(dashboardBlend);
     dashboardPipelineDesc.colorFormats.push_back(RhiTextureFormat::Rgba8Unorm);
-    const RhiPipelineHandle dashboardPipeline =
-        device.createGraphicsPipeline(dashboardPipelineDesc);
-    if (!requireTrue(solidPipeline.isValid() && glassPipeline.isValid() &&
-                     imagePipeline.isValid() && dashboardPipeline.isValid(),
+    const RhiPipelineHandle dashboardPipeline = device.createGraphicsPipeline(dashboardPipelineDesc);
+    if (!requireTrue(solidPipeline.isValid() && glassPipeline.isValid() && imagePipeline.isValid() &&
+                         dashboardPipeline.isValid(),
                      "shared UI and dashboard pipelines must compile from canonical shaders")) {
         device.shutdown();
         return false;
@@ -845,22 +746,28 @@ bool testGlRhiUiSharedPipelines() {
     };
     RhiSamplerDesc invalidSampler;
     invalidSampler.minFilter = static_cast<RhiFilter>(255);
-    if (!requireInvalidSampler(invalidSampler, "sampler creation must reject an invalid min filter")) return false;
+    if (!requireInvalidSampler(invalidSampler, "sampler creation must reject an invalid min filter"))
+        return false;
     invalidSampler = {};
     invalidSampler.magFilter = static_cast<RhiFilter>(255);
-    if (!requireInvalidSampler(invalidSampler, "sampler creation must reject an invalid mag filter")) return false;
+    if (!requireInvalidSampler(invalidSampler, "sampler creation must reject an invalid mag filter"))
+        return false;
     invalidSampler = {};
     invalidSampler.mipmapMode = static_cast<RhiMipmapMode>(255);
-    if (!requireInvalidSampler(invalidSampler, "sampler creation must reject an invalid mipmap mode")) return false;
+    if (!requireInvalidSampler(invalidSampler, "sampler creation must reject an invalid mipmap mode"))
+        return false;
     invalidSampler = {};
     invalidSampler.addressU = static_cast<RhiAddressMode>(255);
-    if (!requireInvalidSampler(invalidSampler, "sampler creation must reject an invalid address mode")) return false;
+    if (!requireInvalidSampler(invalidSampler, "sampler creation must reject an invalid address mode"))
+        return false;
     invalidSampler = {};
     invalidSampler.borderColor = static_cast<RhiBorderColor>(255);
-    if (!requireInvalidSampler(invalidSampler, "sampler creation must reject an invalid border color")) return false;
+    if (!requireInvalidSampler(invalidSampler, "sampler creation must reject an invalid border color"))
+        return false;
     invalidSampler = {};
     invalidSampler.compareOp = static_cast<RhiCompareOp>(255);
-    if (!requireInvalidSampler(invalidSampler, "sampler creation must reject an invalid compare operation")) return false;
+    if (!requireInvalidSampler(invalidSampler, "sampler creation must reject an invalid compare operation"))
+        return false;
 
     RhiGraphicsPipelineDesc invalidPipelineDesc;
     invalidPipelineDesc.vertexShader = solidVertex;
@@ -875,30 +782,39 @@ bool testGlRhiUiSharedPipelines() {
     };
     RhiGraphicsPipelineDesc invalidEnumPipeline = invalidPipelineDesc;
     invalidEnumPipeline.topology = static_cast<RhiPrimitiveTopology>(255);
-    if (!requireInvalidPipeline(invalidEnumPipeline, "pipeline creation must reject an invalid topology")) return false;
+    if (!requireInvalidPipeline(invalidEnumPipeline, "pipeline creation must reject an invalid topology"))
+        return false;
     invalidEnumPipeline = invalidPipelineDesc;
     invalidEnumPipeline.raster.cullMode = static_cast<RhiCullMode>(255);
-    if (!requireInvalidPipeline(invalidEnumPipeline, "pipeline creation must reject an invalid cull mode")) return false;
+    if (!requireInvalidPipeline(invalidEnumPipeline, "pipeline creation must reject an invalid cull mode"))
+        return false;
     invalidEnumPipeline = invalidPipelineDesc;
     invalidEnumPipeline.raster.frontFace = static_cast<RhiFrontFace>(255);
-    if (!requireInvalidPipeline(invalidEnumPipeline, "pipeline creation must reject an invalid front face")) return false;
+    if (!requireInvalidPipeline(invalidEnumPipeline, "pipeline creation must reject an invalid front face"))
+        return false;
     invalidEnumPipeline = invalidPipelineDesc;
     invalidEnumPipeline.depthStencil.depthCompare = static_cast<RhiCompareOp>(255);
-    if (!requireInvalidPipeline(invalidEnumPipeline, "pipeline creation must reject an invalid depth compare operation")) return false;
+    if (!requireInvalidPipeline(invalidEnumPipeline,
+                                "pipeline creation must reject an invalid depth compare operation"))
+        return false;
     invalidEnumPipeline = invalidPipelineDesc;
     invalidEnumPipeline.vertexInput.bindings[0].inputRate = static_cast<RhiVertexInputRate>(255);
-    if (!requireInvalidPipeline(invalidEnumPipeline, "pipeline creation must reject an invalid vertex input rate")) return false;
+    if (!requireInvalidPipeline(invalidEnumPipeline, "pipeline creation must reject an invalid vertex input rate"))
+        return false;
     invalidEnumPipeline = invalidPipelineDesc;
     invalidEnumPipeline.vertexInput.attributes[0].format = static_cast<RhiVertexFormat>(255);
-    if (!requireInvalidPipeline(invalidEnumPipeline, "pipeline creation must reject an invalid vertex format")) return false;
+    if (!requireInvalidPipeline(invalidEnumPipeline, "pipeline creation must reject an invalid vertex format"))
+        return false;
     invalidEnumPipeline = invalidPipelineDesc;
     invalidEnumPipeline.blend.attachments.push_back({});
     invalidEnumPipeline.blend.attachments[0].srcColor = static_cast<RhiBlendFactor>(255);
-    if (!requireInvalidPipeline(invalidEnumPipeline, "pipeline creation must reject an invalid blend factor")) return false;
+    if (!requireInvalidPipeline(invalidEnumPipeline, "pipeline creation must reject an invalid blend factor"))
+        return false;
     invalidEnumPipeline = invalidPipelineDesc;
     invalidEnumPipeline.blend.attachments.push_back({});
     invalidEnumPipeline.blend.attachments[0].colorOp = static_cast<RhiBlendOp>(255);
-    if (!requireInvalidPipeline(invalidEnumPipeline, "pipeline creation must reject an invalid blend operation")) return false;
+    if (!requireInvalidPipeline(invalidEnumPipeline, "pipeline creation must reject an invalid blend operation"))
+        return false;
 
     device.destroyPipeline(dashboardPipeline);
     device.destroyPipeline(imagePipeline);
@@ -936,7 +852,8 @@ bool testGlRhiTimestampQueryPool() {
     poolDesc.debugName = "timestamp-pool";
     poolDesc.queryCount = 2u;
     const RhiQueryPoolHandle pool = device.createQueryPool(poolDesc);
-    if (!requireTrue(pool.isValid(), "RHI device must create timestamp query pools")) return false;
+    if (!requireTrue(pool.isValid(), "RHI device must create timestamp query pools"))
+        return false;
 
     RhiCommandList& commandList = beginTestCommands(device, commandPool);
     commandList.writeTimestamp(pool, 0u);
@@ -946,17 +863,20 @@ bool testGlRhiTimestampQueryPool() {
 
     std::array<uint64_t, 2> timestamps{};
     if (!requireTrue(device.areQueryResultsAvailable(pool, 0u, 2u),
-                     "submitted timestamp query results must become available")) return false;
+                     "submitted timestamp query results must become available"))
+        return false;
     if (!requireTrue(device.getQueryResults(pool, 0u, 2u, timestamps.data()),
-                     "RHI device must read timestamp query results")) return false;
-    if (!requireTrue(timestamps[1] >= timestamps[0],
-                     "timestamp query results must preserve command order")) return false;
+                     "RHI device must read timestamp query results"))
+        return false;
+    if (!requireTrue(timestamps[1] >= timestamps[0], "timestamp query results must preserve command order"))
+        return false;
 
     RhiCommandList& resetCommandList = beginTestCommands(device, commandPool);
     resetCommandList.resetQueryPool(pool, 0u, 2u);
     submitTestCommands(device, commandPool, resetCommandList);
     if (!requireTrue(!device.areQueryResultsAvailable(pool, 0u, 2u),
-                     "reset timestamp queries must become unavailable until rewritten")) return false;
+                     "reset timestamp queries must become unavailable until rewritten"))
+        return false;
 
     RhiCommandList& reuseCommandList = beginTestCommands(device, commandPool);
     reuseCommandList.writeTimestamp(pool, 0u);
@@ -964,19 +884,19 @@ bool testGlRhiTimestampQueryPool() {
     submitTestCommands(device, commandPool, reuseCommandList);
     glFinish();
     if (!requireTrue(device.areQueryResultsAvailable(pool, 0u, 2u),
-                     "reset timestamp queries must support ring-slot reuse")) return false;
+                     "reset timestamp queries must support ring-slot reuse"))
+        return false;
 
     device.destroyQueryPool(pool);
-    if (!requireTrue(!device.areQueryResultsAvailable(pool, 0u, 1u),
-                     "destroyed query pool handles must become stale")) return false;
+    if (!requireTrue(!device.areQueryResultsAvailable(pool, 0u, 1u), "destroyed query pool handles must become stale"))
+        return false;
     device.shutdown();
     return true;
 }
 
 bool testGlRhiResourceDescriptionQueries() {
     GlTestContext context;
-    if (!requireTrue(context.init(),
-                     "OpenGL test context must initialize for resource description queries")) {
+    if (!requireTrue(context.init(), "OpenGL test context must initialize for resource description queries")) {
         return false;
     }
     GlRhiDevice device;
@@ -991,8 +911,7 @@ bool testGlRhiResourceDescriptionQueries() {
     RhiBufferDesc bufferDesc;
     bufferDesc.debugName = bufferDebugName.data();
     bufferDesc.size = 384u;
-    bufferDesc.usage = rhiFlag(RhiBufferUsage::Storage) |
-                       rhiFlag(RhiBufferUsage::TransferDst);
+    bufferDesc.usage = rhiFlag(RhiBufferUsage::Storage) | rhiFlag(RhiBufferUsage::TransferDst);
     bufferDesc.memoryUsage = RhiMemoryUsage::CpuToGpu;
     bufferDesc.initialState = RhiResourceState::StorageBuffer;
     const RhiBufferHandle buffer = device.createBuffer(bufferDesc, nullptr, 0u);
@@ -1008,8 +927,7 @@ bool testGlRhiResourceDescriptionQueries() {
     textureDesc.height = 16u;
     textureDesc.depthOrLayers = 3u;
     textureDesc.mipLevels = 2u;
-    textureDesc.usage = rhiFlag(RhiTextureUsage::Sampled) |
-                        rhiFlag(RhiTextureUsage::ColorAttachment);
+    textureDesc.usage = rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment);
     const RhiTextureHandle texture = device.createTexture(textureDesc, nullptr);
 
     bufferDebugName.fill('B');
@@ -1023,29 +941,21 @@ bool testGlRhiResourceDescriptionQueries() {
                      "resource description query test requires live resources") ||
         !requireTrue(device.getBufferDesc(buffer, queriedBuffer),
                      "live buffer handles must expose their creation description") ||
-        !requireTrue(queriedBuffer.size == bufferDesc.size &&
-                         queriedBuffer.usage == bufferDesc.usage &&
+        !requireTrue(queriedBuffer.size == bufferDesc.size && queriedBuffer.usage == bufferDesc.usage &&
                          queriedBuffer.memoryUsage == bufferDesc.memoryUsage &&
-                         queriedBuffer.initialState == bufferDesc.initialState &&
-                         queriedBuffer.debugName != nullptr &&
-                         std::strcmp(queriedBuffer.debugName,
-                                     kBufferDebugName) == 0,
+                         queriedBuffer.initialState == bufferDesc.initialState && queriedBuffer.debugName != nullptr &&
+                         std::strcmp(queriedBuffer.debugName, kBufferDebugName) == 0,
                      "buffer description queries must preserve all creation fields") ||
         !requireTrue(device.getTextureDesc(texture, queriedTexture),
                      "live texture handles must expose their creation description") ||
-        !requireTrue(queriedTexture.dimension == textureDesc.dimension &&
-                         queriedTexture.format == textureDesc.format &&
-                         queriedTexture.width == textureDesc.width &&
-                         queriedTexture.height == textureDesc.height &&
+        !requireTrue(queriedTexture.dimension == textureDesc.dimension && queriedTexture.format == textureDesc.format &&
+                         queriedTexture.width == textureDesc.width && queriedTexture.height == textureDesc.height &&
                          queriedTexture.depthOrLayers == textureDesc.depthOrLayers &&
                          queriedTexture.mipLevels == textureDesc.mipLevels &&
-                         queriedTexture.usage == textureDesc.usage &&
-                         queriedTexture.debugName != nullptr &&
-                         std::strcmp(queriedTexture.debugName,
-                                     kTextureDebugName) == 0,
+                         queriedTexture.usage == textureDesc.usage && queriedTexture.debugName != nullptr &&
+                         std::strcmp(queriedTexture.debugName, kTextureDebugName) == 0,
                      "texture description queries must preserve all creation fields") ||
-        !requireTrue(!device.getBufferDesc({}, queriedBuffer) &&
-                         !device.getTextureDesc({}, queriedTexture),
+        !requireTrue(!device.getBufferDesc({}, queriedBuffer) && !device.getTextureDesc({}, queriedTexture),
                      "resource description queries must reject invalid handles")) {
         device.shutdown();
         return false;
@@ -1054,8 +964,7 @@ bool testGlRhiResourceDescriptionQueries() {
     device.destroyBuffer(buffer);
     device.destroyTexture(texture);
     const bool staleRejected =
-        requireTrue(!device.getBufferDesc(buffer, queriedBuffer) &&
-                        !device.getTextureDesc(texture, queriedTexture),
+        requireTrue(!device.getBufferDesc(buffer, queriedBuffer) && !device.getTextureDesc(texture, queriedTexture),
                     "resource description queries must reject destroyed handles");
     device.shutdown();
     return staleRejected;
@@ -1070,8 +979,7 @@ bool testRenderDebugServiceTimestampSegments() {
     std::unique_ptr<RhiCommandListPool> commandPool;
     RhiDeviceDesc deviceDesc = makeDeviceDesc();
     deviceDesc.debugName = "render_debug_timestamp_test";
-    if (!requireTrue(device.init(deviceDesc),
-                     "OpenGL RHI device must initialize for debug timestamps")) {
+    if (!requireTrue(device.init(deviceDesc), "OpenGL RHI device must initialize for debug timestamps")) {
         return false;
     }
 
@@ -1082,20 +990,17 @@ bool testRenderDebugServiceTimestampSegments() {
     submitTestCommands(device, commandPool, initialResetCommandList);
 
     RhiCommandList& firstCommandList = beginTestCommands(device, commandPool);
-    const GpuTimerSegmentToken firstSegment =
-        service.beginGpuTimer(firstCommandList, GpuTimerPass::GBuffer);
+    const GpuTimerSegmentToken firstSegment = service.beginGpuTimer(firstCommandList, GpuTimerPass::GBuffer);
     service.endGpuTimer(firstCommandList, firstSegment);
     submitTestCommands(device, commandPool, firstCommandList);
 
     RhiCommandList& secondCommandList = beginTestCommands(device, commandPool);
-    const GpuTimerSegmentToken secondSegment =
-        service.beginGpuTimer(secondCommandList, GpuTimerPass::GBuffer);
+    const GpuTimerSegmentToken secondSegment = service.beginGpuTimer(secondCommandList, GpuTimerPass::GBuffer);
     service.endGpuTimer(secondCommandList, secondSegment);
     submitTestCommands(device, commandPool, secondCommandList);
 
     RhiCommandList& discardedCommandList = beginTestCommands(device, commandPool);
-    const GpuTimerSegmentToken discardedSegment =
-        service.beginGpuTimer(discardedCommandList, GpuTimerPass::Cloud);
+    const GpuTimerSegmentToken discardedSegment = service.beginGpuTimer(discardedCommandList, GpuTimerPass::Cloud);
     service.cancelGpuTimer(discardedSegment);
     submitTestCommands(device, commandPool, discardedCommandList);
 
@@ -1107,11 +1012,11 @@ bool testRenderDebugServiceTimestampSegments() {
     service.cancelGpuTimersSince(checkpoint);
     submitTestCommands(device, commandPool, discardedBatchCommandList);
 
-    if (!requireTrue(service.beginShadowFrame(1, 64),
-                     "shadow timestamp frame must begin after query reset")) return false;
+    if (!requireTrue(service.beginShadowFrame(1, 64), "shadow timestamp frame must begin after query reset"))
+        return false;
     service.cancelShadowFrame();
-    if (!requireTrue(service.beginShadowFrame(1, 64),
-                     "cancelled shadow timestamp frame must release active state")) return false;
+    if (!requireTrue(service.beginShadowFrame(1, 64), "cancelled shadow timestamp frame must release active state"))
+        return false;
     service.cancelShadowFrame();
     glFinish();
 
@@ -1122,12 +1027,12 @@ bool testRenderDebugServiceTimestampSegments() {
     }
 
     const GpuFrameStats& stats = service.getGpuFrameStats();
-    if (!requireTrue(stats.supported && stats.valid,
-                     "debug timestamp segments must publish valid frame statistics")) return false;
-    if (!requireTrue(stats.gbufferMs >= 0.0,
-                     "debug timestamp segments must aggregate non-negative duration")) return false;
-    if (!requireTrue(stats.cloudMs == 0.0,
-                     "discarded timestamp segments must not contribute duration")) return false;
+    if (!requireTrue(stats.supported && stats.valid, "debug timestamp segments must publish valid frame statistics"))
+        return false;
+    if (!requireTrue(stats.gbufferMs >= 0.0, "debug timestamp segments must aggregate non-negative duration"))
+        return false;
+    if (!requireTrue(stats.cloudMs == 0.0, "discarded timestamp segments must not contribute duration"))
+        return false;
 
     service.shutdown();
     device.shutdown();
@@ -1149,10 +1054,7 @@ bool testGlRhiGrowableBuffer() {
     }
 
     RhiGrowableBuffer buffer;
-    if (!requireTrue(buffer.init(device,
-                                 16u,
-                                 rhiFlag(RhiBufferUsage::Indirect),
-                                 RhiMemoryCategory::Geometry,
+    if (!requireTrue(buffer.init(device, 16u, rhiFlag(RhiBufferUsage::Indirect), RhiMemoryCategory::Geometry,
                                  "growable-indirect-buffer"),
                      "growable RHI buffer must initialize")) {
         device.shutdown();
@@ -1162,11 +1064,7 @@ bool testGlRhiGrowableBuffer() {
     constexpr std::array<uint32_t, 4> kCommand = {3u, 1u, 0u, 0u};
     constexpr uint64_t kOffset = 65536u;
     RhiCommandList& commandList = beginTestCommands(device, commandPool);
-    const bool writeSucceeded = buffer.write(
-        commandList,
-        kOffset,
-        kCommand.data(),
-        sizeof(kCommand));
+    const bool writeSucceeded = buffer.write(commandList, kOffset, kCommand.data(), sizeof(kCommand));
     submitTestCommands(device, commandPool, commandList);
     if (!requireTrue(writeSucceeded && buffer.capacity() == kOffset + sizeof(kCommand),
                      "growable RHI buffer must expand and write beyond its initial capacity")) {
@@ -1195,10 +1093,8 @@ bool testGlRhiSwapchainBackbuffer() {
     if (!requireTrue(device.init(deviceDesc), "OpenGL RHI device must initialize for swapchain draw")) {
         return false;
     }
-    if (!requireTrue(device.capabilities().vsyncControl,
-                     "OpenGL RHI must expose runtime vertical sync control") ||
-        !requireTrue(!device.vsyncEnabled() &&
-                         device.capabilities().swapchainPresentMode == RhiPresentMode::Immediate,
+    if (!requireTrue(device.capabilities().vsyncControl, "OpenGL RHI must expose runtime vertical sync control") ||
+        !requireTrue(!device.vsyncEnabled() && device.capabilities().swapchainPresentMode == RhiPresentMode::Immediate,
                      "OpenGL RHI default presentation must remain immediate") ||
         !requireTrue(device.setVsyncEnabled(true) && device.vsyncEnabled() &&
                          device.capabilities().swapchainPresentMode == RhiPresentMode::Fifo,
@@ -1214,18 +1110,15 @@ bool testGlRhiSwapchainBackbuffer() {
         return false;
     }
     const RhiFrameAcquireResult frame = device.acquireFrame();
-    if (!requireTrue(frame.status == RhiFrameStatus::Success &&
-                     frame.width == 32u && frame.height == 32u &&
-                     frame.colorTexture.isValid() && frame.colorView.isValid() &&
-                     frame.depthStencilView.isValid(),
+    if (!requireTrue(frame.status == RhiFrameStatus::Success && frame.width == 32u && frame.height == 32u &&
+                         frame.colorTexture.isValid() && frame.colorView.isValid() && frame.depthStencilView.isValid(),
                      "swapchain frame acquisition must expose the current frame resources")) {
         device.shutdown();
         return false;
     }
     if (!requireTrue(device.acquireFrame().status == RhiFrameStatus::Error,
                      "frame acquisition must reject a second acquire before presentation") ||
-        !requireTrue(device.presentFrame({frame.frameIndex + 1u, frame.imageIndex}) ==
-                         RhiFrameStatus::Error,
+        !requireTrue(device.presentFrame({frame.frameIndex + 1u, frame.imageIndex}) == RhiFrameStatus::Error,
                      "frame presentation must reject a mismatched frame identity")) {
         device.shutdown();
         return false;
@@ -1347,21 +1240,9 @@ void main() {
     renderingInfo.depthStencilAttachment = &depthAttachment;
 
     RhiCommandList& cmd = beginTestCommands(device, commandPool);
-    cmd.textureBarrier({
-        swapchainTexture,
-        RhiResourceState::Present,
-        RhiResourceState::RenderTarget
-    });
-    cmd.textureBarrier({
-        swapchainTexture,
-        RhiResourceState::RenderTarget,
-        RhiResourceState::TransferSrc
-    });
-    cmd.textureBarrier({
-        swapchainTexture,
-        RhiResourceState::TransferSrc,
-        RhiResourceState::RenderTarget
-    });
+    cmd.textureBarrier({swapchainTexture, RhiResourceState::Present, RhiResourceState::RenderTarget});
+    cmd.textureBarrier({swapchainTexture, RhiResourceState::RenderTarget, RhiResourceState::TransferSrc});
+    cmd.textureBarrier({swapchainTexture, RhiResourceState::TransferSrc, RhiResourceState::RenderTarget});
     cmd.beginRendering(renderingInfo);
     cmd.setViewport({0.0f, 0.0f, 32.0f, 32.0f, 0.0f, 1.0f});
     cmd.setGraphicsPipeline(pipeline);
@@ -1377,11 +1258,8 @@ void main() {
 
     const bool whitePixel = pixel[0] >= 250u && pixel[1] >= 250u && pixel[2] >= 250u && pixel[3] >= 250u;
     if (!requireTrue(whitePixel, "swapchain fullscreen draw must produce a white center pixel")) {
-        std::cerr << "center pixel rgba=("
-                  << static_cast<int>(pixel[0]) << ", "
-                  << static_cast<int>(pixel[1]) << ", "
-                  << static_cast<int>(pixel[2]) << ", "
-                  << static_cast<int>(pixel[3]) << ")\n";
+        std::cerr << "center pixel rgba=(" << static_cast<int>(pixel[0]) << ", " << static_cast<int>(pixel[1]) << ", "
+                  << static_cast<int>(pixel[2]) << ", " << static_cast<int>(pixel[3]) << ")\n";
         device.shutdown();
         return false;
     }
@@ -1395,13 +1273,11 @@ void main() {
     RhiBufferDesc readbackDesc;
     readbackDesc.debugName = "swapchain-readback-buffer";
     readbackDesc.size = 4u;
-    readbackDesc.usage = rhiFlag(RhiBufferUsage::TransferDst) |
-                         rhiFlag(RhiBufferUsage::MapRead);
+    readbackDesc.usage = rhiFlag(RhiBufferUsage::TransferDst) | rhiFlag(RhiBufferUsage::MapRead);
     readbackDesc.memoryUsage = RhiMemoryUsage::GpuToCpu;
     readbackDesc.initialState = RhiResourceState::TransferDst;
     const RhiBufferHandle readbackBuffer = device.createBuffer(readbackDesc, nullptr, 0u);
-    if (!requireTrue(readbackBuffer.isValid(),
-                     "swapchain readback buffer must be created")) {
+    if (!requireTrue(readbackBuffer.isValid(), "swapchain readback buffer must be created")) {
         device.shutdown();
         return false;
     }
@@ -1416,53 +1292,34 @@ void main() {
     readbackCopy.width = 1u;
     readbackCopy.height = 1u;
     RhiCommandList& readbackCommandList = beginTestCommands(device, commandPool);
-    readbackCommandList.textureBarrier({
-        swapchainTexture,
-        RhiResourceState::RenderTarget,
-        RhiResourceState::TransferSrc
-    });
+    readbackCommandList.textureBarrier(
+        {swapchainTexture, RhiResourceState::RenderTarget, RhiResourceState::TransferSrc});
     readbackCommandList.copyTextureToBuffer(readbackCopy);
-    readbackCommandList.bufferBarrier({
-        readbackBuffer,
-        RhiResourceState::TransferDst,
-        RhiResourceState::HostRead
-    });
-    readbackCommandList.textureBarrier({
-        swapchainTexture,
-        RhiResourceState::TransferSrc,
-        RhiResourceState::RenderTarget
-    });
+    readbackCommandList.bufferBarrier({readbackBuffer, RhiResourceState::TransferDst, RhiResourceState::HostRead});
+    readbackCommandList.textureBarrier(
+        {swapchainTexture, RhiResourceState::TransferSrc, RhiResourceState::RenderTarget});
     submitTestCommands(device, commandPool, readbackCommandList);
     device.waitIdle();
 
-    const auto* mappedPixel = static_cast<const uint8_t*>(
-        device.mapBuffer(readbackBuffer, 0u, 4u));
-    if (!requireTrue(mappedPixel != nullptr,
-                     "swapchain readback buffer must map for host access")) {
+    const auto* mappedPixel = static_cast<const uint8_t*>(device.mapBuffer(readbackBuffer, 0u, 4u));
+    if (!requireTrue(mappedPixel != nullptr, "swapchain readback buffer must map for host access")) {
         device.shutdown();
         return false;
     }
-    const bool rhiReadbackWhite = mappedPixel[0] >= 250u && mappedPixel[1] >= 250u &&
-                                  mappedPixel[2] >= 250u && mappedPixel[3] >= 250u;
+    const bool rhiReadbackWhite =
+        mappedPixel[0] >= 250u && mappedPixel[1] >= 250u && mappedPixel[2] >= 250u && mappedPixel[3] >= 250u;
     device.unmapBuffer(readbackBuffer);
-    if (!requireTrue(rhiReadbackWhite,
-                     "RHI swapchain texture readback must preserve the rendered pixel")) {
+    if (!requireTrue(rhiReadbackWhite, "RHI swapchain texture readback must preserve the rendered pixel")) {
         device.shutdown();
         return false;
     }
 
     RhiCommandList& presentCommandList = beginTestCommands(device, commandPool);
-    presentCommandList.textureBarrier({
-        swapchainTexture,
-        RhiResourceState::RenderTarget,
-        RhiResourceState::Present
-    });
+    presentCommandList.textureBarrier({swapchainTexture, RhiResourceState::RenderTarget, RhiResourceState::Present});
     submitTestCommands(device, commandPool, presentCommandList);
-    if (!requireTrue(device.presentFrame({frame.frameIndex, frame.imageIndex}) ==
-                         RhiFrameStatus::Success,
+    if (!requireTrue(device.presentFrame({frame.frameIndex, frame.imageIndex}) == RhiFrameStatus::Success,
                      "the acquired frame identity must present successfully") ||
-        !requireTrue(!device.currentSwapchainColorTexture().isValid() &&
-                         !device.currentSwapchainColorView().isValid(),
+        !requireTrue(!device.currentSwapchainColorTexture().isValid() && !device.currentSwapchainColorView().isValid(),
                      "swapchain frame handles must expire after presentation")) {
         device.shutdown();
         return false;
@@ -1497,8 +1354,7 @@ bool testGlRhiBlitToSwapchainBackbuffer() {
         return false;
     }
     const RhiFrameAcquireResult frame = device.acquireFrame();
-    if (!requireTrue(frame.status == RhiFrameStatus::Success,
-                     "swapchain frame must be acquired before blitting")) {
+    if (!requireTrue(frame.status == RhiFrameStatus::Success, "swapchain frame must be acquired before blitting")) {
         device.shutdown();
         return false;
     }
@@ -1509,8 +1365,7 @@ bool testGlRhiBlitToSwapchainBackbuffer() {
     sourceDesc.format = RhiTextureFormat::Rgba8Unorm;
     sourceDesc.width = 1u;
     sourceDesc.height = 1u;
-    sourceDesc.usage = rhiFlag(RhiTextureUsage::TransferSrc) |
-                       rhiFlag(RhiTextureUsage::TransferDst);
+    sourceDesc.usage = rhiFlag(RhiTextureUsage::TransferSrc) | rhiFlag(RhiTextureUsage::TransferDst);
 
     RhiTextureInitialData initialData;
     initialData.pixels = kMagentaPixel.data();
@@ -1533,13 +1388,11 @@ bool testGlRhiBlitToSwapchainBackbuffer() {
     blit.dstView = swapchainView;
 
     RhiCommandList& cmd = beginTestCommands(device, commandPool);
-    cmd.textureBarrier({device.currentSwapchainColorTexture(),
-                        RhiResourceState::Present,
-                        RhiResourceState::TransferDst});
+    cmd.textureBarrier(
+        {device.currentSwapchainColorTexture(), RhiResourceState::Present, RhiResourceState::TransferDst});
     cmd.blitTexture(blit);
-    cmd.textureBarrier({device.currentSwapchainColorTexture(),
-                        RhiResourceState::TransferDst,
-                        RhiResourceState::Present});
+    cmd.textureBarrier(
+        {device.currentSwapchainColorTexture(), RhiResourceState::TransferDst, RhiResourceState::Present});
     submitTestCommands(device, commandPool, cmd);
 
     std::array<uint8_t, 4> pixel{};
@@ -1549,11 +1402,8 @@ bool testGlRhiBlitToSwapchainBackbuffer() {
 
     const bool magentaPixel = pixel[0] >= 250u && pixel[1] <= 5u && pixel[2] >= 250u && pixel[3] >= 250u;
     if (!requireTrue(magentaPixel, "swapchain blit must produce a magenta center pixel")) {
-        std::cerr << "center pixel rgba=("
-                  << static_cast<int>(pixel[0]) << ", "
-                  << static_cast<int>(pixel[1]) << ", "
-                  << static_cast<int>(pixel[2]) << ", "
-                  << static_cast<int>(pixel[3]) << ")\n";
+        std::cerr << "center pixel rgba=(" << static_cast<int>(pixel[0]) << ", " << static_cast<int>(pixel[1]) << ", "
+                  << static_cast<int>(pixel[2]) << ", " << static_cast<int>(pixel[3]) << ")\n";
         device.shutdown();
         return false;
     }
@@ -1589,8 +1439,7 @@ bool testGlRhiTexture3DInitialData() {
     textureDesc.width = 2u;
     textureDesc.height = 2u;
     textureDesc.depthOrLayers = 2u;
-    textureDesc.usage = rhiFlag(RhiTextureUsage::Sampled) |
-                        rhiFlag(RhiTextureUsage::TransferDst);
+    textureDesc.usage = rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::TransferDst);
 
     RhiTextureInitialData initialData;
     initialData.pixels = source.data();
@@ -1652,8 +1501,7 @@ bool testGlRhiCubemapInitialData() {
     textureDesc.width = 1u;
     textureDesc.height = 1u;
     textureDesc.depthOrLayers = 6u;
-    textureDesc.usage = rhiFlag(RhiTextureUsage::Sampled) |
-                        rhiFlag(RhiTextureUsage::TransferDst);
+    textureDesc.usage = rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::TransferDst);
 
     RhiTextureInitialData initialData;
     initialData.pixels = pixels.data();
@@ -1686,18 +1534,14 @@ bool testGlRhiCubemapInitialData() {
 
 bool testGlRhiCubeArrayViews() {
     GlTestContext context;
-    if (!requireTrue(
-            context.init(),
-            "OpenGL test context must initialize for cube-array views")) {
+    if (!requireTrue(context.init(), "OpenGL test context must initialize for cube-array views")) {
         return false;
     }
 
     GlRhiDevice device;
     RhiDeviceDesc deviceDesc = makeDeviceDesc();
     deviceDesc.debugName = "rhi_cube_array_view_test";
-    if (!requireTrue(
-            device.init(deviceDesc),
-            "OpenGL RHI device must initialize for cube-array views")) {
+    if (!requireTrue(device.init(deviceDesc), "OpenGL RHI device must initialize for cube-array views")) {
         return false;
     }
 
@@ -1708,11 +1552,9 @@ bool testGlRhiCubeArrayViews() {
     textureDesc.width = 4u;
     textureDesc.height = 4u;
     textureDesc.depthOrLayers = 12u;
-    textureDesc.usage = rhiFlag(RhiTextureUsage::Sampled) |
-                        rhiFlag(RhiTextureUsage::ColorAttachment);
+    textureDesc.usage = rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment);
     const RhiTextureHandle texture = device.createTexture(textureDesc, nullptr);
-    if (!requireTrue(texture.isValid(),
-                     "a two-cube array texture must be created")) {
+    if (!requireTrue(texture.isValid(), "a two-cube array texture must be created")) {
         device.shutdown();
         return false;
     }
@@ -1721,8 +1563,7 @@ bool testGlRhiCubeArrayViews() {
     cubeArrayDesc.texture = texture;
     cubeArrayDesc.viewType = RhiTextureViewType::CubeArray;
     cubeArrayDesc.layerCount = 12u;
-    const RhiTextureViewHandle cubeArrayView =
-        device.createTextureView(cubeArrayDesc);
+    const RhiTextureViewHandle cubeArrayView = device.createTextureView(cubeArrayDesc);
 
     RhiTextureViewDesc cubeDesc;
     cubeDesc.texture = texture;
@@ -1737,12 +1578,12 @@ bool testGlRhiCubeArrayViews() {
     faceDesc.baseLayer = 7u;
     faceDesc.layerCount = 1u;
     const RhiTextureViewHandle faceView = device.createTextureView(faceDesc);
-    if (!requireTrue(
-            cubeArrayView.isValid() && cubeView.isValid() &&
-                faceView.isValid(),
-            "cube arrays must expose array, single-cube, and single-face views")) {
-        if (faceView.isValid()) device.destroyTextureView(faceView);
-        if (cubeView.isValid()) device.destroyTextureView(cubeView);
+    if (!requireTrue(cubeArrayView.isValid() && cubeView.isValid() && faceView.isValid(),
+                     "cube arrays must expose array, single-cube, and single-face views")) {
+        if (faceView.isValid())
+            device.destroyTextureView(faceView);
+        if (cubeView.isValid())
+            device.destroyTextureView(cubeView);
         if (cubeArrayView.isValid()) {
             device.destroyTextureView(cubeArrayView);
         }
@@ -1760,12 +1601,10 @@ bool testGlRhiCubeArrayViews() {
         ScopedErrorCapture capture;
         RhiTextureDesc invalidTextureDesc = textureDesc;
         invalidTextureDesc.depthOrLayers = 10u;
-        invalidLayerTexture =
-            device.createTexture(invalidTextureDesc, nullptr);
+        invalidLayerTexture = device.createTexture(invalidTextureDesc, nullptr);
         invalidTextureDesc = textureDesc;
         invalidTextureDesc.height = 2u;
-        invalidExtentTexture =
-            device.createTexture(invalidTextureDesc, nullptr);
+        invalidExtentTexture = device.createTexture(invalidTextureDesc, nullptr);
 
         RhiTextureViewDesc invalidViewDesc = cubeArrayDesc;
         invalidViewDesc.baseLayer = 1u;
@@ -1779,18 +1618,16 @@ bool testGlRhiCubeArrayViews() {
         invalidViewDesc.layerCount = 12u;
         invalidCubeView = device.createTextureView(invalidViewDesc);
     }
-    const bool invalidDescriptorsRejected =
-        !invalidLayerTexture.isValid() && !invalidExtentTexture.isValid() &&
-        !invalidBaseView.isValid() && !invalidCountView.isValid() &&
-        !invalidCubeView.isValid();
+    const bool invalidDescriptorsRejected = !invalidLayerTexture.isValid() && !invalidExtentTexture.isValid() &&
+                                            !invalidBaseView.isValid() && !invalidCountView.isValid() &&
+                                            !invalidCubeView.isValid();
 
     device.destroyTextureView(faceView);
     device.destroyTextureView(cubeView);
     device.destroyTextureView(cubeArrayView);
     device.destroyTexture(texture);
-    const bool result = requireTrue(
-        invalidDescriptorsRejected,
-        "cube-array textures and views must reject invalid face ranges");
+    const bool result =
+        requireTrue(invalidDescriptorsRejected, "cube-array textures and views must reject invalid face ranges");
     device.shutdown();
     return result;
 }
@@ -1823,8 +1660,7 @@ bool testGlRhiGenerateMipmaps() {
     textureDesc.height = 4u;
     textureDesc.depthOrLayers = 2u;
     textureDesc.mipLevels = 3u;
-    textureDesc.usage = rhiFlag(RhiTextureUsage::Sampled) |
-                        rhiFlag(RhiTextureUsage::TransferDst);
+    textureDesc.usage = rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::TransferDst);
 
     RhiTextureInitialData initialData;
     initialData.pixels = pixels.data();
@@ -1839,9 +1675,7 @@ bool testGlRhiGenerateMipmaps() {
 
     RhiCommandList& commandList = beginTestCommands(device, commandPool);
     commandList.generateMipmaps(texture);
-    commandList.textureBarrier({texture,
-                                RhiResourceState::TransferDst,
-                                RhiResourceState::ShaderRead});
+    commandList.textureBarrier({texture, RhiResourceState::TransferDst, RhiResourceState::ShaderRead});
     submitTestCommands(device, commandPool, commandList);
     if (!requireTrue(glGetError() == GL_NO_ERROR, "RHI mipmap generation must not report a GL error")) {
         device.destroyTexture(texture);
@@ -1856,8 +1690,7 @@ bool testGlRhiGenerateMipmaps() {
 
 bool testGlRhiRejectsInvalidTransferTextureStates() {
     GlTestContext context;
-    if (!requireTrue(context.init(),
-                     "OpenGL test context must initialize for transfer state validation")) {
+    if (!requireTrue(context.init(), "OpenGL test context must initialize for transfer state validation")) {
         return false;
     }
 
@@ -1865,15 +1698,13 @@ bool testGlRhiRejectsInvalidTransferTextureStates() {
     std::unique_ptr<RhiCommandListPool> commandPool;
     RhiDeviceDesc deviceDesc = makeDeviceDesc();
     deviceDesc.debugName = "rhi_transfer_state_validation_test";
-    if (!requireTrue(device.init(deviceDesc),
-                     "OpenGL RHI device must initialize for transfer state validation")) {
+    if (!requireTrue(device.init(deviceDesc), "OpenGL RHI device must initialize for transfer state validation")) {
         return false;
     }
 
     RhiBufferDesc bufferDesc;
     bufferDesc.size = 64u;
-    bufferDesc.usage = rhiFlag(RhiBufferUsage::TransferSrc) |
-                       rhiFlag(RhiBufferUsage::TransferDst);
+    bufferDesc.usage = rhiFlag(RhiBufferUsage::TransferSrc) | rhiFlag(RhiBufferUsage::TransferDst);
     bufferDesc.initialState = RhiResourceState::TransferSrc;
     const RhiBufferHandle buffer = device.createBuffer(bufferDesc, nullptr, 0u);
 
@@ -1881,14 +1712,12 @@ bool testGlRhiRejectsInvalidTransferTextureStates() {
     textureDesc.format = RhiTextureFormat::Rgba8Unorm;
     textureDesc.width = 4u;
     textureDesc.height = 4u;
-    textureDesc.usage = rhiFlag(RhiTextureUsage::TransferSrc) |
-                        rhiFlag(RhiTextureUsage::TransferDst);
+    textureDesc.usage = rhiFlag(RhiTextureUsage::TransferSrc) | rhiFlag(RhiTextureUsage::TransferDst);
     const RhiTextureHandle source = device.createTexture(textureDesc, nullptr);
     const RhiTextureHandle destination = device.createTexture(textureDesc, nullptr);
     textureDesc.mipLevels = 2u;
     const RhiTextureHandle mipTexture = device.createTexture(textureDesc, nullptr);
-    if (!requireTrue(buffer.isValid() && source.isValid() && destination.isValid() &&
-                     mipTexture.isValid(),
+    if (!requireTrue(buffer.isValid() && source.isValid() && destination.isValid() && mipTexture.isValid(),
                      "transfer state validation resources must be created")) {
         device.shutdown();
         return false;
@@ -1915,8 +1744,7 @@ bool testGlRhiRejectsInvalidTransferTextureStates() {
     blit.src = source;
     blit.dst = destination;
 
-    const auto rejectsInvalidState = [&](const auto& recordCommands,
-                                         const char* expectedDiagnostic) {
+    const auto rejectsInvalidState = [&](const auto& recordCommands, const char* expectedDiagnostic) {
         RhiCommandList& commandList = beginTestCommands(device, commandPool);
         recordCommands(commandList);
         RhiCommandList* submitted[] = {&commandList};
@@ -1924,34 +1752,27 @@ bool testGlRhiRejectsInvalidTransferTextureStates() {
         bool rejected = false;
         {
             ScopedErrorCapture capture;
-            rejected = commandList.end() &&
-                !device.submit({"InvalidTransferState.Submit", submitted, 1u});
+            rejected = commandList.end() && !device.submit({"InvalidTransferState.Submit", submitted, 1u});
             diagnostics = capture.output();
         }
         const bool reset = commandPool->reset();
-        return rejected && reset &&
-               diagnostics.find(expectedDiagnostic) != std::string::npos;
+        return rejected && reset && diagnostics.find(expectedDiagnostic) != std::string::npos;
     };
     const bool rejectedEveryInvalidState =
-        rejectsInvalidState(
-            [&](RhiCommandList& commands) { commands.copyBufferToTexture(upload); },
-            "copyBufferToTexture requires destination subresources in TransferDst state") &&
+        rejectsInvalidState([&](RhiCommandList& commands) { commands.copyBufferToTexture(upload); },
+                            "copyBufferToTexture requires destination subresources in TransferDst state") &&
         rejectsInvalidState(
             [&](RhiCommandList& commands) {
-                commands.bufferBarrier({buffer, RhiResourceState::TransferSrc,
-                                        RhiResourceState::TransferDst});
+                commands.bufferBarrier({buffer, RhiResourceState::TransferSrc, RhiResourceState::TransferDst});
                 commands.copyTextureToBuffer(readback);
             },
             "copyTextureToBuffer requires source subresources in TransferSrc state") &&
-        rejectsInvalidState(
-            [&](RhiCommandList& commands) { commands.copyTexture(copy); },
-            "copyTexture requires TransferSrc and TransferDst subresource states") &&
-        rejectsInvalidState(
-            [&](RhiCommandList& commands) { commands.blitTexture(blit); },
-            "blitTexture requires TransferSrc and TransferDst subresource states") &&
-        rejectsInvalidState(
-            [&](RhiCommandList& commands) { commands.generateMipmaps(mipTexture); },
-            "generateMipmaps requires every texture subresource in TransferDst state");
+        rejectsInvalidState([&](RhiCommandList& commands) { commands.copyTexture(copy); },
+                            "copyTexture requires TransferSrc and TransferDst subresource states") &&
+        rejectsInvalidState([&](RhiCommandList& commands) { commands.blitTexture(blit); },
+                            "blitTexture requires TransferSrc and TransferDst subresource states") &&
+        rejectsInvalidState([&](RhiCommandList& commands) { commands.generateMipmaps(mipTexture); },
+                            "generateMipmaps requires every texture subresource in TransferDst state");
 
     device.destroyTexture(mipTexture);
     device.destroyTexture(destination);
@@ -1964,8 +1785,7 @@ bool testGlRhiRejectsInvalidTransferTextureStates() {
 
 bool testGlRhiBufferStateContracts() {
     GlTestContext context;
-    if (!requireTrue(context.init(),
-                     "OpenGL test context must initialize for buffer state validation")) {
+    if (!requireTrue(context.init(), "OpenGL test context must initialize for buffer state validation")) {
         return false;
     }
 
@@ -1973,8 +1793,7 @@ bool testGlRhiBufferStateContracts() {
     std::unique_ptr<RhiCommandListPool> commandPool;
     RhiDeviceDesc deviceDesc = makeDeviceDesc();
     deviceDesc.debugName = "rhi_buffer_state_validation_test";
-    if (!requireTrue(device.init(deviceDesc),
-                     "OpenGL RHI device must initialize for buffer state validation")) {
+    if (!requireTrue(device.init(deviceDesc), "OpenGL RHI device must initialize for buffer state validation")) {
         return false;
     }
 
@@ -1985,70 +1804,59 @@ bool testGlRhiBufferStateContracts() {
     invalidDesc.initialState = RhiResourceState::TransferSrc;
     const RhiBufferHandle invalidState = device.createBuffer(invalidDesc, nullptr, 0u);
     invalidDesc.initialState = RhiResourceState::VertexBuffer;
-    const RhiBufferHandle invalidInitialData =
-        device.createBuffer(invalidDesc, kData.data(), sizeof(kData));
+    const RhiBufferHandle invalidInitialData = device.createBuffer(invalidDesc, kData.data(), sizeof(kData));
 
     RhiBufferDesc sourceDesc;
     sourceDesc.debugName = "buffer-state-source";
     sourceDesc.size = sizeof(kData);
-    sourceDesc.usage = rhiFlag(RhiBufferUsage::TransferSrc) |
-                       rhiFlag(RhiBufferUsage::TransferDst);
+    sourceDesc.usage = rhiFlag(RhiBufferUsage::TransferSrc) | rhiFlag(RhiBufferUsage::TransferDst);
     sourceDesc.initialState = RhiResourceState::TransferSrc;
-    const RhiBufferHandle source =
-        device.createBuffer(sourceDesc, kData.data(), sizeof(kData));
+    const RhiBufferHandle source = device.createBuffer(sourceDesc, kData.data(), sizeof(kData));
 
     RhiBufferDesc destinationDesc;
     destinationDesc.debugName = "buffer-state-destination";
     destinationDesc.size = sizeof(kData);
-    destinationDesc.usage = rhiFlag(RhiBufferUsage::TransferDst) |
-                            rhiFlag(RhiBufferUsage::MapRead);
+    destinationDesc.usage = rhiFlag(RhiBufferUsage::TransferDst) | rhiFlag(RhiBufferUsage::MapRead);
     destinationDesc.memoryUsage = RhiMemoryUsage::GpuToCpu;
     destinationDesc.initialState = RhiResourceState::TransferDst;
     const RhiBufferHandle destination = device.createBuffer(destinationDesc, nullptr, 0u);
-    if (!requireTrue(!invalidState.isValid() && !invalidInitialData.isValid() &&
-                     source.isValid() && destination.isValid(),
+    if (!requireTrue(!invalidState.isValid() && !invalidInitialData.isValid() && source.isValid() &&
+                         destination.isValid(),
                      "buffer creation must enforce initial state and upload usage contracts")) {
         device.shutdown();
         return false;
     }
 
     RhiCommandList& commands = beginTestCommands(device, commandPool);
-    commands.bufferBarrier({source, RhiResourceState::VertexBuffer,
-                            RhiResourceState::TransferDst});
+    commands.bufferBarrier({source, RhiResourceState::VertexBuffer, RhiResourceState::TransferDst});
     commands.copyBuffer({source, destination, 0u, 0u, sizeof(kData)});
-    commands.bufferBarrier({destination, RhiResourceState::TransferDst,
-                            RhiResourceState::HostRead});
+    commands.bufferBarrier({destination, RhiResourceState::TransferDst, RhiResourceState::HostRead});
     std::string diagnostics;
     bool rejected = false;
     {
         ScopedErrorCapture capture;
         RhiCommandList* submitted[] = {&commands};
-        rejected = commands.end() &&
-            !device.submit({"InvalidBufferBarrier.Submit", submitted, 1u});
+        rejected = commands.end() && !device.submit({"InvalidBufferBarrier.Submit", submitted, 1u});
         diagnostics = capture.output();
     }
-    if (!requireTrue(rejected && commandPool->reset(),
-                     "stale buffer barriers must reject the complete submission")) {
+    if (!requireTrue(rejected && commandPool->reset(), "stale buffer barriers must reject the complete submission")) {
         device.shutdown();
         return false;
     }
 
     RhiCommandList& validCommands = beginTestCommands(device, commandPool);
     validCommands.copyBuffer({source, destination, 0u, 0u, sizeof(kData)});
-    validCommands.bufferBarrier({destination, RhiResourceState::TransferDst,
-                                 RhiResourceState::HostRead});
+    validCommands.bufferBarrier({destination, RhiResourceState::TransferDst, RhiResourceState::HostRead});
     submitTestCommands(device, commandPool, validCommands);
     device.waitIdle();
-    const auto* mapped = static_cast<const uint32_t*>(
-        device.mapBuffer(destination, 0u, sizeof(kData)));
-    const bool copied = mapped != nullptr &&
-        std::memcmp(mapped, kData.data(), sizeof(kData)) == 0;
+    const auto* mapped = static_cast<const uint32_t*>(device.mapBuffer(destination, 0u, sizeof(kData)));
+    const bool copied = mapped != nullptr && std::memcmp(mapped, kData.data(), sizeof(kData)) == 0;
     if (mapped != nullptr) {
         device.unmapBuffer(destination);
     }
 
-    const bool diagnosedMismatch = diagnostics.find(
-        "bufferBarrier oldState does not match the tracked buffer state") != std::string::npos;
+    const bool diagnosedMismatch =
+        diagnostics.find("bufferBarrier oldState does not match the tracked buffer state") != std::string::npos;
     device.destroyBuffer(destination);
     device.destroyBuffer(source);
     device.shutdown();
@@ -2103,7 +1911,7 @@ void main() {
     gl_Position = vec4(kPositions[gl_VertexIndex], 0.0, 1.0);
 }
 )glsl";
-constexpr char kSolidFragmentShader[] = R"glsl(
+    constexpr char kSolidFragmentShader[] = R"glsl(
 #version 450 core
 layout(location = 0) out vec4 outColor;
 layout(push_constant, std430) uniform FullscreenPushConstants {
@@ -2178,8 +1986,7 @@ void main() {
     renderingInfo.colorAttachmentCount = 1;
 
     RhiCommandList& cmd = beginTestCommands(device, commandPool);
-    cmd.textureBarrier({target, RhiResourceState::Undefined,
-                        RhiResourceState::RenderTarget});
+    cmd.textureBarrier({target, RhiResourceState::Undefined, RhiResourceState::RenderTarget});
     cmd.beginRendering(renderingInfo);
     cmd.setViewport({0.0f, 0.0f, 4.0f, 4.0f, 0.0f, 1.0f});
     cmd.setGraphicsPipeline(pipeline);
@@ -2194,11 +2001,8 @@ void main() {
 
     const bool redPixel = pixel[0] >= 250u && pixel[1] <= 5u && pixel[2] <= 5u && pixel[3] >= 250u;
     if (!requireTrue(redPixel, "fullscreen triangle must render a red center pixel")) {
-        std::cerr << "center pixel rgba=("
-                  << static_cast<int>(pixel[0]) << ", "
-                  << static_cast<int>(pixel[1]) << ", "
-                  << static_cast<int>(pixel[2]) << ", "
-                  << static_cast<int>(pixel[3]) << ")\n";
+        std::cerr << "center pixel rgba=(" << static_cast<int>(pixel[0]) << ", " << static_cast<int>(pixel[1]) << ", "
+                  << static_cast<int>(pixel[2]) << ", " << static_cast<int>(pixel[3]) << ")\n";
         device.shutdown();
         return false;
     }
@@ -2213,11 +2017,8 @@ void main() {
     return true;
 }
 
-bool readCenterPixel(GlRhiDevice& device,
-                     const RhiTextureViewHandle targetView,
-                     const uint32_t width,
-                     const uint32_t height,
-                     std::array<uint8_t, 4>& outPixel) {
+bool readCenterPixel(GlRhiDevice& device, const RhiTextureViewHandle targetView, const uint32_t width,
+                     const uint32_t height, std::array<uint8_t, 4>& outPixel) {
     std::unique_ptr<RhiCommandListPool> commandPool;
     RhiColorAttachment colorAttachment;
     colorAttachment.view = targetView;
@@ -2234,20 +2035,14 @@ bool readCenterPixel(GlRhiDevice& device,
     cmd.beginRendering(renderingInfo);
     cmd.endRendering();
     submitTestCommands(device, commandPool, cmd);
-    glReadPixels(static_cast<GLint>(width / 2u),
-                 static_cast<GLint>(height / 2u),
-                 1,
-                 1,
-                 GL_RGBA,
-                 GL_UNSIGNED_BYTE,
+    glReadPixels(static_cast<GLint>(width / 2u), static_cast<GLint>(height / 2u), 1, 1, GL_RGBA, GL_UNSIGNED_BYTE,
                  outPixel.data());
     return true;
 }
 
 bool testGlRhiDepthLoadClearIgnoresPreviousWriteMask() {
     GlTestContext context;
-    if (!requireTrue(context.init(),
-                     "OpenGL test context must initialize for depth load clear")) {
+    if (!requireTrue(context.init(), "OpenGL test context must initialize for depth load clear")) {
         return false;
     }
 
@@ -2255,8 +2050,7 @@ bool testGlRhiDepthLoadClearIgnoresPreviousWriteMask() {
     std::unique_ptr<RhiCommandListPool> commandPool;
     RhiDeviceDesc deviceDesc = makeDeviceDesc();
     deviceDesc.debugName = "rhi_depth_load_clear_test";
-    if (!requireTrue(device.init(deviceDesc),
-                     "OpenGL RHI device must initialize for depth load clear")) {
+    if (!requireTrue(device.init(deviceDesc), "OpenGL RHI device must initialize for depth load clear")) {
         return false;
     }
 
@@ -2287,8 +2081,7 @@ void main() {
     shaderDesc.source = kFragmentShader;
     shaderDesc.sourceSize = sizeof(kFragmentShader) - 1u;
     const RhiShaderHandle fragmentShader = device.createShader(shaderDesc);
-    const RhiPipelineLayoutHandle pipelineLayout =
-        device.createPipelineLayout(RhiPipelineLayoutDesc{});
+    const RhiPipelineLayoutHandle pipelineLayout = device.createPipelineLayout(RhiPipelineLayoutDesc{});
 
     RhiGraphicsPipelineDesc pipelineDesc;
     pipelineDesc.vertexShader = vertexShader;
@@ -2321,10 +2114,9 @@ void main() {
     depthViewDesc.texture = depthTexture;
     const RhiTextureViewHandle depthView = device.createTextureView(depthViewDesc);
 
-    if (!requireTrue(vertexShader.isValid() && fragmentShader.isValid() &&
-                     pipelineLayout.isValid() && pipeline.isValid() &&
-                     colorTexture.isValid() && colorView.isValid() &&
-                     depthTexture.isValid() && depthView.isValid(),
+    if (!requireTrue(vertexShader.isValid() && fragmentShader.isValid() && pipelineLayout.isValid() &&
+                         pipeline.isValid() && colorTexture.isValid() && colorView.isValid() &&
+                         depthTexture.isValid() && depthView.isValid(),
                      "depth load clear resources must be created")) {
         device.shutdown();
         return false;
@@ -2346,10 +2138,8 @@ void main() {
     renderingInfo.depthStencilAttachment = &depthAttachment;
 
     RhiCommandList& maskCommands = beginTestCommands(device, commandPool);
-    maskCommands.textureBarrier({colorTexture, RhiResourceState::Undefined,
-                                 RhiResourceState::RenderTarget});
-    maskCommands.textureBarrier({depthTexture, RhiResourceState::Undefined,
-                                 RhiResourceState::DepthWrite});
+    maskCommands.textureBarrier({colorTexture, RhiResourceState::Undefined, RhiResourceState::RenderTarget});
+    maskCommands.textureBarrier({depthTexture, RhiResourceState::Undefined, RhiResourceState::DepthWrite});
     maskCommands.beginRendering(renderingInfo);
     maskCommands.setGraphicsPipeline(pipeline);
     maskCommands.endRendering();
@@ -2405,12 +2195,10 @@ bool testGlRhiBufferCopyToTexture() {
     RhiBufferDesc srcBufferDesc;
     srcBufferDesc.debugName = "copy-source-buffer";
     srcBufferDesc.size = sourcePixels.size();
-    srcBufferDesc.usage = rhiFlag(RhiBufferUsage::TransferSrc) |
-                          rhiFlag(RhiBufferUsage::TransferDst);
+    srcBufferDesc.usage = rhiFlag(RhiBufferUsage::TransferSrc) | rhiFlag(RhiBufferUsage::TransferDst);
     srcBufferDesc.memoryUsage = RhiMemoryUsage::CpuToGpu;
     srcBufferDesc.initialState = RhiResourceState::TransferSrc;
-    const RhiBufferHandle srcBuffer =
-        device.createBuffer(srcBufferDesc, sourcePixels.data(), sourcePixels.size());
+    const RhiBufferHandle srcBuffer = device.createBuffer(srcBufferDesc, sourcePixels.data(), sourcePixels.size());
     if (!requireTrue(srcBuffer.isValid(), "source buffer must be created for copy test")) {
         device.shutdown();
         return false;
@@ -2453,16 +2241,14 @@ bool testGlRhiBufferCopyToTexture() {
     bufferCopy.dst = dstBuffer;
     bufferCopy.size = sourcePixels.size();
     cmd.copyBuffer(bufferCopy);
-    cmd.bufferBarrier({dstBuffer, RhiResourceState::TransferDst,
-                       RhiResourceState::TransferSrc});
+    cmd.bufferBarrier({dstBuffer, RhiResourceState::TransferDst, RhiResourceState::TransferSrc});
 
     RhiBufferTextureCopy textureCopy;
     textureCopy.srcBuffer = dstBuffer;
     textureCopy.dstTexture = target;
     textureCopy.width = kWidth;
     textureCopy.height = kHeight;
-    cmd.textureBarrier({target, RhiResourceState::Undefined,
-                        RhiResourceState::TransferDst});
+    cmd.textureBarrier({target, RhiResourceState::Undefined, RhiResourceState::TransferDst});
     cmd.copyBufferToTexture(textureCopy);
     cmd.textureBarrier({target, RhiResourceState::TransferDst, RhiResourceState::RenderTarget});
     submitTestCommands(device, commandPool, cmd);
@@ -2475,11 +2261,8 @@ bool testGlRhiBufferCopyToTexture() {
 
     const bool bluePixel = pixel[0] <= 5u && pixel[1] <= 5u && pixel[2] >= 250u && pixel[3] >= 250u;
     if (!requireTrue(bluePixel, "buffer copy path must produce a blue center pixel")) {
-        std::cerr << "center pixel rgba=("
-                  << static_cast<int>(pixel[0]) << ", "
-                  << static_cast<int>(pixel[1]) << ", "
-                  << static_cast<int>(pixel[2]) << ", "
-                  << static_cast<int>(pixel[3]) << ")\n";
+        std::cerr << "center pixel rgba=(" << static_cast<int>(pixel[0]) << ", " << static_cast<int>(pixel[1]) << ", "
+                  << static_cast<int>(pixel[2]) << ", " << static_cast<int>(pixel[3]) << ")\n";
         device.shutdown();
         return false;
     }
@@ -2508,28 +2291,22 @@ bool testGlRhiTightlyPackedR8BufferCopy() {
 
     constexpr uint32_t kWidth = 3u;
     constexpr uint32_t kHeight = 2u;
-    constexpr std::array<uint8_t, kWidth * kHeight> kPixels = {
-        11u, 22u, 33u,
-        44u, 55u, 66u
-    };
+    constexpr std::array<uint8_t, kWidth * kHeight> kPixels = {11u, 22u, 33u, 44u, 55u, 66u};
 
     RhiBufferDesc bufferDesc;
     bufferDesc.size = 8u;
-    bufferDesc.usage = rhiFlag(RhiBufferUsage::TransferSrc) |
-                       rhiFlag(RhiBufferUsage::TransferDst);
+    bufferDesc.usage = rhiFlag(RhiBufferUsage::TransferSrc) | rhiFlag(RhiBufferUsage::TransferDst);
     bufferDesc.memoryUsage = RhiMemoryUsage::CpuToGpu;
     bufferDesc.initialState = RhiResourceState::TransferSrc;
     std::array<uint8_t, 8u> paddedPixels{};
     std::copy(kPixels.begin(), kPixels.end(), paddedPixels.begin());
-    const RhiBufferHandle buffer = device.createBuffer(
-        bufferDesc, paddedPixels.data(), paddedPixels.size());
+    const RhiBufferHandle buffer = device.createBuffer(bufferDesc, paddedPixels.data(), paddedPixels.size());
 
     RhiTextureDesc textureDesc;
     textureDesc.format = RhiTextureFormat::R8Unorm;
     textureDesc.width = kWidth;
     textureDesc.height = kHeight;
-    textureDesc.usage = rhiFlag(RhiTextureUsage::ColorAttachment) |
-                        rhiFlag(RhiTextureUsage::TransferDst);
+    textureDesc.usage = rhiFlag(RhiTextureUsage::ColorAttachment) | rhiFlag(RhiTextureUsage::TransferDst);
     const RhiTextureHandle texture = device.createTexture(textureDesc, nullptr);
     RhiTextureViewDesc viewDesc;
     viewDesc.texture = texture;
@@ -2546,17 +2323,9 @@ bool testGlRhiTightlyPackedR8BufferCopy() {
     copy.width = kWidth;
     copy.height = kHeight;
     RhiCommandList& uploadCommandList = beginTestCommands(device, commandPool);
-    uploadCommandList.textureBarrier({
-        texture,
-        RhiResourceState::Undefined,
-        RhiResourceState::TransferDst
-    });
+    uploadCommandList.textureBarrier({texture, RhiResourceState::Undefined, RhiResourceState::TransferDst});
     uploadCommandList.copyBufferToTexture(copy);
-    uploadCommandList.textureBarrier({
-        texture,
-        RhiResourceState::TransferDst,
-        RhiResourceState::RenderTarget
-    });
+    uploadCommandList.textureBarrier({texture, RhiResourceState::TransferDst, RhiResourceState::RenderTarget});
     submitTestCommands(device, commandPool, uploadCommandList);
 
     RhiColorAttachment attachment;
@@ -2578,8 +2347,7 @@ bool testGlRhiTightlyPackedR8BufferCopy() {
     glReadPixels(0, 0, kWidth, kHeight, GL_RED, GL_UNSIGNED_BYTE, readback.data());
     glPixelStorei(GL_PACK_ALIGNMENT, previousPackAlignment);
 
-    if (!requireTrue(readback == kPixels,
-                     "tightly packed odd-width R8 rows must preserve every texel")) {
+    if (!requireTrue(readback == kPixels, "tightly packed odd-width R8 rows must preserve every texel")) {
         device.shutdown();
         return false;
     }
@@ -2601,8 +2369,7 @@ bool testGlRhiTextureCopyToPaddedReadbackBuffer() {
     std::unique_ptr<RhiCommandListPool> commandPool;
     RhiDeviceDesc deviceDesc = makeDeviceDesc();
     deviceDesc.debugName = "rhi_texture_readback_test";
-    if (!requireTrue(device.init(deviceDesc),
-                     "OpenGL RHI device must initialize for texture readback")) {
+    if (!requireTrue(device.init(deviceDesc), "OpenGL RHI device must initialize for texture readback")) {
         return false;
     }
 
@@ -2611,17 +2378,14 @@ bool testGlRhiTextureCopyToPaddedReadbackBuffer() {
     constexpr uint32_t kBytesPerRow = 16u;
     constexpr uint8_t kPaddingValue = 0xCDu;
     constexpr std::array<uint8_t, kWidth * kHeight * 4u> kPixels = {
-        1u, 2u, 3u, 4u, 5u, 6u, 7u, 8u, 9u, 10u, 11u, 12u,
-        21u, 22u, 23u, 24u, 25u, 26u, 27u, 28u, 29u, 30u, 31u, 32u
-    };
+        1u, 2u, 3u, 4u, 5u, 6u, 7u, 8u, 9u, 10u, 11u, 12u, 21u, 22u, 23u, 24u, 25u, 26u, 27u, 28u, 29u, 30u, 31u, 32u};
 
     RhiTextureDesc textureDesc;
     textureDesc.debugName = "texture-readback-source";
     textureDesc.format = RhiTextureFormat::Rgba8Unorm;
     textureDesc.width = kWidth;
     textureDesc.height = kHeight;
-    textureDesc.usage = rhiFlag(RhiTextureUsage::TransferSrc) |
-                        rhiFlag(RhiTextureUsage::TransferDst);
+    textureDesc.usage = rhiFlag(RhiTextureUsage::TransferSrc) | rhiFlag(RhiTextureUsage::TransferDst);
     RhiTextureInitialData textureData;
     textureData.pixels = kPixels.data();
     textureData.sizeBytes = kPixels.size();
@@ -2634,14 +2398,11 @@ bool testGlRhiTextureCopyToPaddedReadbackBuffer() {
     RhiBufferDesc bufferDesc;
     bufferDesc.debugName = "texture-readback-destination";
     bufferDesc.size = kReadbackSize;
-    bufferDesc.usage = rhiFlag(RhiBufferUsage::TransferDst) |
-                       rhiFlag(RhiBufferUsage::MapRead);
+    bufferDesc.usage = rhiFlag(RhiBufferUsage::TransferDst) | rhiFlag(RhiBufferUsage::MapRead);
     bufferDesc.memoryUsage = RhiMemoryUsage::GpuToCpu;
     bufferDesc.initialState = RhiResourceState::TransferDst;
-    const RhiBufferHandle buffer = device.createBuffer(
-        bufferDesc, initialReadback.data(), initialReadback.size());
-    if (!requireTrue(texture.isValid() && buffer.isValid(),
-                     "texture readback resources must be created")) {
+    const RhiBufferHandle buffer = device.createBuffer(bufferDesc, initialReadback.data(), initialReadback.size());
+    if (!requireTrue(texture.isValid() && buffer.isValid(), "texture readback resources must be created")) {
         device.shutdown();
         return false;
     }
@@ -2655,16 +2416,11 @@ bool testGlRhiTextureCopyToPaddedReadbackBuffer() {
     copy.height = kHeight;
     RhiCommandList& commandList = beginTestCommands(device, commandPool);
     commandList.copyTextureToBuffer(copy);
-    commandList.bufferBarrier({
-        buffer,
-        RhiResourceState::TransferDst,
-        RhiResourceState::HostRead
-    });
+    commandList.bufferBarrier({buffer, RhiResourceState::TransferDst, RhiResourceState::HostRead});
     submitTestCommands(device, commandPool, commandList);
     device.waitIdle();
 
-    const auto* readback = static_cast<const uint8_t*>(
-        device.mapBuffer(buffer, 0u, kReadbackSize));
+    const auto* readback = static_cast<const uint8_t*>(device.mapBuffer(buffer, 0u, kReadbackSize));
     if (!requireTrue(readback != nullptr, "texture readback buffer must map for host access")) {
         device.shutdown();
         return false;
@@ -2672,19 +2428,15 @@ bool testGlRhiTextureCopyToPaddedReadbackBuffer() {
 
     bool matches = true;
     for (uint32_t y = 0u; y < kHeight; ++y) {
-        matches = matches && std::memcmp(
-            readback + static_cast<uint64_t>(y) * kBytesPerRow,
-            kPixels.data() + static_cast<size_t>(y) * kWidth * 4u,
-            kWidth * 4u) == 0;
+        matches = matches && std::memcmp(readback + static_cast<uint64_t>(y) * kBytesPerRow,
+                                         kPixels.data() + static_cast<size_t>(y) * kWidth * 4u, kWidth * 4u) == 0;
         for (uint32_t byte = kWidth * 4u; byte < kBytesPerRow; ++byte) {
-            matches = matches &&
-                      readback[static_cast<uint64_t>(y) * kBytesPerRow + byte] == kPaddingValue;
+            matches = matches && readback[static_cast<uint64_t>(y) * kBytesPerRow + byte] == kPaddingValue;
         }
     }
     device.unmapBuffer(buffer);
 
-    if (!requireTrue(matches,
-                     "texture readback must preserve pixels and explicit row padding")) {
+    if (!requireTrue(matches, "texture readback must preserve pixels and explicit row padding")) {
         device.shutdown();
         return false;
     }
@@ -2709,21 +2461,15 @@ bool testGlRhiBufferCopyToTexture3DRegion() {
         return false;
     }
 
-    constexpr std::array<float, 16> kRegionPixels = {
-        1.0f, 0.0f, 0.0f, 1.0f,
-        0.0f, 1.0f, 0.0f, 1.0f,
-        0.0f, 0.0f, 1.0f, 1.0f,
-        1.0f, 1.0f, 1.0f, 1.0f
-    };
+    constexpr std::array<float, 16> kRegionPixels = {1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f, 1.0f,
+                                                     0.0f, 0.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f};
     RhiBufferDesc bufferDesc;
     bufferDesc.debugName = "copy-3d-region-source";
     bufferDesc.size = sizeof(kRegionPixels);
-    bufferDesc.usage = rhiFlag(RhiBufferUsage::TransferSrc) |
-                       rhiFlag(RhiBufferUsage::TransferDst);
+    bufferDesc.usage = rhiFlag(RhiBufferUsage::TransferSrc) | rhiFlag(RhiBufferUsage::TransferDst);
     bufferDesc.memoryUsage = RhiMemoryUsage::CpuToGpu;
     bufferDesc.initialState = RhiResourceState::TransferSrc;
-    const RhiBufferHandle buffer = device.createBuffer(
-        bufferDesc, kRegionPixels.data(), sizeof(kRegionPixels));
+    const RhiBufferHandle buffer = device.createBuffer(bufferDesc, kRegionPixels.data(), sizeof(kRegionPixels));
 
     RhiTextureDesc textureDesc;
     textureDesc.debugName = "copy-3d-region-target";
@@ -2734,8 +2480,7 @@ bool testGlRhiBufferCopyToTexture3DRegion() {
     textureDesc.depthOrLayers = 4u;
     textureDesc.usage = rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::TransferDst);
     const RhiTextureHandle texture = device.createTexture(textureDesc, nullptr);
-    if (!requireTrue(buffer.isValid() && texture.isValid(),
-                     "3D texture region copy resources must be created")) {
+    if (!requireTrue(buffer.isValid() && texture.isValid(), "3D texture region copy resources must be created")) {
         device.shutdown();
         return false;
     }
@@ -2750,17 +2495,10 @@ bool testGlRhiBufferCopyToTexture3DRegion() {
     copy.height = 2u;
     copy.depth = 1u;
     RhiCommandList& commandList = beginTestCommands(device, commandPool);
-    commandList.textureBarrier({texture,
-                                RhiResourceState::Undefined,
-                                RhiResourceState::TransferDst,
-                                0u,
-                                1u,
-                                0u,
-                                1u});
+    commandList.textureBarrier({texture, RhiResourceState::Undefined, RhiResourceState::TransferDst, 0u, 1u, 0u, 1u});
     commandList.copyBufferToTexture(copy);
     submitTestCommands(device, commandPool, commandList);
-    const bool noError = requireTrue(glGetError() == GL_NO_ERROR,
-                                     "3D texture region copy must not report a GL error");
+    const bool noError = requireTrue(glGetError() == GL_NO_ERROR, "3D texture region copy must not report a GL error");
 
     device.destroyTexture(texture);
     device.destroyBuffer(buffer);
@@ -2811,8 +2549,7 @@ bool testGlRhiComputeStorageTexture() {
     storageImageEntry.type = RhiBindingType::StorageTexture;
     storageImageEntry.stages = rhiFlag(RhiShaderStage::Compute);
     bindGroupLayoutDesc.entries.push_back(storageImageEntry);
-    const RhiBindGroupLayoutHandle bindGroupLayout =
-        device.createBindGroupLayout(bindGroupLayoutDesc);
+    const RhiBindGroupLayoutHandle bindGroupLayout = device.createBindGroupLayout(bindGroupLayoutDesc);
     if (!requireTrue(bindGroupLayout.isValid(), "compute bind group layout must be created")) {
         device.shutdown();
         return false;
@@ -2879,26 +2616,23 @@ void main() {
     {
         ScopedErrorCapture capture;
         RhiCommandList* submitted[] = {&cmd};
-        rejected = cmd.end() &&
-            !device.submit({"InvalidStorageTextureState.Submit", submitted, 1u});
+        rejected = cmd.end() && !device.submit({"InvalidStorageTextureState.Submit", submitted, 1u});
         diagnostics = capture.output();
     }
     if (!requireTrue(rejected && commandPool->reset() &&
-                     diagnostics.find("dispatch texture descriptor state does not match its binding type") !=
-                         std::string::npos,
-            "compute dispatch must reject a storage texture outside ShaderWrite state")) {
+                         diagnostics.find("dispatch texture descriptor state does not match its binding type") !=
+                             std::string::npos,
+                     "compute dispatch must reject a storage texture outside ShaderWrite state")) {
         device.shutdown();
         return false;
     }
 
     RhiCommandList& validCmd = beginTestCommands(device, commandPool);
-    validCmd.textureBarrier({target, RhiResourceState::Undefined,
-                             RhiResourceState::ShaderWrite});
+    validCmd.textureBarrier({target, RhiResourceState::Undefined, RhiResourceState::ShaderWrite});
     validCmd.setComputePipeline(pipeline);
     validCmd.setBindGroup(0u, bindGroup);
     validCmd.dispatch(kWidth, kHeight, 1u);
-    validCmd.textureBarrier({target, RhiResourceState::ShaderWrite,
-                             RhiResourceState::RenderTarget});
+    validCmd.textureBarrier({target, RhiResourceState::ShaderWrite, RhiResourceState::RenderTarget});
     submitTestCommands(device, commandPool, validCmd);
 
     std::array<uint8_t, 4> pixel{};
@@ -2909,11 +2643,8 @@ void main() {
 
     const bool greenPixel = pixel[0] <= 5u && pixel[1] >= 250u && pixel[2] <= 5u && pixel[3] >= 250u;
     if (!requireTrue(greenPixel, "compute dispatch must write a green center pixel")) {
-        std::cerr << "center pixel rgba=("
-                  << static_cast<int>(pixel[0]) << ", "
-                  << static_cast<int>(pixel[1]) << ", "
-                  << static_cast<int>(pixel[2]) << ", "
-                  << static_cast<int>(pixel[3]) << ")\n";
+        std::cerr << "center pixel rgba=(" << static_cast<int>(pixel[0]) << ", " << static_cast<int>(pixel[1]) << ", "
+                  << static_cast<int>(pixel[2]) << ", " << static_cast<int>(pixel[3]) << ")\n";
         device.shutdown();
         return false;
     }
@@ -2952,8 +2683,7 @@ bool testGlRhiCombinedTextureSampler() {
     sourceDesc.format = RhiTextureFormat::Rgba8Unorm;
     sourceDesc.width = 1u;
     sourceDesc.height = 1u;
-    sourceDesc.usage = rhiFlag(RhiTextureUsage::Sampled) |
-                       rhiFlag(RhiTextureUsage::TransferSrc) |
+    sourceDesc.usage = rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::TransferSrc) |
                        rhiFlag(RhiTextureUsage::TransferDst);
 
     RhiTextureInitialData sourceInitialData;
@@ -3011,8 +2741,7 @@ bool testGlRhiCombinedTextureSampler() {
     textureEntry.type = RhiBindingType::CombinedTextureSampler;
     textureEntry.stages = rhiFlag(RhiShaderStage::Fragment);
     bindGroupLayoutDesc.entries.push_back(textureEntry);
-    const RhiBindGroupLayoutHandle bindGroupLayout =
-        device.createBindGroupLayout(bindGroupLayoutDesc);
+    const RhiBindGroupLayoutHandle bindGroupLayout = device.createBindGroupLayout(bindGroupLayoutDesc);
     if (!requireTrue(bindGroupLayout.isValid(), "sampled bind group layout must be created")) {
         device.shutdown();
         return false;
@@ -3115,8 +2844,7 @@ void main() {
     renderingInfo.colorAttachmentCount = 1u;
 
     RhiCommandList& cmd = beginTestCommands(device, commandPool);
-    cmd.textureBarrier({target, RhiResourceState::Undefined,
-                        RhiResourceState::RenderTarget});
+    cmd.textureBarrier({target, RhiResourceState::Undefined, RhiResourceState::RenderTarget});
     cmd.beginRendering(renderingInfo);
     cmd.setViewport({0.0f, 0.0f, static_cast<float>(kWidth), static_cast<float>(kHeight), 0.0f, 1.0f});
     cmd.setGraphicsPipeline(pipeline);
@@ -3128,23 +2856,20 @@ void main() {
     {
         ScopedErrorCapture capture;
         RhiCommandList* submitted[] = {&cmd};
-        rejected = cmd.end() &&
-            !device.submit({"InvalidSampledTextureState.Submit", submitted, 1u});
+        rejected = cmd.end() && !device.submit({"InvalidSampledTextureState.Submit", submitted, 1u});
         diagnostics = capture.output();
     }
     if (!requireTrue(rejected && commandPool->reset() &&
-                     diagnostics.find("graphics draw texture descriptor state does not match its binding type") !=
-                         std::string::npos,
-            "graphics draw must reject a sampled texture outside ShaderRead state")) {
+                         diagnostics.find("graphics draw texture descriptor state does not match its binding type") !=
+                             std::string::npos,
+                     "graphics draw must reject a sampled texture outside ShaderRead state")) {
         device.shutdown();
         return false;
     }
 
     RhiCommandList& validCmd = beginTestCommands(device, commandPool);
-    validCmd.textureBarrier({target, RhiResourceState::Undefined,
-                             RhiResourceState::RenderTarget});
-    validCmd.textureBarrier({sourceTexture, RhiResourceState::TransferSrc,
-                             RhiResourceState::ShaderRead});
+    validCmd.textureBarrier({target, RhiResourceState::Undefined, RhiResourceState::RenderTarget});
+    validCmd.textureBarrier({sourceTexture, RhiResourceState::TransferSrc, RhiResourceState::ShaderRead});
     validCmd.beginRendering(renderingInfo);
     validCmd.setViewport({0.0f, 0.0f, static_cast<float>(kWidth), static_cast<float>(kHeight), 0.0f, 1.0f});
     validCmd.setGraphicsPipeline(pipeline);
@@ -3158,11 +2883,8 @@ void main() {
 
     const bool yellowPixel = pixel[0] >= 250u && pixel[1] >= 250u && pixel[2] <= 5u && pixel[3] >= 250u;
     if (!requireTrue(yellowPixel, "sampled texture draw must produce a yellow center pixel")) {
-        std::cerr << "center pixel rgba=("
-                  << static_cast<int>(pixel[0]) << ", "
-                  << static_cast<int>(pixel[1]) << ", "
-                  << static_cast<int>(pixel[2]) << ", "
-                  << static_cast<int>(pixel[3]) << ")\n";
+        std::cerr << "center pixel rgba=(" << static_cast<int>(pixel[0]) << ", " << static_cast<int>(pixel[1]) << ", "
+                  << static_cast<int>(pixel[2]) << ", " << static_cast<int>(pixel[3]) << ")\n";
         device.shutdown();
         return false;
     }
@@ -3199,11 +2921,7 @@ bool testGlRhiIndexedTriangle() {
     struct Vertex {
         float position[2];
     };
-    constexpr std::array<Vertex, 3> kVertices = {{
-        {{-1.0f, -1.0f}},
-        {{3.0f, -1.0f}},
-        {{-1.0f, 3.0f}}
-    }};
+    constexpr std::array<Vertex, 3> kVertices = {{{{-1.0f, -1.0f}}, {{3.0f, -1.0f}}, {{-1.0f, 3.0f}}}};
     constexpr std::array<uint16_t, 3> kIndices = {0u, 1u, 2u};
     constexpr uint32_t kWidth = 4u;
     constexpr uint32_t kHeight = 4u;
@@ -3211,12 +2929,10 @@ bool testGlRhiIndexedTriangle() {
     RhiBufferDesc vertexBufferDesc;
     vertexBufferDesc.debugName = "indexed-triangle-vertices";
     vertexBufferDesc.size = sizeof(Vertex) * kVertices.size();
-    vertexBufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex) |
-                             rhiFlag(RhiBufferUsage::TransferDst);
+    vertexBufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex) | rhiFlag(RhiBufferUsage::TransferDst);
     vertexBufferDesc.memoryUsage = RhiMemoryUsage::CpuToGpu;
     vertexBufferDesc.initialState = RhiResourceState::VertexBuffer;
-    const RhiBufferHandle vertexBuffer =
-        device.createBuffer(vertexBufferDesc, kVertices.data(), vertexBufferDesc.size);
+    const RhiBufferHandle vertexBuffer = device.createBuffer(vertexBufferDesc, kVertices.data(), vertexBufferDesc.size);
     if (!requireTrue(vertexBuffer.isValid(), "vertex buffer must be created for indexed draw")) {
         device.shutdown();
         return false;
@@ -3225,12 +2941,10 @@ bool testGlRhiIndexedTriangle() {
     RhiBufferDesc indexBufferDesc;
     indexBufferDesc.debugName = "indexed-triangle-indices";
     indexBufferDesc.size = sizeof(uint16_t) * kIndices.size();
-    indexBufferDesc.usage = rhiFlag(RhiBufferUsage::Index) |
-                            rhiFlag(RhiBufferUsage::TransferDst);
+    indexBufferDesc.usage = rhiFlag(RhiBufferUsage::Index) | rhiFlag(RhiBufferUsage::TransferDst);
     indexBufferDesc.memoryUsage = RhiMemoryUsage::CpuToGpu;
     indexBufferDesc.initialState = RhiResourceState::IndexBuffer;
-    const RhiBufferHandle indexBuffer =
-        device.createBuffer(indexBufferDesc, kIndices.data(), indexBufferDesc.size);
+    const RhiBufferHandle indexBuffer = device.createBuffer(indexBufferDesc, kIndices.data(), indexBufferDesc.size);
     if (!requireTrue(indexBuffer.isValid(), "index buffer must be created for indexed draw")) {
         device.shutdown();
         return false;
@@ -3344,8 +3058,7 @@ void main() {
     renderingInfo.colorAttachmentCount = 1u;
 
     RhiCommandList& cmd = beginTestCommands(device, commandPool);
-    cmd.textureBarrier({target, RhiResourceState::Undefined,
-                        RhiResourceState::RenderTarget});
+    cmd.textureBarrier({target, RhiResourceState::Undefined, RhiResourceState::RenderTarget});
     cmd.beginRendering(renderingInfo);
     cmd.setViewport({0.0f, 0.0f, static_cast<float>(kWidth), static_cast<float>(kHeight), 0.0f, 1.0f});
     cmd.setGraphicsPipeline(pipeline);
@@ -3360,11 +3073,8 @@ void main() {
 
     const bool magentaPixel = pixel[0] >= 250u && pixel[1] <= 5u && pixel[2] >= 250u && pixel[3] >= 250u;
     if (!requireTrue(magentaPixel, "indexed draw must produce a magenta center pixel")) {
-        std::cerr << "center pixel rgba=("
-                  << static_cast<int>(pixel[0]) << ", "
-                  << static_cast<int>(pixel[1]) << ", "
-                  << static_cast<int>(pixel[2]) << ", "
-                  << static_cast<int>(pixel[3]) << ")\n";
+        std::cerr << "center pixel rgba=(" << static_cast<int>(pixel[0]) << ", " << static_cast<int>(pixel[1]) << ", "
+                  << static_cast<int>(pixel[2]) << ", " << static_cast<int>(pixel[3]) << ")\n";
         device.shutdown();
         return false;
     }
@@ -3374,8 +3084,7 @@ void main() {
     colorAttachment.clearColor[2] = 0.0f;
     RhiCommandList& isolatedCmd = beginTestCommands(device, commandPool);
     isolatedCmd.beginRendering(renderingInfo);
-    isolatedCmd.setViewport({0.0f, 0.0f, static_cast<float>(kWidth),
-                             static_cast<float>(kHeight), 0.0f, 1.0f});
+    isolatedCmd.setViewport({0.0f, 0.0f, static_cast<float>(kWidth), static_cast<float>(kHeight), 0.0f, 1.0f});
     isolatedCmd.setGraphicsPipeline(pipeline);
     isolatedCmd.drawIndexed(3u, 1u, 0u, 0, 0u);
     isolatedCmd.endRendering();
@@ -3383,15 +3092,14 @@ void main() {
     bool isolatedRejected = false;
     {
         ScopedErrorCapture capture;
-        isolatedRejected = isolatedCmd.end() &&
-            !device.submit({"IsolatedBindings.Submit", isolatedSubmission, 1u});
+        isolatedRejected = isolatedCmd.end() && !device.submit({"IsolatedBindings.Submit", isolatedSubmission, 1u});
     }
 
     std::array<uint8_t, 4> isolatedPixel{};
     glReadPixels(2, 2, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, isolatedPixel.data());
 
-    const bool preservedPixel = isolatedPixel[0] >= 250u && isolatedPixel[1] <= 5u &&
-        isolatedPixel[2] >= 250u && isolatedPixel[3] >= 250u;
+    const bool preservedPixel =
+        isolatedPixel[0] >= 250u && isolatedPixel[1] <= 5u && isolatedPixel[2] >= 250u && isolatedPixel[3] >= 250u;
     if (!requireTrue(isolatedRejected && commandPool->reset() && preservedPixel,
                      "missing bindings must reject the complete list without inheriting or executing prior state")) {
         device.shutdown();
@@ -3431,10 +3139,8 @@ bool testGlRhiDrawIndirect() {
         uint32_t baseInstance;
     };
     constexpr DrawArraysIndirectCommand kDrawCommand = {3u, 1u, 0u, 1u};
-    constexpr std::array<std::array<float, 4>, 2> kMetadata = {{
-        {{4.0f, 0.0f, 0.0f, 0.0f}},
-        {{0.0f, 0.0f, 0.0f, 0.0f}}
-    }};
+    constexpr std::array<std::array<float, 4>, 2> kMetadata = {
+        {{{4.0f, 0.0f, 0.0f, 0.0f}}, {{0.0f, 0.0f, 0.0f, 0.0f}}}};
     constexpr std::array<float, 4> kDrawColor = {0.0f, 1.0f, 1.0f, 1.0f};
     constexpr uint64_t kCommandOffset = 65536u;
     constexpr uint64_t kIndirectBufferSize = kCommandOffset + sizeof(DrawArraysIndirectCommand);
@@ -3444,8 +3150,7 @@ bool testGlRhiDrawIndirect() {
     RhiBufferDesc indirectBufferDesc;
     indirectBufferDesc.debugName = "fullscreen-indirect-command";
     indirectBufferDesc.size = kIndirectBufferSize;
-    indirectBufferDesc.usage = rhiFlag(RhiBufferUsage::Indirect) |
-                               rhiFlag(RhiBufferUsage::TransferDst);
+    indirectBufferDesc.usage = rhiFlag(RhiBufferUsage::Indirect) | rhiFlag(RhiBufferUsage::TransferDst);
     indirectBufferDesc.memoryUsage = RhiMemoryUsage::CpuToGpu;
     indirectBufferDesc.initialState = RhiResourceState::TransferDst;
     const RhiBufferHandle indirectBuffer = device.createBuffer(indirectBufferDesc, nullptr, 0u);
@@ -3457,11 +3162,9 @@ bool testGlRhiDrawIndirect() {
     RhiBufferDesc metadataBufferDesc;
     metadataBufferDesc.debugName = "terrain-contract-metadata";
     metadataBufferDesc.size = sizeof(kMetadata);
-    metadataBufferDesc.usage = rhiFlag(RhiBufferUsage::Storage) |
-                               rhiFlag(RhiBufferUsage::TransferDst);
+    metadataBufferDesc.usage = rhiFlag(RhiBufferUsage::Storage) | rhiFlag(RhiBufferUsage::TransferDst);
     metadataBufferDesc.initialState = RhiResourceState::StorageBuffer;
-    const RhiBufferHandle metadataBuffer =
-        device.createBuffer(metadataBufferDesc, kMetadata.data(), sizeof(kMetadata));
+    const RhiBufferHandle metadataBuffer = device.createBuffer(metadataBufferDesc, kMetadata.data(), sizeof(kMetadata));
     if (!requireTrue(metadataBuffer.isValid(), "terrain metadata buffer must be created")) {
         device.shutdown();
         return false;
@@ -3470,8 +3173,7 @@ bool testGlRhiDrawIndirect() {
     RhiBufferDesc drawParamsBufferDesc;
     drawParamsBufferDesc.debugName = "terrain-contract-draw-params";
     drawParamsBufferDesc.size = sizeof(kDrawColor);
-    drawParamsBufferDesc.usage = rhiFlag(RhiBufferUsage::Uniform) |
-                                 rhiFlag(RhiBufferUsage::TransferDst);
+    drawParamsBufferDesc.usage = rhiFlag(RhiBufferUsage::Uniform) | rhiFlag(RhiBufferUsage::TransferDst);
     drawParamsBufferDesc.initialState = RhiResourceState::UniformBuffer;
     const RhiBufferHandle drawParamsBuffer =
         device.createBuffer(drawParamsBufferDesc, kDrawColor.data(), sizeof(kDrawColor));
@@ -3554,14 +3256,8 @@ void main() {
 
     RhiBindGroupLayoutDesc bindGroupLayoutDesc;
     bindGroupLayoutDesc.debugName = "terrain-contract-bind-group-layout";
-    bindGroupLayoutDesc.entries.push_back({
-        0u,
-        RhiBindingType::StorageBuffer,
-        rhiFlag(RhiShaderStage::Vertex),
-        1u
-    });
-    const RhiBindGroupLayoutHandle bindGroupLayout =
-        device.createBindGroupLayout(bindGroupLayoutDesc);
+    bindGroupLayoutDesc.entries.push_back({0u, RhiBindingType::StorageBuffer, rhiFlag(RhiShaderStage::Vertex), 1u});
+    const RhiBindGroupLayoutHandle bindGroupLayout = device.createBindGroupLayout(bindGroupLayoutDesc);
     if (!requireTrue(bindGroupLayout.isValid(), "terrain bind group layout must be created")) {
         device.shutdown();
         return false;
@@ -3569,14 +3265,8 @@ void main() {
 
     RhiBindGroupLayoutDesc drawParamsLayoutDesc;
     drawParamsLayoutDesc.debugName = "terrain-contract-draw-params-layout";
-    drawParamsLayoutDesc.entries.push_back({
-        13u,
-        RhiBindingType::UniformBuffer,
-        rhiFlag(RhiShaderStage::Fragment),
-        1u
-    });
-    const RhiBindGroupLayoutHandle drawParamsLayout =
-        device.createBindGroupLayout(drawParamsLayoutDesc);
+    drawParamsLayoutDesc.entries.push_back({13u, RhiBindingType::UniformBuffer, rhiFlag(RhiShaderStage::Fragment), 1u});
+    const RhiBindGroupLayoutHandle drawParamsLayout = device.createBindGroupLayout(drawParamsLayoutDesc);
     if (!requireTrue(drawParamsLayout.isValid(), "terrain draw parameter layout must be created")) {
         device.shutdown();
         return false;
@@ -3597,11 +3287,8 @@ void main() {
     pipelineDesc.vertexShader = vertexShader;
     pipelineDesc.fragmentShader = fragmentShader;
     pipelineDesc.layout = pipelineLayout;
-    pipelineDesc.vertexInput.bindings.push_back({
-        0u,
-        static_cast<uint32_t>(sizeof(PackedBlockVertex)),
-        RhiVertexInputRate::Vertex
-    });
+    pipelineDesc.vertexInput.bindings.push_back(
+        {0u, static_cast<uint32_t>(sizeof(PackedBlockVertex)), RhiVertexInputRate::Vertex});
     pipelineDesc.vertexInput.attributes.push_back({11u, 0u, RhiVertexFormat::Uint, 0u});
     pipelineDesc.raster.cullMode = RhiCullMode::None;
     pipelineDesc.depthStencil.depthTestEnabled = false;
@@ -3666,9 +3353,8 @@ void main() {
     terrainVertices[0].posPacked = 0u;
     terrainVertices[1].posPacked = 1u;
     terrainVertices[2].posPacked = 2u;
-    if (!requireTrue(vertexPool.allocate(cmd, 3u, vertexRange) &&
-                     vertexPool.capacityVertices() == 5u &&
-                     vertexPool.upload(cmd, vertexRange, terrainVertices),
+    if (!requireTrue(vertexPool.allocate(cmd, 3u, vertexRange) && vertexPool.capacityVertices() == 5u &&
+                         vertexPool.upload(cmd, vertexRange, terrainVertices),
                      "terrain RHI vertex pool must expand and upload packed vertices")) {
         vertexPool.shutdown();
         device.shutdown();
@@ -3677,10 +3363,8 @@ void main() {
     std::vector<uint8_t> indirectUpload(kIndirectBufferSize, 0u);
     std::memcpy(indirectUpload.data() + kCommandOffset, &kDrawCommand, sizeof(kDrawCommand));
     cmd.updateBuffer(indirectBuffer, 0u, indirectUpload.data(), indirectUpload.size());
-    cmd.bufferBarrier({indirectBuffer, RhiResourceState::TransferDst,
-                       RhiResourceState::IndirectArgument});
-    cmd.textureBarrier({target, RhiResourceState::Undefined,
-                        RhiResourceState::RenderTarget});
+    cmd.bufferBarrier({indirectBuffer, RhiResourceState::TransferDst, RhiResourceState::IndirectArgument});
+    cmd.textureBarrier({target, RhiResourceState::Undefined, RhiResourceState::RenderTarget});
     cmd.beginRendering(renderingInfo);
     cmd.setViewport({0.0f, 0.0f, static_cast<float>(kWidth), static_cast<float>(kHeight), 0.0f, 1.0f});
     cmd.setGraphicsPipeline(pipeline);
@@ -3696,11 +3380,8 @@ void main() {
 
     const bool cyanPixel = pixel[0] <= 5u && pixel[1] >= 250u && pixel[2] >= 250u && pixel[3] >= 250u;
     if (!requireTrue(cyanPixel, "indirect draw must produce a cyan center pixel")) {
-        std::cerr << "center pixel rgba=("
-                  << static_cast<int>(pixel[0]) << ", "
-                  << static_cast<int>(pixel[1]) << ", "
-                  << static_cast<int>(pixel[2]) << ", "
-                  << static_cast<int>(pixel[3]) << ")\n";
+        std::cerr << "center pixel rgba=(" << static_cast<int>(pixel[0]) << ", " << static_cast<int>(pixel[1]) << ", "
+                  << static_cast<int>(pixel[2]) << ", " << static_cast<int>(pixel[3]) << ")\n";
         vertexPool.shutdown();
         device.shutdown();
         return false;
@@ -3742,12 +3423,8 @@ bool testGlRhiTerrainGBufferPipeline() {
     sourceOptions.preprocessorDefinitions.push_back("RHI_TERRAIN_MDI");
     sourceOptions.preprocessorDefinitions.push_back("RHI_TERRAIN_NORMAL_MAPS");
     sourceOptions.preprocessorDefinitions.push_back("RHI_TERRAIN_SPECULAR_MAPS");
-    const auto vertexSource = renderer::rhi::loadShaderSource(
-        "assets/shaders/chunk_gbuffer.vert",
-        sourceOptions);
-    const auto fragmentSource = renderer::rhi::loadShaderSource(
-        "assets/shaders/chunk_gbuffer.frag",
-        sourceOptions);
+    const auto vertexSource = renderer::rhi::loadShaderSource("assets/shaders/chunk_gbuffer.vert", sourceOptions);
+    const auto fragmentSource = renderer::rhi::loadShaderSource("assets/shaders/chunk_gbuffer.frag", sourceOptions);
     if (!requireTrue(vertexSource.has_value() && fragmentSource.has_value(),
                      "terrain GBuffer RHI shader sources must load")) {
         device.shutdown();
@@ -3767,39 +3444,25 @@ bool testGlRhiTerrainGBufferPipeline() {
     fragmentShaderDesc.source = fragmentSource->c_str();
     fragmentShaderDesc.sourceSize = fragmentSource->size();
     const RhiShaderHandle fragmentShader = device.createShader(fragmentShaderDesc);
-    if (!requireTrue(vertexShader.isValid() && fragmentShader.isValid(),
-                     "terrain GBuffer RHI shaders must compile")) {
+    if (!requireTrue(vertexShader.isValid() && fragmentShader.isValid(), "terrain GBuffer RHI shaders must compile")) {
         device.shutdown();
         return false;
     }
 
     RhiBindGroupLayoutDesc metadataLayoutDesc;
     metadataLayoutDesc.debugName = "Terrain.MetadataLayout";
-    metadataLayoutDesc.entries.push_back({
-        0u,
-        RhiBindingType::StorageBuffer,
-        rhiFlag(RhiShaderStage::Vertex),
-        1u
-    });
+    metadataLayoutDesc.entries.push_back({0u, RhiBindingType::StorageBuffer, rhiFlag(RhiShaderStage::Vertex), 1u});
     const RhiBindGroupLayoutHandle metadataLayout = device.createBindGroupLayout(metadataLayoutDesc);
 
     RhiBindGroupLayoutDesc materialLayoutDesc;
     materialLayoutDesc.debugName = "Terrain.GBufferMaterialLayout";
     constexpr std::array<uint32_t, 7> kTextureBindings = {0u, 3u, 4u, 9u, 10u, 11u, 12u};
     for (const uint32_t binding : kTextureBindings) {
-        materialLayoutDesc.entries.push_back({
-            binding,
-            RhiBindingType::CombinedTextureSampler,
-            rhiFlag(RhiShaderStage::Fragment),
-            1u
-        });
+        materialLayoutDesc.entries.push_back(
+            {binding, RhiBindingType::CombinedTextureSampler, rhiFlag(RhiShaderStage::Fragment), 1u});
     }
-    materialLayoutDesc.entries.push_back({
-        13u,
-        RhiBindingType::UniformBuffer,
-        rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment),
-        1u
-    });
+    materialLayoutDesc.entries.push_back(
+        {13u, RhiBindingType::UniformBuffer, rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment), 1u});
     const RhiBindGroupLayoutHandle materialLayout = device.createBindGroupLayout(materialLayoutDesc);
     if (!requireTrue(metadataLayout.isValid() && materialLayout.isValid(),
                      "terrain GBuffer bind group layouts must be created")) {
@@ -3824,26 +3487,17 @@ bool testGlRhiTerrainGBufferPipeline() {
     pipelineDesc.layout = pipelineLayout;
     pipelineDesc.vertexInput.bindings.push_back({0u, sizeof(uint32_t) * 4u, RhiVertexInputRate::Vertex});
     for (uint32_t attribute = 0u; attribute < 4u; ++attribute) {
-        pipelineDesc.vertexInput.attributes.push_back({
-            11u + attribute,
-            0u,
-            RhiVertexFormat::Uint,
-            attribute * static_cast<uint32_t>(sizeof(uint32_t))
-        });
+        pipelineDesc.vertexInput.attributes.push_back(
+            {11u + attribute, 0u, RhiVertexFormat::Uint, attribute * static_cast<uint32_t>(sizeof(uint32_t))});
     }
     pipelineDesc.raster.cullMode = RhiCullMode::Back;
     pipelineDesc.depthStencil.depthTestEnabled = true;
     pipelineDesc.depthStencil.depthWriteEnabled = true;
     pipelineDesc.depthStencil.depthCompare = RhiCompareOp::Less;
-    pipelineDesc.colorFormats = {
-        RhiTextureFormat::Rgba8Unorm,
-        RhiTextureFormat::Rgb10A2Unorm,
-        RhiTextureFormat::Rg8Unorm,
-        RhiTextureFormat::Rgba8Unorm,
-        RhiTextureFormat::Rgba8Unorm,
-        RhiTextureFormat::Rgba8Unorm,
-        RhiTextureFormat::Rg32Uint
-    };
+    pipelineDesc.colorFormats = {RhiTextureFormat::Rgba8Unorm, RhiTextureFormat::Rgb10A2Unorm,
+                                 RhiTextureFormat::Rg8Unorm,   RhiTextureFormat::Rgba8Unorm,
+                                 RhiTextureFormat::Rgba8Unorm, RhiTextureFormat::Rgba8Unorm,
+                                 RhiTextureFormat::Rg32Uint};
     pipelineDesc.depthFormat = RhiTextureFormat::Depth32Float;
     const RhiPipelineHandle pipeline = device.createGraphicsPipeline(pipelineDesc);
     if (!requireTrue(pipeline.isValid(), "terrain GBuffer RHI pipeline must be created")) {
@@ -3871,19 +3525,15 @@ bool testGlRhiTerrainTransparentPipeline() {
     std::unique_ptr<RhiCommandListPool> commandPool;
     RhiDeviceDesc deviceDesc = makeDeviceDesc();
     deviceDesc.debugName = "rhi_terrain_transparent_pipeline_test";
-    if (!requireTrue(device.init(deviceDesc),
-                     "OpenGL RHI device must initialize for transparent terrain pipeline")) {
+    if (!requireTrue(device.init(deviceDesc), "OpenGL RHI device must initialize for transparent terrain pipeline")) {
         return false;
     }
 
     renderer::rhi::RhiShaderSourceOptions sourceOptions;
     sourceOptions.preprocessorDefinitions.push_back("RHI_TERRAIN_LIT_MDI");
-    const auto vertexSource = renderer::rhi::loadShaderSource(
-        "assets/shaders/chunk_lit.vert",
-        sourceOptions);
-    const auto fragmentSource = renderer::rhi::loadShaderSource(
-        "assets/shaders/transparent_composite.frag",
-        sourceOptions);
+    const auto vertexSource = renderer::rhi::loadShaderSource("assets/shaders/chunk_lit.vert", sourceOptions);
+    const auto fragmentSource =
+        renderer::rhi::loadShaderSource("assets/shaders/transparent_composite.frag", sourceOptions);
     if (!requireTrue(vertexSource.has_value() && fragmentSource.has_value(),
                      "transparent terrain RHI shader sources must load")) {
         device.shutdown();
@@ -3910,32 +3560,17 @@ bool testGlRhiTerrainTransparentPipeline() {
     }
 
     RhiBindGroupLayoutDesc metadataLayoutDesc;
-    metadataLayoutDesc.entries.push_back({
-        0u,
-        RhiBindingType::StorageBuffer,
-        rhiFlag(RhiShaderStage::Vertex),
-        1u
-    });
+    metadataLayoutDesc.entries.push_back({0u, RhiBindingType::StorageBuffer, rhiFlag(RhiShaderStage::Vertex), 1u});
     const RhiBindGroupLayoutHandle metadataLayout = device.createBindGroupLayout(metadataLayoutDesc);
 
     RhiBindGroupLayoutDesc materialLayoutDesc;
-    constexpr std::array<uint32_t, 10> kTextureBindings = {
-        0u, 1u, 2u, 3u, 4u, 5u, 6u, 7u, 8u, 14u
-    };
+    constexpr std::array<uint32_t, 10> kTextureBindings = {0u, 1u, 2u, 3u, 4u, 5u, 6u, 7u, 8u, 14u};
     for (const uint32_t binding : kTextureBindings) {
-        materialLayoutDesc.entries.push_back({
-            binding,
-            RhiBindingType::CombinedTextureSampler,
-            rhiFlag(RhiShaderStage::Fragment),
-            1u
-        });
+        materialLayoutDesc.entries.push_back(
+            {binding, RhiBindingType::CombinedTextureSampler, rhiFlag(RhiShaderStage::Fragment), 1u});
     }
-    materialLayoutDesc.entries.push_back({
-        15u,
-        RhiBindingType::UniformBuffer,
-        rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment),
-        1u
-    });
+    materialLayoutDesc.entries.push_back(
+        {15u, RhiBindingType::UniformBuffer, rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment), 1u});
     const RhiBindGroupLayoutHandle materialLayout = device.createBindGroupLayout(materialLayoutDesc);
     if (!requireTrue(metadataLayout.isValid() && materialLayout.isValid(),
                      "transparent terrain bind group layouts must be created")) {
@@ -3947,8 +3582,7 @@ bool testGlRhiTerrainTransparentPipeline() {
     pipelineLayoutDesc.bindGroupLayouts.push_back(metadataLayout);
     pipelineLayoutDesc.bindGroupLayouts.push_back(materialLayout);
     const RhiPipelineLayoutHandle pipelineLayout = device.createPipelineLayout(pipelineLayoutDesc);
-    if (!requireTrue(pipelineLayout.isValid(),
-                     "transparent terrain pipeline layout must be created")) {
+    if (!requireTrue(pipelineLayout.isValid(), "transparent terrain pipeline layout must be created")) {
         device.shutdown();
         return false;
     }
@@ -3959,12 +3593,8 @@ bool testGlRhiTerrainTransparentPipeline() {
     pipelineDesc.layout = pipelineLayout;
     pipelineDesc.vertexInput.bindings.push_back({0u, sizeof(uint32_t) * 4u, RhiVertexInputRate::Vertex});
     for (uint32_t attribute = 0u; attribute < 4u; ++attribute) {
-        pipelineDesc.vertexInput.attributes.push_back({
-            11u + attribute,
-            0u,
-            RhiVertexFormat::Uint,
-            attribute * static_cast<uint32_t>(sizeof(uint32_t))
-        });
+        pipelineDesc.vertexInput.attributes.push_back(
+            {11u + attribute, 0u, RhiVertexFormat::Uint, attribute * static_cast<uint32_t>(sizeof(uint32_t))});
     }
     pipelineDesc.raster.cullMode = RhiCullMode::None;
     pipelineDesc.depthStencil.depthTestEnabled = true;
@@ -4005,19 +3635,14 @@ bool testGlRhiTerrainWaterPipeline() {
     std::unique_ptr<RhiCommandListPool> commandPool;
     RhiDeviceDesc deviceDesc = makeDeviceDesc();
     deviceDesc.debugName = "rhi_terrain_water_pipeline_test";
-    if (!requireTrue(device.init(deviceDesc),
-                     "OpenGL RHI device must initialize for water terrain pipeline")) {
+    if (!requireTrue(device.init(deviceDesc), "OpenGL RHI device must initialize for water terrain pipeline")) {
         return false;
     }
 
     renderer::rhi::RhiShaderSourceOptions sourceOptions;
     sourceOptions.preprocessorDefinitions.push_back("RHI_TERRAIN_WATER_MDI");
-    const auto vertexSource = renderer::rhi::loadShaderSource(
-        "assets/shaders/chunk_lit.vert",
-        sourceOptions);
-    const auto fragmentSource = renderer::rhi::loadShaderSource(
-        "assets/shaders/water_composite.frag",
-        sourceOptions);
+    const auto vertexSource = renderer::rhi::loadShaderSource("assets/shaders/chunk_lit.vert", sourceOptions);
+    const auto fragmentSource = renderer::rhi::loadShaderSource("assets/shaders/water_composite.frag", sourceOptions);
     if (!requireTrue(vertexSource.has_value() && fragmentSource.has_value(),
                      "water terrain RHI shader sources must load")) {
         device.shutdown();
@@ -4037,39 +3662,23 @@ bool testGlRhiTerrainWaterPipeline() {
     fragmentShaderDesc.source = fragmentSource->c_str();
     fragmentShaderDesc.sourceSize = fragmentSource->size();
     const RhiShaderHandle fragmentShader = device.createShader(fragmentShaderDesc);
-    if (!requireTrue(vertexShader.isValid() && fragmentShader.isValid(),
-                     "water terrain RHI shaders must compile")) {
+    if (!requireTrue(vertexShader.isValid() && fragmentShader.isValid(), "water terrain RHI shaders must compile")) {
         device.shutdown();
         return false;
     }
 
     RhiBindGroupLayoutDesc metadataLayoutDesc;
-    metadataLayoutDesc.entries.push_back({
-        0u,
-        RhiBindingType::StorageBuffer,
-        rhiFlag(RhiShaderStage::Vertex),
-        1u
-    });
+    metadataLayoutDesc.entries.push_back({0u, RhiBindingType::StorageBuffer, rhiFlag(RhiShaderStage::Vertex), 1u});
     const RhiBindGroupLayoutHandle metadataLayout = device.createBindGroupLayout(metadataLayoutDesc);
 
     RhiBindGroupLayoutDesc materialLayoutDesc;
-    constexpr std::array<uint32_t, 9> kTextureBindings = {
-        0u, 5u, 6u, 7u, 8u, 9u, 10u, 11u, 12u
-    };
+    constexpr std::array<uint32_t, 9> kTextureBindings = {0u, 5u, 6u, 7u, 8u, 9u, 10u, 11u, 12u};
     for (const uint32_t binding : kTextureBindings) {
-        materialLayoutDesc.entries.push_back({
-            binding,
-            RhiBindingType::CombinedTextureSampler,
-            rhiFlag(RhiShaderStage::Fragment),
-            1u
-        });
+        materialLayoutDesc.entries.push_back(
+            {binding, RhiBindingType::CombinedTextureSampler, rhiFlag(RhiShaderStage::Fragment), 1u});
     }
-    materialLayoutDesc.entries.push_back({
-        13u,
-        RhiBindingType::UniformBuffer,
-        rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment),
-        1u
-    });
+    materialLayoutDesc.entries.push_back(
+        {13u, RhiBindingType::UniformBuffer, rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment), 1u});
     const RhiBindGroupLayoutHandle materialLayout = device.createBindGroupLayout(materialLayoutDesc);
     if (!requireTrue(metadataLayout.isValid() && materialLayout.isValid(),
                      "water terrain bind group layouts must be created")) {
@@ -4092,12 +3701,8 @@ bool testGlRhiTerrainWaterPipeline() {
     pipelineDesc.layout = pipelineLayout;
     pipelineDesc.vertexInput.bindings.push_back({0u, sizeof(uint32_t) * 4u, RhiVertexInputRate::Vertex});
     for (uint32_t attribute = 0u; attribute < 4u; ++attribute) {
-        pipelineDesc.vertexInput.attributes.push_back({
-            11u + attribute,
-            0u,
-            RhiVertexFormat::Uint,
-            attribute * static_cast<uint32_t>(sizeof(uint32_t))
-        });
+        pipelineDesc.vertexInput.attributes.push_back(
+            {11u + attribute, 0u, RhiVertexFormat::Uint, attribute * static_cast<uint32_t>(sizeof(uint32_t))});
     }
     pipelineDesc.raster.cullMode = RhiCullMode::None;
     pipelineDesc.depthStencil.depthTestEnabled = true;
@@ -4131,19 +3736,15 @@ bool testGlRhiTerrainForwardPipeline() {
     std::unique_ptr<RhiCommandListPool> commandPool;
     RhiDeviceDesc deviceDesc = makeDeviceDesc();
     deviceDesc.debugName = "rhi_terrain_forward_pipeline_test";
-    if (!requireTrue(device.init(deviceDesc),
-                     "OpenGL RHI device must initialize for forward terrain pipeline")) {
+    if (!requireTrue(device.init(deviceDesc), "OpenGL RHI device must initialize for forward terrain pipeline")) {
         return false;
     }
 
     renderer::rhi::RhiShaderSourceOptions sourceOptions;
     sourceOptions.preprocessorDefinitions.push_back("RHI_TERRAIN_FORWARD_MDI");
-    const auto vertexSource = renderer::rhi::loadShaderSource(
-        "assets/shaders/chunk_lit.vert",
-        sourceOptions);
-    const auto fragmentSource = renderer::rhi::loadShaderSource(
-        "assets/shaders/forward_basic_terrain.frag",
-        sourceOptions);
+    const auto vertexSource = renderer::rhi::loadShaderSource("assets/shaders/chunk_lit.vert", sourceOptions);
+    const auto fragmentSource =
+        renderer::rhi::loadShaderSource("assets/shaders/forward_basic_terrain.frag", sourceOptions);
     if (!requireTrue(vertexSource.has_value() && fragmentSource.has_value(),
                      "forward terrain RHI shader sources must load")) {
         device.shutdown();
@@ -4161,36 +3762,22 @@ bool testGlRhiTerrainForwardPipeline() {
     fragmentShaderDesc.source = fragmentSource->c_str();
     fragmentShaderDesc.sourceSize = fragmentSource->size();
     const RhiShaderHandle fragmentShader = device.createShader(fragmentShaderDesc);
-    if (!requireTrue(vertexShader.isValid() && fragmentShader.isValid(),
-                     "forward terrain RHI shaders must compile")) {
+    if (!requireTrue(vertexShader.isValid() && fragmentShader.isValid(), "forward terrain RHI shaders must compile")) {
         device.shutdown();
         return false;
     }
 
     RhiBindGroupLayoutDesc metadataLayoutDesc;
-    metadataLayoutDesc.entries.push_back({
-        0u,
-        RhiBindingType::StorageBuffer,
-        rhiFlag(RhiShaderStage::Vertex),
-        1u
-    });
+    metadataLayoutDesc.entries.push_back({0u, RhiBindingType::StorageBuffer, rhiFlag(RhiShaderStage::Vertex), 1u});
     const RhiBindGroupLayoutHandle metadataLayout = device.createBindGroupLayout(metadataLayoutDesc);
 
     RhiBindGroupLayoutDesc materialLayoutDesc;
     for (uint32_t binding = 0u; binding < 5u; ++binding) {
-        materialLayoutDesc.entries.push_back({
-            binding,
-            RhiBindingType::CombinedTextureSampler,
-            rhiFlag(RhiShaderStage::Fragment),
-            1u
-        });
+        materialLayoutDesc.entries.push_back(
+            {binding, RhiBindingType::CombinedTextureSampler, rhiFlag(RhiShaderStage::Fragment), 1u});
     }
-    materialLayoutDesc.entries.push_back({
-        5u,
-        RhiBindingType::UniformBuffer,
-        rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment),
-        1u
-    });
+    materialLayoutDesc.entries.push_back(
+        {5u, RhiBindingType::UniformBuffer, rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment), 1u});
     const RhiBindGroupLayoutHandle materialLayout = device.createBindGroupLayout(materialLayoutDesc);
 
     RhiPipelineLayoutDesc pipelineLayoutDesc;
@@ -4209,12 +3796,8 @@ bool testGlRhiTerrainForwardPipeline() {
     pipelineDesc.layout = pipelineLayout;
     pipelineDesc.vertexInput.bindings.push_back({0u, sizeof(uint32_t) * 4u, RhiVertexInputRate::Vertex});
     for (uint32_t attribute = 0u; attribute < 4u; ++attribute) {
-        pipelineDesc.vertexInput.attributes.push_back({
-            11u + attribute,
-            0u,
-            RhiVertexFormat::Uint,
-            attribute * static_cast<uint32_t>(sizeof(uint32_t))
-        });
+        pipelineDesc.vertexInput.attributes.push_back(
+            {11u + attribute, 0u, RhiVertexFormat::Uint, attribute * static_cast<uint32_t>(sizeof(uint32_t))});
     }
     pipelineDesc.raster.cullMode = RhiCullMode::None;
     pipelineDesc.depthStencil.depthTestEnabled = true;
@@ -4240,8 +3823,7 @@ bool testGlRhiTerrainForwardPipeline() {
 
 bool testGlRhiRg32UintAttachmentClear() {
     GlTestContext context;
-    if (!requireTrue(context.init(),
-                     "OpenGL test context must initialize for RG32Uint attachment clear")) {
+    if (!requireTrue(context.init(), "OpenGL test context must initialize for RG32Uint attachment clear")) {
         return false;
     }
 
@@ -4249,8 +3831,7 @@ bool testGlRhiRg32UintAttachmentClear() {
     std::unique_ptr<RhiCommandListPool> commandPool;
     RhiDeviceDesc deviceDesc = makeDeviceDesc();
     deviceDesc.debugName = "rhi_rg32_uint_attachment_clear_test";
-    if (!requireTrue(device.init(deviceDesc),
-                     "OpenGL RHI device must initialize for RG32Uint attachment clear")) {
+    if (!requireTrue(device.init(deviceDesc), "OpenGL RHI device must initialize for RG32Uint attachment clear")) {
         return false;
     }
 
@@ -4259,8 +3840,7 @@ bool testGlRhiRg32UintAttachmentClear() {
     textureDesc.format = RhiTextureFormat::Rg32Uint;
     textureDesc.width = 1u;
     textureDesc.height = 1u;
-    textureDesc.usage = rhiFlag(RhiTextureUsage::ColorAttachment) |
-                        rhiFlag(RhiTextureUsage::TransferSrc);
+    textureDesc.usage = rhiFlag(RhiTextureUsage::ColorAttachment) | rhiFlag(RhiTextureUsage::TransferSrc);
     const RhiTextureHandle texture = device.createTexture(textureDesc, nullptr);
     RhiTextureViewDesc viewDesc;
     viewDesc.texture = texture;
@@ -4270,12 +3850,10 @@ bool testGlRhiRg32UintAttachmentClear() {
     RhiBufferDesc readbackDesc;
     readbackDesc.debugName = "rg32-uint-clear-readback";
     readbackDesc.size = sizeof(uint32_t) * 2u;
-    readbackDesc.usage = rhiFlag(RhiBufferUsage::TransferDst) |
-                         rhiFlag(RhiBufferUsage::MapRead);
+    readbackDesc.usage = rhiFlag(RhiBufferUsage::TransferDst) | rhiFlag(RhiBufferUsage::MapRead);
     readbackDesc.memoryUsage = RhiMemoryUsage::GpuToCpu;
     readbackDesc.initialState = RhiResourceState::TransferDst;
-    const RhiBufferHandle readback =
-        device.createBuffer(readbackDesc, nullptr, 0u);
+    const RhiBufferHandle readback = device.createBuffer(readbackDesc, nullptr, 0u);
     if (!requireTrue(texture.isValid() && view.isValid() && readback.isValid(),
                      "RG32Uint clear resources must be created")) {
         device.shutdown();
@@ -4283,8 +3861,7 @@ bool testGlRhiRg32UintAttachmentClear() {
     }
 
     RhiCommandList& invalidCommands = beginTestCommands(device, commandPool);
-    invalidCommands.textureBarrier({texture, RhiResourceState::Undefined,
-                                    RhiResourceState::RenderTarget});
+    invalidCommands.textureBarrier({texture, RhiResourceState::Undefined, RhiResourceState::RenderTarget});
     RhiColorAttachment invalidAttachment;
     invalidAttachment.view = view;
     invalidAttachment.loadOp = RhiLoadOp::Clear;
@@ -4300,9 +3877,8 @@ bool testGlRhiRg32UintAttachmentClear() {
     bool rejectedFloatClear = false;
     {
         ScopedErrorCapture capture;
-        rejectedFloatClear = invalidCommands.end() &&
-            !device.submit({"Rg32Uint.InvalidFloatClear.Submit",
-                            invalidSubmission, 1u});
+        rejectedFloatClear =
+            invalidCommands.end() && !device.submit({"Rg32Uint.InvalidFloatClear.Submit", invalidSubmission, 1u});
     }
     if (!requireTrue(rejectedFloatClear && commandPool->reset(),
                      "float clear values must be rejected for unsigned integer attachments")) {
@@ -4310,11 +3886,9 @@ bool testGlRhiRg32UintAttachmentClear() {
         return false;
     }
 
-    constexpr std::array<uint32_t, 2> kClearValue{
-        0x12345678u, 0x9abcdef0u};
+    constexpr std::array<uint32_t, 2> kClearValue{0x12345678u, 0x9abcdef0u};
     RhiCommandList& commandList = beginTestCommands(device, commandPool);
-    commandList.textureBarrier({texture, RhiResourceState::Undefined,
-                                RhiResourceState::RenderTarget});
+    commandList.textureBarrier({texture, RhiResourceState::Undefined, RhiResourceState::RenderTarget});
     RhiColorAttachment attachment;
     attachment.view = view;
     attachment.loadOp = RhiLoadOp::Clear;
@@ -4329,8 +3903,7 @@ bool testGlRhiRg32UintAttachmentClear() {
     renderingInfo.colorAttachmentCount = 1u;
     commandList.beginRendering(renderingInfo);
     commandList.endRendering();
-    commandList.textureBarrier({texture, RhiResourceState::RenderTarget,
-                                RhiResourceState::TransferSrc});
+    commandList.textureBarrier({texture, RhiResourceState::RenderTarget, RhiResourceState::TransferSrc});
     RhiTextureBufferCopy copy;
     copy.srcTexture = texture;
     copy.dstBuffer = readback;
@@ -4339,20 +3912,16 @@ bool testGlRhiRg32UintAttachmentClear() {
     copy.width = 1u;
     copy.height = 1u;
     commandList.copyTextureToBuffer(copy);
-    commandList.bufferBarrier({readback, RhiResourceState::TransferDst,
-                               RhiResourceState::HostRead});
+    commandList.bufferBarrier({readback, RhiResourceState::TransferDst, RhiResourceState::HostRead});
     submitTestCommands(device, commandPool, commandList);
 
-    const auto* mapped = static_cast<const uint32_t*>(
-        device.mapBuffer(readback, 0u, sizeof(kClearValue)));
-    const bool clearPreserved = mapped != nullptr &&
-        mapped[0] == kClearValue[0] && mapped[1] == kClearValue[1];
+    const auto* mapped = static_cast<const uint32_t*>(device.mapBuffer(readback, 0u, sizeof(kClearValue)));
+    const bool clearPreserved = mapped != nullptr && mapped[0] == kClearValue[0] && mapped[1] == kClearValue[1];
     if (mapped != nullptr) {
         device.unmapBuffer(readback);
     }
-    const bool passed = requireTrue(
-        clearPreserved,
-        "RG32Uint attachment clear must preserve both unsigned integer channels");
+    const bool passed =
+        requireTrue(clearPreserved, "RG32Uint attachment clear must preserve both unsigned integer channels");
 
     device.destroyBuffer(readback);
     device.destroyTextureView(view);
@@ -4371,8 +3940,7 @@ bool testGlRhiTextureSubresourceStates() {
     std::unique_ptr<RhiCommandListPool> commandPool;
     RhiDeviceDesc deviceDesc = makeDeviceDesc();
     deviceDesc.debugName = "rhi_texture_subresource_state_test";
-    if (!requireTrue(device.init(deviceDesc),
-                     "OpenGL RHI device must initialize for texture subresource states")) {
+    if (!requireTrue(device.init(deviceDesc), "OpenGL RHI device must initialize for texture subresource states")) {
         return false;
     }
 
@@ -4384,16 +3952,14 @@ bool testGlRhiTextureSubresourceStates() {
     textureDesc.height = 4u;
     textureDesc.depthOrLayers = 2u;
     textureDesc.mipLevels = 2u;
-    textureDesc.usage = rhiFlag(RhiTextureUsage::ColorAttachment) |
-                        rhiFlag(RhiTextureUsage::Sampled);
+    textureDesc.usage = rhiFlag(RhiTextureUsage::ColorAttachment) | rhiFlag(RhiTextureUsage::Sampled);
     const RhiTextureHandle texture = device.createTexture(textureDesc, nullptr);
     if (!requireTrue(texture.isValid(), "subresource state texture must be created")) {
         device.shutdown();
         return false;
     }
 
-    const auto createView = [&device, texture](const uint32_t mip,
-                                               const uint32_t layer) {
+    const auto createView = [&device, texture](const uint32_t mip, const uint32_t layer) {
         RhiTextureViewDesc viewDesc;
         viewDesc.texture = texture;
         viewDesc.viewType = RhiTextureViewType::Texture2D;
@@ -4406,22 +3972,20 @@ bool testGlRhiTextureSubresourceStates() {
     const RhiTextureViewHandle mip0Layer0View = createView(0u, 0u);
     const RhiTextureViewHandle mip0Layer1View = createView(0u, 1u);
     const RhiTextureViewHandle mip1Layer0View = createView(1u, 0u);
-    if (!requireTrue(mip0Layer0View.isValid() && mip0Layer1View.isValid() &&
-                     mip1Layer0View.isValid(),
+    if (!requireTrue(mip0Layer0View.isValid() && mip0Layer1View.isValid() && mip1Layer0View.isValid(),
                      "independent subresource views must be created")) {
         device.shutdown();
         return false;
     }
 
     RhiCommandList& invalidCommands = beginTestCommands(device, commandPool);
-    invalidCommands.textureBarrier({texture, RhiResourceState::RenderTarget,
-                                    RhiResourceState::ShaderRead, 0u, 1u, 1u, 1u});
+    invalidCommands.textureBarrier(
+        {texture, RhiResourceState::RenderTarget, RhiResourceState::ShaderRead, 0u, 1u, 1u, 1u});
     RhiCommandList* invalidSubmission[] = {&invalidCommands};
     bool rejected = false;
     {
         ScopedErrorCapture capture;
-        rejected = invalidCommands.end() &&
-            !device.submit({"InvalidSubresourceState.Submit", invalidSubmission, 1u});
+        rejected = invalidCommands.end() && !device.submit({"InvalidSubresourceState.Submit", invalidSubmission, 1u});
     }
     if (!requireTrue(rejected && commandPool->reset(),
                      "oldState mismatch must reject the complete subresource submission")) {
@@ -4430,15 +3994,11 @@ bool testGlRhiTextureSubresourceStates() {
     }
 
     RhiCommandList& commandList = beginTestCommands(device, commandPool);
-    commandList.textureBarrier({texture, RhiResourceState::Undefined,
-                                RhiResourceState::RenderTarget, 0u, 1u, 0u, 1u});
-    commandList.textureBarrier({texture, RhiResourceState::Undefined,
-                                RhiResourceState::RenderTarget, 0u, 1u, 1u, 1u});
-    commandList.textureBarrier({texture, RhiResourceState::Undefined,
-                                RhiResourceState::RenderTarget, 1u, 1u, 0u, 1u});
+    commandList.textureBarrier({texture, RhiResourceState::Undefined, RhiResourceState::RenderTarget, 0u, 1u, 0u, 1u});
+    commandList.textureBarrier({texture, RhiResourceState::Undefined, RhiResourceState::RenderTarget, 0u, 1u, 1u, 1u});
+    commandList.textureBarrier({texture, RhiResourceState::Undefined, RhiResourceState::RenderTarget, 1u, 1u, 0u, 1u});
 
-    const auto clearSubresource = [&commandList](const RhiTextureViewHandle view,
-                                                 const uint32_t extent,
+    const auto clearSubresource = [&commandList](const RhiTextureViewHandle view, const uint32_t extent,
                                                  const float red) {
         RhiColorAttachment attachment;
         attachment.view = view;
@@ -4458,9 +4018,8 @@ bool testGlRhiTextureSubresourceStates() {
     clearSubresource(mip1Layer0View, 2u, 0.75f);
     submitTestCommands(device, commandPool, commandList);
 
-    const bool noError = requireTrue(
-        glGetError() == GL_NO_ERROR,
-        "oldState rejection must preserve independent mip and layer states");
+    const bool noError =
+        requireTrue(glGetError() == GL_NO_ERROR, "oldState rejection must preserve independent mip and layer states");
     device.destroyTextureView(mip1Layer0View);
     device.destroyTextureView(mip0Layer1View);
     device.destroyTextureView(mip0Layer0View);
@@ -4471,8 +4030,7 @@ bool testGlRhiTextureSubresourceStates() {
 
 bool testGlRhiDeferredCommandPayloadOwnership() {
     GlTestContext context;
-    if (!requireTrue(context.init(),
-                     "OpenGL test context must initialize for deferred command payload ownership")) {
+    if (!requireTrue(context.init(), "OpenGL test context must initialize for deferred command payload ownership")) {
         return false;
     }
 
@@ -4485,27 +4043,23 @@ bool testGlRhiDeferredCommandPayloadOwnership() {
         return false;
     }
 
-    constexpr std::array<uint32_t, 4> kInitialBufferData{
-        0x11111111u, 0x22222222u, 0x33333333u, 0x44444444u};
-    constexpr std::array<uint32_t, 4> kRecordedBufferData{
-        0xaaaaaaaau, 0xbbbbbbbbu, 0xccccccccu, 0xddddddddu};
+    constexpr std::array<uint32_t, 4> kInitialBufferData{0x11111111u, 0x22222222u, 0x33333333u, 0x44444444u};
+    constexpr std::array<uint32_t, 4> kRecordedBufferData{0xaaaaaaaau, 0xbbbbbbbbu, 0xccccccccu, 0xddddddddu};
     RhiBufferDesc bufferDesc;
     bufferDesc.debugName = "deferred-update-buffer";
     bufferDesc.size = sizeof(kInitialBufferData);
-    bufferDesc.usage = rhiFlag(RhiBufferUsage::TransferDst) |
-                       rhiFlag(RhiBufferUsage::MapRead);
+    bufferDesc.usage = rhiFlag(RhiBufferUsage::TransferDst) | rhiFlag(RhiBufferUsage::MapRead);
     bufferDesc.memoryUsage = RhiMemoryUsage::GpuToCpu;
     bufferDesc.initialState = RhiResourceState::HostRead;
-    const RhiBufferHandle buffer = device.createBuffer(
-        bufferDesc, kInitialBufferData.data(), sizeof(kInitialBufferData));
+    const RhiBufferHandle buffer =
+        device.createBuffer(bufferDesc, kInitialBufferData.data(), sizeof(kInitialBufferData));
 
     RhiTextureDesc textureDesc;
     textureDesc.debugName = "deferred-render-target";
     textureDesc.format = RhiTextureFormat::Rgba8Unorm;
     textureDesc.width = 1u;
     textureDesc.height = 1u;
-    textureDesc.usage = rhiFlag(RhiTextureUsage::ColorAttachment) |
-                        rhiFlag(RhiTextureUsage::TransferSrc);
+    textureDesc.usage = rhiFlag(RhiTextureUsage::ColorAttachment) | rhiFlag(RhiTextureUsage::TransferSrc);
     const RhiTextureHandle texture = device.createTexture(textureDesc, nullptr);
     RhiTextureViewDesc viewDesc;
     viewDesc.texture = texture;
@@ -4534,16 +4088,12 @@ bool testGlRhiDeferredCommandPayloadOwnership() {
         device.shutdown();
         return false;
     }
-    commandList.bufferBarrier({buffer, RhiResourceState::HostRead,
-                               RhiResourceState::TransferDst});
+    commandList.bufferBarrier({buffer, RhiResourceState::HostRead, RhiResourceState::TransferDst});
     commandList.updateBuffer(buffer, 0u, updatePayload.data(), sizeof(updatePayload));
-    commandList.bufferBarrier({buffer, RhiResourceState::TransferDst,
-                               RhiResourceState::HostRead});
-    commandList.textureBarrier({texture, RhiResourceState::Undefined,
-                                RhiResourceState::RenderTarget});
+    commandList.bufferBarrier({buffer, RhiResourceState::TransferDst, RhiResourceState::HostRead});
+    commandList.textureBarrier({texture, RhiResourceState::Undefined, RhiResourceState::RenderTarget});
     commandList.beginRendering(renderingInfo);
-    if (!requireTrue(!commandList.end(),
-                     "command list end must reject an active rendering scope")) {
+    if (!requireTrue(!commandList.end(), "command list end must reject an active rendering scope")) {
         device.shutdown();
         return false;
     }
@@ -4553,15 +4103,13 @@ bool testGlRhiDeferredCommandPayloadOwnership() {
     attachment.clearColor[0] = 0.0f;
     attachment.clearColor[1] = 1.0f;
 
-    const auto* beforeSubmit = static_cast<const uint32_t*>(
-        device.mapBuffer(buffer, 0u, sizeof(kInitialBufferData)));
-    const bool unchangedBeforeSubmit = beforeSubmit != nullptr &&
-        std::memcmp(beforeSubmit, kInitialBufferData.data(), sizeof(kInitialBufferData)) == 0;
+    const auto* beforeSubmit = static_cast<const uint32_t*>(device.mapBuffer(buffer, 0u, sizeof(kInitialBufferData)));
+    const bool unchangedBeforeSubmit = beforeSubmit != nullptr && std::memcmp(beforeSubmit, kInitialBufferData.data(),
+                                                                              sizeof(kInitialBufferData)) == 0;
     if (beforeSubmit != nullptr) {
         device.unmapBuffer(buffer);
     }
-    if (!requireTrue(unchangedBeforeSubmit,
-                     "recording commands must not modify the OpenGL buffer before submission")) {
+    if (!requireTrue(unchangedBeforeSubmit, "recording commands must not modify the OpenGL buffer before submission")) {
         device.shutdown();
         return false;
     }
@@ -4573,10 +4121,9 @@ bool testGlRhiDeferredCommandPayloadOwnership() {
         return false;
     }
     device.waitIdle();
-    const auto* afterSubmit = static_cast<const uint32_t*>(
-        device.mapBuffer(buffer, 0u, sizeof(kRecordedBufferData)));
-    const bool recordedUpdatePreserved = afterSubmit != nullptr &&
-        std::memcmp(afterSubmit, kRecordedBufferData.data(), sizeof(kRecordedBufferData)) == 0;
+    const auto* afterSubmit = static_cast<const uint32_t*>(device.mapBuffer(buffer, 0u, sizeof(kRecordedBufferData)));
+    const bool recordedUpdatePreserved = afterSubmit != nullptr && std::memcmp(afterSubmit, kRecordedBufferData.data(),
+                                                                               sizeof(kRecordedBufferData)) == 0;
     if (afterSubmit != nullptr) {
         device.unmapBuffer(buffer);
     }
@@ -4585,14 +4132,12 @@ bool testGlRhiDeferredCommandPayloadOwnership() {
     RhiBufferDesc readbackDesc;
     readbackDesc.debugName = "deferred-render-readback";
     readbackDesc.size = pixel.size();
-    readbackDesc.usage = rhiFlag(RhiBufferUsage::TransferDst) |
-                         rhiFlag(RhiBufferUsage::MapRead);
+    readbackDesc.usage = rhiFlag(RhiBufferUsage::TransferDst) | rhiFlag(RhiBufferUsage::MapRead);
     readbackDesc.memoryUsage = RhiMemoryUsage::GpuToCpu;
     readbackDesc.initialState = RhiResourceState::TransferDst;
     const RhiBufferHandle readback = device.createBuffer(readbackDesc, nullptr, 0u);
     RhiCommandList& readbackCommands = beginTestCommands(device, commandPool);
-    readbackCommands.textureBarrier({texture, RhiResourceState::RenderTarget,
-                                     RhiResourceState::TransferSrc});
+    readbackCommands.textureBarrier({texture, RhiResourceState::RenderTarget, RhiResourceState::TransferSrc});
     RhiTextureBufferCopy copy;
     copy.srcTexture = texture;
     copy.dstBuffer = readback;
@@ -4601,22 +4146,19 @@ bool testGlRhiDeferredCommandPayloadOwnership() {
     copy.width = 1u;
     copy.height = 1u;
     readbackCommands.copyTextureToBuffer(copy);
-    readbackCommands.bufferBarrier({readback, RhiResourceState::TransferDst,
-                                    RhiResourceState::HostRead});
+    readbackCommands.bufferBarrier({readback, RhiResourceState::TransferDst, RhiResourceState::HostRead});
     submitTestCommands(device, commandPool, readbackCommands);
     device.waitIdle();
-    const auto* mappedPixel = static_cast<const uint8_t*>(
-        device.mapBuffer(readback, 0u, pixel.size()));
+    const auto* mappedPixel = static_cast<const uint8_t*>(device.mapBuffer(readback, 0u, pixel.size()));
     if (mappedPixel != nullptr) {
         std::memcpy(pixel.data(), mappedPixel, pixel.size());
         device.unmapBuffer(readback);
     }
 
-    const bool recordedAttachmentPreserved = mappedPixel != nullptr &&
-        pixel[0] >= 250u && pixel[1] <= 5u && pixel[2] <= 5u && pixel[3] >= 250u;
-    const bool passed = requireTrue(
-        recordedUpdatePreserved,
-        "updateBuffer replay must own a deep copy of its recorded source bytes") &&
+    const bool recordedAttachmentPreserved =
+        mappedPixel != nullptr && pixel[0] >= 250u && pixel[1] <= 5u && pixel[2] <= 5u && pixel[3] >= 250u;
+    const bool passed =
+        requireTrue(recordedUpdatePreserved, "updateBuffer replay must own a deep copy of its recorded source bytes") &&
         requireTrue(recordedAttachmentPreserved,
                     "beginRendering replay must own a deep copy of its attachment payload");
 
@@ -4630,8 +4172,7 @@ bool testGlRhiDeferredCommandPayloadOwnership() {
 
 bool testGlRhiRejectsDestroyedRecordedResourcesAtomically() {
     GlTestContext context;
-    if (!requireTrue(context.init(),
-                     "OpenGL test context must initialize for stale command resources")) {
+    if (!requireTrue(context.init(), "OpenGL test context must initialize for stale command resources")) {
         return false;
     }
 
@@ -4639,35 +4180,29 @@ bool testGlRhiRejectsDestroyedRecordedResourcesAtomically() {
     std::unique_ptr<RhiCommandListPool> commandPool;
     RhiDeviceDesc deviceDesc = makeDeviceDesc();
     deviceDesc.debugName = "rhi_stale_recorded_resource_test";
-    if (!requireTrue(device.init(deviceDesc),
-                     "OpenGL RHI device must initialize for stale command resources")) {
+    if (!requireTrue(device.init(deviceDesc), "OpenGL RHI device must initialize for stale command resources")) {
         return false;
     }
 
-    constexpr std::array<uint32_t, 4> kInitialSentinel{
-        0x11111111u, 0x22222222u, 0x33333333u, 0x44444444u};
-    constexpr std::array<uint32_t, 4> kRecordedSentinel{
-        0xaaaaaaaau, 0xbbbbbbbbu, 0xccccccccu, 0xddddddddu};
+    constexpr std::array<uint32_t, 4> kInitialSentinel{0x11111111u, 0x22222222u, 0x33333333u, 0x44444444u};
+    constexpr std::array<uint32_t, 4> kRecordedSentinel{0xaaaaaaaau, 0xbbbbbbbbu, 0xccccccccu, 0xddddddddu};
     constexpr std::array<uint8_t, 4> kTexturePixel{255u, 0u, 0u, 255u};
 
     RhiBufferDesc sentinelDesc;
     sentinelDesc.debugName = "stale-command-sentinel";
     sentinelDesc.size = sizeof(kInitialSentinel);
-    sentinelDesc.usage = rhiFlag(RhiBufferUsage::TransferDst) |
-                         rhiFlag(RhiBufferUsage::MapRead);
+    sentinelDesc.usage = rhiFlag(RhiBufferUsage::TransferDst) | rhiFlag(RhiBufferUsage::MapRead);
     sentinelDesc.memoryUsage = RhiMemoryUsage::GpuToCpu;
     sentinelDesc.initialState = RhiResourceState::HostRead;
-    const RhiBufferHandle sentinel = device.createBuffer(
-        sentinelDesc, kInitialSentinel.data(), sizeof(kInitialSentinel));
+    const RhiBufferHandle sentinel =
+        device.createBuffer(sentinelDesc, kInitialSentinel.data(), sizeof(kInitialSentinel));
 
     RhiBufferDesc stagingDesc;
     stagingDesc.debugName = "destroyed-texture-upload-staging";
     stagingDesc.size = kTexturePixel.size();
-    stagingDesc.usage = rhiFlag(RhiBufferUsage::TransferSrc) |
-                        rhiFlag(RhiBufferUsage::TransferDst);
+    stagingDesc.usage = rhiFlag(RhiBufferUsage::TransferSrc) | rhiFlag(RhiBufferUsage::TransferDst);
     stagingDesc.initialState = RhiResourceState::TransferSrc;
-    const RhiBufferHandle staging = device.createBuffer(
-        stagingDesc, kTexturePixel.data(), kTexturePixel.size());
+    const RhiBufferHandle staging = device.createBuffer(stagingDesc, kTexturePixel.data(), kTexturePixel.size());
 
     RhiTextureDesc textureDesc;
     textureDesc.debugName = "stale-command-upload-target";
@@ -4688,34 +4223,26 @@ bool testGlRhiRejectsDestroyedRecordedResourcesAtomically() {
     upload.width = 1u;
     upload.height = 1u;
     RhiCommandList& commandList = beginTestCommands(device, commandPool);
-    commandList.bufferBarrier({sentinel, RhiResourceState::HostRead,
-                               RhiResourceState::TransferDst});
-    commandList.updateBuffer(sentinel, 0u,
-                             kRecordedSentinel.data(), sizeof(kRecordedSentinel));
-    commandList.textureBarrier({texture, RhiResourceState::Undefined,
-                                RhiResourceState::TransferDst});
+    commandList.bufferBarrier({sentinel, RhiResourceState::HostRead, RhiResourceState::TransferDst});
+    commandList.updateBuffer(sentinel, 0u, kRecordedSentinel.data(), sizeof(kRecordedSentinel));
+    commandList.textureBarrier({texture, RhiResourceState::Undefined, RhiResourceState::TransferDst});
     commandList.copyBufferToTexture(upload);
     device.destroyBuffer(staging);
     RhiCommandList* commandLists[] = {&commandList};
-    const bool rejectedSubmit = commandList.end() &&
-        !device.submit({"stale-recorded-resource-submit", commandLists, 1u});
+    const bool rejectedSubmit =
+        commandList.end() && !device.submit({"stale-recorded-resource-submit", commandLists, 1u});
 
-    const auto* mapped = static_cast<const uint32_t*>(
-        device.mapBuffer(sentinel, 0u, sizeof(kInitialSentinel)));
-    const bool submitWasAtomic = mapped != nullptr &&
-        std::memcmp(mapped, kInitialSentinel.data(), sizeof(kInitialSentinel)) == 0;
+    const auto* mapped = static_cast<const uint32_t*>(device.mapBuffer(sentinel, 0u, sizeof(kInitialSentinel)));
+    const bool submitWasAtomic =
+        mapped != nullptr && std::memcmp(mapped, kInitialSentinel.data(), sizeof(kInitialSentinel)) == 0;
     if (mapped != nullptr) {
         device.unmapBuffer(sentinel);
     }
     const bool resetSucceeded = commandPool->reset();
-    const bool passed = requireTrue(
-        rejectedSubmit,
-        "submission must reject a command list that references a destroyed resource") &&
-        requireTrue(
-        submitWasAtomic,
-        "submission must execute no commands when a recorded resource was destroyed") &&
-        requireTrue(resetSucceeded,
-                    "rejected command lists must allow their pool to reset") &&
+    const bool passed =
+        requireTrue(rejectedSubmit, "submission must reject a command list that references a destroyed resource") &&
+        requireTrue(submitWasAtomic, "submission must execute no commands when a recorded resource was destroyed") &&
+        requireTrue(resetSucceeded, "rejected command lists must allow their pool to reset") &&
         requireTrue(commandList.state() == RhiCommandListState::Initial,
                     "rejected command lists must become resettable");
 
@@ -4728,47 +4255,38 @@ bool testGlRhiRejectsDestroyedRecordedResourcesAtomically() {
 
 bool testGlRhiSemanticDryRunRejectsMultiListSubmissionAtomically() {
     GlTestContext context;
-    if (!requireTrue(context.init(),
-                     "OpenGL test context must initialize for semantic dry-run validation")) {
+    if (!requireTrue(context.init(), "OpenGL test context must initialize for semantic dry-run validation")) {
         return false;
     }
 
     GlRhiDevice device;
     RhiDeviceDesc deviceDesc = makeDeviceDesc();
     deviceDesc.debugName = "rhi_semantic_dry_run_test";
-    if (!requireTrue(device.init(deviceDesc),
-                     "OpenGL RHI device must initialize for semantic dry-run validation")) {
+    if (!requireTrue(device.init(deviceDesc), "OpenGL RHI device must initialize for semantic dry-run validation")) {
         return false;
     }
 
-    constexpr std::array<uint32_t, 4> kInitialData{
-        0x11111111u, 0x22222222u, 0x33333333u, 0x44444444u};
-    constexpr std::array<uint32_t, 4> kUpdatedData{
-        0xaaaaaaaau, 0xbbbbbbbbu, 0xccccccccu, 0xddddddddu};
+    constexpr std::array<uint32_t, 4> kInitialData{0x11111111u, 0x22222222u, 0x33333333u, 0x44444444u};
+    constexpr std::array<uint32_t, 4> kUpdatedData{0xaaaaaaaau, 0xbbbbbbbbu, 0xccccccccu, 0xddddddddu};
 
     RhiBufferDesc sourceDesc;
     sourceDesc.debugName = "semantic-dry-run-source";
     sourceDesc.size = sizeof(kInitialData);
-    sourceDesc.usage = rhiFlag(RhiBufferUsage::TransferSrc) |
-                       rhiFlag(RhiBufferUsage::TransferDst);
+    sourceDesc.usage = rhiFlag(RhiBufferUsage::TransferSrc) | rhiFlag(RhiBufferUsage::TransferDst);
     sourceDesc.initialState = RhiResourceState::TransferDst;
-    const RhiBufferHandle source = device.createBuffer(
-        sourceDesc, kInitialData.data(), sizeof(kInitialData));
+    const RhiBufferHandle source = device.createBuffer(sourceDesc, kInitialData.data(), sizeof(kInitialData));
 
     RhiBufferDesc destinationDesc;
     destinationDesc.debugName = "semantic-dry-run-destination";
     destinationDesc.size = sizeof(kInitialData);
-    destinationDesc.usage = rhiFlag(RhiBufferUsage::TransferDst) |
-                            rhiFlag(RhiBufferUsage::MapRead);
+    destinationDesc.usage = rhiFlag(RhiBufferUsage::TransferDst) | rhiFlag(RhiBufferUsage::MapRead);
     destinationDesc.memoryUsage = RhiMemoryUsage::GpuToCpu;
     destinationDesc.initialState = RhiResourceState::HostRead;
-    const RhiBufferHandle destination = device.createBuffer(
-        destinationDesc, kInitialData.data(), sizeof(kInitialData));
+    const RhiBufferHandle destination = device.createBuffer(destinationDesc, kInitialData.data(), sizeof(kInitialData));
 
     RhiBufferDesc contractDesc = destinationDesc;
     contractDesc.debugName = "semantic-dry-run-contract";
-    const RhiBufferHandle contract = device.createBuffer(
-        contractDesc, kInitialData.data(), sizeof(kInitialData));
+    const RhiBufferHandle contract = device.createBuffer(contractDesc, kInitialData.data(), sizeof(kInitialData));
     if (!requireTrue(source.isValid() && destination.isValid() && contract.isValid(),
                      "semantic dry-run buffers must be created")) {
         device.shutdown();
@@ -4777,34 +4295,25 @@ bool testGlRhiSemanticDryRunRejectsMultiListSubmissionAtomically() {
 
     std::unique_ptr<RhiCommandListPool> submissionPool =
         device.createCommandListPool({"SemanticDryRun.SubmissionPool", 2u, 4096u});
-    RhiCommandList* first = submissionPool != nullptr
-        ? submissionPool->acquire(RhiCommandListType::Graphics)
-        : nullptr;
-    RhiCommandList* second = submissionPool != nullptr
-        ? submissionPool->acquire(RhiCommandListType::Graphics)
-        : nullptr;
+    RhiCommandList* first = submissionPool != nullptr ? submissionPool->acquire(RhiCommandListType::Graphics) : nullptr;
+    RhiCommandList* second =
+        submissionPool != nullptr ? submissionPool->acquire(RhiCommandListType::Graphics) : nullptr;
     if (!requireTrue(first != nullptr && second != nullptr &&
-                     first->begin({"SemanticDryRun.First", RhiCommandListType::Graphics}) &&
-                     second->begin({"SemanticDryRun.Second", RhiCommandListType::Graphics}),
+                         first->begin({"SemanticDryRun.First", RhiCommandListType::Graphics}) &&
+                         second->begin({"SemanticDryRun.Second", RhiCommandListType::Graphics}),
                      "semantic dry-run command lists must begin recording")) {
         device.shutdown();
         return false;
     }
 
     first->updateBuffer(source, 0u, kUpdatedData.data(), sizeof(kUpdatedData));
-    first->bufferBarrier({source, RhiResourceState::TransferDst,
-                          RhiResourceState::TransferSrc});
-    first->bufferBarrier({destination, RhiResourceState::HostRead,
-                          RhiResourceState::TransferDst});
+    first->bufferBarrier({source, RhiResourceState::TransferDst, RhiResourceState::TransferSrc});
+    first->bufferBarrier({destination, RhiResourceState::HostRead, RhiResourceState::TransferDst});
     first->copyBuffer({source, destination, 0u, 0u, sizeof(kUpdatedData)});
-    first->bufferBarrier({destination, RhiResourceState::TransferDst,
-                          RhiResourceState::HostRead});
-    first->bufferBarrier({source, RhiResourceState::TransferSrc,
-                          RhiResourceState::TransferDst});
-    second->bufferBarrier({contract, RhiResourceState::TransferDst,
-                           RhiResourceState::HostRead});
-    if (!requireTrue(first->end() && second->end(),
-                     "semantic dry-run command lists must become executable")) {
+    first->bufferBarrier({destination, RhiResourceState::TransferDst, RhiResourceState::HostRead});
+    first->bufferBarrier({source, RhiResourceState::TransferSrc, RhiResourceState::TransferDst});
+    second->bufferBarrier({contract, RhiResourceState::TransferDst, RhiResourceState::HostRead});
+    if (!requireTrue(first->end() && second->end(), "semantic dry-run command lists must become executable")) {
         device.shutdown();
         return false;
     }
@@ -4817,29 +4326,26 @@ bool testGlRhiSemanticDryRunRejectsMultiListSubmissionAtomically() {
         rejected = !device.submit({"SemanticDryRun.Rejected", submitted, 2u});
         rejectionOutput = capture.output();
     }
-    const auto* afterRejectedSubmit = static_cast<const uint32_t*>(
-        device.mapBuffer(destination, 0u, sizeof(kInitialData)));
+    const auto* afterRejectedSubmit =
+        static_cast<const uint32_t*>(device.mapBuffer(destination, 0u, sizeof(kInitialData)));
     const bool destinationUnchanged = afterRejectedSubmit != nullptr &&
-        std::memcmp(afterRejectedSubmit, kInitialData.data(), sizeof(kInitialData)) == 0;
+                                      std::memcmp(afterRejectedSubmit, kInitialData.data(), sizeof(kInitialData)) == 0;
     if (afterRejectedSubmit != nullptr) {
         device.unmapBuffer(destination);
     }
-    if (!requireTrue(rejected &&
-                     rejectionOutput.find("semantic validation") != std::string::npos,
+    if (!requireTrue(rejected && rejectionOutput.find("semantic validation") != std::string::npos,
                      "submit must reject a later semantic error during dry-run validation") ||
         !requireTrue(first->state() == RhiCommandListState::Executable &&
-                     second->state() == RhiCommandListState::Executable,
+                         second->state() == RhiCommandListState::Executable,
                      "dry-run rejection must preserve every command list as executable") ||
-        !requireTrue(destinationUnchanged,
-                     "dry-run rejection must execute neither updateBuffer nor copyBuffer")) {
+        !requireTrue(destinationUnchanged, "dry-run rejection must execute neither updateBuffer nor copyBuffer")) {
         device.shutdown();
         return false;
     }
 
     std::unique_ptr<RhiCommandListPool> correctionPool;
     RhiCommandList& correction = beginTestCommands(device, correctionPool);
-    correction.bufferBarrier({contract, RhiResourceState::HostRead,
-                              RhiResourceState::TransferDst});
+    correction.bufferBarrier({contract, RhiResourceState::HostRead, RhiResourceState::TransferDst});
     submitTestCommands(device, correctionPool, correction);
 
     if (!requireTrue(device.submit({"SemanticDryRun.Corrected", submitted, 2u}),
@@ -4848,22 +4354,19 @@ bool testGlRhiSemanticDryRunRejectsMultiListSubmissionAtomically() {
         return false;
     }
     device.waitIdle();
-    const auto* afterCorrectedSubmit = static_cast<const uint32_t*>(
-        device.mapBuffer(destination, 0u, sizeof(kUpdatedData)));
+    const auto* afterCorrectedSubmit =
+        static_cast<const uint32_t*>(device.mapBuffer(destination, 0u, sizeof(kUpdatedData)));
     const bool updatedAndCopied = afterCorrectedSubmit != nullptr &&
-        std::memcmp(afterCorrectedSubmit, kUpdatedData.data(), sizeof(kUpdatedData)) == 0;
+                                  std::memcmp(afterCorrectedSubmit, kUpdatedData.data(), sizeof(kUpdatedData)) == 0;
     if (afterCorrectedSubmit != nullptr) {
         device.unmapBuffer(destination);
     }
 
-    const bool passed = requireTrue(
-        updatedAndCopied,
-        "corrected resubmission must execute the original updateBuffer and copyBuffer") &&
-        requireTrue(first->state() == RhiCommandListState::Initial &&
-                    second->state() == RhiCommandListState::Initial,
+    const bool passed =
+        requireTrue(updatedAndCopied, "corrected resubmission must execute the original updateBuffer and copyBuffer") &&
+        requireTrue(first->state() == RhiCommandListState::Initial && second->state() == RhiCommandListState::Initial,
                     "completed corrected submission must reclaim both command lists") &&
-        requireTrue(submissionPool->reset(),
-                    "semantic dry-run submission pool must reset after completion");
+        requireTrue(submissionPool->reset(), "semantic dry-run submission pool must reset after completion");
 
     device.destroyBuffer(contract);
     device.destroyBuffer(destination);
@@ -4875,23 +4378,19 @@ bool testGlRhiSemanticDryRunRejectsMultiListSubmissionAtomically() {
 
 bool testGlRhiCommandListTypeContracts() {
     GlTestContext context;
-    if (!requireTrue(context.init(),
-                     "OpenGL test context must initialize for command-list type contracts")) {
+    if (!requireTrue(context.init(), "OpenGL test context must initialize for command-list type contracts")) {
         return false;
     }
 
     GlRhiDevice device;
     RhiDeviceDesc deviceDesc = makeDeviceDesc();
     deviceDesc.debugName = "rhi_command_list_type_contract_test";
-    if (!requireTrue(device.init(deviceDesc),
-                     "OpenGL RHI device must initialize for command-list type contracts")) {
+    if (!requireTrue(device.init(deviceDesc), "OpenGL RHI device must initialize for command-list type contracts")) {
         return false;
     }
 
-    std::unique_ptr<RhiCommandListPool> pool =
-        device.createCommandListPool({"CommandTypeContract.Pool", 1u, 4096u});
-    if (!requireTrue(pool != nullptr,
-                     "command-list type contract pool must be created") ||
+    std::unique_ptr<RhiCommandListPool> pool = device.createCommandListPool({"CommandTypeContract.Pool", 1u, 4096u});
+    if (!requireTrue(pool != nullptr, "command-list type contract pool must be created") ||
         !requireTrue(pool->acquire(static_cast<RhiCommandListType>(255u)) == nullptr,
                      "command-list pool must reject unknown command-list types")) {
         device.shutdown();
@@ -4900,8 +4399,7 @@ bool testGlRhiCommandListTypeContracts() {
 
     const auto beginTyped = [&pool](const RhiCommandListType type) -> RhiCommandList* {
         RhiCommandList* commandList = pool->acquire(type);
-        if (commandList == nullptr ||
-            !commandList->begin({"CommandTypeContract.Commands", type})) {
+        if (commandList == nullptr || !commandList->begin({"CommandTypeContract.Commands", type})) {
             return nullptr;
         }
         return commandList;
@@ -4909,9 +4407,7 @@ bool testGlRhiCommandListTypeContracts() {
     const auto resetExecutable = [&pool](RhiCommandList& commandList) {
         return commandList.end() && pool->reset();
     };
-    const auto rejects = [&device, &beginTyped](
-                             const RhiCommandListType type,
-                             const auto& recordIllegalCommand) {
+    const auto rejects = [&device, &beginTyped](const RhiCommandListType type, const auto& recordIllegalCommand) {
         RhiCommandList* commandList = beginTyped(type);
         if (commandList == nullptr) {
             return false;
@@ -4919,15 +4415,12 @@ bool testGlRhiCommandListTypeContracts() {
         recordIllegalCommand(*commandList);
         const bool endRejected = !commandList->end();
         RhiCommandList* submitted[] = {commandList};
-        const bool submitRejected = !device.submit(
-            {"CommandTypeContract.InvalidSubmit", submitted, 1u});
-        return endRejected && submitRejected &&
-               commandList->state() == RhiCommandListState::Initial;
+        const bool submitRejected = !device.submit({"CommandTypeContract.InvalidSubmit", submitted, 1u});
+        return endRejected && submitRejected && commandList->state() == RhiCommandListState::Initial;
     };
 
     RhiCommandList* graphics = beginTyped(RhiCommandListType::Graphics);
-    if (!requireTrue(graphics != nullptr,
-                     "graphics command list must begin")) {
+    if (!requireTrue(graphics != nullptr, "graphics command list must begin")) {
         device.shutdown();
         return false;
     }
@@ -4943,8 +4436,7 @@ bool testGlRhiCommandListTypeContracts() {
     }
 
     RhiCommandList* compute = beginTyped(RhiCommandListType::Compute);
-    if (!requireTrue(compute != nullptr,
-                     "compute command list must begin")) {
+    if (!requireTrue(compute != nullptr, "compute command list must begin")) {
         device.shutdown();
         return false;
     }
@@ -4960,8 +4452,7 @@ bool testGlRhiCommandListTypeContracts() {
     }
 
     RhiCommandList* transfer = beginTyped(RhiCommandListType::Transfer);
-    if (!requireTrue(transfer != nullptr,
-                     "transfer command list must begin")) {
+    if (!requireTrue(transfer != nullptr, "transfer command list must begin")) {
         device.shutdown();
         return false;
     }
@@ -4976,20 +4467,17 @@ bool testGlRhiCommandListTypeContracts() {
     }
 
     RhiCommandList* openLabel = beginTyped(RhiCommandListType::Transfer);
-    if (!requireTrue(openLabel != nullptr,
-                     "debug-label scope command list must begin")) {
+    if (!requireTrue(openLabel != nullptr, "debug-label scope command list must begin")) {
         device.shutdown();
         return false;
     }
     openLabel->beginDebugLabel("open-label", glm::vec4(1.0f));
-    if (!requireTrue(!openLabel->end(),
-                     "command list end must reject an open debug-label scope")) {
+    if (!requireTrue(!openLabel->end(), "command list end must reject an open debug-label scope")) {
         device.shutdown();
         return false;
     }
     openLabel->endDebugLabel();
-    if (!requireTrue(resetExecutable(*openLabel),
-                     "a closed debug-label scope must remain executable")) {
+    if (!requireTrue(resetExecutable(*openLabel), "a closed debug-label scope must remain executable")) {
         device.shutdown();
         return false;
     }
@@ -4997,39 +4485,25 @@ bool testGlRhiCommandListTypeContracts() {
     RhiRenderingInfo renderingInfo;
     const bool negativeContracts =
         requireTrue(rejects(RhiCommandListType::Compute,
-                            [&renderingInfo](RhiCommandList& commands) {
-                                commands.beginRendering(renderingInfo);
-                            }),
+                            [&renderingInfo](RhiCommandList& commands) { commands.beginRendering(renderingInfo); }),
                     "compute command lists must reject rendering commands") &&
-        requireTrue(rejects(RhiCommandListType::Compute,
-                            [](RhiCommandList& commands) {
-                                commands.setGraphicsPipeline({});
-                            }),
-                    "compute command lists must reject graphics pipeline commands") &&
-        requireTrue(rejects(RhiCommandListType::Compute,
-                            [](RhiCommandList& commands) {
-                                commands.draw(3u, 1u, 0u, 0u);
-                            }),
-                    "compute command lists must reject draw commands") &&
-        requireTrue(rejects(RhiCommandListType::Transfer,
-                            [](RhiCommandList& commands) {
-                                commands.setComputePipeline({});
-                            }),
-                    "transfer command lists must reject compute pipeline commands") &&
-        requireTrue(rejects(RhiCommandListType::Transfer,
-                            [](RhiCommandList& commands) {
-                                commands.dispatch(1u, 1u, 1u);
-                            }),
-                    "transfer command lists must reject dispatch commands") &&
-        requireTrue(rejects(RhiCommandListType::Transfer,
-                            [](RhiCommandList& commands) {
-                                commands.setBindGroup(0u, {});
-                            }),
-                    "transfer command lists must reject descriptor binding commands") &&
+        requireTrue(
+            rejects(RhiCommandListType::Compute, [](RhiCommandList& commands) { commands.setGraphicsPipeline({}); }),
+            "compute command lists must reject graphics pipeline commands") &&
+        requireTrue(
+            rejects(RhiCommandListType::Compute, [](RhiCommandList& commands) { commands.draw(3u, 1u, 0u, 0u); }),
+            "compute command lists must reject draw commands") &&
+        requireTrue(
+            rejects(RhiCommandListType::Transfer, [](RhiCommandList& commands) { commands.setComputePipeline({}); }),
+            "transfer command lists must reject compute pipeline commands") &&
+        requireTrue(
+            rejects(RhiCommandListType::Transfer, [](RhiCommandList& commands) { commands.dispatch(1u, 1u, 1u); }),
+            "transfer command lists must reject dispatch commands") &&
+        requireTrue(
+            rejects(RhiCommandListType::Transfer, [](RhiCommandList& commands) { commands.setBindGroup(0u, {}); }),
+            "transfer command lists must reject descriptor binding commands") &&
         requireTrue(rejects(RhiCommandListType::Graphics,
-                            [](RhiCommandList& commands) {
-                                commands.drawIndexed(3u, 1u, 0u, 0, 0u);
-                            }),
+                            [](RhiCommandList& commands) { commands.drawIndexed(3u, 1u, 0u, 0, 0u); }),
                     "draw commands must require an active rendering scope") &&
         requireTrue(rejects(RhiCommandListType::Graphics,
                             [&renderingInfo](RhiCommandList& commands) {
@@ -5049,15 +4523,10 @@ bool testGlRhiCommandListTypeContracts() {
                                 commands.beginRendering(renderingInfo);
                             }),
                     "rendering scopes must reject nesting") &&
-        requireTrue(rejects(RhiCommandListType::Transfer,
-                            [](RhiCommandList& commands) {
-                                commands.endDebugLabel();
-                            }),
+        requireTrue(rejects(RhiCommandListType::Transfer, [](RhiCommandList& commands) { commands.endDebugLabel(); }),
                     "debug labels must reject unmatched ends") &&
         requireTrue(rejects(RhiCommandListType::Transfer,
-                            [](RhiCommandList& commands) {
-                                commands.insertDebugMarker(nullptr, glm::vec4(1.0f));
-                            }),
+                            [](RhiCommandList& commands) { commands.insertDebugMarker(nullptr, glm::vec4(1.0f)); }),
                     "debug markers must reject empty names");
 
     device.shutdown();
@@ -5066,16 +4535,14 @@ bool testGlRhiCommandListTypeContracts() {
 
 bool testGlRhiIndependentCommandListPools() {
     GlTestContext context;
-    if (!requireTrue(context.init(),
-                     "OpenGL test context must initialize for independent command pools")) {
+    if (!requireTrue(context.init(), "OpenGL test context must initialize for independent command pools")) {
         return false;
     }
 
     GlRhiDevice device;
     RhiDeviceDesc deviceDesc = makeDeviceDesc();
     deviceDesc.debugName = "rhi_independent_command_pool_test";
-    if (!requireTrue(device.init(deviceDesc),
-                     "OpenGL RHI device must initialize for independent command pools")) {
+    if (!requireTrue(device.init(deviceDesc), "OpenGL RHI device must initialize for independent command pools")) {
         return false;
     }
 
@@ -5088,24 +4555,18 @@ bool testGlRhiIndependentCommandListPools() {
     bool releaseWorkers = false;
     std::thread workers[2];
     for (uint32_t index = 0u; index < 2u; ++index) {
-        workers[index] = std::thread([&device, &workerPools, &workerCommandLists,
-                                      &workerRecorded, &workerMutex, &workerCondition,
-                                      &readyWorkerCount, &releaseWorkers, index]() {
+        workers[index] = std::thread([&device, &workerPools, &workerCommandLists, &workerRecorded, &workerMutex,
+                                      &workerCondition, &readyWorkerCount, &releaseWorkers, index]() {
             RhiCommandListPoolDesc poolDesc;
             poolDesc.debugName = index == 0u ? "WorkerPool0" : "WorkerPool1";
             poolDesc.initialCommandListCapacity = 2u;
-            std::unique_ptr<RhiCommandListPool> ownedPool =
-                device.createCommandListPool(poolDesc);
-            RhiCommandList* commandList = ownedPool != nullptr
-                ? ownedPool->acquire(RhiCommandListType::Graphics)
-                : nullptr;
+            std::unique_ptr<RhiCommandListPool> ownedPool = device.createCommandListPool(poolDesc);
+            RhiCommandList* commandList =
+                ownedPool != nullptr ? ownedPool->acquire(RhiCommandListType::Graphics) : nullptr;
             bool recorded = false;
-            if (commandList != nullptr &&
-                commandList->begin(
-                    {index == 0u ? "WorkerCommands0" : "WorkerCommands1",
-                     RhiCommandListType::Graphics})) {
-                commandList->insertDebugMarker(
-                    index == 0u ? "worker-zero" : "worker-one", glm::vec4(1.0f));
+            if (commandList != nullptr && commandList->begin({index == 0u ? "WorkerCommands0" : "WorkerCommands1",
+                                                              RhiCommandListType::Graphics})) {
+                commandList->insertDebugMarker(index == 0u ? "worker-zero" : "worker-one", glm::vec4(1.0f));
                 recorded = commandList->end();
             }
             std::unique_lock<std::mutex> workerLock(workerMutex);
@@ -5114,16 +4575,12 @@ bool testGlRhiIndependentCommandListPools() {
             workerRecorded[index] = recorded;
             ++readyWorkerCount;
             workerCondition.notify_all();
-            workerCondition.wait(workerLock, [&releaseWorkers]() {
-                return releaseWorkers;
-            });
+            workerCondition.wait(workerLock, [&releaseWorkers]() { return releaseWorkers; });
         });
     }
     {
         std::unique_lock<std::mutex> workerLock(workerMutex);
-        workerCondition.wait(workerLock, [&readyWorkerCount]() {
-            return readyWorkerCount == 2u;
-        });
+        workerCondition.wait(workerLock, [&readyWorkerCount]() { return readyWorkerCount == 2u; });
     }
     const auto finishWorkers = [&]() {
         {
@@ -5136,23 +4593,19 @@ bool testGlRhiIndependentCommandListPools() {
         }
     };
 
-    if (!requireTrue(workerRecorded[0] && workerRecorded[1] &&
-                     workerCommandLists[0] != workerCommandLists[1],
+    if (!requireTrue(workerRecorded[0] && workerRecorded[1] && workerCommandLists[0] != workerCommandLists[1],
                      "two worker threads must record independent command lists from two pools")) {
         finishWorkers();
         device.shutdown();
         return false;
     }
-    if (!requireTrue(
-            workerPools[0]->acquire(RhiCommandListType::Graphics) == nullptr &&
-            !workerPools[1]->reset(),
-            "pool acquire and reset must reject a thread other than the pool owner")) {
+    if (!requireTrue(workerPools[0]->acquire(RhiCommandListType::Graphics) == nullptr && !workerPools[1]->reset(),
+                     "pool acquire and reset must reject a thread other than the pool owner")) {
         finishWorkers();
         device.shutdown();
         return false;
     }
-    if (!requireTrue(device.submit(
-            {"WorkerPools.Submit", workerCommandLists, 2u}),
+    if (!requireTrue(device.submit({"WorkerPools.Submit", workerCommandLists, 2u}),
                      "device thread must submit independently recorded worker command lists")) {
         finishWorkers();
         device.shutdown();
@@ -5161,10 +4614,8 @@ bool testGlRhiIndependentCommandListPools() {
     device.waitIdle();
     finishWorkers();
 
-    std::unique_ptr<RhiCommandListPool> multiListPool =
-        device.createCommandListPool({"MultiListPool", 2u, 4096u});
-    if (!requireTrue(multiListPool != nullptr,
-                     "multi-list pool must be created")) {
+    std::unique_ptr<RhiCommandListPool> multiListPool = device.createCommandListPool({"MultiListPool", 2u, 4096u});
+    if (!requireTrue(multiListPool != nullptr, "multi-list pool must be created")) {
         device.shutdown();
         return false;
     }
@@ -5172,10 +4623,8 @@ bool testGlRhiIndependentCommandListPools() {
     RhiCommandList* second = multiListPool->acquire(RhiCommandListType::Graphics);
     if (!requireTrue(first != nullptr && second != nullptr && first != second,
                      "one pool must return multiple distinct stable command-list addresses") ||
-        !requireTrue(first->begin({"MultiList.First", RhiCommandListType::Graphics}) &&
-                     first->end() &&
-                     second->begin({"MultiList.Second", RhiCommandListType::Graphics}) &&
-                     second->end(),
+        !requireTrue(first->begin({"MultiList.First", RhiCommandListType::Graphics}) && first->end() &&
+                         second->begin({"MultiList.Second", RhiCommandListType::Graphics}) && second->end(),
                      "multiple lists from one pool must record independently")) {
         device.shutdown();
         return false;
@@ -5183,11 +4632,9 @@ bool testGlRhiIndependentCommandListPools() {
     RhiCommandList* multiSubmit[] = {first, second};
     if (!requireTrue(device.submit({"MultiList.Submit", multiSubmit, 2u}),
                      "one submission must accept multiple executable command lists") ||
-        !requireTrue(first->state() == RhiCommandListState::Pending &&
-                     second->state() == RhiCommandListState::Pending,
+        !requireTrue(first->state() == RhiCommandListState::Pending && second->state() == RhiCommandListState::Pending,
                      "submitted command lists must remain pending until completion is reclaimed") ||
-        !requireTrue(!multiListPool->reset(),
-                     "command-list pool reset must reject pending command lists")) {
+        !requireTrue(!multiListPool->reset(), "command-list pool reset must reject pending command lists")) {
         device.shutdown();
         return false;
     }
@@ -5195,14 +4642,12 @@ bool testGlRhiIndependentCommandListPools() {
     const bool resetAfterCompletion = multiListPool->reset();
     multiListPool.reset();
     device.shutdown();
-    return requireTrue(resetAfterCompletion,
-                       "command-list pool reset must succeed after pending work completes");
+    return requireTrue(resetAfterCompletion, "command-list pool reset must succeed after pending work completes");
 }
 
 bool testGlRhiCommandListPoolLifetimeContracts() {
     GlTestContext context;
-    if (!requireTrue(context.init(),
-                     "OpenGL test context must initialize for command-pool lifetime contracts")) {
+    if (!requireTrue(context.init(), "OpenGL test context must initialize for command-pool lifetime contracts")) {
         return false;
     }
 
@@ -5214,19 +4659,15 @@ bool testGlRhiCommandListPoolLifetimeContracts() {
         return false;
     }
 
-    std::unique_ptr<RhiCommandListPool> survivingPool =
-        device->createCommandListPool({"SurvivingPool", 1u, 4096u});
-    RhiCommandList* commandList = survivingPool != nullptr
-        ? survivingPool->acquire(RhiCommandListType::Graphics)
-        : nullptr;
+    std::unique_ptr<RhiCommandListPool> survivingPool = device->createCommandListPool({"SurvivingPool", 1u, 4096u});
+    RhiCommandList* commandList =
+        survivingPool != nullptr ? survivingPool->acquire(RhiCommandListType::Graphics) : nullptr;
     if (!requireTrue(commandList != nullptr &&
-                     commandList->begin({"SurvivingPool.Recording",
-                                         RhiCommandListType::Graphics}),
+                         commandList->begin({"SurvivingPool.Recording", RhiCommandListType::Graphics}),
                      "lifetime test command list must begin recording") ||
-        !requireTrue(!survivingPool->reset(),
-                     "command-pool reset must reject a recording command list") ||
+        !requireTrue(!survivingPool->reset(), "command-pool reset must reject a recording command list") ||
         !requireTrue(commandList->end() && survivingPool->reset() &&
-                     commandList->state() == RhiCommandListState::Initial,
+                         commandList->state() == RhiCommandListState::Initial,
                      "command-pool reset must discard executable command lists")) {
         device->shutdown();
         return false;
@@ -5234,16 +4675,14 @@ bool testGlRhiCommandListPoolLifetimeContracts() {
 
     commandList = survivingPool->acquire(RhiCommandListType::Graphics);
     if (!requireTrue(commandList != nullptr &&
-                     commandList->begin({"SurvivingPool.Executable",
-                                         RhiCommandListType::Graphics}) &&
-                     commandList->end(),
+                         commandList->begin({"SurvivingPool.Executable", RhiCommandListType::Graphics}) &&
+                         commandList->end(),
                      "device-first destruction test command list must become executable")) {
         device->shutdown();
         return false;
     }
     device.reset();
-    if (!requireTrue(survivingPool->reset() &&
-                     commandList->state() == RhiCommandListState::Initial,
+    if (!requireTrue(survivingPool->reset() && commandList->state() == RhiCommandListState::Initial,
                      "a pool surviving its device must safely discard executable command lists") ||
         !requireTrue(survivingPool->acquire(RhiCommandListType::Graphics) == nullptr,
                      "a pool detached from its destroyed device must reject acquisition")) {
@@ -5259,17 +4698,13 @@ bool testGlRhiCommandListPoolLifetimeContracts() {
     }
     std::unique_ptr<RhiCommandListPool> pendingPool =
         pendingDevice.createCommandListPool({"PendingDestructionPool", 1u, 4096u});
-    RhiCommandList* pendingList = pendingPool != nullptr
-        ? pendingPool->acquire(RhiCommandListType::Graphics)
-        : nullptr;
+    RhiCommandList* pendingList = pendingPool != nullptr ? pendingPool->acquire(RhiCommandListType::Graphics) : nullptr;
     RhiSubmissionToken pendingToken;
     RhiCommandList* pendingLists[] = {pendingList};
     if (!requireTrue(pendingList != nullptr &&
-                     pendingList->begin({"PendingDestruction.Commands",
-                                         RhiCommandListType::Graphics}) &&
-                     pendingList->end() &&
-                     pendingDevice.submit({"PendingDestruction.Submit", pendingLists, 1u},
-                                          &pendingToken),
+                         pendingList->begin({"PendingDestruction.Commands", RhiCommandListType::Graphics}) &&
+                         pendingList->end() &&
+                         pendingDevice.submit({"PendingDestruction.Submit", pendingLists, 1u}, &pendingToken),
                      "pending pool destruction test must submit executable work")) {
         pendingDevice.shutdown();
         return false;
@@ -5286,15 +4721,12 @@ bool testGlRhiCommandListPoolLifetimeContracts() {
     std::string destructionDiagnostic;
     {
         ScopedErrorCapture errorCapture;
-        std::thread destroyer([pool = std::move(wrongThreadPool)]() mutable {
-            pool.reset();
-        });
+        std::thread destroyer([pool = std::move(wrongThreadPool)]() mutable { pool.reset(); });
         destroyer.join();
         destructionDiagnostic = errorCapture.output();
     }
     const bool diagnosedWrongThread = requireTrue(
-        destructionDiagnostic.find(
-            "command-list pool destruction requires its owner thread") != std::string::npos,
+        destructionDiagnostic.find("command-list pool destruction requires its owner thread") != std::string::npos,
         "command-pool destruction on a foreign thread must emit a strict diagnostic");
     pendingDevice.shutdown();
     return diagnosedWrongThread;
@@ -5302,28 +4734,22 @@ bool testGlRhiCommandListPoolLifetimeContracts() {
 
 bool testGlRhiSubmissionCompletionTokens() {
     GlTestContext context;
-    if (!requireTrue(context.init(),
-                     "OpenGL test context must initialize for submission token tests")) {
+    if (!requireTrue(context.init(), "OpenGL test context must initialize for submission token tests")) {
         return false;
     }
 
     GlRhiDevice device;
     RhiDeviceDesc deviceDesc = makeDeviceDesc();
     deviceDesc.debugName = "rhi_submission_completion_token_test";
-    if (!requireTrue(device.init(deviceDesc),
-                     "OpenGL RHI device must initialize for submission token tests")) {
+    if (!requireTrue(device.init(deviceDesc), "OpenGL RHI device must initialize for submission token tests")) {
         return false;
     }
 
-    std::unique_ptr<RhiCommandListPool> commandPool =
-        device.createCommandListPool({"SubmissionTokenPool", 1u, 4096u});
-    RhiCommandList* commandList = commandPool != nullptr
-        ? commandPool->acquire(RhiCommandListType::Graphics)
-        : nullptr;
+    std::unique_ptr<RhiCommandListPool> commandPool = device.createCommandListPool({"SubmissionTokenPool", 1u, 4096u});
+    RhiCommandList* commandList = commandPool != nullptr ? commandPool->acquire(RhiCommandListType::Graphics) : nullptr;
     if (!requireTrue(commandList != nullptr &&
-                     commandList->begin({"SubmissionTokenCommands",
-                                         RhiCommandListType::Graphics}) &&
-                     commandList->end(),
+                         commandList->begin({"SubmissionTokenCommands", RhiCommandListType::Graphics}) &&
+                         commandList->end(),
                      "submission token test command list must become executable")) {
         device.shutdown();
         return false;
@@ -5332,58 +4758,48 @@ bool testGlRhiSubmissionCompletionTokens() {
     RhiCommandList* submittedLists[] = {commandList};
     RhiSubmissionToken token;
     bool complete = true;
-    if (!requireTrue(device.submit({"SubmissionToken.Submit", submittedLists, 1u}, &token) &&
-                     token.isValid(),
+    if (!requireTrue(device.submit({"SubmissionToken.Submit", submittedLists, 1u}, &token) && token.isValid(),
                      "successful submission must return a valid completion token") ||
         !requireTrue(device.isSubmissionComplete(token, complete),
                      "non-blocking completion query must accept its device token") ||
         !requireTrue(!device.isSubmissionComplete({}, complete) && !complete,
                      "completion query must reject an invalid token") ||
-        !requireTrue(!device.isSubmissionComplete(
-                         {token.deviceId + 1u, token.sequence}, complete) && !complete,
+        !requireTrue(!device.isSubmissionComplete({token.deviceId + 1u, token.sequence}, complete) && !complete,
                      "completion query must reject a token from another device") ||
         !requireTrue(!device.waitForSubmission({token.deviceId + 1u, token.sequence}),
                      "submission wait must reject a token from another device") ||
-        !requireTrue(device.waitForSubmission(token),
-                     "submission wait must complete the specified submission") ||
+        !requireTrue(device.waitForSubmission(token), "submission wait must complete the specified submission") ||
         !requireTrue(device.isSubmissionComplete(token, complete) && complete,
                      "waited submission must report complete") ||
         !requireTrue(commandList->state() == RhiCommandListState::Initial,
                      "submission wait must reclaim its pending command list") ||
-        !requireTrue(commandPool->reset(),
-                     "command pool must reset after waiting for its submission")) {
+        !requireTrue(commandPool->reset(), "command pool must reset after waiting for its submission")) {
         device.shutdown();
         return false;
     }
 
     commandList = commandPool->acquire(RhiCommandListType::Graphics);
     if (!requireTrue(commandList != nullptr &&
-                     commandList->begin({"SubmissionDependency.Commands",
-                                         RhiCommandListType::Graphics}) &&
-                     commandList->end(),
+                         commandList->begin({"SubmissionDependency.Commands", RhiCommandListType::Graphics}) &&
+                         commandList->end(),
                      "queue dependency test command list must become executable")) {
         device.shutdown();
         return false;
     }
     submittedLists[0] = commandList;
-    RhiSubmitInfo invalidQueueSubmit{
-        "SubmissionDependency.InvalidQueue", submittedLists, 1u};
+    RhiSubmitInfo invalidQueueSubmit{"SubmissionDependency.InvalidQueue", submittedLists, 1u};
     invalidQueueSubmit.queue = RhiQueueType::Compute;
-    RhiSubmitInfo invalidWaitSubmit{
-        "SubmissionDependency.InvalidWaitArray", submittedLists, 1u};
+    RhiSubmitInfo invalidWaitSubmit{"SubmissionDependency.InvalidWaitArray", submittedLists, 1u};
     invalidWaitSubmit.waitCount = 1u;
     const RhiQueueDependency dependency{token, token.sequence};
-    RhiSubmitInfo dependencySubmit{
-        "SubmissionDependency.Valid", submittedLists, 1u};
+    RhiSubmitInfo dependencySubmit{"SubmissionDependency.Valid", submittedLists, 1u};
     dependencySubmit.waits = &dependency;
     dependencySubmit.waitCount = 1u;
     RhiSubmissionToken dependencyToken;
-    if (!requireTrue(!device.submit(invalidQueueSubmit),
-                     "OpenGL submission must reject unsupported queue types") ||
+    if (!requireTrue(!device.submit(invalidQueueSubmit), "OpenGL submission must reject unsupported queue types") ||
         !requireTrue(!device.submit(invalidWaitSubmit),
                      "submission must reject an inconsistent wait dependency array") ||
-        !requireTrue(device.submit(dependencySubmit, &dependencyToken) &&
-                         dependencyToken.sequence > token.sequence,
+        !requireTrue(device.submit(dependencySubmit, &dependencyToken) && dependencyToken.sequence > token.sequence,
                      "submission must accept a valid ordered queue dependency") ||
         !requireTrue(device.waitForSubmission(dependencyToken),
                      "queue dependency submission must complete successfully")) {
@@ -5396,142 +4812,118 @@ bool testGlRhiSubmissionCompletionTokens() {
 }
 
 bool testGlRenderGraphExecutionAndTransientReuse() {
-  GlTestContext context;
-  if (!context.init()) {
-    return false;
-  }
-
-  GlRhiDevice device;
-  if (!requireTrue(
-          device.init(makeDeviceDesc()),
-          "OpenGL device must initialize for Render Graph execution")) {
-    return false;
-  }
-  std::unique_ptr<RhiCommandListPool> commandPool =
-      device.createCommandListPool({"RenderGraphTest.Pool", 2u, 64u * 1024u});
-  if (!requireTrue(commandPool != nullptr,
-                   "Render Graph execution requires a command-list pool")) {
-    device.shutdown();
-    return false;
-  }
-
-  RenderGraph graph;
-  RhiTextureHandle firstTexture;
-  RhiTextureViewHandle firstView;
-  RhiBufferHandle firstBuffer;
-  const auto executeFrame = [&](const bool expectReuse) {
-    graph.reset();
-    RhiTextureDesc textureDesc;
-    textureDesc.format = RhiTextureFormat::Rgba8Unorm;
-    textureDesc.width = 16u;
-    textureDesc.height = 16u;
-    textureDesc.usage = rhiFlag(RhiTextureUsage::TransferSrc) |
-                        rhiFlag(RhiTextureUsage::TransferDst);
-    const RgTextureHandle texture =
-        graph.createTexture({"RenderGraphTest.TransientTexture", textureDesc,
-                             RhiResourceState::TransferSrc});
-    RhiBufferDesc bufferDesc;
-    bufferDesc.size = 256u;
-    bufferDesc.usage =
-        rhiFlag(RhiBufferUsage::Storage) | rhiFlag(RhiBufferUsage::TransferDst);
-    const RgBufferHandle buffer =
-        graph.createBuffer({"RenderGraphTest.TransientBuffer", bufferDesc,
-                            RhiResourceState::StorageBuffer});
-
-    RhiTextureHandle resolvedTexture;
-    RhiTextureViewHandle resolvedView;
-    RhiBufferHandle resolvedBuffer;
-    graph
-        .addPass(
-            {"RenderGraphTest.Write", RgPassType::Copy, RhiQueueType::Graphics})
-        .writeTexture(texture, RhiResourceState::TransferDst)
-        .writeBuffer(buffer, RhiResourceState::TransferDst)
-        .setExecute([&](RgPassContext &pass) {
-          resolvedTexture = pass.texture(texture);
-          resolvedView = pass.textureView(texture);
-          resolvedBuffer = pass.buffer(buffer);
-          return resolvedTexture.isValid() && resolvedView.isValid() &&
-                 resolvedBuffer.isValid();
-        });
-    graph
-        .addPass(
-            {"RenderGraphTest.Read", RgPassType::Copy, RhiQueueType::Graphics})
-        .readTexture(texture, RhiResourceState::TransferSrc)
-        .readBuffer(buffer, RhiResourceState::StorageBuffer)
-        .setExecute([&](RgPassContext &pass) {
-          return pass.texture(texture).index == resolvedTexture.index &&
-                 pass.textureView(texture).index == resolvedView.index &&
-                 pass.buffer(buffer).index == resolvedBuffer.index;
-        });
-
-    const RgCompileResult compiled = graph.compile();
-    if (!requireTrue(compiled.succeeded(), compiled.message.c_str()) ||
-        !requireTrue(
-            graph.submissionBatches().size() == 1u,
-            "same-queue Render Graph passes must share a submission batch")) {
-      return false;
+    GlTestContext context;
+    if (!context.init()) {
+        return false;
     }
-    const RgExecuteResult executed = graph.execute(device, *commandPool);
-    if (!requireTrue(executed.succeeded(), executed.message.c_str()) ||
-        !requireTrue(
-            executed.submissions.size() == 1u &&
-                executed.completionToken().isValid(),
-            "Render Graph execution must return its completion token") ||
-        !requireTrue(device.waitForSubmission(executed.completionToken()),
-                     "Render Graph submission must complete")) {
-      return false;
-    }
-    if (!requireTrue(graph.pollTimings(device) == RgTimingPollResult::Available,
-                     "Render Graph pass timings must become available") ||
-        !requireTrue(graph.latestTimings().passes.size() == 2u &&
-                         graph.latestTimings().passes[0].name ==
-                             "RenderGraphTest.Write" &&
-                         graph.latestTimings().passes[1].name ==
-                             "RenderGraphTest.Read",
-                     "Render Graph timings must retain pass names")) {
-      return false;
-    }
-    const RhiMemoryCategoryStats transientStats =
-        device.memoryStats().categories[static_cast<size_t>(
-            RhiMemoryCategory::Transient)];
-    if (!requireTrue(transientStats.bytes == 1280u &&
-                         transientStats.allocationCount == 2u &&
-                         transientStats.resourceCount == 2u,
-                     "Render Graph resources must enter the transient category")) {
-      return false;
-    }
-    if (expectReuse) {
-      return requireTrue(
-          resolvedTexture.index == firstTexture.index &&
-              resolvedTexture.generation == firstTexture.generation &&
-              resolvedView.index == firstView.index &&
-              resolvedView.generation == firstView.generation &&
-              resolvedBuffer.index == firstBuffer.index &&
-              resolvedBuffer.generation == firstBuffer.generation,
-          "Render Graph must reuse matching transient allocations");
-    }
-    firstTexture = resolvedTexture;
-    firstView = resolvedView;
-    firstBuffer = resolvedBuffer;
-    return true;
-  };
 
-  const bool passed = executeFrame(false) && executeFrame(true);
-  graph.releaseTransientResources(device);
-  device.waitIdle();
-  const RhiMemoryCategoryStats transientAfterRelease =
-      device.memoryStats().categories[static_cast<size_t>(
-          RhiMemoryCategory::Transient)];
-  if (!requireTrue(transientAfterRelease.bytes == 0u &&
-                       transientAfterRelease.resourceCount == 0u,
-                   "released Render Graph resources must leave memory statistics")) {
+    GlRhiDevice device;
+    if (!requireTrue(device.init(makeDeviceDesc()), "OpenGL device must initialize for Render Graph execution")) {
+        return false;
+    }
+    std::unique_ptr<RhiCommandListPool> commandPool =
+        device.createCommandListPool({"RenderGraphTest.Pool", 2u, 64u * 1024u});
+    if (!requireTrue(commandPool != nullptr, "Render Graph execution requires a command-list pool")) {
+        device.shutdown();
+        return false;
+    }
+
+    RenderGraph graph;
+    RhiTextureHandle firstTexture;
+    RhiTextureViewHandle firstView;
+    RhiBufferHandle firstBuffer;
+    const auto executeFrame = [&](const bool expectReuse) {
+        graph.reset();
+        RhiTextureDesc textureDesc;
+        textureDesc.format = RhiTextureFormat::Rgba8Unorm;
+        textureDesc.width = 16u;
+        textureDesc.height = 16u;
+        textureDesc.usage = rhiFlag(RhiTextureUsage::TransferSrc) | rhiFlag(RhiTextureUsage::TransferDst);
+        const RgTextureHandle texture =
+            graph.createTexture({"RenderGraphTest.TransientTexture", textureDesc, RhiResourceState::TransferSrc});
+        RhiBufferDesc bufferDesc;
+        bufferDesc.size = 256u;
+        bufferDesc.usage = rhiFlag(RhiBufferUsage::Storage) | rhiFlag(RhiBufferUsage::TransferDst);
+        const RgBufferHandle buffer =
+            graph.createBuffer({"RenderGraphTest.TransientBuffer", bufferDesc, RhiResourceState::StorageBuffer});
+
+        RhiTextureHandle resolvedTexture;
+        RhiTextureViewHandle resolvedView;
+        RhiBufferHandle resolvedBuffer;
+        graph.addPass({"RenderGraphTest.Write", RgPassType::Copy, RhiQueueType::Graphics})
+            .writeTexture(texture, RhiResourceState::TransferDst)
+            .writeBuffer(buffer, RhiResourceState::TransferDst)
+            .setExecute([&](RgPassContext& pass) {
+                resolvedTexture = pass.texture(texture);
+                resolvedView = pass.textureView(texture);
+                resolvedBuffer = pass.buffer(buffer);
+                return resolvedTexture.isValid() && resolvedView.isValid() && resolvedBuffer.isValid();
+            });
+        graph.addPass({"RenderGraphTest.Read", RgPassType::Copy, RhiQueueType::Graphics})
+            .readTexture(texture, RhiResourceState::TransferSrc)
+            .readBuffer(buffer, RhiResourceState::StorageBuffer)
+            .setExecute([&](RgPassContext& pass) {
+                return pass.texture(texture).index == resolvedTexture.index &&
+                       pass.textureView(texture).index == resolvedView.index &&
+                       pass.buffer(buffer).index == resolvedBuffer.index;
+            });
+
+        const RgCompileResult compiled = graph.compile();
+        if (!requireTrue(compiled.succeeded(), compiled.message.c_str()) ||
+            !requireTrue(graph.submissionBatches().size() == 1u,
+                         "same-queue Render Graph passes must share a submission batch")) {
+            return false;
+        }
+        const RgExecuteResult executed = graph.execute(device, *commandPool);
+        if (!requireTrue(executed.succeeded(), executed.message.c_str()) ||
+            !requireTrue(executed.submissions.size() == 1u && executed.completionToken().isValid(),
+                         "Render Graph execution must return its completion token") ||
+            !requireTrue(device.waitForSubmission(executed.completionToken()),
+                         "Render Graph submission must complete")) {
+            return false;
+        }
+        if (!requireTrue(graph.pollTimings(device) == RgTimingPollResult::Available,
+                         "Render Graph pass timings must become available") ||
+            !requireTrue(graph.latestTimings().passes.size() == 2u &&
+                             graph.latestTimings().passes[0].name == "RenderGraphTest.Write" &&
+                             graph.latestTimings().passes[1].name == "RenderGraphTest.Read",
+                         "Render Graph timings must retain pass names")) {
+            return false;
+        }
+        const RhiMemoryCategoryStats transientStats =
+            device.memoryStats().categories[static_cast<size_t>(RhiMemoryCategory::Transient)];
+        if (!requireTrue(transientStats.bytes == 1280u && transientStats.allocationCount == 2u &&
+                             transientStats.resourceCount == 2u,
+                         "Render Graph resources must enter the transient category")) {
+            return false;
+        }
+        if (expectReuse) {
+            return requireTrue(
+                resolvedTexture.index == firstTexture.index && resolvedTexture.generation == firstTexture.generation &&
+                    resolvedView.index == firstView.index && resolvedView.generation == firstView.generation &&
+                    resolvedBuffer.index == firstBuffer.index && resolvedBuffer.generation == firstBuffer.generation,
+                "Render Graph must reuse matching transient allocations");
+        }
+        firstTexture = resolvedTexture;
+        firstView = resolvedView;
+        firstBuffer = resolvedBuffer;
+        return true;
+    };
+
+    const bool passed = executeFrame(false) && executeFrame(true);
+    graph.releaseTransientResources(device);
+    device.waitIdle();
+    const RhiMemoryCategoryStats transientAfterRelease =
+        device.memoryStats().categories[static_cast<size_t>(RhiMemoryCategory::Transient)];
+    if (!requireTrue(transientAfterRelease.bytes == 0u && transientAfterRelease.resourceCount == 0u,
+                     "released Render Graph resources must leave memory statistics")) {
+        commandPool.reset();
+        device.shutdown();
+        return false;
+    }
     commandPool.reset();
     device.shutdown();
-    return false;
-  }
-  commandPool.reset();
-  device.shutdown();
-  return passed;
+    return passed;
 }
 } // namespace
 
@@ -5668,8 +5060,8 @@ int main() {
     if (!testGlRhiSubmissionCompletionTokens()) {
         return 1;
     }
-  if (!testGlRenderGraphExecutionAndTransientReuse()) {
-    return 1;
-  }
+    if (!testGlRenderGraphExecutionAndTransientReuse()) {
+        return 1;
+    }
     return 0;
 }

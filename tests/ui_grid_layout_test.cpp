@@ -56,25 +56,17 @@ int main() {
     UIRenderContext ctx{};
     grid.layout(ctx);
 
-    if (!almostEqual(firstPtr->x, 0.0f) ||
-        !almostEqual(firstPtr->y, 0.0f) ||
-        !almostEqual(secondPtr->x, 35.0f) ||
-        !almostEqual(secondPtr->y, 0.0f) ||
-        !almostEqual(thirdPtr->x, 0.0f) ||
-        !almostEqual(thirdPtr->y, 25.0f)) {
+    if (!almostEqual(firstPtr->x, 0.0f) || !almostEqual(firstPtr->y, 0.0f) || !almostEqual(secondPtr->x, 35.0f) ||
+        !almostEqual(secondPtr->y, 0.0f) || !almostEqual(thirdPtr->x, 0.0f) || !almostEqual(thirdPtr->y, 25.0f)) {
         return fail("grid should place children by column, row, cell size, and spacing");
     }
 
-    if (!almostEqual(grid.width, 65.0f) ||
-        !almostEqual(grid.height, 45.0f)) {
+    if (!almostEqual(grid.width, 65.0f) || !almostEqual(grid.height, 45.0f)) {
         return fail("grid should size itself to the occupied rows and configured columns");
     }
 
-    if (firstPtr->layoutCalls != 1 ||
-        secondPtr->layoutCalls != 1 ||
-        thirdPtr->layoutCalls != 1 ||
-        !almostEqual(firstPtr->laidOutWidth, 30.0f) ||
-        !almostEqual(thirdPtr->laidOutHeight, 20.0f)) {
+    if (firstPtr->layoutCalls != 1 || secondPtr->layoutCalls != 1 || thirdPtr->layoutCalls != 1 ||
+        !almostEqual(firstPtr->laidOutWidth, 30.0f) || !almostEqual(thirdPtr->laidOutHeight, 20.0f)) {
         return fail("layout(ctx) should recurse into children after assigning grid cells");
     }
 

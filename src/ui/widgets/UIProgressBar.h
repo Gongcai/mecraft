@@ -34,9 +34,18 @@ public:
     [[nodiscard]] bool getShowPercent() const { return m_showPercent; }
 
     // Local color overrides (bypass theme when set).
-    void setTrackColor(const Color& c) { m_trackColor = c; m_hasLocalColors = true; }
-    void setFillColor(const Color& c) { m_fillColor = c; m_hasLocalColors = true; }
-    void setTextColor(const Color& c) { m_textColor = c; m_hasLocalColors = true; }
+    void setTrackColor(const Color& c) {
+        m_trackColor = c;
+        m_hasLocalColors = true;
+    }
+    void setFillColor(const Color& c) {
+        m_fillColor = c;
+        m_hasLocalColors = true;
+    }
+    void setTextColor(const Color& c) {
+        m_textColor = c;
+        m_hasLocalColors = true;
+    }
     void clearLocalColors() { m_hasLocalColors = false; }
     void setTone(UIProgressBarTone tone);
     void setStyle(const UIProgressBarStyle& style);

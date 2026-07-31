@@ -116,6 +116,3 @@ int main() {
     std::cout << "[light_solver_sky_rules_test] PASS\n";
     return EXIT_SUCCESS;
 }
-
-
-

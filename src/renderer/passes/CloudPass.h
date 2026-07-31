@@ -43,14 +43,9 @@ public:
     /// is declared on the compute queue and writes the target via image
     /// stores so it overlaps subsequent graphics work. History-reuse frames
     /// always stay on the graphics queue because texture blits require it.
-    [[nodiscard]] RgPassHandle addGraphPass(
-        RenderGraph& graph,
-        const FrameContext& ctx,
-        const RenderSettings& settings,
-        DeferredRenderTargets& targets,
-        const GraphResources& resources,
-        RgPassHandle dependency,
-        bool useAsyncCompute = false);
+    [[nodiscard]] RgPassHandle addGraphPass(RenderGraph& graph, const FrameContext& ctx, const RenderSettings& settings,
+                                            DeferredRenderTargets& targets, const GraphResources& resources,
+                                            RgPassHandle dependency, bool useAsyncCompute = false);
 
     /// Commits pending temporal state only after the complete graph is submitted.
     /// @param succeeded True when graph recording and submission completed successfully.
@@ -58,23 +53,17 @@ public:
     void invalidateHistory();
 
 private:
-    [[nodiscard]] bool shouldRenderClouds(const FrameContext& ctx,
-                                          const RenderSettings& settings) const;
-    [[nodiscard]] bool recordHistoryCopy(RhiCommandList& commandList,
-                                         const FrameContext& ctx,
+    [[nodiscard]] bool shouldRenderClouds(const FrameContext& ctx, const RenderSettings& settings) const;
+    [[nodiscard]] bool recordHistoryCopy(RhiCommandList& commandList, const FrameContext& ctx,
                                          DeferredRenderTargets& targets);
-    [[nodiscard]] bool recordCloud(RhiCommandList& commandList,
-                                   const FrameContext& ctx,
+    [[nodiscard]] bool recordCloud(RhiCommandList& commandList, const FrameContext& ctx,
                                    DeferredRenderTargets& targets);
-    [[nodiscard]] bool recordCloudCompute(RhiCommandList& commandList,
-                                          const FrameContext& ctx,
+    [[nodiscard]] bool recordCloudCompute(RhiCommandList& commandList, const FrameContext& ctx,
                                           DeferredRenderTargets& targets);
     bool ensureRhiPipeline(RhiDevice& rhiDevice);
     bool ensureComputeRhiPipeline(RhiDevice& rhiDevice);
-    bool ensureBindGroup(RhiDevice& rhiDevice,
-                         const std::array<RhiTextureViewHandle, 4>& views);
-    bool ensureComputeBindGroup(RhiDevice& rhiDevice,
-                                const std::array<RhiTextureViewHandle, 4>& views,
+    bool ensureBindGroup(RhiDevice& rhiDevice, const std::array<RhiTextureViewHandle, 4>& views);
+    bool ensureComputeBindGroup(RhiDevice& rhiDevice, const std::array<RhiTextureViewHandle, 4>& views,
                                 RhiTextureViewHandle cloudStorageView);
     void destroyComputeBindGroup();
     bool ensureNoiseTextureView(RhiDevice& rhiDevice);

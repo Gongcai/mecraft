@@ -35,8 +35,7 @@ void mergeResult(UIEventResult& aggregate, const UIEventResult result) {
     }
 }
 
-UIInputEvent makePointerEvent(const UIInputEventType type,
-                              const InputSnapshot& snapshot,
+UIInputEvent makePointerEvent(const UIInputEventType type, const InputSnapshot& snapshot,
                               const UIPointerButton button) {
     UIInputEvent event;
     event.type = type;
@@ -77,9 +76,7 @@ UIInputEvent makeTextInputEvent(const InputSnapshot& snapshot, const std::uint32
     return event;
 }
 
-UIInputEvent makeKeyEvent(const InputSnapshot& snapshot,
-                          const UIInputEventType type,
-                          const int key) {
+UIInputEvent makeKeyEvent(const InputSnapshot& snapshot, const UIInputEventType type, const int key) {
     UIInputEvent event;
     event.type = type;
     event.x = snapshot.mousePosition.x;
@@ -89,9 +86,7 @@ UIInputEvent makeKeyEvent(const InputSnapshot& snapshot,
     return event;
 }
 
-void routeCommand(UIRenderer& renderer,
-                  const InputSnapshot& snapshot,
-                  UIInputRouteResult& routeResult,
+void routeCommand(UIRenderer& renderer, const InputSnapshot& snapshot, UIInputRouteResult& routeResult,
                   const UICommand command) {
     const UIEventResult result = renderer.routeUIInput(makeCommandEvent(snapshot, command));
     mergeResult(routeResult.aggregate, result);
@@ -99,8 +94,7 @@ void routeCommand(UIRenderer& renderer,
 
 } // namespace
 
-UIInputRouteResult UIInputAdapter::routeInput(UIRenderer& renderer,
-                                              const InputSnapshot& snapshot,
+UIInputRouteResult UIInputAdapter::routeInput(UIRenderer& renderer, const InputSnapshot& snapshot,
                                               const InputContextManager& context) {
     UIInputRouteResult routeResult;
 
@@ -112,10 +106,8 @@ UIInputRouteResult UIInputAdapter::routeInput(UIRenderer& renderer,
     routeResult.primaryReleased = snapshot.isMouseButtonJustReleased(primaryButton);
     routeResult.secondaryReleased = snapshot.isMouseButtonJustReleased(secondaryButton);
 
-    const bool hasButtonEvent = routeResult.primaryPressed ||
-                                routeResult.secondaryPressed ||
-                                routeResult.primaryReleased ||
-                                routeResult.secondaryReleased;
+    const bool hasButtonEvent = routeResult.primaryPressed || routeResult.secondaryPressed ||
+                                routeResult.primaryReleased || routeResult.secondaryReleased;
 
     // Only send PointerMove when mouse actually moved or a button event needs
     // up-to-date hover state. Skips redundant hit-testing on stationary frames.
@@ -128,35 +120,26 @@ UIInputRouteResult UIInputAdapter::routeInput(UIRenderer& renderer,
     lastY = curY;
 
     if (pointerMoved || hasButtonEvent) {
-        mergeResult(routeResult.aggregate,
-                    renderer.routeUIInput(makePointerEvent(UIInputEventType::PointerMove,
-                                                           snapshot,
-                                                           UIPointerButton::None)));
+        mergeResult(routeResult.aggregate, renderer.routeUIInput(makePointerEvent(UIInputEventType::PointerMove,
+                                                                                  snapshot, UIPointerButton::None)));
     }
 
     if (snapshot.isMouseButtonJustPressed(primaryButton)) {
-        routeResult.primaryDown = renderer.routeUIInput(makePointerEvent(UIInputEventType::PointerDown,
-                                                                         snapshot,
-                                                                         UIPointerButton::Primary));
+        routeResult.primaryDown =
+            renderer.routeUIInput(makePointerEvent(UIInputEventType::PointerDown, snapshot, UIPointerButton::Primary));
         mergeResult(routeResult.aggregate, routeResult.primaryDown);
     }
     if (snapshot.isMouseButtonJustPressed(secondaryButton)) {
-        mergeResult(routeResult.aggregate,
-                    renderer.routeUIInput(makePointerEvent(UIInputEventType::PointerDown,
-                                                           snapshot,
-                                                           UIPointerButton::Secondary)));
+        mergeResult(routeResult.aggregate, renderer.routeUIInput(makePointerEvent(
+                                               UIInputEventType::PointerDown, snapshot, UIPointerButton::Secondary)));
     }
     if (snapshot.isMouseButtonJustReleased(primaryButton)) {
-        mergeResult(routeResult.aggregate,
-                    renderer.routeUIInput(makePointerEvent(UIInputEventType::PointerUp,
-                                                           snapshot,
-                                                           UIPointerButton::Primary)));
+        mergeResult(routeResult.aggregate, renderer.routeUIInput(makePointerEvent(UIInputEventType::PointerUp, snapshot,
+                                                                                  UIPointerButton::Primary)));
     }
     if (snapshot.isMouseButtonJustReleased(secondaryButton)) {
-        mergeResult(routeResult.aggregate,
-                    renderer.routeUIInput(makePointerEvent(UIInputEventType::PointerUp,
-                                                           snapshot,
-                                                           UIPointerButton::Secondary)));
+        mergeResult(routeResult.aggregate, renderer.routeUIInput(makePointerEvent(UIInputEventType::PointerUp, snapshot,
+                                                                                  UIPointerButton::Secondary)));
     }
 
     if (snapshot.scrollDelta != 0.0) {
@@ -178,8 +161,7 @@ UIInputRouteResult UIInputAdapter::routeInput(UIRenderer& renderer,
     }
 
     for (std::size_t i = 0; i < snapshot.typedCharCount; ++i) {
-        mergeResult(routeResult.aggregate,
-                    renderer.routeUIInput(makeTextInputEvent(snapshot, snapshot.typedChars[i])));
+        mergeResult(routeResult.aggregate, renderer.routeUIInput(makeTextInputEvent(snapshot, snapshot.typedChars[i])));
     }
     if (routeResult.aggregate == UIEventResult::Consumed) {
         return routeResult;
@@ -215,7 +197,7 @@ UIInputRouteResult UIInputAdapter::routeInput(UIRenderer& renderer,
     if (snapshot.isGamepadConnected()) {
         const float leftStickY = snapshot.getGamepadAxis(GLFW_GAMEPAD_AXIS_LEFT_Y);
         constexpr float kStickScrollDeadZone = 0.2f;
-        constexpr float kStickScrollMultiplier = 3.0f;  // Adjust for scroll speed
+        constexpr float kStickScrollMultiplier = 3.0f; // Adjust for scroll speed
 
         if (std::abs(leftStickY) > kStickScrollDeadZone) {
             // Create a synthetic scroll event

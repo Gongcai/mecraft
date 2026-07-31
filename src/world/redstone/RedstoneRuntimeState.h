@@ -31,13 +31,9 @@ struct RedstoneTorchRuntimeState {
 struct RedstoneRuntimeState {
     std::unordered_map<glm::ivec3, RedstoneTorchRuntimeState, RedstonePositionHash> torches;
 
-    void clear() {
-        torches.clear();
-    }
+    void clear() { torches.clear(); }
 
-    void eraseTorch(const glm::ivec3& position) {
-        torches.erase(position);
-    }
+    void eraseTorch(const glm::ivec3& position) { torches.erase(position); }
 };
 
 #endif // MECRAFT_REDSTONE_RUNTIME_STATE_H

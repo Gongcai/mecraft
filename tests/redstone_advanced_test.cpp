@@ -48,8 +48,7 @@ BlockStateId leverState(const uint16_t facing, const bool powered) {
         BlockRegistry::requireIdByName("minecraft:lever"),
         std::vector<std::pair<uint16_t, uint16_t>>{
             {PropIndices::FACING, facing},
-            {PropIndices::POWERED, powered ? PropIndices::POWERED_TRUE : PropIndices::POWERED_FALSE}
-        });
+            {PropIndices::POWERED, powered ? PropIndices::POWERED_TRUE : PropIndices::POWERED_FALSE}});
 }
 
 BlockStateId leverState(const bool powered) {
@@ -61,17 +60,14 @@ BlockStateId buttonState(const bool powered) {
         BlockRegistry::requireIdByName("minecraft:stone_button"),
         std::vector<std::pair<uint16_t, uint16_t>>{
             {PropIndices::FACING, PropIndices::FACING_FLOOR},
-            {PropIndices::POWERED, powered ? PropIndices::POWERED_TRUE : PropIndices::POWERED_FALSE}
-        });
+            {PropIndices::POWERED, powered ? PropIndices::POWERED_TRUE : PropIndices::POWERED_FALSE}});
 }
 
 BlockStateId redstoneTorchState(const bool lit) {
-    return BlockStateRegistry::getState(
-        BlockRegistry::requireIdByName("minecraft:redstone_torch"),
-        std::vector<std::pair<uint16_t, uint16_t>>{
-            {PropIndices::FACING, PropIndices::FACING_FLOOR},
-            {PropIndices::LIT, lit ? PropIndices::LIT_TRUE : PropIndices::LIT_FALSE}
-        });
+    return BlockStateRegistry::getState(BlockRegistry::requireIdByName("minecraft:redstone_torch"),
+                                        std::vector<std::pair<uint16_t, uint16_t>>{
+                                            {PropIndices::FACING, PropIndices::FACING_FLOOR},
+                                            {PropIndices::LIT, lit ? PropIndices::LIT_TRUE : PropIndices::LIT_FALSE}});
 }
 
 BlockStateId repeaterState(const uint16_t facing, const uint16_t delay, const bool powered) {
@@ -80,28 +76,15 @@ BlockStateId repeaterState(const uint16_t facing, const uint16_t delay, const bo
         std::vector<std::pair<uint16_t, uint16_t>>{
             {PropIndices::FACING, facing},
             {PropIndices::POWERED, powered ? PropIndices::POWERED_TRUE : PropIndices::POWERED_FALSE},
-            {PropIndices::DELAY, delay}
-        });
+            {PropIndices::DELAY, delay}});
 }
 
 uint8_t powerFromState(const BlockStateId state) {
     static const std::array<uint16_t, 16> kPowerValues = {
-        PropIndices::POWER_0,
-        PropIndices::POWER_1,
-        PropIndices::POWER_2,
-        PropIndices::POWER_3,
-        PropIndices::POWER_4,
-        PropIndices::POWER_5,
-        PropIndices::POWER_6,
-        PropIndices::POWER_7,
-        PropIndices::POWER_8,
-        PropIndices::POWER_9,
-        PropIndices::POWER_10,
-        PropIndices::POWER_11,
-        PropIndices::POWER_12,
-        PropIndices::POWER_13,
-        PropIndices::POWER_14,
-        PropIndices::POWER_15,
+        PropIndices::POWER_0,  PropIndices::POWER_1,  PropIndices::POWER_2,  PropIndices::POWER_3,
+        PropIndices::POWER_4,  PropIndices::POWER_5,  PropIndices::POWER_6,  PropIndices::POWER_7,
+        PropIndices::POWER_8,  PropIndices::POWER_9,  PropIndices::POWER_10, PropIndices::POWER_11,
+        PropIndices::POWER_12, PropIndices::POWER_13, PropIndices::POWER_14, PropIndices::POWER_15,
     };
 
     const uint16_t value = BlockStateRegistry::getPropertyIndex(state, PropIndices::POWER);
@@ -135,7 +118,8 @@ int testTorchBurnout() {
 
     const int y = 96;
     prepareFlatLine(world, y, -2, 2);
-    world.setBlockState(0, y, 0, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:stone")));
+    world.setBlockState(0, y, 0,
+                        BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:stone")));
     world.setBlockState(-1, y, 0, leverState(PropIndices::FACING_WEST, false));
     world.setBlockState(0, y + 1, 0, redstoneTorchState(true));
 
@@ -178,7 +162,8 @@ int testSlowTorchTogglesDoNotBurnOut() {
 
     const int y = 88;
     prepareFlatLine(world, y, -2, 2);
-    world.setBlockState(0, y, 0, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:stone")));
+    world.setBlockState(0, y, 0,
+                        BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:stone")));
     world.setBlockState(-1, y, 0, leverState(PropIndices::FACING_WEST, false));
     world.setBlockState(0, y + 1, 0, redstoneTorchState(true));
 
@@ -211,42 +196,39 @@ int testCrossChunkLongRepeaterChain() {
     prepareFlatLine(world, y, -1, 62);
     world.setBlockState(0, y, 0, leverState(true));
     for (int x = 1; x <= 14; ++x) {
-        world.setBlockState(x, y, 0, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_wire")));
+        world.setBlockState(
+            x, y, 0, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_wire")));
     }
     world.setBlockState(15, y, 0, repeaterState(PropIndices::FACING_EAST, PropIndices::DELAY_1, false));
     for (int x = 16; x <= 29; ++x) {
-        world.setBlockState(x, y, 0, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_wire")));
+        world.setBlockState(
+            x, y, 0, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_wire")));
     }
     world.setBlockState(30, y, 0, repeaterState(PropIndices::FACING_EAST, PropIndices::DELAY_1, false));
     for (int x = 31; x <= 44; ++x) {
-        world.setBlockState(x, y, 0, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_wire")));
+        world.setBlockState(
+            x, y, 0, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_wire")));
     }
     world.setBlockState(45, y, 0, repeaterState(PropIndices::FACING_EAST, PropIndices::DELAY_1, false));
     for (int x = 46; x <= 59; ++x) {
-        world.setBlockState(x, y, 0, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_wire")));
+        world.setBlockState(
+            x, y, 0, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_wire")));
     }
-    world.setBlockState(60, y, 0, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_lamp")));
+    world.setBlockState(60, y, 0,
+                        BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_lamp")));
 
     uint64_t tick = 400;
     processRedstoneTicks(world, tick, 8);
-    if (!powered(world, 15, y, 0) ||
-        !powered(world, 30, y, 0) ||
-        !powered(world, 45, y, 0) ||
-        wirePower(world, 16, y, 0) != 15 ||
-        wirePower(world, 31, y, 0) != 15 ||
-        wirePower(world, 46, y, 0) != 15 ||
+    if (!powered(world, 15, y, 0) || !powered(world, 30, y, 0) || !powered(world, 45, y, 0) ||
+        wirePower(world, 16, y, 0) != 15 || wirePower(world, 31, y, 0) != 15 || wirePower(world, 46, y, 0) != 15 ||
         !lit(world, 60, y, 0)) {
         return fail("cross-chunk repeater chain should carry power across chunk borders");
     }
 
     world.setBlockState(0, y, 0, leverState(false));
     processRedstoneTicks(world, tick, 8);
-    if (powered(world, 15, y, 0) ||
-        powered(world, 30, y, 0) ||
-        powered(world, 45, y, 0) ||
-        wirePower(world, 16, y, 0) != 0 ||
-        wirePower(world, 31, y, 0) != 0 ||
-        wirePower(world, 46, y, 0) != 0 ||
+    if (powered(world, 15, y, 0) || powered(world, 30, y, 0) || powered(world, 45, y, 0) ||
+        wirePower(world, 16, y, 0) != 0 || wirePower(world, 31, y, 0) != 0 || wirePower(world, 46, y, 0) != 0 ||
         lit(world, 60, y, 0)) {
         return fail("cross-chunk repeater chain should depower deterministically");
     }
@@ -262,12 +244,16 @@ int testButtonPulseThroughRepeaterDelayLine() {
     const int y = 64;
     prepareFlatLine(world, y, -1, 8);
     world.setBlockState(0, y, 0, buttonState(true));
-    world.setBlockState(1, y, 0, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_wire")));
+    world.setBlockState(1, y, 0,
+                        BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_wire")));
     world.setBlockState(2, y, 0, repeaterState(PropIndices::FACING_EAST, PropIndices::DELAY_2, false));
-    world.setBlockState(3, y, 0, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_wire")));
+    world.setBlockState(3, y, 0,
+                        BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_wire")));
     world.setBlockState(4, y, 0, repeaterState(PropIndices::FACING_EAST, PropIndices::DELAY_2, false));
-    world.setBlockState(5, y, 0, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_wire")));
-    world.setBlockState(6, y, 0, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_lamp")));
+    world.setBlockState(5, y, 0,
+                        BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_wire")));
+    world.setBlockState(6, y, 0,
+                        BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_lamp")));
 
     uint64_t tick = 500;
     processRedstoneTicks(world, tick, 1);

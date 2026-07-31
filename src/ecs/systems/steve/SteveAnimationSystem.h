@@ -10,8 +10,7 @@ class SteveAnimationSystem : public ISystem {
 public:
     using Dependencies = SystemDependency<
         std::tuple<SteveTag, SteveAnimationStateComponent, ChildrenComponent, TransformComponent, CameraStateComponent>,
-        std::tuple<SteveAnimationStateComponent, LocalTransformComponent>
-    >;
+        std::tuple<SteveAnimationStateComponent, LocalTransformComponent>>;
 
     void update(SystemContext& ctx) override;
 };

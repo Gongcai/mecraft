@@ -15,19 +15,18 @@ namespace {
 
 RhiRect2D makeScaledScissorBox(float x, float y, float width, float height, const UIRenderContext& ctx) {
     const float uiScale = ctx.pixelScale();
-    RhiRect2D rect{static_cast<int32_t>(std::floor(x * uiScale)),
-                   static_cast<int32_t>(std::floor(y * uiScale)),
+    RhiRect2D rect{static_cast<int32_t>(std::floor(x * uiScale)), static_cast<int32_t>(std::floor(y * uiScale)),
                    static_cast<uint32_t>(std::max(1.0f, std::ceil(width * uiScale))),
                    static_cast<uint32_t>(std::max(1.0f, std::ceil(height * uiScale)))};
-    if (!ctx.hasScissor) return rect;
+    if (!ctx.hasScissor)
+        return rect;
     const int32_t x0 = std::max(rect.x, ctx.scissor.x);
     const int32_t y0 = std::max(rect.y, ctx.scissor.y);
-    const int32_t x1 = std::min(rect.x + static_cast<int32_t>(rect.width),
-                                ctx.scissor.x + static_cast<int32_t>(ctx.scissor.width));
-    const int32_t y1 = std::min(rect.y + static_cast<int32_t>(rect.height),
-                                ctx.scissor.y + static_cast<int32_t>(ctx.scissor.height));
-    return {x0, y0, static_cast<uint32_t>(std::max(0, x1 - x0)),
-            static_cast<uint32_t>(std::max(0, y1 - y0))};
+    const int32_t x1 =
+        std::min(rect.x + static_cast<int32_t>(rect.width), ctx.scissor.x + static_cast<int32_t>(ctx.scissor.width));
+    const int32_t y1 =
+        std::min(rect.y + static_cast<int32_t>(rect.height), ctx.scissor.y + static_cast<int32_t>(ctx.scissor.height));
+    return {x0, y0, static_cast<uint32_t>(std::max(0, x1 - x0)), static_cast<uint32_t>(std::max(0, y1 - y0))};
 }
 
 float scrollbarThumbHeight(float trackHeight, float contentHeight) {
@@ -40,11 +39,7 @@ float scrollbarThumbHeight(float trackHeight, float contentHeight) {
     return std::clamp(viewRatio * trackHeight, minThumbHeight, trackHeight);
 }
 
-float scrollbarThumbY(float trackY,
-                      float trackHeight,
-                      float thumbHeight,
-                      float scrollOffset,
-                      float scrollMax) {
+float scrollbarThumbY(float trackY, float trackHeight, float thumbHeight, float scrollOffset, float scrollMax) {
     const float travel = std::max(0.0f, trackHeight - thumbHeight);
     if (scrollMax <= 0.0f || travel <= 0.0f) {
         return trackY + travel;
@@ -62,13 +57,16 @@ UIScrollArea::UIScrollArea() {
     height = 400.0f;
 }
 
-UIScrollArea::~UIScrollArea() { shutdown(); }
+UIScrollArea::~UIScrollArea() {
+    shutdown();
+}
 
 void UIScrollArea::init(ResourceMgr& resourceMgr) {
     m_rhiDevice = &resourceMgr.rhiDevice();
     const auto vertexSource = renderer::rhi::loadShaderSource("assets/shaders/ui_capsule_rhi.vert");
     const auto fragmentSource = renderer::rhi::loadShaderSource("assets/shaders/ui_capsule_rhi.frag");
-    if (!vertexSource || !fragmentSource) std::abort();
+    if (!vertexSource || !fragmentSource)
+        std::abort();
 
     RhiShaderDesc shaderDesc;
     shaderDesc.debugName = "UiScrollArea.Vertex";
@@ -110,8 +108,8 @@ void UIScrollArea::init(ResourceMgr& resourceMgr) {
     m_pipeline = m_rhiDevice->createGraphicsPipeline(pipelineDesc);
 
     initMesh();
-    if (!m_vertexShader.isValid() || !m_fragmentShader.isValid() ||
-        !m_pipelineLayout.isValid() || !m_pipeline.isValid() || !m_vertexBuffer.isValid()) {
+    if (!m_vertexShader.isValid() || !m_fragmentShader.isValid() || !m_pipelineLayout.isValid() ||
+        !m_pipeline.isValid() || !m_vertexBuffer.isValid()) {
         std::abort();
     }
     UIWidget::init(resourceMgr);
@@ -121,10 +119,14 @@ void UIScrollArea::shutdown() {
     UIWidget::shutdown();
     cleanupMesh();
     if (m_rhiDevice != nullptr) {
-        if (m_pipeline.isValid()) m_rhiDevice->destroyPipeline(m_pipeline);
-        if (m_pipelineLayout.isValid()) m_rhiDevice->destroyPipelineLayout(m_pipelineLayout);
-        if (m_fragmentShader.isValid()) m_rhiDevice->destroyShader(m_fragmentShader);
-        if (m_vertexShader.isValid()) m_rhiDevice->destroyShader(m_vertexShader);
+        if (m_pipeline.isValid())
+            m_rhiDevice->destroyPipeline(m_pipeline);
+        if (m_pipelineLayout.isValid())
+            m_rhiDevice->destroyPipelineLayout(m_pipelineLayout);
+        if (m_fragmentShader.isValid())
+            m_rhiDevice->destroyShader(m_fragmentShader);
+        if (m_vertexShader.isValid())
+            m_rhiDevice->destroyShader(m_vertexShader);
     }
     m_pipeline = {};
     m_pipelineLayout = {};
@@ -177,15 +179,11 @@ float UIScrollArea::maxScroll() const {
 }
 
 void UIScrollArea::initMesh() {
-    constexpr float vertices[] = {
-        0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 1.0f,
-        0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 1.0f
-    };
+    constexpr float vertices[] = {0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 1.0f};
     RhiBufferDesc desc;
     desc.debugName = "UiScrollArea.VertexBuffer";
     desc.size = sizeof(vertices);
-    desc.usage = rhiFlag(RhiBufferUsage::Vertex) |
-                 rhiFlag(RhiBufferUsage::TransferDst);
+    desc.usage = rhiFlag(RhiBufferUsage::Vertex) | rhiFlag(RhiBufferUsage::TransferDst);
     desc.memoryUsage = RhiMemoryUsage::GpuOnly;
     desc.initialState = RhiResourceState::VertexBuffer;
     desc.memoryCategory = RhiMemoryCategory::Geometry;
@@ -200,9 +198,11 @@ void UIScrollArea::cleanupMesh() {
 }
 
 void UIScrollArea::render(const UIRenderContext& ctx) const {
-    if (!visible) return;
+    if (!visible)
+        return;
     const bool record = ctx.phase == UIRenderPhase::Record;
-    if (record && ctx.commandList == nullptr) return;
+    if (record && ctx.commandList == nullptr)
+        return;
 
     float ax = getAbsoluteX(ctx);
     float ay = getAbsoluteY(ctx);
@@ -226,9 +226,9 @@ void UIScrollArea::render(const UIRenderContext& ctx) const {
     }
 
     const RhiRect2D parentScissor = ctx.hasScissor
-        ? ctx.scissor
-        : RhiRect2D{0, 0, static_cast<uint32_t>(ctx.screenWidth * ctx.pixelScale()),
-                    static_cast<uint32_t>(ctx.screenHeight * ctx.pixelScale())};
+                                        ? ctx.scissor
+                                        : RhiRect2D{0, 0, static_cast<uint32_t>(ctx.screenWidth * ctx.pixelScale()),
+                                                    static_cast<uint32_t>(ctx.screenHeight * ctx.pixelScale())};
     if (record) {
         ctx.commandList->setScissor(parentScissor);
     }
@@ -240,7 +240,8 @@ void UIScrollArea::render(const UIRenderContext& ctx) const {
 }
 
 void UIScrollArea::renderOverlay(const UIRenderContext& ctx) const {
-    if (!visible) return;
+    if (!visible)
+        return;
 
     for (const auto& child : getChildren()) {
         const_cast<UIWidget*>(child.get())->anchorOffsetY += m_scrollOffset;
@@ -250,7 +251,8 @@ void UIScrollArea::renderOverlay(const UIRenderContext& ctx) const {
 }
 
 UIEventResult UIScrollArea::onOverlayInput(const UIInputEvent& event, const UIRenderContext& ctx) {
-    if (!visible) return UIEventResult::Ignored;
+    if (!visible)
+        return UIEventResult::Ignored;
 
     for (auto& child : const_cast<std::vector<std::unique_ptr<UIWidget>>&>(getChildren())) {
         child->anchorOffsetY += m_scrollOffset;
@@ -276,8 +278,8 @@ bool UIScrollArea::hitTestDescendantInputClip(float px, float py, const UIRender
 }
 
 void UIScrollArea::renderScrollbar(const UIRenderContext& ctx) const {
-    if (ctx.commandList == nullptr || !m_pipeline.isValid() ||
-        !m_vertexBuffer.isValid() || m_contentHeight <= 0.0f) return;
+    if (ctx.commandList == nullptr || !m_pipeline.isValid() || !m_vertexBuffer.isValid() || m_contentHeight <= 0.0f)
+        return;
 
     const UIResolvedScrollAreaStyle resolved = resolveStyle(ctx, m_thumbHovered || m_draggingScrollbar);
     float sbWidth = resolved.scrollbarWidth;
@@ -314,8 +316,7 @@ void UIScrollArea::renderScrollbar(const UIRenderContext& ctx) const {
         const PushConstants pushConstants{
             glm::vec4(static_cast<float>(ctx.screenWidth), static_cast<float>(ctx.screenHeight), x, y),
             glm::vec4(shapeWidth, shapeHeight, shapeWidth * 0.5f, 0.0f),
-            glm::vec4(shapeColor[0], shapeColor[1], shapeColor[2], shapeColor[3])
-        };
+            glm::vec4(shapeColor[0], shapeColor[1], shapeColor[2], shapeColor[3])};
         ctx.commandList->pushConstants(&pushConstants, sizeof(pushConstants),
                                        rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment));
         ctx.commandList->draw(6u, 1u, 0u, 0u);
@@ -344,12 +345,12 @@ bool UIScrollArea::hitTestScrollbarThumb(float px, float py, const UIRenderConte
     const float thumbH = scrollbarThumbHeight(ah, m_contentHeight);
     const float thumbY = scrollbarThumbY(trackY, ah, thumbH, m_scrollOffset, scrollMax);
 
-    return px >= trackX && px <= trackX + sbWidth
-        && flippedY >= thumbY && flippedY <= thumbY + thumbH;
+    return px >= trackX && px <= trackX + sbWidth && flippedY >= thumbY && flippedY <= thumbY + thumbH;
 }
 
 UIEventResult UIScrollArea::onInput(const UIInputEvent& event, const UIRenderContext& ctx) {
-    if (!visible || !interactive) return UIEventResult::Ignored;
+    if (!visible || !interactive)
+        return UIEventResult::Ignored;
 
     bool inside = hitTest(event.x, event.y, ctx);
 

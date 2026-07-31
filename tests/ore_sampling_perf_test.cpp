@@ -13,11 +13,7 @@
 
 class TerrainGeneratorPerfAccess {
 public:
-    static BlockID sampleOreBlock(const TerrainGenerator& generator,
-                                  int worldX,
-                                  int y,
-                                  int worldZ,
-                                  BlockID baseBlock) {
+    static BlockID sampleOreBlock(const TerrainGenerator& generator, int worldX, int y, int worldZ, BlockID baseBlock) {
         return generator.sampleOreBlock(worldX, y, worldZ, baseBlock);
     }
 };
@@ -92,20 +88,13 @@ std::vector<OreSample> buildMixedSamples(int sampleCount) {
     return samples;
 }
 
-BenchmarkStats runBenchmark(const std::string& caseName,
-                            const TerrainGenerator& generator,
-                            const std::vector<OreSample>& samples,
-                            int warmupRounds,
-                            int measureRounds) {
+BenchmarkStats runBenchmark(const std::string& caseName, const TerrainGenerator& generator,
+                            const std::vector<OreSample>& samples, int warmupRounds, int measureRounds) {
     for (int i = 0; i < warmupRounds; ++i) {
         uint64_t warmupChecksum = 0;
         for (const OreSample& sample : samples) {
-            warmupChecksum += static_cast<uint64_t>(TerrainGeneratorPerfAccess::sampleOreBlock(
-                    generator,
-                    sample.x,
-                    sample.y,
-                    sample.z,
-                    sample.baseBlock));
+            warmupChecksum += static_cast<uint64_t>(
+                TerrainGeneratorPerfAccess::sampleOreBlock(generator, sample.x, sample.y, sample.z, sample.baseBlock));
         }
         if (warmupChecksum == 0xFFFFFFFFFFFFFFFFULL) {
             std::cout << "[ore_sampling_perf_test] impossible_warmup_checksum=" << warmupChecksum << "\n";
@@ -120,12 +109,8 @@ BenchmarkStats runBenchmark(const std::string& caseName,
         const auto start = std::chrono::high_resolution_clock::now();
         uint64_t roundChecksum = 0;
         for (const OreSample& sample : samples) {
-            roundChecksum += static_cast<uint64_t>(TerrainGeneratorPerfAccess::sampleOreBlock(
-                    generator,
-                    sample.x,
-                    sample.y,
-                    sample.z,
-                    sample.baseBlock));
+            roundChecksum += static_cast<uint64_t>(
+                TerrainGeneratorPerfAccess::sampleOreBlock(generator, sample.x, sample.y, sample.z, sample.baseBlock));
         }
         const auto end = std::chrono::high_resolution_clock::now();
 
@@ -161,19 +146,12 @@ BenchmarkStats runBenchmark(const std::string& caseName,
     }
 
     std::cout << "[ore_sampling_perf_test]"
-              << " case=" << caseName
-              << " samples=" << samples.size()
-              << " warmup=" << warmupRounds
-              << " rounds=" << measureRounds
-              << " median_ms=" << std::fixed << std::setprecision(3) << stats.medianMs
-              << " p95_ms=" << stats.p95Ms
-              << " avg_ms=" << stats.avgMs
-              << " min_ms=" << stats.minMs
-              << " max_ms=" << stats.maxMs
-              << " calls_per_sec=" << std::setprecision(0) << stats.callsPerSec
-              << " ns_per_call=" << std::setprecision(2) << stats.nsPerCall
-              << " checksum=" << std::setprecision(0) << stats.checksum
-              << "\n";
+              << " case=" << caseName << " samples=" << samples.size() << " warmup=" << warmupRounds
+              << " rounds=" << measureRounds << " median_ms=" << std::fixed << std::setprecision(3) << stats.medianMs
+              << " p95_ms=" << stats.p95Ms << " avg_ms=" << stats.avgMs << " min_ms=" << stats.minMs
+              << " max_ms=" << stats.maxMs << " calls_per_sec=" << std::setprecision(0) << stats.callsPerSec
+              << " ns_per_call=" << std::setprecision(2) << stats.nsPerCall << " checksum=" << std::setprecision(0)
+              << stats.checksum << "\n";
 
     return stats;
 }
@@ -190,12 +168,8 @@ int main() {
     constexpr int sampleCount = 2'000'000;
 
     std::cout << "[ore_sampling_perf_test] Starting sampleOreBlock baseline"
-              << " seed=" << seed
-              << " seaLevel=" << seaLevel
-              << " warmup=" << warmupRounds
-              << " rounds=" << measureRounds
-              << " sample_count=" << sampleCount
-              << "\n";
+              << " seed=" << seed << " seaLevel=" << seaLevel << " warmup=" << warmupRounds
+              << " rounds=" << measureRounds << " sample_count=" << sampleCount << "\n";
 
     TerrainGenerator generator;
     generator.init(seed, seaLevel);
@@ -203,23 +177,14 @@ int main() {
     const std::vector<OreSample> stoneOnlySamples = buildStoneOnlySamples(sampleCount);
     const std::vector<OreSample> mixedSamples = buildMixedSamples(sampleCount);
 
-    const BenchmarkStats stoneStats = runBenchmark(
-            "stone_only",
-            generator,
-            stoneOnlySamples,
-            warmupRounds,
-            measureRounds);
+    const BenchmarkStats stoneStats =
+        runBenchmark("stone_only", generator, stoneOnlySamples, warmupRounds, measureRounds);
 
-    const BenchmarkStats mixedStats = runBenchmark(
-            "mixed_base_blocks",
-            generator,
-            mixedSamples,
-            warmupRounds,
-            measureRounds);
+    const BenchmarkStats mixedStats =
+        runBenchmark("mixed_base_blocks", generator, mixedSamples, warmupRounds, measureRounds);
 
     const uint64_t finalChecksum = stoneStats.checksum ^ (mixedStats.checksum << 1U);
 
     std::cout << "[ore_sampling_perf_test] PASS baseline_ready checksum=" << finalChecksum << "\n";
     return EXIT_SUCCESS;
 }
-

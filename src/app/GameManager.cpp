@@ -44,11 +44,7 @@ double percentileFromSorted(const std::vector<double>& sortedValues, const doubl
 }
 
 nlohmann::json gpuTimingPercentilesJson(const GpuTimingPercentiles& timing) {
-    return {
-        {"p50", timing.p50Ms},
-        {"p95", timing.p95Ms},
-        {"p99", timing.p99Ms}
-    };
+    return {{"p50", timing.p50Ms}, {"p95", timing.p95Ms}, {"p99", timing.p99Ms}};
 }
 
 nlohmann::json rhiMemoryStatsJson(const RhiMemoryStats& stats) {
@@ -56,27 +52,21 @@ nlohmann::json rhiMemoryStatsJson(const RhiMemoryStats& stats) {
     for (size_t index = 0u; index < kRhiMemoryCategoryCount; ++index) {
         const auto category = static_cast<RhiMemoryCategory>(index);
         const RhiMemoryCategoryStats& entry = stats.categories[index];
-        categories[rhiMemoryCategoryStableId(category)] = {
-            {"bytes", entry.bytes},
-            {"allocation_count", entry.allocationCount},
-            {"resource_count", entry.resourceCount}
-        };
+        categories[rhiMemoryCategoryStableId(category)] = {{"bytes", entry.bytes},
+                                                           {"allocation_count", entry.allocationCount},
+                                                           {"resource_count", entry.resourceCount}};
     }
-    return {
-        {"valid", stats.valid},
-        {"accuracy", rhiMemoryStatsAccuracyStableId(stats.accuracy)},
-        {"total_bytes", stats.totalBytes},
-        {"total_allocation_count", stats.totalAllocationCount},
-        {"total_resource_count", stats.totalResourceCount},
-        {"categories", std::move(categories)}
-    };
+    return {{"valid", stats.valid},
+            {"accuracy", rhiMemoryStatsAccuracyStableId(stats.accuracy)},
+            {"total_bytes", stats.totalBytes},
+            {"total_allocation_count", stats.totalAllocationCount},
+            {"total_resource_count", stats.totalResourceCount},
+            {"categories", std::move(categories)}};
 }
 
 } // namespace
 
-GameManager::GameManager() 
-    : m_contextManager(m_actionMap, m_input) {
-}
+GameManager::GameManager() : m_contextManager(m_actionMap, m_input) {}
 
 GameManager::~GameManager() = default;
 
@@ -89,16 +79,13 @@ bool GameManager::init(int width, int height, const char* title, AppLaunchOption
     m_benchmarkReportSucceeded = true;
     m_runSucceeded = true;
     if (!m_validationRun.configure(m_launchOptions)) {
-        MECRAFT_LOG_STREAM(
-            std::cerr << "GameManager: validation configuration failed: "
-                      << app::validation::validationRunErrorStableId(
-                             m_validationRun.error())
-                      << ":" << m_validationRun.detail() << '\n');
+        MECRAFT_LOG_STREAM(std::cerr << "GameManager: validation configuration failed: "
+                                     << app::validation::validationRunErrorStableId(m_validationRun.error()) << ":"
+                                     << m_validationRun.detail() << '\n');
         return false;
     }
     std::optional<RhiBackend> savedBackend;
-    if (!m_launchOptions.rhiBackendExplicit &&
-        !m_launchOptions.validationEnabled()) {
+    if (!m_launchOptions.rhiBackendExplicit && !m_launchOptions.validationEnabled()) {
         const app::RhiBackendSettingResult backendSetting = app::loadRhiBackend();
         if (!backendSetting.isValid) {
             MECRAFT_LOG_STREAM(std::cerr << "GameManager: invalid app.rhiBackend setting\n");
@@ -126,20 +113,17 @@ bool GameManager::init(int width, int height, const char* title, AppLaunchOption
             return false;
         }
         m_vsyncEnabled = vsyncSetting.enabled;
-        const app::FullscreenSettingResult fullscreenSetting =
-            app::loadFullscreenEnabled();
+        const app::FullscreenSettingResult fullscreenSetting = app::loadFullscreenEnabled();
         if (!fullscreenSetting.isValid) {
             MECRAFT_LOG_STREAM(std::cerr << "GameManager: invalid app.fullscreenEnabled setting\n");
             return false;
         }
-        m_fullscreenEnabled = fullscreenSetting.enabled.has_value() &&
-                              *fullscreenSetting.enabled;
+        m_fullscreenEnabled = fullscreenSetting.enabled.has_value() && *fullscreenSetting.enabled;
     }
     m_rhiDevice = renderer::rhi::createRhiDevice(m_launchOptions.rhiBackend);
     if (!m_rhiDevice) {
         MECRAFT_LOG_STREAM(std::cerr << "GameManager: requested RHI backend is unavailable: "
-                                    << renderer::rhi::rhiBackendDisplayName(m_launchOptions.rhiBackend)
-                                    << '\n');
+                                     << renderer::rhi::rhiBackendDisplayName(m_launchOptions.rhiBackend) << '\n');
         return false;
     }
     if (!initWindow(width, height, title)) {
@@ -156,8 +140,7 @@ bool GameManager::init(int width, int height, const char* title, AppLaunchOption
 #if defined(MECRAFT_ENABLE_STREAMLINE) && defined(_WIN32)
     if (m_launchOptions.rhiBackend == RhiBackend::Vulkan) {
         StreamlineRuntime& streamline = StreamlineRuntime::instance();
-        if (!streamline.attachLatencyWindow(
-                glfwGetWin32Window(m_window.getHandle()))) {
+        if (!streamline.attachLatencyWindow(glfwGetWin32Window(m_window.getHandle()))) {
             MECRAFT_LOG_STREAM(std::cerr << streamline.lastError() << '\n');
             return false;
         }
@@ -167,7 +150,7 @@ bool GameManager::init(int width, int height, const char* title, AppLaunchOption
     if (!app::bootstrapGameResources(m_resourceMgr, *m_rhiDevice, *m_commandListPool)) {
         return false;
     }
-    
+
     m_audioEngine.init();
     m_bgmSystem.init(m_audioEngine);
     m_uiRenderer.init(m_resourceMgr);
@@ -182,16 +165,14 @@ bool GameManager::init(int width, int height, const char* title, AppLaunchOption
     }
 
     if (m_validationRun.scene() == ValidationScene::Model) {
-        m_appStateMachine.pushState(
-            std::make_unique<ModelSceneAppState>(makeAppStateDependencies()));
-    } else if (m_validationRun.scene() == ValidationScene::Voxel ||
-               m_launchOptions.autoStartGameplay) {
+        m_appStateMachine.pushState(std::make_unique<ModelSceneAppState>(makeAppStateDependencies()));
+    } else if (m_validationRun.scene() == ValidationScene::Voxel || m_launchOptions.autoStartGameplay) {
         GameSessionConfig benchmarkConfig;
         if (!makeBenchmarkSessionConfig(benchmarkConfig)) {
             return false;
         }
-        m_appStateMachine.pushState(std::make_unique<LoadingAppState>(makeAppStateDependencies(),
-                                                                      std::move(benchmarkConfig)));
+        m_appStateMachine.pushState(
+            std::make_unique<LoadingAppState>(makeAppStateDependencies(), std::move(benchmarkConfig)));
     } else {
         m_appStateMachine.pushState(std::make_unique<MainMenuAppState>(makeAppStateDependencies()));
     }
@@ -243,70 +224,63 @@ bool GameManager::initWindow(int width, int height, const char* title) {
     }
     m_input.init(m_window.getHandle());
     m_input.captureMouse(false);
-    
+
     m_actionMap.loadFromFile(KEYBINDINGS_PATH);
     Time::init();
     return true;
 }
 
 AppStateDependencies GameManager::makeAppStateDependencies() {
-    return {
-        m_appStateMachine,
-        m_window,
-        m_input,
-        m_actionMap,
-        m_contextManager,
-        m_resourceMgr,
-        m_audioEngine,
-        m_bgmSystem,
-        m_uiRenderer,
-        m_localeManager,
-        m_threadPool,
-        *m_rhiDevice,
-        *m_commandListPool,
-        m_validationRun,
-        m_launchOptions.enableDebugDashboard,
-        [this]() { activateInputReplayForScope(AppLaunchOptions::InputReplayScope::Gameplay); },
-        [this]() {
-            if (m_launchOptions.inputReplayScope == AppLaunchOptions::InputReplayScope::Gameplay) {
-                m_input.setInputReplayActive(false);
-            }
-        },
-        [this]() {
-            return m_launchOptions.inputReplayScope == AppLaunchOptions::InputReplayScope::Gameplay &&
-                   (m_launchOptions.recordInput || m_launchOptions.replayInput);
-        }
-    };
+    return {m_appStateMachine,
+            m_window,
+            m_input,
+            m_actionMap,
+            m_contextManager,
+            m_resourceMgr,
+            m_audioEngine,
+            m_bgmSystem,
+            m_uiRenderer,
+            m_localeManager,
+            m_threadPool,
+            *m_rhiDevice,
+            *m_commandListPool,
+            m_validationRun,
+            m_launchOptions.enableDebugDashboard,
+            [this]() { activateInputReplayForScope(AppLaunchOptions::InputReplayScope::Gameplay); },
+            [this]() {
+                if (m_launchOptions.inputReplayScope == AppLaunchOptions::InputReplayScope::Gameplay) {
+                    m_input.setInputReplayActive(false);
+                }
+            },
+            [this]() {
+                return m_launchOptions.inputReplayScope == AppLaunchOptions::InputReplayScope::Gameplay &&
+                       (m_launchOptions.recordInput || m_launchOptions.replayInput);
+            }};
 }
 
 bool GameManager::makeBenchmarkSessionConfig(GameSessionConfig& outConfig) const {
     outConfig = GameSessionConfig{};
     if (m_launchOptions.validationEnabled()) {
-        const app::validation::ValidationSceneContract& contract =
-            m_validationRun.sceneContract();
-        if (contract.scene != ValidationScene::Voxel ||
-            !contract.voxelWorld.has_value()) {
-            MECRAFT_LOG_STREAM(std::cerr
-                << "Voxel validation requires one verified world identity\n");
+        const app::validation::ValidationSceneContract& contract = m_validationRun.sceneContract();
+        if (contract.scene != ValidationScene::Voxel || !contract.voxelWorld.has_value()) {
+            MECRAFT_LOG_STREAM(std::cerr << "Voxel validation requires one verified world identity\n");
             return false;
         }
         outConfig.seed = contract.voxelWorld->seed;
         outConfig.renderDistance = contract.voxelWorld->renderDistance;
         outConfig.enableSaving = false;
         outConfig.renderSettingsSource = GameRenderSettingsSource::FixedProfile;
-        outConfig.fixedRenderSettings =
-            m_validationRun.renderSettingsProfile().settings;
+        outConfig.fixedRenderSettings = m_validationRun.renderSettingsProfile().settings;
         return true;
     }
 
     outConfig.seed = m_launchOptions.benchmarkSeed;
-    outConfig.renderDistance = m_launchOptions.benchmarkRenderDistanceSet
-        ? m_launchOptions.benchmarkRenderDistance
-        : app::loadRenderDistance();
+    outConfig.renderDistance = m_launchOptions.benchmarkRenderDistanceSet ? m_launchOptions.benchmarkRenderDistance
+                                                                          : app::loadRenderDistance();
     outConfig.worldName = m_launchOptions.benchmarkWorldName;
     outConfig.worldDisplayName = m_launchOptions.benchmarkWorldDisplayName.empty()
-        ? m_launchOptions.benchmarkWorldName
-        : m_launchOptions.benchmarkWorldDisplayName;
+                                     ? m_launchOptions.benchmarkWorldName
+                                     : m_launchOptions.benchmarkWorldDisplayName;
     outConfig.saveRoot = m_launchOptions.benchmarkSaveRoot;
     outConfig.enableSaving = m_launchOptions.benchmarkEnableSaving;
 
@@ -316,8 +290,8 @@ bool GameManager::makeBenchmarkSessionConfig(GameSessionConfig& outConfig) const
             save::SaveManager saveManager(worldPath);
             save::LevelMeta meta;
             if (!saveManager.loadLevelMeta(meta)) {
-                MECRAFT_LOG_STREAM(std::cerr << "Failed to read benchmark world metadata: "
-                                  << worldPath.string() << '\n');
+                MECRAFT_LOG_STREAM(std::cerr << "Failed to read benchmark world metadata: " << worldPath.string()
+                                             << '\n');
                 return false;
             }
             outConfig.seed = static_cast<int>(meta.seed);
@@ -382,28 +356,19 @@ bool GameManager::run() {
         const auto pollEnd = std::chrono::steady_clock::now();
         const auto& pollEventStats = m_input.debugEventStats();
         const auto imguiPollStats = ImGui_ImplGlfw_GetDebugPollStats();
-        m_appStateMachine.recordPollEvents(std::chrono::duration<double, std::milli>(pollEnd - pollStart).count(),
-                                           pollEventStats.keyEvents,
-                                           pollEventStats.mouseButtonEvents,
-                                           pollEventStats.cursorPosEvents,
-                                           pollEventStats.scrollEvents,
-                                           pollEventStats.charEvents,
-                                           pollEventStats.callbackMs(),
-                                           pollEventStats.cursorPosCallbackMs,
-                                           imguiPollStats.callbackMs,
-                                           imguiPollStats.cursorPosCallbackMs,
-                                           imguiPollStats.cursorPosBackendMs,
-                                           imguiPollStats.wndProcMs,
-                                           imguiPollStats.wndProcSlowestMs,
-                                           imguiPollStats.wndProcSlowestMsg,
-                                           static_cast<unsigned>(imguiPollStats.wndProcCount));
+        m_appStateMachine.recordPollEvents(
+            std::chrono::duration<double, std::milli>(pollEnd - pollStart).count(), pollEventStats.keyEvents,
+            pollEventStats.mouseButtonEvents, pollEventStats.cursorPosEvents, pollEventStats.scrollEvents,
+            pollEventStats.charEvents, pollEventStats.callbackMs(), pollEventStats.cursorPosCallbackMs,
+            imguiPollStats.callbackMs, imguiPollStats.cursorPosCallbackMs, imguiPollStats.cursorPosBackendMs,
+            imguiPollStats.wndProcMs, imguiPollStats.wndProcSlowestMs, imguiPollStats.wndProcSlowestMsg,
+            static_cast<unsigned>(imguiPollStats.wndProcCount));
 #endif
         Time::update();
 
 #if defined(MECRAFT_ENABLE_STREAMLINE)
-        if (streamline != nullptr && !streamline->setPclMarker(
-                trackingFrameIndex,
-                StreamlinePclMarker::SimulationStart)) {
+        if (streamline != nullptr &&
+            !streamline->setPclMarker(trackingFrameIndex, StreamlinePclMarker::SimulationStart)) {
             MECRAFT_LOG_STREAM(std::cerr << streamline->lastError() << '\n');
             m_runSucceeded = false;
             break;
@@ -419,9 +384,8 @@ bool GameManager::run() {
 #endif
         m_appStateMachine.update(frameTime, accumulator);
 #if defined(MECRAFT_ENABLE_STREAMLINE)
-        if (streamline != nullptr && !streamline->setPclMarker(
-                trackingFrameIndex,
-                StreamlinePclMarker::SimulationEnd)) {
+        if (streamline != nullptr &&
+            !streamline->setPclMarker(trackingFrameIndex, StreamlinePclMarker::SimulationEnd)) {
             MECRAFT_LOG_STREAM(std::cerr << streamline->lastError() << '\n');
             m_runSucceeded = false;
             break;
@@ -429,13 +393,13 @@ bool GameManager::run() {
 #endif
 #ifdef MECRAFT_DEBUG
         const auto updateEnd = std::chrono::steady_clock::now();
-        m_appStateMachine.recordAppUpdateDispatch(std::chrono::duration<double, std::milli>(updateEnd - updateStart).count());
+        m_appStateMachine.recordAppUpdateDispatch(
+            std::chrono::duration<double, std::milli>(updateEnd - updateStart).count());
         const auto renderStart = std::chrono::steady_clock::now();
 #endif
 #if defined(MECRAFT_ENABLE_STREAMLINE)
-        if (streamline != nullptr && !streamline->setPclMarker(
-                trackingFrameIndex,
-                StreamlinePclMarker::RenderSubmitStart)) {
+        if (streamline != nullptr &&
+            !streamline->setPclMarker(trackingFrameIndex, StreamlinePclMarker::RenderSubmitStart)) {
             MECRAFT_LOG_STREAM(std::cerr << streamline->lastError() << '\n');
             m_runSucceeded = false;
             break;
@@ -444,9 +408,8 @@ bool GameManager::run() {
         m_appStateMachine.render(frameTime);
         const auto appFrameEnd = std::chrono::steady_clock::now();
 #if defined(MECRAFT_ENABLE_STREAMLINE)
-        if (streamline != nullptr && !streamline->setPclMarker(
-                trackingFrameIndex,
-                StreamlinePclMarker::RenderSubmitEnd)) {
+        if (streamline != nullptr &&
+            !streamline->setPclMarker(trackingFrameIndex, StreamlinePclMarker::RenderSubmitEnd)) {
             MECRAFT_LOG_STREAM(std::cerr << streamline->lastError() << '\n');
             m_runSucceeded = false;
             break;
@@ -454,35 +417,28 @@ bool GameManager::run() {
 #endif
 #ifdef MECRAFT_DEBUG
         const auto renderEnd = std::chrono::steady_clock::now();
-        m_appStateMachine.recordAppRenderDispatch(std::chrono::duration<double, std::milli>(renderEnd - renderStart).count());
+        m_appStateMachine.recordAppRenderDispatch(
+            std::chrono::duration<double, std::milli>(renderEnd - renderStart).count());
 #endif
-        const bool validationSampleCompleted =
-            m_validationRun.consumeCompletedSampleFrame();
-        const double measuredFrameSeconds = m_validationRun.enabled()
-            ? std::chrono::duration<double>(
-                  appFrameEnd - appFrameStart).count()
-            : frameTime;
-        recordBenchmarkFrame(
-            measuredFrameSeconds, validationSampleCompleted);
+        const bool validationSampleCompleted = m_validationRun.consumeCompletedSampleFrame();
+        const double measuredFrameSeconds =
+            m_validationRun.enabled() ? std::chrono::duration<double>(appFrameEnd - appFrameStart).count() : frameTime;
+        recordBenchmarkFrame(measuredFrameSeconds, validationSampleCompleted);
         closeWindowIfBenchmarkComplete();
     }
     if (!writeBenchmarkReport()) {
         m_runSucceeded = false;
     }
-    return m_runSucceeded && !m_validationRun.failed() &&
-        (!m_validationRun.enabled() || m_validationRun.complete());
+    return m_runSucceeded && !m_validationRun.failed() && (!m_validationRun.enabled() || m_validationRun.complete());
 }
 
-void GameManager::recordBenchmarkFrame(
-    const double measuredFrameSeconds,
-    const bool validationSampleCompleted) {
+void GameManager::recordBenchmarkFrame(const double measuredFrameSeconds, const bool validationSampleCompleted) {
     if (m_validationRun.enabled()) {
         if (!validationSampleCompleted) {
             return;
         }
     } else {
-        if (!m_launchOptions.autoStartGameplay ||
-            !m_input.isInputReplayActive()) {
+        if (!m_launchOptions.autoStartGameplay || !m_input.isInputReplayActive()) {
             m_benchmarkReplayWasActive = false;
             return;
         }
@@ -498,8 +454,7 @@ void GameManager::recordBenchmarkFrame(
         m_benchmarkStats.minFrameMs = frameMs;
         m_benchmarkStats.maxFrameMs = frameMs;
         if (m_validationRun.enabled()) {
-            m_benchmarkStats.frameTimesMs.reserve(
-                m_launchOptions.validationSampleFrames);
+            m_benchmarkStats.frameTimesMs.reserve(m_launchOptions.validationSampleFrames);
         } else if (m_launchOptions.benchmarkDurationSeconds > 0.0) {
             m_benchmarkStats.frameTimesMs.reserve(
                 static_cast<size_t>(std::ceil(m_launchOptions.benchmarkDurationSeconds * 240.0)));
@@ -508,9 +463,9 @@ void GameManager::recordBenchmarkFrame(
 
     ++m_benchmarkStats.frameCount;
     m_benchmarkStats.replayActiveSeconds = m_validationRun.enabled()
-        ? static_cast<double>(m_validationRun.completedSampleFrames()) *
-              static_cast<double>(app::validation::kValidationFrameDeltaSeconds)
-        : m_input.inputReplayActiveSeconds();
+                                               ? static_cast<double>(m_validationRun.completedSampleFrames()) *
+                                                     static_cast<double>(app::validation::kValidationFrameDeltaSeconds)
+                                               : m_input.inputReplayActiveSeconds();
     m_benchmarkStats.totalFrameMs += frameMs;
     m_benchmarkStats.minFrameMs = std::min(m_benchmarkStats.minFrameMs, frameMs);
     m_benchmarkStats.maxFrameMs = std::max(m_benchmarkStats.maxFrameMs, frameMs);
@@ -524,11 +479,9 @@ void GameManager::recordBenchmarkFrame(
 
 void GameManager::closeWindowIfBenchmarkComplete() {
     if (m_validationRun.failed()) {
-        MECRAFT_LOG_STREAM(
-            std::cerr << "[Validation] "
-                      << app::validation::validationRunErrorStableId(
-                             m_validationRun.error())
-                      << ":" << m_validationRun.detail() << '\n');
+        MECRAFT_LOG_STREAM(std::cerr << "[Validation] "
+                                     << app::validation::validationRunErrorStableId(m_validationRun.error()) << ":"
+                                     << m_validationRun.detail() << '\n');
         m_runSucceeded = false;
         glfwSetWindowShouldClose(m_window.getHandle(), true);
         return;
@@ -548,9 +501,7 @@ void GameManager::closeWindowIfBenchmarkComplete() {
         glfwSetWindowShouldClose(m_window.getHandle(), true);
         return;
     }
-    if (m_launchOptions.replayInput &&
-        m_launchOptions.exitWhenPlaybackEnds &&
-        m_input.isInputPlaybackFinished()) {
+    if (m_launchOptions.replayInput && m_launchOptions.exitWhenPlaybackEnds && m_input.isInputPlaybackFinished()) {
         glfwSetWindowShouldClose(m_window.getHandle(), true);
     }
 }
@@ -565,8 +516,7 @@ bool GameManager::writeBenchmarkReport() {
         return false;
     }
     if (!m_benchmarkStats.active || m_benchmarkStats.frameCount == 0) {
-        m_benchmarkReportSucceeded = !m_validationRun.enabled() &&
-            m_launchOptions.benchmarkReportPath.empty();
+        m_benchmarkReportSucceeded = !m_validationRun.enabled() && m_launchOptions.benchmarkReportPath.empty();
         return m_benchmarkReportSucceeded;
     }
 
@@ -579,158 +529,100 @@ bool GameManager::writeBenchmarkReport() {
     const double p95FrameMs = percentileFromSorted(sortedFrameMs, 95.0);
     const double p99FrameMs = percentileFromSorted(sortedFrameMs, 99.0);
     const double avgFps = avgFrameMs > 0.0 ? 1000.0 / avgFrameMs : 0.0;
-    const GpuTimingWindowStats gpuTimingWindow =
-        m_benchmarkGpuTimingHistory.snapshot();
-    const RhiMemoryStats memoryStats =
-        m_rhiDevice != nullptr ? m_rhiDevice->memoryStats() : RhiMemoryStats{};
+    const GpuTimingWindowStats gpuTimingWindow = m_benchmarkGpuTimingHistory.snapshot();
+    const RhiMemoryStats memoryStats = m_rhiDevice != nullptr ? m_rhiDevice->memoryStats() : RhiMemoryStats{};
 
-    std::cout << std::fixed << std::setprecision(3)
-              << "[Benchmark] frames=" << m_benchmarkStats.frameCount
+    std::cout << std::fixed << std::setprecision(3) << "[Benchmark] frames=" << m_benchmarkStats.frameCount
               << " replay_active_s=" << m_benchmarkStats.replayActiveSeconds
-              << (m_validationRun.enabled()
-                      ? " cpu_update_render_avg_ms="
-                      : " avg_ms=")
-              << avgFrameMs
-              << " p50_ms=" << p50FrameMs
-              << " p95_ms=" << p95FrameMs
-              << " p99_ms=" << p99FrameMs
-              << " min_ms=" << m_benchmarkStats.minFrameMs
-              << " max_ms=" << m_benchmarkStats.maxFrameMs
-              << " avg_fps=" << avgFps
-              << " gpu_samples=" << gpuTimingWindow.sampleCount
+              << (m_validationRun.enabled() ? " cpu_update_render_avg_ms=" : " avg_ms=") << avgFrameMs
+              << " p50_ms=" << p50FrameMs << " p95_ms=" << p95FrameMs << " p99_ms=" << p99FrameMs
+              << " min_ms=" << m_benchmarkStats.minFrameMs << " max_ms=" << m_benchmarkStats.maxFrameMs
+              << " avg_fps=" << avgFps << " gpu_samples=" << gpuTimingWindow.sampleCount
               << " rhi_memory_bytes=" << memoryStats.totalBytes;
     if (gpuTimingWindow.valid) {
-        std::cout << " gpu_tracked_p95_ms="
-                  << gpuTimingWindow.totalTrackedGpuMs.p95Ms;
+        std::cout << " gpu_tracked_p95_ms=" << gpuTimingWindow.totalTrackedGpuMs.p95Ms;
     }
     std::cout << '\n';
 
-    const std::filesystem::path reportPath = m_validationRun.enabled()
-        ? m_launchOptions.validationReportPath
-        : m_launchOptions.benchmarkReportPath;
+    const std::filesystem::path reportPath =
+        m_validationRun.enabled() ? m_launchOptions.validationReportPath : m_launchOptions.benchmarkReportPath;
     if (reportPath.empty()) {
         return true;
     }
 
     nlohmann::json root;
     if (m_validationRun.enabled()) {
-        const app::validation::ValidationSceneContract& contract =
-            m_validationRun.sceneContract();
+        const app::validation::ValidationSceneContract& contract = m_validationRun.sceneContract();
         root["kind"] = "mecraft.validation_capture_report";
         root["version"] = 1;
         root["scene"] = validationSceneStableId(m_validationRun.scene());
-        root["scene_contract"] = {
-            {"id", contract.id},
-            {"version", contract.version},
-            {"content_hash",
-             renderer::contracts::stableContentHashHex(
-                 contract.contentHash)},
-            {"hash_algorithm",
-             renderer::contracts::kStableContentHashAlgorithm},
-            {"source", contract.sourcePath.generic_u8string()}
-        };
+        root["scene_contract"] = {{"id", contract.id},
+                                  {"version", contract.version},
+                                  {"content_hash", renderer::contracts::stableContentHashHex(contract.contentHash)},
+                                  {"hash_algorithm", renderer::contracts::kStableContentHashAlgorithm},
+                                  {"source", contract.sourcePath.generic_u8string()}};
         root["camera_path"] = {
             {"id", m_validationRun.cameraPath().id},
-            {"content_hash", renderer::contracts::cameraPathContentHashHex(
-                m_validationRun.cameraPath().contentHash)},
+            {"content_hash", renderer::contracts::cameraPathContentHashHex(m_validationRun.cameraPath().contentHash)},
             {"duration_seconds", m_validationRun.cameraPath().durationSeconds},
-            {"source", contract.cameraPath.source.generic_u8string()}
-        };
-        root["capture"] = {
-            {"path", m_launchOptions.validationCapturePath.generic_u8string()},
-            {"width", m_launchOptions.validationWidth},
-            {"height", m_launchOptions.validationHeight},
-            {"camera_time_seconds", m_validationRun.cameraPath().durationSeconds}
-        };
-        root["warmup_frame_count"] =
-            m_launchOptions.validationWarmupFrames;
-        root["requested_sample_frame_count"] =
-            m_launchOptions.validationSampleFrames;
-        const app::validation::ValidationRenderSettingsProfile& profile =
-            m_validationRun.renderSettingsProfile();
-        root["render_settings"] = {
-            {"id", profile.id},
-            {"version", profile.version},
-            {"content_hash",
-             renderer::contracts::stableContentHashHex(
-                 profile.contentHash)}
-        };
-        root["environment"] = {
-            {"time_of_day_seconds",
-             contract.environment.timeOfDaySeconds},
-            {"weather", app::validation::validationWeatherStableId(
-                 contract.environment.weather)}
-        };
+            {"source", contract.cameraPath.source.generic_u8string()}};
+        root["capture"] = {{"path", m_launchOptions.validationCapturePath.generic_u8string()},
+                           {"width", m_launchOptions.validationWidth},
+                           {"height", m_launchOptions.validationHeight},
+                           {"camera_time_seconds", m_validationRun.cameraPath().durationSeconds}};
+        root["warmup_frame_count"] = m_launchOptions.validationWarmupFrames;
+        root["requested_sample_frame_count"] = m_launchOptions.validationSampleFrames;
+        const app::validation::ValidationRenderSettingsProfile& profile = m_validationRun.renderSettingsProfile();
+        root["render_settings"] = {{"id", profile.id},
+                                   {"version", profile.version},
+                                   {"content_hash", renderer::contracts::stableContentHashHex(profile.contentHash)}};
+        root["environment"] = {{"time_of_day_seconds", contract.environment.timeOfDaySeconds},
+                               {"weather", app::validation::validationWeatherStableId(contract.environment.weather)}};
         if (m_validationRun.scene() == ValidationScene::Voxel) {
-            const app::validation::ValidationVoxelWorldIdentity& world =
-                *contract.voxelWorld;
-            root["voxel_world"] = {
-                {"generator", {
-                    {"id", world.generatorId},
-                    {"version", world.generatorVersion}
-                }},
-                {"seed", world.seed},
-                {"render_distance", world.renderDistance},
-                {"content_hash",
-                 renderer::contracts::stableContentHashHex(
-                     world.contentHash)},
-                {"persistent_writes_enabled", false}
-            };
+            const app::validation::ValidationVoxelWorldIdentity& world = *contract.voxelWorld;
+            root["voxel_world"] = {{"generator", {{"id", world.generatorId}, {"version", world.generatorVersion}}},
+                                   {"seed", world.seed},
+                                   {"render_distance", world.renderDistance},
+                                   {"content_hash", renderer::contracts::stableContentHashHex(world.contentHash)},
+                                   {"persistent_writes_enabled", false}};
         } else {
-            const app::validation::ValidationModelAssetIdentity& asset =
-                *contract.modelAsset;
-            root["model_asset"] = {
-                {"source", asset.source.generic_u8string()},
-                {"content_hash",
-                 renderer::contracts::stableContentHashHex(
-                     asset.contentHash)}
-            };
+            const app::validation::ValidationModelAssetIdentity& asset = *contract.modelAsset;
+            root["model_asset"] = {{"source", asset.source.generic_u8string()},
+                                   {"content_hash", renderer::contracts::stableContentHashHex(asset.contentHash)}};
         }
     } else {
         root["kind"] = "mecraft.benchmark_frame_report";
         root["world"] = m_launchOptions.benchmarkWorldName;
         root["replay_input"] = m_launchOptions.inputReplayPath.string();
-        root["benchmark_duration_seconds"] =
-            m_launchOptions.benchmarkDurationSeconds;
+        root["benchmark_duration_seconds"] = m_launchOptions.benchmarkDurationSeconds;
     }
-    root["rhi_backend"] = renderer::rhi::rhiBackendConfigName(
-        m_launchOptions.rhiBackend);
+    root["rhi_backend"] = renderer::rhi::rhiBackendConfigName(m_launchOptions.rhiBackend);
     root["frame_count"] = m_benchmarkStats.frameCount;
-    nlohmann::json framePercentiles = {
-        {"average", avgFrameMs},
-        {"median", p50FrameMs},
-        {"p50", p50FrameMs},
-        {"p95", p95FrameMs},
-        {"p99", p99FrameMs},
-        {"min", m_benchmarkStats.minFrameMs},
-        {"max", m_benchmarkStats.maxFrameMs}
-    };
+    nlohmann::json framePercentiles = {{"average", avgFrameMs},
+                                       {"median", p50FrameMs},
+                                       {"p50", p50FrameMs},
+                                       {"p95", p95FrameMs},
+                                       {"p99", p99FrameMs},
+                                       {"min", m_benchmarkStats.minFrameMs},
+                                       {"max", m_benchmarkStats.maxFrameMs}};
     if (m_validationRun.enabled()) {
-        root["sample_duration_seconds"] =
-            m_benchmarkStats.replayActiveSeconds;
+        root["sample_duration_seconds"] = m_benchmarkStats.replayActiveSeconds;
         root["cpu_update_render_ms"] = std::move(framePercentiles);
     } else {
-        root["replay_active_seconds"] =
-            m_benchmarkStats.replayActiveSeconds;
+        root["replay_active_seconds"] = m_benchmarkStats.replayActiveSeconds;
         root["frame_ms"] = std::move(framePercentiles);
-        root["fps"] = {
-            {"average", avgFps}
-        };
+        root["fps"] = {{"average", avgFps}};
     }
     nlohmann::json gpuStages = nlohmann::json::object();
     for (const GpuTimerPassWindowStats& stage : gpuTimingWindow.passes) {
-        gpuStages[gpuTimerPassName(stage.pass)] =
-            gpuTimingPercentilesJson(stage.gpuMs);
+        gpuStages[gpuTimerPassName(stage.pass)] = gpuTimingPercentilesJson(stage.gpuMs);
     }
-    root["render_graph_stage_ms"] = {
-        {"valid", gpuTimingWindow.valid},
-        {"window_capacity", gpuTimingWindow.capacity},
-        {"window_sample_count", gpuTimingWindow.sampleCount},
-        {"observed_sample_count", gpuTimingWindow.observedSampleCount},
-        {"total_tracked", gpuTimingPercentilesJson(
-            gpuTimingWindow.totalTrackedGpuMs)},
-        {"stages", std::move(gpuStages)}
-    };
+    root["render_graph_stage_ms"] = {{"valid", gpuTimingWindow.valid},
+                                     {"window_capacity", gpuTimingWindow.capacity},
+                                     {"window_sample_count", gpuTimingWindow.sampleCount},
+                                     {"observed_sample_count", gpuTimingWindow.observedSampleCount},
+                                     {"total_tracked", gpuTimingPercentilesJson(gpuTimingWindow.totalTrackedGpuMs)},
+                                     {"stages", std::move(gpuStages)}};
     root["rhi_memory"] = rhiMemoryStatsJson(memoryStats);
 
     const std::filesystem::path parentPath = reportPath.parent_path();
@@ -738,8 +630,8 @@ bool GameManager::writeBenchmarkReport() {
         std::error_code createError;
         std::filesystem::create_directories(parentPath, createError);
         if (createError) {
-            std::cerr << "[Benchmark] Failed to create report directory: "
-                      << parentPath << ": " << createError.message() << '\n';
+            std::cerr << "[Benchmark] Failed to create report directory: " << parentPath << ": "
+                      << createError.message() << '\n';
             m_benchmarkReportSucceeded = false;
             return false;
         }
@@ -754,8 +646,7 @@ bool GameManager::writeBenchmarkReport() {
     output << root.dump(2);
     output.flush();
     if (!output) {
-        std::cerr << "[Benchmark] Failed to flush report: " << reportPath
-                  << '\n';
+        std::cerr << "[Benchmark] Failed to flush report: " << reportPath << '\n';
         m_benchmarkReportSucceeded = false;
         return false;
     }

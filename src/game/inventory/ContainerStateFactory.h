@@ -10,7 +10,6 @@
 
 class ContainerStateFactory final {
 public:
-    [[nodiscard]] static std::unique_ptr<IGameState> create(InventoryStateContext deps,
-                                                            const std::string& containerUiId,
-                                                            const glm::ivec3& blockPosition);
+    [[nodiscard]] static std::unique_ptr<IGameState>
+    create(InventoryStateContext deps, const std::string& containerUiId, const glm::ivec3& blockPosition);
 };

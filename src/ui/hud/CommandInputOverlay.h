@@ -8,8 +8,7 @@
 class ResourceMgr;
 class TextRenderer;
 
-class CommandInputOverlay : public UIWidget
-{
+class CommandInputOverlay : public UIWidget {
 public:
     void init(ResourceMgr& resourceMgr) override;
     void shutdown() override;
@@ -42,26 +41,13 @@ private:
         int h = 1;
     };
 
-    static ClipInfo computeClipInfo(const std::string& text,
-                                    int boxX,
-                                    int boxY,
-                                    int boxW,
-                                    int boxH,
-                                    float textScale,
-                                    int textPaddingX,
-                                    int textPaddingY,
-                                    const TextRenderer& textRenderer);
+    static ClipInfo computeClipInfo(const std::string& text, int boxX, int boxY, int boxW, int boxH, float textScale,
+                                    int textPaddingX, int textPaddingY, const TextRenderer& textRenderer);
     static CaretRect computeCaretRect(const ClipInfo& info, const TextRenderer& textRenderer, float textScale);
     static bool isCaretVisible(double nowSec, float blinkPeriodMs);
 
-    void renderBox(const std::string& text,
-                   const TextRenderer& textRenderer,
-                   const UIRenderContext& context) const;
-    void drawOverlayRect(const UIRenderContext& context,
-                         int rectX,
-                         int rectY,
-                         int rectW,
-                         int rectH,
+    void renderBox(const std::string& text, const TextRenderer& textRenderer, const UIRenderContext& context) const;
+    void drawOverlayRect(const UIRenderContext& context, int rectX, int rectY, int rectW, int rectH,
                          const std::array<float, 4>& rectColor) const;
 
     float m_caretBlinkPeriodMs = 530.0f;

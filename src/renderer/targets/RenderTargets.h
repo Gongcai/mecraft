@@ -13,44 +13,44 @@ namespace render {
 // Logical render target slots.
 enum class Target : int {
     // --- GBuffer MRT (written by gbuffers, read by lighting/composite) ---
-    GAlbedo       = 0,   // RGBA8   — linear albedo.rgb, emissive hint.a         ≈ colortex6
-    GNormalAo     = 1,   // RGB10A2 — octahedral normal.rg, vertex AO.b          ≈ colortex3 (RG)
-    GVoxelLight   = 2,   // RG8     — sky light.r, block light.g                 ≈ colortex7 (RG)
-    GMaterial     = 3,   // RGBA8   — perceptual roughness.r, specular F90.g, emission.b, SSS.a
-    GMaterialAux  = 4,   // RGBA8   — DerivativeMain material id.r, wetness.g, porosity.b, metal.a
-    GF0Metallic   = 5,   // RGBA8   — resolved RGB F0.rgb, metallic.a
+    GAlbedo = 0, // RGBA8   — linear albedo.rgb, emissive hint.a         ≈ colortex6
+    GNormalAo = 1, // RGB10A2 — octahedral normal.rg, vertex AO.b          ≈ colortex3 (RG)
+    GVoxelLight = 2, // RG8     — sky light.r, block light.g                 ≈ colortex7 (RG)
+    GMaterial = 3, // RGBA8   — perceptual roughness.r, specular F90.g, emission.b, SSS.a
+    GMaterialAux = 4, // RGBA8   — DerivativeMain material id.r, wetness.g, porosity.b, metal.a
+    GF0Metallic = 5, // RGBA8   — resolved RGB F0.rgb, metallic.a
     GObjectMaterialId = 6, // RG32UI — stable object ID.r, stable material ID.g
-    GDepth        = 7,   // DEPTH32F — opaque + transparent depth                ≈ depthtex0
+    GDepth = 7, // DEPTH32F — opaque + transparent depth                ≈ depthtex0
 
     // --- Deferred outputs ---
-    SceneLighting = 10,  // RGBA16F — HDR scene after deferred lighting          ≈ colortex4
-    ReflectionData= 11,  // RGBA16F — reflected radiance.rgb, specular weight.a  ≈ colortex2
-    CloudData     = 12,  // RGBA16F — scattered light.rgb, transmittance.a       ≈ colortex1
-    SkyCapture    = 13,  // RGBA16F — equirectangular sky map + metadata texels   ≈ colortex5
-    Velocity      = 14,  // RG16F   — screen-space motion vector xy
+    SceneLighting = 10, // RGBA16F — HDR scene after deferred lighting          ≈ colortex4
+    ReflectionData = 11, // RGBA16F — reflected radiance.rgb, specular weight.a  ≈ colortex2
+    CloudData = 12, // RGBA16F — scattered light.rgb, transmittance.a       ≈ colortex1
+    SkyCapture = 13, // RGBA16F — equirectangular sky map + metadata texels   ≈ colortex5
+    Velocity = 14, // RG16F   — screen-space motion vector xy
 
     // --- Shadow ---
-    ShadowDepth   = 15,  // DEPTH32F — shadow map depth
-    ShadowColor   = 16,  // RGBA8   — albedo for colored shadows / caustics
-    ShadowNormal  = 17,  // RGBA16F — encoded normal.rg, skylight.b, aux/height.a
+    ShadowDepth = 15, // DEPTH32F — shadow map depth
+    ShadowColor = 16, // RGBA8   — albedo for colored shadows / caustics
+    ShadowNormal = 17, // RGBA16F — encoded normal.rg, skylight.b, aux/height.a
 
     // --- Post / temporal ---
-    SceneComposite= 20,  // RGBA16F — opaque HDR after screen-space effects (clouds, reflections)
-    SceneResolved = 21,  // RGBA16F — post-TAA HDR scene (input to post-process)
-    HistoryScene  = 22,  // RGBA16F — TAA color history (ping-pong)
-    HistoryDepth  = 23,  // DEPTH32F — TAA depth history
-    HistoryReflect= 24,  // RGBA16F — reflection temporal history
-    HistoryCloud  = 25,  // RGBA16F — cloud temporal history
-    TemporalCurrent= 26, // RGBA16F — TAA current-frame scratch (avoids reading history[current])
+    SceneComposite = 20, // RGBA16F — opaque HDR after screen-space effects (clouds, reflections)
+    SceneResolved = 21, // RGBA16F — post-TAA HDR scene (input to post-process)
+    HistoryScene = 22, // RGBA16F — TAA color history (ping-pong)
+    HistoryDepth = 23, // DEPTH32F — TAA depth history
+    HistoryReflect = 24, // RGBA16F — reflection temporal history
+    HistoryCloud = 25, // RGBA16F — cloud temporal history
+    TemporalCurrent = 26, // RGBA16F — TAA current-frame scratch (avoids reading history[current])
 
     // --- Utility ---
-    SSAO          = 30,  // R8     — raw ambient occlusion
-    SSAOFiltered  = 31,  // R8     — bilateral-filtered AO
-    HistorySSAO   = 34,  // R8     — SSAO temporal history (ping-pong)
-    SSAOHalfRes   = 35,  // R8     — half-res raw ambient occlusion
+    SSAO = 30, // R8     — raw ambient occlusion
+    SSAOFiltered = 31, // R8     — bilateral-filtered AO
+    HistorySSAO = 34, // R8     — SSAO temporal history (ping-pong)
+    SSAOHalfRes = 35, // R8     — half-res raw ambient occlusion
     SSAOHalfResFiltered = 36, // R8  — half-res bilateral-filtered AO
-    VolumetricFog = 32,  // RGBA16F — fog scattered light.rgb + transmittance.a
-    HalfRes       = 33,  // RGBA16F — generic half-resolution scratch buffer
+    VolumetricFog = 32, // RGBA16F — fog scattered light.rgb + transmittance.a
+    HalfRes = 33, // RGBA16F — generic half-resolution scratch buffer
 
     Count
 };

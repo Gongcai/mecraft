@@ -28,4 +28,4 @@ UITheme loadTheme(const std::string& filename) {
     return t;
 }
 
-}
+} // namespace UIThemePresets

@@ -141,7 +141,7 @@ uint16_t lookupName(const char* name) {
 uint16_t lookupValue(const uint16_t nameIndex, const char* value) {
     return BlockStateRegistry::getPropertyValueIndex(nameIndex, value);
 }
-}
+} // namespace
 
 void init() {
     FACING = lookupName("facing");
@@ -274,4 +274,4 @@ void init() {
     HINGE_RIGHT = lookupValue(HINGE, "right");
 }
 
-}
+} // namespace PropIndices

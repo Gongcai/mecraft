@@ -34,13 +34,34 @@ public:
     void selectAll();
 
     // Local color overrides.
-    void setBackgroundColor(const Color& c)  { m_bgColor = c; m_hasLocalColors = true; }
-    void setBorderColor(const Color& c)      { m_borderColor = c; m_hasLocalColors = true; }
-    void setBorderFocusedColor(const Color& c){ m_borderFocusedColor = c; m_hasLocalColors = true; }
-    void setTextColor(const Color& c)        { m_textColor = c; m_hasLocalColors = true; }
-    void setPlaceholderColor(const Color& c) { m_placeholderColor = c; m_hasLocalColors = true; }
-    void setSelectionColor(const Color& c)   { m_selectionColor = c; m_hasLocalColors = true; }
-    void setCursorColor(const Color& c)      { m_cursorColor = c; m_hasLocalColors = true; }
+    void setBackgroundColor(const Color& c) {
+        m_bgColor = c;
+        m_hasLocalColors = true;
+    }
+    void setBorderColor(const Color& c) {
+        m_borderColor = c;
+        m_hasLocalColors = true;
+    }
+    void setBorderFocusedColor(const Color& c) {
+        m_borderFocusedColor = c;
+        m_hasLocalColors = true;
+    }
+    void setTextColor(const Color& c) {
+        m_textColor = c;
+        m_hasLocalColors = true;
+    }
+    void setPlaceholderColor(const Color& c) {
+        m_placeholderColor = c;
+        m_hasLocalColors = true;
+    }
+    void setSelectionColor(const Color& c) {
+        m_selectionColor = c;
+        m_hasLocalColors = true;
+    }
+    void setCursorColor(const Color& c) {
+        m_cursorColor = c;
+        m_hasLocalColors = true;
+    }
     void setStyle(const UITextInputStyle& style);
     void clearLocalStyle();
 
@@ -80,11 +101,11 @@ private:
     std::string m_placeholder;
     std::size_t m_maxLength = 256;
 
-    int m_cursorPos = 0;       // Byte offset into m_text.
-    int m_selStart = 0;        // Byte offset, selection start (== m_selEnd when no selection).
-    int m_selEnd = 0;          // Byte offset, selection end.
+    int m_cursorPos = 0; // Byte offset into m_text.
+    int m_selStart = 0; // Byte offset, selection start (== m_selEnd when no selection).
+    int m_selEnd = 0; // Byte offset, selection end.
 
-    float m_scrollOffset = 0.0f;  // Horizontal scroll offset in pixels.
+    float m_scrollOffset = 0.0f; // Horizontal scroll offset in pixels.
     float m_cursorBlinkTimer = 0.0f;
     bool m_cursorVisible = true;
     bool m_hovered = false;

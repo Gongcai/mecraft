@@ -2,12 +2,7 @@
 #include <algorithm>
 #include <cmath>
 
-DayNightSystem::DayNightSystem() 
-    : m_totalGameTime(0.0), 
-      m_timeOfDay(0.0f), 
-      m_elapsedDays(0), 
-      m_skyIntensity(1.0f) {
-}
+DayNightSystem::DayNightSystem() : m_totalGameTime(0.0), m_timeOfDay(0.0f), m_elapsedDays(0), m_skyIntensity(1.0f) {}
 
 void DayNightSystem::update(float dt) {
     m_totalGameTime += dt;
@@ -25,27 +20,24 @@ void DayNightSystem::update(float dt) {
     // Full Day: 60s to 540s
     // Sunset: 540s to 660s
     // Full Night: 660s to 1140s
-    
+
     if (m_timeOfDay >= 60.0f && m_timeOfDay <= 540.0f) {
         m_skyIntensity = 1.0f; // Full day
-    } 
-    else if (m_timeOfDay >= 660.0f && m_timeOfDay <= 1140.0f) {
+    } else if (m_timeOfDay >= 660.0f && m_timeOfDay <= 1140.0f) {
         m_skyIntensity = 0.0f; // Full night (use night lightmap entirely)
-    } 
-    else if (m_timeOfDay > 540.0f && m_timeOfDay < 660.0f) {
+    } else if (m_timeOfDay > 540.0f && m_timeOfDay < 660.0f) {
         // Sunset transition (540 to 660 -> duration 120s)
-        float t = (m_timeOfDay - 540.0f) / 120.0f; 
+        float t = (m_timeOfDay - 540.0f) / 120.0f;
         // Smoothstep transition 1.0 -> 0.0
         float factor = t * t * (3.0f - 2.0f * t);
         m_skyIntensity = 1.0f - factor;
-    } 
-    else {
+    } else {
         // Sunrise transition (1140 to 1200, and 0 to 60 -> duration 120s)
         float t;
         if (m_timeOfDay >= 1140.0f) {
             t = (m_timeOfDay - 1140.0f) / 120.0f; // 0.0 to 0.5
         } else {
-            t = (m_timeOfDay + 60.0f) / 120.0f;   // 0.5 to 1.0
+            t = (m_timeOfDay + 60.0f) / 120.0f; // 0.5 to 1.0
         }
         // Smoothstep transition 0.0 -> 1.0
         float factor = t * t * (3.0f - 2.0f * t);

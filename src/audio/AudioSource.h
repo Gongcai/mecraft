@@ -43,5 +43,4 @@ private:
     const AudioClip* m_clip = nullptr;
 };
 
-
 #endif //MECRAFT_AUDIOSOURCE_H

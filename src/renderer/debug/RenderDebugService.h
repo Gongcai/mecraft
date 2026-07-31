@@ -46,15 +46,7 @@ struct GpuTimerCheckpoint {
 };
 
 /// Frustum plane identifiers for culling statistics.
-enum class FrustumPlane : size_t {
-    Left = 0,
-    Right = 1,
-    Bottom = 2,
-    Top = 3,
-    Near = 4,
-    Far = 5,
-    Count = 6
-};
+enum class FrustumPlane : size_t { Left = 0, Right = 1, Bottom = 2, Top = 3, Near = 4, Far = 5, Count = 6 };
 
 /// GPU timing statistics for a single frame.
 struct GpuFrameStats {
@@ -95,8 +87,7 @@ struct GpuTimingWindowStats {
     size_t capacity = 0u;
     uint64_t observedSampleCount = 0u;
     GpuTimingPercentiles totalTrackedGpuMs;
-    std::array<GpuTimerPassWindowStats,
-               static_cast<size_t>(GpuTimerPass::Count)> passes{};
+    std::array<GpuTimerPassWindowStats, static_cast<size_t>(GpuTimerPass::Count)> passes{};
 };
 
 /// Returns the stable diagnostic name for a Render Graph GPU timing stage.
@@ -124,8 +115,7 @@ public:
     [[nodiscard]] GpuTimingWindowStats snapshot() const;
 
 private:
-    std::array<std::array<double, kCapacity>,
-               static_cast<size_t>(GpuTimerPass::Count)> m_passSamples{};
+    std::array<std::array<double, kCapacity>, static_cast<size_t>(GpuTimerPass::Count)> m_passSamples{};
     std::array<double, kCapacity> m_totalSamples{};
     size_t m_nextSample = 0u;
     size_t m_sampleCount = 0u;
@@ -241,12 +231,7 @@ struct ShadowFrameStats {
     std::array<ShadowCascadeStats, kMaxCascades> cascades{};
 };
 
-enum class ShadowTimestampPoint : size_t {
-    Start = 0,
-    OpaqueEnd = 1,
-    End = 2,
-    Count = 3
-};
+enum class ShadowTimestampPoint : size_t { Start = 0, OpaqueEnd = 1, End = 2, Count = 3 };
 
 /// Frustum culling statistics for a single frame.
 struct CullingFrameStats {
@@ -326,8 +311,7 @@ public:
     void beginFrame(RhiCommandList& commandList);
 
     /// Begin one command-list segment for a GPU pass.
-    [[nodiscard]] GpuTimerSegmentToken beginGpuTimer(RhiCommandList& commandList,
-                                                     GpuTimerPass pass);
+    [[nodiscard]] GpuTimerSegmentToken beginGpuTimer(RhiCommandList& commandList, GpuTimerPass pass);
 
     /// End the active command-list segment for a GPU pass.
     void endGpuTimer(RhiCommandList& commandList, GpuTimerSegmentToken token);
@@ -350,17 +334,13 @@ public:
 
     /// Computes fixed-window percentiles for completed GPU timer frames.
     /// @return Statistics covering at most the latest 1000 real rendered frames.
-    [[nodiscard]] GpuTimingWindowStats getGpuTimingWindowStats() const {
-        return m_gpuTimingHistory.snapshot();
-    }
+    [[nodiscard]] GpuTimingWindowStats getGpuTimingWindowStats() const { return m_gpuTimingHistory.snapshot(); }
 
     /// Shadow pass GPU timestamp and cascade statistics.
     [[nodiscard]] bool beginShadowFrame(int cascadeCount, int shadowResolution);
     void recordShadowCascadeStats(int cascadeIndex, const ShadowCascadeStats& stats);
     void recordShadowFrameTotals(int submitted, int culled, float maxCasterDistance);
-    void markShadowTimestamp(RhiCommandList& commandList,
-                             int cascadeIndex,
-                             ShadowTimestampPoint point);
+    void markShadowTimestamp(RhiCommandList& commandList, int cascadeIndex, ShadowTimestampPoint point);
     void endShadowFrame();
     /// Discards an active shadow frame whose timestamp command list was not submitted.
     void cancelShadowFrame();
@@ -378,33 +358,22 @@ public:
     [[nodiscard]] const RenderWorkStats& getRenderWorkStats() const { return m_workStats; }
 
 private:
-    enum class GpuTimerSegmentState : uint8_t {
-        Unused,
-        Recording,
-        Issued
-    };
+    enum class GpuTimerSegmentState : uint8_t { Unused, Recording, Issued };
 
     static constexpr size_t GPU_TIMER_RING_SIZE = 4;
     static constexpr size_t GPU_TIMER_PASS_COUNT = static_cast<size_t>(GpuTimerPass::Count);
     static constexpr size_t GPU_TIMER_MAX_SEGMENTS_PER_PASS = 16;
     static constexpr size_t GPU_TIMER_POINTS_PER_SEGMENT = 2;
-    static constexpr uint32_t GPU_TIMER_QUERY_COUNT =
-        static_cast<uint32_t>(GPU_TIMER_RING_SIZE * GPU_TIMER_PASS_COUNT *
-                              GPU_TIMER_MAX_SEGMENTS_PER_PASS *
-                              GPU_TIMER_POINTS_PER_SEGMENT);
+    static constexpr uint32_t GPU_TIMER_QUERY_COUNT = static_cast<uint32_t>(
+        GPU_TIMER_RING_SIZE * GPU_TIMER_PASS_COUNT * GPU_TIMER_MAX_SEGMENTS_PER_PASS * GPU_TIMER_POINTS_PER_SEGMENT);
     static constexpr size_t SHADOW_TIMER_CASCADE_COUNT = ShadowFrameStats::kMaxCascades;
     static constexpr size_t SHADOW_TIMER_POINT_COUNT = static_cast<size_t>(ShadowTimestampPoint::Count);
     static constexpr uint32_t SHADOW_TIMER_QUERY_COUNT =
-        static_cast<uint32_t>(GPU_TIMER_RING_SIZE * SHADOW_TIMER_CASCADE_COUNT *
-                              SHADOW_TIMER_POINT_COUNT);
+        static_cast<uint32_t>(GPU_TIMER_RING_SIZE * SHADOW_TIMER_CASCADE_COUNT * SHADOW_TIMER_POINT_COUNT);
 
-    [[nodiscard]] static uint32_t gpuTimerQueryIndex(size_t frameIndex,
-                                                     size_t passIndex,
-                                                     size_t segmentIndex,
+    [[nodiscard]] static uint32_t gpuTimerQueryIndex(size_t frameIndex, size_t passIndex, size_t segmentIndex,
                                                      size_t pointIndex);
-    [[nodiscard]] static uint32_t shadowQueryIndex(size_t frameIndex,
-                                                   size_t cascadeIndex,
-                                                   size_t pointIndex);
+    [[nodiscard]] static uint32_t shadowQueryIndex(size_t frameIndex, size_t cascadeIndex, size_t pointIndex);
 
     // GPU timer state
     /// Serializes the segment allocator read-modify-write in beginGpuTimer,
@@ -412,11 +381,8 @@ private:
     /// on worker threads, so segment slots must be claimed atomically.
     mutable std::mutex m_gpuTimerMutex;
     RhiQueryPoolHandle m_gpuTimerQueryPool;
-    std::array<std::array<uint8_t, GPU_TIMER_PASS_COUNT>, GPU_TIMER_RING_SIZE>
-        m_gpuTimerAllocatedSegmentCounts{};
-    std::array<std::array<std::array<GpuTimerSegmentState,
-                                    GPU_TIMER_MAX_SEGMENTS_PER_PASS>,
-                          GPU_TIMER_PASS_COUNT>,
+    std::array<std::array<uint8_t, GPU_TIMER_PASS_COUNT>, GPU_TIMER_RING_SIZE> m_gpuTimerAllocatedSegmentCounts{};
+    std::array<std::array<std::array<GpuTimerSegmentState, GPU_TIMER_MAX_SEGMENTS_PER_PASS>, GPU_TIMER_PASS_COUNT>,
                GPU_TIMER_RING_SIZE>
         m_gpuTimerSegmentStates{};
     GpuFrameStats m_gpuFrameStats{};
@@ -431,7 +397,8 @@ private:
     // contiguous range so availability and result reads can be batched.
     RhiDevice* m_rhiDevice = nullptr;
     RhiQueryPoolHandle m_shadowTimestampQueryPool;
-    std::array<std::array<std::array<bool, SHADOW_TIMER_POINT_COUNT>, SHADOW_TIMER_CASCADE_COUNT>, GPU_TIMER_RING_SIZE> m_shadowTimestampIssued{};
+    std::array<std::array<std::array<bool, SHADOW_TIMER_POINT_COUNT>, SHADOW_TIMER_CASCADE_COUNT>, GPU_TIMER_RING_SIZE>
+        m_shadowTimestampIssued{};
     std::array<ShadowFrameStats, GPU_TIMER_RING_SIZE> m_shadowFrameSlots{};
     std::array<bool, GPU_TIMER_RING_SIZE> m_shadowFrameIssued{};
     ShadowFrameStats m_shadowFrameStats{};

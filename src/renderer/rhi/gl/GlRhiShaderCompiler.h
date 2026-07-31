@@ -19,11 +19,10 @@ struct GlRhiShaderBindingRemap {
 
 // Cross-compiles a reflected SPIR-V stage to OpenGL 4.5 GLSL after applying pipeline-specific
 // descriptor and push-constant physical binding assignments.
-[[nodiscard]] std::optional<std::string> crossCompileShaderToOpenGl(
-    const RhiCompiledShader& shader,
-    const std::vector<GlRhiShaderBindingRemap>& remaps,
-    const std::optional<uint32_t>& pushConstantBinding,
-    std::string& errorMessage);
+[[nodiscard]] std::optional<std::string> crossCompileShaderToOpenGl(const RhiCompiledShader& shader,
+                                                                    const std::vector<GlRhiShaderBindingRemap>& remaps,
+                                                                    const std::optional<uint32_t>& pushConstantBinding,
+                                                                    std::string& errorMessage);
 
 } // namespace renderer::rhi::gl
 

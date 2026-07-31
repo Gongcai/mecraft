@@ -9,15 +9,7 @@
 class VkRhiDevice;
 
 /// Identifies one Vulkan resource consumed by the FSR 3.1 upscaler.
-enum class Fsr31ResourceRole {
-    HdrColor,
-    Depth,
-    Velocity,
-    Exposure,
-    ReactiveMask,
-    TransparencyMask,
-    OutputHdrColor
-};
+enum class Fsr31ResourceRole { HdrColor, Depth, Velocity, Exposure, ReactiveMask, TransparencyMask, OutputHdrColor };
 
 /// Describes why a native Vulkan resource cannot be registered with FSR 3.1.
 enum class Fsr31ResourceValidationError {
@@ -34,8 +26,7 @@ enum class Fsr31ResourceValidationError {
 
 struct Fsr31ResourceValidationFailure {
     Fsr31ResourceRole role = Fsr31ResourceRole::HdrColor;
-    Fsr31ResourceValidationError error =
-        Fsr31ResourceValidationError::MissingNativeObject;
+    Fsr31ResourceValidationError error = Fsr31ResourceValidationError::MissingNativeObject;
 };
 
 /// Native Vulkan resources registered for one FSR 3.1 dispatch.
@@ -49,24 +40,16 @@ struct Fsr31VulkanResourceSet {
     VkRhiTextureInteropInfo outputHdrColor;
 };
 
-enum class Fsr31ResourceResolveStatus {
-    Success,
-    InvalidTemporalFrame,
-    MissingNativeResource,
-    InvalidResourceContract
-};
+enum class Fsr31ResourceResolveStatus { Success, InvalidTemporalFrame, MissingNativeResource, InvalidResourceContract };
 
 struct Fsr31ResourceResolveResult {
-    Fsr31ResourceResolveStatus status =
-        Fsr31ResourceResolveStatus::InvalidTemporalFrame;
+    Fsr31ResourceResolveStatus status = Fsr31ResourceResolveStatus::InvalidTemporalFrame;
     std::optional<TemporalFrameValidationError> temporalError;
     std::optional<Fsr31ResourceRole> missingRole;
     std::optional<Fsr31ResourceValidationFailure> validationFailure;
     Fsr31VulkanResourceSet resources;
 
-    [[nodiscard]] bool succeeded() const {
-        return status == Fsr31ResourceResolveStatus::Success;
-    }
+    [[nodiscard]] bool succeeded() const { return status == Fsr31ResourceResolveStatus::Success; }
 };
 
 /// Validate native image metadata required by an FSR 3.1 Vulkan dispatch.
@@ -75,16 +58,14 @@ struct Fsr31ResourceResolveResult {
 /// @param resources Native Vulkan resource metadata resolved from RHI handles.
 /// @return Empty on success, otherwise the first invalid resource and reason.
 [[nodiscard]] std::optional<Fsr31ResourceValidationFailure>
-validateFsr31VulkanResourceSet(TemporalExtent resourceExtent,
-                              TemporalExtent outputExtent,
-                              const Fsr31VulkanResourceSet& resources);
+validateFsr31VulkanResourceSet(TemporalExtent resourceExtent, TemporalExtent outputExtent,
+                               const Fsr31VulkanResourceSet& resources);
 
 /// Resolve and validate every temporal texture through the Vulkan interop boundary.
 /// @param device Vulkan RHI device owning all supplied handles.
 /// @param frame Complete backend-independent temporal frame contract.
 /// @return Explicit resolution status plus native resources on success.
-[[nodiscard]] Fsr31ResourceResolveResult resolveFsr31VulkanResourceSet(
-    const VkRhiDevice& device,
-    const TemporalFrameInput& frame);
+[[nodiscard]] Fsr31ResourceResolveResult resolveFsr31VulkanResourceSet(const VkRhiDevice& device,
+                                                                       const TemporalFrameInput& frame);
 
 #endif // MECRAFT_FSR31_VULKAN_RESOURCE_CONTRACT_H

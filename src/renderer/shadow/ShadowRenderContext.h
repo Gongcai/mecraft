@@ -21,23 +21,23 @@ struct ShadowRenderContext {
     int cascadeCount = CASCADE_COUNT;
 
     // Legacy cascade-0 compatibility for debug/history paths.
-    glm::mat4 modelView         = glm::mat4(1.0f);
-    glm::mat4 projection        = glm::mat4(1.0f);
+    glm::mat4 modelView = glm::mat4(1.0f);
+    glm::mat4 projection = glm::mat4(1.0f);
     glm::mat4 projectionInverse = glm::mat4(1.0f);
-    glm::mat4 viewProj          = glm::mat4(1.0f);
+    glm::mat4 viewProj = glm::mat4(1.0f);
 
-    glm::vec3 lightDirection    = glm::vec3(0.0f, 1.0f, 0.0f);
+    glm::vec3 lightDirection = glm::vec3(0.0f, 1.0f, 0.0f);
 
     float shadowDistance = 1.0f;
     float texelWorldSize = 1.0f;
 
     struct DebugInfo {
-        int   terrainChunkCount   = 0;    // chunks submitted to shadow pass
-        int   culledChunkCount    = 0;    // chunks rejected by culler
-        float maxCasterDistance   = 0.0f; // farthest caster distance from camera
-        float renderDistance      = 0.0f; // shadowDistance * renderDistanceMul / 16
+        int terrainChunkCount = 0; // chunks submitted to shadow pass
+        int culledChunkCount = 0; // chunks rejected by culler
+        float maxCasterDistance = 0.0f; // farthest caster distance from camera
+        float renderDistance = 0.0f; // shadowDistance * renderDistanceMul / 16
         float shadowDistanceRenderMul = 1.0f;
-        const char* cullingMode   = "unknown";
+        const char* cullingMode = "unknown";
     } debug;
 };
 

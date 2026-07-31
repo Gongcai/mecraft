@@ -9,10 +9,7 @@ void AudioListener::setPosition(const glm::vec3& pos) {
 }
 
 void AudioListener::setOrientation(const glm::vec3& front, const glm::vec3& up) {
-    float orientation[6] = {
-        front.x, front.y, front.z,
-        up.x, up.y, up.z
-    };
+    float orientation[6] = {front.x, front.y, front.z, up.x, up.y, up.z};
     alListenerfv(AL_ORIENTATION, orientation);
 }
 

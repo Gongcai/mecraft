@@ -43,9 +43,7 @@ inline bool overlapsCollision(const World& world, const glm::vec3& center, const
     return false;
 }
 
-inline bool overlapsBlockCollision(const World& world,
-                                   const glm::vec3& position,
-                                   const glm::vec3& halfExtents,
+inline bool overlapsBlockCollision(const World& world, const glm::vec3& position, const glm::vec3& halfExtents,
                                    const glm::ivec3& blockPos) {
     const glm::vec3 minPos = position - halfExtents;
     const glm::vec3 maxPos = position + halfExtents;
@@ -62,13 +60,9 @@ inline float collisionTopY(const World& world, const glm::ivec3& blockPos) {
     return topY;
 }
 
-inline void moveAndCollideAxis(TransformComponent& transform,
-                               VelocityComponent& velocity,
-                               const BoundsComponent& bounds,
-                               GroundedStateComponent& grounded,
-                               const World& world,
-                               const int axis,
-                               const float dt) {
+inline void moveAndCollideAxis(TransformComponent& transform, VelocityComponent& velocity,
+                               const BoundsComponent& bounds, GroundedStateComponent& grounded, const World& world,
+                               const int axis, const float dt) {
     const float delta = velocity.velocity[axis] * dt;
     if (std::abs(delta) <= 0.0f) {
         return;

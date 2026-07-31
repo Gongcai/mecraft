@@ -12,12 +12,8 @@ class CubemapLibrary {
 public:
     void init(RhiDevice& rhiDevice);
 
-    RhiTextureHandle load(const std::string& name,
-                          const std::string& rightPath,
-                          const std::string& leftPath,
-                          const std::string& topPath,
-                          const std::string& bottomPath,
-                          const std::string& frontPath,
+    RhiTextureHandle load(const std::string& name, const std::string& rightPath, const std::string& leftPath,
+                          const std::string& topPath, const std::string& bottomPath, const std::string& frontPath,
                           const std::string& backPath);
 
     [[nodiscard]] RhiTextureHandle get(const std::string& name) const;

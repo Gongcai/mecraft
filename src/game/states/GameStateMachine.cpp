@@ -54,15 +54,9 @@ void GameStateMachine::applyPendingOps() {
         ops.swap(m_pendingOps);
         for (PendingOp& op : ops) {
             switch (op.type) {
-                case PendingOpType::Push:
-                    pushStateNow(std::move(op.state));
-                    break;
-                case PendingOpType::Pop:
-                    popStateNow();
-                    break;
-                case PendingOpType::Change:
-                    changeStateNow(std::move(op.state));
-                    break;
+            case PendingOpType::Push: pushStateNow(std::move(op.state)); break;
+            case PendingOpType::Pop: popStateNow(); break;
+            case PendingOpType::Change: changeStateNow(std::move(op.state)); break;
             }
         }
     }

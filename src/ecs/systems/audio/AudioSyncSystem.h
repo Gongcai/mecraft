@@ -8,10 +8,8 @@ namespace ecs {
 
 class AudioSyncSystem : public ISystem {
 public:
-    using Dependencies = SystemDependency<
-        std::tuple<AudioSourceComponent, TransformComponent>,
-        std::tuple<AudioSourceComponent>
-    >;
+    using Dependencies =
+        SystemDependency<std::tuple<AudioSourceComponent, TransformComponent>, std::tuple<AudioSourceComponent>>;
 
     void update(SystemContext& ctx) override;
 };

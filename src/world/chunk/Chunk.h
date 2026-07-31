@@ -18,8 +18,8 @@ public:
     static constexpr int SIZE_X = 16;
     static constexpr int SIZE_Y = 256;
     static constexpr int SIZE_Z = 16;
-    static constexpr int SUB_CHUNK_SIZE = SubChunk::SIZE;  // 16
-    static constexpr int NUM_SUB_CHUNKS = SIZE_Y / SUB_CHUNK_SIZE;  // 16
+    static constexpr int SUB_CHUNK_SIZE = SubChunk::SIZE; // 16
+    static constexpr int NUM_SUB_CHUNKS = SIZE_Y / SUB_CHUNK_SIZE; // 16
     static constexpr std::size_t BLOCK_COUNT = static_cast<std::size_t>(SIZE_X) * SIZE_Y * SIZE_Z;
 
     Chunk(int chunkX, int chunkZ);
@@ -42,16 +42,15 @@ public:
     // A chunk is "dirty" if any of its sub-chunks is dirty.
     [[nodiscard]] bool isDirty() const;
     [[nodiscard]] bool isSubChunkDirty(int scy) const {
-        if (scy < 0 || scy >= NUM_SUB_CHUNKS) return false;
+        if (scy < 0 || scy >= NUM_SUB_CHUNKS)
+            return false;
         return (m_dirtySubChunkMask & (1u << scy)) != 0u;
     }
     void markSubChunkDirty(int scy);
     [[nodiscard]] uint64_t getSubChunkMeshRevision(int scy) const;
     [[nodiscard]] uint64_t getRenderStateRevision() const { return m_renderStateRevision; }
-    [[nodiscard]] uint64_t getBlockContentRevision() const {
-        return m_blockContentRevision;
-    }
-    void markMeshClean();  // Clears all sub-chunk dirty flags
+    [[nodiscard]] uint64_t getBlockContentRevision() const { return m_blockContentRevision; }
+    void markMeshClean(); // Clears all sub-chunk dirty flags
 
     // --- Per sub-chunk mesh access ---
     [[nodiscard]] const SubChunkMesh& getSubChunkMesh(int scy) const;
@@ -71,11 +70,13 @@ public:
 
     // --- Sub-chunk access ---
     [[nodiscard]] SubChunk* getSubChunk(int scy) {
-        if (scy < 0 || scy >= NUM_SUB_CHUNKS) return nullptr;
+        if (scy < 0 || scy >= NUM_SUB_CHUNKS)
+            return nullptr;
         return m_subChunks[scy].get();
     }
     [[nodiscard]] const SubChunk* getSubChunk(int scy) const {
-        if (scy < 0 || scy >= NUM_SUB_CHUNKS) return nullptr;
+        if (scy < 0 || scy >= NUM_SUB_CHUNKS)
+            return nullptr;
         return m_subChunks[scy].get();
     }
     [[nodiscard]] SubChunk* getOrCreateSubChunk(int scy);

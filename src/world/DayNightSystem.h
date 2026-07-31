@@ -1,4 +1,4 @@
- #ifndef MECRAFT_DAY_NIGHT_SYSTEM_H
+#ifndef MECRAFT_DAY_NIGHT_SYSTEM_H
 #define MECRAFT_DAY_NIGHT_SYSTEM_H
 
 class DayNightSystem {
@@ -42,7 +42,7 @@ private:
     double m_totalGameTime;
     float m_timeOfDay;
     int m_elapsedDays;
-    
+
     float m_skyIntensity;
 
     // A whole day is 20 minutes = 1200 seconds

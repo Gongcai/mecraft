@@ -29,38 +29,32 @@ struct HotbarImagePushConstants {
 
 static_assert(sizeof(HotbarImagePushConstants) == 64u);
 
-[[nodiscard]] RhiRect2D hotbarScissor(const UIRenderContext& context)
-{
+[[nodiscard]] RhiRect2D hotbarScissor(const UIRenderContext& context) {
     if (context.hasScissor) {
         return context.scissor;
     }
-    return {0, 0,
-            static_cast<uint32_t>(std::max(1.0f, std::round(context.screenWidth * context.pixelScale()))),
+    return {0, 0, static_cast<uint32_t>(std::max(1.0f, std::round(context.screenWidth * context.pixelScale()))),
             static_cast<uint32_t>(std::max(1.0f, std::round(context.screenHeight * context.pixelScale())))};
 }
 
 } // namespace
 
-void HotbarControl::init(ResourceMgr& resourceMgr)
-{
+void HotbarControl::init(ResourceMgr& resourceMgr) {
     UIWidget::init(resourceMgr);
     m_resourceMgr = &resourceMgr;
 }
 
-void HotbarControl::shutdown()
-{
+void HotbarControl::shutdown() {
     m_resourceMgr = nullptr;
     m_inventory = nullptr;
     UIWidget::shutdown();
 }
 
-void HotbarControl::setInventorySource(const Inventory* inventory)
-{
+void HotbarControl::setInventorySource(const Inventory* inventory) {
     m_inventory = inventory;
 }
 
-void HotbarControl::renderSelf(const UIRenderContext& context) const
-{
+void HotbarControl::renderSelf(const UIRenderContext& context) const {
     const Inventory* inventory = context.inventory ? context.inventory : m_inventory;
     if (!inventory || context.screenWidth <= 0 || context.screenHeight <= 0) {
         return;
@@ -89,55 +83,43 @@ void HotbarControl::renderSelf(const UIRenderContext& context) const
     // Render item name popup above hotbar
     if (context.textRenderer) {
         checkSlotChange(*inventory, context.localeManager);
-        renderItemName(context,
-                       *inventory,
-                       *context.textRenderer,
-                       context.timeSeconds);
+        renderItemName(context, *inventory, *context.textRenderer, context.timeSeconds);
     }
 }
 
-void HotbarControl::setBgColor(const std::array<float, 4>& color)
-{
+void HotbarControl::setBgColor(const std::array<float, 4>& color) {
     m_bgColor = color;
 }
 
-const std::array<float, 4>& HotbarControl::getBgColor() const
-{
+const std::array<float, 4>& HotbarControl::getBgColor() const {
     return m_bgColor;
 }
 
-void HotbarControl::setBorderColor(const std::array<float, 4>& color)
-{
+void HotbarControl::setBorderColor(const std::array<float, 4>& color) {
     m_borderColor = color;
 }
 
-const std::array<float, 4>& HotbarControl::getBorderColor() const
-{
+const std::array<float, 4>& HotbarControl::getBorderColor() const {
     return m_borderColor;
 }
 
-void HotbarControl::setIconTintColor(const std::array<float, 4>& color)
-{
+void HotbarControl::setIconTintColor(const std::array<float, 4>& color) {
     m_iconTintColor = color;
 }
 
-const std::array<float, 4>& HotbarControl::getIconTintColor() const
-{
+const std::array<float, 4>& HotbarControl::getIconTintColor() const {
     return m_iconTintColor;
 }
 
-void HotbarControl::setCountTextScale(float scale)
-{
+void HotbarControl::setCountTextScale(float scale) {
     m_countTextScale = std::max(0.1f, scale);
 }
 
-float HotbarControl::getCountTextScale() const
-{
+float HotbarControl::getCountTextScale() const {
     return m_countTextScale;
 }
 
-void HotbarControl::renderInternal(const UIRenderContext& context, const Inventory& inventory) const
-{
+void HotbarControl::renderInternal(const UIRenderContext& context, const Inventory& inventory) const {
     const float screenW = static_cast<float>(context.screenWidth);
     const float screenH = static_cast<float>(context.screenHeight);
     const TextRenderer* textRenderer = context.textRenderer;
@@ -169,14 +151,13 @@ void HotbarControl::renderInternal(const UIRenderContext& context, const Invento
 
     if (context.phase == UIRenderPhase::CollectText) {
         if (textRenderer != nullptr) {
-            renderCountText(context, m_cachedSlotCounts, hotbarSlots, slotStride,
-                            startX, startY, *textRenderer);
+            renderCountText(context, m_cachedSlotCounts, hotbarSlots, slotStride, startX, startY, *textRenderer);
         }
         return;
     }
 
-    if (context.commandList == nullptr || context.uiRenderer == nullptr ||
-        !context.panelQuadVertexBuffer.isValid() || !context.imageTexturePipeline.isValid()) {
+    if (context.commandList == nullptr || context.uiRenderer == nullptr || !context.panelQuadVertexBuffer.isValid() ||
+        !context.imageTexturePipeline.isValid()) {
         return;
     }
 
@@ -187,30 +168,22 @@ void HotbarControl::renderInternal(const UIRenderContext& context, const Invento
     commandList.setVertexBuffer(0u, context.panelQuadVertexBuffer, 0u);
     commandList.setScissor(hotbarScissor(context));
 
-    const auto drawImage = [&](const RhiTextureHandle texture,
-                               const float x, const float y,
-                               const float width, const float height,
-                               const std::array<float, 4>& uv,
-                               const std::array<float, 4>& tint) {
+    const auto drawImage = [&](const RhiTextureHandle texture, const float x, const float y, const float width,
+                               const float height, const std::array<float, 4>& uv, const std::array<float, 4>& tint) {
         const RhiBindGroupHandle bindGroup = context.uiRenderer->resolveImageBindGroup(texture);
         if (!bindGroup.isValid()) {
             return;
         }
         const HotbarImagePushConstants pushConstants{
-            glm::vec4(screenW, screenH, x, y),
-            glm::vec4(width, height, 0.0f, 0.0f),
-            glm::vec4(uv[0], uv[1], uv[2], uv[3]),
-            glm::vec4(tint[0], tint[1], tint[2], tint[3])
-        };
+            glm::vec4(screenW, screenH, x, y), glm::vec4(width, height, 0.0f, 0.0f),
+            glm::vec4(uv[0], uv[1], uv[2], uv[3]), glm::vec4(tint[0], tint[1], tint[2], tint[3])};
         commandList.setBindGroup(0u, bindGroup);
         commandList.pushConstants(&pushConstants, sizeof(pushConstants),
-                                  rhiFlag(RhiShaderStage::Vertex) |
-                                  rhiFlag(RhiShaderStage::Fragment));
+                                  rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment));
         commandList.draw(6u, 1u, 0u, 0u);
     };
 
-    auto uvFromTopLeftPixels = [](float x0, float y0, float x1, float y1)
-    {
+    auto uvFromTopLeftPixels = [](float x0, float y0, float x1, float y1) {
         const float u0 = x0 / HotbarLayout::kWidgetsWidth;
         const float u1 = x1 / HotbarLayout::kWidgetsWidth;
         const float v0 = (HotbarLayout::kWidgetsHeight - y1) / HotbarLayout::kWidgetsHeight;
@@ -234,8 +207,7 @@ void HotbarControl::renderInternal(const UIRenderContext& context, const Invento
 
     constexpr float iconInset = 2.0f * HotbarLayout::kScale;
     constexpr float iconSize = 17.5f * HotbarLayout::kScale;
-    for (int i = 0; i < hotbarSlots; ++i)
-    {
+    for (int i = 0; i < hotbarSlots; ++i) {
         const ItemStack stack = inventory.getSlotStack(i);
         const ItemID itemId = stack.itemId;
         if (itemId == 0) {
@@ -268,25 +240,18 @@ void HotbarControl::renderInternal(const UIRenderContext& context, const Invento
         const float iy = startY + iconInset;
 
         drawImage(iconTexture, ix, iy, iconSize, iconSize,
-                  {iconUv.first.x, iconUv.first.y, iconUv.second.x, iconUv.second.y},
-                  m_iconTintColor);
+                  {iconUv.first.x, iconUv.first.y, iconUv.second.x, iconUv.second.y}, m_iconTintColor);
     }
 
     // ── Render item count text ──
     if (textRenderer) {
-        renderCountText(context, m_cachedSlotCounts, hotbarSlots, slotStride,
-                        startX, startY, *textRenderer);
+        renderCountText(context, m_cachedSlotCounts, hotbarSlots, slotStride, startX, startY, *textRenderer);
     }
 }
 
-void HotbarControl::renderCountText(const UIRenderContext& context,
-                                    const int* slotCounts,
-                                    int slotCount,
-                                    float slotStride,
-                                    float startX,
-                                    float startY,
-                                    const TextRenderer& textRenderer) const
-{
+void HotbarControl::renderCountText(const UIRenderContext& context, const int* slotCounts, int slotCount,
+                                    float slotStride, float startX, float startY,
+                                    const TextRenderer& textRenderer) const {
     constexpr float kBaseGlyphSize = 8.0f;
     constexpr float kCountRightPaddingRatio = 0.05f;
     constexpr float kCountBottomPaddingRatio = 0.03f;
@@ -294,8 +259,7 @@ void HotbarControl::renderCountText(const UIRenderContext& context,
     const float slotFullSize = slotStride;
     const float textScale = m_countTextScale * slotFullSize / kBaseGlyphSize;
 
-    for (int i = 0; i < slotCount; ++i)
-    {
+    for (int i = 0; i < slotCount; ++i) {
         if (slotCounts[i] <= 1)
             continue;
 
@@ -310,8 +274,7 @@ void HotbarControl::renderCountText(const UIRenderContext& context,
     }
 }
 
-void HotbarControl::checkSlotChange(const Inventory& inventory, const LocaleManager* localeManager) const
-{
+void HotbarControl::checkSlotChange(const Inventory& inventory, const LocaleManager* localeManager) const {
     const int currentSlot = inventory.getSelectedSlot();
     const ItemID currentItem = inventory.getSelectedItem();
 
@@ -337,11 +300,8 @@ void HotbarControl::checkSlotChange(const Inventory& inventory, const LocaleMana
     }
 }
 
-void HotbarControl::renderItemName(const UIRenderContext& context,
-                                   const Inventory& inventory,
-                                   const TextRenderer& textRenderer,
-                                   float timeSeconds) const
-{
+void HotbarControl::renderItemName(const UIRenderContext& context, const Inventory& inventory,
+                                   const TextRenderer& textRenderer, float timeSeconds) const {
     (void)inventory;
     const float screenW = static_cast<float>(context.screenWidth);
     if (m_itemName.empty()) {
@@ -385,12 +345,10 @@ void HotbarControl::renderItemName(const UIRenderContext& context,
     textRenderer.draw(context, m_itemName, textX, textY, textScale, textColor);
 }
 
-void HotbarControl::setItemNameDisplayDuration(float seconds)
-{
+void HotbarControl::setItemNameDisplayDuration(float seconds) {
     m_itemNameDisplayDuration = std::clamp(seconds, 0.5f, 10.0f);
 }
 
-float HotbarControl::getItemNameDisplayDuration() const
-{
+float HotbarControl::getItemNameDisplayDuration() const {
     return m_itemNameDisplayDuration;
 }

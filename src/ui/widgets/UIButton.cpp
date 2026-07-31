@@ -81,9 +81,8 @@ void UIButton::renderSelf(const UIRenderContext& ctx) const {
     const_cast<UIPanel&>(m_background).width = hw * 2.0f;
     const_cast<UIPanel&>(m_background).height = hh * 2.0f;
     const bool backgroundHasImmediateState = m_pressed || !interactive;
-    const auto bgColor = (!backgroundHasImmediateState && m_hoverColorTween.isRunning())
-        ? m_hoverColorTween.value()
-        : resolved.background;
+    const auto bgColor = (!backgroundHasImmediateState && m_hoverColorTween.isRunning()) ? m_hoverColorTween.value()
+                                                                                         : resolved.background;
     const_cast<UIPanel&>(m_background).setBackgroundColor(bgColor);
     const_cast<UIPanel&>(m_background).setBorderColor(resolved.border);
     const_cast<UIPanel&>(m_background).setBorderWidth(resolved.borderWidth);
@@ -107,64 +106,63 @@ void UIButton::renderSelf(const UIRenderContext& ctx) const {
 }
 
 UIEventResult UIButton::onInput(const UIInputEvent& event, const UIRenderContext& ctx) {
-    if (!visible || !interactive) return UIEventResult::Ignored;
+    if (!visible || !interactive)
+        return UIEventResult::Ignored;
 
     // Let children handle first
     UIEventResult childResult = UIWidget::onInput(event, ctx);
-    if (childResult == UIEventResult::Consumed) return UIEventResult::Consumed;
+    if (childResult == UIEventResult::Consumed)
+        return UIEventResult::Consumed;
 
     const UIComponentStyle baseStyle = resolveBaseStyle(ctx);
 
     bool inside = hitTest(event.x, event.y, ctx);
 
     switch (event.type) {
-        case UIInputEventType::PointerMove: {
-            if (inside && !m_hovered) {
-                m_hovered = true;
-                m_hoverScaleTween.start(1.0f, m_hoverTargetScale, m_hoverDuration, EasingType::EaseOut);
-                m_hoverColorTween.start(baseStyle.backgroundNormal,
-                                        baseStyle.backgroundHover,
-                                        m_hoverDuration,
-                                        EasingType::Linear);
-            } else if (!inside && m_hovered) {
-                m_hovered = false;
-                m_hoverScaleTween.start(m_hoverTargetScale, 1.0f, m_hoverDuration, EasingType::EaseOut);
-                m_hoverColorTween.start(baseStyle.backgroundHover,
-                                        baseStyle.backgroundNormal,
-                                        m_hoverDuration,
-                                        EasingType::Linear);
-            }
-            return inside ? UIEventResult::Handled : UIEventResult::Ignored;
+    case UIInputEventType::PointerMove: {
+        if (inside && !m_hovered) {
+            m_hovered = true;
+            m_hoverScaleTween.start(1.0f, m_hoverTargetScale, m_hoverDuration, EasingType::EaseOut);
+            m_hoverColorTween.start(baseStyle.backgroundNormal, baseStyle.backgroundHover, m_hoverDuration,
+                                    EasingType::Linear);
+        } else if (!inside && m_hovered) {
+            m_hovered = false;
+            m_hoverScaleTween.start(m_hoverTargetScale, 1.0f, m_hoverDuration, EasingType::EaseOut);
+            m_hoverColorTween.start(baseStyle.backgroundHover, baseStyle.backgroundNormal, m_hoverDuration,
+                                    EasingType::Linear);
         }
-        case UIInputEventType::PointerDown: {
-            if (event.button == UIPointerButton::Primary && inside) {
-                m_pressed = true;
-                requestFocus();
-                return UIEventResult::Handled;
-            }
-            break;
+        return inside ? UIEventResult::Handled : UIEventResult::Ignored;
+    }
+    case UIInputEventType::PointerDown: {
+        if (event.button == UIPointerButton::Primary && inside) {
+            m_pressed = true;
+            requestFocus();
+            return UIEventResult::Handled;
         }
-        case UIInputEventType::PointerUp: {
-            if (event.button == UIPointerButton::Primary && m_pressed && inside) {
-                m_pressed = false;
-                if (m_onClick) m_onClick();
-                return UIEventResult::Consumed;
-            }
+        break;
+    }
+    case UIInputEventType::PointerUp: {
+        if (event.button == UIPointerButton::Primary && m_pressed && inside) {
             m_pressed = false;
-            break;
+            if (m_onClick)
+                m_onClick();
+            return UIEventResult::Consumed;
         }
-        case UIInputEventType::Command: {
-            if (isFocused() && isActivateCommand(event)) {
-                if (m_onClick) m_onClick();
-                return UIEventResult::Consumed;
-            }
-            break;
+        m_pressed = false;
+        break;
+    }
+    case UIInputEventType::Command: {
+        if (isFocused() && isActivateCommand(event)) {
+            if (m_onClick)
+                m_onClick();
+            return UIEventResult::Consumed;
         }
-        case UIInputEventType::KeyDown:
-        case UIInputEventType::KeyUp:
-        case UIInputEventType::TextInput:
-        case UIInputEventType::Scroll:
-            break;
+        break;
+    }
+    case UIInputEventType::KeyDown:
+    case UIInputEventType::KeyUp:
+    case UIInputEventType::TextInput:
+    case UIInputEventType::Scroll: break;
     }
 
     return UIEventResult::Ignored;

@@ -46,14 +46,8 @@ DropEntity readDropEntity(const entt::registry& registry, const entt::entity e) 
 
 std::vector<DropEntity> snapshotDrops(ecs::GameplayRegistry& registry) {
     auto& raw = registry.registry();
-    auto view = raw.view<ecs::DropItemTag,
-                         ecs::DropEntityIdComponent,
-                         ecs::TransformComponent,
-                         ecs::ItemComponent,
-                         ecs::VelocityComponent,
-                         ecs::BoundsComponent,
-                         ecs::LifetimeComponent,
-                         ecs::SpinVisualComponent,
+    auto view = raw.view<ecs::DropItemTag, ecs::DropEntityIdComponent, ecs::TransformComponent, ecs::ItemComponent,
+                         ecs::VelocityComponent, ecs::BoundsComponent, ecs::LifetimeComponent, ecs::SpinVisualComponent,
                          ecs::GroundedStateComponent>();
 
     std::vector<DropEntity> drops;
@@ -61,23 +55,14 @@ std::vector<DropEntity> snapshotDrops(ecs::GameplayRegistry& registry) {
         drops.push_back(readDropEntity(raw, e));
     }
 
-    auto projectileView = raw.view<ecs::ProjectileTag,
-                                  ecs::DropEntityIdComponent,
-                                  ecs::TransformComponent,
-                                  ecs::ItemComponent,
-                                  ecs::VelocityComponent,
-                                  ecs::BoundsComponent,
-                                  ecs::LifetimeComponent,
-                                  ecs::SpinVisualComponent,
-                                  ecs::GroundedStateComponent>();
+    auto projectileView = raw.view<ecs::ProjectileTag, ecs::DropEntityIdComponent, ecs::TransformComponent,
+                                   ecs::ItemComponent, ecs::VelocityComponent, ecs::BoundsComponent,
+                                   ecs::LifetimeComponent, ecs::SpinVisualComponent, ecs::GroundedStateComponent>();
     for (const entt::entity e : projectileView) {
         drops.push_back(readDropEntity(raw, e));
     }
 
-    std::sort(drops.begin(), drops.end(),
-              [](const DropEntity& a, const DropEntity& b) {
-                  return a.id < b.id;
-              });
+    std::sort(drops.begin(), drops.end(), [](const DropEntity& a, const DropEntity& b) { return a.id < b.id; });
     return drops;
 }
 

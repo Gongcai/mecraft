@@ -23,11 +23,7 @@ std::string describeModel(const std::size_t index) {
     return "models[" + std::to_string(index) + "]";
 }
 
-bool readString(const json& node,
-                const char* key,
-                std::string& out,
-                const std::string& context,
-                std::string* error) {
+bool readString(const json& node, const char* key, std::string& out, const std::string& context, std::string* error) {
     const auto it = node.find(key);
     if (it == node.end()) {
         setError(error, context + "." + key + " is required");
@@ -41,11 +37,7 @@ bool readString(const json& node,
     return true;
 }
 
-bool readFloat(const json& node,
-               const char* key,
-               float& out,
-               const std::string& context,
-               std::string* error) {
+bool readFloat(const json& node, const char* key, float& out, const std::string& context, std::string* error) {
     const auto it = node.find(key);
     if (it == node.end()) {
         setError(error, context + "." + key + " is required");
@@ -59,11 +51,7 @@ bool readFloat(const json& node,
     return true;
 }
 
-bool readOptionalFloat(const json& node,
-                       const char* key,
-                       float& out,
-                       const std::string& context,
-                       std::string* error) {
+bool readOptionalFloat(const json& node, const char* key, float& out, const std::string& context, std::string* error) {
     const auto it = node.find(key);
     if (it == node.end()) {
         return true;
@@ -76,11 +64,7 @@ bool readOptionalFloat(const json& node,
     return true;
 }
 
-bool readVec2(const json& node,
-              const char* key,
-              glm::vec2& out,
-              const std::string& context,
-              std::string* error) {
+bool readVec2(const json& node, const char* key, glm::vec2& out, const std::string& context, std::string* error) {
     const auto it = node.find(key);
     if (it == node.end()) {
         setError(error, context + "." + key + " is required");
@@ -100,11 +84,7 @@ bool readVec2(const json& node,
     return true;
 }
 
-bool readVec3(const json& node,
-              const char* key,
-              glm::vec3& out,
-              const std::string& context,
-              std::string* error) {
+bool readVec3(const json& node, const char* key, glm::vec3& out, const std::string& context, std::string* error) {
     const auto it = node.find(key);
     if (it == node.end()) {
         setError(error, context + "." + key + " is required");
@@ -124,10 +104,7 @@ bool readVec3(const json& node,
     return true;
 }
 
-bool readOptionalVec3(const json& node,
-                      const char* key,
-                      glm::vec3& out,
-                      const std::string& context,
+bool readOptionalVec3(const json& node, const char* key, glm::vec3& out, const std::string& context,
                       std::string* error) {
     const auto it = node.find(key);
     if (it == node.end()) {
@@ -147,38 +124,30 @@ bool readOptionalVec3(const json& node,
     return true;
 }
 
-std::array<EntityModelPixelRect, 6> buildCubeUvLayout(const glm::vec2& uv,
-                                                       const glm::vec3& size) {
+std::array<EntityModelPixelRect, 6> buildCubeUvLayout(const glm::vec2& uv, const glm::vec3& size) {
     const float u = uv.x;
     const float v = uv.y;
     const float width = size.x;
     const float height = size.y;
     const float depth = size.z;
 
-    return {{
-        {u + depth, v, u + depth + width, v + depth},
-        {u + depth + width, v, u + depth + width + width, v + depth},
-        {u + depth, v + depth, u + depth + width, v + depth + height},
-        {u + depth + width + depth, v + depth, u + depth + width + depth + width, v + depth + height},
-        {u, v + depth, u + depth, v + depth + height},
-        {u + depth + width, v + depth, u + depth + width + depth, v + depth + height}
-    }};
+    return {{{u + depth, v, u + depth + width, v + depth},
+             {u + depth + width, v, u + depth + width + width, v + depth},
+             {u + depth, v + depth, u + depth + width, v + depth + height},
+             {u + depth + width + depth, v + depth, u + depth + width + depth + width, v + depth + height},
+             {u, v + depth, u + depth, v + depth + height},
+             {u + depth + width, v + depth, u + depth + width + depth, v + depth + height}}};
 }
 
-bool parseBox(const json& node,
-              EntityModelBoxDefinition& box,
-              const std::string& context,
-              std::string* error) {
+bool parseBox(const json& node, EntityModelBoxDefinition& box, const std::string& context, std::string* error) {
     if (!node.is_object()) {
         setError(error, context + " must be an object");
         return false;
     }
 
     glm::vec2 uv{0.0f};
-    if (!readVec3(node, "origin", box.origin, context, error) ||
-        !readVec3(node, "size", box.size, context, error) ||
-        !readVec2(node, "uv", uv, context, error) ||
-        !readOptionalFloat(node, "inflate", box.inflate, context, error)) {
+    if (!readVec3(node, "origin", box.origin, context, error) || !readVec3(node, "size", box.size, context, error) ||
+        !readVec2(node, "uv", uv, context, error) || !readOptionalFloat(node, "inflate", box.inflate, context, error)) {
         return false;
     }
 
@@ -195,8 +164,7 @@ bool parseBox(const json& node,
         setError(error, context + ".uvSize values must be positive");
         return false;
     }
-    if (box.size.x + box.inflate * 2.0f <= 0.0f ||
-        box.size.y + box.inflate * 2.0f <= 0.0f ||
+    if (box.size.x + box.inflate * 2.0f <= 0.0f || box.size.y + box.inflate * 2.0f <= 0.0f ||
         box.size.z + box.inflate * 2.0f <= 0.0f) {
         setError(error, context + ".inflate collapses the box geometry");
         return false;
@@ -206,11 +174,8 @@ bool parseBox(const json& node,
     return true;
 }
 
-bool parsePart(const json& node,
-               EntityModelPartDefinition& part,
-               const std::unordered_set<std::string>& knownPartNames,
-               const std::string& context,
-               std::string* error) {
+bool parsePart(const json& node, EntityModelPartDefinition& part, const std::unordered_set<std::string>& knownPartNames,
+               const std::string& context, std::string* error) {
     if (!node.is_object()) {
         setError(error, context + " must be an object");
         return false;
@@ -252,10 +217,7 @@ bool parsePart(const json& node,
     return true;
 }
 
-bool parseModel(const json& node,
-                const std::size_t index,
-                EntityModelDefinition& model,
-                std::string* error) {
+bool parseModel(const json& node, const std::size_t index, EntityModelDefinition& model, std::string* error) {
     const std::string context = describeModel(index);
     if (!node.is_object()) {
         setError(error, context + " must be an object");

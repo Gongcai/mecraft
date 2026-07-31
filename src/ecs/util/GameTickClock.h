@@ -9,16 +9,11 @@ class GameTickClock {
 public:
     static constexpr double DEFAULT_TICK_RATE = 20.0;
 
-    explicit GameTickClock(double tickRate = DEFAULT_TICK_RATE)
-        : m_tickInterval(1.0 / tickRate) {}
+    explicit GameTickClock(double tickRate = DEFAULT_TICK_RATE) : m_tickInterval(1.0 / tickRate) {}
 
-    void advance(double deltaTime) {
-        m_accumulator += deltaTime;
-    }
+    void advance(double deltaTime) { m_accumulator += deltaTime; }
 
-    bool shouldTick() const {
-        return m_accumulator >= m_tickInterval;
-    }
+    bool shouldTick() const { return m_accumulator >= m_tickInterval; }
 
     void consumeTick() {
         m_accumulator -= m_tickInterval;
@@ -33,9 +28,9 @@ public:
     uint32_t maxTicksPerFrame() const { return m_maxTicksPerFrame; }
 
 private:
-    double   m_tickInterval     = 1.0 / DEFAULT_TICK_RATE;
-    double   m_accumulator      = 0.0;
-    uint64_t m_tickIndex        = 0;
+    double m_tickInterval = 1.0 / DEFAULT_TICK_RATE;
+    double m_accumulator = 0.0;
+    uint64_t m_tickIndex = 0;
     uint32_t m_maxTicksPerFrame = 4;
 };
 

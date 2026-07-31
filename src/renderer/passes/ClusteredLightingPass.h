@@ -54,25 +54,21 @@ public:
     };
 
     void shutdown() override;
-    [[nodiscard]] const char* name() const override {
-        return "ClusteredLighting";
-    }
+    [[nodiscard]] const char* name() const override { return "ClusteredLighting"; }
 
     /// Replaces the complete normalized light snapshot used by the next frame.
     /// Stable IDs must be unique and every record must carry the current
     /// contract version.
     /// @param lights Complete immutable GPU light snapshot.
     /// @return True when every record satisfies the fixed GPU contract.
-    [[nodiscard]] bool setLights(
-        std::vector<renderer::contracts::GpuLight> lights);
+    [[nodiscard]] bool setLights(std::vector<renderer::contracts::GpuLight> lights);
 
     /// Publishes the persistent local-shadow resources consumed with the
     /// clustered light list. A resource generation change rebuilds only the
     /// consumer descriptor set while preserving compute-stage bind groups.
     /// @param resources Complete metadata, atlas, cube-array, and sampler set.
     /// @return True when every handle and range is valid.
-    [[nodiscard]] bool setLocalShadowResources(
-        const LocalShadowResources& resources);
+    [[nodiscard]] bool setLocalShadowResources(const LocalShadowResources& resources);
 
     /// Allocates persistent buffers, computes per-light coverage bounds, and
     /// prepares all bind groups before the graph imports their handles.
@@ -81,17 +77,14 @@ public:
     /// @param renderWidth Active render width in pixels.
     /// @param renderHeight Active render height in pixels.
     /// @return True when this frame has a complete, capacity-safe build plan.
-    [[nodiscard]] bool prepareGraphFrame(RhiDevice& rhiDevice,
-                                         const FrameContext& ctx,
-                                         uint32_t renderWidth,
+    [[nodiscard]] bool prepareGraphFrame(RhiDevice& rhiDevice, const FrameContext& ctx, uint32_t renderWidth,
                                          uint32_t renderHeight);
 
     /// Imports every persistent build product into the Render Graph.
     /// @param graph Graph receiving stable buffer handles.
     /// @param resources Receives graph handles used by build and consumers.
     /// @return True when all live buffers were imported.
-    [[nodiscard]] bool importGraphResources(RenderGraph& graph,
-                                            GraphResources& resources) const;
+    [[nodiscard]] bool importGraphResources(RenderGraph& graph, GraphResources& resources) const;
 
     /// Adds upload, count, hierarchical prefix sum, compact fill, and
     /// validation passes after one dependency.
@@ -99,32 +92,19 @@ public:
     /// @param resources Imported persistent buffer handles.
     /// @param dependency Pass that must complete before light upload starts.
     /// @return Final validation pass, or an invalid handle on setup failure.
-    [[nodiscard]] RgPassHandle addGraphPasses(
-        RenderGraph& graph,
-        const GraphResources& resources,
-        RgPassHandle dependency);
+    [[nodiscard]] RgPassHandle addGraphPasses(RenderGraph& graph, const GraphResources& resources,
+                                              RgPassHandle dependency);
 
     /// Commits delayed statistics only after the graph submission succeeds.
     /// @param succeeded True when every graph command list was submitted.
     /// @param completionToken Final graph submission that depends on validation.
-    void finishGraphExecution(bool succeeded,
-                              RhiSubmissionToken completionToken);
+    void finishGraphExecution(bool succeeded, RhiSubmissionToken completionToken);
 
-    [[nodiscard]] const renderer::contracts::ClusterGrid& grid() const {
-        return m_grid;
-    }
-    [[nodiscard]] const ClusteredLightingFrameStats& frameStats() const {
-        return m_frameStats;
-    }
-    [[nodiscard]] uint32_t activeLightCount() const {
-        return static_cast<uint32_t>(m_lightBounds.size());
-    }
-    [[nodiscard]] RhiBindGroupLayoutHandle consumerBindGroupLayout() const {
-        return m_consumerBindGroupLayout;
-    }
-    [[nodiscard]] RhiBindGroupHandle consumerBindGroup() const {
-        return m_consumerBindGroup;
-    }
+    [[nodiscard]] const renderer::contracts::ClusterGrid& grid() const { return m_grid; }
+    [[nodiscard]] const ClusteredLightingFrameStats& frameStats() const { return m_frameStats; }
+    [[nodiscard]] uint32_t activeLightCount() const { return static_cast<uint32_t>(m_lightBounds.size()); }
+    [[nodiscard]] RhiBindGroupLayoutHandle consumerBindGroupLayout() const { return m_consumerBindGroupLayout; }
+    [[nodiscard]] RhiBindGroupHandle consumerBindGroup() const { return m_consumerBindGroup; }
 
 private:
     struct BufferResource final {
@@ -149,31 +129,22 @@ private:
 
     [[nodiscard]] bool validateLights() const;
     [[nodiscard]] bool consumeReadback(RhiDevice& rhiDevice);
-    [[nodiscard]] bool buildCoverage(const FrameContext& ctx,
-                                     uint32_t renderWidth,
-                                     uint32_t renderHeight);
+    [[nodiscard]] bool buildCoverage(const FrameContext& ctx, uint32_t renderWidth, uint32_t renderHeight);
     [[nodiscard]] bool buildScanPlan();
     [[nodiscard]] bool ensurePipelines(RhiDevice& rhiDevice);
     [[nodiscard]] bool ensureBuffers(RhiDevice& rhiDevice);
-    [[nodiscard]] bool ensureBuffer(RhiDevice& rhiDevice,
-                                    BufferResource& resource,
-                                    uint64_t requiredBytes,
-                                    RhiBufferUsageFlags usage,
-                                    RhiMemoryCategory memoryCategory,
-                                    const char* debugName);
+    [[nodiscard]] bool ensureBuffer(RhiDevice& rhiDevice, BufferResource& resource, uint64_t requiredBytes,
+                                    RhiBufferUsageFlags usage, RhiMemoryCategory memoryCategory, const char* debugName);
     [[nodiscard]] bool ensureReadbackBuffers(RhiDevice& rhiDevice);
     [[nodiscard]] bool ensureBuildBindGroups(RhiDevice& rhiDevice);
     [[nodiscard]] bool ensureConsumerBindGroup(RhiDevice& rhiDevice);
-    [[nodiscard]] bool importBuffer(RenderGraph& graph,
-                                    const BufferResource& resource,
+    [[nodiscard]] bool importBuffer(RenderGraph& graph, const BufferResource& resource,
                                     RgBufferHandle& graphBuffer) const;
 
     [[nodiscard]] bool recordUpload(RhiCommandList& commandList) const;
     [[nodiscard]] bool recordCount(RhiCommandList& commandList) const;
-    [[nodiscard]] bool recordScan(RhiCommandList& commandList,
-                                  uint32_t level) const;
-    [[nodiscard]] bool recordScanAdd(RhiCommandList& commandList,
-                                     uint32_t childLevel) const;
+    [[nodiscard]] bool recordScan(RhiCommandList& commandList, uint32_t level) const;
+    [[nodiscard]] bool recordScanAdd(RhiCommandList& commandList, uint32_t childLevel) const;
     [[nodiscard]] bool recordFinalize(RhiCommandList& commandList) const;
     [[nodiscard]] bool recordFill(RhiCommandList& commandList) const;
     [[nodiscard]] bool recordValidateAndReadback(RhiCommandList& commandList);
@@ -230,8 +201,7 @@ private:
     static constexpr uint32_t kStatsReadbackRingSize = 3u;
     std::array<RhiBufferHandle, kStatsReadbackRingSize> m_statsReadbackBuffers{};
     std::array<bool, kStatsReadbackRingSize> m_statsReadbackWritten{};
-    std::array<RhiSubmissionToken, kStatsReadbackRingSize>
-        m_statsReadbackTokens{};
+    std::array<RhiSubmissionToken, kStatsReadbackRingSize> m_statsReadbackTokens{};
     uint32_t m_statsReadbackWriteIndex = 0u;
     uint32_t m_pendingStatsReadbackIndex = 0u;
     bool m_statsReadbackSlotAvailable = true;

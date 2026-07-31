@@ -33,23 +33,20 @@ public:
     [[nodiscard]] const RhiDevice& rhiDevice() const;
     [[nodiscard]] RhiCommandListPool& commandListPool();
 
-    RhiTextureHandle loadTexture2D(const std::string& name,
-                                   const std::string& path,
-                                   bool srgb = false,
+    RhiTextureHandle loadTexture2D(const std::string& name, const std::string& path, bool srgb = false,
                                    bool flipVertically = false,
-                                   RhiTextureQueueSharing queueSharing =
-                                       RhiTextureQueueSharing::Exclusive);
+                                   RhiTextureQueueSharing queueSharing = RhiTextureQueueSharing::Exclusive);
     [[nodiscard]] RhiTextureHandle getTexture2DHandle(const std::string& name) const;
 
     // Standalone named textures (non-atlas), e.g. GUI sheets.
     RhiTextureHandle loadGuiTexture(const std::string& name, const std::string& path, bool flipVertically = true);
-    RhiTextureHandle loadGuiTexture(const std::string& name, const std::string& path, int& outWidth, int& outHeight, bool flipVertically = true);
+    RhiTextureHandle loadGuiTexture(const std::string& name, const std::string& path, int& outWidth, int& outHeight,
+                                    bool flipVertically = true);
     [[nodiscard]] RhiTextureHandle getGuiTextureHandle(const std::string& name) const;
 
     // Texture atlas used by block-facing UI rendering.
     void buildBlockTextureResources(const std::string& directory, int tileSize = 16);
-    void buildBlockTextureResources(const std::string& directory,
-                                    int tileSize,
+    void buildBlockTextureResources(const std::string& directory, int tileSize,
                                     const std::unordered_set<std::string>& registeredTextureNames);
     void buildTextureAtlas(const std::string& directory, int tileSize = 16);
     [[nodiscard]] const TextureAtlas& getAtlas() const;
@@ -62,8 +59,7 @@ public:
     [[nodiscard]] bool hasBlockNormalMaps() const;
     [[nodiscard]] bool hasBlockSpecularMaps() const;
     [[nodiscard]] bool loadBlockTextureCatalog(const std::string& textureConfigPath);
-    [[nodiscard]] bool loadBlockTextureCatalog(const std::string& textureConfigPath,
-                                               const std::string& packConfigPath);
+    [[nodiscard]] bool loadBlockTextureCatalog(const std::string& textureConfigPath, const std::string& packConfigPath);
     [[nodiscard]] int getBlockTextureTileSize() const;
     [[nodiscard]] bool preloadEntityTexturesFromConfig(const std::string& entitiesConfigPath);
     [[nodiscard]] int getTextureArrayLayer(const std::string& name) const;
@@ -85,8 +81,7 @@ public:
     [[nodiscard]] RhiTextureHandle getFoliageColormap() const;
 
     // Cubemap texture (6 face textures for skybox rendering)
-    RhiTextureHandle loadCubemap(const std::string& name,
-                                 const std::string& rightPath, const std::string& leftPath,
+    RhiTextureHandle loadCubemap(const std::string& name, const std::string& rightPath, const std::string& leftPath,
                                  const std::string& topPath, const std::string& bottomPath,
                                  const std::string& frontPath, const std::string& backPath);
     [[nodiscard]] RhiTextureHandle getCubemap(const std::string& name) const;
@@ -115,7 +110,5 @@ private:
     struct Impl;
     std::unique_ptr<Impl> m_impl;
 };
-
-
 
 #endif //MECRAFT_RESOURCEMGR_H

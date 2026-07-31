@@ -36,31 +36,23 @@ void Fsr1Pass::shutdown() {
     m_commandListPool = nullptr;
 }
 
-bool Fsr1Pass::prepareTextureOutput(RhiDevice& rhiDevice,
-                                    const int width,
-                                    const int height) {
-    return isSupported(rhiDevice) && width > 0 && height > 0 &&
-           ensureRhiPipeline(rhiDevice) &&
-           ensureTargets(rhiDevice, width, height) &&
-           ensureOutputTarget(rhiDevice, width, height);
+bool Fsr1Pass::prepareTextureOutput(RhiDevice& rhiDevice, const int width, const int height) {
+    return isSupported(rhiDevice) && width > 0 && height > 0 && ensureRhiPipeline(rhiDevice) &&
+           ensureTargets(rhiDevice, width, height) && ensureOutputTarget(rhiDevice, width, height);
 }
 
 RhiCommandList& Fsr1Pass::beginCommandList(const char* const debugName) const {
     if (m_commandListPool == nullptr) {
         std::abort();
     }
-    RhiCommandList* const commandList =
-        m_commandListPool->acquire(RhiCommandListType::Graphics);
-    if (commandList == nullptr ||
-        !commandList->begin({debugName, RhiCommandListType::Graphics})) {
+    RhiCommandList* const commandList = m_commandListPool->acquire(RhiCommandListType::Graphics);
+    if (commandList == nullptr || !commandList->begin({debugName, RhiCommandListType::Graphics})) {
         std::abort();
     }
     return *commandList;
 }
 
-void Fsr1Pass::submitCommandList(RhiDevice& rhiDevice,
-                                 RhiCommandList& commandList,
-                                 const char* const debugName) const {
+void Fsr1Pass::submitCommandList(RhiDevice& rhiDevice, RhiCommandList& commandList, const char* const debugName) const {
     if (!commandList.end()) {
         std::abort();
     }
@@ -71,69 +63,39 @@ void Fsr1Pass::submitCommandList(RhiDevice& rhiDevice,
     }
 }
 
-bool Fsr1Pass::execute(RhiDevice& rhiDevice,
-                       const RhiTextureViewHandle swapchainColorView,
-                       const RhiTextureHandle inputTexture,
-                       const RhiTextureViewHandle inputView,
-                       const int inputWidth,
-                       const int inputHeight,
-                       const int outputWidth,
-                       const int outputHeight,
-                       const float sharpness,
+bool Fsr1Pass::execute(RhiDevice& rhiDevice, const RhiTextureViewHandle swapchainColorView,
+                       const RhiTextureHandle inputTexture, const RhiTextureViewHandle inputView, const int inputWidth,
+                       const int inputHeight, const int outputWidth, const int outputHeight, const float sharpness,
                        RenderDebugService& debugService) {
-    const RhiTextureHandle swapchainTexture =
-        rhiDevice.currentSwapchainColorTexture();
-    return executeToOutput(
-        rhiDevice, swapchainTexture, swapchainColorView,
-        RhiResourceState::Present, RhiLoadOp::Load,
-        inputTexture, inputView, inputWidth, inputHeight,
-        outputWidth, outputHeight, sharpness, debugService);
+    const RhiTextureHandle swapchainTexture = rhiDevice.currentSwapchainColorTexture();
+    return executeToOutput(rhiDevice, swapchainTexture, swapchainColorView, RhiResourceState::Present, RhiLoadOp::Load,
+                           inputTexture, inputView, inputWidth, inputHeight, outputWidth, outputHeight, sharpness,
+                           debugService);
 }
 
-bool Fsr1Pass::executeToTexture(
-    RhiDevice& rhiDevice,
-    const RhiTextureHandle inputTexture,
-    const RhiTextureViewHandle inputView,
-    const int inputWidth,
-    const int inputHeight,
-    const int outputWidth,
-    const int outputHeight,
-    const float sharpness,
-    RenderDebugService& debugService) {
-    if (!ensureRhiPipeline(rhiDevice) ||
-        !ensureTargets(rhiDevice, outputWidth, outputHeight) ||
+bool Fsr1Pass::executeToTexture(RhiDevice& rhiDevice, const RhiTextureHandle inputTexture,
+                                const RhiTextureViewHandle inputView, const int inputWidth, const int inputHeight,
+                                const int outputWidth, const int outputHeight, const float sharpness,
+                                RenderDebugService& debugService) {
+    if (!ensureRhiPipeline(rhiDevice) || !ensureTargets(rhiDevice, outputWidth, outputHeight) ||
         !ensureOutputTarget(rhiDevice, outputWidth, outputHeight)) {
         return false;
     }
-    return executeToOutput(
-        rhiDevice, m_outputHandle, m_outputView,
-        RhiResourceState::ShaderRead, RhiLoadOp::DontCare,
-        inputTexture, inputView, inputWidth, inputHeight,
-        outputWidth, outputHeight, sharpness, debugService);
+    return executeToOutput(rhiDevice, m_outputHandle, m_outputView, RhiResourceState::ShaderRead, RhiLoadOp::DontCare,
+                           inputTexture, inputView, inputWidth, inputHeight, outputWidth, outputHeight, sharpness,
+                           debugService);
 }
 
-bool Fsr1Pass::executeToOutput(
-    RhiDevice& rhiDevice,
-    const RhiTextureHandle outputTexture,
-    const RhiTextureViewHandle outputView,
-    const RhiResourceState outputStableState,
-    const RhiLoadOp outputLoadOp,
-    const RhiTextureHandle inputTexture,
-    const RhiTextureViewHandle inputView,
-    const int inputWidth,
-    const int inputHeight,
-    const int outputWidth,
-    const int outputHeight,
-    const float sharpness,
-    RenderDebugService& debugService) {
-    if (!isSupported(rhiDevice) || !inputTexture.isValid() ||
-        !inputView.isValid() || !outputTexture.isValid() ||
-        !outputView.isValid() || inputWidth <= 0 || inputHeight <= 0 ||
-        outputWidth <= 0 || outputHeight <= 0 ||
-        !ensureRhiPipeline(rhiDevice) ||
-        !ensureTargets(rhiDevice, outputWidth, outputHeight) ||
-        !ensureEasuBindGroup(rhiDevice, inputView) ||
-        !ensureRcasBindGroup(rhiDevice)) {
+bool Fsr1Pass::executeToOutput(RhiDevice& rhiDevice, const RhiTextureHandle outputTexture,
+                               const RhiTextureViewHandle outputView, const RhiResourceState outputStableState,
+                               const RhiLoadOp outputLoadOp, const RhiTextureHandle inputTexture,
+                               const RhiTextureViewHandle inputView, const int inputWidth, const int inputHeight,
+                               const int outputWidth, const int outputHeight, const float sharpness,
+                               RenderDebugService& debugService) {
+    if (!isSupported(rhiDevice) || !inputTexture.isValid() || !inputView.isValid() || !outputTexture.isValid() ||
+        !outputView.isValid() || inputWidth <= 0 || inputHeight <= 0 || outputWidth <= 0 || outputHeight <= 0 ||
+        !ensureRhiPipeline(rhiDevice) || !ensureTargets(rhiDevice, outputWidth, outputHeight) ||
+        !ensureEasuBindGroup(rhiDevice, inputView) || !ensureRcasBindGroup(rhiDevice)) {
         return false;
     }
 
@@ -141,27 +103,16 @@ bool Fsr1Pass::executeToOutput(
     glm::vec4 con1;
     glm::vec4 con2;
     glm::vec4 con3;
-    populateEasuConstants(con0, con1, con2, con3,
-                          static_cast<float>(inputWidth),
-                          static_cast<float>(inputHeight),
-                          static_cast<float>(inputWidth),
-                          static_cast<float>(inputHeight),
-                          static_cast<float>(outputWidth),
-                          static_cast<float>(outputHeight));
+    populateEasuConstants(con0, con1, con2, con3, static_cast<float>(inputWidth), static_cast<float>(inputHeight),
+                          static_cast<float>(inputWidth), static_cast<float>(inputHeight),
+                          static_cast<float>(outputWidth), static_cast<float>(outputHeight));
 
-    const glm::vec4 easuPushConstants[4] = {
-        con0,
-        con1,
-        con2,
-        con3
-    };
+    const glm::vec4 easuPushConstants[4] = {con0, con1, con2, con3};
     const glm::vec4 rcasPushConstants = populateRcasConstants(sharpness);
 
     m_renderGraph.reset();
-    const auto importTexture = [&](const RhiTextureHandle texture,
-                                   const RhiTextureViewHandle view,
-                                   const RhiResourceState stableState,
-                                   RgTextureHandle& graphTexture) {
+    const auto importTexture = [&](const RhiTextureHandle texture, const RhiTextureViewHandle view,
+                                   const RhiResourceState stableState, RgTextureHandle& graphTexture) {
         RhiTextureDesc desc;
         if (!rhiDevice.getTextureDesc(texture, desc)) {
             return false;
@@ -180,79 +131,60 @@ bool Fsr1Pass::executeToOutput(
     RgTextureHandle graphInput;
     RgTextureHandle graphEasu;
     RgTextureHandle graphSwapchain;
-    if (!importTexture(inputTexture, inputView, RhiResourceState::ShaderRead,
-                       graphInput) ||
-        !importTexture(m_easuHandle, m_easuView, RhiResourceState::ShaderRead,
-                       graphEasu) ||
-        !importTexture(outputTexture, outputView,
-                       outputStableState, graphSwapchain)) {
+    if (!importTexture(inputTexture, inputView, RhiResourceState::ShaderRead, graphInput) ||
+        !importTexture(m_easuHandle, m_easuView, RhiResourceState::ShaderRead, graphEasu) ||
+        !importTexture(outputTexture, outputView, outputStableState, graphSwapchain)) {
         return false;
     }
 
-    RenderGraphPassBuilder easu = m_renderGraph.addPass(
-        {"FSR1.EASU", RgPassType::Graphics, RhiQueueType::Graphics});
+    RenderGraphPassBuilder easu = m_renderGraph.addPass({"FSR1.EASU", RgPassType::Graphics, RhiQueueType::Graphics});
     easu.readTexture(graphInput, RhiResourceState::ShaderRead)
         .writeTexture(graphEasu, RhiResourceState::RenderTarget)
-        .setExecute([this, &debugService, easuPushConstants,
-                     outputWidth, outputHeight](RgPassContext& pass) {
+        .setExecute([this, &debugService, easuPushConstants, outputWidth, outputHeight](RgPassContext& pass) {
             RhiCommandList& commandList = pass.commandList();
-            const GpuTimerSegmentToken timerToken = debugService.beginGpuTimer(
-                commandList, GpuTimerPass::Post);
+            const GpuTimerSegmentToken timerToken = debugService.beginGpuTimer(commandList, GpuTimerPass::Post);
             RhiColorAttachment colorAttachment;
             colorAttachment.view = m_easuView;
             colorAttachment.loadOp = RhiLoadOp::DontCare;
             colorAttachment.storeOp = RhiStoreOp::Store;
             RhiRenderingInfo renderingInfo;
             renderingInfo.debugName = "FSR1EASU";
-            renderingInfo.renderArea = {
-                0, 0,
-                static_cast<uint32_t>(std::max(1, outputWidth)),
-                static_cast<uint32_t>(std::max(1, outputHeight))
-            };
+            renderingInfo.renderArea = {0, 0, static_cast<uint32_t>(std::max(1, outputWidth)),
+                                        static_cast<uint32_t>(std::max(1, outputHeight))};
             renderingInfo.colorAttachments = &colorAttachment;
             renderingInfo.colorAttachmentCount = 1u;
             commandList.beginRendering(renderingInfo);
             commandList.setGraphicsPipeline(m_easuPipeline);
             commandList.setBindGroup(0u, m_easuBindGroup);
-            commandList.pushConstants(easuPushConstants,
-                                      sizeof(easuPushConstants),
-                                      rhiFlag(RhiShaderStage::Fragment));
+            commandList.pushConstants(easuPushConstants, sizeof(easuPushConstants), rhiFlag(RhiShaderStage::Fragment));
             commandList.draw(3u, 1u, 0u, 0u);
             commandList.endRendering();
             debugService.endGpuTimer(commandList, timerToken);
             return true;
         });
 
-    RenderGraphPassBuilder rcas = m_renderGraph.addPass(
-        {"FSR1.RCAS", RgPassType::Graphics, RhiQueueType::Graphics});
+    RenderGraphPassBuilder rcas = m_renderGraph.addPass({"FSR1.RCAS", RgPassType::Graphics, RhiQueueType::Graphics});
     rcas.dependsOn(easu.handle())
         .readTexture(graphEasu, RhiResourceState::ShaderRead)
         .writeTexture(graphSwapchain, RhiResourceState::RenderTarget)
-        .setExecute([this, &debugService, rcasPushConstants,
-                     outputView, outputLoadOp, outputWidth, outputHeight](
-                        RgPassContext& pass) {
+        .setExecute([this, &debugService, rcasPushConstants, outputView, outputLoadOp, outputWidth,
+                     outputHeight](RgPassContext& pass) {
             RhiCommandList& commandList = pass.commandList();
-            const GpuTimerSegmentToken timerToken = debugService.beginGpuTimer(
-                commandList, GpuTimerPass::Post);
+            const GpuTimerSegmentToken timerToken = debugService.beginGpuTimer(commandList, GpuTimerPass::Post);
             RhiColorAttachment colorAttachment;
             colorAttachment.view = outputView;
             colorAttachment.loadOp = outputLoadOp;
             colorAttachment.storeOp = RhiStoreOp::Store;
             RhiRenderingInfo renderingInfo;
             renderingInfo.debugName = "FSR1RCAS";
-            renderingInfo.renderArea = {
-                0, 0,
-                static_cast<uint32_t>(std::max(1, outputWidth)),
-                static_cast<uint32_t>(std::max(1, outputHeight))
-            };
+            renderingInfo.renderArea = {0, 0, static_cast<uint32_t>(std::max(1, outputWidth)),
+                                        static_cast<uint32_t>(std::max(1, outputHeight))};
             renderingInfo.colorAttachments = &colorAttachment;
             renderingInfo.colorAttachmentCount = 1u;
             commandList.beginRendering(renderingInfo);
             commandList.setGraphicsPipeline(m_rcasPipeline);
             commandList.setBindGroup(0u, m_rcasBindGroup);
-            commandList.pushConstants(&rcasPushConstants,
-                                      sizeof(rcasPushConstants),
-                                      rhiFlag(RhiShaderStage::Fragment));
+            commandList.pushConstants(&rcasPushConstants, sizeof(rcasPushConstants), rhiFlag(RhiShaderStage::Fragment));
             commandList.draw(3u, 1u, 0u, 0u);
             commandList.endRendering();
             debugService.endGpuTimer(commandList, timerToken);
@@ -264,8 +196,7 @@ bool Fsr1Pass::executeToOutput(
         return false;
     }
     const GpuTimerCheckpoint timerCheckpoint = debugService.gpuTimerCheckpoint();
-    const RgExecuteResult executed = m_renderGraph.execute(
-        rhiDevice, *m_commandListPool);
+    const RgExecuteResult executed = m_renderGraph.execute(rhiDevice, *m_commandListPool);
     if (!executed.succeeded()) {
         debugService.cancelGpuTimersSince(timerCheckpoint);
         return false;
@@ -334,12 +265,8 @@ bool Fsr1Pass::ensureRhiPipeline(RhiDevice& rhiDevice) {
 
     RhiBindGroupLayoutDesc bindGroupLayoutDesc;
     bindGroupLayoutDesc.debugName = "FSR1.BindGroupLayout";
-    bindGroupLayoutDesc.entries.push_back({
-        0u,
-        RhiBindingType::CombinedTextureSampler,
-        rhiFlag(RhiShaderStage::Fragment),
-        1u
-    });
+    bindGroupLayoutDesc.entries.push_back(
+        {0u, RhiBindingType::CombinedTextureSampler, rhiFlag(RhiShaderStage::Fragment), 1u});
     m_bindGroupLayout = rhiDevice.createBindGroupLayout(bindGroupLayoutDesc);
     if (!m_bindGroupLayout.isValid()) {
         destroyRhiResources();
@@ -455,8 +382,8 @@ bool Fsr1Pass::ensureRcasBindGroup(RhiDevice& rhiDevice) {
 bool Fsr1Pass::ensureTargets(RhiDevice& rhiDevice, const int width, const int height) {
     const int targetWidth = std::max(1, width);
     const int targetHeight = std::max(1, height);
-    if (m_easuHandle.isValid() && m_easuView.isValid() && m_rhiDevice == &rhiDevice &&
-        m_width == targetWidth && m_height == targetHeight) {
+    if (m_easuHandle.isValid() && m_easuView.isValid() && m_rhiDevice == &rhiDevice && m_width == targetWidth &&
+        m_height == targetHeight) {
         return true;
     }
 
@@ -473,8 +400,7 @@ bool Fsr1Pass::ensureTargets(RhiDevice& rhiDevice, const int width, const int he
     textureDesc.depthOrLayers = 1u;
     textureDesc.mipLevels = 1u;
     textureDesc.sampleCount = 1u;
-    textureDesc.usage = rhiFlag(RhiTextureUsage::Sampled) |
-                        rhiFlag(RhiTextureUsage::ColorAttachment);
+    textureDesc.usage = rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment);
     textureDesc.memoryCategory = RhiMemoryCategory::GBufferHistory;
     m_easuHandle = rhiDevice.createTexture(textureDesc, nullptr);
     if (!m_easuHandle.isValid()) {
@@ -497,24 +423,17 @@ bool Fsr1Pass::ensureTargets(RhiDevice& rhiDevice, const int width, const int he
     }
 
     RhiCommandList& commandList = beginCommandList("FSR1.TargetInitialization.Commands");
-    commandList.textureBarrier({
-        m_easuHandle,
-        RhiResourceState::Undefined,
-        RhiResourceState::ShaderRead
-    });
+    commandList.textureBarrier({m_easuHandle, RhiResourceState::Undefined, RhiResourceState::ShaderRead});
     submitCommandList(rhiDevice, commandList, "FSR1.TargetInitialization.Submit");
 
     return true;
 }
 
-bool Fsr1Pass::ensureOutputTarget(RhiDevice& rhiDevice,
-                                  const int width,
-                                  const int height) {
+bool Fsr1Pass::ensureOutputTarget(RhiDevice& rhiDevice, const int width, const int height) {
     const int targetWidth = std::max(1, width);
     const int targetHeight = std::max(1, height);
-    if (m_outputHandle.isValid() && m_outputView.isValid() &&
-        m_rhiDevice == &rhiDevice && m_outputWidth == targetWidth &&
-        m_outputHeight == targetHeight) {
+    if (m_outputHandle.isValid() && m_outputView.isValid() && m_rhiDevice == &rhiDevice &&
+        m_outputWidth == targetWidth && m_outputHeight == targetHeight) {
         return true;
     }
     if (m_rhiDevice != nullptr && m_outputView.isValid()) {
@@ -537,8 +456,7 @@ bool Fsr1Pass::ensureOutputTarget(RhiDevice& rhiDevice,
     textureDesc.depthOrLayers = 1u;
     textureDesc.mipLevels = 1u;
     textureDesc.sampleCount = 1u;
-    textureDesc.usage = rhiFlag(RhiTextureUsage::Sampled) |
-                        rhiFlag(RhiTextureUsage::ColorAttachment) |
+    textureDesc.usage = rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment) |
                         rhiFlag(RhiTextureUsage::TransferSrc);
     textureDesc.memoryCategory = RhiMemoryCategory::GBufferHistory;
     m_outputHandle = rhiDevice.createTexture(textureDesc, nullptr);
@@ -559,14 +477,9 @@ bool Fsr1Pass::ensureOutputTarget(RhiDevice& rhiDevice,
         return false;
     }
 
-    RhiCommandList& commandList = beginCommandList(
-        "FSR1.OutputInitialization.Commands");
-    commandList.textureBarrier({
-        m_outputHandle,
-        RhiResourceState::Undefined,
-        RhiResourceState::ShaderRead});
-    submitCommandList(
-        rhiDevice, commandList, "FSR1.OutputInitialization.Submit");
+    RhiCommandList& commandList = beginCommandList("FSR1.OutputInitialization.Commands");
+    commandList.textureBarrier({m_outputHandle, RhiResourceState::Undefined, RhiResourceState::ShaderRead});
+    submitCommandList(rhiDevice, commandList, "FSR1.OutputInitialization.Submit");
     m_outputWidth = targetWidth;
     m_outputHeight = targetHeight;
     return true;
@@ -654,37 +567,20 @@ void Fsr1Pass::destroyRhiResources() {
     m_rhiDevice = nullptr;
 }
 
-void Fsr1Pass::populateEasuConstants(glm::vec4& con0,
-                                     glm::vec4& con1,
-                                     glm::vec4& con2,
-                                     glm::vec4& con3,
-                                     const float inputViewportWidth,
-                                     const float inputViewportHeight,
-                                     const float inputTextureWidth,
-                                     const float inputTextureHeight,
-                                     const float outputWidth,
-                                     const float outputHeight) {
+void Fsr1Pass::populateEasuConstants(glm::vec4& con0, glm::vec4& con1, glm::vec4& con2, glm::vec4& con3,
+                                     const float inputViewportWidth, const float inputViewportHeight,
+                                     const float inputTextureWidth, const float inputTextureHeight,
+                                     const float outputWidth, const float outputHeight) {
     const float invInputW = 1.0f / std::max(inputTextureWidth, 1.0f);
     const float invInputH = 1.0f / std::max(inputTextureHeight, 1.0f);
     const float invOutputW = 1.0f / std::max(outputWidth, 1.0f);
     const float invOutputH = 1.0f / std::max(outputHeight, 1.0f);
 
-    con0 = glm::vec4(inputViewportWidth * invOutputW,
-                     inputViewportHeight * invOutputH,
-                     0.5f * inputViewportWidth * invOutputW - 0.5f,
-                     0.5f * inputViewportHeight * invOutputH - 0.5f);
-    con1 = glm::vec4(invInputW,
-                     invInputH,
-                     invInputW,
-                     -invInputH);
-    con2 = glm::vec4(-invInputW,
-                     2.0f * invInputH,
-                     invInputW,
-                     2.0f * invInputH);
-    con3 = glm::vec4(0.0f,
-                     4.0f * invInputH,
-                     0.0f,
-                     0.0f);
+    con0 = glm::vec4(inputViewportWidth * invOutputW, inputViewportHeight * invOutputH,
+                     0.5f * inputViewportWidth * invOutputW - 0.5f, 0.5f * inputViewportHeight * invOutputH - 0.5f);
+    con1 = glm::vec4(invInputW, invInputH, invInputW, -invInputH);
+    con2 = glm::vec4(-invInputW, 2.0f * invInputH, invInputW, 2.0f * invInputH);
+    con3 = glm::vec4(0.0f, 4.0f * invInputH, 0.0f, 0.0f);
 }
 
 glm::vec4 Fsr1Pass::populateRcasConstants(const float sharpness) {

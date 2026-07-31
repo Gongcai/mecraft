@@ -13,10 +13,18 @@
 class World;
 class ResourceMgr;
 class ThreadPool;
-namespace physics { class PhysicsSystem; }
-namespace ecs { class GameplayScene; }
-namespace server { class GameServer; }
-namespace client { class GameClient; }
+namespace physics {
+class PhysicsSystem;
+}
+namespace ecs {
+class GameplayScene;
+}
+namespace server {
+class GameServer;
+}
+namespace client {
+class GameClient;
+}
 class DropSystem;
 class ParticleSystem;
 class RainRenderer;
@@ -26,7 +34,7 @@ class GameplayPresentationBuilder;
 class GameStateMachine;
 class IGameState;
 
-class Inventory;  // Forward declaration for getPlayerInventory()
+class Inventory; // Forward declaration for getPlayerInventory()
 class RenderScene;
 
 /// Aggregates gameplay session objects: World, ECS, physics, crafting, particles, etc.

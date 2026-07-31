@@ -5,24 +5,17 @@
 
 namespace {
 std::array<float, 4> textColorForType(ConsoleDisplayBox::MessageType type,
-                                      const ConsoleDisplayBox::RenderParams& params)
-{
+                                      const ConsoleDisplayBox::RenderParams& params) {
     switch (type) {
-        case ConsoleDisplayBox::MessageType::Warning:
-            return params.warningTextColor;
-        case ConsoleDisplayBox::MessageType::Success:
-            return params.successTextColor;
-        case ConsoleDisplayBox::MessageType::Normal:
-        default:
-            return params.normalTextColor;
+    case ConsoleDisplayBox::MessageType::Warning: return params.warningTextColor;
+    case ConsoleDisplayBox::MessageType::Success: return params.successTextColor;
+    case ConsoleDisplayBox::MessageType::Normal:
+    default: return params.normalTextColor;
     }
 }
 } // namespace
 
-void ConsoleDisplayBox::appendLine(const std::string& message,
-                                   double createdAtSec,
-                                   MessageType type)
-{
+void ConsoleDisplayBox::appendLine(const std::string& message, double createdAtSec, MessageType type) {
     if (message.empty()) {
         return;
     }
@@ -33,26 +26,22 @@ void ConsoleDisplayBox::appendLine(const std::string& message,
     }
 }
 
-void ConsoleDisplayBox::clear()
-{
+void ConsoleDisplayBox::clear() {
     m_lines.clear();
 }
 
-void ConsoleDisplayBox::setMaxLines(std::size_t maxLines)
-{
+void ConsoleDisplayBox::setMaxLines(std::size_t maxLines) {
     m_maxLines = std::max<std::size_t>(1, maxLines);
     while (m_lines.size() > m_maxLines) {
         m_lines.pop_front();
     }
 }
 
-bool ConsoleDisplayBox::empty() const
-{
+bool ConsoleDisplayBox::empty() const {
     return m_lines.empty();
 }
 
-void ConsoleDisplayBox::pruneExpired(double nowSec, float fadeEndSeconds)
-{
+void ConsoleDisplayBox::pruneExpired(double nowSec, float fadeEndSeconds) {
     const double fadeEnd = std::max(0.001, static_cast<double>(fadeEndSeconds));
     while (!m_lines.empty()) {
         const double age = nowSec - m_lines.front().createdAtSec;
@@ -63,8 +52,7 @@ void ConsoleDisplayBox::pruneExpired(double nowSec, float fadeEndSeconds)
     }
 }
 
-float ConsoleDisplayBox::computeLineAlpha(double ageSec, float holdSeconds, float fadeEndSeconds)
-{
+float ConsoleDisplayBox::computeLineAlpha(double ageSec, float holdSeconds, float fadeEndSeconds) {
     if (ageSec >= static_cast<double>(fadeEndSeconds)) {
         return 0.0f;
     }
@@ -78,13 +66,9 @@ float ConsoleDisplayBox::computeLineAlpha(double ageSec, float holdSeconds, floa
     return std::clamp(alpha, 0.0f, 1.0f);
 }
 
-void ConsoleDisplayBox::render(double nowSec,
-                               const RenderParams& params,
-                               const DrawRectFn& drawRect,
-                               const SetClipRectFn& setClipRect,
-                               const RenderTextFn& renderText,
-                               const MeasureTextFn& measureText)
-{
+void ConsoleDisplayBox::render(double nowSec, const RenderParams& params, const DrawRectFn& drawRect,
+                               const SetClipRectFn& setClipRect, const RenderTextFn& renderText,
+                               const MeasureTextFn& measureText) {
     if (!drawRect || !setClipRect || !renderText || params.screenW <= 0 || params.screenH <= 0) {
         return;
     }
@@ -94,9 +78,10 @@ void ConsoleDisplayBox::render(double nowSec,
         return;
     }
 
-    const int boxW = std::max(params.minBoxW,
-                              std::min(params.screenW - params.horizontalMargin * 2,
-                                       static_cast<int>(std::round(static_cast<float>(params.screenW) * params.boxWidthRatio))));
+    const int boxW =
+        std::max(params.minBoxW,
+                 std::min(params.screenW - params.horizontalMargin * 2,
+                          static_cast<int>(std::round(static_cast<float>(params.screenW) * params.boxWidthRatio))));
     const int clipW = std::max(1, boxW - params.textPadX * 2);
     const int clipH = std::max(1, params.boxH - params.textPadY * 2);
 
@@ -129,7 +114,8 @@ void ConsoleDisplayBox::render(double nowSec,
             float accW = 0.0f;
             for (size_t ci = it->text.size(); ci > 0; --ci) {
                 const float cw = measureText(it->text.substr(ci - 1, 1), params.textScale).width;
-                if (accW + cw > clipContentW) break;
+                if (accW + cw > clipContentW)
+                    break;
                 accW += cw;
                 maxChars++;
             }
@@ -146,12 +132,7 @@ void ConsoleDisplayBox::render(double nowSec,
         setClipRect(clipX, clipY, clipW, clipH);
         auto tintedTextColor = textColorForType(it->type, params);
         tintedTextColor[3] *= alpha;
-        renderText(visibleText,
-                   textX,
-                   textY,
-                   params.textScale,
-                   tintedTextColor,
-                   static_cast<float>(params.screenW),
+        renderText(visibleText, textX, textY, params.textScale, tintedTextColor, static_cast<float>(params.screenW),
                    static_cast<float>(params.screenH));
 
         ++drawnCount;

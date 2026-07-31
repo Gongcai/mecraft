@@ -7,14 +7,10 @@
 
 #include <glm/glm.hpp>
 
-enum class RayHitKind {
-    None,
-    Block,
-    Fluid
-};
+enum class RayHitKind { None, Block, Fluid };
 
 struct PhysicsInfo {
-    glm::vec3 origin;    // Ray start position in world space.
+    glm::vec3 origin; // Ray start position in world space.
     glm::vec3 direction; // Normalized ray direction in world space.
 
     PhysicsInfo(const glm::vec3& o, const glm::vec3& d) : origin(o), direction(glm::normalize(d)) {}
@@ -24,17 +20,17 @@ struct RayHit {
     bool hit = false;
     RayHitKind kind = RayHitKind::None;
     glm::ivec3 blockPos{};
-    glm::ivec3 normal{};   // Surface normal used to compute adjacent placement positions.
+    glm::ivec3 normal{}; // Surface normal used to compute adjacent placement positions.
     glm::vec3 position{};
     float distance = 0.0f;
 };
 
 struct PhysicsBody {
-    glm::vec3 position{};       // Body origin in world space.
-    glm::vec3 velocity{};       // Body velocity in meters per second.
+    glm::vec3 position{}; // Body origin in world space.
+    glm::vec3 velocity{}; // Body velocity in meters per second.
     glm::vec3 halfExtents{0.3f, 0.9f, 0.3f};
     glm::vec3 colliderOffset{}; // Collision box center offset from position.
-    float eyeOffsetY = 1.62f;   // Eye height relative to position.
+    float eyeOffsetY = 1.62f; // Eye height relative to position.
 
     bool isGrounded = false;
     float landingImpactSpeed = 0.0f; // Absolute vertical speed at latest ground contact.

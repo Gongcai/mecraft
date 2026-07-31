@@ -13,12 +13,12 @@
 #include "../../renderer/rhi/RhiShaderSourceLoader.h"
 #include "../../resource/ResourceMgr.h"
 
-void ConsoleOverlay::init(ResourceMgr& resourceMgr)
-{
+void ConsoleOverlay::init(ResourceMgr& resourceMgr) {
     m_rhiDevice = &resourceMgr.rhiDevice();
     const auto vertexSource = renderer::rhi::loadShaderSource("assets/shaders/ui_capsule_rhi.vert");
     const auto fragmentSource = renderer::rhi::loadShaderSource("assets/shaders/ui_capsule_rhi.frag");
-    if (!vertexSource || !fragmentSource) std::abort();
+    if (!vertexSource || !fragmentSource)
+        std::abort();
     RhiShaderDesc shaderDesc;
     shaderDesc.debugName = "ConsoleOverlay.Vertex";
     shaderDesc.stage = RhiShaderStage::Vertex;
@@ -55,38 +55,43 @@ void ConsoleOverlay::init(ResourceMgr& resourceMgr)
     blend.dstAlpha = RhiBlendFactor::OneMinusSrcAlpha;
     pipelineDesc.blend.attachments.push_back(blend);
     m_pipeline = m_rhiDevice->createGraphicsPipeline(pipelineDesc);
-    constexpr float vertices[] = {0,0, 1,0, 1,1, 0,0, 1,1, 0,1};
+    constexpr float vertices[] = {0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1};
     RhiBufferDesc bufferDesc;
     bufferDesc.debugName = "ConsoleOverlay.VertexBuffer";
     bufferDesc.size = sizeof(vertices);
-    bufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex) |
-                       rhiFlag(RhiBufferUsage::TransferDst);
+    bufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex) | rhiFlag(RhiBufferUsage::TransferDst);
     bufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
     bufferDesc.initialState = RhiResourceState::VertexBuffer;
     bufferDesc.memoryCategory = RhiMemoryCategory::Geometry;
     m_vertexBuffer = m_rhiDevice->createBuffer(bufferDesc, vertices, sizeof(vertices));
-    if (!m_vertexShader.isValid() || !m_fragmentShader.isValid() ||
-        !m_pipelineLayout.isValid() || !m_pipeline.isValid() || !m_vertexBuffer.isValid()) std::abort();
+    if (!m_vertexShader.isValid() || !m_fragmentShader.isValid() || !m_pipelineLayout.isValid() ||
+        !m_pipeline.isValid() || !m_vertexBuffer.isValid())
+        std::abort();
 }
 
-void ConsoleOverlay::shutdown()
-{
+void ConsoleOverlay::shutdown() {
     if (m_rhiDevice != nullptr) {
-        if (m_vertexBuffer.isValid()) m_rhiDevice->destroyBuffer(m_vertexBuffer);
-        if (m_pipeline.isValid()) m_rhiDevice->destroyPipeline(m_pipeline);
-        if (m_pipelineLayout.isValid()) m_rhiDevice->destroyPipelineLayout(m_pipelineLayout);
-        if (m_fragmentShader.isValid()) m_rhiDevice->destroyShader(m_fragmentShader);
-        if (m_vertexShader.isValid()) m_rhiDevice->destroyShader(m_vertexShader);
+        if (m_vertexBuffer.isValid())
+            m_rhiDevice->destroyBuffer(m_vertexBuffer);
+        if (m_pipeline.isValid())
+            m_rhiDevice->destroyPipeline(m_pipeline);
+        if (m_pipelineLayout.isValid())
+            m_rhiDevice->destroyPipelineLayout(m_pipelineLayout);
+        if (m_fragmentShader.isValid())
+            m_rhiDevice->destroyShader(m_fragmentShader);
+        if (m_vertexShader.isValid())
+            m_rhiDevice->destroyShader(m_vertexShader);
     }
-    m_vertexBuffer = {}; m_pipeline = {}; m_pipelineLayout = {};
-    m_fragmentShader = {}; m_vertexShader = {}; m_rhiDevice = nullptr;
+    m_vertexBuffer = {};
+    m_pipeline = {};
+    m_pipelineLayout = {};
+    m_fragmentShader = {};
+    m_vertexShader = {};
+    m_rhiDevice = nullptr;
     m_display.clear();
 }
 
-void ConsoleOverlay::appendLine(const std::string& message,
-                                double createdAtSec,
-                                ConsoleDisplayBox::MessageType type)
-{
+void ConsoleOverlay::appendLine(const std::string& message, double createdAtSec, ConsoleDisplayBox::MessageType type) {
     if (message.empty()) {
         return;
     }
@@ -95,29 +100,24 @@ void ConsoleOverlay::appendLine(const std::string& message,
     m_display.appendLine(message, createdAtSec, type);
 }
 
-void ConsoleOverlay::clear()
-{
+void ConsoleOverlay::clear() {
     m_display.clear();
 }
 
-bool ConsoleOverlay::empty() const
-{
+bool ConsoleOverlay::empty() const {
     return m_display.empty();
 }
 
-void ConsoleOverlay::setMaxLines(std::size_t maxLines)
-{
+void ConsoleOverlay::setMaxLines(std::size_t maxLines) {
     m_maxLines = maxLines;
     m_display.setMaxLines(maxLines);
 }
 
-void ConsoleOverlay::setTextRenderer(const TextRenderer* textRenderer)
-{
+void ConsoleOverlay::setTextRenderer(const TextRenderer* textRenderer) {
     m_textRenderer = textRenderer;
 }
 
-void ConsoleOverlay::renderSelf(const UIRenderContext& context) const
-{
+void ConsoleOverlay::renderSelf(const UIRenderContext& context) const {
     const TextRenderer* textRenderer = context.textRenderer ? context.textRenderer : m_textRenderer;
     if (!textRenderer) {
         return;
@@ -126,32 +126,29 @@ void ConsoleOverlay::renderSelf(const UIRenderContext& context) const
     renderMessages(static_cast<double>(context.timeSeconds), *textRenderer, context);
 }
 
-void ConsoleOverlay::drawOverlayRect(const UIRenderContext& context,
-                                     int rectX,
-                                     int rectY,
-                                     int rectW,
-                                     int rectH,
-                                     const std::array<float, 4>& rectColor) const
-{
-    if (context.commandList == nullptr || !m_pipeline.isValid() ||
-        !m_vertexBuffer.isValid() || rectW <= 0 || rectH <= 0) {
+void ConsoleOverlay::drawOverlayRect(const UIRenderContext& context, int rectX, int rectY, int rectW, int rectH,
+                                     const std::array<float, 4>& rectColor) const {
+    if (context.commandList == nullptr || !m_pipeline.isValid() || !m_vertexBuffer.isValid() || rectW <= 0 ||
+        rectH <= 0) {
         return;
     }
     context.commandList->setGraphicsPipeline(m_pipeline);
     context.commandList->setVertexBuffer(0u, m_vertexBuffer, 0u);
-    struct PushConstants { glm::vec4 screenRect; glm::vec4 rectRadius; glm::vec4 color; };
-    const PushConstants push{
-        glm::vec4(context.screenWidth, context.screenHeight, rectX, rectY),
-        glm::vec4(rectW, rectH, 0.0f, 0.0f),
-        glm::vec4(rectColor[0], rectColor[1], rectColor[2], rectColor[3])};
+    struct PushConstants {
+        glm::vec4 screenRect;
+        glm::vec4 rectRadius;
+        glm::vec4 color;
+    };
+    const PushConstants push{glm::vec4(context.screenWidth, context.screenHeight, rectX, rectY),
+                             glm::vec4(rectW, rectH, 0.0f, 0.0f),
+                             glm::vec4(rectColor[0], rectColor[1], rectColor[2], rectColor[3])};
     context.commandList->pushConstants(&push, sizeof(push),
-        rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment));
+                                       rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment));
     context.commandList->draw(6u, 1u, 0u, 0u);
 }
 
 void ConsoleOverlay::renderMessages(double nowSec, const TextRenderer& textRenderer,
-                                    const UIRenderContext& context) const
-{
+                                    const UIRenderContext& context) const {
     if (m_display.empty()) {
         return;
     }
@@ -193,23 +190,19 @@ void ConsoleOverlay::renderMessages(double nowSec, const TextRenderer& textRende
 
     m_display.setMaxLines(m_maxLines);
     const float uiScale = context.pixelScale();
-    RhiRect2D textScissor = context.hasScissor
-        ? context.scissor
-        : RhiRect2D{0, 0, static_cast<uint32_t>(screenW * uiScale),
-                    static_cast<uint32_t>(screenH * uiScale)};
+    RhiRect2D textScissor = context.hasScissor ? context.scissor
+                                               : RhiRect2D{0, 0, static_cast<uint32_t>(screenW * uiScale),
+                                                           static_cast<uint32_t>(screenH * uiScale)};
     m_display.render(
-        nowSec,
-        params,
+        nowSec, params,
         [this, &context](int rectX, int rectY, int rectW, int rectH, const std::array<float, 4>& rectColor) {
             drawOverlayRect(context, rectX, rectY, rectW, rectH, rectColor);
         },
         [&context, record, &textScissor, uiScale](int clipX, int clipY, int clipW, int clipH) {
-            RhiRect2D clip{
-                static_cast<int32_t>(std::floor(static_cast<float>(clipX) * uiScale)),
-                static_cast<int32_t>(std::floor(static_cast<float>(clipY) * uiScale)),
-                static_cast<uint32_t>(std::max(0.0f, std::ceil(static_cast<float>(clipW) * uiScale))),
-                static_cast<uint32_t>(std::max(0.0f, std::ceil(static_cast<float>(clipH) * uiScale)))
-            };
+            RhiRect2D clip{static_cast<int32_t>(std::floor(static_cast<float>(clipX) * uiScale)),
+                           static_cast<int32_t>(std::floor(static_cast<float>(clipY) * uiScale)),
+                           static_cast<uint32_t>(std::max(0.0f, std::ceil(static_cast<float>(clipW) * uiScale))),
+                           static_cast<uint32_t>(std::max(0.0f, std::ceil(static_cast<float>(clipH) * uiScale)))};
             if (context.hasScissor) {
                 const int32_t x0 = std::max(clip.x, context.scissor.x);
                 const int32_t y0 = std::max(clip.y, context.scissor.y);
@@ -225,13 +218,8 @@ void ConsoleOverlay::renderMessages(double nowSec, const TextRenderer& textRende
                 context.commandList->setScissor(clip);
             }
         },
-        [&textRenderer, &context, &textScissor](const std::string& line,
-                                          float textX,
-                                          float textY,
-                                          float scale,
-                                          const std::array<float, 4>& textColor,
-                                          float,
-                                          float) {
+        [&textRenderer, &context, &textScissor](const std::string& line, float textX, float textY, float scale,
+                                                const std::array<float, 4>& textColor, float, float) {
             UIRenderContext textContext = context;
             textContext.hasScissor = true;
             textContext.scissor = textScissor;
@@ -243,10 +231,9 @@ void ConsoleOverlay::renderMessages(double nowSec, const TextRenderer& textRende
         });
 
     if (record) {
-        const RhiRect2D parentScissor = context.hasScissor
-            ? context.scissor
-            : RhiRect2D{0, 0, static_cast<uint32_t>(screenW * uiScale),
-                        static_cast<uint32_t>(screenH * uiScale)};
+        const RhiRect2D parentScissor = context.hasScissor ? context.scissor
+                                                           : RhiRect2D{0, 0, static_cast<uint32_t>(screenW * uiScale),
+                                                                       static_cast<uint32_t>(screenH * uiScale)};
         context.commandList->setScissor(parentScissor);
     }
 }

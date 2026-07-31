@@ -27,13 +27,9 @@
 
 class DataDrivenContainerState final : public IGameState {
 public:
-    DataDrivenContainerState(InventoryStateContext deps,
-                             std::string containerUiId,
-                             std::string behaviorId,
+    DataDrivenContainerState(InventoryStateContext deps, std::string containerUiId, std::string behaviorId,
                              const glm::ivec3 blockPosition)
-        : m_deps(deps),
-          m_containerUiId(std::move(containerUiId)),
-          m_behaviorId(std::move(behaviorId)),
+        : m_deps(deps), m_containerUiId(std::move(containerUiId)), m_behaviorId(std::move(behaviorId)),
           m_blockPosition(blockPosition) {}
 
     void onEnter() override {
@@ -75,10 +71,8 @@ public:
         const UIInputRouteResult uiRouteResult =
             UIInputAdapter::routeInput(m_deps.uiRenderer, snapshot, m_deps.context);
 
-        if (m_deps.context.isActionTriggered(Action::Inventory) ||
-            m_deps.context.isActionTriggered(Action::Menu) ||
-            (m_deps.context.isActionTriggered(Action::Cancel) &&
-             uiRouteResult.aggregate != UIEventResult::Consumed)) {
+        if (m_deps.context.isActionTriggered(Action::Inventory) || m_deps.context.isActionTriggered(Action::Menu) ||
+            (m_deps.context.isActionTriggered(Action::Cancel) && uiRouteResult.aggregate != UIEventResult::Consumed)) {
             m_deps.fsm.popState();
             return;
         }
@@ -102,8 +96,7 @@ public:
             }
         }
 
-        if (!uiRouteResult.primaryPressed ||
-            uiRouteResult.primaryDown != UIEventResult::Consumed) {
+        if (!uiRouteResult.primaryPressed || uiRouteResult.primaryDown != UIEventResult::Consumed) {
             return;
         }
 
@@ -131,13 +124,10 @@ private:
         SlotSpace space = SlotSpace::None;
         int index = -1;
 
-        [[nodiscard]] bool valid() const {
-            return space != SlotSpace::None && index >= 0;
-        }
+        [[nodiscard]] bool valid() const { return space != SlotSpace::None && index >= 0; }
     };
 
-    static void validateStorageBehavior(const ui::ContainerUiDef& uiDef,
-                                        const ContainerBehaviorDef& behavior) {
+    static void validateStorageBehavior(const ui::ContainerUiDef& uiDef, const ContainerBehaviorDef& behavior) {
         if (behavior.handler != "storage") {
             fail(behavior.id + " requires storage handler for data-driven storage state");
         }
@@ -168,10 +158,7 @@ private:
     }
 
     [[nodiscard]] bool isContainerSlotValid(const int slot) const {
-        return m_storage != nullptr &&
-               slot >= 0 &&
-               slot < m_storageSlotCount &&
-               m_storage->isValidSlot(slot);
+        return m_storage != nullptr && slot >= 0 && slot < m_storageSlotCount && m_storage->isValidSlot(slot);
     }
 
     BlockEntityInventoryStore& ensureStore() {
@@ -211,19 +198,15 @@ private:
 
     [[nodiscard]] static int encodeSlot(const SlotRef slot) {
         switch (slot.space) {
-            case SlotSpace::Container:
-                return kContainerSlotBase + slot.index;
-            case SlotSpace::Player:
-                return slot.index;
-            case SlotSpace::None:
-            default:
-                return -1;
+        case SlotSpace::Container: return kContainerSlotBase + slot.index;
+        case SlotSpace::Player: return slot.index;
+        case SlotSpace::None:
+        default: return -1;
         }
     }
 
     [[nodiscard]] SlotRef decodeSlot(const int encodedSlot) const {
-        if (encodedSlot >= kContainerSlotBase &&
-            encodedSlot < kContainerSlotBase + m_storageSlotCount) {
+        if (encodedSlot >= kContainerSlotBase && encodedSlot < kContainerSlotBase + m_storageSlotCount) {
             return {SlotSpace::Container, encodedSlot - kContainerSlotBase};
         }
         if (m_deps.inventory.isValidSlot(encodedSlot)) {
@@ -255,9 +238,7 @@ private:
         m_deps.inventory.setSlotStack(slot.index, stack);
     }
 
-    [[nodiscard]] uint32_t addToSlot(const SlotRef slot,
-                                     const ItemID itemId,
-                                     const uint32_t count) {
+    [[nodiscard]] uint32_t addToSlot(const SlotRef slot, const ItemID itemId, const uint32_t count) {
         if (!slot.valid() || itemId == 0 || count == 0) {
             return count;
         }
@@ -299,8 +280,7 @@ private:
             const ItemStack picked = getSlotStack(slot);
             if (!picked.isEmpty()) {
                 setSlotStack(slot, {});
-                m_deps.input.beginUIDragItem(static_cast<int>(picked.itemId),
-                                             static_cast<int>(picked.count),
+                m_deps.input.beginUIDragItem(static_cast<int>(picked.itemId), static_cast<int>(picked.count),
                                              encodeSlot(slot));
             }
             return;
@@ -315,9 +295,7 @@ private:
 
         const ItemStack target = getSlotStack(slot);
         if (target.itemId == draggedItemId) {
-            m_deps.input.beginUIDragItem(dragged.itemId,
-                                         static_cast<int>(remaining),
-                                         dragged.sourceSlot);
+            m_deps.input.beginUIDragItem(dragged.itemId, static_cast<int>(remaining), dragged.sourceSlot);
             return;
         }
 
@@ -327,8 +305,7 @@ private:
         setSlotStack(slot, incoming);
 
         if (!target.isEmpty()) {
-            m_deps.input.beginUIDragItem(static_cast<int>(target.itemId),
-                                         static_cast<int>(target.count),
+            m_deps.input.beginUIDragItem(static_cast<int>(target.itemId), static_cast<int>(target.count),
                                          encodeSlot(slot));
         } else {
             m_deps.input.clearUIDragItem();
@@ -433,8 +410,7 @@ private:
     void spawnItemDropAtPlayer(const ItemID itemId, const uint32_t count) {
         ecs::PlayerQuery query(m_deps.ecsRegistry);
         const glm::vec3 playerPos = query.getPosition();
-        const glm::ivec3 blockPos(static_cast<int>(std::floor(playerPos.x)),
-                                  static_cast<int>(std::floor(playerPos.y)),
+        const glm::ivec3 blockPos(static_cast<int>(std::floor(playerPos.x)), static_cast<int>(std::floor(playerPos.y)),
                                   static_cast<int>(std::floor(playerPos.z)));
         m_deps.dropSystem.spawnItemDrop(itemId, blockPos, count);
     }

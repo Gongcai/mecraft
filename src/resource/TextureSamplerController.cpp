@@ -6,9 +6,7 @@
 #include <cmath>
 void TextureSamplerController::refreshAnisotropySupport(const RhiDevice& rhiDevice) {
     const RhiCapabilities& capabilities = rhiDevice.capabilities();
-    m_maxAnisotropy = capabilities.samplerAnisotropy
-        ? std::max(1.0f, capabilities.maxSamplerAnisotropy)
-        : 1.0f;
+    m_maxAnisotropy = capabilities.samplerAnisotropy ? std::max(1.0f, capabilities.maxSamplerAnisotropy) : 1.0f;
     m_anisotropy = std::clamp(m_anisotropy, 1.0f, m_maxAnisotropy);
 }
 

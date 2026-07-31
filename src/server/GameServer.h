@@ -19,8 +19,10 @@ class ThreadPool;
 namespace ecs {
 class GameplayPipeline;
 class GameplayRegistry;
+} // namespace ecs
+namespace physics {
+class PhysicsSystem;
 }
-namespace physics { class PhysicsSystem; }
 
 namespace server {
 
@@ -36,7 +38,7 @@ struct ConnectedClient {
     uint32_t lastAckedInput = 0;
     uint32_t pendingInputActions = 0;
     net::TickId helloTick = 0;
-    int viewDistance = 8;  // Effective client streaming radius until ClientViewConfig arrives.
+    int viewDistance = 8; // Effective client streaming radius until ClientViewConfig arrives.
     bool receivedHello = false;
     bool receivedViewConfig = false;
     bool isAdmin = false;
@@ -59,7 +61,7 @@ struct ConnectedClient {
     entt::entity ecsPlayerEntity = entt::null;
     std::unordered_set<net::EntityNetId> spawnedPlayerNetIds;
     std::unordered_set<net::EntityNetId> spawnedEntityNetIds;
-    std::unordered_set<int64_t> sentChunks;  // Chunks this client has received
+    std::unordered_set<int64_t> sentChunks; // Chunks this client has received
     int chunkSendLogCount = 0;
     int totalChunksSent = 0;
 };
@@ -76,8 +78,8 @@ public:
 
     /// Initialize with save support. If savePath is non-empty, chunks will be
     /// persisted to disk and restored on subsequent sessions.
-    void init(uint32_t seed, ThreadPool* threadPool, int renderDistance,
-              std::filesystem::path savePath, std::string displayName = {});
+    void init(uint32_t seed, ThreadPool* threadPool, int renderDistance, std::filesystem::path savePath,
+              std::string displayName = {});
 
     /// Explicit shutdown: flush pending saves before destruction.
     void shutdown();
@@ -162,10 +164,8 @@ private:
     void respawnPlayer(ConnectedClient& client);
     void dropPlayerInventory(ConnectedClient& client);
     [[nodiscard]] entt::entity resolvePlayerEntity(const ConnectedClient& client) const;
-    [[nodiscard]] bool buildInventorySnapshot(const ConnectedClient& client,
-                                              net::InventorySnapshotMessage& out) const;
-    [[nodiscard]] bool buildContainerSnapshot(const ConnectedClient& client,
-                                              net::ContainerSnapshotMessage& out) const;
+    [[nodiscard]] bool buildInventorySnapshot(const ConnectedClient& client, net::InventorySnapshotMessage& out) const;
+    [[nodiscard]] bool buildContainerSnapshot(const ConnectedClient& client, net::ContainerSnapshotMessage& out) const;
     void destroyOwnedPlayerProxy(ConnectedClient& client);
     [[nodiscard]] net::EntitySpawnMessage makeEntitySpawnMessage(ecs::EntityNetId netId, entt::entity entity) const;
     [[nodiscard]] bool spawnMobEntity(const std::string& entityId, const glm::vec3& position);
@@ -173,7 +173,8 @@ private:
     [[nodiscard]] std::vector<save::PersistentEntityData> snapshotPersistentEntities() const;
     [[nodiscard]] std::vector<save::BlockEntityData> snapshotBlockEntities() const;
     void checkSpawnChunksReady();
-    [[nodiscard]] std::optional<net::BlockUpdateEntry> makeBlockUpdateEntry(int x, int y, int z, BlockStateId stateId, int lightPatchRadius) const;
+    [[nodiscard]] std::optional<net::BlockUpdateEntry> makeBlockUpdateEntry(int x, int y, int z, BlockStateId stateId,
+                                                                            int lightPatchRadius) const;
     [[nodiscard]] net::BlockUpdateEntry makeBlockOnlyUpdateEntry(int x, int y, int z, BlockStateId stateId) const;
     [[nodiscard]] std::optional<net::BlockUpdateEntry> makeSubChunkLightUpdateEntry(int64_t chunkKey, int scy) const;
     void syncPlayersToClients();
@@ -191,8 +192,8 @@ private:
     // Entity sync state
     ecs::EntityNetId m_nextNetId = 1;
     std::unordered_map<ecs::EntityNetId, entt::entity> m_syncedEntities;
-    entt::registry* m_ecsRegistry = nullptr;  // Non-owning pointer to ECS registry
-    ecs::GameplayRegistry* m_gameplayRegistry = nullptr;  // Non-owning pointer when model factories are available
+    entt::registry* m_ecsRegistry = nullptr; // Non-owning pointer to ECS registry
+    ecs::GameplayRegistry* m_gameplayRegistry = nullptr; // Non-owning pointer when model factories are available
     std::unique_ptr<ecs::GameplayRegistry> m_ownedGameplayRegistry;
     std::unique_ptr<ecs::GameplayPipeline> m_ownedGameplayPipeline;
     std::unique_ptr<physics::PhysicsSystem> m_ownedPhysicsSystem;
@@ -222,17 +223,20 @@ private:
 
     // Weather type string conversion helpers
     static WeatherType weatherTypeFromString(const std::string& str) {
-        if (str == "rain") return WeatherType::Rain;
-        if (str == "storm") return WeatherType::Storm;
-        if (str == "snow") return WeatherType::Snow;
+        if (str == "rain")
+            return WeatherType::Rain;
+        if (str == "storm")
+            return WeatherType::Storm;
+        if (str == "snow")
+            return WeatherType::Snow;
         return WeatherType::Clear;
     }
     static const char* weatherTypeToString(WeatherType type) {
         switch (type) {
-            case WeatherType::Rain: return "rain";
-            case WeatherType::Storm: return "storm";
-            case WeatherType::Snow: return "snow";
-            default: return "clear";
+        case WeatherType::Rain: return "rain";
+        case WeatherType::Storm: return "storm";
+        case WeatherType::Snow: return "snow";
+        default: return "clear";
         }
     }
 };

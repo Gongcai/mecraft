@@ -27,10 +27,8 @@ struct ReflectionProbeCaptureFrameStats final {
     uint32_t slotCapacity = 0u;
     renderer::contracts::StableReflectionProbeId currentProbeId;
     uint32_t currentWorkItem = 0u;
-    uint32_t activeCubemapIndex =
-        renderer::contracts::kReflectionProbeInvalidCubemapIndex;
-    uint32_t buildCubemapIndex =
-        renderer::contracts::kReflectionProbeInvalidCubemapIndex;
+    uint32_t activeCubemapIndex = renderer::contracts::kReflectionProbeInvalidCubemapIndex;
+    uint32_t buildCubemapIndex = renderer::contracts::kReflectionProbeInvalidCubemapIndex;
     uint32_t activeRevision = 0u;
     uint32_t buildRevision = 0u;
     bool workScheduled = false;
@@ -75,10 +73,9 @@ public:
     /// @param context Main-frame state shared with the capture renderer.
     /// @param work Face index, camera transform, and target view for the work item.
     /// @return True when the complete face was recorded.
-    [[nodiscard]] virtual bool recordReflectionProbeRadianceFace(
-        RhiCommandList& commandList,
-        const FrameContext& context,
-        const ReflectionProbeCaptureWork& work) = 0;
+    [[nodiscard]] virtual bool recordReflectionProbeRadianceFace(RhiCommandList& commandList,
+                                                                 const FrameContext& context,
+                                                                 const ReflectionProbeCaptureWork& work) = 0;
 };
 
 /// Owns double-buffered radiance and prefiltered probe capture products.
@@ -97,9 +94,7 @@ public:
     };
 
     void shutdown() override;
-    [[nodiscard]] const char* name() const override {
-        return "ReflectionProbeCapture";
-    }
+    [[nodiscard]] const char* name() const override { return "ReflectionProbeCapture"; }
 
     /// Replaces the complete world-space source snapshot.
     /// @param sources Probe placement and requested capture revisions.
@@ -107,21 +102,17 @@ public:
 
     /// Installs the scene renderer used for six-face radiance capture.
     /// @param renderer Explicit capture renderer; pending face work requires it.
-    void setCaptureRenderer(IReflectionProbeCaptureRenderer* renderer) {
-        m_captureRenderer = renderer;
-    }
+    void setCaptureRenderer(IReflectionProbeCaptureRenderer* renderer) { m_captureRenderer = renderer; }
 
     /// Validates sources, allocates capture arrays, and selects the current
     /// active probe snapshot for this camera.
     /// @param rhiDevice Device that owns the capture resources.
     /// @param cameraPositionWorld Main-view world-space camera position.
     /// @return True when the source snapshot and resources are ready.
-    [[nodiscard]] bool prepareFrame(RhiDevice& rhiDevice,
-                                    const glm::vec3& cameraPositionWorld);
+    [[nodiscard]] bool prepareFrame(RhiDevice& rhiDevice, const glm::vec3& cameraPositionWorld);
 
     /// Imports persistent capture arrays with their exact cross-frame state.
-    [[nodiscard]] bool importGraphResources(RenderGraph& graph,
-                                            GraphResources& resources) const;
+    [[nodiscard]] bool importGraphResources(RenderGraph& graph, GraphResources& resources) const;
 
     /// Adds at most one deterministic face or prefilter work item.
     /// @param graph Render Graph receiving the capture work.
@@ -129,29 +120,21 @@ public:
     /// @param context Main-frame state shared with the capture renderer.
     /// @param dependency Previous graph tail.
     /// @return New graph tail or an invalid handle on contract failure.
-    [[nodiscard]] RgPassHandle addGraphPasses(
-        RenderGraph& graph,
-        const GraphResources& resources,
-        const FrameContext& context,
-        RgPassHandle dependency);
+    [[nodiscard]] RgPassHandle addGraphPasses(RenderGraph& graph, const GraphResources& resources,
+                                              const FrameContext& context, RgPassHandle dependency);
 
     /// Commits the scheduled work only after complete graph submission.
     void finishGraphExecution(bool succeeded);
 
-    [[nodiscard]] const std::vector<renderer::contracts::GpuReflectionProbe>&
-    activeProbes() const {
+    [[nodiscard]] const std::vector<renderer::contracts::GpuReflectionProbe>& activeProbes() const {
         return m_activeProbes;
     }
     [[nodiscard]] ConsumerResources consumerResources() const;
     [[nodiscard]] bool hasPendingWork() const;
     /// Returns queue depth, current work, and published/building generations.
     [[nodiscard]] ReflectionProbeCaptureFrameStats frameStats() const;
-    [[nodiscard]] bool hasSources() const {
-        return !m_sources.empty();
-    }
-    [[nodiscard]] const std::string& lastError() const {
-        return m_lastError;
-    }
+    [[nodiscard]] bool hasSources() const { return !m_sources.empty(); }
+    [[nodiscard]] const std::string& lastError() const { return m_lastError; }
 
 private:
     struct ProbeState final {
@@ -168,22 +151,15 @@ private:
     };
 
     [[nodiscard]] bool rebuildSources(const glm::vec3& cameraPositionWorld);
-    [[nodiscard]] bool ensureResources(RhiDevice& rhiDevice,
-                                       uint32_t requiredSlotCapacity);
+    [[nodiscard]] bool ensureResources(RhiDevice& rhiDevice, uint32_t requiredSlotCapacity);
     [[nodiscard]] bool createPipelines(RhiDevice& rhiDevice);
-    [[nodiscard]] bool createViews(RhiDevice& rhiDevice,
-                                   uint32_t slotCapacity);
-    [[nodiscard]] bool recordRadianceFace(RhiCommandList& commandList,
-                                          const FrameContext& context) const;
+    [[nodiscard]] bool createViews(RhiDevice& rhiDevice, uint32_t slotCapacity);
+    [[nodiscard]] bool recordRadianceFace(RhiCommandList& commandList, const FrameContext& context) const;
     [[nodiscard]] bool recordPrefilter(RhiCommandList& commandList) const;
-    [[nodiscard]] ReflectionProbeCaptureWork buildWork(
-        const ProbeState& state,
-        uint32_t probeIndex,
-        uint32_t workItem) const;
-    [[nodiscard]] bool buildActiveProbe(
-        const ProbeState& state,
-        const glm::vec3& cameraPositionWorld,
-        renderer::contracts::GpuReflectionProbe& probe) const;
+    [[nodiscard]] ReflectionProbeCaptureWork buildWork(const ProbeState& state, uint32_t probeIndex,
+                                                       uint32_t workItem) const;
+    [[nodiscard]] bool buildActiveProbe(const ProbeState& state, const glm::vec3& cameraPositionWorld,
+                                        renderer::contracts::GpuReflectionProbe& probe) const;
     void destroyResources();
 
     RhiDevice* m_rhiDevice = nullptr;
@@ -210,8 +186,7 @@ private:
     RhiTextureViewHandle m_depthView;
     std::vector<std::vector<RhiTextureViewHandle>> m_radianceFaceViews;
     std::vector<RhiTextureViewHandle> m_radianceCubeViews;
-    std::vector<std::vector<std::vector<RhiTextureViewHandle>>>
-        m_prefilterFaceMipViews;
+    std::vector<std::vector<std::vector<RhiTextureViewHandle>>> m_prefilterFaceMipViews;
     std::vector<RhiBindGroupHandle> m_prefilterBindGroups;
     RhiSamplerHandle m_linearClampSampler;
     RhiShaderHandle m_fullscreenVertexShader;

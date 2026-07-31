@@ -11,19 +11,13 @@
 
 namespace {
 
-[[nodiscard]] std::optional<StreamlineDlssMode> toDlssMode(
-    const TemporalUpscaleQuality quality) {
+[[nodiscard]] std::optional<StreamlineDlssMode> toDlssMode(const TemporalUpscaleQuality quality) {
     switch (quality) {
-        case TemporalUpscaleQuality::Quality:
-            return StreamlineDlssMode::Quality;
-        case TemporalUpscaleQuality::Balanced:
-            return StreamlineDlssMode::Balanced;
-        case TemporalUpscaleQuality::Performance:
-            return StreamlineDlssMode::Performance;
-        case TemporalUpscaleQuality::UltraPerformance:
-            return StreamlineDlssMode::UltraPerformance;
-        case TemporalUpscaleQuality::Native:
-            return std::nullopt;
+    case TemporalUpscaleQuality::Quality: return StreamlineDlssMode::Quality;
+    case TemporalUpscaleQuality::Balanced: return StreamlineDlssMode::Balanced;
+    case TemporalUpscaleQuality::Performance: return StreamlineDlssMode::Performance;
+    case TemporalUpscaleQuality::UltraPerformance: return StreamlineDlssMode::UltraPerformance;
+    case TemporalUpscaleQuality::Native: return std::nullopt;
     }
     return std::nullopt;
 }
@@ -40,31 +34,22 @@ namespace {
 }
 
 [[nodiscard]] bool hasSingleSubresource(const VkRhiTextureInteropInfo& info) {
-    return info.imageType == VK_IMAGE_TYPE_2D &&
-           info.viewType == VK_IMAGE_VIEW_TYPE_2D &&
-           info.mipCount == 1u && info.layerCount == 1u;
+    return info.imageType == VK_IMAGE_TYPE_2D && info.viewType == VK_IMAGE_VIEW_TYPE_2D && info.mipCount == 1u &&
+           info.layerCount == 1u;
 }
 
-[[nodiscard]] bool hasUsage(
-    const VkRhiTextureInteropInfo& info,
-    const VkImageUsageFlags usage) {
+[[nodiscard]] bool hasUsage(const VkRhiTextureInteropInfo& info, const VkImageUsageFlags usage) {
     return (info.usage & usage) == usage;
 }
 
-[[nodiscard]] bool validResource(
-    const VkRhiTextureInteropInfo& info,
-    const VkFormat format,
-    const TemporalExtent extent,
-    const VkImageUsageFlags usage) {
-    return info.image != VK_NULL_HANDLE && info.view != VK_NULL_HANDLE &&
-           info.format == format && info.extent.width == extent.width &&
-           info.extent.height == extent.height && info.extent.depth == 1u &&
+[[nodiscard]] bool validResource(const VkRhiTextureInteropInfo& info, const VkFormat format,
+                                 const TemporalExtent extent, const VkImageUsageFlags usage) {
+    return info.image != VK_NULL_HANDLE && info.view != VK_NULL_HANDLE && info.format == format &&
+           info.extent.width == extent.width && info.extent.height == extent.height && info.extent.depth == 1u &&
            hasSingleSubresource(info) && hasUsage(info, usage);
 }
 
-[[nodiscard]] StreamlineDlssResource toDlssResource(
-    const VkRhiTextureInteropInfo& info,
-    const RhiResourceState state) {
+[[nodiscard]] StreamlineDlssResource toDlssResource(const VkRhiTextureInteropInfo& info, const RhiResourceState state) {
     StreamlineDlssResource resource;
     resource.image = info.image;
     resource.view = info.view;
@@ -94,9 +79,7 @@ namespace {
 
 } // namespace
 
-DlssRenderExtentResult queryDlssRenderExtent(
-    const TemporalUpscaleQuality quality,
-    const TemporalExtent outputExtent) {
+DlssRenderExtentResult queryDlssRenderExtent(const TemporalUpscaleQuality quality, const TemporalExtent outputExtent) {
     const auto mode = toDlssMode(quality);
     if (!mode.has_value()) {
         return {DlssVulkanStatus::InvalidQuality, {}};
@@ -109,8 +92,7 @@ DlssRenderExtentResult queryDlssRenderExtent(
     options.outputWidth = outputExtent.width;
     options.outputHeight = outputExtent.height;
     StreamlineDlssOptimalSettings settings;
-    if (!StreamlineRuntime::instance().queryDlssOptimalSettings(
-            options, settings)) {
+    if (!StreamlineRuntime::instance().queryDlssOptimalSettings(options, settings)) {
         return {DlssVulkanStatus::RuntimeUnavailable, {}};
     }
     const TemporalExtent renderExtent{settings.renderWidth, settings.renderHeight};
@@ -120,28 +102,18 @@ DlssRenderExtentResult queryDlssRenderExtent(
     return {DlssVulkanStatus::Success, renderExtent};
 }
 
-DlssJitterResult queryDlssJitter(
-    const uint64_t frameIndex,
-    const TemporalExtent renderExtent,
-    const TemporalExtent outputExtent) {
+DlssJitterResult queryDlssJitter(const uint64_t frameIndex, const TemporalExtent renderExtent,
+                                 const TemporalExtent outputExtent) {
     if (!renderExtent.isValid() || !outputExtent.isValid()) {
         return {};
     }
-    const float scale = static_cast<float>(outputExtent.width) /
-                        static_cast<float>(renderExtent.width);
-    const uint32_t phaseCount = std::max(
-        8u, static_cast<uint32_t>(std::ceil(8.0f * scale * scale)));
-    const uint32_t phaseIndex = static_cast<uint32_t>(
-        frameIndex % static_cast<uint64_t>(phaseCount));
+    const float scale = static_cast<float>(outputExtent.width) / static_cast<float>(renderExtent.width);
+    const uint32_t phaseCount = std::max(8u, static_cast<uint32_t>(std::ceil(8.0f * scale * scale)));
+    const uint32_t phaseIndex = static_cast<uint32_t>(frameIndex % static_cast<uint64_t>(phaseCount));
     TemporalJitter jitter;
-    jitter.pixels = {
-        halton(phaseIndex + 1u, 2u) - 0.5f,
-        halton(phaseIndex + 1u, 3u) - 0.5f
-    };
-    jitter.projectionOffset = {
-        2.0f * jitter.pixels.x / static_cast<float>(renderExtent.width),
-        -2.0f * jitter.pixels.y / static_cast<float>(renderExtent.height)
-    };
+    jitter.pixels = {halton(phaseIndex + 1u, 2u) - 0.5f, halton(phaseIndex + 1u, 3u) - 0.5f};
+    jitter.projectionOffset = {2.0f * jitter.pixels.x / static_cast<float>(renderExtent.width),
+                               -2.0f * jitter.pixels.y / static_cast<float>(renderExtent.height)};
     return {DlssVulkanStatus::Success, jitter, phaseCount, phaseIndex};
 }
 
@@ -149,10 +121,8 @@ DlssVulkanContext::~DlssVulkanContext() {
     static_cast<void>(shutdown());
 }
 
-bool DlssVulkanContext::initialize(
-    const TemporalUpscaleQuality quality,
-    const TemporalExtent renderExtent,
-    const TemporalExtent outputExtent) {
+bool DlssVulkanContext::initialize(const TemporalUpscaleQuality quality, const TemporalExtent renderExtent,
+                                   const TemporalExtent outputExtent) {
     if (m_initialized || !renderExtent.isValid() || !outputExtent.isValid()) {
         return false;
     }
@@ -160,8 +130,7 @@ bool DlssVulkanContext::initialize(
     if (!mode.has_value()) {
         return false;
     }
-    const DlssRenderExtentResult expected = queryDlssRenderExtent(
-        quality, outputExtent);
+    const DlssRenderExtentResult expected = queryDlssRenderExtent(quality, outputExtent);
     if (!expected.succeeded() || expected.extent != renderExtent) {
         return false;
     }
@@ -193,37 +162,28 @@ bool DlssVulkanContext::shutdown() {
     return true;
 }
 
-DlssVulkanDispatchResult DlssVulkanContext::dispatch(
-    const VkRhiDevice& device,
-    const RhiCommandList& commandList,
-    const TemporalFrameInput& frame) {
+DlssVulkanDispatchResult DlssVulkanContext::dispatch(const VkRhiDevice& device, const RhiCommandList& commandList,
+                                                     const TemporalFrameInput& frame) {
     if (!m_initialized || frame.extents.resourceExtent != m_renderExtent ||
         frame.extents.outputExtent != m_outputExtent) {
         return {DlssVulkanStatus::RuntimeUnavailable};
     }
-    const auto inputColor = VkRhiInterop::textureInfo(
-        device, frame.textures.hdrColor, frame.textures.hdrColorView);
-    const auto outputColor = VkRhiInterop::textureInfo(
-        device, frame.textures.outputHdrColor, frame.textures.outputHdrColorView);
-    const auto depth = VkRhiInterop::textureInfo(
-        device, frame.textures.depth, frame.textures.depthView);
-    const auto motionVectors = VkRhiInterop::textureInfo(
-        device, frame.textures.velocity, frame.textures.velocityView);
-    const auto exposure = VkRhiInterop::textureInfo(
-        device, frame.textures.exposure, frame.textures.exposureView);
-    if (!inputColor.has_value() || !outputColor.has_value() ||
-        !depth.has_value() || !motionVectors.has_value() ||
+    const auto inputColor = VkRhiInterop::textureInfo(device, frame.textures.hdrColor, frame.textures.hdrColorView);
+    const auto outputColor =
+        VkRhiInterop::textureInfo(device, frame.textures.outputHdrColor, frame.textures.outputHdrColorView);
+    const auto depth = VkRhiInterop::textureInfo(device, frame.textures.depth, frame.textures.depthView);
+    const auto motionVectors = VkRhiInterop::textureInfo(device, frame.textures.velocity, frame.textures.velocityView);
+    const auto exposure = VkRhiInterop::textureInfo(device, frame.textures.exposure, frame.textures.exposureView);
+    if (!inputColor.has_value() || !outputColor.has_value() || !depth.has_value() || !motionVectors.has_value() ||
         !exposure.has_value() ||
-        !validResource(*inputColor, VK_FORMAT_R16G16B16A16_SFLOAT,
-                       frame.extents.resourceExtent, VK_IMAGE_USAGE_SAMPLED_BIT) ||
-        !validResource(*outputColor, VK_FORMAT_R16G16B16A16_SFLOAT,
-                       frame.extents.outputExtent, VK_IMAGE_USAGE_STORAGE_BIT) ||
-        !validResource(*depth, VK_FORMAT_D32_SFLOAT,
-                       frame.extents.resourceExtent, VK_IMAGE_USAGE_SAMPLED_BIT) ||
-        !validResource(*motionVectors, VK_FORMAT_R16G16_SFLOAT,
-                       frame.extents.resourceExtent, VK_IMAGE_USAGE_SAMPLED_BIT) ||
-        !validResource(*exposure, VK_FORMAT_R16G16B16A16_SFLOAT,
-                       {1u, 1u}, VK_IMAGE_USAGE_SAMPLED_BIT)) {
+        !validResource(*inputColor, VK_FORMAT_R16G16B16A16_SFLOAT, frame.extents.resourceExtent,
+                       VK_IMAGE_USAGE_SAMPLED_BIT) ||
+        !validResource(*outputColor, VK_FORMAT_R16G16B16A16_SFLOAT, frame.extents.outputExtent,
+                       VK_IMAGE_USAGE_STORAGE_BIT) ||
+        !validResource(*depth, VK_FORMAT_D32_SFLOAT, frame.extents.resourceExtent, VK_IMAGE_USAGE_SAMPLED_BIT) ||
+        !validResource(*motionVectors, VK_FORMAT_R16G16_SFLOAT, frame.extents.resourceExtent,
+                       VK_IMAGE_USAGE_SAMPLED_BIT) ||
+        !validResource(*exposure, VK_FORMAT_R16G16B16A16_SFLOAT, {1u, 1u}, VK_IMAGE_USAGE_SAMPLED_BIT)) {
         return {DlssVulkanStatus::InvalidResources};
     }
     const auto commandBuffer = VkRhiInterop::commandBuffer(device, commandList);
@@ -241,14 +201,10 @@ DlssVulkanDispatchResult DlssVulkanContext::dispatch(
     dispatch.constants.prevClipToClip = toRowMajorArray(frame.prevClipToClip);
     dispatch.constants.jitterOffset = {frame.jitter.pixels.x, frame.jitter.pixels.y};
     dispatch.constants.motionVectorScale = {-1.0f, -1.0f};
-    dispatch.constants.cameraPosition = {
-        frame.cameraPosition.x, frame.cameraPosition.y, frame.cameraPosition.z};
-    dispatch.constants.cameraUp = {
-        frame.cameraUp.x, frame.cameraUp.y, frame.cameraUp.z};
-    dispatch.constants.cameraRight = {
-        frame.cameraRight.x, frame.cameraRight.y, frame.cameraRight.z};
-    dispatch.constants.cameraForward = {
-        frame.cameraForward.x, frame.cameraForward.y, frame.cameraForward.z};
+    dispatch.constants.cameraPosition = {frame.cameraPosition.x, frame.cameraPosition.y, frame.cameraPosition.z};
+    dispatch.constants.cameraUp = {frame.cameraUp.x, frame.cameraUp.y, frame.cameraUp.z};
+    dispatch.constants.cameraRight = {frame.cameraRight.x, frame.cameraRight.y, frame.cameraRight.z};
+    dispatch.constants.cameraForward = {frame.cameraForward.x, frame.cameraForward.y, frame.cameraForward.z};
     dispatch.constants.cameraNear = frame.cameraNear;
     dispatch.constants.cameraFar = frame.cameraFar;
     dispatch.constants.verticalFovRadians = frame.verticalFovRadians;
@@ -258,8 +214,7 @@ DlssVulkanDispatchResult DlssVulkanContext::dispatch(
     dispatch.inputColor = toDlssResource(*inputColor, RhiResourceState::ShaderRead);
     dispatch.outputColor = toDlssResource(*outputColor, RhiResourceState::ShaderWrite);
     dispatch.depth = toDlssResource(*depth, RhiResourceState::ShaderRead);
-    dispatch.motionVectors = toDlssResource(
-        *motionVectors, RhiResourceState::ShaderRead);
+    dispatch.motionVectors = toDlssResource(*motionVectors, RhiResourceState::ShaderRead);
     dispatch.exposure = toDlssResource(*exposure, RhiResourceState::ShaderRead);
     if (!StreamlineRuntime::instance().evaluateDlss(dispatch)) {
         return {DlssVulkanStatus::SdkError};

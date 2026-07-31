@@ -4,10 +4,7 @@
 #include <unordered_map>
 #include <vector>
 
-enum class ContainerStorageKind {
-    BlockEntity,
-    Transient
-};
+enum class ContainerStorageKind { BlockEntity, Transient };
 
 struct ContainerStorageDef {
     ContainerStorageKind kind = ContainerStorageKind::BlockEntity;

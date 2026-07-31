@@ -39,7 +39,8 @@ bool readVaruint(const uint8_t*& cursor, const uint8_t* end, uint32_t& outValue)
             return false; // overflow
         }
         outValue |= payload << shift;
-        if ((byte & 0x80u) == 0) return true;
+        if ((byte & 0x80u) == 0)
+            return true;
         shift += 7;
     }
     return false; // overflow
@@ -47,8 +48,7 @@ bool readVaruint(const uint8_t*& cursor, const uint8_t* end, uint32_t& outValue)
 
 bool readBlockStateId(const uint8_t*& cursor, const uint8_t* end, BlockStateId& out) {
     if (!block_state_codec::readRegisteredBlockStateId(cursor, end, out)) {
-        MECRAFT_LOG_FPRINTF(stderr,
-                            "[Save] Invalid palette block state index for registry size %zu\n",
+        MECRAFT_LOG_FPRINTF(stderr, "[Save] Invalid palette block state index for registry size %zu\n",
                             BlockStateRegistry::getStateCount());
         return false;
     }
@@ -69,13 +69,15 @@ void writeU16(std::vector<uint8_t>& out, uint16_t v) {
 }
 
 bool readU8(const uint8_t*& cursor, const uint8_t* end, uint8_t& out) {
-    if (cursor >= end) return false;
+    if (cursor >= end)
+        return false;
     out = *cursor++;
     return true;
 }
 
 bool readU16(const uint8_t*& cursor, const uint8_t* end, uint16_t& out) {
-    if (cursor + 2 > end) return false;
+    if (cursor + 2 > end)
+        return false;
     out = static_cast<uint16_t>(cursor[0]) | (static_cast<uint16_t>(cursor[1]) << 8);
     cursor += 2;
     return true;
@@ -131,11 +133,7 @@ bool containsPosition(const std::vector<glm::ivec3>& positions, const glm::ivec3
 // ---------------------------------------------------------------------------
 
 // Serialize one layer (block or fluid) of a subchunk.
-void serializeLayer(
-    std::vector<uint8_t>& out,
-    const Palette& palette,
-    const BitPackedArray& data)
-{
+void serializeLayer(std::vector<uint8_t>& out, const Palette& palette, const BitPackedArray& data) {
     const size_t paletteSize = palette.size();
 
     writeVaruint(out, static_cast<uint32_t>(paletteSize));
@@ -162,9 +160,9 @@ void serializeLayer(
 }
 
 // Read a packed index from a bit-packed byte buffer.
-uint32_t readPackedIndex(const uint8_t* packedData, size_t packedDataSize,
-                         size_t entryIndex, uint8_t bitsPerEntry) {
-    if (bitsPerEntry == 0) return 0;
+uint32_t readPackedIndex(const uint8_t* packedData, size_t packedDataSize, size_t entryIndex, uint8_t bitsPerEntry) {
+    if (bitsPerEntry == 0)
+        return 0;
 
     const size_t bitOffset = entryIndex * bitsPerEntry;
     const size_t byteOffset = bitOffset / 8;
@@ -180,12 +178,10 @@ uint32_t readPackedIndex(const uint8_t* packedData, size_t packedDataSize,
 }
 
 // Deserialize one layer into a subchunk.
-bool deserializeLayer(
-    const uint8_t*& cursor, const uint8_t* end,
-    SubChunk& sub, bool isFluidLayer)
-{
+bool deserializeLayer(const uint8_t*& cursor, const uint8_t* end, SubChunk& sub, bool isFluidLayer) {
     uint32_t paletteCount = 0;
-    if (!readVaruint(cursor, end, paletteCount)) return false;
+    if (!readVaruint(cursor, end, paletteCount))
+        return false;
 
     if (paletteCount == 0) {
         return true;
@@ -196,19 +192,24 @@ bool deserializeLayer(
     palette.reserve(paletteCount);
     for (uint32_t i = 0; i < paletteCount; ++i) {
         BlockStateId stateId = NULL_BLOCK_STATE;
-        if (!readBlockStateId(cursor, end, stateId)) return false;
+        if (!readBlockStateId(cursor, end, stateId))
+            return false;
         palette.push_back(stateId);
     }
 
     // Read bits per entry
     uint8_t bpe = 0;
-    if (!readU8(cursor, end, bpe)) return false;
-    if (bpe > 32) return false;
+    if (!readU8(cursor, end, bpe))
+        return false;
+    if (bpe > 32)
+        return false;
 
     // Read packed data size
     uint32_t packedDataSize = 0;
-    if (!readVaruint(cursor, end, packedDataSize)) return false;
-    if (static_cast<size_t>(end - cursor) < packedDataSize) return false;
+    if (!readVaruint(cursor, end, packedDataSize))
+        return false;
+    if (static_cast<size_t>(end - cursor) < packedDataSize)
+        return false;
 
     const uint8_t* packedData = cursor;
     cursor += packedDataSize;
@@ -222,14 +223,11 @@ bool deserializeLayer(
 
         uint32_t paletteIndex = 0;
         if (bpe > 0 && packedDataSize > 0) {
-            paletteIndex = readPackedIndex(packedData, packedDataSize,
-                                           static_cast<size_t>(i), bpe);
+            paletteIndex = readPackedIndex(packedData, packedDataSize, static_cast<size_t>(i), bpe);
         }
 
         if (paletteIndex >= palette.size()) {
-            MECRAFT_LOG_FPRINTF(stderr,
-                                "[Save] Packed palette index %u exceeds palette size %zu\n",
-                                paletteIndex,
+            MECRAFT_LOG_FPRINTF(stderr, "[Save] Packed palette index %u exceeds palette size %zu\n", paletteIndex,
                                 palette.size());
             return false;
         }
@@ -237,19 +235,16 @@ bool deserializeLayer(
         const BlockStateId stateId = palette[paletteIndex];
 
         if (isFluidLayer) {
-            sub.setFluidLayer(static_cast<int>(lx), static_cast<int>(ly),
-                              static_cast<int>(lz), stateId);
+            sub.setFluidLayer(static_cast<int>(lx), static_cast<int>(ly), static_cast<int>(lz), stateId);
         } else {
-            sub.setBlock(static_cast<int>(lx), static_cast<int>(ly),
-                         static_cast<int>(lz), stateId);
+            sub.setBlock(static_cast<int>(lx), static_cast<int>(ly), static_cast<int>(lz), stateId);
         }
     }
 
     return true;
 }
 
-bool serializeWireContainers(std::vector<uint8_t>& out,
-                             const Chunk& chunk,
+bool serializeWireContainers(std::vector<uint8_t>& out, const Chunk& chunk,
                              const std::vector<WireContainerSaveEntry>& wireContainers) {
     if (wireContainers.size() > static_cast<size_t>(Chunk::SIZE_X * Chunk::SIZE_Y * Chunk::SIZE_Z)) {
         MECRAFT_LOG_FPRINTF(stderr, "[Save] Wire container save entry count exceeds the chunk block count\n");
@@ -274,8 +269,7 @@ bool serializeWireContainers(std::vector<uint8_t>& out,
         int localX = 0;
         int localY = 0;
         int localZ = 0;
-        if (!checkedLocalX(chunk, entry.position, localX) ||
-            !checkedLocalY(entry.position, localY) ||
+        if (!checkedLocalX(chunk, entry.position, localX) || !checkedLocalY(entry.position, localY) ||
             !checkedLocalZ(chunk, entry.position, localZ)) {
             return false;
         }
@@ -304,8 +298,7 @@ bool serializeWireContainers(std::vector<uint8_t>& out,
                 if (!isWireContainerState(chunk.getBlock(x, y, z))) {
                     continue;
                 }
-                const glm::ivec3 worldPosition(chunk.m_chunkX * Chunk::SIZE_X + x,
-                                               y,
+                const glm::ivec3 worldPosition(chunk.m_chunkX * Chunk::SIZE_X + x, y,
                                                chunk.m_chunkZ * Chunk::SIZE_Z + z);
                 if (!containsPosition(writtenPositions, worldPosition)) {
                     MECRAFT_LOG_FPRINTF(stderr, "[Save] Wire container block is missing its saved parts\n");
@@ -317,12 +310,11 @@ bool serializeWireContainers(std::vector<uint8_t>& out,
     return true;
 }
 
-bool deserializeWireContainers(const uint8_t*& cursor,
-                               const uint8_t* end,
-                               const Chunk& chunk,
+bool deserializeWireContainers(const uint8_t*& cursor, const uint8_t* end, const Chunk& chunk,
                                std::vector<WireContainerSaveEntry>& out) {
     uint32_t entryCount = 0;
-    if (!readVaruint(cursor, end, entryCount)) return false;
+    if (!readVaruint(cursor, end, entryCount))
+        return false;
     if (entryCount > static_cast<uint32_t>(Chunk::SIZE_X * Chunk::SIZE_Y * Chunk::SIZE_Z)) {
         return false;
     }
@@ -336,9 +328,7 @@ bool deserializeWireContainers(const uint8_t*& cursor,
         uint8_t localX = 0;
         uint16_t localY = 0;
         uint8_t localZ = 0;
-        if (!readU8(cursor, end, localX) ||
-            !readU16(cursor, end, localY) ||
-            !readU8(cursor, end, localZ)) {
+        if (!readU8(cursor, end, localX) || !readU16(cursor, end, localY) || !readU8(cursor, end, localZ)) {
             return false;
         }
         if (localX >= Chunk::SIZE_X || localY >= Chunk::SIZE_Y || localZ >= Chunk::SIZE_Z) {
@@ -356,7 +346,8 @@ bool deserializeWireContainers(const uint8_t*& cursor,
         }
 
         uint32_t partCount = 0;
-        if (!readVaruint(cursor, end, partCount)) return false;
+        if (!readVaruint(cursor, end, partCount))
+            return false;
         if (partCount == 0 || partCount > WireContainerParts::MAX_PARTS) {
             return false;
         }
@@ -364,10 +355,8 @@ bool deserializeWireContainers(const uint8_t*& cursor,
         WireContainerParts parts;
         for (uint32_t partIndex = 0; partIndex < partCount; ++partIndex) {
             WirePart part;
-            if (!readU16(cursor, end, part.channelId) ||
-                !readU16(cursor, end, part.facing) ||
-                !readU8(cursor, end, part.power) ||
-                !readU8(cursor, end, part.connections)) {
+            if (!readU16(cursor, end, part.channelId) || !readU16(cursor, end, part.facing) ||
+                !readU8(cursor, end, part.power) || !readU8(cursor, end, part.connections)) {
                 return false;
             }
             if (!WireContainerParts::isValidPart(part)) {
@@ -391,8 +380,7 @@ bool deserializeWireContainers(const uint8_t*& cursor,
                 if (!isWireContainerState(chunk.getBlock(x, y, z))) {
                     continue;
                 }
-                const glm::ivec3 worldPosition(chunk.m_chunkX * Chunk::SIZE_X + x,
-                                               y,
+                const glm::ivec3 worldPosition(chunk.m_chunkX * Chunk::SIZE_X + x, y,
                                                chunk.m_chunkZ * Chunk::SIZE_Z + z);
                 if (!containsPosition(readPositions, worldPosition)) {
                     return false;
@@ -415,9 +403,8 @@ std::vector<uint8_t> ChunkSerializer::serializePayload(const Chunk& chunk) {
     return serializePayload(chunk, kNoWireContainers);
 }
 
-std::vector<uint8_t> ChunkSerializer::serializePayload(
-    const Chunk& chunk,
-    const std::vector<WireContainerSaveEntry>& wireContainers) {
+std::vector<uint8_t> ChunkSerializer::serializePayload(const Chunk& chunk,
+                                                       const std::vector<WireContainerSaveEntry>& wireContainers) {
     std::vector<uint8_t> payload;
 
     writeU8(payload, MCHK_ENCODING_PALLETIZED);
@@ -432,10 +419,12 @@ std::vector<uint8_t> ChunkSerializer::serializePayload(
     writeU16(payload, subChunkMask);
 
     for (int scy = 0; scy < Chunk::NUM_SUB_CHUNKS; ++scy) {
-        if ((subChunkMask & (1u << scy)) == 0) continue;
+        if ((subChunkMask & (1u << scy)) == 0)
+            continue;
 
         const SubChunk* sub = chunk.getSubChunk(scy);
-        if (!sub) continue;
+        if (!sub)
+            continue;
 
         writeU8(payload, static_cast<uint8_t>(scy));
         serializeLayer(payload, sub->blockPalette(), sub->blockData());
@@ -449,44 +438,43 @@ std::vector<uint8_t> ChunkSerializer::serializePayload(
     return payload;
 }
 
-std::shared_ptr<Chunk> ChunkSerializer::deserializePayload(
-    int32_t cx, int32_t cz,
-    const uint8_t* data, size_t size)
-{
+std::shared_ptr<Chunk> ChunkSerializer::deserializePayload(int32_t cx, int32_t cz, const uint8_t* data, size_t size) {
     ChunkLoadData loadData = deserializePayloadData(cx, cz, data, size);
     return std::move(loadData.chunk);
 }
 
-ChunkLoadData ChunkSerializer::deserializePayloadData(
-    int32_t cx, int32_t cz,
-    const uint8_t* data, size_t size)
-{
+ChunkLoadData ChunkSerializer::deserializePayloadData(int32_t cx, int32_t cz, const uint8_t* data, size_t size) {
     ChunkLoadData loadData;
     const uint8_t* cursor = data;
     const uint8_t* end = data + size;
 
     uint8_t encoding = 0;
-    if (!readU8(cursor, end, encoding)) return loadData;
-    if (encoding != MCHK_ENCODING_PALLETIZED) return loadData;
+    if (!readU8(cursor, end, encoding))
+        return loadData;
+    if (encoding != MCHK_ENCODING_PALLETIZED)
+        return loadData;
 
     uint16_t subChunkMask = 0;
-    if (!readU16(cursor, end, subChunkMask)) return loadData;
+    if (!readU16(cursor, end, subChunkMask))
+        return loadData;
 
     auto chunk = std::make_shared<Chunk>(cx, cz);
 
     for (int scy = 0; scy < Chunk::NUM_SUB_CHUNKS; ++scy) {
-        if ((subChunkMask & (1u << scy)) == 0) continue;
+        if ((subChunkMask & (1u << scy)) == 0)
+            continue;
 
         uint8_t storedScy = 0;
-        if (!readU8(cursor, end, storedScy)) return loadData;
+        if (!readU8(cursor, end, storedScy))
+            return loadData;
         if (storedScy != static_cast<uint8_t>(scy)) {
-            MECRAFT_LOG_FPRINTF(stderr, "[Save] Subchunk Y mismatch: expected %d, got %d\n",
-                         scy, storedScy);
+            MECRAFT_LOG_FPRINTF(stderr, "[Save] Subchunk Y mismatch: expected %d, got %d\n", scy, storedScy);
             return loadData;
         }
 
         SubChunk* sub = chunk->getOrCreateSubChunk(scy);
-        if (!sub) return loadData;
+        if (!sub)
+            return loadData;
 
         if (!deserializeLayer(cursor, end, *sub, false)) {
             MECRAFT_LOG_FPRINTF(stderr, "[Save] Failed to deserialize block layer for subchunk %d\n", scy);
@@ -520,9 +508,8 @@ std::vector<uint8_t> ChunkSerializer::serializeFile(const Chunk& chunk) {
     return serializeFile(chunk, kNoWireContainers);
 }
 
-std::vector<uint8_t> ChunkSerializer::serializeFile(
-    const Chunk& chunk,
-    const std::vector<WireContainerSaveEntry>& wireContainers) {
+std::vector<uint8_t> ChunkSerializer::serializeFile(const Chunk& chunk,
+                                                    const std::vector<WireContainerSaveEntry>& wireContainers) {
     std::vector<uint8_t> payload = serializePayload(chunk, wireContainers);
     if (payload.empty()) {
         return {};
@@ -545,16 +532,12 @@ std::vector<uint8_t> ChunkSerializer::serializeFile(
     return file;
 }
 
-std::shared_ptr<Chunk> ChunkSerializer::deserializeFile(
-    const uint8_t* data, size_t size)
-{
+std::shared_ptr<Chunk> ChunkSerializer::deserializeFile(const uint8_t* data, size_t size) {
     ChunkLoadData loadData = deserializeFileData(data, size);
     return std::move(loadData.chunk);
 }
 
-ChunkLoadData ChunkSerializer::deserializeFileData(
-    const uint8_t* data, size_t size)
-{
+ChunkLoadData ChunkSerializer::deserializeFileData(const uint8_t* data, size_t size) {
     ChunkLoadData loadData;
     if (size < sizeof(MchkHeader)) {
         MECRAFT_LOG_FPRINTF(stderr, "[Save] MCHK file too small (%zu bytes)\n", size);
@@ -576,15 +559,15 @@ ChunkLoadData ChunkSerializer::deserializeFileData(
 
     if (size < sizeof(MchkHeader) + header.payloadSize) {
         MECRAFT_LOG_FPRINTF(stderr, "[Save] MCHK file truncated: expected %zu, got %zu\n",
-                     sizeof(MchkHeader) + header.payloadSize, size);
+                            sizeof(MchkHeader) + header.payloadSize, size);
         return loadData;
     }
 
     const uint8_t* payload = data + sizeof(MchkHeader);
     const uint32_t computedCrc = detail::crc32(payload, header.payloadSize);
     if (computedCrc != header.payloadCrc32) {
-        MECRAFT_LOG_FPRINTF(stderr, "[Save] MCHK CRC mismatch: expected 0x%08X, got 0x%08X\n",
-                     header.payloadCrc32, computedCrc);
+        MECRAFT_LOG_FPRINTF(stderr, "[Save] MCHK CRC mismatch: expected 0x%08X, got 0x%08X\n", header.payloadCrc32,
+                            computedCrc);
         return loadData;
     }
 

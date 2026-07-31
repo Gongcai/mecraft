@@ -4,8 +4,7 @@
 
 namespace shadow {
 
-void ShadowCasterCuller::setup(float halfPlaneLength, float renderDistanceMul,
-                                const glm::vec3& cameraPos) {
+void ShadowCasterCuller::setup(float halfPlaneLength, float renderDistanceMul, const glm::vec3& cameraPos) {
     // Iris ShadowRenderer.createShadowFrustum:
     //   distance = halfPlaneLength * renderDistanceMul
     //   if (renderDistanceMul < 0) distance = userVideoSettings.shadowDistance * 16
@@ -39,9 +38,12 @@ bool ShadowCasterCuller::isAabbVisible(const glm::vec3& aabbMin, const glm::vec3
     //
     // Returns true if culled. We return true if VISIBLE (not culled).
 
-    if (aabbMax.x < m_minAllowedX || aabbMin.x > m_maxAllowedX) return false;
-    if (aabbMax.y < m_minAllowedY || aabbMin.y > m_maxAllowedY) return false;
-    if (aabbMax.z < m_minAllowedZ || aabbMin.z > m_maxAllowedZ) return false;
+    if (aabbMax.x < m_minAllowedX || aabbMin.x > m_maxAllowedX)
+        return false;
+    if (aabbMax.y < m_minAllowedY || aabbMin.y > m_maxAllowedY)
+        return false;
+    if (aabbMax.z < m_minAllowedZ || aabbMin.z > m_maxAllowedZ)
+        return false;
     return true;
 }
 

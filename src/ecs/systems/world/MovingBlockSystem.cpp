@@ -42,8 +42,7 @@ CollisionAabb physicsBodyAabb(const PhysicsBody& body) {
 }
 
 bool aabbIntersects(const CollisionAabb& lhs, const CollisionAabb& rhs) {
-    return lhs.min.x < rhs.max.x && lhs.max.x > rhs.min.x &&
-           lhs.min.y < rhs.max.y && lhs.max.y > rhs.min.y &&
+    return lhs.min.x < rhs.max.x && lhs.max.x > rhs.min.x && lhs.min.y < rhs.max.y && lhs.max.y > rhs.min.y &&
            lhs.min.z < rhs.max.z && lhs.max.z > rhs.min.z;
 }
 
@@ -79,8 +78,7 @@ bool rangesOverlap(const float aMin, const float aMax, const float bMin, const f
     return aMin < bMax && aMax > bMin;
 }
 
-template <typename Fn>
-void forEachWorldCollisionBox(const World& world, const glm::ivec3& blockPosition, Fn&& fn) {
+template <typename Fn> void forEachWorldCollisionBox(const World& world, const glm::ivec3& blockPosition, Fn&& fn) {
     const BlockStateId stateId = world.getBlockState(blockPosition.x, blockPosition.y, blockPosition.z);
     const glm::vec3 blockOffset(blockPosition);
     for (const BlockCollisionBox& localBox : BlockCollision::getBoxes(stateId)) {
@@ -112,14 +110,11 @@ void forEachIntersectingWorldCollisionBox(const World& world, const CollisionAab
 
 bool worldCollisionIntersects(const World& world, const CollisionAabb& box) {
     bool intersects = false;
-    forEachIntersectingWorldCollisionBox(world, box, [&](const CollisionAabb&) {
-        intersects = true;
-    });
+    forEachIntersectingWorldCollisionBox(world, box, [&](const CollisionAabb&) { intersects = true; });
     return intersects;
 }
 
-void appendSeparationCandidates(const CollisionAabb& body,
-                                const CollisionAabb& obstacle,
+void appendSeparationCandidates(const CollisionAabb& body, const CollisionAabb& obstacle,
                                 std::vector<glm::vec3>& candidates) {
     candidates.push_back(glm::vec3(obstacle.max.x - body.min.x + kMovingBlockPushEpsilon, 0.0f, 0.0f));
     candidates.push_back(glm::vec3(obstacle.min.x - body.max.x - kMovingBlockPushEpsilon, 0.0f, 0.0f));
@@ -131,9 +126,8 @@ void appendSeparationCandidates(const CollisionAabb& body,
 
 bool findWorldDepenetration(const World& world, const CollisionAabb& body, glm::vec3& outDelta) {
     std::vector<glm::vec3> candidates;
-    forEachIntersectingWorldCollisionBox(world, body, [&](const CollisionAabb& obstacle) {
-        appendSeparationCandidates(body, obstacle, candidates);
-    });
+    forEachIntersectingWorldCollisionBox(
+        world, body, [&](const CollisionAabb& obstacle) { appendSeparationCandidates(body, obstacle, candidates); });
 
     if (candidates.empty()) {
         outDelta = glm::vec3(0.0f);
@@ -221,8 +215,7 @@ std::vector<MovingBlockFrameCollision> collectMovingBlockCollisions(const BlockS
     return collisions;
 }
 
-bool pushPhysicsBodyFromMovingBlock(PhysicsBody& body,
-                                    const MovingBlockFrameCollision& collision,
+bool pushPhysicsBodyFromMovingBlock(PhysicsBody& body, const MovingBlockFrameCollision& collision,
                                     const glm::ivec3& movementDirection) {
     const CollisionAabb bodyBox = physicsBodyAabb(body);
     if (!aabbIntersects(bodyBox, collision.sweptBox)) {
@@ -260,8 +253,7 @@ bool physicsBodyRidesMovingBlock(const PhysicsBody& body, const MovingBlockFrame
            rangesOverlap(bodyBox.min.z, bodyBox.max.z, collision.previousBox.min.z, collision.previousBox.max.z);
 }
 
-bool carryPhysicsBodyOnMovingBlock(PhysicsBody& body,
-                                   const MovingBlockFrameCollision& collision,
+bool carryPhysicsBodyOnMovingBlock(PhysicsBody& body, const MovingBlockFrameCollision& collision,
                                    const glm::vec3& frameDelta) {
     if (!physicsBodyRidesMovingBlock(body, collision)) {
         return false;
@@ -279,11 +271,8 @@ bool targetCellIsReadyForPlacement(const World& world, const MovingBlockComponen
            NULL_BLOCK_STATE;
 }
 
-void applyMovingBlockCollisionToEntities(World& world,
-                                         GameplayRegistry& registry,
-                                         const BlockStateId stateId,
-                                         const glm::vec3& previousOrigin,
-                                         const glm::vec3& currentOrigin,
+void applyMovingBlockCollisionToEntities(World& world, GameplayRegistry& registry, const BlockStateId stateId,
+                                         const glm::vec3& previousOrigin, const glm::vec3& currentOrigin,
                                          const glm::ivec3& movementDirection) {
     const glm::vec3 frameDelta = currentOrigin - previousOrigin;
     if (axisTranslationMagnitude(frameDelta) <= 0.0f) {
@@ -365,20 +354,16 @@ std::size_t MovingBlockSystem::processWorld(World& world, GameplayRegistry& regi
         const glm::vec3 currentOrigin = sourceOrigin + glm::vec3(block.direction) * currentProgress;
         transform.position = currentOrigin + glm::vec3(0.5f);
 
-        applyMovingBlockCollisionToEntities(
-            world,
-            registry,
-            block.stateId,
-            previousOrigin,
-            currentOrigin,
-            block.direction);
+        applyMovingBlockCollisionToEntities(world, registry, block.stateId, previousOrigin, currentOrigin,
+                                            block.direction);
 
         if (block.elapsedSeconds >= block.durationSeconds) {
             if (!targetCellIsReadyForPlacement(world, block)) {
                 failMovingBlockSystem("Moving block target cell is occupied at placement time");
             }
             if (block.placeAtTarget) {
-                world.setBlockState(block.targetPosition.x, block.targetPosition.y, block.targetPosition.z, block.stateId);
+                world.setBlockState(block.targetPosition.x, block.targetPosition.y, block.targetPosition.z,
+                                    block.stateId);
             }
             completed.push_back(entity);
         }

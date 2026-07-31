@@ -21,15 +21,12 @@ int main() {
     }
 
     const StreamlineVulkanRequirements& requirements = runtime.vulkanRequirements();
-    std::cout << "Streamline Vulkan requirements: instanceExtensions="
-              << requirements.instanceExtensions.size()
+    std::cout << "Streamline Vulkan requirements: instanceExtensions=" << requirements.instanceExtensions.size()
               << " deviceExtensions=" << requirements.deviceExtensions.size()
-              << " features12=" << requirements.features12.size()
-              << " features13=" << requirements.features13.size()
+              << " features12=" << requirements.features12.size() << " features13=" << requirements.features13.size()
               << " graphicsQueues=" << requirements.additionalGraphicsQueues
               << " computeQueues=" << requirements.additionalComputeQueues
-              << " opticalFlowQueues=" << requirements.opticalFlowQueues
-              << '\n';
+              << " opticalFlowQueues=" << requirements.opticalFlowQueues << '\n';
     printRequirements("instanceExtension", requirements.instanceExtensions);
     printRequirements("deviceExtension", requirements.deviceExtensions);
     printRequirements("feature12", requirements.features12);

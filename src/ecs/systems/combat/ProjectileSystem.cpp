@@ -43,20 +43,14 @@ BlockID targetBlockId() {
     return blockId;
 }
 
-bool isCollisionBlockAt(const IWorldView& worldView,
-                        const glm::vec3& position,
-                        const glm::vec3& halfExtents,
-                        BlockStateId& outState,
-                        glm::ivec3& outBlockPosition) {
+bool isCollisionBlockAt(const IWorldView& worldView, const glm::vec3& position, const glm::vec3& halfExtents,
+                        BlockStateId& outState, glm::ivec3& outBlockPosition) {
     outState = NULL_BLOCK_STATE;
     const glm::vec3 queryMin = position - halfExtents;
     const glm::vec3 queryMax = position + halfExtents;
     if (queryMin.y < 0.0f || queryMax.y >= static_cast<float>(Chunk::SIZE_Y)) {
-        outBlockPosition = {
-            static_cast<int>(std::floor(position.x)),
-            static_cast<int>(std::floor(position.y)),
-            static_cast<int>(std::floor(position.z))
-        };
+        outBlockPosition = {static_cast<int>(std::floor(position.x)), static_cast<int>(std::floor(position.y)),
+                            static_cast<int>(std::floor(position.z))};
         return true;
     }
 
@@ -117,12 +111,7 @@ BlockStateId withPowerProperty(const BlockStateId stateId, const uint8_t power) 
 uint8_t targetPowerFromImpact(const glm::ivec3& blockPosition, const glm::vec3& impactPosition) {
     const glm::vec3 local = glm::clamp(impactPosition - glm::vec3(blockPosition), glm::vec3(0.0f), glm::vec3(1.0f));
     const float faceDistances[6] = {
-        local.x,
-        1.0f - local.x,
-        local.y,
-        1.0f - local.y,
-        local.z,
-        1.0f - local.z,
+        local.x, 1.0f - local.x, local.y, 1.0f - local.y, local.z, 1.0f - local.z,
     };
     int nearestFace = 0;
     for (int i = 1; i < 6; ++i) {
@@ -149,8 +138,7 @@ uint8_t targetPowerFromImpact(const glm::ivec3& blockPosition, const glm::vec3& 
         u = local.x - 0.5f;
         v = local.y - 0.5f;
         break;
-    default:
-        failProjectileSystem("Target impact selected an invalid face");
+    default: failProjectileSystem("Target impact selected an invalid face");
     }
 
     constexpr float kMaxFaceDistance = 0.70710678118f;
@@ -159,9 +147,7 @@ uint8_t targetPowerFromImpact(const glm::ivec3& blockPosition, const glm::vec3& 
     return static_cast<uint8_t>(std::max(1, static_cast<int>(std::ceil(centered * 15.0f))));
 }
 
-void activateTargetBlock(World& world,
-                         const uint64_t tickIndex,
-                         const glm::ivec3& blockPosition,
+void activateTargetBlock(World& world, const uint64_t tickIndex, const glm::ivec3& blockPosition,
                          const glm::vec3& impactPosition) {
     const BlockStateId currentState = world.getBlockState(blockPosition.x, blockPosition.y, blockPosition.z);
     if (BlockStateRegistry::getBlockId(currentState) != targetBlockId()) {
@@ -172,15 +158,11 @@ void activateTargetBlock(World& world,
     const BlockStateId updatedState = withPowerProperty(currentState, power);
     world.setBlockState(blockPosition.x, blockPosition.y, blockPosition.z, updatedState);
     const uint64_t activationRedstoneTick = std::max(world.lastProcessedRedstoneTick(), tickIndex / 2u);
-    world.redstoneScheduledUpdateQueue().reschedule(
-        activationRedstoneTick + kTargetPulseTicks,
-        blockPosition,
-        RedstoneScheduledAction::ReleaseTargetPulse);
+    world.redstoneScheduledUpdateQueue().reschedule(activationRedstoneTick + kTargetPulseTicks, blockPosition,
+                                                    RedstoneScheduledAction::ReleaseTargetPulse);
 }
 
-void emitProjectileImpactParticles(GameplayRegistry& registry,
-                                   const glm::vec3& position,
-                                   const BlockID blockType,
+void emitProjectileImpactParticles(GameplayRegistry& registry, const glm::vec3& position, const BlockID blockType,
                                    const int particleCount) {
     if (blockType == 0) {
         return;
@@ -188,17 +170,14 @@ void emitProjectileImpactParticles(GameplayRegistry& registry,
     ensureParticleEventBus(registry).push(makeImpactParticleEvent(position, blockType, particleCount));
 }
 
-void emitProjectileSound(GameplayRegistry& registry,
-                         const std::string& soundId,
-                         const glm::vec3& position) {
+void emitProjectileSound(GameplayRegistry& registry, const std::string& soundId, const glm::vec3& position) {
     if (soundId.empty()) {
         return;
     }
     ensureAudioEventBus(registry).push({soundId, position, true, 1.0f});
 }
 
-void queueProjectileDespawn(entt::registry& reg,
-                            const entt::entity projectile,
+void queueProjectileDespawn(entt::registry& reg, const entt::entity projectile,
                             std::vector<entt::entity>& destroyList) {
     if (reg.all_of<EntityNetIdComponent>(projectile)) {
         reg.emplace_or_replace<PendingNetworkDespawnTag>(projectile);
@@ -207,11 +186,8 @@ void queueProjectileDespawn(entt::registry& reg,
     destroyList.push_back(projectile);
 }
 
-void queueProjectileImpactDespawn(entt::registry& reg,
-                                  const entt::entity projectile,
-                                  const glm::vec3& position,
-                                  const BlockID particleBlock,
-                                  const int particleCount,
+void queueProjectileImpactDespawn(entt::registry& reg, const entt::entity projectile, const glm::vec3& position,
+                                  const BlockID particleBlock, const int particleCount,
                                   std::vector<entt::entity>& destroyList) {
     if (reg.all_of<EntityNetIdComponent>(projectile)) {
         reg.emplace_or_replace<EntityImpactComponent>(projectile, position, particleBlock, particleCount);
@@ -221,10 +197,7 @@ void queueProjectileImpactDespawn(entt::registry& reg,
     destroyList.push_back(projectile);
 }
 
-void mobBounds(entt::registry& registry,
-               const entt::entity mob,
-               const TransformComponent& transform,
-               glm::vec3& outMin,
+void mobBounds(entt::registry& registry, const entt::entity mob, const TransformComponent& transform, glm::vec3& outMin,
                glm::vec3& outMax) {
     glm::vec3 halfExtents(0.3f, 0.9f, 0.3f);
     glm::vec3 colliderOffset(0.0f, 0.9f, 0.0f);
@@ -253,11 +226,8 @@ float distanceSqToAabb(const glm::vec3& point, const glm::vec3& minBounds, const
     return distanceSq;
 }
 
-entt::entity findProjectileTarget(entt::registry& reg,
-                                  const SystemContext& ctx,
-                                  const entt::entity projectile,
-                                  const ProjectileComponent& projectileData,
-                                  const glm::vec3& position) {
+entt::entity findProjectileTarget(entt::registry& reg, const SystemContext& ctx, const entt::entity projectile,
+                                  const ProjectileComponent& projectileData, const glm::vec3& position) {
     entt::entity best = entt::null;
     float bestDistSq = projectileData.hitRadius * projectileData.hitRadius;
 
@@ -300,10 +270,8 @@ bool isCreativeThrower(GameplayRegistry& registry, const entt::entity player) {
     return registry.ctxGet<GameplayRuntimeContext>().gameplayMode == GameplayMode::Creative;
 }
 
-bool tryUseSelectedThrowable(InventoryComponent& inventoryState,
-                             InventoryDataComponent& inventoryData,
-                             const bool creativeMode,
-                             ProjectileDefinition& outDefinition) {
+bool tryUseSelectedThrowable(InventoryComponent& inventoryState, InventoryDataComponent& inventoryData,
+                             const bool creativeMode, ProjectileDefinition& outDefinition) {
     inventoryData.inventory.setSelectedSlot(inventoryState.selectedHotbarSlot);
     if (!getThrowableProjectileDefinition(inventoryData.inventory.getSelectedItem(), outDefinition)) {
         return false;
@@ -326,13 +294,8 @@ void ProjectileSystem::update(SystemContext& ctx) {
     const IWorldView& worldView = *ctx.services.worldView;
     const float dt = ctx.dt;
 
-    auto throwerView = reg.view<LocalPlayerTag,
-                                TransformComponent,
-                                CameraStateComponent,
-                                BlockActionIntentComponent,
-                                InventoryComponent,
-                                InventoryDataComponent,
-                                ProjectileThrowerComponent>();
+    auto throwerView = reg.view<LocalPlayerTag, TransformComponent, CameraStateComponent, BlockActionIntentComponent,
+                                InventoryComponent, InventoryDataComponent, ProjectileThrowerComponent>();
     for (const entt::entity player : throwerView) {
         auto& thrower = throwerView.get<ProjectileThrowerComponent>(player);
         thrower.cooldownRemaining = std::max(0.0f, thrower.cooldownRemaining - dt);
@@ -345,9 +308,7 @@ void ProjectileSystem::update(SystemContext& ctx) {
         auto& inventoryState = throwerView.get<InventoryComponent>(player);
         auto& inventoryData = throwerView.get<InventoryDataComponent>(player);
         ProjectileDefinition projectileDefinition;
-        if (!tryUseSelectedThrowable(inventoryState,
-                                     inventoryData,
-                                     isCreativeThrower(registry, player),
+        if (!tryUseSelectedThrowable(inventoryState, inventoryData, isCreativeThrower(registry, player),
                                      projectileDefinition)) {
             continue;
         }
@@ -364,8 +325,7 @@ void ProjectileSystem::update(SystemContext& ctx) {
         const glm::vec3 origin = transform.position + glm::vec3(0.0f, transform.eyeHeight, 0.0f);
         const glm::vec3 spawnPosition = origin + direction * projectileDefinition.spawnForwardOffset;
         const glm::vec3 velocity =
-            direction * projectileDefinition.throwSpeed +
-            glm::vec3(0.0f, projectileDefinition.upwardBias, 0.0f);
+            direction * projectileDefinition.throwSpeed + glm::vec3(0.0f, projectileDefinition.upwardBias, 0.0f);
 
         EntityFactory::createProjectile(registry, player, spawnPosition, velocity, projectileDefinition);
         emitProjectileSound(registry, projectileDefinition.throwSoundId, spawnPosition);
@@ -377,13 +337,8 @@ void ProjectileSystem::update(SystemContext& ctx) {
     }
 
     std::vector<entt::entity> destroyList;
-    auto projectileView = reg.view<ProjectileTag,
-                                  ProjectileComponent,
-                                  TransformComponent,
-                                  VelocityComponent,
-                                  LifetimeComponent,
-                                  SpinVisualComponent,
-                                  BoundsComponent>();
+    auto projectileView = reg.view<ProjectileTag, ProjectileComponent, TransformComponent, VelocityComponent,
+                                   LifetimeComponent, SpinVisualComponent, BoundsComponent>();
     for (const entt::entity projectile : projectileView) {
         if (!simulation::isEntityTicking(ctx, projectile)) {
             continue;
@@ -426,17 +381,11 @@ void ProjectileSystem::update(SystemContext& ctx) {
                 if (ctx.services.world) {
                     activateTargetBlock(*ctx.services.world, ctx.tickIndex, hitBlockPosition, transform.position);
                 }
-                emitProjectileImpactParticles(registry,
-                                              transform.position,
-                                              hitBlockId,
+                emitProjectileImpactParticles(registry, transform.position, hitBlockId,
                                               projectileData.entityImpactParticleCount);
                 emitProjectileSound(registry, projectileData.impactSoundId, transform.position);
-                queueProjectileImpactDespawn(reg,
-                                             projectile,
-                                             transform.position,
-                                             hitBlockId,
-                                             projectileData.entityImpactParticleCount,
-                                             destroyList);
+                queueProjectileImpactDespawn(reg, projectile, transform.position, hitBlockId,
+                                             projectileData.entityImpactParticleCount, destroyList);
                 destroyed = true;
                 break;
             }
@@ -445,19 +394,13 @@ void ProjectileSystem::update(SystemContext& ctx) {
             if (target != entt::null) {
                 ensureDamageEventBus(registry).push({target, projectileData.owner, projectileData.damage});
                 const BlockID impactBlock = projectileData.entityImpactParticleBlock != 0
-                    ? projectileData.entityImpactParticleBlock
-                    : defaultProjectileEntityImpactParticleBlock();
-                emitProjectileImpactParticles(registry,
-                                              transform.position,
-                                              impactBlock,
+                                                ? projectileData.entityImpactParticleBlock
+                                                : defaultProjectileEntityImpactParticleBlock();
+                emitProjectileImpactParticles(registry, transform.position, impactBlock,
                                               projectileData.entityImpactParticleCount);
                 emitProjectileSound(registry, projectileData.impactSoundId, transform.position);
-                queueProjectileImpactDespawn(reg,
-                                             projectile,
-                                             transform.position,
-                                             impactBlock,
-                                             projectileData.entityImpactParticleCount,
-                                             destroyList);
+                queueProjectileImpactDespawn(reg, projectile, transform.position, impactBlock,
+                                             projectileData.entityImpactParticleCount, destroyList);
                 destroyed = true;
                 break;
             }

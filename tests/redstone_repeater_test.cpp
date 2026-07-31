@@ -42,8 +42,7 @@ BlockStateId leverState(const bool powered) {
         BlockRegistry::requireIdByName("minecraft:lever"),
         std::vector<std::pair<uint16_t, uint16_t>>{
             {PropIndices::FACING, PropIndices::FACING_FLOOR},
-            {PropIndices::POWERED, powered ? PropIndices::POWERED_TRUE : PropIndices::POWERED_FALSE}
-        });
+            {PropIndices::POWERED, powered ? PropIndices::POWERED_TRUE : PropIndices::POWERED_FALSE}});
 }
 
 BlockStateId repeaterState(const uint16_t delay, const bool powered) {
@@ -52,8 +51,7 @@ BlockStateId repeaterState(const uint16_t delay, const bool powered) {
         std::vector<std::pair<uint16_t, uint16_t>>{
             {PropIndices::FACING, PropIndices::FACING_EAST},
             {PropIndices::POWERED, powered ? PropIndices::POWERED_TRUE : PropIndices::POWERED_FALSE},
-            {PropIndices::DELAY, delay}
-        });
+            {PropIndices::DELAY, delay}});
 }
 
 BlockStateId repeaterState(const uint16_t facing, const uint16_t delay, const bool powered) {
@@ -62,8 +60,7 @@ BlockStateId repeaterState(const uint16_t facing, const uint16_t delay, const bo
         std::vector<std::pair<uint16_t, uint16_t>>{
             {PropIndices::FACING, facing},
             {PropIndices::POWERED, powered ? PropIndices::POWERED_TRUE : PropIndices::POWERED_FALSE},
-            {PropIndices::DELAY, delay}
-        });
+            {PropIndices::DELAY, delay}});
 }
 
 BlockStateId comparatorState(const uint16_t facing, const bool powered) {
@@ -72,28 +69,15 @@ BlockStateId comparatorState(const uint16_t facing, const bool powered) {
         std::vector<std::pair<uint16_t, uint16_t>>{
             {PropIndices::FACING, facing},
             {PropIndices::POWERED, powered ? PropIndices::POWERED_TRUE : PropIndices::POWERED_FALSE},
-            {PropIndices::MODE, PropIndices::MODE_COMPARE}
-        });
+            {PropIndices::MODE, PropIndices::MODE_COMPARE}});
 }
 
 uint8_t wirePower(const World& world, const int x, const int y, const int z) {
     static const std::array<uint16_t, 16> kPowerValues = {
-        PropIndices::POWER_0,
-        PropIndices::POWER_1,
-        PropIndices::POWER_2,
-        PropIndices::POWER_3,
-        PropIndices::POWER_4,
-        PropIndices::POWER_5,
-        PropIndices::POWER_6,
-        PropIndices::POWER_7,
-        PropIndices::POWER_8,
-        PropIndices::POWER_9,
-        PropIndices::POWER_10,
-        PropIndices::POWER_11,
-        PropIndices::POWER_12,
-        PropIndices::POWER_13,
-        PropIndices::POWER_14,
-        PropIndices::POWER_15,
+        PropIndices::POWER_0,  PropIndices::POWER_1,  PropIndices::POWER_2,  PropIndices::POWER_3,
+        PropIndices::POWER_4,  PropIndices::POWER_5,  PropIndices::POWER_6,  PropIndices::POWER_7,
+        PropIndices::POWER_8,  PropIndices::POWER_9,  PropIndices::POWER_10, PropIndices::POWER_11,
+        PropIndices::POWER_12, PropIndices::POWER_13, PropIndices::POWER_14, PropIndices::POWER_15,
     };
 
     const BlockStateId state = world.getBlockState(x, y, z);
@@ -135,55 +119,47 @@ int main() {
     const int y = 96;
     prepareFlatTestLine(world, y);
     world.setBlockState(0, y, 0, leverState(true));
-    world.setBlockState(1, y, 0, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_wire")));
+    world.setBlockState(1, y, 0,
+                        BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_wire")));
     world.setBlockState(2, y, 0, repeaterState(PropIndices::DELAY_2, false));
-    world.setBlockState(3, y, 0, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_wire")));
-    world.setBlockState(4, y, 0, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_lamp")));
-    world.setBlockState(2, y, 1, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_lamp")));
+    world.setBlockState(3, y, 0,
+                        BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_wire")));
+    world.setBlockState(4, y, 0,
+                        BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_lamp")));
+    world.setBlockState(2, y, 1,
+                        BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_lamp")));
 
     ecs::RedstoneSystem::processWorld(world, 0);
-    if (wirePower(world, 1, y, 0) != 15 ||
-        powered(world, 2, y, 0) ||
-        wirePower(world, 3, y, 0) != 0 ||
+    if (wirePower(world, 1, y, 0) != 15 || powered(world, 2, y, 0) || wirePower(world, 3, y, 0) != 0 ||
         lampLit(world, 4, y, 0)) {
         return fail("repeater should see input immediately but keep output off before its delay expires");
     }
 
     ecs::RedstoneSystem::processWorld(world, 1);
-    if (powered(world, 2, y, 0) ||
-        wirePower(world, 3, y, 0) != 0 ||
-        lampLit(world, 4, y, 0)) {
+    if (powered(world, 2, y, 0) || wirePower(world, 3, y, 0) != 0 || lampLit(world, 4, y, 0)) {
         return fail("delay=2 repeater should remain off one redstone tick after input turns on");
     }
 
     ecs::RedstoneSystem::processWorld(world, 2);
-    if (!powered(world, 2, y, 0) ||
-        wirePower(world, 3, y, 0) != 15 ||
-        !lampLit(world, 4, y, 0) ||
+    if (!powered(world, 2, y, 0) || wirePower(world, 3, y, 0) != 15 || !lampLit(world, 4, y, 0) ||
         lampLit(world, 2, y, 1)) {
         return fail("delay=2 repeater should power only its facing direction on the second redstone tick");
     }
 
     world.setBlockState(0, y, 0, leverState(false));
     ecs::RedstoneSystem::processWorld(world, 3);
-    if (wirePower(world, 1, y, 0) != 0 ||
-        !powered(world, 2, y, 0) ||
-        wirePower(world, 3, y, 0) != 15 ||
+    if (wirePower(world, 1, y, 0) != 0 || !powered(world, 2, y, 0) || wirePower(world, 3, y, 0) != 15 ||
         !lampLit(world, 4, y, 0)) {
         return fail("repeater should keep output on until the delayed turn-off tick");
     }
 
     ecs::RedstoneSystem::processWorld(world, 4);
-    if (!powered(world, 2, y, 0) ||
-        wirePower(world, 3, y, 0) != 15 ||
-        !lampLit(world, 4, y, 0)) {
+    if (!powered(world, 2, y, 0) || wirePower(world, 3, y, 0) != 15 || !lampLit(world, 4, y, 0)) {
         return fail("delay=2 repeater should remain on one redstone tick after input turns off");
     }
 
     ecs::RedstoneSystem::processWorld(world, 5);
-    if (powered(world, 2, y, 0) ||
-        wirePower(world, 3, y, 0) != 0 ||
-        lampLit(world, 4, y, 0)) {
+    if (powered(world, 2, y, 0) || wirePower(world, 3, y, 0) != 0 || lampLit(world, 4, y, 0)) {
         return fail("delay=2 repeater should turn off on the second redstone tick after input turns off");
     }
 
@@ -191,10 +167,16 @@ int main() {
         const int lockY = 80;
         prepareFlatTestLine(world, lockY);
         world.setBlockState(0, lockY, 0, leverState(true));
-        world.setBlockState(1, lockY, 0, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_wire")));
+        world.setBlockState(
+            1, lockY, 0,
+            BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_wire")));
         world.setBlockState(2, lockY, 0, repeaterState(PropIndices::DELAY_1, false));
-        world.setBlockState(3, lockY, 0, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_wire")));
-        world.setBlockState(4, lockY, 0, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_lamp")));
+        world.setBlockState(
+            3, lockY, 0,
+            BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_wire")));
+        world.setBlockState(
+            4, lockY, 0,
+            BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_lamp")));
 
         world.setBlock(2, lockY - 1, 2, BlockRegistry::requireIdByName("minecraft:stone"));
         world.setBlock(2, lockY, 2, RUNTIME_ID_NULL);
@@ -203,9 +185,7 @@ int main() {
 
         ecs::RedstoneSystem::processWorld(world, 20);
         ecs::RedstoneSystem::processWorld(world, 21);
-        if (!powered(world, 2, lockY, 0) ||
-            wirePower(world, 3, lockY, 0) != 15 ||
-            !lampLit(world, 4, lockY, 0) ||
+        if (!powered(world, 2, lockY, 0) || wirePower(world, 3, lockY, 0) != 15 || !lampLit(world, 4, lockY, 0) ||
             locked(world, 2, lockY, 0)) {
             return fail("repeater should power normally before side locking");
         }
@@ -213,9 +193,7 @@ int main() {
         world.setBlockState(2, lockY, 2, leverState(true));
         ecs::RedstoneSystem::processWorld(world, 22);
         ecs::RedstoneSystem::processWorld(world, 23);
-        if (!powered(world, 2, lockY, 1) ||
-            !locked(world, 2, lockY, 0) ||
-            !powered(world, 2, lockY, 0)) {
+        if (!powered(world, 2, lockY, 1) || !locked(world, 2, lockY, 0) || !powered(world, 2, lockY, 0)) {
             return fail("powered side repeater should lock the main repeater without changing its output");
         }
 
@@ -223,9 +201,7 @@ int main() {
         ecs::RedstoneSystem::processWorld(world, 24);
         ecs::RedstoneSystem::processWorld(world, 25);
         ecs::RedstoneSystem::processWorld(world, 26);
-        if (!locked(world, 2, lockY, 0) ||
-            !powered(world, 2, lockY, 0) ||
-            wirePower(world, 3, lockY, 0) != 15 ||
+        if (!locked(world, 2, lockY, 0) || !powered(world, 2, lockY, 0) || wirePower(world, 3, lockY, 0) != 15 ||
             !lampLit(world, 4, lockY, 0)) {
             return fail("locked repeater should keep its powered output after rear input turns off");
         }
@@ -233,17 +209,13 @@ int main() {
         world.setBlockState(2, lockY, 2, leverState(false));
         ecs::RedstoneSystem::processWorld(world, 27);
         ecs::RedstoneSystem::processWorld(world, 28);
-        if (locked(world, 2, lockY, 0) ||
-            !powered(world, 2, lockY, 0) ||
-            wirePower(world, 3, lockY, 0) != 15 ||
+        if (locked(world, 2, lockY, 0) || !powered(world, 2, lockY, 0) || wirePower(world, 3, lockY, 0) != 15 ||
             !lampLit(world, 4, lockY, 0)) {
             return fail("unlocked repeater should keep its output until its own delayed evaluation tick");
         }
 
         ecs::RedstoneSystem::processWorld(world, 29);
-        if (locked(world, 2, lockY, 0) ||
-            powered(world, 2, lockY, 0) ||
-            wirePower(world, 3, lockY, 0) != 0 ||
+        if (locked(world, 2, lockY, 0) || powered(world, 2, lockY, 0) || wirePower(world, 3, lockY, 0) != 0 ||
             lampLit(world, 4, lockY, 0)) {
             return fail("unlocked repeater should apply the delayed rear-input state");
         }
@@ -253,9 +225,13 @@ int main() {
         const int comparatorLockY = 72;
         prepareFlatTestLine(world, comparatorLockY);
         world.setBlockState(0, comparatorLockY, 0, leverState(true));
-        world.setBlockState(1, comparatorLockY, 0, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_wire")));
+        world.setBlockState(
+            1, comparatorLockY, 0,
+            BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_wire")));
         world.setBlockState(2, comparatorLockY, 0, repeaterState(PropIndices::DELAY_1, false));
-        world.setBlockState(3, comparatorLockY, 0, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_wire")));
+        world.setBlockState(
+            3, comparatorLockY, 0,
+            BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_wire")));
 
         world.setBlock(2, comparatorLockY - 1, 2, BlockRegistry::requireIdByName("minecraft:stone"));
         world.setBlock(2, comparatorLockY, 2, RUNTIME_ID_NULL);
@@ -264,15 +240,13 @@ int main() {
 
         ecs::RedstoneSystem::processWorld(world, 30);
         ecs::RedstoneSystem::processWorld(world, 31);
-        if (!powered(world, 2, comparatorLockY, 0) ||
-            locked(world, 2, comparatorLockY, 0)) {
+        if (!powered(world, 2, comparatorLockY, 0) || locked(world, 2, comparatorLockY, 0)) {
             return fail("main repeater should power normally before comparator side locking");
         }
 
         world.setBlockState(2, comparatorLockY, 2, leverState(true));
         ecs::RedstoneSystem::processWorld(world, 32);
-        if (!powered(world, 2, comparatorLockY, 1) ||
-            !locked(world, 2, comparatorLockY, 0) ||
+        if (!powered(world, 2, comparatorLockY, 1) || !locked(world, 2, comparatorLockY, 0) ||
             !powered(world, 2, comparatorLockY, 0)) {
             return fail("powered side comparator output should lock the main repeater");
         }
@@ -282,17 +256,22 @@ int main() {
         const int wireSideY = 64;
         prepareFlatTestLine(world, wireSideY);
         world.setBlockState(0, wireSideY, 0, leverState(true));
-        world.setBlockState(1, wireSideY, 0, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_wire")));
+        world.setBlockState(
+            1, wireSideY, 0,
+            BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_wire")));
         world.setBlockState(2, wireSideY, 0, repeaterState(PropIndices::DELAY_1, false));
-        world.setBlockState(3, wireSideY, 0, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_wire")));
+        world.setBlockState(
+            3, wireSideY, 0,
+            BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_wire")));
 
         world.setBlockState(2, wireSideY, 2, leverState(true));
-        world.setBlockState(2, wireSideY, 1, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_wire")));
+        world.setBlockState(
+            2, wireSideY, 1,
+            BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_wire")));
 
         ecs::RedstoneSystem::processWorld(world, 40);
         ecs::RedstoneSystem::processWorld(world, 41);
-        if (!powered(world, 2, wireSideY, 0) ||
-            wirePower(world, 2, wireSideY, 1) == 0 ||
+        if (!powered(world, 2, wireSideY, 0) || wirePower(world, 2, wireSideY, 1) == 0 ||
             locked(world, 2, wireSideY, 0)) {
             return fail("powered side redstone wire should not lock a repeater");
         }
@@ -302,16 +281,18 @@ int main() {
         const int coloredWireY = 56;
         prepareFlatTestLine(world, coloredWireY);
         world.setBlockState(0, coloredWireY, 0, leverState(true));
-        world.setBlockState(1, coloredWireY, 0, BlockStateRegistry::getDefaultState(
-            BlockRegistry::requireIdByName("minecraft:redstone_wire")));
-        world.setBlockState(2, coloredWireY, 0, BlockStateRegistry::getDefaultState(
-            BlockRegistry::requireIdByName("minecraft:blue_redstone_wire")));
-        world.setBlockState(3, coloredWireY, 0, BlockStateRegistry::getDefaultState(
-            BlockRegistry::requireIdByName("minecraft:redstone_lamp")));
+        world.setBlockState(
+            1, coloredWireY, 0,
+            BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_wire")));
+        world.setBlockState(
+            2, coloredWireY, 0,
+            BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:blue_redstone_wire")));
+        world.setBlockState(
+            3, coloredWireY, 0,
+            BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_lamp")));
 
         ecs::RedstoneSystem::processWorld(world, 50);
-        if (wirePower(world, 1, coloredWireY, 0) != 15 ||
-            wirePower(world, 2, coloredWireY, 0) != 0 ||
+        if (wirePower(world, 1, coloredWireY, 0) != 15 || wirePower(world, 2, coloredWireY, 0) != 0 ||
             lampLit(world, 3, coloredWireY, 0)) {
             return fail("redstone wires with different channels should not share propagated power");
         }
@@ -321,25 +302,28 @@ int main() {
         const int coloredRepeaterY = 48;
         prepareFlatTestLine(world, coloredRepeaterY);
         world.setBlockState(0, coloredRepeaterY, 0, leverState(true));
-        world.setBlockState(1, coloredRepeaterY, 0, BlockStateRegistry::getDefaultState(
-            BlockRegistry::requireIdByName("minecraft:redstone_wire")));
+        world.setBlockState(
+            1, coloredRepeaterY, 0,
+            BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_wire")));
         world.setBlockState(2, coloredRepeaterY, 0, repeaterState(PropIndices::DELAY_1, false));
-        world.setBlockState(3, coloredRepeaterY, 0, BlockStateRegistry::getDefaultState(
-            BlockRegistry::requireIdByName("minecraft:blue_redstone_wire")));
-        world.setBlockState(4, coloredRepeaterY, 0, BlockStateRegistry::getDefaultState(
-            BlockRegistry::requireIdByName("minecraft:blue_redstone_wire")));
-        world.setBlockState(5, coloredRepeaterY, 0, BlockStateRegistry::getDefaultState(
-            BlockRegistry::requireIdByName("minecraft:redstone_lamp")));
+        world.setBlockState(
+            3, coloredRepeaterY, 0,
+            BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:blue_redstone_wire")));
+        world.setBlockState(
+            4, coloredRepeaterY, 0,
+            BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:blue_redstone_wire")));
+        world.setBlockState(
+            5, coloredRepeaterY, 0,
+            BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_lamp")));
         world.setBlock(3, coloredRepeaterY - 1, 1, BlockRegistry::requireIdByName("minecraft:stone"));
-        world.setBlockState(3, coloredRepeaterY, 1, BlockStateRegistry::getDefaultState(
-            BlockRegistry::requireIdByName("minecraft:redstone_wire")));
+        world.setBlockState(
+            3, coloredRepeaterY, 1,
+            BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_wire")));
 
         ecs::RedstoneSystem::processWorld(world, 60);
         ecs::RedstoneSystem::processWorld(world, 61);
-        if (!powered(world, 2, coloredRepeaterY, 0) ||
-            wirePower(world, 3, coloredRepeaterY, 0) != 15 ||
-            wirePower(world, 4, coloredRepeaterY, 0) != 14 ||
-            wirePower(world, 3, coloredRepeaterY, 1) != 0 ||
+        if (!powered(world, 2, coloredRepeaterY, 0) || wirePower(world, 3, coloredRepeaterY, 0) != 15 ||
+            wirePower(world, 4, coloredRepeaterY, 0) != 14 || wirePower(world, 3, coloredRepeaterY, 1) != 0 ||
             !lampLit(world, 5, coloredRepeaterY, 0)) {
             return fail("repeater output should enter the target wire channel without powering adjacent channels");
         }
@@ -349,24 +333,27 @@ int main() {
         const int coloredComparatorY = 40;
         prepareFlatTestLine(world, coloredComparatorY);
         world.setBlockState(0, coloredComparatorY, 0, leverState(true));
-        world.setBlockState(1, coloredComparatorY, 0, BlockStateRegistry::getDefaultState(
-            BlockRegistry::requireIdByName("minecraft:redstone_wire")));
+        world.setBlockState(
+            1, coloredComparatorY, 0,
+            BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_wire")));
         world.setBlockState(2, coloredComparatorY, 0, comparatorState(PropIndices::FACING_EAST, false));
-        world.setBlockState(3, coloredComparatorY, 0, BlockStateRegistry::getDefaultState(
-            BlockRegistry::requireIdByName("minecraft:blue_redstone_wire")));
-        world.setBlockState(4, coloredComparatorY, 0, BlockStateRegistry::getDefaultState(
-            BlockRegistry::requireIdByName("minecraft:blue_redstone_wire")));
-        world.setBlockState(5, coloredComparatorY, 0, BlockStateRegistry::getDefaultState(
-            BlockRegistry::requireIdByName("minecraft:redstone_lamp")));
+        world.setBlockState(
+            3, coloredComparatorY, 0,
+            BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:blue_redstone_wire")));
+        world.setBlockState(
+            4, coloredComparatorY, 0,
+            BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:blue_redstone_wire")));
+        world.setBlockState(
+            5, coloredComparatorY, 0,
+            BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_lamp")));
         world.setBlock(3, coloredComparatorY - 1, 1, BlockRegistry::requireIdByName("minecraft:stone"));
-        world.setBlockState(3, coloredComparatorY, 1, BlockStateRegistry::getDefaultState(
-            BlockRegistry::requireIdByName("minecraft:redstone_wire")));
+        world.setBlockState(
+            3, coloredComparatorY, 1,
+            BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_wire")));
 
         ecs::RedstoneSystem::processWorld(world, 70);
-        if (!powered(world, 2, coloredComparatorY, 0) ||
-            wirePower(world, 3, coloredComparatorY, 0) != 15 ||
-            wirePower(world, 4, coloredComparatorY, 0) != 14 ||
-            wirePower(world, 3, coloredComparatorY, 1) != 0 ||
+        if (!powered(world, 2, coloredComparatorY, 0) || wirePower(world, 3, coloredComparatorY, 0) != 15 ||
+            wirePower(world, 4, coloredComparatorY, 0) != 14 || wirePower(world, 3, coloredComparatorY, 1) != 0 ||
             !lampLit(world, 5, coloredComparatorY, 0)) {
             return fail("comparator output should enter the target wire channel without powering adjacent channels");
         }

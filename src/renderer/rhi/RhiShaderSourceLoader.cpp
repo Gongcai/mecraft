@@ -15,8 +15,7 @@ namespace {
     const size_t last = token.find_last_not_of(" \t\r\n");
     token = token.substr(first, last - first + 1);
     if (token.size() >= 2 &&
-        ((token.front() == '"' && token.back() == '"') ||
-         (token.front() == '<' && token.back() == '>'))) {
+        ((token.front() == '"' && token.back() == '"') || (token.front() == '<' && token.back() == '>'))) {
         return token.substr(1, token.size() - 2);
     }
     return {};
@@ -36,8 +35,7 @@ namespace {
     return stream.str();
 }
 
-[[nodiscard]] std::optional<std::string> resolveIncludes(const std::string& source,
-                                                         const std::string& sourcePath,
+[[nodiscard]] std::optional<std::string> resolveIncludes(const std::string& source, const std::string& sourcePath,
                                                          std::unordered_set<std::string>& includeStack) {
     const std::filesystem::path currentPath = std::filesystem::absolute(sourcePath).lexically_normal();
     const std::filesystem::path currentDir = currentPath.parent_path();
@@ -87,12 +85,10 @@ namespace {
         return false;
     }
     const auto validFirstCharacter = [](const char character) {
-        return (character >= 'A' && character <= 'Z') ||
-               (character >= 'a' && character <= 'z') || character == '_';
+        return (character >= 'A' && character <= 'Z') || (character >= 'a' && character <= 'z') || character == '_';
     };
     const auto validCharacter = [&](const char character) {
-        return validFirstCharacter(character) ||
-               (character >= '0' && character <= '9');
+        return validFirstCharacter(character) || (character >= '0' && character <= '9');
     };
     if (!validFirstCharacter(definition.front())) {
         return false;
@@ -105,9 +101,8 @@ namespace {
     return true;
 }
 
-[[nodiscard]] std::optional<std::string> injectDefinitions(
-    const std::string& source,
-    const std::vector<std::string>& definitions) {
+[[nodiscard]] std::optional<std::string> injectDefinitions(const std::string& source,
+                                                           const std::vector<std::string>& definitions) {
     if (definitions.empty()) {
         return source;
     }
@@ -126,8 +121,7 @@ namespace {
         output += '\n';
 
         const size_t directiveStart = line.find_first_not_of(" \t");
-        if (!injected && directiveStart != std::string::npos &&
-            line.compare(directiveStart, 8, "#version") == 0) {
+        if (!injected && directiveStart != std::string::npos && line.compare(directiveStart, 8, "#version") == 0) {
             for (const std::string& definition : definitions) {
                 output += "#define ";
                 output += definition;
@@ -147,9 +141,7 @@ std::optional<std::string> loadShaderSource(const std::string& path) {
     return loadShaderSource(path, {});
 }
 
-std::optional<std::string> loadShaderSource(
-    const std::string& path,
-    const RhiShaderSourceOptions& options) {
+std::optional<std::string> loadShaderSource(const std::string& path, const RhiShaderSourceOptions& options) {
     const std::optional<std::string> source = readTextFile(path);
     if (!source.has_value()) {
         return std::nullopt;
@@ -158,8 +150,7 @@ std::optional<std::string> loadShaderSource(
     const std::filesystem::path sourcePath = std::filesystem::absolute(path).lexically_normal();
     std::unordered_set<std::string> includeStack;
     includeStack.insert(sourcePath.string());
-    const std::optional<std::string> resolvedSource =
-        resolveIncludes(*source, sourcePath.string(), includeStack);
+    const std::optional<std::string> resolvedSource = resolveIncludes(*source, sourcePath.string(), includeStack);
     if (!resolvedSource.has_value()) {
         return std::nullopt;
     }

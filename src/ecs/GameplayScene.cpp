@@ -6,8 +6,7 @@
 
 namespace ecs {
 
-GameplayScene::GameplayScene()
-    : m_pipeline(GameplayPipelineProfile::Client) {}
+GameplayScene::GameplayScene() : m_pipeline(GameplayPipelineProfile::Client) {}
 
 void GameplayScene::initLocalPlayer(const glm::vec3& spawnPos) {
     m_localPlayer = m_registry.create();

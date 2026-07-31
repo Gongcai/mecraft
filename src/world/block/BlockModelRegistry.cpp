@@ -117,11 +117,8 @@ std::string makeModelName(const std::filesystem::path& base, const std::filesyst
     return "block/" + path;
 }
 
-bool resolveTextureVariable(const std::unordered_map<std::string, std::string>& textures,
-                            const std::string& key,
-                            std::unordered_set<std::string>& visiting,
-                            std::string& outTexture,
-                            std::string& error) {
+bool resolveTextureVariable(const std::unordered_map<std::string, std::string>& textures, const std::string& key,
+                            std::unordered_set<std::string>& visiting, std::string& outTexture, std::string& error) {
     const auto it = textures.find(key);
     if (it == textures.end()) {
         error = "Unknown model texture variable: " + key;
@@ -147,7 +144,7 @@ bool resolveTextureVariable(const std::unordered_map<std::string, std::string>& 
     outTexture = std::move(resolved);
     return true;
 }
-}
+} // namespace
 
 bool BlockModelRegistry::init(ResourceMgr* resourceMgr) {
     s_resourceMgr = resourceMgr;
@@ -157,8 +154,8 @@ bool BlockModelRegistry::init(ResourceMgr* resourceMgr) {
     std::error_code fsError;
     if (!std::filesystem::exists(modelDir, fsError)) {
         if (fsError) {
-            std::cerr << "Failed to inspect block model directory: " << modelDir.string()
-                      << ": " << fsError.message() << '\n';
+            std::cerr << "Failed to inspect block model directory: " << modelDir.string() << ": " << fsError.message()
+                      << '\n';
         } else {
             std::cerr << "Block model directory does not exist: " << modelDir.string() << '\n';
         }
@@ -167,8 +164,8 @@ bool BlockModelRegistry::init(ResourceMgr* resourceMgr) {
     fsError.clear();
     if (!std::filesystem::is_directory(modelDir, fsError)) {
         if (fsError) {
-            std::cerr << "Failed to inspect block model path: " << modelDir.string()
-                      << ": " << fsError.message() << '\n';
+            std::cerr << "Failed to inspect block model path: " << modelDir.string() << ": " << fsError.message()
+                      << '\n';
         } else {
             std::cerr << "Block model path is not a directory: " << modelDir.string() << '\n';
         }
@@ -177,8 +174,8 @@ bool BlockModelRegistry::init(ResourceMgr* resourceMgr) {
 
     std::filesystem::recursive_directory_iterator it(modelDir, std::filesystem::directory_options::none, fsError);
     if (fsError) {
-        std::cerr << "Failed to iterate block model directory: " << modelDir.string()
-                  << ": " << fsError.message() << '\n';
+        std::cerr << "Failed to iterate block model directory: " << modelDir.string() << ": " << fsError.message()
+                  << '\n';
         return false;
     }
     const std::filesystem::recursive_directory_iterator end;
@@ -187,15 +184,15 @@ bool BlockModelRegistry::init(ResourceMgr* resourceMgr) {
         fsError.clear();
         const bool regularFile = entry.is_regular_file(fsError);
         if (fsError) {
-            std::cerr << "Failed to inspect block model path: " << entry.path().string()
-                      << ": " << fsError.message() << '\n';
+            std::cerr << "Failed to inspect block model path: " << entry.path().string() << ": " << fsError.message()
+                      << '\n';
             return false;
         }
         if (!regularFile || entry.path().extension() != ".json") {
             it.increment(fsError);
             if (fsError) {
-                std::cerr << "Failed to continue iterating block model directory: "
-                          << modelDir.string() << ": " << fsError.message() << '\n';
+                std::cerr << "Failed to continue iterating block model directory: " << modelDir.string() << ": "
+                          << fsError.message() << '\n';
                 return false;
             }
             continue;
@@ -223,8 +220,8 @@ bool BlockModelRegistry::init(ResourceMgr* resourceMgr) {
 
         it.increment(fsError);
         if (fsError) {
-            std::cerr << "Failed to continue iterating block model directory: "
-                      << modelDir.string() << ": " << fsError.message() << '\n';
+            std::cerr << "Failed to continue iterating block model directory: " << modelDir.string() << ": "
+                      << fsError.message() << '\n';
             return false;
         }
     }
@@ -251,10 +248,8 @@ AnimatedTextureRef BlockModelRegistry::resolveTextureRef(const std::string& text
     return ref;
 }
 
-bool BlockModelRegistry::parseModel(const nlohmann::json& json,
-                                    const std::string& name,
-                                    std::unique_ptr<BlockModel>& outModel,
-                                    std::string& error) {
+bool BlockModelRegistry::parseModel(const nlohmann::json& json, const std::string& name,
+                                    std::unique_ptr<BlockModel>& outModel, std::string& error) {
     if (!json.is_object()) {
         error = "Block model root must be an object: " + name;
         return false;
@@ -346,8 +341,7 @@ bool BlockModelRegistry::parseElement(const nlohmann::json& json, ModelElement& 
     return true;
 }
 
-bool BlockModelRegistry::parseFace(const nlohmann::json& json,
-                                   std::unique_ptr<ModelFace>& outFace,
+bool BlockModelRegistry::parseFace(const nlohmann::json& json, std::unique_ptr<ModelFace>& outFace,
                                    std::string& error) {
     if (!json.is_object()) {
         error = "Model face must be an object";

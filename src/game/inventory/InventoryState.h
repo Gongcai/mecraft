@@ -16,11 +16,8 @@
 
 class InventoryState final : public IGameState {
 public:
-    InventoryState(InventoryStateContext deps,
-                   GameplayMode /*gameplayMode*/)
-        : m_deps(deps),
-          m_dragCtrl(m_deps),
-          m_craftCtrl(m_deps, m_dragCtrl) {
+    InventoryState(InventoryStateContext deps, GameplayMode /*gameplayMode*/)
+        : m_deps(deps), m_dragCtrl(m_deps), m_craftCtrl(m_deps, m_dragCtrl) {
         m_dragCtrl.setCraftingGrid(&deps.uiRenderer.getCraftingGrid());
     }
 
@@ -51,10 +48,8 @@ public:
         const bool secondaryReleased = uiRouteResult.secondaryReleased;
 
         // Close inventory
-        if (m_deps.context.isActionTriggered(Action::Inventory) ||
-            m_deps.context.isActionTriggered(Action::Menu) ||
-            (m_deps.context.isActionTriggered(Action::Cancel) &&
-             uiRouteResult.aggregate != UIEventResult::Consumed)) {
+        if (m_deps.context.isActionTriggered(Action::Inventory) || m_deps.context.isActionTriggered(Action::Menu) ||
+            (m_deps.context.isActionTriggered(Action::Cancel) && uiRouteResult.aggregate != UIEventResult::Consumed)) {
             m_deps.fsm.popState();
             return;
         }
@@ -123,8 +118,10 @@ public:
             return;
         }
 
-        if (!primaryPressed) return;
-        if (primaryDownResult != UIEventResult::Consumed) return;
+        if (!primaryPressed)
+            return;
+        if (primaryDownResult != UIEventResult::Consumed)
+            return;
 
         // Crafting grid click
         const int craftingSlot = m_deps.uiRenderer.getCraftingGridLastActivatedSlot();

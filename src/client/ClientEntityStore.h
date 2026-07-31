@@ -9,7 +9,9 @@
 #include <entt/entt.hpp>
 
 class ResourceMgr;
-namespace ecs { class GameplayRegistry; }
+namespace ecs {
+class GameplayRegistry;
+}
 
 namespace client {
 

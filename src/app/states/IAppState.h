@@ -18,21 +18,11 @@ public:
     [[nodiscard]] virtual const GpuFrameStats* gpuFrameStats() const = 0;
 
 #ifdef MECRAFT_DEBUG
-    virtual void recordPollEvents(double ms,
-                                  unsigned keyEvents,
-                                  unsigned mouseButtonEvents,
-                                  unsigned cursorPosEvents,
-                                  unsigned scrollEvents,
-                                  unsigned charEvents,
-                                  double inputCallbackMs,
-                                  double cursorPosCallbackMs,
-                                  double imguiCallbackMs,
-                                  double imguiCursorPosCallbackMs,
-                                  double imguiCursorPosBackendMs,
-                                  double imguiWndProcMs,
-                                  double imguiWndProcSlowestMs,
-                                  unsigned imguiWndProcSlowestMsg,
-                                  unsigned imguiWndProcCount) {
+    virtual void recordPollEvents(double ms, unsigned keyEvents, unsigned mouseButtonEvents, unsigned cursorPosEvents,
+                                  unsigned scrollEvents, unsigned charEvents, double inputCallbackMs,
+                                  double cursorPosCallbackMs, double imguiCallbackMs, double imguiCursorPosCallbackMs,
+                                  double imguiCursorPosBackendMs, double imguiWndProcMs, double imguiWndProcSlowestMs,
+                                  unsigned imguiWndProcSlowestMsg, unsigned imguiWndProcCount) {
         (void)ms;
         (void)keyEvents;
         (void)mouseButtonEvents;

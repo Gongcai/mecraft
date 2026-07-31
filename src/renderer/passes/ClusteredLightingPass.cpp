@@ -46,22 +46,15 @@ static_assert(sizeof(ClusterScanPushConstants) == 16u);
 static_assert(sizeof(ClusterFillPushConstants) == 32u);
 
 [[nodiscard]] bool finite(const glm::vec4& value) {
-    return std::isfinite(value.x) && std::isfinite(value.y) &&
-           std::isfinite(value.z) && std::isfinite(value.w);
+    return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z) && std::isfinite(value.w);
 }
 
-[[nodiscard]] bool sameClusterGrid(
-    const renderer::contracts::ClusterGrid& lhs,
-    const renderer::contracts::ClusterGrid& rhs) {
-    return lhs.renderWidth == rhs.renderWidth &&
-           lhs.renderHeight == rhs.renderHeight &&
-           lhs.tileCountX == rhs.tileCountX &&
-           lhs.tileCountY == rhs.tileCountY &&
-           lhs.depthSliceCount == rhs.depthSliceCount &&
-           lhs.clusterCount == rhs.clusterCount &&
-           lhs.nearPlane == rhs.nearPlane &&
-           lhs.farPlane == rhs.farPlane &&
-           lhs.depthLogScale == rhs.depthLogScale &&
+[[nodiscard]] bool sameClusterGrid(const renderer::contracts::ClusterGrid& lhs,
+                                   const renderer::contracts::ClusterGrid& rhs) {
+    return lhs.renderWidth == rhs.renderWidth && lhs.renderHeight == rhs.renderHeight &&
+           lhs.tileCountX == rhs.tileCountX && lhs.tileCountY == rhs.tileCountY &&
+           lhs.depthSliceCount == rhs.depthSliceCount && lhs.clusterCount == rhs.clusterCount &&
+           lhs.nearPlane == rhs.nearPlane && lhs.farPlane == rhs.farPlane && lhs.depthLogScale == rhs.depthLogScale &&
            lhs.depthLogBias == rhs.depthLogBias;
 }
 
@@ -73,20 +66,15 @@ static_assert(sizeof(ClusterFillPushConstants) == 32u);
     return (size + kAlignment - 1u) & ~(kAlignment - 1u);
 }
 
-[[nodiscard]] bool multiplyBytes(const uint64_t count,
-                                 const uint64_t stride,
-                                 uint64_t& bytes) {
-    if (count == 0u || stride == 0u ||
-        count > std::numeric_limits<uint64_t>::max() / stride) {
+[[nodiscard]] bool multiplyBytes(const uint64_t count, const uint64_t stride, uint64_t& bytes) {
+    if (count == 0u || stride == 0u || count > std::numeric_limits<uint64_t>::max() / stride) {
         return false;
     }
     bytes = count * stride;
     return true;
 }
 
-void appendStorageBinding(RhiBindGroupDesc& desc,
-                          const uint32_t binding,
-                          const RhiBufferHandle buffer,
+void appendStorageBinding(RhiBindGroupDesc& desc, const uint32_t binding, const RhiBufferHandle buffer,
                           const uint64_t range) {
     RhiBindGroupEntry entry;
     entry.binding = binding;
@@ -96,11 +84,8 @@ void appendStorageBinding(RhiBindGroupDesc& desc,
     desc.entries.push_back(entry);
 }
 
-void appendCombinedTextureSamplerBinding(
-    RhiBindGroupDesc& desc,
-    const uint32_t binding,
-    const RhiTextureViewHandle textureView,
-    const RhiSamplerHandle sampler) {
+void appendCombinedTextureSamplerBinding(RhiBindGroupDesc& desc, const uint32_t binding,
+                                         const RhiTextureViewHandle textureView, const RhiSamplerHandle sampler) {
     RhiBindGroupEntry entry;
     entry.binding = binding;
     entry.resource.combinedTextureSampler.textureView = textureView;
@@ -110,8 +95,7 @@ void appendCombinedTextureSamplerBinding(
 
 } // namespace
 
-bool ClusteredLightingPass::setLights(
-    std::vector<renderer::contracts::GpuLight> lights) {
+bool ClusteredLightingPass::setLights(std::vector<renderer::contracts::GpuLight> lights) {
     m_lights = std::move(lights);
     m_inputValid = validateLights();
     if (!m_inputValid) {
@@ -127,35 +111,22 @@ bool ClusteredLightingPass::setLights(
     return true;
 }
 
-bool ClusteredLightingPass::setLocalShadowResources(
-    const LocalShadowResources& resources) {
-    if (!resources.metadataBuffer.isValid() ||
-        resources.metadataBufferBytes == 0u ||
-        !resources.spotAtlasView.isValid() ||
-        !resources.pointCubeArrayView.isValid() ||
-        !resources.sampler.isValid()) {
+bool ClusteredLightingPass::setLocalShadowResources(const LocalShadowResources& resources) {
+    if (!resources.metadataBuffer.isValid() || resources.metadataBufferBytes == 0u ||
+        !resources.spotAtlasView.isValid() || !resources.pointCubeArrayView.isValid() || !resources.sampler.isValid()) {
         return false;
     }
     const bool changed =
-        resources.metadataBuffer.index !=
-            m_localShadowResources.metadataBuffer.index ||
-        resources.metadataBuffer.generation !=
-            m_localShadowResources.metadataBuffer.generation ||
-        resources.metadataBufferBytes !=
-            m_localShadowResources.metadataBufferBytes ||
-        resources.spotAtlasView.index !=
-            m_localShadowResources.spotAtlasView.index ||
-        resources.spotAtlasView.generation !=
-            m_localShadowResources.spotAtlasView.generation ||
-        resources.pointCubeArrayView.index !=
-            m_localShadowResources.pointCubeArrayView.index ||
-        resources.pointCubeArrayView.generation !=
-            m_localShadowResources.pointCubeArrayView.generation ||
+        resources.metadataBuffer.index != m_localShadowResources.metadataBuffer.index ||
+        resources.metadataBuffer.generation != m_localShadowResources.metadataBuffer.generation ||
+        resources.metadataBufferBytes != m_localShadowResources.metadataBufferBytes ||
+        resources.spotAtlasView.index != m_localShadowResources.spotAtlasView.index ||
+        resources.spotAtlasView.generation != m_localShadowResources.spotAtlasView.generation ||
+        resources.pointCubeArrayView.index != m_localShadowResources.pointCubeArrayView.index ||
+        resources.pointCubeArrayView.generation != m_localShadowResources.pointCubeArrayView.generation ||
         resources.sampler.index != m_localShadowResources.sampler.index ||
-        resources.sampler.generation !=
-            m_localShadowResources.sampler.generation;
-    if (changed && m_rhiDevice != nullptr &&
-        m_consumerBindGroup.isValid()) {
+        resources.sampler.generation != m_localShadowResources.sampler.generation;
+    if (changed && m_rhiDevice != nullptr && m_consumerBindGroup.isValid()) {
         m_rhiDevice->destroyBindGroup(m_consumerBindGroup);
         m_consumerBindGroup = {};
     }
@@ -175,21 +146,15 @@ bool ClusteredLightingPass::validateLights() const {
         const uint32_t stableId = light.classificationAndIdentity.y;
         const uint32_t shadowPolicy = light.classificationAndIdentity.z;
         const uint32_t shadowIndex = light.classificationAndIdentity.w;
-        if (type > static_cast<uint32_t>(GpuLightType::Rect) ||
-            stableId == 0u ||
-            shadowPolicy >
-                static_cast<uint32_t>(GpuLightShadowPolicy::RasterCached) ||
+        if (type > static_cast<uint32_t>(GpuLightType::Rect) || stableId == 0u ||
+            shadowPolicy > static_cast<uint32_t>(GpuLightShadowPolicy::RasterCached) ||
             light.resourcesAndFlags.w != kGpuLightContractVersion ||
-            (light.resourcesAndFlags.z & ~kGpuLightKnownContributionFlags) != 0u ||
-            !gpuLightPackedRangeValid(light) ||
-            !finite(light.positionAndRange) || !finite(light.direction) ||
-            !finite(light.colorAndIntensity) ||
-            !finite(light.spotCosinesAndRectSize) ||
-            !stableIds.insert(stableId).second) {
+            (light.resourcesAndFlags.z & ~kGpuLightKnownContributionFlags) != 0u || !gpuLightPackedRangeValid(light) ||
+            !finite(light.positionAndRange) || !finite(light.direction) || !finite(light.colorAndIntensity) ||
+            !finite(light.spotCosinesAndRectSize) || !stableIds.insert(stableId).second) {
             return false;
         }
-        const bool noShadow =
-            shadowPolicy == static_cast<uint32_t>(GpuLightShadowPolicy::None);
+        const bool noShadow = shadowPolicy == static_cast<uint32_t>(GpuLightShadowPolicy::None);
         if (noShadow != (shadowIndex == kGpuLightInvalidResourceIndex)) {
             return false;
         }
@@ -199,8 +164,7 @@ bool ClusteredLightingPass::validateLights() const {
                     return false;
                 }
             } else if (type == static_cast<uint32_t>(GpuLightType::Point)) {
-                if (shadowIndex < kLocalShadowPointMetadataBase ||
-                    shadowIndex >= kLocalShadowMetadataCount) {
+                if (shadowIndex < kLocalShadowPointMetadataBase || shadowIndex >= kLocalShadowMetadataCount) {
                     return false;
                 }
             } else {
@@ -211,16 +175,11 @@ bool ClusteredLightingPass::validateLights() const {
     return true;
 }
 
-bool ClusteredLightingPass::prepareGraphFrame(RhiDevice& rhiDevice,
-                                               const FrameContext& ctx,
-                                               const uint32_t renderWidth,
-                                               const uint32_t renderHeight) {
-    if (rhiDevice.backend() != RhiBackend::Vulkan || !m_inputValid ||
-        m_gpuBuildFailed ||
-        !m_localShadowResources.metadataBuffer.isValid() ||
-        m_localShadowResources.metadataBufferBytes == 0u ||
-        !m_localShadowResources.spotAtlasView.isValid() ||
-        !m_localShadowResources.pointCubeArrayView.isValid() ||
+bool ClusteredLightingPass::prepareGraphFrame(RhiDevice& rhiDevice, const FrameContext& ctx, const uint32_t renderWidth,
+                                              const uint32_t renderHeight) {
+    if (rhiDevice.backend() != RhiBackend::Vulkan || !m_inputValid || m_gpuBuildFailed ||
+        !m_localShadowResources.metadataBuffer.isValid() || m_localShadowResources.metadataBufferBytes == 0u ||
+        !m_localShadowResources.spotAtlasView.isValid() || !m_localShadowResources.pointCubeArrayView.isValid() ||
         !m_localShadowResources.sampler.isValid()) {
         return false;
     }
@@ -229,11 +188,9 @@ bool ClusteredLightingPass::prepareGraphFrame(RhiDevice& rhiDevice,
     }
     m_rhiDevice = &rhiDevice;
     m_prepared = false;
-    if (!consumeReadback(rhiDevice) || !validateLights() ||
-        !buildCoverage(ctx, renderWidth, renderHeight) ||
-        !buildScanPlan() || !ensurePipelines(rhiDevice) ||
-        !ensureBuffers(rhiDevice) || !ensureBuildBindGroups(rhiDevice) ||
-        !ensureConsumerBindGroup(rhiDevice)) {
+    if (!consumeReadback(rhiDevice) || !validateLights() || !buildCoverage(ctx, renderWidth, renderHeight) ||
+        !buildScanPlan() || !ensurePipelines(rhiDevice) || !ensureBuffers(rhiDevice) ||
+        !ensureBuildBindGroups(rhiDevice) || !ensureConsumerBindGroup(rhiDevice)) {
         return false;
     }
     m_prepared = true;
@@ -249,20 +206,16 @@ bool ClusteredLightingPass::consumeReadback(RhiDevice& rhiDevice) {
     }
     bool complete = false;
     if (!rhiDevice.isSubmissionComplete(token, complete)) {
-        MECRAFT_LOG_STREAM(
-            std::cerr << "[ClusteredLightingPass] Stats submission query failed\n");
+        MECRAFT_LOG_STREAM(std::cerr << "[ClusteredLightingPass] Stats submission query failed\n");
         return false;
     }
     if (!complete) {
         m_statsReadbackSlotAvailable = false;
         return true;
     }
-    const void* mapped = rhiDevice.mapBuffer(
-        m_statsReadbackBuffers[ringIndex], 0u,
-        sizeof(uint32_t) * kStatsWordCount);
+    const void* mapped = rhiDevice.mapBuffer(m_statsReadbackBuffers[ringIndex], 0u, sizeof(uint32_t) * kStatsWordCount);
     if (mapped == nullptr) {
-        MECRAFT_LOG_STREAM(
-            std::cerr << "[ClusteredLightingPass] Stats readback mapping failed\n");
+        MECRAFT_LOG_STREAM(std::cerr << "[ClusteredLightingPass] Stats readback mapping failed\n");
         return false;
     }
     uint32_t words[kStatsWordCount];
@@ -278,30 +231,26 @@ bool ClusteredLightingPass::consumeReadback(RhiDevice& rhiDevice) {
     m_frameStats.clusterCount = words[kStatsClusterCount];
     m_frameStats.lightCount = words[kStatsLightCount];
     m_frameStats.indexCapacity = words[kStatsIndexCapacity];
-    m_frameStats.averageLightsPerCluster = m_frameStats.clusterCount != 0u
-        ? static_cast<float>(m_frameStats.totalIndexCount) /
-              static_cast<float>(m_frameStats.clusterCount)
-        : 0.0f;
-    if (words[kStatsContractVersion] !=
-            renderer::contracts::kGpuLightContractVersion ||
+    m_frameStats.averageLightsPerCluster =
+        m_frameStats.clusterCount != 0u
+            ? static_cast<float>(m_frameStats.totalIndexCount) / static_cast<float>(m_frameStats.clusterCount)
+            : 0.0f;
+    if (words[kStatsContractVersion] != renderer::contracts::kGpuLightContractVersion ||
         m_frameStats.buildError != 0u) {
         m_gpuBuildFailed = true;
-        MECRAFT_LOG_STREAM(
-            std::cerr << "[ClusteredLightingPass] GPU build invariant failed: error="
-                      << m_frameStats.buildError
-                      << " totalIndices=" << m_frameStats.totalIndexCount
-                      << " capacity=" << m_frameStats.indexCapacity << '\n');
+        MECRAFT_LOG_STREAM(std::cerr << "[ClusteredLightingPass] GPU build invariant failed: error="
+                                     << m_frameStats.buildError << " totalIndices=" << m_frameStats.totalIndexCount
+                                     << " capacity=" << m_frameStats.indexCapacity << '\n');
         return false;
     }
     return true;
 }
 
-bool ClusteredLightingPass::buildCoverage(const FrameContext& ctx,
-                                           const uint32_t renderWidth,
-                                           const uint32_t renderHeight) {
+bool ClusteredLightingPass::buildCoverage(const FrameContext& ctx, const uint32_t renderWidth,
+                                          const uint32_t renderHeight) {
     using namespace renderer::contracts;
-    const std::optional<ClusterGrid> grid = buildClusterGrid(
-        renderWidth, renderHeight, ctx.camera.nearPlane, ctx.camera.farPlane);
+    const std::optional<ClusterGrid> grid =
+        buildClusterGrid(renderWidth, renderHeight, ctx.camera.nearPlane, ctx.camera.farPlane);
     if (!grid.has_value()) {
         return false;
     }
@@ -311,13 +260,10 @@ bool ClusteredLightingPass::buildCoverage(const FrameContext& ctx,
     m_grid = *grid;
     m_lightBounds.clear();
     m_lightBounds.reserve(m_lights.size());
-    for (uint32_t lightIndex = 0u;
-         lightIndex < static_cast<uint32_t>(m_lights.size());
-         ++lightIndex) {
+    for (uint32_t lightIndex = 0u; lightIndex < static_cast<uint32_t>(m_lights.size()); ++lightIndex) {
         const GpuLight& light = m_lights[lightIndex];
         const std::optional<GpuClusterLightBounds> bounds =
-            buildGpuClusterLightBounds(
-                light, m_grid, ctx.camera.view, ctx.camera.projection);
+            buildGpuClusterLightBounds(light, m_grid, ctx.camera.view, ctx.camera.projection);
         if (!bounds.has_value()) {
             return false;
         }
@@ -328,8 +274,7 @@ bool ClusteredLightingPass::buildCoverage(const FrameContext& ctx,
         activeBounds.maxCluster.w = lightIndex;
         m_lightBounds.push_back(activeBounds);
     }
-    const std::optional<uint32_t> required =
-        requiredClusterLightIndexCount(m_lightBounds);
+    const std::optional<uint32_t> required = requiredClusterLightIndexCount(m_lightBounds);
     if (!required.has_value()) {
         return false;
     }
@@ -347,9 +292,7 @@ bool ClusteredLightingPass::buildScanPlan() {
     uint64_t scratchCursor = 0u;
     ScanLevel first;
     first.elementCount = m_grid.clusterCount;
-    first.groupCount =
-        (first.elementCount + kClusterScanElementsPerWorkgroup - 1u) /
-        kClusterScanElementsPerWorkgroup;
+    first.groupCount = (first.elementCount + kClusterScanElementsPerWorkgroup - 1u) / kClusterScanElementsPerWorkgroup;
     first.blockSumOffsetWords = static_cast<uint32_t>(scratchCursor);
     scratchCursor += first.groupCount;
     m_scanLevels.push_back(first);
@@ -359,8 +302,7 @@ bool ClusteredLightingPass::buildScanPlan() {
         ScanLevel level;
         level.elementCount = previous.groupCount;
         level.groupCount =
-            (level.elementCount + kClusterScanElementsPerWorkgroup - 1u) /
-            kClusterScanElementsPerWorkgroup;
+            (level.elementCount + kClusterScanElementsPerWorkgroup - 1u) / kClusterScanElementsPerWorkgroup;
         level.inputOffsetWords = previous.blockSumOffsetWords;
         if (scratchCursor > std::numeric_limits<uint32_t>::max()) {
             return false;
@@ -382,10 +324,8 @@ bool ClusteredLightingPass::buildScanPlan() {
 }
 
 bool ClusteredLightingPass::ensurePipelines(RhiDevice& rhiDevice) {
-    if (m_countStage.pipeline.isValid() && m_scanStage.pipeline.isValid() &&
-        m_scanAddStage.pipeline.isValid() &&
-        m_finalizeStage.pipeline.isValid() && m_fillStage.pipeline.isValid() &&
-        m_validateStage.pipeline.isValid() &&
+    if (m_countStage.pipeline.isValid() && m_scanStage.pipeline.isValid() && m_scanAddStage.pipeline.isValid() &&
+        m_finalizeStage.pipeline.isValid() && m_fillStage.pipeline.isValid() && m_validateStage.pipeline.isValid() &&
         m_consumerBindGroupLayout.isValid()) {
         return true;
     }
@@ -394,29 +334,21 @@ bool ClusteredLightingPass::ensurePipelines(RhiDevice& rhiDevice) {
     RhiBindGroupLayoutDesc consumerLayoutDesc;
     consumerLayoutDesc.debugName = "ClusteredLighting.ConsumerLayout";
     for (uint32_t binding = 0u; binding < 5u; ++binding) {
-        consumerLayoutDesc.entries.push_back({
-            binding, RhiBindingType::StorageBuffer,
-            rhiFlag(RhiShaderStage::Fragment), 1u});
+        consumerLayoutDesc.entries.push_back(
+            {binding, RhiBindingType::StorageBuffer, rhiFlag(RhiShaderStage::Fragment), 1u});
     }
-    consumerLayoutDesc.entries.push_back({
-        5u, RhiBindingType::CombinedTextureSampler,
-        rhiFlag(RhiShaderStage::Fragment), 1u});
-    consumerLayoutDesc.entries.push_back({
-        6u, RhiBindingType::CombinedTextureSampler,
-        rhiFlag(RhiShaderStage::Fragment), 1u});
-    m_consumerBindGroupLayout =
-        rhiDevice.createBindGroupLayout(consumerLayoutDesc);
+    consumerLayoutDesc.entries.push_back(
+        {5u, RhiBindingType::CombinedTextureSampler, rhiFlag(RhiShaderStage::Fragment), 1u});
+    consumerLayoutDesc.entries.push_back(
+        {6u, RhiBindingType::CombinedTextureSampler, rhiFlag(RhiShaderStage::Fragment), 1u});
+    m_consumerBindGroupLayout = rhiDevice.createBindGroupLayout(consumerLayoutDesc);
     if (!m_consumerBindGroupLayout.isValid()) {
         return false;
     }
 
-    const auto createStage = [&](ComputeStage& stage,
-                                 const char* shaderPath,
-                                 const char* debugName,
-                                 const uint32_t bindingCount,
-                                 const uint32_t pushConstantBytes) {
-        const std::optional<std::string> source =
-            renderer::rhi::loadShaderSource(shaderPath);
+    const auto createStage = [&](ComputeStage& stage, const char* shaderPath, const char* debugName,
+                                 const uint32_t bindingCount, const uint32_t pushConstantBytes) {
+        const std::optional<std::string> source = renderer::rhi::loadShaderSource(shaderPath);
         if (!source.has_value()) {
             return false;
         }
@@ -432,12 +364,10 @@ bool ClusteredLightingPass::ensurePipelines(RhiDevice& rhiDevice) {
         RhiBindGroupLayoutDesc bindGroupLayoutDesc;
         bindGroupLayoutDesc.debugName = debugName;
         for (uint32_t binding = 0u; binding < bindingCount; ++binding) {
-            bindGroupLayoutDesc.entries.push_back({
-                binding, RhiBindingType::StorageBuffer,
-                rhiFlag(RhiShaderStage::Compute), 1u});
+            bindGroupLayoutDesc.entries.push_back(
+                {binding, RhiBindingType::StorageBuffer, rhiFlag(RhiShaderStage::Compute), 1u});
         }
-        stage.bindGroupLayout =
-            rhiDevice.createBindGroupLayout(bindGroupLayoutDesc);
+        stage.bindGroupLayout = rhiDevice.createBindGroupLayout(bindGroupLayoutDesc);
         if (!stage.bindGroupLayout.isValid()) {
             return false;
         }
@@ -445,10 +375,8 @@ bool ClusteredLightingPass::ensurePipelines(RhiDevice& rhiDevice) {
         pipelineLayoutDesc.debugName = debugName;
         pipelineLayoutDesc.bindGroupLayouts.push_back(stage.bindGroupLayout);
         pipelineLayoutDesc.pushConstantBytes = pushConstantBytes;
-        pipelineLayoutDesc.pushConstantStages =
-            rhiFlag(RhiShaderStage::Compute);
-        stage.pipelineLayout =
-            rhiDevice.createPipelineLayout(pipelineLayoutDesc);
+        pipelineLayoutDesc.pushConstantStages = rhiFlag(RhiShaderStage::Compute);
+        stage.pipelineLayout = rhiDevice.createPipelineLayout(pipelineLayoutDesc);
         if (!stage.pipelineLayout.isValid()) {
             return false;
         }
@@ -460,23 +388,17 @@ bool ClusteredLightingPass::ensurePipelines(RhiDevice& rhiDevice) {
         return stage.pipeline.isValid();
     };
 
-    if (!createStage(m_countStage, "assets/shaders/cluster_count.comp",
-                     "ClusteredLighting.Count", 2u,
+    if (!createStage(m_countStage, "assets/shaders/cluster_count.comp", "ClusteredLighting.Count", 2u,
                      sizeof(ClusterGridPushConstants)) ||
-        !createStage(m_scanStage, "assets/shaders/cluster_scan.comp",
-                     "ClusteredLighting.Scan", 3u,
+        !createStage(m_scanStage, "assets/shaders/cluster_scan.comp", "ClusteredLighting.Scan", 3u,
                      sizeof(ClusterScanPushConstants)) ||
-        !createStage(m_scanAddStage, "assets/shaders/cluster_scan_add.comp",
-                     "ClusteredLighting.ScanAdd", 2u,
+        !createStage(m_scanAddStage, "assets/shaders/cluster_scan_add.comp", "ClusteredLighting.ScanAdd", 2u,
                      sizeof(ClusterScanPushConstants)) ||
-        !createStage(m_finalizeStage, "assets/shaders/cluster_finalize.comp",
-                     "ClusteredLighting.Finalize", 4u,
+        !createStage(m_finalizeStage, "assets/shaders/cluster_finalize.comp", "ClusteredLighting.Finalize", 4u,
                      sizeof(ClusterScanPushConstants)) ||
-        !createStage(m_fillStage, "assets/shaders/cluster_fill.comp",
-                     "ClusteredLighting.Fill", 5u,
+        !createStage(m_fillStage, "assets/shaders/cluster_fill.comp", "ClusteredLighting.Fill", 5u,
                      sizeof(ClusterFillPushConstants)) ||
-        !createStage(m_validateStage, "assets/shaders/cluster_validate.comp",
-                     "ClusteredLighting.Validate", 3u,
+        !createStage(m_validateStage, "assets/shaders/cluster_validate.comp", "ClusteredLighting.Validate", 3u,
                      sizeof(ClusterScanPushConstants))) {
         destroyPipelines();
         return false;
@@ -491,31 +413,21 @@ bool ClusteredLightingPass::ensureBuffers(RhiDevice& rhiDevice) {
     uint64_t recordBytes = 0u;
     uint64_t indexBytes = 0u;
     uint64_t scratchBytes = 0u;
-    if (!multiplyBytes(std::max<size_t>(m_lights.size(), 1u),
-                       sizeof(renderer::contracts::GpuLight), lightBytes) ||
-        !multiplyBytes(std::max<size_t>(m_lightBounds.size(), 1u),
-                       sizeof(renderer::contracts::GpuClusterLightBounds),
+    if (!multiplyBytes(std::max<size_t>(m_lights.size(), 1u), sizeof(renderer::contracts::GpuLight), lightBytes) ||
+        !multiplyBytes(std::max<size_t>(m_lightBounds.size(), 1u), sizeof(renderer::contracts::GpuClusterLightBounds),
                        boundsBytes) ||
-        !multiplyBytes(m_grid.clusterCount, sizeof(uint32_t),
-                       clusterWordBytes) ||
-        !multiplyBytes(m_grid.clusterCount, sizeof(uint32_t) * 2u,
-                       recordBytes) ||
-        !multiplyBytes(std::max(m_requiredIndexCount, 1u), sizeof(uint32_t),
-                       indexBytes) ||
-        !multiplyBytes(std::max(m_scanScratchWordCount, 1u), sizeof(uint32_t),
-                       scratchBytes)) {
+        !multiplyBytes(m_grid.clusterCount, sizeof(uint32_t), clusterWordBytes) ||
+        !multiplyBytes(m_grid.clusterCount, sizeof(uint32_t) * 2u, recordBytes) ||
+        !multiplyBytes(std::max(m_requiredIndexCount, 1u), sizeof(uint32_t), indexBytes) ||
+        !multiplyBytes(std::max(m_scanScratchWordCount, 1u), sizeof(uint32_t), scratchBytes)) {
         return false;
     }
 
     const bool buffersGrow =
-        lightBytes > m_lightBuffer.capacityBytes ||
-        boundsBytes > m_lightBoundsBuffer.capacityBytes ||
-        clusterWordBytes > m_countBuffer.capacityBytes ||
-        clusterWordBytes > m_offsetBuffer.capacityBytes ||
-        recordBytes > m_recordBuffer.capacityBytes ||
-        clusterWordBytes > m_cursorBuffer.capacityBytes ||
-        indexBytes > m_compactIndexBuffer.capacityBytes ||
-        scratchBytes > m_scanScratchBuffer.capacityBytes ||
+        lightBytes > m_lightBuffer.capacityBytes || boundsBytes > m_lightBoundsBuffer.capacityBytes ||
+        clusterWordBytes > m_countBuffer.capacityBytes || clusterWordBytes > m_offsetBuffer.capacityBytes ||
+        recordBytes > m_recordBuffer.capacityBytes || clusterWordBytes > m_cursorBuffer.capacityBytes ||
+        indexBytes > m_compactIndexBuffer.capacityBytes || scratchBytes > m_scanScratchBuffer.capacityBytes ||
         sizeof(uint32_t) * kStatsWordCount > m_statsBuffer.capacityBytes;
     if (buffersGrow) {
         m_emptyBuildReady = false;
@@ -523,60 +435,42 @@ bool ClusteredLightingPass::ensureBuffers(RhiDevice& rhiDevice) {
     }
 
     const RhiBufferUsageFlags storageUploadUsage =
-        rhiFlag(RhiBufferUsage::Storage) |
-        rhiFlag(RhiBufferUsage::TransferDst);
+        rhiFlag(RhiBufferUsage::Storage) | rhiFlag(RhiBufferUsage::TransferDst);
     const RhiBufferUsageFlags storageUsage = rhiFlag(RhiBufferUsage::Storage);
-    if (!ensureBuffer(rhiDevice, m_lightBuffer, lightBytes,
-                      storageUploadUsage, RhiMemoryCategory::SceneData,
+    if (!ensureBuffer(rhiDevice, m_lightBuffer, lightBytes, storageUploadUsage, RhiMemoryCategory::SceneData,
                       "ClusteredLighting.Lights") ||
-        !ensureBuffer(rhiDevice, m_lightBoundsBuffer, boundsBytes,
-                      storageUploadUsage, RhiMemoryCategory::SceneData,
+        !ensureBuffer(rhiDevice, m_lightBoundsBuffer, boundsBytes, storageUploadUsage, RhiMemoryCategory::SceneData,
                       "ClusteredLighting.LightBounds") ||
-        !ensureBuffer(rhiDevice, m_countBuffer, clusterWordBytes,
-                      storageUploadUsage, RhiMemoryCategory::SceneData,
+        !ensureBuffer(rhiDevice, m_countBuffer, clusterWordBytes, storageUploadUsage, RhiMemoryCategory::SceneData,
                       "ClusteredLighting.Counts") ||
-        !ensureBuffer(rhiDevice, m_offsetBuffer, clusterWordBytes,
-                      storageUsage, RhiMemoryCategory::SceneData,
+        !ensureBuffer(rhiDevice, m_offsetBuffer, clusterWordBytes, storageUsage, RhiMemoryCategory::SceneData,
                       "ClusteredLighting.Offsets") ||
-        !ensureBuffer(rhiDevice, m_recordBuffer, recordBytes,
-                      storageUsage, RhiMemoryCategory::SceneData,
+        !ensureBuffer(rhiDevice, m_recordBuffer, recordBytes, storageUsage, RhiMemoryCategory::SceneData,
                       "ClusteredLighting.Records") ||
-        !ensureBuffer(rhiDevice, m_cursorBuffer, clusterWordBytes,
-                      storageUploadUsage, RhiMemoryCategory::SceneData,
+        !ensureBuffer(rhiDevice, m_cursorBuffer, clusterWordBytes, storageUploadUsage, RhiMemoryCategory::SceneData,
                       "ClusteredLighting.Cursors") ||
-        !ensureBuffer(rhiDevice, m_compactIndexBuffer, indexBytes,
-                      storageUsage, RhiMemoryCategory::SceneData,
+        !ensureBuffer(rhiDevice, m_compactIndexBuffer, indexBytes, storageUsage, RhiMemoryCategory::SceneData,
                       "ClusteredLighting.CompactIndices") ||
-        !ensureBuffer(rhiDevice, m_scanScratchBuffer, scratchBytes,
-                      storageUsage, RhiMemoryCategory::SceneData,
+        !ensureBuffer(rhiDevice, m_scanScratchBuffer, scratchBytes, storageUsage, RhiMemoryCategory::SceneData,
                       "ClusteredLighting.ScanScratch") ||
-        !ensureBuffer(rhiDevice, m_statsBuffer,
-                      sizeof(uint32_t) * kStatsWordCount,
-                      storageUploadUsage | rhiFlag(RhiBufferUsage::TransferSrc),
-                      RhiMemoryCategory::SceneData,
+        !ensureBuffer(rhiDevice, m_statsBuffer, sizeof(uint32_t) * kStatsWordCount,
+                      storageUploadUsage | rhiFlag(RhiBufferUsage::TransferSrc), RhiMemoryCategory::SceneData,
                       "ClusteredLighting.Stats") ||
         !ensureReadbackBuffers(rhiDevice)) {
         return false;
     }
-    m_indexCapacity = static_cast<uint32_t>(
-        std::min<uint64_t>(m_compactIndexBuffer.capacityBytes /
-                               sizeof(uint32_t),
-                           std::numeric_limits<uint32_t>::max()));
+    m_indexCapacity = static_cast<uint32_t>(std::min<uint64_t>(m_compactIndexBuffer.capacityBytes / sizeof(uint32_t),
+                                                               std::numeric_limits<uint32_t>::max()));
     return m_indexCapacity >= std::max(m_requiredIndexCount, 1u);
 }
 
-bool ClusteredLightingPass::ensureBuffer(
-    RhiDevice& rhiDevice,
-    BufferResource& resource,
-    const uint64_t requiredBytes,
-    const RhiBufferUsageFlags usage,
-    const RhiMemoryCategory memoryCategory,
-    const char* debugName) {
+bool ClusteredLightingPass::ensureBuffer(RhiDevice& rhiDevice, BufferResource& resource, const uint64_t requiredBytes,
+                                         const RhiBufferUsageFlags usage, const RhiMemoryCategory memoryCategory,
+                                         const char* debugName) {
     if (requiredBytes == 0u) {
         return false;
     }
-    if (resource.handle.isValid() &&
-        resource.capacityBytes >= requiredBytes) {
+    if (resource.handle.isValid() && resource.capacityBytes >= requiredBytes) {
         return true;
     }
     const uint64_t capacity = alignBufferSize(requiredBytes);
@@ -590,8 +484,7 @@ bool ClusteredLightingPass::ensureBuffer(
     desc.memoryUsage = RhiMemoryUsage::GpuOnly;
     desc.initialState = RhiResourceState::StorageBuffer;
     desc.memoryCategory = memoryCategory;
-    const RhiBufferHandle created =
-        rhiDevice.createBuffer(desc, nullptr, 0u);
+    const RhiBufferHandle created = rhiDevice.createBuffer(desc, nullptr, 0u);
     if (!created.isValid()) {
         return false;
     }
@@ -611,8 +504,7 @@ bool ClusteredLightingPass::ensureReadbackBuffers(RhiDevice& rhiDevice) {
         RhiBufferDesc desc;
         desc.debugName = "ClusteredLighting.StatsReadback";
         desc.size = sizeof(uint32_t) * kStatsWordCount;
-        desc.usage = rhiFlag(RhiBufferUsage::TransferDst) |
-                     rhiFlag(RhiBufferUsage::MapRead);
+        desc.usage = rhiFlag(RhiBufferUsage::TransferDst) | rhiFlag(RhiBufferUsage::MapRead);
         desc.memoryUsage = RhiMemoryUsage::GpuToCpu;
         desc.initialState = RhiResourceState::TransferDst;
         desc.memoryCategory = RhiMemoryCategory::Readback;
@@ -625,44 +517,34 @@ bool ClusteredLightingPass::ensureReadbackBuffers(RhiDevice& rhiDevice) {
 }
 
 bool ClusteredLightingPass::ensureBuildBindGroups(RhiDevice& rhiDevice) {
-    if (m_countBindGroup.isValid() &&
-        m_scanBindGroups.size() == m_scanLevels.size() &&
-        m_scanAddBindGroups.size() + 1u == m_scanLevels.size() &&
-        m_finalizeBindGroup.isValid() && m_fillBindGroup.isValid() &&
-        m_validateBindGroup.isValid()) {
+    if (m_countBindGroup.isValid() && m_scanBindGroups.size() == m_scanLevels.size() &&
+        m_scanAddBindGroups.size() + 1u == m_scanLevels.size() && m_finalizeBindGroup.isValid() &&
+        m_fillBindGroup.isValid() && m_validateBindGroup.isValid()) {
         return true;
     }
     destroyBuildBindGroups();
 
     RhiBindGroupDesc countDesc;
     countDesc.layout = m_countStage.bindGroupLayout;
-    appendStorageBinding(countDesc, 0u, m_lightBoundsBuffer.handle,
-                         m_lightBoundsBuffer.capacityBytes);
-    appendStorageBinding(countDesc, 1u, m_countBuffer.handle,
-                         m_countBuffer.capacityBytes);
+    appendStorageBinding(countDesc, 0u, m_lightBoundsBuffer.handle, m_lightBoundsBuffer.capacityBytes);
+    appendStorageBinding(countDesc, 1u, m_countBuffer.handle, m_countBuffer.capacityBytes);
     m_countBindGroup = rhiDevice.createBindGroup(countDesc);
     if (!m_countBindGroup.isValid()) {
         return false;
     }
 
     m_scanBindGroups.reserve(m_scanLevels.size());
-    for (uint32_t levelIndex = 0u;
-         levelIndex < m_scanLevels.size(); ++levelIndex) {
+    for (uint32_t levelIndex = 0u; levelIndex < m_scanLevels.size(); ++levelIndex) {
         RhiBindGroupDesc desc;
         desc.layout = m_scanStage.bindGroupLayout;
         if (levelIndex == 0u) {
-            appendStorageBinding(desc, 0u, m_countBuffer.handle,
-                                 m_countBuffer.capacityBytes);
-            appendStorageBinding(desc, 1u, m_offsetBuffer.handle,
-                                 m_offsetBuffer.capacityBytes);
+            appendStorageBinding(desc, 0u, m_countBuffer.handle, m_countBuffer.capacityBytes);
+            appendStorageBinding(desc, 1u, m_offsetBuffer.handle, m_offsetBuffer.capacityBytes);
         } else {
-            appendStorageBinding(desc, 0u, m_scanScratchBuffer.handle,
-                                 m_scanScratchBuffer.capacityBytes);
-            appendStorageBinding(desc, 1u, m_scanScratchBuffer.handle,
-                                 m_scanScratchBuffer.capacityBytes);
+            appendStorageBinding(desc, 0u, m_scanScratchBuffer.handle, m_scanScratchBuffer.capacityBytes);
+            appendStorageBinding(desc, 1u, m_scanScratchBuffer.handle, m_scanScratchBuffer.capacityBytes);
         }
-        appendStorageBinding(desc, 2u, m_scanScratchBuffer.handle,
-                             m_scanScratchBuffer.capacityBytes);
+        appendStorageBinding(desc, 2u, m_scanScratchBuffer.handle, m_scanScratchBuffer.capacityBytes);
         const RhiBindGroupHandle bindGroup = rhiDevice.createBindGroup(desc);
         if (!bindGroup.isValid()) {
             destroyBuildBindGroups();
@@ -672,15 +554,12 @@ bool ClusteredLightingPass::ensureBuildBindGroups(RhiDevice& rhiDevice) {
     }
 
     m_scanAddBindGroups.reserve(m_scanLevels.size() - 1u);
-    for (uint32_t childLevel = 0u;
-         childLevel + 1u < m_scanLevels.size(); ++childLevel) {
+    for (uint32_t childLevel = 0u; childLevel + 1u < m_scanLevels.size(); ++childLevel) {
         RhiBindGroupDesc desc;
         desc.layout = m_scanAddStage.bindGroupLayout;
-        const BufferResource& data = childLevel == 0u
-            ? m_offsetBuffer : m_scanScratchBuffer;
+        const BufferResource& data = childLevel == 0u ? m_offsetBuffer : m_scanScratchBuffer;
         appendStorageBinding(desc, 0u, data.handle, data.capacityBytes);
-        appendStorageBinding(desc, 1u, m_scanScratchBuffer.handle,
-                             m_scanScratchBuffer.capacityBytes);
+        appendStorageBinding(desc, 1u, m_scanScratchBuffer.handle, m_scanScratchBuffer.capacityBytes);
         const RhiBindGroupHandle bindGroup = rhiDevice.createBindGroup(desc);
         if (!bindGroup.isValid()) {
             destroyBuildBindGroups();
@@ -691,41 +570,28 @@ bool ClusteredLightingPass::ensureBuildBindGroups(RhiDevice& rhiDevice) {
 
     RhiBindGroupDesc finalizeDesc;
     finalizeDesc.layout = m_finalizeStage.bindGroupLayout;
-    appendStorageBinding(finalizeDesc, 0u, m_countBuffer.handle,
-                         m_countBuffer.capacityBytes);
-    appendStorageBinding(finalizeDesc, 1u, m_offsetBuffer.handle,
-                         m_offsetBuffer.capacityBytes);
-    appendStorageBinding(finalizeDesc, 2u, m_recordBuffer.handle,
-                         m_recordBuffer.capacityBytes);
-    appendStorageBinding(finalizeDesc, 3u, m_statsBuffer.handle,
-                         m_statsBuffer.capacityBytes);
+    appendStorageBinding(finalizeDesc, 0u, m_countBuffer.handle, m_countBuffer.capacityBytes);
+    appendStorageBinding(finalizeDesc, 1u, m_offsetBuffer.handle, m_offsetBuffer.capacityBytes);
+    appendStorageBinding(finalizeDesc, 2u, m_recordBuffer.handle, m_recordBuffer.capacityBytes);
+    appendStorageBinding(finalizeDesc, 3u, m_statsBuffer.handle, m_statsBuffer.capacityBytes);
     m_finalizeBindGroup = rhiDevice.createBindGroup(finalizeDesc);
 
     RhiBindGroupDesc fillDesc;
     fillDesc.layout = m_fillStage.bindGroupLayout;
-    appendStorageBinding(fillDesc, 0u, m_lightBoundsBuffer.handle,
-                         m_lightBoundsBuffer.capacityBytes);
-    appendStorageBinding(fillDesc, 1u, m_recordBuffer.handle,
-                         m_recordBuffer.capacityBytes);
-    appendStorageBinding(fillDesc, 2u, m_cursorBuffer.handle,
-                         m_cursorBuffer.capacityBytes);
-    appendStorageBinding(fillDesc, 3u, m_compactIndexBuffer.handle,
-                         m_compactIndexBuffer.capacityBytes);
-    appendStorageBinding(fillDesc, 4u, m_statsBuffer.handle,
-                         m_statsBuffer.capacityBytes);
+    appendStorageBinding(fillDesc, 0u, m_lightBoundsBuffer.handle, m_lightBoundsBuffer.capacityBytes);
+    appendStorageBinding(fillDesc, 1u, m_recordBuffer.handle, m_recordBuffer.capacityBytes);
+    appendStorageBinding(fillDesc, 2u, m_cursorBuffer.handle, m_cursorBuffer.capacityBytes);
+    appendStorageBinding(fillDesc, 3u, m_compactIndexBuffer.handle, m_compactIndexBuffer.capacityBytes);
+    appendStorageBinding(fillDesc, 4u, m_statsBuffer.handle, m_statsBuffer.capacityBytes);
     m_fillBindGroup = rhiDevice.createBindGroup(fillDesc);
 
     RhiBindGroupDesc validateDesc;
     validateDesc.layout = m_validateStage.bindGroupLayout;
-    appendStorageBinding(validateDesc, 0u, m_recordBuffer.handle,
-                         m_recordBuffer.capacityBytes);
-    appendStorageBinding(validateDesc, 1u, m_cursorBuffer.handle,
-                         m_cursorBuffer.capacityBytes);
-    appendStorageBinding(validateDesc, 2u, m_statsBuffer.handle,
-                         m_statsBuffer.capacityBytes);
+    appendStorageBinding(validateDesc, 0u, m_recordBuffer.handle, m_recordBuffer.capacityBytes);
+    appendStorageBinding(validateDesc, 1u, m_cursorBuffer.handle, m_cursorBuffer.capacityBytes);
+    appendStorageBinding(validateDesc, 2u, m_statsBuffer.handle, m_statsBuffer.capacityBytes);
     m_validateBindGroup = rhiDevice.createBindGroup(validateDesc);
-    if (!m_finalizeBindGroup.isValid() || !m_fillBindGroup.isValid() ||
-        !m_validateBindGroup.isValid()) {
+    if (!m_finalizeBindGroup.isValid() || !m_fillBindGroup.isValid() || !m_validateBindGroup.isValid()) {
         destroyBuildBindGroups();
         return false;
     }
@@ -738,29 +604,19 @@ bool ClusteredLightingPass::ensureConsumerBindGroup(RhiDevice& rhiDevice) {
     }
     RhiBindGroupDesc desc;
     desc.layout = m_consumerBindGroupLayout;
-    appendStorageBinding(desc, 0u, m_lightBuffer.handle,
-                         m_lightBuffer.capacityBytes);
-    appendStorageBinding(desc, 1u, m_recordBuffer.handle,
-                         m_recordBuffer.capacityBytes);
-    appendStorageBinding(desc, 2u, m_compactIndexBuffer.handle,
-                         m_compactIndexBuffer.capacityBytes);
-    appendStorageBinding(desc, 3u, m_statsBuffer.handle,
-                         m_statsBuffer.capacityBytes);
-    appendStorageBinding(desc, 4u,
-                         m_localShadowResources.metadataBuffer,
-                         m_localShadowResources.metadataBufferBytes);
-    appendCombinedTextureSamplerBinding(
-        desc, 5u, m_localShadowResources.spotAtlasView,
-        m_localShadowResources.sampler);
-    appendCombinedTextureSamplerBinding(
-        desc, 6u, m_localShadowResources.pointCubeArrayView,
-        m_localShadowResources.sampler);
+    appendStorageBinding(desc, 0u, m_lightBuffer.handle, m_lightBuffer.capacityBytes);
+    appendStorageBinding(desc, 1u, m_recordBuffer.handle, m_recordBuffer.capacityBytes);
+    appendStorageBinding(desc, 2u, m_compactIndexBuffer.handle, m_compactIndexBuffer.capacityBytes);
+    appendStorageBinding(desc, 3u, m_statsBuffer.handle, m_statsBuffer.capacityBytes);
+    appendStorageBinding(desc, 4u, m_localShadowResources.metadataBuffer, m_localShadowResources.metadataBufferBytes);
+    appendCombinedTextureSamplerBinding(desc, 5u, m_localShadowResources.spotAtlasView, m_localShadowResources.sampler);
+    appendCombinedTextureSamplerBinding(desc, 6u, m_localShadowResources.pointCubeArrayView,
+                                        m_localShadowResources.sampler);
     m_consumerBindGroup = rhiDevice.createBindGroup(desc);
     return m_consumerBindGroup.isValid();
 }
 
-bool ClusteredLightingPass::importGraphResources(
-    RenderGraph& graph, GraphResources& resources) const {
+bool ClusteredLightingPass::importGraphResources(RenderGraph& graph, GraphResources& resources) const {
     if (!m_prepared || m_rhiDevice == nullptr) {
         return false;
     }
@@ -770,16 +626,13 @@ bool ClusteredLightingPass::importGraphResources(
            importBuffer(graph, m_offsetBuffer, resources.offsets) &&
            importBuffer(graph, m_recordBuffer, resources.records) &&
            importBuffer(graph, m_cursorBuffer, resources.cursors) &&
-           importBuffer(graph, m_compactIndexBuffer,
-                        resources.compactIndices) &&
+           importBuffer(graph, m_compactIndexBuffer, resources.compactIndices) &&
            importBuffer(graph, m_scanScratchBuffer, resources.scanScratch) &&
            importBuffer(graph, m_statsBuffer, resources.stats);
 }
 
-bool ClusteredLightingPass::importBuffer(
-    RenderGraph& graph,
-    const BufferResource& resource,
-    RgBufferHandle& graphBuffer) const {
+bool ClusteredLightingPass::importBuffer(RenderGraph& graph, const BufferResource& resource,
+                                         RgBufferHandle& graphBuffer) const {
     if (m_rhiDevice == nullptr || !resource.handle.isValid()) {
         return false;
     }
@@ -797,10 +650,8 @@ bool ClusteredLightingPass::importBuffer(
     return graphBuffer.isValid();
 }
 
-RgPassHandle ClusteredLightingPass::addGraphPasses(
-    RenderGraph& graph,
-    const GraphResources& resources,
-    const RgPassHandle dependency) {
+RgPassHandle ClusteredLightingPass::addGraphPasses(RenderGraph& graph, const GraphResources& resources,
+                                                   const RgPassHandle dependency) {
     if (!m_prepared || !dependency.isValid()) {
         return {};
     }
@@ -811,137 +662,106 @@ RgPassHandle ClusteredLightingPass::addGraphPasses(
     }
     m_emptyBuildScheduled = m_lights.empty();
 
-    RenderGraphPassBuilder upload = graph.addPass(
-        {"ClusteredLighting.Upload", RgPassType::Copy,
-         RhiQueueType::Graphics});
+    RenderGraphPassBuilder upload =
+        graph.addPass({"ClusteredLighting.Upload", RgPassType::Copy, RhiQueueType::Graphics});
     upload.dependsOn(dependency)
         .writeBuffer(resources.lights, RhiResourceState::TransferDst)
         .writeBuffer(resources.lightBounds, RhiResourceState::TransferDst)
         .writeBuffer(resources.counts, RhiResourceState::TransferDst)
         .writeBuffer(resources.cursors, RhiResourceState::TransferDst)
         .writeBuffer(resources.stats, RhiResourceState::TransferDst)
-        .setExecute([this](RgPassContext& pass) {
-            return recordUpload(pass.commandList());
-        });
+        .setExecute([this](RgPassContext& pass) { return recordUpload(pass.commandList()); });
     RgPassHandle tail = upload.handle();
 
-    RenderGraphPassBuilder count = graph.addPass(
-        {"ClusteredLighting.Count", RgPassType::Compute,
-         RhiQueueType::Compute});
+    RenderGraphPassBuilder count =
+        graph.addPass({"ClusteredLighting.Count", RgPassType::Compute, RhiQueueType::Compute});
     count.dependsOn(tail)
         .readBuffer(resources.lightBounds, RhiResourceState::StorageBuffer)
         .readWriteBuffer(resources.counts, RhiResourceState::StorageBuffer)
-        .setExecute([this](RgPassContext& pass) {
-            return recordCount(pass.commandList());
-        });
+        .setExecute([this](RgPassContext& pass) { return recordCount(pass.commandList()); });
     tail = count.handle();
 
     for (uint32_t level = 0u; level < m_scanLevels.size(); ++level) {
-        const std::string passName =
-            "ClusteredLighting.Scan." + std::to_string(level);
-        RenderGraphPassBuilder scan = graph.addPass(
-            {passName.c_str(), RgPassType::Compute, RhiQueueType::Compute});
+        const std::string passName = "ClusteredLighting.Scan." + std::to_string(level);
+        RenderGraphPassBuilder scan = graph.addPass({passName.c_str(), RgPassType::Compute, RhiQueueType::Compute});
         scan.dependsOn(tail);
         if (level == 0u) {
             scan.readBuffer(resources.counts, RhiResourceState::StorageBuffer)
-                .writeBuffer(resources.offsets,
-                             RhiResourceState::StorageBuffer)
-                .writeBuffer(resources.scanScratch,
-                             RhiResourceState::StorageBuffer);
+                .writeBuffer(resources.offsets, RhiResourceState::StorageBuffer)
+                .writeBuffer(resources.scanScratch, RhiResourceState::StorageBuffer);
         } else {
-            scan.readWriteBuffer(resources.scanScratch,
-                                 RhiResourceState::StorageBuffer);
+            scan.readWriteBuffer(resources.scanScratch, RhiResourceState::StorageBuffer);
         }
-        scan.setExecute([this, level](RgPassContext& pass) {
-            return recordScan(pass.commandList(), level);
-        });
+        scan.setExecute([this, level](RgPassContext& pass) { return recordScan(pass.commandList(), level); });
         tail = scan.handle();
     }
 
-    for (uint32_t child = static_cast<uint32_t>(m_scanLevels.size() - 1u);
-         child > 0u; --child) {
+    for (uint32_t child = static_cast<uint32_t>(m_scanLevels.size() - 1u); child > 0u; --child) {
         const uint32_t childLevel = child - 1u;
-        const std::string passName =
-            "ClusteredLighting.ScanAdd." + std::to_string(childLevel);
-        RenderGraphPassBuilder add = graph.addPass(
-            {passName.c_str(), RgPassType::Compute, RhiQueueType::Compute});
+        const std::string passName = "ClusteredLighting.ScanAdd." + std::to_string(childLevel);
+        RenderGraphPassBuilder add = graph.addPass({passName.c_str(), RgPassType::Compute, RhiQueueType::Compute});
         add.dependsOn(tail);
         if (childLevel == 0u) {
-            add.readWriteBuffer(resources.offsets,
-                                RhiResourceState::StorageBuffer)
-                .readBuffer(resources.scanScratch,
-                            RhiResourceState::StorageBuffer);
+            add.readWriteBuffer(resources.offsets, RhiResourceState::StorageBuffer)
+                .readBuffer(resources.scanScratch, RhiResourceState::StorageBuffer);
         } else {
-            add.readWriteBuffer(resources.scanScratch,
-                                RhiResourceState::StorageBuffer);
+            add.readWriteBuffer(resources.scanScratch, RhiResourceState::StorageBuffer);
         }
-        add.setExecute([this, childLevel](RgPassContext& pass) {
-            return recordScanAdd(pass.commandList(), childLevel);
-        });
+        add.setExecute(
+            [this, childLevel](RgPassContext& pass) { return recordScanAdd(pass.commandList(), childLevel); });
         tail = add.handle();
     }
 
-    RenderGraphPassBuilder finalize = graph.addPass(
-        {"ClusteredLighting.Finalize", RgPassType::Compute,
-         RhiQueueType::Compute});
+    RenderGraphPassBuilder finalize =
+        graph.addPass({"ClusteredLighting.Finalize", RgPassType::Compute, RhiQueueType::Compute});
     finalize.dependsOn(tail)
         .readBuffer(resources.counts, RhiResourceState::StorageBuffer)
         .readBuffer(resources.offsets, RhiResourceState::StorageBuffer)
         .writeBuffer(resources.records, RhiResourceState::StorageBuffer)
         .readWriteBuffer(resources.stats, RhiResourceState::StorageBuffer)
-        .setExecute([this](RgPassContext& pass) {
-            return recordFinalize(pass.commandList());
-        });
+        .setExecute([this](RgPassContext& pass) { return recordFinalize(pass.commandList()); });
     tail = finalize.handle();
 
-    RenderGraphPassBuilder fill = graph.addPass(
-        {"ClusteredLighting.Fill", RgPassType::Compute,
-         RhiQueueType::Compute});
+    RenderGraphPassBuilder fill = graph.addPass({"ClusteredLighting.Fill", RgPassType::Compute, RhiQueueType::Compute});
     fill.dependsOn(tail)
         .readBuffer(resources.lightBounds, RhiResourceState::StorageBuffer)
         .readBuffer(resources.records, RhiResourceState::StorageBuffer)
         .readWriteBuffer(resources.cursors, RhiResourceState::StorageBuffer)
-        .writeBuffer(resources.compactIndices,
-                     RhiResourceState::StorageBuffer)
+        .writeBuffer(resources.compactIndices, RhiResourceState::StorageBuffer)
         .readWriteBuffer(resources.stats, RhiResourceState::StorageBuffer)
-        .setExecute([this](RgPassContext& pass) {
-            return recordFill(pass.commandList());
-        });
+        .setExecute([this](RgPassContext& pass) { return recordFill(pass.commandList()); });
     tail = fill.handle();
 
-    RenderGraphPassBuilder validate = graph.addPass(
-        {"ClusteredLighting.Validate", RgPassType::Compute,
-         RhiQueueType::Compute});
+    RenderGraphPassBuilder validate =
+        graph.addPass({"ClusteredLighting.Validate", RgPassType::Compute, RhiQueueType::Compute});
     validate.dependsOn(tail)
         .readBuffer(resources.records, RhiResourceState::StorageBuffer)
         .readBuffer(resources.cursors, RhiResourceState::StorageBuffer)
         .readWriteBuffer(resources.stats, RhiResourceState::StorageBuffer)
-        .setExecute([this](RgPassContext& pass) {
-            return recordValidateAndReadback(pass.commandList());
-        });
+        .setExecute([this](RgPassContext& pass) { return recordValidateAndReadback(pass.commandList()); });
     return validate.handle();
 }
 
 bool ClusteredLightingPass::recordUpload(RhiCommandList& commandList) const {
     if (!m_lights.empty()) {
-        commandList.updateBuffer(m_lightBuffer.handle, 0u, m_lights.data(),
-                                 m_lights.size() * sizeof(m_lights.front()));
+        commandList.updateBuffer(m_lightBuffer.handle, 0u, m_lights.data(), m_lights.size() * sizeof(m_lights.front()));
     }
     if (!m_lightBounds.empty()) {
-        commandList.updateBuffer(
-            m_lightBoundsBuffer.handle, 0u, m_lightBounds.data(),
-            m_lightBounds.size() * sizeof(m_lightBounds.front()));
+        commandList.updateBuffer(m_lightBoundsBuffer.handle, 0u, m_lightBounds.data(),
+                                 m_lightBounds.size() * sizeof(m_lightBounds.front()));
     }
-    commandList.updateBuffer(
-        m_countBuffer.handle, 0u, m_zeroClusterWords.data(),
-        m_zeroClusterWords.size() * sizeof(m_zeroClusterWords.front()));
-    commandList.updateBuffer(
-        m_cursorBuffer.handle, 0u, m_zeroClusterWords.data(),
-        m_zeroClusterWords.size() * sizeof(m_zeroClusterWords.front()));
-    const uint32_t stats[kStatsWordCount] = {
-        0u, 0u, 0u, 0u, m_grid.clusterCount,
-        static_cast<uint32_t>(m_lights.size()), m_indexCapacity,
-        renderer::contracts::kGpuLightContractVersion};
+    commandList.updateBuffer(m_countBuffer.handle, 0u, m_zeroClusterWords.data(),
+                             m_zeroClusterWords.size() * sizeof(m_zeroClusterWords.front()));
+    commandList.updateBuffer(m_cursorBuffer.handle, 0u, m_zeroClusterWords.data(),
+                             m_zeroClusterWords.size() * sizeof(m_zeroClusterWords.front()));
+    const uint32_t stats[kStatsWordCount] = {0u,
+                                             0u,
+                                             0u,
+                                             0u,
+                                             m_grid.clusterCount,
+                                             static_cast<uint32_t>(m_lights.size()),
+                                             m_indexCapacity,
+                                             renderer::contracts::kGpuLightContractVersion};
     commandList.updateBuffer(m_statsBuffer.handle, 0u, stats, sizeof(stats));
     return true;
 }
@@ -951,67 +771,52 @@ bool ClusteredLightingPass::recordCount(RhiCommandList& commandList) const {
         return true;
     }
     ClusterGridPushConstants push;
-    push.gridAndLightCount = {
-        m_grid.tileCountX, m_grid.tileCountY, m_grid.depthSliceCount,
-        static_cast<uint32_t>(m_lightBounds.size())};
+    push.gridAndLightCount = {m_grid.tileCountX, m_grid.tileCountY, m_grid.depthSliceCount,
+                              static_cast<uint32_t>(m_lightBounds.size())};
     commandList.setComputePipeline(m_countStage.pipeline);
     commandList.setBindGroup(0u, m_countBindGroup);
-    commandList.pushConstants(&push, sizeof(push),
-                              rhiFlag(RhiShaderStage::Compute));
-    commandList.dispatch(static_cast<uint32_t>(m_lightBounds.size()),
-                         m_grid.depthSliceCount, 1u);
+    commandList.pushConstants(&push, sizeof(push), rhiFlag(RhiShaderStage::Compute));
+    commandList.dispatch(static_cast<uint32_t>(m_lightBounds.size()), m_grid.depthSliceCount, 1u);
     return true;
 }
 
-bool ClusteredLightingPass::recordScan(RhiCommandList& commandList,
-                                        const uint32_t level) const {
+bool ClusteredLightingPass::recordScan(RhiCommandList& commandList, const uint32_t level) const {
     if (level >= m_scanLevels.size()) {
         return false;
     }
     const ScanLevel& scanLevel = m_scanLevels[level];
     ClusterScanPushConstants push;
-    push.offsetsAndCount = {
-        scanLevel.inputOffsetWords, scanLevel.outputOffsetWords,
-        scanLevel.blockSumOffsetWords, scanLevel.elementCount};
+    push.offsetsAndCount = {scanLevel.inputOffsetWords, scanLevel.outputOffsetWords, scanLevel.blockSumOffsetWords,
+                            scanLevel.elementCount};
     commandList.setComputePipeline(m_scanStage.pipeline);
     commandList.setBindGroup(0u, m_scanBindGroups[level]);
-    commandList.pushConstants(&push, sizeof(push),
-                              rhiFlag(RhiShaderStage::Compute));
+    commandList.pushConstants(&push, sizeof(push), rhiFlag(RhiShaderStage::Compute));
     commandList.dispatch(scanLevel.groupCount, 1u, 1u);
     return true;
 }
 
-bool ClusteredLightingPass::recordScanAdd(
-    RhiCommandList& commandList,
-    const uint32_t childLevel) const {
-    if (childLevel + 1u >= m_scanLevels.size() ||
-        childLevel >= m_scanAddBindGroups.size()) {
+bool ClusteredLightingPass::recordScanAdd(RhiCommandList& commandList, const uint32_t childLevel) const {
+    if (childLevel + 1u >= m_scanLevels.size() || childLevel >= m_scanAddBindGroups.size()) {
         return false;
     }
     const ScanLevel& child = m_scanLevels[childLevel];
     const ScanLevel& parent = m_scanLevels[childLevel + 1u];
     ClusterScanPushConstants push;
-    push.offsetsAndCount = {
-        child.outputOffsetWords, parent.outputOffsetWords,
-        child.elementCount,
-        renderer::contracts::kClusterScanElementsPerWorkgroup};
+    push.offsetsAndCount = {child.outputOffsetWords, parent.outputOffsetWords, child.elementCount,
+                            renderer::contracts::kClusterScanElementsPerWorkgroup};
     commandList.setComputePipeline(m_scanAddStage.pipeline);
     commandList.setBindGroup(0u, m_scanAddBindGroups[childLevel]);
-    commandList.pushConstants(&push, sizeof(push),
-                              rhiFlag(RhiShaderStage::Compute));
+    commandList.pushConstants(&push, sizeof(push), rhiFlag(RhiShaderStage::Compute));
     commandList.dispatch((child.elementCount + 255u) / 256u, 1u, 1u);
     return true;
 }
 
 bool ClusteredLightingPass::recordFinalize(RhiCommandList& commandList) const {
     ClusterScanPushConstants push;
-    push.offsetsAndCount = {
-        m_grid.clusterCount, m_indexCapacity,
-        static_cast<uint32_t>(m_lights.size()), 0u};
+    push.offsetsAndCount = {m_grid.clusterCount, m_indexCapacity, static_cast<uint32_t>(m_lights.size()), 0u};
     commandList.setComputePipeline(m_finalizeStage.pipeline);
     commandList.setBindGroup(0u, m_finalizeBindGroup);
-    commandList.pushConstants(&push, sizeof(push),
-                              rhiFlag(RhiShaderStage::Compute));
+    commandList.pushConstants(&push, sizeof(push), rhiFlag(RhiShaderStage::Compute));
     commandList.dispatch((m_grid.clusterCount + 255u) / 256u, 1u, 1u);
     return true;
 }
@@ -1021,52 +826,41 @@ bool ClusteredLightingPass::recordFill(RhiCommandList& commandList) const {
         return true;
     }
     ClusterFillPushConstants push;
-    push.gridAndLightCount = {
-        m_grid.tileCountX, m_grid.tileCountY, m_grid.depthSliceCount,
-        static_cast<uint32_t>(m_lightBounds.size())};
+    push.gridAndLightCount = {m_grid.tileCountX, m_grid.tileCountY, m_grid.depthSliceCount,
+                              static_cast<uint32_t>(m_lightBounds.size())};
     push.capacity = {m_indexCapacity, 0u, 0u, 0u};
     commandList.setComputePipeline(m_fillStage.pipeline);
     commandList.setBindGroup(0u, m_fillBindGroup);
-    commandList.pushConstants(&push, sizeof(push),
-                              rhiFlag(RhiShaderStage::Compute));
-    commandList.dispatch(static_cast<uint32_t>(m_lightBounds.size()),
-                         m_grid.depthSliceCount, 1u);
+    commandList.pushConstants(&push, sizeof(push), rhiFlag(RhiShaderStage::Compute));
+    commandList.dispatch(static_cast<uint32_t>(m_lightBounds.size()), m_grid.depthSliceCount, 1u);
     return true;
 }
 
-bool ClusteredLightingPass::recordValidateAndReadback(
-    RhiCommandList& commandList) {
+bool ClusteredLightingPass::recordValidateAndReadback(RhiCommandList& commandList) {
     ClusterScanPushConstants push;
     push.offsetsAndCount = {m_grid.clusterCount, m_indexCapacity, 0u, 0u};
     commandList.setComputePipeline(m_validateStage.pipeline);
     commandList.setBindGroup(0u, m_validateBindGroup);
-    commandList.pushConstants(&push, sizeof(push),
-                              rhiFlag(RhiShaderStage::Compute));
+    commandList.pushConstants(&push, sizeof(push), rhiFlag(RhiShaderStage::Compute));
     commandList.dispatch((m_grid.clusterCount + 255u) / 256u, 1u, 1u);
     if (!m_statsReadbackSlotAvailable) {
         return true;
     }
 
     const uint32_t ringIndex = m_statsReadbackWriteIndex;
-    commandList.bufferBarrier({m_statsBuffer.handle,
-                               RhiResourceState::StorageBuffer,
-                               RhiResourceState::TransferSrc});
+    commandList.bufferBarrier({m_statsBuffer.handle, RhiResourceState::StorageBuffer, RhiResourceState::TransferSrc});
     if (m_statsReadbackWritten[ringIndex]) {
-        commandList.bufferBarrier({m_statsReadbackBuffers[ringIndex],
-                                   RhiResourceState::HostRead,
-                                   RhiResourceState::TransferDst});
+        commandList.bufferBarrier(
+            {m_statsReadbackBuffers[ringIndex], RhiResourceState::HostRead, RhiResourceState::TransferDst});
     }
     RhiBufferCopy copy;
     copy.src = m_statsBuffer.handle;
     copy.dst = m_statsReadbackBuffers[ringIndex];
     copy.size = sizeof(uint32_t) * kStatsWordCount;
     commandList.copyBuffer(copy);
-    commandList.bufferBarrier({m_statsReadbackBuffers[ringIndex],
-                               RhiResourceState::TransferDst,
-                               RhiResourceState::HostRead});
-    commandList.bufferBarrier({m_statsBuffer.handle,
-                               RhiResourceState::TransferSrc,
-                               RhiResourceState::StorageBuffer});
+    commandList.bufferBarrier(
+        {m_statsReadbackBuffers[ringIndex], RhiResourceState::TransferDst, RhiResourceState::HostRead});
+    commandList.bufferBarrier({m_statsBuffer.handle, RhiResourceState::TransferSrc, RhiResourceState::StorageBuffer});
     m_pendingStatsReadbackIndex = ringIndex;
     m_statsReadbackPending = true;
     return true;
@@ -1079,9 +873,7 @@ void ClusteredLightingPass::publishEmptyFrameStats() {
     m_frameStats.indexCapacity = m_indexCapacity;
 }
 
-void ClusteredLightingPass::finishGraphExecution(
-    const bool succeeded,
-    const RhiSubmissionToken completionToken) {
+void ClusteredLightingPass::finishGraphExecution(const bool succeeded, const RhiSubmissionToken completionToken) {
     if (!succeeded) {
         m_emptyBuildReady = false;
     }
@@ -1097,15 +889,12 @@ void ClusteredLightingPass::finishGraphExecution(
     bool completionValid = succeeded;
     if (succeeded && completionToken.isValid()) {
         m_statsReadbackWritten[m_pendingStatsReadbackIndex] = true;
-        m_statsReadbackTokens[m_pendingStatsReadbackIndex] =
-            completionToken;
-        m_statsReadbackWriteIndex =
-            (m_pendingStatsReadbackIndex + 1u) % kStatsReadbackRingSize;
+        m_statsReadbackTokens[m_pendingStatsReadbackIndex] = completionToken;
+        m_statsReadbackWriteIndex = (m_pendingStatsReadbackIndex + 1u) % kStatsReadbackRingSize;
     } else if (succeeded) {
         m_gpuBuildFailed = true;
         completionValid = false;
-        MECRAFT_LOG_STREAM(
-            std::cerr << "[ClusteredLightingPass] Stats readback submission token is invalid\n");
+        MECRAFT_LOG_STREAM(std::cerr << "[ClusteredLightingPass] Stats readback submission token is invalid\n");
     }
     m_statsReadbackPending = false;
     if (emptyBuildScheduled) {
@@ -1118,9 +907,8 @@ void ClusteredLightingPass::finishGraphExecution(
 
 void ClusteredLightingPass::destroyBuildBindGroups() {
     if (m_rhiDevice != nullptr) {
-        const RhiBindGroupHandle fixed[] = {
-            m_countBindGroup, m_finalizeBindGroup, m_fillBindGroup,
-            m_validateBindGroup, m_consumerBindGroup};
+        const RhiBindGroupHandle fixed[] = {m_countBindGroup, m_finalizeBindGroup, m_fillBindGroup, m_validateBindGroup,
+                                            m_consumerBindGroup};
         for (const RhiBindGroupHandle bindGroup : fixed) {
             if (bindGroup.isValid()) {
                 m_rhiDevice->destroyBindGroup(bindGroup);
@@ -1179,10 +967,9 @@ void ClusteredLightingPass::destroyPipelines() {
 
 void ClusteredLightingPass::destroyBuffers() {
     if (m_rhiDevice != nullptr) {
-        BufferResource* resources[] = {
-            &m_lightBuffer, &m_lightBoundsBuffer, &m_countBuffer,
-            &m_offsetBuffer, &m_recordBuffer, &m_cursorBuffer,
-            &m_compactIndexBuffer, &m_scanScratchBuffer, &m_statsBuffer};
+        BufferResource* resources[] = {&m_lightBuffer,        &m_lightBoundsBuffer, &m_countBuffer,
+                                       &m_offsetBuffer,       &m_recordBuffer,      &m_cursorBuffer,
+                                       &m_compactIndexBuffer, &m_scanScratchBuffer, &m_statsBuffer};
         for (BufferResource* resource : resources) {
             if (resource->handle.isValid()) {
                 m_rhiDevice->destroyBuffer(resource->handle);

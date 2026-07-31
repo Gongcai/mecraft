@@ -41,28 +41,15 @@ BlockStateId observerState(const uint16_t facing, const bool powered) {
         BlockRegistry::requireIdByName("minecraft:observer"),
         std::vector<std::pair<uint16_t, uint16_t>>{
             {PropIndices::FACING, facing},
-            {PropIndices::POWERED, powered ? PropIndices::POWERED_TRUE : PropIndices::POWERED_FALSE}
-        });
+            {PropIndices::POWERED, powered ? PropIndices::POWERED_TRUE : PropIndices::POWERED_FALSE}});
 }
 
 uint8_t wirePower(const World& world, const int x, const int y, const int z) {
     static const std::array<uint16_t, 16> kPowerValues = {
-        PropIndices::POWER_0,
-        PropIndices::POWER_1,
-        PropIndices::POWER_2,
-        PropIndices::POWER_3,
-        PropIndices::POWER_4,
-        PropIndices::POWER_5,
-        PropIndices::POWER_6,
-        PropIndices::POWER_7,
-        PropIndices::POWER_8,
-        PropIndices::POWER_9,
-        PropIndices::POWER_10,
-        PropIndices::POWER_11,
-        PropIndices::POWER_12,
-        PropIndices::POWER_13,
-        PropIndices::POWER_14,
-        PropIndices::POWER_15,
+        PropIndices::POWER_0,  PropIndices::POWER_1,  PropIndices::POWER_2,  PropIndices::POWER_3,
+        PropIndices::POWER_4,  PropIndices::POWER_5,  PropIndices::POWER_6,  PropIndices::POWER_7,
+        PropIndices::POWER_8,  PropIndices::POWER_9,  PropIndices::POWER_10, PropIndices::POWER_11,
+        PropIndices::POWER_12, PropIndices::POWER_13, PropIndices::POWER_14, PropIndices::POWER_15,
     };
 
     const BlockStateId state = world.getBlockState(x, y, z);
@@ -99,8 +86,10 @@ int main() {
     const int y = 96;
     prepareObserverTestArea(world, y);
     world.setBlockState(1, y, 0, observerState(PropIndices::FACING_WEST, false));
-    world.setBlockState(2, y, 0, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_wire")));
-    world.setBlockState(3, y, 0, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_lamp")));
+    world.setBlockState(2, y, 0,
+                        BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_wire")));
+    world.setBlockState(3, y, 0,
+                        BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_lamp")));
     world.redstoneUpdateQueue().clear();
     world.redstoneChangedBlockQueue().clear();
     world.redstoneScheduledUpdateQueue().clear();
@@ -109,31 +98,23 @@ int main() {
     ecs::RedstoneSystem::processWorld(world, 0);
     ecs::RedstoneSystem::processWorld(world, 1);
     ecs::RedstoneSystem::processWorld(world, 2);
-    if (powered(world, 1, y, 0) ||
-        wirePower(world, 2, y, 0) != 0 ||
-        lampLit(world, 3, y, 0)) {
+    if (powered(world, 1, y, 0) || wirePower(world, 2, y, 0) != 0 || lampLit(world, 3, y, 0)) {
         return fail("observer should ignore changes outside its facing direction");
     }
 
     world.setBlock(0, y, 0, BlockRegistry::requireIdByName("minecraft:stone"));
     ecs::RedstoneSystem::processWorld(world, 3);
-    if (powered(world, 1, y, 0) ||
-        wirePower(world, 2, y, 0) != 0 ||
-        lampLit(world, 3, y, 0)) {
+    if (powered(world, 1, y, 0) || wirePower(world, 2, y, 0) != 0 || lampLit(world, 3, y, 0)) {
         return fail("observer should not pulse until the scheduled redstone tick");
     }
 
     ecs::RedstoneSystem::processWorld(world, 4);
-    if (!powered(world, 1, y, 0) ||
-        wirePower(world, 2, y, 0) != 15 ||
-        !lampLit(world, 3, y, 0)) {
+    if (!powered(world, 1, y, 0) || wirePower(world, 2, y, 0) != 15 || !lampLit(world, 3, y, 0)) {
         return fail("observer should emit a powered pulse from its back face");
     }
 
     ecs::RedstoneSystem::processWorld(world, 5);
-    if (powered(world, 1, y, 0) ||
-        wirePower(world, 2, y, 0) != 0 ||
-        lampLit(world, 3, y, 0)) {
+    if (powered(world, 1, y, 0) || wirePower(world, 2, y, 0) != 0 || lampLit(world, 3, y, 0)) {
         return fail("observer pulse should release after one redstone tick");
     }
 

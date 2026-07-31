@@ -429,7 +429,8 @@ public:
     // =========================================================================
 
     static bool decodeServerHello(const uint8_t* data, size_t size, ServerHello& out) {
-        if (size < 20) return false;
+        if (size < 20)
+            return false;
         size_t offset = 0;
         out.protocolVersion = readU32(data, offset);
         out.assignedId = readU32(data, offset);
@@ -441,7 +442,8 @@ public:
 
     static bool decodeChunkData(const uint8_t* data, size_t size, ChunkDataMessage& out) {
         constexpr size_t kHeaderBytes = 13;
-        if (size < kHeaderBytes) return false;
+        if (size < kHeaderBytes)
+            return false;
 
         size_t offset = 0;
         out.chunkX = readI32(data, offset);
@@ -520,7 +522,8 @@ public:
     }
 
     static bool decodeServerSnapshot(const uint8_t* data, size_t size, ServerSnapshot& out) {
-        if (size < 32) return false;
+        if (size < 32)
+            return false;
         size_t offset = 0;
         out.serverTick = readU32(data, offset);
         out.ackInputSequence = readU32(data, offset);
@@ -554,12 +557,13 @@ public:
     }
 
     static bool decodeClientInput(const uint8_t* data, size_t size, ClientInput& out) {
-        constexpr size_t kLegacyInputBytes = 35;              // input + actions, before position snapshots
-        constexpr size_t kModernInputBytes = 67;              // adds position, velocity, yaw, pitch
-        constexpr size_t kModernInputWithSelectedBytes = 68;  // appends selected hotbar slot
-        constexpr size_t kInputTailBytes = 7;                 // jump, sneak, sprint, actions
+        constexpr size_t kLegacyInputBytes = 35; // input + actions, before position snapshots
+        constexpr size_t kModernInputBytes = 67; // adds position, velocity, yaw, pitch
+        constexpr size_t kModernInputWithSelectedBytes = 68; // appends selected hotbar slot
+        constexpr size_t kInputTailBytes = 7; // jump, sneak, sprint, actions
         constexpr size_t kSelectedHotbarSlotOffset = 67;
-        if (size < kLegacyInputBytes) return false;
+        if (size < kLegacyInputBytes)
+            return false;
         size_t offset = 0;
         out.sequence = readU32(data, offset);
         out.dt = readFloat(data, offset);
@@ -578,7 +582,8 @@ public:
             out.yaw = readFloat(data, offset);
             out.pitch = readFloat(data, offset);
         }
-        if (size < offset + kInputTailBytes) return false;
+        if (size < offset + kInputTailBytes)
+            return false;
         out.jump = readU8(data, offset) != 0;
         out.sneak = readU8(data, offset) != 0;
         out.sprint = readU8(data, offset) != 0;
@@ -591,14 +596,16 @@ public:
     }
 
     static bool decodeClientHello(const uint8_t* data, size_t size, ClientHello& out) {
-        if (size < 4) return false;
+        if (size < 4)
+            return false;
         size_t offset = 0;
         out.protocolVersion = readU32(data, offset);
         return true;
     }
 
     static bool decodeClientViewConfig(const uint8_t* data, size_t size, ClientViewConfig& out) {
-        if (size < 4) return false;
+        if (size < 4)
+            return false;
         size_t offset = 0;
         out.renderDistance = static_cast<int>(readI32(data, offset));
         return true;
@@ -606,7 +613,8 @@ public:
 
     static bool decodeClientBlockAction(const uint8_t* data, size_t size, ClientBlockAction& out) {
         constexpr size_t kFixedBytesBeforeState = 53;
-        if (size < kFixedBytesBeforeState) return false;
+        if (size < kFixedBytesBeforeState)
+            return false;
         size_t offset = 0;
         out.sequence = readU32(data, offset);
         out.action = static_cast<ClientBlockActionType>(readU8(data, offset));
@@ -630,10 +638,9 @@ public:
         return true;
     }
 
-    static bool decodeClientContainerOpenRequest(const uint8_t* data,
-                                                 size_t size,
-                                                 ClientContainerOpenRequest& out) {
-        if (size < 28) return false;
+    static bool decodeClientContainerOpenRequest(const uint8_t* data, size_t size, ClientContainerOpenRequest& out) {
+        if (size < 28)
+            return false;
         size_t offset = 0;
         out.sequence = readU32(data, offset);
         out.blockPosition.x = readI32(data, offset);
@@ -645,10 +652,9 @@ public:
         return true;
     }
 
-    static bool decodeClientContainerSlotAction(const uint8_t* data,
-                                                size_t size,
-                                                ClientContainerSlotAction& out) {
-        if (size < 12) return false;
+    static bool decodeClientContainerSlotAction(const uint8_t* data, size_t size, ClientContainerSlotAction& out) {
+        if (size < 12)
+            return false;
         size_t offset = 0;
         out.sequence = readU32(data, offset);
         out.containerId = readU32(data, offset);
@@ -659,7 +665,8 @@ public:
     }
 
     static bool decodeClientContainerClose(const uint8_t* data, size_t size, ClientContainerClose& out) {
-        if (size < 4) return false;
+        if (size < 4)
+            return false;
         size_t offset = 0;
         out.containerId = readU32(data, offset);
         return true;
@@ -671,14 +678,16 @@ public:
     }
 
     static bool decodeClientCommandRequest(const uint8_t* data, size_t size, ClientCommandRequest& out) {
-        if (size < 4) return false;
+        if (size < 4)
+            return false;
         size_t offset = 0;
         out.sequence = readU32(data, offset);
         return readString(data, size, offset, out.command);
     }
 
     static bool decodeClientRespawnRequest(const uint8_t* data, size_t size, ClientRespawnRequest& out) {
-        if (size < 4) return false;
+        if (size < 4)
+            return false;
         size_t offset = 0;
         out.sequence = readU32(data, offset);
         return true;
@@ -687,15 +696,18 @@ public:
     static bool decodeBlockUpdateBatch(const uint8_t* data, size_t size, BlockUpdateBatchMessage& out) {
         size_t offset = 0;
         uint32_t count = 0;
-        if (!readVarU32(data, size, offset, count)) return false;
+        if (!readVarU32(data, size, offset, count))
+            return false;
         out.updates.resize(count);
         for (uint32_t i = 0; i < count; ++i) {
-            if (offset + 13 > size) return false;
+            if (offset + 13 > size)
+                return false;
             out.updates[i].x = readI32(data, offset);
             out.updates[i].y = readI32(data, offset);
             out.updates[i].z = readI32(data, offset);
             const uint8_t kindRaw = readU8(data, offset);
-            if (kindRaw > static_cast<uint8_t>(BlockUpdateKind::LightOnly)) return false;
+            if (kindRaw > static_cast<uint8_t>(BlockUpdateKind::LightOnly))
+                return false;
             out.updates[i].kind = static_cast<BlockUpdateKind>(kindRaw);
             out.updates[i].stateId = NULL_BLOCK_STATE;
             if (out.updates[i].kind == BlockUpdateKind::BlockState) {
@@ -704,8 +716,10 @@ public:
                 }
             }
             uint32_t lightCount = 0;
-            if (!readVarU32(data, size, offset, lightCount)) return false;
-            if (offset + lightCount > size) return false;
+            if (!readVarU32(data, size, offset, lightCount))
+                return false;
+            if (offset + lightCount > size)
+                return false;
             out.updates[i].packedLightPatch.assign(data + offset, data + offset + lightCount);
             offset += lightCount;
         }
@@ -713,19 +727,23 @@ public:
     }
 
     static bool decodeWireContainerUpdate(const uint8_t* data, size_t size, WireContainerUpdateMessage& out) {
-        if (size < 12) return false;
+        if (size < 12)
+            return false;
         size_t offset = 0;
         out.position.x = readI32(data, offset);
         out.position.y = readI32(data, offset);
         out.position.z = readI32(data, offset);
 
         uint32_t count = 0;
-        if (!readVarU32(data, size, offset, count)) return false;
-        if (count > WireContainerParts::MAX_PARTS) return false;
+        if (!readVarU32(data, size, offset, count))
+            return false;
+        if (count > WireContainerParts::MAX_PARTS)
+            return false;
 
         WireContainerParts parts;
         for (uint32_t i = 0; i < count; ++i) {
-            if (offset + 6 > size) return false;
+            if (offset + 6 > size)
+                return false;
             WirePart part;
             part.channelId = readU16(data, offset);
             part.facing = readU16(data, offset);
@@ -734,15 +752,18 @@ public:
             if (!WireContainerParts::isValidPart(part)) {
                 return false;
             }
-            if (!parts.addPart(part)) return false;
+            if (!parts.addPart(part))
+                return false;
         }
-        if (offset != size) return false;
+        if (offset != size)
+            return false;
         out.parts = parts;
         return true;
     }
 
     static bool decodeChunkUnload(const uint8_t* data, size_t size, ChunkUnloadMessage& out) {
-        if (size < 8) return false;
+        if (size < 8)
+            return false;
         size_t offset = 0;
         out.chunkX = readI32(data, offset);
         out.chunkZ = readI32(data, offset);
@@ -752,7 +773,8 @@ public:
     static bool decodeEntitySpawn(const uint8_t* data, size_t size, EntitySpawnMessage& out) {
         constexpr size_t kOldSpawnBytes = 33;
         constexpr size_t kSpawnBytes = 41;
-        if (size < kOldSpawnBytes) return false;
+        if (size < kOldSpawnBytes)
+            return false;
         size_t offset = 0;
         out.netId = readU32(data, offset);
         out.kind = static_cast<EntityKind>(readU8(data, offset));
@@ -776,15 +798,18 @@ public:
     }
 
     static bool decodeEntityDespawn(const uint8_t* data, size_t size, EntityDespawnMessage& out) {
-        if (size < 4) return false;
+        if (size < 4)
+            return false;
         size_t offset = 0;
         out.netId = readU32(data, offset);
         return true;
     }
 
     static bool decodeEntityImpact(const uint8_t* data, size_t size, EntityImpactMessage& out) {
-        if (size < 18) return false;
-        if (size != 18 && size < 20) return false;
+        if (size < 18)
+            return false;
+        if (size != 18 && size < 20)
+            return false;
         size_t offset = 0;
         out.netId = readU32(data, offset);
         out.position.x = readFloat(data, offset);
@@ -799,7 +824,8 @@ public:
     }
 
     static bool decodeEntitySnapshot(const uint8_t* data, size_t size, EntitySnapshotMessage& out) {
-        if (size < 8) return false;
+        if (size < 8)
+            return false;
         size_t offset = 0;
         out.serverTick = readU32(data, offset);
         const uint32_t count = readU32(data, offset);
@@ -849,22 +875,24 @@ public:
     }
 
     static bool decodeServerChatMessage(const uint8_t* data, size_t size, ServerChatMessage& out) {
-        if (size < 4) return false;
+        if (size < 4)
+            return false;
         size_t offset = 0;
         out.senderId = readU32(data, offset);
-        return readString(data, size, offset, out.senderName) &&
-               readString(data, size, offset, out.message);
+        return readString(data, size, offset, out.senderName) && readString(data, size, offset, out.message);
     }
 
     static bool decodeServerSystemMessage(const uint8_t* data, size_t size, ServerSystemMessage& out) {
-        if (size < 1) return false;
+        if (size < 1)
+            return false;
         size_t offset = 0;
         out.kind = static_cast<ChatMessageKind>(readU8(data, offset));
         return readString(data, size, offset, out.message);
     }
 
     static bool decodeCommandResult(const uint8_t* data, size_t size, CommandResultMessage& out) {
-        if (size < 5) return false;
+        if (size < 5)
+            return false;
         size_t offset = 0;
         out.sequence = readU32(data, offset);
         out.success = readU8(data, offset) != 0;
@@ -872,7 +900,8 @@ public:
     }
 
     static bool decodeWorldStateSnapshot(const uint8_t* data, size_t size, WorldStateSnapshotMessage& out) {
-        if (size < 5) return false;
+        if (size < 5)
+            return false;
         size_t offset = 0;
         out.timeOfDay = readFloat(data, offset);
         out.weather = static_cast<NetworkWeatherType>(readU8(data, offset));
@@ -880,7 +909,8 @@ public:
     }
 
     static bool decodePlayerModeUpdate(const uint8_t* data, size_t size, PlayerModeUpdateMessage& out) {
-        if (size < 5) return false;
+        if (size < 5)
+            return false;
         size_t offset = 0;
         out.clientId = readU32(data, offset);
         out.mode = static_cast<NetworkGameplayMode>(readU8(data, offset));
@@ -888,7 +918,8 @@ public:
     }
 
     static bool decodeInventorySnapshot(const uint8_t* data, size_t size, InventorySnapshotMessage& out) {
-        if (size < 5) return false;
+        if (size < 5)
+            return false;
         size_t offset = 0;
         out.selectedHotbarSlot = readU8(data, offset);
         const uint32_t count = readU32(data, offset);
@@ -904,14 +935,15 @@ public:
     }
 
     static bool decodeContainerSnapshot(const uint8_t* data, size_t size, ContainerSnapshotMessage& out) {
-        if (size < 4) return false;
+        if (size < 4)
+            return false;
         size_t offset = 0;
         out.containerId = readU32(data, offset);
-        if (!readString(data, size, offset, out.containerUiId) ||
-            !readString(data, size, offset, out.behaviorId)) {
+        if (!readString(data, size, offset, out.containerUiId) || !readString(data, size, offset, out.behaviorId)) {
             return false;
         }
-        if (offset + 12 > size) return false;
+        if (offset + 12 > size)
+            return false;
         out.blockPosition.x = readI32(data, offset);
         out.blockPosition.y = readI32(data, offset);
         out.blockPosition.z = readI32(data, offset);
@@ -919,7 +951,8 @@ public:
             !readSlotVector(data, size, offset, out.playerSlots)) {
             return false;
         }
-        if (offset + 11 > size) return false;
+        if (offset + 11 > size)
+            return false;
         out.cursor.itemId = readU16(data, offset);
         out.cursor.stackCount = readU8(data, offset);
         out.burnFraction = readFloat(data, offset);
@@ -928,7 +961,8 @@ public:
     }
 
     static bool decodeContainerClose(const uint8_t* data, size_t size, ContainerCloseMessage& out) {
-        if (size < 16) return false;
+        if (size < 16)
+            return false;
         size_t offset = 0;
         out.containerId = readU32(data, offset);
         out.blockPosition.x = readI32(data, offset);
@@ -938,7 +972,7 @@ public:
     }
 
 private:
-    static constexpr size_t kHeaderSize = 6;  // channel(1) + type(1) + payload_size(4)
+    static constexpr size_t kHeaderSize = 6; // channel(1) + type(1) + payload_size(4)
     static constexpr uint8_t kChunkEncodingRleSubChunks = 1;
 
     static uint8_t implicitPackedLight(const Chunk& chunk, const int x, const int y, const int z) {
@@ -975,21 +1009,21 @@ private:
         pushU16(buf, 0);
     }
 
-    static bool decodeRleBlockStateId(const uint8_t* data,
-                                      const size_t size,
-                                      size_t& offset,
-                                      BlockStateId* out,
+    static bool decodeRleBlockStateId(const uint8_t* data, const size_t size, size_t& offset, BlockStateId* out,
                                       const size_t count) {
         size_t written = 0;
         while (offset < size) {
             uint32_t run = 0;
-            if (!readVarU32(data, size, offset, run)) return false;
+            if (!readVarU32(data, size, offset, run))
+                return false;
             if (run == 0) {
                 return written == count;
             }
-            if (written + run > count) return false;
+            if (written + run > count)
+                return false;
             BlockStateId value = NULL_BLOCK_STATE;
-            if (!block_state_codec::readBlockStateId(data, size, offset, value)) return false;
+            if (!block_state_codec::readBlockStateId(data, size, offset, value))
+                return false;
             for (uint32_t i = 0; i < run; ++i) {
                 out[written++] = value;
             }
@@ -1004,7 +1038,8 @@ private:
             if (run == 0) {
                 return written == count;
             }
-            if (offset + 1 > size || written + run > count) return false;
+            if (offset + 1 > size || written + run > count)
+                return false;
             const uint8_t value = readU8(data, offset);
             for (uint16_t i = 0; i < run; ++i) {
                 out[written++] = value;
@@ -1018,12 +1053,8 @@ private:
         buf.push_back(static_cast<uint8_t>(v & 0xFF));
         buf.push_back(static_cast<uint8_t>((v >> 8) & 0xFF));
     }
-    static void pushI16(std::vector<uint8_t>& buf, int16_t v) {
-        pushU16(buf, static_cast<uint16_t>(v));
-    }
-    static void pushI32(std::vector<uint8_t>& buf, int32_t v) {
-        pushU32(buf, static_cast<uint32_t>(v));
-    }
+    static void pushI16(std::vector<uint8_t>& buf, int16_t v) { pushU16(buf, static_cast<uint16_t>(v)); }
+    static void pushI32(std::vector<uint8_t>& buf, int32_t v) { pushU32(buf, static_cast<uint32_t>(v)); }
     static void pushU32(std::vector<uint8_t>& buf, uint32_t v) {
         buf.push_back(static_cast<uint8_t>(v & 0xFF));
         buf.push_back(static_cast<uint8_t>((v >> 8) & 0xFF));
@@ -1054,26 +1085,17 @@ private:
         }
     }
 
-    static uint8_t readU8(const uint8_t* data, size_t& offset) {
-        return data[offset++];
-    }
+    static uint8_t readU8(const uint8_t* data, size_t& offset) { return data[offset++]; }
     static uint16_t readU16(const uint8_t* data, size_t& offset) {
-        uint16_t v = static_cast<uint16_t>(data[offset]) |
-                     (static_cast<uint16_t>(data[offset + 1]) << 8);
+        uint16_t v = static_cast<uint16_t>(data[offset]) | (static_cast<uint16_t>(data[offset + 1]) << 8);
         offset += 2;
         return v;
     }
-    static int16_t readI16(const uint8_t* data, size_t& offset) {
-        return static_cast<int16_t>(readU16(data, offset));
-    }
-    static int32_t readI32(const uint8_t* data, size_t& offset) {
-        return static_cast<int32_t>(readU32(data, offset));
-    }
+    static int16_t readI16(const uint8_t* data, size_t& offset) { return static_cast<int16_t>(readU16(data, offset)); }
+    static int32_t readI32(const uint8_t* data, size_t& offset) { return static_cast<int32_t>(readU32(data, offset)); }
     static uint32_t readU32(const uint8_t* data, size_t& offset) {
-        uint32_t v = static_cast<uint32_t>(data[offset]) |
-                     (static_cast<uint32_t>(data[offset + 1]) << 8) |
-                     (static_cast<uint32_t>(data[offset + 2]) << 16) |
-                     (static_cast<uint32_t>(data[offset + 3]) << 24);
+        uint32_t v = static_cast<uint32_t>(data[offset]) | (static_cast<uint32_t>(data[offset + 1]) << 8) |
+                     (static_cast<uint32_t>(data[offset + 2]) << 16) | (static_cast<uint32_t>(data[offset + 3]) << 24);
         offset += 4;
         return v;
     }
@@ -1104,20 +1126,21 @@ private:
         return v;
     }
     static bool readString(const uint8_t* data, size_t size, size_t& offset, std::string& out) {
-        if (offset + 4 > size) return false;
+        if (offset + 4 > size)
+            return false;
         const uint32_t length = readU32(data, offset);
-        if (offset + length > size) return false;
+        if (offset + length > size)
+            return false;
         out.assign(reinterpret_cast<const char*>(data + offset), length);
         offset += length;
         return true;
     }
-    static bool readSlotVector(const uint8_t* data,
-                               size_t size,
-                               size_t& offset,
-                               std::vector<InventorySlotData>& out) {
-        if (offset + 4 > size) return false;
+    static bool readSlotVector(const uint8_t* data, size_t size, size_t& offset, std::vector<InventorySlotData>& out) {
+        if (offset + 4 > size)
+            return false;
         const uint32_t count = readU32(data, offset);
-        if (offset + static_cast<size_t>(count) * 3 > size) return false;
+        if (offset + static_cast<size_t>(count) * 3 > size)
+            return false;
         out.resize(count);
         for (uint32_t i = 0; i < count; ++i) {
             out[i].itemId = readU16(data, offset);
