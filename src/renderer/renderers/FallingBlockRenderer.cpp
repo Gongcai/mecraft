@@ -1,5 +1,6 @@
 #include "FallingBlockRenderer.h"
 
+#include <algorithm>
 #include <cmath>
 #include <unordered_set>
 #include <vector>
@@ -197,12 +198,42 @@ void FallingBlockRenderer::renderToShadowMap(RhiCommandList& commandList, const 
     }
 }
 
+void FallingBlockRenderer::renderForward(RhiCommandList& commandList, const glm::mat4& viewProj,
+                                         const float skyIntensity, const float animationTime) {
+    if (!m_forwardPipeline.isValid() || !m_gbufferBindGroup.isValid()) {
+        return;
+    }
+    struct ForwardPushConstants {
+        glm::mat4 viewProj;
+        glm::mat4 model;
+        glm::vec4 lightingAnimation;
+    };
+
+    commandList.setGraphicsPipeline(m_forwardPipeline);
+    commandList.setBindGroup(0u, m_gbufferBindGroup);
+    for (const RenderInstance& instance : m_renderInstances) {
+        const renderer::BlockCubeMesh* mesh = getOrCreateMesh(instance.stateId);
+        if (mesh == nullptr || !mesh->valid()) {
+            continue;
+        }
+        const ForwardPushConstants pushConstants{viewProj, instance.model,
+                                                 glm::vec4(instance.light, skyIntensity, animationTime)};
+        commandList.setVertexBuffer(0u, mesh->rhiVertexBuffer, 0u);
+        commandList.pushConstants(&pushConstants, sizeof(pushConstants),
+                                  rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment));
+        commandList.draw(mesh->vertexCount, 1u, 0u, 0u);
+    }
+}
+
 bool FallingBlockRenderer::createGBufferRhiResources() {
     const auto vertexSource = renderer::rhi::loadShaderSource("assets/shaders/falling_block_gbuffer_rhi.vert");
     const auto fragmentSource = renderer::rhi::loadShaderSource("assets/shaders/falling_block_gbuffer_rhi.frag");
     const auto shadowVertexSource = renderer::rhi::loadShaderSource("assets/shaders/falling_block_shadow_rhi.vert");
     const auto shadowFragmentSource = renderer::rhi::loadShaderSource("assets/shaders/falling_block_shadow_rhi.frag");
-    if (!vertexSource || !fragmentSource || !shadowVertexSource || !shadowFragmentSource)
+    const auto forwardVertexSource = renderer::rhi::loadShaderSource("assets/shaders/block_drop_forward_rhi.vert");
+    const auto forwardFragmentSource = renderer::rhi::loadShaderSource("assets/shaders/block_drop_forward_rhi.frag");
+    if (!vertexSource || !fragmentSource || !shadowVertexSource || !shadowFragmentSource || !forwardVertexSource ||
+        !forwardFragmentSource)
         return false;
     const RhiTextureHandle textures[] = {m_resourceMgr->getTextureArray().texture, m_resourceMgr->getGrassColormap(),
                                          m_resourceMgr->getFoliageColormap()};
@@ -234,6 +265,9 @@ bool FallingBlockRenderer::createGBufferRhiResources() {
     m_shadowVertexShader = createShader("FallingBlock.Shadow.Vertex", RhiShaderStage::Vertex, *shadowVertexSource);
     m_shadowFragmentShader =
         createShader("FallingBlock.Shadow.Fragment", RhiShaderStage::Fragment, *shadowFragmentSource);
+    m_forwardVertexShader = createShader("FallingBlock.Forward.Vertex", RhiShaderStage::Vertex, *forwardVertexSource);
+    m_forwardFragmentShader =
+        createShader("FallingBlock.Forward.Fragment", RhiShaderStage::Fragment, *forwardFragmentSource);
     RhiBindGroupLayoutDesc layoutDesc;
     layoutDesc.debugName = "FallingBlock.GBuffer.BindGroupLayout";
     for (uint32_t i = 0; i < 3u; ++i)
@@ -255,6 +289,10 @@ bool FallingBlockRenderer::createGBufferRhiResources() {
     pipelineLayoutDesc.bindGroupLayouts[0] = m_shadowBindGroupLayout;
     pipelineLayoutDesc.pushConstantBytes = sizeof(FallingBlockShadowPushConstants);
     m_shadowPipelineLayout = m_rhiDevice->createPipelineLayout(pipelineLayoutDesc);
+    pipelineLayoutDesc.debugName = "FallingBlock.Forward.PipelineLayout";
+    pipelineLayoutDesc.bindGroupLayouts[0] = m_gbufferBindGroupLayout;
+    pipelineLayoutDesc.pushConstantBytes = sizeof(glm::mat4) * 2u + sizeof(glm::vec4);
+    m_forwardPipelineLayout = m_rhiDevice->createPipelineLayout(pipelineLayoutDesc);
     RhiGraphicsPipelineDesc pipelineDesc;
     pipelineDesc.debugName = "FallingBlock.GBuffer.Pipeline";
     pipelineDesc.vertexShader = m_gbufferVertexShader;
@@ -279,6 +317,20 @@ bool FallingBlockRenderer::createGBufferRhiResources() {
     pipelineDesc.blend.attachments.clear();
     pipelineDesc.depthFormat = RhiTextureFormat::Depth32Float;
     m_shadowPipeline = m_rhiDevice->createGraphicsPipeline(pipelineDesc);
+    pipelineDesc.debugName = "FallingBlock.Forward.Pipeline";
+    pipelineDesc.vertexShader = m_forwardVertexShader;
+    pipelineDesc.fragmentShader = m_forwardFragmentShader;
+    pipelineDesc.layout = m_forwardPipelineLayout;
+    pipelineDesc.colorFormats = {RhiTextureFormat::Rgba16Float};
+    pipelineDesc.blend.attachments.resize(1u);
+    pipelineDesc.vertexInput = {};
+    renderer::setBlockVertexInputLayout(pipelineDesc);
+    pipelineDesc.vertexInput.attributes.erase(
+        std::remove_if(
+            pipelineDesc.vertexInput.attributes.begin(), pipelineDesc.vertexInput.attributes.end(),
+            [](const RhiVertexAttribute& attribute) { return attribute.location == 3u || attribute.location == 4u; }),
+        pipelineDesc.vertexInput.attributes.end());
+    m_forwardPipeline = m_rhiDevice->createGraphicsPipeline(pipelineDesc);
     RhiBindGroupDesc bindGroupDesc;
     bindGroupDesc.layout = m_gbufferBindGroupLayout;
     const RhiTextureViewHandle textureViews[] = {m_textureArrayView, m_grassColormapView, m_foliageColormapView};
@@ -301,7 +353,8 @@ bool FallingBlockRenderer::createGBufferRhiResources() {
         !m_gbufferBindGroupLayout.isValid() || !m_gbufferPipelineLayout.isValid() || !m_gbufferPipeline.isValid() ||
         !m_gbufferBindGroup.isValid() || !m_shadowVertexShader.isValid() || !m_shadowFragmentShader.isValid() ||
         !m_shadowBindGroupLayout.isValid() || !m_shadowPipelineLayout.isValid() || !m_shadowPipeline.isValid() ||
-        !m_shadowBindGroup.isValid()) {
+        !m_shadowBindGroup.isValid() || !m_forwardVertexShader.isValid() || !m_forwardFragmentShader.isValid() ||
+        !m_forwardPipelineLayout.isValid() || !m_forwardPipeline.isValid()) {
         destroyGBufferRhiResources();
         return false;
     }
@@ -310,6 +363,14 @@ bool FallingBlockRenderer::createGBufferRhiResources() {
 
 void FallingBlockRenderer::destroyGBufferRhiResources() {
     if (m_rhiDevice) {
+        if (m_forwardPipeline.isValid())
+            m_rhiDevice->destroyPipeline(m_forwardPipeline);
+        if (m_forwardPipelineLayout.isValid())
+            m_rhiDevice->destroyPipelineLayout(m_forwardPipelineLayout);
+        if (m_forwardFragmentShader.isValid())
+            m_rhiDevice->destroyShader(m_forwardFragmentShader);
+        if (m_forwardVertexShader.isValid())
+            m_rhiDevice->destroyShader(m_forwardVertexShader);
         if (m_shadowBindGroup.isValid())
             m_rhiDevice->destroyBindGroup(m_shadowBindGroup);
         if (m_shadowPipeline.isValid())
@@ -343,6 +404,10 @@ void FallingBlockRenderer::destroyGBufferRhiResources() {
         if (m_textureArrayView.isValid())
             m_rhiDevice->destroyTextureView(m_textureArrayView);
     }
+    m_forwardPipeline = {};
+    m_forwardPipelineLayout = {};
+    m_forwardFragmentShader = {};
+    m_forwardVertexShader = {};
     m_shadowBindGroup = {};
     m_shadowPipeline = {};
     m_shadowPipelineLayout = {};

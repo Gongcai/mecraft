@@ -13,6 +13,7 @@
 #include "../renderers/StaticMeshRenderer.h"
 #include "../renderers/BlockEntityRenderer.h"
 #include "../renderers/DropRenderer.h"
+#include "../renderers/FallingBlockRenderer.h"
 #include "../renderers/HumanoidRenderer.h"
 #include "../mesh/TerrainRhiPipelineSet.h"
 #include "../mesh/TerrainRenderer.h"
@@ -393,6 +394,10 @@ bool DeferredPipeline::recordReflectionProbeRadianceOpaque(RhiCommandList& comma
         !m_shared->dropRenderer->prepareFrame(*context.worldView, *m_shared->dropSystem)) {
         return false;
     }
+    if (m_shared->fallingBlockRenderer != nullptr && m_shared->gameplayRegistry != nullptr &&
+        !m_shared->fallingBlockRenderer->prepareFrame(*context.worldView, *m_shared->gameplayRegistry)) {
+        return false;
+    }
     if (m_shared->humanoidRenderer != nullptr && m_shared->gameplayRegistry != nullptr &&
         !m_shared->humanoidRenderer->prepareFrame(*context.worldView, *m_shared->gameplayRegistry,
                                                   HumanoidRenderer::kRenderMobsOnly)) {
@@ -436,6 +441,10 @@ bool DeferredPipeline::recordReflectionProbeRadianceOpaque(RhiCommandList& comma
     if (m_shared->dropRenderer != nullptr && m_shared->dropSystem != nullptr) {
         m_shared->dropRenderer->renderForward(commandList, work.viewProjection, context.skyIntensity,
                                               context.animationTime);
+    }
+    if (m_shared->fallingBlockRenderer != nullptr && m_shared->gameplayRegistry != nullptr) {
+        m_shared->fallingBlockRenderer->renderForward(commandList, work.viewProjection, context.skyIntensity,
+                                                      context.animationTime);
     }
     if (m_shared->humanoidRenderer != nullptr && m_shared->gameplayRegistry != nullptr) {
         m_shared->humanoidRenderer->renderPreparedForward(commandList, work.viewProjection, context.skyIntensity);

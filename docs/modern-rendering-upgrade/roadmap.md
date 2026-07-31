@@ -83,10 +83,11 @@ M1 与 M2 可并行开发，但公共 `GpuMaterial`、`GpuSceneGeometry` 与 Sta
    Biome Tint、Wetness 和统一 GGX/Lambert 直接光，并将体素 `GpuLight` 快照按探针相对坐标上传；
    水体已接入 DerivativeMain 波高视差、波面/雨滴法线、IOR Fresnel、屏幕空间折射，以及基于
    不透明深度重建光学距离的 Beer-Lambert 吸收与散射。OpenGL/Vulkan `m0_voxel_baseline`
-   120 帧预热加 60 帧采样已通过，Vulkan Validation 无报错。方块实体、掉落物和生物/远端角色
-   使用各自 RGBA16F Forward 管线进入六面捕获，本地第一人称玩家不进入环境探针。下落方块、
-   体素静态 glTF、粒子以及 V02/V07/M07 版本化质量验收仍待完成。Dashboard 与模型场景
-   Reflections 面板已接入队列
+   120 帧预热加 60 帧采样已通过，Vulkan Validation 无报错。方块实体、掉落物、下落方块、
+   活塞移动方块和生物/远端角色使用各自 RGBA16F Forward 管线进入六面捕获；下落方块与活塞
+   移动方块复用同一实例收集及方块纹理、Biome Tint、动画帧、体素光照路径，本地第一人称玩家
+   不进入环境探针。体素静态 glTF、粒子以及 V02/V07/M07 版本化质量验收仍待完成。Dashboard
+   与模型场景 Reflections 面板已接入队列
    深度、当前工作项、代际和槽位展示。）
 
 ### 完成条件

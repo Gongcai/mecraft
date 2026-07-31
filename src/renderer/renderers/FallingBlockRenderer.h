@@ -45,6 +45,10 @@ public:
     // The caller must provide an active shadow rendering scope for the target cascade layer.
     void renderToShadowMap(RhiCommandList& commandList, const glm::mat4& shadowViewProj, float animationTime);
 
+    // Reflection-probe path: renders falling and piston-moving blocks into an RGBA16F radiance target.
+    // The caller must provide an active rendering scope with a Depth32 attachment.
+    void renderForward(RhiCommandList& commandList, const glm::mat4& viewProj, float skyIntensity, float animationTime);
+
 private:
     struct RenderInstance {
         BlockStateId stateId{};
@@ -82,6 +86,10 @@ private:
     RhiPipelineLayoutHandle m_shadowPipelineLayout;
     RhiPipelineHandle m_shadowPipeline;
     RhiBindGroupHandle m_shadowBindGroup;
+    RhiShaderHandle m_forwardVertexShader;
+    RhiShaderHandle m_forwardFragmentShader;
+    RhiPipelineLayoutHandle m_forwardPipelineLayout;
+    RhiPipelineHandle m_forwardPipeline;
 };
 
 #endif // MECRAFT_FALLING_BLOCK_RENDERER_H

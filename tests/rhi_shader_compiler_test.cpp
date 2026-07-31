@@ -100,7 +100,7 @@ struct ShaderCase {
 } // namespace
 
 int main() {
-    constexpr std::array<ShaderCase, 93> kShaderCases{
+    constexpr std::array<ShaderCase, 95> kShaderCases{
         {{"tests/shaders/rhi_screen_coordinates_test.frag", RhiShaderStage::Fragment},
          {"tests/shaders/material_brdf_shared_test.frag", RhiShaderStage::Fragment},
          {"tests/shaders/reflection_probe_contract_test.frag", RhiShaderStage::Fragment},
@@ -122,6 +122,8 @@ int main() {
          {"assets/shaders/falling_block_gbuffer_rhi.frag", RhiShaderStage::Fragment},
          {"assets/shaders/falling_block_gbuffer_rhi.vert", RhiShaderStage::Vertex, "RHI_DROP_BLOCK"},
          {"assets/shaders/falling_block_gbuffer_rhi.frag", RhiShaderStage::Fragment, "RHI_DROP_BLOCK"},
+         {"assets/shaders/block_drop_forward_rhi.vert", RhiShaderStage::Vertex},
+         {"assets/shaders/block_drop_forward_rhi.frag", RhiShaderStage::Fragment},
          {"assets/shaders/block_entity_gbuffer_rhi.vert", RhiShaderStage::Vertex},
          {"assets/shaders/block_entity_gbuffer_rhi.frag", RhiShaderStage::Fragment},
          {"assets/shaders/static_mesh_gbuffer_rhi.vert", RhiShaderStage::Vertex},
