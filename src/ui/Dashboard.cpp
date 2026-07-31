@@ -1533,7 +1533,9 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
             "27: Scene Luma",
             "28: Reflection Luma x64",
             "29: Reflectance x128",
-            "30: Source Gradient x128"
+            "30: Source Gradient x128",
+            "31: Sky IBL Mip",
+            "32: Sky IBL DFG"
         };
         int reflDebugMode = settings.debug.reflectionDebugMode;
         pipelineChanged |= ImGui::Combo("Reflection Debug", &reflDebugMode, kReflectionDebugModes, IM_ARRAYSIZE(kReflectionDebugModes));

@@ -229,6 +229,12 @@ Ray Query Shadow 复用 TLAS 和 Cutout Candidate 判定。首轮仅对设置中
 所有材质按 Roughness 选择 Specular Mip，F0/NoV 查询 DFG LUT。现有直接方向天空采样
 不再承担粗糙镜面预过滤职责。
 
+当前已完成首个可运行增量：`SkyIblPass` 将动态天气天空转换为 128×128 HDR Cubemap，
+生成 8 级 GGX 预过滤链和 256×256 DFG LUT；`ReflectionPass` 使用连续 Roughness Mip 与
+NoV/Roughness DFG 查询替换旧的随机粗糙法线天空近似，并提供独立 Mip/DFG 调试视图。
+分帧双代际构建、天空修订号和整代原子切换仍属于本任务后续工作，不能据此判定第 7 项
+完整验收通过。
+
 ### 7.2 Reflection Probe Grid
 
 局部探针包含：

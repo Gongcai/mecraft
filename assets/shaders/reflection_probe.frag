@@ -15,8 +15,10 @@ layout(binding = 5) uniform sampler2D uMaterialAuxTex;
 layout(binding = 6) uniform sampler2D uSkyCaptureTex;
 layout(binding = 7) uniform sampler2D uVoxelLightTex;
 layout(binding = 8) uniform sampler2D uF0MetallicTex;
+layout(binding = 9) uniform samplerCube uSkySpecularPrefilter;
+layout(binding = 10) uniform sampler2D uSkyDfgLut;
 
-layout(std140, binding = 9) uniform ReflectionParams {
+layout(std140, binding = 11) uniform ReflectionParams {
     mat4 pViewProj;
     mat4 pInvViewProj;
     vec4 pCameraPosNear;
@@ -308,7 +310,9 @@ void main() {
         }
     }
 
-    vec3 skyReflection = sampleSkyRadianceCloudy(uSkyCaptureTex, reflectedDir);
+    float skyIblMip = clamp(roughness, 0.0, 1.0) * 7.0;
+    vec3 skyReflection = textureLod(
+        uSkySpecularPrefilter, reflectedDir, skyIblMip).rgb;
     vec3 skyGradientDebug = abs(dFdx(skyReflection)) + abs(dFdy(skyReflection));
 
     // Early debug: pixelWetness and roughness are available for ALL pixels.
@@ -385,22 +389,22 @@ void main() {
 
     float nDotRay = max(dot(normal, reflectedDir), 0.0);
     float nDotView = max(dot(normal, -viewDir), 1e-6);
-    vec3 reflectionSpecular = vec3(0.0);
+    vec2 skyDfg = texture(uSkyDfgLut,
+                          vec2(nDotView, clamp(roughness, 0.0, 1.0))).rg;
+    if (uReflectionDebugMode == 31) {
+        FragColor = vec4(vec3(skyIblMip / 7.0), 0.0);
+        return;
+    }
+    if (uReflectionDebugMode == 32) {
+        FragColor = vec4(skyDfg, 0.0, 0.0);
+        return;
+    }
+    vec3 reflectionSpecular = pbrEvaluateIblSpecular(
+        vec3(1.0), skyDfg, specularF0, specularF90);
     float dist = 0.0;
     bool usesRoughReflection = materialIsRough || weatherSurfaceWetness > 1e-2;
     if (usesRoughReflection) {
-        vec3 halfWay = normalize(reflectedDir - viewDir);
-        float lDotH = saturate(dot(reflectedDir, halfWay));
-        vec3 fresnel = pbrFresnelSchlick(
-            lDotH, specularF0, specularF90);
-        float alpha2 = roughness * roughness;
-        float V2 = V2SmithGGX(nDotView, max(nDotRay, 1e-6), alpha2);
-        float V1Inverse = V1SmithGGXInverse(nDotView, alpha2);
-        reflectionSpecular = nDotRay * fresnel * V2 * V1Inverse;
         dist = saturate(max(ssrHit * 2.0, roughness * 3.0));
-    } else {
-        reflectionSpecular = pbrFresnelSchlick(
-            nDotView, specularF0, specularF90);
     }
     if (!transMask.isTranslucent && puddleMask > 1e-4) {
         // Mecraft adaptation: DerivativeMain's sky reflection source is sampled

@@ -1,4 +1,5 @@
 #include "ReflectionPass.h"
+#include "SkyIblPass.h"
 #include "../core/RenderScene.h"
 #include "../debug/RenderDebugService.h"
 #include "../targets/DeferredRenderTargets.h"
@@ -45,6 +46,7 @@ void ReflectionPass::shutdown() {
     destroyBaseRhiResources();
     destroyFilterRhiResources();
     destroyTemporalRhiResources();
+    m_skyIblPass = nullptr;
 }
 
 RgPassHandle ReflectionPass::addGraphPasses(
@@ -64,7 +66,9 @@ RgPassHandle ReflectionPass::addGraphPasses(
         !resources.depth.isValid() || !resources.normalAo.isValid() ||
         !resources.material.isValid() || !resources.materialAux.isValid() ||
         !resources.f0Metallic.isValid() ||
-        !resources.skyCapture.isValid() || !resources.voxelLight.isValid() ||
+        !resources.skyCapture.isValid() ||
+        !resources.skySpecularPrefilter.isValid() ||
+        !resources.skyDfgLut.isValid() || !resources.voxelLight.isValid() ||
         !resources.reflection.isValid() ||
         ((filterActive || temporalActive) && !resources.scratch.isValid()) ||
         (temporalActive &&
@@ -96,6 +100,9 @@ RgPassHandle ReflectionPass::addGraphPasses(
         .readTexture(resources.materialAux, RhiResourceState::ShaderRead)
         .readTexture(resources.f0Metallic, RhiResourceState::ShaderRead)
         .readTexture(resources.skyCapture, RhiResourceState::ShaderRead)
+        .readTexture(resources.skySpecularPrefilter,
+                     RhiResourceState::ShaderRead)
+        .readTexture(resources.skyDfgLut, RhiResourceState::ShaderRead)
         .readTexture(resources.voxelLight, RhiResourceState::ShaderRead)
         .writeTexture(baseWritesScratch ? resources.scratch
                                         : resources.reflection,
@@ -180,12 +187,13 @@ bool ReflectionPass::recordReflection(RhiCommandList& commandList,
              *ctx.shared->rhiDevice)) ||
         !targets.ensureSceneLightingTextureView(*ctx.shared->rhiDevice) ||
         !targets.ensureGBufferTextureViews(*ctx.shared->rhiDevice) ||
-        !targets.ensureSkyCaptureTextureView(*ctx.shared->rhiDevice)) {
+        !targets.ensureSkyCaptureTextureView(*ctx.shared->rhiDevice) ||
+        m_skyIblPass == nullptr) {
         return false;
     }
 
     RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
-    const std::array<RhiTextureViewHandle, 9> views = {
+    const std::array<RhiTextureViewHandle, 11> views = {
         targets.sceneLightingTextureViewHandle(),
         targets.albedoTextureViewHandle(),
         targets.depthTextureViewHandle(),
@@ -194,7 +202,9 @@ bool ReflectionPass::recordReflection(RhiCommandList& commandList,
         targets.materialAuxTextureViewHandle(),
         targets.skyCaptureTextureViewHandle(),
         targets.voxelLightTextureViewHandle(),
-        targets.f0MetallicTextureViewHandle()
+        targets.f0MetallicTextureViewHandle(),
+        m_skyIblPass->specularPrefilterView(),
+        m_skyIblPass->dfgLutView()
     };
     if (!ensureBaseRhiPipeline(rhiDevice) || !ensureBaseBindGroup(rhiDevice, views)) {
         return false;
@@ -327,7 +337,7 @@ bool ReflectionPass::ensureBaseRhiPipeline(RhiDevice& rhiDevice) {
 
     RhiBindGroupLayoutDesc bindGroupLayoutDesc;
     bindGroupLayoutDesc.debugName = "ReflectionBase.BindGroupLayout";
-    for (uint32_t binding = 0u; binding < 9u; ++binding) {
+    for (uint32_t binding = 0u; binding < 11u; ++binding) {
         bindGroupLayoutDesc.entries.push_back({
             binding,
             RhiBindingType::CombinedTextureSampler,
@@ -336,7 +346,7 @@ bool ReflectionPass::ensureBaseRhiPipeline(RhiDevice& rhiDevice) {
         });
     }
     bindGroupLayoutDesc.entries.push_back({
-        9u,
+        11u,
         RhiBindingType::UniformBuffer,
         rhiFlag(RhiShaderStage::Fragment),
         1u
@@ -378,7 +388,7 @@ bool ReflectionPass::ensureBaseRhiPipeline(RhiDevice& rhiDevice) {
 
 bool ReflectionPass::ensureBaseBindGroup(
     RhiDevice& rhiDevice,
-    const std::array<RhiTextureViewHandle, 9>& views) {
+    const std::array<RhiTextureViewHandle, 11>& views) {
     if (!ensureBaseRhiPipeline(rhiDevice)) {
         return false;
     }
@@ -392,7 +402,7 @@ bool ReflectionPass::ensureBaseBindGroup(
     }
 
     destroyBaseBindGroup();
-    const RhiSamplerHandle samplers[9] = {
+    const RhiSamplerHandle samplers[11] = {
         m_baseLinearSampler,
         m_baseNearestSampler,
         m_baseNearestSampler,
@@ -401,7 +411,9 @@ bool ReflectionPass::ensureBaseBindGroup(
         m_baseNearestSampler,
         m_baseLinearSampler,
         m_baseNearestSampler,
-        m_baseNearestSampler
+        m_baseNearestSampler,
+        m_baseLinearSampler,
+        m_baseLinearSampler
     };
     RhiBindGroupDesc bindGroupDesc;
     bindGroupDesc.layout = m_baseBindGroupLayout;
@@ -414,7 +426,7 @@ bool ReflectionPass::ensureBaseBindGroup(
     }
 
     RhiBindGroupEntry uniformEntry;
-    uniformEntry.binding = 9u;
+    uniformEntry.binding = 11u;
     uniformEntry.resource.buffer.buffer = m_baseUniformBuffer;
     uniformEntry.resource.buffer.offset = 0u;
     uniformEntry.resource.buffer.range = sizeof(ReflectionBaseParams);

@@ -281,6 +281,7 @@ void DeferredPipeline::initializePasses(ResourceMgr& resourceMgr,
     m_shadowRenderer = shadowRenderer;
 
     m_skyCapturePass = std::make_unique<SkyCapturePass>();
+    m_skyIblPass = std::make_unique<SkyIblPass>();
     m_gbufferPass = std::make_unique<GBufferPass>();
     m_shadowPass = std::make_unique<ShadowPass>();
     m_waterCompositePass = std::make_unique<WaterCompositePass>();
@@ -310,6 +311,7 @@ void DeferredPipeline::initializePasses(ResourceMgr& resourceMgr,
     m_localShadowPass->init(resourceMgr);
     m_lightingPass->init(resourceMgr);
     m_lightingPass->setClusteredLightingPass(m_clusteredLightingPass.get());
+    m_reflectionPass->setSkyIblPass(m_skyIblPass.get());
     m_reflectionPass->init(resourceMgr);
     m_cloudPass->init(resourceMgr);
     m_sceneCompositePass->init(resourceMgr);
@@ -388,6 +390,7 @@ void DeferredPipeline::shutdown() {
     if (m_waterCompositePass) m_waterCompositePass->shutdown();
     if (m_shadowPass) m_shadowPass->shutdown();
     if (m_gbufferPass) m_gbufferPass->shutdown();
+    if (m_skyIblPass) m_skyIblPass->shutdown();
     if (m_skyCapturePass) m_skyCapturePass->shutdown();
 
     m_debugPass.reset();
@@ -408,6 +411,7 @@ void DeferredPipeline::shutdown() {
     m_waterCompositePass.reset();
     m_gbufferPass.reset();
     m_skyCapturePass.reset();
+    m_skyIblPass.reset();
     m_resourceMgr = nullptr;
     m_shadowRenderer = nullptr;
     m_shared = nullptr;
@@ -546,6 +550,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
         m_shared->commandListPool == nullptr ||
         m_shared->deferredTargets == nullptr ||
         m_resourceMgr == nullptr || m_skyCapturePass == nullptr ||
+        m_skyIblPass == nullptr ||
         m_lightingPass == nullptr || m_sceneCompositePass == nullptr ||
         m_waterCompositePass == nullptr || m_volumetricPass == nullptr ||
         !ctx.sceneCaptureColorTexture.isValid() ||
@@ -561,7 +566,6 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
          m_shared->terrainRhiPipelines == nullptr)) {
         return false;
     }
-
     RhiDevice& rhiDevice = *m_shared->rhiDevice;
     DeferredRenderTargets& targets = *m_shared->deferredTargets;
     const bool externalTransparent = externalGeometry &&
@@ -638,6 +642,10 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
          !targets.ensureHistoryCloudTextureViews(rhiDevice))) {
         return false;
     }
+    if (!m_skyIblPass->prepareFrame(
+            rhiDevice, targets.skyCaptureTextureViewHandle())) {
+        return false;
+    }
     if (ssaoEnabled && m_ssaoPass == nullptr) {
         return false;
     }
@@ -681,7 +689,12 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
     bool volumetricGraphPrepared = false;
     bool localShadowGraphPrepared = false;
     bool clusteredLightingGraphPrepared = false;
+    bool skyIblGraphPrepared = false;
     const auto failGraphSetup = [&]() {
+        if (skyIblGraphPrepared) {
+            m_skyIblPass->finishGraphExecution(false);
+            skyIblGraphPrepared = false;
+        }
         if (clusteredLightingGraphPrepared) {
             m_clusteredLightingPass->finishGraphExecution(
                 false, RhiSubmissionToken{});
@@ -940,6 +953,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
     RgTextureHandle historyReflectionPrevious;
     RgTextureHandle historyCloudCurrent;
     RgTextureHandle historyCloudPrevious;
+    SkyIblPass::GraphResources skyIblResources;
     const RhiTextureHandle lightmapDayTexture = m_resourceMgr->getLightmapDay();
     const RhiTextureHandle lightmapNightTexture = m_resourceMgr->getLightmapNight();
     const RhiTextureHandle rippleNormalTexture =
@@ -1101,6 +1115,10 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
                        historyDepthPrevious)) {
         return failGraphSetup();
     }
+    if (!m_skyIblPass->importGraphResources(
+            m_renderGraph, skyIblResources)) {
+        return failGraphSetup();
+    }
     if (!importTexture(targets.taaHistoryDepthTextureHandle(), {},
                        RhiResourceState::DepthRead, taaHistoryDepthCurrent) ||
         !importTexture(targets.taaHistoryDepthTexturePrevHandle(),
@@ -1230,6 +1248,13 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
                 settings.cloud.timeScale);
         });
     graphTail = skyCapturePass.handle();
+
+    graphTail = m_skyIblPass->addGraphPasses(
+        m_renderGraph, skyCapture, skyIblResources, graphTail);
+    if (!graphTail.isValid()) {
+        return failGraphSetup();
+    }
+    skyIblGraphPrepared = true;
 
     // Hi-Z occlusion culling: reduce the previous frame's depth into a
     // max-depth pyramid, upload this frame's indirect terrain commands in a
@@ -1532,6 +1557,9 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
         reflectionResources.materialAux = materialAux;
         reflectionResources.f0Metallic = f0Metallic;
         reflectionResources.skyCapture = skyCapture;
+        reflectionResources.skySpecularPrefilter =
+            skyIblResources.specularPrefilter;
+        reflectionResources.skyDfgLut = skyIblResources.dfgLut;
         reflectionResources.voxelLight = voxelLight;
         reflectionResources.reflection = reflection;
         reflectionResources.scratch = reflectionScratch;
@@ -2305,6 +2333,9 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
     }
     if (localShadowGraphPrepared) {
         m_localShadowPass->finishGraphExecution(executed.succeeded());
+    }
+    if (skyIblGraphPrepared) {
+        m_skyIblPass->finishGraphExecution(executed.succeeded());
     }
     if (executed.succeeded()) {
         commitDeferredHistoryState();

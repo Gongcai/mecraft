@@ -134,4 +134,16 @@ vec3 pbrDiffuseWeight(vec3 fresnel, float metalness) {
            (1.0 - clamp(metalness, 0.0, 1.0));
 }
 
+vec3 pbrEvaluateIblSpecular(vec3 prefilteredRadiance,
+                            vec2 dfg,
+                            vec3 f0,
+                            float f90) {
+    vec3 singleScatter = f0 * dfg.x + vec3(f90 * dfg.y);
+    vec3 missingEnergy = max(vec3(1.0) - singleScatter, vec3(0.0));
+    vec3 averageFresnel = f0 + (vec3(f90) - f0) * (1.0 / 21.0);
+    vec3 multiScatter = missingEnergy * averageFresnel /
+        max(vec3(1.0) - averageFresnel * (1.0 - dfg.x), vec3(1e-4));
+    return prefilteredRadiance * (singleScatter + multiScatter);
+}
+
 #endif // MECRAFT_PBR_BRDF_GLSL

@@ -23,6 +23,7 @@
 #include "../passes/SceneCompositePass.h"
 #include "../passes/VolumetricPass.h"
 #include "../passes/SkyCapturePass.h"
+#include "../passes/SkyIblPass.h"
 #include "../passes/GBufferPass.h"
 #include "../passes/ShadowPass.h"
 #include "../passes/WaterCompositePass.h"
@@ -78,6 +79,7 @@ public:
     SceneCompositePass* sceneCompositePass() const { return m_sceneCompositePass.get(); }
     VolumetricPass* volumetricPass() const { return m_volumetricPass.get(); }
     SkyCapturePass* skyCapturePass() const { return m_skyCapturePass.get(); }
+    SkyIblPass* skyIblPass() const { return m_skyIblPass.get(); }
     GBufferPass* gbufferPass() const { return m_gbufferPass.get(); }
     ShadowPass* shadowPass() const { return m_shadowPass.get(); }
     WaterCompositePass* waterCompositePass() const { return m_waterCompositePass.get(); }
@@ -109,6 +111,7 @@ private:
     std::unique_ptr<SceneCompositePass> m_sceneCompositePass;
     std::unique_ptr<VolumetricPass> m_volumetricPass;
     std::unique_ptr<SkyCapturePass> m_skyCapturePass;
+    std::unique_ptr<SkyIblPass> m_skyIblPass;
     std::unique_ptr<GBufferPass> m_gbufferPass;
     std::unique_ptr<ShadowPass> m_shadowPass;
     std::unique_ptr<WaterCompositePass> m_waterCompositePass;

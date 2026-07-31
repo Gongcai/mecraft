@@ -1109,18 +1109,6 @@ void main() {
 
     vec3 color = sceneData;
 
-    // Sky specular (environment reflection) — Mecraft extension, not in DerivativeMain deferred5.fsh
-    // DerivativeMain handles sky reflections in a separate SSR pass (deferred6.fsh)
-    if (uDerivativeStrictMode == 0 && !isRainWetSurface) {
-        color += evaluateSkySH(skySH, normal) *
-                 pbrFresnelSchlick(
-                     max(dot(normal, viewDir), 0.0),
-                     specularF0, specularF90) *
-                 pow(oneMinus(roughness), 1.65) *
-                 (0.018 + 0.105 * outdoorSkyMask) *
-                 derivativeSpecularMask;
-    }
-
     // Shadow desaturation (Mecraft extension, not in DerivativeMain)
     // Uses the raw 0-1 shadow value for the active sun/moon shadow light.
     float shadowDesatMask = oneMinus(activeShadow) * outdoorSkyMask;

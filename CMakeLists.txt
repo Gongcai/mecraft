@@ -398,6 +398,7 @@ set(SRC_RENDERER
         src/renderer/passes/SceneCompositePass.cpp
         src/renderer/passes/VolumetricPass.cpp
         src/renderer/passes/SkyCapturePass.cpp
+        src/renderer/passes/SkyIblPass.cpp
         src/renderer/passes/GBufferPass.cpp
         src/renderer/passes/ShadowPass.cpp
         src/renderer/passes/WaterCompositePass.cpp
@@ -1016,6 +1017,9 @@ if(MECRAFT_BUILD_TESTS)
     add_mecraft_test(clustered_lighting_contract_test
             tests/clustered_lighting_contract_test.cpp)
     target_compile_definitions(clustered_lighting_contract_test PRIVATE
+            MECRAFT_TEST_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
+    add_mecraft_test(sky_ibl_contract_test tests/sky_ibl_contract_test.cpp)
+    target_compile_definitions(sky_ibl_contract_test PRIVATE
             MECRAFT_TEST_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
     add_mecraft_test(gpu_light_contract_test tests/gpu_light_contract_test.cpp)
     target_compile_definitions(gpu_light_contract_test PRIVATE
