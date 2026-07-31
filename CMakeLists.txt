@@ -388,6 +388,7 @@ set(SRC_RENDERER
         src/renderer/passes/HiZPass.cpp
         src/renderer/passes/VelocityPass.cpp
         src/renderer/passes/ReflectionPass.cpp
+        src/renderer/passes/ReflectionProbeGridPass.cpp
         src/renderer/passes/TemporalResolvePass.cpp
         src/renderer/passes/TemporalUpscalePass.cpp
         src/renderer/passes/MotionBlurPass.cpp

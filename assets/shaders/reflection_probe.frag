@@ -1,5 +1,6 @@
 #version 450 core
 #include "gbuffer_contract.glsl"
+#include "reflection_probe_contract.glsl"
 #include "rhi_screen_coordinates.glsl"
 
 layout(location = 0) in vec2 vScreenUv;
@@ -17,8 +18,25 @@ layout(binding = 7) uniform sampler2D uVoxelLightTex;
 layout(binding = 8) uniform sampler2D uF0MetallicTex;
 layout(binding = 9) uniform samplerCube uSkySpecularPrefilter;
 layout(binding = 10) uniform sampler2D uSkyDfgLut;
+layout(binding = 11) uniform samplerCubeArray uProbeSpecularPrefilter;
 
-layout(std140, binding = 11) uniform ReflectionParams {
+layout(std430, binding = 12) readonly buffer ReflectionProbeRecords {
+    GpuReflectionProbe uReflectionProbes[];
+};
+
+layout(std430, binding = 13) readonly buffer ReflectionProbeGridMetadataBuffer {
+    GpuReflectionProbeGridMetadata uReflectionProbeGrid;
+};
+
+layout(std430, binding = 14) readonly buffer ReflectionProbeGridCells {
+    GpuReflectionProbeGridCell uReflectionProbeCells[];
+};
+
+layout(std430, binding = 15) readonly buffer ReflectionProbeGridIndices {
+    uint uReflectionProbeIndices[];
+};
+
+layout(std140, binding = 16) uniform ReflectionParams {
     mat4 pViewProj;
     mat4 pInvViewProj;
     vec4 pCameraPosNear;
@@ -32,7 +50,6 @@ layout(std140, binding = 11) uniform ReflectionParams {
 #define uNearPlane pCameraPosNear.w
 #define uFarPlane pFarSurfaceTime.x
 #define uSurfaceWetness pFarSurfaceTime.y
-#define uTime pFarSurfaceTime.z
 #define uReflectionDebugMode pControls.x
 #define uRainWetSurfacesEnabled pControls.y
 
@@ -40,20 +57,124 @@ layout(std140, binding = 11) uniform ReflectionParams {
 
 #include "derivative_brdf.glsl"
 
-// PCG-based 2D hash function for high-quality pseudo-random offset
-vec2 Hash2D(vec2 p) {
-    p = fract(p * vec2(0.1031, 0.1030));
-    p += dot(p, p.yx + 33.33);
-    return fract((p.x + p.y) * p);
-}
-
-vec2 GenerateRandomOffset(vec2 screenPos, float time) {
-    // Add a temporally animated offset using Golden Ratio to distribute noise over frames
-    vec2 p = screenPos + fract(time * 0.6180339887498949) * 1000.0;
-    return Hash2D(p);
-}
-
 #include "weather_surface.glsl"
+
+vec3 reflectionProbeDebugColor(uint stableId) {
+    uint value = stableId * 747796405u + 2891336453u;
+    value = ((value >> ((value >> 28u) + 4u)) ^ value) * 277803737u;
+    value = (value >> 22u) ^ value;
+    return vec3(
+        float(value & 255u),
+        float((value >> 8u) & 255u),
+        float((value >> 16u) & 255u)) / 255.0;
+}
+
+void sampleReflectionProbeGrid(
+    vec3 surfacePosition,
+    vec3 surfaceNormal,
+    vec3 reflectionDirection,
+    float mipLevel,
+    out vec3 radiance,
+    out float coverage,
+    out uint dominantStableId) {
+    radiance = vec3(0.0);
+    coverage = 0.0;
+    dominantStableId = 0u;
+
+    uint cellIndex;
+    if (!reflectionProbeGridCellIndex(
+            uReflectionProbeGrid, surfacePosition, cellIndex)) {
+        return;
+    }
+    GpuReflectionProbeGridCell cell = uReflectionProbeCells[cellIndex];
+    float selectedWeights[REFLECTION_PROBE_BLEND_COUNT];
+    uint selectedProbeIndices[REFLECTION_PROBE_BLEND_COUNT];
+    uint selectedStableIds[REFLECTION_PROBE_BLEND_COUNT];
+    vec3 selectedDirections[REFLECTION_PROBE_BLEND_COUNT];
+    for (uint slot = 0u; slot < REFLECTION_PROBE_BLEND_COUNT; ++slot) {
+        selectedWeights[slot] = 0.0;
+        selectedProbeIndices[slot] = 0u;
+        selectedStableIds[slot] = 0xffffffffu;
+        selectedDirections[slot] = vec3(0.0);
+    }
+
+    uint candidateCount = min(
+        cell.offsetAndCount.y,
+        uReflectionProbeGrid.cellAndIndexCounts.z);
+    for (uint candidate = 0u;
+         candidate < REFLECTION_PROBE_GRID_MAX_PROBES_PER_CELL;
+         ++candidate) {
+        if (candidate >= candidateCount) {
+            break;
+        }
+        uint compactIndex = cell.offsetAndCount.x + candidate;
+        if (compactIndex >= uReflectionProbeGrid.cellAndIndexCounts.y) {
+            break;
+        }
+        uint probeIndex = uReflectionProbeIndices[compactIndex];
+        if (probeIndex >= uReflectionProbeGrid.dimensionsAndProbeCount.w) {
+            continue;
+        }
+        GpuReflectionProbe probe = uReflectionProbes[probeIndex];
+        float weight = reflectionProbeInfluenceWeight(
+            probe, surfacePosition, surfaceNormal);
+        if (weight <= 0.0) {
+            continue;
+        }
+        vec3 correctedDirection;
+        if (!reflectionProbeBoxProject(
+                probe, surfacePosition, reflectionDirection,
+                correctedDirection)) {
+            continue;
+        }
+        uint stableId = probe.resourcesAndIdentity.y;
+        for (uint slot = 0u; slot < REFLECTION_PROBE_BLEND_COUNT; ++slot) {
+            bool insert = weight > selectedWeights[slot] ||
+                (weight == selectedWeights[slot] &&
+                 stableId < selectedStableIds[slot]);
+            if (!insert) {
+                continue;
+            }
+            for (uint shift = REFLECTION_PROBE_BLEND_COUNT - 1u;
+                 shift > slot; --shift) {
+                selectedWeights[shift] = selectedWeights[shift - 1u];
+                selectedProbeIndices[shift] =
+                    selectedProbeIndices[shift - 1u];
+                selectedStableIds[shift] = selectedStableIds[shift - 1u];
+                selectedDirections[shift] = selectedDirections[shift - 1u];
+            }
+            selectedWeights[slot] = weight;
+            selectedProbeIndices[slot] = probeIndex;
+            selectedStableIds[slot] = stableId;
+            selectedDirections[slot] = correctedDirection;
+            break;
+        }
+    }
+
+    float totalWeight = 0.0;
+    for (uint slot = 0u; slot < REFLECTION_PROBE_BLEND_COUNT; ++slot) {
+        totalWeight += selectedWeights[slot];
+    }
+    if (totalWeight <= 0.0) {
+        return;
+    }
+    dominantStableId = selectedStableIds[0];
+    coverage = clamp(totalWeight, 0.0, 1.0);
+    for (uint slot = 0u; slot < REFLECTION_PROBE_BLEND_COUNT; ++slot) {
+        if (selectedWeights[slot] <= 0.0) {
+            continue;
+        }
+        GpuReflectionProbe probe =
+            uReflectionProbes[selectedProbeIndices[slot]];
+        vec3 sampleRadiance = textureLod(
+            uProbeSpecularPrefilter,
+            vec4(selectedDirections[slot],
+                 float(probe.resourcesAndIdentity.x)),
+            mipLevel).rgb * probe.positionAndExposure.w;
+        radiance += sampleRadiance *
+            (selectedWeights[slot] / totalWeight);
+    }
+}
 
 vec3 reconstructWorldPosition(vec2 clipUv, float depth) {
     vec4 clip = vec4(clipUv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
@@ -221,7 +342,8 @@ void main() {
     vec3 specularF0 = texture(uF0MetallicTex, textureUv).rgb;
 
     if (depth >= 0.9999) {
-        if (uReflectionDebugMode == 31 || uReflectionDebugMode == 32) {
+        if (uReflectionDebugMode == 31 || uReflectionDebugMode == 32 ||
+            uReflectionDebugMode == 33 || uReflectionDebugMode == 34) {
             FragColor = vec4(0.0);
             return;
         }
@@ -278,7 +400,9 @@ void main() {
         }
     }
 
-    // Recompute reflected direction with wet-flattened normal.
+    // The prefiltered environment represents the complete GGX lobe, so its
+    // lookup direction remains the geometric reflection direction while
+    // roughness selects the convolution mip.
     vec3 reflectedDir = reflect(viewDir, normal);
 
     // DerivativeMain world0/deferred6.fsh only samples a GGX facet normal when
@@ -286,50 +410,41 @@ void main() {
     // GBuffer normal so RippleNormal can bend the reflection source visibly.
     bool materialIsRough = roughness > 0.005;
 
-    // GGX VNDF Importance Sampling for rough surfaces
-    vec3 sampleNormal = normal;
-    if (materialIsRough) {
-        // Construct orthonormal basis around normal (tangentToWorld)
-        vec3 up = abs(normal.y) < 0.999 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
-        vec3 tangent = normalize(cross(up, normal));
-        vec3 bitangent = cross(normal, tangent);
-        mat3 tangentToWorld = mat3(tangent, bitangent, normal);
-
-        // View direction in tangent space (pointing towards viewer)
-        vec3 tangentView = -viewDir * tangentToWorld;
-
-        // Generate temporal-spatial random offset
-        vec2 xyNoise = GenerateRandomOffset(gl_FragCoord.xy, uTime);
-
-        // Sample micro-normal in tangent space
-        vec3 tangentHalfway = SampleGGXVNDF(tangentView, roughness, xyNoise);
-
-        // Transform back to world space
-        sampleNormal = tangentToWorld * tangentHalfway;
-
-        // Compute reflection ray
-        reflectedDir = reflect(viewDir, sampleNormal);
-
-        // Fallback to standard reflection direction if ray points below the surface hemisphere
-        if (dot(normal, reflectedDir) < 1e-6) {
-            reflectedDir = reflect(viewDir, normal);
-        }
-    }
-
-    float skyIblMip = clamp(roughness, 0.0, 1.0) * 7.0;
+    float skyIblMip = clamp(roughness, 0.0, 1.0) *
+        float(REFLECTION_PROBE_CUBE_MIP_COUNT - 1u);
     vec3 skyReflection = textureLod(
         uSkySpecularPrefilter, reflectedDir, skyIblMip).rgb;
+    vec3 probeReflection;
+    float probeCoverage;
+    uint dominantProbeId;
+    sampleReflectionProbeGrid(
+        worldPos, normal, reflectedDir, skyIblMip,
+        probeReflection, probeCoverage, dominantProbeId);
     vec3 skyGradientDebug = abs(dFdx(skyReflection)) + abs(dFdy(skyReflection));
     float nDotView = max(dot(normal, -viewDir), 1e-6);
     vec2 skyDfg = texture(uSkyDfgLut,
                           vec2(nDotView, clamp(roughness, 0.0, 1.0))).rg;
 
     if (uReflectionDebugMode == 31) {
-        FragColor = vec4(vec3(skyIblMip / 7.0), 0.0);
+        FragColor = vec4(vec3(
+            skyIblMip /
+            float(REFLECTION_PROBE_CUBE_MIP_COUNT - 1u)), 0.0);
         return;
     }
     if (uReflectionDebugMode == 32) {
         FragColor = vec4(skyDfg, 0.0, 0.0);
+        return;
+    }
+    if (uReflectionDebugMode == 33) {
+        FragColor = vec4(
+            dominantProbeId != 0u
+                ? reflectionProbeDebugColor(dominantProbeId)
+                : vec3(0.0),
+            0.0);
+        return;
+    }
+    if (uReflectionDebugMode == 34) {
+        FragColor = vec4(vec3(probeCoverage), 0.0);
         return;
     }
 
@@ -456,8 +571,11 @@ void main() {
         return;
     }
 
-    float environmentVisibility = skyLightRaw01 * materialAo;
-    vec3 environmentReflection = skyReflection * environmentVisibility;
+    vec3 environmentRadiance = mix(
+        skyReflection * skyLightRaw01,
+        probeReflection,
+        probeCoverage);
+    vec3 environmentReflection = environmentRadiance * materialAo;
     if (uReflectionDebugMode == 12) {
         FragColor = vec4(environmentReflection, 0.0);
         return;

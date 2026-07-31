@@ -7,6 +7,7 @@
 #include <cmath>
 #include <limits>
 #include <unordered_set>
+#include <utility>
 
 namespace renderer::contracts {
 namespace {
@@ -157,6 +158,21 @@ namespace {
     return result;
 }
 
+[[nodiscard]] ReflectionProbeGridBuildResult gridFailure(
+    const ReflectionProbeGridError error,
+    const uint32_t sourceProbeIndex,
+    const StableReflectionProbeId probeId,
+    const ReflectionProbeError probeError = ReflectionProbeError::None,
+    const ReflectionProbeField probeField = ReflectionProbeField::None) {
+    ReflectionProbeGridBuildResult result;
+    result.error = error;
+    result.probeError = probeError;
+    result.probeField = probeField;
+    result.sourceProbeIndex = sourceProbeIndex;
+    result.probeId = probeId;
+    return result;
+}
+
 } // namespace
 
 bool ReflectionProbeNormalizationResult::succeeded() const {
@@ -169,6 +185,10 @@ bool ReflectionProbeValidationResult::succeeded() const {
 
 bool ReflectionProbeSelectionResult::succeeded() const {
     return error == ReflectionProbeError::None;
+}
+
+bool ReflectionProbeGridBuildResult::succeeded() const {
+    return error == ReflectionProbeGridError::None;
 }
 
 ReflectionProbeNormalizationResult normalizeReflectionProbe(
@@ -374,6 +394,174 @@ ReflectionProbeSelectionResult selectReflectionProbes(
     return result;
 }
 
+ReflectionProbeGridBuildResult buildReflectionProbeGrid(
+    const std::vector<GpuReflectionProbe>& probes) {
+    if (probes.size() > kReflectionProbeGridMaxProbeCount) {
+        return gridFailure(ReflectionProbeGridError::ProbeCapacityExceeded,
+                           0u, {});
+    }
+
+    struct ActiveProbe final {
+        uint32_t sourceIndex = 0u;
+        StableReflectionProbeId probeId;
+        GpuReflectionProbe probe;
+    };
+    std::unordered_set<uint32_t> stableIds;
+    stableIds.reserve(probes.size());
+    std::vector<ActiveProbe> active;
+    active.reserve(probes.size());
+    for (uint32_t index = 0u;
+         index < static_cast<uint32_t>(probes.size()); ++index) {
+        const GpuReflectionProbe& probe = probes[index];
+        const StableReflectionProbeId probeId{
+            probe.resourcesAndIdentity.y};
+        const ReflectionProbeValidationResult validation =
+            validateReflectionProbe(probe);
+        if (!validation.succeeded()) {
+            return gridFailure(ReflectionProbeGridError::InvalidProbe,
+                               index, probeId, validation.error,
+                               validation.field);
+        }
+        if (!stableIds.insert(probeId.value).second) {
+            return gridFailure(ReflectionProbeGridError::DuplicateStableId,
+                               index, probeId);
+        }
+        if (probe.influenceMaxAndValidity.w > 0.0f) {
+            active.push_back({index, probeId, probe});
+        }
+    }
+    std::sort(active.begin(), active.end(),
+              [](const ActiveProbe& lhs, const ActiveProbe& rhs) {
+                  return lhs.probeId.value < rhs.probeId.value;
+              });
+
+    ReflectionProbeGridBuildResult result;
+    if (active.empty()) {
+        return result;
+    }
+
+    glm::vec3 gridMinimum(std::numeric_limits<float>::max());
+    glm::vec3 gridMaximum(std::numeric_limits<float>::lowest());
+    result.grid.probes.reserve(active.size());
+    for (const ActiveProbe& entry : active) {
+        gridMinimum = glm::min(
+            gridMinimum,
+            glm::vec3(entry.probe.influenceMinAndBlendDistance));
+        gridMaximum = glm::max(
+            gridMaximum,
+            glm::vec3(entry.probe.influenceMaxAndValidity));
+        result.grid.probes.push_back(entry.probe);
+    }
+
+    const float cellSize = kReflectionProbeGridCellSizeMeters;
+    const glm::vec3 origin = glm::floor(gridMinimum / cellSize) * cellSize;
+    const glm::vec3 dimensionFloat = glm::ceil(
+        (gridMaximum - origin) / cellSize);
+    if (!finite(origin) || !finite(dimensionFloat) ||
+        glm::any(glm::lessThanEqual(dimensionFloat, glm::vec3(0.0f))) ||
+        glm::any(glm::greaterThan(
+            dimensionFloat,
+            glm::vec3(static_cast<float>(
+                kReflectionProbeGridMaxDimension))))) {
+        return gridFailure(ReflectionProbeGridError::DimensionExceeded,
+                           0u, {});
+    }
+    const glm::uvec3 dimensions(dimensionFloat);
+    const uint64_t cellCount64 =
+        static_cast<uint64_t>(dimensions.x) * dimensions.y * dimensions.z;
+    if (cellCount64 == 0u ||
+        cellCount64 > kReflectionProbeGridMaxCellCount) {
+        return gridFailure(ReflectionProbeGridError::DimensionExceeded,
+                           0u, {});
+    }
+    const uint32_t cellCount = static_cast<uint32_t>(cellCount64);
+    std::vector<std::vector<uint32_t>> cellCandidates(cellCount);
+
+    const auto linearIndex = [dimensions](const glm::uvec3 cell) {
+        return cell.x + dimensions.x *
+            (cell.y + dimensions.y * cell.z);
+    };
+    uint64_t indexCount = 0u;
+    for (uint32_t probeIndex = 0u;
+         probeIndex < static_cast<uint32_t>(result.grid.probes.size());
+         ++probeIndex) {
+        const GpuReflectionProbe& probe = result.grid.probes[probeIndex];
+        const glm::vec3 minimum =
+            glm::vec3(probe.influenceMinAndBlendDistance);
+        const glm::vec3 maximum =
+            glm::vec3(probe.influenceMaxAndValidity);
+        const glm::uvec3 minimumCell = glm::uvec3(glm::floor(
+            (minimum - origin) / cellSize));
+        const glm::vec3 maximumCellFloat = glm::ceil(
+            (maximum - origin) / cellSize) - glm::vec3(1.0f);
+        const glm::uvec3 maximumCell = glm::min(
+            glm::uvec3(glm::max(maximumCellFloat, glm::vec3(0.0f))),
+            dimensions - glm::uvec3(1u));
+        for (uint32_t z = minimumCell.z; z <= maximumCell.z; ++z) {
+            for (uint32_t y = minimumCell.y; y <= maximumCell.y; ++y) {
+                for (uint32_t x = minimumCell.x; x <= maximumCell.x; ++x) {
+                    std::vector<uint32_t>& candidates =
+                        cellCandidates[linearIndex({x, y, z})];
+                    if (candidates.size() >=
+                        kReflectionProbeGridMaxProbesPerCell) {
+                        return gridFailure(
+                            ReflectionProbeGridError::CellCapacityExceeded,
+                            active[probeIndex].sourceIndex,
+                            active[probeIndex].probeId);
+                    }
+                    candidates.push_back(probeIndex);
+                    ++indexCount;
+                    if (indexCount > kReflectionProbeGridMaxIndexCount) {
+                        return gridFailure(
+                            ReflectionProbeGridError::IndexCapacityExceeded,
+                            active[probeIndex].sourceIndex,
+                            active[probeIndex].probeId);
+                    }
+                }
+            }
+        }
+    }
+
+    result.grid.cells.resize(cellCount);
+    result.grid.probeIndices.reserve(static_cast<size_t>(indexCount));
+    for (uint32_t cellIndex = 0u; cellIndex < cellCount; ++cellIndex) {
+        const std::vector<uint32_t>& candidates = cellCandidates[cellIndex];
+        result.grid.cells[cellIndex].offsetAndCount = {
+            static_cast<uint32_t>(result.grid.probeIndices.size()),
+            static_cast<uint32_t>(candidates.size())};
+        result.grid.probeIndices.insert(result.grid.probeIndices.end(),
+                                        candidates.begin(), candidates.end());
+    }
+    result.grid.metadata.originAndCellSize = glm::vec4(origin, cellSize);
+    result.grid.metadata.dimensionsAndProbeCount = {
+        dimensions.x, dimensions.y, dimensions.z,
+        static_cast<uint32_t>(result.grid.probes.size())};
+    result.grid.metadata.cellAndIndexCounts = {
+        cellCount, static_cast<uint32_t>(result.grid.probeIndices.size()),
+        kReflectionProbeGridMaxProbesPerCell,
+        kReflectionProbeContractVersion};
+    return result;
+}
+
+std::optional<uint32_t> reflectionProbeGridCellIndex(
+    const GpuReflectionProbeGridMetadata& metadata,
+    const glm::uvec3& cell) {
+    const glm::uvec3 dimensions(metadata.dimensionsAndProbeCount);
+    if (glm::any(glm::greaterThanEqual(cell, dimensions)) ||
+        metadata.cellAndIndexCounts.x == 0u) {
+        return std::nullopt;
+    }
+    const uint64_t index = static_cast<uint64_t>(cell.x) +
+        static_cast<uint64_t>(dimensions.x) *
+            (static_cast<uint64_t>(cell.y) +
+             static_cast<uint64_t>(dimensions.y) * cell.z);
+    if (index >= metadata.cellAndIndexCounts.x ||
+        index > std::numeric_limits<uint32_t>::max()) {
+        return std::nullopt;
+    }
+    return static_cast<uint32_t>(index);
+}
+
 std::optional<glm::vec3> boxProjectReflectionDirection(
     const GpuReflectionProbe& probe,
     const glm::vec3& surfacePosition,
@@ -476,6 +664,25 @@ const char* reflectionProbeFieldStableId(const ReflectionProbeField field) {
         case ReflectionProbeField::SurfaceNormal: return "SurfaceNormal";
     }
     return "InvalidReflectionProbeField";
+}
+
+const char* reflectionProbeGridErrorStableId(
+    const ReflectionProbeGridError error) {
+    switch (error) {
+        case ReflectionProbeGridError::None: return "None";
+        case ReflectionProbeGridError::InvalidProbe: return "InvalidProbe";
+        case ReflectionProbeGridError::DuplicateStableId:
+            return "DuplicateStableId";
+        case ReflectionProbeGridError::ProbeCapacityExceeded:
+            return "ProbeCapacityExceeded";
+        case ReflectionProbeGridError::DimensionExceeded:
+            return "DimensionExceeded";
+        case ReflectionProbeGridError::CellCapacityExceeded:
+            return "CellCapacityExceeded";
+        case ReflectionProbeGridError::IndexCapacityExceeded:
+            return "IndexCapacityExceeded";
+    }
+    return "InvalidReflectionProbeGridError";
 }
 
 } // namespace renderer::contracts

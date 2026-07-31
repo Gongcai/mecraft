@@ -2,8 +2,12 @@
 #define MECRAFT_REFLECTION_PROBE_CONTRACT_GLSL
 
 const uint REFLECTION_PROBE_CONTRACT_VERSION = 1u;
+const uint REFLECTION_PROBE_CUBE_EXTENT = 128u;
+const uint REFLECTION_PROBE_CUBE_MIP_COUNT = 8u;
 const uint REFLECTION_PROBE_INVALID_CUBEMAP_INDEX = 0xffffffffu;
 const uint REFLECTION_PROBE_BLEND_COUNT = 4u;
+const float REFLECTION_PROBE_GRID_CELL_SIZE_METERS = 16.0;
+const uint REFLECTION_PROBE_GRID_MAX_PROBES_PER_CELL = 16u;
 
 struct GpuReflectionProbe {
     vec4 positionAndExposure;
@@ -13,6 +17,42 @@ struct GpuReflectionProbe {
     vec4 boxProjectionMax;
     uvec4 resourcesAndIdentity;
 };
+
+struct GpuReflectionProbeGridMetadata {
+    vec4 originAndCellSize;
+    uvec4 dimensionsAndProbeCount;
+    uvec4 cellAndIndexCounts;
+    uvec4 reserved;
+};
+
+struct GpuReflectionProbeGridCell {
+    uvec2 offsetAndCount;
+};
+
+bool reflectionProbeGridCellIndex(
+    GpuReflectionProbeGridMetadata metadata,
+    vec3 surfacePosition,
+    out uint cellIndex) {
+    cellIndex = 0u;
+    if (metadata.dimensionsAndProbeCount.w == 0u ||
+        metadata.cellAndIndexCounts.x == 0u ||
+        metadata.originAndCellSize.w <= 0.0) {
+        return false;
+    }
+    vec3 relativeCell = floor(
+        (surfacePosition - metadata.originAndCellSize.xyz) /
+        metadata.originAndCellSize.w);
+    if (any(lessThan(relativeCell, vec3(0.0))) ||
+        any(greaterThanEqual(
+            relativeCell,
+            vec3(metadata.dimensionsAndProbeCount.xyz)))) {
+        return false;
+    }
+    uvec3 cell = uvec3(relativeCell);
+    cellIndex = cell.x + metadata.dimensionsAndProbeCount.x *
+        (cell.y + metadata.dimensionsAndProbeCount.y * cell.z);
+    return cellIndex < metadata.cellAndIndexCounts.x;
+}
 
 bool reflectionProbeContainsInclusive(
     vec3 minimumValue,

@@ -292,6 +292,8 @@ void DeferredPipeline::initializePasses(ResourceMgr& resourceMgr,
     m_localShadowPass = std::make_unique<LocalShadowPass>();
     m_clusteredLightingPass = std::make_unique<ClusteredLightingPass>();
     m_lightingPass = std::make_unique<DeferredLightingPass>();
+    m_reflectionProbeGridPass =
+        std::make_unique<ReflectionProbeGridPass>();
     m_reflectionPass = std::make_unique<ReflectionPass>();
     m_cloudPass = std::make_unique<CloudPass>();
     m_sceneCompositePass = std::make_unique<SceneCompositePass>();
@@ -312,6 +314,8 @@ void DeferredPipeline::initializePasses(ResourceMgr& resourceMgr,
     m_lightingPass->init(resourceMgr);
     m_lightingPass->setClusteredLightingPass(m_clusteredLightingPass.get());
     m_reflectionPass->setSkyIblPass(m_skyIblPass.get());
+    m_reflectionPass->setReflectionProbeGridPass(
+        m_reflectionProbeGridPass.get());
     m_reflectionPass->init(resourceMgr);
     m_cloudPass->init(resourceMgr);
     m_sceneCompositePass->init(resourceMgr);
@@ -380,6 +384,7 @@ void DeferredPipeline::shutdown() {
     if (m_sceneCompositePass) m_sceneCompositePass->shutdown();
     if (m_cloudPass) m_cloudPass->shutdown();
     if (m_reflectionPass) m_reflectionPass->shutdown();
+    if (m_reflectionProbeGridPass) m_reflectionProbeGridPass->shutdown();
     if (m_lightingPass) m_lightingPass->shutdown();
     if (m_clusteredLightingPass) m_clusteredLightingPass->shutdown();
     if (m_localShadowPass) m_localShadowPass->shutdown();
@@ -401,6 +406,7 @@ void DeferredPipeline::shutdown() {
     m_sceneCompositePass.reset();
     m_cloudPass.reset();
     m_reflectionPass.reset();
+    m_reflectionProbeGridPass.reset();
     m_lightingPass.reset();
     m_clusteredLightingPass.reset();
     m_localShadowPass.reset();
@@ -551,6 +557,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
         m_shared->deferredTargets == nullptr ||
         m_resourceMgr == nullptr || m_skyCapturePass == nullptr ||
         m_skyIblPass == nullptr ||
+        m_reflectionProbeGridPass == nullptr ||
         m_lightingPass == nullptr || m_sceneCompositePass == nullptr ||
         m_waterCompositePass == nullptr || m_volumetricPass == nullptr ||
         !ctx.sceneCaptureColorTexture.isValid() ||
@@ -647,6 +654,12 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
             ctx.frameIndex)) {
         return false;
     }
+    if (!m_reflectionProbeGridPass->prepareGraphFrame(rhiDevice)) {
+        MECRAFT_LOG_STREAM(
+            std::cerr << "[DeferredPipeline] "
+                      << m_reflectionProbeGridPass->lastError() << '\n');
+        return false;
+    }
     if (ssaoEnabled && m_ssaoPass == nullptr) {
         return false;
     }
@@ -691,7 +704,12 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
     bool localShadowGraphPrepared = false;
     bool clusteredLightingGraphPrepared = false;
     bool skyIblGraphPrepared = false;
+    bool reflectionProbeGridGraphPrepared = false;
     const auto failGraphSetup = [&]() {
+        if (reflectionProbeGridGraphPrepared) {
+            m_reflectionProbeGridPass->finishGraphExecution(false);
+            reflectionProbeGridGraphPrepared = false;
+        }
         if (skyIblGraphPrepared) {
             m_skyIblPass->finishGraphExecution(false);
             skyIblGraphPrepared = false;
@@ -846,6 +864,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
 
     ClusteredLightingPass::GraphResources clusteredLightingResources;
     LocalShadowPass::GraphResources localShadowResources;
+    ReflectionProbeGridPass::GraphResources reflectionProbeGridResources;
     if (clusteredLightingActive) {
         if (!m_localShadowPass->importGraphResources(
                 m_renderGraph, localShadowResources) ||
@@ -853,6 +872,10 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
                 m_renderGraph, clusteredLightingResources)) {
             return failGraphSetup();
         }
+    }
+    if (!m_reflectionProbeGridPass->importGraphResources(
+            m_renderGraph, reflectionProbeGridResources)) {
+        return failGraphSetup();
     }
 
     ShadowPass::GraphResources shadowResources;
@@ -1256,6 +1279,12 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
         return failGraphSetup();
     }
     skyIblGraphPrepared = true;
+    graphTail = m_reflectionProbeGridPass->addGraphPasses(
+        m_renderGraph, reflectionProbeGridResources, graphTail);
+    if (!graphTail.isValid()) {
+        return failGraphSetup();
+    }
+    reflectionProbeGridGraphPrepared = true;
 
     // Hi-Z occlusion culling: reduce the previous frame's depth into a
     // max-depth pyramid, upload this frame's indirect terrain commands in a
@@ -1561,6 +1590,15 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
         reflectionResources.skySpecularPrefilter =
             skyIblResources.consumerSpecularPrefilter;
         reflectionResources.skyDfgLut = skyIblResources.dfgLut;
+        reflectionResources.probeSpecularPrefilter =
+            reflectionProbeGridResources.prefilteredCubeArray;
+        reflectionResources.probes = reflectionProbeGridResources.probes;
+        reflectionResources.probeGridMetadata =
+            reflectionProbeGridResources.metadata;
+        reflectionResources.probeGridCells =
+            reflectionProbeGridResources.cells;
+        reflectionResources.probeGridIndices =
+            reflectionProbeGridResources.indices;
         reflectionResources.voxelLight = voxelLight;
         reflectionResources.reflection = reflection;
         reflectionResources.scratch = reflectionScratch;
@@ -2337,6 +2375,10 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
     }
     if (skyIblGraphPrepared) {
         m_skyIblPass->finishGraphExecution(executed.succeeded());
+    }
+    if (reflectionProbeGridGraphPrepared) {
+        m_reflectionProbeGridPass->finishGraphExecution(
+            executed.succeeded());
     }
     if (executed.succeeded()) {
         commitDeferredHistoryState();

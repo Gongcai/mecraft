@@ -146,11 +146,14 @@ bool testGenerationAndConsumptionContract() {
                          mipDebug < reflectionMask && dfgDebug < reflectionMask,
                      "roughness mip and DFG must cover every geometry pixel") &&
          requireTrue(
-             reflection.find("skyLightRaw01 * materialAo") !=
+             reflection.find("skyReflection * skyLightRaw01") !=
                      std::string::npos &&
-                 reflection.find("skyLightRaw01 * skyLightRaw01 * skyLightRaw01") ==
+                 reflection.find(
+                     "environmentReflection = environmentRadiance * materialAo") !=
+                     std::string::npos &&
+                 reflection.find("probeReflection * skyLightRaw01") ==
                      std::string::npos,
-             "sky IBL visibility must preserve linear skylight energy and material AO");
+             "sky visibility must attenuate sky IBL without suppressing local probes");
 }
 } // namespace
 

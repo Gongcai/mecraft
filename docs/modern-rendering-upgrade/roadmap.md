@@ -64,9 +64,11 @@ M1 与 M2 可并行开发，但公共 `GpuMaterial`、`GpuSceneGeometry` 与 Sta
    每帧更新一个 Prefilter Face/Mip，完整 48 项成功提交后原子切换。V01/M01/M02 参考图验收
    待对应版本化资产落地。）
 8. 建设 Reflection Probe 数据与 Box Projection。（基础契约完成：固定 96 字节 CPU/GPU
-   数据布局、结构化输入校验、稳定 Top-4 权重选择、Box Projection CPU/GLSL 参考实现、
-   双后端 Shader 编译与契约测试已落地；Probe Capture 资源、流式 Grid 更新、Reflection
-   Pass 消费、Probe ID/Weight 调试视图和 V02/V07/M07 场景验收待后续接入。）
+   数据布局、结构化输入校验、稳定 Top-4 权重选择、Box Projection CPU/GLSL 参考实现已落地；
+   运行时已接入固定 16 米单元格 Grid、稳定 ID 排序的紧凑候选表、事务式 GPU Buffer 上传、
+   Prefiltered Cube Array 资源契约、Reflection Pass Box Projection/Top-4 消费，以及 Probe ID/
+   Weight 调试视图。实际六面场景捕获、动态捕获队列、体素/模型场景 Probe 数据源和
+   V02/V07/M07 场景验收待后续接入。）
 
 ### 完成条件
 

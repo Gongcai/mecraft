@@ -23,6 +23,18 @@ bool requireTrue(const bool condition, const char* message) {
     return true;
 }
 
+bool readProjectFile(const char* relativePath, std::string& source) {
+    const std::string path = std::string(MECRAFT_TEST_SOURCE_DIR) +
+        "/" + relativePath;
+    std::ifstream stream(path, std::ios::binary);
+    if (!stream.is_open()) {
+        return false;
+    }
+    source.assign(std::istreambuf_iterator<char>(stream),
+                  std::istreambuf_iterator<char>());
+    return true;
+}
+
 bool nearlyEqual(const float lhs, const float rhs,
                  const float tolerance = 1.0e-5f) {
     return std::abs(lhs - rhs) <= tolerance;
@@ -265,6 +277,127 @@ bool testDeterministicTopFourSelection() {
                "selection must reject an invalid surface query");
 }
 
+bool testDeterministicSpatialGrid() {
+    using namespace renderer::contracts;
+    const std::vector<GpuReflectionProbe> probes{
+        makeProbe(50u), makeProbe(20u), makeProbe(40u),
+        makeProbe(10u), makeProbe(30u),
+        makeProbe(60u, {0.0f, 1.0f, 0.0f}, 0.0f)};
+    const ReflectionProbeGridBuildResult result =
+        buildReflectionProbeGrid(probes);
+    if (!requireTrue(result.succeeded(),
+                     "valid probes must build a spatial grid") ||
+        !requireTrue(
+            result.grid.metadata.dimensionsAndProbeCount ==
+                glm::uvec4(2u, 1u, 2u, 5u),
+            "grid dimensions and active probe count must be packed") ||
+        !requireTrue(
+            result.grid.metadata.cellAndIndexCounts ==
+                glm::uvec4(4u, 20u,
+                           kReflectionProbeGridMaxProbesPerCell,
+                           kReflectionProbeContractVersion),
+            "cell and compact-index counts must be exact") ||
+        !requireTrue(result.grid.probes.size() == 5u &&
+                         result.grid.cells.size() == 4u &&
+                         result.grid.probeIndices.size() == 20u,
+                     "zero-validity probes must be excluded from GPU data")) {
+        return false;
+    }
+
+    constexpr std::array<uint32_t, 5> expectedIds{
+        10u, 20u, 30u, 40u, 50u};
+    for (uint32_t index = 0u; index < expectedIds.size(); ++index) {
+        if (!requireTrue(
+                result.grid.probes[index].resourcesAndIdentity.y ==
+                    expectedIds[index],
+                "packed probes must sort by stable ID")) {
+            return false;
+        }
+    }
+    for (const GpuReflectionProbeGridCell& cell : result.grid.cells) {
+        if (!requireTrue(cell.offsetAndCount.y == 5u,
+                         "every overlapping cell must reference all probes")) {
+            return false;
+        }
+        for (uint32_t offset = 0u; offset < cell.offsetAndCount.y; ++offset) {
+            if (!requireTrue(
+                    result.grid.probeIndices[
+                        cell.offsetAndCount.x + offset] == offset,
+                    "cell candidates must preserve stable-ID order")) {
+                return false;
+            }
+        }
+    }
+    const auto firstCell = reflectionProbeGridCellIndex(
+        result.grid.metadata, {0u, 0u, 0u});
+    const auto lastCell = reflectionProbeGridCellIndex(
+        result.grid.metadata, {1u, 0u, 1u});
+    const auto outsideCell = reflectionProbeGridCellIndex(
+        result.grid.metadata, {2u, 0u, 0u});
+    return requireTrue(firstCell.has_value() && *firstCell == 0u,
+                       "the first grid cell must map to index zero") &&
+           requireTrue(lastCell.has_value() && *lastCell == 3u,
+                       "xyz coordinates must use the shared linear order") &&
+           requireTrue(!outsideCell.has_value(),
+                       "out-of-range cell coordinates must fail explicitly");
+}
+
+bool testSpatialGridFailures() {
+    using namespace renderer::contracts;
+    std::vector<GpuReflectionProbe> crowded;
+    crowded.reserve(kReflectionProbeGridMaxProbesPerCell + 1u);
+    for (uint32_t index = 0u;
+         index <= kReflectionProbeGridMaxProbesPerCell; ++index) {
+        crowded.push_back(makeProbe(index + 1u));
+    }
+    const ReflectionProbeGridBuildResult crowdedResult =
+        buildReflectionProbeGrid(crowded);
+    if (!requireTrue(
+            !crowdedResult.succeeded() &&
+                crowdedResult.error ==
+                    ReflectionProbeGridError::CellCapacityExceeded &&
+                crowdedResult.probeId.value == 17u,
+            "per-cell overflow must identify the exact probe")) {
+        return false;
+    }
+
+    ReflectionProbeNormalizationInput largeInput = makeInput(100u);
+    largeInput.positionMeters = {1.0f, 1.0f, 0.0f};
+    largeInput.influenceMinMeters = {0.0f, 0.0f, -4.0f};
+    largeInput.influenceMaxMeters = {2050.0f, 4.0f, 4.0f};
+    largeInput.boxProjectionMinMeters = {-1.0f, -1.0f, -5.0f};
+    largeInput.boxProjectionMaxMeters = {2051.0f, 5.0f, 5.0f};
+    const auto largeProbe = normalizeReflectionProbe(largeInput);
+    if (!requireTrue(largeProbe.succeeded(),
+                     "large-grid test probe must satisfy probe validation")) {
+        return false;
+    }
+    const ReflectionProbeGridBuildResult largeResult =
+        buildReflectionProbeGrid({largeProbe.probe});
+    GpuReflectionProbe invalid = makeProbe(200u);
+    invalid.resourcesAndIdentity.w = 0u;
+    const ReflectionProbeGridBuildResult invalidResult =
+        buildReflectionProbeGrid({invalid});
+    return requireTrue(
+               !largeResult.succeeded() &&
+                   largeResult.error ==
+                       ReflectionProbeGridError::DimensionExceeded,
+               "grid dimensions above the fixed contract must fail") &&
+           requireTrue(
+               !invalidResult.succeeded() &&
+                   invalidResult.error ==
+                       ReflectionProbeGridError::InvalidProbe &&
+                   invalidResult.probeError ==
+                       ReflectionProbeError::InvalidContractVersion &&
+                   invalidResult.sourceProbeIndex == 0u,
+               "grid failures must preserve packed-probe validation details") &&
+           requireTrue(
+               std::string(reflectionProbeGridErrorStableId(
+                   ReflectionProbeGridError::CellCapacityExceeded)) ==
+                   "CellCapacityExceeded",
+               "grid failures must expose stable diagnostic IDs");
+}
+
 bool testBoxProjection() {
     using namespace renderer::contracts;
     const GpuReflectionProbe probe = makeProbe(30u);
@@ -295,6 +428,16 @@ bool testCpuAndGlslMirror() {
     static_assert(offsetof(GpuReflectionProbe, boxProjectionMax) == 64u);
     static_assert(offsetof(GpuReflectionProbe,
                            resourcesAndIdentity) == 80u);
+    static_assert(offsetof(GpuReflectionProbeGridMetadata,
+                           originAndCellSize) == 0u);
+    static_assert(offsetof(GpuReflectionProbeGridMetadata,
+                           dimensionsAndProbeCount) == 16u);
+    static_assert(offsetof(GpuReflectionProbeGridMetadata,
+                           cellAndIndexCounts) == 32u);
+    static_assert(offsetof(GpuReflectionProbeGridMetadata,
+                           reserved) == 48u);
+    static_assert(offsetof(GpuReflectionProbeGridCell,
+                           offsetAndCount) == 0u);
 
     const std::string path = std::string(MECRAFT_TEST_SOURCE_DIR) +
         "/assets/shaders/reflection_probe_contract.glsl";
@@ -309,6 +452,10 @@ bool testCpuAndGlslMirror() {
             source.find("REFLECTION_PROBE_CONTRACT_VERSION = 1u") !=
                     std::string::npos &&
                 source.find("REFLECTION_PROBE_BLEND_COUNT = 4u") !=
+                    std::string::npos &&
+                source.find("REFLECTION_PROBE_GRID_CELL_SIZE_METERS = 16.0") !=
+                    std::string::npos &&
+                source.find("REFLECTION_PROBE_GRID_MAX_PROBES_PER_CELL = 16u") !=
                     std::string::npos &&
                 source.find("REFLECTION_PROBE_INVALID_CUBEMAP_INDEX = 0xffffffffu") !=
                     std::string::npos,
@@ -334,8 +481,74 @@ bool testCpuAndGlslMirror() {
     }
     return requireTrue(
         source.find("reflectionProbeInfluenceWeight") != std::string::npos &&
-            source.find("reflectionProbeBoxProject") != std::string::npos,
-        "GLSL must expose influence and box-projection reference functions");
+            source.find("reflectionProbeBoxProject") != std::string::npos &&
+            source.find("reflectionProbeGridCellIndex") != std::string::npos,
+        "GLSL must expose influence, box-projection, and grid functions");
+}
+
+bool testRuntimeGridIntegrationContract() {
+    std::string gridPass;
+    std::string reflectionPass;
+    std::string reflectionShader;
+    std::string pipeline;
+    if (!requireTrue(readProjectFile(
+                         "src/renderer/passes/ReflectionProbeGridPass.cpp",
+                         gridPass),
+                     "probe-grid pass source must be readable") ||
+        !requireTrue(readProjectFile(
+                         "src/renderer/passes/ReflectionPass.cpp",
+                         reflectionPass),
+                     "reflection pass source must be readable") ||
+        !requireTrue(readProjectFile(
+                         "assets/shaders/reflection_probe.frag",
+                         reflectionShader),
+                     "reflection shader source must be readable") ||
+        !requireTrue(readProjectFile(
+                         "src/renderer/core/DeferredPipeline.cpp",
+                         pipeline),
+                     "deferred pipeline source must be readable")) {
+        return false;
+    }
+    return requireTrue(
+               gridPass.find("buildReflectionProbeGrid(m_sceneProbes)") !=
+                       std::string::npos &&
+                   gridPass.find("RhiTextureDimension::CubeArray") !=
+                       std::string::npos &&
+                   gridPass.find("ReflectionProbeGrid.Upload") !=
+                       std::string::npos,
+               "runtime grid pass must build, validate, and upload the packed grid") &&
+           requireTrue(
+               reflectionPass.find(
+                   ".readBuffer(resources.probes") != std::string::npos &&
+                   reflectionPass.find(
+                       ".readTexture(resources.probeSpecularPrefilter") !=
+                       std::string::npos,
+               "reflection graph must declare probe buffers and cubemap reads") &&
+           requireTrue(
+               reflectionShader.find(
+                   "uniform samplerCubeArray uProbeSpecularPrefilter") !=
+                       std::string::npos &&
+                   reflectionShader.find(
+                       "sampleReflectionProbeGrid(") != std::string::npos &&
+                   reflectionShader.find(
+                       "uReflectionDebugMode == 33") != std::string::npos &&
+                   reflectionShader.find(
+                       "uReflectionDebugMode == 34") != std::string::npos,
+               "reflection shading must consume Box Projection and expose ID/weight debug") &&
+           requireTrue(
+               pipeline.find(
+                   "m_reflectionProbeGridPass->prepareGraphFrame") !=
+                       std::string::npos &&
+                   pipeline.find(
+                       "m_reflectionProbeGridPass->importGraphResources") !=
+                       std::string::npos &&
+                   pipeline.find(
+                       "m_reflectionProbeGridPass->addGraphPasses") !=
+                       std::string::npos &&
+                   pipeline.find(
+                       "m_reflectionProbeGridPass->finishGraphExecution") !=
+                       std::string::npos,
+               "deferred graph must own the complete probe-grid transaction");
 }
 
 } // namespace
@@ -345,7 +558,10 @@ int main() {
         !testStructuredValidationFailures() ||
         !testInfluenceWeights() ||
         !testDeterministicTopFourSelection() ||
-        !testBoxProjection() || !testCpuAndGlslMirror()) {
+        !testDeterministicSpatialGrid() ||
+        !testSpatialGridFailures() ||
+        !testBoxProjection() || !testCpuAndGlslMirror() ||
+        !testRuntimeGridIntegrationContract()) {
         return 1;
     }
     std::cout << "[reflection_probe_contract_test] PASS\n";

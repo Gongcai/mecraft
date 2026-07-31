@@ -1515,7 +1515,7 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
             "9: Rain Ripple Normal",
             "10: Rain Ripple Strength",
             "11: F0 x8",
-            "12: Sky Fallback",
+            "12: Sky Environment",
             "13: Reflection RGB x8",
             "14: Has Reflection",
             "15: Sky Light Raw",
@@ -1535,7 +1535,9 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
             "29: Reflectance x128",
             "30: Source Gradient x128",
             "31: Sky IBL Mip",
-            "32: Sky IBL DFG"
+            "32: Sky IBL DFG",
+            "33: Reflection Probe ID",
+            "34: Reflection Probe Weight"
         };
         int reflDebugMode = settings.debug.reflectionDebugMode;
         pipelineChanged |= ImGui::Combo("Reflection Debug", &reflDebugMode, kReflectionDebugModes, IM_ARRAYSIZE(kReflectionDebugModes));

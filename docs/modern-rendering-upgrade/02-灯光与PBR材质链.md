@@ -254,8 +254,14 @@ V01/M01/M02 版本化参考图。
 影响 AABB 与混合距离、Box Projection AABB、Validity、Prefiltered Cubemap Index、稳定 ID、
 Capture Revision 和契约版本。CPU 参考实现对输入执行结构化校验，按边界距离、探针归一化
 距离、表面朝向和 Validity 计算权重，以权重降序和稳定 ID 升序确定 Top-4 并归一化；CPU 与
-GLSL 共用相同的 Box Projection 算法和字段顺序。Probe Capture 资源、流式 Grid 更新、
-Reflection Pass 消费及 Probe ID/Weight 调试视图仍属于后续集成范围。
+GLSL 共用相同的 Box Projection 算法和字段顺序。
+
+运行时 Grid 已使用固定 16 米单元格覆盖有效探针影响盒，限制单元格最多 16 个候选，并按稳定
+ID 生成紧凑候选索引；Probe、Grid Metadata、Cell 和 Index Buffer 通过 Render Graph 事务式
+上传。Reflection Pass 从 Prefiltered Cube Array 读取入选探针，使用 Box Projection 修正方向，
+按 Top-4 权重混合局部环境与天空环境，并提供 Probe ID/Weight 调试视图。粗糙环境反射统一以
+几何反射方向查询预过滤 Mip，不再对方向额外执行随机微表面扰动。实际六面场景捕获、动态更新
+队列、体素/模型场景 Probe 数据源及版本化场景验收仍属于后续集成范围。
 
 Probe Capture 使用与主视图一致的材质和直接光，但关闭时域效果。动态探针按确定的更新
 队列逐 Face/Mip 构建，Dashboard 展示队列长度与资源代际。

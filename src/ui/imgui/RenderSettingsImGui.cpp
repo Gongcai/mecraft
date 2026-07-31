@@ -138,7 +138,11 @@ bool showReflectionSettings(RenderSettings& settings) {
         "27: Scene Luminance",
         "28: Reflection Luminance x64",
         "29: Reflectance x128",
-        "30: Source Gradient x128"
+        "30: Source Gradient x128",
+        "31: Sky IBL Mip",
+        "32: Sky IBL DFG",
+        "33: Reflection Probe ID",
+        "34: Reflection Probe Weight"
     };
 
     bool changed = false;

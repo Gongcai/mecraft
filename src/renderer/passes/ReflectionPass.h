@@ -2,6 +2,7 @@
 #define MECRAFT_REFLECTION_PASS_H
 
 #include "RenderPass.h"
+#include "ReflectionProbeGridPass.h"
 #include "../core/FrameContext.h"
 #include "../core/RenderSettings.h"
 #include "../rhi/RhiHandles.h"
@@ -35,6 +36,11 @@ public:
         RgTextureHandle skyCapture;
         RgTextureHandle skySpecularPrefilter;
         RgTextureHandle skyDfgLut;
+        RgTextureHandle probeSpecularPrefilter;
+        RgBufferHandle probes;
+        RgBufferHandle probeGridMetadata;
+        RgBufferHandle probeGridCells;
+        RgBufferHandle probeGridIndices;
         RgTextureHandle voxelLight;
         RgTextureHandle reflection;
         RgTextureHandle scratch;
@@ -62,6 +68,12 @@ public:
     /// @param pass Sky IBL producer whose products outlive each reflection pass.
     void setSkyIblPass(SkyIblPass* pass) { m_skyIblPass = pass; }
 
+    /// Injects the pass that owns probe-grid buffers and capture resources.
+    /// @param pass Persistent probe-grid producer for deferred reflection.
+    void setReflectionProbeGridPass(ReflectionProbeGridPass* pass) {
+        m_reflectionProbeGridPass = pass;
+    }
+
 private:
     [[nodiscard]] bool recordReflection(RhiCommandList& commandList,
                                         const FrameContext& ctx,
@@ -80,7 +92,9 @@ private:
                                       bool readScratch);
     bool ensureBaseRhiPipeline(RhiDevice& rhiDevice);
     bool ensureBaseBindGroup(RhiDevice& rhiDevice,
-                             const std::array<RhiTextureViewHandle, 11>& views);
+                             const std::array<RhiTextureViewHandle, 12>& views,
+                             const ReflectionProbeGridPass::ConsumerResources&
+                                 probeResources);
     void destroyBaseBindGroup();
     void destroyBaseRhiResources();
     bool ensureFilterRhiPipeline(RhiDevice& rhiDevice);
@@ -96,6 +110,7 @@ private:
 
     RhiDevice* m_baseRhiDevice = nullptr;
     SkyIblPass* m_skyIblPass = nullptr;
+    ReflectionProbeGridPass* m_reflectionProbeGridPass = nullptr;
     RhiBufferHandle m_baseUniformBuffer;
     RhiSamplerHandle m_baseNearestSampler;
     RhiSamplerHandle m_baseLinearSampler;
@@ -105,7 +120,8 @@ private:
     RhiShaderHandle m_baseFragmentShader;
     RhiPipelineHandle m_basePipeline;
     RhiBindGroupHandle m_baseBindGroup;
-    std::array<RhiTextureViewHandle, 11> m_baseBoundViews = {};
+    std::array<RhiTextureViewHandle, 12> m_baseBoundViews = {};
+    ReflectionProbeGridPass::ConsumerResources m_baseBoundProbeResources;
 
     RhiDevice* m_filterRhiDevice = nullptr;
     RhiSamplerHandle m_filterNearestSampler;

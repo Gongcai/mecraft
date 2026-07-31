@@ -16,9 +16,17 @@
 namespace renderer::contracts {
 
 inline constexpr uint32_t kReflectionProbeContractVersion = 1u;
+inline constexpr uint32_t kReflectionProbeCubeExtent = 128u;
+inline constexpr uint32_t kReflectionProbeCubeMipCount = 8u;
 inline constexpr uint32_t kReflectionProbeInvalidCubemapIndex =
     std::numeric_limits<uint32_t>::max();
 inline constexpr uint32_t kReflectionProbeBlendCount = 4u;
+inline constexpr float kReflectionProbeGridCellSizeMeters = 16.0f;
+inline constexpr uint32_t kReflectionProbeGridMaxDimension = 128u;
+inline constexpr uint32_t kReflectionProbeGridMaxCellCount = 262144u;
+inline constexpr uint32_t kReflectionProbeGridMaxProbeCount = 4096u;
+inline constexpr uint32_t kReflectionProbeGridMaxProbesPerCell = 16u;
+inline constexpr uint32_t kReflectionProbeGridMaxIndexCount = 1048576u;
 
 /// Defines the immutable 96-byte CPU/GPU reflection-probe record consumed by
 /// probe selection, box projection, and environment-lighting passes.
@@ -139,6 +147,60 @@ struct ReflectionProbeSelectionResult final {
     [[nodiscard]] bool succeeded() const;
 };
 
+/// Defines the fixed metadata record used to locate one camera-relative probe
+/// grid from a surface position without scanning the complete probe snapshot.
+struct alignas(16) GpuReflectionProbeGridMetadata final {
+    /// Grid origin in camera-relative meters and fixed cubic cell size.
+    glm::vec4 originAndCellSize{0.0f, 0.0f, 0.0f,
+                                kReflectionProbeGridCellSizeMeters};
+    /// Grid dimensions in xyz and active packed probe count in w.
+    glm::uvec4 dimensionsAndProbeCount{0u};
+    /// Cell count, compact index count, per-cell limit, and contract version.
+    glm::uvec4 cellAndIndexCounts{
+        0u, 0u, kReflectionProbeGridMaxProbesPerCell,
+        kReflectionProbeContractVersion};
+    /// Reserved for later streaming metadata and required to remain zero.
+    glm::uvec4 reserved{0u};
+};
+
+/// Locates one contiguous candidate range in the compact probe-index array.
+struct alignas(8) GpuReflectionProbeGridCell final {
+    glm::uvec2 offsetAndCount{0u};
+};
+
+/// Identifies deterministic failures while building the packed spatial grid.
+enum class ReflectionProbeGridError : uint8_t {
+    None,
+    InvalidProbe,
+    DuplicateStableId,
+    ProbeCapacityExceeded,
+    DimensionExceeded,
+    CellCapacityExceeded,
+    IndexCapacityExceeded
+};
+
+/// Stores packed probes and their deterministic spatial acceleration data.
+struct ReflectionProbeGrid final {
+    GpuReflectionProbeGridMetadata metadata;
+    std::vector<GpuReflectionProbe> probes;
+    std::vector<GpuReflectionProbeGridCell> cells;
+    std::vector<uint32_t> probeIndices;
+};
+
+/// Returns a complete grid or the exact source probe/capacity failure.
+struct ReflectionProbeGridBuildResult final {
+    ReflectionProbeGrid grid;
+    ReflectionProbeGridError error = ReflectionProbeGridError::None;
+    ReflectionProbeError probeError = ReflectionProbeError::None;
+    ReflectionProbeField probeField = ReflectionProbeField::None;
+    uint32_t sourceProbeIndex = 0u;
+    StableReflectionProbeId probeId;
+
+    /// Reports whether every source probe was packed into the grid.
+    /// @return True only when no probe or capacity error was recorded.
+    [[nodiscard]] bool succeeded() const;
+};
+
 /// Validates source values and constructs the fixed GPU probe record.
 /// The influence AABB must lie inside the box-projection AABB, and the capture
 /// state must pair zero validity with no resource or positive validity with a
@@ -177,6 +239,29 @@ struct ReflectionProbeSelectionResult final {
     const glm::vec3& surfacePosition,
     const glm::vec3& surfaceNormal);
 
+/// Builds a deterministic camera-relative spatial grid for captured probes.
+/// Zero-validity probes are validated but excluded from GPU storage. Active
+/// probes sort by stable ID so cell candidate order does not depend on scene
+/// submission order.
+/// @param probes Complete visible probe snapshot.
+/// @return Packed probes, cells, and compact indices or a structured failure.
+[[nodiscard]] ReflectionProbeGridBuildResult buildReflectionProbeGrid(
+    const std::vector<GpuReflectionProbe>& probes);
+
+/// Converts one valid cell coordinate to the packed linear cell index.
+/// @param metadata Grid metadata returned by buildReflectionProbeGrid().
+/// @param cell Zero-based integer cell coordinate.
+/// @return Linear cell index, or std::nullopt when the coordinate is outside.
+[[nodiscard]] std::optional<uint32_t> reflectionProbeGridCellIndex(
+    const GpuReflectionProbeGridMetadata& metadata,
+    const glm::uvec3& cell);
+
+/// Returns the stable identifier used by diagnostics for one grid error.
+/// @param error Grid construction error to identify.
+/// @return Process-lifetime string containing the stable identifier.
+[[nodiscard]] const char* reflectionProbeGridErrorStableId(
+    ReflectionProbeGridError error);
+
 /// Corrects a reflection direction against one probe's projection AABB.
 /// The surface must be inside the projection box and the direction must be
 /// finite and non-zero.
@@ -206,6 +291,14 @@ static_assert(sizeof(GpuReflectionProbe) == 96u);
 static_assert(alignof(GpuReflectionProbe) == 16u);
 static_assert(std::is_trivially_copyable_v<GpuReflectionProbe>);
 static_assert(std::is_standard_layout_v<GpuReflectionProbe>);
+static_assert(sizeof(GpuReflectionProbeGridMetadata) == 64u);
+static_assert(alignof(GpuReflectionProbeGridMetadata) == 16u);
+static_assert(std::is_trivially_copyable_v<GpuReflectionProbeGridMetadata>);
+static_assert(std::is_standard_layout_v<GpuReflectionProbeGridMetadata>);
+static_assert(sizeof(GpuReflectionProbeGridCell) == 8u);
+static_assert(alignof(GpuReflectionProbeGridCell) == 8u);
+static_assert(std::is_trivially_copyable_v<GpuReflectionProbeGridCell>);
+static_assert(std::is_standard_layout_v<GpuReflectionProbeGridCell>);
 
 } // namespace renderer::contracts
 
