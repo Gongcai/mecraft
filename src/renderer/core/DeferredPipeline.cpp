@@ -15,12 +15,15 @@
 #include "../mesh/TerrainRenderer.h"
 #include "../mesh/WorldRenderBuffer.h"
 #include "../mesh/TerrainRenderCache.h"
+#include "../contracts/VoxelReflectionProbeSourceContract.h"
 #include "../../world/World.h"
+#include "../../world/chunk/Chunk.h"
 #include "../../particle/ParticleSystem.h"
 #include "../../Diagnostics.h"
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <iostream>
 #include <limits>
 
@@ -220,6 +223,156 @@ bool clearRebuiltHistoryTargets(RhiDevice& rhiDevice, RhiCommandListPool& comman
 
 bool DeferredPipeline::setSceneLights(std::vector<renderer::contracts::SceneLight> lights) {
     m_sceneLights = std::move(lights);
+    return true;
+}
+
+bool DeferredPipeline::configureVoxelReflectionProbe(const FrameContext& ctx) {
+    using namespace renderer::contracts;
+
+    if (ctx.worldView == nullptr || m_reflectionProbeCapturePass == nullptr) {
+        return false;
+    }
+    if (!m_voxelReflectionProbeId.isValid()) {
+        const std::optional<StableReflectionProbeId> allocated = allocateStableSceneId<StableReflectionProbeIdTag>();
+        if (!allocated.has_value()) {
+            MECRAFT_LOG_STREAM(std::cerr << "[DeferredPipeline] voxel reflection-probe ID range is exhausted\n");
+            return false;
+        }
+        m_voxelReflectionProbeId = *allocated;
+    }
+
+    constexpr float kCellSizeMeters = kReflectionProbeGridCellSizeMeters;
+    const glm::ivec3 cameraCell = glm::ivec3(glm::floor(ctx.camera.position / kCellSizeMeters));
+    const uint64_t activeChunkRevision = ctx.worldView->getActiveChunkRevision();
+    const uint64_t blockContentRevision = ctx.worldView->getBlockContentRevision();
+    const bool sourceChanged =
+        !m_voxelReflectionProbeCellInitialized || m_voxelReflectionProbeWorldView != ctx.worldView ||
+        cameraCell != m_voxelReflectionProbeCell || activeChunkRevision != m_voxelReflectionProbeActiveChunkRevision ||
+        blockContentRevision != m_voxelReflectionProbeBlockContentRevision;
+    if (sourceChanged) {
+        if (m_voxelReflectionProbeCaptureRevision == std::numeric_limits<uint32_t>::max()) {
+            MECRAFT_LOG_STREAM(std::cerr << "[DeferredPipeline] voxel reflection-probe revision is exhausted\n");
+            return false;
+        }
+        ++m_voxelReflectionProbeCaptureRevision;
+    }
+
+    const glm::vec3 cellMin = glm::vec3(cameraCell) * kCellSizeMeters;
+    const glm::vec3 cellMax = cellMin + glm::vec3(kCellSizeMeters);
+    VoxelReflectionProbeSourceBuildInput input;
+    input.firstProbeId = m_voxelReflectionProbeId;
+    input.boundsMinWorldMeters = cellMin;
+    input.boundsMaxWorldMeters = cellMax;
+    input.cellSizeMeters = kCellSizeMeters;
+    input.boundsPaddingMeters = 0.0f;
+    input.requestedRevision = m_voxelReflectionProbeCaptureRevision;
+    VoxelReflectionProbeSourceBuildResult built = buildVoxelReflectionProbeSources(input);
+    if (!built.succeeded() || built.sources.size() != 1u) {
+        MECRAFT_LOG_STREAM(std::cerr << "[DeferredPipeline] voxel reflection-probe source build failed: "
+                                     << voxelReflectionProbeSourceBuildErrorStableId(built.error) << '\n');
+        return false;
+    }
+
+    glm::vec3 captureMin = cellMin;
+    glm::vec3 captureMax = cellMax;
+    for (const auto& entry : ctx.worldView->getActiveChunks()) {
+        if (entry.second == nullptr) {
+            MECRAFT_LOG_STREAM(std::cerr << "[DeferredPipeline] active voxel chunk entry is null\n");
+            return false;
+        }
+        const glm::vec3 chunkMin = glm::vec3(entry.second->getWorldOffset());
+        const glm::vec3 chunkMax =
+            chunkMin + glm::vec3(static_cast<float>(Chunk::SIZE_X), static_cast<float>(Chunk::SIZE_Y),
+                                 static_cast<float>(Chunk::SIZE_Z));
+        captureMin = glm::min(captureMin, chunkMin);
+        captureMax = glm::max(captureMax, chunkMax);
+    }
+    built.sources.front().boxProjectionMinWorldMeters = captureMin;
+    built.sources.front().boxProjectionMaxWorldMeters = captureMax;
+
+    const VoxelReflectionProbeSource& voxelSource = built.sources.front();
+    ReflectionProbeCaptureSource source;
+    source.probeId = voxelSource.probeId;
+    source.positionWorldMeters = voxelSource.positionWorldMeters;
+    source.exposureScale = voxelSource.exposureScale;
+    source.influenceMinWorldMeters = voxelSource.influenceMinWorldMeters;
+    source.influenceMaxWorldMeters = voxelSource.influenceMaxWorldMeters;
+    source.blendDistanceMeters = voxelSource.blendDistanceMeters;
+    source.boxProjectionMinWorldMeters = voxelSource.boxProjectionMinWorldMeters;
+    source.boxProjectionMaxWorldMeters = voxelSource.boxProjectionMaxWorldMeters;
+    source.requestedRevision = voxelSource.requestedRevision;
+    m_reflectionProbeCapturePass->setCaptureRenderer(this);
+    m_reflectionProbeCapturePass->setSources({source});
+
+    if (sourceChanged) {
+        m_voxelReflectionProbeCell = cameraCell;
+        m_voxelReflectionProbeWorldView = ctx.worldView;
+        m_voxelReflectionProbeActiveChunkRevision = activeChunkRevision;
+        m_voxelReflectionProbeBlockContentRevision = blockContentRevision;
+        m_voxelReflectionProbeCellInitialized = true;
+    }
+    return true;
+}
+
+bool DeferredPipeline::recordReflectionProbeRadianceFace(RhiCommandList& commandList, const FrameContext& context,
+                                                         const ReflectionProbeCaptureWork& work) {
+    if (m_shared == nullptr || m_shared->terrain == nullptr || m_shared->worldRenderBuffer == nullptr ||
+        m_shared->terrainRhiPipelines == nullptr || m_resourceMgr == nullptr || context.worldView == nullptr ||
+        !work.targetView.isValid() || !work.depthTargetView.isValid() ||
+        work.face >= renderer::contracts::kReflectionProbeCubeFaceCount) {
+        return false;
+    }
+
+    TerrainFrameData frame;
+    frame.view = work.view;
+    frame.viewProj = work.viewProjection;
+    frame.cameraPos = work.positionWorldMeters;
+    frame.animationTime = context.animationTime;
+    frame.shaderTime = context.shaderTime;
+    frame.fog.enabled = false;
+    frame.skyLighting.skyIntensity = context.skyIntensity;
+
+    TerrainRenderer& terrain = *m_shared->terrain;
+    WorldRenderBuffer& worldBuffer = *m_shared->worldRenderBuffer;
+    worldBuffer.resetDrawCommands();
+    terrain.setCameraPos(work.positionWorldMeters);
+    terrain.updateFrustum(work.viewProjection);
+    terrain.renderOpaqueChunksAndCollectPasses(*context.worldView, true);
+    if (!m_shared->terrainRhiPipelines->prepareForward(commandList, *m_resourceMgr, frame) ||
+        !worldBuffer.prepareRhiOpaqueAndCutout(commandList, m_shared->terrainRhiPipelines->forwardMetadataLayout())) {
+        return false;
+    }
+
+    RhiColorAttachment colorAttachment;
+    colorAttachment.view = work.targetView;
+    colorAttachment.loadOp = RhiLoadOp::Clear;
+    colorAttachment.storeOp = RhiStoreOp::Store;
+    const glm::vec3 skyRadiance = context.skyColors.horizon * context.skyIntensity;
+    colorAttachment.clearColor[0] = skyRadiance.r;
+    colorAttachment.clearColor[1] = skyRadiance.g;
+    colorAttachment.clearColor[2] = skyRadiance.b;
+    colorAttachment.clearColor[3] = 1.0f;
+    RhiDepthStencilAttachment depthAttachment;
+    depthAttachment.view = work.depthTargetView;
+    depthAttachment.depthLoadOp = RhiLoadOp::Clear;
+    depthAttachment.depthStoreOp = RhiStoreOp::Store;
+    depthAttachment.clearDepth = 1.0f;
+    RhiRenderingInfo renderingInfo;
+    renderingInfo.debugName = "VoxelTerrain.ReflectionProbeCapture";
+    renderingInfo.renderArea = {0, 0, renderer::contracts::kReflectionProbeCubeExtent,
+                                renderer::contracts::kReflectionProbeCubeExtent};
+    renderingInfo.colorAttachments = &colorAttachment;
+    renderingInfo.colorAttachmentCount = 1u;
+    renderingInfo.depthStencilAttachment = &depthAttachment;
+    commandList.beginRendering(renderingInfo);
+    commandList.setViewport({0.0f, 0.0f, static_cast<float>(renderer::contracts::kReflectionProbeCubeExtent),
+                             static_cast<float>(renderer::contracts::kReflectionProbeCubeExtent), 0.0f, 1.0f});
+    commandList.setScissor(renderingInfo.renderArea);
+    worldBuffer.recordRhiOpaque(commandList, m_shared->terrainRhiPipelines->forwardOpaquePipeline(),
+                                m_shared->terrainRhiPipelines->forwardOpaqueBindGroup());
+    worldBuffer.recordRhiCutout(commandList, m_shared->terrainRhiPipelines->forwardCutoutPipeline(),
+                                m_shared->terrainRhiPipelines->forwardCutoutBindGroup());
+    commandList.endRendering();
     return true;
 }
 
@@ -519,6 +672,9 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
     }
     if (!externalGeometry && (ctx.worldView == nullptr || m_shared->worldRenderBuffer == nullptr ||
                               m_shared->terrainRhiPipelines == nullptr)) {
+        return false;
+    }
+    if (!externalGeometry && !configureVoxelReflectionProbe(ctx)) {
         return false;
     }
     RhiDevice& rhiDevice = *m_shared->rhiDevice;

@@ -272,13 +272,21 @@ Sampling、太阳/月亮直接光、环境光、发光材质和完整 `KHR_light
 Probe 距离全局排序，捕获过程不读取主视图时域结果。模型编辑器的 Reflection Probes 面板支持
 添加、删除、空间参数编辑和按场景包围盒生成固定顺序规则网格，运行时为每个文档 ID 分配独立
 稳定捕获 ID 与修订。Dashboard 与模型场景 Reflections 面板已展示 Source/Active/Building
-数量、剩余工作项、当前 Probe/Work Item、活动/构建修订和 Cubemap 槽位。体素场景数据源与
-体素场景已具备独立的源构建契约：按加载区域 AABB、固定单元尺寸、外扩距离和捕获修订生成
-固定 z/y/x 顺序的世界空间 Probe 源，并严格检查有限值、容量、稳定 ID 范围和 GPU Probe 契约；
-地形 Capture Renderer 接线与 V02/V07/M07 版本化资产验收仍属于后续集成范围。
+数量、剩余工作项、当前 Probe/Work Item、活动/构建修订和 Cubemap 槽位。体素场景已具备独立
+源构建契约：按加载区域 AABB、固定单元尺寸、外扩距离和捕获修订生成固定 z/y/x 顺序的世界
+空间 Probe 源，并严格检查有限值、容量、稳定 ID 范围和 GPU Probe 契约。
 
-Probe Capture 使用与主视图一致的材质和直接光，但关闭时域效果。动态探针按确定的更新
-队列逐 Face/Mip 构建，Dashboard 展示队列长度与资源代际。
+体素运行时以相机所在的 16 米单元中心维护一个流式 Probe。相机跨单元、活动区块集合变化或
+方块内容变化会递增 Capture Revision；影响 AABB 固定为当前单元，Box Projection AABB 覆盖
+已加载区块。地形 Capture Renderer 使用每个 Cubemap Face 的独立 View/ViewProjection 重新执行
+区块视锥裁剪和间接命令上传，将 opaque/cutout 地形写入 128×128 RGBA16F 与 Depth32 目标。
+捕获材质当前复用方块纹理数组、昼夜 Lightmap、顶点 AO、动画和生物群系染色，并关闭雾与主
+视图时域效果。`m0_voxel_baseline` 已完成 OpenGL/Vulkan 120 帧预热和 60 帧采样，Vulkan
+Validation 无报错。
+
+模型 Probe Capture 复用主材质采样和直接光；体素 Capture 的透明地形、水体、实体和现代 PBR
+直接光仍需接入。V02/V07/M07 版本化资产用于最终检查室内外过渡、局部光响应与 Box Projection。
+动态探针按确定的更新队列逐 Face/Mip 构建，Dashboard 展示队列长度与资源代际。
 
 ## 8. 反射能量组合
 

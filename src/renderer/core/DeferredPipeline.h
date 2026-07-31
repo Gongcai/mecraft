@@ -48,7 +48,7 @@ class ShadowRenderer;
 /// Container for all extracted deferred rendering passes.
 /// Owns pass lifecycle (init/shutdown) and provides accessors.
 /// Implements RenderPipeline interface for pipeline switching.
-class DeferredPipeline : public RenderPipeline {
+class DeferredPipeline : public RenderPipeline, public IReflectionProbeCaptureRenderer {
 public:
     // RenderPipeline interface
     void init(SharedRenderResources& shared) override;
@@ -61,6 +61,8 @@ public:
     // Held block light value (set from Game)
     void setHeldBlockLightValue(int value) { m_heldBlockLightValue = value; }
     [[nodiscard]] bool setSceneLights(std::vector<renderer::contracts::SceneLight> lights);
+    [[nodiscard]] bool recordReflectionProbeRadianceFace(RhiCommandList& commandList, const FrameContext& context,
+                                                         const ReflectionProbeCaptureWork& work) override;
     void invalidateHistory();
 
     // Pass accessors
@@ -155,6 +157,13 @@ private:
     bool m_graphCpuStatsValid = false;
     bool m_asyncComputeGateLogged = false;
     bool m_terrainDrawsPrepared = false;
+    renderer::contracts::StableReflectionProbeId m_voxelReflectionProbeId;
+    glm::ivec3 m_voxelReflectionProbeCell{0};
+    const IWorldView* m_voxelReflectionProbeWorldView = nullptr;
+    uint64_t m_voxelReflectionProbeActiveChunkRevision = 0u;
+    uint64_t m_voxelReflectionProbeBlockContentRevision = 0u;
+    uint32_t m_voxelReflectionProbeCaptureRevision = 0u;
+    bool m_voxelReflectionProbeCellInitialized = false;
 
     // Private orchestration methods
     [[nodiscard]] bool recordDeferredAuxiliaryClear(RhiCommandList& commandList, DeferredRenderTargets& targets,
@@ -162,6 +171,7 @@ private:
                                                     bool clearSsaoFiltered);
     void commitDeferredHistoryState();
     [[nodiscard]] bool recordTerrainDrawPreparation(RhiCommandList& commandList, const FrameContext& ctx);
+    [[nodiscard]] bool configureVoxelReflectionProbe(const FrameContext& ctx);
     [[nodiscard]] bool executeFrameGraph(const FrameContext& ctx, const RenderSettings& settings);
     [[nodiscard]] bool renderGBufferTerrain(RhiCommandList& commandList, const FrameContext& ctx,
                                             const RenderSettings& settings);

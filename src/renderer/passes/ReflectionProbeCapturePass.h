@@ -57,6 +57,7 @@ struct ReflectionProbeCaptureWork final {
     uint32_t face = 0u;
     uint32_t mip = 0u;
     glm::vec3 positionWorldMeters{0.0f};
+    glm::mat4 view{1.0f};
     glm::mat4 viewProjection{1.0f};
     RhiTextureViewHandle targetView;
     RhiTextureViewHandle depthTargetView;

@@ -71,7 +71,7 @@ normalizationInput(const ReflectionProbeCaptureSource& source, const glm::vec3& 
     return std::sqrt(maximumDistanceSquared);
 }
 
-[[nodiscard]] glm::mat4 captureViewProjection(const ReflectionProbeCaptureSource& source, const uint32_t face) {
+[[nodiscard]] glm::mat4 captureView(const ReflectionProbeCaptureSource& source, const uint32_t face) {
     constexpr std::array<glm::vec3, renderer::contracts::kReflectionProbeCubeFaceCount> kDirections{
         {{1.0f, 0.0f, 0.0f},
          {-1.0f, 0.0f, 0.0f},
@@ -86,12 +86,14 @@ normalizationInput(const ReflectionProbeCaptureSource& source, const glm::vec3& 
          {0.0f, 0.0f, -1.0f},
          {0.0f, -1.0f, 0.0f},
          {0.0f, -1.0f, 0.0f}}};
+    return glm::lookAt(source.positionWorldMeters, source.positionWorldMeters + kDirections[face], kUpVectors[face]);
+}
+
+[[nodiscard]] glm::mat4 captureViewProjection(const ReflectionProbeCaptureSource& source, const uint32_t face) {
     const float farPlane = captureFarPlane(source);
     const glm::mat4 projection = glm::perspective(
         glm::half_pi<float>(), 1.0f, renderer::contracts::kReflectionProbeCaptureNearPlaneMeters, farPlane);
-    const glm::mat4 view =
-        glm::lookAt(source.positionWorldMeters, source.positionWorldMeters + kDirections[face], kUpVectors[face]);
-    return projection * view;
+    return projection * captureView(source, face);
 }
 
 } // namespace
@@ -541,10 +543,10 @@ RgPassHandle ReflectionProbeCapturePass::addGraphPasses(RenderGraph& graph, cons
     m_scheduledProbeIndex = selected;
     m_scheduledWorkItem = state.nextWorkItem;
     const ReflectionProbeCaptureWorkKind kind = renderer::contracts::reflectionProbeCaptureWorkKind(state.nextWorkItem);
-    RenderGraphPassBuilder pass =
-        graph.addPass({kind == ReflectionProbeCaptureWorkKind::RadianceFace ? "ReflectionProbeCapture.RadianceFace"
-                                                                            : "ReflectionProbeCapture.PrefilterFaceMip",
-                       RgPassType::Graphics, RhiQueueType::Graphics, true});
+    RenderGraphPassBuilder pass = graph.addPass(
+        {kind == ReflectionProbeCaptureWorkKind::RadianceFace ? "ReflectionProbeCapture.RadianceFace"
+                                                              : "ReflectionProbeCapture.PrefilterFaceMip",
+         RgPassType::Graphics, RhiQueueType::Graphics, kind == ReflectionProbeCaptureWorkKind::PrefilterFaceMip});
     pass.dependsOn(dependency);
     if (kind == ReflectionProbeCaptureWorkKind::RadianceFace) {
         if (m_captureRenderer == nullptr) {
@@ -575,6 +577,7 @@ ReflectionProbeCaptureWork ReflectionProbeCapturePass::buildWork(const ProbeStat
     work.face = renderer::contracts::reflectionProbeCaptureFace(workItem);
     work.mip = renderer::contracts::reflectionProbeCaptureMip(workItem);
     work.positionWorldMeters = state.source.positionWorldMeters;
+    work.view = captureView(state.source, work.face);
     work.viewProjection = captureViewProjection(state.source, work.face);
     work.depthTargetView = m_depthView;
     if (renderer::contracts::reflectionProbeCaptureWorkKind(workItem) == ReflectionProbeCaptureWorkKind::RadianceFace) {
