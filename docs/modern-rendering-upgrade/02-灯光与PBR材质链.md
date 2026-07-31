@@ -250,6 +250,13 @@ V01/M01/M02 版本化参考图。
 编辑器放置 Probe 或生成规则网格。表面查询同时考虑包围盒、距离、法线方向和 Validity，
 使用 Box Projection 修正室内反射。
 
+当前已建立 Reflection Probe 基础契约：单个 GPU 记录固定为 96 字节，包含位置与曝光、
+影响 AABB 与混合距离、Box Projection AABB、Validity、Prefiltered Cubemap Index、稳定 ID、
+Capture Revision 和契约版本。CPU 参考实现对输入执行结构化校验，按边界距离、探针归一化
+距离、表面朝向和 Validity 计算权重，以权重降序和稳定 ID 升序确定 Top-4 并归一化；CPU 与
+GLSL 共用相同的 Box Projection 算法和字段顺序。Probe Capture 资源、流式 Grid 更新、
+Reflection Pass 消费及 Probe ID/Weight 调试视图仍属于后续集成范围。
+
 Probe Capture 使用与主视图一致的材质和直接光，但关闭时域效果。动态探针按确定的更新
 队列逐 Face/Mip 构建，Dashboard 展示队列长度与资源代际。
 

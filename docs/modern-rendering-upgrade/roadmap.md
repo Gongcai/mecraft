@@ -63,7 +63,10 @@ M1 与 M2 可并行开发，但公共 `GpuMaterial`、`GpuSceneGeometry` 与 Sta
    Roughness/NoV 消费并提供 Mip/DFG Debug View；天空修订使用双代资源，Radiance 整体快照后
    每帧更新一个 Prefilter Face/Mip，完整 48 项成功提交后原子切换。V01/M01/M02 参考图验收
    待对应版本化资产落地。）
-8. 建设 Reflection Probe 数据与 Box Projection。
+8. 建设 Reflection Probe 数据与 Box Projection。（基础契约完成：固定 96 字节 CPU/GPU
+   数据布局、结构化输入校验、稳定 Top-4 权重选择、Box Projection CPU/GLSL 参考实现、
+   双后端 Shader 编译与契约测试已落地；Probe Capture 资源、流式 Grid 更新、Reflection
+   Pass 消费、Probe ID/Weight 调试视图和 V02/V07/M07 场景验收待后续接入。）
 
 ### 完成条件
 

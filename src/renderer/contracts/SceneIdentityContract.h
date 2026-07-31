@@ -47,11 +47,13 @@ struct StableObjectIdTag;
 struct StableMaterialIdTag;
 struct StableGeometryIdTag;
 struct StableLightIdTag;
+struct StableReflectionProbeIdTag;
 
 using StableObjectId = StableSceneId<StableObjectIdTag>;
 using StableMaterialId = StableSceneId<StableMaterialIdTag>;
 using StableGeometryId = StableSceneId<StableGeometryIdTag>;
 using StableLightId = StableSceneId<StableLightIdTag>;
+using StableReflectionProbeId = StableSceneId<StableReflectionProbeIdTag>;
 
 /// Reserves the leading material-ID range for immutable voxel texture layers.
 /// Dynamic material resources start after this range so a voxel layer can be
@@ -106,14 +108,17 @@ static_assert(sizeof(StableObjectId) == sizeof(uint32_t));
 static_assert(sizeof(StableMaterialId) == sizeof(uint32_t));
 static_assert(sizeof(StableGeometryId) == sizeof(uint32_t));
 static_assert(sizeof(StableLightId) == sizeof(uint32_t));
+static_assert(sizeof(StableReflectionProbeId) == sizeof(uint32_t));
 static_assert(std::is_trivially_copyable_v<StableObjectId>);
 static_assert(std::is_trivially_copyable_v<StableMaterialId>);
 static_assert(std::is_trivially_copyable_v<StableGeometryId>);
 static_assert(std::is_trivially_copyable_v<StableLightId>);
+static_assert(std::is_trivially_copyable_v<StableReflectionProbeId>);
 static_assert(std::is_standard_layout_v<StableObjectId>);
 static_assert(std::is_standard_layout_v<StableMaterialId>);
 static_assert(std::is_standard_layout_v<StableGeometryId>);
 static_assert(std::is_standard_layout_v<StableLightId>);
+static_assert(std::is_standard_layout_v<StableReflectionProbeId>);
 
 } // namespace renderer::contracts
 

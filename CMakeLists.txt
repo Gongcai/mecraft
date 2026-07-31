@@ -354,6 +354,7 @@ set(SRC_RENDERER
         src/renderer/contracts/GpuLightContract.cpp
         src/renderer/contracts/LocalShadowContract.cpp
         src/renderer/contracts/GpuMaterialContract.cpp
+        src/renderer/contracts/ReflectionProbeContract.cpp
         src/renderer/contracts/RenderFeatureContract.cpp
 
         # Lighting data producers
@@ -1027,6 +1028,10 @@ if(MECRAFT_BUILD_TESTS)
     add_mecraft_test(local_shadow_contract_test
             tests/local_shadow_contract_test.cpp)
     target_compile_definitions(local_shadow_contract_test PRIVATE
+            MECRAFT_TEST_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
+    add_mecraft_test(reflection_probe_contract_test
+            tests/reflection_probe_contract_test.cpp)
+    target_compile_definitions(reflection_probe_contract_test PRIVATE
             MECRAFT_TEST_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
     add_mecraft_test(gltf_punctual_light_test
             tests/gltf_punctual_light_test.cpp)
