@@ -58,10 +58,11 @@ M1 与 M2 可并行开发，但公共 `GpuMaterial`、`GpuSceneGeometry` 与 Sta
 6. 建设局部灯 Shadow Atlas/Cube Array。（实现完成：稳定 Light ID 分配、Spot Atlas、
    Point Cube Array、缓存修订、Deferred/Forward+ 共享采样、Debug View、契约测试、
    双后端 RHI 测试与 Vulkan Validation 均已接入；V07/M03 场景验收待对应版本化资产落地。）
-7. 生成 Sky Cubemap、GGX Prefilter Mips、DFG LUT。（首个端到端增量已实现：动态天气天空
-   生成 128×128 HDR Cubemap，构建 8 级 GGX 预过滤链与 256×256 Split-sum DFG LUT，
-   Reflection Pass 已按 Roughness/NoV 消费并提供 Mip/DFG Debug View；天空修订的分帧双代际
-   构建与原子切换、V01/M01/M02 参考图验收待后续增量。）
+7. 生成 Sky Cubemap、GGX Prefilter Mips、DFG LUT。（实现完成：动态天气天空生成 128×128
+   HDR Cubemap，构建 8 级 GGX 预过滤链与 256×256 Split-sum DFG LUT；Reflection Pass 已按
+   Roughness/NoV 消费并提供 Mip/DFG Debug View；天空修订使用双代资源，Radiance 整体快照后
+   每帧更新一个 Prefilter Face/Mip，完整 48 项成功提交后原子切换。V01/M01/M02 参考图验收
+   待对应版本化资产落地。）
 8. 建设 Reflection Probe 数据与 Box Projection。
 
 ### 完成条件

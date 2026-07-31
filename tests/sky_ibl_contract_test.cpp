@@ -36,7 +36,32 @@ bool testProductContract() {
                      "the split-sum DFG LUT must use a 256-pixel extent") &&
          requireTrue(
              kSkyIblGgxSampleCount == 128u,
-             "runtime GGX convolution must retain the fixed sample budget");
+             "runtime GGX convolution must retain the fixed sample budget") &&
+         requireTrue(kSkyIblGenerationCount == 2u,
+                     "sky IBL must retain exactly two atomic generations") &&
+         requireTrue(kSkyIblPrefilterWorkItemCount == 48u,
+                     "the distributed build must cover every face and mip") &&
+         requireTrue(kSkyIblRevisionIntervalFrames == 48u,
+                     "sky revisions must match the complete build cadence");
+}
+
+bool testRevisionAndWorkMapping() {
+  using namespace renderer::contracts;
+  return requireTrue(skyIblRevisionForFrame(0u) == 1u &&
+                         skyIblRevisionForFrame(47u) == 1u &&
+                         skyIblRevisionForFrame(48u) == 2u,
+                     "sky revisions must advance only at complete-build "
+                     "boundaries") &&
+         requireTrue(skyIblMipForWorkItem(0u) == 0u &&
+                         skyIblFaceForWorkItem(0u) == 0u &&
+                         skyIblMipForWorkItem(5u) == 0u &&
+                         skyIblFaceForWorkItem(5u) == 5u &&
+                         skyIblMipForWorkItem(6u) == 1u &&
+                         skyIblFaceForWorkItem(6u) == 0u &&
+                         skyIblMipForWorkItem(47u) == 7u &&
+                         skyIblFaceForWorkItem(47u) == 5u,
+                     "linear work items must cover every mip and face exactly "
+                     "once");
 }
 
 bool testRoughnessMipMapping() {
@@ -76,6 +101,23 @@ bool testGenerationAndConsumptionContract() {
                              std::string::npos &&
                          pass.find("SkyIbl.DfgLut") != std::string::npos,
                      "the render graph must expose all three IBL products") &&
+         requireTrue(
+             pass.find("SkyIbl.Radiance.Generation0") != std::string::npos &&
+                 pass.find("SkyIbl.Radiance.Generation1") !=
+                     std::string::npos &&
+                 pass.find("m_bootstrapBuild ? remaining : 1u") !=
+                     std::string::npos,
+             "generation resources must distribute one face/mip after the "
+             "complete bootstrap") &&
+         requireTrue(
+             pass.find("m_activeGeneration = m_buildGeneration") !=
+                     std::string::npos &&
+                 pass.find("m_consumerGeneration = m_activeGeneration") !=
+                     std::string::npos &&
+                 pass.find("m_nextPrefilterWorkItem ==") !=
+                     std::string::npos,
+             "the consumer generation must switch only after every work item "
+             "commits") &&
          requireTrue(prefilter.find("skyIblImportanceSampleGgx") !=
                              std::string::npos &&
                          prefilter.find("uSampleCount") != std::string::npos,
@@ -102,6 +144,7 @@ bool testGenerationAndConsumptionContract() {
 
 int main() {
   return testProductContract() && testRoughnessMipMapping() &&
+                 testRevisionAndWorkMapping() &&
                  testGenerationAndConsumptionContract()
              ? 0
              : 1;

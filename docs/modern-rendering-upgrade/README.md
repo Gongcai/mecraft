@@ -40,7 +40,7 @@ DLSS、HDR 中间颜色和 Hi-Z。glTF 路径已经支持 metallic-roughness，�
 3. Descriptor Indexing 已查询，但 Bind Group 限制 `arrayCount == 1`，尚未形成
    Bindless 材质表。
 4. 场景缺少统一局部光源缓冲、Clustered Light Culling 和局部灯阴影链。
-5. 环境光只有低阶 SH 与方向天空采样，缺少 GGX 预过滤、DFG LUT 和局部反射探针。
+5. 环境光已具备双代际 GGX 预过滤天空与 DFG LUT，仍缺少局部反射探针。
 6. SSGI 的屏幕空间信息缺失无法由现有降噪器恢复；Vulkan RTGI 需要真实世界空间命中
    与专用降噪器。
 7. 透明物按 Primitive 中心距离排序，已有 IOR、粗糙折射和体积吸收，但缺少逐像素

@@ -643,7 +643,8 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
         return false;
     }
     if (!m_skyIblPass->prepareFrame(
-            rhiDevice, targets.skyCaptureTextureViewHandle())) {
+            rhiDevice, targets.skyCaptureTextureViewHandle(),
+            ctx.frameIndex)) {
         return false;
     }
     if (ssaoEnabled && m_ssaoPass == nullptr) {
@@ -1558,7 +1559,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
         reflectionResources.f0Metallic = f0Metallic;
         reflectionResources.skyCapture = skyCapture;
         reflectionResources.skySpecularPrefilter =
-            skyIblResources.specularPrefilter;
+            skyIblResources.consumerSpecularPrefilter;
         reflectionResources.skyDfgLut = skyIblResources.dfgLut;
         reflectionResources.voxelLight = voxelLight;
         reflectionResources.reflection = reflection;

@@ -10,6 +10,8 @@
 #include <optional>
 
 namespace {
+static_assert(renderer::contracts::kSkyIblGenerationCount == 2u);
+
 struct SkyIblPushConstants {
   uint32_t face = 0u;
   float roughness = 0.0f;
@@ -26,7 +28,8 @@ struct SkyIblPushConstants {
 void SkyIblPass::shutdown() { destroyResources(); }
 
 bool SkyIblPass::prepareFrame(RhiDevice &rhiDevice,
-                              const RhiTextureViewHandle skyCaptureView) {
+                              const RhiTextureViewHandle skyCaptureView,
+                              const uint64_t frameIndex) {
   if (m_rhiDevice != nullptr && m_rhiDevice != &rhiDevice) {
     destroyResources();
   }
@@ -34,22 +37,42 @@ bool SkyIblPass::prepareFrame(RhiDevice &rhiDevice,
   if (!skyCaptureView.isValid())
     return false;
   const bool resourcesReady =
-      (m_skyRadianceTexture.isValid() || createResources(rhiDevice)) &&
+      (m_generations[0].radianceTexture.isValid() ||
+       createResources(rhiDevice)) &&
       (m_skyRadiancePipeline.isValid() || createPipelines(rhiDevice)) &&
-      (m_skyRadianceView.isValid() || createViews(rhiDevice));
+      (m_generations[0].radianceView.isValid() || createViews(rhiDevice));
   if (!resourcesReady)
     return false;
-  return (m_skyRadianceBindGroup.isValid() &&
-          sameView(m_boundSkyCaptureView, skyCaptureView)) ||
-         createBindGroups(rhiDevice, skyCaptureView);
+  bool bindGroupsReady = m_skyRadianceBindGroup.isValid() &&
+                         sameView(m_boundSkyCaptureView, skyCaptureView);
+  for (const GenerationResources &generation : m_generations)
+    bindGroupsReady =
+        bindGroupsReady && generation.prefilterBindGroup.isValid();
+  if (!bindGroupsReady && !createBindGroups(rhiDevice, skyCaptureView))
+    return false;
+
+  m_requestedRevision = std::max(
+      m_requestedRevision,
+      renderer::contracts::skyIblRevisionForFrame(frameIndex));
+  if (m_buildGeneration >= renderer::contracts::kSkyIblGenerationCount) {
+    if (m_activeGeneration >= renderer::contracts::kSkyIblGenerationCount) {
+      beginBuild(0u, m_requestedRevision, true);
+    } else if (m_requestedRevision > m_committedRevision) {
+      beginBuild(1u - m_activeGeneration, m_requestedRevision, false);
+    }
+  }
+  m_consumerGeneration =
+      m_activeGeneration < renderer::contracts::kSkyIblGenerationCount
+          ? m_activeGeneration
+          : m_buildGeneration;
+  return m_consumerGeneration < renderer::contracts::kSkyIblGenerationCount;
 }
 
 bool SkyIblPass::importGraphResources(RenderGraph &graph,
                                       GraphResources &resources) const {
-  if (m_rhiDevice == nullptr || !m_skyRadianceTexture.isValid() ||
-      !m_specularPrefilterTexture.isValid() || !m_dfgLutTexture.isValid() ||
-      !m_skyRadianceView.isValid() || !m_specularPrefilterView.isValid() ||
-      !m_dfgLutView.isValid()) {
+  if (m_rhiDevice == nullptr || !m_dfgLutTexture.isValid() ||
+      !m_dfgLutView.isValid() ||
+      m_consumerGeneration >= renderer::contracts::kSkyIblGenerationCount) {
     return false;
   }
   const auto import = [&graph,
@@ -65,11 +88,32 @@ bool SkyIblPass::importGraphResources(RenderGraph &graph,
                                   RhiResourceState::ShaderRead, view});
     return output.isValid();
   };
-  return import("SkyIbl.Radiance", m_skyRadianceTexture, m_skyRadianceView,
-                m_productsInitialized, resources.skyRadiance) &&
-         import("SkyIbl.SpecularPrefilter", m_specularPrefilterTexture,
-                m_specularPrefilterView, m_productsInitialized,
-                resources.specularPrefilter) &&
+  static constexpr const char *kRadianceNames[] = {
+      "SkyIbl.Radiance.Generation0", "SkyIbl.Radiance.Generation1"};
+  static constexpr const char *kPrefilterNames[] = {
+      "SkyIbl.SpecularPrefilter.Generation0",
+      "SkyIbl.SpecularPrefilter.Generation1"};
+  for (uint32_t index = 0u;
+       index < renderer::contracts::kSkyIblGenerationCount; ++index) {
+    const GenerationResources &generation = m_generations[index];
+    if (!generation.radianceTexture.isValid() ||
+        !generation.specularPrefilterTexture.isValid() ||
+        !generation.radianceView.isValid() ||
+        !generation.specularPrefilterView.isValid() ||
+        !import(kRadianceNames[index], generation.radianceTexture,
+                generation.radianceView,
+                generation.radianceStateInitialized,
+                resources.generations[index].radiance) ||
+        !import(kPrefilterNames[index], generation.specularPrefilterTexture,
+                generation.specularPrefilterView,
+                generation.prefilterStateInitialized,
+                resources.generations[index].specularPrefilter)) {
+      return false;
+    }
+  }
+  resources.consumerSpecularPrefilter =
+      resources.generations[m_consumerGeneration].specularPrefilter;
+  return resources.consumerSpecularPrefilter.isValid() &&
          import("SkyIbl.DfgLut", m_dfgLutTexture, m_dfgLutView, m_dfgReady,
                 resources.dfgLut);
 }
@@ -78,31 +122,53 @@ RgPassHandle SkyIblPass::addGraphPasses(RenderGraph &graph,
                                         const RgTextureHandle skyCapture,
                                         const GraphResources &resources,
                                         const RgPassHandle dependency) {
-  if (!skyCapture.isValid() || !resources.skyRadiance.isValid() ||
-      !resources.specularPrefilter.isValid() || !resources.dfgLut.isValid() ||
-      !dependency.isValid())
+  if (!skyCapture.isValid() || !resources.consumerSpecularPrefilter.isValid() ||
+      !resources.dfgLut.isValid() || !dependency.isValid())
     return {};
 
-  RenderGraphPassBuilder radiance = graph.addPass(
-      {"SkyIbl.Radiance", RgPassType::Graphics, RhiQueueType::Graphics, true});
-  radiance.dependsOn(dependency)
-      .readTexture(skyCapture, RhiResourceState::ShaderRead)
-      .writeTexture(resources.skyRadiance, RhiResourceState::RenderTarget)
-      .setExecute([this](RgPassContext &pass) {
-        return recordSkyRadiance(pass.commandList());
-      });
+  RgPassHandle tail = dependency;
+  if (m_buildGeneration < renderer::contracts::kSkyIblGenerationCount) {
+    const uint32_t generation = m_buildGeneration;
+    const GraphGeneration &buildResources = resources.generations[generation];
+    if (!buildResources.radiance.isValid() ||
+        !buildResources.specularPrefilter.isValid()) {
+      return {};
+    }
+    if (m_buildNeedsRadiance) {
+      RenderGraphPassBuilder radiance = graph.addPass(
+          {"SkyIbl.Radiance", RgPassType::Graphics,
+           RhiQueueType::Graphics, true});
+      radiance.dependsOn(tail)
+          .readTexture(skyCapture, RhiResourceState::ShaderRead)
+          .writeTexture(buildResources.radiance,
+                        RhiResourceState::RenderTarget)
+          .setExecute([this, generation](RgPassContext &pass) {
+            return recordSkyRadiance(pass.commandList(), generation);
+          });
+      m_radianceScheduled = true;
+      tail = radiance.handle();
+    }
 
-  RenderGraphPassBuilder prefilter =
-      graph.addPass({"SkyIbl.GgxPrefilter", RgPassType::Graphics,
-                     RhiQueueType::Graphics, true});
-  prefilter.dependsOn(radiance.handle())
-      .readTexture(resources.skyRadiance, RhiResourceState::ShaderRead)
-      .writeTexture(resources.specularPrefilter, RhiResourceState::RenderTarget)
-      .setExecute([this](RgPassContext &pass) {
-        return recordSpecularPrefilter(pass.commandList());
-      });
-
-  RgPassHandle tail = prefilter.handle();
+    const uint32_t remaining =
+        renderer::contracts::kSkyIblPrefilterWorkItemCount -
+        m_nextPrefilterWorkItem;
+    const uint32_t workItemCount = m_bootstrapBuild ? remaining : 1u;
+    RenderGraphPassBuilder prefilter =
+        graph.addPass({"SkyIbl.GgxPrefilter", RgPassType::Graphics,
+                       RhiQueueType::Graphics, true});
+    prefilter.dependsOn(tail)
+        .readTexture(buildResources.radiance, RhiResourceState::ShaderRead)
+        .writeTexture(buildResources.specularPrefilter,
+                      RhiResourceState::RenderTarget)
+        .setExecute([this, generation, first = m_nextPrefilterWorkItem,
+                     workItemCount](RgPassContext &pass) {
+          return recordSpecularPrefilter(pass.commandList(), generation, first,
+                                         workItemCount);
+        });
+    m_scheduledWorkItemCount = workItemCount;
+    m_prefilterScheduled = true;
+    tail = prefilter.handle();
+  }
   if (!m_dfgReady && !m_dfgScheduled) {
     RenderGraphPassBuilder dfg = graph.addPass(
         {"SkyIbl.DfgLut", RgPassType::Graphics, RhiQueueType::Graphics, true});
@@ -119,10 +185,35 @@ RgPassHandle SkyIblPass::addGraphPasses(RenderGraph &graph,
 
 void SkyIblPass::finishGraphExecution(const bool succeeded) {
   if (succeeded) {
-    m_productsInitialized = true;
+    if (m_radianceScheduled &&
+        m_buildGeneration < renderer::contracts::kSkyIblGenerationCount) {
+      m_generations[m_buildGeneration].radianceStateInitialized = true;
+      m_buildNeedsRadiance = false;
+    }
+    if (m_prefilterScheduled &&
+        m_buildGeneration < renderer::contracts::kSkyIblGenerationCount) {
+      GenerationResources &generation = m_generations[m_buildGeneration];
+      generation.prefilterStateInitialized = true;
+      m_nextPrefilterWorkItem += m_scheduledWorkItemCount;
+      if (m_nextPrefilterWorkItem ==
+          renderer::contracts::kSkyIblPrefilterWorkItemCount) {
+        generation.complete = true;
+        generation.revision = m_buildRevision;
+        m_activeGeneration = m_buildGeneration;
+        m_consumerGeneration = m_activeGeneration;
+        m_committedRevision = m_buildRevision;
+        m_buildGeneration = renderer::contracts::kSkyIblGenerationCount;
+        m_buildRevision = 0u;
+        m_nextPrefilterWorkItem = 0u;
+        m_bootstrapBuild = false;
+      }
+    }
     if (m_dfgScheduled)
       m_dfgReady = true;
   }
+  m_radianceScheduled = false;
+  m_prefilterScheduled = false;
+  m_scheduledWorkItemCount = 0u;
   m_dfgScheduled = false;
 }
 
@@ -147,22 +238,37 @@ bool SkyIblPass::createResources(RhiDevice &rhiDevice) {
     desc.queueSharing = RhiTextureQueueSharing::GraphicsComputeConcurrent;
     return rhiDevice.createTexture(desc, nullptr);
   };
-  m_skyRadianceTexture = create(
-      "SkyIbl.Radiance", renderer::contracts::kSkyIblCubeExtent,
-      renderer::contracts::kSkyIblCubeExtent, 6u, 1u, RhiTextureDimension::Cube,
-      RhiTextureFormat::Rgba16Float, RhiMemoryCategory::Texture);
-  m_specularPrefilterTexture = create(
-      "SkyIbl.SpecularPrefilter", renderer::contracts::kSkyIblCubeExtent,
-      renderer::contracts::kSkyIblCubeExtent, 6u,
-      renderer::contracts::kSkyIblCubeMipCount, RhiTextureDimension::Cube,
-      RhiTextureFormat::Rgba16Float, RhiMemoryCategory::Texture);
+  static constexpr const char *kRadianceNames[] = {
+      "SkyIbl.Radiance.Generation0", "SkyIbl.Radiance.Generation1"};
+  static constexpr const char *kPrefilterNames[] = {
+      "SkyIbl.SpecularPrefilter.Generation0",
+      "SkyIbl.SpecularPrefilter.Generation1"};
+  for (uint32_t index = 0u;
+       index < renderer::contracts::kSkyIblGenerationCount; ++index) {
+    GenerationResources &generation = m_generations[index];
+    generation.radianceTexture = create(
+        kRadianceNames[index], renderer::contracts::kSkyIblCubeExtent,
+        renderer::contracts::kSkyIblCubeExtent,
+        renderer::contracts::kSkyIblCubeFaceCount, 1u,
+        RhiTextureDimension::Cube, RhiTextureFormat::Rgba16Float,
+        RhiMemoryCategory::Texture);
+    generation.specularPrefilterTexture = create(
+        kPrefilterNames[index], renderer::contracts::kSkyIblCubeExtent,
+        renderer::contracts::kSkyIblCubeExtent,
+        renderer::contracts::kSkyIblCubeFaceCount,
+        renderer::contracts::kSkyIblCubeMipCount, RhiTextureDimension::Cube,
+        RhiTextureFormat::Rgba16Float, RhiMemoryCategory::Texture);
+  }
   m_dfgLutTexture =
       create("SkyIbl.DfgLut", renderer::contracts::kSkyIblDfgExtent,
              renderer::contracts::kSkyIblDfgExtent, 1u, 1u,
              RhiTextureDimension::Texture2D, RhiTextureFormat::Rg16Float,
              RhiMemoryCategory::Texture);
-  if (!m_skyRadianceTexture.isValid() ||
-      !m_specularPrefilterTexture.isValid() || !m_dfgLutTexture.isValid()) {
+  bool valid = m_dfgLutTexture.isValid();
+  for (const GenerationResources &generation : m_generations)
+    valid = valid && generation.radianceTexture.isValid() &&
+            generation.specularPrefilterTexture.isValid();
+  if (!valid) {
     destroyResources();
     return false;
   }
@@ -182,18 +288,20 @@ bool SkyIblPass::createViews(RhiDevice &rhiDevice) {
     desc.layerCount = 1u;
     return rhiDevice.createTextureView(desc);
   };
-  RhiTextureViewDesc cubeDesc;
-  cubeDesc.texture = m_skyRadianceTexture;
-  cubeDesc.viewType = RhiTextureViewType::Cube;
-  cubeDesc.format = RhiTextureFormat::Rgba16Float;
-  cubeDesc.baseMip = 0u;
-  cubeDesc.mipCount = 1u;
-  cubeDesc.baseLayer = 0u;
-  cubeDesc.layerCount = 6u;
-  m_skyRadianceView = rhiDevice.createTextureView(cubeDesc);
-  cubeDesc.texture = m_specularPrefilterTexture;
-  cubeDesc.mipCount = renderer::contracts::kSkyIblCubeMipCount;
-  m_specularPrefilterView = rhiDevice.createTextureView(cubeDesc);
+  for (GenerationResources &generation : m_generations) {
+    RhiTextureViewDesc cubeDesc;
+    cubeDesc.texture = generation.radianceTexture;
+    cubeDesc.viewType = RhiTextureViewType::Cube;
+    cubeDesc.format = RhiTextureFormat::Rgba16Float;
+    cubeDesc.baseMip = 0u;
+    cubeDesc.mipCount = 1u;
+    cubeDesc.baseLayer = 0u;
+    cubeDesc.layerCount = renderer::contracts::kSkyIblCubeFaceCount;
+    generation.radianceView = rhiDevice.createTextureView(cubeDesc);
+    cubeDesc.texture = generation.specularPrefilterTexture;
+    cubeDesc.mipCount = renderer::contracts::kSkyIblCubeMipCount;
+    generation.specularPrefilterView = rhiDevice.createTextureView(cubeDesc);
+  }
   RhiTextureViewDesc lutDesc;
   lutDesc.texture = m_dfgLutTexture;
   lutDesc.viewType = RhiTextureViewType::Texture2D;
@@ -203,30 +311,39 @@ bool SkyIblPass::createViews(RhiDevice &rhiDevice) {
   lutDesc.baseLayer = 0u;
   lutDesc.layerCount = 1u;
   m_dfgLutView = rhiDevice.createTextureView(lutDesc);
-  for (uint32_t face = 0u; face < 6u; ++face) {
-    m_skyRadianceFaceViews[face] =
-        createCubeView(m_skyRadianceTexture, 0u, face);
-    for (uint32_t mip = 0u; mip < renderer::contracts::kSkyIblCubeMipCount;
-         ++mip) {
-      m_specularFaceMipViews[mip][face] =
-          createCubeView(m_specularPrefilterTexture, mip, face);
+  for (GenerationResources &generation : m_generations) {
+    for (uint32_t face = 0u;
+         face < renderer::contracts::kSkyIblCubeFaceCount; ++face) {
+      generation.radianceFaceViews[face] =
+          createCubeView(generation.radianceTexture, 0u, face);
+      for (uint32_t mip = 0u;
+           mip < renderer::contracts::kSkyIblCubeMipCount; ++mip) {
+        generation.specularFaceMipViews[mip][face] = createCubeView(
+            generation.specularPrefilterTexture, mip, face);
+      }
     }
   }
-  for (const auto view : m_skyRadianceFaceViews) {
-    if (!view.isValid()) {
+  for (const GenerationResources &generation : m_generations) {
+    if (!generation.radianceView.isValid() ||
+        !generation.specularPrefilterView.isValid()) {
       destroyResources();
       return false;
     }
-  }
-  for (const auto &mipViews : m_specularFaceMipViews)
-    for (const auto view : mipViews) {
+    for (const auto view : generation.radianceFaceViews) {
       if (!view.isValid()) {
         destroyResources();
         return false;
       }
     }
-  if (!m_skyRadianceView.isValid() || !m_specularPrefilterView.isValid() ||
-      !m_dfgLutView.isValid()) {
+    for (const auto &mipViews : generation.specularFaceMipViews)
+      for (const auto view : mipViews) {
+        if (!view.isValid()) {
+          destroyResources();
+          return false;
+        }
+      }
+  }
+  if (!m_dfgLutView.isValid()) {
     destroyResources();
     return false;
   }
@@ -346,10 +463,11 @@ bool SkyIblPass::createBindGroups(RhiDevice &rhiDevice,
     rhiDevice.destroyBindGroup(m_skyRadianceBindGroup);
     m_skyRadianceBindGroup = {};
   }
-  if (m_prefilterBindGroup.isValid()) {
-    rhiDevice.destroyBindGroup(m_prefilterBindGroup);
-    m_prefilterBindGroup = {};
-  }
+  for (GenerationResources &generation : m_generations)
+    if (generation.prefilterBindGroup.isValid()) {
+      rhiDevice.destroyBindGroup(generation.prefilterBindGroup);
+      generation.prefilterBindGroup = {};
+    }
   const auto create = [&rhiDevice, this](const RhiBindGroupLayoutHandle layout,
                                          const RhiTextureViewHandle view) {
     RhiBindGroupDesc desc;
@@ -361,8 +479,13 @@ bool SkyIblPass::createBindGroups(RhiDevice &rhiDevice,
     return rhiDevice.createBindGroup(desc);
   };
   m_skyRadianceBindGroup = create(m_skyRadianceBindGroupLayout, skyCaptureView);
-  m_prefilterBindGroup = create(m_prefilterBindGroupLayout, m_skyRadianceView);
-  if (!m_skyRadianceBindGroup.isValid() || !m_prefilterBindGroup.isValid()) {
+  bool valid = m_skyRadianceBindGroup.isValid();
+  for (GenerationResources &generation : m_generations) {
+    generation.prefilterBindGroup =
+        create(m_prefilterBindGroupLayout, generation.radianceView);
+    valid = valid && generation.prefilterBindGroup.isValid();
+  }
+  if (!valid) {
     destroyResources();
     return false;
   }
@@ -370,9 +493,14 @@ bool SkyIblPass::createBindGroups(RhiDevice &rhiDevice,
   return true;
 }
 
-bool SkyIblPass::recordSkyRadiance(RhiCommandList &commandList) const {
-  for (uint32_t face = 0u; face < 6u; ++face) {
-    RhiColorAttachment attachment{m_skyRadianceFaceViews[face],
+bool SkyIblPass::recordSkyRadiance(RhiCommandList &commandList,
+                                   const uint32_t generation) const {
+  if (generation >= renderer::contracts::kSkyIblGenerationCount)
+    return false;
+  const GenerationResources &resources = m_generations[generation];
+  for (uint32_t face = 0u;
+       face < renderer::contracts::kSkyIblCubeFaceCount; ++face) {
+    RhiColorAttachment attachment{resources.radianceFaceViews[face],
                                   RhiLoadOp::Clear, RhiStoreOp::Store};
     RhiRenderingInfo rendering{"SkyIbl.Radiance.Face",
                                {0, 0, renderer::contracts::kSkyIblCubeExtent,
@@ -398,33 +526,44 @@ bool SkyIblPass::recordSkyRadiance(RhiCommandList &commandList) const {
   return true;
 }
 
-bool SkyIblPass::recordSpecularPrefilter(RhiCommandList &commandList) const {
-  for (uint32_t mip = 0u; mip < renderer::contracts::kSkyIblCubeMipCount;
-       ++mip) {
+bool SkyIblPass::recordSpecularPrefilter(
+    RhiCommandList &commandList, const uint32_t generation,
+    const uint32_t firstWorkItem, const uint32_t workItemCount) const {
+  if (generation >= renderer::contracts::kSkyIblGenerationCount ||
+      workItemCount == 0u ||
+      firstWorkItem + workItemCount >
+          renderer::contracts::kSkyIblPrefilterWorkItemCount) {
+    return false;
+  }
+  const GenerationResources &resources = m_generations[generation];
+  for (uint32_t offset = 0u; offset < workItemCount; ++offset) {
+    const uint32_t workItem = firstWorkItem + offset;
+    const uint32_t mip =
+        renderer::contracts::skyIblMipForWorkItem(workItem);
+    const uint32_t face =
+        renderer::contracts::skyIblFaceForWorkItem(workItem);
     const uint32_t extent =
         std::max(1u, renderer::contracts::kSkyIblCubeExtent >> mip);
-    for (uint32_t face = 0u; face < 6u; ++face) {
-      RhiColorAttachment attachment{m_specularFaceMipViews[mip][face],
-                                    RhiLoadOp::Clear, RhiStoreOp::Store};
-      RhiRenderingInfo rendering{"SkyIbl.Prefilter.Face",
-                                 {0, 0, extent, extent},
-                                 &attachment,
-                                 1u,
-                                 nullptr};
-      commandList.beginRendering(rendering);
-      commandList.setViewport({0.0f, 0.0f, static_cast<float>(extent),
-                               static_cast<float>(extent), 0.0f, 1.0f});
-      commandList.setScissor(rendering.renderArea);
-      commandList.setGraphicsPipeline(m_prefilterPipeline);
-      commandList.setBindGroup(0u, m_prefilterBindGroup);
-      SkyIblPushConstants constants;
-      constants.face = face;
-      constants.roughness = renderer::contracts::skyIblRoughnessForMip(mip);
-      commandList.pushConstants(&constants, sizeof(constants),
-                                rhiFlag(RhiShaderStage::Fragment));
-      commandList.draw(3u, 1u, 0u, 0u);
-      commandList.endRendering();
-    }
+    RhiColorAttachment attachment{resources.specularFaceMipViews[mip][face],
+                                  RhiLoadOp::Clear, RhiStoreOp::Store};
+    RhiRenderingInfo rendering{"SkyIbl.Prefilter.Face",
+                               {0, 0, extent, extent},
+                               &attachment,
+                               1u,
+                               nullptr};
+    commandList.beginRendering(rendering);
+    commandList.setViewport({0.0f, 0.0f, static_cast<float>(extent),
+                             static_cast<float>(extent), 0.0f, 1.0f});
+    commandList.setScissor(rendering.renderArea);
+    commandList.setGraphicsPipeline(m_prefilterPipeline);
+    commandList.setBindGroup(0u, resources.prefilterBindGroup);
+    SkyIblPushConstants constants;
+    constants.face = face;
+    constants.roughness = renderer::contracts::skyIblRoughnessForMip(mip);
+    commandList.pushConstants(&constants, sizeof(constants),
+                              rhiFlag(RhiShaderStage::Fragment));
+    commandList.draw(3u, 1u, 0u, 0u);
+    commandList.endRendering();
   }
   return true;
 }
@@ -449,12 +588,26 @@ bool SkyIblPass::recordDfgLut(RhiCommandList &commandList) const {
   return true;
 }
 
+void SkyIblPass::beginBuild(const uint32_t generation,
+                            const uint64_t revision,
+                            const bool bootstrap) {
+  m_buildGeneration = generation;
+  m_buildRevision = revision;
+  m_nextPrefilterWorkItem = 0u;
+  m_buildNeedsRadiance = true;
+  m_bootstrapBuild = bootstrap;
+  GenerationResources &resources = m_generations[generation];
+  resources.complete = false;
+  resources.revision = 0u;
+}
+
 void SkyIblPass::destroyResources() {
   if (m_rhiDevice != nullptr) {
     if (m_skyRadianceBindGroup.isValid())
       m_rhiDevice->destroyBindGroup(m_skyRadianceBindGroup);
-    if (m_prefilterBindGroup.isValid())
-      m_rhiDevice->destroyBindGroup(m_prefilterBindGroup);
+    for (const GenerationResources &generation : m_generations)
+      if (generation.prefilterBindGroup.isValid())
+        m_rhiDevice->destroyBindGroup(generation.prefilterBindGroup);
     const RhiPipelineHandle pipelines[] = {m_skyRadiancePipeline,
                                            m_prefilterPipeline, m_dfgPipeline};
     for (const auto pipeline : pipelines)
@@ -479,23 +632,30 @@ void SkyIblPass::destroyResources() {
     for (const auto shader : shaders)
       if (shader.isValid())
         m_rhiDevice->destroyShader(shader);
-    const RhiTextureViewHandle views[] = {
-        m_skyRadianceView, m_specularPrefilterView, m_dfgLutView};
-    for (const auto view : views)
-      if (view.isValid())
-        m_rhiDevice->destroyTextureView(view);
-    for (const auto view : m_skyRadianceFaceViews)
-      if (view.isValid())
-        m_rhiDevice->destroyTextureView(view);
-    for (const auto &mipViews : m_specularFaceMipViews)
-      for (const auto view : mipViews)
+    if (m_dfgLutView.isValid())
+      m_rhiDevice->destroyTextureView(m_dfgLutView);
+    for (const GenerationResources &generation : m_generations) {
+      const RhiTextureViewHandle views[] = {
+          generation.radianceView, generation.specularPrefilterView};
+      for (const auto view : views)
         if (view.isValid())
           m_rhiDevice->destroyTextureView(view);
-    const RhiTextureHandle textures[] = {
-        m_skyRadianceTexture, m_specularPrefilterTexture, m_dfgLutTexture};
-    for (const auto texture : textures)
-      if (texture.isValid())
-        m_rhiDevice->destroyTexture(texture);
+      for (const auto view : generation.radianceFaceViews)
+        if (view.isValid())
+          m_rhiDevice->destroyTextureView(view);
+      for (const auto &mipViews : generation.specularFaceMipViews)
+        for (const auto view : mipViews)
+          if (view.isValid())
+            m_rhiDevice->destroyTextureView(view);
+    }
+    if (m_dfgLutTexture.isValid())
+      m_rhiDevice->destroyTexture(m_dfgLutTexture);
+    for (const GenerationResources &generation : m_generations) {
+      if (generation.radianceTexture.isValid())
+        m_rhiDevice->destroyTexture(generation.radianceTexture);
+      if (generation.specularPrefilterTexture.isValid())
+        m_rhiDevice->destroyTexture(generation.specularPrefilterTexture);
+    }
   }
   *this = SkyIblPass{};
 }
