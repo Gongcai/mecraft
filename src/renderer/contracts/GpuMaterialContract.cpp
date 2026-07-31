@@ -443,6 +443,40 @@ LabPbrNormalSample decodeLabPbrNormal(const std::array<uint8_t, 4>& texel) {
     return sample;
 }
 
+void normalizeLabPbrBlockHeightRange(uint8_t* rgbaPixels, const size_t pixelCount,
+                                     const bool sourceHasAlpha) {
+    if (!sourceHasAlpha) {
+        for (size_t pixel = 0u; pixel < pixelCount; ++pixel) {
+            rgbaPixels[pixel * 4u + 3u] = 255u;
+        }
+        return;
+    }
+
+    uint8_t minHeight = 255u;
+    uint8_t maxHeight = 0u;
+    for (size_t pixel = 0u; pixel < pixelCount; ++pixel) {
+        const uint8_t height = rgbaPixels[pixel * 4u + 3u];
+        minHeight = std::min(minHeight, height);
+        maxHeight = std::max(maxHeight, height);
+    }
+
+    if (maxHeight == minHeight) {
+        for (size_t pixel = 0u; pixel < pixelCount; ++pixel) {
+            rgbaPixels[pixel * 4u + 3u] = 255u;
+        }
+        return;
+    }
+
+    const float scale = 255.0f / static_cast<float>(maxHeight - minHeight);
+    for (size_t pixel = 0u; pixel < pixelCount; ++pixel) {
+        const size_t alphaIndex = pixel * 4u + 3u;
+        const float normalized =
+            static_cast<float>(rgbaPixels[alphaIndex] - minHeight) * scale;
+        rgbaPixels[alphaIndex] = static_cast<uint8_t>(
+            std::clamp(normalized + 0.5f, 0.0f, 255.0f));
+    }
+}
+
 GpuMaterialNormalizationError validateLabPbrMetalId(const uint8_t encodedMetalId) {
     if (encodedMetalId <= 237u || encodedMetalId == 255u) {
         return GpuMaterialNormalizationError::None;

@@ -96,6 +96,12 @@ bool testGenerationAndConsumptionContract() {
           "reflection shader must be readable")) {
     return false;
   }
+  const size_t reflectionMask =
+      reflection.find("if (!hasDerivativeReflection)");
+  const size_t mipDebug =
+      reflection.find("uReflectionDebugMode == 31");
+  const size_t dfgDebug =
+      reflection.find("uReflectionDebugMode == 32");
   return requireTrue(pass.find("SkyIbl.Radiance") != std::string::npos &&
                          pass.find("SkyIbl.GgxPrefilter") !=
                              std::string::npos &&
@@ -134,11 +140,17 @@ bool testGenerationAndConsumptionContract() {
                              std::string::npos,
                      "reflection composition must consume roughness mip and "
                      "DFG products") &&
-         requireTrue(reflection.find("uReflectionDebugMode == 31") !=
-                             std::string::npos &&
-                         reflection.find("uReflectionDebugMode == 32") !=
-                             std::string::npos,
-                     "roughness mip and DFG must remain directly observable");
+         requireTrue(mipDebug != std::string::npos &&
+                         dfgDebug != std::string::npos &&
+                         reflectionMask != std::string::npos &&
+                         mipDebug < reflectionMask && dfgDebug < reflectionMask,
+                     "roughness mip and DFG must cover every geometry pixel") &&
+         requireTrue(
+             reflection.find("skyLightRaw01 * materialAo") !=
+                     std::string::npos &&
+                 reflection.find("skyLightRaw01 * skyLightRaw01 * skyLightRaw01") ==
+                     std::string::npos,
+             "sky IBL visibility must preserve linear skylight energy and material AO");
 }
 } // namespace
 

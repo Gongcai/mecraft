@@ -221,6 +221,10 @@ void main() {
     vec3 specularF0 = texture(uF0MetallicTex, textureUv).rgb;
 
     if (depth >= 0.9999) {
+        if (uReflectionDebugMode == 31 || uReflectionDebugMode == 32) {
+            FragColor = vec4(0.0);
+            return;
+        }
         vec3 skyPos = reconstructWorldPosition(vClipUv, 1.0);
         vec3 skyDir = normalize(skyPos - uCameraPos);
         vec3 sky = sampleSkyRadianceCloudy(uSkyCaptureTex, skyDir);
@@ -228,7 +232,9 @@ void main() {
         return;
     }
 
-    vec3 normal = unpackGBufferNormal(texture(uNormalAoTex, textureUv));
+    vec4 packedNormalAo = texture(uNormalAoTex, textureUv);
+    vec3 normal = unpackGBufferNormal(packedNormalAo);
+    float materialAo = clamp(unpackGBufferVertexAo(packedNormalAo), 0.0, 1.0);
     vec3 worldPos = reconstructWorldPosition(vClipUv, depth);
     vec3 viewDir = normalize(worldPos - uCameraPos);
     TranslucentMask transMask = decodeTranslucentMask(aux.materialKind);
@@ -314,6 +320,18 @@ void main() {
     vec3 skyReflection = textureLod(
         uSkySpecularPrefilter, reflectedDir, skyIblMip).rgb;
     vec3 skyGradientDebug = abs(dFdx(skyReflection)) + abs(dFdy(skyReflection));
+    float nDotView = max(dot(normal, -viewDir), 1e-6);
+    vec2 skyDfg = texture(uSkyDfgLut,
+                          vec2(nDotView, clamp(roughness, 0.0, 1.0))).rg;
+
+    if (uReflectionDebugMode == 31) {
+        FragColor = vec4(vec3(skyIblMip / 7.0), 0.0);
+        return;
+    }
+    if (uReflectionDebugMode == 32) {
+        FragColor = vec4(skyDfg, 0.0, 0.0);
+        return;
+    }
 
     // Early debug: pixelWetness and roughness are available for ALL pixels.
     if (uReflectionDebugMode == 1) {
@@ -387,18 +405,6 @@ void main() {
     float ssrHit = 0.0;
     traceScreenSpaceReflection(worldPos + normal * 0.025, reflectedDir, roughness, ssrColor, ssrHit);
 
-    float nDotRay = max(dot(normal, reflectedDir), 0.0);
-    float nDotView = max(dot(normal, -viewDir), 1e-6);
-    vec2 skyDfg = texture(uSkyDfgLut,
-                          vec2(nDotView, clamp(roughness, 0.0, 1.0))).rg;
-    if (uReflectionDebugMode == 31) {
-        FragColor = vec4(vec3(skyIblMip / 7.0), 0.0);
-        return;
-    }
-    if (uReflectionDebugMode == 32) {
-        FragColor = vec4(skyDfg, 0.0, 0.0);
-        return;
-    }
     vec3 reflectionSpecular = pbrEvaluateIblSpecular(
         vec3(1.0), skyDfg, specularF0, specularF90);
     float dist = 0.0;
@@ -450,22 +456,17 @@ void main() {
         return;
     }
 
-    // Smooth sky fallback: roughness drives earlier blend to sky reflection.
-    // Smooth surfaces (low roughness) get more SSR contribution before blending to sky.
-    // Rough surfaces blend to sky earlier — their reflections are already blurred.
-    float skyLightmap = smoothstep(0.3, 0.8, skyLightRaw01 * skyLightRaw01 * skyLightRaw01);
-    float nDotUp = saturate((dot(normal, vec3(0.0, 1.0, 0.0)) + 0.7) * 2.0) * 0.75 + 0.25;
-    float skyFallbackWeight = skyLightmap * nDotUp;
-    vec3 fallback = skyReflection * skyFallbackWeight;
+    float environmentVisibility = skyLightRaw01 * materialAo;
+    vec3 environmentReflection = skyReflection * environmentVisibility;
     if (uReflectionDebugMode == 12) {
-        FragColor = vec4(fallback, 0.0);
+        FragColor = vec4(environmentReflection, 0.0);
         return;
     }
 
-    // Smooth SSR blend: when ssrHit is near zero, use a soft transition to fallback
-    // instead of a hard lerp. This avoids visible seams at SSR boundaries.
+    // Smooth SSR blend: when ssrHit is near zero, use a soft transition to
+    // environment radiance instead of a hard source switch.
     float ssrBlend = smoothstep(0.0, 0.15, ssrHit);
-    vec3 color = mix(fallback, ssrColor, ssrBlend);
+    vec3 color = mix(environmentReflection, ssrColor, ssrBlend);
     if (uReflectionDebugMode == 20) {
         FragColor = vec4(color, 0.0);
         return;

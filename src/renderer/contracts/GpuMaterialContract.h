@@ -281,6 +281,14 @@ normalizeGltfMaterial(const GltfMaterialNormalizationInput& input);
 /// @return Tangent-space normal, material AO, and encoded height.
 [[nodiscard]] LabPbrNormalSample decodeLabPbrNormal(const std::array<uint8_t, 4>& texel);
 
+/// Expands one block tile's authored LabPBR height channel to the full byte
+/// range consumed by parallax occlusion mapping.
+/// @param rgbaPixels Mutable tightly packed RGBA8 tile pixels.
+/// @param pixelCount Number of RGBA8 pixels in the tile.
+/// @param sourceHasAlpha True when the decoded source image authored alpha.
+void normalizeLabPbrBlockHeightRange(uint8_t* rgbaPixels, size_t pixelCount,
+                                     bool sourceHasAlpha);
+
 /// Validates whether one LabPBR green-channel value has defined metal
 /// semantics.
 /// @param encodedMetalId Exact unsigned green-channel value.

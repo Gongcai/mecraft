@@ -272,6 +272,38 @@ bool testLabPbrReferenceVectors() {
                        "undefined LabPBR metal IDs must produce a structured error");
 }
 
+bool testLabPbrBlockHeightNormalization() {
+    using namespace renderer::contracts;
+
+    std::array<uint8_t, 12> authored = {
+        10u, 20u, 30u, 64u,
+        40u, 50u, 60u, 128u,
+        70u, 80u, 90u, 192u,
+    };
+    normalizeLabPbrBlockHeightRange(authored.data(), 3u, true);
+    if (!requireTrue(authored[3] == 0u && authored[7] == 128u && authored[11] == 255u,
+                     "block POM height must expand the authored alpha range") ||
+        !requireTrue(authored[0] == 10u && authored[5] == 50u && authored[10] == 90u,
+                     "height normalization must preserve normal and AO channels")) {
+        return false;
+    }
+
+    std::array<uint8_t, 8> constant = {
+        128u, 128u, 255u, 96u,
+        128u, 128u, 255u, 96u,
+    };
+    normalizeLabPbrBlockHeightRange(constant.data(), 2u, true);
+    if (!requireTrue(constant[3] == 255u && constant[7] == 255u,
+                     "constant-height tiles must encode a flat surface")) {
+        return false;
+    }
+
+    std::array<uint8_t, 4> rgbSource = {128u, 128u, 255u, 0u};
+    normalizeLabPbrBlockHeightRange(rgbSource.data(), 1u, false);
+    return requireTrue(rgbSource[3] == 255u,
+                       "alpha-less normal maps must encode a flat surface");
+}
+
 bool testShaderLayoutMirror() {
     const std::string shaderPath =
         std::string(MECRAFT_TEST_SOURCE_DIR) + "/assets/shaders/gpu_material_contract.glsl";
@@ -373,7 +405,8 @@ bool testSharedShaderIncludes() {
 
 int main() {
     if (!testGpuLayoutAndPacking() || !testStructuredErrors() || !testGltfNumericDomains() ||
-        !testTextureSemantics() || !testLabPbrReferenceVectors() || !testShaderLayoutMirror() ||
+        !testTextureSemantics() || !testLabPbrReferenceVectors() ||
+        !testLabPbrBlockHeightNormalization() || !testShaderLayoutMirror() ||
         !testSharedShaderIncludes()) {
         return 1;
     }

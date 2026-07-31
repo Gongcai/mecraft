@@ -261,13 +261,21 @@ std::vector<unsigned char> makeMaterialMapTilePixels(const unsigned char* source
                                                      const int sourceWidth, const int sourceHeight,
                                                      const int sourceRowStridePixels,
                                                      const int tileSize,
-                                                     const MaterialMapEncoding encoding) {
+                                                     const MaterialMapEncoding encoding,
+                                                     const bool sourceHasAlpha) {
     const resource::TextureResampleFilter filter =
         encoding == MaterialMapEncoding::LabPbrSpecular
             ? resource::TextureResampleFilter::Nearest
             : resource::selectTextureTileResampleFilter(sourceWidth, sourceHeight, tileSize);
-    return resource::resampleRgba8(sourcePixels, sourceWidth, sourceHeight, sourceRowStridePixels,
-                                   tileSize, tileSize, filter);
+    std::vector<unsigned char> tilePixels =
+        resource::resampleRgba8(sourcePixels, sourceWidth, sourceHeight,
+                                sourceRowStridePixels, tileSize, tileSize, filter);
+    if (encoding == MaterialMapEncoding::LabPbrNormal) {
+        renderer::contracts::normalizeLabPbrBlockHeightRange(
+            tilePixels.data(), static_cast<size_t>(tileSize) * static_cast<size_t>(tileSize),
+            sourceHasAlpha);
+    }
+    return tilePixels;
 }
 
 void writeAlbedoLayers(PendingTextureArray& texture,
@@ -323,12 +331,14 @@ void writeMaterialMapLayers(PendingTextureArray& texture,
     }
 
     LoadedImage image(mapPath.value());
+    const bool sourceHasAlpha = image.channels >= 4;
     validateMaterialMapTile(image.data,
                             static_cast<size_t>(image.width) * static_cast<size_t>(image.height),
                             encoding, mapPath.value());
     if (image.height == image.width) {
         std::vector<unsigned char> tilePixels = makeMaterialMapTilePixels(
-            image.data, image.width, image.height, image.width, tileSize, encoding);
+            image.data, image.width, image.height, image.width, tileSize, encoding,
+            sourceHasAlpha);
         for (int layer = 0; layer < layerCount; ++layer) {
             writeTextureArrayLayer(texture, firstLayer + layer, tilePixels.data(), tileSize);
         }
@@ -341,7 +351,8 @@ void writeMaterialMapLayers(PendingTextureArray& texture,
             const unsigned char* framePixels =
                 image.data + static_cast<size_t>(sourceFrameIndex * image.width * image.width) * 4U;
             std::vector<unsigned char> tilePixels = makeMaterialMapTilePixels(
-                framePixels, image.width, image.width, image.width, tileSize, encoding);
+                framePixels, image.width, image.width, image.width, tileSize, encoding,
+                sourceHasAlpha);
             writeTextureArrayLayer(texture, firstLayer + frame, tilePixels.data(), tileSize);
         }
         return;
