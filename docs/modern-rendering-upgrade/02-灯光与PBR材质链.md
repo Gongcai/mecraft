@@ -273,7 +273,9 @@ Probe 距离全局排序，捕获过程不读取主视图时域结果。模型�
 添加、删除、空间参数编辑和按场景包围盒生成固定顺序规则网格，运行时为每个文档 ID 分配独立
 稳定捕获 ID 与修订。Dashboard 与模型场景 Reflections 面板已展示 Source/Active/Building
 数量、剩余工作项、当前 Probe/Work Item、活动/构建修订和 Cubemap 槽位。体素场景数据源与
-V02/V07/M07 版本化资产验收仍属于后续集成范围。
+体素场景已具备独立的源构建契约：按加载区域 AABB、固定单元尺寸、外扩距离和捕获修订生成
+固定 z/y/x 顺序的世界空间 Probe 源，并严格检查有限值、容量、稳定 ID 范围和 GPU Probe 契约；
+地形 Capture Renderer 接线与 V02/V07/M07 版本化资产验收仍属于后续集成范围。
 
 Probe Capture 使用与主视图一致的材质和直接光，但关闭时域效果。动态探针按确定的更新
 队列逐 Face/Mip 构建，Dashboard 展示队列长度与资源代际。

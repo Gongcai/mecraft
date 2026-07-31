@@ -72,9 +72,10 @@ M1 与 M2 可并行开发，但公共 `GpuMaterial`、`GpuSceneGeometry` 与 Sta
    只有完整 54 项提交成功后才切换活动槽。模型场景已接入版本化场景文件中的手工 Probe 与
    规则网格数据源及 RGBA16F 六面绘制器，复用 glTF Material Sampling、主环境直接光和完整
    模型局部灯快照；编辑器支持添加、删除、空间参数编辑和按场景包围盒生成固定顺序网格，
-   运行时为每个文档 ID 分配独立稳定捕获 ID 与修订。体素场景 Probe 数据源和 V02/V07/M07
-   场景验收待后续接入；Dashboard 与模型场景 Reflections 面板已接入队列深度、当前工作项、
-   代际和槽位展示。）
+   运行时为每个文档 ID 分配独立稳定捕获 ID 与修订。体素场景已建立按加载区域 AABB 生成固定
+   z/y/x 顺序源列表的独立契约，并严格校验容量、稳定 ID、修订和 GPU Probe 输入；地形 Capture
+   Renderer 接线和 V02/V07/M07 场景验收待后续接入。Dashboard 与模型场景 Reflections 面板
+   已接入队列深度、当前工作项、代际和槽位展示。）
 
 ### 完成条件
 
