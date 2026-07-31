@@ -3,12 +3,14 @@
 
 #include "TerrainRenderer.h"
 #include "renderer/contracts/ClusteredLightingContract.h"
+#include "renderer/contracts/GpuLightContract.h"
 #include "renderer/rhi/RhiHandles.h"
 #include "renderer/rhi/RhiTypes.h"
 
 #include <array>
 #include <glm/mat4x4.hpp>
 #include <glm/vec3.hpp>
+#include <vector>
 
 class ResourceMgr;
 class DeferredRenderTargets;
@@ -77,6 +79,9 @@ public:
     bool prepareWater(RhiCommandList& commandList, ResourceMgr& resourceMgr, DeferredRenderTargets& targets,
                       const TerrainWaterFrameData& frame);
     bool prepareForward(RhiCommandList& commandList, ResourceMgr& resourceMgr, const TerrainFrameData& frame);
+    bool prepareReflectionProbeCapture(RhiCommandList& commandList, ResourceMgr& resourceMgr,
+                                       const TerrainFrameData& frame, const TerrainRenderSettings& settings,
+                                       const std::vector<renderer::contracts::SceneLight>& lights);
 
     [[nodiscard]] RhiBindGroupLayoutHandle metadataLayout() const { return m_metadataLayout; }
     [[nodiscard]] RhiPipelineHandle gbufferOpaquePipeline() const { return m_gbufferOpaquePipeline; }
@@ -102,6 +107,24 @@ public:
     [[nodiscard]] RhiBindGroupHandle forwardOpaqueBindGroup() const { return m_forwardBindGroups[0]; }
     [[nodiscard]] RhiBindGroupHandle forwardCutoutBindGroup() const { return m_forwardBindGroups[0]; }
     [[nodiscard]] RhiBindGroupHandle forwardTransparentBindGroup() const { return m_forwardBindGroups[1]; }
+    [[nodiscard]] RhiBindGroupLayoutHandle reflectionProbeCaptureMetadataLayout() const {
+        return m_probeCaptureMetadataLayout;
+    }
+    [[nodiscard]] RhiPipelineHandle reflectionProbeCaptureOpaquePipeline() const {
+        return m_probeCaptureOpaquePipeline;
+    }
+    [[nodiscard]] RhiPipelineHandle reflectionProbeCaptureCutoutPipeline() const {
+        return m_probeCaptureCutoutPipeline;
+    }
+    [[nodiscard]] RhiPipelineHandle reflectionProbeCaptureTransparentPipeline() const {
+        return m_probeCaptureTransparentPipeline;
+    }
+    [[nodiscard]] RhiBindGroupHandle reflectionProbeCaptureMaterialBindGroup() const {
+        return m_probeCaptureMaterialBindGroup;
+    }
+    [[nodiscard]] RhiBindGroupHandle reflectionProbeCaptureFrameBindGroup() const {
+        return m_probeCaptureFrameBindGroup;
+    }
 
 private:
     static constexpr size_t kGBufferTextureSlotCount = 7u;
@@ -109,6 +132,7 @@ private:
     static constexpr size_t kTransparentTextureSlotCount = 10u;
     static constexpr size_t kWaterTextureSlotCount = 9u;
     static constexpr size_t kForwardTextureSlotCount = 5u;
+    static constexpr size_t kProbeCaptureTextureSlotCount = 7u;
 
     bool ensureGBufferPipeline(ResourceMgr& resourceMgr);
     bool ensureGBufferTextureViews(ResourceMgr& resourceMgr);
@@ -147,6 +171,14 @@ private:
     void destroyForwardBindGroups();
     void destroyForwardTextureViews();
     void destroyForwardResources();
+    bool ensureProbeCapturePipeline(ResourceMgr& resourceMgr);
+    bool ensureProbeCaptureTextureViews(ResourceMgr& resourceMgr);
+    bool ensureProbeCaptureBindGroups();
+    bool ensureProbeCaptureLightCapacity(uint32_t lightCount);
+    bool ensureProbeCaptureTextureView(size_t slot, RhiTextureHandle texture, RhiTextureViewType viewType);
+    void destroyProbeCaptureBindGroups();
+    void destroyProbeCaptureTextureViews();
+    void destroyProbeCaptureResources();
 
     RhiDevice* m_rhiDevice = nullptr;
     bool m_hasNormalMaps = false;
@@ -241,6 +273,31 @@ private:
     std::array<RhiTextureHandle, kForwardTextureSlotCount> m_forwardViewTextures{};
     std::array<RhiTextureViewHandle, kForwardTextureSlotCount> m_forwardTextureViews{};
     std::array<RhiTextureViewHandle, kForwardTextureSlotCount> m_forwardBoundViews{};
+
+    bool m_probeCaptureHasNormalMaps = false;
+    bool m_probeCaptureHasSpecularMaps = false;
+    float m_probeCaptureSamplerAnisotropy = 1.0f;
+    uint32_t m_probeCaptureLightCapacity = 0u;
+    RhiBindGroupLayoutHandle m_probeCaptureMetadataLayout;
+    RhiBindGroupLayoutHandle m_probeCaptureMaterialLayout;
+    RhiBindGroupLayoutHandle m_probeCaptureFrameLayout;
+    RhiPipelineLayoutHandle m_probeCapturePipelineLayout;
+    RhiShaderHandle m_probeCaptureVertexShader;
+    RhiShaderHandle m_probeCaptureFragmentShader;
+    RhiPipelineHandle m_probeCaptureOpaquePipeline;
+    RhiPipelineHandle m_probeCaptureCutoutPipeline;
+    RhiPipelineHandle m_probeCaptureTransparentPipeline;
+    RhiBufferHandle m_probeCaptureMaterialParamsBuffer;
+    RhiBufferHandle m_probeCaptureFrameParamsBuffer;
+    RhiBufferHandle m_probeCaptureLightBuffer;
+    RhiBindGroupHandle m_probeCaptureMaterialBindGroup;
+    RhiBindGroupHandle m_probeCaptureFrameBindGroup;
+    RhiSamplerHandle m_probeCaptureBlockSampler;
+    RhiSamplerHandle m_probeCaptureLinearClampSampler;
+    RhiSamplerHandle m_probeCaptureLinearRepeatSampler;
+    std::array<RhiTextureHandle, kProbeCaptureTextureSlotCount> m_probeCaptureViewTextures{};
+    std::array<RhiTextureViewHandle, kProbeCaptureTextureSlotCount> m_probeCaptureTextureViews{};
+    std::array<RhiTextureViewHandle, kProbeCaptureTextureSlotCount> m_probeCaptureBoundViews{};
 };
 
 #endif // MECRAFT_TERRAIN_RHI_PIPELINE_SET_H

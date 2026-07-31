@@ -332,8 +332,35 @@ bool DeferredPipeline::recordReflectionProbeRadianceFace(RhiCommandList& command
     frame.cameraPos = work.positionWorldMeters;
     frame.animationTime = context.animationTime;
     frame.shaderTime = context.shaderTime;
+    frame.surfaceWetness = context.weather.surfaceWetness;
     frame.fog.enabled = false;
+    frame.skyLighting.sunDirection = context.skyColors.sunDirection;
+    frame.skyLighting.moonDirection = context.skyColors.moonDirection;
+    frame.skyLighting.sunLightColor = context.skyColors.sunLightColor;
+    frame.skyLighting.moonLightColor = context.skyColors.moonLightColor;
+    frame.skyLighting.skyAmbientColor = context.skyColors.skyAmbientColor;
     frame.skyLighting.skyIntensity = context.skyIntensity;
+    frame.skyLighting.moonVisibility = context.skyColors.moonVisibility;
+
+    TerrainRenderSettings terrainSettings;
+    terrainSettings.rainWetSurfacesEnabled = m_currentSettings.weather.wetSurfacesEnabled;
+    terrainSettings.rainSurfaceRipplesEnabled = m_currentSettings.weather.surfaceRipplesEnabled;
+    terrainSettings.blockMaterialMapsEnabled = m_currentSettings.blockMaterialMaps.enabled;
+    terrainSettings.blockNormalMapsEnabled = m_currentSettings.blockMaterialMaps.normalMapsEnabled;
+    terrainSettings.blockSpecularMapsEnabled = m_currentSettings.blockMaterialMaps.specularMapsEnabled;
+    terrainSettings.blockParallaxMapsEnabled = m_currentSettings.blockMaterialMaps.parallaxMapsEnabled;
+    terrainSettings.blockParallaxDepth = m_currentSettings.blockMaterialMaps.parallaxDepth;
+
+    std::vector<renderer::contracts::SceneLight> probeLights = m_sceneLights;
+    const glm::vec3 cameraToProbeOffset = context.camera.position - work.positionWorldMeters;
+    for (renderer::contracts::SceneLight& sceneLight : probeLights) {
+        if (sceneLight.light.classificationAndIdentity.x !=
+            static_cast<uint32_t>(renderer::contracts::GpuLightType::Directional)) {
+            sceneLight.light.positionAndRange.x += cameraToProbeOffset.x;
+            sceneLight.light.positionAndRange.y += cameraToProbeOffset.y;
+            sceneLight.light.positionAndRange.z += cameraToProbeOffset.z;
+        }
+    }
 
     TerrainRenderer& terrain = *m_shared->terrain;
     WorldRenderBuffer& worldBuffer = *m_shared->worldRenderBuffer;
@@ -349,9 +376,12 @@ bool DeferredPipeline::recordReflectionProbeRadianceFace(RhiCommandList& command
     for (const DrawBatchEntry& entry : transparentBatch) {
         worldBuffer.addTransparent(entry.range);
     }
-    if (!m_shared->terrainRhiPipelines->prepareForward(commandList, *m_resourceMgr, frame) ||
-        !worldBuffer.prepareRhiOpaqueAndCutout(commandList, m_shared->terrainRhiPipelines->forwardMetadataLayout()) ||
-        !worldBuffer.prepareRhiTransparent(commandList, m_shared->terrainRhiPipelines->forwardMetadataLayout())) {
+    if (!m_shared->terrainRhiPipelines->prepareReflectionProbeCapture(commandList, *m_resourceMgr, frame,
+                                                                      terrainSettings, probeLights) ||
+        !worldBuffer.prepareRhiOpaqueAndCutout(commandList,
+                                               m_shared->terrainRhiPipelines->reflectionProbeCaptureMetadataLayout()) ||
+        !worldBuffer.prepareRhiTransparent(commandList,
+                                           m_shared->terrainRhiPipelines->reflectionProbeCaptureMetadataLayout())) {
         return false;
     }
     if (m_shared->blockEntityRenderer != nullptr && (!m_shared->blockEntityRenderer->prepareFrame(*context.worldView) ||
@@ -393,10 +423,12 @@ bool DeferredPipeline::recordReflectionProbeRadianceFace(RhiCommandList& command
     commandList.setViewport({0.0f, 0.0f, static_cast<float>(renderer::contracts::kReflectionProbeCubeExtent),
                              static_cast<float>(renderer::contracts::kReflectionProbeCubeExtent), 0.0f, 1.0f});
     commandList.setScissor(renderingInfo.renderArea);
-    worldBuffer.recordRhiOpaque(commandList, m_shared->terrainRhiPipelines->forwardOpaquePipeline(),
-                                m_shared->terrainRhiPipelines->forwardOpaqueBindGroup());
-    worldBuffer.recordRhiCutout(commandList, m_shared->terrainRhiPipelines->forwardCutoutPipeline(),
-                                m_shared->terrainRhiPipelines->forwardCutoutBindGroup());
+    worldBuffer.recordRhiOpaque(commandList, m_shared->terrainRhiPipelines->reflectionProbeCaptureOpaquePipeline(),
+                                m_shared->terrainRhiPipelines->reflectionProbeCaptureMaterialBindGroup(),
+                                m_shared->terrainRhiPipelines->reflectionProbeCaptureFrameBindGroup());
+    worldBuffer.recordRhiCutout(commandList, m_shared->terrainRhiPipelines->reflectionProbeCaptureCutoutPipeline(),
+                                m_shared->terrainRhiPipelines->reflectionProbeCaptureMaterialBindGroup(),
+                                m_shared->terrainRhiPipelines->reflectionProbeCaptureFrameBindGroup());
     if (m_shared->blockEntityRenderer != nullptr) {
         m_shared->blockEntityRenderer->renderForward(commandList, work.viewProjection, context.skyIntensity);
     }
@@ -407,8 +439,10 @@ bool DeferredPipeline::recordReflectionProbeRadianceFace(RhiCommandList& command
     if (m_shared->humanoidRenderer != nullptr && m_shared->gameplayRegistry != nullptr) {
         m_shared->humanoidRenderer->renderPreparedForward(commandList, work.viewProjection, context.skyIntensity);
     }
-    worldBuffer.recordRhiTransparent(commandList, m_shared->terrainRhiPipelines->forwardTransparentPipeline(),
-                                     m_shared->terrainRhiPipelines->forwardTransparentBindGroup());
+    worldBuffer.recordRhiTransparent(commandList,
+                                     m_shared->terrainRhiPipelines->reflectionProbeCaptureTransparentPipeline(),
+                                     m_shared->terrainRhiPipelines->reflectionProbeCaptureMaterialBindGroup(),
+                                     m_shared->terrainRhiPipelines->reflectionProbeCaptureFrameBindGroup());
     commandList.endRendering();
     return true;
 }

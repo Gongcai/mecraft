@@ -587,10 +587,8 @@ bool RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
     const bool lightDebugActive = isLightDebugActive();
     float cameraRainVisibility = 1.0f;
 
-    const bool clusteredVoxelLightsRequired = getPipelineMode() == PipelineMode::Deferred &&
-                                              m_shared.rhiDevice != nullptr &&
-                                              m_shared.rhiDevice->backend() == RhiBackend::Vulkan;
-    if (clusteredVoxelLightsRequired) {
+    const bool voxelLightSnapshotRequired = getPipelineMode() == PipelineMode::Deferred;
+    if (voxelLightSnapshotRequired) {
         std::vector<renderer::contracts::SceneLight> lights;
         if (!m_voxelLightRegistry.buildSceneLights(request.worldView, request.camera.getPosition(), lights)) {
             MECRAFT_LOG_STREAM(std::cerr << "[RenderScene] " << m_voxelLightRegistry.lastError() << '\n');
@@ -598,7 +596,7 @@ bool RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
         }
         if (!setSceneLights(std::move(lights))) {
             MECRAFT_LOG_STREAM(
-                std::cerr << "[RenderScene] Voxel GPU light snapshot violates the clustered-light contract\n");
+                std::cerr << "[RenderScene] Voxel GPU light snapshot violates the scene-light contract\n");
             return false;
         }
     }

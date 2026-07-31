@@ -77,11 +77,13 @@ M1 与 M2 可并行开发，但公共 `GpuMaterial`、`GpuSceneGeometry` 与 Sta
    单个 16 米相机单元流式 Probe：相机跨单元、活动区块集合或方块内容修订变化会创建新的捕获
    代际，影响盒保持当前单元，Box Projection 与捕获远平面覆盖已加载区块 AABB。地形 Capture
    Renderer 使用独立六面 View/ViewProjection 重新收集区块，opaque/cutout 先写深度，透明地形
-   与水面网格按探针距离从远到近混合，结果写入 128×128 RGBA16F + Depth32 目标；OpenGL/
-   Vulkan `m0_voxel_baseline` 120 帧预热加 60 帧采样已通过，Vulkan Validation 无报错。方块实体、
+   与水面网格按探针距离从远到近混合，结果写入 128×128 RGBA16F + Depth32 目标；Capture 已
+   切换到独立地形 PBR 管线，复用 LabPBR 法线/高度/Specular、Biome Tint、Wetness 和统一
+   GGX/Lambert 直接光，并将体素 `GpuLight` 快照按探针相对坐标上传；OpenGL/Vulkan
+   `m0_voxel_baseline` 120 帧预热加 60 帧采样已通过，Vulkan Validation 无报错。方块实体、
    掉落物和生物/远端角色使用各自 RGBA16F Forward 管线进入六面捕获，本地第一人称玩家不进入
-   环境探针。现代水体折射/吸收、下落方块、体素静态 glTF、粒子、体素捕获内的现代 PBR 直接光
-   以及 V02/V07/M07 版本化质量验收仍待完成。Dashboard 与模型场景 Reflections 面板已接入队列
+   环境探针。现代水体折射/吸收、下落方块、体素静态 glTF、粒子以及 V02/V07/M07 版本化质量
+   验收仍待完成。Dashboard 与模型场景 Reflections 面板已接入队列
    深度、当前工作项、代际和槽位展示。）
 
 ### 完成条件

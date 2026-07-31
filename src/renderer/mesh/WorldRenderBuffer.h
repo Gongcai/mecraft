@@ -156,7 +156,11 @@ public:
 
     bool prepareRhiOpaqueAndCutout(RhiCommandList& commandList, RhiBindGroupLayoutHandle metadataLayout);
     void recordRhiOpaque(RhiCommandList& commandList, RhiPipelineHandle pipeline, RhiBindGroupHandle materialBindGroup);
+    void recordRhiOpaque(RhiCommandList& commandList, RhiPipelineHandle pipeline, RhiBindGroupHandle materialBindGroup,
+                         RhiBindGroupHandle sceneBindGroup);
     void recordRhiCutout(RhiCommandList& commandList, RhiPipelineHandle pipeline, RhiBindGroupHandle materialBindGroup);
+    void recordRhiCutout(RhiCommandList& commandList, RhiPipelineHandle pipeline, RhiBindGroupHandle materialBindGroup,
+                         RhiBindGroupHandle sceneBindGroup);
     bool prepareRhiTransparent(RhiCommandList& commandList, RhiBindGroupLayoutHandle metadataLayout);
     void recordRhiTransparent(RhiCommandList& commandList, RhiPipelineHandle pipeline,
                               RhiBindGroupHandle materialBindGroup);

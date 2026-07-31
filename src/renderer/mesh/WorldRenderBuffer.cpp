@@ -662,6 +662,25 @@ void WorldRenderBuffer::recordRhiOpaque(RhiCommandList& commandList, const RhiPi
     ++m_rhiSubmitCount;
 }
 
+void WorldRenderBuffer::recordRhiOpaque(RhiCommandList& commandList, const RhiPipelineHandle pipeline,
+                                        const RhiBindGroupHandle materialBindGroup,
+                                        const RhiBindGroupHandle sceneBindGroup) {
+    if (m_opaqueCommands.empty()) {
+        return;
+    }
+    if (!sceneBindGroup.isValid()) {
+        std::abort();
+    }
+    commandList.setGraphicsPipeline(pipeline);
+    commandList.setBindGroup(0u, m_rhiMetadataBindGroup);
+    commandList.setBindGroup(1u, materialBindGroup);
+    commandList.setBindGroup(2u, sceneBindGroup);
+    commandList.setVertexBuffer(0u, m_opaquePool.buffer(), 0u);
+    commandList.drawIndirect(m_rhiOpaqueIndirectBuffer.buffer(), 0u, static_cast<uint32_t>(m_opaqueCommands.size()),
+                             sizeof(DrawArraysIndirectCommand));
+    ++m_rhiSubmitCount;
+}
+
 void WorldRenderBuffer::recordRhiCutout(RhiCommandList& commandList, const RhiPipelineHandle pipeline,
                                         const RhiBindGroupHandle materialBindGroup) {
     if (m_cutoutCommands.empty()) {
@@ -670,6 +689,25 @@ void WorldRenderBuffer::recordRhiCutout(RhiCommandList& commandList, const RhiPi
     commandList.setGraphicsPipeline(pipeline);
     commandList.setBindGroup(0u, m_rhiMetadataBindGroup);
     commandList.setBindGroup(1u, materialBindGroup);
+    commandList.setVertexBuffer(0u, m_cutoutPool.buffer(), 0u);
+    commandList.drawIndirect(m_rhiCutoutIndirectBuffer.buffer(), 0u, static_cast<uint32_t>(m_cutoutCommands.size()),
+                             sizeof(DrawArraysIndirectCommand));
+    ++m_rhiSubmitCount;
+}
+
+void WorldRenderBuffer::recordRhiCutout(RhiCommandList& commandList, const RhiPipelineHandle pipeline,
+                                        const RhiBindGroupHandle materialBindGroup,
+                                        const RhiBindGroupHandle sceneBindGroup) {
+    if (m_cutoutCommands.empty()) {
+        return;
+    }
+    if (!sceneBindGroup.isValid()) {
+        std::abort();
+    }
+    commandList.setGraphicsPipeline(pipeline);
+    commandList.setBindGroup(0u, m_rhiMetadataBindGroup);
+    commandList.setBindGroup(1u, materialBindGroup);
+    commandList.setBindGroup(2u, sceneBindGroup);
     commandList.setVertexBuffer(0u, m_cutoutPool.buffer(), 0u);
     commandList.drawIndirect(m_rhiCutoutIndirectBuffer.buffer(), 0u, static_cast<uint32_t>(m_cutoutCommands.size()),
                              sizeof(DrawArraysIndirectCommand));

@@ -107,6 +107,26 @@ struct alignas(16) TerrainForwardParams {
 
 static_assert(sizeof(TerrainForwardParams) == 192u, "Terrain forward parameters must match the std140 shader block");
 
+struct alignas(16) TerrainProbeCaptureMaterialParams {
+    glm::vec4 timing = glm::vec4(0.0f);
+    glm::ivec4 materialFlags = glm::ivec4(0);
+    glm::ivec4 weatherFlags = glm::ivec4(0);
+};
+
+struct alignas(16) TerrainProbeCaptureFrameParams {
+    glm::mat4 viewProjection = glm::mat4(1.0f);
+    glm::vec4 probePosition = glm::vec4(0.0f);
+    glm::vec4 sunDirection = glm::vec4(0.0f, 1.0f, 0.0f, 0.0f);
+    glm::vec4 sunColor = glm::vec4(1.0f);
+    glm::vec4 ambientColor = glm::vec4(0.0f);
+    glm::uvec4 lightCount = glm::uvec4(0u);
+};
+
+static_assert(sizeof(TerrainProbeCaptureMaterialParams) == 48u,
+              "Terrain probe-capture material parameters must match the std140 shader block");
+static_assert(sizeof(TerrainProbeCaptureFrameParams) == 144u,
+              "Terrain probe-capture frame parameters must match the std140 shader block");
+
 void setPackedTerrainVertexInput(RhiGraphicsPipelineDesc& pipelineDesc) {
     pipelineDesc.vertexInput.bindings.push_back(
         {0u, static_cast<uint32_t>(sizeof(PackedBlockVertex)), RhiVertexInputRate::Vertex});
@@ -131,6 +151,7 @@ void TerrainRhiPipelineSet::init(RhiDevice& rhiDevice) {
 }
 
 void TerrainRhiPipelineSet::shutdown() {
+    destroyProbeCaptureResources();
     destroyForwardResources();
     destroyWaterResources();
     destroyTransparentResources();
@@ -344,6 +365,70 @@ bool TerrainRhiPipelineSet::prepareForward(RhiCommandList& commandList, Resource
         {m_forwardParamsBuffers[0], RhiResourceState::TransferDst, RhiResourceState::UniformBuffer});
     commandList.bufferBarrier(
         {m_forwardParamsBuffers[1], RhiResourceState::TransferDst, RhiResourceState::UniformBuffer});
+    return true;
+}
+
+bool TerrainRhiPipelineSet::prepareReflectionProbeCapture(RhiCommandList& commandList, ResourceMgr& resourceMgr,
+                                                          const TerrainFrameData& frame,
+                                                          const TerrainRenderSettings& settings,
+                                                          const std::vector<renderer::contracts::SceneLight>& lights) {
+    if (m_rhiDevice == nullptr || lights.size() > renderer::contracts::kClusterMaxLightCount ||
+        !ensureProbeCapturePipeline(resourceMgr) ||
+        !ensureProbeCaptureLightCapacity(static_cast<uint32_t>(lights.size())) ||
+        !ensureProbeCaptureTextureViews(resourceMgr) || !ensureProbeCaptureBindGroups()) {
+        return false;
+    }
+
+    TerrainProbeCaptureMaterialParams materialParams;
+    materialParams.timing =
+        glm::vec4(frame.animationTime, frame.shaderTime, frame.surfaceWetness, settings.blockParallaxDepth);
+    materialParams.materialFlags = glm::ivec4(
+        0, settings.blockMaterialMapsEnabled && settings.blockNormalMapsEnabled && m_probeCaptureHasNormalMaps ? 1 : 0,
+        settings.blockMaterialMapsEnabled && settings.blockSpecularMapsEnabled && m_probeCaptureHasSpecularMaps ? 1 : 0,
+        settings.blockMaterialMapsEnabled && settings.blockNormalMapsEnabled && settings.blockParallaxMapsEnabled &&
+                m_probeCaptureHasNormalMaps
+            ? 1
+            : 0);
+    materialParams.weatherFlags =
+        glm::ivec4(settings.rainWetSurfacesEnabled ? 1 : 0, settings.rainSurfaceRipplesEnabled ? 1 : 0, 0, 0);
+
+    TerrainProbeCaptureFrameParams frameParams;
+    frameParams.viewProjection = frame.viewProj;
+    frameParams.probePosition = glm::vec4(frame.cameraPos, 1.0f);
+    const bool moonDominant = frame.skyLighting.moonVisibility > 0.5f;
+    frameParams.sunDirection =
+        glm::vec4(moonDominant ? frame.skyLighting.moonDirection : frame.skyLighting.sunDirection, 0.0f);
+    frameParams.sunColor =
+        glm::vec4((moonDominant ? frame.skyLighting.moonLightColor : frame.skyLighting.sunLightColor) *
+                      frame.skyLighting.skyIntensity,
+                  1.0f);
+    frameParams.ambientColor = glm::vec4(frame.skyLighting.skyAmbientColor * frame.skyLighting.skyIntensity, 0.0f);
+    frameParams.lightCount.x = static_cast<uint32_t>(lights.size());
+
+    commandList.bufferBarrier(
+        {m_probeCaptureMaterialParamsBuffer, RhiResourceState::UniformBuffer, RhiResourceState::TransferDst});
+    commandList.updateBuffer(m_probeCaptureMaterialParamsBuffer, 0u, &materialParams, sizeof(materialParams));
+    commandList.bufferBarrier(
+        {m_probeCaptureMaterialParamsBuffer, RhiResourceState::TransferDst, RhiResourceState::UniformBuffer});
+    commandList.bufferBarrier(
+        {m_probeCaptureFrameParamsBuffer, RhiResourceState::UniformBuffer, RhiResourceState::TransferDst});
+    commandList.updateBuffer(m_probeCaptureFrameParamsBuffer, 0u, &frameParams, sizeof(frameParams));
+    commandList.bufferBarrier(
+        {m_probeCaptureFrameParamsBuffer, RhiResourceState::TransferDst, RhiResourceState::UniformBuffer});
+
+    if (!lights.empty()) {
+        std::vector<renderer::contracts::GpuLight> gpuLights;
+        gpuLights.reserve(lights.size());
+        for (const renderer::contracts::SceneLight& light : lights) {
+            gpuLights.push_back(light.light);
+        }
+        commandList.bufferBarrier(
+            {m_probeCaptureLightBuffer, RhiResourceState::StorageBuffer, RhiResourceState::TransferDst});
+        commandList.updateBuffer(m_probeCaptureLightBuffer, 0u, gpuLights.data(),
+                                 gpuLights.size() * sizeof(gpuLights.front()));
+        commandList.bufferBarrier(
+            {m_probeCaptureLightBuffer, RhiResourceState::TransferDst, RhiResourceState::StorageBuffer});
+    }
     return true;
 }
 
@@ -887,6 +972,404 @@ void TerrainRhiPipelineSet::destroyForwardResources() {
     m_forwardBlockSampler = {};
     m_forwardLinearClampSampler = {};
     m_forwardSamplerAnisotropy = 1.0f;
+}
+
+bool TerrainRhiPipelineSet::ensureProbeCapturePipeline(ResourceMgr& resourceMgr) {
+    const bool hasNormalMaps = resourceMgr.hasBlockNormalMaps();
+    const bool hasSpecularMaps = resourceMgr.hasBlockSpecularMaps();
+    const float anisotropy = std::max(1.0f, resourceMgr.getAtlasAnisotropy());
+    if (m_probeCaptureOpaquePipeline.isValid() && m_probeCaptureCutoutPipeline.isValid() &&
+        m_probeCaptureTransparentPipeline.isValid() && hasNormalMaps == m_probeCaptureHasNormalMaps &&
+        hasSpecularMaps == m_probeCaptureHasSpecularMaps && anisotropy == m_probeCaptureSamplerAnisotropy) {
+        return true;
+    }
+
+    destroyProbeCaptureResources();
+    if (m_rhiDevice == nullptr) {
+        return false;
+    }
+    m_probeCaptureHasNormalMaps = hasNormalMaps;
+    m_probeCaptureHasSpecularMaps = hasSpecularMaps;
+    m_probeCaptureSamplerAnisotropy = anisotropy;
+
+    renderer::rhi::RhiShaderSourceOptions sourceOptions;
+    if (hasNormalMaps) {
+        sourceOptions.preprocessorDefinitions.emplace_back("RHI_TERRAIN_NORMAL_MAPS");
+    }
+    if (hasSpecularMaps) {
+        sourceOptions.preprocessorDefinitions.emplace_back("RHI_TERRAIN_SPECULAR_MAPS");
+    }
+    const std::optional<std::string> vertexSource =
+        renderer::rhi::loadShaderSource("assets/shaders/terrain_probe_capture.vert", sourceOptions);
+    const std::optional<std::string> fragmentSource =
+        renderer::rhi::loadShaderSource("assets/shaders/terrain_probe_capture.frag", sourceOptions);
+    if (!vertexSource.has_value() || !fragmentSource.has_value()) {
+        destroyProbeCaptureResources();
+        return false;
+    }
+
+    RhiShaderDesc vertexDesc;
+    vertexDesc.debugName = "Terrain.ProbeCapture.Vertex";
+    vertexDesc.stage = RhiShaderStage::Vertex;
+    vertexDesc.source = vertexSource->c_str();
+    vertexDesc.sourceSize = vertexSource->size();
+    m_probeCaptureVertexShader = m_rhiDevice->createShader(vertexDesc);
+    RhiShaderDesc fragmentDesc;
+    fragmentDesc.debugName = "Terrain.ProbeCapture.Fragment";
+    fragmentDesc.stage = RhiShaderStage::Fragment;
+    fragmentDesc.source = fragmentSource->c_str();
+    fragmentDesc.sourceSize = fragmentSource->size();
+    m_probeCaptureFragmentShader = m_rhiDevice->createShader(fragmentDesc);
+    if (!m_probeCaptureVertexShader.isValid() || !m_probeCaptureFragmentShader.isValid()) {
+        destroyProbeCaptureResources();
+        return false;
+    }
+
+    RhiBufferDesc materialParamsDesc;
+    materialParamsDesc.debugName = "Terrain.ProbeCapture.MaterialParams";
+    materialParamsDesc.size = sizeof(TerrainProbeCaptureMaterialParams);
+    materialParamsDesc.usage = rhiFlag(RhiBufferUsage::Uniform) | rhiFlag(RhiBufferUsage::TransferDst);
+    materialParamsDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+    materialParamsDesc.initialState = RhiResourceState::UniformBuffer;
+    materialParamsDesc.memoryCategory = RhiMemoryCategory::Uniform;
+    m_probeCaptureMaterialParamsBuffer = m_rhiDevice->createBuffer(materialParamsDesc, nullptr, 0u);
+    RhiBufferDesc frameParamsDesc = materialParamsDesc;
+    frameParamsDesc.debugName = "Terrain.ProbeCapture.FrameParams";
+    frameParamsDesc.size = sizeof(TerrainProbeCaptureFrameParams);
+    m_probeCaptureFrameParamsBuffer = m_rhiDevice->createBuffer(frameParamsDesc, nullptr, 0u);
+    if (!m_probeCaptureMaterialParamsBuffer.isValid() || !m_probeCaptureFrameParamsBuffer.isValid()) {
+        destroyProbeCaptureResources();
+        return false;
+    }
+
+    RhiSamplerDesc blockSamplerDesc;
+    blockSamplerDesc.minFilter = RhiFilter::Nearest;
+    blockSamplerDesc.magFilter = RhiFilter::Nearest;
+    blockSamplerDesc.mipmapMode = RhiMipmapMode::Linear;
+    blockSamplerDesc.addressU = RhiAddressMode::Repeat;
+    blockSamplerDesc.addressV = RhiAddressMode::Repeat;
+    blockSamplerDesc.addressW = RhiAddressMode::Repeat;
+    blockSamplerDesc.maxAnisotropy = anisotropy;
+    m_probeCaptureBlockSampler = m_rhiDevice->createSampler(blockSamplerDesc);
+    RhiSamplerDesc linearClampDesc;
+    linearClampDesc.minFilter = RhiFilter::Linear;
+    linearClampDesc.magFilter = RhiFilter::Linear;
+    linearClampDesc.mipmapMode = RhiMipmapMode::Nearest;
+    m_probeCaptureLinearClampSampler = m_rhiDevice->createSampler(linearClampDesc);
+    RhiSamplerDesc linearRepeatDesc = linearClampDesc;
+    linearRepeatDesc.addressU = RhiAddressMode::Repeat;
+    linearRepeatDesc.addressV = RhiAddressMode::Repeat;
+    linearRepeatDesc.addressW = RhiAddressMode::Repeat;
+    m_probeCaptureLinearRepeatSampler = m_rhiDevice->createSampler(linearRepeatDesc);
+    if (!m_probeCaptureBlockSampler.isValid() || !m_probeCaptureLinearClampSampler.isValid() ||
+        !m_probeCaptureLinearRepeatSampler.isValid()) {
+        destroyProbeCaptureResources();
+        return false;
+    }
+
+    RhiBindGroupLayoutDesc metadataLayoutDesc;
+    metadataLayoutDesc.debugName = "Terrain.ProbeCapture.MetadataLayout";
+    metadataLayoutDesc.entries.push_back({0u, RhiBindingType::StorageBuffer, rhiFlag(RhiShaderStage::Vertex), 1u});
+    m_probeCaptureMetadataLayout = m_rhiDevice->createBindGroupLayout(metadataLayoutDesc);
+
+    RhiBindGroupLayoutDesc materialLayoutDesc;
+    materialLayoutDesc.debugName = "Terrain.ProbeCapture.MaterialLayout";
+    for (size_t slot = 0u; slot < 5u; ++slot) {
+        materialLayoutDesc.entries.push_back({kGBufferTextureBindings[slot], RhiBindingType::CombinedTextureSampler,
+                                              rhiFlag(RhiShaderStage::Fragment), 1u});
+    }
+    if (hasNormalMaps) {
+        materialLayoutDesc.entries.push_back(
+            {11u, RhiBindingType::CombinedTextureSampler, rhiFlag(RhiShaderStage::Fragment), 1u});
+    }
+    if (hasSpecularMaps) {
+        materialLayoutDesc.entries.push_back(
+            {12u, RhiBindingType::CombinedTextureSampler, rhiFlag(RhiShaderStage::Fragment), 1u});
+    }
+    materialLayoutDesc.entries.push_back(
+        {13u, RhiBindingType::UniformBuffer, rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment), 1u});
+    m_probeCaptureMaterialLayout = m_rhiDevice->createBindGroupLayout(materialLayoutDesc);
+
+    RhiBindGroupLayoutDesc frameLayoutDesc;
+    frameLayoutDesc.debugName = "Terrain.ProbeCapture.FrameLayout";
+    frameLayoutDesc.entries.push_back(
+        {0u, RhiBindingType::UniformBuffer, rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment), 1u});
+    frameLayoutDesc.entries.push_back({1u, RhiBindingType::StorageBuffer, rhiFlag(RhiShaderStage::Fragment), 1u});
+    m_probeCaptureFrameLayout = m_rhiDevice->createBindGroupLayout(frameLayoutDesc);
+    if (!m_probeCaptureMetadataLayout.isValid() || !m_probeCaptureMaterialLayout.isValid() ||
+        !m_probeCaptureFrameLayout.isValid()) {
+        destroyProbeCaptureResources();
+        return false;
+    }
+
+    RhiPipelineLayoutDesc pipelineLayoutDesc;
+    pipelineLayoutDesc.debugName = "Terrain.ProbeCapture.PipelineLayout";
+    pipelineLayoutDesc.bindGroupLayouts = {m_probeCaptureMetadataLayout, m_probeCaptureMaterialLayout,
+                                           m_probeCaptureFrameLayout};
+    m_probeCapturePipelineLayout = m_rhiDevice->createPipelineLayout(pipelineLayoutDesc);
+    if (!m_probeCapturePipelineLayout.isValid()) {
+        destroyProbeCaptureResources();
+        return false;
+    }
+
+    RhiGraphicsPipelineDesc pipelineDesc;
+    pipelineDesc.vertexShader = m_probeCaptureVertexShader;
+    pipelineDesc.fragmentShader = m_probeCaptureFragmentShader;
+    pipelineDesc.layout = m_probeCapturePipelineLayout;
+    setPackedTerrainVertexInput(pipelineDesc);
+    pipelineDesc.depthStencil.depthTestEnabled = true;
+    pipelineDesc.depthStencil.depthWriteEnabled = true;
+    pipelineDesc.depthStencil.depthCompare = RhiCompareOp::Less;
+    pipelineDesc.colorFormats = {RhiTextureFormat::Rgba16Float};
+    pipelineDesc.depthFormat = RhiTextureFormat::Depth32Float;
+    pipelineDesc.blend.attachments.resize(1u);
+    pipelineDesc.raster.cullMode = RhiCullMode::Back;
+    pipelineDesc.debugName = "Terrain.ProbeCapture.OpaquePipeline";
+    m_probeCaptureOpaquePipeline = m_rhiDevice->createGraphicsPipeline(pipelineDesc);
+    pipelineDesc.raster.cullMode = RhiCullMode::None;
+    pipelineDesc.debugName = "Terrain.ProbeCapture.CutoutPipeline";
+    m_probeCaptureCutoutPipeline = m_rhiDevice->createGraphicsPipeline(pipelineDesc);
+    pipelineDesc.depthStencil.depthWriteEnabled = false;
+    pipelineDesc.depthStencil.depthCompare = RhiCompareOp::LessOrEqual;
+    RhiBlendAttachmentState blend;
+    blend.blendEnabled = true;
+    blend.srcColor = RhiBlendFactor::One;
+    blend.dstColor = RhiBlendFactor::OneMinusSrcAlpha;
+    blend.srcAlpha = RhiBlendFactor::One;
+    blend.dstAlpha = RhiBlendFactor::OneMinusSrcAlpha;
+    pipelineDesc.blend.attachments = {blend};
+    pipelineDesc.debugName = "Terrain.ProbeCapture.TransparentPipeline";
+    m_probeCaptureTransparentPipeline = m_rhiDevice->createGraphicsPipeline(pipelineDesc);
+    if (!m_probeCaptureOpaquePipeline.isValid() || !m_probeCaptureCutoutPipeline.isValid() ||
+        !m_probeCaptureTransparentPipeline.isValid()) {
+        destroyProbeCaptureResources();
+        return false;
+    }
+    return true;
+}
+
+bool TerrainRhiPipelineSet::ensureProbeCaptureTextureViews(ResourceMgr& resourceMgr) {
+    const TextureArray& albedo = resourceMgr.getTextureArray();
+    if (!ensureProbeCaptureTextureView(0u, albedo.texture, RhiTextureViewType::Texture2DArray) ||
+        !ensureProbeCaptureTextureView(1u, resourceMgr.getGrassColormap(), RhiTextureViewType::Texture2D) ||
+        !ensureProbeCaptureTextureView(2u, resourceMgr.getFoliageColormap(), RhiTextureViewType::Texture2D) ||
+        !ensureProbeCaptureTextureView(3u, resourceMgr.getTexture2DHandle("shader_noise2d"),
+                                       RhiTextureViewType::Texture2D) ||
+        !ensureProbeCaptureTextureView(4u, resourceMgr.getTexture2DHandle("shader_ripple_normal"),
+                                       RhiTextureViewType::Texture2D)) {
+        return false;
+    }
+    if (m_probeCaptureHasNormalMaps &&
+        !ensureProbeCaptureTextureView(5u, resourceMgr.getBlockNormalTextureArray().texture,
+                                       RhiTextureViewType::Texture2DArray)) {
+        return false;
+    }
+    return !m_probeCaptureHasSpecularMaps ||
+           ensureProbeCaptureTextureView(6u, resourceMgr.getBlockSpecularTextureArray().texture,
+                                         RhiTextureViewType::Texture2DArray);
+}
+
+bool TerrainRhiPipelineSet::ensureProbeCaptureLightCapacity(const uint32_t lightCount) {
+    const uint32_t requiredCapacity = std::max(lightCount, 1u);
+    if (m_rhiDevice == nullptr || lightCount > renderer::contracts::kClusterMaxLightCount) {
+        return false;
+    }
+    if (m_probeCaptureLightBuffer.isValid() && m_probeCaptureLightCapacity >= requiredCapacity) {
+        return true;
+    }
+    RhiBufferDesc desc;
+    desc.debugName = "Terrain.ProbeCapture.LightBuffer";
+    desc.size = static_cast<uint64_t>(requiredCapacity) * sizeof(renderer::contracts::GpuLight);
+    desc.usage = rhiFlag(RhiBufferUsage::Storage) | rhiFlag(RhiBufferUsage::TransferDst);
+    desc.memoryUsage = RhiMemoryUsage::GpuOnly;
+    desc.initialState = RhiResourceState::StorageBuffer;
+    desc.memoryCategory = RhiMemoryCategory::SceneData;
+    const RhiBufferHandle replacement = m_rhiDevice->createBuffer(desc, nullptr, 0u);
+    if (!replacement.isValid()) {
+        return false;
+    }
+    destroyProbeCaptureBindGroups();
+    if (m_probeCaptureLightBuffer.isValid()) {
+        m_rhiDevice->destroyBuffer(m_probeCaptureLightBuffer);
+    }
+    m_probeCaptureLightBuffer = replacement;
+    m_probeCaptureLightCapacity = requiredCapacity;
+    return true;
+}
+
+bool TerrainRhiPipelineSet::ensureProbeCaptureBindGroups() {
+    bool viewsChanged = false;
+    for (size_t slot = 0u; slot < 5u; ++slot) {
+        viewsChanged = viewsChanged || !sameHandle(m_probeCaptureBoundViews[slot], m_probeCaptureTextureViews[slot]);
+    }
+    if (m_probeCaptureHasNormalMaps) {
+        viewsChanged = viewsChanged || !sameHandle(m_probeCaptureBoundViews[5], m_probeCaptureTextureViews[5]);
+    }
+    if (m_probeCaptureHasSpecularMaps) {
+        viewsChanged = viewsChanged || !sameHandle(m_probeCaptureBoundViews[6], m_probeCaptureTextureViews[6]);
+    }
+    if (m_probeCaptureMaterialBindGroup.isValid() && m_probeCaptureFrameBindGroup.isValid() && !viewsChanged) {
+        return true;
+    }
+    destroyProbeCaptureBindGroups();
+
+    RhiBindGroupDesc materialDesc;
+    materialDesc.layout = m_probeCaptureMaterialLayout;
+    for (size_t slot = 0u; slot < 5u; ++slot) {
+        RhiBindGroupEntry entry;
+        entry.binding = kGBufferTextureBindings[slot];
+        entry.resource.combinedTextureSampler.textureView = m_probeCaptureTextureViews[slot];
+        entry.resource.combinedTextureSampler.sampler =
+            slot == 0u ? m_probeCaptureBlockSampler
+                       : (slot <= 2u ? m_probeCaptureLinearClampSampler : m_probeCaptureLinearRepeatSampler);
+        materialDesc.entries.push_back(entry);
+    }
+    if (m_probeCaptureHasNormalMaps) {
+        RhiBindGroupEntry entry;
+        entry.binding = 11u;
+        entry.resource.combinedTextureSampler = {m_probeCaptureTextureViews[5], m_probeCaptureBlockSampler};
+        materialDesc.entries.push_back(entry);
+    }
+    if (m_probeCaptureHasSpecularMaps) {
+        RhiBindGroupEntry entry;
+        entry.binding = 12u;
+        entry.resource.combinedTextureSampler = {m_probeCaptureTextureViews[6], m_probeCaptureBlockSampler};
+        materialDesc.entries.push_back(entry);
+    }
+    RhiBindGroupEntry materialParamsEntry;
+    materialParamsEntry.binding = 13u;
+    materialParamsEntry.resource.buffer = {m_probeCaptureMaterialParamsBuffer, 0u,
+                                           sizeof(TerrainProbeCaptureMaterialParams)};
+    materialDesc.entries.push_back(materialParamsEntry);
+    m_probeCaptureMaterialBindGroup = m_rhiDevice->createBindGroup(materialDesc);
+
+    RhiBindGroupDesc frameDesc;
+    frameDesc.layout = m_probeCaptureFrameLayout;
+    RhiBindGroupEntry frameParamsEntry;
+    frameParamsEntry.binding = 0u;
+    frameParamsEntry.resource.buffer = {m_probeCaptureFrameParamsBuffer, 0u, sizeof(TerrainProbeCaptureFrameParams)};
+    frameDesc.entries.push_back(frameParamsEntry);
+    RhiBindGroupEntry lightEntry;
+    lightEntry.binding = 1u;
+    lightEntry.resource.buffer = {m_probeCaptureLightBuffer, 0u,
+                                  static_cast<uint64_t>(m_probeCaptureLightCapacity) *
+                                      sizeof(renderer::contracts::GpuLight)};
+    frameDesc.entries.push_back(lightEntry);
+    m_probeCaptureFrameBindGroup = m_rhiDevice->createBindGroup(frameDesc);
+    if (!m_probeCaptureMaterialBindGroup.isValid() || !m_probeCaptureFrameBindGroup.isValid()) {
+        destroyProbeCaptureBindGroups();
+        return false;
+    }
+    m_probeCaptureBoundViews = m_probeCaptureTextureViews;
+    return true;
+}
+
+bool TerrainRhiPipelineSet::ensureProbeCaptureTextureView(const size_t slot, const RhiTextureHandle texture,
+                                                          const RhiTextureViewType viewType) {
+    if (m_rhiDevice == nullptr || slot >= m_probeCaptureTextureViews.size() || !texture.isValid()) {
+        return false;
+    }
+    if (sameHandle(m_probeCaptureViewTextures[slot], texture) && m_probeCaptureTextureViews[slot].isValid()) {
+        return true;
+    }
+    if (m_probeCaptureTextureViews[slot].isValid()) {
+        m_rhiDevice->destroyTextureView(m_probeCaptureTextureViews[slot]);
+    }
+    RhiTextureViewDesc desc;
+    desc.texture = texture;
+    desc.viewType = viewType;
+    desc.format = RhiTextureFormat::Rgba8Unorm;
+    desc.mipCount = kRhiRemainingMipLevels;
+    desc.layerCount = kRhiRemainingArrayLayers;
+    m_probeCaptureTextureViews[slot] = m_rhiDevice->createTextureView(desc);
+    if (!m_probeCaptureTextureViews[slot].isValid()) {
+        m_probeCaptureViewTextures[slot] = {};
+        return false;
+    }
+    m_probeCaptureViewTextures[slot] = texture;
+    return true;
+}
+
+void TerrainRhiPipelineSet::destroyProbeCaptureBindGroups() {
+    if (m_rhiDevice != nullptr) {
+        if (m_probeCaptureMaterialBindGroup.isValid()) {
+            m_rhiDevice->destroyBindGroup(m_probeCaptureMaterialBindGroup);
+        }
+        if (m_probeCaptureFrameBindGroup.isValid()) {
+            m_rhiDevice->destroyBindGroup(m_probeCaptureFrameBindGroup);
+        }
+    }
+    m_probeCaptureMaterialBindGroup = {};
+    m_probeCaptureFrameBindGroup = {};
+    m_probeCaptureBoundViews = {};
+}
+
+void TerrainRhiPipelineSet::destroyProbeCaptureTextureViews() {
+    if (m_rhiDevice != nullptr) {
+        for (RhiTextureViewHandle& view : m_probeCaptureTextureViews) {
+            if (view.isValid()) {
+                m_rhiDevice->destroyTextureView(view);
+            }
+            view = {};
+        }
+    }
+    m_probeCaptureViewTextures = {};
+}
+
+void TerrainRhiPipelineSet::destroyProbeCaptureResources() {
+    destroyProbeCaptureBindGroups();
+    destroyProbeCaptureTextureViews();
+    if (m_rhiDevice != nullptr) {
+        if (m_probeCaptureOpaquePipeline.isValid())
+            m_rhiDevice->destroyPipeline(m_probeCaptureOpaquePipeline);
+        if (m_probeCaptureCutoutPipeline.isValid())
+            m_rhiDevice->destroyPipeline(m_probeCaptureCutoutPipeline);
+        if (m_probeCaptureTransparentPipeline.isValid())
+            m_rhiDevice->destroyPipeline(m_probeCaptureTransparentPipeline);
+        if (m_probeCapturePipelineLayout.isValid())
+            m_rhiDevice->destroyPipelineLayout(m_probeCapturePipelineLayout);
+        if (m_probeCaptureFrameLayout.isValid())
+            m_rhiDevice->destroyBindGroupLayout(m_probeCaptureFrameLayout);
+        if (m_probeCaptureMaterialLayout.isValid())
+            m_rhiDevice->destroyBindGroupLayout(m_probeCaptureMaterialLayout);
+        if (m_probeCaptureMetadataLayout.isValid())
+            m_rhiDevice->destroyBindGroupLayout(m_probeCaptureMetadataLayout);
+        if (m_probeCaptureFragmentShader.isValid())
+            m_rhiDevice->destroyShader(m_probeCaptureFragmentShader);
+        if (m_probeCaptureVertexShader.isValid())
+            m_rhiDevice->destroyShader(m_probeCaptureVertexShader);
+        if (m_probeCaptureMaterialParamsBuffer.isValid())
+            m_rhiDevice->destroyBuffer(m_probeCaptureMaterialParamsBuffer);
+        if (m_probeCaptureFrameParamsBuffer.isValid())
+            m_rhiDevice->destroyBuffer(m_probeCaptureFrameParamsBuffer);
+        if (m_probeCaptureLightBuffer.isValid())
+            m_rhiDevice->destroyBuffer(m_probeCaptureLightBuffer);
+        if (m_probeCaptureBlockSampler.isValid())
+            m_rhiDevice->destroySampler(m_probeCaptureBlockSampler);
+        if (m_probeCaptureLinearClampSampler.isValid())
+            m_rhiDevice->destroySampler(m_probeCaptureLinearClampSampler);
+        if (m_probeCaptureLinearRepeatSampler.isValid())
+            m_rhiDevice->destroySampler(m_probeCaptureLinearRepeatSampler);
+    }
+    m_probeCaptureMetadataLayout = {};
+    m_probeCaptureMaterialLayout = {};
+    m_probeCaptureFrameLayout = {};
+    m_probeCapturePipelineLayout = {};
+    m_probeCaptureVertexShader = {};
+    m_probeCaptureFragmentShader = {};
+    m_probeCaptureOpaquePipeline = {};
+    m_probeCaptureCutoutPipeline = {};
+    m_probeCaptureTransparentPipeline = {};
+    m_probeCaptureMaterialParamsBuffer = {};
+    m_probeCaptureFrameParamsBuffer = {};
+    m_probeCaptureLightBuffer = {};
+    m_probeCaptureBlockSampler = {};
+    m_probeCaptureLinearClampSampler = {};
+    m_probeCaptureLinearRepeatSampler = {};
+    m_probeCaptureLightCapacity = 0u;
+    m_probeCaptureHasNormalMaps = false;
+    m_probeCaptureHasSpecularMaps = false;
+    m_probeCaptureSamplerAnisotropy = 1.0f;
 }
 
 bool TerrainRhiPipelineSet::ensureWaterPipeline(ResourceMgr& resourceMgr) {
