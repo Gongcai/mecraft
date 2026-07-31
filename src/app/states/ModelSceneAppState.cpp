@@ -1027,6 +1027,22 @@ void ModelSceneAppState::showRenderSettingsPanel() {
             "Reflections", ImGuiTreeNodeFlags_DefaultOpen)) {
         ImGui::PushID("ReflectionSettings");
         changed |= render_settings_imgui::showReflectionSettings(settings);
+        const ReflectionProbeCaptureFrameStats capture =
+            m_scene.reflectionProbeCaptureStats();
+        ImGui::SeparatorText("Probe Capture Queue");
+        ImGui::Text("Sources %u  Active %u  Building %u  Pending %u",
+                    capture.sourceCount,
+                    capture.activeProbeCount,
+                    capture.buildingProbeCount,
+                    capture.pendingWorkItemCount);
+        if (capture.currentProbeId.isValid()) {
+            ImGui::Text("Probe %u  Work %u/%u  Revision %u -> %u",
+                        capture.currentProbeId.value,
+                        capture.currentWorkItem,
+                        renderer::contracts::kReflectionProbeCaptureWorkItemCount,
+                        capture.activeRevision,
+                        capture.buildRevision);
+        }
         ImGui::PopID();
     }
     if (ImGui::CollapsingHeader("Shadows")) {

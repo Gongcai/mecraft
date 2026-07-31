@@ -71,8 +71,8 @@ M1 与 M2 可并行开发，但公共 `GpuMaterial`、`GpuSceneGeometry` 与 Sta
    Probe 双槽代际，以及按 6 个 Radiance Face + 48 个 Prefilter Face/Mip 排列的确定性队列；
    只有完整 54 项提交成功后才切换活动槽。模型场景已接入稳定 AABB Probe 数据源及 RGBA16F
    六面绘制器，复用 glTF Material Sampling、主环境直接光和完整模型局部灯快照。体素场景
-   Probe 数据源、模型编辑器 Probe 放置/规则网格、Dashboard 队列展示和 V02/V07/M07 场景
-   验收待后续接入。）
+   Probe 数据源、模型编辑器 Probe 放置/规则网格和 V02/V07/M07 场景验收待后续接入；
+   Dashboard 与模型场景 Reflections 面板已接入队列深度、当前工作项、代际和槽位展示。）
 
 ### 完成条件
 

@@ -9,6 +9,7 @@
 #include "../passes/PostProcessPass.h"
 #include "../passes/Fsr1Pass.h"
 #include "../passes/TemporalUpscalePass.h"
+#include "../passes/ReflectionProbeCapturePass.h"
 #include "../mesh/TerrainStreamingService.h"
 #include "../lighting/VoxelLightRegistry.h"
 #include "../overlays/BlockInteractionOverlayRenderer.h"
@@ -221,6 +222,10 @@ public:
     };
     [[nodiscard]] ClusteredLightingDebugInfo
     clusteredLightingDebugInfo() const;
+
+    /// Returns the deterministic reflection-probe capture queue snapshot.
+    [[nodiscard]] ReflectionProbeCaptureFrameStats
+    reflectionProbeCaptureStats() const;
 
     /// Actual frame extents and swapchain presentation mode for diagnostics.
     /// Render and output extents come from the latest frame context, so they

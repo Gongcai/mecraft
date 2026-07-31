@@ -996,6 +996,17 @@ const GpuFrameStats* ModelSceneDeferredRenderer::gpuFrameStats() const {
         : nullptr;
 }
 
+ReflectionProbeCaptureFrameStats
+ModelSceneDeferredRenderer::reflectionProbeCaptureStats() const {
+    if (!m_impl->initialized) {
+        return {};
+    }
+    const ReflectionProbeCapturePass* capturePass =
+        m_impl->pipeline.reflectionProbeCapturePass();
+    return capturePass != nullptr ? capturePass->frameStats()
+                                  : ReflectionProbeCaptureFrameStats{};
+}
+
 const std::string& ModelSceneDeferredRenderer::lastError() const {
     return m_impl->error;
 }

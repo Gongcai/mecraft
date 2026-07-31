@@ -228,6 +228,7 @@ private:
     RenderGraphFrameStats m_displayRenderGraphStats{};
     RenderScene::ClusteredLightingDebugInfo
         m_displayClusteredLightingStats{};
+    ReflectionProbeCaptureFrameStats m_displayReflectionProbeCaptureStats{};
     HiZCullFrameStats m_displayHiZCullStats{};
     ShadowCullFrameStats m_displayShadowCullStats{};
     RenderWorkStats m_displayRenderWorkStats{};

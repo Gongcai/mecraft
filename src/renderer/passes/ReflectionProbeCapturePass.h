@@ -17,6 +17,25 @@ class FrameContext;
 class RhiCommandList;
 class RhiDevice;
 
+/// Summarizes the deterministic capture queue and the generation currently
+/// visible to reflection consumers.
+struct ReflectionProbeCaptureFrameStats final {
+    uint32_t sourceCount = 0u;
+    uint32_t activeProbeCount = 0u;
+    uint32_t buildingProbeCount = 0u;
+    uint32_t pendingWorkItemCount = 0u;
+    uint32_t slotCapacity = 0u;
+    renderer::contracts::StableReflectionProbeId currentProbeId;
+    uint32_t currentWorkItem = 0u;
+    uint32_t activeCubemapIndex =
+        renderer::contracts::kReflectionProbeInvalidCubemapIndex;
+    uint32_t buildCubemapIndex =
+        renderer::contracts::kReflectionProbeInvalidCubemapIndex;
+    uint32_t activeRevision = 0u;
+    uint32_t buildRevision = 0u;
+    bool workScheduled = false;
+};
+
 /// Describes one world-space probe whose captured image is versioned by the
 /// producer. Spatial fields are converted to camera-relative GPU records when
 /// the frame is prepared.
@@ -125,6 +144,8 @@ public:
     }
     [[nodiscard]] ConsumerResources consumerResources() const;
     [[nodiscard]] bool hasPendingWork() const;
+    /// Returns queue depth, current work, and published/building generations.
+    [[nodiscard]] ReflectionProbeCaptureFrameStats frameStats() const;
     [[nodiscard]] bool hasSources() const {
         return !m_sources.empty();
     }

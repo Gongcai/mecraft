@@ -818,6 +818,8 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
             m_displayRenderGraphStats = renderScene.renderGraphFrameStats();
             m_displayClusteredLightingStats =
                 renderScene.clusteredLightingDebugInfo();
+            m_displayReflectionProbeCaptureStats =
+                renderScene.reflectionProbeCaptureStats();
             m_displayHiZCullStats = renderScene.hiZCullStats();
             m_displayShadowCullStats = renderScene.shadowCullStats();
             m_displayRenderWorkStats = render.getRenderWorkStats();
@@ -1074,6 +1076,42 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
         }
 
         ImGui::Text("Terrain RHI Submissions: %d", render.getTerrainRhiSubmitCount());
+
+        if (ImGui::TreeNode("Reflection Probe Capture Queue")) {
+            const ReflectionProbeCaptureFrameStats& capture =
+                m_displayReflectionProbeCaptureStats;
+            ImGui::Text("Sources: %u  Active: %u  Building: %u",
+                        capture.sourceCount,
+                        capture.activeProbeCount,
+                        capture.buildingProbeCount);
+            ImGui::Text("Pending work: %u  Work per probe: %u  Slots: %u",
+                        capture.pendingWorkItemCount,
+                        renderer::contracts::kReflectionProbeCaptureWorkItemCount,
+                        capture.slotCapacity);
+            if (capture.currentProbeId.isValid()) {
+                ImGui::Text(
+                    "Probe %u  Work item: %u  Active revision: %u  Build revision: %u",
+                    capture.currentProbeId.value,
+                    capture.currentWorkItem,
+                    capture.activeRevision,
+                    capture.buildRevision);
+                const bool activePublished = capture.activeCubemapIndex !=
+                    renderer::contracts::kReflectionProbeInvalidCubemapIndex;
+                if (activePublished) {
+                    ImGui::Text("Cubemap active/build: %u / %u%s",
+                                capture.activeCubemapIndex,
+                                capture.buildCubemapIndex,
+                                capture.workScheduled ? " (scheduled)" : "");
+                } else {
+                    ImGui::Text("Cubemap active: unpublished  Build: %u%s",
+                                capture.buildCubemapIndex,
+                                capture.workScheduled ? " (scheduled)" : "");
+                }
+            } else {
+                ImGui::TextUnformatted("No model or world probe capture source");
+            }
+            ImGui::TreePop();
+        }
 
         GpuFrameStats gpuStats = m_displayGpuStats;
         bool gpuTimerEnabled = render.isGpuTimerEnabled();

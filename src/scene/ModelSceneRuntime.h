@@ -189,6 +189,8 @@ public:
     [[nodiscard]] RhiTextureHandle captureTextureHandle() const;
     [[nodiscard]] RhiTextureFormat captureTextureFormat() const;
     [[nodiscard]] const GpuFrameStats* gpuFrameStats() const;
+    [[nodiscard]] ReflectionProbeCaptureFrameStats
+    reflectionProbeCaptureStats() const;
 
     /// Updates the deferred environment time used by sky and lighting passes.
     /// @param timeOfDaySeconds Time within the 1200-second world day.

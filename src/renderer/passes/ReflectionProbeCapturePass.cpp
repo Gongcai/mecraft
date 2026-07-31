@@ -863,6 +863,56 @@ bool ReflectionProbeCapturePass::hasPendingWork() const {
         [](const ProbeState& state) { return state.building; });
 }
 
+ReflectionProbeCaptureFrameStats
+ReflectionProbeCapturePass::frameStats() const {
+    ReflectionProbeCaptureFrameStats stats;
+    stats.sourceCount = static_cast<uint32_t>(m_sources.size());
+    stats.activeProbeCount = static_cast<uint32_t>(m_activeProbes.size());
+    stats.slotCapacity = m_slotCapacity;
+    stats.workScheduled = m_workScheduled;
+    uint32_t selected = static_cast<uint32_t>(m_states.size());
+    for (uint32_t index = 0u;
+         index < static_cast<uint32_t>(m_states.size()); ++index) {
+        const ProbeState& state = m_states[index];
+        if (!state.building) {
+            continue;
+        }
+        ++stats.buildingProbeCount;
+        stats.pendingWorkItemCount +=
+            renderer::contracts::kReflectionProbeCaptureWorkItemCount -
+            state.nextWorkItem;
+    }
+    if (m_workScheduled && m_scheduledProbeIndex < m_states.size()) {
+        selected = m_scheduledProbeIndex;
+    } else if (!m_states.empty()) {
+        for (uint32_t offset = 0u;
+             offset < static_cast<uint32_t>(m_states.size()); ++offset) {
+            const uint32_t index = (m_queueCursor + offset) %
+                static_cast<uint32_t>(m_states.size());
+            if (m_states[index].building) {
+                selected = index;
+                break;
+            }
+        }
+    }
+    if (selected >= m_states.size()) {
+        return stats;
+    }
+    const ProbeState& state = m_states[selected];
+    stats.currentProbeId = state.source.probeId;
+    stats.currentWorkItem = m_workScheduled
+        ? m_scheduledWorkItem : state.nextWorkItem;
+    stats.activeCubemapIndex = state.active
+        ? state.slotBase + state.activeSlot
+        : renderer::contracts::kReflectionProbeInvalidCubemapIndex;
+    stats.buildCubemapIndex = state.building
+        ? state.slotBase + state.buildSlot
+        : renderer::contracts::kReflectionProbeInvalidCubemapIndex;
+    stats.activeRevision = state.activeRevision;
+    stats.buildRevision = state.buildRevision;
+    return stats;
+}
+
 void ReflectionProbeCapturePass::destroyResources() {
     if (m_rhiDevice != nullptr) {
         for (const RhiBindGroupHandle group : m_prefilterBindGroups) {

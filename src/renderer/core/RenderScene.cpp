@@ -1135,6 +1135,14 @@ RenderScene::clusteredLightingDebugInfo() const {
     return info;
 }
 
+ReflectionProbeCaptureFrameStats RenderScene::reflectionProbeCaptureStats() const {
+    if (m_deferredPipeline == nullptr ||
+        m_deferredPipeline->reflectionProbeCapturePass() == nullptr) {
+        return {};
+    }
+    return m_deferredPipeline->reflectionProbeCapturePass()->frameStats();
+}
+
 HiZCullFrameStats RenderScene::hiZCullStats() const {
     if (m_deferredPipeline == nullptr || m_deferredPipeline->hiZPass() == nullptr) {
         return {};

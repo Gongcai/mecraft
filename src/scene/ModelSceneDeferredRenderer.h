@@ -102,6 +102,8 @@ public:
     [[nodiscard]] RhiTextureHandle captureTextureHandle() const;
     [[nodiscard]] RhiTextureFormat captureTextureFormat() const;
     [[nodiscard]] const GpuFrameStats* gpuFrameStats() const;
+    [[nodiscard]] ReflectionProbeCaptureFrameStats
+    reflectionProbeCaptureStats() const;
     [[nodiscard]] const std::string& lastError() const;
 
 private:

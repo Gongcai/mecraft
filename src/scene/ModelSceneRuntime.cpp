@@ -1795,6 +1795,13 @@ const GpuFrameStats* ModelSceneRuntime::gpuFrameStats() const {
         : nullptr;
 }
 
+ReflectionProbeCaptureFrameStats
+ModelSceneRuntime::reflectionProbeCaptureStats() const {
+    return m_deferredRenderer
+        ? m_deferredRenderer->reflectionProbeCaptureStats()
+        : ReflectionProbeCaptureFrameStats{};
+}
+
 void ModelSceneRuntime::setTimeOfDay(const float timeOfDaySeconds) {
     if (!m_deferredRenderer) {
         std::abort();

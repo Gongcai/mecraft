@@ -269,8 +269,9 @@ Cubemap Index 与 Capture Revision，构建中的槽位不会进入 Reflection P
 使用显式接口接收 Probe 世界位置、六面相机矩阵与颜色/深度目标 View。模型场景已接入基于场景
 AABB 的稳定 Probe 数据源，并以独立 RGBA16F 前向管线复用 glTF Material Sampling、太阳/月亮
 直接光、环境光、发光材质和完整 `KHR_lights_punctual` 快照；透明光学层按 Probe 距离全局排序，
-捕获过程不读取主视图时域结果。体素场景数据源、模型编辑器手工/规则网格放置、Dashboard 队列
-展示及版本化场景验收仍属于后续集成范围。
+捕获过程不读取主视图时域结果。Dashboard 与模型场景 Reflections 面板已展示 Source/Active/
+Building 数量、剩余工作项、当前 Probe/Work Item、活动/构建修订和 Cubemap 槽位。体素场景
+数据源、模型编辑器手工/规则网格放置及版本化场景验收仍属于后续集成范围。
 
 Probe Capture 使用与主视图一致的材质和直接光，但关闭时域效果。动态探针按确定的更新
 队列逐 Face/Mip 构建，Dashboard 展示队列长度与资源代际。
