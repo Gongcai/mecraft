@@ -11,6 +11,9 @@
 #include "../rhi/RhiResources.h"
 #include "../renderers/GameplaySkyRenderer.h"
 #include "../renderers/StaticMeshRenderer.h"
+#include "../renderers/BlockEntityRenderer.h"
+#include "../renderers/DropRenderer.h"
+#include "../renderers/HumanoidRenderer.h"
 #include "../mesh/TerrainRhiPipelineSet.h"
 #include "../mesh/TerrainRenderer.h"
 #include "../mesh/WorldRenderBuffer.h"
@@ -351,6 +354,19 @@ bool DeferredPipeline::recordReflectionProbeRadianceFace(RhiCommandList& command
         !worldBuffer.prepareRhiTransparent(commandList, m_shared->terrainRhiPipelines->forwardMetadataLayout())) {
         return false;
     }
+    if (m_shared->blockEntityRenderer != nullptr && (!m_shared->blockEntityRenderer->prepareFrame(*context.worldView) ||
+                                                     !m_shared->blockEntityRenderer->prepareForward(commandList))) {
+        return false;
+    }
+    if (m_shared->dropRenderer != nullptr && m_shared->dropSystem != nullptr &&
+        !m_shared->dropRenderer->prepareFrame(*context.worldView, *m_shared->dropSystem)) {
+        return false;
+    }
+    if (m_shared->humanoidRenderer != nullptr && m_shared->gameplayRegistry != nullptr &&
+        !m_shared->humanoidRenderer->prepareFrame(*context.worldView, *m_shared->gameplayRegistry,
+                                                  HumanoidRenderer::kRenderMobsOnly)) {
+        return false;
+    }
 
     RhiColorAttachment colorAttachment;
     colorAttachment.view = work.targetView;
@@ -381,6 +397,16 @@ bool DeferredPipeline::recordReflectionProbeRadianceFace(RhiCommandList& command
                                 m_shared->terrainRhiPipelines->forwardOpaqueBindGroup());
     worldBuffer.recordRhiCutout(commandList, m_shared->terrainRhiPipelines->forwardCutoutPipeline(),
                                 m_shared->terrainRhiPipelines->forwardCutoutBindGroup());
+    if (m_shared->blockEntityRenderer != nullptr) {
+        m_shared->blockEntityRenderer->renderForward(commandList, work.viewProjection, context.skyIntensity);
+    }
+    if (m_shared->dropRenderer != nullptr && m_shared->dropSystem != nullptr) {
+        m_shared->dropRenderer->renderForward(commandList, work.viewProjection, context.skyIntensity,
+                                              context.animationTime);
+    }
+    if (m_shared->humanoidRenderer != nullptr && m_shared->gameplayRegistry != nullptr) {
+        m_shared->humanoidRenderer->renderPreparedForward(commandList, work.viewProjection, context.skyIntensity);
+    }
     worldBuffer.recordRhiTransparent(commandList, m_shared->terrainRhiPipelines->forwardTransparentPipeline(),
                                      m_shared->terrainRhiPipelines->forwardTransparentBindGroup());
     commandList.endRendering();

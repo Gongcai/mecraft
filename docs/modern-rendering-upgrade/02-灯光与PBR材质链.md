@@ -285,9 +285,11 @@ Probe 距离全局排序，捕获过程不读取主视图时域结果。模型�
 时域效果。`m0_voxel_baseline` 已完成 OpenGL/Vulkan 120 帧预热和 60 帧采样，Vulkan Validation
 无报错。
 
-模型 Probe Capture 复用主材质采样和直接光；体素 Capture 中的水面网格当前使用方块 Forward
-材质，现代水体折射/吸收、实体和现代 PBR 直接光仍需接入。V02/V07/M07 版本化资产用于最终
-检查室内外过渡、局部光响应与 Box Projection。动态探针按确定的更新队列逐 Face/Mip 构建，
+模型 Probe Capture 复用主材质采样和直接光。体素 Capture 已在透明地形之前绘制方块实体、
+掉落物和生物/远端角色，各类别使用自身 RGBA16F Forward 管线；本地第一人称玩家被明确排除，
+避免观察者模型进入环境探针。水面网格当前使用方块 Forward 材质，现代水体折射/吸收、下落
+方块、体素静态 glTF、粒子和现代 PBR 直接光仍需接入。V02/V07/M07 版本化资产用于最终检查
+室内外过渡、局部光响应与 Box Projection。动态探针按确定的更新队列逐 Face/Mip 构建，
 Dashboard 展示队列长度与资源代际。
 
 ## 8. 反射能量组合
