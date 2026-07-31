@@ -76,11 +76,11 @@ M1 与 M2 可并行开发，但公共 `GpuMaterial`、`GpuSceneGeometry` 与 Sta
    z/y/x 顺序源列表的独立契约，并严格校验容量、稳定 ID、修订和 GPU Probe 输入。运行时已接入
    单个 16 米相机单元流式 Probe：相机跨单元、活动区块集合或方块内容修订变化会创建新的捕获
    代际，影响盒保持当前单元，Box Projection 与捕获远平面覆盖已加载区块 AABB。地形 Capture
-   Renderer 使用独立六面 View/ViewProjection 重新收集 opaque/cutout 区块，写入 128×128
-   RGBA16F + Depth32 目标；OpenGL/Vulkan `m0_voxel_baseline` 120 帧预热加 60 帧采样已通过，
-   Vulkan Validation 无报错。透明地形、水体、实体、体素捕获内的现代 PBR 直接光以及
-   V02/V07/M07 版本化质量验收仍待完成。Dashboard 与模型场景 Reflections 面板已接入队列深度、
-   当前工作项、代际和槽位展示。）
+   Renderer 使用独立六面 View/ViewProjection 重新收集区块，opaque/cutout 先写深度，透明地形
+   与水面网格按探针距离从远到近混合，结果写入 128×128 RGBA16F + Depth32 目标；OpenGL/
+   Vulkan `m0_voxel_baseline` 120 帧预热加 60 帧采样已通过，Vulkan Validation 无报错。现代水体
+   折射/吸收、实体、体素捕获内的现代 PBR 直接光以及 V02/V07/M07 版本化质量验收仍待完成。
+   Dashboard 与模型场景 Reflections 面板已接入队列深度、当前工作项、代际和槽位展示。）
 
 ### 完成条件
 

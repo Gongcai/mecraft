@@ -335,11 +335,20 @@ bool DeferredPipeline::recordReflectionProbeRadianceFace(RhiCommandList& command
     TerrainRenderer& terrain = *m_shared->terrain;
     WorldRenderBuffer& worldBuffer = *m_shared->worldRenderBuffer;
     worldBuffer.resetDrawCommands();
+    terrain.clearTransparentBatches();
     terrain.setCameraPos(work.positionWorldMeters);
     terrain.updateFrustum(work.viewProjection);
     terrain.renderOpaqueChunksAndCollectPasses(*context.worldView, true);
+    terrain.syncTransparentBatches();
+    std::vector<DrawBatchEntry> transparentBatch = terrain.transparentBatches();
+    std::sort(transparentBatch.begin(), transparentBatch.end(),
+              [](const DrawBatchEntry& lhs, const DrawBatchEntry& rhs) { return lhs.distanceSq > rhs.distanceSq; });
+    for (const DrawBatchEntry& entry : transparentBatch) {
+        worldBuffer.addTransparent(entry.range);
+    }
     if (!m_shared->terrainRhiPipelines->prepareForward(commandList, *m_resourceMgr, frame) ||
-        !worldBuffer.prepareRhiOpaqueAndCutout(commandList, m_shared->terrainRhiPipelines->forwardMetadataLayout())) {
+        !worldBuffer.prepareRhiOpaqueAndCutout(commandList, m_shared->terrainRhiPipelines->forwardMetadataLayout()) ||
+        !worldBuffer.prepareRhiTransparent(commandList, m_shared->terrainRhiPipelines->forwardMetadataLayout())) {
         return false;
     }
 
@@ -372,6 +381,8 @@ bool DeferredPipeline::recordReflectionProbeRadianceFace(RhiCommandList& command
                                 m_shared->terrainRhiPipelines->forwardOpaqueBindGroup());
     worldBuffer.recordRhiCutout(commandList, m_shared->terrainRhiPipelines->forwardCutoutPipeline(),
                                 m_shared->terrainRhiPipelines->forwardCutoutBindGroup());
+    worldBuffer.recordRhiTransparent(commandList, m_shared->terrainRhiPipelines->forwardTransparentPipeline(),
+                                     m_shared->terrainRhiPipelines->forwardTransparentBindGroup());
     commandList.endRendering();
     return true;
 }

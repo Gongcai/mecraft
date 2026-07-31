@@ -279,14 +279,16 @@ Probe 距离全局排序，捕获过程不读取主视图时域结果。模型�
 体素运行时以相机所在的 16 米单元中心维护一个流式 Probe。相机跨单元、活动区块集合变化或
 方块内容变化会递增 Capture Revision；影响 AABB 固定为当前单元，Box Projection AABB 覆盖
 已加载区块。地形 Capture Renderer 使用每个 Cubemap Face 的独立 View/ViewProjection 重新执行
-区块视锥裁剪和间接命令上传，将 opaque/cutout 地形写入 128×128 RGBA16F 与 Depth32 目标。
-捕获材质当前复用方块纹理数组、昼夜 Lightmap、顶点 AO、动画和生物群系染色，并关闭雾与主
-视图时域效果。`m0_voxel_baseline` 已完成 OpenGL/Vulkan 120 帧预热和 60 帧采样，Vulkan
-Validation 无报错。
+区块视锥裁剪和间接命令上传，将 opaque/cutout 地形写入 128×128 RGBA16F 与 Depth32 目标，
+随后把当前 Face 可见的透明地形与水面网格按探针距离从远到近排序并执行 SrcAlpha 混合。捕获
+材质当前复用方块纹理数组、昼夜 Lightmap、顶点 AO、动画和生物群系染色，并关闭雾与主视图
+时域效果。`m0_voxel_baseline` 已完成 OpenGL/Vulkan 120 帧预热和 60 帧采样，Vulkan Validation
+无报错。
 
-模型 Probe Capture 复用主材质采样和直接光；体素 Capture 的透明地形、水体、实体和现代 PBR
-直接光仍需接入。V02/V07/M07 版本化资产用于最终检查室内外过渡、局部光响应与 Box Projection。
-动态探针按确定的更新队列逐 Face/Mip 构建，Dashboard 展示队列长度与资源代际。
+模型 Probe Capture 复用主材质采样和直接光；体素 Capture 中的水面网格当前使用方块 Forward
+材质，现代水体折射/吸收、实体和现代 PBR 直接光仍需接入。V02/V07/M07 版本化资产用于最终
+检查室内外过渡、局部光响应与 Box Projection。动态探针按确定的更新队列逐 Face/Mip 构建，
+Dashboard 展示队列长度与资源代际。
 
 ## 8. 反射能量组合
 
