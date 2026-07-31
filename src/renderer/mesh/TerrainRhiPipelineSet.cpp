@@ -115,16 +115,20 @@ struct alignas(16) TerrainProbeCaptureMaterialParams {
 
 struct alignas(16) TerrainProbeCaptureFrameParams {
     glm::mat4 viewProjection = glm::mat4(1.0f);
+    glm::mat4 inverseViewProjection = glm::mat4(1.0f);
+    glm::mat4 view = glm::mat4(1.0f);
     glm::vec4 probePosition = glm::vec4(0.0f);
     glm::vec4 sunDirection = glm::vec4(0.0f, 1.0f, 0.0f, 0.0f);
     glm::vec4 sunColor = glm::vec4(1.0f);
     glm::vec4 ambientColor = glm::vec4(0.0f);
     glm::uvec4 lightCount = glm::uvec4(0u);
+    glm::vec4 waterAbsorptionIor = glm::vec4(0.4f, 0.14f, 0.08f, 1.33f);
+    glm::vec4 waterWaveParams = glm::vec4(1.0f, 1.0f, 0.0f, 0.0f);
 };
 
 static_assert(sizeof(TerrainProbeCaptureMaterialParams) == 48u,
               "Terrain probe-capture material parameters must match the std140 shader block");
-static_assert(sizeof(TerrainProbeCaptureFrameParams) == 144u,
+static_assert(sizeof(TerrainProbeCaptureFrameParams) == 304u,
               "Terrain probe-capture frame parameters must match the std140 shader block");
 
 void setPackedTerrainVertexInput(RhiGraphicsPipelineDesc& pipelineDesc) {
@@ -371,11 +375,14 @@ bool TerrainRhiPipelineSet::prepareForward(RhiCommandList& commandList, Resource
 bool TerrainRhiPipelineSet::prepareReflectionProbeCapture(RhiCommandList& commandList, ResourceMgr& resourceMgr,
                                                           const TerrainFrameData& frame,
                                                           const TerrainRenderSettings& settings,
-                                                          const std::vector<renderer::contracts::SceneLight>& lights) {
+                                                          const std::vector<renderer::contracts::SceneLight>& lights,
+                                                          const RhiTextureViewHandle opaqueColorView,
+                                                          const RhiTextureViewHandle opaqueDepthView) {
     if (m_rhiDevice == nullptr || lights.size() > renderer::contracts::kClusterMaxLightCount ||
         !ensureProbeCapturePipeline(resourceMgr) ||
         !ensureProbeCaptureLightCapacity(static_cast<uint32_t>(lights.size())) ||
-        !ensureProbeCaptureTextureViews(resourceMgr) || !ensureProbeCaptureBindGroups()) {
+        !ensureProbeCaptureTextureViews(resourceMgr) ||
+        !ensureProbeCaptureBindGroups(opaqueColorView, opaqueDepthView)) {
         return false;
     }
 
@@ -394,6 +401,8 @@ bool TerrainRhiPipelineSet::prepareReflectionProbeCapture(RhiCommandList& comman
 
     TerrainProbeCaptureFrameParams frameParams;
     frameParams.viewProjection = frame.viewProj;
+    frameParams.inverseViewProjection = glm::inverse(frame.viewProj);
+    frameParams.view = frame.view;
     frameParams.probePosition = glm::vec4(frame.cameraPos, 1.0f);
     const bool moonDominant = frame.skyLighting.moonVisibility > 0.5f;
     frameParams.sunDirection =
@@ -1087,6 +1096,10 @@ bool TerrainRhiPipelineSet::ensureProbeCapturePipeline(ResourceMgr& resourceMgr)
             {12u, RhiBindingType::CombinedTextureSampler, rhiFlag(RhiShaderStage::Fragment), 1u});
     }
     materialLayoutDesc.entries.push_back(
+        {14u, RhiBindingType::CombinedTextureSampler, rhiFlag(RhiShaderStage::Fragment), 1u});
+    materialLayoutDesc.entries.push_back(
+        {15u, RhiBindingType::CombinedTextureSampler, rhiFlag(RhiShaderStage::Fragment), 1u});
+    materialLayoutDesc.entries.push_back(
         {13u, RhiBindingType::UniformBuffer, rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment), 1u});
     m_probeCaptureMaterialLayout = m_rhiDevice->createBindGroupLayout(materialLayoutDesc);
 
@@ -1197,7 +1210,11 @@ bool TerrainRhiPipelineSet::ensureProbeCaptureLightCapacity(const uint32_t light
     return true;
 }
 
-bool TerrainRhiPipelineSet::ensureProbeCaptureBindGroups() {
+bool TerrainRhiPipelineSet::ensureProbeCaptureBindGroups(const RhiTextureViewHandle opaqueColorView,
+                                                         const RhiTextureViewHandle opaqueDepthView) {
+    if (!opaqueColorView.isValid() || !opaqueDepthView.isValid()) {
+        return false;
+    }
     bool viewsChanged = false;
     for (size_t slot = 0u; slot < 5u; ++slot) {
         viewsChanged = viewsChanged || !sameHandle(m_probeCaptureBoundViews[slot], m_probeCaptureTextureViews[slot]);
@@ -1208,6 +1225,8 @@ bool TerrainRhiPipelineSet::ensureProbeCaptureBindGroups() {
     if (m_probeCaptureHasSpecularMaps) {
         viewsChanged = viewsChanged || !sameHandle(m_probeCaptureBoundViews[6], m_probeCaptureTextureViews[6]);
     }
+    viewsChanged = viewsChanged || !sameHandle(m_probeCaptureOpaqueColorView, opaqueColorView) ||
+                   !sameHandle(m_probeCaptureOpaqueDepthView, opaqueDepthView);
     if (m_probeCaptureMaterialBindGroup.isValid() && m_probeCaptureFrameBindGroup.isValid() && !viewsChanged) {
         return true;
     }
@@ -1236,6 +1255,14 @@ bool TerrainRhiPipelineSet::ensureProbeCaptureBindGroups() {
         entry.resource.combinedTextureSampler = {m_probeCaptureTextureViews[6], m_probeCaptureBlockSampler};
         materialDesc.entries.push_back(entry);
     }
+    RhiBindGroupEntry opaqueColorEntry;
+    opaqueColorEntry.binding = 14u;
+    opaqueColorEntry.resource.combinedTextureSampler = {opaqueColorView, m_probeCaptureLinearClampSampler};
+    materialDesc.entries.push_back(opaqueColorEntry);
+    RhiBindGroupEntry opaqueDepthEntry;
+    opaqueDepthEntry.binding = 15u;
+    opaqueDepthEntry.resource.combinedTextureSampler = {opaqueDepthView, m_probeCaptureLinearClampSampler};
+    materialDesc.entries.push_back(opaqueDepthEntry);
     RhiBindGroupEntry materialParamsEntry;
     materialParamsEntry.binding = 13u;
     materialParamsEntry.resource.buffer = {m_probeCaptureMaterialParamsBuffer, 0u,
@@ -1261,6 +1288,8 @@ bool TerrainRhiPipelineSet::ensureProbeCaptureBindGroups() {
         return false;
     }
     m_probeCaptureBoundViews = m_probeCaptureTextureViews;
+    m_probeCaptureOpaqueColorView = opaqueColorView;
+    m_probeCaptureOpaqueDepthView = opaqueDepthView;
     return true;
 }
 
@@ -1302,6 +1331,8 @@ void TerrainRhiPipelineSet::destroyProbeCaptureBindGroups() {
     m_probeCaptureMaterialBindGroup = {};
     m_probeCaptureFrameBindGroup = {};
     m_probeCaptureBoundViews = {};
+    m_probeCaptureOpaqueColorView = {};
+    m_probeCaptureOpaqueDepthView = {};
 }
 
 void TerrainRhiPipelineSet::destroyProbeCaptureTextureViews() {

@@ -1585,8 +1585,8 @@ bool ModelSceneRuntime::configureReflectionProbeCapture() {
     return true;
 }
 
-bool ModelSceneRuntime::recordReflectionProbeRadianceFace(RhiCommandList& commandList, const FrameContext& context,
-                                                          const ReflectionProbeCaptureWork& work) {
+bool ModelSceneRuntime::recordReflectionProbeRadianceOpaque(RhiCommandList& commandList, const FrameContext& context,
+                                                            const ReflectionProbeCaptureWork& work) {
     if (!work.targetView.isValid() || !work.depthTargetView.isValid() ||
         work.face >= renderer::contracts::kReflectionProbeCubeFaceCount) {
         setError("model scene reflection-probe capture work is invalid");
@@ -1632,6 +1632,48 @@ bool ModelSceneRuntime::recordReflectionProbeRadianceFace(RhiCommandList& comman
                              static_cast<float>(renderer::contracts::kReflectionProbeCubeExtent), 0.0f, 1.0f});
     commandList.setScissor(renderingInfo.renderArea);
 
+    const auto meshView =
+        m_registry
+            .view<scene::StaticMeshComponent, ecs::WorldTransformComponent, scene::PreviousWorldTransformComponent>();
+    for (const entt::entity entity : meshView) {
+        const auto& mesh = meshView.get<scene::StaticMeshComponent>(entity);
+        const glm::mat4& world = meshView.get<ecs::WorldTransformComponent>(entity).worldMatrix;
+        StaticMeshRenderer& renderer = *m_assets[assetIndex(mesh.assetId)].renderer;
+        renderer.setInstanceTransform(world, meshView.get<scene::PreviousWorldTransformComponent>(entity).worldMatrix);
+        renderer.renderReflectionProbeCaptureOpaque(commandList);
+    }
+    commandList.endRendering();
+    return true;
+}
+
+bool ModelSceneRuntime::recordReflectionProbeRadianceTransparent(RhiCommandList& commandList, const FrameContext&,
+                                                                 const ReflectionProbeCaptureWork& work) {
+    if (!work.targetView.isValid() || !work.depthTargetView.isValid() ||
+        work.face >= renderer::contracts::kReflectionProbeCubeFaceCount) {
+        setError("model scene reflection-probe transparent capture work is invalid");
+        return false;
+    }
+
+    RhiColorAttachment colorAttachment;
+    colorAttachment.view = work.targetView;
+    colorAttachment.loadOp = RhiLoadOp::Load;
+    colorAttachment.storeOp = RhiStoreOp::Store;
+    RhiDepthStencilAttachment depthAttachment;
+    depthAttachment.view = work.depthTargetView;
+    depthAttachment.depthLoadOp = RhiLoadOp::Load;
+    depthAttachment.depthStoreOp = RhiStoreOp::Store;
+    RhiRenderingInfo renderingInfo;
+    renderingInfo.debugName = "ModelScene.ReflectionProbeCapture.Transparent";
+    renderingInfo.renderArea = {0, 0, renderer::contracts::kReflectionProbeCubeExtent,
+                                renderer::contracts::kReflectionProbeCubeExtent};
+    renderingInfo.colorAttachments = &colorAttachment;
+    renderingInfo.colorAttachmentCount = 1u;
+    renderingInfo.depthStencilAttachment = &depthAttachment;
+    commandList.beginRendering(renderingInfo);
+    commandList.setViewport({0.0f, 0.0f, static_cast<float>(renderer::contracts::kReflectionProbeCubeExtent),
+                             static_cast<float>(renderer::contracts::kReflectionProbeCubeExtent), 0.0f, 1.0f});
+    commandList.setScissor(renderingInfo.renderArea);
+
     struct QueuedDraw final {
         StaticMeshRenderer* renderer = nullptr;
         StaticMeshRenderer::TransparentDraw draw;
@@ -1646,7 +1688,6 @@ bool ModelSceneRuntime::recordReflectionProbeRadianceFace(RhiCommandList& comman
         const glm::mat4& world = meshView.get<ecs::WorldTransformComponent>(entity).worldMatrix;
         StaticMeshRenderer& renderer = *m_assets[assetIndex(mesh.assetId)].renderer;
         renderer.setInstanceTransform(world, meshView.get<scene::PreviousWorldTransformComponent>(entity).worldMatrix);
-        renderer.renderReflectionProbeCaptureOpaque(commandList);
         assetDraws.clear();
         renderer.appendTransparentDraws(world, work.positionWorldMeters, assetDraws);
         transparentDraws.reserve(transparentDraws.size() + assetDraws.size());

@@ -61,6 +61,8 @@ struct ReflectionProbeCaptureWork final {
     glm::mat4 viewProjection{1.0f};
     RhiTextureViewHandle targetView;
     RhiTextureViewHandle depthTargetView;
+    RhiTextureViewHandle opaqueColorView;
+    RhiTextureViewHandle opaqueDepthView;
 };
 
 /// Records one six-face HDR scene capture using the same material and direct
@@ -69,14 +71,23 @@ class IReflectionProbeCaptureRenderer {
 public:
     virtual ~IReflectionProbeCaptureRenderer() = default;
 
-    /// Records one radiance face into the supplied target view.
+    /// Records opaque and cutout geometry for one radiance face.
     /// @param commandList Graphics command list owned by the Render Graph.
     /// @param context Main-frame state shared with the capture renderer.
     /// @param work Face index, camera transform, and target view for the work item.
-    /// @return True when the complete face was recorded.
-    [[nodiscard]] virtual bool recordReflectionProbeRadianceFace(RhiCommandList& commandList,
-                                                                 const FrameContext& context,
-                                                                 const ReflectionProbeCaptureWork& work) = 0;
+    /// @return True when the opaque portion of the face was recorded.
+    [[nodiscard]] virtual bool recordReflectionProbeRadianceOpaque(RhiCommandList& commandList,
+                                                                   const FrameContext& context,
+                                                                   const ReflectionProbeCaptureWork& work) = 0;
+
+    /// Records globally sorted transparent geometry after opaque snapshots are available.
+    /// @param commandList Graphics command list owned by the Render Graph.
+    /// @param context Main-frame state shared with the capture renderer.
+    /// @param work Face index, camera transform, attachment views, and opaque snapshots.
+    /// @return True when the transparent portion of the face was recorded.
+    [[nodiscard]] virtual bool recordReflectionProbeRadianceTransparent(RhiCommandList& commandList,
+                                                                        const FrameContext& context,
+                                                                        const ReflectionProbeCaptureWork& work) = 0;
 };
 
 /// Owns double-buffered radiance and prefiltered probe capture products.
@@ -86,6 +97,8 @@ public:
         RgTextureHandle radiance;
         RgTextureHandle prefiltered;
         RgTextureHandle depth;
+        RgTextureHandle opaqueColor;
+        RgTextureHandle opaqueDepth;
     };
 
     struct ConsumerResources final {
@@ -155,7 +168,9 @@ private:
     [[nodiscard]] bool ensureResources(RhiDevice& rhiDevice, uint32_t requiredSlotCapacity);
     [[nodiscard]] bool createPipelines(RhiDevice& rhiDevice);
     [[nodiscard]] bool createViews(RhiDevice& rhiDevice, uint32_t slotCapacity);
-    [[nodiscard]] bool recordRadianceFace(RhiCommandList& commandList, const FrameContext& context) const;
+    [[nodiscard]] bool recordRadianceOpaque(RhiCommandList& commandList, const FrameContext& context) const;
+    [[nodiscard]] bool recordRadianceSnapshots(RhiCommandList& commandList) const;
+    [[nodiscard]] bool recordRadianceTransparent(RhiCommandList& commandList, const FrameContext& context) const;
     [[nodiscard]] bool recordPrefilter(RhiCommandList& commandList) const;
     [[nodiscard]] ReflectionProbeCaptureWork buildWork(const ProbeState& state, uint32_t probeIndex,
                                                        uint32_t workItem) const;
@@ -177,14 +192,19 @@ private:
     bool m_radianceInitialized = false;
     bool m_prefilteredInitialized = false;
     bool m_depthInitialized = false;
+    bool m_opaqueSnapshotsInitialized = false;
     uint64_t m_sourceRevision = 1u;
     uint64_t m_preparedRevision = 0u;
     RhiTextureHandle m_radianceTexture;
     RhiTextureHandle m_prefilteredTexture;
     RhiTextureHandle m_depthTexture;
+    RhiTextureHandle m_opaqueColorTexture;
+    RhiTextureHandle m_opaqueDepthTexture;
     RhiTextureViewHandle m_radianceView;
     RhiTextureViewHandle m_prefilteredView;
     RhiTextureViewHandle m_depthView;
+    RhiTextureViewHandle m_opaqueColorView;
+    RhiTextureViewHandle m_opaqueDepthView;
     std::vector<std::vector<RhiTextureViewHandle>> m_radianceFaceViews;
     std::vector<RhiTextureViewHandle> m_radianceCubeViews;
     std::vector<std::vector<std::vector<RhiTextureViewHandle>>> m_prefilterFaceMipViews;

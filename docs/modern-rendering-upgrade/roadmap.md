@@ -76,14 +76,17 @@ M1 与 M2 可并行开发，但公共 `GpuMaterial`、`GpuSceneGeometry` 与 Sta
    z/y/x 顺序源列表的独立契约，并严格校验容量、稳定 ID、修订和 GPU Probe 输入。运行时已接入
    单个 16 米相机单元流式 Probe：相机跨单元、活动区块集合或方块内容修订变化会创建新的捕获
    代际，影响盒保持当前单元，Box Projection 与捕获远平面覆盖已加载区块 AABB。地形 Capture
-   Renderer 使用独立六面 View/ViewProjection 重新收集区块，opaque/cutout 先写深度，透明地形
-   与水面网格按探针距离从远到近混合，结果写入 128×128 RGBA16F + Depth32 目标；Capture 已
-   切换到独立地形 PBR 管线，复用 LabPBR 法线/高度/Specular、Biome Tint、Wetness 和统一
-   GGX/Lambert 直接光，并将体素 `GpuLight` 快照按探针相对坐标上传；OpenGL/Vulkan
-   `m0_voxel_baseline` 120 帧预热加 60 帧采样已通过，Vulkan Validation 无报错。方块实体、
-   掉落物和生物/远端角色使用各自 RGBA16F Forward 管线进入六面捕获，本地第一人称玩家不进入
-   环境探针。现代水体折射/吸收、下落方块、体素静态 glTF、粒子以及 V02/V07/M07 版本化质量
-   验收仍待完成。Dashboard 与模型场景 Reflections 面板已接入队列
+   Renderer 使用独立六面 View/ViewProjection 重新收集区块。每个 Radiance Face 已拆为不透明
+   绘制、颜色/深度复制和透明合成三个 Render Graph 节点：opaque/cutout 与场景实体先写入
+   128×128 RGBA16F + Depth32 目标，再复制出可采样的不透明快照，最后保持玻璃与水面网格按
+   探针距离从远到近统一混合。Capture 使用独立地形 PBR 管线，复用 LabPBR 法线/高度/Specular、
+   Biome Tint、Wetness 和统一 GGX/Lambert 直接光，并将体素 `GpuLight` 快照按探针相对坐标上传；
+   水体已接入 DerivativeMain 波高视差、波面/雨滴法线、IOR Fresnel、屏幕空间折射，以及基于
+   不透明深度重建光学距离的 Beer-Lambert 吸收与散射。OpenGL/Vulkan `m0_voxel_baseline`
+   120 帧预热加 60 帧采样已通过，Vulkan Validation 无报错。方块实体、掉落物和生物/远端角色
+   使用各自 RGBA16F Forward 管线进入六面捕获，本地第一人称玩家不进入环境探针。下落方块、
+   体素静态 glTF、粒子以及 V02/V07/M07 版本化质量验收仍待完成。Dashboard 与模型场景
+   Reflections 面板已接入队列
    深度、当前工作项、代际和槽位展示。）
 
 ### 完成条件

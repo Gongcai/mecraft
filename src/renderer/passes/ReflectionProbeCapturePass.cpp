@@ -252,7 +252,9 @@ bool ReflectionProbeCapturePass::ensureResources(RhiDevice& rhiDevice, const uin
         return false;
     }
     if (m_slotCapacity == requiredSlotCapacity && m_radianceTexture.isValid() && m_prefilteredTexture.isValid() &&
-        m_depthTexture.isValid() && m_radianceView.isValid() && m_prefilteredView.isValid() && m_depthView.isValid()) {
+        m_depthTexture.isValid() && m_opaqueColorTexture.isValid() && m_opaqueDepthTexture.isValid() &&
+        m_radianceView.isValid() && m_prefilteredView.isValid() && m_depthView.isValid() &&
+        m_opaqueColorView.isValid() && m_opaqueDepthView.isValid()) {
         return true;
     }
 
@@ -268,7 +270,8 @@ bool ReflectionProbeCapturePass::ensureResources(RhiDevice& rhiDevice, const uin
         state.building = true;
     }
 
-    const auto createTexture = [&rhiDevice](const char* name, const uint32_t layers, const uint32_t mipLevels) {
+    const auto createTexture = [&rhiDevice](const char* name, const uint32_t layers, const uint32_t mipLevels,
+                                            const RhiTextureUsageFlags extraUsage) {
         RhiTextureDesc desc;
         desc.debugName = name;
         desc.dimension = RhiTextureDimension::CubeArray;
@@ -277,15 +280,16 @@ bool ReflectionProbeCapturePass::ensureResources(RhiDevice& rhiDevice, const uin
         desc.height = renderer::contracts::kReflectionProbeCubeExtent;
         desc.depthOrLayers = layers;
         desc.mipLevels = mipLevels;
-        desc.usage = rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment);
+        desc.usage = rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment) | extraUsage;
         desc.memoryCategory = RhiMemoryCategory::SceneData;
         desc.queueSharing = RhiTextureQueueSharing::GraphicsComputeConcurrent;
         return rhiDevice.createTexture(desc, nullptr);
     };
     const uint32_t layerCount = requiredSlotCapacity * renderer::contracts::kReflectionProbeCubeFaceCount;
-    m_radianceTexture = createTexture("ReflectionProbeCapture.Radiance", layerCount, 1u);
+    m_radianceTexture =
+        createTexture("ReflectionProbeCapture.Radiance", layerCount, 1u, rhiFlag(RhiTextureUsage::TransferSrc));
     m_prefilteredTexture = createTexture("ReflectionProbeCapture.Prefiltered", layerCount,
-                                         renderer::contracts::kReflectionProbeCubeMipCount);
+                                         renderer::contracts::kReflectionProbeCubeMipCount, 0u);
     RhiTextureDesc depthDesc;
     depthDesc.debugName = "ReflectionProbeCapture.Depth";
     depthDesc.dimension = RhiTextureDimension::Texture2D;
@@ -294,10 +298,27 @@ bool ReflectionProbeCapturePass::ensureResources(RhiDevice& rhiDevice, const uin
     depthDesc.height = renderer::contracts::kReflectionProbeCubeExtent;
     depthDesc.depthOrLayers = 1u;
     depthDesc.mipLevels = 1u;
-    depthDesc.usage = rhiFlag(RhiTextureUsage::DepthStencilAttachment);
+    depthDesc.usage = rhiFlag(RhiTextureUsage::DepthStencilAttachment) | rhiFlag(RhiTextureUsage::TransferSrc);
     depthDesc.memoryCategory = RhiMemoryCategory::SceneData;
     m_depthTexture = rhiDevice.createTexture(depthDesc, nullptr);
-    if (!m_radianceTexture.isValid() || !m_prefilteredTexture.isValid() || !m_depthTexture.isValid()) {
+    RhiTextureDesc opaqueColorDesc;
+    opaqueColorDesc.debugName = "ReflectionProbeCapture.OpaqueColor";
+    opaqueColorDesc.dimension = RhiTextureDimension::Texture2D;
+    opaqueColorDesc.format = RhiTextureFormat::Rgba16Float;
+    opaqueColorDesc.width = renderer::contracts::kReflectionProbeCubeExtent;
+    opaqueColorDesc.height = renderer::contracts::kReflectionProbeCubeExtent;
+    opaqueColorDesc.depthOrLayers = 1u;
+    opaqueColorDesc.mipLevels = 1u;
+    opaqueColorDesc.usage = rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::TransferDst);
+    opaqueColorDesc.memoryCategory = RhiMemoryCategory::SceneData;
+    m_opaqueColorTexture = rhiDevice.createTexture(opaqueColorDesc, nullptr);
+    RhiTextureDesc opaqueDepthDesc = depthDesc;
+    opaqueDepthDesc.debugName = "ReflectionProbeCapture.OpaqueDepth";
+    opaqueDepthDesc.usage = rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::DepthStencilAttachment) |
+                            rhiFlag(RhiTextureUsage::TransferDst);
+    m_opaqueDepthTexture = rhiDevice.createTexture(opaqueDepthDesc, nullptr);
+    if (!m_radianceTexture.isValid() || !m_prefilteredTexture.isValid() || !m_depthTexture.isValid() ||
+        !m_opaqueColorTexture.isValid() || !m_opaqueDepthTexture.isValid()) {
         m_lastError = "CaptureTextureCreationFailed";
         destroyResources();
         m_rhiDevice = &rhiDevice;
@@ -336,7 +357,16 @@ bool ReflectionProbeCapturePass::createViews(RhiDevice& rhiDevice, const uint32_
     depthViewDesc.viewType = RhiTextureViewType::Texture2D;
     depthViewDesc.format = RhiTextureFormat::Depth32Float;
     m_depthView = rhiDevice.createTextureView(depthViewDesc);
-    if (!m_radianceView.isValid() || !m_prefilteredView.isValid() || !m_depthView.isValid()) {
+    RhiTextureViewDesc opaqueColorViewDesc;
+    opaqueColorViewDesc.texture = m_opaqueColorTexture;
+    opaqueColorViewDesc.viewType = RhiTextureViewType::Texture2D;
+    opaqueColorViewDesc.format = RhiTextureFormat::Rgba16Float;
+    m_opaqueColorView = rhiDevice.createTextureView(opaqueColorViewDesc);
+    RhiTextureViewDesc opaqueDepthViewDesc = depthViewDesc;
+    opaqueDepthViewDesc.texture = m_opaqueDepthTexture;
+    m_opaqueDepthView = rhiDevice.createTextureView(opaqueDepthViewDesc);
+    if (!m_radianceView.isValid() || !m_prefilteredView.isValid() || !m_depthView.isValid() ||
+        !m_opaqueColorView.isValid() || !m_opaqueDepthView.isValid()) {
         m_lastError = "CaptureArrayViewCreationFailed";
         return false;
     }
@@ -481,8 +511,9 @@ bool ReflectionProbeCapturePass::importGraphResources(RenderGraph& graph, GraphR
         return true;
     }
     if (m_rhiDevice == nullptr || !m_radianceTexture.isValid() || !m_prefilteredTexture.isValid() ||
-        !m_depthTexture.isValid() || !m_radianceView.isValid() || !m_prefilteredView.isValid() ||
-        !m_depthView.isValid()) {
+        !m_depthTexture.isValid() || !m_opaqueColorTexture.isValid() || !m_opaqueDepthTexture.isValid() ||
+        !m_radianceView.isValid() || !m_prefilteredView.isValid() || !m_depthView.isValid() ||
+        !m_opaqueColorView.isValid() || !m_opaqueDepthView.isValid()) {
         return false;
     }
     const auto import = [&graph, this](const char* name, const RhiTextureHandle texture,
@@ -511,7 +542,22 @@ bool ReflectionProbeCapturePass::importGraphResources(RenderGraph& graph, GraphR
         graph.importTexture({"ReflectionProbeCapture.Depth", m_depthTexture, depthDesc,
                              m_depthInitialized ? RhiResourceState::DepthWrite : RhiResourceState::Undefined,
                              RhiResourceState::DepthWrite, m_depthView});
-    return resources.depth.isValid();
+    if (!resources.depth.isValid()) {
+        return false;
+    }
+    if (!import("ReflectionProbeCapture.OpaqueColor", m_opaqueColorTexture, m_opaqueColorView,
+                m_opaqueSnapshotsInitialized, resources.opaqueColor)) {
+        return false;
+    }
+    RhiTextureDesc opaqueDepthDesc;
+    if (!m_rhiDevice->getTextureDesc(m_opaqueDepthTexture, opaqueDepthDesc)) {
+        return false;
+    }
+    resources.opaqueDepth =
+        graph.importTexture({"ReflectionProbeCapture.OpaqueDepth", m_opaqueDepthTexture, opaqueDepthDesc,
+                             m_opaqueSnapshotsInitialized ? RhiResourceState::DepthRead : RhiResourceState::Undefined,
+                             RhiResourceState::DepthRead, m_opaqueDepthView});
+    return resources.opaqueDepth.isValid();
 }
 
 RgPassHandle ReflectionProbeCapturePass::addGraphPasses(RenderGraph& graph, const GraphResources& resources,
@@ -523,7 +569,8 @@ RgPassHandle ReflectionProbeCapturePass::addGraphPasses(RenderGraph& graph, cons
     if (!hasPendingWork()) {
         return dependency;
     }
-    if (!resources.radiance.isValid() || !resources.prefiltered.isValid() || !resources.depth.isValid()) {
+    if (!resources.radiance.isValid() || !resources.prefiltered.isValid() || !resources.depth.isValid() ||
+        !resources.opaqueColor.isValid() || !resources.opaqueDepth.isValid()) {
         m_lastError = "CaptureGraphResourcesMissing";
         return {};
     }
@@ -543,29 +590,59 @@ RgPassHandle ReflectionProbeCapturePass::addGraphPasses(RenderGraph& graph, cons
     m_scheduledProbeIndex = selected;
     m_scheduledWorkItem = state.nextWorkItem;
     const ReflectionProbeCaptureWorkKind kind = renderer::contracts::reflectionProbeCaptureWorkKind(state.nextWorkItem);
-    RenderGraphPassBuilder pass = graph.addPass(
-        {kind == ReflectionProbeCaptureWorkKind::RadianceFace ? "ReflectionProbeCapture.RadianceFace"
-                                                              : "ReflectionProbeCapture.PrefilterFaceMip",
-         RgPassType::Graphics, RhiQueueType::Graphics, kind == ReflectionProbeCaptureWorkKind::PrefilterFaceMip});
-    pass.dependsOn(dependency);
     if (kind == ReflectionProbeCaptureWorkKind::RadianceFace) {
         if (m_captureRenderer == nullptr) {
             m_lastError = "CaptureRendererMissing";
             return {};
         }
-        pass.writeTexture(resources.radiance, RhiResourceState::RenderTarget)
+        const ReflectionProbeCaptureWork work = buildWork(state, selected, state.nextWorkItem);
+        RgTextureSubresourceRange radianceRange;
+        radianceRange.baseMip = 0u;
+        radianceRange.mipCount = 1u;
+        radianceRange.baseLayer = work.cubemapIndex * renderer::contracts::kReflectionProbeCubeFaceCount + work.face;
+        radianceRange.layerCount = 1u;
+        RenderGraphPassBuilder opaque =
+            graph.addPass({"ReflectionProbeCapture.RadianceFace.Opaque", RgPassType::Graphics, RhiQueueType::Graphics});
+        opaque.dependsOn(dependency)
+            .writeTexture(resources.radiance, RhiResourceState::RenderTarget, radianceRange)
             .writeTexture(resources.depth, RhiResourceState::DepthWrite)
             .setExecute([this, &context](RgPassContext& graphPass) {
-                return recordRadianceFace(graphPass.commandList(), context);
+                return recordRadianceOpaque(graphPass.commandList(), context);
             });
+
+        RenderGraphPassBuilder snapshots =
+            graph.addPass({"ReflectionProbeCapture.RadianceFace.CopyOpaque", RgPassType::Copy, RhiQueueType::Graphics});
+        snapshots.dependsOn(opaque.handle())
+            .readTexture(resources.radiance, RhiResourceState::TransferSrc, radianceRange)
+            .readTexture(resources.depth, RhiResourceState::TransferSrc)
+            .writeTexture(resources.opaqueColor, RhiResourceState::TransferDst)
+            .writeTexture(resources.opaqueDepth, RhiResourceState::TransferDst)
+            .setExecute([this](RgPassContext& graphPass) { return recordRadianceSnapshots(graphPass.commandList()); });
+
+        RenderGraphPassBuilder transparent = graph.addPass(
+            {"ReflectionProbeCapture.RadianceFace.Transparent", RgPassType::Graphics, RhiQueueType::Graphics});
+        transparent.dependsOn(snapshots.handle())
+            .readWriteTexture(resources.radiance, RhiResourceState::RenderTarget, radianceRange)
+            .readWriteTexture(resources.depth, RhiResourceState::DepthWrite)
+            .readTexture(resources.opaqueColor, RhiResourceState::ShaderRead)
+            .readTexture(resources.opaqueDepth, RhiResourceState::DepthRead)
+            .setExecute([this, &context](RgPassContext& graphPass) {
+                return recordRadianceTransparent(graphPass.commandList(), context);
+            });
+        m_queueCursor = (selected + 1u) % static_cast<uint32_t>(m_states.size());
+        m_workScheduled = true;
+        return transparent.handle();
     } else {
+        RenderGraphPassBuilder pass = graph.addPass(
+            {"ReflectionProbeCapture.PrefilterFaceMip", RgPassType::Graphics, RhiQueueType::Graphics, true});
+        pass.dependsOn(dependency);
         pass.readTexture(resources.radiance, RhiResourceState::ShaderRead)
             .writeTexture(resources.prefiltered, RhiResourceState::RenderTarget)
             .setExecute([this](RgPassContext& graphPass) { return recordPrefilter(graphPass.commandList()); });
+        m_queueCursor = (selected + 1u) % static_cast<uint32_t>(m_states.size());
+        m_workScheduled = true;
+        return pass.handle();
     }
-    m_queueCursor = (selected + 1u) % static_cast<uint32_t>(m_states.size());
-    m_workScheduled = true;
-    return pass.handle();
 }
 
 ReflectionProbeCaptureWork ReflectionProbeCapturePass::buildWork(const ProbeState& state, const uint32_t probeIndex,
@@ -580,6 +657,8 @@ ReflectionProbeCaptureWork ReflectionProbeCapturePass::buildWork(const ProbeStat
     work.view = captureView(state.source, work.face);
     work.viewProjection = captureViewProjection(state.source, work.face);
     work.depthTargetView = m_depthView;
+    work.opaqueColorView = m_opaqueColorView;
+    work.opaqueDepthView = m_opaqueDepthView;
     if (renderer::contracts::reflectionProbeCaptureWorkKind(workItem) == ReflectionProbeCaptureWorkKind::RadianceFace) {
         work.targetView = m_radianceFaceViews[work.cubemapIndex][work.face];
     } else {
@@ -588,7 +667,7 @@ ReflectionProbeCaptureWork ReflectionProbeCapturePass::buildWork(const ProbeStat
     return work;
 }
 
-bool ReflectionProbeCapturePass::recordRadianceFace(RhiCommandList& commandList, const FrameContext& context) const {
+bool ReflectionProbeCapturePass::recordRadianceOpaque(RhiCommandList& commandList, const FrameContext& context) const {
     if (!m_workScheduled || m_captureRenderer == nullptr || m_scheduledProbeIndex >= m_states.size()) {
         return false;
     }
@@ -597,7 +676,48 @@ bool ReflectionProbeCapturePass::recordRadianceFace(RhiCommandList& commandList,
                                ReflectionProbeCaptureWorkKind::RadianceFace) {
         return false;
     }
-    return m_captureRenderer->recordReflectionProbeRadianceFace(
+    return m_captureRenderer->recordReflectionProbeRadianceOpaque(
+        commandList, context, buildWork(state, m_scheduledProbeIndex, m_scheduledWorkItem));
+}
+
+bool ReflectionProbeCapturePass::recordRadianceSnapshots(RhiCommandList& commandList) const {
+    if (!m_workScheduled || m_scheduledProbeIndex >= m_states.size()) {
+        return false;
+    }
+    const ProbeState& state = m_states[m_scheduledProbeIndex];
+    if (!state.building || renderer::contracts::reflectionProbeCaptureWorkKind(m_scheduledWorkItem) !=
+                               ReflectionProbeCaptureWorkKind::RadianceFace) {
+        return false;
+    }
+    const ReflectionProbeCaptureWork work = buildWork(state, m_scheduledProbeIndex, m_scheduledWorkItem);
+    RhiTextureCopy colorCopy;
+    colorCopy.src = m_radianceTexture;
+    colorCopy.srcSubresource.baseArrayLayer =
+        work.cubemapIndex * renderer::contracts::kReflectionProbeCubeFaceCount + work.face;
+    colorCopy.dst = m_opaqueColorTexture;
+    colorCopy.extent = {renderer::contracts::kReflectionProbeCubeExtent,
+                        renderer::contracts::kReflectionProbeCubeExtent, 1u};
+    commandList.copyTexture(colorCopy);
+
+    RhiTextureCopy depthCopy;
+    depthCopy.src = m_depthTexture;
+    depthCopy.dst = m_opaqueDepthTexture;
+    depthCopy.extent = colorCopy.extent;
+    commandList.copyTexture(depthCopy);
+    return true;
+}
+
+bool ReflectionProbeCapturePass::recordRadianceTransparent(RhiCommandList& commandList,
+                                                           const FrameContext& context) const {
+    if (!m_workScheduled || m_captureRenderer == nullptr || m_scheduledProbeIndex >= m_states.size()) {
+        return false;
+    }
+    const ProbeState& state = m_states[m_scheduledProbeIndex];
+    if (!state.building || renderer::contracts::reflectionProbeCaptureWorkKind(m_scheduledWorkItem) !=
+                               ReflectionProbeCaptureWorkKind::RadianceFace) {
+        return false;
+    }
+    return m_captureRenderer->recordReflectionProbeRadianceTransparent(
         commandList, context, buildWork(state, m_scheduledProbeIndex, m_scheduledWorkItem));
 }
 
@@ -642,6 +762,7 @@ void ReflectionProbeCapturePass::finishGraphExecution(const bool succeeded) {
             if (kind == ReflectionProbeCaptureWorkKind::RadianceFace) {
                 m_radianceInitialized = true;
                 m_depthInitialized = true;
+                m_opaqueSnapshotsInitialized = true;
             } else {
                 m_prefilteredInitialized = true;
             }
@@ -780,6 +901,12 @@ void ReflectionProbeCapturePass::destroyResources() {
         if (m_depthView.isValid()) {
             m_rhiDevice->destroyTextureView(m_depthView);
         }
+        if (m_opaqueColorView.isValid()) {
+            m_rhiDevice->destroyTextureView(m_opaqueColorView);
+        }
+        if (m_opaqueDepthView.isValid()) {
+            m_rhiDevice->destroyTextureView(m_opaqueDepthView);
+        }
         if (m_radianceTexture.isValid()) {
             m_rhiDevice->destroyTexture(m_radianceTexture);
         }
@@ -789,13 +916,23 @@ void ReflectionProbeCapturePass::destroyResources() {
         if (m_depthTexture.isValid()) {
             m_rhiDevice->destroyTexture(m_depthTexture);
         }
+        if (m_opaqueColorTexture.isValid()) {
+            m_rhiDevice->destroyTexture(m_opaqueColorTexture);
+        }
+        if (m_opaqueDepthTexture.isValid()) {
+            m_rhiDevice->destroyTexture(m_opaqueDepthTexture);
+        }
     }
     m_radianceTexture = {};
     m_prefilteredTexture = {};
     m_depthTexture = {};
+    m_opaqueColorTexture = {};
+    m_opaqueDepthTexture = {};
     m_radianceView = {};
     m_prefilteredView = {};
     m_depthView = {};
+    m_opaqueColorView = {};
+    m_opaqueDepthView = {};
     m_radianceFaceViews.clear();
     m_radianceCubeViews.clear();
     m_prefilterFaceMipViews.clear();
@@ -810,6 +947,7 @@ void ReflectionProbeCapturePass::destroyResources() {
     m_radianceInitialized = false;
     m_prefilteredInitialized = false;
     m_depthInitialized = false;
+    m_opaqueSnapshotsInitialized = false;
     m_workScheduled = false;
 }
 

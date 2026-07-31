@@ -21,6 +21,7 @@ vec3 SRGBtoLinear(vec3 color) {
 }
 
 #include "gbuffer_contract.glsl"
+#include "rhi_screen_coordinates.glsl"
 #include "weather_surface.glsl"
 #include "clustered_light_evaluation.glsl"
 #include "terrain_probe_capture_params.glsl"
@@ -52,6 +53,8 @@ layout(set = 1, binding = 11) uniform sampler2DArray uBlockNormalTex;
 #ifdef RHI_TERRAIN_SPECULAR_MAPS
 layout(set = 1, binding = 12) uniform sampler2DArray uBlockSpecularTex;
 #endif
+layout(set = 1, binding = 14) uniform sampler2D uProbeOpaqueColorTex;
+layout(set = 1, binding = 15) uniform sampler2D uProbeOpaqueDepthTex;
 layout(set = 2, binding = 1, std430) readonly buffer TerrainProbeCaptureLightBuffer {
     GpuLight uProbeLights[];
 };
@@ -66,6 +69,10 @@ layout(set = 2, binding = 1, std430) readonly buffer TerrainProbeCaptureLightBuf
 #define uBlockParallaxEnabled uProbeMaterialFlags.w
 #define uRainWetSurfacesEnabled uProbeWeatherFlags.x
 #define uRainSurfaceRipplesEnabled uProbeWeatherFlags.y
+#define uWaterAbsorption uProbeWaterAbsorptionIor.xyz
+#define uWaterIor uProbeWaterAbsorptionIor.w
+#define uWaterWaveHeight uProbeWaterWaveParams.x
+#define uWaterWaveSpeed uProbeWaterWaveParams.y
 
 const int kBlockParallaxMaxSteps = 28;
 const float kBlockParallaxMinViewZ = 0.10;
@@ -181,6 +188,97 @@ bool hasAuthoredSpecularData(vec4 specularTexel) {
     return !isLabPbrInternalNeutralSpecular(specularTexel);
 }
 
+mat3 waterTangentFrame(vec3 normal) {
+    if (abs(normal.y) > 0.5) {
+        return mat3(vec3(1.0, 0.0, 0.0), vec3(0.0, 0.0, 1.0), normal);
+    }
+    if (abs(normal.x) > 0.5) {
+        return mat3(vec3(0.0, 0.0, 1.0), vec3(0.0, 1.0, 0.0), normal);
+    }
+    return mat3(vec3(1.0, 0.0, 0.0), vec3(0.0, 1.0, 0.0), normal);
+}
+
+float waterCurve(float value) {
+    return value * value * (3.0 - 2.0 * value);
+}
+
+vec2 waterCurve(vec2 value) {
+    return value * value * (3.0 - 2.0 * value);
+}
+
+float sampleSmoothWaterNoise(vec2 coordinate) {
+    coordinate += 0.5;
+    vec2 whole = floor(coordinate);
+    coordinate = whole + waterCurve(coordinate - whole) - 0.5;
+    return texture(uNoiseTex, coordinate / 256.0).r;
+}
+
+float waterHeight(vec2 position) {
+    float waveTime = uShaderTime * 1.2 * uWaterWaveSpeed;
+    position.y *= 0.8;
+    float wave = 0.0;
+    wave += sampleSmoothWaterNoise((position + vec2(0.0, position.x - waveTime)) * 0.8);
+    wave += sampleSmoothWaterNoise((position - vec2(-waveTime, position.x)) * 1.6) * 0.5;
+    wave += sampleSmoothWaterNoise((position + vec2(waveTime * 0.6, position.x - waveTime)) * 2.4) * 0.2;
+    wave += sampleSmoothWaterNoise((position - vec2(waveTime * 0.6, position.x - waveTime)) * 3.6) * 0.1;
+    return wave / (0.8 + dot(abs(dFdx(position) + dFdy(position)), vec2(80.0 / 512.0)));
+}
+
+vec3 waterWaveNormal(vec2 position) {
+    float center = waterHeight(position);
+    float left = waterHeight(position + vec2(0.04, 0.0));
+    float up = waterHeight(position + vec2(0.0, 0.04));
+    return normalize(vec3(vec2(center - left, center - up) * uWaterWaveHeight, 0.5));
+}
+
+vec2 waterParallaxPosition(vec3 worldPosition, vec3 tangentViewDirection) {
+    vec3 stepSize = tangentViewDirection * vec3(vec2(0.1 * uWaterWaveHeight), 1.0);
+    stepSize *= 0.02 / max(abs(stepSize.z), 0.001);
+    vec3 samplePosition = vec3(worldPosition.xz - worldPosition.y, 1.0) + stepSize;
+    float sampledHeight = waterHeight(samplePosition.xy);
+    for (uint index = 0u; sampledHeight < samplePosition.z && index < 24u; ++index) {
+        samplePosition += stepSize;
+        sampledHeight = waterHeight(samplePosition.xy);
+    }
+    return samplePosition.xy;
+}
+
+vec3 reconstructProbeWorldPosition(vec2 clipUv, float depth) {
+    vec4 clip = vec4(clipUv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
+    vec4 world = uProbeInverseViewProjection * clip;
+    return world.xyz / max(world.w, 1.0e-5);
+}
+
+vec3 sampleProbeWaterTransmission(vec3 waterNormal, out float opticalDistance) {
+    vec2 extent = vec2(textureSize(uProbeOpaqueColorTex, 0));
+    vec2 screenUv = rhiNativeFragCoordToScreenUv(gl_FragCoord.xy, extent);
+    vec2 clipUv = rhiScreenUvToClipUv(screenUv);
+    vec2 textureUv = rhiScreenUvToTextureUv(screenUv);
+    float opaqueDepth = texture(uProbeOpaqueDepthTex, textureUv).r;
+    opticalDistance = 0.0;
+    if (opaqueDepth <= gl_FragCoord.z || opaqueDepth >= 0.9999) {
+        return texture(uProbeOpaqueColorTex, textureUv).rgb;
+    }
+
+    vec3 opaquePosition = reconstructProbeWorldPosition(clipUv, opaqueDepth);
+    opticalDistance = clamp(distance(vWorldPos, opaquePosition), 0.0, 512.0);
+    vec3 viewNormal = normalize(mat3(uProbeView) * waterNormal);
+    vec3 viewUp = normalize(uProbeView[1].xyz);
+    vec2 refractOffset = (viewUp.xy - viewNormal.xy) *
+                         (clamp(opticalDistance, 0.0, 1.0) * 0.5 /
+                          max(length(uProbePosition.xyz - vWorldPos), 1.0e-4));
+    vec2 refractedClipUv = clamp(clipUv + refractOffset, vec2(0.0), vec2(1.0));
+    vec2 refractedScreenUv = rhiScreenUvToClipUv(refractedClipUv);
+    vec2 refractedTextureUv = rhiScreenUvToTextureUv(refractedScreenUv);
+    float refractedDepth = texture(uProbeOpaqueDepthTex, refractedTextureUv).r;
+    if (refractedDepth >= gl_FragCoord.z && refractedDepth < 0.9999) {
+        opaquePosition = reconstructProbeWorldPosition(refractedClipUv, refractedDepth);
+        opticalDistance = clamp(distance(vWorldPos, opaquePosition), 0.0, 512.0);
+        textureUv = refractedTextureUv;
+    }
+    return texture(uProbeOpaqueColorTex, textureUv).rgb;
+}
+
 void main() {
     bool isCrossVegetation = vNormal > -2.5 && vNormal < -0.5;
     bool forceBaseLod = uForceBaseLod != 0 || isCrossVegetation;
@@ -192,9 +290,11 @@ void main() {
     vec2 uvDx = dFdx(vUV);
     vec2 uvDy = dFdy(vUV);
     vec3 geometricNormal = decodeFaceNormal(vNormal);
+    int derivativeMaterialId = derivativeFragmentMaterialId(materialKindId(vMaterialKind));
+    bool isWater = derivativeMaterialId == MATERIAL_WATER;
     vec2 sampleUv = vUV;
 #ifdef RHI_TERRAIN_NORMAL_MAPS
-    if (!isCrossVegetation && uHasBlockNormalMaps != 0) {
+    if (!isCrossVegetation && !isWater && uHasBlockNormalMaps != 0) {
         sampleUv = applyBlockParallaxMap(geometricNormal, vWorldPos, vUV, sampledLayer, forceBaseLod, uvDx, uvDy);
     }
 #endif
@@ -214,7 +314,6 @@ void main() {
 
     vec3 normal = geometricNormal;
     float ao = clamp(vAO / 3.0, 0.0, 1.0);
-    int derivativeMaterialId = derivativeFragmentMaterialId(materialKindId(vMaterialKind));
     bool isEmissiveMaterial = isDerivativeEmissiveMaterialId(derivativeMaterialId) ||
                               derivativeMaterialId == MATERIAL_ORE || derivativeMaterialId == MATERIAL_NETHER_ORE;
     float emissiveLuminance = dot(albedo, vec3(0.2126, 0.7152, 0.0722));
@@ -225,7 +324,7 @@ void main() {
     SurfaceMaterialAux materialAux = surfaceMaterialAuxForKind(vMaterialKind);
 
 #ifdef RHI_TERRAIN_NORMAL_MAPS
-    if (!isCrossVegetation && uHasBlockNormalMaps != 0) {
+    if (!isCrossVegetation && !isWater && uHasBlockNormalMaps != 0) {
         LabPbrNormalSample normalSample = decodeLabPbrNormal(
             sampleBlockMap(uBlockNormalTex, sampleUv, sampledLayer, forceBaseLod, uvDx, uvDy));
         normal = normalize(tangentFrame(normal, vWorldPos, vUV) * normalSample.tangentNormal);
@@ -233,7 +332,7 @@ void main() {
     }
 #endif
 #ifdef RHI_TERRAIN_SPECULAR_MAPS
-    if (uHasBlockSpecularMaps != 0) {
+    if (!isWater && uHasBlockSpecularMaps != 0) {
         vec4 specularTexel = sampleBlockMap(uBlockSpecularTex, sampleUv, sampledLayer, forceBaseLod, uvDx, uvDy);
         if (hasAuthoredSpecularData(specularTexel)) {
             LabPbrSpecularSample decoded = decodeLabPbrSpecular(specularTexel, albedo);
@@ -246,6 +345,22 @@ void main() {
         }
     }
 #endif
+
+    if (isWater) {
+        vec3 viewDirection = normalize(uProbePosition.xyz - vWorldPos);
+        mat3 frame = waterTangentFrame(geometricNormal);
+        vec3 tangentViewDirection = normalize(transpose(frame) * viewDirection);
+        vec2 parallaxPosition = waterParallaxPosition(vWorldPos, tangentViewDirection);
+        vec3 tangentNormal = waterWaveNormal(parallaxPosition);
+        if (uRainSurfaceRipplesEnabled != 0 && uSurfaceWetness > 0.01) {
+            float skylightFactor = clamp(vSunlight * 10.0 - 9.0, 0.0, 1.0);
+            vec2 rainNormal = SampleRainRippleNormal(
+                uRippleNormalTex, vWorldPos, 1.0, uShaderTime, 0.60, 1.0);
+            tangentNormal.xy += rainNormal * uSurfaceWetness * skylightFactor;
+            tangentNormal = normalize(tangentNormal);
+        }
+        normal = normalize(frame * tangentNormal);
+    }
 
     bool canReceiveRain = !isCrossVegetation && derivativeMaterialId != MATERIAL_WATER &&
                           derivativeMaterialId != MATERIAL_ICE && derivativeMaterialId != MATERIAL_STAINED_GLASS;
@@ -302,7 +417,21 @@ void main() {
     radiance += albedo * uProbeAmbientColor.rgb * ao * skyVisibility;
     radiance += albedo * material.emission * 1.5;
 
-    bool opticalLayer = derivativeMaterialId == MATERIAL_STAINED_GLASS || derivativeMaterialId == MATERIAL_WATER ||
+    if (isWater) {
+        float opticalDistance = 0.0;
+        vec3 transmitted = sampleProbeWaterTransmission(normal, opticalDistance);
+        float fresnel = pbrFresnelDielectricFromIor(max(dot(normal, viewDirection), 1.0e-6), uWaterIor);
+        vec3 absorption = uWaterAbsorption * 8.0 + 0.03;
+        vec3 transmittance = exp(-absorption * (0.16 * opticalDistance));
+        vec3 inScattering = uProbeAmbientColor.rgb * skyVisibility * (1.0 - transmittance) * 0.4;
+        vec3 waterReflection = max(radiance, uProbeAmbientColor.rgb * skyVisibility);
+        vec3 waterRadiance = (transmitted * transmittance + inScattering) * (1.0 - fresnel) +
+                             waterReflection * fresnel;
+        outRadiance = vec4(max(waterRadiance, vec3(0.0)), 1.0);
+        return;
+    }
+
+    bool opticalLayer = derivativeMaterialId == MATERIAL_STAINED_GLASS ||
                         derivativeMaterialId == MATERIAL_ICE;
     float outputAlpha = opticalLayer ? texColor.a : 1.0;
     outRadiance = opticalLayer ? vec4(radiance * outputAlpha, outputAlpha) : vec4(radiance, 1.0);

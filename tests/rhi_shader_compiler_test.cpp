@@ -100,7 +100,7 @@ struct ShaderCase {
 } // namespace
 
 int main() {
-    constexpr std::array<ShaderCase, 90> kShaderCases{
+    constexpr std::array<ShaderCase, 93> kShaderCases{
         {{"tests/shaders/rhi_screen_coordinates_test.frag", RhiShaderStage::Fragment},
          {"tests/shaders/material_brdf_shared_test.frag", RhiShaderStage::Fragment},
          {"tests/shaders/reflection_probe_contract_test.frag", RhiShaderStage::Fragment},
@@ -109,6 +109,10 @@ int main() {
          {"assets/shaders/skybox_blur_rhi.vert", RhiShaderStage::Vertex},
          {"assets/shaders/gameplay_sky_capture_rhi.vert", RhiShaderStage::Vertex},
          {"assets/shaders/chunk_gbuffer.vert", RhiShaderStage::Vertex, "RHI_TERRAIN_MDI", "RHI_TERRAIN_NORMAL_MAPS",
+          "RHI_TERRAIN_SPECULAR_MAPS"},
+         {"assets/shaders/terrain_probe_capture.vert", RhiShaderStage::Vertex},
+         {"assets/shaders/terrain_probe_capture.frag", RhiShaderStage::Fragment},
+         {"assets/shaders/terrain_probe_capture.frag", RhiShaderStage::Fragment, "RHI_TERRAIN_NORMAL_MAPS",
           "RHI_TERRAIN_SPECULAR_MAPS"},
          {"assets/shaders/entity_gbuffer_rhi.vert", RhiShaderStage::Vertex},
          {"assets/shaders/entity_gbuffer_rhi.frag", RhiShaderStage::Fragment},

@@ -317,12 +317,12 @@ bool DeferredPipeline::configureVoxelReflectionProbe(const FrameContext& ctx) {
     return true;
 }
 
-bool DeferredPipeline::recordReflectionProbeRadianceFace(RhiCommandList& commandList, const FrameContext& context,
-                                                         const ReflectionProbeCaptureWork& work) {
+bool DeferredPipeline::recordReflectionProbeRadianceOpaque(RhiCommandList& commandList, const FrameContext& context,
+                                                           const ReflectionProbeCaptureWork& work) {
     if (m_shared == nullptr || m_shared->terrain == nullptr || m_shared->worldRenderBuffer == nullptr ||
         m_shared->terrainRhiPipelines == nullptr || m_resourceMgr == nullptr || context.worldView == nullptr ||
-        !work.targetView.isValid() || !work.depthTargetView.isValid() ||
-        work.face >= renderer::contracts::kReflectionProbeCubeFaceCount) {
+        !work.targetView.isValid() || !work.depthTargetView.isValid() || !work.opaqueColorView.isValid() ||
+        !work.opaqueDepthView.isValid() || work.face >= renderer::contracts::kReflectionProbeCubeFaceCount) {
         return false;
     }
 
@@ -377,7 +377,8 @@ bool DeferredPipeline::recordReflectionProbeRadianceFace(RhiCommandList& command
         worldBuffer.addTransparent(entry.range);
     }
     if (!m_shared->terrainRhiPipelines->prepareReflectionProbeCapture(commandList, *m_resourceMgr, frame,
-                                                                      terrainSettings, probeLights) ||
+                                                                      terrainSettings, probeLights,
+                                                                      work.opaqueColorView, work.opaqueDepthView) ||
         !worldBuffer.prepareRhiOpaqueAndCutout(commandList,
                                                m_shared->terrainRhiPipelines->reflectionProbeCaptureMetadataLayout()) ||
         !worldBuffer.prepareRhiTransparent(commandList,
@@ -413,7 +414,7 @@ bool DeferredPipeline::recordReflectionProbeRadianceFace(RhiCommandList& command
     depthAttachment.depthStoreOp = RhiStoreOp::Store;
     depthAttachment.clearDepth = 1.0f;
     RhiRenderingInfo renderingInfo;
-    renderingInfo.debugName = "VoxelTerrain.ReflectionProbeCapture";
+    renderingInfo.debugName = "VoxelTerrain.ReflectionProbeCapture.Opaque";
     renderingInfo.renderArea = {0, 0, renderer::contracts::kReflectionProbeCubeExtent,
                                 renderer::contracts::kReflectionProbeCubeExtent};
     renderingInfo.colorAttachments = &colorAttachment;
@@ -439,10 +440,41 @@ bool DeferredPipeline::recordReflectionProbeRadianceFace(RhiCommandList& command
     if (m_shared->humanoidRenderer != nullptr && m_shared->gameplayRegistry != nullptr) {
         m_shared->humanoidRenderer->renderPreparedForward(commandList, work.viewProjection, context.skyIntensity);
     }
-    worldBuffer.recordRhiTransparent(commandList,
-                                     m_shared->terrainRhiPipelines->reflectionProbeCaptureTransparentPipeline(),
-                                     m_shared->terrainRhiPipelines->reflectionProbeCaptureMaterialBindGroup(),
-                                     m_shared->terrainRhiPipelines->reflectionProbeCaptureFrameBindGroup());
+    commandList.endRendering();
+    return true;
+}
+
+bool DeferredPipeline::recordReflectionProbeRadianceTransparent(RhiCommandList& commandList, const FrameContext&,
+                                                                const ReflectionProbeCaptureWork& work) {
+    if (m_shared == nullptr || m_shared->worldRenderBuffer == nullptr || m_shared->terrainRhiPipelines == nullptr ||
+        !work.targetView.isValid() || !work.depthTargetView.isValid() || !work.opaqueColorView.isValid() ||
+        !work.opaqueDepthView.isValid() || work.face >= renderer::contracts::kReflectionProbeCubeFaceCount) {
+        return false;
+    }
+
+    RhiColorAttachment colorAttachment;
+    colorAttachment.view = work.targetView;
+    colorAttachment.loadOp = RhiLoadOp::Load;
+    colorAttachment.storeOp = RhiStoreOp::Store;
+    RhiDepthStencilAttachment depthAttachment;
+    depthAttachment.view = work.depthTargetView;
+    depthAttachment.depthLoadOp = RhiLoadOp::Load;
+    depthAttachment.depthStoreOp = RhiStoreOp::Store;
+    RhiRenderingInfo renderingInfo;
+    renderingInfo.debugName = "VoxelTerrain.ReflectionProbeCapture.Transparent";
+    renderingInfo.renderArea = {0, 0, renderer::contracts::kReflectionProbeCubeExtent,
+                                renderer::contracts::kReflectionProbeCubeExtent};
+    renderingInfo.colorAttachments = &colorAttachment;
+    renderingInfo.colorAttachmentCount = 1u;
+    renderingInfo.depthStencilAttachment = &depthAttachment;
+    commandList.beginRendering(renderingInfo);
+    commandList.setViewport({0.0f, 0.0f, static_cast<float>(renderer::contracts::kReflectionProbeCubeExtent),
+                             static_cast<float>(renderer::contracts::kReflectionProbeCubeExtent), 0.0f, 1.0f});
+    commandList.setScissor(renderingInfo.renderArea);
+    m_shared->worldRenderBuffer->recordRhiTransparent(
+        commandList, m_shared->terrainRhiPipelines->reflectionProbeCaptureTransparentPipeline(),
+        m_shared->terrainRhiPipelines->reflectionProbeCaptureMaterialBindGroup(),
+        m_shared->terrainRhiPipelines->reflectionProbeCaptureFrameBindGroup());
     commandList.endRendering();
     return true;
 }

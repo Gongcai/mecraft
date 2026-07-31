@@ -9,11 +9,15 @@ layout(std140, set = 1, binding = 13) uniform TerrainProbeCaptureMaterialParams 
 
 layout(std140, set = 2, binding = 0) uniform TerrainProbeCaptureFrameParams {
     mat4 uProbeViewProjection;
+    mat4 uProbeInverseViewProjection;
+    mat4 uProbeView;
     vec4 uProbePosition;
     vec4 uProbeSunDirection;
     vec4 uProbeSunColor;
     vec4 uProbeAmbientColor;
     uvec4 uProbeLightCount;
+    vec4 uProbeWaterAbsorptionIor;
+    vec4 uProbeWaterWaveParams;
 };
 
 #endif

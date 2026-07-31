@@ -81,7 +81,8 @@ public:
     bool prepareForward(RhiCommandList& commandList, ResourceMgr& resourceMgr, const TerrainFrameData& frame);
     bool prepareReflectionProbeCapture(RhiCommandList& commandList, ResourceMgr& resourceMgr,
                                        const TerrainFrameData& frame, const TerrainRenderSettings& settings,
-                                       const std::vector<renderer::contracts::SceneLight>& lights);
+                                       const std::vector<renderer::contracts::SceneLight>& lights,
+                                       RhiTextureViewHandle opaqueColorView, RhiTextureViewHandle opaqueDepthView);
 
     [[nodiscard]] RhiBindGroupLayoutHandle metadataLayout() const { return m_metadataLayout; }
     [[nodiscard]] RhiPipelineHandle gbufferOpaquePipeline() const { return m_gbufferOpaquePipeline; }
@@ -173,7 +174,7 @@ private:
     void destroyForwardResources();
     bool ensureProbeCapturePipeline(ResourceMgr& resourceMgr);
     bool ensureProbeCaptureTextureViews(ResourceMgr& resourceMgr);
-    bool ensureProbeCaptureBindGroups();
+    bool ensureProbeCaptureBindGroups(RhiTextureViewHandle opaqueColorView, RhiTextureViewHandle opaqueDepthView);
     bool ensureProbeCaptureLightCapacity(uint32_t lightCount);
     bool ensureProbeCaptureTextureView(size_t slot, RhiTextureHandle texture, RhiTextureViewType viewType);
     void destroyProbeCaptureBindGroups();
@@ -298,6 +299,8 @@ private:
     std::array<RhiTextureHandle, kProbeCaptureTextureSlotCount> m_probeCaptureViewTextures{};
     std::array<RhiTextureViewHandle, kProbeCaptureTextureSlotCount> m_probeCaptureTextureViews{};
     std::array<RhiTextureViewHandle, kProbeCaptureTextureSlotCount> m_probeCaptureBoundViews{};
+    RhiTextureViewHandle m_probeCaptureOpaqueColorView;
+    RhiTextureViewHandle m_probeCaptureOpaqueDepthView;
 };
 
 #endif // MECRAFT_TERRAIN_RHI_PIPELINE_SET_H

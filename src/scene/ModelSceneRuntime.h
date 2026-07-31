@@ -66,8 +66,11 @@ public:
     [[nodiscard]] bool prepareTransparentResources(const DeferredTransparentResources& resources) override;
     void renderTransparent(RhiCommandList& commandList, const glm::vec3& cameraPosition,
                            float reflectionCompositeStrength) override;
-    [[nodiscard]] bool recordReflectionProbeRadianceFace(RhiCommandList& commandList, const FrameContext& context,
-                                                         const ReflectionProbeCaptureWork& work) override;
+    [[nodiscard]] bool recordReflectionProbeRadianceOpaque(RhiCommandList& commandList, const FrameContext& context,
+                                                           const ReflectionProbeCaptureWork& work) override;
+    [[nodiscard]] bool recordReflectionProbeRadianceTransparent(RhiCommandList& commandList,
+                                                                const FrameContext& context,
+                                                                const ReflectionProbeCaptureWork& work) override;
 
     /// Imports or reuses one glTF asset and creates an independent ECS instance.
     /// @param path Filesystem path to a GLB or glTF document.

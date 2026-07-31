@@ -61,8 +61,11 @@ public:
     // Held block light value (set from Game)
     void setHeldBlockLightValue(int value) { m_heldBlockLightValue = value; }
     [[nodiscard]] bool setSceneLights(std::vector<renderer::contracts::SceneLight> lights);
-    [[nodiscard]] bool recordReflectionProbeRadianceFace(RhiCommandList& commandList, const FrameContext& context,
-                                                         const ReflectionProbeCaptureWork& work) override;
+    [[nodiscard]] bool recordReflectionProbeRadianceOpaque(RhiCommandList& commandList, const FrameContext& context,
+                                                           const ReflectionProbeCaptureWork& work) override;
+    [[nodiscard]] bool recordReflectionProbeRadianceTransparent(RhiCommandList& commandList,
+                                                                const FrameContext& context,
+                                                                const ReflectionProbeCaptureWork& work) override;
     void invalidateHistory();
 
     // Pass accessors
