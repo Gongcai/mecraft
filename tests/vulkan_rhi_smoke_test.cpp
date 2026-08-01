@@ -830,6 +830,83 @@ void main() {
     return valid;
 }
 
+[[nodiscard]] bool validateDescriptorArrayContract(VkRhiDevice& device) {
+    const RhiCapabilities& capabilities = device.capabilities();
+    if (!capabilities.descriptorBindingPartiallyBound || !capabilities.descriptorBindingVariableDescriptorCount ||
+        !capabilities.descriptorBindingUpdateUnusedWhilePending ||
+        !capabilities.descriptorBindingSampledImageUpdateAfterBind) {
+        std::cerr << "Vulkan descriptor array features are unavailable\n";
+        return false;
+    }
+
+    const uint64_t validationErrorsBefore = device.validationErrorCount();
+    RhiTextureDesc textureDesc;
+    textureDesc.debugName = "VulkanSmoke.DescriptorArray.Texture";
+    textureDesc.format = RhiTextureFormat::Rgba8Unorm;
+    textureDesc.width = 1u;
+    textureDesc.height = 1u;
+    textureDesc.usage = rhiFlag(RhiTextureUsage::Sampled);
+    std::array<RhiTextureHandle, 2u> textures{};
+    std::array<RhiTextureViewHandle, 2u> views{};
+    for (size_t index = 0u; index < textures.size(); ++index) {
+        textures[index] = device.createTexture(textureDesc, nullptr);
+        RhiTextureViewDesc viewDesc;
+        viewDesc.texture = textures[index];
+        viewDesc.format = textureDesc.format;
+        views[index] = device.createTextureView(viewDesc);
+    }
+    const RhiSamplerHandle sampler = device.createSampler({});
+
+    RhiBindGroupLayoutDesc layoutDesc;
+    layoutDesc.debugName = "VulkanSmoke.DescriptorArray.Layout";
+    RhiBindGroupLayoutEntry layoutEntry;
+    layoutEntry.binding = 0u;
+    layoutEntry.type = RhiBindingType::CombinedTextureSampler;
+    layoutEntry.stages = rhiFlag(RhiShaderStage::Fragment);
+    layoutEntry.arrayCount = 4u;
+    layoutEntry.flags = rhiFlag(RhiBindingFlag::PartiallyBound) | rhiFlag(RhiBindingFlag::UpdateAfterBind) |
+                        rhiFlag(RhiBindingFlag::UpdateUnusedWhilePending) |
+                        rhiFlag(RhiBindingFlag::VariableDescriptorCount);
+    RhiBindGroupLayoutEntry updateUnusedEntry;
+    updateUnusedEntry.binding = 0u;
+    updateUnusedEntry.type = RhiBindingType::Sampler;
+    updateUnusedEntry.stages = rhiFlag(RhiShaderStage::Fragment);
+    updateUnusedEntry.flags = rhiFlag(RhiBindingFlag::UpdateUnusedWhilePending);
+    layoutEntry.binding = 1u;
+    layoutDesc.entries.push_back(updateUnusedEntry);
+    layoutDesc.entries.push_back(layoutEntry);
+    const RhiBindGroupLayoutHandle layout = device.createBindGroupLayout(layoutDesc);
+
+    RhiBindGroupDesc groupDesc;
+    groupDesc.layout = layout;
+    groupDesc.variableDescriptorCount = 2u;
+    RhiBindGroupEntry entry;
+    entry.binding = 1u;
+    entry.arrayElement = 1u;
+    entry.resource.combinedTextureSampler = {views[1], sampler};
+    RhiBindGroupEntry updateUnusedGroupEntry;
+    updateUnusedGroupEntry.binding = 0u;
+    updateUnusedGroupEntry.resource.sampler = sampler;
+    groupDesc.entries.push_back(updateUnusedGroupEntry);
+    groupDesc.entries.push_back(entry);
+    const RhiBindGroupHandle group = device.createBindGroup(groupDesc);
+    const bool valid = layout.isValid() && group.isValid() && textures[0].isValid() && textures[1].isValid() &&
+                       views[0].isValid() && views[1].isValid() && sampler.isValid() &&
+                       device.validationErrorCount() == validationErrorsBefore;
+
+    device.destroyBindGroup(group);
+    device.destroyBindGroupLayout(layout);
+    device.destroySampler(sampler);
+    for (size_t index = 0u; index < textures.size(); ++index) {
+        device.destroyTextureView(views[index]);
+        device.destroyTexture(textures[index]);
+    }
+    if (!valid) {
+        std::cerr << "Vulkan descriptor arrays, flags, or variable counts violated the native contract\n";
+    }
+    return valid;
+}
+
 [[nodiscard]] bool validateOffscreenCoordinateContract(VkRhiDevice& device, RhiCommandListPool& commandPool,
                                                        GLFWwindow* window) {
     constexpr uint32_t kWidth = 4u;
@@ -1933,6 +2010,12 @@ int main() {
         }
     }
     if (!createDrawParametersShader(device)) {
+        device.shutdown();
+        glfwDestroyWindow(window);
+        glfwTerminate();
+        return 1;
+    }
+    if (!validateDescriptorArrayContract(device)) {
         device.shutdown();
         glfwDestroyWindow(window);
         glfwTerminate();

@@ -16,11 +16,29 @@ enum class RhiBindingType {
     CombinedTextureSampler
 };
 
+enum class RhiBindingFlag : uint32_t {
+    PartiallyBound = 1u << 0u,
+    UpdateAfterBind = 1u << 1u,
+    UpdateUnusedWhilePending = 1u << 2u,
+    VariableDescriptorCount = 1u << 3u
+};
+
+using RhiBindingFlags = uint32_t;
+
+[[nodiscard]] constexpr RhiBindingFlags rhiFlag(const RhiBindingFlag flag) {
+    return static_cast<RhiBindingFlags>(flag);
+}
+
+[[nodiscard]] constexpr bool rhiHasBindingFlag(const RhiBindingFlags flags, const RhiBindingFlag flag) {
+    return (flags & rhiFlag(flag)) != 0u;
+}
+
 struct RhiBindGroupLayoutEntry {
     uint32_t binding = 0;
     RhiBindingType type = RhiBindingType::UniformBuffer;
     RhiShaderStageFlags stages = 0;
     uint32_t arrayCount = 1;
+    RhiBindingFlags flags = 0u;
 };
 
 struct RhiBindGroupLayoutDesc {
@@ -48,11 +66,13 @@ struct RhiBindingResource {
 
 struct RhiBindGroupEntry {
     uint32_t binding = 0;
+    uint32_t arrayElement = 0;
     RhiBindingResource resource;
 };
 
 struct RhiBindGroupDesc {
     RhiBindGroupLayoutHandle layout;
+    uint32_t variableDescriptorCount = 0u;
     std::vector<RhiBindGroupEntry> entries;
 };
 

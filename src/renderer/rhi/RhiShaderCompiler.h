@@ -18,6 +18,7 @@ struct RhiShaderBindingInfo {
     uint32_t binding = 0;
     RhiBindingType type = RhiBindingType::UniformBuffer;
     uint32_t arrayCount = 1;
+    bool runtimeArray = false;
     RhiShaderStageFlags stages = 0;
     std::string name;
 };

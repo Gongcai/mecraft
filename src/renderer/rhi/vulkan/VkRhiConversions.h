@@ -163,6 +163,19 @@ struct VkResourceStateMapping {
     return VK_DESCRIPTOR_TYPE_MAX_ENUM;
 }
 
+[[nodiscard]] inline VkDescriptorBindingFlags toVkDescriptorBindingFlags(const RhiBindingFlags flags) {
+    VkDescriptorBindingFlags result = 0u;
+    if (rhiHasBindingFlag(flags, RhiBindingFlag::PartiallyBound))
+        result |= VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
+    if (rhiHasBindingFlag(flags, RhiBindingFlag::UpdateAfterBind))
+        result |= VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT;
+    if (rhiHasBindingFlag(flags, RhiBindingFlag::UpdateUnusedWhilePending))
+        result |= VK_DESCRIPTOR_BINDING_UPDATE_UNUSED_WHILE_PENDING_BIT;
+    if (rhiHasBindingFlag(flags, RhiBindingFlag::VariableDescriptorCount))
+        result |= VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT;
+    return result;
+}
+
 [[nodiscard]] inline VkCompareOp toVkCompareOp(const RhiCompareOp op) {
     switch (op) {
     case RhiCompareOp::Never: return VK_COMPARE_OP_NEVER;

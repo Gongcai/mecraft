@@ -120,6 +120,9 @@ bool deviceSupportsFeature(const RhiCapabilities& capabilities, const RenderFeat
     case RenderFeature::BindlessGpuScene:
         return capabilities.descriptorIndexing && capabilities.descriptorBindingPartiallyBound &&
                capabilities.descriptorBindingVariableDescriptorCount && capabilities.runtimeDescriptorArray &&
+               capabilities.descriptorBindingUpdateUnusedWhilePending &&
+               capabilities.descriptorBindingSampledImageUpdateAfterBind &&
+               capabilities.descriptorBindingStorageBufferUpdateAfterBind &&
                capabilities.shaderSampledImageArrayNonUniformIndexing &&
                capabilities.shaderStorageBufferArrayNonUniformIndexing;
     case RenderFeature::GpuDynamicResolution: return capabilities.timestampQuery;

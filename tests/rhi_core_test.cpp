@@ -262,6 +262,16 @@ bool testDescHashStability() {
         return false;
     }
 
+    RhiBindGroupLayoutDesc bindGroupLayoutDesc;
+    bindGroupLayoutDesc.entries.push_back(
+        {3u, RhiBindingType::CombinedTextureSampler, rhiFlag(RhiShaderStage::Fragment), 8u, 0u});
+    const uint64_t scalarBindingFlagsHash = rhiHashBindGroupLayoutDesc(bindGroupLayoutDesc);
+    bindGroupLayoutDesc.entries.front().flags = rhiFlag(RhiBindingFlag::PartiallyBound);
+    if (!requireTrue(scalarBindingFlagsHash != rhiHashBindGroupLayoutDesc(bindGroupLayoutDesc),
+                     "bind group layout hash must include descriptor binding flags")) {
+        return false;
+    }
+
     RhiGraphicsPipelineDesc pipelineDesc;
     const uint64_t pipelineHash = rhiHashGraphicsPipelineDesc(pipelineDesc);
     pipelineDesc.raster.depthBiasEnabled = true;
@@ -524,6 +534,138 @@ bool testGlRhiTextureDescriptorUsageValidation() {
     device.destroyTexture(texture);
     device.shutdown();
     return true;
+}
+
+bool testGlRhiDescriptorArrays() {
+    GlTestContext context;
+    if (!requireTrue(context.init(), "OpenGL test context must initialize for descriptor arrays")) {
+        return false;
+    }
+
+    GlRhiDevice device;
+    RhiDeviceDesc deviceDesc = makeDeviceDesc();
+    deviceDesc.debugName = "rhi_descriptor_array_test";
+    if (!requireTrue(device.init(deviceDesc), "OpenGL RHI device must initialize for descriptor arrays")) {
+        return false;
+    }
+
+    RhiTextureDesc textureDesc;
+    textureDesc.format = RhiTextureFormat::Rgba8Unorm;
+    textureDesc.width = 1u;
+    textureDesc.height = 1u;
+    textureDesc.usage = rhiFlag(RhiTextureUsage::Sampled);
+    std::array<RhiTextureHandle, 2u> textures{};
+    std::array<RhiTextureViewHandle, 2u> views{};
+    for (size_t index = 0u; index < textures.size(); ++index) {
+        textures[index] = device.createTexture(textureDesc, nullptr);
+        RhiTextureViewDesc viewDesc;
+        viewDesc.texture = textures[index];
+        viewDesc.format = textureDesc.format;
+        views[index] = device.createTextureView(viewDesc);
+    }
+    const RhiSamplerHandle sampler = device.createSampler({});
+
+    RhiBindGroupLayoutDesc fixedLayoutDesc;
+    fixedLayoutDesc.entries.push_back(
+        {0u, RhiBindingType::CombinedTextureSampler, rhiFlag(RhiShaderStage::Fragment), 2u});
+    const RhiBindGroupLayoutHandle fixedLayout = device.createBindGroupLayout(fixedLayoutDesc);
+    RhiBindGroupDesc fixedGroupDesc;
+    fixedGroupDesc.layout = fixedLayout;
+    for (uint32_t arrayElement = 0u; arrayElement < views.size(); ++arrayElement) {
+        RhiBindGroupEntry entry;
+        entry.binding = 0u;
+        entry.arrayElement = arrayElement;
+        entry.resource.combinedTextureSampler = {views[arrayElement], sampler};
+        fixedGroupDesc.entries.push_back(entry);
+    }
+    const RhiBindGroupHandle fixedGroup = device.createBindGroup(fixedGroupDesc);
+    RhiBindGroupDesc incompleteGroupDesc = fixedGroupDesc;
+    incompleteGroupDesc.entries.pop_back();
+    const RhiBindGroupHandle incompleteGroup = device.createBindGroup(incompleteGroupDesc);
+
+    constexpr char kVertexShader[] = R"glsl(
+#version 450 core
+void main() { gl_Position = vec4(0.0, 0.0, 0.0, 1.0); }
+)glsl";
+    constexpr char kFragmentShader[] = R"glsl(
+#version 450 core
+layout(set = 0, binding = 0) uniform sampler2D uTextures[2];
+layout(location = 0) out vec4 outColor;
+void main() { outColor = texture(uTextures[0], vec2(0.5)) + texture(uTextures[1], vec2(0.5)); }
+)glsl";
+    RhiShaderDesc shaderDesc;
+    shaderDesc.stage = RhiShaderStage::Vertex;
+    shaderDesc.source = kVertexShader;
+    shaderDesc.sourceSize = sizeof(kVertexShader) - 1u;
+    const RhiShaderHandle vertexShader = device.createShader(shaderDesc);
+    shaderDesc.stage = RhiShaderStage::Fragment;
+    shaderDesc.source = kFragmentShader;
+    shaderDesc.sourceSize = sizeof(kFragmentShader) - 1u;
+    const RhiShaderHandle fragmentShader = device.createShader(shaderDesc);
+    RhiPipelineLayoutDesc pipelineLayoutDesc;
+    pipelineLayoutDesc.bindGroupLayouts.push_back(fixedLayout);
+    const RhiPipelineLayoutHandle pipelineLayout = device.createPipelineLayout(pipelineLayoutDesc);
+    RhiGraphicsPipelineDesc pipelineDesc;
+    pipelineDesc.vertexShader = vertexShader;
+    pipelineDesc.fragmentShader = fragmentShader;
+    pipelineDesc.layout = pipelineLayout;
+    pipelineDesc.raster.cullMode = RhiCullMode::None;
+    pipelineDesc.depthStencil.depthTestEnabled = false;
+    pipelineDesc.depthStencil.depthWriteEnabled = false;
+    pipelineDesc.colorFormats.push_back(RhiTextureFormat::Rgba8Unorm);
+    const RhiPipelineHandle pipeline = device.createGraphicsPipeline(pipelineDesc);
+
+    RhiBindGroupLayoutDesc variableLayoutDesc;
+    RhiBindGroupLayoutEntry variableEntry;
+    variableEntry.binding = 3u;
+    variableEntry.type = RhiBindingType::CombinedTextureSampler;
+    variableEntry.stages = rhiFlag(RhiShaderStage::Fragment);
+    variableEntry.arrayCount = 4u;
+    variableEntry.flags = rhiFlag(RhiBindingFlag::PartiallyBound) | rhiFlag(RhiBindingFlag::UpdateAfterBind) |
+                          rhiFlag(RhiBindingFlag::UpdateUnusedWhilePending) |
+                          rhiFlag(RhiBindingFlag::VariableDescriptorCount);
+    RhiBindGroupLayoutEntry updateUnusedEntry;
+    updateUnusedEntry.binding = 0u;
+    updateUnusedEntry.type = RhiBindingType::Sampler;
+    updateUnusedEntry.stages = rhiFlag(RhiShaderStage::Fragment);
+    updateUnusedEntry.flags = rhiFlag(RhiBindingFlag::UpdateUnusedWhilePending);
+    variableLayoutDesc.entries.push_back(updateUnusedEntry);
+    variableLayoutDesc.entries.push_back(variableEntry);
+    const RhiBindGroupLayoutHandle variableLayout = device.createBindGroupLayout(variableLayoutDesc);
+    RhiBindGroupDesc variableGroupDesc;
+    variableGroupDesc.layout = variableLayout;
+    variableGroupDesc.variableDescriptorCount = 2u;
+    RhiBindGroupEntry sparseEntry;
+    sparseEntry.binding = 3u;
+    sparseEntry.arrayElement = 1u;
+    sparseEntry.resource.combinedTextureSampler = {views[1], sampler};
+    RhiBindGroupEntry updateUnusedGroupEntry;
+    updateUnusedGroupEntry.binding = 0u;
+    updateUnusedGroupEntry.resource.sampler = sampler;
+    variableGroupDesc.entries.push_back(updateUnusedGroupEntry);
+    variableGroupDesc.entries.push_back(sparseEntry);
+    const RhiBindGroupHandle variableGroup = device.createBindGroup(variableGroupDesc);
+
+    const bool valid = requireTrue(fixedLayout.isValid() && fixedGroup.isValid() && !incompleteGroup.isValid() &&
+                                       vertexShader.isValid() && fragmentShader.isValid() && pipelineLayout.isValid() &&
+                                       pipeline.isValid() && variableLayout.isValid() && variableGroup.isValid(),
+                                   "descriptor arrays, flags, and variable counts must satisfy the OpenGL contract");
+
+    device.destroyBindGroup(variableGroup);
+    device.destroyBindGroup(fixedGroup);
+    device.destroyPipeline(pipeline);
+    device.destroyPipelineLayout(pipelineLayout);
+    device.destroyShader(fragmentShader);
+    device.destroyShader(vertexShader);
+    device.destroyBindGroupLayout(variableLayout);
+    device.destroyBindGroupLayout(fixedLayout);
+    device.destroySampler(sampler);
+    for (size_t index = 0u; index < textures.size(); ++index) {
+        device.destroyTextureView(views[index]);
+        device.destroyTexture(textures[index]);
+    }
+    device.shutdown();
+    return valid;
 }
 
 bool testGlRhiShaderLayoutContracts() {
@@ -4947,6 +5089,9 @@ int main() {
         return 1;
     }
     if (!testGlRhiTextureDescriptorUsageValidation()) {
+        return 1;
+    }
+    if (!testGlRhiDescriptorArrays()) {
         return 1;
     }
     if (!testGlRhiShaderLayoutContracts()) {

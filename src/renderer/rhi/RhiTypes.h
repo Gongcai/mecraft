@@ -110,6 +110,11 @@ struct RhiCapabilities {
     bool descriptorIndexing = false;
     bool descriptorBindingPartiallyBound = false;
     bool descriptorBindingVariableDescriptorCount = false;
+    bool descriptorBindingUpdateUnusedWhilePending = false;
+    bool descriptorBindingUniformBufferUpdateAfterBind = false;
+    bool descriptorBindingSampledImageUpdateAfterBind = false;
+    bool descriptorBindingStorageImageUpdateAfterBind = false;
+    bool descriptorBindingStorageBufferUpdateAfterBind = false;
     bool runtimeDescriptorArray = false;
     bool shaderSampledImageArrayNonUniformIndexing = false;
     bool shaderStorageBufferArrayNonUniformIndexing = false;

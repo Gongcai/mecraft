@@ -1450,9 +1450,11 @@ bool VkRhiDevice::init(const RhiDeviceDesc& desc) {
     features12.shaderSampledImageArrayNonUniformIndexing = selected12.shaderSampledImageArrayNonUniformIndexing;
     features12.shaderStorageBufferArrayNonUniformIndexing = selected12.shaderStorageBufferArrayNonUniformIndexing;
     features12.shaderStorageImageArrayNonUniformIndexing = selected12.shaderStorageImageArrayNonUniformIndexing;
+    features12.descriptorBindingUniformBufferUpdateAfterBind = selected12.descriptorBindingUniformBufferUpdateAfterBind;
     features12.descriptorBindingSampledImageUpdateAfterBind = selected12.descriptorBindingSampledImageUpdateAfterBind;
     features12.descriptorBindingStorageImageUpdateAfterBind = selected12.descriptorBindingStorageImageUpdateAfterBind;
     features12.descriptorBindingStorageBufferUpdateAfterBind = selected12.descriptorBindingStorageBufferUpdateAfterBind;
+    features12.descriptorBindingUpdateUnusedWhilePending = selected12.descriptorBindingUpdateUnusedWhilePending;
     features12.descriptorBindingPartiallyBound = selected12.descriptorBindingPartiallyBound;
     features12.descriptorBindingVariableDescriptorCount = selected12.descriptorBindingVariableDescriptorCount;
     features12.runtimeDescriptorArray = selected12.runtimeDescriptorArray;
@@ -1527,7 +1529,8 @@ bool VkRhiDevice::init(const RhiDeviceDesc& desc) {
                                                           {VK_DESCRIPTOR_TYPE_SAMPLER, 4096u},
                                                           {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 4096u}}};
     VkDescriptorPoolCreateInfo poolInfo{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
-    poolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
+    poolInfo.flags =
+        VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT | VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT;
     poolInfo.maxSets = 4096u;
     poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
     poolInfo.pPoolSizes = poolSizes.data();
@@ -1589,6 +1592,16 @@ bool VkRhiDevice::init(const RhiDeviceDesc& desc) {
     m_capabilities.descriptorBindingPartiallyBound = selected12.descriptorBindingPartiallyBound == VK_TRUE;
     m_capabilities.descriptorBindingVariableDescriptorCount =
         selected12.descriptorBindingVariableDescriptorCount == VK_TRUE;
+    m_capabilities.descriptorBindingUpdateUnusedWhilePending =
+        selected12.descriptorBindingUpdateUnusedWhilePending == VK_TRUE;
+    m_capabilities.descriptorBindingUniformBufferUpdateAfterBind =
+        selected12.descriptorBindingUniformBufferUpdateAfterBind == VK_TRUE;
+    m_capabilities.descriptorBindingSampledImageUpdateAfterBind =
+        selected12.descriptorBindingSampledImageUpdateAfterBind == VK_TRUE;
+    m_capabilities.descriptorBindingStorageImageUpdateAfterBind =
+        selected12.descriptorBindingStorageImageUpdateAfterBind == VK_TRUE;
+    m_capabilities.descriptorBindingStorageBufferUpdateAfterBind =
+        selected12.descriptorBindingStorageBufferUpdateAfterBind == VK_TRUE;
     m_capabilities.runtimeDescriptorArray = selected12.runtimeDescriptorArray == VK_TRUE;
     m_capabilities.shaderSampledImageArrayNonUniformIndexing =
         selected12.shaderSampledImageArrayNonUniformIndexing == VK_TRUE;
@@ -2262,16 +2275,63 @@ RhiBindGroupLayoutHandle VkRhiDevice::createBindGroupLayout(const RhiBindGroupLa
     if (!m_initialized)
         return {};
     std::vector<VkDescriptorSetLayoutBinding> bindings;
+    std::vector<VkDescriptorBindingFlags> bindingFlags;
     bindings.reserve(desc.entries.size());
+    bindingFlags.reserve(desc.entries.size());
     std::set<uint32_t> usedBindings;
+    std::optional<uint32_t> variableBinding;
+    uint32_t maximumBinding = 0u;
+    bool updateAfterBind = false;
+    constexpr RhiBindingFlags kKnownFlags =
+        rhiFlag(RhiBindingFlag::PartiallyBound) | rhiFlag(RhiBindingFlag::UpdateAfterBind) |
+        rhiFlag(RhiBindingFlag::UpdateUnusedWhilePending) | rhiFlag(RhiBindingFlag::VariableDescriptorCount);
     for (const auto& entry : desc.entries) {
         const VkDescriptorType type = toVkDescriptorType(entry.type);
-        if (entry.arrayCount != 1u || entry.stages == 0u || type == VK_DESCRIPTOR_TYPE_MAX_ENUM ||
-            !usedBindings.insert(entry.binding).second)
+        if (entry.arrayCount == 0u || entry.stages == 0u || type == VK_DESCRIPTOR_TYPE_MAX_ENUM ||
+            (entry.flags & ~kKnownFlags) != 0u || !usedBindings.insert(entry.binding).second)
             return {};
+        if (rhiHasBindingFlag(entry.flags, RhiBindingFlag::PartiallyBound) &&
+            !m_capabilities.descriptorBindingPartiallyBound)
+            return {};
+        if (rhiHasBindingFlag(entry.flags, RhiBindingFlag::VariableDescriptorCount)) {
+            if (!m_capabilities.descriptorBindingVariableDescriptorCount || variableBinding.has_value())
+                return {};
+            variableBinding = entry.binding;
+        }
+        if (rhiHasBindingFlag(entry.flags, RhiBindingFlag::UpdateUnusedWhilePending) &&
+            !m_capabilities.descriptorBindingUpdateUnusedWhilePending)
+            return {};
+        if (rhiHasBindingFlag(entry.flags, RhiBindingFlag::UpdateAfterBind)) {
+            const bool supported =
+                (entry.type == RhiBindingType::UniformBuffer &&
+                 m_capabilities.descriptorBindingUniformBufferUpdateAfterBind) ||
+                ((entry.type == RhiBindingType::SampledTexture || entry.type == RhiBindingType::Sampler ||
+                  entry.type == RhiBindingType::CombinedTextureSampler) &&
+                 m_capabilities.descriptorBindingSampledImageUpdateAfterBind) ||
+                (entry.type == RhiBindingType::StorageTexture &&
+                 m_capabilities.descriptorBindingStorageImageUpdateAfterBind) ||
+                (entry.type == RhiBindingType::StorageBuffer &&
+                 m_capabilities.descriptorBindingStorageBufferUpdateAfterBind);
+            if (!supported)
+                return {};
+            updateAfterBind = true;
+        }
+        maximumBinding = std::max(maximumBinding, entry.binding);
         bindings.push_back({entry.binding, type, entry.arrayCount, toVkShaderStageFlags(entry.stages), nullptr});
+        bindingFlags.push_back(toVkDescriptorBindingFlags(entry.flags));
     }
+    if (variableBinding.has_value() && *variableBinding != maximumBinding)
+        return {};
+    VkDescriptorSetLayoutBindingFlagsCreateInfo bindingFlagsInfo{
+        VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO};
+    bindingFlagsInfo.bindingCount = static_cast<uint32_t>(bindingFlags.size());
+    bindingFlagsInfo.pBindingFlags = bindingFlags.data();
     VkDescriptorSetLayoutCreateInfo info{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
+    info.pNext = bindingFlags.empty() ? nullptr : &bindingFlagsInfo;
+    info.flags =
+        updateAfterBind
+            ? static_cast<VkDescriptorSetLayoutCreateFlags>(VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT)
+            : VkDescriptorSetLayoutCreateFlags{0u};
     info.bindingCount = static_cast<uint32_t>(bindings.size());
     info.pBindings = bindings.data();
     VkDescriptorSetLayout layout = VK_NULL_HANDLE;
@@ -2471,9 +2531,22 @@ RhiBindGroupHandle VkRhiDevice::createBindGroup(const RhiBindGroupDesc& desc) {
     // descriptor pool, which Vulkan requires to be externally synchronized.
     const std::unique_lock<std::shared_mutex> registryLock(m_data->resourceRegistryMutex);
     const auto* layout = m_data != nullptr ? findRecord(m_data->bindGroupLayouts, desc.layout) : nullptr;
-    if (layout == nullptr || desc.entries.size() != layout->desc.entries.size())
+    if (layout == nullptr)
         return {};
+    const auto variableEntryIt =
+        std::find_if(layout->desc.entries.begin(), layout->desc.entries.end(), [](const auto& entry) {
+            return rhiHasBindingFlag(entry.flags, RhiBindingFlag::VariableDescriptorCount);
+        });
+    if ((variableEntryIt == layout->desc.entries.end() && desc.variableDescriptorCount != 0u) ||
+        (variableEntryIt != layout->desc.entries.end() &&
+         (desc.variableDescriptorCount == 0u || desc.variableDescriptorCount > variableEntryIt->arrayCount)))
+        return {};
+    VkDescriptorSetVariableDescriptorCountAllocateInfo variableCountInfo{
+        VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_ALLOCATE_INFO};
+    variableCountInfo.descriptorSetCount = 1u;
+    variableCountInfo.pDescriptorCounts = &desc.variableDescriptorCount;
     VkDescriptorSetAllocateInfo allocateInfo{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
+    allocateInfo.pNext = variableEntryIt == layout->desc.entries.end() ? nullptr : &variableCountInfo;
     allocateInfo.descriptorPool = m_data->descriptorPool;
     allocateInfo.descriptorSetCount = 1u;
     allocateInfo.pSetLayouts = &layout->layout;
@@ -2486,12 +2559,18 @@ RhiBindGroupHandle VkRhiDevice::createBindGroup(const RhiBindGroupDesc& desc) {
     writes.reserve(desc.entries.size());
     bufferInfos.reserve(desc.entries.size());
     imageInfos.reserve(desc.entries.size());
-    std::set<uint32_t> writtenBindings;
+    std::set<uint64_t> writtenSlots;
     for (const auto& entry : desc.entries) {
         const auto layoutEntryIt = std::find_if(layout->desc.entries.begin(), layout->desc.entries.end(),
                                                 [&](const auto& item) { return item.binding == entry.binding; });
-        if (layoutEntryIt == layout->desc.entries.end() || layoutEntryIt->arrayCount != 1u ||
-            !writtenBindings.insert(entry.binding).second) {
+        const uint32_t descriptorCount =
+            layoutEntryIt != layout->desc.entries.end() &&
+                    rhiHasBindingFlag(layoutEntryIt->flags, RhiBindingFlag::VariableDescriptorCount)
+                ? desc.variableDescriptorCount
+                : (layoutEntryIt != layout->desc.entries.end() ? layoutEntryIt->arrayCount : 0u);
+        const uint64_t slotKey = (static_cast<uint64_t>(entry.binding) << 32u) | entry.arrayElement;
+        if (layoutEntryIt == layout->desc.entries.end() || entry.arrayElement >= descriptorCount ||
+            !writtenSlots.insert(slotKey).second) {
             vkFreeDescriptorSets(m_data->device, m_data->descriptorPool, 1u, &set);
             return {};
         }
@@ -2499,6 +2578,7 @@ RhiBindGroupHandle VkRhiDevice::createBindGroup(const RhiBindGroupDesc& desc) {
         VkWriteDescriptorSet write{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
         write.dstSet = set;
         write.dstBinding = entry.binding;
+        write.dstArrayElement = entry.arrayElement;
         write.descriptorCount = 1u;
         write.descriptorType = type;
         if (type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER || type == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER) {
@@ -2547,6 +2627,20 @@ RhiBindGroupHandle VkRhiDevice::createBindGroup(const RhiBindGroupDesc& desc) {
             write.pImageInfo = &imageInfos.back();
         }
         writes.push_back(write);
+    }
+    for (const RhiBindGroupLayoutEntry& layoutEntry : layout->desc.entries) {
+        if (rhiHasBindingFlag(layoutEntry.flags, RhiBindingFlag::PartiallyBound))
+            continue;
+        const uint32_t descriptorCount = rhiHasBindingFlag(layoutEntry.flags, RhiBindingFlag::VariableDescriptorCount)
+                                             ? desc.variableDescriptorCount
+                                             : layoutEntry.arrayCount;
+        const size_t writtenCount =
+            static_cast<size_t>(std::count_if(desc.entries.begin(), desc.entries.end(),
+                                              [&](const auto& entry) { return entry.binding == layoutEntry.binding; }));
+        if (writtenCount != descriptorCount) {
+            vkFreeDescriptorSets(m_data->device, m_data->descriptorPool, 1u, &set);
+            return {};
+        }
     }
     vkUpdateDescriptorSets(m_data->device, static_cast<uint32_t>(writes.size()), writes.data(), 0u, nullptr);
     const RhiBindGroupHandle handle = m_data->bindGroupHandles.allocate();

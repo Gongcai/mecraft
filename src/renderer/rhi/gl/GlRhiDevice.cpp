@@ -568,6 +568,8 @@ struct GlPipelineRecord {
         uint32_t binding = 0u;
         RhiBindingType type = RhiBindingType::UniformBuffer;
         uint32_t physicalBinding = 0u;
+        uint32_t arrayCount = 1u;
+        RhiBindingFlags flags = 0u;
     };
 
     GLuint program = 0u;
@@ -694,6 +696,10 @@ buildPipelineBindingMappings(const RhiHandleAllocator<RhiBindGroupLayoutHandle>&
                 bindGroupLayouts, bindGroupLayoutRecords, pipelineLayout.desc.bindGroupLayouts[binding.set]);
             const RhiBindGroupLayoutEntry* layoutEntry =
                 setLayout != nullptr ? findLayoutEntry(*setLayout, binding.binding) : nullptr;
+            if (binding.runtimeArray) {
+                logRhiError("runtime descriptor arrays are unavailable in the OpenGL Base profile");
+                return false;
+            }
             if (layoutEntry == nullptr || layoutEntry->type != binding.type ||
                 layoutEntry->arrayCount != binding.arrayCount ||
                 (layoutEntry->stages & binding.stages) != binding.stages) {
@@ -711,7 +717,8 @@ buildPipelineBindingMappings(const RhiHandleAllocator<RhiBindGroupLayoutHandle>&
                              });
             if (existing == reflectedBindings.end()) {
                 reflectedBindings.push_back(binding);
-            } else if (existing->type != binding.type || existing->arrayCount != binding.arrayCount) {
+            } else if (existing->type != binding.type || existing->arrayCount != binding.arrayCount ||
+                       existing->runtimeArray != binding.runtimeArray) {
                 logRhiError("shader stages declare incompatible descriptor types at the same set and binding");
                 return false;
             } else {
@@ -767,6 +774,16 @@ buildPipelineBindingMappings(const RhiHandleAllocator<RhiBindGroupLayoutHandle>&
         mapping.binding = binding.binding;
         mapping.type = binding.type;
         mapping.physicalBinding = nextPhysicalBinding[nameSpace];
+        mapping.arrayCount = binding.arrayCount;
+        const GlBindGroupLayoutRecord* setLayout = recordForHandle(bindGroupLayouts, bindGroupLayoutRecords,
+                                                                   pipelineLayout.desc.bindGroupLayouts[binding.set]);
+        const RhiBindGroupLayoutEntry* layoutEntry =
+            setLayout != nullptr ? findLayoutEntry(*setLayout, binding.binding) : nullptr;
+        if (layoutEntry == nullptr) {
+            logRhiError("pipeline binding reflection references an invalid layout entry");
+            return false;
+        }
+        mapping.flags = layoutEntry->flags;
         nextPhysicalBinding[nameSpace] += binding.arrayCount;
         mappings.push_back(mapping);
     }
@@ -1340,65 +1357,74 @@ void setTextureRangeState(GlTextureRecord& record, const GlTextureSubresourceRan
         if (group == nullptr) {
             return false;
         }
-        const auto entryIt =
-            std::find_if(group->desc.entries.begin(), group->desc.entries.end(),
-                         [&](const RhiBindGroupEntry& entry) { return entry.binding == mapping.binding; });
-        if (entryIt == group->desc.entries.end()) {
-            return false;
-        }
-        const RhiTextureViewHandle view = mapping.type == RhiBindingType::CombinedTextureSampler
-                                              ? entryIt->resource.combinedTextureSampler.textureView
-                                              : entryIt->resource.textureView;
-        const GlTextureViewRecord* viewRecord = recordForHandle(data.textureViews, data.textureViewRecords, view);
-        const RhiResourceState requiredState =
-            mapping.type == RhiBindingType::StorageTexture
-                ? RhiResourceState::ShaderWrite
-                : (viewRecord != nullptr && viewRecord->format.depth ? RhiResourceState::DepthRead
-                                                                     : RhiResourceState::ShaderRead);
-        if (!textureViewHasState(data, view, requiredState)) {
-            const GlTextureRecord* textureRecord =
-                viewRecord != nullptr ? recordForHandle(data.textures, data.textureRecords, viewRecord->desc.texture)
-                                      : nullptr;
-            std::cerr << "GlRhiDevice: " << commandName << " texture descriptor state does not match its binding type"
-                      << " pipeline=["
-                      << rhiDebugName(pipeline.compute ? pipeline.computeDesc.debugName
-                                                       : pipeline.graphicsDesc.debugName)
-                      << "]"
-                      << " set=" << mapping.set << " binding=" << mapping.binding
-                      << " bindGroupHandle=" << boundGroups[mapping.set].index << ':'
-                      << boundGroups[mapping.set].generation << " viewHandle=" << view.index << ':' << view.generation;
-            if (viewRecord != nullptr) {
-                std::cerr << " textureHandle=" << viewRecord->desc.texture.index << ':'
-                          << viewRecord->desc.texture.generation << " mipRange=" << viewRecord->desc.baseMip << '+'
-                          << viewRecord->desc.mipCount << " layerRange=" << viewRecord->desc.baseLayer << '+'
-                          << viewRecord->desc.layerCount;
+        bool foundEntry = false;
+        for (const RhiBindGroupEntry& entry : group->desc.entries) {
+            if (entry.binding != mapping.binding) {
+                continue;
             }
-            if (textureRecord != nullptr) {
-                std::cerr << " texture=[" << rhiDebugName(textureRecord->debugName.c_str()) << ']';
-                GlTextureSubresourceRange range;
-                if (resolveTextureSubresourceRange(textureRecord->desc, viewRecord->desc.baseMip,
-                                                   viewRecord->desc.mipCount, viewRecord->desc.baseLayer,
-                                                   viewRecord->desc.layerCount, range)) {
-                    bool foundMismatch = false;
-                    for (uint32_t mip = range.baseMip; mip < range.baseMip + range.mipCount && !foundMismatch; ++mip) {
-                        for (uint32_t layer = range.baseLayer; layer < range.baseLayer + range.layerCount; ++layer) {
-                            const RhiResourceState tracked =
-                                textureRecord
-                                    ->subresourceStates[textureSubresourceIndex(textureRecord->desc, mip, layer)];
-                            if (tracked != requiredState) {
-                                std::cerr << " mismatchMip=" << mip << " mismatchLayer=" << layer
-                                          << " required=" << resourceStateName(requiredState)
-                                          << " tracked=" << resourceStateName(tracked);
-                                foundMismatch = true;
-                                break;
+            foundEntry = true;
+            const RhiTextureViewHandle view = mapping.type == RhiBindingType::CombinedTextureSampler
+                                                  ? entry.resource.combinedTextureSampler.textureView
+                                                  : entry.resource.textureView;
+            const GlTextureViewRecord* viewRecord = recordForHandle(data.textureViews, data.textureViewRecords, view);
+            const RhiResourceState requiredState =
+                mapping.type == RhiBindingType::StorageTexture
+                    ? RhiResourceState::ShaderWrite
+                    : (viewRecord != nullptr && viewRecord->format.depth ? RhiResourceState::DepthRead
+                                                                         : RhiResourceState::ShaderRead);
+            if (!textureViewHasState(data, view, requiredState)) {
+                const GlTextureRecord* textureRecord =
+                    viewRecord != nullptr
+                        ? recordForHandle(data.textures, data.textureRecords, viewRecord->desc.texture)
+                        : nullptr;
+                std::cerr << "GlRhiDevice: " << commandName
+                          << " texture descriptor state does not match its binding type"
+                          << " pipeline=["
+                          << rhiDebugName(pipeline.compute ? pipeline.computeDesc.debugName
+                                                           : pipeline.graphicsDesc.debugName)
+                          << "]"
+                          << " set=" << mapping.set << " binding=" << mapping.binding
+                          << " arrayElement=" << entry.arrayElement
+                          << " bindGroupHandle=" << boundGroups[mapping.set].index << ':'
+                          << boundGroups[mapping.set].generation << " viewHandle=" << view.index << ':'
+                          << view.generation;
+                if (viewRecord != nullptr) {
+                    std::cerr << " textureHandle=" << viewRecord->desc.texture.index << ':'
+                              << viewRecord->desc.texture.generation << " mipRange=" << viewRecord->desc.baseMip << '+'
+                              << viewRecord->desc.mipCount << " layerRange=" << viewRecord->desc.baseLayer << '+'
+                              << viewRecord->desc.layerCount;
+                }
+                if (textureRecord != nullptr) {
+                    std::cerr << " texture=[" << rhiDebugName(textureRecord->debugName.c_str()) << ']';
+                    GlTextureSubresourceRange range;
+                    if (resolveTextureSubresourceRange(textureRecord->desc, viewRecord->desc.baseMip,
+                                                       viewRecord->desc.mipCount, viewRecord->desc.baseLayer,
+                                                       viewRecord->desc.layerCount, range)) {
+                        bool foundMismatch = false;
+                        for (uint32_t mip = range.baseMip; mip < range.baseMip + range.mipCount && !foundMismatch;
+                             ++mip) {
+                            for (uint32_t layer = range.baseLayer; layer < range.baseLayer + range.layerCount;
+                                 ++layer) {
+                                const RhiResourceState tracked =
+                                    textureRecord
+                                        ->subresourceStates[textureSubresourceIndex(textureRecord->desc, mip, layer)];
+                                if (tracked != requiredState) {
+                                    std::cerr << " mismatchMip=" << mip << " mismatchLayer=" << layer
+                                              << " required=" << resourceStateName(requiredState)
+                                              << " tracked=" << resourceStateName(tracked);
+                                    foundMismatch = true;
+                                    break;
+                                }
                             }
                         }
                     }
                 }
+                std::cerr << '\n';
+                return false;
             }
-            std::cerr << '\n';
-            return false;
         }
+        if (!foundEntry && !rhiHasBindingFlag(mapping.flags, RhiBindingFlag::PartiallyBound))
+            return false;
     }
     return true;
 }
@@ -1418,27 +1444,32 @@ void setTextureRangeState(GlTextureRecord& record, const GlTextureSubresourceRan
         if (group == nullptr) {
             return false;
         }
-        const auto entryIt =
-            std::find_if(group->desc.entries.begin(), group->desc.entries.end(),
-                         [&](const RhiBindGroupEntry& entry) { return entry.binding == mapping.binding; });
-        if (entryIt == group->desc.entries.end()) {
-            return false;
+        bool foundEntry = false;
+        for (const RhiBindGroupEntry& entry : group->desc.entries) {
+            if (entry.binding != mapping.binding) {
+                continue;
+            }
+            foundEntry = true;
+            const GlBufferRecord* buffer =
+                recordForHandle(data.buffers, data.bufferRecords, entry.resource.buffer.buffer);
+            const RhiResourceState requiredState = mapping.type == RhiBindingType::UniformBuffer
+                                                       ? RhiResourceState::UniformBuffer
+                                                       : RhiResourceState::StorageBuffer;
+            if (buffer == nullptr || buffer->state != requiredState) {
+                std::cerr << "GlRhiDevice: " << commandName
+                          << " buffer descriptor state does not match its binding type"
+                          << " pipeline=["
+                          << rhiDebugName(pipeline.compute ? pipeline.computeDesc.debugName
+                                                           : pipeline.graphicsDesc.debugName)
+                          << "] set=" << mapping.set << " binding=" << mapping.binding
+                          << " arrayElement=" << entry.arrayElement << " required=" << resourceStateName(requiredState)
+                          << " tracked="
+                          << resourceStateName(buffer != nullptr ? buffer->state : RhiResourceState::Undefined) << '\n';
+                return false;
+            }
         }
-        const GlBufferRecord* buffer =
-            recordForHandle(data.buffers, data.bufferRecords, entryIt->resource.buffer.buffer);
-        const RhiResourceState requiredState = mapping.type == RhiBindingType::UniformBuffer
-                                                   ? RhiResourceState::UniformBuffer
-                                                   : RhiResourceState::StorageBuffer;
-        if (buffer == nullptr || buffer->state != requiredState) {
-            std::cerr << "GlRhiDevice: " << commandName << " buffer descriptor state does not match its binding type"
-                      << " pipeline=["
-                      << rhiDebugName(pipeline.compute ? pipeline.computeDesc.debugName
-                                                       : pipeline.graphicsDesc.debugName)
-                      << "] set=" << mapping.set << " binding=" << mapping.binding
-                      << " required=" << resourceStateName(requiredState) << " tracked="
-                      << resourceStateName(buffer != nullptr ? buffer->state : RhiResourceState::Undefined) << '\n';
+        if (!foundEntry && !rhiHasBindingFlag(mapping.flags, RhiBindingFlag::PartiallyBound))
             return false;
-        }
     }
     return true;
 }
@@ -2783,6 +2814,47 @@ void GlRhiCommandList::setBindGroup(uint32_t setIndex, RhiBindGroupHandle bindGr
         return;
     }
 
+    if (!m_validationOnly) {
+        for (const GlPipelineRecord::BindingMapping& mapping : pipeline->bindingMappings) {
+            if (mapping.set != setIndex ||
+                (!rhiHasBindingFlag(mapping.flags, RhiBindingFlag::PartiallyBound) &&
+                 !rhiHasBindingFlag(mapping.flags, RhiBindingFlag::VariableDescriptorCount))) {
+                continue;
+            }
+            const uint32_t descriptorCount = rhiHasBindingFlag(mapping.flags, RhiBindingFlag::VariableDescriptorCount)
+                                                 ? record->desc.variableDescriptorCount
+                                                 : mapping.arrayCount;
+            for (uint32_t arrayElement = 0u; arrayElement < mapping.arrayCount; ++arrayElement) {
+                const bool populated =
+                    arrayElement < descriptorCount && std::any_of(
+                                                          record->desc.entries.begin(), record->desc.entries.end(),
+                                                          [&](const RhiBindGroupEntry& entry) {
+                                                              return entry.binding == mapping.binding &&
+                                                                     entry.arrayElement == arrayElement;
+                                                          });
+                if (populated) {
+                    continue;
+                }
+                const GLuint physicalBinding = static_cast<GLuint>(mapping.physicalBinding + arrayElement);
+                switch (mapping.type) {
+                case RhiBindingType::UniformBuffer: glBindBufferBase(GL_UNIFORM_BUFFER, physicalBinding, 0u); break;
+                case RhiBindingType::StorageBuffer:
+                    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, physicalBinding, 0u);
+                    break;
+                case RhiBindingType::SampledTexture: glBindTextureUnit(physicalBinding, 0u); break;
+                case RhiBindingType::StorageTexture:
+                    glBindImageTexture(physicalBinding, 0u, 0, GL_FALSE, 0, GL_READ_ONLY, GL_R8);
+                    break;
+                case RhiBindingType::Sampler: glBindSampler(physicalBinding, 0u); break;
+                case RhiBindingType::CombinedTextureSampler:
+                    glBindTextureUnit(physicalBinding, 0u);
+                    glBindSampler(physicalBinding, 0u);
+                    break;
+                }
+            }
+        }
+    }
+
     for (const RhiBindGroupEntry& entry : record->desc.entries) {
         const auto layoutIt = std::find_if(
             layoutRecord->desc.entries.begin(), layoutRecord->desc.entries.end(),
@@ -2799,7 +2871,11 @@ void GlRhiCommandList::setBindGroup(uint32_t setIndex, RhiBindGroupHandle bindGr
         if (mappingIt == pipeline->bindingMappings.end()) {
             continue;
         }
-        const GLuint physicalBinding = static_cast<GLuint>(mappingIt->physicalBinding);
+        if (entry.arrayElement >= mappingIt->arrayCount) {
+            (void)rejectReplayCommand("setBindGroup received an out-of-range descriptor array element");
+            return;
+        }
+        const GLuint physicalBinding = static_cast<GLuint>(mappingIt->physicalBinding + entry.arrayElement);
 
         switch (layoutIt->type) {
         case RhiBindingType::UniformBuffer: {
@@ -4622,12 +4698,25 @@ RhiBindGroupLayoutHandle GlRhiDevice::createBindGroupLayout(const RhiBindGroupLa
         logRhiError("createBindGroupLayout requires an initialized device");
         return {};
     }
+    constexpr RhiBindingFlags kKnownFlags =
+        rhiFlag(RhiBindingFlag::PartiallyBound) | rhiFlag(RhiBindingFlag::UpdateAfterBind) |
+        rhiFlag(RhiBindingFlag::UpdateUnusedWhilePending) | rhiFlag(RhiBindingFlag::VariableDescriptorCount);
+    std::optional<uint32_t> variableBinding;
+    uint32_t maximumBinding = 0u;
     for (size_t i = 0u; i < desc.entries.size(); ++i) {
         const RhiBindGroupLayoutEntry& entry = desc.entries[i];
-        if (entry.stages == 0u || entry.arrayCount != 1u) {
-            logRhiError("createBindGroupLayout requires non-empty stages and scalar bindings");
+        if (entry.stages == 0u || entry.arrayCount == 0u || (entry.flags & ~kKnownFlags) != 0u) {
+            logRhiError("createBindGroupLayout received an invalid array or binding flag contract");
             return {};
         }
+        if (rhiHasBindingFlag(entry.flags, RhiBindingFlag::VariableDescriptorCount)) {
+            if (variableBinding.has_value()) {
+                logRhiError("createBindGroupLayout received multiple variable descriptor bindings");
+                return {};
+            }
+            variableBinding = entry.binding;
+        }
+        maximumBinding = std::max(maximumBinding, entry.binding);
         const auto duplicate =
             std::find_if(desc.entries.begin() + static_cast<std::ptrdiff_t>(i + 1u), desc.entries.end(),
                          [&](const RhiBindGroupLayoutEntry& candidate) { return candidate.binding == entry.binding; });
@@ -4635,6 +4724,10 @@ RhiBindGroupLayoutHandle GlRhiDevice::createBindGroupLayout(const RhiBindGroupLa
             logRhiError("createBindGroupLayout received duplicate binding numbers");
             return {};
         }
+    }
+    if (variableBinding.has_value() && *variableBinding != maximumBinding) {
+        logRhiError("createBindGroupLayout requires the variable descriptor binding to have the highest number");
+        return {};
     }
 
     const RhiBindGroupLayoutHandle handle = m_data->bindGroupLayouts.allocate();
@@ -4878,19 +4971,27 @@ RhiBindGroupHandle GlRhiDevice::createBindGroup(const RhiBindGroupDesc& desc) {
         logRhiError("createBindGroup received an invalid layout");
         return {};
     }
-    if (desc.entries.size() != layout->desc.entries.size()) {
-        logRhiError("createBindGroup requires exactly one resource for every layout binding");
+    const auto variableEntryIt =
+        std::find_if(layout->desc.entries.begin(), layout->desc.entries.end(), [](const auto& entry) {
+            return rhiHasBindingFlag(entry.flags, RhiBindingFlag::VariableDescriptorCount);
+        });
+    if ((variableEntryIt == layout->desc.entries.end() && desc.variableDescriptorCount != 0u) ||
+        (variableEntryIt != layout->desc.entries.end() &&
+         (desc.variableDescriptorCount == 0u || desc.variableDescriptorCount > variableEntryIt->arrayCount))) {
+        logRhiError("createBindGroup received an invalid variable descriptor count");
         return {};
     }
 
-    for (size_t i = 0u; i < desc.entries.size(); ++i) {
-        const RhiBindGroupEntry& entry = desc.entries[i];
-        const auto duplicate =
-            std::find_if(desc.entries.begin() + static_cast<std::ptrdiff_t>(i + 1u), desc.entries.end(),
-                         [&](const RhiBindGroupEntry& candidate) { return candidate.binding == entry.binding; });
+    std::set<uint64_t> writtenSlots;
+    for (const RhiBindGroupEntry& entry : desc.entries) {
         const RhiBindGroupLayoutEntry* layoutEntry = findLayoutEntry(*layout, entry.binding);
-        if (duplicate != desc.entries.end() || layoutEntry == nullptr) {
-            logRhiError("createBindGroup received a duplicate or undeclared binding");
+        const uint32_t descriptorCount =
+            layoutEntry != nullptr && rhiHasBindingFlag(layoutEntry->flags, RhiBindingFlag::VariableDescriptorCount)
+                ? desc.variableDescriptorCount
+                : (layoutEntry != nullptr ? layoutEntry->arrayCount : 0u);
+        const uint64_t slotKey = (static_cast<uint64_t>(entry.binding) << 32u) | entry.arrayElement;
+        if (layoutEntry == nullptr || entry.arrayElement >= descriptorCount || !writtenSlots.insert(slotKey).second) {
+            logRhiError("createBindGroup received a duplicate, out-of-range, or undeclared array element");
             return {};
         }
 
@@ -4952,6 +5053,21 @@ RhiBindGroupHandle GlRhiDevice::createBindGroup(const RhiBindGroupDesc& desc) {
             }
             break;
         }
+        }
+    }
+    for (const RhiBindGroupLayoutEntry& layoutEntry : layout->desc.entries) {
+        if (rhiHasBindingFlag(layoutEntry.flags, RhiBindingFlag::PartiallyBound)) {
+            continue;
+        }
+        const uint32_t descriptorCount = rhiHasBindingFlag(layoutEntry.flags, RhiBindingFlag::VariableDescriptorCount)
+                                             ? desc.variableDescriptorCount
+                                             : layoutEntry.arrayCount;
+        const size_t writtenCount =
+            static_cast<size_t>(std::count_if(desc.entries.begin(), desc.entries.end(),
+                                              [&](const auto& entry) { return entry.binding == layoutEntry.binding; }));
+        if (writtenCount != descriptorCount) {
+            logRhiError("createBindGroup requires every non-partial descriptor array element");
+            return {};
         }
     }
 

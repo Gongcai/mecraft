@@ -70,6 +70,7 @@ uint64_t rhiHashBindGroupLayoutDesc(const RhiBindGroupLayoutDesc& desc) {
         rhiHashEnum(hash, entry.type);
         rhiHashCombine(hash, entry.stages);
         rhiHashCombine(hash, entry.arrayCount);
+        rhiHashCombine(hash, entry.flags);
     }
     return hash;
 }

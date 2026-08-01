@@ -135,28 +135,37 @@ private:
     return true;
 }
 
-[[nodiscard]] uint32_t reflectedArrayCount(const spvc_compiler compiler, const spvc_reflected_resource& resource,
-                                           std::string& errorMessage) {
+struct ReflectedArrayInfo {
+    uint32_t count = 1u;
+    bool runtime = false;
+};
+
+[[nodiscard]] std::optional<ReflectedArrayInfo>
+reflectedArrayInfo(const spvc_compiler compiler, const spvc_reflected_resource& resource, std::string& errorMessage) {
     const spvc_type type = spvc_compiler_get_type_handle(compiler, resource.type_id);
     const unsigned dimensions = spvc_type_get_num_array_dimensions(type);
-    uint32_t count = 1u;
+    ReflectedArrayInfo info;
     for (unsigned i = 0u; i < dimensions; ++i) {
         if (spvc_type_array_dimension_is_literal(type, i) == SPVC_FALSE) {
-            errorMessage = "runtime-sized descriptor arrays are not supported";
-            return 0u;
+            errorMessage = "specialization-sized descriptor arrays are not supported";
+            return std::nullopt;
         }
         const uint32_t dimension = spvc_type_get_array_dimension(type, i);
         if (dimension == 0u) {
-            errorMessage = "descriptor array dimensions must be non-zero";
-            return 0u;
+            if (info.runtime || i + 1u != dimensions) {
+                errorMessage = "runtime descriptor arrays must use the final array dimension";
+                return std::nullopt;
+            }
+            info.runtime = true;
+            continue;
         }
-        if (count > std::numeric_limits<uint32_t>::max() / dimension) {
+        if (info.count > std::numeric_limits<uint32_t>::max() / dimension) {
             errorMessage = "descriptor array element count exceeds the RHI limit";
-            return 0u;
+            return std::nullopt;
         }
-        count *= dimension;
+        info.count *= dimension;
     }
-    return count;
+    return info;
 }
 
 [[nodiscard]] bool appendReflectedBindings(const spvc_compiler compiler, const spvc_resources resources,
@@ -172,15 +181,16 @@ private:
     }
     for (size_t i = 0u; i < resourceCount; ++i) {
         const spvc_reflected_resource& resource = resourceList[i];
-        const uint32_t arrayCount = reflectedArrayCount(compiler, resource, errorMessage);
-        if (arrayCount == 0u) {
+        const std::optional<ReflectedArrayInfo> arrayInfo = reflectedArrayInfo(compiler, resource, errorMessage);
+        if (!arrayInfo.has_value()) {
             return false;
         }
         RhiShaderBindingInfo binding;
         binding.set = spvc_compiler_get_decoration(compiler, resource.id, SpvDecorationDescriptorSet);
         binding.binding = spvc_compiler_get_decoration(compiler, resource.id, SpvDecorationBinding);
         binding.type = type;
-        binding.arrayCount = arrayCount;
+        binding.arrayCount = arrayInfo->count;
+        binding.runtimeArray = arrayInfo->runtime;
         binding.stages = rhiFlag(stage);
         binding.name = resource.name != nullptr ? resource.name : "";
         reflection.bindings.push_back(std::move(binding));

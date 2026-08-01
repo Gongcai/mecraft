@@ -129,6 +129,59 @@ void main() {
                            kSpirvOpDemoteToHelperInvocation);
 }
 
+[[nodiscard]] bool validateDescriptorArrayReflection() {
+    constexpr std::string_view kFixedSource = R"(#version 450 core
+layout(set = 2, binding = 5) uniform sampler2D uTextures[4];
+layout(location = 0) out vec4 outColor;
+
+void main() {
+    outColor = texture(uTextures[2], vec2(0.5));
+}
+)";
+    constexpr std::string_view kRuntimeSource = R"(#version 450 core
+#extension GL_EXT_nonuniform_qualifier : require
+layout(set = 2, binding = 5) uniform sampler2D uTextures[];
+layout(push_constant) uniform DescriptorArrayPushConstants {
+    uint textureIndex;
+} pc;
+layout(location = 0) out vec4 outColor;
+
+void main() {
+    outColor = texture(uTextures[nonuniformEXT(pc.textureIndex)], vec2(0.5));
+}
+)";
+
+    const auto validateSource = [](const std::string_view source, const bool runtimeArray) {
+        for (const renderer::rhi::RhiShaderBackend backend :
+             {renderer::rhi::RhiShaderBackend::Vulkan, renderer::rhi::RhiShaderBackend::OpenGl}) {
+            RhiShaderDesc desc;
+            desc.debugName = runtimeArray ? "runtime-descriptor-array-contract" : "fixed-descriptor-array-contract";
+            desc.stage = RhiShaderStage::Fragment;
+            desc.source = source.data();
+            desc.sourceSize = source.size();
+            std::string errorMessage;
+            const auto compiled = renderer::rhi::compileShaderToSpirv(desc, backend, errorMessage);
+            if (!compiled.has_value()) {
+                std::cerr << "Descriptor array contract failed to compile: " << errorMessage << '\n';
+                return false;
+            }
+            if (compiled->reflection.bindings.size() != 1u) {
+                std::cerr << "Descriptor array contract produced an invalid binding count\n";
+                return false;
+            }
+            const renderer::rhi::RhiShaderBindingInfo& binding = compiled->reflection.bindings.front();
+            if (binding.set != 2u || binding.binding != 5u || binding.type != RhiBindingType::CombinedTextureSampler ||
+                binding.arrayCount != (runtimeArray ? 1u : 4u) || binding.runtimeArray != runtimeArray) {
+                std::cerr << "Descriptor array reflection does not match the canonical contract\n";
+                return false;
+            }
+        }
+        return true;
+    };
+
+    return validateSource(kFixedSource, false) && validateSource(kRuntimeSource, true);
+}
+
 [[nodiscard]] bool validateGBufferWriterContracts() {
     const auto terrainSource = renderer::rhi::loadShaderSource("assets/shaders/chunk_gbuffer.frag");
     if (!terrainSource.has_value()) {
@@ -296,6 +349,7 @@ int main() {
         success = compileForBackend(shaderCase, *source, renderer::rhi::RhiShaderBackend::OpenGl, "OpenGL") && success;
     }
     success = validateFragmentDiscardContract() && success;
+    success = validateDescriptorArrayReflection() && success;
     success = validateGBufferWriterContracts() && success;
     return success ? 0 : 1;
 }

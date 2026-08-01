@@ -22,6 +22,9 @@ RhiCapabilities completeCapabilities() {
     capabilities.descriptorIndexing = true;
     capabilities.descriptorBindingPartiallyBound = true;
     capabilities.descriptorBindingVariableDescriptorCount = true;
+    capabilities.descriptorBindingUpdateUnusedWhilePending = true;
+    capabilities.descriptorBindingSampledImageUpdateAfterBind = true;
+    capabilities.descriptorBindingStorageBufferUpdateAfterBind = true;
     capabilities.runtimeDescriptorArray = true;
     capabilities.shaderSampledImageArrayNonUniformIndexing = true;
     capabilities.shaderStorageBufferArrayNonUniformIndexing = true;
