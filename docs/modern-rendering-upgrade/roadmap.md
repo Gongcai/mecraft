@@ -113,8 +113,14 @@ M1 与 M2 可并行开发，但公共 `GpuMaterial`、`GpuSceneGeometry` 与 Sta
    Demote 语义；Vulkan 设备选择、创建与能力表已强制启用
    `shaderDemoteToHelperInvocation`。Shader Compiler、OpenGL RHI Core、Vulkan RHI Smoke
    与双后端基础启动验证均通过，Vulkan 未发现 Validation/VUID 错误。）
-2. RHI Descriptor Array、Binding Flags、批量更新与生命周期。
-3. Global Bindless Set、Material/Geometry/Instance Buffers。
+2. RHI Descriptor Array、Binding Flags、批量更新与生命周期。（实现完成：公共 RHI 已支持
+   Descriptor Array、Binding Flags 与多 Bind Group 连续区间批量更新；OpenGL/Vulkan 均执行
+   整批原子校验，并锁定录制、Submission Pending、完成后的更新与资源生命周期规则。Vulkan
+   更新资源进入延迟释放，描述符句柄复用保持代际安全。）
+3. Global Bindless Set、Material/Geometry/Instance Buffers。（基础契约完成：已冻结强类型
+   Bindless Handle、Submission Sequence 感知的槽位代际分配器，以及 192 字节 Instance、
+   128 字节 Geometry 的 CPU/GLSL 固定布局与严格规范化规则；真实 Vulkan/OpenGL Shader
+   include 编译测试已覆盖该布局。Vulkan Global Bindless Set 与 Scene Buffer 上传链仍在实现中。）
 4. RHI AS Handle、Build Size、Build/Copy/Barrier 与 Device Address。
 5. Vulkan AS Feature/Extension 加载、函数指针与延迟销毁。
 6. 体素 Render Chunk/SubChunk BLAS Build/Compaction/Revision。

@@ -224,10 +224,11 @@ void main() {
 } // namespace
 
 int main() {
-    constexpr std::array<ShaderCase, 97> kShaderCases{
+    constexpr std::array<ShaderCase, 98> kShaderCases{
         {{"tests/shaders/rhi_screen_coordinates_test.frag", RhiShaderStage::Fragment},
          {"tests/shaders/material_brdf_shared_test.frag", RhiShaderStage::Fragment},
          {"tests/shaders/reflection_probe_contract_test.frag", RhiShaderStage::Fragment},
+         {"tests/shaders/gpu_scene_contract_test.comp", RhiShaderStage::Compute},
          {"assets/shaders/fullscreen_triangle_rhi.vert", RhiShaderStage::Vertex},
          {"assets/shaders/deferred_lighting.vert", RhiShaderStage::Vertex},
          {"assets/shaders/skybox_blur_rhi.vert", RhiShaderStage::Vertex},

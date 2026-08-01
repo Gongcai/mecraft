@@ -357,6 +357,7 @@ set(SRC_RENDERER
         src/renderer/contracts/GpuLightContract.cpp
         src/renderer/contracts/LocalShadowContract.cpp
         src/renderer/contracts/GpuMaterialContract.cpp
+        src/renderer/contracts/GpuSceneContract.cpp
         src/renderer/contracts/ReflectionProbeContract.cpp
         src/renderer/contracts/VoxelReflectionProbeSourceContract.cpp
         src/renderer/contracts/RenderFeatureContract.cpp
@@ -380,6 +381,7 @@ set(SRC_RENDERER
         src/renderer/core/RenderScene.cpp
         src/renderer/core/DeferredPipeline.cpp
         src/renderer/core/ForwardPipeline.cpp
+        src/renderer/core/BindlessDescriptorSlotAllocator.cpp
 
         # OpenGL helpers
 
@@ -1049,6 +1051,9 @@ if(MECRAFT_BUILD_TESTS)
             tests/voxel_light_registry_test.cpp)
     add_mecraft_test(gpu_material_contract_test tests/gpu_material_contract_test.cpp)
     target_compile_definitions(gpu_material_contract_test PRIVATE
+            MECRAFT_TEST_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
+    add_mecraft_test(gpu_scene_contract_test tests/gpu_scene_contract_test.cpp)
+    target_compile_definitions(gpu_scene_contract_test PRIVATE
             MECRAFT_TEST_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
     add_mecraft_test(render_feature_contract_test tests/render_feature_contract_test.cpp)
     add_mecraft_test(gpu_timing_history_test tests/gpu_timing_history_test.cpp)
