@@ -37,7 +37,7 @@ struct ExpectedCapture {
     const char* sha256;
 };
 
-constexpr std::array<ExpectedCapture, 10u> kExpectedCaptures{
+constexpr std::array<ExpectedCapture, 16u> kExpectedCaptures{
     {{"voxel", "vulkan", "../scenes/m0_voxel_baseline.json", "m0_voxel_baseline",
       app::validation::kValidationSceneContractVersion1, "ecb85fb88ef6aeef", "93b8b518406d50f9",
       "m0_voxel_render_settings", "511c4e7a0e2e2de9", "m0_voxel_baseline_vulkan_1280x720.png", 1511309u,
@@ -77,7 +77,31 @@ constexpr std::array<ExpectedCapture, 10u> kExpectedCaptures{
      {"model", "opengl", "../scenes/m07_probe_interior.json", "m07_probe_interior",
       app::validation::kValidationSceneContractVersion, "e7cfecd188549085", "c17f7838a2a58df0",
       "m0_model_render_settings", "9a8940b4590c9585", "m07_probe_interior_opengl_1280x720.png", 827902u,
-      "c7608d3044394b57", "c48ec38200458ccccd3ac1eba27240e3ab4d93941405dc144858ba6ecae4c97e"}}};
+      "c7608d3044394b57", "c48ec38200458ccccd3ac1eba27240e3ab4d93941405dc144858ba6ecae4c97e"},
+     {"voxel", "vulkan", "../scenes/v01_window_room.json", "v01_window_room",
+      app::validation::kValidationSceneContractVersion, "4f8717cfe9b48270", "926b9e7d3f02af9b",
+      "m0_voxel_render_settings", "511c4e7a0e2e2de9", "v01_window_room_vulkan_1280x720.png", 1195689u,
+      "1b1adfdece4b0eea", "c831311d0871c8b965abb5f4926711dc6425c083cece6cde4ac48ee52033bbd1"},
+     {"voxel", "opengl", "../scenes/v01_window_room.json", "v01_window_room",
+      app::validation::kValidationSceneContractVersion, "4f8717cfe9b48270", "926b9e7d3f02af9b",
+      "m0_voxel_render_settings", "511c4e7a0e2e2de9", "v01_window_room_opengl_1280x720.png", 1276106u,
+      "94f5235554296eb6", "49125a03106f72fa4030527eedb7b73c496127f2b06ed6f244929bee17a7ea91"},
+     {"model", "vulkan", "../scenes/m01_material_grid.json", "m01_material_grid",
+      app::validation::kValidationSceneContractVersion, "2eb15aeceefd92a4", "39d7d82f9711135e",
+      "m0_model_render_settings", "9a8940b4590c9585", "m01_material_grid_vulkan_1280x720.png", 1234187u,
+      "01c08d699686d08e", "e3d5df1041d96cb6b1072e7d34b57b54647da243157441c2eac31caddfed25d1"},
+     {"model", "opengl", "../scenes/m01_material_grid.json", "m01_material_grid",
+      app::validation::kValidationSceneContractVersion, "2eb15aeceefd92a4", "39d7d82f9711135e",
+      "m0_model_render_settings", "9a8940b4590c9585", "m01_material_grid_opengl_1280x720.png", 1251175u,
+      "e169ca32efd110d5", "15212af0c0a59bbad3c2e6c8aa0f4d20e028ccc3cf2271c6332a70a86c0635a6"},
+     {"model", "vulkan", "../scenes/m02_damaged_helmet.json", "m02_damaged_helmet",
+      app::validation::kValidationSceneContractVersion, "a930eac94f635702", "1c0a7939ab2fcdf6",
+      "m0_model_render_settings", "9a8940b4590c9585", "m02_damaged_helmet_vulkan_1280x720.png", 1455565u,
+      "a28244b3a09e2e5f", "5412c95876e47e599bbe0c6304a1c1b46f9a83a7facad0ecea30492c562a8182"},
+     {"model", "opengl", "../scenes/m02_damaged_helmet.json", "m02_damaged_helmet",
+      app::validation::kValidationSceneContractVersion, "a930eac94f635702", "1c0a7939ab2fcdf6",
+      "m0_model_render_settings", "9a8940b4590c9585", "m02_damaged_helmet_opengl_1280x720.png", 1490078u,
+      "49bd90e1de0eeeda", "5fa9609c73ea05c3205267ed9d63cd38b81064df874ed5d3fbaec20309da9e41"}}};
 
 bool requireTrue(const bool condition, const std::string_view message) {
     if (!condition) {
@@ -316,7 +340,7 @@ int main() {
 
     const Json& captures = *manifest.find("captures");
     if (!requireTrue(captures.is_array() && captures.size() == kExpectedCaptures.size(),
-                     "manifest must contain exactly ten versioned captures")) {
+                     "manifest must contain exactly sixteen versioned captures")) {
         return 1;
     }
     std::array<bool, kExpectedCaptures.size()> seen{};

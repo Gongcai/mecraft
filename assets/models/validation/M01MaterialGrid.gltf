@@ -1,0 +1,96 @@
+{
+  "asset": {
+    "version": "2.0",
+    "generator": "mecraft M01 material grid fixture"
+  },
+  "extensionsUsed": ["KHR_materials_ior", "KHR_materials_clearcoat"],
+  "extensionsRequired": ["KHR_materials_ior", "KHR_materials_clearcoat"],
+  "scene": 0,
+  "scenes": [
+    {
+      "nodes": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
+    }
+  ],
+  "nodes": [
+    {"name": "DielectricR04", "mesh": 0, "translation": [-4.0, 3.0, 0.0]},
+    {"name": "DielectricR20", "mesh": 1, "translation": [-2.0, 3.0, 0.0]},
+    {"name": "DielectricR40", "mesh": 2, "translation": [0.0, 3.0, 0.0]},
+    {"name": "DielectricR65", "mesh": 3, "translation": [2.0, 3.0, 0.0]},
+    {"name": "DielectricR90", "mesh": 4, "translation": [4.0, 3.0, 0.0]},
+    {"name": "MetalR04", "mesh": 5, "translation": [-4.0, 1.0, 0.0]},
+    {"name": "MetalR20", "mesh": 6, "translation": [-2.0, 1.0, 0.0]},
+    {"name": "MetalR40", "mesh": 7, "translation": [0.0, 1.0, 0.0]},
+    {"name": "MetalR65", "mesh": 8, "translation": [2.0, 1.0, 0.0]},
+    {"name": "MetalR90", "mesh": 9, "translation": [4.0, 1.0, 0.0]},
+    {"name": "Ior100", "mesh": 10, "translation": [-4.0, -1.0, 0.0]},
+    {"name": "Ior133", "mesh": 11, "translation": [-2.0, -1.0, 0.0]},
+    {"name": "Ior150", "mesh": 12, "translation": [0.0, -1.0, 0.0]},
+    {"name": "Ior180", "mesh": 13, "translation": [2.0, -1.0, 0.0]},
+    {"name": "Ior200", "mesh": 14, "translation": [4.0, -1.0, 0.0]},
+    {"name": "Clearcoat000", "mesh": 15, "translation": [-4.0, -3.0, 0.0]},
+    {"name": "Clearcoat025", "mesh": 16, "translation": [-2.0, -3.0, 0.0]},
+    {"name": "Clearcoat050", "mesh": 17, "translation": [0.0, -3.0, 0.0]},
+    {"name": "Clearcoat075", "mesh": 18, "translation": [2.0, -3.0, 0.0]},
+    {"name": "Clearcoat100", "mesh": 19, "translation": [4.0, -3.0, 0.0]}
+  ],
+  "materials": [
+    {"name": "Dielectric_R04", "pbrMetallicRoughness": {"baseColorFactor": [0.72, 0.08, 0.05, 1.0], "metallicFactor": 0.0, "roughnessFactor": 0.04}},
+    {"name": "Dielectric_R20", "pbrMetallicRoughness": {"baseColorFactor": [0.72, 0.08, 0.05, 1.0], "metallicFactor": 0.0, "roughnessFactor": 0.2}},
+    {"name": "Dielectric_R40", "pbrMetallicRoughness": {"baseColorFactor": [0.72, 0.08, 0.05, 1.0], "metallicFactor": 0.0, "roughnessFactor": 0.4}},
+    {"name": "Dielectric_R65", "pbrMetallicRoughness": {"baseColorFactor": [0.72, 0.08, 0.05, 1.0], "metallicFactor": 0.0, "roughnessFactor": 0.65}},
+    {"name": "Dielectric_R90", "pbrMetallicRoughness": {"baseColorFactor": [0.72, 0.08, 0.05, 1.0], "metallicFactor": 0.0, "roughnessFactor": 0.9}},
+    {"name": "Metal_R04", "pbrMetallicRoughness": {"baseColorFactor": [0.95, 0.62, 0.16, 1.0], "metallicFactor": 1.0, "roughnessFactor": 0.04}},
+    {"name": "Metal_R20", "pbrMetallicRoughness": {"baseColorFactor": [0.95, 0.62, 0.16, 1.0], "metallicFactor": 1.0, "roughnessFactor": 0.2}},
+    {"name": "Metal_R40", "pbrMetallicRoughness": {"baseColorFactor": [0.95, 0.62, 0.16, 1.0], "metallicFactor": 1.0, "roughnessFactor": 0.4}},
+    {"name": "Metal_R65", "pbrMetallicRoughness": {"baseColorFactor": [0.95, 0.62, 0.16, 1.0], "metallicFactor": 1.0, "roughnessFactor": 0.65}},
+    {"name": "Metal_R90", "pbrMetallicRoughness": {"baseColorFactor": [0.95, 0.62, 0.16, 1.0], "metallicFactor": 1.0, "roughnessFactor": 0.9}},
+    {"name": "Ior_100", "pbrMetallicRoughness": {"baseColorFactor": [0.08, 0.32, 0.8, 1.0], "metallicFactor": 0.0, "roughnessFactor": 0.18}, "extensions": {"KHR_materials_ior": {"ior": 1.0}}},
+    {"name": "Ior_133", "pbrMetallicRoughness": {"baseColorFactor": [0.08, 0.32, 0.8, 1.0], "metallicFactor": 0.0, "roughnessFactor": 0.18}, "extensions": {"KHR_materials_ior": {"ior": 1.33}}},
+    {"name": "Ior_150", "pbrMetallicRoughness": {"baseColorFactor": [0.08, 0.32, 0.8, 1.0], "metallicFactor": 0.0, "roughnessFactor": 0.18}, "extensions": {"KHR_materials_ior": {"ior": 1.5}}},
+    {"name": "Ior_180", "pbrMetallicRoughness": {"baseColorFactor": [0.08, 0.32, 0.8, 1.0], "metallicFactor": 0.0, "roughnessFactor": 0.18}, "extensions": {"KHR_materials_ior": {"ior": 1.8}}},
+    {"name": "Ior_200", "pbrMetallicRoughness": {"baseColorFactor": [0.08, 0.32, 0.8, 1.0], "metallicFactor": 0.0, "roughnessFactor": 0.18}, "extensions": {"KHR_materials_ior": {"ior": 2.0}}},
+    {"name": "Clearcoat_000", "pbrMetallicRoughness": {"baseColorFactor": [0.06, 0.55, 0.18, 1.0], "metallicFactor": 0.0, "roughnessFactor": 0.48}, "extensions": {"KHR_materials_clearcoat": {"clearcoatFactor": 0.0, "clearcoatRoughnessFactor": 0.08}}},
+    {"name": "Clearcoat_025", "pbrMetallicRoughness": {"baseColorFactor": [0.06, 0.55, 0.18, 1.0], "metallicFactor": 0.0, "roughnessFactor": 0.48}, "extensions": {"KHR_materials_clearcoat": {"clearcoatFactor": 0.25, "clearcoatRoughnessFactor": 0.08}}},
+    {"name": "Clearcoat_050", "pbrMetallicRoughness": {"baseColorFactor": [0.06, 0.55, 0.18, 1.0], "metallicFactor": 0.0, "roughnessFactor": 0.48}, "extensions": {"KHR_materials_clearcoat": {"clearcoatFactor": 0.5, "clearcoatRoughnessFactor": 0.08}}},
+    {"name": "Clearcoat_075", "pbrMetallicRoughness": {"baseColorFactor": [0.06, 0.55, 0.18, 1.0], "metallicFactor": 0.0, "roughnessFactor": 0.48}, "extensions": {"KHR_materials_clearcoat": {"clearcoatFactor": 0.75, "clearcoatRoughnessFactor": 0.08}}},
+    {"name": "Clearcoat_100", "pbrMetallicRoughness": {"baseColorFactor": [0.06, 0.55, 0.18, 1.0], "metallicFactor": 0.0, "roughnessFactor": 0.48}, "extensions": {"KHR_materials_clearcoat": {"clearcoatFactor": 1.0, "clearcoatRoughnessFactor": 0.08}}}
+  ],
+  "meshes": [
+    {"name": "DielectricR04Sphere", "primitives": [{"attributes": {"POSITION": 0, "NORMAL": 1}, "indices": 2, "material": 0}]},
+    {"name": "DielectricR20Sphere", "primitives": [{"attributes": {"POSITION": 0, "NORMAL": 1}, "indices": 2, "material": 1}]},
+    {"name": "DielectricR40Sphere", "primitives": [{"attributes": {"POSITION": 0, "NORMAL": 1}, "indices": 2, "material": 2}]},
+    {"name": "DielectricR65Sphere", "primitives": [{"attributes": {"POSITION": 0, "NORMAL": 1}, "indices": 2, "material": 3}]},
+    {"name": "DielectricR90Sphere", "primitives": [{"attributes": {"POSITION": 0, "NORMAL": 1}, "indices": 2, "material": 4}]},
+    {"name": "MetalR04Sphere", "primitives": [{"attributes": {"POSITION": 0, "NORMAL": 1}, "indices": 2, "material": 5}]},
+    {"name": "MetalR20Sphere", "primitives": [{"attributes": {"POSITION": 0, "NORMAL": 1}, "indices": 2, "material": 6}]},
+    {"name": "MetalR40Sphere", "primitives": [{"attributes": {"POSITION": 0, "NORMAL": 1}, "indices": 2, "material": 7}]},
+    {"name": "MetalR65Sphere", "primitives": [{"attributes": {"POSITION": 0, "NORMAL": 1}, "indices": 2, "material": 8}]},
+    {"name": "MetalR90Sphere", "primitives": [{"attributes": {"POSITION": 0, "NORMAL": 1}, "indices": 2, "material": 9}]},
+    {"name": "Ior100Sphere", "primitives": [{"attributes": {"POSITION": 0, "NORMAL": 1}, "indices": 2, "material": 10}]},
+    {"name": "Ior133Sphere", "primitives": [{"attributes": {"POSITION": 0, "NORMAL": 1}, "indices": 2, "material": 11}]},
+    {"name": "Ior150Sphere", "primitives": [{"attributes": {"POSITION": 0, "NORMAL": 1}, "indices": 2, "material": 12}]},
+    {"name": "Ior180Sphere", "primitives": [{"attributes": {"POSITION": 0, "NORMAL": 1}, "indices": 2, "material": 13}]},
+    {"name": "Ior200Sphere", "primitives": [{"attributes": {"POSITION": 0, "NORMAL": 1}, "indices": 2, "material": 14}]},
+    {"name": "Clearcoat000Sphere", "primitives": [{"attributes": {"POSITION": 0, "NORMAL": 1}, "indices": 2, "material": 15}]},
+    {"name": "Clearcoat025Sphere", "primitives": [{"attributes": {"POSITION": 0, "NORMAL": 1}, "indices": 2, "material": 16}]},
+    {"name": "Clearcoat050Sphere", "primitives": [{"attributes": {"POSITION": 0, "NORMAL": 1}, "indices": 2, "material": 17}]},
+    {"name": "Clearcoat075Sphere", "primitives": [{"attributes": {"POSITION": 0, "NORMAL": 1}, "indices": 2, "material": 18}]},
+    {"name": "Clearcoat100Sphere", "primitives": [{"attributes": {"POSITION": 0, "NORMAL": 1}, "indices": 2, "material": 19}]}
+  ],
+  "accessors": [
+    {"bufferView": 0, "componentType": 5126, "count": 12, "type": "VEC3", "min": [-0.4253254, -0.4253254, -0.4253254], "max": [0.4253254, 0.4253254, 0.4253254]},
+    {"bufferView": 1, "componentType": 5126, "count": 12, "type": "VEC3"},
+    {"bufferView": 2, "componentType": 5123, "count": 60, "type": "SCALAR"}
+  ],
+  "bufferViews": [
+    {"buffer": 0, "byteOffset": 0, "byteLength": 144, "target": 34962},
+    {"buffer": 0, "byteOffset": 144, "byteLength": 144, "target": 34962},
+    {"buffer": 0, "byteOffset": 288, "byteLength": 120, "target": 34963}
+  ],
+  "buffers": [
+    {
+      "byteLength": 408,
+      "uri": "data:application/octet-stream;base64,UJaGvkDE2T4AAAAAUJaGPkDE2T4AAAAAUJaGvkDE2b4AAAAAUJaGPkDE2b4AAAAAAAAAAFCWhr5AxNk+AAAAAFCWhj5AxNk+AAAAAFCWhr5AxNm+AAAAAFCWhj5AxNm+QMTZPgAAAABQloa+QMTZPgAAAABQloY+QMTZvgAAAABQloa+QMTZvgAAAABQloY+UJYGv0DEWT8AAAAAUJYGP0DEWT8AAAAAUJYGv0DEWb8AAAAAUJYGP0DEWb8AAAAAAAAAAFCWBr9AxFk/AAAAAFCWBj9AxFk/AAAAAFCWBr9AxFm/AAAAAFCWBj9AxFm/QMRZPwAAAABQlga/QMRZPwAAAABQlgY/QMRZvwAAAABQlga/QMRZvwAAAABQlgY/AAALAAUAAAAFAAEAAAABAAcAAAAHAAoAAAAKAAsAAQAFAAkABQALAAQACwAKAAIACgAHAAYABwABAAgAAwAJAAQAAwAEAAIAAwACAAYAAwAGAAgAAwAIAAkABAAJAAUAAgAEAAsABgACAAoACAAGAAcACQAIAAEA"
+    }
+  ]
+}

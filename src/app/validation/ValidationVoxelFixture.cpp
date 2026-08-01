@@ -23,15 +23,17 @@ constexpr std::string_view kSprucePlanksBlockId = "minecraft:spruce_planks";
 constexpr std::string_view kGlassBlockId = "minecraft:glass";
 constexpr std::string_view kTorchBlockId = "minecraft:torch";
 constexpr std::string_view kGlowstoneBlockId = "minecraft:glowstone";
+constexpr std::string_view kMagmaBlockId = "minecraft:magma_block";
 constexpr std::string_view kIronBlockId = "minecraft:iron_block";
 constexpr std::string_view kGoldBlockId = "minecraft:gold_block";
+constexpr std::string_view kDiamondBlockId = "minecraft:diamond_block";
 
 struct FixtureEdit final {
     glm::ivec3 position{0};
     std::string_view blockId;
 };
 
-enum class FixtureKind : uint8_t { None, CaveTurn, LocalLightVillage };
+enum class FixtureKind : uint8_t { None, WindowRoom, CaveTurn, LocalLightVillage };
 
 struct FixtureBlockStates final {
     BlockStateId air = NULL_BLOCK_STATE;
@@ -41,8 +43,10 @@ struct FixtureBlockStates final {
     BlockStateId glass = NULL_BLOCK_STATE;
     BlockStateId torch = NULL_BLOCK_STATE;
     BlockStateId glowstone = NULL_BLOCK_STATE;
+    BlockStateId magma = NULL_BLOCK_STATE;
     BlockStateId iron = NULL_BLOCK_STATE;
     BlockStateId gold = NULL_BLOCK_STATE;
+    BlockStateId diamond = NULL_BLOCK_STATE;
 };
 
 [[nodiscard]] bool fixtureKind(const ValidationVoxelFixtureIdentity& fixture, FixtureKind& kind) {
@@ -51,6 +55,10 @@ struct FixtureBlockStates final {
     }
     if (fixture.id == kValidationVoxelFixtureNoneId) {
         kind = FixtureKind::None;
+        return true;
+    }
+    if (fixture.id == kValidationVoxelFixtureWindowRoomId) {
+        kind = FixtureKind::WindowRoom;
         return true;
     }
     if (fixture.id == kValidationVoxelFixtureCaveTurnId) {
@@ -62,6 +70,37 @@ struct FixtureBlockStates final {
         return true;
     }
     return false;
+}
+
+[[nodiscard]] std::string_view windowRoomBlock(const int x, const int y, const int z) {
+    if (y == 78 || y == 87) {
+        return kStoneBlockId;
+    }
+    const bool wall = x == -8 || x == 8 || z == -8 || z == 8;
+    if (wall && y >= 79 && y <= 86) {
+        const bool window = z == 8 && x >= -3 && x <= 3 && y >= 81 && y <= 84;
+        return window ? kGlassBlockId : kStoneBlockId;
+    }
+    if (z == 2 && y >= 79 && y <= 81) {
+        if (x == -4) {
+            return kIronBlockId;
+        }
+        if (x == 0) {
+            return kGoldBlockId;
+        }
+        if (x == 4) {
+            return kDiamondBlockId;
+        }
+    }
+    if (y == 80 && z == -5) {
+        if (x == -2) {
+            return kGlowstoneBlockId;
+        }
+        if (x == 2) {
+            return kMagmaBlockId;
+        }
+    }
+    return kAirBlockId;
 }
 
 [[nodiscard]] std::string_view caveTurnBlock(const int x, const int y, const int z) {
@@ -144,6 +183,16 @@ struct FixtureBlockStates final {
     std::vector<FixtureEdit> edits;
     switch (kind) {
     case FixtureKind::None: return edits;
+    case FixtureKind::WindowRoom:
+        edits.reserve(17u * 10u * 17u);
+        for (int y = 78; y <= 87; ++y) {
+            for (int z = -8; z <= 8; ++z) {
+                for (int x = -8; x <= 8; ++x) {
+                    edits.push_back({glm::ivec3(x, y, z), windowRoomBlock(x, y, z)});
+                }
+            }
+        }
+        return edits;
     case FixtureKind::CaveTurn:
         edits.reserve(21u * 9u * 19u);
         for (int y = 78; y <= 86; ++y) {
@@ -178,7 +227,7 @@ struct FixtureBlockStates final {
 }
 
 [[nodiscard]] ValidationVoxelFixtureResult resolveFixtureBlockStates(FixtureBlockStates& states) {
-    const std::array<std::pair<std::string_view, BlockStateId*>, 9u> required{{
+    const std::array<std::pair<std::string_view, BlockStateId*>, 11u> required{{
         {kAirBlockId, &states.air},
         {kStoneBlockId, &states.stone},
         {kOakPlanksBlockId, &states.oakPlanks},
@@ -186,8 +235,10 @@ struct FixtureBlockStates final {
         {kGlassBlockId, &states.glass},
         {kTorchBlockId, &states.torch},
         {kGlowstoneBlockId, &states.glowstone},
+        {kMagmaBlockId, &states.magma},
         {kIronBlockId, &states.iron},
         {kGoldBlockId, &states.gold},
+        {kDiamondBlockId, &states.diamond},
     }};
     for (const auto& entry : required) {
         if (!resolveBlockState(entry.first, *entry.second)) {
@@ -212,10 +263,14 @@ struct FixtureBlockStates final {
         return states.torch;
     if (blockId == kGlowstoneBlockId)
         return states.glowstone;
+    if (blockId == kMagmaBlockId)
+        return states.magma;
     if (blockId == kIronBlockId)
         return states.iron;
     if (blockId == kGoldBlockId)
         return states.gold;
+    if (blockId == kDiamondBlockId)
+        return states.diamond;
     std::abort();
 }
 

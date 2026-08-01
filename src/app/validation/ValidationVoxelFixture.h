@@ -13,6 +13,7 @@ class World;
 namespace app::validation {
 
 inline constexpr const char* kValidationVoxelFixtureNoneId = "mecraft.none";
+inline constexpr const char* kValidationVoxelFixtureWindowRoomId = "mecraft.window_room";
 inline constexpr const char* kValidationVoxelFixtureCaveTurnId = "mecraft.cave_turn";
 inline constexpr const char* kValidationVoxelFixtureLocalLightVillageId = "mecraft.local_light_village";
 inline constexpr uint32_t kValidationVoxelFixtureVersion = 1u;

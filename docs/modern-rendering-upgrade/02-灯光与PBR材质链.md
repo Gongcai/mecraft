@@ -239,8 +239,10 @@ Ray Query Shadow 复用 TLAS 和 Cutout Candidate 判定。首轮仅对设置中
 DFG 查询替换旧的随机粗糙法线天空近似，并提供独立 Mip/DFG 调试视图。运行时保留两代
 Radiance/Prefilter 资源：首帧完整引导，后续每 48 帧请求一个天空修订，新代先在单帧完成
 6 个 Radiance Face 快照，再逐帧生成一个 Prefilter Face/Mip；48 个工作项全部成功提交后
-才原子切换消费者，构建失败不会推进修订或暴露半成品。第 7 项剩余验收仅为
-V01/M01/M02 版本化参考图。
+才原子切换消费者，构建失败不会推进修订或暴露半成品。Sky IBL 的版本化验收已经完成：
+V01 锁定单窗体素房间、三列金属材质与发光方块，M01 锁定 4×5
+Metallic/Roughness/IOR/Clearcoat 材质球阵列，M02 锁定 Damaged Helmet 的标准材质与法线细节；
+三个场景均生成 OpenGL/Vulkan 正式参考图。
 
 ### 7.2 Reflection Probe Grid
 
@@ -306,12 +308,14 @@ Transmission Primitive 均沿用 glTF PBR 材质采样、主环境直接光、Em
 快照。本地第一人称玩家被明确排除，避免观察者模型进入环境探针。粒子不纳入本轮 Probe
 Capture 版本化验收，保留为独立后续工作项。
 
-V02、V07、M07 已建立场景契约 v2：V02/V07 锁定体素 Fixture、世界与 Camera Path 身份，
-M07 锁定 glTF 资产、Camera Path 及间距 0.8 米、边界外扩 0.0 米的规则 Probe Grid。三个场景
-均完成 OpenGL/Vulkan 1280×720、300 帧预热、3 帧采样的正式参考图，并以字节数、FNV-1a 64
-和 SHA-256 写入统一清单；Vulkan 捕获未发现 Validation/VUID 错误。参考图覆盖洞穴转角、木屋
-局部光与透明门洞，以及多房间局部灯响应和 Box Projection。动态探针按确定的更新队列逐
-Face/Mip 构建，Dashboard 展示队列长度与资源代际。
+V01、V02、V07、M01、M02、M07 已建立场景契约 v2：三个体素场景锁定 Fixture、世界与
+Camera Path 身份；M01 锁定材质球 glTF 资产及 0.8 米间距、0.1 米边界外扩的 Probe Grid，
+M02 锁定 Damaged Helmet 资产及 1.2 米间距、0.0 米边界外扩的 Probe Grid，M07 锁定多房间
+资产及 0.8 米间距、0.0 米边界外扩的 Probe Grid。六个场景均完成 OpenGL/Vulkan 1280×720、
+300 帧预热、3 帧采样的正式参考图，并以字节数、FNV-1a 64 和 SHA-256 写入 16 项统一清单；
+Vulkan 捕获未发现 Validation/VUID 错误。参考图覆盖 Sky IBL 材质响应、洞穴转角、木屋局部光
+与透明门洞，以及多房间局部灯响应和 Box Projection。动态探针按确定的更新队列逐 Face/Mip
+构建，Dashboard 展示队列长度与资源代际。
 
 ## 8. 反射能量组合
 

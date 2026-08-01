@@ -1,0 +1,29 @@
+{
+  "kind": "mecraft.validation_scene",
+  "version": 2,
+  "id": "m02_damaged_helmet",
+  "scene": "model",
+  "content_hash": "a930eac94f635702",
+  "camera_path": {
+    "source": "../camera_paths/m02_damaged_helmet.json",
+    "id": "m02_damaged_helmet",
+    "content_hash": "1c0a7939ab2fcdf6"
+  },
+  "render_settings": {
+    "id": "m0_model_render_settings",
+    "version": 1,
+    "content_hash": "9a8940b4590c9585"
+  },
+  "environment": {
+    "time_of_day_seconds": 900.0,
+    "weather": "clear"
+  },
+  "model_asset": {
+    "source": "../../models/showcase/DamagedHelmet.glb",
+    "content_hash": "f67fb46e0033d3dd"
+  },
+  "reflection_probe_grid": {
+    "spacing_meters": 1.2,
+    "bounds_padding_meters": 0.0
+  }
+}

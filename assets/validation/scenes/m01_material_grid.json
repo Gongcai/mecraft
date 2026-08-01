@@ -1,0 +1,29 @@
+{
+  "kind": "mecraft.validation_scene",
+  "version": 2,
+  "id": "m01_material_grid",
+  "scene": "model",
+  "content_hash": "2eb15aeceefd92a4",
+  "camera_path": {
+    "source": "../camera_paths/m01_material_grid.json",
+    "id": "m01_material_grid",
+    "content_hash": "39d7d82f9711135e"
+  },
+  "render_settings": {
+    "id": "m0_model_render_settings",
+    "version": 1,
+    "content_hash": "9a8940b4590c9585"
+  },
+  "environment": {
+    "time_of_day_seconds": 900.0,
+    "weather": "clear"
+  },
+  "model_asset": {
+    "source": "../../models/validation/M01MaterialGrid.gltf",
+    "content_hash": "e2dbc94ec6365711"
+  },
+  "reflection_probe_grid": {
+    "spacing_meters": 0.8,
+    "bounds_padding_meters": 0.1
+  }
+}

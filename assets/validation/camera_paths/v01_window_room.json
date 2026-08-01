@@ -1,0 +1,37 @@
+{
+  "kind": "mecraft.camera_path",
+  "version": 1,
+  "id": "v01_window_room",
+  "coordinate_system": "right_handed_y_up",
+  "interpolation": "linear_position_slerp_orientation",
+  "keyframes": [
+    {
+      "time_seconds": 0.0,
+      "position": [0.0, 82.0, -11.0],
+      "look_at": [0.0, 82.0, -20.0],
+      "up": [0.0, 1.0, 0.0],
+      "vertical_fov_degrees": 66.0
+    },
+    {
+      "time_seconds": 2.0,
+      "position": [0.0, 81.8, -3.5],
+      "look_at": [0.0, 82.0, 6.0],
+      "up": [0.0, 1.0, 0.0],
+      "vertical_fov_degrees": 62.0
+    },
+    {
+      "time_seconds": 4.0,
+      "position": [5.0, 82.0, -4.5],
+      "look_at": [0.0, 82.0, 3.0],
+      "up": [0.0, 1.0, 0.0],
+      "vertical_fov_degrees": 64.0
+    },
+    {
+      "time_seconds": 6.0,
+      "position": [0.0, 82.2, -6.0],
+      "look_at": [0.0, 81.8, 5.5],
+      "up": [0.0, 1.0, 0.0],
+      "vertical_fov_degrees": 60.0
+    }
+  ]
+}

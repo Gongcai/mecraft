@@ -1,0 +1,37 @@
+{
+  "kind": "mecraft.camera_path",
+  "version": 1,
+  "id": "m02_damaged_helmet",
+  "coordinate_system": "right_handed_y_up",
+  "interpolation": "linear_position_slerp_orientation",
+  "keyframes": [
+    {
+      "time_seconds": 0.0,
+      "position": [-2.6, 0.8, 2.4],
+      "look_at": [0.0, 0.35, 0.0],
+      "up": [0.0, 1.0, 0.0],
+      "vertical_fov_degrees": 48.0
+    },
+    {
+      "time_seconds": 2.0,
+      "position": [0.0, 0.9, 3.1],
+      "look_at": [0.0, 0.35, 0.0],
+      "up": [0.0, 1.0, 0.0],
+      "vertical_fov_degrees": 46.0
+    },
+    {
+      "time_seconds": 4.0,
+      "position": [2.4, 0.75, 2.4],
+      "look_at": [0.0, 0.35, 0.0],
+      "up": [0.0, 1.0, 0.0],
+      "vertical_fov_degrees": 48.0
+    },
+    {
+      "time_seconds": 6.0,
+      "position": [1.8, 0.9, 2.8],
+      "look_at": [0.0, 0.35, 0.0],
+      "up": [0.0, 1.0, 0.0],
+      "vertical_fov_degrees": 46.0
+    }
+  ]
+}

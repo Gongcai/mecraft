@@ -43,25 +43,38 @@ int main() {
     const std::filesystem::path sceneRoot = sourceRoot / "assets/validation/scenes";
     const std::filesystem::path voxelPath = sceneRoot / "m0_voxel_baseline.json";
     const std::filesystem::path modelPath = sceneRoot / "m0_model_damaged_helmet.json";
+    const std::filesystem::path windowRoomPath = sceneRoot / "v01_window_room.json";
     const std::filesystem::path cavePath = sceneRoot / "v02_cave_turn.json";
     const std::filesystem::path villagePath = sceneRoot / "v07_local_light_village.json";
+    const std::filesystem::path materialGridPath = sceneRoot / "m01_material_grid.json";
+    const std::filesystem::path damagedHelmetPath = sceneRoot / "m02_damaged_helmet.json";
     const std::filesystem::path probeInteriorPath = sceneRoot / "m07_probe_interior.json";
     const app::validation::ValidationSceneContractLoadResult voxel =
         app::validation::loadValidationSceneContract(voxelPath);
     const app::validation::ValidationSceneContractLoadResult model =
         app::validation::loadValidationSceneContract(modelPath);
+    const app::validation::ValidationSceneContractLoadResult windowRoom =
+        app::validation::loadValidationSceneContract(windowRoomPath);
     const app::validation::ValidationSceneContractLoadResult cave =
         app::validation::loadValidationSceneContract(cavePath);
     const app::validation::ValidationSceneContractLoadResult village =
         app::validation::loadValidationSceneContract(villagePath);
+    const app::validation::ValidationSceneContractLoadResult materialGrid =
+        app::validation::loadValidationSceneContract(materialGridPath);
+    const app::validation::ValidationSceneContractLoadResult damagedHelmet =
+        app::validation::loadValidationSceneContract(damagedHelmetPath);
     const app::validation::ValidationSceneContractLoadResult probeInterior =
         app::validation::loadValidationSceneContract(probeInteriorPath);
     const bool voxelLoaded = requireLoaded(voxel, "m0_voxel_baseline");
     const bool modelLoaded = requireLoaded(model, "m0_model_damaged_helmet");
+    const bool windowRoomLoaded = requireLoaded(windowRoom, "v01_window_room");
     const bool caveLoaded = requireLoaded(cave, "v02_cave_turn");
     const bool villageLoaded = requireLoaded(village, "v07_local_light_village");
+    const bool materialGridLoaded = requireLoaded(materialGrid, "m01_material_grid");
+    const bool damagedHelmetLoaded = requireLoaded(damagedHelmet, "m02_damaged_helmet");
     const bool probeInteriorLoaded = requireLoaded(probeInterior, "m07_probe_interior");
-    if (!voxelLoaded || !modelLoaded || !caveLoaded || !villageLoaded || !probeInteriorLoaded) {
+    if (!voxelLoaded || !modelLoaded || !windowRoomLoaded || !caveLoaded || !villageLoaded || !materialGridLoaded ||
+        !damagedHelmetLoaded || !probeInteriorLoaded) {
         return 1;
     }
     if (!requireTrue(voxel.succeeded() && model.succeeded(), "both M0 scene descriptors must verify") ||
@@ -79,7 +92,17 @@ int main() {
                      "the model scene, renderer, and asset identities must remain locked")) {
         return 1;
     }
-    if (!requireTrue(cave.contract.version == app::validation::kValidationSceneContractVersion &&
+    if (!requireTrue(
+            windowRoom.contract.version == app::validation::kValidationSceneContractVersion &&
+                windowRoom.contract.scene == ValidationScene::Voxel && windowRoom.contract.voxelWorld.has_value() &&
+                windowRoom.contract.voxelWorld->fixture.has_value() &&
+                windowRoom.contract.voxelWorld->fixture->id == app::validation::kValidationVoxelFixtureWindowRoomId &&
+                stableContentHashHex(windowRoom.contract.voxelWorld->fixture->contentHash) == "323aa669c63c427a" &&
+                stableContentHashHex(windowRoom.contract.voxelWorld->contentHash) == "d38f66e8e2469348" &&
+                stableContentHashHex(windowRoom.contract.cameraPath.contentHash) == "926b9e7d3f02af9b" &&
+                stableContentHashHex(windowRoom.contract.contentHash) == "4f8717cfe9b48270",
+            "V01 scene, Camera Path, world, and fixture identities must remain locked") ||
+        !requireTrue(cave.contract.version == app::validation::kValidationSceneContractVersion &&
                          cave.contract.scene == ValidationScene::Voxel && cave.contract.voxelWorld.has_value() &&
                          cave.contract.voxelWorld->fixture.has_value() &&
                          cave.contract.voxelWorld->fixture->id == app::validation::kValidationVoxelFixtureCaveTurnId &&
@@ -99,6 +122,26 @@ int main() {
                          stableContentHashHex(village.contract.cameraPath.contentHash) == "cc6a83ed668b12b5" &&
                          stableContentHashHex(village.contract.contentHash) == "5be2746ff4c4b81d",
                      "V07 scene, Camera Path, world, and fixture identities must remain locked") ||
+        !requireTrue(materialGrid.contract.version == app::validation::kValidationSceneContractVersion &&
+                         materialGrid.contract.scene == ValidationScene::Model &&
+                         materialGrid.contract.modelAsset.has_value() &&
+                         materialGrid.contract.modelProbeGrid.has_value() &&
+                         materialGrid.contract.modelProbeGrid->spacingMeters == 0.8 &&
+                         materialGrid.contract.modelProbeGrid->boundsPaddingMeters == 0.1 &&
+                         stableContentHashHex(materialGrid.contract.modelAsset->contentHash) == "e2dbc94ec6365711" &&
+                         stableContentHashHex(materialGrid.contract.cameraPath.contentHash) == "39d7d82f9711135e" &&
+                         stableContentHashHex(materialGrid.contract.contentHash) == "2eb15aeceefd92a4",
+                     "M01 scene, Camera Path, asset, and Probe grid identities must remain locked") ||
+        !requireTrue(damagedHelmet.contract.version == app::validation::kValidationSceneContractVersion &&
+                         damagedHelmet.contract.scene == ValidationScene::Model &&
+                         damagedHelmet.contract.modelAsset.has_value() &&
+                         damagedHelmet.contract.modelProbeGrid.has_value() &&
+                         damagedHelmet.contract.modelProbeGrid->spacingMeters == 1.2 &&
+                         damagedHelmet.contract.modelProbeGrid->boundsPaddingMeters == 0.0 &&
+                         stableContentHashHex(damagedHelmet.contract.modelAsset->contentHash) == "f67fb46e0033d3dd" &&
+                         stableContentHashHex(damagedHelmet.contract.cameraPath.contentHash) == "1c0a7939ab2fcdf6" &&
+                         stableContentHashHex(damagedHelmet.contract.contentHash) == "a930eac94f635702",
+                     "M02 scene, Camera Path, asset, and Probe grid identities must remain locked") ||
         !requireTrue(probeInterior.contract.version == app::validation::kValidationSceneContractVersion &&
                          probeInterior.contract.scene == ValidationScene::Model &&
                          probeInterior.contract.modelAsset.has_value() &&
