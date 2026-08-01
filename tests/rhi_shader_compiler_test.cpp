@@ -22,6 +22,7 @@ struct ShaderCase {
     const char* definition = nullptr;
     const char* secondDefinition = nullptr;
     const char* thirdDefinition = nullptr;
+    bool vulkanOnly = false;
 };
 
 [[nodiscard]] bool compileForBackend(const ShaderCase& shaderCase, const std::string& source,
@@ -224,11 +225,13 @@ void main() {
 } // namespace
 
 int main() {
-    constexpr std::array<ShaderCase, 98> kShaderCases{
+    constexpr std::array<ShaderCase, 99> kShaderCases{
         {{"tests/shaders/rhi_screen_coordinates_test.frag", RhiShaderStage::Fragment},
          {"tests/shaders/material_brdf_shared_test.frag", RhiShaderStage::Fragment},
          {"tests/shaders/reflection_probe_contract_test.frag", RhiShaderStage::Fragment},
          {"tests/shaders/gpu_scene_contract_test.comp", RhiShaderStage::Compute},
+         {"tests/shaders/global_bindless_gpu_scene_test.comp", RhiShaderStage::Compute, nullptr, nullptr, nullptr,
+          true},
          {"assets/shaders/fullscreen_triangle_rhi.vert", RhiShaderStage::Vertex},
          {"assets/shaders/deferred_lighting.vert", RhiShaderStage::Vertex},
          {"assets/shaders/skybox_blur_rhi.vert", RhiShaderStage::Vertex},
@@ -347,7 +350,10 @@ int main() {
             continue;
         }
         success = compileForBackend(shaderCase, *source, renderer::rhi::RhiShaderBackend::Vulkan, "Vulkan") && success;
-        success = compileForBackend(shaderCase, *source, renderer::rhi::RhiShaderBackend::OpenGl, "OpenGL") && success;
+        if (!shaderCase.vulkanOnly) {
+            success =
+                compileForBackend(shaderCase, *source, renderer::rhi::RhiShaderBackend::OpenGl, "OpenGL") && success;
+        }
     }
     success = validateFragmentDiscardContract() && success;
     success = validateDescriptorArrayReflection() && success;

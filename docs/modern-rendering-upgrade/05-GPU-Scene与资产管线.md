@@ -48,12 +48,18 @@ Vulkan Global Bindless Set 保存 Sampled Image、Sampler 和 Storage Buffer 数
 
 - Runtime Descriptor Array。
 - Partially Bound。
-- Variable Descriptor Count。
-- Update-after-bind。
+- Variable Descriptor Count 能力；Global Set 的 Binding 0–3 不设置该 Binding Flag。
+- Update-after-bind 与 Update-unused-while-pending。
 - Sampled Image/Storage Buffer Non-uniform Indexing。
 
-RHI 需要移除 Vulkan `arrayCount == 1` 限制，扩充 Bind Group Entry 表达数组元素、首元素
-与批量更新。Descriptor Layout、Pool 和 Pipeline Layout 都要携带 Binding Flags。
+Vulkan 每个 Descriptor Set 只允许最高编号的一个 Binding 使用 Variable Descriptor Count。
+Global Set 的 Binding 4 已冻结给 TLAS，因此 2D Texture、Cube Texture、Sampler 和 Storage
+Buffer 四个数组均使用初始化时确定的固定描述符数量，Shader 保持运行时非一致索引。
+容量创建前必须校验 Descriptor Set 与 Per-stage Update-after-bind 上限。
+
+公共 RHI 已支持 Descriptor Array、首数组元素、Binding Flags 和多 Bind Group 连续区间的
+整批原子更新。Vulkan `GlobalBindlessSet` 已完成四类资源的强类型发布和生命周期管理；
+OpenGL 明确不创建该全局集合。
 
 ### 3.2 句柄生命周期
 
@@ -90,8 +96,21 @@ Greedy UV Repeat 仍由体素材质采样器处理，最终输出统一 PBR 参�
 | Draw Count | 每类可见命令数量 | GPU 写 |
 | TLAS Instance | Ray Tracing Instance | GPU 或 CPU 写，AS Build 读 |
 
-Buffer 使用帧环形区和增量 Dirty Range。CPU 不每帧重写静态 Material/Geometry。所有表
-都具有容量、使用量、峰值和结构化容量错误。
+Material、Geometry 和 Instance 底层表采用固定容量与增量 Dirty Range。CPU 不每帧重写
+静态 Material/Geometry。帧生成类 Buffer 的环形资源由运行时剔除链接入时建立。所有表都
+具有容量、使用量、峰值和结构化容量错误。
+
+### 4.1 当前底层实现边界
+
+`GpuSceneBufferSet` 已创建 Material、Geometry、Instance 三个 GPU-only Storage Buffer，
+并把它们发布到 Vulkan Global Bindless Storage Buffer Array。每张 CPU 表将写入合并为一个
+连续 Dirty Span；上传录制后必须由有效 Submission Token 确认，累计上传字节与 Dirty 状态
+才会提交。录制完成后发生的同索引写入通过 Revision 保留到下一批上传，命令录制或提交
+失败时可显式丢弃录制批次而不清除 Dirty 数据。三个 Storage Buffer 的退役先执行整批
+预校验，任一重复、失效或陈旧句柄都会拒绝整批状态变更。
+
+当前实现尚未连接体素区块、模型实例和资产注册表生产者，也尚未生成 Visible、Indirect、
+Draw Count 与 TLAS Instance Buffer；这些运行时链路不计入本轮底层实现完成范围。
 
 ## 5. GPU Culling 与间接绘制
 

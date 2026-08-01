@@ -1,3 +1,4 @@
+#include "renderer/core/GlobalBindlessSet.h"
 #include "renderer/rhi/RhiHandleAllocator.h"
 #include "renderer/rhi/RhiGrowableBuffer.h"
 #include "renderer/rhi/RhiHash.h"
@@ -20,6 +21,7 @@
 #include <memory>
 #include <mutex>
 #include <sstream>
+#include <string>
 #include <thread>
 #include <vector>
 
@@ -38,6 +40,15 @@ bool requireTrue(const bool condition, const char* message) {
         return false;
     }
     return true;
+}
+
+bool testGlobalBindlessRejectsOpenGl() {
+    GlRhiDevice device;
+    renderer::core::GlobalBindlessSet bindlessSet;
+    const renderer::core::GlobalBindlessSetError error = bindlessSet.initialize(device, {});
+    return requireTrue(error == renderer::core::GlobalBindlessSetError::BackendUnsupported &&
+                           std::string(renderer::core::globalBindlessSetErrorStableId(error)) == "BackendUnsupported",
+                       "OpenGL must not initialize or simulate the Vulkan Global Bindless Set");
 }
 
 class ScopedErrorCapture {
@@ -1253,6 +1264,27 @@ bool testGlRhiResourceDescriptionQueries() {
     textureDesc.usage = rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment);
     const RhiTextureHandle texture = device.createTexture(textureDesc, nullptr);
 
+    RhiTextureViewDesc textureViewDesc;
+    textureViewDesc.texture = texture;
+    textureViewDesc.viewType = RhiTextureViewType::Texture2DArray;
+    textureViewDesc.format = textureDesc.format;
+    textureViewDesc.baseMip = 1u;
+    textureViewDesc.mipCount = 1u;
+    textureViewDesc.baseLayer = 1u;
+    textureViewDesc.layerCount = 2u;
+    const RhiTextureViewHandle textureView = device.createTextureView(textureViewDesc);
+
+    RhiSamplerDesc samplerDesc;
+    samplerDesc.minFilter = RhiFilter::Nearest;
+    samplerDesc.mipmapMode = RhiMipmapMode::Nearest;
+    samplerDesc.addressU = RhiAddressMode::Repeat;
+    samplerDesc.addressV = RhiAddressMode::MirroredRepeat;
+    samplerDesc.addressW = RhiAddressMode::ClampToBorder;
+    samplerDesc.borderColor = RhiBorderColor::OpaqueWhite;
+    samplerDesc.compareEnabled = true;
+    samplerDesc.compareOp = RhiCompareOp::Greater;
+    const RhiSamplerHandle sampler = device.createSampler(samplerDesc);
+
     bufferDebugName.fill('B');
     bufferDebugName.back() = '\0';
     textureDebugName.fill('T');
@@ -1260,7 +1292,9 @@ bool testGlRhiResourceDescriptionQueries() {
 
     RhiBufferDesc queriedBuffer;
     RhiTextureDesc queriedTexture;
-    if (!requireTrue(buffer.isValid() && texture.isValid(),
+    RhiTextureViewDesc queriedTextureView;
+    RhiSamplerDesc queriedSampler;
+    if (!requireTrue(buffer.isValid() && texture.isValid() && textureView.isValid() && sampler.isValid(),
                      "resource description query test requires live resources") ||
         !requireTrue(device.getBufferDesc(buffer, queriedBuffer),
                      "live buffer handles must expose their creation description") ||
@@ -1278,16 +1312,46 @@ bool testGlRhiResourceDescriptionQueries() {
                          queriedTexture.usage == textureDesc.usage && queriedTexture.debugName != nullptr &&
                          std::strcmp(queriedTexture.debugName, kTextureDebugName) == 0,
                      "texture description queries must preserve all creation fields") ||
-        !requireTrue(!device.getBufferDesc({}, queriedBuffer) && !device.getTextureDesc({}, queriedTexture),
+        !requireTrue(device.getTextureViewDesc(textureView, queriedTextureView),
+                     "live texture-view handles must expose their creation description") ||
+        !requireTrue(queriedTextureView.texture.index == textureViewDesc.texture.index &&
+                         queriedTextureView.texture.generation == textureViewDesc.texture.generation &&
+                         queriedTextureView.viewType == textureViewDesc.viewType &&
+                         queriedTextureView.format == textureViewDesc.format &&
+                         queriedTextureView.baseMip == textureViewDesc.baseMip &&
+                         queriedTextureView.mipCount == textureViewDesc.mipCount &&
+                         queriedTextureView.baseLayer == textureViewDesc.baseLayer &&
+                         queriedTextureView.layerCount == textureViewDesc.layerCount &&
+                         queriedTextureView.depthCompare == textureViewDesc.depthCompare,
+                     "texture-view description queries must preserve all creation fields") ||
+        !requireTrue(device.getSamplerDesc(sampler, queriedSampler),
+                     "live sampler handles must expose their creation description") ||
+        !requireTrue(
+            queriedSampler.minFilter == samplerDesc.minFilter && queriedSampler.magFilter == samplerDesc.magFilter &&
+                queriedSampler.mipmapMode == samplerDesc.mipmapMode &&
+                queriedSampler.addressU == samplerDesc.addressU && queriedSampler.addressV == samplerDesc.addressV &&
+                queriedSampler.addressW == samplerDesc.addressW &&
+                queriedSampler.borderColor == samplerDesc.borderColor &&
+                queriedSampler.maxAnisotropy == samplerDesc.maxAnisotropy &&
+                queriedSampler.compareEnabled == samplerDesc.compareEnabled &&
+                queriedSampler.compareOp == samplerDesc.compareOp,
+            "sampler description queries must preserve all creation fields") ||
+        !requireTrue(!device.getBufferDesc({}, queriedBuffer) && !device.getTextureDesc({}, queriedTexture) &&
+                         !device.getTextureViewDesc({}, queriedTextureView) &&
+                         !device.getSamplerDesc({}, queriedSampler),
                      "resource description queries must reject invalid handles")) {
         device.shutdown();
         return false;
     }
 
+    device.destroyTextureView(textureView);
+    device.destroySampler(sampler);
     device.destroyBuffer(buffer);
     device.destroyTexture(texture);
     const bool staleRejected =
-        requireTrue(!device.getBufferDesc(buffer, queriedBuffer) && !device.getTextureDesc(texture, queriedTexture),
+        requireTrue(!device.getBufferDesc(buffer, queriedBuffer) && !device.getTextureDesc(texture, queriedTexture) &&
+                        !device.getTextureViewDesc(textureView, queriedTextureView) &&
+                        !device.getSamplerDesc(sampler, queriedSampler),
                     "resource description queries must reject destroyed handles");
     device.shutdown();
     return staleRejected;
@@ -5258,6 +5322,9 @@ int main() {
         return 1;
     }
     if (!testMemoryStatsContract()) {
+        return 1;
+    }
+    if (!testGlobalBindlessRejectsOpenGl()) {
         return 1;
     }
     if (!testVertexRangeAllocator()) {

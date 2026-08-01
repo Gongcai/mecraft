@@ -1,0 +1,26 @@
+#version 450 core
+#extension GL_EXT_nonuniform_qualifier : require
+
+#include "../../assets/shaders/global_bindless_set.glsl"
+
+layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+
+layout(push_constant) uniform GlobalBindlessPushConstants {
+    uvec4 sceneBufferIndices;
+    uvec4 resourceIndices;
+} pc;
+
+void main() {
+    uint materialWord = globalBindlessStorageBuffers[nonuniformEXT(pc.sceneBufferIndices.x)].words[0];
+    uint geometryWord = globalBindlessStorageBuffers[nonuniformEXT(pc.sceneBufferIndices.y)].words[0];
+    uint instanceWord = globalBindlessStorageBuffers[nonuniformEXT(pc.sceneBufferIndices.z)].words[44];
+    vec4 texture2DValue = globalBindlessSample2D(pc.resourceIndices.x, pc.resourceIndices.z, vec2(0.5));
+    vec4 textureCubeValue =
+        globalBindlessSampleCube(pc.resourceIndices.y, pc.resourceIndices.z, vec3(1.0, 0.0, 0.0));
+    uint outputIndex = pc.sceneBufferIndices.w;
+    globalBindlessStorageBuffers[nonuniformEXT(outputIndex)].words[0] = materialWord;
+    globalBindlessStorageBuffers[nonuniformEXT(outputIndex)].words[1] = geometryWord;
+    globalBindlessStorageBuffers[nonuniformEXT(outputIndex)].words[2] = instanceWord;
+    globalBindlessStorageBuffers[nonuniformEXT(outputIndex)].words[3] = uint(round(texture2DValue.r * 255.0));
+    globalBindlessStorageBuffers[nonuniformEXT(outputIndex)].words[4] = uint(round(textureCubeValue.r * 255.0));
+}

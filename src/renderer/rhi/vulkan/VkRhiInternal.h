@@ -96,6 +96,7 @@ struct VkRhiDeviceData {
     };
     struct Sampler {
         VkSampler sampler = VK_NULL_HANDLE;
+        RhiSamplerDesc desc{};
         VkRhiResourceLifetime lifetime{};
     };
     struct Shader {

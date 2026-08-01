@@ -382,6 +382,8 @@ set(SRC_RENDERER
         src/renderer/core/DeferredPipeline.cpp
         src/renderer/core/ForwardPipeline.cpp
         src/renderer/core/BindlessDescriptorSlotAllocator.cpp
+        src/renderer/core/GlobalBindlessSet.cpp
+        src/renderer/core/GpuSceneBufferSet.cpp
 
         # OpenGL helpers
 

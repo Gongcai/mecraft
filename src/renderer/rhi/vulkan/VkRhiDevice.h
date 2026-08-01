@@ -27,6 +27,8 @@ public:
     RhiTextureHandle createTexture(const RhiTextureDesc& desc, const RhiTextureInitialData* initialData) override;
     [[nodiscard]] bool getBufferDesc(RhiBufferHandle buffer, RhiBufferDesc& desc) const override;
     [[nodiscard]] bool getTextureDesc(RhiTextureHandle texture, RhiTextureDesc& desc) const override;
+    [[nodiscard]] bool getTextureViewDesc(RhiTextureViewHandle textureView, RhiTextureViewDesc& desc) const override;
+    [[nodiscard]] bool getSamplerDesc(RhiSamplerHandle sampler, RhiSamplerDesc& desc) const override;
     [[nodiscard]] bool getTextureMemoryRequirements(const RhiTextureDesc& desc,
                                                     RhiTextureMemoryRequirements& requirements) override;
     RhiMemoryHandle allocateTextureMemory(const RhiTextureMemoryRequirements& requirements, RhiMemoryCategory category,

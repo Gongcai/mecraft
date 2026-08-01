@@ -15,6 +15,7 @@ namespace renderer::core {
 enum class BindlessDescriptorSlotError : uint8_t {
     None,
     CapacityExceeded,
+    PublicationRejected,
     InvalidHandle,
     StaleGeneration,
     SlotNotLive
@@ -70,12 +71,22 @@ public:
     /// Fresh slots are assigned in ascending order; completed retired slots are reused with a new generation.
     /// @return Live handle or CapacityExceeded when no slot can be published.
     [[nodiscard]] AllocationResult allocate() {
+        return allocateAndPublish([](const Handle) { return true; });
+    }
+
+    /// Allocates one slot only after the owner atomically publishes its descriptor contents.
+    /// The selected fresh or recycled index remains available when publication is rejected.
+    /// @tparam Publisher Callable receiving the candidate handle and returning true after publication.
+    /// @param publisher Atomic descriptor publication operation executed before allocator state changes.
+    /// @return Live handle, CapacityExceeded, or PublicationRejected without consuming a slot.
+    template <typename Publisher> [[nodiscard]] AllocationResult allocateAndPublish(Publisher&& publisher) {
         uint32_t index = 0u;
+        bool recycled = false;
         if (!m_recycledIndices.empty()) {
             index = m_recycledIndices.back();
-            m_recycledIndices.pop_back();
+            recycled = true;
         } else if (m_nextFreshIndex < m_slots.size()) {
-            index = m_nextFreshIndex++;
+            index = m_nextFreshIndex;
         } else {
             return {{}, BindlessDescriptorSlotError::CapacityExceeded};
         }
@@ -83,10 +94,19 @@ public:
         Slot& slot = m_slots[index];
         assert(slot.state == SlotState::Available);
         assert(slot.generation != 0u);
+        const Handle handle{index, slot.generation};
+        if (!publisher(handle)) {
+            return {{}, BindlessDescriptorSlotError::PublicationRejected};
+        }
+        if (recycled) {
+            m_recycledIndices.pop_back();
+        } else {
+            ++m_nextFreshIndex;
+        }
         slot.state = SlotState::Live;
         ++m_liveCount;
         m_peakLiveCount = std::max(m_peakLiveCount, m_liveCount);
-        return {{index, slot.generation}, BindlessDescriptorSlotError::None};
+        return {handle, BindlessDescriptorSlotError::None};
     }
 
     /// Removes one live generation from publication and queues its index for submission-aware reuse.
@@ -94,16 +114,11 @@ public:
     /// @param lastUseSequence Newest GPU submission that may read this descriptor slot.
     /// @return None on success or a stable validation error without mutating allocator state.
     [[nodiscard]] BindlessDescriptorSlotError retire(const Handle handle, const uint64_t lastUseSequence) {
-        if (!handle.isValid() || handle.index >= m_slots.size()) {
-            return BindlessDescriptorSlotError::InvalidHandle;
+        const BindlessDescriptorSlotError validation = validateLive(handle);
+        if (validation != BindlessDescriptorSlotError::None) {
+            return validation;
         }
         Slot& slot = m_slots[handle.index];
-        if (slot.generation != handle.generation) {
-            return BindlessDescriptorSlotError::StaleGeneration;
-        }
-        if (slot.state != SlotState::Live) {
-            return BindlessDescriptorSlotError::SlotNotLive;
-        }
 
         slot.state = SlotState::Retired;
         --m_liveCount;
@@ -111,6 +126,21 @@ public:
         m_retiredSlots.push_back({lastUseSequence, handle.index, handle.generation});
         std::push_heap(m_retiredSlots.begin(), m_retiredSlots.end(), RetiredSlotLater{});
         return BindlessDescriptorSlotError::None;
+    }
+
+    /// Validates one exact live handle without mutating slot state.
+    /// @param handle Descriptor generation to inspect.
+    /// @return None for a live generation or its precise stable lifecycle error.
+    [[nodiscard]] BindlessDescriptorSlotError validateLive(const Handle handle) const {
+        if (!handle.isValid() || handle.index >= m_slots.size()) {
+            return BindlessDescriptorSlotError::InvalidHandle;
+        }
+        const Slot& slot = m_slots[handle.index];
+        if (slot.generation != handle.generation) {
+            return BindlessDescriptorSlotError::StaleGeneration;
+        }
+        return slot.state == SlotState::Live ? BindlessDescriptorSlotError::None
+                                             : BindlessDescriptorSlotError::SlotNotLive;
     }
 
     /// Reclaims every retired slot whose final referencing submission has completed.
@@ -147,8 +177,7 @@ public:
     /// @param handle Descriptor handle to validate.
     /// @return True only for an in-range live slot with an equal generation.
     [[nodiscard]] bool isLive(const Handle handle) const {
-        return handle.isValid() && handle.index < m_slots.size() &&
-               m_slots[handle.index].generation == handle.generation && m_slots[handle.index].state == SlotState::Live;
+        return validateLive(handle) == BindlessDescriptorSlotError::None;
     }
 
     /// Returns current table occupancy and the peak number of simultaneously live slots.

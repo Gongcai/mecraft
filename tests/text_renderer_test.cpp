@@ -205,6 +205,19 @@ public:
         desc = textureDescs[texture.index - 1u];
         return true;
     }
+    [[nodiscard]] bool getTextureViewDesc(const RhiTextureViewHandle textureView,
+                                          RhiTextureViewDesc& desc) const override {
+        if (!textureView.isValid() || textureView.generation != 1u || textureView.index > textureViewDescs.size())
+            return false;
+        desc = textureViewDescs[textureView.index - 1u];
+        return true;
+    }
+    [[nodiscard]] bool getSamplerDesc(const RhiSamplerHandle sampler, RhiSamplerDesc& desc) const override {
+        if (!sampler.isValid() || sampler.generation != 1u || sampler.index > samplerDescs.size())
+            return false;
+        desc = samplerDescs[sampler.index - 1u];
+        return true;
+    }
     RhiTextureViewHandle createTextureView(const RhiTextureViewDesc& desc) override {
         textureViewDescs.push_back(desc);
         return {m_nextTextureView++, 1u};

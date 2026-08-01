@@ -4544,6 +4544,22 @@ bool GlRhiDevice::getTextureDesc(const RhiTextureHandle texture, RhiTextureDesc&
     return true;
 }
 
+bool GlRhiDevice::getTextureViewDesc(const RhiTextureViewHandle textureView, RhiTextureViewDesc& desc) const {
+    const GlTextureViewRecord* record = recordForHandle(m_data->textureViews, m_data->textureViewRecords, textureView);
+    if (!m_initialized || record == nullptr)
+        return false;
+    desc = record->desc;
+    return true;
+}
+
+bool GlRhiDevice::getSamplerDesc(const RhiSamplerHandle sampler, RhiSamplerDesc& desc) const {
+    const GlSamplerRecord* record = recordForHandle(m_data->samplers, m_data->samplerRecords, sampler);
+    if (!m_initialized || record == nullptr)
+        return false;
+    desc = record->desc;
+    return true;
+}
+
 RhiTextureViewHandle GlRhiDevice::createTextureView(const RhiTextureViewDesc& desc) {
     GlResolvedTextureRecord textureRecord;
     const bool textureResolved = resolveTextureRecord(*m_data, desc.texture, textureRecord);

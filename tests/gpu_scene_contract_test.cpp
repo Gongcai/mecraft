@@ -76,6 +76,18 @@ bool testBindlessSlotLifecycle() {
         return false;
     }
 
+    BindlessDescriptorSlotAllocator<BindlessSamplerTag> transactionalAllocator(1u);
+    const auto rejected = transactionalAllocator.allocateAndPublish(
+        [](const BindlessSamplerHandle handle) { return handle.index != 0u; });
+    const BindlessDescriptorSlotStats rejectedStats = transactionalAllocator.stats();
+    const auto published = transactionalAllocator.allocateAndPublish(
+        [](const BindlessSamplerHandle handle) { return handle == BindlessSamplerHandle{0u, 1u}; });
+    if (!requireTrue(rejected.error == BindlessDescriptorSlotError::PublicationRejected &&
+                         rejectedStats.availableCount == 1u && rejectedStats.liveCount == 0u && published.succeeded(),
+                     "rejected descriptor publication must preserve the candidate slot for the next transaction")) {
+        return false;
+    }
+
     if (!requireTrue(allocator.retire(second.handle, 9u) == BindlessDescriptorSlotError::None &&
                          allocator.retire(first.handle, 5u) == BindlessDescriptorSlotError::None,
                      "live slots must retire with independent submission sequences") ||

@@ -42,6 +42,18 @@ public:
     /// @return True when the handle identifies a live texture on this device.
     [[nodiscard]] virtual bool getTextureDesc(RhiTextureHandle texture, RhiTextureDesc& desc) const = 0;
 
+    /// Returns the immutable creation description for a live texture view.
+    /// @param textureView Texture-view handle owned by this device.
+    /// @param desc Receives the exact description used to create the view.
+    /// @return True when the handle identifies a live texture view on this device.
+    [[nodiscard]] virtual bool getTextureViewDesc(RhiTextureViewHandle textureView, RhiTextureViewDesc& desc) const = 0;
+
+    /// Returns the immutable creation description for a live sampler.
+    /// @param sampler Sampler handle owned by this device.
+    /// @param desc Receives the exact description used to create the sampler.
+    /// @return True when the handle identifies a live sampler on this device.
+    [[nodiscard]] virtual bool getSamplerDesc(RhiSamplerHandle sampler, RhiSamplerDesc& desc) const = 0;
+
     // --- Placed textures on shared memory (memory aliasing) ---
     // Optional feature gated by capabilities().textureAliasing. Backends that
     // do not expose placement report the feature as unsupported, and callers

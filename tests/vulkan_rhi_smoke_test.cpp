@@ -1,6 +1,9 @@
+#include "renderer/core/GlobalBindlessSet.h"
+#include "renderer/core/GpuSceneBufferSet.h"
 #include "renderer/rhi/RhiCommandList.h"
 #include "renderer/rhi/RhiDevice.h"
 #include "renderer/rhi/RhiRenderGraph.h"
+#include "renderer/rhi/RhiShaderSourceLoader.h"
 #include "renderer/rhi/vulkan/VkRhiDevice.h"
 #include "renderer/rhi/vulkan/VkRhiInterop.h"
 #include "renderer/passes/TemporalUpscalePass.h"
@@ -2002,6 +2005,341 @@ void main() {
     return valid && device.validationErrorCount() == validationErrorsBefore;
 }
 
+[[nodiscard]] bool validateGlobalBindlessGpuScene(VkRhiDevice& device, RhiCommandListPool& commandPool) {
+    using namespace renderer::contracts;
+    using namespace renderer::core;
+
+    const uint64_t validationErrorsBefore = device.validationErrorCount();
+    GlobalBindlessSet bindlessSet;
+    GlobalBindlessSetConfig bindlessConfig;
+    bindlessConfig.sampledTexture2DCapacity = 2u;
+    bindlessConfig.sampledTextureCubeCapacity = 2u;
+    bindlessConfig.samplerCapacity = 2u;
+    bindlessConfig.storageBufferCapacity = 8u;
+    if (bindlessSet.initialize(device, bindlessConfig) != GlobalBindlessSetError::None) {
+        std::cerr << "Global Bindless Set failed to initialize\n";
+        return false;
+    }
+
+    constexpr std::array<uint8_t, 4u> kTexture2DPixel{17u, 31u, 47u, 255u};
+    RhiTextureDesc texture2DDesc;
+    texture2DDesc.debugName = "VulkanSmoke.GlobalBindless.Texture2D";
+    texture2DDesc.format = RhiTextureFormat::Rgba8Unorm;
+    texture2DDesc.width = 1u;
+    texture2DDesc.height = 1u;
+    texture2DDesc.usage = rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::TransferDst);
+    RhiTextureInitialData texture2DInitialData;
+    texture2DInitialData.pixels = kTexture2DPixel.data();
+    texture2DInitialData.sizeBytes = kTexture2DPixel.size();
+    texture2DInitialData.finalState = RhiResourceState::ShaderRead;
+    const RhiTextureHandle texture2D = device.createTexture(texture2DDesc, &texture2DInitialData);
+    RhiTextureViewDesc texture2DViewDesc;
+    texture2DViewDesc.texture = texture2D;
+    texture2DViewDesc.format = texture2DDesc.format;
+    const RhiTextureViewHandle texture2DView = device.createTextureView(texture2DViewDesc);
+
+    constexpr std::array<uint8_t, 24u> kTextureCubePixels{61u, 67u, 71u, 255u, 61u, 67u, 71u, 255u,
+                                                          61u, 67u, 71u, 255u, 61u, 67u, 71u, 255u,
+                                                          61u, 67u, 71u, 255u, 61u, 67u, 71u, 255u};
+    RhiTextureDesc textureCubeDesc;
+    textureCubeDesc.debugName = "VulkanSmoke.GlobalBindless.TextureCube";
+    textureCubeDesc.dimension = RhiTextureDimension::Cube;
+    textureCubeDesc.format = RhiTextureFormat::Rgba8Unorm;
+    textureCubeDesc.width = 1u;
+    textureCubeDesc.height = 1u;
+    textureCubeDesc.depthOrLayers = 6u;
+    textureCubeDesc.usage = rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::TransferDst);
+    RhiTextureInitialData textureCubeInitialData;
+    textureCubeInitialData.pixels = kTextureCubePixels.data();
+    textureCubeInitialData.sizeBytes = kTextureCubePixels.size();
+    textureCubeInitialData.layerCount = 6u;
+    textureCubeInitialData.finalState = RhiResourceState::ShaderRead;
+    const RhiTextureHandle textureCube = device.createTexture(textureCubeDesc, &textureCubeInitialData);
+    RhiTextureViewDesc textureCubeViewDesc;
+    textureCubeViewDesc.texture = textureCube;
+    textureCubeViewDesc.viewType = RhiTextureViewType::Cube;
+    textureCubeViewDesc.format = textureCubeDesc.format;
+    textureCubeViewDesc.layerCount = 6u;
+    const RhiTextureViewHandle textureCubeView = device.createTextureView(textureCubeViewDesc);
+    const RhiSamplerHandle sampler = device.createSampler({});
+
+    RhiBufferDesc outputDesc;
+    outputDesc.debugName = "VulkanSmoke.GlobalBindless.Output";
+    outputDesc.size = sizeof(uint32_t) * 8u;
+    outputDesc.usage = rhiFlag(RhiBufferUsage::Storage) | rhiFlag(RhiBufferUsage::MapRead);
+    outputDesc.memoryUsage = RhiMemoryUsage::GpuToCpu;
+    outputDesc.initialState = RhiResourceState::StorageBuffer;
+    outputDesc.memoryCategory = RhiMemoryCategory::Readback;
+    const RhiBufferHandle output = device.createBuffer(outputDesc, nullptr, 0u);
+
+    const auto invalidCubePublication = bindlessSet.publishTextureCube(texture2DView);
+    const auto texture2DPublication = bindlessSet.publishTexture2D(texture2DView);
+    const auto textureCubePublication = bindlessSet.publishTextureCube(textureCubeView);
+    const auto samplerPublication = bindlessSet.publishSampler(sampler);
+    const auto outputPublication = bindlessSet.publishStorageBuffer(output);
+
+    GpuSceneBufferSet sceneBuffers;
+    GpuSceneBufferSetConfig sceneConfig;
+    sceneConfig.materialCapacity = 2u;
+    sceneConfig.geometryCapacity = 2u;
+    sceneConfig.instanceCapacity = 2u;
+    bool valid = texture2D.isValid() && texture2DView.isValid() && textureCube.isValid() && textureCubeView.isValid() &&
+                 sampler.isValid() && output.isValid() &&
+                 invalidCubePublication.error == GlobalBindlessSetError::InvalidResource &&
+                 texture2DPublication.succeeded() && textureCubePublication.succeeded() &&
+                 samplerPublication.succeeded() && outputPublication.succeeded() &&
+                 sceneBuffers.initialize(device, bindlessSet, sceneConfig) == GpuSceneBufferSetError::None;
+
+    GpuMaterial material;
+    material.baseColorFactor.x = 0.25f;
+    GpuSceneGeometry geometry;
+    geometry.vertexAddress.low = 0x12345678u;
+    GpuSceneInstance recordedInstance;
+    recordedInstance.identityAndVersion.x = 0x9abcdef0u;
+    GpuSceneInstance latestInstance = recordedInstance;
+    latestInstance.identityAndVersion.x = 0x0badc0deu;
+    valid = valid && sceneBuffers.writeMaterial(0u, material) == GpuSceneBufferSetError::None &&
+            sceneBuffers.writeGeometry(0u, geometry) == GpuSceneBufferSetError::None &&
+            sceneBuffers.writeInstance(0u, recordedInstance) == GpuSceneBufferSetError::None &&
+            sceneBuffers.writeInstance(2u, recordedInstance) == GpuSceneBufferSetError::CapacityExceeded;
+
+    const std::optional<std::string> computeSource =
+        renderer::rhi::loadShaderSource("tests/shaders/global_bindless_gpu_scene_test.comp");
+    RhiShaderDesc shaderDesc;
+    shaderDesc.debugName = "VulkanSmoke.GlobalBindless.Compute";
+    shaderDesc.stage = RhiShaderStage::Compute;
+    shaderDesc.source = computeSource.has_value() ? computeSource->c_str() : nullptr;
+    shaderDesc.sourceSize = computeSource.has_value() ? computeSource->size() : 0u;
+    const RhiShaderHandle shader =
+        valid && computeSource.has_value() ? device.createShader(shaderDesc) : RhiShaderHandle{};
+    RhiPipelineLayoutDesc pipelineLayoutDesc;
+    pipelineLayoutDesc.debugName = "VulkanSmoke.GlobalBindless.PipelineLayout";
+    pipelineLayoutDesc.bindGroupLayouts.push_back(bindlessSet.layout());
+    pipelineLayoutDesc.pushConstantBytes = sizeof(uint32_t) * 8u;
+    pipelineLayoutDesc.pushConstantStages = rhiFlag(RhiShaderStage::Compute);
+    const RhiPipelineLayoutHandle pipelineLayout =
+        shader.isValid() ? device.createPipelineLayout(pipelineLayoutDesc) : RhiPipelineLayoutHandle{};
+    RhiComputePipelineDesc pipelineDesc;
+    pipelineDesc.debugName = "VulkanSmoke.GlobalBindless.Pipeline";
+    pipelineDesc.computeShader = shader;
+    pipelineDesc.layout = pipelineLayout;
+    const RhiPipelineHandle pipeline =
+        pipelineLayout.isValid() ? device.createComputePipeline(pipelineDesc) : RhiPipelineHandle{};
+
+    std::array<uint32_t, 8u> pushConstants{sceneBuffers.materialHandle().index, sceneBuffers.geometryHandle().index,
+                                           sceneBuffers.instanceHandle().index, outputPublication.handle.index,
+                                           texture2DPublication.handle.index,   textureCubePublication.handle.index,
+                                           samplerPublication.handle.index,     0u};
+    bool uploadAwaitingSubmission = false;
+    uint64_t lastUseSequence = 0u;
+    RhiCommandList* firstCommands = pipeline.isValid() ? commandPool.acquire(RhiCommandListType::Compute) : nullptr;
+    const bool firstCommandsBegan =
+        valid && shader.isValid() && pipelineLayout.isValid() && pipeline.isValid() && firstCommands != nullptr &&
+        firstCommands->begin({"VulkanSmoke.GlobalBindless.FirstCommands", RhiCommandListType::Compute});
+    valid = firstCommandsBegan;
+    if (firstCommandsBegan) {
+        const GpuSceneBufferSetError uploadError = sceneBuffers.recordUploads(*firstCommands);
+        uploadAwaitingSubmission = uploadError == GpuSceneBufferSetError::None;
+        const GpuSceneBufferSetError rewriteError = sceneBuffers.writeInstance(0u, latestInstance);
+        firstCommands->setComputePipeline(pipeline);
+        firstCommands->setBindGroup(0u, bindlessSet.bindGroup());
+        firstCommands->pushConstants(pushConstants.data(), sizeof(pushConstants), rhiFlag(RhiShaderStage::Compute));
+        firstCommands->dispatch(1u, 1u, 1u);
+        firstCommands->bufferBarrier({output, RhiResourceState::StorageBuffer, RhiResourceState::HostRead});
+        const bool ended = firstCommands->end();
+        valid = uploadError == GpuSceneBufferSetError::None && rewriteError == GpuSceneBufferSetError::None && ended;
+    }
+
+    RhiSubmissionToken firstToken;
+    if (valid) {
+        RhiCommandList* submissions[] = {firstCommands};
+        const bool submitted = device.submit(
+            {"VulkanSmoke.GlobalBindless.FirstSubmit", submissions, 1u, RhiQueueType::Compute}, &firstToken);
+        if (submitted) {
+            lastUseSequence = firstToken.sequence;
+            const bool marked = sceneBuffers.markSubmitted(firstToken) == GpuSceneBufferSetError::None;
+            if (marked) {
+                uploadAwaitingSubmission = false;
+            }
+            const bool completed = device.waitForSubmission(firstToken);
+            valid = marked && completed;
+        } else {
+            valid = false;
+        }
+    }
+
+    uint32_t expectedMaterialWord = 0u;
+    std::memcpy(&expectedMaterialWord, &material.baseColorFactor.x, sizeof(expectedMaterialWord));
+    if (valid) {
+        const auto* mapped = static_cast<const uint32_t*>(device.mapBuffer(output, 0u, outputDesc.size));
+        valid = mapped != nullptr && mapped[0] == expectedMaterialWord && mapped[1] == geometry.vertexAddress.low &&
+                mapped[2] == recordedInstance.identityAndVersion.x && mapped[3] == kTexture2DPixel[0] &&
+                mapped[4] == kTextureCubePixels[0];
+        if (mapped != nullptr) {
+            device.unmapBuffer(output);
+        }
+    }
+
+    const GpuSceneBufferSetStats firstUploadStats = sceneBuffers.stats();
+    valid = valid && firstUploadStats.materials.dirtyRecordCount == 0u &&
+            firstUploadStats.geometries.dirtyRecordCount == 0u && firstUploadStats.instances.dirtyRecordCount == 1u &&
+            firstUploadStats.uploadedBytes == sizeof(GpuMaterial) + sizeof(GpuSceneGeometry) + sizeof(GpuSceneInstance);
+
+    RhiCommandList* secondCommands = valid ? commandPool.acquire(RhiCommandListType::Compute) : nullptr;
+    const bool secondCommandsBegan =
+        valid && secondCommands != nullptr &&
+        secondCommands->begin({"VulkanSmoke.GlobalBindless.SecondCommands", RhiCommandListType::Compute});
+    valid = secondCommandsBegan;
+    if (secondCommandsBegan) {
+        const GpuSceneBufferSetError uploadError = sceneBuffers.recordUploads(*secondCommands);
+        uploadAwaitingSubmission = uploadError == GpuSceneBufferSetError::None;
+        secondCommands->bufferBarrier({output, RhiResourceState::HostRead, RhiResourceState::StorageBuffer});
+        secondCommands->setComputePipeline(pipeline);
+        secondCommands->setBindGroup(0u, bindlessSet.bindGroup());
+        secondCommands->pushConstants(pushConstants.data(), sizeof(pushConstants), rhiFlag(RhiShaderStage::Compute));
+        secondCommands->dispatch(1u, 1u, 1u);
+        secondCommands->bufferBarrier({output, RhiResourceState::StorageBuffer, RhiResourceState::HostRead});
+        const bool ended = secondCommands->end();
+        valid = uploadError == GpuSceneBufferSetError::None && ended;
+    }
+
+    RhiSubmissionToken secondToken;
+    if (valid) {
+        RhiCommandList* submissions[] = {secondCommands};
+        const bool submitted = device.submit(
+            {"VulkanSmoke.GlobalBindless.SecondSubmit", submissions, 1u, RhiQueueType::Compute}, &secondToken);
+        if (submitted) {
+            lastUseSequence = secondToken.sequence;
+            const bool marked = sceneBuffers.markSubmitted(secondToken) == GpuSceneBufferSetError::None;
+            if (marked) {
+                uploadAwaitingSubmission = false;
+            }
+            const bool completed = device.waitForSubmission(secondToken);
+            valid = marked && completed;
+        } else {
+            valid = false;
+        }
+    }
+
+    if (valid) {
+        const auto* mapped = static_cast<const uint32_t*>(device.mapBuffer(output, 0u, outputDesc.size));
+        valid = mapped != nullptr && mapped[2] == latestInstance.identityAndVersion.x;
+        if (mapped != nullptr) {
+            device.unmapBuffer(output);
+        }
+    }
+
+    const GpuSceneBufferSetStats uploadedStats = sceneBuffers.stats();
+    const GlobalBindlessSetStats liveStats = bindlessSet.stats();
+    valid =
+        valid && uploadedStats.materials.dirtyRecordCount == 0u && uploadedStats.geometries.dirtyRecordCount == 0u &&
+        uploadedStats.instances.dirtyRecordCount == 0u &&
+        uploadedStats.uploadedBytes == sizeof(GpuMaterial) + sizeof(GpuSceneGeometry) + sizeof(GpuSceneInstance) * 2u &&
+        liveStats.sampledTexture2D.liveCount == 1u && liveStats.sampledTextureCube.liveCount == 1u &&
+        liveStats.samplers.liveCount == 1u && liveStats.storageBuffers.liveCount == 4u;
+
+    if (valid) {
+        const std::array<BindlessStorageBufferHandle, 2u> duplicateHandles{sceneBuffers.materialHandle(),
+                                                                           sceneBuffers.materialHandle()};
+        const BindlessDescriptorSlotStats storageStatsBefore = bindlessSet.stats().storageBuffers;
+        const GlobalBindlessSetError duplicateRetirement = bindlessSet.retireStorageBuffers(
+            duplicateHandles.data(), static_cast<uint32_t>(duplicateHandles.size()), lastUseSequence);
+        const BindlessDescriptorSlotStats storageStatsAfter = bindlessSet.stats().storageBuffers;
+        valid = duplicateRetirement == GlobalBindlessSetError::InvalidHandle &&
+                storageStatsAfter.capacity == storageStatsBefore.capacity &&
+                storageStatsAfter.liveCount == storageStatsBefore.liveCount &&
+                storageStatsAfter.retiredCount == storageStatsBefore.retiredCount &&
+                storageStatsAfter.availableCount == storageStatsBefore.availableCount &&
+                storageStatsAfter.exhaustedCount == storageStatsBefore.exhaustedCount &&
+                storageStatsAfter.peakLiveCount == storageStatsBefore.peakLiveCount;
+    }
+
+    device.waitIdle();
+    if (uploadAwaitingSubmission && sceneBuffers.initialized()) {
+        const bool discarded = sceneBuffers.discardRecordedUploads() == GpuSceneBufferSetError::None;
+        uploadAwaitingSubmission = false;
+        valid = discarded && valid;
+    }
+    if (sceneBuffers.initialized()) {
+        const bool sceneShutdown = sceneBuffers.shutdown() == GpuSceneBufferSetError::None;
+        valid = sceneShutdown && valid;
+    }
+
+    bool descriptorRetirementValid = true;
+    if (texture2DPublication.handle.isValid()) {
+        descriptorRetirementValid &=
+            bindlessSet.retire(texture2DPublication.handle, lastUseSequence) == GlobalBindlessSetError::None;
+    }
+    if (textureCubePublication.handle.isValid()) {
+        descriptorRetirementValid &=
+            bindlessSet.retire(textureCubePublication.handle, lastUseSequence) == GlobalBindlessSetError::None;
+    }
+    if (samplerPublication.handle.isValid()) {
+        descriptorRetirementValid &=
+            bindlessSet.retire(samplerPublication.handle, lastUseSequence) == GlobalBindlessSetError::None;
+    }
+    if (outputPublication.handle.isValid()) {
+        descriptorRetirementValid &=
+            bindlessSet.retire(outputPublication.handle, lastUseSequence) == GlobalBindlessSetError::None;
+    }
+    valid = descriptorRetirementValid && valid;
+
+    if (lastUseSequence != 0u) {
+        const GlobalBindlessReclaimResult earlyReclaim = bindlessSet.reclaim(lastUseSequence - 1u);
+        const GlobalBindlessReclaimResult completedReclaim = bindlessSet.reclaim(lastUseSequence);
+        valid = valid && earlyReclaim.sampledTexture2D.reclaimedCount == 0u &&
+                earlyReclaim.sampledTextureCube.reclaimedCount == 0u && earlyReclaim.samplers.reclaimedCount == 0u &&
+                earlyReclaim.storageBuffers.reclaimedCount == 0u &&
+                completedReclaim.sampledTexture2D.reclaimedCount == 1u &&
+                completedReclaim.sampledTextureCube.reclaimedCount == 1u &&
+                completedReclaim.samplers.reclaimedCount == 1u && completedReclaim.storageBuffers.reclaimedCount == 4u;
+    } else {
+        (void)bindlessSet.reclaim(0u);
+    }
+
+    if (output.isValid())
+        device.destroyBuffer(output);
+    if (sampler.isValid())
+        device.destroySampler(sampler);
+    if (textureCubeView.isValid())
+        device.destroyTextureView(textureCubeView);
+    if (textureCube.isValid())
+        device.destroyTexture(textureCube);
+    if (texture2DView.isValid())
+        device.destroyTextureView(texture2DView);
+    if (texture2D.isValid())
+        device.destroyTexture(texture2D);
+
+    if (valid) {
+        const RhiSamplerHandle replacementSampler = device.createSampler({});
+        const auto replacementPublication = bindlessSet.publishSampler(replacementSampler);
+        bool replacementValid =
+            replacementSampler.isValid() && replacementPublication.succeeded() &&
+            replacementPublication.handle ==
+                BindlessSamplerHandle{samplerPublication.handle.index, samplerPublication.handle.generation + 1u};
+        if (replacementPublication.handle.isValid()) {
+            replacementValid &=
+                bindlessSet.retire(replacementPublication.handle, lastUseSequence) == GlobalBindlessSetError::None;
+            (void)bindlessSet.reclaim(lastUseSequence);
+        }
+        valid = replacementValid && valid;
+        if (replacementSampler.isValid())
+            device.destroySampler(replacementSampler);
+    }
+
+    if (pipeline.isValid())
+        device.destroyPipeline(pipeline);
+    if (pipelineLayout.isValid())
+        device.destroyPipelineLayout(pipelineLayout);
+    if (shader.isValid())
+        device.destroyShader(shader);
+    bindlessSet.shutdown();
+    if (!valid) {
+        std::cerr << "Global Bindless GPU Scene upload or lifecycle validation failed\n";
+    }
+    return valid && device.validationErrorCount() == validationErrorsBefore;
+}
+
 } // namespace
 
 [[nodiscard]] bool validateCubeArrayViews(VkRhiDevice& device) {
@@ -2224,6 +2562,7 @@ int main() {
 #endif
         !validateTemporalOutputTarget(device, *commandPool) ||
         !validateBindGroupUpdateLifecycle(device, *commandPool) ||
+        !validateGlobalBindlessGpuScene(device, *commandPool) ||
         !validateVulkanInterop(device, *commandPool, texture, textureView, textureWidth, textureHeight, textureDepth) ||
         !validateOffscreenCoordinateContract(device, *commandPool, window) ||
         !validateRenderGraphMultiQueue(device, *commandPool) ||

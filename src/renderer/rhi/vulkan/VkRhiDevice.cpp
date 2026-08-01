@@ -1618,12 +1618,20 @@ bool VkRhiDevice::init(const RhiDeviceDesc& desc) {
     m_capabilities.maxSamplerAnisotropy = m_data->properties.limits.maxSamplerAnisotropy;
     m_capabilities.maxDescriptorSetUpdateAfterBindSampledImages =
         properties12.maxDescriptorSetUpdateAfterBindSampledImages;
+    m_capabilities.maxDescriptorSetUpdateAfterBindSamplers = properties12.maxDescriptorSetUpdateAfterBindSamplers;
     m_capabilities.maxDescriptorSetUpdateAfterBindStorageImages =
         properties12.maxDescriptorSetUpdateAfterBindStorageImages;
     m_capabilities.maxDescriptorSetUpdateAfterBindUniformBuffers =
         properties12.maxDescriptorSetUpdateAfterBindUniformBuffers;
     m_capabilities.maxDescriptorSetUpdateAfterBindStorageBuffers =
         properties12.maxDescriptorSetUpdateAfterBindStorageBuffers;
+    m_capabilities.maxPerStageDescriptorUpdateAfterBindSampledImages =
+        properties12.maxPerStageDescriptorUpdateAfterBindSampledImages;
+    m_capabilities.maxPerStageDescriptorUpdateAfterBindSamplers =
+        properties12.maxPerStageDescriptorUpdateAfterBindSamplers;
+    m_capabilities.maxPerStageDescriptorUpdateAfterBindStorageBuffers =
+        properties12.maxPerStageDescriptorUpdateAfterBindStorageBuffers;
+    m_capabilities.maxPerStageUpdateAfterBindResources = properties12.maxPerStageUpdateAfterBindResources;
     m_capabilities.graphicsQueueFamilyIndex = m_data->queueFamilies.graphics;
     m_capabilities.computeQueueFamilyIndex = m_data->queueFamilies.compute;
     m_capabilities.transferQueueFamilyIndex = m_data->queueFamilies.transfer;
@@ -2173,6 +2181,24 @@ bool VkRhiDevice::getTextureDesc(const RhiTextureHandle texture, RhiTextureDesc&
     return true;
 }
 
+bool VkRhiDevice::getTextureViewDesc(const RhiTextureViewHandle textureView, RhiTextureViewDesc& desc) const {
+    const std::shared_lock<std::shared_mutex> registryLock(m_data->resourceRegistryMutex);
+    const auto* record = m_data != nullptr ? findRecord(m_data->textureViews, textureView) : nullptr;
+    if (!m_initialized || record == nullptr)
+        return false;
+    desc = record->desc;
+    return true;
+}
+
+bool VkRhiDevice::getSamplerDesc(const RhiSamplerHandle sampler, RhiSamplerDesc& desc) const {
+    const std::shared_lock<std::shared_mutex> registryLock(m_data->resourceRegistryMutex);
+    const auto* record = m_data != nullptr ? findRecord(m_data->samplers, sampler) : nullptr;
+    if (!m_initialized || record == nullptr)
+        return false;
+    desc = record->desc;
+    return true;
+}
+
 RhiTextureViewHandle VkRhiDevice::createTextureView(const RhiTextureViewDesc& desc) {
     // Exclusive: the texture record pointer is used across the native view
     // creation and the registry insertion below.
@@ -2248,7 +2274,7 @@ RhiSamplerHandle VkRhiDevice::createSampler(const RhiSamplerDesc& desc) {
         return {};
     const std::unique_lock<std::shared_mutex> registryLock(m_data->resourceRegistryMutex);
     const RhiSamplerHandle handle = m_data->samplerHandles.allocate();
-    m_data->samplers.emplace(handleKey(handle), VkRhiDeviceData::Sampler{sampler});
+    m_data->samplers.emplace(handleKey(handle), VkRhiDeviceData::Sampler{sampler, desc});
     return handle;
 }
 

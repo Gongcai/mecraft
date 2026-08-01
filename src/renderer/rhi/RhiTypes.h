@@ -135,9 +135,14 @@ struct RhiCapabilities {
     bool timelineSemaphore = false;
     bool bufferDeviceAddress = false;
     uint32_t maxDescriptorSetUpdateAfterBindSampledImages = 0u;
+    uint32_t maxDescriptorSetUpdateAfterBindSamplers = 0u;
     uint32_t maxDescriptorSetUpdateAfterBindStorageImages = 0u;
     uint32_t maxDescriptorSetUpdateAfterBindUniformBuffers = 0u;
     uint32_t maxDescriptorSetUpdateAfterBindStorageBuffers = 0u;
+    uint32_t maxPerStageDescriptorUpdateAfterBindSampledImages = 0u;
+    uint32_t maxPerStageDescriptorUpdateAfterBindSamplers = 0u;
+    uint32_t maxPerStageDescriptorUpdateAfterBindStorageBuffers = 0u;
+    uint32_t maxPerStageUpdateAfterBindResources = 0u;
     uint32_t graphicsQueueFamilyIndex = std::numeric_limits<uint32_t>::max();
     uint32_t computeQueueFamilyIndex = std::numeric_limits<uint32_t>::max();
     uint32_t transferQueueFamilyIndex = std::numeric_limits<uint32_t>::max();
