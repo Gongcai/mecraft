@@ -776,6 +776,9 @@ void main() {
 layout(location = 0) out vec4 outColor0;
 layout(location = 1) out vec4 outColor1;
 void main() {
+    if (gl_FragCoord.x < 0.0) {
+        discard;
+    }
     outColor0 = vec4(1.0);
     outColor1 = vec4(0.5);
 }
@@ -1884,6 +1887,14 @@ int main() {
     desc.enableDebugOutput = true;
     if (!device.init(desc)) {
         std::cerr << "vulkan_rhi_smoke_test: device init failed\n";
+        glfwDestroyWindow(window);
+        glfwTerminate();
+        return 1;
+    }
+    if (device.capabilities().vulkanApiVersion < VK_API_VERSION_1_3 ||
+        !device.capabilities().shaderDemoteToHelperInvocation) {
+        std::cerr << "vulkan_rhi_smoke_test: Vulkan 1.3 shader target features are unavailable\n";
+        device.shutdown();
         glfwDestroyWindow(window);
         glfwTerminate();
         return 1;

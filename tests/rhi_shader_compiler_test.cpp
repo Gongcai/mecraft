@@ -3,12 +3,19 @@
 
 #include <array>
 #include <cctype>
+#include <cstdint>
 #include <initializer_list>
 #include <iostream>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace {
+constexpr uint32_t kSpirvMagicNumber = 0x07230203u;
+constexpr uint32_t kSpirvVersion16 = 0x00010600u;
+constexpr uint16_t kSpirvOpTerminateInvocation = 4416u;
+constexpr uint16_t kSpirvOpDemoteToHelperInvocation = 5380u;
+
 struct ShaderCase {
     const char* path;
     RhiShaderStage stage;
@@ -31,8 +38,13 @@ struct ShaderCase {
         std::cerr << backendName << " shader compilation failed [" << shaderCase.path << "]: " << errorMessage << '\n';
         return false;
     }
-    if (compiled->spirv.empty()) {
-        std::cerr << backendName << " shader compilation produced empty SPIR-V\n";
+    if (compiled->spirv.size() < 2u) {
+        std::cerr << backendName << " shader compilation produced an incomplete SPIR-V header [" << shaderCase.path
+                  << "]\n";
+        return false;
+    }
+    if (compiled->spirv[0] != kSpirvMagicNumber || compiled->spirv[1] != kSpirvVersion16) {
+        std::cerr << backendName << " shader compilation did not produce SPIR-V 1.6 [" << shaderCase.path << "]\n";
         return false;
     }
     return true;
@@ -56,6 +68,65 @@ struct ShaderCase {
         }
     }
     return true;
+}
+
+[[nodiscard]] bool spirvContainsOpcode(const std::vector<uint32_t>& spirv, const uint16_t opcode) {
+    size_t offset = 5u;
+    while (offset < spirv.size()) {
+        const uint32_t instruction = spirv[offset];
+        const uint32_t wordCount = instruction >> 16u;
+        if (wordCount == 0u || wordCount > spirv.size() - offset) {
+            return false;
+        }
+        if (static_cast<uint16_t>(instruction & 0xffffu) == opcode) {
+            return true;
+        }
+        offset += wordCount;
+    }
+    return false;
+}
+
+[[nodiscard]] bool validateFragmentDiscardContract() {
+    constexpr std::string_view kSource = R"(#version 450 core
+layout(location = 0) out vec4 outColor;
+layout(push_constant) uniform DiscardContractPushConstants {
+    float cutoff;
+} pc;
+
+void main() {
+    if (gl_FragCoord.x < pc.cutoff) {
+        discard;
+    }
+    outColor = vec4(1.0);
+}
+)";
+
+    RhiShaderDesc desc;
+    desc.debugName = "fragment-discard-contract";
+    desc.stage = RhiShaderStage::Fragment;
+    desc.source = kSource.data();
+    desc.sourceSize = kSource.size();
+
+    const auto validateBackend = [&](const renderer::rhi::RhiShaderBackend backend, const char* backendName,
+                                     const uint16_t expectedOpcode, const uint16_t rejectedOpcode) {
+        std::string errorMessage;
+        const auto compiled = renderer::rhi::compileShaderToSpirv(desc, backend, errorMessage);
+        if (!compiled.has_value()) {
+            std::cerr << backendName << " fragment discard contract failed to compile: " << errorMessage << '\n';
+            return false;
+        }
+        if (!spirvContainsOpcode(compiled->spirv, expectedOpcode) ||
+            spirvContainsOpcode(compiled->spirv, rejectedOpcode)) {
+            std::cerr << backendName << " fragment discard contract produced an invalid termination opcode\n";
+            return false;
+        }
+        return true;
+    };
+
+    return validateBackend(renderer::rhi::RhiShaderBackend::Vulkan, "Vulkan", kSpirvOpDemoteToHelperInvocation,
+                           kSpirvOpTerminateInvocation) &&
+           validateBackend(renderer::rhi::RhiShaderBackend::OpenGl, "OpenGL", kSpirvOpTerminateInvocation,
+                           kSpirvOpDemoteToHelperInvocation);
 }
 
 [[nodiscard]] bool validateGBufferWriterContracts() {
@@ -224,6 +295,7 @@ int main() {
         success = compileForBackend(shaderCase, *source, renderer::rhi::RhiShaderBackend::Vulkan, "Vulkan") && success;
         success = compileForBackend(shaderCase, *source, renderer::rhi::RhiShaderBackend::OpenGl, "OpenGL") && success;
     }
+    success = validateFragmentDiscardContract() && success;
     success = validateGBufferWriterContracts() && success;
     return success ? 0 : 1;
 }

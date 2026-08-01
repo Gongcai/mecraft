@@ -126,6 +126,7 @@ struct RhiCapabilities {
     uint32_t vulkanApiVersion = 0u;
     bool dynamicRendering = false;
     bool synchronization2 = false;
+    bool shaderDemoteToHelperInvocation = false;
     bool timelineSemaphore = false;
     bool bufferDeviceAddress = false;
     uint32_t maxDescriptorSetUpdateAfterBindSampledImages = 0u;

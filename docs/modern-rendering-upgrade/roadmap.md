@@ -107,7 +107,12 @@ M1 与 M2 可并行开发，但公共 `GpuMaterial`、`GpuSceneGeometry` 与 Sta
 
 ### 任务
 
-1. Vulkan Shader Target 升级到 Vulkan 1.3 / SPIR-V 1.6。
+1. Vulkan Shader Target 升级到 Vulkan 1.3 / SPIR-V 1.6。（实现完成：glslang 客户端与
+   输出目标已固定为 Vulkan 1.3 / SPIR-V 1.6，双后端宏编译路径均锁定 SPIR-V Header；
+   OpenGL Fragment 的 `discard` 使用可交叉编译的终止指令，Vulkan 保留 SPIR-V 1.6 的
+   Demote 语义；Vulkan 设备选择、创建与能力表已强制启用
+   `shaderDemoteToHelperInvocation`。Shader Compiler、OpenGL RHI Core、Vulkan RHI Smoke
+   与双后端基础启动验证均通过，Vulkan 未发现 Validation/VUID 错误。）
 2. RHI Descriptor Array、Binding Flags、批量更新与生命周期。
 3. Global Bindless Set、Material/Geometry/Instance Buffers。
 4. RHI AS Handle、Build Size、Build/Copy/Barrier 与 Device Address。

@@ -1370,8 +1370,9 @@ bool VkRhiDevice::init(const RhiDeviceDesc& desc) {
         if (features2.features.samplerAnisotropy != VK_TRUE || features2.features.independentBlend != VK_TRUE ||
             features2.features.imageCubeArray != VK_TRUE || features11.shaderDrawParameters != VK_TRUE ||
             features13.dynamicRendering != VK_TRUE || features13.synchronization2 != VK_TRUE ||
-            features12.timelineSemaphore != VK_TRUE || features12.bufferDeviceAddress != VK_TRUE ||
-            features12.hostQueryReset != VK_TRUE || depthClip.depthClipControl != VK_TRUE) {
+            features13.shaderDemoteToHelperInvocation != VK_TRUE || features12.timelineSemaphore != VK_TRUE ||
+            features12.bufferDeviceAddress != VK_TRUE || features12.hostQueryReset != VK_TRUE ||
+            depthClip.depthClipControl != VK_TRUE) {
             continue;
         }
 #if defined(MECRAFT_ENABLE_STREAMLINE)
@@ -1432,6 +1433,7 @@ bool VkRhiDevice::init(const RhiDeviceDesc& desc) {
     VkPhysicalDeviceVulkan13Features features13{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES, &depthClip};
     features13.dynamicRendering = VK_TRUE;
     features13.synchronization2 = VK_TRUE;
+    features13.shaderDemoteToHelperInvocation = VK_TRUE;
     features13.privateData = std::any_of(requiredFeatures13.begin(), requiredFeatures13.end(),
                                          [](const char* name) { return std::strcmp(name, "privateData") == 0; })
                                  ? VK_TRUE
@@ -1572,6 +1574,7 @@ bool VkRhiDevice::init(const RhiDeviceDesc& desc) {
     m_capabilities.vulkanApiVersion = m_data->properties.apiVersion;
     m_capabilities.dynamicRendering = true;
     m_capabilities.synchronization2 = true;
+    m_capabilities.shaderDemoteToHelperInvocation = true;
     m_capabilities.timelineSemaphore = true;
     // Placed textures ride Vulkan 1.3 core (vkGetDeviceImageMemoryRequirements)
     // plus VMA's aliasing allocation path; no extension gate needed.

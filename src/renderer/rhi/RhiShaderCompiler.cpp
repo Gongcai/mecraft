@@ -10,22 +10,31 @@
 
 namespace renderer::rhi {
 namespace {
-[[nodiscard]] const char* backendDefinition(const RhiShaderBackend backend) {
+[[nodiscard]] const char* backendPreamble(const RhiShaderBackend backend, const RhiShaderStage stage) {
     switch (backend) {
     case RhiShaderBackend::Vulkan: return "#define RHI_VULKAN 1\n";
-    case RhiShaderBackend::OpenGl: return "#define RHI_OPENGL 1\n";
+    case RhiShaderBackend::OpenGl:
+        if (stage == RhiShaderStage::Fragment) {
+            // SPIR-V 1.6 maps GLSL discard to demote, which OpenGL GLSL cannot represent. The
+            // terminate opcode cross-compiles to the native OpenGL discard statement.
+            return "#extension GL_EXT_terminate_invocation : require\n"
+                   "#define discard terminateInvocation\n"
+                   "#define RHI_OPENGL 1\n";
+        }
+        return "#define RHI_OPENGL 1\n";
     }
     return nullptr;
 }
 
-// Injects the selected RHI backend definition immediately after the GLSL version directive.
-// The source parameter must contain one canonical GLSL stage, and backend identifies the device
-// that will execute the compiled shader. The returned source preserves every original line while
-// making exactly one backend macro visible to shared shader helpers.
-[[nodiscard]] std::optional<std::string>
-injectBackendDefinition(const std::string& source, const RhiShaderBackend backend, std::string& errorMessage) {
-    const char* definition = backendDefinition(backend);
-    if (definition == nullptr) {
+// Injects the selected RHI backend preamble immediately after the GLSL version directive.
+// The source parameter must contain one canonical GLSL stage, backend identifies the device that
+// will execute the compiled shader, and stage selects stage-specific language mappings. The returned
+// source preserves every original line while exposing the backend contract to shared shader helpers.
+[[nodiscard]] std::optional<std::string> injectBackendPreamble(const std::string& source,
+                                                               const RhiShaderBackend backend,
+                                                               const RhiShaderStage stage, std::string& errorMessage) {
+    const char* preamble = backendPreamble(backend, stage);
+    if (preamble == nullptr) {
         errorMessage = "shader compilation received an invalid RHI backend";
         return std::nullopt;
     }
@@ -39,12 +48,12 @@ injectBackendDefinition(const std::string& source, const RhiShaderBackend backen
             source.compare(directiveStart, 8u, "#version") == 0) {
             const size_t insertionPoint = lineEnd == std::string::npos ? source.size() : lineEnd + 1u;
             std::string result;
-            result.reserve(source.size() + std::char_traits<char>::length(definition));
+            result.reserve(source.size() + std::char_traits<char>::length(preamble));
             result.append(source, 0u, insertionPoint);
             if (lineEnd == std::string::npos) {
                 result.push_back('\n');
             }
-            result += definition;
+            result += preamble;
             result.append(source, insertionPoint, std::string::npos);
             return result;
         }
@@ -264,7 +273,7 @@ std::optional<RhiCompiledShader> compileShaderToSpirv(const RhiShaderDesc& desc,
         return std::nullopt;
     }
     const std::string canonicalSource(desc.source, static_cast<size_t>(desc.sourceSize));
-    const std::optional<std::string> source = injectBackendDefinition(canonicalSource, backend, errorMessage);
+    const std::optional<std::string> source = injectBackendPreamble(canonicalSource, backend, desc.stage, errorMessage);
     if (!source.has_value()) {
         return std::nullopt;
     }
@@ -279,8 +288,8 @@ std::optional<RhiCompiledShader> compileShaderToSpirv(const RhiShaderDesc& desc,
     shader.setEntryPoint(desc.entryPoint);
     shader.setSourceEntryPoint(desc.entryPoint);
     shader.setEnvInput(glslang::EShSourceGlsl, language, glslang::EShClientVulkan, 100);
-    shader.setEnvClient(glslang::EShClientVulkan, glslang::EShTargetVulkan_1_1);
-    shader.setEnvTarget(glslang::EShTargetSpv, glslang::EShTargetSpv_1_3);
+    shader.setEnvClient(glslang::EShClientVulkan, glslang::EShTargetVulkan_1_3);
+    shader.setEnvTarget(glslang::EShTargetSpv, glslang::EShTargetSpv_1_6);
 
     constexpr EShMessages kMessages = static_cast<EShMessages>(EShMsgSpvRules | EShMsgVulkanRules);
     if (!shader.parse(GetDefaultResources(), 450, false, kMessages)) {
