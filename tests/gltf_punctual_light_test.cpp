@@ -105,6 +105,77 @@ bool testParsedPunctualLights() {
                        "glTF shadow requests must remain unallocated scene metadata");
 }
 
+bool testValidationAtriumAsset() {
+    const std::string assetPath =
+        std::string(MECRAFT_TEST_SOURCE_DIR) + "/assets/models/validation/M03SponzaAtrium.gltf";
+    cgltf_options options{};
+    cgltf_data* rawData = nullptr;
+    const cgltf_result parseResult = cgltf_parse_file(&options, assetPath.c_str(), &rawData);
+    if (!requireTrue(parseResult == cgltf_result_success && rawData != nullptr,
+                     "the M03 validation atrium must parse")) {
+        return false;
+    }
+    const auto freeData = [](cgltf_data* data) {
+        cgltf_free(data);
+    };
+    std::unique_ptr<cgltf_data, decltype(freeData)> data(rawData, freeData);
+    if (!requireTrue(cgltf_load_buffers(&options, data.get(), assetPath.c_str()) == cgltf_result_success &&
+                         cgltf_validate(data.get()) == cgltf_result_success && data->scene != nullptr,
+                     "the M03 validation atrium must satisfy cgltf validation")) {
+        return false;
+    }
+
+    bool requiresPunctualLights = false;
+    bool requiresEmissiveStrength = false;
+    for (cgltf_size index = 0u; index < data->extensions_required_count; ++index) {
+        const char* extension = data->extensions_required[index];
+        requiresPunctualLights = requiresPunctualLights || std::strcmp(extension, "KHR_lights_punctual") == 0;
+        requiresEmissiveStrength =
+            requiresEmissiveStrength || std::strcmp(extension, "KHR_materials_emissive_strength") == 0;
+    }
+
+    std::size_t emissiveMaterialCount = 0u;
+    for (cgltf_size index = 0u; index < data->materials_count; ++index) {
+        emissiveMaterialCount += data->materials[index].has_emissive_strength != 0 ? 1u : 0u;
+    }
+
+    std::vector<const cgltf_node*> nodes;
+    for (cgltf_size index = 0u; index < data->scene->nodes_count; ++index) {
+        nodes.push_back(data->scene->nodes[index]);
+    }
+    std::size_t pointLightCount = 0u;
+    std::size_t spotLightCount = 0u;
+    std::size_t cachedShadowCount = 0u;
+    std::size_t dynamicShadowCount = 0u;
+    for (std::size_t index = 0u; index < nodes.size(); ++index) {
+        const cgltf_node* node = nodes[index];
+        if (node->light != nullptr) {
+            const renderer::assets::GltfPunctualLightDecodeResult decoded =
+                renderer::assets::decodeGltfPunctualLight(*node);
+            if (!requireTrue(decoded.succeeded(), "every M03 punctual light must decode")) {
+                return false;
+            }
+            pointLightCount += decoded.source.type == renderer::contracts::GpuLightType::Point ? 1u : 0u;
+            spotLightCount += decoded.source.type == renderer::contracts::GpuLightType::Spot ? 1u : 0u;
+            cachedShadowCount +=
+                decoded.source.shadowPolicy == renderer::contracts::GpuLightShadowPolicy::RasterCached ? 1u : 0u;
+            dynamicShadowCount +=
+                decoded.source.shadowPolicy == renderer::contracts::GpuLightShadowPolicy::RasterDynamic ? 1u : 0u;
+        }
+        for (cgltf_size child = 0u; child < node->children_count; ++child) {
+            nodes.push_back(node->children[child]);
+        }
+    }
+
+    return requireTrue(requiresPunctualLights && requiresEmissiveStrength,
+                       "M03 must require punctual-light and emissive-strength extensions") &&
+           requireTrue(data->lights_count == 4u && pointLightCount == 3u && spotLightCount == 1u,
+                       "M03 must lock three point lights and one spot light") &&
+           requireTrue(cachedShadowCount == 2u && dynamicShadowCount == 2u,
+                       "M03 must lock cached and dynamic local-shadow coverage") &&
+           requireTrue(emissiveMaterialCount == 2u, "M03 must lock two emissive fixture materials");
+}
+
 bool testStructuredDecodeFailure() {
     cgltf_light light{};
     light.type = cgltf_light_type_point;
@@ -175,7 +246,8 @@ bool testStaticMeshIntegrationSource() {
 } // namespace
 
 int main() {
-    if (!testParsedPunctualLights() || !testStructuredDecodeFailure() || !testStaticMeshIntegrationSource()) {
+    if (!testParsedPunctualLights() || !testValidationAtriumAsset() || !testStructuredDecodeFailure() ||
+        !testStaticMeshIntegrationSource()) {
         return EXIT_FAILURE;
     }
     std::cout << "[gltf_punctual_light_test] PASS\n";

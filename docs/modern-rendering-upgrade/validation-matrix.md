@@ -20,7 +20,7 @@
 | --- | --- | --- |
 | M01 | Material Grid | Metallic/Roughness/IOR/Clearcoat 扫描 |
 | M02 | Damaged Helmet | 标准 Metallic-Roughness、Normal、IBL |
-| M03 | Sponza | 大场景、局部灯、阴影、RTGI、Emissive |
+| M03 | Sponza Atrium | 大场景、局部灯、阴影、RTGI、Emissive |
 | M04 | Transmission Lab | glTF Transmission/Volume、厚玻璃、多 Primitive |
 | M05 | Instance Stress | 1000 实例、遮挡、LOD、GPU Culling |
 | M06 | Animation Lab | Skin、Morph、Current/Previous Vertex、BLAS Update |
@@ -30,8 +30,8 @@
 
 ### 1.3 已锁定的参考图
 
-参考图清单当前锁定 16 个 OpenGL/Vulkan 捕获项。M0 体素与模型基线保持场景契约 v1；
-V01、V02、V07、M01、M02、M07 使用场景契约 v2，其中体素场景声明确定性 Fixture，
+参考图清单当前锁定 18 个 OpenGL/Vulkan 捕获项。M0 体素与模型基线保持场景契约 v1；
+V01、V02、V07、M01、M02、M03、M07 使用场景契约 v2，其中体素场景声明确定性 Fixture，
 模型场景声明确定性 Reflection Probe Grid。
 
 | 场景契约 | 版本 | 后端 | 捕获配置 | 当前状态 |
@@ -43,10 +43,11 @@ V01、V02、V07、M01、M02、M07 使用场景契约 v2，其中体素场景声�
 | `v07_local_light_village` | 2 | OpenGL/Vulkan | 1280×720，预热 300 帧，采样 3 帧 | 已锁定 |
 | `m01_material_grid` | 2 | OpenGL/Vulkan | 1280×720，预热 300 帧，采样 3 帧 | 已锁定 |
 | `m02_damaged_helmet` | 2 | OpenGL/Vulkan | 1280×720，预热 300 帧，采样 3 帧 | 已锁定 |
+| `m03_sponza_atrium` | 2 | OpenGL/Vulkan | 1280×720，预热 300 帧，采样 3 帧 | 已锁定 |
 | `m07_probe_interior` | 2 | OpenGL/Vulkan | 1280×720，预热 300 帧，采样 3 帧 | 已锁定 |
 
 每张 PNG 同时记录字节数、FNV-1a 64 和 SHA-256；测试会重新解析场景契约，并以“场景契约
-ID + 后端”验证唯一性。六个 v2 场景的 Vulkan 捕获均启用 Validation，未发现 Validation/VUID
+ID + 后端”验证唯一性。七个 v2 场景的 Vulkan 捕获均启用 Validation，未发现 Validation/VUID
 错误。粒子不纳入本轮版本化参考图。
 
 ## 2. 功能矩阵

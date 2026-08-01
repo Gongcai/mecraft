@@ -439,6 +439,60 @@
         "fnv1a64": "49bd90e1de0eeeda",
         "sha256": "5fa9609c73ea05c3205267ed9d63cd38b81064df874ed5d3fbaec20309da9e41"
       }
+    },
+    {
+      "scene": "model",
+      "rhi_backend": "vulkan",
+      "scene_contract": {
+        "source": "../scenes/m03_sponza_atrium.json",
+        "id": "m03_sponza_atrium",
+        "version": 2,
+        "content_hash": "78e7bcd675c0eb54",
+        "hash_algorithm": "fnv1a64"
+      },
+      "camera_path": {
+        "id": "m03_sponza_atrium",
+        "content_hash": "0bb11dd13d10c191"
+      },
+      "render_settings": {
+        "id": "m0_model_render_settings",
+        "version": 1,
+        "content_hash": "9a8940b4590c9585"
+      },
+      "image": {
+        "source": "m03_sponza_atrium_vulkan_1280x720.png",
+        "format": "png_rgba8",
+        "byte_size": 1452716,
+        "fnv1a64": "08f27649deb46570",
+        "sha256": "bd676fe71d6236abb522f83652cd8e8724effe2645b117d160f11a3cfec28b12"
+      }
+    },
+    {
+      "scene": "model",
+      "rhi_backend": "opengl",
+      "scene_contract": {
+        "source": "../scenes/m03_sponza_atrium.json",
+        "id": "m03_sponza_atrium",
+        "version": 2,
+        "content_hash": "78e7bcd675c0eb54",
+        "hash_algorithm": "fnv1a64"
+      },
+      "camera_path": {
+        "id": "m03_sponza_atrium",
+        "content_hash": "0bb11dd13d10c191"
+      },
+      "render_settings": {
+        "id": "m0_model_render_settings",
+        "version": 1,
+        "content_hash": "9a8940b4590c9585"
+      },
+      "image": {
+        "source": "m03_sponza_atrium_opengl_1280x720.png",
+        "format": "png_rgba8",
+        "byte_size": 1180902,
+        "fnv1a64": "b35c719c29555d77",
+        "sha256": "ebb937340e9fb4044781ff524d3c4c11475e778e39513ea7270c37c65c0467f3"
+      }
     }
   ]
 }

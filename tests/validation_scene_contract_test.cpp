@@ -48,6 +48,7 @@ int main() {
     const std::filesystem::path villagePath = sceneRoot / "v07_local_light_village.json";
     const std::filesystem::path materialGridPath = sceneRoot / "m01_material_grid.json";
     const std::filesystem::path damagedHelmetPath = sceneRoot / "m02_damaged_helmet.json";
+    const std::filesystem::path sponzaAtriumPath = sceneRoot / "m03_sponza_atrium.json";
     const std::filesystem::path probeInteriorPath = sceneRoot / "m07_probe_interior.json";
     const app::validation::ValidationSceneContractLoadResult voxel =
         app::validation::loadValidationSceneContract(voxelPath);
@@ -63,6 +64,8 @@ int main() {
         app::validation::loadValidationSceneContract(materialGridPath);
     const app::validation::ValidationSceneContractLoadResult damagedHelmet =
         app::validation::loadValidationSceneContract(damagedHelmetPath);
+    const app::validation::ValidationSceneContractLoadResult sponzaAtrium =
+        app::validation::loadValidationSceneContract(sponzaAtriumPath);
     const app::validation::ValidationSceneContractLoadResult probeInterior =
         app::validation::loadValidationSceneContract(probeInteriorPath);
     const bool voxelLoaded = requireLoaded(voxel, "m0_voxel_baseline");
@@ -72,9 +75,10 @@ int main() {
     const bool villageLoaded = requireLoaded(village, "v07_local_light_village");
     const bool materialGridLoaded = requireLoaded(materialGrid, "m01_material_grid");
     const bool damagedHelmetLoaded = requireLoaded(damagedHelmet, "m02_damaged_helmet");
+    const bool sponzaAtriumLoaded = requireLoaded(sponzaAtrium, "m03_sponza_atrium");
     const bool probeInteriorLoaded = requireLoaded(probeInterior, "m07_probe_interior");
     if (!voxelLoaded || !modelLoaded || !windowRoomLoaded || !caveLoaded || !villageLoaded || !materialGridLoaded ||
-        !damagedHelmetLoaded || !probeInteriorLoaded) {
+        !damagedHelmetLoaded || !sponzaAtriumLoaded || !probeInteriorLoaded) {
         return 1;
     }
     if (!requireTrue(voxel.succeeded() && model.succeeded(), "both M0 scene descriptors must verify") ||
@@ -142,6 +146,16 @@ int main() {
                          stableContentHashHex(damagedHelmet.contract.cameraPath.contentHash) == "1c0a7939ab2fcdf6" &&
                          stableContentHashHex(damagedHelmet.contract.contentHash) == "a930eac94f635702",
                      "M02 scene, Camera Path, asset, and Probe grid identities must remain locked") ||
+        !requireTrue(sponzaAtrium.contract.version == app::validation::kValidationSceneContractVersion &&
+                         sponzaAtrium.contract.scene == ValidationScene::Model &&
+                         sponzaAtrium.contract.modelAsset.has_value() &&
+                         sponzaAtrium.contract.modelProbeGrid.has_value() &&
+                         sponzaAtrium.contract.modelProbeGrid->spacingMeters == 2.4 &&
+                         sponzaAtrium.contract.modelProbeGrid->boundsPaddingMeters == 0.0 &&
+                         stableContentHashHex(sponzaAtrium.contract.modelAsset->contentHash) == "d9880183f37ab83c" &&
+                         stableContentHashHex(sponzaAtrium.contract.cameraPath.contentHash) == "0bb11dd13d10c191" &&
+                         stableContentHashHex(sponzaAtrium.contract.contentHash) == "78e7bcd675c0eb54",
+                     "M03 scene, Camera Path, asset, and Probe grid identities must remain locked") ||
         !requireTrue(probeInterior.contract.version == app::validation::kValidationSceneContractVersion &&
                          probeInterior.contract.scene == ValidationScene::Model &&
                          probeInterior.contract.modelAsset.has_value() &&

@@ -216,8 +216,9 @@ Ray Query Shadow 复用 TLAS 和 Cutout Candidate 判定。首轮仅对设置中
 
 模型场景通过 `DeferredLocalShadowSceneRevisions` 显式提交阴影相关几何修订。局部阴影缓存
 同时跟踪不透明与 Alpha Test 几何变化，场景层级、实例变换或参与绘制的资产集合变化会使
-对应缓存页失效；M07 的 Vulkan 正式捕获已验证局部灯能够读取当前模型几何，而不是复用旧
-场景阴影。
+对应缓存页失效。M03 的确定性 Sponza Atrium 资产锁定三个 Point Light、一个 Spot Light、
+两种 Raster Shadow Policy 与两组 Emissive 灯具；M03/M07 的 Vulkan 正式捕获共同验证局部灯
+能够读取当前模型几何及其阴影修订。
 
 ## 7. PBR IBL
 
@@ -308,14 +309,15 @@ Transmission Primitive 均沿用 glTF PBR 材质采样、主环境直接光、Em
 快照。本地第一人称玩家被明确排除，避免观察者模型进入环境探针。粒子不纳入本轮 Probe
 Capture 版本化验收，保留为独立后续工作项。
 
-V01、V02、V07、M01、M02、M07 已建立场景契约 v2：三个体素场景锁定 Fixture、世界与
+V01、V02、V07、M01、M02、M03、M07 已建立场景契约 v2：三个体素场景锁定 Fixture、世界与
 Camera Path 身份；M01 锁定材质球 glTF 资产及 0.8 米间距、0.1 米边界外扩的 Probe Grid，
 M02 锁定 Damaged Helmet 资产及 1.2 米间距、0.0 米边界外扩的 Probe Grid，M07 锁定多房间
-资产及 0.8 米间距、0.0 米边界外扩的 Probe Grid。六个场景均完成 OpenGL/Vulkan 1280×720、
-300 帧预热、3 帧采样的正式参考图，并以字节数、FNV-1a 64 和 SHA-256 写入 16 项统一清单；
+资产及 0.8 米间距、0.0 米边界外扩的 Probe Grid；M03 锁定 Sponza Atrium 资产及覆盖整个
+中庭的 2.4 米 Probe Grid。七个场景均完成 OpenGL/Vulkan 1280×720、300 帧预热、3 帧采样的
+正式参考图，并以字节数、FNV-1a 64 和 SHA-256 写入 18 项统一清单；
 Vulkan 捕获未发现 Validation/VUID 错误。参考图覆盖 Sky IBL 材质响应、洞穴转角、木屋局部光
-与透明门洞，以及多房间局部灯响应和 Box Projection。动态探针按确定的更新队列逐 Face/Mip
-构建，Dashboard 展示队列长度与资源代际。
+与透明门洞、Sponza Atrium 局部灯阴影，以及多房间局部灯响应和 Box Projection。动态探针按
+确定的更新队列逐 Face/Mip 构建，Dashboard 展示队列长度与资源代际。
 
 ## 8. 反射能量组合
 

@@ -37,7 +37,7 @@ struct ExpectedCapture {
     const char* sha256;
 };
 
-constexpr std::array<ExpectedCapture, 16u> kExpectedCaptures{
+constexpr std::array<ExpectedCapture, 18u> kExpectedCaptures{
     {{"voxel", "vulkan", "../scenes/m0_voxel_baseline.json", "m0_voxel_baseline",
       app::validation::kValidationSceneContractVersion1, "ecb85fb88ef6aeef", "93b8b518406d50f9",
       "m0_voxel_render_settings", "511c4e7a0e2e2de9", "m0_voxel_baseline_vulkan_1280x720.png", 1511309u,
@@ -101,7 +101,15 @@ constexpr std::array<ExpectedCapture, 16u> kExpectedCaptures{
      {"model", "opengl", "../scenes/m02_damaged_helmet.json", "m02_damaged_helmet",
       app::validation::kValidationSceneContractVersion, "a930eac94f635702", "1c0a7939ab2fcdf6",
       "m0_model_render_settings", "9a8940b4590c9585", "m02_damaged_helmet_opengl_1280x720.png", 1490078u,
-      "49bd90e1de0eeeda", "5fa9609c73ea05c3205267ed9d63cd38b81064df874ed5d3fbaec20309da9e41"}}};
+      "49bd90e1de0eeeda", "5fa9609c73ea05c3205267ed9d63cd38b81064df874ed5d3fbaec20309da9e41"},
+     {"model", "vulkan", "../scenes/m03_sponza_atrium.json", "m03_sponza_atrium",
+      app::validation::kValidationSceneContractVersion, "78e7bcd675c0eb54", "0bb11dd13d10c191",
+      "m0_model_render_settings", "9a8940b4590c9585", "m03_sponza_atrium_vulkan_1280x720.png", 1452716u,
+      "08f27649deb46570", "bd676fe71d6236abb522f83652cd8e8724effe2645b117d160f11a3cfec28b12"},
+     {"model", "opengl", "../scenes/m03_sponza_atrium.json", "m03_sponza_atrium",
+      app::validation::kValidationSceneContractVersion, "78e7bcd675c0eb54", "0bb11dd13d10c191",
+      "m0_model_render_settings", "9a8940b4590c9585", "m03_sponza_atrium_opengl_1280x720.png", 1180902u,
+      "b35c719c29555d77", "ebb937340e9fb4044781ff524d3c4c11475e778e39513ea7270c37c65c0467f3"}}};
 
 bool requireTrue(const bool condition, const std::string_view message) {
     if (!condition) {
@@ -340,7 +348,7 @@ int main() {
 
     const Json& captures = *manifest.find("captures");
     if (!requireTrue(captures.is_array() && captures.size() == kExpectedCaptures.size(),
-                     "manifest must contain exactly sixteen versioned captures")) {
+                     "manifest must contain exactly eighteen versioned captures")) {
         return 1;
     }
     std::array<bool, kExpectedCaptures.size()> seen{};

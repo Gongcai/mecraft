@@ -1,0 +1,29 @@
+{
+  "kind": "mecraft.validation_scene",
+  "version": 2,
+  "id": "m03_sponza_atrium",
+  "scene": "model",
+  "content_hash": "78e7bcd675c0eb54",
+  "camera_path": {
+    "source": "../camera_paths/m03_sponza_atrium.json",
+    "id": "m03_sponza_atrium",
+    "content_hash": "0bb11dd13d10c191"
+  },
+  "render_settings": {
+    "id": "m0_model_render_settings",
+    "version": 1,
+    "content_hash": "9a8940b4590c9585"
+  },
+  "environment": {
+    "time_of_day_seconds": 900.0,
+    "weather": "clear"
+  },
+  "model_asset": {
+    "source": "../../models/validation/M03SponzaAtrium.gltf",
+    "content_hash": "d9880183f37ab83c"
+  },
+  "reflection_probe_grid": {
+    "spacing_meters": 2.4,
+    "bounds_padding_meters": 0.0
+  }
+}

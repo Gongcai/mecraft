@@ -1,0 +1,37 @@
+{
+  "kind": "mecraft.camera_path",
+  "version": 1,
+  "id": "m03_sponza_atrium",
+  "coordinate_system": "right_handed_y_up",
+  "interpolation": "linear_position_slerp_orientation",
+  "keyframes": [
+    {
+      "time_seconds": 0.0,
+      "position": [-0.46, -0.13, 1.02],
+      "look_at": [0.0, -0.04, -0.18],
+      "up": [0.0, 1.0, 0.0],
+      "vertical_fov_degrees": 58.0
+    },
+    {
+      "time_seconds": 2.0,
+      "position": [0.0, -0.12, 0.72],
+      "look_at": [0.0, -0.02, -0.48],
+      "up": [0.0, 1.0, 0.0],
+      "vertical_fov_degrees": 56.0
+    },
+    {
+      "time_seconds": 4.0,
+      "position": [0.42, -0.1, 0.25],
+      "look_at": [-0.08, -0.02, -0.72],
+      "up": [0.0, 1.0, 0.0],
+      "vertical_fov_degrees": 54.0
+    },
+    {
+      "time_seconds": 6.0,
+      "position": [0.36, -0.1, 0.92],
+      "look_at": [-0.18, -0.04, -0.45],
+      "up": [0.0, 1.0, 0.0],
+      "vertical_fov_degrees": 58.0
+    }
+  ]
+}

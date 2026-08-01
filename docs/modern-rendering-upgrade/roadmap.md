@@ -57,8 +57,9 @@ M1 与 M2 可并行开发，但公共 `GpuMaterial`、`GpuSceneGeometry` 与 Sta
 5. 接入体素发光方块代理和 glTF `KHR_lights_punctual`。
 6. 建设局部灯 Shadow Atlas/Cube Array。（实现完成：稳定 Light ID 分配、Spot Atlas、
    Point Cube Array、缓存修订、Deferred/Forward+ 共享采样、Debug View、契约测试、
-   双后端 RHI 测试与 Vulkan Validation 均已接入；V07 已完成场景契约 v2、OpenGL/Vulkan
-   正式参考图与 Vulkan Validation 验收，M03 仍需对应版本化资产。）
+   双后端 RHI 测试与 Vulkan Validation 均已接入；V07 与 M03 已完成场景契约 v2、
+   OpenGL/Vulkan 正式参考图与 Vulkan Validation 验收。M03 锁定三个 Point Light、一个
+   Spot Light、缓存/动态阴影策略和 Emissive 灯具。）
 7. 生成 Sky Cubemap、GGX Prefilter Mips、DFG LUT。（实现完成：动态天气天空生成 128×128
    HDR Cubemap，构建 8 级 GGX 预过滤链与 256×256 Split-sum DFG LUT；Reflection Pass 已按
    Roughness/NoV 消费并提供 Mip/DFG Debug View；天空修订使用双代资源，Radiance 整体快照后
@@ -90,8 +91,8 @@ M1 与 M2 可并行开发，但公共 `GpuMaterial`、`GpuSceneGeometry` 与 Sta
    移动方块复用同一实例收集及方块纹理、Biome Tint、动画帧、体素光照路径，本地第一人称玩家
    不进入环境探针。体素静态 glTF 已复用模型场景 Probe Capture 管线，不透明、Alpha Test、
    Alpha Blend 与 Transmission Primitive 均保留 glTF PBR 材质、主环境直接光、Emission 和完整
-   `GpuLight` 快照。V01、V02、V07、M01、M02、M07 已完成场景契约 v2、1280×720 双后端
-   正式参考图和内容 Hash 锁定，统一清单共包含 16 个捕获项；Vulkan 捕获未发现
+   `GpuLight` 快照。V01、V02、V07、M01、M02、M03、M07 已完成场景契约 v2、1280×720
+   双后端正式参考图和内容 Hash 锁定，统一清单共包含 18 个捕获项；Vulkan 捕获未发现
    Validation/VUID 错误。粒子不纳入本轮版本化质量验收。Dashboard 与模型场景 Reflections 面板已接入队列
    深度、当前工作项、代际和槽位展示。）
 
@@ -212,8 +213,8 @@ M1 与 M2 可并行开发，但公共 `GpuMaterial`、`GpuSceneGeometry` 与 Sta
 - NRD License/Notice、第三方版本和构建开关检查。
 - 更新设置 UI、Dashboard、截图与发布说明。
 
-当前已锁定 V01、V02、V07、M01、M02、M07 六个场景契约 v2；各场景均以 300 帧预热、
-3 帧采样生成 OpenGL/Vulkan 1280×720 正式参考图，连同两个 M0 v1 基线形成 16 项清单，
+当前已锁定 V01、V02、V07、M01、M02、M03、M07 七个场景契约 v2；各场景均以 300 帧预热、
+3 帧采样生成 OpenGL/Vulkan 1280×720 正式参考图，连同两个 M0 v1 基线形成 18 项清单，
 并按场景契约版本、Camera Path、渲染设置、FNV-1a 64 和 SHA-256 锁定。该结果不代表完整
 Validation Matrix、Windows 平台和长时性能门禁已经完成；粒子捕获不属于本轮范围。
 
