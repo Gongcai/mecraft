@@ -68,6 +68,10 @@ void logVkError(const char* operation, const VkResult result) {
     std::cerr << "VkRhiDevice: " << operation << " failed with VkResult " << static_cast<int32_t>(result) << '\n';
 }
 
+void logRhiError(const char* message) {
+    std::cerr << "VkRhiDevice: " << message << '\n';
+}
+
 [[nodiscard]] bool vkSucceeded(const VkResult result, const char* operation) {
     if (result == VK_SUCCESS) {
         return true;
@@ -2541,6 +2545,18 @@ RhiBindGroupHandle VkRhiDevice::createBindGroup(const RhiBindGroupDesc& desc) {
         (variableEntryIt != layout->desc.entries.end() &&
          (desc.variableDescriptorCount == 0u || desc.variableDescriptorCount > variableEntryIt->arrayCount)))
         return {};
+    RhiBindGroupDesc storedDesc = desc;
+    std::sort(storedDesc.entries.begin(), storedDesc.entries.end(),
+              [](const RhiBindGroupEntry& lhs, const RhiBindGroupEntry& rhs) {
+                  return lhs.binding != rhs.binding ? lhs.binding < rhs.binding : lhs.arrayElement < rhs.arrayElement;
+              });
+    const auto duplicate =
+        std::adjacent_find(storedDesc.entries.begin(), storedDesc.entries.end(),
+                           [](const RhiBindGroupEntry& lhs, const RhiBindGroupEntry& rhs) {
+                               return lhs.binding == rhs.binding && lhs.arrayElement == rhs.arrayElement;
+                           });
+    if (duplicate != storedDesc.entries.end())
+        return {};
     VkDescriptorSetVariableDescriptorCountAllocateInfo variableCountInfo{
         VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_ALLOCATE_INFO};
     variableCountInfo.descriptorSetCount = 1u;
@@ -2556,11 +2572,11 @@ RhiBindGroupHandle VkRhiDevice::createBindGroup(const RhiBindGroupDesc& desc) {
     std::vector<VkWriteDescriptorSet> writes;
     std::vector<VkDescriptorBufferInfo> bufferInfos;
     std::vector<VkDescriptorImageInfo> imageInfos;
-    writes.reserve(desc.entries.size());
-    bufferInfos.reserve(desc.entries.size());
-    imageInfos.reserve(desc.entries.size());
-    std::set<uint64_t> writtenSlots;
-    for (const auto& entry : desc.entries) {
+    writes.reserve(storedDesc.entries.size());
+    bufferInfos.reserve(storedDesc.entries.size());
+    imageInfos.reserve(storedDesc.entries.size());
+    std::vector<uint32_t> writtenBindingCounts(layout->desc.entries.size(), 0u);
+    for (const auto& entry : storedDesc.entries) {
         const auto layoutEntryIt = std::find_if(layout->desc.entries.begin(), layout->desc.entries.end(),
                                                 [&](const auto& item) { return item.binding == entry.binding; });
         const uint32_t descriptorCount =
@@ -2568,12 +2584,11 @@ RhiBindGroupHandle VkRhiDevice::createBindGroup(const RhiBindGroupDesc& desc) {
                     rhiHasBindingFlag(layoutEntryIt->flags, RhiBindingFlag::VariableDescriptorCount)
                 ? desc.variableDescriptorCount
                 : (layoutEntryIt != layout->desc.entries.end() ? layoutEntryIt->arrayCount : 0u);
-        const uint64_t slotKey = (static_cast<uint64_t>(entry.binding) << 32u) | entry.arrayElement;
-        if (layoutEntryIt == layout->desc.entries.end() || entry.arrayElement >= descriptorCount ||
-            !writtenSlots.insert(slotKey).second) {
+        if (layoutEntryIt == layout->desc.entries.end() || entry.arrayElement >= descriptorCount) {
             vkFreeDescriptorSets(m_data->device, m_data->descriptorPool, 1u, &set);
             return {};
         }
+        ++writtenBindingCounts[static_cast<size_t>(layoutEntryIt - layout->desc.entries.begin())];
         const VkDescriptorType type = toVkDescriptorType(layoutEntryIt->type);
         VkWriteDescriptorSet write{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
         write.dstSet = set;
@@ -2628,24 +2643,346 @@ RhiBindGroupHandle VkRhiDevice::createBindGroup(const RhiBindGroupDesc& desc) {
         }
         writes.push_back(write);
     }
-    for (const RhiBindGroupLayoutEntry& layoutEntry : layout->desc.entries) {
+    for (size_t layoutEntryIndex = 0u; layoutEntryIndex < layout->desc.entries.size(); ++layoutEntryIndex) {
+        const RhiBindGroupLayoutEntry& layoutEntry = layout->desc.entries[layoutEntryIndex];
         if (rhiHasBindingFlag(layoutEntry.flags, RhiBindingFlag::PartiallyBound))
             continue;
         const uint32_t descriptorCount = rhiHasBindingFlag(layoutEntry.flags, RhiBindingFlag::VariableDescriptorCount)
                                              ? desc.variableDescriptorCount
                                              : layoutEntry.arrayCount;
-        const size_t writtenCount =
-            static_cast<size_t>(std::count_if(desc.entries.begin(), desc.entries.end(),
-                                              [&](const auto& entry) { return entry.binding == layoutEntry.binding; }));
-        if (writtenCount != descriptorCount) {
+        if (writtenBindingCounts[layoutEntryIndex] != descriptorCount) {
             vkFreeDescriptorSets(m_data->device, m_data->descriptorPool, 1u, &set);
             return {};
         }
     }
     vkUpdateDescriptorSets(m_data->device, static_cast<uint32_t>(writes.size()), writes.data(), 0u, nullptr);
     const RhiBindGroupHandle handle = m_data->bindGroupHandles.allocate();
-    m_data->bindGroups.emplace(handleKey(handle), VkRhiDeviceData::BindGroup{set, desc.layout, desc});
+    m_data->bindGroups.emplace(handleKey(handle), VkRhiDeviceData::BindGroup{set, desc.layout, std::move(storedDesc)});
     return handle;
+}
+
+bool VkRhiDevice::updateBindGroups(const RhiBindGroupUpdate* updates, const uint32_t updateCount) {
+    if (!m_initialized || updates == nullptr || updateCount == 0u) {
+        logRhiError("updateBindGroups requires a non-empty batch");
+        return false;
+    }
+
+    size_t totalResourceCount = 0u;
+    for (uint32_t updateIndex = 0u; updateIndex < updateCount; ++updateIndex) {
+        const RhiBindGroupUpdate& update = updates[updateIndex];
+        if (update.resources == nullptr || update.resourceCount == 0u ||
+            update.resourceCount > std::numeric_limits<size_t>::max() - totalResourceCount) {
+            logRhiError("updateBindGroups received an invalid resource range");
+            return false;
+        }
+        totalResourceCount += update.resourceCount;
+    }
+
+    const std::lock_guard<std::mutex> commandLock(m_data->commandRegistryMutex);
+    const std::unique_lock<std::shared_mutex> resourceLock(m_data->resourceRegistryMutex);
+    std::vector<uint64_t> recordedBindGroups;
+    for (RhiCommandList* baseCommandList : m_data->commandLists) {
+        auto* commandList = static_cast<VkRhiCommandList*>(baseCommandList);
+        if (commandList == nullptr || (commandList->m_data->state != RhiCommandListState::Recording &&
+                                       commandList->m_data->state != RhiCommandListState::Executable)) {
+            continue;
+        }
+        for (const RhiBindGroupHandle handle : commandList->m_data->resourceReferences.bindGroups) {
+            recordedBindGroups.push_back(handleKey(handle));
+        }
+    }
+    std::sort(recordedBindGroups.begin(), recordedBindGroups.end());
+    recordedBindGroups.erase(std::unique(recordedBindGroups.begin(), recordedBindGroups.end()),
+                             recordedBindGroups.end());
+
+    struct StagedSlot {
+        VkRhiDeviceData::BindGroup* group = nullptr;
+        uint64_t groupKey = 0u;
+        uint32_t binding = 0u;
+        uint32_t arrayElement = 0u;
+        RhiBindingResource resource;
+    };
+    struct PendingResourceStamp {
+        uint64_t sequence = 0u;
+        VkRhiCommandResourceReferences references;
+    };
+    std::vector<StagedSlot> stagedSlots;
+    std::vector<VkWriteDescriptorSet> descriptorWrites;
+    std::vector<VkDescriptorBufferInfo> bufferInfos;
+    std::vector<VkDescriptorImageInfo> imageInfos;
+    stagedSlots.reserve(totalResourceCount);
+    descriptorWrites.reserve(updateCount);
+    bufferInfos.reserve(totalResourceCount);
+    imageInfos.reserve(totalResourceCount);
+    std::unordered_map<uint64_t, PendingResourceStamp> pendingResourceStamps;
+    pendingResourceStamps.reserve(updateCount);
+
+    for (uint32_t updateIndex = 0u; updateIndex < updateCount; ++updateIndex) {
+        const RhiBindGroupUpdate& update = updates[updateIndex];
+        const uint64_t groupKey = handleKey(update.bindGroup);
+        VkRhiDeviceData::BindGroup* group = findRecord(m_data->bindGroups, update.bindGroup);
+        if (group == nullptr) {
+            logRhiError("updateBindGroups received an invalid bind group or binding");
+            return false;
+        }
+        const VkRhiDeviceData::BindGroupLayout* layout = findRecord(m_data->bindGroupLayouts, group->layoutHandle);
+        if (layout == nullptr) {
+            logRhiError("updateBindGroups received an invalid bind group or binding");
+            return false;
+        }
+        const auto layoutEntry =
+            std::find_if(layout->desc.entries.begin(), layout->desc.entries.end(),
+                         [&](const RhiBindGroupLayoutEntry& candidate) { return candidate.binding == update.binding; });
+        if (layoutEntry == layout->desc.entries.end()) {
+            logRhiError("updateBindGroups received an invalid bind group or binding");
+            return false;
+        }
+        const uint32_t descriptorCount = rhiHasBindingFlag(layoutEntry->flags, RhiBindingFlag::VariableDescriptorCount)
+                                             ? group->desc.variableDescriptorCount
+                                             : layoutEntry->arrayCount;
+        if (update.firstArrayElement > descriptorCount ||
+            update.resourceCount > descriptorCount - update.firstArrayElement) {
+            logRhiError("updateBindGroups received an out-of-range descriptor array update");
+            return false;
+        }
+
+        const bool partiallyBound = rhiHasBindingFlag(layoutEntry->flags, RhiBindingFlag::PartiallyBound);
+        const bool updateAfterBind = rhiHasBindingFlag(layoutEntry->flags, RhiBindingFlag::UpdateAfterBind);
+        const bool updateUnused = rhiHasBindingFlag(layoutEntry->flags, RhiBindingFlag::UpdateUnusedWhilePending);
+        const bool pending = group->lifetime.lastUseSequence > m_data->completedSubmissionSequence;
+        const bool recorded = std::binary_search(recordedBindGroups.begin(), recordedBindGroups.end(), groupKey);
+        // The RHI cannot prove static descriptor non-use, so pending UpdateUnused writes also require
+        // PartiallyBound and rely on the caller to select array elements not dynamically accessed.
+        if ((pending && (!partiallyBound || !updateUnused)) ||
+            (!pending && recorded && !updateAfterBind && (!partiallyBound || !updateUnused))) {
+            logRhiError("updateBindGroups rejected a descriptor update that violates its command lifecycle flags");
+            return false;
+        }
+
+        PendingResourceStamp* pendingStamp = nullptr;
+        if (pending) {
+            const auto stampInsertion = pendingResourceStamps.try_emplace(groupKey);
+            pendingStamp = &stampInsertion.first->second;
+            pendingStamp->sequence = std::max(pendingStamp->sequence, group->lifetime.lastUseSequence);
+            switch (layoutEntry->type) {
+            case RhiBindingType::UniformBuffer:
+            case RhiBindingType::StorageBuffer:
+                pendingStamp->references.buffers.reserve(pendingStamp->references.buffers.size() +
+                                                         update.resourceCount);
+                break;
+            case RhiBindingType::SampledTexture:
+            case RhiBindingType::StorageTexture:
+                pendingStamp->references.textures.reserve(pendingStamp->references.textures.size() +
+                                                          update.resourceCount);
+                pendingStamp->references.textureViews.reserve(pendingStamp->references.textureViews.size() +
+                                                              update.resourceCount);
+                break;
+            case RhiBindingType::Sampler:
+                pendingStamp->references.samplers.reserve(pendingStamp->references.samplers.size() +
+                                                          update.resourceCount);
+                break;
+            case RhiBindingType::CombinedTextureSampler:
+                pendingStamp->references.textures.reserve(pendingStamp->references.textures.size() +
+                                                          update.resourceCount);
+                pendingStamp->references.textureViews.reserve(pendingStamp->references.textureViews.size() +
+                                                              update.resourceCount);
+                pendingStamp->references.samplers.reserve(pendingStamp->references.samplers.size() +
+                                                          update.resourceCount);
+                break;
+            }
+        }
+
+        const VkDescriptorType descriptorType = toVkDescriptorType(layoutEntry->type);
+        VkWriteDescriptorSet descriptorWrite{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
+        descriptorWrite.dstSet = group->set;
+        descriptorWrite.dstBinding = update.binding;
+        descriptorWrite.dstArrayElement = update.firstArrayElement;
+        descriptorWrite.descriptorCount = update.resourceCount;
+        descriptorWrite.descriptorType = descriptorType;
+        const size_t bufferInfoStart = bufferInfos.size();
+        const size_t imageInfoStart = imageInfos.size();
+
+        for (uint32_t resourceIndex = 0u; resourceIndex < update.resourceCount; ++resourceIndex) {
+            const uint32_t arrayElement = update.firstArrayElement + resourceIndex;
+            const RhiBindingResource& resource = update.resources[resourceIndex];
+            if (descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER ||
+                descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER) {
+                const VkRhiDeviceData::Buffer* buffer = findRecord(m_data->buffers, resource.buffer.buffer);
+                const RhiBufferUsage requiredUsage = descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER
+                                                         ? RhiBufferUsage::Uniform
+                                                         : RhiBufferUsage::Storage;
+                const uint64_t requiredAlignment = descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER
+                                                       ? m_data->properties.limits.minUniformBufferOffsetAlignment
+                                                       : m_data->properties.limits.minStorageBufferOffsetAlignment;
+                const uint64_t range = buffer != nullptr && resource.buffer.range != 0u
+                                           ? resource.buffer.range
+                                           : (buffer != nullptr && resource.buffer.offset <= buffer->desc.size
+                                                  ? buffer->desc.size - resource.buffer.offset
+                                                  : 0u);
+                const uint64_t maximumRange = descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER
+                                                  ? m_data->properties.limits.maxUniformBufferRange
+                                                  : m_data->properties.limits.maxStorageBufferRange;
+                if (buffer == nullptr || (buffer->desc.usage & rhiFlag(requiredUsage)) == 0u ||
+                    resource.buffer.offset % requiredAlignment != 0u || range == 0u || range > maximumRange ||
+                    resource.buffer.offset > buffer->desc.size || range > buffer->desc.size - resource.buffer.offset) {
+                    logRhiError("updateBindGroups received an invalid buffer resource");
+                    return false;
+                }
+                bufferInfos.push_back({buffer->buffer, resource.buffer.offset,
+                                       resource.buffer.range == 0u ? VK_WHOLE_SIZE : resource.buffer.range});
+                if (pendingStamp != nullptr) {
+                    pendingStamp->references.buffers.push_back(resource.buffer.buffer);
+                }
+            } else {
+                RhiTextureViewHandle viewHandle{};
+                RhiSamplerHandle samplerHandle{};
+                if (descriptorType == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER) {
+                    viewHandle = resource.combinedTextureSampler.textureView;
+                    samplerHandle = resource.combinedTextureSampler.sampler;
+                } else if (descriptorType == VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE ||
+                           descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE) {
+                    viewHandle = resource.textureView;
+                } else if (descriptorType == VK_DESCRIPTOR_TYPE_SAMPLER) {
+                    samplerHandle = resource.sampler;
+                } else {
+                    logRhiError("updateBindGroups received an unsupported descriptor type");
+                    return false;
+                }
+                const VkRhiDeviceData::TextureView* view =
+                    viewHandle.isValid() ? findRecord(m_data->textureViews, viewHandle) : nullptr;
+                const VkRhiDeviceData::Sampler* sampler =
+                    samplerHandle.isValid() ? findRecord(m_data->samplers, samplerHandle) : nullptr;
+                if ((descriptorType == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER &&
+                     (view == nullptr || sampler == nullptr)) ||
+                    ((descriptorType == VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE ||
+                      descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE) &&
+                     view == nullptr) ||
+                    (descriptorType == VK_DESCRIPTOR_TYPE_SAMPLER && sampler == nullptr)) {
+                    logRhiError("updateBindGroups received an invalid image or sampler resource");
+                    return false;
+                }
+                VkImageLayout imageLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+                if (view != nullptr) {
+                    const VkRhiDeviceData::Texture* texture = findRecord(m_data->textures, view->desc.texture);
+                    const RhiTextureUsage requiredUsage = descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE
+                                                              ? RhiTextureUsage::Storage
+                                                              : RhiTextureUsage::Sampled;
+                    if (texture == nullptr || (texture->desc.usage & rhiFlag(requiredUsage)) == 0u) {
+                        logRhiError("updateBindGroups received an incompatible texture-view resource");
+                        return false;
+                    }
+                    if (descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE) {
+                        imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+                    } else {
+                        const RhiTextureFormat viewFormat =
+                            view->desc.format == RhiTextureFormat::Undefined ? texture->desc.format : view->desc.format;
+                        imageLayout = (defaultAspectForFormat(viewFormat) & VK_IMAGE_ASPECT_DEPTH_BIT) != 0u
+                                          ? VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL
+                                          : VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+                    }
+                }
+                imageInfos.push_back({sampler != nullptr ? sampler->sampler : VK_NULL_HANDLE,
+                                      view != nullptr ? view->view : VK_NULL_HANDLE, imageLayout});
+                if (pendingStamp != nullptr) {
+                    if (view != nullptr) {
+                        pendingStamp->references.textures.push_back(view->desc.texture);
+                        pendingStamp->references.textureViews.push_back(viewHandle);
+                    }
+                    if (sampler != nullptr) {
+                        pendingStamp->references.samplers.push_back(samplerHandle);
+                    }
+                }
+            }
+            stagedSlots.push_back({group, groupKey, update.binding, arrayElement, resource});
+        }
+
+        if (descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER ||
+            descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER) {
+            descriptorWrite.pBufferInfo = bufferInfos.data() + bufferInfoStart;
+        } else {
+            descriptorWrite.pImageInfo = imageInfos.data() + imageInfoStart;
+        }
+        descriptorWrites.push_back(descriptorWrite);
+    }
+
+    const auto stagedLess = [](const StagedSlot& lhs, const StagedSlot& rhs) {
+        if (lhs.groupKey != rhs.groupKey) {
+            return lhs.groupKey < rhs.groupKey;
+        }
+        return lhs.binding != rhs.binding ? lhs.binding < rhs.binding : lhs.arrayElement < rhs.arrayElement;
+    };
+    std::sort(stagedSlots.begin(), stagedSlots.end(), stagedLess);
+    const auto duplicate =
+        std::adjacent_find(stagedSlots.begin(), stagedSlots.end(), [](const StagedSlot& lhs, const StagedSlot& rhs) {
+            return lhs.groupKey == rhs.groupKey && lhs.binding == rhs.binding && lhs.arrayElement == rhs.arrayElement;
+        });
+    if (duplicate != stagedSlots.end()) {
+        logRhiError("updateBindGroups received overlapping descriptor array ranges");
+        return false;
+    }
+
+    const auto sortUniqueHandles = [](auto& handles) {
+        std::sort(handles.begin(), handles.end(), [](const auto lhs, const auto rhs) {
+            return lhs.index != rhs.index ? lhs.index < rhs.index : lhs.generation < rhs.generation;
+        });
+        handles.erase(std::unique(handles.begin(), handles.end(),
+                                  [](const auto lhs, const auto rhs) {
+                                      return lhs.index == rhs.index && lhs.generation == rhs.generation;
+                                  }),
+                      handles.end());
+    };
+    for (auto& [_, stamp] : pendingResourceStamps) {
+        sortUniqueHandles(stamp.references.buffers);
+        sortUniqueHandles(stamp.references.textures);
+        sortUniqueHandles(stamp.references.textureViews);
+        sortUniqueHandles(stamp.references.samplers);
+    }
+
+    vkUpdateDescriptorSets(m_data->device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0u,
+                           nullptr);
+    size_t stagedBegin = 0u;
+    while (stagedBegin < stagedSlots.size()) {
+        VkRhiDeviceData::BindGroup* group = stagedSlots[stagedBegin].group;
+        const uint64_t groupKey = stagedSlots[stagedBegin].groupKey;
+        size_t stagedEnd = stagedBegin + 1u;
+        while (stagedEnd < stagedSlots.size() && stagedSlots[stagedEnd].groupKey == groupKey) {
+            ++stagedEnd;
+        }
+        std::vector<RhiBindGroupEntry> mergedEntries;
+        mergedEntries.reserve(group->desc.entries.size() + stagedEnd - stagedBegin);
+        size_t existingIndex = 0u;
+        size_t stagedIndex = stagedBegin;
+        while (existingIndex < group->desc.entries.size() && stagedIndex < stagedEnd) {
+            const RhiBindGroupEntry& existing = group->desc.entries[existingIndex];
+            const StagedSlot& staged = stagedSlots[stagedIndex];
+            if (existing.binding < staged.binding ||
+                (existing.binding == staged.binding && existing.arrayElement < staged.arrayElement)) {
+                mergedEntries.push_back(existing);
+                ++existingIndex;
+            } else if (staged.binding < existing.binding ||
+                       (staged.binding == existing.binding && staged.arrayElement < existing.arrayElement)) {
+                mergedEntries.push_back({staged.binding, staged.arrayElement, staged.resource});
+                ++stagedIndex;
+            } else {
+                mergedEntries.push_back({staged.binding, staged.arrayElement, staged.resource});
+                ++existingIndex;
+                ++stagedIndex;
+            }
+        }
+        mergedEntries.insert(mergedEntries.end(),
+                             group->desc.entries.begin() + static_cast<std::ptrdiff_t>(existingIndex),
+                             group->desc.entries.end());
+        for (; stagedIndex < stagedEnd; ++stagedIndex) {
+            const StagedSlot& staged = stagedSlots[stagedIndex];
+            mergedEntries.push_back({staged.binding, staged.arrayElement, staged.resource});
+        }
+        group->desc.entries = std::move(mergedEntries);
+        stagedBegin = stagedEnd;
+    }
+    for (const auto& [_, stamp] : pendingResourceStamps) {
+        markResourceReferencesUsed(*m_data, stamp.references, stamp.sequence);
+    }
+    return true;
 }
 
 RhiQueryPoolHandle VkRhiDevice::createQueryPool(const RhiQueryPoolDesc& desc) {

@@ -41,6 +41,7 @@ public:
     RhiPipelineHandle createGraphicsPipeline(const RhiGraphicsPipelineDesc& desc) override;
     RhiPipelineHandle createComputePipeline(const RhiComputePipelineDesc& desc) override;
     RhiBindGroupHandle createBindGroup(const RhiBindGroupDesc& desc) override;
+    bool updateBindGroups(const RhiBindGroupUpdate* updates, uint32_t updateCount) override;
     RhiQueryPoolHandle createQueryPool(const RhiQueryPoolDesc& desc) override;
     bool resetQueryPool(RhiQueryPoolHandle pool, uint32_t firstQuery, uint32_t queryCount) override;
     void* mapBuffer(RhiBufferHandle buffer, uint64_t offset, uint64_t size) override;

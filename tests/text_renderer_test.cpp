@@ -234,6 +234,7 @@ public:
         bindGroupDescs.push_back(desc);
         return {m_nextBindGroup++, 1u};
     }
+    bool updateBindGroups(const RhiBindGroupUpdate*, uint32_t) override { return true; }
     RhiQueryPoolHandle createQueryPool(const RhiQueryPoolDesc&) override { return {m_nextQueryPool++, 1u}; }
     bool resetQueryPool(RhiQueryPoolHandle, uint32_t, uint32_t) override { return true; }
     void* mapBuffer(RhiBufferHandle, uint64_t, uint64_t) override { return nullptr; }

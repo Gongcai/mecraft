@@ -907,6 +907,145 @@ void main() {
     return valid;
 }
 
+[[nodiscard]] bool validateBindGroupUpdateLifecycle(VkRhiDevice& device, RhiCommandListPool& commandPool) {
+    const RhiCapabilities& capabilities = device.capabilities();
+    if (!capabilities.descriptorBindingPartiallyBound || !capabilities.descriptorBindingVariableDescriptorCount ||
+        !capabilities.descriptorBindingUpdateUnusedWhilePending ||
+        !capabilities.descriptorBindingStorageBufferUpdateAfterBind) {
+        std::cerr << "Vulkan bind-group update lifecycle features are unavailable\n";
+        return false;
+    }
+
+    const uint64_t validationErrorsBefore = device.validationErrorCount();
+    RhiBufferDesc bufferDesc;
+    bufferDesc.debugName = "VulkanSmoke.BindGroupUpdate.Buffer";
+    bufferDesc.size = 256u;
+    bufferDesc.usage = rhiFlag(RhiBufferUsage::Storage);
+    bufferDesc.initialState = RhiResourceState::StorageBuffer;
+    std::array<RhiBufferHandle, 3u> buffers{};
+    for (RhiBufferHandle& buffer : buffers) {
+        buffer = device.createBuffer(bufferDesc, nullptr, 0u);
+    }
+
+    RhiBindGroupLayoutDesc layoutDesc;
+    layoutDesc.debugName = "VulkanSmoke.BindGroupUpdate.Layout";
+    layoutDesc.entries.push_back({0u, RhiBindingType::StorageBuffer, rhiFlag(RhiShaderStage::Compute), 1u, 0u});
+    layoutDesc.entries.push_back({1u, RhiBindingType::StorageBuffer, rhiFlag(RhiShaderStage::Compute), 1u,
+                                  rhiFlag(RhiBindingFlag::UpdateAfterBind)});
+    layoutDesc.entries.push_back({2u, RhiBindingType::StorageBuffer, rhiFlag(RhiShaderStage::Compute), 2u,
+                                  rhiFlag(RhiBindingFlag::PartiallyBound) | rhiFlag(RhiBindingFlag::UpdateAfterBind) |
+                                      rhiFlag(RhiBindingFlag::UpdateUnusedWhilePending) |
+                                      rhiFlag(RhiBindingFlag::VariableDescriptorCount)});
+    const RhiBindGroupLayoutHandle bindGroupLayout = device.createBindGroupLayout(layoutDesc);
+
+    const auto makeBufferResource = [&](const RhiBufferHandle buffer) {
+        RhiBindingResource resource;
+        resource.buffer.buffer = buffer;
+        resource.buffer.range = bufferDesc.size;
+        return resource;
+    };
+    RhiBindGroupDesc groupDesc;
+    groupDesc.layout = bindGroupLayout;
+    groupDesc.variableDescriptorCount = 2u;
+    for (uint32_t binding = 0u; binding < 3u; ++binding) {
+        RhiBindGroupEntry entry;
+        entry.binding = binding;
+        entry.resource = makeBufferResource(buffers[0]);
+        groupDesc.entries.push_back(entry);
+    }
+    const RhiBindGroupHandle bindGroup = device.createBindGroup(groupDesc);
+
+    constexpr char kComputeSource[] = R"glsl(
+#version 450 core
+layout(local_size_x = 64) in;
+void main() {}
+)glsl";
+    RhiShaderDesc shaderDesc;
+    shaderDesc.debugName = "VulkanSmoke.BindGroupUpdate.Compute";
+    shaderDesc.stage = RhiShaderStage::Compute;
+    shaderDesc.source = kComputeSource;
+    shaderDesc.sourceSize = sizeof(kComputeSource) - 1u;
+    const RhiShaderHandle computeShader = device.createShader(shaderDesc);
+    RhiPipelineLayoutDesc pipelineLayoutDesc;
+    pipelineLayoutDesc.debugName = "VulkanSmoke.BindGroupUpdate.PipelineLayout";
+    pipelineLayoutDesc.bindGroupLayouts.push_back(bindGroupLayout);
+    const RhiPipelineLayoutHandle pipelineLayout = device.createPipelineLayout(pipelineLayoutDesc);
+    RhiComputePipelineDesc pipelineDesc;
+    pipelineDesc.debugName = "VulkanSmoke.BindGroupUpdate.Pipeline";
+    pipelineDesc.computeShader = computeShader;
+    pipelineDesc.layout = pipelineLayout;
+    const RhiPipelineHandle pipeline = device.createComputePipeline(pipelineDesc);
+
+    RhiCommandList* commands = commandPool.acquire(RhiCommandListType::Compute);
+    bool valid = buffers[0].isValid() && buffers[1].isValid() && buffers[2].isValid() && bindGroupLayout.isValid() &&
+                 bindGroup.isValid() && computeShader.isValid() && pipelineLayout.isValid() && pipeline.isValid() &&
+                 commands != nullptr &&
+                 commands->begin({"VulkanSmoke.BindGroupUpdate.Commands", RhiCommandListType::Compute});
+    if (valid) {
+        commands->setComputePipeline(pipeline);
+        for (uint32_t dispatchIndex = 0u; dispatchIndex < 32u; ++dispatchIndex) {
+            commands->dispatch(65535u, 1u, 1u);
+        }
+        commands->setBindGroup(0u, bindGroup);
+        valid = commands->end();
+    }
+
+    RhiBindingResource replacement = makeBufferResource(buffers[1]);
+    const RhiBindGroupUpdate normalRecordedUpdate{bindGroup, 0u, 0u, &replacement, 1u};
+    const RhiBindGroupUpdate updateAfterBindRecordedUpdate{bindGroup, 1u, 0u, &replacement, 1u};
+    std::array<RhiBindingResource, 2u> rangeResources{makeBufferResource(buffers[1]), makeBufferResource(buffers[2])};
+    const RhiBindGroupUpdate rangeRecordedUpdate{bindGroup, 2u, 0u, rangeResources.data(),
+                                                 static_cast<uint32_t>(rangeResources.size())};
+    const std::array<RhiBindGroupUpdate, 2u> recordedBatch{{updateAfterBindRecordedUpdate, rangeRecordedUpdate}};
+    const std::array<RhiBindGroupUpdate, 2u> overlappingBatch{
+        {{bindGroup, 2u, 0u, rangeResources.data(), 1u}, {bindGroup, 2u, 0u, rangeResources.data() + 1u, 1u}}};
+    valid = valid && !device.updateBindGroups(overlappingBatch.data(), overlappingBatch.size()) &&
+            !device.updateBindGroups(&normalRecordedUpdate, 1u) &&
+            device.updateBindGroups(recordedBatch.data(), recordedBatch.size());
+
+    RhiSubmissionToken token;
+    if (valid) {
+        RhiCommandList* submissions[] = {commands};
+        RhiSubmitInfo submitInfo{"VulkanSmoke.BindGroupUpdate.Submit", submissions, 1u};
+        submitInfo.queue = RhiQueueType::Compute;
+        valid = device.submit(submitInfo, &token);
+    }
+
+    replacement = makeBufferResource(buffers[2]);
+    const RhiBindGroupUpdate updateAfterBindPendingUpdate{bindGroup, 1u, 0u, &replacement, 1u};
+    const RhiBindGroupUpdate updateUnusedPendingUpdate{bindGroup, 2u, 0u, &replacement, 1u};
+    valid = valid && !device.updateBindGroups(&updateAfterBindPendingUpdate, 1u) &&
+            device.updateBindGroups(&updateUnusedPendingUpdate, 1u);
+
+    device.destroyBuffer(buffers[1]);
+    const RhiBufferHandle reusedBuffer = device.createBuffer(bufferDesc, nullptr, 0u);
+    const bool handleSlotReused =
+        reusedBuffer.index == buffers[1].index && reusedBuffer.generation != buffers[1].generation;
+    replacement = makeBufferResource(reusedBuffer);
+    const RhiBindGroupUpdate reusedPendingUpdate{bindGroup, 2u, 0u, &replacement, 1u};
+    valid = valid && handleSlotReused && device.updateBindGroups(&reusedPendingUpdate, 1u);
+    device.destroyBuffer(reusedBuffer);
+    valid = valid && device.waitForSubmission(token) && commandPool.reset();
+
+    replacement = makeBufferResource(buffers[2]);
+    const RhiBindGroupUpdate completedUpdate{bindGroup, 0u, 0u, &replacement, 1u};
+    valid = valid && device.updateBindGroups(&completedUpdate, 1u);
+
+    device.destroyBindGroup(bindGroup);
+    device.destroyPipeline(pipeline);
+    device.destroyPipelineLayout(pipelineLayout);
+    device.destroyShader(computeShader);
+    device.destroyBindGroupLayout(bindGroupLayout);
+    device.destroyBuffer(buffers[2]);
+    device.destroyBuffer(buffers[0]);
+    device.waitIdle();
+    if (!valid || device.validationErrorCount() != validationErrorsBefore) {
+        std::cerr << "Vulkan bind-group batch updates or submission lifetimes violated the native contract\n";
+        return false;
+    }
+    return true;
+}
+
 [[nodiscard]] bool validateOffscreenCoordinateContract(VkRhiDevice& device, RhiCommandListPool& commandPool,
                                                        GLFWwindow* window) {
     constexpr uint32_t kWidth = 4u;
@@ -2084,6 +2223,7 @@ int main() {
         !validateDlssFrameGenerationSwapchainLifecycle(device, *commandPool, window) ||
 #endif
         !validateTemporalOutputTarget(device, *commandPool) ||
+        !validateBindGroupUpdateLifecycle(device, *commandPool) ||
         !validateVulkanInterop(device, *commandPool, texture, textureView, textureWidth, textureHeight, textureDepth) ||
         !validateOffscreenCoordinateContract(device, *commandPool, window) ||
         !validateRenderGraphMultiQueue(device, *commandPool) ||

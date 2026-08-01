@@ -99,6 +99,12 @@ public:
     virtual RhiPipelineHandle createGraphicsPipeline(const RhiGraphicsPipelineDesc& desc) = 0;
     virtual RhiPipelineHandle createComputePipeline(const RhiComputePipelineDesc& desc) = 0;
     virtual RhiBindGroupHandle createBindGroup(const RhiBindGroupDesc& desc) = 0;
+
+    /// Atomically updates contiguous descriptor-array ranges across one or more bind groups.
+    /// @param updates Array of destination ranges and replacement resources to validate.
+    /// @param updateCount Number of range updates in the batch.
+    /// @return True when every range and lifecycle constraint was accepted and applied.
+    virtual bool updateBindGroups(const RhiBindGroupUpdate* updates, uint32_t updateCount) = 0;
     virtual RhiQueryPoolHandle createQueryPool(const RhiQueryPoolDesc& desc) = 0;
 
     /// Resets a contiguous query range before commands write new results.

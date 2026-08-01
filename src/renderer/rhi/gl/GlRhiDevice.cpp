@@ -12,6 +12,7 @@
 #include <atomic>
 #include <cstring>
 #include <deque>
+#include <functional>
 #include <iostream>
 #include <limits>
 #include <mutex>
@@ -586,6 +587,7 @@ struct GlPipelineRecord {
 struct GlBindGroupRecord {
     RhiBindGroupDesc desc;
     bool active = false;
+    uint64_t lastUseSequence = 0u;
 };
 
 struct GlQueryPoolRecord {
@@ -4982,18 +4984,33 @@ RhiBindGroupHandle GlRhiDevice::createBindGroup(const RhiBindGroupDesc& desc) {
         return {};
     }
 
-    std::set<uint64_t> writtenSlots;
-    for (const RhiBindGroupEntry& entry : desc.entries) {
+    RhiBindGroupDesc storedDesc = desc;
+    std::sort(storedDesc.entries.begin(), storedDesc.entries.end(),
+              [](const RhiBindGroupEntry& lhs, const RhiBindGroupEntry& rhs) {
+                  return lhs.binding != rhs.binding ? lhs.binding < rhs.binding : lhs.arrayElement < rhs.arrayElement;
+              });
+    const auto duplicate =
+        std::adjacent_find(storedDesc.entries.begin(), storedDesc.entries.end(),
+                           [](const RhiBindGroupEntry& lhs, const RhiBindGroupEntry& rhs) {
+                               return lhs.binding == rhs.binding && lhs.arrayElement == rhs.arrayElement;
+                           });
+    if (duplicate != storedDesc.entries.end()) {
+        logRhiError("createBindGroup received a duplicate, out-of-range, or undeclared array element");
+        return {};
+    }
+
+    std::vector<uint32_t> writtenBindingCounts(layout->desc.entries.size(), 0u);
+    for (const RhiBindGroupEntry& entry : storedDesc.entries) {
         const RhiBindGroupLayoutEntry* layoutEntry = findLayoutEntry(*layout, entry.binding);
         const uint32_t descriptorCount =
             layoutEntry != nullptr && rhiHasBindingFlag(layoutEntry->flags, RhiBindingFlag::VariableDescriptorCount)
                 ? desc.variableDescriptorCount
                 : (layoutEntry != nullptr ? layoutEntry->arrayCount : 0u);
-        const uint64_t slotKey = (static_cast<uint64_t>(entry.binding) << 32u) | entry.arrayElement;
-        if (layoutEntry == nullptr || entry.arrayElement >= descriptorCount || !writtenSlots.insert(slotKey).second) {
+        if (layoutEntry == nullptr || entry.arrayElement >= descriptorCount) {
             logRhiError("createBindGroup received a duplicate, out-of-range, or undeclared array element");
             return {};
         }
+        ++writtenBindingCounts[static_cast<size_t>(layoutEntry - layout->desc.entries.data())];
 
         switch (layoutEntry->type) {
         case RhiBindingType::UniformBuffer:
@@ -5055,17 +5072,15 @@ RhiBindGroupHandle GlRhiDevice::createBindGroup(const RhiBindGroupDesc& desc) {
         }
         }
     }
-    for (const RhiBindGroupLayoutEntry& layoutEntry : layout->desc.entries) {
+    for (size_t layoutEntryIndex = 0u; layoutEntryIndex < layout->desc.entries.size(); ++layoutEntryIndex) {
+        const RhiBindGroupLayoutEntry& layoutEntry = layout->desc.entries[layoutEntryIndex];
         if (rhiHasBindingFlag(layoutEntry.flags, RhiBindingFlag::PartiallyBound)) {
             continue;
         }
         const uint32_t descriptorCount = rhiHasBindingFlag(layoutEntry.flags, RhiBindingFlag::VariableDescriptorCount)
                                              ? desc.variableDescriptorCount
                                              : layoutEntry.arrayCount;
-        const size_t writtenCount =
-            static_cast<size_t>(std::count_if(desc.entries.begin(), desc.entries.end(),
-                                              [&](const auto& entry) { return entry.binding == layoutEntry.binding; }));
-        if (writtenCount != descriptorCount) {
+        if (writtenBindingCounts[layoutEntryIndex] != descriptorCount) {
             logRhiError("createBindGroup requires every non-partial descriptor array element");
             return {};
         }
@@ -5076,8 +5091,211 @@ RhiBindGroupHandle GlRhiDevice::createBindGroup(const RhiBindGroupDesc& desc) {
     if (slot >= m_data->bindGroupRecords.size()) {
         m_data->bindGroupRecords.resize(slot + 1u);
     }
-    m_data->bindGroupRecords[slot] = {desc, true};
+    m_data->bindGroupRecords[slot] = {std::move(storedDesc), true};
     return handle;
+}
+
+bool GlRhiDevice::updateBindGroups(const RhiBindGroupUpdate* updates, const uint32_t updateCount) {
+    if (!m_initialized || std::this_thread::get_id() != m_deviceThread || updates == nullptr || updateCount == 0u) {
+        logRhiError("updateBindGroups requires a non-empty batch on the device thread");
+        return false;
+    }
+
+    std::vector<std::pair<uint32_t, uint32_t>> recordedBindGroups;
+    {
+        const std::lock_guard<std::mutex> registryLock(m_data->commandListRegistryMutex);
+        for (const auto& [_, weakCommandList] : m_data->commandLists) {
+            const std::shared_ptr<GlRhiCommandList> commandList = weakCommandList.lock();
+            if (commandList == nullptr || (commandList->m_state != RhiCommandListState::Recording &&
+                                           commandList->m_state != RhiCommandListState::Executable)) {
+                continue;
+            }
+            for (const RhiBindGroupHandle handle : commandList->m_resourceReferences->bindGroups) {
+                recordedBindGroups.emplace_back(handle.index, handle.generation);
+            }
+        }
+    }
+    std::sort(recordedBindGroups.begin(), recordedBindGroups.end());
+    recordedBindGroups.erase(std::unique(recordedBindGroups.begin(), recordedBindGroups.end()),
+                             recordedBindGroups.end());
+
+    size_t totalResourceCount = 0u;
+    for (uint32_t updateIndex = 0u; updateIndex < updateCount; ++updateIndex) {
+        const RhiBindGroupUpdate& update = updates[updateIndex];
+        if (update.resources == nullptr || update.resourceCount == 0u ||
+            update.resourceCount > std::numeric_limits<size_t>::max() - totalResourceCount) {
+            logRhiError("updateBindGroups received an invalid resource range");
+            return false;
+        }
+        totalResourceCount += update.resourceCount;
+    }
+
+    struct StagedSlot {
+        GlBindGroupRecord* group = nullptr;
+        uint32_t binding = 0u;
+        uint32_t arrayElement = 0u;
+        RhiBindingResource resource;
+    };
+    std::vector<StagedSlot> stagedSlots;
+    stagedSlots.reserve(totalResourceCount);
+
+    for (uint32_t updateIndex = 0u; updateIndex < updateCount; ++updateIndex) {
+        const RhiBindGroupUpdate& update = updates[updateIndex];
+        GlBindGroupRecord* group = recordForHandle(m_data->bindGroups, m_data->bindGroupRecords, update.bindGroup);
+        const GlBindGroupLayoutRecord* layout =
+            group != nullptr
+                ? recordForHandle(m_data->bindGroupLayouts, m_data->bindGroupLayoutRecords, group->desc.layout)
+                : nullptr;
+        const RhiBindGroupLayoutEntry* layoutEntry =
+            layout != nullptr ? findLayoutEntry(*layout, update.binding) : nullptr;
+        if (group == nullptr || layoutEntry == nullptr) {
+            logRhiError("updateBindGroups received an invalid bind group or binding");
+            return false;
+        }
+        const uint32_t descriptorCount = rhiHasBindingFlag(layoutEntry->flags, RhiBindingFlag::VariableDescriptorCount)
+                                             ? group->desc.variableDescriptorCount
+                                             : layoutEntry->arrayCount;
+        if (update.firstArrayElement > descriptorCount ||
+            update.resourceCount > descriptorCount - update.firstArrayElement) {
+            logRhiError("updateBindGroups received an out-of-range descriptor array update");
+            return false;
+        }
+
+        const bool partiallyBound = rhiHasBindingFlag(layoutEntry->flags, RhiBindingFlag::PartiallyBound);
+        const bool updateAfterBind = rhiHasBindingFlag(layoutEntry->flags, RhiBindingFlag::UpdateAfterBind);
+        const bool updateUnused = rhiHasBindingFlag(layoutEntry->flags, RhiBindingFlag::UpdateUnusedWhilePending);
+        const bool pending = group->lastUseSequence > m_data->completedSubmissionSequence;
+        const bool recorded = std::binary_search(recordedBindGroups.begin(), recordedBindGroups.end(),
+                                                 std::pair{update.bindGroup.index, update.bindGroup.generation});
+        // The RHI cannot prove static descriptor non-use, so pending UpdateUnused writes also require
+        // PartiallyBound and rely on the caller to select array elements not dynamically accessed.
+        if ((pending && (!partiallyBound || !updateUnused)) ||
+            (!pending && recorded && !updateAfterBind && (!partiallyBound || !updateUnused))) {
+            logRhiError("updateBindGroups rejected a descriptor update that violates its command lifecycle flags");
+            return false;
+        }
+
+        for (uint32_t resourceIndex = 0u; resourceIndex < update.resourceCount; ++resourceIndex) {
+            const uint32_t arrayElement = update.firstArrayElement + resourceIndex;
+            const RhiBindingResource& resource = update.resources[resourceIndex];
+            switch (layoutEntry->type) {
+            case RhiBindingType::UniformBuffer:
+            case RhiBindingType::StorageBuffer: {
+                const GlBufferRecord* buffer =
+                    recordForHandle(m_data->buffers, m_data->bufferRecords, resource.buffer.buffer);
+                const RhiBufferUsage requiredUsage = layoutEntry->type == RhiBindingType::UniformBuffer
+                                                         ? RhiBufferUsage::Uniform
+                                                         : RhiBufferUsage::Storage;
+                const uint32_t requiredAlignment = layoutEntry->type == RhiBindingType::UniformBuffer
+                                                       ? m_data->uniformBufferOffsetAlignment
+                                                       : m_data->storageBufferOffsetAlignment;
+                const uint64_t range = buffer != nullptr && resource.buffer.range != 0u
+                                           ? resource.buffer.range
+                                           : (buffer != nullptr && resource.buffer.offset <= buffer->desc.size
+                                                  ? buffer->desc.size - resource.buffer.offset
+                                                  : 0u);
+                if (buffer == nullptr || (buffer->desc.usage & rhiFlag(requiredUsage)) == 0u ||
+                    resource.buffer.offset % requiredAlignment != 0u || range == 0u ||
+                    resource.buffer.offset > buffer->desc.size || range > buffer->desc.size - resource.buffer.offset) {
+                    logRhiError("updateBindGroups received an invalid buffer resource");
+                    return false;
+                }
+                break;
+            }
+            case RhiBindingType::SampledTexture:
+            case RhiBindingType::StorageTexture: {
+                const GlTextureViewRecord* view =
+                    recordForHandle(m_data->textureViews, m_data->textureViewRecords, resource.textureView);
+                GlResolvedTextureRecord texture;
+                const RhiTextureUsage requiredUsage = layoutEntry->type == RhiBindingType::SampledTexture
+                                                          ? RhiTextureUsage::Sampled
+                                                          : RhiTextureUsage::Storage;
+                if (view == nullptr || !resolveTextureRecord(*m_data, view->desc.texture, texture) ||
+                    (texture.desc.usage & rhiFlag(requiredUsage)) == 0u) {
+                    logRhiError("updateBindGroups received an invalid texture-view resource");
+                    return false;
+                }
+                break;
+            }
+            case RhiBindingType::Sampler:
+                if (recordForHandle(m_data->samplers, m_data->samplerRecords, resource.sampler) == nullptr) {
+                    logRhiError("updateBindGroups received an invalid sampler resource");
+                    return false;
+                }
+                break;
+            case RhiBindingType::CombinedTextureSampler: {
+                const GlTextureViewRecord* view = recordForHandle(m_data->textureViews, m_data->textureViewRecords,
+                                                                  resource.combinedTextureSampler.textureView);
+                GlResolvedTextureRecord texture;
+                if (view == nullptr || !resolveTextureRecord(*m_data, view->desc.texture, texture) ||
+                    (texture.desc.usage & rhiFlag(RhiTextureUsage::Sampled)) == 0u ||
+                    recordForHandle(m_data->samplers, m_data->samplerRecords,
+                                    resource.combinedTextureSampler.sampler) == nullptr) {
+                    logRhiError("updateBindGroups received an invalid combined texture-sampler resource");
+                    return false;
+                }
+                break;
+            }
+            }
+            stagedSlots.push_back({group, update.binding, arrayElement, resource});
+        }
+    }
+
+    const auto stagedLess = [](const StagedSlot& lhs, const StagedSlot& rhs) {
+        if (lhs.group != rhs.group) {
+            return std::less<GlBindGroupRecord*>{}(lhs.group, rhs.group);
+        }
+        return lhs.binding != rhs.binding ? lhs.binding < rhs.binding : lhs.arrayElement < rhs.arrayElement;
+    };
+    std::sort(stagedSlots.begin(), stagedSlots.end(), stagedLess);
+    const auto duplicate =
+        std::adjacent_find(stagedSlots.begin(), stagedSlots.end(), [](const StagedSlot& lhs, const StagedSlot& rhs) {
+            return lhs.group == rhs.group && lhs.binding == rhs.binding && lhs.arrayElement == rhs.arrayElement;
+        });
+    if (duplicate != stagedSlots.end()) {
+        logRhiError("updateBindGroups received overlapping descriptor array ranges");
+        return false;
+    }
+
+    size_t stagedBegin = 0u;
+    while (stagedBegin < stagedSlots.size()) {
+        GlBindGroupRecord* group = stagedSlots[stagedBegin].group;
+        size_t stagedEnd = stagedBegin + 1u;
+        while (stagedEnd < stagedSlots.size() && stagedSlots[stagedEnd].group == group) {
+            ++stagedEnd;
+        }
+        std::vector<RhiBindGroupEntry> mergedEntries;
+        mergedEntries.reserve(group->desc.entries.size() + stagedEnd - stagedBegin);
+        size_t existingIndex = 0u;
+        size_t stagedIndex = stagedBegin;
+        while (existingIndex < group->desc.entries.size() && stagedIndex < stagedEnd) {
+            const RhiBindGroupEntry& existing = group->desc.entries[existingIndex];
+            const StagedSlot& staged = stagedSlots[stagedIndex];
+            if (existing.binding < staged.binding ||
+                (existing.binding == staged.binding && existing.arrayElement < staged.arrayElement)) {
+                mergedEntries.push_back(existing);
+                ++existingIndex;
+            } else if (staged.binding < existing.binding ||
+                       (staged.binding == existing.binding && staged.arrayElement < existing.arrayElement)) {
+                mergedEntries.push_back({staged.binding, staged.arrayElement, staged.resource});
+                ++stagedIndex;
+            } else {
+                mergedEntries.push_back({staged.binding, staged.arrayElement, staged.resource});
+                ++existingIndex;
+                ++stagedIndex;
+            }
+        }
+        mergedEntries.insert(mergedEntries.end(),
+                             group->desc.entries.begin() + static_cast<std::ptrdiff_t>(existingIndex),
+                             group->desc.entries.end());
+        for (; stagedIndex < stagedEnd; ++stagedIndex) {
+            const StagedSlot& staged = stagedSlots[stagedIndex];
+            mergedEntries.push_back({staged.binding, staged.arrayElement, staged.resource});
+        }
+        group->desc.entries = std::move(mergedEntries);
+        stagedBegin = stagedEnd;
+    }
+    return true;
 }
 
 RhiQueryPoolHandle GlRhiDevice::createQueryPool(const RhiQueryPoolDesc& desc) {
@@ -5531,6 +5749,22 @@ bool GlRhiDevice::submit(const RhiSubmitInfo& info, RhiSubmissionToken* completi
         return false;
     }
 
+    std::vector<RhiBindGroupHandle> submittedBindGroups;
+    for (const std::shared_ptr<GlRhiCommandList>& commandList : commandLists) {
+        for (const RhiBindGroupHandle handle : commandList->m_resourceReferences->bindGroups) {
+            submittedBindGroups.push_back(handle);
+        }
+    }
+    std::sort(submittedBindGroups.begin(), submittedBindGroups.end(),
+              [](const RhiBindGroupHandle lhs, const RhiBindGroupHandle rhs) {
+                  return lhs.index != rhs.index ? lhs.index < rhs.index : lhs.generation < rhs.generation;
+              });
+    submittedBindGroups.erase(std::unique(submittedBindGroups.begin(), submittedBindGroups.end(),
+                                          [](const RhiBindGroupHandle lhs, const RhiBindGroupHandle rhs) {
+                                              return lhs.index == rhs.index && lhs.generation == rhs.generation;
+                                          }),
+                              submittedBindGroups.end());
+
     for (const std::shared_ptr<GlRhiCommandList>& commandList : commandLists) {
         if (!commandList->replay(false)) {
             logRhiError("submit failed to replay a validated command list");
@@ -5546,6 +5780,12 @@ bool GlRhiDevice::submit(const RhiSubmitInfo& info, RhiSubmissionToken* completi
     GlRetirementBatch batch;
     batch.fence = fence;
     batch.submissionSequence = ++m_lastSubmittedSequence;
+    for (const RhiBindGroupHandle handle : submittedBindGroups) {
+        GlBindGroupRecord* group = recordForHandle(m_data->bindGroups, m_data->bindGroupRecords, handle);
+        if (group != nullptr) {
+            group->lastUseSequence = std::max(group->lastUseSequence, batch.submissionSequence);
+        }
+    }
     batch.resources = std::move(m_data->pendingRetirements);
     batch.commandLists = std::move(commandLists);
     m_data->pendingRetirements = {};

@@ -646,9 +646,26 @@ void main() { outColor = texture(uTextures[0], vec2(0.5)) + texture(uTextures[1]
     variableGroupDesc.entries.push_back(sparseEntry);
     const RhiBindGroupHandle variableGroup = device.createBindGroup(variableGroupDesc);
 
+    std::array<RhiBindingResource, 2u> fixedUpdateResources{};
+    fixedUpdateResources[0].combinedTextureSampler = {views[1], sampler};
+    fixedUpdateResources[1].combinedTextureSampler = {views[0], sampler};
+    RhiBindingResource variableUpdateResource;
+    variableUpdateResource.combinedTextureSampler = {views[0], sampler};
+    const std::array<RhiBindGroupUpdate, 2u> descriptorUpdates{
+        {{fixedGroup, 0u, 0u, fixedUpdateResources.data(), static_cast<uint32_t>(fixedUpdateResources.size())},
+         {variableGroup, 3u, 0u, &variableUpdateResource, 1u}}};
+    const bool batchUpdated = device.updateBindGroups(descriptorUpdates.data(), descriptorUpdates.size());
+    const std::array<RhiBindGroupUpdate, 2u> overlappingUpdates{
+        {{fixedGroup, 0u, 0u, fixedUpdateResources.data(), 1u},
+         {fixedGroup, 0u, 0u, fixedUpdateResources.data() + 1u, 1u}}};
+    const bool overlappingRejected = !device.updateBindGroups(overlappingUpdates.data(), overlappingUpdates.size());
+    const RhiBindGroupUpdate outOfRangeUpdate{fixedGroup, 0u, 1u, fixedUpdateResources.data(), 2u};
+    const bool outOfRangeRejected = !device.updateBindGroups(&outOfRangeUpdate, 1u);
+
     const bool valid = requireTrue(fixedLayout.isValid() && fixedGroup.isValid() && !incompleteGroup.isValid() &&
                                        vertexShader.isValid() && fragmentShader.isValid() && pipelineLayout.isValid() &&
-                                       pipeline.isValid() && variableLayout.isValid() && variableGroup.isValid(),
+                                       pipeline.isValid() && variableLayout.isValid() && variableGroup.isValid() &&
+                                       batchUpdated && overlappingRejected && outOfRangeRejected,
                                    "descriptor arrays, flags, and variable counts must satisfy the OpenGL contract");
 
     device.destroyBindGroup(variableGroup);
@@ -666,6 +683,170 @@ void main() { outColor = texture(uTextures[0], vec2(0.5)) + texture(uTextures[1]
     }
     device.shutdown();
     return valid;
+}
+
+bool testGlRhiBindGroupUpdateLifecycle() {
+    GlTestContext context;
+    if (!requireTrue(context.init(), "OpenGL test context must initialize for bind-group update lifecycle tests")) {
+        return false;
+    }
+
+    GlRhiDevice device;
+    RhiDeviceDesc deviceDesc = makeDeviceDesc();
+    deviceDesc.debugName = "rhi_bind_group_update_lifecycle_test";
+    if (!requireTrue(device.init(deviceDesc),
+                     "OpenGL RHI device must initialize for bind-group update lifecycle tests")) {
+        return false;
+    }
+
+    RhiBufferDesc bufferDesc;
+    bufferDesc.size = 256u;
+    bufferDesc.usage = rhiFlag(RhiBufferUsage::Storage);
+    bufferDesc.initialState = RhiResourceState::StorageBuffer;
+    std::array<RhiBufferHandle, 3u> buffers{};
+    for (size_t index = 0u; index < buffers.size(); ++index) {
+        buffers[index] = device.createBuffer(bufferDesc, nullptr, 0u);
+    }
+
+    RhiBindGroupLayoutDesc layoutDesc;
+    layoutDesc.entries.push_back({0u, RhiBindingType::StorageBuffer, rhiFlag(RhiShaderStage::Compute), 1u, 0u});
+    layoutDesc.entries.push_back({1u, RhiBindingType::StorageBuffer, rhiFlag(RhiShaderStage::Compute), 1u,
+                                  rhiFlag(RhiBindingFlag::UpdateAfterBind)});
+    layoutDesc.entries.push_back({2u, RhiBindingType::StorageBuffer, rhiFlag(RhiShaderStage::Compute), 2u,
+                                  rhiFlag(RhiBindingFlag::PartiallyBound) | rhiFlag(RhiBindingFlag::UpdateAfterBind) |
+                                      rhiFlag(RhiBindingFlag::UpdateUnusedWhilePending) |
+                                      rhiFlag(RhiBindingFlag::VariableDescriptorCount)});
+    const RhiBindGroupLayoutHandle bindGroupLayout = device.createBindGroupLayout(layoutDesc);
+
+    const auto makeBufferResource = [&](const RhiBufferHandle buffer) {
+        RhiBindingResource resource;
+        resource.buffer.buffer = buffer;
+        resource.buffer.range = bufferDesc.size;
+        return resource;
+    };
+    RhiBindGroupDesc groupDesc;
+    groupDesc.layout = bindGroupLayout;
+    groupDesc.variableDescriptorCount = 2u;
+    for (uint32_t binding = 0u; binding < 3u; ++binding) {
+        RhiBindGroupEntry entry;
+        entry.binding = binding;
+        entry.resource = makeBufferResource(buffers[0]);
+        groupDesc.entries.push_back(entry);
+    }
+    const RhiBindGroupHandle bindGroup = device.createBindGroup(groupDesc);
+
+    constexpr char kComputeShader[] = R"glsl(
+#version 450 core
+layout(local_size_x = 1) in;
+void main() {}
+)glsl";
+    RhiShaderDesc shaderDesc;
+    shaderDesc.stage = RhiShaderStage::Compute;
+    shaderDesc.source = kComputeShader;
+    shaderDesc.sourceSize = sizeof(kComputeShader) - 1u;
+    const RhiShaderHandle computeShader = device.createShader(shaderDesc);
+    RhiPipelineLayoutDesc pipelineLayoutDesc;
+    pipelineLayoutDesc.bindGroupLayouts.push_back(bindGroupLayout);
+    const RhiPipelineLayoutHandle pipelineLayout = device.createPipelineLayout(pipelineLayoutDesc);
+    RhiComputePipelineDesc pipelineDesc;
+    pipelineDesc.computeShader = computeShader;
+    pipelineDesc.layout = pipelineLayout;
+    const RhiPipelineHandle pipeline = device.createComputePipeline(pipelineDesc);
+
+    std::unique_ptr<RhiCommandListPool> commandPool =
+        device.createCommandListPool({"BindGroupUpdateLifecycle.Pool", 1u, 4096u});
+    RhiCommandList* commands = commandPool != nullptr ? commandPool->acquire(RhiCommandListType::Compute) : nullptr;
+    bool valid = buffers[0].isValid() && buffers[1].isValid() && buffers[2].isValid() && bindGroupLayout.isValid() &&
+                 bindGroup.isValid() && computeShader.isValid() && pipelineLayout.isValid() && pipeline.isValid() &&
+                 commands != nullptr &&
+                 commands->begin({"BindGroupUpdateLifecycle.Commands", RhiCommandListType::Compute});
+    if (valid) {
+        commands->setComputePipeline(pipeline);
+        commands->setBindGroup(0u, bindGroup);
+        valid = commands->end();
+    }
+    if (!valid) {
+        std::cerr << "bind-group update lifecycle setup or command recording failed\n";
+    }
+
+    RhiBindingResource replacement = makeBufferResource(buffers[1]);
+    const RhiBindGroupUpdate normalRecordedUpdate{bindGroup, 0u, 0u, &replacement, 1u};
+    const RhiBindGroupUpdate updateAfterBindRecordedUpdate{bindGroup, 1u, 0u, &replacement, 1u};
+    std::array<RhiBindingResource, 2u> rangeResources{makeBufferResource(buffers[1]), makeBufferResource(buffers[2])};
+    const RhiBindGroupUpdate rangeRecordedUpdate{bindGroup, 2u, 0u, rangeResources.data(),
+                                                 static_cast<uint32_t>(rangeResources.size())};
+    std::string recordedDiagnostic;
+    bool normalRecordedRejected = false;
+    {
+        ScopedErrorCapture capture;
+        normalRecordedRejected = !device.updateBindGroups(&normalRecordedUpdate, 1u);
+        recordedDiagnostic = capture.output();
+    }
+    valid = valid && normalRecordedRejected &&
+            recordedDiagnostic.find("violates its command lifecycle flags") != std::string::npos &&
+            device.updateBindGroups(&updateAfterBindRecordedUpdate, 1u) &&
+            device.updateBindGroups(&rangeRecordedUpdate, 1u);
+    if (!valid) {
+        std::cerr << "bind-group recorded update lifecycle validation failed\n";
+    }
+
+    RhiSubmissionToken token;
+    if (valid) {
+        RhiCommandList* submissions[] = {commands};
+        valid = device.submit({"BindGroupUpdateLifecycle.Submit", submissions, 1u, RhiQueueType::Graphics}, &token);
+    }
+    if (!valid) {
+        std::cerr << "bind-group update lifecycle submission failed\n";
+    }
+
+    replacement = makeBufferResource(buffers[2]);
+    const RhiBindGroupUpdate updateAfterBindPendingUpdate{bindGroup, 1u, 0u, &replacement, 1u};
+    const RhiBindGroupUpdate updateUnusedPendingUpdate{bindGroup, 2u, 0u, &replacement, 1u};
+    std::string pendingDiagnostic;
+    bool updateAfterBindPendingRejected = false;
+    if (valid) {
+        ScopedErrorCapture capture;
+        updateAfterBindPendingRejected = !device.updateBindGroups(&updateAfterBindPendingUpdate, 1u);
+        pendingDiagnostic = capture.output();
+    }
+    valid = valid && updateAfterBindPendingRejected &&
+            pendingDiagnostic.find("violates its command lifecycle flags") != std::string::npos &&
+            device.updateBindGroups(&updateUnusedPendingUpdate, 1u);
+    if (!valid) {
+        std::cerr << "bind-group pending update lifecycle validation failed\n";
+    }
+
+    device.destroyBuffer(buffers[1]);
+    const RhiBufferHandle reusedBuffer = device.createBuffer(bufferDesc, nullptr, 0u);
+    const bool handleSlotReused =
+        reusedBuffer.index == buffers[1].index && reusedBuffer.generation != buffers[1].generation;
+    replacement = makeBufferResource(reusedBuffer);
+    const RhiBindGroupUpdate reusedPendingUpdate{bindGroup, 2u, 0u, &replacement, 1u};
+    valid = valid && handleSlotReused && device.updateBindGroups(&reusedPendingUpdate, 1u);
+    device.destroyBuffer(reusedBuffer);
+    valid = valid && device.waitForSubmission(token) && commandPool->reset();
+    if (!valid) {
+        std::cerr << "bind-group pending resource reuse or completion wait failed\n";
+    }
+
+    replacement = makeBufferResource(buffers[2]);
+    const RhiBindGroupUpdate completedUpdate{bindGroup, 0u, 0u, &replacement, 1u};
+    valid = valid && device.updateBindGroups(&completedUpdate, 1u);
+    if (!valid) {
+        std::cerr << "bind-group update after submission completion failed\n";
+    }
+
+    commandPool.reset();
+    device.destroyBindGroup(bindGroup);
+    device.destroyPipeline(pipeline);
+    device.destroyPipelineLayout(pipelineLayout);
+    device.destroyShader(computeShader);
+    device.destroyBindGroupLayout(bindGroupLayout);
+    device.destroyBuffer(buffers[2]);
+    device.destroyBuffer(buffers[0]);
+    device.waitIdle();
+    device.shutdown();
+    return requireTrue(valid, "bind-group updates must enforce recorded and pending submission lifecycle flags");
 }
 
 bool testGlRhiShaderLayoutContracts() {
@@ -5092,6 +5273,9 @@ int main() {
         return 1;
     }
     if (!testGlRhiDescriptorArrays()) {
+        return 1;
+    }
+    if (!testGlRhiBindGroupUpdateLifecycle()) {
         return 1;
     }
     if (!testGlRhiShaderLayoutContracts()) {

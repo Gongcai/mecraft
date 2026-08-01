@@ -76,4 +76,12 @@ struct RhiBindGroupDesc {
     std::vector<RhiBindGroupEntry> entries;
 };
 
+struct RhiBindGroupUpdate {
+    RhiBindGroupHandle bindGroup;
+    uint32_t binding = 0u;
+    uint32_t firstArrayElement = 0u;
+    const RhiBindingResource* resources = nullptr;
+    uint32_t resourceCount = 0u;
+};
+
 #endif // MECRAFT_RHI_DESCRIPTOR_H
