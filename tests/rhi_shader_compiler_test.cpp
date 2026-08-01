@@ -100,7 +100,7 @@ struct ShaderCase {
 } // namespace
 
 int main() {
-    constexpr std::array<ShaderCase, 95> kShaderCases{
+    constexpr std::array<ShaderCase, 97> kShaderCases{
         {{"tests/shaders/rhi_screen_coordinates_test.frag", RhiShaderStage::Fragment},
          {"tests/shaders/material_brdf_shared_test.frag", RhiShaderStage::Fragment},
          {"tests/shaders/reflection_probe_contract_test.frag", RhiShaderStage::Fragment},
@@ -135,6 +135,8 @@ int main() {
          {"assets/shaders/static_mesh_transparent_rhi.vert", RhiShaderStage::Vertex},
          {"assets/shaders/static_mesh_transparent_rhi.frag", RhiShaderStage::Fragment},
          {"assets/shaders/static_mesh_transparent_rhi.frag", RhiShaderStage::Fragment, "MECRAFT_CLUSTERED_LIGHTING"},
+         {"assets/shaders/static_mesh_probe_capture_rhi.vert", RhiShaderStage::Vertex},
+         {"assets/shaders/static_mesh_probe_capture_rhi.frag", RhiShaderStage::Fragment},
          {"assets/shaders/chunk_gbuffer.frag", RhiShaderStage::Fragment, "RHI_TERRAIN_MDI", "RHI_TERRAIN_NORMAL_MAPS",
           "RHI_TERRAIN_SPECULAR_MAPS"},
          {"assets/shaders/ssao.frag", RhiShaderStage::Fragment},

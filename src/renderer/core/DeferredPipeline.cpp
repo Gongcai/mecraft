@@ -386,6 +386,13 @@ bool DeferredPipeline::recordReflectionProbeRadianceOpaque(RhiCommandList& comma
                                            m_shared->terrainRhiPipelines->reflectionProbeCaptureMetadataLayout())) {
         return false;
     }
+    if (m_shared->staticMeshRenderer != nullptr &&
+        (!m_shared->staticMeshRenderer->ensureReflectionProbeCaptureLightCapacity(
+             static_cast<uint32_t>(probeLights.size())) ||
+         !m_shared->staticMeshRenderer->prepareReflectionProbeCapture(
+             commandList, work.viewProjection, work.positionWorldMeters, context, probeLights))) {
+        return false;
+    }
     if (m_shared->blockEntityRenderer != nullptr && (!m_shared->blockEntityRenderer->prepareFrame(*context.worldView) ||
                                                      !m_shared->blockEntityRenderer->prepareForward(commandList))) {
         return false;
@@ -435,6 +442,9 @@ bool DeferredPipeline::recordReflectionProbeRadianceOpaque(RhiCommandList& comma
     worldBuffer.recordRhiCutout(commandList, m_shared->terrainRhiPipelines->reflectionProbeCaptureCutoutPipeline(),
                                 m_shared->terrainRhiPipelines->reflectionProbeCaptureMaterialBindGroup(),
                                 m_shared->terrainRhiPipelines->reflectionProbeCaptureFrameBindGroup());
+    if (m_shared->staticMeshRenderer != nullptr) {
+        m_shared->staticMeshRenderer->renderReflectionProbeCaptureOpaque(commandList);
+    }
     if (m_shared->blockEntityRenderer != nullptr) {
         m_shared->blockEntityRenderer->renderForward(commandList, work.viewProjection, context.skyIntensity);
     }
@@ -461,6 +471,15 @@ bool DeferredPipeline::recordReflectionProbeRadianceTransparent(RhiCommandList& 
         return false;
     }
 
+    std::vector<StaticMeshRenderer::TransparentDraw> staticMeshDraws;
+    if (m_shared->staticMeshRenderer != nullptr) {
+        m_shared->staticMeshRenderer->appendPreparedTransparentDraws(work.positionWorldMeters, staticMeshDraws);
+        std::sort(staticMeshDraws.begin(), staticMeshDraws.end(),
+                  [](const StaticMeshRenderer::TransparentDraw& lhs, const StaticMeshRenderer::TransparentDraw& rhs) {
+                      return lhs.distanceSquared > rhs.distanceSquared;
+                  });
+    }
+
     RhiColorAttachment colorAttachment;
     colorAttachment.view = work.targetView;
     colorAttachment.loadOp = RhiLoadOp::Load;
@@ -484,6 +503,11 @@ bool DeferredPipeline::recordReflectionProbeRadianceTransparent(RhiCommandList& 
         commandList, m_shared->terrainRhiPipelines->reflectionProbeCaptureTransparentPipeline(),
         m_shared->terrainRhiPipelines->reflectionProbeCaptureMaterialBindGroup(),
         m_shared->terrainRhiPipelines->reflectionProbeCaptureFrameBindGroup());
+    if (m_shared->staticMeshRenderer != nullptr) {
+        for (const StaticMeshRenderer::TransparentDraw& draw : staticMeshDraws) {
+            m_shared->staticMeshRenderer->renderReflectionProbeCaptureTransparent(commandList, draw);
+        }
+    }
     commandList.endRendering();
     return true;
 }

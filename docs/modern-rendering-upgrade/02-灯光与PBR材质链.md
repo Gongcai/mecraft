@@ -296,7 +296,9 @@ Metallic、Roughness、Emission、AO 和 Wetness；太阳/月亮主光、环境�
 模型 Probe Capture 复用主材质采样和直接光。体素 Capture 已在透明地形之前绘制方块实体、
 掉落物、下落方块、活塞移动方块和生物/远端角色，各类别使用自身 RGBA16F Forward 管线；
 下落方块与活塞移动方块复用同一实例收集及方块纹理、Biome Tint、动画帧、体素光照路径。
-本地第一人称玩家被明确排除，避免观察者模型进入环境探针。体素静态 glTF、粒子仍需接入。
+体素静态 glTF 已复用模型场景的 Probe Capture 管线，不透明、Alpha Test、Alpha Blend 与
+Transmission Primitive 均沿用 glTF PBR 材质采样、主环境直接光、Emission 和完整 `GpuLight`
+快照。本地第一人称玩家被明确排除，避免观察者模型进入环境探针。粒子仍需接入。
 V02/V07/M07 版本化资产用于最终检查
 室内外过渡、局部光响应与 Box Projection。动态探针按确定的更新队列逐 Face/Mip 构建，
 Dashboard 展示队列长度与资源代际。

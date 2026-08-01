@@ -95,6 +95,11 @@ public:
     void appendTransparentDraws(const glm::mat4& model, const glm::vec3& cameraPosition,
                                 std::vector<TransparentDraw>& draws) const;
 
+    /// Appends forward optical primitives for the currently prepared world instance.
+    /// @param cameraPosition World-space camera or probe position used for distance sorting.
+    /// @param draws Destination receiving one entry per transparent primitive.
+    void appendPreparedTransparentDraws(const glm::vec3& cameraPosition, std::vector<TransparentDraw>& draws) const;
+
     /// Draws one previously collected transparent primitive.
     /// @param commandList Command list with the transparent attachments active.
     /// @param draw Primitive, transform, and sort data collected for this draw.

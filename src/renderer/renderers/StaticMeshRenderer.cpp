@@ -1632,6 +1632,11 @@ void StaticMeshRenderer::appendTransparentDraws(const glm::mat4& model, const gl
     }
 }
 
+void StaticMeshRenderer::appendPreparedTransparentDraws(const glm::vec3& cameraPosition,
+                                                        std::vector<TransparentDraw>& draws) const {
+    appendTransparentDraws(m_modelMatrix, cameraPosition, draws);
+}
+
 bool StaticMeshRenderer::prepareTransparentResources(const RhiTextureViewHandle sceneColor,
                                                      const RhiTextureViewHandle opaqueDepth,
                                                      const RhiTextureViewHandle skyCapture) {

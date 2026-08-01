@@ -86,8 +86,10 @@ M1 与 M2 可并行开发，但公共 `GpuMaterial`、`GpuSceneGeometry` 与 Sta
    120 帧预热加 60 帧采样已通过，Vulkan Validation 无报错。方块实体、掉落物、下落方块、
    活塞移动方块和生物/远端角色使用各自 RGBA16F Forward 管线进入六面捕获；下落方块与活塞
    移动方块复用同一实例收集及方块纹理、Biome Tint、动画帧、体素光照路径，本地第一人称玩家
-   不进入环境探针。体素静态 glTF、粒子以及 V02/V07/M07 版本化质量验收仍待完成。Dashboard
-   与模型场景 Reflections 面板已接入队列
+   不进入环境探针。体素静态 glTF 已复用模型场景 Probe Capture 管线，不透明、Alpha Test、
+   Alpha Blend 与 Transmission Primitive 均保留 glTF PBR 材质、主环境直接光、Emission 和完整
+   `GpuLight` 快照。粒子以及 V02/V07/M07 版本化质量验收仍待完成。Dashboard 与模型场景
+   Reflections 面板已接入队列
    深度、当前工作项、代际和槽位展示。）
 
 ### 完成条件

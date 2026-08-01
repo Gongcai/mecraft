@@ -377,6 +377,7 @@ bool testRuntimeGridIntegrationContract() {
     std::string gridPass;
     std::string reflectionPass;
     std::string reflectionShader;
+    std::string staticMeshProbeShader;
     std::string pipeline;
     if (!requireTrue(readProjectFile("src/renderer/passes/ReflectionProbeCapturePass.cpp", capturePass),
                      "probe-capture pass source must be readable") ||
@@ -386,6 +387,8 @@ bool testRuntimeGridIntegrationContract() {
                      "reflection pass source must be readable") ||
         !requireTrue(readProjectFile("assets/shaders/reflection_probe.frag", reflectionShader),
                      "reflection shader source must be readable") ||
+        !requireTrue(readProjectFile("assets/shaders/static_mesh_probe_capture_rhi.frag", staticMeshProbeShader),
+                     "static mesh probe-capture shader source must be readable") ||
         !requireTrue(readProjectFile("src/renderer/core/DeferredPipeline.cpp", pipeline),
                      "deferred pipeline source must be readable")) {
         return false;
@@ -407,13 +410,25 @@ bool testRuntimeGridIntegrationContract() {
                            reflectionShader.find("uReflectionDebugMode == 33") != std::string::npos &&
                            reflectionShader.find("uReflectionDebugMode == 34") != std::string::npos,
                        "reflection shading must consume Box Projection and expose ID/weight debug") &&
+           requireTrue(staticMeshProbeShader.find("sampleStaticMeshMaterial(vUv)") != std::string::npos &&
+                           staticMeshProbeShader.find("evaluateGpuLight(") != std::string::npos &&
+                           staticMeshProbeShader.find("evaluateMaterialEmission(sampledMaterial)") != std::string::npos,
+                       "static mesh capture must preserve glTF material, analytic-light, and emission evaluation") &&
            requireTrue(pipeline.find("m_reflectionProbeCapturePass->prepareFrame") != std::string::npos &&
                            pipeline.find("m_reflectionProbeCapturePass->addGraphPasses") != std::string::npos &&
                            pipeline.find("m_reflectionProbeGridPass->prepareGraphFrame") != std::string::npos &&
                            pipeline.find("m_reflectionProbeGridPass->importGraphResources") != std::string::npos &&
                            pipeline.find("m_reflectionProbeGridPass->addGraphPasses") != std::string::npos &&
                            pipeline.find("m_reflectionProbeGridPass->finishGraphExecution") != std::string::npos,
-                       "deferred graph must own the complete probe-grid transaction");
+                       "deferred graph must own the complete probe-grid transaction") &&
+           requireTrue(
+               pipeline.find("m_shared->staticMeshRenderer->ensureReflectionProbeCaptureLightCapacity(") !=
+                       std::string::npos &&
+                   pipeline.find("m_shared->staticMeshRenderer->prepareReflectionProbeCapture(") != std::string::npos &&
+                   pipeline.find("renderReflectionProbeCaptureOpaque(commandList)") != std::string::npos &&
+                   pipeline.find("appendPreparedTransparentDraws(work.positionWorldMeters") != std::string::npos &&
+                   pipeline.find("renderReflectionProbeCaptureTransparent(commandList, draw)") != std::string::npos,
+               "voxel probe capture must include opaque and optical static glTF primitives");
 }
 
 } // namespace
