@@ -112,6 +112,37 @@ public:
     virtual RhiPipelineHandle createComputePipeline(const RhiComputePipelineDesc& desc) = 0;
     virtual RhiBindGroupHandle createBindGroup(const RhiBindGroupDesc& desc) = 0;
 
+    /// Creates an acceleration structure inside a caller-owned storage buffer.
+    /// @param desc Type, backing-buffer range, and diagnostic label.
+    /// @return Live handle, or an invalid handle when the complete description is rejected.
+    virtual RhiAccelerationStructureHandle createAccelerationStructure(const RhiAccelerationStructureDesc& desc) = 0;
+
+    /// Returns the immutable creation description for a live acceleration structure.
+    /// @param accelerationStructure Handle owned by this device.
+    /// @param desc Receives the exact description used to create the object.
+    /// @return True when the handle identifies a live acceleration structure.
+    [[nodiscard]] virtual bool getAccelerationStructureDesc(RhiAccelerationStructureHandle accelerationStructure,
+                                                            RhiAccelerationStructureDesc& desc) const = 0;
+
+    /// Queries exact storage, build-scratch, and update-scratch byte requirements.
+    /// @param input Geometry and primitive ranges that will be built.
+    /// @param sizes Receives native byte requirements when the complete input is valid.
+    /// @return True when every geometry and range satisfies the backend contract.
+    [[nodiscard]] virtual bool
+    queryAccelerationStructureBuildSizes(const RhiAccelerationStructureBuildInput& input,
+                                         RhiAccelerationStructureBuildSizes& sizes) const = 0;
+
+    /// Returns the shader-visible address of a buffer created with DeviceAddress usage.
+    /// @param buffer Live buffer owned by this device.
+    /// @return Non-zero device address, or zero when the handle or usage is invalid.
+    [[nodiscard]] virtual uint64_t bufferDeviceAddress(RhiBufferHandle buffer) const = 0;
+
+    /// Returns the shader-visible address of a built acceleration structure.
+    /// @param accelerationStructure Live acceleration structure owned by this device.
+    /// @return Non-zero device address, or zero when the handle is invalid.
+    [[nodiscard]] virtual uint64_t
+    accelerationStructureDeviceAddress(RhiAccelerationStructureHandle accelerationStructure) const = 0;
+
     /// Atomically updates contiguous descriptor-array ranges across one or more bind groups.
     /// @param updates Array of destination ranges and replacement resources to validate.
     /// @param updateCount Number of range updates in the batch.
@@ -171,6 +202,7 @@ public:
     virtual void destroyPipeline(RhiPipelineHandle handle) = 0;
     virtual void destroyBindGroup(RhiBindGroupHandle handle) = 0;
     virtual void destroyQueryPool(RhiQueryPoolHandle handle) = 0;
+    virtual void destroyAccelerationStructure(RhiAccelerationStructureHandle handle) = 0;
 
     [[nodiscard]] virtual std::unique_ptr<RhiCommandListPool>
     createCommandListPool(const RhiCommandListPoolDesc& desc) = 0;

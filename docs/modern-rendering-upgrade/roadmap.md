@@ -120,16 +120,26 @@ M1 与 M2 可并行开发，但公共 `GpuMaterial`、`GpuSceneGeometry` 与 Sta
 3. Global Bindless Set、Material/Geometry/Instance Buffers。（底层实现完成，运行时接入未完成：
    已冻结强类型 Bindless Handle、Submission Sequence 感知的槽位代际分配器，以及 192 字节
    Instance、128 字节 Geometry 的 CPU/GLSL 固定布局与严格规范化规则。Vulkan Global Set
-   已实现固定容量的 2D Texture、Cube Texture、Sampler、Storage Buffer 数组，Binding 4 保留
-   给 TLAS；Scene Buffer 已实现 GPU-only 固定容量表、连续 Dirty Span 上传、Submission Token
-   确认、Revision 保护与整批原子退役。真实 Shader 编译和 Vulkan Compute Smoke 已覆盖非一致
-   索引读取、回写与代际复用，且未发现 Validation/VUID 错误。体素区块、模型实例和资产注册表
-   尚未接入这些表，GPU Culling、Indirect Draw 与 TLAS 消费链仍未实现。）
-4. RHI AS Handle、Build Size、Build/Copy/Barrier 与 Device Address。
-5. Vulkan AS Feature/Extension 加载、函数指针与延迟销毁。
+   已实现固定容量的 2D Texture、Cube Texture、Sampler、Storage Buffer 数组，并将 Binding 4
+   正式接入固定 TLAS Descriptor；Scene Buffer 已实现 GPU-only 固定容量表、连续 Dirty Span 上传、
+   Submission Token 确认、Revision 保护与整批原子退役。真实 Shader 编译和 Vulkan Compute Smoke
+   已覆盖非一致索引读取、回写与代际复用，且未发现 Validation/VUID 错误。体素区块、模型实例和
+   资产注册表尚未接入这些表，GPU Culling、Indirect Draw 与 TLAS 消费链仍未实现。）
+4. RHI AS Handle、Build Size、Build/Copy/Barrier 与 Device Address。（实现完成：公共 RHI 已提供
+   强类型 AS Handle、BLAS/TLAS、Triangles/AABBs/Instances、Build/Update、Clone/Compact、精确
+   Build Size、Buffer/AS Device Address、AS Barrier、Compacted Size Query，以及固定 64 字节
+   TLAS Instance 布局。几何范围、地址与偏移对齐、批量 Build 的 Source/Destination 交叉和 Scratch
+   重叠均执行整批校验；AS Descriptor 只接受 TLAS。）
+5. Vulkan AS Feature/Extension 加载、函数指针与延迟销毁。（实现完成：设备初始化强制验证并启用
+   Acceleration Structure、Ray Query、Deferred Host Operations 与 Buffer Device Address；已加载
+   Create/Destroy、Build Size、Device Address、Build、Copy、Property Query 函数指针。AS 注册表、
+   Submission Sequence 引用盖章、Backing Buffer 依赖传播、AS 先于 Buffer 的延迟释放顺序，以及
+   OpenGL 对 AS Buffer/Descriptor/资源/命令/Shader 资源的明确拒绝均已落地。）
 6. 体素 Render Chunk/SubChunk BLAS Build/Compaction/Revision。
 7. glTF Static Mesh BLAS 共享和 TLAS Instance。
-8. AS Smoke Test、Cutout Candidate Test 与显存统计。
+8. AS Smoke Test、Cutout Candidate Test 与显存统计。（基础 Smoke 与显存统计完成：Vulkan 已覆盖
+   真实三角形 BLAS Build/Update、Compacted Size、Clone/Compact、TLAS Build、Binding 4、Shader
+   Reflection、延迟销毁和 Validation；Cutout Candidate、体素/glTF 生产者及运行时场景验收仍待完成。）
 
 ### 完成条件
 

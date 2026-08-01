@@ -97,6 +97,12 @@ enum class FrameAttempt { Success, Retry, Error };
                                          const uint32_t width, const uint32_t height, const uint32_t depth) {
     const auto deviceInfo = VkRhiInterop::deviceInfo(device);
     const auto textureInfo = VkRhiInterop::textureInfo(device, texture, view);
+    constexpr VkPipelineStageFlags2 kAccelerationStructureWriteStages =
+        VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_BUILD_BIT_KHR |
+        VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_COPY_BIT_KHR;
+    constexpr VkPipelineStageFlags2 kAccelerationStructureReadStages = VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT |
+                                                                       VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT |
+                                                                       kAccelerationStructureWriteStages;
     if (!deviceInfo.has_value() || deviceInfo->instance == VK_NULL_HANDLE ||
         deviceInfo->physicalDevice == VK_NULL_HANDLE || deviceInfo->device == VK_NULL_HANDLE ||
         deviceInfo->graphicsQueue == VK_NULL_HANDLE || deviceInfo->graphicsQueueFamily == VK_QUEUE_FAMILY_IGNORED ||
@@ -107,7 +113,12 @@ enum class FrameAttempt { Success, Retry, Error };
         textureInfo->mipCount != 1u || textureInfo->layerCount != 1u ||
         textureInfo->aspectMask != VK_IMAGE_ASPECT_COLOR_BIT ||
         VkRhiInterop::textureInfo(device, {}, view).has_value() ||
-        VkRhiInterop::resourceLayout(RhiResourceState::ShaderRead) != VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
+        VkRhiInterop::resourceLayout(RhiResourceState::ShaderRead) != VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL ||
+        VkRhiInterop::resourceStages(RhiResourceState::AccelerationStructureBuildWrite) !=
+            kAccelerationStructureWriteStages ||
+        VkRhiInterop::resourceStages(RhiResourceState::AccelerationStructureRead) != kAccelerationStructureReadStages ||
+        VkRhiInterop::resourceAccess(RhiResourceState::AccelerationStructureBuildInput) !=
+            VK_ACCESS_2_SHADER_READ_BIT) {
         return false;
     }
 
@@ -2342,6 +2353,456 @@ void main() {
 
 } // namespace
 
+[[nodiscard]] bool validateAccelerationStructures(VkRhiDevice& device, RhiCommandListPool& commandPool) {
+    using namespace renderer::core;
+
+    const uint64_t validationErrorsBefore = device.validationErrorCount();
+    const RhiCapabilities& capabilities = device.capabilities();
+    if (!capabilities.accelerationStructure || !capabilities.rayQuery || !capabilities.bufferDeviceAddress ||
+        !capabilities.descriptorBindingAccelerationStructureUpdateAfterBind ||
+        capabilities.maxAccelerationStructureGeometryCount == 0u ||
+        capabilities.maxAccelerationStructureInstanceCount == 0u ||
+        capabilities.maxAccelerationStructurePrimitiveCount == 0u ||
+        capabilities.minAccelerationStructureScratchOffsetAlignment == 0u) {
+        std::cerr << "Acceleration-structure capabilities are incomplete\n";
+        return false;
+    }
+
+    RhiBufferHandle vertexBuffer;
+    RhiBufferHandle indexBuffer;
+    RhiBufferHandle blasStorage;
+    RhiBufferHandle blasScratch;
+    RhiBufferHandle cloneStorage;
+    RhiBufferHandle compactStorage;
+    RhiBufferHandle instanceBuffer;
+    RhiBufferHandle tlasStorage;
+    RhiBufferHandle tlasScratch;
+    RhiAccelerationStructureHandle blas;
+    RhiAccelerationStructureHandle cloneBlas;
+    RhiAccelerationStructureHandle compactBlas;
+    RhiAccelerationStructureHandle tlas;
+    RhiQueryPoolHandle compactedSizeQueries;
+    RhiBindGroupLayoutHandle accelerationStructureDescriptorLayout;
+    RhiBindGroupHandle accelerationStructureDescriptorGroup;
+    GlobalBindlessSet accelerationStructureBindlessSet;
+
+    const auto cleanup = [&]() {
+        accelerationStructureBindlessSet.shutdown();
+        if (accelerationStructureDescriptorGroup.isValid())
+            device.destroyBindGroup(accelerationStructureDescriptorGroup);
+        if (accelerationStructureDescriptorLayout.isValid())
+            device.destroyBindGroupLayout(accelerationStructureDescriptorLayout);
+        if (compactedSizeQueries.isValid())
+            device.destroyQueryPool(compactedSizeQueries);
+        if (tlas.isValid())
+            device.destroyAccelerationStructure(tlas);
+        if (compactBlas.isValid())
+            device.destroyAccelerationStructure(compactBlas);
+        if (cloneBlas.isValid())
+            device.destroyAccelerationStructure(cloneBlas);
+        if (blas.isValid())
+            device.destroyAccelerationStructure(blas);
+        if (tlasScratch.isValid())
+            device.destroyBuffer(tlasScratch);
+        if (tlasStorage.isValid())
+            device.destroyBuffer(tlasStorage);
+        if (instanceBuffer.isValid())
+            device.destroyBuffer(instanceBuffer);
+        if (compactStorage.isValid())
+            device.destroyBuffer(compactStorage);
+        if (cloneStorage.isValid())
+            device.destroyBuffer(cloneStorage);
+        if (blasScratch.isValid())
+            device.destroyBuffer(blasScratch);
+        if (blasStorage.isValid())
+            device.destroyBuffer(blasStorage);
+        if (indexBuffer.isValid())
+            device.destroyBuffer(indexBuffer);
+        if (vertexBuffer.isValid())
+            device.destroyBuffer(vertexBuffer);
+        device.waitIdle();
+    };
+
+    const auto submitComputeAndWait = [&](const char* debugName, auto&& recorder) {
+        RhiCommandList* commands = commandPool.acquire(RhiCommandListType::Compute);
+        if (commands == nullptr || !commands->begin({debugName, RhiCommandListType::Compute}) || !recorder(*commands) ||
+            !commands->end()) {
+            return false;
+        }
+        RhiCommandList* submissions[] = {commands};
+        RhiSubmissionToken token;
+        return device.submit({debugName, submissions, 1u, RhiQueueType::Compute}, &token) &&
+               device.waitForSubmission(token);
+    };
+
+    const auto rejectsBuildBatch = [&](const char* debugName, const RhiAccelerationStructureBuildDesc* builds,
+                                       const uint32_t buildCount) {
+        RhiCommandList* commands = commandPool.acquire(RhiCommandListType::Compute);
+        if (commands == nullptr || !commands->begin({debugName, RhiCommandListType::Compute})) {
+            return false;
+        }
+        const bool rejected = !commands->buildAccelerationStructures(builds, buildCount);
+        return commands->end() && rejected;
+    };
+
+    constexpr std::array<float, 18u> kTriangleVertices{-1.0f, -1.0f, 0.0f, 1.0f, -1.0f, 0.0f, 0.0f, 1.0f, 0.0f,
+                                                       -0.5f, -0.5f, 0.0f, 0.5f, -0.5f, 0.0f, 0.0f, 0.5f, 0.0f};
+    constexpr std::array<uint32_t, 3u> kTriangleIndices{0u, 1u, 2u};
+    constexpr RhiBufferUsageFlags kBuildInputUsages = rhiFlag(RhiBufferUsage::TransferDst) |
+                                                      rhiFlag(RhiBufferUsage::DeviceAddress) |
+                                                      rhiFlag(RhiBufferUsage::AccelerationStructureBuildInput);
+    RhiBufferDesc vertexDesc;
+    vertexDesc.debugName = "VulkanSmoke.AS.Vertices";
+    vertexDesc.size = sizeof(kTriangleVertices);
+    vertexDesc.usage = kBuildInputUsages;
+    vertexDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+    vertexDesc.initialState = RhiResourceState::AccelerationStructureBuildInput;
+    vertexDesc.memoryCategory = RhiMemoryCategory::Geometry;
+    vertexBuffer = device.createBuffer(vertexDesc, kTriangleVertices.data(), sizeof(kTriangleVertices));
+    RhiBufferDesc indexDesc = vertexDesc;
+    indexDesc.debugName = "VulkanSmoke.AS.Indices";
+    indexDesc.size = sizeof(kTriangleIndices);
+    indexBuffer = device.createBuffer(indexDesc, kTriangleIndices.data(), sizeof(kTriangleIndices));
+
+    RhiAccelerationStructureGeometryDesc triangleGeometry;
+    triangleGeometry.type = RhiAccelerationStructureGeometryType::Triangles;
+    triangleGeometry.flags = rhiFlag(RhiAccelerationStructureGeometryFlag::Opaque);
+    triangleGeometry.triangles.vertexBuffer = vertexBuffer;
+    triangleGeometry.triangles.vertexStride = sizeof(float) * 3u;
+    triangleGeometry.triangles.vertexCount = 6u;
+    triangleGeometry.triangles.vertexFormat = RhiVertexFormat::Float3;
+    triangleGeometry.triangles.indexBuffer = indexBuffer;
+    triangleGeometry.triangles.indexFormat = RhiAccelerationStructureIndexFormat::Uint32;
+    RhiAccelerationStructureBuildRangeDesc triangleRange;
+    triangleRange.primitiveCount = 1u;
+    RhiAccelerationStructureBuildInput blasInput;
+    blasInput.type = RhiAccelerationStructureType::BottomLevel;
+    blasInput.flags = rhiFlag(RhiAccelerationStructureBuildFlag::AllowUpdate) |
+                      rhiFlag(RhiAccelerationStructureBuildFlag::AllowCompaction) |
+                      rhiFlag(RhiAccelerationStructureBuildFlag::PreferFastTrace);
+    blasInput.geometries = &triangleGeometry;
+    blasInput.ranges = &triangleRange;
+    blasInput.geometryCount = 1u;
+    RhiAccelerationStructureBuildSizes blasSizes;
+    bool valid = vertexBuffer.isValid() && indexBuffer.isValid() && device.bufferDeviceAddress(vertexBuffer) != 0u &&
+                 device.bufferDeviceAddress(indexBuffer) != 0u &&
+                 device.queryAccelerationStructureBuildSizes(blasInput, blasSizes) &&
+                 blasSizes.accelerationStructureSize != 0u && blasSizes.buildScratchSize != 0u &&
+                 blasSizes.updateScratchSize != 0u;
+
+    if (valid) {
+        RhiAccelerationStructureGeometryDesc nonIndexedGeometry = triangleGeometry;
+        nonIndexedGeometry.triangles.indexBuffer = {};
+        nonIndexedGeometry.triangles.indexOffset = 0u;
+        nonIndexedGeometry.triangles.indexFormat = RhiAccelerationStructureIndexFormat::None;
+        RhiAccelerationStructureBuildRangeDesc nonIndexedRange = triangleRange;
+        nonIndexedRange.firstVertex = 3u;
+        RhiAccelerationStructureBuildInput nonIndexedInput = blasInput;
+        nonIndexedInput.geometries = &nonIndexedGeometry;
+        nonIndexedInput.ranges = &nonIndexedRange;
+        RhiAccelerationStructureBuildSizes validationSizes;
+        valid = device.queryAccelerationStructureBuildSizes(nonIndexedInput, validationSizes);
+        nonIndexedRange.primitiveOffset = 2u;
+        valid = valid && !device.queryAccelerationStructureBuildSizes(nonIndexedInput, validationSizes);
+        nonIndexedRange.primitiveOffset = 0u;
+        nonIndexedRange.firstVertex = 4u;
+        valid = valid && !device.queryAccelerationStructureBuildSizes(nonIndexedInput, validationSizes);
+        nonIndexedRange.firstVertex = 3u;
+        nonIndexedGeometry.triangles.vertexStride = sizeof(float) * 3u + 2u;
+        valid = valid && !device.queryAccelerationStructureBuildSizes(nonIndexedInput, validationSizes);
+        nonIndexedGeometry.triangles.vertexStride = sizeof(float) * 3u;
+        nonIndexedGeometry.triangles.transformBuffer = vertexBuffer;
+        nonIndexedRange.transformOffset = 4u;
+        valid = valid && !device.queryAccelerationStructureBuildSizes(nonIndexedInput, validationSizes);
+    }
+
+    constexpr RhiBufferUsageFlags kAccelerationStructureStorageUsages =
+        rhiFlag(RhiBufferUsage::DeviceAddress) | rhiFlag(RhiBufferUsage::AccelerationStructureStorage);
+    if (valid) {
+        RhiBufferDesc storageDesc;
+        storageDesc.debugName = "VulkanSmoke.AS.BLAS.Storage";
+        storageDesc.size = blasSizes.accelerationStructureSize;
+        storageDesc.usage = kAccelerationStructureStorageUsages;
+        storageDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+        storageDesc.initialState = RhiResourceState::AccelerationStructureBuildWrite;
+        storageDesc.memoryCategory = RhiMemoryCategory::AccelerationStructure;
+        blasStorage = device.createBuffer(storageDesc, nullptr, 0u);
+        RhiBufferDesc scratchDesc;
+        scratchDesc.debugName = "VulkanSmoke.AS.BLAS.Scratch";
+        scratchDesc.size = std::max(blasSizes.buildScratchSize, blasSizes.updateScratchSize);
+        scratchDesc.usage = rhiFlag(RhiBufferUsage::Storage) | rhiFlag(RhiBufferUsage::DeviceAddress);
+        scratchDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+        scratchDesc.initialState = RhiResourceState::AccelerationStructureBuildScratch;
+        scratchDesc.memoryCategory = RhiMemoryCategory::AccelerationStructure;
+        blasScratch = device.createBuffer(scratchDesc, nullptr, 0u);
+        blas = device.createAccelerationStructure({"VulkanSmoke.AS.BLAS", RhiAccelerationStructureType::BottomLevel,
+                                                   blasStorage, 0u, blasSizes.accelerationStructureSize});
+        compactedSizeQueries = device.createQueryPool(
+            {"VulkanSmoke.AS.CompactedSize", RhiQueryType::AccelerationStructureCompactedSize, 1u});
+        RhiAccelerationStructureDesc storedDesc;
+        valid = blasStorage.isValid() && blasScratch.isValid() && blas.isValid() && compactedSizeQueries.isValid() &&
+                device.getAccelerationStructureDesc(blas, storedDesc) &&
+                storedDesc.type == RhiAccelerationStructureType::BottomLevel &&
+                storedDesc.buffer.index == blasStorage.index &&
+                storedDesc.buffer.generation == blasStorage.generation &&
+                std::strcmp(storedDesc.debugName, "VulkanSmoke.AS.BLAS") == 0;
+    }
+
+    uint64_t compactedSize = 0u;
+    if (valid) {
+        const RhiAccelerationStructureBuildDesc build{
+            blasInput, RhiAccelerationStructureBuildMode::Build, {}, blas, blasScratch, 0u};
+        valid = submitComputeAndWait("VulkanSmoke.AS.Build", [&](RhiCommandList& commands) {
+            commands.resetQueryPool(compactedSizeQueries, 0u, 1u);
+            return commands.buildAccelerationStructures(&build, 1u) &&
+                   commands.accelerationStructureBarrier({blas, RhiResourceState::AccelerationStructureBuildWrite,
+                                                          RhiResourceState::AccelerationStructureRead}) &&
+                   commands.writeAccelerationStructureProperties({&blas, 1u, compactedSizeQueries, 0u});
+        });
+    }
+    if (valid) {
+        valid = device.areQueryResultsAvailable(compactedSizeQueries, 0u, 1u) &&
+                device.getQueryResults(compactedSizeQueries, 0u, 1u, &compactedSize) && compactedSize != 0u &&
+                compactedSize <= blasSizes.accelerationStructureSize &&
+                device.accelerationStructureDeviceAddress(blas) != 0u;
+    }
+
+    if (valid) {
+        const RhiAccelerationStructureBuildDesc update{
+            blasInput, RhiAccelerationStructureBuildMode::Update, blas, blas, blasScratch, 0u};
+        valid = submitComputeAndWait("VulkanSmoke.AS.Update", [&](RhiCommandList& commands) {
+            commands.resetQueryPool(compactedSizeQueries, 0u, 1u);
+            return commands.accelerationStructureBarrier({blas, RhiResourceState::AccelerationStructureRead,
+                                                          RhiResourceState::AccelerationStructureBuildWrite}) &&
+                   commands.buildAccelerationStructures(&update, 1u) &&
+                   commands.accelerationStructureBarrier({blas, RhiResourceState::AccelerationStructureBuildWrite,
+                                                          RhiResourceState::AccelerationStructureRead}) &&
+                   commands.writeAccelerationStructureProperties({&blas, 1u, compactedSizeQueries, 0u});
+        });
+    }
+    if (valid) {
+        valid = device.getQueryResults(compactedSizeQueries, 0u, 1u, &compactedSize) && compactedSize != 0u &&
+                compactedSize <= blasSizes.accelerationStructureSize;
+    }
+
+    if (valid) {
+        RhiBufferDesc cloneStorageDesc;
+        cloneStorageDesc.debugName = "VulkanSmoke.AS.Clone.Storage";
+        cloneStorageDesc.size = blasSizes.accelerationStructureSize;
+        cloneStorageDesc.usage = kAccelerationStructureStorageUsages;
+        cloneStorageDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+        cloneStorageDesc.initialState = RhiResourceState::AccelerationStructureBuildWrite;
+        cloneStorageDesc.memoryCategory = RhiMemoryCategory::AccelerationStructure;
+        cloneStorage = device.createBuffer(cloneStorageDesc, nullptr, 0u);
+        RhiBufferDesc compactStorageDesc = cloneStorageDesc;
+        compactStorageDesc.debugName = "VulkanSmoke.AS.Compact.Storage";
+        compactStorageDesc.size = compactedSize;
+        compactStorage = device.createBuffer(compactStorageDesc, nullptr, 0u);
+        cloneBlas =
+            device.createAccelerationStructure({"VulkanSmoke.AS.Clone", RhiAccelerationStructureType::BottomLevel,
+                                                cloneStorage, 0u, blasSizes.accelerationStructureSize});
+        compactBlas = device.createAccelerationStructure(
+            {"VulkanSmoke.AS.Compact", RhiAccelerationStructureType::BottomLevel, compactStorage, 0u, compactedSize});
+        valid = cloneStorage.isValid() && compactStorage.isValid() && cloneBlas.isValid() && compactBlas.isValid();
+    }
+    if (valid) {
+        const std::array<RhiAccelerationStructureBuildDesc, 2u> overlappingScratchBuilds{
+            RhiAccelerationStructureBuildDesc{
+                blasInput, RhiAccelerationStructureBuildMode::Build, {}, blas, blasScratch, 0u},
+            RhiAccelerationStructureBuildDesc{
+                blasInput, RhiAccelerationStructureBuildMode::Build, {}, cloneBlas, blasScratch, 0u}};
+        const std::array<RhiAccelerationStructureBuildDesc, 2u> crossingSourceDestinationBuilds{
+            RhiAccelerationStructureBuildDesc{
+                blasInput, RhiAccelerationStructureBuildMode::Build, {}, cloneBlas, blasScratch, 0u},
+            RhiAccelerationStructureBuildDesc{blasInput, RhiAccelerationStructureBuildMode::Update, cloneBlas, blas,
+                                              blasScratch, 0u}};
+        valid =
+            rejectsBuildBatch("VulkanSmoke.AS.RejectScratchOverlap", overlappingScratchBuilds.data(),
+                              static_cast<uint32_t>(overlappingScratchBuilds.size())) &&
+            rejectsBuildBatch("VulkanSmoke.AS.RejectSourceDestinationCrossing", crossingSourceDestinationBuilds.data(),
+                              static_cast<uint32_t>(crossingSourceDestinationBuilds.size()));
+    }
+    if (valid) {
+        valid = submitComputeAndWait("VulkanSmoke.AS.Copy", [&](RhiCommandList& commands) {
+            return commands.copyAccelerationStructure({blas, cloneBlas, RhiAccelerationStructureCopyMode::Clone}) &&
+                   commands.accelerationStructureBarrier({cloneBlas, RhiResourceState::AccelerationStructureBuildWrite,
+                                                          RhiResourceState::AccelerationStructureRead}) &&
+                   commands.copyAccelerationStructure({blas, compactBlas, RhiAccelerationStructureCopyMode::Compact}) &&
+                   commands.accelerationStructureBarrier({compactBlas,
+                                                          RhiResourceState::AccelerationStructureBuildWrite,
+                                                          RhiResourceState::AccelerationStructureRead});
+        });
+    }
+
+    uint64_t compactBlasAddress = 0u;
+    if (valid) {
+        compactBlasAddress = device.accelerationStructureDeviceAddress(compactBlas);
+        valid = device.accelerationStructureDeviceAddress(cloneBlas) != 0u && compactBlasAddress != 0u;
+    }
+
+    RhiAccelerationStructureBuildSizes tlasSizes;
+    RhiAccelerationStructureGeometryDesc instanceGeometry;
+    RhiAccelerationStructureBuildRangeDesc instanceRange;
+    RhiAccelerationStructureBuildInput tlasInput;
+    if (valid) {
+        RhiAccelerationStructureInstance instance;
+        const auto customIndex = rhiPackAccelerationStructureInstanceCustomIndexAndMask(23u, 0xffu);
+        const auto instanceFlags = rhiPackAccelerationStructureInstanceShaderBindingTableOffsetAndFlags(
+            0u, rhiFlag(RhiAccelerationStructureInstanceFlag::TriangleFacingCullDisable));
+        valid = customIndex.has_value() && instanceFlags.has_value();
+        if (valid) {
+            instance.customIndexAndMask = *customIndex;
+            instance.shaderBindingTableOffsetAndFlags = *instanceFlags;
+            instance.accelerationStructureReference = compactBlasAddress;
+            RhiBufferDesc instanceDesc;
+            instanceDesc.debugName = "VulkanSmoke.AS.TLAS.Instances";
+            instanceDesc.size = sizeof(instance);
+            instanceDesc.usage = kBuildInputUsages;
+            instanceDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+            instanceDesc.initialState = RhiResourceState::AccelerationStructureBuildInput;
+            instanceDesc.memoryCategory = RhiMemoryCategory::AccelerationStructure;
+            instanceBuffer = device.createBuffer(instanceDesc, &instance, sizeof(instance));
+        }
+        instanceGeometry.type = RhiAccelerationStructureGeometryType::Instances;
+        instanceGeometry.instances.buffer = instanceBuffer;
+        instanceRange.primitiveCount = 1u;
+        tlasInput.type = RhiAccelerationStructureType::TopLevel;
+        tlasInput.flags = rhiFlag(RhiAccelerationStructureBuildFlag::PreferFastTrace);
+        tlasInput.geometries = &instanceGeometry;
+        tlasInput.ranges = &instanceRange;
+        tlasInput.geometryCount = 1u;
+        RhiAccelerationStructureGeometryDesc pointerGeometry = instanceGeometry;
+        pointerGeometry.instances.arrayOfPointers = true;
+        RhiAccelerationStructureBuildRangeDesc misalignedPointerRange = instanceRange;
+        misalignedPointerRange.primitiveOffset = 8u;
+        RhiAccelerationStructureBuildInput misalignedPointerInput = tlasInput;
+        misalignedPointerInput.geometries = &pointerGeometry;
+        misalignedPointerInput.ranges = &misalignedPointerRange;
+        RhiAccelerationStructureBuildSizes validationSizes;
+        valid = valid && instanceBuffer.isValid() &&
+                !device.queryAccelerationStructureBuildSizes(misalignedPointerInput, validationSizes) &&
+                device.queryAccelerationStructureBuildSizes(tlasInput, tlasSizes);
+    }
+
+    if (valid) {
+        RhiBufferDesc tlasStorageDesc;
+        tlasStorageDesc.debugName = "VulkanSmoke.AS.TLAS.Storage";
+        tlasStorageDesc.size = tlasSizes.accelerationStructureSize;
+        tlasStorageDesc.usage = kAccelerationStructureStorageUsages;
+        tlasStorageDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+        tlasStorageDesc.initialState = RhiResourceState::AccelerationStructureBuildWrite;
+        tlasStorageDesc.memoryCategory = RhiMemoryCategory::AccelerationStructure;
+        tlasStorage = device.createBuffer(tlasStorageDesc, nullptr, 0u);
+        RhiBufferDesc tlasScratchDesc;
+        tlasScratchDesc.debugName = "VulkanSmoke.AS.TLAS.Scratch";
+        tlasScratchDesc.size = tlasSizes.buildScratchSize;
+        tlasScratchDesc.usage = rhiFlag(RhiBufferUsage::Storage) | rhiFlag(RhiBufferUsage::DeviceAddress);
+        tlasScratchDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+        tlasScratchDesc.initialState = RhiResourceState::AccelerationStructureBuildScratch;
+        tlasScratchDesc.memoryCategory = RhiMemoryCategory::AccelerationStructure;
+        tlasScratch = device.createBuffer(tlasScratchDesc, nullptr, 0u);
+        tlas = device.createAccelerationStructure({"VulkanSmoke.AS.TLAS", RhiAccelerationStructureType::TopLevel,
+                                                   tlasStorage, 0u, tlasSizes.accelerationStructureSize});
+        valid = tlasStorage.isValid() && tlasScratch.isValid() && tlas.isValid();
+    }
+    if (valid) {
+        const RhiAccelerationStructureBuildDesc build{
+            tlasInput, RhiAccelerationStructureBuildMode::Build, {}, tlas, tlasScratch, 0u};
+        valid = submitComputeAndWait("VulkanSmoke.AS.TLAS.Build", [&](RhiCommandList& commands) {
+            return commands.buildAccelerationStructures(&build, 1u) &&
+                   commands.accelerationStructureBarrier({tlas, RhiResourceState::AccelerationStructureBuildWrite,
+                                                          RhiResourceState::AccelerationStructureRead});
+        });
+    }
+    if (valid) {
+        valid = device.accelerationStructureDeviceAddress(tlas) != 0u;
+    }
+
+    if (valid) {
+        RhiBindGroupLayoutDesc descriptorLayoutDesc;
+        descriptorLayoutDesc.debugName = "VulkanSmoke.AS.DescriptorLayout";
+        descriptorLayoutDesc.entries = {{0u, RhiBindingType::AccelerationStructure, rhiFlag(RhiShaderStage::Compute),
+                                         1u, rhiFlag(RhiBindingFlag::PartiallyBound)}};
+        accelerationStructureDescriptorLayout = device.createBindGroupLayout(descriptorLayoutDesc);
+        RhiBindingResource blasResource;
+        blasResource.accelerationStructure = compactBlas;
+        RhiBindGroupDesc invalidBlasDescriptor;
+        invalidBlasDescriptor.layout = accelerationStructureDescriptorLayout;
+        invalidBlasDescriptor.entries = {{0u, 0u, blasResource}};
+        const RhiBindGroupHandle rejectedBlasDescriptor = device.createBindGroup(invalidBlasDescriptor);
+        RhiBindGroupDesc descriptorGroupDesc;
+        descriptorGroupDesc.layout = accelerationStructureDescriptorLayout;
+        accelerationStructureDescriptorGroup = device.createBindGroup(descriptorGroupDesc);
+        RhiBindGroupUpdate descriptorUpdate;
+        descriptorUpdate.bindGroup = accelerationStructureDescriptorGroup;
+        descriptorUpdate.binding = 0u;
+        descriptorUpdate.resources = &blasResource;
+        descriptorUpdate.resourceCount = 1u;
+        const bool rejectedBlasUpdate = !device.updateBindGroups(&descriptorUpdate, 1u);
+        RhiBindingResource tlasResource;
+        tlasResource.accelerationStructure = tlas;
+        descriptorUpdate.resources = &tlasResource;
+        valid = accelerationStructureDescriptorLayout.isValid() && !rejectedBlasDescriptor.isValid() &&
+                accelerationStructureDescriptorGroup.isValid() && rejectedBlasUpdate &&
+                device.updateBindGroups(&descriptorUpdate, 1u);
+    }
+
+    if (valid) {
+        GlobalBindlessSetConfig bindlessConfig;
+        bindlessConfig.sampledTexture2DCapacity = 1u;
+        bindlessConfig.sampledTextureCubeCapacity = 1u;
+        bindlessConfig.samplerCapacity = 1u;
+        bindlessConfig.storageBufferCapacity = 1u;
+        valid = accelerationStructureBindlessSet.initialize(device, bindlessConfig) == GlobalBindlessSetError::None &&
+                accelerationStructureBindlessSet.setAccelerationStructure(compactBlas) ==
+                    GlobalBindlessSetError::InvalidResource &&
+                accelerationStructureBindlessSet.setAccelerationStructure(tlas) == GlobalBindlessSetError::None &&
+                accelerationStructureBindlessSet.setAccelerationStructure(tlas) == GlobalBindlessSetError::None;
+    }
+
+    if (valid) {
+        const RhiMemoryStats stats = device.memoryStats();
+        const RhiMemoryCategoryStats& accelerationStructureStats =
+            stats.categories[static_cast<size_t>(RhiMemoryCategory::AccelerationStructure)];
+        valid = stats.valid && accelerationStructureStats.resourceCount >= 11u &&
+                accelerationStructureStats.allocationCount >= 7u;
+    }
+
+    if (valid) {
+        accelerationStructureBindlessSet.shutdown();
+        RhiCommandList* commands = commandPool.acquire(RhiCommandListType::Compute);
+        RhiSubmissionToken token;
+        if (commands == nullptr || !commands->begin({"VulkanSmoke.AS.DeferredDestroy", RhiCommandListType::Compute}) ||
+            !commands->accelerationStructureBarrier(
+                {tlas, RhiResourceState::AccelerationStructureRead, RhiResourceState::AccelerationStructureRead}) ||
+            !commands->end()) {
+            valid = false;
+        } else {
+            RhiCommandList* submissions[] = {commands};
+            valid = device.submit({"VulkanSmoke.AS.DeferredDestroy", submissions, 1u, RhiQueueType::Compute}, &token);
+            if (valid) {
+                device.destroyAccelerationStructure(tlas);
+                tlas = {};
+                device.destroyBuffer(tlasStorage);
+                tlasStorage = {};
+                valid = device.waitForSubmission(token);
+            }
+        }
+    }
+
+    cleanup();
+    const RhiMemoryStats finalStats = device.memoryStats();
+    const RhiMemoryCategoryStats& finalAccelerationStructureStats =
+        finalStats.categories[static_cast<size_t>(RhiMemoryCategory::AccelerationStructure)];
+    valid = valid && finalStats.valid && finalAccelerationStructureStats.resourceCount == 0u &&
+            finalAccelerationStructureStats.allocationCount == 0u &&
+            device.validationErrorCount() == validationErrorsBefore;
+    if (!valid) {
+        std::cerr << "Acceleration-structure build, copy, descriptor, or lifetime validation failed\n";
+    }
+    return valid;
+}
+
 [[nodiscard]] bool validateCubeArrayViews(VkRhiDevice& device) {
     const uint64_t validationErrorsBefore = device.validationErrorCount();
     RhiTextureDesc textureDesc;
@@ -2563,6 +3024,7 @@ int main() {
         !validateTemporalOutputTarget(device, *commandPool) ||
         !validateBindGroupUpdateLifecycle(device, *commandPool) ||
         !validateGlobalBindlessGpuScene(device, *commandPool) ||
+        !validateAccelerationStructures(device, *commandPool) ||
         !validateVulkanInterop(device, *commandPool, texture, textureView, textureWidth, textureHeight, textureDepth) ||
         !validateOffscreenCoordinateContract(device, *commandPool, window) ||
         !validateRenderGraphMultiQueue(device, *commandPool) ||

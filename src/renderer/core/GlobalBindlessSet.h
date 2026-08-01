@@ -115,6 +115,11 @@ public:
     [[nodiscard]] GlobalBindlessPublicationResult<renderer::contracts::BindlessStorageBufferTag>
     publishStorageBuffer(RhiBufferHandle buffer);
 
+    /// Publishes the current top-level acceleration structure at fixed binding 4.
+    /// @param accelerationStructure Live top-level structure owned by the initialized device.
+    /// @return None after the descriptor is updated, or a stable validation/publication error.
+    [[nodiscard]] GlobalBindlessSetError setAccelerationStructure(RhiAccelerationStructureHandle accelerationStructure);
+
     /// Retires one sampled two-dimensional texture slot after its newest referencing submission.
     [[nodiscard]] GlobalBindlessSetError retire(renderer::contracts::BindlessTexture2DHandle handle,
                                                 uint64_t lastUseSequence);
@@ -165,6 +170,7 @@ private:
     BindlessDescriptorSlotAllocator<renderer::contracts::BindlessTextureCubeTag> m_sampledTextureCubeSlots{0u};
     BindlessDescriptorSlotAllocator<renderer::contracts::BindlessSamplerTag> m_samplerSlots{0u};
     BindlessDescriptorSlotAllocator<renderer::contracts::BindlessStorageBufferTag> m_storageBufferSlots{0u};
+    RhiAccelerationStructureHandle m_accelerationStructure;
 };
 
 } // namespace renderer::core

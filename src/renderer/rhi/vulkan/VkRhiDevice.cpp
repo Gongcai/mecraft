@@ -94,6 +94,11 @@ toVkCommandResourceState(const RhiResourceState state, const RhiCommandListType 
     case RhiResourceState::ShaderWrite:
     case RhiResourceState::UniformBuffer:
     case RhiResourceState::StorageBuffer: mapping.stages = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT; break;
+    case RhiResourceState::AccelerationStructureRead:
+        mapping.stages = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT |
+                         VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_BUILD_BIT_KHR |
+                         VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_COPY_BIT_KHR;
+        break;
     default: break;
     }
     return mapping;
@@ -147,7 +152,7 @@ VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityFlagBits
 }
 
 [[nodiscard]] VkBufferUsageFlags toVkBufferUsage(const RhiBufferUsageFlags usage) {
-    VkBufferUsageFlags result = VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+    VkBufferUsageFlags result = 0u;
     if ((usage & rhiFlag(RhiBufferUsage::Vertex)) != 0u)
         result |= VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
     if ((usage & rhiFlag(RhiBufferUsage::Index)) != 0u)
@@ -162,6 +167,12 @@ VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityFlagBits
         result |= VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
     if ((usage & rhiFlag(RhiBufferUsage::TransferDst)) != 0u)
         result |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+    if ((usage & rhiFlag(RhiBufferUsage::DeviceAddress)) != 0u)
+        result |= VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+    if ((usage & rhiFlag(RhiBufferUsage::AccelerationStructureStorage)) != 0u)
+        result |= VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR;
+    if ((usage & rhiFlag(RhiBufferUsage::AccelerationStructureBuildInput)) != 0u)
+        result |= VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR;
     return result;
 }
 
@@ -541,6 +552,286 @@ template <typename DeferredQueue, typename DeferredItem> void enqueueDeferred(De
     queue.insert(insertion, std::move(item));
 }
 
+struct NativeAccelerationStructureBuildInput {
+    std::vector<VkAccelerationStructureGeometryKHR> geometries;
+    std::vector<VkAccelerationStructureBuildRangeInfoKHR> ranges;
+    std::vector<uint32_t> primitiveCounts;
+};
+
+[[nodiscard]] bool rangeFits(const uint64_t totalSize, const uint64_t offset, const uint64_t size) {
+    return size != 0u && offset <= totalSize && size <= totalSize - offset;
+}
+
+[[nodiscard]] bool rangesOverlap(const uint64_t lhsOffset, const uint64_t lhsSize, const uint64_t rhsOffset,
+                                 const uint64_t rhsSize) {
+    return lhsOffset <= rhsOffset ? lhsSize > rhsOffset - lhsOffset : rhsSize > lhsOffset - rhsOffset;
+}
+
+[[nodiscard]] bool checkedAdd(const uint64_t lhs, const uint64_t rhs, uint64_t& result) {
+    if (rhs > std::numeric_limits<uint64_t>::max() - lhs) {
+        return false;
+    }
+    result = lhs + rhs;
+    return true;
+}
+
+[[nodiscard]] bool checkedMultiply(const uint64_t lhs, const uint64_t rhs, uint64_t& result) {
+    if (lhs != 0u && rhs > std::numeric_limits<uint64_t>::max() / lhs) {
+        return false;
+    }
+    result = lhs * rhs;
+    return true;
+}
+
+[[nodiscard]] bool stridedRangeFits(const uint64_t totalSize, const uint64_t offset, const uint64_t stride,
+                                    const uint64_t elementSize, const uint64_t elementCount) {
+    if (elementCount == 0u || stride < elementSize ||
+        elementCount - 1u > (std::numeric_limits<uint64_t>::max() - elementSize) / stride) {
+        return false;
+    }
+    return rangeFits(totalSize, offset, (elementCount - 1u) * stride + elementSize);
+}
+
+[[nodiscard]] bool bufferHasUsages(const VkRhiDeviceData::Buffer& buffer, const RhiBufferUsageFlags usages) {
+    return (buffer.desc.usage & usages) == usages;
+}
+
+[[nodiscard]] VkDeviceAddress nativeBufferDeviceAddress(const VkRhiDeviceData& data,
+                                                        const VkRhiDeviceData::Buffer& buffer) {
+    VkBufferDeviceAddressInfo addressInfo{VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO};
+    addressInfo.buffer = buffer.buffer;
+    return vkGetBufferDeviceAddress(data.device, &addressInfo);
+}
+
+[[nodiscard]] bool deviceAddressAtOffset(const VkDeviceAddress base, const uint64_t offset, VkDeviceAddress& address) {
+    return base != 0u && checkedAdd(base, offset, address);
+}
+
+[[nodiscard]] bool fillNativeAccelerationStructureBuildInput(const VkRhiDeviceData& data,
+                                                             const RhiCapabilities& capabilities,
+                                                             const RhiAccelerationStructureBuildInput& input,
+                                                             NativeAccelerationStructureBuildInput& native,
+                                                             VkRhiCommandResourceReferences* references) {
+    constexpr RhiAccelerationStructureBuildFlags kKnownBuildFlags =
+        rhiFlag(RhiAccelerationStructureBuildFlag::AllowUpdate) |
+        rhiFlag(RhiAccelerationStructureBuildFlag::AllowCompaction) |
+        rhiFlag(RhiAccelerationStructureBuildFlag::PreferFastTrace) |
+        rhiFlag(RhiAccelerationStructureBuildFlag::PreferFastBuild);
+    constexpr RhiAccelerationStructureGeometryFlags kKnownGeometryFlags =
+        rhiFlag(RhiAccelerationStructureGeometryFlag::Opaque) |
+        rhiFlag(RhiAccelerationStructureGeometryFlag::NoDuplicateAnyHitInvocation);
+    const bool conflictingPreferenceFlags =
+        (input.flags & rhiFlag(RhiAccelerationStructureBuildFlag::PreferFastTrace)) != 0u &&
+        (input.flags & rhiFlag(RhiAccelerationStructureBuildFlag::PreferFastBuild)) != 0u;
+    if (input.geometries == nullptr || input.ranges == nullptr || input.geometryCount == 0u ||
+        input.geometryCount > capabilities.maxAccelerationStructureGeometryCount ||
+        (input.flags & ~kKnownBuildFlags) != 0u || conflictingPreferenceFlags ||
+        toVkAccelerationStructureType(input.type) == VK_ACCELERATION_STRUCTURE_TYPE_MAX_ENUM_KHR ||
+        (input.type == RhiAccelerationStructureType::TopLevel && input.geometryCount != 1u)) {
+        return false;
+    }
+
+    native.geometries.resize(input.geometryCount);
+    native.ranges.resize(input.geometryCount);
+    native.primitiveCounts.resize(input.geometryCount);
+    uint64_t totalPrimitiveCount = 0u;
+    for (uint32_t index = 0u; index < input.geometryCount; ++index) {
+        const RhiAccelerationStructureGeometryDesc& geometry = input.geometries[index];
+        const RhiAccelerationStructureBuildRangeDesc& range = input.ranges[index];
+        if ((geometry.flags & ~kKnownGeometryFlags) != 0u || range.primitiveCount == 0u ||
+            range.primitiveCount > capabilities.maxAccelerationStructurePrimitiveCount ||
+            totalPrimitiveCount > capabilities.maxAccelerationStructurePrimitiveCount - range.primitiveCount) {
+            return false;
+        }
+        totalPrimitiveCount += range.primitiveCount;
+
+        VkAccelerationStructureGeometryKHR& nativeGeometry = native.geometries[index];
+        nativeGeometry = {VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR};
+        nativeGeometry.flags = toVkAccelerationStructureGeometryFlags(geometry.flags);
+        native.ranges[index] = {range.primitiveCount, range.primitiveOffset, range.firstVertex, range.transformOffset};
+        native.primitiveCounts[index] = range.primitiveCount;
+
+        switch (geometry.type) {
+        case RhiAccelerationStructureGeometryType::Triangles: {
+            if (input.type != RhiAccelerationStructureType::BottomLevel ||
+                geometry.triangles.vertexFormat != RhiVertexFormat::Float3 || geometry.triangles.vertexCount == 0u ||
+                geometry.triangles.vertexStride < sizeof(float) * 3u ||
+                geometry.triangles.vertexStride % sizeof(float) != 0u ||
+                geometry.triangles.vertexStride > std::numeric_limits<uint32_t>::max()) {
+                return false;
+            }
+            const auto* vertexBuffer = findRecord(data.buffers, geometry.triangles.vertexBuffer);
+            constexpr RhiBufferUsageFlags kBuildInputUsages =
+                rhiFlag(RhiBufferUsage::DeviceAddress) | rhiFlag(RhiBufferUsage::AccelerationStructureBuildInput);
+            if (vertexBuffer == nullptr || !bufferHasUsages(*vertexBuffer, kBuildInputUsages) ||
+                !stridedRangeFits(vertexBuffer->desc.size, geometry.triangles.vertexOffset,
+                                  geometry.triangles.vertexStride, sizeof(float) * 3u,
+                                  geometry.triangles.vertexCount)) {
+                return false;
+            }
+            VkDeviceAddress vertexDataAddress = 0u;
+            if (!deviceAddressAtOffset(nativeBufferDeviceAddress(data, *vertexBuffer), geometry.triangles.vertexOffset,
+                                       vertexDataAddress) ||
+                vertexDataAddress % alignof(float) != 0u) {
+                return false;
+            }
+
+            VkAccelerationStructureGeometryTrianglesDataKHR triangles{
+                VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR};
+            triangles.vertexFormat = VK_FORMAT_R32G32B32_SFLOAT;
+            triangles.vertexData.deviceAddress = vertexDataAddress;
+            triangles.vertexStride = geometry.triangles.vertexStride;
+            triangles.maxVertex = geometry.triangles.vertexCount - 1u;
+            triangles.indexType = toVkAccelerationStructureIndexType(geometry.triangles.indexFormat);
+            if (triangles.indexType == VK_INDEX_TYPE_MAX_ENUM) {
+                return false;
+            }
+
+            if (geometry.triangles.indexFormat == RhiAccelerationStructureIndexFormat::None) {
+                const uint64_t vertexPrimitiveCount = static_cast<uint64_t>(range.primitiveCount) * 3u;
+                uint64_t firstVertexOffset = 0u;
+                uint64_t primitiveDataOffset = 0u;
+                uint64_t completeVertexOffset = 0u;
+                if (geometry.triangles.indexBuffer.isValid() || geometry.triangles.indexOffset != 0u ||
+                    vertexPrimitiveCount / 3u != range.primitiveCount || range.primitiveOffset % sizeof(float) != 0u ||
+                    vertexPrimitiveCount > geometry.triangles.vertexCount ||
+                    range.firstVertex > geometry.triangles.vertexCount - vertexPrimitiveCount ||
+                    !checkedMultiply(range.firstVertex, geometry.triangles.vertexStride, firstVertexOffset) ||
+                    !checkedAdd(geometry.triangles.vertexOffset, range.primitiveOffset, primitiveDataOffset) ||
+                    !checkedAdd(primitiveDataOffset, firstVertexOffset, completeVertexOffset) ||
+                    !stridedRangeFits(vertexBuffer->desc.size, completeVertexOffset, geometry.triangles.vertexStride,
+                                      sizeof(float) * 3u, vertexPrimitiveCount)) {
+                    return false;
+                }
+            } else {
+                const auto* indexBuffer = findRecord(data.buffers, geometry.triangles.indexBuffer);
+                const uint64_t indexSize = geometry.triangles.indexFormat == RhiAccelerationStructureIndexFormat::Uint16
+                                               ? sizeof(uint16_t)
+                                               : sizeof(uint32_t);
+                const uint64_t indexCount = static_cast<uint64_t>(range.primitiveCount) * 3u;
+                uint64_t completeIndexOffset = 0u;
+                if (indexBuffer == nullptr || !bufferHasUsages(*indexBuffer, kBuildInputUsages) ||
+                    indexCount / 3u != range.primitiveCount || range.primitiveOffset % indexSize != 0u ||
+                    range.firstVertex >= geometry.triangles.vertexCount ||
+                    !checkedAdd(geometry.triangles.indexOffset, range.primitiveOffset, completeIndexOffset) ||
+                    !rangeFits(indexBuffer->desc.size, completeIndexOffset, indexCount * indexSize)) {
+                    return false;
+                }
+                VkDeviceAddress indexDataAddress = 0u;
+                if (!deviceAddressAtOffset(nativeBufferDeviceAddress(data, *indexBuffer),
+                                           geometry.triangles.indexOffset, indexDataAddress) ||
+                    indexDataAddress % indexSize != 0u) {
+                    return false;
+                }
+                triangles.indexData.deviceAddress = indexDataAddress;
+                if (references != nullptr) {
+                    references->reference(geometry.triangles.indexBuffer);
+                }
+            }
+
+            if (geometry.triangles.transformBuffer.isValid()) {
+                const auto* transformBuffer = findRecord(data.buffers, geometry.triangles.transformBuffer);
+                uint64_t completeTransformOffset = 0u;
+                if (range.transformOffset % (sizeof(float) * 4u) != 0u || transformBuffer == nullptr ||
+                    !bufferHasUsages(*transformBuffer, kBuildInputUsages) ||
+                    !checkedAdd(geometry.triangles.transformOffset, range.transformOffset, completeTransformOffset) ||
+                    !rangeFits(transformBuffer->desc.size, completeTransformOffset, sizeof(float) * 12u)) {
+                    return false;
+                }
+                VkDeviceAddress transformDataAddress = 0u;
+                if (!deviceAddressAtOffset(nativeBufferDeviceAddress(data, *transformBuffer),
+                                           geometry.triangles.transformOffset, transformDataAddress) ||
+                    transformDataAddress % (sizeof(float) * 4u) != 0u) {
+                    return false;
+                }
+                triangles.transformData.deviceAddress = transformDataAddress;
+                if (references != nullptr) {
+                    references->reference(geometry.triangles.transformBuffer);
+                }
+            } else if (geometry.triangles.transformOffset != 0u || range.transformOffset != 0u) {
+                return false;
+            }
+
+            nativeGeometry.geometryType = VK_GEOMETRY_TYPE_TRIANGLES_KHR;
+            nativeGeometry.geometry.triangles = triangles;
+            if (references != nullptr) {
+                references->reference(geometry.triangles.vertexBuffer);
+            }
+            break;
+        }
+        case RhiAccelerationStructureGeometryType::Aabbs: {
+            if (input.type != RhiAccelerationStructureType::BottomLevel || range.firstVertex != 0u ||
+                range.transformOffset != 0u || geometry.aabbs.stride < sizeof(float) * 6u ||
+                geometry.aabbs.stride % 8u != 0u) {
+                return false;
+            }
+            const auto* buffer = findRecord(data.buffers, geometry.aabbs.buffer);
+            constexpr RhiBufferUsageFlags kBuildInputUsages =
+                rhiFlag(RhiBufferUsage::DeviceAddress) | rhiFlag(RhiBufferUsage::AccelerationStructureBuildInput);
+            uint64_t completeOffset = 0u;
+            if (buffer == nullptr || !bufferHasUsages(*buffer, kBuildInputUsages) ||
+                !checkedAdd(geometry.aabbs.offset, range.primitiveOffset, completeOffset) ||
+                !stridedRangeFits(buffer->desc.size, completeOffset, geometry.aabbs.stride, sizeof(float) * 6u,
+                                  range.primitiveCount)) {
+                return false;
+            }
+            VkDeviceAddress dataAddress = 0u;
+            if (!deviceAddressAtOffset(nativeBufferDeviceAddress(data, *buffer), geometry.aabbs.offset, dataAddress) ||
+                dataAddress % 8u != 0u || range.primitiveOffset % 8u != 0u) {
+                return false;
+            }
+            VkAccelerationStructureGeometryAabbsDataKHR aabbs{
+                VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_AABBS_DATA_KHR};
+            aabbs.data.deviceAddress = dataAddress;
+            aabbs.stride = geometry.aabbs.stride;
+            nativeGeometry.geometryType = VK_GEOMETRY_TYPE_AABBS_KHR;
+            nativeGeometry.geometry.aabbs = aabbs;
+            if (references != nullptr) {
+                references->reference(geometry.aabbs.buffer);
+            }
+            break;
+        }
+        case RhiAccelerationStructureGeometryType::Instances: {
+            if (input.type != RhiAccelerationStructureType::TopLevel || range.firstVertex != 0u ||
+                range.transformOffset != 0u ||
+                range.primitiveCount > capabilities.maxAccelerationStructureInstanceCount) {
+                return false;
+            }
+            const auto* buffer = findRecord(data.buffers, geometry.instances.buffer);
+            constexpr RhiBufferUsageFlags kBuildInputUsages =
+                rhiFlag(RhiBufferUsage::DeviceAddress) | rhiFlag(RhiBufferUsage::AccelerationStructureBuildInput);
+            const uint64_t instanceStride =
+                geometry.instances.arrayOfPointers ? sizeof(uint64_t) : sizeof(RhiAccelerationStructureInstance);
+            const uint64_t requiredAlignment = geometry.instances.arrayOfPointers ? sizeof(uint64_t) : 16u;
+            uint64_t completeOffset = 0u;
+            if (buffer == nullptr || !bufferHasUsages(*buffer, kBuildInputUsages) ||
+                !checkedAdd(geometry.instances.offset, range.primitiveOffset, completeOffset) ||
+                !rangeFits(buffer->desc.size, completeOffset,
+                           static_cast<uint64_t>(range.primitiveCount) * instanceStride)) {
+                return false;
+            }
+            VkDeviceAddress dataAddress = 0u;
+            if (!deviceAddressAtOffset(nativeBufferDeviceAddress(data, *buffer), geometry.instances.offset,
+                                       dataAddress) ||
+                dataAddress % requiredAlignment != 0u || range.primitiveOffset % 16u != 0u) {
+                return false;
+            }
+            VkAccelerationStructureGeometryInstancesDataKHR instances{
+                VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_INSTANCES_DATA_KHR};
+            instances.arrayOfPointers = geometry.instances.arrayOfPointers ? VK_TRUE : VK_FALSE;
+            instances.data.deviceAddress = dataAddress;
+            nativeGeometry.geometryType = VK_GEOMETRY_TYPE_INSTANCES_KHR;
+            nativeGeometry.geometry.instances = instances;
+            if (references != nullptr) {
+                references->reference(geometry.instances.buffer);
+            }
+            break;
+        }
+        }
+    }
+    return true;
+}
+
 [[nodiscard]] bool resolveResourceReferences(VkRhiDeviceData& data, VkRhiCommandResourceReferences& references) {
     for (size_t index = 0u; index < references.pipelines.size(); ++index) {
         const auto* pipeline = findRecord(data.pipelines, references.pipelines[index]);
@@ -567,7 +858,15 @@ template <typename DeferredQueue, typename DeferredItem> void enqueueDeferred(De
             references.reference(entry.resource.sampler);
             references.reference(entry.resource.combinedTextureSampler.textureView);
             references.reference(entry.resource.combinedTextureSampler.sampler);
+            references.reference(entry.resource.accelerationStructure);
         }
+    }
+    for (size_t index = 0u; index < references.accelerationStructures.size(); ++index) {
+        const auto* accelerationStructure =
+            findRecord(data.accelerationStructures, references.accelerationStructures[index]);
+        if (accelerationStructure == nullptr)
+            return false;
+        references.reference(accelerationStructure->desc.buffer);
     }
     for (size_t index = 0u; index < references.textureViews.size(); ++index) {
         const auto* view = findRecord(data.textureViews, references.textureViews[index]);
@@ -584,7 +883,8 @@ template <typename DeferredQueue, typename DeferredItem> void enqueueDeferred(De
            allExist(references.bindGroupLayouts, data.bindGroupLayouts) &&
            allExist(references.pipelineLayouts, data.pipelineLayouts) &&
            allExist(references.pipelines, data.pipelines) && allExist(references.bindGroups, data.bindGroups) &&
-           allExist(references.queryPools, data.queryPools);
+           allExist(references.queryPools, data.queryPools) &&
+           allExist(references.accelerationStructures, data.accelerationStructures);
 }
 
 [[nodiscard]] VkRect2D toVkClippedScissor(const RhiRect2D& rect, const uint32_t targetWidth,
@@ -615,6 +915,7 @@ void markResourceReferencesUsed(VkRhiDeviceData& data, const VkRhiCommandResourc
     markAll(references.pipelines, data.pipelines);
     markAll(references.bindGroups, data.bindGroups);
     markAll(references.queryPools, data.queryPools);
+    markAll(references.accelerationStructures, data.accelerationStructures);
 }
 
 void destroyDeferredObject(VkRhiDeviceData& data, const VkRhiDeviceData::DeferredObject& item) {
@@ -644,6 +945,10 @@ void destroyDeferredObject(VkRhiDeviceData& data, const VkRhiDeviceData::Deferre
     }
     case VK_OBJECT_TYPE_QUERY_POOL:
         vkDestroyQueryPool(data.device, reinterpret_cast<VkQueryPool>(item.object), nullptr);
+        break;
+    case VK_OBJECT_TYPE_ACCELERATION_STRUCTURE_KHR:
+        data.destroyAccelerationStructure(data.device, reinterpret_cast<VkAccelerationStructureKHR>(item.object),
+                                          nullptr);
         break;
     default: break;
     }
@@ -1244,6 +1549,11 @@ bool VkRhiDevice::init(const RhiDeviceDesc& desc) {
     }
     requirements.requireDeviceExtension(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
     requirements.requireDeviceExtension(VK_EXT_DEPTH_CLIP_CONTROL_EXTENSION_NAME);
+    requirements.requireDeviceExtension(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME);
+    requirements.requireDeviceExtension(VK_KHR_RAY_TRACING_MAINTENANCE_1_EXTENSION_NAME);
+    requirements.requireDeviceExtension(VK_KHR_RAY_QUERY_EXTENSION_NAME);
+    requirements.requireDeviceExtension(VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME);
+    requirements.requireDeviceExtension(VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME);
 #if defined(MECRAFT_ENABLE_FSR31)
     requirements.requireDeviceExtension(VK_KHR_DEDICATED_ALLOCATION_EXTENSION_NAME);
     requirements.requireDeviceExtension(VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME);
@@ -1342,6 +1652,8 @@ bool VkRhiDevice::init(const RhiDeviceDesc& desc) {
     VkPhysicalDeviceVulkan12Features selected12{};
     VkPhysicalDeviceVulkan13Features selected13{};
     VkPhysicalDeviceFeatures selectedCoreFeatures{};
+    bool selectedAccelerationStructureHostCommands = false;
+    bool selectedAccelerationStructureDescriptorUpdateAfterBind = false;
     const bool requireOpticalFlow = requirements.opticalFlowQueueCount() > 0u;
     const std::vector<const char*> requiredFeatures12 = requirements.vulkan12FeatureNames();
     const std::vector<const char*> requiredFeatures13 = requirements.vulkan13FeatureNames();
@@ -1358,9 +1670,14 @@ bool VkRhiDevice::init(const RhiDeviceDesc& desc) {
             continue;
         }
         VkPhysicalDeviceOpticalFlowFeaturesNV opticalFlow{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_OPTICAL_FLOW_FEATURES_NV};
+        VkPhysicalDeviceRayQueryFeaturesKHR rayQuery{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR,
+                                                     requireOpticalFlow ? &opticalFlow : nullptr};
+        VkPhysicalDeviceAccelerationStructureFeaturesKHR accelerationStructure{
+            VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR, &rayQuery};
+        VkPhysicalDeviceRayTracingMaintenance1FeaturesKHR rayTracingMaintenance{
+            VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_MAINTENANCE_1_FEATURES_KHR, &accelerationStructure};
         VkPhysicalDeviceDepthClipControlFeaturesEXT depthClip{
-            VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_CLIP_CONTROL_FEATURES_EXT,
-            requireOpticalFlow ? &opticalFlow : nullptr};
+            VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_CLIP_CONTROL_FEATURES_EXT, &rayTracingMaintenance};
         VkPhysicalDeviceVulkan13Features features13{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES, &depthClip};
         VkPhysicalDeviceVulkan12Features features12{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES, &features13};
         VkPhysicalDeviceVulkan11Features features11{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES, &features12};
@@ -1376,7 +1693,9 @@ bool VkRhiDevice::init(const RhiDeviceDesc& desc) {
             features13.dynamicRendering != VK_TRUE || features13.synchronization2 != VK_TRUE ||
             features13.shaderDemoteToHelperInvocation != VK_TRUE || features12.timelineSemaphore != VK_TRUE ||
             features12.bufferDeviceAddress != VK_TRUE || features12.hostQueryReset != VK_TRUE ||
-            depthClip.depthClipControl != VK_TRUE) {
+            depthClip.depthClipControl != VK_TRUE || accelerationStructure.accelerationStructure != VK_TRUE ||
+            accelerationStructure.descriptorBindingAccelerationStructureUpdateAfterBind != VK_TRUE ||
+            rayTracingMaintenance.rayTracingMaintenance1 != VK_TRUE || rayQuery.rayQuery != VK_TRUE) {
             continue;
         }
 #if defined(MECRAFT_ENABLE_STREAMLINE)
@@ -1397,6 +1716,9 @@ bool VkRhiDevice::init(const RhiDeviceDesc& desc) {
             selected12 = features12;
             selected13 = features13;
             selectedCoreFeatures = features2.features;
+            selectedAccelerationStructureHostCommands =
+                accelerationStructure.accelerationStructureHostCommands == VK_TRUE;
+            selectedAccelerationStructureDescriptorUpdateAfterBind = true;
         }
     }
     if (m_data->physicalDevice == VK_NULL_HANDLE) {
@@ -1431,8 +1753,21 @@ bool VkRhiDevice::init(const RhiDeviceDesc& desc) {
     m_data->streamlineOpticalFlowQueueIndex = 0u;
     VkPhysicalDeviceOpticalFlowFeaturesNV opticalFlow{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_OPTICAL_FLOW_FEATURES_NV};
     opticalFlow.opticalFlow = requireOpticalFlow ? VK_TRUE : VK_FALSE;
+    VkPhysicalDeviceRayQueryFeaturesKHR rayQuery{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR,
+                                                 requireOpticalFlow ? &opticalFlow : nullptr};
+    rayQuery.rayQuery = VK_TRUE;
+    VkPhysicalDeviceAccelerationStructureFeaturesKHR accelerationStructure{
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR, &rayQuery};
+    accelerationStructure.accelerationStructure = VK_TRUE;
+    accelerationStructure.accelerationStructureHostCommands =
+        selectedAccelerationStructureHostCommands ? VK_TRUE : VK_FALSE;
+    accelerationStructure.descriptorBindingAccelerationStructureUpdateAfterBind =
+        selectedAccelerationStructureDescriptorUpdateAfterBind ? VK_TRUE : VK_FALSE;
+    VkPhysicalDeviceRayTracingMaintenance1FeaturesKHR rayTracingMaintenance{
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_MAINTENANCE_1_FEATURES_KHR, &accelerationStructure};
+    rayTracingMaintenance.rayTracingMaintenance1 = VK_TRUE;
     VkPhysicalDeviceDepthClipControlFeaturesEXT depthClip{
-        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_CLIP_CONTROL_FEATURES_EXT, requireOpticalFlow ? &opticalFlow : nullptr};
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_CLIP_CONTROL_FEATURES_EXT, &rayTracingMaintenance};
     depthClip.depthClipControl = VK_TRUE;
     VkPhysicalDeviceVulkan13Features features13{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES, &depthClip};
     features13.dynamicRendering = VK_TRUE;
@@ -1515,6 +1850,30 @@ bool VkRhiDevice::init(const RhiDeviceDesc& desc) {
         vkGetDeviceProcAddr(m_data->device, "vkCmdEndDebugUtilsLabelEXT"));
     m_data->insertLabel = reinterpret_cast<PFN_vkCmdInsertDebugUtilsLabelEXT>(
         vkGetDeviceProcAddr(m_data->device, "vkCmdInsertDebugUtilsLabelEXT"));
+    m_data->createAccelerationStructure = reinterpret_cast<PFN_vkCreateAccelerationStructureKHR>(
+        vkGetDeviceProcAddr(m_data->device, "vkCreateAccelerationStructureKHR"));
+    m_data->destroyAccelerationStructure = reinterpret_cast<PFN_vkDestroyAccelerationStructureKHR>(
+        vkGetDeviceProcAddr(m_data->device, "vkDestroyAccelerationStructureKHR"));
+    m_data->getAccelerationStructureBuildSizes = reinterpret_cast<PFN_vkGetAccelerationStructureBuildSizesKHR>(
+        vkGetDeviceProcAddr(m_data->device, "vkGetAccelerationStructureBuildSizesKHR"));
+    m_data->getAccelerationStructureDeviceAddress = reinterpret_cast<PFN_vkGetAccelerationStructureDeviceAddressKHR>(
+        vkGetDeviceProcAddr(m_data->device, "vkGetAccelerationStructureDeviceAddressKHR"));
+    m_data->cmdBuildAccelerationStructures = reinterpret_cast<PFN_vkCmdBuildAccelerationStructuresKHR>(
+        vkGetDeviceProcAddr(m_data->device, "vkCmdBuildAccelerationStructuresKHR"));
+    m_data->cmdCopyAccelerationStructure = reinterpret_cast<PFN_vkCmdCopyAccelerationStructureKHR>(
+        vkGetDeviceProcAddr(m_data->device, "vkCmdCopyAccelerationStructureKHR"));
+    m_data->cmdWriteAccelerationStructuresProperties =
+        reinterpret_cast<PFN_vkCmdWriteAccelerationStructuresPropertiesKHR>(
+            vkGetDeviceProcAddr(m_data->device, "vkCmdWriteAccelerationStructuresPropertiesKHR"));
+    if (m_data->createAccelerationStructure == nullptr || m_data->destroyAccelerationStructure == nullptr ||
+        m_data->getAccelerationStructureBuildSizes == nullptr ||
+        m_data->getAccelerationStructureDeviceAddress == nullptr || m_data->cmdBuildAccelerationStructures == nullptr ||
+        m_data->cmdCopyAccelerationStructure == nullptr ||
+        m_data->cmdWriteAccelerationStructuresProperties == nullptr) {
+        logRhiError("required acceleration-structure entry points are unavailable");
+        shutdown();
+        return false;
+    }
 
     VmaAllocatorCreateInfo allocatorInfo{};
     allocatorInfo.flags = VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT;
@@ -1526,12 +1885,13 @@ bool VkRhiDevice::init(const RhiDeviceDesc& desc) {
         shutdown();
         return false;
     }
-    const std::array<VkDescriptorPoolSize, 6u> poolSizes{{{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 4096u},
+    const std::array<VkDescriptorPoolSize, 7u> poolSizes{{{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 4096u},
                                                           {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 4096u},
                                                           {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 4096u},
                                                           {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 4096u},
                                                           {VK_DESCRIPTOR_TYPE_SAMPLER, 4096u},
-                                                          {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 4096u}}};
+                                                          {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 4096u},
+                                                          {VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 4096u}}};
     VkDescriptorPoolCreateInfo poolInfo{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
     poolInfo.flags =
         VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT | VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT;
@@ -1575,7 +1935,10 @@ bool VkRhiDevice::init(const RhiDeviceDesc& desc) {
         return false;
     }
 
-    VkPhysicalDeviceVulkan12Properties properties12{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_PROPERTIES};
+    VkPhysicalDeviceAccelerationStructurePropertiesKHR accelerationStructureProperties{
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_PROPERTIES_KHR};
+    VkPhysicalDeviceVulkan12Properties properties12{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_PROPERTIES,
+                                                    &accelerationStructureProperties};
     VkPhysicalDeviceProperties2 properties2{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2, &properties12};
     vkGetPhysicalDeviceProperties2(m_data->physicalDevice, &properties2);
     m_capabilities.vulkanApiVersion = m_data->properties.apiVersion;
@@ -1587,6 +1950,14 @@ bool VkRhiDevice::init(const RhiDeviceDesc& desc) {
     // plus VMA's aliasing allocation path; no extension gate needed.
     m_capabilities.textureAliasing = true;
     m_capabilities.bufferDeviceAddress = true;
+    m_capabilities.accelerationStructure = true;
+    m_capabilities.rayQuery = true;
+    m_capabilities.accelerationStructureHostCommands = selectedAccelerationStructureHostCommands;
+    m_capabilities.maxAccelerationStructureGeometryCount = accelerationStructureProperties.maxGeometryCount;
+    m_capabilities.maxAccelerationStructureInstanceCount = accelerationStructureProperties.maxInstanceCount;
+    m_capabilities.maxAccelerationStructurePrimitiveCount = accelerationStructureProperties.maxPrimitiveCount;
+    m_capabilities.minAccelerationStructureScratchOffsetAlignment =
+        accelerationStructureProperties.minAccelerationStructureScratchOffsetAlignment;
     m_capabilities.multiDrawIndirect = selectedCoreFeatures.multiDrawIndirect == VK_TRUE;
     m_capabilities.timestampQuery = m_data->properties.limits.timestampComputeAndGraphics == VK_TRUE;
     m_capabilities.textureView = true;
@@ -1606,6 +1977,8 @@ bool VkRhiDevice::init(const RhiDeviceDesc& desc) {
         selected12.descriptorBindingStorageImageUpdateAfterBind == VK_TRUE;
     m_capabilities.descriptorBindingStorageBufferUpdateAfterBind =
         selected12.descriptorBindingStorageBufferUpdateAfterBind == VK_TRUE;
+    m_capabilities.descriptorBindingAccelerationStructureUpdateAfterBind =
+        selectedAccelerationStructureDescriptorUpdateAfterBind;
     m_capabilities.runtimeDescriptorArray = selected12.runtimeDescriptorArray == VK_TRUE;
     m_capabilities.shaderSampledImageArrayNonUniformIndexing =
         selected12.shaderSampledImageArrayNonUniformIndexing == VK_TRUE;
@@ -1625,12 +1998,16 @@ bool VkRhiDevice::init(const RhiDeviceDesc& desc) {
         properties12.maxDescriptorSetUpdateAfterBindUniformBuffers;
     m_capabilities.maxDescriptorSetUpdateAfterBindStorageBuffers =
         properties12.maxDescriptorSetUpdateAfterBindStorageBuffers;
+    m_capabilities.maxDescriptorSetUpdateAfterBindAccelerationStructures =
+        accelerationStructureProperties.maxDescriptorSetUpdateAfterBindAccelerationStructures;
     m_capabilities.maxPerStageDescriptorUpdateAfterBindSampledImages =
         properties12.maxPerStageDescriptorUpdateAfterBindSampledImages;
     m_capabilities.maxPerStageDescriptorUpdateAfterBindSamplers =
         properties12.maxPerStageDescriptorUpdateAfterBindSamplers;
     m_capabilities.maxPerStageDescriptorUpdateAfterBindStorageBuffers =
         properties12.maxPerStageDescriptorUpdateAfterBindStorageBuffers;
+    m_capabilities.maxPerStageDescriptorUpdateAfterBindAccelerationStructures =
+        accelerationStructureProperties.maxPerStageDescriptorUpdateAfterBindAccelerationStructures;
     m_capabilities.maxPerStageUpdateAfterBindResources = properties12.maxPerStageUpdateAfterBindResources;
     m_capabilities.graphicsQueueFamilyIndex = m_data->queueFamilies.graphics;
     m_capabilities.computeQueueFamilyIndex = m_data->queueFamilies.compute;
@@ -1714,6 +2091,9 @@ void VkRhiDevice::shutdown() {
         }
         for (auto& [_, record] : m_data->textureViews) {
             vkDestroyImageView(m_data->device, record.view, nullptr);
+        }
+        for (auto& [_, record] : m_data->accelerationStructures) {
+            m_data->destroyAccelerationStructure(m_data->device, record.accelerationStructure, nullptr);
         }
         for (const auto& record : m_data->deferredObjects) {
             destroyDeferredObject(*m_data, record);
@@ -1826,13 +2206,31 @@ RhiMemoryStats VkRhiDevice::memoryStats() const {
             return {};
         }
     }
+    if (!stats.add(RhiMemoryCategory::AccelerationStructure, 0u, 0u,
+                   m_data->accelerationStructureHandles.liveCount())) {
+        return {};
+    }
     return stats;
 }
 
 RhiBufferHandle VkRhiDevice::createBuffer(const RhiBufferDesc& desc, const void* initialData,
                                           const size_t initialDataSize) {
-    if (!m_initialized || !rhiMemoryCategoryValid(desc.memoryCategory) || desc.size == 0u ||
-        (initialData == nullptr && initialDataSize != 0u) || initialDataSize > desc.size) {
+    constexpr RhiBufferUsageFlags kAccelerationStructureStorageUsages =
+        rhiFlag(RhiBufferUsage::AccelerationStructureStorage) | rhiFlag(RhiBufferUsage::DeviceAddress);
+    const bool accelerationStructureStorage =
+        (desc.usage & rhiFlag(RhiBufferUsage::AccelerationStructureStorage)) != 0u;
+    const bool accelerationStructureBuildInput =
+        (desc.usage & rhiFlag(RhiBufferUsage::AccelerationStructureBuildInput)) != 0u;
+    if (!m_initialized || !rhiMemoryCategoryValid(desc.memoryCategory) || desc.size == 0u || desc.usage == 0u ||
+        toVkBufferUsage(desc.usage) == 0u || (initialData == nullptr && initialDataSize != 0u) ||
+        initialDataSize > desc.size) {
+        return {};
+    }
+    if ((accelerationStructureStorage &&
+         ((desc.usage & kAccelerationStructureStorageUsages) != kAccelerationStructureStorageUsages ||
+          desc.memoryUsage != RhiMemoryUsage::GpuOnly)) ||
+        (accelerationStructureBuildInput && (desc.usage & rhiFlag(RhiBufferUsage::DeviceAddress)) == 0u)) {
+        logRhiError("acceleration-structure buffers require explicit device-address usage");
         return {};
     }
     if (initialData != nullptr && desc.memoryUsage == RhiMemoryUsage::GpuOnly &&
@@ -2199,6 +2597,132 @@ bool VkRhiDevice::getSamplerDesc(const RhiSamplerHandle sampler, RhiSamplerDesc&
     return true;
 }
 
+RhiAccelerationStructureHandle VkRhiDevice::createAccelerationStructure(const RhiAccelerationStructureDesc& desc) {
+    if (!m_initialized || m_data == nullptr || desc.size == 0u || desc.offset % 256u != 0u ||
+        toVkAccelerationStructureType(desc.type) == VK_ACCELERATION_STRUCTURE_TYPE_MAX_ENUM_KHR) {
+        return {};
+    }
+    const std::unique_lock<std::shared_mutex> registryLock(m_data->resourceRegistryMutex);
+    const auto* buffer = findRecord(m_data->buffers, desc.buffer);
+    constexpr RhiBufferUsageFlags kRequiredUsages =
+        rhiFlag(RhiBufferUsage::DeviceAddress) | rhiFlag(RhiBufferUsage::AccelerationStructureStorage);
+    if (buffer == nullptr || !bufferHasUsages(*buffer, kRequiredUsages) ||
+        buffer->desc.memoryCategory != RhiMemoryCategory::AccelerationStructure ||
+        !rangeFits(buffer->desc.size, desc.offset, desc.size)) {
+        return {};
+    }
+    const bool overlaps = std::any_of(
+        m_data->accelerationStructures.begin(), m_data->accelerationStructures.end(), [&](const auto& entry) {
+            const RhiAccelerationStructureDesc& existing = entry.second.desc;
+            return existing.buffer.index == desc.buffer.index && existing.buffer.generation == desc.buffer.generation &&
+                   rangesOverlap(desc.offset, desc.size, existing.offset, existing.size);
+        });
+    const bool overlapsDeferred =
+        std::any_of(m_data->deferredObjects.begin(), m_data->deferredObjects.end(), [&](const auto& item) {
+            return item.type == VK_OBJECT_TYPE_ACCELERATION_STRUCTURE_KHR &&
+                   item.accelerationStructureBuffer.index == desc.buffer.index &&
+                   item.accelerationStructureBuffer.generation == desc.buffer.generation &&
+                   rangesOverlap(desc.offset, desc.size, item.accelerationStructureOffset,
+                                 item.accelerationStructureSize);
+        });
+    if (overlaps || overlapsDeferred) {
+        logRhiError("createAccelerationStructure received an overlapping backing-buffer range");
+        return {};
+    }
+
+    VkAccelerationStructureCreateInfoKHR createInfo{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR};
+    createInfo.buffer = buffer->buffer;
+    createInfo.offset = desc.offset;
+    createInfo.size = desc.size;
+    createInfo.type = toVkAccelerationStructureType(desc.type);
+    VkAccelerationStructureKHR accelerationStructure = VK_NULL_HANDLE;
+    if (!vkSucceeded(m_data->createAccelerationStructure(m_data->device, &createInfo, nullptr, &accelerationStructure),
+                     "vkCreateAccelerationStructureKHR")) {
+        return {};
+    }
+
+    const RhiAccelerationStructureHandle handle = m_data->accelerationStructureHandles.allocate();
+    VkRhiDeviceData::AccelerationStructure record;
+    record.accelerationStructure = accelerationStructure;
+    record.desc = desc;
+    record.debugName = desc.debugName != nullptr ? desc.debugName : "";
+    const auto insertion = m_data->accelerationStructures.emplace(handleKey(handle), std::move(record));
+    insertion.first->second.desc.debugName = insertion.first->second.debugName.c_str();
+    nameObject(*m_data, VK_OBJECT_TYPE_ACCELERATION_STRUCTURE_KHR, reinterpret_cast<uint64_t>(accelerationStructure),
+               desc.debugName);
+    return handle;
+}
+
+bool VkRhiDevice::getAccelerationStructureDesc(const RhiAccelerationStructureHandle accelerationStructure,
+                                               RhiAccelerationStructureDesc& desc) const {
+    if (!m_initialized || m_data == nullptr) {
+        return false;
+    }
+    const std::shared_lock<std::shared_mutex> registryLock(m_data->resourceRegistryMutex);
+    const auto* record = findRecord(m_data->accelerationStructures, accelerationStructure);
+    if (record == nullptr) {
+        return false;
+    }
+    desc = record->desc;
+    desc.debugName = record->debugName.c_str();
+    return true;
+}
+
+bool VkRhiDevice::queryAccelerationStructureBuildSizes(const RhiAccelerationStructureBuildInput& input,
+                                                       RhiAccelerationStructureBuildSizes& sizes) const {
+    if (!m_initialized || m_data == nullptr) {
+        return false;
+    }
+    const std::shared_lock<std::shared_mutex> registryLock(m_data->resourceRegistryMutex);
+    NativeAccelerationStructureBuildInput native;
+    if (!fillNativeAccelerationStructureBuildInput(*m_data, m_capabilities, input, native, nullptr)) {
+        return false;
+    }
+    VkAccelerationStructureBuildGeometryInfoKHR buildInfo{
+        VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR};
+    buildInfo.type = toVkAccelerationStructureType(input.type);
+    buildInfo.flags = toVkAccelerationStructureBuildFlags(input.flags);
+    buildInfo.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
+    buildInfo.geometryCount = input.geometryCount;
+    buildInfo.pGeometries = native.geometries.data();
+    VkAccelerationStructureBuildSizesInfoKHR nativeSizes{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR};
+    m_data->getAccelerationStructureBuildSizes(m_data->device, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR,
+                                               &buildInfo, native.primitiveCounts.data(), &nativeSizes);
+    if (nativeSizes.accelerationStructureSize == 0u || nativeSizes.buildScratchSize == 0u) {
+        return false;
+    }
+    sizes = {nativeSizes.accelerationStructureSize, nativeSizes.buildScratchSize, nativeSizes.updateScratchSize};
+    return true;
+}
+
+uint64_t VkRhiDevice::bufferDeviceAddress(const RhiBufferHandle buffer) const {
+    if (!m_initialized || m_data == nullptr) {
+        return 0u;
+    }
+    const std::shared_lock<std::shared_mutex> registryLock(m_data->resourceRegistryMutex);
+    const auto* record = findRecord(m_data->buffers, buffer);
+    if (record == nullptr || (record->desc.usage & rhiFlag(RhiBufferUsage::DeviceAddress)) == 0u) {
+        return 0u;
+    }
+    return nativeBufferDeviceAddress(*m_data, *record);
+}
+
+uint64_t
+VkRhiDevice::accelerationStructureDeviceAddress(const RhiAccelerationStructureHandle accelerationStructure) const {
+    if (!m_initialized || m_data == nullptr) {
+        return 0u;
+    }
+    const std::shared_lock<std::shared_mutex> registryLock(m_data->resourceRegistryMutex);
+    const auto* record = findRecord(m_data->accelerationStructures, accelerationStructure);
+    if (record == nullptr) {
+        return 0u;
+    }
+    VkAccelerationStructureDeviceAddressInfoKHR addressInfo{
+        VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_DEVICE_ADDRESS_INFO_KHR};
+    addressInfo.accelerationStructure = record->accelerationStructure;
+    return m_data->getAccelerationStructureDeviceAddress(m_data->device, &addressInfo);
+}
+
 RhiTextureViewHandle VkRhiDevice::createTextureView(const RhiTextureViewDesc& desc) {
     // Exclusive: the texture record pointer is used across the native view
     // creation and the registry insertion below.
@@ -2341,7 +2865,9 @@ RhiBindGroupLayoutHandle VkRhiDevice::createBindGroupLayout(const RhiBindGroupLa
                 (entry.type == RhiBindingType::StorageTexture &&
                  m_capabilities.descriptorBindingStorageImageUpdateAfterBind) ||
                 (entry.type == RhiBindingType::StorageBuffer &&
-                 m_capabilities.descriptorBindingStorageBufferUpdateAfterBind);
+                 m_capabilities.descriptorBindingStorageBufferUpdateAfterBind) ||
+                (entry.type == RhiBindingType::AccelerationStructure &&
+                 m_capabilities.descriptorBindingAccelerationStructureUpdateAfterBind);
             if (!supported)
                 return {};
             updateAfterBind = true;
@@ -2598,9 +3124,13 @@ RhiBindGroupHandle VkRhiDevice::createBindGroup(const RhiBindGroupDesc& desc) {
     std::vector<VkWriteDescriptorSet> writes;
     std::vector<VkDescriptorBufferInfo> bufferInfos;
     std::vector<VkDescriptorImageInfo> imageInfos;
+    std::vector<VkAccelerationStructureKHR> accelerationStructureHandles;
+    std::vector<VkWriteDescriptorSetAccelerationStructureKHR> accelerationStructureInfos;
     writes.reserve(storedDesc.entries.size());
     bufferInfos.reserve(storedDesc.entries.size());
     imageInfos.reserve(storedDesc.entries.size());
+    accelerationStructureHandles.reserve(storedDesc.entries.size());
+    accelerationStructureInfos.reserve(storedDesc.entries.size());
     std::vector<uint32_t> writtenBindingCounts(layout->desc.entries.size(), 0u);
     for (const auto& entry : storedDesc.entries) {
         const auto layoutEntryIt = std::find_if(layout->desc.entries.begin(), layout->desc.entries.end(),
@@ -2631,6 +3161,18 @@ RhiBindGroupHandle VkRhiDevice::createBindGroup(const RhiBindGroupDesc& desc) {
             bufferInfos.push_back({buffer->buffer, entry.resource.buffer.offset,
                                    entry.resource.buffer.range == 0u ? VK_WHOLE_SIZE : entry.resource.buffer.range});
             write.pBufferInfo = &bufferInfos.back();
+        } else if (type == VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR) {
+            const auto* accelerationStructure =
+                findRecord(m_data->accelerationStructures, entry.resource.accelerationStructure);
+            if (accelerationStructure == nullptr ||
+                accelerationStructure->desc.type != RhiAccelerationStructureType::TopLevel) {
+                vkFreeDescriptorSets(m_data->device, m_data->descriptorPool, 1u, &set);
+                return {};
+            }
+            accelerationStructureHandles.push_back(accelerationStructure->accelerationStructure);
+            accelerationStructureInfos.push_back({VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR,
+                                                  nullptr, 1u, &accelerationStructureHandles.back()});
+            write.pNext = &accelerationStructureInfos.back();
         } else {
             RhiTextureViewHandle viewHandle{};
             RhiSamplerHandle samplerHandle{};
@@ -2736,10 +3278,14 @@ bool VkRhiDevice::updateBindGroups(const RhiBindGroupUpdate* updates, const uint
     std::vector<VkWriteDescriptorSet> descriptorWrites;
     std::vector<VkDescriptorBufferInfo> bufferInfos;
     std::vector<VkDescriptorImageInfo> imageInfos;
+    std::vector<VkAccelerationStructureKHR> accelerationStructureHandles;
+    std::vector<VkWriteDescriptorSetAccelerationStructureKHR> accelerationStructureInfos;
     stagedSlots.reserve(totalResourceCount);
     descriptorWrites.reserve(updateCount);
     bufferInfos.reserve(totalResourceCount);
     imageInfos.reserve(totalResourceCount);
+    accelerationStructureHandles.reserve(totalResourceCount);
+    accelerationStructureInfos.reserve(updateCount);
     std::unordered_map<uint64_t, PendingResourceStamp> pendingResourceStamps;
     pendingResourceStamps.reserve(updateCount);
 
@@ -2815,6 +3361,12 @@ bool VkRhiDevice::updateBindGroups(const RhiBindGroupUpdate* updates, const uint
                 pendingStamp->references.samplers.reserve(pendingStamp->references.samplers.size() +
                                                           update.resourceCount);
                 break;
+            case RhiBindingType::AccelerationStructure:
+                pendingStamp->references.buffers.reserve(pendingStamp->references.buffers.size() +
+                                                         update.resourceCount);
+                pendingStamp->references.accelerationStructures.reserve(
+                    pendingStamp->references.accelerationStructures.size() + update.resourceCount);
+                break;
             }
         }
 
@@ -2827,6 +3379,7 @@ bool VkRhiDevice::updateBindGroups(const RhiBindGroupUpdate* updates, const uint
         descriptorWrite.descriptorType = descriptorType;
         const size_t bufferInfoStart = bufferInfos.size();
         const size_t imageInfoStart = imageInfos.size();
+        const size_t accelerationStructureStart = accelerationStructureHandles.size();
 
         for (uint32_t resourceIndex = 0u; resourceIndex < update.resourceCount; ++resourceIndex) {
             const uint32_t arrayElement = update.firstArrayElement + resourceIndex;
@@ -2858,6 +3411,19 @@ bool VkRhiDevice::updateBindGroups(const RhiBindGroupUpdate* updates, const uint
                                        resource.buffer.range == 0u ? VK_WHOLE_SIZE : resource.buffer.range});
                 if (pendingStamp != nullptr) {
                     pendingStamp->references.buffers.push_back(resource.buffer.buffer);
+                }
+            } else if (descriptorType == VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR) {
+                const auto* accelerationStructure =
+                    findRecord(m_data->accelerationStructures, resource.accelerationStructure);
+                if (accelerationStructure == nullptr ||
+                    accelerationStructure->desc.type != RhiAccelerationStructureType::TopLevel) {
+                    logRhiError("updateBindGroups received an invalid acceleration structure");
+                    return false;
+                }
+                accelerationStructureHandles.push_back(accelerationStructure->accelerationStructure);
+                if (pendingStamp != nullptr) {
+                    pendingStamp->references.buffers.push_back(accelerationStructure->desc.buffer);
+                    pendingStamp->references.accelerationStructures.push_back(resource.accelerationStructure);
                 }
             } else {
                 RhiTextureViewHandle viewHandle{};
@@ -2925,6 +3491,11 @@ bool VkRhiDevice::updateBindGroups(const RhiBindGroupUpdate* updates, const uint
         if (descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER ||
             descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER) {
             descriptorWrite.pBufferInfo = bufferInfos.data() + bufferInfoStart;
+        } else if (descriptorType == VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR) {
+            accelerationStructureInfos.push_back({VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR,
+                                                  nullptr, update.resourceCount,
+                                                  accelerationStructureHandles.data() + accelerationStructureStart});
+            descriptorWrite.pNext = &accelerationStructureInfos.back();
         } else {
             descriptorWrite.pImageInfo = imageInfos.data() + imageInfoStart;
         }
@@ -2962,6 +3533,7 @@ bool VkRhiDevice::updateBindGroups(const RhiBindGroupUpdate* updates, const uint
         sortUniqueHandles(stamp.references.textures);
         sortUniqueHandles(stamp.references.textureViews);
         sortUniqueHandles(stamp.references.samplers);
+        sortUniqueHandles(stamp.references.accelerationStructures);
     }
 
     vkUpdateDescriptorSets(m_data->device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0u,
@@ -3012,17 +3584,22 @@ bool VkRhiDevice::updateBindGroups(const RhiBindGroupUpdate* updates, const uint
 }
 
 RhiQueryPoolHandle VkRhiDevice::createQueryPool(const RhiQueryPoolDesc& desc) {
-    if (!m_initialized || desc.type != RhiQueryType::Timestamp || desc.queryCount == 0u)
+    if (!m_initialized || desc.queryCount == 0u)
         return {};
     VkQueryPoolCreateInfo info{VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO};
-    info.queryType = VK_QUERY_TYPE_TIMESTAMP;
+    switch (desc.type) {
+    case RhiQueryType::Timestamp: info.queryType = VK_QUERY_TYPE_TIMESTAMP; break;
+    case RhiQueryType::AccelerationStructureCompactedSize:
+        info.queryType = VK_QUERY_TYPE_ACCELERATION_STRUCTURE_COMPACTED_SIZE_KHR;
+        break;
+    }
     info.queryCount = desc.queryCount;
     VkQueryPool pool = VK_NULL_HANDLE;
     if (!vkSucceeded(vkCreateQueryPool(m_data->device, &info, nullptr, &pool), "vkCreateQueryPool"))
         return {};
     const std::unique_lock<std::shared_mutex> registryLock(m_data->resourceRegistryMutex);
     const RhiQueryPoolHandle handle = m_data->queryPoolHandles.allocate();
-    m_data->queryPools.emplace(handleKey(handle), VkRhiDeviceData::QueryPool{pool, desc.queryCount});
+    m_data->queryPools.emplace(handleKey(handle), VkRhiDeviceData::QueryPool{pool, desc.queryCount, desc.type});
     nameObject(*m_data, VK_OBJECT_TYPE_QUERY_POOL, reinterpret_cast<uint64_t>(pool), desc.debugName);
     return handle;
 }
@@ -3095,8 +3672,13 @@ bool VkRhiDevice::getQueryResults(const RhiQueryPoolHandle pool, const uint32_t 
     if (vkGetQueryPoolResults(m_data->device, record->pool, firstQuery, queryCount, ticks.size() * sizeof(uint64_t),
                               ticks.data(), sizeof(uint64_t), VK_QUERY_RESULT_64_BIT) != VK_SUCCESS)
         return false;
-    for (uint32_t i = 0u; i < queryCount; ++i) {
-        results[i] = static_cast<uint64_t>(static_cast<double>(ticks[i]) * m_data->properties.limits.timestampPeriod);
+    if (record->type == RhiQueryType::Timestamp) {
+        for (uint32_t i = 0u; i < queryCount; ++i) {
+            results[i] =
+                static_cast<uint64_t>(static_cast<double>(ticks[i]) * m_data->properties.limits.timestampPeriod);
+        }
+    } else {
+        std::copy(ticks.begin(), ticks.end(), results);
     }
     return true;
 }
@@ -3410,7 +3992,12 @@ void VkRhiDevice::destroyBuffer(const RhiBufferHandle handle) {
     {
         const std::unique_lock<std::shared_mutex> registryLock(m_data->resourceRegistryMutex);
         const auto it = m_data->buffers.find(handleKey(handle));
-        if (it == m_data->buffers.end() || !m_data->bufferHandles.release(handle))
+        const bool hostsAccelerationStructure = std::any_of(
+            m_data->accelerationStructures.begin(), m_data->accelerationStructures.end(), [handle](const auto& entry) {
+                return entry.second.desc.buffer.index == handle.index &&
+                       entry.second.desc.buffer.generation == handle.generation;
+            });
+        if (it == m_data->buffers.end() || hostsAccelerationStructure || !m_data->bufferHandles.release(handle))
             return;
         enqueueDeferred(m_data->deferredBuffers,
                         VkRhiDeviceData::DeferredBuffer{it->second.lifetime.lastUseSequence, it->second.buffer,
@@ -3564,6 +4151,25 @@ void VkRhiDevice::destroyQueryPool(const RhiQueryPoolHandle handle) {
                         VkRhiDeviceData::DeferredObject{it->second.lifetime.lastUseSequence, VK_OBJECT_TYPE_QUERY_POOL,
                                                         reinterpret_cast<uint64_t>(it->second.pool)});
         m_data->queryPools.erase(it);
+    }
+    reclaimCompletedWork();
+}
+
+void VkRhiDevice::destroyAccelerationStructure(const RhiAccelerationStructureHandle handle) {
+    if (m_data == nullptr)
+        return;
+    {
+        const std::unique_lock<std::shared_mutex> registryLock(m_data->resourceRegistryMutex);
+        const auto it = m_data->accelerationStructures.find(handleKey(handle));
+        if (it == m_data->accelerationStructures.end() || !m_data->accelerationStructureHandles.release(handle)) {
+            return;
+        }
+        enqueueDeferred(m_data->deferredObjects,
+                        VkRhiDeviceData::DeferredObject{
+                            it->second.lifetime.lastUseSequence, VK_OBJECT_TYPE_ACCELERATION_STRUCTURE_KHR,
+                            reinterpret_cast<uint64_t>(it->second.accelerationStructure), it->second.desc.buffer,
+                            it->second.desc.offset, it->second.desc.size});
+        m_data->accelerationStructures.erase(it);
     }
     reclaimCompletedWork();
 }
@@ -4181,6 +4787,35 @@ void VkRhiCommandList::bufferBarrier(const RhiBufferBarrier& barrier) {
     m_data->resourceReferences.reference(barrier.buffer);
 }
 
+bool VkRhiCommandList::accelerationStructureBarrier(const RhiAccelerationStructureBarrier& barrier) {
+    const auto isAccelerationStructureState = [](const RhiResourceState state) {
+        return state == RhiResourceState::AccelerationStructureBuildWrite ||
+               state == RhiResourceState::AccelerationStructureRead;
+    };
+    if (m_data->state != RhiCommandListState::Recording || m_data->rendering ||
+        m_data->type == RhiCommandListType::Transfer || !isAccelerationStructureState(barrier.oldState) ||
+        !isAccelerationStructureState(barrier.newState)) {
+        return false;
+    }
+    const std::shared_lock<std::shared_mutex> registryLock(m_device->m_data->resourceRegistryMutex);
+    if (findRecord(m_device->m_data->accelerationStructures, barrier.accelerationStructure) == nullptr) {
+        return false;
+    }
+    const auto source = toVkCommandResourceState(barrier.oldState, m_data->type);
+    const auto destination = toVkCommandResourceState(barrier.newState, m_data->type);
+    VkMemoryBarrier2 nativeBarrier{VK_STRUCTURE_TYPE_MEMORY_BARRIER_2};
+    nativeBarrier.srcStageMask = source.stages;
+    nativeBarrier.srcAccessMask = source.access;
+    nativeBarrier.dstStageMask = destination.stages;
+    nativeBarrier.dstAccessMask = destination.access;
+    VkDependencyInfo dependency{VK_STRUCTURE_TYPE_DEPENDENCY_INFO};
+    dependency.memoryBarrierCount = 1u;
+    dependency.pMemoryBarriers = &nativeBarrier;
+    vkCmdPipelineBarrier2(m_data->commandBuffer, &dependency);
+    m_data->resourceReferences.reference(barrier.accelerationStructure);
+    return true;
+}
+
 void VkRhiCommandList::beginRendering(const RhiRenderingInfo& info) {
     if (m_data->state != RhiCommandListState::Recording || m_data->rendering ||
         info.colorAttachmentCount > m_device->m_capabilities.maxColorAttachments) {
@@ -4691,10 +5326,199 @@ void VkRhiCommandList::resetQueryPool(const RhiQueryPoolHandle pool, const uint3
 void VkRhiCommandList::writeTimestamp(const RhiQueryPoolHandle pool, const uint32_t queryIndex) {
     const std::shared_lock<std::shared_mutex> registryLock(m_device->m_data->resourceRegistryMutex);
     const auto* record = findRecord(m_device->m_data->queryPools, pool);
-    if (record == nullptr || queryIndex >= record->count) {
+    if (record == nullptr || record->type != RhiQueryType::Timestamp || queryIndex >= record->count) {
         m_data->valid = false;
         return;
     }
     vkCmdWriteTimestamp2(m_data->commandBuffer, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, record->pool, queryIndex);
     m_data->resourceReferences.reference(pool);
+}
+
+bool VkRhiCommandList::buildAccelerationStructures(const RhiAccelerationStructureBuildDesc* builds,
+                                                   const uint32_t buildCount) {
+    if (m_data->state != RhiCommandListState::Recording || m_data->rendering ||
+        m_data->type == RhiCommandListType::Transfer || builds == nullptr || buildCount == 0u) {
+        return false;
+    }
+    const std::shared_lock<std::shared_mutex> registryLock(m_device->m_data->resourceRegistryMutex);
+    std::vector<NativeAccelerationStructureBuildInput> nativeInputs(buildCount);
+    std::vector<VkAccelerationStructureBuildGeometryInfoKHR> nativeBuilds(buildCount);
+    std::vector<const VkAccelerationStructureBuildRangeInfoKHR*> nativeRangePointers(buildCount);
+    std::vector<uint64_t> destinationKeys;
+    std::vector<uint64_t> sourceKeys;
+    struct ScratchRange {
+        RhiBufferHandle buffer;
+        uint64_t offset = 0u;
+        uint64_t size = 0u;
+    };
+    std::vector<ScratchRange> scratchRanges;
+    destinationKeys.reserve(buildCount);
+    sourceKeys.reserve(buildCount);
+    scratchRanges.reserve(buildCount);
+    VkRhiCommandResourceReferences stagedReferences;
+
+    for (uint32_t buildIndex = 0u; buildIndex < buildCount; ++buildIndex) {
+        const RhiAccelerationStructureBuildDesc& build = builds[buildIndex];
+        if (!fillNativeAccelerationStructureBuildInput(*m_device->m_data, m_device->m_capabilities, build.input,
+                                                       nativeInputs[buildIndex], &stagedReferences)) {
+            return false;
+        }
+        const auto* destination = findRecord(m_device->m_data->accelerationStructures, build.destination);
+        const auto* source =
+            build.source.isValid() ? findRecord(m_device->m_data->accelerationStructures, build.source) : nullptr;
+        const auto* scratch = findRecord(m_device->m_data->buffers, build.scratchBuffer);
+        constexpr RhiBufferUsageFlags kScratchUsages =
+            rhiFlag(RhiBufferUsage::Storage) | rhiFlag(RhiBufferUsage::DeviceAddress);
+        const bool update = build.mode == RhiAccelerationStructureBuildMode::Update;
+        const bool modeValid = update || build.mode == RhiAccelerationStructureBuildMode::Build;
+        if (!modeValid || destination == nullptr || destination->desc.type != build.input.type || scratch == nullptr ||
+            !bufferHasUsages(*scratch, kScratchUsages) ||
+            build.scratchOffset % m_device->m_capabilities.minAccelerationStructureScratchOffsetAlignment != 0u ||
+            (!update && build.source.isValid()) ||
+            (update && (source == nullptr || source->desc.type != build.input.type ||
+                        (build.input.flags & rhiFlag(RhiAccelerationStructureBuildFlag::AllowUpdate)) == 0u))) {
+            return false;
+        }
+        const uint64_t destinationKey = handleKey(build.destination);
+        const uint64_t sourceKey = source != nullptr ? handleKey(build.source) : 0u;
+        for (size_t previousIndex = 0u; previousIndex < destinationKeys.size(); ++previousIndex) {
+            if (destinationKeys[previousIndex] == destinationKey ||
+                (sourceKey != 0u && destinationKeys[previousIndex] == sourceKey) ||
+                (sourceKeys[previousIndex] != 0u && sourceKeys[previousIndex] == destinationKey)) {
+                return false;
+            }
+        }
+        destinationKeys.push_back(destinationKey);
+        sourceKeys.push_back(sourceKey);
+
+        VkAccelerationStructureBuildGeometryInfoKHR sizeQuery{
+            VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR};
+        sizeQuery.type = toVkAccelerationStructureType(build.input.type);
+        sizeQuery.flags = toVkAccelerationStructureBuildFlags(build.input.flags);
+        sizeQuery.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
+        sizeQuery.geometryCount = build.input.geometryCount;
+        sizeQuery.pGeometries = nativeInputs[buildIndex].geometries.data();
+        VkAccelerationStructureBuildSizesInfoKHR nativeSizes{
+            VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR};
+        m_device->m_data->getAccelerationStructureBuildSizes(
+            m_device->m_data->device, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &sizeQuery,
+            nativeInputs[buildIndex].primitiveCounts.data(), &nativeSizes);
+        const uint64_t scratchSize = update ? nativeSizes.updateScratchSize : nativeSizes.buildScratchSize;
+        const VkDeviceAddress scratchAddress = nativeBufferDeviceAddress(*m_device->m_data, *scratch);
+        if (nativeSizes.accelerationStructureSize == 0u || scratchSize == 0u ||
+            destination->desc.size < nativeSizes.accelerationStructureSize ||
+            !rangeFits(scratch->desc.size, build.scratchOffset, scratchSize) || scratchAddress == 0u ||
+            (scratchAddress + build.scratchOffset) %
+                    m_device->m_capabilities.minAccelerationStructureScratchOffsetAlignment !=
+                0u) {
+            return false;
+        }
+        for (const ScratchRange& previous : scratchRanges) {
+            if (previous.buffer.index == build.scratchBuffer.index &&
+                previous.buffer.generation == build.scratchBuffer.generation &&
+                rangesOverlap(previous.offset, previous.size, build.scratchOffset, scratchSize)) {
+                return false;
+            }
+        }
+        const bool overlapsAccelerationStructure =
+            std::any_of(m_device->m_data->accelerationStructures.begin(),
+                        m_device->m_data->accelerationStructures.end(), [&](const auto& entry) {
+                            const RhiAccelerationStructureDesc& accelerationStructure = entry.second.desc;
+                            return accelerationStructure.buffer.index == build.scratchBuffer.index &&
+                                   accelerationStructure.buffer.generation == build.scratchBuffer.generation &&
+                                   rangesOverlap(accelerationStructure.offset, accelerationStructure.size,
+                                                 build.scratchOffset, scratchSize);
+                        });
+        if (overlapsAccelerationStructure) {
+            return false;
+        }
+        scratchRanges.push_back({build.scratchBuffer, build.scratchOffset, scratchSize});
+
+        VkAccelerationStructureBuildGeometryInfoKHR& nativeBuild = nativeBuilds[buildIndex];
+        nativeBuild = {VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR};
+        nativeBuild.type = sizeQuery.type;
+        nativeBuild.flags = sizeQuery.flags;
+        nativeBuild.mode =
+            update ? VK_BUILD_ACCELERATION_STRUCTURE_MODE_UPDATE_KHR : VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
+        nativeBuild.srcAccelerationStructure = source != nullptr ? source->accelerationStructure : VK_NULL_HANDLE;
+        nativeBuild.dstAccelerationStructure = destination->accelerationStructure;
+        nativeBuild.geometryCount = build.input.geometryCount;
+        nativeBuild.pGeometries = nativeInputs[buildIndex].geometries.data();
+        nativeBuild.scratchData.deviceAddress = scratchAddress + build.scratchOffset;
+        nativeRangePointers[buildIndex] = nativeInputs[buildIndex].ranges.data();
+        stagedReferences.reference(build.destination);
+        stagedReferences.reference(build.source);
+        stagedReferences.reference(build.scratchBuffer);
+    }
+
+    const auto mergeHandles = [](const auto& handles, auto& references) {
+        for (const auto handle : handles) {
+            references.reference(handle);
+        }
+    };
+    mergeHandles(stagedReferences.buffers, m_data->resourceReferences);
+    mergeHandles(stagedReferences.accelerationStructures, m_data->resourceReferences);
+    m_device->m_data->cmdBuildAccelerationStructures(m_data->commandBuffer, buildCount, nativeBuilds.data(),
+                                                     nativeRangePointers.data());
+    return true;
+}
+
+bool VkRhiCommandList::copyAccelerationStructure(const RhiAccelerationStructureCopyDesc& copy) {
+    if (m_data->state != RhiCommandListState::Recording || m_data->rendering ||
+        m_data->type == RhiCommandListType::Transfer ||
+        toVkAccelerationStructureCopyMode(copy.mode) == VK_COPY_ACCELERATION_STRUCTURE_MODE_MAX_ENUM_KHR ||
+        (copy.source.index == copy.destination.index && copy.source.generation == copy.destination.generation)) {
+        return false;
+    }
+    const std::shared_lock<std::shared_mutex> registryLock(m_device->m_data->resourceRegistryMutex);
+    const auto* source = findRecord(m_device->m_data->accelerationStructures, copy.source);
+    const auto* destination = findRecord(m_device->m_data->accelerationStructures, copy.destination);
+    if (source == nullptr || destination == nullptr || source->desc.type != destination->desc.type ||
+        (copy.mode == RhiAccelerationStructureCopyMode::Clone && destination->desc.size < source->desc.size)) {
+        return false;
+    }
+    VkCopyAccelerationStructureInfoKHR info{VK_STRUCTURE_TYPE_COPY_ACCELERATION_STRUCTURE_INFO_KHR};
+    info.src = source->accelerationStructure;
+    info.dst = destination->accelerationStructure;
+    info.mode = toVkAccelerationStructureCopyMode(copy.mode);
+    m_device->m_data->cmdCopyAccelerationStructure(m_data->commandBuffer, &info);
+    m_data->resourceReferences.reference(copy.source);
+    m_data->resourceReferences.reference(copy.destination);
+    return true;
+}
+
+bool VkRhiCommandList::writeAccelerationStructureProperties(const RhiAccelerationStructurePropertyQueryDesc& query) {
+    if (m_data->state != RhiCommandListState::Recording || m_data->rendering ||
+        m_data->type == RhiCommandListType::Transfer || query.accelerationStructures == nullptr ||
+        query.accelerationStructureCount == 0u) {
+        return false;
+    }
+    const std::shared_lock<std::shared_mutex> registryLock(m_device->m_data->resourceRegistryMutex);
+    const auto* pool = findRecord(m_device->m_data->queryPools, query.queryPool);
+    if (pool == nullptr || pool->type != RhiQueryType::AccelerationStructureCompactedSize ||
+        query.firstQuery > pool->count || query.accelerationStructureCount > pool->count - query.firstQuery) {
+        return false;
+    }
+    std::vector<VkAccelerationStructureKHR> nativeAccelerationStructures;
+    std::vector<uint64_t> keys;
+    nativeAccelerationStructures.reserve(query.accelerationStructureCount);
+    keys.reserve(query.accelerationStructureCount);
+    for (uint32_t index = 0u; index < query.accelerationStructureCount; ++index) {
+        const RhiAccelerationStructureHandle handle = query.accelerationStructures[index];
+        const auto* accelerationStructure = findRecord(m_device->m_data->accelerationStructures, handle);
+        const uint64_t key = handleKey(handle);
+        if (accelerationStructure == nullptr || std::find(keys.begin(), keys.end(), key) != keys.end()) {
+            return false;
+        }
+        keys.push_back(key);
+        nativeAccelerationStructures.push_back(accelerationStructure->accelerationStructure);
+    }
+    m_device->m_data->cmdWriteAccelerationStructuresProperties(
+        m_data->commandBuffer, query.accelerationStructureCount, nativeAccelerationStructures.data(),
+        VK_QUERY_TYPE_ACCELERATION_STRUCTURE_COMPACTED_SIZE_KHR, pool->pool, query.firstQuery);
+    for (uint32_t index = 0u; index < query.accelerationStructureCount; ++index) {
+        m_data->resourceReferences.reference(query.accelerationStructures[index]);
+    }
+    m_data->resourceReferences.reference(query.queryPool);
+    return true;
 }

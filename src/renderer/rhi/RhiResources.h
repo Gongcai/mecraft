@@ -318,6 +318,151 @@ struct RhiQueryPoolDesc {
     uint32_t queryCount = 1;
 };
 
+/// Describes one acceleration structure stored inside a caller-owned buffer.
+/// The buffer may host multiple non-overlapping acceleration structures.
+struct RhiAccelerationStructureDesc {
+    const char* debugName = nullptr;
+    RhiAccelerationStructureType type = RhiAccelerationStructureType::BottomLevel;
+    RhiBufferHandle buffer;
+    uint64_t offset = 0u;
+    uint64_t size = 0u;
+};
+
+/// Describes indexed or non-indexed triangle input for a bottom-level build.
+struct RhiAccelerationStructureTrianglesDesc {
+    RhiBufferHandle vertexBuffer;
+    uint64_t vertexOffset = 0u;
+    uint64_t vertexStride = 0u;
+    uint32_t vertexCount = 0u;
+    RhiVertexFormat vertexFormat = RhiVertexFormat::Float3;
+    RhiBufferHandle indexBuffer;
+    uint64_t indexOffset = 0u;
+    RhiAccelerationStructureIndexFormat indexFormat = RhiAccelerationStructureIndexFormat::None;
+    RhiBufferHandle transformBuffer;
+    uint64_t transformOffset = 0u;
+};
+
+/// Describes tightly addressable axis-aligned bounding boxes for a bottom-level build.
+struct RhiAccelerationStructureAabbsDesc {
+    RhiBufferHandle buffer;
+    uint64_t offset = 0u;
+    uint64_t stride = 0u;
+};
+
+/// Describes top-level instance records or an array of pointers to instance records.
+struct RhiAccelerationStructureInstancesDesc {
+    RhiBufferHandle buffer;
+    uint64_t offset = 0u;
+    bool arrayOfPointers = false;
+};
+
+/// Selects one geometry payload and the traversal semantics used while building it.
+struct RhiAccelerationStructureGeometryDesc {
+    RhiAccelerationStructureGeometryType type = RhiAccelerationStructureGeometryType::Triangles;
+    RhiAccelerationStructureGeometryFlags flags = 0u;
+    RhiAccelerationStructureTrianglesDesc triangles;
+    RhiAccelerationStructureAabbsDesc aabbs;
+    RhiAccelerationStructureInstancesDesc instances;
+};
+
+/// Selects the primitive subset consumed by one geometry in a build operation.
+struct RhiAccelerationStructureBuildRangeDesc {
+    uint32_t primitiveCount = 0u;
+    uint32_t primitiveOffset = 0u;
+    uint32_t firstVertex = 0u;
+    uint32_t transformOffset = 0u;
+};
+
+/// Immutable geometry inputs shared by size queries and command recording.
+struct RhiAccelerationStructureBuildInput {
+    RhiAccelerationStructureType type = RhiAccelerationStructureType::BottomLevel;
+    RhiAccelerationStructureBuildFlags flags = 0u;
+    const RhiAccelerationStructureGeometryDesc* geometries = nullptr;
+    const RhiAccelerationStructureBuildRangeDesc* ranges = nullptr;
+    uint32_t geometryCount = 0u;
+};
+
+/// Reports exact native storage and scratch requirements for one build input.
+struct RhiAccelerationStructureBuildSizes {
+    uint64_t accelerationStructureSize = 0u;
+    uint64_t buildScratchSize = 0u;
+    uint64_t updateScratchSize = 0u;
+};
+
+/// Records one bottom-level or top-level acceleration-structure build or update.
+struct RhiAccelerationStructureBuildDesc {
+    RhiAccelerationStructureBuildInput input;
+    RhiAccelerationStructureBuildMode mode = RhiAccelerationStructureBuildMode::Build;
+    RhiAccelerationStructureHandle source;
+    RhiAccelerationStructureHandle destination;
+    RhiBufferHandle scratchBuffer;
+    uint64_t scratchOffset = 0u;
+};
+
+/// Copies one acceleration structure without exposing backend-native copy modes.
+struct RhiAccelerationStructureCopyDesc {
+    RhiAccelerationStructureHandle source;
+    RhiAccelerationStructureHandle destination;
+    RhiAccelerationStructureCopyMode mode = RhiAccelerationStructureCopyMode::Clone;
+};
+
+/// Writes compacted byte sizes for a contiguous acceleration-structure array.
+struct RhiAccelerationStructurePropertyQueryDesc {
+    const RhiAccelerationStructureHandle* accelerationStructures = nullptr;
+    uint32_t accelerationStructureCount = 0u;
+    RhiQueryPoolHandle queryPool;
+    uint32_t firstQuery = 0u;
+};
+
+/// Defines an acceleration-structure dependency between build, copy, and shader access.
+struct RhiAccelerationStructureBarrier {
+    RhiAccelerationStructureHandle accelerationStructure;
+    RhiResourceState oldState = RhiResourceState::AccelerationStructureBuildWrite;
+    RhiResourceState newState = RhiResourceState::AccelerationStructureRead;
+};
+
+/// Matches the 64-byte GPU layout consumed by top-level acceleration-structure builds.
+struct RhiAccelerationStructureInstance {
+    std::array<float, 12u> transform{1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f};
+    /// Low 24 bits store the custom index; high 8 bits store the visibility mask.
+    uint32_t customIndexAndMask = 0xff000000u;
+    /// Low 24 bits store the shader-binding-table offset; high 8 bits store instance flags.
+    uint32_t shaderBindingTableOffsetAndFlags = 0u;
+    uint64_t accelerationStructureReference = 0u;
+};
+
+static_assert(sizeof(RhiAccelerationStructureInstance) == 64u,
+              "Acceleration-structure instances must preserve the native 64-byte GPU layout");
+
+/// Packs the custom index and visibility mask used by one top-level instance.
+/// @param customIndex Scene-defined index constrained to 24 bits.
+/// @param mask Eight-bit ray visibility mask.
+/// @return Packed field, or std::nullopt when the custom index exceeds 24 bits.
+[[nodiscard]] constexpr std::optional<uint32_t>
+rhiPackAccelerationStructureInstanceCustomIndexAndMask(const uint32_t customIndex, const uint8_t mask) {
+    if (customIndex > 0x00ffffffu) {
+        return std::nullopt;
+    }
+    return customIndex | (static_cast<uint32_t>(mask) << 24u);
+}
+
+/// Packs the shader-binding-table offset and instance flags used by one top-level instance.
+/// @param shaderBindingTableOffset Shader-record offset constrained to 24 bits.
+/// @param flags Known RhiAccelerationStructureInstanceFlag bits stored in the high 8 bits.
+/// @return Packed field, or std::nullopt when the offset or flag set violates the fixed layout.
+[[nodiscard]] constexpr std::optional<uint32_t> rhiPackAccelerationStructureInstanceShaderBindingTableOffsetAndFlags(
+    const uint32_t shaderBindingTableOffset, const RhiAccelerationStructureInstanceFlags flags) {
+    constexpr RhiAccelerationStructureInstanceFlags kKnownFlags =
+        rhiFlag(RhiAccelerationStructureInstanceFlag::TriangleFacingCullDisable) |
+        rhiFlag(RhiAccelerationStructureInstanceFlag::TriangleFrontCounterClockwise) |
+        rhiFlag(RhiAccelerationStructureInstanceFlag::ForceOpaque) |
+        rhiFlag(RhiAccelerationStructureInstanceFlag::ForceNoOpaque);
+    if (shaderBindingTableOffset > 0x00ffffffu || (flags & ~kKnownFlags) != 0u) {
+        return std::nullopt;
+    }
+    return shaderBindingTableOffset | (flags << 24u);
+}
+
 enum class RhiColorClearValueType : uint8_t { Float, Uint };
 
 struct RhiColorAttachment {

@@ -25,6 +25,7 @@ RhiCapabilities completeCapabilities() {
     capabilities.descriptorBindingUpdateUnusedWhilePending = true;
     capabilities.descriptorBindingSampledImageUpdateAfterBind = true;
     capabilities.descriptorBindingStorageBufferUpdateAfterBind = true;
+    capabilities.descriptorBindingAccelerationStructureUpdateAfterBind = true;
     capabilities.runtimeDescriptorArray = true;
     capabilities.shaderSampledImageArrayNonUniformIndexing = true;
     capabilities.shaderStorageBufferArrayNonUniformIndexing = true;
@@ -132,6 +133,28 @@ int main() {
                               completeFeatureMask(), RenderFeature::BindlessGpuScene);
     if (!requireTrue(missingBindlessCapability.code == RenderFeatureStatusCode::BindlessDescriptorCapabilityMissing,
                      "bindless GPU scene must validate descriptor indexing subfeatures")) {
+        return 1;
+    }
+
+    RhiCapabilities missingAccelerationStructureDescriptorUpdate = capabilities;
+    missingAccelerationStructureDescriptorUpdate.descriptorBindingAccelerationStructureUpdateAfterBind = false;
+    const RenderFeatureStatus missingAccelerationStructureDescriptorCapability = evaluateRenderFeature(
+        RenderProfile::VulkanModern, RhiBackend::Vulkan, missingAccelerationStructureDescriptorUpdate, completeBuild,
+        completeFeatureMask(), RenderFeature::BindlessGpuScene);
+    if (!requireTrue(missingAccelerationStructureDescriptorCapability.code ==
+                         RenderFeatureStatusCode::BindlessDescriptorCapabilityMissing,
+                     "bindless GPU scene must require update-after-bind acceleration-structure descriptors")) {
+        return 1;
+    }
+
+    RhiCapabilities missingAccelerationStructure = capabilities;
+    missingAccelerationStructure.accelerationStructure = false;
+    const RenderFeatureStatus missingAccelerationStructureCapability =
+        evaluateRenderFeature(RenderProfile::VulkanModern, RhiBackend::Vulkan, missingAccelerationStructure,
+                              completeBuild, completeFeatureMask(), RenderFeature::BindlessGpuScene);
+    if (!requireTrue(missingAccelerationStructureCapability.code ==
+                         RenderFeatureStatusCode::BindlessDescriptorCapabilityMissing,
+                     "bindless GPU scene must require the acceleration-structure resource capability")) {
         return 1;
     }
 

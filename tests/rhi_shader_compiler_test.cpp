@@ -1,5 +1,6 @@
 #include "renderer/rhi/RhiShaderCompiler.h"
 #include "renderer/rhi/RhiShaderSourceLoader.h"
+#include "renderer/rhi/gl/GlRhiShaderCompiler.h"
 
 #include <array>
 #include <cctype>
@@ -183,6 +184,47 @@ void main() {
     return validateSource(kFixedSource, false) && validateSource(kRuntimeSource, true);
 }
 
+[[nodiscard]] bool validateAccelerationStructureReflection() {
+    constexpr std::string_view kSource = R"(#version 460 core
+#extension GL_EXT_ray_query : require
+layout(set = 0, binding = 4) uniform accelerationStructureEXT uSceneTlas;
+layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+
+void main() {
+    rayQueryEXT query;
+    rayQueryInitializeEXT(query, uSceneTlas, gl_RayFlagsTerminateOnFirstHitEXT, 0xff,
+                          vec3(0.0), 0.01, vec3(0.0, 0.0, 1.0), 100.0);
+}
+)";
+
+    RhiShaderDesc desc;
+    desc.debugName = "acceleration-structure-reflection-contract";
+    desc.stage = RhiShaderStage::Compute;
+    desc.source = kSource.data();
+    desc.sourceSize = kSource.size();
+    std::string errorMessage;
+    const auto compiled =
+        renderer::rhi::compileShaderToSpirv(desc, renderer::rhi::RhiShaderBackend::Vulkan, errorMessage);
+    if (!compiled.has_value() || compiled->reflection.bindings.size() != 1u) {
+        std::cerr << "Acceleration-structure shader reflection failed: " << errorMessage << '\n';
+        return false;
+    }
+    const renderer::rhi::RhiShaderBindingInfo& binding = compiled->reflection.bindings.front();
+    if (binding.set != 0u || binding.binding != 4u || binding.type != RhiBindingType::AccelerationStructure ||
+        binding.arrayCount != 1u || binding.runtimeArray || binding.stages != rhiFlag(RhiShaderStage::Compute)) {
+        std::cerr << "Acceleration-structure reflection does not match the canonical contract\n";
+        return false;
+    }
+
+    errorMessage.clear();
+    const auto openGlSource = renderer::rhi::gl::crossCompileShaderToOpenGl(*compiled, {}, std::nullopt, errorMessage);
+    if (openGlSource.has_value() || errorMessage != "OpenGL does not support acceleration-structure shader resources") {
+        std::cerr << "OpenGL must explicitly reject acceleration-structure shader resources\n";
+        return false;
+    }
+    return true;
+}
+
 [[nodiscard]] bool validateGBufferWriterContracts() {
     const auto terrainSource = renderer::rhi::loadShaderSource("assets/shaders/chunk_gbuffer.frag");
     if (!terrainSource.has_value()) {
@@ -357,6 +399,7 @@ int main() {
     }
     success = validateFragmentDiscardContract() && success;
     success = validateDescriptorArrayReflection() && success;
+    success = validateAccelerationStructureReflection() && success;
     success = validateGBufferWriterContracts() && success;
     return success ? 0 : 1;
 }

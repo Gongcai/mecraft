@@ -115,6 +115,7 @@ struct RhiCapabilities {
     bool descriptorBindingSampledImageUpdateAfterBind = false;
     bool descriptorBindingStorageImageUpdateAfterBind = false;
     bool descriptorBindingStorageBufferUpdateAfterBind = false;
+    bool descriptorBindingAccelerationStructureUpdateAfterBind = false;
     bool runtimeDescriptorArray = false;
     bool shaderSampledImageArrayNonUniformIndexing = false;
     bool shaderStorageBufferArrayNonUniformIndexing = false;
@@ -139,9 +140,11 @@ struct RhiCapabilities {
     uint32_t maxDescriptorSetUpdateAfterBindStorageImages = 0u;
     uint32_t maxDescriptorSetUpdateAfterBindUniformBuffers = 0u;
     uint32_t maxDescriptorSetUpdateAfterBindStorageBuffers = 0u;
+    uint32_t maxDescriptorSetUpdateAfterBindAccelerationStructures = 0u;
     uint32_t maxPerStageDescriptorUpdateAfterBindSampledImages = 0u;
     uint32_t maxPerStageDescriptorUpdateAfterBindSamplers = 0u;
     uint32_t maxPerStageDescriptorUpdateAfterBindStorageBuffers = 0u;
+    uint32_t maxPerStageDescriptorUpdateAfterBindAccelerationStructures = 0u;
     uint32_t maxPerStageUpdateAfterBindResources = 0u;
     uint32_t graphicsQueueFamilyIndex = std::numeric_limits<uint32_t>::max();
     uint32_t computeQueueFamilyIndex = std::numeric_limits<uint32_t>::max();
@@ -154,6 +157,11 @@ struct RhiCapabilities {
     bool accelerationStructure = false;
     bool rayQuery = false;
     bool rayTracingPipeline = false;
+    bool accelerationStructureHostCommands = false;
+    uint64_t maxAccelerationStructureGeometryCount = 0u;
+    uint64_t maxAccelerationStructureInstanceCount = 0u;
+    uint64_t maxAccelerationStructurePrimitiveCount = 0u;
+    uint32_t minAccelerationStructureScratchOffsetAlignment = 1u;
     uint32_t shaderBindingTableHandleSize = 0u;
     uint32_t shaderBindingTableHandleAlignment = 0u;
     uint32_t shaderBindingTableBaseAlignment = 0u;
@@ -213,14 +221,17 @@ enum class RhiBufferUsage : uint32_t {
     TransferSrc = 1u << 5u,
     TransferDst = 1u << 6u,
     MapRead = 1u << 7u,
-    MapWrite = 1u << 8u
+    MapWrite = 1u << 8u,
+    DeviceAddress = 1u << 9u,
+    AccelerationStructureStorage = 1u << 10u,
+    AccelerationStructureBuildInput = 1u << 11u
 };
 
 using RhiBufferUsageFlags = uint32_t;
 
 enum class RhiMemoryUsage { GpuOnly, CpuToGpu, GpuToCpu };
 
-enum class RhiQueryType { Timestamp };
+enum class RhiQueryType { Timestamp, AccelerationStructureCompactedSize };
 
 enum class RhiFilter { Nearest, Linear };
 
@@ -251,6 +262,10 @@ enum class RhiResourceState {
     IndirectArgument,
     UniformBuffer,
     StorageBuffer,
+    AccelerationStructureBuildInput,
+    AccelerationStructureBuildScratch,
+    AccelerationStructureBuildWrite,
+    AccelerationStructureRead,
     HostRead,
     HostWrite
 };
@@ -280,6 +295,41 @@ enum class RhiBlendOp { Add, Subtract, ReverseSubtract, Min, Max };
 
 enum class RhiVertexFormat { Float, Float2, Float3, Float4, Uint, Uint2, Uint3, Uint4, Sint8, Unorm8, Uint8, Uint16 };
 
+enum class RhiAccelerationStructureType : uint8_t { BottomLevel, TopLevel };
+
+enum class RhiAccelerationStructureGeometryType : uint8_t { Triangles, Aabbs, Instances };
+
+enum class RhiAccelerationStructureIndexFormat : uint8_t { None, Uint16, Uint32 };
+
+enum class RhiAccelerationStructureBuildMode : uint8_t { Build, Update };
+
+enum class RhiAccelerationStructureCopyMode : uint8_t { Clone, Compact };
+
+enum class RhiAccelerationStructureBuildFlag : uint32_t {
+    AllowUpdate = 1u << 0u,
+    AllowCompaction = 1u << 1u,
+    PreferFastTrace = 1u << 2u,
+    PreferFastBuild = 1u << 3u
+};
+
+using RhiAccelerationStructureBuildFlags = uint32_t;
+
+enum class RhiAccelerationStructureGeometryFlag : uint32_t {
+    Opaque = 1u << 0u,
+    NoDuplicateAnyHitInvocation = 1u << 1u
+};
+
+using RhiAccelerationStructureGeometryFlags = uint32_t;
+
+enum class RhiAccelerationStructureInstanceFlag : uint32_t {
+    TriangleFacingCullDisable = 1u << 0u,
+    TriangleFrontCounterClockwise = 1u << 1u,
+    ForceOpaque = 1u << 2u,
+    ForceNoOpaque = 1u << 3u
+};
+
+using RhiAccelerationStructureInstanceFlags = uint32_t;
+
 enum class RhiVertexInputRate { Vertex, Instance };
 
 struct RhiViewport {
@@ -308,6 +358,18 @@ struct RhiRect2D {
 
 [[nodiscard]] constexpr RhiShaderStageFlags rhiFlag(RhiShaderStage stage) {
     return static_cast<RhiShaderStageFlags>(stage);
+}
+
+[[nodiscard]] constexpr RhiAccelerationStructureBuildFlags rhiFlag(RhiAccelerationStructureBuildFlag flag) {
+    return static_cast<RhiAccelerationStructureBuildFlags>(flag);
+}
+
+[[nodiscard]] constexpr RhiAccelerationStructureGeometryFlags rhiFlag(RhiAccelerationStructureGeometryFlag flag) {
+    return static_cast<RhiAccelerationStructureGeometryFlags>(flag);
+}
+
+[[nodiscard]] constexpr RhiAccelerationStructureInstanceFlags rhiFlag(RhiAccelerationStructureInstanceFlag flag) {
+    return static_cast<RhiAccelerationStructureInstanceFlags>(flag);
 }
 
 #endif // MECRAFT_RHI_TYPES_H

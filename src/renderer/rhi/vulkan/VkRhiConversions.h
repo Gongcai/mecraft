@@ -132,6 +132,23 @@ struct VkResourceStateMapping {
     case RhiResourceState::StorageBuffer:
         return {VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
                 VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT, VK_IMAGE_LAYOUT_UNDEFINED};
+    case RhiResourceState::AccelerationStructureBuildInput:
+        return {VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, VK_ACCESS_2_SHADER_READ_BIT,
+                VK_IMAGE_LAYOUT_UNDEFINED};
+    case RhiResourceState::AccelerationStructureBuildScratch:
+        return {VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_BUILD_BIT_KHR,
+                VK_ACCESS_2_ACCELERATION_STRUCTURE_READ_BIT_KHR | VK_ACCESS_2_ACCELERATION_STRUCTURE_WRITE_BIT_KHR,
+                VK_IMAGE_LAYOUT_UNDEFINED};
+    case RhiResourceState::AccelerationStructureBuildWrite:
+        return {VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_BUILD_BIT_KHR |
+                    VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_COPY_BIT_KHR,
+                VK_ACCESS_2_ACCELERATION_STRUCTURE_READ_BIT_KHR | VK_ACCESS_2_ACCELERATION_STRUCTURE_WRITE_BIT_KHR,
+                VK_IMAGE_LAYOUT_UNDEFINED};
+    case RhiResourceState::AccelerationStructureRead:
+        return {VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT |
+                    VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_BUILD_BIT_KHR |
+                    VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_COPY_BIT_KHR,
+                VK_ACCESS_2_ACCELERATION_STRUCTURE_READ_BIT_KHR, VK_IMAGE_LAYOUT_UNDEFINED};
     case RhiResourceState::HostRead:
         return {VK_PIPELINE_STAGE_2_HOST_BIT, VK_ACCESS_2_HOST_READ_BIT, VK_IMAGE_LAYOUT_UNDEFINED};
     case RhiResourceState::HostWrite:
@@ -159,8 +176,60 @@ struct VkResourceStateMapping {
     case RhiBindingType::StorageTexture: return VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
     case RhiBindingType::Sampler: return VK_DESCRIPTOR_TYPE_SAMPLER;
     case RhiBindingType::CombinedTextureSampler: return VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    case RhiBindingType::AccelerationStructure: return VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
     }
     return VK_DESCRIPTOR_TYPE_MAX_ENUM;
+}
+
+[[nodiscard]] inline VkAccelerationStructureTypeKHR
+toVkAccelerationStructureType(const RhiAccelerationStructureType type) {
+    switch (type) {
+    case RhiAccelerationStructureType::BottomLevel: return VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
+    case RhiAccelerationStructureType::TopLevel: return VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR;
+    }
+    return VK_ACCELERATION_STRUCTURE_TYPE_MAX_ENUM_KHR;
+}
+
+[[nodiscard]] inline VkBuildAccelerationStructureFlagsKHR
+toVkAccelerationStructureBuildFlags(const RhiAccelerationStructureBuildFlags flags) {
+    VkBuildAccelerationStructureFlagsKHR result = 0u;
+    if ((flags & rhiFlag(RhiAccelerationStructureBuildFlag::AllowUpdate)) != 0u)
+        result |= VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR;
+    if ((flags & rhiFlag(RhiAccelerationStructureBuildFlag::AllowCompaction)) != 0u)
+        result |= VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_COMPACTION_BIT_KHR;
+    if ((flags & rhiFlag(RhiAccelerationStructureBuildFlag::PreferFastTrace)) != 0u)
+        result |= VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR;
+    if ((flags & rhiFlag(RhiAccelerationStructureBuildFlag::PreferFastBuild)) != 0u)
+        result |= VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_BUILD_BIT_KHR;
+    return result;
+}
+
+[[nodiscard]] inline VkGeometryFlagsKHR
+toVkAccelerationStructureGeometryFlags(const RhiAccelerationStructureGeometryFlags flags) {
+    VkGeometryFlagsKHR result = 0u;
+    if ((flags & rhiFlag(RhiAccelerationStructureGeometryFlag::Opaque)) != 0u)
+        result |= VK_GEOMETRY_OPAQUE_BIT_KHR;
+    if ((flags & rhiFlag(RhiAccelerationStructureGeometryFlag::NoDuplicateAnyHitInvocation)) != 0u)
+        result |= VK_GEOMETRY_NO_DUPLICATE_ANY_HIT_INVOCATION_BIT_KHR;
+    return result;
+}
+
+[[nodiscard]] inline VkIndexType toVkAccelerationStructureIndexType(const RhiAccelerationStructureIndexFormat format) {
+    switch (format) {
+    case RhiAccelerationStructureIndexFormat::None: return VK_INDEX_TYPE_NONE_KHR;
+    case RhiAccelerationStructureIndexFormat::Uint16: return VK_INDEX_TYPE_UINT16;
+    case RhiAccelerationStructureIndexFormat::Uint32: return VK_INDEX_TYPE_UINT32;
+    }
+    return VK_INDEX_TYPE_MAX_ENUM;
+}
+
+[[nodiscard]] inline VkCopyAccelerationStructureModeKHR
+toVkAccelerationStructureCopyMode(const RhiAccelerationStructureCopyMode mode) {
+    switch (mode) {
+    case RhiAccelerationStructureCopyMode::Clone: return VK_COPY_ACCELERATION_STRUCTURE_MODE_CLONE_KHR;
+    case RhiAccelerationStructureCopyMode::Compact: return VK_COPY_ACCELERATION_STRUCTURE_MODE_COMPACT_KHR;
+    }
+    return VK_COPY_ACCELERATION_STRUCTURE_MODE_MAX_ENUM_KHR;
 }
 
 [[nodiscard]] inline VkDescriptorBindingFlags toVkDescriptorBindingFlags(const RhiBindingFlags flags) {

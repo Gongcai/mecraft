@@ -118,11 +118,12 @@ bool deviceSupportsFeature(const RhiCapabilities& capabilities, const RenderFeat
         return capabilities.accelerationStructure && capabilities.rayQuery && capabilities.bufferDeviceAddress;
     case RenderFeature::NrdDenoiser: return capabilities.storageImage;
     case RenderFeature::BindlessGpuScene:
-        return capabilities.descriptorIndexing && capabilities.descriptorBindingPartiallyBound &&
-               capabilities.descriptorBindingVariableDescriptorCount && capabilities.runtimeDescriptorArray &&
-               capabilities.descriptorBindingUpdateUnusedWhilePending &&
+        return capabilities.accelerationStructure && capabilities.descriptorIndexing &&
+               capabilities.descriptorBindingPartiallyBound && capabilities.descriptorBindingVariableDescriptorCount &&
+               capabilities.runtimeDescriptorArray && capabilities.descriptorBindingUpdateUnusedWhilePending &&
                capabilities.descriptorBindingSampledImageUpdateAfterBind &&
                capabilities.descriptorBindingStorageBufferUpdateAfterBind &&
+               capabilities.descriptorBindingAccelerationStructureUpdateAfterBind &&
                capabilities.shaderSampledImageArrayNonUniformIndexing &&
                capabilities.shaderStorageBufferArrayNonUniformIndexing;
     case RenderFeature::GpuDynamicResolution: return capabilities.timestampQuery;

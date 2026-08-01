@@ -73,6 +73,18 @@ RTGI 在 Tonemap 和 Temporal Upscale 之前运行，所有辐射都处于线性
 
 ## 4. 加速结构架构
 
+当前已完成 Vulkan AS 基础层：公共 RHI 提供 BLAS/TLAS、Triangles/AABBs/Instances、
+Build/Update、Clone/Compact、Build Size、Device Address、Compacted Size Query 与 AS Barrier；
+Vulkan 初始化强制启用 Acceleration Structure、Ray Query、Deferred Host Operations 和 Buffer
+Device Address，并完成函数指针、强类型注册表、Submission Sequence 生命周期及延迟销毁。
+Global Bindless Binding 4 已能发布 TLAS，Shader Reflection 也已识别 Acceleration Structure
+Descriptor。真实三角形 BLAS、Update、Compaction、Clone、TLAS 和 Descriptor Smoke 已通过，
+未发现 Validation/VUID 错误。
+
+这一完成状态只代表底层资源与命令契约就绪。体素 Render Chunk/SubChunk BLAS 生产者、glTF
+资产级 BLAS 缓存、运行时 TLAS Instance 列表、Revision 调度、Cutout Candidate Alpha Test 和
+RTGI Ray Query Pass 尚未接入，以下各节仍是后续生产层的实施规范。
+
 ### 4.1 体素区块 BLAS
 
 以实际渲染网格作为 BLAS 输入，不对每个方块创建 Instance。建议粒度是现有可独立修订

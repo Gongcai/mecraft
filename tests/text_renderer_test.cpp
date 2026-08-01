@@ -85,6 +85,7 @@ public:
         events.push_back({EventType::TextureBarrier});
     }
     void bufferBarrier(const RhiBufferBarrier&) override {}
+    bool accelerationStructureBarrier(const RhiAccelerationStructureBarrier&) override { return false; }
 
     void beginRendering(const RhiRenderingInfo&) override {}
     void endRendering() override {}
@@ -134,6 +135,11 @@ public:
 
     void resetQueryPool(RhiQueryPoolHandle, uint32_t, uint32_t) override {}
     void writeTimestamp(RhiQueryPoolHandle, uint32_t) override {}
+    bool buildAccelerationStructures(const RhiAccelerationStructureBuildDesc*, uint32_t) override { return false; }
+    bool copyAccelerationStructure(const RhiAccelerationStructureCopyDesc&) override { return false; }
+    bool writeAccelerationStructureProperties(const RhiAccelerationStructurePropertyQueryDesc&) override {
+        return false;
+    }
 
     void clearDrawRecording() {
         events.clear();
@@ -247,6 +253,21 @@ public:
         bindGroupDescs.push_back(desc);
         return {m_nextBindGroup++, 1u};
     }
+    RhiAccelerationStructureHandle createAccelerationStructure(const RhiAccelerationStructureDesc&) override {
+        return {};
+    }
+    [[nodiscard]] bool getAccelerationStructureDesc(RhiAccelerationStructureHandle,
+                                                    RhiAccelerationStructureDesc&) const override {
+        return false;
+    }
+    [[nodiscard]] bool queryAccelerationStructureBuildSizes(const RhiAccelerationStructureBuildInput&,
+                                                            RhiAccelerationStructureBuildSizes&) const override {
+        return false;
+    }
+    [[nodiscard]] uint64_t bufferDeviceAddress(RhiBufferHandle) const override { return 0u; }
+    [[nodiscard]] uint64_t accelerationStructureDeviceAddress(RhiAccelerationStructureHandle) const override {
+        return 0u;
+    }
     bool updateBindGroups(const RhiBindGroupUpdate*, uint32_t) override { return true; }
     RhiQueryPoolHandle createQueryPool(const RhiQueryPoolDesc&) override { return {m_nextQueryPool++, 1u}; }
     bool resetQueryPool(RhiQueryPoolHandle, uint32_t, uint32_t) override { return true; }
@@ -279,6 +300,7 @@ public:
     void destroyPipeline(RhiPipelineHandle) override {}
     void destroyBindGroup(RhiBindGroupHandle) override {}
     void destroyQueryPool(RhiQueryPoolHandle) override {}
+    void destroyAccelerationStructure(RhiAccelerationStructureHandle) override {}
 
     [[nodiscard]] std::unique_ptr<RhiCommandListPool> createCommandListPool(const RhiCommandListPoolDesc&) override {
         return std::make_unique<RecordingCommandListPool>(commandList);

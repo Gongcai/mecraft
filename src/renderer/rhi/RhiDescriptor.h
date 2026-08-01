@@ -13,7 +13,8 @@ enum class RhiBindingType {
     SampledTexture,
     StorageTexture,
     Sampler,
-    CombinedTextureSampler
+    CombinedTextureSampler,
+    AccelerationStructure
 };
 
 enum class RhiBindingFlag : uint32_t {
@@ -62,6 +63,7 @@ struct RhiBindingResource {
     RhiTextureViewHandle textureView;
     RhiSamplerHandle sampler;
     RhiTextureSamplerBinding combinedTextureSampler;
+    RhiAccelerationStructureHandle accelerationStructure;
 };
 
 struct RhiBindGroupEntry {

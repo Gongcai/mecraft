@@ -25,6 +25,7 @@ public:
     void insertDebugMarker(const char* name, const glm::vec4& color) override;
     void textureBarrier(const RhiTextureBarrier& barrier) override;
     void bufferBarrier(const RhiBufferBarrier& barrier) override;
+    bool accelerationStructureBarrier(const RhiAccelerationStructureBarrier& barrier) override;
     void beginRendering(const RhiRenderingInfo& info) override;
     void endRendering() override;
     void clearDepthAttachment(float depth, const RhiRect2D& rect) override;
@@ -50,6 +51,9 @@ public:
     void generateMipmaps(RhiTextureHandle texture) override;
     void resetQueryPool(RhiQueryPoolHandle pool, uint32_t firstQuery, uint32_t queryCount) override;
     void writeTimestamp(RhiQueryPoolHandle pool, uint32_t queryIndex) override;
+    bool buildAccelerationStructures(const RhiAccelerationStructureBuildDesc* builds, uint32_t buildCount) override;
+    bool copyAccelerationStructure(const RhiAccelerationStructureCopyDesc& copy) override;
+    bool writeAccelerationStructureProperties(const RhiAccelerationStructurePropertyQueryDesc& query) override;
 
 private:
     friend class VkRhiCommandListPool;

@@ -1058,6 +1058,8 @@ if(MECRAFT_BUILD_TESTS)
     target_compile_definitions(gpu_scene_contract_test PRIVATE
             MECRAFT_TEST_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
     add_mecraft_test(render_feature_contract_test tests/render_feature_contract_test.cpp)
+    add_mecraft_test(rhi_acceleration_structure_contract_test
+            tests/rhi_acceleration_structure_contract_test.cpp)
     add_mecraft_test(gpu_timing_history_test tests/gpu_timing_history_test.cpp)
     add_mecraft_test(rhi_render_graph_test tests/rhi_render_graph_test.cpp)
     add_mecraft_test(presentation_controller_test tests/presentation_controller_test.cpp)

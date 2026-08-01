@@ -43,6 +43,14 @@ public:
     RhiPipelineHandle createGraphicsPipeline(const RhiGraphicsPipelineDesc& desc) override;
     RhiPipelineHandle createComputePipeline(const RhiComputePipelineDesc& desc) override;
     RhiBindGroupHandle createBindGroup(const RhiBindGroupDesc& desc) override;
+    RhiAccelerationStructureHandle createAccelerationStructure(const RhiAccelerationStructureDesc& desc) override;
+    [[nodiscard]] bool getAccelerationStructureDesc(RhiAccelerationStructureHandle accelerationStructure,
+                                                    RhiAccelerationStructureDesc& desc) const override;
+    [[nodiscard]] bool queryAccelerationStructureBuildSizes(const RhiAccelerationStructureBuildInput& input,
+                                                            RhiAccelerationStructureBuildSizes& sizes) const override;
+    [[nodiscard]] uint64_t bufferDeviceAddress(RhiBufferHandle buffer) const override;
+    [[nodiscard]] uint64_t
+    accelerationStructureDeviceAddress(RhiAccelerationStructureHandle accelerationStructure) const override;
     bool updateBindGroups(const RhiBindGroupUpdate* updates, uint32_t updateCount) override;
     RhiQueryPoolHandle createQueryPool(const RhiQueryPoolDesc& desc) override;
     bool resetQueryPool(RhiQueryPoolHandle pool, uint32_t firstQuery, uint32_t queryCount) override;
@@ -75,6 +83,7 @@ public:
     void destroyPipeline(RhiPipelineHandle handle) override;
     void destroyBindGroup(RhiBindGroupHandle handle) override;
     void destroyQueryPool(RhiQueryPoolHandle handle) override;
+    void destroyAccelerationStructure(RhiAccelerationStructureHandle handle) override;
 
     [[nodiscard]] std::unique_ptr<RhiCommandListPool>
     createCommandListPool(const RhiCommandListPoolDesc& desc) override;

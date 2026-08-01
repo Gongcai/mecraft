@@ -25,6 +25,7 @@ public:
 
     virtual void textureBarrier(const RhiTextureBarrier& barrier) = 0;
     virtual void bufferBarrier(const RhiBufferBarrier& barrier) = 0;
+    virtual bool accelerationStructureBarrier(const RhiAccelerationStructureBarrier& barrier) = 0;
 
     virtual void beginRendering(const RhiRenderingInfo& info) = 0;
     virtual void endRendering() = 0;
@@ -58,6 +59,18 @@ public:
 
     virtual void resetQueryPool(RhiQueryPoolHandle pool, uint32_t firstQuery, uint32_t queryCount) = 0;
     virtual void writeTimestamp(RhiQueryPoolHandle pool, uint32_t queryIndex) = 0;
+
+    /// Atomically records one or more acceleration-structure build or update operations.
+    /// @param builds Complete build array validated before any native command is emitted.
+    /// @param buildCount Number of builds in the array.
+    /// @return True when every build was accepted and recorded.
+    virtual bool buildAccelerationStructures(const RhiAccelerationStructureBuildDesc* builds, uint32_t buildCount) = 0;
+
+    /// Records a clone or compact copy between compatible acceleration structures.
+    virtual bool copyAccelerationStructure(const RhiAccelerationStructureCopyDesc& copy) = 0;
+
+    /// Writes compacted acceleration-structure sizes into a compatible query pool.
+    virtual bool writeAccelerationStructureProperties(const RhiAccelerationStructurePropertyQueryDesc& query) = 0;
 };
 
 #endif // MECRAFT_RHI_COMMAND_LIST_H

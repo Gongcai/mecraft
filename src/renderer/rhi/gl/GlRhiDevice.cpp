@@ -398,6 +398,10 @@ struct GlVertexFormatInfo {
     case RhiResourceState::IndirectArgument: return "IndirectArgument";
     case RhiResourceState::UniformBuffer: return "UniformBuffer";
     case RhiResourceState::StorageBuffer: return "StorageBuffer";
+    case RhiResourceState::AccelerationStructureBuildInput: return "AccelerationStructureBuildInput";
+    case RhiResourceState::AccelerationStructureBuildScratch: return "AccelerationStructureBuildScratch";
+    case RhiResourceState::AccelerationStructureBuildWrite: return "AccelerationStructureBuildWrite";
+    case RhiResourceState::AccelerationStructureRead: return "AccelerationStructureRead";
     case RhiResourceState::HostRead: return "HostRead";
     case RhiResourceState::HostWrite: return "HostWrite";
     }
@@ -420,6 +424,10 @@ struct GlVertexFormatInfo {
     case RhiResourceState::IndirectArgument:
     case RhiResourceState::UniformBuffer:
     case RhiResourceState::StorageBuffer:
+    case RhiResourceState::AccelerationStructureBuildInput:
+    case RhiResourceState::AccelerationStructureBuildScratch:
+    case RhiResourceState::AccelerationStructureBuildWrite:
+    case RhiResourceState::AccelerationStructureRead:
     case RhiResourceState::HostRead:
     case RhiResourceState::HostWrite: return false;
     }
@@ -435,6 +443,10 @@ struct GlVertexFormatInfo {
     case RhiResourceState::IndirectArgument: return (usage & rhiFlag(RhiBufferUsage::Indirect)) != 0u;
     case RhiResourceState::UniformBuffer: return (usage & rhiFlag(RhiBufferUsage::Uniform)) != 0u;
     case RhiResourceState::StorageBuffer: return (usage & rhiFlag(RhiBufferUsage::Storage)) != 0u;
+    case RhiResourceState::AccelerationStructureBuildInput:
+    case RhiResourceState::AccelerationStructureBuildScratch:
+    case RhiResourceState::AccelerationStructureBuildWrite:
+    case RhiResourceState::AccelerationStructureRead: return false;
     case RhiResourceState::HostRead: return (usage & rhiFlag(RhiBufferUsage::MapRead)) != 0u;
     case RhiResourceState::HostWrite: return (usage & rhiFlag(RhiBufferUsage::MapWrite)) != 0u;
     case RhiResourceState::Undefined: return true;
@@ -462,6 +474,10 @@ struct GlVertexFormatInfo {
     case RhiResourceState::IndirectArgument: return GL_COMMAND_BARRIER_BIT;
     case RhiResourceState::UniformBuffer: return GL_UNIFORM_BARRIER_BIT;
     case RhiResourceState::StorageBuffer: return GL_SHADER_STORAGE_BARRIER_BIT;
+    case RhiResourceState::AccelerationStructureBuildInput:
+    case RhiResourceState::AccelerationStructureBuildScratch:
+    case RhiResourceState::AccelerationStructureBuildWrite:
+    case RhiResourceState::AccelerationStructureRead: return 0u;
     case RhiResourceState::HostRead: return GL_CLIENT_MAPPED_BUFFER_BARRIER_BIT;
     case RhiResourceState::HostWrite: return GL_CLIENT_MAPPED_BUFFER_BARRIER_BIT;
     case RhiResourceState::Undefined:
@@ -669,6 +685,7 @@ template <typename Handle, typename Record>
     case RhiBindingType::Sampler:
     case RhiBindingType::CombinedTextureSampler: return 2u;
     case RhiBindingType::StorageTexture: return 3u;
+    case RhiBindingType::AccelerationStructure: return 4u;
     }
     return 4u;
 }
@@ -1014,6 +1031,7 @@ struct GlRhiCommandResourceReferences {
                         return false;
                     }
                     break;
+                case RhiBindingType::AccelerationStructure: return false;
                 }
             }
             return true;
@@ -2247,6 +2265,11 @@ void GlRhiCommandList::bufferBarrier(const RhiBufferBarrier& barrier) {
     record->state = barrier.newState;
 }
 
+bool GlRhiCommandList::accelerationStructureBarrier(const RhiAccelerationStructureBarrier& barrier) {
+    (void)barrier;
+    return rejectRecordedCommand("OpenGL does not support acceleration-structure barriers");
+}
+
 void GlRhiCommandList::beginRendering(const RhiRenderingInfo& info) {
     if (!m_replaying) {
         if (m_recordingRendering) {
@@ -2852,6 +2875,9 @@ void GlRhiCommandList::setBindGroup(uint32_t setIndex, RhiBindGroupHandle bindGr
                     glBindTextureUnit(physicalBinding, 0u);
                     glBindSampler(physicalBinding, 0u);
                     break;
+                case RhiBindingType::AccelerationStructure:
+                    (void)rejectReplayCommand("OpenGL does not support acceleration-structure descriptors");
+                    return;
                 }
             }
         }
@@ -2978,6 +3004,9 @@ void GlRhiCommandList::setBindGroup(uint32_t setIndex, RhiBindGroupHandle bindGr
             }
             break;
         }
+        case RhiBindingType::AccelerationStructure:
+            (void)rejectReplayCommand("OpenGL does not support acceleration-structure descriptors");
+            return;
         }
     }
 
@@ -3946,6 +3975,23 @@ void GlRhiCommandList::writeTimestamp(RhiQueryPoolHandle pool, uint32_t queryInd
     }
 }
 
+bool GlRhiCommandList::buildAccelerationStructures(const RhiAccelerationStructureBuildDesc* builds,
+                                                   const uint32_t buildCount) {
+    (void)builds;
+    (void)buildCount;
+    return rejectRecordedCommand("OpenGL does not support acceleration-structure builds");
+}
+
+bool GlRhiCommandList::copyAccelerationStructure(const RhiAccelerationStructureCopyDesc& copy) {
+    (void)copy;
+    return rejectRecordedCommand("OpenGL does not support acceleration-structure copies");
+}
+
+bool GlRhiCommandList::writeAccelerationStructureProperties(const RhiAccelerationStructurePropertyQueryDesc& query) {
+    (void)query;
+    return rejectRecordedCommand("OpenGL does not support acceleration-structure property queries");
+}
+
 GlRhiCommandListPool::GlRhiCommandListPool(GlRhiDevice& device, const RhiCommandListPoolDesc& desc)
     : m_device(&device), m_registry(device.m_commandPoolRegistry), m_ownerThread(std::this_thread::get_id()),
       m_initialArenaCapacity(desc.initialArenaCapacity) {
@@ -4407,6 +4453,13 @@ RhiMemoryStats GlRhiDevice::memoryStats() const {
 }
 
 RhiBufferHandle GlRhiDevice::createBuffer(const RhiBufferDesc& desc, const void* initialData, size_t initialDataSize) {
+    constexpr RhiBufferUsageFlags kUnsupportedAccelerationStructureUsages =
+        rhiFlag(RhiBufferUsage::DeviceAddress) | rhiFlag(RhiBufferUsage::AccelerationStructureStorage) |
+        rhiFlag(RhiBufferUsage::AccelerationStructureBuildInput);
+    if ((desc.usage & kUnsupportedAccelerationStructureUsages) != 0u) {
+        logRhiError("OpenGL does not support acceleration-structure buffer usages");
+        return {};
+    }
     if (!m_initialized || !rhiMemoryCategoryValid(desc.memoryCategory) || desc.size == 0u || desc.usage == 0u ||
         (initialData == nullptr && initialDataSize != 0u) || initialDataSize > desc.size ||
         !bufferUsageSupportsState(desc.usage, desc.initialState) ||
@@ -4723,6 +4776,10 @@ RhiBindGroupLayoutHandle GlRhiDevice::createBindGroupLayout(const RhiBindGroupLa
     uint32_t maximumBinding = 0u;
     for (size_t i = 0u; i < desc.entries.size(); ++i) {
         const RhiBindGroupLayoutEntry& entry = desc.entries[i];
+        if (entry.type == RhiBindingType::AccelerationStructure) {
+            logRhiError("OpenGL does not support acceleration-structure descriptors");
+            return {};
+        }
         if (entry.stages == 0u || entry.arrayCount == 0u || (entry.flags & ~kKnownFlags) != 0u) {
             logRhiError("createBindGroupLayout received an invalid array or binding flag contract");
             return {};
@@ -5086,6 +5143,9 @@ RhiBindGroupHandle GlRhiDevice::createBindGroup(const RhiBindGroupDesc& desc) {
             }
             break;
         }
+        case RhiBindingType::AccelerationStructure:
+            logRhiError("OpenGL does not support acceleration-structure descriptors");
+            return {};
         }
     }
     for (size_t layoutEntryIndex = 0u; layoutEntryIndex < layout->desc.entries.size(); ++layoutEntryIndex) {
@@ -5252,6 +5312,9 @@ bool GlRhiDevice::updateBindGroups(const RhiBindGroupUpdate* updates, const uint
                 }
                 break;
             }
+            case RhiBindingType::AccelerationStructure:
+                logRhiError("OpenGL does not support acceleration-structure descriptors");
+                return false;
             }
             stagedSlots.push_back({group, update.binding, arrayElement, resource});
         }
@@ -5312,6 +5375,40 @@ bool GlRhiDevice::updateBindGroups(const RhiBindGroupUpdate* updates, const uint
         stagedBegin = stagedEnd;
     }
     return true;
+}
+
+RhiAccelerationStructureHandle GlRhiDevice::createAccelerationStructure(const RhiAccelerationStructureDesc& desc) {
+    (void)desc;
+    logRhiError("OpenGL does not support acceleration structures");
+    return {};
+}
+
+bool GlRhiDevice::getAccelerationStructureDesc(RhiAccelerationStructureHandle accelerationStructure,
+                                               RhiAccelerationStructureDesc& desc) const {
+    (void)accelerationStructure;
+    (void)desc;
+    logRhiError("OpenGL does not support acceleration structures");
+    return false;
+}
+
+bool GlRhiDevice::queryAccelerationStructureBuildSizes(const RhiAccelerationStructureBuildInput& input,
+                                                       RhiAccelerationStructureBuildSizes& sizes) const {
+    (void)input;
+    (void)sizes;
+    logRhiError("OpenGL does not support acceleration-structure build-size queries");
+    return false;
+}
+
+uint64_t GlRhiDevice::bufferDeviceAddress(RhiBufferHandle buffer) const {
+    (void)buffer;
+    logRhiError("OpenGL does not support buffer device addresses");
+    return 0u;
+}
+
+uint64_t GlRhiDevice::accelerationStructureDeviceAddress(RhiAccelerationStructureHandle accelerationStructure) const {
+    (void)accelerationStructure;
+    logRhiError("OpenGL does not support acceleration-structure device addresses");
+    return 0u;
 }
 
 RhiQueryPoolHandle GlRhiDevice::createQueryPool(const RhiQueryPoolDesc& desc) {
@@ -5652,6 +5749,12 @@ void GlRhiDevice::destroyQueryPool(RhiQueryPoolHandle handle) {
         *record = {};
     }
     (void)m_data->queryPools.release(handle);
+}
+
+void GlRhiDevice::destroyAccelerationStructure(RhiAccelerationStructureHandle handle) {
+    if (handle.isValid()) {
+        logRhiError("OpenGL does not own acceleration-structure resources");
+    }
 }
 
 std::unique_ptr<RhiCommandListPool> GlRhiDevice::createCommandListPool(const RhiCommandListPoolDesc& desc) {

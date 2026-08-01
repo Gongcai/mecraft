@@ -222,7 +222,10 @@ reflectedArrayInfo(const spvc_compiler compiler, const spvc_reflected_resource& 
         !appendReflectedBindings(compiler, resources, SPVC_RESOURCE_TYPE_SEPARATE_SAMPLERS, RhiBindingType::Sampler,
                                  shader.stage, shader.reflection, errorMessage) ||
         !appendReflectedBindings(compiler, resources, SPVC_RESOURCE_TYPE_STORAGE_IMAGE, RhiBindingType::StorageTexture,
-                                 shader.stage, shader.reflection, errorMessage)) {
+                                 shader.stage, shader.reflection, errorMessage) ||
+        !appendReflectedBindings(compiler, resources, SPVC_RESOURCE_TYPE_ACCELERATION_STRUCTURE,
+                                 RhiBindingType::AccelerationStructure, shader.stage, shader.reflection,
+                                 errorMessage)) {
         return false;
     }
 

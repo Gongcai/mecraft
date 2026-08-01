@@ -13,6 +13,8 @@ namespace {
 constexpr RhiBindingFlags kGlobalBindingFlags = rhiFlag(RhiBindingFlag::PartiallyBound) |
                                                 rhiFlag(RhiBindingFlag::UpdateAfterBind) |
                                                 rhiFlag(RhiBindingFlag::UpdateUnusedWhilePending);
+constexpr RhiBindingFlags kGlobalAccelerationStructureBindingFlags =
+    rhiFlag(RhiBindingFlag::PartiallyBound) | rhiFlag(RhiBindingFlag::UpdateAfterBind);
 constexpr RhiShaderStageFlags kGlobalShaderStages =
     rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment) | rhiFlag(RhiShaderStage::Compute);
 
@@ -29,24 +31,29 @@ constexpr RhiShaderStageFlags kGlobalShaderStages =
            capabilities.descriptorBindingVariableDescriptorCount &&
            capabilities.descriptorBindingUpdateUnusedWhilePending &&
            capabilities.descriptorBindingSampledImageUpdateAfterBind &&
-           capabilities.descriptorBindingStorageBufferUpdateAfterBind && capabilities.runtimeDescriptorArray &&
-           capabilities.shaderSampledImageArrayNonUniformIndexing &&
+           capabilities.descriptorBindingStorageBufferUpdateAfterBind &&
+           capabilities.descriptorBindingAccelerationStructureUpdateAfterBind && capabilities.accelerationStructure &&
+           capabilities.runtimeDescriptorArray && capabilities.shaderSampledImageArrayNonUniformIndexing &&
            capabilities.shaderStorageBufferArrayNonUniformIndexing;
 }
 
 [[nodiscard]] bool capacitiesFitLimits(const GlobalBindlessSetConfig& config, const RhiCapabilities& capabilities) {
     uint32_t sampledImageCount = 0u;
     uint32_t sampledAndSamplerCount = 0u;
+    uint32_t arrayResourceCount = 0u;
     uint32_t totalResourceCount = 0u;
     return checkedAdd(config.sampledTexture2DCapacity, config.sampledTextureCubeCapacity, sampledImageCount) &&
            checkedAdd(sampledImageCount, config.samplerCapacity, sampledAndSamplerCount) &&
-           checkedAdd(sampledAndSamplerCount, config.storageBufferCapacity, totalResourceCount) &&
+           checkedAdd(sampledAndSamplerCount, config.storageBufferCapacity, arrayResourceCount) &&
+           checkedAdd(arrayResourceCount, 1u, totalResourceCount) &&
            sampledImageCount <= capabilities.maxDescriptorSetUpdateAfterBindSampledImages &&
            sampledImageCount <= capabilities.maxPerStageDescriptorUpdateAfterBindSampledImages &&
            config.samplerCapacity <= capabilities.maxDescriptorSetUpdateAfterBindSamplers &&
            config.samplerCapacity <= capabilities.maxPerStageDescriptorUpdateAfterBindSamplers &&
            config.storageBufferCapacity <= capabilities.maxDescriptorSetUpdateAfterBindStorageBuffers &&
            config.storageBufferCapacity <= capabilities.maxPerStageDescriptorUpdateAfterBindStorageBuffers &&
+           capabilities.maxDescriptorSetUpdateAfterBindAccelerationStructures >= 1u &&
+           capabilities.maxPerStageDescriptorUpdateAfterBindAccelerationStructures >= 1u &&
            totalResourceCount <= capabilities.maxPerStageUpdateAfterBindResources;
 }
 
@@ -105,7 +112,9 @@ GlobalBindlessSetError GlobalBindlessSet::initialize(RhiDevice& rhiDevice, const
         {static_cast<uint32_t>(renderer::contracts::GlobalBindlessBinding::Sampler), RhiBindingType::Sampler,
          kGlobalShaderStages, config.samplerCapacity, kGlobalBindingFlags},
         {static_cast<uint32_t>(renderer::contracts::GlobalBindlessBinding::StorageBuffer),
-         RhiBindingType::StorageBuffer, kGlobalShaderStages, config.storageBufferCapacity, kGlobalBindingFlags}};
+         RhiBindingType::StorageBuffer, kGlobalShaderStages, config.storageBufferCapacity, kGlobalBindingFlags},
+        {static_cast<uint32_t>(renderer::contracts::GlobalBindlessBinding::AccelerationStructure),
+         RhiBindingType::AccelerationStructure, kGlobalShaderStages, 1u, kGlobalAccelerationStructureBindingFlags}};
     const RhiBindGroupLayoutHandle layout = rhiDevice.createBindGroupLayout(layoutDesc);
     if (!layout.isValid()) {
         return GlobalBindlessSetError::LayoutCreationFailed;
@@ -148,6 +157,7 @@ void GlobalBindlessSet::shutdown() {
     m_sampledTextureCubeSlots = BindlessDescriptorSlotAllocator<renderer::contracts::BindlessTextureCubeTag>(0u);
     m_samplerSlots = BindlessDescriptorSlotAllocator<renderer::contracts::BindlessSamplerTag>(0u);
     m_storageBufferSlots = BindlessDescriptorSlotAllocator<renderer::contracts::BindlessStorageBufferTag>(0u);
+    m_accelerationStructure = {};
 }
 
 GlobalBindlessPublicationResult<renderer::contracts::BindlessTexture2DTag>
@@ -211,6 +221,29 @@ GlobalBindlessSet::publishStorageBuffer(const RhiBufferHandle buffer) {
     return publicationResult(m_storageBufferSlots.allocateAndPublish([&](const auto handle) {
         return updateResource(renderer::contracts::GlobalBindlessBinding::StorageBuffer, handle.index, resource);
     }));
+}
+
+GlobalBindlessSetError
+GlobalBindlessSet::setAccelerationStructure(const RhiAccelerationStructureHandle accelerationStructure) {
+    if (!initialized()) {
+        return GlobalBindlessSetError::NotInitialized;
+    }
+    RhiAccelerationStructureDesc desc;
+    if (!m_device->getAccelerationStructureDesc(accelerationStructure, desc) ||
+        desc.type != RhiAccelerationStructureType::TopLevel) {
+        return GlobalBindlessSetError::InvalidResource;
+    }
+    if (m_accelerationStructure.index == accelerationStructure.index &&
+        m_accelerationStructure.generation == accelerationStructure.generation) {
+        return GlobalBindlessSetError::None;
+    }
+    RhiBindingResource resource;
+    resource.accelerationStructure = accelerationStructure;
+    if (!updateResource(renderer::contracts::GlobalBindlessBinding::AccelerationStructure, 0u, resource)) {
+        return GlobalBindlessSetError::DescriptorPublicationFailed;
+    }
+    m_accelerationStructure = accelerationStructure;
+    return GlobalBindlessSetError::None;
 }
 
 GlobalBindlessSetError GlobalBindlessSet::retire(const renderer::contracts::BindlessTexture2DHandle handle,

@@ -103,6 +103,21 @@ private:
     return true;
 }
 
+[[nodiscard]] bool rejectAccelerationStructureResources(const spvc_resources resources, std::string& errorMessage) {
+    const spvc_reflected_resource* resourceList = nullptr;
+    size_t resourceCount = 0u;
+    if (spvc_resources_get_resource_list_for_type(resources, SPVC_RESOURCE_TYPE_ACCELERATION_STRUCTURE, &resourceList,
+                                                  &resourceCount) != SPVC_SUCCESS) {
+        errorMessage = "SPIRV-Cross acceleration-structure reflection failed during OpenGL validation";
+        return false;
+    }
+    if (resourceCount != 0u) {
+        errorMessage = "OpenGL does not support acceleration-structure shader resources";
+        return false;
+    }
+    return true;
+}
+
 } // namespace
 
 std::optional<std::string> crossCompileShaderToOpenGl(const RhiCompiledShader& shader,
@@ -125,7 +140,8 @@ std::optional<std::string> crossCompileShaderToOpenGl(const RhiCompiledShader& s
         owner.captureLastError();
         return std::nullopt;
     }
-    if (!remapResources(compiler, resources, SPVC_RESOURCE_TYPE_UNIFORM_BUFFER, RhiBindingType::UniformBuffer, remaps,
+    if (!rejectAccelerationStructureResources(resources, errorMessage) ||
+        !remapResources(compiler, resources, SPVC_RESOURCE_TYPE_UNIFORM_BUFFER, RhiBindingType::UniformBuffer, remaps,
                         errorMessage) ||
         !remapResources(compiler, resources, SPVC_RESOURCE_TYPE_STORAGE_BUFFER, RhiBindingType::StorageBuffer, remaps,
                         errorMessage) ||
