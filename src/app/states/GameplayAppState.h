@@ -4,6 +4,8 @@
 #include "IAppState.h"
 #include "AppStateDependencies.h"
 #include "../../game/session/GameSessionConfig.h"
+#include <cstdint>
+#include <limits>
 #include <memory>
 #include <string>
 
@@ -41,6 +43,7 @@ private:
     bool m_closeAppAfterExitScreenshot = false;
     bool m_validationActive = false;
     bool m_validationSceneReady = false;
+    uint32_t m_validationSequenceFrame = std::numeric_limits<uint32_t>::max();
     double m_previousTimeSpeed = 1.0;
 };
 

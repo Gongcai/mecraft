@@ -7,6 +7,7 @@
 
 #include <glm/glm.hpp>
 
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -27,6 +28,13 @@ struct DeferredClusteredLightingResources {
     RhiBindGroupLayoutHandle bindGroupLayout;
     RhiBindGroupHandle bindGroup;
     renderer::contracts::ClusterGrid grid;
+};
+
+/// Carries explicit geometry revisions used to validate cached local shadows.
+struct DeferredLocalShadowSceneRevisions {
+    uint64_t geometryContentRevision = 0u;
+    uint64_t activeGeometryRevision = 0u;
+    uint64_t dynamicOccluderRevision = 0u;
 };
 
 /// Supplies non-world geometry to the shared deferred rendering pipeline.
@@ -66,6 +74,13 @@ public:
     [[nodiscard]] virtual bool collectSceneLights(const glm::vec3& cameraPosition,
                                                   std::vector<renderer::contracts::SceneLight>& lights,
                                                   std::string& error) = 0;
+
+    /// Reports stable revisions for cached local-shadow invalidation.
+    /// @param revisions Receives non-zero static geometry revisions and the current dynamic revision.
+    /// @param error Receives a precise synchronization failure.
+    /// @return True when the revisions describe the geometry drawn by this provider.
+    [[nodiscard]] virtual bool queryLocalShadowSceneRevisions(DeferredLocalShadowSceneRevisions& revisions,
+                                                              std::string& error) const = 0;
 
     /// Publishes the current clustered-light descriptor set and grid before
     /// any frame commands are recorded.

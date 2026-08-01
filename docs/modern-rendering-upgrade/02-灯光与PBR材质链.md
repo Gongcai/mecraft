@@ -214,6 +214,11 @@ Ray Query Shadow 复用 TLAS 和 Cutout Candidate 判定。首轮仅对设置中
 其射线数量与 GPU 时间单独统计。Area Light 的软阴影采样使用 Blue Noise 旋转并进入
 专用时空滤波，不能把 Diffuse RTGI 的 NRD 输出当成阴影结果。
 
+模型场景通过 `DeferredLocalShadowSceneRevisions` 显式提交阴影相关几何修订。局部阴影缓存
+同时跟踪不透明与 Alpha Test 几何变化，场景层级、实例变换或参与绘制的资产集合变化会使
+对应缓存页失效；M07 的 Vulkan 正式捕获已验证局部灯能够读取当前模型几何，而不是复用旧
+场景阴影。
+
 ## 7. PBR IBL
 
 ### 7.1 天空环境
@@ -298,10 +303,15 @@ Metallic、Roughness、Emission、AO 和 Wetness；太阳/月亮主光、环境�
 下落方块与活塞移动方块复用同一实例收集及方块纹理、Biome Tint、动画帧、体素光照路径。
 体素静态 glTF 已复用模型场景的 Probe Capture 管线，不透明、Alpha Test、Alpha Blend 与
 Transmission Primitive 均沿用 glTF PBR 材质采样、主环境直接光、Emission 和完整 `GpuLight`
-快照。本地第一人称玩家被明确排除，避免观察者模型进入环境探针。粒子仍需接入。
-V02/V07/M07 版本化资产用于最终检查
-室内外过渡、局部光响应与 Box Projection。动态探针按确定的更新队列逐 Face/Mip 构建，
-Dashboard 展示队列长度与资源代际。
+快照。本地第一人称玩家被明确排除，避免观察者模型进入环境探针。粒子不纳入本轮 Probe
+Capture 版本化验收，保留为独立后续工作项。
+
+V02、V07、M07 已建立场景契约 v2：V02/V07 锁定体素 Fixture、世界与 Camera Path 身份，
+M07 锁定 glTF 资产、Camera Path 及间距 0.8 米、边界外扩 0.0 米的规则 Probe Grid。三个场景
+均完成 OpenGL/Vulkan 1280×720、300 帧预热、3 帧采样的正式参考图，并以字节数、FNV-1a 64
+和 SHA-256 写入统一清单；Vulkan 捕获未发现 Validation/VUID 错误。参考图覆盖洞穴转角、木屋
+局部光与透明门洞，以及多房间局部灯响应和 Box Projection。动态探针按确定的更新队列逐
+Face/Mip 构建，Dashboard 展示队列长度与资源代际。
 
 ## 8. 反射能量组合
 

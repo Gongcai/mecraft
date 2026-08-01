@@ -2763,9 +2763,14 @@ bool DeferredPipeline::recordGenericTransparentPass(RhiCommandList& commandList,
     commandList.setViewport({0.0f, 0.0f, static_cast<float>(std::max(1, targets.width())),
                              static_cast<float>(std::max(1, targets.height())), 0.0f, 1.0f});
     commandList.setScissor(renderingInfo.renderArea);
-    worldBuffer.recordRhiTransparent(commandList, m_shared->terrainRhiPipelines->transparentPipeline(),
-                                     m_shared->terrainRhiPipelines->transparentBindGroup(),
-                                     m_shared->terrainRhiPipelines->transparentClusterBindGroup());
+    if (m_shared->rhiDevice->backend() == RhiBackend::Vulkan) {
+        worldBuffer.recordRhiTransparent(commandList, m_shared->terrainRhiPipelines->transparentPipeline(),
+                                         m_shared->terrainRhiPipelines->transparentBindGroup(),
+                                         m_shared->terrainRhiPipelines->transparentClusterBindGroup());
+    } else {
+        worldBuffer.recordRhiTransparent(commandList, m_shared->terrainRhiPipelines->transparentPipeline(),
+                                         m_shared->terrainRhiPipelines->transparentBindGroup());
+    }
 
     commandList.endRendering();
     if (ctx.debugService != nullptr) {

@@ -1,4 +1,5 @@
 #include "app/validation/ValidationSceneContract.h"
+#include "app/validation/ValidationVoxelFixture.h"
 
 #include <nlohmann/json.hpp>
 
@@ -17,6 +18,16 @@ bool requireTrue(const bool condition, const char* message) {
     return true;
 }
 
+bool requireLoaded(const app::validation::ValidationSceneContractLoadResult& result, const char* sceneId) {
+    if (result.succeeded()) {
+        return true;
+    }
+    std::cerr << "[validation_scene_contract_test] FAIL: " << sceneId
+              << " error=" << app::validation::validationSceneContractErrorStableId(result.error)
+              << " detail=" << result.detail << '\n';
+    return false;
+}
+
 } // namespace
 
 int main() {
@@ -32,10 +43,27 @@ int main() {
     const std::filesystem::path sceneRoot = sourceRoot / "assets/validation/scenes";
     const std::filesystem::path voxelPath = sceneRoot / "m0_voxel_baseline.json";
     const std::filesystem::path modelPath = sceneRoot / "m0_model_damaged_helmet.json";
+    const std::filesystem::path cavePath = sceneRoot / "v02_cave_turn.json";
+    const std::filesystem::path villagePath = sceneRoot / "v07_local_light_village.json";
+    const std::filesystem::path probeInteriorPath = sceneRoot / "m07_probe_interior.json";
     const app::validation::ValidationSceneContractLoadResult voxel =
         app::validation::loadValidationSceneContract(voxelPath);
     const app::validation::ValidationSceneContractLoadResult model =
         app::validation::loadValidationSceneContract(modelPath);
+    const app::validation::ValidationSceneContractLoadResult cave =
+        app::validation::loadValidationSceneContract(cavePath);
+    const app::validation::ValidationSceneContractLoadResult village =
+        app::validation::loadValidationSceneContract(villagePath);
+    const app::validation::ValidationSceneContractLoadResult probeInterior =
+        app::validation::loadValidationSceneContract(probeInteriorPath);
+    const bool voxelLoaded = requireLoaded(voxel, "m0_voxel_baseline");
+    const bool modelLoaded = requireLoaded(model, "m0_model_damaged_helmet");
+    const bool caveLoaded = requireLoaded(cave, "v02_cave_turn");
+    const bool villageLoaded = requireLoaded(village, "v07_local_light_village");
+    const bool probeInteriorLoaded = requireLoaded(probeInterior, "m07_probe_interior");
+    if (!voxelLoaded || !modelLoaded || !caveLoaded || !villageLoaded || !probeInteriorLoaded) {
+        return 1;
+    }
     if (!requireTrue(voxel.succeeded() && model.succeeded(), "both M0 scene descriptors must verify") ||
         !requireTrue(voxel.contract.scene == ValidationScene::Voxel && voxel.contract.voxelWorld.has_value() &&
                          !voxel.contract.modelAsset.has_value() &&
@@ -49,6 +77,38 @@ int main() {
                          stableContentHashHex(model.contract.renderSettings.contentHash) == "9a8940b4590c9585" &&
                          stableContentHashHex(model.contract.modelAsset->contentHash) == "f67fb46e0033d3dd",
                      "the model scene, renderer, and asset identities must remain locked")) {
+        return 1;
+    }
+    if (!requireTrue(cave.contract.version == app::validation::kValidationSceneContractVersion &&
+                         cave.contract.scene == ValidationScene::Voxel && cave.contract.voxelWorld.has_value() &&
+                         cave.contract.voxelWorld->fixture.has_value() &&
+                         cave.contract.voxelWorld->fixture->id == app::validation::kValidationVoxelFixtureCaveTurnId &&
+                         stableContentHashHex(cave.contract.voxelWorld->fixture->contentHash) == "8e8834253081af88" &&
+                         stableContentHashHex(cave.contract.voxelWorld->contentHash) == "b58b9504e7ed54b3" &&
+                         stableContentHashHex(cave.contract.cameraPath.contentHash) == "87e07b85195fdded" &&
+                         stableContentHashHex(cave.contract.contentHash) == "4bb4409c20ca21c6",
+                     "V02 scene, Camera Path, world, and fixture identities must remain locked") ||
+        !requireTrue(village.contract.version == app::validation::kValidationSceneContractVersion &&
+                         village.contract.scene == ValidationScene::Voxel && village.contract.voxelWorld.has_value() &&
+                         village.contract.voxelWorld->fixture.has_value() &&
+                         village.contract.voxelWorld->fixture->id ==
+                             app::validation::kValidationVoxelFixtureLocalLightVillageId &&
+                         stableContentHashHex(village.contract.voxelWorld->fixture->contentHash) ==
+                             "b34bf75d177ebb41" &&
+                         stableContentHashHex(village.contract.voxelWorld->contentHash) == "500831ce59abbfd5" &&
+                         stableContentHashHex(village.contract.cameraPath.contentHash) == "cc6a83ed668b12b5" &&
+                         stableContentHashHex(village.contract.contentHash) == "5be2746ff4c4b81d",
+                     "V07 scene, Camera Path, world, and fixture identities must remain locked") ||
+        !requireTrue(probeInterior.contract.version == app::validation::kValidationSceneContractVersion &&
+                         probeInterior.contract.scene == ValidationScene::Model &&
+                         probeInterior.contract.modelAsset.has_value() &&
+                         probeInterior.contract.modelProbeGrid.has_value() &&
+                         probeInterior.contract.modelProbeGrid->spacingMeters == 0.8 &&
+                         probeInterior.contract.modelProbeGrid->boundsPaddingMeters == 0.0 &&
+                         stableContentHashHex(probeInterior.contract.modelAsset->contentHash) == "097b196adca0e388" &&
+                         stableContentHashHex(probeInterior.contract.cameraPath.contentHash) == "c17f7838a2a58df0" &&
+                         stableContentHashHex(probeInterior.contract.contentHash) == "e7cfecd188549085",
+                     "M07 scene, Camera Path, asset, and Probe grid identities must remain locked")) {
         return 1;
     }
 
@@ -69,6 +129,67 @@ int main() {
     const auto changedCamera = app::validation::parseValidationSceneContractJson(voxelJson.dump(), voxelPath);
     if (!requireTrue(changedCamera.error == app::validation::ValidationSceneContractError::CameraPathIdentityMismatch,
                      "Camera Path identity drift must fail before rendering")) {
+        return 1;
+    }
+
+    nlohmann::json caveJson = nlohmann::json::parse(std::ifstream(cavePath), nullptr, false);
+    voxelJson = nlohmann::json::parse(std::ifstream(voxelPath), nullptr, false);
+    voxelJson["voxel_world"]["fixture"] = caveJson["voxel_world"]["fixture"];
+    const auto version1WithFixture = app::validation::parseValidationSceneContractJson(voxelJson.dump(), voxelPath);
+    if (!requireTrue(version1WithFixture.error == app::validation::ValidationSceneContractError::UnexpectedField,
+                     "version 1 voxel scenes must reject Fixture identities")) {
+        return 1;
+    }
+
+    caveJson.erase("content_hash");
+    caveJson["content_hash"] = "4bb4409c20ca21c6";
+    caveJson["voxel_world"].erase("fixture");
+    const auto version2WithoutFixture = app::validation::parseValidationSceneContractJson(caveJson.dump(), cavePath);
+    if (!requireTrue(version2WithoutFixture.error == app::validation::ValidationSceneContractError::MissingField,
+                     "version 2 voxel scenes must require Fixture identities")) {
+        return 1;
+    }
+
+    caveJson = nlohmann::json::parse(std::ifstream(cavePath), nullptr, false);
+    caveJson["voxel_world"]["fixture"]["content_hash"] = "0000000000000001";
+    const auto changedFixture = app::validation::parseValidationSceneContractJson(caveJson.dump(), cavePath);
+    if (!requireTrue(changedFixture.error == app::validation::ValidationSceneContractError::FixtureHashMismatch,
+                     "Fixture recipe drift must fail before world synchronization")) {
+        return 1;
+    }
+
+    nlohmann::json modelJson = nlohmann::json::parse(std::ifstream(modelPath), nullptr, false);
+    modelJson["reflection_probe_grid"] = {{"spacing_meters", 0.8}, {"bounds_padding_meters", 0.0}};
+    const auto version1WithProbeGrid = app::validation::parseValidationSceneContractJson(modelJson.dump(), modelPath);
+    if (!requireTrue(version1WithProbeGrid.error == app::validation::ValidationSceneContractError::UnexpectedField,
+                     "version 1 model scenes must reject Probe grid inputs")) {
+        return 1;
+    }
+
+    nlohmann::json probeInteriorJson = nlohmann::json::parse(std::ifstream(probeInteriorPath), nullptr, false);
+    probeInteriorJson.erase("reflection_probe_grid");
+    const auto version2WithoutProbeGrid =
+        app::validation::parseValidationSceneContractJson(probeInteriorJson.dump(), probeInteriorPath);
+    if (!requireTrue(version2WithoutProbeGrid.error == app::validation::ValidationSceneContractError::MissingField,
+                     "version 2 model scenes must require Probe grid inputs")) {
+        return 1;
+    }
+
+    probeInteriorJson = nlohmann::json::parse(std::ifstream(probeInteriorPath), nullptr, false);
+    probeInteriorJson["reflection_probe_grid"]["spacing_meters"] = 0.0;
+    const auto invalidProbeGrid =
+        app::validation::parseValidationSceneContractJson(probeInteriorJson.dump(), probeInteriorPath);
+    if (!requireTrue(invalidProbeGrid.error == app::validation::ValidationSceneContractError::InvalidProbeGrid,
+                     "Probe grid spacing must be positive")) {
+        return 1;
+    }
+
+    probeInteriorJson = nlohmann::json::parse(std::ifstream(probeInteriorPath), nullptr, false);
+    probeInteriorJson["reflection_probe_grid"]["spacing_meters"] = 0.9;
+    const auto changedProbeGrid =
+        app::validation::parseValidationSceneContractJson(probeInteriorJson.dump(), probeInteriorPath);
+    if (!requireTrue(changedProbeGrid.error == app::validation::ValidationSceneContractError::SceneHashMismatch,
+                     "Probe grid changes must invalidate the versioned scene hash")) {
         return 1;
     }
 

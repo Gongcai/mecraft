@@ -9,6 +9,7 @@
 #include <optional>
 #include <string>
 
+#include "app/validation/ValidationSceneContract.h"
 #include "engine/camera/Camera.h"
 #include "renderer/capture/TextureCapture.h"
 #include "renderer/contracts/CameraPathContract.h"
@@ -89,10 +90,14 @@ public:
     /// @return Capture status after a requested frame, or no value otherwise.
     [[nodiscard]] std::optional<renderer::capture::TextureCaptureResult> takeValidationCaptureResult();
 
-    /// Freezes authoritative world state before deterministic rendering begins.
-    /// @return True when the session is non-persistent, local, and fully loaded.
-    /// @param timeOfDaySeconds Fixed world time supplied by the scene contract.
-    [[nodiscard]] bool prepareValidationScene(float timeOfDaySeconds);
+    /// Applies the verified fixture and freezes authoritative world state before rendering begins.
+    /// @param contract Complete voxel scene identity, environment, and optional fixture recipe.
+    /// @return True when the local non-persistent world accepted every deterministic input.
+    [[nodiscard]] bool prepareValidationScene(const app::validation::ValidationSceneContract& contract);
+
+    /// Returns the latest validation preparation or synchronization failure detail.
+    /// @return Empty text before a failure, otherwise one stable structured detail.
+    [[nodiscard]] const std::string& validationSceneError() const { return m_validationSceneError; }
 
     /// Reports whether every terrain mesh required by the frozen world is resident.
     /// @return True after all dirty, executing, and deferred meshing work has drained.
@@ -122,6 +127,9 @@ private:
     std::optional<RenderFrameClock> m_validationFrameClock;
     std::optional<std::filesystem::path> m_validationCapturePath;
     std::optional<renderer::capture::TextureCaptureResult> m_validationCaptureResult;
+    std::optional<app::validation::ValidationVoxelFixtureIdentity> m_validationVoxelFixture;
+    std::string m_validationSceneError;
+    bool m_validationWorldSynchronizationPending = false;
     float m_fixedInterpolationAlpha = 0.0f;
     LoadPhase m_loadPhase = LoadPhase::NotStarted;
 };

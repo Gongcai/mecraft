@@ -991,6 +991,15 @@ void GameServer::tickInitialLoading(const float dt, const glm::vec3& loadCenter)
     ++m_currentTick;
 }
 
+void GameServer::synchronizeValidationWorld(const glm::vec3& loadCenter) {
+    processClientMessages();
+    cleanupDisconnectedClients();
+    m_world.flushInteractiveLighting(loadCenter);
+    m_world.updateForInitialLoad(loadCenter, 0.0f);
+    sendBlockUpdatesToClients();
+    sendWireContainerUpdatesToClients();
+}
+
 void GameServer::setClientLoadCenter(const glm::vec3& loadCenter) {
     for (auto& client : m_clients) {
         client.lastPosition = loadCenter;

@@ -310,9 +310,40 @@ bool LocalShadowPass::buildPreparedShadows(const FrameContext& ctx, const IWorld
     m_pendingFrameStats.spotAtlasResolution = m_spotGridSize * kLocalShadowSpotTileResolution;
     m_pendingFrameStats.pointCubeCapacity = m_pointCubeCapacity;
 
-    const uint64_t blockRevision = worldView != nullptr ? worldView->getBlockContentRevision() : 0u;
-    const uint64_t activeRevision = worldView != nullptr ? worldView->getActiveChunkRevision() : 0u;
-    const uint64_t dynamicRevision = hasDynamicOccluders(m_gameplayRegistry) ? ctx.frameIndex : 0u;
+    uint64_t geometryContentRevision = 0u;
+    uint64_t activeGeometryRevision = 0u;
+    uint64_t dynamicOccluderRevision = 0u;
+    if (worldView != nullptr) {
+        geometryContentRevision = worldView->getBlockContentRevision();
+        activeGeometryRevision = worldView->getActiveChunkRevision();
+        dynamicOccluderRevision = hasDynamicOccluders(m_gameplayRegistry) ? ctx.frameIndex : 0u;
+    } else {
+        if (!m_externalGeometryFrame) {
+            m_lastError = "external geometry local-shadow frame is not active";
+            return false;
+        }
+        if (ctx.shared == nullptr) {
+            m_lastError = "external geometry local-shadow frame has no shared render resources";
+            return false;
+        }
+        if (ctx.shared->deferredGeometryProvider == nullptr) {
+            m_lastError = "external geometry local-shadow frame has no geometry provider";
+            return false;
+        }
+        DeferredLocalShadowSceneRevisions revisions;
+        std::string revisionError;
+        if (!ctx.shared->deferredGeometryProvider->queryLocalShadowSceneRevisions(revisions, revisionError)) {
+            m_lastError = revisionError;
+            return false;
+        }
+        if (revisions.geometryContentRevision == 0u || revisions.activeGeometryRevision == 0u) {
+            m_lastError = "external geometry local-shadow revisions must be non-zero";
+            return false;
+        }
+        geometryContentRevision = revisions.geometryContentRevision;
+        activeGeometryRevision = revisions.activeGeometryRevision;
+        dynamicOccluderRevision = revisions.dynamicOccluderRevision;
+    }
     const glm::mat4 cameraTranslation = glm::translate(glm::mat4(1.0f), ctx.camera.position);
 
     std::unordered_set<uint32_t> activeCacheIds;
@@ -384,16 +415,12 @@ bool LocalShadowPass::buildPreparedShadows(const FrameContext& ctx, const IWorld
         prepared.pendingCache.positionAndRange = {prepared.worldPosition, prepared.range};
         prepared.pendingCache.directionAndOuterCosine = {prepared.direction,
                                                          spot ? source.light.spotCosinesAndRectSize.y : 0.0f};
-        prepared.pendingCache.blockContentRevision = blockRevision;
-        prepared.pendingCache.activeChunkRevision = activeRevision;
-        prepared.pendingCache.dynamicOccluderRevision = dynamicRevision;
+        prepared.pendingCache.geometryContentRevision = geometryContentRevision;
+        prepared.pendingCache.activeGeometryRevision = activeGeometryRevision;
+        prepared.pendingCache.dynamicOccluderRevision = dynamicOccluderRevision;
         prepared.pendingCache.valid = true;
         activeCacheIds.insert(allocation.lightId.value);
 
-        if (allocation.policy == GpuLightShadowPolicy::RasterCached && worldView == nullptr) {
-            m_lastError = "cached local shadows require explicit scene revision data";
-            return false;
-        }
         const auto cached = m_cacheRecords.find(allocation.lightId.value);
         prepared.redraw = allocation.policy == GpuLightShadowPolicy::RasterDynamic || cached == m_cacheRecords.end() ||
                           !sameCacheRecord(cached->second, prepared.pendingCache);
@@ -771,7 +798,8 @@ bool LocalShadowPass::sameCacheRecord(const CacheRecord& lhs, const CacheRecord&
     return lhs.valid && lhs.type == rhs.type && lhs.resourceSlot == rhs.resourceSlot &&
            nearlyEqual(lhs.positionAndRange, rhs.positionAndRange) &&
            nearlyEqual(lhs.directionAndOuterCosine, rhs.directionAndOuterCosine) &&
-           lhs.blockContentRevision == rhs.blockContentRevision && lhs.activeChunkRevision == rhs.activeChunkRevision &&
+           lhs.geometryContentRevision == rhs.geometryContentRevision &&
+           lhs.activeGeometryRevision == rhs.activeGeometryRevision &&
            lhs.dynamicOccluderRevision == rhs.dynamicOccluderRevision;
 }
 

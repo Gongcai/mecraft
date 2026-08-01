@@ -1,0 +1,35 @@
+{
+  "kind": "mecraft.validation_scene",
+  "version": 2,
+  "id": "v07_local_light_village",
+  "scene": "voxel",
+  "content_hash": "5be2746ff4c4b81d",
+  "camera_path": {
+    "source": "../camera_paths/v07_local_light_village.json",
+    "id": "v07_local_light_village",
+    "content_hash": "cc6a83ed668b12b5"
+  },
+  "render_settings": {
+    "id": "m0_voxel_render_settings",
+    "version": 1,
+    "content_hash": "511c4e7a0e2e2de9"
+  },
+  "environment": {
+    "time_of_day_seconds": 900.0,
+    "weather": "clear"
+  },
+  "voxel_world": {
+    "generator": {
+      "id": "mecraft.overworld",
+      "version": 1
+    },
+    "seed": 1234,
+    "render_distance": 4,
+    "fixture": {
+      "id": "mecraft.local_light_village",
+      "version": 1,
+      "content_hash": "b34bf75d177ebb41"
+    },
+    "content_hash": "500831ce59abbfd5"
+  }
+}

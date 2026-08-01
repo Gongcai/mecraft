@@ -1422,6 +1422,19 @@ bool ModelSceneRuntime::collectSceneLights(const glm::vec3& cameraPosition,
     return true;
 }
 
+bool ModelSceneRuntime::queryLocalShadowSceneRevisions(DeferredLocalShadowSceneRevisions& revisions,
+                                                       std::string& error) const {
+    if (!m_reflectionProbeSignatureValid || m_reflectionProbeSceneSignature == 0u) {
+        error = "model scene local-shadow revisions are unavailable before scene synchronization";
+        return false;
+    }
+    revisions.geometryContentRevision = m_reflectionProbeSceneSignature;
+    revisions.activeGeometryRevision = m_reflectionProbeSceneSignature;
+    revisions.dynamicOccluderRevision = 0u;
+    error.clear();
+    return true;
+}
+
 bool ModelSceneRuntime::configureClusteredLighting(const DeferredClusteredLightingResources& resources) {
     for (MeshAsset& asset : m_assets) {
         if (!asset.renderer->configureClusteredLighting(resources.bindGroupLayout, resources.bindGroup,

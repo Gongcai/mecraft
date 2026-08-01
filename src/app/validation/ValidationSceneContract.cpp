@@ -1,6 +1,7 @@
 #include "app/validation/ValidationSceneContract.h"
 
 #include "app/AppSettings.h"
+#include "app/validation/ValidationVoxelFixture.h"
 
 #include <nlohmann/json.hpp>
 
@@ -212,6 +213,17 @@ void configureCommonValidationSettings(RenderSettings& settings) {
         }
     }
 
+    ValidationSceneContract& contract = result.contract;
+    contract.sourcePath = sourcePath.lexically_normal();
+    if (!readUint32(root, "version", "root.version", contract.version, result)) {
+        return result;
+    }
+    if (contract.version != kValidationSceneContractVersion1 && contract.version != kValidationSceneContractVersion) {
+        result.error = ValidationSceneContractError::UnsupportedVersion;
+        result.detail = "root.version";
+        return result;
+    }
+
     std::string sceneText;
     if (!readString(root, "scene", "root.scene", sceneText, result)) {
         return result;
@@ -222,8 +234,18 @@ void configureCommonValidationSettings(RenderSettings& settings) {
         result.detail = "root.scene";
         return result;
     }
+    contract.scene = *scene;
     const auto expectedRootFields =
-        *scene == ValidationScene::Voxel
+        *scene == ValidationScene::Voxel ? std::initializer_list<const char*>{"kind",
+                                                                              "version",
+                                                                              "id",
+                                                                              "scene",
+                                                                              "content_hash",
+                                                                              "camera_path",
+                                                                              "render_settings",
+                                                                              "environment",
+                                                                              "voxel_world"}
+        : contract.version == kValidationSceneContractVersion1
             ? std::initializer_list<const char*>{"kind",
                                                  "version",
                                                  "id",
@@ -232,21 +254,17 @@ void configureCommonValidationSettings(RenderSettings& settings) {
                                                  "camera_path",
                                                  "render_settings",
                                                  "environment",
-                                                 "voxel_world"}
+                                                 "model_asset"}
             : std::initializer_list<const char*>{
-                  "kind",        "version",         "id",          "scene",      "content_hash",
-                  "camera_path", "render_settings", "environment", "model_asset"};
+                  "kind",        "version",         "id",          "scene",       "content_hash",
+                  "camera_path", "render_settings", "environment", "model_asset", "reflection_probe_grid"};
     result.error = validateFields(root, expectedRootFields, "root", result.detail);
     if (result.error != ValidationSceneContractError::None) {
         return result;
     }
 
-    ValidationSceneContract& contract = result.contract;
-    contract.sourcePath = sourcePath.lexically_normal();
-    contract.scene = *scene;
     std::string kind;
     if (!readString(root, "kind", "root.kind", kind, result) ||
-        !readUint32(root, "version", "root.version", contract.version, result) ||
         !readString(root, "id", "root.id", contract.id, result) ||
         !readHash(root, "content_hash", "root.content_hash", contract.contentHash, result)) {
         return result;
@@ -254,11 +272,6 @@ void configureCommonValidationSettings(RenderSettings& settings) {
     if (kind != kValidationSceneContractKind) {
         result.error = ValidationSceneContractError::InvalidKind;
         result.detail = "root.kind";
-        return result;
-    }
-    if (contract.version != kValidationSceneContractVersion) {
-        result.error = ValidationSceneContractError::UnsupportedVersion;
-        result.detail = "root.version";
         return result;
     }
     if (!validIdentifier(contract.id)) {
@@ -338,8 +351,11 @@ void configureCommonValidationSettings(RenderSettings& settings) {
             result.detail = "root.voxel_world";
             return result;
         }
-        result.error = validateFields(voxel, {"generator", "seed", "render_distance", "content_hash"},
-                                      "root.voxel_world", result.detail);
+        const auto expectedVoxelFields =
+            contract.version == kValidationSceneContractVersion1
+                ? std::initializer_list<const char*>{"generator", "seed", "render_distance", "content_hash"}
+                : std::initializer_list<const char*>{"generator", "seed", "render_distance", "fixture", "content_hash"};
+        result.error = validateFields(voxel, expectedVoxelFields, "root.voxel_world", result.detail);
         if (result.error != ValidationSceneContractError::None) {
             return result;
         }
@@ -365,6 +381,41 @@ void configureCommonValidationSettings(RenderSettings& settings) {
             result.error = ValidationSceneContractError::InvalidWorld;
             result.detail = "root.voxel_world";
             return result;
+        }
+        if (contract.version == kValidationSceneContractVersion) {
+            const Json& fixtureObject = *voxel.find("fixture");
+            if (!fixtureObject.is_object()) {
+                result.error = ValidationSceneContractError::InvalidFieldType;
+                result.detail = "root.voxel_world.fixture";
+                return result;
+            }
+            result.error = validateFields(fixtureObject, {"id", "version", "content_hash"}, "root.voxel_world.fixture",
+                                          result.detail);
+            ValidationVoxelFixtureIdentity fixture;
+            if (result.error != ValidationSceneContractError::None ||
+                !readString(fixtureObject, "id", "root.voxel_world.fixture.id", fixture.id, result) ||
+                !readUint32(fixtureObject, "version", "root.voxel_world.fixture.version", fixture.version, result) ||
+                !readHash(fixtureObject, "content_hash", "root.voxel_world.fixture.content_hash", fixture.contentHash,
+                          result)) {
+                return result;
+            }
+            if (!validIdentifier(fixture.id)) {
+                result.error = ValidationSceneContractError::InvalidFixture;
+                result.detail = "root.voxel_world.fixture";
+                return result;
+            }
+            const std::optional<StableContentHash> actualFixtureHash = validationVoxelFixtureContentHash(fixture);
+            if (!actualFixtureHash.has_value()) {
+                result.error = ValidationSceneContractError::InvalidFixture;
+                result.detail = "root.voxel_world.fixture";
+                return result;
+            }
+            if (*actualFixtureHash != fixture.contentHash) {
+                result.error = ValidationSceneContractError::FixtureHashMismatch;
+                result.detail = renderer::contracts::stableContentHashHex(*actualFixtureHash);
+                return result;
+            }
+            world.fixture = std::move(fixture);
         }
         const StableContentHash actualWorldHash = validationVoxelWorldContentHash(world);
         if (actualWorldHash != world.contentHash) {
@@ -402,6 +453,33 @@ void configureCommonValidationSettings(RenderSettings& settings) {
             return result;
         }
         contract.modelAsset = std::move(modelAsset);
+        if (contract.version == kValidationSceneContractVersion) {
+            const Json& probeGridObject = *root.find("reflection_probe_grid");
+            if (!probeGridObject.is_object()) {
+                result.error = ValidationSceneContractError::InvalidFieldType;
+                result.detail = "root.reflection_probe_grid";
+                return result;
+            }
+            result.error = validateFields(probeGridObject, {"spacing_meters", "bounds_padding_meters"},
+                                          "root.reflection_probe_grid", result.detail);
+            ValidationModelProbeGridIdentity probeGrid;
+            if (result.error != ValidationSceneContractError::None ||
+                !readDouble(probeGridObject, "spacing_meters", "root.reflection_probe_grid.spacing_meters",
+                            probeGrid.spacingMeters, result) ||
+                !readDouble(probeGridObject, "bounds_padding_meters",
+                            "root.reflection_probe_grid.bounds_padding_meters", probeGrid.boundsPaddingMeters,
+                            result)) {
+                return result;
+            }
+            if (probeGrid.spacingMeters <= 0.0 || probeGrid.boundsPaddingMeters < 0.0 ||
+                probeGrid.spacingMeters > static_cast<double>(std::numeric_limits<float>::max()) ||
+                probeGrid.boundsPaddingMeters > static_cast<double>(std::numeric_limits<float>::max())) {
+                result.error = ValidationSceneContractError::InvalidProbeGrid;
+                result.detail = "root.reflection_probe_grid";
+                return result;
+            }
+            contract.modelProbeGrid = probeGrid;
+        }
     }
 
     const renderer::contracts::CameraPathLoadResult cameraPath =
@@ -441,13 +519,24 @@ void configureCommonValidationSettings(RenderSettings& settings) {
 } // namespace
 
 bool ValidationSceneContract::isValid() const {
+    const bool supportedVersion =
+        version == kValidationSceneContractVersion1 || version == kValidationSceneContractVersion;
+    const bool voxelFixtureValid =
+        !voxelWorld.has_value() || (version == kValidationSceneContractVersion1 ? !voxelWorld->fixture.has_value()
+                                                                                : voxelWorld->fixture.has_value());
+    const bool modelProbeGridValid =
+        !modelAsset.has_value() || (version == kValidationSceneContractVersion1
+                                        ? !modelProbeGrid.has_value()
+                                        : modelProbeGrid.has_value() && modelProbeGrid->spacingMeters > 0.0 &&
+                                              modelProbeGrid->boundsPaddingMeters >= 0.0);
     const bool sceneIdentityValid =
-        (scene == ValidationScene::Voxel && voxelWorld.has_value() && !modelAsset.has_value()) ||
+        (scene == ValidationScene::Voxel && voxelWorld.has_value() && !modelAsset.has_value() &&
+         !modelProbeGrid.has_value()) ||
         (scene == ValidationScene::Model && modelAsset.has_value() && !voxelWorld.has_value());
-    return version == kValidationSceneContractVersion && !id.empty() && !sourcePath.empty() && contentHash != 0u &&
-           !cameraPath.source.empty() && !cameraPath.resolvedPath.empty() && !cameraPath.id.empty() &&
-           cameraPath.contentHash != 0u && !renderSettings.id.empty() && renderSettings.version != 0u &&
-           renderSettings.contentHash != 0u && sceneIdentityValid;
+    return supportedVersion && voxelFixtureValid && modelProbeGridValid && !id.empty() && !sourcePath.empty() &&
+           contentHash != 0u && !cameraPath.source.empty() && !cameraPath.resolvedPath.empty() &&
+           !cameraPath.id.empty() && cameraPath.contentHash != 0u && !renderSettings.id.empty() &&
+           renderSettings.version != 0u && renderSettings.contentHash != 0u && sceneIdentityValid;
 }
 
 bool ValidationSceneContractLoadResult::succeeded() const {
@@ -483,6 +572,11 @@ StableContentHash validationVoxelWorldContentHash(const ValidationVoxelWorldIden
     hash.addUint64(world.generatorVersion);
     hash.addInt64(world.seed);
     hash.addInt64(world.renderDistance);
+    if (world.fixture.has_value()) {
+        hash.addString(world.fixture->id);
+        hash.addUint64(world.fixture->version);
+        hash.addUint64(world.fixture->contentHash);
+    }
     return hash.value();
 }
 
@@ -509,6 +603,11 @@ StableContentHash validationSceneContentHash(const ValidationSceneContract& cont
         hash.addUint64(world.generatorVersion);
         hash.addInt64(world.seed);
         hash.addInt64(world.renderDistance);
+        if (world.fixture.has_value()) {
+            hash.addString(world.fixture->id);
+            hash.addUint64(world.fixture->version);
+            hash.addUint64(world.fixture->contentHash);
+        }
         hash.addUint64(world.contentHash);
     } else if (contract.scene == ValidationScene::Model) {
         if (!contract.modelAsset.has_value()) {
@@ -516,6 +615,10 @@ StableContentHash validationSceneContentHash(const ValidationSceneContract& cont
         }
         hash.addString(contract.modelAsset->source.generic_u8string());
         hash.addUint64(contract.modelAsset->contentHash);
+        if (contract.modelProbeGrid.has_value()) {
+            hash.addDouble(contract.modelProbeGrid->spacingMeters);
+            hash.addDouble(contract.modelProbeGrid->boundsPaddingMeters);
+        }
     } else {
         std::abort();
     }
@@ -581,7 +684,10 @@ const char* validationSceneContractErrorStableId(const ValidationSceneContractEr
     case ValidationSceneContractError::RenderSettingsIdentityMismatch: return "RenderSettingsIdentityMismatch";
     case ValidationSceneContractError::InvalidEnvironment: return "InvalidEnvironment";
     case ValidationSceneContractError::InvalidWorld: return "InvalidWorld";
+    case ValidationSceneContractError::InvalidFixture: return "InvalidFixture";
+    case ValidationSceneContractError::FixtureHashMismatch: return "FixtureHashMismatch";
     case ValidationSceneContractError::WorldHashMismatch: return "WorldHashMismatch";
+    case ValidationSceneContractError::InvalidProbeGrid: return "InvalidProbeGrid";
     case ValidationSceneContractError::AssetHashFailed: return "AssetHashFailed";
     case ValidationSceneContractError::AssetHashMismatch: return "AssetHashMismatch";
     case ValidationSceneContractError::SceneHashMismatch: return "SceneHashMismatch";

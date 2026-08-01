@@ -1,0 +1,37 @@
+{
+  "kind": "mecraft.camera_path",
+  "version": 1,
+  "id": "v07_local_light_village",
+  "coordinate_system": "right_handed_y_up",
+  "interpolation": "linear_position_slerp_orientation",
+  "keyframes": [
+    {
+      "time_seconds": 0.0,
+      "position": [1.5, 81.5, -4.0],
+      "look_at": [-4.0, 81.5, -4.0],
+      "up": [0.0, 1.0, 0.0],
+      "vertical_fov_degrees": 64.0
+    },
+    {
+      "time_seconds": 2.0,
+      "position": [-2.0, 81.4, -4.0],
+      "look_at": [-7.0, 81.5, -4.0],
+      "up": [0.0, 1.0, 0.0],
+      "vertical_fov_degrees": 62.0
+    },
+    {
+      "time_seconds": 4.0,
+      "position": [-5.0, 81.4, -4.0],
+      "look_at": [-9.0, 81.2, -4.0],
+      "up": [0.0, 1.0, 0.0],
+      "vertical_fov_degrees": 60.0
+    },
+    {
+      "time_seconds": 6.0,
+      "position": [-10.5, 81.5, -4.0],
+      "look_at": [-4.0, 81.5, -4.0],
+      "up": [0.0, 1.0, 0.0],
+      "vertical_fov_degrees": 58.0
+    }
+  ]
+}

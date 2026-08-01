@@ -585,10 +585,21 @@ bool GameManager::writeBenchmarkReport() {
                                    {"render_distance", world.renderDistance},
                                    {"content_hash", renderer::contracts::stableContentHashHex(world.contentHash)},
                                    {"persistent_writes_enabled", false}};
+            if (world.fixture.has_value()) {
+                root["voxel_world"]["fixture"] = {
+                    {"id", world.fixture->id},
+                    {"version", world.fixture->version},
+                    {"content_hash", renderer::contracts::stableContentHashHex(world.fixture->contentHash)}};
+            }
         } else {
             const app::validation::ValidationModelAssetIdentity& asset = *contract.modelAsset;
             root["model_asset"] = {{"source", asset.source.generic_u8string()},
                                    {"content_hash", renderer::contracts::stableContentHashHex(asset.contentHash)}};
+            if (contract.modelProbeGrid.has_value()) {
+                root["reflection_probe_grid"] = {
+                    {"spacing_meters", contract.modelProbeGrid->spacingMeters},
+                    {"bounds_padding_meters", contract.modelProbeGrid->boundsPaddingMeters}};
+            }
         }
     } else {
         root["kind"] = "mecraft.benchmark_frame_report";

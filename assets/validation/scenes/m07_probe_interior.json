@@ -1,0 +1,29 @@
+{
+  "kind": "mecraft.validation_scene",
+  "version": 2,
+  "id": "m07_probe_interior",
+  "scene": "model",
+  "content_hash": "e7cfecd188549085",
+  "camera_path": {
+    "source": "../camera_paths/m07_probe_interior.json",
+    "id": "m07_probe_interior",
+    "content_hash": "c17f7838a2a58df0"
+  },
+  "render_settings": {
+    "id": "m0_model_render_settings",
+    "version": 1,
+    "content_hash": "9a8940b4590c9585"
+  },
+  "environment": {
+    "time_of_day_seconds": 900.0,
+    "weather": "clear"
+  },
+  "model_asset": {
+    "source": "../../models/validation/M07ProbeInterior.gltf",
+    "content_hash": "097b196adca0e388"
+  },
+  "reflection_probe_grid": {
+    "spacing_meters": 0.8,
+    "bounds_padding_meters": 0.0
+  }
+}

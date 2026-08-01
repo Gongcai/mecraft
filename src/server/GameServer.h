@@ -95,6 +95,9 @@ public:
     /// Run one server tick. Called from the game loop at the server tick rate.
     void tick(float dt);
     void tickInitialLoading(float dt, const glm::vec3& loadCenter);
+    /// Drains authoritative lighting and publishes pending block updates without advancing simulation systems.
+    /// @param loadCenter Stable local-player position used by world streaming and lighting priorities.
+    void synchronizeValidationWorld(const glm::vec3& loadCenter);
     void setClientLoadCenter(const glm::vec3& loadCenter);
 
     /// Access the authoritative world.

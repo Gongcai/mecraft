@@ -112,8 +112,8 @@ private:
         uint32_t resourceSlot = 0u;
         glm::vec4 positionAndRange{0.0f};
         glm::vec4 directionAndOuterCosine{0.0f};
-        uint64_t blockContentRevision = 0u;
-        uint64_t activeChunkRevision = 0u;
+        uint64_t geometryContentRevision = 0u;
+        uint64_t activeGeometryRevision = 0u;
         uint64_t dynamicOccluderRevision = 0u;
         bool valid = false;
     };

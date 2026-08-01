@@ -25,10 +25,9 @@ bool GameplayAppState::beginValidation() {
         return true;
     }
     const app::validation::ValidationSceneContract& contract = m_deps.validationRun.sceneContract();
-    if (!m_game->prepareValidationScene(static_cast<float>(contract.environment.timeOfDaySeconds))) {
+    if (!m_game->prepareValidationScene(contract)) {
         m_deps.validationRun.fail(app::validation::ValidationRunError::SceneInitializationFailed,
-                                  "gameplay validation requires a loaded local session with persistence disabled and "
-                                  "fixed renderer settings");
+                                  m_game->validationSceneError());
         m_enterFailed = true;
         return false;
     }
@@ -116,7 +115,7 @@ void GameplayAppState::update(double frameTime, double& accumulator) {
         accumulator = 0.0;
         if (!m_game->updateFrame(0.0f)) {
             m_deps.validationRun.fail(app::validation::ValidationRunError::RenderFailed,
-                                      "gameplay validation frame update failed");
+                                      m_game->validationSceneError());
         }
         return;
     }
@@ -169,6 +168,9 @@ void GameplayAppState::update(double frameTime, double& accumulator) {
 void GameplayAppState::render(double frameTime) {
     if (m_game) {
         if (m_validationActive) {
+            if (m_deps.validationRun.failed()) {
+                return;
+            }
             const Window::FramebufferSize framebufferSize = m_deps.window.getFramebufferSize();
             const AppLaunchOptions& options = m_deps.validationRun.options();
             if (framebufferSize.width != static_cast<int>(options.validationWidth) ||
@@ -186,9 +188,12 @@ void GameplayAppState::render(double frameTime) {
             }
             const RenderFrameClock clock{validationFrame->sequenceFrameIndex, validationFrame->deltaTimeSeconds,
                                          validationFrame->renderTimeSeconds, validationFrame->renderTimeSeconds};
-            const std::filesystem::path* capturePath = m_validationSceneReady && validationFrame->captureAfterRender
-                                                           ? &options.validationCapturePath
-                                                           : nullptr;
+            if (m_validationSequenceFrame != validationFrame->sequenceFrameIndex) {
+                m_validationSequenceFrame = validationFrame->sequenceFrameIndex;
+                m_validationSceneReady = false;
+            }
+            const bool captureRequested = m_validationSceneReady && validationFrame->captureAfterRender;
+            const std::filesystem::path* capturePath = captureRequested ? &options.validationCapturePath : nullptr;
             if (!m_game->configureValidationFrame(validationFrame->cameraPose, clock, capturePath)) {
                 m_deps.validationRun.fail(app::validation::ValidationRunError::CameraPoseConversionFailed,
                                           "gameplay Camera Path pose cannot be represented by the float render camera");
@@ -200,8 +205,16 @@ void GameplayAppState::render(double frameTime) {
                 return;
             }
 
-            if (!m_validationSceneReady) {
-                m_validationSceneReady = m_game->isValidationSceneReady();
+            const bool sceneReadyAfterRender = m_game->isValidationSceneReady();
+            if (!sceneReadyAfterRender) {
+                if (captureRequested) {
+                    static_cast<void>(m_game->takeValidationCaptureResult());
+                }
+                m_validationSceneReady = false;
+                return;
+            }
+            m_validationSceneReady = true;
+            if (validationFrame->captureAfterRender && !captureRequested) {
                 return;
             }
 

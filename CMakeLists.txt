@@ -231,6 +231,7 @@ find_package(spirv_cross_c CONFIG REQUIRED)
 set(SRC_APP
         src/app/AppLaunchOptions.cpp
         src/app/validation/ValidationSceneContract.cpp
+        src/app/validation/ValidationVoxelFixture.cpp
         src/app/validation/ValidationRunController.cpp
         src/app/AppSettings.cpp
         src/app/GameResourceBootstrapper.cpp

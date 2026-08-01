@@ -134,7 +134,24 @@ void ModelSceneAppState::onEnter() {
     m_transformCommandEntityId = scene::kInvalidSceneEntityId;
     if (m_deps.validationRun.enabled()) {
         const app::validation::ValidationSceneContract& contract = m_deps.validationRun.sceneContract();
-        if (!m_scene.generateReflectionProbeGrid(8.0f, 1.0f)) {
+        float probeGridSpacing = 0.0f;
+        float probeGridPadding = 0.0f;
+        switch (contract.version) {
+        case app::validation::kValidationSceneContractVersion1:
+            probeGridSpacing = 8.0f;
+            probeGridPadding = 1.0f;
+            break;
+        case app::validation::kValidationSceneContractVersion:
+            if (!contract.modelProbeGrid.has_value()) {
+                failValidationInitialization("model validation requires a versioned Reflection Probe grid");
+                return;
+            }
+            probeGridSpacing = static_cast<float>(contract.modelProbeGrid->spacingMeters);
+            probeGridPadding = static_cast<float>(contract.modelProbeGrid->boundsPaddingMeters);
+            break;
+        default: std::abort();
+        }
+        if (!m_scene.generateReflectionProbeGrid(probeGridSpacing, probeGridPadding)) {
             failValidationInitialization(m_scene.lastError());
             return;
         }
@@ -1508,6 +1525,12 @@ void ModelSceneAppState::render(const double frameTime) {
         if (!m_scene.renderViewport(view, projection, camera.getPosition(), m_cameraNearPlane, m_cameraFarPlane,
                                     camera.getFOV(), clock)) {
             m_deps.validationRun.fail(app::validation::ValidationRunError::RenderFailed, m_scene.lastError());
+            return;
+        }
+
+        const ReflectionProbeCaptureFrameStats probes = m_scene.reflectionProbeCaptureStats();
+        if (probes.sourceCount == 0u || probes.activeProbeCount != probes.sourceCount ||
+            probes.buildingProbeCount != 0u || probes.pendingWorkItemCount != 0u || probes.workScheduled) {
             return;
         }
 

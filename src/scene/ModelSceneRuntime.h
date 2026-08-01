@@ -61,6 +61,8 @@ public:
     [[nodiscard]] bool collectSceneLights(const glm::vec3& cameraPosition,
                                           std::vector<renderer::contracts::SceneLight>& lights,
                                           std::string& error) override;
+    [[nodiscard]] bool queryLocalShadowSceneRevisions(DeferredLocalShadowSceneRevisions& revisions,
+                                                      std::string& error) const override;
     [[nodiscard]] bool configureClusteredLighting(const DeferredClusteredLightingResources& resources) override;
     [[nodiscard]] bool hasTransparentGeometry() const override;
     [[nodiscard]] bool prepareTransparentResources(const DeferredTransparentResources& resources) override;

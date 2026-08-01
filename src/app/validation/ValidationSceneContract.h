@@ -14,7 +14,8 @@
 
 namespace app::validation {
 
-inline constexpr uint32_t kValidationSceneContractVersion = 1u;
+inline constexpr uint32_t kValidationSceneContractVersion1 = 1u;
+inline constexpr uint32_t kValidationSceneContractVersion = 2u;
 inline constexpr const char* kValidationSceneContractKind = "mecraft.validation_scene";
 inline constexpr uint32_t kValidationRenderSettingsVersion = 1u;
 inline constexpr const char* kValidationVoxelGeneratorId = "mecraft.overworld";
@@ -52,12 +53,20 @@ struct ValidationEnvironmentIdentity {
     ValidationWeather weather = ValidationWeather::Clear;
 };
 
+/// Identifies one immutable built-in voxel fixture and its semantic block-edit hash.
+struct ValidationVoxelFixtureIdentity {
+    std::string id;
+    uint32_t version = 0u;
+    renderer::contracts::StableContentHash contentHash = 0u;
+};
+
 /// Identifies a generated voxel world recipe and its stable semantic hash.
 struct ValidationVoxelWorldIdentity {
     std::string generatorId;
     uint32_t generatorVersion = 0u;
     int seed = 0;
     int renderDistance = 0;
+    std::optional<ValidationVoxelFixtureIdentity> fixture;
     renderer::contracts::StableContentHash contentHash = 0u;
 };
 
@@ -66,6 +75,12 @@ struct ValidationModelAssetIdentity {
     std::filesystem::path source;
     std::filesystem::path resolvedPath;
     renderer::contracts::StableContentHash contentHash = 0u;
+};
+
+/// Defines the deterministic Reflection Probe grid generated for one model scene.
+struct ValidationModelProbeGridIdentity {
+    double spacingMeters = 0.0;
+    double boundsPaddingMeters = 0.0;
 };
 
 /// Describes every versioned identity input required by one validation run.
@@ -80,6 +95,7 @@ struct ValidationSceneContract {
     ValidationEnvironmentIdentity environment;
     std::optional<ValidationVoxelWorldIdentity> voxelWorld;
     std::optional<ValidationModelAssetIdentity> modelAsset;
+    std::optional<ValidationModelProbeGridIdentity> modelProbeGrid;
 
     /// Reports whether the scene contains exactly one complete scene identity.
     /// @return True after strict parsing and all referenced-asset verification.
@@ -107,7 +123,10 @@ enum class ValidationSceneContractError : uint8_t {
     RenderSettingsIdentityMismatch,
     InvalidEnvironment,
     InvalidWorld,
+    InvalidFixture,
+    FixtureHashMismatch,
     WorldHashMismatch,
+    InvalidProbeGrid,
     AssetHashFailed,
     AssetHashMismatch,
     SceneHashMismatch

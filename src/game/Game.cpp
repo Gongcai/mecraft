@@ -10,6 +10,7 @@
 #include "presentation/GameplayHudPresenter.h"
 #include "server/GameServer.h"
 #include "save/SaveManager.h"
+#include "app/validation/ValidationVoxelFixture.h"
 #include "renderer/rhi/RhiCommandList.h"
 #include "renderer/rhi/RhiDevice.h"
 #include "renderer/rhi/RhiResources.h"
@@ -18,6 +19,7 @@
 #include "engine/platform/Window.h"
 #include "world/World.h"
 #include "world/WeatherSystem.h"
+#include "world/light/LightTypes.h"
 #include <algorithm>
 #include <cstdint>
 #include <iostream>
@@ -124,12 +126,34 @@ bool Game::fixedUpdate(const double fixedStep, double& accumulator) {
 
 bool Game::updateFrame(const float deltaTime) {
     // G5: Delegate to orchestrator
+    if (m_validationWorldSynchronizationPending) {
+        m_session.server().synchronizeValidationWorld(m_session.getLocalPlayerPosition());
+        m_session.receiveWorldMessages();
+        if (!m_validationVoxelFixture.has_value()) {
+            m_validationSceneError = "validation world synchronization has no fixture identity";
+            return false;
+        }
+        const app::validation::ValidationVoxelFixtureResult synchronized =
+            app::validation::verifyValidationVoxelFixture(m_session.worldView(), *m_validationVoxelFixture);
+        if (synchronized.succeeded()) {
+            if (isLightFrameSettled(m_session.world().getLightFrameStats())) {
+                m_validationWorldSynchronizationPending = false;
+            }
+        } else if (synchronized.error != app::validation::ValidationVoxelFixtureError::ChunkNotLoaded &&
+                   synchronized.error != app::validation::ValidationVoxelFixtureError::StateMismatch) {
+            m_validationSceneError =
+                std::string(app::validation::validationVoxelFixtureErrorStableId(synchronized.error)) + ":" +
+                synchronized.detail;
+            return false;
+        }
+    }
 #ifdef MECRAFT_DEBUG
     const auto audioStart = std::chrono::steady_clock::now();
 #endif
     if (m_audioSyncSystem) {
         m_frameOrchestrator->syncAudioListener(*m_audioSyncSystem, deltaTime, m_session);
     } else {
+        m_validationSceneError = "audio listener system is not initialized";
         MECRAFT_LOG_STREAM(std::cerr << "[Game] Audio listener system is not initialized\n");
         return false;
     }
@@ -263,22 +287,65 @@ std::optional<renderer::capture::TextureCaptureResult> Game::takeValidationCaptu
     return result;
 }
 
-bool Game::prepareValidationScene(const float timeOfDaySeconds) {
-    if (!m_initialized || !isLoadingComplete() || m_config.isMultiplayer() || m_config.enableSaving ||
-        m_config.renderSettingsSource != GameRenderSettingsSource::FixedProfile) {
+bool Game::prepareValidationScene(const app::validation::ValidationSceneContract& contract) {
+    m_validationSceneError.clear();
+    if (!m_initialized) {
+        m_validationSceneError = "validation gameplay session is not initialized";
+        return false;
+    }
+    if (!isLoadingComplete()) {
+        m_validationSceneError = "validation gameplay session has not completed loading";
+        return false;
+    }
+    if (m_config.isMultiplayer()) {
+        m_validationSceneError = "validation gameplay requires a local session";
+        return false;
+    }
+    if (m_config.enableSaving) {
+        m_validationSceneError = "validation gameplay requires persistence to be disabled";
+        return false;
+    }
+    if (m_config.renderSettingsSource != GameRenderSettingsSource::FixedProfile) {
+        m_validationSceneError = "validation gameplay requires a fixed renderer profile";
+        return false;
+    }
+    if (contract.scene != ValidationScene::Voxel) {
+        m_validationSceneError = "validation gameplay requires a voxel scene contract";
+        return false;
+    }
+    if (!contract.voxelWorld.has_value()) {
+        m_validationSceneError = "validation voxel scene contract has no world identity";
         return false;
     }
     World& world = m_session.world();
-    world.getDayNightSystem().setTimeOfDay(timeOfDaySeconds);
+    world.getDayNightSystem().setTimeOfDay(static_cast<float>(contract.environment.timeOfDaySeconds));
     world.getWeatherSystem().setDebugWeatherPresetInstant(WeatherType::Clear);
+    m_validationVoxelFixture = contract.voxelWorld->fixture;
+    m_validationWorldSynchronizationPending = false;
+    if (m_validationVoxelFixture.has_value()) {
+        const app::validation::ValidationVoxelFixtureResult applied =
+            app::validation::applyValidationVoxelFixture(world, *m_validationVoxelFixture);
+        if (!applied.succeeded()) {
+            m_validationSceneError =
+                std::string(app::validation::validationVoxelFixtureErrorStableId(applied.error)) + ":" + applied.detail;
+            return false;
+        }
+        m_validationWorldSynchronizationPending =
+            m_validationVoxelFixture->id != app::validation::kValidationVoxelFixtureNoneId;
+    }
     return true;
 }
 
 bool Game::isValidationSceneReady() const {
-    if (!m_initialized || !isLoadingComplete() || !m_renderRuntime) {
+    if (!m_initialized || !isLoadingComplete() || !m_renderRuntime || m_validationWorldSynchronizationPending) {
         return false;
     }
-    return m_renderRuntime->renderScene().getTerrainStreamingService().isSettled(m_session.worldView());
+    const RenderScene& renderScene = m_renderRuntime->renderScene();
+    const ReflectionProbeCaptureFrameStats probes = renderScene.reflectionProbeCaptureStats();
+    const bool probesSettled = probes.sourceCount > 0u && probes.activeProbeCount == probes.sourceCount &&
+                               probes.buildingProbeCount == 0u && probes.pendingWorkItemCount == 0u &&
+                               !probes.workScheduled;
+    return probesSettled && renderScene.getTerrainStreamingService().isSettled(m_session.worldView());
 }
 
 const GpuFrameStats* Game::gpuFrameStats() const {
