@@ -359,6 +359,7 @@ set(SRC_RENDERER
         src/renderer/contracts/GpuMaterialContract.cpp
         src/renderer/contracts/GpuSceneContract.cpp
         src/renderer/contracts/ReflectionProbeContract.cpp
+        src/renderer/contracts/RtgiNrdSignalContract.cpp
         src/renderer/contracts/RtgiSamplingContract.cpp
         src/renderer/contracts/TerrainMaterialSamplingContract.cpp
         src/renderer/contracts/TerrainRayTracingContract.cpp
@@ -401,6 +402,7 @@ set(SRC_RENDERER
         # Render passes
         src/renderer/passes/SsaoPass.cpp
         src/renderer/passes/SsgiPass.cpp
+        src/renderer/passes/RtgiSignalPackPass.cpp
         src/renderer/passes/RtgiTracePass.cpp
         src/renderer/passes/HiZPass.cpp
         src/renderer/passes/VelocityPass.cpp
@@ -1072,6 +1074,9 @@ if(MECRAFT_BUILD_TESTS)
     target_compile_definitions(gpu_scene_contract_test PRIVATE
             MECRAFT_TEST_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
     add_mecraft_test(render_feature_contract_test tests/render_feature_contract_test.cpp)
+    add_mecraft_test(rtgi_nrd_signal_contract_test tests/rtgi_nrd_signal_contract_test.cpp)
+    target_compile_definitions(rtgi_nrd_signal_contract_test PRIVATE
+            MECRAFT_TEST_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
     add_mecraft_test(rtgi_sampling_contract_test tests/rtgi_sampling_contract_test.cpp)
     target_compile_definitions(rtgi_sampling_contract_test PRIVATE
             MECRAFT_TEST_SOURCE_DIR="${PROJECT_SOURCE_DIR}")

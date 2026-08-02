@@ -4,10 +4,12 @@
 #include "renderer/contracts/GpuLightContract.h"
 #include "renderer/contracts/GpuMaterialContract.h"
 #include "renderer/contracts/LocalShadowContract.h"
+#include "renderer/contracts/RtgiNrdSignalContract.h"
 #include "renderer/contracts/RtgiSamplingContract.h"
 #include "renderer/contracts/StaticMeshRayTracingContract.h"
 #include "renderer/mesh/TerrainBlasCache.h"
 #include "renderer/passes/ClusteredLightingPass.h"
+#include "renderer/passes/RtgiSignalPackPass.h"
 #include "renderer/passes/RtgiTracePass.h"
 #include "renderer/rhi/RhiCommandList.h"
 #include "renderer/rhi/RhiDevice.h"
@@ -3505,6 +3507,7 @@ namespace {
         rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::TransferDst);
     constexpr RhiTextureUsageFlags kStorageUsage =
         rhiFlag(RhiTextureUsage::Storage) | rhiFlag(RhiTextureUsage::TransferSrc);
+    constexpr RhiTextureUsageFlags kRawSignalUsage = kStorageUsage | rhiFlag(RhiTextureUsage::Sampled);
     SmokeTexture depth;
     SmokeTexture normalAo;
     SmokeTexture materialAux;
@@ -3518,13 +3521,18 @@ namespace {
     SmokeTexture localShadowSpotAtlas;
     SmokeTexture localShadowPointCubeArray;
     SmokeTexture radianceHitDistance;
+    SmokeTexture relaxRadianceHitDistance;
+    SmokeTexture reblurRadianceHitDistance;
     SmokeTexture validation;
     RtgiTracePass tracePass;
+    RtgiSignalPackPass signalPackPass;
     ClusteredLightingPass clusteredLightingPass;
     RhiBufferHandle localShadowMetadata;
     RhiSamplerHandle localShadowSampler;
     RhiBufferHandle validationReadback;
     RhiBufferHandle radianceReadback;
+    RhiBufferHandle relaxReadback;
+    RhiBufferHandle reblurReadback;
     bool clusteredPrepared = false;
     bool clusteredFinished = false;
     const auto cleanup = [&]() {
@@ -3532,6 +3540,7 @@ namespace {
             clusteredLightingPass.finishGraphExecution(false, {});
         }
         device.waitIdle();
+        signalPackPass.shutdown();
         tracePass.shutdown();
         clusteredLightingPass.shutdown();
         if (validationReadback.isValid()) {
@@ -3539,6 +3548,12 @@ namespace {
         }
         if (radianceReadback.isValid()) {
             device.destroyBuffer(radianceReadback);
+        }
+        if (relaxReadback.isValid()) {
+            device.destroyBuffer(relaxReadback);
+        }
+        if (reblurReadback.isValid()) {
+            device.destroyBuffer(reblurReadback);
         }
         if (localShadowMetadata.isValid()) {
             device.destroyBuffer(localShadowMetadata);
@@ -3548,6 +3563,8 @@ namespace {
         }
         SmokeTexture* textures[] = {
             &validation,
+            &reblurRadianceHitDistance,
+            &relaxRadianceHitDistance,
             &radianceHitDistance,
             &localShadowPointCubeArray,
             &localShadowSpotAtlas,
@@ -3647,7 +3664,13 @@ namespace {
                       RhiResourceState::DepthRead, localShadowPointCubeArray) &&
         createTexture("VulkanSmoke.RTGI.RadianceHitDistance", RhiTextureDimension::Texture2D,
                       RhiTextureViewType::Texture2D, RhiTextureFormat::Rgba16Float, smokeCase.width, smokeCase.height,
-                      1u, kStorageUsage, nullptr, 0u, RhiResourceState::Undefined, radianceHitDistance) &&
+                      1u, kRawSignalUsage, nullptr, 0u, RhiResourceState::Undefined, radianceHitDistance) &&
+        createTexture("VulkanSmoke.RTGI.RelaxRadianceHitDistance", RhiTextureDimension::Texture2D,
+                      RhiTextureViewType::Texture2D, RhiTextureFormat::Rgba16Float, smokeCase.width, smokeCase.height,
+                      1u, kStorageUsage, nullptr, 0u, RhiResourceState::Undefined, relaxRadianceHitDistance) &&
+        createTexture("VulkanSmoke.RTGI.ReblurRadianceHitDistance", RhiTextureDimension::Texture2D,
+                      RhiTextureViewType::Texture2D, RhiTextureFormat::Rgba16Float, smokeCase.width, smokeCase.height,
+                      1u, kStorageUsage, nullptr, 0u, RhiResourceState::Undefined, reblurRadianceHitDistance) &&
         createTexture("VulkanSmoke.RTGI.Validation", RhiTextureDimension::Texture2D, RhiTextureViewType::Texture2D,
                       RhiTextureFormat::Rg32Uint, smokeCase.width, smokeCase.height, 1u, kStorageUsage, nullptr, 0u,
                       RhiResourceState::Undefined, validation);
@@ -3690,7 +3713,10 @@ namespace {
     if (valid) {
         validationReadback = device.createBuffer(validationReadbackDesc, nullptr, 0u);
         radianceReadback = device.createBuffer(radianceReadbackDesc, nullptr, 0u);
-        valid = validationReadback.isValid() && radianceReadback.isValid();
+        relaxReadback = device.createBuffer(radianceReadbackDesc, nullptr, 0u);
+        reblurReadback = device.createBuffer(radianceReadbackDesc, nullptr, 0u);
+        valid = validationReadback.isValid() && radianceReadback.isValid() && relaxReadback.isValid() &&
+                reblurReadback.isValid();
     }
 
     SharedRenderResources shared;
@@ -3736,14 +3762,18 @@ namespace {
                                     texture.view, RhiQueueType::Graphics, RhiQueueType::Graphics});
     };
     RtgiTracePass::GraphResources resources;
+    RtgiSignalPackPass::GraphResources packResources;
     ClusteredLightingPass::GraphResources clusteredResources;
     RtgiTracePass::LightingResources lightingResources;
     RgBufferHandle validationReadbackResource;
     RgBufferHandle radianceReadbackResource;
+    RgBufferHandle relaxReadbackResource;
+    RgBufferHandle reblurReadbackResource;
     RgBufferHandle localShadowMetadataResource;
     RgTextureHandle localShadowSpotAtlasResource;
     RgTextureHandle localShadowPointCubeArrayResource;
     RgPassHandle traceHandle;
+    RgPassHandle packHandle;
     if (valid) {
         resources.depth = importTexture(depth, RhiResourceState::DepthRead, RhiResourceState::DepthRead);
         resources.normalAo = importTexture(normalAo, RhiResourceState::ShaderRead, RhiResourceState::ShaderRead);
@@ -3763,6 +3793,13 @@ namespace {
         resources.diffuseRadianceHitDistance =
             importTexture(radianceHitDistance, RhiResourceState::Undefined, RhiResourceState::ShaderWrite);
         resources.validation = importTexture(validation, RhiResourceState::Undefined, RhiResourceState::ShaderWrite);
+        packResources.rawDiffuseRadianceHitDistance = resources.diffuseRadianceHitDistance;
+        packResources.depth = resources.depth;
+        packResources.relaxDiffuseRadianceHitDistance =
+            importTexture(relaxRadianceHitDistance, RhiResourceState::Undefined, RhiResourceState::ShaderWrite);
+        packResources.reblurDiffuseRadianceHitDistance =
+            importTexture(reblurRadianceHitDistance, RhiResourceState::Undefined, RhiResourceState::ShaderWrite);
+        packResources.validation = resources.validation;
         localShadowSpotAtlasResource =
             importTexture(localShadowSpotAtlas, RhiResourceState::DepthRead, RhiResourceState::DepthRead);
         localShadowPointCubeArrayResource =
@@ -3778,14 +3815,22 @@ namespace {
         radianceReadbackResource = graph.importBuffer({"RTGI.RadianceReadback", radianceReadback, radianceReadbackDesc,
                                                        RhiResourceState::TransferDst, RhiResourceState::HostRead,
                                                        RhiQueueType::Graphics, RhiQueueType::Graphics});
-        valid = valid && resources.depth.isValid() && resources.normalAo.isValid() && resources.materialAux.isValid() &&
-                resources.blueNoise.isValid() && resources.diffuseRadianceHitDistance.isValid() &&
-                resources.terrainAlbedo.isValid() && resources.terrainNormal.isValid() &&
-                resources.terrainSpecular.isValid() && resources.grassColormap.isValid() &&
-                resources.foliageColormap.isValid() && resources.skyCapture.isValid() &&
-                resources.validation.isValid() && localShadowMetadataResource.isValid() &&
-                localShadowSpotAtlasResource.isValid() && localShadowPointCubeArrayResource.isValid() &&
-                validationReadbackResource.isValid() && radianceReadbackResource.isValid();
+        relaxReadbackResource = graph.importBuffer({"RTGI.RelaxReadback", relaxReadback, radianceReadbackDesc,
+                                                    RhiResourceState::TransferDst, RhiResourceState::HostRead,
+                                                    RhiQueueType::Graphics, RhiQueueType::Graphics});
+        reblurReadbackResource = graph.importBuffer({"RTGI.ReblurReadback", reblurReadback, radianceReadbackDesc,
+                                                     RhiResourceState::TransferDst, RhiResourceState::HostRead,
+                                                     RhiQueueType::Graphics, RhiQueueType::Graphics});
+        valid =
+            valid && resources.depth.isValid() && resources.normalAo.isValid() && resources.materialAux.isValid() &&
+            resources.blueNoise.isValid() && resources.diffuseRadianceHitDistance.isValid() &&
+            resources.terrainAlbedo.isValid() && resources.terrainNormal.isValid() &&
+            resources.terrainSpecular.isValid() && resources.grassColormap.isValid() &&
+            resources.foliageColormap.isValid() && resources.skyCapture.isValid() && resources.validation.isValid() &&
+            localShadowMetadataResource.isValid() && localShadowSpotAtlasResource.isValid() &&
+            localShadowPointCubeArrayResource.isValid() && packResources.relaxDiffuseRadianceHitDistance.isValid() &&
+            packResources.reblurDiffuseRadianceHitDistance.isValid() && validationReadbackResource.isValid() &&
+            radianceReadbackResource.isValid() && relaxReadbackResource.isValid() && reblurReadbackResource.isValid();
     }
     if (valid) {
         const RgPassHandle inputReady = graph.addPass({"RTGI.InputReady", RgPassType::Copy, RhiQueueType::Graphics})
@@ -3811,14 +3856,24 @@ namespace {
         settings.terrainSpecularMapsEnabled = smokeCase.terrainSpecularMapsEnabled;
         traceHandle = tracePass.addGraphPass(graph, frame, settings, resources, lightingResources, clusteredReady);
         valid = traceHandle.isValid();
+        if (valid) {
+            RtgiSignalPackPass::Settings packSettings;
+            packSettings.useJitteredProjection = settings.useJitteredProjection;
+            packHandle = signalPackPass.addGraphPass(graph, frame, packSettings, packResources, traceHandle);
+            valid = packHandle.isValid();
+        }
     }
     if (valid) {
         graph.addPass({"RTGI.ValidationCopy", RgPassType::Copy, RhiQueueType::Graphics})
-            .dependsOn(traceHandle)
+            .dependsOn(packHandle)
             .readTexture(resources.validation, RhiResourceState::TransferSrc)
             .readTexture(resources.diffuseRadianceHitDistance, RhiResourceState::TransferSrc)
+            .readTexture(packResources.relaxDiffuseRadianceHitDistance, RhiResourceState::TransferSrc)
+            .readTexture(packResources.reblurDiffuseRadianceHitDistance, RhiResourceState::TransferSrc)
             .writeBuffer(validationReadbackResource, RhiResourceState::TransferDst)
             .writeBuffer(radianceReadbackResource, RhiResourceState::TransferDst)
+            .writeBuffer(relaxReadbackResource, RhiResourceState::TransferDst)
+            .writeBuffer(reblurReadbackResource, RhiResourceState::TransferDst)
             .setExecute([&](RgPassContext& context) {
                 RhiTextureBufferCopy validationCopy;
                 validationCopy.srcTexture = context.texture(resources.validation);
@@ -3836,6 +3891,14 @@ namespace {
                 radianceCopy.width = smokeCase.width;
                 radianceCopy.height = smokeCase.height;
                 context.commandList().copyTextureToBuffer(radianceCopy);
+                RhiTextureBufferCopy relaxCopy = radianceCopy;
+                relaxCopy.srcTexture = context.texture(packResources.relaxDiffuseRadianceHitDistance);
+                relaxCopy.dstBuffer = context.buffer(relaxReadbackResource);
+                context.commandList().copyTextureToBuffer(relaxCopy);
+                RhiTextureBufferCopy reblurCopy = radianceCopy;
+                reblurCopy.srcTexture = context.texture(packResources.reblurDiffuseRadianceHitDistance);
+                reblurCopy.dstBuffer = context.buffer(reblurReadbackResource);
+                context.commandList().copyTextureToBuffer(reblurCopy);
                 return true;
             });
         const RgCompileResult compiled = graph.compile();
@@ -3860,8 +3923,23 @@ namespace {
             static_cast<const uint32_t*>(device.mapBuffer(validationReadback, 0u, validationReadbackDesc.size));
         const auto* radianceResult =
             static_cast<const uint16_t*>(device.mapBuffer(radianceReadback, 0u, radianceReadbackDesc.size));
-        valid = validationResult != nullptr && radianceResult != nullptr;
-        if (validationResult != nullptr && radianceResult != nullptr) {
+        const auto* relaxResult =
+            static_cast<const uint16_t*>(device.mapBuffer(relaxReadback, 0u, radianceReadbackDesc.size));
+        const auto* reblurResult =
+            static_cast<const uint16_t*>(device.mapBuffer(reblurReadback, 0u, radianceReadbackDesc.size));
+        valid = validationResult != nullptr && radianceResult != nullptr && relaxResult != nullptr &&
+                reblurResult != nullptr;
+        if (validationResult != nullptr && radianceResult != nullptr && relaxResult != nullptr &&
+            reblurResult != nullptr) {
+            const auto unpackSignal = [](const uint16_t* signal, const size_t pixelIndex) {
+                return glm::vec4(glm::unpackHalf1x16(signal[pixelIndex * 4u + 0u]),
+                                 glm::unpackHalf1x16(signal[pixelIndex * 4u + 1u]),
+                                 glm::unpackHalf1x16(signal[pixelIndex * 4u + 2u]),
+                                 glm::unpackHalf1x16(signal[pixelIndex * 4u + 3u]));
+            };
+            const auto nearHalf = [](const float actual, const float expected) {
+                return std::abs(actual - expected) <= std::max(0.002f, std::abs(expected) * 0.002f);
+            };
             for (size_t pixelIndex = 0u; pixelIndex < pixelCount; ++pixelIndex) {
                 const uint32_t validationWord = validationResult[pixelIndex * 2u];
                 const uint32_t hitIdentityHash = validationResult[pixelIndex * 2u + 1u];
@@ -3869,29 +3947,68 @@ namespace {
                                          glm::unpackHalf1x16(radianceResult[pixelIndex * 4u + 1u]),
                                          glm::unpackHalf1x16(radianceResult[pixelIndex * 4u + 2u])};
                 const float hitDistance = glm::unpackHalf1x16(radianceResult[pixelIndex * 4u + 3u]);
+                const glm::vec4 rawSignal(radiance, hitDistance);
+                const glm::vec4 relaxSignal = unpackSignal(relaxResult, pixelIndex);
+                const glm::vec4 reblurSignal = unpackSignal(reblurResult, pixelIndex);
                 const RtgiTraceSmokeExpectedPixel& expected = smokeCase.expectedPixels[pixelIndex];
                 const bool radianceValid =
                     std::isfinite(radiance.r) && std::isfinite(radiance.g) && std::isfinite(radiance.b) &&
                     radiance.r >= expected.minimumRadiance.r && radiance.g >= expected.minimumRadiance.g &&
                     radiance.b >= expected.minimumRadiance.b && radiance.r <= expected.maximumRadiance.r &&
                     radiance.g <= expected.maximumRadiance.g && radiance.b <= expected.maximumRadiance.b;
+                bool packedSignalsValid = false;
+                if (expected.classification == RtgiTraceClassification::Hit ||
+                    expected.classification == RtgiTraceClassification::Miss) {
+                    const size_t pixelX = pixelIndex % smokeCase.width;
+                    const size_t pixelY = pixelIndex / smokeCase.width;
+                    const glm::vec2 screenUv{(static_cast<float>(pixelX) + 0.5f) / static_cast<float>(smokeCase.width),
+                                             (static_cast<float>(pixelY) + 0.5f) /
+                                                 static_cast<float>(smokeCase.height)};
+                    const glm::vec2 clipUv{screenUv.x, 1.0f - screenUv.y};
+                    const glm::mat4 inverseProjection = frame.camera.view * frame.camera.invViewProj;
+                    const glm::vec4 viewPositionH =
+                        inverseProjection *
+                        glm::vec4(clipUv * 2.0f - 1.0f, smokeCase.depth[pixelIndex] * 2.0f - 1.0f, 1.0f);
+                    std::optional<glm::vec4> expectedReblur;
+                    if (std::isfinite(viewPositionH.w) && std::abs(viewPositionH.w) > 1.0e-7f) {
+                        const float viewZ = viewPositionH.z / viewPositionH.w;
+                        const std::optional<float> normalizedHitDistance =
+                            rtgiReblurNormalizedHitDistance(hitDistance, viewZ, {}, 1.0f);
+                        if (normalizedHitDistance.has_value()) {
+                            expectedReblur =
+                                rtgiPackReblurRadianceAndNormalizedHitDistance(radiance, *normalizedHitDistance);
+                        }
+                    }
+                    packedSignalsValid = expectedReblur.has_value();
+                    for (uint32_t component = 0u; component < 4u && packedSignalsValid; ++component) {
+                        packedSignalsValid = nearHalf(relaxSignal[component], rawSignal[component]) &&
+                                             nearHalf(reblurSignal[component], (*expectedReblur)[component]);
+                    }
+                } else {
+                    packedSignalsValid = relaxSignal == glm::vec4(0.0f) && reblurSignal == glm::vec4(0.0f);
+                }
                 const bool pixelValid = rtgiTraceValidationClassification(validationWord) == expected.classification &&
                                         rtgiTraceValidationCandidateCount(validationWord) == expected.candidateCount &&
                                         rtgiTraceValidationConfirmedCount(validationWord) == expected.confirmedCount &&
                                         hitIdentityHash == expected.hitIdentityHash && std::isfinite(hitDistance) &&
                                         hitDistance >= expected.minimumHitDistance &&
-                                        hitDistance <= expected.maximumHitDistance && radianceValid;
+                                        hitDistance <= expected.maximumHitDistance && radianceValid &&
+                                        packedSignalsValid;
                 if (!pixelValid) {
                     std::cerr << smokeCase.label << " pixel " << pixelIndex << " validation failed: class="
                               << static_cast<uint32_t>(rtgiTraceValidationClassification(validationWord))
                               << " candidates=" << rtgiTraceValidationCandidateCount(validationWord)
                               << " confirmed=" << rtgiTraceValidationConfirmedCount(validationWord)
                               << " identityHash=" << hitIdentityHash << " radiance=(" << radiance.r << ", "
-                              << radiance.g << ", " << radiance.b << ") distance=" << hitDistance << '\n';
+                              << radiance.g << ", " << radiance.b << ") distance=" << hitDistance << " relax=("
+                              << relaxSignal.x << ", " << relaxSignal.y << ", " << relaxSignal.z << ", "
+                              << relaxSignal.w << ") reblur=(" << reblurSignal.x << ", " << reblurSignal.y << ", "
+                              << reblurSignal.z << ", " << reblurSignal.w << ")\n";
                     valid = false;
                 }
             }
             const RtgiTracePass::Stats& stats = tracePass.stats();
+            const RtgiSignalPackPass::Stats& packStats = signalPackPass.stats();
             valid = valid && stats.dispatched && stats.frameIndex == frame.frameIndex &&
                     stats.sceneTlasRevision == activeTlas.revision && stats.width == smokeCase.width &&
                     stats.height == smokeCase.height && stats.instanceMask == smokeCase.instanceMask &&
@@ -3900,7 +4017,11 @@ namespace {
                     stats.gpuSceneGeometryBytes == activeTlas.gpuSceneGeometryBytes &&
                     stats.gpuSceneInstanceBytes == activeTlas.gpuSceneInstanceBytes &&
                     stats.gpuSceneMaterialCount == activeTlas.gpuSceneMaterialCount &&
-                    stats.gpuSceneGeometryCount == activeTlas.gpuSceneGeometryCount;
+                    stats.gpuSceneGeometryCount == activeTlas.gpuSceneGeometryCount && packStats.dispatched &&
+                    packStats.width == smokeCase.width && packStats.height == smokeCase.height &&
+                    packStats.reblurHitDistance.constantScale == 3.0f &&
+                    packStats.reblurHitDistance.viewZScale == 0.1f &&
+                    packStats.reblurHitDistance.roughnessScale == 20.0f && packStats.diffuseRoughness == 1.0f;
         }
         if (validationResult != nullptr) {
             device.unmapBuffer(validationReadback);
@@ -3908,12 +4029,358 @@ namespace {
         if (radianceResult != nullptr) {
             device.unmapBuffer(radianceReadback);
         }
+        if (relaxResult != nullptr) {
+            device.unmapBuffer(relaxReadback);
+        }
+        if (reblurResult != nullptr) {
+            device.unmapBuffer(reblurReadback);
+        }
     }
 
     cleanup();
     valid = valid && device.validationErrorCount() == validationErrorsBefore;
     if (!valid) {
         std::cerr << smokeCase.label << " RTGI trace pass validation failed\n";
+    }
+    return valid;
+}
+
+[[nodiscard]] bool validateRtgiSignalPackInvalidInputs(VkRhiDevice& device, RhiCommandListPool& commandPool) {
+    using namespace renderer::contracts;
+
+    struct SmokeTexture final {
+        RhiTextureDesc desc;
+        RhiTextureHandle texture;
+        RhiTextureViewHandle view;
+    };
+
+    constexpr uint32_t kWidth = 7u;
+    constexpr uint32_t kHeight = 1u;
+    constexpr size_t kPixelCount = static_cast<size_t>(kWidth) * kHeight;
+    const uint64_t validationErrorsBefore = device.validationErrorCount();
+    const auto createTexture = [&](const char* debugName, const RhiTextureFormat format,
+                                   const RhiTextureUsageFlags usage, const void* pixels, const size_t sizeBytes,
+                                   const RhiResourceState finalState, SmokeTexture& output) {
+        output.desc.debugName = debugName;
+        output.desc.format = format;
+        output.desc.width = kWidth;
+        output.desc.height = kHeight;
+        output.desc.usage = usage;
+        output.desc.memoryCategory = RhiMemoryCategory::Transient;
+        if (pixels != nullptr) {
+            RhiTextureInitialData initialData;
+            initialData.pixels = pixels;
+            initialData.sizeBytes = sizeBytes;
+            initialData.finalState = finalState;
+            output.texture = device.createTexture(output.desc, &initialData);
+        } else {
+            output.texture = device.createTexture(output.desc, nullptr);
+        }
+        if (!output.texture.isValid()) {
+            return false;
+        }
+        RhiTextureViewDesc viewDesc;
+        viewDesc.texture = output.texture;
+        viewDesc.viewType = RhiTextureViewType::Texture2D;
+        viewDesc.format = format;
+        output.view = device.createTextureView(viewDesc);
+        return output.view.isValid();
+    };
+
+    std::vector<uint16_t> rawSignal(kPixelCount * 4u, 0u);
+    const auto setRawSignal = [&](const size_t pixel, const glm::vec4& value) {
+        for (uint32_t component = 0u; component < 4u; ++component) {
+            rawSignal[pixel * 4u + component] = glm::packHalf1x16(value[component]);
+        }
+    };
+    setRawSignal(0u, glm::vec4(1.0f, 2.0f, 3.0f, 2.0f));
+    setRawSignal(1u, glm::vec4(0.25f, 0.5f, 0.75f, kRtgiNrdFp16Max));
+    setRawSignal(2u, glm::vec4(0.0f));
+    setRawSignal(3u, glm::vec4(0.0f));
+    setRawSignal(4u, glm::vec4(0.0f, 1.0f, 1.0f, 1.0f));
+    rawSignal[4u * 4u] = 0x7e00u;
+    setRawSignal(5u, glm::vec4(1.0f));
+    rawSignal[5u * 4u + 3u] = 0x7c00u;
+    setRawSignal(6u, glm::vec4(1.0f, 2.0f, 3.0f, 2.0f));
+
+    std::vector<float> depth(kPixelCount, 0.25f);
+    depth[2u] = 1.0f;
+    depth[6u] = std::numeric_limits<float>::quiet_NaN();
+    std::vector<uint32_t> validation(kPixelCount * 2u, 0u);
+    const auto setValidation = [&](const size_t pixel, const RtgiTraceClassification classification,
+                                   const uint32_t candidateCount, const uint32_t confirmedCount,
+                                   const uint32_t identity) {
+        const std::optional<uint32_t> word = encodeRtgiTraceValidation(classification, candidateCount, confirmedCount);
+        if (!word.has_value()) {
+            return false;
+        }
+        validation[pixel * 2u] = *word;
+        validation[pixel * 2u + 1u] = identity;
+        return true;
+    };
+    bool valid = setValidation(0u, RtgiTraceClassification::Hit, 1u, 1u, 111u) &&
+                 setValidation(1u, RtgiTraceClassification::Miss, 2u, 0u, 0u) &&
+                 setValidation(2u, RtgiTraceClassification::Sky, 0u, 0u, 0u) &&
+                 setValidation(3u, RtgiTraceClassification::Translucent, 0u, 0u, 0u) &&
+                 setValidation(4u, RtgiTraceClassification::Hit, 7u, 2u, 444u) &&
+                 setValidation(5u, RtgiTraceClassification::Miss, 3u, 1u, 555u) &&
+                 setValidation(6u, RtgiTraceClassification::Hit, 5u, 4u, 666u);
+
+    constexpr RhiTextureUsageFlags kRawUsage =
+        rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::TransferDst);
+    constexpr RhiTextureUsageFlags kDepthUsage = kRawUsage | rhiFlag(RhiTextureUsage::DepthStencilAttachment);
+    constexpr RhiTextureUsageFlags kOutputUsage =
+        rhiFlag(RhiTextureUsage::Storage) | rhiFlag(RhiTextureUsage::TransferSrc);
+    constexpr RhiTextureUsageFlags kValidationUsage = kOutputUsage | rhiFlag(RhiTextureUsage::TransferDst);
+    SmokeTexture raw;
+    SmokeTexture depthTexture;
+    SmokeTexture relax;
+    SmokeTexture reblur;
+    SmokeTexture validationTexture;
+    RtgiSignalPackPass pass;
+    RhiBufferHandle validationReadback;
+    RhiBufferHandle relaxReadback;
+    RhiBufferHandle reblurReadback;
+    const auto cleanup = [&]() {
+        device.waitIdle();
+        pass.shutdown();
+        RhiBufferHandle* buffers[] = {&reblurReadback, &relaxReadback, &validationReadback};
+        for (RhiBufferHandle* buffer : buffers) {
+            if (buffer->isValid()) {
+                device.destroyBuffer(*buffer);
+            }
+        }
+        SmokeTexture* textures[] = {&validationTexture, &reblur, &relax, &depthTexture, &raw};
+        for (SmokeTexture* texture : textures) {
+            if (texture->view.isValid()) {
+                device.destroyTextureView(texture->view);
+            }
+            if (texture->texture.isValid()) {
+                device.destroyTexture(texture->texture);
+            }
+        }
+    };
+
+    valid = valid &&
+            createTexture("VulkanSmoke.RTGI.SignalPack.Raw", RhiTextureFormat::Rgba16Float, kRawUsage, rawSignal.data(),
+                          rawSignal.size() * sizeof(uint16_t), RhiResourceState::ShaderRead, raw) &&
+            createTexture("VulkanSmoke.RTGI.SignalPack.Depth", RhiTextureFormat::Depth32Float, kDepthUsage,
+                          depth.data(), depth.size() * sizeof(float), RhiResourceState::DepthRead, depthTexture) &&
+            createTexture("VulkanSmoke.RTGI.SignalPack.Relax", RhiTextureFormat::Rgba16Float, kOutputUsage, nullptr, 0u,
+                          RhiResourceState::Undefined, relax) &&
+            createTexture("VulkanSmoke.RTGI.SignalPack.Reblur", RhiTextureFormat::Rgba16Float, kOutputUsage, nullptr,
+                          0u, RhiResourceState::Undefined, reblur) &&
+            createTexture("VulkanSmoke.RTGI.SignalPack.Validation", RhiTextureFormat::Rg32Uint, kValidationUsage,
+                          validation.data(), validation.size() * sizeof(uint32_t), RhiResourceState::ShaderWrite,
+                          validationTexture);
+
+    RhiBufferDesc validationReadbackDesc;
+    validationReadbackDesc.debugName = "VulkanSmoke.RTGI.SignalPack.ValidationReadback";
+    validationReadbackDesc.size = validation.size() * sizeof(uint32_t);
+    validationReadbackDesc.usage = rhiFlag(RhiBufferUsage::TransferDst) | rhiFlag(RhiBufferUsage::MapRead);
+    validationReadbackDesc.memoryUsage = RhiMemoryUsage::GpuToCpu;
+    validationReadbackDesc.initialState = RhiResourceState::TransferDst;
+    validationReadbackDesc.memoryCategory = RhiMemoryCategory::Readback;
+    RhiBufferDesc signalReadbackDesc = validationReadbackDesc;
+    signalReadbackDesc.debugName = "VulkanSmoke.RTGI.SignalPack.SignalReadback";
+    signalReadbackDesc.size = rawSignal.size() * sizeof(uint16_t);
+    if (valid) {
+        validationReadback = device.createBuffer(validationReadbackDesc, nullptr, 0u);
+        relaxReadback = device.createBuffer(signalReadbackDesc, nullptr, 0u);
+        reblurReadback = device.createBuffer(signalReadbackDesc, nullptr, 0u);
+        valid = validationReadback.isValid() && relaxReadback.isValid() && reblurReadback.isValid();
+    }
+
+    SharedRenderResources shared;
+    shared.rhiDevice = &device;
+    shared.commandListPool = &commandPool;
+    FrameContext frame;
+    frame.shared = &shared;
+    frame.temporalExtents =
+        makeTemporalFrameExtents({kWidth, kHeight}, {kWidth, kHeight}, {kWidth, kHeight}, {kWidth, kHeight});
+    frame.camera.view = glm::mat4(1.0f);
+    frame.camera.invViewProj = glm::mat4(1.0f);
+    frame.camera.invViewProj[2][2] = 0.0f;
+    frame.camera.invViewProj[3][2] = -10.0f;
+    frame.camera.jitteredInvViewProj = frame.camera.invViewProj;
+
+    RenderGraph graph;
+    RtgiSignalPackPass::GraphResources resources;
+    RgBufferHandle validationReadbackResource;
+    RgBufferHandle relaxReadbackResource;
+    RgBufferHandle reblurReadbackResource;
+    RgPassHandle packHandle;
+    if (valid) {
+        const auto importTexture = [&](const SmokeTexture& texture, const RhiResourceState initialState,
+                                       const RhiResourceState finalState) {
+            return graph.importTexture({texture.desc.debugName, texture.texture, texture.desc, initialState, finalState,
+                                        texture.view, RhiQueueType::Graphics, RhiQueueType::Graphics});
+        };
+        resources.rawDiffuseRadianceHitDistance =
+            importTexture(raw, RhiResourceState::ShaderRead, RhiResourceState::ShaderRead);
+        resources.depth = importTexture(depthTexture, RhiResourceState::DepthRead, RhiResourceState::DepthRead);
+        resources.relaxDiffuseRadianceHitDistance =
+            importTexture(relax, RhiResourceState::Undefined, RhiResourceState::ShaderWrite);
+        resources.reblurDiffuseRadianceHitDistance =
+            importTexture(reblur, RhiResourceState::Undefined, RhiResourceState::ShaderWrite);
+        resources.validation =
+            importTexture(validationTexture, RhiResourceState::ShaderWrite, RhiResourceState::ShaderWrite);
+        validationReadbackResource =
+            graph.importBuffer({validationReadbackDesc.debugName, validationReadback, validationReadbackDesc,
+                                RhiResourceState::TransferDst, RhiResourceState::HostRead, RhiQueueType::Graphics,
+                                RhiQueueType::Graphics});
+        relaxReadbackResource = graph.importBuffer({signalReadbackDesc.debugName, relaxReadback, signalReadbackDesc,
+                                                    RhiResourceState::TransferDst, RhiResourceState::HostRead,
+                                                    RhiQueueType::Graphics, RhiQueueType::Graphics});
+        reblurReadbackResource = graph.importBuffer({signalReadbackDesc.debugName, reblurReadback, signalReadbackDesc,
+                                                     RhiResourceState::TransferDst, RhiResourceState::HostRead,
+                                                     RhiQueueType::Graphics, RhiQueueType::Graphics});
+        const RgPassHandle inputReady =
+            graph.addPass({"RTGI.SignalPackInputReady", RgPassType::Copy, RhiQueueType::Graphics})
+                .setExecute([](RgPassContext&) { return true; })
+                .handle();
+        RtgiSignalPackPass::GraphResources aliasedResources = resources;
+        aliasedResources.reblurDiffuseRadianceHitDistance = aliasedResources.relaxDiffuseRadianceHitDistance;
+        valid = !pass.addGraphPass(graph, frame, {}, aliasedResources, inputReady).isValid();
+        packHandle = pass.addGraphPass(graph, frame, {}, resources, inputReady);
+        valid = valid && resources.rawDiffuseRadianceHitDistance.isValid() && resources.depth.isValid() &&
+                resources.relaxDiffuseRadianceHitDistance.isValid() &&
+                resources.reblurDiffuseRadianceHitDistance.isValid() && resources.validation.isValid() &&
+                validationReadbackResource.isValid() && relaxReadbackResource.isValid() &&
+                reblurReadbackResource.isValid() && packHandle.isValid();
+    }
+    if (valid) {
+        graph.addPass({"RTGI.SignalPackCopy", RgPassType::Copy, RhiQueueType::Graphics})
+            .dependsOn(packHandle)
+            .readTexture(resources.validation, RhiResourceState::TransferSrc)
+            .readTexture(resources.relaxDiffuseRadianceHitDistance, RhiResourceState::TransferSrc)
+            .readTexture(resources.reblurDiffuseRadianceHitDistance, RhiResourceState::TransferSrc)
+            .writeBuffer(validationReadbackResource, RhiResourceState::TransferDst)
+            .writeBuffer(relaxReadbackResource, RhiResourceState::TransferDst)
+            .writeBuffer(reblurReadbackResource, RhiResourceState::TransferDst)
+            .setExecute([&](RgPassContext& context) {
+                RhiTextureBufferCopy validationCopy;
+                validationCopy.srcTexture = context.texture(resources.validation);
+                validationCopy.dstBuffer = context.buffer(validationReadbackResource);
+                validationCopy.bytesPerRow = sizeof(uint32_t) * 2u * kWidth;
+                validationCopy.rowsPerImage = kHeight;
+                validationCopy.width = kWidth;
+                validationCopy.height = kHeight;
+                context.commandList().copyTextureToBuffer(validationCopy);
+                RhiTextureBufferCopy signalCopy;
+                signalCopy.srcTexture = context.texture(resources.relaxDiffuseRadianceHitDistance);
+                signalCopy.dstBuffer = context.buffer(relaxReadbackResource);
+                signalCopy.bytesPerRow = sizeof(uint16_t) * 4u * kWidth;
+                signalCopy.rowsPerImage = kHeight;
+                signalCopy.width = kWidth;
+                signalCopy.height = kHeight;
+                context.commandList().copyTextureToBuffer(signalCopy);
+                signalCopy.srcTexture = context.texture(resources.reblurDiffuseRadianceHitDistance);
+                signalCopy.dstBuffer = context.buffer(reblurReadbackResource);
+                context.commandList().copyTextureToBuffer(signalCopy);
+                return true;
+            });
+        const RgCompileResult compiled = graph.compile();
+        valid = compiled.succeeded();
+        if (!valid) {
+            std::cerr << "RTGI Signal Pack Render Graph compile failed: " << compiled.message << '\n';
+        }
+    }
+    if (valid) {
+        const RgExecuteResult executed = graph.execute(device, commandPool);
+        valid = executed.succeeded() && executed.completionToken().isValid() &&
+                device.waitForSubmission(executed.completionToken());
+        if (!executed.succeeded()) {
+            std::cerr << "RTGI Signal Pack Render Graph execution failed: " << executed.message << '\n';
+        }
+    }
+    if (valid) {
+        const auto* validationResult =
+            static_cast<const uint32_t*>(device.mapBuffer(validationReadback, 0u, validationReadbackDesc.size));
+        const auto* relaxResult =
+            static_cast<const uint16_t*>(device.mapBuffer(relaxReadback, 0u, signalReadbackDesc.size));
+        const auto* reblurResult =
+            static_cast<const uint16_t*>(device.mapBuffer(reblurReadback, 0u, signalReadbackDesc.size));
+        valid = validationResult != nullptr && relaxResult != nullptr && reblurResult != nullptr;
+        if (validationResult != nullptr && relaxResult != nullptr && reblurResult != nullptr) {
+            const std::array<RtgiTraceClassification, kPixelCount> expectedClassifications{
+                RtgiTraceClassification::Hit,       RtgiTraceClassification::Miss,
+                RtgiTraceClassification::Sky,       RtgiTraceClassification::Translucent,
+                RtgiTraceClassification::NonFinite, RtgiTraceClassification::NonFinite,
+                RtgiTraceClassification::NonFinite};
+            constexpr std::array<uint32_t, kPixelCount> kExpectedCandidates{1u, 2u, 0u, 0u, 7u, 3u, 5u};
+            constexpr std::array<uint32_t, kPixelCount> kExpectedConfirmed{1u, 0u, 0u, 0u, 2u, 1u, 4u};
+            constexpr std::array<uint32_t, kPixelCount> kExpectedIdentities{111u, 0u, 0u, 0u, 0u, 0u, 0u};
+            const std::array<glm::vec4, kPixelCount> expectedRelax{glm::vec4(1.0f, 2.0f, 3.0f, 2.0f),
+                                                                   glm::vec4(0.25f, 0.5f, 0.75f, kRtgiNrdFp16Max),
+                                                                   glm::vec4(0.0f),
+                                                                   glm::vec4(0.0f),
+                                                                   glm::vec4(0.0f),
+                                                                   glm::vec4(0.0f),
+                                                                   glm::vec4(0.0f)};
+            const std::array<glm::vec4, kPixelCount> expectedReblur{glm::vec4(2.0f, -1.0f, 0.0f, 0.5f),
+                                                                    glm::vec4(0.5f, -0.25f, 0.0f, 1.0f),
+                                                                    glm::vec4(0.0f),
+                                                                    glm::vec4(0.0f),
+                                                                    glm::vec4(0.0f),
+                                                                    glm::vec4(0.0f),
+                                                                    glm::vec4(0.0f)};
+            const auto unpackSignal = [](const uint16_t* signal, const size_t pixel) {
+                return glm::vec4(glm::unpackHalf1x16(signal[pixel * 4u]), glm::unpackHalf1x16(signal[pixel * 4u + 1u]),
+                                 glm::unpackHalf1x16(signal[pixel * 4u + 2u]),
+                                 glm::unpackHalf1x16(signal[pixel * 4u + 3u]));
+            };
+            const auto nearSignal = [](const glm::vec4& actual, const glm::vec4& expected) {
+                for (uint32_t component = 0u; component < 4u; ++component) {
+                    const float tolerance = std::max(0.002f, std::abs(expected[component]) * 0.002f);
+                    if (std::abs(actual[component] - expected[component]) > tolerance) {
+                        return false;
+                    }
+                }
+                return true;
+            };
+            for (size_t pixel = 0u; pixel < kPixelCount; ++pixel) {
+                const uint32_t validationWord = validationResult[pixel * 2u];
+                const uint32_t identity = validationResult[pixel * 2u + 1u];
+                const glm::vec4 relaxSignal = unpackSignal(relaxResult, pixel);
+                const glm::vec4 reblurSignal = unpackSignal(reblurResult, pixel);
+                const bool pixelValid =
+                    rtgiTraceValidationClassification(validationWord) == expectedClassifications[pixel] &&
+                    rtgiTraceValidationCandidateCount(validationWord) == kExpectedCandidates[pixel] &&
+                    rtgiTraceValidationConfirmedCount(validationWord) == kExpectedConfirmed[pixel] &&
+                    identity == kExpectedIdentities[pixel] && nearSignal(relaxSignal, expectedRelax[pixel]) &&
+                    nearSignal(reblurSignal, expectedReblur[pixel]);
+                if (!pixelValid) {
+                    std::cerr << "RTGI Signal Pack pixel " << pixel << " failed: class="
+                              << static_cast<uint32_t>(rtgiTraceValidationClassification(validationWord))
+                              << " candidates=" << rtgiTraceValidationCandidateCount(validationWord)
+                              << " confirmed=" << rtgiTraceValidationConfirmedCount(validationWord)
+                              << " identity=" << identity << " relax=(" << relaxSignal.x << ", " << relaxSignal.y
+                              << ", " << relaxSignal.z << ", " << relaxSignal.w << ") reblur=(" << reblurSignal.x
+                              << ", " << reblurSignal.y << ", " << reblurSignal.z << ", " << reblurSignal.w << ")\n";
+                    valid = false;
+                }
+            }
+            const RtgiSignalPackPass::Stats& stats = pass.stats();
+            valid = valid && stats.dispatched && stats.width == kWidth && stats.height == kHeight &&
+                    stats.reblurHitDistance.constantScale == 3.0f && stats.reblurHitDistance.viewZScale == 0.1f &&
+                    stats.reblurHitDistance.roughnessScale == 20.0f && stats.diffuseRoughness == 1.0f;
+        }
+        if (validationResult != nullptr) {
+            device.unmapBuffer(validationReadback);
+        }
+        if (relaxResult != nullptr) {
+            device.unmapBuffer(relaxReadback);
+        }
+        if (reblurResult != nullptr) {
+            device.unmapBuffer(reblurReadback);
+        }
+    }
+
+    cleanup();
+    valid = valid && device.validationErrorCount() == validationErrorsBefore;
+    if (!valid) {
+        std::cerr << "RTGI signal-pack invalid-input validation failed\n";
     }
     return valid;
 }
@@ -4012,10 +4479,13 @@ namespace {
     missCase.instanceMask = smokeCase.instanceMask;
     RtgiTraceSmokeExpectedPixel miss;
     miss.classification = RtgiTraceClassification::Miss;
+    miss.minimumHitDistance = kRtgiNrdFp16Max;
+    miss.maximumHitDistance = kRtgiNrdFp16Max;
     miss.minimumRadiance = {0.249f, 0.499f, 0.749f};
     miss.maximumRadiance = {0.251f, 0.501f, 0.751f};
     missCase.expectedPixels = {miss};
-    return validateRtgiTraceCase(device, commandPool, sceneTlas, activeTlas, globalBindlessSet, missCase);
+    return validateRtgiTraceCase(device, commandPool, sceneTlas, activeTlas, globalBindlessSet, missCase) &&
+           validateRtgiSignalPackInvalidInputs(device, commandPool);
 }
 
 [[nodiscard]] bool validateStaticMeshBlasAndSceneTlas(VkRhiDevice& device, RhiCommandListPool& commandPool) {

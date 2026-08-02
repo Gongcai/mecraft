@@ -285,13 +285,25 @@ Trace Pass 输出：
 
 当前 Opaque Trace 已创建 `RGBA16F` 辐射/命中距离和 `RG32UI` 验证输出，固定分类为
 Sky、Translucent、Miss、Hit 与 NonFinite。Hit Distance、Terrain/模型次级材质、Emissive、太阳、
-局部灯、天空环境项和 Miss Sky Radiance 均已由真实 Vulkan 回读验证。该原始 RGB 信号尚未按
-RELAX/REBLUR 规范打包，也尚未进入正式 Deferred 合成。
+局部灯、天空环境项和 Miss Sky Radiance 均已由真实 Vulkan 回读验证。原始输出在写入 FP16 前限制到
+`65504`；Miss 的 First-bounce Hit Distance 固定写入 `65504`，天空主表面和透明主表面仍表示为未采样
+全零数据。
 
-RELAX 使用 `RELAX_FrontEnd_PackRadianceAndHitDist` 打包原始 First-bounce Hit Distance；
-REBLUR 先调用 `REBLUR_FrontEnd_GetNormHitDist`，再用
-`REBLUR_FrontEnd_PackRadianceAndNormHitDist` 打包。两者不能共享 Alpha 编码。所有
-Radiance 在 Pack 前检查有限值，发现 NaN/Inf 时写入诊断计数并使该帧 RTGI 验证失败。
+新增独立 `RtgiSignalPackPass`，同时输出两张互不共享 Alpha 编码的 `RGBA16F` 纹理：
+
+- `RtgiRelaxDiffuseRadianceHitDistance`：按 `RELAX_FrontEnd_PackRadianceAndHitDist` 保留线性 RGB 与真实
+  First-bounce Hit Distance。
+- `RtgiReblurDiffuseRadianceHitDistance`：从主表面 Depth 和 `View * InverseViewProjection` 重建 View-Z，
+  使用 NRD 默认 `A=3.0`、`B=0.1`、`C=20.0` 及 Diffuse Roughness `1.0` 执行
+  `REBLUR_FrontEnd_GetNormHitDist`，再按 `REBLUR_FrontEnd_PackRadianceAndNormHitDist` 将 RGB 转为 YCoCg。
+
+Hit 和 Miss 执行两种打包；Sky 与 Translucent 的两张输出均为全零。Raw Radiance、Hit Distance、Depth
+出现 NaN/Inf，或 Radiance/Hit Distance 为负时，两张输出均清零，`RtgiValidation` 保留原 Candidate 与
+Confirmed 计数，将分类改为 NonFinite 并清除 Identity Hash。CPU 契约固定了 FP16 上限、NRD Epsilon、
+YCoCg 变换、REBLUR Magic Curve 与 96 字节 Push Constant 布局；真实 Vulkan Smoke 已验证
+`RGB=(1,2,3)` 转换为 `YCoCg=(2,-1,0)`、`viewZ=10/hitDist=2` 得到归一化距离 `0.5`、Miss 得到
+RELAX Alpha `65504` 与 REBLUR Alpha `1`，并覆盖 NaN/Inf 诊断。NRD SDK、历史资源和降噪调度仍属于
+下一阶段集成。
 
 ## 6. NRD 4.17.4 集成
 

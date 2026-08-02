@@ -1,0 +1,95 @@
+#version 460 core
+
+#include "rhi_screen_coordinates.glsl"
+#include "rtgi_sampling.glsl"
+#include "rtgi_nrd_signal.glsl"
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+layout(set = 0, binding = 0) uniform sampler2D uRawDiffuseRadianceHitDistance;
+layout(set = 0, binding = 1) uniform sampler2D uDepthTexture;
+layout(set = 0, binding = 2, rgba16f) uniform writeonly image2D uRelaxDiffuseRadianceHitDistance;
+layout(set = 0, binding = 3, rgba16f) uniform writeonly image2D uReblurDiffuseRadianceHitDistance;
+layout(set = 0, binding = 4, rg32ui) uniform uimage2D uValidation;
+
+layout(push_constant) uniform RtgiSignalPackPushConstants {
+    mat4 inverseProjection;
+    vec4 renderExtentAndInverse;
+    vec4 reblurParametersAndDiffuseRoughness;
+} pc;
+
+void rtgiSignalPackWriteZero(ivec2 texel) {
+    imageStore(uRelaxDiffuseRadianceHitDistance, texel, vec4(0.0));
+    imageStore(uReblurDiffuseRadianceHitDistance, texel, vec4(0.0));
+}
+
+void rtgiSignalPackFail(ivec2 texel, uvec4 validation) {
+    rtgiSignalPackWriteZero(texel);
+    uint validationWord =
+        (validation.x & ~RTGI_TRACE_VALIDATION_CLASSIFICATION_MASK) | RTGI_TRACE_CLASS_NON_FINITE;
+    imageStore(uValidation, texel, uvec4(validationWord, 0u, 0u, 0u));
+}
+
+bool rtgiSignalPackReconstructViewZ(ivec2 texel, float depth, out float viewZ) {
+    vec2 screenUv = (vec2(texel) + 0.5) * pc.renderExtentAndInverse.zw;
+    vec2 clipUv = rhiScreenUvToClipUv(screenUv);
+    vec4 viewPositionH = pc.inverseProjection * vec4(clipUv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
+    if (!rtgiNrdFinite(viewPositionH) || abs(viewPositionH.w) <= 1.0e-7) {
+        viewZ = 0.0;
+        return false;
+    }
+    viewZ = viewPositionH.z / viewPositionH.w;
+    return rtgiNrdFinite(viewZ);
+}
+
+void main() {
+    ivec2 texel = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 extent = ivec2(pc.renderExtentAndInverse.xy);
+    if (texel.x >= extent.x || texel.y >= extent.y) {
+        return;
+    }
+
+    uvec4 validation = imageLoad(uValidation, texel);
+    uint classification = validation.x & RTGI_TRACE_VALIDATION_CLASSIFICATION_MASK;
+    vec4 rawSignal = texelFetch(uRawDiffuseRadianceHitDistance, texel, 0);
+    float depth = texelFetch(uDepthTexture, texel, 0).r;
+    bool rawSignalValid = rtgiNrdFinite(rawSignal) && all(greaterThanEqual(rawSignal.rgb, vec3(0.0))) &&
+                          rawSignal.a >= 0.0 && rtgiNrdFinite(depth) && depth >= 0.0 && depth <= 1.0;
+    if (!rawSignalValid) {
+        rtgiSignalPackFail(texel, validation);
+        return;
+    }
+
+    if (classification == RTGI_TRACE_CLASS_SKY || classification == RTGI_TRACE_CLASS_TRANSLUCENT) {
+        rtgiSignalPackWriteZero(texel);
+        return;
+    }
+    if (classification == RTGI_TRACE_CLASS_NON_FINITE) {
+        rtgiSignalPackWriteZero(texel);
+        imageStore(uValidation, texel, uvec4(validation.x, 0u, 0u, 0u));
+        return;
+    }
+    if (classification != RTGI_TRACE_CLASS_HIT && classification != RTGI_TRACE_CLASS_MISS) {
+        rtgiSignalPackFail(texel, validation);
+        return;
+    }
+
+    float viewZ;
+    if (!rtgiSignalPackReconstructViewZ(texel, depth, viewZ)) {
+        rtgiSignalPackFail(texel, validation);
+        return;
+    }
+    float normalizedHitDistance = rtgiReblurFrontEndGetNormalizedHitDistance(
+        rawSignal.a, viewZ, pc.reblurParametersAndDiffuseRoughness.xyz,
+        pc.reblurParametersAndDiffuseRoughness.w);
+    vec4 relaxSignal = rtgiRelaxFrontEndPackRadianceAndHitDistance(rawSignal.rgb, rawSignal.a);
+    vec4 reblurSignal = rtgiReblurFrontEndPackRadianceAndNormalizedHitDistance(
+        rawSignal.rgb, normalizedHitDistance);
+    if (!rtgiNrdFinite(normalizedHitDistance) || !rtgiNrdFinite(relaxSignal) || !rtgiNrdFinite(reblurSignal)) {
+        rtgiSignalPackFail(texel, validation);
+        return;
+    }
+
+    imageStore(uRelaxDiffuseRadianceHitDistance, texel, relaxSignal);
+    imageStore(uReblurDiffuseRadianceHitDistance, texel, reblurSignal);
+}

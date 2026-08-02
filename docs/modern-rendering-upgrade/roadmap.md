@@ -191,7 +191,7 @@ M1 与 M2 可并行开发，但公共 `GpuMaterial`、`GpuSceneGeometry` 与 Sta
    所有权与 Active TLAS 发布已完成；生产 `RtgiTracePass`、确定性帧旋转、Blue Noise/Cosine
    Sampling、Opaque 自动提交、Terrain Cutout Candidate Confirm、Render Graph 资源声明、逐像素
    Candidate/Confirmed 计数、模型 Stable Material/Geometry Hash、真实 Vulkan 命中距离回读及完整
-   次级命中材质/辐射已完成。Deferred 运行时消费和 NRD 输入打包尚未完成。）
+   次级命中材质/辐射、RELAX/REBLUR 独立输入打包已完成。Deferred 运行时消费尚未完成。）
 2. 体素 Greedy Primitive Metadata 与 Cutout Alpha Candidate。（实现完成：新增 C++/GLSL 体素材质
    采样契约，固化包含边界的 `0.1` Alpha Cutoff、NaN/Inf 拒绝、1024 层纹理编码与
    6-bit 动画帧数/FPS 上限；GBuffer、主视图、Probe Capture 与 Shadow 的非 Leaves Cutout 已共用
@@ -221,7 +221,13 @@ M1 与 M2 可并行开发，但公共 `GpuMaterial`、`GpuSceneGeometry` 与 Sta
    返回 `RayQueryUnavailable`。命中表面累加 Emissive、直接光和天空环境项，Miss 直接采样 Sky Capture。Vulkan Smoke 已用 RGB 通道分别锁定
    红色 Emissive、绿色太阳、蓝色 Point Light，并验证 Terrain Grass Tint、天空环境项及固定天空
    Radiance Miss；CPU/GLSL World Grid、UBO 和材质源码契约测试已通过。）
-5. Raw Diffuse Radiance + First-bounce Hit Distance，并按 RELAX/REBLUR 规范分别打包。
+5. Raw Diffuse Radiance + First-bounce Hit Distance，并按 RELAX/REBLUR 规范分别打包。（实现完成：
+   `RtgiTracePass` 保留统一 `RGBA16F` 原始 RGB Radiance 与 First-bounce Hit Distance，Miss 距离固定为
+   FP16 最大值 `65504`。新增独立 `RtgiSignalPackPass`，RELAX 保留线性 RGB 与真实距离，REBLUR 使用
+   NRD 4.17 的默认 `(A=3, B=0.1, C=20)` 和 Diffuse Roughness `1` 归一化距离并将 RGB 转为 YCoCg；
+   Sky/Translucent 明确输出全零。Raw Radiance、Hit Distance 或 Depth 出现 NaN/Inf，或 Radiance 为负时，
+   两种输出均清零，`RtgiValidation` 保留 Candidate/Confirmed 计数、改写为 `NonFinite` 并清除 Identity
+   Hash。CPU 契约、106 个 Shader 编译用例与真实 Vulkan Trace/Pack/非法输入回读均已通过。）
 6. NRD 4.17.4 Build、License、RHI Pipeline 与 Render Graph Bridge。
 7. RELAX_DIFFUSE Quality、REBLUR_DIFFUSE Performance。
 8. Non-jittered Matrix、2.5D Motion、Pre-exposure 转换和 History Reset。
