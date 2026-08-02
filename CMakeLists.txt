@@ -361,6 +361,7 @@ set(SRC_RENDERER
         src/renderer/contracts/ReflectionProbeContract.cpp
         src/renderer/contracts/RtgiSamplingContract.cpp
         src/renderer/contracts/TerrainMaterialSamplingContract.cpp
+        src/renderer/contracts/TerrainRayTracingContract.cpp
         src/renderer/contracts/VoxelReflectionProbeSourceContract.cpp
         src/renderer/contracts/RenderFeatureContract.cpp
 
@@ -1069,6 +1070,10 @@ if(MECRAFT_BUILD_TESTS)
     add_mecraft_test(terrain_material_sampling_contract_test
             tests/terrain_material_sampling_contract_test.cpp)
     target_compile_definitions(terrain_material_sampling_contract_test PRIVATE
+            MECRAFT_TEST_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
+    add_mecraft_test(terrain_ray_tracing_contract_test
+            tests/terrain_ray_tracing_contract_test.cpp)
+    target_compile_definitions(terrain_ray_tracing_contract_test PRIVATE
             MECRAFT_TEST_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
     add_mecraft_test(rhi_acceleration_structure_contract_test
             tests/rhi_acceleration_structure_contract_test.cpp)

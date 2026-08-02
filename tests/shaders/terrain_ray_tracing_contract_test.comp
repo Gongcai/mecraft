@@ -1,0 +1,21 @@
+#version 460 core
+
+#include "../../assets/shaders/terrain_ray_tracing_contract.glsl"
+
+layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+
+layout(std430, set = 0, binding = 0) readonly buffer TerrainMetadataInput {
+    TerrainPrimitiveMetadata metadata[];
+} uInput;
+
+layout(std430, set = 0, binding = 1) writeonly buffer TerrainMetadataOutput {
+    uvec4 values[];
+} uOutput;
+
+void main() {
+    TerrainPrimitiveMetadata primitive = uInput.metadata[0];
+    uOutput.values[0] =
+        uvec4(terrainPrimitiveAnimationFrameCount(primitive),
+              terrainPrimitiveAnimationFramesPerSecond(primitive), uint(terrainPrimitiveFace(primitive)),
+              terrainPrimitiveMaterialAndTint(primitive));
+}

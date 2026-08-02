@@ -1270,9 +1270,10 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub& render, Re
         if (renderWork.terrainBlasSupported) {
             ImGui::Text("BLAS Work: build/compact %u / %u, retired %u", renderWork.terrainBlasBuildsThisFrame,
                         renderWork.terrainBlasCompactionsThisFrame, renderWork.terrainRetiredBlasTasks);
-            ImGui::Text("BLAS Memory: geometry %.2f MiB, compact %.2f MiB, scratch peak %.2f MiB",
-                        bytesToMiB(renderWork.terrainBlasGeometryBytes), bytesToMiB(renderWork.terrainBlasBytes),
-                        bytesToMiB(renderWork.terrainBlasScratchPeakBytes));
+            ImGui::Text("BLAS Memory: geometry %.2f MiB, metadata %.2f MiB, compact %.2f MiB, scratch peak %.2f MiB",
+                        bytesToMiB(renderWork.terrainBlasGeometryBytes),
+                        bytesToMiB(renderWork.terrainBlasPrimitiveMetadataBytes),
+                        bytesToMiB(renderWork.terrainBlasBytes), bytesToMiB(renderWork.terrainBlasScratchPeakBytes));
             ImGui::Text("BLAS Primitives: %llu", static_cast<unsigned long long>(renderWork.terrainBlasPrimitives));
         }
         ImGui::Text("Scene TLAS: %s, desired/active %u / %u, pending %s, retired %u",

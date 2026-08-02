@@ -8,12 +8,14 @@
 
 namespace {
 
-[[nodiscard]] BlockVertex makeVertex(const float x, const float y, const float z) {
-    BlockVertex vertex{};
-    vertex.x = x;
-    vertex.y = y;
-    vertex.z = z;
-    return vertex;
+[[nodiscard]] BlockVertex makeVertex(const float x, const float y, const float z, const float u, const float v,
+                                     const int8_t face, const uint16_t layer, const uint16_t frameCount = 1u,
+                                     const uint8_t framesPerSecond = 0u, const bool animated = false,
+                                     const uint8_t tintKind = BlockTintKinds::NONE,
+                                     const uint8_t derivativeMaterialId = DerivativeMaterialIds::DEFAULT) {
+    return makeBlockVertex(x, y, z, u, v, static_cast<float>(face), 1.0f, 0.0f, 3.0f, static_cast<float>(layer),
+                           static_cast<float>(frameCount), static_cast<float>(framesPerSecond), animated ? 1.0f : 0.0f,
+                           tintKind, 64u, 128u, derivativeMaterialId);
 }
 
 [[nodiscard]] bool requireTrue(const bool condition, const char* message) {
@@ -27,12 +29,16 @@ namespace {
 } // namespace
 
 int main() {
-    const std::vector<BlockVertex> opaque{makeVertex(0.0f, 0.0f, 0.0f), makeVertex(1.0f, 0.0f, 0.0f),
-                                          makeVertex(0.0f, 1.0f, 0.0f)};
-    const std::vector<BlockVertex> cutout{makeVertex(0.0f, 0.0f, 1.0f), makeVertex(1.0f, 0.0f, 1.0f),
-                                          makeVertex(0.0f, 1.0f, 1.0f)};
-    const std::vector<BlockVertex> cutoutDistance{makeVertex(0.0f, 0.0f, 2.0f), makeVertex(1.0f, 0.0f, 2.0f),
-                                                  makeVertex(0.0f, 1.0f, 2.0f)};
+    const std::vector<BlockVertex> opaque{makeVertex(0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 2, 17u),
+                                          makeVertex(1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 2, 17u),
+                                          makeVertex(0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 2, 17u)};
+    const std::vector<BlockVertex> cutout{
+        makeVertex(0.0f, 0.0f, 1.0f, 0.0f, 0.0f, -1, 100u, 3u, 4u, true, BlockTintKinds::GRASS, 9u),
+        makeVertex(1.0f, 0.0f, 1.0f, 1.0f, 0.0f, -1, 100u, 3u, 4u, true, BlockTintKinds::GRASS, 9u),
+        makeVertex(0.0f, 1.0f, 1.0f, 0.0f, 1.0f, -1, 100u, 3u, 4u, true, BlockTintKinds::GRASS, 9u)};
+    const std::vector<BlockVertex> cutoutDistance{makeVertex(0.0f, 0.0f, 2.0f, 0.0f, 0.0f, 5, 200u),
+                                                  makeVertex(1.0f, 0.0f, 2.0f, 1.0f, 0.0f, 5, 200u),
+                                                  makeVertex(0.0f, 1.0f, 2.0f, 0.0f, 1.0f, 5, 200u)};
 
     TerrainBlasGeometry geometry;
     const TerrainBlasRequestResult validResult =
@@ -43,7 +49,8 @@ int main() {
 
     TerrainBlasGeometry invalidCountGeometry;
     const TerrainBlasRequestResult invalidCountResult = TerrainBlasCache::prepareGeometry(
-        {makeVertex(0.0f, 0.0f, 0.0f), makeVertex(1.0f, 0.0f, 0.0f)}, {}, {}, invalidCountGeometry);
+        {makeVertex(0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 2, 17u), makeVertex(1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 2, 17u)}, {}, {},
+        invalidCountGeometry);
 
     std::vector<BlockVertex> invalidPosition = opaque;
     invalidPosition.front().x = std::numeric_limits<float>::quiet_NaN();
@@ -51,20 +58,50 @@ int main() {
     const TerrainBlasRequestResult invalidPositionResult =
         TerrainBlasCache::prepareGeometry(invalidPosition, {}, {}, invalidPositionGeometry);
 
+    std::vector<BlockVertex> invalidUv = opaque;
+    invalidUv.front().u = std::numeric_limits<float>::infinity();
+    TerrainBlasGeometry invalidUvGeometry;
+    const TerrainBlasRequestResult invalidUvResult =
+        TerrainBlasCache::prepareGeometry(invalidUv, {}, {}, invalidUvGeometry);
+
+    std::vector<BlockVertex> inconsistentMaterial = opaque;
+    inconsistentMaterial[1].layer = 18u;
+    TerrainBlasGeometry inconsistentMaterialGeometry;
+    const TerrainBlasRequestResult inconsistentMaterialResult =
+        TerrainBlasCache::prepareGeometry(inconsistentMaterial, {}, {}, inconsistentMaterialGeometry);
+
+    std::vector<BlockVertex> invalidAnimationFlag = opaque;
+    for (BlockVertex& vertex : invalidAnimationFlag) {
+        vertex.animated = 2u;
+    }
+    TerrainBlasGeometry invalidAnimationFlagGeometry;
+    const TerrainBlasRequestResult invalidAnimationFlagResult =
+        TerrainBlasCache::prepareGeometry(invalidAnimationFlag, {}, {}, invalidAnimationFlagGeometry);
+
     std::vector<TerrainBlasScheduleKey> schedule{{2u, {8, 1}}, {1u, {9, 3}}, {2u, {7, 5}}, {2u, {7, 2}}};
     std::sort(schedule.begin(), schedule.end());
 
     const bool valid =
-        requireTrue(validResult == TerrainBlasRequestResult::Queued && geometry.opaqueVertexCount == 3u &&
-                        geometry.cutoutVertexCount == 6u && geometry.vertexCount() == 9u &&
-                        geometry.primitiveCount() == 3u && geometry.vertices[3].z == 1.0f &&
-                        geometry.vertices[6].z == 2.0f,
-                    "geometry preparation must preserve opaque and cutout triangle ranges") &&
+        requireTrue(
+            validResult == TerrainBlasRequestResult::Queued && geometry.opaqueVertexCount == 3u &&
+                geometry.cutoutVertexCount == 6u && geometry.vertexCount() == 9u && geometry.primitiveCount() == 3u &&
+                geometry.vertices[3].z == 1.0f && geometry.vertices[6].z == 2.0f &&
+                geometry.primitiveMetadata.size() == 3u && geometry.primitiveMetadata[0].textureLayer == 17u &&
+                renderer::contracts::terrainPrimitiveAnimationFrameCount(geometry.primitiveMetadata[1]) == 3u &&
+                renderer::contracts::terrainPrimitiveAnimationFramesPerSecond(geometry.primitiveMetadata[1]) == 4u &&
+                renderer::contracts::terrainPrimitiveAnimated(geometry.primitiveMetadata[1]) &&
+                renderer::contracts::terrainPrimitiveFace(geometry.primitiveMetadata[1]) == -1 &&
+                geometry.uploadByteSize() ==
+                    sizeof(BlockVertex) * 9u + sizeof(renderer::contracts::TerrainPrimitiveMetadata) * 3u,
+            "geometry preparation must preserve triangle order and emit one metadata record per primitive") &&
         requireTrue(emptyResult == TerrainBlasRequestResult::Cleared && emptyGeometry.empty(),
                     "empty solid geometry must explicitly clear the resident BLAS") &&
         requireTrue(invalidCountResult == TerrainBlasRequestResult::InvalidGeometry &&
-                        invalidPositionResult == TerrainBlasRequestResult::InvalidGeometry,
-                    "non-triangle and non-finite geometry must be rejected") &&
+                        invalidPositionResult == TerrainBlasRequestResult::InvalidGeometry &&
+                        invalidUvResult == TerrainBlasRequestResult::InvalidGeometry &&
+                        inconsistentMaterialResult == TerrainBlasRequestResult::InvalidGeometry &&
+                        invalidAnimationFlagResult == TerrainBlasRequestResult::InvalidGeometry,
+                    "non-triangle, non-finite, and material-inconsistent primitives must be rejected") &&
         requireTrue(TerrainBlasCache::validKey({0, 0}) && TerrainBlasCache::validKey({0, 15}) &&
                         !TerrainBlasCache::validKey({0, -1}) && !TerrainBlasCache::validKey({0, 16}),
                     "terrain keys must remain inside the fixed SubChunk column range") &&

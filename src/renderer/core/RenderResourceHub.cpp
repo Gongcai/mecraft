@@ -356,6 +356,7 @@ RenderWorkStats RenderResourceHub::getRenderWorkStats() const {
     stats.terrainBlasCompactionsThisFrame = blasStats.compactionsRecordedThisFrame;
     stats.terrainBlasPrimitives = blasStats.activePrimitiveCount;
     stats.terrainBlasGeometryBytes = blasStats.activeGeometryBytes;
+    stats.terrainBlasPrimitiveMetadataBytes = blasStats.activePrimitiveMetadataBytes;
     stats.terrainBlasBytes = blasStats.activeBlasBytes;
     stats.terrainBlasScratchPeakBytes = blasStats.scratchPeakBytesThisFrame;
     return stats;

@@ -147,10 +147,13 @@ M1 与 M2 可并行开发，但公共 `GpuMaterial`、`GpuSceneGeometry` 与 Sta
    一帧。Build、Compacted Size Query、Compact Copy、Submission Token、查询槽隔离与延迟销毁已形成
    完整状态机；新 Revision 压缩完成前保留旧 Active BLAS，完成后原子换代，空网格和区块卸载会
    明确退役对应资源，Graph 失败保留 CPU Geometry 并按同一算法重新录制。Dashboard 已显示 Active、
-   Pending、Primitive、Geometry/BLAS/Scratch 字节；纯契约测试与 Vulkan 生产缓存 Smoke 已覆盖输入
-   校验、确定性顺序、Build/Compact、Revision 换代和卸载，Validation 未发现错误。）
+   Pending、Primitive、Geometry/Primitive Metadata/BLAS/Scratch 字节；固定 16 字节 Primitive Metadata、
+   Geometry Index 范围与 Device Address 已纳入压缩 BLAS 生命周期。纯契约测试与 Vulkan 生产缓存 Smoke
+   已覆盖输入校验、确定性顺序、Metadata 回读、Build/Compact、Revision 换代和卸载，Validation
+   未发现错误。）
 7. glTF Static Mesh BLAS 共享和 TLAS Instance。（实现完成：新增共享 `SceneBlasResource`，由
-   TLAS 代际共同持有 BLAS、Backing Storage 与 Geometry Buffer 生命周期；`StaticMeshBlasCache`
+   TLAS 代际共同持有 BLAS、Backing Storage、Geometry 与 Primitive Metadata Buffer 生命周期；
+   `StaticMeshBlasCache`
    将同一 glTF 资产的 Opaque 与 Alpha Mask Primitive 构建为多 Geometry 压缩 BLAS，Blend 与
    Transmission 不进入 Solid BLAS，多个 ECS 实例共享同一资产 BLAS。`SceneTlasCache` 按稳定
    Instance Key 排序，分配唯一 24-bit Custom Index，并固定 GI Opaque/Cutout、Shadow、Reflection
@@ -165,8 +168,8 @@ M1 与 M2 可并行开发，但公共 `GpuMaterial`、`GpuSceneGeometry` 与 Sta
    退役、Binding 4、Shader Reflection、体素 Revision 原子换代、卸载和延迟销毁。真实 Compute Ray
    Query Smoke 进一步覆盖 Opaque 自动提交、Cutout Candidate 拒绝/显式确认，以及 Instance Custom
    Index、Geometry Index、Primitive ID、Barycentrics 回读，Validation 未发现错误。统一 Alpha
-   Cutoff 与动画层选择契约已在 M3 接入体素光栅路径；正式运行时材质元数据、完整纹理采样
-   与 Candidate Confirm 命中链继续归 M3 第 2、3 项。）
+   Cutoff、动画层选择、正式 Terrain Primitive Metadata 与 TLAS 代际命中数据快照已在 M3 接入；
+   完整纹理采样与 Candidate Confirm 命中链继续归 M3 第 2、3 项。）
 
 ### 完成条件
 
@@ -186,9 +189,11 @@ M1 与 M2 可并行开发，但公共 `GpuMaterial`、`GpuSceneGeometry` 与 Sta
 2. 体素 Greedy Primitive Metadata 与 Cutout Alpha Candidate。（进行中：新增 C++/GLSL 体素材质
    采样契约，固化包含边界的 `0.1` Alpha Cutoff、NaN/Inf 拒绝、1024 层纹理编码与
    6-bit 动画帧数/FPS 上限；GBuffer、主视图、Probe Capture 与 Shadow 的非 Leaves Cutout 已共用
-   同一 Alpha Test 及动画层选择，Leaves 保持实心投影。Terrain Greedy Primitive Metadata、
-   BLAS Geometry Index 映射、Ray Cone 纹理采样与
-   生产 Cutout Candidate Confirm 尚未完成。）
+   同一 Alpha Test 及动画层选择，Leaves 保持实心投影。固定 16 字节 Terrain Primitive Metadata、
+   Opaque/Cutout Primitive 顺序、BLAS Geometry Index 到 Vertex/Primitive Base 映射、Vertex/Metadata
+   Device Address 及 TLAS Active Generation 精确快照已完成；Vulkan 已覆盖 Metadata Buffer 回读、
+   Terrain BLAS 换代期间旧 TLAS 地址保留与新代映射切换。Barycentric UV、Ray Cone 纹理采样与生产
+   Cutout Candidate Confirm 尚未完成。）
 3. 模型 Geometry/Material 次级命中读取。
 4. 次级太阳、局部灯、Emissive、天空 Radiance。
 5. Raw Diffuse Radiance + First-bounce Hit Distance，并按 RELAX/REBLUR 规范分别打包。

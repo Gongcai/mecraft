@@ -5,6 +5,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <vector>
 
 class RhiDevice;
@@ -38,10 +39,15 @@ public:
     [[nodiscard]] uint64_t blasBytes() const { return m_blasBytes; }
     [[nodiscard]] const std::vector<RhiBufferHandle>& retainedBuffers() const { return m_retainedBuffers; }
 
+    /// Resolves the immutable device address captured for one retained geometry buffer.
+    /// @param buffer Exact handle whose lifetime is owned by this shared BLAS resource.
+    /// @return Non-zero creation-time address, or no value when the handle is not retained.
+    [[nodiscard]] std::optional<uint64_t> retainedBufferDeviceAddress(RhiBufferHandle buffer) const;
+
 private:
     SceneBlasResource(RhiDevice& device, RhiAccelerationStructureHandle accelerationStructure,
                       RhiBufferHandle storageBuffer, uint64_t deviceAddress, uint64_t blasBytes,
-                      std::vector<RhiBufferHandle> retainedBuffers);
+                      std::vector<RhiBufferHandle> retainedBuffers, std::vector<uint64_t> retainedBufferAddresses);
 
     RhiDevice* m_device = nullptr;
     RhiAccelerationStructureHandle m_accelerationStructure;
@@ -49,6 +55,7 @@ private:
     uint64_t m_deviceAddress = 0u;
     uint64_t m_blasBytes = 0u;
     std::vector<RhiBufferHandle> m_retainedBuffers;
+    std::vector<uint64_t> m_retainedBufferAddresses;
 };
 
 using SceneBlasResourcePtr = std::shared_ptr<const SceneBlasResource>;

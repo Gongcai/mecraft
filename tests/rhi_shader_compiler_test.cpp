@@ -267,11 +267,12 @@ void main() {
 } // namespace
 
 int main() {
-    constexpr std::array<ShaderCase, 104> kShaderCases{
+    constexpr std::array<ShaderCase, 105> kShaderCases{
         {{"tests/shaders/rhi_screen_coordinates_test.frag", RhiShaderStage::Fragment},
          {"tests/shaders/material_brdf_shared_test.frag", RhiShaderStage::Fragment},
          {"tests/shaders/reflection_probe_contract_test.frag", RhiShaderStage::Fragment},
          {"tests/shaders/gpu_scene_contract_test.comp", RhiShaderStage::Compute},
+         {"tests/shaders/terrain_ray_tracing_contract_test.comp", RhiShaderStage::Compute},
          {"tests/shaders/global_bindless_gpu_scene_test.comp", RhiShaderStage::Compute, nullptr, nullptr, nullptr,
           true},
          {"tests/shaders/cutout_ray_query_test.comp", RhiShaderStage::Compute, nullptr, nullptr, nullptr, true},

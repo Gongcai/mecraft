@@ -2,6 +2,7 @@
 #define MECRAFT_TERRAIN_BLAS_CACHE_H
 
 #include "TerrainGpuKey.h"
+#include "renderer/contracts/TerrainRayTracingContract.h"
 #include "renderer/rhi/RhiHandles.h"
 #include "renderer/rhi/SceneBlasResource.h"
 #include "renderer/rhi/RhiTypes.h"
@@ -57,13 +58,20 @@ struct TerrainBlasScheduleKey {
 /// CPU geometry retained until a BLAS build submission is accepted.
 struct TerrainBlasGeometry {
     std::vector<BlockVertex> vertices;
+    std::vector<renderer::contracts::TerrainPrimitiveMetadata> primitiveMetadata;
     uint32_t opaqueVertexCount = 0u;
     uint32_t cutoutVertexCount = 0u;
 
     [[nodiscard]] uint32_t vertexCount() const { return opaqueVertexCount + cutoutVertexCount; }
     [[nodiscard]] uint32_t primitiveCount() const { return vertexCount() / 3u; }
-    [[nodiscard]] uint64_t byteSize() const { return static_cast<uint64_t>(vertices.size()) * sizeof(BlockVertex); }
-    [[nodiscard]] bool empty() const { return vertices.empty(); }
+    [[nodiscard]] uint64_t vertexByteSize() const {
+        return static_cast<uint64_t>(vertices.size()) * sizeof(BlockVertex);
+    }
+    [[nodiscard]] uint64_t primitiveMetadataByteSize() const {
+        return static_cast<uint64_t>(primitiveMetadata.size()) * sizeof(renderer::contracts::TerrainPrimitiveMetadata);
+    }
+    [[nodiscard]] uint64_t uploadByteSize() const { return vertexByteSize() + primitiveMetadataByteSize(); }
+    [[nodiscard]] bool empty() const { return vertices.empty() && primitiveMetadata.empty(); }
 };
 
 /// Reports whether a terrain geometry request was accepted or rejected by its public contract.
@@ -94,12 +102,17 @@ struct TerrainBlasView {
     renderer::rt::SceneBlasResourcePtr resource;
     RhiAccelerationStructureHandle accelerationStructure;
     RhiBufferHandle geometryBuffer;
+    RhiBufferHandle primitiveMetadataBuffer;
     uint64_t deviceAddress = 0u;
+    uint64_t vertexAddress = 0u;
+    uint64_t primitiveMetadataAddress = 0u;
     uint32_t opaqueVertexCount = 0u;
     uint32_t cutoutVertexCount = 0u;
     uint32_t primitiveCount = 0u;
     uint64_t geometryBytes = 0u;
+    uint64_t primitiveMetadataBytes = 0u;
     uint64_t blasBytes = 0u;
+    renderer::contracts::TerrainRayTracingHitData hitData;
 };
 
 /// Aggregated terrain BLAS residency and scheduler diagnostics.
@@ -114,6 +127,7 @@ struct TerrainBlasStats {
     uint32_t compactionsRecordedThisFrame = 0u;
     uint64_t activePrimitiveCount = 0u;
     uint64_t activeGeometryBytes = 0u;
+    uint64_t activePrimitiveMetadataBytes = 0u;
     uint64_t activeBlasBytes = 0u;
     uint64_t scratchPeakBytesThisFrame = 0u;
 };
@@ -189,10 +203,14 @@ private:
         uint64_t revision = 0u;
         glm::vec3 worldOrigin = glm::vec3(0.0f);
         renderer::rt::SceneBlasResourcePtr resource;
+        RhiBufferHandle geometryBuffer;
+        RhiBufferHandle primitiveMetadataBuffer;
         uint32_t opaqueVertexCount = 0u;
         uint32_t cutoutVertexCount = 0u;
         uint32_t primitiveCount = 0u;
         uint64_t geometryBytes = 0u;
+        uint64_t primitiveMetadataBytes = 0u;
+        renderer::contracts::TerrainRayTracingHitData hitData;
     };
 
     struct Entry {
@@ -210,6 +228,7 @@ private:
         bool current = true;
         TaskState state = TaskState::Queued;
         RhiBufferHandle geometryBuffer;
+        RhiBufferHandle primitiveMetadataBuffer;
         RhiBufferHandle buildStorageBuffer;
         RhiAccelerationStructureHandle buildAccelerationStructure;
         RhiBufferHandle scratchBuffer;

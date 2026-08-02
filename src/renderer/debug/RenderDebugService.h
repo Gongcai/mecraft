@@ -305,6 +305,7 @@ struct RenderWorkStats {
     uint32_t terrainBlasCompactionsThisFrame = 0u;
     uint64_t terrainBlasPrimitives = 0u;
     uint64_t terrainBlasGeometryBytes = 0u;
+    uint64_t terrainBlasPrimitiveMetadataBytes = 0u;
     uint64_t terrainBlasBytes = 0u;
     uint64_t terrainBlasScratchPeakBytes = 0u;
 };

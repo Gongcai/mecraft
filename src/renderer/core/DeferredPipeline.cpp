@@ -2468,7 +2468,9 @@ bool DeferredPipeline::prepareSceneTlas() {
                                      terrain.resource,
                                      glm::translate(glm::mat4(1.0f), terrain.worldOrigin),
                                      mask,
-                                     false});
+                                     false,
+                                     renderer::rt::SceneTlasTerrainHitData{terrain.hitData, terrain.geometryBuffer,
+                                                                           terrain.primitiveMetadataBuffer}});
             }
         }
         if (m_shared->staticMeshRenderer != nullptr) {
@@ -2494,7 +2496,8 @@ bool DeferredPipeline::prepareSceneTlas() {
                      blas,
                      m_shared->staticMeshRenderer->instanceTransform(),
                      mask,
-                     blasStats.containsDoubleSided});
+                     blasStats.containsDoubleSided,
+                     std::nullopt});
             }
         }
     }

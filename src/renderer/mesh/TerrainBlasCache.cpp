@@ -15,8 +15,11 @@
 namespace {
 
 constexpr RhiBufferUsageFlags kGeometryBufferUsages =
-    rhiFlag(RhiBufferUsage::Storage) | rhiFlag(RhiBufferUsage::TransferDst) | rhiFlag(RhiBufferUsage::DeviceAddress) |
-    rhiFlag(RhiBufferUsage::AccelerationStructureBuildInput);
+    rhiFlag(RhiBufferUsage::Storage) | rhiFlag(RhiBufferUsage::TransferSrc) | rhiFlag(RhiBufferUsage::TransferDst) |
+    rhiFlag(RhiBufferUsage::DeviceAddress) | rhiFlag(RhiBufferUsage::AccelerationStructureBuildInput);
+constexpr RhiBufferUsageFlags kPrimitiveMetadataBufferUsages =
+    rhiFlag(RhiBufferUsage::Storage) | rhiFlag(RhiBufferUsage::TransferSrc) | rhiFlag(RhiBufferUsage::TransferDst) |
+    rhiFlag(RhiBufferUsage::DeviceAddress);
 constexpr RhiBufferUsageFlags kAccelerationStructureStorageUsages =
     rhiFlag(RhiBufferUsage::DeviceAddress) | rhiFlag(RhiBufferUsage::AccelerationStructureStorage);
 constexpr RhiBufferUsageFlags kScratchBufferUsages =
@@ -25,25 +28,112 @@ constexpr RhiAccelerationStructureBuildFlags kTerrainBuildFlags =
     rhiFlag(RhiAccelerationStructureBuildFlag::AllowCompaction) |
     rhiFlag(RhiAccelerationStructureBuildFlag::PreferFastTrace);
 
-static_assert(offsetof(BlockVertex, x) == 0u && offsetof(BlockVertex, y) == sizeof(float) &&
-                  offsetof(BlockVertex, z) == sizeof(float) * 2u,
+static_assert(offsetof(BlockVertex, x) == renderer::contracts::kTerrainRayTracingVertexPositionOffset &&
+                  offsetof(BlockVertex, y) == sizeof(float) && offsetof(BlockVertex, z) == sizeof(float) * 2u,
               "Terrain BLAS positions must occupy the first three floats of BlockVertex");
+static_assert(offsetof(BlockVertex, u) == renderer::contracts::kTerrainRayTracingVertexUvOffset &&
+                  offsetof(BlockVertex, v) == renderer::contracts::kTerrainRayTracingVertexUvOffset + sizeof(float),
+              "Terrain ray-query UVs must match the fixed BlockVertex byte offsets");
+static_assert(sizeof(BlockVertex) == renderer::contracts::kTerrainRayTracingVertexStride,
+              "Terrain ray-query vertex stride must match BlockVertex");
 
-[[nodiscard]] bool finitePosition(const BlockVertex& vertex) {
-    return std::isfinite(vertex.x) && std::isfinite(vertex.y) && std::isfinite(vertex.z);
+[[nodiscard]] bool finitePositionAndUv(const BlockVertex& vertex) {
+    return std::isfinite(vertex.x) && std::isfinite(vertex.y) && std::isfinite(vertex.z) && std::isfinite(vertex.u) &&
+           std::isfinite(vertex.v);
 }
 
 [[nodiscard]] bool finiteVector(const glm::vec3& value) {
     return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
 }
 
+[[nodiscard]] bool samePrimitiveMaterial(const BlockVertex& left, const BlockVertex& right) {
+    return left.normal == right.normal && left.layer == right.layer &&
+           left.animationFrameCount == right.animationFrameCount && left.animationFps == right.animationFps &&
+           left.animated == right.animated && left.tintPacked == right.tintPacked;
+}
+
+[[nodiscard]] std::optional<renderer::contracts::TerrainPrimitiveMetadata>
+primitiveMetadataForTriangle(const std::vector<BlockVertex>& vertices, const size_t firstVertex) {
+    if (firstVertex > vertices.size() || vertices.size() - firstVertex < 3u) {
+        return std::nullopt;
+    }
+    const BlockVertex& first = vertices[firstVertex];
+    const BlockVertex& second = vertices[firstVertex + 1u];
+    const BlockVertex& third = vertices[firstVertex + 2u];
+    if (first.animated > 1u || !finitePositionAndUv(first) || !finitePositionAndUv(second) ||
+        !finitePositionAndUv(third) || !samePrimitiveMaterial(first, second) || !samePrimitiveMaterial(first, third)) {
+        return std::nullopt;
+    }
+    return renderer::contracts::encodeTerrainPrimitiveMetadata({first.layer, first.animationFrameCount,
+                                                                first.animationFps, first.animated != 0u,
+                                                                first.tintPacked, first.normal});
+}
+
+[[nodiscard]] bool buildPrimitiveMetadata(const std::vector<BlockVertex>& vertices,
+                                          std::vector<renderer::contracts::TerrainPrimitiveMetadata>& metadata) {
+    metadata.clear();
+    if (vertices.size() % 3u != 0u) {
+        return false;
+    }
+    metadata.reserve(vertices.size() / 3u);
+    for (size_t firstVertex = 0u; firstVertex < vertices.size(); firstVertex += 3u) {
+        const std::optional<renderer::contracts::TerrainPrimitiveMetadata> primitive =
+            primitiveMetadataForTriangle(vertices, firstVertex);
+        if (!primitive.has_value()) {
+            metadata.clear();
+            return false;
+        }
+        metadata.push_back(*primitive);
+    }
+    return true;
+}
+
 [[nodiscard]] bool validPreparedGeometry(const TerrainBlasGeometry& geometry) {
     const uint64_t totalVertexCount = static_cast<uint64_t>(geometry.opaqueVertexCount) + geometry.cutoutVertexCount;
     if (geometry.opaqueVertexCount % 3u != 0u || geometry.cutoutVertexCount % 3u != 0u ||
-        totalVertexCount > std::numeric_limits<uint32_t>::max() || totalVertexCount != geometry.vertices.size()) {
+        totalVertexCount > std::numeric_limits<uint32_t>::max() || totalVertexCount != geometry.vertices.size() ||
+        geometry.primitiveMetadata.size() != totalVertexCount / 3u) {
         return false;
     }
-    return std::all_of(geometry.vertices.begin(), geometry.vertices.end(), finitePosition);
+    for (size_t primitiveIndex = 0u; primitiveIndex < geometry.primitiveMetadata.size(); ++primitiveIndex) {
+        const std::optional<renderer::contracts::TerrainPrimitiveMetadata> expected =
+            primitiveMetadataForTriangle(geometry.vertices, primitiveIndex * 3u);
+        if (!expected.has_value() || !renderer::contracts::validTerrainPrimitiveMetadata(*expected) ||
+            !(*expected == geometry.primitiveMetadata[primitiveIndex])) {
+            return false;
+        }
+    }
+    return true;
+}
+
+[[nodiscard]] std::optional<renderer::contracts::TerrainRayTracingHitData>
+makeTerrainHitData(const uint64_t revision, const uint64_t vertexAddress, const uint64_t primitiveMetadataAddress,
+                   const uint32_t opaqueVertexCount, const uint32_t cutoutVertexCount) {
+    renderer::contracts::TerrainRayTracingHitData hitData;
+    hitData.revision = revision;
+    hitData.vertexAddress = vertexAddress;
+    hitData.primitiveMetadataAddress = primitiveMetadataAddress;
+    uint32_t geometryIndex = 0u;
+    uint32_t vertexBase = 0u;
+    uint32_t primitiveBase = 0u;
+    const auto appendGeometry = [&](const renderer::contracts::TerrainRayTracingGeometryClass geometryClass,
+                                    const uint32_t vertexCount) {
+        if (vertexCount == 0u) {
+            return;
+        }
+        hitData.geometries[geometryIndex] = {geometryIndex, geometryClass, vertexBase,
+                                             vertexCount,   primitiveBase, vertexCount / 3u};
+        ++geometryIndex;
+        vertexBase += vertexCount;
+        primitiveBase += vertexCount / 3u;
+    };
+    appendGeometry(renderer::contracts::TerrainRayTracingGeometryClass::Opaque, opaqueVertexCount);
+    appendGeometry(renderer::contracts::TerrainRayTracingGeometryClass::Cutout, cutoutVertexCount);
+    hitData.geometryCount = geometryIndex;
+    if (!renderer::contracts::validTerrainRayTracingHitData(hitData)) {
+        return std::nullopt;
+    }
+    return hitData;
 }
 
 } // namespace
@@ -136,10 +226,7 @@ TerrainBlasRequestResult TerrainBlasCache::prepareGeometry(const std::vector<Blo
     const uint64_t totalCount = opaqueCount + cutoutCount;
     if (opaque.size() % 3u != 0u || cutout.size() % 3u != 0u || cutoutDistance.size() % 3u != 0u ||
         opaqueCount > std::numeric_limits<uint32_t>::max() || cutoutCount > std::numeric_limits<uint32_t>::max() ||
-        totalCount > std::numeric_limits<uint32_t>::max() ||
-        !std::all_of(opaque.begin(), opaque.end(), finitePosition) ||
-        !std::all_of(cutout.begin(), cutout.end(), finitePosition) ||
-        !std::all_of(cutoutDistance.begin(), cutoutDistance.end(), finitePosition)) {
+        totalCount > std::numeric_limits<uint32_t>::max()) {
         return TerrainBlasRequestResult::InvalidGeometry;
     }
 
@@ -149,6 +236,10 @@ TerrainBlasRequestResult TerrainBlasCache::prepareGeometry(const std::vector<Blo
     geometry.vertices.insert(geometry.vertices.end(), opaque.begin(), opaque.end());
     geometry.vertices.insert(geometry.vertices.end(), cutout.begin(), cutout.end());
     geometry.vertices.insert(geometry.vertices.end(), cutoutDistance.begin(), cutoutDistance.end());
+    if (!buildPrimitiveMetadata(geometry.vertices, geometry.primitiveMetadata)) {
+        geometry = {};
+        return TerrainBlasRequestResult::InvalidGeometry;
+    }
     return geometry.empty() ? TerrainBlasRequestResult::Cleared : TerrainBlasRequestResult::Queued;
 }
 
@@ -256,7 +347,7 @@ bool TerrainBlasCache::recordFrame(RhiCommandList& commandList) {
             continue;
         }
 
-        const uint64_t taskBytes = task.geometry.byteSize();
+        const uint64_t taskBytes = task.geometry.uploadByteSize();
         const uint64_t taskPrimitives = task.geometry.primitiveCount();
         const bool fitsBudget =
             taskBytes <= m_budgets.maxBuildGeometryBytes - std::min(geometryBytes, m_budgets.maxBuildGeometryBytes) &&
@@ -308,6 +399,7 @@ void TerrainBlasCache::finishGraphExecution(const bool succeeded, const RhiSubmi
                 task.scratchBuffer = {};
             }
             std::vector<BlockVertex>().swap(task.geometry.vertices);
+            std::vector<renderer::contracts::TerrainPrimitiveMetadata>().swap(task.geometry.primitiveMetadata);
             continue;
         }
 
@@ -366,18 +458,25 @@ std::optional<TerrainBlasView> TerrainBlasCache::activeView(const SubChunkGpuKey
         return std::nullopt;
     }
     const ActiveResource& active = *entryIt->second.active;
-    return TerrainBlasView{key,
-                           active.revision,
-                           active.worldOrigin,
-                           active.resource,
-                           active.resource->accelerationStructure(),
-                           active.resource->retainedBuffers().front(),
-                           active.resource->deviceAddress(),
-                           active.opaqueVertexCount,
-                           active.cutoutVertexCount,
-                           active.primitiveCount,
-                           active.geometryBytes,
-                           active.resource->blasBytes()};
+    TerrainBlasView view;
+    view.key = key;
+    view.revision = active.revision;
+    view.worldOrigin = active.worldOrigin;
+    view.resource = active.resource;
+    view.accelerationStructure = active.resource->accelerationStructure();
+    view.geometryBuffer = active.geometryBuffer;
+    view.primitiveMetadataBuffer = active.primitiveMetadataBuffer;
+    view.deviceAddress = active.resource->deviceAddress();
+    view.vertexAddress = active.hitData.vertexAddress;
+    view.primitiveMetadataAddress = active.hitData.primitiveMetadataAddress;
+    view.opaqueVertexCount = active.opaqueVertexCount;
+    view.cutoutVertexCount = active.cutoutVertexCount;
+    view.primitiveCount = active.primitiveCount;
+    view.geometryBytes = active.geometryBytes;
+    view.primitiveMetadataBytes = active.primitiveMetadataBytes;
+    view.blasBytes = active.resource->blasBytes();
+    view.hitData = active.hitData;
+    return view;
 }
 
 std::vector<TerrainBlasView> TerrainBlasCache::activeViews() const {
@@ -388,10 +487,25 @@ std::vector<TerrainBlasView> TerrainBlasCache::activeViews() const {
             continue;
         }
         const ActiveResource& active = *entry.active;
-        views.push_back(TerrainBlasView{
-            key, active.revision, active.worldOrigin, active.resource, active.resource->accelerationStructure(),
-            active.resource->retainedBuffers().front(), active.resource->deviceAddress(), active.opaqueVertexCount,
-            active.cutoutVertexCount, active.primitiveCount, active.geometryBytes, active.resource->blasBytes()});
+        TerrainBlasView view;
+        view.key = key;
+        view.revision = active.revision;
+        view.worldOrigin = active.worldOrigin;
+        view.resource = active.resource;
+        view.accelerationStructure = active.resource->accelerationStructure();
+        view.geometryBuffer = active.geometryBuffer;
+        view.primitiveMetadataBuffer = active.primitiveMetadataBuffer;
+        view.deviceAddress = active.resource->deviceAddress();
+        view.vertexAddress = active.hitData.vertexAddress;
+        view.primitiveMetadataAddress = active.hitData.primitiveMetadataAddress;
+        view.opaqueVertexCount = active.opaqueVertexCount;
+        view.cutoutVertexCount = active.cutoutVertexCount;
+        view.primitiveCount = active.primitiveCount;
+        view.geometryBytes = active.geometryBytes;
+        view.primitiveMetadataBytes = active.primitiveMetadataBytes;
+        view.blasBytes = active.resource->blasBytes();
+        view.hitData = active.hitData;
+        views.push_back(std::move(view));
     }
     std::sort(views.begin(), views.end(), [](const TerrainBlasView& left, const TerrainBlasView& right) {
         if (left.key.chunkKey != right.key.chunkKey) {
@@ -416,6 +530,7 @@ TerrainBlasStats TerrainBlasCache::stats() const {
         ++result.activeBlasCount;
         result.activePrimitiveCount += entry.active->primitiveCount;
         result.activeGeometryBytes += entry.active->geometryBytes;
+        result.activePrimitiveMetadataBytes += entry.active->primitiveMetadataBytes;
         result.activeBlasBytes += entry.active->resource->blasBytes();
     }
     for (const auto& [_, task] : m_tasks) {
@@ -514,15 +629,23 @@ bool TerrainBlasCache::recordBuild(PendingTask& task, RhiCommandList& commandLis
 
     RhiBufferDesc geometryDesc;
     geometryDesc.debugName = "Terrain.BLAS.Geometry";
-    geometryDesc.size = task.geometry.byteSize();
+    geometryDesc.size = task.geometry.vertexByteSize();
     geometryDesc.usage = kGeometryBufferUsages;
     geometryDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
     geometryDesc.initialState = RhiResourceState::TransferDst;
     geometryDesc.memoryCategory = RhiMemoryCategory::Geometry;
     task.geometryBuffer = m_device->createBuffer(geometryDesc, nullptr, 0u);
-    if (!task.geometryBuffer.isValid()) {
-        releaseQueryIndex(task);
-        setTransientError("Terrain BLAS geometry buffer creation failed");
+    RhiBufferDesc primitiveMetadataDesc;
+    primitiveMetadataDesc.debugName = "Terrain.BLAS.PrimitiveMetadata";
+    primitiveMetadataDesc.size = task.geometry.primitiveMetadataByteSize();
+    primitiveMetadataDesc.usage = kPrimitiveMetadataBufferUsages;
+    primitiveMetadataDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+    primitiveMetadataDesc.initialState = RhiResourceState::TransferDst;
+    primitiveMetadataDesc.memoryCategory = RhiMemoryCategory::Geometry;
+    task.primitiveMetadataBuffer = m_device->createBuffer(primitiveMetadataDesc, nullptr, 0u);
+    if (!task.geometryBuffer.isValid() || !task.primitiveMetadataBuffer.isValid()) {
+        destroyBuildAttempt(task);
+        setTransientError("Terrain BLAS geometry or primitive-metadata buffer creation failed");
         return false;
     }
 
@@ -600,9 +723,13 @@ bool TerrainBlasCache::recordBuild(PendingTask& task, RhiCommandList& commandLis
     m_scratchBytesRecordedThisFrame += task.buildScratchBytes;
     m_scratchPeakBytesThisFrame = std::max(m_scratchPeakBytesThisFrame, m_scratchBytesRecordedThisFrame);
 
-    commandList.updateBuffer(task.geometryBuffer, 0u, task.geometry.vertices.data(), task.geometry.byteSize());
+    commandList.updateBuffer(task.geometryBuffer, 0u, task.geometry.vertices.data(), task.geometry.vertexByteSize());
+    commandList.updateBuffer(task.primitiveMetadataBuffer, 0u, task.geometry.primitiveMetadata.data(),
+                             task.geometry.primitiveMetadataByteSize());
     commandList.bufferBarrier(
         {task.geometryBuffer, RhiResourceState::TransferDst, RhiResourceState::AccelerationStructureBuildInput});
+    commandList.bufferBarrier(
+        {task.primitiveMetadataBuffer, RhiResourceState::TransferDst, RhiResourceState::ShaderRead});
     commandList.resetQueryPool(m_compactedSizeQueries, task.queryIndex, 1u);
     const RhiAccelerationStructureBuildDesc build{
         buildInput, RhiAccelerationStructureBuildMode::Build, {}, task.buildAccelerationStructure, task.scratchBuffer,
@@ -616,6 +743,8 @@ bool TerrainBlasCache::recordBuild(PendingTask& task, RhiCommandList& commandLis
         setTransientError("Terrain BLAS build command recording failed");
         return false;
     }
+    commandList.bufferBarrier(
+        {task.geometryBuffer, RhiResourceState::AccelerationStructureBuildInput, RhiResourceState::ShaderRead});
     return true;
 }
 
@@ -680,28 +809,39 @@ void TerrainBlasCache::retireCurrentTask(Entry& entry) {
 
 bool TerrainBlasCache::promoteTask(PendingTask& task, Entry& entry) {
     const uint64_t deviceAddress = m_device->accelerationStructureDeviceAddress(task.compactAccelerationStructure);
-    if (deviceAddress == 0u) {
-        setFatalError("Terrain BLAS compacted device address is invalid");
+    const uint64_t vertexAddress = m_device->bufferDeviceAddress(task.geometryBuffer);
+    const uint64_t primitiveMetadataAddress = m_device->bufferDeviceAddress(task.primitiveMetadataBuffer);
+    const std::optional<renderer::contracts::TerrainRayTracingHitData> hitData =
+        makeTerrainHitData(task.revision, vertexAddress, primitiveMetadataAddress, task.geometry.opaqueVertexCount,
+                           task.geometry.cutoutVertexCount);
+    if (deviceAddress == 0u || !hitData.has_value()) {
+        setFatalError("Terrain BLAS compacted or hit-data device address is invalid");
         return false;
     }
 
     ActiveResource active;
     active.revision = task.revision;
     active.worldOrigin = task.worldOrigin;
-    active.resource =
-        renderer::rt::SceneBlasResource::create(*m_device, task.compactAccelerationStructure, task.compactStorageBuffer,
-                                                deviceAddress, task.compactedBlasBytes, {task.geometryBuffer});
+    active.resource = renderer::rt::SceneBlasResource::create(
+        *m_device, task.compactAccelerationStructure, task.compactStorageBuffer, deviceAddress, task.compactedBlasBytes,
+        {task.geometryBuffer, task.primitiveMetadataBuffer});
     if (active.resource == nullptr) {
         setFatalError("Terrain BLAS shared resource creation failed");
         return false;
     }
+    active.geometryBuffer = task.geometryBuffer;
+    active.primitiveMetadataBuffer = task.primitiveMetadataBuffer;
     active.opaqueVertexCount = task.geometry.opaqueVertexCount;
     active.cutoutVertexCount = task.geometry.cutoutVertexCount;
     active.primitiveCount = task.geometry.primitiveCount();
     active.geometryBytes = static_cast<uint64_t>(task.geometry.vertexCount()) * sizeof(BlockVertex);
+    active.primitiveMetadataBytes =
+        static_cast<uint64_t>(task.geometry.primitiveCount()) * sizeof(renderer::contracts::TerrainPrimitiveMetadata);
+    active.hitData = *hitData;
     task.compactAccelerationStructure = {};
     task.compactStorageBuffer = {};
     task.geometryBuffer = {};
+    task.primitiveMetadataBuffer = {};
 
     entry.active = std::move(active);
     entry.currentTaskSequence = 0u;
@@ -735,6 +875,10 @@ void TerrainBlasCache::destroyTaskResources(PendingTask& task) {
         m_device->destroyBuffer(task.geometryBuffer);
         task.geometryBuffer = {};
     }
+    if (task.primitiveMetadataBuffer.isValid()) {
+        m_device->destroyBuffer(task.primitiveMetadataBuffer);
+        task.primitiveMetadataBuffer = {};
+    }
 }
 
 void TerrainBlasCache::destroyBuildAttempt(PendingTask& task) {
@@ -754,6 +898,10 @@ void TerrainBlasCache::destroyBuildAttempt(PendingTask& task) {
     if (task.geometryBuffer.isValid()) {
         m_device->destroyBuffer(task.geometryBuffer);
         task.geometryBuffer = {};
+    }
+    if (task.primitiveMetadataBuffer.isValid()) {
+        m_device->destroyBuffer(task.primitiveMetadataBuffer);
+        task.primitiveMetadataBuffer = {};
     }
     task.buildBlasBytes = 0u;
     task.buildScratchBytes = 0u;

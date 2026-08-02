@@ -186,7 +186,9 @@ bool ForwardPipeline::prepareSceneTlas() {
                                  terrain.resource,
                                  glm::translate(glm::mat4(1.0f), terrain.worldOrigin),
                                  mask,
-                                 false});
+                                 false,
+                                 renderer::rt::SceneTlasTerrainHitData{terrain.hitData, terrain.geometryBuffer,
+                                                                       terrain.primitiveMetadataBuffer}});
         }
     }
     const renderer::rt::SceneTlasSetResult result = cache.setInstances(std::move(instances));

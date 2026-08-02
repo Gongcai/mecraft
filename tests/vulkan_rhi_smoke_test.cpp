@@ -2818,6 +2818,7 @@ void main() {
 [[nodiscard]] bool validateTerrainBlasCache(VkRhiDevice& device, RhiCommandListPool& commandPool) {
     const uint64_t validationErrorsBefore = device.validationErrorCount();
     TerrainBlasCache cache;
+    renderer::rt::SceneTlasCache sceneTlas;
     if (!cache.init(&device) || !cache.supported()) {
         std::cerr << "Terrain BLAS cache initialization failed\n";
         cache.shutdown();
@@ -2825,17 +2826,22 @@ void main() {
     }
     cache.setBudgets({1u, 1024u * 1024u, 4096u, 1u});
 
-    const auto makeVertex = [](const float x, const float y, const float z) {
-        BlockVertex vertex{};
-        vertex.x = x;
-        vertex.y = y;
-        vertex.z = z;
-        return vertex;
+    const auto makeVertex = [](const float x, const float y, const float z, const float u, const float v,
+                               const int8_t face, const uint16_t layer, const uint16_t frameCount,
+                               const uint8_t framesPerSecond, const bool animated, const uint8_t tintKind,
+                               const uint8_t derivativeMaterialId) {
+        return makeBlockVertex(x, y, z, u, v, static_cast<float>(face), 1.0f, 0.0f, 3.0f, static_cast<float>(layer),
+                               static_cast<float>(frameCount), static_cast<float>(framesPerSecond),
+                               animated ? 1.0f : 0.0f, tintKind, 64u, 128u, derivativeMaterialId);
     };
-    const std::vector<BlockVertex> opaque{makeVertex(0.0f, 0.0f, 0.0f), makeVertex(1.0f, 0.0f, 0.0f),
-                                          makeVertex(0.0f, 1.0f, 0.0f)};
-    const std::vector<BlockVertex> cutout{makeVertex(0.0f, 0.0f, 1.0f), makeVertex(1.0f, 0.0f, 1.0f),
-                                          makeVertex(0.0f, 1.0f, 1.0f)};
+    const std::vector<BlockVertex> opaque{
+        makeVertex(0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 2, 17u, 1u, 0u, false, BlockTintKinds::NONE, 3u),
+        makeVertex(1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 2, 17u, 1u, 0u, false, BlockTintKinds::NONE, 3u),
+        makeVertex(0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 2, 17u, 1u, 0u, false, BlockTintKinds::NONE, 3u)};
+    const std::vector<BlockVertex> cutout{
+        makeVertex(0.0f, 0.0f, 1.0f, 0.0f, 0.0f, -1, 100u, 3u, 4u, true, BlockTintKinds::GRASS, 9u),
+        makeVertex(1.0f, 0.0f, 1.0f, 1.0f, 0.0f, -1, 100u, 3u, 4u, true, BlockTintKinds::GRASS, 9u),
+        makeVertex(0.0f, 1.0f, 1.0f, 0.0f, 1.0f, -1, 100u, 3u, 4u, true, BlockTintKinds::GRASS, 9u)};
     const auto makeGeometry = [&]() {
         TerrainBlasGeometry geometry;
         const TerrainBlasRequestResult prepared = TerrainBlasCache::prepareGeometry(opaque, cutout, {}, geometry);
@@ -2866,15 +2872,142 @@ void main() {
         cache.beginFrame();
         return cache.healthy();
     };
+    const auto validateMetadataReadback =
+        [&](const TerrainBlasView& view,
+            const std::vector<renderer::contracts::TerrainPrimitiveMetadata>& expectedMetadata) {
+            const uint64_t byteCount =
+                static_cast<uint64_t>(expectedMetadata.size()) * sizeof(renderer::contracts::TerrainPrimitiveMetadata);
+            RhiBufferDesc readbackDesc;
+            readbackDesc.debugName = "VulkanSmoke.TerrainBLAS.MetadataReadback";
+            readbackDesc.size = byteCount;
+            readbackDesc.usage = rhiFlag(RhiBufferUsage::TransferDst) | rhiFlag(RhiBufferUsage::MapRead);
+            readbackDesc.memoryUsage = RhiMemoryUsage::GpuToCpu;
+            readbackDesc.initialState = RhiResourceState::TransferDst;
+            readbackDesc.memoryCategory = RhiMemoryCategory::Readback;
+            const RhiBufferHandle readback = device.createBuffer(readbackDesc, nullptr, 0u);
+            if (!readback.isValid()) {
+                return false;
+            }
+
+            RhiCommandList* commands = commandPool.acquire(RhiCommandListType::Compute);
+            bool readbackValid = commands != nullptr &&
+                                 commands->begin({"VulkanSmoke.TerrainBLAS.MetadataCopy", RhiCommandListType::Compute});
+            if (readbackValid) {
+                commands->bufferBarrier(
+                    {view.primitiveMetadataBuffer, RhiResourceState::ShaderRead, RhiResourceState::TransferSrc});
+                commands->copyBuffer({view.primitiveMetadataBuffer, readback, 0u, 0u, byteCount});
+                commands->bufferBarrier(
+                    {view.primitiveMetadataBuffer, RhiResourceState::TransferSrc, RhiResourceState::ShaderRead});
+                commands->bufferBarrier({readback, RhiResourceState::TransferDst, RhiResourceState::HostRead});
+                readbackValid = commands->end();
+            }
+            RhiSubmissionToken token;
+            if (readbackValid) {
+                RhiCommandList* submissions[] = {commands};
+                readbackValid =
+                    device.submit({"VulkanSmoke.TerrainBLAS.MetadataCopy", submissions, 1u, RhiQueueType::Compute},
+                                  &token) &&
+                    device.waitForSubmission(token);
+            }
+            if (readbackValid) {
+                const void* mapped = device.mapBuffer(readback, 0u, byteCount);
+                readbackValid = mapped != nullptr && std::memcmp(mapped, expectedMetadata.data(), byteCount) == 0;
+                if (mapped != nullptr) {
+                    device.unmapBuffer(readback);
+                }
+            }
+            device.destroyBuffer(readback);
+            return readbackValid;
+        };
+    const auto submitTlasFrame = [&](const char* debugName) {
+        sceneTlas.beginFrame();
+        RhiCommandList* commands = commandPool.acquire(RhiCommandListType::Graphics);
+        if (commands == nullptr || !commands->begin({debugName, RhiCommandListType::Graphics}) ||
+            !sceneTlas.recordFrame(*commands) || !commands->end()) {
+            sceneTlas.finishGraphExecution(false, {});
+            return false;
+        }
+        RhiCommandList* submissions[] = {commands};
+        RhiSubmissionToken token;
+        if (!device.submit({debugName, submissions, 1u, RhiQueueType::Graphics}, &token)) {
+            sceneTlas.finishGraphExecution(false, token);
+            return false;
+        }
+        sceneTlas.finishGraphExecution(true, token);
+        if (!device.waitForSubmission(token)) {
+            return false;
+        }
+        sceneTlas.beginFrame();
+        return sceneTlas.healthy();
+    };
+    const auto setTerrainInstance = [&](const TerrainBlasView& view,
+                                        const std::optional<renderer::rt::SceneTlasTerrainHitData>& terrainHitData) {
+        const uint8_t mask = renderer::rt::sceneTlasMaskBit(renderer::rt::SceneTlasInstanceMask::GiOpaque) |
+                             renderer::rt::sceneTlasMaskBit(renderer::rt::SceneTlasInstanceMask::GiCutout) |
+                             renderer::rt::sceneTlasMaskBit(renderer::rt::SceneTlasInstanceMask::ShadowCaster);
+        std::vector<renderer::rt::SceneTlasInstanceInput> instances;
+        instances.push_back({{renderer::rt::SceneTlasInstanceKind::Terrain, view.key.chunkKey, view.key.scy},
+                             view.resource,
+                             glm::translate(glm::mat4(1.0f), view.worldOrigin),
+                             mask,
+                             false,
+                             terrainHitData});
+        return sceneTlas.setInstances(std::move(instances));
+    };
 
     const SubChunkGpuKey key{91, 4};
+    const TerrainBlasGeometry expectedGeometry = makeGeometry();
     bool valid = cache.requestBuild(key, 1u, glm::vec3(32.0f, 64.0f, -16.0f), makeGeometry()) ==
                      TerrainBlasRequestResult::Queued &&
                  submitCacheFrame("VulkanSmoke.TerrainBLAS.Build1") && !cache.activeView(key).has_value() &&
                  submitCacheFrame("VulkanSmoke.TerrainBLAS.Compact1");
-    const std::optional<TerrainBlasView> firstView = cache.activeView(key);
-    valid = valid && firstView.has_value() && firstView->revision == 1u && firstView->deviceAddress != 0u &&
-            firstView->opaqueVertexCount == 3u && firstView->cutoutVertexCount == 3u && firstView->primitiveCount == 2u;
+    std::optional<TerrainBlasView> firstView = cache.activeView(key);
+    valid =
+        valid && firstView.has_value() && firstView->revision == 1u && firstView->deviceAddress != 0u &&
+        firstView->geometryBuffer.isValid() && firstView->primitiveMetadataBuffer.isValid() &&
+        firstView->vertexAddress == device.bufferDeviceAddress(firstView->geometryBuffer) &&
+        firstView->primitiveMetadataAddress == device.bufferDeviceAddress(firstView->primitiveMetadataBuffer) &&
+        firstView->opaqueVertexCount == 3u && firstView->cutoutVertexCount == 3u && firstView->primitiveCount == 2u &&
+        firstView->primitiveMetadataBytes ==
+            sizeof(renderer::contracts::TerrainPrimitiveMetadata) * expectedGeometry.primitiveMetadata.size() &&
+        firstView->resource->retainedBuffers().size() == 2u &&
+        renderer::contracts::validTerrainRayTracingHitData(firstView->hitData) &&
+        firstView->hitData.geometryCount == 2u &&
+        firstView->hitData.geometries[0].geometryClass == renderer::contracts::TerrainRayTracingGeometryClass::Opaque &&
+        firstView->hitData.geometries[0].primitiveBase == 0u &&
+        firstView->hitData.geometries[1].geometryClass == renderer::contracts::TerrainRayTracingGeometryClass::Cutout &&
+        firstView->hitData.geometries[1].primitiveBase == 1u &&
+        validateMetadataReadback(*firstView, expectedGeometry.primitiveMetadata);
+    if (valid) {
+        valid = sceneTlas.init(&device) && sceneTlas.supported();
+    }
+    if (valid) {
+        renderer::rt::SceneTlasTerrainHitData validHitData{firstView->hitData, firstView->geometryBuffer,
+                                                           firstView->primitiveMetadataBuffer};
+        renderer::rt::SceneTlasTerrainHitData foreignHitData = validHitData;
+        foreignHitData.rayTracing.vertexAddress += 256u;
+        renderer::rt::SceneTlasTerrainHitData swappedRoles = validHitData;
+        std::swap(swappedRoles.vertexBuffer, swappedRoles.primitiveMetadataBuffer);
+        valid = setTerrainInstance(*firstView, std::nullopt) == renderer::rt::SceneTlasSetResult::InvalidInstance &&
+                setTerrainInstance(*firstView, foreignHitData) == renderer::rt::SceneTlasSetResult::InvalidInstance &&
+                setTerrainInstance(*firstView, swappedRoles) == renderer::rt::SceneTlasSetResult::InvalidInstance &&
+                setTerrainInstance(*firstView, validHitData) == renderer::rt::SceneTlasSetResult::Accepted &&
+                submitTlasFrame("VulkanSmoke.TerrainTLAS.Build1");
+    }
+    const std::optional<renderer::rt::SceneTlasView> firstTlas = valid ? sceneTlas.activeView() : std::nullopt;
+    renderer::contracts::TerrainRayTracingHitData firstHitData;
+    renderer::rt::SceneTlasTerrainHitData firstSceneHitData;
+    RhiBufferHandle firstGeometryBuffer;
+    RhiBufferHandle firstPrimitiveMetadataBuffer;
+    if (firstView.has_value()) {
+        firstHitData = firstView->hitData;
+        firstGeometryBuffer = firstView->geometryBuffer;
+        firstPrimitiveMetadataBuffer = firstView->primitiveMetadataBuffer;
+        firstSceneHitData = {firstView->hitData, firstView->geometryBuffer, firstView->primitiveMetadataBuffer};
+    }
+    valid = valid && firstTlas.has_value() && firstTlas->mappings.size() == 1u &&
+            firstTlas->mappings[0].terrainHitData == std::optional(firstSceneHitData);
+    firstView.reset();
 
     valid = valid &&
             cache.requestBuild(key, 2u, glm::vec3(32.0f, 64.0f, -16.0f), makeGeometry()) ==
@@ -2885,7 +3018,35 @@ void main() {
             submitCacheFrame("VulkanSmoke.TerrainBLAS.Compact2");
     const std::optional<TerrainBlasView> secondView = cache.activeView(key);
     valid = valid && secondView.has_value() && secondView->revision == 2u && secondView->deviceAddress != 0u &&
-            secondView->deviceAddress != firstView->deviceAddress;
+            secondView->hitData.revision == 2u && secondView->hitData.vertexAddress != firstHitData.vertexAddress &&
+            secondView->hitData.primitiveMetadataAddress != firstHitData.primitiveMetadataAddress &&
+            device.bufferDeviceAddress(firstGeometryBuffer) == firstHitData.vertexAddress &&
+            device.bufferDeviceAddress(firstPrimitiveMetadataBuffer) == firstHitData.primitiveMetadataAddress;
+    const std::optional<renderer::rt::SceneTlasView> retainedFirstTlas = valid ? sceneTlas.activeView() : std::nullopt;
+    valid = valid && retainedFirstTlas.has_value() && retainedFirstTlas->revision == firstTlas->revision &&
+            retainedFirstTlas->mappings[0].terrainHitData == std::optional(firstSceneHitData) &&
+            setTerrainInstance(*secondView,
+                               renderer::rt::SceneTlasTerrainHitData{secondView->hitData, secondView->geometryBuffer,
+                                                                     secondView->primitiveMetadataBuffer}) ==
+                renderer::rt::SceneTlasSetResult::Accepted;
+    const std::optional<renderer::rt::SceneTlasView> activeAfterDesiredReplacement =
+        valid ? sceneTlas.activeView() : std::nullopt;
+    valid = valid && activeAfterDesiredReplacement.has_value() &&
+            activeAfterDesiredReplacement->revision == firstTlas->revision &&
+            activeAfterDesiredReplacement->mappings[0].terrainHitData == std::optional(firstSceneHitData) &&
+            device.bufferDeviceAddress(firstGeometryBuffer) == firstHitData.vertexAddress &&
+            device.bufferDeviceAddress(firstPrimitiveMetadataBuffer) == firstHitData.primitiveMetadataAddress &&
+            submitTlasFrame("VulkanSmoke.TerrainTLAS.Build2");
+    const std::optional<renderer::rt::SceneTlasView> secondTlas = valid ? sceneTlas.activeView() : std::nullopt;
+    valid = valid && secondTlas.has_value() && secondTlas->revision > firstTlas->revision &&
+            secondTlas->mappings.size() == 1u && secondTlas->mappings[0].terrainHitData.has_value() &&
+            secondTlas->mappings[0].terrainHitData->rayTracing == secondView->hitData &&
+            secondTlas->mappings[0].terrainHitData->vertexBuffer.index == secondView->geometryBuffer.index &&
+            secondTlas->mappings[0].terrainHitData->vertexBuffer.generation == secondView->geometryBuffer.generation &&
+            secondTlas->mappings[0].terrainHitData->primitiveMetadataBuffer.index ==
+                secondView->primitiveMetadataBuffer.index &&
+            secondTlas->mappings[0].terrainHitData->primitiveMetadataBuffer.generation ==
+                secondView->primitiveMetadataBuffer.generation;
 
     TerrainBlasGeometry invalidGeometry = makeGeometry();
     if (!invalidGeometry.vertices.empty()) {
@@ -2901,13 +3062,17 @@ void main() {
 
     const TerrainBlasStats residentStats = cache.stats();
     valid = valid && residentStats.activeBlasCount == 1u && residentStats.activePrimitiveCount == 2u &&
-            residentStats.activeGeometryBytes == sizeof(BlockVertex) * 6u && residentStats.activeBlasBytes != 0u &&
-            cache.isSettled();
+            residentStats.activeGeometryBytes == sizeof(BlockVertex) * 6u &&
+            residentStats.activePrimitiveMetadataBytes == sizeof(renderer::contracts::TerrainPrimitiveMetadata) * 2u &&
+            residentStats.activeBlasBytes != 0u && cache.isSettled() &&
+            sceneTlas.setInstances({}) == renderer::rt::SceneTlasSetResult::Accepted &&
+            !sceneTlas.activeView().has_value() && sceneTlas.isSettled();
     cache.remove(key);
     const TerrainBlasStats removedStats = cache.stats();
     valid = valid && removedStats.activeBlasCount == 0u && removedStats.pendingBuildCount == 0u &&
             removedStats.pendingCompactionCount == 0u;
 
+    sceneTlas.shutdown();
     cache.shutdown();
     device.waitIdle();
     valid = valid && device.validationErrorCount() == validationErrorsBefore;
@@ -3388,8 +3553,10 @@ static_assert(sizeof(RayQuerySmokeResult) == 32u);
                              sharedBlas,
                              glm::translate(glm::mat4(1.0f), glm::vec3(secondTranslation, 0.0f, 0.0f)),
                              mask,
-                             true});
-        instances.push_back({{SceneTlasInstanceKind::StaticMesh, 7, 0}, sharedBlas, glm::mat4(1.0f), mask, true});
+                             true,
+                             std::nullopt});
+        instances.push_back(
+            {{SceneTlasInstanceKind::StaticMesh, 7, 0}, sharedBlas, glm::mat4(1.0f), mask, true, std::nullopt});
         return instances;
     };
     const auto submitTlasFrame = [&](const char* debugName) {

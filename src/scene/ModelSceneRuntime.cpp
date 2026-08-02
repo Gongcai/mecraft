@@ -1472,7 +1472,8 @@ bool ModelSceneRuntime::collectRayTracingInstances(std::vector<renderer::rt::Sce
                              blas,
                              view.get<ecs::WorldTransformComponent>(entity).worldMatrix,
                              mask,
-                             blasStats.containsDoubleSided});
+                             blasStats.containsDoubleSided,
+                             std::nullopt});
     }
     instances = std::move(collected);
     error.clear();

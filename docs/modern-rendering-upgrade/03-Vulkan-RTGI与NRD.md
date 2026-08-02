@@ -86,7 +86,11 @@ Descriptor。真实三角形 BLAS、Update、Compaction、Clone、TLAS 和 Descr
 Compact Copy 和 Revision 原子换代；Submission Token 负责 Build/Compact 完成判定、查询槽隔离与
 资源延迟销毁。新 Revision 就绪前旧 Active BLAS 保持有效，空网格及区块卸载会明确退役资源，
 Graph 失败会保留 CPU Geometry 供同一任务重新录制。Dashboard 已发布 Active/Pending、Primitive、
-Geometry/BLAS/Scratch 字节统计，Vulkan 生产缓存 Smoke 与 Validation 已通过。
+Geometry/Primitive Metadata/BLAS/Scratch 字节统计，Vulkan 生产缓存 Smoke 与 Validation 已通过。
+每三个连续非索引顶点现在生成一条固定 16 字节 `TerrainPrimitiveMetadata`，记录纹理层、动画帧数、
+FPS、动画标志、Face、Derivative Material 与 Tint；Opaque Primitive 排在前，Cutout Primitive 排在后，
+并由固定 Geometry Index 映射到各自的 Vertex Base 与 Primitive Base。Vertex 与 Primitive Metadata
+Buffer 均具备 Storage、Device Address 与独立生命周期，压缩 BLAS 通过 `SceneBlasResource` 同时持有。
 
 glTF 与运行时 TLAS 生产层现已接入。`StaticMeshBlasCache` 将每个静态资产的 Opaque 与 Alpha Mask
 Primitive 构建为多 Geometry 压缩 BLAS，Opaque Geometry 设置 Opaque Flag，Alpha Mask Geometry
@@ -96,6 +100,8 @@ Storage、Device Address 与 AS Build Input 用途；同一资产的多个 ECS �
 `SceneTlasCache` 收集 Terrain 与 Static Mesh 实例，按稳定 Key 排序并生成唯一 24-bit Custom Index，
 固定 GI Opaque/Cutout、Shadow、Reflection 与 First Person Mask。每个 TLAS 代际持有唯一 BLAS 集合，
 Desired/Pending/Active/Retired 状态机覆盖 Transform 连续变化、空场景、部分 Graph 提交失败及资产卸载。
+Terrain Custom Index 还保存所引用 BLAS 代际的 Vertex/Primitive Metadata Device Address、Stride、Revision
+及 Geometry Index 范围快照，因此旧 Active TLAS 不会读取新换代 Terrain BLAS 的地址。
 Dashboard 已发布 Instance、唯一 BLAS、TLAS/BLAS 字节、Revision 与 Build 统计。Vulkan Smoke 覆盖
 Opaque/Cutout 多 Geometry BLAS、两个 Instance 共享同一 BLAS、Transform 换代与空场景退役；Damaged
 Helmet、Sponza 的 Vulkan 场景验收及 Damaged Helmet 的 OpenGL 基础渲染均已通过。
@@ -109,8 +115,10 @@ Set，于帧开始把最新完成的 Active TLAS 发布到固定 Binding 4；重
 GBuffer、Probe Capture 与 Shadow 的非 Leaves Cutout 已共用体素材质采样契约；Leaves 按现有设计
 保持实心投影。Alpha Cutoff 固定为包含边界的
 `0.1`，NaN/Inf Alpha 明确拒绝，动画层使用同一确定性帧选择函数。C++ 契约同时固化
-1024 层纹理数组及 6-bit 帧数/FPS 上限，非法元数据以 `std::optional` 报告。Geometry/
-Primitive Metadata 到 UV/纹理的运行时命中链尚未完成。
+1024 层纹理数组及 6-bit 帧数/FPS 上限，非法元数据以 `std::optional` 报告。Terrain Primitive
+Metadata、Geometry Index 到 Primitive Base 映射、BLAS Device Address 与 TLAS 代际快照链已完成，
+并通过 GPU Buffer 回读与两代 Terrain BLAS/TLAS 生命周期 Smoke。Barycentric UV 重建、纹理数组采样、
+Ray Cone 与生产 Candidate Confirm 尚未接入。
 生产 `RtgiTracePass` 已从 GBuffer 重建主表面，使用 Blue Noise、Cranley-Patterson 帧旋转与
 Cosine-weighted Hemisphere Sampling，并通过固定 Binding 4 对 `GI_OPAQUE` 执行 Compute Ray Query。
 以下各节继续约束 Cutout、次级命中着色和正式 Deferred 消费链。
@@ -128,7 +136,7 @@ Cosine-weighted Hemisphere Sampling，并通过固定 Binding 4 对 `GI_OPAQUE` 
 
 区块生命周期：
 
-1. Mesher 产生可光追的 Vertex/Index/Primitive Metadata Buffer。
+1. Mesher 产生可光追的非索引 Vertex 与 Primitive Metadata Buffer。
 2. 上传完成后，以 `geometryRevision` 请求 BLAS Build。
 3. 静态区块使用 Fast Trace + Compaction；Build 完成后查询压缩尺寸并复制。
 4. 压缩 BLAS 就绪后进入下一代 TLAS，旧代资源持有到 Submission Token 完成。

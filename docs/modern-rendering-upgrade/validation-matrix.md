@@ -86,6 +86,11 @@ Candidate 拒绝/确认、Instance Custom Index、Geometry Index、Primitive ID 
 验证，且未产生 Validation/VUID 错误。该结果不替代 V03/M03 Alpha Mask 场景验收；统一纹理采样、
 主视图同一 Alpha Cutoff 和 Candidate/Confirmed Counter 仍按本矩阵执行。
 
+Terrain Primitive Metadata 基础层另由 GPU Buffer 回读与双代际生命周期 Smoke 约束：16 字节记录必须
+与 CPU 生成值逐字节一致，Opaque/Cutout Geometry Index 必须映射到连续 Vertex/Primitive Base；新
+Terrain BLAS 激活后，旧 Active TLAS 的 Custom Index 仍须保留旧 Vertex/Metadata Device Address，直到
+对应 TLAS 代际完成退役。
+
 ## 3. RTGI 与 NRD 画质门槛
 
 ### 3.1 Reference
@@ -185,6 +190,8 @@ BLAS/TLAS 和 NRD Dispatch 数。Frame Generation 只单列展示 FPS，不用�
 - Vulkan Shader Target、Acceleration Structure Descriptor 与运行时数组 Reflection 正确。
 - Gameplay 与模型场景运行时创建 Global Bindless Set，Active TLAS 发布到固定 Binding 4；重复代际不
   产生 Descriptor 写入，Dashboard 的 Revision 与更新计数一致。
+- Terrain Primitive Metadata 回读值、Geometry Index 范围及 TLAS 代际 Device Address 快照一致，
+  BLAS 换代期间不出现悬空或跨代地址。
 - Modern 设置只有在所有硬要求满足时可选。
 - 缺少单个扩展/特性的模拟设备测试能返回对应错误码。
 

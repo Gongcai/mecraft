@@ -1,6 +1,7 @@
 #ifndef MECRAFT_SCENE_TLAS_CACHE_H
 #define MECRAFT_SCENE_TLAS_CACHE_H
 
+#include "renderer/contracts/TerrainRayTracingContract.h"
 #include "renderer/rhi/RhiHandles.h"
 #include "renderer/rhi/RhiResources.h"
 #include "renderer/rhi/SceneBlasResource.h"
@@ -56,6 +57,20 @@ enum class SceneTlasInstanceMask : uint8_t {
     return static_cast<uint8_t>(mask);
 }
 
+/// Binds canonical terrain hit-data addresses to the exact retained buffers that provide each role.
+struct SceneTlasTerrainHitData final {
+    renderer::contracts::TerrainRayTracingHitData rayTracing;
+    RhiBufferHandle vertexBuffer;
+    RhiBufferHandle primitiveMetadataBuffer;
+
+    [[nodiscard]] bool operator==(const SceneTlasTerrainHitData& other) const {
+        return rayTracing == other.rayTracing && vertexBuffer.index == other.vertexBuffer.index &&
+               vertexBuffer.generation == other.vertexBuffer.generation &&
+               primitiveMetadataBuffer.index == other.primitiveMetadataBuffer.index &&
+               primitiveMetadataBuffer.generation == other.primitiveMetadataBuffer.generation;
+    }
+};
+
 /// CPU instance descriptor supplied by terrain and static-mesh scene producers.
 struct SceneTlasInstanceInput {
     SceneTlasInstanceKey key;
@@ -63,12 +78,14 @@ struct SceneTlasInstanceInput {
     glm::mat4 transform{1.0f};
     uint8_t mask = 0u;
     bool doubleSided = false;
+    std::optional<SceneTlasTerrainHitData> terrainHitData;
 };
 
-/// Resolves one generated 24-bit custom index back to its stable scene identity.
+/// Resolves one generated 24-bit custom index back to its stable identity and immutable terrain hit data.
 struct SceneTlasInstanceMapping {
     uint32_t customIndex = 0u;
     SceneTlasInstanceKey key;
+    std::optional<SceneTlasTerrainHitData> terrainHitData;
 };
 
 /// Classifies an instance-list transaction independently from graph recording.

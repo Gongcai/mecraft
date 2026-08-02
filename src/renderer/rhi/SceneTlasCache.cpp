@@ -57,12 +57,16 @@ constexpr uint8_t kKnownInstanceMask =
     return false;
 }
 
+[[nodiscard]] bool sameBuffer(const RhiBufferHandle left, const RhiBufferHandle right) {
+    return left.index == right.index && left.generation == right.generation;
+}
+
 } // namespace
 
 bool SceneTlasCache::NormalizedInput::operator==(const NormalizedInput& other) const {
     return source.key == other.source.key && source.blas->deviceAddress() == other.source.blas->deviceAddress() &&
            sameMatrix(source.transform, other.source.transform) && source.mask == other.source.mask &&
-           source.doubleSided == other.source.doubleSided;
+           source.doubleSided == other.source.doubleSided && source.terrainHitData == other.source.terrainHitData;
 }
 
 bool SceneTlasCache::init(RhiDevice* device) {
@@ -139,12 +143,29 @@ SceneTlasSetResult SceneTlasCache::setInstances(std::vector<SceneTlasInstanceInp
     for (std::size_t index = 0u; index < instances.size(); ++index) {
         SceneTlasInstanceInput& source = instances[index];
         const bool unknownMaskBits = (source.mask & static_cast<uint8_t>(~kKnownInstanceMask)) != 0u;
+        const bool terrainInstance = source.key.kind == SceneTlasInstanceKind::Terrain;
         if (!validInstanceKey(source.key) || (index != 0u && source.key == instances[index - 1u].key) ||
             source.blas == nullptr || source.mask == 0u || unknownMaskBits || source.blas->deviceAddress() == 0u ||
             !source.blas->accelerationStructure().isValid() || !source.blas->storageBuffer().isValid() ||
-            source.blas->blasBytes() == 0u) {
+            source.blas->blasBytes() == 0u || terrainInstance != source.terrainHitData.has_value()) {
             setTransientError("Scene TLAS instance identity, mask, or BLAS is invalid");
             return SceneTlasSetResult::InvalidInstance;
+        }
+        if (source.terrainHitData.has_value()) {
+            const std::optional<uint64_t> retainedVertexAddress =
+                source.blas->retainedBufferDeviceAddress(source.terrainHitData->vertexBuffer);
+            const std::optional<uint64_t> retainedPrimitiveMetadataAddress =
+                source.blas->retainedBufferDeviceAddress(source.terrainHitData->primitiveMetadataBuffer);
+            if (!renderer::contracts::validTerrainRayTracingHitData(source.terrainHitData->rayTracing) ||
+                !source.terrainHitData->vertexBuffer.isValid() ||
+                !source.terrainHitData->primitiveMetadataBuffer.isValid() ||
+                sameBuffer(source.terrainHitData->vertexBuffer, source.terrainHitData->primitiveMetadataBuffer) ||
+                retainedVertexAddress != std::optional(source.terrainHitData->rayTracing.vertexAddress) ||
+                retainedPrimitiveMetadataAddress !=
+                    std::optional(source.terrainHitData->rayTracing.primitiveMetadataAddress)) {
+                setTransientError("Scene TLAS terrain hit-data snapshot does not belong to the referenced BLAS");
+                return SceneTlasSetResult::InvalidInstance;
+            }
         }
 
         RhiAccelerationStructureInstance native;
@@ -218,7 +239,7 @@ bool SceneTlasCache::recordFrame(RhiCommandList& commandList) {
             generation.blasResources.push_back(input.source.blas);
             generation.blasBytes += input.source.blas->blasBytes();
         }
-        generation.mappings.push_back({static_cast<uint32_t>(index), input.source.key});
+        generation.mappings.push_back({static_cast<uint32_t>(index), input.source.key, input.source.terrainHitData});
     }
 
     RhiBufferDesc instanceDesc;
