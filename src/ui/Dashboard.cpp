@@ -761,6 +761,7 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub& render, Re
             m_displayShadowStats = render.getShadowFrameStats();
             m_displayRenderGraphStats = renderScene.renderGraphFrameStats();
             m_displaySceneTlasStats = renderScene.sceneTlasStats();
+            m_displayGlobalBindlessStats = renderScene.globalBindlessDebugInfo();
             m_displayClusteredLightingStats = renderScene.clusteredLightingDebugInfo();
             m_displayReflectionProbeCaptureStats = renderScene.reflectionProbeCaptureStats();
             m_displayHiZCullStats = renderScene.hiZCullStats();
@@ -1290,6 +1291,22 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub& render, Re
                         bytesToMiB(m_displaySceneTlasStats.activeTlasBytes));
             ImGui::Text("TLAS Shared BLAS: %u unique, %.3f MiB compact", m_displaySceneTlasStats.activeBlasCount,
                         bytesToMiB(m_displaySceneTlasStats.activeBlasBytes));
+        }
+        if (m_displayGlobalBindlessStats.initialized) {
+            ImGui::Text("Global Bindless TLAS: %s, revision %llu, descriptor updates %llu",
+                        m_displayGlobalBindlessStats.activeSceneTlasPublished ? "published" : "inactive",
+                        static_cast<unsigned long long>(m_displayGlobalBindlessStats.activeSceneTlasRevision),
+                        static_cast<unsigned long long>(
+                            m_displayGlobalBindlessStats.descriptors.accelerationStructureUpdateCount));
+            ImGui::Text("Bindless Slots: 2D %u/%u, Cube %u/%u, Sampler %u/%u, Buffer %u/%u",
+                        m_displayGlobalBindlessStats.descriptors.sampledTexture2D.liveCount,
+                        m_displayGlobalBindlessStats.descriptors.sampledTexture2D.capacity,
+                        m_displayGlobalBindlessStats.descriptors.sampledTextureCube.liveCount,
+                        m_displayGlobalBindlessStats.descriptors.sampledTextureCube.capacity,
+                        m_displayGlobalBindlessStats.descriptors.samplers.liveCount,
+                        m_displayGlobalBindlessStats.descriptors.samplers.capacity,
+                        m_displayGlobalBindlessStats.descriptors.storageBuffers.liveCount,
+                        m_displayGlobalBindlessStats.descriptors.storageBuffers.capacity);
         }
 
         bool cutoutDistanceLimit = render.isCutoutDistanceLimitEnabled();

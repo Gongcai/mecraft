@@ -117,14 +117,17 @@ M1 与 M2 可并行开发，但公共 `GpuMaterial`、`GpuSceneGeometry` 与 Sta
    Descriptor Array、Binding Flags 与多 Bind Group 连续区间批量更新；OpenGL/Vulkan 均执行
    整批原子校验，并锁定录制、Submission Pending、完成后的更新与资源生命周期规则。Vulkan
    更新资源进入延迟释放，描述符句柄复用保持代际安全。）
-3. Global Bindless Set、Material/Geometry/Instance Buffers。（底层实现完成，运行时接入未完成：
+3. Global Bindless Set、Material/Geometry/Instance Buffers。（底层实现完成，Binding 4 运行时发布完成：
    已冻结强类型 Bindless Handle、Submission Sequence 感知的槽位代际分配器，以及 192 字节
    Instance、128 字节 Geometry 的 CPU/GLSL 固定布局与严格规范化规则。Vulkan Global Set
    已实现固定容量的 2D Texture、Cube Texture、Sampler、Storage Buffer 数组，并将 Binding 4
    正式接入固定 TLAS Descriptor；Scene Buffer 已实现 GPU-only 固定容量表、连续 Dirty Span 上传、
    Submission Token 确认、Revision 保护与整批原子退役。真实 Shader 编译和 Vulkan Compute Smoke
-   已覆盖非一致索引读取、回写与代际复用，且未发现 Validation/VUID 错误。体素区块、模型实例和
-   资产注册表尚未接入这些表，GPU Culling、Indirect Draw 与 TLAS 消费链仍未实现。）
+   已覆盖非一致索引读取、回写与代际复用。Gameplay `RenderScene` 与 Model Scene Deferred 现已在
+   Vulkan 创建同一契约的 Global Set，并于帧开始发布最新完成的 Active TLAS；Dashboard 展示发布
+   Revision、Descriptor 更新次数和各数组占用，真实 Cutout Ray Query Smoke 也通过该 Global Set
+   读取 Binding 4，Validation 未发现错误。体素区块、模型实例和资产注册表尚未接入三张 Scene 表，
+   GPU Culling、Indirect Draw 与正式 RTGI Shader 消费链仍未实现。）
 4. RHI AS Handle、Build Size、Build/Copy/Barrier 与 Device Address。（实现完成：公共 RHI 已提供
    强类型 AS Handle、BLAS/TLAS、Triangles/AABBs/Instances、Build/Update、Clone/Compact、精确
    Build Size、Buffer/AS Device Address、AS Barrier、Compacted Size Query，以及固定 64 字节
@@ -174,7 +177,9 @@ M1 与 M2 可并行开发，但公共 `GpuMaterial`、`GpuSceneGeometry` 与 Sta
 
 ### 任务
 
-1. RTGI Compute Ray Query、Blue Noise/Cosine Sampling。
+1. RTGI Compute Ray Query、Blue Noise/Cosine Sampling。（进行中：Global Bindless Binding 4 的双运行时
+   所有权、Active TLAS 发布和真实 Ray Query Smoke 已完成；生产 Trace Pass、Blue Noise/Cosine
+   Sampling 与 Render Graph 消费仍待实现。）
 2. 体素 Greedy Primitive Metadata 与 Cutout Alpha Candidate。
 3. 模型 Geometry/Material 次级命中读取。
 4. 次级太阳、局部灯、Emissive、天空 Radiance。

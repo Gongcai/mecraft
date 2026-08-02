@@ -103,8 +103,11 @@ Helmet、Sponza 的 Vulkan 场景验收及 Damaged Helmet 的 OpenGL 基础渲�
 Cutout Candidate/Confirm 底层 Smoke 已完成：真实 Vulkan Compute Ray Query 使用四条确定性射线验证
 Opaque 自动提交、Cutout Candidate 拒绝、Cutout 显式确认和平移实例命中，并回读 Instance Custom
 Index、Geometry Index、Primitive ID 与 Barycentrics；多个 TLAS Instance 继续共享同一 BLAS，Validation
-未发现错误。Geometry/Primitive Metadata 到 UV/纹理的运行时命中链、主视图统一 Alpha Cutoff、Global
-Bindless Binding 4 的运行时发布和 RTGI Ray Query Pass 仍属于后续消费层工作，以下各节继续约束这些链路。
+未发现错误。Gameplay `RenderScene` 与 Model Scene Deferred 现已在 Vulkan 分别持有 Global Bindless
+Set，于帧开始把最新完成的 Active TLAS 发布到固定 Binding 4；重复代际不产生 Descriptor 写入，Dashboard
+显示 Active Revision、Descriptor 更新次数和数组占用。OpenGL 两条路径均不创建该集合。Geometry/
+Primitive Metadata 到 UV/纹理的运行时命中链、主视图统一 Alpha Cutoff 和 RTGI Ray Query Pass 仍属于
+后续消费层工作，以下各节继续约束这些链路。
 
 ### 4.1 体素区块 BLAS
 

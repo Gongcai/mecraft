@@ -348,6 +348,7 @@ struct ModelSceneDeferredRenderer::Impl {
     Fsr1Pass fsr1;
     TemporalUpscalePass temporalUpscale;
     RenderDebugService debugService;
+    renderer::core::GlobalBindlessSet globalBindlessSet;
     renderer::rt::SceneTlasCache sceneTlasCache;
     DayNightSystem dayNight;
     WeatherSystem weather;
@@ -402,6 +403,15 @@ bool ModelSceneDeferredRenderer::init(ResourceMgr& resourceMgr, RhiDevice& rhiDe
         shutdown();
         return false;
     }
+    if (rhiDevice.backend() == RhiBackend::Vulkan) {
+        const renderer::core::GlobalBindlessSetError bindlessError = state.globalBindlessSet.initialize(rhiDevice, {});
+        if (bindlessError != renderer::core::GlobalBindlessSetError::None) {
+            state.error = std::string("failed to initialize model scene Global Bindless Set: ") +
+                          renderer::core::globalBindlessSetErrorStableId(bindlessError);
+            shutdown();
+            return false;
+        }
+    }
     state.dayNight.setTimeOfDay(300.0f);
     state.weather.setDebugWeatherPresetInstant(WeatherType::Clear);
 
@@ -422,6 +432,7 @@ bool ModelSceneDeferredRenderer::init(ResourceMgr& resourceMgr, RhiDevice& rhiDe
     state.shared.rhiDevice = &rhiDevice;
     state.shared.commandListPool = &commandListPool;
     state.shared.sceneTlasCache = &state.sceneTlasCache;
+    state.shared.globalBindlessSet = state.globalBindlessSet.initialized() ? &state.globalBindlessSet : nullptr;
     state.shared.deferredTargets = &state.targets;
     state.shared.sky = &state.sky;
     state.shared.shadowRenderer = &state.shadowRenderer;
@@ -444,6 +455,7 @@ void ModelSceneDeferredRenderer::shutdown() {
     if (state.initialized) {
         state.pipeline.shutdown();
     }
+    state.globalBindlessSet.shutdown();
     state.sceneTlasCache.shutdown();
     state.temporalUpscale.shutdown();
     state.fsr1.shutdown();
@@ -538,6 +550,18 @@ bool ModelSceneDeferredRenderer::render(const glm::mat4& view, const glm::mat4& 
         return false;
     }
     state.sceneTlasCache.beginFrame();
+    if (state.rhiDevice->backend() == RhiBackend::Vulkan) {
+        const std::optional<renderer::rt::SceneTlasView> activeTlas = state.sceneTlasCache.activeView();
+        if (activeTlas.has_value()) {
+            const renderer::core::GlobalBindlessSetError bindlessError =
+                state.globalBindlessSet.setAccelerationStructure(activeTlas->accelerationStructure);
+            if (bindlessError != renderer::core::GlobalBindlessSetError::None) {
+                state.error = std::string("failed to publish model scene Active TLAS: ") +
+                              renderer::core::globalBindlessSetErrorStableId(bindlessError);
+                return false;
+            }
+        }
+    }
     if (!std::isfinite(verticalFovDegrees) || verticalFovDegrees <= 1.0f || verticalFovDegrees >= 179.0f ||
         !std::isfinite(frameClock.deltaTimeSeconds) || frameClock.deltaTimeSeconds < 0.0f ||
         !std::isfinite(frameClock.animationTimeSeconds) || !std::isfinite(frameClock.shaderTimeSeconds)) {

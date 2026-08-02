@@ -10,6 +10,11 @@ layout(std430, set = 0, binding = 3) buffer GlobalBindlessStorageBuffer {
     uint words[];
 } globalBindlessStorageBuffers[];
 
+// Ray-query shaders opt into the fixed TLAS binding and enable GL_EXT_ray_query before including this contract.
+#if defined(RHI_GLOBAL_BINDLESS_RAY_QUERY)
+layout(set = 0, binding = 4) uniform accelerationStructureEXT globalBindlessSceneTlas;
+#endif
+
 // Samples one two-dimensional texture with independently indexed texture and sampler descriptors.
 // textureIndex selects the sampled-image descriptor, samplerIndex selects filtering state, and uv is normalized.
 // The returned value is the filtered RGBA texel produced by Vulkan's combined sampler operation.

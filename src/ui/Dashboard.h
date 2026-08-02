@@ -218,6 +218,7 @@ private:
     ShadowFrameStats m_displayShadowStats{};
     RenderGraphFrameStats m_displayRenderGraphStats{};
     renderer::rt::SceneTlasStats m_displaySceneTlasStats{};
+    RenderScene::GlobalBindlessDebugInfo m_displayGlobalBindlessStats{};
     RenderScene::ClusteredLightingDebugInfo m_displayClusteredLightingStats{};
     ReflectionProbeCaptureFrameStats m_displayReflectionProbeCaptureStats{};
     HiZCullFrameStats m_displayHiZCullStats{};

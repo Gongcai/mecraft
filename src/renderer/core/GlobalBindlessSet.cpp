@@ -158,6 +158,7 @@ void GlobalBindlessSet::shutdown() {
     m_samplerSlots = BindlessDescriptorSlotAllocator<renderer::contracts::BindlessSamplerTag>(0u);
     m_storageBufferSlots = BindlessDescriptorSlotAllocator<renderer::contracts::BindlessStorageBufferTag>(0u);
     m_accelerationStructure = {};
+    m_accelerationStructureUpdateCount = 0u;
 }
 
 GlobalBindlessPublicationResult<renderer::contracts::BindlessTexture2DTag>
@@ -243,6 +244,7 @@ GlobalBindlessSet::setAccelerationStructure(const RhiAccelerationStructureHandle
         return GlobalBindlessSetError::DescriptorPublicationFailed;
     }
     m_accelerationStructure = accelerationStructure;
+    ++m_accelerationStructureUpdateCount;
     return GlobalBindlessSetError::None;
 }
 
@@ -309,8 +311,13 @@ GlobalBindlessReclaimResult GlobalBindlessSet::reclaim(const uint64_t completedS
 }
 
 GlobalBindlessSetStats GlobalBindlessSet::stats() const {
-    return {m_sampledTexture2DSlots.stats(), m_sampledTextureCubeSlots.stats(), m_samplerSlots.stats(),
-            m_storageBufferSlots.stats()};
+    GlobalBindlessSetStats result;
+    result.sampledTexture2D = m_sampledTexture2DSlots.stats();
+    result.sampledTextureCube = m_sampledTextureCubeSlots.stats();
+    result.samplers = m_samplerSlots.stats();
+    result.storageBuffers = m_storageBufferSlots.stats();
+    result.accelerationStructureUpdateCount = m_accelerationStructureUpdateCount;
+    return result;
 }
 
 bool GlobalBindlessSet::updateResource(const renderer::contracts::GlobalBindlessBinding binding, const uint32_t index,

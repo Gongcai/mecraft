@@ -1,9 +1,15 @@
 #version 460 core
 #extension GL_EXT_ray_query : require
+#extension GL_EXT_nonuniform_qualifier : require
+
+#define RHI_GLOBAL_BINDLESS_RAY_QUERY
+#include "../../assets/shaders/global_bindless_set.glsl"
 
 layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
 
-layout(set = 0, binding = 0) uniform accelerationStructureEXT uSceneTlas;
+layout(push_constant) uniform CutoutRayQueryPushConstants {
+    uint outputBufferIndex;
+} pc;
 
 struct RayQueryResult {
     uint committed;
@@ -15,10 +21,6 @@ struct RayQueryResult {
     uint barycentricXBits;
     uint barycentricYBits;
 };
-
-layout(set = 0, binding = 1, std430) writeonly buffer RayQueryOutput {
-    RayQueryResult results[];
-} outputBuffer;
 
 void main() {
     uint rayIndex = gl_GlobalInvocationID.x;
@@ -40,7 +42,7 @@ void main() {
     result.barycentricYBits = 0u;
 
     rayQueryEXT query;
-    rayQueryInitializeEXT(query, uSceneTlas, gl_RayFlagsNoneEXT, 0xffu, origin, 0.001,
+    rayQueryInitializeEXT(query, globalBindlessSceneTlas, gl_RayFlagsNoneEXT, 0xffu, origin, 0.001,
                           vec3(0.0, 0.0, 1.0), 10.0);
     while (rayQueryProceedEXT(query)) {
         if (rayQueryGetIntersectionTypeEXT(query, false) != gl_RayQueryCandidateIntersectionTriangleEXT) {
@@ -63,5 +65,14 @@ void main() {
         result.committedGeometry = rayQueryGetIntersectionGeometryIndexEXT(query, true);
         result.instanceCustomIndex = rayQueryGetIntersectionInstanceCustomIndexEXT(query, true);
     }
-    outputBuffer.results[rayIndex] = result;
+    uint wordOffset = rayIndex * 8u;
+    globalBindlessStorageBuffers[nonuniformEXT(pc.outputBufferIndex)].words[wordOffset + 0u] = result.committed;
+    globalBindlessStorageBuffers[nonuniformEXT(pc.outputBufferIndex)].words[wordOffset + 1u] = result.candidateCount;
+    globalBindlessStorageBuffers[nonuniformEXT(pc.outputBufferIndex)].words[wordOffset + 2u] = result.committedGeometry;
+    globalBindlessStorageBuffers[nonuniformEXT(pc.outputBufferIndex)].words[wordOffset + 3u] =
+        result.instanceCustomIndex;
+    globalBindlessStorageBuffers[nonuniformEXT(pc.outputBufferIndex)].words[wordOffset + 4u] = result.candidateGeometry;
+    globalBindlessStorageBuffers[nonuniformEXT(pc.outputBufferIndex)].words[wordOffset + 5u] = result.candidatePrimitive;
+    globalBindlessStorageBuffers[nonuniformEXT(pc.outputBufferIndex)].words[wordOffset + 6u] = result.barycentricXBits;
+    globalBindlessStorageBuffers[nonuniformEXT(pc.outputBufferIndex)].words[wordOffset + 7u] = result.barycentricYBits;
 }

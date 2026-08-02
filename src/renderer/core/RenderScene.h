@@ -5,6 +5,7 @@
 #include "RenderPipeline.h"
 #include "FrameContext.h"
 #include "FrameOutput.h"
+#include "GlobalBindlessSet.h"
 #include "../contracts/GpuLightContract.h"
 #include "../passes/PostProcessPass.h"
 #include "../passes/Fsr1Pass.h"
@@ -74,6 +75,7 @@ struct SharedRenderResources {
     RhiDevice* rhiDevice = nullptr;
     RhiCommandListPool* commandListPool = nullptr;
     renderer::rt::SceneTlasCache* sceneTlasCache = nullptr;
+    renderer::core::GlobalBindlessSet* globalBindlessSet = nullptr;
 
     // Terrain
     TerrainRenderCache* terrainCache = nullptr;
@@ -245,6 +247,17 @@ public:
     /// Returns runtime TLAS generation and residency diagnostics.
     [[nodiscard]] renderer::rt::SceneTlasStats sceneTlasStats() const { return m_sceneTlasCache.stats(); }
 
+    /// Reports runtime Global Bindless Set residency and Active TLAS publication state.
+    struct GlobalBindlessDebugInfo {
+        bool initialized = false;
+        bool activeSceneTlasPublished = false;
+        uint64_t activeSceneTlasRevision = 0u;
+        renderer::core::GlobalBindlessSetStats descriptors;
+    };
+    /// Returns Global Bindless initialization, current Active TLAS revision, and descriptor occupancy.
+    /// @return Immutable diagnostic snapshot for the latest prepared frame.
+    [[nodiscard]] GlobalBindlessDebugInfo globalBindlessDebugInfo() const;
+
     // Pipeline readiness (R2.6a)
     /// Check if the new pipeline path is ready to use.
     bool isNewPipelineReady() const;
@@ -319,6 +332,10 @@ private:
     /// Reset frame-scoped GPU diagnostics before any pipeline pass records work.
     [[nodiscard]] bool executeFrameBeginGraph();
 
+    /// Publishes the latest completed TLAS generation to fixed Global Bindless Binding 4.
+    /// @return True when the active backend state is valid and any required descriptor update succeeds.
+    [[nodiscard]] bool publishActiveSceneTlas();
+
     /// Record scene overlays, precipitation, and the first-person item in display order.
     [[nodiscard]] bool executeSceneOverlayGraph(const RenderGameplayFrameRequest& request,
                                                 const glm::ivec2& frameRenderSize, bool lightDebugActive,
@@ -335,7 +352,9 @@ private:
 
     // Shared infrastructure
     SharedRenderResources m_shared;
+    renderer::core::GlobalBindlessSet m_globalBindlessSet;
     renderer::rt::SceneTlasCache m_sceneTlasCache;
+    uint64_t m_publishedSceneTlasRevision = 0u;
 
     // Terrain streaming service (owned by RenderScene)
     TerrainStreamingService m_terrainStreamingService;

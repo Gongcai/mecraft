@@ -248,6 +248,9 @@ void RenderScene::shutdown() {
     m_forwardPipeline.reset();
     m_deferredPipeline.reset();
 
+    m_shared.globalBindlessSet = nullptr;
+    m_globalBindlessSet.shutdown();
+    m_publishedSceneTlasRevision = 0u;
     m_sceneTlasCache.shutdown();
 
     // Phase R4: Shutdown terrain streaming service
@@ -288,6 +291,10 @@ bool RenderScene::renderFrame(const IWorldView& worldView, const Camera& camera,
     }
     m_terrainStreamingService.beginFrame();
     m_sceneTlasCache.beginFrame();
+    if (!publishActiveSceneTlas()) {
+        m_terrainStreamingService.endFrame();
+        return false;
+    }
     if (m_blockEntityRenderer != nullptr) {
         m_blockEntityRenderer->beginFrame();
     }
@@ -883,6 +890,43 @@ const FrameOutput& RenderScene::getLastFrameOutput() const {
     return m_lastFrameOutput;
 }
 
+RenderScene::GlobalBindlessDebugInfo RenderScene::globalBindlessDebugInfo() const {
+    GlobalBindlessDebugInfo info;
+    info.initialized = m_globalBindlessSet.initialized();
+    info.activeSceneTlasPublished = m_publishedSceneTlasRevision != 0u;
+    info.activeSceneTlasRevision = m_publishedSceneTlasRevision;
+    info.descriptors = m_globalBindlessSet.stats();
+    return info;
+}
+
+bool RenderScene::publishActiveSceneTlas() {
+    if (m_shared.rhiDevice == nullptr) {
+        return false;
+    }
+    if (m_shared.rhiDevice->backend() == RhiBackend::OpenGL) {
+        m_publishedSceneTlasRevision = 0u;
+        return true;
+    }
+    if (!m_globalBindlessSet.initialized()) {
+        MECRAFT_LOG_STREAM(std::cerr << "[RenderScene] Global Bindless Set is not initialized on Vulkan\n");
+        return false;
+    }
+    const std::optional<renderer::rt::SceneTlasView> activeTlas = m_sceneTlasCache.activeView();
+    if (!activeTlas.has_value()) {
+        m_publishedSceneTlasRevision = 0u;
+        return true;
+    }
+    const renderer::core::GlobalBindlessSetError error =
+        m_globalBindlessSet.setAccelerationStructure(activeTlas->accelerationStructure);
+    if (error != renderer::core::GlobalBindlessSetError::None) {
+        MECRAFT_LOG_STREAM(std::cerr << "[RenderScene] Active TLAS publication failed: "
+                                     << renderer::core::globalBindlessSetErrorStableId(error) << '\n');
+        return false;
+    }
+    m_publishedSceneTlasRevision = activeTlas->revision;
+    return true;
+}
+
 void RenderScene::setupResources(ThreadPool* threadPool, RhiDevice* rhiDevice, RhiCommandListPool* commandListPool,
                                  TerrainRenderer* terrain, TerrainRhiPipelineSet* terrainRhiPipelines,
                                  WorldRenderBuffer* worldRenderBuffer, DeferredRenderTargets* deferredTargets,
@@ -901,6 +945,17 @@ void RenderScene::setupResources(ThreadPool* threadPool, RhiDevice* rhiDevice, R
     }
     if (!m_sceneTlasCache.init(rhiDevice)) {
         std::abort();
+    }
+    m_shared.globalBindlessSet = nullptr;
+    m_publishedSceneTlasRevision = 0u;
+    if (rhiDevice->backend() == RhiBackend::Vulkan) {
+        const renderer::core::GlobalBindlessSetError bindlessError = m_globalBindlessSet.initialize(*rhiDevice, {});
+        if (bindlessError != renderer::core::GlobalBindlessSetError::None) {
+            MECRAFT_LOG_STREAM(std::cerr << "[RenderScene] Global Bindless Set initialization failed: "
+                                         << renderer::core::globalBindlessSetErrorStableId(bindlessError) << '\n');
+            std::abort();
+        }
+        m_shared.globalBindlessSet = &m_globalBindlessSet;
     }
     m_shared.overlayRenderer = &m_overlayRenderer;
 

@@ -2765,6 +2765,8 @@ void main() {
                     GlobalBindlessSetError::InvalidResource &&
                 accelerationStructureBindlessSet.setAccelerationStructure(tlas) == GlobalBindlessSetError::None &&
                 accelerationStructureBindlessSet.setAccelerationStructure(tlas) == GlobalBindlessSetError::None;
+        const GlobalBindlessSetStats bindlessStats = accelerationStructureBindlessSet.stats();
+        valid = valid && bindlessStats.accelerationStructureUpdateCount == 1u;
     }
 
     if (valid) {
@@ -2927,6 +2929,8 @@ static_assert(sizeof(RayQuerySmokeResult) == 32u);
 
 [[nodiscard]] bool validateCutoutRayQuery(VkRhiDevice& device, RhiCommandListPool& commandPool,
                                           const RhiAccelerationStructureHandle sceneTlas) {
+    using namespace renderer::core;
+
     constexpr uint32_t kRayCount = 4u;
     constexpr uint32_t kInvalidIndex = std::numeric_limits<uint32_t>::max();
     const uint64_t validationErrorsBefore = device.validationErrorCount();
@@ -2939,8 +2943,7 @@ static_assert(sizeof(RayQuerySmokeResult) == 32u);
     outputDesc.initialState = RhiResourceState::StorageBuffer;
     outputDesc.memoryCategory = RhiMemoryCategory::Readback;
     RhiBufferHandle output = device.createBuffer(outputDesc, nullptr, 0u);
-    RhiBindGroupLayoutHandle bindGroupLayout;
-    RhiBindGroupHandle bindGroup;
+    GlobalBindlessSet bindlessSet;
     RhiShaderHandle shader;
     RhiPipelineLayoutHandle pipelineLayout;
     RhiPipelineHandle pipeline;
@@ -2954,12 +2957,7 @@ static_assert(sizeof(RayQuerySmokeResult) == 32u);
         if (shader.isValid()) {
             device.destroyShader(shader);
         }
-        if (bindGroup.isValid()) {
-            device.destroyBindGroup(bindGroup);
-        }
-        if (bindGroupLayout.isValid()) {
-            device.destroyBindGroupLayout(bindGroupLayout);
-        }
+        bindlessSet.shutdown();
         if (output.isValid()) {
             device.destroyBuffer(output);
         }
@@ -2968,27 +2966,21 @@ static_assert(sizeof(RayQuerySmokeResult) == 32u);
 
     bool valid = sceneTlas.isValid() && output.isValid();
     if (valid) {
-        RhiBindGroupLayoutDesc layoutDesc;
-        layoutDesc.debugName = "VulkanSmoke.CutoutRayQuery.BindGroupLayout";
-        layoutDesc.entries = {
-            {0u, RhiBindingType::AccelerationStructure, rhiFlag(RhiShaderStage::Compute), 1u, 0u},
-            {1u, RhiBindingType::StorageBuffer, rhiFlag(RhiShaderStage::Compute), 1u, 0u},
-        };
-        bindGroupLayout = device.createBindGroupLayout(layoutDesc);
-        valid = bindGroupLayout.isValid();
+        GlobalBindlessSetConfig bindlessConfig;
+        bindlessConfig.sampledTexture2DCapacity = 1u;
+        bindlessConfig.sampledTextureCubeCapacity = 1u;
+        bindlessConfig.samplerCapacity = 1u;
+        bindlessConfig.storageBufferCapacity = 1u;
+        valid = bindlessSet.initialize(device, bindlessConfig) == GlobalBindlessSetError::None;
     }
-    if (valid) {
-        RhiBindingResource tlasResource;
-        tlasResource.accelerationStructure = sceneTlas;
-        RhiBindingResource outputResource;
-        outputResource.buffer.buffer = output;
-        outputResource.buffer.range = outputDesc.size;
-        RhiBindGroupDesc bindGroupDesc;
-        bindGroupDesc.layout = bindGroupLayout;
-        bindGroupDesc.entries = {{0u, 0u, tlasResource}, {1u, 0u, outputResource}};
-        bindGroup = device.createBindGroup(bindGroupDesc);
-        valid = bindGroup.isValid();
-    }
+    const auto outputPublication =
+        valid ? bindlessSet.publishStorageBuffer(output)
+              : GlobalBindlessPublicationResult<renderer::contracts::BindlessStorageBufferTag>{};
+    valid = valid && outputPublication.succeeded() &&
+            bindlessSet.setAccelerationStructure(sceneTlas) == GlobalBindlessSetError::None;
+    const GlobalBindlessSetStats bindlessStats = bindlessSet.stats();
+    valid =
+        valid && bindlessStats.storageBuffers.liveCount == 1u && bindlessStats.accelerationStructureUpdateCount == 1u;
 
     const std::optional<std::string> computeSource =
         valid ? renderer::rhi::loadShaderSource("tests/shaders/cutout_ray_query_test.comp") : std::nullopt;
@@ -3004,7 +2996,9 @@ static_assert(sizeof(RayQuerySmokeResult) == 32u);
     if (valid) {
         RhiPipelineLayoutDesc pipelineLayoutDesc;
         pipelineLayoutDesc.debugName = "VulkanSmoke.CutoutRayQuery.PipelineLayout";
-        pipelineLayoutDesc.bindGroupLayouts.push_back(bindGroupLayout);
+        pipelineLayoutDesc.bindGroupLayouts.push_back(bindlessSet.layout());
+        pipelineLayoutDesc.pushConstantBytes = sizeof(uint32_t);
+        pipelineLayoutDesc.pushConstantStages = rhiFlag(RhiShaderStage::Compute);
         pipelineLayout = device.createPipelineLayout(pipelineLayoutDesc);
         RhiComputePipelineDesc pipelineDesc;
         pipelineDesc.debugName = "VulkanSmoke.CutoutRayQuery.Pipeline";
@@ -3021,7 +3015,9 @@ static_assert(sizeof(RayQuerySmokeResult) == 32u);
     }
     if (valid) {
         commands->setComputePipeline(pipeline);
-        commands->setBindGroup(0u, bindGroup);
+        commands->setBindGroup(0u, bindlessSet.bindGroup());
+        commands->pushConstants(&outputPublication.handle.index, sizeof(outputPublication.handle.index),
+                                rhiFlag(RhiShaderStage::Compute));
         commands->dispatch(kRayCount, 1u, 1u);
         commands->bufferBarrier({output, RhiResourceState::StorageBuffer, RhiResourceState::HostRead});
         valid = commands->end();

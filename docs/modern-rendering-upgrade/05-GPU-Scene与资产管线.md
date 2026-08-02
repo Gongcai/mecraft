@@ -115,8 +115,10 @@ Material、Geometry 和 Instance 底层表采用固定容量与增量 Dirty Rang
 独立的 CPU TLAS 生产链已经完成：`SceneTlasCache` 将 Terrain 与 Static Mesh 快照规范化为固定
 64 字节 Instance Buffer，按稳定 Key 分配 24-bit Custom Index，并通过 Desired/Pending/Active/Retired
 代际管理提交、换代和卸载。Active 代际只保留唯一 BLAS 引用，Dashboard 可读取 Instance 数、唯一
-BLAS 数、TLAS/BLAS 字节、Revision 与 Build 计数。Global Bindless Binding 4 的运行时发布由 RTGI
-消费链负责接入。
+BLAS 数、TLAS/BLAS 字节、Revision 与 Build 计数。Gameplay 与模型场景的 Vulkan 运行时所有者现已
+创建 Global Bindless Set，并在帧开始把最新完成的 Active TLAS 发布到固定 Binding 4；Dashboard 同时
+报告发布 Revision、Descriptor 更新次数和四类数组占用。OpenGL 明确不创建该集合。正式 RTGI Shader
+绑定与 Scene Buffer 消费仍由 M3 接入。
 
 ## 5. GPU Culling 与间接绘制
 

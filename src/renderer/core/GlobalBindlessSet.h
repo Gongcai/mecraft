@@ -63,12 +63,13 @@ struct GlobalBindlessReclaimResult final {
     BindlessDescriptorSlotReclaimResult storageBuffers;
 };
 
-/// Reports current occupancy independently for every descriptor-array domain.
+/// Reports current occupancy for every descriptor-array domain and fixed TLAS descriptor update count.
 struct GlobalBindlessSetStats final {
     BindlessDescriptorSlotStats sampledTexture2D;
     BindlessDescriptorSlotStats sampledTextureCube;
     BindlessDescriptorSlotStats samplers;
     BindlessDescriptorSlotStats storageBuffers;
+    uint64_t accelerationStructureUpdateCount = 0u;
 };
 
 /// Owns the Vulkan-only frame-stable descriptor set used by modern GPU scene paths.
@@ -171,6 +172,7 @@ private:
     BindlessDescriptorSlotAllocator<renderer::contracts::BindlessSamplerTag> m_samplerSlots{0u};
     BindlessDescriptorSlotAllocator<renderer::contracts::BindlessStorageBufferTag> m_storageBufferSlots{0u};
     RhiAccelerationStructureHandle m_accelerationStructure;
+    uint64_t m_accelerationStructureUpdateCount = 0u;
 };
 
 } // namespace renderer::core

@@ -183,6 +183,8 @@ BLAS/TLAS 和 NRD Dispatch 数。Frame Generation 只单列展示 FPS，不用�
 
 - 枚举并验证 AS、Ray Query、Descriptor Indexing 各子特性和限制。
 - Vulkan Shader Target、Acceleration Structure Descriptor 与运行时数组 Reflection 正确。
+- Gameplay 与模型场景运行时创建 Global Bindless Set，Active TLAS 发布到固定 Binding 4；重复代际不
+  产生 Descriptor 写入，Dashboard 的 Revision 与更新计数一致。
 - Modern 设置只有在所有硬要求满足时可选。
 - 缺少单个扩展/特性的模拟设备测试能返回对应错误码。
 
