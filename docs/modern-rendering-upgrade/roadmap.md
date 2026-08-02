@@ -155,11 +155,13 @@ M1 与 M2 可并行开发，但公共 `GpuMaterial`、`GpuSceneGeometry` 与 Sta
    已接入运行时 TLAS；Dashboard 展示 Instance、唯一 BLAS、TLAS/BLAS 字节、Revision 与构建计数。
    OpenGL 保持明确 Unsupported。契约测试、Vulkan Smoke、Damaged Helmet 与 Sponza 场景验收均已
    通过，Validation 未发现错误。）
-8. AS Smoke Test、Cutout Candidate Test 与显存统计。（AS、体素/glTF 生产缓存、运行时 TLAS 与
-   显存统计完成：Vulkan 已覆盖真实三角形 BLAS Build/Update、Compacted Size、Clone/Compact、
-   多 Geometry Static BLAS、共享 BLAS 的多 TLAS Instance、Transform 换代、空场景退役、Binding 4、
-   Shader Reflection、体素 Revision 原子换代、卸载、延迟销毁和 Validation；Cutout Candidate
-   Alpha Test 仍待 RTGI 材质命中链接入。）
+8. AS Smoke Test、Cutout Candidate Test 与显存统计。（实现完成：AS、体素/glTF 生产缓存、运行时
+   TLAS 与显存统计均已覆盖。Vulkan 已验证真实三角形 BLAS Build/Update、Compacted Size、
+   Clone/Compact、多 Geometry Static BLAS、共享 BLAS 的多 TLAS Instance、Transform 换代、空场景
+   退役、Binding 4、Shader Reflection、体素 Revision 原子换代、卸载和延迟销毁。真实 Compute Ray
+   Query Smoke 进一步覆盖 Opaque 自动提交、Cutout Candidate 拒绝/显式确认，以及 Instance Custom
+   Index、Geometry Index、Primitive ID、Barycentrics 回读，Validation 未发现错误。正式运行时材质
+   元数据、纹理采样与统一 Alpha Cutoff 命中链归 M3 第 2、3 项。）
 
 ### 完成条件
 

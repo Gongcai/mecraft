@@ -81,6 +81,11 @@ ID + 后端”验证唯一性。七个 v2 场景的 Vulkan 捕获均启用 Valid
 “不适用”只表示该资产不包含对应内容，不表示另一场景类别可以跳过同类核心能力。模型
 BLAS 也用于体素世界中的实体和方块实体。
 
+Cutout Ray Query 的底层 Vulkan GPU 契约已由真实 Compute Smoke 覆盖：Opaque 自动提交、Cutout
+Candidate 拒绝/确认、Instance Custom Index、Geometry Index、Primitive ID 与 Barycentrics 均已回读
+验证，且未产生 Validation/VUID 错误。该结果不替代 V03/M03 Alpha Mask 场景验收；统一纹理采样、
+主视图同一 Alpha Cutoff 和 Candidate/Confirmed Counter 仍按本矩阵执行。
+
 ## 3. RTGI 与 NRD 画质门槛
 
 ### 3.1 Reference

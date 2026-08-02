@@ -100,8 +100,11 @@ Dashboard 已发布 Instance、唯一 BLAS、TLAS/BLAS 字节、Revision 与 Bui
 Opaque/Cutout 多 Geometry BLAS、两个 Instance 共享同一 BLAS、Transform 换代与空场景退役；Damaged
 Helmet、Sponza 的 Vulkan 场景验收及 Damaged Helmet 的 OpenGL 基础渲染均已通过。
 
-Cutout Candidate Alpha Test、Global Bindless Binding 4 的运行时发布和 RTGI Ray Query Pass 仍属于
-后续消费层工作，以下各节继续约束这些链路。
+Cutout Candidate/Confirm 底层 Smoke 已完成：真实 Vulkan Compute Ray Query 使用四条确定性射线验证
+Opaque 自动提交、Cutout Candidate 拒绝、Cutout 显式确认和平移实例命中，并回读 Instance Custom
+Index、Geometry Index、Primitive ID 与 Barycentrics；多个 TLAS Instance 继续共享同一 BLAS，Validation
+未发现错误。Geometry/Primitive Metadata 到 UV/纹理的运行时命中链、主视图统一 Alpha Cutoff、Global
+Bindless Binding 4 的运行时发布和 RTGI Ray Query Pass 仍属于后续消费层工作，以下各节继续约束这些链路。
 
 ### 4.1 体素区块 BLAS
 
@@ -186,6 +189,9 @@ Opaque Triangle 可直接接受 Committed Intersection。Cutout Triangle 按以�
 3. 重建 UV、方块 Greedy Repeat、Biome Tint 与 Texture Index。
 4. 使用主视图同一 Alpha Cutoff 与纹理采样函数。
 5. Alpha 通过时调用 `rayQueryConfirmIntersectionEXT`。
+
+当前 Vulkan Smoke 已固化第 1、5 项的 GPU 契约，并以确定性 Alpha 结果分别覆盖 Candidate 拒绝与确认。
+第 2 至 4 项依赖正式体素 Greedy Primitive Metadata、模型材质元数据和统一纹理采样函数，仍在 M3 完成。
 
 Ray Cone 根据射线距离、像素覆盖和三角形 UV 梯度选择 Texture LOD，避免树叶与细栅栏
 在次级射线中出现过度锐利闪烁。

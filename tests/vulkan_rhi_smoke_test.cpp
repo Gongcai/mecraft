@@ -25,6 +25,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -2911,6 +2912,168 @@ void main() {
     return valid;
 }
 
+struct RayQuerySmokeResult {
+    uint32_t committed = 0u;
+    uint32_t candidateCount = 0u;
+    uint32_t committedGeometry = 0u;
+    uint32_t instanceCustomIndex = 0u;
+    uint32_t candidateGeometry = 0u;
+    uint32_t candidatePrimitive = 0u;
+    uint32_t barycentricXBits = 0u;
+    uint32_t barycentricYBits = 0u;
+};
+
+static_assert(sizeof(RayQuerySmokeResult) == 32u);
+
+[[nodiscard]] bool validateCutoutRayQuery(VkRhiDevice& device, RhiCommandListPool& commandPool,
+                                          const RhiAccelerationStructureHandle sceneTlas) {
+    constexpr uint32_t kRayCount = 4u;
+    constexpr uint32_t kInvalidIndex = std::numeric_limits<uint32_t>::max();
+    const uint64_t validationErrorsBefore = device.validationErrorCount();
+
+    RhiBufferDesc outputDesc;
+    outputDesc.debugName = "VulkanSmoke.CutoutRayQuery.Output";
+    outputDesc.size = sizeof(RayQuerySmokeResult) * kRayCount;
+    outputDesc.usage = rhiFlag(RhiBufferUsage::Storage) | rhiFlag(RhiBufferUsage::MapRead);
+    outputDesc.memoryUsage = RhiMemoryUsage::GpuToCpu;
+    outputDesc.initialState = RhiResourceState::StorageBuffer;
+    outputDesc.memoryCategory = RhiMemoryCategory::Readback;
+    RhiBufferHandle output = device.createBuffer(outputDesc, nullptr, 0u);
+    RhiBindGroupLayoutHandle bindGroupLayout;
+    RhiBindGroupHandle bindGroup;
+    RhiShaderHandle shader;
+    RhiPipelineLayoutHandle pipelineLayout;
+    RhiPipelineHandle pipeline;
+    const auto cleanup = [&]() {
+        if (pipeline.isValid()) {
+            device.destroyPipeline(pipeline);
+        }
+        if (pipelineLayout.isValid()) {
+            device.destroyPipelineLayout(pipelineLayout);
+        }
+        if (shader.isValid()) {
+            device.destroyShader(shader);
+        }
+        if (bindGroup.isValid()) {
+            device.destroyBindGroup(bindGroup);
+        }
+        if (bindGroupLayout.isValid()) {
+            device.destroyBindGroupLayout(bindGroupLayout);
+        }
+        if (output.isValid()) {
+            device.destroyBuffer(output);
+        }
+        device.waitIdle();
+    };
+
+    bool valid = sceneTlas.isValid() && output.isValid();
+    if (valid) {
+        RhiBindGroupLayoutDesc layoutDesc;
+        layoutDesc.debugName = "VulkanSmoke.CutoutRayQuery.BindGroupLayout";
+        layoutDesc.entries = {
+            {0u, RhiBindingType::AccelerationStructure, rhiFlag(RhiShaderStage::Compute), 1u, 0u},
+            {1u, RhiBindingType::StorageBuffer, rhiFlag(RhiShaderStage::Compute), 1u, 0u},
+        };
+        bindGroupLayout = device.createBindGroupLayout(layoutDesc);
+        valid = bindGroupLayout.isValid();
+    }
+    if (valid) {
+        RhiBindingResource tlasResource;
+        tlasResource.accelerationStructure = sceneTlas;
+        RhiBindingResource outputResource;
+        outputResource.buffer.buffer = output;
+        outputResource.buffer.range = outputDesc.size;
+        RhiBindGroupDesc bindGroupDesc;
+        bindGroupDesc.layout = bindGroupLayout;
+        bindGroupDesc.entries = {{0u, 0u, tlasResource}, {1u, 0u, outputResource}};
+        bindGroup = device.createBindGroup(bindGroupDesc);
+        valid = bindGroup.isValid();
+    }
+
+    const std::optional<std::string> computeSource =
+        valid ? renderer::rhi::loadShaderSource("tests/shaders/cutout_ray_query_test.comp") : std::nullopt;
+    if (valid) {
+        RhiShaderDesc shaderDesc;
+        shaderDesc.debugName = "VulkanSmoke.CutoutRayQuery.Compute";
+        shaderDesc.stage = RhiShaderStage::Compute;
+        shaderDesc.source = computeSource.has_value() ? computeSource->c_str() : nullptr;
+        shaderDesc.sourceSize = computeSource.has_value() ? computeSource->size() : 0u;
+        shader = computeSource.has_value() ? device.createShader(shaderDesc) : RhiShaderHandle{};
+        valid = shader.isValid();
+    }
+    if (valid) {
+        RhiPipelineLayoutDesc pipelineLayoutDesc;
+        pipelineLayoutDesc.debugName = "VulkanSmoke.CutoutRayQuery.PipelineLayout";
+        pipelineLayoutDesc.bindGroupLayouts.push_back(bindGroupLayout);
+        pipelineLayout = device.createPipelineLayout(pipelineLayoutDesc);
+        RhiComputePipelineDesc pipelineDesc;
+        pipelineDesc.debugName = "VulkanSmoke.CutoutRayQuery.Pipeline";
+        pipelineDesc.computeShader = shader;
+        pipelineDesc.layout = pipelineLayout;
+        pipeline = pipelineLayout.isValid() ? device.createComputePipeline(pipelineDesc) : RhiPipelineHandle{};
+        valid = pipeline.isValid();
+    }
+
+    RhiCommandList* commands = valid ? commandPool.acquire(RhiCommandListType::Graphics) : nullptr;
+    if (valid) {
+        valid = commands != nullptr &&
+                commands->begin({"VulkanSmoke.CutoutRayQuery.Commands", RhiCommandListType::Graphics});
+    }
+    if (valid) {
+        commands->setComputePipeline(pipeline);
+        commands->setBindGroup(0u, bindGroup);
+        commands->dispatch(kRayCount, 1u, 1u);
+        commands->bufferBarrier({output, RhiResourceState::StorageBuffer, RhiResourceState::HostRead});
+        valid = commands->end();
+    }
+
+    RhiSubmissionToken token;
+    if (valid) {
+        RhiCommandList* submissions[] = {commands};
+        valid = device.submit({"VulkanSmoke.CutoutRayQuery.Submit", submissions, 1u, RhiQueueType::Graphics}, &token) &&
+                token.isValid() && device.waitForSubmission(token);
+    }
+
+    if (valid) {
+        const auto* results = static_cast<const RayQuerySmokeResult*>(device.mapBuffer(output, 0u, outputDesc.size));
+        valid = results != nullptr;
+        if (results != nullptr) {
+            const auto decodeFloat = [](const uint32_t bits) {
+                float value = 0.0f;
+                std::memcpy(&value, &bits, sizeof(value));
+                return value;
+            };
+            const auto validBarycentrics = [&](const RayQuerySmokeResult& result) {
+                const float x = decodeFloat(result.barycentricXBits);
+                const float y = decodeFloat(result.barycentricYBits);
+                return std::isfinite(x) && std::isfinite(y) && std::abs(x - 0.25f) <= 0.0001f &&
+                       std::abs(y - 0.25f) <= 0.0001f;
+            };
+            valid = results[0].committed == 1u && results[0].candidateCount == 0u &&
+                    results[0].committedGeometry == 0u && results[0].instanceCustomIndex == 0u &&
+                    results[0].candidateGeometry == kInvalidIndex && results[1].committed == 0u &&
+                    results[1].candidateCount == 1u && results[1].committedGeometry == kInvalidIndex &&
+                    results[1].instanceCustomIndex == 0u && results[1].candidateGeometry == 1u &&
+                    results[1].candidatePrimitive == 0u && validBarycentrics(results[1]) &&
+                    results[2].committed == 1u && results[2].candidateCount == 1u &&
+                    results[2].committedGeometry == 1u && results[2].instanceCustomIndex == 0u &&
+                    results[2].candidateGeometry == 1u && results[2].candidatePrimitive == 0u &&
+                    validBarycentrics(results[2]) && results[3].committed == 1u && results[3].candidateCount == 1u &&
+                    results[3].committedGeometry == 1u && results[3].instanceCustomIndex == 1u &&
+                    results[3].candidateGeometry == 1u && results[3].candidatePrimitive == 0u &&
+                    validBarycentrics(results[3]);
+            device.unmapBuffer(output);
+        }
+    }
+
+    cleanup();
+    valid = valid && device.validationErrorCount() == validationErrorsBefore;
+    if (!valid) {
+        std::cerr << "Cutout Ray Query candidate or confirmation validation failed\n";
+    }
+    return valid;
+}
+
 [[nodiscard]] bool validateStaticMeshBlasAndSceneTlas(VkRhiDevice& device, RhiCommandListPool& commandPool) {
     using namespace renderer::rt;
 
@@ -3062,6 +3225,9 @@ void main() {
                 firstTlas->mappings[1].customIndex == 1u && firstTlas->mappings[1].key.primary == 42 &&
                 stats.activeBlasCount == 1u && stats.activeInstanceBytes == firstTlas->instanceBytes &&
                 stats.activeBlasBytes == firstTlas->blasBytes && sceneTlas.isSettled();
+    }
+    if (valid) {
+        valid = validateCutoutRayQuery(device, commandPool, firstTlas->accelerationStructure);
     }
     if (valid) {
         valid = sceneTlas.setInstances(makeInstances(6.0f)) == SceneTlasSetResult::Accepted &&

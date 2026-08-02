@@ -1,0 +1,67 @@
+#version 460 core
+#extension GL_EXT_ray_query : require
+
+layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+
+layout(set = 0, binding = 0) uniform accelerationStructureEXT uSceneTlas;
+
+struct RayQueryResult {
+    uint committed;
+    uint candidateCount;
+    uint committedGeometry;
+    uint instanceCustomIndex;
+    uint candidateGeometry;
+    uint candidatePrimitive;
+    uint barycentricXBits;
+    uint barycentricYBits;
+};
+
+layout(set = 0, binding = 1, std430) writeonly buffer RayQueryOutput {
+    RayQueryResult results[];
+} outputBuffer;
+
+void main() {
+    uint rayIndex = gl_GlobalInvocationID.x;
+    vec3 origin = vec3(0.25, 0.25, 0.5);
+    if (rayIndex == 0u) {
+        origin.z = -1.0;
+    } else if (rayIndex == 3u) {
+        origin.x = 3.25;
+    }
+
+    RayQueryResult result;
+    result.committed = 0u;
+    result.candidateCount = 0u;
+    result.committedGeometry = 0xffffffffu;
+    result.instanceCustomIndex = 0xffffffffu;
+    result.candidateGeometry = 0xffffffffu;
+    result.candidatePrimitive = 0xffffffffu;
+    result.barycentricXBits = 0u;
+    result.barycentricYBits = 0u;
+
+    rayQueryEXT query;
+    rayQueryInitializeEXT(query, uSceneTlas, gl_RayFlagsNoneEXT, 0xffu, origin, 0.001,
+                          vec3(0.0, 0.0, 1.0), 10.0);
+    while (rayQueryProceedEXT(query)) {
+        if (rayQueryGetIntersectionTypeEXT(query, false) != gl_RayQueryCandidateIntersectionTriangleEXT) {
+            continue;
+        }
+        vec2 barycentrics = rayQueryGetIntersectionBarycentricsEXT(query, false);
+        ++result.candidateCount;
+        result.candidateGeometry = rayQueryGetIntersectionGeometryIndexEXT(query, false);
+        result.candidatePrimitive = rayQueryGetIntersectionPrimitiveIndexEXT(query, false);
+        result.instanceCustomIndex = rayQueryGetIntersectionInstanceCustomIndexEXT(query, false);
+        result.barycentricXBits = floatBitsToUint(barycentrics.x);
+        result.barycentricYBits = floatBitsToUint(barycentrics.y);
+        if (rayIndex >= 2u) {
+            rayQueryConfirmIntersectionEXT(query);
+        }
+    }
+
+    if (rayQueryGetIntersectionTypeEXT(query, true) == gl_RayQueryCommittedIntersectionTriangleEXT) {
+        result.committed = 1u;
+        result.committedGeometry = rayQueryGetIntersectionGeometryIndexEXT(query, true);
+        result.instanceCustomIndex = rayQueryGetIntersectionInstanceCustomIndexEXT(query, true);
+    }
+    outputBuffer.results[rayIndex] = result;
+}
