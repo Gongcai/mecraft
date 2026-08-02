@@ -267,7 +267,7 @@ void main() {
 } // namespace
 
 int main() {
-    constexpr std::array<ShaderCase, 100> kShaderCases{
+    constexpr std::array<ShaderCase, 101> kShaderCases{
         {{"tests/shaders/rhi_screen_coordinates_test.frag", RhiShaderStage::Fragment},
          {"tests/shaders/material_brdf_shared_test.frag", RhiShaderStage::Fragment},
          {"tests/shaders/reflection_probe_contract_test.frag", RhiShaderStage::Fragment},
@@ -275,6 +275,7 @@ int main() {
          {"tests/shaders/global_bindless_gpu_scene_test.comp", RhiShaderStage::Compute, nullptr, nullptr, nullptr,
           true},
          {"tests/shaders/cutout_ray_query_test.comp", RhiShaderStage::Compute, nullptr, nullptr, nullptr, true},
+         {"assets/shaders/rtgi_trace.comp", RhiShaderStage::Compute, nullptr, nullptr, nullptr, true},
          {"assets/shaders/fullscreen_triangle_rhi.vert", RhiShaderStage::Vertex},
          {"assets/shaders/deferred_lighting.vert", RhiShaderStage::Vertex},
          {"assets/shaders/skybox_blur_rhi.vert", RhiShaderStage::Vertex},

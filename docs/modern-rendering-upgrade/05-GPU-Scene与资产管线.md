@@ -117,8 +117,9 @@ Material、Geometry 和 Instance 底层表采用固定容量与增量 Dirty Rang
 代际管理提交、换代和卸载。Active 代际只保留唯一 BLAS 引用，Dashboard 可读取 Instance 数、唯一
 BLAS 数、TLAS/BLAS 字节、Revision 与 Build 计数。Gameplay 与模型场景的 Vulkan 运行时所有者现已
 创建 Global Bindless Set，并在帧开始把最新完成的 Active TLAS 发布到固定 Binding 4；Dashboard 同时
-报告发布 Revision、Descriptor 更新次数和四类数组占用。OpenGL 明确不创建该集合。正式 RTGI Shader
-绑定与 Scene Buffer 消费仍由 M3 接入。
+报告发布 Revision、Descriptor 更新次数和四类数组占用。OpenGL 明确不创建该集合。生产
+`RtgiTracePass` 已绑定该 Global Set 并从 Binding 4 读取 Active TLAS；Scene Buffer 与次级材质
+消费继续由 M3 接入。
 
 ## 5. GPU Culling 与间接绘制
 

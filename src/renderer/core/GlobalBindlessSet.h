@@ -152,6 +152,8 @@ public:
     [[nodiscard]] RhiBindGroupLayoutHandle layout() const { return m_layout; }
     /// Returns the frame-stable descriptor set bound by modern draw and compute paths.
     [[nodiscard]] RhiBindGroupHandle bindGroup() const { return m_bindGroup; }
+    /// Returns the TLAS currently published at fixed Binding 4.
+    [[nodiscard]] RhiAccelerationStructureHandle accelerationStructure() const { return m_accelerationStructure; }
     /// Reports whether the Vulkan descriptor set is fully initialized.
     [[nodiscard]] bool initialized() const {
         return m_device != nullptr && m_layout.isValid() && m_bindGroup.isValid();

@@ -359,6 +359,7 @@ set(SRC_RENDERER
         src/renderer/contracts/GpuMaterialContract.cpp
         src/renderer/contracts/GpuSceneContract.cpp
         src/renderer/contracts/ReflectionProbeContract.cpp
+        src/renderer/contracts/RtgiSamplingContract.cpp
         src/renderer/contracts/VoxelReflectionProbeSourceContract.cpp
         src/renderer/contracts/RenderFeatureContract.cpp
 
@@ -396,6 +397,7 @@ set(SRC_RENDERER
         # Render passes
         src/renderer/passes/SsaoPass.cpp
         src/renderer/passes/SsgiPass.cpp
+        src/renderer/passes/RtgiTracePass.cpp
         src/renderer/passes/HiZPass.cpp
         src/renderer/passes/VelocityPass.cpp
         src/renderer/passes/ReflectionPass.cpp
@@ -1062,6 +1064,7 @@ if(MECRAFT_BUILD_TESTS)
     target_compile_definitions(gpu_scene_contract_test PRIVATE
             MECRAFT_TEST_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
     add_mecraft_test(render_feature_contract_test tests/render_feature_contract_test.cpp)
+    add_mecraft_test(rtgi_sampling_contract_test tests/rtgi_sampling_contract_test.cpp)
     add_mecraft_test(rhi_acceleration_structure_contract_test
             tests/rhi_acceleration_structure_contract_test.cpp)
     add_mecraft_test(terrain_blas_cache_contract_test

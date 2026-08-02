@@ -127,7 +127,8 @@ M1 与 M2 可并行开发，但公共 `GpuMaterial`、`GpuSceneGeometry` 与 Sta
    Vulkan 创建同一契约的 Global Set，并于帧开始发布最新完成的 Active TLAS；Dashboard 展示发布
    Revision、Descriptor 更新次数和各数组占用，真实 Cutout Ray Query Smoke 也通过该 Global Set
    读取 Binding 4，Validation 未发现错误。体素区块、模型实例和资产注册表尚未接入三张 Scene 表，
-   GPU Culling、Indirect Draw 与正式 RTGI Shader 消费链仍未实现。）
+   GPU Culling 与 Indirect Draw 仍未实现；生产 `RtgiTracePass` 已消费 Binding 4 完成
+   Opaque Ray Query，Scene Buffer 与次级材质消费尚未接入。）
 4. RHI AS Handle、Build Size、Build/Copy/Barrier 与 Device Address。（实现完成：公共 RHI 已提供
    强类型 AS Handle、BLAS/TLAS、Triangles/AABBs/Instances、Build/Update、Clone/Compact、精确
    Build Size、Buffer/AS Device Address、AS Barrier、Compacted Size Query，以及固定 64 字节
@@ -178,8 +179,9 @@ M1 与 M2 可并行开发，但公共 `GpuMaterial`、`GpuSceneGeometry` 与 Sta
 ### 任务
 
 1. RTGI Compute Ray Query、Blue Noise/Cosine Sampling。（进行中：Global Bindless Binding 4 的双运行时
-   所有权、Active TLAS 发布和真实 Ray Query Smoke 已完成；生产 Trace Pass、Blue Noise/Cosine
-   Sampling 与 Render Graph 消费仍待实现。）
+   所有权与 Active TLAS 发布已完成；生产 `RtgiTracePass`、确定性帧旋转、Blue Noise/Cosine
+   Sampling、Opaque Ray Query、Render Graph 资源声明与真实 Vulkan 命中距离回读已完成。
+   Cutout 命中确认、次级材质辐射、Deferred 运行时消费和 NRD 输入打包尚未完成。）
 2. 体素 Greedy Primitive Metadata 与 Cutout Alpha Candidate。
 3. 模型 Geometry/Material 次级命中读取。
 4. 次级太阳、局部灯、Emissive、天空 Radiance。

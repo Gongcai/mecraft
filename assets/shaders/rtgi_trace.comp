@@ -1,0 +1,103 @@
+#version 460 core
+#extension GL_EXT_ray_query : require
+#extension GL_EXT_nonuniform_qualifier : require
+
+#define RHI_GLOBAL_BINDLESS_RAY_QUERY
+#include "global_bindless_set.glsl"
+#include "gbuffer_contract.glsl"
+#include "rhi_screen_coordinates.glsl"
+#include "rtgi_sampling.glsl"
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+layout(set = 1, binding = 0) uniform sampler2D uDepthTexture;
+layout(set = 1, binding = 1) uniform sampler2D uNormalAoTexture;
+layout(set = 1, binding = 2) uniform sampler2D uMaterialAuxTexture;
+layout(set = 1, binding = 3) uniform sampler2D uBlueNoiseTexture;
+layout(set = 1, binding = 4, rgba16f) uniform writeonly image2D uDiffuseRadianceHitDistance;
+layout(set = 1, binding = 5, rg32ui) uniform writeonly uimage2D uValidation;
+
+layout(push_constant) uniform RtgiTracePushConstants {
+    mat4 inverseViewProjection;
+    vec4 cameraPositionAndMaxDistance;
+    vec4 renderExtentAndBias;
+    uvec4 frameMaskAndFlags;
+} pc;
+
+bool rtgiFinite(vec3 value) {
+    return !any(isnan(value)) && !any(isinf(value));
+}
+
+void rtgiWriteResult(ivec2 texel, vec3 radiance, float hitDistance, uint classification) {
+    if (!rtgiFinite(radiance) || isnan(hitDistance) || isinf(hitDistance)) {
+        imageStore(uDiffuseRadianceHitDistance, texel, vec4(0.0));
+        imageStore(uValidation, texel, uvec4(RTGI_TRACE_CLASS_NON_FINITE, floatBitsToUint(0.0), 0u, 0u));
+        return;
+    }
+    imageStore(uDiffuseRadianceHitDistance, texel, vec4(max(radiance, vec3(0.0)), max(hitDistance, 0.0)));
+    imageStore(uValidation, texel, uvec4(classification, floatBitsToUint(max(hitDistance, 0.0)), 0u, 0u));
+}
+
+void main() {
+    ivec2 texel = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 extent = ivec2(pc.renderExtentAndBias.xy);
+    if (texel.x >= extent.x || texel.y >= extent.y) {
+        return;
+    }
+
+    float depth = texelFetch(uDepthTexture, texel, 0).r;
+    if (depth >= 0.9999) {
+        rtgiWriteResult(texel, vec3(0.0), 0.0, RTGI_TRACE_CLASS_SKY);
+        return;
+    }
+
+    SurfaceMaterialAux materialAux = unpackGBufferMaterialAux(texelFetch(uMaterialAuxTexture, texel, 0));
+    if (decodeTranslucentMask(materialAux.materialKind).isTranslucent) {
+        rtgiWriteResult(texel, vec3(0.0), 0.0, RTGI_TRACE_CLASS_TRANSLUCENT);
+        return;
+    }
+
+    vec2 screenUv = (vec2(texel) + 0.5) / pc.renderExtentAndBias.xy;
+    vec2 clipUv = rhiScreenUvToClipUv(screenUv);
+    vec4 worldPositionH = pc.inverseViewProjection * vec4(clipUv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
+    if (abs(worldPositionH.w) <= 1.0e-7) {
+        rtgiWriteResult(texel, vec3(0.0), 0.0, RTGI_TRACE_CLASS_NON_FINITE);
+        return;
+    }
+    vec3 worldPosition = worldPositionH.xyz / worldPositionH.w;
+    vec3 normal = unpackGBufferNormal(texelFetch(uNormalAoTexture, texel, 0));
+    if (!rtgiFinite(worldPosition) || !rtgiFinite(normal)) {
+        rtgiWriteResult(texel, vec3(0.0), 0.0, RTGI_TRACE_CLASS_NON_FINITE);
+        return;
+    }
+
+    ivec2 noiseExtent = textureSize(uBlueNoiseTexture, 0);
+    uvec2 frameOffset = uvec2(pc.frameMaskAndFlags.x * 17u, pc.frameMaskAndFlags.x * 43u);
+    ivec2 noiseTexel = ivec2((uvec2(texel) + frameOffset) % uvec2(noiseExtent));
+    vec2 blueNoise = texelFetch(uBlueNoiseTexture, noiseTexel, 0).rg;
+    vec2 sampleValue = fract(blueNoise + rtgiCranleyPattersonRotation(pc.frameMaskAndFlags.x));
+    vec3 rayDirection = rtgiCosineHemisphereDirection(sampleValue, normal);
+
+    float positionScale = max(max(abs(worldPosition.x), max(abs(worldPosition.y), abs(worldPosition.z))), 1.0);
+    float floatingPointBias = positionScale * 9.5367431640625e-7;
+    float angularScale = 1.0 / max(dot(normal, rayDirection), 0.25);
+    float originBias = max(pc.renderExtentAndBias.z, floatingPointBias) * angularScale;
+    vec3 rayOrigin = worldPosition + normal * originBias;
+    float rayMinimum = max(originBias * 0.25, 1.0e-4);
+
+    rayQueryEXT query;
+    rayQueryInitializeEXT(query, globalBindlessSceneTlas, gl_RayFlagsTerminateOnFirstHitEXT,
+                          pc.frameMaskAndFlags.y, rayOrigin, rayMinimum, rayDirection,
+                          pc.cameraPositionAndMaxDistance.w);
+    // The first production slice traces GI_OPAQUE only. Non-opaque candidates remain unconfirmed until the
+    // material metadata and unified alpha test are connected by the dedicated Cutout task.
+    while (rayQueryProceedEXT(query)) {
+    }
+
+    if (rayQueryGetIntersectionTypeEXT(query, true) == gl_RayQueryCommittedIntersectionTriangleEXT) {
+        float hitDistance = rayQueryGetIntersectionTEXT(query, true);
+        rtgiWriteResult(texel, vec3(0.0), hitDistance, RTGI_TRACE_CLASS_HIT);
+        return;
+    }
+    rtgiWriteResult(texel, vec3(0.0), 0.0, RTGI_TRACE_CLASS_MISS);
+}

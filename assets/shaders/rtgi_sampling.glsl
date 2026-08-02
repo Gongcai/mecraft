@@ -1,0 +1,41 @@
+#ifndef MECRAFT_RTGI_SAMPLING_GLSL
+#define MECRAFT_RTGI_SAMPLING_GLSL
+
+const float RTGI_TWO_PI = 6.28318530717958647692;
+const float RTGI_UINT24_SCALE = 1.0 / 16777216.0;
+
+const uint RTGI_TRACE_CLASS_SKY = 0u;
+const uint RTGI_TRACE_CLASS_TRANSLUCENT = 1u;
+const uint RTGI_TRACE_CLASS_MISS = 2u;
+const uint RTGI_TRACE_CLASS_HIT = 3u;
+const uint RTGI_TRACE_CLASS_NON_FINITE = 4u;
+
+// Applies the integer permutation shared with RtgiSamplingContract.
+uint rtgiSampleHash(uint value) {
+    value ^= value >> 16u;
+    value *= 0x7feb352du;
+    value ^= value >> 15u;
+    value *= 0x846ca68bu;
+    value ^= value >> 16u;
+    return value;
+}
+
+// Returns the deterministic per-frame Cranley-Patterson rotation in [0, 1).
+vec2 rtgiCranleyPattersonRotation(uint frameIndex) {
+    return vec2(float(rtgiSampleHash(frameIndex ^ 0x68bc21ebu) & 0x00ffffffu),
+                float(rtgiSampleHash(frameIndex ^ 0x02e5be93u) & 0x00ffffffu)) * RTGI_UINT24_SCALE;
+}
+
+// Maps one low-discrepancy sample to a cosine-weighted unit direction around normal.
+vec3 rtgiCosineHemisphereDirection(vec2 sampleValue, vec3 normal) {
+    vec3 unitNormal = normalize(normal);
+    vec3 helper = abs(unitNormal.z) < 0.999 ? vec3(0.0, 0.0, 1.0) : vec3(1.0, 0.0, 0.0);
+    vec3 tangent = normalize(cross(helper, unitNormal));
+    vec3 bitangent = cross(unitNormal, tangent);
+    float radius = sqrt(sampleValue.y);
+    float angle = RTGI_TWO_PI * sampleValue.x;
+    return normalize(tangent * (radius * cos(angle)) + bitangent * (radius * sin(angle)) +
+                     unitNormal * sqrt(1.0 - sampleValue.y));
+}
+
+#endif // MECRAFT_RTGI_SAMPLING_GLSL

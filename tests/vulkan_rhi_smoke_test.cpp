@@ -1,6 +1,9 @@
 #include "renderer/core/GlobalBindlessSet.h"
 #include "renderer/core/GpuSceneBufferSet.h"
+#include "renderer/core/RenderScene.h"
+#include "renderer/contracts/RtgiSamplingContract.h"
 #include "renderer/mesh/TerrainBlasCache.h"
+#include "renderer/passes/RtgiTracePass.h"
 #include "renderer/rhi/RhiCommandList.h"
 #include "renderer/rhi/RhiDevice.h"
 #include "renderer/rhi/RhiRenderGraph.h"
@@ -3070,6 +3073,232 @@ static_assert(sizeof(RayQuerySmokeResult) == 32u);
     return valid;
 }
 
+[[nodiscard]] bool validateRtgiTracePass(VkRhiDevice& device, RhiCommandListPool& commandPool,
+                                         renderer::rt::SceneTlasCache& sceneTlas,
+                                         const renderer::rt::SceneTlasView& activeTlas) {
+    using namespace renderer::contracts;
+    using namespace renderer::core;
+    using namespace renderer::rt;
+
+    struct SmokeTexture final {
+        RhiTextureDesc desc;
+        RhiTextureHandle texture;
+        RhiTextureViewHandle view;
+    };
+
+    const uint64_t validationErrorsBefore = device.validationErrorCount();
+    const auto createTexture = [&](const char* debugName, const RhiTextureFormat format,
+                                   const RhiTextureUsageFlags usage, const void* pixels, const size_t sizeBytes,
+                                   const RhiResourceState finalState, SmokeTexture& output) {
+        output.desc.debugName = debugName;
+        output.desc.format = format;
+        output.desc.width = 1u;
+        output.desc.height = 1u;
+        output.desc.usage = usage;
+        output.desc.memoryCategory = RhiMemoryCategory::Transient;
+        if (pixels != nullptr) {
+            RhiTextureInitialData initialData;
+            initialData.pixels = pixels;
+            initialData.sizeBytes = sizeBytes;
+            initialData.finalState = finalState;
+            output.texture = device.createTexture(output.desc, &initialData);
+        } else {
+            output.texture = device.createTexture(output.desc, nullptr);
+        }
+        if (!output.texture.isValid()) {
+            return false;
+        }
+        RhiTextureViewDesc viewDesc;
+        viewDesc.texture = output.texture;
+        viewDesc.viewType = RhiTextureViewType::Texture2D;
+        viewDesc.format = format;
+        output.view = device.createTextureView(viewDesc);
+        return output.view.isValid();
+    };
+
+    constexpr float kDepth = 0.25f;
+    constexpr std::array<float, 4u> kPackedNormal{0.5f, 0.5f, 1.0f, 0.0f};
+    constexpr std::array<float, 4u> kOpaqueMaterialAux{0.0f, 0.0f, 0.0f, 0.0f};
+    const glm::vec2 rotation = rtgiCranleyPattersonRotation(0u);
+    const auto wrapUnit = [](const float value) {
+        return value - std::floor(value);
+    };
+    constexpr glm::vec2 kDesiredSample{0.125f, 0.0001f};
+    const std::array<float, 4u> blueNoise{wrapUnit(kDesiredSample.x - rotation.x),
+                                          wrapUnit(kDesiredSample.y - rotation.y), 0.0f, 1.0f};
+
+    constexpr RhiTextureUsageFlags kSampledUsage =
+        rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::TransferDst);
+    constexpr RhiTextureUsageFlags kStorageUsage =
+        rhiFlag(RhiTextureUsage::Storage) | rhiFlag(RhiTextureUsage::TransferSrc);
+    SmokeTexture depth;
+    SmokeTexture normalAo;
+    SmokeTexture materialAux;
+    SmokeTexture noise;
+    SmokeTexture radianceHitDistance;
+    SmokeTexture validation;
+    GlobalBindlessSet globalBindlessSet;
+    RtgiTracePass tracePass;
+    RhiBufferHandle validationReadback;
+    const auto cleanup = [&]() {
+        device.waitIdle();
+        tracePass.shutdown();
+        globalBindlessSet.shutdown();
+        if (validationReadback.isValid()) {
+            device.destroyBuffer(validationReadback);
+        }
+        SmokeTexture* textures[] = {&validation, &radianceHitDistance, &noise, &materialAux, &normalAo, &depth};
+        for (SmokeTexture* texture : textures) {
+            if (texture->view.isValid()) {
+                device.destroyTextureView(texture->view);
+            }
+            if (texture->texture.isValid()) {
+                device.destroyTexture(texture->texture);
+            }
+        }
+    };
+
+    bool valid = activeTlas.accelerationStructure.isValid() &&
+                 createTexture("VulkanSmoke.RTGI.Depth", RhiTextureFormat::Depth32Float,
+                               kSampledUsage | rhiFlag(RhiTextureUsage::DepthStencilAttachment), &kDepth,
+                               sizeof(kDepth), RhiResourceState::DepthRead, depth) &&
+                 createTexture("VulkanSmoke.RTGI.NormalAo", RhiTextureFormat::Rgba32Float, kSampledUsage,
+                               kPackedNormal.data(), sizeof(kPackedNormal), RhiResourceState::ShaderRead, normalAo) &&
+                 createTexture("VulkanSmoke.RTGI.MaterialAux", RhiTextureFormat::Rgba32Float, kSampledUsage,
+                               kOpaqueMaterialAux.data(), sizeof(kOpaqueMaterialAux), RhiResourceState::ShaderRead,
+                               materialAux) &&
+                 createTexture("VulkanSmoke.RTGI.BlueNoise", RhiTextureFormat::Rgba32Float, kSampledUsage,
+                               blueNoise.data(), sizeof(blueNoise), RhiResourceState::ShaderRead, noise) &&
+                 createTexture("VulkanSmoke.RTGI.RadianceHitDistance", RhiTextureFormat::Rgba16Float, kStorageUsage,
+                               nullptr, 0u, RhiResourceState::Undefined, radianceHitDistance) &&
+                 createTexture("VulkanSmoke.RTGI.Validation", RhiTextureFormat::Rg32Uint, kStorageUsage, nullptr, 0u,
+                               RhiResourceState::Undefined, validation);
+
+    if (valid) {
+        GlobalBindlessSetConfig config;
+        config.sampledTexture2DCapacity = 1u;
+        config.sampledTextureCubeCapacity = 1u;
+        config.samplerCapacity = 1u;
+        config.storageBufferCapacity = 1u;
+        valid = globalBindlessSet.initialize(device, config) == GlobalBindlessSetError::None &&
+                globalBindlessSet.setAccelerationStructure(activeTlas.accelerationStructure) ==
+                    GlobalBindlessSetError::None;
+    }
+
+    RhiBufferDesc readbackDesc;
+    readbackDesc.debugName = "VulkanSmoke.RTGI.ValidationReadback";
+    readbackDesc.size = sizeof(uint32_t) * 2u;
+    readbackDesc.usage = rhiFlag(RhiBufferUsage::TransferDst) | rhiFlag(RhiBufferUsage::MapRead);
+    readbackDesc.memoryUsage = RhiMemoryUsage::GpuToCpu;
+    readbackDesc.initialState = RhiResourceState::TransferDst;
+    readbackDesc.memoryCategory = RhiMemoryCategory::Readback;
+    if (valid) {
+        validationReadback = device.createBuffer(readbackDesc, nullptr, 0u);
+        valid = validationReadback.isValid();
+    }
+
+    SharedRenderResources shared;
+    shared.rhiDevice = &device;
+    shared.commandListPool = &commandPool;
+    shared.sceneTlasCache = &sceneTlas;
+    shared.globalBindlessSet = &globalBindlessSet;
+    FrameContext frame;
+    frame.shared = &shared;
+    frame.frameIndex = 0u;
+    frame.temporalExtents = makeTemporalFrameExtents({1u, 1u}, {1u, 1u}, {1u, 1u}, {1u, 1u});
+    frame.camera.invViewProj = glm::translate(glm::mat4(1.0f), glm::vec3(0.25f, 0.25f, 0.0f));
+    frame.camera.jitteredInvViewProj = frame.camera.invViewProj;
+    frame.camera.position = {0.25f, 0.25f, -0.5f};
+
+    RenderGraph graph;
+    const auto importTexture = [&](const SmokeTexture& texture, const RhiResourceState initialState,
+                                   const RhiResourceState finalState) {
+        return graph.importTexture({texture.desc.debugName, texture.texture, texture.desc, initialState, finalState,
+                                    texture.view, RhiQueueType::Graphics, RhiQueueType::Graphics});
+    };
+    RtgiTracePass::GraphResources resources;
+    RgBufferHandle readbackResource;
+    RgPassHandle traceHandle;
+    if (valid) {
+        resources.depth = importTexture(depth, RhiResourceState::DepthRead, RhiResourceState::DepthRead);
+        resources.normalAo = importTexture(normalAo, RhiResourceState::ShaderRead, RhiResourceState::ShaderRead);
+        resources.materialAux = importTexture(materialAux, RhiResourceState::ShaderRead, RhiResourceState::ShaderRead);
+        resources.blueNoise = importTexture(noise, RhiResourceState::ShaderRead, RhiResourceState::ShaderRead);
+        resources.diffuseRadianceHitDistance =
+            importTexture(radianceHitDistance, RhiResourceState::Undefined, RhiResourceState::ShaderWrite);
+        resources.validation = importTexture(validation, RhiResourceState::Undefined, RhiResourceState::ShaderWrite);
+        readbackResource = graph.importBuffer({"RTGI.ValidationReadback", validationReadback, readbackDesc,
+                                               RhiResourceState::TransferDst, RhiResourceState::HostRead,
+                                               RhiQueueType::Graphics, RhiQueueType::Graphics});
+        valid = resources.depth.isValid() && resources.normalAo.isValid() && resources.materialAux.isValid() &&
+                resources.blueNoise.isValid() && resources.diffuseRadianceHitDistance.isValid() &&
+                resources.validation.isValid() && readbackResource.isValid();
+    }
+    if (valid) {
+        const RgPassHandle inputReady = graph.addPass({"RTGI.InputReady", RgPassType::Copy, RhiQueueType::Graphics})
+                                            .setExecute([](RgPassContext&) { return true; })
+                                            .handle();
+        RtgiTracePass::Settings settings;
+        settings.maxRayDistance = 10.0f;
+        settings.minimumRayOriginBias = 0.001f;
+        settings.instanceMask = sceneTlasMaskBit(SceneTlasInstanceMask::GiOpaque);
+        traceHandle = tracePass.addGraphPass(graph, frame, settings, resources, inputReady);
+        valid = traceHandle.isValid();
+    }
+    if (valid) {
+        graph.addPass({"RTGI.ValidationCopy", RgPassType::Copy, RhiQueueType::Graphics})
+            .dependsOn(traceHandle)
+            .readTexture(resources.validation, RhiResourceState::TransferSrc)
+            .writeBuffer(readbackResource, RhiResourceState::TransferDst)
+            .setExecute([&](RgPassContext& context) {
+                RhiTextureBufferCopy copy;
+                copy.srcTexture = context.texture(resources.validation);
+                copy.dstBuffer = context.buffer(readbackResource);
+                copy.bytesPerRow = sizeof(uint32_t) * 2u;
+                copy.rowsPerImage = 1u;
+                copy.width = 1u;
+                copy.height = 1u;
+                context.commandList().copyTextureToBuffer(copy);
+                return true;
+            });
+        const RgCompileResult compiled = graph.compile();
+        valid = compiled.succeeded();
+        if (!valid) {
+            std::cerr << "RTGI Trace Render Graph compile failed: " << compiled.message << '\n';
+        }
+    }
+    if (valid) {
+        const RgExecuteResult executed = graph.execute(device, commandPool);
+        valid = executed.succeeded() && executed.completionToken().isValid() &&
+                device.waitForSubmission(executed.completionToken());
+        if (!executed.succeeded()) {
+            std::cerr << "RTGI Trace Render Graph execution failed: " << executed.message << '\n';
+        }
+    }
+    if (valid) {
+        const auto* result = static_cast<const uint32_t*>(device.mapBuffer(validationReadback, 0u, readbackDesc.size));
+        valid = result != nullptr;
+        if (result != nullptr) {
+            float hitDistance = 0.0f;
+            std::memcpy(&hitDistance, &result[1], sizeof(hitDistance));
+            const RtgiTracePass::Stats& stats = tracePass.stats();
+            valid = result[0] == static_cast<uint32_t>(RtgiTraceClassification::Hit) && std::isfinite(hitDistance) &&
+                    hitDistance >= 0.45f && hitDistance <= 0.55f && stats.dispatched &&
+                    stats.frameIndex == frame.frameIndex && stats.sceneTlasRevision == activeTlas.revision &&
+                    stats.width == 1u && stats.height == 1u &&
+                    stats.instanceMask == sceneTlasMaskBit(SceneTlasInstanceMask::GiOpaque);
+            device.unmapBuffer(validationReadback);
+        }
+    }
+
+    cleanup();
+    valid = valid && device.validationErrorCount() == validationErrorsBefore;
+    if (!valid) {
+        std::cerr << "RTGI Blue Noise cosine trace pass validation failed\n";
+    }
+    return valid;
+}
+
 [[nodiscard]] bool validateStaticMeshBlasAndSceneTlas(VkRhiDevice& device, RhiCommandListPool& commandPool) {
     using namespace renderer::rt;
 
@@ -3224,6 +3453,9 @@ static_assert(sizeof(RayQuerySmokeResult) == 32u);
     }
     if (valid) {
         valid = validateCutoutRayQuery(device, commandPool, firstTlas->accelerationStructure);
+    }
+    if (valid) {
+        valid = validateRtgiTracePass(device, commandPool, sceneTlas, *firstTlas);
     }
     if (valid) {
         valid = sceneTlas.setInstances(makeInstances(6.0f)) == SceneTlasSetResult::Accepted &&

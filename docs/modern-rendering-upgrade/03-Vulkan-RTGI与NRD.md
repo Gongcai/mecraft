@@ -106,8 +106,10 @@ Index、Geometry Index、Primitive ID 与 Barycentrics；多个 TLAS Instance �
 未发现错误。Gameplay `RenderScene` 与 Model Scene Deferred 现已在 Vulkan 分别持有 Global Bindless
 Set，于帧开始把最新完成的 Active TLAS 发布到固定 Binding 4；重复代际不产生 Descriptor 写入，Dashboard
 显示 Active Revision、Descriptor 更新次数和数组占用。OpenGL 两条路径均不创建该集合。Geometry/
-Primitive Metadata 到 UV/纹理的运行时命中链、主视图统一 Alpha Cutoff 和 RTGI Ray Query Pass 仍属于
-后续消费层工作，以下各节继续约束这些链路。
+Primitive Metadata 到 UV/纹理的运行时命中链和主视图统一 Alpha Cutoff 仍属于后续消费层工作。
+生产 `RtgiTracePass` 已从 GBuffer 重建主表面，使用 Blue Noise、Cranley-Patterson 帧旋转与
+Cosine-weighted Hemisphere Sampling，并通过固定 Binding 4 对 `GI_OPAQUE` 执行 Compute Ray Query。
+以下各节继续约束 Cutout、次级命中着色和正式 Deferred 消费链。
 
 ### 4.1 体素区块 BLAS
 
@@ -183,6 +185,11 @@ Roughness、Material ID 和 Stable Object ID。Ray Origin 沿几何法线偏移�
 最大射线距离是画质设置中的世界单位参数，并可按室内/室外预设配置；它不是基于本帧
 时间动态改变的隐藏变量。
 
+当前 C++/GLSL 共享确定性整数 Hash、帧旋转、余弦半球映射与 112 字节 Push Constant
+契约。单元测试固化 Hash 结果、采样有效域和期望余弦分布；真实 Vulkan Smoke 使用
+1×1 GBuffer、Blue Noise、Scene TLAS 与生产 `RtgiTracePass`，回读验证约 0.5 世界单位的
+Opaque 命中距离。
+
 ### 5.3 Candidate 命中
 
 Opaque Triangle 可直接接受 Committed Intersection。Cutout Triangle 按以下步骤处理：
@@ -194,7 +201,8 @@ Opaque Triangle 可直接接受 Committed Intersection。Cutout Triangle 按以�
 5. Alpha 通过时调用 `rayQueryConfirmIntersectionEXT`。
 
 当前 Vulkan Smoke 已固化第 1、5 项的 GPU 契约，并以确定性 Alpha 结果分别覆盖 Candidate 拒绝与确认。
-第 2 至 4 项依赖正式体素 Greedy Primitive Metadata、模型材质元数据和统一纹理采样函数，仍在 M3 完成。
+生产 Trace Pass 本轮只使用 `GI_OPAQUE` Mask，不确认 Cutout Candidate；第 2 至 4 项依赖
+正式体素 Greedy Primitive Metadata、模型材质元数据和统一纹理采样函数，继续在 M3 完成。
 
 Ray Cone 根据射线距离、像素覆盖和三角形 UV 梯度选择 Texture LOD，避免树叶与细栅栏
 在次级射线中出现过度锐利闪烁。
@@ -221,6 +229,10 @@ Trace Pass 输出：
 
 - `RtgiDiffuseRadianceHitDistance`：RGB Diffuse Radiance + First-bounce Hit Distance。
 - `RtgiValidation`：Hit/Miss、Instance/Material 分类或 NaN 诊断。
+
+当前 Opaque Trace 已创建 `RGBA16F` 辐射/命中距离和 `RG32UI` 验证输出，固定分类为
+Sky、Translucent、Miss、Hit 与 NonFinite。Hit Distance 已由真实 Vulkan 回读验证；RGB 在次级
+材质与灯光链接入前保持为零，不进入正式 Deferred 合成。
 
 RELAX 使用 `RELAX_FrontEnd_PackRadianceAndHitDist` 打包原始 First-bounce Hit Distance；
 REBLUR 先调用 `REBLUR_FrontEnd_GetNormHitDist`，再用
