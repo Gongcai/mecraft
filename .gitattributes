@@ -1,0 +1,8 @@
+third_party/nrd/Dependencies/** -whitespace
+third_party/nrd/Generated/SPIRV/** -whitespace
+third_party/nrd/Include/** -whitespace
+third_party/nrd/LICENSE.txt -whitespace
+third_party/nrd/README.md -whitespace
+third_party/nrd/Resources/** -whitespace
+third_party/nrd/Shaders/** -whitespace
+third_party/nrd/Source/** -whitespace

@@ -5,6 +5,7 @@
 #include <glslang/SPIRV/GlslangToSpv.h>
 #include <spirv_cross/spirv_cross_c.h>
 
+#include <cstring>
 #include <limits>
 #include <mutex>
 
@@ -262,15 +263,46 @@ reflectedArrayInfo(const spvc_compiler compiler, const spvc_reflected_resource& 
 std::optional<RhiCompiledShader> compileShaderToSpirv(const RhiShaderDesc& desc, const RhiShaderBackend backend,
                                                       std::string& errorMessage) {
     errorMessage.clear();
-    if (desc.source == nullptr || desc.sourceSize == 0u || desc.bytecode != nullptr || desc.bytecodeSize != 0u ||
-        desc.entryPoint == nullptr || desc.entryPoint[0] == '\0') {
-        errorMessage = "shader compilation requires canonical GLSL source and an entry point";
+    const bool sourcePairValid = (desc.source == nullptr) == (desc.sourceSize == 0u);
+    const bool bytecodePairValid = (desc.bytecode == nullptr) == (desc.bytecodeSize == 0u);
+    const bool hasSource = desc.source != nullptr && desc.sourceSize != 0u;
+    const bool hasBytecode = desc.bytecode != nullptr && desc.bytecodeSize != 0u;
+    if (!sourcePairValid || !bytecodePairValid || hasSource == hasBytecode || desc.entryPoint == nullptr ||
+        desc.entryPoint[0] == '\0') {
+        errorMessage = "shader creation requires exactly one GLSL source or SPIR-V bytecode payload and an entry point";
         return std::nullopt;
     }
     const EShLanguage language = toGlslangStage(desc.stage);
     if (language == EShLangCount) {
         errorMessage = "shader compilation received an invalid stage";
         return std::nullopt;
+    }
+
+    if (hasBytecode) {
+        constexpr uint32_t kSpirvMagicNumber = 0x07230203u;
+        if (desc.bytecodeSize % sizeof(uint32_t) != 0u ||
+            desc.bytecodeSize > static_cast<uint64_t>(std::numeric_limits<size_t>::max())) {
+            errorMessage = "SPIR-V bytecode size must be a multiple of four bytes";
+            return std::nullopt;
+        }
+        const size_t wordCount = static_cast<size_t>(desc.bytecodeSize / sizeof(uint32_t));
+        if (wordCount < 5u) {
+            errorMessage = "SPIR-V bytecode does not contain a complete module header";
+            return std::nullopt;
+        }
+        RhiCompiledShader compiled;
+        compiled.stage = desc.stage;
+        compiled.entryPoint = desc.entryPoint;
+        compiled.spirv.resize(wordCount);
+        std::memcpy(compiled.spirv.data(), desc.bytecode, static_cast<size_t>(desc.bytecodeSize));
+        if (compiled.spirv.front() != kSpirvMagicNumber) {
+            errorMessage = "SPIR-V bytecode has an invalid module header";
+            return std::nullopt;
+        }
+        if (!reflectShader(compiled, errorMessage)) {
+            return std::nullopt;
+        }
+        return compiled;
     }
 
     static std::once_flag initializationFlag;
@@ -335,10 +367,11 @@ std::optional<RhiCompiledShader> compileShaderToSpirv(const RhiShaderDesc& desc,
     options.disableOptimizer = false;
     options.optimizeSize = true;
     glslang::GlslangToSpv(*intermediate, compiled.spirv, &options);
-    if (compiled.spirv.empty() || !reflectShader(compiled, errorMessage)) {
-        if (errorMessage.empty()) {
-            errorMessage = "SPIR-V generation produced no bytecode";
-        }
+    if (compiled.spirv.empty()) {
+        errorMessage = "SPIR-V generation produced no bytecode";
+        return std::nullopt;
+    }
+    if (!reflectShader(compiled, errorMessage)) {
         return std::nullopt;
     }
     return compiled;

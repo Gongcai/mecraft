@@ -181,6 +181,7 @@ enum class RhiTextureViewType { Texture2D, Texture2DArray, Texture3D, Cube, Cube
 enum class RhiTextureFormat {
     Undefined,
     R8Unorm,
+    R8Uint,
     Rg8Unorm,
     Rgba8Unorm,
     Rgba8Srgb,
@@ -191,6 +192,7 @@ enum class RhiTextureFormat {
     Rgba16Float,
     Rgba32Float,
     R16Float,
+    R16Uint,
     R32Float,
     R32Uint,
     Rg32Uint,

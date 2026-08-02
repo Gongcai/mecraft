@@ -26,6 +26,9 @@
 #if defined(MECRAFT_ENABLE_FSR31)
 #include "renderer/upscaling/Fsr31VulkanContext.h"
 #endif
+#if defined(MECRAFT_ENABLE_NRD)
+#include "renderer/nrd/NrdRenderGraphBridge.h"
+#endif
 #if defined(MECRAFT_ENABLE_STREAMLINE)
 #include "renderer/upscaling/DlssVulkanContext.h"
 #include "renderer/upscaling/StreamlineRuntime.h"
@@ -486,6 +489,323 @@ void destroyFsr31SmokeTexture(VkRhiDevice& device, Fsr31SmokeTexture& resource) 
     pass.shutdown();
     destroyInputs();
     return dispatched;
+}
+#endif
+
+#if defined(MECRAFT_ENABLE_NRD)
+struct NrdSmokeTexture final {
+    RhiTextureDesc desc;
+    RhiTextureHandle texture;
+    RhiTextureViewHandle view;
+};
+
+[[nodiscard]] bool createNrdSmokeTexture(VkRhiDevice& device, const char* const debugName,
+                                         const RhiTextureFormat format, const uint32_t width, const uint32_t height,
+                                         const RhiTextureUsageFlags usage, const void* const pixels,
+                                         const size_t sizeBytes, const RhiResourceState finalState,
+                                         NrdSmokeTexture& output) {
+    output.desc.debugName = debugName;
+    output.desc.format = format;
+    output.desc.width = width;
+    output.desc.height = height;
+    output.desc.usage = usage;
+    output.desc.memoryCategory = RhiMemoryCategory::Nrd;
+    RhiTextureInitialData initialData;
+    initialData.pixels = pixels;
+    initialData.sizeBytes = sizeBytes;
+    initialData.finalState = finalState;
+    output.texture = device.createTexture(output.desc, &initialData);
+    if (!output.texture.isValid()) {
+        return false;
+    }
+
+    RhiTextureViewDesc viewDesc;
+    viewDesc.texture = output.texture;
+    viewDesc.viewType = RhiTextureViewType::Texture2D;
+    viewDesc.format = format;
+    output.view = device.createTextureView(viewDesc);
+    if (!output.view.isValid()) {
+        device.destroyTexture(output.texture);
+        output.texture = {};
+        return false;
+    }
+    return true;
+}
+
+void destroyNrdSmokeTexture(VkRhiDevice& device, NrdSmokeTexture& resource) {
+    if (resource.view.isValid()) {
+        device.destroyTextureView(resource.view);
+    }
+    if (resource.texture.isValid()) {
+        device.destroyTexture(resource.texture);
+    }
+    resource = {};
+}
+
+void setNrdIdentityMatrix(float (&matrix)[16]) {
+    std::fill(std::begin(matrix), std::end(matrix), 0.0f);
+    matrix[0] = 1.0f;
+    matrix[5] = 1.0f;
+    matrix[10] = 1.0f;
+    matrix[15] = 1.0f;
+}
+
+[[nodiscard]] bool validateNrdRenderGraphDispatch(VkRhiDevice& device, RhiCommandListPool& commandPool) {
+    using renderer::nrd::NrdBridgeError;
+    using renderer::nrd::NrdDiffuseMethod;
+    using renderer::nrd::NrdExternalResources;
+    using renderer::nrd::NrdGraphDispatchResult;
+    using renderer::nrd::NrdRenderGraphBridge;
+
+    constexpr uint32_t kWidth = 16u;
+    constexpr uint32_t kHeight = 16u;
+    constexpr size_t kPixelCount = static_cast<size_t>(kWidth) * kHeight;
+    const uint64_t validationErrorsBefore = device.validationErrorCount();
+
+    std::vector<uint16_t> motion(kPixelCount * 2u, 0u);
+    const uint32_t packedNormalRoughness = glm::packUnorm3x10_1x2(glm::vec4(0.5f, 0.5f, 1.0f, 0.0f));
+    std::vector<uint32_t> normalRoughness(kPixelCount, packedNormalRoughness);
+    std::vector<float> viewZ(kPixelCount, 1.0f);
+    std::vector<uint16_t> rawSignal(kPixelCount * 4u, 0u);
+    for (size_t pixel = 0u; pixel < kPixelCount; ++pixel) {
+        rawSignal[pixel * 4u + 0u] = glm::packHalf1x16(0.25f);
+        rawSignal[pixel * 4u + 1u] = glm::packHalf1x16(0.5f);
+        rawSignal[pixel * 4u + 2u] = glm::packHalf1x16(0.75f);
+        rawSignal[pixel * 4u + 3u] = glm::packHalf1x16(0.5f);
+    }
+    std::vector<uint16_t> outputSignal(kPixelCount * 4u, 0x7e00u);
+
+    constexpr RhiTextureUsageFlags kInputUsage = rhiFlag(RhiTextureUsage::Sampled);
+    constexpr RhiTextureUsageFlags kOutputUsage =
+        rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::Storage) | rhiFlag(RhiTextureUsage::TransferSrc);
+    NrdSmokeTexture motionTexture;
+    NrdSmokeTexture normalRoughnessTexture;
+    NrdSmokeTexture viewZTexture;
+    NrdSmokeTexture rawSignalTexture;
+    NrdSmokeTexture outputTexture;
+    RhiBufferHandle readback;
+    RenderGraph graph;
+    NrdRenderGraphBridge bridge;
+    const auto cleanup = [&]() {
+        device.waitIdle();
+        bridge.shutdown();
+        graph.releaseTransientResources(device);
+        if (readback.isValid()) {
+            device.destroyBuffer(readback);
+        }
+        destroyNrdSmokeTexture(device, outputTexture);
+        destroyNrdSmokeTexture(device, rawSignalTexture);
+        destroyNrdSmokeTexture(device, viewZTexture);
+        destroyNrdSmokeTexture(device, normalRoughnessTexture);
+        destroyNrdSmokeTexture(device, motionTexture);
+    };
+
+    bool valid =
+        createNrdSmokeTexture(device, "VulkanSmoke.NRD.Motion", RhiTextureFormat::Rg16Float, kWidth, kHeight,
+                              kInputUsage, motion.data(), motion.size() * sizeof(uint16_t),
+                              RhiResourceState::ShaderRead, motionTexture) &&
+        createNrdSmokeTexture(device, "VulkanSmoke.NRD.NormalRoughness", RhiTextureFormat::Rgb10A2Unorm, kWidth,
+                              kHeight, kInputUsage, normalRoughness.data(), normalRoughness.size() * sizeof(uint32_t),
+                              RhiResourceState::ShaderRead, normalRoughnessTexture) &&
+        createNrdSmokeTexture(device, "VulkanSmoke.NRD.ViewZ", RhiTextureFormat::R32Float, kWidth, kHeight, kInputUsage,
+                              viewZ.data(), viewZ.size() * sizeof(float), RhiResourceState::ShaderRead, viewZTexture) &&
+        createNrdSmokeTexture(device, "VulkanSmoke.NRD.RawDiffuse", RhiTextureFormat::Rgba16Float, kWidth, kHeight,
+                              kInputUsage, rawSignal.data(), rawSignal.size() * sizeof(uint16_t),
+                              RhiResourceState::ShaderRead, rawSignalTexture) &&
+        createNrdSmokeTexture(device, "VulkanSmoke.NRD.OutputDiffuse", RhiTextureFormat::Rgba16Float, kWidth, kHeight,
+                              kOutputUsage, outputSignal.data(), outputSignal.size() * sizeof(uint16_t),
+                              RhiResourceState::ShaderWrite, outputTexture);
+    if (!valid) {
+        std::cerr << "NRD smoke test failed to create external textures\n";
+        cleanup();
+        return false;
+    }
+
+    RhiBufferDesc readbackDesc;
+    readbackDesc.debugName = "VulkanSmoke.NRD.Readback";
+    readbackDesc.size = outputSignal.size() * sizeof(uint16_t);
+    readbackDesc.usage = rhiFlag(RhiBufferUsage::TransferDst) | rhiFlag(RhiBufferUsage::MapRead);
+    readbackDesc.memoryUsage = RhiMemoryUsage::GpuToCpu;
+    readbackDesc.initialState = RhiResourceState::TransferDst;
+    readbackDesc.memoryCategory = RhiMemoryCategory::Readback;
+    readback = device.createBuffer(readbackDesc, nullptr, 0u);
+    valid = readback.isValid();
+
+    ::nrd::CommonSettings commonSettings{};
+    setNrdIdentityMatrix(commonSettings.viewToClipMatrix);
+    setNrdIdentityMatrix(commonSettings.viewToClipMatrixPrev);
+    setNrdIdentityMatrix(commonSettings.worldToViewMatrix);
+    setNrdIdentityMatrix(commonSettings.worldToViewMatrixPrev);
+    commonSettings.resourceSize[0] = kWidth;
+    commonSettings.resourceSize[1] = kHeight;
+    commonSettings.resourceSizePrev[0] = kWidth;
+    commonSettings.resourceSizePrev[1] = kHeight;
+    commonSettings.rectSize[0] = kWidth;
+    commonSettings.rectSize[1] = kHeight;
+    commonSettings.rectSizePrev[0] = kWidth;
+    commonSettings.rectSizePrev[1] = kHeight;
+    commonSettings.motionVectorScale[0] = 1.0f;
+    commonSettings.motionVectorScale[1] = 1.0f;
+    commonSettings.motionVectorScale[2] = 0.0f;
+    commonSettings.timeDeltaBetweenFrames = 1000.0f / 60.0f;
+    commonSettings.denoisingRange = 1000.0f;
+    const ::nrd::RelaxSettings relaxSettings{};
+
+    const auto initializeBridge = [&]() {
+        const NrdBridgeError initialized = bridge.initialize(device, NrdDiffuseMethod::Relax, kWidth, kHeight);
+        const std::optional<NrdDiffuseMethod> initializedMethod = bridge.method();
+        const bool initializedContract =
+            initialized == NrdBridgeError::None && bridge.initialized() && initializedMethod.has_value() &&
+            *initializedMethod == NrdDiffuseMethod::Relax && bridge.pipelineCount() == 15u &&
+            bridge.permanentPoolSize() == 6u && bridge.transientPoolSize() == 4u;
+        if (!initializedContract) {
+            const std::optional<std::string_view> error = renderer::nrd::nrdBridgeErrorStableId(initialized);
+            if (error.has_value()) {
+                std::cerr << "NRD bridge initialization failed: " << *error << '\n';
+            }
+        }
+        return initializedContract;
+    };
+
+    valid = valid && initializeBridge();
+    if (valid) {
+        RenderGraph rejectedGraph;
+        commonSettings.frameIndex = 0u;
+        commonSettings.accumulationMode = ::nrd::AccumulationMode::CLEAR_AND_RESTART;
+        const NrdExternalResources missingExternalResources;
+        const NrdGraphDispatchResult missingResourceResult =
+            bridge.addGraphDispatches(rejectedGraph, commonSettings, relaxSettings, missingExternalResources);
+        valid = missingResourceResult.error == NrdBridgeError::MissingExternalResource &&
+                !missingResourceResult.succeeded() && !bridge.framePending() &&
+                bridge.lastError() == NrdBridgeError::MissingExternalResource;
+        if (valid) {
+            const NrdGraphDispatchResult invalidStateResult =
+                bridge.addGraphDispatches(rejectedGraph, commonSettings, relaxSettings, missingExternalResources);
+            valid = invalidStateResult.error == NrdBridgeError::ExecutionStateInvalid &&
+                    !invalidStateResult.succeeded() && !bridge.framePending() &&
+                    bridge.lastError() == NrdBridgeError::ExecutionStateInvalid;
+        }
+    }
+    bridge.shutdown();
+    valid = valid && initializeBridge();
+
+    const auto executeFrame = [&](const uint32_t frameIndex, const ::nrd::AccumulationMode accumulationMode,
+                                  const uint32_t expectedDispatchCount, const RhiResourceState readbackInitialState) {
+        graph.reset();
+        const auto importTexture = [&](const NrdSmokeTexture& texture, const RhiResourceState initialState,
+                                       const RhiResourceState finalState) {
+            return graph.importTexture({texture.desc.debugName, texture.texture, texture.desc, initialState, finalState,
+                                        texture.view, RhiQueueType::Graphics, RhiQueueType::Graphics});
+        };
+        const RgTextureHandle motionResource =
+            importTexture(motionTexture, RhiResourceState::ShaderRead, RhiResourceState::ShaderRead);
+        const RgTextureHandle normalRoughnessResource =
+            importTexture(normalRoughnessTexture, RhiResourceState::ShaderRead, RhiResourceState::ShaderRead);
+        const RgTextureHandle viewZResource =
+            importTexture(viewZTexture, RhiResourceState::ShaderRead, RhiResourceState::ShaderRead);
+        const RgTextureHandle rawSignalResource =
+            importTexture(rawSignalTexture, RhiResourceState::ShaderRead, RhiResourceState::ShaderRead);
+        const RgTextureHandle outputResource =
+            importTexture(outputTexture, RhiResourceState::ShaderWrite, RhiResourceState::ShaderWrite);
+        const RgBufferHandle readbackResource =
+            graph.importBuffer({readbackDesc.debugName, readback, readbackDesc, readbackInitialState,
+                                RhiResourceState::HostRead, RhiQueueType::Graphics, RhiQueueType::Graphics});
+        NrdExternalResources externalResources;
+        const bool resourcesValid =
+            motionResource.isValid() && normalRoughnessResource.isValid() && viewZResource.isValid() &&
+            rawSignalResource.isValid() && outputResource.isValid() && readbackResource.isValid() &&
+            externalResources.bind(::nrd::ResourceType::IN_MV, motionResource) &&
+            externalResources.bind(::nrd::ResourceType::IN_NORMAL_ROUGHNESS, normalRoughnessResource) &&
+            externalResources.bind(::nrd::ResourceType::IN_VIEWZ, viewZResource) &&
+            externalResources.bind(::nrd::ResourceType::IN_DIFF_RADIANCE_HITDIST, rawSignalResource) &&
+            externalResources.bind(::nrd::ResourceType::OUT_DIFF_RADIANCE_HITDIST, outputResource);
+        if (!resourcesValid) {
+            return false;
+        }
+
+        commonSettings.frameIndex = frameIndex;
+        commonSettings.accumulationMode = accumulationMode;
+        const NrdGraphDispatchResult dispatchResult =
+            bridge.addGraphDispatches(graph, commonSettings, relaxSettings, externalResources);
+        if (!dispatchResult.succeeded() || dispatchResult.dispatchCount != expectedDispatchCount ||
+            !bridge.framePending()) {
+            return false;
+        }
+
+        RenderGraphPassBuilder readbackPass =
+            graph.addPass({"NRD.OutputReadback", RgPassType::Copy, RhiQueueType::Graphics});
+        if (!readbackPass.handle().isValid()) {
+            RgExecuteResult failedExecution;
+            failedExecution.error = RgExecuteError::NotCompiled;
+            bridge.completeGraphExecution(failedExecution);
+            return false;
+        }
+        readbackPass.dependsOn(dispatchResult.lastPass)
+            .readTexture(outputResource, RhiResourceState::TransferSrc)
+            .writeBuffer(readbackResource, RhiResourceState::TransferDst)
+            .setExecute([&](RgPassContext& context) {
+                RhiTextureBufferCopy copy;
+                copy.srcTexture = context.texture(outputResource);
+                copy.dstBuffer = context.buffer(readbackResource);
+                copy.bytesPerRow = sizeof(uint16_t) * 4u * kWidth;
+                copy.rowsPerImage = kHeight;
+                copy.width = kWidth;
+                copy.height = kHeight;
+                context.commandList().copyTextureToBuffer(copy);
+                return true;
+            });
+
+        const RgCompileResult compiled = graph.compile();
+        if (!compiled.succeeded()) {
+            RgExecuteResult failedExecution;
+            failedExecution.error = RgExecuteError::NotCompiled;
+            failedExecution.message = compiled.message;
+            bridge.completeGraphExecution(failedExecution);
+            std::cerr << "NRD Render Graph compile failed: " << compiled.message << '\n';
+            return false;
+        }
+
+        const RgExecuteResult executed = graph.execute(device, commandPool);
+        bridge.completeGraphExecution(executed);
+        if (!executed.succeeded()) {
+            std::cerr << "NRD Render Graph execution failed: " << executed.message << '\n';
+            return false;
+        }
+        return executed.completionToken().isValid() && device.waitForSubmission(executed.completionToken()) &&
+               !bridge.framePending() && bridge.lastError() == NrdBridgeError::None;
+    };
+
+    if (valid) {
+        valid = executeFrame(0u, ::nrd::AccumulationMode::CLEAR_AND_RESTART, 21u, RhiResourceState::TransferDst);
+    }
+    if (valid) {
+        valid = executeFrame(1u, ::nrd::AccumulationMode::CONTINUE, 10u, RhiResourceState::HostRead);
+    }
+    if (valid) {
+        const auto* pixels = static_cast<const uint16_t*>(device.mapBuffer(readback, 0u, readbackDesc.size));
+        valid = pixels != nullptr;
+        bool nonZeroRadiance = false;
+        if (pixels != nullptr) {
+            for (size_t pixel = 0u; pixel < kPixelCount; ++pixel) {
+                for (uint32_t component = 0u; component < 4u; ++component) {
+                    const float value = glm::unpackHalf1x16(pixels[pixel * 4u + component]);
+                    valid = valid && std::isfinite(value);
+                    if (component < 3u && value > 0.0f) {
+                        nonZeroRadiance = true;
+                    }
+                }
+            }
+            device.unmapBuffer(readback);
+        }
+        valid = valid && nonZeroRadiance;
+    }
+
+    cleanup();
+    valid = valid && device.validationErrorCount() == validationErrorsBefore;
+    if (!valid) {
+        std::cerr << "NRD Vulkan Render Graph dispatch validation failed\n";
+    }
+    return valid;
 }
 #endif
 
@@ -5150,6 +5470,9 @@ int main() {
     if (commandPool == nullptr || !immediateModeValidated || !validateRg32UintAttachmentClear(device, *commandPool) ||
 #if defined(MECRAFT_ENABLE_FSR31)
         !validateFsr31VulkanDispatch(device, *commandPool) || !validateFsr31VulkanContext(device) ||
+#endif
+#if defined(MECRAFT_ENABLE_NRD)
+        !validateNrdRenderGraphDispatch(device, *commandPool) ||
 #endif
 #if defined(MECRAFT_ENABLE_STREAMLINE)
         !validateDlssVulkanDispatch(device, *commandPool, window) ||

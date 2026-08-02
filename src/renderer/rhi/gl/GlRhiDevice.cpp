@@ -144,6 +144,7 @@ template <typename Handle> [[nodiscard]] bool sameHandle(const Handle a, const H
 [[nodiscard]] bool toGlFormatInfo(const RhiTextureFormat format, GlFormatInfo& out) {
     switch (format) {
     case RhiTextureFormat::R8Unorm: out = {GL_R8, GL_RED, GL_UNSIGNED_BYTE, false, false}; return true;
+    case RhiTextureFormat::R8Uint: out = {GL_R8UI, GL_RED_INTEGER, GL_UNSIGNED_BYTE, false, false}; return true;
     case RhiTextureFormat::Rg8Unorm: out = {GL_RG8, GL_RG, GL_UNSIGNED_BYTE, false, false}; return true;
     case RhiTextureFormat::Rgba8Unorm: out = {GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE, false, false}; return true;
     case RhiTextureFormat::Rgba8Srgb: out = {GL_SRGB8_ALPHA8, GL_RGBA, GL_UNSIGNED_BYTE, false, false}; return true;
@@ -156,6 +157,7 @@ template <typename Handle> [[nodiscard]] bool sameHandle(const Handle a, const H
     case RhiTextureFormat::Rgba16Float: out = {GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT, false, false}; return true;
     case RhiTextureFormat::Rgba32Float: out = {GL_RGBA32F, GL_RGBA, GL_FLOAT, false, false}; return true;
     case RhiTextureFormat::R16Float: out = {GL_R16F, GL_RED, GL_HALF_FLOAT, false, false}; return true;
+    case RhiTextureFormat::R16Uint: out = {GL_R16UI, GL_RED_INTEGER, GL_UNSIGNED_SHORT, false, false}; return true;
     case RhiTextureFormat::R32Float: out = {GL_R32F, GL_RED, GL_FLOAT, false, false}; return true;
     case RhiTextureFormat::R32Uint: out = {GL_R32UI, GL_RED_INTEGER, GL_UNSIGNED_INT, false, false}; return true;
     case RhiTextureFormat::Rg32Uint: out = {GL_RG32UI, GL_RG_INTEGER, GL_UNSIGNED_INT, false, false}; return true;
@@ -178,7 +180,8 @@ template <typename Handle> [[nodiscard]] bool sameHandle(const Handle a, const H
 
 [[nodiscard]] size_t textureFormatSizeBytes(const RhiTextureFormat format) {
     switch (format) {
-    case RhiTextureFormat::R8Unorm: return 1u;
+    case RhiTextureFormat::R8Unorm:
+    case RhiTextureFormat::R8Uint: return 1u;
     case RhiTextureFormat::Rg8Unorm: return 2u;
     case RhiTextureFormat::Rgba8Unorm:
     case RhiTextureFormat::Rgba8Srgb:
@@ -191,6 +194,7 @@ template <typename Handle> [[nodiscard]] bool sameHandle(const Handle a, const H
     case RhiTextureFormat::Depth24Stencil8:
     case RhiTextureFormat::Depth32Float: return 4u;
     case RhiTextureFormat::R16Float:
+    case RhiTextureFormat::R16Uint:
     case RhiTextureFormat::Depth16: return 2u;
     case RhiTextureFormat::Rg16Float: return 4u;
     case RhiTextureFormat::Rg32Uint:
@@ -209,6 +213,7 @@ template <typename Handle> [[nodiscard]] bool sameHandle(const Handle a, const H
     case RhiTextureFormat::Depth24Stencil8:
         return rhiFlag(RhiTextureAspect::Depth) | rhiFlag(RhiTextureAspect::Stencil);
     case RhiTextureFormat::R8Unorm:
+    case RhiTextureFormat::R8Uint:
     case RhiTextureFormat::Rg8Unorm:
     case RhiTextureFormat::Rgba8Unorm:
     case RhiTextureFormat::Rgba8Srgb:
@@ -219,6 +224,7 @@ template <typename Handle> [[nodiscard]] bool sameHandle(const Handle a, const H
     case RhiTextureFormat::Rgba16Float:
     case RhiTextureFormat::Rgba32Float:
     case RhiTextureFormat::R16Float:
+    case RhiTextureFormat::R16Uint:
     case RhiTextureFormat::R32Float:
     case RhiTextureFormat::R32Uint:
     case RhiTextureFormat::Rg32Uint: return rhiFlag(RhiTextureAspect::Color);

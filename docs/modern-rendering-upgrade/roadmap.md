@@ -228,7 +228,14 @@ M1 与 M2 可并行开发，但公共 `GpuMaterial`、`GpuSceneGeometry` 与 Sta
    Sky/Translucent 明确输出全零。Raw Radiance、Hit Distance 或 Depth 出现 NaN/Inf，或 Radiance 为负时，
    两种输出均清零，`RtgiValidation` 保留 Candidate/Confirmed 计数、改写为 `NonFinite` 并清除 Identity
    Hash。CPU 契约、106 个 Shader 编译用例与真实 Vulkan Trace/Pack/非法输入回读均已通过。）
-6. NRD 4.17.4 Build、License、RHI Pipeline 与 Render Graph Bridge。
+6. NRD 4.17.3 Build、License、RHI Pipeline 与 Render Graph Bridge。（实现完成：固定上游
+   `v4.17.3`/`792eff196afdd350fd9c3f862119017ccb438a0e`，仓库内离线保存源码、许可证、Notice、
+   31 个 SPIR-V Blob 及逐文件 SHA-256；RHI 已支持 SPIR-V Bytecode 校验与反射、`R8_UINT`/
+   `R16_UINT` 格式，Bridge 已创建 Permanent/Transient Pool、Pipeline、Descriptor、常量缓冲并翻译
+   NRD Dispatch。SDK 契约测试覆盖 RELAX/REBLUR 固定实例数据与全部 Pipeline Reflection，16×16
+   RELAX 首帧 21 个、第二帧 10 个 Render Graph Pass 已通过真实 Vulkan 回读和 Validation，并覆盖
+   `CONTINUE`、Permanent Pool 历史、Descriptor Cache 缩容与构图失败后的实例失效。生产 Deferred
+   消费、时域输入与 Method 设置仍属于第 7、8 项。）
 7. RELAX_DIFFUSE Quality、REBLUR_DIFFUSE Performance。
 8. Non-jittered Matrix、2.5D Motion、Pre-exposure 转换和 History Reset。
 9. RTGI/NRD Debug View、Timestamp、Reference Capture。

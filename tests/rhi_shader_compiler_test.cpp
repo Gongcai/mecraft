@@ -225,6 +225,61 @@ void main() {
     return true;
 }
 
+[[nodiscard]] bool validateSpirvBytecodeInput() {
+    constexpr std::string_view kSource = R"(#version 450 core
+layout(set = 0, binding = 3, rgba16f) uniform image2D uOutput;
+layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+
+void main() {
+    imageStore(uOutput, ivec2(gl_GlobalInvocationID.xy), vec4(1.0));
+}
+)";
+
+    RhiShaderDesc sourceDesc;
+    sourceDesc.debugName = "spirv-bytecode-source";
+    sourceDesc.stage = RhiShaderStage::Compute;
+    sourceDesc.source = kSource.data();
+    sourceDesc.sourceSize = kSource.size();
+    std::string errorMessage;
+    const auto sourceCompiled =
+        renderer::rhi::compileShaderToSpirv(sourceDesc, renderer::rhi::RhiShaderBackend::Vulkan, errorMessage);
+    if (!sourceCompiled.has_value()) {
+        std::cerr << "SPIR-V bytecode source failed to compile: " << errorMessage << '\n';
+        return false;
+    }
+
+    RhiShaderDesc bytecodeDesc;
+    bytecodeDesc.debugName = "spirv-bytecode-input";
+    bytecodeDesc.stage = RhiShaderStage::Compute;
+    bytecodeDesc.bytecode = sourceCompiled->spirv.data();
+    bytecodeDesc.bytecodeSize = sourceCompiled->spirv.size() * sizeof(uint32_t);
+    const auto bytecodeCompiled =
+        renderer::rhi::compileShaderToSpirv(bytecodeDesc, renderer::rhi::RhiShaderBackend::Vulkan, errorMessage);
+    if (!bytecodeCompiled.has_value() || bytecodeCompiled->spirv != sourceCompiled->spirv ||
+        bytecodeCompiled->reflection.bindings.size() != 1u) {
+        std::cerr << "Valid SPIR-V bytecode was not accepted and reflected: " << errorMessage << '\n';
+        return false;
+    }
+    const renderer::rhi::RhiShaderBindingInfo& binding = bytecodeCompiled->reflection.bindings.front();
+    if (binding.set != 0u || binding.binding != 3u || binding.type != RhiBindingType::StorageTexture ||
+        binding.arrayCount != 1u || binding.runtimeArray || binding.stages != rhiFlag(RhiShaderStage::Compute)) {
+        std::cerr << "SPIR-V bytecode reflection does not match the source contract\n";
+        return false;
+    }
+
+    std::array<uint32_t, 5u> invalidHeader{};
+    bytecodeDesc.bytecode = invalidHeader.data();
+    bytecodeDesc.bytecodeSize = sizeof(invalidHeader);
+    errorMessage.clear();
+    if (renderer::rhi::compileShaderToSpirv(bytecodeDesc, renderer::rhi::RhiShaderBackend::Vulkan, errorMessage)
+            .has_value() ||
+        errorMessage != "SPIR-V bytecode has an invalid module header") {
+        std::cerr << "Invalid SPIR-V bytecode must be rejected by its module header\n";
+        return false;
+    }
+    return true;
+}
+
 [[nodiscard]] bool validateGBufferWriterContracts() {
     const auto terrainSource = renderer::rhi::loadShaderSource("assets/shaders/chunk_gbuffer.frag");
     if (!terrainSource.has_value()) {
@@ -408,6 +463,7 @@ int main() {
     success = validateFragmentDiscardContract() && success;
     success = validateDescriptorArrayReflection() && success;
     success = validateAccelerationStructureReflection() && success;
+    success = validateSpirvBytecodeInput() && success;
     success = validateGBufferWriterContracts() && success;
     return success ? 0 : 1;
 }

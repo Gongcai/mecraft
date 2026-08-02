@@ -225,7 +225,7 @@ GPU VBIOS/功耗模式。
 
 ## 10. 第三方与发布检查
 
-- NRD 固定 4.17.4，源码 Commit 可追踪。
+- NRD 固定 4.17.3，源码 Commit 可追踪。
 - NVIDIA RTX SDK License 文本与 Notice 位于发布包要求位置。
 - `MECRAFT_ENABLE_NRD` 开关在启用/关闭构建均通过。
 - Shader/Library 二进制产物来自固定版本，构建日志记录 Hash。

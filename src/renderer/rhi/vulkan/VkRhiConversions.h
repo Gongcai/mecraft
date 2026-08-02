@@ -17,6 +17,7 @@ struct VkResourceStateMapping {
 [[nodiscard]] inline VkFormat toVkFormat(const RhiTextureFormat format) {
     switch (format) {
     case RhiTextureFormat::R8Unorm: return VK_FORMAT_R8_UNORM;
+    case RhiTextureFormat::R8Uint: return VK_FORMAT_R8_UINT;
     case RhiTextureFormat::Rg8Unorm: return VK_FORMAT_R8G8_UNORM;
     case RhiTextureFormat::Rgba8Unorm: return VK_FORMAT_R8G8B8A8_UNORM;
     case RhiTextureFormat::Rgba8Srgb: return VK_FORMAT_R8G8B8A8_SRGB;
@@ -27,6 +28,7 @@ struct VkResourceStateMapping {
     case RhiTextureFormat::Rgba16Float: return VK_FORMAT_R16G16B16A16_SFLOAT;
     case RhiTextureFormat::Rgba32Float: return VK_FORMAT_R32G32B32A32_SFLOAT;
     case RhiTextureFormat::R16Float: return VK_FORMAT_R16_SFLOAT;
+    case RhiTextureFormat::R16Uint: return VK_FORMAT_R16_UINT;
     case RhiTextureFormat::R32Float: return VK_FORMAT_R32_SFLOAT;
     case RhiTextureFormat::R32Uint: return VK_FORMAT_R32_UINT;
     case RhiTextureFormat::Rg32Uint: return VK_FORMAT_R32G32_UINT;
@@ -42,6 +44,7 @@ struct VkResourceStateMapping {
 [[nodiscard]] inline RhiTextureFormat fromVkFormat(const VkFormat format) {
     switch (format) {
     case VK_FORMAT_R8_UNORM: return RhiTextureFormat::R8Unorm;
+    case VK_FORMAT_R8_UINT: return RhiTextureFormat::R8Uint;
     case VK_FORMAT_R8G8_UNORM: return RhiTextureFormat::Rg8Unorm;
     case VK_FORMAT_R8G8B8A8_UNORM: return RhiTextureFormat::Rgba8Unorm;
     case VK_FORMAT_R8G8B8A8_SRGB: return RhiTextureFormat::Rgba8Srgb;
@@ -52,6 +55,7 @@ struct VkResourceStateMapping {
     case VK_FORMAT_R16G16B16A16_SFLOAT: return RhiTextureFormat::Rgba16Float;
     case VK_FORMAT_R32G32B32A32_SFLOAT: return RhiTextureFormat::Rgba32Float;
     case VK_FORMAT_R16_SFLOAT: return RhiTextureFormat::R16Float;
+    case VK_FORMAT_R16_UINT: return RhiTextureFormat::R16Uint;
     case VK_FORMAT_R32_SFLOAT: return RhiTextureFormat::R32Float;
     case VK_FORMAT_R32_UINT: return RhiTextureFormat::R32Uint;
     case VK_FORMAT_R32G32_UINT: return RhiTextureFormat::Rg32Uint;

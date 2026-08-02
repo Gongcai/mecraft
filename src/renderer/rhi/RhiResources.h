@@ -157,7 +157,8 @@ struct RhiMemoryStats {
 /// @return Bytes per texel, or zero for Undefined.
 [[nodiscard]] constexpr uint64_t rhiTextureFormatSizeBytes(const RhiTextureFormat format) {
     switch (format) {
-    case RhiTextureFormat::R8Unorm: return 1u;
+    case RhiTextureFormat::R8Unorm:
+    case RhiTextureFormat::R8Uint: return 1u;
     case RhiTextureFormat::Rg8Unorm: return 2u;
     case RhiTextureFormat::Rgba8Unorm:
     case RhiTextureFormat::Rgba8Srgb:
@@ -170,6 +171,7 @@ struct RhiMemoryStats {
     case RhiTextureFormat::Depth24Stencil8:
     case RhiTextureFormat::Depth32Float: return 4u;
     case RhiTextureFormat::R16Float:
+    case RhiTextureFormat::R16Uint:
     case RhiTextureFormat::Depth16: return 2u;
     case RhiTextureFormat::Rg16Float: return 4u;
     case RhiTextureFormat::Rg32Uint:
@@ -185,6 +187,8 @@ struct RhiMemoryStats {
 /// @return True only for unsigned integer color formats.
 [[nodiscard]] constexpr bool rhiTextureFormatIsUnsignedInteger(const RhiTextureFormat format) {
     switch (format) {
+    case RhiTextureFormat::R8Uint:
+    case RhiTextureFormat::R16Uint:
     case RhiTextureFormat::R32Uint:
     case RhiTextureFormat::Rg32Uint: return true;
     default: return false;

@@ -228,9 +228,11 @@ VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityFlagBits
 
 [[nodiscard]] uint32_t formatByteSize(const RhiTextureFormat format) {
     switch (format) {
-    case RhiTextureFormat::R8Unorm: return 1u;
+    case RhiTextureFormat::R8Unorm:
+    case RhiTextureFormat::R8Uint: return 1u;
     case RhiTextureFormat::Rg8Unorm:
     case RhiTextureFormat::R16Float:
+    case RhiTextureFormat::R16Uint:
     case RhiTextureFormat::Depth16: return 2u;
     case RhiTextureFormat::Rgba8Unorm:
     case RhiTextureFormat::Rgba8Srgb:

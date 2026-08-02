@@ -25,7 +25,7 @@ OpenGL 基础功能集继续使用其明确列出的 SSGI/SSR 能力。
 - 每像素或棋盘格单次 Diffuse Bounce。
 - 天空 Miss、Emissive Hit、太阳和 Clustered Local Lights 的次级命中辐射。
 - `RGB Diffuse Radiance + First-bounce Hit Distance` 逻辑信号，并按 NRD Method 分别打包。
-- NRD 4.17.4 `RELAX_DIFFUSE` 与 `REBLUR_DIFFUSE`。
+- NRD 4.17.3 `RELAX_DIFFUSE` 与 `REBLUR_DIFFUSE`。
 - 区块、静态模型、动态刚体实例的 AS 生命周期。
 - 完整历史失效、诊断视图与 GPU 时间统计。
 
@@ -302,10 +302,11 @@ Hit 和 Miss 执行两种打包；Sky 与 Translucent 的两张输出均为全�
 Confirmed 计数，将分类改为 NonFinite 并清除 Identity Hash。CPU 契约固定了 FP16 上限、NRD Epsilon、
 YCoCg 变换、REBLUR Magic Curve 与 96 字节 Push Constant 布局；真实 Vulkan Smoke 已验证
 `RGB=(1,2,3)` 转换为 `YCoCg=(2,-1,0)`、`viewZ=10/hitDist=2` 得到归一化距离 `0.5`、Miss 得到
-RELAX Alpha `65504` 与 REBLUR Alpha `1`，并覆盖 NaN/Inf 诊断。NRD SDK、历史资源和降噪调度仍属于
-下一阶段集成。
+RELAX Alpha `65504` 与 REBLUR Alpha `1`，并覆盖 NaN/Inf 诊断。NRD 4.17.3 固定依赖、RHI Pipeline、
+Render Graph Bridge 和最小真实 Vulkan RELAX 调度已经完成；生产 Deferred 消费、逐帧时域输入和
+Method 设置仍属于下一阶段集成。
 
-## 6. NRD 4.17.4 集成
+## 6. NRD 4.17.3 集成
 
 ### 6.1 选择理由
 
@@ -336,7 +337,7 @@ NRD Bridge 每帧提供：
 - Disocclusion Threshold、History Confidence 与 Reset/Continue Accumulation Mode。
 
 Mecraft 当前速度纹理定义为 `currentUv - previousUv`，且纹理坐标 Y 向下。Bridge 必须按
-NRD 4.17.4 的 `previous - current` 约定转换符号，并通过 `motionVectorScale` 完成 UV/像素
+NRD 4.17.3 的 `previous - current` 约定转换符号，并通过 `motionVectorScale` 完成 UV/像素
 域变换。现代管线另生成 `.z = previousViewZ - currentViewZ` 的 2.5D 分量，提升动态物体
 历史拒绝；FSR/DLSS 继续读取公共 RG16F 2D Velocity。转换后用相机平移、旋转和动态物体
 三类测试验证重投影方向。
@@ -363,6 +364,15 @@ Stable Object ID 由应用生成 History Confidence 与 Disocclusion Threshold M
 4. 导入 GBuffer、Raw Signal 与 Output，解析 Permanent/Transient Pool Index。
 5. Push Constant/Constant Buffer 上传完成后 Dispatch。
 6. Render Graph 生成全部 Texture Barrier。
+
+当前 Bridge 固定校验 NRD 版本、Normal/Roughness Encoding、SPIR-V Binding Offset、Vulkan 扩展
+Storage Image 能力、外部纹理格式与完整尺寸。Diffuse Output 在 NRD 内部既作为 UAV 写入，也会被后续
+Pass 作为 SRV 读取，因此资源必须同时声明 `Sampled | Storage`；应用需要回读时再附加 `TransferSrc`。
+RELAX 与 REBLUR 的 Pipeline/Pool/Constant Buffer 契约均由 SPIR-V Reflection 测试锁定，首帧
+`CLEAR_AND_RESTART` 的 RELAX 21 个 Dispatch、第二帧 `CONTINUE` 的 10 个 Dispatch 已通过 16×16
+Vulkan Render Graph 执行和有限值回读，并覆盖 Permanent Pool 历史与 Descriptor Cache 缩容。
+`GetComputeDispatches` 成功后若构图失败，Bridge 会锁定执行状态并要求重建实例，避免 SDK Ping-Pong
+状态与 GPU 历史产生偏差。
 
 NRD Resource Pool 与 `resourceSize` 绑定，动态分辨率通过当前/上一帧 `rectSize` 表达，不
 因每次 Active Rect 变化重建。非零 `rectOrigin` 需要以
@@ -466,7 +476,8 @@ BLAS；普通地形继续使用区块合并网格，避免每方块 Instance 造
 
 ## 11. NRD 依赖与许可证
 
-- 固定版本：NRD 4.17.4。
+- 固定版本：NRD 4.17.3，Tag `v4.17.3`，Commit
+  `792eff196afdd350fd9c3f862119017ccb438a0e`。
 - 官方仓库：<https://github.com/NVIDIA-RTX/NRD>
 - 官方许可证：<https://github.com/NVIDIA-RTX/NRD/blob/master/LICENSE.txt>
 - 许可证类型：NVIDIA RTX SDK License，不是 OSI 定义的开源许可证。
