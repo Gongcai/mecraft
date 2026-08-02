@@ -5,12 +5,16 @@
 #extension GL_EXT_buffer_reference_uvec2 : require
 
 #define RHI_GLOBAL_BINDLESS_RAY_QUERY
+#define MECRAFT_CLUSTER_BIND_SET 2
 #include "global_bindless_set.glsl"
 #include "gbuffer_contract.glsl"
+#include "render_contract.glsl"
 #include "rhi_screen_coordinates.glsl"
 #include "rtgi_sampling.glsl"
 #include "terrain_ray_query.glsl"
 #include "static_mesh_ray_query.glsl"
+#include "clustered_lighting.glsl"
+#include "world_light_grid.glsl"
 
 layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
 
@@ -24,6 +28,20 @@ layout(std430, set = 1, binding = 6) readonly buffer TerrainRayTracingHitDataTab
     TerrainRayTracingGpuInstance instances[];
 } uTerrainHitData;
 layout(set = 1, binding = 7) uniform sampler2DArray uTerrainAlbedo;
+layout(set = 1, binding = 11) uniform sampler2DArray uTerrainNormal;
+layout(set = 1, binding = 12) uniform sampler2DArray uTerrainSpecular;
+layout(set = 1, binding = 13) uniform sampler2D uGrassColormap;
+layout(set = 1, binding = 14) uniform sampler2D uFoliageColormap;
+layout(set = 1, binding = 15) uniform sampler2D uSkyCapture;
+layout(std140, set = 1, binding = 16) uniform RtgiSecondaryLightingParams {
+    vec4 sunDirectionAndVisibility;
+    vec4 moonDirectionAndVisibility;
+    vec4 sunRadiance;
+    vec4 moonRadiance;
+    vec4 skyAmbientRadiance;
+    vec4 traceAndEmissionScales;
+    uvec4 flags;
+} uSecondaryLighting;
 
 layout(push_constant) uniform RtgiTracePushConstants {
     mat4 inverseViewProjection;
@@ -33,20 +51,41 @@ layout(push_constant) uniform RtgiTracePushConstants {
     uvec4 materialGeometryCounts;
 } pc;
 
+struct RtgiSecondarySurface {
+    vec3 albedo;
+    vec3 normal;
+    vec3 emission;
+    vec3 specularF0;
+    float specularF90;
+    float perceptualRoughness;
+    float metalness;
+    float ao;
+    float skyVisibility;
+};
+
+bool rtgiFinite(float value) {
+    return !isnan(value) && !isinf(value);
+}
+
+bool rtgiFinite(vec2 value) {
+    return !any(isnan(value)) && !any(isinf(value));
+}
+
 bool rtgiFinite(vec3 value) {
     return !any(isnan(value)) && !any(isinf(value));
 }
 
 void rtgiWriteResult(ivec2 texel, vec3 radiance, float hitDistance, uint classification, uint candidateCount,
                      uint confirmedCount, uint hitIdentityHash) {
-    if (!rtgiFinite(radiance) || isnan(hitDistance) || isinf(hitDistance)) {
+    if (!rtgiFinite(radiance) || !rtgiFinite(hitDistance)) {
         imageStore(uDiffuseRadianceHitDistance, texel, vec4(0.0));
         imageStore(uValidation, texel,
                    uvec4(rtgiTraceValidationWord(RTGI_TRACE_CLASS_NON_FINITE, candidateCount, confirmedCount),
                          0u, 0u, 0u));
         return;
     }
-    imageStore(uDiffuseRadianceHitDistance, texel, vec4(max(radiance, vec3(0.0)), max(hitDistance, 0.0)));
+    imageStore(uDiffuseRadianceHitDistance, texel,
+               vec4(max(radiance, vec3(0.0)), max(hitDistance, 0.0)));
     imageStore(uValidation, texel,
                uvec4(rtgiTraceValidationWord(classification, candidateCount, confirmedCount),
                      hitIdentityHash, 0u, 0u));
@@ -61,6 +100,269 @@ bool rtgiReconstructWorldPosition(vec2 screenUv, float depth, out vec3 worldPosi
     }
     worldPosition = worldPositionH.xyz / worldPositionH.w;
     return rtgiFinite(worldPosition);
+}
+
+float rtgiOriginBias(vec3 position, vec3 normal, vec3 direction) {
+    float positionScale = max(max(abs(position.x), max(abs(position.y), abs(position.z))), 1.0);
+    float floatingPointBias = positionScale * 9.5367431640625e-7;
+    float angularScale = 1.0 / max(abs(dot(normal, direction)), 0.25);
+    return max(pc.renderExtentAndBias.z, floatingPointBias) * angularScale;
+}
+
+float rtgiConeWidth(float pixelWorldFootprint, float rayDistance, float primarySurfaceDistance) {
+    return pixelWorldFootprint *
+           (1.0 + rayDistance / max(primarySurfaceDistance, pixelWorldFootprint));
+}
+
+bool rtgiCandidateAlphaPasses(uint customIndex, uint geometryIndex, uint primitiveIndex, vec2 barycentrics,
+                              float coneWidth, out float sampledOpacity, out float sampledLod,
+                              out uint stableMaterialId, out uint stableGeometryId) {
+    sampledOpacity = 0.0;
+    sampledLod = 0.0;
+    stableMaterialId = 0u;
+    stableGeometryId = 0u;
+    if (customIndex >= pc.frameMaskAndFlags.z) {
+        return false;
+    }
+    if (staticMeshRayQueryInstancePresent(customIndex, pc.frameMaskAndFlags.z)) {
+        return staticMeshRayQueryCandidateAlphaPasses(
+            customIndex, geometryIndex, primitiveIndex, barycentrics, coneWidth, pc.frameMaskAndFlags.z,
+            pc.materialGeometryCounts.x, pc.materialGeometryCounts.y, sampledOpacity, sampledLod,
+            stableMaterialId, stableGeometryId);
+    }
+    return terrainRayQueryCandidateAlphaPasses(
+        uTerrainHitData.instances[customIndex], geometryIndex, primitiveIndex, barycentrics, coneWidth,
+        pc.renderExtentAndBias.w, uTerrainAlbedo, sampledOpacity, sampledLod);
+}
+
+bool rtgiTraceVisibility(vec3 surfacePosition, vec3 normal, vec3 direction, float maximumDistance,
+                         float coneWidth, out float visibility) {
+    visibility = 0.0;
+    float directionLengthSquared = dot(direction, direction);
+    if (!rtgiFinite(surfacePosition) || !rtgiFinite(normal) || !rtgiFinite(direction) ||
+        directionLengthSquared <= 1.0e-12 || !rtgiFinite(maximumDistance) || maximumDistance <= 0.0 ||
+        !rtgiFinite(coneWidth) || coneWidth <= 0.0) {
+        return false;
+    }
+    vec3 unitDirection = direction * inversesqrt(directionLengthSquared);
+    float originBias = rtgiOriginBias(surfacePosition, normal, unitDirection);
+    float rayMinimum = max(originBias * 0.25, 1.0e-4);
+    float rayMaximum = maximumDistance - dot(normal * originBias, unitDirection) - rayMinimum;
+    if (rayMaximum <= rayMinimum) {
+        visibility = 1.0;
+        return true;
+    }
+    vec3 rayOrigin = surfacePosition + normal * originBias;
+
+    rayQueryEXT query;
+    rayQueryInitializeEXT(query, globalBindlessSceneTlas, gl_RayFlagsTerminateOnFirstHitEXT,
+                          pc.frameMaskAndFlags.w, rayOrigin, rayMinimum, unitDirection, rayMaximum);
+    while (rayQueryProceedEXT(query)) {
+        if (rayQueryGetIntersectionTypeEXT(query, false) != gl_RayQueryCandidateIntersectionTriangleEXT) {
+            continue;
+        }
+        float sampledOpacity;
+        float sampledLod;
+        uint stableMaterialId;
+        uint stableGeometryId;
+        if (rtgiCandidateAlphaPasses(
+                rayQueryGetIntersectionInstanceCustomIndexEXT(query, false),
+                rayQueryGetIntersectionGeometryIndexEXT(query, false),
+                rayQueryGetIntersectionPrimitiveIndexEXT(query, false),
+                rayQueryGetIntersectionBarycentricsEXT(query, false), coneWidth, sampledOpacity,
+                sampledLod, stableMaterialId, stableGeometryId)) {
+            rayQueryConfirmIntersectionEXT(query);
+        }
+    }
+    visibility = rayQueryGetIntersectionTypeEXT(query, true) ==
+                         gl_RayQueryCommittedIntersectionTriangleEXT
+                     ? 0.0
+                     : 1.0;
+    return true;
+}
+
+bool rtgiEvaluateDirectionalSurface(RtgiSecondarySurface surface, vec3 viewDirection, vec3 lightDirection,
+                                    vec3 incidentRadiance, out vec3 radiance) {
+    radiance = vec3(0.0);
+    float lightLengthSquared = dot(lightDirection, lightDirection);
+    if (!rtgiFinite(viewDirection) || !rtgiFinite(lightDirection) || !rtgiFinite(incidentRadiance) ||
+        lightLengthSquared <= 1.0e-12) {
+        return false;
+    }
+    vec3 unitLightDirection = lightDirection * inversesqrt(lightLengthSquared);
+    float nDotL = max(dot(surface.normal, unitLightDirection), 0.0);
+    if (nDotL <= 0.0 || all(lessThanEqual(incidentRadiance, vec3(0.0)))) {
+        return true;
+    }
+    vec3 halfVector = viewDirection + unitLightDirection;
+    float halfLengthSquared = dot(halfVector, halfVector);
+    if (halfLengthSquared <= 1.0e-12) {
+        return false;
+    }
+    vec3 halfDirection = halfVector * inversesqrt(halfLengthSquared);
+    float nDotV = max(dot(surface.normal, viewDirection), 0.0);
+    float nDotH = max(dot(surface.normal, halfDirection), 0.0);
+    float lDotH = max(dot(unitLightDirection, halfDirection), 0.0);
+    vec3 fresnel = pbrFresnelSchlick(lDotH, surface.specularF0, surface.specularF90);
+    vec3 diffuse = pbrDiffuseWeight(fresnel, surface.metalness) *
+                   pbrLambertDiffuse(surface.albedo) * nDotL;
+    vec3 specular = pbrEvaluateDirectSpecular(
+        lDotH, nDotV, nDotL, nDotH,
+        pbrPerceptualRoughnessToAlphaSquared(surface.perceptualRoughness), surface.specularF0,
+        surface.specularF90);
+    radiance = (diffuse + specular) * incidentRadiance;
+    return rtgiFinite(radiance);
+}
+
+bool rtgiAccumulateCelestial(RtgiSecondarySurface surface, vec3 surfacePosition, vec3 viewDirection,
+                             vec4 directionAndVisibility, vec3 incidentRadiance, float coneWidth,
+                             inout vec3 radiance) {
+    if (directionAndVisibility.w <= 0.0 || all(lessThanEqual(incidentRadiance, vec3(0.0)))) {
+        return true;
+    }
+    vec3 directRadiance;
+    if (!rtgiEvaluateDirectionalSurface(surface, viewDirection, directionAndVisibility.xyz,
+                                        incidentRadiance, directRadiance)) {
+        return false;
+    }
+    if (all(lessThanEqual(directRadiance, vec3(0.0)))) {
+        return true;
+    }
+    float shadowVisibility;
+    if (!rtgiTraceVisibility(surfacePosition, surface.normal, directionAndVisibility.xyz,
+                             uSecondaryLighting.traceAndEmissionScales.x, coneWidth, shadowVisibility)) {
+        return false;
+    }
+    radiance += directRadiance * shadowVisibility;
+    return true;
+}
+
+bool rtgiLightRayDirection(GpuLight light, vec3 cameraRelativeSurface, out vec3 direction,
+                           out float maximumDistance) {
+    direction = vec3(0.0);
+    maximumDistance = 0.0;
+    if (gpuLightType(light) == GPU_LIGHT_TYPE_DIRECTIONAL) {
+        direction = -light.direction.xyz;
+        maximumDistance = uSecondaryLighting.traceAndEmissionScales.x;
+    } else {
+        vec3 surfaceToLight = light.positionAndRange.xyz - cameraRelativeSurface;
+        float distanceSquared = dot(surfaceToLight, surfaceToLight);
+        if (!rtgiFinite(surfaceToLight) || distanceSquared <= 1.0e-12) {
+            return false;
+        }
+        maximumDistance = sqrt(distanceSquared);
+        direction = surfaceToLight / maximumDistance;
+    }
+    return rtgiFinite(direction) && rtgiFinite(maximumDistance) && maximumDistance > 0.0;
+}
+
+bool rtgiLightVisibility(GpuLight light, vec3 surfacePosition, vec3 cameraRelativeSurface, vec3 normal,
+                         float coneWidth, out float visibility) {
+    visibility = 0.0;
+    uint policy = gpuLightShadowPolicy(light);
+    if (policy == GPU_LIGHT_SHADOW_NONE) {
+        visibility = 1.0;
+        return gpuLightShadowIndex(light) == GPU_LIGHT_INVALID_RESOURCE_INDEX;
+    }
+    if (policy == GPU_LIGHT_SHADOW_RASTER_DYNAMIC || policy == GPU_LIGHT_SHADOW_RASTER_CACHED) {
+        vec3 resourceCoordinate;
+        bool valid;
+        visibility = localShadowVisibility(light, cameraRelativeSurface, normal, resourceCoordinate, valid);
+        return valid;
+    }
+    if (policy != GPU_LIGHT_SHADOW_RAY_QUERY ||
+        gpuLightShadowIndex(light) != GPU_LIGHT_INVALID_RESOURCE_INDEX) {
+        return false;
+    }
+    vec3 direction;
+    float maximumDistance;
+    return rtgiLightRayDirection(light, cameraRelativeSurface, direction, maximumDistance) &&
+           rtgiTraceVisibility(surfacePosition, normal, direction, maximumDistance, coneWidth, visibility);
+}
+
+bool rtgiAccumulateGpuLight(GpuLight light, RtgiSecondarySurface surface, vec3 surfacePosition,
+                            vec3 cameraRelativeSurface, vec3 viewDirection, float coneWidth,
+                            inout vec3 radiance) {
+    float nDotV = max(dot(surface.normal, viewDirection), 0.0);
+    GpuLightSurfaceContribution contribution = evaluateGpuLight(
+        light, cameraRelativeSurface, surface.normal, viewDirection, surface.specularF0,
+        surface.specularF90, nDotV,
+        pbrPerceptualRoughnessToAlphaSquared(surface.perceptualRoughness));
+    vec3 combinedContribution = contribution.diffuse + contribution.specular;
+    if (all(lessThanEqual(combinedContribution, vec3(0.0)))) {
+        return true;
+    }
+    float shadowVisibility;
+    if (!rtgiLightVisibility(light, surfacePosition, cameraRelativeSurface, surface.normal, coneWidth,
+                             shadowVisibility)) {
+        return false;
+    }
+    radiance += (surface.albedo * (1.0 - surface.metalness) * contribution.diffuse +
+                 contribution.specular) * shadowVisibility;
+    return rtgiFinite(radiance);
+}
+
+bool rtgiAccumulateWorldLights(RtgiSecondarySurface surface, vec3 surfacePosition,
+                               vec3 cameraRelativeSurface, vec3 viewDirection, float coneWidth,
+                               inout vec3 radiance) {
+    if (uClusterStats[CLUSTER_STATS_BUILD_ERROR] != 0u ||
+        uClusterStats[CLUSTER_STATS_CONTRACT_VERSION] != GPU_LIGHT_CONTRACT_VERSION ||
+        !worldLightGridHeaderValid()) {
+        return false;
+    }
+    uint lightCount = uClusterStats[CLUSTER_STATS_LIGHT_COUNT];
+    uint globalLightCount = uWorldLightGrid.countsAndVersion.z;
+    for (uint listIndex = 0u; listIndex < globalLightCount; ++listIndex) {
+        uint lightIndex = uWorldLightIndices[listIndex];
+        if (lightIndex >= lightCount ||
+            !rtgiAccumulateGpuLight(uClusterLights[lightIndex], surface, surfacePosition,
+                                    cameraRelativeSurface, viewDirection, coneWidth, radiance)) {
+            return false;
+        }
+    }
+
+    uvec2 cellRange;
+    if (!worldLightGridCellRange(cameraRelativeSurface, cellRange)) {
+        return false;
+    }
+    for (uint listIndex = 0u; listIndex < cellRange.y; ++listIndex) {
+        uint lightIndex = uWorldLightIndices[cellRange.x + listIndex];
+        if (lightIndex >= lightCount ||
+            !rtgiAccumulateGpuLight(uClusterLights[lightIndex], surface, surfacePosition,
+                                    cameraRelativeSurface, viewDirection, coneWidth, radiance)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool rtgiShadeSecondarySurface(RtgiSecondarySurface surface, vec3 surfacePosition,
+                               vec3 incomingRayDirection, float coneWidth, out vec3 radiance) {
+    radiance = vec3(0.0);
+    vec3 viewDirection = -incomingRayDirection;
+    if (!rtgiFinite(surface.albedo) || !rtgiFinite(surface.normal) || !rtgiFinite(surface.emission) ||
+        !rtgiFinite(surface.specularF0) || !rtgiFinite(surface.specularF90) ||
+        !rtgiFinite(surface.perceptualRoughness) || !rtgiFinite(surface.metalness) ||
+        !rtgiFinite(surface.ao) || !rtgiFinite(surface.skyVisibility) || !rtgiFinite(viewDirection)) {
+        return false;
+    }
+    radiance = surface.emission;
+    if (!rtgiAccumulateCelestial(surface, surfacePosition, viewDirection,
+                                 uSecondaryLighting.sunDirectionAndVisibility,
+                                 uSecondaryLighting.sunRadiance.rgb, coneWidth, radiance) ||
+        !rtgiAccumulateCelestial(surface, surfacePosition, viewDirection,
+                                 uSecondaryLighting.moonDirectionAndVisibility,
+                                 uSecondaryLighting.moonRadiance.rgb, coneWidth, radiance)) {
+        return false;
+    }
+    vec3 cameraRelativeSurface = surfacePosition - pc.cameraPositionAndMaxDistance.xyz;
+    if (!rtgiAccumulateWorldLights(surface, surfacePosition, cameraRelativeSurface, viewDirection,
+                                   coneWidth, radiance)) {
+        return false;
+    }
+    radiance += surface.albedo * (1.0 - surface.metalness) *
+                uSecondaryLighting.skyAmbientRadiance.rgb * surface.ao * surface.skyVisibility;
+    return rtgiFinite(radiance);
 }
 
 void main() {
@@ -100,7 +402,7 @@ void main() {
     }
     float pixelWorldFootprint =
         max(length(adjacentWorldPositionX - worldPosition), length(adjacentWorldPositionY - worldPosition));
-    if (isnan(pixelWorldFootprint) || isinf(pixelWorldFootprint) || pixelWorldFootprint <= 0.0) {
+    if (!rtgiFinite(pixelWorldFootprint) || pixelWorldFootprint <= 0.0) {
         rtgiWriteResult(texel, vec3(0.0), 0.0, RTGI_TRACE_CLASS_NON_FINITE, 0u, 0u, 0u);
         return;
     }
@@ -112,12 +414,10 @@ void main() {
     vec2 sampleValue = fract(blueNoise + rtgiCranleyPattersonRotation(pc.frameMaskAndFlags.x));
     vec3 rayDirection = rtgiCosineHemisphereDirection(sampleValue, normal);
 
-    float positionScale = max(max(abs(worldPosition.x), max(abs(worldPosition.y), abs(worldPosition.z))), 1.0);
-    float floatingPointBias = positionScale * 9.5367431640625e-7;
-    float angularScale = 1.0 / max(dot(normal, rayDirection), 0.25);
-    float originBias = max(pc.renderExtentAndBias.z, floatingPointBias) * angularScale;
+    float originBias = rtgiOriginBias(worldPosition, normal, rayDirection);
     vec3 rayOrigin = worldPosition + normal * originBias;
     float rayMinimum = max(originBias * 0.25, 1.0e-4);
+    float primarySurfaceDistance = length(worldPosition - pc.cameraPositionAndMaxDistance.xyz);
 
     rayQueryEXT query;
     rayQueryInitializeEXT(query, globalBindlessSceneTlas, gl_RayFlagsTerminateOnFirstHitEXT,
@@ -130,33 +430,18 @@ void main() {
             continue;
         }
         candidateCount = min(candidateCount + 1u, RTGI_TRACE_VALIDATION_CANDIDATE_MASK);
-        uint customIndex = rayQueryGetIntersectionInstanceCustomIndexEXT(query, false);
-        if (customIndex >= pc.frameMaskAndFlags.z) {
-            continue;
-        }
-        uint geometryIndex = rayQueryGetIntersectionGeometryIndexEXT(query, false);
-        uint primitiveIndex = rayQueryGetIntersectionPrimitiveIndexEXT(query, false);
-        vec2 barycentrics = rayQueryGetIntersectionBarycentricsEXT(query, false);
         float candidateDistance = rayQueryGetIntersectionTEXT(query, false);
-        float primarySurfaceDistance = length(worldPosition - pc.cameraPositionAndMaxDistance.xyz);
-        float coneWidth = pixelWorldFootprint *
-                          (1.0 + candidateDistance / max(primarySurfaceDistance, pixelWorldFootprint));
-        float sampledOpacity = 0.0;
-        float sampledLod = 0.0;
-        uint stableMaterialId = 0u;
-        uint stableGeometryId = 0u;
-        bool alphaPasses = false;
-        if (staticMeshRayQueryInstancePresent(customIndex, pc.frameMaskAndFlags.z)) {
-            alphaPasses = staticMeshRayQueryCandidateAlphaPasses(
-                customIndex, geometryIndex, primitiveIndex, barycentrics, coneWidth, pc.frameMaskAndFlags.z,
-                pc.materialGeometryCounts.x, pc.materialGeometryCounts.y, sampledOpacity, sampledLod,
-                stableMaterialId, stableGeometryId);
-        } else {
-            alphaPasses = terrainRayQueryCandidateAlphaPasses(
-                uTerrainHitData.instances[customIndex], geometryIndex, primitiveIndex, barycentrics, coneWidth,
-                pc.renderExtentAndBias.w, uTerrainAlbedo, sampledOpacity, sampledLod);
-        }
-        if (alphaPasses) {
+        float coneWidth = rtgiConeWidth(pixelWorldFootprint, candidateDistance, primarySurfaceDistance);
+        float sampledOpacity;
+        float sampledLod;
+        uint stableMaterialId;
+        uint stableGeometryId;
+        if (rtgiCandidateAlphaPasses(
+                rayQueryGetIntersectionInstanceCustomIndexEXT(query, false),
+                rayQueryGetIntersectionGeometryIndexEXT(query, false),
+                rayQueryGetIntersectionPrimitiveIndexEXT(query, false),
+                rayQueryGetIntersectionBarycentricsEXT(query, false), coneWidth, sampledOpacity,
+                sampledLod, stableMaterialId, stableGeometryId)) {
             rayQueryConfirmIntersectionEXT(query);
             confirmedCount = min(confirmedCount + 1u, RTGI_TRACE_VALIDATION_CONFIRMED_MASK);
         }
@@ -164,22 +449,67 @@ void main() {
 
     if (rayQueryGetIntersectionTypeEXT(query, true) == gl_RayQueryCommittedIntersectionTriangleEXT) {
         float hitDistance = rayQueryGetIntersectionTEXT(query, true);
-        uint hitIdentityHash = 0u;
+        float coneWidth = rtgiConeWidth(pixelWorldFootprint, hitDistance, primarySurfaceDistance);
         uint customIndex = rayQueryGetIntersectionInstanceCustomIndexEXT(query, true);
+        uint geometryIndex = rayQueryGetIntersectionGeometryIndexEXT(query, true);
+        uint primitiveIndex = rayQueryGetIntersectionPrimitiveIndexEXT(query, true);
+        vec2 barycentrics = rayQueryGetIntersectionBarycentricsEXT(query, true);
+        RtgiSecondarySurface surface;
+        uint hitIdentityHash = 0u;
+        bool surfaceValid = false;
         if (staticMeshRayQueryInstancePresent(customIndex, pc.frameMaskAndFlags.z)) {
-            uint stableMaterialId = 0u;
-            uint stableGeometryId = 0u;
-            if (staticMeshRayQueryCommittedIdentity(
-                    customIndex, rayQueryGetIntersectionGeometryIndexEXT(query, true),
-                    rayQueryGetIntersectionPrimitiveIndexEXT(query, true), pc.frameMaskAndFlags.z,
-                    pc.materialGeometryCounts.x, pc.materialGeometryCounts.y, stableMaterialId,
-                    stableGeometryId)) {
-                hitIdentityHash = rtgiStableHitIdentityHash(stableMaterialId, stableGeometryId);
+            StaticMeshRayQuerySurface staticSurface;
+            surfaceValid = staticMeshRayQueryCommittedSurface(
+                customIndex, geometryIndex, primitiveIndex, barycentrics, coneWidth, rayDirection,
+                uSecondaryLighting.traceAndEmissionScales.z, pc.frameMaskAndFlags.z,
+                pc.materialGeometryCounts.x, pc.materialGeometryCounts.y, staticSurface);
+            if (surfaceValid) {
+                surface.albedo = staticSurface.albedo;
+                surface.normal = staticSurface.normal;
+                surface.emission = staticSurface.emission;
+                surface.specularF0 = staticSurface.specularF0;
+                surface.specularF90 = staticSurface.specularF90;
+                surface.perceptualRoughness = staticSurface.perceptualRoughness;
+                surface.metalness = staticSurface.metalness;
+                surface.ao = staticSurface.ao;
+                surface.skyVisibility = 1.0;
+                hitIdentityHash = rtgiStableHitIdentityHash(staticSurface.stableMaterialId,
+                                                            staticSurface.stableGeometryId);
+            }
+        } else if (customIndex < pc.frameMaskAndFlags.z) {
+            TerrainRayQuerySurface terrainSurface;
+            surfaceValid = terrainRayQueryCommittedSurface(
+                uTerrainHitData.instances[customIndex], geometryIndex, primitiveIndex, barycentrics,
+                coneWidth, pc.renderExtentAndBias.w, rayDirection,
+                (uSecondaryLighting.flags.x & RTGI_SECONDARY_LIGHTING_TERRAIN_NORMAL_MAP_BIT) != 0u,
+                (uSecondaryLighting.flags.x & RTGI_SECONDARY_LIGHTING_TERRAIN_SPECULAR_MAP_BIT) != 0u,
+                uSecondaryLighting.traceAndEmissionScales.y, uTerrainAlbedo, uTerrainNormal,
+                uTerrainSpecular, uGrassColormap, uFoliageColormap, terrainSurface);
+            if (surfaceValid) {
+                surface.albedo = terrainSurface.albedo;
+                surface.normal = terrainSurface.normal;
+                surface.emission = terrainSurface.emission;
+                surface.specularF0 = terrainSurface.specularF0;
+                surface.specularF90 = terrainSurface.specularF90;
+                surface.perceptualRoughness = terrainSurface.perceptualRoughness;
+                surface.metalness = terrainSurface.metalness;
+                surface.ao = terrainSurface.ao;
+                surface.skyVisibility = terrainSurface.skyVisibility;
             }
         }
-        rtgiWriteResult(texel, vec3(0.0), hitDistance, RTGI_TRACE_CLASS_HIT, candidateCount, confirmedCount,
-                        hitIdentityHash);
+        vec3 radiance;
+        vec3 surfacePosition = rayOrigin + rayDirection * hitDistance;
+        if (!surfaceValid ||
+            !rtgiShadeSecondarySurface(surface, surfacePosition, rayDirection, coneWidth, radiance)) {
+            rtgiWriteResult(texel, vec3(0.0), 0.0, RTGI_TRACE_CLASS_NON_FINITE, candidateCount,
+                            confirmedCount, 0u);
+            return;
+        }
+        rtgiWriteResult(texel, radiance, hitDistance, RTGI_TRACE_CLASS_HIT, candidateCount,
+                        confirmedCount, hitIdentityHash);
         return;
     }
-    rtgiWriteResult(texel, vec3(0.0), 0.0, RTGI_TRACE_CLASS_MISS, candidateCount, confirmedCount, 0u);
+
+    vec3 missRadiance = sampleSkyRadiance(uSkyCapture, rayDirection);
+    rtgiWriteResult(texel, missRadiance, 0.0, RTGI_TRACE_CLASS_MISS, candidateCount, confirmedCount, 0u);
 }

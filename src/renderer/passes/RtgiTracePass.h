@@ -12,7 +12,7 @@
 class RhiCommandList;
 class RhiDevice;
 
-/// Records the Vulkan raw diffuse RTGI ray-query signal before material shading and denoising.
+/// Records the Vulkan raw diffuse RTGI ray-query signal with complete secondary-hit lighting.
 class RtgiTracePass final : public RenderPass {
 public:
     /// Immutable inputs and outputs declared by the caller's render graph.
@@ -22,16 +22,38 @@ public:
         RgTextureHandle materialAux;
         RgTextureHandle blueNoise;
         RgTextureHandle terrainAlbedo;
+        RgTextureHandle terrainNormal;
+        RgTextureHandle terrainSpecular;
+        RgTextureHandle grassColormap;
+        RgTextureHandle foliageColormap;
+        RgTextureHandle skyCapture;
         RgTextureHandle diffuseRadianceHitDistance;
         RgTextureHandle validation;
     };
 
-    /// Explicit trace controls for opaque traversal and terrain Cutout Candidate confirmation.
+    /// Shared light-grid and local-shadow resources bound through the clustered consumer set.
+    struct LightingResources final {
+        RhiBindGroupLayoutHandle bindGroupLayout;
+        RhiBindGroupHandle bindGroup;
+        RgBufferHandle lights;
+        RgBufferHandle worldCells;
+        RgBufferHandle worldIndices;
+        RgBufferHandle worldHeader;
+        RgBufferHandle localShadowMetadata;
+        RgTextureHandle localShadowSpotAtlas;
+        RgTextureHandle localShadowPointCubeArray;
+    };
+
+    /// Explicit trace controls for primary traversal, secondary shadows, and terrain material maps.
     struct Settings final {
         float maxRayDistance = 64.0f;
+        float maxShadowRayDistance = 128.0f;
         float minimumRayOriginBias = 0.001f;
         uint8_t instanceMask = 3u;
+        uint8_t shadowInstanceMask = 4u;
         bool useJitteredProjection = false;
+        bool terrainNormalMapsEnabled = true;
+        bool terrainSpecularMapsEnabled = true;
     };
 
     /// Latest successfully recorded raw-trace dispatch diagnostics.
@@ -61,7 +83,8 @@ public:
     /// @param dependency Pass that completes all trace inputs before dispatch.
     /// @return Trace pass handle, or an invalid handle when any production contract is invalid.
     [[nodiscard]] RgPassHandle addGraphPass(RenderGraph& graph, const FrameContext& ctx, const Settings& settings,
-                                            const GraphResources& resources, RgPassHandle dependency);
+                                            const GraphResources& resources, const LightingResources& lighting,
+                                            RgPassHandle dependency);
 
     /// Returns diagnostics for the latest successfully recorded dispatch.
     /// @return Immutable dispatch snapshot; dispatched is false before the first successful record.
@@ -74,6 +97,11 @@ private:
         RhiTextureViewHandle materialAux;
         RhiTextureViewHandle blueNoise;
         RhiTextureViewHandle terrainAlbedo;
+        RhiTextureViewHandle terrainNormal;
+        RhiTextureViewHandle terrainSpecular;
+        RhiTextureViewHandle grassColormap;
+        RhiTextureViewHandle foliageColormap;
+        RhiTextureViewHandle skyCapture;
         RhiTextureViewHandle diffuseRadianceHitDistance;
         RhiTextureViewHandle validation;
     };
@@ -94,8 +122,10 @@ private:
 
     [[nodiscard]] bool recordTrace(RhiCommandList& commandList, const FrameContext& ctx, const Settings& settings,
                                    const TraceViews& views, const TraceSceneBuffers& sceneBuffers,
+                                   RhiBindGroupLayoutHandle lightingLayout, RhiBindGroupHandle lightingBindGroup,
                                    uint64_t sceneTlasRevision);
-    [[nodiscard]] bool ensurePipeline(RhiDevice& rhiDevice, RhiBindGroupLayoutHandle globalBindlessLayout);
+    [[nodiscard]] bool ensurePipeline(RhiDevice& rhiDevice, RhiBindGroupLayoutHandle globalBindlessLayout,
+                                      RhiBindGroupLayoutHandle lightingLayout);
     [[nodiscard]] bool ensureBindGroup(RhiDevice& rhiDevice, const TraceViews& views,
                                        const TraceSceneBuffers& sceneBuffers);
     void destroyRhiResources();
@@ -104,14 +134,17 @@ private:
     RhiShaderHandle m_shader;
     RhiSamplerHandle m_sampler;
     RhiSamplerHandle m_terrainSampler;
+    RhiSamplerHandle m_linearClampSampler;
+    RhiBufferHandle m_secondaryLightingBuffer;
     RhiBindGroupLayoutHandle m_globalBindlessLayout;
+    RhiBindGroupLayoutHandle m_lightingLayout;
     RhiBindGroupLayoutHandle m_traceBindGroupLayout;
     RhiPipelineLayoutHandle m_pipelineLayout;
     RhiPipelineHandle m_pipeline;
     RhiBindGroupHandle m_traceBindGroup;
     std::array<RhiBufferHandle, 4u> m_boundSceneBuffers{};
     std::array<uint64_t, 4u> m_boundSceneBufferBytes{};
-    std::array<RhiTextureViewHandle, 7u> m_boundViews{};
+    std::array<RhiTextureViewHandle, 12u> m_boundViews{};
     Stats m_stats;
 };
 

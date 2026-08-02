@@ -131,7 +131,9 @@ Ray Query。Candidate Alpha 通过时显式调用 `rayQueryConfirmIntersectionEX
 Classification、Candidate Count 与 Confirmed Count。模型路径已从 Binding 8/9/10 读取 TLAS 代际
 Material/Geometry/Instance 表，通过固定顶点布局、Uint32 Index 与三角形 Metadata 重建属性，使用
 Global Bindless 纹理和 Sampler 执行 glTF Alpha Mask，并在 Validation Y 写入 Stable Material/Geometry
-Hash；Hit Distance 保存在 `RGBA16F` 输出 Alpha。以下各节继续约束次级命中辐射和正式 Deferred 消费链。
+Hash；Hit Distance 保存在 `RGBA16F` 输出 Alpha。Committed Hit 已进一步读取 Terrain 与模型完整材质，
+通过 Camera-relative World Light Grid、太阳/月亮、局部阴影和 Sky Capture 计算次级辐射；以下各节继续
+约束原始信号打包、NRD 与正式 Deferred 消费链。
 
 ### 4.1 体素区块 BLAS
 
@@ -207,12 +209,13 @@ Roughness、Material ID 和 Stable Object ID。Ray Origin 沿几何法线偏移�
 最大射线距离是画质设置中的世界单位参数，并可按室内/室外预设配置；它不是基于本帧
 时间动态改变的隐藏变量。
 
-当前 C++/GLSL 共享确定性整数 Hash、帧旋转、余弦半球映射与 112 字节 Push Constant
-契约。单元测试固化 Hash 结果、采样有效域和期望余弦分布；真实 Vulkan Smoke 使用
-1×1 GBuffer、Blue Noise、Scene TLAS 与生产 `RtgiTracePass`，回读验证约 0.5 世界单位的
-Opaque 命中距离。Terrain 生产链另使用 2×1 GBuffer 与两层动画纹理数组：左像素在动画层 Alpha
+当前 C++/GLSL 共享确定性整数 Hash、帧旋转、余弦半球映射、128 字节 Push Constant 与 112 字节
+次级光照 UBO 契约。单元测试固化 Hash 结果、采样有效域、期望余弦分布、UBO 布局及 Terrain
+Normal/Specular Map Flag；真实 Vulkan Smoke 使用 Blue Noise、Scene TLAS 与生产 `RtgiTracePass`。
+Terrain 生产链使用 2×1 GBuffer 与两层动画纹理数组：左像素在动画层 Alpha
 为零时拒绝 Cutout 并命中约 2 世界单位后的 Opaque，右像素确认 Cutout 并命中约 1 世界单位；两者
-分别回读 `Candidate/Confirmed = 1/0` 与 `1/1`，Validation 未发现错误。
+分别回读 `Candidate/Confirmed = 1/0` 与 `1/1`。模型生产链回读约 1.5/0.5 世界单位的 Opaque/Mask
+命中；独立 1×1 用例验证无几何命中时返回 Sky Capture Radiance。Validation 未发现错误。
 
 ### 5.3 Candidate 命中
 
@@ -226,12 +229,15 @@ Opaque Triangle 可直接接受 Committed Intersection。Cutout Triangle 按以�
 
 Terrain 生产链已完成第 1、2、4、5 项：固定 Geometry Range 定位 Vertex/Metadata，Barycentrics
 重建 Greedy UV，动画元数据选择纹理层，显式 LOD 采样复用统一 Alpha Cutoff，并在通过时确认 Candidate。
-Biome Tint 与完整材质颜色属于次级命中辐射阶段，不参与 Alpha 边界。模型生产链同样完成 Candidate
+Committed Surface 已通过通用属性插值恢复 Position、UV、顶点天光、方块光和 AO，应用 Biome/
+Redstone Tint，并读取 LabPBR Normal、Specular 与 Emission；这些材质数据不改变 Candidate Alpha
+边界。模型生产链同样完成 Candidate
 读取：Geometry Index 定位 `GpuSceneGeometry`，固定 48 字节顶点与 Uint32 Index 重建 Position、Normal、
 Tangent、UV，16 字节 Metadata 校验 Material/Geometry Stable ID；Alpha Candidate 仅按 Ray Cone LOD
-读取 Global Bindless Base Color，并应用 Base Color Factor 与 `materialPassesAlphaTest`。完整 12 语义
-材质采样函数保留给后续次级辐射阶段。Terrain 与模型各自的 2×1 生产 Smoke 均锁定 Cutout 拒绝后
-命中 Opaque 与显式确认结果。
+读取 Global Bindless Base Color，并应用 Base Color Factor 与 `materialPassesAlphaTest`。Committed
+Surface 使用逆转置法线变换及镜像/非均匀缩放安全的 Tangent Frame，采样全部 12 个材质语义并输出
+Base Color、Normal、Metalness、Roughness、AO、Emissive、Dielectric F0 与稳定身份。Terrain 与模型
+各自的 2×1 生产 Smoke 均锁定 Cutout 拒绝后命中 Opaque、显式确认及对应次级材质辐射。
 
 Ray Cone 根据射线距离、像素覆盖和三角形 UV 梯度选择 Texture LOD，避免树叶与细栅栏
 在次级射线中出现过度锐利闪烁。
@@ -249,6 +255,24 @@ Miss 返回对应方向的物理天空辐射，包含昼夜、天气与云层透
 Diffuse BRDF 求值。路径估计器应用次级表面材质；主表面的 Diffuse Material Factor 在
 NRD 前移除，降噪完成后再调制。首版只有一次间接反弹，不递归发射 GI Ray。
 
+生产实现使用 `RtgiSecondaryLightingParams` 传递太阳/月亮方向与物理 Radiance、天空环境项、阴影
+距离和 Terrain 材质 Flag。太阳/月亮 Radiance 已包含昼夜可见能量，Visibility 只决定是否发射
+Alpha-aware Shadow Ray，不再次缩放 Radiance。Shadow Ray 与 GI Ray 使用独立 Instance Mask；
+Cutout 遮挡仍执行与主追踪一致的 Candidate Alpha 循环。
+
+次级命中不能复用主视图 Cluster，因此 `ClusteredLightingPass` 同时构建固定 16 米 Cell 的
+Camera-relative 稀疏 `WorldLightGrid`。Directional Light 按源 Light Index 进入全局前缀，Point、Spot、
+Rect Light 按影响球与 Cell AABB 的精确相交进入确定性排序列表；总索引固定限制为 262144，超过容量
+时返回 `IndexCapacityExceeded` 且不发布部分结果。Shader 对 Cell 坐标执行二分查找。局部灯继续使用
+统一 PBR 求值：`None`、`RasterDynamic`、`RasterCached` 读取现有 Metadata/Spot Atlas/Point Cube Array，
+`RayQuery` 发射可见性射线。Ray Query 分支已通过生产 Shader 编译和源码契约；生产 `SceneLight` 入口
+当前仍服从主视图共享阴影契约并显式返回 `RayQueryUnavailable`。命中结果最后累加天空环境项；Miss
+直接调用 `sampleSkyRadiance` 读取原始 Sky Capture。
+
+Vulkan Smoke 对 Terrain 使用非白 Grass Colormap 与天空环境项，确认 Opaque 和 Grass Tint 后的 RGB
+Radiance 不同；模型用红色 Emissive、绿色太阳和蓝色 Point Light 将三条能量来源隔离到不同通道，
+同时保留 Mask 拒绝/确认与稳定身份检查；独立 Miss 用例逐通道回读固定 `(0.25, 0.5, 0.75)` 天空值。
+
 体素顶点天光/方块光可作为游戏风格的独立 Radiance Term，必须在设置与调试图中单独
 标识。它不能和解析灯能量重复计算。
 
@@ -260,8 +284,9 @@ Trace Pass 输出：
 - `RtgiValidation`：Hit/Miss、Instance/Material 分类或 NaN 诊断。
 
 当前 Opaque Trace 已创建 `RGBA16F` 辐射/命中距离和 `RG32UI` 验证输出，固定分类为
-Sky、Translucent、Miss、Hit 与 NonFinite。Hit Distance 已由真实 Vulkan 回读验证；RGB 在次级
-材质与灯光链接入前保持为零，不进入正式 Deferred 合成。
+Sky、Translucent、Miss、Hit 与 NonFinite。Hit Distance、Terrain/模型次级材质、Emissive、太阳、
+局部灯、天空环境项和 Miss Sky Radiance 均已由真实 Vulkan 回读验证。该原始 RGB 信号尚未按
+RELAX/REBLUR 规范打包，也尚未进入正式 Deferred 合成。
 
 RELAX 使用 `RELAX_FrontEnd_PackRadianceAndHitDist` 打包原始 First-bounce Hit Distance；
 REBLUR 先调用 `REBLUR_FrontEnd_GetNormHitDist`，再用

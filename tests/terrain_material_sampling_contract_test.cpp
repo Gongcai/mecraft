@@ -25,6 +25,7 @@ namespace {
     }
     const std::string source{std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>()};
     return source.find("const float TERRAIN_ALPHA_CUTOFF = 0.1;") != std::string::npos &&
+           source.find("const uint TERRAIN_MATERIAL_TEXTURE_LAYER_CAPACITY = 1024u;") != std::string::npos &&
            source.find("bool terrainAlphaTestPasses(float opacity)") != std::string::npos &&
            source.find("return !isnan(opacity) && !isinf(opacity) && opacity >= TERRAIN_ALPHA_CUTOFF;") !=
                std::string::npos &&

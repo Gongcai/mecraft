@@ -137,6 +137,11 @@ bool testReadbackCompletionContract() {
                        "statistics readback must query its exact GPU submission") &&
            requireTrue(pass.find("m_statsReadbackSlotAvailable = false") != std::string::npos,
                        "pending readback slots must remain unavailable for overwrite") &&
+           requireTrue(pass.find("m_statsReadbackWorldSnapshots[ringIndex] = captureWorldLightGridStats()") !=
+                               std::string::npos &&
+                           pass.find("applyWorldLightGridStats(m_statsReadbackWorldSnapshots[ringIndex])") !=
+                               std::string::npos,
+                       "world-grid statistics must retain the snapshot paired with each GPU readback slot") &&
            requireTrue(pipeline.find("executed.succeeded(), executed.completionToken()") != std::string::npos,
                        "the clustered pass must retain the graph completion token");
 }

@@ -14,6 +14,8 @@ const uint RTGI_TRACE_VALIDATION_CANDIDATE_SHIFT = 8u;
 const uint RTGI_TRACE_VALIDATION_CANDIDATE_MASK = 0xfffu;
 const uint RTGI_TRACE_VALIDATION_CONFIRMED_SHIFT = 20u;
 const uint RTGI_TRACE_VALIDATION_CONFIRMED_MASK = 0xfffu;
+const uint RTGI_SECONDARY_LIGHTING_TERRAIN_NORMAL_MAP_BIT = 1u << 0u;
+const uint RTGI_SECONDARY_LIGHTING_TERRAIN_SPECULAR_MAP_BIT = 1u << 1u;
 
 uint rtgiTraceValidationWord(uint classification, uint candidateCount, uint confirmedCount) {
     return (classification & RTGI_TRACE_VALIDATION_CLASSIFICATION_MASK) |

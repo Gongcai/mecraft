@@ -2,6 +2,7 @@
 #define MECRAFT_TERRAIN_MATERIAL_SAMPLING_GLSL
 
 const float TERRAIN_ALPHA_CUTOFF = 0.1;
+const uint TERRAIN_MATERIAL_TEXTURE_LAYER_CAPACITY = 1024u;
 
 // Applies the fixed opacity boundary shared by terrain raster and ray-query consumers.
 bool terrainAlphaTestPasses(float opacity) {

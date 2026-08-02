@@ -48,6 +48,19 @@ struct StaticMeshRayQueryTextureSamples {
     vec3 clearcoatNormal;
 };
 
+struct StaticMeshRayQuerySurface {
+    vec3 albedo;
+    vec3 normal;
+    vec3 emission;
+    vec3 specularF0;
+    float specularF90;
+    float perceptualRoughness;
+    float metalness;
+    float ao;
+    uint stableMaterialId;
+    uint stableGeometryId;
+};
+
 bool staticMeshRayQueryFinite(vec2 value) {
     return !any(isnan(value)) && !any(isinf(value));
 }
@@ -58,6 +71,15 @@ bool staticMeshRayQueryFinite(vec3 value) {
 
 bool staticMeshRayQueryFinite(vec4 value) {
     return !any(isnan(value)) && !any(isinf(value));
+}
+
+vec3 staticMeshRayQueryTransformVector(GpuSceneAffineTransform transform, vec3 vector) {
+    return vec3(dot(transform.row0.xyz, vector), dot(transform.row1.xyz, vector),
+                dot(transform.row2.xyz, vector));
+}
+
+vec3 staticMeshRayQueryTransformNormal(GpuSceneAffineTransform objectFromWorld, vec3 normal) {
+    return mat3(objectFromWorld.row0.xyz, objectFromWorld.row1.xyz, objectFromWorld.row2.xyz) * normal;
 }
 
 uint staticMeshRayQueryTextureIndex(GpuMaterial material, uint semantic) {
@@ -349,6 +371,119 @@ bool staticMeshRayQuerySampleBaseColor(StaticMeshRayQueryTriangle triangle, GpuS
     return staticMeshRayQuerySampleSemantic(triangle, instanceData, material,
                                             GPU_MATERIAL_TEXTURE_BASE_COLOR, uv, coneWidth,
                                             baseColor, lod);
+}
+
+bool staticMeshRayQueryTangentFrame(GpuSceneInstance instanceData, StaticMeshRayQueryAttributes attributes,
+                                    out mat3 frame) {
+    frame = mat3(1.0);
+    vec3 objectNormal = normalize(attributes.normal);
+    vec3 objectTangent = attributes.tangent.xyz - objectNormal * dot(objectNormal, attributes.tangent.xyz);
+    float objectTangentLengthSquared = dot(objectTangent, objectTangent);
+    if (!staticMeshRayQueryFinite(objectNormal) || !staticMeshRayQueryFinite(objectTangent) ||
+        objectTangentLengthSquared <= 1.0e-12) {
+        return false;
+    }
+    objectTangent *= inversesqrt(objectTangentLengthSquared);
+    vec3 objectBitangent = normalize(cross(objectNormal, objectTangent)) * attributes.tangent.w;
+
+    vec3 worldNormal = staticMeshRayQueryTransformNormal(instanceData.objectFromWorld, objectNormal);
+    vec3 worldTangent = staticMeshRayQueryTransformVector(instanceData.worldFromObject, objectTangent);
+    vec3 transformedBitangent = staticMeshRayQueryTransformVector(instanceData.worldFromObject, objectBitangent);
+    float worldNormalLengthSquared = dot(worldNormal, worldNormal);
+    if (!staticMeshRayQueryFinite(worldNormal) || !staticMeshRayQueryFinite(worldTangent) ||
+        !staticMeshRayQueryFinite(transformedBitangent) || worldNormalLengthSquared <= 1.0e-12) {
+        return false;
+    }
+    worldNormal *= inversesqrt(worldNormalLengthSquared);
+    worldTangent -= worldNormal * dot(worldNormal, worldTangent);
+    float worldTangentLengthSquared = dot(worldTangent, worldTangent);
+    if (worldTangentLengthSquared <= 1.0e-12 || dot(transformedBitangent, transformedBitangent) <= 1.0e-12) {
+        return false;
+    }
+    worldTangent *= inversesqrt(worldTangentLengthSquared);
+    float handedness = dot(cross(worldNormal, worldTangent), transformedBitangent) < 0.0 ? -1.0 : 1.0;
+    vec3 worldBitangent = normalize(cross(worldNormal, worldTangent)) * handedness;
+    if (!staticMeshRayQueryFinite(worldBitangent)) {
+        return false;
+    }
+    frame = mat3(worldTangent, worldBitangent, worldNormal);
+    return true;
+}
+
+bool staticMeshRayQueryCommittedSurface(uint customIndex, uint geometryIndex, uint primitiveIndex,
+                                        vec2 barycentrics, float coneWidth, vec3 incomingRayDirection,
+                                        float emissionScale, uint sceneInstanceCount, uint materialCount,
+                                        uint geometryCount, out StaticMeshRayQuerySurface surface) {
+    surface.albedo = vec3(0.0);
+    surface.normal = vec3(0.0, 1.0, 0.0);
+    surface.emission = vec3(0.0);
+    surface.specularF0 = vec3(0.04);
+    surface.specularF90 = 1.0;
+    surface.perceptualRoughness = 1.0;
+    surface.metalness = 0.0;
+    surface.ao = 0.0;
+    surface.stableMaterialId = 0u;
+    surface.stableGeometryId = 0u;
+    if (!staticMeshRayQueryFinite(incomingRayDirection) || dot(incomingRayDirection, incomingRayDirection) <= 1.0e-12 ||
+        isnan(emissionScale) || isinf(emissionScale) || emissionScale < 0.0) {
+        return false;
+    }
+
+    GpuSceneInstance instanceData;
+    GpuSceneGeometry geometry;
+    GpuMaterial material;
+    StaticMeshRayQueryTriangle triangle;
+    StaticMeshRayQueryAttributes attributes;
+    StaticMeshRayQueryTextureSamples textureSamples;
+    float baseColorLod = 0.0;
+    if (!staticMeshRayQueryResolveGeometry(customIndex, geometryIndex, sceneInstanceCount, materialCount,
+                                           geometryCount, instanceData, geometry, material) ||
+        !staticMeshRayQueryLoadTriangle(geometry, primitiveIndex, triangle) ||
+        !staticMeshRayQueryInterpolateAttributes(triangle, barycentrics, attributes) ||
+        !staticMeshRayQuerySampleMaterial(triangle, instanceData, material, attributes.uv, coneWidth,
+                                          textureSamples, baseColorLod)) {
+        return false;
+    }
+
+    MaterialSample sampledMaterial = decodeGltfMaterial(material, textureSamples.material);
+    if (!staticMeshRayQueryFinite(sampledMaterial.baseColor) ||
+        !materialPassesAlphaTest(material, sampledMaterial.baseColor.a) ||
+        !staticMeshRayQueryFinite(sampledMaterial.emissive) ||
+        !staticMeshRayQueryFinite(sampledMaterial.dielectricF0) || isnan(sampledMaterial.specularF90) ||
+        isinf(sampledMaterial.specularF90) || isnan(sampledMaterial.perceptualRoughness) ||
+        isinf(sampledMaterial.perceptualRoughness) || isnan(sampledMaterial.metalness) ||
+        isinf(sampledMaterial.metalness) || isnan(sampledMaterial.occlusion) ||
+        isinf(sampledMaterial.occlusion)) {
+        return false;
+    }
+
+    mat3 tangentFrame;
+    if (!staticMeshRayQueryTangentFrame(instanceData, attributes, tangentFrame)) {
+        return false;
+    }
+    vec3 tangentNormal = decodeMaterialTangentNormal(textureSamples.normal, material.materialFactors.z);
+    vec3 worldNormal = normalize(tangentFrame * tangentNormal);
+    if (!staticMeshRayQueryFinite(tangentNormal) || !staticMeshRayQueryFinite(worldNormal)) {
+        return false;
+    }
+    worldNormal = faceforward(worldNormal, incomingRayDirection, worldNormal);
+
+    surface.albedo = sampledMaterial.baseColor.rgb;
+    surface.normal = worldNormal;
+    surface.emission = evaluateMaterialEmission(sampledMaterial) * emissionScale;
+    surface.specularF0 = pbrMaterialSpecularF0(sampledMaterial.dielectricF0, surface.albedo,
+                                               sampledMaterial.metalness);
+    surface.specularF90 = pbrMaterialSpecularF90(sampledMaterial.specularF90, sampledMaterial.metalness);
+    surface.perceptualRoughness = sampledMaterial.perceptualRoughness;
+    surface.metalness = sampledMaterial.metalness;
+    surface.ao = sampledMaterial.occlusion;
+    surface.stableMaterialId = triangle.metadata.stableMaterialId;
+    surface.stableGeometryId = triangle.metadata.stableGeometryId;
+    return staticMeshRayQueryFinite(surface.albedo) && staticMeshRayQueryFinite(surface.normal) &&
+           staticMeshRayQueryFinite(surface.emission) && staticMeshRayQueryFinite(surface.specularF0) &&
+           !isnan(surface.specularF90) && !isinf(surface.specularF90) &&
+           !isnan(surface.perceptualRoughness) && !isinf(surface.perceptualRoughness) &&
+           !isnan(surface.metalness) && !isinf(surface.metalness) && !isnan(surface.ao) && !isinf(surface.ao);
 }
 
 bool staticMeshRayQueryCandidateAlphaPasses(uint customIndex, uint geometryIndex, uint primitiveIndex,

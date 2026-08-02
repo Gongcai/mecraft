@@ -1628,6 +1628,9 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
             .readBuffer(clusteredLightingResources.records, RhiResourceState::StorageBuffer)
             .readBuffer(clusteredLightingResources.compactIndices, RhiResourceState::StorageBuffer)
             .readBuffer(clusteredLightingResources.stats, RhiResourceState::StorageBuffer)
+            .readBuffer(clusteredLightingResources.worldCells, RhiResourceState::StorageBuffer)
+            .readBuffer(clusteredLightingResources.worldIndices, RhiResourceState::StorageBuffer)
+            .readBuffer(clusteredLightingResources.worldHeader, RhiResourceState::StorageBuffer)
             .readBuffer(localShadowResources.metadata, RhiResourceState::StorageBuffer)
             .readTexture(localShadowResources.spotAtlas, RhiResourceState::DepthRead)
             .readTexture(localShadowResources.pointCubeArray, RhiResourceState::DepthRead);
@@ -1876,6 +1879,9 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
                     .readBuffer(clusteredLightingResources.records, RhiResourceState::StorageBuffer)
                     .readBuffer(clusteredLightingResources.compactIndices, RhiResourceState::StorageBuffer)
                     .readBuffer(clusteredLightingResources.stats, RhiResourceState::StorageBuffer)
+                    .readBuffer(clusteredLightingResources.worldCells, RhiResourceState::StorageBuffer)
+                    .readBuffer(clusteredLightingResources.worldIndices, RhiResourceState::StorageBuffer)
+                    .readBuffer(clusteredLightingResources.worldHeader, RhiResourceState::StorageBuffer)
                     .readBuffer(localShadowResources.metadata, RhiResourceState::StorageBuffer)
                     .readTexture(localShadowResources.spotAtlas, RhiResourceState::DepthRead)
                     .readTexture(localShadowResources.pointCubeArray, RhiResourceState::DepthRead);

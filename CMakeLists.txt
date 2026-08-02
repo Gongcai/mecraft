@@ -363,6 +363,7 @@ set(SRC_RENDERER
         src/renderer/contracts/TerrainMaterialSamplingContract.cpp
         src/renderer/contracts/TerrainRayTracingContract.cpp
         src/renderer/contracts/VoxelReflectionProbeSourceContract.cpp
+        src/renderer/contracts/WorldLightGridContract.cpp
         src/renderer/contracts/RenderFeatureContract.cpp
 
         # Lighting data producers
@@ -1038,6 +1039,10 @@ if(MECRAFT_BUILD_TESTS)
             tests/clustered_lighting_contract_test.cpp)
     target_compile_definitions(clustered_lighting_contract_test PRIVATE
             MECRAFT_TEST_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
+    add_mecraft_test(world_light_grid_contract_test
+            tests/world_light_grid_contract_test.cpp)
+    target_compile_definitions(world_light_grid_contract_test PRIVATE
+            MECRAFT_TEST_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
     add_mecraft_test(sky_ibl_contract_test tests/sky_ibl_contract_test.cpp)
     target_compile_definitions(sky_ibl_contract_test PRIVATE
             MECRAFT_TEST_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
@@ -1068,6 +1073,8 @@ if(MECRAFT_BUILD_TESTS)
             MECRAFT_TEST_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
     add_mecraft_test(render_feature_contract_test tests/render_feature_contract_test.cpp)
     add_mecraft_test(rtgi_sampling_contract_test tests/rtgi_sampling_contract_test.cpp)
+    target_compile_definitions(rtgi_sampling_contract_test PRIVATE
+            MECRAFT_TEST_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
     add_mecraft_test(terrain_material_sampling_contract_test
             tests/terrain_material_sampling_contract_test.cpp)
     target_compile_definitions(terrain_material_sampling_contract_test PRIVATE

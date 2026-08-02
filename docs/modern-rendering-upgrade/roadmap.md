@@ -190,8 +190,8 @@ M1 与 M2 可并行开发，但公共 `GpuMaterial`、`GpuSceneGeometry` 与 Sta
 1. RTGI Compute Ray Query、Blue Noise/Cosine Sampling。（进行中：Global Bindless Binding 4 的双运行时
    所有权与 Active TLAS 发布已完成；生产 `RtgiTracePass`、确定性帧旋转、Blue Noise/Cosine
    Sampling、Opaque 自动提交、Terrain Cutout Candidate Confirm、Render Graph 资源声明、逐像素
-   Candidate/Confirmed 计数、模型 Stable Material/Geometry Hash 与真实 Vulkan 命中距离回读已完成。
-   次级材质辐射、Deferred 运行时消费和 NRD 输入打包尚未完成。）
+   Candidate/Confirmed 计数、模型 Stable Material/Geometry Hash、真实 Vulkan 命中距离回读及完整
+   次级命中材质/辐射已完成。Deferred 运行时消费和 NRD 输入打包尚未完成。）
 2. 体素 Greedy Primitive Metadata 与 Cutout Alpha Candidate。（实现完成：新增 C++/GLSL 体素材质
    采样契约，固化包含边界的 `0.1` Alpha Cutoff、NaN/Inf 拒绝、1024 层纹理编码与
    6-bit 动画帧数/FPS 上限；GBuffer、主视图、Probe Capture 与 Shadow 的非 Leaves Cutout 已共用
@@ -206,10 +206,21 @@ M1 与 M2 可并行开发，但公共 `GpuMaterial`、`GpuSceneGeometry` 与 Sta
    `GpuMaterial` 与 Geometry，对共享实例仅追加 Instance。Shader 通过 Device Address 读取固定
    48 字节 Position/Normal/Tangent/UV 顶点、Uint32 Index 与 16 字节 Metadata，以 Barycentrics
    重建属性并校验 Stable Material/Geometry ID；Alpha Mask 通过 Ray Cone LOD 读取 Global Bindless
-   Base Color，应用 Base Color Factor 与统一 Alpha Test 后显式确认 Candidate，完整材质采样函数留给
-   次级辐射阶段。2×1 Vulkan Smoke 已验证左像素拒绝 Mask 后命中后方 Opaque、右像素确认 Mask，并
-   回读两种稳定身份 Hash 与 Hit Distance。）
-4. 次级太阳、局部灯、Emissive、天空 Radiance。
+   Base Color，应用 Base Color Factor 与统一 Alpha Test 后显式确认 Candidate。Committed Surface
+   已使用逆转置法线变换和镜像/非均匀缩放安全的 Tangent Frame 采样全部 12 个材质语义，输出
+   Base Color、Normal、Metalness、Roughness、AO、Emissive、F0 与稳定身份。2×1 Vulkan Smoke 已验证
+   左像素拒绝 Mask 后命中后方 Opaque、右像素确认 Mask，并回读两种稳定身份 Hash、Hit Distance 和
+   次级材质辐射。）
+4. 次级太阳、局部灯、Emissive、天空 Radiance。（实现完成：新增固定 16 米 Cell 的
+   Camera-relative `WorldLightGrid`，Directional Light 进入全局索引前缀，Point/Spot/Rect 按精确
+   Sphere/AABB 相交进入排序稀疏 Cell；Clustered Consumer Set 的 Binding 7/8/9 发布 Cell、Index 与
+   Header，总索引固定限制为 262144，超限时原子失败。Terrain Committed Surface 已接入顶点天光/AO、Biome/Redstone Tint、LabPBR Normal/
+   Specular/Emission，模型 Committed Surface 已接入完整 glTF 材质。太阳/月亮使用 Alpha-aware
+   Shadow Ray，局部灯的 None、Raster Dynamic/Cached 生产资源路径与 Ray Query Shader 分支均已求值；
+   Ray Query 分支已通过生产 Shader 编译和源码契约，`SceneLight` 生产入口仍与主视图契约一致地显式
+   返回 `RayQueryUnavailable`。命中表面累加 Emissive、直接光和天空环境项，Miss 直接采样 Sky Capture。Vulkan Smoke 已用 RGB 通道分别锁定
+   红色 Emissive、绿色太阳、蓝色 Point Light，并验证 Terrain Grass Tint、天空环境项及固定天空
+   Radiance Miss；CPU/GLSL World Grid、UBO 和材质源码契约测试已通过。）
 5. Raw Diffuse Radiance + First-bounce Hit Distance，并按 RELAX/REBLUR 规范分别打包。
 6. NRD 4.17.4 Build、License、RHI Pipeline 与 Render Graph Bridge。
 7. RELAX_DIFFUSE Quality、REBLUR_DIFFUSE Performance。

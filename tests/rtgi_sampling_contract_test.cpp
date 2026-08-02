@@ -3,9 +3,13 @@
 #include <glm/geometric.hpp>
 
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
+#include <fstream>
 #include <iostream>
+#include <iterator>
 #include <optional>
+#include <string>
 
 namespace {
 [[nodiscard]] bool requireTrue(const bool condition, const char* message) {
@@ -14,6 +18,30 @@ namespace {
         return false;
     }
     return true;
+}
+
+[[nodiscard]] bool validateShaderMirror() {
+    const std::string samplingPath = std::string(MECRAFT_TEST_SOURCE_DIR) + "/assets/shaders/rtgi_sampling.glsl";
+    const std::string tracePath = std::string(MECRAFT_TEST_SOURCE_DIR) + "/assets/shaders/rtgi_trace.comp";
+    std::ifstream samplingFile(samplingPath, std::ios::binary);
+    std::ifstream traceFile(tracePath, std::ios::binary);
+    if (!samplingFile.is_open() || !traceFile.is_open()) {
+        return false;
+    }
+    const std::string samplingSource{std::istreambuf_iterator<char>(samplingFile), std::istreambuf_iterator<char>()};
+    const std::string traceSource{std::istreambuf_iterator<char>(traceFile), std::istreambuf_iterator<char>()};
+    return samplingSource.find("const uint RTGI_SECONDARY_LIGHTING_TERRAIN_NORMAL_MAP_BIT = 1u << 0u;") !=
+               std::string::npos &&
+           samplingSource.find("const uint RTGI_SECONDARY_LIGHTING_TERRAIN_SPECULAR_MAP_BIT = 1u << 1u;") !=
+               std::string::npos &&
+           traceSource.find("layout(std140, set = 1, binding = 16) uniform RtgiSecondaryLightingParams") !=
+               std::string::npos &&
+           traceSource.find("vec4 traceAndEmissionScales;") != std::string::npos &&
+           traceSource.find("uvec4 flags;") != std::string::npos &&
+           traceSource.find("policy != GPU_LIGHT_SHADOW_RAY_QUERY") != std::string::npos &&
+           traceSource.find("gpuLightShadowIndex(light) != GPU_LIGHT_INVALID_RESOURCE_INDEX") != std::string::npos &&
+           traceSource.find("maximumDistance - dot(normal * originBias, unitDirection) - rayMinimum") !=
+               std::string::npos;
 }
 } // namespace
 
@@ -29,6 +57,16 @@ int main() {
         requireTrue(rtgiStableHitIdentityHash(601u, 501u) == 1366735474u &&
                         rtgiStableHitIdentityHash(602u, 502u) == 1027311900u && sizeof(RtgiTracePushConstants) == 128u,
                     "RTGI stable hit identity and push-constant contracts must remain bit-exact") &&
+        valid;
+    valid =
+        requireTrue(sizeof(RtgiSecondaryLightingParams) == 112u && alignof(RtgiSecondaryLightingParams) == 16u &&
+                        offsetof(RtgiSecondaryLightingParams, sunDirectionAndVisibility) == 0u &&
+                        offsetof(RtgiSecondaryLightingParams, traceAndEmissionScales) == 80u &&
+                        offsetof(RtgiSecondaryLightingParams, flags) == 96u &&
+                        kRtgiSecondaryLightingTerrainNormalMapBit == 1u &&
+                        kRtgiSecondaryLightingTerrainSpecularMapBit == 2u &&
+                        (kRtgiSecondaryLightingTerrainNormalMapBit | kRtgiSecondaryLightingTerrainSpecularMapBit) == 3u,
+                    "RTGI secondary-lighting UBO layout and terrain-map flags must remain fixed") &&
         valid;
 
     const glm::vec2 firstRotation = rtgiCranleyPattersonRotation(0u);
@@ -95,5 +133,6 @@ int main() {
                      .has_value(),
             "RTGI validation packing must preserve classification and Cutout counters") &&
         valid;
+    valid = requireTrue(validateShaderMirror(), "RTGI GLSL flags and secondary-lighting UBO must mirror C++") && valid;
     return valid ? 0 : 1;
 }

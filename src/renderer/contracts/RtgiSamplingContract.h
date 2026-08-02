@@ -16,6 +16,8 @@ inline constexpr uint32_t kRtgiTraceValidationCandidateShift = 8u;
 inline constexpr uint32_t kRtgiTraceValidationCandidateMask = 0xfffu;
 inline constexpr uint32_t kRtgiTraceValidationConfirmedShift = 20u;
 inline constexpr uint32_t kRtgiTraceValidationConfirmedMask = 0xfffu;
+inline constexpr uint32_t kRtgiSecondaryLightingTerrainNormalMapBit = 1u << 0u;
+inline constexpr uint32_t kRtgiSecondaryLightingTerrainSpecularMapBit = 1u << 1u;
 
 /// Push constants shared by the production RTGI trace pass and Vulkan smoke validation.
 struct alignas(16) RtgiTracePushConstants final {
@@ -27,6 +29,20 @@ struct alignas(16) RtgiTracePushConstants final {
 };
 
 static_assert(sizeof(RtgiTracePushConstants) == 128u);
+
+/// Uniform parameters used to shade one RTGI secondary hit without extending
+/// the Vulkan-minimum 128-byte push-constant contract.
+struct alignas(16) RtgiSecondaryLightingParams final {
+    glm::vec4 sunDirectionAndVisibility{0.0f, 1.0f, 0.0f, 1.0f};
+    glm::vec4 moonDirectionAndVisibility{0.0f, -1.0f, 0.0f, 0.0f};
+    glm::vec4 sunRadiance{1.0f, 1.0f, 1.0f, 0.0f};
+    glm::vec4 moonRadiance{0.0f};
+    glm::vec4 skyAmbientRadiance{0.0f};
+    glm::vec4 traceAndEmissionScales{128.0f, 1.5f, 1.0f, 0.0f};
+    glm::uvec4 flags{0u};
+};
+
+static_assert(sizeof(RtgiSecondaryLightingParams) == 112u);
 
 /// Hashes one sample-sequence value with the integer permutation shared by GLSL.
 /// @param value Input sequence value.

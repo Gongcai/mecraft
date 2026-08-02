@@ -18,6 +18,8 @@ namespace {
 constexpr uint8_t kRtgiKnownInstanceMask =
     renderer::rt::sceneTlasMaskBit(renderer::rt::SceneTlasInstanceMask::GiOpaque) |
     renderer::rt::sceneTlasMaskBit(renderer::rt::SceneTlasInstanceMask::GiCutout);
+constexpr uint8_t kRtgiKnownShadowInstanceMask =
+    renderer::rt::sceneTlasMaskBit(renderer::rt::SceneTlasInstanceMask::ShadowCaster);
 
 [[nodiscard]] bool sameHandle(const RhiTextureViewHandle lhs, const RhiTextureViewHandle rhs) {
     return lhs.index == rhs.index && lhs.generation == rhs.generation;
@@ -46,6 +48,22 @@ constexpr uint8_t kRtgiKnownInstanceMask =
     return true;
 }
 
+[[nodiscard]] bool finite(const glm::vec3& value) {
+    return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
+}
+
+[[nodiscard]] bool validDirection(const glm::vec3& value) {
+    return finite(value) && glm::dot(value, value) > 1.0e-12f;
+}
+
+[[nodiscard]] bool validRadiance(const glm::vec3& value) {
+    return finite(value) && value.x >= 0.0f && value.y >= 0.0f && value.z >= 0.0f;
+}
+
+[[nodiscard]] bool unitInterval(const float value) {
+    return std::isfinite(value) && value >= 0.0f && value <= 1.0f;
+}
+
 [[nodiscard]] bool storageBufferMatches(RhiDevice& rhiDevice, const RhiBufferHandle buffer,
                                         const uint64_t expectedBytes, RhiBufferDesc& desc) {
     return buffer.isValid() && expectedBytes != 0u && rhiDevice.getBufferDesc(buffer, desc) &&
@@ -59,17 +77,31 @@ void RtgiTracePass::shutdown() {
 }
 
 RgPassHandle RtgiTracePass::addGraphPass(RenderGraph& graph, const FrameContext& ctx, const Settings& settings,
-                                         const GraphResources& resources, const RgPassHandle dependency) {
+                                         const GraphResources& resources, const LightingResources& lighting,
+                                         const RgPassHandle dependency) {
     if (!dependency.isValid() || ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr ||
         ctx.shared->globalBindlessSet == nullptr || ctx.shared->sceneTlasCache == nullptr ||
         ctx.shared->rhiDevice->backend() != RhiBackend::Vulkan || !ctx.shared->globalBindlessSet->initialized() ||
         !ctx.temporalExtents.renderExtent.isValid() || !std::isfinite(settings.maxRayDistance) ||
-        settings.maxRayDistance <= 0.0f || !std::isfinite(settings.minimumRayOriginBias) ||
+        settings.maxRayDistance <= 0.0f || !std::isfinite(settings.maxShadowRayDistance) ||
+        settings.maxShadowRayDistance <= 0.0f || !std::isfinite(settings.minimumRayOriginBias) ||
         settings.minimumRayOriginBias <= 0.0f || settings.minimumRayOriginBias >= settings.maxRayDistance ||
-        settings.instanceMask == 0u || (settings.instanceMask & static_cast<uint8_t>(~kRtgiKnownInstanceMask)) != 0u ||
+        settings.minimumRayOriginBias >= settings.maxShadowRayDistance || settings.instanceMask == 0u ||
+        (settings.instanceMask & static_cast<uint8_t>(~kRtgiKnownInstanceMask)) != 0u ||
+        settings.shadowInstanceMask == 0u ||
+        (settings.shadowInstanceMask & static_cast<uint8_t>(~kRtgiKnownShadowInstanceMask)) != 0u ||
         !resources.depth.isValid() || !resources.normalAo.isValid() || !resources.materialAux.isValid() ||
-        !resources.blueNoise.isValid() || !resources.terrainAlbedo.isValid() ||
-        !resources.diffuseRadianceHitDistance.isValid() || !resources.validation.isValid()) {
+        !resources.blueNoise.isValid() || !resources.terrainAlbedo.isValid() || !resources.terrainNormal.isValid() ||
+        !resources.terrainSpecular.isValid() || !resources.grassColormap.isValid() ||
+        !resources.foliageColormap.isValid() || !resources.skyCapture.isValid() ||
+        !resources.diffuseRadianceHitDistance.isValid() || !resources.validation.isValid() ||
+        !lighting.bindGroupLayout.isValid() || !lighting.bindGroup.isValid() || !lighting.lights.isValid() ||
+        !lighting.worldCells.isValid() || !lighting.worldIndices.isValid() || !lighting.worldHeader.isValid() ||
+        !lighting.localShadowMetadata.isValid() || !lighting.localShadowSpotAtlas.isValid() ||
+        !lighting.localShadowPointCubeArray.isValid() || !validDirection(ctx.skyColors.sunDirection) ||
+        !validDirection(ctx.skyColors.moonDirection) || !validRadiance(ctx.skyIlluminance.sunIlluminance) ||
+        !validRadiance(ctx.skyIlluminance.moonIlluminance) || !validRadiance(ctx.skyIlluminance.skyIlluminance) ||
+        !unitInterval(ctx.skyColors.sunVisibility) || !unitInterval(ctx.skyColors.moonVisibility)) {
         return {};
     }
 
@@ -132,6 +164,7 @@ RgPassHandle RtgiTracePass::addGraphPass(RenderGraph& graph, const FrameContext&
 
     const FrameContext* frame = &ctx;
     const GraphResources frameResources = resources;
+    const LightingResources frameLighting = lighting;
     const uint64_t sceneTlasRevision = activeTlas->revision;
     TraceSceneBuffers sceneBuffers;
     sceneBuffers.terrainHitDataBytes = activeTlas->terrainHitDataBytes;
@@ -148,39 +181,59 @@ RgPassHandle RtgiTracePass::addGraphPass(RenderGraph& graph, const FrameContext&
         .readTexture(resources.materialAux, RhiResourceState::ShaderRead)
         .readTexture(resources.blueNoise, RhiResourceState::ShaderRead)
         .readTexture(resources.terrainAlbedo, RhiResourceState::ShaderRead)
+        .readTexture(resources.terrainNormal, RhiResourceState::ShaderRead)
+        .readTexture(resources.terrainSpecular, RhiResourceState::ShaderRead)
+        .readTexture(resources.grassColormap, RhiResourceState::ShaderRead)
+        .readTexture(resources.foliageColormap, RhiResourceState::ShaderRead)
+        .readTexture(resources.skyCapture, RhiResourceState::ShaderRead)
         .readBuffer(terrainHitData, RhiResourceState::StorageBuffer)
         .readBuffer(gpuSceneMaterials, RhiResourceState::StorageBuffer)
         .readBuffer(gpuSceneGeometries, RhiResourceState::StorageBuffer)
         .readBuffer(gpuSceneInstances, RhiResourceState::StorageBuffer)
+        .readBuffer(lighting.lights, RhiResourceState::StorageBuffer)
+        .readBuffer(lighting.worldCells, RhiResourceState::StorageBuffer)
+        .readBuffer(lighting.worldIndices, RhiResourceState::StorageBuffer)
+        .readBuffer(lighting.worldHeader, RhiResourceState::StorageBuffer)
+        .readBuffer(lighting.localShadowMetadata, RhiResourceState::StorageBuffer)
+        .readTexture(lighting.localShadowSpotAtlas, RhiResourceState::DepthRead)
+        .readTexture(lighting.localShadowPointCubeArray, RhiResourceState::DepthRead)
         .writeTexture(resources.diffuseRadianceHitDistance, RhiResourceState::ShaderWrite)
         .writeTexture(resources.validation, RhiResourceState::ShaderWrite)
-        .setExecute([this, frame, settings, frameResources, terrainHitData, gpuSceneMaterials, gpuSceneGeometries,
-                     gpuSceneInstances, sceneBuffers, sceneTlasRevision](RgPassContext& pass) mutable {
+        .setExecute([this, frame, settings, frameResources, frameLighting, terrainHitData, gpuSceneMaterials,
+                     gpuSceneGeometries, gpuSceneInstances, sceneBuffers,
+                     sceneTlasRevision](RgPassContext& pass) mutable {
             const TraceViews views{pass.textureView(frameResources.depth),
                                    pass.textureView(frameResources.normalAo),
                                    pass.textureView(frameResources.materialAux),
                                    pass.textureView(frameResources.blueNoise),
                                    pass.textureView(frameResources.terrainAlbedo),
+                                   pass.textureView(frameResources.terrainNormal),
+                                   pass.textureView(frameResources.terrainSpecular),
+                                   pass.textureView(frameResources.grassColormap),
+                                   pass.textureView(frameResources.foliageColormap),
+                                   pass.textureView(frameResources.skyCapture),
                                    pass.textureView(frameResources.diffuseRadianceHitDistance),
                                    pass.textureView(frameResources.validation)};
             sceneBuffers.terrainHitData = pass.buffer(terrainHitData);
             sceneBuffers.gpuSceneMaterials = pass.buffer(gpuSceneMaterials);
             sceneBuffers.gpuSceneGeometries = pass.buffer(gpuSceneGeometries);
             sceneBuffers.gpuSceneInstances = pass.buffer(gpuSceneInstances);
-            return recordTrace(pass.commandList(), *frame, settings, views, sceneBuffers, sceneTlasRevision);
+            return recordTrace(pass.commandList(), *frame, settings, views, sceneBuffers, frameLighting.bindGroupLayout,
+                               frameLighting.bindGroup, sceneTlasRevision);
         });
     return trace.handle();
 }
 
 bool RtgiTracePass::recordTrace(RhiCommandList& commandList, const FrameContext& ctx, const Settings& settings,
                                 const TraceViews& views, const TraceSceneBuffers& sceneBuffers,
-                                const uint64_t sceneTlasRevision) {
+                                const RhiBindGroupLayoutHandle lightingLayout,
+                                const RhiBindGroupHandle lightingBindGroup, const uint64_t sceneTlasRevision) {
     const glm::mat4& inverseViewProjection =
         settings.useJitteredProjection ? ctx.camera.jitteredInvViewProj : ctx.camera.invViewProj;
     if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr || ctx.shared->globalBindlessSet == nullptr ||
         !finiteMatrix(inverseViewProjection) || !std::isfinite(ctx.animationTime) ||
-        sceneBuffers.sceneInstanceCount == 0u ||
-        !ensurePipeline(*ctx.shared->rhiDevice, ctx.shared->globalBindlessSet->layout()) ||
+        sceneBuffers.sceneInstanceCount == 0u || !lightingBindGroup.isValid() ||
+        !ensurePipeline(*ctx.shared->rhiDevice, ctx.shared->globalBindlessSet->layout(), lightingLayout) ||
         !ensureBindGroup(*ctx.shared->rhiDevice, views, sceneBuffers)) {
         return false;
     }
@@ -193,13 +246,31 @@ bool RtgiTracePass::recordTrace(RhiCommandList& commandList, const FrameContext&
                                                   settings.minimumRayOriginBias, ctx.animationTime);
     pushConstants.frameMaskAndFlags =
         glm::uvec4(static_cast<uint32_t>(ctx.frameIndex), static_cast<uint32_t>(settings.instanceMask),
-                   sceneBuffers.sceneInstanceCount, 0u);
+                   sceneBuffers.sceneInstanceCount, static_cast<uint32_t>(settings.shadowInstanceMask));
     pushConstants.materialGeometryCounts =
         glm::uvec4(sceneBuffers.gpuSceneMaterialCount, sceneBuffers.gpuSceneGeometryCount, 0u, 0u);
+
+    renderer::contracts::RtgiSecondaryLightingParams lightingParams;
+    lightingParams.sunDirectionAndVisibility = glm::vec4(ctx.skyColors.sunDirection, ctx.skyColors.sunVisibility);
+    lightingParams.moonDirectionAndVisibility = glm::vec4(ctx.skyColors.moonDirection, ctx.skyColors.moonVisibility);
+    lightingParams.sunRadiance = glm::vec4(ctx.skyIlluminance.sunIlluminance, 0.0f);
+    lightingParams.moonRadiance = glm::vec4(ctx.skyIlluminance.moonIlluminance, 0.0f);
+    lightingParams.skyAmbientRadiance = glm::vec4(ctx.skyIlluminance.skyIlluminance, 0.0f);
+    lightingParams.traceAndEmissionScales = glm::vec4(settings.maxShadowRayDistance, 1.5f, 1.0f, 0.0f);
+    lightingParams.flags.x =
+        (settings.terrainNormalMapsEnabled ? renderer::contracts::kRtgiSecondaryLightingTerrainNormalMapBit : 0u) |
+        (settings.terrainSpecularMapsEnabled ? renderer::contracts::kRtgiSecondaryLightingTerrainSpecularMapBit : 0u);
+
+    commandList.bufferBarrier(
+        {m_secondaryLightingBuffer, RhiResourceState::UniformBuffer, RhiResourceState::TransferDst});
+    commandList.updateBuffer(m_secondaryLightingBuffer, 0u, &lightingParams, sizeof(lightingParams));
+    commandList.bufferBarrier(
+        {m_secondaryLightingBuffer, RhiResourceState::TransferDst, RhiResourceState::UniformBuffer});
 
     commandList.setComputePipeline(m_pipeline);
     commandList.setBindGroup(0u, ctx.shared->globalBindlessSet->bindGroup());
     commandList.setBindGroup(1u, m_traceBindGroup);
+    commandList.setBindGroup(2u, lightingBindGroup);
     commandList.pushConstants(&pushConstants, sizeof(pushConstants), rhiFlag(RhiShaderStage::Compute));
     commandList.dispatch((extent.width + 7u) / 8u, (extent.height + 7u) / 8u, 1u);
 
@@ -218,21 +289,24 @@ bool RtgiTracePass::recordTrace(RhiCommandList& commandList, const FrameContext&
     return true;
 }
 
-bool RtgiTracePass::ensurePipeline(RhiDevice& rhiDevice, const RhiBindGroupLayoutHandle globalBindlessLayout) {
+bool RtgiTracePass::ensurePipeline(RhiDevice& rhiDevice, const RhiBindGroupLayoutHandle globalBindlessLayout,
+                                   const RhiBindGroupLayoutHandle lightingLayout) {
     if (m_rhiDevice != nullptr && m_rhiDevice != &rhiDevice) {
         destroyRhiResources();
     }
-    if (m_pipeline.isValid() && sameHandle(m_globalBindlessLayout, globalBindlessLayout)) {
+    if (m_pipeline.isValid() && sameHandle(m_globalBindlessLayout, globalBindlessLayout) &&
+        sameHandle(m_lightingLayout, lightingLayout)) {
         return true;
     }
     if (m_pipeline.isValid()) {
         destroyRhiResources();
     }
-    if (!globalBindlessLayout.isValid()) {
+    if (!globalBindlessLayout.isValid() || !lightingLayout.isValid()) {
         return false;
     }
     m_rhiDevice = &rhiDevice;
     m_globalBindlessLayout = globalBindlessLayout;
+    m_lightingLayout = lightingLayout;
 
     const std::optional<std::string> source = renderer::rhi::loadShaderSource("assets/shaders/rtgi_trace.comp");
     if (!source.has_value()) {
@@ -259,14 +333,28 @@ bool RtgiTracePass::ensurePipeline(RhiDevice& rhiDevice, const RhiBindGroupLayou
     samplerDesc.addressW = RhiAddressMode::ClampToEdge;
     m_sampler = rhiDevice.createSampler(samplerDesc);
     RhiSamplerDesc terrainSamplerDesc;
-    terrainSamplerDesc.minFilter = RhiFilter::Nearest;
-    terrainSamplerDesc.magFilter = RhiFilter::Nearest;
+    terrainSamplerDesc.minFilter = RhiFilter::Linear;
+    terrainSamplerDesc.magFilter = RhiFilter::Linear;
     terrainSamplerDesc.mipmapMode = RhiMipmapMode::Linear;
     terrainSamplerDesc.addressU = RhiAddressMode::Repeat;
     terrainSamplerDesc.addressV = RhiAddressMode::Repeat;
     terrainSamplerDesc.addressW = RhiAddressMode::Repeat;
     m_terrainSampler = rhiDevice.createSampler(terrainSamplerDesc);
-    if (!m_sampler.isValid() || !m_terrainSampler.isValid()) {
+    RhiSamplerDesc linearClampSamplerDesc = terrainSamplerDesc;
+    linearClampSamplerDesc.addressU = RhiAddressMode::ClampToEdge;
+    linearClampSamplerDesc.addressV = RhiAddressMode::ClampToEdge;
+    linearClampSamplerDesc.addressW = RhiAddressMode::ClampToEdge;
+    m_linearClampSampler = rhiDevice.createSampler(linearClampSamplerDesc);
+    RhiBufferDesc lightingBufferDesc;
+    lightingBufferDesc.debugName = "RTGI.SecondaryLightingParams";
+    lightingBufferDesc.size = sizeof(renderer::contracts::RtgiSecondaryLightingParams);
+    lightingBufferDesc.usage = rhiFlag(RhiBufferUsage::Uniform) | rhiFlag(RhiBufferUsage::TransferDst);
+    lightingBufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+    lightingBufferDesc.initialState = RhiResourceState::UniformBuffer;
+    lightingBufferDesc.memoryCategory = RhiMemoryCategory::SceneData;
+    m_secondaryLightingBuffer = rhiDevice.createBuffer(lightingBufferDesc, nullptr, 0u);
+    if (!m_sampler.isValid() || !m_terrainSampler.isValid() || !m_linearClampSampler.isValid() ||
+        !m_secondaryLightingBuffer.isValid()) {
         destroyRhiResources();
         return false;
     }
@@ -286,6 +374,11 @@ bool RtgiTracePass::ensurePipeline(RhiDevice& rhiDevice, const RhiBindGroupLayou
         traceLayoutDesc.entries.push_back(
             {binding, RhiBindingType::StorageBuffer, rhiFlag(RhiShaderStage::Compute), 1u});
     }
+    for (uint32_t binding = 11u; binding <= 15u; ++binding) {
+        traceLayoutDesc.entries.push_back(
+            {binding, RhiBindingType::CombinedTextureSampler, rhiFlag(RhiShaderStage::Compute), 1u});
+    }
+    traceLayoutDesc.entries.push_back({16u, RhiBindingType::UniformBuffer, rhiFlag(RhiShaderStage::Compute), 1u});
     m_traceBindGroupLayout = rhiDevice.createBindGroupLayout(traceLayoutDesc);
     if (!m_traceBindGroupLayout.isValid()) {
         destroyRhiResources();
@@ -296,6 +389,7 @@ bool RtgiTracePass::ensurePipeline(RhiDevice& rhiDevice, const RhiBindGroupLayou
     pipelineLayoutDesc.debugName = "RTGI.Trace.PipelineLayout";
     pipelineLayoutDesc.bindGroupLayouts.push_back(globalBindlessLayout);
     pipelineLayoutDesc.bindGroupLayouts.push_back(m_traceBindGroupLayout);
+    pipelineLayoutDesc.bindGroupLayouts.push_back(lightingLayout);
     pipelineLayoutDesc.pushConstantBytes = sizeof(renderer::contracts::RtgiTracePushConstants);
     pipelineLayoutDesc.pushConstantStages = rhiFlag(RhiShaderStage::Compute);
     m_pipelineLayout = rhiDevice.createPipelineLayout(pipelineLayoutDesc);
@@ -318,16 +412,29 @@ bool RtgiTracePass::ensurePipeline(RhiDevice& rhiDevice, const RhiBindGroupLayou
 
 bool RtgiTracePass::ensureBindGroup(RhiDevice& rhiDevice, const TraceViews& views,
                                     const TraceSceneBuffers& sceneBuffers) {
-    const std::array<RhiTextureViewHandle, 7u> boundViews{views.depth,         views.normalAo,
-                                                          views.materialAux,   views.blueNoise,
-                                                          views.terrainAlbedo, views.diffuseRadianceHitDistance,
-                                                          views.validation};
+    const std::array<RhiTextureViewHandle, 12u> boundViews{views.depth,
+                                                           views.normalAo,
+                                                           views.materialAux,
+                                                           views.blueNoise,
+                                                           views.terrainAlbedo,
+                                                           views.terrainNormal,
+                                                           views.terrainSpecular,
+                                                           views.grassColormap,
+                                                           views.foliageColormap,
+                                                           views.skyCapture,
+                                                           views.diffuseRadianceHitDistance,
+                                                           views.validation};
     for (const RhiTextureViewHandle view : boundViews) {
         if (!view.isValid()) {
             return false;
         }
     }
     RhiTextureViewDesc terrainAlbedoDesc;
+    RhiTextureViewDesc terrainNormalDesc;
+    RhiTextureViewDesc terrainSpecularDesc;
+    RhiTextureViewDesc grassColormapDesc;
+    RhiTextureViewDesc foliageColormapDesc;
+    RhiTextureViewDesc skyCaptureDesc;
     const std::array<RhiBufferHandle, 4u> boundSceneBuffers{sceneBuffers.terrainHitData, sceneBuffers.gpuSceneMaterials,
                                                             sceneBuffers.gpuSceneGeometries,
                                                             sceneBuffers.gpuSceneInstances};
@@ -339,7 +446,17 @@ bool RtgiTracePass::ensureBindGroup(RhiDevice& rhiDevice, const TraceViews& view
         std::any_of(boundSceneBufferBytes.begin(), boundSceneBufferBytes.end(),
                     [](const uint64_t bytes) { return bytes == 0u; }) ||
         !rhiDevice.getTextureViewDesc(views.terrainAlbedo, terrainAlbedoDesc) ||
-        terrainAlbedoDesc.viewType != RhiTextureViewType::Texture2DArray) {
+        !rhiDevice.getTextureViewDesc(views.terrainNormal, terrainNormalDesc) ||
+        !rhiDevice.getTextureViewDesc(views.terrainSpecular, terrainSpecularDesc) ||
+        !rhiDevice.getTextureViewDesc(views.grassColormap, grassColormapDesc) ||
+        !rhiDevice.getTextureViewDesc(views.foliageColormap, foliageColormapDesc) ||
+        !rhiDevice.getTextureViewDesc(views.skyCapture, skyCaptureDesc) ||
+        terrainAlbedoDesc.viewType != RhiTextureViewType::Texture2DArray ||
+        terrainNormalDesc.viewType != RhiTextureViewType::Texture2DArray ||
+        terrainSpecularDesc.viewType != RhiTextureViewType::Texture2DArray ||
+        grassColormapDesc.viewType != RhiTextureViewType::Texture2D ||
+        foliageColormapDesc.viewType != RhiTextureViewType::Texture2D ||
+        skyCaptureDesc.viewType != RhiTextureViewType::Texture2D) {
         return false;
     }
     bool unchanged = m_traceBindGroup.isValid();
@@ -370,7 +487,7 @@ bool RtgiTracePass::ensureBindGroup(RhiDevice& rhiDevice, const TraceViews& view
     for (uint32_t binding = 4u; binding < 6u; ++binding) {
         RhiBindGroupEntry entry;
         entry.binding = binding;
-        entry.resource.textureView = boundViews[binding + 1u];
+        entry.resource.textureView = boundViews[binding + 6u];
         bindGroupDesc.entries.push_back(entry);
     }
     RhiBindGroupEntry hitDataEntry;
@@ -387,6 +504,20 @@ bool RtgiTracePass::ensureBindGroup(RhiDevice& rhiDevice, const TraceViews& view
         sceneBufferEntry.resource.buffer = {boundSceneBuffers[index], 0u, boundSceneBufferBytes[index]};
         bindGroupDesc.entries.push_back(sceneBufferEntry);
     }
+    const std::array<RhiTextureViewHandle, 5u> materialViews{
+        views.terrainNormal, views.terrainSpecular, views.grassColormap, views.foliageColormap, views.skyCapture};
+    for (uint32_t index = 0u; index < materialViews.size(); ++index) {
+        RhiBindGroupEntry entry;
+        entry.binding = 11u + index;
+        entry.resource.combinedTextureSampler.textureView = materialViews[index];
+        entry.resource.combinedTextureSampler.sampler = index < 2u ? m_terrainSampler : m_linearClampSampler;
+        bindGroupDesc.entries.push_back(entry);
+    }
+    RhiBindGroupEntry lightingParamsEntry;
+    lightingParamsEntry.binding = 16u;
+    lightingParamsEntry.resource.buffer = {m_secondaryLightingBuffer, 0u,
+                                           sizeof(renderer::contracts::RtgiSecondaryLightingParams)};
+    bindGroupDesc.entries.push_back(lightingParamsEntry);
     m_traceBindGroup = rhiDevice.createBindGroup(bindGroupDesc);
     if (!m_traceBindGroup.isValid()) {
         m_boundViews = {};
@@ -420,6 +551,12 @@ void RtgiTracePass::destroyRhiResources() {
         if (m_terrainSampler.isValid()) {
             m_rhiDevice->destroySampler(m_terrainSampler);
         }
+        if (m_linearClampSampler.isValid()) {
+            m_rhiDevice->destroySampler(m_linearClampSampler);
+        }
+        if (m_secondaryLightingBuffer.isValid()) {
+            m_rhiDevice->destroyBuffer(m_secondaryLightingBuffer);
+        }
         if (m_shader.isValid()) {
             m_rhiDevice->destroyShader(m_shader);
         }
@@ -428,7 +565,10 @@ void RtgiTracePass::destroyRhiResources() {
     m_shader = {};
     m_sampler = {};
     m_terrainSampler = {};
+    m_linearClampSampler = {};
+    m_secondaryLightingBuffer = {};
     m_globalBindlessLayout = {};
+    m_lightingLayout = {};
     m_traceBindGroupLayout = {};
     m_pipelineLayout = {};
     m_pipeline = {};

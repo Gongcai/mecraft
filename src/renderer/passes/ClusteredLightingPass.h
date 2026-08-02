@@ -3,6 +3,7 @@
 
 #include "RenderPass.h"
 #include "renderer/contracts/ClusteredLightingContract.h"
+#include "renderer/contracts/WorldLightGridContract.h"
 #include "renderer/core/FrameContext.h"
 #include "renderer/rhi/RhiHandles.h"
 #include "renderer/rhi/RhiRenderGraph.h"
@@ -25,6 +26,10 @@ struct ClusteredLightingFrameStats final {
     uint32_t nonEmptyClusterCount = 0u;
     uint32_t indexCapacity = 0u;
     uint32_t buildError = 0u;
+    uint32_t worldCellCount = 0u;
+    uint32_t worldIndexCount = 0u;
+    uint32_t worldGlobalLightCount = 0u;
+    uint32_t maxWorldLightsPerCell = 0u;
     float averageLightsPerCluster = 0.0f;
 };
 
@@ -51,6 +56,9 @@ public:
         RgBufferHandle compactIndices;
         RgBufferHandle scanScratch;
         RgBufferHandle stats;
+        RgBufferHandle worldCells;
+        RgBufferHandle worldIndices;
+        RgBufferHandle worldHeader;
     };
 
     void shutdown() override;
@@ -127,6 +135,13 @@ private:
         uint32_t blockSumOffsetWords = 0u;
     };
 
+    struct WorldLightGridStatsSnapshot final {
+        uint32_t cellCount = 0u;
+        uint32_t indexCount = 0u;
+        uint32_t globalLightCount = 0u;
+        uint32_t maxLightsPerCell = 0u;
+    };
+
     [[nodiscard]] bool validateLights() const;
     [[nodiscard]] bool consumeReadback(RhiDevice& rhiDevice);
     [[nodiscard]] bool buildCoverage(const FrameContext& ctx, uint32_t renderWidth, uint32_t renderHeight);
@@ -148,6 +163,8 @@ private:
     [[nodiscard]] bool recordFinalize(RhiCommandList& commandList) const;
     [[nodiscard]] bool recordFill(RhiCommandList& commandList) const;
     [[nodiscard]] bool recordValidateAndReadback(RhiCommandList& commandList);
+    [[nodiscard]] WorldLightGridStatsSnapshot captureWorldLightGridStats() const;
+    void applyWorldLightGridStats(const WorldLightGridStatsSnapshot& snapshot);
     void publishEmptyFrameStats();
 
     void destroyBuildBindGroups();
@@ -163,6 +180,7 @@ private:
     bool m_emptyBuildScheduled = false;
     std::vector<renderer::contracts::GpuLight> m_lights;
     std::vector<renderer::contracts::GpuClusterLightBounds> m_lightBounds;
+    renderer::contracts::WorldLightGridBuildResult m_worldLightGrid;
     std::vector<uint32_t> m_zeroClusterWords;
     renderer::contracts::ClusterGrid m_grid;
     uint32_t m_requiredIndexCount = 0u;
@@ -179,6 +197,9 @@ private:
     BufferResource m_compactIndexBuffer;
     BufferResource m_scanScratchBuffer;
     BufferResource m_statsBuffer;
+    BufferResource m_worldCellBuffer;
+    BufferResource m_worldIndexBuffer;
+    BufferResource m_worldHeaderBuffer;
 
     ComputeStage m_countStage;
     ComputeStage m_scanStage;
@@ -202,6 +223,7 @@ private:
     std::array<RhiBufferHandle, kStatsReadbackRingSize> m_statsReadbackBuffers{};
     std::array<bool, kStatsReadbackRingSize> m_statsReadbackWritten{};
     std::array<RhiSubmissionToken, kStatsReadbackRingSize> m_statsReadbackTokens{};
+    std::array<WorldLightGridStatsSnapshot, kStatsReadbackRingSize> m_statsReadbackWorldSnapshots{};
     uint32_t m_statsReadbackWriteIndex = 0u;
     uint32_t m_pendingStatsReadbackIndex = 0u;
     bool m_statsReadbackSlotAvailable = true;

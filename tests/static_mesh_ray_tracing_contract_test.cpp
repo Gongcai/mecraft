@@ -46,8 +46,10 @@ int main() {
 
     std::string contractSource;
     std::string querySource;
+    std::string traceSource;
     valid = requireTrue(readSource("/assets/shaders/static_mesh_ray_tracing_contract.glsl", contractSource) &&
-                            readSource("/assets/shaders/static_mesh_ray_query.glsl", querySource),
+                            readSource("/assets/shaders/static_mesh_ray_query.glsl", querySource) &&
+                            readSource("/assets/shaders/rtgi_trace.comp", traceSource),
                         "static-mesh ray-tracing GLSL sources must be readable") &&
             valid;
     valid =
@@ -67,9 +69,20 @@ int main() {
                             querySource.find("staticMeshRayQueryConeTextureLod") != std::string::npos &&
                             querySource.find("staticMeshRayQuerySampleMaterial") != std::string::npos &&
                             querySource.find("staticMeshRayQuerySampleBaseColor") != std::string::npos &&
+                            querySource.find("staticMeshRayQueryCommittedSurface") != std::string::npos &&
+                            querySource.find("decodeGltfMaterial") != std::string::npos &&
+                            querySource.find("evaluateMaterialEmission") != std::string::npos &&
+                            querySource.find("pbrMaterialSpecularF0") != std::string::npos &&
+                            querySource.find("GPU_MATERIAL_TEXTURE_THICKNESS") != std::string::npos &&
                             querySource.find("staticMeshRayQueryCandidateAlphaPasses") != std::string::npos &&
                             querySource.find("staticMeshRayQueryCommittedIdentity") != std::string::npos,
                         "ray-query source must expose indexed attribute, material, alpha, and identity paths") &&
+            valid;
+    valid = requireTrue(traceSource.find("staticMeshRayQueryCommittedSurface(") != std::string::npos &&
+                            traceSource.find("rtgiAccumulateWorldLights") != std::string::npos &&
+                            traceSource.find("worldLightGridCellRange") != std::string::npos &&
+                            traceSource.find("sampleSkyRadiance(uSkyCapture, rayDirection)") != std::string::npos,
+                        "RTGI trace must consume static committed material, world lights, and miss sky radiance") &&
             valid;
     const std::size_t candidateStart = querySource.find("bool staticMeshRayQueryCandidateAlphaPasses");
     const std::size_t committedStart = querySource.find("bool staticMeshRayQueryCommittedIdentity");

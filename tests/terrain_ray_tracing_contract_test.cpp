@@ -30,6 +30,12 @@ namespace {
         return false;
     }
     const std::string querySource{std::istreambuf_iterator<char>(queryFile), std::istreambuf_iterator<char>()};
+    const std::string tracePath = std::string(MECRAFT_TEST_SOURCE_DIR) + "/assets/shaders/rtgi_trace.comp";
+    std::ifstream traceFile(tracePath);
+    if (!traceFile.is_open()) {
+        return false;
+    }
+    const std::string traceSource{std::istreambuf_iterator<char>(traceFile), std::istreambuf_iterator<char>()};
     return source.find("const uint TERRAIN_RAY_TRACING_CONTRACT_VERSION = 1u;") != std::string::npos &&
            source.find("const uint TERRAIN_RAY_TRACING_VERTEX_STRIDE = 32u;") != std::string::npos &&
            source.find("const uint TERRAIN_RAY_TRACING_VERTEX_UV_OFFSET = 12u;") != std::string::npos &&
@@ -41,9 +47,18 @@ namespace {
            source.find("struct TerrainRayTracingGpuInstance") != std::string::npos &&
            source.find("int terrainPrimitiveFace(TerrainPrimitiveMetadata metadata)") != std::string::npos &&
            querySource.find("layout(buffer_reference, std430, buffer_reference_align = 4)") != std::string::npos &&
-           querySource.find("vec2 terrainRayQueryBarycentricUv") != std::string::npos &&
+           querySource.find("bool terrainRayQueryInterpolateAttributes") != std::string::npos &&
            querySource.find("bool terrainRayQueryConeTextureLod") != std::string::npos &&
-           querySource.find("bool terrainRayQueryCandidateAlphaPasses") != std::string::npos;
+           querySource.find("bool terrainRayQueryCandidateAlphaPasses") != std::string::npos &&
+           querySource.find("bool terrainRayQueryCommittedSurface") != std::string::npos &&
+           querySource.find("decodeLabPbrNormal") != std::string::npos &&
+           querySource.find("decodeLabPbrSpecular") != std::string::npos &&
+           querySource.find("textureLod(grassColormap") != std::string::npos &&
+           querySource.find("surface.emission = albedo * material.emission * emissionScale;") != std::string::npos &&
+           traceSource.find("terrainRayQueryCommittedSurface(") != std::string::npos &&
+           traceSource.find("rtgiAccumulateWorldLights") != std::string::npos &&
+           traceSource.find("worldLightGridCellRange") != std::string::npos &&
+           traceSource.find("sampleSkyRadiance(uSkyCapture, rayDirection)") != std::string::npos;
 }
 
 } // namespace

@@ -100,6 +100,7 @@ bool ClusteredLightingPass::setLights(std::vector<renderer::contracts::GpuLight>
     m_inputValid = validateLights();
     if (!m_inputValid) {
         m_lights.clear();
+        m_worldLightGrid = {};
         m_prepared = false;
         m_emptyBuildReady = false;
         return false;
@@ -231,6 +232,7 @@ bool ClusteredLightingPass::consumeReadback(RhiDevice& rhiDevice) {
     m_frameStats.clusterCount = words[kStatsClusterCount];
     m_frameStats.lightCount = words[kStatsLightCount];
     m_frameStats.indexCapacity = words[kStatsIndexCapacity];
+    applyWorldLightGridStats(m_statsReadbackWorldSnapshots[ringIndex]);
     m_frameStats.averageLightsPerCluster =
         m_frameStats.clusterCount != 0u
             ? static_cast<float>(m_frameStats.totalIndexCount) / static_cast<float>(m_frameStats.clusterCount)
@@ -258,6 +260,12 @@ bool ClusteredLightingPass::buildCoverage(const FrameContext& ctx, const uint32_
         m_emptyBuildReady = false;
     }
     m_grid = *grid;
+    m_worldLightGrid = buildWorldLightGrid(m_lights);
+    if (!m_worldLightGrid.succeeded()) {
+        MECRAFT_LOG_STREAM(std::cerr << "[ClusteredLightingPass] World light grid build failed: "
+                                     << worldLightGridBuildErrorStableId(m_worldLightGrid.error) << '\n');
+        return false;
+    }
     m_lightBounds.clear();
     m_lightBounds.reserve(m_lights.size());
     for (uint32_t lightIndex = 0u; lightIndex < static_cast<uint32_t>(m_lights.size()); ++lightIndex) {
@@ -333,14 +341,15 @@ bool ClusteredLightingPass::ensurePipelines(RhiDevice& rhiDevice) {
 
     RhiBindGroupLayoutDesc consumerLayoutDesc;
     consumerLayoutDesc.debugName = "ClusteredLighting.ConsumerLayout";
+    const RhiShaderStageFlags consumerStages = rhiFlag(RhiShaderStage::Fragment) | rhiFlag(RhiShaderStage::Compute);
     for (uint32_t binding = 0u; binding < 5u; ++binding) {
-        consumerLayoutDesc.entries.push_back(
-            {binding, RhiBindingType::StorageBuffer, rhiFlag(RhiShaderStage::Fragment), 1u});
+        consumerLayoutDesc.entries.push_back({binding, RhiBindingType::StorageBuffer, consumerStages, 1u});
     }
-    consumerLayoutDesc.entries.push_back(
-        {5u, RhiBindingType::CombinedTextureSampler, rhiFlag(RhiShaderStage::Fragment), 1u});
-    consumerLayoutDesc.entries.push_back(
-        {6u, RhiBindingType::CombinedTextureSampler, rhiFlag(RhiShaderStage::Fragment), 1u});
+    consumerLayoutDesc.entries.push_back({5u, RhiBindingType::CombinedTextureSampler, consumerStages, 1u});
+    consumerLayoutDesc.entries.push_back({6u, RhiBindingType::CombinedTextureSampler, consumerStages, 1u});
+    for (uint32_t binding = 7u; binding <= 9u; ++binding) {
+        consumerLayoutDesc.entries.push_back({binding, RhiBindingType::StorageBuffer, consumerStages, 1u});
+    }
     m_consumerBindGroupLayout = rhiDevice.createBindGroupLayout(consumerLayoutDesc);
     if (!m_consumerBindGroupLayout.isValid()) {
         return false;
@@ -413,13 +422,18 @@ bool ClusteredLightingPass::ensureBuffers(RhiDevice& rhiDevice) {
     uint64_t recordBytes = 0u;
     uint64_t indexBytes = 0u;
     uint64_t scratchBytes = 0u;
+    uint64_t worldCellBytes = 0u;
+    uint64_t worldIndexBytes = 0u;
     if (!multiplyBytes(std::max<size_t>(m_lights.size(), 1u), sizeof(renderer::contracts::GpuLight), lightBytes) ||
         !multiplyBytes(std::max<size_t>(m_lightBounds.size(), 1u), sizeof(renderer::contracts::GpuClusterLightBounds),
                        boundsBytes) ||
         !multiplyBytes(m_grid.clusterCount, sizeof(uint32_t), clusterWordBytes) ||
         !multiplyBytes(m_grid.clusterCount, sizeof(uint32_t) * 2u, recordBytes) ||
         !multiplyBytes(std::max(m_requiredIndexCount, 1u), sizeof(uint32_t), indexBytes) ||
-        !multiplyBytes(std::max(m_scanScratchWordCount, 1u), sizeof(uint32_t), scratchBytes)) {
+        !multiplyBytes(std::max(m_scanScratchWordCount, 1u), sizeof(uint32_t), scratchBytes) ||
+        !multiplyBytes(std::max<size_t>(m_worldLightGrid.cells.size(), 1u),
+                       sizeof(renderer::contracts::GpuWorldLightCell), worldCellBytes) ||
+        !multiplyBytes(std::max<size_t>(m_worldLightGrid.lightIndices.size(), 1u), sizeof(uint32_t), worldIndexBytes)) {
         return false;
     }
 
@@ -428,7 +442,9 @@ bool ClusteredLightingPass::ensureBuffers(RhiDevice& rhiDevice) {
         clusterWordBytes > m_countBuffer.capacityBytes || clusterWordBytes > m_offsetBuffer.capacityBytes ||
         recordBytes > m_recordBuffer.capacityBytes || clusterWordBytes > m_cursorBuffer.capacityBytes ||
         indexBytes > m_compactIndexBuffer.capacityBytes || scratchBytes > m_scanScratchBuffer.capacityBytes ||
-        sizeof(uint32_t) * kStatsWordCount > m_statsBuffer.capacityBytes;
+        sizeof(uint32_t) * kStatsWordCount > m_statsBuffer.capacityBytes ||
+        worldCellBytes > m_worldCellBuffer.capacityBytes || worldIndexBytes > m_worldIndexBuffer.capacityBytes ||
+        sizeof(renderer::contracts::GpuWorldLightGridHeader) > m_worldHeaderBuffer.capacityBytes;
     if (buffersGrow) {
         m_emptyBuildReady = false;
         destroyBuildBindGroups();
@@ -456,6 +472,12 @@ bool ClusteredLightingPass::ensureBuffers(RhiDevice& rhiDevice) {
         !ensureBuffer(rhiDevice, m_statsBuffer, sizeof(uint32_t) * kStatsWordCount,
                       storageUploadUsage | rhiFlag(RhiBufferUsage::TransferSrc), RhiMemoryCategory::SceneData,
                       "ClusteredLighting.Stats") ||
+        !ensureBuffer(rhiDevice, m_worldCellBuffer, worldCellBytes, storageUploadUsage, RhiMemoryCategory::SceneData,
+                      "ClusteredLighting.WorldCells") ||
+        !ensureBuffer(rhiDevice, m_worldIndexBuffer, worldIndexBytes, storageUploadUsage, RhiMemoryCategory::SceneData,
+                      "ClusteredLighting.WorldIndices") ||
+        !ensureBuffer(rhiDevice, m_worldHeaderBuffer, sizeof(renderer::contracts::GpuWorldLightGridHeader),
+                      storageUploadUsage, RhiMemoryCategory::SceneData, "ClusteredLighting.WorldHeader") ||
         !ensureReadbackBuffers(rhiDevice)) {
         return false;
     }
@@ -612,6 +634,9 @@ bool ClusteredLightingPass::ensureConsumerBindGroup(RhiDevice& rhiDevice) {
     appendCombinedTextureSamplerBinding(desc, 5u, m_localShadowResources.spotAtlasView, m_localShadowResources.sampler);
     appendCombinedTextureSamplerBinding(desc, 6u, m_localShadowResources.pointCubeArrayView,
                                         m_localShadowResources.sampler);
+    appendStorageBinding(desc, 7u, m_worldCellBuffer.handle, m_worldCellBuffer.capacityBytes);
+    appendStorageBinding(desc, 8u, m_worldIndexBuffer.handle, m_worldIndexBuffer.capacityBytes);
+    appendStorageBinding(desc, 9u, m_worldHeaderBuffer.handle, m_worldHeaderBuffer.capacityBytes);
     m_consumerBindGroup = rhiDevice.createBindGroup(desc);
     return m_consumerBindGroup.isValid();
 }
@@ -628,7 +653,10 @@ bool ClusteredLightingPass::importGraphResources(RenderGraph& graph, GraphResour
            importBuffer(graph, m_cursorBuffer, resources.cursors) &&
            importBuffer(graph, m_compactIndexBuffer, resources.compactIndices) &&
            importBuffer(graph, m_scanScratchBuffer, resources.scanScratch) &&
-           importBuffer(graph, m_statsBuffer, resources.stats);
+           importBuffer(graph, m_statsBuffer, resources.stats) &&
+           importBuffer(graph, m_worldCellBuffer, resources.worldCells) &&
+           importBuffer(graph, m_worldIndexBuffer, resources.worldIndices) &&
+           importBuffer(graph, m_worldHeaderBuffer, resources.worldHeader);
 }
 
 bool ClusteredLightingPass::importBuffer(RenderGraph& graph, const BufferResource& resource,
@@ -670,6 +698,9 @@ RgPassHandle ClusteredLightingPass::addGraphPasses(RenderGraph& graph, const Gra
         .writeBuffer(resources.counts, RhiResourceState::TransferDst)
         .writeBuffer(resources.cursors, RhiResourceState::TransferDst)
         .writeBuffer(resources.stats, RhiResourceState::TransferDst)
+        .writeBuffer(resources.worldCells, RhiResourceState::TransferDst)
+        .writeBuffer(resources.worldIndices, RhiResourceState::TransferDst)
+        .writeBuffer(resources.worldHeader, RhiResourceState::TransferDst)
         .setExecute([this](RgPassContext& pass) { return recordUpload(pass.commandList()); });
     RgPassHandle tail = upload.handle();
 
@@ -750,6 +781,15 @@ bool ClusteredLightingPass::recordUpload(RhiCommandList& commandList) const {
         commandList.updateBuffer(m_lightBoundsBuffer.handle, 0u, m_lightBounds.data(),
                                  m_lightBounds.size() * sizeof(m_lightBounds.front()));
     }
+    if (!m_worldLightGrid.cells.empty()) {
+        commandList.updateBuffer(m_worldCellBuffer.handle, 0u, m_worldLightGrid.cells.data(),
+                                 m_worldLightGrid.cells.size() * sizeof(m_worldLightGrid.cells.front()));
+    }
+    if (!m_worldLightGrid.lightIndices.empty()) {
+        commandList.updateBuffer(m_worldIndexBuffer.handle, 0u, m_worldLightGrid.lightIndices.data(),
+                                 m_worldLightGrid.lightIndices.size() * sizeof(m_worldLightGrid.lightIndices.front()));
+    }
+    commandList.updateBuffer(m_worldHeaderBuffer.handle, 0u, &m_worldLightGrid.header, sizeof(m_worldLightGrid.header));
     commandList.updateBuffer(m_countBuffer.handle, 0u, m_zeroClusterWords.data(),
                              m_zeroClusterWords.size() * sizeof(m_zeroClusterWords.front()));
     commandList.updateBuffer(m_cursorBuffer.handle, 0u, m_zeroClusterWords.data(),
@@ -861,9 +901,23 @@ bool ClusteredLightingPass::recordValidateAndReadback(RhiCommandList& commandLis
     commandList.bufferBarrier(
         {m_statsReadbackBuffers[ringIndex], RhiResourceState::TransferDst, RhiResourceState::HostRead});
     commandList.bufferBarrier({m_statsBuffer.handle, RhiResourceState::TransferSrc, RhiResourceState::StorageBuffer});
+    m_statsReadbackWorldSnapshots[ringIndex] = captureWorldLightGridStats();
     m_pendingStatsReadbackIndex = ringIndex;
     m_statsReadbackPending = true;
     return true;
+}
+
+ClusteredLightingPass::WorldLightGridStatsSnapshot ClusteredLightingPass::captureWorldLightGridStats() const {
+    return {static_cast<uint32_t>(m_worldLightGrid.cells.size()),
+            static_cast<uint32_t>(m_worldLightGrid.lightIndices.size()), m_worldLightGrid.header.countsAndVersion.z,
+            m_worldLightGrid.maxLightsPerCell};
+}
+
+void ClusteredLightingPass::applyWorldLightGridStats(const WorldLightGridStatsSnapshot& snapshot) {
+    m_frameStats.worldCellCount = snapshot.cellCount;
+    m_frameStats.worldIndexCount = snapshot.indexCount;
+    m_frameStats.worldGlobalLightCount = snapshot.globalLightCount;
+    m_frameStats.maxWorldLightsPerCell = snapshot.maxLightsPerCell;
 }
 
 void ClusteredLightingPass::publishEmptyFrameStats() {
@@ -871,6 +925,7 @@ void ClusteredLightingPass::publishEmptyFrameStats() {
     m_frameStats.valid = true;
     m_frameStats.clusterCount = m_grid.clusterCount;
     m_frameStats.indexCapacity = m_indexCapacity;
+    applyWorldLightGridStats(captureWorldLightGridStats());
 }
 
 void ClusteredLightingPass::finishGraphExecution(const bool succeeded, const RhiSubmissionToken completionToken) {
@@ -969,7 +1024,8 @@ void ClusteredLightingPass::destroyBuffers() {
     if (m_rhiDevice != nullptr) {
         BufferResource* resources[] = {&m_lightBuffer,        &m_lightBoundsBuffer, &m_countBuffer,
                                        &m_offsetBuffer,       &m_recordBuffer,      &m_cursorBuffer,
-                                       &m_compactIndexBuffer, &m_scanScratchBuffer, &m_statsBuffer};
+                                       &m_compactIndexBuffer, &m_scanScratchBuffer, &m_statsBuffer,
+                                       &m_worldCellBuffer,    &m_worldIndexBuffer,  &m_worldHeaderBuffer};
         for (BufferResource* resource : resources) {
             if (resource->handle.isValid()) {
                 m_rhiDevice->destroyBuffer(resource->handle);
@@ -985,6 +1041,7 @@ void ClusteredLightingPass::destroyBuffers() {
     }
     m_statsReadbackWritten.fill(false);
     m_statsReadbackTokens.fill({});
+    m_statsReadbackWorldSnapshots.fill(WorldLightGridStatsSnapshot{});
     m_statsReadbackWriteIndex = 0u;
     m_pendingStatsReadbackIndex = 0u;
     m_statsReadbackSlotAvailable = true;
