@@ -101,9 +101,11 @@ Storage、Device Address 与 AS Build Input 用途；同一资产的多个 ECS �
 固定 GI Opaque/Cutout、Shadow、Reflection 与 First Person Mask。每个 TLAS 代际持有唯一 BLAS 集合，
 Desired/Pending/Active/Retired 状态机覆盖 Transform 连续变化、空场景、部分 Graph 提交失败及资产卸载。
 Terrain Custom Index 还保存所引用 BLAS 代际的 Vertex/Primitive Metadata Device Address、Stride、Revision
-及 Geometry Index 范围快照；每个 TLAS 代际同时持有按 Custom Index 排列的 64 字节 GPU 命中表，
+及 Geometry Index 范围快照；每个 TLAS 代际同时持有按 Custom Index 排列的 64 字节 Terrain 命中表，
 Terrain 写入完整地址与范围，Static Mesh 写入明确零记录。因此旧 Active TLAS 不会读取新换代
-Terrain BLAS 的地址。
+Terrain BLAS 的地址。另有 TLAS 代际专属的 `GpuMaterial`、`GpuSceneGeometry`、`GpuSceneInstance`
+三张表：Terrain 的 Instance 记录逐字节为零，Static Mesh 记录保存资产表范围、Transform、Bounds、
+Stable Object ID 与 Custom Index；同一模型资产只展开一次 Material/Geometry。
 Dashboard 已发布 Instance、唯一 BLAS、TLAS/BLAS 字节、Revision 与 Build 统计。Vulkan Smoke 覆盖
 Opaque/Cutout 多 Geometry BLAS、两个 Instance 共享同一 BLAS、Transform 换代与空场景退役；Damaged
 Helmet、Sponza 的 Vulkan 场景验收及 Damaged Helmet 的 OpenGL 基础渲染均已通过。
@@ -126,8 +128,10 @@ Geometry Index、Primitive ID 与 Barycentrics 定位固定 32 字节 `BlockVert
 生产 `RtgiTracePass` 已从 GBuffer 重建主表面，使用 Blue Noise、Cranley-Patterson 帧旋转与
 Cosine-weighted Hemisphere Sampling，并通过固定 Binding 4 对 `GI_OPAQUE | GI_CUTOUT` 执行 Compute
 Ray Query。Candidate Alpha 通过时显式调用 `rayQueryConfirmIntersectionEXT`，Validation Word 同时记录
-Classification、Candidate Count 与 Confirmed Count。以下各节继续约束模型次级命中着色和正式
-Deferred 消费链。
+Classification、Candidate Count 与 Confirmed Count。模型路径已从 Binding 8/9/10 读取 TLAS 代际
+Material/Geometry/Instance 表，通过固定顶点布局、Uint32 Index 与三角形 Metadata 重建属性，使用
+Global Bindless 纹理和 Sampler 执行 glTF Alpha Mask，并在 Validation Y 写入 Stable Material/Geometry
+Hash；Hit Distance 保存在 `RGBA16F` 输出 Alpha。以下各节继续约束次级命中辐射和正式 Deferred 消费链。
 
 ### 4.1 体素区块 BLAS
 
@@ -220,11 +224,14 @@ Opaque Triangle 可直接接受 Committed Intersection。Cutout Triangle 按以�
 4. 使用主视图同一 Alpha Cutoff 与纹理采样函数。
 5. Alpha 通过时调用 `rayQueryConfirmIntersectionEXT`。
 
-当前 Terrain 生产链已完成第 1、2、4、5 项：固定 Geometry Range 定位 Vertex/Metadata，Barycentrics
+Terrain 生产链已完成第 1、2、4、5 项：固定 Geometry Range 定位 Vertex/Metadata，Barycentrics
 重建 Greedy UV，动画元数据选择纹理层，显式 LOD 采样复用统一 Alpha Cutoff，并在通过时确认 Candidate。
-Biome Tint 与完整材质颜色属于次级命中辐射阶段，不参与 Alpha 边界。底层四射线 Smoke 与生产 2×1
-`RtgiTracePass` Smoke 分别锁定 Ray Query 内建值和真实纹理判定结果；模型 Alpha Mask 的材质读取归
-第 3 项继续实现。
+Biome Tint 与完整材质颜色属于次级命中辐射阶段，不参与 Alpha 边界。模型生产链同样完成 Candidate
+读取：Geometry Index 定位 `GpuSceneGeometry`，固定 48 字节顶点与 Uint32 Index 重建 Position、Normal、
+Tangent、UV，16 字节 Metadata 校验 Material/Geometry Stable ID；Alpha Candidate 仅按 Ray Cone LOD
+读取 Global Bindless Base Color，并应用 Base Color Factor 与 `materialPassesAlphaTest`。完整 12 语义
+材质采样函数保留给后续次级辐射阶段。Terrain 与模型各自的 2×1 生产 Smoke 均锁定 Cutout 拒绝后
+命中 Opaque 与显式确认结果。
 
 Ray Cone 根据射线距离、像素覆盖和三角形 UV 梯度选择 Texture LOD，避免树叶与细栅栏
 在次级射线中出现过度锐利闪烁。

@@ -1,10 +1,13 @@
 #ifndef MECRAFT_SCENE_TLAS_CACHE_H
 #define MECRAFT_SCENE_TLAS_CACHE_H
 
+#include "renderer/contracts/GpuMaterialContract.h"
+#include "renderer/contracts/GpuSceneContract.h"
 #include "renderer/contracts/TerrainRayTracingContract.h"
 #include "renderer/rhi/RhiHandles.h"
 #include "renderer/rhi/RhiResources.h"
 #include "renderer/rhi/SceneBlasResource.h"
+#include "renderer/rhi/StaticMeshRayTracingResource.h"
 #include "renderer/rhi/RhiTypes.h"
 
 #include <glm/mat4x4.hpp>
@@ -79,6 +82,7 @@ struct SceneTlasInstanceInput {
     uint8_t mask = 0u;
     bool doubleSided = false;
     std::optional<SceneTlasTerrainHitData> terrainHitData;
+    StaticMeshRayTracingResourcePtr staticMeshHitData;
 };
 
 /// Resolves one generated 24-bit custom index back to its stable identity and immutable terrain hit data.
@@ -86,6 +90,7 @@ struct SceneTlasInstanceMapping {
     uint32_t customIndex = 0u;
     SceneTlasInstanceKey key;
     std::optional<SceneTlasTerrainHitData> terrainHitData;
+    StaticMeshRayTracingResourcePtr staticMeshHitData;
 };
 
 /// Classifies an instance-list transaction independently from graph recording.
@@ -97,11 +102,20 @@ struct SceneTlasView {
     RhiAccelerationStructureHandle accelerationStructure;
     RhiBufferHandle instanceBuffer;
     RhiBufferHandle terrainHitDataBuffer;
+    RhiBufferHandle gpuSceneMaterialBuffer;
+    RhiBufferHandle gpuSceneGeometryBuffer;
+    RhiBufferHandle gpuSceneInstanceBuffer;
     uint64_t deviceAddress = 0u;
+    uint64_t bindlessIdentity = 0u;
     uint32_t instanceCount = 0u;
     uint32_t blasCount = 0u;
+    uint32_t gpuSceneMaterialCount = 0u;
+    uint32_t gpuSceneGeometryCount = 0u;
     uint64_t instanceBytes = 0u;
     uint64_t terrainHitDataBytes = 0u;
+    uint64_t gpuSceneMaterialBytes = 0u;
+    uint64_t gpuSceneGeometryBytes = 0u;
+    uint64_t gpuSceneInstanceBytes = 0u;
     uint64_t blasBytes = 0u;
     uint64_t tlasBytes = 0u;
     std::vector<SceneTlasInstanceMapping> mappings;
@@ -121,6 +135,9 @@ struct SceneTlasStats {
     uint64_t activeRevision = 0u;
     uint64_t activeInstanceBytes = 0u;
     uint64_t activeTerrainHitDataBytes = 0u;
+    uint64_t activeGpuSceneMaterialBytes = 0u;
+    uint64_t activeGpuSceneGeometryBytes = 0u;
+    uint64_t activeGpuSceneInstanceBytes = 0u;
     uint64_t activeBlasBytes = 0u;
     uint64_t activeTlasBytes = 0u;
     uint64_t buildsRecorded = 0u;
@@ -187,15 +204,25 @@ private:
         uint64_t revision = 0u;
         RhiBufferHandle instanceBuffer;
         RhiBufferHandle terrainHitDataBuffer;
+        RhiBufferHandle gpuSceneMaterialBuffer;
+        RhiBufferHandle gpuSceneGeometryBuffer;
+        RhiBufferHandle gpuSceneInstanceBuffer;
         RhiBufferHandle storageBuffer;
         RhiBufferHandle scratchBuffer;
         RhiAccelerationStructureHandle accelerationStructure;
         uint64_t deviceAddress = 0u;
+        uint64_t bindlessIdentity = 0u;
+        uint32_t gpuSceneMaterialCount = 0u;
+        uint32_t gpuSceneGeometryCount = 0u;
         uint64_t instanceBytes = 0u;
         uint64_t terrainHitDataBytes = 0u;
+        uint64_t gpuSceneMaterialBytes = 0u;
+        uint64_t gpuSceneGeometryBytes = 0u;
+        uint64_t gpuSceneInstanceBytes = 0u;
         uint64_t blasBytes = 0u;
         uint64_t tlasBytes = 0u;
         std::vector<SceneBlasResourcePtr> blasResources;
+        std::vector<StaticMeshRayTracingResourcePtr> staticMeshResources;
         std::vector<SceneTlasInstanceMapping> mappings;
         RhiSubmissionToken submissionToken;
         RhiSubmissionToken lastUseToken;

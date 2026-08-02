@@ -188,7 +188,8 @@ bool ForwardPipeline::prepareSceneTlas() {
                                  mask,
                                  false,
                                  renderer::rt::SceneTlasTerrainHitData{terrain.hitData, terrain.geometryBuffer,
-                                                                       terrain.primitiveMetadataBuffer}});
+                                                                       terrain.primitiveMetadataBuffer},
+                                 {}});
         }
     }
     const renderer::rt::SceneTlasSetResult result = cache.setInstances(std::move(instances));

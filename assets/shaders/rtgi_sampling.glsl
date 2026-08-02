@@ -31,6 +31,11 @@ uint rtgiSampleHash(uint value) {
     return value;
 }
 
+// Hashes stable material and geometry identities for the validation image.
+uint rtgiStableHitIdentityHash(uint stableMaterialId, uint stableGeometryId) {
+    return rtgiSampleHash(stableMaterialId * 0x9e3779b9u ^ stableGeometryId * 0x85ebca6bu);
+}
+
 // Returns the deterministic per-frame Cranley-Patterson rotation in [0, 1).
 vec2 rtgiCranleyPattersonRotation(uint frameIndex) {
     return vec2(float(rtgiSampleHash(frameIndex ^ 0x68bc21ebu) & 0x00ffffffu),

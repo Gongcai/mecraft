@@ -7,10 +7,18 @@
 #include "renderer/rhi/RhiResources.h"
 
 #include <cstdint>
+#include <memory>
+#include <vector>
 
 class RhiDevice;
 
 namespace renderer::core {
+
+/// Extends the lifetime of RHI resources published through descriptor-array slots.
+class GlobalBindlessLifetime {
+public:
+    virtual ~GlobalBindlessLifetime() = default;
+};
 
 /// Identifies deterministic Global Bindless Set initialization and publication failures.
 enum class GlobalBindlessSetError : uint8_t {
@@ -154,6 +162,13 @@ public:
     [[nodiscard]] RhiBindGroupHandle bindGroup() const { return m_bindGroup; }
     /// Returns the TLAS currently published at fixed Binding 4.
     [[nodiscard]] RhiAccelerationStructureHandle accelerationStructure() const { return m_accelerationStructure; }
+    /// Returns the unique identity of this initialized descriptor-set generation.
+    [[nodiscard]] uint64_t identity() const { return m_identity; }
+
+    /// Retains one resource bundle until the descriptor set has been destroyed.
+    /// @param lifetime Non-null owner of resources referenced by published descriptor slots.
+    /// @return None when the initialized set accepted the lifetime.
+    [[nodiscard]] GlobalBindlessSetError retainLifetime(std::shared_ptr<const GlobalBindlessLifetime> lifetime);
     /// Reports whether the Vulkan descriptor set is fully initialized.
     [[nodiscard]] bool initialized() const {
         return m_device != nullptr && m_layout.isValid() && m_bindGroup.isValid();
@@ -174,6 +189,8 @@ private:
     BindlessDescriptorSlotAllocator<renderer::contracts::BindlessSamplerTag> m_samplerSlots{0u};
     BindlessDescriptorSlotAllocator<renderer::contracts::BindlessStorageBufferTag> m_storageBufferSlots{0u};
     RhiAccelerationStructureHandle m_accelerationStructure;
+    std::vector<std::shared_ptr<const GlobalBindlessLifetime>> m_retainedLifetimes;
+    uint64_t m_identity = 0u;
     uint64_t m_accelerationStructureUpdateCount = 0u;
 };
 

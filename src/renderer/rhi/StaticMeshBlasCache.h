@@ -1,9 +1,14 @@
 #ifndef MECRAFT_STATIC_MESH_BLAS_CACHE_H
 #define MECRAFT_STATIC_MESH_BLAS_CACHE_H
 
+#include "renderer/contracts/GpuSceneContract.h"
 #include "renderer/contracts/SceneIdentityContract.h"
+#include "renderer/contracts/StaticMeshRayTracingContract.h"
 #include "renderer/rhi/RhiHandles.h"
 #include "renderer/rhi/SceneBlasResource.h"
+#include "renderer/rhi/StaticMeshRayTracingResource.h"
+
+#include <glm/vec3.hpp>
 
 #include <cstdint>
 #include <string>
@@ -17,12 +22,18 @@ namespace renderer::rt {
 /// Describes one raster primitive included as a geometry in an asset-level static BLAS.
 struct StaticMeshBlasGeometry {
     renderer::contracts::StableGeometryId geometryId;
+    renderer::contracts::StableMaterialId materialId;
     RhiBufferHandle vertexBuffer;
     RhiBufferHandle indexBuffer;
+    RhiBufferHandle primitiveMetadataBuffer;
     uint64_t positionOffset = 0u;
     uint64_t vertexStride = 0u;
     uint32_t vertexCount = 0u;
     uint32_t indexCount = 0u;
+    uint32_t materialIndex = renderer::contracts::kGpuSceneInvalidTableIndex;
+    uint32_t geometryRevision = renderer::contracts::kStaticMeshRayTracingGeometryRevision;
+    glm::vec3 localBoundsMin{0.0f};
+    glm::vec3 localBoundsMax{0.0f};
     bool opaque = true;
     bool doubleSided = false;
 
@@ -66,6 +77,9 @@ public:
 
     [[nodiscard]] bool supported() const { return m_supported; }
     [[nodiscard]] const SceneBlasResourcePtr& resource() const { return m_resource; }
+    [[nodiscard]] const std::vector<StaticMeshRayTracingGeometry>& rayTracingGeometries() const {
+        return m_rayTracingGeometries;
+    }
     [[nodiscard]] const StaticMeshBlasStats& stats() const { return m_stats; }
     [[nodiscard]] const std::string& lastError() const { return m_lastError; }
 
@@ -76,6 +90,7 @@ private:
     bool m_initialized = false;
     bool m_supported = false;
     SceneBlasResourcePtr m_resource;
+    std::vector<StaticMeshRayTracingGeometry> m_rayTracingGeometries;
     StaticMeshBlasStats m_stats;
     std::string m_lastError;
 };

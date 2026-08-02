@@ -25,6 +25,11 @@ int main() {
                             rtgiSampleHash(0xffffffffu) == 1734902346u,
                         "RTGI sample hash must remain bit-exact") &&
             valid;
+    valid =
+        requireTrue(rtgiStableHitIdentityHash(601u, 501u) == 1366735474u &&
+                        rtgiStableHitIdentityHash(602u, 502u) == 1027311900u && sizeof(RtgiTracePushConstants) == 128u,
+                    "RTGI stable hit identity and push-constant contracts must remain bit-exact") &&
+        valid;
 
     const glm::vec2 firstRotation = rtgiCranleyPattersonRotation(0u);
     const glm::vec2 repeatedRotation = rtgiCranleyPattersonRotation(0u);

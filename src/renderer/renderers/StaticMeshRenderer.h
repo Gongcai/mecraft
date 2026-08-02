@@ -13,6 +13,7 @@
 #include "../rhi/StaticMeshBlasCache.h"
 #include "../contracts/ClusteredLightingContract.h"
 #include "../contracts/GpuLightContract.h"
+#include "../contracts/GpuMaterialContract.h"
 #include "../contracts/SceneIdentityContract.h"
 
 class FrameContext;
@@ -20,6 +21,9 @@ class IWorldView;
 class ResourceMgr;
 class RhiCommandList;
 class RhiDevice;
+namespace renderer::core {
+class GlobalBindlessSet;
+}
 
 /// Loads and renders one static glTF 2.0 PBR showcase asset.
 class StaticMeshRenderer {
@@ -34,7 +38,8 @@ public:
     /// @param resourceMgr Provides the active RHI device and command pool.
     /// @param modelPath Filesystem path to a glTF 2.0 GLB or JSON document.
     /// @return True when the complete asset and all graphics pipelines are ready.
-    [[nodiscard]] bool init(ResourceMgr& resourceMgr, const std::string& modelPath);
+    [[nodiscard]] bool init(ResourceMgr& resourceMgr, const std::string& modelPath,
+                            renderer::core::GlobalBindlessSet* globalBindlessSet);
 
     /// Releases every GPU object owned by the renderer.
     void shutdown();
@@ -67,6 +72,11 @@ public:
 
     /// Returns static BLAS geometry classification and compacted residency diagnostics.
     [[nodiscard]] const renderer::rt::StaticMeshBlasStats& staticBlasStats() const { return m_staticBlasCache.stats(); }
+
+    /// Returns the immutable model Geometry/Material snapshot used by TLAS instances.
+    [[nodiscard]] const renderer::rt::StaticMeshRayTracingResourcePtr& staticRayTracingResource() const {
+        return m_staticRayTracingResource;
+    }
 
     /// Returns the currently prepared local-to-world transform for gameplay rendering.
     [[nodiscard]] const glm::mat4& instanceTransform() const { return m_modelMatrix; }
@@ -191,6 +201,9 @@ private:
     struct MaterialResource {
         RhiBufferHandle uniformBuffer;
         RhiBindGroupHandle bindGroup;
+        renderer::contracts::GpuMaterial gpuMaterial;
+        std::array<uint32_t, renderer::contracts::kGpuMaterialTextureSemanticCount> textureIndices{};
+        std::array<uint32_t, renderer::contracts::kGpuMaterialTextureSemanticCount> samplerIndices{};
         renderer::contracts::StableMaterialId materialId;
         bool doubleSided = false;
         bool alphaMasked = false;
@@ -202,10 +215,13 @@ private:
     struct PrimitiveResource {
         RhiBufferHandle vertexBuffer;
         RhiBufferHandle indexBuffer;
+        RhiBufferHandle primitiveMetadataBuffer;
         renderer::contracts::StableGeometryId geometryId;
         uint32_t vertexCount = 0u;
         uint32_t indexCount = 0u;
         uint32_t materialIndex = 0u;
+        glm::vec3 boundsMin{0.0f};
+        glm::vec3 boundsMax{0.0f};
         glm::vec3 boundsCenter{0.0f};
         bool retainedByBlas = false;
     };
@@ -215,6 +231,7 @@ private:
     [[nodiscard]] bool ensureTransparentPipelines(RhiBindGroupLayoutHandle clusteredLightingLayout);
     [[nodiscard]] bool loadAsset(const std::string& modelPath, ResourceMgr& resourceMgr);
     [[nodiscard]] bool buildStaticBlas(RhiCommandListPool& commandListPool);
+    [[nodiscard]] bool publishRayTracingResources(renderer::core::GlobalBindlessSet& globalBindlessSet);
     void destroyTransparentPipelines();
     void destroyPipelineResources();
     void setError(std::string message);
@@ -226,6 +243,7 @@ private:
     std::vector<PrimitiveResource> m_primitives;
     std::vector<renderer::contracts::AnalyticLightSourceDefinition> m_punctualLights;
     renderer::rt::StaticMeshBlasCache m_staticBlasCache;
+    renderer::rt::StaticMeshRayTracingResourcePtr m_staticRayTracingResource;
     RhiBufferHandle m_frameUniformBuffer;
     RhiBufferHandle m_probeCaptureFrameUniformBuffer;
     RhiBufferHandle m_probeCaptureLightBuffer;
@@ -277,6 +295,7 @@ private:
     renderer::contracts::StableObjectId m_objectId;
     bool m_instancePlaced = false;
     bool m_framePrepared = false;
+    bool m_bindlessOwnsTextures = false;
     uint32_t m_probeCaptureLightCapacity = 0u;
     std::string m_lastError;
 };

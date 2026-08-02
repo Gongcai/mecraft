@@ -18,6 +18,9 @@ class ImGuiRhiRenderer;
 class ResourceMgr;
 class RhiCommandListPool;
 class RhiDevice;
+namespace renderer::core {
+class GlobalBindlessSet;
+}
 struct RenderSettings;
 struct GpuFrameStats;
 enum class WeatherType;
@@ -93,6 +96,8 @@ public:
     [[nodiscard]] RhiTextureFormat captureTextureFormat() const;
     [[nodiscard]] const GpuFrameStats* gpuFrameStats() const;
     [[nodiscard]] ReflectionProbeCaptureFrameStats reflectionProbeCaptureStats() const;
+    /// Returns the Vulkan Global Bindless Set used by imported model assets, or nullptr on OpenGL.
+    [[nodiscard]] renderer::core::GlobalBindlessSet* globalBindlessSet();
     [[nodiscard]] const std::string& lastError() const;
 
 private:

@@ -31,6 +31,10 @@ uint32_t rtgiSampleHash(uint32_t value) {
     return value;
 }
 
+uint32_t rtgiStableHitIdentityHash(const uint32_t stableMaterialId, const uint32_t stableGeometryId) {
+    return rtgiSampleHash(stableMaterialId * 0x9e3779b9u ^ stableGeometryId * 0x85ebca6bu);
+}
+
 glm::vec2 rtgiCranleyPattersonRotation(const uint32_t frameIndex) {
     return {normalizedHash24(rtgiSampleHash(frameIndex ^ 0x68bc21ebu)),
             normalizedHash24(rtgiSampleHash(frameIndex ^ 0x02e5be93u))};

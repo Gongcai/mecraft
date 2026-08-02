@@ -2470,7 +2470,8 @@ bool DeferredPipeline::prepareSceneTlas() {
                                      mask,
                                      false,
                                      renderer::rt::SceneTlasTerrainHitData{terrain.hitData, terrain.geometryBuffer,
-                                                                           terrain.primitiveMetadataBuffer}});
+                                                                           terrain.primitiveMetadataBuffer},
+                                     {}});
             }
         }
         if (m_shared->staticMeshRenderer != nullptr) {
@@ -2491,13 +2492,21 @@ bool DeferredPipeline::prepareSceneTlas() {
                     mask |= renderer::rt::sceneTlasMaskBit(renderer::rt::SceneTlasInstanceMask::GiCutout);
                 }
                 const renderer::contracts::StableObjectId objectId = m_shared->staticMeshRenderer->stableObjectId();
+                const renderer::rt::StaticMeshRayTracingResourcePtr& hitData =
+                    m_shared->staticMeshRenderer->staticRayTracingResource();
+                if (hitData == nullptr) {
+                    MECRAFT_LOG_STREAM(std::cerr
+                                       << "[DeferredPipeline] Gameplay static mesh has no ray-tracing hit data\n");
+                    return false;
+                }
                 instances.push_back(
                     {{renderer::rt::SceneTlasInstanceKind::StaticMesh, static_cast<int64_t>(objectId.value), 0},
                      blas,
                      m_shared->staticMeshRenderer->instanceTransform(),
                      mask,
                      blasStats.containsDoubleSided,
-                     std::nullopt});
+                     std::nullopt,
+                     hitData});
             }
         }
     }

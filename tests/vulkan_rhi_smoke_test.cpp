@@ -1,7 +1,9 @@
 #include "renderer/core/GlobalBindlessSet.h"
 #include "renderer/core/GpuSceneBufferSet.h"
 #include "renderer/core/RenderScene.h"
+#include "renderer/contracts/GpuMaterialContract.h"
 #include "renderer/contracts/RtgiSamplingContract.h"
+#include "renderer/contracts/StaticMeshRayTracingContract.h"
 #include "renderer/mesh/TerrainBlasCache.h"
 #include "renderer/passes/RtgiTracePass.h"
 #include "renderer/rhi/RhiCommandList.h"
@@ -39,6 +41,7 @@
 #include <vector>
 
 #include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/packing.hpp>
 
 namespace {
 
@@ -48,6 +51,7 @@ struct RtgiTraceSmokeExpectedPixel final {
     renderer::contracts::RtgiTraceClassification classification = renderer::contracts::RtgiTraceClassification::Miss;
     uint32_t candidateCount = 0u;
     uint32_t confirmedCount = 0u;
+    uint32_t hitIdentityHash = 0u;
     float minimumHitDistance = 0.0f;
     float maximumHitDistance = 0.0f;
 };
@@ -76,6 +80,7 @@ struct RtgiTraceSmokeCase final {
 [[nodiscard]] bool validateRtgiTraceCase(VkRhiDevice& device, RhiCommandListPool& commandPool,
                                          renderer::rt::SceneTlasCache& sceneTlas,
                                          const renderer::rt::SceneTlasView& activeTlas,
+                                         renderer::core::GlobalBindlessSet& globalBindlessSet,
                                          const RtgiTraceSmokeCase& smokeCase);
 
 [[nodiscard]] bool validateGpuBufferContents(VkRhiDevice& device, RhiCommandListPool& commandPool,
@@ -3032,7 +3037,8 @@ void main() {
                              glm::translate(glm::mat4(1.0f), view.worldOrigin),
                              mask,
                              false,
-                             terrainHitData});
+                             terrainHitData,
+                             {}});
         return sceneTlas.setInstances(std::move(instances));
     };
 
@@ -3125,11 +3131,27 @@ void main() {
         smokeCase.animationTime = 1.0f;
         smokeCase.instanceMask = renderer::rt::sceneTlasMaskBit(renderer::rt::SceneTlasInstanceMask::GiOpaque) |
                                  renderer::rt::sceneTlasMaskBit(renderer::rt::SceneTlasInstanceMask::GiCutout);
-        smokeCase.expectedPixels = {
-            {renderer::contracts::RtgiTraceClassification::Hit, 1u, 0u, 1.95f, 2.05f},
-            {renderer::contracts::RtgiTraceClassification::Hit, 1u, 1u, 0.95f, 1.05f},
-        };
-        valid = validateRtgiTraceCase(device, commandPool, sceneTlas, *firstTlas, smokeCase);
+        RtgiTraceSmokeExpectedPixel rejectedCutout;
+        rejectedCutout.classification = renderer::contracts::RtgiTraceClassification::Hit;
+        rejectedCutout.candidateCount = 1u;
+        rejectedCutout.minimumHitDistance = 1.95f;
+        rejectedCutout.maximumHitDistance = 2.05f;
+        RtgiTraceSmokeExpectedPixel confirmedCutout;
+        confirmedCutout.classification = renderer::contracts::RtgiTraceClassification::Hit;
+        confirmedCutout.candidateCount = 1u;
+        confirmedCutout.confirmedCount = 1u;
+        confirmedCutout.minimumHitDistance = 0.95f;
+        confirmedCutout.maximumHitDistance = 1.05f;
+        smokeCase.expectedPixels = {rejectedCutout, confirmedCutout};
+        renderer::core::GlobalBindlessSet rtgiBindlessSet;
+        renderer::core::GlobalBindlessSetConfig bindlessConfig;
+        bindlessConfig.sampledTexture2DCapacity = 1u;
+        bindlessConfig.sampledTextureCubeCapacity = 1u;
+        bindlessConfig.samplerCapacity = 1u;
+        bindlessConfig.storageBufferCapacity = 1u;
+        valid = rtgiBindlessSet.initialize(device, bindlessConfig) == renderer::core::GlobalBindlessSetError::None &&
+                validateRtgiTraceCase(device, commandPool, sceneTlas, *firstTlas, rtgiBindlessSet, smokeCase);
+        rtgiBindlessSet.shutdown();
     }
     firstView.reset();
 
@@ -3381,6 +3403,7 @@ namespace {
 [[nodiscard]] bool validateRtgiTraceCase(VkRhiDevice& device, RhiCommandListPool& commandPool,
                                          renderer::rt::SceneTlasCache& sceneTlas,
                                          const renderer::rt::SceneTlasView& activeTlas,
+                                         renderer::core::GlobalBindlessSet& globalBindlessSet,
                                          const RtgiTraceSmokeCase& smokeCase) {
     using namespace renderer::contracts;
     using namespace renderer::core;
@@ -3457,15 +3480,17 @@ namespace {
     SmokeTexture terrainAlbedo;
     SmokeTexture radianceHitDistance;
     SmokeTexture validation;
-    GlobalBindlessSet globalBindlessSet;
     RtgiTracePass tracePass;
     RhiBufferHandle validationReadback;
+    RhiBufferHandle radianceReadback;
     const auto cleanup = [&]() {
         device.waitIdle();
         tracePass.shutdown();
-        globalBindlessSet.shutdown();
         if (validationReadback.isValid()) {
             device.destroyBuffer(validationReadback);
+        }
+        if (radianceReadback.isValid()) {
+            device.destroyBuffer(radianceReadback);
         }
         SmokeTexture* textures[] = {&validation, &radianceHitDistance, &terrainAlbedo, &noise, &materialAux, &normalAo,
                                     &depth};
@@ -3480,6 +3505,9 @@ namespace {
     };
 
     bool valid = activeTlas.accelerationStructure.isValid() && activeTlas.terrainHitDataBuffer.isValid() &&
+                 activeTlas.gpuSceneMaterialBuffer.isValid() && activeTlas.gpuSceneGeometryBuffer.isValid() &&
+                 activeTlas.gpuSceneInstanceBuffer.isValid() &&
+                 (activeTlas.bindlessIdentity == 0u || activeTlas.bindlessIdentity == globalBindlessSet.identity()) &&
                  createTexture("VulkanSmoke.RTGI.Depth", RhiTextureFormat::Depth32Float,
                                kSampledUsage | rhiFlag(RhiTextureUsage::DepthStencilAttachment), smokeCase.depth.data(),
                                smokeCase.depth.size() * sizeof(float), RhiResourceState::DepthRead, depth) &&
@@ -3524,26 +3552,24 @@ namespace {
     }
 
     if (valid) {
-        GlobalBindlessSetConfig config;
-        config.sampledTexture2DCapacity = 1u;
-        config.sampledTextureCubeCapacity = 1u;
-        config.samplerCapacity = 1u;
-        config.storageBufferCapacity = 1u;
-        valid = globalBindlessSet.initialize(device, config) == GlobalBindlessSetError::None &&
-                globalBindlessSet.setAccelerationStructure(activeTlas.accelerationStructure) ==
-                    GlobalBindlessSetError::None;
+        valid = globalBindlessSet.setAccelerationStructure(activeTlas.accelerationStructure) ==
+                GlobalBindlessSetError::None;
     }
 
-    RhiBufferDesc readbackDesc;
-    readbackDesc.debugName = "VulkanSmoke.RTGI.ValidationReadback";
-    readbackDesc.size = static_cast<uint64_t>(sizeof(uint32_t) * 2u) * pixelCount;
-    readbackDesc.usage = rhiFlag(RhiBufferUsage::TransferDst) | rhiFlag(RhiBufferUsage::MapRead);
-    readbackDesc.memoryUsage = RhiMemoryUsage::GpuToCpu;
-    readbackDesc.initialState = RhiResourceState::TransferDst;
-    readbackDesc.memoryCategory = RhiMemoryCategory::Readback;
+    RhiBufferDesc validationReadbackDesc;
+    validationReadbackDesc.debugName = "VulkanSmoke.RTGI.ValidationReadback";
+    validationReadbackDesc.size = static_cast<uint64_t>(sizeof(uint32_t) * 2u) * pixelCount;
+    validationReadbackDesc.usage = rhiFlag(RhiBufferUsage::TransferDst) | rhiFlag(RhiBufferUsage::MapRead);
+    validationReadbackDesc.memoryUsage = RhiMemoryUsage::GpuToCpu;
+    validationReadbackDesc.initialState = RhiResourceState::TransferDst;
+    validationReadbackDesc.memoryCategory = RhiMemoryCategory::Readback;
+    RhiBufferDesc radianceReadbackDesc = validationReadbackDesc;
+    radianceReadbackDesc.debugName = "VulkanSmoke.RTGI.RadianceReadback";
+    radianceReadbackDesc.size = static_cast<uint64_t>(sizeof(uint16_t) * 4u) * pixelCount;
     if (valid) {
-        validationReadback = device.createBuffer(readbackDesc, nullptr, 0u);
-        valid = validationReadback.isValid();
+        validationReadback = device.createBuffer(validationReadbackDesc, nullptr, 0u);
+        radianceReadback = device.createBuffer(radianceReadbackDesc, nullptr, 0u);
+        valid = validationReadback.isValid() && radianceReadback.isValid();
     }
 
     SharedRenderResources shared;
@@ -3568,7 +3594,8 @@ namespace {
                                     texture.view, RhiQueueType::Graphics, RhiQueueType::Graphics});
     };
     RtgiTracePass::GraphResources resources;
-    RgBufferHandle readbackResource;
+    RgBufferHandle validationReadbackResource;
+    RgBufferHandle radianceReadbackResource;
     RgPassHandle traceHandle;
     if (valid) {
         resources.depth = importTexture(depth, RhiResourceState::DepthRead, RhiResourceState::DepthRead);
@@ -3580,12 +3607,16 @@ namespace {
         resources.diffuseRadianceHitDistance =
             importTexture(radianceHitDistance, RhiResourceState::Undefined, RhiResourceState::ShaderWrite);
         resources.validation = importTexture(validation, RhiResourceState::Undefined, RhiResourceState::ShaderWrite);
-        readbackResource = graph.importBuffer({"RTGI.ValidationReadback", validationReadback, readbackDesc,
-                                               RhiResourceState::TransferDst, RhiResourceState::HostRead,
-                                               RhiQueueType::Graphics, RhiQueueType::Graphics});
+        validationReadbackResource = graph.importBuffer(
+            {"RTGI.ValidationReadback", validationReadback, validationReadbackDesc, RhiResourceState::TransferDst,
+             RhiResourceState::HostRead, RhiQueueType::Graphics, RhiQueueType::Graphics});
+        radianceReadbackResource = graph.importBuffer({"RTGI.RadianceReadback", radianceReadback, radianceReadbackDesc,
+                                                       RhiResourceState::TransferDst, RhiResourceState::HostRead,
+                                                       RhiQueueType::Graphics, RhiQueueType::Graphics});
         valid = resources.depth.isValid() && resources.normalAo.isValid() && resources.materialAux.isValid() &&
                 resources.blueNoise.isValid() && resources.diffuseRadianceHitDistance.isValid() &&
-                resources.terrainAlbedo.isValid() && resources.validation.isValid() && readbackResource.isValid();
+                resources.terrainAlbedo.isValid() && resources.validation.isValid() &&
+                validationReadbackResource.isValid() && radianceReadbackResource.isValid();
     }
     if (valid) {
         const RgPassHandle inputReady = graph.addPass({"RTGI.InputReady", RgPassType::Copy, RhiQueueType::Graphics})
@@ -3602,16 +3633,26 @@ namespace {
         graph.addPass({"RTGI.ValidationCopy", RgPassType::Copy, RhiQueueType::Graphics})
             .dependsOn(traceHandle)
             .readTexture(resources.validation, RhiResourceState::TransferSrc)
-            .writeBuffer(readbackResource, RhiResourceState::TransferDst)
+            .readTexture(resources.diffuseRadianceHitDistance, RhiResourceState::TransferSrc)
+            .writeBuffer(validationReadbackResource, RhiResourceState::TransferDst)
+            .writeBuffer(radianceReadbackResource, RhiResourceState::TransferDst)
             .setExecute([&](RgPassContext& context) {
-                RhiTextureBufferCopy copy;
-                copy.srcTexture = context.texture(resources.validation);
-                copy.dstBuffer = context.buffer(readbackResource);
-                copy.bytesPerRow = sizeof(uint32_t) * 2u * smokeCase.width;
-                copy.rowsPerImage = smokeCase.height;
-                copy.width = smokeCase.width;
-                copy.height = smokeCase.height;
-                context.commandList().copyTextureToBuffer(copy);
+                RhiTextureBufferCopy validationCopy;
+                validationCopy.srcTexture = context.texture(resources.validation);
+                validationCopy.dstBuffer = context.buffer(validationReadbackResource);
+                validationCopy.bytesPerRow = sizeof(uint32_t) * 2u * smokeCase.width;
+                validationCopy.rowsPerImage = smokeCase.height;
+                validationCopy.width = smokeCase.width;
+                validationCopy.height = smokeCase.height;
+                context.commandList().copyTextureToBuffer(validationCopy);
+                RhiTextureBufferCopy radianceCopy;
+                radianceCopy.srcTexture = context.texture(resources.diffuseRadianceHitDistance);
+                radianceCopy.dstBuffer = context.buffer(radianceReadbackResource);
+                radianceCopy.bytesPerRow = sizeof(uint16_t) * 4u * smokeCase.width;
+                radianceCopy.rowsPerImage = smokeCase.height;
+                radianceCopy.width = smokeCase.width;
+                radianceCopy.height = smokeCase.height;
+                context.commandList().copyTextureToBuffer(radianceCopy);
                 return true;
             });
         const RgCompileResult compiled = graph.compile();
@@ -3622,6 +3663,7 @@ namespace {
     }
     if (valid) {
         const RgExecuteResult executed = graph.execute(device, commandPool);
+        sceneTlas.finishGraphExecution(executed.succeeded(), executed.completionToken());
         valid = executed.succeeded() && executed.completionToken().isValid() &&
                 device.waitForSubmission(executed.completionToken());
         if (!executed.succeeded()) {
@@ -3629,25 +3671,29 @@ namespace {
         }
     }
     if (valid) {
-        const auto* result = static_cast<const uint32_t*>(device.mapBuffer(validationReadback, 0u, readbackDesc.size));
-        valid = result != nullptr;
-        if (result != nullptr) {
+        const auto* validationResult =
+            static_cast<const uint32_t*>(device.mapBuffer(validationReadback, 0u, validationReadbackDesc.size));
+        const auto* radianceResult =
+            static_cast<const uint16_t*>(device.mapBuffer(radianceReadback, 0u, radianceReadbackDesc.size));
+        valid = validationResult != nullptr && radianceResult != nullptr;
+        if (validationResult != nullptr && radianceResult != nullptr) {
             for (size_t pixelIndex = 0u; pixelIndex < pixelCount; ++pixelIndex) {
-                const uint32_t validationWord = result[pixelIndex * 2u];
-                float hitDistance = 0.0f;
-                std::memcpy(&hitDistance, &result[pixelIndex * 2u + 1u], sizeof(hitDistance));
+                const uint32_t validationWord = validationResult[pixelIndex * 2u];
+                const uint32_t hitIdentityHash = validationResult[pixelIndex * 2u + 1u];
+                const float hitDistance = glm::unpackHalf1x16(radianceResult[pixelIndex * 4u + 3u]);
                 const RtgiTraceSmokeExpectedPixel& expected = smokeCase.expectedPixels[pixelIndex];
                 const bool pixelValid = rtgiTraceValidationClassification(validationWord) == expected.classification &&
                                         rtgiTraceValidationCandidateCount(validationWord) == expected.candidateCount &&
                                         rtgiTraceValidationConfirmedCount(validationWord) == expected.confirmedCount &&
-                                        std::isfinite(hitDistance) && hitDistance >= expected.minimumHitDistance &&
+                                        hitIdentityHash == expected.hitIdentityHash && std::isfinite(hitDistance) &&
+                                        hitDistance >= expected.minimumHitDistance &&
                                         hitDistance <= expected.maximumHitDistance;
                 if (!pixelValid) {
                     std::cerr << smokeCase.label << " pixel " << pixelIndex << " validation failed: class="
                               << static_cast<uint32_t>(rtgiTraceValidationClassification(validationWord))
                               << " candidates=" << rtgiTraceValidationCandidateCount(validationWord)
                               << " confirmed=" << rtgiTraceValidationConfirmedCount(validationWord)
-                              << " distance=" << hitDistance << '\n';
+                              << " identityHash=" << hitIdentityHash << " distance=" << hitDistance << '\n';
                     valid = false;
                 }
             }
@@ -3655,8 +3701,18 @@ namespace {
             valid = valid && stats.dispatched && stats.frameIndex == frame.frameIndex &&
                     stats.sceneTlasRevision == activeTlas.revision && stats.width == smokeCase.width &&
                     stats.height == smokeCase.height && stats.instanceMask == smokeCase.instanceMask &&
-                    stats.terrainHitDataBytes == activeTlas.terrainHitDataBytes;
+                    stats.terrainHitDataBytes == activeTlas.terrainHitDataBytes &&
+                    stats.gpuSceneMaterialBytes == activeTlas.gpuSceneMaterialBytes &&
+                    stats.gpuSceneGeometryBytes == activeTlas.gpuSceneGeometryBytes &&
+                    stats.gpuSceneInstanceBytes == activeTlas.gpuSceneInstanceBytes &&
+                    stats.gpuSceneMaterialCount == activeTlas.gpuSceneMaterialCount &&
+                    stats.gpuSceneGeometryCount == activeTlas.gpuSceneGeometryCount;
+        }
+        if (validationResult != nullptr) {
             device.unmapBuffer(validationReadback);
+        }
+        if (radianceResult != nullptr) {
+            device.unmapBuffer(radianceReadback);
         }
     }
 
@@ -3672,52 +3728,88 @@ namespace {
 
 [[nodiscard]] bool validateRtgiTracePass(VkRhiDevice& device, RhiCommandListPool& commandPool,
                                          renderer::rt::SceneTlasCache& sceneTlas,
-                                         const renderer::rt::SceneTlasView& activeTlas) {
+                                         const renderer::rt::SceneTlasView& activeTlas,
+                                         renderer::core::GlobalBindlessSet& globalBindlessSet) {
     const glm::vec2 rotation = renderer::contracts::rtgiCranleyPattersonRotation(0u);
     const auto wrapUnit = [](const float value) {
         return value - std::floor(value);
     };
     constexpr glm::vec2 kDesiredSample{0.125f, 0.0001f};
     RtgiTraceSmokeCase smokeCase;
-    smokeCase.label = "Blue Noise Cosine Opaque";
-    smokeCase.width = 1u;
+    smokeCase.label = "Static Mesh Alpha Mask";
+    smokeCase.width = 2u;
     smokeCase.height = 1u;
-    smokeCase.depth = {0.25f};
-    smokeCase.normalAo = {0.5f, 0.5f, 1.0f, 0.0f};
-    smokeCase.materialAux = {0.0f, 0.0f, 0.0f, 0.0f};
-    smokeCase.blueNoise = {wrapUnit(kDesiredSample.x - rotation.x), wrapUnit(kDesiredSample.y - rotation.y), 0.0f,
-                           1.0f};
+    smokeCase.depth = {0.25f, 0.25f};
+    smokeCase.normalAo = {1.0f, 1.0f, 1.0f, 0.0f, 1.0f, 1.0f, 1.0f, 0.0f};
+    smokeCase.materialAux = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
+    const std::array<float, 4u> noisePixel{wrapUnit(kDesiredSample.x - rotation.x),
+                                           wrapUnit(kDesiredSample.y - rotation.y), 0.0f, 1.0f};
+    smokeCase.blueNoise = {noisePixel[0], noisePixel[1], noisePixel[2], noisePixel[3],
+                           noisePixel[0], noisePixel[1], noisePixel[2], noisePixel[3]};
     smokeCase.terrainAlbedoWidth = 1u;
     smokeCase.terrainAlbedoHeight = 1u;
     smokeCase.terrainAlbedoLayers = 1u;
     smokeCase.terrainAlbedo = {255u, 255u, 255u, 255u};
-    smokeCase.inverseViewProjection = glm::translate(glm::mat4(1.0f), glm::vec3(0.25f, 0.25f, 0.0f));
-    smokeCase.cameraPosition = {0.25f, 0.25f, -0.5f};
-    smokeCase.instanceMask = renderer::rt::sceneTlasMaskBit(renderer::rt::SceneTlasInstanceMask::GiOpaque);
-    smokeCase.expectedPixels = {
-        {renderer::contracts::RtgiTraceClassification::Hit, 0u, 0u, 0.45f, 0.55f},
-    };
-    return validateRtgiTraceCase(device, commandPool, sceneTlas, activeTlas, smokeCase);
+    smokeCase.inverseViewProjection = glm::translate(glm::mat4(1.0f), glm::vec3(0.5f, 0.1f, 2.0f)) *
+                                      glm::scale(glm::mat4(1.0f), glm::vec3(0.5f, 1.0f, 1.0f));
+    smokeCase.cameraPosition = {0.5f, 0.1f, 2.0f};
+    smokeCase.maxRayDistance = 4.0f;
+    smokeCase.instanceMask = renderer::rt::sceneTlasMaskBit(renderer::rt::SceneTlasInstanceMask::GiOpaque) |
+                             renderer::rt::sceneTlasMaskBit(renderer::rt::SceneTlasInstanceMask::GiCutout);
+    RtgiTraceSmokeExpectedPixel rejectedMask;
+    rejectedMask.classification = renderer::contracts::RtgiTraceClassification::Hit;
+    rejectedMask.candidateCount = 1u;
+    rejectedMask.confirmedCount = 0u;
+    rejectedMask.hitIdentityHash = renderer::contracts::rtgiStableHitIdentityHash(601u, 501u);
+    rejectedMask.minimumHitDistance = 1.45f;
+    rejectedMask.maximumHitDistance = 1.55f;
+    RtgiTraceSmokeExpectedPixel confirmedMask;
+    confirmedMask.classification = renderer::contracts::RtgiTraceClassification::Hit;
+    confirmedMask.candidateCount = 1u;
+    confirmedMask.confirmedCount = 1u;
+    confirmedMask.hitIdentityHash = renderer::contracts::rtgiStableHitIdentityHash(602u, 502u);
+    confirmedMask.minimumHitDistance = 0.45f;
+    confirmedMask.maximumHitDistance = 0.55f;
+    smokeCase.expectedPixels = {rejectedMask, confirmedMask};
+    return validateRtgiTraceCase(device, commandPool, sceneTlas, activeTlas, globalBindlessSet, smokeCase);
 }
 
 [[nodiscard]] bool validateStaticMeshBlasAndSceneTlas(VkRhiDevice& device, RhiCommandListPool& commandPool) {
+    using namespace renderer::contracts;
+    using namespace renderer::core;
     using namespace renderer::rt;
 
     const uint64_t validationErrorsBefore = device.validationErrorCount();
-    struct PositionVertex {
+    struct StaticMeshVertex final {
         float position[3];
+        float normal[3];
+        float tangent[4];
+        float uv[2];
     };
-    const std::array<PositionVertex, 3u> opaqueVertices{
-        PositionVertex{{0.0f, 0.0f, 0.0f}}, PositionVertex{{1.0f, 0.0f, 0.0f}}, PositionVertex{{0.0f, 1.0f, 0.0f}}};
-    const std::array<PositionVertex, 3u> cutoutVertices{
-        PositionVertex{{0.0f, 0.0f, 1.0f}}, PositionVertex{{1.0f, 0.0f, 1.0f}}, PositionVertex{{0.0f, 1.0f, 1.0f}}};
+    static_assert(sizeof(StaticMeshVertex) == kStaticMeshRayTracingVertexStride);
+    const auto makeVertex = [](const float x, const float y, const float z, const float u, const float v) {
+        return StaticMeshVertex{{x, y, z}, {0.0f, 0.0f, 1.0f}, {1.0f, 0.0f, 0.0f, 1.0f}, {u, v}};
+    };
+    const std::array<StaticMeshVertex, 3u> opaqueVertices{makeVertex(0.0f, 0.0f, 0.0f, 0.0f, 0.0f),
+                                                          makeVertex(1.0f, 0.0f, 0.0f, 1.0f, 0.0f),
+                                                          makeVertex(0.0f, 1.0f, 0.0f, 0.0f, 1.0f)};
+    const std::array<StaticMeshVertex, 3u> cutoutVertices{makeVertex(0.0f, 0.0f, 1.0f, 0.0f, 0.0f),
+                                                          makeVertex(1.0f, 0.0f, 1.0f, 1.0f, 0.0f),
+                                                          makeVertex(0.0f, 1.0f, 1.0f, 0.0f, 1.0f)};
     const std::array<uint32_t, 3u> indices{0u, 1u, 2u};
+    const std::array<StaticMeshPrimitiveMetadata, 1u> opaqueMetadata{
+        StaticMeshPrimitiveMetadata{0u, 601u, 501u, kStaticMeshRayTracingContractVersion}};
+    const std::array<StaticMeshPrimitiveMetadata, 1u> cutoutMetadata{
+        StaticMeshPrimitiveMetadata{1u, 602u, 502u, kStaticMeshRayTracingContractVersion}};
     constexpr RhiBufferUsageFlags kVertexUsages =
         rhiFlag(RhiBufferUsage::Vertex) | rhiFlag(RhiBufferUsage::Storage) | rhiFlag(RhiBufferUsage::TransferDst) |
         rhiFlag(RhiBufferUsage::DeviceAddress) | rhiFlag(RhiBufferUsage::AccelerationStructureBuildInput);
     constexpr RhiBufferUsageFlags kIndexUsages =
         rhiFlag(RhiBufferUsage::Index) | rhiFlag(RhiBufferUsage::Storage) | rhiFlag(RhiBufferUsage::TransferDst) |
         rhiFlag(RhiBufferUsage::DeviceAddress) | rhiFlag(RhiBufferUsage::AccelerationStructureBuildInput);
+    constexpr RhiBufferUsageFlags kMetadataUsages = rhiFlag(RhiBufferUsage::Storage) |
+                                                    rhiFlag(RhiBufferUsage::TransferDst) |
+                                                    rhiFlag(RhiBufferUsage::DeviceAddress);
 
     const auto createGeometryBuffer = [&](const char* name, const uint64_t size, const RhiBufferUsageFlags usage,
                                           const RhiResourceState state, const void* data) {
@@ -3731,23 +3823,147 @@ namespace {
         return device.createBuffer(desc, data, static_cast<size_t>(size));
     };
 
-    std::array<RhiBufferHandle, 4u> geometryBuffers{
+    std::array<RhiBufferHandle, 6u> geometryBuffers{
         createGeometryBuffer("VulkanSmoke.StaticBLAS.OpaqueVertices", sizeof(opaqueVertices), kVertexUsages,
                              RhiResourceState::VertexBuffer, opaqueVertices.data()),
         createGeometryBuffer("VulkanSmoke.StaticBLAS.OpaqueIndices", sizeof(indices), kIndexUsages,
                              RhiResourceState::IndexBuffer, indices.data()),
+        createGeometryBuffer("VulkanSmoke.StaticBLAS.OpaqueMetadata", sizeof(opaqueMetadata), kMetadataUsages,
+                             RhiResourceState::ShaderRead, opaqueMetadata.data()),
         createGeometryBuffer("VulkanSmoke.StaticBLAS.CutoutVertices", sizeof(cutoutVertices), kVertexUsages,
                              RhiResourceState::VertexBuffer, cutoutVertices.data()),
         createGeometryBuffer("VulkanSmoke.StaticBLAS.CutoutIndices", sizeof(indices), kIndexUsages,
-                             RhiResourceState::IndexBuffer, indices.data())};
+                             RhiResourceState::IndexBuffer, indices.data()),
+        createGeometryBuffer("VulkanSmoke.StaticBLAS.CutoutMetadata", sizeof(cutoutMetadata), kMetadataUsages,
+                             RhiResourceState::ShaderRead, cutoutMetadata.data())};
+
+    class StaticMeshBindlessLifetime final : public GlobalBindlessLifetime {
+    public:
+        StaticMeshBindlessLifetime(VkRhiDevice& owner, std::vector<RhiTextureHandle> textures,
+                                   std::vector<RhiTextureViewHandle> views, std::vector<RhiSamplerHandle> samplers)
+            : m_owner(owner), m_textures(std::move(textures)), m_views(std::move(views)),
+              m_samplers(std::move(samplers)) {}
+
+        ~StaticMeshBindlessLifetime() override {
+            for (const RhiTextureViewHandle view : m_views) {
+                if (view.isValid()) {
+                    m_owner.destroyTextureView(view);
+                }
+            }
+            for (const RhiTextureHandle texture : m_textures) {
+                if (texture.isValid()) {
+                    m_owner.destroyTexture(texture);
+                }
+            }
+            for (const RhiSamplerHandle sampler : m_samplers) {
+                if (sampler.isValid()) {
+                    m_owner.destroySampler(sampler);
+                }
+            }
+        }
+
+    private:
+        VkRhiDevice& m_owner;
+        std::vector<RhiTextureHandle> m_textures;
+        std::vector<RhiTextureViewHandle> m_views;
+        std::vector<RhiSamplerHandle> m_samplers;
+    };
+
+    const auto createTexture2D = [&](const char* debugName, const uint32_t width, const uint32_t height,
+                                     const uint8_t* pixels, RhiTextureHandle& texture, RhiTextureViewHandle& view) {
+        RhiTextureDesc textureDesc;
+        textureDesc.debugName = debugName;
+        textureDesc.format = RhiTextureFormat::Rgba8Unorm;
+        textureDesc.width = width;
+        textureDesc.height = height;
+        textureDesc.usage = rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::TransferDst);
+        textureDesc.memoryCategory = RhiMemoryCategory::Texture;
+        RhiTextureInitialData initialData;
+        initialData.pixels = pixels;
+        initialData.sizeBytes = static_cast<size_t>(width) * static_cast<size_t>(height) * 4u;
+        initialData.finalState = RhiResourceState::ShaderRead;
+        texture = device.createTexture(textureDesc, &initialData);
+        if (!texture.isValid()) {
+            return false;
+        }
+        RhiTextureViewDesc viewDesc;
+        viewDesc.texture = texture;
+        viewDesc.viewType = RhiTextureViewType::Texture2D;
+        viewDesc.format = textureDesc.format;
+        view = device.createTextureView(viewDesc);
+        return view.isValid();
+    };
+
+    GlobalBindlessSet globalBindlessSet;
+    RhiTextureHandle whiteTexture;
+    RhiTextureViewHandle whiteView;
+    RhiTextureHandle maskTexture;
+    RhiTextureViewHandle maskView;
+    RhiSamplerHandle materialSampler;
+    std::shared_ptr<StaticMeshBindlessLifetime> bindlessLifetime;
+    const std::array<uint8_t, 4u> whitePixel{255u, 255u, 255u, 255u};
+    const std::array<uint8_t, 8u> maskPixels{255u, 255u, 255u, 0u, 255u, 255u, 255u, 255u};
+    GlobalBindlessSetConfig bindlessConfig;
+    bindlessConfig.sampledTexture2DCapacity = 2u;
+    bindlessConfig.sampledTextureCubeCapacity = 1u;
+    bindlessConfig.samplerCapacity = 1u;
+    bindlessConfig.storageBufferCapacity = 1u;
+    bool valid = globalBindlessSet.initialize(device, bindlessConfig) == GlobalBindlessSetError::None &&
+                 createTexture2D("VulkanSmoke.StaticMesh.White", 1u, 1u, whitePixel.data(), whiteTexture, whiteView) &&
+                 createTexture2D("VulkanSmoke.StaticMesh.Mask", 2u, 1u, maskPixels.data(), maskTexture, maskView);
+    if (valid) {
+        RhiSamplerDesc samplerDesc;
+        samplerDesc.minFilter = RhiFilter::Nearest;
+        samplerDesc.magFilter = RhiFilter::Nearest;
+        samplerDesc.mipmapMode = RhiMipmapMode::Nearest;
+        samplerDesc.addressU = RhiAddressMode::ClampToEdge;
+        samplerDesc.addressV = RhiAddressMode::ClampToEdge;
+        samplerDesc.addressW = RhiAddressMode::ClampToEdge;
+        materialSampler = device.createSampler(samplerDesc);
+        valid = materialSampler.isValid();
+    }
+    bindlessLifetime = std::make_shared<StaticMeshBindlessLifetime>(
+        device, std::vector<RhiTextureHandle>{whiteTexture, maskTexture},
+        std::vector<RhiTextureViewHandle>{whiteView, maskView}, std::vector<RhiSamplerHandle>{materialSampler});
+    if (valid) {
+        valid = globalBindlessSet.retainLifetime(bindlessLifetime) == GlobalBindlessSetError::None;
+    }
+    const auto whitePublication =
+        valid ? globalBindlessSet.publishTexture2D(whiteView) : GlobalBindlessPublicationResult<BindlessTexture2DTag>{};
+    const auto maskPublication =
+        valid ? globalBindlessSet.publishTexture2D(maskView) : GlobalBindlessPublicationResult<BindlessTexture2DTag>{};
+    const auto samplerPublication = valid ? globalBindlessSet.publishSampler(materialSampler)
+                                          : GlobalBindlessPublicationResult<BindlessSamplerTag>{};
+    valid = valid && whitePublication.succeeded() && maskPublication.succeeded() && samplerPublication.succeeded();
+
+    std::vector<GpuMaterial> gpuMaterials(2u);
+    gpuMaterials[1].modesAndFlags.x = static_cast<uint32_t>(GpuMaterialAlphaMode::Mask);
+    gpuMaterials[1].transmissionVolumeFactors.z = 0.5f;
+    if (valid) {
+        for (GpuMaterial& material : gpuMaterials) {
+            for (size_t semantic = 0u; semantic < kGpuMaterialTextureSemanticCount; ++semantic) {
+                material.textureIndices[semantic / 4u][semantic % 4u] = whitePublication.handle.index;
+                material.samplerIndices[semantic / 4u][semantic % 4u] = samplerPublication.handle.index;
+            }
+        }
+        gpuMaterials[1].textureIndices[static_cast<size_t>(GpuMaterialTextureSemantic::BaseColor) / 4u]
+                                      [static_cast<size_t>(GpuMaterialTextureSemantic::BaseColor) % 4u] =
+            maskPublication.handle.index;
+    }
+
     StaticMeshBlasCache staticBlas;
     SceneTlasCache sceneTlas;
     bool staticBlasOwnsGeometry = false;
     SceneBlasResourcePtr sharedBlas;
+    StaticMeshRayTracingResourcePtr rayTracingResource;
     const auto cleanup = [&]() {
+        device.waitIdle();
         sceneTlas.shutdown();
+        rayTracingResource.reset();
         sharedBlas.reset();
         staticBlas.shutdown();
+        globalBindlessSet.shutdown();
+        bindlessLifetime.reset();
         if (!staticBlasOwnsGeometry) {
             for (const RhiBufferHandle buffer : geometryBuffers) {
                 if (buffer.isValid()) {
@@ -3755,18 +3971,41 @@ namespace {
                 }
             }
         }
-        device.waitIdle();
     };
 
-    bool valid = std::all_of(geometryBuffers.begin(), geometryBuffers.end(),
-                             [](const RhiBufferHandle buffer) { return buffer.isValid(); }) &&
-                 staticBlas.init(&device) && staticBlas.supported();
+    valid = valid &&
+            std::all_of(geometryBuffers.begin(), geometryBuffers.end(),
+                        [](const RhiBufferHandle buffer) { return buffer.isValid(); }) &&
+            staticBlas.init(&device) && staticBlas.supported();
     if (valid) {
-        const std::vector<StaticMeshBlasGeometry> geometries{
-            {renderer::contracts::StableGeometryId{501u}, geometryBuffers[0], geometryBuffers[1], 0u,
-             sizeof(PositionVertex), 3u, 3u, true, false},
-            {renderer::contracts::StableGeometryId{502u}, geometryBuffers[2], geometryBuffers[3], 0u,
-             sizeof(PositionVertex), 3u, 3u, false, true}};
+        StaticMeshBlasGeometry opaqueGeometry;
+        opaqueGeometry.geometryId = StableGeometryId{501u};
+        opaqueGeometry.materialId = StableMaterialId{601u};
+        opaqueGeometry.vertexBuffer = geometryBuffers[0];
+        opaqueGeometry.indexBuffer = geometryBuffers[1];
+        opaqueGeometry.primitiveMetadataBuffer = geometryBuffers[2];
+        opaqueGeometry.vertexStride = sizeof(StaticMeshVertex);
+        opaqueGeometry.vertexCount = 3u;
+        opaqueGeometry.indexCount = 3u;
+        opaqueGeometry.materialIndex = 0u;
+        opaqueGeometry.localBoundsMin = {0.0f, 0.0f, 0.0f};
+        opaqueGeometry.localBoundsMax = {1.0f, 1.0f, 0.0f};
+        opaqueGeometry.opaque = true;
+        StaticMeshBlasGeometry cutoutGeometry;
+        cutoutGeometry.geometryId = StableGeometryId{502u};
+        cutoutGeometry.materialId = StableMaterialId{602u};
+        cutoutGeometry.vertexBuffer = geometryBuffers[3];
+        cutoutGeometry.indexBuffer = geometryBuffers[4];
+        cutoutGeometry.primitiveMetadataBuffer = geometryBuffers[5];
+        cutoutGeometry.vertexStride = sizeof(StaticMeshVertex);
+        cutoutGeometry.vertexCount = 3u;
+        cutoutGeometry.indexCount = 3u;
+        cutoutGeometry.materialIndex = 1u;
+        cutoutGeometry.localBoundsMin = {0.0f, 0.0f, 1.0f};
+        cutoutGeometry.localBoundsMax = {1.0f, 1.0f, 1.0f};
+        cutoutGeometry.opaque = false;
+        cutoutGeometry.doubleSided = true;
+        const std::vector<StaticMeshBlasGeometry> geometries{opaqueGeometry, cutoutGeometry};
         valid = staticBlas.build(commandPool, geometries) == StaticMeshBlasBuildResult::Built;
         staticBlasOwnsGeometry = valid;
     }
@@ -3775,8 +4014,27 @@ namespace {
         const StaticMeshBlasStats& stats = staticBlas.stats();
         valid = sharedBlas != nullptr && stats.resident && stats.geometryCount == 2u && stats.primitiveCount == 2u &&
                 stats.containsOpaque && stats.containsCutout && stats.containsDoubleSided &&
-                stats.compactedBlasBytes != 0u && stats.compactedBlasBytes <= stats.uncompactedBlasBytes &&
-                sceneTlas.init(&device) && sceneTlas.supported();
+                stats.compactedBlasBytes != 0u && stats.compactedBlasBytes <= stats.uncompactedBlasBytes;
+    }
+    if (valid) {
+        std::vector<GpuMaterial> invalidOpaqueMaterials = gpuMaterials;
+        invalidOpaqueMaterials[0].modesAndFlags.x = static_cast<uint32_t>(GpuMaterialAlphaMode::Mask);
+        std::vector<GpuMaterial> invalidCutoutMaterials = gpuMaterials;
+        invalidCutoutMaterials[1].modesAndFlags.x = static_cast<uint32_t>(GpuMaterialAlphaMode::Opaque);
+        const std::vector<StableMaterialId> materialIds{StableMaterialId{601u}, StableMaterialId{602u}};
+        valid = StaticMeshRayTracingResource::create(globalBindlessSet.identity(), bindlessLifetime,
+                                                     std::move(invalidOpaqueMaterials), materialIds,
+                                                     staticBlas.rayTracingGeometries()) == nullptr &&
+                StaticMeshRayTracingResource::create(globalBindlessSet.identity(), bindlessLifetime,
+                                                     std::move(invalidCutoutMaterials), materialIds,
+                                                     staticBlas.rayTracingGeometries()) == nullptr;
+    }
+    if (valid) {
+        rayTracingResource = StaticMeshRayTracingResource::create(
+            globalBindlessSet.identity(), bindlessLifetime, gpuMaterials,
+            std::vector<StableMaterialId>{StableMaterialId{601u}, StableMaterialId{602u}},
+            staticBlas.rayTracingGeometries());
+        valid = rayTracingResource != nullptr && sceneTlas.init(&device) && sceneTlas.supported();
     }
 
     const auto makeInstances = [&](const float secondTranslation) {
@@ -3790,10 +4048,43 @@ namespace {
                              glm::translate(glm::mat4(1.0f), glm::vec3(secondTranslation, 0.0f, 0.0f)),
                              mask,
                              true,
-                             std::nullopt});
-        instances.push_back(
-            {{SceneTlasInstanceKind::StaticMesh, 7, 0}, sharedBlas, glm::mat4(1.0f), mask, true, std::nullopt});
+                             std::nullopt,
+                             rayTracingResource});
+        instances.push_back({{SceneTlasInstanceKind::StaticMesh, 7, 0},
+                             sharedBlas,
+                             glm::mat4(1.0f),
+                             mask,
+                             true,
+                             std::nullopt,
+                             rayTracingResource});
         return instances;
+    };
+    const auto expectedGpuSceneInstances = [&](const float secondTranslation) {
+        std::array<GpuSceneInstance, 2u> instances;
+        const std::array<glm::mat4, 2u> transforms{
+            glm::mat4(1.0f), glm::translate(glm::mat4(1.0f), glm::vec3(secondTranslation, 0.0f, 0.0f))};
+        const std::array<uint32_t, 2u> stableObjectIds{7u, 42u};
+        const GpuSceneInstanceFlags flags = gpuSceneInstanceFlagBit(GpuSceneInstanceFlag::Enabled) |
+                                            gpuSceneInstanceFlagBit(GpuSceneInstanceFlag::ShadowCaster) |
+                                            gpuSceneInstanceFlagBit(GpuSceneInstanceFlag::ReflectionVisible) |
+                                            gpuSceneInstanceFlagBit(GpuSceneInstanceFlag::RayTracingVisible);
+        for (uint32_t index = 0u; index < instances.size(); ++index) {
+            const glm::vec3 center = glm::vec3(transforms[index] * glm::vec4(0.5f, 0.5f, 0.5f, 1.0f));
+            GpuSceneInstanceNormalizationInput input;
+            input.worldFromObject = transforms[index];
+            input.previousWorldFromObject = transforms[index];
+            input.worldBoundsCenterAndRadius = glm::vec4(center, glm::length(glm::vec3(0.5f)));
+            input.geometryCount = 2u;
+            input.flags = flags;
+            input.stableObjectId = StableObjectId{stableObjectIds[index]};
+            input.rayTracingInstanceId = index;
+            const GpuSceneInstanceNormalizationResult normalized = normalizeGpuSceneInstance(input);
+            if (!normalized.succeeded()) {
+                return std::optional<std::array<GpuSceneInstance, 2u>>{};
+            }
+            instances[index] = normalized.instance;
+        }
+        return std::optional<std::array<GpuSceneInstance, 2u>>{instances};
     };
     const auto submitTlasFrame = [&](const char* debugName) {
         sceneTlas.beginFrame();
@@ -3846,26 +4137,52 @@ namespace {
     if (valid) {
         const SceneTlasStats stats = sceneTlas.stats();
         const std::array<renderer::contracts::TerrainRayTracingGpuInstance, 2u> emptyTerrainHitData{};
-        valid = firstTlas.has_value() && firstTlas->deviceAddress != 0u && firstTlas->instanceCount == 2u &&
-                firstTlas->blasCount == 1u &&
-                firstTlas->instanceBytes == 2u * sizeof(RhiAccelerationStructureInstance) &&
-                firstTlas->terrainHitDataBuffer.isValid() &&
-                firstTlas->terrainHitDataBytes == sizeof(emptyTerrainHitData) &&
-                firstTlas->blasBytes == sharedBlas->blasBytes() && firstTlas->mappings.size() == 2u &&
-                firstTlas->mappings[0].customIndex == 0u && firstTlas->mappings[0].key.primary == 7 &&
-                firstTlas->mappings[1].customIndex == 1u && firstTlas->mappings[1].key.primary == 42 &&
-                stats.activeBlasCount == 1u && stats.activeInstanceBytes == firstTlas->instanceBytes &&
-                stats.activeTerrainHitDataBytes == firstTlas->terrainHitDataBytes &&
-                stats.activeBlasBytes == firstTlas->blasBytes && sceneTlas.isSettled() &&
-                validateGpuBufferContents(device, commandPool, firstTlas->terrainHitDataBuffer,
-                                          RhiResourceState::StorageBuffer, emptyTerrainHitData.data(),
-                                          sizeof(emptyTerrainHitData), "VulkanSmoke.SceneTLAS.TerrainHitDataReadback");
+        const std::array<GpuSceneGeometry, 2u> expectedGeometries{rayTracingResource->geometries()[0].gpu,
+                                                                  rayTracingResource->geometries()[1].gpu};
+        const std::optional<std::array<GpuSceneInstance, 2u>> expectedInstances = expectedGpuSceneInstances(3.0f);
+        valid =
+            firstTlas.has_value() && firstTlas->deviceAddress != 0u && firstTlas->instanceCount == 2u &&
+            firstTlas->blasCount == 1u && firstTlas->bindlessIdentity == globalBindlessSet.identity() &&
+            firstTlas->gpuSceneMaterialCount == gpuMaterials.size() &&
+            firstTlas->gpuSceneGeometryCount == expectedGeometries.size() &&
+            firstTlas->instanceBytes == 2u * sizeof(RhiAccelerationStructureInstance) &&
+            firstTlas->terrainHitDataBuffer.isValid() &&
+            firstTlas->terrainHitDataBytes == sizeof(emptyTerrainHitData) &&
+            firstTlas->gpuSceneMaterialBytes == sizeof(GpuMaterial) * gpuMaterials.size() &&
+            firstTlas->gpuSceneGeometryBytes == sizeof(expectedGeometries) &&
+            firstTlas->gpuSceneInstanceBytes == sizeof(GpuSceneInstance) * 2u &&
+            firstTlas->blasBytes == sharedBlas->blasBytes() && firstTlas->mappings.size() == 2u &&
+            firstTlas->mappings[0].customIndex == 0u && firstTlas->mappings[0].key.primary == 7 &&
+            firstTlas->mappings[0].staticMeshHitData == rayTracingResource &&
+            firstTlas->mappings[1].customIndex == 1u && firstTlas->mappings[1].key.primary == 42 &&
+            firstTlas->mappings[1].staticMeshHitData == rayTracingResource && stats.activeBlasCount == 1u &&
+            stats.activeInstanceBytes == firstTlas->instanceBytes &&
+            stats.activeTerrainHitDataBytes == firstTlas->terrainHitDataBytes &&
+            stats.activeGpuSceneMaterialBytes == firstTlas->gpuSceneMaterialBytes &&
+            stats.activeGpuSceneGeometryBytes == firstTlas->gpuSceneGeometryBytes &&
+            stats.activeGpuSceneInstanceBytes == firstTlas->gpuSceneInstanceBytes &&
+            stats.activeBlasBytes == firstTlas->blasBytes && sceneTlas.isSettled() && expectedInstances.has_value() &&
+            validateGpuBufferContents(device, commandPool, firstTlas->terrainHitDataBuffer,
+                                      RhiResourceState::StorageBuffer, emptyTerrainHitData.data(),
+                                      sizeof(emptyTerrainHitData), "VulkanSmoke.SceneTLAS.TerrainHitDataReadback") &&
+            validateGpuBufferContents(device, commandPool, firstTlas->gpuSceneMaterialBuffer,
+                                      RhiResourceState::StorageBuffer, gpuMaterials.data(),
+                                      firstTlas->gpuSceneMaterialBytes,
+                                      "VulkanSmoke.SceneTLAS.GpuSceneMaterialReadback") &&
+            validateGpuBufferContents(device, commandPool, firstTlas->gpuSceneGeometryBuffer,
+                                      RhiResourceState::StorageBuffer, expectedGeometries.data(),
+                                      firstTlas->gpuSceneGeometryBytes,
+                                      "VulkanSmoke.SceneTLAS.GpuSceneGeometryReadback") &&
+            validateGpuBufferContents(device, commandPool, firstTlas->gpuSceneInstanceBuffer,
+                                      RhiResourceState::StorageBuffer, expectedInstances->data(),
+                                      firstTlas->gpuSceneInstanceBytes,
+                                      "VulkanSmoke.SceneTLAS.GpuSceneInstanceReadback");
     }
     if (valid) {
         valid = validateCutoutRayQuery(device, commandPool, firstTlas->accelerationStructure);
     }
     if (valid) {
-        valid = validateRtgiTracePass(device, commandPool, sceneTlas, *firstTlas);
+        valid = validateRtgiTracePass(device, commandPool, sceneTlas, *firstTlas, globalBindlessSet);
     }
     if (valid) {
         valid = sceneTlas.setInstances(makeInstances(6.0f)) == SceneTlasSetResult::Accepted &&
@@ -3879,10 +4196,17 @@ namespace {
     }
     const std::optional<SceneTlasView> secondTlas = valid ? sceneTlas.activeView() : std::nullopt;
     if (valid) {
+        const std::optional<std::array<GpuSceneInstance, 2u>> expectedInstances = expectedGpuSceneInstances(6.0f);
         valid = secondTlas.has_value() && secondTlas->revision > firstTlas->revision &&
-                secondTlas->deviceAddress != 0u && secondTlas->instanceCount == 2u && sceneTlas.isSettled() &&
-                sceneTlas.setInstances({}) == SceneTlasSetResult::Accepted && !sceneTlas.activeView().has_value() &&
-                sceneTlas.isSettled();
+                secondTlas->deviceAddress != 0u && secondTlas->instanceCount == 2u &&
+                secondTlas->gpuSceneMaterialCount == 2u && secondTlas->gpuSceneGeometryCount == 2u &&
+                expectedInstances.has_value() &&
+                validateGpuBufferContents(device, commandPool, secondTlas->gpuSceneInstanceBuffer,
+                                          RhiResourceState::StorageBuffer, expectedInstances->data(),
+                                          secondTlas->gpuSceneInstanceBytes,
+                                          "VulkanSmoke.SceneTLAS.GpuSceneInstanceReplacementReadback") &&
+                sceneTlas.isSettled() && sceneTlas.setInstances({}) == SceneTlasSetResult::Accepted &&
+                !sceneTlas.activeView().has_value() && sceneTlas.isSettled();
     }
 
     cleanup();

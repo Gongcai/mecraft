@@ -43,6 +43,11 @@ public:
         uint32_t height = 0u;
         uint8_t instanceMask = 0u;
         uint64_t terrainHitDataBytes = 0u;
+        uint64_t gpuSceneMaterialBytes = 0u;
+        uint64_t gpuSceneGeometryBytes = 0u;
+        uint64_t gpuSceneInstanceBytes = 0u;
+        uint32_t gpuSceneMaterialCount = 0u;
+        uint32_t gpuSceneGeometryCount = 0u;
     };
 
     void shutdown() override;
@@ -73,13 +78,26 @@ private:
         RhiTextureViewHandle validation;
     };
 
+    struct TraceSceneBuffers final {
+        RhiBufferHandle terrainHitData;
+        RhiBufferHandle gpuSceneMaterials;
+        RhiBufferHandle gpuSceneGeometries;
+        RhiBufferHandle gpuSceneInstances;
+        uint64_t terrainHitDataBytes = 0u;
+        uint64_t gpuSceneMaterialBytes = 0u;
+        uint64_t gpuSceneGeometryBytes = 0u;
+        uint64_t gpuSceneInstanceBytes = 0u;
+        uint32_t sceneInstanceCount = 0u;
+        uint32_t gpuSceneMaterialCount = 0u;
+        uint32_t gpuSceneGeometryCount = 0u;
+    };
+
     [[nodiscard]] bool recordTrace(RhiCommandList& commandList, const FrameContext& ctx, const Settings& settings,
-                                   const TraceViews& views, RhiBufferHandle terrainHitDataBuffer,
-                                   uint32_t sceneInstanceCount, uint64_t terrainHitDataBytes,
+                                   const TraceViews& views, const TraceSceneBuffers& sceneBuffers,
                                    uint64_t sceneTlasRevision);
     [[nodiscard]] bool ensurePipeline(RhiDevice& rhiDevice, RhiBindGroupLayoutHandle globalBindlessLayout);
     [[nodiscard]] bool ensureBindGroup(RhiDevice& rhiDevice, const TraceViews& views,
-                                       RhiBufferHandle terrainHitDataBuffer, uint64_t terrainHitDataBytes);
+                                       const TraceSceneBuffers& sceneBuffers);
     void destroyRhiResources();
 
     RhiDevice* m_rhiDevice = nullptr;
@@ -91,8 +109,8 @@ private:
     RhiPipelineLayoutHandle m_pipelineLayout;
     RhiPipelineHandle m_pipeline;
     RhiBindGroupHandle m_traceBindGroup;
-    RhiBufferHandle m_boundTerrainHitDataBuffer;
-    uint64_t m_boundTerrainHitDataBytes = 0u;
+    std::array<RhiBufferHandle, 4u> m_boundSceneBuffers{};
+    std::array<uint64_t, 4u> m_boundSceneBufferBytes{};
     std::array<RhiTextureViewHandle, 7u> m_boundViews{};
     Stats m_stats;
 };

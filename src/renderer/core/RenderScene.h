@@ -258,6 +258,9 @@ public:
     /// @return Immutable diagnostic snapshot for the latest prepared frame.
     [[nodiscard]] GlobalBindlessDebugInfo globalBindlessDebugInfo() const;
 
+    /// Returns the Vulkan Global Bindless Set used for asset publication, or nullptr on OpenGL.
+    [[nodiscard]] renderer::core::GlobalBindlessSet* globalBindlessSet() { return m_shared.globalBindlessSet; }
+
     // Pipeline readiness (R2.6a)
     /// Check if the new pipeline path is ready to use.
     bool isNewPipelineReady() const;

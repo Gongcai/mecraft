@@ -378,6 +378,7 @@ set(SRC_RENDERER
         src/renderer/rhi/SceneBlasResource.cpp
         src/renderer/rhi/SceneTlasCache.cpp
         src/renderer/rhi/StaticMeshBlasCache.cpp
+        src/renderer/rhi/StaticMeshRayTracingResource.cpp
         src/renderer/rhi/RhiDeviceFactory.cpp
         src/renderer/rhi/RhiShaderCompiler.cpp
         src/renderer/rhi/RhiShaderSourceLoader.cpp
@@ -1074,6 +1075,10 @@ if(MECRAFT_BUILD_TESTS)
     add_mecraft_test(terrain_ray_tracing_contract_test
             tests/terrain_ray_tracing_contract_test.cpp)
     target_compile_definitions(terrain_ray_tracing_contract_test PRIVATE
+            MECRAFT_TEST_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
+    add_mecraft_test(static_mesh_ray_tracing_contract_test
+            tests/static_mesh_ray_tracing_contract_test.cpp)
+    target_compile_definitions(static_mesh_ray_tracing_contract_test PRIVATE
             MECRAFT_TEST_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
     add_mecraft_test(rhi_acceleration_structure_contract_test
             tests/rhi_acceleration_structure_contract_test.cpp)

@@ -5,7 +5,10 @@
 #include "renderer/rhi/RhiDevice.h"
 #include "renderer/rhi/RhiResources.h"
 
+#include <glm/vector_relational.hpp>
+
 #include <algorithm>
+#include <cmath>
 #include <cstddef>
 #include <limits>
 #include <unordered_set>
@@ -28,13 +31,22 @@ constexpr RhiBufferUsageFlags kScratchBufferUsages =
 }
 
 [[nodiscard]] bool validGeometry(const StaticMeshBlasGeometry& geometry) {
-    if (!geometry.geometryId.isValid() || !geometry.vertexBuffer.isValid() || !geometry.indexBuffer.isValid() ||
-        geometry.vertexCount == 0u || geometry.indexCount == 0u || geometry.indexCount % 3u != 0u ||
-        geometry.vertexStride < sizeof(float) * 3u || geometry.vertexStride % sizeof(float) != 0u ||
-        geometry.positionOffset % sizeof(float) != 0u) {
+    const auto finite = [](const glm::vec3& value) {
+        return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
+    };
+    if (!geometry.geometryId.isValid() || !geometry.materialId.isValid() || !geometry.vertexBuffer.isValid() ||
+        !geometry.indexBuffer.isValid() || !geometry.primitiveMetadataBuffer.isValid() || geometry.vertexCount == 0u ||
+        geometry.indexCount == 0u || geometry.indexCount % 3u != 0u ||
+        geometry.vertexStride != renderer::contracts::kStaticMeshRayTracingVertexStride ||
+        geometry.positionOffset != renderer::contracts::kStaticMeshRayTracingPositionOffset ||
+        geometry.materialIndex == renderer::contracts::kGpuSceneInvalidTableIndex || geometry.geometryRevision == 0u ||
+        !finite(geometry.localBoundsMin) || !finite(geometry.localBoundsMax) ||
+        glm::any(glm::greaterThan(geometry.localBoundsMin, geometry.localBoundsMax))) {
         return false;
     }
-    return bufferIdentity(geometry.vertexBuffer) != bufferIdentity(geometry.indexBuffer);
+    return bufferIdentity(geometry.vertexBuffer) != bufferIdentity(geometry.indexBuffer) &&
+           bufferIdentity(geometry.vertexBuffer) != bufferIdentity(geometry.primitiveMetadataBuffer) &&
+           bufferIdentity(geometry.indexBuffer) != bufferIdentity(geometry.primitiveMetadataBuffer);
 }
 
 } // namespace
@@ -54,6 +66,7 @@ bool StaticMeshBlasCache::init(RhiDevice* device) {
 
 void StaticMeshBlasCache::shutdown() {
     m_resource.reset();
+    m_rayTracingGeometries.clear();
     m_device = nullptr;
     m_initialized = false;
     m_supported = false;
@@ -82,7 +95,7 @@ StaticMeshBlasBuildResult StaticMeshBlasCache::build(RhiCommandListPool& command
     std::unordered_set<uint32_t> geometryIds;
     std::unordered_set<uint64_t> retainedIdentities;
     std::vector<RhiBufferHandle> retainedBuffers;
-    retainedBuffers.reserve(geometries.size() * 2u);
+    retainedBuffers.reserve(geometries.size() * 3u);
     uint64_t primitiveCount = 0u;
     for (const StaticMeshBlasGeometry& geometry : geometries) {
         if (!validGeometry(geometry) || !geometryIds.insert(geometry.geometryId.value).second ||
@@ -98,6 +111,11 @@ StaticMeshBlasBuildResult StaticMeshBlasCache::build(RhiCommandListPool& command
         }
         retainedBuffers.push_back(geometry.vertexBuffer);
         retainedBuffers.push_back(geometry.indexBuffer);
+        if (!retainedIdentities.insert(bufferIdentity(geometry.primitiveMetadataBuffer)).second) {
+            setError("Static mesh BLAS primitive metadata buffers must have unique ownership");
+            return StaticMeshBlasBuildResult::InvalidGeometry;
+        }
+        retainedBuffers.push_back(geometry.primitiveMetadataBuffer);
     }
 
     std::vector<RhiAccelerationStructureGeometryDesc> nativeGeometries(geometries.size());
@@ -303,7 +321,59 @@ StaticMeshBlasBuildResult StaticMeshBlasCache::build(RhiCommandListPool& command
     compactStorage = {};
     destroyBuildResources();
 
+    std::vector<StaticMeshRayTracingGeometry> rayTracingGeometries;
+    rayTracingGeometries.reserve(geometries.size());
+    for (const StaticMeshBlasGeometry& source : geometries) {
+        const std::optional<uint64_t> vertexAddress = resource->retainedBufferDeviceAddress(source.vertexBuffer);
+        const std::optional<uint64_t> indexAddress = resource->retainedBufferDeviceAddress(source.indexBuffer);
+        const std::optional<uint64_t> primitiveMetadataAddress =
+            resource->retainedBufferDeviceAddress(source.primitiveMetadataBuffer);
+        renderer::contracts::GpuSceneGeometryFlags flags =
+            renderer::contracts::gpuSceneGeometryFlagBit(source.opaque
+                                                             ? renderer::contracts::GpuSceneGeometryFlag::Opaque
+                                                             : renderer::contracts::GpuSceneGeometryFlag::Cutout) |
+            renderer::contracts::gpuSceneGeometryFlagBit(renderer::contracts::GpuSceneGeometryFlag::ShadowCaster) |
+            renderer::contracts::gpuSceneGeometryFlagBit(renderer::contracts::GpuSceneGeometryFlag::ReflectionVisible) |
+            renderer::contracts::gpuSceneGeometryFlagBit(renderer::contracts::GpuSceneGeometryFlag::RayTracingVisible);
+        if (source.doubleSided) {
+            flags |=
+                renderer::contracts::gpuSceneGeometryFlagBit(renderer::contracts::GpuSceneGeometryFlag::DoubleSided);
+        }
+        if (!vertexAddress.has_value() || !indexAddress.has_value() || !primitiveMetadataAddress.has_value()) {
+            resource.reset();
+            setError("Static mesh BLAS retained geometry addresses are incomplete");
+            return StaticMeshBlasBuildResult::Failed;
+        }
+        renderer::contracts::GpuSceneGeometryNormalizationInput input;
+        input.vertexAddress = *vertexAddress;
+        input.indexAddress = *indexAddress;
+        input.primitiveMetadataAddress = *primitiveMetadataAddress;
+        input.vertexStride = static_cast<uint32_t>(source.vertexStride);
+        input.positionByteOffset = static_cast<uint32_t>(source.positionOffset);
+        input.vertexCount = source.vertexCount;
+        input.indexCount = source.indexCount;
+        input.indexType = renderer::contracts::GpuSceneIndexType::Uint32;
+        input.materialIndex = source.materialIndex;
+        input.stableMaterialId = source.materialId;
+        input.stableGeometryId = source.geometryId;
+        input.primitiveMetadataStride = sizeof(renderer::contracts::StaticMeshPrimitiveMetadata);
+        input.geometryRevision = source.geometryRevision;
+        input.flags = flags;
+        input.localBoundsMin = source.localBoundsMin;
+        input.localBoundsMax = source.localBoundsMax;
+        const renderer::contracts::GpuSceneGeometryNormalizationResult normalized =
+            renderer::contracts::normalizeGpuSceneGeometry(input);
+        if (!normalized.succeeded()) {
+            resource.reset();
+            setError("Static mesh BLAS GPU Scene geometry normalization failed");
+            return StaticMeshBlasBuildResult::InvalidGeometry;
+        }
+        rayTracingGeometries.push_back(
+            {normalized.geometry, source.vertexBuffer, source.indexBuffer, source.primitiveMetadataBuffer});
+    }
+
     m_resource = std::move(resource);
+    m_rayTracingGeometries = std::move(rayTracingGeometries);
     m_stats.supported = true;
     m_stats.resident = true;
     m_stats.geometryCount = static_cast<uint32_t>(geometries.size());

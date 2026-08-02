@@ -4,6 +4,7 @@
 #include "renderer/rhi/RhiDevice.h"
 #include "renderer/rhi/RhiResources.h"
 
+#include <glm/common.hpp>
 #include <glm/geometric.hpp>
 #include <glm/mat3x3.hpp>
 
@@ -11,6 +12,7 @@
 #include <cmath>
 #include <cstring>
 #include <limits>
+#include <unordered_map>
 #include <unordered_set>
 #include <utility>
 
@@ -21,6 +23,8 @@ constexpr RhiBufferUsageFlags kInstanceBufferUsages =
     rhiFlag(RhiBufferUsage::Storage) | rhiFlag(RhiBufferUsage::TransferDst) | rhiFlag(RhiBufferUsage::DeviceAddress) |
     rhiFlag(RhiBufferUsage::AccelerationStructureBuildInput);
 constexpr RhiBufferUsageFlags kTerrainHitDataBufferUsages =
+    rhiFlag(RhiBufferUsage::Storage) | rhiFlag(RhiBufferUsage::TransferSrc) | rhiFlag(RhiBufferUsage::TransferDst);
+constexpr RhiBufferUsageFlags kGpuSceneHitDataBufferUsages =
     rhiFlag(RhiBufferUsage::Storage) | rhiFlag(RhiBufferUsage::TransferSrc) | rhiFlag(RhiBufferUsage::TransferDst);
 constexpr RhiBufferUsageFlags kAccelerationStructureStorageUsages =
     rhiFlag(RhiBufferUsage::DeviceAddress) | rhiFlag(RhiBufferUsage::AccelerationStructureStorage);
@@ -63,12 +67,48 @@ constexpr uint8_t kKnownInstanceMask =
     return left.index == right.index && left.generation == right.generation;
 }
 
+[[nodiscard]] bool staticMeshHitDataBelongsToBlas(const StaticMeshRayTracingResource& hitData,
+                                                  const SceneBlasResource& blas) {
+    for (const StaticMeshRayTracingGeometry& geometry : hitData.geometries()) {
+        const std::optional<uint64_t> vertexAddress = blas.retainedBufferDeviceAddress(geometry.vertexBuffer);
+        const std::optional<uint64_t> indexAddress = blas.retainedBufferDeviceAddress(geometry.indexBuffer);
+        const std::optional<uint64_t> primitiveMetadataAddress =
+            blas.retainedBufferDeviceAddress(geometry.primitiveMetadataBuffer);
+        if (vertexAddress !=
+                std::optional(renderer::contracts::unpackGpuSceneDeviceAddress(geometry.gpu.vertexAddress)) ||
+            indexAddress !=
+                std::optional(renderer::contracts::unpackGpuSceneDeviceAddress(geometry.gpu.indexAddress)) ||
+            primitiveMetadataAddress != std::optional(renderer::contracts::unpackGpuSceneDeviceAddress(
+                                            geometry.gpu.primitiveMetadataAddress))) {
+            return false;
+        }
+    }
+    return true;
+}
+
+[[nodiscard]] std::optional<glm::vec4> staticMeshWorldBounds(const StaticMeshRayTracingResource& hitData,
+                                                             const glm::mat4& transform) {
+    const glm::vec3 localCenter = (hitData.localBoundsMin() + hitData.localBoundsMax()) * 0.5f;
+    const glm::vec3 localExtent = (hitData.localBoundsMax() - hitData.localBoundsMin()) * 0.5f;
+    const glm::vec3 worldCenter = glm::vec3(transform * glm::vec4(localCenter, 1.0f));
+    const glm::mat3 linear(transform);
+    const glm::vec3 worldExtent =
+        glm::abs(linear[0]) * localExtent.x + glm::abs(linear[1]) * localExtent.y + glm::abs(linear[2]) * localExtent.z;
+    const float radius = glm::length(worldExtent);
+    if (!std::isfinite(worldCenter.x) || !std::isfinite(worldCenter.y) || !std::isfinite(worldCenter.z) ||
+        !std::isfinite(radius) || radius <= 0.0f) {
+        return std::nullopt;
+    }
+    return glm::vec4(worldCenter, radius);
+}
+
 } // namespace
 
 bool SceneTlasCache::NormalizedInput::operator==(const NormalizedInput& other) const {
     return source.key == other.source.key && source.blas->deviceAddress() == other.source.blas->deviceAddress() &&
            sameMatrix(source.transform, other.source.transform) && source.mask == other.source.mask &&
-           source.doubleSided == other.source.doubleSided && source.terrainHitData == other.source.terrainHitData;
+           source.doubleSided == other.source.doubleSided && source.terrainHitData == other.source.terrainHitData &&
+           source.staticMeshHitData == other.source.staticMeshHitData;
 }
 
 bool SceneTlasCache::init(RhiDevice* device) {
@@ -142,14 +182,18 @@ SceneTlasSetResult SceneTlasCache::setInstances(std::vector<SceneTlasInstanceInp
         [](const SceneTlasInstanceInput& left, const SceneTlasInstanceInput& right) { return left.key < right.key; });
     std::vector<NormalizedInput> normalized;
     normalized.reserve(instances.size());
+    uint64_t staticMeshBindlessIdentity = 0u;
     for (std::size_t index = 0u; index < instances.size(); ++index) {
         SceneTlasInstanceInput& source = instances[index];
         const bool unknownMaskBits = (source.mask & static_cast<uint8_t>(~kKnownInstanceMask)) != 0u;
         const bool terrainInstance = source.key.kind == SceneTlasInstanceKind::Terrain;
+        const bool staticMeshInstance = source.key.kind == SceneTlasInstanceKind::StaticMesh;
         if (!validInstanceKey(source.key) || (index != 0u && source.key == instances[index - 1u].key) ||
             source.blas == nullptr || source.mask == 0u || unknownMaskBits || source.blas->deviceAddress() == 0u ||
             !source.blas->accelerationStructure().isValid() || !source.blas->storageBuffer().isValid() ||
-            source.blas->blasBytes() == 0u || terrainInstance != source.terrainHitData.has_value()) {
+            source.blas->blasBytes() == 0u || terrainInstance != source.terrainHitData.has_value() ||
+            staticMeshInstance != (source.staticMeshHitData != nullptr) ||
+            (staticMeshInstance && static_cast<uint64_t>(source.key.primary) > std::numeric_limits<uint32_t>::max())) {
             setTransientError("Scene TLAS instance identity, mask, or BLAS is invalid");
             return SceneTlasSetResult::InvalidInstance;
         }
@@ -168,6 +212,16 @@ SceneTlasSetResult SceneTlasCache::setInstances(std::vector<SceneTlasInstanceInp
                 setTransientError("Scene TLAS terrain hit-data snapshot does not belong to the referenced BLAS");
                 return SceneTlasSetResult::InvalidInstance;
             }
+        }
+        if (source.staticMeshHitData != nullptr) {
+            const uint64_t bindlessIdentity = source.staticMeshHitData->bindlessIdentity();
+            if (bindlessIdentity == 0u ||
+                (staticMeshBindlessIdentity != 0u && staticMeshBindlessIdentity != bindlessIdentity) ||
+                !staticMeshHitDataBelongsToBlas(*source.staticMeshHitData, *source.blas)) {
+                setTransientError("Scene TLAS static-mesh hit-data snapshot does not belong to the referenced BLAS");
+                return SceneTlasSetResult::InvalidInstance;
+            }
+            staticMeshBindlessIdentity = bindlessIdentity;
         }
 
         RhiAccelerationStructureInstance native;
@@ -225,6 +279,19 @@ bool SceneTlasCache::recordFrame(RhiCommandList& commandList) {
     nativeInstances.reserve(m_desiredInputs.size());
     std::vector<renderer::contracts::TerrainRayTracingGpuInstance> terrainHitData;
     terrainHitData.reserve(m_desiredInputs.size());
+    std::vector<renderer::contracts::GpuMaterial> gpuSceneMaterials;
+    std::vector<renderer::contracts::GpuSceneGeometry> gpuSceneGeometries;
+    std::vector<renderer::contracts::GpuSceneInstance> gpuSceneInstances(m_desiredInputs.size());
+    const std::array<uint8_t, sizeof(renderer::contracts::GpuSceneInstance)> zeroGpuSceneInstance{};
+    for (renderer::contracts::GpuSceneInstance& instance : gpuSceneInstances) {
+        std::memcpy(&instance, zeroGpuSceneInstance.data(), zeroGpuSceneInstance.size());
+    }
+    struct StaticMeshTableRange final {
+        uint32_t materialBase = 0u;
+        uint32_t geometryBase = 0u;
+    };
+    std::unordered_map<const StaticMeshRayTracingResource*, StaticMeshTableRange> staticMeshTableRanges;
+    staticMeshTableRanges.reserve(m_desiredInputs.size());
     Generation generation;
     generation.revision = m_desiredRevision;
     generation.instanceBytes = static_cast<uint64_t>(m_desiredInputs.size()) * sizeof(RhiAccelerationStructureInstance);
@@ -234,6 +301,8 @@ bool SceneTlasCache::recordFrame(RhiCommandList& commandList) {
     generation.mappings.reserve(m_desiredInputs.size());
     std::unordered_set<const SceneBlasResource*> uniqueBlasResources;
     uniqueBlasResources.reserve(m_desiredInputs.size());
+    std::unordered_set<const StaticMeshRayTracingResource*> uniqueStaticMeshResources;
+    uniqueStaticMeshResources.reserve(m_desiredInputs.size());
     for (std::size_t index = 0u; index < m_desiredInputs.size(); ++index) {
         const NormalizedInput& input = m_desiredInputs[index];
         nativeInstances.push_back(input.native);
@@ -248,6 +317,69 @@ bool SceneTlasCache::recordFrame(RhiCommandList& commandList) {
             gpuHitData = *encoded;
         }
         terrainHitData.push_back(gpuHitData);
+        if (input.source.staticMeshHitData != nullptr) {
+            const StaticMeshRayTracingResource& hitData = *input.source.staticMeshHitData;
+            const auto inserted = staticMeshTableRanges.try_emplace(&hitData);
+            StaticMeshTableRange& range = inserted.first->second;
+            if (inserted.second) {
+                if (hitData.materials().size() > std::numeric_limits<uint32_t>::max() - gpuSceneMaterials.size() ||
+                    hitData.geometries().size() > std::numeric_limits<uint32_t>::max() - gpuSceneGeometries.size()) {
+                    setTransientError("Scene TLAS GPU Scene table count exceeds the 32-bit contract");
+                    return false;
+                }
+                range.materialBase = static_cast<uint32_t>(gpuSceneMaterials.size());
+                range.geometryBase = static_cast<uint32_t>(gpuSceneGeometries.size());
+                gpuSceneMaterials.insert(gpuSceneMaterials.end(), hitData.materials().begin(),
+                                         hitData.materials().end());
+                for (const StaticMeshRayTracingGeometry& geometry : hitData.geometries()) {
+                    gpuSceneGeometries.push_back(geometry.gpu);
+                }
+            }
+            if (generation.bindlessIdentity != 0u && generation.bindlessIdentity != hitData.bindlessIdentity()) {
+                setTransientError("Scene TLAS static-mesh resources reference different Global Bindless generations");
+                return false;
+            }
+            generation.bindlessIdentity = hitData.bindlessIdentity();
+            if (uniqueStaticMeshResources.insert(&hitData).second) {
+                generation.staticMeshResources.push_back(input.source.staticMeshHitData);
+            }
+
+            const std::optional<glm::vec4> worldBounds = staticMeshWorldBounds(hitData, input.source.transform);
+            renderer::contracts::GpuSceneInstanceFlags instanceFlags =
+                renderer::contracts::gpuSceneInstanceFlagBit(renderer::contracts::GpuSceneInstanceFlag::Enabled) |
+                renderer::contracts::gpuSceneInstanceFlagBit(
+                    renderer::contracts::GpuSceneInstanceFlag::RayTracingVisible);
+            if ((input.source.mask & sceneTlasMaskBit(SceneTlasInstanceMask::ShadowCaster)) != 0u) {
+                instanceFlags |= renderer::contracts::gpuSceneInstanceFlagBit(
+                    renderer::contracts::GpuSceneInstanceFlag::ShadowCaster);
+            }
+            if ((input.source.mask & sceneTlasMaskBit(SceneTlasInstanceMask::ReflectionVisible)) != 0u) {
+                instanceFlags |= renderer::contracts::gpuSceneInstanceFlagBit(
+                    renderer::contracts::GpuSceneInstanceFlag::ReflectionVisible);
+            }
+            if (!worldBounds.has_value()) {
+                setTransientError("Scene TLAS static-mesh world bounds are invalid");
+                return false;
+            }
+            renderer::contracts::GpuSceneInstanceNormalizationInput sceneInput;
+            sceneInput.worldFromObject = input.source.transform;
+            sceneInput.previousWorldFromObject = input.source.transform;
+            sceneInput.worldBoundsCenterAndRadius = *worldBounds;
+            sceneInput.geometryBase = range.geometryBase;
+            sceneInput.geometryCount = static_cast<uint32_t>(hitData.geometries().size());
+            sceneInput.materialBase = range.materialBase;
+            sceneInput.flags = instanceFlags;
+            sceneInput.stableObjectId =
+                renderer::contracts::StableObjectId{static_cast<uint32_t>(input.source.key.primary)};
+            sceneInput.rayTracingInstanceId = static_cast<uint32_t>(index);
+            const renderer::contracts::GpuSceneInstanceNormalizationResult normalizedScene =
+                renderer::contracts::normalizeGpuSceneInstance(sceneInput);
+            if (!normalizedScene.succeeded()) {
+                setTransientError("Scene TLAS static-mesh GPU Scene instance normalization failed");
+                return false;
+            }
+            gpuSceneInstances[index] = normalizedScene.instance;
+        }
         if (uniqueBlasResources.insert(input.source.blas.get()).second) {
             if (generation.blasBytes > std::numeric_limits<uint64_t>::max() - input.source.blas->blasBytes()) {
                 setTransientError("Scene TLAS referenced BLAS byte count overflows the 64-bit contract");
@@ -256,8 +388,17 @@ bool SceneTlasCache::recordFrame(RhiCommandList& commandList) {
             generation.blasResources.push_back(input.source.blas);
             generation.blasBytes += input.source.blas->blasBytes();
         }
-        generation.mappings.push_back({static_cast<uint32_t>(index), input.source.key, input.source.terrainHitData});
+        generation.mappings.push_back({static_cast<uint32_t>(index), input.source.key, input.source.terrainHitData,
+                                       input.source.staticMeshHitData});
     }
+    generation.gpuSceneMaterialCount = static_cast<uint32_t>(gpuSceneMaterials.size());
+    generation.gpuSceneGeometryCount = static_cast<uint32_t>(gpuSceneGeometries.size());
+    generation.gpuSceneMaterialBytes = static_cast<uint64_t>(std::max<std::size_t>(gpuSceneMaterials.size(), 1u)) *
+                                       sizeof(renderer::contracts::GpuMaterial);
+    generation.gpuSceneGeometryBytes = static_cast<uint64_t>(std::max<std::size_t>(gpuSceneGeometries.size(), 1u)) *
+                                       sizeof(renderer::contracts::GpuSceneGeometry);
+    generation.gpuSceneInstanceBytes =
+        static_cast<uint64_t>(gpuSceneInstances.size()) * sizeof(renderer::contracts::GpuSceneInstance);
 
     RhiBufferDesc instanceDesc;
     instanceDesc.debugName = "Scene.TLAS.Instances";
@@ -277,6 +418,33 @@ bool SceneTlasCache::recordFrame(RhiCommandList& commandList) {
     terrainHitDataDesc.memoryCategory = RhiMemoryCategory::SceneData;
     generation.terrainHitDataBuffer = m_device->createBuffer(terrainHitDataDesc, nullptr, 0u);
 
+    RhiBufferDesc gpuSceneMaterialDesc;
+    gpuSceneMaterialDesc.debugName = "Scene.TLAS.GpuSceneMaterials";
+    gpuSceneMaterialDesc.size = generation.gpuSceneMaterialBytes;
+    gpuSceneMaterialDesc.usage = kGpuSceneHitDataBufferUsages;
+    gpuSceneMaterialDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+    gpuSceneMaterialDesc.initialState = RhiResourceState::TransferDst;
+    gpuSceneMaterialDesc.memoryCategory = RhiMemoryCategory::SceneData;
+    generation.gpuSceneMaterialBuffer = m_device->createBuffer(gpuSceneMaterialDesc, nullptr, 0u);
+
+    RhiBufferDesc gpuSceneGeometryDesc;
+    gpuSceneGeometryDesc.debugName = "Scene.TLAS.GpuSceneGeometries";
+    gpuSceneGeometryDesc.size = generation.gpuSceneGeometryBytes;
+    gpuSceneGeometryDesc.usage = kGpuSceneHitDataBufferUsages;
+    gpuSceneGeometryDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+    gpuSceneGeometryDesc.initialState = RhiResourceState::TransferDst;
+    gpuSceneGeometryDesc.memoryCategory = RhiMemoryCategory::SceneData;
+    generation.gpuSceneGeometryBuffer = m_device->createBuffer(gpuSceneGeometryDesc, nullptr, 0u);
+
+    RhiBufferDesc gpuSceneInstanceDesc;
+    gpuSceneInstanceDesc.debugName = "Scene.TLAS.GpuSceneInstances";
+    gpuSceneInstanceDesc.size = generation.gpuSceneInstanceBytes;
+    gpuSceneInstanceDesc.usage = kGpuSceneHitDataBufferUsages;
+    gpuSceneInstanceDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+    gpuSceneInstanceDesc.initialState = RhiResourceState::TransferDst;
+    gpuSceneInstanceDesc.memoryCategory = RhiMemoryCategory::SceneData;
+    generation.gpuSceneInstanceBuffer = m_device->createBuffer(gpuSceneInstanceDesc, nullptr, 0u);
+
     RhiAccelerationStructureGeometryDesc instanceGeometry;
     instanceGeometry.type = RhiAccelerationStructureGeometryType::Instances;
     instanceGeometry.instances.buffer = generation.instanceBuffer;
@@ -290,6 +458,8 @@ bool SceneTlasCache::recordFrame(RhiCommandList& commandList) {
     buildInput.geometryCount = 1u;
     RhiAccelerationStructureBuildSizes buildSizes;
     if (!generation.instanceBuffer.isValid() || !generation.terrainHitDataBuffer.isValid() ||
+        !generation.gpuSceneMaterialBuffer.isValid() || !generation.gpuSceneGeometryBuffer.isValid() ||
+        !generation.gpuSceneInstanceBuffer.isValid() ||
         !m_device->queryAccelerationStructureBuildSizes(buildInput, buildSizes) ||
         buildSizes.accelerationStructureSize == 0u || buildSizes.buildScratchSize == 0u) {
         destroyGeneration(generation);
@@ -329,10 +499,26 @@ bool SceneTlasCache::recordFrame(RhiCommandList& commandList) {
 
     commandList.updateBuffer(generation.instanceBuffer, 0u, nativeInstances.data(), instanceDesc.size);
     commandList.updateBuffer(generation.terrainHitDataBuffer, 0u, terrainHitData.data(), terrainHitDataDesc.size);
+    const std::array<uint8_t, sizeof(renderer::contracts::GpuMaterial)> zeroMaterialRecord{};
+    const std::array<uint8_t, sizeof(renderer::contracts::GpuSceneGeometry)> zeroGeometryRecord{};
+    const void* materialData = gpuSceneMaterials.empty() ? static_cast<const void*>(zeroMaterialRecord.data())
+                                                         : static_cast<const void*>(gpuSceneMaterials.data());
+    const void* geometryData = gpuSceneGeometries.empty() ? static_cast<const void*>(zeroGeometryRecord.data())
+                                                          : static_cast<const void*>(gpuSceneGeometries.data());
+    commandList.updateBuffer(generation.gpuSceneMaterialBuffer, 0u, materialData, gpuSceneMaterialDesc.size);
+    commandList.updateBuffer(generation.gpuSceneGeometryBuffer, 0u, geometryData, gpuSceneGeometryDesc.size);
+    commandList.updateBuffer(generation.gpuSceneInstanceBuffer, 0u, gpuSceneInstances.data(),
+                             gpuSceneInstanceDesc.size);
     commandList.bufferBarrier(
         {generation.instanceBuffer, RhiResourceState::TransferDst, RhiResourceState::AccelerationStructureBuildInput});
     commandList.bufferBarrier(
         {generation.terrainHitDataBuffer, RhiResourceState::TransferDst, RhiResourceState::StorageBuffer});
+    commandList.bufferBarrier(
+        {generation.gpuSceneMaterialBuffer, RhiResourceState::TransferDst, RhiResourceState::StorageBuffer});
+    commandList.bufferBarrier(
+        {generation.gpuSceneGeometryBuffer, RhiResourceState::TransferDst, RhiResourceState::StorageBuffer});
+    commandList.bufferBarrier(
+        {generation.gpuSceneInstanceBuffer, RhiResourceState::TransferDst, RhiResourceState::StorageBuffer});
     const RhiAccelerationStructureBuildDesc buildDesc{buildInput,
                                                       RhiAccelerationStructureBuildMode::Build,
                                                       {},
@@ -404,18 +590,29 @@ std::optional<SceneTlasView> SceneTlasCache::activeView() const {
         return std::nullopt;
     }
     const Generation& active = *m_active;
-    return SceneTlasView{active.revision,
-                         active.accelerationStructure,
-                         active.instanceBuffer,
-                         active.terrainHitDataBuffer,
-                         active.deviceAddress,
-                         static_cast<uint32_t>(active.mappings.size()),
-                         static_cast<uint32_t>(active.blasResources.size()),
-                         active.instanceBytes,
-                         active.terrainHitDataBytes,
-                         active.blasBytes,
-                         active.tlasBytes,
-                         active.mappings};
+    SceneTlasView view;
+    view.revision = active.revision;
+    view.accelerationStructure = active.accelerationStructure;
+    view.instanceBuffer = active.instanceBuffer;
+    view.terrainHitDataBuffer = active.terrainHitDataBuffer;
+    view.gpuSceneMaterialBuffer = active.gpuSceneMaterialBuffer;
+    view.gpuSceneGeometryBuffer = active.gpuSceneGeometryBuffer;
+    view.gpuSceneInstanceBuffer = active.gpuSceneInstanceBuffer;
+    view.deviceAddress = active.deviceAddress;
+    view.bindlessIdentity = active.bindlessIdentity;
+    view.instanceCount = static_cast<uint32_t>(active.mappings.size());
+    view.blasCount = static_cast<uint32_t>(active.blasResources.size());
+    view.gpuSceneMaterialCount = active.gpuSceneMaterialCount;
+    view.gpuSceneGeometryCount = active.gpuSceneGeometryCount;
+    view.instanceBytes = active.instanceBytes;
+    view.terrainHitDataBytes = active.terrainHitDataBytes;
+    view.gpuSceneMaterialBytes = active.gpuSceneMaterialBytes;
+    view.gpuSceneGeometryBytes = active.gpuSceneGeometryBytes;
+    view.gpuSceneInstanceBytes = active.gpuSceneInstanceBytes;
+    view.blasBytes = active.blasBytes;
+    view.tlasBytes = active.tlasBytes;
+    view.mappings = active.mappings;
+    return view;
 }
 
 SceneTlasStats SceneTlasCache::stats() const {
@@ -435,6 +632,9 @@ SceneTlasStats SceneTlasCache::stats() const {
         result.activeRevision = m_active->revision;
         result.activeInstanceBytes = m_active->instanceBytes;
         result.activeTerrainHitDataBytes = m_active->terrainHitDataBytes;
+        result.activeGpuSceneMaterialBytes = m_active->gpuSceneMaterialBytes;
+        result.activeGpuSceneGeometryBytes = m_active->gpuSceneGeometryBytes;
+        result.activeGpuSceneInstanceBytes = m_active->gpuSceneInstanceBytes;
         result.activeBlasBytes = m_active->blasBytes;
         result.activeTlasBytes = m_active->tlasBytes;
     }
@@ -556,6 +756,15 @@ void SceneTlasCache::destroyGeneration(Generation& generation) {
         }
         if (generation.terrainHitDataBuffer.isValid()) {
             m_device->destroyBuffer(generation.terrainHitDataBuffer);
+        }
+        if (generation.gpuSceneMaterialBuffer.isValid()) {
+            m_device->destroyBuffer(generation.gpuSceneMaterialBuffer);
+        }
+        if (generation.gpuSceneGeometryBuffer.isValid()) {
+            m_device->destroyBuffer(generation.gpuSceneGeometryBuffer);
+        }
+        if (generation.gpuSceneInstanceBuffer.isValid()) {
+            m_device->destroyBuffer(generation.gpuSceneInstanceBuffer);
         }
     }
     generation = {};

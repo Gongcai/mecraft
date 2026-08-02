@@ -875,6 +875,10 @@ ReflectionProbeCaptureFrameStats ModelSceneDeferredRenderer::reflectionProbeCapt
     return capturePass != nullptr ? capturePass->frameStats() : ReflectionProbeCaptureFrameStats{};
 }
 
+renderer::core::GlobalBindlessSet* ModelSceneDeferredRenderer::globalBindlessSet() {
+    return m_impl->globalBindlessSet.initialized() ? &m_impl->globalBindlessSet : nullptr;
+}
+
 const std::string& ModelSceneDeferredRenderer::lastError() const {
     return m_impl->error;
 }

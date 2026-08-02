@@ -126,9 +126,10 @@ M1 与 M2 可并行开发，但公共 `GpuMaterial`、`GpuSceneGeometry` 与 Sta
    已覆盖非一致索引读取、回写与代际复用。Gameplay `RenderScene` 与 Model Scene Deferred 现已在
    Vulkan 创建同一契约的 Global Set，并于帧开始发布最新完成的 Active TLAS；Dashboard 展示发布
    Revision、Descriptor 更新次数和各数组占用，真实 Cutout Ray Query Smoke 也通过该 Global Set
-   读取 Binding 4，Validation 未发现错误。体素区块、模型实例和资产注册表尚未接入三张 Scene 表，
-   GPU Culling 与 Indirect Draw 仍未实现；生产 `RtgiTracePass` 已消费 Binding 4 完成
-   Opaque Ray Query，Scene Buffer 与次级材质消费尚未接入。）
+   读取 Binding 4，Validation 未发现错误。`SceneTlasCache` 现已按 TLAS 代际展平唯一模型资产的
+   Material/Geometry 表，并生成与 Custom Index 一一对应的 Instance 表；共享资产的多个实例只增加
+   Instance 记录。生产 `RtgiTracePass` 已在 Binding 8/9/10 消费这三张表和 Global Bindless 模型纹理。
+   面向 GPU Culling/Indirect Draw 的常驻 Scene 表与资产注册表仍属于 M4。）
 4. RHI AS Handle、Build Size、Build/Copy/Barrier 与 Device Address。（实现完成：公共 RHI 已提供
    强类型 AS Handle、BLAS/TLAS、Triangles/AABBs/Instances、Build/Update、Clone/Compact、精确
    Build Size、Buffer/AS Device Address、AS Barrier、Compacted Size Query，以及固定 64 字节
@@ -171,7 +172,9 @@ M1 与 M2 可并行开发，但公共 `GpuMaterial`、`GpuSceneGeometry` 与 Sta
    Cutoff、动画层选择、正式 Terrain Primitive Metadata 与每 Custom Index 64 字节 TLAS 代际命中表
    已在 M3 接入。生产 `RtgiTracePass` 的 2×1 Vulkan Smoke 已真实覆盖 Barycentric UV、动画纹理层、
    Texture2DArray Alpha 采样、Ray Cone LOD 计算，以及 Cutout 拒绝后命中后方 Opaque 与显式确认
-   Cutout 两条路径；Terrain 与 Static Mesh 命中表均完成逐字节 GPU 回读。）
+   Cutout 两条路径。Static Mesh Smoke 进一步覆盖 48 字节顶点、Uint32 Index、16 字节三角形 Metadata、
+   两张 `GpuMaterial`、Global Bindless Texture/Sampler、共享资产表去重、三张 GPU Scene 表逐字节回读，
+   以及模型 Alpha Mask 拒绝后命中 Opaque 与显式确认两条路径。）
 
 ### 完成条件
 
@@ -187,8 +190,8 @@ M1 与 M2 可并行开发，但公共 `GpuMaterial`、`GpuSceneGeometry` 与 Sta
 1. RTGI Compute Ray Query、Blue Noise/Cosine Sampling。（进行中：Global Bindless Binding 4 的双运行时
    所有权与 Active TLAS 发布已完成；生产 `RtgiTracePass`、确定性帧旋转、Blue Noise/Cosine
    Sampling、Opaque 自动提交、Terrain Cutout Candidate Confirm、Render Graph 资源声明、逐像素
-   Candidate/Confirmed 计数与真实 Vulkan 命中距离回读已完成。次级材质辐射、Deferred 运行时消费和
-   NRD 输入打包尚未完成。）
+   Candidate/Confirmed 计数、模型 Stable Material/Geometry Hash 与真实 Vulkan 命中距离回读已完成。
+   次级材质辐射、Deferred 运行时消费和 NRD 输入打包尚未完成。）
 2. 体素 Greedy Primitive Metadata 与 Cutout Alpha Candidate。（实现完成：新增 C++/GLSL 体素材质
    采样契约，固化包含边界的 `0.1` Alpha Cutoff、NaN/Inf 拒绝、1024 层纹理编码与
    6-bit 动画帧数/FPS 上限；GBuffer、主视图、Probe Capture 与 Shadow 的非 Leaves Cutout 已共用
@@ -198,7 +201,14 @@ M1 与 M2 可并行开发，但公共 `GpuMaterial`、`GpuSceneGeometry` 与 Sta
    读取固定 32 字节 `BlockVertex` 和 Primitive Metadata，以 Barycentrics 重建 UV，按像素世界覆盖、
    射线距离和三角形 UV 梯度计算 Ray Cone LOD，选择动画纹理层并执行统一 Alpha Test。Vulkan 已覆盖
    Metadata/命中表回读、Terrain BLAS/TLAS 双代生命周期及生产 Candidate 拒绝/确认结果。）
-3. 模型 Geometry/Material 次级命中读取。
+3. 模型 Geometry/Material 次级命中读取。（实现完成：Static BLAS Geometry Index 已映射到
+   `GpuSceneGeometry`，TLAS Custom Index 已映射到 `GpuSceneInstance`；每代 TLAS 对唯一资产展开
+   `GpuMaterial` 与 Geometry，对共享实例仅追加 Instance。Shader 通过 Device Address 读取固定
+   48 字节 Position/Normal/Tangent/UV 顶点、Uint32 Index 与 16 字节 Metadata，以 Barycentrics
+   重建属性并校验 Stable Material/Geometry ID；Alpha Mask 通过 Ray Cone LOD 读取 Global Bindless
+   Base Color，应用 Base Color Factor 与统一 Alpha Test 后显式确认 Candidate，完整材质采样函数留给
+   次级辐射阶段。2×1 Vulkan Smoke 已验证左像素拒绝 Mask 后命中后方 Opaque、右像素确认 Mask，并
+   回读两种稳定身份 Hash 与 Hit Distance。）
 4. 次级太阳、局部灯、Emissive、天空 Radiance。
 5. Raw Diffuse Radiance + First-bounce Hit Distance，并按 RELAX/REBLUR 规范分别打包。
 6. NRD 4.17.4 Build、License、RHI Pipeline 与 Render Graph Bridge。

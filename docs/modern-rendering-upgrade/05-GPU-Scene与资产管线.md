@@ -109,8 +109,10 @@ Material、Geometry 和 Instance 底层表采用固定容量与增量 Dirty Rang
 失败时可显式丢弃录制批次而不清除 Dirty 数据。三个 Storage Buffer 的退役先执行整批
 预校验，任一重复、失效或陈旧句柄都会拒绝整批状态变更。
 
-当前实现尚未连接体素区块、模型实例和资产注册表到 Material/Geometry/Instance 三张 GPU Scene
-表，也尚未生成 Visible、Indirect 与 Draw Count Buffer；这些运行时链路属于 M4。
+常驻 `GpuSceneBufferSet` 尚未连接体素区块、模型实例和资产注册表，也尚未生成 Visible、Indirect 与
+Draw Count Buffer；这些面向 GPU Culling 的运行时链路属于 M4。RTGI 已使用独立的 TLAS 代际表：
+`SceneTlasCache` 对唯一 Static Mesh 资产展开 Material/Geometry，并为每个 TLAS Custom Index 生成
+Instance；Terrain 对应 Instance 记录为零。该表与 Active TLAS 同代提交、换代和退役。
 
 独立的 CPU TLAS 生产链已经完成：`SceneTlasCache` 将 Terrain 与 Static Mesh 快照规范化为固定
 64 字节 Instance Buffer，按稳定 Key 分配 24-bit Custom Index，并通过 Desired/Pending/Active/Retired
@@ -118,8 +120,9 @@ Material、Geometry 和 Instance 底层表采用固定容量与增量 Dirty Rang
 BLAS 数、TLAS/BLAS 字节、Revision 与 Build 计数。Gameplay 与模型场景的 Vulkan 运行时所有者现已
 创建 Global Bindless Set，并在帧开始把最新完成的 Active TLAS 发布到固定 Binding 4；Dashboard 同时
 报告发布 Revision、Descriptor 更新次数和四类数组占用。OpenGL 明确不创建该集合。生产
-`RtgiTracePass` 已绑定该 Global Set 并从 Binding 4 读取 Active TLAS；Scene Buffer 与次级材质
-消费继续由 M3 接入。
+`RtgiTracePass` 已绑定该 Global Set，从 Binding 4 读取 Active TLAS，并从 Binding 8/9/10 读取同代
+Material/Geometry/Instance 表；模型 Texture/Sampler 位于相同 Global Bindless generation，资源生命期
+由整个 Descriptor Set 持有。模型 Alpha Mask 次级读取已在 M3 完成。
 
 ## 5. GPU Culling 与间接绘制
 

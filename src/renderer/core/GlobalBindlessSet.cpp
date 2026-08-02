@@ -3,12 +3,15 @@
 #include "renderer/rhi/RhiDevice.h"
 
 #include <algorithm>
+#include <atomic>
 #include <cstdlib>
 #include <limits>
 #include <vector>
 
 namespace renderer::core {
 namespace {
+
+std::atomic<uint64_t> g_nextGlobalBindlessIdentity{1u};
 
 constexpr RhiBindingFlags kGlobalBindingFlags = rhiFlag(RhiBindingFlag::PartiallyBound) |
                                                 rhiFlag(RhiBindingFlag::UpdateAfterBind) |
@@ -138,6 +141,11 @@ GlobalBindlessSetError GlobalBindlessSet::initialize(RhiDevice& rhiDevice, const
     m_samplerSlots = BindlessDescriptorSlotAllocator<renderer::contracts::BindlessSamplerTag>(config.samplerCapacity);
     m_storageBufferSlots =
         BindlessDescriptorSlotAllocator<renderer::contracts::BindlessStorageBufferTag>(config.storageBufferCapacity);
+    m_identity = g_nextGlobalBindlessIdentity.fetch_add(1u, std::memory_order_relaxed);
+    if (m_identity == 0u) {
+        shutdown();
+        return GlobalBindlessSetError::InvalidResource;
+    }
     return GlobalBindlessSetError::None;
 }
 
@@ -150,6 +158,7 @@ void GlobalBindlessSet::shutdown() {
             m_device->destroyBindGroupLayout(m_layout);
         }
     }
+    m_retainedLifetimes.clear();
     m_device = nullptr;
     m_layout = {};
     m_bindGroup = {};
@@ -158,7 +167,19 @@ void GlobalBindlessSet::shutdown() {
     m_samplerSlots = BindlessDescriptorSlotAllocator<renderer::contracts::BindlessSamplerTag>(0u);
     m_storageBufferSlots = BindlessDescriptorSlotAllocator<renderer::contracts::BindlessStorageBufferTag>(0u);
     m_accelerationStructure = {};
+    m_identity = 0u;
     m_accelerationStructureUpdateCount = 0u;
+}
+
+GlobalBindlessSetError GlobalBindlessSet::retainLifetime(std::shared_ptr<const GlobalBindlessLifetime> lifetime) {
+    if (!initialized()) {
+        return GlobalBindlessSetError::NotInitialized;
+    }
+    if (lifetime == nullptr) {
+        return GlobalBindlessSetError::InvalidResource;
+    }
+    m_retainedLifetimes.push_back(std::move(lifetime));
+    return GlobalBindlessSetError::None;
 }
 
 GlobalBindlessPublicationResult<renderer::contracts::BindlessTexture2DTag>

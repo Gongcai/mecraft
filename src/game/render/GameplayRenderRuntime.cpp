@@ -210,7 +210,7 @@ bool GameplayRenderRuntime::init(ResourceMgr& resourceMgr, GameSession& session,
     if (!blockEntityRenderer.init(resourceMgr)) {
         return false;
     }
-    if (!staticMeshRenderer.init(resourceMgr, DAMAGED_HELMET_MODEL_PATH)) {
+    if (!staticMeshRenderer.init(resourceMgr, DAMAGED_HELMET_MODEL_PATH, renderScene.globalBindlessSet())) {
         std::cerr << "GameplayRenderRuntime: " << staticMeshRenderer.lastError() << '\n';
         return false;
     }

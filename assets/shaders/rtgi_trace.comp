@@ -10,6 +10,7 @@
 #include "rhi_screen_coordinates.glsl"
 #include "rtgi_sampling.glsl"
 #include "terrain_ray_query.glsl"
+#include "static_mesh_ray_query.glsl"
 
 layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
 
@@ -29,6 +30,7 @@ layout(push_constant) uniform RtgiTracePushConstants {
     vec4 cameraPositionAndMaxDistance;
     vec4 renderExtentAndBias;
     uvec4 frameMaskAndFlags;
+    uvec4 materialGeometryCounts;
 } pc;
 
 bool rtgiFinite(vec3 value) {
@@ -36,18 +38,18 @@ bool rtgiFinite(vec3 value) {
 }
 
 void rtgiWriteResult(ivec2 texel, vec3 radiance, float hitDistance, uint classification, uint candidateCount,
-                     uint confirmedCount) {
+                     uint confirmedCount, uint hitIdentityHash) {
     if (!rtgiFinite(radiance) || isnan(hitDistance) || isinf(hitDistance)) {
         imageStore(uDiffuseRadianceHitDistance, texel, vec4(0.0));
         imageStore(uValidation, texel,
                    uvec4(rtgiTraceValidationWord(RTGI_TRACE_CLASS_NON_FINITE, candidateCount, confirmedCount),
-                         floatBitsToUint(0.0), 0u, 0u));
+                         0u, 0u, 0u));
         return;
     }
     imageStore(uDiffuseRadianceHitDistance, texel, vec4(max(radiance, vec3(0.0)), max(hitDistance, 0.0)));
     imageStore(uValidation, texel,
                uvec4(rtgiTraceValidationWord(classification, candidateCount, confirmedCount),
-                     floatBitsToUint(max(hitDistance, 0.0)), 0u, 0u));
+                     hitIdentityHash, 0u, 0u));
 }
 
 bool rtgiReconstructWorldPosition(vec2 screenUv, float depth, out vec3 worldPosition) {
@@ -70,13 +72,13 @@ void main() {
 
     float depth = texelFetch(uDepthTexture, texel, 0).r;
     if (depth >= 0.9999) {
-        rtgiWriteResult(texel, vec3(0.0), 0.0, RTGI_TRACE_CLASS_SKY, 0u, 0u);
+        rtgiWriteResult(texel, vec3(0.0), 0.0, RTGI_TRACE_CLASS_SKY, 0u, 0u, 0u);
         return;
     }
 
     SurfaceMaterialAux materialAux = unpackGBufferMaterialAux(texelFetch(uMaterialAuxTexture, texel, 0));
     if (decodeTranslucentMask(materialAux.materialKind).isTranslucent) {
-        rtgiWriteResult(texel, vec3(0.0), 0.0, RTGI_TRACE_CLASS_TRANSLUCENT, 0u, 0u);
+        rtgiWriteResult(texel, vec3(0.0), 0.0, RTGI_TRACE_CLASS_TRANSLUCENT, 0u, 0u, 0u);
         return;
     }
 
@@ -88,18 +90,18 @@ void main() {
     if (!rtgiReconstructWorldPosition(screenUv, depth, worldPosition) ||
         !rtgiReconstructWorldPosition(screenUv + vec2(pixelSize.x, 0.0), depth, adjacentWorldPositionX) ||
         !rtgiReconstructWorldPosition(screenUv + vec2(0.0, pixelSize.y), depth, adjacentWorldPositionY)) {
-        rtgiWriteResult(texel, vec3(0.0), 0.0, RTGI_TRACE_CLASS_NON_FINITE, 0u, 0u);
+        rtgiWriteResult(texel, vec3(0.0), 0.0, RTGI_TRACE_CLASS_NON_FINITE, 0u, 0u, 0u);
         return;
     }
     vec3 normal = unpackGBufferNormal(texelFetch(uNormalAoTexture, texel, 0));
     if (!rtgiFinite(worldPosition) || !rtgiFinite(normal)) {
-        rtgiWriteResult(texel, vec3(0.0), 0.0, RTGI_TRACE_CLASS_NON_FINITE, 0u, 0u);
+        rtgiWriteResult(texel, vec3(0.0), 0.0, RTGI_TRACE_CLASS_NON_FINITE, 0u, 0u, 0u);
         return;
     }
     float pixelWorldFootprint =
         max(length(adjacentWorldPositionX - worldPosition), length(adjacentWorldPositionY - worldPosition));
     if (isnan(pixelWorldFootprint) || isinf(pixelWorldFootprint) || pixelWorldFootprint <= 0.0) {
-        rtgiWriteResult(texel, vec3(0.0), 0.0, RTGI_TRACE_CLASS_NON_FINITE, 0u, 0u);
+        rtgiWriteResult(texel, vec3(0.0), 0.0, RTGI_TRACE_CLASS_NON_FINITE, 0u, 0u, 0u);
         return;
     }
 
@@ -141,9 +143,20 @@ void main() {
                           (1.0 + candidateDistance / max(primarySurfaceDistance, pixelWorldFootprint));
         float sampledOpacity = 0.0;
         float sampledLod = 0.0;
-        if (terrainRayQueryCandidateAlphaPasses(uTerrainHitData.instances[customIndex], geometryIndex,
-                                                primitiveIndex, barycentrics, coneWidth,
-                                                pc.renderExtentAndBias.w, uTerrainAlbedo, sampledOpacity, sampledLod)) {
+        uint stableMaterialId = 0u;
+        uint stableGeometryId = 0u;
+        bool alphaPasses = false;
+        if (staticMeshRayQueryInstancePresent(customIndex, pc.frameMaskAndFlags.z)) {
+            alphaPasses = staticMeshRayQueryCandidateAlphaPasses(
+                customIndex, geometryIndex, primitiveIndex, barycentrics, coneWidth, pc.frameMaskAndFlags.z,
+                pc.materialGeometryCounts.x, pc.materialGeometryCounts.y, sampledOpacity, sampledLod,
+                stableMaterialId, stableGeometryId);
+        } else {
+            alphaPasses = terrainRayQueryCandidateAlphaPasses(
+                uTerrainHitData.instances[customIndex], geometryIndex, primitiveIndex, barycentrics, coneWidth,
+                pc.renderExtentAndBias.w, uTerrainAlbedo, sampledOpacity, sampledLod);
+        }
+        if (alphaPasses) {
             rayQueryConfirmIntersectionEXT(query);
             confirmedCount = min(confirmedCount + 1u, RTGI_TRACE_VALIDATION_CONFIRMED_MASK);
         }
@@ -151,8 +164,22 @@ void main() {
 
     if (rayQueryGetIntersectionTypeEXT(query, true) == gl_RayQueryCommittedIntersectionTriangleEXT) {
         float hitDistance = rayQueryGetIntersectionTEXT(query, true);
-        rtgiWriteResult(texel, vec3(0.0), hitDistance, RTGI_TRACE_CLASS_HIT, candidateCount, confirmedCount);
+        uint hitIdentityHash = 0u;
+        uint customIndex = rayQueryGetIntersectionInstanceCustomIndexEXT(query, true);
+        if (staticMeshRayQueryInstancePresent(customIndex, pc.frameMaskAndFlags.z)) {
+            uint stableMaterialId = 0u;
+            uint stableGeometryId = 0u;
+            if (staticMeshRayQueryCommittedIdentity(
+                    customIndex, rayQueryGetIntersectionGeometryIndexEXT(query, true),
+                    rayQueryGetIntersectionPrimitiveIndexEXT(query, true), pc.frameMaskAndFlags.z,
+                    pc.materialGeometryCounts.x, pc.materialGeometryCounts.y, stableMaterialId,
+                    stableGeometryId)) {
+                hitIdentityHash = rtgiStableHitIdentityHash(stableMaterialId, stableGeometryId);
+            }
+        }
+        rtgiWriteResult(texel, vec3(0.0), hitDistance, RTGI_TRACE_CLASS_HIT, candidateCount, confirmedCount,
+                        hitIdentityHash);
         return;
     }
-    rtgiWriteResult(texel, vec3(0.0), 0.0, RTGI_TRACE_CLASS_MISS, candidateCount, confirmedCount);
+    rtgiWriteResult(texel, vec3(0.0), 0.0, RTGI_TRACE_CLASS_MISS, candidateCount, confirmedCount, 0u);
 }

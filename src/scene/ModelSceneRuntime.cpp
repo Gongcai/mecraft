@@ -1246,7 +1246,7 @@ bool ModelSceneRuntime::loadMeshAsset(ResourceMgr& resourceMgr, const std::strin
 bool ModelSceneRuntime::createMeshAsset(ResourceMgr& resourceMgr, const scene::SceneAssetId assetId,
                                         const std::string& name, const std::string& path, MeshAsset& asset) {
     auto renderer = std::make_unique<StaticMeshRenderer>();
-    if (!renderer->init(resourceMgr, path)) {
+    if (!renderer->init(resourceMgr, path, m_deferredRenderer->globalBindlessSet())) {
         setError(renderer->lastError());
         return false;
     }
@@ -1453,8 +1453,9 @@ bool ModelSceneRuntime::collectRayTracingInstances(std::vector<renderer::rt::Sce
             continue;
         }
         const renderer::rt::SceneBlasResourcePtr& blas = asset.renderer->staticBlasResource();
-        if (blas == nullptr || !blasStats.resident) {
-            error = "model scene solid mesh has no resident asset-level BLAS";
+        const renderer::rt::StaticMeshRayTracingResourcePtr& hitData = asset.renderer->staticRayTracingResource();
+        if (blas == nullptr || !blasStats.resident || hitData == nullptr) {
+            error = "model scene solid mesh has no resident asset-level ray-tracing resources";
             return false;
         }
         uint8_t mask = renderer::rt::sceneTlasMaskBit(renderer::rt::SceneTlasInstanceMask::ShadowCaster) |
@@ -1473,7 +1474,8 @@ bool ModelSceneRuntime::collectRayTracingInstances(std::vector<renderer::rt::Sce
                              view.get<ecs::WorldTransformComponent>(entity).worldMatrix,
                              mask,
                              blasStats.containsDoubleSided,
-                             std::nullopt});
+                             std::nullopt,
+                             hitData});
     }
     instances = std::move(collected);
     error.clear();

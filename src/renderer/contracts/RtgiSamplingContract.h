@@ -23,14 +23,21 @@ struct alignas(16) RtgiTracePushConstants final {
     glm::vec4 cameraPositionAndMaxDistance{0.0f, 0.0f, 0.0f, 64.0f};
     glm::vec4 renderExtentAndBias{1.0f, 1.0f, 0.001f, 0.0f};
     glm::uvec4 frameMaskAndFlags{0u, 1u, 0u, 0u};
+    glm::uvec4 materialGeometryCounts{0u};
 };
 
-static_assert(sizeof(RtgiTracePushConstants) == 112u);
+static_assert(sizeof(RtgiTracePushConstants) == 128u);
 
 /// Hashes one sample-sequence value with the integer permutation shared by GLSL.
 /// @param value Input sequence value.
 /// @return Deterministic 32-bit permutation of value.
 [[nodiscard]] uint32_t rtgiSampleHash(uint32_t value);
+
+/// Hashes stable material and geometry identities for the RTGI validation image.
+/// @param stableMaterialId Non-zero stable material identity from primitive metadata.
+/// @param stableGeometryId Non-zero stable geometry identity from primitive metadata.
+/// @return Deterministic 32-bit identity word shared with GLSL validation.
+[[nodiscard]] uint32_t rtgiStableHitIdentityHash(uint32_t stableMaterialId, uint32_t stableGeometryId);
 
 /// Produces the per-frame two-dimensional Cranley-Patterson rotation used by RTGI.
 /// @param frameIndex Low 32 bits of the deterministic render-frame index.

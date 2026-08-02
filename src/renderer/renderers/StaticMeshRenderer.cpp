@@ -28,7 +28,9 @@
 
 #include "../contracts/GpuMaterialContract.h"
 #include "../contracts/SceneIdentityContract.h"
+#include "../contracts/StaticMeshRayTracingContract.h"
 #include "../core/FrameContext.h"
+#include "../core/GlobalBindlessSet.h"
 #include "../rhi/RhiCommandList.h"
 #include "../rhi/RhiCommandListPool.h"
 #include "../rhi/RhiDevice.h"
@@ -118,6 +120,33 @@ struct TangentGenerationContext {
     std::vector<StaticMeshVertex>* vertices = nullptr;
 };
 
+/// Owns model textures and samplers for the complete Global Bindless Set lifetime.
+class StaticMeshBindlessLifetime final : public renderer::core::GlobalBindlessLifetime {
+public:
+    StaticMeshBindlessLifetime(RhiDevice& device, std::vector<RhiTextureHandle> textures,
+                               std::vector<RhiTextureViewHandle> textureViews, std::vector<RhiSamplerHandle> samplers)
+        : m_device(&device), m_textures(std::move(textures)), m_textureViews(std::move(textureViews)),
+          m_samplers(std::move(samplers)) {}
+
+    ~StaticMeshBindlessLifetime() override {
+        for (const RhiTextureViewHandle view : m_textureViews) {
+            m_device->destroyTextureView(view);
+        }
+        for (const RhiTextureHandle texture : m_textures) {
+            m_device->destroyTexture(texture);
+        }
+        for (const RhiSamplerHandle sampler : m_samplers) {
+            m_device->destroySampler(sampler);
+        }
+    }
+
+private:
+    RhiDevice* m_device = nullptr;
+    std::vector<RhiTextureHandle> m_textures;
+    std::vector<RhiTextureViewHandle> m_textureViews;
+    std::vector<RhiSamplerHandle> m_samplers;
+};
+
 static_assert(sizeof(StaticMeshGBufferPushConstants) == 128u,
               "Static mesh G-buffer push constants must fit the Vulkan minimum limit");
 static_assert(sizeof(StaticMeshTransparentPushConstants) == 80u,
@@ -129,6 +158,11 @@ static_assert(sizeof(StaticMeshPreviewPushConstants) == 128u,
               "Static mesh preview push constants must fit the Vulkan minimum limit");
 static_assert(sizeof(StaticMeshProbeCaptureFrameParams) == 144u,
               "Static mesh probe-capture parameters must match the std140 block");
+static_assert(sizeof(StaticMeshVertex) == renderer::contracts::kStaticMeshRayTracingVertexStride);
+static_assert(offsetof(StaticMeshVertex, position) == renderer::contracts::kStaticMeshRayTracingPositionOffset);
+static_assert(offsetof(StaticMeshVertex, normal) == renderer::contracts::kStaticMeshRayTracingNormalOffset);
+static_assert(offsetof(StaticMeshVertex, tangent) == renderer::contracts::kStaticMeshRayTracingTangentOffset);
+static_assert(offsetof(StaticMeshVertex, uv) == renderer::contracts::kStaticMeshRayTracingUvOffset);
 
 [[nodiscard]] bool finiteVector(const glm::vec3& value) {
     return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
@@ -544,7 +578,8 @@ void setTangent(const SMikkTSpaceContext* context, const float tangent[], const 
 
 } // namespace
 
-bool StaticMeshRenderer::init(ResourceMgr& resourceMgr, const std::string& modelPath) {
+bool StaticMeshRenderer::init(ResourceMgr& resourceMgr, const std::string& modelPath,
+                              renderer::core::GlobalBindlessSet* globalBindlessSet) {
     shutdown();
     m_rhiDevice = &resourceMgr.rhiDevice();
     if (!m_staticBlasCache.init(m_rhiDevice)) {
@@ -563,6 +598,17 @@ bool StaticMeshRenderer::init(ResourceMgr& resourceMgr, const std::string& model
     m_objectId = *objectId;
     if (!createPipelineResources() || !loadAsset(modelPath, resourceMgr) ||
         !buildStaticBlas(resourceMgr.commandListPool())) {
+        const std::string error = m_lastError;
+        shutdown();
+        m_lastError = error;
+        return false;
+    }
+    if (m_staticBlasCache.stats().geometryCount != 0u) {
+        if (globalBindlessSet == nullptr || !globalBindlessSet->initialized()) {
+            setError("Vulkan static mesh ray tracing requires the owning Global Bindless Set");
+        } else if (publishRayTracingResources(*globalBindlessSet)) {
+            return true;
+        }
         const std::string error = m_lastError;
         shutdown();
         m_lastError = error;
@@ -962,6 +1008,7 @@ bool StaticMeshRenderer::loadAsset(const std::string& modelPath, ResourceMgr& re
     const std::filesystem::path modelDirectory = std::filesystem::path(modelPath).parent_path();
     std::unordered_map<TextureCacheKey, uint32_t, TextureCacheKeyHash> textureCache;
     std::unordered_map<uint64_t, uint32_t> solidTextureCache;
+    std::unordered_map<const cgltf_sampler*, uint32_t> samplerCache;
 
     const auto uploadTexture = [this](const unsigned char* pixels, const std::size_t sizeBytes, const uint32_t width,
                                       const uint32_t height, const bool srgb, uint32_t& textureIndex) -> bool {
@@ -1003,7 +1050,7 @@ bool StaticMeshRenderer::loadAsset(const std::string& modelPath, ResourceMgr& re
 
     const auto loadTexture = [&](const cgltf_texture_view& textureView, const bool srgb,
                                  const std::array<unsigned char, 4>& defaultPixel, uint32_t& textureIndex,
-                                 RhiSamplerHandle& samplerHandle) -> bool {
+                                 uint32_t& samplerIndex) -> bool {
         const cgltf_sampler* sampler = nullptr;
         if (textureView.texture == nullptr) {
             const uint64_t solidKey =
@@ -1052,18 +1099,25 @@ bool StaticMeshRenderer::loadAsset(const std::string& modelPath, ResourceMgr& re
             sampler = textureView.texture->sampler;
         }
 
+        const auto cachedSampler = samplerCache.find(sampler);
+        if (cachedSampler != samplerCache.end()) {
+            samplerIndex = cachedSampler->second;
+            return true;
+        }
         const RhiCapabilities& capabilities = m_rhiDevice->capabilities();
         RhiSamplerDesc samplerDesc;
         if (!buildSamplerDesc(sampler, capabilities, samplerDesc)) {
             setError("glTF texture uses an invalid sampler contract");
             return false;
         }
-        samplerHandle = m_rhiDevice->createSampler(samplerDesc);
+        const RhiSamplerHandle samplerHandle = m_rhiDevice->createSampler(samplerDesc);
         if (!samplerHandle.isValid()) {
             setError("failed to create static mesh anisotropic sampler");
             return false;
         }
+        samplerIndex = static_cast<uint32_t>(m_samplers.size());
         m_samplers.push_back(samplerHandle);
+        samplerCache.emplace(sampler, samplerIndex);
         return true;
     };
 
@@ -1087,7 +1141,7 @@ bool StaticMeshRenderer::loadAsset(const std::string& modelPath, ResourceMgr& re
             &material.transmission.transmission_texture,
             &material.volume.thickness_texture};
         std::array<uint32_t, 12> textureIndices{};
-        std::array<RhiSamplerHandle, 12> samplers{};
+        std::array<uint32_t, 12> samplerIndices{};
         const renderer::contracts::GpuMaterialWorkflow workflow =
             specularGlossiness ? renderer::contracts::GpuMaterialWorkflow::SpecularGlossiness
                                : renderer::contracts::GpuMaterialWorkflow::MetallicRoughness;
@@ -1096,7 +1150,7 @@ bool StaticMeshRenderer::loadAsset(const std::string& modelPath, ResourceMgr& re
             if (!loadTexture(*textureViews[channel],
                              renderer::contracts::gpuMaterialTextureUsesSrgb(semantic, workflow),
                              renderer::contracts::gpuMaterialDefaultTexturePixel(semantic), textureIndices[channel],
-                             samplers[channel])) {
+                             samplerIndices[channel])) {
                 return false;
             }
         }
@@ -1168,7 +1222,7 @@ bool StaticMeshRenderer::loadAsset(const std::string& modelPath, ResourceMgr& re
             (material.has_volume ? gpuMaterialFlagBit(GpuMaterialFlag::Volume) : 0u) |
             (infiniteAttenuationDistance ? gpuMaterialFlagBit(GpuMaterialFlag::InfiniteAttenuationDistance) : 0u);
         for (size_t channel = 0u; channel < textureIndices.size(); ++channel) {
-            materialInput.textureBindings[channel] = {textureIndices[channel], samplers[channel].index};
+            materialInput.textureBindings[channel] = {textureIndices[channel], samplerIndices[channel]};
         }
 
         const renderer::contracts::GpuMaterialNormalizationResult normalization =
@@ -1196,6 +1250,9 @@ bool StaticMeshRenderer::loadAsset(const std::string& modelPath, ResourceMgr& re
         materialBufferDesc.memoryCategory = RhiMemoryCategory::Uniform;
         MaterialResource resource;
         resource.materialId = *materialId;
+        resource.gpuMaterial = normalization.material;
+        resource.textureIndices = textureIndices;
+        resource.samplerIndices = samplerIndices;
         resource.uniformBuffer = m_rhiDevice->createBuffer(materialBufferDesc, &params, sizeof(params));
         if (!resource.uniformBuffer.isValid()) {
             setError("failed to create static mesh material uniform buffer");
@@ -1212,13 +1269,15 @@ bool StaticMeshRenderer::loadAsset(const std::string& modelPath, ResourceMgr& re
         for (uint32_t channel = 0u; channel < 5u; ++channel) {
             RhiBindGroupEntry entry;
             entry.binding = channel;
-            entry.resource.combinedTextureSampler = {m_textures[textureIndices[channel]].view, samplers[channel]};
+            entry.resource.combinedTextureSampler = {m_textures[textureIndices[channel]].view,
+                                                     m_samplers[samplerIndices[channel]]};
             bindGroupDesc.entries.push_back(entry);
         }
         for (uint32_t channel = 5u; channel < 12u; ++channel) {
             RhiBindGroupEntry entry;
             entry.binding = channel + 2u;
-            entry.resource.combinedTextureSampler = {m_textures[textureIndices[channel]].view, samplers[channel]};
+            entry.resource.combinedTextureSampler = {m_textures[textureIndices[channel]].view,
+                                                     m_samplers[samplerIndices[channel]]};
             bindGroupDesc.entries.push_back(entry);
         }
         RhiBindGroupEntry materialEntry;
@@ -1405,6 +1464,8 @@ bool StaticMeshRenderer::loadAsset(const std::string& modelPath, ResourceMgr& re
         resource.vertexCount = static_cast<uint32_t>(vertices.size());
         resource.indexCount = static_cast<uint32_t>(indices.size());
         resource.materialIndex = static_cast<uint32_t>(primitive.material - data->materials);
+        resource.boundsMin = primitiveBoundsMin;
+        resource.boundsMax = primitiveBoundsMax;
         resource.boundsCenter = (primitiveBoundsMin + primitiveBoundsMax) * 0.5f;
         const MaterialResource& material = m_materials[resource.materialIndex];
         const bool solidGeometry = !material.alphaBlended && !material.transmissive;
@@ -1429,12 +1490,30 @@ bool StaticMeshRenderer::loadAsset(const std::string& modelPath, ResourceMgr& re
         }
         bufferDesc.initialState = RhiResourceState::IndexBuffer;
         resource.indexBuffer = m_rhiDevice->createBuffer(bufferDesc, indices.data(), bufferDesc.size);
-        if (!resource.vertexBuffer.isValid() || !resource.indexBuffer.isValid()) {
+        if (solidGeometry && m_staticBlasCache.supported()) {
+            const renderer::contracts::StaticMeshPrimitiveMetadata metadata{
+                resource.materialIndex, material.materialId.value, resource.geometryId.value,
+                renderer::contracts::kStaticMeshRayTracingContractVersion};
+            std::vector<renderer::contracts::StaticMeshPrimitiveMetadata> primitiveMetadata(resource.indexCount / 3u,
+                                                                                            metadata);
+            bufferDesc.debugName = "StaticMesh.PrimitiveMetadataBuffer";
+            bufferDesc.size = primitiveMetadata.size() * sizeof(primitiveMetadata.front());
+            bufferDesc.usage = rhiFlag(RhiBufferUsage::Storage) | rhiFlag(RhiBufferUsage::TransferSrc) |
+                               rhiFlag(RhiBufferUsage::TransferDst) | rhiFlag(RhiBufferUsage::DeviceAddress);
+            bufferDesc.initialState = RhiResourceState::ShaderRead;
+            resource.primitiveMetadataBuffer =
+                m_rhiDevice->createBuffer(bufferDesc, primitiveMetadata.data(), bufferDesc.size);
+        }
+        if (!resource.vertexBuffer.isValid() || !resource.indexBuffer.isValid() ||
+            (solidGeometry && m_staticBlasCache.supported() && !resource.primitiveMetadataBuffer.isValid())) {
             if (resource.vertexBuffer.isValid()) {
                 m_rhiDevice->destroyBuffer(resource.vertexBuffer);
             }
             if (resource.indexBuffer.isValid()) {
                 m_rhiDevice->destroyBuffer(resource.indexBuffer);
+            }
+            if (resource.primitiveMetadataBuffer.isValid()) {
+                m_rhiDevice->destroyBuffer(resource.primitiveMetadataBuffer);
             }
             setError("failed to upload static mesh primitive buffers");
             return false;
@@ -1528,9 +1607,22 @@ bool StaticMeshRenderer::buildStaticBlas(RhiCommandListPool& commandListPool) {
         if (material.alphaBlended || material.transmissive) {
             continue;
         }
-        geometries.push_back({primitive.geometryId, primitive.vertexBuffer, primitive.indexBuffer,
-                              offsetof(StaticMeshVertex, position), sizeof(StaticMeshVertex), primitive.vertexCount,
-                              primitive.indexCount, !material.alphaMasked, material.doubleSided});
+        renderer::rt::StaticMeshBlasGeometry geometry;
+        geometry.geometryId = primitive.geometryId;
+        geometry.materialId = material.materialId;
+        geometry.vertexBuffer = primitive.vertexBuffer;
+        geometry.indexBuffer = primitive.indexBuffer;
+        geometry.primitiveMetadataBuffer = primitive.primitiveMetadataBuffer;
+        geometry.positionOffset = offsetof(StaticMeshVertex, position);
+        geometry.vertexStride = sizeof(StaticMeshVertex);
+        geometry.vertexCount = primitive.vertexCount;
+        geometry.indexCount = primitive.indexCount;
+        geometry.materialIndex = primitive.materialIndex;
+        geometry.localBoundsMin = primitive.boundsMin;
+        geometry.localBoundsMax = primitive.boundsMax;
+        geometry.opaque = !material.alphaMasked;
+        geometry.doubleSided = material.doubleSided;
+        geometries.push_back(geometry);
         primitiveIndices.push_back(primitiveIndex);
     }
 
@@ -1548,6 +1640,95 @@ bool StaticMeshRenderer::buildStaticBlas(RhiCommandListPool& commandListPool) {
     }
     setError("static mesh BLAS build returned an invalid result");
     return false;
+}
+
+bool StaticMeshRenderer::publishRayTracingResources(renderer::core::GlobalBindlessSet& globalBindlessSet) {
+    using namespace renderer::contracts;
+    using namespace renderer::core;
+
+    const std::vector<renderer::rt::StaticMeshRayTracingGeometry>& geometries =
+        m_staticBlasCache.rayTracingGeometries();
+    if (geometries.empty() || m_materials.empty() || m_textures.empty() || m_samplers.empty()) {
+        setError("static mesh ray-tracing publication requires complete Geometry, Material, texture, and sampler data");
+        return false;
+    }
+    const GlobalBindlessSetStats bindlessStats = globalBindlessSet.stats();
+    if (m_textures.size() > bindlessStats.sampledTexture2D.availableCount ||
+        m_samplers.size() > bindlessStats.samplers.availableCount) {
+        setError("static mesh ray-tracing publication exceeds Global Bindless descriptor capacity");
+        return false;
+    }
+
+    std::vector<RhiTextureHandle> ownedTextures;
+    std::vector<RhiTextureViewHandle> ownedTextureViews;
+    ownedTextures.reserve(m_textures.size());
+    ownedTextureViews.reserve(m_textures.size());
+    for (const TextureResource& texture : m_textures) {
+        ownedTextures.push_back(texture.texture);
+        ownedTextureViews.push_back(texture.view);
+    }
+    const auto bindlessLifetime = std::make_shared<StaticMeshBindlessLifetime>(
+        *m_rhiDevice, std::move(ownedTextures), std::move(ownedTextureViews), m_samplers);
+    const GlobalBindlessSetError lifetimeError = globalBindlessSet.retainLifetime(bindlessLifetime);
+    if (lifetimeError != GlobalBindlessSetError::None) {
+        setError(std::string("static mesh bindless lifetime publication failed: ") +
+                 globalBindlessSetErrorStableId(lifetimeError));
+        return false;
+    }
+    m_bindlessOwnsTextures = true;
+
+    std::vector<BindlessTexture2DHandle> textureHandles;
+    textureHandles.reserve(m_textures.size());
+    for (const TextureResource& texture : m_textures) {
+        const auto publication = globalBindlessSet.publishTexture2D(texture.view);
+        if (!publication.succeeded()) {
+            setError(std::string("static mesh texture bindless publication failed: ") +
+                     globalBindlessSetErrorStableId(publication.error));
+            return false;
+        }
+        textureHandles.push_back(publication.handle);
+    }
+    std::vector<BindlessSamplerHandle> samplerHandles;
+    samplerHandles.reserve(m_samplers.size());
+    for (const RhiSamplerHandle sampler : m_samplers) {
+        const auto publication = globalBindlessSet.publishSampler(sampler);
+        if (!publication.succeeded()) {
+            setError(std::string("static mesh sampler bindless publication failed: ") +
+                     globalBindlessSetErrorStableId(publication.error));
+            return false;
+        }
+        samplerHandles.push_back(publication.handle);
+    }
+
+    std::vector<GpuMaterial> materials;
+    std::vector<StableMaterialId> materialIds;
+    materials.reserve(m_materials.size());
+    materialIds.reserve(m_materials.size());
+    for (const MaterialResource& source : m_materials) {
+        GpuMaterial material = source.gpuMaterial;
+        for (std::size_t semanticIndex = 0u; semanticIndex < kGpuMaterialTextureSemanticCount; ++semanticIndex) {
+            const uint32_t textureIndex = source.textureIndices[semanticIndex];
+            const uint32_t samplerIndex = source.samplerIndices[semanticIndex];
+            if (textureIndex >= textureHandles.size() || samplerIndex >= samplerHandles.size()) {
+                setError("static mesh material references an invalid asset-local texture or sampler index");
+                return false;
+            }
+            material.textureIndices[semanticIndex / 4u][semanticIndex % 4u] = textureHandles[textureIndex].index;
+            material.samplerIndices[semanticIndex / 4u][semanticIndex % 4u] = samplerHandles[samplerIndex].index;
+        }
+        materials.push_back(material);
+        materialIds.push_back(source.materialId);
+    }
+
+    std::shared_ptr<renderer::rt::StaticMeshRayTracingResource> rayTracingResource =
+        renderer::rt::StaticMeshRayTracingResource::create(globalBindlessSet.identity(), bindlessLifetime,
+                                                           std::move(materials), std::move(materialIds), geometries);
+    if (rayTracingResource == nullptr) {
+        setError("static mesh ray-tracing Geometry/Material resource validation failed");
+        return false;
+    }
+    m_staticRayTracingResource = std::move(rayTracingResource);
+    return true;
 }
 
 void StaticMeshRenderer::prepareFrame(const FrameContext& ctx, const IWorldView& worldView) {
@@ -1994,6 +2175,9 @@ void StaticMeshRenderer::renderToShadowMap(RhiCommandList& commandList, const gl
 void StaticMeshRenderer::shutdown() {
     if (m_rhiDevice != nullptr) {
         for (PrimitiveResource& primitive : m_primitives) {
+            if (!primitive.retainedByBlas && primitive.primitiveMetadataBuffer.isValid()) {
+                m_rhiDevice->destroyBuffer(primitive.primitiveMetadataBuffer);
+            }
             if (!primitive.retainedByBlas && primitive.indexBuffer.isValid()) {
                 m_rhiDevice->destroyBuffer(primitive.indexBuffer);
             }
@@ -2009,22 +2193,25 @@ void StaticMeshRenderer::shutdown() {
                 m_rhiDevice->destroyBuffer(material.uniformBuffer);
             }
         }
-        for (TextureResource& texture : m_textures) {
-            if (texture.view.isValid()) {
-                m_rhiDevice->destroyTextureView(texture.view);
+        if (!m_bindlessOwnsTextures) {
+            for (TextureResource& texture : m_textures) {
+                if (texture.view.isValid()) {
+                    m_rhiDevice->destroyTextureView(texture.view);
+                }
+                if (texture.texture.isValid()) {
+                    m_rhiDevice->destroyTexture(texture.texture);
+                }
             }
-            if (texture.texture.isValid()) {
-                m_rhiDevice->destroyTexture(texture.texture);
-            }
-        }
-        for (const RhiSamplerHandle sampler : m_samplers) {
-            if (sampler.isValid()) {
-                m_rhiDevice->destroySampler(sampler);
+            for (const RhiSamplerHandle sampler : m_samplers) {
+                if (sampler.isValid()) {
+                    m_rhiDevice->destroySampler(sampler);
+                }
             }
         }
         destroyPipelineResources();
     }
     m_staticBlasCache.shutdown();
+    m_staticRayTracingResource.reset();
     m_primitives.clear();
     m_materials.clear();
     m_textures.clear();
@@ -2039,6 +2226,7 @@ void StaticMeshRenderer::shutdown() {
     m_objectId = {};
     m_instancePlaced = false;
     m_framePrepared = false;
+    m_bindlessOwnsTextures = false;
     m_lastError.clear();
 }
 

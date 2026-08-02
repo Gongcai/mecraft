@@ -85,14 +85,18 @@ Cutout Ray Query 的底层 Vulkan GPU 契约已由真实 Compute Smoke 覆盖：
 Candidate 拒绝/确认、Instance Custom Index、Geometry Index、Primitive ID 与 Barycentrics 均已回读
 验证。生产 `RtgiTracePass` 另以 2×1 Terrain 场景验证 Barycentric UV、两帧动画纹理层、显式 LOD
 Texture2DArray 采样和统一 Alpha Cutoff：透明像素必须产生 `Candidate/Confirmed = 1/0` 并命中后方
-Opaque，实心像素必须产生 `1/1` 并确认前方 Cutout，且全程不得产生 Validation/VUID 错误。该结果
-不替代 V03/M03 Alpha Mask 场景验收；模型 Alpha Mask 仍须通过 M03。
+Opaque，实心像素必须产生 `1/1` 并确认前方 Cutout，且全程不得产生 Validation/VUID 错误。模型路径
+另以 2×1 Static Mesh 场景执行同样两条射线，必须读取 Global Bindless Mask 纹理、输出 Opaque 与 Mask
+各自的 Stable Material/Geometry Hash，并从 `RGBA16F` Alpha 回读对应 Hit Distance。该结果不替代
+V03/M03 Alpha Mask 场景验收。
 
 Terrain Primitive Metadata 基础层另由 GPU Buffer 回读与双代际生命周期 Smoke 约束：16 字节记录必须
 与 CPU 生成值逐字节一致，Opaque/Cutout Geometry Index 必须映射到连续 Vertex/Primitive Base；新
 Terrain BLAS 激活后，旧 Active TLAS 的 Custom Index 仍须保留旧 Vertex/Metadata Device Address，直到
-对应 TLAS 代际完成退役。每个 TLAS 代际的 64 字节命中记录也必须逐字节匹配 CPU 编码；Static Mesh
-Custom Index 对应记录必须保持全零，命中表字节数必须严格等于 `Instance Count × 64`。
+对应 TLAS 代际完成退役。每个 TLAS 代际的 64 字节 Terrain 命中记录也必须逐字节匹配 CPU 编码；
+Static Mesh Custom Index 对应 Terrain 记录必须保持全零，表字节数必须严格等于
+`Instance Count × 64`。TLAS 代际 Material/Geometry/Instance 三张表还必须逐字节匹配 CPU 规范化结果，
+共享模型资产的两个实例不得重复展开 Material/Geometry。
 
 ## 3. RTGI 与 NRD 画质门槛
 
