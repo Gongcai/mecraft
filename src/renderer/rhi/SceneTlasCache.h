@@ -96,10 +96,12 @@ struct SceneTlasView {
     uint64_t revision = 0u;
     RhiAccelerationStructureHandle accelerationStructure;
     RhiBufferHandle instanceBuffer;
+    RhiBufferHandle terrainHitDataBuffer;
     uint64_t deviceAddress = 0u;
     uint32_t instanceCount = 0u;
     uint32_t blasCount = 0u;
     uint64_t instanceBytes = 0u;
+    uint64_t terrainHitDataBytes = 0u;
     uint64_t blasBytes = 0u;
     uint64_t tlasBytes = 0u;
     std::vector<SceneTlasInstanceMapping> mappings;
@@ -118,6 +120,7 @@ struct SceneTlasStats {
     uint64_t desiredRevision = 0u;
     uint64_t activeRevision = 0u;
     uint64_t activeInstanceBytes = 0u;
+    uint64_t activeTerrainHitDataBytes = 0u;
     uint64_t activeBlasBytes = 0u;
     uint64_t activeTlasBytes = 0u;
     uint64_t buildsRecorded = 0u;
@@ -183,11 +186,13 @@ private:
     struct Generation {
         uint64_t revision = 0u;
         RhiBufferHandle instanceBuffer;
+        RhiBufferHandle terrainHitDataBuffer;
         RhiBufferHandle storageBuffer;
         RhiBufferHandle scratchBuffer;
         RhiAccelerationStructureHandle accelerationStructure;
         uint64_t deviceAddress = 0u;
         uint64_t instanceBytes = 0u;
+        uint64_t terrainHitDataBytes = 0u;
         uint64_t blasBytes = 0u;
         uint64_t tlasBytes = 0u;
         std::vector<SceneBlasResourcePtr> blasResources;

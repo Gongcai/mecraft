@@ -141,10 +141,47 @@ struct TerrainRayTracingHitData final {
     }
 };
 
+/// Stores one Geometry Index range in the shader-visible TLAS hit-data table.
+struct alignas(16) TerrainRayTracingGpuGeometry final {
+    uint32_t vertexBase = 0u;
+    uint32_t primitiveBase = 0u;
+    uint32_t primitiveCount = 0u;
+    uint32_t geometryClass = 0u;
+
+    [[nodiscard]] bool operator==(const TerrainRayTracingGpuGeometry& other) const {
+        return vertexBase == other.vertexBase && primitiveBase == other.primitiveBase &&
+               primitiveCount == other.primitiveCount && geometryClass == other.geometryClass;
+    }
+};
+
+/// Stores one fixed 64-byte Custom Index record consumed through physical storage-buffer addresses.
+struct alignas(16) TerrainRayTracingGpuInstance final {
+    std::array<uint32_t, 2u> vertexAddressWords{};
+    std::array<uint32_t, 2u> primitiveMetadataAddressWords{};
+    std::array<TerrainRayTracingGpuGeometry, kTerrainRayTracingGeometryCapacity> geometries{};
+    uint32_t geometryCount = 0u;
+    uint32_t revisionLow = 0u;
+    uint32_t revisionHigh = 0u;
+    uint32_t contractVersion = 0u;
+
+    [[nodiscard]] bool operator==(const TerrainRayTracingGpuInstance& other) const {
+        return vertexAddressWords == other.vertexAddressWords &&
+               primitiveMetadataAddressWords == other.primitiveMetadataAddressWords && geometries == other.geometries &&
+               geometryCount == other.geometryCount && revisionLow == other.revisionLow &&
+               revisionHigh == other.revisionHigh && contractVersion == other.contractVersion;
+    }
+};
+
 /// Validates a complete terrain hit-data snapshot and its canonical Opaque/Cutout ordering.
 /// @param hitData Candidate addresses, strides, and Geometry Index ranges.
 /// @return True only when every Geometry Index maps to one contiguous non-empty primitive range.
 [[nodiscard]] bool validTerrainRayTracingHitData(const TerrainRayTracingHitData& hitData);
+
+/// Encodes one validated CPU hit-data snapshot into the fixed shader-visible Custom Index record.
+/// @param hitData Exact Terrain BLAS generation referenced by the matching TLAS instance.
+/// @return The 64-byte GPU record, or no value when the CPU snapshot violates the canonical contract.
+[[nodiscard]] std::optional<TerrainRayTracingGpuInstance>
+encodeTerrainRayTracingGpuInstance(const TerrainRayTracingHitData& hitData);
 
 static_assert(alignof(TerrainPrimitiveMetadata) == 16u);
 static_assert(sizeof(TerrainPrimitiveMetadata) == 16u);
@@ -154,6 +191,25 @@ static_assert(offsetof(TerrainPrimitiveMetadata, materialAndTint) == 8u);
 static_assert(offsetof(TerrainPrimitiveMetadata, faceAndFlags) == 12u);
 static_assert(std::is_standard_layout_v<TerrainPrimitiveMetadata>);
 static_assert(std::is_trivially_copyable_v<TerrainPrimitiveMetadata>);
+static_assert(alignof(TerrainRayTracingGpuGeometry) == 16u);
+static_assert(sizeof(TerrainRayTracingGpuGeometry) == 16u);
+static_assert(offsetof(TerrainRayTracingGpuGeometry, vertexBase) == 0u);
+static_assert(offsetof(TerrainRayTracingGpuGeometry, primitiveBase) == 4u);
+static_assert(offsetof(TerrainRayTracingGpuGeometry, primitiveCount) == 8u);
+static_assert(offsetof(TerrainRayTracingGpuGeometry, geometryClass) == 12u);
+static_assert(std::is_standard_layout_v<TerrainRayTracingGpuGeometry>);
+static_assert(std::is_trivially_copyable_v<TerrainRayTracingGpuGeometry>);
+static_assert(alignof(TerrainRayTracingGpuInstance) == 16u);
+static_assert(sizeof(TerrainRayTracingGpuInstance) == 64u);
+static_assert(offsetof(TerrainRayTracingGpuInstance, vertexAddressWords) == 0u);
+static_assert(offsetof(TerrainRayTracingGpuInstance, primitiveMetadataAddressWords) == 8u);
+static_assert(offsetof(TerrainRayTracingGpuInstance, geometries) == 16u);
+static_assert(offsetof(TerrainRayTracingGpuInstance, geometryCount) == 48u);
+static_assert(offsetof(TerrainRayTracingGpuInstance, revisionLow) == 52u);
+static_assert(offsetof(TerrainRayTracingGpuInstance, revisionHigh) == 56u);
+static_assert(offsetof(TerrainRayTracingGpuInstance, contractVersion) == 60u);
+static_assert(std::is_standard_layout_v<TerrainRayTracingGpuInstance>);
+static_assert(std::is_trivially_copyable_v<TerrainRayTracingGpuInstance>);
 
 } // namespace renderer::contracts
 

@@ -1287,8 +1287,9 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub& render, Re
                         static_cast<unsigned long long>(m_displaySceneTlasStats.activeRevision),
                         static_cast<unsigned long long>(m_displaySceneTlasStats.buildsCompleted),
                         static_cast<unsigned long long>(m_displaySceneTlasStats.buildsRecorded));
-            ImGui::Text("TLAS Memory: instances %.3f MiB, structure %.3f MiB",
+            ImGui::Text("TLAS Memory: instances %.3f MiB, terrain hit data %.3f MiB, structure %.3f MiB",
                         bytesToMiB(m_displaySceneTlasStats.activeInstanceBytes),
+                        bytesToMiB(m_displaySceneTlasStats.activeTerrainHitDataBytes),
                         bytesToMiB(m_displaySceneTlasStats.activeTlasBytes));
             ImGui::Text("TLAS Shared BLAS: %u unique, %.3f MiB compact", m_displaySceneTlasStats.activeBlasCount,
                         bytesToMiB(m_displaySceneTlasStats.activeBlasBytes));

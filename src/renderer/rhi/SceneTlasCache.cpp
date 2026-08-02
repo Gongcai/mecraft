@@ -20,6 +20,8 @@ namespace {
 constexpr RhiBufferUsageFlags kInstanceBufferUsages =
     rhiFlag(RhiBufferUsage::Storage) | rhiFlag(RhiBufferUsage::TransferDst) | rhiFlag(RhiBufferUsage::DeviceAddress) |
     rhiFlag(RhiBufferUsage::AccelerationStructureBuildInput);
+constexpr RhiBufferUsageFlags kTerrainHitDataBufferUsages =
+    rhiFlag(RhiBufferUsage::Storage) | rhiFlag(RhiBufferUsage::TransferSrc) | rhiFlag(RhiBufferUsage::TransferDst);
 constexpr RhiBufferUsageFlags kAccelerationStructureStorageUsages =
     rhiFlag(RhiBufferUsage::DeviceAddress) | rhiFlag(RhiBufferUsage::AccelerationStructureStorage);
 constexpr RhiBufferUsageFlags kScratchBufferUsages =
@@ -221,9 +223,13 @@ bool SceneTlasCache::recordFrame(RhiCommandList& commandList) {
 
     std::vector<RhiAccelerationStructureInstance> nativeInstances;
     nativeInstances.reserve(m_desiredInputs.size());
+    std::vector<renderer::contracts::TerrainRayTracingGpuInstance> terrainHitData;
+    terrainHitData.reserve(m_desiredInputs.size());
     Generation generation;
     generation.revision = m_desiredRevision;
     generation.instanceBytes = static_cast<uint64_t>(m_desiredInputs.size()) * sizeof(RhiAccelerationStructureInstance);
+    generation.terrainHitDataBytes =
+        static_cast<uint64_t>(m_desiredInputs.size()) * sizeof(renderer::contracts::TerrainRayTracingGpuInstance);
     generation.blasResources.reserve(m_desiredInputs.size());
     generation.mappings.reserve(m_desiredInputs.size());
     std::unordered_set<const SceneBlasResource*> uniqueBlasResources;
@@ -231,6 +237,17 @@ bool SceneTlasCache::recordFrame(RhiCommandList& commandList) {
     for (std::size_t index = 0u; index < m_desiredInputs.size(); ++index) {
         const NormalizedInput& input = m_desiredInputs[index];
         nativeInstances.push_back(input.native);
+        renderer::contracts::TerrainRayTracingGpuInstance gpuHitData;
+        if (input.source.terrainHitData.has_value()) {
+            const std::optional<renderer::contracts::TerrainRayTracingGpuInstance> encoded =
+                renderer::contracts::encodeTerrainRayTracingGpuInstance(input.source.terrainHitData->rayTracing);
+            if (!encoded.has_value()) {
+                setTransientError("Scene TLAS terrain hit-data GPU encoding failed");
+                return false;
+            }
+            gpuHitData = *encoded;
+        }
+        terrainHitData.push_back(gpuHitData);
         if (uniqueBlasResources.insert(input.source.blas.get()).second) {
             if (generation.blasBytes > std::numeric_limits<uint64_t>::max() - input.source.blas->blasBytes()) {
                 setTransientError("Scene TLAS referenced BLAS byte count overflows the 64-bit contract");
@@ -251,6 +268,15 @@ bool SceneTlasCache::recordFrame(RhiCommandList& commandList) {
     instanceDesc.memoryCategory = RhiMemoryCategory::AccelerationStructure;
     generation.instanceBuffer = m_device->createBuffer(instanceDesc, nullptr, 0u);
 
+    RhiBufferDesc terrainHitDataDesc;
+    terrainHitDataDesc.debugName = "Scene.TLAS.TerrainHitData";
+    terrainHitDataDesc.size = generation.terrainHitDataBytes;
+    terrainHitDataDesc.usage = kTerrainHitDataBufferUsages;
+    terrainHitDataDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+    terrainHitDataDesc.initialState = RhiResourceState::TransferDst;
+    terrainHitDataDesc.memoryCategory = RhiMemoryCategory::SceneData;
+    generation.terrainHitDataBuffer = m_device->createBuffer(terrainHitDataDesc, nullptr, 0u);
+
     RhiAccelerationStructureGeometryDesc instanceGeometry;
     instanceGeometry.type = RhiAccelerationStructureGeometryType::Instances;
     instanceGeometry.instances.buffer = generation.instanceBuffer;
@@ -263,7 +289,7 @@ bool SceneTlasCache::recordFrame(RhiCommandList& commandList) {
     buildInput.ranges = &instanceRange;
     buildInput.geometryCount = 1u;
     RhiAccelerationStructureBuildSizes buildSizes;
-    if (!generation.instanceBuffer.isValid() ||
+    if (!generation.instanceBuffer.isValid() || !generation.terrainHitDataBuffer.isValid() ||
         !m_device->queryAccelerationStructureBuildSizes(buildInput, buildSizes) ||
         buildSizes.accelerationStructureSize == 0u || buildSizes.buildScratchSize == 0u) {
         destroyGeneration(generation);
@@ -302,8 +328,11 @@ bool SceneTlasCache::recordFrame(RhiCommandList& commandList) {
     generation.tlasBytes = buildSizes.accelerationStructureSize;
 
     commandList.updateBuffer(generation.instanceBuffer, 0u, nativeInstances.data(), instanceDesc.size);
+    commandList.updateBuffer(generation.terrainHitDataBuffer, 0u, terrainHitData.data(), terrainHitDataDesc.size);
     commandList.bufferBarrier(
         {generation.instanceBuffer, RhiResourceState::TransferDst, RhiResourceState::AccelerationStructureBuildInput});
+    commandList.bufferBarrier(
+        {generation.terrainHitDataBuffer, RhiResourceState::TransferDst, RhiResourceState::StorageBuffer});
     const RhiAccelerationStructureBuildDesc buildDesc{buildInput,
                                                       RhiAccelerationStructureBuildMode::Build,
                                                       {},
@@ -378,10 +407,12 @@ std::optional<SceneTlasView> SceneTlasCache::activeView() const {
     return SceneTlasView{active.revision,
                          active.accelerationStructure,
                          active.instanceBuffer,
+                         active.terrainHitDataBuffer,
                          active.deviceAddress,
                          static_cast<uint32_t>(active.mappings.size()),
                          static_cast<uint32_t>(active.blasResources.size()),
                          active.instanceBytes,
+                         active.terrainHitDataBytes,
                          active.blasBytes,
                          active.tlasBytes,
                          active.mappings};
@@ -403,6 +434,7 @@ SceneTlasStats SceneTlasCache::stats() const {
         result.activeBlasCount = static_cast<uint32_t>(m_active->blasResources.size());
         result.activeRevision = m_active->revision;
         result.activeInstanceBytes = m_active->instanceBytes;
+        result.activeTerrainHitDataBytes = m_active->terrainHitDataBytes;
         result.activeBlasBytes = m_active->blasBytes;
         result.activeTlasBytes = m_active->tlasBytes;
     }
@@ -521,6 +553,9 @@ void SceneTlasCache::destroyGeneration(Generation& generation) {
         }
         if (generation.instanceBuffer.isValid()) {
             m_device->destroyBuffer(generation.instanceBuffer);
+        }
+        if (generation.terrainHitDataBuffer.isValid()) {
+            m_device->destroyBuffer(generation.terrainHitDataBuffer);
         }
     }
     generation = {};

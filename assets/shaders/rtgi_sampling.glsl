@@ -9,6 +9,17 @@ const uint RTGI_TRACE_CLASS_TRANSLUCENT = 1u;
 const uint RTGI_TRACE_CLASS_MISS = 2u;
 const uint RTGI_TRACE_CLASS_HIT = 3u;
 const uint RTGI_TRACE_CLASS_NON_FINITE = 4u;
+const uint RTGI_TRACE_VALIDATION_CLASSIFICATION_MASK = 0xffu;
+const uint RTGI_TRACE_VALIDATION_CANDIDATE_SHIFT = 8u;
+const uint RTGI_TRACE_VALIDATION_CANDIDATE_MASK = 0xfffu;
+const uint RTGI_TRACE_VALIDATION_CONFIRMED_SHIFT = 20u;
+const uint RTGI_TRACE_VALIDATION_CONFIRMED_MASK = 0xfffu;
+
+uint rtgiTraceValidationWord(uint classification, uint candidateCount, uint confirmedCount) {
+    return (classification & RTGI_TRACE_VALIDATION_CLASSIFICATION_MASK) |
+           (min(candidateCount, RTGI_TRACE_VALIDATION_CANDIDATE_MASK) << RTGI_TRACE_VALIDATION_CANDIDATE_SHIFT) |
+           (min(confirmedCount, RTGI_TRACE_VALIDATION_CONFIRMED_MASK) << RTGI_TRACE_VALIDATION_CONFIRMED_SHIFT);
+}
 
 // Applies the integer permutation shared with RtgiSamplingContract.
 uint rtgiSampleHash(uint value) {

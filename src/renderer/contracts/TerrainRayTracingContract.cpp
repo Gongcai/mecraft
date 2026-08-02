@@ -83,4 +83,27 @@ bool validTerrainRayTracingHitData(const TerrainRayTracingHitData& hitData) {
     return true;
 }
 
+std::optional<TerrainRayTracingGpuInstance>
+encodeTerrainRayTracingGpuInstance(const TerrainRayTracingHitData& hitData) {
+    if (!validTerrainRayTracingHitData(hitData)) {
+        return std::nullopt;
+    }
+
+    TerrainRayTracingGpuInstance encoded;
+    encoded.vertexAddressWords = {static_cast<uint32_t>(hitData.vertexAddress),
+                                  static_cast<uint32_t>(hitData.vertexAddress >> 32u)};
+    encoded.primitiveMetadataAddressWords = {static_cast<uint32_t>(hitData.primitiveMetadataAddress),
+                                             static_cast<uint32_t>(hitData.primitiveMetadataAddress >> 32u)};
+    for (uint32_t index = 0u; index < hitData.geometryCount; ++index) {
+        const TerrainRayTracingGeometryRange& geometry = hitData.geometries[index];
+        encoded.geometries[index] = {geometry.vertexBase, geometry.primitiveBase, geometry.primitiveCount,
+                                     static_cast<uint32_t>(geometry.geometryClass)};
+    }
+    encoded.geometryCount = hitData.geometryCount;
+    encoded.revisionLow = static_cast<uint32_t>(hitData.revision);
+    encoded.revisionHigh = static_cast<uint32_t>(hitData.revision >> 32u);
+    encoded.contractVersion = kTerrainRayTracingContractVersion;
+    return encoded;
+}
+
 } // namespace renderer::contracts

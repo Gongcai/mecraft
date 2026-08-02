@@ -76,5 +76,19 @@ int main() {
                             static_cast<uint32_t>(RtgiTraceClassification::NonFinite) == 4u,
                         "RTGI validation classifications must remain stable") &&
             valid;
+
+    const std::optional<uint32_t> packedValidation = encodeRtgiTraceValidation(RtgiTraceClassification::Hit, 17u, 1u);
+    valid =
+        requireTrue(
+            packedValidation.has_value() &&
+                rtgiTraceValidationClassification(*packedValidation) == RtgiTraceClassification::Hit &&
+                rtgiTraceValidationCandidateCount(*packedValidation) == 17u &&
+                rtgiTraceValidationConfirmedCount(*packedValidation) == 1u &&
+                !encodeRtgiTraceValidation(RtgiTraceClassification::Miss, kRtgiTraceValidationCandidateMask + 1u, 0u)
+                     .has_value() &&
+                !encodeRtgiTraceValidation(RtgiTraceClassification::Miss, 0u, kRtgiTraceValidationConfirmedMask + 1u)
+                     .has_value(),
+            "RTGI validation packing must preserve classification and Cutout counters") &&
+        valid;
     return valid ? 0 : 1;
 }

@@ -24,6 +24,24 @@ struct TerrainPrimitiveMetadata {
     uint faceAndFlags;
 };
 
+struct TerrainRayTracingGpuGeometry {
+    uint vertexBase;
+    uint primitiveBase;
+    uint primitiveCount;
+    uint geometryClass;
+};
+
+// The address words and aligned Geometry records mirror the fixed 64-byte C++ Custom Index record.
+struct TerrainRayTracingGpuInstance {
+    uvec2 vertexAddressWords;
+    uvec2 primitiveMetadataAddressWords;
+    TerrainRayTracingGpuGeometry geometries[2];
+    uint geometryCount;
+    uint revisionLow;
+    uint revisionHigh;
+    uint contractVersion;
+};
+
 uint terrainPrimitiveAnimationFrameCount(TerrainPrimitiveMetadata metadata) {
     return metadata.animationAndFlags & TERRAIN_PRIMITIVE_ANIMATION_FRAME_COUNT_MASK;
 }
@@ -57,6 +75,14 @@ uvec2 terrainPrimitiveTintCoordinates(TerrainPrimitiveMetadata metadata) {
 int terrainPrimitiveFace(TerrainPrimitiveMetadata metadata) {
     uint encodedFace = metadata.faceAndFlags & TERRAIN_PRIMITIVE_FACE_MASK;
     return encodedFace <= 0x7fu ? int(encodedFace) : int(encodedFace) - 0x100;
+}
+
+bool terrainRayTracingGpuInstanceValid(TerrainRayTracingGpuInstance instanceData) {
+    return instanceData.contractVersion == TERRAIN_RAY_TRACING_CONTRACT_VERSION &&
+           instanceData.geometryCount > 0u && instanceData.geometryCount <= 2u &&
+           (instanceData.revisionLow != 0u || instanceData.revisionHigh != 0u) &&
+           any(notEqual(instanceData.vertexAddressWords, uvec2(0u))) &&
+           any(notEqual(instanceData.primitiveMetadataAddressWords, uvec2(0u)));
 }
 
 #endif // MECRAFT_TERRAIN_RAY_TRACING_CONTRACT_GLSL

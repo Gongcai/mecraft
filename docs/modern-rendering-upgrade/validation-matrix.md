@@ -83,13 +83,16 @@ BLAS 也用于体素世界中的实体和方块实体。
 
 Cutout Ray Query 的底层 Vulkan GPU 契约已由真实 Compute Smoke 覆盖：Opaque 自动提交、Cutout
 Candidate 拒绝/确认、Instance Custom Index、Geometry Index、Primitive ID 与 Barycentrics 均已回读
-验证，且未产生 Validation/VUID 错误。该结果不替代 V03/M03 Alpha Mask 场景验收；统一纹理采样、
-主视图同一 Alpha Cutoff 和 Candidate/Confirmed Counter 仍按本矩阵执行。
+验证。生产 `RtgiTracePass` 另以 2×1 Terrain 场景验证 Barycentric UV、两帧动画纹理层、显式 LOD
+Texture2DArray 采样和统一 Alpha Cutoff：透明像素必须产生 `Candidate/Confirmed = 1/0` 并命中后方
+Opaque，实心像素必须产生 `1/1` 并确认前方 Cutout，且全程不得产生 Validation/VUID 错误。该结果
+不替代 V03/M03 Alpha Mask 场景验收；模型 Alpha Mask 仍须通过 M03。
 
 Terrain Primitive Metadata 基础层另由 GPU Buffer 回读与双代际生命周期 Smoke 约束：16 字节记录必须
 与 CPU 生成值逐字节一致，Opaque/Cutout Geometry Index 必须映射到连续 Vertex/Primitive Base；新
 Terrain BLAS 激活后，旧 Active TLAS 的 Custom Index 仍须保留旧 Vertex/Metadata Device Address，直到
-对应 TLAS 代际完成退役。
+对应 TLAS 代际完成退役。每个 TLAS 代际的 64 字节命中记录也必须逐字节匹配 CPU 编码；Static Mesh
+Custom Index 对应记录必须保持全零，命中表字节数必须严格等于 `Instance Count × 64`。
 
 ## 3. RTGI 与 NRD 画质门槛
 

@@ -1,5 +1,6 @@
 #include "renderer/contracts/TerrainRayTracingContract.h"
 
+#include <array>
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
@@ -23,6 +24,12 @@ namespace {
         return false;
     }
     const std::string source{std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>()};
+    const std::string queryPath = std::string(MECRAFT_TEST_SOURCE_DIR) + "/assets/shaders/terrain_ray_query.glsl";
+    std::ifstream queryFile(queryPath);
+    if (!queryFile.is_open()) {
+        return false;
+    }
+    const std::string querySource{std::istreambuf_iterator<char>(queryFile), std::istreambuf_iterator<char>()};
     return source.find("const uint TERRAIN_RAY_TRACING_CONTRACT_VERSION = 1u;") != std::string::npos &&
            source.find("const uint TERRAIN_RAY_TRACING_VERTEX_STRIDE = 32u;") != std::string::npos &&
            source.find("const uint TERRAIN_RAY_TRACING_VERTEX_UV_OFFSET = 12u;") != std::string::npos &&
@@ -31,7 +38,12 @@ namespace {
            source.find("uint animationAndFlags;") != std::string::npos &&
            source.find("uint materialAndTint;") != std::string::npos &&
            source.find("uint faceAndFlags;") != std::string::npos &&
-           source.find("int terrainPrimitiveFace(TerrainPrimitiveMetadata metadata)") != std::string::npos;
+           source.find("struct TerrainRayTracingGpuInstance") != std::string::npos &&
+           source.find("int terrainPrimitiveFace(TerrainPrimitiveMetadata metadata)") != std::string::npos &&
+           querySource.find("layout(buffer_reference, std430, buffer_reference_align = 4)") != std::string::npos &&
+           querySource.find("vec2 terrainRayQueryBarycentricUv") != std::string::npos &&
+           querySource.find("bool terrainRayQueryConeTextureLod") != std::string::npos &&
+           querySource.find("bool terrainRayQueryCandidateAlphaPasses") != std::string::npos;
 }
 
 } // namespace
@@ -75,9 +87,9 @@ int main() {
             valid;
 
     TerrainRayTracingHitData mixed;
-    mixed.revision = 7u;
-    mixed.vertexAddress = 0x1000u;
-    mixed.primitiveMetadataAddress = 0x2000u;
+    mixed.revision = 0x0000000400000007ull;
+    mixed.vertexAddress = 0x0000000210001000ull;
+    mixed.primitiveMetadataAddress = 0x0000000320002000ull;
     mixed.geometryCount = 2u;
     mixed.geometries[0] = {0u, TerrainRayTracingGeometryClass::Opaque, 0u, 6u, 0u, 2u};
     mixed.geometries[1] = {1u, TerrainRayTracingGeometryClass::Cutout, 6u, 3u, 2u, 1u};
@@ -92,6 +104,18 @@ int main() {
                         "hit data must accept canonical mixed and cutout-only Geometry Index mappings") &&
             valid;
 
+    const std::optional<TerrainRayTracingGpuInstance> gpuInstance = encodeTerrainRayTracingGpuInstance(mixed);
+    valid = requireTrue(gpuInstance.has_value() &&
+                            gpuInstance->vertexAddressWords == std::array<uint32_t, 2u>{0x10001000u, 2u} &&
+                            gpuInstance->primitiveMetadataAddressWords == std::array<uint32_t, 2u>{0x20002000u, 3u} &&
+                            gpuInstance->geometryCount == 2u && gpuInstance->revisionLow == 7u &&
+                            gpuInstance->revisionHigh == 4u &&
+                            gpuInstance->contractVersion == kTerrainRayTracingContractVersion &&
+                            gpuInstance->geometries[0] == TerrainRayTracingGpuGeometry{0u, 0u, 2u, 0u} &&
+                            gpuInstance->geometries[1] == TerrainRayTracingGpuGeometry{6u, 2u, 1u, 1u},
+                        "GPU hit data must preserve 64-bit addresses and every Geometry Index range") &&
+            valid;
+
     TerrainRayTracingHitData invalidMapping = mixed;
     invalidMapping.geometries[1].primitiveBase = 1u;
     TerrainRayTracingHitData invalidOrder = mixed;
@@ -104,6 +128,9 @@ int main() {
                 !validTerrainRayTracingHitData(invalidMapping) && !validTerrainRayTracingHitData(invalidOrder) &&
                     !validTerrainRayTracingHitData(invalidStride) && !validTerrainRayTracingHitData(invalidUnusedRange),
                 "hit data must reject ambiguous bases, ordering, strides, and unused ranges") &&
+            valid;
+    valid = requireTrue(!encodeTerrainRayTracingGpuInstance(invalidMapping).has_value(),
+                        "GPU hit-data encoding must reject invalid CPU snapshots") &&
             valid;
 
     valid =

@@ -21,15 +21,16 @@ public:
         RgTextureHandle normalAo;
         RgTextureHandle materialAux;
         RgTextureHandle blueNoise;
+        RgTextureHandle terrainAlbedo;
         RgTextureHandle diffuseRadianceHitDistance;
         RgTextureHandle validation;
     };
 
-    /// Explicit trace controls for the first opaque-only RTGI production slice.
+    /// Explicit trace controls for opaque traversal and terrain Cutout Candidate confirmation.
     struct Settings final {
         float maxRayDistance = 64.0f;
         float minimumRayOriginBias = 0.001f;
-        uint8_t instanceMask = 1u;
+        uint8_t instanceMask = 3u;
         bool useJitteredProjection = false;
     };
 
@@ -41,6 +42,7 @@ public:
         uint32_t width = 0u;
         uint32_t height = 0u;
         uint8_t instanceMask = 0u;
+        uint64_t terrainHitDataBytes = 0u;
     };
 
     void shutdown() override;
@@ -49,8 +51,8 @@ public:
     /// Adds one Vulkan compute ray-query pass with exact G-buffer and raw-signal dependencies.
     /// @param graph Render graph receiving the trace declaration.
     /// @param ctx Current frame matrices, dimensions, and shared Global Bindless/TLAS owners.
-    /// @param settings Explicit opaque trace distance, origin bias, mask, and projection contract.
-    /// @param resources Imported G-buffer/noise inputs and storage-image outputs.
+    /// @param settings Explicit solid trace distance, origin bias, mask, and projection contract.
+    /// @param resources Imported G-buffer, noise, terrain albedo, and storage-image resources.
     /// @param dependency Pass that completes all trace inputs before dispatch.
     /// @return Trace pass handle, or an invalid handle when any production contract is invalid.
     [[nodiscard]] RgPassHandle addGraphPass(RenderGraph& graph, const FrameContext& ctx, const Settings& settings,
@@ -66,25 +68,32 @@ private:
         RhiTextureViewHandle normalAo;
         RhiTextureViewHandle materialAux;
         RhiTextureViewHandle blueNoise;
+        RhiTextureViewHandle terrainAlbedo;
         RhiTextureViewHandle diffuseRadianceHitDistance;
         RhiTextureViewHandle validation;
     };
 
     [[nodiscard]] bool recordTrace(RhiCommandList& commandList, const FrameContext& ctx, const Settings& settings,
-                                   const TraceViews& views, uint64_t sceneTlasRevision);
+                                   const TraceViews& views, RhiBufferHandle terrainHitDataBuffer,
+                                   uint32_t sceneInstanceCount, uint64_t terrainHitDataBytes,
+                                   uint64_t sceneTlasRevision);
     [[nodiscard]] bool ensurePipeline(RhiDevice& rhiDevice, RhiBindGroupLayoutHandle globalBindlessLayout);
-    [[nodiscard]] bool ensureBindGroup(RhiDevice& rhiDevice, const TraceViews& views);
+    [[nodiscard]] bool ensureBindGroup(RhiDevice& rhiDevice, const TraceViews& views,
+                                       RhiBufferHandle terrainHitDataBuffer, uint64_t terrainHitDataBytes);
     void destroyRhiResources();
 
     RhiDevice* m_rhiDevice = nullptr;
     RhiShaderHandle m_shader;
     RhiSamplerHandle m_sampler;
+    RhiSamplerHandle m_terrainSampler;
     RhiBindGroupLayoutHandle m_globalBindlessLayout;
     RhiBindGroupLayoutHandle m_traceBindGroupLayout;
     RhiPipelineLayoutHandle m_pipelineLayout;
     RhiPipelineHandle m_pipeline;
     RhiBindGroupHandle m_traceBindGroup;
-    std::array<RhiTextureViewHandle, 6u> m_boundViews{};
+    RhiBufferHandle m_boundTerrainHitDataBuffer;
+    uint64_t m_boundTerrainHitDataBytes = 0u;
+    std::array<RhiTextureViewHandle, 7u> m_boundViews{};
     Stats m_stats;
 };
 

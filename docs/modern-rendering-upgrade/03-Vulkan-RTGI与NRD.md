@@ -101,7 +101,9 @@ Storage、Device Address 与 AS Build Input 用途；同一资产的多个 ECS �
 固定 GI Opaque/Cutout、Shadow、Reflection 与 First Person Mask。每个 TLAS 代际持有唯一 BLAS 集合，
 Desired/Pending/Active/Retired 状态机覆盖 Transform 连续变化、空场景、部分 Graph 提交失败及资产卸载。
 Terrain Custom Index 还保存所引用 BLAS 代际的 Vertex/Primitive Metadata Device Address、Stride、Revision
-及 Geometry Index 范围快照，因此旧 Active TLAS 不会读取新换代 Terrain BLAS 的地址。
+及 Geometry Index 范围快照；每个 TLAS 代际同时持有按 Custom Index 排列的 64 字节 GPU 命中表，
+Terrain 写入完整地址与范围，Static Mesh 写入明确零记录。因此旧 Active TLAS 不会读取新换代
+Terrain BLAS 的地址。
 Dashboard 已发布 Instance、唯一 BLAS、TLAS/BLAS 字节、Revision 与 Build 统计。Vulkan Smoke 覆盖
 Opaque/Cutout 多 Geometry BLAS、两个 Instance 共享同一 BLAS、Transform 换代与空场景退役；Damaged
 Helmet、Sponza 的 Vulkan 场景验收及 Damaged Helmet 的 OpenGL 基础渲染均已通过。
@@ -117,11 +119,15 @@ GBuffer、Probe Capture 与 Shadow 的非 Leaves Cutout 已共用体素材质采
 `0.1`，NaN/Inf Alpha 明确拒绝，动画层使用同一确定性帧选择函数。C++ 契约同时固化
 1024 层纹理数组及 6-bit 帧数/FPS 上限，非法元数据以 `std::optional` 报告。Terrain Primitive
 Metadata、Geometry Index 到 Primitive Base 映射、BLAS Device Address 与 TLAS 代际快照链已完成，
-并通过 GPU Buffer 回读与两代 Terrain BLAS/TLAS 生命周期 Smoke。Barycentric UV 重建、纹理数组采样、
-Ray Cone 与生产 Candidate Confirm 尚未接入。
+并通过 GPU Buffer 回读与两代 Terrain BLAS/TLAS 生命周期 Smoke。生产 Shader 现已从 Candidate 的
+Geometry Index、Primitive ID 与 Barycentrics 定位固定 32 字节 `BlockVertex` 和 Primitive Metadata，
+重建 UV，按像素世界覆盖、射线距离与三角形 UV 梯度计算 Ray Cone LOD，选择动画 Texture2DArray
+层并执行统一 Alpha Test。
 生产 `RtgiTracePass` 已从 GBuffer 重建主表面，使用 Blue Noise、Cranley-Patterson 帧旋转与
-Cosine-weighted Hemisphere Sampling，并通过固定 Binding 4 对 `GI_OPAQUE` 执行 Compute Ray Query。
-以下各节继续约束 Cutout、次级命中着色和正式 Deferred 消费链。
+Cosine-weighted Hemisphere Sampling，并通过固定 Binding 4 对 `GI_OPAQUE | GI_CUTOUT` 执行 Compute
+Ray Query。Candidate Alpha 通过时显式调用 `rayQueryConfirmIntersectionEXT`，Validation Word 同时记录
+Classification、Candidate Count 与 Confirmed Count。以下各节继续约束模型次级命中着色和正式
+Deferred 消费链。
 
 ### 4.1 体素区块 BLAS
 
@@ -200,7 +206,9 @@ Roughness、Material ID 和 Stable Object ID。Ray Origin 沿几何法线偏移�
 当前 C++/GLSL 共享确定性整数 Hash、帧旋转、余弦半球映射与 112 字节 Push Constant
 契约。单元测试固化 Hash 结果、采样有效域和期望余弦分布；真实 Vulkan Smoke 使用
 1×1 GBuffer、Blue Noise、Scene TLAS 与生产 `RtgiTracePass`，回读验证约 0.5 世界单位的
-Opaque 命中距离。
+Opaque 命中距离。Terrain 生产链另使用 2×1 GBuffer 与两层动画纹理数组：左像素在动画层 Alpha
+为零时拒绝 Cutout 并命中约 2 世界单位后的 Opaque，右像素确认 Cutout 并命中约 1 世界单位；两者
+分别回读 `Candidate/Confirmed = 1/0` 与 `1/1`，Validation 未发现错误。
 
 ### 5.3 Candidate 命中
 
@@ -212,10 +220,11 @@ Opaque Triangle 可直接接受 Committed Intersection。Cutout Triangle 按以�
 4. 使用主视图同一 Alpha Cutoff 与纹理采样函数。
 5. Alpha 通过时调用 `rayQueryConfirmIntersectionEXT`。
 
-当前 Vulkan Smoke 已固化第 1、5 项的 GPU 契约，并以确定性 Alpha 结果分别覆盖 Candidate 拒绝与确认。
-第 4 项的固定 Alpha 边界与动画层选择契约已接入体素光栅路径；完整纹理采样还需要
-Greedy UV Repeat、Primitive Metadata、Geometry Index 映射与 Ray Cone LOD。生产 Trace Pass 当前只使用
-`GI_OPAQUE` Mask，不确认 Cutout Candidate；这条运行时命中链继续在 M3 完成。
+当前 Terrain 生产链已完成第 1、2、4、5 项：固定 Geometry Range 定位 Vertex/Metadata，Barycentrics
+重建 Greedy UV，动画元数据选择纹理层，显式 LOD 采样复用统一 Alpha Cutoff，并在通过时确认 Candidate。
+Biome Tint 与完整材质颜色属于次级命中辐射阶段，不参与 Alpha 边界。底层四射线 Smoke 与生产 2×1
+`RtgiTracePass` Smoke 分别锁定 Ray Query 内建值和真实纹理判定结果；模型 Alpha Mask 的材质读取归
+第 3 项继续实现。
 
 Ray Cone 根据射线距离、像素覆盖和三角形 UV 梯度选择 Texture LOD，避免树叶与细栅栏
 在次级射线中出现过度锐利闪烁。

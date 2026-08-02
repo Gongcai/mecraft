@@ -44,6 +44,87 @@ namespace {
 
 enum class FrameAttempt { Success, Retry, Error };
 
+struct RtgiTraceSmokeExpectedPixel final {
+    renderer::contracts::RtgiTraceClassification classification = renderer::contracts::RtgiTraceClassification::Miss;
+    uint32_t candidateCount = 0u;
+    uint32_t confirmedCount = 0u;
+    float minimumHitDistance = 0.0f;
+    float maximumHitDistance = 0.0f;
+};
+
+struct RtgiTraceSmokeCase final {
+    const char* label = nullptr;
+    uint32_t width = 0u;
+    uint32_t height = 0u;
+    std::vector<float> depth;
+    std::vector<float> normalAo;
+    std::vector<float> materialAux;
+    std::vector<float> blueNoise;
+    uint32_t terrainAlbedoWidth = 0u;
+    uint32_t terrainAlbedoHeight = 0u;
+    uint32_t terrainAlbedoLayers = 0u;
+    std::vector<uint8_t> terrainAlbedo;
+    glm::mat4 inverseViewProjection{1.0f};
+    glm::vec3 cameraPosition{0.0f};
+    float animationTime = 0.0f;
+    float maxRayDistance = 10.0f;
+    float minimumRayOriginBias = 0.001f;
+    uint8_t instanceMask = 0u;
+    std::vector<RtgiTraceSmokeExpectedPixel> expectedPixels;
+};
+
+[[nodiscard]] bool validateRtgiTraceCase(VkRhiDevice& device, RhiCommandListPool& commandPool,
+                                         renderer::rt::SceneTlasCache& sceneTlas,
+                                         const renderer::rt::SceneTlasView& activeTlas,
+                                         const RtgiTraceSmokeCase& smokeCase);
+
+[[nodiscard]] bool validateGpuBufferContents(VkRhiDevice& device, RhiCommandListPool& commandPool,
+                                             const RhiBufferHandle source, const RhiResourceState sourceState,
+                                             const void* expected, const uint64_t byteCount, const char* debugName) {
+    if (!source.isValid() || expected == nullptr || byteCount == 0u ||
+        byteCount > static_cast<uint64_t>(std::numeric_limits<size_t>::max()) || debugName == nullptr) {
+        return false;
+    }
+
+    RhiBufferDesc readbackDesc;
+    readbackDesc.debugName = debugName;
+    readbackDesc.size = byteCount;
+    readbackDesc.usage = rhiFlag(RhiBufferUsage::TransferDst) | rhiFlag(RhiBufferUsage::MapRead);
+    readbackDesc.memoryUsage = RhiMemoryUsage::GpuToCpu;
+    readbackDesc.initialState = RhiResourceState::TransferDst;
+    readbackDesc.memoryCategory = RhiMemoryCategory::Readback;
+    const RhiBufferHandle readback = device.createBuffer(readbackDesc, nullptr, 0u);
+    if (!readback.isValid()) {
+        return false;
+    }
+
+    RhiCommandList* commands = commandPool.acquire(RhiCommandListType::Graphics);
+    bool valid = commands != nullptr && commands->begin({debugName, RhiCommandListType::Graphics});
+    if (valid) {
+        commands->bufferBarrier({source, sourceState, RhiResourceState::TransferSrc});
+        commands->copyBuffer({source, readback, 0u, 0u, byteCount});
+        commands->bufferBarrier({source, RhiResourceState::TransferSrc, sourceState});
+        commands->bufferBarrier({readback, RhiResourceState::TransferDst, RhiResourceState::HostRead});
+        valid = commands->end();
+    }
+
+    RhiSubmissionToken token;
+    if (valid) {
+        RhiCommandList* submissions[] = {commands};
+        valid = device.submit({debugName, submissions, 1u, RhiQueueType::Graphics}, &token) &&
+                device.waitForSubmission(token);
+    }
+    if (valid) {
+        const void* mapped = device.mapBuffer(readback, 0u, byteCount);
+        valid = mapped != nullptr && std::memcmp(mapped, expected, static_cast<size_t>(byteCount)) == 0;
+        if (mapped != nullptr) {
+            device.unmapBuffer(readback);
+        }
+    }
+    device.destroyBuffer(readback);
+    return valid;
+}
+
 [[nodiscard]] bool validateIndependentUiPresentation(VkRhiDevice& device, RhiCommandListPool& commandPool,
                                                      GLFWwindow* window) {
     std::unique_ptr<PresentationBackend> backend = createNativePresentationBackend(device);
@@ -2835,13 +2916,13 @@ void main() {
                                animated ? 1.0f : 0.0f, tintKind, 64u, 128u, derivativeMaterialId);
     };
     const std::vector<BlockVertex> opaque{
-        makeVertex(0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 2, 17u, 1u, 0u, false, BlockTintKinds::NONE, 3u),
-        makeVertex(1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 2, 17u, 1u, 0u, false, BlockTintKinds::NONE, 3u),
-        makeVertex(0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 2, 17u, 1u, 0u, false, BlockTintKinds::NONE, 3u)};
+        makeVertex(-2.0f, -2.0f, 2.0f, -0.5f, 0.0f, 2, 0u, 1u, 0u, false, BlockTintKinds::NONE, 3u),
+        makeVertex(2.0f, -2.0f, 2.0f, 1.5f, 0.0f, 2, 0u, 1u, 0u, false, BlockTintKinds::NONE, 3u),
+        makeVertex(0.0f, 2.0f, 2.0f, 0.5f, 1.0f, 2, 0u, 1u, 0u, false, BlockTintKinds::NONE, 3u)};
     const std::vector<BlockVertex> cutout{
-        makeVertex(0.0f, 0.0f, 1.0f, 0.0f, 0.0f, -1, 100u, 3u, 4u, true, BlockTintKinds::GRASS, 9u),
-        makeVertex(1.0f, 0.0f, 1.0f, 1.0f, 0.0f, -1, 100u, 3u, 4u, true, BlockTintKinds::GRASS, 9u),
-        makeVertex(0.0f, 1.0f, 1.0f, 0.0f, 1.0f, -1, 100u, 3u, 4u, true, BlockTintKinds::GRASS, 9u)};
+        makeVertex(-2.0f, -2.0f, 1.0f, -0.5f, 0.0f, -1, 0u, 2u, 1u, true, BlockTintKinds::GRASS, 9u),
+        makeVertex(2.0f, -2.0f, 1.0f, 1.5f, 0.0f, -1, 0u, 2u, 1u, true, BlockTintKinds::GRASS, 9u),
+        makeVertex(0.0f, 2.0f, 1.0f, 0.5f, 1.0f, -1, 0u, 2u, 1u, true, BlockTintKinds::GRASS, 9u)};
     const auto makeGeometry = [&]() {
         TerrainBlasGeometry geometry;
         const TerrainBlasRequestResult prepared = TerrainBlasCache::prepareGeometry(opaque, cutout, {}, geometry);
@@ -3005,8 +3086,51 @@ void main() {
         firstPrimitiveMetadataBuffer = firstView->primitiveMetadataBuffer;
         firstSceneHitData = {firstView->hitData, firstView->geometryBuffer, firstView->primitiveMetadataBuffer};
     }
-    valid = valid && firstTlas.has_value() && firstTlas->mappings.size() == 1u &&
-            firstTlas->mappings[0].terrainHitData == std::optional(firstSceneHitData);
+    const std::optional<renderer::contracts::TerrainRayTracingGpuInstance> firstGpuHitData =
+        renderer::contracts::encodeTerrainRayTracingGpuInstance(firstHitData);
+    const renderer::rt::SceneTlasStats firstTlasStats = sceneTlas.stats();
+    valid = valid && firstTlas.has_value() && firstTlas->instanceCount == 1u && firstTlas->mappings.size() == 1u &&
+            firstTlas->mappings[0].terrainHitData == std::optional(firstSceneHitData) &&
+            firstTlas->terrainHitDataBuffer.isValid() &&
+            firstTlas->terrainHitDataBytes == sizeof(renderer::contracts::TerrainRayTracingGpuInstance) &&
+            firstTlasStats.activeTerrainHitDataBytes == firstTlas->terrainHitDataBytes && firstGpuHitData.has_value() &&
+            validateGpuBufferContents(device, commandPool, firstTlas->terrainHitDataBuffer,
+                                      RhiResourceState::StorageBuffer, &*firstGpuHitData, sizeof(*firstGpuHitData),
+                                      "VulkanSmoke.TerrainTLAS.HitDataReadback1");
+    if (valid) {
+        const glm::vec2 rotation = renderer::contracts::rtgiCranleyPattersonRotation(0u);
+        const auto wrapUnit = [](const float value) {
+            return value - std::floor(value);
+        };
+        constexpr glm::vec2 kDesiredSample{0.125f, 0.0001f};
+        const std::array<float, 4u> noiseTexel{wrapUnit(kDesiredSample.x - rotation.x),
+                                               wrapUnit(kDesiredSample.y - rotation.y), 0.0f, 1.0f};
+        RtgiTraceSmokeCase smokeCase;
+        smokeCase.label = "Terrain Cutout Candidate Confirm";
+        smokeCase.width = 2u;
+        smokeCase.height = 1u;
+        smokeCase.depth = {0.5f, 0.5f};
+        smokeCase.normalAo = {0.5f, 0.5f, 1.0f, 0.0f, 0.5f, 0.5f, 1.0f, 0.0f};
+        smokeCase.materialAux = std::vector<float>(8u, 0.0f);
+        smokeCase.blueNoise = {noiseTexel[0], noiseTexel[1], noiseTexel[2], noiseTexel[3],
+                               noiseTexel[0], noiseTexel[1], noiseTexel[2], noiseTexel[3]};
+        smokeCase.terrainAlbedoWidth = 2u;
+        smokeCase.terrainAlbedoHeight = 1u;
+        smokeCase.terrainAlbedoLayers = 2u;
+        smokeCase.terrainAlbedo = {
+            255u, 255u, 255u, 255u, 255u, 255u, 255u, 255u, 255u, 255u, 255u, 0u, 255u, 255u, 255u, 255u,
+        };
+        smokeCase.inverseViewProjection = glm::translate(glm::mat4(1.0f), glm::vec3(32.0f, 64.0f, -16.0f));
+        smokeCase.cameraPosition = {32.0f, 64.0f, -17.0f};
+        smokeCase.animationTime = 1.0f;
+        smokeCase.instanceMask = renderer::rt::sceneTlasMaskBit(renderer::rt::SceneTlasInstanceMask::GiOpaque) |
+                                 renderer::rt::sceneTlasMaskBit(renderer::rt::SceneTlasInstanceMask::GiCutout);
+        smokeCase.expectedPixels = {
+            {renderer::contracts::RtgiTraceClassification::Hit, 1u, 0u, 1.95f, 2.05f},
+            {renderer::contracts::RtgiTraceClassification::Hit, 1u, 1u, 0.95f, 1.05f},
+        };
+        valid = validateRtgiTraceCase(device, commandPool, sceneTlas, *firstTlas, smokeCase);
+    }
     firstView.reset();
 
     valid = valid &&
@@ -3038,15 +3162,29 @@ void main() {
             device.bufferDeviceAddress(firstPrimitiveMetadataBuffer) == firstHitData.primitiveMetadataAddress &&
             submitTlasFrame("VulkanSmoke.TerrainTLAS.Build2");
     const std::optional<renderer::rt::SceneTlasView> secondTlas = valid ? sceneTlas.activeView() : std::nullopt;
+    const std::optional<renderer::contracts::TerrainRayTracingGpuInstance> secondGpuHitData =
+        secondView.has_value() ? renderer::contracts::encodeTerrainRayTracingGpuInstance(secondView->hitData)
+                               : std::optional<renderer::contracts::TerrainRayTracingGpuInstance>{};
+    const renderer::rt::SceneTlasStats secondTlasStats = sceneTlas.stats();
     valid = valid && secondTlas.has_value() && secondTlas->revision > firstTlas->revision &&
-            secondTlas->mappings.size() == 1u && secondTlas->mappings[0].terrainHitData.has_value() &&
+            secondTlas->instanceCount == 1u && secondTlas->mappings.size() == 1u &&
+            secondTlas->mappings[0].terrainHitData.has_value() &&
             secondTlas->mappings[0].terrainHitData->rayTracing == secondView->hitData &&
             secondTlas->mappings[0].terrainHitData->vertexBuffer.index == secondView->geometryBuffer.index &&
             secondTlas->mappings[0].terrainHitData->vertexBuffer.generation == secondView->geometryBuffer.generation &&
             secondTlas->mappings[0].terrainHitData->primitiveMetadataBuffer.index ==
                 secondView->primitiveMetadataBuffer.index &&
             secondTlas->mappings[0].terrainHitData->primitiveMetadataBuffer.generation ==
-                secondView->primitiveMetadataBuffer.generation;
+                secondView->primitiveMetadataBuffer.generation &&
+            secondTlas->terrainHitDataBuffer.isValid() &&
+            (secondTlas->terrainHitDataBuffer.index != firstTlas->terrainHitDataBuffer.index ||
+             secondTlas->terrainHitDataBuffer.generation != firstTlas->terrainHitDataBuffer.generation) &&
+            secondTlas->terrainHitDataBytes == sizeof(renderer::contracts::TerrainRayTracingGpuInstance) &&
+            secondTlasStats.activeTerrainHitDataBytes == secondTlas->terrainHitDataBytes &&
+            secondGpuHitData.has_value() &&
+            validateGpuBufferContents(device, commandPool, secondTlas->terrainHitDataBuffer,
+                                      RhiResourceState::StorageBuffer, &*secondGpuHitData, sizeof(*secondGpuHitData),
+                                      "VulkanSmoke.TerrainTLAS.HitDataReadback2");
 
     TerrainBlasGeometry invalidGeometry = makeGeometry();
     if (!invalidGeometry.vertices.empty()) {
@@ -3238,9 +3376,12 @@ static_assert(sizeof(RayQuerySmokeResult) == 32u);
     return valid;
 }
 
-[[nodiscard]] bool validateRtgiTracePass(VkRhiDevice& device, RhiCommandListPool& commandPool,
+namespace {
+
+[[nodiscard]] bool validateRtgiTraceCase(VkRhiDevice& device, RhiCommandListPool& commandPool,
                                          renderer::rt::SceneTlasCache& sceneTlas,
-                                         const renderer::rt::SceneTlasView& activeTlas) {
+                                         const renderer::rt::SceneTlasView& activeTlas,
+                                         const RtgiTraceSmokeCase& smokeCase) {
     using namespace renderer::contracts;
     using namespace renderer::core;
     using namespace renderer::rt;
@@ -3251,14 +3392,38 @@ static_assert(sizeof(RayQuerySmokeResult) == 32u);
         RhiTextureViewHandle view;
     };
 
+    const size_t maximumSize = std::numeric_limits<size_t>::max();
+    if (smokeCase.label == nullptr || smokeCase.width == 0u || smokeCase.height == 0u ||
+        smokeCase.terrainAlbedoWidth == 0u || smokeCase.terrainAlbedoHeight == 0u ||
+        smokeCase.terrainAlbedoLayers == 0u ||
+        static_cast<size_t>(smokeCase.width) > maximumSize / static_cast<size_t>(smokeCase.height) ||
+        static_cast<size_t>(smokeCase.terrainAlbedoWidth) >
+            maximumSize / static_cast<size_t>(smokeCase.terrainAlbedoHeight)) {
+        return false;
+    }
+    const size_t pixelCount = static_cast<size_t>(smokeCase.width) * static_cast<size_t>(smokeCase.height);
+    const size_t terrainLayerTexels =
+        static_cast<size_t>(smokeCase.terrainAlbedoWidth) * static_cast<size_t>(smokeCase.terrainAlbedoHeight);
+    if (pixelCount > maximumSize / (4u * sizeof(float)) ||
+        terrainLayerTexels > maximumSize / static_cast<size_t>(smokeCase.terrainAlbedoLayers)) {
+        return false;
+    }
+    const size_t terrainTexelCount = terrainLayerTexels * static_cast<size_t>(smokeCase.terrainAlbedoLayers);
+    if (terrainTexelCount > maximumSize / 4u || smokeCase.depth.size() != pixelCount ||
+        smokeCase.normalAo.size() != pixelCount * 4u || smokeCase.materialAux.size() != pixelCount * 4u ||
+        smokeCase.blueNoise.size() != pixelCount * 4u || smokeCase.terrainAlbedo.size() != terrainTexelCount * 4u ||
+        smokeCase.expectedPixels.size() != pixelCount) {
+        return false;
+    }
+
     const uint64_t validationErrorsBefore = device.validationErrorCount();
     const auto createTexture = [&](const char* debugName, const RhiTextureFormat format,
                                    const RhiTextureUsageFlags usage, const void* pixels, const size_t sizeBytes,
                                    const RhiResourceState finalState, SmokeTexture& output) {
         output.desc.debugName = debugName;
         output.desc.format = format;
-        output.desc.width = 1u;
-        output.desc.height = 1u;
+        output.desc.width = smokeCase.width;
+        output.desc.height = smokeCase.height;
         output.desc.usage = usage;
         output.desc.memoryCategory = RhiMemoryCategory::Transient;
         if (pixels != nullptr) {
@@ -3281,17 +3446,6 @@ static_assert(sizeof(RayQuerySmokeResult) == 32u);
         return output.view.isValid();
     };
 
-    constexpr float kDepth = 0.25f;
-    constexpr std::array<float, 4u> kPackedNormal{0.5f, 0.5f, 1.0f, 0.0f};
-    constexpr std::array<float, 4u> kOpaqueMaterialAux{0.0f, 0.0f, 0.0f, 0.0f};
-    const glm::vec2 rotation = rtgiCranleyPattersonRotation(0u);
-    const auto wrapUnit = [](const float value) {
-        return value - std::floor(value);
-    };
-    constexpr glm::vec2 kDesiredSample{0.125f, 0.0001f};
-    const std::array<float, 4u> blueNoise{wrapUnit(kDesiredSample.x - rotation.x),
-                                          wrapUnit(kDesiredSample.y - rotation.y), 0.0f, 1.0f};
-
     constexpr RhiTextureUsageFlags kSampledUsage =
         rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::TransferDst);
     constexpr RhiTextureUsageFlags kStorageUsage =
@@ -3300,6 +3454,7 @@ static_assert(sizeof(RayQuerySmokeResult) == 32u);
     SmokeTexture normalAo;
     SmokeTexture materialAux;
     SmokeTexture noise;
+    SmokeTexture terrainAlbedo;
     SmokeTexture radianceHitDistance;
     SmokeTexture validation;
     GlobalBindlessSet globalBindlessSet;
@@ -3312,7 +3467,8 @@ static_assert(sizeof(RayQuerySmokeResult) == 32u);
         if (validationReadback.isValid()) {
             device.destroyBuffer(validationReadback);
         }
-        SmokeTexture* textures[] = {&validation, &radianceHitDistance, &noise, &materialAux, &normalAo, &depth};
+        SmokeTexture* textures[] = {&validation, &radianceHitDistance, &terrainAlbedo, &noise, &materialAux, &normalAo,
+                                    &depth};
         for (SmokeTexture* texture : textures) {
             if (texture->view.isValid()) {
                 device.destroyTextureView(texture->view);
@@ -3323,21 +3479,49 @@ static_assert(sizeof(RayQuerySmokeResult) == 32u);
         }
     };
 
-    bool valid = activeTlas.accelerationStructure.isValid() &&
+    bool valid = activeTlas.accelerationStructure.isValid() && activeTlas.terrainHitDataBuffer.isValid() &&
                  createTexture("VulkanSmoke.RTGI.Depth", RhiTextureFormat::Depth32Float,
-                               kSampledUsage | rhiFlag(RhiTextureUsage::DepthStencilAttachment), &kDepth,
-                               sizeof(kDepth), RhiResourceState::DepthRead, depth) &&
+                               kSampledUsage | rhiFlag(RhiTextureUsage::DepthStencilAttachment), smokeCase.depth.data(),
+                               smokeCase.depth.size() * sizeof(float), RhiResourceState::DepthRead, depth) &&
                  createTexture("VulkanSmoke.RTGI.NormalAo", RhiTextureFormat::Rgba32Float, kSampledUsage,
-                               kPackedNormal.data(), sizeof(kPackedNormal), RhiResourceState::ShaderRead, normalAo) &&
+                               smokeCase.normalAo.data(), smokeCase.normalAo.size() * sizeof(float),
+                               RhiResourceState::ShaderRead, normalAo) &&
                  createTexture("VulkanSmoke.RTGI.MaterialAux", RhiTextureFormat::Rgba32Float, kSampledUsage,
-                               kOpaqueMaterialAux.data(), sizeof(kOpaqueMaterialAux), RhiResourceState::ShaderRead,
-                               materialAux) &&
+                               smokeCase.materialAux.data(), smokeCase.materialAux.size() * sizeof(float),
+                               RhiResourceState::ShaderRead, materialAux) &&
                  createTexture("VulkanSmoke.RTGI.BlueNoise", RhiTextureFormat::Rgba32Float, kSampledUsage,
-                               blueNoise.data(), sizeof(blueNoise), RhiResourceState::ShaderRead, noise) &&
+                               smokeCase.blueNoise.data(), smokeCase.blueNoise.size() * sizeof(float),
+                               RhiResourceState::ShaderRead, noise) &&
                  createTexture("VulkanSmoke.RTGI.RadianceHitDistance", RhiTextureFormat::Rgba16Float, kStorageUsage,
                                nullptr, 0u, RhiResourceState::Undefined, radianceHitDistance) &&
                  createTexture("VulkanSmoke.RTGI.Validation", RhiTextureFormat::Rg32Uint, kStorageUsage, nullptr, 0u,
                                RhiResourceState::Undefined, validation);
+    if (valid) {
+        terrainAlbedo.desc.debugName = "VulkanSmoke.RTGI.TerrainAlbedo";
+        terrainAlbedo.desc.dimension = RhiTextureDimension::Texture2DArray;
+        terrainAlbedo.desc.format = RhiTextureFormat::Rgba8Unorm;
+        terrainAlbedo.desc.width = smokeCase.terrainAlbedoWidth;
+        terrainAlbedo.desc.height = smokeCase.terrainAlbedoHeight;
+        terrainAlbedo.desc.depthOrLayers = smokeCase.terrainAlbedoLayers;
+        terrainAlbedo.desc.usage = kSampledUsage;
+        terrainAlbedo.desc.memoryCategory = RhiMemoryCategory::Transient;
+        RhiTextureInitialData initialData;
+        initialData.pixels = smokeCase.terrainAlbedo.data();
+        initialData.sizeBytes = smokeCase.terrainAlbedo.size();
+        initialData.layerCount = smokeCase.terrainAlbedoLayers;
+        initialData.finalState = RhiResourceState::ShaderRead;
+        terrainAlbedo.texture = device.createTexture(terrainAlbedo.desc, &initialData);
+        valid = terrainAlbedo.texture.isValid();
+        if (valid) {
+            RhiTextureViewDesc viewDesc;
+            viewDesc.texture = terrainAlbedo.texture;
+            viewDesc.viewType = RhiTextureViewType::Texture2DArray;
+            viewDesc.format = terrainAlbedo.desc.format;
+            viewDesc.layerCount = smokeCase.terrainAlbedoLayers;
+            terrainAlbedo.view = device.createTextureView(viewDesc);
+            valid = terrainAlbedo.view.isValid();
+        }
+    }
 
     if (valid) {
         GlobalBindlessSetConfig config;
@@ -3352,7 +3536,7 @@ static_assert(sizeof(RayQuerySmokeResult) == 32u);
 
     RhiBufferDesc readbackDesc;
     readbackDesc.debugName = "VulkanSmoke.RTGI.ValidationReadback";
-    readbackDesc.size = sizeof(uint32_t) * 2u;
+    readbackDesc.size = static_cast<uint64_t>(sizeof(uint32_t) * 2u) * pixelCount;
     readbackDesc.usage = rhiFlag(RhiBufferUsage::TransferDst) | rhiFlag(RhiBufferUsage::MapRead);
     readbackDesc.memoryUsage = RhiMemoryUsage::GpuToCpu;
     readbackDesc.initialState = RhiResourceState::TransferDst;
@@ -3370,10 +3554,12 @@ static_assert(sizeof(RayQuerySmokeResult) == 32u);
     FrameContext frame;
     frame.shared = &shared;
     frame.frameIndex = 0u;
-    frame.temporalExtents = makeTemporalFrameExtents({1u, 1u}, {1u, 1u}, {1u, 1u}, {1u, 1u});
-    frame.camera.invViewProj = glm::translate(glm::mat4(1.0f), glm::vec3(0.25f, 0.25f, 0.0f));
+    const TemporalExtent renderExtent{smokeCase.width, smokeCase.height};
+    frame.temporalExtents = makeTemporalFrameExtents(renderExtent, renderExtent, renderExtent, renderExtent);
+    frame.camera.invViewProj = smokeCase.inverseViewProjection;
     frame.camera.jitteredInvViewProj = frame.camera.invViewProj;
-    frame.camera.position = {0.25f, 0.25f, -0.5f};
+    frame.camera.position = smokeCase.cameraPosition;
+    frame.animationTime = smokeCase.animationTime;
 
     RenderGraph graph;
     const auto importTexture = [&](const SmokeTexture& texture, const RhiResourceState initialState,
@@ -3389,6 +3575,8 @@ static_assert(sizeof(RayQuerySmokeResult) == 32u);
         resources.normalAo = importTexture(normalAo, RhiResourceState::ShaderRead, RhiResourceState::ShaderRead);
         resources.materialAux = importTexture(materialAux, RhiResourceState::ShaderRead, RhiResourceState::ShaderRead);
         resources.blueNoise = importTexture(noise, RhiResourceState::ShaderRead, RhiResourceState::ShaderRead);
+        resources.terrainAlbedo =
+            importTexture(terrainAlbedo, RhiResourceState::ShaderRead, RhiResourceState::ShaderRead);
         resources.diffuseRadianceHitDistance =
             importTexture(radianceHitDistance, RhiResourceState::Undefined, RhiResourceState::ShaderWrite);
         resources.validation = importTexture(validation, RhiResourceState::Undefined, RhiResourceState::ShaderWrite);
@@ -3397,16 +3585,16 @@ static_assert(sizeof(RayQuerySmokeResult) == 32u);
                                                RhiQueueType::Graphics, RhiQueueType::Graphics});
         valid = resources.depth.isValid() && resources.normalAo.isValid() && resources.materialAux.isValid() &&
                 resources.blueNoise.isValid() && resources.diffuseRadianceHitDistance.isValid() &&
-                resources.validation.isValid() && readbackResource.isValid();
+                resources.terrainAlbedo.isValid() && resources.validation.isValid() && readbackResource.isValid();
     }
     if (valid) {
         const RgPassHandle inputReady = graph.addPass({"RTGI.InputReady", RgPassType::Copy, RhiQueueType::Graphics})
                                             .setExecute([](RgPassContext&) { return true; })
                                             .handle();
         RtgiTracePass::Settings settings;
-        settings.maxRayDistance = 10.0f;
-        settings.minimumRayOriginBias = 0.001f;
-        settings.instanceMask = sceneTlasMaskBit(SceneTlasInstanceMask::GiOpaque);
+        settings.maxRayDistance = smokeCase.maxRayDistance;
+        settings.minimumRayOriginBias = smokeCase.minimumRayOriginBias;
+        settings.instanceMask = smokeCase.instanceMask;
         traceHandle = tracePass.addGraphPass(graph, frame, settings, resources, inputReady);
         valid = traceHandle.isValid();
     }
@@ -3419,10 +3607,10 @@ static_assert(sizeof(RayQuerySmokeResult) == 32u);
                 RhiTextureBufferCopy copy;
                 copy.srcTexture = context.texture(resources.validation);
                 copy.dstBuffer = context.buffer(readbackResource);
-                copy.bytesPerRow = sizeof(uint32_t) * 2u;
-                copy.rowsPerImage = 1u;
-                copy.width = 1u;
-                copy.height = 1u;
+                copy.bytesPerRow = sizeof(uint32_t) * 2u * smokeCase.width;
+                copy.rowsPerImage = smokeCase.height;
+                copy.width = smokeCase.width;
+                copy.height = smokeCase.height;
                 context.commandList().copyTextureToBuffer(copy);
                 return true;
             });
@@ -3444,14 +3632,30 @@ static_assert(sizeof(RayQuerySmokeResult) == 32u);
         const auto* result = static_cast<const uint32_t*>(device.mapBuffer(validationReadback, 0u, readbackDesc.size));
         valid = result != nullptr;
         if (result != nullptr) {
-            float hitDistance = 0.0f;
-            std::memcpy(&hitDistance, &result[1], sizeof(hitDistance));
+            for (size_t pixelIndex = 0u; pixelIndex < pixelCount; ++pixelIndex) {
+                const uint32_t validationWord = result[pixelIndex * 2u];
+                float hitDistance = 0.0f;
+                std::memcpy(&hitDistance, &result[pixelIndex * 2u + 1u], sizeof(hitDistance));
+                const RtgiTraceSmokeExpectedPixel& expected = smokeCase.expectedPixels[pixelIndex];
+                const bool pixelValid = rtgiTraceValidationClassification(validationWord) == expected.classification &&
+                                        rtgiTraceValidationCandidateCount(validationWord) == expected.candidateCount &&
+                                        rtgiTraceValidationConfirmedCount(validationWord) == expected.confirmedCount &&
+                                        std::isfinite(hitDistance) && hitDistance >= expected.minimumHitDistance &&
+                                        hitDistance <= expected.maximumHitDistance;
+                if (!pixelValid) {
+                    std::cerr << smokeCase.label << " pixel " << pixelIndex << " validation failed: class="
+                              << static_cast<uint32_t>(rtgiTraceValidationClassification(validationWord))
+                              << " candidates=" << rtgiTraceValidationCandidateCount(validationWord)
+                              << " confirmed=" << rtgiTraceValidationConfirmedCount(validationWord)
+                              << " distance=" << hitDistance << '\n';
+                    valid = false;
+                }
+            }
             const RtgiTracePass::Stats& stats = tracePass.stats();
-            valid = result[0] == static_cast<uint32_t>(RtgiTraceClassification::Hit) && std::isfinite(hitDistance) &&
-                    hitDistance >= 0.45f && hitDistance <= 0.55f && stats.dispatched &&
-                    stats.frameIndex == frame.frameIndex && stats.sceneTlasRevision == activeTlas.revision &&
-                    stats.width == 1u && stats.height == 1u &&
-                    stats.instanceMask == sceneTlasMaskBit(SceneTlasInstanceMask::GiOpaque);
+            valid = valid && stats.dispatched && stats.frameIndex == frame.frameIndex &&
+                    stats.sceneTlasRevision == activeTlas.revision && stats.width == smokeCase.width &&
+                    stats.height == smokeCase.height && stats.instanceMask == smokeCase.instanceMask &&
+                    stats.terrainHitDataBytes == activeTlas.terrainHitDataBytes;
             device.unmapBuffer(validationReadback);
         }
     }
@@ -3459,9 +3663,41 @@ static_assert(sizeof(RayQuerySmokeResult) == 32u);
     cleanup();
     valid = valid && device.validationErrorCount() == validationErrorsBefore;
     if (!valid) {
-        std::cerr << "RTGI Blue Noise cosine trace pass validation failed\n";
+        std::cerr << smokeCase.label << " RTGI trace pass validation failed\n";
     }
     return valid;
+}
+
+} // namespace
+
+[[nodiscard]] bool validateRtgiTracePass(VkRhiDevice& device, RhiCommandListPool& commandPool,
+                                         renderer::rt::SceneTlasCache& sceneTlas,
+                                         const renderer::rt::SceneTlasView& activeTlas) {
+    const glm::vec2 rotation = renderer::contracts::rtgiCranleyPattersonRotation(0u);
+    const auto wrapUnit = [](const float value) {
+        return value - std::floor(value);
+    };
+    constexpr glm::vec2 kDesiredSample{0.125f, 0.0001f};
+    RtgiTraceSmokeCase smokeCase;
+    smokeCase.label = "Blue Noise Cosine Opaque";
+    smokeCase.width = 1u;
+    smokeCase.height = 1u;
+    smokeCase.depth = {0.25f};
+    smokeCase.normalAo = {0.5f, 0.5f, 1.0f, 0.0f};
+    smokeCase.materialAux = {0.0f, 0.0f, 0.0f, 0.0f};
+    smokeCase.blueNoise = {wrapUnit(kDesiredSample.x - rotation.x), wrapUnit(kDesiredSample.y - rotation.y), 0.0f,
+                           1.0f};
+    smokeCase.terrainAlbedoWidth = 1u;
+    smokeCase.terrainAlbedoHeight = 1u;
+    smokeCase.terrainAlbedoLayers = 1u;
+    smokeCase.terrainAlbedo = {255u, 255u, 255u, 255u};
+    smokeCase.inverseViewProjection = glm::translate(glm::mat4(1.0f), glm::vec3(0.25f, 0.25f, 0.0f));
+    smokeCase.cameraPosition = {0.25f, 0.25f, -0.5f};
+    smokeCase.instanceMask = renderer::rt::sceneTlasMaskBit(renderer::rt::SceneTlasInstanceMask::GiOpaque);
+    smokeCase.expectedPixels = {
+        {renderer::contracts::RtgiTraceClassification::Hit, 0u, 0u, 0.45f, 0.55f},
+    };
+    return validateRtgiTraceCase(device, commandPool, sceneTlas, activeTlas, smokeCase);
 }
 
 [[nodiscard]] bool validateStaticMeshBlasAndSceneTlas(VkRhiDevice& device, RhiCommandListPool& commandPool) {
@@ -3609,14 +3845,21 @@ static_assert(sizeof(RayQuerySmokeResult) == 32u);
     const std::optional<SceneTlasView> firstTlas = valid ? sceneTlas.activeView() : std::nullopt;
     if (valid) {
         const SceneTlasStats stats = sceneTlas.stats();
+        const std::array<renderer::contracts::TerrainRayTracingGpuInstance, 2u> emptyTerrainHitData{};
         valid = firstTlas.has_value() && firstTlas->deviceAddress != 0u && firstTlas->instanceCount == 2u &&
                 firstTlas->blasCount == 1u &&
                 firstTlas->instanceBytes == 2u * sizeof(RhiAccelerationStructureInstance) &&
+                firstTlas->terrainHitDataBuffer.isValid() &&
+                firstTlas->terrainHitDataBytes == sizeof(emptyTerrainHitData) &&
                 firstTlas->blasBytes == sharedBlas->blasBytes() && firstTlas->mappings.size() == 2u &&
                 firstTlas->mappings[0].customIndex == 0u && firstTlas->mappings[0].key.primary == 7 &&
                 firstTlas->mappings[1].customIndex == 1u && firstTlas->mappings[1].key.primary == 42 &&
                 stats.activeBlasCount == 1u && stats.activeInstanceBytes == firstTlas->instanceBytes &&
-                stats.activeBlasBytes == firstTlas->blasBytes && sceneTlas.isSettled();
+                stats.activeTerrainHitDataBytes == firstTlas->terrainHitDataBytes &&
+                stats.activeBlasBytes == firstTlas->blasBytes && sceneTlas.isSettled() &&
+                validateGpuBufferContents(device, commandPool, firstTlas->terrainHitDataBuffer,
+                                          RhiResourceState::StorageBuffer, emptyTerrainHitData.data(),
+                                          sizeof(emptyTerrainHitData), "VulkanSmoke.SceneTLAS.TerrainHitDataReadback");
     }
     if (valid) {
         valid = validateCutoutRayQuery(device, commandPool, firstTlas->accelerationStructure);

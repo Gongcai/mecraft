@@ -61,4 +61,15 @@ std::optional<glm::vec3> rtgiCosineHemisphereDirection(const glm::vec2& sample, 
     return glm::normalize(direction);
 }
 
+std::optional<uint32_t> encodeRtgiTraceValidation(const RtgiTraceClassification classification,
+                                                  const uint32_t candidateCount, const uint32_t confirmedCount) {
+    const uint32_t classificationValue = static_cast<uint32_t>(classification);
+    if (classificationValue > kRtgiTraceValidationClassificationMask ||
+        candidateCount > kRtgiTraceValidationCandidateMask || confirmedCount > kRtgiTraceValidationConfirmedMask) {
+        return std::nullopt;
+    }
+    return classificationValue | (candidateCount << kRtgiTraceValidationCandidateShift) |
+           (confirmedCount << kRtgiTraceValidationConfirmedShift);
+}
+
 } // namespace renderer::contracts

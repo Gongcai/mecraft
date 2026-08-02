@@ -11,6 +11,12 @@ namespace renderer::contracts {
 /// Stable per-pixel classifications written by the raw RTGI validation image.
 enum class RtgiTraceClassification : uint32_t { Sky = 0u, Translucent = 1u, Miss = 2u, Hit = 3u, NonFinite = 4u };
 
+inline constexpr uint32_t kRtgiTraceValidationClassificationMask = 0xffu;
+inline constexpr uint32_t kRtgiTraceValidationCandidateShift = 8u;
+inline constexpr uint32_t kRtgiTraceValidationCandidateMask = 0xfffu;
+inline constexpr uint32_t kRtgiTraceValidationConfirmedShift = 20u;
+inline constexpr uint32_t kRtgiTraceValidationConfirmedMask = 0xfffu;
+
 /// Push constants shared by the production RTGI trace pass and Vulkan smoke validation.
 struct alignas(16) RtgiTracePushConstants final {
     glm::mat4 inverseViewProjection{1.0f};
@@ -36,6 +42,29 @@ static_assert(sizeof(RtgiTracePushConstants) == 112u);
 /// @param normal Finite non-zero world-space surface normal.
 /// @return Unit direction in the normal hemisphere, or no value when the contract is invalid.
 [[nodiscard]] std::optional<glm::vec3> rtgiCosineHemisphereDirection(const glm::vec2& sample, const glm::vec3& normal);
+
+/// Packs one per-pixel trace classification and Cutout Candidate/Confirmed counters into 32 bits.
+/// @param classification Stable raw-trace result classification.
+/// @param candidateCount Number of non-opaque triangle candidates evaluated by the ray query.
+/// @param confirmedCount Number of candidates explicitly confirmed after material alpha testing.
+/// @return Packed validation word, or no value when either counter exceeds its 12-bit field.
+[[nodiscard]] std::optional<uint32_t> encodeRtgiTraceValidation(RtgiTraceClassification classification,
+                                                                uint32_t candidateCount, uint32_t confirmedCount);
+
+/// Decodes the stable classification stored in bits 0 through 7.
+[[nodiscard]] constexpr RtgiTraceClassification rtgiTraceValidationClassification(const uint32_t packed) {
+    return static_cast<RtgiTraceClassification>(packed & kRtgiTraceValidationClassificationMask);
+}
+
+/// Decodes the Cutout Candidate count stored in bits 8 through 19.
+[[nodiscard]] constexpr uint32_t rtgiTraceValidationCandidateCount(const uint32_t packed) {
+    return (packed >> kRtgiTraceValidationCandidateShift) & kRtgiTraceValidationCandidateMask;
+}
+
+/// Decodes the explicitly confirmed Cutout count stored in bits 20 through 31.
+[[nodiscard]] constexpr uint32_t rtgiTraceValidationConfirmedCount(const uint32_t packed) {
+    return (packed >> kRtgiTraceValidationConfirmedShift) & kRtgiTraceValidationConfirmedMask;
+}
 
 } // namespace renderer::contracts
 

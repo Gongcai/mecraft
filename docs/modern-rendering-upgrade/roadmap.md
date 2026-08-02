@@ -168,8 +168,10 @@ M1 与 M2 可并行开发，但公共 `GpuMaterial`、`GpuSceneGeometry` 与 Sta
    退役、Binding 4、Shader Reflection、体素 Revision 原子换代、卸载和延迟销毁。真实 Compute Ray
    Query Smoke 进一步覆盖 Opaque 自动提交、Cutout Candidate 拒绝/显式确认，以及 Instance Custom
    Index、Geometry Index、Primitive ID、Barycentrics 回读，Validation 未发现错误。统一 Alpha
-   Cutoff、动画层选择、正式 Terrain Primitive Metadata 与 TLAS 代际命中数据快照已在 M3 接入；
-   完整纹理采样与 Candidate Confirm 命中链继续归 M3 第 2、3 项。）
+   Cutoff、动画层选择、正式 Terrain Primitive Metadata 与每 Custom Index 64 字节 TLAS 代际命中表
+   已在 M3 接入。生产 `RtgiTracePass` 的 2×1 Vulkan Smoke 已真实覆盖 Barycentric UV、动画纹理层、
+   Texture2DArray Alpha 采样、Ray Cone LOD 计算，以及 Cutout 拒绝后命中后方 Opaque 与显式确认
+   Cutout 两条路径；Terrain 与 Static Mesh 命中表均完成逐字节 GPU 回读。）
 
 ### 完成条件
 
@@ -184,16 +186,18 @@ M1 与 M2 可并行开发，但公共 `GpuMaterial`、`GpuSceneGeometry` 与 Sta
 
 1. RTGI Compute Ray Query、Blue Noise/Cosine Sampling。（进行中：Global Bindless Binding 4 的双运行时
    所有权与 Active TLAS 发布已完成；生产 `RtgiTracePass`、确定性帧旋转、Blue Noise/Cosine
-   Sampling、Opaque Ray Query、Render Graph 资源声明与真实 Vulkan 命中距离回读已完成。
-   Cutout 命中确认、次级材质辐射、Deferred 运行时消费和 NRD 输入打包尚未完成。）
-2. 体素 Greedy Primitive Metadata 与 Cutout Alpha Candidate。（进行中：新增 C++/GLSL 体素材质
+   Sampling、Opaque 自动提交、Terrain Cutout Candidate Confirm、Render Graph 资源声明、逐像素
+   Candidate/Confirmed 计数与真实 Vulkan 命中距离回读已完成。次级材质辐射、Deferred 运行时消费和
+   NRD 输入打包尚未完成。）
+2. 体素 Greedy Primitive Metadata 与 Cutout Alpha Candidate。（实现完成：新增 C++/GLSL 体素材质
    采样契约，固化包含边界的 `0.1` Alpha Cutoff、NaN/Inf 拒绝、1024 层纹理编码与
    6-bit 动画帧数/FPS 上限；GBuffer、主视图、Probe Capture 与 Shadow 的非 Leaves Cutout 已共用
    同一 Alpha Test 及动画层选择，Leaves 保持实心投影。固定 16 字节 Terrain Primitive Metadata、
    Opaque/Cutout Primitive 顺序、BLAS Geometry Index 到 Vertex/Primitive Base 映射、Vertex/Metadata
-   Device Address 及 TLAS Active Generation 精确快照已完成；Vulkan 已覆盖 Metadata Buffer 回读、
-   Terrain BLAS 换代期间旧 TLAS 地址保留与新代映射切换。Barycentric UV、Ray Cone 纹理采样与生产
-   Cutout Candidate Confirm 尚未完成。）
+   Device Address 及 TLAS Active Generation 精确快照已完成。Shader 通过 Physical Storage Buffer
+   读取固定 32 字节 `BlockVertex` 和 Primitive Metadata，以 Barycentrics 重建 UV，按像素世界覆盖、
+   射线距离和三角形 UV 梯度计算 Ray Cone LOD，选择动画纹理层并执行统一 Alpha Test。Vulkan 已覆盖
+   Metadata/命中表回读、Terrain BLAS/TLAS 双代生命周期及生产 Candidate 拒绝/确认结果。）
 3. 模型 Geometry/Material 次级命中读取。
 4. 次级太阳、局部灯、Emissive、天空 Radiance。
 5. Raw Diffuse Radiance + First-bounce Hit Distance，并按 RELAX/REBLUR 规范分别打包。
