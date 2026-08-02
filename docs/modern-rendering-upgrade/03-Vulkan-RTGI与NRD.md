@@ -88,8 +88,20 @@ Compact Copy 和 Revision 原子换代；Submission Token 负责 Build/Compact �
 Graph 失败会保留 CPU Geometry 供同一任务重新录制。Dashboard 已发布 Active/Pending、Primitive、
 Geometry/BLAS/Scratch 字节统计，Vulkan 生产缓存 Smoke 与 Validation 已通过。
 
-glTF 资产级 BLAS 缓存、运行时 TLAS Instance 列表、Cutout Candidate Alpha Test 和 RTGI Ray
-Query Pass 尚未接入，以下各节继续约束这些生产层与消费层工作。
+glTF 与运行时 TLAS 生产层现已接入。`StaticMeshBlasCache` 将每个静态资产的 Opaque 与 Alpha Mask
+Primitive 构建为多 Geometry 压缩 BLAS，Opaque Geometry 设置 Opaque Flag，Alpha Mask Geometry
+保留 Candidate 路径，Blend 与 Transmission 不进入首版 Solid BLAS。Vertex/Index Buffer 固定具备
+Storage、Device Address 与 AS Build Input 用途；同一资产的多个 ECS 实例共享 BLAS。
+
+`SceneTlasCache` 收集 Terrain 与 Static Mesh 实例，按稳定 Key 排序并生成唯一 24-bit Custom Index，
+固定 GI Opaque/Cutout、Shadow、Reflection 与 First Person Mask。每个 TLAS 代际持有唯一 BLAS 集合，
+Desired/Pending/Active/Retired 状态机覆盖 Transform 连续变化、空场景、部分 Graph 提交失败及资产卸载。
+Dashboard 已发布 Instance、唯一 BLAS、TLAS/BLAS 字节、Revision 与 Build 统计。Vulkan Smoke 覆盖
+Opaque/Cutout 多 Geometry BLAS、两个 Instance 共享同一 BLAS、Transform 换代与空场景退役；Damaged
+Helmet、Sponza 的 Vulkan 场景验收及 Damaged Helmet 的 OpenGL 基础渲染均已通过。
+
+Cutout Candidate Alpha Test、Global Bindless Binding 4 的运行时发布和 RTGI Ray Query Pass 仍属于
+后续消费层工作，以下各节继续约束这些链路。
 
 ### 4.1 体素区块 BLAS
 

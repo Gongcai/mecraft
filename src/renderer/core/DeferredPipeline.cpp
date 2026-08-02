@@ -31,6 +31,8 @@
 #include <iostream>
 #include <limits>
 
+#include <glm/gtc/matrix_transform.hpp>
+
 namespace {
 void setClearAttachment(RhiColorAttachment& attachment, const RhiTextureViewHandle view, const float red,
                         const float green, const float blue, const float alpha) {
@@ -819,6 +821,9 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
     if (!externalGeometry && m_shared->staticMeshRenderer != nullptr) {
         m_shared->staticMeshRenderer->prepareFrame(ctx, *ctx.worldView);
     }
+    if (!prepareSceneTlas()) {
+        return false;
+    }
     if (externalGeometry) {
         m_transparentBatch.clear();
         m_transparentPassPlan = {};
@@ -1387,6 +1392,13 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
         return failGraphSetup();
     }
     skyIblGraphPrepared = true;
+    if (m_shared->sceneTlasCache != nullptr && m_shared->sceneTlasCache->supported()) {
+        RenderGraphPassBuilder sceneTlas =
+            m_renderGraph.addPass({"Deferred.SceneTLAS", RgPassType::Graphics, RhiQueueType::Graphics});
+        sceneTlas.dependsOn(graphTail).setExecute(
+            [&](RgPassContext& pass) { return m_shared->sceneTlasCache->recordFrame(pass.commandList()); });
+        graphTail = sceneTlas.handle();
+    }
     // Hi-Z occlusion culling: reduce the previous frame's depth into a
     // max-depth pyramid, upload this frame's indirect terrain commands in a
     // dedicated pass, and zero occluded commands before the GBuffer draws
@@ -2327,6 +2339,9 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
     if (m_shared->terrainCache != nullptr) {
         m_shared->terrainCache->finishGraphExecution(executed.succeeded(), executed.completionToken());
     }
+    if (m_shared->sceneTlasCache != nullptr) {
+        m_shared->sceneTlasCache->finishGraphExecution(executed.succeeded(), executed.completionToken());
+    }
     if (!executed.succeeded() && ctx.debugService != nullptr) {
         ctx.debugService->cancelGpuTimersSince(timerCheckpoint);
     }
@@ -2413,6 +2428,87 @@ RenderGraphFrameStats DeferredPipeline::renderGraphFrameStats() const {
         stats.gpuIdleMs = std::max(0.0, stats.gpuSpanMs - stats.gpuTotalMs);
     }
     return stats;
+}
+
+bool DeferredPipeline::prepareSceneTlas() {
+    if (m_shared == nullptr || m_shared->sceneTlasCache == nullptr) {
+        return true;
+    }
+    renderer::rt::SceneTlasCache& cache = *m_shared->sceneTlasCache;
+    if (!cache.supported()) {
+        return true;
+    }
+    if (!cache.healthy()) {
+        MECRAFT_LOG_STREAM(std::cerr << "[DeferredPipeline] " << cache.lastError() << '\n');
+        return false;
+    }
+
+    std::vector<renderer::rt::SceneTlasInstanceInput> instances;
+    if (m_shared->deferredGeometryProvider != nullptr) {
+        std::string error;
+        if (!m_shared->deferredGeometryProvider->collectRayTracingInstances(instances, error)) {
+            MECRAFT_LOG_STREAM(std::cerr << "[DeferredPipeline] " << error << '\n');
+            return false;
+        }
+    } else {
+        if (m_shared->terrainCache != nullptr) {
+            const std::vector<TerrainBlasView> terrainViews = m_shared->terrainCache->blasCache().activeViews();
+            instances.reserve(terrainViews.size() + (m_shared->staticMeshRenderer != nullptr ? 1u : 0u));
+            for (const TerrainBlasView& terrain : terrainViews) {
+                uint8_t mask = renderer::rt::sceneTlasMaskBit(renderer::rt::SceneTlasInstanceMask::ShadowCaster) |
+                               renderer::rt::sceneTlasMaskBit(renderer::rt::SceneTlasInstanceMask::ReflectionVisible);
+                if (terrain.opaqueVertexCount != 0u) {
+                    mask |= renderer::rt::sceneTlasMaskBit(renderer::rt::SceneTlasInstanceMask::GiOpaque);
+                }
+                if (terrain.cutoutVertexCount != 0u) {
+                    mask |= renderer::rt::sceneTlasMaskBit(renderer::rt::SceneTlasInstanceMask::GiCutout);
+                }
+                instances.push_back({{renderer::rt::SceneTlasInstanceKind::Terrain, terrain.key.chunkKey,
+                                      static_cast<int64_t>(terrain.key.scy)},
+                                     terrain.resource,
+                                     glm::translate(glm::mat4(1.0f), terrain.worldOrigin),
+                                     mask,
+                                     false});
+            }
+        }
+        if (m_shared->staticMeshRenderer != nullptr) {
+            const renderer::rt::StaticMeshBlasStats& blasStats = m_shared->staticMeshRenderer->staticBlasStats();
+            if (blasStats.geometryCount != 0u) {
+                const renderer::rt::SceneBlasResourcePtr& blas = m_shared->staticMeshRenderer->staticBlasResource();
+                if (blas == nullptr || !blasStats.resident) {
+                    MECRAFT_LOG_STREAM(std::cerr
+                                       << "[DeferredPipeline] Gameplay static mesh has no resident asset-level BLAS\n");
+                    return false;
+                }
+                uint8_t mask = renderer::rt::sceneTlasMaskBit(renderer::rt::SceneTlasInstanceMask::ShadowCaster) |
+                               renderer::rt::sceneTlasMaskBit(renderer::rt::SceneTlasInstanceMask::ReflectionVisible);
+                if (blasStats.containsOpaque) {
+                    mask |= renderer::rt::sceneTlasMaskBit(renderer::rt::SceneTlasInstanceMask::GiOpaque);
+                }
+                if (blasStats.containsCutout) {
+                    mask |= renderer::rt::sceneTlasMaskBit(renderer::rt::SceneTlasInstanceMask::GiCutout);
+                }
+                const renderer::contracts::StableObjectId objectId = m_shared->staticMeshRenderer->stableObjectId();
+                instances.push_back(
+                    {{renderer::rt::SceneTlasInstanceKind::StaticMesh, static_cast<int64_t>(objectId.value), 0},
+                     blas,
+                     m_shared->staticMeshRenderer->instanceTransform(),
+                     mask,
+                     blasStats.containsDoubleSided});
+            }
+        }
+    }
+
+    const renderer::rt::SceneTlasSetResult result = cache.setInstances(std::move(instances));
+    switch (result) {
+    case renderer::rt::SceneTlasSetResult::Accepted:
+    case renderer::rt::SceneTlasSetResult::Unchanged:
+    case renderer::rt::SceneTlasSetResult::Unsupported: return true;
+    case renderer::rt::SceneTlasSetResult::InvalidInstance:
+        MECRAFT_LOG_STREAM(std::cerr << "[DeferredPipeline] " << cache.lastError() << '\n');
+        return false;
+    }
+    return false;
 }
 
 bool DeferredPipeline::recordTerrainDrawPreparation(RhiCommandList& commandList, const FrameContext& ctx) {

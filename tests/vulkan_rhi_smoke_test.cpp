@@ -4,7 +4,9 @@
 #include "renderer/rhi/RhiCommandList.h"
 #include "renderer/rhi/RhiDevice.h"
 #include "renderer/rhi/RhiRenderGraph.h"
+#include "renderer/rhi/SceneTlasCache.h"
 #include "renderer/rhi/RhiShaderSourceLoader.h"
+#include "renderer/rhi/StaticMeshBlasCache.h"
 #include "renderer/rhi/vulkan/VkRhiDevice.h"
 #include "renderer/rhi/vulkan/VkRhiInterop.h"
 #include "renderer/passes/TemporalUpscalePass.h"
@@ -31,6 +33,8 @@
 #include <memory>
 #include <optional>
 #include <vector>
+
+#include <glm/gtc/matrix_transform.hpp>
 
 namespace {
 
@@ -2907,6 +2911,184 @@ void main() {
     return valid;
 }
 
+[[nodiscard]] bool validateStaticMeshBlasAndSceneTlas(VkRhiDevice& device, RhiCommandListPool& commandPool) {
+    using namespace renderer::rt;
+
+    const uint64_t validationErrorsBefore = device.validationErrorCount();
+    struct PositionVertex {
+        float position[3];
+    };
+    const std::array<PositionVertex, 3u> opaqueVertices{
+        PositionVertex{{0.0f, 0.0f, 0.0f}}, PositionVertex{{1.0f, 0.0f, 0.0f}}, PositionVertex{{0.0f, 1.0f, 0.0f}}};
+    const std::array<PositionVertex, 3u> cutoutVertices{
+        PositionVertex{{0.0f, 0.0f, 1.0f}}, PositionVertex{{1.0f, 0.0f, 1.0f}}, PositionVertex{{0.0f, 1.0f, 1.0f}}};
+    const std::array<uint32_t, 3u> indices{0u, 1u, 2u};
+    constexpr RhiBufferUsageFlags kVertexUsages =
+        rhiFlag(RhiBufferUsage::Vertex) | rhiFlag(RhiBufferUsage::Storage) | rhiFlag(RhiBufferUsage::TransferDst) |
+        rhiFlag(RhiBufferUsage::DeviceAddress) | rhiFlag(RhiBufferUsage::AccelerationStructureBuildInput);
+    constexpr RhiBufferUsageFlags kIndexUsages =
+        rhiFlag(RhiBufferUsage::Index) | rhiFlag(RhiBufferUsage::Storage) | rhiFlag(RhiBufferUsage::TransferDst) |
+        rhiFlag(RhiBufferUsage::DeviceAddress) | rhiFlag(RhiBufferUsage::AccelerationStructureBuildInput);
+
+    const auto createGeometryBuffer = [&](const char* name, const uint64_t size, const RhiBufferUsageFlags usage,
+                                          const RhiResourceState state, const void* data) {
+        RhiBufferDesc desc;
+        desc.debugName = name;
+        desc.size = size;
+        desc.usage = usage;
+        desc.memoryUsage = RhiMemoryUsage::GpuOnly;
+        desc.initialState = state;
+        desc.memoryCategory = RhiMemoryCategory::Geometry;
+        return device.createBuffer(desc, data, static_cast<size_t>(size));
+    };
+
+    std::array<RhiBufferHandle, 4u> geometryBuffers{
+        createGeometryBuffer("VulkanSmoke.StaticBLAS.OpaqueVertices", sizeof(opaqueVertices), kVertexUsages,
+                             RhiResourceState::VertexBuffer, opaqueVertices.data()),
+        createGeometryBuffer("VulkanSmoke.StaticBLAS.OpaqueIndices", sizeof(indices), kIndexUsages,
+                             RhiResourceState::IndexBuffer, indices.data()),
+        createGeometryBuffer("VulkanSmoke.StaticBLAS.CutoutVertices", sizeof(cutoutVertices), kVertexUsages,
+                             RhiResourceState::VertexBuffer, cutoutVertices.data()),
+        createGeometryBuffer("VulkanSmoke.StaticBLAS.CutoutIndices", sizeof(indices), kIndexUsages,
+                             RhiResourceState::IndexBuffer, indices.data())};
+    StaticMeshBlasCache staticBlas;
+    SceneTlasCache sceneTlas;
+    bool staticBlasOwnsGeometry = false;
+    SceneBlasResourcePtr sharedBlas;
+    const auto cleanup = [&]() {
+        sceneTlas.shutdown();
+        sharedBlas.reset();
+        staticBlas.shutdown();
+        if (!staticBlasOwnsGeometry) {
+            for (const RhiBufferHandle buffer : geometryBuffers) {
+                if (buffer.isValid()) {
+                    device.destroyBuffer(buffer);
+                }
+            }
+        }
+        device.waitIdle();
+    };
+
+    bool valid = std::all_of(geometryBuffers.begin(), geometryBuffers.end(),
+                             [](const RhiBufferHandle buffer) { return buffer.isValid(); }) &&
+                 staticBlas.init(&device) && staticBlas.supported();
+    if (valid) {
+        const std::vector<StaticMeshBlasGeometry> geometries{
+            {renderer::contracts::StableGeometryId{501u}, geometryBuffers[0], geometryBuffers[1], 0u,
+             sizeof(PositionVertex), 3u, 3u, true, false},
+            {renderer::contracts::StableGeometryId{502u}, geometryBuffers[2], geometryBuffers[3], 0u,
+             sizeof(PositionVertex), 3u, 3u, false, true}};
+        valid = staticBlas.build(commandPool, geometries) == StaticMeshBlasBuildResult::Built;
+        staticBlasOwnsGeometry = valid;
+    }
+    if (valid) {
+        sharedBlas = staticBlas.resource();
+        const StaticMeshBlasStats& stats = staticBlas.stats();
+        valid = sharedBlas != nullptr && stats.resident && stats.geometryCount == 2u && stats.primitiveCount == 2u &&
+                stats.containsOpaque && stats.containsCutout && stats.containsDoubleSided &&
+                stats.compactedBlasBytes != 0u && stats.compactedBlasBytes <= stats.uncompactedBlasBytes &&
+                sceneTlas.init(&device) && sceneTlas.supported();
+    }
+
+    const auto makeInstances = [&](const float secondTranslation) {
+        const uint8_t mask = sceneTlasMaskBit(SceneTlasInstanceMask::GiOpaque) |
+                             sceneTlasMaskBit(SceneTlasInstanceMask::GiCutout) |
+                             sceneTlasMaskBit(SceneTlasInstanceMask::ShadowCaster) |
+                             sceneTlasMaskBit(SceneTlasInstanceMask::ReflectionVisible);
+        std::vector<SceneTlasInstanceInput> instances;
+        instances.push_back({{SceneTlasInstanceKind::StaticMesh, 42, 0},
+                             sharedBlas,
+                             glm::translate(glm::mat4(1.0f), glm::vec3(secondTranslation, 0.0f, 0.0f)),
+                             mask,
+                             true});
+        instances.push_back({{SceneTlasInstanceKind::StaticMesh, 7, 0}, sharedBlas, glm::mat4(1.0f), mask, true});
+        return instances;
+    };
+    const auto submitTlasFrame = [&](const char* debugName) {
+        sceneTlas.beginFrame();
+        RhiCommandList* commands = commandPool.acquire(RhiCommandListType::Graphics);
+        if (commands == nullptr || !commands->begin({debugName, RhiCommandListType::Graphics}) ||
+            !sceneTlas.recordFrame(*commands) || !commands->end()) {
+            sceneTlas.finishGraphExecution(false, {});
+            return false;
+        }
+        RhiCommandList* submissions[] = {commands};
+        RhiSubmissionToken token;
+        if (!device.submit({debugName, submissions, 1u, RhiQueueType::Graphics}, &token)) {
+            sceneTlas.finishGraphExecution(false, token);
+            return false;
+        }
+        sceneTlas.finishGraphExecution(true, token);
+        if (!device.waitForSubmission(token)) {
+            return false;
+        }
+        sceneTlas.beginFrame();
+        return sceneTlas.healthy();
+    };
+    const auto submitPartiallyFailedTlasFrame = [&](const char* debugName) {
+        sceneTlas.beginFrame();
+        RhiCommandList* commands = commandPool.acquire(RhiCommandListType::Graphics);
+        if (commands == nullptr || !commands->begin({debugName, RhiCommandListType::Graphics}) ||
+            !sceneTlas.recordFrame(*commands) || !commands->end()) {
+            sceneTlas.finishGraphExecution(false, {});
+            return false;
+        }
+        RhiCommandList* submissions[] = {commands};
+        RhiSubmissionToken token;
+        if (!device.submit({debugName, submissions, 1u, RhiQueueType::Graphics}, &token)) {
+            sceneTlas.finishGraphExecution(false, token);
+            return false;
+        }
+        sceneTlas.finishGraphExecution(false, token);
+        if (!device.waitForSubmission(token)) {
+            return false;
+        }
+        sceneTlas.beginFrame();
+        return sceneTlas.healthy();
+    };
+
+    if (valid) {
+        valid = sceneTlas.setInstances(makeInstances(3.0f)) == SceneTlasSetResult::Accepted &&
+                submitTlasFrame("VulkanSmoke.SceneTLAS.Build1");
+    }
+    const std::optional<SceneTlasView> firstTlas = valid ? sceneTlas.activeView() : std::nullopt;
+    if (valid) {
+        const SceneTlasStats stats = sceneTlas.stats();
+        valid = firstTlas.has_value() && firstTlas->deviceAddress != 0u && firstTlas->instanceCount == 2u &&
+                firstTlas->blasCount == 1u &&
+                firstTlas->instanceBytes == 2u * sizeof(RhiAccelerationStructureInstance) &&
+                firstTlas->blasBytes == sharedBlas->blasBytes() && firstTlas->mappings.size() == 2u &&
+                firstTlas->mappings[0].customIndex == 0u && firstTlas->mappings[0].key.primary == 7 &&
+                firstTlas->mappings[1].customIndex == 1u && firstTlas->mappings[1].key.primary == 42 &&
+                stats.activeBlasCount == 1u && stats.activeInstanceBytes == firstTlas->instanceBytes &&
+                stats.activeBlasBytes == firstTlas->blasBytes && sceneTlas.isSettled();
+    }
+    if (valid) {
+        valid = sceneTlas.setInstances(makeInstances(6.0f)) == SceneTlasSetResult::Accepted &&
+                submitPartiallyFailedTlasFrame("VulkanSmoke.SceneTLAS.PartialFailure");
+    }
+    if (valid) {
+        const std::optional<SceneTlasView> retainedTlas = sceneTlas.activeView();
+        valid = retainedTlas.has_value() && retainedTlas->revision == firstTlas->revision &&
+                !sceneTlas.stats().pending && !sceneTlas.isSettled() &&
+                submitTlasFrame("VulkanSmoke.SceneTLAS.Build2Retry");
+    }
+    const std::optional<SceneTlasView> secondTlas = valid ? sceneTlas.activeView() : std::nullopt;
+    if (valid) {
+        valid = secondTlas.has_value() && secondTlas->revision > firstTlas->revision &&
+                secondTlas->deviceAddress != 0u && secondTlas->instanceCount == 2u && sceneTlas.isSettled() &&
+                sceneTlas.setInstances({}) == SceneTlasSetResult::Accepted && !sceneTlas.activeView().has_value() &&
+                sceneTlas.isSettled();
+    }
+
+    cleanup();
+    valid = valid && device.validationErrorCount() == validationErrorsBefore;
+    if (!valid) {
+        std::cerr << "Static mesh BLAS sharing or Scene TLAS generation validation failed\n";
+    }
+    return valid;
+}
+
 [[nodiscard]] bool validateCubeArrayViews(VkRhiDevice& device) {
     const uint64_t validationErrorsBefore = device.validationErrorCount();
     RhiTextureDesc textureDesc;
@@ -3129,6 +3311,7 @@ int main() {
         !validateBindGroupUpdateLifecycle(device, *commandPool) ||
         !validateGlobalBindlessGpuScene(device, *commandPool) ||
         !validateAccelerationStructures(device, *commandPool) || !validateTerrainBlasCache(device, *commandPool) ||
+        !validateStaticMeshBlasAndSceneTlas(device, *commandPool) ||
         !validateVulkanInterop(device, *commandPool, texture, textureView, textureWidth, textureHeight, textureDepth) ||
         !validateOffscreenCoordinateContract(device, *commandPool, window) ||
         !validateRenderGraphMultiQueue(device, *commandPool) ||

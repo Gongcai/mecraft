@@ -173,6 +173,7 @@ private:
                                                     bool clearReflection, bool clearSceneComposite, bool clearCloud,
                                                     bool clearSsaoFiltered);
     void commitDeferredHistoryState();
+    [[nodiscard]] bool prepareSceneTlas();
     [[nodiscard]] bool recordTerrainDrawPreparation(RhiCommandList& commandList, const FrameContext& ctx);
     [[nodiscard]] bool configureVoxelReflectionProbe(const FrameContext& ctx);
     [[nodiscard]] bool executeFrameGraph(const FrameContext& ctx, const RenderSettings& settings);

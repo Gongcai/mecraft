@@ -4,6 +4,7 @@
 #include "../rhi/RhiHandles.h"
 #include "../contracts/ClusteredLightingContract.h"
 #include "../contracts/GpuLightContract.h"
+#include "../rhi/SceneTlasCache.h"
 
 #include <glm/glm.hpp>
 
@@ -81,6 +82,13 @@ public:
     /// @return True when the revisions describe the geometry drawn by this provider.
     [[nodiscard]] virtual bool queryLocalShadowSceneRevisions(DeferredLocalShadowSceneRevisions& revisions,
                                                               std::string& error) const = 0;
+
+    /// Builds the complete ray-tracing instance snapshot for the current scene transforms.
+    /// @param instances Destination replaced with every solid scene instance.
+    /// @param error Receives a precise asset, identity, or transform failure.
+    /// @return True when the snapshot is complete and internally consistent.
+    [[nodiscard]] virtual bool collectRayTracingInstances(std::vector<renderer::rt::SceneTlasInstanceInput>& instances,
+                                                          std::string& error) const = 0;
 
     /// Publishes the current clustered-light descriptor set and grid before
     /// any frame commands are recorded.

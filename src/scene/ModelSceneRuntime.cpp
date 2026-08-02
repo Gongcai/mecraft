@@ -1435,6 +1435,50 @@ bool ModelSceneRuntime::queryLocalShadowSceneRevisions(DeferredLocalShadowSceneR
     return true;
 }
 
+bool ModelSceneRuntime::collectRayTracingInstances(std::vector<renderer::rt::SceneTlasInstanceInput>& instances,
+                                                   std::string& error) const {
+    std::vector<renderer::rt::SceneTlasInstanceInput> collected;
+    const auto view = m_registry.view<scene::StaticMeshComponent, scene::StableObjectIdComponent,
+                                      scene::SceneEntityIdComponent, ecs::WorldTransformComponent>();
+    collected.reserve(view.size_hint());
+    for (const entt::entity entity : view) {
+        const auto& mesh = view.get<scene::StaticMeshComponent>(entity);
+        const MeshAsset& asset = m_assets[assetIndex(mesh.assetId)];
+        if (asset.renderer == nullptr) {
+            error = "model scene TLAS references an empty mesh asset";
+            return false;
+        }
+        const renderer::rt::StaticMeshBlasStats& blasStats = asset.renderer->staticBlasStats();
+        if (blasStats.geometryCount == 0u) {
+            continue;
+        }
+        const renderer::rt::SceneBlasResourcePtr& blas = asset.renderer->staticBlasResource();
+        if (blas == nullptr || !blasStats.resident) {
+            error = "model scene solid mesh has no resident asset-level BLAS";
+            return false;
+        }
+        uint8_t mask = renderer::rt::sceneTlasMaskBit(renderer::rt::SceneTlasInstanceMask::ShadowCaster) |
+                       renderer::rt::sceneTlasMaskBit(renderer::rt::SceneTlasInstanceMask::ReflectionVisible);
+        if (blasStats.containsOpaque) {
+            mask |= renderer::rt::sceneTlasMaskBit(renderer::rt::SceneTlasInstanceMask::GiOpaque);
+        }
+        if (blasStats.containsCutout) {
+            mask |= renderer::rt::sceneTlasMaskBit(renderer::rt::SceneTlasInstanceMask::GiCutout);
+        }
+        const renderer::contracts::StableObjectId objectId = view.get<scene::StableObjectIdComponent>(entity).value;
+        const scene::SceneEntityId sceneEntityId = view.get<scene::SceneEntityIdComponent>(entity).value;
+        collected.push_back({{renderer::rt::SceneTlasInstanceKind::StaticMesh, static_cast<int64_t>(objectId.value),
+                              static_cast<int64_t>(sceneEntityId)},
+                             blas,
+                             view.get<ecs::WorldTransformComponent>(entity).worldMatrix,
+                             mask,
+                             blasStats.containsDoubleSided});
+    }
+    instances = std::move(collected);
+    error.clear();
+    return true;
+}
+
 bool ModelSceneRuntime::configureClusteredLighting(const DeferredClusteredLightingResources& resources) {
     for (MeshAsset& asset : m_assets) {
         if (!asset.renderer->configureClusteredLighting(resources.bindGroupLayout, resources.bindGroup,

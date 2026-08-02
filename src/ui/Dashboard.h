@@ -217,6 +217,7 @@ private:
     GpuTimingWindowStats m_displayGpuTimingWindowStats{};
     ShadowFrameStats m_displayShadowStats{};
     RenderGraphFrameStats m_displayRenderGraphStats{};
+    renderer::rt::SceneTlasStats m_displaySceneTlasStats{};
     RenderScene::ClusteredLightingDebugInfo m_displayClusteredLightingStats{};
     ReflectionProbeCaptureFrameStats m_displayReflectionProbeCaptureStats{};
     HiZCullFrameStats m_displayHiZCullStats{};

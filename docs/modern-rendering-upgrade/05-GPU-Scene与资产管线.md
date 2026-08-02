@@ -109,8 +109,14 @@ Material、Geometry 和 Instance 底层表采用固定容量与增量 Dirty Rang
 失败时可显式丢弃录制批次而不清除 Dirty 数据。三个 Storage Buffer 的退役先执行整批
 预校验，任一重复、失效或陈旧句柄都会拒绝整批状态变更。
 
-当前实现尚未连接体素区块、模型实例和资产注册表生产者，也尚未生成 Visible、Indirect、
-Draw Count 与 TLAS Instance Buffer；这些运行时链路不计入本轮底层实现完成范围。
+当前实现尚未连接体素区块、模型实例和资产注册表到 Material/Geometry/Instance 三张 GPU Scene
+表，也尚未生成 Visible、Indirect 与 Draw Count Buffer；这些运行时链路属于 M4。
+
+独立的 CPU TLAS 生产链已经完成：`SceneTlasCache` 将 Terrain 与 Static Mesh 快照规范化为固定
+64 字节 Instance Buffer，按稳定 Key 分配 24-bit Custom Index，并通过 Desired/Pending/Active/Retired
+代际管理提交、换代和卸载。Active 代际只保留唯一 BLAS 引用，Dashboard 可读取 Instance 数、唯一
+BLAS 数、TLAS/BLAS 字节、Revision 与 Build 计数。Global Bindless Binding 4 的运行时发布由 RTGI
+消费链负责接入。
 
 ## 5. GPU Culling 与间接绘制
 
@@ -154,10 +160,11 @@ Frustum、Distance、Occlusion、LOD 和最终 Draw Count。
 - Buffer Pool 搬迁导致 Device Address 改变时增加 Geometry Revision 并重建相关 BLAS。
 - 区块上传与 AS Build 由 Submission Token 和 Render Graph Dependency 串联。
 
-当前体素 BLAS 生产缓存已完成。光栅 `PackedBlockVertex` Pool 保持现有职责，光追侧为每个
+当前体素 BLAS 与 TLAS Instance 生产缓存已完成。光栅 `PackedBlockVertex` Pool 保持现有职责，光追侧为每个
 SubChunk 独立保留完整 `BlockVertex` Geometry Buffer，因此光栅 Pool 扩容不会改变 BLAS Build
 Input Address。Mesher Revision、Build/Compaction 状态、Submission Token、原子换代和卸载已经
-串联；GPU Scene Geometry 注册、可见区块产品复用与运行时 TLAS Instance 生成仍属于后续任务。
+串联；Active SubChunk BLAS 按 Chunk Key 与 Section Y 稳定排序，并以世界偏移生成 TLAS Transform。
+GPU Scene Geometry 注册与可见区块产品复用仍属于 M4。
 
 ### 5.4 模型实例
 
@@ -165,6 +172,12 @@ Input Address。Mesher Revision、Build/Compaction 状态、Submission Token、�
 Transform、Previous Transform 和 Asset Handle 写入 Instance Buffer，GPU 产生 Draw。
 同一资产的 Primitive 通过 Geometry Range 展开，实例数量只影响 Instance Buffer 与
 可见命令。
+
+当前资产级光追生产层已经完成。每个 `StaticMeshRenderer` 为 Opaque 与 Alpha Mask Primitive
+分配稳定 Geometry ID，并构建一个多 Geometry、Fast Trace、压缩后的静态 BLAS；Blend 与
+Transmission Primitive 保持在光栅/透明链，不进入 Solid BLAS。`ModelSceneRuntime` 为每个 ECS
+实体提交独立 Transform、Stable Object ID 与 Scene Entity ID，多个实体共同引用资产 BLAS。
+光栅提交仍保持现有逐实例路径，GPU Scene 与 Indirect Draw 改造属于 M4。
 
 ## 6. LOD 与 Meshlet
 
@@ -279,6 +292,7 @@ Material 和 Descriptor。卸载按 Visible 移除、TLAS 移除、GPU 完成、
 - Texture 各 Mip Resident 字节数。
 - Bindless Image/Sampler/Buffer 槽数。
 - BLAS 压缩前后字节数。
+- TLAS Instance Buffer、TLAS Storage 与活动唯一 BLAS 字节数。
 - Frame GPU Scene 与 Indirect Buffer 峰值。
 - 上传队列字节数与每帧 Upload 时间。
 
@@ -288,6 +302,7 @@ Material 和 Descriptor。卸载按 Visible 移除、TLAS 移除、GPU 完成、
 - Frustum/Distance/Occlusion/LOD 剔除原因。
 - Meshlet Bounds/Normal Cone。
 - Bindless Slot、Generation 与 Residency。
+- TLAS Instance、Custom Index、Mask、Revision 与唯一 BLAS 共享量。
 - Draw Count、Triangle Count、Pipeline Bucket Count。
 - Skin/Morph Current-Previous Position 差。
 - 光栅 Geometry 与 BLAS Geometry Overlay。

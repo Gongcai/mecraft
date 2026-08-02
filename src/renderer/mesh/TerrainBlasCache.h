@@ -3,6 +3,7 @@
 
 #include "TerrainGpuKey.h"
 #include "renderer/rhi/RhiHandles.h"
+#include "renderer/rhi/SceneBlasResource.h"
 #include "renderer/rhi/RhiTypes.h"
 #include "../../world/chunk/SubChunk.h"
 
@@ -87,8 +88,10 @@ struct TerrainBlasBudgets {
 
 /// Read-only view of one compacted terrain BLAS generation.
 struct TerrainBlasView {
+    SubChunkGpuKey key;
     uint64_t revision = 0u;
     glm::vec3 worldOrigin = glm::vec3(0.0f);
+    renderer::rt::SceneBlasResourcePtr resource;
     RhiAccelerationStructureHandle accelerationStructure;
     RhiBufferHandle geometryBuffer;
     uint64_t deviceAddress = 0u;
@@ -167,6 +170,9 @@ public:
     [[nodiscard]] bool isSettled() const;
     [[nodiscard]] const std::string& lastError() const { return m_lastError; }
     [[nodiscard]] std::optional<TerrainBlasView> activeView(const SubChunkGpuKey& key) const;
+    /// Enumerates active BLAS generations ordered by chunk identity and vertical section.
+    /// @return Stable views that retain every referenced BLAS and geometry buffer lifetime.
+    [[nodiscard]] std::vector<TerrainBlasView> activeViews() const;
     [[nodiscard]] TerrainBlasStats stats() const;
 
 private:
@@ -182,15 +188,11 @@ private:
     struct ActiveResource {
         uint64_t revision = 0u;
         glm::vec3 worldOrigin = glm::vec3(0.0f);
-        RhiAccelerationStructureHandle accelerationStructure;
-        RhiBufferHandle storageBuffer;
-        RhiBufferHandle geometryBuffer;
-        uint64_t deviceAddress = 0u;
+        renderer::rt::SceneBlasResourcePtr resource;
         uint32_t opaqueVertexCount = 0u;
         uint32_t cutoutVertexCount = 0u;
         uint32_t primitiveCount = 0u;
         uint64_t geometryBytes = 0u;
-        uint64_t blasBytes = 0u;
     };
 
     struct Entry {
@@ -234,7 +236,6 @@ private:
     [[nodiscard]] bool taskIsCurrent(const PendingTask& task) const;
     void retireCurrentTask(Entry& entry);
     [[nodiscard]] bool promoteTask(PendingTask& task, Entry& entry);
-    void destroyActiveResource(ActiveResource& resource);
     void destroyTaskResources(PendingTask& task);
     void destroyBuildAttempt(PendingTask& task);
     void destroyCompactAttempt(PendingTask& task);

@@ -145,11 +145,21 @@ M1 与 M2 可并行开发，但公共 `GpuMaterial`、`GpuSceneGeometry` 与 Sta
    明确退役对应资源，Graph 失败保留 CPU Geometry 并按同一算法重新录制。Dashboard 已显示 Active、
    Pending、Primitive、Geometry/BLAS/Scratch 字节；纯契约测试与 Vulkan 生产缓存 Smoke 已覆盖输入
    校验、确定性顺序、Build/Compact、Revision 换代和卸载，Validation 未发现错误。）
-7. glTF Static Mesh BLAS 共享和 TLAS Instance。
-8. AS Smoke Test、Cutout Candidate Test 与显存统计。（AS 与体素生产缓存 Smoke、显存统计完成：
-   Vulkan 已覆盖真实三角形 BLAS Build/Update、Compacted Size、Clone/Compact、TLAS Build、
-   Binding 4、Shader Reflection、体素 Revision 原子换代、卸载、延迟销毁和 Validation；Cutout
-   Candidate、glTF 生产者及运行时 TLAS 场景验收仍待完成。）
+7. glTF Static Mesh BLAS 共享和 TLAS Instance。（实现完成：新增共享 `SceneBlasResource`，由
+   TLAS 代际共同持有 BLAS、Backing Storage 与 Geometry Buffer 生命周期；`StaticMeshBlasCache`
+   将同一 glTF 资产的 Opaque 与 Alpha Mask Primitive 构建为多 Geometry 压缩 BLAS，Blend 与
+   Transmission 不进入 Solid BLAS，多个 ECS 实例共享同一资产 BLAS。`SceneTlasCache` 按稳定
+   Instance Key 排序，分配唯一 24-bit Custom Index，并固定 GI Opaque/Cutout、Shadow、Reflection
+   与 First Person Mask；Transform、CCW、Double-sided、空场景退役、Graph 提交失败和连续换代均
+   使用 Desired/Pending/Active/Retired 状态机。Gameplay Deferred/Forward 与 Model Scene Deferred
+   已接入运行时 TLAS；Dashboard 展示 Instance、唯一 BLAS、TLAS/BLAS 字节、Revision 与构建计数。
+   OpenGL 保持明确 Unsupported。契约测试、Vulkan Smoke、Damaged Helmet 与 Sponza 场景验收均已
+   通过，Validation 未发现错误。）
+8. AS Smoke Test、Cutout Candidate Test 与显存统计。（AS、体素/glTF 生产缓存、运行时 TLAS 与
+   显存统计完成：Vulkan 已覆盖真实三角形 BLAS Build/Update、Compacted Size、Clone/Compact、
+   多 Geometry Static BLAS、共享 BLAS 的多 TLAS Instance、Transform 换代、空场景退役、Binding 4、
+   Shader Reflection、体素 Revision 原子换代、卸载、延迟销毁和 Validation；Cutout Candidate
+   Alpha Test 仍待 RTGI 材质命中链接入。）
 
 ### 完成条件
 

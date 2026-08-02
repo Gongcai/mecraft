@@ -10,6 +10,7 @@
 #include <glm/glm.hpp>
 
 #include "../rhi/RhiHandles.h"
+#include "../rhi/StaticMeshBlasCache.h"
 #include "../contracts/ClusteredLightingContract.h"
 #include "../contracts/GpuLightContract.h"
 #include "../contracts/SceneIdentityContract.h"
@@ -58,6 +59,20 @@ public:
 
     /// Returns the asset-space axis-aligned bounds generated while decoding glTF vertices.
     void assetBounds(glm::vec3& minimum, glm::vec3& maximum) const;
+
+    /// Returns the compacted asset-level BLAS shared by every scene instance.
+    [[nodiscard]] const renderer::rt::SceneBlasResourcePtr& staticBlasResource() const {
+        return m_staticBlasCache.resource();
+    }
+
+    /// Returns static BLAS geometry classification and compacted residency diagnostics.
+    [[nodiscard]] const renderer::rt::StaticMeshBlasStats& staticBlasStats() const { return m_staticBlasCache.stats(); }
+
+    /// Returns the currently prepared local-to-world transform for gameplay rendering.
+    [[nodiscard]] const glm::mat4& instanceTransform() const { return m_modelMatrix; }
+
+    /// Returns the stable identity assigned to the gameplay-owned asset instance.
+    [[nodiscard]] renderer::contracts::StableObjectId stableObjectId() const { return m_objectId; }
 
     /// Returns the number of KHR_lights_punctual instances in the default scene.
     /// @return Count of validated asset-local punctual light definitions.
@@ -178,6 +193,7 @@ private:
         RhiBindGroupHandle bindGroup;
         renderer::contracts::StableMaterialId materialId;
         bool doubleSided = false;
+        bool alphaMasked = false;
         bool alphaBlended = false;
         bool transmissive = false;
         bool forwardOpticalLayer = false;
@@ -186,15 +202,19 @@ private:
     struct PrimitiveResource {
         RhiBufferHandle vertexBuffer;
         RhiBufferHandle indexBuffer;
+        renderer::contracts::StableGeometryId geometryId;
+        uint32_t vertexCount = 0u;
         uint32_t indexCount = 0u;
         uint32_t materialIndex = 0u;
         glm::vec3 boundsCenter{0.0f};
+        bool retainedByBlas = false;
     };
 
     [[nodiscard]] bool createPipelineResources();
     [[nodiscard]] bool rebuildReflectionProbeCaptureBindGroup();
     [[nodiscard]] bool ensureTransparentPipelines(RhiBindGroupLayoutHandle clusteredLightingLayout);
     [[nodiscard]] bool loadAsset(const std::string& modelPath, ResourceMgr& resourceMgr);
+    [[nodiscard]] bool buildStaticBlas(RhiCommandListPool& commandListPool);
     void destroyTransparentPipelines();
     void destroyPipelineResources();
     void setError(std::string message);
@@ -205,6 +225,7 @@ private:
     std::vector<MaterialResource> m_materials;
     std::vector<PrimitiveResource> m_primitives;
     std::vector<renderer::contracts::AnalyticLightSourceDefinition> m_punctualLights;
+    renderer::rt::StaticMeshBlasCache m_staticBlasCache;
     RhiBufferHandle m_frameUniformBuffer;
     RhiBufferHandle m_probeCaptureFrameUniformBuffer;
     RhiBufferHandle m_probeCaptureLightBuffer;

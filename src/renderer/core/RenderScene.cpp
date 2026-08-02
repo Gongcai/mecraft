@@ -248,6 +248,8 @@ void RenderScene::shutdown() {
     m_forwardPipeline.reset();
     m_deferredPipeline.reset();
 
+    m_sceneTlasCache.shutdown();
+
     // Phase R4: Shutdown terrain streaming service
     m_terrainStreamingService.shutdown();
 
@@ -285,6 +287,7 @@ bool RenderScene::renderFrame(const IWorldView& worldView, const Camera& camera,
         return false;
     }
     m_terrainStreamingService.beginFrame();
+    m_sceneTlasCache.beginFrame();
     if (m_blockEntityRenderer != nullptr) {
         m_blockEntityRenderer->beginFrame();
     }
@@ -896,10 +899,14 @@ void RenderScene::setupResources(ThreadPool* threadPool, RhiDevice* rhiDevice, R
     if (!m_terrainStreamingService.init(threadPool, worldRenderBuffer, rhiDevice)) {
         std::abort();
     }
+    if (!m_sceneTlasCache.init(rhiDevice)) {
+        std::abort();
+    }
     m_shared.overlayRenderer = &m_overlayRenderer;
 
     m_shared.rhiDevice = rhiDevice;
     m_shared.commandListPool = commandListPool;
+    m_shared.sceneTlasCache = &m_sceneTlasCache;
     m_temporalUpscalePass.init(*rhiDevice, *commandListPool);
     m_postProcessPass.init(*m_shared.resources, *commandListPool);
     m_fsr1Supported = Fsr1Pass::isSupported(*rhiDevice);

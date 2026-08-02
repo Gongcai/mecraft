@@ -78,7 +78,7 @@ void TerrainBlasCache::shutdown() {
     if (m_device != nullptr) {
         for (auto& [_, entry] : m_entries) {
             if (entry.active.has_value()) {
-                destroyActiveResource(*entry.active);
+                entry.active.reset();
             }
         }
         for (auto& [_, task] : m_tasks) {
@@ -184,7 +184,6 @@ TerrainBlasRequestResult TerrainBlasCache::requestBuild(const SubChunkGpuKey& ke
     entry.latestRevision = revision;
     if (geometry.empty()) {
         if (entry.active.has_value()) {
-            destroyActiveResource(*entry.active);
             entry.active.reset();
         }
         return TerrainBlasRequestResult::Cleared;
@@ -213,7 +212,6 @@ void TerrainBlasCache::remove(const SubChunkGpuKey& key) {
     Entry& entry = entryIt->second;
     retireCurrentTask(entry);
     if (entry.active.has_value()) {
-        destroyActiveResource(*entry.active);
         entry.active.reset();
     }
     m_entries.erase(entryIt);
@@ -368,10 +366,40 @@ std::optional<TerrainBlasView> TerrainBlasCache::activeView(const SubChunkGpuKey
         return std::nullopt;
     }
     const ActiveResource& active = *entryIt->second.active;
-    return TerrainBlasView{active.revision,          active.worldOrigin,    active.accelerationStructure,
-                           active.geometryBuffer,    active.deviceAddress,  active.opaqueVertexCount,
-                           active.cutoutVertexCount, active.primitiveCount, active.geometryBytes,
-                           active.blasBytes};
+    return TerrainBlasView{key,
+                           active.revision,
+                           active.worldOrigin,
+                           active.resource,
+                           active.resource->accelerationStructure(),
+                           active.resource->retainedBuffers().front(),
+                           active.resource->deviceAddress(),
+                           active.opaqueVertexCount,
+                           active.cutoutVertexCount,
+                           active.primitiveCount,
+                           active.geometryBytes,
+                           active.resource->blasBytes()};
+}
+
+std::vector<TerrainBlasView> TerrainBlasCache::activeViews() const {
+    std::vector<TerrainBlasView> views;
+    views.reserve(m_entries.size());
+    for (const auto& [key, entry] : m_entries) {
+        if (!entry.active.has_value()) {
+            continue;
+        }
+        const ActiveResource& active = *entry.active;
+        views.push_back(TerrainBlasView{
+            key, active.revision, active.worldOrigin, active.resource, active.resource->accelerationStructure(),
+            active.resource->retainedBuffers().front(), active.resource->deviceAddress(), active.opaqueVertexCount,
+            active.cutoutVertexCount, active.primitiveCount, active.geometryBytes, active.resource->blasBytes()});
+    }
+    std::sort(views.begin(), views.end(), [](const TerrainBlasView& left, const TerrainBlasView& right) {
+        if (left.key.chunkKey != right.key.chunkKey) {
+            return left.key.chunkKey < right.key.chunkKey;
+        }
+        return left.key.scy < right.key.scy;
+    });
+    return views;
 }
 
 TerrainBlasStats TerrainBlasCache::stats() const {
@@ -388,7 +416,7 @@ TerrainBlasStats TerrainBlasCache::stats() const {
         ++result.activeBlasCount;
         result.activePrimitiveCount += entry.active->primitiveCount;
         result.activeGeometryBytes += entry.active->geometryBytes;
-        result.activeBlasBytes += entry.active->blasBytes;
+        result.activeBlasBytes += entry.active->resource->blasBytes();
     }
     for (const auto& [_, task] : m_tasks) {
         if (!task.current) {
@@ -660,22 +688,21 @@ bool TerrainBlasCache::promoteTask(PendingTask& task, Entry& entry) {
     ActiveResource active;
     active.revision = task.revision;
     active.worldOrigin = task.worldOrigin;
-    active.accelerationStructure = task.compactAccelerationStructure;
-    active.storageBuffer = task.compactStorageBuffer;
-    active.geometryBuffer = task.geometryBuffer;
-    active.deviceAddress = deviceAddress;
+    active.resource =
+        renderer::rt::SceneBlasResource::create(*m_device, task.compactAccelerationStructure, task.compactStorageBuffer,
+                                                deviceAddress, task.compactedBlasBytes, {task.geometryBuffer});
+    if (active.resource == nullptr) {
+        setFatalError("Terrain BLAS shared resource creation failed");
+        return false;
+    }
     active.opaqueVertexCount = task.geometry.opaqueVertexCount;
     active.cutoutVertexCount = task.geometry.cutoutVertexCount;
     active.primitiveCount = task.geometry.primitiveCount();
     active.geometryBytes = static_cast<uint64_t>(task.geometry.vertexCount()) * sizeof(BlockVertex);
-    active.blasBytes = task.compactedBlasBytes;
     task.compactAccelerationStructure = {};
     task.compactStorageBuffer = {};
     task.geometryBuffer = {};
 
-    if (entry.active.has_value()) {
-        destroyActiveResource(*entry.active);
-    }
     entry.active = std::move(active);
     entry.currentTaskSequence = 0u;
 
@@ -688,21 +715,6 @@ bool TerrainBlasCache::promoteTask(PendingTask& task, Entry& entry) {
         task.buildStorageBuffer = {};
     }
     return true;
-}
-
-void TerrainBlasCache::destroyActiveResource(ActiveResource& resource) {
-    if (resource.accelerationStructure.isValid()) {
-        m_device->destroyAccelerationStructure(resource.accelerationStructure);
-        resource.accelerationStructure = {};
-    }
-    if (resource.storageBuffer.isValid()) {
-        m_device->destroyBuffer(resource.storageBuffer);
-        resource.storageBuffer = {};
-    }
-    if (resource.geometryBuffer.isValid()) {
-        m_device->destroyBuffer(resource.geometryBuffer);
-        resource.geometryBuffer = {};
-    }
 }
 
 void TerrainBlasCache::destroyTaskResources(PendingTask& task) {

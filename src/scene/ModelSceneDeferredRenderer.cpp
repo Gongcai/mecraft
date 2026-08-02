@@ -348,6 +348,7 @@ struct ModelSceneDeferredRenderer::Impl {
     Fsr1Pass fsr1;
     TemporalUpscalePass temporalUpscale;
     RenderDebugService debugService;
+    renderer::rt::SceneTlasCache sceneTlasCache;
     DayNightSystem dayNight;
     WeatherSystem weather;
     bool timePaused = true;
@@ -396,6 +397,11 @@ bool ModelSceneDeferredRenderer::init(ResourceMgr& resourceMgr, RhiDevice& rhiDe
     state.fsr1.init(resourceMgr, commandListPool);
     state.temporalUpscale.init(rhiDevice, commandListPool);
     state.debugService.init(rhiDevice);
+    if (!state.sceneTlasCache.init(&rhiDevice)) {
+        state.error = state.sceneTlasCache.lastError();
+        shutdown();
+        return false;
+    }
     state.dayNight.setTimeOfDay(300.0f);
     state.weather.setDebugWeatherPresetInstant(WeatherType::Clear);
 
@@ -415,6 +421,7 @@ bool ModelSceneDeferredRenderer::init(ResourceMgr& resourceMgr, RhiDevice& rhiDe
 
     state.shared.rhiDevice = &rhiDevice;
     state.shared.commandListPool = &commandListPool;
+    state.shared.sceneTlasCache = &state.sceneTlasCache;
     state.shared.deferredTargets = &state.targets;
     state.shared.sky = &state.sky;
     state.shared.shadowRenderer = &state.shadowRenderer;
@@ -437,6 +444,7 @@ void ModelSceneDeferredRenderer::shutdown() {
     if (state.initialized) {
         state.pipeline.shutdown();
     }
+    state.sceneTlasCache.shutdown();
     state.temporalUpscale.shutdown();
     state.fsr1.shutdown();
     state.postProcess.shutdown();
@@ -529,6 +537,7 @@ bool ModelSceneDeferredRenderer::render(const glm::mat4& view, const glm::mat4& 
         state.error = "failed to begin model scene deferred frame";
         return false;
     }
+    state.sceneTlasCache.beginFrame();
     if (!std::isfinite(verticalFovDegrees) || verticalFovDegrees <= 1.0f || verticalFovDegrees >= 179.0f ||
         !std::isfinite(frameClock.deltaTimeSeconds) || frameClock.deltaTimeSeconds < 0.0f ||
         !std::isfinite(frameClock.animationTimeSeconds) || !std::isfinite(frameClock.shaderTimeSeconds)) {

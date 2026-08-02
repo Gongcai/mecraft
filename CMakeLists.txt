@@ -372,6 +372,9 @@ set(SRC_RENDERER
         src/renderer/rhi/RhiGrowableBuffer.cpp
         src/renderer/rhi/RhiHash.cpp
         src/renderer/rhi/RhiRenderGraph.cpp
+        src/renderer/rhi/SceneBlasResource.cpp
+        src/renderer/rhi/SceneTlasCache.cpp
+        src/renderer/rhi/StaticMeshBlasCache.cpp
         src/renderer/rhi/RhiDeviceFactory.cpp
         src/renderer/rhi/RhiShaderCompiler.cpp
         src/renderer/rhi/RhiShaderSourceLoader.cpp
@@ -1063,6 +1066,8 @@ if(MECRAFT_BUILD_TESTS)
             tests/rhi_acceleration_structure_contract_test.cpp)
     add_mecraft_test(terrain_blas_cache_contract_test
             tests/terrain_blas_cache_contract_test.cpp)
+    add_mecraft_test(scene_tlas_cache_contract_test
+            tests/scene_tlas_cache_contract_test.cpp)
     add_mecraft_test(gpu_timing_history_test tests/gpu_timing_history_test.cpp)
     add_mecraft_test(rhi_render_graph_test tests/rhi_render_graph_test.cpp)
     add_mecraft_test(presentation_controller_test tests/presentation_controller_test.cpp)

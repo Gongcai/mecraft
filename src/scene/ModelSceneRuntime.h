@@ -63,6 +63,8 @@ public:
                                           std::string& error) override;
     [[nodiscard]] bool queryLocalShadowSceneRevisions(DeferredLocalShadowSceneRevisions& revisions,
                                                       std::string& error) const override;
+    [[nodiscard]] bool collectRayTracingInstances(std::vector<renderer::rt::SceneTlasInstanceInput>& instances,
+                                                  std::string& error) const override;
     [[nodiscard]] bool configureClusteredLighting(const DeferredClusteredLightingResources& resources) override;
     [[nodiscard]] bool hasTransparentGeometry() const override;
     [[nodiscard]] bool prepareTransparentResources(const DeferredTransparentResources& resources) override;

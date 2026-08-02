@@ -15,6 +15,7 @@
 #include "../overlays/BlockInteractionOverlayRenderer.h"
 #include "../debug/RenderDebugService.h"
 #include "../rhi/RhiRenderGraph.h"
+#include "../rhi/SceneTlasCache.h"
 
 #include <memory>
 #include <functional>
@@ -72,6 +73,7 @@ struct SharedRenderResources {
     // RHI
     RhiDevice* rhiDevice = nullptr;
     RhiCommandListPool* commandListPool = nullptr;
+    renderer::rt::SceneTlasCache* sceneTlasCache = nullptr;
 
     // Terrain
     TerrainRenderCache* terrainCache = nullptr;
@@ -240,6 +242,9 @@ public:
     [[nodiscard]] HiZCullFrameStats hiZCullStats() const;
     [[nodiscard]] ShadowCullFrameStats shadowCullStats() const;
 
+    /// Returns runtime TLAS generation and residency diagnostics.
+    [[nodiscard]] renderer::rt::SceneTlasStats sceneTlasStats() const { return m_sceneTlasCache.stats(); }
+
     // Pipeline readiness (R2.6a)
     /// Check if the new pipeline path is ready to use.
     bool isNewPipelineReady() const;
@@ -330,6 +335,7 @@ private:
 
     // Shared infrastructure
     SharedRenderResources m_shared;
+    renderer::rt::SceneTlasCache m_sceneTlasCache;
 
     // Terrain streaming service (owned by RenderScene)
     TerrainStreamingService m_terrainStreamingService;

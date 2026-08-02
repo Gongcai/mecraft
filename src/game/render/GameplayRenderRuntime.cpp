@@ -279,9 +279,9 @@ void GameplayRenderRuntime::shutdown() {
     m_impl->firstPersonHeldItemRenderer.shutdown();
     m_impl->fallingBlockRenderer.shutdown();
     m_impl->dropRenderer.shutdown();
+    m_impl->scene.shutdown();
     m_impl->staticMeshRenderer.shutdown();
     m_impl->blockEntityRenderer.shutdown();
-    m_impl->scene.shutdown();
     m_impl->resourceHub.shutdown();
     m_impl->presentationController.reset();
     m_impl->presentationBackend.reset();

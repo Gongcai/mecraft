@@ -21,6 +21,8 @@
 #include <algorithm>
 #include <iostream>
 
+#include <glm/gtc/matrix_transform.hpp>
+
 ForwardPipeline::ForwardPipeline() = default;
 ForwardPipeline::~ForwardPipeline() = default;
 
@@ -77,6 +79,9 @@ bool ForwardPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSet
     }
 
     RhiDevice& rhiDevice = *m_shared->rhiDevice;
+    if (!prepareSceneTlas()) {
+        return false;
+    }
     m_renderGraph.reset();
 
     const auto importTexture = [&](const RhiTextureHandle texture, const RhiTextureViewHandle view,
@@ -105,9 +110,17 @@ bool ForwardPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSet
         return false;
     }
 
+    RenderGraphPassBuilder sceneTlas =
+        m_renderGraph.addPass({"Forward.SceneTLAS", RgPassType::Graphics, RhiQueueType::Graphics});
+    sceneTlas.setExecute([&](RgPassContext& pass) {
+        return m_shared->sceneTlasCache == nullptr || m_shared->sceneTlasCache->recordFrame(pass.commandList());
+    });
+
     RenderGraphPassBuilder prepare =
         m_renderGraph.addPass({"Forward.Prepare", RgPassType::Graphics, RhiQueueType::Graphics});
-    prepare.setExecute([&](RgPassContext& pass) { return prepareGraphFrame(ctx, settings, pass.commandList()); });
+    prepare.dependsOn(sceneTlas.handle()).setExecute([&](RgPassContext& pass) {
+        return prepareGraphFrame(ctx, settings, pass.commandList());
+    });
 
     RenderGraphPassBuilder sky = m_renderGraph.addPass({"Forward.Sky", RgPassType::Graphics, RhiQueueType::Graphics});
     sky.dependsOn(prepare.handle())
@@ -131,12 +144,61 @@ bool ForwardPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSet
     if (m_terrainCache != nullptr) {
         m_terrainCache->finishGraphExecution(executed.succeeded(), executed.completionToken());
     }
+    if (m_shared->sceneTlasCache != nullptr) {
+        m_shared->sceneTlasCache->finishGraphExecution(executed.succeeded(), executed.completionToken());
+    }
     if (!executed.succeeded()) {
         MECRAFT_LOG_STREAM(std::cerr << "[ForwardPipeline] Render Graph execution failed: " << executed.message
                                      << '\n');
         return false;
     }
     return true;
+}
+
+bool ForwardPipeline::prepareSceneTlas() {
+    if (m_shared == nullptr || m_shared->sceneTlasCache == nullptr) {
+        return true;
+    }
+    renderer::rt::SceneTlasCache& cache = *m_shared->sceneTlasCache;
+    if (!cache.supported()) {
+        return true;
+    }
+    if (!cache.healthy()) {
+        MECRAFT_LOG_STREAM(std::cerr << "[ForwardPipeline] " << cache.lastError() << '\n');
+        return false;
+    }
+
+    std::vector<renderer::rt::SceneTlasInstanceInput> instances;
+    if (m_terrainCache != nullptr) {
+        const std::vector<TerrainBlasView> terrainViews = m_terrainCache->blasCache().activeViews();
+        instances.reserve(terrainViews.size());
+        for (const TerrainBlasView& terrain : terrainViews) {
+            uint8_t mask = renderer::rt::sceneTlasMaskBit(renderer::rt::SceneTlasInstanceMask::ShadowCaster) |
+                           renderer::rt::sceneTlasMaskBit(renderer::rt::SceneTlasInstanceMask::ReflectionVisible);
+            if (terrain.opaqueVertexCount != 0u) {
+                mask |= renderer::rt::sceneTlasMaskBit(renderer::rt::SceneTlasInstanceMask::GiOpaque);
+            }
+            if (terrain.cutoutVertexCount != 0u) {
+                mask |= renderer::rt::sceneTlasMaskBit(renderer::rt::SceneTlasInstanceMask::GiCutout);
+            }
+            instances.push_back({{renderer::rt::SceneTlasInstanceKind::Terrain, terrain.key.chunkKey,
+                                  static_cast<int64_t>(terrain.key.scy)},
+                                 terrain.resource,
+                                 glm::translate(glm::mat4(1.0f), terrain.worldOrigin),
+                                 mask,
+                                 false});
+        }
+    }
+    const renderer::rt::SceneTlasSetResult result = cache.setInstances(std::move(instances));
+    switch (result) {
+    case renderer::rt::SceneTlasSetResult::Accepted:
+    case renderer::rt::SceneTlasSetResult::Unchanged:
+    case renderer::rt::SceneTlasSetResult::Unsupported: return true;
+    case renderer::rt::SceneTlasSetResult::InvalidInstance:
+        MECRAFT_LOG_STREAM(std::cerr << "[ForwardPipeline] " << cache.lastError() << '\n');
+        return false;
+    }
+    return false;
 }
 
 bool ForwardPipeline::prepareGraphFrame(const FrameContext& ctx, const RenderSettings& settings,

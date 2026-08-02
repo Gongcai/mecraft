@@ -547,6 +547,12 @@ void setTangent(const SMikkTSpaceContext* context, const float tangent[], const 
 bool StaticMeshRenderer::init(ResourceMgr& resourceMgr, const std::string& modelPath) {
     shutdown();
     m_rhiDevice = &resourceMgr.rhiDevice();
+    if (!m_staticBlasCache.init(m_rhiDevice)) {
+        const std::string error = m_staticBlasCache.lastError();
+        shutdown();
+        m_lastError = error;
+        return false;
+    }
     const std::optional<renderer::contracts::StableObjectId> objectId =
         renderer::contracts::allocateStableSceneId<renderer::contracts::StableObjectIdTag>();
     if (!objectId.has_value()) {
@@ -555,7 +561,8 @@ bool StaticMeshRenderer::init(ResourceMgr& resourceMgr, const std::string& model
         return false;
     }
     m_objectId = *objectId;
-    if (!createPipelineResources() || !loadAsset(modelPath, resourceMgr)) {
+    if (!createPipelineResources() || !loadAsset(modelPath, resourceMgr) ||
+        !buildStaticBlas(resourceMgr.commandListPool())) {
         const std::string error = m_lastError;
         shutdown();
         m_lastError = error;
@@ -1195,6 +1202,7 @@ bool StaticMeshRenderer::loadAsset(const std::string& modelPath, ResourceMgr& re
             return false;
         }
         resource.doubleSided = material.double_sided != 0;
+        resource.alphaMasked = materialInput.alphaMode == renderer::contracts::GpuMaterialAlphaMode::Mask;
         resource.alphaBlended = materialInput.alphaMode == renderer::contracts::GpuMaterialAlphaMode::Blend;
         resource.transmissive = materialInput.alphaMode == renderer::contracts::GpuMaterialAlphaMode::Transmission;
         resource.forwardOpticalLayer = resource.alphaBlended || resource.transmissive || material.has_clearcoat;
@@ -1387,13 +1395,27 @@ bool StaticMeshRenderer::loadAsset(const std::string& modelPath, ResourceMgr& re
         }
 
         PrimitiveResource resource;
+        const std::optional<renderer::contracts::StableGeometryId> geometryId =
+            renderer::contracts::allocateStableSceneId<renderer::contracts::StableGeometryIdTag>();
+        if (!geometryId.has_value()) {
+            setError("stable static mesh geometry identity space is exhausted");
+            return false;
+        }
+        resource.geometryId = *geometryId;
+        resource.vertexCount = static_cast<uint32_t>(vertices.size());
         resource.indexCount = static_cast<uint32_t>(indices.size());
         resource.materialIndex = static_cast<uint32_t>(primitive.material - data->materials);
         resource.boundsCenter = (primitiveBoundsMin + primitiveBoundsMax) * 0.5f;
+        const MaterialResource& material = m_materials[resource.materialIndex];
+        const bool solidGeometry = !material.alphaBlended && !material.transmissive;
         RhiBufferDesc bufferDesc;
         bufferDesc.debugName = "StaticMesh.VertexBuffer";
         bufferDesc.size = vertices.size() * sizeof(StaticMeshVertex);
         bufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex) | rhiFlag(RhiBufferUsage::TransferDst);
+        if (solidGeometry && m_staticBlasCache.supported()) {
+            bufferDesc.usage |= rhiFlag(RhiBufferUsage::Storage) | rhiFlag(RhiBufferUsage::DeviceAddress) |
+                                rhiFlag(RhiBufferUsage::AccelerationStructureBuildInput);
+        }
         bufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
         bufferDesc.initialState = RhiResourceState::VertexBuffer;
         bufferDesc.memoryCategory = RhiMemoryCategory::Geometry;
@@ -1401,6 +1423,10 @@ bool StaticMeshRenderer::loadAsset(const std::string& modelPath, ResourceMgr& re
         bufferDesc.debugName = "StaticMesh.IndexBuffer";
         bufferDesc.size = indices.size() * sizeof(uint32_t);
         bufferDesc.usage = rhiFlag(RhiBufferUsage::Index) | rhiFlag(RhiBufferUsage::TransferDst);
+        if (solidGeometry && m_staticBlasCache.supported()) {
+            bufferDesc.usage |= rhiFlag(RhiBufferUsage::Storage) | rhiFlag(RhiBufferUsage::DeviceAddress) |
+                                rhiFlag(RhiBufferUsage::AccelerationStructureBuildInput);
+        }
         bufferDesc.initialState = RhiResourceState::IndexBuffer;
         resource.indexBuffer = m_rhiDevice->createBuffer(bufferDesc, indices.data(), bufferDesc.size);
         if (!resource.vertexBuffer.isValid() || !resource.indexBuffer.isValid()) {
@@ -1489,6 +1515,39 @@ bool StaticMeshRenderer::loadAsset(const std::string& modelPath, ResourceMgr& re
         return false;
     }
     return true;
+}
+
+bool StaticMeshRenderer::buildStaticBlas(RhiCommandListPool& commandListPool) {
+    std::vector<renderer::rt::StaticMeshBlasGeometry> geometries;
+    std::vector<std::size_t> primitiveIndices;
+    geometries.reserve(m_primitives.size());
+    primitiveIndices.reserve(m_primitives.size());
+    for (std::size_t primitiveIndex = 0u; primitiveIndex < m_primitives.size(); ++primitiveIndex) {
+        const PrimitiveResource& primitive = m_primitives[primitiveIndex];
+        const MaterialResource& material = m_materials[primitive.materialIndex];
+        if (material.alphaBlended || material.transmissive) {
+            continue;
+        }
+        geometries.push_back({primitive.geometryId, primitive.vertexBuffer, primitive.indexBuffer,
+                              offsetof(StaticMeshVertex, position), sizeof(StaticMeshVertex), primitive.vertexCount,
+                              primitive.indexCount, !material.alphaMasked, material.doubleSided});
+        primitiveIndices.push_back(primitiveIndex);
+    }
+
+    const renderer::rt::StaticMeshBlasBuildResult result = m_staticBlasCache.build(commandListPool, geometries);
+    switch (result) {
+    case renderer::rt::StaticMeshBlasBuildResult::Built:
+        for (const std::size_t primitiveIndex : primitiveIndices) {
+            m_primitives[primitiveIndex].retainedByBlas = true;
+        }
+        return true;
+    case renderer::rt::StaticMeshBlasBuildResult::Empty:
+    case renderer::rt::StaticMeshBlasBuildResult::Unsupported: return true;
+    case renderer::rt::StaticMeshBlasBuildResult::InvalidGeometry:
+    case renderer::rt::StaticMeshBlasBuildResult::Failed: setError(m_staticBlasCache.lastError()); return false;
+    }
+    setError("static mesh BLAS build returned an invalid result");
+    return false;
 }
 
 void StaticMeshRenderer::prepareFrame(const FrameContext& ctx, const IWorldView& worldView) {
@@ -1935,10 +1994,10 @@ void StaticMeshRenderer::renderToShadowMap(RhiCommandList& commandList, const gl
 void StaticMeshRenderer::shutdown() {
     if (m_rhiDevice != nullptr) {
         for (PrimitiveResource& primitive : m_primitives) {
-            if (primitive.indexBuffer.isValid()) {
+            if (!primitive.retainedByBlas && primitive.indexBuffer.isValid()) {
                 m_rhiDevice->destroyBuffer(primitive.indexBuffer);
             }
-            if (primitive.vertexBuffer.isValid()) {
+            if (!primitive.retainedByBlas && primitive.vertexBuffer.isValid()) {
                 m_rhiDevice->destroyBuffer(primitive.vertexBuffer);
             }
         }
@@ -1965,6 +2024,7 @@ void StaticMeshRenderer::shutdown() {
         }
         destroyPipelineResources();
     }
+    m_staticBlasCache.shutdown();
     m_primitives.clear();
     m_materials.clear();
     m_textures.clear();

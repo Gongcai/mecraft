@@ -34,6 +34,7 @@ public:
 
 private:
     [[nodiscard]] bool executeFrameGraph(const FrameContext& ctx, const RenderSettings& settings);
+    [[nodiscard]] bool prepareSceneTlas();
     [[nodiscard]] bool prepareGraphFrame(const FrameContext& ctx, const RenderSettings& settings,
                                          RhiCommandList& commandList);
     [[nodiscard]] bool recordSkyPass(const FrameContext& ctx, RhiCommandList& commandList);

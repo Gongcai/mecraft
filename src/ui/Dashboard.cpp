@@ -760,6 +760,7 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub& render, Re
             m_displayGpuTimingWindowStats = renderScene.debugService().getGpuTimingWindowStats();
             m_displayShadowStats = render.getShadowFrameStats();
             m_displayRenderGraphStats = renderScene.renderGraphFrameStats();
+            m_displaySceneTlasStats = renderScene.sceneTlasStats();
             m_displayClusteredLightingStats = renderScene.clusteredLightingDebugInfo();
             m_displayReflectionProbeCaptureStats = renderScene.reflectionProbeCaptureStats();
             m_displayHiZCullStats = renderScene.hiZCullStats();
@@ -1272,6 +1273,23 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub& render, Re
                         bytesToMiB(renderWork.terrainBlasGeometryBytes), bytesToMiB(renderWork.terrainBlasBytes),
                         bytesToMiB(renderWork.terrainBlasScratchPeakBytes));
             ImGui::Text("BLAS Primitives: %llu", static_cast<unsigned long long>(renderWork.terrainBlasPrimitives));
+        }
+        ImGui::Text("Scene TLAS: %s, desired/active %u / %u, pending %s, retired %u",
+                    m_displaySceneTlasStats.supported ? (m_displaySceneTlasStats.healthy ? "ready" : "error")
+                                                      : "unsupported",
+                    m_displaySceneTlasStats.desiredInstanceCount, m_displaySceneTlasStats.activeInstanceCount,
+                    m_displaySceneTlasStats.pending ? "yes" : "no", m_displaySceneTlasStats.retiredGenerationCount);
+        if (m_displaySceneTlasStats.supported) {
+            ImGui::Text("TLAS Revisions: desired %llu, active %llu, builds %llu / %llu",
+                        static_cast<unsigned long long>(m_displaySceneTlasStats.desiredRevision),
+                        static_cast<unsigned long long>(m_displaySceneTlasStats.activeRevision),
+                        static_cast<unsigned long long>(m_displaySceneTlasStats.buildsCompleted),
+                        static_cast<unsigned long long>(m_displaySceneTlasStats.buildsRecorded));
+            ImGui::Text("TLAS Memory: instances %.3f MiB, structure %.3f MiB",
+                        bytesToMiB(m_displaySceneTlasStats.activeInstanceBytes),
+                        bytesToMiB(m_displaySceneTlasStats.activeTlasBytes));
+            ImGui::Text("TLAS Shared BLAS: %u unique, %.3f MiB compact", m_displaySceneTlasStats.activeBlasCount,
+                        bytesToMiB(m_displaySceneTlasStats.activeBlasBytes));
         }
 
         bool cutoutDistanceLimit = render.isCutoutDistanceLimitEnabled();
