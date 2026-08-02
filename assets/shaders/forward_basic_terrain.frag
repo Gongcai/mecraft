@@ -4,6 +4,8 @@
 // no skyCapture, atmosphereLut, shadow maps, SSAO, SSR, volumetric.
 // Contract: texture array + lightmap day/night + AO levels + biome tint + fog.
 
+#include "terrain_material_sampling.glsl"
+
 layout(location = 0) out vec4 FragColor;
 
 layout(location = 0) in vec2 vUV;
@@ -117,18 +119,15 @@ void main() {
     // Cross vegetation alpha-cutout mips can darken noticeably at distance.
     bool isCrossVegetation = (vNormal > -2.5 && vNormal < -0.5);
     bool forceBaseLodFlag = (uForceBaseLod != 0) || isCrossVegetation;
-    float sampledLayer = vLayer;
-    if (vAnimated > 0.5 && vAnimationFrameCount > 1.0 && vAnimationFps > 0.0) {
-        float frame = mod(floor(uAnimationTime * vAnimationFps), vAnimationFrameCount);
-        sampledLayer += frame;
-    }
+    float sampledLayer = terrainAnimatedTextureLayer(vLayer, vAnimationFrameCount, vAnimationFps, vAnimated,
+                                                      uAnimationTime);
 
     vec3 sampleCoord = vec3(vUV, sampledLayer);
     vec4 texColor = forceBaseLodFlag
         ? textureLod(texArray, sampleCoord, 0.0)
         : texture(texArray, sampleCoord);
 
-    if (texColor.a < 0.1)
+    if (!terrainAlphaTestPasses(texColor.a))
         discard;
 
     // Biome tinting: grass (kind=1) and foliage (kind=2)

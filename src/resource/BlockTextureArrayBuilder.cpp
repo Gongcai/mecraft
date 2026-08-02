@@ -1,6 +1,7 @@
 #include "BlockTextureArrayBuilder.h"
 #include "TextureResampler.h"
 #include "renderer/contracts/GpuMaterialContract.h"
+#include "renderer/contracts/TerrainMaterialSamplingContract.h"
 #include "renderer/rhi/RhiCommandList.h"
 #include "renderer/rhi/RhiDevice.h"
 
@@ -362,7 +363,7 @@ BlockTextureArraySet buildBlockTextureArraySet(const BlockTextureManifest& manif
         numLayers += layerCount;
     }
 
-    if (numLayers > 1024) {
+    if (numLayers > static_cast<int>(renderer::contracts::kTerrainTextureLayerCount)) {
         failBlockTextureArrayBuilder("Block texture array exceeds the 1024-layer vertex encoding limit");
     }
 

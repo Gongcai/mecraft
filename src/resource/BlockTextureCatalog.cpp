@@ -1,7 +1,9 @@
 #include "BlockTextureCatalog.h"
 
 #include "../Diagnostics.h"
+#include "renderer/contracts/TerrainMaterialSamplingContract.h"
 
+#include <cmath>
 #include <cstdio>
 #include <fstream>
 #include <nlohmann/json.hpp>
@@ -95,13 +97,15 @@ bool BlockTextureCatalog::load(const std::string& textureConfigPath) {
                 return false;
             }
             const int64_t frameCount = framesIt->get<int64_t>();
-            if (frameCount < 1 || frameCount > 63) {
+            if (frameCount < 1 ||
+                frameCount > static_cast<int64_t>(renderer::contracts::kTerrainAnimationFrameCountMax)) {
                 MECRAFT_LOG_FPRINTF(stderr, "[Resource] block_textures.json frames out of range for %s\n",
                                     name.c_str());
                 return false;
             }
             entry.animation.frameCount = static_cast<int>(frameCount);
-            if (entry.animation.frameCount <= 0 || entry.animation.frameCount > 63) {
+            if (entry.animation.frameCount <= 0 ||
+                entry.animation.frameCount > static_cast<int>(renderer::contracts::kTerrainAnimationFrameCountMax)) {
                 MECRAFT_LOG_FPRINTF(stderr, "[Resource] block_textures.json frames out of range for %s\n",
                                     name.c_str());
                 return false;
@@ -115,14 +119,24 @@ bool BlockTextureCatalog::load(const std::string& textureConfigPath) {
                                     name.c_str());
                 return false;
             }
-            entry.animation.fps = fpsIt->get<float>();
-            if (entry.animation.fps < 0.0f || entry.animation.fps > 63.0f) {
-                MECRAFT_LOG_FPRINTF(stderr, "[Resource] block_textures.json fps out of range for %s\n", name.c_str());
+            const double framesPerSecond = fpsIt->get<double>();
+            if (!std::isfinite(framesPerSecond) || std::floor(framesPerSecond) != framesPerSecond ||
+                framesPerSecond < 0.0 ||
+                framesPerSecond > static_cast<double>(renderer::contracts::kTerrainAnimationFramesPerSecondMax)) {
+                MECRAFT_LOG_FPRINTF(stderr,
+                                    "[Resource] block_textures.json fps must be an integer in range [0, 63] for %s\n",
+                                    name.c_str());
                 return false;
             }
+            entry.animation.fps = static_cast<float>(framesPerSecond);
         }
 
         if (entry.animation.frameCount > 1) {
+            if (entry.animation.fps <= 0.0f) {
+                MECRAFT_LOG_FPRINTF(stderr, "[Resource] Animated block texture requires positive fps for %s\n",
+                                    name.c_str());
+                return false;
+            }
             const auto layoutIt = textureJson.find("frameLayout");
             if (layoutIt == textureJson.end() || !layoutIt->is_string()) {
                 MECRAFT_LOG_FPRINTF(stderr, "[Resource] Animated block texture requires frameLayout for %s\n",

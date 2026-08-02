@@ -22,6 +22,7 @@ vec3 SRGBtoLinear(vec3 color) {
 
 #include "gbuffer_contract.glsl"
 #include "rhi_screen_coordinates.glsl"
+#include "terrain_material_sampling.glsl"
 #include "weather_surface.glsl"
 #include "clustered_light_evaluation.glsl"
 #include "terrain_probe_capture_params.glsl"
@@ -282,10 +283,8 @@ vec3 sampleProbeWaterTransmission(vec3 waterNormal, out float opticalDistance) {
 void main() {
     bool isCrossVegetation = vNormal > -2.5 && vNormal < -0.5;
     bool forceBaseLod = uForceBaseLod != 0 || isCrossVegetation;
-    float sampledLayer = vLayer;
-    if (vAnimated > 0.5 && vAnimationFrameCount > 1.0 && vAnimationFps > 0.0) {
-        sampledLayer += mod(floor(uAnimationTime * vAnimationFps), vAnimationFrameCount);
-    }
+    float sampledLayer = terrainAnimatedTextureLayer(vLayer, vAnimationFrameCount, vAnimationFps, vAnimated,
+                                                      uAnimationTime);
 
     vec2 uvDx = dFdx(vUV);
     vec2 uvDy = dFdy(vUV);
@@ -300,7 +299,7 @@ void main() {
 #endif
 
     vec4 texColor = sampleBlockMap(texArray, sampleUv, sampledLayer, forceBaseLod, uvDx, uvDy);
-    if (texColor.a < 0.1) {
+    if (!terrainAlphaTestPasses(texColor.a)) {
         discard;
     }
     vec3 albedo = srgbToLinear(texColor.rgb);

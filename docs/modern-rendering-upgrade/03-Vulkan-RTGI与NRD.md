@@ -105,8 +105,12 @@ Opaque 自动提交、Cutout Candidate 拒绝、Cutout 显式确认和平移实�
 Index、Geometry Index、Primitive ID 与 Barycentrics；多个 TLAS Instance 继续共享同一 BLAS，Validation
 未发现错误。Gameplay `RenderScene` 与 Model Scene Deferred 现已在 Vulkan 分别持有 Global Bindless
 Set，于帧开始把最新完成的 Active TLAS 发布到固定 Binding 4；重复代际不产生 Descriptor 写入，Dashboard
-显示 Active Revision、Descriptor 更新次数和数组占用。OpenGL 两条路径均不创建该集合。Geometry/
-Primitive Metadata 到 UV/纹理的运行时命中链和主视图统一 Alpha Cutoff 仍属于后续消费层工作。
+显示 Active Revision、Descriptor 更新次数和数组占用。OpenGL 两条路径均不创建该集合。主视图、
+GBuffer、Probe Capture 与 Shadow 的非 Leaves Cutout 已共用体素材质采样契约；Leaves 按现有设计
+保持实心投影。Alpha Cutoff 固定为包含边界的
+`0.1`，NaN/Inf Alpha 明确拒绝，动画层使用同一确定性帧选择函数。C++ 契约同时固化
+1024 层纹理数组及 6-bit 帧数/FPS 上限，非法元数据以 `std::optional` 报告。Geometry/
+Primitive Metadata 到 UV/纹理的运行时命中链尚未完成。
 生产 `RtgiTracePass` 已从 GBuffer 重建主表面，使用 Blue Noise、Cranley-Patterson 帧旋转与
 Cosine-weighted Hemisphere Sampling，并通过固定 Binding 4 对 `GI_OPAQUE` 执行 Compute Ray Query。
 以下各节继续约束 Cutout、次级命中着色和正式 Deferred 消费链。
@@ -201,8 +205,9 @@ Opaque Triangle 可直接接受 Committed Intersection。Cutout Triangle 按以�
 5. Alpha 通过时调用 `rayQueryConfirmIntersectionEXT`。
 
 当前 Vulkan Smoke 已固化第 1、5 项的 GPU 契约，并以确定性 Alpha 结果分别覆盖 Candidate 拒绝与确认。
-生产 Trace Pass 本轮只使用 `GI_OPAQUE` Mask，不确认 Cutout Candidate；第 2 至 4 项依赖
-正式体素 Greedy Primitive Metadata、模型材质元数据和统一纹理采样函数，继续在 M3 完成。
+第 4 项的固定 Alpha 边界与动画层选择契约已接入体素光栅路径；完整纹理采样还需要
+Greedy UV Repeat、Primitive Metadata、Geometry Index 映射与 Ray Cone LOD。生产 Trace Pass 当前只使用
+`GI_OPAQUE` Mask，不确认 Cutout Candidate；这条运行时命中链继续在 M3 完成。
 
 Ray Cone 根据射线距离、像素覆盖和三角形 UV 梯度选择 Texture LOD，避免树叶与细栅栏
 在次级射线中出现过度锐利闪烁。

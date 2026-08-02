@@ -164,8 +164,9 @@ M1 与 M2 可并行开发，但公共 `GpuMaterial`、`GpuSceneGeometry` 与 Sta
    Clone/Compact、多 Geometry Static BLAS、共享 BLAS 的多 TLAS Instance、Transform 换代、空场景
    退役、Binding 4、Shader Reflection、体素 Revision 原子换代、卸载和延迟销毁。真实 Compute Ray
    Query Smoke 进一步覆盖 Opaque 自动提交、Cutout Candidate 拒绝/显式确认，以及 Instance Custom
-   Index、Geometry Index、Primitive ID、Barycentrics 回读，Validation 未发现错误。正式运行时材质
-   元数据、纹理采样与统一 Alpha Cutoff 命中链归 M3 第 2、3 项。）
+   Index、Geometry Index、Primitive ID、Barycentrics 回读，Validation 未发现错误。统一 Alpha
+   Cutoff 与动画层选择契约已在 M3 接入体素光栅路径；正式运行时材质元数据、完整纹理采样
+   与 Candidate Confirm 命中链继续归 M3 第 2、3 项。）
 
 ### 完成条件
 
@@ -182,7 +183,12 @@ M1 与 M2 可并行开发，但公共 `GpuMaterial`、`GpuSceneGeometry` 与 Sta
    所有权与 Active TLAS 发布已完成；生产 `RtgiTracePass`、确定性帧旋转、Blue Noise/Cosine
    Sampling、Opaque Ray Query、Render Graph 资源声明与真实 Vulkan 命中距离回读已完成。
    Cutout 命中确认、次级材质辐射、Deferred 运行时消费和 NRD 输入打包尚未完成。）
-2. 体素 Greedy Primitive Metadata 与 Cutout Alpha Candidate。
+2. 体素 Greedy Primitive Metadata 与 Cutout Alpha Candidate。（进行中：新增 C++/GLSL 体素材质
+   采样契约，固化包含边界的 `0.1` Alpha Cutoff、NaN/Inf 拒绝、1024 层纹理编码与
+   6-bit 动画帧数/FPS 上限；GBuffer、主视图、Probe Capture 与 Shadow 的非 Leaves Cutout 已共用
+   同一 Alpha Test 及动画层选择，Leaves 保持实心投影。Terrain Greedy Primitive Metadata、
+   BLAS Geometry Index 映射、Ray Cone 纹理采样与
+   生产 Cutout Candidate Confirm 尚未完成。）
 3. 模型 Geometry/Material 次级命中读取。
 4. 次级太阳、局部灯、Emissive、天空 Radiance。
 5. Raw Diffuse Radiance + First-bounce Hit Distance，并按 RELAX/REBLUR 规范分别打包。

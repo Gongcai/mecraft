@@ -1,6 +1,7 @@
 #version 450 core
 #include "gbuffer_contract.glsl"
 #include "derivative_shadow.glsl"
+#include "terrain_material_sampling.glsl"
 #include "weather_surface.glsl"
 
 layout (location = 0) out vec4 GAlbedoMaterial;
@@ -246,11 +247,8 @@ void applyLabPbrSpecularMap(vec4 specularTexel,
 void main() {
     bool isCrossVegetation = (vNormal > -2.5 && vNormal < -0.5);
     bool forceBaseLod = (uForceBaseLod != 0) || isCrossVegetation;
-    float sampledLayer = vLayer;
-    if (vAnimated > 0.5 && vAnimationFrameCount > 1.0 && vAnimationFps > 0.0) {
-        float frame = mod(floor(uAnimationTime * vAnimationFps), vAnimationFrameCount);
-        sampledLayer += frame;
-    }
+    float sampledLayer = terrainAnimatedTextureLayer(vLayer, vAnimationFrameCount, vAnimationFps, vAnimated,
+                                                      uAnimationTime);
 
     vec2 uvDx = dFdx(vUV);
     vec2 uvDy = dFdy(vUV);
@@ -263,7 +261,7 @@ void main() {
 #endif
 
     vec4 texColor = sampleBlockMap(texArray, sampleUv, sampledLayer, forceBaseLod, uvDx, uvDy);
-    if (texColor.a < 0.1) {
+    if (!terrainAlphaTestPasses(texColor.a)) {
         discard;
     }
 

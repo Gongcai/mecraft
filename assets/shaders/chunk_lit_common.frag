@@ -5,6 +5,7 @@ layout(location = 2) out float FragTransparencyMask;
 #endif
 #include "gbuffer_contract.glsl"
 #include "lighting_environment.glsl"
+#include "terrain_material_sampling.glsl"
 #ifdef RHI_TERRAIN_LIT_MDI
 #include "terrain_lit_params.glsl"
 #define uMoonPhaseFlux rhiTerrainLitMoonLightColor.w
@@ -416,11 +417,8 @@ uniform vec3 uCameraPos;
         // Cross vegetation alpha-cutout mips can darken noticeably at distance.
         bool isCrossVegetation = (vNormal > -2.5 && vNormal < -0.5);
         bool forceBaseLod = (uForceBaseLod != 0) || isCrossVegetation;
-        float sampledLayer = vLayer;
-        if (vAnimated > 0.5 && vAnimationFrameCount > 1.0 && vAnimationFps > 0.0) {
-            float frame = mod(floor(uAnimationTime * vAnimationFps), vAnimationFrameCount);
-            sampledLayer += frame;
-        }
+        float sampledLayer = terrainAnimatedTextureLayer(vLayer, vAnimationFrameCount, vAnimationFps, vAnimated,
+                                                          uAnimationTime);
 
         bool waterLayer = (uWaterEffectsEnabled != 0) && isWaterLayer(sampledLayer);
         if (MECRAFT_TRANSPARENT_COMPOSITE != 0 && !waterLayer) {
@@ -447,7 +445,7 @@ uniform vec3 uCameraPos;
             ? textureLod(texArray, sampleCoord, 0.0)
             : texture(texArray, sampleCoord);
 
-        if (texColor.a < 0.1)
+        if (!terrainAlphaTestPasses(texColor.a))
             discard;
 
         vec3 albedo = srgbToLinear(texColor.rgb);

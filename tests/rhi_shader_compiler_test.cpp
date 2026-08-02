@@ -267,7 +267,7 @@ void main() {
 } // namespace
 
 int main() {
-    constexpr std::array<ShaderCase, 101> kShaderCases{
+    constexpr std::array<ShaderCase, 104> kShaderCases{
         {{"tests/shaders/rhi_screen_coordinates_test.frag", RhiShaderStage::Fragment},
          {"tests/shaders/material_brdf_shared_test.frag", RhiShaderStage::Fragment},
          {"tests/shaders/reflection_probe_contract_test.frag", RhiShaderStage::Fragment},
@@ -311,6 +311,10 @@ int main() {
          {"assets/shaders/static_mesh_probe_capture_rhi.frag", RhiShaderStage::Fragment},
          {"assets/shaders/chunk_gbuffer.frag", RhiShaderStage::Fragment, "RHI_TERRAIN_MDI", "RHI_TERRAIN_NORMAL_MAPS",
           "RHI_TERRAIN_SPECULAR_MAPS"},
+         {"assets/shaders/forward_basic_terrain.frag", RhiShaderStage::Fragment, "RHI_TERRAIN_FORWARD_MDI"},
+         {"assets/shaders/shadow_depth.frag", RhiShaderStage::Fragment, "RHI_TERRAIN_SHADOW_MDI"},
+         {"assets/shaders/shadow_depth.frag", RhiShaderStage::Fragment, "RHI_TERRAIN_SHADOW_MDI",
+          "RHI_TERRAIN_SHADOW_DEPTH_ONLY"},
          {"assets/shaders/ssao.frag", RhiShaderStage::Fragment},
          {"assets/shaders/ssao_filter.frag", RhiShaderStage::Fragment},
          {"assets/shaders/ssao_upsample.frag", RhiShaderStage::Fragment},

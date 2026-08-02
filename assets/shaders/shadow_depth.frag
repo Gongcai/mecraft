@@ -1,5 +1,6 @@
 #version 450 core
 #include "derivative_shadow.glsl"
+#include "terrain_material_sampling.glsl"
 
 layout(location = 0) in vec2 vUV;
 layout(location = 1) in float vLayer;
@@ -169,20 +170,14 @@ void main() {
         // Non-water blocks: existing behavior
         bool isCrossVegetation = (vNormal > -2.5 && vNormal < -0.5);
         bool forceBaseLod = (uForceBaseLod != 0) || isCrossVegetation;
-        float sampledLayer = vLayer;
-        if (vAnimated > 0.5 && vAnimationFrameCount > 1.0 && vAnimationFps > 0.0) {
-            float frame = mod(floor(uAnimationTime * vAnimationFps), vAnimationFrameCount);
-            sampledLayer += frame;
-        }
+        float sampledLayer = terrainAnimatedTextureLayer(vLayer, vAnimationFrameCount, vAnimationFps, vAnimated,
+                                                          uAnimationTime);
         vec4 texColor = forceBaseLod
             ? textureLod(texArray, vec3(vUV, sampledLayer), 0.0)
             : texture(texArray, vec3(vUV, sampledLayer));
-        // Cutout vegetation (grass/flowers) now casts shadows via alpha testing.
-        // Standard alpha threshold of 0.1 filters out transparent pixels while
-        // preserving the silhouette shape in shadow space.
-
+        // Leaves intentionally remain solid shadow casters; every other terrain cutout uses the shared alpha test.
         bool solidFoliageCaster = (vMaterialKind == MATERIAL_LEAVES);
-        if (!solidFoliageCaster && texColor.a < 0.1) {
+        if (!solidFoliageCaster && !terrainAlphaTestPasses(texColor.a)) {
             discard;
         }
         if (solidFoliageCaster) {
