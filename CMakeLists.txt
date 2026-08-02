@@ -439,6 +439,7 @@ set(SRC_RENDERER
         src/renderer/mesh/ItemModelMesh.cpp
         src/renderer/mesh/MeshBuilderRegistry.cpp
         src/renderer/mesh/WorldRenderBuffer.cpp
+        src/renderer/mesh/TerrainBlasCache.cpp
         src/renderer/mesh/TerrainRenderCache.cpp
         src/renderer/mesh/TerrainStreamingService.cpp
         src/renderer/mesh/TerrainRenderer.cpp
@@ -1060,6 +1061,8 @@ if(MECRAFT_BUILD_TESTS)
     add_mecraft_test(render_feature_contract_test tests/render_feature_contract_test.cpp)
     add_mecraft_test(rhi_acceleration_structure_contract_test
             tests/rhi_acceleration_structure_contract_test.cpp)
+    add_mecraft_test(terrain_blas_cache_contract_test
+            tests/terrain_blas_cache_contract_test.cpp)
     add_mecraft_test(gpu_timing_history_test tests/gpu_timing_history_test.cpp)
     add_mecraft_test(rhi_render_graph_test tests/rhi_render_graph_test.cpp)
     add_mecraft_test(presentation_controller_test tests/presentation_controller_test.cpp)

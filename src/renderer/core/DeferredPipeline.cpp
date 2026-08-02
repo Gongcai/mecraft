@@ -2324,6 +2324,9 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
         MECRAFT_LOG_STREAM(std::cerr << "[DeferredPipeline] Render Graph execution failed: " << executed.message
                                      << '\n');
     }
+    if (m_shared->terrainCache != nullptr) {
+        m_shared->terrainCache->finishGraphExecution(executed.succeeded(), executed.completionToken());
+    }
     if (!executed.succeeded() && ctx.debugService != nullptr) {
         ctx.debugService->cancelGpuTimersSince(timerCheckpoint);
     }
@@ -2426,7 +2429,11 @@ bool DeferredPipeline::recordTerrainDrawPreparation(RhiCommandList& commandList,
 
     if (m_shared->terrainCache) {
         m_shared->terrainCache->releaseStaleMdiAllocations(*ctx.worldView);
-        m_shared->terrainCache->drainMeshingResults(*ctx.worldView, commandList);
+        if (!m_shared->terrainCache->drainMeshingResults(*ctx.worldView, commandList)) {
+            MECRAFT_LOG_STREAM(std::cerr << "[DeferredPipeline] " << m_shared->terrainCache->blasCache().lastError()
+                                         << '\n');
+            return false;
+        }
     }
     worldBuffer.beginFrame();
     terrain.clearTransparentBatches();

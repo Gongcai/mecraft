@@ -1260,6 +1260,19 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub& render, Re
                     static_cast<unsigned long long>(renderWork.meshUploadDeferredCount));
         ImGui::Text("World Buffer Upload: %.3f ms, expands %llu", renderWork.worldBufferUploadMs,
                     static_cast<unsigned long long>(renderWork.worldBufferExpandCount));
+        ImGui::Text("Terrain BLAS: %s, active %u, pending build/compact %u / %u",
+                    renderWork.terrainBlasSupported ? (renderWork.terrainBlasHealthy ? "ready" : "error")
+                                                    : "unsupported",
+                    renderWork.terrainActiveBlas, renderWork.terrainPendingBlasBuilds,
+                    renderWork.terrainPendingBlasCompactions);
+        if (renderWork.terrainBlasSupported) {
+            ImGui::Text("BLAS Work: build/compact %u / %u, retired %u", renderWork.terrainBlasBuildsThisFrame,
+                        renderWork.terrainBlasCompactionsThisFrame, renderWork.terrainRetiredBlasTasks);
+            ImGui::Text("BLAS Memory: geometry %.2f MiB, compact %.2f MiB, scratch peak %.2f MiB",
+                        bytesToMiB(renderWork.terrainBlasGeometryBytes), bytesToMiB(renderWork.terrainBlasBytes),
+                        bytesToMiB(renderWork.terrainBlasScratchPeakBytes));
+            ImGui::Text("BLAS Primitives: %llu", static_cast<unsigned long long>(renderWork.terrainBlasPrimitives));
+        }
 
         bool cutoutDistanceLimit = render.isCutoutDistanceLimitEnabled();
         if (ImGui::Checkbox("Cutout Distance Limit", &cutoutDistanceLimit)) {

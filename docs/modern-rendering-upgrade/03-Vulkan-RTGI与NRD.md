@@ -81,9 +81,15 @@ Global Bindless Binding 4 已能发布 TLAS，Shader Reflection 也已识别 Acc
 Descriptor。真实三角形 BLAS、Update、Compaction、Clone、TLAS 和 Descriptor Smoke 已通过，
 未发现 Validation/VUID 错误。
 
-这一完成状态只代表底层资源与命令契约就绪。体素 Render Chunk/SubChunk BLAS 生产者、glTF
-资产级 BLAS 缓存、运行时 TLAS Instance 列表、Revision 调度、Cutout Candidate Alpha Test 和
-RTGI Ray Query Pass 尚未接入，以下各节仍是后续生产层的实施规范。
+体素 Render Chunk/SubChunk BLAS 生产层现已接入：`TerrainBlasCache` 保留 SubChunk 局部
+`BlockVertex`，将 Opaque 与 Cutout 分成不同 Geometry，执行预算化 Build、Compacted Size Query、
+Compact Copy 和 Revision 原子换代；Submission Token 负责 Build/Compact 完成判定、查询槽隔离与
+资源延迟销毁。新 Revision 就绪前旧 Active BLAS 保持有效，空网格及区块卸载会明确退役资源，
+Graph 失败会保留 CPU Geometry 供同一任务重新录制。Dashboard 已发布 Active/Pending、Primitive、
+Geometry/BLAS/Scratch 字节统计，Vulkan 生产缓存 Smoke 与 Validation 已通过。
+
+glTF 资产级 BLAS 缓存、运行时 TLAS Instance 列表、Cutout Candidate Alpha Test 和 RTGI Ray
+Query Pass 尚未接入，以下各节继续约束这些生产层与消费层工作。
 
 ### 4.1 体素区块 BLAS
 

@@ -3,6 +3,7 @@
 
 #include "../../world/chunk/SubChunk.h"
 #include "../../world/chunk/Chunk.h"
+#include "TerrainBlasCache.h"
 #include "WorldDrawBatch.h"
 #include "ChunkMeshingService.h"
 #include <glm/glm.hpp>
@@ -17,6 +18,7 @@ class IWorldView;
 class World;
 class WorldRenderBuffer;
 class RhiCommandList;
+class RhiDevice;
 
 /// Per-sub-chunk transparent bounds cache
 struct TransparentSubChunkCache {
@@ -66,24 +68,6 @@ struct ChunkRenderColumnCache {
     uint64_t validatedFrameSerial = 0;
 };
 
-/// Key for MDI mesh allocation lookup
-struct SubChunkGpuKey {
-    int64_t chunkKey = 0;
-    int scy = 0;
-
-    bool operator==(const SubChunkGpuKey& other) const { return chunkKey == other.chunkKey && scy == other.scy; }
-};
-
-/// Hash for SubChunkGpuKey
-struct SubChunkGpuKeyHash {
-    size_t operator()(const SubChunkGpuKey& key) const {
-        const uint64_t chunk = static_cast<uint64_t>(key.chunkKey);
-        const uint64_t mixed =
-            chunk ^ (static_cast<uint64_t>(key.scy) + 0x9e3779b97f4a7c15ULL + (chunk << 6) + (chunk >> 2));
-        return static_cast<size_t>(mixed);
-    }
-};
-
 /// Tracks GPU memory allocation for a sub-chunk in the global pool
 struct MdiMeshAllocation {
     WorldGpuMesh mesh;
@@ -93,7 +77,7 @@ struct MdiMeshAllocation {
 /// Does NOT perform any GL draw calls — Renderer retains drawing responsibility.
 class TerrainRenderCache {
 public:
-    void init();
+    [[nodiscard]] bool init(RhiDevice* rhiDevice = nullptr);
     void shutdown();
     void beginFrame();
 
@@ -123,9 +107,12 @@ public:
 
     // Meshing job management
     void submitMeshingJobs(const IWorldView& worldView, const glm::vec3& cameraPos);
-    void drainMeshingResults(const IWorldView& worldView, RhiCommandList& commandList);
+    [[nodiscard]] bool drainMeshingResults(const IWorldView& worldView, RhiCommandList& commandList);
+    void finishGraphExecution(bool succeeded, RhiSubmissionToken completionToken);
     [[nodiscard]] const std::unordered_set<int64_t>& meshingInFlight() const { return m_meshingInFlight; }
     [[nodiscard]] bool isMeshingSettled(const IWorldView& worldView) const;
+    [[nodiscard]] TerrainBlasCache& blasCache() { return m_blasCache; }
+    [[nodiscard]] const TerrainBlasCache& blasCache() const { return m_blasCache; }
 
     [[nodiscard]] int meshingSubmittedThisFrame() const { return m_meshingSubmittedThisFrame; }
     [[nodiscard]] int meshingCompletedThisFrame() const { return m_meshingCompletedThisFrame; }
@@ -157,6 +144,8 @@ public:
     void recordMeshingHistory();
 
 private:
+    void releaseMdiAllocationOnly(const SubChunkGpuKey& key);
+
     // Chunk column cache
     std::vector<ChunkRenderColumnCache> m_chunkRenderColumns;
     uint64_t m_chunkRenderColumnsRevision = 0;
@@ -165,6 +154,7 @@ private:
 
     // MDI allocation tracking
     std::unordered_map<SubChunkGpuKey, MdiMeshAllocation, SubChunkGpuKeyHash> m_mdiMeshAllocations;
+    TerrainBlasCache m_blasCache;
     uint64_t m_lastMdiAllocationSweepActiveRevision = 0;
     bool m_mdiAllocationSweepInitialized = false;
 

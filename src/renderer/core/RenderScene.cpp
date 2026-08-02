@@ -891,13 +891,15 @@ void RenderScene::setupResources(ThreadPool* threadPool, RhiDevice* rhiDevice, R
                            ? static_cast<RenderPipeline*>(m_deferredPipeline.get())
                            : static_cast<RenderPipeline*>(m_forwardPipeline.get());
 
-    m_terrainStreamingService.init(threadPool, worldRenderBuffer);
+    if (threadPool == nullptr || rhiDevice == nullptr || commandListPool == nullptr)
+        std::abort();
+    if (!m_terrainStreamingService.init(threadPool, worldRenderBuffer, rhiDevice)) {
+        std::abort();
+    }
     m_shared.overlayRenderer = &m_overlayRenderer;
 
     m_shared.rhiDevice = rhiDevice;
     m_shared.commandListPool = commandListPool;
-    if (rhiDevice == nullptr || commandListPool == nullptr)
-        std::abort();
     m_temporalUpscalePass.init(*rhiDevice, *commandListPool);
     m_postProcessPass.init(*m_shared.resources, *commandListPool);
     m_fsr1Supported = Fsr1Pass::isSupported(*rhiDevice);

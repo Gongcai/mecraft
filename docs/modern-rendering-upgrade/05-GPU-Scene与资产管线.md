@@ -154,6 +154,11 @@ Frustum、Distance、Occlusion、LOD 和最终 Draw Count。
 - Buffer Pool 搬迁导致 Device Address 改变时增加 Geometry Revision 并重建相关 BLAS。
 - 区块上传与 AS Build 由 Submission Token 和 Render Graph Dependency 串联。
 
+当前体素 BLAS 生产缓存已完成。光栅 `PackedBlockVertex` Pool 保持现有职责，光追侧为每个
+SubChunk 独立保留完整 `BlockVertex` Geometry Buffer，因此光栅 Pool 扩容不会改变 BLAS Build
+Input Address。Mesher Revision、Build/Compaction 状态、Submission Token、原子换代和卸载已经
+串联；GPU Scene Geometry 注册、可见区块产品复用与运行时 TLAS Instance 生成仍属于后续任务。
+
 ### 5.4 模型实例
 
 `ModelSceneRuntime` 不再对每个 Entity 调用 `renderToGBuffer`/`renderToShadowMap`。它把

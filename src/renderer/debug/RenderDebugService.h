@@ -295,6 +295,18 @@ struct RenderWorkStats {
     size_t meshUploadDeferredCount = 0;
     size_t worldBufferExpandCount = 0;
     double worldBufferUploadMs = 0.0;
+    bool terrainBlasSupported = false;
+    bool terrainBlasHealthy = true;
+    uint32_t terrainActiveBlas = 0u;
+    uint32_t terrainPendingBlasBuilds = 0u;
+    uint32_t terrainPendingBlasCompactions = 0u;
+    uint32_t terrainRetiredBlasTasks = 0u;
+    uint32_t terrainBlasBuildsThisFrame = 0u;
+    uint32_t terrainBlasCompactionsThisFrame = 0u;
+    uint64_t terrainBlasPrimitives = 0u;
+    uint64_t terrainBlasGeometryBytes = 0u;
+    uint64_t terrainBlasBytes = 0u;
+    uint64_t terrainBlasScratchPeakBytes = 0u;
 };
 
 /// Manages GPU timer queries and collects debug statistics for the rendering pipeline.

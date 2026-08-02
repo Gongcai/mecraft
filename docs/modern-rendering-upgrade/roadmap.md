@@ -135,11 +135,21 @@ M1 与 M2 可并行开发，但公共 `GpuMaterial`、`GpuSceneGeometry` 与 Sta
    Create/Destroy、Build Size、Device Address、Build、Copy、Property Query 函数指针。AS 注册表、
    Submission Sequence 引用盖章、Backing Buffer 依赖传播、AS 先于 Buffer 的延迟释放顺序，以及
    OpenGL 对 AS Buffer/Descriptor/资源/命令/Shader 资源的明确拒绝均已落地。）
-6. 体素 Render Chunk/SubChunk BLAS Build/Compaction/Revision。
+6. 体素 Render Chunk/SubChunk BLAS Build/Compaction/Revision。（实现完成：新增独立
+   `TerrainBlasCache`，以 SubChunk 局部 `BlockVertex` 三角形生成 Opaque 与非 Opaque Cutout
+   Geometry，Water/Transparent 不进入首版 Solid Mask；RT Geometry Buffer 固定具备 Storage、
+   Device Address、AS Build Input 与 Transfer Dst 用途。调度器按请求序号和 SubChunk Stable Key
+   确定性执行每帧 Build 数、Geometry 字节、Primitive 数及 Compaction 数预算，超预算首任务可独占
+   一帧。Build、Compacted Size Query、Compact Copy、Submission Token、查询槽隔离与延迟销毁已形成
+   完整状态机；新 Revision 压缩完成前保留旧 Active BLAS，完成后原子换代，空网格和区块卸载会
+   明确退役对应资源，Graph 失败保留 CPU Geometry 并按同一算法重新录制。Dashboard 已显示 Active、
+   Pending、Primitive、Geometry/BLAS/Scratch 字节；纯契约测试与 Vulkan 生产缓存 Smoke 已覆盖输入
+   校验、确定性顺序、Build/Compact、Revision 换代和卸载，Validation 未发现错误。）
 7. glTF Static Mesh BLAS 共享和 TLAS Instance。
-8. AS Smoke Test、Cutout Candidate Test 与显存统计。（基础 Smoke 与显存统计完成：Vulkan 已覆盖
-   真实三角形 BLAS Build/Update、Compacted Size、Clone/Compact、TLAS Build、Binding 4、Shader
-   Reflection、延迟销毁和 Validation；Cutout Candidate、体素/glTF 生产者及运行时场景验收仍待完成。）
+8. AS Smoke Test、Cutout Candidate Test 与显存统计。（AS 与体素生产缓存 Smoke、显存统计完成：
+   Vulkan 已覆盖真实三角形 BLAS Build/Update、Compacted Size、Clone/Compact、TLAS Build、
+   Binding 4、Shader Reflection、体素 Revision 原子换代、卸载、延迟销毁和 Validation；Cutout
+   Candidate、glTF 生产者及运行时 TLAS 场景验收仍待完成。）
 
 ### 完成条件
 

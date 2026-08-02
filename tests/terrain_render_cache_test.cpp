@@ -38,7 +38,9 @@ int main() {
 
     ChunkMeshingService meshingService;
     TerrainRenderCache cache;
-    cache.init();
+    if (!cache.init()) {
+        return fail("CPU-only terrain cache initialization should succeed");
+    }
     cache.setChunkMeshingService(&meshingService);
 
     if (cache.isMeshingSettled(world)) {

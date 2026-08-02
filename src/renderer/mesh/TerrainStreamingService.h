@@ -12,6 +12,7 @@ class World;
 class ThreadPool;
 class WorldRenderBuffer;
 class RhiCommandList;
+class RhiDevice;
 
 /// Centralized terrain mesh streaming orchestrator.
 /// Owns TerrainRenderCache and ChunkMeshingService, manages meshing budgets,
@@ -21,12 +22,14 @@ class RhiCommandList;
 ///   1. beginFrame()
 ///   2. releaseStaleMdiAllocations(world)
 ///   3. drainMeshingResults(world)
-///   4. (pipeline renders terrain)
-///   5. submitMeshingJobs(world, cameraPos)
-///   6. endFrame()
+///   4. submitMeshingJobs(world, cameraPos)
+///   5. (pipeline renders terrain)
+///   6. finishGraphExecution(succeeded, token)
+///   7. endFrame()
 class TerrainStreamingService {
 public:
-    void init(ThreadPool* threadPool, WorldRenderBuffer* worldRenderBuffer = nullptr);
+    [[nodiscard]] bool init(ThreadPool* threadPool, WorldRenderBuffer* worldRenderBuffer = nullptr,
+                            RhiDevice* rhiDevice = nullptr);
     void shutdown();
 
     /// Reset per-frame counters. Call at start of frame.
@@ -39,7 +42,10 @@ public:
     void releaseMdiAllocation(const SubChunkGpuKey& key);
 
     /// Drain completed meshing results and upload to GPU.
-    void drainMeshingResults(const IWorldView& worldView, RhiCommandList& commandList);
+    [[nodiscard]] bool drainMeshingResults(const IWorldView& worldView, RhiCommandList& commandList);
+
+    /// Commits or rolls back acceleration-structure work recorded by the terrain cache.
+    void finishGraphExecution(bool succeeded, RhiSubmissionToken completionToken);
 
     /// Submit new meshing jobs for dirty sub-chunks near the camera.
     void submitMeshingJobs(const IWorldView& worldView, const glm::vec3& cameraPos);

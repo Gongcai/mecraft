@@ -1,8 +1,10 @@
 #include "TerrainStreamingService.h"
 #include "../../world/IWorldView.h"
 
-void TerrainStreamingService::init(ThreadPool* threadPool, WorldRenderBuffer* worldRenderBuffer) {
-    m_terrainCache.init();
+bool TerrainStreamingService::init(ThreadPool* threadPool, WorldRenderBuffer* worldRenderBuffer, RhiDevice* rhiDevice) {
+    if (!m_terrainCache.init(rhiDevice)) {
+        return false;
+    }
     if (worldRenderBuffer != nullptr) {
         m_terrainCache.setWorldRenderBuffer(worldRenderBuffer);
     }
@@ -26,6 +28,7 @@ void TerrainStreamingService::init(ThreadPool* threadPool, WorldRenderBuffer* wo
                                      static_cast<float>(m_meshingSubmitTimeBudgetMs), m_meshingDrainBudget,
                                      static_cast<float>(m_meshingDrainTimeBudgetMs), m_meshingDrainVertexBudget);
     m_meshingService.start(threadPool);
+    return true;
 }
 
 void TerrainStreamingService::shutdown() {
@@ -45,9 +48,14 @@ void TerrainStreamingService::releaseMdiAllocation(const SubChunkGpuKey& key) {
     m_terrainCache.releaseMdiAllocation(key);
 }
 
-void TerrainStreamingService::drainMeshingResults(const IWorldView& worldView, RhiCommandList& commandList) {
-    m_terrainCache.drainMeshingResults(worldView, commandList);
+bool TerrainStreamingService::drainMeshingResults(const IWorldView& worldView, RhiCommandList& commandList) {
+    const bool succeeded = m_terrainCache.drainMeshingResults(worldView, commandList);
     syncFrameStats();
+    return succeeded;
+}
+
+void TerrainStreamingService::finishGraphExecution(const bool succeeded, const RhiSubmissionToken completionToken) {
+    m_terrainCache.finishGraphExecution(succeeded, completionToken);
 }
 
 void TerrainStreamingService::submitMeshingJobs(const IWorldView& worldView, const glm::vec3& cameraPos) {

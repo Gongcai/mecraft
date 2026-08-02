@@ -1,5 +1,6 @@
 #include "renderer/core/GlobalBindlessSet.h"
 #include "renderer/core/GpuSceneBufferSet.h"
+#include "renderer/mesh/TerrainBlasCache.h"
 #include "renderer/rhi/RhiCommandList.h"
 #include "renderer/rhi/RhiDevice.h"
 #include "renderer/rhi/RhiRenderGraph.h"
@@ -26,6 +27,7 @@
 #include <cstdio>
 #include <cstring>
 #include <iostream>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <vector>
@@ -2803,6 +2805,108 @@ void main() {
     return valid;
 }
 
+[[nodiscard]] bool validateTerrainBlasCache(VkRhiDevice& device, RhiCommandListPool& commandPool) {
+    const uint64_t validationErrorsBefore = device.validationErrorCount();
+    TerrainBlasCache cache;
+    if (!cache.init(&device) || !cache.supported()) {
+        std::cerr << "Terrain BLAS cache initialization failed\n";
+        cache.shutdown();
+        return false;
+    }
+    cache.setBudgets({1u, 1024u * 1024u, 4096u, 1u});
+
+    const auto makeVertex = [](const float x, const float y, const float z) {
+        BlockVertex vertex{};
+        vertex.x = x;
+        vertex.y = y;
+        vertex.z = z;
+        return vertex;
+    };
+    const std::vector<BlockVertex> opaque{makeVertex(0.0f, 0.0f, 0.0f), makeVertex(1.0f, 0.0f, 0.0f),
+                                          makeVertex(0.0f, 1.0f, 0.0f)};
+    const std::vector<BlockVertex> cutout{makeVertex(0.0f, 0.0f, 1.0f), makeVertex(1.0f, 0.0f, 1.0f),
+                                          makeVertex(0.0f, 1.0f, 1.0f)};
+    const auto makeGeometry = [&]() {
+        TerrainBlasGeometry geometry;
+        const TerrainBlasRequestResult prepared = TerrainBlasCache::prepareGeometry(opaque, cutout, {}, geometry);
+        if (prepared != TerrainBlasRequestResult::Queued) {
+            geometry = {};
+        }
+        return geometry;
+    };
+    const auto submitCacheFrame = [&](const char* debugName) {
+        cache.beginFrame();
+        RhiCommandList* commands = commandPool.acquire(RhiCommandListType::Compute);
+        if (commands == nullptr || !commands->begin({debugName, RhiCommandListType::Compute}) ||
+            !cache.recordFrame(*commands) || !commands->end()) {
+            cache.finishGraphExecution(false, {});
+            std::cerr << cache.lastError() << '\n';
+            return false;
+        }
+        RhiCommandList* submissions[] = {commands};
+        RhiSubmissionToken token;
+        if (!device.submit({debugName, submissions, 1u, RhiQueueType::Compute}, &token)) {
+            cache.finishGraphExecution(false, token);
+            return false;
+        }
+        cache.finishGraphExecution(true, token);
+        if (!device.waitForSubmission(token)) {
+            return false;
+        }
+        cache.beginFrame();
+        return cache.healthy();
+    };
+
+    const SubChunkGpuKey key{91, 4};
+    bool valid = cache.requestBuild(key, 1u, glm::vec3(32.0f, 64.0f, -16.0f), makeGeometry()) ==
+                     TerrainBlasRequestResult::Queued &&
+                 submitCacheFrame("VulkanSmoke.TerrainBLAS.Build1") && !cache.activeView(key).has_value() &&
+                 submitCacheFrame("VulkanSmoke.TerrainBLAS.Compact1");
+    const std::optional<TerrainBlasView> firstView = cache.activeView(key);
+    valid = valid && firstView.has_value() && firstView->revision == 1u && firstView->deviceAddress != 0u &&
+            firstView->opaqueVertexCount == 3u && firstView->cutoutVertexCount == 3u && firstView->primitiveCount == 2u;
+
+    valid = valid &&
+            cache.requestBuild(key, 2u, glm::vec3(32.0f, 64.0f, -16.0f), makeGeometry()) ==
+                TerrainBlasRequestResult::Queued &&
+            submitCacheFrame("VulkanSmoke.TerrainBLAS.Build2");
+    const std::optional<TerrainBlasView> duringRevision = cache.activeView(key);
+    valid = valid && duringRevision.has_value() && duringRevision->revision == 1u &&
+            submitCacheFrame("VulkanSmoke.TerrainBLAS.Compact2");
+    const std::optional<TerrainBlasView> secondView = cache.activeView(key);
+    valid = valid && secondView.has_value() && secondView->revision == 2u && secondView->deviceAddress != 0u &&
+            secondView->deviceAddress != firstView->deviceAddress;
+
+    TerrainBlasGeometry invalidGeometry = makeGeometry();
+    if (!invalidGeometry.vertices.empty()) {
+        invalidGeometry.vertices.front().x = std::numeric_limits<float>::quiet_NaN();
+    }
+    valid = valid &&
+            cache.requestBuild(key, 3u, glm::vec3(32.0f, 64.0f, -16.0f), std::move(invalidGeometry)) ==
+                TerrainBlasRequestResult::InvalidGeometry &&
+            cache.requestBuild(key, 1u, glm::vec3(32.0f, 64.0f, -16.0f), makeGeometry()) ==
+                TerrainBlasRequestResult::StaleRevision &&
+            cache.requestBuild(key, 2u, glm::vec3(32.0f, 64.0f, -16.0f), makeGeometry()) ==
+                TerrainBlasRequestResult::Unchanged;
+
+    const TerrainBlasStats residentStats = cache.stats();
+    valid = valid && residentStats.activeBlasCount == 1u && residentStats.activePrimitiveCount == 2u &&
+            residentStats.activeGeometryBytes == sizeof(BlockVertex) * 6u && residentStats.activeBlasBytes != 0u &&
+            cache.isSettled();
+    cache.remove(key);
+    const TerrainBlasStats removedStats = cache.stats();
+    valid = valid && removedStats.activeBlasCount == 0u && removedStats.pendingBuildCount == 0u &&
+            removedStats.pendingCompactionCount == 0u;
+
+    cache.shutdown();
+    device.waitIdle();
+    valid = valid && device.validationErrorCount() == validationErrorsBefore;
+    if (!valid) {
+        std::cerr << "Terrain BLAS build, compaction, revision, or lifetime validation failed\n";
+    }
+    return valid;
+}
+
 [[nodiscard]] bool validateCubeArrayViews(VkRhiDevice& device) {
     const uint64_t validationErrorsBefore = device.validationErrorCount();
     RhiTextureDesc textureDesc;
@@ -3024,7 +3128,7 @@ int main() {
         !validateTemporalOutputTarget(device, *commandPool) ||
         !validateBindGroupUpdateLifecycle(device, *commandPool) ||
         !validateGlobalBindlessGpuScene(device, *commandPool) ||
-        !validateAccelerationStructures(device, *commandPool) ||
+        !validateAccelerationStructures(device, *commandPool) || !validateTerrainBlasCache(device, *commandPool) ||
         !validateVulkanInterop(device, *commandPool, texture, textureView, textureWidth, textureHeight, textureDepth) ||
         !validateOffscreenCoordinateContract(device, *commandPool, window) ||
         !validateRenderGraphMultiQueue(device, *commandPool) ||

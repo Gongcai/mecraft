@@ -84,7 +84,9 @@ bool RenderResourceHub::init(ResourceMgr& resourceMgr, ThreadPool& threadPool, R
     if (!m_worldRenderBuffer.init(*m_rhiDevice)) {
         return false;
     }
-    m_terrainCache.init();
+    if (!m_terrainCache.init(m_rhiDevice)) {
+        return false;
+    }
     m_terrainCache.setWorldRenderBuffer(&m_worldRenderBuffer);
     m_terrainCache.setChunkMeshingService(&m_meshingService);
     m_terrainCache.setRegionChunkSize(m_regionChunkSize);
@@ -341,6 +343,21 @@ RenderWorkStats RenderResourceHub::getRenderWorkStats() const {
         stats.worldBufferExpandCount = static_cast<size_t>(cache.worldBufferExpandCountThisFrame());
         stats.worldBufferUploadMs = cache.worldBufferUploadMsThisFrame();
     }
+    const TerrainRenderCache& activeTerrainCache =
+        m_terrainStreamingService != nullptr ? m_terrainStreamingService->terrainCache() : m_terrainCache;
+    const TerrainBlasStats blasStats = activeTerrainCache.blasCache().stats();
+    stats.terrainBlasSupported = blasStats.supported;
+    stats.terrainBlasHealthy = blasStats.healthy;
+    stats.terrainActiveBlas = blasStats.activeBlasCount;
+    stats.terrainPendingBlasBuilds = blasStats.pendingBuildCount;
+    stats.terrainPendingBlasCompactions = blasStats.pendingCompactionCount;
+    stats.terrainRetiredBlasTasks = blasStats.retiredTaskCount;
+    stats.terrainBlasBuildsThisFrame = blasStats.buildsRecordedThisFrame;
+    stats.terrainBlasCompactionsThisFrame = blasStats.compactionsRecordedThisFrame;
+    stats.terrainBlasPrimitives = blasStats.activePrimitiveCount;
+    stats.terrainBlasGeometryBytes = blasStats.activeGeometryBytes;
+    stats.terrainBlasBytes = blasStats.activeBlasBytes;
+    stats.terrainBlasScratchPeakBytes = blasStats.scratchPeakBytesThisFrame;
     return stats;
 }
 

@@ -128,6 +128,9 @@ bool ForwardPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSet
         return false;
     }
     const RgExecuteResult executed = m_renderGraph.execute(rhiDevice, *m_shared->commandListPool);
+    if (m_terrainCache != nullptr) {
+        m_terrainCache->finishGraphExecution(executed.succeeded(), executed.completionToken());
+    }
     if (!executed.succeeded()) {
         MECRAFT_LOG_STREAM(std::cerr << "[ForwardPipeline] Render Graph execution failed: " << executed.message
                                      << '\n');
@@ -265,7 +268,10 @@ bool ForwardPipeline::prepareTerrain(const FrameContext& ctx, RhiCommandList& co
 
     if (m_terrainCache) {
         m_terrainCache->releaseStaleMdiAllocations(*ctx.worldView);
-        m_terrainCache->drainMeshingResults(*ctx.worldView, commandList);
+        if (!m_terrainCache->drainMeshingResults(*ctx.worldView, commandList)) {
+            MECRAFT_LOG_STREAM(std::cerr << "[ForwardPipeline] " << m_terrainCache->blasCache().lastError() << '\n');
+            return false;
+        }
     }
     worldBuffer.beginFrame();
     terrain.clearTransparentBatches();
