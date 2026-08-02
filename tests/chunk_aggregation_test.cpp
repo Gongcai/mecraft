@@ -132,8 +132,25 @@ int main() {
     if (aggregated.opaqueVertices.empty() || !hasCutoutPass || aggregated.waterVertices.empty()) {
         return fail("aggregation should preserve all render passes across sub-chunks");
     }
-    if (!aggregated.hasBounds || aggregated.boundsMin != glm::vec3(0.0f, 1.0f, 0.0f) ||
-        aggregated.boundsMax != glm::vec3(1.0f, 34.0f, 1.0f)) {
+
+    glm::vec3 emittedBoundsMin(std::numeric_limits<float>::max());
+    glm::vec3 emittedBoundsMax(std::numeric_limits<float>::lowest());
+    const auto expandEmittedBounds = [&](const std::vector<BlockVertex>& vertices) {
+        for (const BlockVertex& vertex : vertices) {
+            emittedBoundsMin.x = std::min(emittedBoundsMin.x, vertex.x);
+            emittedBoundsMin.y = std::min(emittedBoundsMin.y, vertex.y);
+            emittedBoundsMin.z = std::min(emittedBoundsMin.z, vertex.z);
+            emittedBoundsMax.x = std::max(emittedBoundsMax.x, vertex.x);
+            emittedBoundsMax.y = std::max(emittedBoundsMax.y, vertex.y);
+            emittedBoundsMax.z = std::max(emittedBoundsMax.z, vertex.z);
+        }
+    };
+    expandEmittedBounds(aggregated.opaqueVertices);
+    expandEmittedBounds(aggregated.cutoutVertices);
+    expandEmittedBounds(aggregated.cutoutDistanceVertices);
+    expandEmittedBounds(aggregated.transparentVertices);
+    expandEmittedBounds(aggregated.waterVertices);
+    if (!aggregated.hasBounds || aggregated.boundsMin != emittedBoundsMin || aggregated.boundsMax != emittedBoundsMax) {
         return fail("aggregated bounds should expand across all populated sub-chunks");
     }
 
@@ -144,13 +161,14 @@ int main() {
     const float transparentMinY = minVertexY(aggregated.waterVertices);
     const float transparentMaxY = maxVertexY(aggregated.waterVertices);
 
-    if (opaqueMinY < 1.0f || opaqueMaxY > 2.0f) {
+    constexpr float kSubChunkHeight = static_cast<float>(SubChunk::SIZE);
+    if (opaqueMinY < 0.0f || opaqueMaxY >= kSubChunkHeight) {
         return fail("opaque vertices should remain offset into the owning low sub-chunk slice");
     }
-    if (cutoutMinY < 18.0f || cutoutMaxY > 19.0f) {
+    if (cutoutMinY < kSubChunkHeight || cutoutMaxY >= 2.0f * kSubChunkHeight) {
         return fail("cutout vertices should remain offset into the owning middle sub-chunk slice");
     }
-    if (transparentMinY < 33.0f || transparentMaxY > 34.0f) {
+    if (transparentMinY < 2.0f * kSubChunkHeight || transparentMaxY >= 3.0f * kSubChunkHeight) {
         return fail("transparent vertices should remain offset into the owning high sub-chunk slice");
     }
     if (!aggregated.transparentVertices.empty()) {
