@@ -734,13 +734,19 @@ bool TerrainBlasCache::recordBuild(PendingTask& task, RhiCommandList& commandLis
     const RhiAccelerationStructureBuildDesc build{
         buildInput, RhiAccelerationStructureBuildMode::Build, {}, task.buildAccelerationStructure, task.scratchBuffer,
         0u};
-    if (!commandList.buildAccelerationStructures(&build, 1u) ||
-        !commandList.accelerationStructureBarrier({task.buildAccelerationStructure,
+    if (!commandList.buildAccelerationStructures(&build, 1u)) {
+        setTransientError("Terrain BLAS acceleration-structure build command was rejected");
+        return false;
+    }
+    if (!commandList.accelerationStructureBarrier({task.buildAccelerationStructure,
                                                    RhiResourceState::AccelerationStructureBuildWrite,
-                                                   RhiResourceState::AccelerationStructureRead}) ||
-        !commandList.writeAccelerationStructureProperties(
+                                                   RhiResourceState::AccelerationStructureRead})) {
+        setTransientError("Terrain BLAS acceleration-structure barrier recording failed");
+        return false;
+    }
+    if (!commandList.writeAccelerationStructureProperties(
             {&task.buildAccelerationStructure, 1u, m_compactedSizeQueries, task.queryIndex})) {
-        setTransientError("Terrain BLAS build command recording failed");
+        setTransientError("Terrain BLAS compacted-size query recording failed");
         return false;
     }
     commandList.bufferBarrier(
