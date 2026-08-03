@@ -1,5 +1,6 @@
 #include "renderer/contracts/RtgiSamplingContract.h"
 
+#include <glm/common.hpp>
 #include <glm/geometric.hpp>
 
 #include <cmath>
@@ -7,7 +8,7 @@
 namespace renderer::contracts {
 namespace {
 constexpr float kTwoPi = 6.28318530717958647692f;
-constexpr float kUint24Scale = 1.0f / 16777216.0f;
+constexpr glm::vec2 kR2Increment{0.7548776662466927f, 0.5698402909980532f};
 
 [[nodiscard]] bool finite(const glm::vec2& value) {
     return std::isfinite(value.x) && std::isfinite(value.y);
@@ -17,9 +18,6 @@ constexpr float kUint24Scale = 1.0f / 16777216.0f;
     return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
 }
 
-[[nodiscard]] float normalizedHash24(const uint32_t value) {
-    return static_cast<float>(value & 0x00ffffffu) * kUint24Scale;
-}
 } // namespace
 
 uint32_t rtgiSampleHash(uint32_t value) {
@@ -36,8 +34,8 @@ uint32_t rtgiStableHitIdentityHash(const uint32_t stableMaterialId, const uint32
 }
 
 glm::vec2 rtgiCranleyPattersonRotation(const uint32_t frameIndex) {
-    return {normalizedHash24(rtgiSampleHash(frameIndex ^ 0x68bc21ebu)),
-            normalizedHash24(rtgiSampleHash(frameIndex ^ 0x02e5be93u))};
+    const float sequenceIndex = static_cast<float>(frameIndex & 0x00ffffffu) + 1.0f;
+    return glm::fract(kR2Increment * sequenceIndex);
 }
 
 std::optional<glm::vec3> rtgiCosineHemisphereDirection(const glm::vec2& sample, const glm::vec3& normal) {

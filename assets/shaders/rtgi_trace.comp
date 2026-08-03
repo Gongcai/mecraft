@@ -64,6 +64,8 @@ struct RtgiSecondarySurface {
     float skyVisibility;
 };
 
+const float RTGI_METALLIC_DIFFUSE_TRANSPORT_FLOOR = 0.35;
+
 bool rtgiFinite(float value) {
     return !isnan(value) && !isinf(value);
 }
@@ -185,6 +187,12 @@ bool rtgiTraceVisibility(vec3 surfacePosition, vec3 normal, vec3 direction, floa
     return true;
 }
 
+vec3 rtgiDiffuseTransportAlbedo(RtgiSecondarySurface surface) {
+    float transportWeight = mix(1.0, RTGI_METALLIC_DIFFUSE_TRANSPORT_FLOOR,
+                                clamp(surface.metalness, 0.0, 1.0));
+    return surface.albedo * transportWeight;
+}
+
 bool rtgiEvaluateDirectionalSurface(RtgiSecondarySurface surface, vec3 viewDirection, vec3 lightDirection,
                                     vec3 incidentRadiance, out vec3 radiance) {
     radiance = vec3(0.0);
@@ -204,17 +212,11 @@ bool rtgiEvaluateDirectionalSurface(RtgiSecondarySurface surface, vec3 viewDirec
         return false;
     }
     vec3 halfDirection = halfVector * inversesqrt(halfLengthSquared);
-    float nDotV = max(dot(surface.normal, viewDirection), 0.0);
-    float nDotH = max(dot(surface.normal, halfDirection), 0.0);
     float lDotH = max(dot(unitLightDirection, halfDirection), 0.0);
     vec3 fresnel = pbrFresnelSchlick(lDotH, surface.specularF0, surface.specularF90);
-    vec3 diffuse = pbrDiffuseWeight(fresnel, surface.metalness) *
-                   pbrLambertDiffuse(surface.albedo) * nDotL;
-    vec3 specular = pbrEvaluateDirectSpecular(
-        lDotH, nDotV, nDotL, nDotH,
-        pbrPerceptualRoughnessToAlphaSquared(surface.perceptualRoughness), surface.specularF0,
-        surface.specularF90);
-    radiance = (diffuse + specular) * incidentRadiance;
+    vec3 diffuseWeight = pbrDiffuseWeight(fresnel, surface.metalness) +
+                         vec3(RTGI_METALLIC_DIFFUSE_TRANSPORT_FLOOR * clamp(surface.metalness, 0.0, 1.0));
+    radiance = diffuseWeight * pbrLambertDiffuse(surface.albedo) * nDotL * incidentRadiance;
     return rtgiFinite(radiance);
 }
 
@@ -292,8 +294,7 @@ bool rtgiAccumulateGpuLight(GpuLight light, RtgiSecondarySurface surface, vec3 s
         light, cameraRelativeSurface, surface.normal, viewDirection, surface.specularF0,
         surface.specularF90, nDotV,
         pbrPerceptualRoughnessToAlphaSquared(surface.perceptualRoughness));
-    vec3 combinedContribution = contribution.diffuse + contribution.specular;
-    if (all(lessThanEqual(combinedContribution, vec3(0.0)))) {
+    if (all(lessThanEqual(contribution.diffuse, vec3(0.0)))) {
         return true;
     }
     float shadowVisibility;
@@ -301,8 +302,7 @@ bool rtgiAccumulateGpuLight(GpuLight light, RtgiSecondarySurface surface, vec3 s
                              shadowVisibility)) {
         return false;
     }
-    radiance += (surface.albedo * (1.0 - surface.metalness) * contribution.diffuse +
-                 contribution.specular) * shadowVisibility;
+    radiance += rtgiDiffuseTransportAlbedo(surface) * contribution.diffuse * shadowVisibility;
     return rtgiFinite(radiance);
 }
 
@@ -364,7 +364,7 @@ bool rtgiShadeSecondarySurface(RtgiSecondarySurface surface, vec3 surfacePositio
                                    coneWidth, radiance)) {
         return false;
     }
-    radiance += surface.albedo * (1.0 - surface.metalness) *
+    radiance += rtgiDiffuseTransportAlbedo(surface) *
                 uSecondaryLighting.skyAmbientRadiance.rgb * surface.ao * surface.skyVisibility;
     return rtgiFinite(radiance);
 }
@@ -412,8 +412,7 @@ void main() {
     }
 
     ivec2 noiseExtent = textureSize(uBlueNoiseTexture, 0);
-    uvec2 frameOffset = uvec2(pc.frameMaskAndFlags.x * 17u, pc.frameMaskAndFlags.x * 43u);
-    ivec2 noiseTexel = ivec2((uvec2(texel) + frameOffset) % uvec2(noiseExtent));
+    ivec2 noiseTexel = ivec2(uvec2(texel) % uvec2(noiseExtent));
     vec2 blueNoise = texelFetch(uBlueNoiseTexture, noiseTexel, 0).rg;
     vec2 sampleValue = fract(blueNoise + rtgiCranleyPattersonRotation(pc.frameMaskAndFlags.x));
     vec3 rayDirection = rtgiCosineHemisphereDirection(sampleValue, normal);

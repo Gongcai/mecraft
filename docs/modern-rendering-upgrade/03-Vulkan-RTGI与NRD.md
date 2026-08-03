@@ -125,7 +125,8 @@ Metadata、Geometry Index 到 Primitive Base 映射、BLAS Device Address 与 TL
 Geometry Index、Primitive ID 与 Barycentrics 定位固定 32 字节 `BlockVertex` 和 Primitive Metadata，
 重建 UV，按像素世界覆盖、射线距离与三角形 UV 梯度计算 Ray Cone LOD，选择动画 Texture2DArray
 层并执行统一 Alpha Test。
-生产 `RtgiTracePass` 已从 GBuffer 重建主表面，使用 Blue Noise、Cranley-Patterson 帧旋转与
+生产 `RtgiTracePass` 已从 GBuffer 重建主表面，使用固定空间 Blue Noise、R2 低差异
+Cranley-Patterson 帧旋转与
 Cosine-weighted Hemisphere Sampling，并通过固定 Binding 4 对 `GI_OPAQUE | GI_CUTOUT` 执行 Compute
 Ray Query。Candidate Alpha 通过时显式调用 `rayQueryConfirmIntersectionEXT`，Validation Word 同时记录
 Classification、Candidate Count 与 Confirmed Count。模型路径已从 Binding 8/9/10 读取 TLAS 代际
@@ -200,8 +201,8 @@ Roughness、Material ID 和 Stable Object ID。Ray Origin 沿几何法线偏移�
 
 首版对 Diffuse Lobe 做 Cosine-weighted Hemisphere Sampling：
 
-- Sobol/Owen 或 Blue Noise 提供低差异样本。
-- 每帧使用确定的 Cranley-Patterson Rotation。
+- 固定空间 Blue Noise 提供逐像素样本相位，不能随帧滚动纹理坐标。
+- 每帧使用确定的 R2 低差异 Cranley-Patterson Rotation，避免整幅图像发生随机相位跳变。
 - 相机 Jitter 与 GI Sample Sequence 使用不同维度。
 - Quality：Render Extent 全像素 1 spp。
 - Performance：Render Extent 棋盘格 1 spp，向 NRD 正确声明 Checkerboard Mode。
@@ -209,9 +210,10 @@ Roughness、Material ID 和 Stable Object ID。Ray Origin 沿几何法线偏移�
 最大射线距离是画质设置中的世界单位参数，并可按室内/室外预设配置；它不是基于本帧
 时间动态改变的隐藏变量。
 
-当前 C++/GLSL 共享确定性整数 Hash、帧旋转、余弦半球映射、128 字节 Push Constant 与 112 字节
-次级光照 UBO 契约。单元测试固化 Hash 结果、采样有效域、期望余弦分布、UBO 布局及 Terrain
-Normal/Specular Map Flag；真实 Vulkan Smoke 使用 Blue Noise、Scene TLAS 与生产 `RtgiTracePass`。
+当前 C++/GLSL 共享确定性整数 Hash、R2 帧旋转、余弦半球映射、128 字节 Push Constant 与 112 字节
+次级光照 UBO 契约。单元测试固化 Hash 结果、R2 环面步进、固定噪声寻址、采样有效域、期望余弦
+分布、UBO 布局及 Terrain Normal/Specular Map Flag；真实 Vulkan Smoke 使用 Blue Noise、Scene TLAS
+与生产 `RtgiTracePass`。
 Terrain 生产链使用 2×1 GBuffer 与两层动画纹理数组：左像素在动画层 Alpha
 为零时拒绝 Cutout 并命中约 2 世界单位后的 Opaque，右像素确认 Cutout 并命中约 1 世界单位；两者
 分别回读 `Candidate/Confirmed = 1/0` 与 `1/1`。模型生产链回读约 1.5/0.5 世界单位的 Opaque/Mask
@@ -251,8 +253,10 @@ Ray Cone 根据射线距离、像素覆盖和三角形 UV 梯度选择 Texture L
 - 命中点所在 Camera-relative World Light Cell 的局部灯辐射与阴影。
 - 天空漫反射环境项。
 
-Miss 返回对应方向的物理天空辐射，包含昼夜、天气与云层透射。命中点材质使用统一
-Diffuse BRDF 求值。路径估计器应用次级表面材质；主表面的 Diffuse Material Factor 在
+Miss 返回对应方向的物理天空辐射，包含昼夜、天气与云层透射。命中点材质只写入
+Diffuse BRDF 输运，不能把次级镜面高光混入 `NRD Diffuse` 信号。由于独立 Specular RT 尚未实现，
+金属材质使用上限明确的 `0.35 * Albedo` 漫反射输运补偿，使金属方块仍能产生稳定的材质色溢出；
+该补偿将在独立 Specular RT 接入后由真实镜面输运替代。路径估计器应用次级表面材质；主表面的 Diffuse Material Factor 在
 NRD 前移除，降噪完成后再调制。首版只有一次间接反弹，不递归发射 GI Ray。
 
 生产实现使用 `RtgiSecondaryLightingParams` 传递太阳/月亮方向与物理 Radiance、天空环境项、阴影
@@ -406,6 +410,8 @@ Checkerboard Mode 和 Rect Size 变化只更新设置并按契约决定 History 
 新创建或复用且内容可能未初始化的 Permanent Pool 使用一次
 `nrd::AccumulationMode::CLEAR_AND_RESTART`。动态对象局部变化依靠 Motion、Depth、Normal
 以及应用生成的 History Confidence/Disocclusion Mask 判定，不清空整帧历史。
+`DeferredPipeline::invalidateHistory()` 同时标记 NRD Permanent Pool 为 Clear，确保开关切换、世界加载
+与相机历史失效不会继续读取旧 GI。
 
 ### 6.5 Demodulation 与合成
 

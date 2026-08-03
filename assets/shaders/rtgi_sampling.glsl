@@ -2,7 +2,7 @@
 #define MECRAFT_RTGI_SAMPLING_GLSL
 
 const float RTGI_TWO_PI = 6.28318530717958647692;
-const float RTGI_UINT24_SCALE = 1.0 / 16777216.0;
+const vec2 RTGI_R2_INCREMENT = vec2(0.7548776662466927, 0.5698402909980532);
 
 const uint RTGI_TRACE_CLASS_SKY = 0u;
 const uint RTGI_TRACE_CLASS_TRANSLUCENT = 1u;
@@ -38,10 +38,10 @@ uint rtgiStableHitIdentityHash(uint stableMaterialId, uint stableGeometryId) {
     return rtgiSampleHash(stableMaterialId * 0x9e3779b9u ^ stableGeometryId * 0x85ebca6bu);
 }
 
-// Returns the deterministic per-frame Cranley-Patterson rotation in [0, 1).
+// Advances the shared Cranley-Patterson rotation with a low-discrepancy R2 sequence.
 vec2 rtgiCranleyPattersonRotation(uint frameIndex) {
-    return vec2(float(rtgiSampleHash(frameIndex ^ 0x68bc21ebu) & 0x00ffffffu),
-                float(rtgiSampleHash(frameIndex ^ 0x02e5be93u) & 0x00ffffffu)) * RTGI_UINT24_SCALE;
+    float sequenceIndex = float(frameIndex & 0x00ffffffu) + 1.0;
+    return fract(RTGI_R2_INCREMENT * sequenceIndex);
 }
 
 // Maps one low-discrepancy sample to a cosine-weighted unit direction around normal.

@@ -758,6 +758,9 @@ void DeferredPipeline::shutdown() {
 
 void DeferredPipeline::invalidateHistory() {
     m_hasPreviousFrameData = false;
+#if defined(MECRAFT_ENABLE_NRD)
+    m_nrdClearHistory = true;
+#endif
     if (m_cloudPass) {
         m_cloudPass->invalidateHistory();
     }

@@ -5033,8 +5033,8 @@ namespace {
     rejectedMask.hitIdentityHash = renderer::contracts::rtgiStableHitIdentityHash(601u, 501u);
     rejectedMask.minimumHitDistance = 1.45f;
     rejectedMask.maximumHitDistance = 1.55f;
-    rejectedMask.minimumRadiance = {0.999f, 0.46f, 0.212f};
-    rejectedMask.maximumRadiance = {1.001f, 0.466f, 0.216f};
+    rejectedMask.minimumRadiance = {0.999f, 0.456f, 0.212f};
+    rejectedMask.maximumRadiance = {1.001f, 0.46f, 0.216f};
     RtgiTraceSmokeExpectedPixel confirmedMask;
     confirmedMask.classification = renderer::contracts::RtgiTraceClassification::Hit;
     confirmedMask.candidateCount = 1u;
@@ -5042,8 +5042,8 @@ namespace {
     confirmedMask.hitIdentityHash = renderer::contracts::rtgiStableHitIdentityHash(602u, 502u);
     confirmedMask.minimumHitDistance = 0.45f;
     confirmedMask.maximumHitDistance = 0.55f;
-    confirmedMask.minimumRadiance = {0.0f, 0.46f, 0.0f};
-    confirmedMask.maximumRadiance = {0.001f, 0.466f, 0.001f};
+    confirmedMask.minimumRadiance = {0.0f, 0.456f, 0.0f};
+    confirmedMask.maximumRadiance = {0.001f, 0.46f, 0.001f};
     smokeCase.expectedPixels = {rejectedMask, confirmedMask};
     if (!validateRtgiTraceCase(device, commandPool, sceneTlas, activeTlas, globalBindlessSet, smokeCase)) {
         return false;

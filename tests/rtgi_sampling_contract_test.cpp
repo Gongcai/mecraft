@@ -23,16 +23,21 @@ namespace {
 [[nodiscard]] bool validateShaderMirror() {
     const std::string samplingPath = std::string(MECRAFT_TEST_SOURCE_DIR) + "/assets/shaders/rtgi_sampling.glsl";
     const std::string tracePath = std::string(MECRAFT_TEST_SOURCE_DIR) + "/assets/shaders/rtgi_trace.comp";
+    const std::string pipelinePath = std::string(MECRAFT_TEST_SOURCE_DIR) + "/src/renderer/core/DeferredPipeline.cpp";
     std::ifstream samplingFile(samplingPath, std::ios::binary);
     std::ifstream traceFile(tracePath, std::ios::binary);
-    if (!samplingFile.is_open() || !traceFile.is_open()) {
+    std::ifstream pipelineFile(pipelinePath, std::ios::binary);
+    if (!samplingFile.is_open() || !traceFile.is_open() || !pipelineFile.is_open()) {
         return false;
     }
     const std::string samplingSource{std::istreambuf_iterator<char>(samplingFile), std::istreambuf_iterator<char>()};
     const std::string traceSource{std::istreambuf_iterator<char>(traceFile), std::istreambuf_iterator<char>()};
+    const std::string pipelineSource{std::istreambuf_iterator<char>(pipelineFile), std::istreambuf_iterator<char>()};
     return samplingSource.find("const uint RTGI_SECONDARY_LIGHTING_TERRAIN_NORMAL_MAP_BIT = 1u << 0u;") !=
                std::string::npos &&
            samplingSource.find("const uint RTGI_SECONDARY_LIGHTING_TERRAIN_SPECULAR_MAP_BIT = 1u << 1u;") !=
+               std::string::npos &&
+           samplingSource.find("const vec2 RTGI_R2_INCREMENT = vec2(0.7548776662466927, 0.5698402909980532);") !=
                std::string::npos &&
            traceSource.find("layout(std140, set = 1, binding = 16) uniform RtgiSecondaryLightingParams") !=
                std::string::npos &&
@@ -41,7 +46,17 @@ namespace {
            traceSource.find("policy != GPU_LIGHT_SHADOW_RAY_QUERY") != std::string::npos &&
            traceSource.find("gpuLightShadowIndex(light) != GPU_LIGHT_INVALID_RESOURCE_INDEX") != std::string::npos &&
            traceSource.find("maximumDistance - dot(normal * originBias, unitDirection) - rayMinimum") !=
-               std::string::npos;
+               std::string::npos &&
+           traceSource.find("const float RTGI_METALLIC_DIFFUSE_TRANSPORT_FLOOR = 0.35;") != std::string::npos &&
+           traceSource.find("ivec2 noiseTexel = ivec2(uvec2(texel) % uvec2(noiseExtent));") != std::string::npos &&
+           traceSource.find("frameOffset") == std::string::npos &&
+           traceSource.find("radiance += rtgiDiffuseTransportAlbedo(surface) * contribution.diffuse") !=
+               std::string::npos &&
+           traceSource.find("surface.albedo * (1.0 - surface.metalness)") == std::string::npos &&
+           pipelineSource.find("void DeferredPipeline::invalidateHistory() {\n"
+                               "    m_hasPreviousFrameData = false;\n"
+                               "#if defined(MECRAFT_ENABLE_NRD)\n"
+                               "    m_nrdClearHistory = true;") != std::string::npos;
 }
 } // namespace
 
@@ -58,17 +73,17 @@ int main() {
                         rtgiStableHitIdentityHash(602u, 502u) == 1027311900u && sizeof(RtgiTracePushConstants) == 128u,
                     "RTGI stable hit identity and push-constant contracts must remain bit-exact") &&
         valid;
-    valid =
-        requireTrue(sizeof(RtgiSecondaryLightingParams) == 112u && alignof(RtgiSecondaryLightingParams) == 16u &&
-                        offsetof(RtgiSecondaryLightingParams, sunDirectionAndVisibility) == 0u &&
-                        offsetof(RtgiSecondaryLightingParams, traceAndEmissionScales) == 80u &&
-                        offsetof(RtgiSecondaryLightingParams, flags) == 96u &&
-                        RtgiSecondaryLightingParams{}.traceAndEmissionScales.w == 1.0f &&
-                        kRtgiSecondaryLightingTerrainNormalMapBit == 1u &&
-                        kRtgiSecondaryLightingTerrainSpecularMapBit == 2u &&
-                        (kRtgiSecondaryLightingTerrainNormalMapBit | kRtgiSecondaryLightingTerrainSpecularMapBit) == 3u,
-                    "RTGI secondary-lighting UBO layout and terrain-map flags must remain fixed") &&
-        valid;
+    valid = requireTrue(
+                sizeof(RtgiSecondaryLightingParams) == 112u && alignof(RtgiSecondaryLightingParams) == 16u &&
+                    offsetof(RtgiSecondaryLightingParams, sunDirectionAndVisibility) == 0u &&
+                    offsetof(RtgiSecondaryLightingParams, traceAndEmissionScales) == 80u &&
+                    offsetof(RtgiSecondaryLightingParams, flags) == 96u &&
+                    RtgiSecondaryLightingParams{}.traceAndEmissionScales.w == 1.0f &&
+                    kRtgiSecondaryLightingTerrainNormalMapBit == 1u &&
+                    kRtgiSecondaryLightingTerrainSpecularMapBit == 2u && kRtgiMetallicDiffuseTransportFloor == 0.35f &&
+                    (kRtgiSecondaryLightingTerrainNormalMapBit | kRtgiSecondaryLightingTerrainSpecularMapBit) == 3u,
+                "RTGI secondary-lighting UBO, terrain-map flags, and metallic transport must remain fixed") &&
+            valid;
 
     const glm::vec2 firstRotation = rtgiCranleyPattersonRotation(0u);
     const glm::vec2 repeatedRotation = rtgiCranleyPattersonRotation(0u);
@@ -76,6 +91,11 @@ int main() {
     valid = requireTrue(firstRotation == repeatedRotation && firstRotation.x >= 0.0f && firstRotation.x < 1.0f &&
                             firstRotation.y >= 0.0f && firstRotation.y < 1.0f && firstRotation != nextRotation,
                         "RTGI Cranley-Patterson rotation must be deterministic and frame-varying") &&
+            valid;
+    constexpr glm::vec2 kExpectedR2Step{0.7548776662466927f, 0.5698402909980532f};
+    const glm::vec2 wrappedStep = glm::mod(nextRotation - firstRotation + glm::vec2(1.0f), glm::vec2(1.0f));
+    valid = requireTrue(glm::length(wrappedStep - kExpectedR2Step) <= 1.0e-6f,
+                        "RTGI frame rotation must advance by the low-discrepancy R2 step") &&
             valid;
 
     const std::optional<glm::vec3> pole = rtgiCosineHemisphereDirection(glm::vec2(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));

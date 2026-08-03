@@ -18,6 +18,7 @@ inline constexpr uint32_t kRtgiTraceValidationConfirmedShift = 20u;
 inline constexpr uint32_t kRtgiTraceValidationConfirmedMask = 0xfffu;
 inline constexpr uint32_t kRtgiSecondaryLightingTerrainNormalMapBit = 1u << 0u;
 inline constexpr uint32_t kRtgiSecondaryLightingTerrainSpecularMapBit = 1u << 1u;
+inline constexpr float kRtgiMetallicDiffuseTransportFloor = 0.35f;
 
 /// Push constants shared by the production RTGI trace pass and Vulkan smoke validation.
 struct alignas(16) RtgiTracePushConstants final {
@@ -56,7 +57,7 @@ static_assert(sizeof(RtgiSecondaryLightingParams) == 112u);
 /// @return Deterministic 32-bit identity word shared with GLSL validation.
 [[nodiscard]] uint32_t rtgiStableHitIdentityHash(uint32_t stableMaterialId, uint32_t stableGeometryId);
 
-/// Produces the per-frame two-dimensional Cranley-Patterson rotation used by RTGI.
+/// Produces the per-frame low-discrepancy Cranley-Patterson rotation used by RTGI.
 /// @param frameIndex Low 32 bits of the deterministic render-frame index.
 /// @return Two values in the half-open interval [0, 1).
 [[nodiscard]] glm::vec2 rtgiCranleyPattersonRotation(uint32_t frameIndex);

@@ -188,10 +188,11 @@ M1 与 M2 可并行开发，但公共 `GpuMaterial`、`GpuSceneGeometry` 与 Sta
 ### 任务
 
 1. RTGI Compute Ray Query、Blue Noise/Cosine Sampling。（实现完成：Global Bindless Binding 4 的双运行时
-   所有权与 Active TLAS 发布已完成；生产 `RtgiTracePass`、确定性帧旋转、Blue Noise/Cosine
+   所有权与 Active TLAS 发布已完成；生产 `RtgiTracePass`、固定空间 Blue Noise、R2 低差异帧旋转、Cosine
    Sampling、Opaque 自动提交、Terrain Cutout Candidate Confirm、Render Graph 资源声明、逐像素
    Candidate/Confirmed 计数、模型 Stable Material/Geometry Hash、真实 Vulkan 命中距离回读及完整
-   次级命中材质/辐射、RELAX/REBLUR 独立输入打包，以及 Deferred Lighting 运行时消费均已完成。）
+   次级命中材质/辐射、RELAX/REBLUR 独立输入打包，以及 Deferred Lighting 运行时消费均已完成；采样序列
+   不再同时滚动噪声纹理和随机跳变整图相位。）
 2. 体素 Greedy Primitive Metadata 与 Cutout Alpha Candidate。（实现完成：新增 C++/GLSL 体素材质
    采样契约，固化包含边界的 `0.1` Alpha Cutoff、NaN/Inf 拒绝、1024 层纹理编码与
    6-bit 动画帧数/FPS 上限；GBuffer、主视图、Probe Capture 与 Shadow 的非 Leaves Cutout 已共用
@@ -220,7 +221,8 @@ M1 与 M2 可并行开发，但公共 `GpuMaterial`、`GpuSceneGeometry` 与 Sta
    Ray Query 分支已通过生产 Shader 编译和源码契约，`SceneLight` 生产入口仍与主视图契约一致地显式
    返回 `RayQueryUnavailable`。命中表面累加 Emissive、直接光和天空环境项，Miss 直接采样 Sky Capture。Vulkan Smoke 已用 RGB 通道分别锁定
    红色 Emissive、绿色太阳、蓝色 Point Light，并验证 Terrain Grass Tint、天空环境项及固定天空
-   Radiance Miss；CPU/GLSL World Grid、UBO 和材质源码契约测试已通过。）
+   Radiance Miss；Diffuse GI 已排除次级镜面项，并以有界金属色输运补偿稳定 LabPBR 金属方块的色溢出；
+   CPU/GLSL World Grid、UBO 和材质源码契约测试已通过。）
 5. Raw Diffuse Radiance + First-bounce Hit Distance，并按 RELAX/REBLUR 规范分别打包。（实现完成：
    `RtgiTracePass` 保留统一 `RGBA16F` 原始 RGB Radiance 与 First-bounce Hit Distance，Miss 距离固定为
    FP16 最大值 `65504`。新增独立 `RtgiSignalPackPass`，RELAX 保留线性 RGB 与真实距离，REBLUR 使用
@@ -247,7 +249,7 @@ M1 与 M2 可并行开发，但公共 `GpuMaterial`、`GpuSceneGeometry` 与 Sta
    `RG16F` Velocity 保持不变。Guide Prep 使用上一帧 Depth、正 View-Z，并在全局 Temporal Reset 时清零
    Z History；固定数值的真实 Vulkan 回读和 Validation 已通过。Pre-exposure 转换与按历史所有者细分的
    生产当前曝光值仍显式为 `1`，全局 Auto Exposure 到 Scene HDR 的 Pre-exposure producer 与按历史
-   所有者细分的 Reset 仍待完成。）
+   所有者细分的 Reset 仍待完成；公共 `invalidateHistory()` 已同步触发 NRD Permanent Pool Clear。）
 9. RTGI/NRD Debug View、Timestamp、Reference Capture。（进行中：RTGI Trace/Signal Pack 与 NRD Guide/
    全部 SDK Dispatch 已纳入独立 GPU Timestamp 阶段，Dashboard、固定 p50/p95/p99 窗口和 Benchmark JSON
    均分别发布 RTGI/NRD 耗时；信号 Debug View 与双场景 Reference Capture 仍待完成。）
