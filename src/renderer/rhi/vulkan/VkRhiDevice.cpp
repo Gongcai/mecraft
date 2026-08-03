@@ -2223,6 +2223,8 @@ RhiBufferHandle VkRhiDevice::createBuffer(const RhiBufferDesc& desc, const void*
         (desc.usage & rhiFlag(RhiBufferUsage::AccelerationStructureStorage)) != 0u;
     const bool accelerationStructureBuildInput =
         (desc.usage & rhiFlag(RhiBufferUsage::AccelerationStructureBuildInput)) != 0u;
+    const bool accelerationStructureBuildScratch =
+        desc.initialState == RhiResourceState::AccelerationStructureBuildScratch;
     if (!m_initialized || !rhiMemoryCategoryValid(desc.memoryCategory) || desc.size == 0u || desc.usage == 0u ||
         toVkBufferUsage(desc.usage) == 0u || (initialData == nullptr && initialDataSize != 0u) ||
         initialDataSize > desc.size) {
@@ -2231,7 +2233,11 @@ RhiBufferHandle VkRhiDevice::createBuffer(const RhiBufferDesc& desc, const void*
     if ((accelerationStructureStorage &&
          ((desc.usage & kAccelerationStructureStorageUsages) != kAccelerationStructureStorageUsages ||
           desc.memoryUsage != RhiMemoryUsage::GpuOnly)) ||
-        (accelerationStructureBuildInput && (desc.usage & rhiFlag(RhiBufferUsage::DeviceAddress)) == 0u)) {
+        (accelerationStructureBuildInput && (desc.usage & rhiFlag(RhiBufferUsage::DeviceAddress)) == 0u) ||
+        (accelerationStructureBuildScratch &&
+         ((desc.usage & (rhiFlag(RhiBufferUsage::Storage) | rhiFlag(RhiBufferUsage::DeviceAddress))) !=
+              (rhiFlag(RhiBufferUsage::Storage) | rhiFlag(RhiBufferUsage::DeviceAddress)) ||
+          desc.memoryUsage != RhiMemoryUsage::GpuOnly))) {
         logRhiError("acceleration-structure buffers require explicit device-address usage");
         return {};
     }
@@ -2249,6 +2255,9 @@ RhiBufferHandle VkRhiDevice::createBuffer(const RhiBufferDesc& desc, const void*
     VmaAllocationCreateInfo allocationInfo{};
     allocationInfo.usage = desc.memoryUsage == RhiMemoryUsage::GpuOnly ? VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE
                                                                        : VMA_MEMORY_USAGE_AUTO_PREFER_HOST;
+    if (accelerationStructureBuildScratch) {
+        allocationInfo.minAlignment = m_capabilities.minAccelerationStructureScratchOffsetAlignment;
+    }
     if (desc.memoryUsage != RhiMemoryUsage::GpuOnly) {
         allocationInfo.flags =
             VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;

@@ -3038,6 +3038,31 @@ void main() {
         return false;
     }
 
+    std::array<RhiBufferHandle, 8u> scratchAlignmentBuffers{};
+    RhiBufferDesc scratchAlignmentDesc;
+    scratchAlignmentDesc.debugName = "VulkanSmoke.AS.ScratchAlignment";
+    scratchAlignmentDesc.size = 257u;
+    scratchAlignmentDesc.usage = rhiFlag(RhiBufferUsage::Storage) | rhiFlag(RhiBufferUsage::DeviceAddress);
+    scratchAlignmentDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+    scratchAlignmentDesc.initialState = RhiResourceState::AccelerationStructureBuildScratch;
+    scratchAlignmentDesc.memoryCategory = RhiMemoryCategory::AccelerationStructure;
+    bool scratchAlignmentValid = true;
+    for (RhiBufferHandle& buffer : scratchAlignmentBuffers) {
+        buffer = device.createBuffer(scratchAlignmentDesc, nullptr, 0u);
+        const uint64_t address = buffer.isValid() ? device.bufferDeviceAddress(buffer) : 0u;
+        scratchAlignmentValid = scratchAlignmentValid && address != 0u &&
+                                address % capabilities.minAccelerationStructureScratchOffsetAlignment == 0u;
+    }
+    for (const RhiBufferHandle buffer : scratchAlignmentBuffers) {
+        if (buffer.isValid()) {
+            device.destroyBuffer(buffer);
+        }
+    }
+    if (!scratchAlignmentValid) {
+        std::cerr << "Acceleration-structure scratch allocation alignment validation failed\n";
+        return false;
+    }
+
     RhiBufferHandle vertexBuffer;
     RhiBufferHandle indexBuffer;
     RhiBufferHandle blasStorage;
