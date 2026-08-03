@@ -609,12 +609,18 @@ bool RtgiTracePass::ensureBindGroup(RhiDevice& rhiDevice, const TraceViews& view
             m_boundSceneBufferBytes = boundSceneBufferBytes;
             return true;
         }
+
+        // The update can be rejected for a lifecycle or resource-contract
+        // reason. Once the device is idle, the old descriptor set is no
+        // longer needed and must be released before allocating its replacement;
+        // otherwise a finite descriptor pool can remain exhausted forever.
+        rhiDevice.destroyBindGroup(previousBindGroup);
+        m_traceBindGroup = {};
     }
     RhiBindGroupHandle newBindGroup = rhiDevice.createBindGroup(bindGroupDesc);
     if (!newBindGroup.isValid()) {
-        // Scene/TLAS revisions can arrive while the previous frame still owns
-        // its descriptor set. Reclaim completed descriptor sets before retrying;
-        // the old group remains valid until the retry has a replacement.
+        // Scene/TLAS revisions can arrive while descriptor allocations from the
+        // previous frame are still being reclaimed. Retry after the idle point.
         rhiDevice.waitIdle();
         newBindGroup = rhiDevice.createBindGroup(bindGroupDesc);
     }

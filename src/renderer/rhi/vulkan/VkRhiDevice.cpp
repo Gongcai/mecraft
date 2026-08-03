@@ -3415,7 +3415,20 @@ bool VkRhiDevice::updateBindGroups(const RhiBindGroupUpdate* updates, const uint
                 if (buffer == nullptr || (buffer->desc.usage & rhiFlag(requiredUsage)) == 0u ||
                     resource.buffer.offset % requiredAlignment != 0u || range == 0u || range > maximumRange ||
                     resource.buffer.offset > buffer->desc.size || range > buffer->desc.size - resource.buffer.offset) {
-                    logRhiError("updateBindGroups received an invalid buffer resource");
+                    std::cerr << "VkRhiDevice: updateBindGroups received an invalid buffer resource"
+                              << " binding=" << update.binding << " arrayElement=" << arrayElement
+                              << " handle=" << resource.buffer.buffer.index << ':' << resource.buffer.buffer.generation
+                              << " offset=" << resource.buffer.offset << " requestedRange=" << resource.buffer.range
+                              << " resolvedRange=" << range << " requiredUsage=0x" << std::hex
+                              << rhiFlag(requiredUsage) << " requiredAlignment=" << std::dec << requiredAlignment
+                              << " maximumRange=" << maximumRange;
+                    if (buffer == nullptr) {
+                        std::cerr << " buffer=null";
+                    } else {
+                        std::cerr << " bufferSize=" << buffer->desc.size << " bufferUsage=0x" << std::hex
+                                  << static_cast<uint32_t>(buffer->desc.usage) << std::dec;
+                    }
+                    std::cerr << '\n';
                     return false;
                 }
                 bufferInfos.push_back({buffer->buffer, resource.buffer.offset,
