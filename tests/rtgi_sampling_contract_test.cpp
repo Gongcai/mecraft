@@ -49,12 +49,16 @@ namespace {
            traceSource.find("maximumDistance - dot(normal * originBias, unitDirection) - rayMinimum") !=
                std::string::npos &&
            traceSource.find("const float RTGI_METALLIC_DIFFUSE_TRANSPORT_FLOOR = 0.35;") != std::string::npos &&
+           traceSource.find("const float RTGI_RADIANCE_FIREFLY_CLAMP = 8.0;") != std::string::npos &&
            traceSource.find("ivec2 noiseTexel = ivec2(uvec2(texel) % uvec2(noiseExtent));") != std::string::npos &&
            traceSource.find("rtgiCranleyPattersonRotation(0u)") != std::string::npos &&
            traceSource.find("frameOffset") == std::string::npos &&
            traceSource.find("radiance += rtgiDiffuseTransportAlbedo(surface) * contribution.diffuse") !=
                std::string::npos &&
            traceSource.find("rtgiTerrainBlockLightIncident(surface.blockLight)") != std::string::npos &&
+           traceSource.find("surface.geometricNormal") != std::string::npos &&
+           traceSource.find("rtgiAccumulateSkyAmbient") != std::string::npos &&
+           traceSource.find("reflect(rayDirection, geometricNormal)") != std::string::npos &&
            traceSource.find("surface.albedo * (1.0 - surface.metalness)") == std::string::npos &&
            pipelineSource.find("const bool nrdEnabled = rtgiEnabled && settings.nrd.enabled;") != std::string::npos &&
            pipelineSource.find("void DeferredPipeline::invalidateHistory() {\n"

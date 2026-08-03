@@ -39,6 +39,7 @@ struct TerrainRayQueryAttributes {
 struct TerrainRayQuerySurface {
     vec3 albedo;
     vec3 normal;
+    vec3 geometricNormal;
     vec3 emission;
     vec3 specularF0;
     float specularF90;
@@ -252,6 +253,7 @@ bool terrainRayQueryCommittedSurface(TerrainRayTracingGpuInstance instanceData, 
                                      out TerrainRayQuerySurface surface) {
     surface.albedo = vec3(0.0);
     surface.normal = vec3(0.0, 1.0, 0.0);
+    surface.geometricNormal = vec3(0.0, 1.0, 0.0);
     surface.emission = vec3(0.0);
     surface.specularF0 = vec3(0.04);
     surface.specularF90 = 1.0;
@@ -313,7 +315,8 @@ bool terrainRayQueryCommittedSurface(TerrainRayTracingGpuInstance instanceData, 
     float emissiveHint = emissiveMaterial ? emissiveMask * clamp(attributes.blockLight * 1.25, 0.0, 1.0) : 0.0;
     SurfaceMaterial material = surfaceMaterialForKind(float(materialKind), emissiveHint);
     SurfaceMaterialAux materialAux = surfaceMaterialAuxForKind(float(materialKind));
-    vec3 normal = terrainRayQueryFaceNormal(terrainPrimitiveFace(triangle.metadata));
+    vec3 geometricNormal = normalize(terrainRayQueryFaceNormal(terrainPrimitiveFace(triangle.metadata)));
+    vec3 normal = geometricNormal;
     float ao = clamp(attributes.ao, 0.0, 1.0);
     bool crossedVegetation = terrainPrimitiveFace(triangle.metadata) == TERRAIN_PRIMITIVE_FACE_CROSS_FLOWER ||
                              terrainPrimitiveFace(triangle.metadata) == TERRAIN_PRIMITIVE_FACE_CROSS_BIOME_TINT;
@@ -346,9 +349,14 @@ bool terrainRayQueryCommittedSurface(TerrainRayTracingGpuInstance instanceData, 
             materialAux.metalness = decoded.metalness;
         }
     }
-    normal = faceforward(normalize(normal), incomingRayDirection, normalize(normal));
+    geometricNormal = faceforward(geometricNormal, incomingRayDirection, geometricNormal);
+    normal = faceforward(normalize(normal), incomingRayDirection, geometricNormal);
+    if (dot(normal, geometricNormal) < 0.0) {
+        normal = -normal;
+    }
     surface.albedo = albedo;
     surface.normal = normal;
+    surface.geometricNormal = geometricNormal;
     surface.emission = albedo * material.emission * emissionScale;
     surface.specularF0 = decodeLabPbrF0(material.encodedF0OrMetalId, albedo);
     surface.specularF90 = pbrMaterialSpecularF90(material.specularF90, materialAux.metalness);

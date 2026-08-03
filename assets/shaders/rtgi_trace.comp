@@ -56,6 +56,7 @@ layout(push_constant) uniform RtgiTracePushConstants {
 struct RtgiSecondarySurface {
     vec3 albedo;
     vec3 normal;
+    vec3 geometricNormal;
     vec3 emission;
     vec3 specularF0;
     float specularF90;
@@ -67,6 +68,10 @@ struct RtgiSecondarySurface {
 };
 
 const float RTGI_METALLIC_DIFFUSE_TRANSPORT_FLOOR = 0.35;
+// The sky capture contains a high-radiance solar disk. A single diffuse ray
+// occasionally landing on that tiny disk must not become a screen-space
+// firefly, so keep the raw one-spp signal within the normal scene range.
+const float RTGI_RADIANCE_FIREFLY_CLAMP = 8.0;
 
 bool rtgiFinite(float value) {
     return !isnan(value) && !isinf(value);
@@ -108,9 +113,8 @@ vec3 rtgiTerrainBlockLightIncident(float blockLight) {
 
 void rtgiWriteResult(ivec2 texel, vec3 radiance, float hitDistance, uint classification, uint candidateCount,
                      uint confirmedCount, uint hitIdentityHash) {
-    vec3 preExposedRadiance = radiance * uSecondaryLighting.traceAndEmissionScales.w;
-    if (!rtgiFinite(preExposedRadiance) || !rtgiFinite(hitDistance) ||
-        any(lessThan(preExposedRadiance, vec3(0.0))) ||
+    if (!rtgiFinite(radiance) || !rtgiFinite(hitDistance) ||
+        any(lessThan(radiance, vec3(0.0))) ||
         hitDistance < 0.0) {
         imageStore(uDiffuseRadianceHitDistance, texel, vec4(0.0));
         imageStore(uValidation, texel,
@@ -118,6 +122,16 @@ void rtgiWriteResult(ivec2 texel, vec3 radiance, float hitDistance, uint classif
                          0u, 0u, 0u));
         return;
     }
+    vec3 preExposedRadiance = radiance * uSecondaryLighting.traceAndEmissionScales.w;
+    if (!rtgiFinite(preExposedRadiance)) {
+        imageStore(uDiffuseRadianceHitDistance, texel, vec4(0.0));
+        imageStore(uValidation, texel,
+                   uvec4(rtgiTraceValidationWord(RTGI_TRACE_CLASS_NON_FINITE, candidateCount, confirmedCount),
+                         0u, 0u, 0u));
+        return;
+    }
+    preExposedRadiance = min(preExposedRadiance,
+                             vec3(RTGI_RADIANCE_FIREFLY_CLAMP) * uSecondaryLighting.traceAndEmissionScales.w);
     imageStore(uDiffuseRadianceHitDistance, texel,
                vec4(min(preExposedRadiance, vec3(RTGI_NRD_FP16_MAX)), min(hitDistance, RTGI_NRD_FP16_MAX)));
     imageStore(uValidation, texel,
@@ -263,7 +277,7 @@ bool rtgiAccumulateCelestial(RtgiSecondarySurface surface, vec3 surfacePosition,
         return true;
     }
     float shadowVisibility;
-    if (!rtgiTraceVisibility(surfacePosition, surface.normal, directionAndVisibility.xyz,
+    if (!rtgiTraceVisibility(surfacePosition, surface.geometricNormal, directionAndVisibility.xyz,
                              uSecondaryLighting.traceAndEmissionScales.x, coneWidth, shadowVisibility)) {
         return false;
     }
@@ -291,7 +305,7 @@ bool rtgiLightRayDirection(GpuLight light, vec3 cameraRelativeSurface, out vec3 
 }
 
 bool rtgiLightVisibility(GpuLight light, vec3 surfacePosition, vec3 cameraRelativeSurface, vec3 normal,
-                         float coneWidth, out float visibility) {
+                         vec3 originNormal, float coneWidth, out float visibility) {
     visibility = 0.0;
     uint policy = gpuLightShadowPolicy(light);
     if (policy == GPU_LIGHT_SHADOW_NONE) {
@@ -311,7 +325,7 @@ bool rtgiLightVisibility(GpuLight light, vec3 surfacePosition, vec3 cameraRelati
     vec3 direction;
     float maximumDistance;
     return rtgiLightRayDirection(light, cameraRelativeSurface, direction, maximumDistance) &&
-           rtgiTraceVisibility(surfacePosition, normal, direction, maximumDistance, coneWidth, visibility);
+           rtgiTraceVisibility(surfacePosition, originNormal, direction, maximumDistance, coneWidth, visibility);
 }
 
 bool rtgiAccumulateGpuLight(GpuLight light, RtgiSecondarySurface surface, vec3 surfacePosition,
@@ -326,7 +340,8 @@ bool rtgiAccumulateGpuLight(GpuLight light, RtgiSecondarySurface surface, vec3 s
         return true;
     }
     float shadowVisibility;
-    if (!rtgiLightVisibility(light, surfacePosition, cameraRelativeSurface, surface.normal, coneWidth,
+    if (!rtgiLightVisibility(light, surfacePosition, cameraRelativeSurface, surface.normal,
+                             surface.geometricNormal, coneWidth,
                              shadowVisibility)) {
         return false;
     }
@@ -368,11 +383,37 @@ bool rtgiAccumulateWorldLights(RtgiSecondarySurface surface, vec3 surfacePositio
     return true;
 }
 
+bool rtgiAccumulateSkyAmbient(RtgiSecondarySurface surface, vec3 surfacePosition, float coneWidth,
+                              inout vec3 radiance) {
+    float skyVisibility = clamp(surface.skyVisibility, 0.0, 1.0);
+    if (skyVisibility <= 0.0 || all(lessThanEqual(uSecondaryLighting.skyAmbientRadiance.rgb, vec3(0.0)))) {
+        return true;
+    }
+    vec3 skyDirection = surface.normal + vec3(0.0, 1.0, 0.0);
+    float directionLengthSquared = dot(skyDirection, skyDirection);
+    if (directionLengthSquared <= 1.0e-12) {
+        return true;
+    }
+    skyDirection *= inversesqrt(directionLengthSquared);
+    if (dot(surface.normal, skyDirection) <= 0.0) {
+        return true;
+    }
+    float visibility;
+    if (!rtgiTraceVisibility(surfacePosition, surface.geometricNormal, skyDirection,
+                             uSecondaryLighting.traceAndEmissionScales.x, coneWidth, visibility)) {
+        return false;
+    }
+    radiance += rtgiDiffuseTransportAlbedo(surface) * uSecondaryLighting.skyAmbientRadiance.rgb * surface.ao *
+                skyVisibility * visibility;
+    return rtgiFinite(radiance);
+}
+
 bool rtgiShadeSecondarySurface(RtgiSecondarySurface surface, vec3 surfacePosition,
                                vec3 incomingRayDirection, float coneWidth, out vec3 radiance) {
     radiance = vec3(0.0);
     vec3 viewDirection = -incomingRayDirection;
-    if (!rtgiFinite(surface.albedo) || !rtgiFinite(surface.normal) || !rtgiFinite(surface.emission) ||
+    if (!rtgiFinite(surface.albedo) || !rtgiFinite(surface.normal) || !rtgiFinite(surface.geometricNormal) ||
+        !rtgiFinite(surface.emission) ||
         !rtgiFinite(surface.specularF0) || !rtgiFinite(surface.specularF90) ||
         !rtgiFinite(surface.perceptualRoughness) || !rtgiFinite(surface.metalness) ||
         !rtgiFinite(surface.ao) || !rtgiFinite(surface.skyVisibility) || !rtgiFinite(surface.blockLight) ||
@@ -395,9 +436,7 @@ bool rtgiShadeSecondarySurface(RtgiSecondarySurface surface, vec3 surfacePositio
     }
     radiance += rtgiDiffuseTransportAlbedo(surface) *
                 rtgiTerrainBlockLightIncident(surface.blockLight) * surface.ao;
-    radiance += rtgiDiffuseTransportAlbedo(surface) *
-                uSecondaryLighting.skyAmbientRadiance.rgb * surface.ao * surface.skyVisibility;
-    return rtgiFinite(radiance);
+    return rtgiAccumulateSkyAmbient(surface, surfacePosition, coneWidth, radiance);
 }
 
 void main() {
@@ -431,9 +470,25 @@ void main() {
         return;
     }
     vec3 normal = unpackGBufferNormal(texelFetch(uNormalAoTexture, texel, 0));
-    if (!rtgiFinite(worldPosition) || !rtgiFinite(normal)) {
+    vec3 geometricNormal = normal;
+    vec3 reconstructedGeometricNormal = cross(adjacentWorldPositionX - worldPosition,
+                                              adjacentWorldPositionY - worldPosition);
+    float geometricNormalLengthSquared = dot(reconstructedGeometricNormal, reconstructedGeometricNormal);
+    if (!rtgiFinite(worldPosition) || !rtgiFinite(normal) || !rtgiFinite(reconstructedGeometricNormal)) {
         rtgiWriteResult(texel, vec3(0.0), 0.0, RTGI_TRACE_CLASS_NON_FINITE, 0u, 0u, 0u);
         return;
+    }
+    // A one-pixel render extent has no valid screen-space Y derivative (the
+    // Vulkan contract tests intentionally use 2x1), so retain the G-buffer
+    // normal as the conservative origin normal in that case.
+    if (extent.x >= 2 && extent.y >= 2 && geometricNormalLengthSquared > 1.0e-12) {
+        geometricNormal = reconstructedGeometricNormal * inversesqrt(geometricNormalLengthSquared);
+        geometricNormal = faceforward(geometricNormal, worldPosition - pc.cameraPositionAndMaxDistance.xyz,
+                                       geometricNormal);
+    }
+    normal = normalize(normal);
+    if (dot(normal, geometricNormal) < 0.0) {
+        normal = -normal;
     }
     float pixelWorldFootprint =
         max(length(adjacentWorldPositionX - worldPosition), length(adjacentWorldPositionY - worldPosition));
@@ -447,9 +502,15 @@ void main() {
     vec2 blueNoise = texelFetch(uBlueNoiseTexture, noiseTexel, 0).rg;
     vec2 sampleValue = fract(blueNoise + rtgiCranleyPattersonRotation(0u));
     vec3 rayDirection = rtgiCosineHemisphereDirection(sampleValue, normal);
+    if (dot(rayDirection, geometricNormal) < 0.0) {
+        // A steep normal-map lobe can point below the geometric face. Reflect
+        // that sample back into the real solid-angle hemisphere so the ray
+        // cannot start outside the block and immediately travel through it.
+        rayDirection = normalize(reflect(rayDirection, geometricNormal));
+    }
 
-    float originBias = rtgiOriginBias(worldPosition, normal, rayDirection);
-    vec3 rayOrigin = worldPosition + normal * originBias;
+    float originBias = rtgiOriginBias(worldPosition, geometricNormal, rayDirection);
+    vec3 rayOrigin = worldPosition + geometricNormal * originBias;
     float rayMinimum = max(originBias * 0.25, 1.0e-4);
     float primarySurfaceDistance = length(worldPosition - pc.cameraPositionAndMaxDistance.xyz);
 
@@ -500,6 +561,7 @@ void main() {
             if (surfaceValid) {
                 surface.albedo = staticSurface.albedo;
                 surface.normal = staticSurface.normal;
+                surface.geometricNormal = staticSurface.geometricNormal;
                 surface.emission = staticSurface.emission;
                 surface.specularF0 = staticSurface.specularF0;
                 surface.specularF90 = staticSurface.specularF90;
@@ -523,6 +585,7 @@ void main() {
             if (surfaceValid) {
                 surface.albedo = terrainSurface.albedo;
                 surface.normal = terrainSurface.normal;
+                surface.geometricNormal = terrainSurface.geometricNormal;
                 surface.emission = terrainSurface.emission;
                 surface.specularF0 = terrainSurface.specularF0;
                 surface.specularF90 = terrainSurface.specularF90;

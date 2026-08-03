@@ -51,6 +51,7 @@ struct StaticMeshRayQueryTextureSamples {
 struct StaticMeshRayQuerySurface {
     vec3 albedo;
     vec3 normal;
+    vec3 geometricNormal;
     vec3 emission;
     vec3 specularF0;
     float specularF90;
@@ -416,6 +417,7 @@ bool staticMeshRayQueryCommittedSurface(uint customIndex, uint geometryIndex, ui
                                         uint geometryCount, out StaticMeshRayQuerySurface surface) {
     surface.albedo = vec3(0.0);
     surface.normal = vec3(0.0, 1.0, 0.0);
+    surface.geometricNormal = vec3(0.0, 1.0, 0.0);
     surface.emission = vec3(0.0);
     surface.specularF0 = vec3(0.04);
     surface.specularF90 = 1.0;
@@ -461,15 +463,22 @@ bool staticMeshRayQueryCommittedSurface(uint customIndex, uint geometryIndex, ui
     if (!staticMeshRayQueryTangentFrame(instanceData, attributes, tangentFrame)) {
         return false;
     }
+    vec3 geometricNormal = normalize(tangentFrame[2]);
     vec3 tangentNormal = decodeMaterialTangentNormal(textureSamples.normal, material.materialFactors.z);
     vec3 worldNormal = normalize(tangentFrame * tangentNormal);
-    if (!staticMeshRayQueryFinite(tangentNormal) || !staticMeshRayQueryFinite(worldNormal)) {
+    if (!staticMeshRayQueryFinite(tangentNormal) || !staticMeshRayQueryFinite(geometricNormal) ||
+        !staticMeshRayQueryFinite(worldNormal)) {
         return false;
     }
-    worldNormal = faceforward(worldNormal, incomingRayDirection, worldNormal);
+    geometricNormal = faceforward(geometricNormal, incomingRayDirection, geometricNormal);
+    worldNormal = faceforward(worldNormal, incomingRayDirection, geometricNormal);
+    if (dot(worldNormal, geometricNormal) < 0.0) {
+        worldNormal = -worldNormal;
+    }
 
     surface.albedo = sampledMaterial.baseColor.rgb;
     surface.normal = worldNormal;
+    surface.geometricNormal = geometricNormal;
     surface.emission = evaluateMaterialEmission(sampledMaterial) * emissionScale;
     surface.specularF0 = pbrMaterialSpecularF0(sampledMaterial.dielectricF0, surface.albedo,
                                                sampledMaterial.metalness);
