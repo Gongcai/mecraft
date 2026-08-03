@@ -1,6 +1,7 @@
 #include "RtgiSignalPackPass.h"
 
 #include "renderer/core/RenderScene.h"
+#include "renderer/debug/RenderDebugService.h"
 #include "renderer/rhi/RhiCommandList.h"
 #include "renderer/rhi/RhiDevice.h"
 #include "renderer/rhi/RhiShaderSourceLoader.h"
@@ -107,10 +108,16 @@ bool RtgiSignalPackPass::recordPack(RhiCommandList& commandList, const FrameCont
         glm::vec4(settings.reblurHitDistance.constantScale, settings.reblurHitDistance.viewZScale,
                   settings.reblurHitDistance.roughnessScale, settings.diffuseRoughness);
 
+    const GpuTimerSegmentToken gpuTimer = ctx.debugService != nullptr
+                                              ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::Rtgi)
+                                              : GpuTimerSegmentToken{};
     commandList.setComputePipeline(m_pipeline);
     commandList.setBindGroup(0u, m_bindGroup);
     commandList.pushConstants(&pushConstants, sizeof(pushConstants), rhiFlag(RhiShaderStage::Compute));
     commandList.dispatch((extent.width + 7u) / 8u, (extent.height + 7u) / 8u, 1u);
+    if (ctx.debugService != nullptr) {
+        ctx.debugService->endGpuTimer(commandList, gpuTimer);
+    }
 
     m_stats.dispatched = true;
     m_stats.width = extent.width;

@@ -303,8 +303,9 @@ Confirmed 计数，将分类改为 NonFinite 并清除 Identity Hash。CPU 契�
 YCoCg 变换、REBLUR Magic Curve 与 96 字节 Push Constant 布局；真实 Vulkan Smoke 已验证
 `RGB=(1,2,3)` 转换为 `YCoCg=(2,-1,0)`、`viewZ=10/hitDist=2` 得到归一化距离 `0.5`、Miss 得到
 RELAX Alpha `65504` 与 REBLUR Alpha `1`，并覆盖 NaN/Inf 诊断。NRD 4.17.3 固定依赖、RHI Pipeline、
-Render Graph Bridge 和最小真实 Vulkan RELAX 调度已经完成；生产 Deferred 消费、逐帧时域输入和
-Method 设置仍属于下一阶段集成。
+Render Graph Bridge、真实 Vulkan RELAX 调度、生产 Deferred 消费和显式 RELAX/REBLUR Method 设置均已
+完成。逐帧矩阵与二维屏幕运动输入已接入；完整 2.5D Motion、Pre-exposure 和细分 History Reset 仍属于
+后续时域契约工作。
 
 ## 6. NRD 4.17.3 集成
 
@@ -444,7 +445,8 @@ BLAS；普通地形继续使用区块合并网格，避免每方块 Instance 造
 - BLAS 采用静态压缩；记录压缩前后字节数。
 - TLAS Instance Buffer、Scratch 和 NRD Transient Pool 使用帧环形资源。
 - Quality 在 Render Extent 全像素 1 spp；Performance 使用 Checkerboard 1 spp。
-- Trace、Alpha Candidate、Secondary Shadow、NRD 各自拥有 Timestamp。
+- RTGI Trace/Signal Pack 与 NRD Guide/SDK Dispatch 已分别拥有独立 Timestamp；Alpha Candidate 与
+  Secondary Shadow 的细分计时仍通过后续诊断增量补充。
 - RT Distance、Max Local Lights Per Hit 与 Signal Resolution 是公开画质参数。
 - 动态分辨率只改变 Render Extent，不改变 Method、Ray Distance 或材质复杂度。
 

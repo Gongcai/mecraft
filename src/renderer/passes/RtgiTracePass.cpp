@@ -5,6 +5,7 @@
 #include "renderer/contracts/RtgiSamplingContract.h"
 #include "renderer/core/GlobalBindlessSet.h"
 #include "renderer/core/RenderScene.h"
+#include "renderer/debug/RenderDebugService.h"
 #include "renderer/rhi/RhiCommandList.h"
 #include "renderer/rhi/RhiDevice.h"
 #include "renderer/rhi/RhiShaderSourceLoader.h"
@@ -261,6 +262,9 @@ bool RtgiTracePass::recordTrace(RhiCommandList& commandList, const FrameContext&
         (settings.terrainNormalMapsEnabled ? renderer::contracts::kRtgiSecondaryLightingTerrainNormalMapBit : 0u) |
         (settings.terrainSpecularMapsEnabled ? renderer::contracts::kRtgiSecondaryLightingTerrainSpecularMapBit : 0u);
 
+    const GpuTimerSegmentToken gpuTimer = ctx.debugService != nullptr
+                                              ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::Rtgi)
+                                              : GpuTimerSegmentToken{};
     commandList.bufferBarrier(
         {m_secondaryLightingBuffer, RhiResourceState::UniformBuffer, RhiResourceState::TransferDst});
     commandList.updateBuffer(m_secondaryLightingBuffer, 0u, &lightingParams, sizeof(lightingParams));
@@ -273,6 +277,9 @@ bool RtgiTracePass::recordTrace(RhiCommandList& commandList, const FrameContext&
     commandList.setBindGroup(2u, lightingBindGroup);
     commandList.pushConstants(&pushConstants, sizeof(pushConstants), rhiFlag(RhiShaderStage::Compute));
     commandList.dispatch((extent.width + 7u) / 8u, (extent.height + 7u) / 8u, 1u);
+    if (ctx.debugService != nullptr) {
+        ctx.debugService->endGpuTimer(commandList, gpuTimer);
+    }
 
     m_stats.dispatched = true;
     m_stats.frameIndex = ctx.frameIndex;

@@ -187,11 +187,11 @@ M1 与 M2 可并行开发，但公共 `GpuMaterial`、`GpuSceneGeometry` 与 Sta
 
 ### 任务
 
-1. RTGI Compute Ray Query、Blue Noise/Cosine Sampling。（进行中：Global Bindless Binding 4 的双运行时
+1. RTGI Compute Ray Query、Blue Noise/Cosine Sampling。（实现完成：Global Bindless Binding 4 的双运行时
    所有权与 Active TLAS 发布已完成；生产 `RtgiTracePass`、确定性帧旋转、Blue Noise/Cosine
    Sampling、Opaque 自动提交、Terrain Cutout Candidate Confirm、Render Graph 资源声明、逐像素
    Candidate/Confirmed 计数、模型 Stable Material/Geometry Hash、真实 Vulkan 命中距离回读及完整
-   次级命中材质/辐射、RELAX/REBLUR 独立输入打包已完成。Deferred 运行时消费尚未完成。）
+   次级命中材质/辐射、RELAX/REBLUR 独立输入打包，以及 Deferred Lighting 运行时消费均已完成。）
 2. 体素 Greedy Primitive Metadata 与 Cutout Alpha Candidate。（实现完成：新增 C++/GLSL 体素材质
    采样契约，固化包含边界的 `0.1` Alpha Cutoff、NaN/Inf 拒绝、1024 层纹理编码与
    6-bit 动画帧数/FPS 上限；GBuffer、主视图、Probe Capture 与 Shadow 的非 Leaves Cutout 已共用
@@ -235,10 +235,14 @@ M1 与 M2 可并行开发，但公共 `GpuMaterial`、`GpuSceneGeometry` 与 Sta
    NRD Dispatch。SDK 契约测试覆盖 RELAX/REBLUR 固定实例数据与全部 Pipeline Reflection，16×16
    RELAX 首帧 21 个、第二帧 10 个 Render Graph Pass 已通过真实 Vulkan 回读和 Validation，并覆盖
    `CONTINUE`、Permanent Pool 历史、Descriptor Cache 缩容与构图失败后的实例失效。生产 Deferred
-   消费、时域输入与 Method 设置仍属于第 7、8 项。）
-7. RELAX_DIFFUSE Quality、REBLUR_DIFFUSE Performance。
+   已接入 Bridge 输出；更完整的时域与 Pre-exposure 契约仍属于第 8 项。）
+7. RELAX_DIFFUSE Quality、REBLUR_DIFFUSE Performance。（实现完成：用户设置显式选择 Method，运行时
+   按 Method 重建固定 NRD 实例并选择独立的线性 RGB/真实 Hit Distance 或 YCoCg/归一化 Hit Distance
+   输入；Deferred Lighting 按输出编码解包，运行时不会依据 GPU 时间更改 Method。）
 8. Non-jittered Matrix、2.5D Motion、Pre-exposure 转换和 History Reset。
-9. RTGI/NRD Debug View、Timestamp、Reference Capture。
+9. RTGI/NRD Debug View、Timestamp、Reference Capture。（进行中：RTGI Trace/Signal Pack 与 NRD Guide/
+   全部 SDK Dispatch 已纳入独立 GPU Timestamp 阶段，Dashboard、固定 p50/p95/p99 窗口和 Benchmark JSON
+   均分别发布 RTGI/NRD 耗时；信号 Debug View 与双场景 Reference Capture 仍待完成。）
 
 ### 完成条件
 

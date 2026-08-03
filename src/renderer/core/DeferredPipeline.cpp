@@ -1968,7 +1968,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
             }
             const renderer::nrd::NrdGraphDispatchResult nrdDispatch =
                 m_nrdBridge->addGraphDispatches(m_renderGraph, commonSettings, methodSettings, externalResources,
-                                                graphTail);
+                                                graphTail, ctx.debugService);
             if (!nrdDispatch.succeeded()) {
                 return failGraphSetup();
             }

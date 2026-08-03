@@ -16,6 +16,8 @@ double gpuTimerPassMilliseconds(const GpuFrameStats& stats, const GpuTimerPass p
     case GpuTimerPass::Shadow: return stats.shadowMs;
     case GpuTimerPass::Ssao: return stats.ssaoMs;
     case GpuTimerPass::Ssgi: return stats.ssgiMs;
+    case GpuTimerPass::Rtgi: return stats.rtgiMs;
+    case GpuTimerPass::Nrd: return stats.nrdMs;
     case GpuTimerPass::Lighting: return stats.lightingMs;
     case GpuTimerPass::Transparent: return stats.transparentMs;
     case GpuTimerPass::Volumetric: return stats.volumetricMs;
@@ -51,6 +53,8 @@ const char* gpuTimerPassName(const GpuTimerPass pass) {
     case GpuTimerPass::Shadow: return "Shadow";
     case GpuTimerPass::Ssao: return "SSAO";
     case GpuTimerPass::Ssgi: return "SSGI";
+    case GpuTimerPass::Rtgi: return "RTGI";
+    case GpuTimerPass::Nrd: return "NRD";
     case GpuTimerPass::Lighting: return "Lighting";
     case GpuTimerPass::Transparent: return "Transparent";
     case GpuTimerPass::Volumetric: return "Volumetric";
@@ -274,6 +278,8 @@ void RenderDebugService::beginFrame(RhiCommandList& commandList) {
             m_gpuFrameStats.shadowMs = readMs(GpuTimerPass::Shadow);
             m_gpuFrameStats.ssaoMs = readMs(GpuTimerPass::Ssao);
             m_gpuFrameStats.ssgiMs = readMs(GpuTimerPass::Ssgi);
+            m_gpuFrameStats.rtgiMs = readMs(GpuTimerPass::Rtgi);
+            m_gpuFrameStats.nrdMs = readMs(GpuTimerPass::Nrd);
             m_gpuFrameStats.lightingMs = readMs(GpuTimerPass::Lighting);
             m_gpuFrameStats.transparentMs = readMs(GpuTimerPass::Transparent);
             m_gpuFrameStats.volumetricMs = readMs(GpuTimerPass::Volumetric);

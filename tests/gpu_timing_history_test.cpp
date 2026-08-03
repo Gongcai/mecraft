@@ -25,8 +25,8 @@ bool requireNear(const double actual, const double expected, const char* message
 }
 
 bool testStableStageNames() {
-    const char* expected[] = {"GBuffer",    "Shadow",     "SSAO",  "SSGI",  "Lighting", "Transparent",
-                              "Volumetric", "Reflection", "Cloud", "Water", "Post"};
+    const char* expected[] = {"GBuffer", "Shadow", "SSAO",       "SSGI",  "RTGI",  "NRD", "Lighting",
+                              "Transparent", "Volumetric", "Reflection", "Cloud", "Water", "Post"};
     for (size_t index = 0u; index < static_cast<size_t>(GpuTimerPass::Count); ++index) {
         if (!requireTrue(std::string(gpuTimerPassName(static_cast<GpuTimerPass>(index))) == expected[index],
                          "GPU stage names must remain stable")) {
@@ -58,6 +58,8 @@ bool testFixedWindowPercentiles() {
         frame.sequence = sequence;
         frame.gbufferMs = static_cast<double>(sequence);
         frame.shadowMs = static_cast<double>(sequence) * 2.0;
+        frame.rtgiMs = static_cast<double>(sequence) * 0.5;
+        frame.nrdMs = static_cast<double>(sequence) * 0.25;
         if (!requireTrue(history.record(frame), "unique completed GPU frames must be recorded")) {
             return false;
         }
@@ -83,15 +85,19 @@ bool testFixedWindowPercentiles() {
 
     const auto& gbuffer = stats.passes[static_cast<size_t>(GpuTimerPass::GBuffer)].gpuMs;
     const auto& shadow = stats.passes[static_cast<size_t>(GpuTimerPass::Shadow)].gpuMs;
+    const auto& rtgi = stats.passes[static_cast<size_t>(GpuTimerPass::Rtgi)].gpuMs;
+    const auto& nrd = stats.passes[static_cast<size_t>(GpuTimerPass::Nrd)].gpuMs;
     return requireNear(gbuffer.p50Ms, 502.0, "GBuffer p50 must use nearest-rank selection") &&
            requireNear(gbuffer.p95Ms, 952.0, "GBuffer p95 must use nearest-rank selection") &&
            requireNear(gbuffer.p99Ms, 992.0, "GBuffer p99 must use nearest-rank selection") &&
            requireNear(shadow.p50Ms, 1004.0, "Shadow p50 must preserve stage values") &&
            requireNear(shadow.p95Ms, 1904.0, "Shadow p95 must preserve stage values") &&
            requireNear(shadow.p99Ms, 1984.0, "Shadow p99 must preserve stage values") &&
-           requireNear(stats.totalTrackedGpuMs.p50Ms, 1506.0, "tracked total p50 must be computed per frame") &&
-           requireNear(stats.totalTrackedGpuMs.p95Ms, 2856.0, "tracked total p95 must be computed per frame") &&
-           requireNear(stats.totalTrackedGpuMs.p99Ms, 2976.0, "tracked total p99 must be computed per frame");
+           requireNear(rtgi.p50Ms, 251.0, "RTGI p50 must preserve stage values") &&
+           requireNear(nrd.p95Ms, 238.0, "NRD p95 must preserve stage values") &&
+           requireNear(stats.totalTrackedGpuMs.p50Ms, 1882.5, "tracked total p50 must be computed per frame") &&
+           requireNear(stats.totalTrackedGpuMs.p95Ms, 3570.0, "tracked total p95 must be computed per frame") &&
+           requireNear(stats.totalTrackedGpuMs.p99Ms, 3720.0, "tracked total p99 must be computed per frame");
 }
 
 } // namespace

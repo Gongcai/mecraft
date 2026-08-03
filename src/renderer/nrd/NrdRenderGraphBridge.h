@@ -13,6 +13,7 @@
 #include <string_view>
 #include <variant>
 
+class RenderDebugService;
 class RhiDevice;
 
 namespace renderer::nrd {
@@ -120,12 +121,14 @@ public:
     /// @param methodSettings Settings whose variant must match the initialized method.
     /// @param externalResources Imported application textures used by this frame's dispatch list.
     /// @param dependency Optional pass that completed all external NRD inputs.
+    /// @param debugService Optional timestamp owner that records every NRD dispatch.
     /// @return Last dispatch pass, count, and an exact error code.
     [[nodiscard]] NrdGraphDispatchResult addGraphDispatches(RenderGraph& graph,
                                                             const ::nrd::CommonSettings& commonSettings,
                                                             const NrdDiffuseSettings& methodSettings,
                                                             const NrdExternalResources& externalResources,
-                                                            RgPassHandle dependency = {});
+                                                            RgPassHandle dependency = {},
+                                                            RenderDebugService* debugService = nullptr);
 
     /// Commits persistent-pool state after the matching graph execution attempt.
     /// @param result Render Graph execution result for the graph populated by addGraphDispatches.

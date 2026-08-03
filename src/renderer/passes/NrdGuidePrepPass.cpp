@@ -1,6 +1,7 @@
 #include "NrdGuidePrepPass.h"
 
 #include "renderer/core/RenderScene.h"
+#include "renderer/debug/RenderDebugService.h"
 #include "renderer/rhi/RhiCommandList.h"
 #include "renderer/rhi/RhiDevice.h"
 #include "renderer/rhi/RhiShaderSourceLoader.h"
@@ -105,10 +106,16 @@ bool NrdGuidePrepPass::recordGuide(RhiCommandList& commandList, const FrameConte
         glm::vec4(static_cast<float>(extent.width), static_cast<float>(extent.height), settings.denoisingRange,
                   -settings.denoisingRange * 2.0f);
 
+    const GpuTimerSegmentToken gpuTimer = ctx.debugService != nullptr
+                                              ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::Nrd)
+                                              : GpuTimerSegmentToken{};
     commandList.setComputePipeline(m_pipeline);
     commandList.setBindGroup(0u, m_bindGroup);
     commandList.pushConstants(&pushConstants, sizeof(pushConstants), rhiFlag(RhiShaderStage::Compute));
     commandList.dispatch((extent.width + 7u) / 8u, (extent.height + 7u) / 8u, 1u);
+    if (ctx.debugService != nullptr) {
+        ctx.debugService->endGpuTimer(commandList, gpuTimer);
+    }
 
     m_stats.dispatched = true;
     m_stats.width = extent.width;

@@ -20,14 +20,16 @@ enum class GpuTimerPass : size_t {
     Shadow = 1,
     Ssao = 2,
     Ssgi = 3,
-    Lighting = 4,
-    Transparent = 5,
-    Volumetric = 6,
-    Reflection = 7,
-    Cloud = 8,
-    Water = 9,
-    Post = 10,
-    Count = 11
+    Rtgi = 4,
+    Nrd = 5,
+    Lighting = 6,
+    Transparent = 7,
+    Volumetric = 8,
+    Reflection = 9,
+    Cloud = 10,
+    Water = 11,
+    Post = 12,
+    Count = 13
 };
 
 /// Identifies one explicitly recorded GPU timestamp segment.
@@ -58,6 +60,8 @@ struct GpuFrameStats {
     double shadowMs = 0.0;
     double ssaoMs = 0.0;
     double ssgiMs = 0.0;
+    double rtgiMs = 0.0;
+    double nrdMs = 0.0;
     double lightingMs = 0.0;
     double transparentMs = 0.0;
     double volumetricMs = 0.0;
@@ -375,7 +379,9 @@ private:
 
     static constexpr size_t GPU_TIMER_RING_SIZE = 4;
     static constexpr size_t GPU_TIMER_PASS_COUNT = static_cast<size_t>(GpuTimerPass::Count);
-    static constexpr size_t GPU_TIMER_MAX_SEGMENTS_PER_PASS = 16;
+    // RELAX emits 21 dispatches on its first frame, in addition to guide
+    // preparation, so one stage needs more than the legacy 16 slots.
+    static constexpr size_t GPU_TIMER_MAX_SEGMENTS_PER_PASS = 32;
     static constexpr size_t GPU_TIMER_POINTS_PER_SEGMENT = 2;
     static constexpr uint32_t GPU_TIMER_QUERY_COUNT = static_cast<uint32_t>(
         GPU_TIMER_RING_SIZE * GPU_TIMER_PASS_COUNT * GPU_TIMER_MAX_SEGMENTS_PER_PASS * GPU_TIMER_POINTS_PER_SEGMENT);

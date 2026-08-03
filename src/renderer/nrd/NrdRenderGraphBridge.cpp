@@ -1,5 +1,6 @@
 #include "renderer/nrd/NrdRenderGraphBridge.h"
 
+#include "renderer/debug/RenderDebugService.h"
 #include "renderer/rhi/RhiCommandList.h"
 #include "renderer/rhi/RhiDevice.h"
 
@@ -631,7 +632,8 @@ NrdGraphDispatchResult NrdRenderGraphBridge::addGraphDispatches(RenderGraph& gra
                                                                 const ::nrd::CommonSettings& commonSettings,
                                                                 const NrdDiffuseSettings& methodSettings,
                                                                 const NrdExternalResources& externalResources,
-                                                                const RgPassHandle dependency) {
+                                                                const RgPassHandle dependency,
+                                                                RenderDebugService* const debugService) {
     NrdGraphDispatchResult result;
     bool dispatchStateAdvanced = false;
     const auto fail = [this, &result, &dispatchStateAdvanced](const NrdBridgeError error) {
@@ -857,10 +859,22 @@ NrdGraphDispatchResult NrdRenderGraphBridge::addGraphDispatches(RenderGraph& gra
                 pass.writeTexture(access.texture, RhiResourceState::ShaderWrite);
             }
         }
-        pass.setExecute(
-            [implementation = m_impl.get(), dispatchIndex, dispatch = std::move(dispatch)](RgPassContext& context) {
-                return implementation->recordDispatch(context, dispatchIndex, dispatch);
-            });
+        pass.setExecute([implementation = m_impl.get(), dispatchIndex, dispatch = std::move(dispatch),
+                         debugService](RgPassContext& context) {
+            RhiCommandList& commandList = context.commandList();
+            const GpuTimerSegmentToken gpuTimer = debugService != nullptr
+                                                      ? debugService->beginGpuTimer(commandList, GpuTimerPass::Nrd)
+                                                      : GpuTimerSegmentToken{};
+            const bool recorded = implementation->recordDispatch(context, dispatchIndex, dispatch);
+            if (debugService != nullptr) {
+                if (recorded) {
+                    debugService->endGpuTimer(commandList, gpuTimer);
+                } else {
+                    debugService->cancelGpuTimer(gpuTimer);
+                }
+            }
+            return recorded;
+        });
         previousPass = pass.handle();
     }
 
