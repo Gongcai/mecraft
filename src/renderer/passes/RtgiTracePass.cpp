@@ -91,6 +91,7 @@ RgPassHandle RtgiTracePass::addGraphPass(RenderGraph& graph, const FrameContext&
         settings.minimumRayOriginBias <= 0.0f || settings.minimumRayOriginBias >= settings.maxRayDistance ||
         settings.minimumRayOriginBias >= settings.maxShadowRayDistance || settings.instanceMask == 0u ||
         !std::isfinite(settings.blockLightStrength) || settings.blockLightStrength < 0.0f ||
+        !std::isfinite(settings.celestialRadianceScale) || settings.celestialRadianceScale < 0.0f ||
         (settings.instanceMask & static_cast<uint8_t>(~kRtgiKnownInstanceMask)) != 0u ||
         settings.shadowInstanceMask == 0u ||
         (settings.shadowInstanceMask & static_cast<uint8_t>(~kRtgiKnownShadowInstanceMask)) != 0u ||
@@ -251,6 +252,9 @@ bool RtgiTracePass::recordTrace(RhiCommandList& commandList, const FrameContext&
     if (!std::isfinite(ctx.preExposure) || ctx.preExposure <= 0.0f) {
         return reject("pre-exposure is not positive and finite");
     }
+    if (!std::isfinite(settings.celestialRadianceScale) || settings.celestialRadianceScale < 0.0f) {
+        return reject("celestial radiance scale is not finite and non-negative");
+    }
     if (sceneBuffers.sceneInstanceCount == 0u) {
         return reject("active Scene TLAS has no instances");
     }
@@ -279,8 +283,8 @@ bool RtgiTracePass::recordTrace(RhiCommandList& commandList, const FrameContext&
     renderer::contracts::RtgiSecondaryLightingParams lightingParams;
     lightingParams.sunDirectionAndVisibility = glm::vec4(ctx.skyColors.sunDirection, ctx.skyColors.sunVisibility);
     lightingParams.moonDirectionAndVisibility = glm::vec4(ctx.skyColors.moonDirection, ctx.skyColors.moonVisibility);
-    lightingParams.sunRadiance = glm::vec4(ctx.skyIlluminance.sunIlluminance, 0.0f);
-    lightingParams.moonRadiance = glm::vec4(ctx.skyIlluminance.moonIlluminance, 0.0f);
+    lightingParams.sunRadiance = glm::vec4(ctx.skyIlluminance.sunIlluminance * settings.celestialRadianceScale, 0.0f);
+    lightingParams.moonRadiance = glm::vec4(ctx.skyIlluminance.moonIlluminance * settings.celestialRadianceScale, 0.0f);
     lightingParams.skyAmbientRadiance = glm::vec4(ctx.skyIlluminance.skyIlluminance, 0.0f);
     lightingParams.traceAndEmissionScales = glm::vec4(settings.maxShadowRayDistance, 1.5f, 1.0f, ctx.preExposure);
     lightingParams.terrainLightScales = glm::vec4(settings.blockLightStrength, 1.35f, 0.0f, 0.0f);

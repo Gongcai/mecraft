@@ -60,7 +60,11 @@ namespace {
            traceSource.find("rtgiAccumulateSkyAmbient") != std::string::npos &&
            traceSource.find("reflect(rayDirection, geometricNormal)") != std::string::npos &&
            traceSource.find("surface.albedo * (1.0 - surface.metalness)") == std::string::npos &&
+           traceSource.find("optional local-light shadow resource must not erase") != std::string::npos &&
+           traceSource.find("Local lights are optional secondary transport") != std::string::npos &&
            pipelineSource.find("const bool nrdEnabled = rtgiEnabled && settings.nrd.enabled;") != std::string::npos &&
+           pipelineSource.find("traceSettings.celestialRadianceScale = settings.postProcess.directSunStrength * 64.0f;") !=
+               std::string::npos &&
            pipelineSource.find("void DeferredPipeline::invalidateHistory() {\n"
                                "    m_hasPreviousFrameData = false;\n"
                                "#if defined(MECRAFT_ENABLE_NRD)\n"

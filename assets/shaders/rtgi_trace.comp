@@ -343,7 +343,9 @@ bool rtgiAccumulateGpuLight(GpuLight light, RtgiSecondarySurface surface, vec3 s
     if (!rtgiLightVisibility(light, surfacePosition, cameraRelativeSurface, surface.normal,
                              surface.geometricNormal, coneWidth,
                              shadowVisibility)) {
-        return false;
+        // An optional local-light shadow resource must not erase celestial or
+        // sky radiance already accumulated for this secondary hit.
+        return true;
     }
     radiance += rtgiDiffuseTransportAlbedo(surface) * contribution.diffuse * shadowVisibility;
     return rtgiFinite(radiance);
@@ -355,29 +357,29 @@ bool rtgiAccumulateWorldLights(RtgiSecondarySurface surface, vec3 surfacePositio
     if (uClusterStats[CLUSTER_STATS_BUILD_ERROR] != 0u ||
         uClusterStats[CLUSTER_STATS_CONTRACT_VERSION] != GPU_LIGHT_CONTRACT_VERSION ||
         !worldLightGridHeaderValid()) {
-        return false;
+        // Local lights are optional secondary transport. Preserve RTGI when
+        // their frame-local product is unavailable or empty.
+        return true;
     }
     uint lightCount = uClusterStats[CLUSTER_STATS_LIGHT_COUNT];
     uint globalLightCount = uWorldLightGrid.countsAndVersion.z;
     for (uint listIndex = 0u; listIndex < globalLightCount; ++listIndex) {
         uint lightIndex = uWorldLightIndices[listIndex];
-        if (lightIndex >= lightCount ||
-            !rtgiAccumulateGpuLight(uClusterLights[lightIndex], surface, surfacePosition,
-                                    cameraRelativeSurface, viewDirection, coneWidth, radiance)) {
-            return false;
+        if (lightIndex < lightCount) {
+            rtgiAccumulateGpuLight(uClusterLights[lightIndex], surface, surfacePosition,
+                                   cameraRelativeSurface, viewDirection, coneWidth, radiance);
         }
     }
 
     uvec2 cellRange;
     if (!worldLightGridCellRange(cameraRelativeSurface, cellRange)) {
-        return false;
+        return true;
     }
     for (uint listIndex = 0u; listIndex < cellRange.y; ++listIndex) {
         uint lightIndex = uWorldLightIndices[cellRange.x + listIndex];
-        if (lightIndex >= lightCount ||
-            !rtgiAccumulateGpuLight(uClusterLights[lightIndex], surface, surfacePosition,
-                                    cameraRelativeSurface, viewDirection, coneWidth, radiance)) {
-            return false;
+        if (lightIndex < lightCount) {
+            rtgiAccumulateGpuLight(uClusterLights[lightIndex], surface, surfacePosition,
+                                   cameraRelativeSurface, viewDirection, coneWidth, radiance);
         }
     }
     return true;

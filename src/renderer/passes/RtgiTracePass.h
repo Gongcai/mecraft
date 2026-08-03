@@ -55,6 +55,8 @@ public:
         bool terrainNormalMapsEnabled = true;
         bool terrainSpecularMapsEnabled = true;
         float blockLightStrength = 1.0f;
+        // Match the artistic irradiance scale used by deferred sunlight.
+        float celestialRadianceScale = 1.0f;
     };
 
     /// Latest successfully recorded raw-trace dispatch diagnostics.
