@@ -17,7 +17,8 @@ constexpr RhiBindingFlags kGlobalBindingFlags = rhiFlag(RhiBindingFlag::Partiall
                                                 rhiFlag(RhiBindingFlag::UpdateAfterBind) |
                                                 rhiFlag(RhiBindingFlag::UpdateUnusedWhilePending);
 constexpr RhiBindingFlags kGlobalAccelerationStructureBindingFlags =
-    rhiFlag(RhiBindingFlag::PartiallyBound) | rhiFlag(RhiBindingFlag::UpdateAfterBind);
+    rhiFlag(RhiBindingFlag::PartiallyBound) | rhiFlag(RhiBindingFlag::UpdateAfterBind) |
+    rhiFlag(RhiBindingFlag::UpdateUnusedWhilePending);
 constexpr RhiShaderStageFlags kGlobalShaderStages =
     rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment) | rhiFlag(RhiShaderStage::Compute);
 
