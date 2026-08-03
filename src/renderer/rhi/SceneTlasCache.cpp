@@ -266,10 +266,10 @@ bool SceneTlasCache::recordFrame(RhiCommandList& commandList) {
         }
         return false;
     }
-    if (!pollSubmittedGeneration() || !pollRetiredGenerations()) {
-        return false;
-    }
-    applyEmptyDesiredGeneration();
+    // Active-generation promotion and retired-resource reclamation belong to
+    // beginFrame(). This callback runs after the render graph has imported the
+    // active generation's buffers; changing or reclaiming generations here
+    // would invalidate those imported handles before later passes record.
     if (m_desiredInputs.empty() || m_pending.has_value() ||
         (m_active.has_value() && m_active->revision == m_desiredRevision)) {
         return true;
