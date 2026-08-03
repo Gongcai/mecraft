@@ -1,3 +1,4 @@
+#include "app/AppSettings.h"
 #include "renderer/contracts/SceneIdentityContract.h"
 #include "renderer/contracts/TemporalFrameContract.h"
 #include "renderer/core/RenderSettings.h"
@@ -64,6 +65,31 @@ bool testSettingsDefaults() {
                        "native upscaling must use native quality") &&
            requireTrue(!settings.dynamicResolutionEnabled, "dynamic resolution must require explicit enablement") &&
            requireTrue(!settings.debugVisualizationEnabled, "temporal debug visualization must default to disabled");
+}
+
+bool testRtgiNrdDependencyNormalization() {
+    RenderSettings settings;
+    settings.rtgi.enabled = true;
+    settings.nrd.enabled = true;
+
+    nlohmann::json encoded = app::serializeRenderSettings(settings);
+    encoded["rtgi"]["enabled"] = false;
+
+    RenderSettings decoded;
+    std::string error;
+    if (!requireTrue(app::deserializeRenderSettings(encoded, decoded, error),
+                     "legacy RTGI/NRD settings must remain loadable")) {
+        return false;
+    }
+    if (!requireTrue(!decoded.rtgi.enabled && !decoded.nrd.enabled,
+                     "loading disabled RTGI must also disable NRD")) {
+        return false;
+    }
+
+    settings.rtgi.enabled = false;
+    settings.nrd.enabled = true;
+    return requireTrue(normalizeRenderSettingsDependencies(settings) && !settings.nrd.enabled,
+                       "runtime settings normalization must disable NRD with RTGI");
 }
 
 bool testTemporalReconstructionSelection() {
@@ -407,6 +433,8 @@ bool testTemporalUpscaleDispatch() {
 
 int main() {
     if (!testSettingsDefaults())
+        return 1;
+    if (!testRtgiNrdDependencyNormalization())
         return 1;
     if (!testTemporalReconstructionSelection())
         return 1;

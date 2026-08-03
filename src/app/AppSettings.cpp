@@ -702,6 +702,7 @@ void applyRenderSettings(const json& j, RenderSettings& s) {
     applyObject("debug", [&s](const json& value) { applyDebugSettings(value, s.debug); });
     applyObject("fog", [&s](const json& value) { applyFogSettings(value, s.fog); });
     applyObject("weather", [&s](const json& value) { applyWeatherSettings(value, s.weather); });
+    normalizeRenderSettingsDependencies(s);
 }
 
 json toJson(const RenderSettings& s) {
@@ -965,7 +966,9 @@ bool saveSettings(const AppSettingsData& settings) {
         game = json::object();
     }
     game["renderDistance"] = std::clamp(settings.renderDistance, kMinRenderDistance, kMaxRenderDistance);
-    root["render"] = toJson(settings.renderSettings);
+    RenderSettings renderSettings = settings.renderSettings;
+    normalizeRenderSettingsDependencies(renderSettings);
+    root["render"] = toJson(renderSettings);
     return writeSettingsFile(root);
 }
 
@@ -981,7 +984,9 @@ bool saveRenderDistance(const int renderDistance) {
 
 bool saveRenderSettings(const RenderSettings& settings) {
     json root = readSettingsFile();
-    root["render"] = toJson(settings);
+    RenderSettings normalizedSettings = settings;
+    normalizeRenderSettingsDependencies(normalizedSettings);
+    root["render"] = toJson(normalizedSettings);
     return writeSettingsFile(root);
 }
 

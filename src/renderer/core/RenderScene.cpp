@@ -754,33 +754,36 @@ const char* RenderScene::activePipelineName() const {
 }
 
 void RenderScene::setSettings(const RenderSettings& settings) {
-    if (m_settingsChangedCallback && !m_settingsChangedCallback(settings)) {
+    RenderSettings normalizedSettings = settings;
+    normalizeRenderSettingsDependencies(normalizedSettings);
+    if (m_settingsChangedCallback && !m_settingsChangedCallback(normalizedSettings)) {
         return;
     }
     // Detect pipeline mode change and trigger switch
-    if (settings.pipelineMode != m_settings.pipelineMode) {
-        setPipelineMode(settings.pipelineMode);
+    if (normalizedSettings.pipelineMode != m_settings.pipelineMode) {
+        setPipelineMode(normalizedSettings.pipelineMode);
     }
 
     TemporalResetReasons resetReasons = temporalResetReasonBit(TemporalResetReason::None);
-    if (settings.upscale.type != m_settings.upscale.type ||
-        settings.upscale.debugVisualizationEnabled != m_settings.upscale.debugVisualizationEnabled ||
-        settings.upscale.fsr1Enabled != m_settings.upscale.fsr1Enabled) {
+    if (normalizedSettings.upscale.type != m_settings.upscale.type ||
+        normalizedSettings.upscale.debugVisualizationEnabled != m_settings.upscale.debugVisualizationEnabled ||
+        normalizedSettings.upscale.fsr1Enabled != m_settings.upscale.fsr1Enabled) {
         resetReasons = resetReasons | TemporalResetReason::Method;
     }
-    if (settings.upscale.quality != m_settings.upscale.quality ||
-        settings.upscale.outputWidth != m_settings.upscale.outputWidth ||
-        settings.upscale.outputHeight != m_settings.upscale.outputHeight ||
-        settings.upscale.dynamicResolutionEnabled != m_settings.upscale.dynamicResolutionEnabled ||
-        std::abs(settings.upscale.fsr1RenderScale - m_settings.upscale.fsr1RenderScale) > 0.0001f) {
+    if (normalizedSettings.upscale.quality != m_settings.upscale.quality ||
+        normalizedSettings.upscale.outputWidth != m_settings.upscale.outputWidth ||
+        normalizedSettings.upscale.outputHeight != m_settings.upscale.outputHeight ||
+        normalizedSettings.upscale.dynamicResolutionEnabled != m_settings.upscale.dynamicResolutionEnabled ||
+        std::abs(normalizedSettings.upscale.fsr1RenderScale - m_settings.upscale.fsr1RenderScale) > 0.0001f) {
         resetReasons = resetReasons | TemporalResetReason::ResourceExtent;
     }
-    if (settings.rtgi.enabled != m_settings.rtgi.enabled || settings.nrd.enabled != m_settings.nrd.enabled ||
-        settings.nrd.method != m_settings.nrd.method) {
+    if (normalizedSettings.rtgi.enabled != m_settings.rtgi.enabled ||
+        normalizedSettings.nrd.enabled != m_settings.nrd.enabled ||
+        normalizedSettings.nrd.method != m_settings.nrd.method) {
         resetReasons = resetReasons | TemporalResetReason::Method;
     }
 
-    m_settings = settings;
+    m_settings = normalizedSettings;
 
     if (requiresTemporalReset(resetReasons)) {
         invalidateFrameHistory(resetReasons);

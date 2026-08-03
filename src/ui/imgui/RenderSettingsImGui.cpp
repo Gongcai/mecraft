@@ -235,8 +235,11 @@ bool showSsgiSettings(RenderSettings& settings) {
 }
 
 bool showRtgiSettings(RenderSettings& settings) {
-    bool changed = false;
-    changed |= ImGui::Checkbox("RTGI", &settings.rtgi.enabled);
+    bool changed = normalizeRenderSettingsDependencies(settings);
+    if (ImGui::Checkbox("RTGI", &settings.rtgi.enabled)) {
+        normalizeRenderSettingsDependencies(settings);
+        changed = true;
+    }
     changed |= ImGui::SliderFloat("RTGI Intensity", &settings.rtgi.intensity, 0.0f, 8.0f, "%.2f");
     changed |= ImGui::SliderFloat("RTGI Max Ray Distance", &settings.rtgi.maxRayDistance, 1.0f, 256.0f, "%.1f");
     changed |= ImGui::SliderFloat("RTGI Max Shadow Distance", &settings.rtgi.maxShadowRayDistance, 1.0f, 512.0f,

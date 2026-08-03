@@ -375,6 +375,16 @@ struct RenderSettings {
     WeatherRenderSettings weather;
 };
 
+/// Enforces dependencies between renderer features after settings are edited or loaded.
+/// @return True when the settings were changed.
+inline bool normalizeRenderSettingsDependencies(RenderSettings& settings) {
+    if (!settings.rtgi.enabled && settings.nrd.enabled) {
+        settings.nrd.enabled = false;
+        return true;
+    }
+    return false;
+}
+
 /// Reports whether a renderer configuration provides the temporal inputs required by DLSS-G.
 /// @param settings Candidate renderer configuration.
 /// @param fsr1Supported True when the active RHI can execute the configured FSR 1 pass.
