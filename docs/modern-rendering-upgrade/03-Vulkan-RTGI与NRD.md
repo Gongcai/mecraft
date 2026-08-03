@@ -304,8 +304,11 @@ YCoCg 变换、REBLUR Magic Curve 与 96 字节 Push Constant 布局；真实 Vu
 `RGB=(1,2,3)` 转换为 `YCoCg=(2,-1,0)`、`viewZ=10/hitDist=2` 得到归一化距离 `0.5`、Miss 得到
 RELAX Alpha `65504` 与 REBLUR Alpha `1`，并覆盖 NaN/Inf 诊断。NRD 4.17.3 固定依赖、RHI Pipeline、
 Render Graph Bridge、真实 Vulkan RELAX 调度、生产 Deferred 消费和显式 RELAX/REBLUR Method 设置均已
-完成。逐帧矩阵与二维屏幕运动输入已接入；完整 2.5D Motion、Pre-exposure 和细分 History Reset 仍属于
-后续时域契约工作。
+完成。逐帧 Non-jittered Matrix 与独立 `RGBA16F` 2.5D Motion 已接入：Guide Prep 从当前/上一帧 Depth
+重建正 View-Z，输出 `previousUv - currentUv` 与 `previousPositiveViewZ - currentPositiveViewZ`，并在
+全局 Temporal Reset 时禁用深度历史。公共 `RG16F` Velocity 不变。固定数值的真实 Vulkan 回读已覆盖
+XY 符号、Z 深度差、正 View-Z 和 Validation；Pre-exposure 与按历史所有者细分的 Reset 仍属于后续
+时域契约工作。
 
 ## 6. NRD 4.17.3 集成
 
@@ -342,6 +345,11 @@ NRD 4.17.3 的 `previous - current` 约定转换符号，并通过 `motionVector
 域变换。现代管线另生成 `.z = previousViewZ - currentViewZ` 的 2.5D 分量，提升动态物体
 历史拒绝；FSR/DLSS 继续读取公共 RG16F 2D Velocity。转换后用相机平移、旋转和动态物体
 三类测试验证重投影方向。
+
+当前生产实现使用当前/上一帧 Non-jittered Inverse Projection 和双帧 Depth 重建正 View-Z，NRD
+`IN_MV` 固定为 `RGBA16F`，`motionVectorScale.z = 1`。全局 Temporal Reset 或 NRD History Clear
+期间不读取上一帧深度，Z Motion 写零；真实 Vulkan Smoke 固定验证当前 View-Z `2`、上一帧 View-Z
+`3` 和 Z Motion `1`。
 
 NRD 的 `frameIndex` 每个真实渲染帧严格增加 1，并与 Checkerboard Phase 同步。Material/
 Stable Object ID 由应用生成 History Confidence 与 Disocclusion Threshold Mix；NRD 直接

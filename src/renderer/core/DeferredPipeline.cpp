@@ -1441,17 +1441,16 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
             !createRtgiTexture("RTGI.Validation", RhiTextureFormat::Rg32Uint, sampledStorage, rtgiValidation)) {
             return failGraphSetup();
         }
-        if (nrdEnabled &&
-            (!createRtgiTexture("RTGI.RelaxDiffuseRadianceHitDistance", RhiTextureFormat::Rgba16Float,
-                                sampledStorage, rtgiRelaxDiffuse) ||
-             !createRtgiTexture("RTGI.ReblurDiffuseRadianceHitDistance", RhiTextureFormat::Rgba16Float,
-                                sampledStorage, rtgiReblurDiffuse) ||
-             !createRtgiTexture("NRD.Motion", RhiTextureFormat::Rg16Float, sampledStorage, nrdMotion) ||
-             !createRtgiTexture("NRD.NormalRoughness", RhiTextureFormat::Rgb10A2Unorm, sampledStorage,
-                                nrdNormalRoughness) ||
-             !createRtgiTexture("NRD.ViewZ", RhiTextureFormat::R32Float, sampledStorage, nrdViewZ) ||
-             !createRtgiTexture("NRD.OutputDiffuseRadianceHitDistance", RhiTextureFormat::Rgba16Float, sampledStorage,
-                                nrdOutputDiffuse))) {
+        if (nrdEnabled && (!createRtgiTexture("RTGI.RelaxDiffuseRadianceHitDistance", RhiTextureFormat::Rgba16Float,
+                                              sampledStorage, rtgiRelaxDiffuse) ||
+                           !createRtgiTexture("RTGI.ReblurDiffuseRadianceHitDistance", RhiTextureFormat::Rgba16Float,
+                                              sampledStorage, rtgiReblurDiffuse) ||
+                           !createRtgiTexture("NRD.Motion", RhiTextureFormat::Rgba16Float, sampledStorage, nrdMotion) ||
+                           !createRtgiTexture("NRD.NormalRoughness", RhiTextureFormat::Rgb10A2Unorm, sampledStorage,
+                                              nrdNormalRoughness) ||
+                           !createRtgiTexture("NRD.ViewZ", RhiTextureFormat::R32Float, sampledStorage, nrdViewZ) ||
+                           !createRtgiTexture("NRD.OutputDiffuseRadianceHitDistance", RhiTextureFormat::Rgba16Float,
+                                              sampledStorage, nrdOutputDiffuse))) {
             return failGraphSetup();
         }
     }
@@ -1897,15 +1896,16 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
 
             NrdGuidePrepPass::Settings guideSettings;
             guideSettings.denoisingRange = settings.nrd.denoisingRange;
-            guideSettings.useJitteredProjection = traceSettings.useJitteredProjection;
             NrdGuidePrepPass::GraphResources guideResources;
             guideResources.depth = depth;
             guideResources.normalAo = normalAo;
             guideResources.material = material;
             guideResources.velocity = velocity;
+            guideResources.historyDepthPrevious = historyDepthPrevious;
             guideResources.motion = nrdMotion;
             guideResources.normalRoughness = nrdNormalRoughness;
             guideResources.viewZ = nrdViewZ;
+            guideSettings.historyValid = !m_nrdClearHistory && !temporalReset;
             graphTail = m_nrdGuidePrepPass->addGraphPass(m_renderGraph, ctx, guideSettings, guideResources, graphTail);
             if (!graphTail.isValid()) {
                 return failGraphSetup();
@@ -1938,7 +1938,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
             commonSettings.rectSizePrev[1] = static_cast<uint16_t>(extent.height);
             commonSettings.motionVectorScale[0] = 1.0f;
             commonSettings.motionVectorScale[1] = 1.0f;
-            commonSettings.motionVectorScale[2] = 0.0f;
+            commonSettings.motionVectorScale[2] = 1.0f;
             const glm::vec2 cameraJitter = nrdCameraJitterUv(ctx.jitter);
             const glm::vec2 previousCameraJitter = nrdCameraJitterUv(ctx.previousJitter);
             commonSettings.cameraJitter[0] = cameraJitter.x;

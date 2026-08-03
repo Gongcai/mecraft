@@ -9,18 +9,41 @@ layout(binding = 0) uniform sampler2D uDepthTexture;
 layout(binding = 1) uniform sampler2D uNormalAoTexture;
 layout(binding = 2) uniform sampler2D uMaterialTexture;
 layout(binding = 3) uniform sampler2D uVelocityTexture;
-layout(binding = 4, rg16f) uniform writeonly image2D uMotion;
-layout(binding = 5, rgb10_a2) uniform writeonly image2D uNormalRoughness;
-layout(binding = 6, r32f) uniform writeonly image2D uViewZ;
+layout(binding = 4) uniform sampler2D uHistoryDepthTexture;
+layout(binding = 5, rgba16f) uniform writeonly image2D uMotion;
+layout(binding = 6, rgb10_a2) uniform writeonly image2D uNormalRoughness;
+layout(binding = 7, r32f) uniform writeonly image2D uViewZ;
 
 layout(push_constant) uniform NrdGuidePrepPushConstants {
-    mat4 inverseViewProjection;
-    mat4 worldToView;
-    vec4 renderExtentAndDenoisingRange;
+    mat4 inverseProjection;
+    mat4 previousInverseProjection;
+    vec4 renderExtentInvalidViewZAndHistory;
 } pc;
 
 bool nrdGuideFinite(vec4 value) {
     return !any(isnan(value)) && !any(isinf(value));
+}
+
+float nrdGuidePositiveViewZ(mat4 inverseProjection, vec2 screenUv, float depth, float invalidViewZ) {
+    if (depth >= 0.999999) {
+        return invalidViewZ;
+    }
+
+    vec2 clipUv = rhiScreenUvToClipUv(screenUv);
+    vec4 viewPosition = inverseProjection * vec4(clipUv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
+    if (!nrdGuideFinite(viewPosition) || abs(viewPosition.w) <= 1.0e-7) {
+        return invalidViewZ;
+    }
+
+    viewPosition /= viewPosition.w;
+    if (!nrdGuideFinite(viewPosition)) {
+        return invalidViewZ;
+    }
+    return abs(viewPosition.z);
+}
+
+bool nrdGuideUvInside(vec2 uv) {
+    return all(greaterThanEqual(uv, vec2(0.0))) && all(lessThan(uv, vec2(1.0)));
 }
 
 vec3 nrdGuidePackNormalRoughness(vec3 normal, float roughness) {
@@ -39,30 +62,35 @@ vec3 nrdGuidePackNormalRoughness(vec3 normal, float roughness) {
 
 void main() {
     ivec2 texel = ivec2(gl_GlobalInvocationID.xy);
-    ivec2 extent = ivec2(pc.renderExtentAndDenoisingRange.xy);
+    ivec2 extent = ivec2(pc.renderExtentInvalidViewZAndHistory.xy);
     if (texel.x >= extent.x || texel.y >= extent.y) {
         return;
     }
 
     float depth = texelFetch(uDepthTexture, texel, 0).r;
     vec2 screenUv = (vec2(texel) + 0.5) / vec2(extent);
-    vec2 clipUv = rhiScreenUvToClipUv(screenUv);
-    vec4 worldPosition = pc.inverseViewProjection * vec4(clipUv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
-    float viewZ = pc.renderExtentAndDenoisingRange.w;
-    if (depth < 0.999999 && nrdGuideFinite(worldPosition) && abs(worldPosition.w) > 1.0e-7) {
-        worldPosition /= worldPosition.w;
-        vec4 viewPosition = pc.worldToView * worldPosition;
-        if (nrdGuideFinite(viewPosition)) {
-            viewZ = viewPosition.z;
-        }
-    }
+    float invalidViewZ = pc.renderExtentInvalidViewZAndHistory.z;
+    float currentPositiveViewZ = nrdGuidePositiveViewZ(pc.inverseProjection, screenUv, depth, invalidViewZ);
 
     vec3 normal = unpackGBufferNormal(texelFetch(uNormalAoTexture, texel, 0));
     SurfaceMaterial material = unpackGBufferMaterial(texelFetch(uMaterialTexture, texel, 0));
     float roughness = linearMaterialRoughness(material);
     vec2 motion = -texelFetch(uVelocityTexture, texel, 0).rg;
+    float motionViewZ = 0.0;
 
-    imageStore(uMotion, texel, vec4(motion, 0.0, 0.0));
+    if (pc.renderExtentInvalidViewZAndHistory.w > 0.5 && currentPositiveViewZ < invalidViewZ) {
+        vec2 previousUv = screenUv + motion;
+        if (nrdGuideUvInside(previousUv)) {
+            float previousDepth = textureLod(uHistoryDepthTexture, previousUv, 0.0).r;
+            float previousPositiveViewZ =
+                nrdGuidePositiveViewZ(pc.previousInverseProjection, previousUv, previousDepth, invalidViewZ);
+            if (previousPositiveViewZ < invalidViewZ) {
+                motionViewZ = previousPositiveViewZ - currentPositiveViewZ;
+            }
+        }
+    }
+
+    imageStore(uMotion, texel, vec4(motion, motionViewZ, 0.0));
     imageStore(uNormalRoughness, texel, vec4(nrdGuidePackNormalRoughness(normal, roughness), 0.0));
-    imageStore(uViewZ, texel, vec4(viewZ, 0.0, 0.0, 0.0));
+    imageStore(uViewZ, texel, vec4(currentPositiveViewZ, 0.0, 0.0, 0.0));
 }

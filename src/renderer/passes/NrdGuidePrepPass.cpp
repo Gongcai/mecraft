@@ -11,9 +11,9 @@
 
 namespace {
 struct alignas(16) NrdGuidePrepPushConstants final {
-    glm::mat4 inverseViewProjection{1.0f};
-    glm::mat4 worldToView{1.0f};
-    glm::vec4 renderExtentAndDenoisingRange{1.0f};
+    glm::mat4 inverseProjection{1.0f};
+    glm::mat4 previousInverseProjection{1.0f};
+    glm::vec4 renderExtentInvalidViewZAndHistory{1.0f};
 };
 static_assert(sizeof(NrdGuidePrepPushConstants) == 144u);
 
@@ -57,9 +57,9 @@ RgPassHandle NrdGuidePrepPass::addGraphPass(RenderGraph& graph, const FrameConte
                                             const GraphResources& resources, const RgPassHandle dependency) {
     if (!dependency.isValid() || ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr ||
         ctx.shared->rhiDevice->backend() != RhiBackend::Vulkan || !ctx.temporalExtents.renderExtent.isValid() ||
-        !ctx.shared->rhiDevice->capabilities().storageImageExtendedFormats ||
-        !std::isfinite(settings.denoisingRange) || settings.denoisingRange <= 0.0f || !resources.depth.isValid() ||
-        !resources.normalAo.isValid() || !resources.material.isValid() || !resources.velocity.isValid() ||
+        !ctx.shared->rhiDevice->capabilities().storageImageExtendedFormats || !std::isfinite(settings.denoisingRange) ||
+        settings.denoisingRange <= 0.0f || !resources.depth.isValid() || !resources.normalAo.isValid() ||
+        !resources.material.isValid() || !resources.velocity.isValid() || !resources.historyDepthPrevious.isValid() ||
         !resources.motion.isValid() || !resources.normalRoughness.isValid() || !resources.viewZ.isValid()) {
         return {};
     }
@@ -72,6 +72,7 @@ RgPassHandle NrdGuidePrepPass::addGraphPass(RenderGraph& graph, const FrameConte
         .readTexture(resources.normalAo, RhiResourceState::ShaderRead)
         .readTexture(resources.material, RhiResourceState::ShaderRead)
         .readTexture(resources.velocity, RhiResourceState::ShaderRead)
+        .readTexture(resources.historyDepthPrevious, RhiResourceState::DepthRead)
         .writeTexture(resources.motion, RhiResourceState::ShaderWrite)
         .writeTexture(resources.normalRoughness, RhiResourceState::ShaderWrite)
         .writeTexture(resources.viewZ, RhiResourceState::ShaderWrite)
@@ -80,6 +81,7 @@ RgPassHandle NrdGuidePrepPass::addGraphPass(RenderGraph& graph, const FrameConte
                                    pass.textureView(frameResources.normalAo),
                                    pass.textureView(frameResources.material),
                                    pass.textureView(frameResources.velocity),
+                                   pass.textureView(frameResources.historyDepthPrevious),
                                    pass.textureView(frameResources.motion),
                                    pass.textureView(frameResources.normalRoughness),
                                    pass.textureView(frameResources.viewZ)};
@@ -90,21 +92,21 @@ RgPassHandle NrdGuidePrepPass::addGraphPass(RenderGraph& graph, const FrameConte
 
 bool NrdGuidePrepPass::recordGuide(RhiCommandList& commandList, const FrameContext& ctx, const Settings& settings,
                                    const GuideViews& views) {
-    const glm::mat4& inverseViewProjection =
-        settings.useJitteredProjection ? ctx.camera.jitteredInvViewProj : ctx.camera.invViewProj;
+    const glm::mat4 inverseProjection = ctx.camera.view * ctx.camera.invViewProj;
+    const glm::mat4 previousInverseProjection = ctx.prevCamera.view * ctx.prevCamera.invViewProj;
     const TemporalExtent extent = ctx.temporalExtents.renderExtent;
-    if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr || !finiteMatrix(inverseViewProjection) ||
-        !finiteMatrix(ctx.camera.view) || !ensurePipeline(*ctx.shared->rhiDevice) ||
+    if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr || !finiteMatrix(inverseProjection) ||
+        !finiteMatrix(previousInverseProjection) || !ensurePipeline(*ctx.shared->rhiDevice) ||
         !ensureBindGroup(*ctx.shared->rhiDevice, views, extent.width, extent.height)) {
         return false;
     }
 
     NrdGuidePrepPushConstants pushConstants;
-    pushConstants.inverseViewProjection = inverseViewProjection;
-    pushConstants.worldToView = ctx.camera.view;
-    pushConstants.renderExtentAndDenoisingRange =
-        glm::vec4(static_cast<float>(extent.width), static_cast<float>(extent.height), settings.denoisingRange,
-                  -settings.denoisingRange * 2.0f);
+    pushConstants.inverseProjection = inverseProjection;
+    pushConstants.previousInverseProjection = previousInverseProjection;
+    pushConstants.renderExtentInvalidViewZAndHistory =
+        glm::vec4(static_cast<float>(extent.width), static_cast<float>(extent.height), settings.denoisingRange * 2.0f,
+                  settings.historyValid ? 1.0f : 0.0f);
 
     const GpuTimerSegmentToken gpuTimer = ctx.debugService != nullptr
                                               ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::Nrd)
@@ -164,11 +166,11 @@ bool NrdGuidePrepPass::ensurePipeline(RhiDevice& rhiDevice) {
 
     RhiBindGroupLayoutDesc layoutDesc;
     layoutDesc.debugName = "NRD.GuidePrep.BindGroupLayout";
-    for (uint32_t binding = 0u; binding < 4u; ++binding) {
+    for (uint32_t binding = 0u; binding < 5u; ++binding) {
         layoutDesc.entries.push_back(
             {binding, RhiBindingType::CombinedTextureSampler, rhiFlag(RhiShaderStage::Compute), 1u});
     }
-    for (uint32_t binding = 4u; binding < 7u; ++binding) {
+    for (uint32_t binding = 5u; binding < 8u; ++binding) {
         layoutDesc.entries.push_back({binding, RhiBindingType::StorageTexture, rhiFlag(RhiShaderStage::Compute), 1u});
     }
     m_bindGroupLayout = rhiDevice.createBindGroupLayout(layoutDesc);
@@ -202,19 +204,15 @@ bool NrdGuidePrepPass::ensurePipeline(RhiDevice& rhiDevice) {
 
 bool NrdGuidePrepPass::ensureBindGroup(RhiDevice& rhiDevice, const GuideViews& views, const uint32_t width,
                                        const uint32_t height) {
-    const std::array<RhiTextureViewHandle, 7u> boundViews{views.depth,          views.normalAo,
-                                                          views.material,       views.velocity,
-                                                          views.motion,         views.normalRoughness,
-                                                          views.viewZ};
-    const std::array<RhiTextureFormat, 7u> formats{RhiTextureFormat::Depth32Float,
-                                                   RhiTextureFormat::Rgb10A2Unorm,
-                                                   RhiTextureFormat::Rgba8Unorm,
-                                                   RhiTextureFormat::Rg16Float,
-                                                   RhiTextureFormat::Rg16Float,
-                                                   RhiTextureFormat::Rgb10A2Unorm,
-                                                   RhiTextureFormat::R32Float};
+    const std::array<RhiTextureViewHandle, 8u> boundViews{
+        views.depth,  views.normalAo,        views.material, views.velocity, views.historyDepthPrevious,
+        views.motion, views.normalRoughness, views.viewZ};
+    const std::array<RhiTextureFormat, 8u> formats{RhiTextureFormat::Depth32Float, RhiTextureFormat::Rgb10A2Unorm,
+                                                   RhiTextureFormat::Rgba8Unorm,   RhiTextureFormat::Rg16Float,
+                                                   RhiTextureFormat::Depth32Float, RhiTextureFormat::Rgba16Float,
+                                                   RhiTextureFormat::Rgb10A2Unorm, RhiTextureFormat::R32Float};
     for (uint32_t index = 0u; index < boundViews.size(); ++index) {
-        const RhiTextureUsage usage = index < 4u ? RhiTextureUsage::Sampled : RhiTextureUsage::Storage;
+        const RhiTextureUsage usage = index < 5u ? RhiTextureUsage::Sampled : RhiTextureUsage::Storage;
         if (!textureViewMatches(rhiDevice, boundViews[index], formats[index], usage, width, height)) {
             return false;
         }
@@ -234,13 +232,13 @@ bool NrdGuidePrepPass::ensureBindGroup(RhiDevice& rhiDevice, const GuideViews& v
 
     RhiBindGroupDesc bindGroupDesc;
     bindGroupDesc.layout = m_bindGroupLayout;
-    for (uint32_t binding = 0u; binding < 4u; ++binding) {
+    for (uint32_t binding = 0u; binding < 5u; ++binding) {
         RhiBindGroupEntry entry;
         entry.binding = binding;
         entry.resource.combinedTextureSampler = {boundViews[binding], m_sampler};
         bindGroupDesc.entries.push_back(entry);
     }
-    for (uint32_t binding = 4u; binding < boundViews.size(); ++binding) {
+    for (uint32_t binding = 5u; binding < boundViews.size(); ++binding) {
         RhiBindGroupEntry entry;
         entry.binding = binding;
         entry.resource.textureView = boundViews[binding];

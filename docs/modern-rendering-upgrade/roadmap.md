@@ -235,11 +235,16 @@ M1 与 M2 可并行开发，但公共 `GpuMaterial`、`GpuSceneGeometry` 与 Sta
    NRD Dispatch。SDK 契约测试覆盖 RELAX/REBLUR 固定实例数据与全部 Pipeline Reflection，16×16
    RELAX 首帧 21 个、第二帧 10 个 Render Graph Pass 已通过真实 Vulkan 回读和 Validation，并覆盖
    `CONTINUE`、Permanent Pool 历史、Descriptor Cache 缩容与构图失败后的实例失效。生产 Deferred
-   已接入 Bridge 输出；更完整的时域与 Pre-exposure 契约仍属于第 8 项。）
+   已接入 Bridge 输出；Pre-exposure 与细分 History Reset 契约仍属于第 8 项。）
 7. RELAX_DIFFUSE Quality、REBLUR_DIFFUSE Performance。（实现完成：用户设置显式选择 Method，运行时
    按 Method 重建固定 NRD 实例并选择独立的线性 RGB/真实 Hit Distance 或 YCoCg/归一化 Hit Distance
    输入；Deferred Lighting 按输出编码解包，运行时不会依据 GPU 时间更改 Method。）
-8. Non-jittered Matrix、2.5D Motion、Pre-exposure 转换和 History Reset。
+8. Non-jittered Matrix、2.5D Motion、Pre-exposure 转换和 History Reset。（进行中：当前/上一帧
+   Non-jittered Matrix 已进入 NRD Common Settings；独立 `RGBA16F` Guide Motion 已按
+   `previousUv - currentUv` 和 `previousPositiveViewZ - currentPositiveViewZ` 生成 2.5D 输入，公共
+   `RG16F` Velocity 保持不变。Guide Prep 使用上一帧 Depth、正 View-Z，并在全局 Temporal Reset 时清零
+   Z History；固定数值的真实 Vulkan 回读和 Validation 已通过。Pre-exposure 转换与按历史所有者细分的
+   Reset 仍待完成。）
 9. RTGI/NRD Debug View、Timestamp、Reference Capture。（进行中：RTGI Trace/Signal Pack 与 NRD Guide/
    全部 SDK Dispatch 已纳入独立 GPU Timestamp 阶段，Dashboard、固定 p50/p95/p99 窗口和 Benchmark JSON
    均分别发布 RTGI/NRD 耗时；信号 Debug View 与双场景 Reference Capture 仍待完成。）

@@ -83,7 +83,7 @@ std::optional<RhiTextureFormat> nrdTextureFormatToRhi(const ::nrd::Format format
 
 std::optional<RhiTextureFormat> nrdDiffuseExternalTextureFormat(const ::nrd::ResourceType type) {
     switch (type) {
-    case ::nrd::ResourceType::IN_MV: return RhiTextureFormat::Rg16Float;
+    case ::nrd::ResourceType::IN_MV: return RhiTextureFormat::Rgba16Float;
     case ::nrd::ResourceType::IN_NORMAL_ROUGHNESS: return RhiTextureFormat::Rgb10A2Unorm;
     case ::nrd::ResourceType::IN_VIEWZ: return RhiTextureFormat::R32Float;
     case ::nrd::ResourceType::IN_DIFF_CONFIDENCE:

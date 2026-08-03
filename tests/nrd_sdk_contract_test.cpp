@@ -89,7 +89,7 @@ void setIdentity(float (&matrix)[16]) {
     settings.rectSizePrev[1] = kResourceHeight;
     settings.motionVectorScale[0] = 1.0f;
     settings.motionVectorScale[1] = 1.0f;
-    settings.motionVectorScale[2] = 0.0f;
+    settings.motionVectorScale[2] = 1.0f;
     settings.timeDeltaBetweenFrames = 1000.0f / 60.0f;
     settings.denoisingRange = 1000.0f;
     settings.accumulationMode = ::nrd::AccumulationMode::CLEAR_AND_RESTART;
@@ -377,6 +377,14 @@ findBinding(const renderer::rhi::RhiShaderReflection& reflection, const uint32_t
     }
     if (renderer::nrd::nrdTextureFormatToRhi(::nrd::Format::RGBA32_SFLOAT).has_value()) {
         return requireTrue(false, "Unsupported NRD formats must not enter the diffuse bridge contract");
+    }
+    if (renderer::nrd::nrdDiffuseExternalTextureFormat(::nrd::ResourceType::IN_MV) !=
+            std::optional(RhiTextureFormat::Rgba16Float) ||
+        renderer::nrd::nrdDiffuseExternalTextureFormat(::nrd::ResourceType::IN_NORMAL_ROUGHNESS) !=
+            std::optional(RhiTextureFormat::Rgb10A2Unorm) ||
+        renderer::nrd::nrdDiffuseExternalTextureFormat(::nrd::ResourceType::IN_VIEWZ) !=
+            std::optional(RhiTextureFormat::R32Float)) {
+        return requireTrue(false, "NRD guide formats must preserve the fixed 2.5D motion contract");
     }
 
     constexpr std::array<MethodContract, 2u> kMethodContracts{

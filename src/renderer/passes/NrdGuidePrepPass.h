@@ -21,6 +21,7 @@ public:
         RgTextureHandle normalAo;
         RgTextureHandle material;
         RgTextureHandle velocity;
+        RgTextureHandle historyDepthPrevious;
         RgTextureHandle motion;
         RgTextureHandle normalRoughness;
         RgTextureHandle viewZ;
@@ -29,7 +30,7 @@ public:
     /// Explicit projection and valid-depth range used to prepare one guide frame.
     struct Settings final {
         float denoisingRange = 500.0f;
-        bool useJitteredProjection = false;
+        bool historyValid = false;
     };
 
     /// Latest successfully recorded guide dispatch diagnostics.
@@ -62,6 +63,7 @@ private:
         RhiTextureViewHandle normalAo;
         RhiTextureViewHandle material;
         RhiTextureViewHandle velocity;
+        RhiTextureViewHandle historyDepthPrevious;
         RhiTextureViewHandle motion;
         RhiTextureViewHandle normalRoughness;
         RhiTextureViewHandle viewZ;
@@ -80,7 +82,7 @@ private:
     RhiPipelineLayoutHandle m_pipelineLayout;
     RhiPipelineHandle m_pipeline;
     RhiBindGroupHandle m_bindGroup;
-    std::array<RhiTextureViewHandle, 7u> m_boundViews{};
+    std::array<RhiTextureViewHandle, 8u> m_boundViews{};
     Stats m_stats;
 };
 

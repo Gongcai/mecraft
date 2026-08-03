@@ -9,6 +9,7 @@
 #include "renderer/contracts/StaticMeshRayTracingContract.h"
 #include "renderer/mesh/TerrainBlasCache.h"
 #include "renderer/passes/ClusteredLightingPass.h"
+#include "renderer/passes/NrdGuidePrepPass.h"
 #include "renderer/passes/RtgiSignalPackPass.h"
 #include "renderer/passes/RtgiTracePass.h"
 #include "renderer/rhi/RhiCommandList.h"
@@ -514,7 +515,7 @@ struct NrdSmokeTexture final {
     initialData.pixels = pixels;
     initialData.sizeBytes = sizeBytes;
     initialData.finalState = finalState;
-    output.texture = device.createTexture(output.desc, &initialData);
+    output.texture = device.createTexture(output.desc, pixels != nullptr ? &initialData : nullptr);
     if (!output.texture.isValid()) {
         return false;
     }
@@ -550,6 +551,235 @@ void setNrdIdentityMatrix(float (&matrix)[16]) {
     matrix[15] = 1.0f;
 }
 
+[[nodiscard]] bool validateNrdGuidePrepPass(VkRhiDevice& device, RhiCommandListPool& commandPool) {
+    constexpr uint32_t kWidth = 2u;
+    constexpr uint32_t kHeight = 1u;
+    constexpr size_t kPixelCount = static_cast<size_t>(kWidth) * kHeight;
+    constexpr size_t kMotionBytes = kPixelCount * sizeof(uint16_t) * 4u;
+    constexpr size_t kViewZBytes = kPixelCount * sizeof(float);
+    constexpr uint64_t kViewZOffset = kMotionBytes;
+    const uint64_t validationErrorsBefore = device.validationErrorCount();
+
+    std::vector<float> depth(kPixelCount, 0.25f);
+    std::vector<float> historyDepth(kPixelCount, 0.125f);
+    const uint32_t packedNormalAo = glm::packUnorm3x10_1x2(glm::vec4(0.5f, 0.5f, 1.0f, 1.0f));
+    std::vector<uint32_t> normalAo(kPixelCount, packedNormalAo);
+    std::vector<uint32_t> material(kPixelCount, 0x000000ffu);
+    std::vector<uint16_t> velocity(kPixelCount * 2u, 0u);
+    for (size_t pixel = 0u; pixel < kPixelCount; ++pixel) {
+        velocity[pixel * 2u + 0u] = glm::packHalf1x16(0.125f);
+        velocity[pixel * 2u + 1u] = glm::packHalf1x16(-0.125f);
+    }
+
+    constexpr RhiTextureUsageFlags kSampledUsage = rhiFlag(RhiTextureUsage::Sampled);
+    constexpr RhiTextureUsageFlags kDepthUsage =
+        rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::DepthStencilAttachment);
+    constexpr RhiTextureUsageFlags kGuideOutputUsage =
+        rhiFlag(RhiTextureUsage::Storage) | rhiFlag(RhiTextureUsage::TransferSrc);
+    NrdSmokeTexture depthTexture;
+    NrdSmokeTexture normalAoTexture;
+    NrdSmokeTexture materialTexture;
+    NrdSmokeTexture velocityTexture;
+    NrdSmokeTexture historyDepthTexture;
+    NrdSmokeTexture motionTexture;
+    NrdSmokeTexture normalRoughnessTexture;
+    NrdSmokeTexture viewZTexture;
+    RhiBufferHandle readback;
+    RenderGraph graph;
+    NrdGuidePrepPass pass;
+    const auto cleanup = [&]() {
+        device.waitIdle();
+        pass.shutdown();
+        graph.releaseTransientResources(device);
+        if (readback.isValid()) {
+            device.destroyBuffer(readback);
+        }
+        destroyNrdSmokeTexture(device, viewZTexture);
+        destroyNrdSmokeTexture(device, normalRoughnessTexture);
+        destroyNrdSmokeTexture(device, motionTexture);
+        destroyNrdSmokeTexture(device, historyDepthTexture);
+        destroyNrdSmokeTexture(device, velocityTexture);
+        destroyNrdSmokeTexture(device, materialTexture);
+        destroyNrdSmokeTexture(device, normalAoTexture);
+        destroyNrdSmokeTexture(device, depthTexture);
+    };
+
+    const auto requireTexture = [](const bool created, const char* const name) {
+        if (!created) {
+            std::cerr << "NRD Guide Prep smoke test failed to create " << name << '\n';
+        }
+        return created;
+    };
+    bool valid =
+        requireTexture(createNrdSmokeTexture(device, "VulkanSmoke.NRD.Guide.Depth", RhiTextureFormat::Depth32Float,
+                                             kWidth, kHeight, kDepthUsage, depth.data(), depth.size() * sizeof(float),
+                                             RhiResourceState::DepthRead, depthTexture),
+                       "current depth") &&
+        requireTexture(createNrdSmokeTexture(device, "VulkanSmoke.NRD.Guide.NormalAo", RhiTextureFormat::Rgb10A2Unorm,
+                                             kWidth, kHeight, kSampledUsage, normalAo.data(),
+                                             normalAo.size() * sizeof(uint32_t), RhiResourceState::ShaderRead,
+                                             normalAoTexture),
+                       "normal/AO") &&
+        requireTexture(createNrdSmokeTexture(device, "VulkanSmoke.NRD.Guide.Material", RhiTextureFormat::Rgba8Unorm,
+                                             kWidth, kHeight, kSampledUsage, material.data(),
+                                             material.size() * sizeof(uint32_t), RhiResourceState::ShaderRead,
+                                             materialTexture),
+                       "material") &&
+        requireTexture(createNrdSmokeTexture(device, "VulkanSmoke.NRD.Guide.Velocity", RhiTextureFormat::Rg16Float,
+                                             kWidth, kHeight, kSampledUsage, velocity.data(),
+                                             velocity.size() * sizeof(uint16_t), RhiResourceState::ShaderRead,
+                                             velocityTexture),
+                       "velocity") &&
+        requireTexture(createNrdSmokeTexture(device, "VulkanSmoke.NRD.Guide.HistoryDepth",
+                                             RhiTextureFormat::Depth32Float, kWidth, kHeight, kDepthUsage,
+                                             historyDepth.data(), historyDepth.size() * sizeof(float),
+                                             RhiResourceState::DepthRead, historyDepthTexture),
+                       "previous depth") &&
+        requireTexture(createNrdSmokeTexture(device, "VulkanSmoke.NRD.Guide.Motion", RhiTextureFormat::Rgba16Float,
+                                             kWidth, kHeight, kGuideOutputUsage, nullptr, 0u,
+                                             RhiResourceState::Undefined, motionTexture),
+                       "motion output") &&
+        requireTexture(createNrdSmokeTexture(device, "VulkanSmoke.NRD.Guide.NormalRoughness",
+                                             RhiTextureFormat::Rgb10A2Unorm, kWidth, kHeight,
+                                             rhiFlag(RhiTextureUsage::Storage), nullptr, 0u,
+                                             RhiResourceState::Undefined, normalRoughnessTexture),
+                       "normal/roughness output") &&
+        requireTexture(createNrdSmokeTexture(device, "VulkanSmoke.NRD.Guide.ViewZ", RhiTextureFormat::R32Float, kWidth,
+                                             kHeight, kGuideOutputUsage, nullptr, 0u, RhiResourceState::Undefined,
+                                             viewZTexture),
+                       "View-Z output");
+    if (!valid) {
+        std::cerr << "NRD Guide Prep smoke test failed to create textures\n";
+        cleanup();
+        return false;
+    }
+
+    RhiBufferDesc readbackDesc;
+    readbackDesc.debugName = "VulkanSmoke.NRD.Guide.Readback";
+    readbackDesc.size = kMotionBytes + kViewZBytes;
+    readbackDesc.usage = rhiFlag(RhiBufferUsage::TransferDst) | rhiFlag(RhiBufferUsage::MapRead);
+    readbackDesc.memoryUsage = RhiMemoryUsage::GpuToCpu;
+    readbackDesc.initialState = RhiResourceState::TransferDst;
+    readbackDesc.memoryCategory = RhiMemoryCategory::Readback;
+    readback = device.createBuffer(readbackDesc, nullptr, 0u);
+    valid = readback.isValid();
+
+    SharedRenderResources shared;
+    shared.rhiDevice = &device;
+    shared.commandListPool = &commandPool;
+    FrameContext frame;
+    frame.shared = &shared;
+    frame.temporalExtents =
+        makeTemporalFrameExtents({kWidth, kHeight}, {kWidth, kHeight}, {kWidth, kHeight}, {kWidth, kHeight});
+    frame.camera.view = glm::mat4(1.0f);
+    frame.camera.invViewProj = glm::mat4(1.0f);
+    frame.camera.invViewProj[2][2] = 4.0f;
+    frame.camera.jitteredInvViewProj = frame.camera.invViewProj;
+    frame.prevCamera = frame.camera;
+
+    NrdGuidePrepPass::GraphResources resources;
+    RgBufferHandle readbackResource;
+    RgPassHandle guideHandle;
+    if (valid) {
+        const auto importTexture = [&](const NrdSmokeTexture& texture, const RhiResourceState initialState,
+                                       const RhiResourceState finalState) {
+            return graph.importTexture({texture.desc.debugName, texture.texture, texture.desc, initialState, finalState,
+                                        texture.view, RhiQueueType::Graphics, RhiQueueType::Graphics});
+        };
+        resources.depth = importTexture(depthTexture, RhiResourceState::DepthRead, RhiResourceState::DepthRead);
+        resources.normalAo = importTexture(normalAoTexture, RhiResourceState::ShaderRead, RhiResourceState::ShaderRead);
+        resources.material = importTexture(materialTexture, RhiResourceState::ShaderRead, RhiResourceState::ShaderRead);
+        resources.velocity = importTexture(velocityTexture, RhiResourceState::ShaderRead, RhiResourceState::ShaderRead);
+        resources.historyDepthPrevious =
+            importTexture(historyDepthTexture, RhiResourceState::DepthRead, RhiResourceState::DepthRead);
+        resources.motion = importTexture(motionTexture, RhiResourceState::Undefined, RhiResourceState::ShaderWrite);
+        resources.normalRoughness =
+            importTexture(normalRoughnessTexture, RhiResourceState::Undefined, RhiResourceState::ShaderWrite);
+        resources.viewZ = importTexture(viewZTexture, RhiResourceState::Undefined, RhiResourceState::ShaderWrite);
+        readbackResource =
+            graph.importBuffer({readbackDesc.debugName, readback, readbackDesc, RhiResourceState::TransferDst,
+                                RhiResourceState::HostRead, RhiQueueType::Graphics, RhiQueueType::Graphics});
+        const RgPassHandle inputReady = graph.addPass({"NRD.GuideInputReady", RgPassType::Copy, RhiQueueType::Graphics})
+                                            .setExecute([](RgPassContext&) { return true; })
+                                            .handle();
+        NrdGuidePrepPass::Settings settings;
+        settings.denoisingRange = 10.0f;
+        settings.historyValid = true;
+        guideHandle = pass.addGraphPass(graph, frame, settings, resources, inputReady);
+        valid = resources.depth.isValid() && resources.normalAo.isValid() && resources.material.isValid() &&
+                resources.velocity.isValid() && resources.historyDepthPrevious.isValid() &&
+                resources.motion.isValid() && resources.normalRoughness.isValid() && resources.viewZ.isValid() &&
+                readbackResource.isValid() && guideHandle.isValid();
+    }
+    if (valid) {
+        graph.addPass({"NRD.GuideReadback", RgPassType::Copy, RhiQueueType::Graphics})
+            .dependsOn(guideHandle)
+            .readTexture(resources.motion, RhiResourceState::TransferSrc)
+            .readTexture(resources.viewZ, RhiResourceState::TransferSrc)
+            .writeBuffer(readbackResource, RhiResourceState::TransferDst)
+            .setExecute([&](RgPassContext& context) {
+                RhiTextureBufferCopy motionCopy;
+                motionCopy.srcTexture = context.texture(resources.motion);
+                motionCopy.dstBuffer = context.buffer(readbackResource);
+                motionCopy.bytesPerRow = sizeof(uint16_t) * 4u * kWidth;
+                motionCopy.rowsPerImage = kHeight;
+                motionCopy.width = kWidth;
+                motionCopy.height = kHeight;
+                context.commandList().copyTextureToBuffer(motionCopy);
+                RhiTextureBufferCopy viewZCopy;
+                viewZCopy.srcTexture = context.texture(resources.viewZ);
+                viewZCopy.dstBuffer = context.buffer(readbackResource);
+                viewZCopy.bufferOffset = kViewZOffset;
+                viewZCopy.bytesPerRow = sizeof(float) * kWidth;
+                viewZCopy.rowsPerImage = kHeight;
+                viewZCopy.width = kWidth;
+                viewZCopy.height = kHeight;
+                context.commandList().copyTextureToBuffer(viewZCopy);
+                return true;
+            });
+        const RgCompileResult compiled = graph.compile();
+        valid = compiled.succeeded();
+        if (!valid) {
+            std::cerr << "NRD Guide Prep Render Graph compile failed: " << compiled.message << '\n';
+        }
+    }
+    if (valid) {
+        const RgExecuteResult executed = graph.execute(device, commandPool);
+        valid = executed.succeeded() && executed.completionToken().isValid() &&
+                device.waitForSubmission(executed.completionToken());
+        if (!executed.succeeded()) {
+            std::cerr << "NRD Guide Prep Render Graph execution failed: " << executed.message << '\n';
+        }
+    }
+    if (valid) {
+        const auto* bytes = static_cast<const uint8_t*>(device.mapBuffer(readback, 0u, readbackDesc.size));
+        valid = bytes != nullptr;
+        if (bytes != nullptr) {
+            const auto* motion = reinterpret_cast<const uint16_t*>(bytes);
+            const auto* viewZ = reinterpret_cast<const float*>(bytes + kViewZOffset);
+            for (size_t pixel = 0u; pixel < kPixelCount; ++pixel) {
+                const float motionX = glm::unpackHalf1x16(motion[pixel * 4u + 0u]);
+                const float motionY = glm::unpackHalf1x16(motion[pixel * 4u + 1u]);
+                const float motionZ = glm::unpackHalf1x16(motion[pixel * 4u + 2u]);
+                const float motionW = glm::unpackHalf1x16(motion[pixel * 4u + 3u]);
+                valid = valid && std::abs(motionX + 0.125f) < 0.001f && std::abs(motionY - 0.125f) < 0.001f &&
+                        std::abs(motionZ - 1.0f) < 0.001f && std::abs(motionW) < 0.001f &&
+                        std::abs(viewZ[pixel] - 2.0f) < 0.001f;
+            }
+            device.unmapBuffer(readback);
+        }
+        valid = valid && pass.stats().dispatched && pass.stats().width == kWidth && pass.stats().height == kHeight &&
+                std::abs(pass.stats().denoisingRange - 10.0f) < 0.001f;
+    }
+
+    cleanup();
+    valid = valid && device.validationErrorCount() == validationErrorsBefore;
+    if (!valid) {
+        std::cerr << "NRD Guide Prep Vulkan readback validation failed\n";
+    }
+    return valid;
+}
+
 [[nodiscard]] bool validateNrdRenderGraphDispatch(VkRhiDevice& device, RhiCommandListPool& commandPool) {
     using renderer::nrd::NrdBridgeError;
     using renderer::nrd::NrdDiffuseMethod;
@@ -562,7 +792,7 @@ void setNrdIdentityMatrix(float (&matrix)[16]) {
     constexpr size_t kPixelCount = static_cast<size_t>(kWidth) * kHeight;
     const uint64_t validationErrorsBefore = device.validationErrorCount();
 
-    std::vector<uint16_t> motion(kPixelCount * 2u, 0u);
+    std::vector<uint16_t> motion(kPixelCount * 4u, 0u);
     const uint32_t packedNormalRoughness = glm::packUnorm3x10_1x2(glm::vec4(0.5f, 0.5f, 1.0f, 0.0f));
     std::vector<uint32_t> normalRoughness(kPixelCount, packedNormalRoughness);
     std::vector<float> viewZ(kPixelCount, 1.0f);
@@ -601,7 +831,7 @@ void setNrdIdentityMatrix(float (&matrix)[16]) {
     };
 
     bool valid =
-        createNrdSmokeTexture(device, "VulkanSmoke.NRD.Motion", RhiTextureFormat::Rg16Float, kWidth, kHeight,
+        createNrdSmokeTexture(device, "VulkanSmoke.NRD.Motion", RhiTextureFormat::Rgba16Float, kWidth, kHeight,
                               kInputUsage, motion.data(), motion.size() * sizeof(uint16_t),
                               RhiResourceState::ShaderRead, motionTexture) &&
         createNrdSmokeTexture(device, "VulkanSmoke.NRD.NormalRoughness", RhiTextureFormat::Rgb10A2Unorm, kWidth,
@@ -646,7 +876,7 @@ void setNrdIdentityMatrix(float (&matrix)[16]) {
     commonSettings.rectSizePrev[1] = kHeight;
     commonSettings.motionVectorScale[0] = 1.0f;
     commonSettings.motionVectorScale[1] = 1.0f;
-    commonSettings.motionVectorScale[2] = 0.0f;
+    commonSettings.motionVectorScale[2] = 1.0f;
     commonSettings.timeDeltaBetweenFrames = 1000.0f / 60.0f;
     commonSettings.denoisingRange = 1000.0f;
     const ::nrd::RelaxSettings relaxSettings{};
@@ -5472,7 +5702,7 @@ int main() {
         !validateFsr31VulkanDispatch(device, *commandPool) || !validateFsr31VulkanContext(device) ||
 #endif
 #if defined(MECRAFT_ENABLE_NRD)
-        !validateNrdRenderGraphDispatch(device, *commandPool) ||
+        !validateNrdGuidePrepPass(device, *commandPool) || !validateNrdRenderGraphDispatch(device, *commandPool) ||
 #endif
 #if defined(MECRAFT_ENABLE_STREAMLINE)
         !validateDlssVulkanDispatch(device, *commandPool, window) ||
