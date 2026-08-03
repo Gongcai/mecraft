@@ -383,6 +383,7 @@ private:
     std::optional<TemporalFrameInput> m_temporalFrameInput;
     std::optional<TemporalUpscaleResult> m_temporalUpscaleResult;
     bool m_hasPreviousContext = false;
+    uint64_t m_previousWorldBlockContentRevision = 0u;
     TemporalResetReasons m_pendingTemporalResetReasons = temporalResetReasonBit(TemporalResetReason::FirstFrame);
     double m_contextCpuMs = 0.0;
     bool m_eyeInWater = false;

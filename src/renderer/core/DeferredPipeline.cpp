@@ -892,8 +892,8 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
     RhiDevice& rhiDevice = *m_shared->rhiDevice;
     DeferredRenderTargets& targets = *m_shared->deferredTargets;
     const bool rtgiEnabled = settings.rtgi.enabled;
-    const bool nrdEnabled = settings.nrd.enabled;
-    if ((nrdEnabled && !rtgiEnabled) || (rtgiEnabled && !validRtgiSettings(settings.rtgi)) ||
+    const bool nrdEnabled = rtgiEnabled && settings.nrd.enabled;
+    if ((rtgiEnabled && !validRtgiSettings(settings.rtgi)) ||
         (nrdEnabled && !validNrdSettings(settings.nrd))) {
         MECRAFT_LOG_STREAM(std::cerr << "[DeferredPipeline] RTGI or NRD settings are invalid\n");
         return false;
@@ -1871,6 +1871,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
             settings.blockMaterialMaps.enabled && settings.blockMaterialMaps.normalMapsEnabled;
         traceSettings.terrainSpecularMapsEnabled =
             settings.blockMaterialMaps.enabled && settings.blockMaterialMaps.specularMapsEnabled;
+        traceSettings.blockLightStrength = settings.postProcess.blockLightStrength;
         graphTail =
             m_rtgiTracePass->addGraphPass(m_renderGraph, ctx, traceSettings, rtgiResources, rtgiLighting, graphTail);
         if (!graphTail.isValid()) {

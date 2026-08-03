@@ -263,7 +263,13 @@ GlobalBindlessSet::setAccelerationStructure(const RhiAccelerationStructureHandle
     RhiBindingResource resource;
     resource.accelerationStructure = accelerationStructure;
     if (!updateResource(renderer::contracts::GlobalBindlessBinding::AccelerationStructure, 0u, resource)) {
-        return GlobalBindlessSetError::DescriptorPublicationFailed;
+        // TLAS generations can publish immediately after the previous frame records
+        // the global bindless set. Drain completed work once before surfacing a
+        // descriptor lifecycle failure to gameplay.
+        m_device->waitIdle();
+        if (!updateResource(renderer::contracts::GlobalBindlessBinding::AccelerationStructure, 0u, resource)) {
+            return GlobalBindlessSetError::DescriptorPublicationFailed;
+        }
     }
     m_accelerationStructure = accelerationStructure;
     ++m_accelerationStructureUpdateCount;

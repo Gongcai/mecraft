@@ -268,6 +268,7 @@ void RenderScene::shutdown() {
     m_temporalUpscalePass.shutdown();
     m_postProcessPass.shutdown();
     m_hasPreviousContext = false;
+    m_previousWorldBlockContentRevision = 0u;
     m_pendingTemporalResetReasons = temporalResetReasonBit(TemporalResetReason::FirstFrame);
     m_temporalFrameInput.reset();
     m_temporalUpscaleResult.reset();
@@ -1318,6 +1319,12 @@ RenderScene::buildFrameContext(const IWorldView& worldView, const Camera& camera
 
     // Previous frame data (temporal)
     TemporalResetReasons explicitResetReasons = m_pendingTemporalResetReasons;
+    const uint64_t worldBlockContentRevision = worldView.getBlockContentRevision();
+    if (m_hasPreviousContext && m_previousWorldBlockContentRevision != worldBlockContentRevision) {
+        // A block edit changes both the G-buffer geometry and the lighting
+        // signal. Do not let temporal filters blend across that discontinuity.
+        explicitResetReasons = explicitResetReasons | TemporalResetReason::AssetRevision;
+    }
     if (m_hasPreviousContext && m_previousContext.worldView != &worldView) {
         explicitResetReasons = explicitResetReasons | TemporalResetReason::WorldReload;
     }
@@ -1468,6 +1475,7 @@ RenderScene::buildFrameContext(const IWorldView& worldView, const Camera& camera
     // Store current context as previous for next frame
     m_previousContext = ctx;
     m_hasPreviousContext = true;
+    m_previousWorldBlockContentRevision = worldBlockContentRevision;
     m_pendingTemporalResetReasons = temporalResetReasonBit(TemporalResetReason::None);
 
     return ctx;

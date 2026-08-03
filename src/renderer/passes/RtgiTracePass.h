@@ -54,6 +54,7 @@ public:
         bool useJitteredProjection = false;
         bool terrainNormalMapsEnabled = true;
         bool terrainSpecularMapsEnabled = true;
+        float blockLightStrength = 1.0f;
     };
 
     /// Latest successfully recorded raw-trace dispatch diagnostics.

@@ -42,6 +42,7 @@ namespace {
            traceSource.find("layout(std140, set = 1, binding = 16) uniform RtgiSecondaryLightingParams") !=
                std::string::npos &&
            traceSource.find("vec4 traceAndEmissionScales;") != std::string::npos &&
+           traceSource.find("vec4 terrainLightScales;") != std::string::npos &&
            traceSource.find("uvec4 flags;") != std::string::npos &&
            traceSource.find("policy != GPU_LIGHT_SHADOW_RAY_QUERY") != std::string::npos &&
            traceSource.find("gpuLightShadowIndex(light) != GPU_LIGHT_INVALID_RESOURCE_INDEX") != std::string::npos &&
@@ -49,10 +50,13 @@ namespace {
                std::string::npos &&
            traceSource.find("const float RTGI_METALLIC_DIFFUSE_TRANSPORT_FLOOR = 0.35;") != std::string::npos &&
            traceSource.find("ivec2 noiseTexel = ivec2(uvec2(texel) % uvec2(noiseExtent));") != std::string::npos &&
+           traceSource.find("rtgiCranleyPattersonRotation(0u)") != std::string::npos &&
            traceSource.find("frameOffset") == std::string::npos &&
            traceSource.find("radiance += rtgiDiffuseTransportAlbedo(surface) * contribution.diffuse") !=
                std::string::npos &&
+           traceSource.find("rtgiTerrainBlockLightIncident(surface.blockLight)") != std::string::npos &&
            traceSource.find("surface.albedo * (1.0 - surface.metalness)") == std::string::npos &&
+           pipelineSource.find("const bool nrdEnabled = rtgiEnabled && settings.nrd.enabled;") != std::string::npos &&
            pipelineSource.find("void DeferredPipeline::invalidateHistory() {\n"
                                "    m_hasPreviousFrameData = false;\n"
                                "#if defined(MECRAFT_ENABLE_NRD)\n"
@@ -74,15 +78,18 @@ int main() {
                     "RTGI stable hit identity and push-constant contracts must remain bit-exact") &&
         valid;
     valid = requireTrue(
-                sizeof(RtgiSecondaryLightingParams) == 112u && alignof(RtgiSecondaryLightingParams) == 16u &&
+                sizeof(RtgiSecondaryLightingParams) == 128u && alignof(RtgiSecondaryLightingParams) == 16u &&
                     offsetof(RtgiSecondaryLightingParams, sunDirectionAndVisibility) == 0u &&
                     offsetof(RtgiSecondaryLightingParams, traceAndEmissionScales) == 80u &&
-                    offsetof(RtgiSecondaryLightingParams, flags) == 96u &&
+                    offsetof(RtgiSecondaryLightingParams, terrainLightScales) == 96u &&
+                    offsetof(RtgiSecondaryLightingParams, flags) == 112u &&
                     RtgiSecondaryLightingParams{}.traceAndEmissionScales.w == 1.0f &&
+                    RtgiSecondaryLightingParams{}.terrainLightScales.x == 1.0f &&
+                    RtgiSecondaryLightingParams{}.terrainLightScales.y == 1.35f &&
                     kRtgiSecondaryLightingTerrainNormalMapBit == 1u &&
                     kRtgiSecondaryLightingTerrainSpecularMapBit == 2u && kRtgiMetallicDiffuseTransportFloor == 0.35f &&
                     (kRtgiSecondaryLightingTerrainNormalMapBit | kRtgiSecondaryLightingTerrainSpecularMapBit) == 3u,
-                "RTGI secondary-lighting UBO, terrain-map flags, and metallic transport must remain fixed") &&
+                "RTGI secondary-lighting UBO, terrain block-light bounce, terrain-map flags, and metallic transport must remain fixed") &&
             valid;
 
     const glm::vec2 firstRotation = rtgiCranleyPattersonRotation(0u);

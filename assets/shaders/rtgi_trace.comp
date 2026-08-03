@@ -41,6 +41,7 @@ layout(std140, set = 1, binding = 16) uniform RtgiSecondaryLightingParams {
     vec4 moonRadiance;
     vec4 skyAmbientRadiance;
     vec4 traceAndEmissionScales;
+    vec4 terrainLightScales;
     uvec4 flags;
 } uSecondaryLighting;
 
@@ -62,6 +63,7 @@ struct RtgiSecondarySurface {
     float metalness;
     float ao;
     float skyVisibility;
+    float blockLight;
 };
 
 const float RTGI_METALLIC_DIFFUSE_TRANSPORT_FLOOR = 0.35;
@@ -76,6 +78,32 @@ bool rtgiFinite(vec2 value) {
 
 bool rtgiFinite(vec3 value) {
     return !any(isnan(value)) && !any(isinf(value));
+}
+
+vec3 rtgiBlackbodyApprox(float t) {
+    t = clamp(t, 1000.0, 15000.0);
+    float it = 1.0 / t;
+    float it2 = it * it;
+    vec4 vx = vec4(-0.2661239e9, -0.2343580e6, 0.8776956e3, 0.179910);
+    vec4 vy = vec4(-1.1063814, -1.34811020, 2.18555832, -0.20219683);
+    float x = dot(vx, vec4(it * it2, it2, it, 1.0));
+    float x2 = x * x;
+    float y = dot(vy, vec4(x * x2, x2, x, 1.0));
+    mat3 xyzToSrgb = mat3(
+         3.2404542, -1.5371385, -0.4985314,
+        -0.9692660,  1.8760108,  0.0415560,
+         0.0556434, -0.2040259,  1.0572252);
+    vec3 srgb = max(vec3(x / y, 1.0, (1.0 - x - y) / y) * xyzToSrgb, vec3(0.0));
+    return srgb / max(min(srgb.r, min(srgb.g, srgb.b)), 0.001);
+}
+
+vec3 rtgiTerrainBlockLightIncident(float blockLight) {
+    float lightMask = clamp(blockLight, 0.0, 1.0);
+    if (lightMask <= 0.0 || uSecondaryLighting.terrainLightScales.x <= 0.0) {
+        return vec3(0.0);
+    }
+    return rtgiBlackbodyApprox(3000.0) * pow(lightMask, 2.2) *
+           uSecondaryLighting.terrainLightScales.x * uSecondaryLighting.terrainLightScales.y;
 }
 
 void rtgiWriteResult(ivec2 texel, vec3 radiance, float hitDistance, uint classification, uint candidateCount,
@@ -347,7 +375,8 @@ bool rtgiShadeSecondarySurface(RtgiSecondarySurface surface, vec3 surfacePositio
     if (!rtgiFinite(surface.albedo) || !rtgiFinite(surface.normal) || !rtgiFinite(surface.emission) ||
         !rtgiFinite(surface.specularF0) || !rtgiFinite(surface.specularF90) ||
         !rtgiFinite(surface.perceptualRoughness) || !rtgiFinite(surface.metalness) ||
-        !rtgiFinite(surface.ao) || !rtgiFinite(surface.skyVisibility) || !rtgiFinite(viewDirection)) {
+        !rtgiFinite(surface.ao) || !rtgiFinite(surface.skyVisibility) || !rtgiFinite(surface.blockLight) ||
+        !rtgiFinite(viewDirection)) {
         return false;
     }
     radiance = surface.emission;
@@ -364,6 +393,8 @@ bool rtgiShadeSecondarySurface(RtgiSecondarySurface surface, vec3 surfacePositio
                                    coneWidth, radiance)) {
         return false;
     }
+    radiance += rtgiDiffuseTransportAlbedo(surface) *
+                rtgiTerrainBlockLightIncident(surface.blockLight) * surface.ao;
     radiance += rtgiDiffuseTransportAlbedo(surface) *
                 uSecondaryLighting.skyAmbientRadiance.rgb * surface.ao * surface.skyVisibility;
     return rtgiFinite(radiance);
@@ -414,7 +445,7 @@ void main() {
     ivec2 noiseExtent = textureSize(uBlueNoiseTexture, 0);
     ivec2 noiseTexel = ivec2(uvec2(texel) % uvec2(noiseExtent));
     vec2 blueNoise = texelFetch(uBlueNoiseTexture, noiseTexel, 0).rg;
-    vec2 sampleValue = fract(blueNoise + rtgiCranleyPattersonRotation(pc.frameMaskAndFlags.x));
+    vec2 sampleValue = fract(blueNoise + rtgiCranleyPattersonRotation(0u));
     vec3 rayDirection = rtgiCosineHemisphereDirection(sampleValue, normal);
 
     float originBias = rtgiOriginBias(worldPosition, normal, rayDirection);
@@ -476,6 +507,7 @@ void main() {
                 surface.metalness = staticSurface.metalness;
                 surface.ao = staticSurface.ao;
                 surface.skyVisibility = 1.0;
+                surface.blockLight = 0.0;
                 hitIdentityHash = rtgiStableHitIdentityHash(staticSurface.stableMaterialId,
                                                             staticSurface.stableGeometryId);
             }
@@ -498,6 +530,7 @@ void main() {
                 surface.metalness = terrainSurface.metalness;
                 surface.ao = terrainSurface.ao;
                 surface.skyVisibility = terrainSurface.skyVisibility;
+                surface.blockLight = terrainSurface.blockLight;
             }
         }
         vec3 radiance;

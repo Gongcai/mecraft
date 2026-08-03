@@ -145,6 +145,12 @@ public:
 
 private:
     void releaseMdiAllocationOnly(const SubChunkGpuKey& key);
+    void collectRetiredMdiAllocations();
+
+    struct RetiredMdiAllocation {
+        WorldGpuMesh mesh;
+        RhiSubmissionToken completionToken;
+    };
 
     // Chunk column cache
     std::vector<ChunkRenderColumnCache> m_chunkRenderColumns;
@@ -154,6 +160,7 @@ private:
 
     // MDI allocation tracking
     std::unordered_map<SubChunkGpuKey, MdiMeshAllocation, SubChunkGpuKeyHash> m_mdiMeshAllocations;
+    std::vector<RetiredMdiAllocation> m_retiredMdiAllocations;
     TerrainBlasCache m_blasCache;
     uint64_t m_lastMdiAllocationSweepActiveRevision = 0;
     bool m_mdiAllocationSweepInitialized = false;
@@ -169,6 +176,8 @@ private:
     // Dependencies (non-owning)
     WorldRenderBuffer* m_worldRenderBuffer = nullptr;
     ChunkMeshingService* m_meshingService = nullptr;
+    RhiDevice* m_rhiDevice = nullptr;
+    RhiSubmissionToken m_lastGraphCompletionToken;
 
     // Configuration
     int m_regionChunkSize = 8;

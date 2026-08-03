@@ -90,6 +90,7 @@ RgPassHandle RtgiTracePass::addGraphPass(RenderGraph& graph, const FrameContext&
         settings.maxShadowRayDistance <= 0.0f || !std::isfinite(settings.minimumRayOriginBias) ||
         settings.minimumRayOriginBias <= 0.0f || settings.minimumRayOriginBias >= settings.maxRayDistance ||
         settings.minimumRayOriginBias >= settings.maxShadowRayDistance || settings.instanceMask == 0u ||
+        !std::isfinite(settings.blockLightStrength) || settings.blockLightStrength < 0.0f ||
         (settings.instanceMask & static_cast<uint8_t>(~kRtgiKnownInstanceMask)) != 0u ||
         settings.shadowInstanceMask == 0u ||
         (settings.shadowInstanceMask & static_cast<uint8_t>(~kRtgiKnownShadowInstanceMask)) != 0u ||
@@ -282,6 +283,7 @@ bool RtgiTracePass::recordTrace(RhiCommandList& commandList, const FrameContext&
     lightingParams.moonRadiance = glm::vec4(ctx.skyIlluminance.moonIlluminance, 0.0f);
     lightingParams.skyAmbientRadiance = glm::vec4(ctx.skyIlluminance.skyIlluminance, 0.0f);
     lightingParams.traceAndEmissionScales = glm::vec4(settings.maxShadowRayDistance, 1.5f, 1.0f, ctx.preExposure);
+    lightingParams.terrainLightScales = glm::vec4(settings.blockLightStrength, 1.35f, 0.0f, 0.0f);
     lightingParams.flags.x =
         (settings.terrainNormalMapsEnabled ? renderer::contracts::kRtgiSecondaryLightingTerrainNormalMapBit : 0u) |
         (settings.terrainSpecularMapsEnabled ? renderer::contracts::kRtgiSecondaryLightingTerrainSpecularMapBit : 0u);
@@ -396,24 +398,47 @@ bool RtgiTracePass::ensurePipeline(RhiDevice& rhiDevice, const RhiBindGroupLayou
 
     RhiBindGroupLayoutDesc traceLayoutDesc;
     traceLayoutDesc.debugName = "RTGI.Trace.BindGroupLayout";
+    const RhiCapabilities& capabilities = rhiDevice.capabilities();
+    const RhiBindingFlags partiallyBoundAndUnused = rhiFlag(RhiBindingFlag::PartiallyBound) |
+                                                     rhiFlag(RhiBindingFlag::UpdateUnusedWhilePending);
+    const auto traceBindingFlags = [&](const RhiBindingType type) {
+        bool updateAfterBind = false;
+        switch (type) {
+        case RhiBindingType::UniformBuffer: updateAfterBind = capabilities.descriptorBindingUniformBufferUpdateAfterBind; break;
+        case RhiBindingType::StorageBuffer: updateAfterBind = capabilities.descriptorBindingStorageBufferUpdateAfterBind; break;
+        case RhiBindingType::StorageTexture: updateAfterBind = capabilities.descriptorBindingStorageImageUpdateAfterBind; break;
+        case RhiBindingType::CombinedTextureSampler:
+        case RhiBindingType::SampledTexture: updateAfterBind = capabilities.descriptorBindingSampledImageUpdateAfterBind; break;
+        default: break;
+        }
+        return partiallyBoundAndUnused | (updateAfterBind ? rhiFlag(RhiBindingFlag::UpdateAfterBind) : 0u);
+    };
     for (uint32_t binding = 0u; binding < 4u; ++binding) {
         traceLayoutDesc.entries.push_back(
-            {binding, RhiBindingType::CombinedTextureSampler, rhiFlag(RhiShaderStage::Compute), 1u});
+            {binding, RhiBindingType::CombinedTextureSampler, rhiFlag(RhiShaderStage::Compute), 1u,
+             traceBindingFlags(RhiBindingType::CombinedTextureSampler)});
     }
-    traceLayoutDesc.entries.push_back({4u, RhiBindingType::StorageTexture, rhiFlag(RhiShaderStage::Compute), 1u});
-    traceLayoutDesc.entries.push_back({5u, RhiBindingType::StorageTexture, rhiFlag(RhiShaderStage::Compute), 1u});
-    traceLayoutDesc.entries.push_back({6u, RhiBindingType::StorageBuffer, rhiFlag(RhiShaderStage::Compute), 1u});
+    traceLayoutDesc.entries.push_back({4u, RhiBindingType::StorageTexture, rhiFlag(RhiShaderStage::Compute), 1u,
+                                       traceBindingFlags(RhiBindingType::StorageTexture)});
+    traceLayoutDesc.entries.push_back({5u, RhiBindingType::StorageTexture, rhiFlag(RhiShaderStage::Compute), 1u,
+                                       traceBindingFlags(RhiBindingType::StorageTexture)});
+    traceLayoutDesc.entries.push_back({6u, RhiBindingType::StorageBuffer, rhiFlag(RhiShaderStage::Compute), 1u,
+                                       traceBindingFlags(RhiBindingType::StorageBuffer)});
     traceLayoutDesc.entries.push_back(
-        {7u, RhiBindingType::CombinedTextureSampler, rhiFlag(RhiShaderStage::Compute), 1u});
+        {7u, RhiBindingType::CombinedTextureSampler, rhiFlag(RhiShaderStage::Compute), 1u,
+         traceBindingFlags(RhiBindingType::CombinedTextureSampler)});
     for (uint32_t binding = 8u; binding <= 10u; ++binding) {
         traceLayoutDesc.entries.push_back(
-            {binding, RhiBindingType::StorageBuffer, rhiFlag(RhiShaderStage::Compute), 1u});
+            {binding, RhiBindingType::StorageBuffer, rhiFlag(RhiShaderStage::Compute), 1u,
+             traceBindingFlags(RhiBindingType::StorageBuffer)});
     }
     for (uint32_t binding = 11u; binding <= 15u; ++binding) {
         traceLayoutDesc.entries.push_back(
-            {binding, RhiBindingType::CombinedTextureSampler, rhiFlag(RhiShaderStage::Compute), 1u});
+            {binding, RhiBindingType::CombinedTextureSampler, rhiFlag(RhiShaderStage::Compute), 1u,
+             traceBindingFlags(RhiBindingType::CombinedTextureSampler)});
     }
-    traceLayoutDesc.entries.push_back({16u, RhiBindingType::UniformBuffer, rhiFlag(RhiShaderStage::Compute), 1u});
+    traceLayoutDesc.entries.push_back({16u, RhiBindingType::UniformBuffer, rhiFlag(RhiShaderStage::Compute), 1u,
+                                       traceBindingFlags(RhiBindingType::UniformBuffer)});
     m_traceBindGroupLayout = rhiDevice.createBindGroupLayout(traceLayoutDesc);
     if (!m_traceBindGroupLayout.isValid()) {
         destroyRhiResources();
@@ -517,11 +542,6 @@ bool RtgiTracePass::ensureBindGroup(RhiDevice& rhiDevice, const TraceViews& view
     if (unchanged) {
         return true;
     }
-    if (m_traceBindGroup.isValid()) {
-        rhiDevice.destroyBindGroup(m_traceBindGroup);
-        m_traceBindGroup = {};
-    }
-
     RhiBindGroupDesc bindGroupDesc;
     bindGroupDesc.layout = m_traceBindGroupLayout;
     for (uint32_t binding = 0u; binding < 4u; ++binding) {
@@ -565,13 +585,46 @@ bool RtgiTracePass::ensureBindGroup(RhiDevice& rhiDevice, const TraceViews& view
     lightingParamsEntry.resource.buffer = {m_secondaryLightingBuffer, 0u,
                                            sizeof(renderer::contracts::RtgiSecondaryLightingParams)};
     bindGroupDesc.entries.push_back(lightingParamsEntry);
-    m_traceBindGroup = rhiDevice.createBindGroup(bindGroupDesc);
-    if (!m_traceBindGroup.isValid()) {
-        m_boundViews = {};
-        m_boundSceneBuffers = {};
-        m_boundSceneBufferBytes = {};
+    const RhiBindGroupHandle previousBindGroup = m_traceBindGroup;
+    if (previousBindGroup.isValid()) {
+        // Keep one descriptor set across TLAS and transient-view generations.
+        // This avoids descriptor-pool churn and is legal after the previous
+        // frame has been made idle; the layout flags also cover executable
+        // command lists retained by the command-list pool.
+        rhiDevice.waitIdle();
+        std::vector<RhiBindingResource> resources;
+        resources.reserve(bindGroupDesc.entries.size());
+        for (const RhiBindGroupEntry& entry : bindGroupDesc.entries) {
+            resources.push_back(entry.resource);
+        }
+        std::vector<RhiBindGroupUpdate> updates;
+        updates.reserve(bindGroupDesc.entries.size());
+        for (size_t index = 0u; index < bindGroupDesc.entries.size(); ++index) {
+            updates.push_back({previousBindGroup, bindGroupDesc.entries[index].binding,
+                               bindGroupDesc.entries[index].arrayElement, &resources[index], 1u});
+        }
+        if (rhiDevice.updateBindGroups(updates.data(), static_cast<uint32_t>(updates.size()))) {
+            m_boundViews = boundViews;
+            m_boundSceneBuffers = boundSceneBuffers;
+            m_boundSceneBufferBytes = boundSceneBufferBytes;
+            return true;
+        }
+    }
+    RhiBindGroupHandle newBindGroup = rhiDevice.createBindGroup(bindGroupDesc);
+    if (!newBindGroup.isValid()) {
+        // Scene/TLAS revisions can arrive while the previous frame still owns
+        // its descriptor set. Reclaim completed descriptor sets before retrying;
+        // the old group remains valid until the retry has a replacement.
+        rhiDevice.waitIdle();
+        newBindGroup = rhiDevice.createBindGroup(bindGroupDesc);
+    }
+    if (!newBindGroup.isValid()) {
         return reject("RHI rejected RTGI bind group creation");
     }
+    if (previousBindGroup.isValid()) {
+        rhiDevice.destroyBindGroup(previousBindGroup);
+    }
+    m_traceBindGroup = newBindGroup;
     m_boundViews = boundViews;
     m_boundSceneBuffers = boundSceneBuffers;
     m_boundSceneBufferBytes = boundSceneBufferBytes;

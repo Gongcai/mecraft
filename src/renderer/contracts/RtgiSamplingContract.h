@@ -41,10 +41,12 @@ struct alignas(16) RtgiSecondaryLightingParams final {
     glm::vec4 skyAmbientRadiance{0.0f};
     // The fourth component scales scene-referred secondary radiance into the current pre-exposed domain.
     glm::vec4 traceAndEmissionScales{128.0f, 1.5f, 1.0f, 1.0f};
+    // x: Minecraft block-light strength; y: terrain block-light bounce boost.
+    glm::vec4 terrainLightScales{1.0f, 1.35f, 0.0f, 0.0f};
     glm::uvec4 flags{0u};
 };
 
-static_assert(sizeof(RtgiSecondaryLightingParams) == 112u);
+static_assert(sizeof(RtgiSecondaryLightingParams) == 128u);
 
 /// Hashes one sample-sequence value with the integer permutation shared by GLSL.
 /// @param value Input sequence value.

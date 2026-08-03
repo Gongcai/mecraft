@@ -46,6 +46,7 @@ struct TerrainRayQuerySurface {
     float metalness;
     float ao;
     float skyVisibility;
+    float blockLight;
     uint materialKind;
 };
 
@@ -258,6 +259,7 @@ bool terrainRayQueryCommittedSurface(TerrainRayTracingGpuInstance instanceData, 
     surface.metalness = 0.0;
     surface.ao = 0.0;
     surface.skyVisibility = 0.0;
+    surface.blockLight = 0.0;
     surface.materialKind = 0u;
 
     TerrainRayQueryTriangle triangle;
@@ -354,13 +356,15 @@ bool terrainRayQueryCommittedSurface(TerrainRayTracingGpuInstance instanceData, 
     surface.metalness = materialAux.metalness;
     surface.ao = clamp(ao, 0.0, 1.0);
     surface.skyVisibility = clamp(attributes.sunlight, 0.0, 1.0);
+    surface.blockLight = clamp(attributes.blockLight, 0.0, 1.0);
     surface.materialKind = materialKind;
     return terrainRayQueryFinite(surface.albedo) && terrainRayQueryFinite(surface.normal) &&
            terrainRayQueryFinite(surface.emission) && terrainRayQueryFinite(surface.specularF0) &&
            !isnan(surface.specularF90) && !isinf(surface.specularF90) &&
            !isnan(surface.perceptualRoughness) && !isinf(surface.perceptualRoughness) &&
            !isnan(surface.metalness) && !isinf(surface.metalness) && !isnan(surface.ao) && !isinf(surface.ao) &&
-           !isnan(surface.skyVisibility) && !isinf(surface.skyVisibility);
+           !isnan(surface.skyVisibility) && !isinf(surface.skyVisibility) &&
+           !isnan(surface.blockLight) && !isinf(surface.blockLight);
 }
 
 bool terrainRayQueryCandidateAlphaPasses(TerrainRayTracingGpuInstance instanceData, uint geometryIndex,

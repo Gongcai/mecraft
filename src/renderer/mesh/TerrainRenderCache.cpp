@@ -1,6 +1,7 @@
 #include "TerrainRenderCache.h"
 #include "WorldRenderBuffer.h"
 #include "ChunkMesher.h"
+#include "../rhi/RhiDevice.h"
 #include "../../world/IWorldView.h"
 #include "../../world/chunk/Chunk.h"
 #include "../../world/chunk/SubChunk.h"
@@ -57,11 +58,13 @@ void expandBounds(glm::vec3& minBounds, glm::vec3& maxBounds, bool& hasBounds, c
 // ---------------------------------------------------------------------------
 
 bool TerrainRenderCache::init(RhiDevice* rhiDevice) {
+    m_rhiDevice = rhiDevice;
     return m_blasCache.init(rhiDevice);
 }
 
 void TerrainRenderCache::beginFrame() {
     ++m_frameSerial;
+    collectRetiredMdiAllocations();
     m_blasCache.beginFrame();
     m_meshUploadVerticesThisFrame = 0;
     m_meshUploadBytesThisFrame = 0;
@@ -78,6 +81,15 @@ void TerrainRenderCache::beginFrame() {
 }
 
 void TerrainRenderCache::shutdown() {
+    if (m_rhiDevice != nullptr && !m_retiredMdiAllocations.empty()) {
+        m_rhiDevice->waitIdle();
+    }
+    if (m_worldRenderBuffer != nullptr) {
+        for (const RetiredMdiAllocation& retired : m_retiredMdiAllocations) {
+            m_worldRenderBuffer->free(retired.mesh);
+        }
+    }
+    m_retiredMdiAllocations.clear();
     m_blasCache.shutdown();
     m_chunkRenderColumns.clear();
     m_frameSerial = 0;
@@ -88,6 +100,8 @@ void TerrainRenderCache::shutdown() {
     m_deferredMeshResults.clear();
     m_deferredTransparentBatch.clear();
     m_transparentPassPlan.clear();
+    m_lastGraphCompletionToken = {};
+    m_rhiDevice = nullptr;
 }
 
 void TerrainRenderCache::setMeshingBudgets(const int submitBudget, const int maxInFlight,
@@ -241,8 +255,32 @@ void TerrainRenderCache::releaseMdiAllocationOnly(const SubChunkGpuKey& key) {
     if (it == m_mdiMeshAllocations.end()) {
         return;
     }
-    m_worldRenderBuffer->free(it->second.mesh);
+    if (m_lastGraphCompletionToken.isValid()) {
+        m_retiredMdiAllocations.push_back({it->second.mesh, m_lastGraphCompletionToken});
+    } else {
+        m_worldRenderBuffer->free(it->second.mesh);
+    }
     m_mdiMeshAllocations.erase(it);
+}
+
+void TerrainRenderCache::collectRetiredMdiAllocations() {
+    if (m_retiredMdiAllocations.empty() || m_worldRenderBuffer == nullptr) {
+        return;
+    }
+    for (auto it = m_retiredMdiAllocations.begin(); it != m_retiredMdiAllocations.end();) {
+        bool complete = false;
+        if (m_rhiDevice == nullptr || !it->completionToken.isValid() ||
+            !m_rhiDevice->isSubmissionComplete(it->completionToken, complete)) {
+            ++it;
+            continue;
+        }
+        if (!complete) {
+            ++it;
+            continue;
+        }
+        m_worldRenderBuffer->free(it->mesh);
+        it = m_retiredMdiAllocations.erase(it);
+    }
 }
 
 void TerrainRenderCache::releaseMdiAllocation(const SubChunkGpuKey& key) {
@@ -646,6 +684,9 @@ bool TerrainRenderCache::drainMeshingResults(const IWorldView& worldView, RhiCom
 }
 
 void TerrainRenderCache::finishGraphExecution(const bool succeeded, const RhiSubmissionToken completionToken) {
+    if (completionToken.isValid()) {
+        m_lastGraphCompletionToken = completionToken;
+    }
     m_blasCache.finishGraphExecution(succeeded, completionToken);
 }
 
