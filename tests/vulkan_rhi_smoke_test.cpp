@@ -74,6 +74,7 @@ struct RtgiTraceSmokeCase final {
     std::vector<float> depth;
     std::vector<float> normalAo;
     std::vector<float> materialAux;
+    std::vector<uint8_t> voxelLight;
     std::vector<float> blueNoise;
     uint32_t terrainAlbedoWidth = 0u;
     uint32_t terrainAlbedoHeight = 0u;
@@ -3717,6 +3718,7 @@ void main() {
         smokeCase.depth = {0.5f, 0.5f};
         smokeCase.normalAo = {0.5f, 0.5f, 1.0f, 0.0f, 0.5f, 0.5f, 1.0f, 0.0f};
         smokeCase.materialAux = std::vector<float>(8u, 0.0f);
+        smokeCase.voxelLight = {255u, 0u, 0u, 255u, 255u, 0u, 0u, 255u};
         smokeCase.blueNoise = {noiseTexel[0], noiseTexel[1], noiseTexel[2], noiseTexel[3],
                                noiseTexel[0], noiseTexel[1], noiseTexel[2], noiseTexel[3]};
         smokeCase.terrainAlbedoWidth = 2u;
@@ -4039,6 +4041,7 @@ namespace {
     const size_t terrainTexelCount = terrainLayerTexels * static_cast<size_t>(smokeCase.terrainAlbedoLayers);
     if (terrainTexelCount > maximumSize / 4u || smokeCase.depth.size() != pixelCount ||
         smokeCase.normalAo.size() != pixelCount * 4u || smokeCase.materialAux.size() != pixelCount * 4u ||
+        smokeCase.voxelLight.size() != pixelCount * 4u ||
         smokeCase.blueNoise.size() != pixelCount * 4u || smokeCase.terrainAlbedo.size() != terrainTexelCount * 4u ||
         smokeCase.expectedPixels.size() != pixelCount) {
         return false;
@@ -4088,6 +4091,7 @@ namespace {
     SmokeTexture depth;
     SmokeTexture normalAo;
     SmokeTexture materialAux;
+    SmokeTexture voxelLight;
     SmokeTexture noise;
     SmokeTexture terrainAlbedo;
     SmokeTexture terrainNormal;
@@ -4152,6 +4156,7 @@ namespace {
             &terrainNormal,
             &terrainAlbedo,
             &noise,
+            &voxelLight,
             &materialAux,
             &normalAo,
             &depth,
@@ -4203,6 +4208,10 @@ namespace {
                       RhiTextureFormat::Rgba32Float, smokeCase.width, smokeCase.height, 1u, kSampledUsage,
                       smokeCase.materialAux.data(), smokeCase.materialAux.size() * sizeof(float),
                       RhiResourceState::ShaderRead, materialAux) &&
+        createTexture("VulkanSmoke.RTGI.VoxelLight", RhiTextureDimension::Texture2D, RhiTextureViewType::Texture2D,
+                      RhiTextureFormat::Rgba8Unorm, smokeCase.width, smokeCase.height, 1u, kSampledUsage,
+                      smokeCase.voxelLight.data(), smokeCase.voxelLight.size(), RhiResourceState::ShaderRead,
+                      voxelLight) &&
         createTexture("VulkanSmoke.RTGI.BlueNoise", RhiTextureDimension::Texture2D, RhiTextureViewType::Texture2D,
                       RhiTextureFormat::Rgba32Float, smokeCase.width, smokeCase.height, 1u, kSampledUsage,
                       smokeCase.blueNoise.data(), smokeCase.blueNoise.size() * sizeof(float),
@@ -4357,6 +4366,7 @@ namespace {
         resources.depth = importTexture(depth, RhiResourceState::DepthRead, RhiResourceState::DepthRead);
         resources.normalAo = importTexture(normalAo, RhiResourceState::ShaderRead, RhiResourceState::ShaderRead);
         resources.materialAux = importTexture(materialAux, RhiResourceState::ShaderRead, RhiResourceState::ShaderRead);
+        resources.voxelLight = importTexture(voxelLight, RhiResourceState::ShaderRead, RhiResourceState::ShaderRead);
         resources.blueNoise = importTexture(noise, RhiResourceState::ShaderRead, RhiResourceState::ShaderRead);
         resources.terrainAlbedo =
             importTexture(terrainAlbedo, RhiResourceState::ShaderRead, RhiResourceState::ShaderRead);
@@ -4402,7 +4412,8 @@ namespace {
                                                      RhiQueueType::Graphics, RhiQueueType::Graphics});
         valid =
             valid && resources.depth.isValid() && resources.normalAo.isValid() && resources.materialAux.isValid() &&
-            resources.blueNoise.isValid() && resources.diffuseRadianceHitDistance.isValid() &&
+            resources.voxelLight.isValid() && resources.blueNoise.isValid() &&
+            resources.diffuseRadianceHitDistance.isValid() &&
             resources.terrainAlbedo.isValid() && resources.terrainNormal.isValid() &&
             resources.terrainSpecular.isValid() && resources.grassColormap.isValid() &&
             resources.foliageColormap.isValid() && resources.skyCapture.isValid() && resources.validation.isValid() &&
@@ -4995,6 +5006,7 @@ namespace {
     smokeCase.depth = {0.25f, 0.25f};
     smokeCase.normalAo = {1.0f, 1.0f, 1.0f, 0.0f, 1.0f, 1.0f, 1.0f, 0.0f};
     smokeCase.materialAux = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
+    smokeCase.voxelLight = {255u, 0u, 0u, 255u, 255u, 0u, 0u, 255u};
     const std::array<float, 4u> noisePixel{wrapUnit(kDesiredSample.x - rotation.x),
                                            wrapUnit(kDesiredSample.y - rotation.y), 0.0f, 1.0f};
     smokeCase.blueNoise = {noisePixel[0], noisePixel[1], noisePixel[2], noisePixel[3],
@@ -5056,6 +5068,7 @@ namespace {
     missCase.depth = {0.25f};
     missCase.normalAo = {1.0f, 1.0f, 1.0f, 0.0f};
     missCase.materialAux = {0.0f, 0.0f, 0.0f, 0.0f};
+    missCase.voxelLight = {255u, 0u, 0u, 255u};
     missCase.blueNoise = {noisePixel[0], noisePixel[1], noisePixel[2], noisePixel[3]};
     missCase.terrainAlbedoWidth = 1u;
     missCase.terrainAlbedoHeight = 1u;
@@ -5076,7 +5089,16 @@ namespace {
     miss.minimumRadiance = {0.999f, 1.999f, 2.999f};
     miss.maximumRadiance = {1.001f, 2.001f, 3.001f};
     missCase.expectedPixels = {miss};
-    return validateRtgiTraceCase(device, commandPool, sceneTlas, activeTlas, globalBindlessSet, missCase) &&
+    if (!validateRtgiTraceCase(device, commandPool, sceneTlas, activeTlas, globalBindlessSet, missCase)) {
+        return false;
+    }
+
+    RtgiTraceSmokeCase enclosedMissCase = missCase;
+    enclosedMissCase.label = "Enclosed Sky Miss Rejection";
+    enclosedMissCase.voxelLight = {0u, 0u, 0u, 255u};
+    enclosedMissCase.expectedPixels[0].minimumRadiance = {0.0f, 0.0f, 0.0f};
+    enclosedMissCase.expectedPixels[0].maximumRadiance = {0.0f, 0.0f, 0.0f};
+    return validateRtgiTraceCase(device, commandPool, sceneTlas, activeTlas, globalBindlessSet, enclosedMissCase) &&
            validateRtgiSignalPackInvalidInputs(device, commandPool);
 }
 

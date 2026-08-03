@@ -51,8 +51,11 @@ namespace {
            traceSource.find("const float RTGI_METALLIC_DIFFUSE_TRANSPORT_FLOOR = 0.35;") != std::string::npos &&
            traceSource.find("const float RTGI_RADIANCE_FIREFLY_CLAMP = 8.0;") != std::string::npos &&
            traceSource.find("ivec2 noiseTexel = ivec2(uvec2(texel) % uvec2(noiseExtent));") != std::string::npos &&
-           traceSource.find("rtgiCranleyPattersonRotation(0u)") != std::string::npos &&
+           traceSource.find("rtgiCranleyPattersonRotation(pc.frameMaskAndFlags.x)") != std::string::npos &&
            traceSource.find("frameOffset") == std::string::npos &&
+           traceSource.find("layout(set = 1, binding = 17) uniform sampler2D uVoxelLightTexture;") !=
+               std::string::npos &&
+           traceSource.find("rtgiPrimarySkyVisibility") != std::string::npos &&
            traceSource.find("radiance += rtgiDiffuseTransportAlbedo(surface) * contribution.diffuse") !=
                std::string::npos &&
            traceSource.find("rtgiTerrainBlockLightIncident(surface.blockLight)") != std::string::npos &&

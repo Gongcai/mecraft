@@ -96,6 +96,7 @@ RgPassHandle RtgiTracePass::addGraphPass(RenderGraph& graph, const FrameContext&
         settings.shadowInstanceMask == 0u ||
         (settings.shadowInstanceMask & static_cast<uint8_t>(~kRtgiKnownShadowInstanceMask)) != 0u ||
         !resources.depth.isValid() || !resources.normalAo.isValid() || !resources.materialAux.isValid() ||
+        !resources.voxelLight.isValid() ||
         !resources.blueNoise.isValid() || !resources.terrainAlbedo.isValid() || !resources.terrainNormal.isValid() ||
         !resources.terrainSpecular.isValid() || !resources.grassColormap.isValid() ||
         !resources.foliageColormap.isValid() || !resources.skyCapture.isValid() ||
@@ -185,6 +186,7 @@ RgPassHandle RtgiTracePass::addGraphPass(RenderGraph& graph, const FrameContext&
         .readTexture(resources.depth, RhiResourceState::DepthRead)
         .readTexture(resources.normalAo, RhiResourceState::ShaderRead)
         .readTexture(resources.materialAux, RhiResourceState::ShaderRead)
+        .readTexture(resources.voxelLight, RhiResourceState::ShaderRead)
         .readTexture(resources.blueNoise, RhiResourceState::ShaderRead)
         .readTexture(resources.terrainAlbedo, RhiResourceState::ShaderRead)
         .readTexture(resources.terrainNormal, RhiResourceState::ShaderRead)
@@ -211,6 +213,7 @@ RgPassHandle RtgiTracePass::addGraphPass(RenderGraph& graph, const FrameContext&
             const TraceViews views{pass.textureView(frameResources.depth),
                                    pass.textureView(frameResources.normalAo),
                                    pass.textureView(frameResources.materialAux),
+                                   pass.textureView(frameResources.voxelLight),
                                    pass.textureView(frameResources.blueNoise),
                                    pass.textureView(frameResources.terrainAlbedo),
                                    pass.textureView(frameResources.terrainNormal),
@@ -443,6 +446,9 @@ bool RtgiTracePass::ensurePipeline(RhiDevice& rhiDevice, const RhiBindGroupLayou
     }
     traceLayoutDesc.entries.push_back({16u, RhiBindingType::UniformBuffer, rhiFlag(RhiShaderStage::Compute), 1u,
                                        traceBindingFlags(RhiBindingType::UniformBuffer)});
+    traceLayoutDesc.entries.push_back(
+        {17u, RhiBindingType::CombinedTextureSampler, rhiFlag(RhiShaderStage::Compute), 1u,
+         traceBindingFlags(RhiBindingType::CombinedTextureSampler)});
     m_traceBindGroupLayout = rhiDevice.createBindGroupLayout(traceLayoutDesc);
     if (!m_traceBindGroupLayout.isValid()) {
         destroyRhiResources();
@@ -480,7 +486,7 @@ bool RtgiTracePass::ensureBindGroup(RhiDevice& rhiDevice, const TraceViews& view
         MECRAFT_LOG_STREAM(std::cerr << "[RtgiTracePass] Bind group setup rejected: " << reason << '\n');
         return false;
     };
-    const std::array<RhiTextureViewHandle, 12u> boundViews{views.depth,
+    const std::array<RhiTextureViewHandle, 13u> boundViews{views.depth,
                                                            views.normalAo,
                                                            views.materialAux,
                                                            views.blueNoise,
@@ -491,7 +497,8 @@ bool RtgiTracePass::ensureBindGroup(RhiDevice& rhiDevice, const TraceViews& view
                                                            views.foliageColormap,
                                                            views.skyCapture,
                                                            views.diffuseRadianceHitDistance,
-                                                           views.validation};
+                                                           views.validation,
+                                                           views.voxelLight};
     for (const RhiTextureViewHandle view : boundViews) {
         if (!view.isValid()) {
             return reject("one or more RTGI texture views are invalid");
@@ -503,6 +510,7 @@ bool RtgiTracePass::ensureBindGroup(RhiDevice& rhiDevice, const TraceViews& view
     RhiTextureViewDesc grassColormapDesc;
     RhiTextureViewDesc foliageColormapDesc;
     RhiTextureViewDesc skyCaptureDesc;
+    RhiTextureViewDesc voxelLightDesc;
     const std::array<RhiBufferHandle, 4u> boundSceneBuffers{sceneBuffers.terrainHitData, sceneBuffers.gpuSceneMaterials,
                                                             sceneBuffers.gpuSceneGeometries,
                                                             sceneBuffers.gpuSceneInstances};
@@ -522,7 +530,8 @@ bool RtgiTracePass::ensureBindGroup(RhiDevice& rhiDevice, const TraceViews& view
         !rhiDevice.getTextureViewDesc(views.terrainSpecular, terrainSpecularDesc) ||
         !rhiDevice.getTextureViewDesc(views.grassColormap, grassColormapDesc) ||
         !rhiDevice.getTextureViewDesc(views.foliageColormap, foliageColormapDesc) ||
-        !rhiDevice.getTextureViewDesc(views.skyCapture, skyCaptureDesc)) {
+        !rhiDevice.getTextureViewDesc(views.skyCapture, skyCaptureDesc) ||
+        !rhiDevice.getTextureViewDesc(views.voxelLight, voxelLightDesc)) {
         return reject("one or more RTGI texture view descriptors are unavailable");
     }
     if (terrainAlbedoDesc.viewType != RhiTextureViewType::Texture2DArray ||
@@ -532,8 +541,9 @@ bool RtgiTracePass::ensureBindGroup(RhiDevice& rhiDevice, const TraceViews& view
     }
     if (grassColormapDesc.viewType != RhiTextureViewType::Texture2D ||
         foliageColormapDesc.viewType != RhiTextureViewType::Texture2D ||
-        skyCaptureDesc.viewType != RhiTextureViewType::Texture2D) {
-        return reject("colormap or sky capture views are not 2D textures");
+        skyCaptureDesc.viewType != RhiTextureViewType::Texture2D ||
+        voxelLightDesc.viewType != RhiTextureViewType::Texture2D) {
+        return reject("colormap, sky capture, or voxel-light views are not 2D textures");
     }
     bool unchanged = m_traceBindGroup.isValid();
     for (size_t index = 0u; index < boundViews.size(); ++index) {
@@ -589,6 +599,10 @@ bool RtgiTracePass::ensureBindGroup(RhiDevice& rhiDevice, const TraceViews& view
     lightingParamsEntry.resource.buffer = {m_secondaryLightingBuffer, 0u,
                                            sizeof(renderer::contracts::RtgiSecondaryLightingParams)};
     bindGroupDesc.entries.push_back(lightingParamsEntry);
+    RhiBindGroupEntry voxelLightEntry;
+    voxelLightEntry.binding = 17u;
+    voxelLightEntry.resource.combinedTextureSampler = {views.voxelLight, m_sampler};
+    bindGroupDesc.entries.push_back(voxelLightEntry);
     const RhiBindGroupHandle previousBindGroup = m_traceBindGroup;
     if (previousBindGroup.isValid()) {
         // Keep one descriptor set across TLAS and transient-view generations.

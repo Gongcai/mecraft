@@ -1836,6 +1836,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
         rtgiResources.depth = depth;
         rtgiResources.normalAo = normalAo;
         rtgiResources.materialAux = materialAux;
+        rtgiResources.voxelLight = voxelLight;
         rtgiResources.blueNoise = skyNoise;
         rtgiResources.terrainAlbedo = terrainAlbedo;
         rtgiResources.terrainNormal = terrainNormal;

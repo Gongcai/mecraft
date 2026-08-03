@@ -34,6 +34,7 @@ layout(set = 1, binding = 12) uniform sampler2DArray uTerrainSpecular;
 layout(set = 1, binding = 13) uniform sampler2D uGrassColormap;
 layout(set = 1, binding = 14) uniform sampler2D uFoliageColormap;
 layout(set = 1, binding = 15) uniform sampler2D uSkyCapture;
+layout(set = 1, binding = 17) uniform sampler2D uVoxelLightTexture;
 layout(std140, set = 1, binding = 16) uniform RtgiSecondaryLightingParams {
     vec4 sunDirectionAndVisibility;
     vec4 moonDirectionAndVisibility;
@@ -226,6 +227,31 @@ bool rtgiTraceVisibility(vec3 surfacePosition, vec3 normal, vec3 direction, floa
                          gl_RayQueryCommittedIntersectionTriangleEXT
                      ? 0.0
                      : 1.0;
+    return true;
+}
+
+// A primary ray miss is only a sky sample when the surface can actually see
+// the sky. The voxel sky-light channel is a stable coarse visibility prior;
+// the TLAS query rejects false sky hits caused by an incomplete/stale BLAS.
+bool rtgiPrimarySkyVisibility(vec3 surfacePosition, vec3 geometricNormal, float pixelWorldFootprint,
+                              ivec2 texel, out float visibility) {
+    visibility = 0.0;
+    float skyLight = clamp(texelFetch(uVoxelLightTexture, texel, 0).r, 0.0, 1.0);
+    float skyLightMask = skyLight * skyLight * skyLight;
+    if (skyLightMask <= 1.0e-4) {
+        return true;
+    }
+    vec3 skyDirection = vec3(0.0, 1.0, 0.0);
+    if (dot(geometricNormal, skyDirection) > 0.0) {
+        skyDirection = normalize(skyDirection + geometricNormal);
+    }
+    float geometryVisibility = 0.0;
+    if (!rtgiTraceVisibility(surfacePosition, geometricNormal, skyDirection,
+                              uSecondaryLighting.traceAndEmissionScales.x, pixelWorldFootprint,
+                              geometryVisibility)) {
+        return false;
+    }
+    visibility = skyLightMask * geometryVisibility;
     return true;
 }
 
@@ -502,7 +528,7 @@ void main() {
     ivec2 noiseExtent = textureSize(uBlueNoiseTexture, 0);
     ivec2 noiseTexel = ivec2(uvec2(texel) % uvec2(noiseExtent));
     vec2 blueNoise = texelFetch(uBlueNoiseTexture, noiseTexel, 0).rg;
-    vec2 sampleValue = fract(blueNoise + rtgiCranleyPattersonRotation(0u));
+    vec2 sampleValue = fract(blueNoise + rtgiCranleyPattersonRotation(pc.frameMaskAndFlags.x));
     vec3 rayDirection = rtgiCosineHemisphereDirection(sampleValue, normal);
     if (dot(rayDirection, geometricNormal) < 0.0) {
         // A steep normal-map lobe can point below the geometric face. Reflect
@@ -611,7 +637,13 @@ void main() {
         return;
     }
 
-    vec3 missRadiance = sampleSkyRadiance(uSkyCapture, rayDirection);
+    float skyVisibility = 0.0;
+    if (!rtgiPrimarySkyVisibility(worldPosition, geometricNormal, pixelWorldFootprint, texel, skyVisibility)) {
+        rtgiWriteResult(texel, vec3(0.0), RTGI_NRD_FP16_MAX, RTGI_TRACE_CLASS_MISS, candidateCount,
+                        confirmedCount, 0u);
+        return;
+    }
+    vec3 missRadiance = sampleSkyRadiance(uSkyCapture, rayDirection) * skyVisibility;
     rtgiWriteResult(texel, missRadiance, RTGI_NRD_FP16_MAX, RTGI_TRACE_CLASS_MISS, candidateCount,
                     confirmedCount, 0u);
 }

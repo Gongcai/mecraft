@@ -20,6 +20,7 @@ public:
         RgTextureHandle depth;
         RgTextureHandle normalAo;
         RgTextureHandle materialAux;
+        RgTextureHandle voxelLight;
         RgTextureHandle blueNoise;
         RgTextureHandle terrainAlbedo;
         RgTextureHandle terrainNormal;
@@ -82,7 +83,7 @@ public:
     /// @param graph Render graph receiving the trace declaration.
     /// @param ctx Current frame matrices, dimensions, and shared Global Bindless/TLAS owners.
     /// @param settings Explicit solid trace distance, origin bias, mask, and projection contract.
-    /// @param resources Imported G-buffer, noise, terrain albedo, and storage-image resources.
+    /// @param resources Imported G-buffer, voxel-light, noise, terrain material, and storage-image resources.
     /// @param dependency Pass that completes all trace inputs before dispatch.
     /// @return Trace pass handle, or an invalid handle when any production contract is invalid.
     [[nodiscard]] RgPassHandle addGraphPass(RenderGraph& graph, const FrameContext& ctx, const Settings& settings,
@@ -98,6 +99,7 @@ private:
         RhiTextureViewHandle depth;
         RhiTextureViewHandle normalAo;
         RhiTextureViewHandle materialAux;
+        RhiTextureViewHandle voxelLight;
         RhiTextureViewHandle blueNoise;
         RhiTextureViewHandle terrainAlbedo;
         RhiTextureViewHandle terrainNormal;
@@ -147,7 +149,7 @@ private:
     RhiBindGroupHandle m_traceBindGroup;
     std::array<RhiBufferHandle, 4u> m_boundSceneBuffers{};
     std::array<uint64_t, 4u> m_boundSceneBufferBytes{};
-    std::array<RhiTextureViewHandle, 12u> m_boundViews{};
+    std::array<RhiTextureViewHandle, 13u> m_boundViews{};
     Stats m_stats;
 };
 
