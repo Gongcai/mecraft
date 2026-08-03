@@ -160,6 +160,10 @@ struct FrameContext {
     float animationTime = 0.0f;
     float shaderTime = 0.0f;
 
+    // Scene-radiance scale applied before finite-precision HDR storage.
+    float preExposure = 1.0f;
+    float previousPreExposure = 1.0f;
+
     // Resource, active signal, rendering, and presentation dimensions form one contract.
     TemporalFrameExtents temporalExtents;
 

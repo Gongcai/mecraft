@@ -63,6 +63,7 @@ int main() {
                         offsetof(RtgiSecondaryLightingParams, sunDirectionAndVisibility) == 0u &&
                         offsetof(RtgiSecondaryLightingParams, traceAndEmissionScales) == 80u &&
                         offsetof(RtgiSecondaryLightingParams, flags) == 96u &&
+                        RtgiSecondaryLightingParams{}.traceAndEmissionScales.w == 1.0f &&
                         kRtgiSecondaryLightingTerrainNormalMapBit == 1u &&
                         kRtgiSecondaryLightingTerrainSpecularMapBit == 2u &&
                         (kRtgiSecondaryLightingTerrainNormalMapBit | kRtgiSecondaryLightingTerrainSpecularMapBit) == 3u,

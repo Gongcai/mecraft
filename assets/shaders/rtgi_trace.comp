@@ -78,7 +78,9 @@ bool rtgiFinite(vec3 value) {
 
 void rtgiWriteResult(ivec2 texel, vec3 radiance, float hitDistance, uint classification, uint candidateCount,
                      uint confirmedCount, uint hitIdentityHash) {
-    if (!rtgiFinite(radiance) || !rtgiFinite(hitDistance) || any(lessThan(radiance, vec3(0.0))) ||
+    vec3 preExposedRadiance = radiance * uSecondaryLighting.traceAndEmissionScales.w;
+    if (!rtgiFinite(preExposedRadiance) || !rtgiFinite(hitDistance) ||
+        any(lessThan(preExposedRadiance, vec3(0.0))) ||
         hitDistance < 0.0) {
         imageStore(uDiffuseRadianceHitDistance, texel, vec4(0.0));
         imageStore(uValidation, texel,
@@ -87,7 +89,7 @@ void rtgiWriteResult(ivec2 texel, vec3 radiance, float hitDistance, uint classif
         return;
     }
     imageStore(uDiffuseRadianceHitDistance, texel,
-               vec4(min(radiance, vec3(RTGI_NRD_FP16_MAX)), min(hitDistance, RTGI_NRD_FP16_MAX)));
+               vec4(min(preExposedRadiance, vec3(RTGI_NRD_FP16_MAX)), min(hitDistance, RTGI_NRD_FP16_MAX)));
     imageStore(uValidation, texel,
                uvec4(rtgiTraceValidationWord(classification, candidateCount, confirmedCount),
                      hitIdentityHash, 0u, 0u));

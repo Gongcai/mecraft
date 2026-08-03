@@ -22,9 +22,22 @@ struct alignas(16) RtgiSignalPackPushConstants final {
     glm::mat4 inverseProjection{1.0f};
     glm::vec4 renderExtentAndInverse{1.0f};
     glm::vec4 reblurParametersAndDiffuseRoughness{3.0f, 0.1f, 20.0f, 1.0f};
+    glm::vec4 preExposureAndInverse{1.0f};
 };
 
-static_assert(sizeof(RtgiSignalPackPushConstants) == 96u);
+static_assert(sizeof(RtgiSignalPackPushConstants) == 112u);
+
+/// Removes the finite positive pre-exposure scale before radiance enters NRD history.
+/// @param radiance Non-negative radiance stored in the pre-exposed scene domain.
+/// @param preExposure Finite positive scale applied before HDR storage.
+/// @return Scene-referred radiance, or no value for an invalid contract.
+[[nodiscard]] std::optional<glm::vec3> rtgiRemovePreExposure(const glm::vec3& radiance, float preExposure);
+
+/// Restores scene radiance to the current pre-exposed domain after NRD resolves history.
+/// @param radiance Non-negative scene-referred NRD output radiance.
+/// @param preExposure Finite positive scale applied by the current frame.
+/// @return Pre-exposed radiance, or no value for an invalid contract.
+[[nodiscard]] std::optional<glm::vec3> rtgiApplyPreExposure(const glm::vec3& radiance, float preExposure);
 
 /// Validates the three positive scales required by NRD REBLUR normalization.
 /// @param parameters Constant, view-Z, and roughness scales passed to NRD.

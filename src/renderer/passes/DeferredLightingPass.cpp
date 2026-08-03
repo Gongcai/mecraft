@@ -112,7 +112,7 @@ void DeferredLightingPass::shutdown() {
 
 bool DeferredLightingPass::execute(RhiCommandList& commandList, const FrameContext& ctx, const RenderSettings& settings,
                                    DeferredRenderTargets& targets, const RhiTextureViewHandle rtgiDiffuseView,
-                                   const RtgiDiffuseEncoding rtgiEncoding) {
+                                   const RtgiDiffuseEncoding rtgiEncoding, const float rtgiRadianceScale) {
     if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr || m_shadowRenderer == nullptr) {
         return false;
     }
@@ -125,7 +125,8 @@ bool DeferredLightingPass::execute(RhiCommandList& commandList, const FrameConte
         (!clusteredLightingActive && rtgiEncoding != RtgiDiffuseEncoding::Disabled) ||
         (settings.rtgi.enabled && rtgiEncoding == RtgiDiffuseEncoding::Disabled) ||
         (!settings.rtgi.enabled && rtgiEncoding != RtgiDiffuseEncoding::Disabled) ||
-        !std::isfinite(settings.rtgi.intensity) || settings.rtgi.intensity < 0.0f) {
+        !std::isfinite(settings.rtgi.intensity) || settings.rtgi.intensity < 0.0f ||
+        !std::isfinite(rtgiRadianceScale) || rtgiRadianceScale <= 0.0f) {
         return false;
     }
     if (clusteredLightingActive &&
@@ -221,8 +222,8 @@ bool DeferredLightingPass::execute(RhiCommandList& commandList, const FrameConte
     params.cloud2 =
         glm::vec4(ctx.cloud.planarDensity, ctx.cloud.planarAltitude, ctx.fog.startDistance, ctx.fog.endDistance);
     params.fogParams = glm::vec4(ctx.fog.density, 0.0f, 0.0f, 0.0f);
-    params.rtgi = glm::vec4(settings.rtgi.enabled ? settings.rtgi.intensity : 0.0f,
-                            static_cast<float>(rtgiEncoding), 0.0f, 0.0f);
+    params.rtgi = glm::vec4(settings.rtgi.enabled ? settings.rtgi.intensity : 0.0f, static_cast<float>(rtgiEncoding),
+                            rtgiRadianceScale, 0.0f);
     params.flags0 = glm::ivec4(1, settings.postProcess.aerialPerspectiveEnabled ? 1 : 0, volumetricFogActive ? 1 : 0,
                                ctx.volumetric.lightEnabled ? 1 : 0);
     params.flags1 = glm::ivec4(ctx.atmosphere.directWeatherOcclusionOverride, settings.shadow.enabled ? 1 : 0,
@@ -375,8 +376,8 @@ bool DeferredLightingPass::ensureRhiPipeline(RhiDevice& rhiDevice) {
                                                    : rhiFlag(RhiShaderStage::Fragment);
         bindGroupLayoutDesc.entries.push_back({binding, RhiBindingType::CombinedTextureSampler, visibility, 1u});
     }
-    bindGroupLayoutDesc.entries.push_back({lightingTextureCount, RhiBindingType::UniformBuffer,
-                                           rhiFlag(RhiShaderStage::Fragment), 1u});
+    bindGroupLayoutDesc.entries.push_back(
+        {lightingTextureCount, RhiBindingType::UniformBuffer, rhiFlag(RhiShaderStage::Fragment), 1u});
     m_bindGroupLayout = rhiDevice.createBindGroupLayout(bindGroupLayoutDesc);
     if (!m_bindGroupLayout.isValid()) {
         destroyRhiResources();
@@ -473,7 +474,8 @@ bool DeferredLightingPass::ensureRhiBindGroup(
             return false;
         }
     }
-    if (m_bindGroup.isValid() && m_boundViewCount == textureCount && sameTextureViews(m_boundViews, views, textureCount)) {
+    if (m_bindGroup.isValid() && m_boundViewCount == textureCount &&
+        sameTextureViews(m_boundViews, views, textureCount)) {
         return true;
     }
     destroyRhiBindGroup();

@@ -24,6 +24,22 @@ bool rtgiReblurHitDistanceParametersValid(const RtgiReblurHitDistanceParameters&
            std::isfinite(parameters.roughnessScale) && parameters.roughnessScale >= 1.0f;
 }
 
+std::optional<glm::vec3> rtgiRemovePreExposure(const glm::vec3& radiance, const float preExposure) {
+    if (!validRadiance(radiance) || !std::isfinite(preExposure) || preExposure <= 0.0f) {
+        return std::nullopt;
+    }
+    const glm::vec3 sceneRadiance = radiance / preExposure;
+    return validRadiance(sceneRadiance) ? std::optional(sceneRadiance) : std::nullopt;
+}
+
+std::optional<glm::vec3> rtgiApplyPreExposure(const glm::vec3& radiance, const float preExposure) {
+    if (!validRadiance(radiance) || !std::isfinite(preExposure) || preExposure <= 0.0f) {
+        return std::nullopt;
+    }
+    const glm::vec3 preExposedRadiance = radiance * preExposure;
+    return validRadiance(preExposedRadiance) ? std::optional(preExposedRadiance) : std::nullopt;
+}
+
 std::optional<float> rtgiReblurNormalizedHitDistance(const float hitDistance, const float viewZ,
                                                      const RtgiReblurHitDistanceParameters& parameters,
                                                      const float roughness) {

@@ -16,6 +16,7 @@ layout(push_constant) uniform RtgiSignalPackPushConstants {
     mat4 inverseProjection;
     vec4 renderExtentAndInverse;
     vec4 reblurParametersAndDiffuseRoughness;
+    vec4 preExposureAndInverse;
 } pc;
 
 void rtgiSignalPackWriteZero(ivec2 texel) {
@@ -52,8 +53,10 @@ void main() {
     uvec4 validation = imageLoad(uValidation, texel);
     uint classification = validation.x & RTGI_TRACE_VALIDATION_CLASSIFICATION_MASK;
     vec4 rawSignal = texelFetch(uRawDiffuseRadianceHitDistance, texel, 0);
+    vec3 sceneRadiance = rawSignal.rgb * pc.preExposureAndInverse.y;
     float depth = texelFetch(uDepthTexture, texel, 0).r;
-    bool rawSignalValid = rtgiNrdFinite(rawSignal) && all(greaterThanEqual(rawSignal.rgb, vec3(0.0))) &&
+    bool rawSignalValid = rtgiNrdFinite(rawSignal) && rtgiNrdFinite(sceneRadiance) &&
+                          all(greaterThanEqual(sceneRadiance, vec3(0.0))) &&
                           rawSignal.a >= 0.0 && rtgiNrdFinite(depth) && depth >= 0.0 && depth <= 1.0;
     if (!rawSignalValid) {
         rtgiSignalPackFail(texel, validation);
@@ -82,9 +85,9 @@ void main() {
     float normalizedHitDistance = rtgiReblurFrontEndGetNormalizedHitDistance(
         rawSignal.a, viewZ, pc.reblurParametersAndDiffuseRoughness.xyz,
         pc.reblurParametersAndDiffuseRoughness.w);
-    vec4 relaxSignal = rtgiRelaxFrontEndPackRadianceAndHitDistance(rawSignal.rgb, rawSignal.a);
+    vec4 relaxSignal = rtgiRelaxFrontEndPackRadianceAndHitDistance(sceneRadiance, rawSignal.a);
     vec4 reblurSignal = rtgiReblurFrontEndPackRadianceAndNormalizedHitDistance(
-        rawSignal.rgb, normalizedHitDistance);
+        sceneRadiance, normalizedHitDistance);
     if (!rtgiNrdFinite(normalizedHitDistance) || !rtgiNrdFinite(relaxSignal) || !rtgiNrdFinite(reblurSignal)) {
         rtgiSignalPackFail(texel, validation);
         return;

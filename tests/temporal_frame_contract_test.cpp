@@ -35,6 +35,7 @@ TemporalFrameInput completeFrame() {
                                static_cast<float>(frame.extents.renderExtent.height)};
     frame.frameDeltaMilliseconds = 16.0f;
     frame.preExposure = 1.0f;
+    frame.previousPreExposure = 1.0f;
     frame.cameraNear = 0.1f;
     frame.cameraFar = 500.0f;
     frame.verticalFovRadians = 1.22173048f;
@@ -288,6 +289,13 @@ bool testFrameValidation() {
     frame.motionVectorScale.x = 0.0f;
     if (!requireTrue(validateTemporalFrame(frame) == TemporalFrameValidationError::InvalidMotionVectorScale,
                      "motion-vector scale must match the render extent")) {
+        return false;
+    }
+
+    frame = completeFrame();
+    frame.previousPreExposure = std::numeric_limits<float>::infinity();
+    if (!requireTrue(validateTemporalFrame(frame) == TemporalFrameValidationError::InvalidPreExposure,
+                     "current and previous pre-exposure must remain finite and positive")) {
         return false;
     }
 

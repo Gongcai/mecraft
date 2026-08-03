@@ -183,6 +183,7 @@ layout(std140, binding = MECRAFT_DEFERRED_LIGHTING_PARAMS_BINDING) uniform Defer
 #define uMoonPhaseFlux pFogParams.y
 #define uRtgiIntensity pRtgi.x
 #define uRtgiEncoding int(pRtgi.y)
+#define uRtgiRadianceScale pRtgi.z
 #define uNoiseEnabled (pFlags0.x != 0)
 #define uAerialPerspectiveEnabled pFlags0.y
 #define uVolumetricFogActive pFlags0.z
@@ -243,10 +244,10 @@ vec3 nrdYCoCgToLinear(vec3 color) {
 
 vec3 sampleRtgiDiffuse(vec2 textureUv) {
     if (uRtgiEncoding == 1) {
-        return max(texture(uRtgiDiffuseTex, textureUv).rgb, vec3(0.0));
+        return max(texture(uRtgiDiffuseTex, textureUv).rgb, vec3(0.0)) * uRtgiRadianceScale;
     }
     if (uRtgiEncoding == 2) {
-        return nrdYCoCgToLinear(texture(uRtgiDiffuseTex, textureUv).rgb);
+        return nrdYCoCgToLinear(texture(uRtgiDiffuseTex, textureUv).rgb) * uRtgiRadianceScale;
     }
     return vec3(0.0);
 }

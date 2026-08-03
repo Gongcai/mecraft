@@ -1263,6 +1263,7 @@ RenderScene::buildFrameContext(const IWorldView& worldView, const Camera& camera
     const double visualTime = frameClock.has_value() ? frameClock->shaderTimeSeconds : Time::getRawTime();
     ctx.animationTime = static_cast<float>(std::fmod(gameTime, 16.0));
     ctx.shaderTime = static_cast<float>(std::fmod(visualTime, 8192.0));
+    ctx.preExposure = 1.0f;
 
     if (m_settings.upscale.type == TemporalUpscalerType::Fsr31) {
 #if defined(MECRAFT_ENABLE_FSR31)
@@ -1331,12 +1332,14 @@ RenderScene::buildFrameContext(const IWorldView& worldView, const Camera& camera
         ctx.previousViewProj = m_previousContext.camera.viewProj;
         ctx.previousInvViewProj = m_previousContext.camera.invViewProj;
         ctx.previousJitteredViewProj = m_previousContext.camera.jitteredViewProj;
+        ctx.previousPreExposure = m_previousContext.preExposure;
     } else {
         ctx.prevCamera = ctx.camera;
         ctx.previousJitter = ctx.jitter;
         ctx.previousViewProj = ctx.camera.viewProj;
         ctx.previousInvViewProj = ctx.camera.invViewProj;
         ctx.previousJitteredViewProj = ctx.camera.jitteredViewProj;
+        ctx.previousPreExposure = ctx.preExposure;
     }
 
     // Velocity reprojection matrix: apply the CURRENT frame's jitter to the
@@ -1531,7 +1534,8 @@ void RenderScene::refreshTemporalFrameInput() {
     input.motionVectorScale = {static_cast<float>(m_currentContext.temporalExtents.renderExtent.width),
                                static_cast<float>(m_currentContext.temporalExtents.renderExtent.height)};
     input.frameDeltaMilliseconds = m_currentContext.deltaTime * 1000.0f;
-    input.preExposure = 1.0f;
+    input.preExposure = m_currentContext.preExposure;
+    input.previousPreExposure = m_currentContext.previousPreExposure;
     input.cameraNear = m_currentContext.camera.nearPlane;
     input.cameraFar = m_currentContext.camera.farPlane;
     input.verticalFovRadians = glm::radians(m_currentContext.camera.fovDegrees);

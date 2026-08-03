@@ -96,8 +96,9 @@ RgPassHandle RtgiTracePass::addGraphPass(RenderGraph& graph, const FrameContext&
         !resources.terrainSpecular.isValid() || !resources.grassColormap.isValid() ||
         !resources.foliageColormap.isValid() || !resources.skyCapture.isValid() ||
         !resources.diffuseRadianceHitDistance.isValid() || !resources.validation.isValid() ||
-        !lighting.bindGroupLayout.isValid() || !lighting.bindGroup.isValid() || !lighting.lights.isValid() ||
-        !lighting.worldCells.isValid() || !lighting.worldIndices.isValid() || !lighting.worldHeader.isValid() ||
+        !std::isfinite(ctx.preExposure) || ctx.preExposure <= 0.0f || !lighting.bindGroupLayout.isValid() ||
+        !lighting.bindGroup.isValid() || !lighting.lights.isValid() || !lighting.worldCells.isValid() ||
+        !lighting.worldIndices.isValid() || !lighting.worldHeader.isValid() ||
         !lighting.localShadowMetadata.isValid() || !lighting.localShadowSpotAtlas.isValid() ||
         !lighting.localShadowPointCubeArray.isValid() || !validDirection(ctx.skyColors.sunDirection) ||
         !validDirection(ctx.skyColors.moonDirection) || !validRadiance(ctx.skyIlluminance.sunIlluminance) ||
@@ -232,8 +233,8 @@ bool RtgiTracePass::recordTrace(RhiCommandList& commandList, const FrameContext&
     const glm::mat4& inverseViewProjection =
         settings.useJitteredProjection ? ctx.camera.jitteredInvViewProj : ctx.camera.invViewProj;
     if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr || ctx.shared->globalBindlessSet == nullptr ||
-        !finiteMatrix(inverseViewProjection) || !std::isfinite(ctx.animationTime) ||
-        sceneBuffers.sceneInstanceCount == 0u || !lightingBindGroup.isValid() ||
+        !finiteMatrix(inverseViewProjection) || !std::isfinite(ctx.animationTime) || !std::isfinite(ctx.preExposure) ||
+        ctx.preExposure <= 0.0f || sceneBuffers.sceneInstanceCount == 0u || !lightingBindGroup.isValid() ||
         !ensurePipeline(*ctx.shared->rhiDevice, ctx.shared->globalBindlessSet->layout(), lightingLayout) ||
         !ensureBindGroup(*ctx.shared->rhiDevice, views, sceneBuffers)) {
         return false;
@@ -257,7 +258,7 @@ bool RtgiTracePass::recordTrace(RhiCommandList& commandList, const FrameContext&
     lightingParams.sunRadiance = glm::vec4(ctx.skyIlluminance.sunIlluminance, 0.0f);
     lightingParams.moonRadiance = glm::vec4(ctx.skyIlluminance.moonIlluminance, 0.0f);
     lightingParams.skyAmbientRadiance = glm::vec4(ctx.skyIlluminance.skyIlluminance, 0.0f);
-    lightingParams.traceAndEmissionScales = glm::vec4(settings.maxShadowRayDistance, 1.5f, 1.0f, 0.0f);
+    lightingParams.traceAndEmissionScales = glm::vec4(settings.maxShadowRayDistance, 1.5f, 1.0f, ctx.preExposure);
     lightingParams.flags.x =
         (settings.terrainNormalMapsEnabled ? renderer::contracts::kRtgiSecondaryLightingTerrainNormalMapBit : 0u) |
         (settings.terrainSpecularMapsEnabled ? renderer::contracts::kRtgiSecondaryLightingTerrainSpecularMapBit : 0u);

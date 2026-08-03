@@ -307,8 +307,8 @@ Render Graph Bridge、真实 Vulkan RELAX 调度、生产 Deferred 消费和显�
 完成。逐帧 Non-jittered Matrix 与独立 `RGBA16F` 2.5D Motion 已接入：Guide Prep 从当前/上一帧 Depth
 重建正 View-Z，输出 `previousUv - currentUv` 与 `previousPositiveViewZ - currentPositiveViewZ`，并在
 全局 Temporal Reset 时禁用深度历史。公共 `RG16F` Velocity 不变。固定数值的真实 Vulkan 回读已覆盖
-XY 符号、Z 深度差、正 View-Z 和 Validation；Pre-exposure 与按历史所有者细分的 Reset 仍属于后续
-时域契约工作。
+XY 符号、Z 深度差、正 View-Z 和 Validation；当前/上一帧 Pre-exposure 也已进入共享 FrameContext
+和 TemporalFrameInput。
 
 ## 6. NRD 4.17.3 集成
 
@@ -347,9 +347,12 @@ NRD 4.17.3 的 `previous - current` 约定转换符号，并通过 `motionVector
 三类测试验证重投影方向。
 
 当前生产实现使用当前/上一帧 Non-jittered Inverse Projection 和双帧 Depth 重建正 View-Z，NRD
-`IN_MV` 固定为 `RGBA16F`，`motionVectorScale.z = 1`。全局 Temporal Reset 或 NRD History Clear
-期间不读取上一帧深度，Z Motion 写零；真实 Vulkan Smoke 固定验证当前 View-Z `2`、上一帧 View-Z
-`3` 和 Z Motion `1`。
+`IN_MV` 固定为 `RGBA16F`，`motionVectorScale.z = 1`。RTGI Raw 乘当前 Pre-exposure 写入有限精度
+HDR，Signal Pack 在进入 NRD 前乘其倒数，Deferred Lighting 对 NRD 输出恢复当前 Pre-exposure；NRD
+历史因此始终消费 Scene-referred Radiance。全局 Temporal Reset 或 NRD History Clear 期间不读取上一帧
+深度，Z Motion 写零；真实 Vulkan Smoke 固定验证当前 View-Z `2`、上一帧 View-Z `3`、Z Motion `1`，
+并验证 `Pre-exposure = 4` 的 Raw/NRD 输入转换。当前全局 producer 仍显式使用 `1`，按历史所有者
+细分的 Reset 仍属于后续时域契约工作。
 
 NRD 的 `frameIndex` 每个真实渲染帧严格增加 1，并与 Checkerboard Phase 同步。Material/
 Stable Object ID 由应用生成 History Confidence 与 Disocclusion Threshold Mix；NRD 直接

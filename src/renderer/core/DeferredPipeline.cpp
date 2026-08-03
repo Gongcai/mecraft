@@ -1827,6 +1827,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
     RgTextureHandle rtgiDiffuseTexture = albedo;
     DeferredLightingPass::RtgiDiffuseEncoding rtgiDiffuseEncoding =
         DeferredLightingPass::RtgiDiffuseEncoding::Disabled;
+    float rtgiRadianceScale = 1.0f;
     if (rtgiEnabled) {
         RtgiTracePass::GraphResources rtgiResources;
         rtgiResources.depth = depth;
@@ -1977,6 +1978,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
             rtgiDiffuseEncoding = settings.nrd.method == NrdDiffuseMethod::Reblur
                                       ? DeferredLightingPass::RtgiDiffuseEncoding::ReblurYCoCg
                                       : DeferredLightingPass::RtgiDiffuseEncoding::LinearRgb;
+            rtgiRadianceScale = ctx.preExposure;
         }
 #endif
     }
@@ -2023,9 +2025,10 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
     if (rtgiDiffuseEncoding != DeferredLightingPass::RtgiDiffuseEncoding::Disabled) {
         lighting.readTexture(rtgiDiffuseTexture, RhiResourceState::ShaderRead);
     }
-    lighting.setExecute([&, rtgiDiffuseTexture, rtgiDiffuseEncoding](RgPassContext& pass) {
+    lighting.setExecute([&, rtgiDiffuseTexture, rtgiDiffuseEncoding, rtgiRadianceScale](RgPassContext& pass) {
         return m_lightingPass->execute(pass.commandList(), ctx, settings, targets,
-                                       pass.textureView(rtgiDiffuseTexture), rtgiDiffuseEncoding);
+                                       pass.textureView(rtgiDiffuseTexture), rtgiDiffuseEncoding,
+                                       rtgiRadianceScale);
     });
     if (clusteredLightingActive) {
         lighting.readBuffer(clusteredLightingResources.lights, RhiResourceState::StorageBuffer)

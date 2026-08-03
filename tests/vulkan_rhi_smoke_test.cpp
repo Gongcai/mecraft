@@ -92,6 +92,8 @@ struct RtgiTraceSmokeCase final {
     glm::mat4 inverseViewProjection{1.0f};
     glm::vec3 cameraPosition{0.0f};
     float animationTime = 0.0f;
+    float preExposure = 1.0f;
+    float previousPreExposure = 1.0f;
     float maxRayDistance = 10.0f;
     float maxShadowRayDistance = 16.0f;
     float minimumRayOriginBias = 0.001f;
@@ -4287,6 +4289,8 @@ namespace {
         glm::radians(70.0f), static_cast<float>(smokeCase.width) / static_cast<float>(smokeCase.height), 0.1f, 32.0f);
     frame.camera.nearPlane = 0.1f;
     frame.camera.farPlane = 32.0f;
+    frame.preExposure = smokeCase.preExposure;
+    frame.previousPreExposure = smokeCase.previousPreExposure;
     frame.skyColors.sunDirection = smokeCase.sunDirection;
     frame.skyColors.moonDirection = smokeCase.moonDirection;
     frame.skyColors.sunVisibility = smokeCase.sunVisibility;
@@ -4497,7 +4501,7 @@ namespace {
                                          glm::unpackHalf1x16(radianceResult[pixelIndex * 4u + 1u]),
                                          glm::unpackHalf1x16(radianceResult[pixelIndex * 4u + 2u])};
                 const float hitDistance = glm::unpackHalf1x16(radianceResult[pixelIndex * 4u + 3u]);
-                const glm::vec4 rawSignal(radiance, hitDistance);
+                const std::optional<glm::vec3> sceneRadiance = rtgiRemovePreExposure(radiance, smokeCase.preExposure);
                 const glm::vec4 relaxSignal = unpackSignal(relaxResult, pixelIndex);
                 const glm::vec4 reblurSignal = unpackSignal(reblurResult, pixelIndex);
                 const RtgiTraceSmokeExpectedPixel& expected = smokeCase.expectedPixels[pixelIndex];
@@ -4524,14 +4528,17 @@ namespace {
                         const float viewZ = viewPositionH.z / viewPositionH.w;
                         const std::optional<float> normalizedHitDistance =
                             rtgiReblurNormalizedHitDistance(hitDistance, viewZ, {}, 1.0f);
-                        if (normalizedHitDistance.has_value()) {
+                        if (normalizedHitDistance.has_value() && sceneRadiance.has_value()) {
                             expectedReblur =
-                                rtgiPackReblurRadianceAndNormalizedHitDistance(radiance, *normalizedHitDistance);
+                                rtgiPackReblurRadianceAndNormalizedHitDistance(*sceneRadiance, *normalizedHitDistance);
                         }
                     }
-                    packedSignalsValid = expectedReblur.has_value();
+                    const std::optional<glm::vec4> expectedRelax =
+                        sceneRadiance.has_value() ? rtgiPackRelaxRadianceAndHitDistance(*sceneRadiance, hitDistance)
+                                                  : std::nullopt;
+                    packedSignalsValid = expectedRelax.has_value() && expectedReblur.has_value();
                     for (uint32_t component = 0u; component < 4u && packedSignalsValid; ++component) {
-                        packedSignalsValid = nearHalf(relaxSignal[component], rawSignal[component]) &&
+                        packedSignalsValid = nearHalf(relaxSignal[component], (*expectedRelax)[component]) &&
                                              nearHalf(reblurSignal[component], (*expectedReblur)[component]);
                     }
                 } else {
@@ -4571,7 +4578,9 @@ namespace {
                     packStats.width == smokeCase.width && packStats.height == smokeCase.height &&
                     packStats.reblurHitDistance.constantScale == 3.0f &&
                     packStats.reblurHitDistance.viewZScale == 0.1f &&
-                    packStats.reblurHitDistance.roughnessScale == 20.0f && packStats.diffuseRoughness == 1.0f;
+                    packStats.reblurHitDistance.roughnessScale == 20.0f && packStats.diffuseRoughness == 1.0f &&
+                    packStats.preExposure == smokeCase.preExposure &&
+                    packStats.previousPreExposure == smokeCase.previousPreExposure;
         }
         if (validationResult != nullptr) {
             device.unmapBuffer(validationReadback);
@@ -4643,15 +4652,15 @@ namespace {
             rawSignal[pixel * 4u + component] = glm::packHalf1x16(value[component]);
         }
     };
-    setRawSignal(0u, glm::vec4(1.0f, 2.0f, 3.0f, 2.0f));
-    setRawSignal(1u, glm::vec4(0.25f, 0.5f, 0.75f, kRtgiNrdFp16Max));
+    setRawSignal(0u, glm::vec4(4.0f, 8.0f, 12.0f, 2.0f));
+    setRawSignal(1u, glm::vec4(1.0f, 2.0f, 3.0f, kRtgiNrdFp16Max));
     setRawSignal(2u, glm::vec4(0.0f));
     setRawSignal(3u, glm::vec4(0.0f));
     setRawSignal(4u, glm::vec4(0.0f, 1.0f, 1.0f, 1.0f));
     rawSignal[4u * 4u] = 0x7e00u;
     setRawSignal(5u, glm::vec4(1.0f));
     rawSignal[5u * 4u + 3u] = 0x7c00u;
-    setRawSignal(6u, glm::vec4(1.0f, 2.0f, 3.0f, 2.0f));
+    setRawSignal(6u, glm::vec4(4.0f, 8.0f, 12.0f, 2.0f));
 
     std::vector<float> depth(kPixelCount, 0.25f);
     depth[2u] = 1.0f;
@@ -4753,6 +4762,8 @@ namespace {
     frame.camera.invViewProj[2][2] = 0.0f;
     frame.camera.invViewProj[3][2] = -10.0f;
     frame.camera.jitteredInvViewProj = frame.camera.invViewProj;
+    frame.preExposure = 4.0f;
+    frame.previousPreExposure = 2.0f;
 
     RenderGraph graph;
     RtgiSignalPackPass::GraphResources resources;
@@ -4792,6 +4803,9 @@ namespace {
         RtgiSignalPackPass::GraphResources aliasedResources = resources;
         aliasedResources.reblurDiffuseRadianceHitDistance = aliasedResources.relaxDiffuseRadianceHitDistance;
         valid = !pass.addGraphPass(graph, frame, {}, aliasedResources, inputReady).isValid();
+        FrameContext invalidExposureFrame = frame;
+        invalidExposureFrame.preExposure = 0.0f;
+        valid = valid && !pass.addGraphPass(graph, invalidExposureFrame, {}, resources, inputReady).isValid();
         packHandle = pass.addGraphPass(graph, frame, {}, resources, inputReady);
         valid = valid && resources.rawDiffuseRadianceHitDistance.isValid() && resources.depth.isValid() &&
                 resources.relaxDiffuseRadianceHitDistance.isValid() &&
@@ -4914,7 +4928,8 @@ namespace {
             const RtgiSignalPackPass::Stats& stats = pass.stats();
             valid = valid && stats.dispatched && stats.width == kWidth && stats.height == kHeight &&
                     stats.reblurHitDistance.constantScale == 3.0f && stats.reblurHitDistance.viewZScale == 0.1f &&
-                    stats.reblurHitDistance.roughnessScale == 20.0f && stats.diffuseRoughness == 1.0f;
+                    stats.reblurHitDistance.roughnessScale == 20.0f && stats.diffuseRoughness == 1.0f &&
+                    stats.preExposure == 4.0f && stats.previousPreExposure == 2.0f;
         }
         if (validationResult != nullptr) {
             device.unmapBuffer(validationReadback);
@@ -5025,14 +5040,16 @@ namespace {
     missCase.inverseViewProjection = glm::translate(glm::mat4(1.0f), glm::vec3(10.5f, 0.1f, 2.0f)) *
                                      glm::scale(glm::mat4(1.0f), glm::vec3(0.5f, 1.0f, 1.0f));
     missCase.cameraPosition = {10.5f, 0.1f, 2.0f};
+    missCase.preExposure = 4.0f;
+    missCase.previousPreExposure = 2.0f;
     missCase.maxRayDistance = 4.0f;
     missCase.instanceMask = smokeCase.instanceMask;
     RtgiTraceSmokeExpectedPixel miss;
     miss.classification = RtgiTraceClassification::Miss;
     miss.minimumHitDistance = kRtgiNrdFp16Max;
     miss.maximumHitDistance = kRtgiNrdFp16Max;
-    miss.minimumRadiance = {0.249f, 0.499f, 0.749f};
-    miss.maximumRadiance = {0.251f, 0.501f, 0.751f};
+    miss.minimumRadiance = {0.999f, 1.999f, 2.999f};
+    miss.maximumRadiance = {1.001f, 2.001f, 3.001f};
     missCase.expectedPixels = {miss};
     return validateRtgiTraceCase(device, commandPool, sceneTlas, activeTlas, globalBindlessSet, missCase) &&
            validateRtgiSignalPackInvalidInputs(device, commandPool);

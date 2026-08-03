@@ -284,6 +284,7 @@ struct TemporalFrameInput {
     glm::vec2 motionVectorScale = glm::vec2(0.0f);
     float frameDeltaMilliseconds = 0.0f;
     float preExposure = 1.0f;
+    float previousPreExposure = 1.0f;
     float cameraNear = 0.0f;
     float cameraFar = 0.0f;
     float verticalFovRadians = 0.0f;
@@ -372,7 +373,8 @@ validateTemporalFrame(const TemporalFrameInput& frame) {
     if (!std::isfinite(frame.frameDeltaMilliseconds) || frame.frameDeltaMilliseconds < 0.0f) {
         return TemporalFrameValidationError::InvalidFrameDelta;
     }
-    if (!std::isfinite(frame.preExposure) || frame.preExposure <= 0.0f) {
+    if (!std::isfinite(frame.preExposure) || frame.preExposure <= 0.0f || !std::isfinite(frame.previousPreExposure) ||
+        frame.previousPreExposure <= 0.0f) {
         return TemporalFrameValidationError::InvalidPreExposure;
     }
     if (!std::isfinite(frame.cameraNear) || !std::isfinite(frame.cameraFar) || frame.cameraNear <= 0.0f ||

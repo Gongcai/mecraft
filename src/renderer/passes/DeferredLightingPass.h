@@ -46,10 +46,11 @@ public:
     /// @param targets Persistent GBuffer inputs and scene-lighting output.
     /// @param rtgiDiffuseView Vulkan RTGI diffuse texture, ignored only when encoding is Disabled.
     /// @param rtgiEncoding Exact RTGI signal encoding consumed by the fragment shader.
+    /// @param rtgiRadianceScale Scale restoring NRD scene-referred output to the current pre-exposed domain.
     /// @return True when resources were prepared and lighting commands were recorded.
     [[nodiscard]] bool execute(RhiCommandList& commandList, const FrameContext& ctx, const RenderSettings& settings,
                                DeferredRenderTargets& targets, RhiTextureViewHandle rtgiDiffuseView,
-                               RtgiDiffuseEncoding rtgiEncoding);
+                               RtgiDiffuseEncoding rtgiEncoding, float rtgiRadianceScale);
 
 private:
     bool ensureRhiPipeline(RhiDevice& rhiDevice);

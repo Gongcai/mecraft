@@ -38,7 +38,8 @@ struct alignas(16) RtgiSecondaryLightingParams final {
     glm::vec4 sunRadiance{1.0f, 1.0f, 1.0f, 0.0f};
     glm::vec4 moonRadiance{0.0f};
     glm::vec4 skyAmbientRadiance{0.0f};
-    glm::vec4 traceAndEmissionScales{128.0f, 1.5f, 1.0f, 0.0f};
+    // The fourth component scales scene-referred secondary radiance into the current pre-exposed domain.
+    glm::vec4 traceAndEmissionScales{128.0f, 1.5f, 1.0f, 1.0f};
     glm::uvec4 flags{0u};
 };
 

@@ -39,6 +39,8 @@ public:
         uint32_t height = 0u;
         renderer::contracts::RtgiReblurHitDistanceParameters reblurHitDistance;
         float diffuseRoughness = 0.0f;
+        float preExposure = 1.0f;
+        float previousPreExposure = 1.0f;
     };
 
     void shutdown() override;

@@ -218,6 +218,7 @@ struct ModelSceneDeferredRenderer::Impl {
         context.deltaTime = frameClock.deltaTimeSeconds;
         context.animationTime = static_cast<float>(std::fmod(frameClock.animationTimeSeconds, 16.0));
         context.shaderTime = static_cast<float>(std::fmod(frameClock.shaderTimeSeconds, 8192.0));
+        context.preExposure = 1.0f;
         if (settings.upscale.type == TemporalUpscalerType::Fsr31) {
 #if defined(MECRAFT_ENABLE_FSR31)
             const Fsr31JitterResult jitter = queryFsr31Jitter(context.frameIndex, context.temporalExtents.renderExtent,
@@ -250,12 +251,14 @@ struct ModelSceneDeferredRenderer::Impl {
             context.previousViewProj = previousContext.camera.viewProj;
             context.previousInvViewProj = previousContext.camera.invViewProj;
             context.previousJitteredViewProj = previousContext.camera.jitteredViewProj;
+            context.previousPreExposure = previousContext.preExposure;
         } else {
             context.prevCamera = context.camera;
             context.previousJitter = context.jitter;
             context.previousViewProj = context.camera.viewProj;
             context.previousInvViewProj = context.camera.invViewProj;
             context.previousJitteredViewProj = context.camera.jitteredViewProj;
+            context.previousPreExposure = context.preExposure;
         }
         context.previousViewProjWithCurrentJitter = context.previousViewProj;
         if (usesTemporalProjectionJitter(settings.upscale.type, settings.taa.enabled)) {
@@ -603,7 +606,8 @@ bool ModelSceneDeferredRenderer::render(const glm::mat4& view, const glm::mat4& 
         temporalInput.motionVectorScale = {static_cast<float>(context.temporalExtents.renderExtent.width),
                                            static_cast<float>(context.temporalExtents.renderExtent.height)};
         temporalInput.frameDeltaMilliseconds = frameClock.deltaTimeSeconds * 1000.0f;
-        temporalInput.preExposure = 1.0f;
+        temporalInput.preExposure = context.preExposure;
+        temporalInput.previousPreExposure = context.previousPreExposure;
         temporalInput.cameraNear = nearPlane;
         temporalInput.cameraFar = farPlane;
         temporalInput.verticalFovRadians = glm::radians(verticalFovDegrees);

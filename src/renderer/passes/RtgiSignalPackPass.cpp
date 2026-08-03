@@ -57,9 +57,11 @@ RgPassHandle RtgiSignalPackPass::addGraphPass(RenderGraph& graph, const FrameCon
         ctx.shared->rhiDevice->backend() != RhiBackend::Vulkan || !ctx.temporalExtents.renderExtent.isValid() ||
         !renderer::contracts::rtgiReblurHitDistanceParametersValid(settings.reblurHitDistance) ||
         !std::isfinite(settings.diffuseRoughness) || settings.diffuseRoughness < 0.0f ||
-        settings.diffuseRoughness > 1.0f || !resources.rawDiffuseRadianceHitDistance.isValid() ||
-        !resources.depth.isValid() || !resources.relaxDiffuseRadianceHitDistance.isValid() ||
-        !resources.reblurDiffuseRadianceHitDistance.isValid() || !resources.validation.isValid() ||
+        settings.diffuseRoughness > 1.0f || !std::isfinite(ctx.preExposure) || ctx.preExposure <= 0.0f ||
+        !std::isfinite(ctx.previousPreExposure) || ctx.previousPreExposure <= 0.0f ||
+        !resources.rawDiffuseRadianceHitDistance.isValid() || !resources.depth.isValid() ||
+        !resources.relaxDiffuseRadianceHitDistance.isValid() || !resources.reblurDiffuseRadianceHitDistance.isValid() ||
+        !resources.validation.isValid() ||
         sameHandle(resources.rawDiffuseRadianceHitDistance, resources.relaxDiffuseRadianceHitDistance) ||
         sameHandle(resources.rawDiffuseRadianceHitDistance, resources.reblurDiffuseRadianceHitDistance) ||
         sameHandle(resources.relaxDiffuseRadianceHitDistance, resources.reblurDiffuseRadianceHitDistance)) {
@@ -93,7 +95,8 @@ bool RtgiSignalPackPass::recordPack(RhiCommandList& commandList, const FrameCont
     const glm::mat4 inverseProjection = ctx.camera.view * inverseViewProjection;
     const TemporalExtent extent = ctx.temporalExtents.renderExtent;
     if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr || !finiteMatrix(ctx.camera.view) ||
-        !finiteMatrix(inverseViewProjection) || !finiteMatrix(inverseProjection) ||
+        !finiteMatrix(inverseViewProjection) || !finiteMatrix(inverseProjection) || !std::isfinite(ctx.preExposure) ||
+        ctx.preExposure <= 0.0f || !std::isfinite(ctx.previousPreExposure) || ctx.previousPreExposure <= 0.0f ||
         !ensurePipeline(*ctx.shared->rhiDevice) ||
         !ensureBindGroup(*ctx.shared->rhiDevice, views, extent.width, extent.height)) {
         return false;
@@ -107,6 +110,8 @@ bool RtgiSignalPackPass::recordPack(RhiCommandList& commandList, const FrameCont
     pushConstants.reblurParametersAndDiffuseRoughness =
         glm::vec4(settings.reblurHitDistance.constantScale, settings.reblurHitDistance.viewZScale,
                   settings.reblurHitDistance.roughnessScale, settings.diffuseRoughness);
+    pushConstants.preExposureAndInverse = glm::vec4(ctx.preExposure, 1.0f / ctx.preExposure, ctx.previousPreExposure,
+                                                    ctx.previousPreExposure / ctx.preExposure);
 
     const GpuTimerSegmentToken gpuTimer = ctx.debugService != nullptr
                                               ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::Rtgi)
@@ -124,6 +129,8 @@ bool RtgiSignalPackPass::recordPack(RhiCommandList& commandList, const FrameCont
     m_stats.height = extent.height;
     m_stats.reblurHitDistance = settings.reblurHitDistance;
     m_stats.diffuseRoughness = settings.diffuseRoughness;
+    m_stats.preExposure = ctx.preExposure;
+    m_stats.previousPreExposure = ctx.previousPreExposure;
     return true;
 }
 
