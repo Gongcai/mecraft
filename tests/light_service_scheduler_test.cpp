@@ -350,6 +350,65 @@ void testInteractiveFlushAppliesBlockLightBeforeNextWorldTick() {
     }
 }
 
+void testOpaqueEditClearsSkylightWithoutSecondEdit() {
+    ThreadPool pool(2);
+    pool.start();
+
+    World world;
+    ThreadPoolGuard poolGuard{pool};
+    world.init(20260417);
+    world.setRenderDistance(1);
+    world.setThreadPool(&pool);
+
+    const glm::vec3 playerPos(8.0f, 80.0f, 8.0f);
+    tickWorld(world, playerPos, 10);
+    settleLoadedArea(world, playerPos);
+
+    constexpr int roomMin = 7;
+    constexpr int roomMax = 11;
+    constexpr int floorY = 100;
+    constexpr int roofY = 104;
+    constexpr int sampleX = 9;
+    constexpr int sampleY = 103;
+    constexpr int sampleZ = 9;
+    const BlockID stone = BlockRegistry::requireIdByName("minecraft:stone");
+
+    for (int y = floorY; y <= roofY; ++y) {
+        for (int z = roomMin; z <= roomMax; ++z) {
+            for (int x = roomMin; x <= roomMax; ++x) {
+                const bool shell = x == roomMin || x == roomMax || z == roomMin || z == roomMax || y == floorY ||
+                                   y == roofY;
+                if (shell) {
+                    world.setBlock(x, y, z, stone);
+                }
+            }
+        }
+    }
+    tickWorld(world, playerPos, 20);
+    if (!waitUntil(world, playerPos, 240, [&]() {
+            const LightFrameStats stats = world.getLightFrameStats();
+            return stats.queued == 0 && stats.dirty == 0 && stats.inFlight == 0 && stats.pendingCompleted == 0;
+        })) {
+        fail("sealed room setup should settle before skylight edit");
+    }
+
+    world.setBlock(sampleX, roofY, sampleZ, RUNTIME_ID_NULL);
+    const bool skylit = waitUntil(world, playerPos, 120, [&]() {
+        Chunk* chunk = findChunk(world, 0, 0);
+        return chunk != nullptr && chunk->getSunlight(sampleX, sampleY, sampleZ) > 0;
+    });
+    if (!skylit) {
+        fail("opening the roof should restore skylight inside the room");
+    }
+
+    world.setBlock(sampleX, roofY, sampleZ, stone);
+    world.flushInteractiveLighting(playerPos);
+    Chunk* chunk = findChunk(world, 0, 0);
+    if (chunk == nullptr || chunk->getSunlight(sampleX, sampleY, sampleZ) != 0) {
+        fail("closing the roof should clear skylight before a second block edit");
+    }
+}
+
 void testBoundaryInboxDoesNotDirtyMeshBeforeLightApply() {
     ThreadPool pool(2);
     pool.start();
@@ -414,6 +473,7 @@ int main() {
     testHighFrequencyContinuousBlockChangesRequeueCleanly();
     testInteriorBlockChangeOnlyQueuesOwningChunk();
     testInteractiveFlushAppliesBlockLightBeforeNextWorldTick();
+    testOpaqueEditClearsSkylightWithoutSecondEdit();
     testBoundaryInboxDoesNotDirtyMeshBeforeLightApply();
 
     pass();

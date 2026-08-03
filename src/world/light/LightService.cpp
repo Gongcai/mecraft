@@ -226,6 +226,8 @@ void LightService::onBlockChanged(const int wx, const int wy, const int wz, cons
     if (it != m_world.getActiveChunks().end() && it->second) {
         const int localX = wx - chunkCoords.x * Chunk::SIZE_X;
         const int localZ = wz - chunkCoords.y * Chunk::SIZE_Z;
+        const bool lightSourceChange = BlockRegistry::isLightSourceFast(oldId) ||
+                                       BlockRegistry::isLightSourceFast(newId);
         it->second->recalcHeightMap(localX, localZ);
         it->second->bumpLightRevision();
         updateBaseLightCacheForBlockChange(*it->second, localX, wy, localZ, oldId, newId);
@@ -235,6 +237,42 @@ void LightService::onBlockChanged(const int wx, const int wy, const int wz, cons
             LightChunkState& state = m_chunkStates[key];
             state.pendingBlockChanges.push_back(
                 {static_cast<uint8_t>(localX), static_cast<uint8_t>(wy), static_cast<uint8_t>(localZ), oldId, newId});
+
+            // Boundary batches contain propagated light, not provenance. When a
+            // light source changes, a batch previously received from a neighbor
+            // may have originated from the source being edited and must not be
+            // treated as a persistent source during the removal pass.
+            // Drop those cached inputs and ask neighbors to resend their current
+            // independent boundary state after this chunk has recomputed.
+            if (lightSourceChange) {
+                for (int direction = 0; direction < 4; ++direction) {
+                    if (!state.pendingBoundaryChanged[direction]) {
+                        state.pendingPreviousBoundaryCache[direction] = state.boundaryCache[direction];
+                    }
+                    state.boundaryCache[direction].reset();
+                    state.pendingBoundaryChanged[direction] = true;
+                }
+            }
+        }
+
+        if (lightSourceChange) {
+            // The neighboring chunk may have a stable light result and would
+            // otherwise have no reason to emit the now-invalid boundary again.
+            // Force one outgoing publication in the direction facing us.
+            for (int direction = 0; direction < 4; ++direction) {
+                Chunk* neighbor = it->second->neighbors[direction];
+                if (!neighbor) {
+                    continue;
+                }
+                const int64_t neighborKey = World::chunkKey(neighbor->m_chunkX, neighbor->m_chunkZ);
+                {
+                    std::lock_guard<std::mutex> lock(m_stateMutex);
+                    LightChunkState& neighborState = m_chunkStates[neighborKey];
+                    neighborState.pendingForceOutgoingBoundaryMask |=
+                        directionBit(oppositeDirection(direction));
+                }
+                markChunkDirty(neighborKey, LightDirtyReason::NeighborBoundary);
+            }
         }
     }
     markChunkDirty(key, LightDirtyReason::BlockChanged);
