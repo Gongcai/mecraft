@@ -406,6 +406,7 @@ set(SRC_RENDERER
         # Render passes
         src/renderer/passes/SsaoPass.cpp
         src/renderer/passes/SsgiPass.cpp
+        src/renderer/passes/NrdGuidePrepPass.cpp
         src/renderer/passes/RtgiSignalPackPass.cpp
         src/renderer/passes/RtgiTracePass.cpp
         src/renderer/passes/HiZPass.cpp

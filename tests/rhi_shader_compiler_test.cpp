@@ -322,7 +322,7 @@ void main() {
 } // namespace
 
 int main() {
-    constexpr std::array<ShaderCase, 106> kShaderCases{
+    constexpr std::array<ShaderCase, 108> kShaderCases{
         {{"tests/shaders/rhi_screen_coordinates_test.frag", RhiShaderStage::Fragment},
          {"tests/shaders/material_brdf_shared_test.frag", RhiShaderStage::Fragment},
          {"tests/shaders/reflection_probe_contract_test.frag", RhiShaderStage::Fragment},
@@ -332,6 +332,7 @@ int main() {
           true},
          {"tests/shaders/cutout_ray_query_test.comp", RhiShaderStage::Compute, nullptr, nullptr, nullptr, true},
          {"assets/shaders/rtgi_trace.comp", RhiShaderStage::Compute, nullptr, nullptr, nullptr, true},
+         {"assets/shaders/nrd_guide_prep.comp", RhiShaderStage::Compute, nullptr, nullptr, nullptr, true},
          {"assets/shaders/rtgi_nrd_signal_pack.comp", RhiShaderStage::Compute, nullptr, nullptr, nullptr, true},
          {"assets/shaders/fullscreen_triangle_rhi.vert", RhiShaderStage::Vertex},
          {"assets/shaders/deferred_lighting.vert", RhiShaderStage::Vertex},
@@ -378,6 +379,8 @@ int main() {
          {"assets/shaders/ssao_temporal.frag", RhiShaderStage::Fragment},
          {"assets/shaders/deferred_lighting.frag", RhiShaderStage::Fragment},
          {"assets/shaders/deferred_lighting.frag", RhiShaderStage::Fragment, "MECRAFT_CLUSTERED_LIGHTING"},
+         {"assets/shaders/deferred_lighting.frag", RhiShaderStage::Fragment, "MECRAFT_CLUSTERED_LIGHTING",
+          "MECRAFT_RTGI_DIFFUSE"},
          {"assets/shaders/velocity_resolve.frag", RhiShaderStage::Fragment},
          {"assets/shaders/velocity_transparent_resolve.frag", RhiShaderStage::Fragment},
          {"assets/shaders/temporal_resolve.frag", RhiShaderStage::Fragment},

@@ -234,6 +234,45 @@ bool showSsgiSettings(RenderSettings& settings) {
     return changed;
 }
 
+bool showRtgiSettings(RenderSettings& settings) {
+    bool changed = false;
+    changed |= ImGui::Checkbox("RTGI", &settings.rtgi.enabled);
+    changed |= ImGui::SliderFloat("RTGI Intensity", &settings.rtgi.intensity, 0.0f, 8.0f, "%.2f");
+    changed |= ImGui::SliderFloat("RTGI Max Ray Distance", &settings.rtgi.maxRayDistance, 1.0f, 256.0f, "%.1f");
+    changed |= ImGui::SliderFloat("RTGI Max Shadow Distance", &settings.rtgi.maxShadowRayDistance, 1.0f, 512.0f,
+                                  "%.1f");
+    changed |= ImGui::SliderFloat("RTGI Ray Origin Bias", &settings.rtgi.minimumRayOriginBias, 0.0001f, 0.25f,
+                                  "%.4f");
+
+    if (!settings.rtgi.enabled) {
+        ImGui::BeginDisabled();
+    }
+    changed |= ImGui::Checkbox("NRD Diffuse Denoising", &settings.nrd.enabled);
+    int method = static_cast<int>(settings.nrd.method);
+    static constexpr const char* kNrdMethods[] = {"RELAX", "REBLUR"};
+    if (ImGui::Combo("NRD Diffuse Method", &method, kNrdMethods, IM_ARRAYSIZE(kNrdMethods))) {
+        settings.nrd.method = static_cast<NrdDiffuseMethod>(method);
+        changed = true;
+    }
+    changed |= ImGui::SliderFloat("NRD Denoising Range", &settings.nrd.denoisingRange, 1.0f, 4096.0f, "%.1f");
+    changed |= ImGui::SliderFloat("NRD Disocclusion Threshold", &settings.nrd.disocclusionThreshold, 0.01f, 0.02f,
+                                  "%.3f");
+    changed |= ImGui::SliderFloat("NRD Alternate Threshold", &settings.nrd.disocclusionThresholdAlternate, 0.02f,
+                                  0.3f, "%.3f");
+    if (settings.nrd.method == NrdDiffuseMethod::Reblur) {
+        changed |= ImGui::SliderFloat("NRD REBLUR Hit Distance A", &settings.nrd.reblurHitDistanceConstantScale, 0.1f,
+                                      32.0f, "%.2f");
+        changed |= ImGui::SliderFloat("NRD REBLUR Hit Distance B", &settings.nrd.reblurHitDistanceViewZScale, 0.001f,
+                                      2.0f, "%.3f");
+        changed |= ImGui::SliderFloat("NRD REBLUR Hit Distance C", &settings.nrd.reblurHitDistanceRoughnessScale, 1.0f,
+                                      64.0f, "%.1f");
+    }
+    if (!settings.rtgi.enabled) {
+        ImGui::EndDisabled();
+    }
+    return changed;
+}
+
 bool showPictureAdjustments(RenderSettings& settings) {
     bool changed = false;
     if (settings.postProcess.autoExposureEnabled) {

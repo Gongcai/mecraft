@@ -10,6 +10,9 @@
 #include "../mesh/TerrainRenderCache.h"
 #include "../passes/SsaoPass.h"
 #include "../passes/SsgiPass.h"
+#include "../passes/NrdGuidePrepPass.h"
+#include "../passes/RtgiSignalPackPass.h"
+#include "../passes/RtgiTracePass.h"
 #include "../passes/HiZPass.h"
 #include "../passes/VelocityPass.h"
 #include "../passes/ReflectionPass.h"
@@ -30,6 +33,10 @@
 #include "../passes/ShadowPass.h"
 #include "../passes/WaterCompositePass.h"
 #include "../passes/DebugPass.h"
+
+#if defined(MECRAFT_ENABLE_NRD)
+#include "../nrd/NrdRenderGraphBridge.h"
+#endif
 
 #include <cstdint>
 #include <memory>
@@ -104,6 +111,13 @@ private:
     // Pass instances
     std::unique_ptr<SsaoPass> m_ssaoPass;
     std::unique_ptr<SsgiPass> m_ssgiPass;
+    std::unique_ptr<RtgiTracePass> m_rtgiTracePass;
+    std::unique_ptr<NrdGuidePrepPass> m_nrdGuidePrepPass;
+    std::unique_ptr<RtgiSignalPackPass> m_rtgiSignalPackPass;
+#if defined(MECRAFT_ENABLE_NRD)
+    std::unique_ptr<renderer::nrd::NrdRenderGraphBridge> m_nrdBridge;
+    bool m_nrdClearHistory = true;
+#endif
     std::unique_ptr<VelocityPass> m_velocityPass;
     std::unique_ptr<HiZPass> m_hiZPass;
     std::unique_ptr<ReflectionPass> m_reflectionPass;
@@ -174,6 +188,7 @@ private:
                                                     bool clearSsaoFiltered);
     void commitDeferredHistoryState();
     [[nodiscard]] bool prepareSceneTlas();
+    [[nodiscard]] bool bootstrapSceneTlasForRtgi();
     [[nodiscard]] bool recordTerrainDrawPreparation(RhiCommandList& commandList, const FrameContext& ctx);
     [[nodiscard]] bool configureVoxelReflectionProbe(const FrameContext& ctx);
     [[nodiscard]] bool executeFrameGraph(const FrameContext& ctx, const RenderSettings& settings);

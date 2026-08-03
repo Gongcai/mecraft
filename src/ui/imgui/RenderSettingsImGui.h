@@ -35,6 +35,11 @@ namespace render_settings_imgui {
 /// @return True when the user changed at least one SSGI setting.
 [[nodiscard]] bool showSsgiSettings(RenderSettings& settings);
 
+/// Draws Vulkan RTGI and NRD controls shared by renderer configuration panels.
+/// @param settings Renderer settings updated by the controls.
+/// @return True when the user changed at least one RTGI or NRD setting.
+[[nodiscard]] bool showRtgiSettings(RenderSettings& settings);
+
 /// Draws the common exposure and color adjustment controls.
 /// @param settings Renderer settings updated by the controls.
 /// @return True when the user changed at least one adjustment.

@@ -63,7 +63,7 @@ const char* missingDeviceReason(const RenderFeature feature) {
         return "The device or driver does not provide acceleration structures, ray queries, and buffer device "
                "addresses.";
     case RenderFeature::NrdDenoiser:
-        return "The device or driver does not provide the compute storage images required by NRD.";
+        return "The device or driver does not provide the extended storage-image formats required by NRD.";
     case RenderFeature::BindlessGpuScene:
         return "The device or driver does not provide the required bindless descriptor features.";
     case RenderFeature::GpuDynamicResolution: return "The device or driver does not provide GPU timestamp queries.";
@@ -116,7 +116,8 @@ bool deviceSupportsFeature(const RhiCapabilities& capabilities, const RenderFeat
     case RenderFeature::ReflectionProbeGrid: return capabilities.textureView && capabilities.samplerAnisotropy;
     case RenderFeature::RayTracedGlobalIllumination:
         return capabilities.accelerationStructure && capabilities.rayQuery && capabilities.bufferDeviceAddress;
-    case RenderFeature::NrdDenoiser: return capabilities.storageImage;
+    case RenderFeature::NrdDenoiser:
+        return capabilities.storageImage && capabilities.storageImageExtendedFormats;
     case RenderFeature::BindlessGpuScene:
         return capabilities.accelerationStructure && capabilities.descriptorIndexing &&
                capabilities.descriptorBindingPartiallyBound && capabilities.descriptorBindingVariableDescriptorCount &&
@@ -206,7 +207,8 @@ uint64_t currentImplementedRenderFeatureMask() {
     return featureBit(RenderFeature::DeferredPbr) | featureBit(RenderFeature::CascadedSunShadows) |
            featureBit(RenderFeature::Ssao) | featureBit(RenderFeature::Ssgi) | featureBit(RenderFeature::Ssr) |
            featureBit(RenderFeature::GltfMaterials) | featureBit(RenderFeature::ClusteredLighting) |
-           featureBit(RenderFeature::PbrImageBasedLighting);
+           featureBit(RenderFeature::PbrImageBasedLighting) |
+           featureBit(RenderFeature::RayTracedGlobalIllumination) | featureBit(RenderFeature::NrdDenoiser);
 }
 
 RenderFeatureStatus evaluateRenderFeature(const RenderProfile profile, const RhiBackend backend,

@@ -1515,6 +1515,7 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub& render, Re
         }
         pipelineChanged |= ImGui::Checkbox("SSGI Temporal", &settings.ssgi.temporalEnabled);
         pipelineChanged |= ImGui::Checkbox("SSGI Denoise", &settings.ssgi.denoiseEnabled);
+        pipelineChanged |= render_settings_imgui::showRtgiSettings(settings);
         const bool fsr1Supported = renderScene.isFsr1Supported();
         const bool fsr31Supported = renderScene.isFsr31Supported();
         const bool dlssSupported = renderScene.isDlssSupported();

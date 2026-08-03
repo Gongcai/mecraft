@@ -1,0 +1,68 @@
+#version 450 core
+
+#include "gbuffer_contract.glsl"
+#include "rhi_screen_coordinates.glsl"
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+layout(binding = 0) uniform sampler2D uDepthTexture;
+layout(binding = 1) uniform sampler2D uNormalAoTexture;
+layout(binding = 2) uniform sampler2D uMaterialTexture;
+layout(binding = 3) uniform sampler2D uVelocityTexture;
+layout(binding = 4, rg16f) uniform writeonly image2D uMotion;
+layout(binding = 5, rgb10_a2) uniform writeonly image2D uNormalRoughness;
+layout(binding = 6, r32f) uniform writeonly image2D uViewZ;
+
+layout(push_constant) uniform NrdGuidePrepPushConstants {
+    mat4 inverseViewProjection;
+    mat4 worldToView;
+    vec4 renderExtentAndDenoisingRange;
+} pc;
+
+bool nrdGuideFinite(vec4 value) {
+    return !any(isnan(value)) && !any(isinf(value));
+}
+
+vec3 nrdGuidePackNormalRoughness(vec3 normal, float roughness) {
+    normal /= abs(normal.x) + abs(normal.y) + abs(normal.z);
+
+    vec3 packed;
+    packed.y = normal.y * 0.5 + 0.5;
+    packed.x = normal.x * 0.5 + packed.y;
+    packed.y -= normal.x * 0.5;
+
+    roughness = max(clamp(roughness, 0.0, 1.0), 1.5 / 512.0);
+    float signedRoughness = normal.z < 0.0 ? -roughness : roughness;
+    packed.z = signedRoughness * 0.5 + 0.5;
+    return packed;
+}
+
+void main() {
+    ivec2 texel = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 extent = ivec2(pc.renderExtentAndDenoisingRange.xy);
+    if (texel.x >= extent.x || texel.y >= extent.y) {
+        return;
+    }
+
+    float depth = texelFetch(uDepthTexture, texel, 0).r;
+    vec2 screenUv = (vec2(texel) + 0.5) / vec2(extent);
+    vec2 clipUv = rhiScreenUvToClipUv(screenUv);
+    vec4 worldPosition = pc.inverseViewProjection * vec4(clipUv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
+    float viewZ = pc.renderExtentAndDenoisingRange.w;
+    if (depth < 0.999999 && nrdGuideFinite(worldPosition) && abs(worldPosition.w) > 1.0e-7) {
+        worldPosition /= worldPosition.w;
+        vec4 viewPosition = pc.worldToView * worldPosition;
+        if (nrdGuideFinite(viewPosition)) {
+            viewZ = viewPosition.z;
+        }
+    }
+
+    vec3 normal = unpackGBufferNormal(texelFetch(uNormalAoTexture, texel, 0));
+    SurfaceMaterial material = unpackGBufferMaterial(texelFetch(uMaterialTexture, texel, 0));
+    float roughness = linearMaterialRoughness(material);
+    vec2 motion = -texelFetch(uVelocityTexture, texel, 0).rg;
+
+    imageStore(uMotion, texel, vec4(motion, 0.0, 0.0));
+    imageStore(uNormalRoughness, texel, vec4(nrdGuidePackNormalRoughness(normal, roughness), 0.0));
+    imageStore(uViewZ, texel, vec4(viewZ, 0.0, 0.0, 0.0));
+}

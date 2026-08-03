@@ -63,6 +63,30 @@ struct SsgiSettings {
     int denoiseIterations = 2;
 };
 
+/// Selects the fixed diffuse denoiser used for one NRD instance lifetime.
+enum class NrdDiffuseMethod { Relax = 0, Reblur = 1 };
+
+/// Ray-traced diffuse global illumination controls.
+struct RtgiSettings {
+    bool enabled = false;
+    float intensity = 1.0f;
+    float maxRayDistance = 64.0f;
+    float maxShadowRayDistance = 128.0f;
+    float minimumRayOriginBias = 0.001f;
+};
+
+/// NVIDIA Real-time Denoiser controls for the RTGI diffuse signal.
+struct NrdSettings {
+    bool enabled = false;
+    NrdDiffuseMethod method = NrdDiffuseMethod::Relax;
+    float denoisingRange = 500.0f;
+    float disocclusionThreshold = 0.01f;
+    float disocclusionThresholdAlternate = 0.05f;
+    float reblurHitDistanceConstantScale = 3.0f;
+    float reblurHitDistanceViewZScale = 0.1f;
+    float reblurHitDistanceRoughnessScale = 20.0f;
+};
+
 /// Volumetric fog/light settings
 struct VolumetricSettings {
     bool lightEnabled = true;
@@ -333,6 +357,8 @@ struct RenderSettings {
     ShadowSettings shadow;
     SsaoSettings ssao;
     SsgiSettings ssgi;
+    RtgiSettings rtgi;
+    NrdSettings nrd;
     VolumetricSettings volumetric;
     CloudSettings cloud;
     OcclusionSettings occlusion;

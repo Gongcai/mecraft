@@ -1,5 +1,6 @@
 #include "DeferredPipeline.h"
 #include "RenderScene.h"
+#include "GlobalBindlessSet.h"
 #include "FrameOutput.h"
 #include "IDeferredGeometryProvider.h"
 #include "../debug/RenderDebugService.h"
@@ -9,6 +10,7 @@
 #include "../rhi/RhiCommandList.h"
 #include "../rhi/RhiDevice.h"
 #include "../rhi/RhiResources.h"
+#include "../rhi/SceneTlasCache.h"
 #include "../renderers/GameplaySkyRenderer.h"
 #include "../renderers/StaticMeshRenderer.h"
 #include "../renderers/BlockEntityRenderer.h"
@@ -28,12 +30,57 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <cstring>
 #include <iostream>
 #include <limits>
 
 #include <glm/gtc/matrix_transform.hpp>
 
 namespace {
+[[nodiscard]] bool validRtgiSettings(const RtgiSettings& settings) {
+    return std::isfinite(settings.intensity) && settings.intensity >= 0.0f &&
+           std::isfinite(settings.maxRayDistance) && settings.maxRayDistance > 0.0f &&
+           std::isfinite(settings.maxShadowRayDistance) && settings.maxShadowRayDistance > 0.0f &&
+           std::isfinite(settings.minimumRayOriginBias) && settings.minimumRayOriginBias > 0.0f &&
+           settings.minimumRayOriginBias < settings.maxRayDistance &&
+           settings.minimumRayOriginBias < settings.maxShadowRayDistance;
+}
+
+[[nodiscard]] bool validNrdSettings(const NrdSettings& settings) {
+    const bool methodValid = settings.method == NrdDiffuseMethod::Relax || settings.method == NrdDiffuseMethod::Reblur;
+    return methodValid && std::isfinite(settings.denoisingRange) && settings.denoisingRange > 0.0f &&
+           std::isfinite(settings.disocclusionThreshold) && settings.disocclusionThreshold >= 0.01f &&
+           settings.disocclusionThreshold <= 0.02f && std::isfinite(settings.disocclusionThresholdAlternate) &&
+           settings.disocclusionThresholdAlternate >= 0.02f && settings.disocclusionThresholdAlternate <= 0.2f &&
+           std::isfinite(settings.reblurHitDistanceConstantScale) &&
+           settings.reblurHitDistanceConstantScale > 0.0f &&
+           std::isfinite(settings.reblurHitDistanceViewZScale) && settings.reblurHitDistanceViewZScale > 0.0f &&
+           std::isfinite(settings.reblurHitDistanceRoughnessScale) &&
+           settings.reblurHitDistanceRoughnessScale >= 1.0f;
+}
+
+#if defined(MECRAFT_ENABLE_NRD)
+[[nodiscard]] renderer::nrd::NrdDiffuseMethod nrdBridgeMethod(const NrdDiffuseMethod method) {
+    return method == NrdDiffuseMethod::Relax ? renderer::nrd::NrdDiffuseMethod::Relax
+                                             : renderer::nrd::NrdDiffuseMethod::Reblur;
+}
+
+[[nodiscard]] glm::mat4 nrdViewToClipMatrix(const glm::mat4& projection) {
+    glm::mat4 depthRemap(1.0f);
+    depthRemap[2][2] = 0.5f;
+    depthRemap[3][2] = 0.5f;
+    return depthRemap * projection;
+}
+
+void copyNrdMatrix(const glm::mat4& source, float (&destination)[16]) {
+    std::memcpy(destination, &source[0][0], sizeof(destination));
+}
+
+[[nodiscard]] glm::vec2 nrdCameraJitterUv(const TemporalJitter& jitter) {
+    return glm::vec2(jitter.projectionOffset.x * 0.5f, -jitter.projectionOffset.y * 0.5f);
+}
+#endif
+
 void setClearAttachment(RhiColorAttachment& attachment, const RhiTextureViewHandle view, const float red,
                         const float green, const float blue, const float alpha) {
     attachment.view = view;
@@ -527,6 +574,13 @@ void DeferredPipeline::initializePasses(ResourceMgr& resourceMgr, shadow::Shadow
     m_hiZPass = std::make_unique<HiZPass>();
     m_ssaoPass = std::make_unique<SsaoPass>();
     m_ssgiPass = std::make_unique<SsgiPass>();
+    m_rtgiTracePass = std::make_unique<RtgiTracePass>();
+    m_nrdGuidePrepPass = std::make_unique<NrdGuidePrepPass>();
+    m_rtgiSignalPackPass = std::make_unique<RtgiSignalPackPass>();
+#if defined(MECRAFT_ENABLE_NRD)
+    m_nrdBridge = std::make_unique<renderer::nrd::NrdRenderGraphBridge>();
+    m_nrdClearHistory = true;
+#endif
     m_localShadowPass = std::make_unique<LocalShadowPass>();
     m_clusteredLightingPass = std::make_unique<ClusteredLightingPass>();
     m_lightingPass = std::make_unique<DeferredLightingPass>();
@@ -614,6 +668,16 @@ void DeferredPipeline::shutdown() {
     }
     if (m_debugPass)
         m_debugPass->shutdown();
+#if defined(MECRAFT_ENABLE_NRD)
+    if (m_nrdBridge)
+        m_nrdBridge->shutdown();
+#endif
+    if (m_rtgiSignalPackPass)
+        m_rtgiSignalPackPass->shutdown();
+    if (m_nrdGuidePrepPass)
+        m_nrdGuidePrepPass->shutdown();
+    if (m_rtgiTracePass)
+        m_rtgiTracePass->shutdown();
     if (m_dofPass)
         m_dofPass->shutdown();
     if (m_motionBlurPass)
@@ -659,6 +723,13 @@ void DeferredPipeline::shutdown() {
         m_skyCapturePass->shutdown();
 
     m_debugPass.reset();
+#if defined(MECRAFT_ENABLE_NRD)
+    m_nrdBridge.reset();
+    m_nrdClearHistory = true;
+#endif
+    m_rtgiSignalPackPass.reset();
+    m_nrdGuidePrepPass.reset();
+    m_rtgiTracePass.reset();
     m_dofPass.reset();
     m_motionBlurPass.reset();
     m_taaPass.reset();
@@ -817,11 +888,43 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
     }
     RhiDevice& rhiDevice = *m_shared->rhiDevice;
     DeferredRenderTargets& targets = *m_shared->deferredTargets;
+    const bool rtgiEnabled = settings.rtgi.enabled;
+    const bool nrdEnabled = settings.nrd.enabled;
+    if ((nrdEnabled && !rtgiEnabled) || (rtgiEnabled && !validRtgiSettings(settings.rtgi)) ||
+        (nrdEnabled && !validNrdSettings(settings.nrd))) {
+        MECRAFT_LOG_STREAM(std::cerr << "[DeferredPipeline] RTGI or NRD settings are invalid\n");
+        return false;
+    }
+    if (rtgiEnabled) {
+        const RhiCapabilities& capabilities = rhiDevice.capabilities();
+        if (rhiDevice.backend() != RhiBackend::Vulkan || !capabilities.accelerationStructure ||
+            !capabilities.rayQuery || !capabilities.bufferDeviceAddress || m_shared->globalBindlessSet == nullptr ||
+            !m_shared->globalBindlessSet->initialized() || m_shared->sceneTlasCache == nullptr ||
+            !m_shared->sceneTlasCache->supported() || m_rtgiTracePass == nullptr) {
+            MECRAFT_LOG_STREAM(std::cerr << "[DeferredPipeline] RTGI production requirements are unavailable\n");
+            return false;
+        }
+    }
+    if (nrdEnabled) {
+#if defined(MECRAFT_ENABLE_NRD)
+        if (!rhiDevice.capabilities().storageImageExtendedFormats || m_nrdGuidePrepPass == nullptr ||
+            m_rtgiSignalPackPass == nullptr || m_nrdBridge == nullptr) {
+            MECRAFT_LOG_STREAM(std::cerr << "[DeferredPipeline] NRD production requirements are unavailable\n");
+            return false;
+        }
+#else
+        MECRAFT_LOG_STREAM(std::cerr << "[DeferredPipeline] This build does not include NRD\n");
+        return false;
+#endif
+    }
     const bool externalTransparent = externalGeometry && m_shared->deferredGeometryProvider->hasTransparentGeometry();
     if (!externalGeometry && m_shared->staticMeshRenderer != nullptr) {
         m_shared->staticMeshRenderer->prepareFrame(ctx, *ctx.worldView);
     }
     if (!prepareSceneTlas()) {
+        return false;
+    }
+    if (rtgiEnabled && !bootstrapSceneTlasForRtgi()) {
         return false;
     }
     if (externalGeometry) {
@@ -936,7 +1039,21 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
     bool skyIblGraphPrepared = false;
     bool reflectionProbeCaptureGraphPrepared = false;
     bool reflectionProbeGridGraphPrepared = false;
+    std::vector<RhiTextureViewHandle> graphOwnedTextureViews;
     const auto failGraphSetup = [&]() {
+#if defined(MECRAFT_ENABLE_NRD)
+        if (m_nrdBridge != nullptr && m_nrdBridge->framePending()) {
+            RgExecuteResult failedExecution;
+            failedExecution.error = RgExecuteError::NotCompiled;
+            m_nrdBridge->completeGraphExecution(failedExecution);
+        }
+#endif
+        for (const RhiTextureViewHandle view : graphOwnedTextureViews) {
+            if (view.isValid()) {
+                rhiDevice.destroyTextureView(view);
+            }
+        }
+        graphOwnedTextureViews.clear();
         if (reflectionProbeGridGraphPrepared) {
             m_reflectionProbeGridPass->finishGraphExecution(false);
             reflectionProbeGridGraphPrepared = false;
@@ -1007,6 +1124,45 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
         }
     }
 
+#if defined(MECRAFT_ENABLE_NRD)
+    if (!nrdEnabled && m_nrdBridge->initialized()) {
+        rhiDevice.waitIdle();
+        m_nrdBridge->shutdown();
+        m_nrdClearHistory = true;
+    }
+    if (nrdEnabled) {
+        const TemporalExtent extent = ctx.temporalExtents.renderExtent;
+        if (extent.width > std::numeric_limits<uint16_t>::max() ||
+            extent.height > std::numeric_limits<uint16_t>::max()) {
+            MECRAFT_LOG_STREAM(std::cerr << "[DeferredPipeline] NRD render extent exceeds the SDK contract\n");
+            return failGraphSetup();
+        }
+        const renderer::nrd::NrdDiffuseMethod method = nrdBridgeMethod(settings.nrd.method);
+        const bool rebuildBridge =
+            !m_nrdBridge->initialized() || m_nrdBridge->method() != std::optional(method) ||
+            m_nrdBridge->resourceWidth() != extent.width || m_nrdBridge->resourceHeight() != extent.height ||
+            m_nrdBridge->lastError() == renderer::nrd::NrdBridgeError::ExecutionStateInvalid;
+        if (rebuildBridge) {
+            if (m_nrdBridge->initialized()) {
+                rhiDevice.waitIdle();
+                m_nrdBridge->shutdown();
+            }
+            const renderer::nrd::NrdBridgeError bridgeError =
+                m_nrdBridge->initialize(rhiDevice, method, static_cast<uint16_t>(extent.width),
+                                        static_cast<uint16_t>(extent.height));
+            if (bridgeError != renderer::nrd::NrdBridgeError::None) {
+                const std::optional<std::string_view> stableError =
+                    renderer::nrd::nrdBridgeErrorStableId(bridgeError);
+                MECRAFT_LOG_STREAM(std::cerr << "[DeferredPipeline] NRD bridge initialization failed: "
+                                             << (stableError.has_value() ? *stableError : std::string_view("Invalid"))
+                                             << '\n');
+                return failGraphSetup();
+            }
+            m_nrdClearHistory = true;
+        }
+    }
+#endif
+
     const auto graphBuildStart = std::chrono::steady_clock::now();
     m_renderGraph.reset();
     // Aliasing only takes effect on backends reporting textureAliasing; the
@@ -1019,11 +1175,34 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
     // The composite stages below always write sceneResolved, so every frame
     // graph starts its scene color ping-pong chain at index 0.
     targets.resetSceneColorChain();
-    const auto importTexture = [&](const RhiTextureHandle texture, const RhiTextureViewHandle view,
+    const auto defaultTextureViewType = [](const RhiTextureDimension dimension) {
+        switch (dimension) {
+        case RhiTextureDimension::Texture2D: return RhiTextureViewType::Texture2D;
+        case RhiTextureDimension::Texture2DArray: return RhiTextureViewType::Texture2DArray;
+        case RhiTextureDimension::Texture3D: return RhiTextureViewType::Texture3D;
+        case RhiTextureDimension::Cube: return RhiTextureViewType::Cube;
+        case RhiTextureDimension::CubeArray: return RhiTextureViewType::CubeArray;
+        }
+        return RhiTextureViewType::Texture2D;
+    };
+    const auto importTexture = [&](const RhiTextureHandle texture, RhiTextureViewHandle view,
                                    const RhiResourceState stableState, RgTextureHandle& graphTexture) {
         RhiTextureDesc desc;
         if (!rhiDevice.getTextureDesc(texture, desc))
             return false;
+        if (!view.isValid()) {
+            RhiTextureViewDesc viewDesc;
+            viewDesc.texture = texture;
+            viewDesc.viewType = defaultTextureViewType(desc.dimension);
+            viewDesc.format = desc.format;
+            viewDesc.mipCount = desc.mipLevels;
+            viewDesc.layerCount = desc.depthOrLayers;
+            view = rhiDevice.createTextureView(viewDesc);
+            if (!view.isValid()) {
+                return false;
+            }
+            graphOwnedTextureViews.push_back(view);
+        }
         RgImportedTextureDesc imported;
         imported.name = desc.debugName;
         imported.texture = texture;
@@ -1169,10 +1348,29 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
     RgTextureHandle historyReflectionPrevious;
     RgTextureHandle historyCloudCurrent;
     RgTextureHandle historyCloudPrevious;
+    RgTextureHandle terrainAlbedo;
+    RgTextureHandle terrainNormal;
+    RgTextureHandle terrainSpecular;
+    RgTextureHandle grassColormap;
+    RgTextureHandle foliageColormap;
+    RgTextureHandle rtgiRawDiffuse;
+    RgTextureHandle rtgiValidation;
+    RgTextureHandle rtgiRelaxDiffuse;
+    RgTextureHandle rtgiReblurDiffuse;
+    RgTextureHandle nrdMotion;
+    RgTextureHandle nrdNormalRoughness;
+    RgTextureHandle nrdViewZ;
+    RgTextureHandle nrdOutputDiffuse;
     SkyIblPass::GraphResources skyIblResources;
     const RhiTextureHandle lightmapDayTexture = m_resourceMgr->getLightmapDay();
     const RhiTextureHandle lightmapNightTexture = m_resourceMgr->getLightmapNight();
     const RhiTextureHandle rippleNormalTexture = m_resourceMgr->getTexture2DHandle("shader_ripple_normal");
+
+    const RhiTextureHandle terrainAlbedoTexture = m_resourceMgr->getTextureArray().texture;
+    const RhiTextureHandle terrainNormalTexture = m_resourceMgr->getBlockNormalTextureArray().texture;
+    const RhiTextureHandle terrainSpecularTexture = m_resourceMgr->getBlockSpecularTextureArray().texture;
+    const RhiTextureHandle grassColormapTexture = m_resourceMgr->getGrassColormap();
+    const RhiTextureHandle foliageColormapTexture = m_resourceMgr->getFoliageColormap();
 
     // Frame-scoped scene targets are declared as graph transients: every one
     // is fully rewritten before it is read each frame, so the lifetime-aware
@@ -1211,6 +1409,51 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
         !transparentCompositeDepth.isValid() || !reflection.isValid() || !cloud.isValid() ||
         (externalTransparent && !transmissionSource.isValid())) {
         return failGraphSetup();
+    }
+
+    if (rtgiEnabled) {
+        if (!importTexture(terrainAlbedoTexture, {}, RhiResourceState::ShaderRead, terrainAlbedo) ||
+            !importTexture(terrainNormalTexture, {}, RhiResourceState::ShaderRead, terrainNormal) ||
+            !importTexture(terrainSpecularTexture, {}, RhiResourceState::ShaderRead, terrainSpecular) ||
+            !importTexture(grassColormapTexture, {}, RhiResourceState::ShaderRead, grassColormap) ||
+            !importTexture(foliageColormapTexture, {}, RhiResourceState::ShaderRead, foliageColormap)) {
+            return failGraphSetup();
+        }
+        const auto createRtgiTexture = [&](const char* name, const RhiTextureFormat format,
+                                           const RhiTextureUsageFlags usage, RgTextureHandle& handle) {
+            RhiTextureDesc desc;
+            desc.debugName = name;
+            desc.format = format;
+            desc.width = ctx.temporalExtents.renderExtent.width;
+            desc.height = ctx.temporalExtents.renderExtent.height;
+            desc.depthOrLayers = 1u;
+            desc.mipLevels = 1u;
+            desc.sampleCount = 1u;
+            desc.usage = usage;
+            desc.memoryCategory = RhiMemoryCategory::Nrd;
+            handle = m_renderGraph.createTexture({name, desc, RhiResourceState::ShaderRead});
+            return handle.isValid();
+        };
+        const RhiTextureUsageFlags sampledStorage = rhiFlag(RhiTextureUsage::Sampled) |
+                                                    rhiFlag(RhiTextureUsage::Storage);
+        if (!createRtgiTexture("RTGI.RawDiffuseRadianceHitDistance", RhiTextureFormat::Rgba16Float, sampledStorage,
+                              rtgiRawDiffuse) ||
+            !createRtgiTexture("RTGI.Validation", RhiTextureFormat::Rg32Uint, sampledStorage, rtgiValidation)) {
+            return failGraphSetup();
+        }
+        if (nrdEnabled &&
+            (!createRtgiTexture("RTGI.RelaxDiffuseRadianceHitDistance", RhiTextureFormat::Rgba16Float,
+                                sampledStorage, rtgiRelaxDiffuse) ||
+             !createRtgiTexture("RTGI.ReblurDiffuseRadianceHitDistance", RhiTextureFormat::Rgba16Float,
+                                sampledStorage, rtgiReblurDiffuse) ||
+             !createRtgiTexture("NRD.Motion", RhiTextureFormat::Rg16Float, sampledStorage, nrdMotion) ||
+             !createRtgiTexture("NRD.NormalRoughness", RhiTextureFormat::Rgb10A2Unorm, sampledStorage,
+                                nrdNormalRoughness) ||
+             !createRtgiTexture("NRD.ViewZ", RhiTextureFormat::R32Float, sampledStorage, nrdViewZ) ||
+             !createRtgiTexture("NRD.OutputDiffuseRadianceHitDistance", RhiTextureFormat::Rgba16Float, sampledStorage,
+                                nrdOutputDiffuse))) {
+            return failGraphSetup();
+        }
     }
 
     // Publish the resolved transient handles into DeferredRenderTargets right
@@ -1582,6 +1825,162 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
     }
     reflectionProbeGridGraphPrepared = true;
 
+    RgTextureHandle rtgiDiffuseTexture = albedo;
+    DeferredLightingPass::RtgiDiffuseEncoding rtgiDiffuseEncoding =
+        DeferredLightingPass::RtgiDiffuseEncoding::Disabled;
+    if (rtgiEnabled) {
+        RtgiTracePass::GraphResources rtgiResources;
+        rtgiResources.depth = depth;
+        rtgiResources.normalAo = normalAo;
+        rtgiResources.materialAux = materialAux;
+        rtgiResources.blueNoise = skyNoise;
+        rtgiResources.terrainAlbedo = terrainAlbedo;
+        rtgiResources.terrainNormal = terrainNormal;
+        rtgiResources.terrainSpecular = terrainSpecular;
+        rtgiResources.grassColormap = grassColormap;
+        rtgiResources.foliageColormap = foliageColormap;
+        rtgiResources.skyCapture = skyCapture;
+        rtgiResources.diffuseRadianceHitDistance = rtgiRawDiffuse;
+        rtgiResources.validation = rtgiValidation;
+
+        RtgiTracePass::LightingResources rtgiLighting;
+        rtgiLighting.bindGroupLayout = m_clusteredLightingPass->consumerBindGroupLayout();
+        rtgiLighting.bindGroup = m_clusteredLightingPass->consumerBindGroup();
+        rtgiLighting.lights = clusteredLightingResources.lights;
+        rtgiLighting.worldCells = clusteredLightingResources.worldCells;
+        rtgiLighting.worldIndices = clusteredLightingResources.worldIndices;
+        rtgiLighting.worldHeader = clusteredLightingResources.worldHeader;
+        rtgiLighting.localShadowMetadata = localShadowResources.metadata;
+        rtgiLighting.localShadowSpotAtlas = localShadowResources.spotAtlas;
+        rtgiLighting.localShadowPointCubeArray = localShadowResources.pointCubeArray;
+
+        RtgiTracePass::Settings traceSettings;
+        traceSettings.maxRayDistance = settings.rtgi.maxRayDistance;
+        traceSettings.maxShadowRayDistance = settings.rtgi.maxShadowRayDistance;
+        traceSettings.minimumRayOriginBias = settings.rtgi.minimumRayOriginBias;
+        traceSettings.instanceMask = renderer::rt::sceneTlasMaskBit(renderer::rt::SceneTlasInstanceMask::GiOpaque) |
+                                     renderer::rt::sceneTlasMaskBit(renderer::rt::SceneTlasInstanceMask::GiCutout);
+        traceSettings.shadowInstanceMask =
+            renderer::rt::sceneTlasMaskBit(renderer::rt::SceneTlasInstanceMask::ShadowCaster);
+        traceSettings.useJitteredProjection =
+            usesTemporalProjectionJitter(settings.upscale.type, settings.taa.enabled);
+        traceSettings.terrainNormalMapsEnabled =
+            settings.blockMaterialMaps.enabled && settings.blockMaterialMaps.normalMapsEnabled;
+        traceSettings.terrainSpecularMapsEnabled =
+            settings.blockMaterialMaps.enabled && settings.blockMaterialMaps.specularMapsEnabled;
+        graphTail =
+            m_rtgiTracePass->addGraphPass(m_renderGraph, ctx, traceSettings, rtgiResources, rtgiLighting, graphTail);
+        if (!graphTail.isValid()) {
+            return failGraphSetup();
+        }
+        rtgiDiffuseTexture = rtgiRawDiffuse;
+        rtgiDiffuseEncoding = DeferredLightingPass::RtgiDiffuseEncoding::LinearRgb;
+
+#if defined(MECRAFT_ENABLE_NRD)
+        if (nrdEnabled) {
+            RtgiSignalPackPass::Settings packSettings;
+            packSettings.reblurHitDistance.constantScale = settings.nrd.reblurHitDistanceConstantScale;
+            packSettings.reblurHitDistance.viewZScale = settings.nrd.reblurHitDistanceViewZScale;
+            packSettings.reblurHitDistance.roughnessScale = settings.nrd.reblurHitDistanceRoughnessScale;
+            packSettings.diffuseRoughness = 1.0f;
+            packSettings.useJitteredProjection = traceSettings.useJitteredProjection;
+            RtgiSignalPackPass::GraphResources packResources;
+            packResources.rawDiffuseRadianceHitDistance = rtgiRawDiffuse;
+            packResources.depth = depth;
+            packResources.relaxDiffuseRadianceHitDistance = rtgiRelaxDiffuse;
+            packResources.reblurDiffuseRadianceHitDistance = rtgiReblurDiffuse;
+            packResources.validation = rtgiValidation;
+            graphTail = m_rtgiSignalPackPass->addGraphPass(m_renderGraph, ctx, packSettings, packResources, graphTail);
+            if (!graphTail.isValid()) {
+                return failGraphSetup();
+            }
+
+            NrdGuidePrepPass::Settings guideSettings;
+            guideSettings.denoisingRange = settings.nrd.denoisingRange;
+            guideSettings.useJitteredProjection = traceSettings.useJitteredProjection;
+            NrdGuidePrepPass::GraphResources guideResources;
+            guideResources.depth = depth;
+            guideResources.normalAo = normalAo;
+            guideResources.material = material;
+            guideResources.velocity = velocity;
+            guideResources.motion = nrdMotion;
+            guideResources.normalRoughness = nrdNormalRoughness;
+            guideResources.viewZ = nrdViewZ;
+            graphTail = m_nrdGuidePrepPass->addGraphPass(m_renderGraph, ctx, guideSettings, guideResources, graphTail);
+            if (!graphTail.isValid()) {
+                return failGraphSetup();
+            }
+
+            renderer::nrd::NrdExternalResources externalResources;
+            const RgTextureHandle nrdInputSignal =
+                settings.nrd.method == NrdDiffuseMethod::Relax ? rtgiRelaxDiffuse : rtgiReblurDiffuse;
+            if (!externalResources.bind(::nrd::ResourceType::IN_MV, nrdMotion) ||
+                !externalResources.bind(::nrd::ResourceType::IN_NORMAL_ROUGHNESS, nrdNormalRoughness) ||
+                !externalResources.bind(::nrd::ResourceType::IN_VIEWZ, nrdViewZ) ||
+                !externalResources.bind(::nrd::ResourceType::IN_DIFF_RADIANCE_HITDIST, nrdInputSignal) ||
+                !externalResources.bind(::nrd::ResourceType::OUT_DIFF_RADIANCE_HITDIST, nrdOutputDiffuse)) {
+                return failGraphSetup();
+            }
+
+            ::nrd::CommonSettings commonSettings{};
+            const TemporalExtent extent = ctx.temporalExtents.renderExtent;
+            copyNrdMatrix(nrdViewToClipMatrix(ctx.camera.projection), commonSettings.viewToClipMatrix);
+            copyNrdMatrix(nrdViewToClipMatrix(ctx.prevCamera.projection), commonSettings.viewToClipMatrixPrev);
+            copyNrdMatrix(ctx.camera.view, commonSettings.worldToViewMatrix);
+            copyNrdMatrix(ctx.prevCamera.view, commonSettings.worldToViewMatrixPrev);
+            commonSettings.resourceSize[0] = static_cast<uint16_t>(extent.width);
+            commonSettings.resourceSize[1] = static_cast<uint16_t>(extent.height);
+            commonSettings.resourceSizePrev[0] = static_cast<uint16_t>(extent.width);
+            commonSettings.resourceSizePrev[1] = static_cast<uint16_t>(extent.height);
+            commonSettings.rectSize[0] = static_cast<uint16_t>(extent.width);
+            commonSettings.rectSize[1] = static_cast<uint16_t>(extent.height);
+            commonSettings.rectSizePrev[0] = static_cast<uint16_t>(extent.width);
+            commonSettings.rectSizePrev[1] = static_cast<uint16_t>(extent.height);
+            commonSettings.motionVectorScale[0] = 1.0f;
+            commonSettings.motionVectorScale[1] = 1.0f;
+            commonSettings.motionVectorScale[2] = 0.0f;
+            const glm::vec2 cameraJitter = nrdCameraJitterUv(ctx.jitter);
+            const glm::vec2 previousCameraJitter = nrdCameraJitterUv(ctx.previousJitter);
+            commonSettings.cameraJitter[0] = cameraJitter.x;
+            commonSettings.cameraJitter[1] = cameraJitter.y;
+            commonSettings.cameraJitterPrev[0] = previousCameraJitter.x;
+            commonSettings.cameraJitterPrev[1] = previousCameraJitter.y;
+            commonSettings.viewZScale = 1.0f;
+            commonSettings.timeDeltaBetweenFrames = std::max(ctx.deltaTime * 1000.0f, 0.0f);
+            commonSettings.denoisingRange = settings.nrd.denoisingRange;
+            commonSettings.disocclusionThreshold = settings.nrd.disocclusionThreshold;
+            commonSettings.disocclusionThresholdAlternate = settings.nrd.disocclusionThresholdAlternate;
+            commonSettings.frameIndex = static_cast<uint32_t>(ctx.frameIndex);
+            commonSettings.accumulationMode =
+                m_nrdClearHistory ? ::nrd::AccumulationMode::CLEAR_AND_RESTART
+                                  : temporalReset ? ::nrd::AccumulationMode::RESTART
+                                                  : ::nrd::AccumulationMode::CONTINUE;
+
+            renderer::nrd::NrdDiffuseSettings methodSettings;
+            if (settings.nrd.method == NrdDiffuseMethod::Relax) {
+                methodSettings = ::nrd::RelaxSettings{};
+            } else {
+                ::nrd::ReblurSettings reblurSettings{};
+                reblurSettings.hitDistanceParameters.A = settings.nrd.reblurHitDistanceConstantScale;
+                reblurSettings.hitDistanceParameters.B = settings.nrd.reblurHitDistanceViewZScale;
+                reblurSettings.hitDistanceParameters.C = settings.nrd.reblurHitDistanceRoughnessScale;
+                methodSettings = reblurSettings;
+            }
+            const renderer::nrd::NrdGraphDispatchResult nrdDispatch =
+                m_nrdBridge->addGraphDispatches(m_renderGraph, commonSettings, methodSettings, externalResources,
+                                                graphTail);
+            if (!nrdDispatch.succeeded()) {
+                return failGraphSetup();
+            }
+            graphTail = nrdDispatch.lastPass;
+            rtgiDiffuseTexture = nrdOutputDiffuse;
+            rtgiDiffuseEncoding = settings.nrd.method == NrdDiffuseMethod::Reblur
+                                      ? DeferredLightingPass::RtgiDiffuseEncoding::ReblurYCoCg
+                                      : DeferredLightingPass::RtgiDiffuseEncoding::LinearRgb;
+        }
+#endif
+    }
+
     RenderGraphPassBuilder sceneLightingCopy = m_renderGraph.addPass(
         {"Deferred.SceneLightingCopy", RgPassType::Copy, RhiQueueType::Graphics, /*threadSafeRecord=*/true});
     sceneLightingCopy.dependsOn(graphTail)
@@ -1620,9 +2019,14 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
         .readTexture(shadowResources.color0, RhiResourceState::ShaderRead)
         .readTexture(shadowResources.color1, RhiResourceState::ShaderRead)
         .readTexture(rippleNormal, RhiResourceState::ShaderRead)
-        .readWriteTexture(sceneLighting, RhiResourceState::RenderTarget)
-        .setExecute(
-            [&](RgPassContext& pass) { return m_lightingPass->execute(pass.commandList(), ctx, settings, targets); });
+        .readWriteTexture(sceneLighting, RhiResourceState::RenderTarget);
+    if (rtgiDiffuseEncoding != DeferredLightingPass::RtgiDiffuseEncoding::Disabled) {
+        lighting.readTexture(rtgiDiffuseTexture, RhiResourceState::ShaderRead);
+    }
+    lighting.setExecute([&, rtgiDiffuseTexture, rtgiDiffuseEncoding](RgPassContext& pass) {
+        return m_lightingPass->execute(pass.commandList(), ctx, settings, targets,
+                                       pass.textureView(rtgiDiffuseTexture), rtgiDiffuseEncoding);
+    });
     if (clusteredLightingActive) {
         lighting.readBuffer(clusteredLightingResources.lights, RhiResourceState::StorageBuffer)
             .readBuffer(clusteredLightingResources.records, RhiResourceState::StorageBuffer)
@@ -2348,6 +2752,20 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
     if (m_shared->sceneTlasCache != nullptr) {
         m_shared->sceneTlasCache->finishGraphExecution(executed.succeeded(), executed.completionToken());
     }
+#if defined(MECRAFT_ENABLE_NRD)
+    if (m_nrdBridge != nullptr && m_nrdBridge->framePending()) {
+        m_nrdBridge->completeGraphExecution(executed);
+        if (executed.succeeded()) {
+            m_nrdClearHistory = false;
+        }
+    }
+#endif
+    for (const RhiTextureViewHandle view : graphOwnedTextureViews) {
+        if (view.isValid()) {
+            rhiDevice.destroyTextureView(view);
+        }
+    }
+    graphOwnedTextureViews.clear();
     if (!executed.succeeded() && ctx.debugService != nullptr) {
         ctx.debugService->cancelGpuTimersSince(timerCheckpoint);
     }
@@ -2434,6 +2852,57 @@ RenderGraphFrameStats DeferredPipeline::renderGraphFrameStats() const {
         stats.gpuIdleMs = std::max(0.0, stats.gpuSpanMs - stats.gpuTotalMs);
     }
     return stats;
+}
+
+bool DeferredPipeline::bootstrapSceneTlasForRtgi() {
+    if (m_shared == nullptr || m_shared->rhiDevice == nullptr || m_shared->commandListPool == nullptr ||
+        m_shared->sceneTlasCache == nullptr || m_shared->globalBindlessSet == nullptr) {
+        return false;
+    }
+
+    RhiDevice& rhiDevice = *m_shared->rhiDevice;
+    renderer::rt::SceneTlasCache& cache = *m_shared->sceneTlasCache;
+    std::optional<renderer::rt::SceneTlasView> activeTlas = cache.activeView();
+    if (!activeTlas.has_value()) {
+        RenderGraph bootstrapGraph;
+        RenderGraphPassBuilder tlasBuild =
+            bootstrapGraph.addPass({"RTGI.SceneTLASBootstrap", RgPassType::Graphics, RhiQueueType::Graphics});
+        tlasBuild.setExecute([&](RgPassContext& pass) { return cache.recordFrame(pass.commandList()); });
+        const RgCompileResult compiled = bootstrapGraph.compile();
+        if (!compiled.succeeded()) {
+            MECRAFT_LOG_STREAM(std::cerr << "[DeferredPipeline] RTGI TLAS bootstrap compile failed: "
+                                         << compiled.message << '\n');
+            return false;
+        }
+
+        const RgExecuteResult executed = bootstrapGraph.execute(rhiDevice, *m_shared->commandListPool);
+        cache.finishGraphExecution(executed.succeeded(), executed.completionToken());
+        if (!executed.succeeded() || !executed.completionToken().isValid() ||
+            !rhiDevice.waitForSubmission(executed.completionToken())) {
+            MECRAFT_LOG_STREAM(std::cerr << "[DeferredPipeline] RTGI TLAS bootstrap execution failed: "
+                                         << executed.message << '\n');
+            return false;
+        }
+        cache.beginFrame();
+        if (!cache.healthy()) {
+            MECRAFT_LOG_STREAM(std::cerr << "[DeferredPipeline] " << cache.lastError() << '\n');
+            return false;
+        }
+        activeTlas = cache.activeView();
+    }
+    if (!activeTlas.has_value()) {
+        MECRAFT_LOG_STREAM(std::cerr << "[DeferredPipeline] RTGI requires a completed Active TLAS\n");
+        return false;
+    }
+
+    const renderer::core::GlobalBindlessSetError bindlessError =
+        m_shared->globalBindlessSet->setAccelerationStructure(activeTlas->accelerationStructure);
+    if (bindlessError != renderer::core::GlobalBindlessSetError::None) {
+        MECRAFT_LOG_STREAM(std::cerr << "[DeferredPipeline] RTGI Active TLAS publication failed: "
+                                     << renderer::core::globalBindlessSetErrorStableId(bindlessError) << '\n');
+        return false;
+    }
+    return true;
 }
 
 bool DeferredPipeline::prepareSceneTlas() {

@@ -18,6 +18,7 @@ RhiCapabilities completeCapabilities() {
     capabilities.maxColorAttachments = 8u;
     capabilities.textureView = true;
     capabilities.storageImage = true;
+    capabilities.storageImageExtendedFormats = true;
     capabilities.samplerAnisotropy = true;
     capabilities.descriptorIndexing = true;
     capabilities.descriptorBindingPartiallyBound = true;
@@ -113,6 +114,16 @@ int main() {
                               completeFeatureMask(), RenderFeature::NrdDenoiser);
     if (!requireTrue(missingNrd.code == RenderFeatureStatusCode::BuildFeatureUnavailable,
                      "NRD must report a missing build component separately")) {
+        return 1;
+    }
+
+    RhiCapabilities missingExtendedStorageFormats = capabilities;
+    missingExtendedStorageFormats.storageImageExtendedFormats = false;
+    const RenderFeatureStatus missingNrdStorageFormats =
+        evaluateRenderFeature(RenderProfile::VulkanModern, RhiBackend::Vulkan, missingExtendedStorageFormats,
+                              completeBuild, completeFeatureMask(), RenderFeature::NrdDenoiser);
+    if (!requireTrue(missingNrdStorageFormats.code == RenderFeatureStatusCode::DeviceCapabilityMissing,
+                     "NRD must require extended storage-image formats")) {
         return 1;
     }
 

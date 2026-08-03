@@ -775,6 +775,10 @@ void RenderScene::setSettings(const RenderSettings& settings) {
         std::abs(settings.upscale.fsr1RenderScale - m_settings.upscale.fsr1RenderScale) > 0.0001f) {
         resetReasons = resetReasons | TemporalResetReason::ResourceExtent;
     }
+    if (settings.rtgi.enabled != m_settings.rtgi.enabled || settings.nrd.enabled != m_settings.nrd.enabled ||
+        settings.nrd.method != m_settings.nrd.method) {
+        resetReasons = resetReasons | TemporalResetReason::Method;
+    }
 
     m_settings = settings;
 

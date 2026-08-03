@@ -12,13 +12,15 @@
 #include "../../resource/ResourceMgr.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstddef>
 #include <optional>
 
 #include <glm/glm.hpp>
 
 namespace {
-constexpr size_t kLightingTextureCount = 20u;
+constexpr size_t kBaseLightingTextureCount = 20u;
+constexpr size_t kVulkanLightingTextureCount = 21u;
 
 [[nodiscard]] bool sameTextureHandle(const RhiTextureHandle lhs, const RhiTextureHandle rhs) {
     return lhs.index == rhs.index && lhs.generation == rhs.generation;
@@ -28,9 +30,10 @@ constexpr size_t kLightingTextureCount = 20u;
     return lhs.index == rhs.index && lhs.generation == rhs.generation;
 }
 
-[[nodiscard]] bool sameTextureViews(const std::array<RhiTextureViewHandle, kLightingTextureCount>& lhs,
-                                    const std::array<RhiTextureViewHandle, kLightingTextureCount>& rhs) {
-    for (size_t index = 0u; index < lhs.size(); ++index) {
+[[nodiscard]] bool sameTextureViews(const std::array<RhiTextureViewHandle, kVulkanLightingTextureCount>& lhs,
+                                    const std::array<RhiTextureViewHandle, kVulkanLightingTextureCount>& rhs,
+                                    const uint32_t textureCount) {
+    for (uint32_t index = 0u; index < textureCount; ++index) {
         if (!sameTextureView(lhs[index], rhs[index])) {
             return false;
         }
@@ -76,6 +79,7 @@ struct alignas(16) DeferredLightingParams {
     glm::vec4 cloud1;
     glm::vec4 cloud2;
     glm::vec4 fogParams;
+    glm::vec4 rtgi;
     glm::ivec4 flags0;
     glm::ivec4 flags1;
     glm::ivec4 flags2;
@@ -86,7 +90,7 @@ struct alignas(16) DeferredLightingParams {
     glm::vec4 clusterDepth;
     glm::uvec4 clusterRenderExtent;
 };
-static_assert(sizeof(DeferredLightingParams) == 1328u);
+static_assert(sizeof(DeferredLightingParams) == 1344u);
 } // namespace
 
 void DeferredLightingPass::init(ResourceMgr& resourceMgr) {
@@ -107,13 +111,23 @@ void DeferredLightingPass::shutdown() {
 }
 
 bool DeferredLightingPass::execute(RhiCommandList& commandList, const FrameContext& ctx, const RenderSettings& settings,
-                                   DeferredRenderTargets& targets) {
+                                   DeferredRenderTargets& targets, const RhiTextureViewHandle rtgiDiffuseView,
+                                   const RtgiDiffuseEncoding rtgiEncoding) {
     if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr || m_shadowRenderer == nullptr) {
         return false;
     }
 
     RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
     const bool clusteredLightingActive = rhiDevice.backend() == RhiBackend::Vulkan;
+    const uint32_t lightingTextureCount = clusteredLightingActive ? static_cast<uint32_t>(kVulkanLightingTextureCount)
+                                                                  : static_cast<uint32_t>(kBaseLightingTextureCount);
+    if ((clusteredLightingActive && !rtgiDiffuseView.isValid()) ||
+        (!clusteredLightingActive && rtgiEncoding != RtgiDiffuseEncoding::Disabled) ||
+        (settings.rtgi.enabled && rtgiEncoding == RtgiDiffuseEncoding::Disabled) ||
+        (!settings.rtgi.enabled && rtgiEncoding != RtgiDiffuseEncoding::Disabled) ||
+        !std::isfinite(settings.rtgi.intensity) || settings.rtgi.intensity < 0.0f) {
+        return false;
+    }
     if (clusteredLightingActive &&
         (m_clusteredLightingPass == nullptr || !m_clusteredLightingPass->consumerBindGroupLayout().isValid() ||
          !m_clusteredLightingPass->consumerBindGroup().isValid())) {
@@ -129,7 +143,7 @@ bool DeferredLightingPass::execute(RhiCommandList& commandList, const FrameConte
         return false;
     }
 
-    const std::array<RhiTextureViewHandle, kLightingTextureCount> views = {
+    const std::array<RhiTextureViewHandle, kVulkanLightingTextureCount> views = {
         targets.albedoTextureViewHandle(),
         targets.normalAoTextureViewHandle(),
         targets.voxelLightTextureViewHandle(),
@@ -149,8 +163,9 @@ bool DeferredLightingPass::execute(RhiCommandList& commandList, const FrameConte
         targets.csmShadowColor0ArrayTextureViewHandle(),
         targets.csmShadowColor1ArrayTextureViewHandle(),
         m_rippleNormalTextureView,
-        targets.f0MetallicTextureViewHandle()};
-    if (!ensureRhiBindGroup(rhiDevice, views)) {
+        targets.f0MetallicTextureViewHandle(),
+        rtgiDiffuseView};
+    if (!ensureRhiBindGroup(rhiDevice, views, lightingTextureCount)) {
         return false;
     }
 
@@ -206,6 +221,8 @@ bool DeferredLightingPass::execute(RhiCommandList& commandList, const FrameConte
     params.cloud2 =
         glm::vec4(ctx.cloud.planarDensity, ctx.cloud.planarAltitude, ctx.fog.startDistance, ctx.fog.endDistance);
     params.fogParams = glm::vec4(ctx.fog.density, 0.0f, 0.0f, 0.0f);
+    params.rtgi = glm::vec4(settings.rtgi.enabled ? settings.rtgi.intensity : 0.0f,
+                            static_cast<float>(rtgiEncoding), 0.0f, 0.0f);
     params.flags0 = glm::ivec4(1, settings.postProcess.aerialPerspectiveEnabled ? 1 : 0, volumetricFogActive ? 1 : 0,
                                ctx.volumetric.lightEnabled ? 1 : 0);
     params.flags1 = glm::ivec4(ctx.atmosphere.directWeatherOcclusionOverride, settings.shadow.enabled ? 1 : 0,
@@ -278,6 +295,7 @@ bool DeferredLightingPass::ensureRhiPipeline(RhiDevice& rhiDevice) {
     renderer::rhi::RhiShaderSourceOptions fragmentOptions;
     if (rhiDevice.backend() == RhiBackend::Vulkan) {
         fragmentOptions.preprocessorDefinitions.emplace_back("MECRAFT_CLUSTERED_LIGHTING");
+        fragmentOptions.preprocessorDefinitions.emplace_back("MECRAFT_RTGI_DIFFUSE");
     }
     const std::optional<std::string> fragmentSource =
         renderer::rhi::loadShaderSource("assets/shaders/deferred_lighting.frag", fragmentOptions);
@@ -348,13 +366,16 @@ bool DeferredLightingPass::ensureRhiPipeline(RhiDevice& rhiDevice) {
 
     RhiBindGroupLayoutDesc bindGroupLayoutDesc;
     bindGroupLayoutDesc.debugName = "DeferredLighting.BindGroupLayout";
-    for (uint32_t binding = 0u; binding < kLightingTextureCount; ++binding) {
+    const uint32_t lightingTextureCount = rhiDevice.backend() == RhiBackend::Vulkan
+                                              ? static_cast<uint32_t>(kVulkanLightingTextureCount)
+                                              : static_cast<uint32_t>(kBaseLightingTextureCount);
+    for (uint32_t binding = 0u; binding < lightingTextureCount; ++binding) {
         const RhiShaderStageFlags visibility = binding == 9u
                                                    ? rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment)
                                                    : rhiFlag(RhiShaderStage::Fragment);
         bindGroupLayoutDesc.entries.push_back({binding, RhiBindingType::CombinedTextureSampler, visibility, 1u});
     }
-    bindGroupLayoutDesc.entries.push_back({static_cast<uint32_t>(kLightingTextureCount), RhiBindingType::UniformBuffer,
+    bindGroupLayoutDesc.entries.push_back({lightingTextureCount, RhiBindingType::UniformBuffer,
                                            rhiFlag(RhiShaderStage::Fragment), 1u});
     m_bindGroupLayout = rhiDevice.createBindGroupLayout(bindGroupLayoutDesc);
     if (!m_bindGroupLayout.isValid()) {
@@ -441,27 +462,33 @@ bool DeferredLightingPass::ensureTextureView(RhiDevice& rhiDevice, const RhiText
     return true;
 }
 
-bool DeferredLightingPass::ensureRhiBindGroup(RhiDevice& rhiDevice, const std::array<RhiTextureViewHandle, 20>& views) {
-    for (const RhiTextureViewHandle view : views) {
-        if (!view.isValid()) {
+bool DeferredLightingPass::ensureRhiBindGroup(
+    RhiDevice& rhiDevice, const std::array<RhiTextureViewHandle, kVulkanLightingTextureCount>& views,
+    const uint32_t textureCount) {
+    if (textureCount != kBaseLightingTextureCount && textureCount != kVulkanLightingTextureCount) {
+        return false;
+    }
+    for (uint32_t index = 0u; index < textureCount; ++index) {
+        if (!views[index].isValid()) {
             return false;
         }
     }
-    if (m_bindGroup.isValid() && sameTextureViews(m_boundViews, views)) {
+    if (m_bindGroup.isValid() && m_boundViewCount == textureCount && sameTextureViews(m_boundViews, views, textureCount)) {
         return true;
     }
     destroyRhiBindGroup();
 
-    const RhiSamplerHandle samplers[kLightingTextureCount] = {
+    const RhiSamplerHandle samplers[kVulkanLightingTextureCount] = {
         m_nearestClampSampler,  m_nearestClampSampler,  m_nearestClampSampler,  m_nearestClampSampler,
         m_nearestClampSampler,  m_nearestClampSampler,  m_linearClampSampler,   m_linearClampSampler,
         m_linearClampSampler,   m_linearClampSampler,   m_linearRepeatSampler,  m_linearClampSampler,
         m_compareBorderSampler, m_nearestBorderSampler, m_compareBorderSampler, m_nearestBorderSampler,
-        m_nearestBorderSampler, m_nearestBorderSampler, m_linearRepeatSampler,  m_nearestClampSampler};
+        m_nearestBorderSampler, m_nearestBorderSampler, m_linearRepeatSampler,  m_nearestClampSampler,
+        m_nearestClampSampler};
 
     RhiBindGroupDesc bindGroupDesc;
     bindGroupDesc.layout = m_bindGroupLayout;
-    for (uint32_t binding = 0u; binding < kLightingTextureCount; ++binding) {
+    for (uint32_t binding = 0u; binding < textureCount; ++binding) {
         RhiBindGroupEntry entry;
         entry.binding = binding;
         entry.resource.combinedTextureSampler.textureView = views[binding];
@@ -470,7 +497,7 @@ bool DeferredLightingPass::ensureRhiBindGroup(RhiDevice& rhiDevice, const std::a
     }
 
     RhiBindGroupEntry uniformEntry;
-    uniformEntry.binding = static_cast<uint32_t>(kLightingTextureCount);
+    uniformEntry.binding = textureCount;
     uniformEntry.resource.buffer.buffer = m_uniformBuffer;
     uniformEntry.resource.buffer.offset = 0u;
     uniformEntry.resource.buffer.range = sizeof(DeferredLightingParams);
@@ -481,6 +508,7 @@ bool DeferredLightingPass::ensureRhiBindGroup(RhiDevice& rhiDevice, const std::a
         return false;
     }
     m_boundViews = views;
+    m_boundViewCount = textureCount;
     return true;
 }
 
@@ -490,6 +518,7 @@ void DeferredLightingPass::destroyRhiBindGroup() {
     }
     m_bindGroup = {};
     m_boundViews = {};
+    m_boundViewCount = 0u;
 }
 
 void DeferredLightingPass::destroyExternalTextureViews() {

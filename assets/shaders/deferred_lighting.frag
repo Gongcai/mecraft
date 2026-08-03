@@ -60,7 +60,14 @@ layout(binding = 17) uniform sampler2DArray uCsmShadowColor1;
 layout(binding = 18) uniform sampler2D uRippleNormalTex;
 layout(binding = 19) uniform sampler2D uF0MetallicTex;
 
-layout(std140, binding = 20) uniform DeferredLightingParams {
+#ifdef MECRAFT_RTGI_DIFFUSE
+layout(binding = 20) uniform sampler2D uRtgiDiffuseTex;
+#define MECRAFT_DEFERRED_LIGHTING_PARAMS_BINDING 21
+#else
+#define MECRAFT_DEFERRED_LIGHTING_PARAMS_BINDING 20
+#endif
+
+layout(std140, binding = MECRAFT_DEFERRED_LIGHTING_PARAMS_BINDING) uniform DeferredLightingParams {
     mat4 pViewProj;
     mat4 pInvViewProj;
     mat4 pProjection;
@@ -91,6 +98,7 @@ layout(std140, binding = 20) uniform DeferredLightingParams {
     vec4 pCloud1;
     vec4 pCloud2;
     vec4 pFogParams;
+    vec4 pRtgi;
     ivec4 pFlags0;
     ivec4 pFlags1;
     ivec4 pFlags2;
@@ -173,6 +181,8 @@ layout(std140, binding = 20) uniform DeferredLightingParams {
 #define uFogEnd pCloud2.w
 #define uFogDensity pFogParams.x
 #define uMoonPhaseFlux pFogParams.y
+#define uRtgiIntensity pRtgi.x
+#define uRtgiEncoding int(pRtgi.y)
 #define uNoiseEnabled (pFlags0.x != 0)
 #define uAerialPerspectiveEnabled pFlags0.y
 #define uVolumetricFogActive pFlags0.z
@@ -220,6 +230,27 @@ vec3 desaturateLinear(vec3 color, float amount) {
     float luma = dot(color, vec3(0.2126, 0.7152, 0.0722));
     return mix(color, vec3(luma), clamp(amount, 0.0, 1.0));
 }
+
+#ifdef MECRAFT_RTGI_DIFFUSE
+vec3 nrdYCoCgToLinear(vec3 color) {
+    float t = color.x - color.z;
+    vec3 linearColor;
+    linearColor.y = color.x + color.z;
+    linearColor.x = t + color.y;
+    linearColor.z = t - color.y;
+    return max(linearColor, vec3(0.0));
+}
+
+vec3 sampleRtgiDiffuse(vec2 textureUv) {
+    if (uRtgiEncoding == 1) {
+        return max(texture(uRtgiDiffuseTex, textureUv).rgb, vec3(0.0));
+    }
+    if (uRtgiEncoding == 2) {
+        return nrdYCoCgToLinear(texture(uRtgiDiffuseTex, textureUv).rgb);
+    }
+    return vec3(0.0);
+}
+#endif
 
 // Planckian locus blackbody — DerivativeMain/lib/Head/Common.inc Blackbody().
 // Computes CIE xy chromaticity from temperature, converts to sRGB, normalizes.
@@ -1088,6 +1119,9 @@ void main() {
     dbgDirect = directVisibilityDebug;
     sceneData += shadow * diffuse;
     sceneData += clusteredDiffuse;
+#ifdef MECRAFT_RTGI_DIFFUSE
+    sceneData += sampleRtgiDiffuse(textureUv) * uRtgiIntensity;
+#endif
 
     // Multiply by albedo AFTER all diffuse/ambient/emission accumulation
     // (DerivativeMain deferred5.fsh:353: sceneData *= albedo)

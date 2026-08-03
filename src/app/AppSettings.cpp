@@ -197,6 +197,52 @@ json toJson(const SsgiSettings& s) {
     };
 }
 
+void applyRtgiSettings(const json& j, RtgiSettings& s) {
+    readBool(j, "enabled", s.enabled);
+    readFloat(j, "intensity", s.intensity);
+    readFloat(j, "maxRayDistance", s.maxRayDistance);
+    readFloat(j, "maxShadowRayDistance", s.maxShadowRayDistance);
+    readFloat(j, "minimumRayOriginBias", s.minimumRayOriginBias);
+}
+
+json toJson(const RtgiSettings& s) {
+    return {
+        {"enabled", s.enabled},
+        {"intensity", s.intensity},
+        {"maxRayDistance", s.maxRayDistance},
+        {"maxShadowRayDistance", s.maxShadowRayDistance},
+        {"minimumRayOriginBias", s.minimumRayOriginBias},
+    };
+}
+
+void applyNrdSettings(const json& j, NrdSettings& s) {
+    readBool(j, "enabled", s.enabled);
+    int method = static_cast<int>(s.method);
+    readInt(j, "method", method);
+    if (method >= static_cast<int>(NrdDiffuseMethod::Relax) && method <= static_cast<int>(NrdDiffuseMethod::Reblur)) {
+        s.method = static_cast<NrdDiffuseMethod>(method);
+    }
+    readFloat(j, "denoisingRange", s.denoisingRange);
+    readFloat(j, "disocclusionThreshold", s.disocclusionThreshold);
+    readFloat(j, "disocclusionThresholdAlternate", s.disocclusionThresholdAlternate);
+    readFloat(j, "reblurHitDistanceConstantScale", s.reblurHitDistanceConstantScale);
+    readFloat(j, "reblurHitDistanceViewZScale", s.reblurHitDistanceViewZScale);
+    readFloat(j, "reblurHitDistanceRoughnessScale", s.reblurHitDistanceRoughnessScale);
+}
+
+json toJson(const NrdSettings& s) {
+    return {
+        {"enabled", s.enabled},
+        {"method", static_cast<int>(s.method)},
+        {"denoisingRange", s.denoisingRange},
+        {"disocclusionThreshold", s.disocclusionThreshold},
+        {"disocclusionThresholdAlternate", s.disocclusionThresholdAlternate},
+        {"reblurHitDistanceConstantScale", s.reblurHitDistanceConstantScale},
+        {"reblurHitDistanceViewZScale", s.reblurHitDistanceViewZScale},
+        {"reblurHitDistanceRoughnessScale", s.reblurHitDistanceRoughnessScale},
+    };
+}
+
 void applyVolumetricSettings(const json& j, VolumetricSettings& s) {
     readBool(j, "lightEnabled", s.lightEnabled);
     readBool(j, "uwLightEnabled", s.uwLightEnabled);
@@ -639,6 +685,8 @@ void applyRenderSettings(const json& j, RenderSettings& s) {
     applyObject("shadow", [&s](const json& value) { applyShadowSettings(value, s.shadow); });
     applyObject("ssao", [&s](const json& value) { applySsaoSettings(value, s.ssao); });
     applyObject("ssgi", [&s](const json& value) { applySsgiSettings(value, s.ssgi); });
+    applyObject("rtgi", [&s](const json& value) { applyRtgiSettings(value, s.rtgi); });
+    applyObject("nrd", [&s](const json& value) { applyNrdSettings(value, s.nrd); });
     applyObject("volumetric", [&s](const json& value) { applyVolumetricSettings(value, s.volumetric); });
     applyObject("cloud", [&s](const json& value) { applyCloudSettings(value, s.cloud); });
     applyObject("occlusion", [&s](const json& value) { applyOcclusionSettings(value, s.occlusion); });
@@ -662,6 +710,8 @@ json toJson(const RenderSettings& s) {
         {"shadow", toJson(s.shadow)},
         {"ssao", toJson(s.ssao)},
         {"ssgi", toJson(s.ssgi)},
+        {"rtgi", toJson(s.rtgi)},
+        {"nrd", toJson(s.nrd)},
         {"volumetric", toJson(s.volumetric)},
         {"cloud", toJson(s.cloud)},
         {"occlusion", toJson(s.occlusion)},
@@ -829,6 +879,11 @@ bool deserializeRenderSettings(const nlohmann::json& value, RenderSettings& sett
         !validateEnumValue(upscale, "quality", static_cast<int>(TemporalUpscaleQuality::Native),
                            static_cast<int>(TemporalUpscaleQuality::UltraPerformance), "renderSettings.upscale",
                            error)) {
+        return false;
+    }
+    const auto& nrd = value.at("nrd");
+    if (!validateEnumValue(nrd, "method", static_cast<int>(NrdDiffuseMethod::Relax),
+                           static_cast<int>(NrdDiffuseMethod::Reblur), "renderSettings.nrd", error)) {
         return false;
     }
     const auto& nvidia = value.at("nvidia");

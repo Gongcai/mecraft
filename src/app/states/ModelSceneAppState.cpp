@@ -944,6 +944,11 @@ void ModelSceneAppState::showRenderSettingsPanel() {
         changed |= render_settings_imgui::showSsgiSettings(settings);
         ImGui::PopID();
     }
+    if (ImGui::CollapsingHeader("RTGI / NRD")) {
+        ImGui::PushID("RtgiSettings");
+        changed |= render_settings_imgui::showRtgiSettings(settings);
+        ImGui::PopID();
+    }
     if (ImGui::CollapsingHeader("Post Process / Picture", ImGuiTreeNodeFlags_DefaultOpen)) {
         ImGui::PushID("PostProcessSettings");
         changed |= render_settings_imgui::showPostProcessSettings(settings);

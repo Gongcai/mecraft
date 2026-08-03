@@ -22,6 +22,9 @@ class ShadowRenderer;
 /// Deferred lighting pass: computes full-scene lighting from GBuffer, shadows, SSAO, and atmosphere.
 class DeferredLightingPass : public RenderPass {
 public:
+    /// Identifies the exact RGB encoding stored in the Vulkan RTGI diffuse input.
+    enum class RtgiDiffuseEncoding : uint8_t { Disabled = 0u, LinearRgb = 1u, ReblurYCoCg = 2u };
+
     void init(ResourceMgr& resourceMgr);
     void shutdown() override;
     [[nodiscard]] const char* name() const override { return "DeferredLighting"; }
@@ -41,16 +44,20 @@ public:
     /// @param ctx Current frame camera, weather, atmosphere, and lighting state.
     /// @param settings Current shadow, SSAO, and post-process settings.
     /// @param targets Persistent GBuffer inputs and scene-lighting output.
+    /// @param rtgiDiffuseView Vulkan RTGI diffuse texture, ignored only when encoding is Disabled.
+    /// @param rtgiEncoding Exact RTGI signal encoding consumed by the fragment shader.
     /// @return True when resources were prepared and lighting commands were recorded.
     [[nodiscard]] bool execute(RhiCommandList& commandList, const FrameContext& ctx, const RenderSettings& settings,
-                               DeferredRenderTargets& targets);
+                               DeferredRenderTargets& targets, RhiTextureViewHandle rtgiDiffuseView,
+                               RtgiDiffuseEncoding rtgiEncoding);
 
 private:
     bool ensureRhiPipeline(RhiDevice& rhiDevice);
     bool ensureExternalTextureViews(RhiDevice& rhiDevice);
     bool ensureTextureView(RhiDevice& rhiDevice, RhiTextureHandle texture, RhiTextureFormat format,
                            RhiTextureHandle& viewTexture, RhiTextureViewHandle& textureView);
-    bool ensureRhiBindGroup(RhiDevice& rhiDevice, const std::array<RhiTextureViewHandle, 20>& views);
+    bool ensureRhiBindGroup(RhiDevice& rhiDevice, const std::array<RhiTextureViewHandle, 21>& views,
+                            uint32_t textureCount);
     void destroyRhiBindGroup();
     void destroyExternalTextureViews();
     void destroyRhiResources();
@@ -83,7 +90,8 @@ private:
     RhiShaderHandle m_fragmentShader;
     RhiPipelineHandle m_pipeline;
     RhiBindGroupHandle m_bindGroup;
-    std::array<RhiTextureViewHandle, 20> m_boundViews = {};
+    std::array<RhiTextureViewHandle, 21> m_boundViews = {};
+    uint32_t m_boundViewCount = 0u;
 };
 
 #endif // MECRAFT_DEFERRED_LIGHTING_PASS_H
