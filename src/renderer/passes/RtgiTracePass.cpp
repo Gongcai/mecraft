@@ -1,5 +1,6 @@
 #include "RtgiTracePass.h"
 
+#include "Diagnostics.h"
 #include "renderer/contracts/GpuMaterialContract.h"
 #include "renderer/contracts/GpuSceneContract.h"
 #include "renderer/contracts/RtgiSamplingContract.h"
@@ -13,6 +14,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <iostream>
 #include <optional>
 
 namespace {
@@ -230,14 +232,35 @@ bool RtgiTracePass::recordTrace(RhiCommandList& commandList, const FrameContext&
                                 const TraceViews& views, const TraceSceneBuffers& sceneBuffers,
                                 const RhiBindGroupLayoutHandle lightingLayout,
                                 const RhiBindGroupHandle lightingBindGroup, const uint64_t sceneTlasRevision) {
+    const auto reject = [](const char* reason) {
+        MECRAFT_LOG_STREAM(std::cerr << "[RtgiTracePass] Trace recording rejected: " << reason << '\n');
+        return false;
+    };
     const glm::mat4& inverseViewProjection =
         settings.useJitteredProjection ? ctx.camera.jitteredInvViewProj : ctx.camera.invViewProj;
-    if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr || ctx.shared->globalBindlessSet == nullptr ||
-        !finiteMatrix(inverseViewProjection) || !std::isfinite(ctx.animationTime) || !std::isfinite(ctx.preExposure) ||
-        ctx.preExposure <= 0.0f || sceneBuffers.sceneInstanceCount == 0u || !lightingBindGroup.isValid() ||
-        !ensurePipeline(*ctx.shared->rhiDevice, ctx.shared->globalBindlessSet->layout(), lightingLayout) ||
-        !ensureBindGroup(*ctx.shared->rhiDevice, views, sceneBuffers)) {
-        return false;
+    if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr || ctx.shared->globalBindlessSet == nullptr) {
+        return reject("shared Vulkan renderer state is unavailable");
+    }
+    if (!finiteMatrix(inverseViewProjection)) {
+        return reject("inverse view-projection matrix is non-finite");
+    }
+    if (!std::isfinite(ctx.animationTime)) {
+        return reject("animation time is non-finite");
+    }
+    if (!std::isfinite(ctx.preExposure) || ctx.preExposure <= 0.0f) {
+        return reject("pre-exposure is not positive and finite");
+    }
+    if (sceneBuffers.sceneInstanceCount == 0u) {
+        return reject("active Scene TLAS has no instances");
+    }
+    if (!lightingBindGroup.isValid()) {
+        return reject("clustered lighting bind group is invalid");
+    }
+    if (!ensurePipeline(*ctx.shared->rhiDevice, ctx.shared->globalBindlessSet->layout(), lightingLayout)) {
+        return reject("RTGI pipeline resources could not be created");
+    }
+    if (!ensureBindGroup(*ctx.shared->rhiDevice, views, sceneBuffers)) {
+        return reject("RTGI texture or scene-buffer bind group could not be created");
     }
 
     const TemporalExtent extent = ctx.temporalExtents.renderExtent;
@@ -299,6 +322,10 @@ bool RtgiTracePass::recordTrace(RhiCommandList& commandList, const FrameContext&
 
 bool RtgiTracePass::ensurePipeline(RhiDevice& rhiDevice, const RhiBindGroupLayoutHandle globalBindlessLayout,
                                    const RhiBindGroupLayoutHandle lightingLayout) {
+    const auto reject = [](const char* reason) {
+        MECRAFT_LOG_STREAM(std::cerr << "[RtgiTracePass] Pipeline setup rejected: " << reason << '\n');
+        return false;
+    };
     if (m_rhiDevice != nullptr && m_rhiDevice != &rhiDevice) {
         destroyRhiResources();
     }
@@ -310,7 +337,7 @@ bool RtgiTracePass::ensurePipeline(RhiDevice& rhiDevice, const RhiBindGroupLayou
         destroyRhiResources();
     }
     if (!globalBindlessLayout.isValid() || !lightingLayout.isValid()) {
-        return false;
+        return reject("global bindless or clustered lighting layout is invalid");
     }
     m_rhiDevice = &rhiDevice;
     m_globalBindlessLayout = globalBindlessLayout;
@@ -319,7 +346,7 @@ bool RtgiTracePass::ensurePipeline(RhiDevice& rhiDevice, const RhiBindGroupLayou
     const std::optional<std::string> source = renderer::rhi::loadShaderSource("assets/shaders/rtgi_trace.comp");
     if (!source.has_value()) {
         destroyRhiResources();
-        return false;
+        return reject("RTGI trace shader source is unavailable");
     }
     RhiShaderDesc shaderDesc;
     shaderDesc.debugName = "RTGI.Trace.Compute";
@@ -329,7 +356,7 @@ bool RtgiTracePass::ensurePipeline(RhiDevice& rhiDevice, const RhiBindGroupLayou
     m_shader = rhiDevice.createShader(shaderDesc);
     if (!m_shader.isValid()) {
         destroyRhiResources();
-        return false;
+        return reject("RTGI trace shader compilation failed");
     }
 
     RhiSamplerDesc samplerDesc;
@@ -364,7 +391,7 @@ bool RtgiTracePass::ensurePipeline(RhiDevice& rhiDevice, const RhiBindGroupLayou
     if (!m_sampler.isValid() || !m_terrainSampler.isValid() || !m_linearClampSampler.isValid() ||
         !m_secondaryLightingBuffer.isValid()) {
         destroyRhiResources();
-        return false;
+        return reject("RTGI trace sampler or secondary-lighting buffer creation failed");
     }
 
     RhiBindGroupLayoutDesc traceLayoutDesc;
@@ -390,7 +417,7 @@ bool RtgiTracePass::ensurePipeline(RhiDevice& rhiDevice, const RhiBindGroupLayou
     m_traceBindGroupLayout = rhiDevice.createBindGroupLayout(traceLayoutDesc);
     if (!m_traceBindGroupLayout.isValid()) {
         destroyRhiResources();
-        return false;
+        return reject("RTGI trace bind group layout creation failed");
     }
 
     RhiPipelineLayoutDesc pipelineLayoutDesc;
@@ -403,7 +430,7 @@ bool RtgiTracePass::ensurePipeline(RhiDevice& rhiDevice, const RhiBindGroupLayou
     m_pipelineLayout = rhiDevice.createPipelineLayout(pipelineLayoutDesc);
     if (!m_pipelineLayout.isValid()) {
         destroyRhiResources();
-        return false;
+        return reject("RTGI trace pipeline layout creation failed");
     }
 
     RhiComputePipelineDesc pipelineDesc;
@@ -413,13 +440,17 @@ bool RtgiTracePass::ensurePipeline(RhiDevice& rhiDevice, const RhiBindGroupLayou
     m_pipeline = rhiDevice.createComputePipeline(pipelineDesc);
     if (!m_pipeline.isValid()) {
         destroyRhiResources();
-        return false;
+        return reject("RTGI trace compute pipeline creation failed");
     }
     return true;
 }
 
 bool RtgiTracePass::ensureBindGroup(RhiDevice& rhiDevice, const TraceViews& views,
                                     const TraceSceneBuffers& sceneBuffers) {
+    const auto reject = [](const char* reason) {
+        MECRAFT_LOG_STREAM(std::cerr << "[RtgiTracePass] Bind group setup rejected: " << reason << '\n');
+        return false;
+    };
     const std::array<RhiTextureViewHandle, 12u> boundViews{views.depth,
                                                            views.normalAo,
                                                            views.materialAux,
@@ -434,7 +465,7 @@ bool RtgiTracePass::ensureBindGroup(RhiDevice& rhiDevice, const TraceViews& view
                                                            views.validation};
     for (const RhiTextureViewHandle view : boundViews) {
         if (!view.isValid()) {
-            return false;
+            return reject("one or more RTGI texture views are invalid");
         }
     }
     RhiTextureViewDesc terrainAlbedoDesc;
@@ -450,22 +481,30 @@ bool RtgiTracePass::ensureBindGroup(RhiDevice& rhiDevice, const TraceViews& view
         sceneBuffers.terrainHitDataBytes, sceneBuffers.gpuSceneMaterialBytes, sceneBuffers.gpuSceneGeometryBytes,
         sceneBuffers.gpuSceneInstanceBytes};
     if (std::any_of(boundSceneBuffers.begin(), boundSceneBuffers.end(),
-                    [](const RhiBufferHandle buffer) { return !buffer.isValid(); }) ||
-        std::any_of(boundSceneBufferBytes.begin(), boundSceneBufferBytes.end(),
-                    [](const uint64_t bytes) { return bytes == 0u; }) ||
-        !rhiDevice.getTextureViewDesc(views.terrainAlbedo, terrainAlbedoDesc) ||
+                    [](const RhiBufferHandle buffer) { return !buffer.isValid(); })) {
+        return reject("one or more Scene TLAS buffers are invalid");
+    }
+    if (std::any_of(boundSceneBufferBytes.begin(), boundSceneBufferBytes.end(),
+                    [](const uint64_t bytes) { return bytes == 0u; })) {
+        return reject("one or more Scene TLAS buffer ranges are empty");
+    }
+    if (!rhiDevice.getTextureViewDesc(views.terrainAlbedo, terrainAlbedoDesc) ||
         !rhiDevice.getTextureViewDesc(views.terrainNormal, terrainNormalDesc) ||
         !rhiDevice.getTextureViewDesc(views.terrainSpecular, terrainSpecularDesc) ||
         !rhiDevice.getTextureViewDesc(views.grassColormap, grassColormapDesc) ||
         !rhiDevice.getTextureViewDesc(views.foliageColormap, foliageColormapDesc) ||
-        !rhiDevice.getTextureViewDesc(views.skyCapture, skyCaptureDesc) ||
-        terrainAlbedoDesc.viewType != RhiTextureViewType::Texture2DArray ||
+        !rhiDevice.getTextureViewDesc(views.skyCapture, skyCaptureDesc)) {
+        return reject("one or more RTGI texture view descriptors are unavailable");
+    }
+    if (terrainAlbedoDesc.viewType != RhiTextureViewType::Texture2DArray ||
         terrainNormalDesc.viewType != RhiTextureViewType::Texture2DArray ||
-        terrainSpecularDesc.viewType != RhiTextureViewType::Texture2DArray ||
-        grassColormapDesc.viewType != RhiTextureViewType::Texture2D ||
+        terrainSpecularDesc.viewType != RhiTextureViewType::Texture2DArray) {
+        return reject("terrain material views are not 2D arrays");
+    }
+    if (grassColormapDesc.viewType != RhiTextureViewType::Texture2D ||
         foliageColormapDesc.viewType != RhiTextureViewType::Texture2D ||
         skyCaptureDesc.viewType != RhiTextureViewType::Texture2D) {
-        return false;
+        return reject("colormap or sky capture views are not 2D textures");
     }
     bool unchanged = m_traceBindGroup.isValid();
     for (size_t index = 0u; index < boundViews.size(); ++index) {
@@ -531,7 +570,7 @@ bool RtgiTracePass::ensureBindGroup(RhiDevice& rhiDevice, const TraceViews& view
         m_boundViews = {};
         m_boundSceneBuffers = {};
         m_boundSceneBufferBytes = {};
-        return false;
+        return reject("RHI rejected RTGI bind group creation");
     }
     m_boundViews = boundViews;
     m_boundSceneBuffers = boundSceneBuffers;
