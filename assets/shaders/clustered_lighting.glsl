@@ -44,29 +44,22 @@ bool localShadowCommonMetadataValid(LocalShadowMetadata metadata) {
         metadata.classification.w == LOCAL_SHADOW_CONTRACT_VERSION;
 }
 
-uint localShadowPointFaceIndex(vec3 direction) {
-    vec3 magnitude = abs(direction);
-    if (magnitude.x >= magnitude.y && magnitude.x >= magnitude.z) {
-        return direction.x >= 0.0 ? 0u : 1u;
-    }
-    if (magnitude.y >= magnitude.z) {
-        return direction.y >= 0.0 ? 2u : 3u;
-    }
-    return direction.z >= 0.0 ? 4u : 5u;
-}
-
-bool localShadowProjectedDepth(
+bool localShadowPointProjectedDepth(
     LocalShadowMetadata metadata,
-    uint faceIndex,
-    vec3 cameraRelativePosition,
+    vec3 direction,
+    float receiverDistance,
     out float depth) {
-    vec4 clip = metadata.cameraRelativeViewProjection[faceIndex] *
-        vec4(cameraRelativePosition, 1.0);
-    if (!localShadowFinite(clip) || clip.w <= 0.0) {
+    vec4 nearFar = metadata.nearFarDepthBiasNormalOffset;
+    float faceDepth = receiverDistance * max(max(abs(direction.x), abs(direction.y)), abs(direction.z));
+    if (!localShadowFinite(vec4(direction, receiverDistance)) ||
+        !localShadowFinite(faceDepth) || faceDepth <= 0.0 || nearFar.y <= nearFar.x) {
         return false;
     }
-    float ndcDepth = clip.z / clip.w;
-    depth = ndcDepth * 0.5 + 0.5;
+    // The six 90-degree GLM perspective faces share the same radial depth
+    // mapping. Avoiding a per-tap matrix multiply preserves the rendered
+    // depth value while keeping the point-shadow PCF path arithmetic-only.
+    depth = nearFar.y / (nearFar.y - nearFar.x) -
+        nearFar.y * nearFar.x / ((nearFar.y - nearFar.x) * faceDepth);
     return localShadowFinite(depth);
 }
 
@@ -196,13 +189,9 @@ float sampleLocalPointShadow(
             vec3 sampleDirection = normalize(
                 baseDirection +
                 (tangent * float(x) + bitangent * float(y)) * angularTexel);
-            uint faceIndex = localShadowPointFaceIndex(sampleDirection);
-            vec3 projectedReceiver = light.positionAndRange.xyz +
-                sampleDirection * receiverDistance;
             float referenceDepth;
-            if (!localShadowProjectedDepth(
-                    metadata, faceIndex, projectedReceiver,
-                    referenceDepth)) {
+            if (!localShadowPointProjectedDepth(metadata, sampleDirection,
+                                                receiverDistance, referenceDepth)) {
                 valid = false;
                 return 1.0;
             }

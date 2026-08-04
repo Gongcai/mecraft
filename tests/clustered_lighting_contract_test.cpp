@@ -130,6 +130,33 @@ bool testCoverageAndCapacity() {
                        "a complete off-screen light set must produce valid zero coverage");
 }
 
+bool testPointShadowDepthFormula() {
+    constexpr float nearPlane = 0.05f;
+    constexpr float farPlane = 10.0f;
+    const glm::mat4 projection = glm::perspective(glm::radians(90.0f), 1.0f, nearPlane, farPlane);
+    const glm::vec3 directions[] = {
+        glm::normalize(glm::vec3(1.0f, 0.2f, -0.4f)),
+        glm::normalize(glm::vec3(-0.3f, 0.8f, 1.0f)),
+        glm::normalize(glm::vec3(0.1f, -0.9f, -0.7f)),
+    };
+    const float distances[] = {0.25f, 2.0f, 9.0f};
+    for (const glm::vec3 direction : directions) {
+        for (const float distance : distances) {
+            const float faceDepth = distance * std::max(std::max(std::abs(direction.x), std::abs(direction.y)),
+                                                        std::abs(direction.z));
+            const glm::vec4 clip = projection * glm::vec4(0.0f, 0.0f, -faceDepth, 1.0f);
+            const float matrixDepth = clip.z / clip.w * 0.5f + 0.5f;
+            const float analyticDepth = farPlane / (farPlane - nearPlane) -
+                                        farPlane * nearPlane / ((farPlane - nearPlane) * faceDepth);
+            if (!requireTrue(std::abs(matrixDepth - analyticDepth) <= 1.0e-5f,
+                             "point-shadow analytic depth must match the GLM cube-face projection")) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
 bool testReadbackCompletionContract() {
     std::string pass;
     std::string pipeline;
@@ -330,7 +357,8 @@ bool testSharedLightingConsumers() {
 } // namespace
 
 int main() {
-    if (!testGridAndLogarithmicSlices() || !testCoverageAndCapacity() || !testComputeShaderContracts() ||
+    if (!testGridAndLogarithmicSlices() || !testCoverageAndCapacity() || !testPointShadowDepthFormula() ||
+        !testComputeShaderContracts() ||
         !testReadbackCompletionContract() || !testEmptyLightingSteadyStateContract() ||
         !testSharedLightingConsumers()) {
         return 1;
