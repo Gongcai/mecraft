@@ -59,6 +59,29 @@ namespace {
            settings.reblurHitDistanceRoughnessScale >= 1.0f;
 }
 
+[[nodiscard]] bool cameraTransformChanged(const FrameContext& ctx) {
+    if (requiresTemporalReset(ctx.temporalResetReasons)) {
+        return true;
+    }
+
+    const glm::vec3 positionDelta = ctx.camera.position - ctx.prevCamera.position;
+    if (glm::dot(positionDelta, positionDelta) > 1.0e-8f) {
+        return true;
+    }
+
+    // Compare only rotation. Translation is covered by the position check,
+    // and comparing the full view matrix would make the threshold depend on
+    // the camera's distance from the world origin.
+    float maximumRotationDelta = 0.0f;
+    for (uint32_t column = 0u; column < 3u; ++column) {
+        for (uint32_t row = 0u; row < 3u; ++row) {
+            maximumRotationDelta = std::max(
+                maximumRotationDelta, std::abs(ctx.camera.view[column][row] - ctx.prevCamera.view[column][row]));
+        }
+    }
+    return maximumRotationDelta > 1.0e-5f;
+}
+
 #if defined(MECRAFT_ENABLE_NRD)
 [[nodiscard]] renderer::nrd::NrdDiffuseMethod nrdBridgeMethod(const NrdDiffuseMethod method) {
     return method == NrdDiffuseMethod::Relax ? renderer::nrd::NrdDiffuseMethod::Relax
@@ -757,10 +780,12 @@ void DeferredPipeline::shutdown() {
     m_resourceMgr = nullptr;
     m_shadowRenderer = nullptr;
     m_shared = nullptr;
+    m_rtgiTemporalSampleIndex = 0u;
 }
 
 void DeferredPipeline::invalidateHistory() {
     m_hasPreviousFrameData = false;
+    m_rtgiTemporalSampleIndex = 0u;
 #if defined(MECRAFT_ENABLE_NRD)
     m_nrdClearHistory = true;
 #endif
@@ -939,6 +964,10 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
         m_graphCpuTerrainPrepMs = 0.0;
     }
     const bool temporalReset = requiresTemporalReset(ctx.temporalResetReasons);
+    const bool rtgiCameraMoving = cameraTransformChanged(ctx);
+    if (!nrdEnabled || temporalReset) {
+        m_rtgiTemporalSampleIndex = 0u;
+    }
     const bool ssaoEnabled = settings.ssao.enabled;
     const bool ssaoTemporalEnabled = ssaoEnabled && settings.ssao.temporalEnabled && !temporalReset;
     const bool ssgiEnabled = settings.ssgi.enabled && settings.debug.deferredLightDebugMode <= 0;
@@ -1870,6 +1899,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
         traceSettings.shadowInstanceMask =
             renderer::rt::sceneTlasMaskBit(renderer::rt::SceneTlasInstanceMask::ShadowCaster);
         traceSettings.temporalSamplingEnabled = nrdEnabled;
+        traceSettings.temporalSampleIndex = m_rtgiTemporalSampleIndex;
         traceSettings.useJitteredProjection =
             usesTemporalProjectionJitter(settings.upscale.type, settings.taa.enabled);
         traceSettings.terrainNormalMapsEnabled =
@@ -1972,9 +2002,10 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
 
             renderer::nrd::NrdDiffuseSettings methodSettings;
             if (settings.nrd.method == NrdDiffuseMethod::Relax) {
-                ::nrd::RelaxSettings relaxSettings{};
-                relaxSettings.enableAntiFirefly = true;
-                methodSettings = relaxSettings;
+                // The raw RTGI signal already applies a bounded radiance
+                // clamp. Relax's adaptive anti-firefly pass can toggle sparse
+                // bright samples as motion causes history confidence to vary.
+                methodSettings = ::nrd::RelaxSettings{};
             } else {
                 ::nrd::ReblurSettings reblurSettings{};
                 reblurSettings.hitDistanceParameters.A = settings.nrd.reblurHitDistanceConstantScale;
@@ -2769,6 +2800,9 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
     if (!executed.succeeded()) {
         MECRAFT_LOG_STREAM(std::cerr << "[DeferredPipeline] Render Graph execution failed: " << executed.message
                                      << '\n');
+    }
+    if (executed.succeeded() && nrdEnabled && !rtgiCameraMoving && !temporalReset) {
+        ++m_rtgiTemporalSampleIndex;
     }
     if (m_shared->terrainCache != nullptr) {
         m_shared->terrainCache->finishGraphExecution(executed.succeeded(), executed.completionToken());

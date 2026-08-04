@@ -150,6 +150,9 @@ private:
     bool m_hasPreviousFrameData = false;
     bool m_waterRenderedBeforeTemporal = false;
     bool m_waterRenderedAfterTemporal = false;
+    // Hold RTGI's low-discrepancy phase while the camera is moving so NRD
+    // history rejection does not become a frame-to-frame lighting strobe.
+    uint32_t m_rtgiTemporalSampleIndex = 0u;
     int m_heldBlockLightValue = 0;
     std::vector<renderer::contracts::SceneLight> m_sceneLights;
 

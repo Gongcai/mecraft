@@ -56,6 +56,10 @@ public:
         // Advance the stochastic sequence only when a temporal denoiser will
         // accumulate it. Raw RTGI inspection remains spatially stable.
         bool temporalSamplingEnabled = false;
+        // The temporal owner may hold this phase while the camera is moving
+        // so rejected NRD history does not expose a new one-spp estimate on
+        // every frame.
+        uint32_t temporalSampleIndex = 0u;
         bool terrainNormalMapsEnabled = true;
         bool terrainSpecularMapsEnabled = true;
         float blockLightStrength = 1.0f;
