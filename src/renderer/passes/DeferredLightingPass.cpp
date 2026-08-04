@@ -223,7 +223,7 @@ bool DeferredLightingPass::execute(RhiCommandList& commandList, const FrameConte
         glm::vec4(ctx.cloud.planarDensity, ctx.cloud.planarAltitude, ctx.fog.startDistance, ctx.fog.endDistance);
     params.fogParams = glm::vec4(ctx.fog.density, 0.0f, 0.0f, 0.0f);
     params.rtgi = glm::vec4(settings.rtgi.enabled ? settings.rtgi.intensity : 0.0f, static_cast<float>(rtgiEncoding),
-                            rtgiRadianceScale, 0.0f);
+                            rtgiRadianceScale, ctx.preExposure);
     params.flags0 = glm::ivec4(1, settings.postProcess.aerialPerspectiveEnabled ? 1 : 0, volumetricFogActive ? 1 : 0,
                                ctx.volumetric.lightEnabled ? 1 : 0);
     params.flags1 = glm::ivec4(ctx.atmosphere.directWeatherOcclusionOverride, settings.shadow.enabled ? 1 : 0,

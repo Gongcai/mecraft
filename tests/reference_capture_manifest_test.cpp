@@ -35,81 +35,95 @@ struct ExpectedCapture {
     uintmax_t byteSize;
     const char* fnv1a64;
     const char* sha256;
+    uint32_t renderSettingsVersion = app::validation::kValidationRenderSettingsVersion;
+    const char* cameraId = nullptr;
 };
 
-constexpr std::array<ExpectedCapture, 18u> kExpectedCaptures{
+constexpr std::array<ExpectedCapture, 20u> kExpectedCaptures{
     {{"voxel", "vulkan", "../scenes/m0_voxel_baseline.json", "m0_voxel_baseline",
-      app::validation::kValidationSceneContractVersion1, "ecb85fb88ef6aeef", "93b8b518406d50f9",
-      "m0_voxel_render_settings", "511c4e7a0e2e2de9", "m0_voxel_baseline_vulkan_1280x720.png", 1511309u,
+      app::validation::kValidationSceneContractVersion1, "6c81fda86f69af2d", "93b8b518406d50f9",
+      "m0_voxel_render_settings", "df6a9bdca9fd3c13", "m0_voxel_baseline_vulkan_1280x720.png", 1511309u,
       "f07952a77f7a1b80", "e57d401434e60e967f37543721c0a753dcc02eb1103af05cdc62c2bf283d4467"},
      {"model", "vulkan", "../scenes/m0_model_damaged_helmet.json", "m0_model_damaged_helmet",
-      app::validation::kValidationSceneContractVersion1, "bde98b1cf0faca9a", "6f33df94f7766d10",
-      "m0_model_render_settings", "9a8940b4590c9585", "m0_model_damaged_helmet_vulkan_1280x720.png", 1234823u,
+      app::validation::kValidationSceneContractVersion1, "2d9879327dff178e", "6f33df94f7766d10",
+      "m0_model_render_settings", "d3dc2b31ae5c8cb1", "m0_model_damaged_helmet_vulkan_1280x720.png", 1234823u,
       "0acff06e5a4b407b", "c7c20bb8820f0413dd0e4e418b9bb04d6b47689f1f07de69bf8a2896c7e25e66"},
      {"voxel", "opengl", "../scenes/m0_voxel_baseline.json", "m0_voxel_baseline",
-      app::validation::kValidationSceneContractVersion1, "ecb85fb88ef6aeef", "93b8b518406d50f9",
-      "m0_voxel_render_settings", "511c4e7a0e2e2de9", "m0_voxel_baseline_opengl_1280x720.png", 1559880u,
+      app::validation::kValidationSceneContractVersion1, "6c81fda86f69af2d", "93b8b518406d50f9",
+      "m0_voxel_render_settings", "df6a9bdca9fd3c13", "m0_voxel_baseline_opengl_1280x720.png", 1559880u,
       "c0ab8dfe38860049", "83491e3140815b3471cd5b1a25f576f1c727da1dc9c263dd95649bc4b4315079"},
      {"model", "opengl", "../scenes/m0_model_damaged_helmet.json", "m0_model_damaged_helmet",
-      app::validation::kValidationSceneContractVersion1, "bde98b1cf0faca9a", "6f33df94f7766d10",
-      "m0_model_render_settings", "9a8940b4590c9585", "m0_model_damaged_helmet_opengl_1280x720.png", 1254074u,
+      app::validation::kValidationSceneContractVersion1, "2d9879327dff178e", "6f33df94f7766d10",
+      "m0_model_render_settings", "d3dc2b31ae5c8cb1", "m0_model_damaged_helmet_opengl_1280x720.png", 1254074u,
       "fcd624333380366c", "4fe801feffe55134f413fcc0e512b9fc4b5fc4f61d263250914ae3e754a30278"},
      {"voxel", "vulkan", "../scenes/v02_cave_turn.json", "v02_cave_turn",
-      app::validation::kValidationSceneContractVersion, "4bb4409c20ca21c6", "87e07b85195fdded",
-      "m0_voxel_render_settings", "511c4e7a0e2e2de9", "v02_cave_turn_vulkan_1280x720.png", 1605634u, "bb63c81b1fe7717c",
+      app::validation::kValidationSceneContractVersion, "eaed3c42e49b7ec0", "87e07b85195fdded",
+      "m0_voxel_render_settings", "df6a9bdca9fd3c13", "v02_cave_turn_vulkan_1280x720.png", 1605634u, "bb63c81b1fe7717c",
       "d83fa8c171838803a5c6dad6af65b257f034b6ffd6ee8478cbd937e2032c486d"},
      {"voxel", "opengl", "../scenes/v02_cave_turn.json", "v02_cave_turn",
-      app::validation::kValidationSceneContractVersion, "4bb4409c20ca21c6", "87e07b85195fdded",
-      "m0_voxel_render_settings", "511c4e7a0e2e2de9", "v02_cave_turn_opengl_1280x720.png", 1599216u, "292b8f0614f94eba",
+      app::validation::kValidationSceneContractVersion, "eaed3c42e49b7ec0", "87e07b85195fdded",
+      "m0_voxel_render_settings", "df6a9bdca9fd3c13", "v02_cave_turn_opengl_1280x720.png", 1599216u, "292b8f0614f94eba",
       "cd79cc926df9cdf97ae600804ab80282ee92b2fcd398dbf88c63cad75ed84de5"},
      {"voxel", "vulkan", "../scenes/v07_local_light_village.json", "v07_local_light_village",
-      app::validation::kValidationSceneContractVersion, "5be2746ff4c4b81d", "cc6a83ed668b12b5",
-      "m0_voxel_render_settings", "511c4e7a0e2e2de9", "v07_local_light_village_vulkan_1280x720.png", 1927321u,
+      app::validation::kValidationSceneContractVersion, "d17c6283169ee9a3", "cc6a83ed668b12b5",
+      "m0_voxel_render_settings", "df6a9bdca9fd3c13", "v07_local_light_village_vulkan_1280x720.png", 1927321u,
       "889cf2097fb6fc08", "5989b0b55ebacbd79e8565d93ef32423c901e36ba0c2cb5c923d318f98fcf8b8"},
      {"voxel", "opengl", "../scenes/v07_local_light_village.json", "v07_local_light_village",
-      app::validation::kValidationSceneContractVersion, "5be2746ff4c4b81d", "cc6a83ed668b12b5",
-      "m0_voxel_render_settings", "511c4e7a0e2e2de9", "v07_local_light_village_opengl_1280x720.png", 1910247u,
+      app::validation::kValidationSceneContractVersion, "d17c6283169ee9a3", "cc6a83ed668b12b5",
+      "m0_voxel_render_settings", "df6a9bdca9fd3c13", "v07_local_light_village_opengl_1280x720.png", 1910247u,
       "e9646d908c65f697", "134a8c474b1dc8db84f06b6b196d8ee1f857da8fb1e5ca87420a81e50eeca306"},
      {"model", "vulkan", "../scenes/m07_probe_interior.json", "m07_probe_interior",
-      app::validation::kValidationSceneContractVersion, "e7cfecd188549085", "c17f7838a2a58df0",
-      "m0_model_render_settings", "9a8940b4590c9585", "m07_probe_interior_vulkan_1280x720.png", 1004315u,
+      app::validation::kValidationSceneContractVersion, "794c82551af3b031", "c17f7838a2a58df0",
+      "m0_model_render_settings", "d3dc2b31ae5c8cb1", "m07_probe_interior_vulkan_1280x720.png", 1004315u,
       "c7f23f26f530cdb2", "f8a8a97988b8d751b1e5832b73e15ed1db5799d7535fbcf02b909e5d94858f42"},
      {"model", "opengl", "../scenes/m07_probe_interior.json", "m07_probe_interior",
-      app::validation::kValidationSceneContractVersion, "e7cfecd188549085", "c17f7838a2a58df0",
-      "m0_model_render_settings", "9a8940b4590c9585", "m07_probe_interior_opengl_1280x720.png", 827902u,
+      app::validation::kValidationSceneContractVersion, "794c82551af3b031", "c17f7838a2a58df0",
+      "m0_model_render_settings", "d3dc2b31ae5c8cb1", "m07_probe_interior_opengl_1280x720.png", 827902u,
       "c7608d3044394b57", "c48ec38200458ccccd3ac1eba27240e3ab4d93941405dc144858ba6ecae4c97e"},
      {"voxel", "vulkan", "../scenes/v01_window_room.json", "v01_window_room",
-      app::validation::kValidationSceneContractVersion, "4f8717cfe9b48270", "926b9e7d3f02af9b",
-      "m0_voxel_render_settings", "511c4e7a0e2e2de9", "v01_window_room_vulkan_1280x720.png", 1195689u,
+      app::validation::kValidationSceneContractVersion, "cabff68652ab41a6", "926b9e7d3f02af9b",
+      "m0_voxel_render_settings", "df6a9bdca9fd3c13", "v01_window_room_vulkan_1280x720.png", 1195689u,
       "1b1adfdece4b0eea", "c831311d0871c8b965abb5f4926711dc6425c083cece6cde4ac48ee52033bbd1"},
      {"voxel", "opengl", "../scenes/v01_window_room.json", "v01_window_room",
-      app::validation::kValidationSceneContractVersion, "4f8717cfe9b48270", "926b9e7d3f02af9b",
-      "m0_voxel_render_settings", "511c4e7a0e2e2de9", "v01_window_room_opengl_1280x720.png", 1276106u,
+      app::validation::kValidationSceneContractVersion, "cabff68652ab41a6", "926b9e7d3f02af9b",
+      "m0_voxel_render_settings", "df6a9bdca9fd3c13", "v01_window_room_opengl_1280x720.png", 1276106u,
       "94f5235554296eb6", "49125a03106f72fa4030527eedb7b73c496127f2b06ed6f244929bee17a7ea91"},
      {"model", "vulkan", "../scenes/m01_material_grid.json", "m01_material_grid",
-      app::validation::kValidationSceneContractVersion, "2eb15aeceefd92a4", "39d7d82f9711135e",
-      "m0_model_render_settings", "9a8940b4590c9585", "m01_material_grid_vulkan_1280x720.png", 1234187u,
+      app::validation::kValidationSceneContractVersion, "0d41ec590cc1c430", "39d7d82f9711135e",
+      "m0_model_render_settings", "d3dc2b31ae5c8cb1", "m01_material_grid_vulkan_1280x720.png", 1234187u,
       "01c08d699686d08e", "e3d5df1041d96cb6b1072e7d34b57b54647da243157441c2eac31caddfed25d1"},
      {"model", "opengl", "../scenes/m01_material_grid.json", "m01_material_grid",
-      app::validation::kValidationSceneContractVersion, "2eb15aeceefd92a4", "39d7d82f9711135e",
-      "m0_model_render_settings", "9a8940b4590c9585", "m01_material_grid_opengl_1280x720.png", 1251175u,
+      app::validation::kValidationSceneContractVersion, "0d41ec590cc1c430", "39d7d82f9711135e",
+      "m0_model_render_settings", "d3dc2b31ae5c8cb1", "m01_material_grid_opengl_1280x720.png", 1251175u,
       "e169ca32efd110d5", "15212af0c0a59bbad3c2e6c8aa0f4d20e028ccc3cf2271c6332a70a86c0635a6"},
      {"model", "vulkan", "../scenes/m02_damaged_helmet.json", "m02_damaged_helmet",
-      app::validation::kValidationSceneContractVersion, "a930eac94f635702", "1c0a7939ab2fcdf6",
-      "m0_model_render_settings", "9a8940b4590c9585", "m02_damaged_helmet_vulkan_1280x720.png", 1455565u,
+      app::validation::kValidationSceneContractVersion, "5f59b4e7ee3cefd6", "1c0a7939ab2fcdf6",
+      "m0_model_render_settings", "d3dc2b31ae5c8cb1", "m02_damaged_helmet_vulkan_1280x720.png", 1455565u,
       "a28244b3a09e2e5f", "5412c95876e47e599bbe0c6304a1c1b46f9a83a7facad0ecea30492c562a8182"},
      {"model", "opengl", "../scenes/m02_damaged_helmet.json", "m02_damaged_helmet",
-      app::validation::kValidationSceneContractVersion, "a930eac94f635702", "1c0a7939ab2fcdf6",
-      "m0_model_render_settings", "9a8940b4590c9585", "m02_damaged_helmet_opengl_1280x720.png", 1490078u,
+      app::validation::kValidationSceneContractVersion, "5f59b4e7ee3cefd6", "1c0a7939ab2fcdf6",
+      "m0_model_render_settings", "d3dc2b31ae5c8cb1", "m02_damaged_helmet_opengl_1280x720.png", 1490078u,
       "49bd90e1de0eeeda", "5fa9609c73ea05c3205267ed9d63cd38b81064df874ed5d3fbaec20309da9e41"},
      {"model", "vulkan", "../scenes/m03_sponza_atrium.json", "m03_sponza_atrium",
-      app::validation::kValidationSceneContractVersion, "78e7bcd675c0eb54", "0bb11dd13d10c191",
-      "m0_model_render_settings", "9a8940b4590c9585", "m03_sponza_atrium_vulkan_1280x720.png", 1452716u,
+      app::validation::kValidationSceneContractVersion, "3971c64e26520d88", "0bb11dd13d10c191",
+      "m0_model_render_settings", "d3dc2b31ae5c8cb1", "m03_sponza_atrium_vulkan_1280x720.png", 1452716u,
       "08f27649deb46570", "bd676fe71d6236abb522f83652cd8e8724effe2645b117d160f11a3cfec28b12"},
      {"model", "opengl", "../scenes/m03_sponza_atrium.json", "m03_sponza_atrium",
-      app::validation::kValidationSceneContractVersion, "78e7bcd675c0eb54", "0bb11dd13d10c191",
-      "m0_model_render_settings", "9a8940b4590c9585", "m03_sponza_atrium_opengl_1280x720.png", 1180902u,
-      "b35c719c29555d77", "ebb937340e9fb4044781ff524d3c4c11475e778e39513ea7270c37c65c0467f3"}}};
+      app::validation::kValidationSceneContractVersion, "3971c64e26520d88", "0bb11dd13d10c191",
+      "m0_model_render_settings", "d3dc2b31ae5c8cb1", "m03_sponza_atrium_opengl_1280x720.png", 1180902u,
+      "b35c719c29555d77", "ebb937340e9fb4044781ff524d3c4c11475e778e39513ea7270c37c65c0467f3"},
+     {"voxel", "vulkan", "../scenes/m3_voxel_rtgi_cave.json", "m3_voxel_rtgi_cave",
+      app::validation::kValidationSceneContractVersion, "eb2c2fc0e213e42a", "87e07b85195fdded",
+      app::validation::kValidationRtgiVoxelRenderSettingsId, "709b7dc42c834be1",
+      "m3_voxel_rtgi_cave_vulkan_1280x720.png", 1586920u, "413110028768785b",
+      "65c6007172982b9cbc686254b9ac3053313e3f37cd7dfa9f122fda437ac35179",
+      app::validation::kValidationRtgiRenderSettingsVersion, "v02_cave_turn"},
+     {"model", "vulkan", "../scenes/m3_model_rtgi_sponza.json", "m3_model_rtgi_sponza",
+      app::validation::kValidationSceneContractVersion, "eb3bbf25ae7e3af5", "0bb11dd13d10c191",
+      app::validation::kValidationRtgiModelRenderSettingsId, "aff15d8d38329069",
+      "m3_model_rtgi_sponza_vulkan_1280x720.png", 1176129u, "d90831cc587efa5a",
+      "962273df8dacb35ab44e9749aa0522b201be5e62da0265f0d2631d9ac9a6c7d0",
+      app::validation::kValidationRtgiRenderSettingsVersion, "m03_sponza_atrium"}}};
 
 bool requireTrue(const bool condition, const std::string_view message) {
     if (!condition) {
@@ -251,13 +265,13 @@ bool validateCapture(const Json& capture, const std::filesystem::path& manifestD
                          hasString(sceneContract, "hash_algorithm", renderer::contracts::kStableContentHashAlgorithm) &&
                          readUint32(sceneContract, "version", sceneVersion) && sceneVersion == expected->sceneVersion,
                      "scene identity must match its versioned descriptor") ||
-        !requireTrue(hasString(cameraPath, "id", expected->sceneId) &&
+        !requireTrue(hasString(cameraPath, "id", expected->cameraId != nullptr ? expected->cameraId : expected->sceneId) &&
                          hasString(cameraPath, "content_hash", expected->cameraHash),
                      "Camera Path identity must match the selected scene") ||
         !requireTrue(hasString(renderSettings, "id", expected->renderSettingsId) &&
                          hasString(renderSettings, "content_hash", expected->renderSettingsHash) &&
                          readUint32(renderSettings, "version", renderSettingsVersion) &&
-                         renderSettingsVersion == app::validation::kValidationRenderSettingsVersion,
+                         renderSettingsVersion == expected->renderSettingsVersion,
                      "render settings identity must match the selected scene")) {
         return false;
     }
@@ -348,7 +362,7 @@ int main() {
 
     const Json& captures = *manifest.find("captures");
     if (!requireTrue(captures.is_array() && captures.size() == kExpectedCaptures.size(),
-                     "manifest must contain exactly eighteen versioned captures")) {
+                     "manifest must contain exactly twenty versioned captures")) {
         return 1;
     }
     std::array<bool, kExpectedCaptures.size()> seen{};

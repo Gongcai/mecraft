@@ -90,6 +90,7 @@ RenderSettings modelSceneSettings() {
 
 PostProcessEffects buildPostProcessEffects(const RenderSettings& settings, const FrameContext& context) {
     PostProcessEffects effects;
+    effects.preExposure = context.preExposure;
     effects.bloomEnabled = settings.postProcess.bloomEnabled;
     effects.bloomMipCount = settings.postProcess.bloomMipCount;
     effects.bloomThreshold = settings.postProcess.bloomThreshold;

@@ -119,7 +119,7 @@ bool SceneCompositePass::recordGraphPass(RhiCommandList& commandList, const Fram
     params.atmosphereComposite = glm::vec4(ctx.skyColors.moonPhaseAngle, ctx.weather.skyWetness, ctx.weather.wetness,
                                            settings.cloud.sceneCloudCompositeStrength);
     params.reflectionWater = glm::vec4(settings.reflection.sceneReflectionCompositeStrength, 0.4f, 0.14f, 0.08f);
-    params.status = glm::vec4(0.0f);
+    params.status = glm::vec4(0.0f, 0.0f, ctx.preExposure, 0.0f);
     params.flags0 = glm::ivec4(settings.ssgi.enabled ? 1 : 0, 0, 0, 0);
     params.flags1 = glm::ivec4(settings.debug.reflectionDebugMode, ctx.eyeInWater ? 1 : 0, 0, 0);
 

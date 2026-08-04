@@ -15,7 +15,7 @@
         "source": "../scenes/m0_voxel_baseline.json",
         "id": "m0_voxel_baseline",
         "version": 1,
-        "content_hash": "ecb85fb88ef6aeef",
+        "content_hash": "6c81fda86f69af2d",
         "hash_algorithm": "fnv1a64"
       },
       "camera_path": {
@@ -25,7 +25,7 @@
       "render_settings": {
         "id": "m0_voxel_render_settings",
         "version": 1,
-        "content_hash": "511c4e7a0e2e2de9"
+        "content_hash": "df6a9bdca9fd3c13"
       },
       "image": {
         "source": "m0_voxel_baseline_vulkan_1280x720.png",
@@ -42,7 +42,7 @@
         "source": "../scenes/m0_model_damaged_helmet.json",
         "id": "m0_model_damaged_helmet",
         "version": 1,
-        "content_hash": "bde98b1cf0faca9a",
+        "content_hash": "2d9879327dff178e",
         "hash_algorithm": "fnv1a64"
       },
       "camera_path": {
@@ -52,7 +52,7 @@
       "render_settings": {
         "id": "m0_model_render_settings",
         "version": 1,
-        "content_hash": "9a8940b4590c9585"
+        "content_hash": "d3dc2b31ae5c8cb1"
       },
       "image": {
         "source": "m0_model_damaged_helmet_vulkan_1280x720.png",
@@ -69,7 +69,7 @@
         "source": "../scenes/m0_voxel_baseline.json",
         "id": "m0_voxel_baseline",
         "version": 1,
-        "content_hash": "ecb85fb88ef6aeef",
+        "content_hash": "6c81fda86f69af2d",
         "hash_algorithm": "fnv1a64"
       },
       "camera_path": {
@@ -79,7 +79,7 @@
       "render_settings": {
         "id": "m0_voxel_render_settings",
         "version": 1,
-        "content_hash": "511c4e7a0e2e2de9"
+        "content_hash": "df6a9bdca9fd3c13"
       },
       "image": {
         "source": "m0_voxel_baseline_opengl_1280x720.png",
@@ -96,7 +96,7 @@
         "source": "../scenes/m0_model_damaged_helmet.json",
         "id": "m0_model_damaged_helmet",
         "version": 1,
-        "content_hash": "bde98b1cf0faca9a",
+        "content_hash": "2d9879327dff178e",
         "hash_algorithm": "fnv1a64"
       },
       "camera_path": {
@@ -106,7 +106,7 @@
       "render_settings": {
         "id": "m0_model_render_settings",
         "version": 1,
-        "content_hash": "9a8940b4590c9585"
+        "content_hash": "d3dc2b31ae5c8cb1"
       },
       "image": {
         "source": "m0_model_damaged_helmet_opengl_1280x720.png",
@@ -123,7 +123,7 @@
         "source": "../scenes/v02_cave_turn.json",
         "id": "v02_cave_turn",
         "version": 2,
-        "content_hash": "4bb4409c20ca21c6",
+        "content_hash": "eaed3c42e49b7ec0",
         "hash_algorithm": "fnv1a64"
       },
       "camera_path": {
@@ -133,7 +133,7 @@
       "render_settings": {
         "id": "m0_voxel_render_settings",
         "version": 1,
-        "content_hash": "511c4e7a0e2e2de9"
+        "content_hash": "df6a9bdca9fd3c13"
       },
       "image": {
         "source": "v02_cave_turn_vulkan_1280x720.png",
@@ -150,7 +150,7 @@
         "source": "../scenes/v02_cave_turn.json",
         "id": "v02_cave_turn",
         "version": 2,
-        "content_hash": "4bb4409c20ca21c6",
+        "content_hash": "eaed3c42e49b7ec0",
         "hash_algorithm": "fnv1a64"
       },
       "camera_path": {
@@ -160,7 +160,7 @@
       "render_settings": {
         "id": "m0_voxel_render_settings",
         "version": 1,
-        "content_hash": "511c4e7a0e2e2de9"
+        "content_hash": "df6a9bdca9fd3c13"
       },
       "image": {
         "source": "v02_cave_turn_opengl_1280x720.png",
@@ -177,7 +177,7 @@
         "source": "../scenes/v07_local_light_village.json",
         "id": "v07_local_light_village",
         "version": 2,
-        "content_hash": "5be2746ff4c4b81d",
+        "content_hash": "d17c6283169ee9a3",
         "hash_algorithm": "fnv1a64"
       },
       "camera_path": {
@@ -187,7 +187,7 @@
       "render_settings": {
         "id": "m0_voxel_render_settings",
         "version": 1,
-        "content_hash": "511c4e7a0e2e2de9"
+        "content_hash": "df6a9bdca9fd3c13"
       },
       "image": {
         "source": "v07_local_light_village_vulkan_1280x720.png",
@@ -204,7 +204,7 @@
         "source": "../scenes/v07_local_light_village.json",
         "id": "v07_local_light_village",
         "version": 2,
-        "content_hash": "5be2746ff4c4b81d",
+        "content_hash": "d17c6283169ee9a3",
         "hash_algorithm": "fnv1a64"
       },
       "camera_path": {
@@ -214,7 +214,7 @@
       "render_settings": {
         "id": "m0_voxel_render_settings",
         "version": 1,
-        "content_hash": "511c4e7a0e2e2de9"
+        "content_hash": "df6a9bdca9fd3c13"
       },
       "image": {
         "source": "v07_local_light_village_opengl_1280x720.png",
@@ -231,7 +231,7 @@
         "source": "../scenes/m07_probe_interior.json",
         "id": "m07_probe_interior",
         "version": 2,
-        "content_hash": "e7cfecd188549085",
+        "content_hash": "794c82551af3b031",
         "hash_algorithm": "fnv1a64"
       },
       "camera_path": {
@@ -241,7 +241,7 @@
       "render_settings": {
         "id": "m0_model_render_settings",
         "version": 1,
-        "content_hash": "9a8940b4590c9585"
+        "content_hash": "d3dc2b31ae5c8cb1"
       },
       "image": {
         "source": "m07_probe_interior_vulkan_1280x720.png",
@@ -258,7 +258,7 @@
         "source": "../scenes/m07_probe_interior.json",
         "id": "m07_probe_interior",
         "version": 2,
-        "content_hash": "e7cfecd188549085",
+        "content_hash": "794c82551af3b031",
         "hash_algorithm": "fnv1a64"
       },
       "camera_path": {
@@ -268,7 +268,7 @@
       "render_settings": {
         "id": "m0_model_render_settings",
         "version": 1,
-        "content_hash": "9a8940b4590c9585"
+        "content_hash": "d3dc2b31ae5c8cb1"
       },
       "image": {
         "source": "m07_probe_interior_opengl_1280x720.png",
@@ -285,7 +285,7 @@
         "source": "../scenes/v01_window_room.json",
         "id": "v01_window_room",
         "version": 2,
-        "content_hash": "4f8717cfe9b48270",
+        "content_hash": "cabff68652ab41a6",
         "hash_algorithm": "fnv1a64"
       },
       "camera_path": {
@@ -295,7 +295,7 @@
       "render_settings": {
         "id": "m0_voxel_render_settings",
         "version": 1,
-        "content_hash": "511c4e7a0e2e2de9"
+        "content_hash": "df6a9bdca9fd3c13"
       },
       "image": {
         "source": "v01_window_room_vulkan_1280x720.png",
@@ -312,7 +312,7 @@
         "source": "../scenes/v01_window_room.json",
         "id": "v01_window_room",
         "version": 2,
-        "content_hash": "4f8717cfe9b48270",
+        "content_hash": "cabff68652ab41a6",
         "hash_algorithm": "fnv1a64"
       },
       "camera_path": {
@@ -322,7 +322,7 @@
       "render_settings": {
         "id": "m0_voxel_render_settings",
         "version": 1,
-        "content_hash": "511c4e7a0e2e2de9"
+        "content_hash": "df6a9bdca9fd3c13"
       },
       "image": {
         "source": "v01_window_room_opengl_1280x720.png",
@@ -339,7 +339,7 @@
         "source": "../scenes/m01_material_grid.json",
         "id": "m01_material_grid",
         "version": 2,
-        "content_hash": "2eb15aeceefd92a4",
+        "content_hash": "0d41ec590cc1c430",
         "hash_algorithm": "fnv1a64"
       },
       "camera_path": {
@@ -349,7 +349,7 @@
       "render_settings": {
         "id": "m0_model_render_settings",
         "version": 1,
-        "content_hash": "9a8940b4590c9585"
+        "content_hash": "d3dc2b31ae5c8cb1"
       },
       "image": {
         "source": "m01_material_grid_vulkan_1280x720.png",
@@ -366,7 +366,7 @@
         "source": "../scenes/m01_material_grid.json",
         "id": "m01_material_grid",
         "version": 2,
-        "content_hash": "2eb15aeceefd92a4",
+        "content_hash": "0d41ec590cc1c430",
         "hash_algorithm": "fnv1a64"
       },
       "camera_path": {
@@ -376,7 +376,7 @@
       "render_settings": {
         "id": "m0_model_render_settings",
         "version": 1,
-        "content_hash": "9a8940b4590c9585"
+        "content_hash": "d3dc2b31ae5c8cb1"
       },
       "image": {
         "source": "m01_material_grid_opengl_1280x720.png",
@@ -393,7 +393,7 @@
         "source": "../scenes/m02_damaged_helmet.json",
         "id": "m02_damaged_helmet",
         "version": 2,
-        "content_hash": "a930eac94f635702",
+        "content_hash": "5f59b4e7ee3cefd6",
         "hash_algorithm": "fnv1a64"
       },
       "camera_path": {
@@ -403,7 +403,7 @@
       "render_settings": {
         "id": "m0_model_render_settings",
         "version": 1,
-        "content_hash": "9a8940b4590c9585"
+        "content_hash": "d3dc2b31ae5c8cb1"
       },
       "image": {
         "source": "m02_damaged_helmet_vulkan_1280x720.png",
@@ -420,7 +420,7 @@
         "source": "../scenes/m02_damaged_helmet.json",
         "id": "m02_damaged_helmet",
         "version": 2,
-        "content_hash": "a930eac94f635702",
+        "content_hash": "5f59b4e7ee3cefd6",
         "hash_algorithm": "fnv1a64"
       },
       "camera_path": {
@@ -430,7 +430,7 @@
       "render_settings": {
         "id": "m0_model_render_settings",
         "version": 1,
-        "content_hash": "9a8940b4590c9585"
+        "content_hash": "d3dc2b31ae5c8cb1"
       },
       "image": {
         "source": "m02_damaged_helmet_opengl_1280x720.png",
@@ -447,7 +447,7 @@
         "source": "../scenes/m03_sponza_atrium.json",
         "id": "m03_sponza_atrium",
         "version": 2,
-        "content_hash": "78e7bcd675c0eb54",
+        "content_hash": "3971c64e26520d88",
         "hash_algorithm": "fnv1a64"
       },
       "camera_path": {
@@ -457,7 +457,7 @@
       "render_settings": {
         "id": "m0_model_render_settings",
         "version": 1,
-        "content_hash": "9a8940b4590c9585"
+        "content_hash": "d3dc2b31ae5c8cb1"
       },
       "image": {
         "source": "m03_sponza_atrium_vulkan_1280x720.png",
@@ -474,7 +474,7 @@
         "source": "../scenes/m03_sponza_atrium.json",
         "id": "m03_sponza_atrium",
         "version": 2,
-        "content_hash": "78e7bcd675c0eb54",
+        "content_hash": "3971c64e26520d88",
         "hash_algorithm": "fnv1a64"
       },
       "camera_path": {
@@ -484,7 +484,7 @@
       "render_settings": {
         "id": "m0_model_render_settings",
         "version": 1,
-        "content_hash": "9a8940b4590c9585"
+        "content_hash": "d3dc2b31ae5c8cb1"
       },
       "image": {
         "source": "m03_sponza_atrium_opengl_1280x720.png",
@@ -492,6 +492,60 @@
         "byte_size": 1180902,
         "fnv1a64": "b35c719c29555d77",
         "sha256": "ebb937340e9fb4044781ff524d3c4c11475e778e39513ea7270c37c65c0467f3"
+      }
+    },
+    {
+      "scene": "voxel",
+      "rhi_backend": "vulkan",
+      "scene_contract": {
+        "source": "../scenes/m3_voxel_rtgi_cave.json",
+        "id": "m3_voxel_rtgi_cave",
+        "version": 2,
+        "content_hash": "eb2c2fc0e213e42a",
+        "hash_algorithm": "fnv1a64"
+      },
+      "camera_path": {
+        "id": "v02_cave_turn",
+        "content_hash": "87e07b85195fdded"
+      },
+      "render_settings": {
+        "id": "m3_voxel_rtgi_quality",
+        "version": 2,
+        "content_hash": "709b7dc42c834be1"
+      },
+      "image": {
+        "source": "m3_voxel_rtgi_cave_vulkan_1280x720.png",
+        "format": "png_rgba8",
+        "byte_size": 1586920,
+        "fnv1a64": "413110028768785b",
+        "sha256": "65c6007172982b9cbc686254b9ac3053313e3f37cd7dfa9f122fda437ac35179"
+      }
+    },
+    {
+      "scene": "model",
+      "rhi_backend": "vulkan",
+      "scene_contract": {
+        "source": "../scenes/m3_model_rtgi_sponza.json",
+        "id": "m3_model_rtgi_sponza",
+        "version": 2,
+        "content_hash": "eb3bbf25ae7e3af5",
+        "hash_algorithm": "fnv1a64"
+      },
+      "camera_path": {
+        "id": "m03_sponza_atrium",
+        "content_hash": "0bb11dd13d10c191"
+      },
+      "render_settings": {
+        "id": "m3_model_rtgi_quality",
+        "version": 2,
+        "content_hash": "aff15d8d38329069"
+      },
+      "image": {
+        "source": "m3_model_rtgi_sponza_vulkan_1280x720.png",
+        "format": "png_rgba8",
+        "byte_size": 1176129,
+        "fnv1a64": "d90831cc587efa5a",
+        "sha256": "962273df8dacb35ab44e9749aa0522b201be5e62da0265f0d2631d9ac9a6c7d0"
       }
     }
   ]

@@ -20,6 +20,7 @@ class RenderDebugService;
 
 /// Per-frame post-process effects configuration.
 struct PostProcessEffects {
+    float preExposure = 1.0f;
     bool underwaterEnabled = false;
     glm::vec3 underwaterTint = glm::vec3(0.24f, 0.46f, 0.72f);
     float underwaterStrength = 0.68f;

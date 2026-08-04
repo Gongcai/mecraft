@@ -50,6 +50,8 @@ int main() {
     const std::filesystem::path damagedHelmetPath = sceneRoot / "m02_damaged_helmet.json";
     const std::filesystem::path sponzaAtriumPath = sceneRoot / "m03_sponza_atrium.json";
     const std::filesystem::path probeInteriorPath = sceneRoot / "m07_probe_interior.json";
+    const std::filesystem::path rtgiVoxelPath = sceneRoot / "m3_voxel_rtgi_cave.json";
+    const std::filesystem::path rtgiModelPath = sceneRoot / "m3_model_rtgi_sponza.json";
     const app::validation::ValidationSceneContractLoadResult voxel =
         app::validation::loadValidationSceneContract(voxelPath);
     const app::validation::ValidationSceneContractLoadResult model =
@@ -68,6 +70,10 @@ int main() {
         app::validation::loadValidationSceneContract(sponzaAtriumPath);
     const app::validation::ValidationSceneContractLoadResult probeInterior =
         app::validation::loadValidationSceneContract(probeInteriorPath);
+    const app::validation::ValidationSceneContractLoadResult rtgiVoxel =
+        app::validation::loadValidationSceneContract(rtgiVoxelPath);
+    const app::validation::ValidationSceneContractLoadResult rtgiModel =
+        app::validation::loadValidationSceneContract(rtgiModelPath);
     const bool voxelLoaded = requireLoaded(voxel, "m0_voxel_baseline");
     const bool modelLoaded = requireLoaded(model, "m0_model_damaged_helmet");
     const bool windowRoomLoaded = requireLoaded(windowRoom, "v01_window_room");
@@ -77,21 +83,23 @@ int main() {
     const bool damagedHelmetLoaded = requireLoaded(damagedHelmet, "m02_damaged_helmet");
     const bool sponzaAtriumLoaded = requireLoaded(sponzaAtrium, "m03_sponza_atrium");
     const bool probeInteriorLoaded = requireLoaded(probeInterior, "m07_probe_interior");
+    const bool rtgiVoxelLoaded = requireLoaded(rtgiVoxel, "m3_voxel_rtgi_cave");
+    const bool rtgiModelLoaded = requireLoaded(rtgiModel, "m3_model_rtgi_sponza");
     if (!voxelLoaded || !modelLoaded || !windowRoomLoaded || !caveLoaded || !villageLoaded || !materialGridLoaded ||
-        !damagedHelmetLoaded || !sponzaAtriumLoaded || !probeInteriorLoaded) {
+        !damagedHelmetLoaded || !sponzaAtriumLoaded || !probeInteriorLoaded || !rtgiVoxelLoaded || !rtgiModelLoaded) {
         return 1;
     }
     if (!requireTrue(voxel.succeeded() && model.succeeded(), "both M0 scene descriptors must verify") ||
         !requireTrue(voxel.contract.scene == ValidationScene::Voxel && voxel.contract.voxelWorld.has_value() &&
                          !voxel.contract.modelAsset.has_value() &&
-                         stableContentHashHex(voxel.contract.contentHash) == "ecb85fb88ef6aeef" &&
-                         stableContentHashHex(voxel.contract.renderSettings.contentHash) == "511c4e7a0e2e2de9" &&
+                         stableContentHashHex(voxel.contract.contentHash) == "6c81fda86f69af2d" &&
+                         stableContentHashHex(voxel.contract.renderSettings.contentHash) == "df6a9bdca9fd3c13" &&
                          stableContentHashHex(voxel.contract.voxelWorld->contentHash) == "10ac44b930335e6b",
                      "the voxel scene, renderer, and world identities must remain locked") ||
         !requireTrue(model.contract.scene == ValidationScene::Model && model.contract.modelAsset.has_value() &&
                          !model.contract.voxelWorld.has_value() &&
-                         stableContentHashHex(model.contract.contentHash) == "bde98b1cf0faca9a" &&
-                         stableContentHashHex(model.contract.renderSettings.contentHash) == "9a8940b4590c9585" &&
+                         stableContentHashHex(model.contract.contentHash) == "2d9879327dff178e" &&
+                         stableContentHashHex(model.contract.renderSettings.contentHash) == "d3dc2b31ae5c8cb1" &&
                          stableContentHashHex(model.contract.modelAsset->contentHash) == "f67fb46e0033d3dd",
                      "the model scene, renderer, and asset identities must remain locked")) {
         return 1;
@@ -104,7 +112,7 @@ int main() {
                 stableContentHashHex(windowRoom.contract.voxelWorld->fixture->contentHash) == "323aa669c63c427a" &&
                 stableContentHashHex(windowRoom.contract.voxelWorld->contentHash) == "d38f66e8e2469348" &&
                 stableContentHashHex(windowRoom.contract.cameraPath.contentHash) == "926b9e7d3f02af9b" &&
-                stableContentHashHex(windowRoom.contract.contentHash) == "4f8717cfe9b48270",
+                stableContentHashHex(windowRoom.contract.contentHash) == "cabff68652ab41a6",
             "V01 scene, Camera Path, world, and fixture identities must remain locked") ||
         !requireTrue(cave.contract.version == app::validation::kValidationSceneContractVersion &&
                          cave.contract.scene == ValidationScene::Voxel && cave.contract.voxelWorld.has_value() &&
@@ -113,7 +121,7 @@ int main() {
                          stableContentHashHex(cave.contract.voxelWorld->fixture->contentHash) == "8e8834253081af88" &&
                          stableContentHashHex(cave.contract.voxelWorld->contentHash) == "b58b9504e7ed54b3" &&
                          stableContentHashHex(cave.contract.cameraPath.contentHash) == "87e07b85195fdded" &&
-                         stableContentHashHex(cave.contract.contentHash) == "4bb4409c20ca21c6",
+                         stableContentHashHex(cave.contract.contentHash) == "eaed3c42e49b7ec0",
                      "V02 scene, Camera Path, world, and fixture identities must remain locked") ||
         !requireTrue(village.contract.version == app::validation::kValidationSceneContractVersion &&
                          village.contract.scene == ValidationScene::Voxel && village.contract.voxelWorld.has_value() &&
@@ -124,7 +132,7 @@ int main() {
                              "b34bf75d177ebb41" &&
                          stableContentHashHex(village.contract.voxelWorld->contentHash) == "500831ce59abbfd5" &&
                          stableContentHashHex(village.contract.cameraPath.contentHash) == "cc6a83ed668b12b5" &&
-                         stableContentHashHex(village.contract.contentHash) == "5be2746ff4c4b81d",
+                         stableContentHashHex(village.contract.contentHash) == "d17c6283169ee9a3",
                      "V07 scene, Camera Path, world, and fixture identities must remain locked") ||
         !requireTrue(materialGrid.contract.version == app::validation::kValidationSceneContractVersion &&
                          materialGrid.contract.scene == ValidationScene::Model &&
@@ -134,7 +142,7 @@ int main() {
                          materialGrid.contract.modelProbeGrid->boundsPaddingMeters == 0.1 &&
                          stableContentHashHex(materialGrid.contract.modelAsset->contentHash) == "e2dbc94ec6365711" &&
                          stableContentHashHex(materialGrid.contract.cameraPath.contentHash) == "39d7d82f9711135e" &&
-                         stableContentHashHex(materialGrid.contract.contentHash) == "2eb15aeceefd92a4",
+                         stableContentHashHex(materialGrid.contract.contentHash) == "0d41ec590cc1c430",
                      "M01 scene, Camera Path, asset, and Probe grid identities must remain locked") ||
         !requireTrue(damagedHelmet.contract.version == app::validation::kValidationSceneContractVersion &&
                          damagedHelmet.contract.scene == ValidationScene::Model &&
@@ -144,7 +152,7 @@ int main() {
                          damagedHelmet.contract.modelProbeGrid->boundsPaddingMeters == 0.0 &&
                          stableContentHashHex(damagedHelmet.contract.modelAsset->contentHash) == "f67fb46e0033d3dd" &&
                          stableContentHashHex(damagedHelmet.contract.cameraPath.contentHash) == "1c0a7939ab2fcdf6" &&
-                         stableContentHashHex(damagedHelmet.contract.contentHash) == "a930eac94f635702",
+                         stableContentHashHex(damagedHelmet.contract.contentHash) == "5f59b4e7ee3cefd6",
                      "M02 scene, Camera Path, asset, and Probe grid identities must remain locked") ||
         !requireTrue(sponzaAtrium.contract.version == app::validation::kValidationSceneContractVersion &&
                          sponzaAtrium.contract.scene == ValidationScene::Model &&
@@ -154,7 +162,7 @@ int main() {
                          sponzaAtrium.contract.modelProbeGrid->boundsPaddingMeters == 0.0 &&
                          stableContentHashHex(sponzaAtrium.contract.modelAsset->contentHash) == "d9880183f37ab83c" &&
                          stableContentHashHex(sponzaAtrium.contract.cameraPath.contentHash) == "0bb11dd13d10c191" &&
-                         stableContentHashHex(sponzaAtrium.contract.contentHash) == "78e7bcd675c0eb54",
+                         stableContentHashHex(sponzaAtrium.contract.contentHash) == "3971c64e26520d88",
                      "M03 scene, Camera Path, asset, and Probe grid identities must remain locked") ||
         !requireTrue(probeInterior.contract.version == app::validation::kValidationSceneContractVersion &&
                          probeInterior.contract.scene == ValidationScene::Model &&
@@ -164,8 +172,34 @@ int main() {
                          probeInterior.contract.modelProbeGrid->boundsPaddingMeters == 0.0 &&
                          stableContentHashHex(probeInterior.contract.modelAsset->contentHash) == "097b196adca0e388" &&
                          stableContentHashHex(probeInterior.contract.cameraPath.contentHash) == "c17f7838a2a58df0" &&
-                         stableContentHashHex(probeInterior.contract.contentHash) == "e7cfecd188549085",
-                     "M07 scene, Camera Path, asset, and Probe grid identities must remain locked")) {
+                         stableContentHashHex(probeInterior.contract.contentHash) == "794c82551af3b031",
+                     "M07 scene, Camera Path, asset, and Probe grid identities must remain locked") ||
+        !requireTrue(rtgiVoxel.contract.version == app::validation::kValidationSceneContractVersion &&
+                         rtgiVoxel.contract.scene == ValidationScene::Voxel && rtgiVoxel.contract.voxelWorld.has_value() &&
+                         rtgiVoxel.contract.renderSettings.id == app::validation::kValidationRtgiVoxelRenderSettingsId &&
+                         rtgiVoxel.contract.renderSettings.version == app::validation::kValidationRtgiRenderSettingsVersion &&
+                         stableContentHashHex(rtgiVoxel.contract.contentHash) == "eb2c2fc0e213e42a" &&
+                         stableContentHashHex(rtgiVoxel.contract.renderSettings.contentHash) == "709b7dc42c834be1" &&
+                         app::validation::makeValidationRenderSettingsProfile(
+                             rtgiVoxel.contract.scene, rtgiVoxel.contract.renderSettings)
+                                 .settings.rtgi.enabled &&
+                         app::validation::makeValidationRenderSettingsProfile(
+                             rtgiVoxel.contract.scene, rtgiVoxel.contract.renderSettings)
+                                 .settings.nrd.enabled,
+                     "M3 voxel RTGI scene and quality profile identities must remain locked") ||
+        !requireTrue(rtgiModel.contract.version == app::validation::kValidationSceneContractVersion &&
+                         rtgiModel.contract.scene == ValidationScene::Model && rtgiModel.contract.modelAsset.has_value() &&
+                         rtgiModel.contract.renderSettings.id == app::validation::kValidationRtgiModelRenderSettingsId &&
+                         rtgiModel.contract.renderSettings.version == app::validation::kValidationRtgiRenderSettingsVersion &&
+                         stableContentHashHex(rtgiModel.contract.contentHash) == "eb3bbf25ae7e3af5" &&
+                         stableContentHashHex(rtgiModel.contract.renderSettings.contentHash) == "aff15d8d38329069" &&
+                         app::validation::makeValidationRenderSettingsProfile(
+                             rtgiModel.contract.scene, rtgiModel.contract.renderSettings)
+                                 .settings.rtgi.enabled &&
+                         app::validation::makeValidationRenderSettingsProfile(
+                             rtgiModel.contract.scene, rtgiModel.contract.renderSettings)
+                                 .settings.nrd.enabled,
+                     "M3 model RTGI scene and quality profile identities must remain locked")) {
         return 1;
     }
 
@@ -199,7 +233,7 @@ int main() {
     }
 
     caveJson.erase("content_hash");
-    caveJson["content_hash"] = "4bb4409c20ca21c6";
+    caveJson["content_hash"] = "eaed3c42e49b7ec0";
     caveJson["voxel_world"].erase("fixture");
     const auto version2WithoutFixture = app::validation::parseValidationSceneContractJson(caveJson.dump(), cavePath);
     if (!requireTrue(version2WithoutFixture.error == app::validation::ValidationSceneContractError::MissingField,

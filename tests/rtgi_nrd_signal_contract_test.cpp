@@ -65,7 +65,7 @@ namespace {
            guideSource.find("return abs(viewPosition.z);") != std::string::npos &&
            pipelineSource.find("glm::vec2 nrdCameraJitterPixels(const TemporalJitter& jitter)") !=
                std::string::npos &&
-           pipelineSource.find("return jitter.pixels;") != std::string::npos &&
+           pipelineSource.find("return -jitter.pixels;") != std::string::npos &&
            pipelineSource.find("nrdCameraJitterUv") == std::string::npos &&
            sceneSource.find("ctx.jitter.pixels.x = frameX * 0.5f;") != std::string::npos &&
            sceneSource.find("ctx.jitter.pixels.y = -frameY * 0.5f;") != std::string::npos &&

@@ -42,6 +42,7 @@ void main() {
     vec3 albedo = texel.rgb;
 #ifdef PARTICLE_DEFERRED
     albedo = srgbToLinear(albedo);
+    albedo *= max(uScreenParams.z, 1e-6);
 #endif
     if (vBiomeTintFactor > 0.5) {
 #ifdef PARTICLE_DEFERRED

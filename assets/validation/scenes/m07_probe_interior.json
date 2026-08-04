@@ -3,7 +3,7 @@
   "version": 2,
   "id": "m07_probe_interior",
   "scene": "model",
-  "content_hash": "e7cfecd188549085",
+  "content_hash": "794c82551af3b031",
   "camera_path": {
     "source": "../camera_paths/m07_probe_interior.json",
     "id": "m07_probe_interior",
@@ -12,7 +12,7 @@
   "render_settings": {
     "id": "m0_model_render_settings",
     "version": 1,
-    "content_hash": "9a8940b4590c9585"
+    "content_hash": "d3dc2b31ae5c8cb1"
   },
   "environment": {
     "time_of_day_seconds": 900.0,

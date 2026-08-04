@@ -1,0 +1,33 @@
+{
+  "kind": "mecraft.rtgi_reference_capture_manifest",
+  "version": 1,
+  "capture_profile": {
+    "backend": "vulkan",
+    "width": 1280,
+    "height": 720,
+    "warmup_frame_count": 300,
+    "sample_frame_count": 3,
+    "nrd_method": "RELAX_DIFFUSE"
+  },
+  "acceptance": {
+    "required_gpu_stages": ["RTGI", "NRD"],
+    "ssgi_p95_ms": 0.0,
+    "report_window_must_be_valid": true
+  },
+  "captures": [
+    {
+      "scene": "voxel",
+      "scene_contract_id": "m3_voxel_rtgi_cave",
+      "render_settings_id": "m3_voxel_rtgi_quality",
+      "image": "m3_voxel_rtgi_cave_vulkan_1280x720.png",
+      "report": "m3_voxel_rtgi_cave_vulkan_1280x720.report.json"
+    },
+    {
+      "scene": "model",
+      "scene_contract_id": "m3_model_rtgi_sponza",
+      "render_settings_id": "m3_model_rtgi_quality",
+      "image": "m3_model_rtgi_sponza_vulkan_1280x720.png",
+      "report": "m3_model_rtgi_sponza_vulkan_1280x720.report.json"
+    }
+  ]
+}

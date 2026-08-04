@@ -47,6 +47,7 @@ layout(std140, binding = 10) uniform SceneCompositeParams {
 #define uWaterAbsorption pReflectionWater.yzw
 #define uBlindness pStatus.x
 #define uDarknessFactor pStatus.y
+#define uPreExposure max(pStatus.z, 1e-6)
 #define uSsgiEnabled pFlags0.x
 #define uReflectionDebugMode pFlags1.x
 #define uIsEyeInWater pFlags1.y
@@ -113,6 +114,7 @@ void main() {
         sky *= min(1.0, mix(18.0, 1.5, solarCoreMask) / max(luminance(sky), 1e-5));
         sky += renderProceduralMoonDisk(skyDir);
         sky += renderProceduralSunDisk(skyDir);
+        sky *= uPreExposure;
         float cloudSolarMask = proceduralSunAngularMask(skyDir, 0.018, 0.155);
         float cloudSolarCoreMask = proceduralSunAngularMask(skyDir, 0.000, 0.085);
         cloud.rgb *= (1.0 - cloudSolarMask * 0.985) * (1.0 - cloudSolarCoreMask * 0.98);
@@ -129,6 +131,7 @@ void main() {
     // - translucent surfaces use reflection.a as scene pass-through
     // - opaque reflective surfaces add reflection.rgb directly
     vec4 reflection = texture(uReflectionTex, textureUv);
+    reflection.rgb *= uPreExposure;
 
     // Reflection debug: bypass composite, output raw reflection data.
     if (uReflectionDebugMode > 0) {
@@ -195,6 +198,7 @@ void main() {
     // Water uses detailed Beer-Lambert + sky scatter; lava/powder_snow use CommonFog only.
     // Blindness/darkness CommonFog applies regardless of eye medium.
     {
+        color /= uPreExposure;
         vec3 fogWorldPos = reconstructWorldPosition(
             vClipUv, depth < 0.9999 ? depth : 0.9999);
         float fogDistance = length(fogWorldPos - uCameraPos);
@@ -204,6 +208,7 @@ void main() {
         CommonFog(color, fogDistance, uIsEyeInWater,
                   uBlindness, uDarknessFactor, uWeatherWetness,
                   env.skyIlluminance, env.directIlluminance);
+        color *= uPreExposure;
     }
 
     FragColor = vec4(tonemapDebugSafe(color), scene.a);

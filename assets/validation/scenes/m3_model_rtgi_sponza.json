@@ -1,18 +1,18 @@
 {
   "kind": "mecraft.validation_scene",
   "version": 2,
-  "id": "m03_sponza_atrium",
+  "id": "m3_model_rtgi_sponza",
   "scene": "model",
-  "content_hash": "3971c64e26520d88",
+  "content_hash": "eb3bbf25ae7e3af5",
   "camera_path": {
     "source": "../camera_paths/m03_sponza_atrium.json",
     "id": "m03_sponza_atrium",
     "content_hash": "0bb11dd13d10c191"
   },
   "render_settings": {
-    "id": "m0_model_render_settings",
-    "version": 1,
-    "content_hash": "d3dc2b31ae5c8cb1"
+    "id": "m3_model_rtgi_quality",
+    "version": 2,
+    "content_hash": "aff15d8d38329069"
   },
   "environment": {
     "time_of_day_seconds": 900.0,

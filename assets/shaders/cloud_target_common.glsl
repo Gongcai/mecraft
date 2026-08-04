@@ -40,6 +40,7 @@ layout(std140, binding = 4) uniform CloudParams {
 #define uPlanarCloudAltitude pPlanarCloud.z
 #define uCloudTimeScale pTiming.x
 #define uLightningFlash pTiming.y
+#define uPreExposure max(pTiming.z, 1e-6)
 #define uFrameIndex pControls.x
 #define uHistoryAvailable pControls.y
 
@@ -440,7 +441,7 @@ vec4 renderCloudTarget(vec2 vScreenUv) {
     // DerivativeMain Deferred1.glsl:378: vec4(scattering, transmittance)
     vec3 finalColor = cloudColor + planarResult.rgb * transmittance;
     float finalTransmittance = transmittance * planarTransmittance;
-    vec4 currentCloud = vec4(max(finalColor, vec3(0.0)), finalTransmittance);
+    vec4 currentCloud = vec4(max(finalColor, vec3(0.0)) * uPreExposure, finalTransmittance);
 
     // ---- Temporal cloud reprojection ----
     // DerivativeMain Deferred2.glsl: temporal upscale blends current frame with

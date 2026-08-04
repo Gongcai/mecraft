@@ -1,0 +1,209 @@
+{
+  "camera_path": {
+    "content_hash": "87e07b85195fdded",
+    "duration_seconds": 6.0,
+    "id": "v02_cave_turn",
+    "source": "../camera_paths/v02_cave_turn.json"
+  },
+  "capture": {
+    "camera_time_seconds": 6.0,
+    "height": 720,
+    "path": "assets/validation/reference_captures/m3_voxel_rtgi_cave_vulkan_1280x720.png",
+    "width": 1280
+  },
+  "cpu_update_render_ms": {
+    "average": 199.20907533333332,
+    "max": 545.111421,
+    "median": 27.098777000000002,
+    "min": 25.417028000000002,
+    "p50": 27.098777000000002,
+    "p95": 545.111421,
+    "p99": 545.111421
+  },
+  "environment": {
+    "time_of_day_seconds": 900.0,
+    "weather": "clear"
+  },
+  "frame_count": 3,
+  "kind": "mecraft.validation_capture_report",
+  "render_graph_stage_ms": {
+    "observed_sample_count": 3,
+    "stages": {
+      "Cloud": {
+        "p50": 0.254976,
+        "p95": 0.260096,
+        "p99": 0.260096
+      },
+      "GBuffer": {
+        "p50": 0.43008,
+        "p95": 0.536576,
+        "p99": 0.536576
+      },
+      "Lighting": {
+        "p50": 1.516544,
+        "p95": 1.538048,
+        "p99": 1.538048
+      },
+      "NRD": {
+        "p50": 2.684928,
+        "p95": 4.06016,
+        "p99": 4.06016
+      },
+      "Post": {
+        "p50": 0.178944,
+        "p95": 0.187904,
+        "p99": 0.187904
+      },
+      "RTGI": {
+        "p50": 2.445312,
+        "p95": 3.713024,
+        "p99": 3.713024
+      },
+      "Reflection": {
+        "p50": 0.438272,
+        "p95": 0.55296,
+        "p99": 0.55296
+      },
+      "SSAO": {
+        "p50": 0.2496,
+        "p95": 0.287744,
+        "p99": 0.287744
+      },
+      "SSGI": {
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 0.0
+      },
+      "Shadow": {
+        "p50": 0.953344,
+        "p95": 0.975872,
+        "p99": 0.975872
+      },
+      "Transparent": {
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 0.0
+      },
+      "Volumetric": {
+        "p50": 0.238592,
+        "p95": 0.256,
+        "p99": 0.256
+      },
+      "Water": {
+        "p50": 0.178176,
+        "p95": 0.203776,
+        "p99": 0.203776
+      }
+    },
+    "total_tracked": {
+      "p50": 10.898176,
+      "p95": 10.933759999999998,
+      "p99": 10.933759999999998
+    },
+    "valid": true,
+    "window_capacity": 1000,
+    "window_sample_count": 3
+  },
+  "render_settings": {
+    "content_hash": "709b7dc42c834be1",
+    "id": "m3_voxel_rtgi_quality",
+    "version": 2
+  },
+  "requested_sample_frame_count": 3,
+  "rhi_backend": "vulkan",
+  "rhi_memory": {
+    "accuracy": "exact",
+    "categories": {
+      "acceleration_structure": {
+        "allocation_count": 258,
+        "bytes": 3009024,
+        "resource_count": 515
+      },
+      "gbuffer_history": {
+        "allocation_count": 73,
+        "bytes": 561705984,
+        "resource_count": 73
+      },
+      "geometry": {
+        "allocation_count": 552,
+        "bytes": 56814592,
+        "resource_count": 552
+      },
+      "nrd": {
+        "allocation_count": 7,
+        "bytes": 25559808,
+        "resource_count": 7
+      },
+      "presentation": {
+        "allocation_count": 6,
+        "bytes": 16384000,
+        "resource_count": 9
+      },
+      "readback": {
+        "allocation_count": 12,
+        "bytes": 240,
+        "resource_count": 12
+      },
+      "scene_data": {
+        "allocation_count": 36,
+        "bytes": 8858336,
+        "resource_count": 36
+      },
+      "sdk": {
+        "allocation_count": 0,
+        "bytes": 0,
+        "resource_count": 0
+      },
+      "texture": {
+        "allocation_count": 80,
+        "bytes": 259604992,
+        "resource_count": 80
+      },
+      "transient": {
+        "allocation_count": 9,
+        "bytes": 53346304,
+        "resource_count": 16
+      },
+      "unclassified": {
+        "allocation_count": 0,
+        "bytes": 0,
+        "resource_count": 0
+      },
+      "uniform": {
+        "allocation_count": 19,
+        "bytes": 6336,
+        "resource_count": 19
+      }
+    },
+    "total_allocation_count": 1052,
+    "total_bytes": 985289616,
+    "total_resource_count": 1319,
+    "valid": true
+  },
+  "sample_duration_seconds": 0.05000000260770321,
+  "scene": "voxel",
+  "scene_contract": {
+    "content_hash": "eb2c2fc0e213e42a",
+    "hash_algorithm": "fnv1a64",
+    "id": "m3_voxel_rtgi_cave",
+    "source": "assets/validation/scenes/m3_voxel_rtgi_cave.json",
+    "version": 2
+  },
+  "version": 1,
+  "voxel_world": {
+    "content_hash": "b58b9504e7ed54b3",
+    "fixture": {
+      "content_hash": "8e8834253081af88",
+      "id": "mecraft.cave_turn",
+      "version": 1
+    },
+    "generator": {
+      "id": "mecraft.overworld",
+      "version": 1
+    },
+    "persistent_writes_enabled": false,
+    "render_distance": 4,
+    "seed": 1234
+  },
+  "warmup_frame_count": 300
+}

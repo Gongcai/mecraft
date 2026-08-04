@@ -664,6 +664,7 @@ bool RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
         PostProcessEffects effects =
             buildPostProcessEffects(request.worldView, request.camera, frameAspectRatio, cameraRainVisibility,
                                     request.screenRollRadians, request.dayNightSystem, request.weatherSystem);
+        effects.preExposure = m_currentContext.preExposure;
         m_postProcessPass.setFrameEffects(effects);
         if (lightDebugActive) {
             if (!m_postProcessPass.blitSceneCaptureToBackbuffer(*m_shared.rhiDevice,
@@ -1343,10 +1344,11 @@ RenderScene::buildFrameContext(const IWorldView& worldView, const Camera& camera
     if (m_hasPreviousContext && m_previousContext.frameIndex + 1u != ctx.frameIndex) {
         explicitResetReasons = explicitResetReasons | TemporalResetReason::FrameDiscontinuity;
     }
-    // A pre-exposure step does not invalidate any current history owner: the
-    // RTGI raw storage is regenerated every frame and the signal pack removes
-    // the storage scale before NRD accumulation. TemporalResetReason::
-    // PreExposure is raised here once scene HDR itself becomes pre-exposed.
+    if (m_hasPreviousContext && std::abs(m_previousContext.preExposure - ctx.preExposure) > 1.0e-6f) {
+        // NRD signal packing removes this storage scale before denoising, while
+        // scene-domain histories must not blend values from different domains.
+        explicitResetReasons = explicitResetReasons | TemporalResetReason::PreExposure;
+    }
     ctx.temporalResetReasons = evaluateTemporalResetReasons(m_hasPreviousContext, m_previousContext.temporalExtents,
                                                             ctx.temporalExtents, explicitResetReasons, {});
     if (!ownerRequiresTemporalReset(TemporalHistoryOwner::ScreenSpace, ctx.temporalResetReasons)) {

@@ -132,6 +132,7 @@ bool WaterCompositePass::recordGraphPass(const FrameContext& ctx, const RenderSe
     waterFrame.freezeBias = settings.volumetric.freezeBias;
     waterFrame.rainSurfaceRipplesEnabled = rainSurfaceRipplesEnabled;
     waterFrame.eyeInWater = ctx.eyeInWater;
+    waterFrame.preExposure = ctx.preExposure;
 
     const GpuTimerSegmentToken gpuTimer = ctx.debugService != nullptr
                                               ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::Water)

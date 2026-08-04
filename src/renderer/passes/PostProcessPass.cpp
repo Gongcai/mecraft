@@ -709,7 +709,8 @@ void PostProcessPass::recordExposureDownsample(RhiCommandList& commandList, cons
     commandList.setGraphicsPipeline(m_exposureDownsamplePipeline);
     commandList.setBindGroup(0u, m_exposureDownsampleBindGroup[mip]);
     const ExposureDownsamplePushConstants pushConstants{
-        glm::vec4(static_cast<float>(sourceSize.x), static_cast<float>(sourceSize.y), 0.0f, 0.0f),
+        glm::vec4(static_cast<float>(sourceSize.x), static_cast<float>(sourceSize.y), 0.0f,
+                  std::max(m_effects.preExposure, 1.0e-6f)),
         glm::ivec4(sourceIsScene ? 1 : 0, sourceIsScene ? sourceLod : 0, 0, 0)};
     commandList.pushConstants(&pushConstants, sizeof(pushConstants), rhiFlag(RhiShaderStage::Fragment));
     commandList.draw(3u, 1u, 0u, 0u);
@@ -783,7 +784,7 @@ PostProcessPass::PostProcessCompositeParams PostProcessPass::buildCompositeParam
             glm::vec4(m_effects.weatherWetness, m_effects.weatherStorm, m_effects.snowStrength, m_effects.skyWetness),
             glm::vec4(m_effects.fogWetness, m_effects.cloudWetness, m_effects.cameraRainVisibility,
                       m_effects.weatherExposureBias),
-            glm::vec4(m_effects.weatherPostRainFog, m_effects.gameTime, 0.0f, 0.0f)};
+            glm::vec4(m_effects.weatherPostRainFog, m_effects.gameTime, m_effects.preExposure, 0.0f)};
 }
 
 bool PostProcessPass::ensureSceneCaptureTargets(RhiDevice& rhiDevice, const int width, const int height) {

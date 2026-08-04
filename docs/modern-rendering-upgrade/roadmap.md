@@ -241,7 +241,7 @@ M1 与 M2 可并行开发，但公共 `GpuMaterial`、`GpuSceneGeometry` 与 Sta
 7. RELAX_DIFFUSE Quality、REBLUR_DIFFUSE Performance。（实现完成：用户设置显式选择 Method，运行时
    按 Method 重建固定 NRD 实例并选择独立的线性 RGB/真实 Hit Distance 或 YCoCg/归一化 Hit Distance
    输入；Deferred Lighting 按输出编码解包，运行时不会依据 GPU 时间更改 Method。）
-8. Non-jittered Matrix、2.5D Motion、Pre-exposure 转换和 History Reset。（进行中：当前/上一帧
+8. Non-jittered Matrix、2.5D Motion、Pre-exposure 转换和 History Reset。（实现完成：当前/上一帧
    Non-jittered Matrix 已进入 NRD Common Settings；当前/上一帧 Pre-exposure 已进入 FrameContext 与
    TemporalFrameInput；RTGI Raw 写入当前 Pre-exposed 域，Signal Pack 进入 NRD 前去曝光。独立
    `RGBA16F` Guide Motion 已按
@@ -250,18 +250,20 @@ M1 与 M2 可并行开发，但公共 `GpuMaterial`、`GpuSceneGeometry` 与 Sta
    Z History；固定数值的真实 Vulkan 回读和 Validation 已通过。Pre-exposure producer 已接入：
    PostProcess 的 1x1 自适应曝光状态经三槽 Readback Ring 回读 CPU，Vulkan Deferred 按整档 2 的幂
    量化并以 1 EV 迟滞产出 `FrameContext.preExposure`，RTGI Raw 存储与 Firefly Clamp 随实际曝光缩放，
-   Signal Pack 按同值去曝光；Scene HDR 当前仍为 scene-referred 域，Deferred Lighting 合成 NRD 输出
-   使用恒等 Scale，Raw 直采回退按倒数去曝光，`TemporalFrameInput` 的上采样域保持 `1`。按历史所有者
+   Signal Pack 按同值去曝光；Scene HDR 的 Lighting、SceneComposite、Reflection、Water、Transparent、Cloud、
+   Volumetric 和 Particle 写入端均使用同一 Pre-exposed 域，PostProcess Tonemap 前除回，
+   `TemporalFrameInput` 的上采样域保持 `1`。按历史所有者
    细分的 Reset 已完成：`TemporalHistoryOwner`（NrdDiffuse/Clouds/Volumetrics/ScreenSpace/Upscaler）
    与 `ownerRequiresTemporalReset` 过滤全部消费点，`DenoiserMethod` 原因只重启 NRD 与 RTGI 采样序列，
-   保留云、体积雾、屏幕空间与上采样历史；`PreExposure` 原因位已为 Scene HDR Pre-exposed 化预留。
-   剩余：全局 Auto Exposure 到 Scene HDR 的 Pre-exposed 域应用（Lighting/Water/Transparent/Cloud/
-   Volumetric 写入端乘 E、Tonemap 除 E）待独立视觉验证阶段实施。）
-9. RTGI/NRD Debug View、Timestamp、Reference Capture。（进行中：RTGI Trace/Signal Pack 与 NRD Guide/
+   保留云、体积雾、屏幕空间与上采样历史；`PreExposure` 原因位会重启 Scene HDR 域历史，NRD 输入仍保持
+   去曝光稳定。固定的 Vulkan shader 编译、Temporal Contract、静态场景和 RTGI smoke 已通过。）
+9. RTGI/NRD Debug View、Timestamp、Reference Capture。（实现完成：RTGI Trace/Signal Pack 与 NRD Guide/
    全部 SDK Dispatch 已纳入独立 GPU Timestamp 阶段，Dashboard、固定 p50/p95/p99 窗口和 Benchmark JSON
    均分别发布 RTGI/NRD 耗时；信号 Debug View 已接入 Deferred Debug View 89-92（Raw Radiance、
    First-bounce Hit Distance、Trace Classification、Candidate/Confirmed 计数），RTGI 关闭时以恒有效
-   目标替换绑定；双场景 Reference Capture 仍待完成。）
+   目标替换绑定；新增 `m3_voxel_rtgi_cave` 与 `m3_model_rtgi_sponza` 的 Vulkan RELAX 基准图、运行报告和
+   `rtgi_reference_capture_manifest_test`，manifest 同时锁定场景/Camera Path/profile/image 字节身份，
+   报告验收 RTGI/NRD Timestamp 有效且 SSGI 为零。）
 
 ### 完成条件
 
@@ -269,6 +271,11 @@ M1 与 M2 可并行开发，但公共 `GpuMaterial`、`GpuSceneGeometry` 与 Sta
 - 模型 Sponza/Helmet 的次级材质、Emissive 与法线正确。
 - NRD 达到验证矩阵的方差、拖影和 GPU 时间门槛。
 - Vulkan Modern 的间接漫反射只来自 RTGI，不混入 SSGI。
+
+当前 M3 画质门槛状态：双场景 Reference Capture 与运行链路已自动验收；64 spp Linear EXR、固定 ROI 的
+Variance/SSIM/95th HDR error、Ghost/Disocclusion 像素统计尚未接入现有 PNG validation runner，因此不能
+把这些数值门槛标记为通过。M03 1280×720 三帧探针的总 GPU p95 为 29.906 ms（RTGI 15.627 ms、NRD
+2.772 ms），也不能替代性能矩阵要求的 1080p/1000 帧正式测量。
 
 ## 7. M4：GPU Culling、LOD 与动画
 

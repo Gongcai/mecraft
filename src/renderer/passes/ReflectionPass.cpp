@@ -192,7 +192,8 @@ bool ReflectionPass::recordReflection(RhiCommandList& commandList, const FrameCo
     params.viewProj = projectionJitter ? ctx.camera.jitteredViewProj : ctx.camera.viewProj;
     params.invViewProj = projectionJitter ? ctx.camera.jitteredInvViewProj : ctx.camera.invViewProj;
     params.cameraPosNear = glm::vec4(ctx.camera.position, ctx.camera.nearPlane);
-    params.farSurfaceTime = glm::vec4(ctx.camera.farPlane, ctx.weather.surfaceWetness, ctx.shaderTime, 0.0f);
+    params.farSurfaceTime =
+        glm::vec4(ctx.camera.farPlane, ctx.weather.surfaceWetness, ctx.shaderTime, ctx.preExposure);
     params.controls = glm::ivec4(settings.debug.reflectionDebugMode, settings.weather.rainLinesEnabled ? 1 : 0, 0, 0);
 
     RhiColorAttachment colorAttachment;

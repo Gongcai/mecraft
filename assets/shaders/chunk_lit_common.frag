@@ -114,6 +114,7 @@ uniform float uWaterFlowFirstLayer;
 uniform float uWaterFlowLayerCount;
 uniform vec3 uWaterAbsorption;
 uniform vec3 uCameraPos;
+#define uPreExposure 1.0
 #endif
 
     const float kTwoPi = 6.28318530718;
@@ -267,7 +268,7 @@ uniform vec3 uCameraPos;
                                    (0.0015 + 0.0040 * fresnel) * topFace,
                                    vec2(0.0),
                                    vec2(1.0));
-            vec3 sceneColor = texture(uSceneColorTex, refractUv).rgb;
+            vec3 sceneColor = texture(uSceneColorTex, refractUv).rgb / max(uPreExposure, 1e-6);
             color = mix(color, sceneColor * waterTint, (0.08 + 0.14 * absorption) * topFace);
         }
 
@@ -635,7 +636,7 @@ uniform vec3 uCameraPos;
             alpha = clamp(alpha + 0.08, texColor.a * 0.70, 0.92);
         }
 
-        FragColor = vec4(finalColor, alpha);
+        FragColor = vec4(finalColor * max(uPreExposure, 1e-6), alpha);
 #if MECRAFT_TRANSPARENT_COMPOSITE != 0
         if (waterLayer) {
             FragReactiveMask = 0.35;

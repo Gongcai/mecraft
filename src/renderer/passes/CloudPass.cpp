@@ -171,7 +171,7 @@ namespace {
     params.cloudDynamicWeatherTime = glm::vec4(ctx.skyIlluminance.cloudDynamicWeather, ctx.shaderTime);
     params.cloudShape = glm::vec4(ctx.cloud.coverage, ctx.cloud.density, ctx.cloud.height, ctx.cloud.thickness);
     params.planarCloud = glm::vec4(ctx.cloud.planarCoverage, ctx.cloud.planarDensity, ctx.cloud.planarAltitude, 0.0f);
-    params.timing = glm::vec4(ctx.cloud.timeScale, ctx.weather.lightningFlash, 0.0f, 0.0f);
+    params.timing = glm::vec4(ctx.cloud.timeScale, ctx.weather.lightningFlash, ctx.preExposure, 0.0f);
     params.controls = glm::ivec4(static_cast<int>(ctx.frameIndex & 0x7fffffffULL), historyAvailable ? 1 : 0, 0, 0);
     return params;
 }

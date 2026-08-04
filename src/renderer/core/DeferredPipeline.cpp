@@ -78,9 +78,10 @@ void copyNrdMatrix(const glm::mat4& source, float (&destination)[16]) {
 
 [[nodiscard]] glm::vec2 nrdCameraJitterPixels(const TemporalJitter& jitter) {
     // NRD's CommonSettings::cameraJitter is expressed in pixel units, not
-    // normalized projection/NDC units. TemporalJitter::pixels is already in
-    // NRD's sub-pixel convention; only projectionOffset uses NDC units.
-    return jitter.pixels;
+    // normalized projection/NDC units. The projection matrix shifts geometry
+    // by TemporalJitter::pixels, while NRD defines sampleUv = pixelUv + jitter,
+    // so the SDK-facing sample offset has the opposite sign.
+    return -jitter.pixels;
 }
 #endif
 
@@ -386,6 +387,7 @@ bool DeferredPipeline::recordReflectionProbeRadianceOpaque(RhiCommandList& comma
     frame.animationTime = context.animationTime;
     frame.shaderTime = context.shaderTime;
     frame.surfaceWetness = context.weather.surfaceWetness;
+    frame.preExposure = context.preExposure;
     frame.fog.enabled = false;
     frame.skyLighting.sunDirection = context.skyColors.sunDirection;
     frame.skyLighting.moonDirection = context.skyColors.moonDirection;
@@ -1898,10 +1900,8 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
         }
         rtgiDiffuseTexture = rtgiRawDiffuse;
         rtgiDiffuseEncoding = DeferredLightingPass::RtgiDiffuseEncoding::LinearRgb;
-        // The raw trace target stores pre-exposed radiance for FP16 range
-        // protection; the scene HDR domain is scene-referred, so the direct
-        // raw fallback removes that storage scale at composite.
-        rtgiRadianceScale = 1.0f / ctx.preExposure;
+        // The raw trace target and Scene HDR use the same pre-exposed domain.
+        rtgiRadianceScale = 1.0f;
 
 #if defined(MECRAFT_ENABLE_NRD)
         if (nrdEnabled) {
@@ -2016,10 +2016,9 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
             rtgiDiffuseEncoding = settings.nrd.method == NrdDiffuseMethod::Reblur
                                       ? DeferredLightingPass::RtgiDiffuseEncoding::ReblurYCoCg
                                       : DeferredLightingPass::RtgiDiffuseEncoding::LinearRgb;
-            // NRD consumes and returns de-exposed scene-referred radiance;
-            // the scene HDR domain is also scene-referred, so no scale is
-            // reapplied at composite.
-            rtgiRadianceScale = 1.0f;
+            // NRD consumes and returns scene-referred radiance, so restore the
+            // current Scene HDR pre-exposure at composite.
+            rtgiRadianceScale = ctx.preExposure;
         }
 #endif
     }
@@ -3489,7 +3488,8 @@ bool DeferredPipeline::recordParticlesPass(RhiCommandList& commandList, const Fr
                                static_cast<float>(std::max(1, targets.height())));
 
     m_shared->particleSystem->renderToSceneResolved(commandList, targets.voxelLightTextureHandle(),
-                                                    targets.depthTextureHandle(), viewProj, screenSize);
+                                                    targets.depthTextureHandle(), viewProj, screenSize,
+                                                    ctx.preExposure);
 
     commandList.endRendering();
     if (ctx.debugService != nullptr) {

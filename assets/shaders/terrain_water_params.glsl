@@ -15,6 +15,7 @@ layout(std140, set = 1, binding = 13) uniform TerrainWaterParams {
     ivec4 rhiTerrainWaterControlFlags0;
     ivec4 rhiTerrainWaterControlFlags1;
     ivec4 rhiTerrainWaterControlFlags2;
+    vec4 rhiTerrainWaterPreExposure;
 };
 
 #define uWaterViewProj rhiTerrainWaterViewProj
@@ -55,3 +56,4 @@ layout(std140, set = 1, binding = 13) uniform TerrainWaterParams {
 #define uFreezeBias rhiTerrainWaterControlFlags1.z
 #define uRainSurfaceRipplesEnabled rhiTerrainWaterControlFlags1.w
 #define uIsEyeInWater rhiTerrainWaterControlFlags2.x
+#define uPreExposure rhiTerrainWaterPreExposure.x

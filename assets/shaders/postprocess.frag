@@ -71,6 +71,7 @@ layout(std140, binding = 12) uniform PostProcessParams {
 #define uWeatherExposureBias uPostWeatherParams1.w
 #define uWeatherPostRainFog uPostWeatherParams2.x
 #define uTime uPostWeatherParams2.y
+#define uPreExposure max(uPostWeatherParams2.z, 1e-6)
 
 float g_resolvedExposure = 1.0;
 
@@ -1243,6 +1244,10 @@ void main() {
             color += rays * uSunRayStrength * rayMask;
         }
     }
+
+    // Scene render targets are pre-exposed for FP16 range, while grading and
+    // tonemapping operate on scene-referred radiance.
+    color /= uPreExposure;
 
     // DerivativeMain Grade.glsl line 237: PurkinjeShift before exposure/tonemap.
     // Only active in shaderpack grading mode (DerivativeMain-like pipeline).

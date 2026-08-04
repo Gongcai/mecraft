@@ -32,7 +32,8 @@ public:
     [[nodiscard]] bool hasPreparedVertices() const { return m_preparedVertexCount > 0u; }
     void render(RhiCommandList& commandList, const glm::mat4& viewProj);
     void renderToSceneResolved(RhiCommandList& commandList, RhiTextureHandle voxelLightTexture,
-                               RhiTextureHandle depthTexture, const glm::mat4& viewProj, const glm::vec2& screenSize);
+                               RhiTextureHandle depthTexture, const glm::mat4& viewProj, const glm::vec2& screenSize,
+                               float preExposure);
 
 private:
     // Build billboard vertices from ECS particle data. Returns vertex count.

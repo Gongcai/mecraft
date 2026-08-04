@@ -30,7 +30,7 @@ bool ValidationRunController::configure(const AppLaunchOptions& options) {
     }
     m_sceneContract = std::move(loaded.contract);
     m_cameraPath = std::move(loaded.cameraPath);
-    m_renderSettingsProfile = makeValidationRenderSettingsProfile(m_sceneContract.scene);
+    m_renderSettingsProfile = makeValidationRenderSettingsProfile(m_sceneContract.scene, m_sceneContract.renderSettings);
     m_phase = Phase::Ready;
     return true;
 }

@@ -92,9 +92,10 @@ struct alignas(16) TerrainWaterParams {
     glm::ivec4 controlFlags0 = glm::ivec4(0);
     glm::ivec4 controlFlags1 = glm::ivec4(0);
     glm::ivec4 controlFlags2 = glm::ivec4(0);
+    glm::vec4 preExposure = glm::vec4(1.0f, 0.0f, 0.0f, 0.0f);
 };
 
-static_assert(sizeof(TerrainWaterParams) == 400u, "Terrain water parameters must match the std140 shader block");
+static_assert(sizeof(TerrainWaterParams) == 416u, "Terrain water parameters must match the std140 shader block");
 
 struct alignas(16) TerrainForwardParams {
     glm::mat4 view = glm::mat4(1.0f);
@@ -283,7 +284,7 @@ bool TerrainRhiPipelineSet::prepareTransparent(RhiCommandList& commandList, Reso
     params.atmosphereParams2 = glm::vec4(frame.atmosphere.surfaceWetness, frame.atmosphere.skyWetness,
                                          frame.atmosphere.fogWetness, frame.atmosphere.cloudWetness);
     params.atmosphereParams3 = glm::vec4(frame.atmosphere.precipitation, 0.0f, 0.0f, 0.0f);
-    params.waterAbsorption = glm::vec4(1.0f, 1.0f, 1.0f, 0.0f);
+    params.waterAbsorption = glm::vec4(1.0f, 1.0f, 1.0f, frame.preExposure);
     params.controlFlags0 = glm::ivec4(1, 1, 0, 1);
     params.controlFlags1 = glm::ivec4(1, frame.fog.enabled ? 1 : 0, frame.fog.mode, 0);
     params.controlFlags2 =
@@ -337,6 +338,7 @@ bool TerrainRhiPipelineSet::prepareWater(RhiCommandList& commandList, ResourceMg
         glm::ivec4(frame.volumetricFogActive ? 1 : 0, static_cast<int>(frame.frameIndex & 0x7fffffffULL),
                    frame.freezeBias ? 1 : 0, frame.rainSurfaceRipplesEnabled ? 1 : 0);
     params.controlFlags2 = glm::ivec4(frame.eyeInWater ? 1 : 0, 0, 0, 0);
+    params.preExposure = glm::vec4(frame.preExposure, 0.0f, 0.0f, 0.0f);
     commandList.bufferBarrier({m_waterParamsBuffer, RhiResourceState::UniformBuffer, RhiResourceState::TransferDst});
     commandList.updateBuffer(m_waterParamsBuffer, 0u, &params, sizeof(params));
     commandList.bufferBarrier({m_waterParamsBuffer, RhiResourceState::TransferDst, RhiResourceState::UniformBuffer});

@@ -77,6 +77,7 @@ uniform float uWaterStillLayerCount;
 uniform float uWaterFlowFirstLayer;
 uniform float uWaterFlowLayerCount;
 #define uWaterViewProj viewProj
+#define uPreExposure 1.0
 #endif
 
 layout(location = 0) out vec4 FragColor;
@@ -500,7 +501,7 @@ void main() {
         clipUv, gl_FragCoord.z, sceneDepth, refractionNormal, refractDepthTex);
     vec2 refractScreenUv = rhiScreenUvToClipUv(refractClipUv);
     vec2 refractTextureUv = rhiScreenUvToTextureUv(refractScreenUv);
-    vec3 sceneColor = texture(uSceneColorTex, refractTextureUv).rgb;
+    vec3 sceneColor = texture(uSceneColorTex, refractTextureUv).rgb / max(uPreExposure, 1e-6);
 
     // ---- Water fog (DerivativeMain WaterFog.glsl, applied BEFORE reflection) ----
     float waterSkylight = cube(clamp(vSunlight, 0.0, 1.0));
@@ -563,10 +564,10 @@ void main() {
     if (uVolumetricFogActive != 0) {
         vec4 volumetric = sampleDepthAwareVolumetric(textureUv);
         fogTransmittance = clamp(volumetric.a, 0.0, 1.0);
-        color = color * fogTransmittance + volumetric.rgb;
+        color = color * fogTransmittance + volumetric.rgb / max(uPreExposure, 1e-6);
     }
 
-    FragColor = vec4(max(color, vec3(0.0)), fogTransmittance);
+    FragColor = vec4(max(color, vec3(0.0)) * max(uPreExposure, 1e-6), fogTransmittance);
     // Water changes every frame, but full-strength masks discard nearly all
     // temporal history and expose projection jitter. Scale both signals by the
     // actual reflection contribution so calm, face-on water remains stable.

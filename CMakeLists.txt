@@ -1054,6 +1054,9 @@ if(MECRAFT_BUILD_TESTS)
     add_mecraft_test(reference_capture_manifest_test tests/reference_capture_manifest_test.cpp)
     target_compile_definitions(reference_capture_manifest_test PRIVATE
             MECRAFT_TEST_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
+    add_mecraft_test(rtgi_reference_capture_manifest_test tests/rtgi_reference_capture_manifest_test.cpp)
+    target_compile_definitions(rtgi_reference_capture_manifest_test PRIVATE
+            MECRAFT_TEST_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
     add_mecraft_test(texture_capture_test tests/texture_capture_test.cpp)
     add_mecraft_test(temporal_frame_contract_test tests/temporal_frame_contract_test.cpp)
     add_mecraft_test(clustered_lighting_contract_test

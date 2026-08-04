@@ -66,6 +66,7 @@ layout(std140, set = 1, binding = 15) uniform TerrainLitParams {
 #define uPrecipitation rhiTerrainLitAtmosphereParams3.x
 #define uWindTime rhiTerrainLitAtmosphereParams3.y
 #define uWaterAbsorption rhiTerrainLitWaterAbsorption.xyz
+#define uPreExposure rhiTerrainLitWaterAbsorption.w
 #define uWaterStillFirstLayer rhiTerrainLitWaterLayers.x
 #define uWaterStillLayerCount rhiTerrainLitWaterLayers.y
 #define uWaterFlowFirstLayer rhiTerrainLitWaterLayers.z

@@ -50,6 +50,7 @@ layout(std140, binding = 10) uniform VolumetricFogParams {
     vec4 pCloud1;
     vec4 pCloudDynamicWeather;
     vec4 pWater;
+    vec4 pPreExposure;
     vec4 pVFog0;
     vec4 pVFog1;
     ivec4 pFlags0;
@@ -100,6 +101,7 @@ layout(std140, binding = 10) uniform VolumetricFogParams {
 #define uCloudTimeScale pCloudDynamicWeather.w
 #define uWaterAbsorption pWater.xyz
 #define uUnderwaterVolumetricLightStrength pWater.w
+#define uPreExposure max(pPreExposure.x, 1e-6)
 #define uVFogCenterHeight pVFog0.x
 #define uVFogHeightSpread pVFog0.y
 #define uVFogNoiseScale pVFog0.z
@@ -616,7 +618,7 @@ void main() {
             return;
         }
 
-        FragColor = vec4(max(uwResult.rgb, vec3(0.0)), uwResult.a);
+        FragColor = vec4(max(uwResult.rgb, vec3(0.0)) * uPreExposure, uwResult.a);
         return;
     }
 
@@ -1112,5 +1114,5 @@ void main() {
         return;
     }
 
-    FragColor = vec4(max(scattering, vec3(0.0)), 1.0 - opacity);
+    FragColor = vec4(max(scattering, vec3(0.0)) * uPreExposure, 1.0 - opacity);
 }

@@ -137,12 +137,12 @@ void ParticleSystem::render(RhiCommandList& commandList, const glm::mat4& viewPr
 
 void ParticleSystem::renderToSceneResolved(RhiCommandList& commandList, const RhiTextureHandle voxelLightTexture,
                                            const RhiTextureHandle depthTexture, const glm::mat4& viewProj,
-                                           const glm::vec2& screenSize) {
+                                           const glm::vec2& screenSize, const float preExposure) {
     if (m_preparedVertexCount == 0u || !ensureDeferredBindGroup(voxelLightTexture, depthTexture)) {
         return;
     }
     const ParticlePushConstants pushConstants{viewProj, glm::vec4(0.50f, 0.78f, 0.34f, 0.0f),
-                                              glm::vec4(screenSize, 0.0f, 0.0f)};
+                                              glm::vec4(screenSize, preExposure, 0.0f)};
     commandList.setGraphicsPipeline(m_deferredPipeline);
     commandList.setBindGroup(0u, m_deferredBindGroup);
     commandList.setVertexBuffer(0u, m_rhiVertexBuffer, 0u);

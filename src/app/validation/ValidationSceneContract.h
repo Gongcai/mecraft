@@ -18,6 +18,9 @@ inline constexpr uint32_t kValidationSceneContractVersion1 = 1u;
 inline constexpr uint32_t kValidationSceneContractVersion = 2u;
 inline constexpr const char* kValidationSceneContractKind = "mecraft.validation_scene";
 inline constexpr uint32_t kValidationRenderSettingsVersion = 1u;
+inline constexpr uint32_t kValidationRtgiRenderSettingsVersion = 2u;
+inline constexpr const char* kValidationRtgiVoxelRenderSettingsId = "m3_voxel_rtgi_quality";
+inline constexpr const char* kValidationRtgiModelRenderSettingsId = "m3_model_rtgi_quality";
 inline constexpr const char* kValidationVoxelGeneratorId = "mecraft.overworld";
 inline constexpr uint32_t kValidationVoxelGeneratorVersion = 1u;
 
@@ -148,6 +151,13 @@ struct ValidationSceneContractLoadResult {
 /// @param scene Concrete validation scene that consumes the settings.
 /// @return Complete settings, stable metadata, and semantic content hash.
 [[nodiscard]] ValidationRenderSettingsProfile makeValidationRenderSettingsProfile(ValidationScene scene);
+
+/// Builds the exact renderer profile named by a scene contract.
+/// @param scene Concrete validation scene that consumes the settings.
+/// @param identity Versioned profile identity requested by the descriptor.
+/// @return Complete profile, or an invalid empty profile for an unknown identity.
+[[nodiscard]] ValidationRenderSettingsProfile
+makeValidationRenderSettingsProfile(ValidationScene scene, const ValidationRenderSettingsIdentity& identity);
 
 /// Computes the semantic hash of one generated voxel world recipe.
 /// @param world Generator identity, seed, and render distance to hash.

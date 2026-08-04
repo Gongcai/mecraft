@@ -35,7 +35,7 @@ int main() {
                          controller.renderSettingsProfile().version ==
                              app::validation::kValidationRenderSettingsVersion &&
                          renderer::contracts::stableContentHashHex(controller.renderSettingsProfile().contentHash) ==
-                             "511c4e7a0e2e2de9" &&
+                             "df6a9bdca9fd3c13" &&
                          !controller.renderSettingsProfile().settings.upscale.dynamicResolutionEnabled &&
                          !controller.renderSettingsProfile().settings.upscale.fsr1Enabled,
                      "validation must publish the fixed versioned renderer profile") ||
@@ -87,6 +87,23 @@ int main() {
     invalid.validationSampleFrames = 1u;
     std::string error;
     if (!requireTrue(!validateAppLaunchOptions(invalid, error), "validation must reject a single sample frame")) {
+        return 1;
+    }
+
+    AppLaunchOptions rtgiOptions = options;
+    rtgiOptions.validationScenePath =
+        std::filesystem::path(MECRAFT_TEST_SOURCE_DIR) / "assets/validation/scenes/m3_voxel_rtgi_cave.json";
+    app::validation::ValidationRunController rtgiController;
+    if (!requireTrue(rtgiController.configure(rtgiOptions), "the M3 RTGI Camera Path must configure validation") ||
+        !requireTrue(rtgiController.renderSettingsProfile().id ==
+                             app::validation::kValidationRtgiVoxelRenderSettingsId &&
+                         rtgiController.renderSettingsProfile().version ==
+                             app::validation::kValidationRtgiRenderSettingsVersion &&
+                         rtgiController.renderSettingsProfile().settings.rtgi.enabled &&
+                         rtgiController.renderSettingsProfile().settings.nrd.enabled &&
+                         !rtgiController.renderSettingsProfile().settings.ssgi.enabled &&
+                         rtgiController.renderSettingsProfile().settings.nrd.disocclusionThreshold == 0.02f,
+                     "M3 validation must select the fixed RTGI/RELAX profile without SSGI")) {
         return 1;
     }
 

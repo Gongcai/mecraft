@@ -55,6 +55,8 @@ layout(std140, binding = 6) uniform StaticMeshFrameParams {
     uvec4 uClusterRenderExtent;
 };
 
+#define uPreExposure max(uSunColor.w, 1e-6)
+
 #include "static_mesh_material.glsl"
 #include "render_contract.glsl"
 
@@ -336,7 +338,7 @@ void main() {
         vec3 transmittedScene = textureLod(
             uSceneColorTexture,
             rhiScreenUvToTextureUv(transmissionScreenUv),
-            transmissionLod).rgb;
+            transmissionLod).rgb / uPreExposure;
         vec3 volumeAttenuation = vec3(1.0);
         if (sampledMaterial.thickness > 0.0 &&
             sampledMaterial.attenuationEnabled) {
@@ -355,14 +357,14 @@ void main() {
         sampledMaterial.transmission <= 0.0 &&
         sampledMaterial.clearcoat > 0.0;
     if (clearcoatOverlay) {
-        outColor = vec4(clearcoatDirect + clearcoatReflection, 0.0);
+        outColor = vec4((clearcoatDirect + clearcoatReflection) * uPreExposure, 0.0);
         outReactiveMask = sampledMaterial.clearcoat;
         outTransparencyMask = 0.0;
         return;
     }
 
     outColor = vec4(
-        color * sampledMaterial.baseColor.a + reflection,
+        (color * sampledMaterial.baseColor.a + reflection) * uPreExposure,
         sampledMaterial.baseColor.a);
     float temporalMask = max(
         sampledMaterial.baseColor.a, sampledMaterial.transmission);

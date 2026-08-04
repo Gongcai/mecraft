@@ -177,6 +177,9 @@ constexpr double kWorldDaySeconds = 1200.0;
 
 void configureCommonValidationSettings(RenderSettings& settings) {
     settings.pipelineMode = PipelineMode::Deferred;
+    // Keep the versioned reference captures on their locked NRD profile.
+    // Runtime defaults may evolve independently of capture identity.
+    settings.nrd.disocclusionThreshold = 0.01f;
     settings.ssao.asyncComputeEnabled = false;
     settings.cloud.asyncComputeEnabled = false;
     settings.cloud.updateInterval = 1;
@@ -499,7 +502,8 @@ void configureCommonValidationSettings(RenderSettings& settings) {
     }
     result.cameraPath = cameraPath.path;
 
-    const ValidationRenderSettingsProfile profile = makeValidationRenderSettingsProfile(contract.scene);
+    const ValidationRenderSettingsProfile profile =
+        makeValidationRenderSettingsProfile(contract.scene, contract.renderSettings);
     if (profile.id != contract.renderSettings.id || profile.version != contract.renderSettings.version ||
         profile.contentHash != contract.renderSettings.contentHash) {
         result.error = ValidationSceneContractError::RenderSettingsIdentityMismatch;
@@ -562,6 +566,31 @@ ValidationRenderSettingsProfile makeValidationRenderSettingsProfile(const Valida
         break;
     case ValidationScene::None: std::abort();
     }
+    profile.contentHash = renderSettingsContentHash(profile.settings);
+    return profile;
+}
+
+ValidationRenderSettingsProfile
+makeValidationRenderSettingsProfile(const ValidationScene scene, const ValidationRenderSettingsIdentity& identity) {
+    ValidationRenderSettingsProfile profile = makeValidationRenderSettingsProfile(scene);
+    if (identity.id == profile.id && identity.version == profile.version) {
+        return profile;
+    }
+
+    const char* expectedRtgiId = scene == ValidationScene::Voxel ? kValidationRtgiVoxelRenderSettingsId
+                                                                 : kValidationRtgiModelRenderSettingsId;
+    if (scene == ValidationScene::None || identity.id != expectedRtgiId ||
+        identity.version != kValidationRtgiRenderSettingsVersion) {
+        return {};
+    }
+    profile.id = expectedRtgiId;
+    profile.version = kValidationRtgiRenderSettingsVersion;
+    profile.settings.rtgi.enabled = true;
+    profile.settings.rtgi.intensity = 1.0f;
+    profile.settings.nrd.enabled = true;
+    profile.settings.nrd.method = NrdDiffuseMethod::Relax;
+    profile.settings.nrd.disocclusionThreshold = 0.02f;
+    profile.settings.ssgi.enabled = false;
     profile.contentHash = renderSettingsContentHash(profile.settings);
     return profile;
 }

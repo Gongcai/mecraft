@@ -56,6 +56,7 @@ struct TerrainWaterFrameData {
     bool freezeBias = false;
     bool rainSurfaceRipplesEnabled = false;
     bool eyeInWater = false;
+    float preExposure = 1.0f;
 };
 
 class TerrainRhiPipelineSet {

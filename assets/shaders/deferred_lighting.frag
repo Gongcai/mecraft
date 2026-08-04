@@ -184,6 +184,7 @@ layout(std140, binding = MECRAFT_DEFERRED_LIGHTING_PARAMS_BINDING) uniform Defer
 #define uRtgiIntensity pRtgi.x
 #define uRtgiEncoding int(pRtgi.y)
 #define uRtgiRadianceScale pRtgi.z
+#define uPreExposure pRtgi.w
 #define uNoiseEnabled (pFlags0.x != 0)
 #define uAerialPerspectiveEnabled pFlags0.y
 #define uVolumetricFogActive pFlags0.z
@@ -1217,5 +1218,5 @@ void main() {
     // Alpha encodes translucency: 0 = opaque, 1 = translucent (water/glass/ice/stained glass).
     // Downstream composite passes use this to apply refraction/tinting selectively.
     float translucency = transMask.isTranslucent ? 1.0 : 0.0;
-    FragColor = vec4(max(color, vec3(0.0)), translucency);
+    FragColor = vec4(max(color, vec3(0.0)) * max(uPreExposure, 1e-6), translucency);
 }

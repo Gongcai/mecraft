@@ -41,5 +41,7 @@ void main() {
     // DerivativeMain DownSample: raw HDR downsample, no brightness threshold.
     // Exposure compensation in Grade (bloomAmount /= fma(max(exposure,1.0),0.7,0.3))
     // prevents bloom from blowing out in bright scenes.
+    // Bloom remains in the Scene HDR pre-exposed domain; the final composite
+    // removes that scale before grading and tonemapping.
     FragColor = vec4(clamp(bloom, 0.0, 65535.0), 1.0);
 }

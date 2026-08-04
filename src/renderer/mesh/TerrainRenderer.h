@@ -129,6 +129,7 @@ struct TerrainFrameData {
     float animationTime = 0.0f;
     float shaderTime = 0.0f;
     float surfaceWetness = 0.0f;
+    float preExposure = 1.0f;
     TerrainFogData fog{};
     TerrainSkyLightingData skyLighting{};
     TerrainAtmosphereData atmosphere{};

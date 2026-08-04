@@ -50,6 +50,7 @@ layout(std140, binding = 16) uniform ReflectionParams {
 #define uNearPlane pCameraPosNear.w
 #define uFarPlane pFarSurfaceTime.x
 #define uSurfaceWetness pFarSurfaceTime.y
+#define uPreExposure max(pFarSurfaceTime.w, 1e-6)
 #define uReflectionDebugMode pControls.x
 #define uRainWetSurfacesEnabled pControls.y
 
@@ -325,7 +326,7 @@ bool traceScreenSpaceReflection(vec3 worldPos,
             float roughnessConfidence = 1.0 - coneWidth * 0.7;
             float distanceRoughnessPenalty = 1.0 - coneWidth * saturate(refinedT / maxDistance) * 0.5;
             hitConfidence = clamp(edgeFade * distanceFade * grazingFade * normalFacing * roughnessConfidence * distanceRoughnessPenalty, 0.0, 1.0);
-            hitColor = texture(uSceneLightingTex, refinedTextureUv).rgb;
+            hitColor = texture(uSceneLightingTex, refinedTextureUv).rgb / uPreExposure;
             return hitConfidence > 0.001;
         }
     }

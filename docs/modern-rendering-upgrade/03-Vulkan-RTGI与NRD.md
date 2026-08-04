@@ -355,8 +355,10 @@ NRD 4.17.3 的 `previous - current` 约定转换符号，并通过 `motionVector
 HDR，Signal Pack 在进入 NRD 前乘其倒数，Deferred Lighting 对 NRD 输出恢复当前 Pre-exposure；NRD
 历史因此始终消费 Scene-referred Radiance。全局 Temporal Reset 或 NRD History Clear 期间不读取上一帧
 深度，Z Motion 写零；真实 Vulkan Smoke 固定验证当前 View-Z `2`、上一帧 View-Z `3`、Z Motion `1`，
-并验证 `Pre-exposure = 4` 的 Raw/NRD 输入转换。当前全局 producer 仍显式使用 `1`，按历史所有者
-细分的 Reset 仍属于后续时域契约工作。
+并验证 `Pre-exposure = 4` 的 Raw/NRD 输入转换。Scene HDR 的 Lighting、SceneComposite、Reflection、
+Water、Transparent、Cloud、Volumetric 和 Particle producer 已统一写入 Pre-exposed 域，Tonemap 前除回；
+按历史所有者细分的 Reset 已完成，`TemporalFrameInput` 的上采样域保持 `1`。`PreExposure` 只让 Scene HDR
+域历史重启，NRD 输入保持去曝光稳定。
 
 NRD 的 `frameIndex` 每个真实渲染帧严格增加 1，并与 Checkerboard Phase 同步。Material/
 Stable Object ID 由应用生成 History Confidence 与 Disocclusion Threshold Mix；NRD 直接

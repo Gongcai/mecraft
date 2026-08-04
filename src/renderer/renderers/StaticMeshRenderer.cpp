@@ -1822,7 +1822,7 @@ bool StaticMeshRenderer::prepareGBuffer(RhiCommandList& commandList, const glm::
         glm::vec4(moonDominant ? context.skyColors.moonDirection : context.skyColors.sunDirection, 0.0f);
     frameParams.sunColor = glm::vec4(
         (moonDominant ? context.skyColors.moonLightColor : context.skyColors.sunLightColor) * context.skyIntensity,
-        1.0f);
+        context.preExposure);
     frameParams.ambientColor = glm::vec4(context.skyColors.skyAmbientColor * context.skyIntensity, 0.0f);
     frameParams.fogColor = glm::vec4(context.fog.color, 0.0f);
     frameParams.fogParams = glm::vec4(context.fog.startDistance, context.fog.endDistance, context.fog.density,
