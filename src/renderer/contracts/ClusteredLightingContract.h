@@ -36,12 +36,15 @@ struct ClusterGrid final {
 };
 
 /// Stores one inclusive integer cluster box consumed by count and fill
-/// compute passes. minCluster.w is one for an intersecting light and zero for
-/// a light outside the current view. ClusteredLightingPass stores the source
-/// GpuLight index in maxCluster.w after removing inactive bounds.
+/// compute passes, plus the light sphere in view space used for exact
+/// sphere-vs-cluster intersection. minCluster.w is one for an intersecting
+/// light and zero for a light outside the current view. ClusteredLightingPass
+/// stores the source GpuLight index in maxCluster.w after removing inactive
+/// bounds. viewSphere.w is negative for directional lights.
 struct alignas(16) GpuClusterLightBounds final {
     glm::uvec4 minCluster{0u};
     glm::uvec4 maxCluster{0u};
+    glm::vec4 viewSphere{0.0f, 0.0f, 0.0f, -1.0f};
 };
 
 /// Builds the fixed 16x16x24 cluster lattice for one render extent.
@@ -73,17 +76,18 @@ struct alignas(16) GpuClusterLightBounds final {
                                                                               const glm::mat4& view,
                                                                               const glm::mat4& projection);
 
-/// Counts the exact number of compact-list entries represented by bounds.
+/// Counts the maximum number of compact-list entries represented by the coarse
+/// bounds. GPU sphere intersection can reduce the final count before fill.
 /// @param bounds Inclusive cluster box with its active marker.
 /// @return Zero for an inactive light, or the covered cluster count.
 [[nodiscard]] uint32_t clusterLightCoverageCount(const GpuClusterLightBounds& bounds);
 
-/// Sums all light coverage counts without exceeding 32-bit GPU indices.
+/// Sums all coarse coverage counts without exceeding 32-bit GPU index capacity.
 /// @param bounds Per-light inclusive cluster boxes.
 /// @return Required compact index capacity, or std::nullopt on overflow.
 [[nodiscard]] std::optional<uint32_t> requiredClusterLightIndexCount(const std::vector<GpuClusterLightBounds>& bounds);
 
-static_assert(sizeof(GpuClusterLightBounds) == 32u);
+static_assert(sizeof(GpuClusterLightBounds) == 48u);
 static_assert(alignof(GpuClusterLightBounds) == 16u);
 static_assert(std::is_trivially_copyable_v<GpuClusterLightBounds>);
 static_assert(std::is_standard_layout_v<GpuClusterLightBounds>);

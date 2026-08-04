@@ -1,5 +1,6 @@
 #version 450 core
 #include "cluster_build_contract.glsl"
+#include "cluster_sphere_intersection.glsl"
 
 layout(local_size_x = CLUSTER_COVERAGE_WORKGROUP_SIZE,
        local_size_y = 1,
@@ -22,8 +23,11 @@ layout(binding = 4, std430) buffer ClusterStatsBuffer {
 };
 
 layout(push_constant) uniform RhiPushConstants {
+    mat4 uInverseProjection;
     // xyz: cluster grid dimensions; w: light count.
     uvec4 uGridAndLightCount;
+    // x/y: near/far depth; z/w: logarithmic slice scale/bias.
+    vec4 uDepthParameters;
     // x: compact index capacity.
     uvec4 uCapacity;
 };
@@ -52,6 +56,11 @@ void main() {
          coverageIndex += CLUSTER_COVERAGE_WORKGROUP_SIZE) {
         const uvec3 cluster = clusteredLightCoverageCoordinate(
             coverageIndex, minimumCluster, coverageExtent, depthSlice);
+        const ClusterFrustumCorners frustum = buildClusterFrustumCorners(
+            uInverseProjection, uDepthParameters, cluster, gridSize);
+        if (!clusterSphereIntersectsCluster(bounds.viewSphere, frustum)) {
+            continue;
+        }
         const uint clusterIndex = clusteredLightClusterIndex(
             cluster, gridSize);
         const uint cursor = atomicAdd(

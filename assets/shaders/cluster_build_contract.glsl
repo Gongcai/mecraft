@@ -19,6 +19,7 @@ const uint CLUSTER_COVERAGE_WORKGROUP_SIZE = 64u;
 struct ClusterLightBounds {
     uvec4 minCluster;
     uvec4 maxCluster;
+    vec4 viewSphere;
 };
 
 struct ClusterRecord {

@@ -105,6 +105,12 @@ bool testCoverageAndCapacity() {
                      "a finite local light must cover a compact cluster subset")) {
         return false;
     }
+    if (!requireTrue(centerBounds->viewSphere.w == 2.0f && centerBounds->viewSphere.z == -8.0f,
+                     "local light bounds must preserve the view-space influence sphere") ||
+        !requireTrue(directionalBounds->viewSphere.w < 0.0f,
+                     "directional bounds must carry the explicit non-spherical marker")) {
+        return false;
+    }
 
     const GpuLight outside = makePointLight(3u, {10000.0f, 0.0f, -8.0f}, 1.0f);
     const auto outsideBounds = buildGpuClusterLightBounds(outside, grid, view, projection);
@@ -182,12 +188,15 @@ bool testComputeShaderContracts() {
     std::string scan;
     std::string count;
     std::string fill;
+    std::string intersection;
     if (!requireTrue(readProjectFile("assets/shaders/cluster_scan.comp", scan),
                      "hierarchical scan shader must be readable") ||
         !requireTrue(readProjectFile("assets/shaders/cluster_count.comp", count),
                      "cluster count shader must be readable") ||
         !requireTrue(readProjectFile("assets/shaders/cluster_fill.comp", fill),
-                     "compact list fill shader must be readable")) {
+                     "compact list fill shader must be readable") ||
+        !requireTrue(readProjectFile("assets/shaders/cluster_sphere_intersection.glsl", intersection),
+                     "cluster sphere intersection shader must be readable")) {
         return false;
     }
     return requireTrue(scan.find("shared uint uScan[512]") != std::string::npos,
@@ -209,7 +218,11 @@ bool testComputeShaderContracts() {
                            fill.find("gl_WorkGroupID.y") != std::string::npos,
                        "fill must distribute every active light slice and preserve the source light index") &&
            requireTrue(fill.find("CLUSTER_BUILD_ERROR") != std::string::npos,
-                       "capacity and cursor failures must be explicit");
+                       "capacity and cursor failures must be explicit") &&
+           requireTrue(count.find("clusterSphereIntersectsCluster") != std::string::npos &&
+                           fill.find("clusterSphereIntersectsCluster") != std::string::npos &&
+                           intersection.find("clusterPointTriangleDistanceSquared") != std::string::npos,
+                       "count and fill must share exact sphere-cluster intersection coverage");
 }
 
 bool testSharedLightingConsumers() {

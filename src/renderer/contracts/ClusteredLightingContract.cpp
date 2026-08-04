@@ -89,6 +89,7 @@ std::optional<GpuClusterLightBounds> buildGpuClusterLightBounds(const GpuLight& 
     if (type == GpuLightType::Directional) {
         bounds.minCluster = {0u, 0u, 0u, 1u};
         bounds.maxCluster = {grid.tileCountX - 1u, grid.tileCountY - 1u, grid.depthSliceCount - 1u, 0u};
+        bounds.viewSphere = {0.0f, 0.0f, 0.0f, -1.0f};
         return bounds;
     }
 
@@ -111,6 +112,7 @@ std::optional<GpuClusterLightBounds> buildGpuClusterLightBounds(const GpuLight& 
     const float maxDepth = std::min(grid.farPlane, viewDepth + radius);
     bounds.minCluster.z = clusterDepthSlice(grid, minDepth);
     bounds.maxCluster.z = clusterDepthSlice(grid, maxDepth);
+    bounds.viewSphere = {viewCenter, radius};
 
     bool fullScreen = viewDepth - radius <= grid.nearPlane;
     float ndcMinX = -1.0f;

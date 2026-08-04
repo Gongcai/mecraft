@@ -29,7 +29,9 @@ constexpr uint32_t kStatsIndexCapacity = 6u;
 constexpr uint32_t kStatsContractVersion = 7u;
 
 struct alignas(16) ClusterGridPushConstants final {
+    glm::mat4 inverseProjection{1.0f};
     glm::uvec4 gridAndLightCount{0u};
+    glm::vec4 depthParameters{0.0f};
 };
 
 struct alignas(16) ClusterScanPushConstants final {
@@ -37,16 +39,22 @@ struct alignas(16) ClusterScanPushConstants final {
 };
 
 struct alignas(16) ClusterFillPushConstants final {
+    glm::mat4 inverseProjection{1.0f};
     glm::uvec4 gridAndLightCount{0u};
+    glm::vec4 depthParameters{0.0f};
     glm::uvec4 capacity{0u};
 };
 
-static_assert(sizeof(ClusterGridPushConstants) == 16u);
+static_assert(sizeof(ClusterGridPushConstants) == 96u);
 static_assert(sizeof(ClusterScanPushConstants) == 16u);
-static_assert(sizeof(ClusterFillPushConstants) == 32u);
+static_assert(sizeof(ClusterFillPushConstants) == 112u);
 
 [[nodiscard]] bool finite(const glm::vec4& value) {
     return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z) && std::isfinite(value.w);
+}
+
+[[nodiscard]] bool finite(const glm::mat4& value) {
+    return finite(value[0]) && finite(value[1]) && finite(value[2]) && finite(value[3]);
 }
 
 [[nodiscard]] bool sameClusterGrid(const renderer::contracts::ClusterGrid& lhs,
@@ -260,6 +268,10 @@ bool ClusteredLightingPass::buildCoverage(const FrameContext& ctx, const uint32_
         m_emptyBuildReady = false;
     }
     m_grid = *grid;
+    m_inverseProjection = glm::inverse(ctx.camera.projection);
+    if (!finite(m_inverseProjection)) {
+        return false;
+    }
     m_worldLightGrid = buildWorldLightGrid(m_lights);
     if (!m_worldLightGrid.succeeded()) {
         MECRAFT_LOG_STREAM(std::cerr << "[ClusteredLightingPass] World light grid build failed: "
@@ -811,8 +823,10 @@ bool ClusteredLightingPass::recordCount(RhiCommandList& commandList) const {
         return true;
     }
     ClusterGridPushConstants push;
+    push.inverseProjection = m_inverseProjection;
     push.gridAndLightCount = {m_grid.tileCountX, m_grid.tileCountY, m_grid.depthSliceCount,
                               static_cast<uint32_t>(m_lightBounds.size())};
+    push.depthParameters = {m_grid.nearPlane, m_grid.farPlane, m_grid.depthLogScale, m_grid.depthLogBias};
     commandList.setComputePipeline(m_countStage.pipeline);
     commandList.setBindGroup(0u, m_countBindGroup);
     commandList.pushConstants(&push, sizeof(push), rhiFlag(RhiShaderStage::Compute));
@@ -866,8 +880,10 @@ bool ClusteredLightingPass::recordFill(RhiCommandList& commandList) const {
         return true;
     }
     ClusterFillPushConstants push;
+    push.inverseProjection = m_inverseProjection;
     push.gridAndLightCount = {m_grid.tileCountX, m_grid.tileCountY, m_grid.depthSliceCount,
                               static_cast<uint32_t>(m_lightBounds.size())};
+    push.depthParameters = {m_grid.nearPlane, m_grid.farPlane, m_grid.depthLogScale, m_grid.depthLogBias};
     push.capacity = {m_indexCapacity, 0u, 0u, 0u};
     commandList.setComputePipeline(m_fillStage.pipeline);
     commandList.setBindGroup(0u, m_fillBindGroup);

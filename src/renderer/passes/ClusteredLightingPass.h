@@ -183,6 +183,7 @@ private:
     renderer::contracts::WorldLightGridBuildResult m_worldLightGrid;
     std::vector<uint32_t> m_zeroClusterWords;
     renderer::contracts::ClusterGrid m_grid;
+    glm::mat4 m_inverseProjection{1.0f};
     uint32_t m_requiredIndexCount = 0u;
     uint32_t m_indexCapacity = 0u;
     uint32_t m_scanScratchWordCount = 0u;
