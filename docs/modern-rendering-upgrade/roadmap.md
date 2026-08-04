@@ -243,16 +243,25 @@ M1 与 M2 可并行开发，但公共 `GpuMaterial`、`GpuSceneGeometry` 与 Sta
    输入；Deferred Lighting 按输出编码解包，运行时不会依据 GPU 时间更改 Method。）
 8. Non-jittered Matrix、2.5D Motion、Pre-exposure 转换和 History Reset。（进行中：当前/上一帧
    Non-jittered Matrix 已进入 NRD Common Settings；当前/上一帧 Pre-exposure 已进入 FrameContext 与
-   TemporalFrameInput；RTGI Raw 写入当前 Pre-exposed 域，Signal Pack 进入 NRD 前去曝光，Deferred
-   Lighting 合成 NRD 输出时恢复当前曝光。独立 `RGBA16F` Guide Motion 已按
+   TemporalFrameInput；RTGI Raw 写入当前 Pre-exposed 域，Signal Pack 进入 NRD 前去曝光。独立
+   `RGBA16F` Guide Motion 已按
    `previousUv - currentUv` 和 `previousPositiveViewZ - currentPositiveViewZ` 生成 2.5D 输入，公共
    `RG16F` Velocity 保持不变。Guide Prep 使用上一帧 Depth、正 View-Z，并在全局 Temporal Reset 时清零
-   Z History；固定数值的真实 Vulkan 回读和 Validation 已通过。Pre-exposure 转换与按历史所有者细分的
-   生产当前曝光值仍显式为 `1`，全局 Auto Exposure 到 Scene HDR 的 Pre-exposure producer 与按历史
-   所有者细分的 Reset 仍待完成；公共 `invalidateHistory()` 已同步触发 NRD Permanent Pool Clear。）
+   Z History；固定数值的真实 Vulkan 回读和 Validation 已通过。Pre-exposure producer 已接入：
+   PostProcess 的 1x1 自适应曝光状态经三槽 Readback Ring 回读 CPU，Vulkan Deferred 按整档 2 的幂
+   量化并以 1 EV 迟滞产出 `FrameContext.preExposure`，RTGI Raw 存储与 Firefly Clamp 随实际曝光缩放，
+   Signal Pack 按同值去曝光；Scene HDR 当前仍为 scene-referred 域，Deferred Lighting 合成 NRD 输出
+   使用恒等 Scale，Raw 直采回退按倒数去曝光，`TemporalFrameInput` 的上采样域保持 `1`。按历史所有者
+   细分的 Reset 已完成：`TemporalHistoryOwner`（NrdDiffuse/Clouds/Volumetrics/ScreenSpace/Upscaler）
+   与 `ownerRequiresTemporalReset` 过滤全部消费点，`DenoiserMethod` 原因只重启 NRD 与 RTGI 采样序列，
+   保留云、体积雾、屏幕空间与上采样历史；`PreExposure` 原因位已为 Scene HDR Pre-exposed 化预留。
+   剩余：全局 Auto Exposure 到 Scene HDR 的 Pre-exposed 域应用（Lighting/Water/Transparent/Cloud/
+   Volumetric 写入端乘 E、Tonemap 除 E）待独立视觉验证阶段实施。）
 9. RTGI/NRD Debug View、Timestamp、Reference Capture。（进行中：RTGI Trace/Signal Pack 与 NRD Guide/
    全部 SDK Dispatch 已纳入独立 GPU Timestamp 阶段，Dashboard、固定 p50/p95/p99 窗口和 Benchmark JSON
-   均分别发布 RTGI/NRD 耗时；信号 Debug View 与双场景 Reference Capture 仍待完成。）
+   均分别发布 RTGI/NRD 耗时；信号 Debug View 已接入 Deferred Debug View 89-92（Raw Radiance、
+   First-bounce Hit Distance、Trace Classification、Candidate/Confirmed 计数），RTGI 关闭时以恒有效
+   目标替换绑定；双场景 Reference Capture 仍待完成。）
 
 ### 完成条件
 

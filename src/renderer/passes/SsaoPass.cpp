@@ -51,7 +51,7 @@ void SsaoPass::shutdown() {
 RgPassHandle SsaoPass::addGraphPasses(RenderGraph& graph, const FrameContext& ctx, const SsaoSettings& ssao,
                                       DeferredRenderTargets& targets, const GraphResources& resources,
                                       const RgPassHandle dependency, const bool useAsyncCompute) {
-    const bool temporalEnabled = ssao.temporalEnabled && !requiresTemporalReset(ctx.temporalResetReasons);
+    const bool temporalEnabled = ssao.temporalEnabled && !ownerRequiresTemporalReset(TemporalHistoryOwner::ScreenSpace, ctx.temporalResetReasons);
     if (!dependency.isValid() || !resources.depth.isValid() || !resources.normalAo.isValid() ||
         !resources.velocity.isValid() || !resources.noise.isValid() || !resources.halfRes.isValid() ||
         !resources.filtered.isValid() || (ssao.filterEnabled && !resources.halfResFiltered.isValid()) ||

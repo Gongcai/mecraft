@@ -51,8 +51,10 @@ layout(binding = 21) uniform sampler2D uReactiveMaskTex;
 layout(binding = 22) uniform sampler2D uTransparencyMaskTex;
 layout(binding = 23) uniform sampler2D uF0MetallicTex;
 layout(binding = 24) uniform usampler2D uObjectMaterialIdTex;
+layout(binding = 25) uniform sampler2D uRtgiRawTex;
+layout(binding = 26) uniform usampler2D uRtgiValidationTex;
 
-layout(std140, binding = 25) uniform DebugParams {
+layout(std140, binding = 27) uniform DebugParams {
     mat4 pShadowModelView;
     mat4 pShadowProjection;
     mat4 pShadowProjectionInverse;
@@ -936,6 +938,40 @@ void main() {
         FragColor = vec4(materialId == 0u ? vec3(0.0)
                                          : stableIdentityColor(materialId),
                          1.0);
+        return;
+    }
+
+    // Debug 89-92: RTGI raw signal and trace validation.
+    // The raw target stores pre-exposed radiance in RGB and the first-bounce
+    // hit distance in A (65504 for a sky miss). The validation word packs
+    // classification (8 bits), candidate count (12 bits), confirmed count
+    // (12 bits); values mirror rtgi_sampling.glsl.
+    if (uDebugViewMode == 89) {
+        FragColor = vec4(tonemapPreview(max(texture(uRtgiRawTex, textureUv).rgb, vec3(0.0))), 1.0);
+        return;
+    }
+    if (uDebugViewMode == 90) {
+        float hitDistance = max(texture(uRtgiRawTex, textureUv).a, 0.0);
+        // Miss distances saturate the ramp; nearby hits resolve in detail.
+        FragColor = vec4(heatmap(1.0 - exp(-hitDistance / 24.0)), 1.0);
+        return;
+    }
+    if (uDebugViewMode == 91) {
+        uint word = texture(uRtgiValidationTex, textureUv).r;
+        uint classification = word & 0xffu;
+        vec3 classColor = classification == 3u   ? vec3(0.1, 0.8, 0.2)  // hit
+                          : classification == 2u ? vec3(0.2, 0.4, 0.9)  // miss/sky sample
+                          : classification == 0u ? vec3(0.05, 0.05, 0.1) // primary sky
+                          : classification == 1u ? vec3(0.7, 0.7, 0.2)  // translucent
+                                                 : vec3(1.0, 0.1, 0.6); // non-finite
+        FragColor = vec4(classColor, 1.0);
+        return;
+    }
+    if (uDebugViewMode == 92) {
+        uint word = texture(uRtgiValidationTex, textureUv).r;
+        float candidates = float((word >> 8u) & 0xfffu);
+        float confirmed = float((word >> 20u) & 0xfffu);
+        FragColor = vec4(heatmap(candidates / 16.0).r, confirmed / 16.0, 0.0, 1.0);
         return;
     }
 

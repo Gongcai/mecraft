@@ -157,7 +157,7 @@ bool ShadowPass::prepareGraphFrame(const FrameContext& ctx, const RenderSettings
     // the world the stale shadow map captured.
     const glm::vec3 lightDirection = m_shadowRenderer->lightDirection();
     const bool forceAllCascades = !settings.shadow.farCascadeInterleaved || !m_farCascadesPrimed ||
-                                  requiresTemporalReset(ctx.temporalResetReasons) ||
+                                  ownerRequiresTemporalReset(TemporalHistoryOwner::ScreenSpace, ctx.temporalResetReasons) ||
                                   settings.shadow.resolution != m_lastShadowResolution ||
                                   settings.shadow.distance != m_lastShadowDistance ||
                                   glm::dot(lightDirection, m_lastShadowLightDirection) < 0.999f;

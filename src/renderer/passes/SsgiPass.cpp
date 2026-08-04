@@ -56,7 +56,7 @@ void SsgiPass::shutdown() {
 RgPassHandle SsgiPass::addGraphPasses(RenderGraph& graph, const FrameContext& ctx, const RenderSettings& settings,
                                       DeferredRenderTargets& targets, const GraphResources& resources,
                                       const RgPassHandle dependency) {
-    const bool temporalActive = settings.ssgi.temporalEnabled && !requiresTemporalReset(ctx.temporalResetReasons);
+    const bool temporalActive = settings.ssgi.temporalEnabled && !ownerRequiresTemporalReset(TemporalHistoryOwner::ScreenSpace, ctx.temporalResetReasons);
     const int denoiseIterations = settings.ssgi.denoiseEnabled ? std::clamp(settings.ssgi.denoiseIterations, 0, 4) : 0;
     if (!dependency.isValid() || !resources.sceneLighting.isValid() || !resources.albedo.isValid() ||
         !resources.normalAo.isValid() || !resources.materialAux.isValid() || !resources.depth.isValid() ||

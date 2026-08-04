@@ -349,6 +349,12 @@ private:
     void invalidateFrameHistory(TemporalResetReasons reasons);
     void refreshTemporalFrameInput();
 
+    /// Produce the scene-radiance pre-exposure for the frame being built.
+    /// Tracks the GPU-adapted auto exposure quantized to powers of two with
+    /// one-stop hysteresis so the pre-exposed HDR domain changes rarely.
+    /// Non-Vulkan and non-deferred paths keep the identity domain.
+    [[nodiscard]] float resolveScenePreExposure();
+
     // Configuration
     RenderSettings m_settings;
     std::function<bool(const RenderSettings&)> m_settingsChangedCallback;
@@ -384,6 +390,9 @@ private:
     std::optional<TemporalUpscaleResult> m_temporalUpscaleResult;
     bool m_hasPreviousContext = false;
     uint64_t m_previousWorldBlockContentRevision = 0u;
+    // Active quantized scene pre-exposure; changes only across >= 1-stop
+    // adapted-exposure transitions.
+    float m_scenePreExposure = 1.0f;
     TemporalResetReasons m_pendingTemporalResetReasons = temporalResetReasonBit(TemporalResetReason::FirstFrame);
     double m_contextCpuMs = 0.0;
     bool m_eyeInWater = false;

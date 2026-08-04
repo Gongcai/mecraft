@@ -245,7 +245,7 @@ struct ModelSceneDeferredRenderer::Impl {
         }
         context.temporalResetReasons = evaluateTemporalResetReasons(hasPreviousContext, previousContext.temporalExtents,
                                                                     context.temporalExtents, explicitResetReasons, {});
-        if (!requiresTemporalReset(context.temporalResetReasons)) {
+        if (!ownerRequiresTemporalReset(TemporalHistoryOwner::ScreenSpace, context.temporalResetReasons)) {
             context.prevCamera = previousContext.camera;
             context.previousJitter = previousContext.jitter;
             context.previousViewProj = previousContext.camera.viewProj;
@@ -622,7 +622,8 @@ bool ModelSceneDeferredRenderer::render(const glm::mat4& view, const glm::mat4& 
         temporalInput.cameraUp = glm::normalize(glm::vec3(inverseView[1]));
         temporalInput.cameraForward = glm::normalize(-glm::vec3(inverseView[2]));
         temporalInput.depthInverted = false;
-        temporalInput.resetReasons = context.temporalResetReasons;
+        temporalInput.resetReasons =
+            context.temporalResetReasons & temporalResetReasonMaskForOwner(TemporalHistoryOwner::Upscaler);
         temporalInput.textures.hdrColor = state.postProcess.sceneColorTextureHandle();
         temporalInput.textures.hdrColorView = state.postProcess.sceneColorTextureViewHandle();
         temporalInput.textures.depth = output.gbufferDepth;

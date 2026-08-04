@@ -12,11 +12,17 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
+#include <cstring>
 #include <iostream>
 #include <optional>
 #include <string>
 
+#include <glm/gtc/packing.hpp>
+
 namespace {
+// One 1x1 RGBA16F exposure-state texel: four 16-bit float channels.
+constexpr uint32_t kExposureReadbackSlotBytes = 8u;
+
 struct ExposureDownsamplePushConstants {
     glm::vec4 sourceSize;
     glm::ivec4 flags;
@@ -449,6 +455,34 @@ bool PostProcessPass::executeCompositeGraph(RhiDevice& rhiDevice, const Composit
                 return true;
             });
         graphTail = resolve.handle();
+
+        m_exposureReadbackRecorded = false;
+        if (ensureExposureReadbackBuffers(rhiDevice) && consumeExposureReadback(rhiDevice)) {
+            RenderGraphPassBuilder readback =
+                m_renderGraph.addPass({"PostProcess.ExposureReadback", RgPassType::Copy, RhiQueueType::Graphics});
+            readback.dependsOn(graphTail)
+                .readTexture(resources.exposureState[finalExposureReadIndex], RhiResourceState::TransferSrc)
+                .setExecute([this, finalExposureReadIndex](RgPassContext& pass) {
+                    const uint32_t ringIndex = m_exposureReadbackWriteIndex;
+                    if (m_exposureReadbackWritten[ringIndex]) {
+                        pass.commandList().bufferBarrier({m_exposureReadbackBuffers[ringIndex],
+                                                         RhiResourceState::HostRead, RhiResourceState::TransferDst});
+                    }
+                    RhiTextureBufferCopy copy;
+                    copy.srcTexture = m_exposureStateHandle[finalExposureReadIndex];
+                    copy.dstBuffer = m_exposureReadbackBuffers[ringIndex];
+                    copy.bytesPerRow = kExposureReadbackSlotBytes;
+                    copy.rowsPerImage = 1u;
+                    copy.width = 1u;
+                    copy.height = 1u;
+                    pass.commandList().copyTextureToBuffer(copy);
+                    pass.commandList().bufferBarrier({m_exposureReadbackBuffers[ringIndex],
+                                                     RhiResourceState::TransferDst, RhiResourceState::HostRead});
+                    return true;
+                });
+            graphTail = readback.handle();
+            m_exposureReadbackRecorded = true;
+        }
     }
 
     const bool bloomReady = m_effects.bloomEnabled && m_effects.bloomStrength > 0.001f;
@@ -556,9 +590,22 @@ bool PostProcessPass::executeCompositeGraph(RhiDevice& rhiDevice, const Composit
     const RgExecuteResult executed = m_renderGraph.execute(rhiDevice, *m_commandListPool);
     if (!executed.succeeded()) {
         debugService.cancelGpuTimersSince(timerCheckpoint);
+        m_exposureReadbackRecorded = false;
         MECRAFT_LOG_STREAM(std::cerr << "[PostProcessPass] Render Graph execution failed: " << executed.message
                                      << '\n');
         return false;
+    }
+
+    if (m_exposureReadbackRecorded) {
+        m_exposureReadbackRecorded = false;
+        if (!executed.submissions.empty() && executed.submissions.back().isValid()) {
+            const uint32_t ringIndex = m_exposureReadbackWriteIndex;
+            m_exposureReadbackTokens[ringIndex] = executed.submissions.back();
+            m_exposureReadbackWritten[ringIndex] = true;
+            m_exposureReadbackWriteIndex = (ringIndex + 1u) % kExposureReadbackRingSize;
+        } else {
+            MECRAFT_LOG_STREAM(std::cerr << "[PostProcessPass] Exposure readback submission token is invalid\n");
+        }
     }
 
     if (autoExposureEnabled) {
@@ -834,7 +881,8 @@ bool PostProcessPass::ensureProcessingTargets(RhiDevice& rhiDevice, const int wi
 
     for (int index = 0; index < 2; ++index) {
         if (!createTextureAndView(rhiDevice, "PostProcess.ExposureState", RhiTextureFormat::Rgba16Float, 1u, 1u,
-                                  rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment),
+                                  rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment) |
+                                      rhiFlag(RhiTextureUsage::TransferSrc),
                                   m_exposureStateHandle[index], m_exposureStateView[index])) {
             destroyProcessingTargets();
             return false;
@@ -1073,6 +1121,74 @@ bool PostProcessPass::ensureRhiPipelines(RhiDevice& rhiDevice) {
         return false;
     }
     return true;
+}
+
+bool PostProcessPass::ensureExposureReadbackBuffers(RhiDevice& rhiDevice) {
+    for (RhiBufferHandle& buffer : m_exposureReadbackBuffers) {
+        if (buffer.isValid()) {
+            continue;
+        }
+        RhiBufferDesc desc;
+        desc.debugName = "PostProcess.ExposureReadback";
+        desc.size = kExposureReadbackSlotBytes;
+        desc.usage = rhiFlag(RhiBufferUsage::TransferDst) | rhiFlag(RhiBufferUsage::MapRead);
+        desc.memoryUsage = RhiMemoryUsage::GpuToCpu;
+        desc.initialState = RhiResourceState::TransferDst;
+        desc.memoryCategory = RhiMemoryCategory::Readback;
+        buffer = rhiDevice.createBuffer(desc, nullptr, 0u);
+        if (!buffer.isValid()) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool PostProcessPass::consumeExposureReadback(RhiDevice& rhiDevice) {
+    const uint32_t ringIndex = m_exposureReadbackWriteIndex;
+    const RhiSubmissionToken token = m_exposureReadbackTokens[ringIndex];
+    if (!token.isValid()) {
+        return true;
+    }
+    bool complete = false;
+    if (!rhiDevice.isSubmissionComplete(token, complete)) {
+        MECRAFT_LOG_STREAM(std::cerr << "[PostProcessPass] Exposure readback submission query failed\n");
+        m_exposureReadbackTokens[ringIndex] = {};
+        return false;
+    }
+    if (!complete) {
+        return false;
+    }
+    const void* mapped = rhiDevice.mapBuffer(m_exposureReadbackBuffers[ringIndex], 0u, kExposureReadbackSlotBytes);
+    if (mapped == nullptr) {
+        MECRAFT_LOG_STREAM(std::cerr << "[PostProcessPass] Exposure readback mapping failed\n");
+        m_exposureReadbackTokens[ringIndex] = {};
+        return false;
+    }
+    uint16_t packedExposure = 0u;
+    std::memcpy(&packedExposure, mapped, sizeof(packedExposure));
+    rhiDevice.unmapBuffer(m_exposureReadbackBuffers[ringIndex]);
+    m_exposureReadbackTokens[ringIndex] = {};
+    const float exposure = glm::unpackHalf1x16(packedExposure);
+    if (std::isfinite(exposure) && exposure > 0.0f) {
+        m_gpuAdaptedExposure = exposure;
+        m_gpuAdaptedExposureValid = true;
+    }
+    return true;
+}
+
+void PostProcessPass::destroyExposureReadbackBuffers() {
+    for (uint32_t index = 0u; index < kExposureReadbackRingSize; ++index) {
+        if (m_exposureReadbackBuffers[index].isValid() && m_rhiDevice != nullptr) {
+            m_rhiDevice->destroyBuffer(m_exposureReadbackBuffers[index]);
+        }
+        m_exposureReadbackBuffers[index] = {};
+        m_exposureReadbackTokens[index] = {};
+        m_exposureReadbackWritten[index] = false;
+    }
+    m_exposureReadbackWriteIndex = 0u;
+    m_exposureReadbackRecorded = false;
+    m_gpuAdaptedExposureValid = false;
+    m_gpuAdaptedExposure = 0.0f;
 }
 
 bool PostProcessPass::ensureSwapchainCompositePipeline(RhiDevice& rhiDevice, const RhiTextureFormat colorFormat) {
@@ -1387,6 +1503,7 @@ void PostProcessPass::destroyProcessingTargets() {
             destroyTextureAndView(m_exposureStateHandle[index], m_exposureStateView[index]);
         }
     }
+    destroyExposureReadbackBuffers();
     m_exposureMipCount = 0;
     m_exposureStateReadIndex = 0;
     m_autoExposureInitialized = false;

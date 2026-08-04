@@ -95,7 +95,11 @@ bool showDeferredDebugView(RenderSettings& settings) {
                                                       "85: Transparency Mask",
                                                       "86: RGB F0",
                                                       "87: Stable Object ID",
-                                                      "88: Stable Material ID"};
+                                                      "88: Stable Material ID",
+                                                      "89: RTGI Raw Radiance",
+                                                      "90: RTGI Hit Distance",
+                                                      "91: RTGI Trace Class",
+                                                      "92: RTGI Candidates"};
     int debugViewMode = settings.debug.viewMode;
     const bool changed =
         ImGui::Combo("Deferred Debug View", &debugViewMode, kDebugViewModes, IM_ARRAYSIZE(kDebugViewModes));

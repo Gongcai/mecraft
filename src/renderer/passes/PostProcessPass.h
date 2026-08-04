@@ -7,6 +7,7 @@
 #include "../rhi/RhiTypes.h"
 #include <array>
 #include <cstdint>
+#include <optional>
 #include <glm/vec2.hpp>
 #include <glm/vec3.hpp>
 #include <glm/vec4.hpp>
@@ -126,6 +127,15 @@ public:
     [[nodiscard]] bool isAutoExposureGpuResolved() const {
         return m_effects.autoExposureEnabled && m_autoExposureInitialized;
     }
+    /// Latest GPU-resolved adapted exposure read back to the CPU. The value
+    /// lags the GPU by the readback ring depth and is absent until the first
+    /// auto-exposure resolve completes or when auto exposure is disabled.
+    [[nodiscard]] std::optional<float> gpuAdaptedExposure() const {
+        if (!m_effects.autoExposureEnabled || !m_gpuAdaptedExposureValid) {
+            return std::nullopt;
+        }
+        return m_gpuAdaptedExposure;
+    }
     [[nodiscard]] int targetWidth() const { return m_processingWidth; }
     [[nodiscard]] int targetHeight() const { return m_processingHeight; }
     [[nodiscard]] RhiTextureHandle sceneColorTextureHandle() const { return m_sceneColorHandle; }
@@ -147,6 +157,9 @@ private:
     static constexpr int kExposureMipCount = 13;
     static constexpr int kAutoExposureLod = 6;
     static constexpr double kAutoExposureSampleIntervalSeconds = 0.25;
+    // Three slots cover the maximum frames-in-flight so a copy is never
+    // recorded into a slot the CPU has not consumed yet.
+    static constexpr uint32_t kExposureReadbackRingSize = 3u;
     enum class CompositeDestination { Backbuffer, Texture };
     struct PostProcessCompositeParams;
     [[nodiscard]] RhiCommandList& beginCommandList(const char* debugName) const;
@@ -155,6 +168,9 @@ private:
     bool ensureProcessingTargets(RhiDevice& rhiDevice, int width, int height);
     bool ensureCompositeTarget(RhiDevice& rhiDevice, int width, int height);
     bool ensureRhiPipelines(RhiDevice& rhiDevice);
+    bool ensureExposureReadbackBuffers(RhiDevice& rhiDevice);
+    bool consumeExposureReadback(RhiDevice& rhiDevice);
+    void destroyExposureReadbackBuffers();
     bool ensureSwapchainCompositePipeline(RhiDevice& rhiDevice, RhiTextureFormat colorFormat);
     bool ensureNoiseTextureView(RhiDevice& rhiDevice);
     bool ensureGbufferDepthTextureView(RhiDevice& rhiDevice, RhiTextureHandle texture);
@@ -268,6 +284,17 @@ private:
     RhiTextureViewHandle m_exposureStateView[2] = {};
     int m_exposureStateReadIndex = 0;
     double m_autoExposureSampleAccumulator = 0.0;
+
+    // GPU-to-CPU adapted-exposure readback ring. Each slot holds one 1x1
+    // RGBA16F exposure-state copy and the submission token that guards its
+    // completion; slots are consumed only after the token reports complete.
+    RhiBufferHandle m_exposureReadbackBuffers[kExposureReadbackRingSize] = {};
+    RhiSubmissionToken m_exposureReadbackTokens[kExposureReadbackRingSize] = {};
+    bool m_exposureReadbackWritten[kExposureReadbackRingSize] = {};
+    uint32_t m_exposureReadbackWriteIndex = 0u;
+    bool m_exposureReadbackRecorded = false;
+    float m_gpuAdaptedExposure = 0.0f;
+    bool m_gpuAdaptedExposureValid = false;
 
     int m_captureWidth = 0;
     int m_captureHeight = 0;

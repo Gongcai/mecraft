@@ -223,8 +223,34 @@ bool testTemporalReset() {
         }
         describedReasons |= temporalResetReasonBit(descriptor.reason);
     }
-    return requireTrue(describedReasons == ((1u << 12u) - 1u),
-                       "reset descriptors must cover every declared temporal reset bit");
+    if (!requireTrue(describedReasons == ((1u << 14u) - 1u),
+                     "reset descriptors must cover every declared temporal reset bit")) {
+        return false;
+    }
+
+    // Owner-scoped filtering: a denoiser method switch is private to the NRD
+    // owner, and a pre-exposure step never restarts NRD's de-exposed history.
+    const TemporalResetReasons denoiserOnly = temporalResetReasonBit(TemporalResetReason::DenoiserMethod);
+    const TemporalResetReasons preExposureOnly = temporalResetReasonBit(TemporalResetReason::PreExposure);
+    const TemporalResetReasons cameraCut = temporalResetReasonBit(TemporalResetReason::CameraCut);
+    if (!requireTrue(ownerRequiresTemporalReset(TemporalHistoryOwner::NrdDiffuse, denoiserOnly) &&
+                         !ownerRequiresTemporalReset(TemporalHistoryOwner::ScreenSpace, denoiserOnly) &&
+                         !ownerRequiresTemporalReset(TemporalHistoryOwner::Clouds, denoiserOnly) &&
+                         !ownerRequiresTemporalReset(TemporalHistoryOwner::Volumetrics, denoiserOnly) &&
+                         !ownerRequiresTemporalReset(TemporalHistoryOwner::Upscaler, denoiserOnly),
+                     "a denoiser method change must only reset the NRD history owner")) {
+        return false;
+    }
+    if (!requireTrue(!ownerRequiresTemporalReset(TemporalHistoryOwner::NrdDiffuse, preExposureOnly) &&
+                         ownerRequiresTemporalReset(TemporalHistoryOwner::ScreenSpace, preExposureOnly) &&
+                         ownerRequiresTemporalReset(TemporalHistoryOwner::Upscaler, preExposureOnly),
+                     "a pre-exposure step must reset scene-domain owners but never NRD")) {
+        return false;
+    }
+    return requireTrue(ownerRequiresTemporalReset(TemporalHistoryOwner::NrdDiffuse, cameraCut) &&
+                           ownerRequiresTemporalReset(TemporalHistoryOwner::ScreenSpace, cameraCut) &&
+                           ownerRequiresTemporalReset(TemporalHistoryOwner::Clouds, cameraCut),
+                       "world and camera causes must reset every history owner");
 }
 
 bool testStableSceneIdentity() {

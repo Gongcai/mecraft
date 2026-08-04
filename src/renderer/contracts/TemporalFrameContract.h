@@ -125,7 +125,9 @@ enum class TemporalResetReason : uint32_t {
     Projection = 1u << 8u,
     FrameDiscontinuity = 1u << 9u,
     AssetRevision = 1u << 10u,
-    ActiveRect = 1u << 11u
+    ActiveRect = 1u << 11u,
+    PreExposure = 1u << 12u,
+    DenoiserMethod = 1u << 13u
 };
 
 using TemporalResetReasons = uint32_t;
@@ -186,7 +188,7 @@ struct TemporalResetReasonDescriptor {
 };
 
 /// Fixed metadata table for every observable non-zero reset cause.
-inline constexpr std::array<TemporalResetReasonDescriptor, 12u> kTemporalResetReasonDescriptors{
+inline constexpr std::array<TemporalResetReasonDescriptor, 14u> kTemporalResetReasonDescriptors{
     {{TemporalResetReason::FirstFrame, "first_frame"},
      {TemporalResetReason::CameraCut, "camera_cut"},
      {TemporalResetReason::Teleport, "teleport"},
@@ -198,12 +200,51 @@ inline constexpr std::array<TemporalResetReasonDescriptor, 12u> kTemporalResetRe
      {TemporalResetReason::Projection, "projection"},
      {TemporalResetReason::FrameDiscontinuity, "frame_discontinuity"},
      {TemporalResetReason::AssetRevision, "asset_revision"},
-     {TemporalResetReason::ActiveRect, "active_rect"}}};
+     {TemporalResetReason::ActiveRect, "active_rect"},
+     {TemporalResetReason::PreExposure, "pre_exposure"},
+     {TemporalResetReason::DenoiserMethod, "denoiser_method"}}};
 
 /// Return the fixed table of observable temporal reset causes.
 /// @return Compile-time table containing every non-zero reason and its stable identifier.
-[[nodiscard]] constexpr const std::array<TemporalResetReasonDescriptor, 12u>& temporalResetReasonDescriptors() {
+[[nodiscard]] constexpr const std::array<TemporalResetReasonDescriptor, 14u>& temporalResetReasonDescriptors() {
     return kTemporalResetReasonDescriptors;
+}
+
+/// Systems that own a temporal history and can be invalidated independently.
+enum class TemporalHistoryOwner : uint32_t {
+    /// NRD diffuse denoiser pools and the RTGI temporal sample sequence.
+    NrdDiffuse = 0u,
+    /// Cloud temporal reconstruction history.
+    Clouds,
+    /// Volumetric fog/light temporal history.
+    Volumetrics,
+    /// Screen-space accumulation histories: SSAO, SSGI, reflection, native
+    /// TAA, Hi-Z reprojection, and motion-vector-derived previous-frame data.
+    ScreenSpace,
+    /// External temporal upscaler history (FSR/DLSS/native upscale).
+    Upscaler
+};
+
+/// Reset causes one history owner reacts to. A denoiser method switch only
+/// rebuilds NRD state, and a scene pre-exposure step only rescales histories
+/// that store pre-exposed radiance (NRD accumulates de-exposed values).
+/// @param owner History owner whose relevant reset causes are requested.
+/// @return Bitmask of every cause that invalidates the owner's history.
+[[nodiscard]] constexpr TemporalResetReasons temporalResetReasonMaskForOwner(const TemporalHistoryOwner owner) {
+    constexpr TemporalResetReasons kAllReasons = ~0u;
+    if (owner == TemporalHistoryOwner::NrdDiffuse) {
+        return kAllReasons & ~temporalResetReasonBit(TemporalResetReason::PreExposure);
+    }
+    return kAllReasons & ~temporalResetReasonBit(TemporalResetReason::DenoiserMethod);
+}
+
+/// Determine whether one owner's history must restart for the given causes.
+/// @param owner History owner whose history is inspected.
+/// @param reasons Reset-cause bitmask for the frame.
+/// @return True when at least one cause relevant to the owner is present.
+[[nodiscard]] constexpr bool ownerRequiresTemporalReset(const TemporalHistoryOwner owner,
+                                                        const TemporalResetReasons reasons) {
+    return (reasons & temporalResetReasonMaskForOwner(owner)) != 0u;
 }
 
 /// Evaluate all reset causes visible to the shared frame contract.

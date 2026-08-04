@@ -135,7 +135,7 @@ bool DeferredLightingPass::execute(RhiCommandList& commandList, const FrameConte
         return false;
     }
     const bool useTemporalSsao =
-        settings.ssao.enabled && settings.ssao.temporalEnabled && !requiresTemporalReset(ctx.temporalResetReasons);
+        settings.ssao.enabled && settings.ssao.temporalEnabled && !ownerRequiresTemporalReset(TemporalHistoryOwner::ScreenSpace, ctx.temporalResetReasons);
     if (!ensureRhiPipeline(rhiDevice) || !targets.ensureSceneLightingTextureView(rhiDevice) ||
         !targets.ensureGBufferTextureViews(rhiDevice) || !targets.ensureVolumetricFogTextureViews(rhiDevice) ||
         !(useTemporalSsao ? targets.ensureSsaoTemporalTextureView(rhiDevice)

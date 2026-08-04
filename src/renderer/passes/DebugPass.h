@@ -24,7 +24,7 @@ class ShadowRenderer;
 /// Displays all intermediate render targets for visual inspection.
 class DebugPass : public RenderPass {
 public:
-    static constexpr std::size_t kTextureCount = 25u;
+    static constexpr std::size_t kTextureCount = 27u;
     void init(ResourceMgr& resourceMgr);
     void shutdown() override;
     [[nodiscard]] const char* name() const override { return "Debug"; }
@@ -51,9 +51,12 @@ public:
                                             RgPassHandle dependency);
 
     /// Records the debug visualization into an existing graph command list.
+    /// @param rtgiRawView Resolved view for the RTGI raw radiance/hit-distance transient, or invalid to fall back.
+    /// @param rtgiValidationView Resolved view for the RTGI validation transient, or invalid to fall back.
     [[nodiscard]] bool recordGraphPass(const FrameContext& ctx, const RenderSettings& settings,
                                        DeferredRenderTargets& targets, int width, int height,
-                                       RhiCommandList& commandList);
+                                       RhiCommandList& commandList, RhiTextureViewHandle rtgiRawView,
+                                       RhiTextureViewHandle rtgiValidationView);
 
 private:
     bool ensureRhiPipeline(RhiDevice& rhiDevice);
