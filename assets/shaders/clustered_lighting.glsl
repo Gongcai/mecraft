@@ -183,31 +183,33 @@ float sampleLocalPointShadow(
     }
     float angularTexel = 2.0 / float(faceResolution);
 
+    // Four diagonal taps preserve a soft point shadow while scaling to many voxel lights.
+    const vec2 pcfOffsets[4] = vec2[4](
+        vec2(-0.75, -0.75), vec2(0.75, -0.75),
+        vec2(-0.75, 0.75), vec2(0.75, 0.75));
     float visibility = 0.0;
-    for (int y = -1; y <= 1; ++y) {
-        for (int x = -1; x <= 1; ++x) {
-            vec3 sampleDirection = normalize(
-                baseDirection +
-                (tangent * float(x) + bitangent * float(y)) * angularTexel);
-            float referenceDepth;
-            if (!localShadowPointProjectedDepth(metadata, sampleDirection,
-                                                receiverDistance, referenceDepth)) {
-                valid = false;
-                return 1.0;
-            }
-            referenceDepth -= metadata.nearFarDepthBiasNormalOffset.z;
-            float storedDepth = texture(
-                uLocalShadowPointCubeArray,
-                vec4(sampleDirection,
-                     float(metadata.classification.y))).r;
-            if (!localShadowFinite(storedDepth)) {
-                valid = false;
-                return 1.0;
-            }
-            visibility += referenceDepth <= storedDepth ? 1.0 : 0.0;
+    for (uint sampleIndex = 0u; sampleIndex < 4u; ++sampleIndex) {
+        vec2 offset = pcfOffsets[sampleIndex];
+        vec3 sampleDirection = normalize(
+            baseDirection + (tangent * offset.x + bitangent * offset.y) * angularTexel);
+        float referenceDepth;
+        if (!localShadowPointProjectedDepth(metadata, sampleDirection,
+                                            receiverDistance, referenceDepth)) {
+            valid = false;
+            return 1.0;
         }
+        referenceDepth -= metadata.nearFarDepthBiasNormalOffset.z;
+        float storedDepth = texture(
+            uLocalShadowPointCubeArray,
+            vec4(sampleDirection,
+                 float(metadata.classification.y))).r;
+        if (!localShadowFinite(storedDepth)) {
+            valid = false;
+            return 1.0;
+        }
+        visibility += referenceDepth <= storedDepth ? 1.0 : 0.0;
     }
-    return visibility / 9.0;
+    return visibility / 4.0;
 }
 
 float localShadowVisibility(

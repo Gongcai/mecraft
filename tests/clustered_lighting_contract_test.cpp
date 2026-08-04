@@ -290,8 +290,10 @@ bool testSharedLightingConsumers() {
                      "every clustered consumer must dispatch through evaluateGpuLight") ||
         !requireTrue(sharedLighting.find("sampler2D uLocalShadowSpotAtlas") != std::string::npos &&
                          sharedLighting.find("samplerCubeArray uLocalShadowPointCubeArray") != std::string::npos &&
-                         sharedLighting.find("visibility / 9.0") != std::string::npos,
-                     "shared consumers must evaluate Spot and Point 3x3 PCF") ||
+                         sharedLighting.find("visibility / 9.0") != std::string::npos &&
+                         sharedLighting.find("visibility / 4.0") != std::string::npos &&
+                         sharedLighting.find("const vec2 pcfOffsets[4]") != std::string::npos,
+                     "shared consumers must evaluate Spot 3x3 PCF and Point 4-tap PCF") ||
         !requireTrue(contributionEvaluation != std::string::npos && shadowSampling != std::string::npos &&
                          contributionEvaluation < shadowSampling,
                      "surface contribution rejection must precede local-shadow sampling") ||
