@@ -412,8 +412,8 @@ bool rtgiAccumulateWorldLights(RtgiSecondarySurface surface, vec3 surfacePositio
 }
 
 bool rtgiAccumulateSkyAmbient(RtgiSecondarySurface surface, vec3 surfacePosition, float coneWidth,
-                              inout vec3 radiance) {
-    float skyVisibility = clamp(surface.skyVisibility, 0.0, 1.0);
+                              float originSkyPrior, inout vec3 radiance) {
+    float skyVisibility = clamp(surface.skyVisibility, 0.0, 1.0) * originSkyPrior;
     if (skyVisibility <= 0.0 || all(lessThanEqual(uSecondaryLighting.skyAmbientRadiance.rgb, vec3(0.0)))) {
         return true;
     }
@@ -437,7 +437,8 @@ bool rtgiAccumulateSkyAmbient(RtgiSecondarySurface surface, vec3 surfacePosition
 }
 
 bool rtgiShadeSecondarySurface(RtgiSecondarySurface surface, vec3 surfacePosition,
-                               vec3 incomingRayDirection, float coneWidth, out vec3 radiance) {
+                               vec3 incomingRayDirection, float coneWidth, float originSkyPrior,
+                               out vec3 radiance) {
     radiance = vec3(0.0);
     vec3 viewDirection = -incomingRayDirection;
     if (!rtgiFinite(surface.albedo) || !rtgiFinite(surface.normal) || !rtgiFinite(surface.geometricNormal) ||
@@ -449,12 +450,24 @@ bool rtgiShadeSecondarySurface(RtgiSecondarySurface surface, vec3 surfacePositio
         return false;
     }
     radiance = surface.emission;
+    // Celestial radiance is gated by two conservative voxel sky-light priors:
+    // the hit surface's vertex sky light (a surface that cannot see the sky
+    // cannot receive direct sun or moon radiance) and the ray-origin
+    // surface's sky light (a fully enclosed origin cannot legally receive
+    // sun, moon, or sky-ambient energy in one bounce). Together they reject
+    // shadow rays and GI rays that thread through greedy-mesh T-junction and
+    // corner seam cracks. Emissive, block light, and local lights are
+    // unaffected; static mesh hits publish skyVisibility 1; the miss path
+    // applies the origin prior through rtgiPrimarySkyVisibility.
+    float celestialMask = clamp(surface.skyVisibility, 0.0, 1.0);
+    celestialMask *= celestialMask * celestialMask;
+    celestialMask *= originSkyPrior;
     if (!rtgiAccumulateCelestial(surface, surfacePosition, viewDirection,
                                  uSecondaryLighting.sunDirectionAndVisibility,
-                                 uSecondaryLighting.sunRadiance.rgb, coneWidth, radiance) ||
+                                 uSecondaryLighting.sunRadiance.rgb * celestialMask, coneWidth, radiance) ||
         !rtgiAccumulateCelestial(surface, surfacePosition, viewDirection,
                                  uSecondaryLighting.moonDirectionAndVisibility,
-                                 uSecondaryLighting.moonRadiance.rgb, coneWidth, radiance)) {
+                                 uSecondaryLighting.moonRadiance.rgb * celestialMask, coneWidth, radiance)) {
         return false;
     }
     vec3 cameraRelativeSurface = surfacePosition - pc.cameraPositionAndMaxDistance.xyz;
@@ -464,7 +477,7 @@ bool rtgiShadeSecondarySurface(RtgiSecondarySurface surface, vec3 surfacePositio
     }
     radiance += rtgiDiffuseTransportAlbedo(surface) *
                 rtgiTerrainBlockLightIncident(surface.blockLight) * surface.ao;
-    return rtgiAccumulateSkyAmbient(surface, surfacePosition, coneWidth, radiance);
+    return rtgiAccumulateSkyAmbient(surface, surfacePosition, coneWidth, originSkyPrior, radiance);
 }
 
 void main() {
@@ -491,9 +504,25 @@ void main() {
     vec3 adjacentWorldPositionX;
     vec3 adjacentWorldPositionY;
     vec2 pixelSize = 1.0 / pc.renderExtentAndBias.xy;
+    // Reconstruct the screen-space derivatives with each neighbor's own
+    // depth. Reusing the center depth flattens the neighborhood onto a
+    // constant-depth plane, which bends the reconstructed geometric normal
+    // toward the camera at grazing angles; ray origins biased along that
+    // wrong normal start inside or behind the surface and leak.
+    ivec2 adjacentTexelX = min(texel + ivec2(1, 0), extent - 1);
+    ivec2 adjacentTexelY = min(texel + ivec2(0, 1), extent - 1);
+    float depthX = texelFetch(uDepthTexture, adjacentTexelX, 0).r;
+    float depthY = texelFetch(uDepthTexture, adjacentTexelY, 0).r;
+    // Across sky or strong depth discontinuities the derivative no longer
+    // describes the local surface; fall back to the center depth there so the
+    // footprint stays bounded and the G-buffer normal takes over below.
+    bool adjacentDepthValid = depthX < 0.9999 && depthY < 0.9999 &&
+                              abs(depthX - depth) < 1.0e-3 && abs(depthY - depth) < 1.0e-3;
+    float sampleDepthX = adjacentDepthValid ? depthX : depth;
+    float sampleDepthY = adjacentDepthValid ? depthY : depth;
     if (!rtgiReconstructWorldPosition(screenUv, depth, worldPosition) ||
-        !rtgiReconstructWorldPosition(screenUv + vec2(pixelSize.x, 0.0), depth, adjacentWorldPositionX) ||
-        !rtgiReconstructWorldPosition(screenUv + vec2(0.0, pixelSize.y), depth, adjacentWorldPositionY)) {
+        !rtgiReconstructWorldPosition(screenUv + vec2(pixelSize.x, 0.0), sampleDepthX, adjacentWorldPositionX) ||
+        !rtgiReconstructWorldPosition(screenUv + vec2(0.0, pixelSize.y), sampleDepthY, adjacentWorldPositionY)) {
         rtgiWriteResult(texel, vec3(0.0), 0.0, RTGI_TRACE_CLASS_NON_FINITE, 0u, 0u, 0u);
         return;
     }
@@ -506,15 +535,22 @@ void main() {
         rtgiWriteResult(texel, vec3(0.0), 0.0, RTGI_TRACE_CLASS_NON_FINITE, 0u, 0u, 0u);
         return;
     }
+    normal = normalize(normal);
     // A one-pixel render extent has no valid screen-space Y derivative (the
     // Vulkan contract tests intentionally use 2x1), so retain the G-buffer
-    // normal as the conservative origin normal in that case.
-    if (extent.x >= 2 && extent.y >= 2 && geometricNormalLengthSquared > 1.0e-12) {
-        geometricNormal = reconstructedGeometricNormal * inversesqrt(geometricNormalLengthSquared);
-        geometricNormal = faceforward(geometricNormal, worldPosition - pc.cameraPositionAndMaxDistance.xyz,
-                                       geometricNormal);
+    // normal as the conservative origin normal in that case. The derivative
+    // normal is also rejected when it disagrees with the shading normal:
+    // that happens exactly where the screen-space plane fit broke (grazing
+    // angles, depth discontinuities), and the G-buffer face normal is the
+    // safer ray-origin frame there.
+    if (adjacentDepthValid && extent.x >= 2 && extent.y >= 2 && geometricNormalLengthSquared > 1.0e-12) {
+        vec3 candidateNormal = reconstructedGeometricNormal * inversesqrt(geometricNormalLengthSquared);
+        candidateNormal = faceforward(candidateNormal, worldPosition - pc.cameraPositionAndMaxDistance.xyz,
+                                      candidateNormal);
+        if (dot(candidateNormal, normal) > 0.25) {
+            geometricNormal = candidateNormal;
+        }
     }
-    normal = normalize(normal);
     if (dot(normal, geometricNormal) < 0.0) {
         normal = -normal;
     }
@@ -626,8 +662,11 @@ void main() {
         }
         vec3 radiance;
         vec3 surfacePosition = rayOrigin + rayDirection * hitDistance;
+        float originSkyLight = clamp(texelFetch(uVoxelLightTexture, texel, 0).r, 0.0, 1.0);
+        float originSkyPrior = originSkyLight * originSkyLight * originSkyLight;
         if (!surfaceValid ||
-            !rtgiShadeSecondarySurface(surface, surfacePosition, rayDirection, coneWidth, radiance)) {
+            !rtgiShadeSecondarySurface(surface, surfacePosition, rayDirection, coneWidth, originSkyPrior,
+                                       radiance)) {
             rtgiWriteResult(texel, vec3(0.0), 0.0, RTGI_TRACE_CLASS_NON_FINITE, candidateCount,
                             confirmedCount, 0u);
             return;
