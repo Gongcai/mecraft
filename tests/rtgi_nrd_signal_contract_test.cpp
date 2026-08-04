@@ -27,13 +27,17 @@ namespace {
     const std::string tracePath = std::string(MECRAFT_TEST_SOURCE_DIR) + "/assets/shaders/rtgi_trace.comp";
     const std::string guidePath = std::string(MECRAFT_TEST_SOURCE_DIR) + "/assets/shaders/nrd_guide_prep.comp";
     const std::string lightingPath = std::string(MECRAFT_TEST_SOURCE_DIR) + "/assets/shaders/deferred_lighting.frag";
+    const std::string pipelinePath = std::string(MECRAFT_TEST_SOURCE_DIR) + "/src/renderer/core/DeferredPipeline.cpp";
+    const std::string scenePath = std::string(MECRAFT_TEST_SOURCE_DIR) + "/src/renderer/core/RenderScene.cpp";
     std::ifstream signalFile(signalPath, std::ios::binary);
     std::ifstream packFile(packPath, std::ios::binary);
     std::ifstream traceFile(tracePath, std::ios::binary);
     std::ifstream guideFile(guidePath, std::ios::binary);
     std::ifstream lightingFile(lightingPath, std::ios::binary);
+    std::ifstream pipelineFile(pipelinePath, std::ios::binary);
+    std::ifstream sceneFile(scenePath, std::ios::binary);
     if (!signalFile.is_open() || !packFile.is_open() || !traceFile.is_open() || !guideFile.is_open() ||
-        !lightingFile.is_open()) {
+        !lightingFile.is_open() || !pipelineFile.is_open() || !sceneFile.is_open()) {
         return false;
     }
     const std::string signalSource{std::istreambuf_iterator<char>(signalFile), std::istreambuf_iterator<char>()};
@@ -41,6 +45,8 @@ namespace {
     const std::string traceSource{std::istreambuf_iterator<char>(traceFile), std::istreambuf_iterator<char>()};
     const std::string guideSource{std::istreambuf_iterator<char>(guideFile), std::istreambuf_iterator<char>()};
     const std::string lightingSource{std::istreambuf_iterator<char>(lightingFile), std::istreambuf_iterator<char>()};
+    const std::string pipelineSource{std::istreambuf_iterator<char>(pipelineFile), std::istreambuf_iterator<char>()};
+    const std::string sceneSource{std::istreambuf_iterator<char>(sceneFile), std::istreambuf_iterator<char>()};
     return signalSource.find("const float RTGI_NRD_FP16_MAX = 65504.0;") != std::string::npos &&
            signalSource.find("const float RTGI_NRD_EPSILON = 1.0e-6;") != std::string::npos &&
            signalSource.find("dot(color, vec3(0.25, 0.5, 0.25))") != std::string::npos &&
@@ -55,6 +61,12 @@ namespace {
            guideSource.find("vec2 motion = -texelFetch(uVelocityTexture, texel, 0).rg;") != std::string::npos &&
            guideSource.find("motionViewZ = previousPositiveViewZ - currentPositiveViewZ;") != std::string::npos &&
            guideSource.find("return abs(viewPosition.z);") != std::string::npos &&
+           pipelineSource.find("glm::vec2 nrdCameraJitterPixels(const TemporalJitter& jitter)") !=
+               std::string::npos &&
+           pipelineSource.find("return jitter.pixels;") != std::string::npos &&
+           pipelineSource.find("nrdCameraJitterUv") == std::string::npos &&
+           sceneSource.find("ctx.jitter.pixels.x = frameX * 0.5f;") != std::string::npos &&
+           sceneSource.find("ctx.jitter.pixels.y = -frameY * 0.5f;") != std::string::npos &&
            lightingSource.find("uRtgiRadianceScale pRtgi.z") != std::string::npos &&
            lightingSource.find("* uRtgiRadianceScale;") != std::string::npos;
 }

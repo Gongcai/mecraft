@@ -53,6 +53,9 @@ public:
         uint8_t instanceMask = 3u;
         uint8_t shadowInstanceMask = 4u;
         bool useJitteredProjection = false;
+        // Advance the stochastic sequence only when a temporal denoiser will
+        // accumulate it. Raw RTGI inspection remains spatially stable.
+        bool temporalSamplingEnabled = false;
         bool terrainNormalMapsEnabled = true;
         bool terrainSpecularMapsEnabled = true;
         float blockLightStrength = 1.0f;

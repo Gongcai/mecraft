@@ -1302,8 +1302,11 @@ RenderScene::buildFrameContext(const IWorldView& worldView, const Camera& camera
         const float frameY = glm::fract(frameCounter / 1.7548776662f + 0.5f) * 2.0f - 1.0f;
         ctx.jitter.projectionOffset.x = frameX * invW;
         ctx.jitter.projectionOffset.y = frameY * invH;
-        ctx.jitter.pixels.x = frameX;
-        ctx.jitter.pixels.y = -frameY;
+        // Keep the SDK-facing pixel jitter in [-0.5, 0.5]. The projection
+        // offset above intentionally remains in NDC units and therefore uses
+        // the full [-1, 1] sample sequence.
+        ctx.jitter.pixels.x = frameX * 0.5f;
+        ctx.jitter.pixels.y = -frameY * 0.5f;
     }
 
     // Jittered projection matrix

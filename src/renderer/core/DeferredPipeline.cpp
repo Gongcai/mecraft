@@ -76,8 +76,11 @@ void copyNrdMatrix(const glm::mat4& source, float (&destination)[16]) {
     std::memcpy(destination, &source[0][0], sizeof(destination));
 }
 
-[[nodiscard]] glm::vec2 nrdCameraJitterUv(const TemporalJitter& jitter) {
-    return glm::vec2(jitter.projectionOffset.x * 0.5f, -jitter.projectionOffset.y * 0.5f);
+[[nodiscard]] glm::vec2 nrdCameraJitterPixels(const TemporalJitter& jitter) {
+    // NRD's CommonSettings::cameraJitter is expressed in pixel units, not
+    // normalized projection/NDC units. TemporalJitter::pixels is already in
+    // NRD's sub-pixel convention; only projectionOffset uses NDC units.
+    return jitter.pixels;
 }
 #endif
 
@@ -1866,6 +1869,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
                                      renderer::rt::sceneTlasMaskBit(renderer::rt::SceneTlasInstanceMask::GiCutout);
         traceSettings.shadowInstanceMask =
             renderer::rt::sceneTlasMaskBit(renderer::rt::SceneTlasInstanceMask::ShadowCaster);
+        traceSettings.temporalSamplingEnabled = nrdEnabled;
         traceSettings.useJitteredProjection =
             usesTemporalProjectionJitter(settings.upscale.type, settings.taa.enabled);
         traceSettings.terrainNormalMapsEnabled =
@@ -1949,8 +1953,8 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
             commonSettings.motionVectorScale[0] = 1.0f;
             commonSettings.motionVectorScale[1] = 1.0f;
             commonSettings.motionVectorScale[2] = 1.0f;
-            const glm::vec2 cameraJitter = nrdCameraJitterUv(ctx.jitter);
-            const glm::vec2 previousCameraJitter = nrdCameraJitterUv(ctx.previousJitter);
+            const glm::vec2 cameraJitter = nrdCameraJitterPixels(ctx.jitter);
+            const glm::vec2 previousCameraJitter = nrdCameraJitterPixels(ctx.previousJitter);
             commonSettings.cameraJitter[0] = cameraJitter.x;
             commonSettings.cameraJitter[1] = cameraJitter.y;
             commonSettings.cameraJitterPrev[0] = previousCameraJitter.x;
@@ -1968,18 +1972,26 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
 
             renderer::nrd::NrdDiffuseSettings methodSettings;
             if (settings.nrd.method == NrdDiffuseMethod::Relax) {
-                methodSettings = ::nrd::RelaxSettings{};
+                ::nrd::RelaxSettings relaxSettings{};
+                relaxSettings.enableAntiFirefly = true;
+                methodSettings = relaxSettings;
             } else {
                 ::nrd::ReblurSettings reblurSettings{};
                 reblurSettings.hitDistanceParameters.A = settings.nrd.reblurHitDistanceConstantScale;
                 reblurSettings.hitDistanceParameters.B = settings.nrd.reblurHitDistanceViewZScale;
                 reblurSettings.hitDistanceParameters.C = settings.nrd.reblurHitDistanceRoughnessScale;
+                reblurSettings.enableAntiFirefly = true;
                 methodSettings = reblurSettings;
             }
             const renderer::nrd::NrdGraphDispatchResult nrdDispatch =
                 m_nrdBridge->addGraphDispatches(m_renderGraph, commonSettings, methodSettings, externalResources,
                                                 graphTail, ctx.debugService);
             if (!nrdDispatch.succeeded()) {
+                const std::optional<std::string_view> stableError =
+                    renderer::nrd::nrdBridgeErrorStableId(nrdDispatch.error);
+                MECRAFT_LOG_STREAM(std::cerr << "[DeferredPipeline] NRD dispatch setup failed: "
+                                             << (stableError.has_value() ? *stableError : std::string_view("Invalid"))
+                                             << '\n');
                 return failGraphSetup();
             }
             graphTail = nrdDispatch.lastPass;

@@ -278,7 +278,8 @@ bool RtgiTracePass::recordTrace(RhiCommandList& commandList, const FrameContext&
     pushConstants.renderExtentAndBias = glm::vec4(static_cast<float>(extent.width), static_cast<float>(extent.height),
                                                   settings.minimumRayOriginBias, ctx.animationTime);
     pushConstants.frameMaskAndFlags =
-        glm::uvec4(static_cast<uint32_t>(ctx.frameIndex), static_cast<uint32_t>(settings.instanceMask),
+        glm::uvec4(settings.temporalSamplingEnabled ? static_cast<uint32_t>(ctx.frameIndex) : 0u,
+                   static_cast<uint32_t>(settings.instanceMask),
                    sceneBuffers.sceneInstanceCount, static_cast<uint32_t>(settings.shadowInstanceMask));
     pushConstants.materialGeometryCounts =
         glm::uvec4(sceneBuffers.gpuSceneMaterialCount, sceneBuffers.gpuSceneGeometryCount, 0u, 0u);
