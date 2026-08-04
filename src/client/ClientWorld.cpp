@@ -56,6 +56,11 @@ uint64_t ClientWorld::getActiveChunkRevision() const {
     return m_activeChunkRevision;
 }
 
+uint64_t ClientWorld::getBlockEditRevision() const {
+    std::lock_guard lock(m_chunksMutex);
+    return m_blockEditRevision;
+}
+
 uint64_t ClientWorld::getBlockContentRevision() const {
     std::lock_guard lock(m_chunksMutex);
     return m_blockContentRevision;
@@ -256,6 +261,7 @@ void ClientWorld::applyBlockUpdate(const int x, const int y, const int z, const 
             m_wireContainerParts.erase(glm::ivec3(x, y, z));
         }
         ++m_blockContentRevision;
+        ++m_blockEditRevision;
         chunk.recalcHeightMap(lx, lz);
         if (lx == 0 && chunk.neighbors[1]) {
             chunk.neighbors[1]->markSubChunkDirty(Chunk::toSubChunkIndex(y));
@@ -331,6 +337,7 @@ void ClientWorld::applyWireContainerUpdate(const glm::ivec3& position, const Wir
 
     m_wireContainerParts.getOrCreate(position) = parts;
     ++m_blockContentRevision;
+    ++m_blockEditRevision;
     it->second->markSubChunkDirty(Chunk::toSubChunkIndex(position.y));
 }
 
@@ -338,6 +345,7 @@ void ClientWorld::eraseWireContainerParts(const glm::ivec3& position) {
     std::lock_guard lock(m_chunksMutex);
     m_wireContainerParts.erase(position);
     ++m_blockContentRevision;
+    ++m_blockEditRevision;
 }
 
 void ClientWorld::setRenderDistance(int distance) {

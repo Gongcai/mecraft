@@ -31,6 +31,14 @@ public:
     /// Get a revision counter that increments when loaded block contents change.
     [[nodiscard]] virtual uint64_t getBlockContentRevision() const = 0;
 
+    /// Get a revision counter that increments only for in-place block edits
+    /// (player or gameplay block changes), never for chunk streaming. Temporal
+    /// render histories reset on edits but survive load/unload, which occurs
+    /// every frame during fast travel; appearing geometry is handled by
+    /// per-pixel disocclusion instead. Defaults to the content revision for
+    /// views that cannot distinguish the two.
+    [[nodiscard]] virtual uint64_t getBlockEditRevision() const { return getBlockContentRevision(); }
+
     /// Query a block state at world coordinates.
     [[nodiscard]] virtual BlockStateId getBlock(int x, int y, int z) const = 0;
 

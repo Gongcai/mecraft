@@ -34,6 +34,7 @@ public:
     [[nodiscard]] const ChunkMap& getActiveChunks() const override;
     [[nodiscard]] uint64_t getActiveChunkRevision() const override;
     [[nodiscard]] uint64_t getBlockContentRevision() const override;
+    [[nodiscard]] uint64_t getBlockEditRevision() const override;
     [[nodiscard]] BlockStateId getBlock(int x, int y, int z) const override;
     [[nodiscard]] uint8_t getPackedLight(int x, int y, int z) const override;
     [[nodiscard]] BlockStateId getBlockState(int x, int y, int z) const override;
@@ -89,6 +90,8 @@ private:
     mutable std::mutex m_chunksMutex;
     uint64_t m_activeChunkRevision = 1;
     uint64_t m_blockContentRevision = 1;
+    // Advances only for in-place block edits; chunk streaming never bumps it.
+    uint64_t m_blockEditRevision = 1;
     int m_renderDistance = 16;
     WireContainerPartStore m_wireContainerParts;
 

@@ -59,7 +59,9 @@ namespace {
            traceSource.find("missRadiance, RTGI_NRD_FP16_MAX, RTGI_TRACE_CLASS_MISS") != std::string::npos &&
            guideSource.find("layout(binding = 5, rgba16f) uniform writeonly image2D uMotion;") != std::string::npos &&
            guideSource.find("vec2 motion = -texelFetch(uVelocityTexture, texel, 0).rg;") != std::string::npos &&
-           guideSource.find("motionViewZ = previousPositiveViewZ - currentPositiveViewZ;") != std::string::npos &&
+           guideSource.find("float motionViewZ = 0.0;") != std::string::npos &&
+           guideSource.find("float signedViewZ = currentPositiveViewZ < invalidViewZ ? -currentPositiveViewZ : "
+                            "-invalidViewZ;") != std::string::npos &&
            guideSource.find("return abs(viewPosition.z);") != std::string::npos &&
            pipelineSource.find("glm::vec2 nrdCameraJitterPixels(const TemporalJitter& jitter)") !=
                std::string::npos &&

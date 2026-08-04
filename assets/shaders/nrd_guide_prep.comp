@@ -76,21 +76,20 @@ void main() {
     SurfaceMaterial material = unpackGBufferMaterial(texelFetch(uMaterialTexture, texel, 0));
     float roughness = linearMaterialRoughness(material);
     vec2 motion = -texelFetch(uVelocityTexture, texel, 0).rg;
+    // NRD contract: with motionVectorScale.z == 0 the library derives the
+    // view-Z delta itself from the previous matrices. Reconstructing it here
+    // from the jittered history depth injects per-frame noise on slopes that
+    // the disocclusion test interprets as parallax, making a static image
+    // crawl. Publish a pure 2D screen-space motion instead.
     float motionViewZ = 0.0;
-
-    if (pc.renderExtentInvalidViewZAndHistory.w > 0.5 && currentPositiveViewZ < invalidViewZ) {
-        vec2 previousUv = screenUv + motion;
-        if (nrdGuideUvInside(previousUv)) {
-            float previousDepth = textureLod(uHistoryDepthTexture, previousUv, 0.0).r;
-            float previousPositiveViewZ =
-                nrdGuidePositiveViewZ(pc.previousInverseProjection, previousUv, previousDepth, invalidViewZ);
-            if (previousPositiveViewZ < invalidViewZ) {
-                motionViewZ = previousPositiveViewZ - currentPositiveViewZ;
-            }
-        }
-    }
 
     imageStore(uMotion, texel, vec4(motion, motionViewZ, 0.0));
     imageStore(uNormalRoughness, texel, vec4(nrdGuidePackNormalRoughness(normal, roughness), 0.0));
-    imageStore(uViewZ, texel, vec4(currentPositiveViewZ, 0.0, 0.0, 0.0));
+    // NRD consumes signed view-space Z and infers handedness from the
+    // projection matrix; this renderer is right-handed, so the visible
+    // half-space is negative Z. Publishing |z| mirrors every reconstructed
+    // world position while the camera delta stays in real space, which breaks
+    // reprojection during motion.
+    float signedViewZ = currentPositiveViewZ < invalidViewZ ? -currentPositiveViewZ : -invalidViewZ;
+    imageStore(uViewZ, texel, vec4(signedViewZ, 0.0, 0.0, 0.0));
 }

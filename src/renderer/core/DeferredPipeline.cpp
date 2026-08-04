@@ -59,29 +59,6 @@ namespace {
            settings.reblurHitDistanceRoughnessScale >= 1.0f;
 }
 
-[[nodiscard]] bool cameraTransformChanged(const FrameContext& ctx) {
-    if (requiresTemporalReset(ctx.temporalResetReasons)) {
-        return true;
-    }
-
-    const glm::vec3 positionDelta = ctx.camera.position - ctx.prevCamera.position;
-    if (glm::dot(positionDelta, positionDelta) > 1.0e-8f) {
-        return true;
-    }
-
-    // Compare only rotation. Translation is covered by the position check,
-    // and comparing the full view matrix would make the threshold depend on
-    // the camera's distance from the world origin.
-    float maximumRotationDelta = 0.0f;
-    for (uint32_t column = 0u; column < 3u; ++column) {
-        for (uint32_t row = 0u; row < 3u; ++row) {
-            maximumRotationDelta = std::max(
-                maximumRotationDelta, std::abs(ctx.camera.view[column][row] - ctx.prevCamera.view[column][row]));
-        }
-    }
-    return maximumRotationDelta > 1.0e-5f;
-}
-
 #if defined(MECRAFT_ENABLE_NRD)
 [[nodiscard]] renderer::nrd::NrdDiffuseMethod nrdBridgeMethod(const NrdDiffuseMethod method) {
     return method == NrdDiffuseMethod::Relax ? renderer::nrd::NrdDiffuseMethod::Relax
@@ -963,9 +940,11 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
         m_transparentPassPlan = {};
         m_graphCpuTerrainPrepMs = 0.0;
     }
-    const bool temporalReset = requiresTemporalReset(ctx.temporalResetReasons);
-    const bool rtgiCameraMoving = cameraTransformChanged(ctx);
-    if (!nrdEnabled || temporalReset) {
+    const bool temporalReset =
+        ownerRequiresTemporalReset(TemporalHistoryOwner::ScreenSpace, ctx.temporalResetReasons);
+    const bool nrdTemporalReset =
+        ownerRequiresTemporalReset(TemporalHistoryOwner::NrdDiffuse, ctx.temporalResetReasons);
+    if (!nrdEnabled || nrdTemporalReset) {
         m_rtgiTemporalSampleIndex = 0u;
     }
     const bool ssaoEnabled = settings.ssao.enabled;
@@ -1681,8 +1660,9 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
     // dedicated pass, and zero occluded commands before the GBuffer draws
     // consume them. Skipped on temporal resets when no valid history exists.
     m_terrainDrawsPrepared = false;
-    const bool hiZCullActive = !externalGeometry && settings.occlusion.hiZEnabled && m_hiZPass != nullptr &&
-                               m_hasPreviousFrameData && !requiresTemporalReset(ctx.temporalResetReasons);
+    const bool hiZCullActive =
+        !externalGeometry && settings.occlusion.hiZEnabled && m_hiZPass != nullptr && m_hasPreviousFrameData &&
+        !ownerRequiresTemporalReset(TemporalHistoryOwner::ScreenSpace, ctx.temporalResetReasons);
     if (!externalGeometry && settings.occlusion.hiZEnabled && m_hiZPass != nullptr) {
         HiZPass::GraphResources hiZResources;
         hiZResources.historyDepthPrevious = historyDepthPrevious;
@@ -1918,6 +1898,10 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
         }
         rtgiDiffuseTexture = rtgiRawDiffuse;
         rtgiDiffuseEncoding = DeferredLightingPass::RtgiDiffuseEncoding::LinearRgb;
+        // The raw trace target stores pre-exposed radiance for FP16 range
+        // protection; the scene HDR domain is scene-referred, so the direct
+        // raw fallback removes that storage scale at composite.
+        rtgiRadianceScale = 1.0f / ctx.preExposure;
 
 #if defined(MECRAFT_ENABLE_NRD)
         if (nrdEnabled) {
@@ -1949,7 +1933,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
             guideResources.motion = nrdMotion;
             guideResources.normalRoughness = nrdNormalRoughness;
             guideResources.viewZ = nrdViewZ;
-            guideSettings.historyValid = !m_nrdClearHistory && !temporalReset;
+            guideSettings.historyValid = !m_nrdClearHistory && !nrdTemporalReset;
             graphTail = m_nrdGuidePrepPass->addGraphPass(m_renderGraph, ctx, guideSettings, guideResources, graphTail);
             if (!graphTail.isValid()) {
                 return failGraphSetup();
@@ -1982,7 +1966,9 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
             commonSettings.rectSizePrev[1] = static_cast<uint16_t>(extent.height);
             commonSettings.motionVectorScale[0] = 1.0f;
             commonSettings.motionVectorScale[1] = 1.0f;
-            commonSettings.motionVectorScale[2] = 1.0f;
+            // Zero directs NRD to derive the view-Z delta from the previous
+            // matrices instead of trusting a noisy externally derived value.
+            commonSettings.motionVectorScale[2] = 0.0f;
             const glm::vec2 cameraJitter = nrdCameraJitterPixels(ctx.jitter);
             const glm::vec2 previousCameraJitter = nrdCameraJitterPixels(ctx.previousJitter);
             commonSettings.cameraJitter[0] = cameraJitter.x;
@@ -1997,7 +1983,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
             commonSettings.frameIndex = static_cast<uint32_t>(ctx.frameIndex);
             commonSettings.accumulationMode =
                 m_nrdClearHistory ? ::nrd::AccumulationMode::CLEAR_AND_RESTART
-                                  : temporalReset ? ::nrd::AccumulationMode::RESTART
+                                  : nrdTemporalReset ? ::nrd::AccumulationMode::RESTART
                                                   : ::nrd::AccumulationMode::CONTINUE;
 
             renderer::nrd::NrdDiffuseSettings methodSettings;
@@ -2030,7 +2016,10 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
             rtgiDiffuseEncoding = settings.nrd.method == NrdDiffuseMethod::Reblur
                                       ? DeferredLightingPass::RtgiDiffuseEncoding::ReblurYCoCg
                                       : DeferredLightingPass::RtgiDiffuseEncoding::LinearRgb;
-            rtgiRadianceScale = ctx.preExposure;
+            // NRD consumes and returns de-exposed scene-referred radiance;
+            // the scene HDR domain is also scene-referred, so no scale is
+            // reapplied at composite.
+            rtgiRadianceScale = 1.0f;
         }
 #endif
     }
@@ -2621,7 +2610,9 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
                                    reactiveMask,
                                    transparencyMask,
                                    f0Metallic,
-                                   objectMaterialId};
+                                   objectMaterialId,
+                                   rtgiRawDiffuse.isValid() ? rtgiRawDiffuse : sceneLighting,
+                                   rtgiValidation.isValid() ? rtgiValidation : objectMaterialId};
         debugResources.output = sceneCaptureColor;
         graphTail = m_debugPass->addGraphPass(m_renderGraph, ctx, settings, targets, debugResources, graphTail);
         if (!graphTail.isValid()) {
@@ -2801,7 +2792,11 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
         MECRAFT_LOG_STREAM(std::cerr << "[DeferredPipeline] Render Graph execution failed: " << executed.message
                                      << '\n');
     }
-    if (executed.succeeded() && nrdEnabled && !rtgiCameraMoving && !temporalReset) {
+    // The sampling phase must advance every frame, camera motion included: a
+    // frozen phase turns the one-spp estimate into a pattern-locked bias that
+    // NRD's accumulation cannot average out. Motion stability is NRD's
+    // responsibility via reprojection.
+    if (executed.succeeded() && nrdEnabled && !nrdTemporalReset) {
         ++m_rtgiTemporalSampleIndex;
     }
     if (m_shared->terrainCache != nullptr) {

@@ -781,7 +781,9 @@ void RenderScene::setSettings(const RenderSettings& settings) {
     if (normalizedSettings.rtgi.enabled != m_settings.rtgi.enabled ||
         normalizedSettings.nrd.enabled != m_settings.nrd.enabled ||
         normalizedSettings.nrd.method != m_settings.nrd.method) {
-        resetReasons = resetReasons | TemporalResetReason::Method;
+        // Denoiser reconfiguration only rebuilds the NRD-owned history; the
+        // owner-scoped reset keeps scene-domain and upscaler histories alive.
+        resetReasons = resetReasons | TemporalResetReason::DenoiserMethod;
     }
 
     m_settings = normalizedSettings;
@@ -1267,7 +1269,7 @@ RenderScene::buildFrameContext(const IWorldView& worldView, const Camera& camera
     const double visualTime = frameClock.has_value() ? frameClock->shaderTimeSeconds : Time::getRawTime();
     ctx.animationTime = static_cast<float>(std::fmod(gameTime, 16.0));
     ctx.shaderTime = static_cast<float>(std::fmod(visualTime, 8192.0));
-    ctx.preExposure = 1.0f;
+    ctx.preExposure = resolveScenePreExposure();
 
     if (m_settings.upscale.type == TemporalUpscalerType::Fsr31) {
 #if defined(MECRAFT_ENABLE_FSR31)
@@ -1322,10 +1324,14 @@ RenderScene::buildFrameContext(const IWorldView& worldView, const Camera& camera
 
     // Previous frame data (temporal)
     TemporalResetReasons explicitResetReasons = m_pendingTemporalResetReasons;
-    const uint64_t worldBlockContentRevision = worldView.getBlockContentRevision();
+    const uint64_t worldBlockContentRevision = worldView.getBlockEditRevision();
     if (m_hasPreviousContext && m_previousWorldBlockContentRevision != worldBlockContentRevision) {
-        // A block edit changes both the G-buffer geometry and the lighting
-        // signal. Do not let temporal filters blend across that discontinuity.
+        // An in-place block edit changes both the G-buffer geometry and the
+        // lighting signal. Do not let temporal filters blend across that
+        // discontinuity. Chunk streaming intentionally does not reach this
+        // path: during fast travel it changes the world every frame, and a
+        // per-frame full reset would keep NRD and TAA in permanent restart;
+        // appearing geometry is rejected per pixel by disocclusion instead.
         explicitResetReasons = explicitResetReasons | TemporalResetReason::AssetRevision;
     }
     if (m_hasPreviousContext && m_previousContext.worldView != &worldView) {
@@ -1337,9 +1343,13 @@ RenderScene::buildFrameContext(const IWorldView& worldView, const Camera& camera
     if (m_hasPreviousContext && m_previousContext.frameIndex + 1u != ctx.frameIndex) {
         explicitResetReasons = explicitResetReasons | TemporalResetReason::FrameDiscontinuity;
     }
+    // A pre-exposure step does not invalidate any current history owner: the
+    // RTGI raw storage is regenerated every frame and the signal pack removes
+    // the storage scale before NRD accumulation. TemporalResetReason::
+    // PreExposure is raised here once scene HDR itself becomes pre-exposed.
     ctx.temporalResetReasons = evaluateTemporalResetReasons(m_hasPreviousContext, m_previousContext.temporalExtents,
                                                             ctx.temporalExtents, explicitResetReasons, {});
-    if (!requiresTemporalReset(ctx.temporalResetReasons)) {
+    if (!ownerRequiresTemporalReset(TemporalHistoryOwner::ScreenSpace, ctx.temporalResetReasons)) {
         ctx.prevCamera = m_previousContext.camera;
         ctx.previousJitter = m_previousContext.jitter;
         ctx.previousViewProj = m_previousContext.camera.viewProj;
@@ -1524,8 +1534,39 @@ bool RenderScene::isFsr1RuntimeEnabled() const {
            m_settings.pipelineMode == PipelineMode::Deferred;
 }
 
+float RenderScene::resolveScenePreExposure() {
+    if (m_shared.rhiDevice == nullptr || m_shared.rhiDevice->backend() != RhiBackend::Vulkan ||
+        m_settings.pipelineMode != PipelineMode::Deferred) {
+        m_scenePreExposure = 1.0f;
+        return m_scenePreExposure;
+    }
+    const float adaptedExposure =
+        m_postProcessPass.gpuAdaptedExposure().value_or(m_postProcessPass.getAdaptedExposure());
+    if (!std::isfinite(adaptedExposure) || adaptedExposure <= 0.0f) {
+        return m_scenePreExposure;
+    }
+    // The adapted exposure is the scale that brings scene radiance to the
+    // tonemapper's working range, which is also the FP16 sweet spot for
+    // pre-exposed storage. Quantize to whole stops and require a full stop of
+    // drift before switching so the radiance domain changes rarely; every
+    // switch invalidates scene-domain temporal histories.
+    const float boundedLogExposure = std::log2(std::clamp(adaptedExposure, 1.0f / 64.0f, 64.0f));
+    const float activeLogExposure = std::log2(m_scenePreExposure);
+    if (std::abs(boundedLogExposure - activeLogExposure) >= 1.0f) {
+        m_scenePreExposure = std::exp2(std::round(boundedLogExposure));
+    }
+    return m_scenePreExposure;
+}
+
 void RenderScene::invalidateFrameHistory(const TemporalResetReasons reasons) {
     m_pendingTemporalResetReasons |= reasons;
+    if (!ownerRequiresTemporalReset(TemporalHistoryOwner::ScreenSpace, reasons) &&
+        !ownerRequiresTemporalReset(TemporalHistoryOwner::Upscaler, reasons)) {
+        // NRD-only causes: the reason still reaches every per-owner filter
+        // through the frame context, so scene-domain histories, the previous
+        // frame context, and the upscaler survive.
+        return;
+    }
     m_hasPreviousContext = false;
     m_temporalFrameInput.reset();
     m_temporalUpscaleResult.reset();
@@ -1548,8 +1589,10 @@ void RenderScene::refreshTemporalFrameInput() {
     input.motionVectorScale = {static_cast<float>(m_currentContext.temporalExtents.renderExtent.width),
                                static_cast<float>(m_currentContext.temporalExtents.renderExtent.height)};
     input.frameDeltaMilliseconds = m_currentContext.deltaTime * 1000.0f;
-    input.preExposure = m_currentContext.preExposure;
-    input.previousPreExposure = m_currentContext.previousPreExposure;
+    // The upscaler consumes scene HDR color, which stays scene-referred: the
+    // frame pre-exposure currently applies only to the RTGI raw storage chain.
+    input.preExposure = 1.0f;
+    input.previousPreExposure = 1.0f;
     input.cameraNear = m_currentContext.camera.nearPlane;
     input.cameraFar = m_currentContext.camera.farPlane;
     input.verticalFovRadians = glm::radians(m_currentContext.camera.fovDegrees);
@@ -1565,7 +1608,8 @@ void RenderScene::refreshTemporalFrameInput() {
     input.cameraUp = glm::normalize(glm::vec3(inverseView[1]));
     input.cameraForward = glm::normalize(-glm::vec3(inverseView[2]));
     input.depthInverted = false;
-    input.resetReasons = m_currentContext.temporalResetReasons;
+    input.resetReasons =
+        m_currentContext.temporalResetReasons & temporalResetReasonMaskForOwner(TemporalHistoryOwner::Upscaler);
     input.textures.hdrColor = m_postProcessPass.sceneColorTextureHandle();
     input.textures.hdrColorView = m_postProcessPass.sceneColorTextureViewHandle();
     input.textures.depth = m_lastFrameOutput.gbufferDepth;

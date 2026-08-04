@@ -839,6 +839,7 @@ void World::setFluidState(const int x, const int y, const int z, const BlockStat
 
     // Mark dirty for remesh
     ++m_blockContentRevision;
+    ++m_blockEditRevision;
     markChunkSubChunkAndVerticalNeighborsDirty(chunk, scy, localY);
     if (localX == 0) {
         auto nit = m_chunks.find(chunkKey(chunkX - 1, chunkZ));
@@ -949,6 +950,7 @@ void World::setBlockState(int x, int y, int z, BlockStateId id) {
 
     // Geometry edits must always trigger remesh, regardless of lighting pipeline.
     ++m_blockContentRevision;
+    ++m_blockEditRevision;
     markChunkSubChunkAndVerticalNeighborsDirty(chunk, editedScy, localY);
     if (localX == 0) {
         auto nit = m_chunks.find(chunkKey(chunkX - 1, chunkZ));
@@ -1024,6 +1026,7 @@ void World::notifyWireContainerPartsChanged(const glm::ivec3& pos) {
     Chunk& chunk = *it->second;
 
     ++m_blockContentRevision;
+    ++m_blockEditRevision;
     if (m_wireContainerChangeCallback) {
         m_wireContainerChangeCallback(pos);
     }

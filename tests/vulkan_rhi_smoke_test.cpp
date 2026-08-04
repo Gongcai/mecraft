@@ -765,9 +765,11 @@ void setNrdIdentityMatrix(float (&matrix)[16]) {
                 const float motionY = glm::unpackHalf1x16(motion[pixel * 4u + 1u]);
                 const float motionZ = glm::unpackHalf1x16(motion[pixel * 4u + 2u]);
                 const float motionW = glm::unpackHalf1x16(motion[pixel * 4u + 3u]);
+                // The guide contract publishes pure 2D motion (NRD derives
+                // the view-Z delta itself) and signed right-handed view Z.
                 valid = valid && std::abs(motionX + 0.125f) < 0.001f && std::abs(motionY - 0.125f) < 0.001f &&
-                        std::abs(motionZ - 1.0f) < 0.001f && std::abs(motionW) < 0.001f &&
-                        std::abs(viewZ[pixel] - 2.0f) < 0.001f;
+                        std::abs(motionZ) < 0.001f && std::abs(motionW) < 0.001f &&
+                        std::abs(viewZ[pixel] + 2.0f) < 0.001f;
             }
             device.unmapBuffer(readback);
         }
