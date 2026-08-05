@@ -56,6 +56,10 @@ namespace {
            traceSource.find("layout(set = 1, binding = 17) uniform sampler2D uVoxelLightTexture;") !=
                std::string::npos &&
            traceSource.find("rtgiPrimarySkyVisibility") != std::string::npos &&
+           traceSource.find("vec3 rtgiVoxelGeometricNormal(vec3 shadingNormal)") != std::string::npos &&
+           traceSource.find("materialKindId(materialAux.materialKind) <= MATERIAL_NETHER_ORE") !=
+               std::string::npos &&
+           traceSource.find("if (!voxelPrimarySurface && adjacentDepthValid") != std::string::npos &&
            traceSource.find("radiance += rtgiDiffuseTransportAlbedo(surface) * contribution.diffuse") !=
                std::string::npos &&
            traceSource.find("rtgiTerrainBlockLightIncident(surface.blockLight)") != std::string::npos &&
@@ -125,6 +129,20 @@ int main() {
     const std::optional<glm::vec3> pole = rtgiCosineHemisphereDirection(glm::vec2(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
     valid = requireTrue(pole.has_value() && glm::length(*pole - glm::vec3(0.0f, 1.0f, 0.0f)) <= 1.0e-6f,
                         "Zero radial RTGI sample must map to the surface normal") &&
+            valid;
+
+    const std::optional<glm::vec3> voxelPositiveX =
+        rtgiVoxelGeometricNormal(glm::normalize(glm::vec3(0.91f, 0.35f, -0.22f)));
+    const std::optional<glm::vec3> voxelNegativeY =
+        rtgiVoxelGeometricNormal(glm::normalize(glm::vec3(0.18f, -0.94f, 0.29f)));
+    const std::optional<glm::vec3> voxelPositiveZ =
+        rtgiVoxelGeometricNormal(glm::normalize(glm::vec3(-0.31f, 0.42f, 0.85f)));
+    valid = requireTrue(voxelPositiveX.has_value() && voxelNegativeY.has_value() && voxelPositiveZ.has_value() &&
+                            glm::length(*voxelPositiveX - glm::vec3(1.0f, 0.0f, 0.0f)) <= 1.0e-6f &&
+                            glm::length(*voxelNegativeY - glm::vec3(0.0f, -1.0f, 0.0f)) <= 1.0e-6f &&
+                            glm::length(*voxelPositiveZ - glm::vec3(0.0f, 0.0f, 1.0f)) <= 1.0e-6f &&
+                            !rtgiVoxelGeometricNormal(glm::vec3(0.0f)).has_value(),
+                        "RTGI voxel geometric normals must remain stable under terrain normal mapping") &&
             valid;
 
     const std::optional<glm::vec3> known =

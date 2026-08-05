@@ -63,6 +63,20 @@ std::optional<glm::vec3> rtgiCosineHemisphereDirection(const glm::vec2& sample, 
     return glm::normalize(direction);
 }
 
+std::optional<glm::vec3> rtgiVoxelGeometricNormal(const glm::vec3& shadingNormal) {
+    if (!finite(shadingNormal) || glm::dot(shadingNormal, shadingNormal) <= 1.0e-12f) {
+        return std::nullopt;
+    }
+    const glm::vec3 magnitude = glm::abs(shadingNormal);
+    if (magnitude.x >= magnitude.y && magnitude.x >= magnitude.z) {
+        return glm::vec3(std::copysign(1.0f, shadingNormal.x), 0.0f, 0.0f);
+    }
+    if (magnitude.y >= magnitude.z) {
+        return glm::vec3(0.0f, std::copysign(1.0f, shadingNormal.y), 0.0f);
+    }
+    return glm::vec3(0.0f, 0.0f, std::copysign(1.0f, shadingNormal.z));
+}
+
 std::optional<uint32_t> encodeRtgiTraceValidation(const RtgiTraceClassification classification,
                                                   const uint32_t candidateCount, const uint32_t confirmedCount) {
     const uint32_t classificationValue = static_cast<uint32_t>(classification);

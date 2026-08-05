@@ -194,6 +194,11 @@ RTGI/NRD 历史失效。CPU 与 GPU 坐标统一使用相机相对世界空间�
 Roughness、Material ID 和 Stable Object ID。Ray Origin 沿几何法线偏移，偏移量由世界
 单位、入射角和浮点误差计算，不能使用对所有场景固定的巨大 Bias。
 
+体素 GBuffer 的 World Normal 可以包含 LabPBR 法线贴图，不能直接作为 Ray Origin 的几何法线。
+方块材质范围 `0..58` 的主表面按 shading normal 的最大绝对分量恢复带符号的轴对齐方块面法线，并用该法线约束起点偏移
+和采样半球，防止逐帧样本穿过方块角点与 Greedy Mesh 接缝。模型主表面不做轴对齐处理，继续使用
+严格深度邻域重建，并要求候选几何法线与 shading normal 保持同向且点积大于 `0.75`。
+
 天空像素不发射 RTGI Ray，其环境贡献直接由天空光照链计算。透明表面在 Forward+
 阶段读取同一份 Denoised GI。
 
@@ -212,7 +217,7 @@ Roughness、Material ID 和 Stable Object ID。Ray Origin 沿几何法线偏移�
 
 当前 C++/GLSL 共享确定性整数 Hash、R2 帧旋转、余弦半球映射、128 字节 Push Constant 与 112 字节
 次级光照 UBO 契约。单元测试固化 Hash 结果、R2 环面步进、固定噪声寻址、采样有效域、期望余弦
-分布、UBO 布局及 Terrain Normal/Specular Map Flag；真实 Vulkan Smoke 使用 Blue Noise、Scene TLAS
+分布、体素主轴几何法线、UBO 布局及 Terrain Normal/Specular Map Flag；真实 Vulkan Smoke 使用 Blue Noise、Scene TLAS
 与生产 `RtgiTracePass`。
 Terrain 生产链使用 2×1 GBuffer 与两层动画纹理数组：左像素在动画层 Alpha
 为零时拒绝 Cutout 并命中约 2 世界单位后的 Opaque，右像素确认 Cutout 并命中约 1 世界单位；两者

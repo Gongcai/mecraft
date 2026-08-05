@@ -70,6 +70,11 @@ static_assert(sizeof(RtgiSecondaryLightingParams) == 128u);
 /// @return Unit direction in the normal hemisphere, or no value when the contract is invalid.
 [[nodiscard]] std::optional<glm::vec3> rtgiCosineHemisphereDirection(const glm::vec2& sample, const glm::vec3& normal);
 
+/// Recovers the axis-aligned geometric face normal of a voxel surface from its shading normal.
+/// @param shadingNormal Finite non-zero world-space normal after terrain normal mapping.
+/// @return Signed dominant axis, or no value when the input is invalid.
+[[nodiscard]] std::optional<glm::vec3> rtgiVoxelGeometricNormal(const glm::vec3& shadingNormal);
+
 /// Packs one per-pixel trace classification and Cutout Candidate/Confirmed counters into 32 bits.
 /// @param classification Stable raw-trace result classification.
 /// @param candidateCount Number of non-opaque triangle candidates evaluated by the ray query.
