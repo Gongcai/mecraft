@@ -461,6 +461,40 @@ void seedBoundaryDiffs(const std::vector<uint8_t>& basePacked, std::vector<uint8
     }
 }
 
+bool hasBoundaryLightDecrease(const std::vector<uint8_t>& previousBoundaryPacked,
+                              const std::vector<uint8_t>& currentBoundaryPacked,
+                              const std::array<bool, 4>& changedDirections) {
+    for (int direction = 0; direction < 4; ++direction) {
+        if (!changedDirections[direction]) {
+            continue;
+        }
+
+        if (direction == 0 || direction == 1) {
+            const int x = (direction == 0) ? 0 : (Chunk::SIZE_X - 1);
+            for (int y = 0; y < Chunk::SIZE_Y; ++y) {
+                for (int z = 0; z < Chunk::SIZE_Z; ++z) {
+                    if (getSky(currentBoundaryPacked, x, y, z) < getSky(previousBoundaryPacked, x, y, z) ||
+                        getBlock(currentBoundaryPacked, x, y, z) < getBlock(previousBoundaryPacked, x, y, z)) {
+                        return true;
+                    }
+                }
+            }
+            continue;
+        }
+
+        const int z = (direction == 2) ? 0 : (Chunk::SIZE_Z - 1);
+        for (int y = 0; y < Chunk::SIZE_Y; ++y) {
+            for (int x = 0; x < Chunk::SIZE_X; ++x) {
+                if (getSky(currentBoundaryPacked, x, y, z) < getSky(previousBoundaryPacked, x, y, z) ||
+                    getBlock(currentBoundaryPacked, x, y, z) < getBlock(previousBoundaryPacked, x, y, z)) {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
 template <LightKind Kind>
 void runRemovePassTyped(SolverContext& context, const std::vector<uint8_t>& basePacked,
                         std::vector<uint8_t>& workingPacked, WorkQueue<RemovalNode>& removeQueue,
@@ -765,8 +799,36 @@ LightResult LightSolver::solve(const LightJob& job) {
     SolverContext context = makeSolverContext(job);
 
     const std::vector<uint8_t> originalPacked = buildOriginalPacked(job);
-    if (job.reason == LightDirtyReason::ChunkLoaded ||
-        (!hasChangedBoundary(job.changedBoundaryDirections) && job.blockChanges.empty())) {
+    const bool hasBoundaryChanges = hasChangedBoundary(job.changedBoundaryDirections);
+    const bool hasBlockChanges = !job.blockChanges.empty();
+    if (job.reason == LightDirtyReason::ChunkLoaded || job.suppressedBoundaryMask != 0u) {
+        return solveByRebuild(context, originalPacked, startTime);
+    }
+
+    // A forced publication with unchanged light only serializes the current border.
+    if (!hasBoundaryChanges && !hasBlockChanges && job.forceOutgoingBoundaryMask != 0u) {
+        LightResult result;
+        result.selfDelta.chunkKey = job.chunkKey;
+        result.selfDelta.revision = job.revision;
+        result.selfDelta.packedLight = originalPacked;
+        result.outgoing.reserve(4);
+        buildOutgoingBatches(context, originalPacked, originalPacked, result.outgoing);
+        result.workerMs = static_cast<float>(
+            std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - startTime).count());
+        return result;
+    }
+
+    if (!hasBoundaryChanges && !hasBlockChanges) {
+        return solveByRebuild(context, originalPacked, startTime);
+    }
+
+    std::vector<uint8_t> previousBoundaryPacked(Chunk::BLOCK_COUNT, 0);
+    std::vector<uint8_t> currentBoundaryPacked(Chunk::BLOCK_COUNT, 0);
+    applyBoundarySeeds(context, job.previousInbox, previousBoundaryPacked);
+    applyBoundarySeeds(context, job.inbox, currentBoundaryPacked);
+    if (hasBoundaryLightDecrease(previousBoundaryPacked, currentBoundaryPacked, job.changedBoundaryDirections)) {
+        // A lower boundary seed invalidates the incremental removal provenance;
+        // rebuild from the chunk's intrinsic light sources to remove all residual light.
         return solveByRebuild(context, originalPacked, startTime);
     }
 
@@ -783,11 +845,6 @@ LightResult LightSolver::solve(const LightJob& job) {
     } else {
         buildCurrentBasePacked(context, basePacked);
     }
-
-    std::vector<uint8_t> previousBoundaryPacked(Chunk::BLOCK_COUNT, 0);
-    std::vector<uint8_t> currentBoundaryPacked(Chunk::BLOCK_COUNT, 0);
-    applyBoundarySeeds(context, job.previousInbox, previousBoundaryPacked);
-    applyBoundarySeeds(context, job.inbox, currentBoundaryPacked, job.suppressedBoundaryMask);
 
     result.selfDelta.packedLight = originalPacked;
 

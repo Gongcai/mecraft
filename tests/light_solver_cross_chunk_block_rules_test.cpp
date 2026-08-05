@@ -123,6 +123,9 @@ void testCrossChunkBlockLightNeedsPersistentBoundaryInput() {
     leftStableSyncJob.forceOutgoingBoundaryMask = 1u << 0;
     const LightResult leftStableSync = LightSolver::solve(leftStableSyncJob);
     const BorderUpdateBatch stableBoundary = findOutgoingToPosXNeighbor(leftStableSync, World::chunkKey(1, 0));
+    if (leftStableSync.nodesVisited != 0) {
+        fail("stable forced boundary sync should not rebuild the chunk light field");
+    }
     if (stableBoundary.dirtySubChunkMask != 0 || stableBoundary.nodes.empty()) {
         fail("forced boundary sync should resend stable border light without reporting a light delta");
     }
@@ -152,6 +155,7 @@ void testCrossChunkBlockLightNeedsPersistentBoundaryInput() {
     const LightResult leftRemoved = LightSolver::solve(leftRemovedJob);
     const BorderUpdateBatch removedBoundary = findOutgoingToPosXNeighbor(leftRemoved, World::chunkKey(1, 0));
 
+    right->setBlockLight(2, y, z, 15);
     LightJob rightRemovedJob = buildJob(right);
     rightRemovedJob.reason = LightDirtyReason::NeighborBoundary;
     rightRemovedJob.changedBoundaryDirections[0] = true;
@@ -159,7 +163,8 @@ void testCrossChunkBlockLightNeedsPersistentBoundaryInput() {
     rightRemovedJob.inbox.push_back(removedBoundary);
     const LightResult rightCleared = LightSolver::solve(rightRemovedJob);
     if (blockAt(rightCleared.selfDelta.packedLight, 0, y, z) != 0 ||
-        blockAt(rightCleared.selfDelta.packedLight, 1, y, z) != 0) {
+        blockAt(rightCleared.selfDelta.packedLight, 1, y, z) != 0 ||
+        blockAt(rightCleared.selfDelta.packedLight, 2, y, z) != 0) {
         fail("neighbor block light should clear after source torch removal");
     }
 }
@@ -211,6 +216,42 @@ void testStaleReturnedBoundaryDoesNotPreserveRemovedLocalEmitter() {
     }
 }
 
+void testEmissionRemovalRebuildsOverestimatedResidualLight() {
+    auto chunk = std::make_shared<Chunk>(0, 0);
+
+    constexpr int y = 20;
+    constexpr int z = 8;
+    for (int iy = 0; iy <= 40; ++iy) {
+        for (int iz = 0; iz < Chunk::SIZE_Z; ++iz) {
+            for (int ix = 0; ix < Chunk::SIZE_X; ++ix) {
+                chunk->setBlockFast(ix, iy, iz, stateForBlockName("minecraft:stone"));
+            }
+        }
+    }
+    for (int x = 6; x <= 10; ++x) {
+        chunk->setBlockFast(x, y, z, NULL_BLOCK_STATE);
+    }
+    chunk->setBlockFast(8, y, z, stateForBlockName("minecraft:torch"));
+
+    const LightResult lit = LightSolver::solve(buildJob(chunk));
+    chunk->replacePackedLight(lit.selfDelta.packedLight.data(), lit.selfDelta.packedLight.size(), nullptr);
+    chunk->setBlockLight(10, y, z, 15);
+    chunk->setBlockFast(8, y, z, NULL_BLOCK_STATE);
+
+    LightJob removedJob = buildJob(chunk);
+    removedJob.reason = LightDirtyReason::BlockChanged;
+    removedJob.blockChanges.push_back({static_cast<uint8_t>(8), static_cast<uint8_t>(y), static_cast<uint8_t>(z),
+                                       BlockRegistry::requireIdByName("minecraft:torch"), RUNTIME_ID_NULL});
+    removedJob.suppressedBoundaryMask = 0x0Fu;
+
+    const LightResult cleared = LightSolver::solve(removedJob);
+    if (blockAt(cleared.selfDelta.packedLight, 8, y, z) != 0 ||
+        blockAt(cleared.selfDelta.packedLight, 9, y, z) != 0 ||
+        blockAt(cleared.selfDelta.packedLight, 10, y, z) != 0) {
+        fail("emission removal should clear residual light above the old propagation gradient");
+    }
+}
+
 void testGlowLichenPropagationAndRemovalUsesRemovePass() {
     auto chunk = std::make_shared<Chunk>(0, 0);
 
@@ -253,6 +294,7 @@ int main() {
 
     testCrossChunkBlockLightNeedsPersistentBoundaryInput();
     testStaleReturnedBoundaryDoesNotPreserveRemovedLocalEmitter();
+    testEmissionRemovalRebuildsOverestimatedResidualLight();
     testGlowLichenPropagationAndRemovalUsesRemovePass();
 
     std::cout << "[light_solver_cross_chunk_block_rules_test] PASS\n";
