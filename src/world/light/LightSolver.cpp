@@ -201,8 +201,12 @@ std::vector<uint8_t> buildOriginalPacked(const LightJob& job) {
 }
 
 void applyBoundarySeeds(SolverContext& context, const std::vector<BorderUpdateBatch>& batches,
-                        std::vector<uint8_t>& packed) {
+                        std::vector<uint8_t>& packed, const uint8_t suppressedBoundaryMask = 0) {
     for (const BorderUpdateBatch& batch : batches) {
+        if (batch.fromDirection < 4 && (suppressedBoundaryMask & (1u << batch.fromDirection)) != 0u) {
+            continue;
+        }
+
         for (const BorderLightNode& node : batch.nodes) {
             const int x = static_cast<int>(node.localX);
             const int y = static_cast<int>(node.y);
@@ -260,7 +264,7 @@ void buildCurrentBasePacked(SolverContext& context, std::vector<uint8_t>& packed
         }
     }
 
-    applyBoundarySeeds(context, context.job.inbox, packed);
+    applyBoundarySeeds(context, context.job.inbox, packed, context.job.suppressedBoundaryMask);
 }
 
 uint32_t borderFaceDirtyMask(const std::vector<uint8_t>& before, const std::vector<uint8_t>& after,
@@ -714,7 +718,7 @@ LightResult solveByRebuild(SolverContext& context, const std::vector<uint8_t>& o
     // a full scan for jobs that predate the cache (or ChunkLoaded first build).
     if (!context.job.baseLightPacked.empty()) {
         result.selfDelta.packedLight = context.job.baseLightPacked;
-        applyBoundarySeeds(context, context.job.inbox, result.selfDelta.packedLight);
+        applyBoundarySeeds(context, context.job.inbox, result.selfDelta.packedLight, context.job.suppressedBoundaryMask);
     } else {
         buildCurrentBasePacked(context, result.selfDelta.packedLight);
     }
@@ -775,7 +779,7 @@ LightResult LightSolver::solve(const LightJob& job) {
     // Use incrementally-maintained base light when available.
     if (!context.job.baseLightPacked.empty()) {
         basePacked = context.job.baseLightPacked;
-        applyBoundarySeeds(context, context.job.inbox, basePacked);
+        applyBoundarySeeds(context, context.job.inbox, basePacked, context.job.suppressedBoundaryMask);
     } else {
         buildCurrentBasePacked(context, basePacked);
     }
@@ -783,7 +787,7 @@ LightResult LightSolver::solve(const LightJob& job) {
     std::vector<uint8_t> previousBoundaryPacked(Chunk::BLOCK_COUNT, 0);
     std::vector<uint8_t> currentBoundaryPacked(Chunk::BLOCK_COUNT, 0);
     applyBoundarySeeds(context, job.previousInbox, previousBoundaryPacked);
-    applyBoundarySeeds(context, job.inbox, currentBoundaryPacked);
+    applyBoundarySeeds(context, job.inbox, currentBoundaryPacked, job.suppressedBoundaryMask);
 
     result.selfDelta.packedLight = originalPacked;
 

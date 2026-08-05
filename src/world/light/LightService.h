@@ -59,6 +59,9 @@ private:
         std::array<bool, 4> pendingBoundaryChanged{};
         uint32_t pendingHaloMeshDirtyMask = 0;
         uint32_t inFlightHaloMeshDirtyMask = 0;
+        uint8_t boundaryInvalidationMask = 0;
+        uint8_t pendingSuppressedBoundaryMask = 0;
+        uint8_t inFlightSuppressedBoundaryMask = 0;
         uint8_t pendingForceOutgoingBoundaryMask = 0;
         uint8_t inFlightForceOutgoingBoundaryMask = 0;
         LightDirtyReason reason = LightDirtyReason::NeighborBoundary;

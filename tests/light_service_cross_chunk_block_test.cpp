@@ -84,6 +84,17 @@ int main() {
         fail("torch should propagate block light into the neighboring chunk");
     }
 
+    const auto leftIt = chunks.find(World::chunkKey(0, 0));
+    if (leftIt == chunks.end() || !leftIt->second) {
+        fail("expected source chunk to stay loaded");
+    }
+    const uint8_t torchLevel = BlockRegistry::getLightLevelFast(BlockRegistry::requireIdByName("minecraft:torch"));
+    if (leftIt->second->getBlockLight(15, torchY, tunnelZ) != torchLevel - 1 ||
+        rightChunk.getBlockLight(0, torchY, tunnelZ) != torchLevel - 2 ||
+        rightChunk.getBlockLight(1, torchY, tunnelZ) != torchLevel - 3) {
+        fail("cross-chunk block-light gradient should attenuate by one per voxel without a boundary discontinuity");
+    }
+
     constexpr int perturbX = 20;
     constexpr int perturbY = 90;
     constexpr int perturbZ = 12;
@@ -92,6 +103,11 @@ int main() {
 
     if (!waitUntil(world, playerPos, 120, rightTunnelLit)) {
         fail("neighbor chunk should keep cross-chunk block light after its own recompute");
+    }
+    if (leftIt->second->getBlockLight(15, torchY, tunnelZ) != torchLevel - 1 ||
+        rightChunk.getBlockLight(0, torchY, tunnelZ) != torchLevel - 2 ||
+        rightChunk.getBlockLight(1, torchY, tunnelZ) != torchLevel - 3) {
+        fail("neighbor recompute should preserve the exact cross-chunk block-light gradient");
     }
 
     world.setBlock(torchX, torchY, tunnelZ, RUNTIME_ID_NULL);
@@ -104,6 +120,28 @@ int main() {
     });
     if (!clearedInNeighbor) {
         fail("neighboring chunk block light should clear after removing the source torch");
+    }
+
+    constexpr int rightTorchX = 17;
+    world.setBlock(torchX, torchY, tunnelZ, BlockRegistry::requireIdByName("minecraft:torch"));
+    world.setBlock(rightTorchX, torchY, tunnelZ, BlockRegistry::requireIdByName("minecraft:torch"));
+    if (!waitUntil(world, playerPos, 180, [&]() {
+            return leftIt->second->getBlockLight(15, torchY, tunnelZ) == torchLevel - 1 &&
+                   rightChunk.getBlockLight(0, torchY, tunnelZ) == torchLevel - 1 &&
+                   isLightFrameSettled(world.getLightFrameStats());
+        })) {
+        fail("opposing cross-chunk light sources should settle before removal");
+    }
+
+    world.setBlock(torchX, torchY, tunnelZ, RUNTIME_ID_NULL);
+    if (!waitUntil(world, playerPos, 240, [&]() {
+            return rightChunk.getBlockLight(1, torchY, tunnelZ) == torchLevel &&
+                   rightChunk.getBlockLight(0, torchY, tunnelZ) == torchLevel - 1 &&
+                   leftIt->second->getBlockLight(15, torchY, tunnelZ) == torchLevel - 2 &&
+                   leftIt->second->getBlockLight(14, torchY, tunnelZ) == torchLevel - 3 &&
+                   isLightFrameSettled(world.getLightFrameStats());
+        })) {
+        fail("independent neighbor light should cross the boundary continuously after local emitter removal");
     }
 
     pass();

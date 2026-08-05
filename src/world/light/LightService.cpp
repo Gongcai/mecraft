@@ -187,6 +187,7 @@ void LightService::onChunkUnloaded(const int64_t chunkKey) {
             neighborState.pendingPreviousBoundaryCache[direction] = neighborState.boundaryCache[direction];
             neighborState.boundaryCache[direction].reset();
             neighborState.pendingBoundaryChanged[direction] = true;
+            neighbor->bumpLightRevision();
             neighborState.dirty = true;
             if (!wasDirty || shouldReplaceDirtyReason(neighborState.reason, LightDirtyReason::NeighborBoundary)) {
                 neighborState.reason = LightDirtyReason::NeighborBoundary;
@@ -226,8 +227,11 @@ void LightService::onBlockChanged(const int wx, const int wy, const int wz, cons
     if (it != m_world.getActiveChunks().end() && it->second) {
         const int localX = wx - chunkCoords.x * Chunk::SIZE_X;
         const int localZ = wz - chunkCoords.y * Chunk::SIZE_Z;
-        const bool lightSourceChange = BlockRegistry::isLightSourceFast(oldId) ||
-                                       BlockRegistry::isLightSourceFast(newId);
+        const uint8_t oldEmission =
+            BlockRegistry::isLightSourceFast(oldId) ? BlockRegistry::getLightLevelFast(oldId) : 0;
+        const uint8_t newEmission =
+            BlockRegistry::isLightSourceFast(newId) ? BlockRegistry::getLightLevelFast(newId) : 0;
+        const bool emissionDecreased = newEmission < oldEmission;
         it->second->recalcHeightMap(localX, localZ);
         it->second->bumpLightRevision();
         updateBaseLightCacheForBlockChange(*it->second, localX, wy, localZ, oldId, newId);
@@ -238,13 +242,11 @@ void LightService::onBlockChanged(const int wx, const int wy, const int wz, cons
             state.pendingBlockChanges.push_back(
                 {static_cast<uint8_t>(localX), static_cast<uint8_t>(wy), static_cast<uint8_t>(localZ), oldId, newId});
 
-            // Boundary batches contain propagated light, not provenance. When a
-            // light source changes, a batch previously received from a neighbor
-            // may have originated from the source being edited and must not be
-            // treated as a persistent source during the removal pass.
-            // Drop those cached inputs and ask neighbors to resend their current
-            // independent boundary state after this chunk has recomputed.
-            if (lightSourceChange) {
+            // Boundary batches contain propagated light, not provenance. When
+            // block-light emission decreases, previously received neighbor input
+            // may have originated from this source. Suppress those inputs for the
+            // edit job and accept refreshed state only after this result applies.
+            if (emissionDecreased) {
                 for (int direction = 0; direction < 4; ++direction) {
                     if (!state.pendingBoundaryChanged[direction]) {
                         state.pendingPreviousBoundaryCache[direction] = state.boundaryCache[direction];
@@ -252,26 +254,8 @@ void LightService::onBlockChanged(const int wx, const int wy, const int wz, cons
                     state.boundaryCache[direction].reset();
                     state.pendingBoundaryChanged[direction] = true;
                 }
-            }
-        }
-
-        if (lightSourceChange) {
-            // The neighboring chunk may have a stable light result and would
-            // otherwise have no reason to emit the now-invalid boundary again.
-            // Force one outgoing publication in the direction facing us.
-            for (int direction = 0; direction < 4; ++direction) {
-                Chunk* neighbor = it->second->neighbors[direction];
-                if (!neighbor) {
-                    continue;
-                }
-                const int64_t neighborKey = World::chunkKey(neighbor->m_chunkX, neighbor->m_chunkZ);
-                {
-                    std::lock_guard<std::mutex> lock(m_stateMutex);
-                    LightChunkState& neighborState = m_chunkStates[neighborKey];
-                    neighborState.pendingForceOutgoingBoundaryMask |=
-                        directionBit(oppositeDirection(direction));
-                }
-                markChunkDirty(neighborKey, LightDirtyReason::NeighborBoundary);
+                state.boundaryInvalidationMask = 0x0Fu;
+                state.pendingSuppressedBoundaryMask = 0x0Fu;
             }
         }
     }
@@ -367,10 +351,13 @@ void LightService::submitJobs(const glm::vec3& cameraPos, const int submitBudget
                     job.changedBoundaryDirections = state.pendingBoundaryChanged;
                     job.inbox = collectBoundaryInputs(state);
                     job.packedLightSnapshot = capturePackedLightSnapshot(*chunkIt->second);
+                    job.suppressedBoundaryMask = state.pendingSuppressedBoundaryMask;
                     job.forceOutgoingBoundaryMask = state.pendingForceOutgoingBoundaryMask;
                     state.inFlightHaloMeshDirtyMask = state.pendingHaloMeshDirtyMask;
+                    state.inFlightSuppressedBoundaryMask = state.pendingSuppressedBoundaryMask;
                     state.inFlightForceOutgoingBoundaryMask = state.pendingForceOutgoingBoundaryMask;
                     state.pendingHaloMeshDirtyMask = 0;
+                    state.pendingSuppressedBoundaryMask = 0;
                     state.pendingForceOutgoingBoundaryMask = 0;
 
                     // Snapshot the incrementally-maintained base-light cache so
@@ -480,6 +467,7 @@ void LightService::drainCompleted(World& world, const int mergeBudget, const flo
                 shouldRequeue = state.dirty;
                 if (shouldRequeue) {
                     state.pendingHaloMeshDirtyMask |= state.inFlightHaloMeshDirtyMask;
+                    state.pendingSuppressedBoundaryMask |= state.inFlightSuppressedBoundaryMask;
                     state.pendingForceOutgoingBoundaryMask |= state.inFlightForceOutgoingBoundaryMask;
                     state.queued = true;
                     ++m_frameStats.requeued;
@@ -495,11 +483,13 @@ void LightService::drainCompleted(World& world, const int mergeBudget, const flo
                     }
                 }
                 state.inFlightHaloMeshDirtyMask = 0;
+                state.inFlightSuppressedBoundaryMask = 0;
                 state.inFlightForceOutgoingBoundaryMask = 0;
                 continue;
             }
 
             const uint32_t haloMeshDirtyMask = state.inFlightHaloMeshDirtyMask;
+            const uint8_t suppressedBoundaryMask = state.inFlightSuppressedBoundaryMask;
             if (!ticket.result.selfDelta.packedLight.empty()) {
                 uint32_t appliedDirtyMask = 0;
                 chunkIt->second->replacePackedLight(ticket.result.selfDelta.packedLight.data(),
@@ -512,7 +502,34 @@ void LightService::drainCompleted(World& world, const int mergeBudget, const flo
                 }
             }
             state.inFlightHaloMeshDirtyMask = 0;
+            state.inFlightSuppressedBoundaryMask = 0;
             state.inFlightForceOutgoingBoundaryMask = 0;
+            state.boundaryInvalidationMask &= static_cast<uint8_t>(~suppressedBoundaryMask);
+            state.boundaryInvalidationMask |= state.pendingSuppressedBoundaryMask;
+
+            if (suppressedBoundaryMask != 0u) {
+                for (int direction = 0; direction < 4; ++direction) {
+                    if ((suppressedBoundaryMask & directionBit(direction)) == 0u) {
+                        continue;
+                    }
+                    Chunk* neighbor = chunkIt->second->neighbors[direction];
+                    if (!neighbor) {
+                        continue;
+                    }
+                    const int64_t neighborKey = World::chunkKey(neighbor->m_chunkX, neighbor->m_chunkZ);
+                    LightChunkState& neighborState = m_chunkStates[neighborKey];
+                    neighborState.pendingForceOutgoingBoundaryMask |= directionBit(oppositeDirection(direction));
+                    const bool wasDirty = neighborState.dirty;
+                    neighborState.dirty = true;
+                    if (!wasDirty || shouldReplaceDirtyReason(neighborState.reason, LightDirtyReason::NeighborBoundary)) {
+                        neighborState.reason = LightDirtyReason::NeighborBoundary;
+                    }
+                    if (!neighborState.inFlight && !neighborState.queued) {
+                        neighborState.queued = true;
+                        neighbor->setLightQueued(true);
+                    }
+                }
+            }
 
             for (const BorderUpdateBatch& batch : ticket.result.outgoing) {
                 auto neighborChunkIt = world.getActiveChunks().find(batch.targetChunkKey);
@@ -523,12 +540,18 @@ void LightService::drainCompleted(World& world, const int mergeBudget, const flo
                 LightChunkState& neighborState = m_chunkStates[batch.targetChunkKey];
                 bool boundaryChanged = true;
                 if (batch.fromDirection < neighborState.boundaryCache.size()) {
+                    if ((neighborState.boundaryInvalidationMask & directionBit(batch.fromDirection)) != 0u) {
+                        ++m_frameStats.boundarySync;
+                        continue;
+                    }
+
                     const std::optional<BorderUpdateBatch>& previous = neighborState.boundaryCache[batch.fromDirection];
                     boundaryChanged = !previous.has_value() || !sameBoundaryNodes(*previous, batch);
                     if (boundaryChanged) {
                         neighborState.pendingPreviousBoundaryCache[batch.fromDirection] = previous;
                         neighborState.boundaryCache[batch.fromDirection] = batch;
                         neighborState.pendingBoundaryChanged[batch.fromDirection] = true;
+                        neighborChunkIt->second->bumpLightRevision();
                     }
                 }
                 if (boundaryChanged) {
@@ -658,10 +681,13 @@ int LightService::processInteractiveJobsInline(const glm::vec3& cameraPos, const
                     job.changedBoundaryDirections = state.pendingBoundaryChanged;
                     job.inbox = collectBoundaryInputs(state);
                     job.packedLightSnapshot = capturePackedLightSnapshot(*chunkIt->second);
+                    job.suppressedBoundaryMask = state.pendingSuppressedBoundaryMask;
                     job.forceOutgoingBoundaryMask = state.pendingForceOutgoingBoundaryMask;
                     state.inFlightHaloMeshDirtyMask = state.pendingHaloMeshDirtyMask;
+                    state.inFlightSuppressedBoundaryMask = state.pendingSuppressedBoundaryMask;
                     state.inFlightForceOutgoingBoundaryMask = state.pendingForceOutgoingBoundaryMask;
                     state.pendingHaloMeshDirtyMask = 0;
+                    state.pendingSuppressedBoundaryMask = 0;
                     state.pendingForceOutgoingBoundaryMask = 0;
 
                     auto cacheIt = m_baseLightCaches.find(chunkKey);

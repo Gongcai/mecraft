@@ -57,6 +57,7 @@ struct LightJob {
     std::vector<BorderUpdateBatch> previousInbox;
     std::vector<BorderUpdateBatch> inbox;
     std::array<bool, 4> changedBoundaryDirections{};
+    uint8_t suppressedBoundaryMask = 0; // Input directions ignored while an emission decrease is recomputed.
     uint8_t forceOutgoingBoundaryMask = 0;
     LightDirtyReason reason = LightDirtyReason::NeighborBoundary;
 };

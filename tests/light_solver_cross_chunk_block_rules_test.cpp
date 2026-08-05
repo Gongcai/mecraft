@@ -72,6 +72,17 @@ BorderUpdateBatch findOutgoingToPosXNeighbor(const LightResult& result, const in
     return *it;
 }
 
+BorderUpdateBatch findOutgoingToNegXNeighbor(const LightResult& result, const int64_t expectedKey) {
+    const auto it =
+        std::find_if(result.outgoing.begin(), result.outgoing.end(), [expectedKey](const BorderUpdateBatch& batch) {
+            return batch.targetChunkKey == expectedKey && batch.fromDirection == 1;
+        });
+    if (it == result.outgoing.end()) {
+        fail("expected -X outgoing boundary batch");
+    }
+    return *it;
+}
+
 void buildSealedTunnel(const std::shared_ptr<Chunk>& left, const std::shared_ptr<Chunk>& right, const int y,
                        const int z) {
     for (int iy = 0; iy <= 40; ++iy) {
@@ -153,6 +164,53 @@ void testCrossChunkBlockLightNeedsPersistentBoundaryInput() {
     }
 }
 
+void testStaleReturnedBoundaryDoesNotPreserveRemovedLocalEmitter() {
+    auto left = std::make_shared<Chunk>(0, 0);
+    auto right = std::make_shared<Chunk>(1, 0);
+
+    constexpr int y = 20;
+    constexpr int z = 8;
+    buildSealedTunnel(left, right, y, z);
+    left->setBlockFast(14, y, z, stateForBlockName("minecraft:torch"));
+
+    LightJob leftLitJob = buildJob(left);
+    leftLitJob.neighborPosX = right;
+    const LightResult leftLit = LightSolver::solve(leftLitJob);
+    const BorderUpdateBatch litBoundary = findOutgoingToPosXNeighbor(leftLit, World::chunkKey(1, 0));
+    left->replacePackedLight(leftLit.selfDelta.packedLight.data(), leftLit.selfDelta.packedLight.size(), nullptr);
+
+    LightJob rightLitJob = buildJob(right);
+    rightLitJob.reason = LightDirtyReason::NeighborBoundary;
+    rightLitJob.changedBoundaryDirections[0] = true;
+    rightLitJob.inbox.push_back(litBoundary);
+    const LightResult rightLit = LightSolver::solve(rightLitJob);
+    right->replacePackedLight(rightLit.selfDelta.packedLight.data(), rightLit.selfDelta.packedLight.size(), nullptr);
+
+    LightJob staleRightSyncJob = buildJob(right);
+    staleRightSyncJob.neighborNegX = left;
+    staleRightSyncJob.inbox.push_back(litBoundary);
+    staleRightSyncJob.forceOutgoingBoundaryMask = 1u << 1;
+    const LightResult staleRightSync = LightSolver::solve(staleRightSyncJob);
+    const BorderUpdateBatch staleReturnedBoundary =
+        findOutgoingToNegXNeighbor(staleRightSync, World::chunkKey(0, 0));
+
+    left->setBlockFast(14, y, z, NULL_BLOCK_STATE);
+    LightJob leftRemovedRaceJob = buildJob(left);
+    leftRemovedRaceJob.reason = LightDirtyReason::BlockChanged;
+    leftRemovedRaceJob.blockChanges.push_back({static_cast<uint8_t>(14), static_cast<uint8_t>(y),
+                                               static_cast<uint8_t>(z),
+                                               BlockRegistry::requireIdByName("minecraft:torch"), RUNTIME_ID_NULL});
+    leftRemovedRaceJob.changedBoundaryDirections[1] = true;
+    leftRemovedRaceJob.suppressedBoundaryMask = 1u << 1;
+    leftRemovedRaceJob.inbox.push_back(staleReturnedBoundary);
+
+    const LightResult leftAfterRace = LightSolver::solve(leftRemovedRaceJob);
+    if (blockAt(leftAfterRace.selfDelta.packedLight, 14, y, z) != 0 ||
+        blockAt(leftAfterRace.selfDelta.packedLight, 15, y, z) != 0) {
+        fail("stale returned boundary should not preserve removed local emitter light");
+    }
+}
+
 void testGlowLichenPropagationAndRemovalUsesRemovePass() {
     auto chunk = std::make_shared<Chunk>(0, 0);
 
@@ -194,6 +252,7 @@ int main() {
     BlockRegistry::init(nullptr);
 
     testCrossChunkBlockLightNeedsPersistentBoundaryInput();
+    testStaleReturnedBoundaryDoesNotPreserveRemovedLocalEmitter();
     testGlowLichenPropagationAndRemovalUsesRemovePass();
 
     std::cout << "[light_solver_cross_chunk_block_rules_test] PASS\n";
