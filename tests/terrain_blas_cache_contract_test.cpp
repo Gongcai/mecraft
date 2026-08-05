@@ -1,6 +1,7 @@
 #include "renderer/mesh/TerrainBlasCache.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdlib>
 #include <iostream>
 #include <limits>
@@ -85,6 +86,7 @@ int main() {
         requireTrue(
             validResult == TerrainBlasRequestResult::Queued && geometry.opaqueVertexCount == 3u &&
                 geometry.cutoutVertexCount == 6u && geometry.vertexCount() == 9u && geometry.primitiveCount() == 3u &&
+                std::abs(geometry.vertices[0].z - kTerrainBlasOpaqueSurfaceExpansion) <= 1.0e-7f &&
                 geometry.vertices[3].z == 1.0f && geometry.vertices[6].z == 2.0f &&
                 geometry.primitiveMetadata.size() == 3u && geometry.primitiveMetadata[0].textureLayer == 17u &&
                 renderer::contracts::terrainPrimitiveAnimationFrameCount(geometry.primitiveMetadata[1]) == 3u &&
@@ -93,7 +95,7 @@ int main() {
                 renderer::contracts::terrainPrimitiveFace(geometry.primitiveMetadata[1]) == -1 &&
                 geometry.uploadByteSize() ==
                     sizeof(BlockVertex) * 9u + sizeof(renderer::contracts::TerrainPrimitiveMetadata) * 3u,
-            "geometry preparation must preserve triangle order and emit one metadata record per primitive") &&
+            "geometry preparation must seal opaque faces, preserve triangle order, and emit one metadata record per primitive") &&
         requireTrue(emptyResult == TerrainBlasRequestResult::Cleared && emptyGeometry.empty(),
                     "empty solid geometry must explicitly clear the resident BLAS") &&
         requireTrue(invalidCountResult == TerrainBlasRequestResult::InvalidGeometry &&

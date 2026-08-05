@@ -576,11 +576,14 @@ void main() {
     ivec2 noiseTexel = ivec2(uvec2(texel) % uvec2(noiseExtent));
     vec2 blueNoise = texelFetch(uBlueNoiseTexture, noiseTexel, 0).rg;
     vec2 sampleValue = fract(blueNoise + rtgiCranleyPattersonRotation(pc.frameMaskAndFlags.x));
-    vec3 rayDirection = rtgiCosineHemisphereDirection(sampleValue, normal);
+    // A voxel normal map changes the BRDF but not the solid block boundary.
+    // Sampling its perturbed hemisphere creates near-tangent directions that
+    // can enter an adjacent face through a greedy-mesh seam. Use the exact
+    // axis-aligned face for voxel transport; arbitrary static meshes retain
+    // their smooth shading-normal distribution.
+    vec3 samplingNormal = voxelPrimarySurface ? geometricNormal : normal;
+    vec3 rayDirection = rtgiCosineHemisphereDirection(sampleValue, samplingNormal);
     if (dot(rayDirection, geometricNormal) < 0.0) {
-        // A steep normal-map lobe can point below the geometric face. Reflect
-        // that sample back into the real solid-angle hemisphere so the ray
-        // cannot start outside the block and immediately travel through it.
         rayDirection = normalize(reflect(rayDirection, geometricNormal));
     }
 

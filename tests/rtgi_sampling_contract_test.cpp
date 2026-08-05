@@ -60,6 +60,8 @@ namespace {
            traceSource.find("materialKindId(materialAux.materialKind) <= MATERIAL_NETHER_ORE") !=
                std::string::npos &&
            traceSource.find("if (!voxelPrimarySurface && adjacentDepthValid") != std::string::npos &&
+           traceSource.find("vec3 samplingNormal = voxelPrimarySurface ? geometricNormal : normal;") !=
+               std::string::npos &&
            traceSource.find("radiance += rtgiDiffuseTransportAlbedo(surface) * contribution.diffuse") !=
                std::string::npos &&
            traceSource.find("rtgiTerrainBlockLightIncident(surface.blockLight)") != std::string::npos &&

@@ -74,6 +74,10 @@ struct TerrainBlasGeometry {
     [[nodiscard]] bool empty() const { return vertices.empty() && primitiveMetadata.empty(); }
 };
 
+// Expands only the ray-tracing copy of opaque terrain faces so perpendicular
+// block faces overlap across floating-point and sub-chunk mesh boundaries.
+inline constexpr float kTerrainBlasOpaqueSurfaceExpansion = 1.0f / 2048.0f;
+
 /// Reports whether a terrain geometry request was accepted or rejected by its public contract.
 enum class TerrainBlasRequestResult : uint8_t {
     Queued,
@@ -153,7 +157,7 @@ public:
     /// @param opaque Opaque triangle-list vertices.
     /// @param cutout Alpha-tested triangle-list vertices without distance culling.
     /// @param cutoutDistance Alpha-tested triangle-list vertices with raster distance culling.
-    /// @param geometry Receives opaque vertices followed by both cutout classes.
+    /// @param geometry Receives sealed opaque vertices followed by unchanged cutout classes.
     /// @return Queued when valid, Cleared for empty solid geometry, or InvalidGeometry.
     [[nodiscard]] static TerrainBlasRequestResult prepareGeometry(const std::vector<BlockVertex>& opaque,
                                                                   const std::vector<BlockVertex>& cutout,

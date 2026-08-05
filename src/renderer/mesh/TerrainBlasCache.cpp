@@ -88,6 +88,35 @@ primitiveMetadataForTriangle(const std::vector<BlockVertex>& vertices, const siz
     return true;
 }
 
+/// Expands the opaque prefix along its encoded face normals without changing cutout vertices.
+/// @param vertices Combined opaque and cutout BLAS vertex payload.
+/// @param opaqueVertexCount Number of vertices in the opaque prefix.
+/// @return False when the prefix is invalid or contains a non-axis-aligned face marker.
+[[nodiscard]] bool sealOpaqueGeometry(std::vector<BlockVertex>& vertices, const uint32_t opaqueVertexCount) {
+    constexpr std::array<std::array<float, 3u>, 6u> kFaceNormals{{
+        {{0.0f, 1.0f, 0.0f}},
+        {{0.0f, -1.0f, 0.0f}},
+        {{0.0f, 0.0f, 1.0f}},
+        {{0.0f, 0.0f, -1.0f}},
+        {{-1.0f, 0.0f, 0.0f}},
+        {{1.0f, 0.0f, 0.0f}},
+    }};
+    if (opaqueVertexCount > vertices.size()) {
+        return false;
+    }
+    for (uint32_t vertexIndex = 0u; vertexIndex < opaqueVertexCount; ++vertexIndex) {
+        BlockVertex& vertex = vertices[vertexIndex];
+        if (vertex.normal < 0 || vertex.normal >= static_cast<int8_t>(kFaceNormals.size())) {
+            return false;
+        }
+        const auto& normal = kFaceNormals[static_cast<size_t>(vertex.normal)];
+        vertex.x += normal[0] * kTerrainBlasOpaqueSurfaceExpansion;
+        vertex.y += normal[1] * kTerrainBlasOpaqueSurfaceExpansion;
+        vertex.z += normal[2] * kTerrainBlasOpaqueSurfaceExpansion;
+    }
+    return true;
+}
+
 [[nodiscard]] bool validPreparedGeometry(const TerrainBlasGeometry& geometry) {
     const uint64_t totalVertexCount = static_cast<uint64_t>(geometry.opaqueVertexCount) + geometry.cutoutVertexCount;
     if (geometry.opaqueVertexCount % 3u != 0u || geometry.cutoutVertexCount % 3u != 0u ||
@@ -236,7 +265,8 @@ TerrainBlasRequestResult TerrainBlasCache::prepareGeometry(const std::vector<Blo
     geometry.vertices.insert(geometry.vertices.end(), opaque.begin(), opaque.end());
     geometry.vertices.insert(geometry.vertices.end(), cutout.begin(), cutout.end());
     geometry.vertices.insert(geometry.vertices.end(), cutoutDistance.begin(), cutoutDistance.end());
-    if (!buildPrimitiveMetadata(geometry.vertices, geometry.primitiveMetadata)) {
+    if (!sealOpaqueGeometry(geometry.vertices, geometry.opaqueVertexCount) ||
+        !buildPrimitiveMetadata(geometry.vertices, geometry.primitiveMetadata)) {
         geometry = {};
         return TerrainBlasRequestResult::InvalidGeometry;
     }

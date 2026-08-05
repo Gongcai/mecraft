@@ -144,6 +144,10 @@ Hash；Hit Distance 保存在 `RGBA16F` 输出 Alpha。Committed Hit 已进一�
 - Opaque Geometry 使用 Opaque Flag。
 - Cutout Geometry 不设置 Opaque Flag，Ray Query Candidate 执行 Alpha Test。
 - Water/Glass/Blend Geometry 不进入首版 Diffuse RTGI Solid Mask，但表面仍接收 RTGI。
+- 体素主表面的 GI 方向围绕轴对齐几何法线采样，法线贴图只参与 BRDF，避免扰动后的采样
+  半球产生贴近实体表面的射线并穿过 Greedy Mesh 接缝。
+- Terrain BLAS 使用独立顶点副本将不透明面沿几何法线外扩 `1/2048` 方块；结合 Greedy Quad
+  的面内重叠，封闭垂直面、T-junction 与 SubChunk 边界的射线缝隙。光栅网格与 Cutout 几何不变。
 - 异形方块使用其真实三角形网格。
 - Greedy Quad 保留每 Primitive 的 Face、Tile、UV Repeat、Material ID 与 Tint 数据。
 
