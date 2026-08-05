@@ -2,6 +2,7 @@
 #define MECRAFT_RTGI_TRACE_PASS_H
 
 #include "RenderPass.h"
+#include "renderer/contracts/RtgiSamplingContract.h"
 #include "renderer/core/FrameContext.h"
 #include "renderer/rhi/RhiHandles.h"
 #include "renderer/rhi/RhiRenderGraph.h"
@@ -49,7 +50,7 @@ public:
     struct Settings final {
         float maxRayDistance = 64.0f;
         float maxShadowRayDistance = 128.0f;
-        float minimumRayOriginBias = 0.001f;
+        float minimumRayOriginBias = renderer::contracts::kRtgiMinimumRayOriginBias;
         uint8_t instanceMask = 3u;
         uint8_t shadowInstanceMask = 4u;
         bool useJitteredProjection = false;

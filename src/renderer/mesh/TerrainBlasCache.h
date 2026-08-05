@@ -2,6 +2,7 @@
 #define MECRAFT_TERRAIN_BLAS_CACHE_H
 
 #include "TerrainGpuKey.h"
+#include "renderer/contracts/RtgiSamplingContract.h"
 #include "renderer/contracts/TerrainRayTracingContract.h"
 #include "renderer/rhi/RhiHandles.h"
 #include "renderer/rhi/SceneBlasResource.h"
@@ -76,7 +77,7 @@ struct TerrainBlasGeometry {
 
 // Expands only the ray-tracing copy of opaque terrain faces so perpendicular
 // block faces overlap across floating-point and sub-chunk mesh boundaries.
-inline constexpr float kTerrainBlasOpaqueSurfaceExpansion = 1.0f / 2048.0f;
+inline constexpr float kTerrainBlasOpaqueSurfaceExpansion = renderer::contracts::kRtgiVoxelSurfaceExpansion;
 
 /// Reports whether a terrain geometry request was accepted or rejected by its public contract.
 enum class TerrainBlasRequestResult : uint8_t {

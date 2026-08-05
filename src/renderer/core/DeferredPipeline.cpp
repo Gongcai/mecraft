@@ -41,7 +41,8 @@ namespace {
     return std::isfinite(settings.intensity) && settings.intensity >= 0.0f &&
            std::isfinite(settings.maxRayDistance) && settings.maxRayDistance > 0.0f &&
            std::isfinite(settings.maxShadowRayDistance) && settings.maxShadowRayDistance > 0.0f &&
-           std::isfinite(settings.minimumRayOriginBias) && settings.minimumRayOriginBias > 0.0f &&
+           std::isfinite(settings.minimumRayOriginBias) &&
+           settings.minimumRayOriginBias >= renderer::contracts::kRtgiMinimumRayOriginBias &&
            settings.minimumRayOriginBias < settings.maxRayDistance &&
            settings.minimumRayOriginBias < settings.maxShadowRayDistance;
 }

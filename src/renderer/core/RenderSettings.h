@@ -1,6 +1,8 @@
 #ifndef MECRAFT_RENDER_SETTINGS_H
 #define MECRAFT_RENDER_SETTINGS_H
 
+#include "renderer/contracts/RtgiSamplingContract.h"
+
 #include <glm/glm.hpp>
 
 #include <cstdint>
@@ -72,7 +74,7 @@ struct RtgiSettings {
     float intensity = 1.0f;
     float maxRayDistance = 64.0f;
     float maxShadowRayDistance = 128.0f;
-    float minimumRayOriginBias = 0.001f;
+    float minimumRayOriginBias = renderer::contracts::kRtgiMinimumRayOriginBias;
 };
 
 /// NVIDIA Real-time Denoiser controls for the RTGI diffuse signal.
@@ -390,11 +392,16 @@ struct RenderSettings {
 /// Enforces dependencies between renderer features after settings are edited or loaded.
 /// @return True when the settings were changed.
 inline bool normalizeRenderSettingsDependencies(RenderSettings& settings) {
+    bool changed = false;
+    if (settings.rtgi.minimumRayOriginBias < renderer::contracts::kRtgiMinimumRayOriginBias) {
+        settings.rtgi.minimumRayOriginBias = renderer::contracts::kRtgiMinimumRayOriginBias;
+        changed = true;
+    }
     if (!settings.rtgi.enabled && settings.nrd.enabled) {
         settings.nrd.enabled = false;
-        return true;
+        changed = true;
     }
-    return false;
+    return changed;
 }
 
 /// Reports whether a renderer configuration provides the temporal inputs required by DLSS-G.

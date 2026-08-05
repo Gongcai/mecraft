@@ -148,6 +148,8 @@ Hash；Hit Distance 保存在 `RGBA16F` 输出 Alpha。Committed Hit 已进一�
   半球产生贴近实体表面的射线并穿过 Greedy Mesh 接缝。
 - Terrain BLAS 使用独立顶点副本将不透明面沿几何法线外扩 `1/2048` 方块；结合 Greedy Quad
   的面内重叠，封闭垂直面、T-junction 与 SubChunk 边界的射线缝隙。光栅网格与 Cutout 几何不变。
+- RTGI Ray Origin Bias 的契约下限为 `1/1024` 方块，即 Terrain BLAS 壳厚的两倍。Shader、设置
+  规范化、UI 与运行时校验共享该常量，主射线和可见性射线不得从外扩后的实体壳内部发射。
 - Debug View 89–92 固定 RTGI 采样相位，并在进入和退出检查模式时清空 NRD 历史。Hit Distance
   仅对有效 Hit 显示连续距离热图；Miss、Sky、Translucent 与 Non-finite 使用固定分类色，避免
   `65504` Miss 距离与零距离无效结果伪装成跨帧几何跳变。

@@ -248,8 +248,8 @@ bool showRtgiSettings(RenderSettings& settings) {
     changed |= ImGui::SliderFloat("RTGI Max Ray Distance", &settings.rtgi.maxRayDistance, 1.0f, 256.0f, "%.1f");
     changed |= ImGui::SliderFloat("RTGI Max Shadow Distance", &settings.rtgi.maxShadowRayDistance, 1.0f, 512.0f,
                                   "%.1f");
-    changed |= ImGui::SliderFloat("RTGI Ray Origin Bias", &settings.rtgi.minimumRayOriginBias, 0.0001f, 0.25f,
-                                  "%.4f");
+    changed |= ImGui::SliderFloat("RTGI Ray Origin Bias", &settings.rtgi.minimumRayOriginBias,
+                                  renderer::contracts::kRtgiMinimumRayOriginBias, 0.25f, "%.4f");
 
     if (!settings.rtgi.enabled) {
         ImGui::BeginDisabled();

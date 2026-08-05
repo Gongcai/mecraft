@@ -88,7 +88,8 @@ RgPassHandle RtgiTracePass::addGraphPass(RenderGraph& graph, const FrameContext&
         !ctx.temporalExtents.renderExtent.isValid() || !std::isfinite(settings.maxRayDistance) ||
         settings.maxRayDistance <= 0.0f || !std::isfinite(settings.maxShadowRayDistance) ||
         settings.maxShadowRayDistance <= 0.0f || !std::isfinite(settings.minimumRayOriginBias) ||
-        settings.minimumRayOriginBias <= 0.0f || settings.minimumRayOriginBias >= settings.maxRayDistance ||
+        settings.minimumRayOriginBias < renderer::contracts::kRtgiMinimumRayOriginBias ||
+        settings.minimumRayOriginBias >= settings.maxRayDistance ||
         settings.minimumRayOriginBias >= settings.maxShadowRayDistance || settings.instanceMask == 0u ||
         !std::isfinite(settings.blockLightStrength) || settings.blockLightStrength < 0.0f ||
         !std::isfinite(settings.celestialRadianceScale) || settings.celestialRadianceScale < 0.0f ||

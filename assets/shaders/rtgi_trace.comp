@@ -155,7 +155,7 @@ float rtgiOriginBias(vec3 position, vec3 normal, vec3 direction) {
     float positionScale = max(max(abs(position.x), max(abs(position.y), abs(position.z))), 1.0);
     float floatingPointBias = positionScale * 9.5367431640625e-7;
     float angularScale = 1.0 / max(abs(dot(normal, direction)), 0.25);
-    return max(pc.renderExtentAndBias.z, floatingPointBias) * angularScale;
+    return max(max(pc.renderExtentAndBias.z, RTGI_MINIMUM_RAY_ORIGIN_BIAS), floatingPointBias) * angularScale;
 }
 
 vec3 rtgiVoxelGeometricNormal(vec3 shadingNormal) {

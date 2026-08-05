@@ -40,6 +40,8 @@ namespace {
                std::string::npos &&
            samplingSource.find("const vec2 RTGI_R2_INCREMENT = vec2(0.7548776662466927, 0.5698402909980532);") !=
                std::string::npos &&
+           samplingSource.find("const float RTGI_MINIMUM_RAY_ORIGIN_BIAS = RTGI_VOXEL_SURFACE_EXPANSION * 2.0;") !=
+               std::string::npos &&
            traceSource.find("layout(std140, set = 1, binding = 16) uniform RtgiSecondaryLightingParams") !=
                std::string::npos &&
            traceSource.find("vec4 traceAndEmissionScales;") != std::string::npos &&
@@ -95,6 +97,11 @@ int main() {
     using namespace renderer::contracts;
 
     bool valid = true;
+    valid = requireTrue(kRtgiVoxelSurfaceExpansion == 1.0f / 2048.0f &&
+                            kRtgiMinimumRayOriginBias == 1.0f / 1024.0f &&
+                            RtgiSettings{}.minimumRayOriginBias == kRtgiMinimumRayOriginBias,
+                        "RTGI ray-origin bias must remain larger than the sealed voxel BLAS shell") &&
+            valid;
     valid = requireTrue(!isRtgiTraceInspectionView(88) && isRtgiTraceInspectionView(89) &&
                             isRtgiTraceInspectionView(90) && isRtgiTraceInspectionView(91) &&
                             isRtgiTraceInspectionView(92) && !isRtgiTraceInspectionView(93),
