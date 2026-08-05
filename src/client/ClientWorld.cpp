@@ -348,9 +348,27 @@ void ClientWorld::applyBlockUpdate(const int x, const int y, const int z, const 
                         }
                         const int plx = wx - pcx * Chunk::SIZE_X;
                         const int plz = wz - pcz * Chunk::SIZE_Z;
+                        const uint8_t currentPacked = pit->second->getPackedLight(plx, wy, plz);
                         pit->second->setSunlight(plx, wy, plz, static_cast<uint8_t>((packed >> 4) & 0x0F));
                         pit->second->setBlockLight(plx, wy, plz, static_cast<uint8_t>(packed & 0x0F));
-                        pit->second->markSubChunkDirty(Chunk::toSubChunkIndex(wy));
+                        const int scy = Chunk::toSubChunkIndex(wy);
+                        pit->second->markSubChunkDirty(scy);
+                        if (currentPacked != packed) {
+                            uint8_t changedBoundaryMask = 0;
+                            if (plx == Chunk::SIZE_X - 1) {
+                                changedBoundaryMask |= 1u << 0;
+                            }
+                            if (plx == 0) {
+                                changedBoundaryMask |= 1u << 1;
+                            }
+                            if (plz == Chunk::SIZE_Z - 1) {
+                                changedBoundaryMask |= 1u << 2;
+                            }
+                            if (plz == 0) {
+                                changedBoundaryMask |= 1u << 3;
+                            }
+                            markLightBorderNeighborsDirty(*pit->second, 1u << scy, changedBoundaryMask);
+                        }
                     }
                 }
             }

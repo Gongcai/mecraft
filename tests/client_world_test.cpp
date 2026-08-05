@@ -279,6 +279,37 @@ static void testApplyBlockUpdateAcceptsVariableLightPatch() {
     std::printf("[PASS] testApplyBlockUpdateAcceptsVariableLightPatch\n");
 }
 
+static void testVariableLightPatchDirtiesChangedNeighborBorders() {
+    client::ClientWorld cw;
+    auto left = std::make_shared<Chunk>(0, 0);
+    auto right = std::make_shared<Chunk>(1, 0);
+    left->setBlock(15, 64, 4, defaultState("minecraft:stone"));
+    right->setBlock(0, 64, 4, defaultState("minecraft:stone"));
+    cw.addChunk(left);
+    cw.addChunk(right);
+
+    constexpr int patchSide = 5;
+    constexpr int patchRadius = patchSide / 2;
+    std::vector<uint8_t> lightPatch(static_cast<size_t>(patchSide * patchSide * patchSide), 0);
+    const int centerIndex = (patchRadius * patchSide + patchRadius) * patchSide + (patchRadius + 2);
+    lightPatch[static_cast<size_t>(centerIndex)] = 0x0C;
+
+    const int scy = Chunk::toSubChunkIndex(64);
+    left->markMeshClean();
+    right->markMeshClean();
+    cw.applyBlockUpdate(14, 64, 4, net::BlockUpdateKind::LightOnly, NULL_BLOCK_STATE, lightPatch);
+    require(right->isSubChunkDirty(scy), "variable light patch should dirty the receiving border subchunk");
+    require(left->isSubChunkDirty(scy), "variable light patch should dirty the adjacent border subchunk");
+
+    left->markMeshClean();
+    right->markMeshClean();
+    std::fill(lightPatch.begin(), lightPatch.end(), 0);
+    cw.applyBlockUpdate(14, 64, 4, net::BlockUpdateKind::LightOnly, NULL_BLOCK_STATE, lightPatch);
+    require(right->isSubChunkDirty(scy), "variable light removal should dirty the receiving border subchunk");
+    require(left->isSubChunkDirty(scy), "variable light removal should dirty the adjacent border subchunk");
+    std::printf("[PASS] testVariableLightPatchDirtiesChangedNeighborBorders\n");
+}
+
 static void testApplyBlockUpdatePreservesStateId() {
     client::ClientWorld cw;
     auto chunk = std::make_shared<Chunk>(0, 0);
@@ -367,6 +398,7 @@ int main() {
     testClientWorldRaycastHitsBlocks();
     testClientWorldRaycastSeparatesFluidAndBlockTargets();
     testApplyBlockUpdateAcceptsVariableLightPatch();
+    testVariableLightPatchDirtiesChangedNeighborBorders();
     testApplyBlockUpdatePreservesStateId();
     testApplyBlockUpdateAcceptsLightSection();
     testApplyBlockUpdateAcceptsFullChunkLightSnapshot();

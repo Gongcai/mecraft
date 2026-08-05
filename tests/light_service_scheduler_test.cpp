@@ -1,3 +1,4 @@
+#include <array>
 #include <chrono>
 #include <cstdlib>
 #include <functional>
@@ -463,6 +464,86 @@ void testBoundaryInboxDoesNotDirtyMeshBeforeLightApply() {
         fail("expected a boundary sync before the neighbor light apply");
     }
 }
+
+void testFourChunkCornerRemovalMatchesIndependentSource() {
+    ThreadPool pool(2);
+    pool.start();
+
+    World world;
+    ThreadPoolGuard poolGuard{pool};
+    world.init(20260417);
+    world.setRenderDistance(2);
+    world.setThreadPool(&pool);
+
+    const glm::vec3 playerPos(8.0f, 100.0f, 8.0f);
+    tickWorld(world, playerPos, 20);
+
+    constexpr int y = 100;
+    constexpr int minCoord = 13;
+    constexpr int maxCoord = 18;
+    const BlockID stone = BlockRegistry::requireIdByName("minecraft:stone");
+    const BlockID torch = BlockRegistry::requireIdByName("minecraft:torch");
+
+    // Build an opaque room around the intersection of chunks (0,0), (1,0),
+    // (0,1), and (1,1) so only the tested block-light sources contribute.
+    for (int z = minCoord; z <= maxCoord; ++z) {
+        for (int x = minCoord; x <= maxCoord; ++x) {
+            world.setBlock(x, y - 1, z, stone);
+            world.setBlock(x, y + 2, z, stone);
+            if (x == minCoord || x == maxCoord || z == minCoord || z == maxCoord) {
+                world.setBlock(x, y, z, stone);
+                world.setBlock(x, y + 1, z, stone);
+            } else {
+                world.setBlock(x, y, z, RUNTIME_ID_NULL);
+                world.setBlock(x, y + 1, z, RUNTIME_ID_NULL);
+            }
+        }
+    }
+
+    const auto settled = [&]() { return isLightFrameSettled(world.getLightFrameStats()); };
+    if (!waitUntil(world, playerPos, 360, settled)) {
+        fail("four-chunk corner room should settle before testing source removal");
+    }
+
+    constexpr int independentX = 16;
+    constexpr int independentZ = 16;
+    constexpr int toggledX = 15;
+    constexpr int toggledZ = 15;
+    world.setBlock(independentX, y, independentZ, torch);
+    if (!waitUntil(world, playerPos, 180, [&]() {
+            return world.getPackedLight(independentX, y, independentZ) != 0 && settled();
+        })) {
+        fail("independent diagonal source should settle before corner stress");
+    }
+
+    const auto captureRoomLight = [&]() {
+        std::array<uint8_t, 32> light{};
+        std::size_t index = 0;
+        for (int sampleY = y; sampleY <= y + 1; ++sampleY) {
+            for (int z = 14; z <= 17; ++z) {
+                for (int x = 14; x <= 17; ++x) {
+                    light[index++] = static_cast<uint8_t>(world.getPackedLight(x, sampleY, z) & 0x0F);
+                }
+            }
+        }
+        return light;
+    };
+
+    const std::array<uint8_t, 32> independentLight = captureRoomLight();
+    for (int iteration = 0; iteration < 12; ++iteration) {
+        world.setBlock(toggledX, y, toggledZ, torch);
+        tickWorld(world, playerPos, 2);
+        world.setBlock(toggledX, y, toggledZ, RUNTIME_ID_NULL);
+        tickWorld(world, playerPos, 1);
+    }
+
+    if (!waitUntil(world, playerPos, 360, settled)) {
+        fail("corner source removal should converge without repeated edits");
+    }
+    if (captureRoomLight() != independentLight) {
+        fail("four-chunk corner removal should leave exactly the independent source light");
+    }
+}
 } // namespace
 
 int main() {
@@ -475,6 +556,7 @@ int main() {
     testInteractiveFlushAppliesBlockLightBeforeNextWorldTick();
     testOpaqueEditClearsSkylightWithoutSecondEdit();
     testBoundaryInboxDoesNotDirtyMeshBeforeLightApply();
+    testFourChunkCornerRemovalMatchesIndependentSource();
 
     pass();
 }

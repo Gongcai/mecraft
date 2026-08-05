@@ -184,7 +184,9 @@ void LightService::onChunkUnloaded(const int64_t chunkKey) {
             const int64_t neighborKey = World::chunkKey(neighbor->m_chunkX, neighbor->m_chunkZ);
             LightChunkState& neighborState = m_chunkStates[neighborKey];
             const bool wasDirty = neighborState.dirty;
-            neighborState.pendingPreviousBoundaryCache[direction] = neighborState.boundaryCache[direction];
+            if (!neighborState.pendingBoundaryChanged[direction]) {
+                neighborState.pendingPreviousBoundaryCache[direction] = neighborState.boundaryCache[direction];
+            }
             neighborState.boundaryCache[direction].reset();
             neighborState.pendingBoundaryChanged[direction] = true;
             neighbor->bumpLightRevision();
@@ -548,7 +550,10 @@ void LightService::drainCompleted(World& world, const int mergeBudget, const flo
                     const std::optional<BorderUpdateBatch>& previous = neighborState.boundaryCache[batch.fromDirection];
                     boundaryChanged = !previous.has_value() || !sameBoundaryNodes(*previous, batch);
                     if (boundaryChanged) {
-                        neighborState.pendingPreviousBoundaryCache[batch.fromDirection] = previous;
+                        // Preserve the first pre-change batch until the coalesced job is captured.
+                        if (!neighborState.pendingBoundaryChanged[batch.fromDirection]) {
+                            neighborState.pendingPreviousBoundaryCache[batch.fromDirection] = previous;
+                        }
                         neighborState.boundaryCache[batch.fromDirection] = batch;
                         neighborState.pendingBoundaryChanged[batch.fromDirection] = true;
                         neighborChunkIt->second->bumpLightRevision();
