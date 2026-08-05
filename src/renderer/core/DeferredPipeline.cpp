@@ -761,6 +761,7 @@ void DeferredPipeline::shutdown() {
     m_shadowRenderer = nullptr;
     m_shared = nullptr;
     m_rtgiTemporalSampleIndex = 0u;
+    m_rtgiTraceInspectionActive = false;
 }
 
 void DeferredPipeline::invalidateHistory() {
@@ -947,9 +948,17 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
         ownerRequiresTemporalReset(TemporalHistoryOwner::ScreenSpace, ctx.temporalResetReasons);
     const bool nrdTemporalReset =
         ownerRequiresTemporalReset(TemporalHistoryOwner::NrdDiffuse, ctx.temporalResetReasons);
-    if (!nrdEnabled || nrdTemporalReset) {
+    const bool rtgiTraceInspection = settings.debug.viewMode >= 89 && settings.debug.viewMode <= 92;
+    const bool rtgiTraceInspectionChanged = rtgiTraceInspection != m_rtgiTraceInspectionActive;
+    m_rtgiTraceInspectionActive = rtgiTraceInspection;
+    if (!nrdEnabled || nrdTemporalReset || rtgiTraceInspectionChanged) {
         m_rtgiTemporalSampleIndex = 0u;
     }
+#if defined(MECRAFT_ENABLE_NRD)
+    if (rtgiTraceInspectionChanged) {
+        m_nrdClearHistory = true;
+    }
+#endif
     const bool ssaoEnabled = settings.ssao.enabled;
     const bool ssaoTemporalEnabled = ssaoEnabled && settings.ssao.temporalEnabled && !temporalReset;
     const bool ssgiEnabled = settings.ssgi.enabled && settings.debug.deferredLightDebugMode <= 0;
@@ -1881,7 +1890,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
                                      renderer::rt::sceneTlasMaskBit(renderer::rt::SceneTlasInstanceMask::GiCutout);
         traceSettings.shadowInstanceMask =
             renderer::rt::sceneTlasMaskBit(renderer::rt::SceneTlasInstanceMask::ShadowCaster);
-        traceSettings.temporalSamplingEnabled = nrdEnabled;
+        traceSettings.temporalSamplingEnabled = nrdEnabled && !rtgiTraceInspection;
         traceSettings.temporalSampleIndex = m_rtgiTemporalSampleIndex;
         traceSettings.useJitteredProjection =
             usesTemporalProjectionJitter(settings.upscale.type, settings.taa.enabled);
@@ -2801,7 +2810,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
     // frozen phase turns the one-spp estimate into a pattern-locked bias that
     // NRD's accumulation cannot average out. Motion stability is NRD's
     // responsibility via reprojection.
-    if (executed.succeeded() && nrdEnabled && !nrdTemporalReset) {
+    if (executed.succeeded() && nrdEnabled && !nrdTemporalReset && !rtgiTraceInspection) {
         ++m_rtgiTemporalSampleIndex;
     }
     if (m_shared->terrainCache != nullptr) {

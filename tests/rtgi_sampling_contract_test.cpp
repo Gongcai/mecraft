@@ -71,7 +71,10 @@ namespace {
            traceSource.find("surface.albedo * (1.0 - surface.metalness)") == std::string::npos &&
            traceSource.find("optional local-light shadow resource must not erase") != std::string::npos &&
            traceSource.find("Local lights are optional secondary transport") != std::string::npos &&
-           pipelineSource.find("traceSettings.temporalSamplingEnabled = nrdEnabled;") != std::string::npos &&
+           pipelineSource.find("const bool rtgiTraceInspection = settings.debug.viewMode >= 89") !=
+               std::string::npos &&
+           pipelineSource.find("traceSettings.temporalSamplingEnabled = nrdEnabled && !rtgiTraceInspection;") !=
+               std::string::npos &&
            pipelineSource.find("traceSettings.temporalSampleIndex = m_rtgiTemporalSampleIndex;") !=
                std::string::npos &&
            pipelineSource.find("relaxSettings.atrousIterationNum =") != std::string::npos &&

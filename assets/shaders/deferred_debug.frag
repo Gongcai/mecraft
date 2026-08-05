@@ -951,9 +951,19 @@ void main() {
         return;
     }
     if (uDebugViewMode == 90) {
+        uint classification = texture(uRtgiValidationTex, textureUv).r & 0xffu;
         float hitDistance = max(texture(uRtgiRawTex, textureUv).a, 0.0);
-        // Miss distances saturate the ramp; nearby hits resolve in detail.
-        FragColor = vec4(heatmap(1.0 - exp(-hitDistance / 24.0)), 1.0);
+        if (classification == 3u) {
+            FragColor = vec4(heatmap(1.0 - exp(-hitDistance / 24.0)), 1.0);
+        } else if (classification == 2u) {
+            FragColor = vec4(0.1, 0.25, 0.9, 1.0);
+        } else if (classification == 4u) {
+            FragColor = vec4(1.0, 0.05, 0.6, 1.0);
+        } else if (classification == 1u) {
+            FragColor = vec4(0.7, 0.7, 0.2, 1.0);
+        } else {
+            FragColor = vec4(0.02, 0.02, 0.04, 1.0);
+        }
         return;
     }
     if (uDebugViewMode == 91) {
