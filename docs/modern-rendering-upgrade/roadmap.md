@@ -274,8 +274,11 @@ M1 与 M2 可并行开发，但公共 `GpuMaterial`、`GpuSceneGeometry` 与 Sta
 
 当前 M3 画质门槛状态：双场景 Reference Capture 与运行链路已自动验收；64 spp Linear EXR、固定 ROI 的
 Variance/SSIM/95th HDR error、Ghost/Disocclusion 像素统计尚未接入现有 PNG validation runner，因此不能
-把这些数值门槛标记为通过。M03 1280×720 三帧探针的总 GPU p95 为 29.906 ms（RTGI 15.627 ms、NRD
-2.772 ms），也不能替代性能矩阵要求的 1080p/1000 帧正式测量。
+把这些数值门槛标记为通过。最新体素世界 Dashboard 千帧窗口观测中，1280×720 的总 GPU p95 为
+7.281 ms（RTGI 2.611 ms、NRD 2.230 ms、Lighting 0.845 ms），1920×1080 的总 GPU p95 为
+14.170 ms（RTGI 5.119 ms、NRD 4.142 ms、Lighting 1.911 ms）。1080p 总时间已经低于 16.67 ms
+预算，RTGI、NRD 与 Lighting 分项仍是主要优化目标。该观测仍需补齐固定场景契约、硬件与渲染设置记录，
+再进入性能矩阵的正式 1000 帧报告。
 
 ## 7. M4：GPU Culling、LOD 与动画
 
