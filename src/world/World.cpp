@@ -536,11 +536,16 @@ void World::flushInteractiveLighting(const glm::vec3& playerPos) {
         return;
     }
 
-    constexpr int kInteractiveLightJobBudget = 4;
-    constexpr int kInteractiveLightMergeBudget = 16;
-    constexpr float kInteractiveLightMergeTimeBudgetMs = 2.0f;
-    m_lightService->processInteractiveJobsInline(playerPos, kInteractiveLightJobBudget, kInteractiveLightMergeBudget,
-                                                 kInteractiveLightMergeTimeBudgetMs);
+    constexpr int kInteractiveLightJobBatch = 32;
+    constexpr int kInteractiveLightMergeBudget = 64;
+    constexpr float kInteractiveLightMergeTimeBudgetMs = 8.0f;
+    while (m_lightService->countPendingInteractiveJobs() > 0) {
+        const int solved = m_lightService->processInteractiveJobsInline(
+            playerPos, kInteractiveLightJobBatch, kInteractiveLightMergeBudget, kInteractiveLightMergeTimeBudgetMs);
+        if (solved == 0) {
+            break;
+        }
+    }
     m_interactiveLightFlushRequested = m_lightService->countPendingInteractiveJobs() > 0;
 }
 

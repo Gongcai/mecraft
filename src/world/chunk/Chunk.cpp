@@ -36,6 +36,22 @@ void markSubChunkAndVerticalNeighborsDirty(Chunk& chunk, const int scy, const in
         chunk.markSubChunkDirty(scy + 1);
     }
 }
+
+uint32_t expandSubChunkMaskVertical(uint32_t mask) {
+    uint32_t expanded = mask;
+    for (int scy = 0; scy < Chunk::NUM_SUB_CHUNKS; ++scy) {
+        if ((mask & (1u << scy)) == 0u) {
+            continue;
+        }
+        if (scy > 0) {
+            expanded |= 1u << (scy - 1);
+        }
+        if (scy + 1 < Chunk::NUM_SUB_CHUNKS) {
+            expanded |= 1u << (scy + 1);
+        }
+    }
+    return expanded;
+}
 } // namespace
 
 Chunk::Chunk(const int chunkX, const int chunkZ) : m_chunkX(chunkX), m_chunkZ(chunkZ) {
@@ -578,12 +594,14 @@ void Chunk::setSubChunkMesh(const int scy, const SubChunkMesh& mesh) {
     sc->setMesh(mesh);
     ++m_renderStateRevision;
     m_dirtySubChunkMask &= ~(1u << scy);
+    m_interactiveLightDirtySubChunkMask &= ~(1u << scy);
     m_dirty = m_dirtySubChunkMask != 0u;
 }
 
 void Chunk::markMeshClean() {
     m_dirty = false;
     m_dirtySubChunkMask = 0;
+    m_interactiveLightDirtySubChunkMask = 0;
     for (int scy = 0; scy < NUM_SUB_CHUNKS; ++scy) {
         if (m_subChunks[scy]) {
             m_subChunks[scy]->markMeshClean();
@@ -605,6 +623,23 @@ void Chunk::markSubChunkDirty(const int scy) {
 
     m_dirtySubChunkMask |= (1u << scy);
     m_dirty = true;
+}
+
+void Chunk::markInteractiveLightSubChunkDirty(const int scy) {
+    if (scy < 0 || scy >= NUM_SUB_CHUNKS || getSubChunk(scy) == nullptr) {
+        return;
+    }
+    markSubChunkDirty(scy);
+    m_interactiveLightDirtySubChunkMask |= 1u << scy;
+}
+
+void Chunk::markInteractiveLightSubChunksDirty(uint32_t subChunkMask) {
+    subChunkMask = expandSubChunkMaskVertical(subChunkMask);
+    for (int scy = 0; scy < NUM_SUB_CHUNKS; ++scy) {
+        if ((subChunkMask & (1u << scy)) != 0u) {
+            markInteractiveLightSubChunkDirty(scy);
+        }
+    }
 }
 
 uint64_t Chunk::getSubChunkMeshRevision(const int scy) const {

@@ -53,6 +53,7 @@ private:
         bool queued = false;
         bool inFlight = false;
         uint64_t inFlightRevision = 0;
+        uint64_t inFlightDispatchSerial = 0;
         std::vector<LocalLightChange> pendingBlockChanges;
         std::array<std::optional<BorderUpdateBatch>, 4> boundaryCache;
         std::array<std::optional<BorderUpdateBatch>, 4> pendingPreviousBoundaryCache;
@@ -70,6 +71,7 @@ private:
 
     struct CompletedTicket {
         LightResult result;
+        uint64_t dispatchSerial = 0;
     };
 
     static bool isInteractiveReason(LightDirtyReason reason);
@@ -80,6 +82,7 @@ private:
     collectBoundaryInputs(const std::array<std::optional<BorderUpdateBatch>, 4>& cache);
     static void clearBoundaryInputs(std::array<std::optional<BorderUpdateBatch>, 4>& cache);
     void markChunkDirty(int64_t chunkKey, LightDirtyReason reason);
+    void supersedeInteractiveInFlightJobs();
     void onWorkerCompleted(CompletedTicket ticket);
 
     // Base-light cache — incrementally maintained on the main thread so that
@@ -100,6 +103,7 @@ private:
     mutable std::mutex m_stateMutex;
     mutable std::mutex m_completedMutex;
     std::atomic<int> m_completedCount{0};
+    uint64_t m_nextDispatchSerial = 1;
     bool m_running = false;
 };
 

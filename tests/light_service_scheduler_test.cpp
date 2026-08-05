@@ -1,4 +1,5 @@
 #include <array>
+#include <atomic>
 #include <chrono>
 #include <cstdlib>
 #include <functional>
@@ -351,6 +352,66 @@ void testInteractiveFlushAppliesBlockLightBeforeNextWorldTick() {
     }
 }
 
+void testInteractiveFlushSupersedesInFlightJob() {
+    ThreadPool pool(1);
+    pool.start();
+
+    World world;
+    ThreadPoolGuard poolGuard{pool};
+    world.init(20260417);
+    world.setRenderDistance(1);
+    world.setThreadPool(&pool);
+
+    const glm::vec3 playerPos(8.0f, 80.0f, 8.0f);
+    tickWorld(world, playerPos, 10);
+    settleLoadedArea(world, playerPos);
+
+    constexpr int torchX = 8;
+    constexpr int torchY = 81;
+    constexpr int torchZ = 8;
+    const BlockID stone = BlockRegistry::requireIdByName("minecraft:stone");
+    const BlockID torch = BlockRegistry::requireIdByName("minecraft:torch");
+    world.setBlock(torchX, torchY - 1, torchZ, stone);
+    if (!waitUntil(world, playerPos, 180, [&]() { return isLightFrameSettled(world.getLightFrameStats()); })) {
+        fail("in-flight supersession setup should settle before blocking the worker");
+    }
+
+    std::atomic<bool> blockerStarted{false};
+    std::atomic<bool> releaseBlocker{false};
+    pool.submit(
+        [&]() {
+            blockerStarted.store(true, std::memory_order_release);
+            while (!releaseBlocker.load(std::memory_order_acquire)) {
+                std::this_thread::yield();
+            }
+        },
+        -100);
+    while (!blockerStarted.load(std::memory_order_acquire)) {
+        std::this_thread::yield();
+    }
+
+    world.setBlock(torchX, torchY, torchZ, torch);
+    world.update(playerPos);
+    world.setBlock(torchX, torchY, torchZ, RUNTIME_ID_NULL);
+    world.flushInteractiveLighting(playerPos);
+    const Chunk* chunk = findChunk(world, 0, 0);
+    const bool immediateClean = chunk != nullptr && chunk->getBlockLight(torchX + 1, torchY, torchZ) == 0;
+
+    releaseBlocker.store(true, std::memory_order_release);
+    for (int i = 0; i < 120 && (pool.activeCount() != 0 || pool.pendingCount() != 0); ++i) {
+        world.update(playerPos);
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+
+    if (!immediateClean) {
+        fail("interactive flush should replace a stale in-flight job before the worker returns");
+    }
+    chunk = findChunk(world, 0, 0);
+    if (chunk == nullptr || chunk->getBlockLight(torchX + 1, torchY, torchZ) != 0) {
+        fail("a superseded worker result must not restore removed block light");
+    }
+}
+
 void testOpaqueEditClearsSkylightWithoutSecondEdit() {
     ThreadPool pool(2);
     pool.start();
@@ -377,8 +438,8 @@ void testOpaqueEditClearsSkylightWithoutSecondEdit() {
     for (int y = floorY; y <= roofY; ++y) {
         for (int z = roomMin; z <= roomMax; ++z) {
             for (int x = roomMin; x <= roomMax; ++x) {
-                const bool shell = x == roomMin || x == roomMax || z == roomMin || z == roomMax || y == floorY ||
-                                   y == roofY;
+                const bool shell =
+                    x == roomMin || x == roomMax || z == roomMin || z == roomMax || y == floorY || y == roofY;
                 if (shell) {
                     world.setBlock(x, y, z, stone);
                 }
@@ -500,7 +561,9 @@ void testFourChunkCornerRemovalMatchesIndependentSource() {
         }
     }
 
-    const auto settled = [&]() { return isLightFrameSettled(world.getLightFrameStats()); };
+    const auto settled = [&]() {
+        return isLightFrameSettled(world.getLightFrameStats());
+    };
     if (!waitUntil(world, playerPos, 360, settled)) {
         fail("four-chunk corner room should settle before testing source removal");
     }
@@ -510,9 +573,8 @@ void testFourChunkCornerRemovalMatchesIndependentSource() {
     constexpr int toggledX = 15;
     constexpr int toggledZ = 15;
     world.setBlock(independentX, y, independentZ, torch);
-    if (!waitUntil(world, playerPos, 180, [&]() {
-            return world.getPackedLight(independentX, y, independentZ) != 0 && settled();
-        })) {
+    if (!waitUntil(world, playerPos, 180,
+                   [&]() { return world.getPackedLight(independentX, y, independentZ) != 0 && settled(); })) {
         fail("independent diagonal source should settle before corner stress");
     }
 
@@ -530,6 +592,19 @@ void testFourChunkCornerRemovalMatchesIndependentSource() {
     };
 
     const std::array<uint8_t, 32> independentLight = captureRoomLight();
+    world.setBlock(toggledX, y, toggledZ, torch);
+    if (!waitUntil(world, playerPos, 180, settled)) {
+        fail("corner source should settle before testing one-pass removal");
+    }
+    world.setBlock(toggledX, y, toggledZ, RUNTIME_ID_NULL);
+    world.flushInteractiveLighting(playerPos);
+    if (captureRoomLight() != independentLight) {
+        fail("one interactive flush should remove corner light in every affected chunk");
+    }
+    if (!settled()) {
+        fail("one interactive flush should settle every corner-removal boundary round");
+    }
+
     for (int iteration = 0; iteration < 12; ++iteration) {
         world.setBlock(toggledX, y, toggledZ, torch);
         tickWorld(world, playerPos, 2);
@@ -554,6 +629,7 @@ int main() {
     testHighFrequencyContinuousBlockChangesRequeueCleanly();
     testInteriorBlockChangeOnlyQueuesOwningChunk();
     testInteractiveFlushAppliesBlockLightBeforeNextWorldTick();
+    testInteractiveFlushSupersedesInFlightJob();
     testOpaqueEditClearsSkylightWithoutSecondEdit();
     testBoundaryInboxDoesNotDirtyMeshBeforeLightApply();
     testFourChunkCornerRemovalMatchesIndependentSource();

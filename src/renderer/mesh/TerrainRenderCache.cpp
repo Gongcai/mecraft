@@ -25,6 +25,7 @@ struct MeshingCandidate {
     int64_t chunkKey = 0;
     Chunk* chunk = nullptr;
     int scy = 0; // Sub-chunk index
+    bool interactiveLightDirty = false;
     float distanceSq = 0.0f;
     std::shared_ptr<Chunk> chunkRef;
     std::shared_ptr<Chunk> neighborPosX;
@@ -394,6 +395,7 @@ void TerrainRenderCache::submitMeshingJobs(const IWorldView& worldView, const gl
             candidate.chunkKey = chunkKey;
             candidate.chunk = &chunk;
             candidate.scy = scy;
+            candidate.interactiveLightDirty = chunk.isInteractiveLightSubChunkDirty(scy);
             candidate.distanceSq = dx * dx + dz * dz;
             candidate.chunkRef = pair.second;
             candidate.neighborPosX = findSharedByCoords(chunk.m_chunkX + 1, chunk.m_chunkZ);
@@ -405,13 +407,20 @@ void TerrainRenderCache::submitMeshingJobs(const IWorldView& worldView, const gl
     }
 
     const int availableInFlightSlots = std::max(0, m_meshingMaxInFlight - static_cast<int>(m_meshingInFlight.size()));
-    const int submitCount =
-        std::min({m_meshingSubmitBudget, availableInFlightSlots, static_cast<int>(candidates.size())});
+    const int interactiveCandidateCount =
+        static_cast<int>(std::count_if(candidates.begin(), candidates.end(), [](const MeshingCandidate& candidate) {
+            return candidate.interactiveLightDirty;
+        }));
+    const int submitBudget = std::max(m_meshingSubmitBudget, interactiveCandidateCount);
+    const int submitCount = std::min({submitBudget, availableInFlightSlots, static_cast<int>(candidates.size())});
     if (submitCount <= 0) {
         return;
     }
 
     const auto candidateLess = [](const MeshingCandidate& lhs, const MeshingCandidate& rhs) {
+        if (lhs.interactiveLightDirty != rhs.interactiveLightDirty) {
+            return lhs.interactiveLightDirty;
+        }
         if (lhs.distanceSq != rhs.distanceSq) {
             return lhs.distanceSq < rhs.distanceSq;
         }
@@ -426,11 +435,11 @@ void TerrainRenderCache::submitMeshingJobs(const IWorldView& worldView, const gl
     for (int index = 0; index < submitCount; ++index) {
         const double elapsedMs =
             std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - submitStartTime).count();
-        if (elapsedMs >= static_cast<double>(m_meshingSubmitTimeBudgetMs)) {
+        const MeshingCandidate& candidate = candidates[static_cast<size_t>(index)];
+        if (!candidate.interactiveLightDirty && elapsedMs >= static_cast<double>(m_meshingSubmitTimeBudgetMs)) {
             break;
         }
 
-        MeshingCandidate& candidate = candidates[static_cast<size_t>(index)];
         if (candidate.chunk == nullptr) {
             continue;
         }
@@ -446,7 +455,8 @@ void TerrainRenderCache::submitMeshingJobs(const IWorldView& worldView, const gl
             continue;
         }
 
-        const int priority = static_cast<int>(candidate.distanceSq);
+        const int priority = candidate.interactiveLightDirty ? (-1000000000 + static_cast<int>(candidate.distanceSq))
+                                                             : static_cast<int>(candidate.distanceSq);
         m_meshingService->submit(std::move(job), priority);
 
         const int64_t flightKey = subChunkFlightKey(candidate.chunkKey, candidate.scy);
@@ -491,6 +501,20 @@ bool TerrainRenderCache::drainMeshingResults(const IWorldView& worldView, RhiCom
         }
     }
 
+    const auto& activeChunks = worldView.getActiveChunks();
+    if (!m_deferredMeshResults.empty()) {
+        std::stable_sort(m_deferredMeshResults.begin(), m_deferredMeshResults.end(),
+                         [&](const SubChunkMeshingResult& lhs, const SubChunkMeshingResult& rhs) {
+                             const auto lhsIt = activeChunks.find(lhs.chunkKey);
+                             const auto rhsIt = activeChunks.find(rhs.chunkKey);
+                             const bool lhsInteractive = lhsIt != activeChunks.end() && lhsIt->second &&
+                                                         lhsIt->second->isInteractiveLightSubChunkDirty(lhs.scy);
+                             const bool rhsInteractive = rhsIt != activeChunks.end() && rhsIt->second &&
+                                                         rhsIt->second->isInteractiveLightSubChunkDirty(rhs.scy);
+                             return lhsInteractive && !rhsInteractive;
+                         });
+    }
+
     bool succeeded = true;
     size_t processIdx = 0u;
     if (!m_deferredMeshResults.empty()) {
@@ -502,15 +526,22 @@ bool TerrainRenderCache::drainMeshingResults(const IWorldView& worldView, RhiCom
         };
 
         // Phase 2: Process from deferred buffer respecting budgets.
-        // Over-budget results stay in the buffer for the next frame.
-        while (processIdx < m_deferredMeshResults.size() && uploadedCount < m_meshingDrainBudget) {
-            const double elapsedMs =
-                std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - drainStartTime).count();
-            if (elapsedMs >= m_meshingDrainTimeBudgetMs) {
+        // Results beyond the current budgets stay in the buffer for the next frame.
+        while (processIdx < m_deferredMeshResults.size()) {
+            SubChunkMeshingResult& result = m_deferredMeshResults[processIdx];
+            const auto it = activeChunks.find(result.chunkKey);
+            const bool interactiveLightMesh =
+                it != activeChunks.end() && it->second && it->second->isInteractiveLightSubChunkDirty(result.scy);
+            if (!interactiveLightMesh && uploadedCount >= m_meshingDrainBudget) {
                 break;
             }
 
-            SubChunkMeshingResult& result = m_deferredMeshResults[processIdx];
+            const double elapsedMs =
+                std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - drainStartTime).count();
+            if (!interactiveLightMesh && elapsedMs >= m_meshingDrainTimeBudgetMs) {
+                break;
+            }
+
             auto recycleResultMeshData = [&]() {
                 if (m_meshingService != nullptr) {
                     m_meshingService->recycleMeshData(std::move(result.meshData));
@@ -527,7 +558,7 @@ bool TerrainRenderCache::drainMeshingResults(const IWorldView& worldView, RhiCom
             // Hard vertex budget: if this result would push us over, allow at most
             // one over-budget upload then stop for this frame.
             const bool overBudget = m_meshUploadVerticesThisFrame + currentVertices > m_meshingDrainVertexBudget;
-            if (overBudget && uploadedCount > 0) {
+            if (!interactiveLightMesh && overBudget && uploadedCount > 0) {
                 break; // Already uploaded something; defer the rest
             }
 
@@ -542,8 +573,6 @@ bool TerrainRenderCache::drainMeshingResults(const IWorldView& worldView, RhiCom
             const int64_t flightKey = subChunkFlightKey(result.chunkKey, result.scy);
             m_meshingInFlight.erase(flightKey);
 
-            const auto& activeChunks = worldView.getActiveChunks();
-            const auto it = activeChunks.find(result.chunkKey);
             if (it == activeChunks.end() || !it->second) {
                 recycleResultMeshData();
                 continue;
@@ -655,7 +684,7 @@ bool TerrainRenderCache::drainMeshingResults(const IWorldView& worldView, RhiCom
             m_meshUploadVerticesThisFrame += currentVertices;
             m_meshUploadBytesThisFrame += static_cast<size_t>(currentVertices) * sizeof(PackedBlockVertex);
 
-            if (overBudget) {
+            if (!interactiveLightMesh && overBudget) {
                 break; // Allow one over-budget upload, then stop
             }
         }

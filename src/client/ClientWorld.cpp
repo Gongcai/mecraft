@@ -24,8 +24,7 @@ void markRenderableBorderDirty(Chunk& chunk) {
 }
 
 // Marks neighbor sub-chunk meshes that sample a changed horizontal light border.
-void markLightBorderNeighborsDirty(Chunk& chunk, const uint32_t dirtySubChunkMask,
-                                   const uint8_t changedBoundaryMask) {
+void markLightBorderNeighborsDirty(Chunk& chunk, const uint32_t dirtySubChunkMask, const uint8_t changedBoundaryMask) {
     if (changedBoundaryMask == 0u || dirtySubChunkMask == 0u) {
         return;
     }
@@ -48,16 +47,16 @@ void markLightBorderNeighborsDirty(Chunk& chunk, const uint32_t dirtySubChunkMas
             continue;
         }
         if ((changedBoundaryMask & (1u << 0)) != 0u && chunk.neighbors[0]) {
-            chunk.neighbors[0]->markSubChunkDirty(scy);
+            chunk.neighbors[0]->markInteractiveLightSubChunkDirty(scy);
         }
         if ((changedBoundaryMask & (1u << 1)) != 0u && chunk.neighbors[1]) {
-            chunk.neighbors[1]->markSubChunkDirty(scy);
+            chunk.neighbors[1]->markInteractiveLightSubChunkDirty(scy);
         }
         if ((changedBoundaryMask & (1u << 2)) != 0u && chunk.neighbors[2]) {
-            chunk.neighbors[2]->markSubChunkDirty(scy);
+            chunk.neighbors[2]->markInteractiveLightSubChunkDirty(scy);
         }
         if ((changedBoundaryMask & (1u << 3)) != 0u && chunk.neighbors[3]) {
-            chunk.neighbors[3]->markSubChunkDirty(scy);
+            chunk.neighbors[3]->markInteractiveLightSubChunkDirty(scy);
         }
     }
 }
@@ -320,12 +319,16 @@ void ClientWorld::applyBlockUpdate(const int x, const int y, const int z, const 
             uint8_t changedBoundaryMask = 0;
             chunk.replacePackedLight(packedLightPatch.data(), packedLightPatch.size(), &dirtySubChunkMask,
                                      &changedBoundaryMask);
+            chunk.markInteractiveLightSubChunksDirty(dirtySubChunkMask);
             markLightBorderNeighborsDirty(chunk, dirtySubChunkMask, changedBoundaryMask);
         } else if (packedLightPatch.size() == SubChunk::BLOCK_COUNT) {
             const int scy = Chunk::toSubChunkIndex(y);
             uint8_t changedBoundaryMask = 0;
-            const bool changed = chunk.replacePackedLightSection(scy, packedLightPatch.data(),
-                                                                 packedLightPatch.size(), &changedBoundaryMask);
+            const bool changed = chunk.replacePackedLightSection(scy, packedLightPatch.data(), packedLightPatch.size(),
+                                                                 &changedBoundaryMask);
+            if (changed) {
+                chunk.markInteractiveLightSubChunksDirty(1u << scy);
+            }
             markLightBorderNeighborsDirty(chunk, changed ? (1u << scy) : 0u, changedBoundaryMask);
         } else if (const int patchSide = inferOddCubeSide(packedLightPatch.size()); patchSide > 0) {
             const int patchRadius = patchSide / 2;
@@ -352,7 +355,7 @@ void ClientWorld::applyBlockUpdate(const int x, const int y, const int z, const 
                         pit->second->setSunlight(plx, wy, plz, static_cast<uint8_t>((packed >> 4) & 0x0F));
                         pit->second->setBlockLight(plx, wy, plz, static_cast<uint8_t>(packed & 0x0F));
                         const int scy = Chunk::toSubChunkIndex(wy);
-                        pit->second->markSubChunkDirty(scy);
+                        pit->second->markInteractiveLightSubChunkDirty(scy);
                         if (currentPacked != packed) {
                             uint8_t changedBoundaryMask = 0;
                             if (plx == Chunk::SIZE_X - 1) {

@@ -300,6 +300,10 @@ static void testVariableLightPatchDirtiesChangedNeighborBorders() {
     cw.applyBlockUpdate(14, 64, 4, net::BlockUpdateKind::LightOnly, NULL_BLOCK_STATE, lightPatch);
     require(right->isSubChunkDirty(scy), "variable light patch should dirty the receiving border subchunk");
     require(left->isSubChunkDirty(scy), "variable light patch should dirty the adjacent border subchunk");
+    require(right->isInteractiveLightSubChunkDirty(scy),
+            "variable light patch should mark the receiving border subchunk as interactive light dirty");
+    require(left->isInteractiveLightSubChunkDirty(scy),
+            "variable light patch should mark the adjacent border subchunk as interactive light dirty");
 
     left->markMeshClean();
     right->markMeshClean();
@@ -307,6 +311,10 @@ static void testVariableLightPatchDirtiesChangedNeighborBorders() {
     cw.applyBlockUpdate(14, 64, 4, net::BlockUpdateKind::LightOnly, NULL_BLOCK_STATE, lightPatch);
     require(right->isSubChunkDirty(scy), "variable light removal should dirty the receiving border subchunk");
     require(left->isSubChunkDirty(scy), "variable light removal should dirty the adjacent border subchunk");
+    require(right->isInteractiveLightSubChunkDirty(scy),
+            "variable light removal should mark the receiving border subchunk as interactive light dirty");
+    require(left->isInteractiveLightSubChunkDirty(scy),
+            "variable light removal should mark the adjacent border subchunk as interactive light dirty");
     std::printf("[PASS] testVariableLightPatchDirtiesChangedNeighborBorders\n");
 }
 

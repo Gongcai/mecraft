@@ -3,30 +3,30 @@
   "build": {
     "config": "Release"
   },
-  "captured_at": "2026-07-31",
+  "captured_at": "2026-08-04",
   "cases": [
     {
-      "avg_ms": 56.2306495,
+      "avg_ms": 44.10142466666667,
       "checksum": 1,
       "chunks": 9,
-      "chunks_per_sec": 162.20512021548626,
-      "max_ms": 67.043233,
-      "median_ms": 55.4853015,
-      "min_ms": 47.677493,
+      "chunks_per_sec": 204.5626029354756,
+      "max_ms": 44.66089,
+      "median_ms": 43.996311500000004,
+      "min_ms": 43.745909,
       "name": "window_3x3",
-      "p95_ms": 61.797447,
+      "p95_ms": 44.232152,
       "radius": 1
     },
     {
-      "avg_ms": 164.540727,
+      "avg_ms": 124.61724333333332,
       "checksum": 27,
       "chunks": 25,
-      "chunks_per_sec": 160.68251711644,
-      "max_ms": 222.060881,
-      "median_ms": 155.5863105,
-      "min_ms": 118.836573,
+      "chunks_per_sec": 201.14565889269403,
+      "max_ms": 130.739075,
+      "median_ms": 124.2880415,
+      "min_ms": 117.890324,
       "name": "window_5x5",
-      "p95_ms": 213.231477,
+      "p95_ms": 130.202355,
       "radius": 2
     }
   ],

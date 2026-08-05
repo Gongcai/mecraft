@@ -47,6 +47,14 @@ public:
         return (m_dirtySubChunkMask & (1u << scy)) != 0u;
     }
     void markSubChunkDirty(int scy);
+    void markInteractiveLightSubChunkDirty(int scy);
+    void markInteractiveLightSubChunksDirty(uint32_t subChunkMask);
+    [[nodiscard]] bool isInteractiveLightSubChunkDirty(int scy) const {
+        if (scy < 0 || scy >= NUM_SUB_CHUNKS) {
+            return false;
+        }
+        return (m_interactiveLightDirtySubChunkMask & (1u << scy)) != 0u;
+    }
     [[nodiscard]] uint64_t getSubChunkMeshRevision(int scy) const;
     [[nodiscard]] uint64_t getRenderStateRevision() const { return m_renderStateRevision; }
     [[nodiscard]] uint64_t getBlockContentRevision() const { return m_blockContentRevision; }
@@ -129,6 +137,7 @@ private:
 
     bool m_dirty = true;
     uint32_t m_dirtySubChunkMask = 0;
+    uint32_t m_interactiveLightDirtySubChunkMask = 0;
     uint64_t m_renderStateRevision = 1;
     uint64_t m_blockContentRevision = 1;
     uint64_t m_lightRevision = 1;

@@ -27,3 +27,8 @@
 /assets/textures/blocks/
 /assets/textures/blocks_bak/
 /github-pat.txt
+
+# BGM audio files are excluded from the repository (copyright + repo size).
+# Only assets/bgm/bgm.json (the track list) is tracked. Add your own local
+# .wav tracks directly into assets/bgm/ on each machine.
+/assets/bgm/*.wav

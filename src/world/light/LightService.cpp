@@ -129,6 +129,7 @@ void LightService::shutdown() {
 
     std::lock_guard<std::mutex> stateLock(m_stateMutex);
     m_chunkStates.clear();
+    m_nextDispatchSerial = 1;
 
     std::lock_guard<std::mutex> completedLock(m_completedMutex);
     m_completed = {};
@@ -293,6 +294,7 @@ void LightService::submitJobs(const glm::vec3& cameraPos, const int submitBudget
         int64_t chunkKey = 0;
         LightJob job;
         LightDirtyReason pickedReason = LightDirtyReason::NeighborBoundary;
+        uint64_t dispatchSerial = 0;
         bool found = false;
 
         {
@@ -374,6 +376,8 @@ void LightService::submitJobs(const glm::vec3& cameraPos, const int submitBudget
                     ++m_frameStats.captureCount;
 
                     state.inFlightRevision = job.revision;
+                    dispatchSerial = m_nextDispatchSerial++;
+                    state.inFlightDispatchSerial = dispatchSerial;
                     chunkIt->second->setLightQueued(false);
                     chunkIt->second->setLightInFlight(true);
                     found = true;
@@ -391,8 +395,9 @@ void LightService::submitJobs(const glm::vec3& cameraPos, const int submitBudget
                     m_frameStats.submittedNeighborBoundary);
 
         m_pool->submit(
-            [this, job = std::move(job)]() {
+            [this, dispatchSerial, job = std::move(job)]() {
                 CompletedTicket ticket;
+                ticket.dispatchSerial = dispatchSerial;
                 ticket.result = LightSolver::solve(job);
                 onWorkerCompleted(std::move(ticket));
             },
@@ -456,6 +461,11 @@ void LightService::drainCompleted(World& world, const int mergeBudget, const flo
             }
 
             LightChunkState& state = it->second;
+            if (ticket.dispatchSerial != state.inFlightDispatchSerial) {
+                ++m_frameStats.staleDropped;
+                continue;
+            }
+
             auto chunkIt = world.getActiveChunks().find(ticket.result.selfDelta.chunkKey);
             if (chunkIt != world.getActiveChunks().end() && chunkIt->second) {
                 chunkIt->second->setLightInFlight(false);
@@ -523,7 +533,8 @@ void LightService::drainCompleted(World& world, const int mergeBudget, const flo
                     neighborState.pendingForceOutgoingBoundaryMask |= directionBit(oppositeDirection(direction));
                     const bool wasDirty = neighborState.dirty;
                     neighborState.dirty = true;
-                    if (!wasDirty || shouldReplaceDirtyReason(neighborState.reason, LightDirtyReason::NeighborBoundary)) {
+                    if (!wasDirty ||
+                        shouldReplaceDirtyReason(neighborState.reason, LightDirtyReason::NeighborBoundary)) {
                         neighborState.reason = LightDirtyReason::NeighborBoundary;
                     }
                     if (!neighborState.inFlight && !neighborState.queued) {
@@ -621,11 +632,16 @@ int LightService::processInteractiveJobsInline(const glm::vec3& cameraPos, const
         return 0;
     }
 
+    supersedeInteractiveInFlightJobs();
+    drainCompleted(m_world, mergeBudget, mergeTimeBudgetMs);
+
     int solved = 0;
     while (solved < jobBudget) {
+        supersedeInteractiveInFlightJobs();
         int64_t chunkKey = 0;
         LightJob job;
         LightDirtyReason pickedReason = LightDirtyReason::NeighborBoundary;
+        uint64_t dispatchSerial = 0;
         bool found = false;
 
         {
@@ -705,6 +721,8 @@ int LightService::processInteractiveJobsInline(const glm::vec3& cameraPos, const
                     ++m_frameStats.captureCount;
 
                     state.inFlightRevision = job.revision;
+                    dispatchSerial = m_nextDispatchSerial++;
+                    state.inFlightDispatchSerial = dispatchSerial;
                     chunkIt->second->setLightQueued(false);
                     chunkIt->second->setLightInFlight(true);
                     found = true;
@@ -722,6 +740,7 @@ int LightService::processInteractiveJobsInline(const glm::vec3& cameraPos, const
                     m_frameStats.submittedNeighborBoundary);
 
         CompletedTicket ticket;
+        ticket.dispatchSerial = dispatchSerial;
         ticket.result = LightSolver::solve(job);
         {
             std::lock_guard<std::mutex> lock(m_completedMutex);
@@ -777,6 +796,35 @@ void LightService::markChunkDirty(const int64_t chunkKey, const LightDirtyReason
         auto it = m_world.getActiveChunks().find(chunkKey);
         if (it != m_world.getActiveChunks().end() && it->second) {
             it->second->setLightQueued(true);
+        }
+    }
+}
+
+void LightService::supersedeInteractiveInFlightJobs() {
+    std::lock_guard<std::mutex> lock(m_stateMutex);
+    for (auto& entry : m_chunkStates) {
+        LightChunkState& state = entry.second;
+        if (!state.inFlight || !state.dirty || !isInteractiveReason(state.reason)) {
+            continue;
+        }
+
+        // Keep all work captured by the obsolete job in the next inline job.
+        // The old worker result carries its dispatch serial and is discarded
+        // without touching the replacement job's state when it completes.
+        state.pendingHaloMeshDirtyMask |= state.inFlightHaloMeshDirtyMask;
+        state.pendingSuppressedBoundaryMask |= state.inFlightSuppressedBoundaryMask;
+        state.pendingForceOutgoingBoundaryMask |= state.inFlightForceOutgoingBoundaryMask;
+        state.inFlightHaloMeshDirtyMask = 0;
+        state.inFlightSuppressedBoundaryMask = 0;
+        state.inFlightForceOutgoingBoundaryMask = 0;
+        state.inFlight = false;
+        state.inFlightDispatchSerial = 0;
+        state.queued = true;
+
+        const auto chunkIt = m_world.getActiveChunks().find(entry.first);
+        if (chunkIt != m_world.getActiveChunks().end() && chunkIt->second) {
+            chunkIt->second->setLightInFlight(false);
+            chunkIt->second->setLightQueued(true);
         }
     }
 }
