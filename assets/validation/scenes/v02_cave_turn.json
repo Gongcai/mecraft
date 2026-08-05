@@ -3,7 +3,7 @@
   "version": 2,
   "id": "v02_cave_turn",
   "scene": "voxel",
-  "content_hash": "eaed3c42e49b7ec0",
+  "content_hash": "e08e28e1168e5c99",
   "camera_path": {
     "source": "../camera_paths/v02_cave_turn.json",
     "id": "v02_cave_turn",
@@ -12,7 +12,7 @@
   "render_settings": {
     "id": "m0_voxel_render_settings",
     "version": 1,
-    "content_hash": "df6a9bdca9fd3c13"
+    "content_hash": "a64f59f7e206230c"
   },
   "environment": {
     "time_of_day_seconds": 900.0,

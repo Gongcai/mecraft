@@ -13,9 +13,11 @@
 class RhiCommandList;
 class RhiDevice;
 
-/// Packs one raw RTGI diffuse signal into distinct RELAX and REBLUR inputs.
+/// Packs one raw RTGI diffuse signal into the selected NRD method input.
 class RtgiSignalPackPass final : public RenderPass {
 public:
+    enum class Method : uint8_t { Relax = 0u, Reblur = 1u };
+
     /// Raw inputs, method-specific outputs, and the read-write validation image.
     struct GraphResources final {
         RgTextureHandle rawDiffuseRadianceHitDistance;
@@ -30,6 +32,7 @@ public:
         renderer::contracts::RtgiReblurHitDistanceParameters reblurHitDistance;
         float diffuseRoughness = 1.0f;
         bool useJitteredProjection = false;
+        Method method = Method::Relax;
     };
 
     /// Latest successfully recorded signal-pack dispatch diagnostics.
@@ -41,6 +44,7 @@ public:
         float diffuseRoughness = 0.0f;
         float preExposure = 1.0f;
         float previousPreExposure = 1.0f;
+        Method method = Method::Relax;
     };
 
     void shutdown() override;
@@ -70,7 +74,7 @@ private:
 
     [[nodiscard]] bool recordPack(RhiCommandList& commandList, const FrameContext& ctx, const Settings& settings,
                                   const PackViews& views);
-    [[nodiscard]] bool ensurePipeline(RhiDevice& rhiDevice);
+    [[nodiscard]] bool ensurePipeline(RhiDevice& rhiDevice, Method method);
     [[nodiscard]] bool ensureBindGroup(RhiDevice& rhiDevice, const PackViews& views, uint32_t width, uint32_t height);
     void destroyRhiResources();
 
@@ -82,6 +86,8 @@ private:
     RhiPipelineHandle m_pipeline;
     RhiBindGroupHandle m_bindGroup;
     std::array<RhiTextureViewHandle, 5u> m_boundViews{};
+    Method m_pipelineMethod = Method::Relax;
+    bool m_pipelineMethodValid = false;
     Stats m_stats;
 };
 

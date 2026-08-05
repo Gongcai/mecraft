@@ -109,7 +109,7 @@ bool NrdGuidePrepPass::recordGuide(RhiCommandList& commandList, const FrameConte
                   settings.historyValid ? 1.0f : 0.0f);
 
     const GpuTimerSegmentToken gpuTimer = ctx.debugService != nullptr
-                                              ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::Nrd)
+                                              ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::NrdGuidePrep)
                                               : GpuTimerSegmentToken{};
     commandList.setComputePipeline(m_pipeline);
     commandList.setBindGroup(0u, m_bindGroup);

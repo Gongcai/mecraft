@@ -86,6 +86,7 @@ struct NrdSettings {
     // and makes a static image crawl.
     float disocclusionThreshold = 0.02f;
     float disocclusionThresholdAlternate = 0.05f;
+    int relaxAtrousIterations = 5;
     float reblurHitDistanceConstantScale = 3.0f;
     float reblurHitDistanceViewZScale = 0.1f;
     float reblurHitDistanceRoughnessScale = 20.0f;

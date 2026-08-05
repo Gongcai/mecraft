@@ -62,6 +62,7 @@ RgPassHandle RtgiSignalPackPass::addGraphPass(RenderGraph& graph, const FrameCon
         !resources.rawDiffuseRadianceHitDistance.isValid() || !resources.depth.isValid() ||
         !resources.relaxDiffuseRadianceHitDistance.isValid() || !resources.reblurDiffuseRadianceHitDistance.isValid() ||
         !resources.validation.isValid() ||
+        (settings.method != Method::Relax && settings.method != Method::Reblur) ||
         sameHandle(resources.rawDiffuseRadianceHitDistance, resources.relaxDiffuseRadianceHitDistance) ||
         sameHandle(resources.rawDiffuseRadianceHitDistance, resources.reblurDiffuseRadianceHitDistance) ||
         sameHandle(resources.relaxDiffuseRadianceHitDistance, resources.reblurDiffuseRadianceHitDistance)) {
@@ -97,7 +98,7 @@ bool RtgiSignalPackPass::recordPack(RhiCommandList& commandList, const FrameCont
     if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr || !finiteMatrix(ctx.camera.view) ||
         !finiteMatrix(inverseViewProjection) || !finiteMatrix(inverseProjection) || !std::isfinite(ctx.preExposure) ||
         ctx.preExposure <= 0.0f || !std::isfinite(ctx.previousPreExposure) || ctx.previousPreExposure <= 0.0f ||
-        !ensurePipeline(*ctx.shared->rhiDevice) ||
+        !ensurePipeline(*ctx.shared->rhiDevice, settings.method) ||
         !ensureBindGroup(*ctx.shared->rhiDevice, views, extent.width, extent.height)) {
         return false;
     }
@@ -114,7 +115,7 @@ bool RtgiSignalPackPass::recordPack(RhiCommandList& commandList, const FrameCont
                                                     ctx.previousPreExposure / ctx.preExposure);
 
     const GpuTimerSegmentToken gpuTimer = ctx.debugService != nullptr
-                                              ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::Rtgi)
+                                              ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::RtgiSignalPack)
                                               : GpuTimerSegmentToken{};
     commandList.setComputePipeline(m_pipeline);
     commandList.setBindGroup(0u, m_bindGroup);
@@ -131,26 +132,33 @@ bool RtgiSignalPackPass::recordPack(RhiCommandList& commandList, const FrameCont
     m_stats.diffuseRoughness = settings.diffuseRoughness;
     m_stats.preExposure = ctx.preExposure;
     m_stats.previousPreExposure = ctx.previousPreExposure;
+    m_stats.method = settings.method;
     return true;
 }
 
-bool RtgiSignalPackPass::ensurePipeline(RhiDevice& rhiDevice) {
+bool RtgiSignalPackPass::ensurePipeline(RhiDevice& rhiDevice, const Method method) {
     if (m_rhiDevice != nullptr && m_rhiDevice != &rhiDevice) {
         destroyRhiResources();
     }
-    if (m_pipeline.isValid()) {
+    if (m_pipeline.isValid() && m_pipelineMethodValid && m_pipelineMethod == method) {
         return true;
+    }
+    if (m_pipeline.isValid()) {
+        destroyRhiResources();
     }
     m_rhiDevice = &rhiDevice;
 
-    const std::optional<std::string> source =
-        renderer::rhi::loadShaderSource("assets/shaders/rtgi_nrd_signal_pack.comp");
+    renderer::rhi::RhiShaderSourceOptions sourceOptions;
+    sourceOptions.preprocessorDefinitions.emplace_back(method == Method::Relax ? "MECRAFT_RTGI_SIGNAL_PACK_RELAX"
+                                                                               : "MECRAFT_RTGI_SIGNAL_PACK_REBLUR");
+    const std::optional<std::string> source = renderer::rhi::loadShaderSource(
+        "assets/shaders/rtgi_nrd_signal_pack.comp", sourceOptions);
     if (!source.has_value()) {
         destroyRhiResources();
         return false;
     }
     RhiShaderDesc shaderDesc;
-    shaderDesc.debugName = "RTGI.SignalPack.Compute";
+    shaderDesc.debugName = method == Method::Relax ? "RTGI.SignalPack.Relax.Compute" : "RTGI.SignalPack.Reblur.Compute";
     shaderDesc.stage = RhiShaderStage::Compute;
     shaderDesc.source = source->c_str();
     shaderDesc.sourceSize = source->size();
@@ -199,7 +207,8 @@ bool RtgiSignalPackPass::ensurePipeline(RhiDevice& rhiDevice) {
     }
 
     RhiComputePipelineDesc pipelineDesc;
-    pipelineDesc.debugName = "RTGI.SignalPack.Pipeline";
+    pipelineDesc.debugName =
+        method == Method::Relax ? "RTGI.SignalPack.Relax.Pipeline" : "RTGI.SignalPack.Reblur.Pipeline";
     pipelineDesc.computeShader = m_shader;
     pipelineDesc.layout = m_pipelineLayout;
     m_pipeline = rhiDevice.createComputePipeline(pipelineDesc);
@@ -207,6 +216,8 @@ bool RtgiSignalPackPass::ensurePipeline(RhiDevice& rhiDevice) {
         destroyRhiResources();
         return false;
     }
+    m_pipelineMethod = method;
+    m_pipelineMethodValid = true;
     return true;
 }
 
@@ -294,4 +305,6 @@ void RtgiSignalPackPass::destroyRhiResources() {
     m_pipeline = {};
     m_bindGroup = {};
     m_boundViews = {};
+    m_pipelineMethod = Method::Relax;
+    m_pipelineMethodValid = false;
 }

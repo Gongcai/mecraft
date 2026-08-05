@@ -266,7 +266,9 @@ bool showRtgiSettings(RenderSettings& settings) {
                                   "%.3f");
     changed |= ImGui::SliderFloat("NRD Alternate Threshold", &settings.nrd.disocclusionThresholdAlternate, 0.02f,
                                   0.3f, "%.3f");
-    if (settings.nrd.method == NrdDiffuseMethod::Reblur) {
+    if (settings.nrd.method == NrdDiffuseMethod::Relax) {
+        changed |= ImGui::SliderInt("NRD RELAX A-Trous Iterations", &settings.nrd.relaxAtrousIterations, 2, 8);
+    } else {
         changed |= ImGui::SliderFloat("NRD REBLUR Hit Distance A", &settings.nrd.reblurHitDistanceConstantScale, 0.1f,
                                       32.0f, "%.2f");
         changed |= ImGui::SliderFloat("NRD REBLUR Hit Distance B", &settings.nrd.reblurHitDistanceViewZScale, 0.001f,

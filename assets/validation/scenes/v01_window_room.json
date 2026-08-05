@@ -3,7 +3,7 @@
   "version": 2,
   "id": "v01_window_room",
   "scene": "voxel",
-  "content_hash": "cabff68652ab41a6",
+  "content_hash": "2d6b6c5ba4209093",
   "camera_path": {
     "source": "../camera_paths/v01_window_room.json",
     "id": "v01_window_room",
@@ -12,7 +12,7 @@
   "render_settings": {
     "id": "m0_voxel_render_settings",
     "version": 1,
-    "content_hash": "df6a9bdca9fd3c13"
+    "content_hash": "a64f59f7e206230c"
   },
   "environment": {
     "time_of_day_seconds": 900.0,

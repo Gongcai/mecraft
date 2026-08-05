@@ -52,6 +52,8 @@ namespace {
            signalSource.find("dot(color, vec3(0.25, 0.5, 0.25))") != std::string::npos &&
            signalSource.find("exp2(-200.0 * roughness * roughness)") != std::string::npos &&
            packSource.find("layout(set = 0, binding = 4, rg32ui) uniform uimage2D uValidation;") != std::string::npos &&
+           packSource.find("MECRAFT_RTGI_SIGNAL_PACK_RELAX") != std::string::npos &&
+           packSource.find("MECRAFT_RTGI_SIGNAL_PACK_REBLUR") != std::string::npos &&
            packSource.find("classification != RTGI_TRACE_CLASS_HIT && classification != RTGI_TRACE_CLASS_MISS") !=
                std::string::npos &&
            packSource.find("vec3 sceneRadiance = rawSignal.rgb * pc.preExposureAndInverse.y;") != std::string::npos &&

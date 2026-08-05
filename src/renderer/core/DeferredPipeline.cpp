@@ -52,6 +52,7 @@ namespace {
            std::isfinite(settings.disocclusionThreshold) && settings.disocclusionThreshold >= 0.01f &&
            settings.disocclusionThreshold <= 0.02f && std::isfinite(settings.disocclusionThresholdAlternate) &&
            settings.disocclusionThresholdAlternate >= 0.02f && settings.disocclusionThresholdAlternate <= 0.2f &&
+           settings.relaxAtrousIterations >= 2 && settings.relaxAtrousIterations <= 8 &&
            std::isfinite(settings.reblurHitDistanceConstantScale) &&
            settings.reblurHitDistanceConstantScale > 0.0f &&
            std::isfinite(settings.reblurHitDistanceViewZScale) && settings.reblurHitDistanceViewZScale > 0.0f &&
@@ -1911,6 +1912,9 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
             packSettings.reblurHitDistance.roughnessScale = settings.nrd.reblurHitDistanceRoughnessScale;
             packSettings.diffuseRoughness = 1.0f;
             packSettings.useJitteredProjection = traceSettings.useJitteredProjection;
+            packSettings.method = settings.nrd.method == NrdDiffuseMethod::Relax
+                                      ? RtgiSignalPackPass::Method::Relax
+                                      : RtgiSignalPackPass::Method::Reblur;
             RtgiSignalPackPass::GraphResources packResources;
             packResources.rawDiffuseRadianceHitDistance = rtgiRawDiffuse;
             packResources.depth = depth;
@@ -1991,7 +1995,9 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
                 // The raw RTGI signal already applies a bounded radiance
                 // clamp. Relax's adaptive anti-firefly pass can toggle sparse
                 // bright samples as motion causes history confidence to vary.
-                methodSettings = ::nrd::RelaxSettings{};
+                ::nrd::RelaxSettings relaxSettings{};
+                relaxSettings.atrousIterationNum = static_cast<uint32_t>(settings.nrd.relaxAtrousIterations);
+                methodSettings = relaxSettings;
             } else {
                 ::nrd::ReblurSettings reblurSettings{};
                 reblurSettings.hitDistanceParameters.A = settings.nrd.reblurHitDistanceConstantScale;

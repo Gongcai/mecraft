@@ -12,6 +12,13 @@ layout(set = 0, binding = 2, rgba16f) uniform writeonly image2D uRelaxDiffuseRad
 layout(set = 0, binding = 3, rgba16f) uniform writeonly image2D uReblurDiffuseRadianceHitDistance;
 layout(set = 0, binding = 4, rg32ui) uniform uimage2D uValidation;
 
+#if defined(MECRAFT_RTGI_SIGNAL_PACK_RELAX) && defined(MECRAFT_RTGI_SIGNAL_PACK_REBLUR)
+#error "RTGI signal pack requires exactly one NRD method"
+#endif
+#if !defined(MECRAFT_RTGI_SIGNAL_PACK_RELAX) && !defined(MECRAFT_RTGI_SIGNAL_PACK_REBLUR)
+#error "RTGI signal pack requires an NRD method"
+#endif
+
 layout(push_constant) uniform RtgiSignalPackPushConstants {
     mat4 inverseProjection;
     vec4 renderExtentAndInverse;
@@ -20,8 +27,11 @@ layout(push_constant) uniform RtgiSignalPackPushConstants {
 } pc;
 
 void rtgiSignalPackWriteZero(ivec2 texel) {
+#if defined(MECRAFT_RTGI_SIGNAL_PACK_RELAX)
     imageStore(uRelaxDiffuseRadianceHitDistance, texel, vec4(0.0));
+#else
     imageStore(uReblurDiffuseRadianceHitDistance, texel, vec4(0.0));
+#endif
 }
 
 void rtgiSignalPackFail(ivec2 texel, uvec4 validation) {
@@ -77,6 +87,14 @@ void main() {
         return;
     }
 
+#if defined(MECRAFT_RTGI_SIGNAL_PACK_RELAX)
+    vec4 relaxSignal = rtgiRelaxFrontEndPackRadianceAndHitDistance(sceneRadiance, rawSignal.a);
+    if (!rtgiNrdFinite(relaxSignal)) {
+        rtgiSignalPackFail(texel, validation);
+        return;
+    }
+    imageStore(uRelaxDiffuseRadianceHitDistance, texel, relaxSignal);
+#else
     float viewZ;
     if (!rtgiSignalPackReconstructViewZ(texel, depth, viewZ)) {
         rtgiSignalPackFail(texel, validation);
@@ -85,14 +103,12 @@ void main() {
     float normalizedHitDistance = rtgiReblurFrontEndGetNormalizedHitDistance(
         rawSignal.a, viewZ, pc.reblurParametersAndDiffuseRoughness.xyz,
         pc.reblurParametersAndDiffuseRoughness.w);
-    vec4 relaxSignal = rtgiRelaxFrontEndPackRadianceAndHitDistance(sceneRadiance, rawSignal.a);
     vec4 reblurSignal = rtgiReblurFrontEndPackRadianceAndNormalizedHitDistance(
         sceneRadiance, normalizedHitDistance);
-    if (!rtgiNrdFinite(normalizedHitDistance) || !rtgiNrdFinite(relaxSignal) || !rtgiNrdFinite(reblurSignal)) {
+    if (!rtgiNrdFinite(normalizedHitDistance) || !rtgiNrdFinite(reblurSignal)) {
         rtgiSignalPackFail(texel, validation);
         return;
     }
-
-    imageStore(uRelaxDiffuseRadianceHitDistance, texel, relaxSignal);
     imageStore(uReblurDiffuseRadianceHitDistance, texel, reblurSignal);
+#endif
 }

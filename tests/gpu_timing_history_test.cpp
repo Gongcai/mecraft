@@ -25,8 +25,11 @@ bool requireNear(const double actual, const double expected, const char* message
 }
 
 bool testStableStageNames() {
-    const char* expected[] = {"GBuffer", "Shadow", "SSAO",       "SSGI",  "RTGI",  "NRD", "Lighting",
-                              "Transparent", "Volumetric", "Reflection", "Cloud", "Water", "Post"};
+    const char* expected[] = {"GBuffer",         "Shadow",          "SSAO",          "SSGI",
+                              "RTGI",            "NRD",             "Lighting",      "Transparent",
+                              "Volumetric",      "Reflection",      "Cloud",         "Water",
+                              "Post",            "RTGI.Trace",      "RTGI.SignalPack", "NRD.GuidePrep",
+                              "NRD.Dispatch"};
     for (size_t index = 0u; index < static_cast<size_t>(GpuTimerPass::Count); ++index) {
         if (!requireTrue(std::string(gpuTimerPassName(static_cast<GpuTimerPass>(index))) == expected[index],
                          "GPU stage names must remain stable")) {

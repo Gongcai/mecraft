@@ -330,6 +330,8 @@ RELAX 与 REBLUR。它使用法线、粗糙度、View-Z、运动矢量、Hit Dis
 | RTGI Performance | `REBLUR_DIFFUSE` | 更低 GPU 成本，可配合 Checkerboard Trace |
 
 Method 由用户设置明确选择，运行中不依据 GPU 时间改动 Method。
+RELAX 的 A-Trous 迭代次数作为显式质量参数开放，合法范围为 `2..8`，默认值为 `5`。
+性能对比可固定使用 `3` 次迭代，但不得由运行时根据帧耗时自动改写。
 
 ### 6.2 输入契约
 
@@ -391,6 +393,10 @@ RELAX 与 REBLUR 的 Pipeline/Pool/Constant Buffer 契约均由 SPIR-V Reflectio
 Vulkan Render Graph 执行和有限值回读，并覆盖 Permanent Pool 历史与 Descriptor Cache 缩容。
 `GetComputeDispatches` 成功后若构图失败，Bridge 会锁定执行状态并要求重建实例，避免 SDK Ping-Pong
 状态与 GPU 历史产生偏差。
+
+Signal Pack 按当前 NRD Method 创建专用 Compute Pipeline。RELAX 变体只执行线性 RGB 与真实
+Hit Distance 打包，REBLUR 变体只执行 YCoCg 与归一化 Hit Distance 打包，不再在每个像素上计算并
+写出另一种 Method 的无用结果。Method 切换与 NRD 实例重建、历史重启保持同一生命周期。
 
 NRD Resource Pool 与 `resourceSize` 绑定，动态分辨率通过当前/上一帧 `rectSize` 表达，不
 因每次 Active Rect 变化重建。非零 `rectOrigin` 需要以
@@ -464,7 +470,9 @@ BLAS；普通地形继续使用区块合并网格，避免每方块 Instance 造
 - BLAS 采用静态压缩；记录压缩前后字节数。
 - TLAS Instance Buffer、Scratch 和 NRD Transient Pool 使用帧环形资源。
 - Quality 在 Render Extent 全像素 1 spp；Performance 使用 Checkerboard 1 spp。
-- RTGI Trace/Signal Pack 与 NRD Guide/SDK Dispatch 已分别拥有独立 Timestamp；Alpha Candidate 与
+- RTGI Trace/Signal Pack 与 NRD Guide/SDK Dispatch 已分别拥有独立 Timestamp；Dashboard 与
+  Benchmark JSON 使用 `RTGI.Trace`、`RTGI.SignalPack`、`NRD.GuidePrep`、`NRD.Dispatch` 发布细分
+  p50/p95/p99，同时保留不重复计入总时间的 RTGI/NRD 聚合项。Alpha Candidate 与
   Secondary Shadow 的细分计时仍通过后续诊断增量补充。
 - RT Distance、Max Local Lights Per Hit 与 Signal Resolution 是公开画质参数。
 - 动态分辨率只改变 Render Extent，不改变 Method、Ray Distance 或材质复杂度。

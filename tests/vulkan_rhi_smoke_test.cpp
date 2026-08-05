@@ -4109,6 +4109,7 @@ namespace {
     SmokeTexture validation;
     RtgiTracePass tracePass;
     RtgiSignalPackPass signalPackPass;
+    RtgiSignalPackPass reblurSignalPackPass;
     ClusteredLightingPass clusteredLightingPass;
     RhiBufferHandle localShadowMetadata;
     RhiSamplerHandle localShadowSampler;
@@ -4123,6 +4124,7 @@ namespace {
             clusteredLightingPass.finishGraphExecution(false, {});
         }
         device.waitIdle();
+        reblurSignalPackPass.shutdown();
         signalPackPass.shutdown();
         tracePass.shutdown();
         clusteredLightingPass.shutdown();
@@ -4364,6 +4366,7 @@ namespace {
     RgTextureHandle localShadowPointCubeArrayResource;
     RgPassHandle traceHandle;
     RgPassHandle packHandle;
+    RgPassHandle reblurPackHandle;
     if (valid) {
         resources.depth = importTexture(depth, RhiResourceState::DepthRead, RhiResourceState::DepthRead);
         resources.normalAo = importTexture(normalAo, RhiResourceState::ShaderRead, RhiResourceState::ShaderRead);
@@ -4451,13 +4454,20 @@ namespace {
         if (valid) {
             RtgiSignalPackPass::Settings packSettings;
             packSettings.useJitteredProjection = settings.useJitteredProjection;
+            packSettings.method = RtgiSignalPackPass::Method::Relax;
             packHandle = signalPackPass.addGraphPass(graph, frame, packSettings, packResources, traceHandle);
             valid = packHandle.isValid();
+            if (valid) {
+                packSettings.method = RtgiSignalPackPass::Method::Reblur;
+                reblurPackHandle =
+                    reblurSignalPackPass.addGraphPass(graph, frame, packSettings, packResources, packHandle);
+                valid = reblurPackHandle.isValid();
+            }
         }
     }
     if (valid) {
         graph.addPass({"RTGI.ValidationCopy", RgPassType::Copy, RhiQueueType::Graphics})
-            .dependsOn(packHandle)
+            .dependsOn(reblurPackHandle)
             .readTexture(resources.validation, RhiResourceState::TransferSrc)
             .readTexture(resources.diffuseRadianceHitDistance, RhiResourceState::TransferSrc)
             .readTexture(packResources.relaxDiffuseRadianceHitDistance, RhiResourceState::TransferSrc)
@@ -4604,6 +4614,7 @@ namespace {
             }
             const RtgiTracePass::Stats& stats = tracePass.stats();
             const RtgiSignalPackPass::Stats& packStats = signalPackPass.stats();
+            const RtgiSignalPackPass::Stats& reblurPackStats = reblurSignalPackPass.stats();
             valid = valid && stats.dispatched && stats.frameIndex == frame.frameIndex &&
                     stats.sceneTlasRevision == activeTlas.revision && stats.width == smokeCase.width &&
                     stats.height == smokeCase.height && stats.instanceMask == smokeCase.instanceMask &&
@@ -4618,7 +4629,9 @@ namespace {
                     packStats.reblurHitDistance.viewZScale == 0.1f &&
                     packStats.reblurHitDistance.roughnessScale == 20.0f && packStats.diffuseRoughness == 1.0f &&
                     packStats.preExposure == smokeCase.preExposure &&
-                    packStats.previousPreExposure == smokeCase.previousPreExposure;
+                    packStats.previousPreExposure == smokeCase.previousPreExposure &&
+                    packStats.method == RtgiSignalPackPass::Method::Relax && reblurPackStats.dispatched &&
+                    reblurPackStats.method == RtgiSignalPackPass::Method::Reblur;
         }
         if (validationResult != nullptr) {
             device.unmapBuffer(validationReadback);
@@ -4734,13 +4747,15 @@ namespace {
     SmokeTexture relax;
     SmokeTexture reblur;
     SmokeTexture validationTexture;
-    RtgiSignalPackPass pass;
+    RtgiSignalPackPass relaxPass;
+    RtgiSignalPackPass reblurPass;
     RhiBufferHandle validationReadback;
     RhiBufferHandle relaxReadback;
     RhiBufferHandle reblurReadback;
     const auto cleanup = [&]() {
         device.waitIdle();
-        pass.shutdown();
+        reblurPass.shutdown();
+        relaxPass.shutdown();
         RhiBufferHandle* buffers[] = {&reblurReadback, &relaxReadback, &validationReadback};
         for (RhiBufferHandle* buffer : buffers) {
             if (buffer->isValid()) {
@@ -4809,6 +4824,7 @@ namespace {
     RgBufferHandle relaxReadbackResource;
     RgBufferHandle reblurReadbackResource;
     RgPassHandle packHandle;
+    RgPassHandle reblurPackHandle;
     if (valid) {
         const auto importTexture = [&](const SmokeTexture& texture, const RhiResourceState initialState,
                                        const RhiResourceState finalState) {
@@ -4840,20 +4856,25 @@ namespace {
                 .handle();
         RtgiSignalPackPass::GraphResources aliasedResources = resources;
         aliasedResources.reblurDiffuseRadianceHitDistance = aliasedResources.relaxDiffuseRadianceHitDistance;
-        valid = !pass.addGraphPass(graph, frame, {}, aliasedResources, inputReady).isValid();
+        valid = !relaxPass.addGraphPass(graph, frame, {}, aliasedResources, inputReady).isValid();
         FrameContext invalidExposureFrame = frame;
         invalidExposureFrame.preExposure = 0.0f;
-        valid = valid && !pass.addGraphPass(graph, invalidExposureFrame, {}, resources, inputReady).isValid();
-        packHandle = pass.addGraphPass(graph, frame, {}, resources, inputReady);
+        valid = valid && !relaxPass.addGraphPass(graph, invalidExposureFrame, {}, resources, inputReady).isValid();
+        RtgiSignalPackPass::Settings relaxSettings;
+        relaxSettings.method = RtgiSignalPackPass::Method::Relax;
+        packHandle = relaxPass.addGraphPass(graph, frame, relaxSettings, resources, inputReady);
+        RtgiSignalPackPass::Settings reblurSettings;
+        reblurSettings.method = RtgiSignalPackPass::Method::Reblur;
+        reblurPackHandle = reblurPass.addGraphPass(graph, frame, reblurSettings, resources, packHandle);
         valid = valid && resources.rawDiffuseRadianceHitDistance.isValid() && resources.depth.isValid() &&
                 resources.relaxDiffuseRadianceHitDistance.isValid() &&
                 resources.reblurDiffuseRadianceHitDistance.isValid() && resources.validation.isValid() &&
                 validationReadbackResource.isValid() && relaxReadbackResource.isValid() &&
-                reblurReadbackResource.isValid() && packHandle.isValid();
+                reblurReadbackResource.isValid() && packHandle.isValid() && reblurPackHandle.isValid();
     }
     if (valid) {
         graph.addPass({"RTGI.SignalPackCopy", RgPassType::Copy, RhiQueueType::Graphics})
-            .dependsOn(packHandle)
+            .dependsOn(reblurPackHandle)
             .readTexture(resources.validation, RhiResourceState::TransferSrc)
             .readTexture(resources.relaxDiffuseRadianceHitDistance, RhiResourceState::TransferSrc)
             .readTexture(resources.reblurDiffuseRadianceHitDistance, RhiResourceState::TransferSrc)
@@ -4963,11 +4984,14 @@ namespace {
                     valid = false;
                 }
             }
-            const RtgiSignalPackPass::Stats& stats = pass.stats();
+            const RtgiSignalPackPass::Stats& stats = relaxPass.stats();
+            const RtgiSignalPackPass::Stats& reblurStats = reblurPass.stats();
             valid = valid && stats.dispatched && stats.width == kWidth && stats.height == kHeight &&
                     stats.reblurHitDistance.constantScale == 3.0f && stats.reblurHitDistance.viewZScale == 0.1f &&
                     stats.reblurHitDistance.roughnessScale == 20.0f && stats.diffuseRoughness == 1.0f &&
-                    stats.preExposure == 4.0f && stats.previousPreExposure == 2.0f;
+                    stats.preExposure == 4.0f && stats.previousPreExposure == 2.0f &&
+                    stats.method == RtgiSignalPackPass::Method::Relax && reblurStats.dispatched &&
+                    reblurStats.method == RtgiSignalPackPass::Method::Reblur;
         }
         if (validationResult != nullptr) {
             device.unmapBuffer(validationReadback);

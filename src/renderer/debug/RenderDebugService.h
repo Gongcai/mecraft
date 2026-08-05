@@ -29,7 +29,11 @@ enum class GpuTimerPass : size_t {
     Cloud = 10,
     Water = 11,
     Post = 12,
-    Count = 13
+    RtgiTrace = 13,
+    RtgiSignalPack = 14,
+    NrdGuidePrep = 15,
+    NrdDispatch = 16,
+    Count = 17
 };
 
 /// Identifies one explicitly recorded GPU timestamp segment.
@@ -62,6 +66,10 @@ struct GpuFrameStats {
     double ssgiMs = 0.0;
     double rtgiMs = 0.0;
     double nrdMs = 0.0;
+    double rtgiTraceMs = 0.0;
+    double rtgiSignalPackMs = 0.0;
+    double nrdGuidePrepMs = 0.0;
+    double nrdDispatchMs = 0.0;
     double lightingMs = 0.0;
     double transparentMs = 0.0;
     double volumetricMs = 0.0;

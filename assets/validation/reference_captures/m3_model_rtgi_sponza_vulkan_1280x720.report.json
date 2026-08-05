@@ -113,7 +113,7 @@
     "window_sample_count": 3
   },
   "render_settings": {
-    "content_hash": "aff15d8d38329069",
+    "content_hash": "b8afb7f84be62d98",
     "id": "m3_model_rtgi_quality",
     "version": 2
   },
@@ -191,7 +191,7 @@
   "sample_duration_seconds": 0.05000000260770321,
   "scene": "model",
   "scene_contract": {
-    "content_hash": "eb3bbf25ae7e3af5",
+    "content_hash": "f472f91c279cb22c",
     "hash_algorithm": "fnv1a64",
     "id": "m3_model_rtgi_sponza",
     "source": "assets/validation/scenes/m3_model_rtgi_sponza.json",

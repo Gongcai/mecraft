@@ -105,7 +105,7 @@
     "window_sample_count": 3
   },
   "render_settings": {
-    "content_hash": "709b7dc42c834be1",
+    "content_hash": "f102d1561423ccc6",
     "id": "m3_voxel_rtgi_quality",
     "version": 2
   },
@@ -183,7 +183,7 @@
   "sample_duration_seconds": 0.05000000260770321,
   "scene": "voxel",
   "scene_contract": {
-    "content_hash": "eb2c2fc0e213e42a",
+    "content_hash": "f555ab3a2d85b3b4",
     "hash_algorithm": "fnv1a64",
     "id": "m3_voxel_rtgi_cave",
     "source": "assets/validation/scenes/m3_voxel_rtgi_cave.json",

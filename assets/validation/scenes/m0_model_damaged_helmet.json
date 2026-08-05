@@ -3,7 +3,7 @@
   "version": 1,
   "id": "m0_model_damaged_helmet",
   "scene": "model",
-  "content_hash": "2d9879327dff178e",
+  "content_hash": "1da28c807bd28f56",
   "camera_path": {
     "source": "../camera_paths/m0_model_damaged_helmet.json",
     "id": "m0_model_damaged_helmet",
@@ -12,7 +12,7 @@
   "render_settings": {
     "id": "m0_model_render_settings",
     "version": 1,
-    "content_hash": "d3dc2b31ae5c8cb1"
+    "content_hash": "26b5990e49b5e2a8"
   },
   "environment": {
     "time_of_day_seconds": 300.0,

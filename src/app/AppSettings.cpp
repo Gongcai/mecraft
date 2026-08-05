@@ -225,6 +225,7 @@ void applyNrdSettings(const json& j, NrdSettings& s) {
     readFloat(j, "denoisingRange", s.denoisingRange);
     readFloat(j, "disocclusionThreshold", s.disocclusionThreshold);
     readFloat(j, "disocclusionThresholdAlternate", s.disocclusionThresholdAlternate);
+    readInt(j, "relaxAtrousIterations", s.relaxAtrousIterations);
     readFloat(j, "reblurHitDistanceConstantScale", s.reblurHitDistanceConstantScale);
     readFloat(j, "reblurHitDistanceViewZScale", s.reblurHitDistanceViewZScale);
     readFloat(j, "reblurHitDistanceRoughnessScale", s.reblurHitDistanceRoughnessScale);
@@ -237,6 +238,7 @@ json toJson(const NrdSettings& s) {
         {"denoisingRange", s.denoisingRange},
         {"disocclusionThreshold", s.disocclusionThreshold},
         {"disocclusionThresholdAlternate", s.disocclusionThresholdAlternate},
+        {"relaxAtrousIterations", s.relaxAtrousIterations},
         {"reblurHitDistanceConstantScale", s.reblurHitDistanceConstantScale},
         {"reblurHitDistanceViewZScale", s.reblurHitDistanceViewZScale},
         {"reblurHitDistanceRoughnessScale", s.reblurHitDistanceRoughnessScale},

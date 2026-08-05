@@ -68,7 +68,7 @@ namespace {
            pipelineSource.find("traceSettings.temporalSamplingEnabled = nrdEnabled;") != std::string::npos &&
            pipelineSource.find("traceSettings.temporalSampleIndex = m_rtgiTemporalSampleIndex;") !=
                std::string::npos &&
-           pipelineSource.find("methodSettings = ::nrd::RelaxSettings{};") != std::string::npos &&
+           pipelineSource.find("relaxSettings.atrousIterationNum =") != std::string::npos &&
            pipelineSource.find("reblurSettings.enableAntiFirefly = true;") != std::string::npos &&
            pipelineSource.find("const bool nrdEnabled = rtgiEnabled && settings.nrd.enabled;") != std::string::npos &&
            pipelineSource.find("traceSettings.celestialRadianceScale = settings.postProcess.directSunStrength * 64.0f;") !=

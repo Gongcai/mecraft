@@ -297,7 +297,7 @@ bool RtgiTracePass::recordTrace(RhiCommandList& commandList, const FrameContext&
         (settings.terrainSpecularMapsEnabled ? renderer::contracts::kRtgiSecondaryLightingTerrainSpecularMapBit : 0u);
 
     const GpuTimerSegmentToken gpuTimer = ctx.debugService != nullptr
-                                              ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::Rtgi)
+                                              ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::RtgiTrace)
                                               : GpuTimerSegmentToken{};
     commandList.bufferBarrier(
         {m_secondaryLightingBuffer, RhiResourceState::UniformBuffer, RhiResourceState::TransferDst});

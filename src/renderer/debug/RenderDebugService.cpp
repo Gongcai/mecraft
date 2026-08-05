@@ -18,6 +18,10 @@ double gpuTimerPassMilliseconds(const GpuFrameStats& stats, const GpuTimerPass p
     case GpuTimerPass::Ssgi: return stats.ssgiMs;
     case GpuTimerPass::Rtgi: return stats.rtgiMs;
     case GpuTimerPass::Nrd: return stats.nrdMs;
+    case GpuTimerPass::RtgiTrace: return stats.rtgiTraceMs;
+    case GpuTimerPass::RtgiSignalPack: return stats.rtgiSignalPackMs;
+    case GpuTimerPass::NrdGuidePrep: return stats.nrdGuidePrepMs;
+    case GpuTimerPass::NrdDispatch: return stats.nrdDispatchMs;
     case GpuTimerPass::Lighting: return stats.lightingMs;
     case GpuTimerPass::Transparent: return stats.transparentMs;
     case GpuTimerPass::Volumetric: return stats.volumetricMs;
@@ -28,6 +32,11 @@ double gpuTimerPassMilliseconds(const GpuFrameStats& stats, const GpuTimerPass p
     case GpuTimerPass::Count: break;
     }
     std::abort();
+}
+
+bool gpuTimerPassIncludedInTrackedTotal(const GpuTimerPass pass) {
+    return pass != GpuTimerPass::RtgiTrace && pass != GpuTimerPass::RtgiSignalPack &&
+           pass != GpuTimerPass::NrdGuidePrep && pass != GpuTimerPass::NrdDispatch;
 }
 
 GpuTimingPercentiles calculatePercentiles(const std::array<double, GpuTimingHistory::kCapacity>& samples,
@@ -62,6 +71,10 @@ const char* gpuTimerPassName(const GpuTimerPass pass) {
     case GpuTimerPass::Cloud: return "Cloud";
     case GpuTimerPass::Water: return "Water";
     case GpuTimerPass::Post: return "Post";
+    case GpuTimerPass::RtgiTrace: return "RTGI.Trace";
+    case GpuTimerPass::RtgiSignalPack: return "RTGI.SignalPack";
+    case GpuTimerPass::NrdGuidePrep: return "NRD.GuidePrep";
+    case GpuTimerPass::NrdDispatch: return "NRD.Dispatch";
     case GpuTimerPass::Count: break;
     }
     std::abort();
@@ -88,7 +101,9 @@ bool GpuTimingHistory::record(const GpuFrameStats& stats) {
             return false;
         }
         passValues[passIndex] = milliseconds;
-        totalMs += milliseconds;
+        if (gpuTimerPassIncludedInTrackedTotal(pass)) {
+            totalMs += milliseconds;
+        }
     }
     for (size_t passIndex = 0u; passIndex < passValues.size(); ++passIndex) {
         m_passSamples[passIndex][m_nextSample] = passValues[passIndex];
@@ -278,8 +293,12 @@ void RenderDebugService::beginFrame(RhiCommandList& commandList) {
             m_gpuFrameStats.shadowMs = readMs(GpuTimerPass::Shadow);
             m_gpuFrameStats.ssaoMs = readMs(GpuTimerPass::Ssao);
             m_gpuFrameStats.ssgiMs = readMs(GpuTimerPass::Ssgi);
-            m_gpuFrameStats.rtgiMs = readMs(GpuTimerPass::Rtgi);
-            m_gpuFrameStats.nrdMs = readMs(GpuTimerPass::Nrd);
+            m_gpuFrameStats.rtgiTraceMs = readMs(GpuTimerPass::RtgiTrace);
+            m_gpuFrameStats.rtgiSignalPackMs = readMs(GpuTimerPass::RtgiSignalPack);
+            m_gpuFrameStats.nrdGuidePrepMs = readMs(GpuTimerPass::NrdGuidePrep);
+            m_gpuFrameStats.nrdDispatchMs = readMs(GpuTimerPass::NrdDispatch);
+            m_gpuFrameStats.rtgiMs = m_gpuFrameStats.rtgiTraceMs + m_gpuFrameStats.rtgiSignalPackMs;
+            m_gpuFrameStats.nrdMs = m_gpuFrameStats.nrdGuidePrepMs + m_gpuFrameStats.nrdDispatchMs;
             m_gpuFrameStats.lightingMs = readMs(GpuTimerPass::Lighting);
             m_gpuFrameStats.transparentMs = readMs(GpuTimerPass::Transparent);
             m_gpuFrameStats.volumetricMs = readMs(GpuTimerPass::Volumetric);

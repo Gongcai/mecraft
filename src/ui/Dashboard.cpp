@@ -1051,7 +1051,11 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub& render, Re
             ImGui::Text("GPU SSAO: %.3f ms", gpuStats.ssaoMs);
             ImGui::Text("GPU SSGI: %.3f ms", gpuStats.ssgiMs);
             ImGui::Text("GPU RTGI: %.3f ms", gpuStats.rtgiMs);
+            ImGui::Text("  Trace: %.3f ms  Signal Pack: %.3f ms", gpuStats.rtgiTraceMs,
+                        gpuStats.rtgiSignalPackMs);
             ImGui::Text("GPU NRD: %.3f ms", gpuStats.nrdMs);
+            ImGui::Text("  Guide Prep: %.3f ms  Dispatch: %.3f ms", gpuStats.nrdGuidePrepMs,
+                        gpuStats.nrdDispatchMs);
             ImGui::Text("GPU Lighting: %.3f ms", gpuStats.lightingMs);
             ImGui::Text("GPU Transparent: %.3f ms", gpuStats.transparentMs);
             ImGui::Text("GPU Volumetric: %.3f ms", gpuStats.volumetricMs);

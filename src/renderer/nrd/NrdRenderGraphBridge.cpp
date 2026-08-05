@@ -863,7 +863,7 @@ NrdGraphDispatchResult NrdRenderGraphBridge::addGraphDispatches(RenderGraph& gra
                          debugService](RgPassContext& context) {
             RhiCommandList& commandList = context.commandList();
             const GpuTimerSegmentToken gpuTimer = debugService != nullptr
-                                                      ? debugService->beginGpuTimer(commandList, GpuTimerPass::Nrd)
+                                                      ? debugService->beginGpuTimer(commandList, GpuTimerPass::NrdDispatch)
                                                       : GpuTimerSegmentToken{};
             const bool recorded = implementation->recordDispatch(context, dispatchIndex, dispatch);
             if (debugService != nullptr) {

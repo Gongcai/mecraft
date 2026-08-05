@@ -229,7 +229,9 @@ M1 与 M2 可并行开发，但公共 `GpuMaterial`、`GpuSceneGeometry` 与 Sta
    NRD 4.17 的默认 `(A=3, B=0.1, C=20)` 和 Diffuse Roughness `1` 归一化距离并将 RGB 转为 YCoCg；
    Sky/Translucent 明确输出全零。Raw Radiance、Hit Distance 或 Depth 出现 NaN/Inf，或 Radiance 为负时，
    两种输出均清零，`RtgiValidation` 保留 Candidate/Confirmed 计数、改写为 `NonFinite` 并清除 Identity
-   Hash。CPU 契约、106 个 Shader 编译用例与真实 Vulkan Trace/Pack/非法输入回读均已通过。）
+   Hash。Signal Pack 已改为按 Method 编译专用 Pipeline，RELAX 不再计算或写出 REBLUR 信号，REBLUR
+   也不再计算或写出 RELAX 信号。CPU 契约、109 个 Shader 编译用例与真实 Vulkan
+   Trace/Pack/非法输入回读均已通过。）
 6. NRD 4.17.3 Build、License、RHI Pipeline 与 Render Graph Bridge。（实现完成：固定上游
    `v4.17.3`/`792eff196afdd350fd9c3f862119017ccb438a0e`，仓库内离线保存源码、许可证、Notice、
    31 个 SPIR-V Blob 及逐文件 SHA-256；RHI 已支持 SPIR-V Bytecode 校验与反射、`R8_UINT`/
@@ -240,7 +242,8 @@ M1 与 M2 可并行开发，但公共 `GpuMaterial`、`GpuSceneGeometry` 与 Sta
    已接入 Bridge 输出；全局 Pre-exposure producer 与细分 History Reset 契约仍属于第 8 项。）
 7. RELAX_DIFFUSE Quality、REBLUR_DIFFUSE Performance。（实现完成：用户设置显式选择 Method，运行时
    按 Method 重建固定 NRD 实例并选择独立的线性 RGB/真实 Hit Distance 或 YCoCg/归一化 Hit Distance
-   输入；Deferred Lighting 按输出编码解包，运行时不会依据 GPU 时间更改 Method。）
+   输入；Deferred Lighting 按输出编码解包，运行时不会依据 GPU 时间更改 Method。RELAX A-Trous
+   迭代数已开放为 `2..8` 的显式设置，默认保持 `5`。）
 8. Non-jittered Matrix、2.5D Motion、Pre-exposure 转换和 History Reset。（实现完成：当前/上一帧
    Non-jittered Matrix 已进入 NRD Common Settings；当前/上一帧 Pre-exposure 已进入 FrameContext 与
    TemporalFrameInput；RTGI Raw 写入当前 Pre-exposed 域，Signal Pack 进入 NRD 前去曝光。独立
@@ -259,7 +262,8 @@ M1 与 M2 可并行开发，但公共 `GpuMaterial`、`GpuSceneGeometry` 与 Sta
    去曝光稳定。固定的 Vulkan shader 编译、Temporal Contract、静态场景和 RTGI smoke 已通过。）
 9. RTGI/NRD Debug View、Timestamp、Reference Capture。（实现完成：RTGI Trace/Signal Pack 与 NRD Guide/
    全部 SDK Dispatch 已纳入独立 GPU Timestamp 阶段，Dashboard、固定 p50/p95/p99 窗口和 Benchmark JSON
-   均分别发布 RTGI/NRD 耗时；信号 Debug View 已接入 Deferred Debug View 89-92（Raw Radiance、
+   已发布 `RTGI.Trace`、`RTGI.SignalPack`、`NRD.GuidePrep`、`NRD.Dispatch` 细分耗时，并保留不重复
+   计入总时间的 RTGI/NRD 聚合项；信号 Debug View 已接入 Deferred Debug View 89-92（Raw Radiance、
    First-bounce Hit Distance、Trace Classification、Candidate/Confirmed 计数），RTGI 关闭时以恒有效
    目标替换绑定；新增 `m3_voxel_rtgi_cave` 与 `m3_model_rtgi_sponza` 的 Vulkan RELAX 基准图、运行报告和
    `rtgi_reference_capture_manifest_test`，manifest 同时锁定场景/Camera Path/profile/image 字节身份，
@@ -278,7 +282,8 @@ Variance/SSIM/95th HDR error、Ghost/Disocclusion 像素统计尚未接入现有
 7.281 ms（RTGI 2.611 ms、NRD 2.230 ms、Lighting 0.845 ms），1920×1080 的总 GPU p95 为
 14.170 ms（RTGI 5.119 ms、NRD 4.142 ms、Lighting 1.911 ms）。1080p 总时间已经低于 16.67 ms
 预算，RTGI、NRD 与 Lighting 分项仍是主要优化目标。该观测仍需补齐固定场景契约、硬件与渲染设置记录，
-再进入性能矩阵的正式 1000 帧报告。
+再进入性能矩阵的正式 1000 帧报告。下一轮先采集四个新增细分阶段，并固定比较 RELAX A-Trous 5/3；
+Lighting 同时记录火把数量、Cluster 覆盖与索引数量，定位逐像素灯光、阴影采样或 Cluster 覆盖成本。
 
 ## 7. M4：GPU Culling、LOD 与动画
 
