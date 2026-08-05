@@ -1,4 +1,5 @@
 #include "renderer/contracts/RtgiSamplingContract.h"
+#include "renderer/core/RenderSettings.h"
 
 #include <glm/geometric.hpp>
 
@@ -71,7 +72,7 @@ namespace {
            traceSource.find("surface.albedo * (1.0 - surface.metalness)") == std::string::npos &&
            traceSource.find("optional local-light shadow resource must not erase") != std::string::npos &&
            traceSource.find("Local lights are optional secondary transport") != std::string::npos &&
-           pipelineSource.find("const bool rtgiTraceInspection = settings.debug.viewMode >= 89") !=
+           pipelineSource.find("const bool rtgiTraceInspection = isRtgiTraceInspectionView(settings.debug.viewMode);") !=
                std::string::npos &&
            pipelineSource.find("traceSettings.temporalSamplingEnabled = nrdEnabled && !rtgiTraceInspection;") !=
                std::string::npos &&
@@ -94,6 +95,11 @@ int main() {
     using namespace renderer::contracts;
 
     bool valid = true;
+    valid = requireTrue(!isRtgiTraceInspectionView(88) && isRtgiTraceInspectionView(89) &&
+                            isRtgiTraceInspectionView(90) && isRtgiTraceInspectionView(91) &&
+                            isRtgiTraceInspectionView(92) && !isRtgiTraceInspectionView(93),
+                        "RTGI trace inspection views must remain the exact 89-92 range") &&
+            valid;
     valid = requireTrue(rtgiSampleHash(0u) == 0u && rtgiSampleHash(1u) == 1753845952u &&
                             rtgiSampleHash(0xffffffffu) == 1734902346u,
                         "RTGI sample hash must remain bit-exact") &&

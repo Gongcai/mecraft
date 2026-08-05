@@ -948,7 +948,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
         ownerRequiresTemporalReset(TemporalHistoryOwner::ScreenSpace, ctx.temporalResetReasons);
     const bool nrdTemporalReset =
         ownerRequiresTemporalReset(TemporalHistoryOwner::NrdDiffuse, ctx.temporalResetReasons);
-    const bool rtgiTraceInspection = settings.debug.viewMode >= 89 && settings.debug.viewMode <= 92;
+    const bool rtgiTraceInspection = isRtgiTraceInspectionView(settings.debug.viewMode);
     const bool rtgiTraceInspectionChanged = rtgiTraceInspection != m_rtgiTraceInspectionActive;
     m_rtgiTraceInspectionActive = rtgiTraceInspection;
     if (!nrdEnabled || nrdTemporalReset || rtgiTraceInspectionChanged) {

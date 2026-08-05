@@ -151,6 +151,8 @@ Hash；Hit Distance 保存在 `RGBA16F` 输出 Alpha。Committed Hit 已进一�
 - Debug View 89–92 固定 RTGI 采样相位，并在进入和退出检查模式时清空 NRD 历史。Hit Distance
   仅对有效 Hit 显示连续距离热图；Miss、Sky、Translucent 与 Non-finite 使用固定分类色，避免
   `65504` Miss 距离与零距离无效结果伪装成跨帧几何跳变。
+- Debug View 89–92 同时将 FrameContext 投影抖动固定为零；进入和退出时以 `Method` 原因重置
+  NRD、屏幕空间与上采样器历史，避免 FSR/TAA 子像素覆盖变化被误判为 BLAS Hit/Miss 跳变。
 - 异形方块使用其真实三角形网格。
 - Greedy Quad 保留每 Primitive 的 Face、Tile、UV Repeat、Material ID 与 Tint 数据。
 

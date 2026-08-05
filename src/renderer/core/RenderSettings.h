@@ -312,6 +312,13 @@ struct DebugSettings {
     bool disableGreedyMeshing = false;
 };
 
+/// Determines whether the selected view inspects raw RTGI trace products.
+/// @param debugViewMode Deferred debug-view identifier.
+/// @return True for RTGI raw radiance, hit distance, classification, and candidate views.
+[[nodiscard]] constexpr bool isRtgiTraceInspectionView(const int debugViewMode) {
+    return debugViewMode >= 89 && debugViewMode <= 92;
+}
+
 /// Fog settings
 struct FogSettings {
     bool enabled = true;

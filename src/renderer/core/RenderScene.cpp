@@ -786,6 +786,10 @@ void RenderScene::setSettings(const RenderSettings& settings) {
         // owner-scoped reset keeps scene-domain and upscaler histories alive.
         resetReasons = resetReasons | TemporalResetReason::DenoiserMethod;
     }
+    if (isRtgiTraceInspectionView(normalizedSettings.debug.viewMode) !=
+        isRtgiTraceInspectionView(m_settings.debug.viewMode)) {
+        resetReasons = resetReasons | TemporalResetReason::Method;
+    }
 
     m_settings = normalizedSettings;
 
@@ -1272,7 +1276,13 @@ RenderScene::buildFrameContext(const IWorldView& worldView, const Camera& camera
     ctx.shaderTime = static_cast<float>(std::fmod(visualTime, 8192.0));
     ctx.preExposure = resolveScenePreExposure();
 
-    if (m_settings.upscale.type == TemporalUpscalerType::Fsr31) {
+    const bool rtgiTraceInspection = isRtgiTraceInspectionView(m_settings.debug.viewMode);
+    if (rtgiTraceInspection) {
+        // Raw trace diagnostics compare identical primary surfaces and rays.
+        // Temporal upscalers remain selected, but their projection jitter is
+        // removed until inspection ends and all histories restart.
+        ctx.jitter = {};
+    } else if (m_settings.upscale.type == TemporalUpscalerType::Fsr31) {
 #if defined(MECRAFT_ENABLE_FSR31)
         const Fsr31JitterResult jitter =
             queryFsr31Jitter(ctx.frameIndex, ctx.temporalExtents.renderExtent, ctx.temporalExtents.outputExtent);
