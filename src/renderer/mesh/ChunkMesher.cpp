@@ -173,7 +173,7 @@ constexpr int FACE_RIGHT = 5;
 constexpr float CROSS_BIOME_TINT_MARKER = -1.0f;
 constexpr float CROSS_FLOWER_MARKER = -2.0f;
 constexpr float kNormalizedQuantizationScale = 180.0f;
-constexpr float kGreedyFaceOverlapEpsilon = 1.0f / 1024.0f;
+constexpr float kAxisAlignedFaceOverlapEpsilon = 1.0f / 1024.0f;
 
 constexpr std::array<IVec3, 6> kFaceNormals = {{{0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1}, {-1, 0, 0}, {1, 0, 0}}};
 
@@ -191,6 +191,7 @@ constexpr std::array<glm::vec3, 4> kCrossQuadB = {
 
 void resetMeshData(ChunkMeshData& meshData) {
     meshData.opaqueVertices.clear();
+    meshData.rayTracingOpaqueVertices.clear();
     meshData.cutoutVertices.clear();
     meshData.cutoutDistanceVertices.clear();
     meshData.transparentVertices.clear();
@@ -200,6 +201,7 @@ void resetMeshData(ChunkMeshData& meshData) {
     meshData.transparentFaceCountBeforeGreedy = 0;
     meshData.transparentFaceCountAfterGreedy = 0;
     meshData.opaqueVertexCount = 0;
+    meshData.rayTracingGeometryBuilt = false;
     meshData.buildTimeMs = 0.0;
     meshData.hasBounds = false;
     meshData.boundsMin = glm::vec3(0.0f);
@@ -1121,7 +1123,7 @@ std::array<glm::vec3, 4> buildGreedyFaceCorners(const int face, const int x, con
     }
 }
 
-void expandGreedyFaceCornersInPlane(std::array<glm::vec3, 4>& corners, const int face) {
+void expandAxisAlignedFaceCornersInPlane(std::array<glm::vec3, 4>& corners, const int face) {
     glm::vec3 center(0.0f);
     for (const glm::vec3& corner : corners) {
         center += corner;
@@ -1129,7 +1131,7 @@ void expandGreedyFaceCornersInPlane(std::array<glm::vec3, 4>& corners, const int
     center *= 0.25f;
 
     const auto expandAxis = [](float& value, const float centerValue) {
-        value += (value >= centerValue) ? kGreedyFaceOverlapEpsilon : -kGreedyFaceOverlapEpsilon;
+        value += (value >= centerValue) ? kAxisAlignedFaceOverlapEpsilon : -kAxisAlignedFaceOverlapEpsilon;
     };
 
     switch (face) {
@@ -1174,7 +1176,7 @@ void emitGreedyFace(std::vector<BlockVertex>& vertices, ChunkMeshData& meshData,
     // Greedy quads can form T-junctions against neighbouring smaller quads.
     // Expanding them by a tiny amount in-plane hides raster cracks without
     // changing the face depth.
-    expandGreedyFaceCornersInPlane(corners, face);
+    expandAxisAlignedFaceCornersInPlane(corners, face);
     const std::array<glm::vec2, 4> faceUV =
         buildFaceUv(static_cast<float>(width), static_cast<float>(height), cell.renderData.uvQuarterTurns);
 
@@ -1201,6 +1203,16 @@ void emitUnitFace(std::vector<BlockVertex>& vertices, const glm::vec3& pos, cons
         corners[i] = pos + kFaceCorners[static_cast<size_t>(face)][i];
     }
     appendFaceVertices(vertices, corners, faceUV, face, renderData);
+}
+
+void emitRayTracingUnitFace(std::vector<BlockVertex>& vertices, const FaceCell& cell, const int face) {
+    std::array<glm::vec3, 4> corners = buildGreedyFaceCorners(face, cell.x, cell.y, cell.z, 1, 1);
+    // Adjacent unit quads share the same integer-grid edge. A small in-plane
+    // overlap makes that shared edge conservative for triangle intersection
+    // without introducing the T-junctions created by variable-size quads.
+    expandAxisAlignedFaceCornersInPlane(corners, face);
+    const std::array<glm::vec2, 4> faceUV = buildFaceUv(1.0f, 1.0f, cell.renderData.uvQuarterTurns);
+    appendFaceVertices(vertices, corners, faceUV, face, cell.renderData);
 }
 
 void emitCustomFace(std::vector<BlockVertex>& vertices, const std::array<glm::vec3, 4>& corners, const int face,
@@ -2074,6 +2086,9 @@ void buildOpaqueGreedyPlane(const SubChunkMeshingSnapshot& snapshot, ChunkMeshDa
                 cell.renderData = buildFaceRenderData(snapshot, stateId, *info.def, info, x, y, z, Face);
                 cell.key = buildFaceMergeKey(stateId, cell.renderData);
                 ++meshData.opaqueFaceCountBeforeGreedy;
+                if (meshData.rayTracingGeometryBuilt) {
+                    emitRayTracingUnitFace(meshData.rayTracingOpaqueVertices, cell, Face);
+                }
             }
         }
 
@@ -3444,11 +3459,16 @@ void ChunkMesher::buildSubChunkMeshData(const SubChunkMeshingSnapshot& snapshot,
 
     resetMeshData(meshData);
     reserveDefaultMeshDataCapacity(meshData);
+    meshData.rayTracingGeometryBuilt = snapshot.buildRayTracingGeometry;
+    if (meshData.rayTracingGeometryBuilt) {
+        meshData.rayTracingOpaqueVertices.reserve(4096);
+    }
     const auto startTime = std::chrono::steady_clock::now();
 
     const SubChunkMeshClassPresence presence = scanMeshClassPresence(snapshot);
 
     buildOpaqueGreedyFaces(snapshot, meshData, presence);
+    const size_t opaqueCubeRasterVertexCount = meshData.opaqueVertices.size();
     buildCutoutGreedyFaces(snapshot, meshData, presence);
     buildTransparentGreedyFaces(snapshot, meshData, presence);
     WaterTopMask mergedWaterTopFaces{};
@@ -3500,6 +3520,12 @@ void ChunkMesher::buildSubChunkMeshData(const SubChunkMeshingSnapshot& snapshot,
                 }
             }
         }
+    }
+
+    if (meshData.rayTracingGeometryBuilt && meshData.opaqueVertices.size() > opaqueCubeRasterVertexCount) {
+        meshData.rayTracingOpaqueVertices.insert(meshData.rayTracingOpaqueVertices.end(),
+                                                 meshData.opaqueVertices.begin() + opaqueCubeRasterVertexCount,
+                                                 meshData.opaqueVertices.end());
     }
 
     meshData.opaqueVertexCount = static_cast<uint32_t>(meshData.opaqueVertices.size());

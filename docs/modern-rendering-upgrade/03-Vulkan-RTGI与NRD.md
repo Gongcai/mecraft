@@ -138,16 +138,20 @@ Hash；Hit Distance 保存在 `RGBA16F` 输出 Alpha。Committed Hit 已进一�
 
 ### 4.1 体素区块 BLAS
 
-以实际渲染网格作为 BLAS 输入，不对每个方块创建 Instance。建议粒度是现有可独立修订
-和上传的 Render Chunk/SubChunk Mesh：
+以与光栅网格同一修订生成的独立 RT 表面作为 BLAS 输入，不对每个方块创建 Instance。BLAS
+粒度保持为可独立修订和上传的 SubChunk Mesh：
 
 - Opaque Geometry 使用 Opaque Flag。
 - Cutout Geometry 不设置 Opaque Flag，Ray Query Candidate 执行 Alpha Test。
 - Water/Glass/Blend Geometry 不进入首版 Diffuse RTGI Solid Mask，但表面仍接收 RTGI。
+- 完整不透明方块只为可见表面生成 `1×1` 单位 Quad；相邻单位面共享体素格边，不使用会产生
+  T-Junction 的可变尺寸贪心矩形。异形不透明方块继续使用其真实三角形网格。
+- SubChunk Snapshot 读取六向一体素 Halo，边界两侧分别裁掉被实体邻居遮挡的面；方块编辑、区块
+  加载与卸载会同时标记受影响的边界 SubChunk。单位面不需要跨 BLAS 共享顶点或跨区块合并。
 - 体素主表面的 GI 方向围绕轴对齐几何法线采样，法线贴图只参与 BRDF，避免扰动后的采样
-  半球产生贴近实体表面的射线并穿过 Greedy Mesh 接缝。
-- Terrain BLAS 使用独立顶点副本将不透明面沿几何法线外扩 `1/2048` 方块；结合 Greedy Quad
-  的面内重叠，封闭垂直面、T-junction 与 SubChunk 边界的射线缝隙。光栅网格与 Cutout 几何不变。
+  半球产生贴近实体表面的射线并穿过体素边缘。
+- RT 单位面在面内重叠 `1/1024` 方块，BLAS 顶点副本再沿几何法线外扩 `1/2048` 方块，保守
+  覆盖同平面共享边和垂直面交线。光栅贪心网格与 Cutout 几何不变。
 - RTGI Ray Origin Bias 的契约下限为 `1/1024` 方块，即 Terrain BLAS 壳厚的两倍。Shader、设置
   规范化、UI 与运行时校验共享该常量，主射线和可见性射线不得从外扩后的实体壳内部发射。
 - Debug View 89–92 固定 RTGI 采样相位，并在进入和退出检查模式时清空 NRD 历史。Hit Distance
@@ -155,8 +159,12 @@ Hash；Hit Distance 保存在 `RGBA16F` 输出 Alpha。Committed Hit 已进一�
   `65504` Miss 距离与零距离无效结果伪装成跨帧几何跳变。
 - Debug View 89–92 同时将 FrameContext 投影抖动固定为零；进入和退出时以 `Method` 原因重置
   NRD、屏幕空间与上采样器历史，避免 FSR/TAA 子像素覆盖变化被误判为 BLAS Hit/Miss 跳变。
-- 异形方块使用其真实三角形网格。
-- Greedy Quad 保留每 Primitive 的 Face、Tile、UV Repeat、Material ID 与 Tint 数据。
+- 每个 RT 单位 Quad 保留自身方块的 Face、Tile、UV、Material ID、Tint、AO 与光照数据。不同方块
+  类型不能直接合并为一个 Primitive；只有把这些属性改为命中后按体素坐标查询，才允许跨材质整面合并。
+
+当前独立单位面是正确性基线。下一轮需记录 RT 顶点数、BLAS Build/Compaction 时间、Geometry/BLAS
+字节和 Trace 时间；需要压缩时采用带边约束的共形矩形划分或体素 AABB/DDA，不能重新使用会产生
+T-Junction 的普通贪心网格。
 
 区块生命周期：
 
@@ -463,7 +471,8 @@ RT Distance 是公开设置，体素雾距离与 RT Distance 的关系通过画�
 ### 7.3 小型与重复几何
 
 Cross Plant、Torch、Fence、Slab、Stair 等使用实际 Mesh BLAS。大量相同方块实体共享
-BLAS；普通地形继续使用区块合并网格，避免每方块 Instance 造成 TLAS 膨胀。
+BLAS；普通完整方块在每个 SubChunk BLAS 内使用可见单位面，仍然不创建每方块 TLAS Instance，
+因此不会按方块数量膨胀 TLAS。
 
 ### 7.4 昼夜与天气
 

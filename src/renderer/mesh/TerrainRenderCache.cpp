@@ -469,6 +469,7 @@ void TerrainRenderCache::submitMeshingJobs(const IWorldView& worldView, const gl
         if (!job.snapshot) {
             continue;
         }
+        job.snapshot->buildRayTracingGeometry = m_blasCache.supported();
 
         const int priority = candidate.interactiveLightDirty ? (-1000000000 + static_cast<int>(candidate.distanceSq))
                                                              : static_cast<int>(candidate.distanceSq);
@@ -614,9 +615,14 @@ bool TerrainRenderCache::drainMeshingResults(const IWorldView& worldView, RhiCom
 
             TerrainBlasGeometry blasGeometry;
             if (m_blasCache.supported()) {
-                const TerrainBlasRequestResult preparation =
-                    TerrainBlasCache::prepareGeometry(result.meshData.opaqueVertices, result.meshData.cutoutVertices,
-                                                      result.meshData.cutoutDistanceVertices, blasGeometry);
+                if (!result.meshData.rayTracingGeometryBuilt) {
+                    recycleResultMeshData();
+                    succeeded = false;
+                    break;
+                }
+                const TerrainBlasRequestResult preparation = TerrainBlasCache::prepareGeometry(
+                    result.meshData.rayTracingOpaqueVertices, result.meshData.cutoutVertices,
+                    result.meshData.cutoutDistanceVertices, blasGeometry);
                 if (preparation == TerrainBlasRequestResult::InvalidGeometry) {
                     recycleResultMeshData();
                     succeeded = false;

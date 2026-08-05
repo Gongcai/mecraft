@@ -98,6 +98,7 @@ ChunkMeshData ChunkMeshingService::acquireMeshData() {
 
 void ChunkMeshingService::recycleMeshData(ChunkMeshData&& meshData) {
     meshData.opaqueVertices.clear();
+    meshData.rayTracingOpaqueVertices.clear();
     meshData.cutoutVertices.clear();
     meshData.cutoutDistanceVertices.clear();
     meshData.transparentVertices.clear();
@@ -107,6 +108,7 @@ void ChunkMeshingService::recycleMeshData(ChunkMeshData&& meshData) {
     meshData.transparentFaceCountBeforeGreedy = 0;
     meshData.transparentFaceCountAfterGreedy = 0;
     meshData.opaqueVertexCount = 0;
+    meshData.rayTracingGeometryBuilt = false;
     meshData.buildTimeMs = 0.0;
     meshData.hasBounds = false;
     meshData.boundsMin = glm::vec3(0.0f);

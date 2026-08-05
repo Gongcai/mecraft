@@ -108,7 +108,8 @@ HUD-less Color ──► Frame Generation ──► UI Composite ──► Prese
 
 体素世界必须获得完整的 RTGI、PBR、局部灯、反射、透明和时域能力：
 
-- 贪心网格的每个三角形能定位方块材质、面方向、纹理层和 UV 重复规则。
+- 光栅使用贪心网格；RT 为完整不透明方块使用共形单位面，并让每个三角形定位自身方块的材质、
+  面方向、纹理层和 UV 规则。
 - 区块网格修订号驱动 BLAS 生命周期，区块移动只改变 TLAS Instance Transform。
 - Cutout 树叶、草和异形方块在 Ray Query Candidate 阶段执行 alpha 判定。
 - 方块发光定义生成表面 Emissive，并可生成参与 Clustered Lighting 的解析光源代理。

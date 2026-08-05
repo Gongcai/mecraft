@@ -597,6 +597,63 @@ int main() {
             !meshData.cutoutDistanceVertices.empty()) {
             return fail("opaque strip should not emit transparent or cutout geometry");
         }
+        if (meshData.rayTracingGeometryBuilt || !meshData.rayTracingOpaqueVertices.empty()) {
+            return fail("ordinary raster meshing should not allocate ray-tracing geometry");
+        }
+
+        const SubChunkMeshingSnapshotPtr rayTracingSnapshot = ChunkMesher::captureSubChunkSnapshot(chunk, 2);
+        if (!rayTracingSnapshot) {
+            return fail("ray-tracing meshing should capture the populated sub-chunk");
+        }
+        rayTracingSnapshot->buildRayTracingGeometry = true;
+        const ChunkMeshData rayTracingMeshData = ChunkMesher::buildSubChunkMeshData(*rayTracingSnapshot);
+        if (!rayTracingMeshData.rayTracingGeometryBuilt ||
+            rayTracingMeshData.rayTracingOpaqueVertices.size() !=
+                static_cast<size_t>(rayTracingMeshData.opaqueFaceCountBeforeGreedy) * 6u) {
+            return fail("ray-tracing opaque geometry should retain one quad per visible voxel face");
+        }
+        if (rayTracingMeshData.rayTracingOpaqueVertices.size() <= rayTracingMeshData.opaqueVertices.size()) {
+            return fail("ray-tracing opaque geometry should remain independent from raster greedy merging");
+        }
+        constexpr float maxUnitFaceSpan = 1.0f + 2.0f / 1024.0f + 0.0001f;
+        for (size_t firstVertex = 0; firstVertex < rayTracingMeshData.rayTracingOpaqueVertices.size();
+             firstVertex += 6u) {
+            glm::vec3 minimum(std::numeric_limits<float>::max());
+            glm::vec3 maximum(std::numeric_limits<float>::lowest());
+            const int face = rayTracingMeshData.rayTracingOpaqueVertices[firstVertex].normal;
+            for (size_t vertexOffset = 0; vertexOffset < 6u; ++vertexOffset) {
+                const BlockVertex& vertex = rayTracingMeshData.rayTracingOpaqueVertices[firstVertex + vertexOffset];
+                if (vertex.normal != face) {
+                    return fail("one ray-tracing voxel quad should have one geometric face normal");
+                }
+                minimum = glm::min(minimum, glm::vec3(vertex.x, vertex.y, vertex.z));
+                maximum = glm::max(maximum, glm::vec3(vertex.x, vertex.y, vertex.z));
+            }
+            const glm::vec3 span = maximum - minimum;
+            if (span.x > maxUnitFaceSpan || span.y > maxUnitFaceSpan || span.z > maxUnitFaceSpan) {
+                return fail("ray-tracing voxel quads should never contain a greedily merged edge");
+            }
+        }
+    }
+
+    {
+        Chunk chunk(0, 0);
+        chunk.setBlock(0, 15, 0, stateForBlockName("minecraft:stone"));
+        chunk.setBlock(0, 16, 0, stateForBlockName("minecraft:stone"));
+
+        const SubChunkMeshingSnapshotPtr lowerSnapshot = ChunkMesher::captureSubChunkSnapshot(chunk, 0);
+        const SubChunkMeshingSnapshotPtr upperSnapshot = ChunkMesher::captureSubChunkSnapshot(chunk, 1);
+        if (!lowerSnapshot || !upperSnapshot) {
+            return fail("cross-section ray-tracing meshing should capture both populated sub-chunks");
+        }
+        lowerSnapshot->buildRayTracingGeometry = true;
+        upperSnapshot->buildRayTracingGeometry = true;
+        const ChunkMeshData lowerMesh = ChunkMesher::buildSubChunkMeshData(*lowerSnapshot);
+        const ChunkMeshData upperMesh = ChunkMesher::buildSubChunkMeshData(*upperSnapshot);
+        if (lowerMesh.opaqueFaceCountBeforeGreedy != 5u || upperMesh.opaqueFaceCountBeforeGreedy != 5u ||
+            lowerMesh.rayTracingOpaqueVertices.size() != 30u || upperMesh.rayTracingOpaqueVertices.size() != 30u) {
+            return fail("ray-tracing geometry should cull the shared face across a sub-chunk boundary");
+        }
     }
 
     {

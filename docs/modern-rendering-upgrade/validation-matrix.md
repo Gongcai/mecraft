@@ -61,7 +61,7 @@ ID + 后端”验证唯一性。七个 v2 场景的 Vulkan 捕获均启用 Valid
 | GGX IBL | V01 | M01/M02 | Roughness Mip/DFG View | 扫描连续，高粗糙金属能量稳定 |
 | Reflection Probe | V02/V07 | M07 | Probe ID/Weight | 室内外过渡连续，Box Projection 正确 |
 | Bindless Material | V03/V07 | M05 | Slot/Generation Validation | 无悬空槽和材质错绑 |
-| Chunk BLAS | V05/V06 | 不适用 | BLAS Revision/Overlay | 与光栅几何同代重合 |
+| Chunk BLAS | V05/V06 | 不适用 | BLAS Revision/Overlay | 与光栅同修订、表面覆盖一致且无 T-Junction 漏光 |
 | Model BLAS/TLAS | V06 实体 | M02/M05 | Instance Custom ID | 多实例共享，Transform 正确 |
 | Cutout Ray Query | V03 | M03 Alpha Mask | Candidate/Confirmed Counter | 与光栅 Alpha Cutoff 一致 |
 | Raw RTGI | V01/V02 | M03 | Hit/Miss/Radiance/Distance | 离屏能量稳定、无 NaN/Inf |

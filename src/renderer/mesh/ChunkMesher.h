@@ -66,6 +66,9 @@ struct SubChunkMeshingSnapshot {
     bool isTopSection = false;
     // Whether this is the bottommost sub-chunk
     bool isBottomSection = false;
+    // Builds a topology-conforming opaque surface for hardware ray tracing.
+    // Raster geometry remains greedily merged independently of this surface.
+    bool buildRayTracingGeometry = false;
 };
 
 using SubChunkMeshingSnapshotPtr = std::shared_ptr<SubChunkMeshingSnapshot>;
@@ -73,6 +76,7 @@ using SubChunkMeshingSnapshotPtr = std::shared_ptr<SubChunkMeshingSnapshot>;
 struct ChunkMeshData {
 
     std::vector<BlockVertex> opaqueVertices;
+    std::vector<BlockVertex> rayTracingOpaqueVertices;
     std::vector<BlockVertex> cutoutVertices;
     std::vector<BlockVertex> cutoutDistanceVertices;
     std::vector<BlockVertex> transparentVertices;
@@ -82,6 +86,7 @@ struct ChunkMeshData {
     uint32_t transparentFaceCountBeforeGreedy = 0;
     uint32_t transparentFaceCountAfterGreedy = 0;
     uint32_t opaqueVertexCount = 0;
+    bool rayTracingGeometryBuilt = false;
     double buildTimeMs = 0.0;
     bool hasBounds = false;
     glm::vec3 boundsMin = glm::vec3(0.0f);

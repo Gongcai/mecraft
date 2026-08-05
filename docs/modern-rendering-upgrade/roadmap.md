@@ -141,8 +141,9 @@ M1 与 M2 可并行开发，但公共 `GpuMaterial`、`GpuSceneGeometry` 与 Sta
    Submission Sequence 引用盖章、Backing Buffer 依赖传播、AS 先于 Buffer 的延迟释放顺序，以及
    OpenGL 对 AS Buffer/Descriptor/资源/命令/Shader 资源的明确拒绝均已落地。）
 6. 体素 Render Chunk/SubChunk BLAS Build/Compaction/Revision。（实现完成：新增独立
-   `TerrainBlasCache`，以 SubChunk 局部 `BlockVertex` 三角形生成 Opaque 与非 Opaque Cutout
-   Geometry，Water/Transparent 不进入首版 Solid Mask；RT Geometry Buffer 固定具备 Storage、
+   `TerrainBlasCache`，完整不透明方块以 SubChunk 局部、邻居感知的可见单位面生成共形 Opaque
+   Geometry，异形方块保留真实网格，Cutout 生成非 Opaque Geometry；Water/Transparent 不进入首版
+   Solid Mask。光栅贪心网格不再作为 Opaque BLAS 输入；RT Geometry Buffer 固定具备 Storage、
    Device Address、AS Build Input 与 Transfer Dst 用途。调度器按请求序号和 SubChunk Stable Key
    确定性执行每帧 Build 数、Geometry 字节、Primitive 数及 Compaction 数预算，超预算首任务可独占
    一帧。Build、Compacted Size Query、Compact Copy、Submission Token、查询槽隔离与延迟销毁已形成
