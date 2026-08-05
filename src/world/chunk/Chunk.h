@@ -82,8 +82,12 @@ public:
     [[nodiscard]] SubChunk* getOrCreateSubChunk(int scy);
 
     [[nodiscard]] uint8_t getPackedLight(int x, int y, int z) const;
-    bool replacePackedLight(const uint8_t* data, size_t size, uint32_t* outDirtySubChunkMask = nullptr);
-    bool replacePackedLightSection(int scy, const uint8_t* data, size_t size);
+    // Replaces packed light data and optionally reports changed sub-chunks and horizontal borders.
+    bool replacePackedLight(const uint8_t* data, size_t size, uint32_t* outDirtySubChunkMask = nullptr,
+                            uint8_t* outChangedBoundaryMask = nullptr);
+    // Replaces one light section and optionally reports changed horizontal borders.
+    bool replacePackedLightSection(int scy, const uint8_t* data, size_t size,
+                                   uint8_t* outChangedBoundaryMask = nullptr);
 
     [[nodiscard]] uint64_t getLightRevision() const { return m_lightRevision; }
     uint64_t bumpLightRevision() { return ++m_lightRevision; }

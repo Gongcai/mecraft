@@ -188,6 +188,36 @@ static void testNeighborLinkingDirtiesExistingBorders() {
     std::printf("[PASS] testNeighborLinkingDirtiesExistingBorders\n");
 }
 
+static void testLightOnlyUpdateDirtiesChangedNeighborBorders() {
+    client::ClientWorld cw;
+    auto left = std::make_shared<Chunk>(0, 0);
+    auto right = std::make_shared<Chunk>(1, 0);
+    left->setBlock(15, 64, 0, defaultState("minecraft:stone"));
+    right->setBlock(0, 64, 0, defaultState("minecraft:stone"));
+    cw.addChunk(left);
+    cw.addChunk(right);
+
+    constexpr int y = 64;
+    const int scy = Chunk::toSubChunkIndex(y);
+    left->markMeshClean();
+    right->markMeshClean();
+
+    std::vector<uint8_t> lightPatch(SubChunk::BLOCK_COUNT, 0);
+    lightPatch[SubChunk::toIndex(0, Chunk::toSubChunkLocalY(y), 0)] = 15;
+    cw.applyBlockUpdate(16, y, 0, net::BlockUpdateKind::LightOnly, NULL_BLOCK_STATE, lightPatch);
+
+    require(right->isSubChunkDirty(scy), "light-only update should dirty the receiving chunk");
+    require(left->isSubChunkDirty(scy), "light-only border update should dirty the adjacent chunk");
+
+    left->markMeshClean();
+    right->markMeshClean();
+    std::fill(lightPatch.begin(), lightPatch.end(), 0);
+    cw.applyBlockUpdate(16, y, 0, net::BlockUpdateKind::LightOnly, NULL_BLOCK_STATE, lightPatch);
+    require(right->isSubChunkDirty(scy), "light-only removal should dirty the receiving chunk");
+    require(left->isSubChunkDirty(scy), "light-only removal should dirty the adjacent chunk");
+    std::printf("[PASS] testLightOnlyUpdateDirtiesChangedNeighborBorders\n");
+}
+
 static void testClientWorldRaycastHitsBlocks() {
     client::ClientWorld cw;
     auto chunk = std::make_shared<Chunk>(0, 0);
@@ -333,6 +363,7 @@ int main() {
     testChunkLoadProgressIncludesMeshingHalo();
     testWeatherDayNightProxy();
     testNeighborLinkingDirtiesExistingBorders();
+    testLightOnlyUpdateDirtiesChangedNeighborBorders();
     testClientWorldRaycastHitsBlocks();
     testClientWorldRaycastSeparatesFluidAndBlockTargets();
     testApplyBlockUpdateAcceptsVariableLightPatch();

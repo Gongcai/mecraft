@@ -23,6 +23,45 @@ void markRenderableBorderDirty(Chunk& chunk) {
     }
 }
 
+// Marks neighbor sub-chunk meshes that sample a changed horizontal light border.
+void markLightBorderNeighborsDirty(Chunk& chunk, const uint32_t dirtySubChunkMask,
+                                   const uint8_t changedBoundaryMask) {
+    if (changedBoundaryMask == 0u || dirtySubChunkMask == 0u) {
+        return;
+    }
+
+    uint32_t expandedMask = dirtySubChunkMask;
+    for (int scy = 0; scy < Chunk::NUM_SUB_CHUNKS; ++scy) {
+        if ((dirtySubChunkMask & (1u << scy)) == 0u) {
+            continue;
+        }
+        if (scy > 0) {
+            expandedMask |= 1u << (scy - 1);
+        }
+        if (scy + 1 < Chunk::NUM_SUB_CHUNKS) {
+            expandedMask |= 1u << (scy + 1);
+        }
+    }
+
+    for (int scy = 0; scy < Chunk::NUM_SUB_CHUNKS; ++scy) {
+        if ((expandedMask & (1u << scy)) == 0u) {
+            continue;
+        }
+        if ((changedBoundaryMask & (1u << 0)) != 0u && chunk.neighbors[0]) {
+            chunk.neighbors[0]->markSubChunkDirty(scy);
+        }
+        if ((changedBoundaryMask & (1u << 1)) != 0u && chunk.neighbors[1]) {
+            chunk.neighbors[1]->markSubChunkDirty(scy);
+        }
+        if ((changedBoundaryMask & (1u << 2)) != 0u && chunk.neighbors[2]) {
+            chunk.neighbors[2]->markSubChunkDirty(scy);
+        }
+        if ((changedBoundaryMask & (1u << 3)) != 0u && chunk.neighbors[3]) {
+            chunk.neighbors[3]->markSubChunkDirty(scy);
+        }
+    }
+}
+
 int inferOddCubeSide(const std::size_t valueCount) {
     for (int side = 1; side <= Chunk::SIZE_Y; side += 2) {
         const std::size_t sideSize = static_cast<std::size_t>(side);
@@ -277,10 +316,17 @@ void ClientWorld::applyBlockUpdate(const int x, const int y, const int z, const 
 
     if (!packedLightPatch.empty()) {
         if (packedLightPatch.size() == Chunk::BLOCK_COUNT) {
-            chunk.replacePackedLight(packedLightPatch.data(), packedLightPatch.size());
+            uint32_t dirtySubChunkMask = 0;
+            uint8_t changedBoundaryMask = 0;
+            chunk.replacePackedLight(packedLightPatch.data(), packedLightPatch.size(), &dirtySubChunkMask,
+                                     &changedBoundaryMask);
+            markLightBorderNeighborsDirty(chunk, dirtySubChunkMask, changedBoundaryMask);
         } else if (packedLightPatch.size() == SubChunk::BLOCK_COUNT) {
-            chunk.replacePackedLightSection(Chunk::toSubChunkIndex(y), packedLightPatch.data(),
-                                            packedLightPatch.size());
+            const int scy = Chunk::toSubChunkIndex(y);
+            uint8_t changedBoundaryMask = 0;
+            const bool changed = chunk.replacePackedLightSection(scy, packedLightPatch.data(),
+                                                                 packedLightPatch.size(), &changedBoundaryMask);
+            markLightBorderNeighborsDirty(chunk, changed ? (1u << scy) : 0u, changedBoundaryMask);
         } else if (const int patchSide = inferOddCubeSide(packedLightPatch.size()); patchSide > 0) {
             const int patchRadius = patchSide / 2;
             size_t index = 0;

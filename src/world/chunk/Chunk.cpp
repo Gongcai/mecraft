@@ -188,13 +188,15 @@ uint8_t Chunk::getPackedLight(const int x, const int y, const int z) const {
     return sc->m_lightMap[SubChunk::toIndex(x, toSubChunkLocalY(y), z)];
 }
 
-bool Chunk::replacePackedLight(const uint8_t* data, const size_t size, uint32_t* outDirtySubChunkMask) {
+bool Chunk::replacePackedLight(const uint8_t* data, const size_t size, uint32_t* outDirtySubChunkMask,
+                               uint8_t* outChangedBoundaryMask) {
     if (data == nullptr || size != BLOCK_COUNT) {
         return false;
     }
 
     uint32_t dirtyMask = 0;
     uint32_t meshDirtyMask = 0;
+    uint8_t changedBoundaryMask = 0;
 
     for (int y = 0; y < SIZE_Y; ++y) {
         const int scy = toSubChunkIndex(y);
@@ -216,12 +218,27 @@ bool Chunk::replacePackedLight(const uint8_t* data, const size_t size, uint32_t*
                 }
                 sc->m_lightMap[SubChunk::toIndex(x, toSubChunkLocalY(y), z)] = packed;
                 dirtyMask |= (1u << scy);
+                if (x == SIZE_X - 1) {
+                    changedBoundaryMask |= 1u << 0;
+                }
+                if (x == 0) {
+                    changedBoundaryMask |= 1u << 1;
+                }
+                if (z == SIZE_Z - 1) {
+                    changedBoundaryMask |= 1u << 2;
+                }
+                if (z == 0) {
+                    changedBoundaryMask |= 1u << 3;
+                }
             }
         }
     }
 
     if (outDirtySubChunkMask) {
         *outDirtySubChunkMask = dirtyMask;
+    }
+    if (outChangedBoundaryMask) {
+        *outChangedBoundaryMask = changedBoundaryMask;
     }
 
     if (dirtyMask != 0) {
@@ -248,12 +265,14 @@ bool Chunk::replacePackedLight(const uint8_t* data, const size_t size, uint32_t*
     return true;
 }
 
-bool Chunk::replacePackedLightSection(const int scy, const uint8_t* data, const size_t size) {
+bool Chunk::replacePackedLightSection(const int scy, const uint8_t* data, const size_t size,
+                                      uint8_t* outChangedBoundaryMask) {
     if (data == nullptr || size != SubChunk::BLOCK_COUNT || scy < 0 || scy >= NUM_SUB_CHUNKS) {
         return false;
     }
 
     bool changed = false;
+    uint8_t changedBoundaryMask = 0;
     SubChunk* sc = getSubChunk(scy);
     const int yBase = scy * SubChunk::SIZE;
     size_t index = 0;
@@ -274,8 +293,24 @@ bool Chunk::replacePackedLightSection(const int scy, const uint8_t* data, const 
                 }
                 sc->m_lightMap[SubChunk::toIndex(x, ly, z)] = packed;
                 changed = true;
+                if (x == SIZE_X - 1) {
+                    changedBoundaryMask |= 1u << 0;
+                }
+                if (x == 0) {
+                    changedBoundaryMask |= 1u << 1;
+                }
+                if (z == SIZE_Z - 1) {
+                    changedBoundaryMask |= 1u << 2;
+                }
+                if (z == 0) {
+                    changedBoundaryMask |= 1u << 3;
+                }
             }
         }
+    }
+
+    if (outChangedBoundaryMask) {
+        *outChangedBoundaryMask = changedBoundaryMask;
     }
 
     if (changed) {
