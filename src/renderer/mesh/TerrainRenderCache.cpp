@@ -203,6 +203,8 @@ void TerrainRenderCache::refreshChunkRenderColumnCache(ChunkRenderColumnCache& c
     glm::vec3 columnMax(0.0f);
     column.renderableCount = 0;
     column.transparentCount = 0;
+    column.subChunkRenderable.fill(0u);
+    column.subChunkMeshes.fill(WorldGpuMesh{});
     for (int scy = 0; scy < Chunk::NUM_SUB_CHUNKS; ++scy) {
         const SubChunk* sc = column.chunk->getSubChunk(scy);
         if (!sc) {
@@ -227,6 +229,19 @@ void TerrainRenderCache::refreshChunkRenderColumnCache(ChunkRenderColumnCache& c
             mesh.hasBounds ? mesh.boundsMax
                            : column.worldOffset +
                                  glm::vec3(Chunk::SIZE_X, static_cast<float>(yBase + SubChunk::SIZE), Chunk::SIZE_Z);
+
+        column.subChunkRenderable[scy] = 1u;
+        column.subChunkBoundsMin[scy] = boundsMin;
+        column.subChunkBoundsMax[scy] = boundsMax;
+        WorldGpuMesh& cachedMesh = column.subChunkMeshes[scy];
+        cachedMesh.opaque = mesh.opaqueRange;
+        cachedMesh.cutout = mesh.cutoutRange;
+        cachedMesh.cutoutDistance = mesh.cutoutDistanceRange;
+        cachedMesh.transparent = mesh.transparentRange;
+        cachedMesh.water = mesh.waterRange;
+        cachedMesh.hasBounds = mesh.hasBounds;
+        cachedMesh.boundsMin = mesh.boundsMin;
+        cachedMesh.boundsMax = mesh.boundsMax;
 
         ++column.renderableCount;
         expandBounds(columnMin, columnMax, columnHasBounds, boundsMin, boundsMax);

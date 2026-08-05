@@ -63,6 +63,11 @@ struct ChunkRenderColumnCache {
     std::array<uint64_t, Chunk::NUM_SUB_CHUNKS> subChunkMeshFingerprints{};
     std::array<int, Chunk::NUM_SUB_CHUNKS> transparentScys{};
     std::array<TransparentSubChunkCache, Chunk::NUM_SUB_CHUNKS> transparentSubChunks{};
+    // Stable per-sub-chunk render state consumed by the main terrain traversal.
+    std::array<uint8_t, Chunk::NUM_SUB_CHUNKS> subChunkRenderable{};
+    std::array<glm::vec3, Chunk::NUM_SUB_CHUNKS> subChunkBoundsMin{};
+    std::array<glm::vec3, Chunk::NUM_SUB_CHUNKS> subChunkBoundsMax{};
+    std::array<WorldGpuMesh, Chunk::NUM_SUB_CHUNKS> subChunkMeshes{};
     int renderableCount = 0;
     int transparentCount = 0;
     uint64_t validatedFrameSerial = 0;

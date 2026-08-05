@@ -334,34 +334,20 @@ void TerrainRenderer::renderOpaqueChunksAndCollectPasses(const IWorldView& world
             }
 #endif
 
-            const glm::ivec3 offset = column.chunk->getWorldOffset();
             const float cutoutLimitBlocks = m_cutoutRenderDistanceChunks * static_cast<float>(Chunk::SIZE_X);
             const float cutoutLimitSq = cutoutLimitBlocks * cutoutLimitBlocks;
             for (int scy = 0; scy < Chunk::NUM_SUB_CHUNKS; ++scy) {
-                const SubChunk* sc = column.chunk->getSubChunk(scy);
-                if (!sc)
-                    continue;
-                const SubChunkMesh& mesh = sc->getMesh();
-                if (!mesh.inGlobalPool)
-                    continue;
-                if (mesh.opaqueRange.vertexCount == 0 && mesh.cutoutRange.vertexCount == 0 &&
-                    mesh.cutoutDistanceRange.vertexCount == 0 && mesh.transparentRange.vertexCount == 0 &&
-                    mesh.waterRange.vertexCount == 0) {
+                if (column.subChunkRenderable[scy] == 0u) {
                     continue;
                 }
+                const WorldGpuMesh& mesh = column.subChunkMeshes[scy];
 
 #ifdef MECRAFT_DEBUG
                 ++m_mdiSubChunkTestsThisFrame;
                 ++m_chunkTestsThisFrame;
 #endif
-                const int yBase = scy * SubChunk::SIZE;
-                const glm::vec3 derivedMin(static_cast<float>(offset.x), static_cast<float>(offset.y + yBase),
-                                           static_cast<float>(offset.z));
-                const glm::vec3 derivedMax(static_cast<float>(offset.x + Chunk::SIZE_X),
-                                           static_cast<float>(offset.y + yBase + SubChunk::SIZE),
-                                           static_cast<float>(offset.z + Chunk::SIZE_Z));
-                const glm::vec3 boundsMin = mesh.hasBounds ? mesh.boundsMin : derivedMin;
-                const glm::vec3 boundsMax = mesh.hasBounds ? mesh.boundsMax : derivedMax;
+                const glm::vec3& boundsMin = column.subChunkBoundsMin[scy];
+                const glm::vec3& boundsMax = column.subChunkBoundsMax[scy];
                 if (!boundsWithinCameraDistance(boundsMin, boundsMax)) {
                     continue;
                 }
@@ -385,23 +371,21 @@ void TerrainRenderer::renderOpaqueChunksAndCollectPasses(const IWorldView& world
                 }
 #endif
 
-                if (mesh.opaqueRange.vertexCount > 0) {
-                    m_worldRenderBuffer->addOpaque(mesh.opaqueRange);
+                if (mesh.opaque.vertexCount > 0) {
+                    m_worldRenderBuffer->addOpaque(mesh.opaque);
                 }
-                if (mesh.cutoutRange.vertexCount > 0) {
-                    m_worldRenderBuffer->addCutout(mesh.cutoutRange);
+                if (mesh.cutout.vertexCount > 0) {
+                    m_worldRenderBuffer->addCutout(mesh.cutout);
                 }
-                if (mesh.cutoutDistanceRange.vertexCount > 0) {
-                    const glm::vec3 sectionCenter(static_cast<float>(offset.x) + Chunk::SIZE_X * 0.5f,
-                                                  static_cast<float>(offset.y + yBase) + SubChunk::SIZE * 0.5f,
-                                                  static_cast<float>(offset.z) + Chunk::SIZE_Z * 0.5f);
+                if (mesh.cutoutDistance.vertexCount > 0) {
+                    const glm::vec3 sectionCenter = (boundsMin + boundsMax) * 0.5f;
                     const glm::vec2 toCameraXZ(sectionCenter.x - m_cameraPos.x, sectionCenter.z - m_cameraPos.z);
                     const float distanceSq = glm::dot(toCameraXZ, toCameraXZ);
 #ifdef MECRAFT_DEBUG
                     ++m_cutoutCandidatesThisFrame;
 #endif
                     if (!m_cutoutDistanceLimitEnabled || distanceSq <= cutoutLimitSq) {
-                        m_worldRenderBuffer->addCutout(mesh.cutoutDistanceRange);
+                        m_worldRenderBuffer->addCutout(mesh.cutoutDistance);
                     }
 #ifdef MECRAFT_DEBUG
                     else {
@@ -409,20 +393,16 @@ void TerrainRenderer::renderOpaqueChunksAndCollectPasses(const IWorldView& world
                     }
 #endif
                 }
-                if (mesh.transparentRange.vertexCount > 0) {
-                    const glm::vec3 sectionCenter(static_cast<float>(offset.x) + Chunk::SIZE_X * 0.5f,
-                                                  static_cast<float>(offset.y + yBase) + SubChunk::SIZE * 0.5f,
-                                                  static_cast<float>(offset.z) + Chunk::SIZE_Z * 0.5f);
+                if (mesh.transparent.vertexCount > 0) {
+                    const glm::vec3 sectionCenter = (boundsMin + boundsMax) * 0.5f;
                     const glm::vec3 toCamera = sectionCenter - m_cameraPos;
-                    m_terrainCache->addTransparentBatch(mesh.transparentRange, glm::dot(toCamera, toCamera),
+                    m_terrainCache->addTransparentBatch(mesh.transparent, glm::dot(toCamera, toCamera),
                                                         TransparentBatchKind::Generic);
                 }
-                if (mesh.waterRange.vertexCount > 0) {
-                    const glm::vec3 sectionCenter(static_cast<float>(offset.x) + Chunk::SIZE_X * 0.5f,
-                                                  static_cast<float>(offset.y + yBase) + SubChunk::SIZE * 0.5f,
-                                                  static_cast<float>(offset.z) + Chunk::SIZE_Z * 0.5f);
+                if (mesh.water.vertexCount > 0) {
+                    const glm::vec3 sectionCenter = (boundsMin + boundsMax) * 0.5f;
                     const glm::vec3 toCamera = sectionCenter - m_cameraPos;
-                    m_terrainCache->addTransparentBatch(mesh.waterRange, glm::dot(toCamera, toCamera),
+                    m_terrainCache->addTransparentBatch(mesh.water, glm::dot(toCamera, toCamera),
                                                         TransparentBatchKind::Water);
                 }
             }
