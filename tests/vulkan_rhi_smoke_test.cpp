@@ -560,12 +560,10 @@ void setNrdIdentityMatrix(float (&matrix)[16]) {
     constexpr size_t kPixelCount = static_cast<size_t>(kWidth) * kHeight;
     constexpr size_t kMotionBytes = kPixelCount * sizeof(uint16_t) * 4u;
     constexpr size_t kViewZBytes = kPixelCount * sizeof(float);
-    constexpr size_t kConfidenceBytes = kPixelCount * sizeof(uint8_t);
-    constexpr size_t kValidationHistoryBytes = kPixelCount * sizeof(uint32_t) * 2u;
+    constexpr size_t kCoverageBytes = kPixelCount * sizeof(uint8_t);
     constexpr uint64_t kViewZOffset = kMotionBytes;
-    constexpr uint64_t kConfidenceOffset = kViewZOffset + kViewZBytes;
-    constexpr uint64_t kValidationHistoryOffset = (kConfidenceOffset + kConfidenceBytes + 7u) & ~uint64_t{7u};
-    constexpr uint64_t kReadbackBytes = kValidationHistoryOffset + kValidationHistoryBytes;
+    constexpr uint64_t kCoverageOffset = kViewZOffset + kViewZBytes;
+    constexpr uint64_t kReadbackBytes = kCoverageOffset + kCoverageBytes;
     const uint64_t validationErrorsBefore = device.validationErrorCount();
 
     std::vector<float> depth(kPixelCount, 0.25f);
@@ -573,12 +571,9 @@ void setNrdIdentityMatrix(float (&matrix)[16]) {
     std::vector<uint32_t> normalAo(kPixelCount, packedNormalAo);
     std::vector<uint32_t> material(kPixelCount, 0x000000ffu);
     std::vector<uint16_t> velocity(kPixelCount * 2u, 0u);
-    std::vector<uint32_t> validation(kPixelCount * 2u, 0u);
     for (size_t pixel = 0u; pixel < kPixelCount; ++pixel) {
         velocity[pixel * 2u + 0u] = glm::packHalf1x16(0.125f);
         velocity[pixel * 2u + 1u] = glm::packHalf1x16(-0.125f);
-        validation[pixel * 2u + 0u] = static_cast<uint32_t>(renderer::contracts::RtgiTraceClassification::Hit);
-        validation[pixel * 2u + 1u] = static_cast<uint32_t>(101u + pixel);
     }
 
     constexpr RhiTextureUsageFlags kSampledUsage = rhiFlag(RhiTextureUsage::Sampled);
@@ -590,13 +585,10 @@ void setNrdIdentityMatrix(float (&matrix)[16]) {
     NrdSmokeTexture normalAoTexture;
     NrdSmokeTexture materialTexture;
     NrdSmokeTexture velocityTexture;
-    NrdSmokeTexture validationTexture;
-    NrdSmokeTexture previousValidationTexture;
     NrdSmokeTexture motionTexture;
     NrdSmokeTexture normalRoughnessTexture;
     NrdSmokeTexture viewZTexture;
-    NrdSmokeTexture confidenceTexture;
-    NrdSmokeTexture validationHistoryTexture;
+    NrdSmokeTexture reprojectionCoverageTexture;
     RhiBufferHandle readback;
     RenderGraph graph;
     NrdGuidePrepPass pass;
@@ -607,13 +599,10 @@ void setNrdIdentityMatrix(float (&matrix)[16]) {
         if (readback.isValid()) {
             device.destroyBuffer(readback);
         }
-        destroyNrdSmokeTexture(device, validationHistoryTexture);
-        destroyNrdSmokeTexture(device, confidenceTexture);
+        destroyNrdSmokeTexture(device, reprojectionCoverageTexture);
         destroyNrdSmokeTexture(device, viewZTexture);
         destroyNrdSmokeTexture(device, normalRoughnessTexture);
         destroyNrdSmokeTexture(device, motionTexture);
-        destroyNrdSmokeTexture(device, previousValidationTexture);
-        destroyNrdSmokeTexture(device, validationTexture);
         destroyNrdSmokeTexture(device, velocityTexture);
         destroyNrdSmokeTexture(device, materialTexture);
         destroyNrdSmokeTexture(device, normalAoTexture);
@@ -646,16 +635,6 @@ void setNrdIdentityMatrix(float (&matrix)[16]) {
                                              velocity.size() * sizeof(uint16_t), RhiResourceState::ShaderRead,
                                              velocityTexture),
                        "velocity") &&
-        requireTexture(createNrdSmokeTexture(device, "VulkanSmoke.NRD.Guide.Validation",
-                                             RhiTextureFormat::Rg32Uint, kWidth, kHeight, kSampledUsage,
-                                             validation.data(), validation.size() * sizeof(uint32_t),
-                                             RhiResourceState::ShaderRead, validationTexture),
-                       "current validation") &&
-        requireTexture(createNrdSmokeTexture(device, "VulkanSmoke.NRD.Guide.PreviousValidation",
-                                             RhiTextureFormat::Rg32Uint, kWidth, kHeight, kSampledUsage,
-                                             validation.data(), validation.size() * sizeof(uint32_t),
-                                             RhiResourceState::ShaderRead, previousValidationTexture),
-                       "previous validation") &&
         requireTexture(createNrdSmokeTexture(device, "VulkanSmoke.NRD.Guide.Motion", RhiTextureFormat::Rgba16Float,
                                              kWidth, kHeight, kGuideOutputUsage, nullptr, 0u,
                                              RhiResourceState::Undefined, motionTexture),
@@ -669,14 +648,10 @@ void setNrdIdentityMatrix(float (&matrix)[16]) {
                                              kHeight, kGuideOutputUsage, nullptr, 0u, RhiResourceState::Undefined,
                                              viewZTexture),
                        "View-Z output") &&
-        requireTexture(createNrdSmokeTexture(device, "VulkanSmoke.NRD.Guide.Confidence", RhiTextureFormat::R8Unorm,
-                                             kWidth, kHeight, kGuideOutputUsage, nullptr, 0u,
-                                             RhiResourceState::Undefined, confidenceTexture),
-                       "confidence output") &&
-        requireTexture(createNrdSmokeTexture(device, "VulkanSmoke.NRD.Guide.ValidationHistory",
-                                             RhiTextureFormat::Rg32Uint, kWidth, kHeight, kGuideOutputUsage, nullptr,
-                                             0u, RhiResourceState::Undefined, validationHistoryTexture),
-                       "validation-history output");
+        requireTexture(createNrdSmokeTexture(device, "VulkanSmoke.NRD.Guide.ReprojectionCoverage",
+                                             RhiTextureFormat::R8Unorm, kWidth, kHeight, kGuideOutputUsage, nullptr, 0u,
+                                             RhiResourceState::Undefined, reprojectionCoverageTexture),
+                       "reprojection-coverage output");
     if (!valid) {
         std::cerr << "NRD Guide Prep smoke test failed to create textures\n";
         cleanup();
@@ -722,18 +697,12 @@ void setNrdIdentityMatrix(float (&matrix)[16]) {
         resources.normalAo = importTexture(normalAoTexture, RhiResourceState::ShaderRead, RhiResourceState::ShaderRead);
         resources.material = importTexture(materialTexture, RhiResourceState::ShaderRead, RhiResourceState::ShaderRead);
         resources.velocity = importTexture(velocityTexture, RhiResourceState::ShaderRead, RhiResourceState::ShaderRead);
-        resources.validation =
-            importTexture(validationTexture, RhiResourceState::ShaderRead, RhiResourceState::ShaderRead);
-        resources.previousValidation =
-            importTexture(previousValidationTexture, RhiResourceState::ShaderRead, RhiResourceState::ShaderRead);
         resources.motion = importTexture(motionTexture, RhiResourceState::Undefined, RhiResourceState::ShaderWrite);
         resources.normalRoughness =
             importTexture(normalRoughnessTexture, RhiResourceState::Undefined, RhiResourceState::ShaderWrite);
         resources.viewZ = importTexture(viewZTexture, RhiResourceState::Undefined, RhiResourceState::ShaderWrite);
-        resources.confidence =
-            importTexture(confidenceTexture, RhiResourceState::Undefined, RhiResourceState::ShaderWrite);
-        resources.currentValidationHistory =
-            importTexture(validationHistoryTexture, RhiResourceState::Undefined, RhiResourceState::ShaderWrite);
+        resources.reprojectionCoverage =
+            importTexture(reprojectionCoverageTexture, RhiResourceState::Undefined, RhiResourceState::ShaderWrite);
         readbackResource =
             graph.importBuffer({readbackDesc.debugName, readback, readbackDesc, RhiResourceState::TransferDst,
                                 RhiResourceState::HostRead, RhiQueueType::Graphics, RhiQueueType::Graphics});
@@ -743,21 +712,18 @@ void setNrdIdentityMatrix(float (&matrix)[16]) {
         NrdGuidePrepPass::Settings settings;
         settings.denoisingRange = 10.0f;
         settings.historyValid = true;
-        settings.validateHitIdentity = true;
         guideHandle = pass.addGraphPass(graph, frame, settings, resources, inputReady);
         valid = resources.depth.isValid() && resources.normalAo.isValid() && resources.material.isValid() &&
-                resources.velocity.isValid() && resources.validation.isValid() &&
-                resources.previousValidation.isValid() && resources.motion.isValid() &&
-                resources.normalRoughness.isValid() && resources.viewZ.isValid() && resources.confidence.isValid() &&
-                resources.currentValidationHistory.isValid() && readbackResource.isValid() && guideHandle.isValid();
+                resources.velocity.isValid() && resources.motion.isValid() && resources.normalRoughness.isValid() &&
+                resources.viewZ.isValid() && resources.reprojectionCoverage.isValid() && readbackResource.isValid() &&
+                guideHandle.isValid();
     }
     if (valid) {
         graph.addPass({"NRD.GuideReadback", RgPassType::Copy, RhiQueueType::Graphics})
             .dependsOn(guideHandle)
             .readTexture(resources.motion, RhiResourceState::TransferSrc)
             .readTexture(resources.viewZ, RhiResourceState::TransferSrc)
-            .readTexture(resources.confidence, RhiResourceState::TransferSrc)
-            .readTexture(resources.currentValidationHistory, RhiResourceState::TransferSrc)
+            .readTexture(resources.reprojectionCoverage, RhiResourceState::TransferSrc)
             .writeBuffer(readbackResource, RhiResourceState::TransferDst)
             .setExecute([&](RgPassContext& context) {
                 RhiTextureBufferCopy motionCopy;
@@ -777,24 +743,15 @@ void setNrdIdentityMatrix(float (&matrix)[16]) {
                 viewZCopy.width = kWidth;
                 viewZCopy.height = kHeight;
                 context.commandList().copyTextureToBuffer(viewZCopy);
-                RhiTextureBufferCopy confidenceCopy;
-                confidenceCopy.srcTexture = context.texture(resources.confidence);
-                confidenceCopy.dstBuffer = context.buffer(readbackResource);
-                confidenceCopy.bufferOffset = kConfidenceOffset;
-                confidenceCopy.bytesPerRow = sizeof(uint8_t) * kWidth;
-                confidenceCopy.rowsPerImage = kHeight;
-                confidenceCopy.width = kWidth;
-                confidenceCopy.height = kHeight;
-                context.commandList().copyTextureToBuffer(confidenceCopy);
-                RhiTextureBufferCopy validationHistoryCopy;
-                validationHistoryCopy.srcTexture = context.texture(resources.currentValidationHistory);
-                validationHistoryCopy.dstBuffer = context.buffer(readbackResource);
-                validationHistoryCopy.bufferOffset = kValidationHistoryOffset;
-                validationHistoryCopy.bytesPerRow = sizeof(uint32_t) * 2u * kWidth;
-                validationHistoryCopy.rowsPerImage = kHeight;
-                validationHistoryCopy.width = kWidth;
-                validationHistoryCopy.height = kHeight;
-                context.commandList().copyTextureToBuffer(validationHistoryCopy);
+                RhiTextureBufferCopy coverageCopy;
+                coverageCopy.srcTexture = context.texture(resources.reprojectionCoverage);
+                coverageCopy.dstBuffer = context.buffer(readbackResource);
+                coverageCopy.bufferOffset = kCoverageOffset;
+                coverageCopy.bytesPerRow = sizeof(uint8_t) * kWidth;
+                coverageCopy.rowsPerImage = kHeight;
+                coverageCopy.width = kWidth;
+                coverageCopy.height = kHeight;
+                context.commandList().copyTextureToBuffer(coverageCopy);
                 return true;
             });
         const RgCompileResult compiled = graph.compile();
@@ -817,9 +774,7 @@ void setNrdIdentityMatrix(float (&matrix)[16]) {
         if (bytes != nullptr) {
             const auto* motion = reinterpret_cast<const uint16_t*>(bytes);
             const auto* viewZ = reinterpret_cast<const float*>(bytes + kViewZOffset);
-            const auto* confidence = bytes + kConfidenceOffset;
-            const auto* validationHistory =
-                reinterpret_cast<const uint32_t*>(bytes + kValidationHistoryOffset);
+            const auto* coverage = bytes + kCoverageOffset;
             for (size_t pixel = 0u; pixel < kPixelCount; ++pixel) {
                 const float motionX = glm::unpackHalf1x16(motion[pixel * 4u + 0u]);
                 const float motionY = glm::unpackHalf1x16(motion[pixel * 4u + 1u]);
@@ -828,18 +783,13 @@ void setNrdIdentityMatrix(float (&matrix)[16]) {
                 // The guide contract publishes 2.5D motion: current positive
                 // View-Z is 2, previous positive View-Z is 3, and NRD receives
                 // the previous-minus-current delta after its handedness conversion.
-                const bool pixelValid =
-                    std::abs(motionX + 0.125f) < 0.001f && std::abs(motionY - 0.125f) < 0.001f &&
-                    std::abs(motionZ - 1.0f) < 0.001f && std::abs(motionW) < 0.001f &&
-                    std::abs(viewZ[pixel] + 2.0f) < 0.001f && confidence[pixel] == 255u &&
-                    validationHistory[pixel * 2u + 0u] == validation[pixel * 2u + 0u] &&
-                    validationHistory[pixel * 2u + 1u] == validation[pixel * 2u + 1u];
+                const bool pixelValid = std::abs(motionX + 0.125f) < 0.001f && std::abs(motionY - 0.125f) < 0.001f &&
+                                        std::abs(motionZ - 1.0f) < 0.001f && std::abs(motionW) < 0.001f &&
+                                        std::abs(viewZ[pixel] + 2.0f) < 0.001f && coverage[pixel] == 255u;
                 if (!pixelValid) {
-                    std::cerr << "NRD Guide Prep pixel " << pixel << " mismatch: motion=(" << motionX << ", "
-                              << motionY << ", " << motionZ << ", " << motionW << "), View-Z=" << viewZ[pixel]
-                              << ", confidence=" << static_cast<uint32_t>(confidence[pixel]) << ", validation=("
-                              << validationHistory[pixel * 2u + 0u] << ", "
-                              << validationHistory[pixel * 2u + 1u] << ")\n";
+                    std::cerr << "NRD Guide Prep pixel " << pixel << " mismatch: motion=(" << motionX << ", " << motionY
+                              << ", " << motionZ << ", " << motionW << "), View-Z=" << viewZ[pixel]
+                              << ", reprojection coverage=" << static_cast<uint32_t>(coverage[pixel]) << '\n';
                 }
                 valid = valid && pixelValid;
             }
@@ -3815,9 +3765,8 @@ void main() {
         rejectedCutout.maximumHitDistance = 2.05f;
         rejectedCutout.minimumRadiance = {0.49f, 0.49f, 0.49f};
         rejectedCutout.maximumRadiance = {0.51f, 0.51f, 0.51f};
-        rejectedCutout.hitIdentityHash =
-            renderer::contracts::rtgiTerrainHitIdentityHash(firstView->hitData.revision,
-                                                            firstView->hitData.vertexAddress);
+        rejectedCutout.hitIdentityHash = renderer::contracts::rtgiTerrainHitIdentityHash(
+            firstView->hitData.revision, firstView->hitData.vertexAddress);
         RtgiTraceSmokeExpectedPixel confirmedCutout;
         confirmedCutout.classification = renderer::contracts::RtgiTraceClassification::Hit;
         confirmedCutout.candidateCount = 1u;
@@ -3826,9 +3775,8 @@ void main() {
         confirmedCutout.maximumHitDistance = 1.05f;
         confirmedCutout.minimumRadiance = {0.02f, 0.28f, 0.004f};
         confirmedCutout.maximumRadiance = {0.03f, 0.31f, 0.007f};
-        confirmedCutout.hitIdentityHash =
-            renderer::contracts::rtgiTerrainHitIdentityHash(firstView->hitData.revision,
-                                                            firstView->hitData.vertexAddress);
+        confirmedCutout.hitIdentityHash = renderer::contracts::rtgiTerrainHitIdentityHash(
+            firstView->hitData.revision, firstView->hitData.vertexAddress);
         smokeCase.expectedPixels = {rejectedCutout, confirmedCutout};
         renderer::core::GlobalBindlessSet rtgiBindlessSet;
         renderer::core::GlobalBindlessSetConfig bindlessConfig;
@@ -4121,9 +4069,8 @@ namespace {
     const size_t terrainTexelCount = terrainLayerTexels * static_cast<size_t>(smokeCase.terrainAlbedoLayers);
     if (terrainTexelCount > maximumSize / 4u || smokeCase.depth.size() != pixelCount ||
         smokeCase.normalAo.size() != pixelCount * 4u || smokeCase.materialAux.size() != pixelCount * 4u ||
-        smokeCase.voxelLight.size() != pixelCount * 4u ||
-        smokeCase.blueNoise.size() != pixelCount * 4u || smokeCase.terrainAlbedo.size() != terrainTexelCount * 4u ||
-        smokeCase.expectedPixels.size() != pixelCount) {
+        smokeCase.voxelLight.size() != pixelCount * 4u || smokeCase.blueNoise.size() != pixelCount * 4u ||
+        smokeCase.terrainAlbedo.size() != terrainTexelCount * 4u || smokeCase.expectedPixels.size() != pixelCount) {
         return false;
     }
 
@@ -4498,12 +4445,12 @@ namespace {
         valid =
             valid && resources.depth.isValid() && resources.normalAo.isValid() && resources.materialAux.isValid() &&
             resources.voxelLight.isValid() && resources.blueNoise.isValid() &&
-            resources.diffuseRadianceHitDistance.isValid() &&
-            resources.terrainAlbedo.isValid() && resources.terrainNormal.isValid() &&
-            resources.terrainSpecular.isValid() && resources.grassColormap.isValid() &&
-            resources.foliageColormap.isValid() && resources.skyCapture.isValid() && resources.validation.isValid() &&
-            localShadowMetadataResource.isValid() && localShadowSpotAtlasResource.isValid() &&
-            localShadowPointCubeArrayResource.isValid() && packResources.relaxDiffuseRadianceHitDistance.isValid() &&
+            resources.diffuseRadianceHitDistance.isValid() && resources.terrainAlbedo.isValid() &&
+            resources.terrainNormal.isValid() && resources.terrainSpecular.isValid() &&
+            resources.grassColormap.isValid() && resources.foliageColormap.isValid() &&
+            resources.skyCapture.isValid() && resources.validation.isValid() && localShadowMetadataResource.isValid() &&
+            localShadowSpotAtlasResource.isValid() && localShadowPointCubeArrayResource.isValid() &&
+            packResources.relaxDiffuseRadianceHitDistance.isValid() &&
             packResources.reblurDiffuseRadianceHitDistance.isValid() && validationReadbackResource.isValid() &&
             radianceReadbackResource.isValid() && relaxReadbackResource.isValid() && reblurReadbackResource.isValid();
     }

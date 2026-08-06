@@ -152,9 +152,8 @@ void DeferredRenderTargets::initializePersistentTextureStates() {
         // SceneLighting/SceneComposite/TransparentComposite/Reflection/Cloud
         // are render-graph transients now; the graph tracks their states.
         m_sceneResolvedHandle, m_halfResHandle, m_reflectionTemporalScratchHandle, m_skyCaptureHandle,
-        m_historySceneHandle[0], m_historySceneHandle[1], m_historyConfidenceHandle[0], m_historyConfidenceHandle[1],
-        m_historyRtgiValidationHandle[0], m_historyRtgiValidationHandle[1],
-        m_historyReflectionHandle[0], m_historyReflectionHandle[1],
+        m_historySceneHandle[0], m_historySceneHandle[1], m_nrdReprojectionCoverageHandle[0],
+        m_nrdReprojectionCoverageHandle[1], m_historyReflectionHandle[0], m_historyReflectionHandle[1],
         m_historyCloudHandle[0], m_historyCloudHandle[1], m_historyVolumetricHandle[0], m_historyVolumetricHandle[1],
         m_temporalCurrentHandle, m_velocityHandle, m_perObjectVelocityHandle, m_weatherMaskHandle, m_reactiveMaskHandle,
         m_transparencyMaskHandle, m_ssaoFilteredHandle, m_ssaoHalfResHandle, m_ssaoHalfResFilteredHandle,
@@ -512,25 +511,17 @@ bool DeferredRenderTargets::createSceneHistoryTextures() {
     const RhiTextureUsageFlags depthUsage =
         rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::DepthStencilAttachment) |
         rhiFlag(RhiTextureUsage::TransferSrc) | rhiFlag(RhiTextureUsage::TransferDst);
-    const RhiTextureUsageFlags confidenceUsage =
-        rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::Storage) |
-        rhiFlag(RhiTextureUsage::TransferDst);
-    const RhiTextureUsageFlags validationUsage =
-        rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::Storage) |
-        rhiFlag(RhiTextureUsage::TransferDst);
+    const RhiTextureUsageFlags coverageUsage =
+        rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::Storage) | rhiFlag(RhiTextureUsage::TransferDst);
     for (int i = 0; i < 2; ++i) {
         const char* sceneName = i == 0 ? "DeferredTargets.HistoryScene[0]" : "DeferredTargets.HistoryScene[1]";
-        const char* confidenceName =
-            i == 0 ? "DeferredTargets.HistoryConfidence[0]" : "DeferredTargets.HistoryConfidence[1]";
-        const char* validationName = i == 0 ? "DeferredTargets.HistoryRtgiValidation[0]"
-                                            : "DeferredTargets.HistoryRtgiValidation[1]";
+        const char* coverageName =
+            i == 0 ? "DeferredTargets.NrdReprojectionCoverage[0]" : "DeferredTargets.NrdReprojectionCoverage[1]";
         const char* depthName = i == 0 ? "DeferredTargets.HistoryDepth[0]" : "DeferredTargets.HistoryDepth[1]";
         const char* taaDepthName = i == 0 ? "DeferredTargets.TaaHistoryDepth[0]" : "DeferredTargets.TaaHistoryDepth[1]";
         if (!createTexture(sceneName, RhiTextureFormat::Rgba16Float, colorUsage, m_historySceneHandle[i]) ||
-            !createTexture(confidenceName, RhiTextureFormat::R8Unorm, confidenceUsage,
-                           m_historyConfidenceHandle[i]) ||
-            !createTexture(validationName, RhiTextureFormat::Rg32Uint, validationUsage,
-                           m_historyRtgiValidationHandle[i]) ||
+            !createTexture(coverageName, RhiTextureFormat::R8Unorm, coverageUsage,
+                           m_nrdReprojectionCoverageHandle[i]) ||
             !createTexture(depthName, RhiTextureFormat::Depth32Float, depthUsage, m_historyDepthHandle[i]) ||
             !createTexture(taaDepthName, RhiTextureFormat::Depth32Float, depthUsage, m_taaHistoryDepthHandle[i])) {
             destroySceneHistoryTextures();
@@ -550,13 +541,9 @@ void DeferredRenderTargets::destroySceneHistoryTextures() {
             m_rhiDevice->destroyTexture(m_historySceneHandle[i]);
             m_historySceneHandle[i] = {};
         }
-        if (m_historyConfidenceHandle[i].isValid()) {
-            m_rhiDevice->destroyTexture(m_historyConfidenceHandle[i]);
-            m_historyConfidenceHandle[i] = {};
-        }
-        if (m_historyRtgiValidationHandle[i].isValid()) {
-            m_rhiDevice->destroyTexture(m_historyRtgiValidationHandle[i]);
-            m_historyRtgiValidationHandle[i] = {};
+        if (m_nrdReprojectionCoverageHandle[i].isValid()) {
+            m_rhiDevice->destroyTexture(m_nrdReprojectionCoverageHandle[i]);
+            m_nrdReprojectionCoverageHandle[i] = {};
         }
         if (m_historyDepthHandle[i].isValid()) {
             m_rhiDevice->destroyTexture(m_historyDepthHandle[i]);
@@ -913,21 +900,19 @@ bool DeferredRenderTargets::registerRhiTextures() {
         m_gMaterialHandle.isValid() && m_gMaterialAuxHandle.isValid() && m_gF0MetallicHandle.isValid() &&
         m_gObjectMaterialIdHandle.isValid() && m_gDepthHandle.isValid() && m_sceneResolvedHandle.isValid() &&
         m_halfResHandle.isValid() && m_reflectionTemporalScratchHandle.isValid() && m_historySceneHandle[0].isValid() &&
-        m_historySceneHandle[1].isValid() && m_historyConfidenceHandle[0].isValid() &&
-        m_historyConfidenceHandle[1].isValid() && m_historyRtgiValidationHandle[0].isValid() &&
-        m_historyRtgiValidationHandle[1].isValid() && m_historyDepthHandle[0].isValid() &&
-        m_historyDepthHandle[1].isValid() &&
-        m_taaHistoryDepthHandle[0].isValid() && m_taaHistoryDepthHandle[1].isValid() &&
-        m_historyReflectionHandle[0].isValid() && m_historyReflectionHandle[1].isValid() &&
-        m_historyCloudHandle[0].isValid() && m_historyCloudHandle[1].isValid() &&
-        m_historyVolumetricHandle[0].isValid() && m_historyVolumetricHandle[1].isValid() &&
-        m_temporalCurrentHandle.isValid() && m_velocityHandle.isValid() && m_perObjectVelocityHandle.isValid() &&
-        m_weatherMaskHandle.isValid() && m_reactiveMaskHandle.isValid() && m_transparencyMaskHandle.isValid() &&
-        m_skyCaptureHandle.isValid() && m_atmosphereLutHandle.isValid() && m_ssaoFilteredHandle.isValid() &&
-        m_ssaoHalfResHandle.isValid() && m_ssaoHalfResFilteredHandle.isValid() && m_ssaoHistoryHandle[0].isValid() &&
-        m_ssaoHistoryHandle[1].isValid() && m_ssaoTemporalHandle.isValid() && m_ssgiHandle.isValid() &&
-        m_ssgiHalfResHandle.isValid() && m_ssgiDenoiseHandle[0].isValid() && m_ssgiDenoiseHandle[1].isValid() &&
-        m_ssgiHistoryHandle[0].isValid() && m_ssgiHistoryHandle[1].isValid() &&
+        m_historySceneHandle[1].isValid() && m_nrdReprojectionCoverageHandle[0].isValid() &&
+        m_nrdReprojectionCoverageHandle[1].isValid() && m_historyDepthHandle[0].isValid() &&
+        m_historyDepthHandle[1].isValid() && m_taaHistoryDepthHandle[0].isValid() &&
+        m_taaHistoryDepthHandle[1].isValid() && m_historyReflectionHandle[0].isValid() &&
+        m_historyReflectionHandle[1].isValid() && m_historyCloudHandle[0].isValid() &&
+        m_historyCloudHandle[1].isValid() && m_historyVolumetricHandle[0].isValid() &&
+        m_historyVolumetricHandle[1].isValid() && m_temporalCurrentHandle.isValid() && m_velocityHandle.isValid() &&
+        m_perObjectVelocityHandle.isValid() && m_weatherMaskHandle.isValid() && m_reactiveMaskHandle.isValid() &&
+        m_transparencyMaskHandle.isValid() && m_skyCaptureHandle.isValid() && m_atmosphereLutHandle.isValid() &&
+        m_ssaoFilteredHandle.isValid() && m_ssaoHalfResHandle.isValid() && m_ssaoHalfResFilteredHandle.isValid() &&
+        m_ssaoHistoryHandle[0].isValid() && m_ssaoHistoryHandle[1].isValid() && m_ssaoTemporalHandle.isValid() &&
+        m_ssgiHandle.isValid() && m_ssgiHalfResHandle.isValid() && m_ssgiDenoiseHandle[0].isValid() &&
+        m_ssgiDenoiseHandle[1].isValid() && m_ssgiHistoryHandle[0].isValid() && m_ssgiHistoryHandle[1].isValid() &&
         m_ssgiMomentsHistoryHandle[0].isValid() && m_ssgiMomentsHistoryHandle[1].isValid() &&
         m_ssgiTemporalHandle.isValid() && m_ssgiTemporalMomentsHandle.isValid() && m_csmShadowDepthHandle.isValid() &&
         m_csmShadowDepthAllHandle.isValid() && m_csmShadowColor0Handle.isValid() && m_csmShadowColor1Handle.isValid();
@@ -1919,75 +1904,34 @@ bool DeferredRenderTargets::ensureHistorySceneTextureViews(RhiDevice& rhiDevice)
     return true;
 }
 
-bool DeferredRenderTargets::ensureHistoryConfidenceTextureViews(RhiDevice& rhiDevice) {
+bool DeferredRenderTargets::ensureNrdReprojectionCoverageTextureViews(RhiDevice& rhiDevice) {
     const std::lock_guard<std::recursive_mutex> viewLock(m_rhiViewMutex);
     if (m_rhiViewDevice != nullptr && m_rhiViewDevice != &rhiDevice) {
         destroyRhiTextureViews();
     }
-    if (m_historyConfidenceView[0].isValid() && m_historyConfidenceView[1].isValid()) {
+    if (m_nrdReprojectionCoverageView[0].isValid() && m_nrdReprojectionCoverageView[1].isValid()) {
         return true;
     }
-    if (!m_historyConfidenceHandle[0].isValid() || !m_historyConfidenceHandle[1].isValid()) {
+    if (!m_nrdReprojectionCoverageHandle[0].isValid() || !m_nrdReprojectionCoverageHandle[1].isValid()) {
         return false;
     }
 
     for (int historyIndex = 0; historyIndex < 2; ++historyIndex) {
-        if (m_historyConfidenceView[historyIndex].isValid()) {
+        if (m_nrdReprojectionCoverageView[historyIndex].isValid()) {
             continue;
         }
 
         RhiTextureViewDesc desc;
-        desc.texture = m_historyConfidenceHandle[historyIndex];
+        desc.texture = m_nrdReprojectionCoverageHandle[historyIndex];
         desc.viewType = RhiTextureViewType::Texture2D;
         desc.format = RhiTextureFormat::R8Unorm;
         desc.baseMip = 0u;
         desc.mipCount = 1u;
         desc.baseLayer = 0u;
         desc.layerCount = 1u;
-        m_historyConfidenceView[historyIndex] = rhiDevice.createTextureView(desc);
-        if (!m_historyConfidenceView[historyIndex].isValid()) {
-            for (RhiTextureViewHandle& view : m_historyConfidenceView) {
-                if (view.isValid()) {
-                    rhiDevice.destroyTextureView(view);
-                }
-                view = {};
-            }
-            return false;
-        }
-    }
-
-    m_rhiViewDevice = &rhiDevice;
-    return true;
-}
-
-bool DeferredRenderTargets::ensureHistoryRtgiValidationTextureViews(RhiDevice& rhiDevice) {
-    const std::lock_guard<std::recursive_mutex> viewLock(m_rhiViewMutex);
-    if (m_rhiViewDevice != nullptr && m_rhiViewDevice != &rhiDevice) {
-        destroyRhiTextureViews();
-    }
-    if (m_historyRtgiValidationView[0].isValid() && m_historyRtgiValidationView[1].isValid()) {
-        return true;
-    }
-    if (!m_historyRtgiValidationHandle[0].isValid() || !m_historyRtgiValidationHandle[1].isValid()) {
-        return false;
-    }
-
-    for (int historyIndex = 0; historyIndex < 2; ++historyIndex) {
-        if (m_historyRtgiValidationView[historyIndex].isValid()) {
-            continue;
-        }
-
-        RhiTextureViewDesc desc;
-        desc.texture = m_historyRtgiValidationHandle[historyIndex];
-        desc.viewType = RhiTextureViewType::Texture2D;
-        desc.format = RhiTextureFormat::Rg32Uint;
-        desc.baseMip = 0u;
-        desc.mipCount = 1u;
-        desc.baseLayer = 0u;
-        desc.layerCount = 1u;
-        m_historyRtgiValidationView[historyIndex] = rhiDevice.createTextureView(desc);
-        if (!m_historyRtgiValidationView[historyIndex].isValid()) {
-            for (RhiTextureViewHandle& view : m_historyRtgiValidationView) {
+        m_nrdReprojectionCoverageView[historyIndex] = rhiDevice.createTextureView(desc);
+        if (!m_nrdReprojectionCoverageView[historyIndex].isValid()) {
+            for (RhiTextureViewHandle& view : m_nrdReprojectionCoverageView) {
                 if (view.isValid()) {
                     rhiDevice.destroyTextureView(view);
                 }
@@ -2549,13 +2493,7 @@ void DeferredRenderTargets::destroyRhiTextureViews() {
         }
         view = {};
     }
-    for (RhiTextureViewHandle& view : m_historyConfidenceView) {
-        if (m_rhiViewDevice != nullptr && view.isValid()) {
-            m_rhiViewDevice->destroyTextureView(view);
-        }
-        view = {};
-    }
-    for (RhiTextureViewHandle& view : m_historyRtgiValidationView) {
+    for (RhiTextureViewHandle& view : m_nrdReprojectionCoverageView) {
         if (m_rhiViewDevice != nullptr && view.isValid()) {
             m_rhiViewDevice->destroyTextureView(view);
         }
@@ -2646,10 +2584,8 @@ void DeferredRenderTargets::destroyRhiTextureViews() {
     m_skyCaptureView = {};
     m_historySceneView[0] = {};
     m_historySceneView[1] = {};
-    m_historyConfidenceView[0] = {};
-    m_historyConfidenceView[1] = {};
-    m_historyRtgiValidationView[0] = {};
-    m_historyRtgiValidationView[1] = {};
+    m_nrdReprojectionCoverageView[0] = {};
+    m_nrdReprojectionCoverageView[1] = {};
     m_historyDepthView[0] = {};
     m_historyDepthView[1] = {};
     m_taaHistoryDepthView[0] = {};

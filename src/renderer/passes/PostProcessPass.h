@@ -166,6 +166,7 @@ private:
     [[nodiscard]] RhiCommandList& beginCommandList(const char* debugName) const;
     void submitCommandList(RhiDevice& rhiDevice, RhiCommandList& commandList, const char* debugName) const;
     bool ensureSceneCaptureTargets(RhiDevice& rhiDevice, int width, int height);
+    bool ensureExposureState(RhiDevice& rhiDevice);
     bool ensureProcessingTargets(RhiDevice& rhiDevice, int width, int height);
     bool ensureCompositeTarget(RhiDevice& rhiDevice, int width, int height);
     bool ensureRhiPipelines(RhiDevice& rhiDevice);
@@ -178,6 +179,7 @@ private:
     bool rebuildTargetBindGroups();
     bool rebuildCompositeBindGroups();
     void destroySceneCaptureTargets();
+    void destroyExposureState();
     void destroyProcessingTargets();
     void destroyTargetBindGroups();
     void destroyCompositeBindGroups();

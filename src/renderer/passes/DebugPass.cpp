@@ -17,7 +17,6 @@
 
 namespace {
 constexpr size_t kDebugTextureCount = DebugPass::kTextureCount;
-constexpr size_t kNrdValidationTextureIndex = 31u;
 
 [[nodiscard]] bool sameTextureHandle(const RhiTextureHandle lhs, const RhiTextureHandle rhs) {
     return lhs.index == rhs.index && lhs.generation == rhs.generation;
@@ -127,9 +126,6 @@ RgPassHandle DebugPass::addGraphPass(RenderGraph& graph, const FrameContext& ctx
     std::array<DeclaredTexture, kDebugTextureCount> declaredTextures{};
     std::size_t declaredTextureCount = 0u;
     for (std::size_t index = 0u; index < resources.textures.size(); ++index) {
-        if (index == kNrdValidationTextureIndex && !isNrdValidationView(settings.debug.viewMode)) {
-            continue;
-        }
         const bool depthTexture = index == 4u || index == 5u || index == 9u || index == 16u ||
                                   (index == 13u && settings.debug.viewMode == 19);
         const RgTextureHandle texture = resources.textures[index];
@@ -153,14 +149,13 @@ RgPassHandle DebugPass::addGraphPass(RenderGraph& graph, const FrameContext& ctx
                      nrdMotion = resources.textures[27], nrdNormalRoughness = resources.textures[28],
                      nrdViewZ = resources.textures[29], nrdOutput = resources.textures[30],
                      nrdValidation = resources.textures[31],
-                     nrdConfidence = resources.textures[32]](RgPassContext& pass) {
-            return recordGraphPass(*frame, frameSettings, *frameTargets,
-                                   static_cast<int>(frame->temporalExtents.renderExtent.width),
-                                   static_cast<int>(frame->temporalExtents.renderExtent.height), pass.commandList(),
-                                   pass.textureView(rtgiRaw), pass.textureView(rtgiValidation), pass.textureView(nrdMotion),
-                                   pass.textureView(nrdNormalRoughness), pass.textureView(nrdViewZ),
-                                   pass.textureView(nrdOutput), pass.textureView(nrdValidation),
-                                   pass.textureView(nrdConfidence));
+                     nrdReprojectionCoverage = resources.textures[32]](RgPassContext& pass) {
+            return recordGraphPass(
+                *frame, frameSettings, *frameTargets, static_cast<int>(frame->temporalExtents.renderExtent.width),
+                static_cast<int>(frame->temporalExtents.renderExtent.height), pass.commandList(),
+                pass.textureView(rtgiRaw), pass.textureView(rtgiValidation), pass.textureView(nrdMotion),
+                pass.textureView(nrdNormalRoughness), pass.textureView(nrdViewZ), pass.textureView(nrdOutput),
+                pass.textureView(nrdValidation), pass.textureView(nrdReprojectionCoverage));
         });
     return debug.handle();
 }
@@ -172,9 +167,9 @@ bool DebugPass::recordGraphPass(const FrameContext& ctx, const RenderSettings& s
                                 const RhiTextureViewHandle nrdNormalRoughnessView,
                                 const RhiTextureViewHandle nrdViewZView, const RhiTextureViewHandle nrdOutputView,
                                 const RhiTextureViewHandle nrdValidationView,
-                                const RhiTextureViewHandle nrdConfidenceView) {
+                                const RhiTextureViewHandle nrdReprojectionCoverageView) {
     if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr || !ctx.sceneCaptureColorView.isValid() ||
-        !nrdConfidenceView.isValid() || m_shadowRenderer == nullptr) {
+        !nrdReprojectionCoverageView.isValid() || m_shadowRenderer == nullptr) {
         return false;
     }
 
@@ -218,30 +213,16 @@ bool DebugPass::recordGraphPass(const FrameContext& ctx, const RenderSettings& s
     }
 
     const std::array<RhiTextureViewHandle, kDebugTextureCount> views = {
-        targets.albedoTextureViewHandle(),
-        targets.normalAoTextureViewHandle(),
-        targets.voxelLightTextureViewHandle(),
-        targets.materialTextureViewHandle(),
-        targets.depthTextureViewHandle(),
-        targets.csmShadowDepthArrayTextureViewHandle(),
-        targets.ssaoFilteredTextureViewHandle(),
-        targets.sceneLightingTextureViewHandle(),
-        targets.transparentCompositeTextureViewHandle(),
-        targets.transparentCompositeDepthTextureViewHandle(),
-        targets.halfResTextureViewHandle(),
-        targets.skyCaptureTextureViewHandle(),
-        targets.velocityTextureViewHandle(),
-        binding13,
-        binding14,
-        binding15,
-        targets.csmShadowDepthArrayTextureViewHandle(),
-        targets.temporalCurrentTextureViewHandle(),
-        targets.ssgiTextureViewHandle(),
-        targets.csmShadowColor0ArrayTextureViewHandle(),
-        targets.csmShadowColor1ArrayTextureViewHandle(),
-        targets.reactiveMaskTextureViewHandle(),
-        targets.transparencyMaskTextureViewHandle(),
-        targets.f0MetallicTextureViewHandle(),
+        targets.albedoTextureViewHandle(), targets.normalAoTextureViewHandle(), targets.voxelLightTextureViewHandle(),
+        targets.materialTextureViewHandle(), targets.depthTextureViewHandle(),
+        targets.csmShadowDepthArrayTextureViewHandle(), targets.ssaoFilteredTextureViewHandle(),
+        targets.sceneLightingTextureViewHandle(), targets.transparentCompositeTextureViewHandle(),
+        targets.transparentCompositeDepthTextureViewHandle(), targets.halfResTextureViewHandle(),
+        targets.skyCaptureTextureViewHandle(), targets.velocityTextureViewHandle(), binding13, binding14, binding15,
+        targets.csmShadowDepthArrayTextureViewHandle(), targets.temporalCurrentTextureViewHandle(),
+        targets.ssgiTextureViewHandle(), targets.csmShadowColor0ArrayTextureViewHandle(),
+        targets.csmShadowColor1ArrayTextureViewHandle(), targets.reactiveMaskTextureViewHandle(),
+        targets.transparencyMaskTextureViewHandle(), targets.f0MetallicTextureViewHandle(),
         targets.objectMaterialIdTextureViewHandle(),
         // RTGI signal transients; sampled only by the RTGI debug modes and
         // substituted with always-valid targets when RTGI is disabled.
@@ -252,7 +233,7 @@ bool DebugPass::recordGraphPass(const FrameContext& ctx, const RenderSettings& s
         nrdViewZView.isValid() ? nrdViewZView : targets.depthTextureViewHandle(),
         nrdOutputView.isValid() ? nrdOutputView : targets.sceneLightingTextureViewHandle(),
         nrdValidationView.isValid() ? nrdValidationView : targets.sceneLightingTextureViewHandle(),
-        nrdConfidenceView};
+        nrdReprojectionCoverageView};
     if (!ensureRhiBindGroup(rhiDevice, debugViewMode, views)) {
         return false;
     }
@@ -466,7 +447,7 @@ bool DebugPass::ensureRhiBindGroup(RhiDevice& rhiDevice, const int debugViewMode
     std::array<RhiSamplerHandle, kDebugTextureCount> samplers;
     samplers.fill(m_linearSampler);
     const size_t nearestBindings[] = {0u,  1u,  2u,  3u,  4u,  5u,  9u,  12u, 16u, 19u, 20u,
-                                     21u, 22u, 23u, 24u, 25u, 26u, 27u, 28u, 29u, 31u, 32u};
+                                      21u, 22u, 23u, 24u, 25u, 26u, 27u, 28u, 29u, 31u, 32u};
     for (const size_t binding : nearestBindings) {
         samplers[binding] = m_nearestSampler;
     }

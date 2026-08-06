@@ -58,16 +58,14 @@ public:
     /// @param nrdViewZView Resolved NRD View-Z guide view.
     /// @param nrdOutputView Resolved NRD denoised diffuse signal view.
     /// @param nrdValidationView Resolved NRD validation overlay view.
+    /// @param nrdReprojectionCoverageView Resolved previous-viewport coverage diagnostic view.
     [[nodiscard]] bool recordGraphPass(const FrameContext& ctx, const RenderSettings& settings,
                                        DeferredRenderTargets& targets, int width, int height,
                                        RhiCommandList& commandList, RhiTextureViewHandle rtgiRawView,
-                                       RhiTextureViewHandle rtgiValidationView,
-                                       RhiTextureViewHandle nrdMotionView,
-                                       RhiTextureViewHandle nrdNormalRoughnessView,
-                                       RhiTextureViewHandle nrdViewZView,
-                                       RhiTextureViewHandle nrdOutputView,
-                                       RhiTextureViewHandle nrdValidationView,
-                                       RhiTextureViewHandle nrdConfidenceView);
+                                       RhiTextureViewHandle rtgiValidationView, RhiTextureViewHandle nrdMotionView,
+                                       RhiTextureViewHandle nrdNormalRoughnessView, RhiTextureViewHandle nrdViewZView,
+                                       RhiTextureViewHandle nrdOutputView, RhiTextureViewHandle nrdValidationView,
+                                       RhiTextureViewHandle nrdReprojectionCoverageView);
 
 private:
     bool ensureRhiPipeline(RhiDevice& rhiDevice);

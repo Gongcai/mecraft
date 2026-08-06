@@ -30,7 +30,10 @@ namespace {
     const std::string pipelinePath = std::string(MECRAFT_TEST_SOURCE_DIR) + "/src/renderer/core/DeferredPipeline.cpp";
     const std::string targetsPath =
         std::string(MECRAFT_TEST_SOURCE_DIR) + "/src/renderer/targets/DeferredRenderTargets.h";
+    const std::string debugPassPath = std::string(MECRAFT_TEST_SOURCE_DIR) + "/src/renderer/passes/DebugPass.cpp";
     const std::string scenePath = std::string(MECRAFT_TEST_SOURCE_DIR) + "/src/renderer/core/RenderScene.cpp";
+    const std::string modelScenePath =
+        std::string(MECRAFT_TEST_SOURCE_DIR) + "/src/scene/ModelSceneDeferredRenderer.cpp";
     std::ifstream signalFile(signalPath, std::ios::binary);
     std::ifstream packFile(packPath, std::ios::binary);
     std::ifstream traceFile(tracePath, std::ios::binary);
@@ -38,9 +41,12 @@ namespace {
     std::ifstream lightingFile(lightingPath, std::ios::binary);
     std::ifstream pipelineFile(pipelinePath, std::ios::binary);
     std::ifstream targetsFile(targetsPath, std::ios::binary);
+    std::ifstream debugPassFile(debugPassPath, std::ios::binary);
     std::ifstream sceneFile(scenePath, std::ios::binary);
+    std::ifstream modelSceneFile(modelScenePath, std::ios::binary);
     if (!signalFile.is_open() || !packFile.is_open() || !traceFile.is_open() || !guideFile.is_open() ||
-        !lightingFile.is_open() || !pipelineFile.is_open() || !targetsFile.is_open() || !sceneFile.is_open()) {
+        !lightingFile.is_open() || !pipelineFile.is_open() || !targetsFile.is_open() || !debugPassFile.is_open() ||
+        !sceneFile.is_open() || !modelSceneFile.is_open()) {
         return false;
     }
     const std::string signalSource{std::istreambuf_iterator<char>(signalFile), std::istreambuf_iterator<char>()};
@@ -50,7 +56,10 @@ namespace {
     const std::string lightingSource{std::istreambuf_iterator<char>(lightingFile), std::istreambuf_iterator<char>()};
     const std::string pipelineSource{std::istreambuf_iterator<char>(pipelineFile), std::istreambuf_iterator<char>()};
     const std::string targetsSource{std::istreambuf_iterator<char>(targetsFile), std::istreambuf_iterator<char>()};
+    const std::string debugPassSource{std::istreambuf_iterator<char>(debugPassFile), std::istreambuf_iterator<char>()};
     const std::string sceneSource{std::istreambuf_iterator<char>(sceneFile), std::istreambuf_iterator<char>()};
+    const std::string modelSceneSource{std::istreambuf_iterator<char>(modelSceneFile),
+                                       std::istreambuf_iterator<char>()};
     return signalSource.find("const float RTGI_NRD_FP16_MAX = 65504.0;") != std::string::npos &&
            signalSource.find("const float RTGI_NRD_EPSILON = 1.0e-6;") != std::string::npos &&
            signalSource.find("dot(color, vec3(0.25, 0.5, 0.25))") != std::string::npos &&
@@ -66,12 +75,12 @@ namespace {
            traceSource.find("missRadiance, RTGI_NRD_FP16_MAX, RTGI_TRACE_CLASS_MISS") != std::string::npos &&
            traceSource.find("rtgiOffsetSurfaceOrigin") != std::string::npos &&
            traceSource.find("dot(geometricNormal, outgoingDirection) < 0.0 ? -1.0 : 1.0") != std::string::npos &&
-           guideSource.find("layout(binding = 6, rgba16f) uniform writeonly image2D uMotion;") != std::string::npos &&
-           guideSource.find("layout(binding = 9, r8) uniform writeonly image2D uConfidence;") != std::string::npos &&
-           guideSource.find("layout(binding = 5) uniform usampler2D uPreviousValidationTexture;") !=
+           guideSource.find("layout(binding = 4, rgba16f) uniform writeonly image2D uMotion;") != std::string::npos &&
+           guideSource.find("layout(binding = 7, r8) uniform writeonly image2D uReprojectionCoverage;") !=
                std::string::npos &&
-           guideSource.find("layout(binding = 10, rg32ui) uniform writeonly uimage2D uValidationHistory;") !=
-               std::string::npos &&
+           guideSource.find("uValidationTexture") == std::string::npos &&
+           guideSource.find("uPreviousValidationTexture") == std::string::npos &&
+           guideSource.find("uValidationHistory") == std::string::npos &&
            guideSource.find("vec2 motion = -texelFetch(uVelocityTexture, texel, 0).rg;") != std::string::npos &&
            guideSource.find("float nrdGuideMaterialId(SurfaceMaterial material, float roughness)") !=
                std::string::npos &&
@@ -85,12 +94,10 @@ namespace {
                             "-invalidViewZ;") != std::string::npos &&
            guideSource.find("viewPosition.z >= -1.0e-7") != std::string::npos &&
            guideSource.find("positiveViewZ = -viewPosition.z;") != std::string::npos &&
-           guideSource.find("imageStore(uValidationHistory, texel, uvec4(currentValidation, 0u, 0u));") !=
+           guideSource.find("imageStore(uReprojectionCoverage, texel, vec4(reprojectionCoverage, 0.0, 0.0, 0.0));") !=
                std::string::npos &&
-           guideSource.find("const bool validateHitIdentity = (historyFlags & 2u) != 0u;") != std::string::npos &&
-           guideSource.find("currentValidation.g == previousValidation.g") != std::string::npos &&
-           pipelineSource.find("glm::vec2 nrdCameraJitterPixels(const TemporalJitter& jitter)") !=
-               std::string::npos &&
+           guideSource.find("It is not NRD history confidence") != std::string::npos &&
+           pipelineSource.find("glm::vec2 nrdCameraJitterPixels(const TemporalJitter& jitter)") != std::string::npos &&
            pipelineSource.find("return -jitter.pixels;") != std::string::npos &&
            pipelineSource.find("commonSettings.motionVectorScale[2] = 1.0f;") != std::string::npos &&
            pipelineSource.find("relaxSettings.minMaterialForDiffuse = 0.0f;") != std::string::npos &&
@@ -99,19 +106,26 @@ namespace {
                std::string::npos &&
            pipelineSource.find("guideSettings.useJitteredProjection = traceSettings.useJitteredProjection;") !=
                std::string::npos &&
-           pipelineSource.find("IN_DIFF_CONFIDENCE") != std::string::npos &&
-           pipelineSource.find("commonSettings.isHistoryConfidenceAvailable = true;") != std::string::npos &&
-           pipelineSource.find("guideResources.currentValidationHistory = historyRtgiValidationCurrent;") !=
-               std::string::npos &&
+           pipelineSource.find("IN_DIFF_CONFIDENCE") == std::string::npos &&
+           pipelineSource.find("commonSettings.isHistoryConfidenceAvailable = false;") != std::string::npos &&
+           pipelineSource.find("guideResources.reprojectionCoverage = nrdReprojectionCoverage;") != std::string::npos &&
+           pipelineSource.find("sampledStorage | rhiFlag(RhiTextureUsage::ColorAttachment)") != std::string::npos &&
+           pipelineSource.find("NRD.ValidationDescriptorInit") != std::string::npos &&
+           pipelineSource.find("writeTexture(nrdValidation, RhiResourceState::RenderTarget)") != std::string::npos &&
            pipelineSource.find("writeTexture(historyDepthCurrent, RhiResourceState::TransferDst)") !=
                std::string::npos &&
            pipelineSource.find("targets.swapHistory();") != std::string::npos &&
            targetsSource.find("historyDepthTexturePrevHandle() const") != std::string::npos &&
            targetsSource.find("m_historyDepthHandle[1 - m_currentHistoryIndex]") != std::string::npos &&
-           targetsSource.find("historyConfidenceTexturePrevHandle() const") != std::string::npos &&
-           targetsSource.find("historyRtgiValidationTexturePrevHandle() const") != std::string::npos &&
+           targetsSource.find("nrdReprojectionCoverageTextureHandle() const") != std::string::npos &&
+           targetsSource.find("historyConfidenceTexture") == std::string::npos &&
+           targetsSource.find("historyRtgiValidationTexture") == std::string::npos &&
+           debugPassSource.find("!isNrdValidationView(settings.debug.viewMode)") == std::string::npos &&
            sceneSource.find("ctx.jitter.pixels.x = frameX * 0.5f;") != std::string::npos &&
            sceneSource.find("ctx.jitter.pixels.y = -frameY * 0.5f;") != std::string::npos &&
+           sceneSource.find("m_previousContext.camera.projection != ctx.camera.projection") == std::string::npos &&
+           modelSceneSource.find("previousContext.camera.projection != context.camera.projection") ==
+               std::string::npos &&
            lightingSource.find("uRtgiRadianceScale pRtgi.z") != std::string::npos &&
            lightingSource.find("* uRtgiRadianceScale;") != std::string::npos;
 }

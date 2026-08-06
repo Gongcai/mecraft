@@ -402,9 +402,16 @@ Water、Transparent、Cloud、Volumetric 和 Particle producer 已统一写入 P
 
 NRD 的 `frameIndex` 每个真实渲染帧严格增加 1，并与 Checkerboard Phase 同步。当前生产 Bridge
 绑定 `IN_MV`、`IN_NORMAL_ROUGHNESS`、`IN_VIEWZ`、方法对应的 Radiance/Hit Distance，以及
-`OUT_DIFF_RADIANCE_HITDIST`。`IN_DIFF_CONFIDENCE`、`IN_DISOCCLUSION_THRESHOLD_MIX` 和
-`OUT_VALIDATION` 尚未接入生产 Deferred 资源；它们是对齐官方验证覆盖的后续诊断项，不把 32-bit
-Object ID 直接当作 NRD 原生输入。
+`OUT_DIFF_RADIANCE_HITDIST` 与 `OUT_VALIDATION`。只有 Debug View 100 请求 NRD 生成 Validation；其他
+Deferred Debug View 通过显式资源初始化保证静态描述符始终处于合法的 Shader Read 状态。
+`IN_DIFF_CONFIDENCE` 和 `IN_DISOCCLUSION_THRESHOLD_MIX` 不接入生产管线。NRD 的历史置信度要求由独立的
+上一帧光照梯度追踪生成，不能使用当前像素是否落在上一帧视口内，也不能直接使用 RT Hit/Miss 或 32-bit
+Object ID 比较结果。
+
+Debug View 101 显示 `NRD Reprojection Coverage`：白色表示当前表面重投影后位于上一帧视口内，黑色表示
+新显露区域、屏幕边界外或无有效深度。该画面只用于观察运动时的历史覆盖边界，不参与 NRD 权重计算。
+平滑 FOV 变化由当前/上一帧投影矩阵直接重投影，不再因逐帧矩阵数值变化而连续重启历史；资源尺寸变化、
+相机切换和资产修订仍按对应 Temporal Reset 原因重启相关历史。
 
 ### 6.3 NRD Render Graph Bridge
 

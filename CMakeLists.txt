@@ -1042,6 +1042,12 @@ if(MECRAFT_BUILD_TESTS)
                 -DMECRAFT_SOURCE_DIR=${PROJECT_SOURCE_DIR}
                 -P ${PROJECT_SOURCE_DIR}/tests/renderer_removed_feature_test.cmake)
     add_mecraft_test(app_launch_options_test tests/app_launch_options_test.cpp)
+    add_mecraft_test(app_shutdown_contract_test tests/app_shutdown_contract_test.cpp)
+    target_compile_definitions(app_shutdown_contract_test PRIVATE
+            MECRAFT_TEST_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
+    add_mecraft_test(post_process_resource_contract_test tests/post_process_resource_contract_test.cpp)
+    target_compile_definitions(post_process_resource_contract_test PRIVATE
+            MECRAFT_TEST_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
     add_mecraft_test(camera_path_contract_test tests/camera_path_contract_test.cpp)
     target_compile_definitions(camera_path_contract_test PRIVATE
             MECRAFT_TEST_SOURCE_DIR="${PROJECT_SOURCE_DIR}")

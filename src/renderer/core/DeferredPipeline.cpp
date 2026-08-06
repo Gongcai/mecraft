@@ -38,10 +38,9 @@
 
 namespace {
 [[nodiscard]] bool validRtgiSettings(const RtgiSettings& settings) {
-    return std::isfinite(settings.intensity) && settings.intensity >= 0.0f &&
-           std::isfinite(settings.maxRayDistance) && settings.maxRayDistance > 0.0f &&
-           std::isfinite(settings.maxShadowRayDistance) && settings.maxShadowRayDistance > 0.0f &&
-           std::isfinite(settings.minimumRayOriginBias) &&
+    return std::isfinite(settings.intensity) && settings.intensity >= 0.0f && std::isfinite(settings.maxRayDistance) &&
+           settings.maxRayDistance > 0.0f && std::isfinite(settings.maxShadowRayDistance) &&
+           settings.maxShadowRayDistance > 0.0f && std::isfinite(settings.minimumRayOriginBias) &&
            settings.minimumRayOriginBias >= renderer::contracts::kRtgiMinimumRayOriginBias &&
            settings.minimumRayOriginBias < settings.maxRayDistance &&
            settings.minimumRayOriginBias < settings.maxShadowRayDistance;
@@ -54,11 +53,9 @@ namespace {
            settings.disocclusionThreshold <= 0.02f && std::isfinite(settings.disocclusionThresholdAlternate) &&
            settings.disocclusionThresholdAlternate >= 0.02f && settings.disocclusionThresholdAlternate <= 0.2f &&
            settings.relaxAtrousIterations >= 2 && settings.relaxAtrousIterations <= 8 &&
-           std::isfinite(settings.reblurHitDistanceConstantScale) &&
-           settings.reblurHitDistanceConstantScale > 0.0f &&
+           std::isfinite(settings.reblurHitDistanceConstantScale) && settings.reblurHitDistanceConstantScale > 0.0f &&
            std::isfinite(settings.reblurHitDistanceViewZScale) && settings.reblurHitDistanceViewZScale > 0.0f &&
-           std::isfinite(settings.reblurHitDistanceRoughnessScale) &&
-           settings.reblurHitDistanceRoughnessScale >= 1.0f;
+           std::isfinite(settings.reblurHitDistanceRoughnessScale) && settings.reblurHitDistanceRoughnessScale >= 1.0f;
 }
 
 #if defined(MECRAFT_ENABLE_NRD)
@@ -762,14 +759,12 @@ void DeferredPipeline::shutdown() {
     m_shadowRenderer = nullptr;
     m_shared = nullptr;
     m_rtgiTemporalSampleIndex = 0u;
-    m_lastNrdSceneTlasRevision = 0u;
     m_rtgiTraceInspectionActive = false;
 }
 
 void DeferredPipeline::invalidateHistory() {
     m_hasPreviousFrameData = false;
     m_rtgiTemporalSampleIndex = 0u;
-    m_lastNrdSceneTlasRevision = 0u;
 #if defined(MECRAFT_ENABLE_NRD)
     m_nrdClearHistory = true;
 #endif
@@ -905,8 +900,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
     DeferredRenderTargets& targets = *m_shared->deferredTargets;
     const bool rtgiEnabled = settings.rtgi.enabled;
     const bool nrdEnabled = rtgiEnabled && settings.nrd.enabled;
-    if ((rtgiEnabled && !validRtgiSettings(settings.rtgi)) ||
-        (nrdEnabled && !validNrdSettings(settings.nrd))) {
+    if ((rtgiEnabled && !validRtgiSettings(settings.rtgi)) || (nrdEnabled && !validNrdSettings(settings.nrd))) {
         MECRAFT_LOG_STREAM(std::cerr << "[DeferredPipeline] RTGI or NRD settings are invalid\n");
         return false;
     }
@@ -942,26 +936,12 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
     if (rtgiEnabled && !bootstrapSceneTlasForRtgi()) {
         return false;
     }
-    uint64_t activeSceneTlasRevision = 0u;
-    if (rtgiEnabled) {
-        const std::optional<renderer::rt::SceneTlasView> activeTlas = m_shared->sceneTlasCache->activeView();
-        if (!activeTlas.has_value()) {
-            return false;
-        }
-        activeSceneTlasRevision = activeTlas->revision;
-    }
-    if (!nrdEnabled) {
-        m_lastNrdSceneTlasRevision = 0u;
-    }
-    const bool nrdSceneTlasChanged = nrdEnabled && m_lastNrdSceneTlasRevision != 0u &&
-                                     activeSceneTlasRevision != m_lastNrdSceneTlasRevision;
     if (externalGeometry) {
         m_transparentBatch.clear();
         m_transparentPassPlan = {};
         m_graphCpuTerrainPrepMs = 0.0;
     }
-    const bool temporalReset =
-        ownerRequiresTemporalReset(TemporalHistoryOwner::ScreenSpace, ctx.temporalResetReasons);
+    const bool temporalReset = ownerRequiresTemporalReset(TemporalHistoryOwner::ScreenSpace, ctx.temporalResetReasons);
     const bool nrdTemporalReset =
         ownerRequiresTemporalReset(TemporalHistoryOwner::NrdDiffuse, ctx.temporalResetReasons);
     const bool rtgiTraceInspection = isRtgiTraceInspectionView(settings.debug.viewMode);
@@ -969,11 +949,6 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
     m_rtgiTraceInspectionActive = rtgiTraceInspection;
     if (!nrdEnabled || nrdTemporalReset || rtgiTraceInspectionChanged) {
         m_rtgiTemporalSampleIndex = 0u;
-    }
-    uint32_t rtgiFrameTemporalSampleIndex = m_rtgiTemporalSampleIndex;
-    if (nrdSceneTlasChanged && !nrdTemporalReset && !rtgiTraceInspectionChanged &&
-        rtgiFrameTemporalSampleIndex != 0u) {
-        --rtgiFrameTemporalSampleIndex;
     }
 #if defined(MECRAFT_ENABLE_NRD)
     if (rtgiTraceInspectionChanged) {
@@ -1000,16 +975,15 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
     if (!targets.ensureGBufferTextureViews(rhiDevice) || !targets.ensurePerObjectVelocityTextureView(rhiDevice) ||
         !targets.ensureVelocityTextureView(rhiDevice) || !targets.ensureSceneResolvedTextureView(rhiDevice) ||
         !targets.ensureHistorySceneTextureViews(rhiDevice) ||
-        !targets.ensureHistoryConfidenceTextureViews(rhiDevice) ||
-        !targets.ensureTemporalCurrentTextureView(rhiDevice) ||
-        (nrdEnabled && !targets.ensureHistoryRtgiValidationTextureViews(rhiDevice)) ||
-        !targets.ensureHalfResTextureView(rhiDevice) || !targets.ensureHistoryVolumetricTextureViews(rhiDevice) ||
-        !targets.ensureHistoryDepthTextureViews(rhiDevice) || !targets.ensureSsgiTextureView(rhiDevice) ||
-        !targets.ensureSsgiHalfResTextureView(rhiDevice) || !targets.ensureSsgiDenoiseTextureView(rhiDevice, 0) ||
-        !targets.ensureSsgiDenoiseTextureView(rhiDevice, 1) || !targets.ensureSsgiTemporalTextureViews(rhiDevice) ||
-        !targets.ensureWeatherMaskTextureView(rhiDevice) || !targets.ensureReactiveMaskTextureView(rhiDevice) ||
-        !targets.ensureTransparencyMaskTextureView(rhiDevice) || !targets.ensureSkyCaptureTextureView(rhiDevice) ||
-        !targets.ensureVolumetricFogTextureViews(rhiDevice) || !targets.ensureSsaoFilteredTextureView(rhiDevice) ||
+        !targets.ensureNrdReprojectionCoverageTextureViews(rhiDevice) ||
+        !targets.ensureTemporalCurrentTextureView(rhiDevice) || !targets.ensureHalfResTextureView(rhiDevice) ||
+        !targets.ensureHistoryVolumetricTextureViews(rhiDevice) || !targets.ensureHistoryDepthTextureViews(rhiDevice) ||
+        !targets.ensureSsgiTextureView(rhiDevice) || !targets.ensureSsgiHalfResTextureView(rhiDevice) ||
+        !targets.ensureSsgiDenoiseTextureView(rhiDevice, 0) || !targets.ensureSsgiDenoiseTextureView(rhiDevice, 1) ||
+        !targets.ensureSsgiTemporalTextureViews(rhiDevice) || !targets.ensureWeatherMaskTextureView(rhiDevice) ||
+        !targets.ensureReactiveMaskTextureView(rhiDevice) || !targets.ensureTransparencyMaskTextureView(rhiDevice) ||
+        !targets.ensureSkyCaptureTextureView(rhiDevice) || !targets.ensureVolumetricFogTextureViews(rhiDevice) ||
+        !targets.ensureSsaoFilteredTextureView(rhiDevice) ||
         (ssaoEnabled && !targets.ensureSsaoHalfResTextureView(rhiDevice)) ||
         (ssaoEnabled && settings.ssao.filterEnabled && !targets.ensureSsaoHalfResFilteredTextureView(rhiDevice)) ||
         (ssaoTemporalEnabled &&
@@ -1188,21 +1162,19 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
             return failGraphSetup();
         }
         const renderer::nrd::NrdDiffuseMethod method = nrdBridgeMethod(settings.nrd.method);
-        const bool rebuildBridge =
-            !m_nrdBridge->initialized() || m_nrdBridge->method() != std::optional(method) ||
-            m_nrdBridge->resourceWidth() != extent.width || m_nrdBridge->resourceHeight() != extent.height ||
-            m_nrdBridge->lastError() == renderer::nrd::NrdBridgeError::ExecutionStateInvalid;
+        const bool rebuildBridge = !m_nrdBridge->initialized() || m_nrdBridge->method() != std::optional(method) ||
+                                   m_nrdBridge->resourceWidth() != extent.width ||
+                                   m_nrdBridge->resourceHeight() != extent.height ||
+                                   m_nrdBridge->lastError() == renderer::nrd::NrdBridgeError::ExecutionStateInvalid;
         if (rebuildBridge) {
             if (m_nrdBridge->initialized()) {
                 rhiDevice.waitIdle();
                 m_nrdBridge->shutdown();
             }
-            const renderer::nrd::NrdBridgeError bridgeError =
-                m_nrdBridge->initialize(rhiDevice, method, static_cast<uint16_t>(extent.width),
-                                        static_cast<uint16_t>(extent.height));
+            const renderer::nrd::NrdBridgeError bridgeError = m_nrdBridge->initialize(
+                rhiDevice, method, static_cast<uint16_t>(extent.width), static_cast<uint16_t>(extent.height));
             if (bridgeError != renderer::nrd::NrdBridgeError::None) {
-                const std::optional<std::string_view> stableError =
-                    renderer::nrd::nrdBridgeErrorStableId(bridgeError);
+                const std::optional<std::string_view> stableError = renderer::nrd::nrdBridgeErrorStableId(bridgeError);
                 MECRAFT_LOG_STREAM(std::cerr << "[DeferredPipeline] NRD bridge initialization failed: "
                                              << (stableError.has_value() ? *stableError : std::string_view("Invalid"))
                                              << '\n');
@@ -1387,9 +1359,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
     RgTextureHandle ssgiHistoryPrevious;
     RgTextureHandle ssgiMomentsHistoryCurrent;
     RgTextureHandle ssgiMomentsHistoryPrevious;
-    RgTextureHandle historyConfidenceCurrent;
-    RgTextureHandle historyRtgiValidationCurrent;
-    RgTextureHandle historyRtgiValidationPrevious;
+    RgTextureHandle nrdReprojectionCoverage;
     RgTextureHandle historyDepthCurrent;
     RgTextureHandle historyDepthPrevious;
     RgTextureHandle taaHistoryDepthCurrent;
@@ -1488,25 +1458,26 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
             handle = m_renderGraph.createTexture({name, desc, RhiResourceState::ShaderRead});
             return handle.isValid();
         };
-        const RhiTextureUsageFlags sampledStorage = rhiFlag(RhiTextureUsage::Sampled) |
-                                                    rhiFlag(RhiTextureUsage::Storage);
+        const RhiTextureUsageFlags sampledStorage =
+            rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::Storage);
+        const RhiTextureUsageFlags nrdValidationUsage = sampledStorage | rhiFlag(RhiTextureUsage::ColorAttachment);
         if (!createRtgiTexture("RTGI.RawDiffuseRadianceHitDistance", RhiTextureFormat::Rgba16Float, sampledStorage,
-                              rtgiRawDiffuse) ||
+                               rtgiRawDiffuse) ||
             !createRtgiTexture("RTGI.Validation", RhiTextureFormat::Rg32Uint, sampledStorage, rtgiValidation)) {
             return failGraphSetup();
         }
-        if (nrdEnabled && (!createRtgiTexture("RTGI.RelaxDiffuseRadianceHitDistance", RhiTextureFormat::Rgba16Float,
-                                              sampledStorage, rtgiRelaxDiffuse) ||
-                           !createRtgiTexture("RTGI.ReblurDiffuseRadianceHitDistance", RhiTextureFormat::Rgba16Float,
-                                              sampledStorage, rtgiReblurDiffuse) ||
-                           !createRtgiTexture("NRD.Motion", RhiTextureFormat::Rgba16Float, sampledStorage, nrdMotion) ||
-                           !createRtgiTexture("NRD.NormalRoughness", RhiTextureFormat::Rgb10A2Unorm, sampledStorage,
-                                              nrdNormalRoughness) ||
-                           !createRtgiTexture("NRD.ViewZ", RhiTextureFormat::R32Float, sampledStorage, nrdViewZ) ||
-                           !createRtgiTexture("NRD.OutputDiffuseRadianceHitDistance", RhiTextureFormat::Rgba16Float,
-                                              sampledStorage, nrdOutputDiffuse) ||
-                           !createRtgiTexture("NRD.Validation", RhiTextureFormat::Rgba8Unorm, sampledStorage,
-                                              nrdValidation))) {
+        if (nrdEnabled &&
+            (!createRtgiTexture("RTGI.RelaxDiffuseRadianceHitDistance", RhiTextureFormat::Rgba16Float, sampledStorage,
+                                rtgiRelaxDiffuse) ||
+             !createRtgiTexture("RTGI.ReblurDiffuseRadianceHitDistance", RhiTextureFormat::Rgba16Float, sampledStorage,
+                                rtgiReblurDiffuse) ||
+             !createRtgiTexture("NRD.Motion", RhiTextureFormat::Rgba16Float, sampledStorage, nrdMotion) ||
+             !createRtgiTexture("NRD.NormalRoughness", RhiTextureFormat::Rgb10A2Unorm, sampledStorage,
+                                nrdNormalRoughness) ||
+             !createRtgiTexture("NRD.ViewZ", RhiTextureFormat::R32Float, sampledStorage, nrdViewZ) ||
+             !createRtgiTexture("NRD.OutputDiffuseRadianceHitDistance", RhiTextureFormat::Rgba16Float, sampledStorage,
+                                nrdOutputDiffuse) ||
+             !createRtgiTexture("NRD.Validation", RhiTextureFormat::Rgba8Unorm, nrdValidationUsage, nrdValidation))) {
             return failGraphSetup();
         }
     }
@@ -1581,17 +1552,9 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
                        RhiResourceState::DepthRead, historyDepthPrevious)) {
         return failGraphSetup();
     }
-    if (!importTexture(targets.historyConfidenceTextureHandle(), targets.historyConfidenceTextureViewHandle(),
-                       RhiResourceState::ShaderRead, historyConfidenceCurrent)) {
-        return failGraphSetup();
-    }
-    if (nrdEnabled &&
-        (!importTexture(targets.historyRtgiValidationTextureHandle(),
-                        targets.historyRtgiValidationTextureViewHandle(), RhiResourceState::ShaderRead,
-                        historyRtgiValidationCurrent) ||
-         !importTexture(targets.historyRtgiValidationTexturePrevHandle(),
-                        targets.historyRtgiValidationTexturePrevViewHandle(), RhiResourceState::ShaderRead,
-                        historyRtgiValidationPrevious))) {
+    if (!importTexture(targets.nrdReprojectionCoverageTextureHandle(),
+                       targets.nrdReprojectionCoverageTextureViewHandle(), RhiResourceState::ShaderRead,
+                       nrdReprojectionCoverage)) {
         return failGraphSetup();
     }
     if (!m_skyIblPass->importGraphResources(m_renderGraph, skyIblResources)) {
@@ -1715,9 +1678,9 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
     // dedicated pass, and zero occluded commands before the GBuffer draws
     // consume them. Skipped on temporal resets when no valid history exists.
     m_terrainDrawsPrepared = false;
-    const bool hiZCullActive =
-        !externalGeometry && settings.occlusion.hiZEnabled && m_hiZPass != nullptr && m_hasPreviousFrameData &&
-        !ownerRequiresTemporalReset(TemporalHistoryOwner::ScreenSpace, ctx.temporalResetReasons);
+    const bool hiZCullActive = !externalGeometry && settings.occlusion.hiZEnabled && m_hiZPass != nullptr &&
+                               m_hasPreviousFrameData &&
+                               !ownerRequiresTemporalReset(TemporalHistoryOwner::ScreenSpace, ctx.temporalResetReasons);
     if (!externalGeometry && settings.occlusion.hiZEnabled && m_hiZPass != nullptr) {
         HiZPass::GraphResources hiZResources;
         hiZResources.historyDepthPrevious = historyDepthPrevious;
@@ -1895,8 +1858,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
     reflectionProbeGridGraphPrepared = true;
 
     RgTextureHandle rtgiDiffuseTexture = albedo;
-    DeferredLightingPass::RtgiDiffuseEncoding rtgiDiffuseEncoding =
-        DeferredLightingPass::RtgiDiffuseEncoding::Disabled;
+    DeferredLightingPass::RtgiDiffuseEncoding rtgiDiffuseEncoding = DeferredLightingPass::RtgiDiffuseEncoding::Disabled;
     float rtgiRadianceScale = 1.0f;
     if (rtgiEnabled) {
         RtgiTracePass::GraphResources rtgiResources;
@@ -1934,9 +1896,8 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
         traceSettings.shadowInstanceMask =
             renderer::rt::sceneTlasMaskBit(renderer::rt::SceneTlasInstanceMask::ShadowCaster);
         traceSettings.temporalSamplingEnabled = nrdEnabled && !rtgiTraceInspection;
-        traceSettings.temporalSampleIndex = rtgiFrameTemporalSampleIndex;
-        traceSettings.useJitteredProjection =
-            usesTemporalProjectionJitter(settings.upscale.type, settings.taa.enabled);
+        traceSettings.temporalSampleIndex = m_rtgiTemporalSampleIndex;
+        traceSettings.useJitteredProjection = usesTemporalProjectionJitter(settings.upscale.type, settings.taa.enabled);
         traceSettings.terrainNormalMapsEnabled =
             settings.blockMaterialMaps.enabled && settings.blockMaterialMaps.normalMapsEnabled;
         traceSettings.terrainSpecularMapsEnabled =
@@ -1964,9 +1925,8 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
             packSettings.reblurHitDistance.roughnessScale = settings.nrd.reblurHitDistanceRoughnessScale;
             packSettings.diffuseRoughness = 1.0f;
             packSettings.useJitteredProjection = traceSettings.useJitteredProjection;
-            packSettings.method = settings.nrd.method == NrdDiffuseMethod::Relax
-                                      ? RtgiSignalPackPass::Method::Relax
-                                      : RtgiSignalPackPass::Method::Reblur;
+            packSettings.method = settings.nrd.method == NrdDiffuseMethod::Relax ? RtgiSignalPackPass::Method::Relax
+                                                                                 : RtgiSignalPackPass::Method::Reblur;
             RtgiSignalPackPass::GraphResources packResources;
             packResources.rawDiffuseRadianceHitDistance = rtgiRawDiffuse;
             packResources.depth = depth;
@@ -1985,16 +1945,12 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
             guideResources.normalAo = normalAo;
             guideResources.material = material;
             guideResources.velocity = velocity;
-            guideResources.validation = rtgiValidation;
-            guideResources.previousValidation = historyRtgiValidationPrevious;
             guideResources.motion = nrdMotion;
             guideResources.normalRoughness = nrdNormalRoughness;
             guideResources.viewZ = nrdViewZ;
-            guideResources.confidence = historyConfidenceCurrent;
-            guideResources.currentValidationHistory = historyRtgiValidationCurrent;
+            guideResources.reprojectionCoverage = nrdReprojectionCoverage;
             guideSettings.historyValid = !m_nrdClearHistory && !nrdTemporalReset;
             guideSettings.useJitteredProjection = traceSettings.useJitteredProjection;
-            guideSettings.validateHitIdentity = nrdSceneTlasChanged;
             graphTail = m_nrdGuidePrepPass->addGraphPass(m_renderGraph, ctx, guideSettings, guideResources, graphTail);
             if (!graphTail.isValid()) {
                 return failGraphSetup();
@@ -2006,7 +1962,6 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
             if (!externalResources.bind(::nrd::ResourceType::IN_MV, nrdMotion) ||
                 !externalResources.bind(::nrd::ResourceType::IN_NORMAL_ROUGHNESS, nrdNormalRoughness) ||
                 !externalResources.bind(::nrd::ResourceType::IN_VIEWZ, nrdViewZ) ||
-                !externalResources.bind(::nrd::ResourceType::IN_DIFF_CONFIDENCE, historyConfidenceCurrent) ||
                 !externalResources.bind(::nrd::ResourceType::IN_DIFF_RADIANCE_HITDIST, nrdInputSignal) ||
                 !externalResources.bind(::nrd::ResourceType::OUT_DIFF_RADIANCE_HITDIST, nrdOutputDiffuse) ||
                 !externalResources.bind(::nrd::ResourceType::OUT_VALIDATION, nrdValidation)) {
@@ -2044,13 +1999,12 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
             commonSettings.denoisingRange = settings.nrd.denoisingRange;
             commonSettings.disocclusionThreshold = settings.nrd.disocclusionThreshold;
             commonSettings.disocclusionThresholdAlternate = settings.nrd.disocclusionThresholdAlternate;
-            commonSettings.isHistoryConfidenceAvailable = true;
+            commonSettings.isHistoryConfidenceAvailable = false;
             commonSettings.enableValidation = isNrdValidationView(settings.debug.viewMode);
             commonSettings.frameIndex = static_cast<uint32_t>(ctx.frameIndex);
-            commonSettings.accumulationMode =
-                m_nrdClearHistory ? ::nrd::AccumulationMode::CLEAR_AND_RESTART
-                                  : nrdTemporalReset ? ::nrd::AccumulationMode::RESTART
-                                                  : ::nrd::AccumulationMode::CONTINUE;
+            commonSettings.accumulationMode = m_nrdClearHistory  ? ::nrd::AccumulationMode::CLEAR_AND_RESTART
+                                              : nrdTemporalReset ? ::nrd::AccumulationMode::RESTART
+                                                                 : ::nrd::AccumulationMode::CONTINUE;
 
             renderer::nrd::NrdDiffuseSettings methodSettings;
             if (settings.nrd.method == NrdDiffuseMethod::Relax) {
@@ -2070,9 +2024,8 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
                 reblurSettings.enableAntiFirefly = true;
                 methodSettings = reblurSettings;
             }
-            const renderer::nrd::NrdGraphDispatchResult nrdDispatch =
-                m_nrdBridge->addGraphDispatches(m_renderGraph, commonSettings, methodSettings, externalResources,
-                                                graphTail, ctx.debugService);
+            const renderer::nrd::NrdGraphDispatchResult nrdDispatch = m_nrdBridge->addGraphDispatches(
+                m_renderGraph, commonSettings, methodSettings, externalResources, graphTail, ctx.debugService);
             if (!nrdDispatch.succeeded()) {
                 const std::optional<std::string_view> stableError =
                     renderer::nrd::nrdBridgeErrorStableId(nrdDispatch.error);
@@ -2136,9 +2089,8 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
         lighting.readTexture(rtgiDiffuseTexture, RhiResourceState::ShaderRead);
     }
     lighting.setExecute([&, rtgiDiffuseTexture, rtgiDiffuseEncoding, rtgiRadianceScale](RgPassContext& pass) {
-        return m_lightingPass->execute(pass.commandList(), ctx, settings, targets,
-                                       pass.textureView(rtgiDiffuseTexture), rtgiDiffuseEncoding,
-                                       rtgiRadianceScale);
+        return m_lightingPass->execute(pass.commandList(), ctx, settings, targets, pass.textureView(rtgiDiffuseTexture),
+                                       rtgiDiffuseEncoding, rtgiRadianceScale);
     });
     if (clusteredLightingActive) {
         lighting.readBuffer(clusteredLightingResources.lights, RhiResourceState::StorageBuffer)
@@ -2630,6 +2582,23 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
     const bool debugViewActive = settings.debug.deferredLightDebugMode <= 0 &&
                                  settings.debug.reflectionDebugMode <= 0 && settings.debug.viewMode > 0 &&
                                  m_debugPass != nullptr;
+    if (debugViewActive && nrdEnabled && !isNrdValidationView(settings.debug.viewMode)) {
+        const int nrdValidationWidth = static_cast<int>(ctx.temporalExtents.renderExtent.width);
+        const int nrdValidationHeight = static_cast<int>(ctx.temporalExtents.renderExtent.height);
+        RenderGraphPassBuilder validationDescriptorInit =
+            m_renderGraph.addPass({"NRD.ValidationDescriptorInit", RgPassType::Graphics, RhiQueueType::Graphics,
+                                   /*threadSafeRecord=*/true});
+        validationDescriptorInit.dependsOn(graphTail)
+            .writeTexture(nrdValidation, RhiResourceState::RenderTarget)
+            .setExecute([nrdValidation, nrdValidationWidth, nrdValidationHeight](RgPassContext& pass) {
+                RhiColorAttachment attachment;
+                setClearAttachment(attachment, pass.textureView(nrdValidation), 0.0f, 0.0f, 0.0f, 0.0f);
+                clearColorAttachments(pass.commandList(), "NRD.ValidationDescriptorInit", nrdValidationWidth,
+                                      nrdValidationHeight, &attachment, 1u);
+                return true;
+            });
+        graphTail = validationDescriptorInit.handle();
+    }
     if (debugViewActive) {
         RgTextureHandle debugGraphBinding13 = historyScenePrevious;
         if (settings.debug.viewMode == 19) {
@@ -2687,7 +2656,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
                                    nrdViewZ.isValid() ? nrdViewZ : depth,
                                    nrdOutputDiffuse.isValid() ? nrdOutputDiffuse : sceneLighting,
                                    nrdValidation.isValid() ? nrdValidation : sceneLighting,
-                                   historyConfidenceCurrent};
+                                   nrdReprojectionCoverage};
         debugResources.output = sceneCaptureColor;
         graphTail = m_debugPass->addGraphPass(m_renderGraph, ctx, settings, targets, debugResources, graphTail);
         if (!graphTail.isValid()) {
@@ -2867,12 +2836,9 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
         MECRAFT_LOG_STREAM(std::cerr << "[DeferredPipeline] Render Graph execution failed: " << executed.message
                                      << '\n');
     }
-    // Advance the low-discrepancy phase after each stable temporal frame. A
-    // changed TLAS deliberately reuses the preceding phase once so the raw
-    // validation identities isolate scene changes from stochastic variation.
+    // Advance the low-discrepancy phase after each stable temporal frame.
     if (executed.succeeded() && nrdEnabled && !nrdTemporalReset && !rtgiTraceInspection) {
-        m_rtgiTemporalSampleIndex = rtgiFrameTemporalSampleIndex + 1u;
-        m_lastNrdSceneTlasRevision = activeSceneTlasRevision;
+        ++m_rtgiTemporalSampleIndex;
     }
     if (m_shared->terrainCache != nullptr) {
         m_shared->terrainCache->finishGraphExecution(executed.succeeded(), executed.completionToken());
@@ -2998,8 +2964,8 @@ bool DeferredPipeline::bootstrapSceneTlasForRtgi() {
         tlasBuild.setExecute([&](RgPassContext& pass) { return cache.recordFrame(pass.commandList()); });
         const RgCompileResult compiled = bootstrapGraph.compile();
         if (!compiled.succeeded()) {
-            MECRAFT_LOG_STREAM(std::cerr << "[DeferredPipeline] RTGI TLAS bootstrap compile failed: "
-                                         << compiled.message << '\n');
+            MECRAFT_LOG_STREAM(
+                std::cerr << "[DeferredPipeline] RTGI TLAS bootstrap compile failed: " << compiled.message << '\n');
             return false;
         }
 
@@ -3007,8 +2973,8 @@ bool DeferredPipeline::bootstrapSceneTlasForRtgi() {
         cache.finishGraphExecution(executed.succeeded(), executed.completionToken());
         if (!executed.succeeded() || !executed.completionToken().isValid() ||
             !rhiDevice.waitForSubmission(executed.completionToken())) {
-            MECRAFT_LOG_STREAM(std::cerr << "[DeferredPipeline] RTGI TLAS bootstrap execution failed: "
-                                         << executed.message << '\n');
+            MECRAFT_LOG_STREAM(
+                std::cerr << "[DeferredPipeline] RTGI TLAS bootstrap execution failed: " << executed.message << '\n');
             return false;
         }
         cache.beginFrame();

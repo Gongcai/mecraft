@@ -669,6 +669,12 @@ void GameManager::shutdown() {
     if (!writeBenchmarkReport()) {
         m_runSucceeded = false;
     }
+    if (m_rhiDevice) {
+        // Application states own render resources referenced by the latest
+        // submissions, so all GPU work must finish before those states are
+        // destroyed.
+        m_rhiDevice->waitIdle();
+    }
     while (!m_appStateMachine.isEmpty()) {
         m_appStateMachine.popState();
     }
@@ -677,7 +683,6 @@ void GameManager::shutdown() {
     m_bgmSystem.shutdown();
     m_audioEngine.shutdown();
     if (m_rhiDevice) {
-        m_rhiDevice->waitIdle();
         m_commandListPool.reset();
         m_rhiDevice->shutdown();
         m_rhiDevice.reset();

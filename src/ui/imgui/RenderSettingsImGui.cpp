@@ -108,7 +108,7 @@ bool showDeferredDebugView(RenderSettings& settings) {
                                                       "98: NRD Output Radiance",
                                                       "99: NRD Raw/Output Delta",
                                                       "100: NRD Validation",
-                                                      "101: NRD History Confidence"};
+                                                      "101: NRD Reprojection Coverage"};
     int debugViewMode = settings.debug.viewMode;
     const bool changed =
         ImGui::Combo("Deferred Debug View", &debugViewMode, kDebugViewModes, IM_ARRAYSIZE(kDebugViewModes));
@@ -255,8 +255,8 @@ bool showRtgiSettings(RenderSettings& settings) {
     }
     changed |= ImGui::SliderFloat("RTGI Intensity", &settings.rtgi.intensity, 0.0f, 8.0f, "%.2f");
     changed |= ImGui::SliderFloat("RTGI Max Ray Distance", &settings.rtgi.maxRayDistance, 1.0f, 256.0f, "%.1f");
-    changed |= ImGui::SliderFloat("RTGI Max Shadow Distance", &settings.rtgi.maxShadowRayDistance, 1.0f, 512.0f,
-                                  "%.1f");
+    changed |=
+        ImGui::SliderFloat("RTGI Max Shadow Distance", &settings.rtgi.maxShadowRayDistance, 1.0f, 512.0f, "%.1f");
     changed |= ImGui::SliderFloat("RTGI Ray Origin Bias", &settings.rtgi.minimumRayOriginBias,
                                   renderer::contracts::kRtgiMinimumRayOriginBias, 0.25f, "%.4f");
 
@@ -271,10 +271,10 @@ bool showRtgiSettings(RenderSettings& settings) {
         changed = true;
     }
     changed |= ImGui::SliderFloat("NRD Denoising Range", &settings.nrd.denoisingRange, 1.0f, 4096.0f, "%.1f");
-    changed |= ImGui::SliderFloat("NRD Disocclusion Threshold", &settings.nrd.disocclusionThreshold, 0.01f, 0.02f,
+    changed |=
+        ImGui::SliderFloat("NRD Disocclusion Threshold", &settings.nrd.disocclusionThreshold, 0.01f, 0.02f, "%.3f");
+    changed |= ImGui::SliderFloat("NRD Alternate Threshold", &settings.nrd.disocclusionThresholdAlternate, 0.02f, 0.3f,
                                   "%.3f");
-    changed |= ImGui::SliderFloat("NRD Alternate Threshold", &settings.nrd.disocclusionThresholdAlternate, 0.02f,
-                                  0.3f, "%.3f");
     if (settings.nrd.method == NrdDiffuseMethod::Relax) {
         changed |= ImGui::SliderInt("NRD RELAX A-Trous Iterations", &settings.nrd.relaxAtrousIterations, 2, 8);
     } else {

@@ -238,9 +238,6 @@ struct ModelSceneDeferredRenderer::Impl {
         context.camera.jitteredViewProj = jitteredProjection * view;
         context.camera.jitteredInvViewProj = glm::inverse(context.camera.jitteredViewProj);
         TemporalResetReasons explicitResetReasons = pendingTemporalResetReasons;
-        if (hasPreviousContext && previousContext.camera.projection != context.camera.projection) {
-            explicitResetReasons = explicitResetReasons | TemporalResetReason::Projection;
-        }
         if (hasPreviousContext && previousContext.frameIndex + 1u != context.frameIndex) {
             explicitResetReasons = explicitResetReasons | TemporalResetReason::FrameDiscontinuity;
         }

@@ -58,7 +58,7 @@ layout(binding = 28) uniform sampler2D uNrdNormalRoughnessTex;
 layout(binding = 29) uniform sampler2D uNrdViewZTex;
 layout(binding = 30) uniform sampler2D uNrdOutputTex;
 layout(binding = 31) uniform sampler2D uNrdValidationTex;
-layout(binding = 32) uniform sampler2D uNrdConfidenceTex;
+layout(binding = 32) uniform sampler2D uNrdReprojectionCoverageTex;
 
 layout(std140, binding = 33) uniform DebugParams {
     mat4 pShadowModelView;
@@ -1009,7 +1009,8 @@ void main() {
         vec4 motion = texture(uNrdMotionTex, textureUv);
         vec2 signedMotion = clamp(motion.xy * 64.0, vec2(-1.0), vec2(1.0));
         float speed = clamp(length(motion.xy) * 128.0, 0.0, 1.0);
-        FragColor = vec4(signedMotion * 0.5 + 0.5, speed, 1.0);
+        vec3 directionColor = vec3(signedMotion * 0.5 + 0.5, 1.0);
+        FragColor = vec4(directionColor * speed, 1.0);
         return;
     }
     if (uDebugViewMode == 96) {
@@ -1037,8 +1038,8 @@ void main() {
         return;
     }
     if (uDebugViewMode == 101) {
-        float confidence = clamp(texture(uNrdConfidenceTex, textureUv).r, 0.0, 1.0);
-        FragColor = vec4(confidence, confidence, confidence, 1.0);
+        float coverage = clamp(texture(uNrdReprojectionCoverageTex, textureUv).r, 0.0, 1.0);
+        FragColor = vec4(coverage, coverage, coverage, 1.0);
         return;
     }
 

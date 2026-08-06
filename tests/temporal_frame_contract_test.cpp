@@ -81,8 +81,7 @@ bool testRtgiNrdDependencyNormalization() {
                      "legacy RTGI/NRD settings must remain loadable")) {
         return false;
     }
-    if (!requireTrue(!decoded.rtgi.enabled && !decoded.nrd.enabled,
-                     "loading disabled RTGI must also disable NRD")) {
+    if (!requireTrue(!decoded.rtgi.enabled && !decoded.nrd.enabled, "loading disabled RTGI must also disable NRD")) {
         return false;
     }
 
@@ -110,7 +109,7 @@ bool testTemporalReconstructionSelection() {
 bool testNrdValidationDebugViewSelection() {
     return requireTrue(isNrdValidationView(100), "NRD validation view must consume the optional validation output") &&
            requireTrue(!isNrdValidationView(101),
-                       "NRD history confidence view must not consume the optional validation output");
+                       "NRD reprojection coverage view must not consume the optional validation output");
 }
 
 bool testMotionVectorConvention() {
@@ -254,10 +253,10 @@ bool testTemporalReset() {
                      "a pre-exposure step must reset scene-domain owners but never NRD")) {
         return false;
     }
-    if (!requireTrue(!ownerRequiresTemporalReset(TemporalHistoryOwner::NrdDiffuse, assetRevisionOnly) &&
+    if (!requireTrue(ownerRequiresTemporalReset(TemporalHistoryOwner::NrdDiffuse, assetRevisionOnly) &&
                          ownerRequiresTemporalReset(TemporalHistoryOwner::ScreenSpace, assetRevisionOnly) &&
                          ownerRequiresTemporalReset(TemporalHistoryOwner::Upscaler, assetRevisionOnly),
-                     "an asset edit must use per-pixel NRD confidence while resetting scene-domain owners")) {
+                     "an asset edit must reset NRD and scene-domain histories")) {
         return false;
     }
     return requireTrue(ownerRequiresTemporalReset(TemporalHistoryOwner::NrdDiffuse, cameraCut) &&

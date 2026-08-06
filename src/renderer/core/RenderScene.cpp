@@ -1348,9 +1348,6 @@ RenderScene::buildFrameContext(const IWorldView& worldView, const Camera& camera
     if (m_hasPreviousContext && m_previousContext.worldView != &worldView) {
         explicitResetReasons = explicitResetReasons | TemporalResetReason::WorldReload;
     }
-    if (m_hasPreviousContext && m_previousContext.camera.projection != ctx.camera.projection) {
-        explicitResetReasons = explicitResetReasons | TemporalResetReason::Projection;
-    }
     if (m_hasPreviousContext && m_previousContext.frameIndex + 1u != ctx.frameIndex) {
         explicitResetReasons = explicitResetReasons | TemporalResetReason::FrameDiscontinuity;
     }

@@ -53,8 +53,7 @@ namespace {
            traceSource.find("uvec4 flags;") != std::string::npos &&
            traceSource.find("policy != GPU_LIGHT_SHADOW_RAY_QUERY") != std::string::npos &&
            traceSource.find("gpuLightShadowIndex(light) != GPU_LIGHT_INVALID_RESOURCE_INDEX") != std::string::npos &&
-           traceSource.find("maximumDistance - dot(originOffset, unitDirection) - rayMinimum") !=
-               std::string::npos &&
+           traceSource.find("maximumDistance - dot(originOffset, unitDirection) - rayMinimum") != std::string::npos &&
            traceSource.find("const float RTGI_METALLIC_DIFFUSE_TRANSPORT_FLOOR = 0.35;") != std::string::npos &&
            traceSource.find("const float RTGI_RADIANCE_FIREFLY_CLAMP = 8.0;") != std::string::npos &&
            traceSource.find("ivec2 noiseTexel = ivec2(uvec2(texel) % uvec2(noiseExtent));") != std::string::npos &&
@@ -64,8 +63,7 @@ namespace {
                std::string::npos &&
            traceSource.find("rtgiPrimarySkyVisibility") != std::string::npos &&
            traceSource.find("vec3 rtgiVoxelGeometricNormal(vec3 shadingNormal)") != std::string::npos &&
-           traceSource.find("materialKindId(materialAux.materialKind) <= MATERIAL_NETHER_ORE") !=
-               std::string::npos &&
+           traceSource.find("materialKindId(materialAux.materialKind) <= MATERIAL_NETHER_ORE") != std::string::npos &&
            traceSource.find("if (!voxelPrimarySurface && adjacentDepthValid") != std::string::npos &&
            traceSource.find("vec3 samplingNormal = voxelPrimarySurface ? geometricNormal : normal;") !=
                std::string::npos &&
@@ -78,21 +76,23 @@ namespace {
            traceSource.find("surface.albedo * (1.0 - surface.metalness)") == std::string::npos &&
            traceSource.find("optional local-light shadow resource must not erase") != std::string::npos &&
            traceSource.find("Local lights are optional secondary transport") != std::string::npos &&
-           pipelineSource.find("const bool rtgiTraceInspection = isRtgiTraceInspectionView(settings.debug.viewMode);") !=
+           pipelineSource.find(
+               "const bool rtgiTraceInspection = isRtgiTraceInspectionView(settings.debug.viewMode);") !=
                std::string::npos &&
            pipelineSource.find("traceSettings.temporalSamplingEnabled = nrdEnabled && !rtgiTraceInspection;") !=
                std::string::npos &&
-           pipelineSource.find("traceSettings.temporalSampleIndex = rtgiFrameTemporalSampleIndex;") !=
-               std::string::npos &&
+           pipelineSource.find("traceSettings.temporalSampleIndex = m_rtgiTemporalSampleIndex;") != std::string::npos &&
+           pipelineSource.find("++m_rtgiTemporalSampleIndex;") != std::string::npos &&
+           pipelineSource.find("m_lastNrdSceneTlasRevision") == std::string::npos &&
            pipelineSource.find("relaxSettings.atrousIterationNum =") != std::string::npos &&
            pipelineSource.find("reblurSettings.enableAntiFirefly = true;") != std::string::npos &&
            pipelineSource.find("const bool nrdEnabled = rtgiEnabled && settings.nrd.enabled;") != std::string::npos &&
-           pipelineSource.find("traceSettings.celestialRadianceScale = settings.postProcess.directSunStrength * 64.0f;") !=
+           pipelineSource.find(
+               "traceSettings.celestialRadianceScale = settings.postProcess.directSunStrength * 64.0f;") !=
                std::string::npos &&
            pipelineSource.find("void DeferredPipeline::invalidateHistory() {\n"
                                "    m_hasPreviousFrameData = false;\n"
                                "    m_rtgiTemporalSampleIndex = 0u;\n"
-                               "    m_lastNrdSceneTlasRevision = 0u;\n"
                                "#if defined(MECRAFT_ENABLE_NRD)\n"
                                "    m_nrdClearHistory = true;") != std::string::npos;
 }
@@ -102,8 +102,7 @@ int main() {
     using namespace renderer::contracts;
 
     bool valid = true;
-    valid = requireTrue(kRtgiVoxelSurfaceExpansion == 1.0f / 2048.0f &&
-                            kRtgiMinimumRayOriginBias == 1.0f / 1024.0f &&
+    valid = requireTrue(kRtgiVoxelSurfaceExpansion == 1.0f / 2048.0f && kRtgiMinimumRayOriginBias == 1.0f / 1024.0f &&
                             RtgiSettings{}.minimumRayOriginBias == kRtgiMinimumRayOriginBias,
                         "RTGI ray-origin bias must remain larger than the sealed voxel BLAS shell") &&
             valid;
@@ -117,14 +116,12 @@ int main() {
                             rtgiSampleHash(0xffffffffu) == 1734902346u,
                         "RTGI sample hash must remain bit-exact") &&
             valid;
-    valid =
-        requireTrue(rtgiStableHitIdentityHash(601u, 501u) == 1366735474u &&
-                        rtgiStableHitIdentityHash(602u, 502u) == 1027311900u &&
-                        rtgiTerrainHitIdentityHash(1u, 0u) == 1753845952u &&
-                        rtgiTerrainHitIdentityHash(1u, 1u) == 3875847014u &&
-                        sizeof(RtgiTracePushConstants) == 128u,
-                    "RTGI stable hit identity and push-constant contracts must remain bit-exact") &&
-        valid;
+    valid = requireTrue(rtgiStableHitIdentityHash(601u, 501u) == 1366735474u &&
+                            rtgiStableHitIdentityHash(602u, 502u) == 1027311900u &&
+                            rtgiTerrainHitIdentityHash(1u, 0u) == 1753845952u &&
+                            rtgiTerrainHitIdentityHash(1u, 1u) == 3875847014u && sizeof(RtgiTracePushConstants) == 128u,
+                        "RTGI stable hit identity and push-constant contracts must remain bit-exact") &&
+            valid;
     valid = requireTrue(
                 sizeof(RtgiSecondaryLightingParams) == 128u && alignof(RtgiSecondaryLightingParams) == 16u &&
                     offsetof(RtgiSecondaryLightingParams, sunDirectionAndVisibility) == 0u &&
@@ -137,7 +134,8 @@ int main() {
                     kRtgiSecondaryLightingTerrainNormalMapBit == 1u &&
                     kRtgiSecondaryLightingTerrainSpecularMapBit == 2u && kRtgiMetallicDiffuseTransportFloor == 0.35f &&
                     (kRtgiSecondaryLightingTerrainNormalMapBit | kRtgiSecondaryLightingTerrainSpecularMapBit) == 3u,
-                "RTGI secondary-lighting UBO, terrain block-light bounce, terrain-map flags, and metallic transport must remain fixed") &&
+                "RTGI secondary-lighting UBO, terrain block-light bounce, terrain-map flags, and metallic transport "
+                "must remain fixed") &&
             valid;
 
     const glm::vec2 firstRotation = rtgiCranleyPattersonRotation(0u);
@@ -188,8 +186,8 @@ int main() {
     const glm::vec3 cameraPosition{1000000.0f, 96.0f, -2000000.0f};
     const glm::vec3 sceneOrigin{999936.0f, 0.0f, -2000000.0f};
     const glm::mat4 projection = glm::perspective(glm::radians(70.0f), 16.0f / 9.0f, 0.1f, 500.0f);
-    const glm::mat4 view = glm::lookAt(cameraPosition, cameraPosition + glm::vec3(0.2f, -0.1f, -1.0f),
-                                       glm::vec3(0.0f, 1.0f, 0.0f));
+    const glm::mat4 view =
+        glm::lookAt(cameraPosition, cameraPosition + glm::vec3(0.2f, -0.1f, -1.0f), glm::vec3(0.0f, 1.0f, 0.0f));
     glm::mat4 cameraRelativeInverseViewProjection;
     const bool cameraRelativeMatrix = makeRtgiCameraRelativeInverseViewProjection(
         projection, view, cameraPosition, sceneOrigin, cameraRelativeInverseViewProjection);
@@ -199,11 +197,12 @@ int main() {
     const glm::vec4 clipPoint = projection * viewRotation * glm::vec4(cameraRelativePoint, 1.0f);
     const glm::vec4 reconstructedPointH = cameraRelativeInverseViewProjection * clipPoint;
     const glm::vec3 reconstructedPoint = glm::vec3(reconstructedPointH) / reconstructedPointH.w;
-    valid = requireTrue(cameraRelativeMatrix && std::abs(reconstructedPointH.w) > 1.0e-6f &&
-                            glm::length(reconstructedPoint - scenePoint) <= 2.0e-3f &&
-                            !makeRtgiCameraRelativeInverseViewProjection(
-                                 projection, view, glm::vec3(NAN), sceneOrigin, cameraRelativeInverseViewProjection),
-                        "RTGI camera-relative reconstruction must preserve large-world positions and reject invalid input") &&
+    valid = requireTrue(
+                cameraRelativeMatrix && std::abs(reconstructedPointH.w) > 1.0e-6f &&
+                    glm::length(reconstructedPoint - scenePoint) <= 2.0e-3f &&
+                    !makeRtgiCameraRelativeInverseViewProjection(projection, view, glm::vec3(NAN), sceneOrigin,
+                                                                 cameraRelativeInverseViewProjection),
+                "RTGI camera-relative reconstruction must preserve large-world positions and reject invalid input") &&
             valid;
 
     constexpr uint32_t kSampleCount = 4096u;
