@@ -17,6 +17,7 @@
 
 namespace {
 constexpr size_t kDebugTextureCount = DebugPass::kTextureCount;
+constexpr size_t kNrdValidationTextureIndex = 31u;
 
 [[nodiscard]] bool sameTextureHandle(const RhiTextureHandle lhs, const RhiTextureHandle rhs) {
     return lhs.index == rhs.index && lhs.generation == rhs.generation;
@@ -126,6 +127,9 @@ RgPassHandle DebugPass::addGraphPass(RenderGraph& graph, const FrameContext& ctx
     std::array<DeclaredTexture, kDebugTextureCount> declaredTextures{};
     std::size_t declaredTextureCount = 0u;
     for (std::size_t index = 0u; index < resources.textures.size(); ++index) {
+        if (index == kNrdValidationTextureIndex && !isNrdValidationView(settings.debug.viewMode)) {
+            continue;
+        }
         const bool depthTexture = index == 4u || index == 5u || index == 9u || index == 16u ||
                                   (index == 13u && settings.debug.viewMode == 19);
         const RgTextureHandle texture = resources.textures[index];

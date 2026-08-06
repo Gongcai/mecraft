@@ -107,6 +107,12 @@ bool testTemporalReconstructionSelection() {
                        "FSR 3.1 must exclude the native TAA resolve");
 }
 
+bool testNrdValidationDebugViewSelection() {
+    return requireTrue(isNrdValidationView(100), "NRD validation view must consume the optional validation output") &&
+           requireTrue(!isNrdValidationView(101),
+                       "NRD history confidence view must not consume the optional validation output");
+}
+
 bool testMotionVectorConvention() {
     return requireTrue(TemporalMotionVectorConvention::currentMinusPrevious,
                        "motion vectors must store current minus previous UV") &&
@@ -470,6 +476,8 @@ int main() {
     if (!testRtgiNrdDependencyNormalization())
         return 1;
     if (!testTemporalReconstructionSelection())
+        return 1;
+    if (!testNrdValidationDebugViewSelection())
         return 1;
     if (!testMotionVectorConvention())
         return 1;

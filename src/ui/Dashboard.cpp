@@ -83,6 +83,9 @@ Dashboard::~Dashboard() {
 }
 
 void Dashboard::shutdown() {
+    if (m_contextCreated) {
+        ImGui::DestroyPlatformWindows();
+    }
     destroyRhiResources();
     if (m_contextCreated) {
         ImGuiIO& io = ImGui::GetIO();

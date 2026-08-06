@@ -320,6 +320,13 @@ struct DebugSettings {
     return debugViewMode >= 89 && debugViewMode <= 94;
 }
 
+/// Determines whether the selected view consumes NRD's optional validation output.
+/// @param debugViewMode Deferred debug-view identifier.
+/// @return True only for the NRD validation overlay view.
+[[nodiscard]] constexpr bool isNrdValidationView(const int debugViewMode) {
+    return debugViewMode == 100;
+}
+
 /// Fog settings
 struct FogSettings {
     bool enabled = true;

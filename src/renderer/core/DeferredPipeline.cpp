@@ -2045,7 +2045,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
             commonSettings.disocclusionThreshold = settings.nrd.disocclusionThreshold;
             commonSettings.disocclusionThresholdAlternate = settings.nrd.disocclusionThresholdAlternate;
             commonSettings.isHistoryConfidenceAvailable = true;
-            commonSettings.enableValidation = settings.debug.viewMode == 100;
+            commonSettings.enableValidation = isNrdValidationView(settings.debug.viewMode);
             commonSettings.frameIndex = static_cast<uint32_t>(ctx.frameIndex);
             commonSettings.accumulationMode =
                 m_nrdClearHistory ? ::nrd::AccumulationMode::CLEAR_AND_RESTART

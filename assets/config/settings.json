@@ -1,5 +1,6 @@
 {
   "app": {
+    "rhiBackend": "vulkan",
     "vsyncEnabled": false
   },
   "game": {
