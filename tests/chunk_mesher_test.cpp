@@ -621,10 +621,15 @@ int main() {
             glm::vec3 minimum(std::numeric_limits<float>::max());
             glm::vec3 maximum(std::numeric_limits<float>::lowest());
             const int face = rayTracingMeshData.rayTracingOpaqueVertices[firstVertex].normal;
+            const uint8_t faceSunlight = rayTracingMeshData.rayTracingOpaqueVertices[firstVertex].sunlight;
+            const uint8_t faceBlockLight = rayTracingMeshData.rayTracingOpaqueVertices[firstVertex].blockLight;
             for (size_t vertexOffset = 0; vertexOffset < 6u; ++vertexOffset) {
                 const BlockVertex& vertex = rayTracingMeshData.rayTracingOpaqueVertices[firstVertex + vertexOffset];
                 if (vertex.normal != face) {
                     return fail("one ray-tracing voxel quad should have one geometric face normal");
+                }
+                if (vertex.sunlight != faceSunlight || vertex.blockLight != faceBlockLight || vertex.ao != 3u) {
+                    return fail("ray-tracing voxel faces should use constant face light and full geometric AO");
                 }
                 minimum = glm::min(minimum, glm::vec3(vertex.x, vertex.y, vertex.z));
                 maximum = glm::max(maximum, glm::vec3(vertex.x, vertex.y, vertex.z));

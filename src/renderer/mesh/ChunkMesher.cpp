@@ -1205,14 +1205,34 @@ void emitUnitFace(std::vector<BlockVertex>& vertices, const glm::vec3& pos, cons
     appendFaceVertices(vertices, corners, faceUV, face, renderData);
 }
 
-void emitRayTracingUnitFace(std::vector<BlockVertex>& vertices, const FaceCell& cell, const int face) {
+void emitRayTracingUnitFace(std::vector<BlockVertex>& vertices, const SubChunkMeshingSnapshot& snapshot,
+                            const FaceCell& cell, const int face) {
     std::array<glm::vec3, 4> corners = buildGreedyFaceCorners(face, cell.x, cell.y, cell.z, 1, 1);
     // Adjacent unit quads share the same integer-grid edge. A small in-plane
     // overlap makes that shared edge conservative for triangle intersection
     // without introducing the T-junctions created by variable-size quads.
     expandAxisAlignedFaceCornersInPlane(corners, face);
     const std::array<glm::vec2, 4> faceUV = buildFaceUv(1.0f, 1.0f, cell.renderData.uvQuarterTurns);
-    appendFaceVertices(vertices, corners, faceUV, face, cell.renderData);
+
+    // RT terrain attributes must describe the voxel face itself. Raster vertex
+    // lighting averages side and corner cells, which is correct for a greedy
+    // raster quad but lets bright corner samples bleed across an RT hit.
+    FaceRenderData renderData = cell.renderData;
+    const IVec3& normal = kFaceNormals[face];
+    const uint8_t packedLight = getResolvedLightSC(snapshot, cell.x + normal.x, cell.y + normal.y, cell.z + normal.z);
+    const uint8_t sunLight = static_cast<uint8_t>((packedLight >> 4) & 0x0F);
+    const uint8_t blockLight = static_cast<uint8_t>(packedLight & 0x0F);
+    VertexLightData faceLight;
+    faceLight.ao = 3;
+    faceLight.sunLight = sunLight;
+    faceLight.blockLight = blockLight;
+    faceLight.sunKey = sunLight;
+    faceLight.blockKey = blockLight;
+    faceLight.sunNormalized = lightToNormalized(sunLight);
+    faceLight.blockNormalized = lightToNormalized(blockLight);
+    renderData.vertices.fill(faceLight);
+    renderData.flipDiagonal = false;
+    appendFaceVertices(vertices, corners, faceUV, face, renderData);
 }
 
 void emitCustomFace(std::vector<BlockVertex>& vertices, const std::array<glm::vec3, 4>& corners, const int face,
@@ -2087,7 +2107,7 @@ void buildOpaqueGreedyPlane(const SubChunkMeshingSnapshot& snapshot, ChunkMeshDa
                 cell.key = buildFaceMergeKey(stateId, cell.renderData);
                 ++meshData.opaqueFaceCountBeforeGreedy;
                 if (meshData.rayTracingGeometryBuilt) {
-                    emitRayTracingUnitFace(meshData.rayTracingOpaqueVertices, cell, Face);
+                    emitRayTracingUnitFace(meshData.rayTracingOpaqueVertices, snapshot, cell, Face);
                 }
             }
         }

@@ -280,8 +280,8 @@ Ray Cone 根据射线距离、像素覆盖和三角形 UV 梯度选择 Texture L
 Miss 返回对应方向的物理天空辐射，包含昼夜、天气与云层透射。命中点材质只写入
 Diffuse BRDF 输运，不能把次级镜面高光混入 `NRD Diffuse` 信号。由于独立 Specular RT 尚未实现，
 金属材质使用上限明确的 `0.35 * Albedo` 漫反射输运补偿，使金属方块仍能产生稳定的材质色溢出；
-该补偿将在独立 Specular RT 接入后由真实镜面输运替代。路径估计器应用次级表面材质；主表面的 Diffuse Material Factor 在
-NRD 前移除，降噪完成后再调制。首版只有一次间接反弹，不递归发射 GI Ray。
+该补偿将在独立 Specular RT 接入后由真实镜面输运替代。路径估计器应用次级表面材质；主表面的
+Diffuse Albedo 在 Deferred Lighting 的统一合成点乘入 NRD 输出。首版只有一次间接反弹，不递归发射 GI Ray。
 
 生产实现使用 `RtgiSecondaryLightingParams` 传递太阳/月亮方向与物理 Radiance、天空环境项、阴影
 距离和 Terrain 材质 Flag。太阳/月亮 Radiance 已包含昼夜可见能量，Visibility 只决定是否发射
@@ -368,7 +368,21 @@ NRD Bridge 每帧提供：
 - Non-jittered 2D 或 2.5D Screen-space Motion Vector。
 - 当前/上一帧 Non-jittered View-to-Clip、World-to-View 等矩阵。
 - 当前/上一帧 Jitter、Resource Size、Rect Size、Frame Index 与 Frame Time。
-- Disocclusion Threshold、History Confidence 与 Reset/Continue Accumulation Mode。
+- Disocclusion Threshold 与 Reset/Continue Accumulation Mode。
+
+历史深度不是 NRD 自动生成或托管的资源。NRD 只维护自己的 Permanent Pool 和 Transient Pool；
+`IN_VIEWZ`、`IN_MV` 以及它们所依赖的上一帧深度必须由应用侧准备。Mecraft 的
+`DeferredRenderTargets` 为可见表面深度保留两张 ping-pong 纹理：`Deferred.HistoryCopy` 在帧末把当前
+Depth 写入当前槽，`commitDeferredHistoryState()` 在提交成功后翻转槽位，下一帧通过
+`historyDepthTexturePrevHandle()` 读取上一帧内容。NRD Guide Prep 在 `historyValid` 为真时用这张纹理
+和上一帧非抖动逆投影重建上一帧正 View-Z；全局 Temporal Reset 时不读取它，并让 NRD 进入 Restart。
+
+这与 NVIDIA 官方样例一致：
+[`Shared.hlsli::GetMotion`](https://github.com/NVIDIA-RTX/NRD-Sample/blob/9deb12a5408c4e2e07a6ff261f0a1051dd22f5d6/Shaders/Include/Shared.hlsli)
+在应用侧计算 `MV.xy = uvPrev - uv`、`MV.z = viewZPrev - viewZ`；
+[`NRDSample.cpp`](https://github.com/NVIDIA-RTX/NRD-Sample/blob/9deb12a5408c4e2e07a6ff261f0a1051dd22f5d6/Source/NRDSample.cpp)
+再将应用准备的 `IN_MV`、`IN_VIEWZ`、Radiance/Hit Distance 和输出资源提交给 NRD。官方样例的
+`OUT_VALIDATION` 也是可选的应用纹理，不属于 NRD 历史管理。
 
 Mecraft 当前速度纹理定义为 `currentUv - previousUv`，且纹理坐标 Y 向下。Bridge 必须按
 NRD 4.17.3 的 `previous - current` 约定转换符号，并通过 `motionVectorScale` 完成 UV/像素
@@ -386,9 +400,11 @@ Water、Transparent、Cloud、Volumetric 和 Particle producer 已统一写入 P
 按历史所有者细分的 Reset 已完成，`TemporalFrameInput` 的上采样域保持 `1`。`PreExposure` 只让 Scene HDR
 域历史重启，NRD 输入保持去曝光稳定。
 
-NRD 的 `frameIndex` 每个真实渲染帧严格增加 1，并与 Checkerboard Phase 同步。Material/
-Stable Object ID 由应用生成 History Confidence 与 Disocclusion Threshold Mix；NRD 直接
-消费这些可选 Mask，而不把 32-bit Object ID 当成原生 NRD 输入。
+NRD 的 `frameIndex` 每个真实渲染帧严格增加 1，并与 Checkerboard Phase 同步。当前生产 Bridge
+绑定 `IN_MV`、`IN_NORMAL_ROUGHNESS`、`IN_VIEWZ`、方法对应的 Radiance/Hit Distance，以及
+`OUT_DIFF_RADIANCE_HITDIST`。`IN_DIFF_CONFIDENCE`、`IN_DISOCCLUSION_THRESHOLD_MIX` 和
+`OUT_VALIDATION` 尚未接入生产 Deferred 资源；它们是对齐官方验证覆盖的后续诊断项，不把 32-bit
+Object ID 直接当作 NRD 原生输入。
 
 ### 6.3 NRD Render Graph Bridge
 
@@ -441,18 +457,24 @@ Checkerboard Mode 和 Rect Size 变化只更新设置并按契约决定 History 
 
 新创建或复用且内容可能未初始化的 Permanent Pool 使用一次
 `nrd::AccumulationMode::CLEAR_AND_RESTART`。动态对象局部变化依靠 Motion、Depth、Normal
-以及应用生成的 History Confidence/Disocclusion Mask 判定，不清空整帧历史。
+和 NRD 的阈值设置判定，不清空整帧历史；应用侧 Confidence/Disocclusion Mask 仍未接入当前生产路径。
 `DeferredPipeline::invalidateHistory()` 同时标记 NRD Permanent Pool 为 Clear，确保开关切换、世界加载
 与相机历史失效不会继续读取旧 GI。
 
 ### 6.5 Demodulation 与合成
 
-NRD 要求材质与待降噪信号解耦。Trace Pass 使用 `NRD_MaterialFactors` 计算主表面 Diffuse
-Factor，将路径估计器产生的 Irradiance/已调制结果转换为符合 NRD Front-end 规范的
-Diffuse Radiance；NRD 输出在 `IndirectLightingComposite` 中重新乘主表面 Diffuse Factor。
-次级表面 Albedo 已属于路径输运，合成时不能再次相乘。
+NRD 要求材质与待降噪信号解耦。当前路径在 `RtgiSignalPackPass` 中将 Raw Radiance 按方法打包
+为线性 RGB 或 YCoCg，NRD 输出回到 `Deferred Lighting` 后，主表面 `albedo` 在同一处统一乘入
+直接光、Clustered 光和 RTGI 漫反射累积结果。主表面材质没有在 Trace Pass 中通过名为
+`NRD_MaterialFactors` 的对象单独处理。次级表面 Albedo 已经参与路径输运，合成时不能再次相乘。
 
 Albedo 白炉、纯 Emissive、黑色材质和高饱和光源测试用于检查重复调制与能量爆炸。
+
+### 6.6 后续待办：DLSS Ray Reconstruction
+
+在 RTGI 几何命中、2.5D Motion、RELAX/REBLUR 稳定性和性能验收完成后，单独评估 DLSS Ray
+Reconstruction。该路径需要 NVIDIA NGX/Vulkan 能力门槛、独立的 Ray Reconstruction 输入与输出、
+历史重置/资源生命周期、验证视图和与 NRD 的质量对比；当前不实现，也不改变现有 NRD Diffuse 路径。
 
 ## 7. 体素世界专项设计
 

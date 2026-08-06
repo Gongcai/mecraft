@@ -158,6 +158,14 @@ float rtgiOriginBias(vec3 position, vec3 normal, vec3 direction) {
     return max(max(pc.renderExtentAndBias.z, RTGI_MINIMUM_RAY_ORIGIN_BIAS), floatingPointBias) * angularScale;
 }
 
+// Moves a ray origin to the geometric side selected by its outgoing direction.
+// This keeps visibility and primary rays outside the source surface for both
+// hemispheres, matching the RT surface-offset contract used by Caustica.
+vec3 rtgiOffsetSurfaceOrigin(vec3 position, vec3 geometricNormal, vec3 outgoingDirection, float bias) {
+    float side = dot(geometricNormal, outgoingDirection) < 0.0 ? -1.0 : 1.0;
+    return position + geometricNormal * (side * bias);
+}
+
 vec3 rtgiVoxelGeometricNormal(vec3 shadingNormal) {
     vec3 magnitude = abs(shadingNormal);
     if (magnitude.x >= magnitude.y && magnitude.x >= magnitude.z) {
@@ -206,13 +214,14 @@ bool rtgiTraceVisibility(vec3 surfacePosition, vec3 normal, vec3 direction, floa
     }
     vec3 unitDirection = direction * inversesqrt(directionLengthSquared);
     float originBias = rtgiOriginBias(surfacePosition, normal, unitDirection);
+    vec3 originOffset = rtgiOffsetSurfaceOrigin(vec3(0.0), normal, unitDirection, originBias);
     float rayMinimum = max(originBias * 0.25, 1.0e-4);
-    float rayMaximum = maximumDistance - dot(normal * originBias, unitDirection) - rayMinimum;
+    float rayMaximum = maximumDistance - dot(originOffset, unitDirection) - rayMinimum;
     if (rayMaximum <= rayMinimum) {
         visibility = 1.0;
         return true;
     }
-    vec3 rayOrigin = surfacePosition + normal * originBias;
+    vec3 rayOrigin = surfacePosition + originOffset;
 
     rayQueryEXT query;
     rayQueryInitializeEXT(query, globalBindlessSceneTlas, gl_RayFlagsTerminateOnFirstHitEXT,
@@ -588,7 +597,7 @@ void main() {
     }
 
     float originBias = rtgiOriginBias(worldPosition, geometricNormal, rayDirection);
-    vec3 rayOrigin = worldPosition + geometricNormal * originBias;
+    vec3 rayOrigin = rtgiOffsetSurfaceOrigin(worldPosition, geometricNormal, rayDirection, originBias);
     float rayMinimum = max(originBias * 0.25, 1.0e-4);
     float primarySurfaceDistance = length(worldPosition - pc.cameraPositionAndMaxDistance.xyz);
 

@@ -31,6 +31,10 @@ public:
     struct Settings final {
         float denoisingRange = 500.0f;
         bool historyValid = false;
+        // Selects the projection used by the G-buffer depth reconstruction.
+        // The NRD common matrices remain non-jittered, while the guide must
+        // match the projection that produced the current and previous depth.
+        bool useJitteredProjection = false;
     };
 
     /// Latest successfully recorded guide dispatch diagnostics.

@@ -1948,6 +1948,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
             guideResources.normalRoughness = nrdNormalRoughness;
             guideResources.viewZ = nrdViewZ;
             guideSettings.historyValid = !m_nrdClearHistory && !nrdTemporalReset;
+            guideSettings.useJitteredProjection = traceSettings.useJitteredProjection;
             graphTail = m_nrdGuidePrepPass->addGraphPass(m_renderGraph, ctx, guideSettings, guideResources, graphTail);
             if (!graphTail.isValid()) {
                 return failGraphSetup();
@@ -1980,9 +1981,10 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
             commonSettings.rectSizePrev[1] = static_cast<uint16_t>(extent.height);
             commonSettings.motionVectorScale[0] = 1.0f;
             commonSettings.motionVectorScale[1] = 1.0f;
-            // Zero directs NRD to derive the view-Z delta from the previous
-            // matrices instead of trusting a noisy externally derived value.
-            commonSettings.motionVectorScale[2] = 0.0f;
+            // The guide publishes 2.5D screen-space motion: xy is previous
+            // minus current texture UV and z is previous minus current signed
+            // view-space Z. NRD must consume all three components.
+            commonSettings.motionVectorScale[2] = 1.0f;
             const glm::vec2 cameraJitter = nrdCameraJitterPixels(ctx.jitter);
             const glm::vec2 previousCameraJitter = nrdCameraJitterPixels(ctx.previousJitter);
             commonSettings.cameraJitter[0] = cameraJitter.x;
@@ -2007,12 +2009,14 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
                 // bright samples as motion causes history confidence to vary.
                 ::nrd::RelaxSettings relaxSettings{};
                 relaxSettings.atrousIterationNum = static_cast<uint32_t>(settings.nrd.relaxAtrousIterations);
+                relaxSettings.minMaterialForDiffuse = 0.0f;
                 methodSettings = relaxSettings;
             } else {
                 ::nrd::ReblurSettings reblurSettings{};
                 reblurSettings.hitDistanceParameters.A = settings.nrd.reblurHitDistanceConstantScale;
                 reblurSettings.hitDistanceParameters.B = settings.nrd.reblurHitDistanceViewZScale;
                 reblurSettings.hitDistanceParameters.C = settings.nrd.reblurHitDistanceRoughnessScale;
+                reblurSettings.minMaterialForDiffuse = 0.0f;
                 reblurSettings.enableAntiFirefly = true;
                 methodSettings = reblurSettings;
             }

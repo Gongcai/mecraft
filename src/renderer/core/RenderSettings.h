@@ -82,10 +82,9 @@ struct NrdSettings {
     bool enabled = false;
     NrdDiffuseMethod method = NrdDiffuseMethod::Relax;
     float denoisingRange = 500.0f;
-    // 0.02 absorbs the sub-pixel view-Z wobble that jittered depth leaves on
-    // slopes (the guides are built from a jittered depth buffer against
-    // non-jittered matrices), which otherwise reads as per-frame parallax
-    // and makes a static image crawl.
+    // Guide depth is reconstructed with the same jittered projection that
+    // produced the G-buffer; this threshold covers real reprojection error at
+    // surface boundaries rather than a camera-jitter mismatch.
     float disocclusionThreshold = 0.02f;
     float disocclusionThresholdAlternate = 0.05f;
     int relaxAtrousIterations = 5;

@@ -18,6 +18,16 @@ vec2 rhiScreenUvToTextureUv(vec2 screenUv) {
 #endif
 }
 
+// Converts native texture UV coordinates back to the logical top-left screen
+// UV domain used by projection and view-space reconstruction.
+vec2 rhiTextureUvToScreenUv(vec2 textureUv) {
+#if defined(RHI_OPENGL)
+    return vec2(textureUv.x, 1.0 - textureUv.y);
+#else
+    return textureUv;
+#endif
+}
+
 // Converts top-left screen UV coordinates to bottom-left clip UV coordinates.
 // screenUv is expressed in the RHI render-target domain. The return value is suitable for NDC,
 // inverse-projection, and inverse-view-projection reconstruction performed by project shaders.

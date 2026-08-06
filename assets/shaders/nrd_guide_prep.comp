@@ -24,32 +24,53 @@ bool nrdGuideFinite(vec4 value) {
     return !any(isnan(value)) && !any(isinf(value));
 }
 
-float nrdGuidePositiveViewZ(mat4 inverseProjection, vec2 screenUv, float depth, float invalidViewZ) {
+bool nrdGuideReconstructPositiveViewZ(mat4 inverseProjection, vec2 screenUv, float depth, out float positiveViewZ) {
+    positiveViewZ = 0.0;
     if (depth >= 0.999999) {
-        return invalidViewZ;
+        return false;
     }
 
     vec2 clipUv = rhiScreenUvToClipUv(screenUv);
     vec4 viewPosition = inverseProjection * vec4(clipUv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
     if (!nrdGuideFinite(viewPosition) || abs(viewPosition.w) <= 1.0e-7) {
-        return invalidViewZ;
+        return false;
     }
 
     viewPosition /= viewPosition.w;
     if (!nrdGuideFinite(viewPosition)) {
-        return invalidViewZ;
+        return false;
     }
-    return abs(viewPosition.z);
+    positiveViewZ = abs(viewPosition.z);
+    return nrdGuideFinite(vec4(positiveViewZ, 0.0, 0.0, 0.0));
+}
+
+float nrdGuidePositiveViewZ(mat4 inverseProjection, vec2 screenUv, float depth, float invalidViewZ) {
+    float positiveViewZ;
+    return nrdGuideReconstructPositiveViewZ(inverseProjection, screenUv, depth, positiveViewZ) ? positiveViewZ
+                                                                                               : invalidViewZ;
 }
 
 bool nrdGuideUvInside(vec2 uv) {
     return all(greaterThanEqual(uv, vec2(0.0))) && all(lessThan(uv, vec2(1.0)));
 }
 
-vec3 nrdGuidePackNormalRoughness(vec3 normal, float roughness) {
+float nrdGuideMaterialId(SurfaceMaterial material, float roughness) {
+    if (material.emission > 0.01) {
+        return 3.0;
+    }
+    if (material.sss > 0.01) {
+        return 2.0;
+    }
+    if (roughness < 0.35) {
+        return 1.0;
+    }
+    return 0.0;
+}
+
+vec4 nrdGuidePackNormalRoughness(vec3 normal, float roughness, float materialId) {
     normal /= abs(normal.x) + abs(normal.y) + abs(normal.z);
 
-    vec3 packed;
+    vec4 packed;
     packed.y = normal.y * 0.5 + 0.5;
     packed.x = normal.x * 0.5 + packed.y;
     packed.y -= normal.x * 0.5;
@@ -57,6 +78,7 @@ vec3 nrdGuidePackNormalRoughness(vec3 normal, float roughness) {
     roughness = max(clamp(roughness, 0.0, 1.0), 1.5 / 512.0);
     float signedRoughness = normal.z < 0.0 ? -roughness : roughness;
     packed.z = signedRoughness * 0.5 + 0.5;
+    packed.w = clamp(materialId / 3.0, 0.0, 1.0);
     return packed;
 }
 
@@ -75,16 +97,32 @@ void main() {
     vec3 normal = unpackGBufferNormal(texelFetch(uNormalAoTexture, texel, 0));
     SurfaceMaterial material = unpackGBufferMaterial(texelFetch(uMaterialTexture, texel, 0));
     float roughness = linearMaterialRoughness(material);
+    float materialId = nrdGuideMaterialId(material, roughness);
     vec2 motion = -texelFetch(uVelocityTexture, texel, 0).rg;
-    // NRD contract: with motionVectorScale.z == 0 the library derives the
-    // view-Z delta itself from the previous matrices. Reconstructing it here
-    // from the jittered history depth injects per-frame noise on slopes that
-    // the disocclusion test interprets as parallax, making a static image
-    // crawl. Publish a pure 2D screen-space motion instead.
     float motionViewZ = 0.0;
+    const bool historyValid = pc.renderExtentInvalidViewZAndHistory.w > 0.5;
+    const vec2 currentTextureUv = rhiScreenUvToTextureUv(screenUv);
+    const vec2 previousTextureUv = currentTextureUv + motion;
+    if (historyValid && currentPositiveViewZ < invalidViewZ && nrdGuideUvInside(previousTextureUv) &&
+        nrdGuideFinite(vec4(motion, 0.0, 0.0))) {
+        ivec2 previousExtent = textureSize(uHistoryDepthTexture, 0);
+        ivec2 previousTexel = ivec2(previousTextureUv * vec2(previousExtent));
+        previousTexel = clamp(previousTexel, ivec2(0), previousExtent - ivec2(1));
+        float previousDepth = texelFetch(uHistoryDepthTexture, previousTexel, 0).r;
+        float previousPositiveViewZ;
+        if (nrdGuideReconstructPositiveViewZ(pc.previousInverseProjection,
+                                              rhiTextureUvToScreenUv(previousTextureUv), previousDepth,
+                                              previousPositiveViewZ) &&
+            previousPositiveViewZ < invalidViewZ) {
+            // NRD converts this renderer's right-handed view matrices to its
+            // left-handed internal space, so the signed 2.5D delta is the
+            // previous positive depth minus the current positive depth.
+            motionViewZ = previousPositiveViewZ - currentPositiveViewZ;
+        }
+    }
 
     imageStore(uMotion, texel, vec4(motion, motionViewZ, 0.0));
-    imageStore(uNormalRoughness, texel, vec4(nrdGuidePackNormalRoughness(normal, roughness), 0.0));
+    imageStore(uNormalRoughness, texel, nrdGuidePackNormalRoughness(normal, roughness, materialId));
     // NRD consumes signed view-space Z and infers handedness from the
     // projection matrix; this renderer is right-handed, so the visible
     // half-space is negative Z. Publishing |z| mirrors every reconstructed

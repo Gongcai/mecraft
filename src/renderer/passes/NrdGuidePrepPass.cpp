@@ -92,8 +92,12 @@ RgPassHandle NrdGuidePrepPass::addGraphPass(RenderGraph& graph, const FrameConte
 
 bool NrdGuidePrepPass::recordGuide(RhiCommandList& commandList, const FrameContext& ctx, const Settings& settings,
                                    const GuideViews& views) {
-    const glm::mat4 inverseProjection = ctx.camera.view * ctx.camera.invViewProj;
-    const glm::mat4 previousInverseProjection = ctx.prevCamera.view * ctx.prevCamera.invViewProj;
+    const glm::mat4& currentInverseViewProjection =
+        settings.useJitteredProjection ? ctx.camera.jitteredInvViewProj : ctx.camera.invViewProj;
+    const glm::mat4& previousInverseViewProjection =
+        settings.useJitteredProjection ? ctx.prevCamera.jitteredInvViewProj : ctx.prevCamera.invViewProj;
+    const glm::mat4 inverseProjection = ctx.camera.view * currentInverseViewProjection;
+    const glm::mat4 previousInverseProjection = ctx.prevCamera.view * previousInverseViewProjection;
     const TemporalExtent extent = ctx.temporalExtents.renderExtent;
     if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr || !finiteMatrix(inverseProjection) ||
         !finiteMatrix(previousInverseProjection) || !ensurePipeline(*ctx.shared->rhiDevice) ||
