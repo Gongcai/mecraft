@@ -61,6 +61,15 @@ static_assert(sizeof(RtgiSecondaryLightingParams) == 128u);
 /// @return Deterministic 32-bit identity word shared with GLSL validation.
 [[nodiscard]] uint32_t rtgiStableHitIdentityHash(uint32_t stableMaterialId, uint32_t stableGeometryId);
 
+/// Hashes one terrain hit location together with the resident BLAS revision referenced by its TLAS instance.
+/// @param blasRevision Resident terrain BLAS revision stored in the TLAS hit-data table.
+/// @param customIndex TLAS instance custom index used to address the hit-data table.
+/// @param geometryIndex BLAS geometry range containing the hit triangle.
+/// @param primitiveIndex Triangle index inside the geometry range.
+/// @return Deterministic diagnostic identity shared with GLSL validation.
+[[nodiscard]] uint32_t rtgiTerrainHitIdentityHash(uint64_t blasRevision, uint32_t customIndex,
+                                                  uint32_t geometryIndex, uint32_t primitiveIndex);
+
 /// Produces the per-frame low-discrepancy Cranley-Patterson rotation used by RTGI.
 /// @param frameIndex Low 32 bits of the deterministic render-frame index.
 /// @return Two values in the half-open interval [0, 1).

@@ -99,7 +99,15 @@ bool showDeferredDebugView(RenderSettings& settings) {
                                                       "89: RTGI Raw Radiance",
                                                       "90: RTGI Hit Distance",
                                                       "91: RTGI Trace Class",
-                                                      "92: RTGI Candidates"};
+                                                      "92: RTGI Candidates",
+                                                      "93: RTGI Candidate Rejects",
+                                                      "94: RTGI Hit Identity",
+                                                      "95: NRD Motion",
+                                                      "96: NRD View-Z",
+                                                      "97: NRD Normal/Roughness",
+                                                      "98: NRD Output Radiance",
+                                                      "99: NRD Raw/Output Delta",
+                                                      "100: NRD Validation"};
     int debugViewMode = settings.debug.viewMode;
     const bool changed =
         ImGui::Combo("Deferred Debug View", &debugViewMode, kDebugViewModes, IM_ARRAYSIZE(kDebugViewModes));

@@ -61,29 +61,31 @@ namespace {
            packSource.find("classification != RTGI_TRACE_CLASS_HIT && classification != RTGI_TRACE_CLASS_MISS") !=
                std::string::npos &&
            packSource.find("vec3 sceneRadiance = rawSignal.rgb * pc.preExposureAndInverse.y;") != std::string::npos &&
+           packSource.find("uvec4(validationWord, validation.y, 0u, 0u)") != std::string::npos &&
            traceSource.find("radiance * uSecondaryLighting.traceAndEmissionScales.w") != std::string::npos &&
            traceSource.find("missRadiance, RTGI_NRD_FP16_MAX, RTGI_TRACE_CLASS_MISS") != std::string::npos &&
            traceSource.find("rtgiOffsetSurfaceOrigin") != std::string::npos &&
            traceSource.find("dot(geometricNormal, outgoingDirection) < 0.0 ? -1.0 : 1.0") != std::string::npos &&
-           guideSource.find("layout(binding = 5, rgba16f) uniform writeonly image2D uMotion;") != std::string::npos &&
+           guideSource.find("layout(binding = 4, rgba16f) uniform writeonly image2D uMotion;") != std::string::npos &&
            guideSource.find("vec2 motion = -texelFetch(uVelocityTexture, texel, 0).rg;") != std::string::npos &&
            guideSource.find("float nrdGuideMaterialId(SurfaceMaterial material, float roughness)") !=
                std::string::npos &&
            guideSource.find("packed.w = clamp(materialId / 3.0, 0.0, 1.0);") != std::string::npos &&
            guideSource.find("nrdGuideReconstructPositiveViewZ") != std::string::npos &&
            guideSource.find("float motionViewZ = 0.0;") != std::string::npos &&
-           guideSource.find("previousTextureUv = currentTextureUv + motion") != std::string::npos &&
+           guideSource.find("pc.currentClipToPreviousView, screenUv, depth") != std::string::npos &&
            guideSource.find("motionViewZ = previousPositiveViewZ - currentPositiveViewZ;") != std::string::npos &&
+           guideSource.find("uHistoryDepthTexture") == std::string::npos &&
            guideSource.find("float signedViewZ = currentPositiveViewZ < invalidViewZ ? -currentPositiveViewZ : "
                             "-invalidViewZ;") != std::string::npos &&
-           guideSource.find("positiveViewZ = abs(viewPosition.z);") != std::string::npos &&
+           guideSource.find("viewPosition.z >= -1.0e-7") != std::string::npos &&
+           guideSource.find("positiveViewZ = -viewPosition.z;") != std::string::npos &&
            pipelineSource.find("glm::vec2 nrdCameraJitterPixels(const TemporalJitter& jitter)") !=
                std::string::npos &&
            pipelineSource.find("return -jitter.pixels;") != std::string::npos &&
            pipelineSource.find("commonSettings.motionVectorScale[2] = 1.0f;") != std::string::npos &&
            pipelineSource.find("relaxSettings.minMaterialForDiffuse = 0.0f;") != std::string::npos &&
            pipelineSource.find("reblurSettings.minMaterialForDiffuse = 0.0f;") != std::string::npos &&
-           pipelineSource.find("guideResources.historyDepthPrevious = historyDepthPrevious;") != std::string::npos &&
            pipelineSource.find("guideSettings.historyValid = !m_nrdClearHistory && !nrdTemporalReset;") !=
                std::string::npos &&
            pipelineSource.find("guideSettings.useJitteredProjection = traceSettings.useJitteredProjection;") !=

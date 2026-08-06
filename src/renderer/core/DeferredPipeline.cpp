@@ -1388,6 +1388,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
     RgTextureHandle nrdNormalRoughness;
     RgTextureHandle nrdViewZ;
     RgTextureHandle nrdOutputDiffuse;
+    RgTextureHandle nrdValidation;
     SkyIblPass::GraphResources skyIblResources;
     const RhiTextureHandle lightmapDayTexture = m_resourceMgr->getLightmapDay();
     const RhiTextureHandle lightmapNightTexture = m_resourceMgr->getLightmapNight();
@@ -1477,7 +1478,9 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
                                               nrdNormalRoughness) ||
                            !createRtgiTexture("NRD.ViewZ", RhiTextureFormat::R32Float, sampledStorage, nrdViewZ) ||
                            !createRtgiTexture("NRD.OutputDiffuseRadianceHitDistance", RhiTextureFormat::Rgba16Float,
-                                              sampledStorage, nrdOutputDiffuse))) {
+                                              sampledStorage, nrdOutputDiffuse) ||
+                           !createRtgiTexture("NRD.Validation", RhiTextureFormat::Rgba8Unorm, sampledStorage,
+                                              nrdValidation))) {
             return failGraphSetup();
         }
     }
@@ -1943,7 +1946,6 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
             guideResources.normalAo = normalAo;
             guideResources.material = material;
             guideResources.velocity = velocity;
-            guideResources.historyDepthPrevious = historyDepthPrevious;
             guideResources.motion = nrdMotion;
             guideResources.normalRoughness = nrdNormalRoughness;
             guideResources.viewZ = nrdViewZ;
@@ -1961,7 +1963,8 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
                 !externalResources.bind(::nrd::ResourceType::IN_NORMAL_ROUGHNESS, nrdNormalRoughness) ||
                 !externalResources.bind(::nrd::ResourceType::IN_VIEWZ, nrdViewZ) ||
                 !externalResources.bind(::nrd::ResourceType::IN_DIFF_RADIANCE_HITDIST, nrdInputSignal) ||
-                !externalResources.bind(::nrd::ResourceType::OUT_DIFF_RADIANCE_HITDIST, nrdOutputDiffuse)) {
+                !externalResources.bind(::nrd::ResourceType::OUT_DIFF_RADIANCE_HITDIST, nrdOutputDiffuse) ||
+                !externalResources.bind(::nrd::ResourceType::OUT_VALIDATION, nrdValidation)) {
                 return failGraphSetup();
             }
 
@@ -1982,8 +1985,8 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
             commonSettings.motionVectorScale[0] = 1.0f;
             commonSettings.motionVectorScale[1] = 1.0f;
             // The guide publishes 2.5D screen-space motion: xy is previous
-            // minus current texture UV and z is previous minus current signed
-            // view-space Z. NRD must consume all three components.
+            // minus current texture UV and z is previous positive view depth
+            // minus current positive view depth.
             commonSettings.motionVectorScale[2] = 1.0f;
             const glm::vec2 cameraJitter = nrdCameraJitterPixels(ctx.jitter);
             const glm::vec2 previousCameraJitter = nrdCameraJitterPixels(ctx.previousJitter);
@@ -1996,6 +1999,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
             commonSettings.denoisingRange = settings.nrd.denoisingRange;
             commonSettings.disocclusionThreshold = settings.nrd.disocclusionThreshold;
             commonSettings.disocclusionThresholdAlternate = settings.nrd.disocclusionThresholdAlternate;
+            commonSettings.enableValidation = settings.debug.viewMode == 100;
             commonSettings.frameIndex = static_cast<uint32_t>(ctx.frameIndex);
             commonSettings.accumulationMode =
                 m_nrdClearHistory ? ::nrd::AccumulationMode::CLEAR_AND_RESTART
@@ -2631,7 +2635,12 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
                                    f0Metallic,
                                    objectMaterialId,
                                    rtgiRawDiffuse.isValid() ? rtgiRawDiffuse : sceneLighting,
-                                   rtgiValidation.isValid() ? rtgiValidation : objectMaterialId};
+                                   rtgiValidation.isValid() ? rtgiValidation : objectMaterialId,
+                                   nrdMotion.isValid() ? nrdMotion : velocity,
+                                   nrdNormalRoughness.isValid() ? nrdNormalRoughness : normalAo,
+                                   nrdViewZ.isValid() ? nrdViewZ : depth,
+                                   nrdOutputDiffuse.isValid() ? nrdOutputDiffuse : sceneLighting,
+                                   nrdValidation.isValid() ? nrdValidation : sceneLighting};
         debugResources.output = sceneCaptureColor;
         graphTail = m_debugPass->addGraphPass(m_renderGraph, ctx, settings, targets, debugResources, graphTail);
         if (!graphTail.isValid()) {

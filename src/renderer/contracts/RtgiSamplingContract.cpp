@@ -33,6 +33,15 @@ uint32_t rtgiStableHitIdentityHash(const uint32_t stableMaterialId, const uint32
     return rtgiSampleHash(stableMaterialId * 0x9e3779b9u ^ stableGeometryId * 0x85ebca6bu);
 }
 
+uint32_t rtgiTerrainHitIdentityHash(const uint64_t blasRevision, const uint32_t customIndex,
+                                    const uint32_t geometryIndex, const uint32_t primitiveIndex) {
+    const uint32_t revisionLow = static_cast<uint32_t>(blasRevision);
+    const uint32_t revisionHigh = static_cast<uint32_t>(blasRevision >> 32u);
+    const uint32_t revisionMix = revisionLow ^ revisionHigh * 0x9e3779b9u;
+    const uint32_t geometryMix = geometryIndex * 0x85ebca6bu ^ primitiveIndex * 0xc2b2ae35u;
+    return rtgiSampleHash(revisionMix ^ customIndex * 0x27d4eb2du ^ geometryMix);
+}
+
 glm::vec2 rtgiCranleyPattersonRotation(const uint32_t frameIndex) {
     const float sequenceIndex = static_cast<float>(frameIndex & 0x00ffffffu) + 1.0f;
     return glm::fract(kR2Increment * sequenceIndex);

@@ -21,7 +21,6 @@ public:
         RgTextureHandle normalAo;
         RgTextureHandle material;
         RgTextureHandle velocity;
-        RgTextureHandle historyDepthPrevious;
         RgTextureHandle motion;
         RgTextureHandle normalRoughness;
         RgTextureHandle viewZ;
@@ -67,7 +66,6 @@ private:
         RhiTextureViewHandle normalAo;
         RhiTextureViewHandle material;
         RhiTextureViewHandle velocity;
-        RhiTextureViewHandle historyDepthPrevious;
         RhiTextureViewHandle motion;
         RhiTextureViewHandle normalRoughness;
         RhiTextureViewHandle viewZ;
@@ -86,7 +84,7 @@ private:
     RhiPipelineLayoutHandle m_pipelineLayout;
     RhiPipelineHandle m_pipeline;
     RhiBindGroupHandle m_bindGroup;
-    std::array<RhiTextureViewHandle, 8u> m_boundViews{};
+    std::array<RhiTextureViewHandle, 7u> m_boundViews{};
     Stats m_stats;
 };
 

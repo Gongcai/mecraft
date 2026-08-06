@@ -662,8 +662,11 @@ void main() {
             }
         } else if (customIndex < pc.frameMaskAndFlags.z) {
             TerrainRayQuerySurface terrainSurface;
+            TerrainRayTracingGpuInstance terrainInstance = uTerrainHitData.instances[customIndex];
+            hitIdentityHash = rtgiTerrainHitIdentityHash(terrainInstance.revisionLow, terrainInstance.revisionHigh,
+                                                          customIndex, geometryIndex, primitiveIndex);
             surfaceValid = terrainRayQueryCommittedSurface(
-                uTerrainHitData.instances[customIndex], geometryIndex, primitiveIndex, barycentrics,
+                terrainInstance, geometryIndex, primitiveIndex, barycentrics,
                 coneWidth, pc.renderExtentAndBias.w, rayDirection,
                 (uSecondaryLighting.flags.x & RTGI_SECONDARY_LIGHTING_TERRAIN_NORMAL_MAP_BIT) != 0u,
                 (uSecondaryLighting.flags.x & RTGI_SECONDARY_LIGHTING_TERRAIN_SPECULAR_MAP_BIT) != 0u,

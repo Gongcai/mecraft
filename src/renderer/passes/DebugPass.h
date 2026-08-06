@@ -24,7 +24,7 @@ class ShadowRenderer;
 /// Displays all intermediate render targets for visual inspection.
 class DebugPass : public RenderPass {
 public:
-    static constexpr std::size_t kTextureCount = 27u;
+    static constexpr std::size_t kTextureCount = 32u;
     void init(ResourceMgr& resourceMgr);
     void shutdown() override;
     [[nodiscard]] const char* name() const override { return "Debug"; }
@@ -51,12 +51,22 @@ public:
                                             RgPassHandle dependency);
 
     /// Records the debug visualization into an existing graph command list.
-    /// @param rtgiRawView Resolved view for the RTGI raw radiance/hit-distance transient, or invalid to fall back.
-    /// @param rtgiValidationView Resolved view for the RTGI validation transient, or invalid to fall back.
+    /// @param rtgiRawView Resolved view for the RTGI raw radiance/hit-distance transient.
+    /// @param rtgiValidationView Resolved view for the RTGI validation transient.
+    /// @param nrdMotionView Resolved NRD motion guide view.
+    /// @param nrdNormalRoughnessView Resolved NRD normal/roughness guide view.
+    /// @param nrdViewZView Resolved NRD View-Z guide view.
+    /// @param nrdOutputView Resolved NRD denoised diffuse signal view.
+    /// @param nrdValidationView Resolved NRD validation overlay view.
     [[nodiscard]] bool recordGraphPass(const FrameContext& ctx, const RenderSettings& settings,
                                        DeferredRenderTargets& targets, int width, int height,
                                        RhiCommandList& commandList, RhiTextureViewHandle rtgiRawView,
-                                       RhiTextureViewHandle rtgiValidationView);
+                                       RhiTextureViewHandle rtgiValidationView,
+                                       RhiTextureViewHandle nrdMotionView,
+                                       RhiTextureViewHandle nrdNormalRoughnessView,
+                                       RhiTextureViewHandle nrdViewZView,
+                                       RhiTextureViewHandle nrdOutputView,
+                                       RhiTextureViewHandle nrdValidationView);
 
 private:
     bool ensureRhiPipeline(RhiDevice& rhiDevice);

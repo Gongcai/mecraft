@@ -9,14 +9,13 @@ layout(binding = 0) uniform sampler2D uDepthTexture;
 layout(binding = 1) uniform sampler2D uNormalAoTexture;
 layout(binding = 2) uniform sampler2D uMaterialTexture;
 layout(binding = 3) uniform sampler2D uVelocityTexture;
-layout(binding = 4) uniform sampler2D uHistoryDepthTexture;
-layout(binding = 5, rgba16f) uniform writeonly image2D uMotion;
-layout(binding = 6, rgb10_a2) uniform writeonly image2D uNormalRoughness;
-layout(binding = 7, r32f) uniform writeonly image2D uViewZ;
+layout(binding = 4, rgba16f) uniform writeonly image2D uMotion;
+layout(binding = 5, rgb10_a2) uniform writeonly image2D uNormalRoughness;
+layout(binding = 6, r32f) uniform writeonly image2D uViewZ;
 
 layout(push_constant) uniform NrdGuidePrepPushConstants {
     mat4 inverseProjection;
-    mat4 previousInverseProjection;
+    mat4 currentClipToPreviousView;
     vec4 renderExtentInvalidViewZAndHistory;
 } pc;
 
@@ -37,10 +36,10 @@ bool nrdGuideReconstructPositiveViewZ(mat4 inverseProjection, vec2 screenUv, flo
     }
 
     viewPosition /= viewPosition.w;
-    if (!nrdGuideFinite(viewPosition)) {
+    if (!nrdGuideFinite(viewPosition) || viewPosition.z >= -1.0e-7) {
         return false;
     }
-    positiveViewZ = abs(viewPosition.z);
+    positiveViewZ = -viewPosition.z;
     return nrdGuideFinite(vec4(positiveViewZ, 0.0, 0.0, 0.0));
 }
 
@@ -48,10 +47,6 @@ float nrdGuidePositiveViewZ(mat4 inverseProjection, vec2 screenUv, float depth, 
     float positiveViewZ;
     return nrdGuideReconstructPositiveViewZ(inverseProjection, screenUv, depth, positiveViewZ) ? positiveViewZ
                                                                                                : invalidViewZ;
-}
-
-bool nrdGuideUvInside(vec2 uv) {
-    return all(greaterThanEqual(uv, vec2(0.0))) && all(lessThan(uv, vec2(1.0)));
 }
 
 float nrdGuideMaterialId(SurfaceMaterial material, float roughness) {
@@ -101,22 +96,12 @@ void main() {
     vec2 motion = -texelFetch(uVelocityTexture, texel, 0).rg;
     float motionViewZ = 0.0;
     const bool historyValid = pc.renderExtentInvalidViewZAndHistory.w > 0.5;
-    const vec2 currentTextureUv = rhiScreenUvToTextureUv(screenUv);
-    const vec2 previousTextureUv = currentTextureUv + motion;
-    if (historyValid && currentPositiveViewZ < invalidViewZ && nrdGuideUvInside(previousTextureUv) &&
-        nrdGuideFinite(vec4(motion, 0.0, 0.0))) {
-        ivec2 previousExtent = textureSize(uHistoryDepthTexture, 0);
-        ivec2 previousTexel = ivec2(previousTextureUv * vec2(previousExtent));
-        previousTexel = clamp(previousTexel, ivec2(0), previousExtent - ivec2(1));
-        float previousDepth = texelFetch(uHistoryDepthTexture, previousTexel, 0).r;
+    if (historyValid && currentPositiveViewZ < invalidViewZ && nrdGuideFinite(vec4(motion, 0.0, 0.0))) {
         float previousPositiveViewZ;
-        if (nrdGuideReconstructPositiveViewZ(pc.previousInverseProjection,
-                                              rhiTextureUvToScreenUv(previousTextureUv), previousDepth,
-                                              previousPositiveViewZ) &&
-            previousPositiveViewZ < invalidViewZ) {
-            // NRD converts this renderer's right-handed view matrices to its
-            // left-handed internal space, so the signed 2.5D delta is the
-            // previous positive depth minus the current positive depth.
+        if (nrdGuideReconstructPositiveViewZ(pc.currentClipToPreviousView, screenUv, depth,
+                                              previousPositiveViewZ) && previousPositiveViewZ < invalidViewZ) {
+            // The current depth sample identifies the current world point. Projecting that same point into the
+            // previous view avoids sampling an unrelated surface at a disoccluded or newly visible history pixel.
             motionViewZ = previousPositiveViewZ - currentPositiveViewZ;
         }
     }

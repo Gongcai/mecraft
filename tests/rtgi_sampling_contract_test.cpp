@@ -42,6 +42,8 @@ namespace {
                std::string::npos &&
            samplingSource.find("const float RTGI_MINIMUM_RAY_ORIGIN_BIAS = RTGI_VOXEL_SURFACE_EXPANSION * 2.0;") !=
                std::string::npos &&
+           samplingSource.find("uint rtgiTerrainHitIdentityHash(uint revisionLow, uint revisionHigh, uint customIndex") !=
+               std::string::npos &&
            traceSource.find("layout(std140, set = 1, binding = 16) uniform RtgiSecondaryLightingParams") !=
                std::string::npos &&
            traceSource.find("vec4 traceAndEmissionScales;") != std::string::npos &&
@@ -49,7 +51,7 @@ namespace {
            traceSource.find("uvec4 flags;") != std::string::npos &&
            traceSource.find("policy != GPU_LIGHT_SHADOW_RAY_QUERY") != std::string::npos &&
            traceSource.find("gpuLightShadowIndex(light) != GPU_LIGHT_INVALID_RESOURCE_INDEX") != std::string::npos &&
-           traceSource.find("maximumDistance - dot(normal * originBias, unitDirection) - rayMinimum") !=
+           traceSource.find("maximumDistance - dot(originOffset, unitDirection) - rayMinimum") !=
                std::string::npos &&
            traceSource.find("const float RTGI_METALLIC_DIFFUSE_TRANSPORT_FLOOR = 0.35;") != std::string::npos &&
            traceSource.find("const float RTGI_RADIANCE_FIREFLY_CLAMP = 8.0;") != std::string::npos &&
@@ -104,8 +106,9 @@ int main() {
             valid;
     valid = requireTrue(!isRtgiTraceInspectionView(88) && isRtgiTraceInspectionView(89) &&
                             isRtgiTraceInspectionView(90) && isRtgiTraceInspectionView(91) &&
-                            isRtgiTraceInspectionView(92) && !isRtgiTraceInspectionView(93),
-                        "RTGI trace inspection views must remain the exact 89-92 range") &&
+                            isRtgiTraceInspectionView(92) && isRtgiTraceInspectionView(93) &&
+                            isRtgiTraceInspectionView(94) && !isRtgiTraceInspectionView(95),
+                        "RTGI trace inspection views must remain the exact 89-94 range") &&
             valid;
     valid = requireTrue(rtgiSampleHash(0u) == 0u && rtgiSampleHash(1u) == 1753845952u &&
                             rtgiSampleHash(0xffffffffu) == 1734902346u,
@@ -113,7 +116,10 @@ int main() {
             valid;
     valid =
         requireTrue(rtgiStableHitIdentityHash(601u, 501u) == 1366735474u &&
-                        rtgiStableHitIdentityHash(602u, 502u) == 1027311900u && sizeof(RtgiTracePushConstants) == 128u,
+                        rtgiStableHitIdentityHash(602u, 502u) == 1027311900u &&
+                        rtgiTerrainHitIdentityHash(1u, 0u, 0u, 0u) == 1753845952u &&
+                        rtgiTerrainHitIdentityHash(1u, 0u, 1u, 0u) == 3375014680u &&
+                        sizeof(RtgiTracePushConstants) == 128u,
                     "RTGI stable hit identity and push-constant contracts must remain bit-exact") &&
         valid;
     valid = requireTrue(

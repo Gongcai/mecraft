@@ -564,7 +564,6 @@ void setNrdIdentityMatrix(float (&matrix)[16]) {
     const uint64_t validationErrorsBefore = device.validationErrorCount();
 
     std::vector<float> depth(kPixelCount, 0.25f);
-    std::vector<float> historyDepth(kPixelCount, 0.125f);
     const uint32_t packedNormalAo = glm::packUnorm3x10_1x2(glm::vec4(0.5f, 0.5f, 1.0f, 1.0f));
     std::vector<uint32_t> normalAo(kPixelCount, packedNormalAo);
     std::vector<uint32_t> material(kPixelCount, 0x000000ffu);
@@ -583,7 +582,6 @@ void setNrdIdentityMatrix(float (&matrix)[16]) {
     NrdSmokeTexture normalAoTexture;
     NrdSmokeTexture materialTexture;
     NrdSmokeTexture velocityTexture;
-    NrdSmokeTexture historyDepthTexture;
     NrdSmokeTexture motionTexture;
     NrdSmokeTexture normalRoughnessTexture;
     NrdSmokeTexture viewZTexture;
@@ -600,7 +598,6 @@ void setNrdIdentityMatrix(float (&matrix)[16]) {
         destroyNrdSmokeTexture(device, viewZTexture);
         destroyNrdSmokeTexture(device, normalRoughnessTexture);
         destroyNrdSmokeTexture(device, motionTexture);
-        destroyNrdSmokeTexture(device, historyDepthTexture);
         destroyNrdSmokeTexture(device, velocityTexture);
         destroyNrdSmokeTexture(device, materialTexture);
         destroyNrdSmokeTexture(device, normalAoTexture);
@@ -633,11 +630,6 @@ void setNrdIdentityMatrix(float (&matrix)[16]) {
                                              velocity.size() * sizeof(uint16_t), RhiResourceState::ShaderRead,
                                              velocityTexture),
                        "velocity") &&
-        requireTexture(createNrdSmokeTexture(device, "VulkanSmoke.NRD.Guide.HistoryDepth",
-                                             RhiTextureFormat::Depth32Float, kWidth, kHeight, kDepthUsage,
-                                             historyDepth.data(), historyDepth.size() * sizeof(float),
-                                             RhiResourceState::DepthRead, historyDepthTexture),
-                       "previous depth") &&
         requireTexture(createNrdSmokeTexture(device, "VulkanSmoke.NRD.Guide.Motion", RhiTextureFormat::Rgba16Float,
                                              kWidth, kHeight, kGuideOutputUsage, nullptr, 0u,
                                              RhiResourceState::Undefined, motionTexture),
@@ -679,6 +671,7 @@ void setNrdIdentityMatrix(float (&matrix)[16]) {
     frame.camera.invViewProj[2][2] = 4.0f;
     frame.camera.jitteredInvViewProj = frame.camera.invViewProj;
     frame.prevCamera = frame.camera;
+    frame.prevCamera.view[3][2] = -1.0f;
 
     NrdGuidePrepPass::GraphResources resources;
     RgBufferHandle readbackResource;
@@ -693,8 +686,6 @@ void setNrdIdentityMatrix(float (&matrix)[16]) {
         resources.normalAo = importTexture(normalAoTexture, RhiResourceState::ShaderRead, RhiResourceState::ShaderRead);
         resources.material = importTexture(materialTexture, RhiResourceState::ShaderRead, RhiResourceState::ShaderRead);
         resources.velocity = importTexture(velocityTexture, RhiResourceState::ShaderRead, RhiResourceState::ShaderRead);
-        resources.historyDepthPrevious =
-            importTexture(historyDepthTexture, RhiResourceState::DepthRead, RhiResourceState::DepthRead);
         resources.motion = importTexture(motionTexture, RhiResourceState::Undefined, RhiResourceState::ShaderWrite);
         resources.normalRoughness =
             importTexture(normalRoughnessTexture, RhiResourceState::Undefined, RhiResourceState::ShaderWrite);
@@ -710,8 +701,8 @@ void setNrdIdentityMatrix(float (&matrix)[16]) {
         settings.historyValid = true;
         guideHandle = pass.addGraphPass(graph, frame, settings, resources, inputReady);
         valid = resources.depth.isValid() && resources.normalAo.isValid() && resources.material.isValid() &&
-                resources.velocity.isValid() && resources.historyDepthPrevious.isValid() &&
-                resources.motion.isValid() && resources.normalRoughness.isValid() && resources.viewZ.isValid() &&
+                resources.velocity.isValid() && resources.motion.isValid() && resources.normalRoughness.isValid() &&
+                resources.viewZ.isValid() &&
                 readbackResource.isValid() && guideHandle.isValid();
     }
     if (valid) {
@@ -3744,6 +3735,8 @@ void main() {
         rejectedCutout.maximumHitDistance = 2.05f;
         rejectedCutout.minimumRadiance = {0.49f, 0.49f, 0.49f};
         rejectedCutout.maximumRadiance = {0.51f, 0.51f, 0.51f};
+        rejectedCutout.hitIdentityHash = renderer::contracts::rtgiTerrainHitIdentityHash(
+            firstView->hitData.revision, 0u, 0u, 0u);
         RtgiTraceSmokeExpectedPixel confirmedCutout;
         confirmedCutout.classification = renderer::contracts::RtgiTraceClassification::Hit;
         confirmedCutout.candidateCount = 1u;
@@ -3752,6 +3745,8 @@ void main() {
         confirmedCutout.maximumHitDistance = 1.05f;
         confirmedCutout.minimumRadiance = {0.02f, 0.28f, 0.004f};
         confirmedCutout.maximumRadiance = {0.03f, 0.31f, 0.007f};
+        confirmedCutout.hitIdentityHash = renderer::contracts::rtgiTerrainHitIdentityHash(
+            firstView->hitData.revision, 0u, 1u, 0u);
         smokeCase.expectedPixels = {rejectedCutout, confirmedCutout};
         renderer::core::GlobalBindlessSet rtgiBindlessSet;
         renderer::core::GlobalBindlessSetConfig bindlessConfig;
@@ -4934,7 +4929,7 @@ namespace {
                 RtgiTraceClassification::NonFinite};
             constexpr std::array<uint32_t, kPixelCount> kExpectedCandidates{1u, 2u, 0u, 0u, 7u, 3u, 5u};
             constexpr std::array<uint32_t, kPixelCount> kExpectedConfirmed{1u, 0u, 0u, 0u, 2u, 1u, 4u};
-            constexpr std::array<uint32_t, kPixelCount> kExpectedIdentities{111u, 0u, 0u, 0u, 0u, 0u, 0u};
+            constexpr std::array<uint32_t, kPixelCount> kExpectedIdentities{111u, 0u, 0u, 0u, 444u, 555u, 666u};
             const std::array<glm::vec4, kPixelCount> expectedRelax{glm::vec4(1.0f, 2.0f, 3.0f, 2.0f),
                                                                    glm::vec4(0.25f, 0.5f, 0.75f, kRtgiNrdFp16Max),
                                                                    glm::vec4(0.0f),

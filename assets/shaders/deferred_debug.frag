@@ -53,8 +53,13 @@ layout(binding = 23) uniform sampler2D uF0MetallicTex;
 layout(binding = 24) uniform usampler2D uObjectMaterialIdTex;
 layout(binding = 25) uniform sampler2D uRtgiRawTex;
 layout(binding = 26) uniform usampler2D uRtgiValidationTex;
+layout(binding = 27) uniform sampler2D uNrdMotionTex;
+layout(binding = 28) uniform sampler2D uNrdNormalRoughnessTex;
+layout(binding = 29) uniform sampler2D uNrdViewZTex;
+layout(binding = 30) uniform sampler2D uNrdOutputTex;
+layout(binding = 31) uniform sampler2D uNrdValidationTex;
 
-layout(std140, binding = 27) uniform DebugParams {
+layout(std140, binding = 32) uniform DebugParams {
     mat4 pShadowModelView;
     mat4 pShadowProjection;
     mat4 pShadowProjectionInverse;
@@ -941,7 +946,7 @@ void main() {
         return;
     }
 
-    // Debug 89-92: RTGI raw signal and trace validation.
+    // Debug 89-94: RTGI raw signal, trace validation, and TLAS hit identity.
     // The raw target stores pre-exposed radiance in RGB and the first-bounce
     // hit distance in A (65504 for a sky miss). The validation word packs
     // classification (8 bits), candidate count (12 bits), confirmed count
@@ -982,6 +987,52 @@ void main() {
         float candidates = float((word >> 8u) & 0xfffu);
         float confirmed = float((word >> 20u) & 0xfffu);
         FragColor = vec4(heatmap(candidates / 16.0).r, confirmed / 16.0, 0.0, 1.0);
+        return;
+    }
+    if (uDebugViewMode == 93) {
+        uint word = texture(uRtgiValidationTex, textureUv).r;
+        float candidates = float((word >> 8u) & 0xfffu) / 16.0;
+        float confirmed = float((word >> 20u) & 0xfffu) / 16.0;
+        float rejected = max(candidates - confirmed, 0.0);
+        FragColor = vec4(heatmap(rejected).r, heatmap(confirmed).g, heatmap(candidates).b, 1.0);
+        return;
+    }
+    if (uDebugViewMode == 94) {
+        uint identity = texture(uRtgiValidationTex, textureUv).g;
+        FragColor = vec4(identity == 0u ? vec3(0.0) : stableIdentityColor(identity), 1.0);
+        return;
+    }
+
+    // Debug 95-100: NRD guide and temporal diagnostics.
+    if (uDebugViewMode == 95) {
+        vec4 motion = texture(uNrdMotionTex, textureUv);
+        vec2 signedMotion = clamp(motion.xy * 64.0, vec2(-1.0), vec2(1.0));
+        float speed = clamp(length(motion.xy) * 128.0, 0.0, 1.0);
+        FragColor = vec4(signedMotion * 0.5 + 0.5, speed, 1.0);
+        return;
+    }
+    if (uDebugViewMode == 96) {
+        float viewZ = texture(uNrdViewZTex, textureUv).r;
+        float distance = clamp(1.0 - exp(-abs(viewZ) / 64.0), 0.0, 1.0);
+        FragColor = viewZ >= 0.0 ? vec4(1.0, distance, 0.0, 1.0) : vec4(0.0, distance, 1.0, 1.0);
+        return;
+    }
+    if (uDebugViewMode == 97) {
+        FragColor = vec4(texture(uNrdNormalRoughnessTex, textureUv).rgb, 1.0);
+        return;
+    }
+    if (uDebugViewMode == 98) {
+        FragColor = vec4(tonemapPreview(max(texture(uNrdOutputTex, textureUv).rgb, vec3(0.0))), 1.0);
+        return;
+    }
+    if (uDebugViewMode == 99) {
+        vec3 raw = texture(uRtgiRawTex, textureUv).rgb;
+        vec3 denoised = texture(uNrdOutputTex, textureUv).rgb;
+        FragColor = vec4(tonemapPreview(abs(raw - denoised) * 8.0), 1.0);
+        return;
+    }
+    if (uDebugViewMode == 100) {
+        FragColor = texture(uNrdValidationTex, textureUv);
         return;
     }
 

@@ -145,18 +145,27 @@ RgPassHandle DebugPass::addGraphPass(RenderGraph& graph, const FrameContext& ctx
     }
     debug.writeTexture(resources.output, RhiResourceState::RenderTarget)
         .setExecute([this, frame = &ctx, frameSettings = settings, frameTargets = &targets,
-                     rtgiRaw = resources.textures[25], rtgiValidation = resources.textures[26]](RgPassContext& pass) {
+                     rtgiRaw = resources.textures[25], rtgiValidation = resources.textures[26],
+                     nrdMotion = resources.textures[27], nrdNormalRoughness = resources.textures[28],
+                     nrdViewZ = resources.textures[29], nrdOutput = resources.textures[30],
+                     nrdValidation = resources.textures[31]](RgPassContext& pass) {
             return recordGraphPass(*frame, frameSettings, *frameTargets,
                                    static_cast<int>(frame->temporalExtents.renderExtent.width),
                                    static_cast<int>(frame->temporalExtents.renderExtent.height), pass.commandList(),
-                                   pass.textureView(rtgiRaw), pass.textureView(rtgiValidation));
+                                   pass.textureView(rtgiRaw), pass.textureView(rtgiValidation), pass.textureView(nrdMotion),
+                                   pass.textureView(nrdNormalRoughness), pass.textureView(nrdViewZ),
+                                   pass.textureView(nrdOutput), pass.textureView(nrdValidation));
         });
     return debug.handle();
 }
 
 bool DebugPass::recordGraphPass(const FrameContext& ctx, const RenderSettings& settings, DeferredRenderTargets& targets,
                                 const int width, const int height, RhiCommandList& commandList,
-                                const RhiTextureViewHandle rtgiRawView, const RhiTextureViewHandle rtgiValidationView) {
+                                const RhiTextureViewHandle rtgiRawView, const RhiTextureViewHandle rtgiValidationView,
+                                const RhiTextureViewHandle nrdMotionView,
+                                const RhiTextureViewHandle nrdNormalRoughnessView,
+                                const RhiTextureViewHandle nrdViewZView, const RhiTextureViewHandle nrdOutputView,
+                                const RhiTextureViewHandle nrdValidationView) {
     if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr || !ctx.sceneCaptureColorView.isValid() ||
         m_shadowRenderer == nullptr) {
         return false;
@@ -230,7 +239,12 @@ bool DebugPass::recordGraphPass(const FrameContext& ctx, const RenderSettings& s
         // RTGI signal transients; sampled only by the RTGI debug modes and
         // substituted with always-valid targets when RTGI is disabled.
         rtgiRawView.isValid() ? rtgiRawView : targets.sceneLightingTextureViewHandle(),
-        rtgiValidationView.isValid() ? rtgiValidationView : targets.objectMaterialIdTextureViewHandle()};
+        rtgiValidationView.isValid() ? rtgiValidationView : targets.objectMaterialIdTextureViewHandle(),
+        nrdMotionView.isValid() ? nrdMotionView : targets.velocityTextureViewHandle(),
+        nrdNormalRoughnessView.isValid() ? nrdNormalRoughnessView : targets.normalAoTextureViewHandle(),
+        nrdViewZView.isValid() ? nrdViewZView : targets.depthTextureViewHandle(),
+        nrdOutputView.isValid() ? nrdOutputView : targets.sceneLightingTextureViewHandle(),
+        nrdValidationView.isValid() ? nrdValidationView : targets.sceneLightingTextureViewHandle()};
     if (!ensureRhiBindGroup(rhiDevice, debugViewMode, views)) {
         return false;
     }
@@ -443,7 +457,8 @@ bool DebugPass::ensureRhiBindGroup(RhiDevice& rhiDevice, const int debugViewMode
 
     std::array<RhiSamplerHandle, kDebugTextureCount> samplers;
     samplers.fill(m_linearSampler);
-    const size_t nearestBindings[] = {0u, 1u, 2u, 3u, 4u, 5u, 9u, 12u, 16u, 19u, 20u, 21u, 22u, 23u, 24u, 25u, 26u};
+    const size_t nearestBindings[] = {0u,  1u,  2u,  3u,  4u,  5u,  9u,  12u, 16u, 19u, 20u,
+                                     21u, 22u, 23u, 24u, 25u, 26u, 27u, 28u, 29u, 31u};
     for (const size_t binding : nearestBindings) {
         samplers[binding] = m_nearestSampler;
     }
