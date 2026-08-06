@@ -40,12 +40,11 @@ uint rtgiStableHitIdentityHash(uint stableMaterialId, uint stableGeometryId) {
     return rtgiSampleHash(stableMaterialId * 0x9e3779b9u ^ stableGeometryId * 0x85ebca6bu);
 }
 
-// Hashes the resident terrain BLAS revision and exact TLAS hit location for validation views.
-uint rtgiTerrainHitIdentityHash(uint revisionLow, uint revisionHigh, uint customIndex,
-                                uint geometryIndex, uint primitiveIndex) {
+// Hashes a terrain BLAS generation without depending on its mutable TLAS custom index.
+uint rtgiTerrainHitIdentityHash(uint revisionLow, uint revisionHigh, uvec2 vertexAddressWords) {
     uint revisionMix = revisionLow ^ revisionHigh * 0x9e3779b9u;
-    uint geometryMix = geometryIndex * 0x85ebca6bu ^ primitiveIndex * 0xc2b2ae35u;
-    return rtgiSampleHash(revisionMix ^ customIndex * 0x27d4eb2du ^ geometryMix);
+    uint addressMix = vertexAddressWords.x * 0x27d4eb2du ^ vertexAddressWords.y * 0x85ebca6bu;
+    return rtgiSampleHash(revisionMix ^ addressMix);
 }
 
 // Advances the shared Cranley-Patterson rotation with a low-discrepancy R2 sequence.

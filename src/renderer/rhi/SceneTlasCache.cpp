@@ -19,6 +19,8 @@
 namespace renderer::rt {
 namespace {
 
+constexpr float kSceneOriginCellSizeMeters = 128.0f;
+
 constexpr RhiBufferUsageFlags kInstanceBufferUsages =
     rhiFlag(RhiBufferUsage::Storage) | rhiFlag(RhiBufferUsage::TransferDst) | rhiFlag(RhiBufferUsage::DeviceAddress) |
     rhiFlag(RhiBufferUsage::AccelerationStructureBuildInput);
@@ -47,6 +49,14 @@ constexpr uint8_t kKnownInstanceMask =
         }
     }
     return true;
+}
+
+[[nodiscard]] bool finiteVector(const glm::vec3& value) {
+    return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
+}
+
+[[nodiscard]] bool sameVector(const glm::vec3& left, const glm::vec3& right) {
+    return left.x == right.x && left.y == right.y && left.z == right.z;
 }
 
 [[nodiscard]] bool sameMatrix(const glm::mat4& left, const glm::mat4& right) {
@@ -145,6 +155,7 @@ void SceneTlasCache::shutdown() {
     m_buildsRecorded = 0u;
     m_buildsCompleted = 0u;
     m_desiredRevision = 0u;
+    m_desiredSceneOrigin = glm::vec3(0.0f);
     m_desiredInputs.clear();
     m_pending.reset();
     m_active.reset();
@@ -163,14 +174,15 @@ void SceneTlasCache::beginFrame() {
     applyEmptyDesiredGeneration();
 }
 
-SceneTlasSetResult SceneTlasCache::setInstances(std::vector<SceneTlasInstanceInput> instances) {
+SceneTlasSetResult SceneTlasCache::setInstances(std::vector<SceneTlasInstanceInput> instances,
+                                                const glm::vec3& sceneOrigin) {
     if (!m_initialized || !m_supported) {
         return SceneTlasSetResult::Unsupported;
     }
     if (!m_healthy) {
         return SceneTlasSetResult::InvalidInstance;
     }
-    if ((m_pending.has_value() && m_pending->state == PendingState::Recorded) ||
+    if ((m_pending.has_value() && m_pending->state == PendingState::Recorded) || !finiteVector(sceneOrigin) ||
         instances.size() > kMaximumCustomIndexCount ||
         instances.size() > m_device->capabilities().maxAccelerationStructureInstanceCount) {
         setTransientError("Scene TLAS instance transaction is invalid");
@@ -224,8 +236,10 @@ SceneTlasSetResult SceneTlasCache::setInstances(std::vector<SceneTlasInstanceInp
             staticMeshBindlessIdentity = bindlessIdentity;
         }
 
+        glm::mat4 rebasedTransform;
         RhiAccelerationStructureInstance native;
-        if (!encodeTransform(source.transform, native.transform)) {
+        if (!rebaseTransform(source.transform, sceneOrigin, rebasedTransform) ||
+            !encodeTransform(rebasedTransform, native.transform)) {
             setTransientError("Scene TLAS instance transform is invalid");
             return SceneTlasSetResult::InvalidInstance;
         }
@@ -243,7 +257,7 @@ SceneTlasSetResult SceneTlasCache::setInstances(std::vector<SceneTlasInstanceInp
         normalized.push_back({std::move(source), native});
     }
 
-    if (normalized == m_desiredInputs) {
+    if (sameVector(sceneOrigin, m_desiredSceneOrigin) && normalized == m_desiredInputs) {
         return SceneTlasSetResult::Unchanged;
     }
     if (m_nextRevision == std::numeric_limits<uint64_t>::max()) {
@@ -251,6 +265,7 @@ SceneTlasSetResult SceneTlasCache::setInstances(std::vector<SceneTlasInstanceInp
         return SceneTlasSetResult::InvalidInstance;
     }
     m_desiredRevision = m_nextRevision++;
+    m_desiredSceneOrigin = sceneOrigin;
     m_desiredInputs = std::move(normalized);
     applyEmptyDesiredGeneration();
     return SceneTlasSetResult::Accepted;
@@ -294,6 +309,7 @@ bool SceneTlasCache::recordFrame(RhiCommandList& commandList) {
     staticMeshTableRanges.reserve(m_desiredInputs.size());
     Generation generation;
     generation.revision = m_desiredRevision;
+    generation.sceneOrigin = m_desiredSceneOrigin;
     generation.instanceBytes = static_cast<uint64_t>(m_desiredInputs.size()) * sizeof(RhiAccelerationStructureInstance);
     generation.terrainHitDataBytes =
         static_cast<uint64_t>(m_desiredInputs.size()) * sizeof(renderer::contracts::TerrainRayTracingGpuInstance);
@@ -344,7 +360,12 @@ bool SceneTlasCache::recordFrame(RhiCommandList& commandList) {
                 generation.staticMeshResources.push_back(input.source.staticMeshHitData);
             }
 
-            const std::optional<glm::vec4> worldBounds = staticMeshWorldBounds(hitData, input.source.transform);
+            glm::mat4 rebasedTransform;
+            if (!rebaseTransform(input.source.transform, generation.sceneOrigin, rebasedTransform)) {
+                setTransientError("Scene TLAS static-mesh transform rebasing failed");
+                return false;
+            }
+            const std::optional<glm::vec4> worldBounds = staticMeshWorldBounds(hitData, rebasedTransform);
             renderer::contracts::GpuSceneInstanceFlags instanceFlags =
                 renderer::contracts::gpuSceneInstanceFlagBit(renderer::contracts::GpuSceneInstanceFlag::Enabled) |
                 renderer::contracts::gpuSceneInstanceFlagBit(
@@ -362,8 +383,8 @@ bool SceneTlasCache::recordFrame(RhiCommandList& commandList) {
                 return false;
             }
             renderer::contracts::GpuSceneInstanceNormalizationInput sceneInput;
-            sceneInput.worldFromObject = input.source.transform;
-            sceneInput.previousWorldFromObject = input.source.transform;
+            sceneInput.worldFromObject = rebasedTransform;
+            sceneInput.previousWorldFromObject = rebasedTransform;
             sceneInput.worldBoundsCenterAndRadius = *worldBounds;
             sceneInput.geometryBase = range.geometryBase;
             sceneInput.geometryCount = static_cast<uint32_t>(hitData.geometries().size());
@@ -592,6 +613,7 @@ std::optional<SceneTlasView> SceneTlasCache::activeView() const {
     const Generation& active = *m_active;
     SceneTlasView view;
     view.revision = active.revision;
+    view.sceneOrigin = active.sceneOrigin;
     view.accelerationStructure = active.accelerationStructure;
     view.instanceBuffer = active.instanceBuffer;
     view.terrainHitDataBuffer = active.terrainHitDataBuffer;
@@ -637,6 +659,7 @@ SceneTlasStats SceneTlasCache::stats() const {
         result.activeGpuSceneInstanceBytes = m_active->gpuSceneInstanceBytes;
         result.activeBlasBytes = m_active->blasBytes;
         result.activeTlasBytes = m_active->tlasBytes;
+        result.activeSceneOrigin = m_active->sceneOrigin;
     }
     return result;
 }
@@ -665,6 +688,33 @@ RhiAccelerationStructureInstanceFlags SceneTlasCache::instanceFlags(const bool d
         flags |= rhiFlag(RhiAccelerationStructureInstanceFlag::TriangleFacingCullDisable);
     }
     return flags;
+}
+
+std::optional<glm::vec3> SceneTlasCache::sceneOriginForCamera(const glm::vec3& cameraPosition) {
+    if (!finiteVector(cameraPosition)) {
+        return std::nullopt;
+    }
+    return glm::floor(cameraPosition / kSceneOriginCellSizeMeters) * kSceneOriginCellSizeMeters;
+}
+
+bool SceneTlasCache::rebaseTransform(const glm::mat4& transform, const glm::vec3& sceneOrigin,
+                                     glm::mat4& rebasedTransform) {
+    if (!finiteMatrix(transform) || !finiteVector(sceneOrigin) || std::abs(transform[0][3]) > 1.0e-6f ||
+        std::abs(transform[1][3]) > 1.0e-6f || std::abs(transform[2][3]) > 1.0e-6f ||
+        std::abs(transform[3][3] - 1.0f) > 1.0e-6f) {
+        return false;
+    }
+    rebasedTransform = transform;
+    const glm::dvec3 translated = glm::dvec3(transform[3]) - glm::dvec3(sceneOrigin);
+    if (!std::isfinite(translated.x) || !std::isfinite(translated.y) || !std::isfinite(translated.z) ||
+        std::abs(translated.x) > static_cast<double>(std::numeric_limits<float>::max()) ||
+        std::abs(translated.y) > static_cast<double>(std::numeric_limits<float>::max()) ||
+        std::abs(translated.z) > static_cast<double>(std::numeric_limits<float>::max())) {
+        return false;
+    }
+    rebasedTransform[3] = glm::vec4(static_cast<float>(translated.x), static_cast<float>(translated.y),
+                                    static_cast<float>(translated.z), 1.0f);
+    return true;
 }
 
 bool SceneTlasCache::pollSubmittedGeneration() {

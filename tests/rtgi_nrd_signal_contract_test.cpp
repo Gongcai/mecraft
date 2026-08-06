@@ -66,7 +66,12 @@ namespace {
            traceSource.find("missRadiance, RTGI_NRD_FP16_MAX, RTGI_TRACE_CLASS_MISS") != std::string::npos &&
            traceSource.find("rtgiOffsetSurfaceOrigin") != std::string::npos &&
            traceSource.find("dot(geometricNormal, outgoingDirection) < 0.0 ? -1.0 : 1.0") != std::string::npos &&
-           guideSource.find("layout(binding = 4, rgba16f) uniform writeonly image2D uMotion;") != std::string::npos &&
+           guideSource.find("layout(binding = 6, rgba16f) uniform writeonly image2D uMotion;") != std::string::npos &&
+           guideSource.find("layout(binding = 9, r8) uniform writeonly image2D uConfidence;") != std::string::npos &&
+           guideSource.find("layout(binding = 5) uniform usampler2D uPreviousValidationTexture;") !=
+               std::string::npos &&
+           guideSource.find("layout(binding = 10, rg32ui) uniform writeonly uimage2D uValidationHistory;") !=
+               std::string::npos &&
            guideSource.find("vec2 motion = -texelFetch(uVelocityTexture, texel, 0).rg;") != std::string::npos &&
            guideSource.find("float nrdGuideMaterialId(SurfaceMaterial material, float roughness)") !=
                std::string::npos &&
@@ -80,6 +85,10 @@ namespace {
                             "-invalidViewZ;") != std::string::npos &&
            guideSource.find("viewPosition.z >= -1.0e-7") != std::string::npos &&
            guideSource.find("positiveViewZ = -viewPosition.z;") != std::string::npos &&
+           guideSource.find("imageStore(uValidationHistory, texel, uvec4(currentValidation, 0u, 0u));") !=
+               std::string::npos &&
+           guideSource.find("const bool validateHitIdentity = (historyFlags & 2u) != 0u;") != std::string::npos &&
+           guideSource.find("currentValidation.g == previousValidation.g") != std::string::npos &&
            pipelineSource.find("glm::vec2 nrdCameraJitterPixels(const TemporalJitter& jitter)") !=
                std::string::npos &&
            pipelineSource.find("return -jitter.pixels;") != std::string::npos &&
@@ -90,11 +99,17 @@ namespace {
                std::string::npos &&
            pipelineSource.find("guideSettings.useJitteredProjection = traceSettings.useJitteredProjection;") !=
                std::string::npos &&
+           pipelineSource.find("IN_DIFF_CONFIDENCE") != std::string::npos &&
+           pipelineSource.find("commonSettings.isHistoryConfidenceAvailable = true;") != std::string::npos &&
+           pipelineSource.find("guideResources.currentValidationHistory = historyRtgiValidationCurrent;") !=
+               std::string::npos &&
            pipelineSource.find("writeTexture(historyDepthCurrent, RhiResourceState::TransferDst)") !=
                std::string::npos &&
            pipelineSource.find("targets.swapHistory();") != std::string::npos &&
            targetsSource.find("historyDepthTexturePrevHandle() const") != std::string::npos &&
            targetsSource.find("m_historyDepthHandle[1 - m_currentHistoryIndex]") != std::string::npos &&
+           targetsSource.find("historyConfidenceTexturePrevHandle() const") != std::string::npos &&
+           targetsSource.find("historyRtgiValidationTexturePrevHandle() const") != std::string::npos &&
            sceneSource.find("ctx.jitter.pixels.x = frameX * 0.5f;") != std::string::npos &&
            sceneSource.find("ctx.jitter.pixels.y = -frameY * 0.5f;") != std::string::npos &&
            lightingSource.find("uRtgiRadianceScale pRtgi.z") != std::string::npos &&

@@ -99,6 +99,8 @@ enum class SceneTlasSetResult : uint8_t { Accepted, Unchanged, Unsupported, Inva
 /// Read-only snapshot of the latest completed TLAS generation.
 struct SceneTlasView {
     uint64_t revision = 0u;
+    /// World-space origin subtracted from every TLAS and GPU Scene instance transform.
+    glm::vec3 sceneOrigin{0.0f};
     RhiAccelerationStructureHandle accelerationStructure;
     RhiBufferHandle instanceBuffer;
     RhiBufferHandle terrainHitDataBuffer;
@@ -142,6 +144,7 @@ struct SceneTlasStats {
     uint64_t activeTlasBytes = 0u;
     uint64_t buildsRecorded = 0u;
     uint64_t buildsCompleted = 0u;
+    glm::vec3 activeSceneOrigin{0.0f};
 };
 
 /// Builds transactional TLAS generations while retaining every referenced BLAS until GPU retirement completes.
@@ -160,8 +163,10 @@ public:
 
     /// Replaces the desired scene instance snapshot after validation and stable sorting.
     /// @param instances Complete scene snapshot; an empty vector explicitly retires the active TLAS.
+    /// @param sceneOrigin Shared floating origin for TLAS and camera-relative GPU Scene data.
     /// @return Accepted, Unchanged, Unsupported, or InvalidInstance.
-    [[nodiscard]] SceneTlasSetResult setInstances(std::vector<SceneTlasInstanceInput> instances);
+    [[nodiscard]] SceneTlasSetResult setInstances(std::vector<SceneTlasInstanceInput> instances,
+                                                  const glm::vec3& sceneOrigin = glm::vec3(0.0f));
 
     /// Records one required TLAS build into the current Render Graph command list.
     /// @return False when resource creation or command recording fails.
@@ -190,6 +195,19 @@ public:
     /// @return Counter-clockwise facing plus optional cull disable.
     [[nodiscard]] static RhiAccelerationStructureInstanceFlags instanceFlags(bool doubleSided);
 
+    /// Selects a stable floating-origin cell for a camera position.
+    /// @param cameraPosition Finite world-space camera position in meters.
+    /// @return Cell-aligned origin, or no value when the position is not finite.
+    [[nodiscard]] static std::optional<glm::vec3> sceneOriginForCamera(const glm::vec3& cameraPosition);
+
+    /// Subtracts a scene origin from only the affine translation without multiplying large float matrices.
+    /// @param transform Absolute local-to-world affine transform.
+    /// @param sceneOrigin Origin shared by the active TLAS generation.
+    /// @param rebasedTransform Receives the camera-relative affine transform.
+    /// @return False when either input is non-finite or non-affine.
+    [[nodiscard]] static bool rebaseTransform(const glm::mat4& transform, const glm::vec3& sceneOrigin,
+                                              glm::mat4& rebasedTransform);
+
 private:
     enum class PendingState : uint8_t { Recorded, Submitted };
 
@@ -202,6 +220,7 @@ private:
 
     struct Generation {
         uint64_t revision = 0u;
+        glm::vec3 sceneOrigin{0.0f};
         RhiBufferHandle instanceBuffer;
         RhiBufferHandle terrainHitDataBuffer;
         RhiBufferHandle gpuSceneMaterialBuffer;
@@ -254,6 +273,7 @@ private:
     uint64_t m_buildsRecorded = 0u;
     uint64_t m_buildsCompleted = 0u;
     uint64_t m_desiredRevision = 0u;
+    glm::vec3 m_desiredSceneOrigin{0.0f};
     std::vector<NormalizedInput> m_desiredInputs;
     std::optional<PendingGeneration> m_pending;
     std::optional<Generation> m_active;

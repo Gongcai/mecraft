@@ -233,7 +233,8 @@ enum class TemporalHistoryOwner : uint32_t {
 [[nodiscard]] constexpr TemporalResetReasons temporalResetReasonMaskForOwner(const TemporalHistoryOwner owner) {
     constexpr TemporalResetReasons kAllReasons = ~0u;
     if (owner == TemporalHistoryOwner::NrdDiffuse) {
-        return kAllReasons & ~temporalResetReasonBit(TemporalResetReason::PreExposure);
+        return kAllReasons & ~temporalResetReasonBit(TemporalResetReason::PreExposure) &
+               ~temporalResetReasonBit(TemporalResetReason::AssetRevision);
     }
     return kAllReasons & ~temporalResetReasonBit(TemporalResetReason::DenoiserMethod);
 }

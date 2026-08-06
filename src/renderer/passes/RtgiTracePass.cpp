@@ -40,17 +40,6 @@ constexpr uint8_t kRtgiKnownShadowInstanceMask =
     return lhs.index == rhs.index && lhs.generation == rhs.generation;
 }
 
-[[nodiscard]] bool finiteMatrix(const glm::mat4& matrix) {
-    for (uint32_t column = 0u; column < 4u; ++column) {
-        for (uint32_t row = 0u; row < 4u; ++row) {
-            if (!std::isfinite(matrix[column][row])) {
-                return false;
-            }
-        }
-    }
-    return true;
-}
-
 [[nodiscard]] bool finite(const glm::vec3& value) {
     return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
 }
@@ -182,6 +171,7 @@ RgPassHandle RtgiTracePass::addGraphPass(RenderGraph& graph, const FrameContext&
     sceneBuffers.sceneInstanceCount = activeTlas->instanceCount;
     sceneBuffers.gpuSceneMaterialCount = activeTlas->gpuSceneMaterialCount;
     sceneBuffers.gpuSceneGeometryCount = activeTlas->gpuSceneGeometryCount;
+    sceneBuffers.sceneOrigin = activeTlas->sceneOrigin;
     RenderGraphPassBuilder trace = graph.addPass({"RTGI.Trace", RgPassType::Compute, RhiQueueType::Graphics});
     trace.dependsOn(dependency)
         .readTexture(resources.depth, RhiResourceState::DepthRead)
@@ -242,13 +232,20 @@ bool RtgiTracePass::recordTrace(RhiCommandList& commandList, const FrameContext&
         MECRAFT_LOG_STREAM(std::cerr << "[RtgiTracePass] Trace recording rejected: " << reason << '\n');
         return false;
     };
-    const glm::mat4& inverseViewProjection =
-        settings.useJitteredProjection ? ctx.camera.jitteredInvViewProj : ctx.camera.invViewProj;
+    glm::mat4 projection = ctx.camera.projection;
+    if (settings.useJitteredProjection) {
+        for (uint32_t column = 0u; column < 4u; ++column) {
+            projection[column][0] += ctx.jitter.projectionOffset.x * ctx.camera.projection[column][3];
+            projection[column][1] += ctx.jitter.projectionOffset.y * ctx.camera.projection[column][3];
+        }
+    }
+    glm::mat4 inverseViewProjection;
     if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr || ctx.shared->globalBindlessSet == nullptr) {
         return reject("shared Vulkan renderer state is unavailable");
     }
-    if (!finiteMatrix(inverseViewProjection)) {
-        return reject("inverse view-projection matrix is non-finite");
+    if (!renderer::contracts::makeRtgiCameraRelativeInverseViewProjection(
+            projection, ctx.camera.view, ctx.camera.position, sceneBuffers.sceneOrigin, inverseViewProjection)) {
+        return reject("camera-relative inverse view-projection matrix is invalid");
     }
     if (!std::isfinite(ctx.animationTime)) {
         return reject("animation time is non-finite");
@@ -275,7 +272,8 @@ bool RtgiTracePass::recordTrace(RhiCommandList& commandList, const FrameContext&
     const TemporalExtent extent = ctx.temporalExtents.renderExtent;
     renderer::contracts::RtgiTracePushConstants pushConstants;
     pushConstants.inverseViewProjection = inverseViewProjection;
-    pushConstants.cameraPositionAndMaxDistance = glm::vec4(ctx.camera.position, settings.maxRayDistance);
+    pushConstants.cameraPositionAndMaxDistance =
+        glm::vec4(ctx.camera.position - sceneBuffers.sceneOrigin, settings.maxRayDistance);
     pushConstants.renderExtentAndBias = glm::vec4(static_cast<float>(extent.width), static_cast<float>(extent.height),
                                                   settings.minimumRayOriginBias, ctx.animationTime);
     pushConstants.frameMaskAndFlags =

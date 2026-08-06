@@ -91,12 +91,17 @@ RgPassHandle RtgiSignalPackPass::addGraphPass(RenderGraph& graph, const FrameCon
 
 bool RtgiSignalPackPass::recordPack(RhiCommandList& commandList, const FrameContext& ctx, const Settings& settings,
                                     const PackViews& views) {
-    const glm::mat4& inverseViewProjection =
-        settings.useJitteredProjection ? ctx.camera.jitteredInvViewProj : ctx.camera.invViewProj;
-    const glm::mat4 inverseProjection = ctx.camera.view * inverseViewProjection;
+    glm::mat4 projection = ctx.camera.projection;
+    if (settings.useJitteredProjection) {
+        for (uint32_t column = 0u; column < 4u; ++column) {
+            projection[column][0] += ctx.jitter.projectionOffset.x * ctx.camera.projection[column][3];
+            projection[column][1] += ctx.jitter.projectionOffset.y * ctx.camera.projection[column][3];
+        }
+    }
+    const glm::mat4 inverseProjection = glm::inverse(projection);
     const TemporalExtent extent = ctx.temporalExtents.renderExtent;
-    if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr || !finiteMatrix(ctx.camera.view) ||
-        !finiteMatrix(inverseViewProjection) || !finiteMatrix(inverseProjection) || !std::isfinite(ctx.preExposure) ||
+    if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr || !finiteMatrix(inverseProjection) ||
+        !std::isfinite(ctx.preExposure) ||
         ctx.preExposure <= 0.0f || !std::isfinite(ctx.previousPreExposure) || ctx.previousPreExposure <= 0.0f ||
         !ensurePipeline(*ctx.shared->rhiDevice, settings.method) ||
         !ensureBindGroup(*ctx.shared->rhiDevice, views, extent.width, extent.height)) {

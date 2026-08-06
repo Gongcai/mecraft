@@ -153,6 +153,7 @@ private:
     // Advances the production low-discrepancy sequence; trace inspection
     // freezes it so raw validation images remain comparable across frames.
     uint32_t m_rtgiTemporalSampleIndex = 0u;
+    uint64_t m_lastNrdSceneTlasRevision = 0u;
     bool m_rtgiTraceInspectionActive = false;
     int m_heldBlockLightValue = 0;
     std::vector<renderer::contracts::SceneLight> m_sceneLights;
@@ -191,7 +192,7 @@ private:
                                                     bool clearReflection, bool clearSceneComposite, bool clearCloud,
                                                     bool clearSsaoFiltered);
     void commitDeferredHistoryState();
-    [[nodiscard]] bool prepareSceneTlas();
+    [[nodiscard]] bool prepareSceneTlas(const glm::vec3& cameraPosition);
     [[nodiscard]] bool bootstrapSceneTlasForRtgi();
     [[nodiscard]] bool recordTerrainDrawPreparation(RhiCommandList& commandList, const FrameContext& ctx);
     [[nodiscard]] bool configureVoxelReflectionProbe(const FrameContext& ctx);

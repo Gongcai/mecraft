@@ -2,6 +2,7 @@
 
 #include <glm/common.hpp>
 #include <glm/geometric.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 
 #include <cmath>
 
@@ -18,6 +19,17 @@ constexpr glm::vec2 kR2Increment{0.7548776662466927f, 0.5698402909980532f};
     return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
 }
 
+[[nodiscard]] bool finite(const glm::mat4& value) {
+    for (uint32_t column = 0u; column < 4u; ++column) {
+        for (uint32_t row = 0u; row < 4u; ++row) {
+            if (!std::isfinite(value[column][row])) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
 } // namespace
 
 uint32_t rtgiSampleHash(uint32_t value) {
@@ -29,17 +41,34 @@ uint32_t rtgiSampleHash(uint32_t value) {
     return value;
 }
 
+bool makeRtgiCameraRelativeInverseViewProjection(const glm::mat4& projection, const glm::mat4& view,
+                                                 const glm::vec3& cameraPosition, const glm::vec3& sceneOrigin,
+                                                 glm::mat4& inverseViewProjection) {
+    if (!finite(projection) || !finite(view) || !finite(cameraPosition) || !finite(sceneOrigin)) {
+        return false;
+    }
+    glm::mat4 viewRotation = view;
+    viewRotation[3] = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
+    const glm::mat4 inverseProjection = glm::inverse(projection);
+    const glm::mat4 inverseViewRotation = glm::inverse(viewRotation);
+    const glm::vec3 cameraRelativePosition = cameraPosition - sceneOrigin;
+    inverseViewProjection = glm::translate(glm::mat4(1.0f), cameraRelativePosition) * inverseViewRotation *
+                            inverseProjection;
+    return finite(inverseViewProjection);
+}
+
 uint32_t rtgiStableHitIdentityHash(const uint32_t stableMaterialId, const uint32_t stableGeometryId) {
     return rtgiSampleHash(stableMaterialId * 0x9e3779b9u ^ stableGeometryId * 0x85ebca6bu);
 }
 
-uint32_t rtgiTerrainHitIdentityHash(const uint64_t blasRevision, const uint32_t customIndex,
-                                    const uint32_t geometryIndex, const uint32_t primitiveIndex) {
+uint32_t rtgiTerrainHitIdentityHash(const uint64_t blasRevision, const uint64_t vertexAddress) {
     const uint32_t revisionLow = static_cast<uint32_t>(blasRevision);
     const uint32_t revisionHigh = static_cast<uint32_t>(blasRevision >> 32u);
+    const uint32_t addressLow = static_cast<uint32_t>(vertexAddress);
+    const uint32_t addressHigh = static_cast<uint32_t>(vertexAddress >> 32u);
     const uint32_t revisionMix = revisionLow ^ revisionHigh * 0x9e3779b9u;
-    const uint32_t geometryMix = geometryIndex * 0x85ebca6bu ^ primitiveIndex * 0xc2b2ae35u;
-    return rtgiSampleHash(revisionMix ^ customIndex * 0x27d4eb2du ^ geometryMix);
+    const uint32_t addressMix = addressLow * 0x27d4eb2du ^ addressHigh * 0x85ebca6bu;
+    return rtgiSampleHash(revisionMix ^ addressMix);
 }
 
 glm::vec2 rtgiCranleyPattersonRotation(const uint32_t frameIndex) {

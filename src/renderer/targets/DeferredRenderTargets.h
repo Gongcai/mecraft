@@ -200,6 +200,38 @@ public:
     }
     bool ensureHistorySceneTextureView(RhiDevice& rhiDevice);
     bool ensureHistorySceneTextureViews(RhiDevice& rhiDevice);
+    /// Returns the current and previous NRD history-confidence textures.
+    /// The current slot is written by NRD guide preparation and becomes the
+    /// previous slot after a successful frame commit.
+    [[nodiscard]] RhiTextureHandle historyConfidenceTextureHandle() const {
+        return m_historyConfidenceHandle[m_currentHistoryIndex];
+    }
+    [[nodiscard]] RhiTextureHandle historyConfidenceTexturePrevHandle() const {
+        return m_historyConfidenceHandle[1 - m_currentHistoryIndex];
+    }
+    [[nodiscard]] RhiTextureViewHandle historyConfidenceTextureViewHandle() const {
+        return m_historyConfidenceView[m_currentHistoryIndex];
+    }
+    [[nodiscard]] RhiTextureViewHandle historyConfidenceTexturePrevViewHandle() const {
+        return m_historyConfidenceView[1 - m_currentHistoryIndex];
+    }
+    bool ensureHistoryConfidenceTextureViews(RhiDevice& rhiDevice);
+    /// Returns the current and previous raw RTGI validation histories.
+    /// Guide preparation writes the current slot after comparing the current
+    /// trace against the reprojected previous slot.
+    [[nodiscard]] RhiTextureHandle historyRtgiValidationTextureHandle() const {
+        return m_historyRtgiValidationHandle[m_currentHistoryIndex];
+    }
+    [[nodiscard]] RhiTextureHandle historyRtgiValidationTexturePrevHandle() const {
+        return m_historyRtgiValidationHandle[1 - m_currentHistoryIndex];
+    }
+    [[nodiscard]] RhiTextureViewHandle historyRtgiValidationTextureViewHandle() const {
+        return m_historyRtgiValidationView[m_currentHistoryIndex];
+    }
+    [[nodiscard]] RhiTextureViewHandle historyRtgiValidationTexturePrevViewHandle() const {
+        return m_historyRtgiValidationView[1 - m_currentHistoryIndex];
+    }
+    bool ensureHistoryRtgiValidationTextureViews(RhiDevice& rhiDevice);
     [[nodiscard]] RhiTextureHandle historyDepthTextureHandle() const {
         return m_historyDepthHandle[m_currentHistoryIndex];
     }
@@ -507,11 +539,15 @@ private:
 
     // History ping-pong for temporal accumulation
     RhiTextureHandle m_historySceneHandle[2];
+    RhiTextureHandle m_historyConfidenceHandle[2];
+    RhiTextureHandle m_historyRtgiValidationHandle[2];
     // Opaque depth history consumed by SSGI and volumetric temporal passes.
     RhiTextureHandle m_historyDepthHandle[2];
     // Visible-surface depth history consumed by Native TAA after transparency.
     RhiTextureHandle m_taaHistoryDepthHandle[2];
     RhiTextureViewHandle m_historySceneView[2];
+    RhiTextureViewHandle m_historyConfidenceView[2];
+    RhiTextureViewHandle m_historyRtgiValidationView[2];
     RhiTextureViewHandle m_historyDepthView[2];
     RhiTextureViewHandle m_taaHistoryDepthView[2];
     RhiTextureHandle m_historyReflectionHandle[2];

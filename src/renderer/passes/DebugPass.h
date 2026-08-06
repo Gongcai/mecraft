@@ -24,7 +24,7 @@ class ShadowRenderer;
 /// Displays all intermediate render targets for visual inspection.
 class DebugPass : public RenderPass {
 public:
-    static constexpr std::size_t kTextureCount = 32u;
+    static constexpr std::size_t kTextureCount = 33u;
     void init(ResourceMgr& resourceMgr);
     void shutdown() override;
     [[nodiscard]] const char* name() const override { return "Debug"; }
@@ -66,7 +66,8 @@ public:
                                        RhiTextureViewHandle nrdNormalRoughnessView,
                                        RhiTextureViewHandle nrdViewZView,
                                        RhiTextureViewHandle nrdOutputView,
-                                       RhiTextureViewHandle nrdValidationView);
+                                       RhiTextureViewHandle nrdValidationView,
+                                       RhiTextureViewHandle nrdConfidenceView);
 
 private:
     bool ensureRhiPipeline(RhiDevice& rhiDevice);

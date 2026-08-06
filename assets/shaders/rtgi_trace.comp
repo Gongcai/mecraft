@@ -664,7 +664,7 @@ void main() {
             TerrainRayQuerySurface terrainSurface;
             TerrainRayTracingGpuInstance terrainInstance = uTerrainHitData.instances[customIndex];
             hitIdentityHash = rtgiTerrainHitIdentityHash(terrainInstance.revisionLow, terrainInstance.revisionHigh,
-                                                          customIndex, geometryIndex, primitiveIndex);
+                                                          terrainInstance.vertexAddressWords);
             surfaceValid = terrainRayQueryCommittedSurface(
                 terrainInstance, geometryIndex, primitiveIndex, barycentrics,
                 coneWidth, pc.renderExtentAndBias.w, rayDirection,

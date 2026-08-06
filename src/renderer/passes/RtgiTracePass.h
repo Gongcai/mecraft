@@ -131,6 +131,7 @@ private:
         uint32_t sceneInstanceCount = 0u;
         uint32_t gpuSceneMaterialCount = 0u;
         uint32_t gpuSceneGeometryCount = 0u;
+        glm::vec3 sceneOrigin{0.0f};
     };
 
     [[nodiscard]] bool recordTrace(RhiCommandList& commandList, const FrameContext& ctx, const Settings& settings,

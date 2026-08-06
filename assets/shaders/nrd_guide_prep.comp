@@ -2,6 +2,7 @@
 
 #include "gbuffer_contract.glsl"
 #include "rhi_screen_coordinates.glsl"
+#include "rtgi_sampling.glsl"
 
 layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
 
@@ -9,9 +10,13 @@ layout(binding = 0) uniform sampler2D uDepthTexture;
 layout(binding = 1) uniform sampler2D uNormalAoTexture;
 layout(binding = 2) uniform sampler2D uMaterialTexture;
 layout(binding = 3) uniform sampler2D uVelocityTexture;
-layout(binding = 4, rgba16f) uniform writeonly image2D uMotion;
-layout(binding = 5, rgb10_a2) uniform writeonly image2D uNormalRoughness;
-layout(binding = 6, r32f) uniform writeonly image2D uViewZ;
+layout(binding = 4) uniform usampler2D uValidationTexture;
+layout(binding = 5) uniform usampler2D uPreviousValidationTexture;
+layout(binding = 6, rgba16f) uniform writeonly image2D uMotion;
+layout(binding = 7, rgb10_a2) uniform writeonly image2D uNormalRoughness;
+layout(binding = 8, r32f) uniform writeonly image2D uViewZ;
+layout(binding = 9, r8) uniform writeonly image2D uConfidence;
+layout(binding = 10, rg32ui) uniform writeonly uimage2D uValidationHistory;
 
 layout(push_constant) uniform NrdGuidePrepPushConstants {
     mat4 inverseProjection;
@@ -94,8 +99,12 @@ void main() {
     float roughness = linearMaterialRoughness(material);
     float materialId = nrdGuideMaterialId(material, roughness);
     vec2 motion = -texelFetch(uVelocityTexture, texel, 0).rg;
+    uvec2 currentValidation = texelFetch(uValidationTexture, texel, 0).rg;
+    uint classification = currentValidation.r & RTGI_TRACE_VALIDATION_CLASSIFICATION_MASK;
     float motionViewZ = 0.0;
-    const bool historyValid = pc.renderExtentInvalidViewZAndHistory.w > 0.5;
+    const uint historyFlags = uint(pc.renderExtentInvalidViewZAndHistory.w + 0.5);
+    const bool historyValid = (historyFlags & 1u) != 0u;
+    const bool validateHitIdentity = (historyFlags & 2u) != 0u;
     if (historyValid && currentPositiveViewZ < invalidViewZ && nrdGuideFinite(vec4(motion, 0.0, 0.0))) {
         float previousPositiveViewZ;
         if (nrdGuideReconstructPositiveViewZ(pc.currentClipToPreviousView, screenUv, depth,
@@ -115,4 +124,35 @@ void main() {
     // reprojection during motion.
     float signedViewZ = currentPositiveViewZ < invalidViewZ ? -currentPositiveViewZ : -invalidViewZ;
     imageStore(uViewZ, texel, vec4(signedViewZ, 0.0, 0.0, 0.0));
+
+    // Preserve the current raw trace identity independently from confidence.
+    // This makes the first valid frame after a reset available for comparison
+    // instead of recursively propagating a cleared confidence value forever.
+    imageStore(uValidationHistory, texel, uvec4(currentValidation, 0u, 0u));
+
+    // Reject history when the reprojected secondary hit generation changed.
+    // Stable misses compare by classification, while geometry hits also
+    // require the same resident BLAS identity carried by the validation image.
+    float confidence = 0.0;
+    const bool currentSignalValid = classification == RTGI_TRACE_CLASS_MISS || classification == RTGI_TRACE_CLASS_HIT;
+    if (historyValid && currentSignalValid && currentPositiveViewZ < invalidViewZ &&
+        nrdGuideFinite(vec4(motion, 0.0, 0.0))) {
+        const vec2 previousUv = screenUv + motion;
+        if (all(greaterThanEqual(previousUv, vec2(0.0))) && all(lessThan(previousUv, vec2(1.0)))) {
+            const uvec2 previousValidation = texture(uPreviousValidationTexture, previousUv).rg;
+            const uint previousClassification =
+                previousValidation.r & RTGI_TRACE_VALIDATION_CLASSIFICATION_MASK;
+            bool validationStable = true;
+            if (validateHitIdentity) {
+                const bool previousSignalValid = previousClassification == RTGI_TRACE_CLASS_MISS ||
+                                                 previousClassification == RTGI_TRACE_CLASS_HIT;
+                const bool classificationStable = classification == previousClassification;
+                const bool identityStable = classification != RTGI_TRACE_CLASS_HIT ||
+                                            currentValidation.g == previousValidation.g;
+                validationStable = previousSignalValid && classificationStable && identityStable;
+            }
+            confidence = validationStable ? 1.0 : 0.0;
+        }
+    }
+    imageStore(uConfidence, texel, vec4(confidence, 0.0, 0.0, 0.0));
 }

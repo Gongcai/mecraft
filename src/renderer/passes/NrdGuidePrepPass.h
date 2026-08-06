@@ -21,9 +21,13 @@ public:
         RgTextureHandle normalAo;
         RgTextureHandle material;
         RgTextureHandle velocity;
+        RgTextureHandle validation;
+        RgTextureHandle previousValidation;
         RgTextureHandle motion;
         RgTextureHandle normalRoughness;
         RgTextureHandle viewZ;
+        RgTextureHandle confidence;
+        RgTextureHandle currentValidationHistory;
     };
 
     /// Explicit projection and valid-depth range used to prepare one guide frame.
@@ -34,6 +38,10 @@ public:
         // The NRD common matrices remain non-jittered, while the guide must
         // match the projection that produced the current and previous depth.
         bool useJitteredProjection = false;
+        // Compares the reprojected raw RT identity only when the active TLAS
+        // generation changed. Stochastic rays may hit different geometry on
+        // ordinary frames, which is not a temporal-history invalidation.
+        bool validateHitIdentity = false;
     };
 
     /// Latest successfully recorded guide dispatch diagnostics.
@@ -66,9 +74,13 @@ private:
         RhiTextureViewHandle normalAo;
         RhiTextureViewHandle material;
         RhiTextureViewHandle velocity;
+        RhiTextureViewHandle validation;
+        RhiTextureViewHandle previousValidation;
         RhiTextureViewHandle motion;
         RhiTextureViewHandle normalRoughness;
         RhiTextureViewHandle viewZ;
+        RhiTextureViewHandle confidence;
+        RhiTextureViewHandle currentValidationHistory;
     };
 
     [[nodiscard]] bool recordGuide(RhiCommandList& commandList, const FrameContext& ctx, const Settings& settings,
@@ -84,7 +96,7 @@ private:
     RhiPipelineLayoutHandle m_pipelineLayout;
     RhiPipelineHandle m_pipeline;
     RhiBindGroupHandle m_bindGroup;
-    std::array<RhiTextureViewHandle, 7u> m_boundViews{};
+    std::array<RhiTextureViewHandle, 11u> m_boundViews{};
     Stats m_stats;
 };
 

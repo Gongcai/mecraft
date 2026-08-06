@@ -762,12 +762,14 @@ void DeferredPipeline::shutdown() {
     m_shadowRenderer = nullptr;
     m_shared = nullptr;
     m_rtgiTemporalSampleIndex = 0u;
+    m_lastNrdSceneTlasRevision = 0u;
     m_rtgiTraceInspectionActive = false;
 }
 
 void DeferredPipeline::invalidateHistory() {
     m_hasPreviousFrameData = false;
     m_rtgiTemporalSampleIndex = 0u;
+    m_lastNrdSceneTlasRevision = 0u;
 #if defined(MECRAFT_ENABLE_NRD)
     m_nrdClearHistory = true;
 #endif
@@ -934,12 +936,25 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
     if (!externalGeometry && m_shared->staticMeshRenderer != nullptr) {
         m_shared->staticMeshRenderer->prepareFrame(ctx, *ctx.worldView);
     }
-    if (!prepareSceneTlas()) {
+    if (!prepareSceneTlas(ctx.camera.position)) {
         return false;
     }
     if (rtgiEnabled && !bootstrapSceneTlasForRtgi()) {
         return false;
     }
+    uint64_t activeSceneTlasRevision = 0u;
+    if (rtgiEnabled) {
+        const std::optional<renderer::rt::SceneTlasView> activeTlas = m_shared->sceneTlasCache->activeView();
+        if (!activeTlas.has_value()) {
+            return false;
+        }
+        activeSceneTlasRevision = activeTlas->revision;
+    }
+    if (!nrdEnabled) {
+        m_lastNrdSceneTlasRevision = 0u;
+    }
+    const bool nrdSceneTlasChanged = nrdEnabled && m_lastNrdSceneTlasRevision != 0u &&
+                                     activeSceneTlasRevision != m_lastNrdSceneTlasRevision;
     if (externalGeometry) {
         m_transparentBatch.clear();
         m_transparentPassPlan = {};
@@ -954,6 +969,11 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
     m_rtgiTraceInspectionActive = rtgiTraceInspection;
     if (!nrdEnabled || nrdTemporalReset || rtgiTraceInspectionChanged) {
         m_rtgiTemporalSampleIndex = 0u;
+    }
+    uint32_t rtgiFrameTemporalSampleIndex = m_rtgiTemporalSampleIndex;
+    if (nrdSceneTlasChanged && !nrdTemporalReset && !rtgiTraceInspectionChanged &&
+        rtgiFrameTemporalSampleIndex != 0u) {
+        --rtgiFrameTemporalSampleIndex;
     }
 #if defined(MECRAFT_ENABLE_NRD)
     if (rtgiTraceInspectionChanged) {
@@ -979,7 +999,10 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
     // so no ensure* call may run for them before the graph resolves.
     if (!targets.ensureGBufferTextureViews(rhiDevice) || !targets.ensurePerObjectVelocityTextureView(rhiDevice) ||
         !targets.ensureVelocityTextureView(rhiDevice) || !targets.ensureSceneResolvedTextureView(rhiDevice) ||
-        !targets.ensureHistorySceneTextureViews(rhiDevice) || !targets.ensureTemporalCurrentTextureView(rhiDevice) ||
+        !targets.ensureHistorySceneTextureViews(rhiDevice) ||
+        !targets.ensureHistoryConfidenceTextureViews(rhiDevice) ||
+        !targets.ensureTemporalCurrentTextureView(rhiDevice) ||
+        (nrdEnabled && !targets.ensureHistoryRtgiValidationTextureViews(rhiDevice)) ||
         !targets.ensureHalfResTextureView(rhiDevice) || !targets.ensureHistoryVolumetricTextureViews(rhiDevice) ||
         !targets.ensureHistoryDepthTextureViews(rhiDevice) || !targets.ensureSsgiTextureView(rhiDevice) ||
         !targets.ensureSsgiHalfResTextureView(rhiDevice) || !targets.ensureSsgiDenoiseTextureView(rhiDevice, 0) ||
@@ -1364,6 +1387,9 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
     RgTextureHandle ssgiHistoryPrevious;
     RgTextureHandle ssgiMomentsHistoryCurrent;
     RgTextureHandle ssgiMomentsHistoryPrevious;
+    RgTextureHandle historyConfidenceCurrent;
+    RgTextureHandle historyRtgiValidationCurrent;
+    RgTextureHandle historyRtgiValidationPrevious;
     RgTextureHandle historyDepthCurrent;
     RgTextureHandle historyDepthPrevious;
     RgTextureHandle taaHistoryDepthCurrent;
@@ -1553,6 +1579,19 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
     if (!importTexture(targets.historyDepthTextureHandle(), {}, RhiResourceState::DepthRead, historyDepthCurrent) ||
         !importTexture(targets.historyDepthTexturePrevHandle(), targets.historyDepthTexturePrevViewHandle(),
                        RhiResourceState::DepthRead, historyDepthPrevious)) {
+        return failGraphSetup();
+    }
+    if (!importTexture(targets.historyConfidenceTextureHandle(), targets.historyConfidenceTextureViewHandle(),
+                       RhiResourceState::ShaderRead, historyConfidenceCurrent)) {
+        return failGraphSetup();
+    }
+    if (nrdEnabled &&
+        (!importTexture(targets.historyRtgiValidationTextureHandle(),
+                        targets.historyRtgiValidationTextureViewHandle(), RhiResourceState::ShaderRead,
+                        historyRtgiValidationCurrent) ||
+         !importTexture(targets.historyRtgiValidationTexturePrevHandle(),
+                        targets.historyRtgiValidationTexturePrevViewHandle(), RhiResourceState::ShaderRead,
+                        historyRtgiValidationPrevious))) {
         return failGraphSetup();
     }
     if (!m_skyIblPass->importGraphResources(m_renderGraph, skyIblResources)) {
@@ -1895,7 +1934,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
         traceSettings.shadowInstanceMask =
             renderer::rt::sceneTlasMaskBit(renderer::rt::SceneTlasInstanceMask::ShadowCaster);
         traceSettings.temporalSamplingEnabled = nrdEnabled && !rtgiTraceInspection;
-        traceSettings.temporalSampleIndex = m_rtgiTemporalSampleIndex;
+        traceSettings.temporalSampleIndex = rtgiFrameTemporalSampleIndex;
         traceSettings.useJitteredProjection =
             usesTemporalProjectionJitter(settings.upscale.type, settings.taa.enabled);
         traceSettings.terrainNormalMapsEnabled =
@@ -1946,11 +1985,16 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
             guideResources.normalAo = normalAo;
             guideResources.material = material;
             guideResources.velocity = velocity;
+            guideResources.validation = rtgiValidation;
+            guideResources.previousValidation = historyRtgiValidationPrevious;
             guideResources.motion = nrdMotion;
             guideResources.normalRoughness = nrdNormalRoughness;
             guideResources.viewZ = nrdViewZ;
+            guideResources.confidence = historyConfidenceCurrent;
+            guideResources.currentValidationHistory = historyRtgiValidationCurrent;
             guideSettings.historyValid = !m_nrdClearHistory && !nrdTemporalReset;
             guideSettings.useJitteredProjection = traceSettings.useJitteredProjection;
+            guideSettings.validateHitIdentity = nrdSceneTlasChanged;
             graphTail = m_nrdGuidePrepPass->addGraphPass(m_renderGraph, ctx, guideSettings, guideResources, graphTail);
             if (!graphTail.isValid()) {
                 return failGraphSetup();
@@ -1962,6 +2006,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
             if (!externalResources.bind(::nrd::ResourceType::IN_MV, nrdMotion) ||
                 !externalResources.bind(::nrd::ResourceType::IN_NORMAL_ROUGHNESS, nrdNormalRoughness) ||
                 !externalResources.bind(::nrd::ResourceType::IN_VIEWZ, nrdViewZ) ||
+                !externalResources.bind(::nrd::ResourceType::IN_DIFF_CONFIDENCE, historyConfidenceCurrent) ||
                 !externalResources.bind(::nrd::ResourceType::IN_DIFF_RADIANCE_HITDIST, nrdInputSignal) ||
                 !externalResources.bind(::nrd::ResourceType::OUT_DIFF_RADIANCE_HITDIST, nrdOutputDiffuse) ||
                 !externalResources.bind(::nrd::ResourceType::OUT_VALIDATION, nrdValidation)) {
@@ -1999,6 +2044,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
             commonSettings.denoisingRange = settings.nrd.denoisingRange;
             commonSettings.disocclusionThreshold = settings.nrd.disocclusionThreshold;
             commonSettings.disocclusionThresholdAlternate = settings.nrd.disocclusionThresholdAlternate;
+            commonSettings.isHistoryConfidenceAvailable = true;
             commonSettings.enableValidation = settings.debug.viewMode == 100;
             commonSettings.frameIndex = static_cast<uint32_t>(ctx.frameIndex);
             commonSettings.accumulationMode =
@@ -2640,7 +2686,8 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
                                    nrdNormalRoughness.isValid() ? nrdNormalRoughness : normalAo,
                                    nrdViewZ.isValid() ? nrdViewZ : depth,
                                    nrdOutputDiffuse.isValid() ? nrdOutputDiffuse : sceneLighting,
-                                   nrdValidation.isValid() ? nrdValidation : sceneLighting};
+                                   nrdValidation.isValid() ? nrdValidation : sceneLighting,
+                                   historyConfidenceCurrent};
         debugResources.output = sceneCaptureColor;
         graphTail = m_debugPass->addGraphPass(m_renderGraph, ctx, settings, targets, debugResources, graphTail);
         if (!graphTail.isValid()) {
@@ -2820,12 +2867,12 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
         MECRAFT_LOG_STREAM(std::cerr << "[DeferredPipeline] Render Graph execution failed: " << executed.message
                                      << '\n');
     }
-    // The sampling phase must advance every frame, camera motion included: a
-    // frozen phase turns the one-spp estimate into a pattern-locked bias that
-    // NRD's accumulation cannot average out. Motion stability is NRD's
-    // responsibility via reprojection.
+    // Advance the low-discrepancy phase after each stable temporal frame. A
+    // changed TLAS deliberately reuses the preceding phase once so the raw
+    // validation identities isolate scene changes from stochastic variation.
     if (executed.succeeded() && nrdEnabled && !nrdTemporalReset && !rtgiTraceInspection) {
-        ++m_rtgiTemporalSampleIndex;
+        m_rtgiTemporalSampleIndex = rtgiFrameTemporalSampleIndex + 1u;
+        m_lastNrdSceneTlasRevision = activeSceneTlasRevision;
     }
     if (m_shared->terrainCache != nullptr) {
         m_shared->terrainCache->finishGraphExecution(executed.succeeded(), executed.completionToken());
@@ -2986,7 +3033,7 @@ bool DeferredPipeline::bootstrapSceneTlasForRtgi() {
     return true;
 }
 
-bool DeferredPipeline::prepareSceneTlas() {
+bool DeferredPipeline::prepareSceneTlas(const glm::vec3& cameraPosition) {
     if (m_shared == nullptr || m_shared->sceneTlasCache == nullptr) {
         return true;
     }
@@ -2996,6 +3043,11 @@ bool DeferredPipeline::prepareSceneTlas() {
     }
     if (!cache.healthy()) {
         MECRAFT_LOG_STREAM(std::cerr << "[DeferredPipeline] " << cache.lastError() << '\n');
+        return false;
+    }
+    const std::optional<glm::vec3> sceneOrigin = renderer::rt::SceneTlasCache::sceneOriginForCamera(cameraPosition);
+    if (!sceneOrigin.has_value()) {
+        MECRAFT_LOG_STREAM(std::cerr << "[DeferredPipeline] Camera position is invalid for RT scene rebasing\n");
         return false;
     }
 
@@ -3067,7 +3119,7 @@ bool DeferredPipeline::prepareSceneTlas() {
         }
     }
 
-    const renderer::rt::SceneTlasSetResult result = cache.setInstances(std::move(instances));
+    const renderer::rt::SceneTlasSetResult result = cache.setInstances(std::move(instances), *sceneOrigin);
     switch (result) {
     case renderer::rt::SceneTlasSetResult::Accepted:
     case renderer::rt::SceneTlasSetResult::Unchanged:

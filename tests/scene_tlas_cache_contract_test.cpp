@@ -50,6 +50,15 @@ int main() {
     const uint8_t cutoutMask =
         sceneTlasMaskBit(SceneTlasInstanceMask::GiCutout) | sceneTlasMaskBit(SceneTlasInstanceMask::ShadowCaster);
 
+    const std::optional<glm::vec3> cameraOrigin = SceneTlasCache::sceneOriginForCamera({257.25f, -0.25f, -129.0f});
+    glm::mat4 rebasedTransform;
+    const glm::mat4 largeTransform = glm::translate(glm::mat4(1.0f), glm::vec3(1000000.5f, -2048.25f, 300000.75f));
+    const bool rebased = cameraOrigin.has_value() &&
+                         SceneTlasCache::rebaseTransform(largeTransform, *cameraOrigin, rebasedTransform);
+    const glm::vec3 expectedTranslation = cameraOrigin.has_value()
+                                              ? glm::vec3(1000000.5f, -2048.25f, 300000.75f) - *cameraOrigin
+                                              : glm::vec3(0.0f);
+
     const bool valid =
         requireTrue(keys[0] == SceneTlasInstanceKey{SceneTlasInstanceKind::Terrain, 8, 1} &&
                         keys[1] == SceneTlasInstanceKey{SceneTlasInstanceKind::Terrain, 8, 3} &&
@@ -73,7 +82,10 @@ int main() {
                         (cutoutMask & sceneTlasMaskBit(SceneTlasInstanceMask::GiCutout)) != 0u &&
                         sceneTlasMaskBit(SceneTlasInstanceMask::FirstPerson) !=
                             sceneTlasMaskBit(SceneTlasInstanceMask::ReflectionVisible),
-                    "GI, shadow, reflection, and first-person visibility masks must remain distinct");
+                    "GI, shadow, reflection, and first-person visibility masks must remain distinct") &&
+        requireTrue(cameraOrigin.has_value() && *cameraOrigin == glm::vec3(256.0f, -128.0f, -256.0f) && rebased &&
+                        glm::length(glm::vec3(rebasedTransform[3]) - expectedTranslation) <= 1.0e-4f,
+                    "TLAS scene origin and affine translation rebasing must preserve large-world offsets");
 
     return valid ? EXIT_SUCCESS : EXIT_FAILURE;
 }

@@ -58,8 +58,9 @@ layout(binding = 28) uniform sampler2D uNrdNormalRoughnessTex;
 layout(binding = 29) uniform sampler2D uNrdViewZTex;
 layout(binding = 30) uniform sampler2D uNrdOutputTex;
 layout(binding = 31) uniform sampler2D uNrdValidationTex;
+layout(binding = 32) uniform sampler2D uNrdConfidenceTex;
 
-layout(std140, binding = 32) uniform DebugParams {
+layout(std140, binding = 33) uniform DebugParams {
     mat4 pShadowModelView;
     mat4 pShadowProjection;
     mat4 pShadowProjectionInverse;
@@ -946,7 +947,7 @@ void main() {
         return;
     }
 
-    // Debug 89-94: RTGI raw signal, trace validation, and TLAS hit identity.
+    // Debug 89-94: RTGI raw signal, trace validation, and resident BLAS generation.
     // The raw target stores pre-exposed radiance in RGB and the first-bounce
     // hit distance in A (65504 for a sky miss). The validation word packs
     // classification (8 bits), candidate count (12 bits), confirmed count
@@ -1003,7 +1004,7 @@ void main() {
         return;
     }
 
-    // Debug 95-100: NRD guide and temporal diagnostics.
+    // Debug 95-101: NRD guide and temporal diagnostics.
     if (uDebugViewMode == 95) {
         vec4 motion = texture(uNrdMotionTex, textureUv);
         vec2 signedMotion = clamp(motion.xy * 64.0, vec2(-1.0), vec2(1.0));
@@ -1033,6 +1034,11 @@ void main() {
     }
     if (uDebugViewMode == 100) {
         FragColor = texture(uNrdValidationTex, textureUv);
+        return;
+    }
+    if (uDebugViewMode == 101) {
+        float confidence = clamp(texture(uNrdConfidenceTex, textureUv).r, 0.0, 1.0);
+        FragColor = vec4(confidence, confidence, confidence, 1.0);
         return;
     }
 

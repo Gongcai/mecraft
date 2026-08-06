@@ -79,7 +79,7 @@ bool ForwardPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSet
     }
 
     RhiDevice& rhiDevice = *m_shared->rhiDevice;
-    if (!prepareSceneTlas()) {
+    if (!prepareSceneTlas(ctx.camera.position)) {
         return false;
     }
     m_renderGraph.reset();
@@ -155,7 +155,7 @@ bool ForwardPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSet
     return true;
 }
 
-bool ForwardPipeline::prepareSceneTlas() {
+bool ForwardPipeline::prepareSceneTlas(const glm::vec3& cameraPosition) {
     if (m_shared == nullptr || m_shared->sceneTlasCache == nullptr) {
         return true;
     }
@@ -165,6 +165,11 @@ bool ForwardPipeline::prepareSceneTlas() {
     }
     if (!cache.healthy()) {
         MECRAFT_LOG_STREAM(std::cerr << "[ForwardPipeline] " << cache.lastError() << '\n');
+        return false;
+    }
+    const std::optional<glm::vec3> sceneOrigin = renderer::rt::SceneTlasCache::sceneOriginForCamera(cameraPosition);
+    if (!sceneOrigin.has_value()) {
+        MECRAFT_LOG_STREAM(std::cerr << "[ForwardPipeline] Camera position is invalid for RT scene rebasing\n");
         return false;
     }
 
@@ -192,7 +197,7 @@ bool ForwardPipeline::prepareSceneTlas() {
                                  {}});
         }
     }
-    const renderer::rt::SceneTlasSetResult result = cache.setInstances(std::move(instances));
+    const renderer::rt::SceneTlasSetResult result = cache.setInstances(std::move(instances), *sceneOrigin);
     switch (result) {
     case renderer::rt::SceneTlasSetResult::Accepted:
     case renderer::rt::SceneTlasSetResult::Unchanged:

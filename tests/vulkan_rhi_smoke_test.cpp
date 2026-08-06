@@ -560,7 +560,12 @@ void setNrdIdentityMatrix(float (&matrix)[16]) {
     constexpr size_t kPixelCount = static_cast<size_t>(kWidth) * kHeight;
     constexpr size_t kMotionBytes = kPixelCount * sizeof(uint16_t) * 4u;
     constexpr size_t kViewZBytes = kPixelCount * sizeof(float);
+    constexpr size_t kConfidenceBytes = kPixelCount * sizeof(uint8_t);
+    constexpr size_t kValidationHistoryBytes = kPixelCount * sizeof(uint32_t) * 2u;
     constexpr uint64_t kViewZOffset = kMotionBytes;
+    constexpr uint64_t kConfidenceOffset = kViewZOffset + kViewZBytes;
+    constexpr uint64_t kValidationHistoryOffset = (kConfidenceOffset + kConfidenceBytes + 7u) & ~uint64_t{7u};
+    constexpr uint64_t kReadbackBytes = kValidationHistoryOffset + kValidationHistoryBytes;
     const uint64_t validationErrorsBefore = device.validationErrorCount();
 
     std::vector<float> depth(kPixelCount, 0.25f);
@@ -568,9 +573,12 @@ void setNrdIdentityMatrix(float (&matrix)[16]) {
     std::vector<uint32_t> normalAo(kPixelCount, packedNormalAo);
     std::vector<uint32_t> material(kPixelCount, 0x000000ffu);
     std::vector<uint16_t> velocity(kPixelCount * 2u, 0u);
+    std::vector<uint32_t> validation(kPixelCount * 2u, 0u);
     for (size_t pixel = 0u; pixel < kPixelCount; ++pixel) {
         velocity[pixel * 2u + 0u] = glm::packHalf1x16(0.125f);
         velocity[pixel * 2u + 1u] = glm::packHalf1x16(-0.125f);
+        validation[pixel * 2u + 0u] = static_cast<uint32_t>(renderer::contracts::RtgiTraceClassification::Hit);
+        validation[pixel * 2u + 1u] = static_cast<uint32_t>(101u + pixel);
     }
 
     constexpr RhiTextureUsageFlags kSampledUsage = rhiFlag(RhiTextureUsage::Sampled);
@@ -582,9 +590,13 @@ void setNrdIdentityMatrix(float (&matrix)[16]) {
     NrdSmokeTexture normalAoTexture;
     NrdSmokeTexture materialTexture;
     NrdSmokeTexture velocityTexture;
+    NrdSmokeTexture validationTexture;
+    NrdSmokeTexture previousValidationTexture;
     NrdSmokeTexture motionTexture;
     NrdSmokeTexture normalRoughnessTexture;
     NrdSmokeTexture viewZTexture;
+    NrdSmokeTexture confidenceTexture;
+    NrdSmokeTexture validationHistoryTexture;
     RhiBufferHandle readback;
     RenderGraph graph;
     NrdGuidePrepPass pass;
@@ -595,9 +607,13 @@ void setNrdIdentityMatrix(float (&matrix)[16]) {
         if (readback.isValid()) {
             device.destroyBuffer(readback);
         }
+        destroyNrdSmokeTexture(device, validationHistoryTexture);
+        destroyNrdSmokeTexture(device, confidenceTexture);
         destroyNrdSmokeTexture(device, viewZTexture);
         destroyNrdSmokeTexture(device, normalRoughnessTexture);
         destroyNrdSmokeTexture(device, motionTexture);
+        destroyNrdSmokeTexture(device, previousValidationTexture);
+        destroyNrdSmokeTexture(device, validationTexture);
         destroyNrdSmokeTexture(device, velocityTexture);
         destroyNrdSmokeTexture(device, materialTexture);
         destroyNrdSmokeTexture(device, normalAoTexture);
@@ -630,6 +646,16 @@ void setNrdIdentityMatrix(float (&matrix)[16]) {
                                              velocity.size() * sizeof(uint16_t), RhiResourceState::ShaderRead,
                                              velocityTexture),
                        "velocity") &&
+        requireTexture(createNrdSmokeTexture(device, "VulkanSmoke.NRD.Guide.Validation",
+                                             RhiTextureFormat::Rg32Uint, kWidth, kHeight, kSampledUsage,
+                                             validation.data(), validation.size() * sizeof(uint32_t),
+                                             RhiResourceState::ShaderRead, validationTexture),
+                       "current validation") &&
+        requireTexture(createNrdSmokeTexture(device, "VulkanSmoke.NRD.Guide.PreviousValidation",
+                                             RhiTextureFormat::Rg32Uint, kWidth, kHeight, kSampledUsage,
+                                             validation.data(), validation.size() * sizeof(uint32_t),
+                                             RhiResourceState::ShaderRead, previousValidationTexture),
+                       "previous validation") &&
         requireTexture(createNrdSmokeTexture(device, "VulkanSmoke.NRD.Guide.Motion", RhiTextureFormat::Rgba16Float,
                                              kWidth, kHeight, kGuideOutputUsage, nullptr, 0u,
                                              RhiResourceState::Undefined, motionTexture),
@@ -642,7 +668,15 @@ void setNrdIdentityMatrix(float (&matrix)[16]) {
         requireTexture(createNrdSmokeTexture(device, "VulkanSmoke.NRD.Guide.ViewZ", RhiTextureFormat::R32Float, kWidth,
                                              kHeight, kGuideOutputUsage, nullptr, 0u, RhiResourceState::Undefined,
                                              viewZTexture),
-                       "View-Z output");
+                       "View-Z output") &&
+        requireTexture(createNrdSmokeTexture(device, "VulkanSmoke.NRD.Guide.Confidence", RhiTextureFormat::R8Unorm,
+                                             kWidth, kHeight, kGuideOutputUsage, nullptr, 0u,
+                                             RhiResourceState::Undefined, confidenceTexture),
+                       "confidence output") &&
+        requireTexture(createNrdSmokeTexture(device, "VulkanSmoke.NRD.Guide.ValidationHistory",
+                                             RhiTextureFormat::Rg32Uint, kWidth, kHeight, kGuideOutputUsage, nullptr,
+                                             0u, RhiResourceState::Undefined, validationHistoryTexture),
+                       "validation-history output");
     if (!valid) {
         std::cerr << "NRD Guide Prep smoke test failed to create textures\n";
         cleanup();
@@ -651,7 +685,7 @@ void setNrdIdentityMatrix(float (&matrix)[16]) {
 
     RhiBufferDesc readbackDesc;
     readbackDesc.debugName = "VulkanSmoke.NRD.Guide.Readback";
-    readbackDesc.size = kMotionBytes + kViewZBytes;
+    readbackDesc.size = kReadbackBytes;
     readbackDesc.usage = rhiFlag(RhiBufferUsage::TransferDst) | rhiFlag(RhiBufferUsage::MapRead);
     readbackDesc.memoryUsage = RhiMemoryUsage::GpuToCpu;
     readbackDesc.initialState = RhiResourceState::TransferDst;
@@ -667,10 +701,12 @@ void setNrdIdentityMatrix(float (&matrix)[16]) {
     frame.temporalExtents =
         makeTemporalFrameExtents({kWidth, kHeight}, {kWidth, kHeight}, {kWidth, kHeight}, {kWidth, kHeight});
     frame.camera.view = glm::mat4(1.0f);
-    frame.camera.invViewProj = glm::mat4(1.0f);
-    frame.camera.invViewProj[2][2] = 4.0f;
+    frame.camera.projection = glm::mat4(1.0f);
+    frame.camera.projection[2][2] = 0.25f;
+    frame.camera.invViewProj = glm::inverse(frame.camera.projection);
     frame.camera.jitteredInvViewProj = frame.camera.invViewProj;
     frame.prevCamera = frame.camera;
+    frame.prevCamera.position.z = 1.0f;
     frame.prevCamera.view[3][2] = -1.0f;
 
     NrdGuidePrepPass::GraphResources resources;
@@ -686,10 +722,18 @@ void setNrdIdentityMatrix(float (&matrix)[16]) {
         resources.normalAo = importTexture(normalAoTexture, RhiResourceState::ShaderRead, RhiResourceState::ShaderRead);
         resources.material = importTexture(materialTexture, RhiResourceState::ShaderRead, RhiResourceState::ShaderRead);
         resources.velocity = importTexture(velocityTexture, RhiResourceState::ShaderRead, RhiResourceState::ShaderRead);
+        resources.validation =
+            importTexture(validationTexture, RhiResourceState::ShaderRead, RhiResourceState::ShaderRead);
+        resources.previousValidation =
+            importTexture(previousValidationTexture, RhiResourceState::ShaderRead, RhiResourceState::ShaderRead);
         resources.motion = importTexture(motionTexture, RhiResourceState::Undefined, RhiResourceState::ShaderWrite);
         resources.normalRoughness =
             importTexture(normalRoughnessTexture, RhiResourceState::Undefined, RhiResourceState::ShaderWrite);
         resources.viewZ = importTexture(viewZTexture, RhiResourceState::Undefined, RhiResourceState::ShaderWrite);
+        resources.confidence =
+            importTexture(confidenceTexture, RhiResourceState::Undefined, RhiResourceState::ShaderWrite);
+        resources.currentValidationHistory =
+            importTexture(validationHistoryTexture, RhiResourceState::Undefined, RhiResourceState::ShaderWrite);
         readbackResource =
             graph.importBuffer({readbackDesc.debugName, readback, readbackDesc, RhiResourceState::TransferDst,
                                 RhiResourceState::HostRead, RhiQueueType::Graphics, RhiQueueType::Graphics});
@@ -699,17 +743,21 @@ void setNrdIdentityMatrix(float (&matrix)[16]) {
         NrdGuidePrepPass::Settings settings;
         settings.denoisingRange = 10.0f;
         settings.historyValid = true;
+        settings.validateHitIdentity = true;
         guideHandle = pass.addGraphPass(graph, frame, settings, resources, inputReady);
         valid = resources.depth.isValid() && resources.normalAo.isValid() && resources.material.isValid() &&
-                resources.velocity.isValid() && resources.motion.isValid() && resources.normalRoughness.isValid() &&
-                resources.viewZ.isValid() &&
-                readbackResource.isValid() && guideHandle.isValid();
+                resources.velocity.isValid() && resources.validation.isValid() &&
+                resources.previousValidation.isValid() && resources.motion.isValid() &&
+                resources.normalRoughness.isValid() && resources.viewZ.isValid() && resources.confidence.isValid() &&
+                resources.currentValidationHistory.isValid() && readbackResource.isValid() && guideHandle.isValid();
     }
     if (valid) {
         graph.addPass({"NRD.GuideReadback", RgPassType::Copy, RhiQueueType::Graphics})
             .dependsOn(guideHandle)
             .readTexture(resources.motion, RhiResourceState::TransferSrc)
             .readTexture(resources.viewZ, RhiResourceState::TransferSrc)
+            .readTexture(resources.confidence, RhiResourceState::TransferSrc)
+            .readTexture(resources.currentValidationHistory, RhiResourceState::TransferSrc)
             .writeBuffer(readbackResource, RhiResourceState::TransferDst)
             .setExecute([&](RgPassContext& context) {
                 RhiTextureBufferCopy motionCopy;
@@ -729,6 +777,24 @@ void setNrdIdentityMatrix(float (&matrix)[16]) {
                 viewZCopy.width = kWidth;
                 viewZCopy.height = kHeight;
                 context.commandList().copyTextureToBuffer(viewZCopy);
+                RhiTextureBufferCopy confidenceCopy;
+                confidenceCopy.srcTexture = context.texture(resources.confidence);
+                confidenceCopy.dstBuffer = context.buffer(readbackResource);
+                confidenceCopy.bufferOffset = kConfidenceOffset;
+                confidenceCopy.bytesPerRow = sizeof(uint8_t) * kWidth;
+                confidenceCopy.rowsPerImage = kHeight;
+                confidenceCopy.width = kWidth;
+                confidenceCopy.height = kHeight;
+                context.commandList().copyTextureToBuffer(confidenceCopy);
+                RhiTextureBufferCopy validationHistoryCopy;
+                validationHistoryCopy.srcTexture = context.texture(resources.currentValidationHistory);
+                validationHistoryCopy.dstBuffer = context.buffer(readbackResource);
+                validationHistoryCopy.bufferOffset = kValidationHistoryOffset;
+                validationHistoryCopy.bytesPerRow = sizeof(uint32_t) * 2u * kWidth;
+                validationHistoryCopy.rowsPerImage = kHeight;
+                validationHistoryCopy.width = kWidth;
+                validationHistoryCopy.height = kHeight;
+                context.commandList().copyTextureToBuffer(validationHistoryCopy);
                 return true;
             });
         const RgCompileResult compiled = graph.compile();
@@ -751,6 +817,9 @@ void setNrdIdentityMatrix(float (&matrix)[16]) {
         if (bytes != nullptr) {
             const auto* motion = reinterpret_cast<const uint16_t*>(bytes);
             const auto* viewZ = reinterpret_cast<const float*>(bytes + kViewZOffset);
+            const auto* confidence = bytes + kConfidenceOffset;
+            const auto* validationHistory =
+                reinterpret_cast<const uint32_t*>(bytes + kValidationHistoryOffset);
             for (size_t pixel = 0u; pixel < kPixelCount; ++pixel) {
                 const float motionX = glm::unpackHalf1x16(motion[pixel * 4u + 0u]);
                 const float motionY = glm::unpackHalf1x16(motion[pixel * 4u + 1u]);
@@ -759,9 +828,20 @@ void setNrdIdentityMatrix(float (&matrix)[16]) {
                 // The guide contract publishes 2.5D motion: current positive
                 // View-Z is 2, previous positive View-Z is 3, and NRD receives
                 // the previous-minus-current delta after its handedness conversion.
-                valid = valid && std::abs(motionX + 0.125f) < 0.001f && std::abs(motionY - 0.125f) < 0.001f &&
-                        std::abs(motionZ - 1.0f) < 0.001f && std::abs(motionW) < 0.001f &&
-                        std::abs(viewZ[pixel] + 2.0f) < 0.001f;
+                const bool pixelValid =
+                    std::abs(motionX + 0.125f) < 0.001f && std::abs(motionY - 0.125f) < 0.001f &&
+                    std::abs(motionZ - 1.0f) < 0.001f && std::abs(motionW) < 0.001f &&
+                    std::abs(viewZ[pixel] + 2.0f) < 0.001f && confidence[pixel] == 255u &&
+                    validationHistory[pixel * 2u + 0u] == validation[pixel * 2u + 0u] &&
+                    validationHistory[pixel * 2u + 1u] == validation[pixel * 2u + 1u];
+                if (!pixelValid) {
+                    std::cerr << "NRD Guide Prep pixel " << pixel << " mismatch: motion=(" << motionX << ", "
+                              << motionY << ", " << motionZ << ", " << motionW << "), View-Z=" << viewZ[pixel]
+                              << ", confidence=" << static_cast<uint32_t>(confidence[pixel]) << ", validation=("
+                              << validationHistory[pixel * 2u + 0u] << ", "
+                              << validationHistory[pixel * 2u + 1u] << ")\n";
+                }
+                valid = valid && pixelValid;
             }
             device.unmapBuffer(readback);
         }
@@ -3735,8 +3815,9 @@ void main() {
         rejectedCutout.maximumHitDistance = 2.05f;
         rejectedCutout.minimumRadiance = {0.49f, 0.49f, 0.49f};
         rejectedCutout.maximumRadiance = {0.51f, 0.51f, 0.51f};
-        rejectedCutout.hitIdentityHash = renderer::contracts::rtgiTerrainHitIdentityHash(
-            firstView->hitData.revision, 0u, 0u, 0u);
+        rejectedCutout.hitIdentityHash =
+            renderer::contracts::rtgiTerrainHitIdentityHash(firstView->hitData.revision,
+                                                            firstView->hitData.vertexAddress);
         RtgiTraceSmokeExpectedPixel confirmedCutout;
         confirmedCutout.classification = renderer::contracts::RtgiTraceClassification::Hit;
         confirmedCutout.candidateCount = 1u;
@@ -3745,8 +3826,9 @@ void main() {
         confirmedCutout.maximumHitDistance = 1.05f;
         confirmedCutout.minimumRadiance = {0.02f, 0.28f, 0.004f};
         confirmedCutout.maximumRadiance = {0.03f, 0.31f, 0.007f};
-        confirmedCutout.hitIdentityHash = renderer::contracts::rtgiTerrainHitIdentityHash(
-            firstView->hitData.revision, 0u, 1u, 0u);
+        confirmedCutout.hitIdentityHash =
+            renderer::contracts::rtgiTerrainHitIdentityHash(firstView->hitData.revision,
+                                                            firstView->hitData.vertexAddress);
         smokeCase.expectedPixels = {rejectedCutout, confirmedCutout};
         renderer::core::GlobalBindlessSet rtgiBindlessSet;
         renderer::core::GlobalBindlessSetConfig bindlessConfig;
@@ -4315,12 +4397,14 @@ namespace {
     frame.frameIndex = 0u;
     const TemporalExtent renderExtent{smokeCase.width, smokeCase.height};
     frame.temporalExtents = makeTemporalFrameExtents(renderExtent, renderExtent, renderExtent, renderExtent);
-    frame.camera.invViewProj = smokeCase.inverseViewProjection;
-    frame.camera.jitteredInvViewProj = frame.camera.invViewProj;
     frame.camera.position = smokeCase.cameraPosition;
-    frame.camera.view = glm::mat4(1.0f);
-    frame.camera.projection = glm::perspective(
-        glm::radians(70.0f), static_cast<float>(smokeCase.width) / static_cast<float>(smokeCase.height), 0.1f, 32.0f);
+    frame.camera.view = glm::translate(glm::mat4(1.0f), -frame.camera.position);
+    const glm::vec3 cameraRelativePosition = frame.camera.position - activeTlas.sceneOrigin;
+    const glm::mat4 inverseProjection =
+        glm::translate(glm::mat4(1.0f), -cameraRelativePosition) * smokeCase.inverseViewProjection;
+    frame.camera.projection = glm::inverse(inverseProjection);
+    frame.camera.invViewProj = glm::inverse(frame.camera.projection * frame.camera.view);
+    frame.camera.jitteredInvViewProj = frame.camera.invViewProj;
     frame.camera.nearPlane = 0.1f;
     frame.camera.farPlane = 32.0f;
     frame.preExposure = smokeCase.preExposure;
@@ -4807,9 +4891,10 @@ namespace {
     frame.temporalExtents =
         makeTemporalFrameExtents({kWidth, kHeight}, {kWidth, kHeight}, {kWidth, kHeight}, {kWidth, kHeight});
     frame.camera.view = glm::mat4(1.0f);
-    frame.camera.invViewProj = glm::mat4(1.0f);
-    frame.camera.invViewProj[2][2] = 0.0f;
-    frame.camera.invViewProj[3][2] = -10.0f;
+    glm::mat4 inverseProjection(1.0f);
+    inverseProjection[3][2] = -9.5f;
+    frame.camera.projection = glm::inverse(inverseProjection);
+    frame.camera.invViewProj = inverseProjection;
     frame.camera.jitteredInvViewProj = frame.camera.invViewProj;
     frame.preExposure = 4.0f;
     frame.previousPreExposure = 2.0f;

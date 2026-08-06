@@ -232,6 +232,7 @@ bool testTemporalReset() {
     // owner, and a pre-exposure step never restarts NRD's de-exposed history.
     const TemporalResetReasons denoiserOnly = temporalResetReasonBit(TemporalResetReason::DenoiserMethod);
     const TemporalResetReasons preExposureOnly = temporalResetReasonBit(TemporalResetReason::PreExposure);
+    const TemporalResetReasons assetRevisionOnly = temporalResetReasonBit(TemporalResetReason::AssetRevision);
     const TemporalResetReasons cameraCut = temporalResetReasonBit(TemporalResetReason::CameraCut);
     if (!requireTrue(ownerRequiresTemporalReset(TemporalHistoryOwner::NrdDiffuse, denoiserOnly) &&
                          !ownerRequiresTemporalReset(TemporalHistoryOwner::ScreenSpace, denoiserOnly) &&
@@ -245,6 +246,12 @@ bool testTemporalReset() {
                          ownerRequiresTemporalReset(TemporalHistoryOwner::ScreenSpace, preExposureOnly) &&
                          ownerRequiresTemporalReset(TemporalHistoryOwner::Upscaler, preExposureOnly),
                      "a pre-exposure step must reset scene-domain owners but never NRD")) {
+        return false;
+    }
+    if (!requireTrue(!ownerRequiresTemporalReset(TemporalHistoryOwner::NrdDiffuse, assetRevisionOnly) &&
+                         ownerRequiresTemporalReset(TemporalHistoryOwner::ScreenSpace, assetRevisionOnly) &&
+                         ownerRequiresTemporalReset(TemporalHistoryOwner::Upscaler, assetRevisionOnly),
+                     "an asset edit must use per-pixel NRD confidence while resetting scene-domain owners")) {
         return false;
     }
     return requireTrue(ownerRequiresTemporalReset(TemporalHistoryOwner::NrdDiffuse, cameraCut) &&

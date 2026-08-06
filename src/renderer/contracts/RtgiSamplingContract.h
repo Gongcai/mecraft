@@ -55,20 +55,29 @@ static_assert(sizeof(RtgiSecondaryLightingParams) == 128u);
 /// @return Deterministic 32-bit permutation of value.
 [[nodiscard]] uint32_t rtgiSampleHash(uint32_t value);
 
+/// Builds the inverse view-projection that reconstructs positions in the active RT scene space.
+/// @param projection Current projection matrix, including the same jitter used for the depth buffer.
+/// @param view Absolute camera view matrix; only its orientation is used.
+/// @param cameraPosition Absolute camera position in world space.
+/// @param sceneOrigin Origin subtracted from TLAS and GPU Scene transforms.
+/// @param inverseViewProjection Receives clip-to-scene-space reconstruction matrix.
+/// @return False when an input is non-finite, singular, or produces a non-finite result.
+[[nodiscard]] bool makeRtgiCameraRelativeInverseViewProjection(const glm::mat4& projection, const glm::mat4& view,
+                                                              const glm::vec3& cameraPosition,
+                                                              const glm::vec3& sceneOrigin,
+                                                              glm::mat4& inverseViewProjection);
+
 /// Hashes stable material and geometry identities for the RTGI validation image.
 /// @param stableMaterialId Non-zero stable material identity from primitive metadata.
 /// @param stableGeometryId Non-zero stable geometry identity from primitive metadata.
 /// @return Deterministic 32-bit identity word shared with GLSL validation.
 [[nodiscard]] uint32_t rtgiStableHitIdentityHash(uint32_t stableMaterialId, uint32_t stableGeometryId);
 
-/// Hashes one terrain hit location together with the resident BLAS revision referenced by its TLAS instance.
+/// Hashes one resident terrain BLAS generation independently from its TLAS custom index.
 /// @param blasRevision Resident terrain BLAS revision stored in the TLAS hit-data table.
-/// @param customIndex TLAS instance custom index used to address the hit-data table.
-/// @param geometryIndex BLAS geometry range containing the hit triangle.
-/// @param primitiveIndex Triangle index inside the geometry range.
-/// @return Deterministic diagnostic identity shared with GLSL validation.
-[[nodiscard]] uint32_t rtgiTerrainHitIdentityHash(uint64_t blasRevision, uint32_t customIndex,
-                                                  uint32_t geometryIndex, uint32_t primitiveIndex);
+/// @param vertexAddress Device address of the retained generation's immutable vertex buffer.
+/// @return Deterministic resident-generation identity shared with GLSL validation.
+[[nodiscard]] uint32_t rtgiTerrainHitIdentityHash(uint64_t blasRevision, uint64_t vertexAddress);
 
 /// Produces the per-frame low-discrepancy Cranley-Patterson rotation used by RTGI.
 /// @param frameIndex Low 32 bits of the deterministic render-frame index.

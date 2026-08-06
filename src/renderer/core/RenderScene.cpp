@@ -1361,7 +1361,11 @@ RenderScene::buildFrameContext(const IWorldView& worldView, const Camera& camera
     }
     ctx.temporalResetReasons = evaluateTemporalResetReasons(m_hasPreviousContext, m_previousContext.temporalExtents,
                                                             ctx.temporalExtents, explicitResetReasons, {});
-    if (!ownerRequiresTemporalReset(TemporalHistoryOwner::ScreenSpace, ctx.temporalResetReasons)) {
+    const bool previousCameraRequired =
+        !ownerRequiresTemporalReset(TemporalHistoryOwner::ScreenSpace, ctx.temporalResetReasons) ||
+        !ownerRequiresTemporalReset(TemporalHistoryOwner::NrdDiffuse, ctx.temporalResetReasons) ||
+        !ownerRequiresTemporalReset(TemporalHistoryOwner::Upscaler, ctx.temporalResetReasons);
+    if (previousCameraRequired) {
         ctx.prevCamera = m_previousContext.camera;
         ctx.previousJitter = m_previousContext.jitter;
         ctx.previousViewProj = m_previousContext.camera.viewProj;

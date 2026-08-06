@@ -2,6 +2,7 @@
 #include "renderer/core/RenderSettings.h"
 
 #include <glm/geometric.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 
 #include <cmath>
 #include <cstddef>
@@ -42,7 +43,8 @@ namespace {
                std::string::npos &&
            samplingSource.find("const float RTGI_MINIMUM_RAY_ORIGIN_BIAS = RTGI_VOXEL_SURFACE_EXPANSION * 2.0;") !=
                std::string::npos &&
-           samplingSource.find("uint rtgiTerrainHitIdentityHash(uint revisionLow, uint revisionHigh, uint customIndex") !=
+           samplingSource.find(
+               "uint rtgiTerrainHitIdentityHash(uint revisionLow, uint revisionHigh, uvec2 vertexAddressWords)") !=
                std::string::npos &&
            traceSource.find("layout(std140, set = 1, binding = 16) uniform RtgiSecondaryLightingParams") !=
                std::string::npos &&
@@ -80,7 +82,7 @@ namespace {
                std::string::npos &&
            pipelineSource.find("traceSettings.temporalSamplingEnabled = nrdEnabled && !rtgiTraceInspection;") !=
                std::string::npos &&
-           pipelineSource.find("traceSettings.temporalSampleIndex = m_rtgiTemporalSampleIndex;") !=
+           pipelineSource.find("traceSettings.temporalSampleIndex = rtgiFrameTemporalSampleIndex;") !=
                std::string::npos &&
            pipelineSource.find("relaxSettings.atrousIterationNum =") != std::string::npos &&
            pipelineSource.find("reblurSettings.enableAntiFirefly = true;") != std::string::npos &&
@@ -90,6 +92,7 @@ namespace {
            pipelineSource.find("void DeferredPipeline::invalidateHistory() {\n"
                                "    m_hasPreviousFrameData = false;\n"
                                "    m_rtgiTemporalSampleIndex = 0u;\n"
+                               "    m_lastNrdSceneTlasRevision = 0u;\n"
                                "#if defined(MECRAFT_ENABLE_NRD)\n"
                                "    m_nrdClearHistory = true;") != std::string::npos;
 }
@@ -117,8 +120,8 @@ int main() {
     valid =
         requireTrue(rtgiStableHitIdentityHash(601u, 501u) == 1366735474u &&
                         rtgiStableHitIdentityHash(602u, 502u) == 1027311900u &&
-                        rtgiTerrainHitIdentityHash(1u, 0u, 0u, 0u) == 1753845952u &&
-                        rtgiTerrainHitIdentityHash(1u, 0u, 1u, 0u) == 3375014680u &&
+                        rtgiTerrainHitIdentityHash(1u, 0u) == 1753845952u &&
+                        rtgiTerrainHitIdentityHash(1u, 1u) == 3875847014u &&
                         sizeof(RtgiTracePushConstants) == 128u,
                     "RTGI stable hit identity and push-constant contracts must remain bit-exact") &&
         valid;
@@ -181,6 +184,27 @@ int main() {
                         !rtgiCosineHemisphereDirection(glm::vec2(0.5f), glm::vec3(0.0f)).has_value(),
                     "RTGI cosine sampling must reject invalid input contracts") &&
         valid;
+
+    const glm::vec3 cameraPosition{1000000.0f, 96.0f, -2000000.0f};
+    const glm::vec3 sceneOrigin{999936.0f, 0.0f, -2000000.0f};
+    const glm::mat4 projection = glm::perspective(glm::radians(70.0f), 16.0f / 9.0f, 0.1f, 500.0f);
+    const glm::mat4 view = glm::lookAt(cameraPosition, cameraPosition + glm::vec3(0.2f, -0.1f, -1.0f),
+                                       glm::vec3(0.0f, 1.0f, 0.0f));
+    glm::mat4 cameraRelativeInverseViewProjection;
+    const bool cameraRelativeMatrix = makeRtgiCameraRelativeInverseViewProjection(
+        projection, view, cameraPosition, sceneOrigin, cameraRelativeInverseViewProjection);
+    const glm::mat4 viewRotation = glm::mat4(glm::mat3(view));
+    const glm::vec3 scenePoint{7.0f, 3.0f, -11.0f};
+    const glm::vec3 cameraRelativePoint = scenePoint - (cameraPosition - sceneOrigin);
+    const glm::vec4 clipPoint = projection * viewRotation * glm::vec4(cameraRelativePoint, 1.0f);
+    const glm::vec4 reconstructedPointH = cameraRelativeInverseViewProjection * clipPoint;
+    const glm::vec3 reconstructedPoint = glm::vec3(reconstructedPointH) / reconstructedPointH.w;
+    valid = requireTrue(cameraRelativeMatrix && std::abs(reconstructedPointH.w) > 1.0e-6f &&
+                            glm::length(reconstructedPoint - scenePoint) <= 2.0e-3f &&
+                            !makeRtgiCameraRelativeInverseViewProjection(
+                                 projection, view, glm::vec3(NAN), sceneOrigin, cameraRelativeInverseViewProjection),
+                        "RTGI camera-relative reconstruction must preserve large-world positions and reject invalid input") &&
+            valid;
 
     constexpr uint32_t kSampleCount = 4096u;
     double cosineSum = 0.0;
