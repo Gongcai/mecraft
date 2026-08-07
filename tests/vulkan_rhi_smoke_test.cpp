@@ -391,8 +391,7 @@ void destroyFsr31SmokeTexture(VkRhiDevice& device, Fsr31SmokeTexture& resource) 
     std::vector<uint16_t> hdrPixels(renderPixelCount * 4u, 0u);
     std::vector<float> depthPixels(renderPixelCount, 1.0f);
     std::vector<uint16_t> velocityPixels(renderPixelCount * 2u, 0u);
-    constexpr uint16_t kHalfFloatOne = 0x3c00u;
-    const uint16_t exposurePixels[4] = {kHalfFloatOne, 0u, 0u, 0u};
+    const float exposurePixels[1] = {1.0f};
     std::vector<uint8_t> maskPixels(renderPixelCount, 0u);
 
     Fsr31SmokeTexture hdr;
@@ -421,7 +420,7 @@ void destroyFsr31SmokeTexture(VkRhiDevice& device, Fsr31SmokeTexture& resource) 
         createFsr31SmokeTexture(device, "VulkanSmoke.FSR31.Velocity", RhiTextureFormat::Rg16Float, kRenderExtent,
                                 sampledUsage, velocityPixels.data(), velocityPixels.size() * sizeof(uint16_t),
                                 RhiResourceState::ShaderRead, velocity) &&
-        createFsr31SmokeTexture(device, "VulkanSmoke.FSR31.Exposure", RhiTextureFormat::Rgba16Float, {1u, 1u},
+        createFsr31SmokeTexture(device, "VulkanSmoke.FSR31.Exposure", RhiTextureFormat::R32Float, {1u, 1u},
                                 sampledUsage, exposurePixels, sizeof(exposurePixels), RhiResourceState::ShaderRead,
                                 exposure) &&
         createFsr31SmokeTexture(device, "VulkanSmoke.FSR31.Reactive", RhiTextureFormat::R8Unorm, kRenderExtent,

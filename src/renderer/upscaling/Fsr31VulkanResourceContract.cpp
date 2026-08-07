@@ -62,7 +62,7 @@ std::optional<Fsr31ResourceValidationFailure> validateFsr31VulkanResourceSet(con
           VK_IMAGE_ASPECT_COLOR_BIT, false},
          {Fsr31ResourceRole::Exposure,
           &resources.exposure,
-          VK_FORMAT_R16G16B16A16_SFLOAT,
+          VK_FORMAT_R32_SFLOAT,
           {1u, 1u},
           VK_IMAGE_ASPECT_COLOR_BIT,
           false},

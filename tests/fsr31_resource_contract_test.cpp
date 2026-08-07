@@ -48,7 +48,7 @@ Fsr31VulkanResourceSet completeResources() {
     resources.hdrColor = sampledTexture(VK_FORMAT_R16G16B16A16_SFLOAT, kRenderExtent, 1u);
     resources.depth = sampledTexture(VK_FORMAT_D32_SFLOAT, kRenderExtent, 2u);
     resources.velocity = sampledTexture(VK_FORMAT_R16G16_SFLOAT, kRenderExtent, 3u);
-    resources.exposure = sampledTexture(VK_FORMAT_R16G16B16A16_SFLOAT, {1u, 1u}, 4u);
+    resources.exposure = sampledTexture(VK_FORMAT_R32_SFLOAT, {1u, 1u}, 4u);
     resources.reactiveMask = sampledTexture(VK_FORMAT_R8_UNORM, kRenderExtent, 5u);
     resources.transparencyMask = sampledTexture(VK_FORMAT_R8_UNORM, kRenderExtent, 6u);
     resources.outputHdrColor = sampledTexture(VK_FORMAT_R16G16B16A16_SFLOAT, kOutputExtent, 7u);

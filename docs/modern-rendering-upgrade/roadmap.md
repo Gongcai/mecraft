@@ -256,7 +256,8 @@ M1 与 M2 可并行开发，但公共 `GpuMaterial`、`GpuSceneGeometry` 与 Sta
    量化并以 1 EV 迟滞产出 `FrameContext.preExposure`，RTGI Raw 存储与 Firefly Clamp 随实际曝光缩放，
    Signal Pack 按同值去曝光；Scene HDR 的 Lighting、SceneComposite、Reflection、Water、Transparent、Cloud、
    Volumetric 和 Particle 写入端均使用同一 Pre-exposed 域，PostProcess Tonemap 前除回，
-   `TemporalFrameInput` 的上采样域保持 `1`。按历史所有者
+   `TemporalFrameInput` 将当前/上一帧 Pre-exposure 传给时域上采样器；FSR 3.1 通过专用 `R32F` 纹理把
+   Scene-referred Exposure 换算为 `Exposure / PreExposure`。按历史所有者
    细分的 Reset 已完成：`TemporalHistoryOwner`（NrdDiffuse/Clouds/Volumetrics/ScreenSpace/Upscaler）
    与 `ownerRequiresTemporalReset` 过滤全部消费点，`DenoiserMethod` 原因只重启 NRD 与 RTGI 采样序列，
    保留云、体积雾、屏幕空间与上采样历史；`PreExposure` 原因位会重启 Scene HDR 域历史，NRD 输入仍保持

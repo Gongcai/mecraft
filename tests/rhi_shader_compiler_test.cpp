@@ -352,7 +352,7 @@ void main() {
 } // namespace
 
 int main() {
-    constexpr std::array<ShaderCase, 109> kShaderCases{
+    constexpr std::array<ShaderCase, 110> kShaderCases{
         {{"tests/shaders/rhi_screen_coordinates_test.frag", RhiShaderStage::Fragment},
          {"tests/shaders/material_brdf_shared_test.frag", RhiShaderStage::Fragment},
          {"tests/shaders/reflection_probe_contract_test.frag", RhiShaderStage::Fragment},
@@ -452,6 +452,7 @@ int main() {
          {"assets/shaders/bloom_blur.frag", RhiShaderStage::Fragment},
          {"assets/shaders/exposure_downsample.frag", RhiShaderStage::Fragment},
          {"assets/shaders/exposure_resolve.frag", RhiShaderStage::Fragment},
+         {"assets/shaders/fsr_exposure_normalize.frag", RhiShaderStage::Fragment},
          {"assets/shaders/blur_rhi.frag", RhiShaderStage::Fragment},
          {"assets/shaders/fsr1_easu.frag", RhiShaderStage::Fragment},
          {"assets/shaders/fsr1_rcas.frag", RhiShaderStage::Fragment},

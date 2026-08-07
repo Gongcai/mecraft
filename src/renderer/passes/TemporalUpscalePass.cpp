@@ -3,6 +3,7 @@
 #include "renderer/rhi/RhiCommandList.h"
 #include "renderer/rhi/RhiCommandListPool.h"
 #include "renderer/rhi/RhiDevice.h"
+#include "renderer/rhi/RhiShaderSourceLoader.h"
 
 #if defined(MECRAFT_ENABLE_FSR31)
 #include "renderer/rhi/vulkan/VkRhiDevice.h"
@@ -60,6 +61,11 @@ temporalFailure(const TemporalUpscaleStatus status,
 #endif
 
 #if defined(MECRAFT_ENABLE_FSR31)
+struct FsrExposurePushConstants {
+    glm::vec4 preExposure;
+};
+static_assert(sizeof(FsrExposurePushConstants) == 16u);
+
 [[nodiscard]] TemporalUpscaleStatus fsr31DispatchFailureStatus(const Fsr31VulkanDispatchStatus status) {
     switch (status) {
     case Fsr31VulkanDispatchStatus::InvalidResources: return TemporalUpscaleStatus::Fsr31InvalidResources;
@@ -156,6 +162,7 @@ void TemporalUpscalePass::shutdown() {
 #endif
 #if defined(MECRAFT_ENABLE_FSR31)
     static_cast<void>(releaseFsr31Context());
+    destroyFsrExposureResources();
 #endif
     if (m_device != nullptr) {
         m_renderGraph.releaseTransientResources(*m_device);
@@ -165,6 +172,219 @@ void TemporalUpscalePass::shutdown() {
     m_commandListPool = nullptr;
     m_device = nullptr;
 }
+
+#if defined(MECRAFT_ENABLE_FSR31)
+bool TemporalUpscalePass::ensureFsrExposureResources() {
+    if (m_device == nullptr || m_device->backend() != RhiBackend::Vulkan) {
+        return false;
+    }
+    if (m_fsrExposureTexture.isValid() && m_fsrExposureView.isValid() && m_fsrExposureSampler.isValid() &&
+        m_fsrExposureBindGroupLayout.isValid() && m_fsrExposurePipelineLayout.isValid() &&
+        m_fsrExposureVertexShader.isValid() && m_fsrExposureFragmentShader.isValid() &&
+        m_fsrExposurePipeline.isValid()) {
+        return true;
+    }
+
+    destroyFsrExposureResources();
+
+    const std::optional<std::string> vertexSource =
+        renderer::rhi::loadShaderSource("assets/shaders/fullscreen_triangle_rhi.vert");
+    const std::optional<std::string> fragmentSource =
+        renderer::rhi::loadShaderSource("assets/shaders/fsr_exposure_normalize.frag");
+    if (!vertexSource.has_value() || !fragmentSource.has_value()) {
+        return false;
+    }
+
+    RhiShaderDesc vertexDesc;
+    vertexDesc.debugName = "FSR31.ExposureNormalize.Vertex";
+    vertexDesc.stage = RhiShaderStage::Vertex;
+    vertexDesc.source = vertexSource->c_str();
+    vertexDesc.sourceSize = vertexSource->size();
+    m_fsrExposureVertexShader = m_device->createShader(vertexDesc);
+
+    RhiShaderDesc fragmentDesc;
+    fragmentDesc.debugName = "FSR31.ExposureNormalize.Fragment";
+    fragmentDesc.stage = RhiShaderStage::Fragment;
+    fragmentDesc.source = fragmentSource->c_str();
+    fragmentDesc.sourceSize = fragmentSource->size();
+    m_fsrExposureFragmentShader = m_device->createShader(fragmentDesc);
+    if (!m_fsrExposureVertexShader.isValid() || !m_fsrExposureFragmentShader.isValid()) {
+        destroyFsrExposureResources();
+        return false;
+    }
+
+    RhiSamplerDesc samplerDesc;
+    samplerDesc.minFilter = RhiFilter::Nearest;
+    samplerDesc.magFilter = RhiFilter::Nearest;
+    samplerDesc.mipmapMode = RhiMipmapMode::Nearest;
+    samplerDesc.addressU = RhiAddressMode::ClampToEdge;
+    samplerDesc.addressV = RhiAddressMode::ClampToEdge;
+    samplerDesc.addressW = RhiAddressMode::ClampToEdge;
+    m_fsrExposureSampler = m_device->createSampler(samplerDesc);
+    if (!m_fsrExposureSampler.isValid()) {
+        destroyFsrExposureResources();
+        return false;
+    }
+
+    RhiBindGroupLayoutDesc bindGroupLayoutDesc;
+    bindGroupLayoutDesc.debugName = "FSR31.ExposureNormalize.BindGroupLayout";
+    bindGroupLayoutDesc.entries.push_back(
+        {0u, RhiBindingType::CombinedTextureSampler, rhiFlag(RhiShaderStage::Fragment), 1u});
+    m_fsrExposureBindGroupLayout = m_device->createBindGroupLayout(bindGroupLayoutDesc);
+    if (!m_fsrExposureBindGroupLayout.isValid()) {
+        destroyFsrExposureResources();
+        return false;
+    }
+
+    RhiPipelineLayoutDesc pipelineLayoutDesc;
+    pipelineLayoutDesc.debugName = "FSR31.ExposureNormalize.PipelineLayout";
+    pipelineLayoutDesc.bindGroupLayouts.push_back(m_fsrExposureBindGroupLayout);
+    pipelineLayoutDesc.pushConstantBytes = sizeof(FsrExposurePushConstants);
+    pipelineLayoutDesc.pushConstantStages = rhiFlag(RhiShaderStage::Fragment);
+    m_fsrExposurePipelineLayout = m_device->createPipelineLayout(pipelineLayoutDesc);
+    if (!m_fsrExposurePipelineLayout.isValid()) {
+        destroyFsrExposureResources();
+        return false;
+    }
+
+    RhiTextureDesc textureDesc;
+    textureDesc.debugName = "FSR31.Exposure";
+    textureDesc.format = RhiTextureFormat::R32Float;
+    textureDesc.width = 1u;
+    textureDesc.height = 1u;
+    textureDesc.depthOrLayers = 1u;
+    textureDesc.mipLevels = 1u;
+    textureDesc.sampleCount = 1u;
+    textureDesc.usage = rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment);
+    textureDesc.memoryCategory = RhiMemoryCategory::Sdk;
+    m_fsrExposureTexture = m_device->createTexture(textureDesc, nullptr);
+    if (!m_fsrExposureTexture.isValid()) {
+        destroyFsrExposureResources();
+        return false;
+    }
+
+    RhiTextureViewDesc viewDesc;
+    viewDesc.texture = m_fsrExposureTexture;
+    viewDesc.viewType = RhiTextureViewType::Texture2D;
+    viewDesc.format = RhiTextureFormat::R32Float;
+    viewDesc.baseMip = 0u;
+    viewDesc.mipCount = 1u;
+    viewDesc.baseLayer = 0u;
+    viewDesc.layerCount = 1u;
+    m_fsrExposureView = m_device->createTextureView(viewDesc);
+    if (!m_fsrExposureView.isValid()) {
+        destroyFsrExposureResources();
+        return false;
+    }
+
+    RhiGraphicsPipelineDesc pipelineDesc;
+    pipelineDesc.debugName = "FSR31.ExposureNormalize.Pipeline";
+    pipelineDesc.vertexShader = m_fsrExposureVertexShader;
+    pipelineDesc.fragmentShader = m_fsrExposureFragmentShader;
+    pipelineDesc.layout = m_fsrExposurePipelineLayout;
+    pipelineDesc.topology = RhiPrimitiveTopology::TriangleList;
+    pipelineDesc.raster.cullMode = RhiCullMode::None;
+    pipelineDesc.depthStencil.depthTestEnabled = false;
+    pipelineDesc.depthStencil.depthWriteEnabled = false;
+    pipelineDesc.colorFormats.push_back(RhiTextureFormat::R32Float);
+    pipelineDesc.blend.attachments.push_back({});
+    m_fsrExposurePipeline = m_device->createGraphicsPipeline(pipelineDesc);
+    if (!m_fsrExposurePipeline.isValid()) {
+        destroyFsrExposureResources();
+        return false;
+    }
+    return true;
+}
+
+bool TemporalUpscalePass::ensureFsrExposureBindGroup(const RhiTextureViewHandle sourceView) {
+    if (m_device == nullptr || !sourceView.isValid() || !m_fsrExposureBindGroupLayout.isValid() ||
+        !m_fsrExposureSampler.isValid()) {
+        return false;
+    }
+    for (const RhiTextureViewHandle cachedView : m_fsrExposureSourceViews) {
+        if (sameHandle(cachedView, sourceView)) {
+            return true;
+        }
+    }
+
+    size_t slot = m_fsrExposureSourceViews.size();
+    for (size_t index = 0u; index < m_fsrExposureSourceViews.size(); ++index) {
+        if (!m_fsrExposureSourceViews[index].isValid()) {
+            slot = index;
+            break;
+        }
+    }
+    if (slot == m_fsrExposureSourceViews.size()) {
+        m_device->waitIdle();
+        slot = 0u;
+        if (m_fsrExposureBindGroups[slot].isValid()) {
+            m_device->destroyBindGroup(m_fsrExposureBindGroups[slot]);
+        }
+        m_fsrExposureBindGroups[slot] = {};
+        m_fsrExposureSourceViews[slot] = {};
+    }
+
+    RhiBindGroupDesc bindGroupDesc;
+    bindGroupDesc.layout = m_fsrExposureBindGroupLayout;
+    RhiBindGroupEntry entry;
+    entry.binding = 0u;
+    entry.resource.combinedTextureSampler.textureView = sourceView;
+    entry.resource.combinedTextureSampler.sampler = m_fsrExposureSampler;
+    bindGroupDesc.entries.push_back(entry);
+    m_fsrExposureBindGroups[slot] = m_device->createBindGroup(bindGroupDesc);
+    if (!m_fsrExposureBindGroups[slot].isValid()) {
+        return false;
+    }
+    m_fsrExposureSourceViews[slot] = sourceView;
+    return true;
+}
+
+void TemporalUpscalePass::destroyFsrExposureResources() {
+    if (m_device != nullptr) {
+        for (RhiBindGroupHandle& bindGroup : m_fsrExposureBindGroups) {
+            if (bindGroup.isValid()) {
+                m_device->destroyBindGroup(bindGroup);
+            }
+            bindGroup = {};
+        }
+        if (m_fsrExposurePipeline.isValid()) {
+            m_device->destroyPipeline(m_fsrExposurePipeline);
+        }
+        if (m_fsrExposureView.isValid()) {
+            m_device->destroyTextureView(m_fsrExposureView);
+        }
+        if (m_fsrExposureTexture.isValid()) {
+            m_device->destroyTexture(m_fsrExposureTexture);
+        }
+        if (m_fsrExposureFragmentShader.isValid()) {
+            m_device->destroyShader(m_fsrExposureFragmentShader);
+        }
+        if (m_fsrExposureVertexShader.isValid()) {
+            m_device->destroyShader(m_fsrExposureVertexShader);
+        }
+        if (m_fsrExposurePipelineLayout.isValid()) {
+            m_device->destroyPipelineLayout(m_fsrExposurePipelineLayout);
+        }
+        if (m_fsrExposureBindGroupLayout.isValid()) {
+            m_device->destroyBindGroupLayout(m_fsrExposureBindGroupLayout);
+        }
+        if (m_fsrExposureSampler.isValid()) {
+            m_device->destroySampler(m_fsrExposureSampler);
+        }
+    }
+    m_fsrExposureBindGroups = {};
+    m_fsrExposureSourceViews = {};
+    m_fsrExposurePipeline = {};
+    m_fsrExposureView = {};
+    m_fsrExposureTexture = {};
+    m_fsrExposureFragmentShader = {};
+    m_fsrExposureVertexShader = {};
+    m_fsrExposurePipelineLayout = {};
+    m_fsrExposureBindGroupLayout = {};
+    m_fsrExposureSampler = {};
+    m_fsrExposureInitialized = false;
+}
+#endif
 
 bool TemporalUpscalePass::prepareOutputTarget(const UpscaleSettings& settings, const TemporalExtent renderExtent,
                                               const TemporalExtent outputExtent) {
@@ -181,6 +401,7 @@ bool TemporalUpscalePass::prepareOutputTarget(const UpscaleSettings& settings, c
         if (!releaseFsr31Context()) {
             return false;
         }
+        destroyFsrExposureResources();
 #endif
         destroyOutputTarget();
         return true;
@@ -193,8 +414,11 @@ bool TemporalUpscalePass::prepareOutputTarget(const UpscaleSettings& settings, c
     }
 
 #if defined(MECRAFT_ENABLE_FSR31)
-    if (settings.type == TemporalUpscalerType::Dlss && !releaseFsr31Context()) {
-        return false;
+    if (settings.type == TemporalUpscalerType::Dlss) {
+        if (!releaseFsr31Context()) {
+            return false;
+        }
+        destroyFsrExposureResources();
     }
 #endif
 #if defined(MECRAFT_ENABLE_STREAMLINE)
@@ -246,6 +470,9 @@ bool TemporalUpscalePass::prepareOutputTarget(const UpscaleSettings& settings, c
 
 #if defined(MECRAFT_ENABLE_FSR31)
     if (settings.type == TemporalUpscalerType::Fsr31) {
+        if (!ensureFsrExposureResources()) {
+            return false;
+        }
         const bool contextReady = m_fsr31Context != nullptr && m_fsr31Context->isInitialized() &&
                                   m_fsr31Context->maxRenderExtent() == renderExtent &&
                                   m_fsr31Context->maxOutputExtent() == outputExtent &&
@@ -339,7 +566,8 @@ TemporalUpscaleResult TemporalUpscalePass::execute(const UpscaleSettings& settin
 #if defined(MECRAFT_ENABLE_FSR31)
         if (m_device == nullptr || m_commandListPool == nullptr || m_fsr31Context == nullptr ||
             !m_fsr31Context->isInitialized() || !sameHandle(frame.textures.outputHdrColor, m_outputTexture) ||
-            !sameHandle(frame.textures.outputHdrColorView, m_outputView)) {
+            !sameHandle(frame.textures.outputHdrColorView, m_outputView) || !ensureFsrExposureResources() ||
+            !ensureFsrExposureBindGroup(frame.textures.exposureView)) {
             return temporalFailure(TemporalUpscaleStatus::Fsr31Unavailable);
         }
         {
@@ -347,10 +575,21 @@ TemporalUpscaleResult TemporalUpscalePass::execute(const UpscaleSettings& settin
             RgTextureHandle hdrColor;
             RgTextureHandle depth;
             RgTextureHandle velocity;
-            RgTextureHandle exposure;
+            RgTextureHandle sceneExposure;
+            RgTextureHandle normalizedExposure;
             RgTextureHandle reactiveMask;
             RgTextureHandle transparencyMask;
             RgTextureHandle outputHdrColor;
+            RhiBindGroupHandle exposureBindGroup;
+            for (size_t index = 0u; index < m_fsrExposureSourceViews.size(); ++index) {
+                if (sameHandle(m_fsrExposureSourceViews[index], frame.textures.exposureView)) {
+                    exposureBindGroup = m_fsrExposureBindGroups[index];
+                    break;
+                }
+            }
+            if (!exposureBindGroup.isValid()) {
+                return temporalFailure(TemporalUpscaleStatus::Fsr31Unavailable);
+            }
             if (!importTemporalTexture(m_renderGraph, *m_device, "FSR31.HdrColor", frame.textures.hdrColor,
                                        frame.textures.hdrColorView, RhiResourceState::ShaderRead,
                                        RhiResourceState::ShaderRead, hdrColor) ||
@@ -360,9 +599,13 @@ TemporalUpscaleResult TemporalUpscalePass::execute(const UpscaleSettings& settin
                 !importTemporalTexture(m_renderGraph, *m_device, "FSR31.Velocity", frame.textures.velocity,
                                        frame.textures.velocityView, RhiResourceState::ShaderRead,
                                        RhiResourceState::ShaderRead, velocity) ||
-                !importTemporalTexture(m_renderGraph, *m_device, "FSR31.Exposure", frame.textures.exposure,
+                !importTemporalTexture(m_renderGraph, *m_device, "FSR31.SceneExposure", frame.textures.exposure,
                                        frame.textures.exposureView, RhiResourceState::ShaderRead,
-                                       RhiResourceState::ShaderRead, exposure) ||
+                                       RhiResourceState::ShaderRead, sceneExposure) ||
+                !importTemporalTexture(
+                    m_renderGraph, *m_device, "FSR31.Exposure", m_fsrExposureTexture, m_fsrExposureView,
+                    m_fsrExposureInitialized ? RhiResourceState::ShaderRead : RhiResourceState::Undefined,
+                    RhiResourceState::ShaderRead, normalizedExposure) ||
                 !importTemporalTexture(m_renderGraph, *m_device, "FSR31.ReactiveMask", frame.textures.reactiveMask,
                                        frame.textures.reactiveMaskView, RhiResourceState::ShaderRead,
                                        RhiResourceState::ShaderRead, reactiveMask) ||
@@ -377,23 +620,51 @@ TemporalUpscaleResult TemporalUpscalePass::execute(const UpscaleSettings& settin
                 return temporalFailure(TemporalUpscaleStatus::Fsr31InvalidResources);
             }
 
+            TemporalFrameInput fsrFrame = frame;
+            fsrFrame.textures.exposure = m_fsrExposureTexture;
+            fsrFrame.textures.exposureView = m_fsrExposureView;
+
             bool dispatchAttempted = false;
             Fsr31VulkanDispatchResult dispatched;
             const Fsr31VulkanDispatchDesc dispatchDesc{settings.sharpeningEnabled, settings.sharpeningStrength,
                                                        settings.debugVisualizationEnabled};
+            RenderGraphPassBuilder normalizeExposure =
+                m_renderGraph.addPass({"FSR31.ExposureNormalize", RgPassType::Graphics, RhiQueueType::Graphics});
+            normalizeExposure.readTexture(sceneExposure, RhiResourceState::ShaderRead)
+                .writeTexture(normalizedExposure, RhiResourceState::RenderTarget)
+                .setExecute([this, exposureBindGroup, preExposure = frame.preExposure](RgPassContext& pass) {
+                    RhiColorAttachment colorAttachment;
+                    colorAttachment.view = m_fsrExposureView;
+                    colorAttachment.loadOp = RhiLoadOp::DontCare;
+                    colorAttachment.storeOp = RhiStoreOp::Store;
+                    RhiRenderingInfo renderingInfo;
+                    renderingInfo.debugName = "FSR31.ExposureNormalize";
+                    renderingInfo.renderArea = {0u, 0u, 1u, 1u};
+                    renderingInfo.colorAttachments = &colorAttachment;
+                    renderingInfo.colorAttachmentCount = 1u;
+                    pass.commandList().beginRendering(renderingInfo);
+                    pass.commandList().setGraphicsPipeline(m_fsrExposurePipeline);
+                    pass.commandList().setBindGroup(0u, exposureBindGroup);
+                    const FsrExposurePushConstants constants{glm::vec4(preExposure, 0.0f, 0.0f, 0.0f)};
+                    pass.commandList().pushConstants(&constants, sizeof(constants), rhiFlag(RhiShaderStage::Fragment));
+                    pass.commandList().draw(3u, 1u, 0u, 0u);
+                    pass.commandList().endRendering();
+                    return true;
+                });
             RenderGraphPassBuilder dispatch =
                 m_renderGraph.addPass({"FSR31.Dispatch", RgPassType::External, RhiQueueType::Graphics});
-            dispatch.readTexture(hdrColor, RhiResourceState::ShaderRead)
+            dispatch.dependsOn(normalizeExposure.handle())
+                .readTexture(hdrColor, RhiResourceState::ShaderRead)
                 .readTexture(depth, RhiResourceState::ShaderRead)
                 .readTexture(velocity, RhiResourceState::ShaderRead)
-                .readTexture(exposure, RhiResourceState::ShaderRead)
+                .readTexture(normalizedExposure, RhiResourceState::ShaderRead)
                 .readTexture(reactiveMask, RhiResourceState::ShaderRead)
                 .readTexture(transparencyMask, RhiResourceState::ShaderRead)
                 .writeTexture(outputHdrColor, RhiResourceState::ShaderWrite)
-                .setExecute([this, frame, dispatchDesc, &dispatchAttempted, &dispatched](RgPassContext& pass) {
+                .setExecute([this, fsrFrame, dispatchDesc, &dispatchAttempted, &dispatched](RgPassContext& pass) {
                     dispatchAttempted = true;
                     dispatched = m_fsr31Context->dispatch(static_cast<const VkRhiDevice&>(*m_device),
-                                                          pass.commandList(), frame, dispatchDesc);
+                                                          pass.commandList(), fsrFrame, dispatchDesc);
                     return dispatched.succeeded();
                 });
 
@@ -423,6 +694,7 @@ TemporalUpscaleResult TemporalUpscalePass::execute(const UpscaleSettings& settin
                 static_cast<void>(releaseFsr31Context());
                 return temporalFailure(status, std::nullopt, sdkError);
             }
+            m_fsrExposureInitialized = true;
             m_outputInitialized = true;
             TemporalUpscaleResult result;
             result.status = TemporalUpscaleStatus::Success;

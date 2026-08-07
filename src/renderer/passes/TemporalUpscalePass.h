@@ -6,6 +6,7 @@
 #include "renderer/rhi/RhiRenderGraph.h"
 #include "renderer/rhi/RhiTypes.h"
 
+#include <array>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -80,6 +81,15 @@ private:
     void destroyOutputTarget();
 #if defined(MECRAFT_ENABLE_FSR31)
     [[nodiscard]] bool releaseFsr31Context();
+    /// Create the R32F exposure target and graphics state used by FSR.
+    /// @return True when the normalization target and pipeline are valid.
+    [[nodiscard]] bool ensureFsrExposureResources();
+    /// Cache a bind group for one post-process exposure-state view.
+    /// @param sourceView RGBA16F scene exposure state sampled by normalization.
+    /// @return True when a matching bind group is ready.
+    [[nodiscard]] bool ensureFsrExposureBindGroup(RhiTextureViewHandle sourceView);
+    /// Release every resource owned by the FSR exposure normalization stage.
+    void destroyFsrExposureResources();
 #endif
 #if defined(MECRAFT_ENABLE_STREAMLINE)
     [[nodiscard]] bool releaseDlssContext();
@@ -96,6 +106,17 @@ private:
     std::unique_ptr<Fsr31VulkanContext> m_fsr31Context;
     bool m_fsr31DynamicResolution = false;
     bool m_fsr31DebugChecking = false;
+    RhiTextureHandle m_fsrExposureTexture;
+    RhiTextureViewHandle m_fsrExposureView;
+    RhiSamplerHandle m_fsrExposureSampler;
+    RhiBindGroupLayoutHandle m_fsrExposureBindGroupLayout;
+    RhiPipelineLayoutHandle m_fsrExposurePipelineLayout;
+    RhiShaderHandle m_fsrExposureVertexShader;
+    RhiShaderHandle m_fsrExposureFragmentShader;
+    RhiPipelineHandle m_fsrExposurePipeline;
+    std::array<RhiBindGroupHandle, 2u> m_fsrExposureBindGroups{};
+    std::array<RhiTextureViewHandle, 2u> m_fsrExposureSourceViews{};
+    bool m_fsrExposureInitialized = false;
 #endif
 #if defined(MECRAFT_ENABLE_STREAMLINE)
     std::unique_ptr<DlssVulkanContext> m_dlssContext;

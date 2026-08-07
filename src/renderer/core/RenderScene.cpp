@@ -1608,10 +1608,11 @@ void RenderScene::refreshTemporalFrameInput() {
     input.motionVectorScale = {static_cast<float>(m_currentContext.temporalExtents.renderExtent.width),
                                static_cast<float>(m_currentContext.temporalExtents.renderExtent.height)};
     input.frameDeltaMilliseconds = m_currentContext.deltaTime * 1000.0f;
-    // The upscaler consumes scene HDR color, which stays scene-referred: the
-    // frame pre-exposure currently applies only to the RTGI raw storage chain.
-    input.preExposure = 1.0f;
-    input.previousPreExposure = 1.0f;
+    // The temporal upscaler receives the same pre-exposed scene HDR domain as
+    // the lighting and composite passes. These values let FSR rescale its
+    // persistent history when the storage domain changes between frames.
+    input.preExposure = m_currentContext.preExposure;
+    input.previousPreExposure = m_currentContext.previousPreExposure;
     input.cameraNear = m_currentContext.camera.nearPlane;
     input.cameraFar = m_currentContext.camera.farPlane;
     input.verticalFovRadians = glm::radians(m_currentContext.camera.fovDegrees);

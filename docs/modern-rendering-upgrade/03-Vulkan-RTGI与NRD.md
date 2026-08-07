@@ -399,8 +399,10 @@ HDR，Signal Pack 在进入 NRD 前乘其倒数，Deferred Lighting 对 NRD 输�
 深度，Z Motion 写零；真实 Vulkan Smoke 固定验证当前 View-Z `2`、上一帧 View-Z `3`、Z Motion `1`，
 并验证 `Pre-exposure = 4` 的 Raw/NRD 输入转换。Scene HDR 的 Lighting、SceneComposite、Reflection、
 Water、Transparent、Cloud、Volumetric 和 Particle producer 已统一写入 Pre-exposed 域，Tonemap 前除回；
-按历史所有者细分的 Reset 已完成，`TemporalFrameInput` 的上采样域保持 `1`。`PreExposure` 只让 Scene HDR
-域历史重启，NRD 输入保持去曝光稳定。
+按历史所有者细分的 Reset 已完成。`TemporalFrameInput` 将当前/上一帧 Pre-exposure 传给时域上采样器；
+FSR 3.1 另用 `R32F` 1x1 纹理把后处理的 Scene-referred Exposure 换算为 `Exposure / PreExposure`，使
+FSR 的亮度分析、历史颜色与最终 Tonemap 处于同一可见能量域。`PreExposure` 会重启 Scene HDR 域历史，
+NRD 输入仍保持去曝光稳定。
 
 NRD 的 `frameIndex` 每个真实渲染帧严格增加 1，并与 Checkerboard Phase 同步。当前生产 Bridge
 绑定 `IN_MV`、`IN_NORMAL_ROUGHNESS`、`IN_VIEWZ`、方法对应的 Radiance/Hit Distance，以及
