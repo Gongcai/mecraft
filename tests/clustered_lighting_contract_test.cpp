@@ -1,4 +1,5 @@
 #include "renderer/contracts/ClusteredLightingContract.h"
+#include "renderer/contracts/LocalShadowContract.h"
 
 #include <glm/gtc/matrix_transform.hpp>
 
@@ -131,6 +132,7 @@ bool testCoverageAndCapacity() {
 }
 
 bool testPointShadowDepthFormula() {
+    using namespace renderer::contracts;
     constexpr float nearPlane = 0.05f;
     constexpr float farPlane = 10.0f;
     const glm::mat4 projection = glm::perspective(glm::radians(90.0f), 1.0f, nearPlane, farPlane);
@@ -142,19 +144,24 @@ bool testPointShadowDepthFormula() {
     const float distances[] = {0.25f, 2.0f, 9.0f};
     for (const glm::vec3 direction : directions) {
         for (const float distance : distances) {
-            const float faceDepth = distance * std::max(std::max(std::abs(direction.x), std::abs(direction.y)),
-                                                        std::abs(direction.z));
+            const float faceDepth =
+                distance * std::max(std::max(std::abs(direction.x), std::abs(direction.y)), std::abs(direction.z));
             const glm::vec4 clip = projection * glm::vec4(0.0f, 0.0f, -faceDepth, 1.0f);
             const float matrixDepth = clip.z / clip.w * 0.5f + 0.5f;
-            const float analyticDepth = farPlane / (farPlane - nearPlane) -
-                                        farPlane * nearPlane / ((farPlane - nearPlane) * faceDepth);
+            const float analyticDepth =
+                farPlane / (farPlane - nearPlane) - farPlane * nearPlane / ((farPlane - nearPlane) * faceDepth);
+            const float decodedDepth = farPlane * nearPlane / (farPlane - analyticDepth * (farPlane - nearPlane));
             if (!requireTrue(std::abs(matrixDepth - analyticDepth) <= 1.0e-5f,
-                             "point-shadow analytic depth must match the GLM cube-face projection")) {
+                             "point-shadow analytic depth must match the GLM cube-face projection") ||
+                !requireTrue(std::abs(decodedDepth - faceDepth) <= 1.0e-4f,
+                             "point-shadow sampled depth must decode to linear face distance")) {
                 return false;
             }
         }
     }
-    return true;
+    return requireTrue(kLocalShadowNearPlaneMeters == nearPlane && kLocalShadowDepthBiasMeters == 0.005f &&
+                           kLocalShadowNormalOffsetMeters == 0.005f,
+                       "local-shadow receiver offsets and comparisons must use the metric contract");
 }
 
 bool testReadbackCompletionContract() {
@@ -288,12 +295,18 @@ bool testSharedLightingConsumers() {
                      "terrain Forward+ must use the shared clustered evaluator") ||
         !requireTrue(sharedLighting.find("evaluateGpuLight(") != std::string::npos,
                      "every clustered consumer must dispatch through evaluateGpuLight") ||
-        !requireTrue(sharedLighting.find("sampler2D uLocalShadowSpotAtlas") != std::string::npos &&
-                         sharedLighting.find("samplerCubeArray uLocalShadowPointCubeArray") != std::string::npos &&
-                         sharedLighting.find("visibility / 9.0") != std::string::npos &&
-                         sharedLighting.find("visibility / 4.0") != std::string::npos &&
-                         sharedLighting.find("const vec2 pcfOffsets[4]") != std::string::npos,
-                     "shared consumers must evaluate Spot 3x3 PCF and Point 4-tap PCF") ||
+        !requireTrue(
+            sharedLighting.find("sampler2D uLocalShadowSpotAtlas") != std::string::npos &&
+                sharedLighting.find("samplerCubeArray uLocalShadowPointCubeArray") != std::string::npos &&
+                sharedLighting.find("localShadowProjectedDepthToLinear") != std::string::npos &&
+                sharedLighting.find("receiverDepth - metadata.nearFarDepthBiasNormalOffset.z") != std::string::npos &&
+                sharedLighting.find("receiverFaceDepth - metadata.nearFarDepthBiasNormalOffset.z") !=
+                    std::string::npos &&
+                sharedLighting.find("referenceDepth -= metadata.nearFarDepthBiasNormalOffset.z") == std::string::npos &&
+                sharedLighting.find("visibility / 9.0") != std::string::npos &&
+                sharedLighting.find("visibility / 4.0") != std::string::npos &&
+                sharedLighting.find("const vec2 pcfOffsets[4]") != std::string::npos,
+            "shared consumers must compare metric Spot and Point PCF depths") ||
         !requireTrue(contributionEvaluation != std::string::npos && shadowSampling != std::string::npos &&
                          contributionEvaluation < shadowSampling,
                      "surface contribution rejection must precede local-shadow sampling") ||
@@ -360,8 +373,7 @@ bool testSharedLightingConsumers() {
 
 int main() {
     if (!testGridAndLogarithmicSlices() || !testCoverageAndCapacity() || !testPointShadowDepthFormula() ||
-        !testComputeShaderContracts() ||
-        !testReadbackCompletionContract() || !testEmptyLightingSteadyStateContract() ||
+        !testComputeShaderContracts() || !testReadbackCompletionContract() || !testEmptyLightingSteadyStateContract() ||
         !testSharedLightingConsumers()) {
         return 1;
     }

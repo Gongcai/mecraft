@@ -372,7 +372,7 @@ bool rtgiLightRayDirection(GpuLight light, vec3 cameraRelativeSurface, out vec3 
     return rtgiFinite(direction) && rtgiFinite(maximumDistance) && maximumDistance > 0.0;
 }
 
-bool rtgiLightVisibility(GpuLight light, vec3 surfacePosition, vec3 cameraRelativeSurface, vec3 normal,
+bool rtgiLightVisibility(GpuLight light, vec3 surfacePosition, vec3 cameraRelativeSurface,
                          vec3 originNormal, float coneWidth, out float visibility) {
     visibility = 0.0;
     uint policy = gpuLightShadowPolicy(light);
@@ -380,16 +380,15 @@ bool rtgiLightVisibility(GpuLight light, vec3 surfacePosition, vec3 cameraRelati
         visibility = 1.0;
         return gpuLightShadowIndex(light) == GPU_LIGHT_INVALID_RESOURCE_INDEX;
     }
-    if (policy == GPU_LIGHT_SHADOW_RASTER_DYNAMIC || policy == GPU_LIGHT_SHADOW_RASTER_CACHED) {
-        vec3 resourceCoordinate;
-        bool valid;
-        visibility = localShadowVisibility(light, cameraRelativeSurface, normal, resourceCoordinate, valid);
-        return valid;
-    }
-    if (policy != GPU_LIGHT_SHADOW_RAY_QUERY ||
-        gpuLightShadowIndex(light) != GPU_LIGHT_INVALID_RESOURCE_INDEX) {
+    bool rasterPolicy = policy == GPU_LIGHT_SHADOW_RASTER_DYNAMIC || policy == GPU_LIGHT_SHADOW_RASTER_CACHED;
+    if ((!rasterPolicy && policy != GPU_LIGHT_SHADOW_RAY_QUERY) ||
+        (rasterPolicy && gpuLightShadowIndex(light) == GPU_LIGHT_INVALID_RESOURCE_INDEX) ||
+        (policy == GPU_LIGHT_SHADOW_RAY_QUERY &&
+         gpuLightShadowIndex(light) != GPU_LIGHT_INVALID_RESOURCE_INDEX)) {
         return false;
     }
+    // RTGI traces local-light visibility against the same TLAS as its bounce ray.
+    // Raster policies identify the direct-light cache and do not change this path.
     vec3 direction;
     float maximumDistance;
     return rtgiLightRayDirection(light, cameraRelativeSurface, direction, maximumDistance) &&
@@ -408,7 +407,7 @@ bool rtgiAccumulateGpuLight(GpuLight light, RtgiSecondarySurface surface, vec3 s
         return true;
     }
     float shadowVisibility;
-    if (!rtgiLightVisibility(light, surfacePosition, cameraRelativeSurface, surface.normal,
+    if (!rtgiLightVisibility(light, surfacePosition, cameraRelativeSurface,
                              surface.geometricNormal, coneWidth,
                              shadowVisibility)) {
         // An optional local-light shadow resource must not erase celestial or

@@ -21,6 +21,9 @@ inline constexpr uint32_t kLocalShadowMaxSpotLightCount = 64u;
 inline constexpr uint32_t kLocalShadowMaxPointLightCount = 64u;
 inline constexpr uint32_t kLocalShadowPointMetadataBase = kLocalShadowMaxSpotLightCount;
 inline constexpr uint32_t kLocalShadowMetadataCount = kLocalShadowMaxSpotLightCount + kLocalShadowMaxPointLightCount;
+inline constexpr float kLocalShadowNearPlaneMeters = 0.05f;
+inline constexpr float kLocalShadowDepthBiasMeters = 0.005f;
+inline constexpr float kLocalShadowNormalOffsetMeters = 0.005f;
 
 /// Classifies the persistent raster resource used by one local light.
 enum class LocalShadowType : uint32_t { Spot = 0u, Point = 1u };
@@ -32,7 +35,7 @@ struct alignas(16) LocalShadowMetadata final {
     std::array<glm::mat4, 6> cameraRelativeViewProjection{};
     /// Spot atlas scale.xy and bias.zw. Point lights store zero.
     glm::vec4 atlasScaleBias{0.0f};
-    /// Near plane, far plane, depth bias, and normal offset in meters.
+    /// Near plane, far plane, linear-depth comparison bias, and normal offset in meters.
     glm::vec4 nearFarDepthBiasNormalOffset{0.0f};
     /// LocalShadowType, resource slot, face count, and contract version.
     glm::uvec4 classification{0u};

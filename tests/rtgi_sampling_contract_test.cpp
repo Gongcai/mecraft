@@ -55,8 +55,12 @@ namespace {
            traceSource.find("vec4 traceAndEmissionScales;") != std::string::npos &&
            traceSource.find("vec4 terrainLightScales;") != std::string::npos &&
            traceSource.find("uvec4 flags;") != std::string::npos &&
+           traceSource.find("bool rasterPolicy = policy == GPU_LIGHT_SHADOW_RASTER_DYNAMIC") != std::string::npos &&
            traceSource.find("policy != GPU_LIGHT_SHADOW_RAY_QUERY") != std::string::npos &&
            traceSource.find("gpuLightShadowIndex(light) != GPU_LIGHT_INVALID_RESOURCE_INDEX") != std::string::npos &&
+           traceSource.find("localShadowVisibility(light, cameraRelativeSurface") == std::string::npos &&
+           traceSource.find("rtgiTraceVisibility(surfacePosition, originNormal, direction, maximumDistance") !=
+               std::string::npos &&
            traceSource.find("maximumDistance - dot(originOffset, unitDirection) - rayMinimum") != std::string::npos &&
            traceSource.find("const float RTGI_METALLIC_DIFFUSE_TRANSPORT_FLOOR = 0.35;") != std::string::npos &&
            traceSource.find("const float RTGI_RADIANCE_FIREFLY_CLAMP = 8.0;") != std::string::npos &&

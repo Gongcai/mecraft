@@ -44,23 +44,27 @@ bool localShadowCommonMetadataValid(LocalShadowMetadata metadata) {
         metadata.classification.w == LOCAL_SHADOW_CONTRACT_VERSION;
 }
 
-bool localShadowPointProjectedDepth(
+bool localShadowProjectedDepthToLinear(
     LocalShadowMetadata metadata,
-    vec3 direction,
-    float receiverDistance,
-    out float depth) {
+    float projectedDepth,
+    out float linearDepth) {
     vec4 nearFar = metadata.nearFarDepthBiasNormalOffset;
-    float faceDepth = receiverDistance * max(max(abs(direction.x), abs(direction.y)), abs(direction.z));
-    if (!localShadowFinite(vec4(direction, receiverDistance)) ||
-        !localShadowFinite(faceDepth) || faceDepth <= 0.0 || nearFar.y <= nearFar.x) {
+    float denominator = nearFar.y - projectedDepth * (nearFar.y - nearFar.x);
+    if (!localShadowFinite(projectedDepth) || projectedDepth < 0.0 || projectedDepth > 1.0 ||
+        !localShadowFinite(denominator) || denominator <= 0.0) {
         return false;
     }
-    // The six 90-degree GLM perspective faces share the same radial depth
-    // mapping. Avoiding a per-tap matrix multiply preserves the rendered
-    // depth value while keeping the point-shadow PCF path arithmetic-only.
-    depth = nearFar.y / (nearFar.y - nearFar.x) -
-        nearFar.y * nearFar.x / ((nearFar.y - nearFar.x) * faceDepth);
-    return localShadowFinite(depth);
+    linearDepth = nearFar.y * nearFar.x / denominator;
+    return localShadowFinite(linearDepth) && linearDepth >= nearFar.x && linearDepth <= nearFar.y;
+}
+
+bool localShadowPointFaceDepth(
+    vec3 direction,
+    float receiverDistance,
+    out float faceDepth) {
+    faceDepth = receiverDistance * max(max(abs(direction.x), abs(direction.y)), abs(direction.z));
+    return localShadowFinite(vec4(direction, receiverDistance)) &&
+        localShadowFinite(faceDepth) && faceDepth > 0.0;
 }
 
 float sampleLocalSpotShadow(
@@ -101,11 +105,11 @@ float sampleLocalSpotShadow(
         rhiScreenUvToClipUv(localClipUv));
     vec2 atlasUv = localTextureUv * atlas.xy + atlas.zw;
     resourceCoordinate = vec3(atlasUv, 0.0);
-    float referenceDepth = ndc.z * 0.5 + 0.5 -
-        metadata.nearFarDepthBiasNormalOffset.z;
+    float receiverDepth = clip.w;
     if (any(lessThan(localClipUv, vec2(0.0))) ||
         any(greaterThan(localClipUv, vec2(1.0))) ||
-        referenceDepth < 0.0 || referenceDepth > 1.0) {
+        receiverDepth <= metadata.nearFarDepthBiasNormalOffset.x ||
+        receiverDepth >= metadata.nearFarDepthBiasNormalOffset.y) {
         return 1.0;
     }
 
@@ -129,11 +133,12 @@ float sampleLocalSpotShadow(
                 atlasUv + vec2(float(x), float(y)) * texel,
                 tileMinimum, tileMaximum);
             float storedDepth = texture(uLocalShadowSpotAtlas, sampleUv).r;
-            if (!localShadowFinite(storedDepth)) {
+            float occluderDepth;
+            if (!localShadowProjectedDepthToLinear(metadata, storedDepth, occluderDepth)) {
                 valid = false;
                 return 1.0;
             }
-            visibility += referenceDepth <= storedDepth ? 1.0 : 0.0;
+            visibility += receiverDepth - metadata.nearFarDepthBiasNormalOffset.z <= occluderDepth ? 1.0 : 0.0;
         }
     }
     return visibility / 9.0;
@@ -192,22 +197,21 @@ float sampleLocalPointShadow(
         vec2 offset = pcfOffsets[sampleIndex];
         vec3 sampleDirection = normalize(
             baseDirection + (tangent * offset.x + bitangent * offset.y) * angularTexel);
-        float referenceDepth;
-        if (!localShadowPointProjectedDepth(metadata, sampleDirection,
-                                            receiverDistance, referenceDepth)) {
+        float receiverFaceDepth;
+        if (!localShadowPointFaceDepth(sampleDirection, receiverDistance, receiverFaceDepth)) {
             valid = false;
             return 1.0;
         }
-        referenceDepth -= metadata.nearFarDepthBiasNormalOffset.z;
         float storedDepth = texture(
             uLocalShadowPointCubeArray,
             vec4(sampleDirection,
                  float(metadata.classification.y))).r;
-        if (!localShadowFinite(storedDepth)) {
+        float occluderFaceDepth;
+        if (!localShadowProjectedDepthToLinear(metadata, storedDepth, occluderFaceDepth)) {
             valid = false;
             return 1.0;
         }
-        visibility += referenceDepth <= storedDepth ? 1.0 : 0.0;
+        visibility += receiverFaceDepth - metadata.nearFarDepthBiasNormalOffset.z <= occluderFaceDepth ? 1.0 : 0.0;
     }
     return visibility / 4.0;
 }

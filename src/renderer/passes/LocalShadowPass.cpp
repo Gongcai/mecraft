@@ -29,11 +29,6 @@
 #include <unordered_set>
 
 namespace {
-
-constexpr float kLocalShadowNearPlane = 0.05f;
-constexpr float kLocalShadowDepthBias = 0.0015f;
-constexpr float kLocalShadowNormalOffset = 0.03f;
-
 [[nodiscard]] uint32_t growPowerOfTwo(const uint32_t required, const uint32_t maximum) {
     uint32_t value = 1u;
     while (value < required && value < maximum) {
@@ -362,7 +357,7 @@ bool LocalShadowPass::buildPreparedShadows(const FrameContext& ctx, const IWorld
         prepared.direction = glm::vec3(source.light.direction);
         prepared.range = source.light.positionAndRange.w;
         if (!finite(prepared.worldPosition) || !std::isfinite(prepared.range) ||
-            prepared.range <= kLocalShadowNearPlane) {
+            prepared.range <= kLocalShadowNearPlaneMeters) {
             m_lastError = "local shadow world transform is invalid";
             return false;
         }
@@ -374,7 +369,8 @@ bool LocalShadowPass::buildPreparedShadows(const FrameContext& ctx, const IWorld
             const float outerAngle = std::acos(std::clamp(outerCosine, -1.0f, 1.0f));
             prepared.views[0] = glm::lookAt(prepared.worldPosition, prepared.worldPosition + prepared.direction,
                                             shadowUpVector(prepared.direction));
-            prepared.projections[0] = glm::perspective(outerAngle * 2.0f, 1.0f, kLocalShadowNearPlane, prepared.range);
+            prepared.projections[0] =
+                glm::perspective(outerAngle * 2.0f, 1.0f, kLocalShadowNearPlaneMeters, prepared.range);
             prepared.worldViewProjections[0] = prepared.projections[0] * prepared.views[0];
         } else {
             ++m_pendingFrameStats.requestedPointLights;
@@ -388,7 +384,7 @@ bool LocalShadowPass::buildPreparedShadows(const FrameContext& ctx, const IWorld
                 prepared.views[face] =
                     glm::lookAt(prepared.worldPosition, prepared.worldPosition + kDirections[face], kUpVectors[face]);
                 prepared.projections[face] =
-                    glm::perspective(glm::radians(90.0f), 1.0f, kLocalShadowNearPlane, prepared.range);
+                    glm::perspective(glm::radians(90.0f), 1.0f, kLocalShadowNearPlaneMeters, prepared.range);
                 prepared.worldViewProjections[face] = prepared.projections[face] * prepared.views[face];
             }
         }
@@ -405,8 +401,8 @@ bool LocalShadowPass::buildPreparedShadows(const FrameContext& ctx, const IWorld
             metadata.atlasScaleBias = {scale, scale, scale * static_cast<float>(tileX),
                                        scale * static_cast<float>(tileY)};
         }
-        metadata.nearFarDepthBiasNormalOffset = {kLocalShadowNearPlane, prepared.range, kLocalShadowDepthBias,
-                                                 kLocalShadowNormalOffset};
+        metadata.nearFarDepthBiasNormalOffset = {kLocalShadowNearPlaneMeters, prepared.range,
+                                                 kLocalShadowDepthBiasMeters, kLocalShadowNormalOffsetMeters};
         metadata.classification = {static_cast<uint32_t>(allocation.type), allocation.resourceSlot, faceCount,
                                    kLocalShadowContractVersion};
 
