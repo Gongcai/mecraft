@@ -112,6 +112,28 @@ vec3 rtgiTerrainBlockLightIncident(float blockLight) {
            uSecondaryLighting.terrainLightScales.x * uSecondaryLighting.terrainLightScales.y;
 }
 
+void rtgiSolarAngularMasks(vec3 worldDirection, out float solarLobeMask, out float solarCoreMask) {
+    vec3 sunDirection = normalize(uSecondaryLighting.sunDirectionAndVisibility.xyz);
+    float visibility = clamp(uSecondaryLighting.sunDirectionAndVisibility.w, 0.0, 1.0) *
+                       smoothstep(-0.05, 0.08, sunDirection.y);
+    float angle = acos(clamp(dot(normalize(worldDirection), sunDirection), -1.0, 1.0));
+    solarLobeMask = (1.0 - smoothstep(0.018, 0.180, angle)) * visibility;
+    solarCoreMask = (1.0 - smoothstep(0.000, 0.070, angle)) * visibility;
+}
+
+vec3 rtgiSuppressSolarSkyLobe(vec3 skyRadiance, vec3 worldDirection) {
+    // The deferred sky composite removes this captured solar lobe and draws the
+    // procedural sun separately. Apply the same separation to GI misses so a
+    // one-spp ray cannot turn the tiny solar disk into a bright indirect-light point.
+    float solarLobeMask;
+    float solarCoreMask;
+    rtgiSolarAngularMasks(worldDirection, solarLobeMask, solarCoreMask);
+    skyRadiance *= (1.0 - solarLobeMask * 0.94) * (1.0 - solarCoreMask * 0.92);
+    float skyLuminance = dot(skyRadiance, vec3(0.2126, 0.7152, 0.0722));
+    skyRadiance *= min(1.0, mix(18.0, 1.5, solarCoreMask) / max(skyLuminance, 1.0e-5));
+    return max(skyRadiance, vec3(0.0));
+}
+
 void rtgiWriteResult(ivec2 texel, vec3 radiance, float hitDistance, uint classification, uint candidateCount,
                      uint confirmedCount, uint hitIdentityHash) {
     if (!rtgiFinite(radiance) || !rtgiFinite(hitDistance) ||
@@ -708,7 +730,8 @@ void main() {
                         confirmedCount, 0u);
         return;
     }
-    vec3 missRadiance = sampleSkyRadiance(uSkyCapture, rayDirection) * skyVisibility;
+    vec3 missRadiance = rtgiSuppressSolarSkyLobe(sampleSkyRadiance(uSkyCapture, rayDirection), rayDirection) *
+                        skyVisibility;
     rtgiWriteResult(texel, missRadiance, RTGI_NRD_FP16_MAX, RTGI_TRACE_CLASS_MISS, candidateCount,
                     confirmedCount, 0u);
 }

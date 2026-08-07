@@ -82,6 +82,22 @@ void copyNrdMatrix(const glm::mat4& source, float (&destination)[16]) {
     // so the SDK-facing sample offset has the opposite sign.
     return -jitter.pixels;
 }
+
+[[nodiscard]] uint32_t nrdAccumulationFrameCount(const float accumulationSeconds, const float deltaSeconds,
+                                                 const uint32_t maximumFrameCount) {
+    constexpr float kMinimumFrameSeconds = 1.0f / 240.0f;
+    constexpr float kMaximumFrameSeconds = 1.0f / 15.0f;
+    const float frameSeconds = std::clamp(deltaSeconds, kMinimumFrameSeconds, kMaximumFrameSeconds);
+    const float framesPerSecond = 1.0f / frameSeconds;
+    const uint32_t frameCount = ::nrd::GetMaxAccumulatedFrameNum(accumulationSeconds, framesPerSecond);
+    return std::clamp(frameCount, 1u, maximumFrameCount);
+}
+
+[[nodiscard]] uint32_t nrdFastAccumulationFrameCount(const float deltaSeconds, const uint32_t maximumFrameCount) {
+    const uint32_t desiredFrameCount = nrdAccumulationFrameCount(0.1f, deltaSeconds, maximumFrameCount);
+    const uint32_t upperFrameCount = std::max(1u, maximumFrameCount - 1u);
+    return std::min(upperFrameCount, std::max(4u, desiredFrameCount));
+}
 #endif
 
 void setClearAttachment(RhiColorAttachment& attachment, const RhiTextureViewHandle view, const float red,
@@ -900,6 +916,10 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
     DeferredRenderTargets& targets = *m_shared->deferredTargets;
     const bool rtgiEnabled = settings.rtgi.enabled;
     const bool nrdEnabled = rtgiEnabled && settings.nrd.enabled;
+    if (nrdEnabled && (!std::isfinite(ctx.deltaTime) || ctx.deltaTime < 0.0f)) {
+        MECRAFT_LOG_STREAM(std::cerr << "[DeferredPipeline] NRD requires a finite non-negative frame delta\n");
+        return false;
+    }
     if ((rtgiEnabled && !validRtgiSettings(settings.rtgi)) || (nrdEnabled && !validNrdSettings(settings.nrd))) {
         MECRAFT_LOG_STREAM(std::cerr << "[DeferredPipeline] RTGI or NRD settings are invalid\n");
         return false;
@@ -2014,6 +2034,15 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
                 ::nrd::RelaxSettings relaxSettings{};
                 relaxSettings.atrousIterationNum = static_cast<uint32_t>(settings.nrd.relaxAtrousIterations);
                 relaxSettings.minMaterialForDiffuse = 0.0f;
+                relaxSettings.diffuseMaxAccumulatedFrameNum =
+                    nrdAccumulationFrameCount(::nrd::RELAX_DEFAULT_ACCUMULATION_TIME, ctx.deltaTime,
+                                              ::nrd::RELAX_MAX_HISTORY_FRAME_NUM);
+                relaxSettings.diffuseMaxFastAccumulatedFrameNum =
+                    nrdFastAccumulationFrameCount(ctx.deltaTime, relaxSettings.diffuseMaxAccumulatedFrameNum);
+                // One-spp RTGI contains legitimate high-variance samples. Do
+                // not reset the accumulated history on a single bright sample.
+                relaxSettings.antilagSettings.accelerationAmount = 0.0f;
+                relaxSettings.antilagSettings.resetAmount = 0.0f;
                 methodSettings = relaxSettings;
             } else {
                 ::nrd::ReblurSettings reblurSettings{};
@@ -2022,6 +2051,11 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
                 reblurSettings.hitDistanceParameters.C = settings.nrd.reblurHitDistanceRoughnessScale;
                 reblurSettings.minMaterialForDiffuse = 0.0f;
                 reblurSettings.enableAntiFirefly = true;
+                reblurSettings.maxAccumulatedFrameNum =
+                    nrdAccumulationFrameCount(::nrd::REBLUR_DEFAULT_ACCUMULATION_TIME, ctx.deltaTime,
+                                              ::nrd::REBLUR_MAX_HISTORY_FRAME_NUM);
+                reblurSettings.maxFastAccumulatedFrameNum =
+                    nrdFastAccumulationFrameCount(ctx.deltaTime, reblurSettings.maxAccumulatedFrameNum);
                 methodSettings = reblurSettings;
             }
             const renderer::nrd::NrdGraphDispatchResult nrdDispatch = m_nrdBridge->addGraphDispatches(

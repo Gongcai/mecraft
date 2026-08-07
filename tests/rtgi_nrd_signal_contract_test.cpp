@@ -31,6 +31,7 @@ namespace {
     const std::string targetsPath =
         std::string(MECRAFT_TEST_SOURCE_DIR) + "/src/renderer/targets/DeferredRenderTargets.h";
     const std::string debugPassPath = std::string(MECRAFT_TEST_SOURCE_DIR) + "/src/renderer/passes/DebugPass.cpp";
+    const std::string debugShaderPath = std::string(MECRAFT_TEST_SOURCE_DIR) + "/assets/shaders/deferred_debug.frag";
     const std::string scenePath = std::string(MECRAFT_TEST_SOURCE_DIR) + "/src/renderer/core/RenderScene.cpp";
     const std::string modelScenePath =
         std::string(MECRAFT_TEST_SOURCE_DIR) + "/src/scene/ModelSceneDeferredRenderer.cpp";
@@ -42,11 +43,12 @@ namespace {
     std::ifstream pipelineFile(pipelinePath, std::ios::binary);
     std::ifstream targetsFile(targetsPath, std::ios::binary);
     std::ifstream debugPassFile(debugPassPath, std::ios::binary);
+    std::ifstream debugShaderFile(debugShaderPath, std::ios::binary);
     std::ifstream sceneFile(scenePath, std::ios::binary);
     std::ifstream modelSceneFile(modelScenePath, std::ios::binary);
     if (!signalFile.is_open() || !packFile.is_open() || !traceFile.is_open() || !guideFile.is_open() ||
         !lightingFile.is_open() || !pipelineFile.is_open() || !targetsFile.is_open() || !debugPassFile.is_open() ||
-        !sceneFile.is_open() || !modelSceneFile.is_open()) {
+        !debugShaderFile.is_open() || !sceneFile.is_open() || !modelSceneFile.is_open()) {
         return false;
     }
     const std::string signalSource{std::istreambuf_iterator<char>(signalFile), std::istreambuf_iterator<char>()};
@@ -57,6 +59,8 @@ namespace {
     const std::string pipelineSource{std::istreambuf_iterator<char>(pipelineFile), std::istreambuf_iterator<char>()};
     const std::string targetsSource{std::istreambuf_iterator<char>(targetsFile), std::istreambuf_iterator<char>()};
     const std::string debugPassSource{std::istreambuf_iterator<char>(debugPassFile), std::istreambuf_iterator<char>()};
+    const std::string debugShaderSource{std::istreambuf_iterator<char>(debugShaderFile),
+                                        std::istreambuf_iterator<char>()};
     const std::string sceneSource{std::istreambuf_iterator<char>(sceneFile), std::istreambuf_iterator<char>()};
     const std::string modelSceneSource{std::istreambuf_iterator<char>(modelSceneFile),
                                        std::istreambuf_iterator<char>()};
@@ -121,6 +125,15 @@ namespace {
            targetsSource.find("historyConfidenceTexture") == std::string::npos &&
            targetsSource.find("historyRtgiValidationTexture") == std::string::npos &&
            debugPassSource.find("!isNrdValidationView(settings.debug.viewMode)") == std::string::npos &&
+           debugPassSource.find("params.rtgiParams = glm::vec4(nrdEncoding, ctx.preExposure") !=
+               std::string::npos &&
+           debugShaderSource.find("vec3 debugRawRtgiSceneRadiance(vec2 textureUv)") != std::string::npos &&
+           debugShaderSource.find("/ uRtgiPreExposure;") != std::string::npos &&
+           debugShaderSource.find("vec3 debugNrdSceneRadiance(vec2 textureUv)") != std::string::npos &&
+           debugShaderSource.find("uNrdDiffuseEncoding == 2.0") != std::string::npos &&
+           debugShaderSource.find("radiance = nrdYCoCgToLinear(radiance);") != std::string::npos &&
+           debugShaderSource.find("vec3 raw = debugRawRtgiSceneRadiance(textureUv);") != std::string::npos &&
+           debugShaderSource.find("vec3 denoised = debugNrdSceneRadiance(textureUv);") != std::string::npos &&
            sceneSource.find("ctx.jitter.pixels.x = frameX * 0.5f;") != std::string::npos &&
            sceneSource.find("ctx.jitter.pixels.y = -frameY * 0.5f;") != std::string::npos &&
            sceneSource.find("m_previousContext.camera.projection != ctx.camera.projection") == std::string::npos &&

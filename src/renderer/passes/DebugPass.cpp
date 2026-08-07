@@ -88,8 +88,9 @@ struct alignas(16) DebugParams {
     glm::vec4 shadowParams;
     glm::ivec4 flags0;
     glm::ivec4 flags1;
+    glm::vec4 rtgiParams;
 };
-static_assert(sizeof(DebugParams) == 816u);
+static_assert(sizeof(DebugParams) == 832u);
 } // namespace
 
 void DebugPass::init(ResourceMgr& resourceMgr) {
@@ -265,6 +266,11 @@ bool DebugPass::recordGraphPass(const FrameContext& ctx, const RenderSettings& s
     params.flags0 = glm::ivec4(ctx.moonShadowActive ? 1 : 0, shadow::ShadowRenderer::CASCADE_COUNT, debugViewMode,
                                static_cast<int>(ctx.frameIndex & 0x7fffffffULL));
     params.flags1 = glm::ivec4(settings.volumetric.freezeBias ? 1 : 0, 0, 0, 0);
+    const bool nrdDiffuseAvailable = settings.rtgi.enabled && settings.nrd.enabled;
+    const float nrdEncoding = nrdDiffuseAvailable
+                                  ? (settings.nrd.method == NrdDiffuseMethod::Reblur ? 2.0f : 1.0f)
+                                  : 0.0f;
+    params.rtgiParams = glm::vec4(nrdEncoding, ctx.preExposure, nrdDiffuseAvailable ? 1.0f : 0.0f, 0.0f);
 
     RhiColorAttachment colorAttachment;
     colorAttachment.view = ctx.sceneCaptureColorView;

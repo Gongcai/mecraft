@@ -77,6 +77,7 @@ layout(std140, binding = 33) uniform DebugParams {
     vec4 pShadowParams;
     ivec4 pFlags0;
     ivec4 pFlags1;
+    vec4 pRtgiParams;
 };
 
 #define uShadowModelView pShadowModelView
@@ -106,6 +107,9 @@ layout(std140, binding = 33) uniform DebugParams {
 #define uDebugViewMode pFlags0.z
 #define uFrameIndex pFlags0.w
 #define uFreezeBias pFlags1.x
+#define uNrdDiffuseEncoding pRtgiParams.x
+#define uRtgiPreExposure max(pRtgiParams.y, 1.0e-6)
+#define uNrdDiffuseAvailable (pRtgiParams.z > 0.5)
 
 #include "mecraft_shadow.glsl"
 #include "render_contract.glsl"
@@ -113,6 +117,28 @@ layout(std140, binding = 33) uniform DebugParams {
 vec3 tonemapPreview(vec3 color) {
     color = max(color, vec3(0.0));
     return color / (color + vec3(1.0));
+}
+
+vec3 nrdYCoCgToLinear(vec3 color) {
+    float t = color.x - color.z;
+    vec3 linearColor;
+    linearColor.y = color.x + color.z;
+    linearColor.x = t + color.y;
+    linearColor.z = t - color.y;
+    return max(linearColor, vec3(0.0));
+}
+
+vec3 debugRawRtgiSceneRadiance(vec2 textureUv) {
+    // RTGI stores pre-exposed radiance; diagnostics compare it in NRD's scene-referred domain.
+    return max(texture(uRtgiRawTex, textureUv).rgb, vec3(0.0)) / uRtgiPreExposure;
+}
+
+vec3 debugNrdSceneRadiance(vec2 textureUv) {
+    vec3 radiance = texture(uNrdOutputTex, textureUv).rgb;
+    if (uNrdDiffuseAvailable && uNrdDiffuseEncoding == 2.0) {
+        radiance = nrdYCoCgToLinear(radiance);
+    }
+    return max(radiance, vec3(0.0));
 }
 
 vec3 heatmap(float v) {
@@ -953,7 +979,7 @@ void main() {
     // classification (8 bits), candidate count (12 bits), confirmed count
     // (12 bits); values mirror rtgi_sampling.glsl.
     if (uDebugViewMode == 89) {
-        FragColor = vec4(tonemapPreview(max(texture(uRtgiRawTex, textureUv).rgb, vec3(0.0))), 1.0);
+        FragColor = vec4(tonemapPreview(debugRawRtgiSceneRadiance(textureUv)), 1.0);
         return;
     }
     if (uDebugViewMode == 90) {
@@ -1024,12 +1050,12 @@ void main() {
         return;
     }
     if (uDebugViewMode == 98) {
-        FragColor = vec4(tonemapPreview(max(texture(uNrdOutputTex, textureUv).rgb, vec3(0.0))), 1.0);
+        FragColor = vec4(tonemapPreview(debugNrdSceneRadiance(textureUv)), 1.0);
         return;
     }
     if (uDebugViewMode == 99) {
-        vec3 raw = texture(uRtgiRawTex, textureUv).rgb;
-        vec3 denoised = texture(uNrdOutputTex, textureUv).rgb;
+        vec3 raw = debugRawRtgiSceneRadiance(textureUv);
+        vec3 denoised = debugNrdSceneRadiance(textureUv);
         FragColor = vec4(tonemapPreview(abs(raw - denoised) * 8.0), 1.0);
         return;
     }

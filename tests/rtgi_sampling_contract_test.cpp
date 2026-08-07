@@ -56,6 +56,10 @@ namespace {
            traceSource.find("maximumDistance - dot(originOffset, unitDirection) - rayMinimum") != std::string::npos &&
            traceSource.find("const float RTGI_METALLIC_DIFFUSE_TRANSPORT_FLOOR = 0.35;") != std::string::npos &&
            traceSource.find("const float RTGI_RADIANCE_FIREFLY_CLAMP = 8.0;") != std::string::npos &&
+           traceSource.find("vec3 rtgiSuppressSolarSkyLobe(vec3 skyRadiance, vec3 worldDirection)") !=
+               std::string::npos &&
+           traceSource.find("rtgiSuppressSolarSkyLobe(sampleSkyRadiance(uSkyCapture, rayDirection), rayDirection)") !=
+               std::string::npos &&
            traceSource.find("ivec2 noiseTexel = ivec2(uvec2(texel) % uvec2(noiseExtent));") != std::string::npos &&
            traceSource.find("rtgiCranleyPattersonRotation(pc.frameMaskAndFlags.x)") != std::string::npos &&
            traceSource.find("frameOffset") == std::string::npos &&
@@ -85,6 +89,10 @@ namespace {
            pipelineSource.find("++m_rtgiTemporalSampleIndex;") != std::string::npos &&
            pipelineSource.find("m_lastNrdSceneTlasRevision") == std::string::npos &&
            pipelineSource.find("relaxSettings.atrousIterationNum =") != std::string::npos &&
+           pipelineSource.find("nrdAccumulationFrameCount(::nrd::RELAX_DEFAULT_ACCUMULATION_TIME") !=
+               std::string::npos &&
+           pipelineSource.find("relaxSettings.antilagSettings.accelerationAmount = 0.0f;") != std::string::npos &&
+           pipelineSource.find("relaxSettings.antilagSettings.resetAmount = 0.0f;") != std::string::npos &&
            pipelineSource.find("reblurSettings.enableAntiFirefly = true;") != std::string::npos &&
            pipelineSource.find("const bool nrdEnabled = rtgiEnabled && settings.nrd.enabled;") != std::string::npos &&
            pipelineSource.find(

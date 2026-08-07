@@ -294,8 +294,10 @@ Rect Light 按影响球与 Cell AABB 的精确相交进入确定性排序列表�
 时返回 `IndexCapacityExceeded` 且不发布部分结果。Shader 对 Cell 坐标执行二分查找。局部灯继续使用
 统一 PBR 求值：`None`、`RasterDynamic`、`RasterCached` 读取现有 Metadata/Spot Atlas/Point Cube Array，
 `RayQuery` 发射可见性射线。Ray Query 分支已通过生产 Shader 编译和源码契约；生产 `SceneLight` 入口
-当前仍服从主视图共享阴影契约并显式返回 `RayQueryUnavailable`。命中结果最后累加天空环境项；Miss
-直接调用 `sampleSkyRadiance` 读取原始 Sky Capture。
+当前仍服从主视图共享阴影契约并显式返回 `RayQueryUnavailable`。命中结果最后累加天空环境项。Sky
+Capture 含有主天空合成阶段会先抑制、再由解析太阳盘重建的高亮太阳瓣；RTGI Miss 在读取 Sky Capture
+后应用同一组角度遮罩和亮度限制，避免 1 spp 射线偶发命中太阳盘形成逐帧出现、消失的间接光点，也避免
+与解析太阳直射项重复计能。普通天空、天气与云层方向辐射保持不变。
 
 Vulkan Smoke 对 Terrain 使用非白 Grass Colormap 与天空环境项，确认 Opaque 和 Grass Tint 后的 RGB
 Radiance 不同；模型用红色 Emissive、绿色太阳和蓝色 Point Light 将三条能量来源隔离到不同通道，
@@ -407,6 +409,16 @@ Deferred Debug View 通过显式资源初始化保证静态描述符始终处于
 `IN_DIFF_CONFIDENCE` 和 `IN_DISOCCLUSION_THRESHOLD_MIX` 不接入生产管线。NRD 的历史置信度要求由独立的
 上一帧光照梯度追踪生成，不能使用当前像素是否落在上一帧视口内，也不能直接使用 RT Hit/Miss 或 32-bit
 Object ID 比较结果。
+
+RELAX/REBLUR 的主历史按 SDK 推荐的 `0.5` 秒积累周期和真实渲染帧间隔换算为帧数，并受对应 Method
+的历史上限约束；Fast History 使用 `0.1` 秒周期且始终长于 History Fix。这样在关闭垂直同步的高帧率
+运行中，历史不会因固定 30 帧而缩短成很小的时间窗口。RELAX Anti-lag 的加速与重置量保持关闭，防止
+1 spp 合法高方差亮样本触发历史反复重置；几何、材质和视口变化仍由正常的反遮挡与 Temporal Reset
+路径处理。
+
+Debug View 89、98、99 统一显示 Scene-referred Linear RGB：89 在预览前移除 Raw RTGI 的当前
+Pre-exposure，98 对 REBLUR 输出先执行 YCoCg 解码，99 再在相同辐射域计算 Raw/Output Delta。因此
+99 的变化只表达降噪差异，不再混入曝光倍率或编码差异。
 
 Debug View 101 显示 `NRD Reprojection Coverage`：白色表示当前表面重投影后位于上一帧视口内，黑色表示
 新显露区域、屏幕边界外或无有效深度。该画面只用于观察运动时的历史覆盖边界，不参与 NRD 权重计算。
