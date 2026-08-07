@@ -1480,6 +1480,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
         };
         const RhiTextureUsageFlags sampledStorage =
             rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::Storage);
+        const RhiTextureUsageFlags nrdOutputUsage = sampledStorage | rhiFlag(RhiTextureUsage::ColorAttachment);
         const RhiTextureUsageFlags nrdValidationUsage = sampledStorage | rhiFlag(RhiTextureUsage::ColorAttachment);
         if (!createRtgiTexture("RTGI.RawDiffuseRadianceHitDistance", RhiTextureFormat::Rgba16Float, sampledStorage,
                                rtgiRawDiffuse) ||
@@ -1495,7 +1496,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
              !createRtgiTexture("NRD.NormalRoughness", RhiTextureFormat::Rgb10A2Unorm, sampledStorage,
                                 nrdNormalRoughness) ||
              !createRtgiTexture("NRD.ViewZ", RhiTextureFormat::R32Float, sampledStorage, nrdViewZ) ||
-             !createRtgiTexture("NRD.OutputDiffuseRadianceHitDistance", RhiTextureFormat::Rgba16Float, sampledStorage,
+             !createRtgiTexture("NRD.OutputDiffuseRadianceHitDistance", RhiTextureFormat::Rgba16Float, nrdOutputUsage,
                                 nrdOutputDiffuse) ||
              !createRtgiTexture("NRD.Validation", RhiTextureFormat::Rgba8Unorm, nrdValidationUsage, nrdValidation))) {
             return failGraphSetup();
@@ -1975,6 +1976,25 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
             if (!graphTail.isValid()) {
                 return failGraphSetup();
             }
+
+            // NRD deliberately skips pixels beyond denoisingRange. Define
+            // those pixels as zero indirect radiance before every dispatch so
+            // sky silhouettes cannot expose aliased transient texture data.
+            const int nrdOutputWidth = static_cast<int>(ctx.temporalExtents.renderExtent.width);
+            const int nrdOutputHeight = static_cast<int>(ctx.temporalExtents.renderExtent.height);
+            RenderGraphPassBuilder nrdOutputInit =
+                m_renderGraph.addPass({"NRD.OutputInit", RgPassType::Graphics, RhiQueueType::Graphics,
+                                       /*threadSafeRecord=*/true});
+            nrdOutputInit.dependsOn(graphTail)
+                .writeTexture(nrdOutputDiffuse, RhiResourceState::RenderTarget)
+                .setExecute([nrdOutputDiffuse, nrdOutputWidth, nrdOutputHeight](RgPassContext& pass) {
+                    RhiColorAttachment attachment;
+                    setClearAttachment(attachment, pass.textureView(nrdOutputDiffuse), 0.0f, 0.0f, 0.0f, 0.0f);
+                    clearColorAttachments(pass.commandList(), "NRD.OutputInit", nrdOutputWidth, nrdOutputHeight,
+                                          &attachment, 1u);
+                    return true;
+                });
+            graphTail = nrdOutputInit.handle();
 
             renderer::nrd::NrdExternalResources externalResources;
             const RgTextureHandle nrdInputSignal =

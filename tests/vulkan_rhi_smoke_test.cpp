@@ -824,6 +824,10 @@ void setNrdIdentityMatrix(float (&matrix)[16]) {
     std::vector<float> viewZ(kPixelCount, 1.0f);
     std::vector<uint16_t> rawSignal(kPixelCount * 4u, 0u);
     for (size_t pixel = 0u; pixel < kPixelCount; ++pixel) {
+        const size_t x = pixel % kWidth;
+        if (x >= kWidth / 2u) {
+            viewZ[pixel] = 2000.0f;
+        }
         rawSignal[pixel * 4u + 0u] = glm::packHalf1x16(0.25f);
         rawSignal[pixel * 4u + 1u] = glm::packHalf1x16(0.5f);
         rawSignal[pixel * 4u + 2u] = glm::packHalf1x16(0.75f);
@@ -833,7 +837,8 @@ void setNrdIdentityMatrix(float (&matrix)[16]) {
 
     constexpr RhiTextureUsageFlags kInputUsage = rhiFlag(RhiTextureUsage::Sampled);
     constexpr RhiTextureUsageFlags kOutputUsage =
-        rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::Storage) | rhiFlag(RhiTextureUsage::TransferSrc);
+        rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::Storage) | rhiFlag(RhiTextureUsage::TransferSrc) |
+        rhiFlag(RhiTextureUsage::ColorAttachment);
     NrdSmokeTexture motionTexture;
     NrdSmokeTexture normalRoughnessTexture;
     NrdSmokeTexture viewZTexture;
@@ -979,10 +984,36 @@ void setNrdIdentityMatrix(float (&matrix)[16]) {
             return false;
         }
 
+        RenderGraphPassBuilder outputInit =
+            graph.addPass({"NRD.OutputInit", RgPassType::Graphics, RhiQueueType::Graphics});
+        if (!outputInit.handle().isValid()) {
+            return false;
+        }
+        outputInit.writeTexture(outputResource, RhiResourceState::RenderTarget)
+            .setExecute([outputResource](RgPassContext& context) {
+                RhiColorAttachment attachment;
+                attachment.view = context.textureView(outputResource);
+                attachment.loadOp = RhiLoadOp::Clear;
+                attachment.storeOp = RhiStoreOp::Store;
+                attachment.clearColor[0] = 0.0f;
+                attachment.clearColor[1] = 0.0f;
+                attachment.clearColor[2] = 0.0f;
+                attachment.clearColor[3] = 0.0f;
+
+                RhiRenderingInfo renderingInfo;
+                renderingInfo.debugName = "NRD.OutputInit";
+                renderingInfo.renderArea = {0u, 0u, kWidth, kHeight};
+                renderingInfo.colorAttachments = &attachment;
+                renderingInfo.colorAttachmentCount = 1u;
+                context.commandList().beginRendering(renderingInfo);
+                context.commandList().endRendering();
+                return true;
+            });
+
         commonSettings.frameIndex = frameIndex;
         commonSettings.accumulationMode = accumulationMode;
         const NrdGraphDispatchResult dispatchResult =
-            bridge.addGraphDispatches(graph, commonSettings, relaxSettings, externalResources);
+            bridge.addGraphDispatches(graph, commonSettings, relaxSettings, externalResources, outputInit.handle());
         if (!dispatchResult.succeeded() || dispatchResult.dispatchCount != expectedDispatchCount ||
             !bridge.framePending()) {
             return false;
@@ -1043,10 +1074,14 @@ void setNrdIdentityMatrix(float (&matrix)[16]) {
         bool nonZeroRadiance = false;
         if (pixels != nullptr) {
             for (size_t pixel = 0u; pixel < kPixelCount; ++pixel) {
+                const size_t x = pixel % kWidth;
+                const bool skyPixel = x >= kWidth / 2u;
                 for (uint32_t component = 0u; component < 4u; ++component) {
                     const float value = glm::unpackHalf1x16(pixels[pixel * 4u + component]);
                     valid = valid && std::isfinite(value);
-                    if (component < 3u && value > 0.0f) {
+                    if (skyPixel) {
+                        valid = valid && pixels[pixel * 4u + component] == 0u;
+                    } else if (component < 3u && value > 0.0f) {
                         nonZeroRadiance = true;
                     }
                 }

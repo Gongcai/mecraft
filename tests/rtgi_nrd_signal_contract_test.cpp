@@ -113,7 +113,10 @@ namespace {
            pipelineSource.find("IN_DIFF_CONFIDENCE") == std::string::npos &&
            pipelineSource.find("commonSettings.isHistoryConfidenceAvailable = false;") != std::string::npos &&
            pipelineSource.find("guideResources.reprojectionCoverage = nrdReprojectionCoverage;") != std::string::npos &&
+           pipelineSource.find("const RhiTextureUsageFlags nrdOutputUsage =") != std::string::npos &&
            pipelineSource.find("sampledStorage | rhiFlag(RhiTextureUsage::ColorAttachment)") != std::string::npos &&
+           pipelineSource.find("NRD.OutputInit") != std::string::npos &&
+           pipelineSource.find("writeTexture(nrdOutputDiffuse, RhiResourceState::RenderTarget)") != std::string::npos &&
            pipelineSource.find("NRD.ValidationDescriptorInit") != std::string::npos &&
            pipelineSource.find("writeTexture(nrdValidation, RhiResourceState::RenderTarget)") != std::string::npos &&
            pipelineSource.find("writeTexture(historyDepthCurrent, RhiResourceState::TransferDst)") !=
