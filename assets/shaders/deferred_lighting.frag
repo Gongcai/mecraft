@@ -1081,13 +1081,15 @@ void main() {
         sceneData += LinearToSRGB(isNetherOre * cube(max0(albedoRaw - vec3(0.1)))) * 2.0;
     }
 
-    // Blocklight falloff (BlockLighting.glsl:111-115, Overworld)
-    // DerivativeMain: mcLightmap.r * (ao * oneMinus(mcLightmap.r) + mcLightmap.r) * 2.0 * blocklightColor * TORCHLIGHT_BRIGHTNESS * lightSourceMask
-    // Note: mcLightmapR has already been through GetBlocklightFalloff.
+    // The OpenGL baseline retains propagated Minecraft block light. The
+    // clustered Vulkan path receives the same emitters as shadowed GpuLight
+    // records and must not add an unshadowed copy of their direct energy.
+#ifndef MECRAFT_CLUSTERED_LIGHTING
     if (mcLightmapR > 1e-5) {
         sceneData += mcLightmapR * (ssao * oneMinus(mcLightmapR) + mcLightmapR) *
                      2.0 * blocklightColor * uBlockLightStrength * lightSourceMask;
     }
+#endif
 
     // Held torchlight (BlockLighting.glsl:117-128, Overworld)
     // DerivativeMain: uses heldBlockLightValue/heldBlockLightValue2 OptiFine builtins.

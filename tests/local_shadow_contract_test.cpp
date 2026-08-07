@@ -228,11 +228,26 @@ bool testCpuAndGlslMirror() {
     return true;
 }
 
+bool testTerrainGeometrySignature() {
+    using namespace renderer::contracts;
+    const uint64_t pending = extendLocalShadowGeometrySignature(
+        kLocalShadowGeometrySignatureSeed, 42, 3u, 11u, 17u, false);
+    const uint64_t resident = extendLocalShadowGeometrySignature(
+        kLocalShadowGeometrySignatureSeed, 42, 3u, 11u, 17u, true);
+    const uint64_t rebuilt = extendLocalShadowGeometrySignature(
+        kLocalShadowGeometrySignatureSeed, 42, 3u, 11u, 18u, true);
+    const uint64_t repeated = extendLocalShadowGeometrySignature(
+        kLocalShadowGeometrySignatureSeed, 42, 3u, 11u, 17u, true);
+    return requireTrue(pending != resident && resident != rebuilt && resident == repeated,
+                       "local-shadow geometry signatures must detect GPU residency and mesh replacement");
+}
+
 } // namespace
 
 int main() {
     if (!testStableSlotsAndDeterministicInsertion() || !testDeletionAndLowestFreeReuse() ||
-        !testTransactionalCapacityFailure() || !testStructuredFailures() || !testCpuAndGlslMirror()) {
+        !testTransactionalCapacityFailure() || !testStructuredFailures() || !testCpuAndGlslMirror() ||
+        !testTerrainGeometrySignature()) {
         return 1;
     }
     std::cout << "[local_shadow_contract_test] PASS\n";

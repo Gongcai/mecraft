@@ -53,6 +53,25 @@ vec2 rtgiCranleyPattersonRotation(uint frameIndex) {
     return fract(RTGI_R2_INCREMENT * sequenceIndex);
 }
 
+// Applies a stable per-pixel stride and dihedral orientation to the shared R2
+// sequence. Every pixel remains low-discrepancy over time, while localized
+// bright hits no longer advance in one screen-wide correlated phase.
+vec2 rtgiPixelScrambledCranleyPattersonRotation(uint frameIndex, uvec2 pixel) {
+    uint scramble = rtgiSampleHash(pixel.x * 1973u + pixel.y * 9277u + 26699u);
+    uint stride = 1u + 2u * ((scramble >> 3u) & 3u);
+    vec2 rotation = rtgiCranleyPattersonRotation(frameIndex * stride);
+    if ((scramble & 1u) != 0u) {
+        rotation = rotation.yx;
+    }
+    if ((scramble & 2u) != 0u) {
+        rotation.x = fract(-rotation.x);
+    }
+    if ((scramble & 4u) != 0u) {
+        rotation.y = fract(-rotation.y);
+    }
+    return rotation;
+}
+
 // Maps one low-discrepancy sample to a cosine-weighted unit direction around normal.
 vec3 rtgiCosineHemisphereDirection(vec2 sampleValue, vec3 normal) {
     vec3 unitNormal = normalize(normal);

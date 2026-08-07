@@ -180,4 +180,18 @@ const char* localShadowAllocationErrorStableId(const LocalShadowAllocationError 
     return "InvalidLocalShadowAllocationError";
 }
 
+uint64_t extendLocalShadowGeometrySignature(uint64_t signature, const int64_t chunkKey,
+                                            const uint32_t subChunkIndex, const uint64_t meshRevision,
+                                            const uint64_t meshFingerprint, const bool resident) {
+    const auto combine = [](uint64_t seed, const uint64_t value) {
+        seed ^= value + 0x9e3779b97f4a7c15ULL + (seed << 6u) + (seed >> 2u);
+        return seed;
+    };
+    signature = combine(signature, static_cast<uint64_t>(chunkKey));
+    signature = combine(signature, subChunkIndex);
+    signature = combine(signature, meshRevision);
+    signature = combine(signature, meshFingerprint);
+    return combine(signature, resident ? 1u : 0u);
+}
+
 } // namespace renderer::contracts

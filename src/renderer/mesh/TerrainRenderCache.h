@@ -118,6 +118,8 @@ public:
     [[nodiscard]] bool isMeshingSettled(const IWorldView& worldView) const;
     [[nodiscard]] TerrainBlasCache& blasCache() { return m_blasCache; }
     [[nodiscard]] const TerrainBlasCache& blasCache() const { return m_blasCache; }
+    /// Returns a non-zero revision advanced whenever resident raster terrain geometry changes.
+    [[nodiscard]] uint64_t localShadowGeometryRevision() const { return m_localShadowGeometryRevision; }
 
     [[nodiscard]] int meshingSubmittedThisFrame() const { return m_meshingSubmittedThisFrame; }
     [[nodiscard]] int meshingCompletedThisFrame() const { return m_meshingCompletedThisFrame; }
@@ -151,6 +153,7 @@ public:
 private:
     void releaseMdiAllocationOnly(const SubChunkGpuKey& key);
     void collectRetiredMdiAllocations();
+    void advanceLocalShadowGeometryRevision();
 
     struct RetiredMdiAllocation {
         WorldGpuMesh mesh;
@@ -169,6 +172,7 @@ private:
     TerrainBlasCache m_blasCache;
     uint64_t m_lastMdiAllocationSweepActiveRevision = 0;
     bool m_mdiAllocationSweepInitialized = false;
+    uint64_t m_localShadowGeometryRevision = 1u;
 
     // Meshing state
     std::unordered_set<int64_t> m_meshingInFlight;

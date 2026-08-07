@@ -1923,7 +1923,6 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
             settings.blockMaterialMaps.enabled && settings.blockMaterialMaps.normalMapsEnabled;
         traceSettings.terrainSpecularMapsEnabled =
             settings.blockMaterialMaps.enabled && settings.blockMaterialMaps.specularMapsEnabled;
-        traceSettings.blockLightStrength = settings.postProcess.blockLightStrength;
         // Deferred sunlight uses this artistic 64x irradiance scale. Apply it
         // to the secondary celestial bounce so RTGI is visible at the same
         // scene-referred energy scale as direct lighting.

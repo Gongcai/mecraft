@@ -307,10 +307,16 @@ bool LocalShadowPass::buildPreparedShadows(const FrameContext& ctx, const IWorld
 
     uint64_t geometryContentRevision = 0u;
     uint64_t activeGeometryRevision = 0u;
+    uint64_t rasterGeometryRevision = 0u;
     uint64_t dynamicOccluderRevision = 0u;
     if (worldView != nullptr) {
         geometryContentRevision = worldView->getBlockContentRevision();
         activeGeometryRevision = worldView->getActiveChunkRevision();
+        rasterGeometryRevision = m_terrainRenderer->localShadowGeometryRevision();
+        if (rasterGeometryRevision == 0u) {
+            m_lastError = "local shadow terrain geometry revision is unavailable";
+            return false;
+        }
         dynamicOccluderRevision = hasDynamicOccluders(m_gameplayRegistry) ? ctx.frameIndex : 0u;
     } else {
         if (!m_externalGeometryFrame) {
@@ -343,8 +349,8 @@ bool LocalShadowPass::buildPreparedShadows(const FrameContext& ctx, const IWorld
 
     std::unordered_set<uint32_t> activeCacheIds;
     activeCacheIds.reserve(m_allocations.size());
-    std::vector<LocalShadowCullVolume> dirtyVolumes;
-    std::vector<size_t> dirtyPreparedIndices;
+    std::vector<LocalShadowCullVolume> geometryVolumes;
+    std::vector<size_t> geometryPreparedIndices;
     for (const LocalShadowAllocation& allocation : m_allocations) {
         const SceneLight& source = m_sceneLights[allocation.sceneLightIndex];
         GpuLight& resolved = m_resolvedLights[allocation.sceneLightIndex];
@@ -413,27 +419,42 @@ bool LocalShadowPass::buildPreparedShadows(const FrameContext& ctx, const IWorld
                                                          spot ? source.light.spotCosinesAndRectSize.y : 0.0f};
         prepared.pendingCache.geometryContentRevision = geometryContentRevision;
         prepared.pendingCache.activeGeometryRevision = activeGeometryRevision;
+        prepared.pendingCache.rasterGeometryRevision = rasterGeometryRevision;
         prepared.pendingCache.dynamicOccluderRevision = dynamicOccluderRevision;
         prepared.pendingCache.valid = true;
         activeCacheIds.insert(allocation.lightId.value);
 
         const auto cached = m_cacheRecords.find(allocation.lightId.value);
-        prepared.redraw = allocation.policy == GpuLightShadowPolicy::RasterDynamic || cached == m_cacheRecords.end() ||
-                          !sameCacheRecord(cached->second, prepared.pendingCache);
-        if (prepared.redraw) {
-            dirtyPreparedIndices.push_back(m_preparedShadows.size());
+        const bool dynamic = allocation.policy == GpuLightShadowPolicy::RasterDynamic;
+        const bool gameplayGeometryNeedsEvaluation =
+            !m_externalGeometryFrame &&
+            (dynamic || cached == m_cacheRecords.end() ||
+             !sameCacheRecordBase(cached->second, prepared.pendingCache) ||
+             cached->second.rasterGeometryRevision != rasterGeometryRevision);
+        if (gameplayGeometryNeedsEvaluation) {
+            geometryPreparedIndices.push_back(m_preparedShadows.size());
             LocalShadowCullVolume volume;
             volume.type = allocation.type;
             volume.position = prepared.worldPosition;
             volume.range = prepared.range;
             if (spot) {
                 volume.frustumPlanes = extractFrustumPlanes(prepared.worldViewProjections[0]);
-                ++m_pendingFrameStats.renderedSpotPages;
-            } else {
-                ++m_pendingFrameStats.renderedPointPages;
             }
-            dirtyVolumes.push_back(volume);
+            geometryVolumes.push_back(volume);
+        } else if (m_externalGeometryFrame) {
+            prepared.redraw = dynamic || cached == m_cacheRecords.end() ||
+                              !sameCacheRecord(cached->second, prepared.pendingCache);
+            if (prepared.redraw) {
+                if (spot) {
+                    ++m_pendingFrameStats.renderedSpotPages;
+                } else {
+                    ++m_pendingFrameStats.renderedPointPages;
+                }
+            } else {
+                ++m_pendingFrameStats.reusedCachedPages;
+            }
         } else {
+            prepared.pendingCache.terrainGeometrySignature = cached->second.terrainGeometrySignature;
             ++m_pendingFrameStats.reusedCachedPages;
         }
         m_preparedShadows.push_back(std::move(prepared));
@@ -447,15 +468,30 @@ bool LocalShadowPass::buildPreparedShadows(const FrameContext& ctx, const IWorld
         }
     }
 
-    if (!m_externalGeometryFrame && !dirtyVolumes.empty()) {
+    if (!m_externalGeometryFrame && !geometryVolumes.empty()) {
         std::vector<LocalShadowChunkRanges> ranges;
-        m_terrainRenderer->collectLocalShadowChunks(*worldView, dirtyVolumes, ranges);
-        if (ranges.size() != dirtyPreparedIndices.size()) {
+        m_terrainRenderer->collectLocalShadowChunks(*worldView, geometryVolumes, ranges);
+        if (ranges.size() != geometryPreparedIndices.size()) {
             m_lastError = "local shadow terrain bin count is inconsistent";
             return false;
         }
         for (size_t index = 0u; index < ranges.size(); ++index) {
-            m_preparedShadows[dirtyPreparedIndices[index]].terrainRanges = std::move(ranges[index]);
+            PreparedShadow& prepared = m_preparedShadows[geometryPreparedIndices[index]];
+            prepared.pendingCache.terrainGeometrySignature = ranges[index].geometrySignature;
+            const auto cached = m_cacheRecords.find(prepared.allocation.lightId.value);
+            prepared.redraw = prepared.allocation.policy == GpuLightShadowPolicy::RasterDynamic ||
+                              cached == m_cacheRecords.end() ||
+                              !sameCacheRecord(cached->second, prepared.pendingCache);
+            if (prepared.redraw) {
+                prepared.terrainRanges = std::move(ranges[index]);
+                if (prepared.allocation.type == LocalShadowType::Spot) {
+                    ++m_pendingFrameStats.renderedSpotPages;
+                } else {
+                    ++m_pendingFrameStats.renderedPointPages;
+                }
+            } else {
+                ++m_pendingFrameStats.reusedCachedPages;
+            }
         }
     }
     return true;
@@ -762,7 +798,7 @@ void LocalShadowPass::finishGraphExecution(const bool succeeded) {
     }
     if (succeeded) {
         for (const PreparedShadow& shadow : m_preparedShadows) {
-            if (shadow.redraw && shadow.allocation.policy == renderer::contracts::GpuLightShadowPolicy::RasterCached) {
+            if (shadow.allocation.policy == renderer::contracts::GpuLightShadowPolicy::RasterCached) {
                 m_cacheRecords[shadow.allocation.lightId.value] = shadow.pendingCache;
             }
         }
@@ -791,6 +827,10 @@ void LocalShadowPass::invalidateCache(const renderer::contracts::LocalShadowType
 }
 
 bool LocalShadowPass::sameCacheRecord(const CacheRecord& lhs, const CacheRecord& rhs) {
+    return sameCacheRecordBase(lhs, rhs) && lhs.terrainGeometrySignature == rhs.terrainGeometrySignature;
+}
+
+bool LocalShadowPass::sameCacheRecordBase(const CacheRecord& lhs, const CacheRecord& rhs) {
     return lhs.valid && lhs.type == rhs.type && lhs.resourceSlot == rhs.resourceSlot &&
            nearlyEqual(lhs.positionAndRange, rhs.positionAndRange) &&
            nearlyEqual(lhs.directionAndOuterCosine, rhs.directionAndOuterCosine) &&

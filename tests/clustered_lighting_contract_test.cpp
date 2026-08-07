@@ -363,6 +363,15 @@ bool testSharedLightingConsumers() {
     return requireTrue(localShadowPass != std::string::npos && clusteredPass != std::string::npos &&
                            localShadowPass < clusteredPass,
                        "local shadow rendering must complete before cluster build") &&
+           requireTrue(deferred.find("#ifndef MECRAFT_CLUSTERED_LIGHTING") != std::string::npos &&
+                           deferred.find("mcLightmapR * (ssao * oneMinus(mcLightmapR) + mcLightmapR)") !=
+                               std::string::npos,
+                       "modern clustered lighting must not add unshadowed propagated block light") &&
+           requireTrue(terrainForward.find("#ifdef MECRAFT_CLUSTERED_LIGHTING\n        vec3 blockLight = vec3(0.0);") !=
+                               std::string::npos &&
+                           terrainForward.find("#ifndef MECRAFT_CLUSTERED_LIGHTING\n        lightColor = mix(") !=
+                               std::string::npos,
+                       "terrain Forward+ must reserve voxel block light for the non-clustered pipeline") &&
            requireTrue(deferred.find("uDeferredDebugMode == 24") != std::string::npos &&
                            deferred.find("uDeferredDebugMode == 25") != std::string::npos &&
                            deferred.find("uDeferredDebugMode == 26") != std::string::npos,

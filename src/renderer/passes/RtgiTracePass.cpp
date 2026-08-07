@@ -80,7 +80,6 @@ RgPassHandle RtgiTracePass::addGraphPass(RenderGraph& graph, const FrameContext&
         settings.minimumRayOriginBias < renderer::contracts::kRtgiMinimumRayOriginBias ||
         settings.minimumRayOriginBias >= settings.maxRayDistance ||
         settings.minimumRayOriginBias >= settings.maxShadowRayDistance || settings.instanceMask == 0u ||
-        !std::isfinite(settings.blockLightStrength) || settings.blockLightStrength < 0.0f ||
         !std::isfinite(settings.celestialRadianceScale) || settings.celestialRadianceScale < 0.0f ||
         (settings.instanceMask & static_cast<uint8_t>(~kRtgiKnownInstanceMask)) != 0u ||
         settings.shadowInstanceMask == 0u ||
@@ -290,7 +289,7 @@ bool RtgiTracePass::recordTrace(RhiCommandList& commandList, const FrameContext&
     lightingParams.moonRadiance = glm::vec4(ctx.skyIlluminance.moonIlluminance * settings.celestialRadianceScale, 0.0f);
     lightingParams.skyAmbientRadiance = glm::vec4(ctx.skyIlluminance.skyIlluminance, 0.0f);
     lightingParams.traceAndEmissionScales = glm::vec4(settings.maxShadowRayDistance, 1.5f, 1.0f, ctx.preExposure);
-    lightingParams.terrainLightScales = glm::vec4(settings.blockLightStrength, 1.35f, 0.0f, 0.0f);
+    lightingParams.terrainLightScales = glm::vec4(0.0f);
     lightingParams.flags.x =
         (settings.terrainNormalMapsEnabled ? renderer::contracts::kRtgiSecondaryLightingTerrainNormalMapBit : 0u) |
         (settings.terrainSpecularMapsEnabled ? renderer::contracts::kRtgiSecondaryLightingTerrainSpecularMapBit : 0u);

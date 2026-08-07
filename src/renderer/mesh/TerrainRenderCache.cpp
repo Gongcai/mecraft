@@ -97,6 +97,7 @@ void TerrainRenderCache::shutdown() {
     m_mdiMeshAllocations.clear();
     m_mdiAllocationSweepInitialized = false;
     m_lastMdiAllocationSweepActiveRevision = 0;
+    m_localShadowGeometryRevision = 1u;
     m_meshingInFlight.clear();
     m_deferredMeshResults.clear();
     m_deferredTransparentBatch.clear();
@@ -279,6 +280,13 @@ void TerrainRenderCache::releaseMdiAllocationOnly(const SubChunkGpuKey& key) {
     m_mdiMeshAllocations.erase(it);
 }
 
+void TerrainRenderCache::advanceLocalShadowGeometryRevision() {
+    ++m_localShadowGeometryRevision;
+    if (m_localShadowGeometryRevision == 0u) {
+        m_localShadowGeometryRevision = 1u;
+    }
+}
+
 void TerrainRenderCache::collectRetiredMdiAllocations() {
     if (m_retiredMdiAllocations.empty() || m_worldRenderBuffer == nullptr) {
         return;
@@ -317,6 +325,7 @@ void TerrainRenderCache::releaseStaleMdiAllocations(const IWorldView& worldView)
     }
 
     const auto& activeChunks = worldView.getActiveChunks();
+    bool rasterGeometryChanged = false;
     for (auto it = m_mdiMeshAllocations.begin(); it != m_mdiMeshAllocations.end();) {
         const auto chunkIt = activeChunks.find(it->first.chunkKey);
         bool release = (chunkIt == activeChunks.end() || !chunkIt->second);
@@ -338,9 +347,13 @@ void TerrainRenderCache::releaseStaleMdiAllocations(const IWorldView& worldView)
             m_worldRenderBuffer->free(it->second.mesh);
             m_blasCache.remove(it->first);
             it = m_mdiMeshAllocations.erase(it);
+            rasterGeometryChanged = true;
         } else {
             ++it;
         }
+    }
+    if (rasterGeometryChanged) {
+        advanceLocalShadowGeometryRevision();
     }
     m_mdiAllocationSweepInitialized = true;
     m_lastMdiAllocationSweepActiveRevision = activeChunkRevision;
@@ -375,6 +388,7 @@ void TerrainRenderCache::submitMeshingJobs(const IWorldView& worldView, const gl
 
         SubChunkMesh emptyMesh;
         chunk.setSubChunkMesh(scy, emptyMesh);
+        advanceLocalShadowGeometryRevision();
     };
 
     for (const auto& pair : activeChunks) {
@@ -700,6 +714,7 @@ bool TerrainRenderCache::drainMeshingResults(const IWorldView& worldView, RhiCom
             releaseMdiAllocationOnly(gpuKey);
             m_mdiMeshAllocations[gpuKey] = MdiMeshAllocation{gpu};
             chunk.setSubChunkMesh(result.scy, mesh);
+            advanceLocalShadowGeometryRevision();
             recycleResultMeshData();
 
             m_meshUploadVerticesThisFrame += currentVertices;

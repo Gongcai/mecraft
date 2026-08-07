@@ -24,6 +24,7 @@ inline constexpr uint32_t kLocalShadowMetadataCount = kLocalShadowMaxSpotLightCo
 inline constexpr float kLocalShadowNearPlaneMeters = 0.05f;
 inline constexpr float kLocalShadowDepthBiasMeters = 0.005f;
 inline constexpr float kLocalShadowNormalOffsetMeters = 0.005f;
+inline constexpr uint64_t kLocalShadowGeometrySignatureSeed = 1469598103934665603ULL;
 
 /// Classifies the persistent raster resource used by one local light.
 enum class LocalShadowType : uint32_t { Spot = 0u, Point = 1u };
@@ -111,6 +112,18 @@ private:
 /// @param error Allocation error to identify.
 /// @return Process-lifetime string containing the stable identifier.
 [[nodiscard]] const char* localShadowAllocationErrorStableId(LocalShadowAllocationError error);
+
+/// Extends the deterministic signature of terrain geometry relevant to one local-shadow volume.
+/// @param signature Signature accumulated from preceding sub-chunks in stable traversal order.
+/// @param chunkKey Stable world chunk key containing the sub-chunk.
+/// @param subChunkIndex Vertical sub-chunk index within the chunk.
+/// @param meshRevision Logical mesh revision requested by world edits.
+/// @param meshFingerprint Resident GPU mesh allocation fingerprint.
+/// @param resident True when the mesh ranges are available in the global GPU pool.
+/// @return Updated non-zero signature used to validate a cached local-shadow page.
+[[nodiscard]] uint64_t extendLocalShadowGeometrySignature(uint64_t signature, int64_t chunkKey,
+                                                          uint32_t subChunkIndex, uint64_t meshRevision,
+                                                          uint64_t meshFingerprint, bool resident);
 
 static_assert(sizeof(LocalShadowMetadata) == 432u);
 static_assert(alignof(LocalShadowMetadata) == 16u);

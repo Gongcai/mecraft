@@ -5,6 +5,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 
 #include <cmath>
+#include <utility>
 
 namespace renderer::contracts {
 namespace {
@@ -74,6 +75,22 @@ uint32_t rtgiTerrainHitIdentityHash(const uint64_t blasRevision, const uint64_t 
 glm::vec2 rtgiCranleyPattersonRotation(const uint32_t frameIndex) {
     const float sequenceIndex = static_cast<float>(frameIndex & 0x00ffffffu) + 1.0f;
     return glm::fract(kR2Increment * sequenceIndex);
+}
+
+glm::vec2 rtgiPixelScrambledCranleyPattersonRotation(const uint32_t frameIndex, const glm::uvec2& pixel) {
+    const uint32_t scramble = rtgiSampleHash(pixel.x * 1973u + pixel.y * 9277u + 26699u);
+    const uint32_t stride = 1u + 2u * ((scramble >> 3u) & 3u);
+    glm::vec2 rotation = rtgiCranleyPattersonRotation(frameIndex * stride);
+    if ((scramble & 1u) != 0u) {
+        std::swap(rotation.x, rotation.y);
+    }
+    if ((scramble & 2u) != 0u) {
+        rotation.x = glm::fract(-rotation.x);
+    }
+    if ((scramble & 4u) != 0u) {
+        rotation.y = glm::fract(-rotation.y);
+    }
+    return rotation;
 }
 
 std::optional<glm::vec3> rtgiCosineHemisphereDirection(const glm::vec2& sample, const glm::vec3& normal) {

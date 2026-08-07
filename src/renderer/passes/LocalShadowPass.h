@@ -114,6 +114,8 @@ private:
         glm::vec4 directionAndOuterCosine{0.0f};
         uint64_t geometryContentRevision = 0u;
         uint64_t activeGeometryRevision = 0u;
+        uint64_t rasterGeometryRevision = 0u;
+        uint64_t terrainGeometrySignature = renderer::contracts::kLocalShadowGeometrySignatureSeed;
         uint64_t dynamicOccluderRevision = 0u;
         bool valid = false;
     };
@@ -155,6 +157,7 @@ private:
     void destroyPointCubeArray();
     void destroyResources();
     [[nodiscard]] static bool sameCacheRecord(const CacheRecord& lhs, const CacheRecord& rhs);
+    [[nodiscard]] static bool sameCacheRecordBase(const CacheRecord& lhs, const CacheRecord& rhs);
 
     ResourceMgr* m_resourceMgr = nullptr;
     RhiDevice* m_rhiDevice = nullptr;

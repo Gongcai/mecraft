@@ -225,8 +225,9 @@ Ray Query Shadow 复用 TLAS 和 Cutout Candidate 判定。首轮仅对设置中
 专用时空滤波，不能把 Diffuse RTGI 的 NRD 输出当成阴影结果。
 
 模型场景通过 `DeferredLocalShadowSceneRevisions` 显式提交阴影相关几何修订。局部阴影缓存
-同时跟踪不透明与 Alpha Test 几何变化，场景层级、实例变换或参与绘制的资产集合变化会使
-对应缓存页失效。M03 的确定性 Sponza Atrium 资产锁定三个 Point Light、一个 Spot Light、
+同时跟踪不透明与 Alpha Test 几何变化以及异步网格上传后的 GPU 常驻修订；场景层级、实例变换、
+参与绘制的资产集合或对应网格从空页变为常驻范围时，会使受影响的缓存页失效。M03 的确定性
+Sponza Atrium 资产锁定三个 Point Light、一个 Spot Light、
 两种 Raster Shadow Policy 与两组 Emissive 灯具；M03/M07 的 Vulkan 正式捕获共同验证局部灯
 能够读取当前模型几何及其阴影修订。
 

@@ -65,6 +65,7 @@ struct RtgiSecondarySurface {
     float metalness;
     float ao;
     float skyVisibility;
+    // Retained in the hit-surface ABI for voxel validation; analytic GpuLights own local radiance.
     float blockLight;
 };
 
@@ -84,32 +85,6 @@ bool rtgiFinite(vec2 value) {
 
 bool rtgiFinite(vec3 value) {
     return !any(isnan(value)) && !any(isinf(value));
-}
-
-vec3 rtgiBlackbodyApprox(float t) {
-    t = clamp(t, 1000.0, 15000.0);
-    float it = 1.0 / t;
-    float it2 = it * it;
-    vec4 vx = vec4(-0.2661239e9, -0.2343580e6, 0.8776956e3, 0.179910);
-    vec4 vy = vec4(-1.1063814, -1.34811020, 2.18555832, -0.20219683);
-    float x = dot(vx, vec4(it * it2, it2, it, 1.0));
-    float x2 = x * x;
-    float y = dot(vy, vec4(x * x2, x2, x, 1.0));
-    mat3 xyzToSrgb = mat3(
-         3.2404542, -1.5371385, -0.4985314,
-        -0.9692660,  1.8760108,  0.0415560,
-         0.0556434, -0.2040259,  1.0572252);
-    vec3 srgb = max(vec3(x / y, 1.0, (1.0 - x - y) / y) * xyzToSrgb, vec3(0.0));
-    return srgb / max(min(srgb.r, min(srgb.g, srgb.b)), 0.001);
-}
-
-vec3 rtgiTerrainBlockLightIncident(float blockLight) {
-    float lightMask = clamp(blockLight, 0.0, 1.0);
-    if (lightMask <= 0.0 || uSecondaryLighting.terrainLightScales.x <= 0.0) {
-        return vec3(0.0);
-    }
-    return rtgiBlackbodyApprox(3000.0) * pow(lightMask, 2.2) *
-           uSecondaryLighting.terrainLightScales.x * uSecondaryLighting.terrainLightScales.y;
 }
 
 void rtgiSolarAngularMasks(vec3 worldDirection, out float solarLobeMask, out float solarCoreMask) {
@@ -497,8 +472,8 @@ bool rtgiShadeSecondarySurface(RtgiSecondarySurface surface, vec3 surfacePositio
     // surface's sky light (a fully enclosed origin cannot legally receive
     // sun, moon, or sky-ambient energy in one bounce). Together they reject
     // shadow rays and GI rays that thread through greedy-mesh T-junction and
-    // corner seam cracks. Emissive, block light, and local lights are
-    // unaffected; static mesh hits publish skyVisibility 1; the miss path
+    // corner seam cracks. Emissive and local lights are unaffected; static
+    // mesh hits publish skyVisibility 1; the miss path
     // applies the origin prior through rtgiPrimarySkyVisibility.
     float celestialMask = clamp(surface.skyVisibility, 0.0, 1.0);
     celestialMask *= celestialMask * celestialMask;
@@ -516,8 +491,6 @@ bool rtgiShadeSecondarySurface(RtgiSecondarySurface surface, vec3 surfacePositio
                                    coneWidth, radiance)) {
         return false;
     }
-    radiance += rtgiDiffuseTransportAlbedo(surface) *
-                rtgiTerrainBlockLightIncident(surface.blockLight) * surface.ao;
     return rtgiAccumulateSkyAmbient(surface, surfacePosition, coneWidth, originSkyPrior, radiance);
 }
 
@@ -605,7 +578,8 @@ void main() {
     ivec2 noiseExtent = textureSize(uBlueNoiseTexture, 0);
     ivec2 noiseTexel = ivec2(uvec2(texel) % uvec2(noiseExtent));
     vec2 blueNoise = texelFetch(uBlueNoiseTexture, noiseTexel, 0).rg;
-    vec2 sampleValue = fract(blueNoise + rtgiCranleyPattersonRotation(pc.frameMaskAndFlags.x));
+    vec2 sampleValue = fract(blueNoise +
+                             rtgiPixelScrambledCranleyPattersonRotation(pc.frameMaskAndFlags.x, uvec2(texel)));
     // A voxel normal map changes the BRDF but not the solid block boundary.
     // Sampling its perturbed hemisphere creates near-tangent directions that
     // can enter an adjacent face through a greedy-mesh seam. Use the exact

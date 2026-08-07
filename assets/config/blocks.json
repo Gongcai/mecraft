@@ -1020,6 +1020,13 @@
       "materialKind": "plant",
       "isLightSource": true,
       "lightLevel": 7,
+      "analyticLight": {
+        "colorLinear": [0.62, 0.78, 1.0],
+        "positionOffsetMeters": [0.5, 0.5, 0.5],
+        "luminousFluxLumens": 28.0,
+        "rangeMeters": 6.0,
+        "shadowPolicy": "none"
+      },
       "timeToBreak": 10,
       "textures": {
         "all": "glow_lichen"

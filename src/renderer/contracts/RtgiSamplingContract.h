@@ -43,8 +43,8 @@ struct alignas(16) RtgiSecondaryLightingParams final {
     glm::vec4 skyAmbientRadiance{0.0f};
     // The fourth component scales scene-referred secondary radiance into the current pre-exposed domain.
     glm::vec4 traceAndEmissionScales{128.0f, 1.5f, 1.0f, 1.0f};
-    // x: Minecraft block-light strength; y: terrain block-light bounce boost.
-    glm::vec4 terrainLightScales{1.0f, 1.35f, 0.0f, 0.0f};
+    // Reserved to preserve the 128-byte shader ABI; modern RTGI reads analytic GpuLight records.
+    glm::vec4 terrainLightScales{0.0f};
     glm::uvec4 flags{0u};
 };
 
@@ -83,6 +83,12 @@ static_assert(sizeof(RtgiSecondaryLightingParams) == 128u);
 /// @param frameIndex Low 32 bits of the deterministic render-frame index.
 /// @return Two values in the half-open interval [0, 1).
 [[nodiscard]] glm::vec2 rtgiCranleyPattersonRotation(uint32_t frameIndex);
+
+/// Produces a deterministic per-pixel permutation of the temporal R2 rotation.
+/// @param frameIndex Low 32 bits of the deterministic render-frame index.
+/// @param pixel Integer render-resolution pixel coordinate.
+/// @return Pixel-scrambled low-discrepancy rotation in the half-open interval [0, 1).
+[[nodiscard]] glm::vec2 rtgiPixelScrambledCranleyPattersonRotation(uint32_t frameIndex, const glm::uvec2& pixel);
 
 /// Maps one two-dimensional sample to a cosine-weighted world-space hemisphere direction.
 /// @param sample Two values in the half-open interval [0, 1).

@@ -69,7 +69,8 @@ namespace {
            traceSource.find("rtgiSuppressSolarSkyLobe(sampleSkyRadiance(uSkyCapture, rayDirection), rayDirection)") !=
                std::string::npos &&
            traceSource.find("ivec2 noiseTexel = ivec2(uvec2(texel) % uvec2(noiseExtent));") != std::string::npos &&
-           traceSource.find("rtgiCranleyPattersonRotation(pc.frameMaskAndFlags.x)") != std::string::npos &&
+           traceSource.find("rtgiPixelScrambledCranleyPattersonRotation(pc.frameMaskAndFlags.x, uvec2(texel))") !=
+               std::string::npos &&
            traceSource.find("frameOffset") == std::string::npos &&
            traceSource.find("layout(set = 1, binding = 17) uniform sampler2D uVoxelLightTexture;") !=
                std::string::npos &&
@@ -81,7 +82,7 @@ namespace {
                std::string::npos &&
            traceSource.find("radiance += rtgiDiffuseTransportAlbedo(surface) * contribution.diffuse") !=
                std::string::npos &&
-           traceSource.find("rtgiTerrainBlockLightIncident(surface.blockLight)") != std::string::npos &&
+           traceSource.find("rtgiTerrainBlockLightIncident") == std::string::npos &&
            traceSource.find("surface.geometricNormal") != std::string::npos &&
            traceSource.find("rtgiAccumulateSkyAmbient") != std::string::npos &&
            traceSource.find("reflect(rayDirection, geometricNormal)") != std::string::npos &&
@@ -152,12 +153,11 @@ int main() {
                     offsetof(RtgiSecondaryLightingParams, terrainLightScales) == 96u &&
                     offsetof(RtgiSecondaryLightingParams, flags) == 112u &&
                     RtgiSecondaryLightingParams{}.traceAndEmissionScales.w == 1.0f &&
-                    RtgiSecondaryLightingParams{}.terrainLightScales.x == 1.0f &&
-                    RtgiSecondaryLightingParams{}.terrainLightScales.y == 1.35f &&
+                    RtgiSecondaryLightingParams{}.terrainLightScales == glm::vec4(0.0f) &&
                     kRtgiSecondaryLightingTerrainNormalMapBit == 1u &&
                     kRtgiSecondaryLightingTerrainSpecularMapBit == 2u && kRtgiMetallicDiffuseTransportFloor == 0.35f &&
                     (kRtgiSecondaryLightingTerrainNormalMapBit | kRtgiSecondaryLightingTerrainSpecularMapBit) == 3u,
-                "RTGI secondary-lighting UBO, terrain block-light bounce, terrain-map flags, and metallic transport "
+                "RTGI secondary-lighting UBO, analytic-light ownership, terrain-map flags, and metallic transport "
                 "must remain fixed") &&
             valid;
 
@@ -172,6 +172,16 @@ int main() {
     const glm::vec2 wrappedStep = glm::mod(nextRotation - firstRotation + glm::vec2(1.0f), glm::vec2(1.0f));
     valid = requireTrue(glm::length(wrappedStep - kExpectedR2Step) <= 1.0e-6f,
                         "RTGI frame rotation must advance by the low-discrepancy R2 step") &&
+            valid;
+
+    const glm::vec2 scrambled = rtgiPixelScrambledCranleyPattersonRotation(19u, glm::uvec2(7u, 11u));
+    const glm::vec2 repeatedScramble = rtgiPixelScrambledCranleyPattersonRotation(19u, glm::uvec2(7u, 11u));
+    const glm::vec2 adjacentScramble = rtgiPixelScrambledCranleyPattersonRotation(19u, glm::uvec2(8u, 11u));
+    const glm::vec2 nextScramble = rtgiPixelScrambledCranleyPattersonRotation(20u, glm::uvec2(7u, 11u));
+    valid = requireTrue(scrambled == repeatedScramble && scrambled != adjacentScramble && scrambled != nextScramble &&
+                            glm::all(glm::greaterThanEqual(scrambled, glm::vec2(0.0f))) &&
+                            glm::all(glm::lessThan(scrambled, glm::vec2(1.0f))),
+                        "RTGI pixel scrambling must be deterministic, spatially decorrelated, and frame-varying") &&
             valid;
 
     const std::optional<glm::vec3> pole = rtgiCosineHemisphereDirection(glm::vec2(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));

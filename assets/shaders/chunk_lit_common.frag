@@ -537,7 +537,11 @@ uniform vec3 uCameraPos;
         float groundFacing = clamp(dot(normal, vec3(0.0, -1.0, 0.0)) * 0.5 + 0.5, 0.0, 1.0);
         vec3 fakeBounce = warmSunColor * uFakeBounceStrength * pow(skyLightMask, 4.0) * (0.28 + 0.58 * groundFacing);
         vec3 blockLightColor = mix(blackbodyApprox(3000.0), vanillaLight, 0.18);
+#ifdef MECRAFT_CLUSTERED_LIGHTING
+        vec3 blockLight = vec3(0.0);
+#else
         vec3 blockLight = blockLightColor * pow(blockLightMask, 2.2) * uBlockLightStrength;
+#endif
 
         // Held block light: dynamic illumination from the player's held item.
         vec3 heldLight = vec3(0.0);
@@ -549,7 +553,9 @@ uniform vec3 uCameraPos;
         }
 
         vec3 lightColor = directSun + directMoon + skyAmbient + minimumAmbient + fakeBounce + blockLight + heldLight;
+#ifndef MECRAFT_CLUSTERED_LIGHTING
         lightColor = mix(lightColor, vanillaLight, 0.035);
+#endif
 
         // Combine texture, lightmap color, and AO
         vec3 finalColor = albedo * lightColor * aoFactor;

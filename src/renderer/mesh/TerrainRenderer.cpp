@@ -596,6 +596,38 @@ void TerrainRenderer::collectLocalShadowChunks(const IWorldView& worldView,
         return;
     }
 
+    // Sign every logical sub-chunk in the light volume, including meshes that
+    // are still waiting for GPU upload. The resident flag and allocation
+    // fingerprint then force a cached page to refresh when async meshing
+    // publishes the real ranges on a later frame.
+    for (const ChunkRenderColumnCache& column : columns) {
+        if (column.chunk == nullptr) {
+            continue;
+        }
+        for (int sectionY = 0; sectionY < Chunk::NUM_SUB_CHUNKS; ++sectionY) {
+            const SubChunk* subChunk = column.chunk->getSubChunk(sectionY);
+            if (subChunk == nullptr) {
+                continue;
+            }
+            const int yBase = sectionY * SubChunk::SIZE;
+            const glm::vec3 boundsMin = column.worldOffset + glm::vec3(0.0f, static_cast<float>(yBase), 0.0f);
+            const glm::vec3 boundsMax = column.worldOffset +
+                                        glm::vec3(static_cast<float>(Chunk::SIZE_X),
+                                                  static_cast<float>(yBase + SubChunk::SIZE),
+                                                  static_cast<float>(Chunk::SIZE_Z));
+            const SubChunkMesh& mesh = subChunk->getMesh();
+            for (size_t lightIndex = 0u; lightIndex < volumes.size(); ++lightIndex) {
+                if (!localShadowVolumeIntersectsAabb(volumes[lightIndex], boundsMin, boundsMax)) {
+                    continue;
+                }
+                LocalShadowChunkRanges& output = ranges[lightIndex];
+                output.geometrySignature = renderer::contracts::extendLocalShadowGeometrySignature(
+                    output.geometrySignature, column.chunkKey, static_cast<uint32_t>(sectionY),
+                    column.chunk->getSubChunkMeshRevision(sectionY), mesh.metadataFingerprint, mesh.inGlobalPool);
+            }
+        }
+    }
+
     std::vector<uint8_t> regionVisible(volumes.size());
     std::vector<uint8_t> columnVisible(volumes.size());
     size_t regionBegin = 0u;
@@ -689,6 +721,10 @@ void TerrainRenderer::collectLocalShadowChunks(const IWorldView& worldView,
         }
         regionBegin = regionEnd;
     }
+}
+
+uint64_t TerrainRenderer::localShadowGeometryRevision() const {
+    return m_terrainCache != nullptr ? m_terrainCache->localShadowGeometryRevision() : 0u;
 }
 
 // ============================================================================

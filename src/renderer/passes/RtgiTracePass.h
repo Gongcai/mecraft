@@ -63,7 +63,6 @@ public:
         uint32_t temporalSampleIndex = 0u;
         bool terrainNormalMapsEnabled = true;
         bool terrainSpecularMapsEnabled = true;
-        float blockLightStrength = 1.0f;
         // Match the artistic irradiance scale used by deferred sunlight.
         float celestialRadianceScale = 1.0f;
     };

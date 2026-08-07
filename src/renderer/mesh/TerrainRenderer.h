@@ -37,6 +37,7 @@ struct LocalShadowCullVolume final {
 struct LocalShadowChunkRanges final {
     std::vector<GpuMeshRange> opaque;
     std::vector<GpuMeshRange> cutout;
+    uint64_t geometrySignature = renderer::contracts::kLocalShadowGeometrySignatureSeed;
 };
 
 // Forward declarations for types used only as pointers/references in the public interface
@@ -183,6 +184,8 @@ public:
     /// @param ranges Destination resized to match volumes on success.
     void collectLocalShadowChunks(const IWorldView& worldView, const std::vector<LocalShadowCullVolume>& volumes,
                                   std::vector<LocalShadowChunkRanges>& ranges);
+    /// Returns the revision used to detect resident terrain changes between cached local-shadow frames.
+    [[nodiscard]] uint64_t localShadowGeometryRevision() const;
 
     // --- Accessors ---
     [[nodiscard]] const std::vector<ChunkRenderColumnCache>& chunkRenderColumns() const;

@@ -120,14 +120,16 @@ bool testIncrementalVoxelLights() {
     std::vector<renderer::contracts::SceneLight> lights;
     if (!requireTrue(registry.buildSceneLights(world, glm::vec3(0.0f), lights),
                      "initial voxel light snapshot must build") ||
-        !requireTrue(lights.size() == 3u && registry.sourceCount() == 3u,
-                     "propagated-only block lights must not emit analytic lights") ||
+        !requireTrue(lights.size() == 4u && registry.sourceCount() == 4u,
+                     "every configured Vulkan emitter must publish an analytic light") ||
         !requireTrue(lights[0].light.positionAndRange.x == -0.5f && lights[1].light.positionAndRange.x == 1.5f &&
-                         lights[2].light.positionAndRange.x == 3.5f,
+                         lights[2].light.positionAndRange.x == 3.5f &&
+                         lights[3].light.positionAndRange.x == 5.5f,
                      "voxel lights must use deterministic chunk and block order") ||
         !requireTrue(lights[0].requestedShadowPolicy == renderer::contracts::GpuLightShadowPolicy::None &&
                          lights[1].requestedShadowPolicy == renderer::contracts::GpuLightShadowPolicy::RasterCached &&
                          lights[2].requestedShadowPolicy == renderer::contracts::GpuLightShadowPolicy::RasterCached &&
+                         lights[3].requestedShadowPolicy == renderer::contracts::GpuLightShadowPolicy::None &&
                          lights[1].light.classificationAndIdentity.z ==
                              static_cast<uint32_t>(renderer::contracts::GpuLightShadowPolicy::None) &&
                          lights[1].light.classificationAndIdentity.w ==
@@ -152,7 +154,7 @@ bool testIncrementalVoxelLights() {
 
     center->setBlock(1, 64, 2, stone);
     world.notifyBlockChange();
-    if (!requireTrue(registry.buildSceneLights(world, glm::vec3(0.0f), lights) && lights.size() == 2u,
+    if (!requireTrue(registry.buildSceneLights(world, glm::vec3(0.0f), lights) && lights.size() == 3u,
                      "removing an emissive block must update only its changed chunk") ||
         !requireTrue(registry.lightRevision() > initialRevision, "source edits must advance the light revision")) {
         return false;
@@ -161,7 +163,7 @@ bool testIncrementalVoxelLights() {
     center->setBlock(3, 64, 2, redstoneLampOff);
     center->setBlock(2, 64, 2, redstoneTorchOn);
     world.notifyBlockChange();
-    if (!requireTrue(registry.buildSceneLights(world, glm::vec3(0.0f), lights) && lights.size() == 2u,
+    if (!requireTrue(registry.buildSceneLights(world, glm::vec3(0.0f), lights) && lights.size() == 3u,
                      "state-controlled lights must track their enabled property") ||
         !requireTrue(lights[1].light.colorAndIntensity.x == 1.0f && lights[1].light.colorAndIntensity.y == 0.025f,
                      "enabled redstone torches must use their configured color")) {
@@ -178,7 +180,7 @@ bool testIncrementalVoxelLights() {
     }
 
     world.removeChunk(-1, 0);
-    if (!requireTrue(registry.buildSceneLights(world, glm::vec3(0.0f), lights) && lights.size() == 1u,
+    if (!requireTrue(registry.buildSceneLights(world, glm::vec3(0.0f), lights) && lights.size() == 2u,
                      "unloaded chunks must retire their cached light sources")) {
         return false;
     }

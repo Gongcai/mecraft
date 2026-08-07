@@ -226,7 +226,8 @@ Roughness、Material ID 和 Stable Object ID。Ray Origin 沿几何法线偏移�
 首版对 Diffuse Lobe 做 Cosine-weighted Hemisphere Sampling：
 
 - 固定空间 Blue Noise 提供逐像素样本相位，不能随帧滚动纹理坐标。
-- 每帧使用确定的 R2 低差异 Cranley-Patterson Rotation，避免整幅图像发生随机相位跳变。
+- 每个像素对确定的 R2 Cranley-Patterson Rotation 使用稳定的奇数步幅和 D4 方向扰动；每个像素
+  仍保持低差异序列，但相邻像素不会在同一屏幕相位同时切换局部高能命中。
 - 相机 Jitter 与 GI Sample Sequence 使用不同维度。
 - Quality：Render Extent 全像素 1 spp。
 - Performance：Render Extent 棋盘格 1 spp，向 NRD 正确声明 Checkerboard Mode。
@@ -303,8 +304,10 @@ Vulkan Smoke 对 Terrain 使用非白 Grass Colormap 与天空环境项，确认
 Radiance 不同；模型用红色 Emissive、绿色太阳和蓝色 Point Light 将三条能量来源隔离到不同通道，
 同时保留 Mask 拒绝/确认与稳定身份检查；独立 Miss 用例逐通道回读固定 `(0.25, 0.5, 0.75)` 天空值。
 
-体素顶点天光/方块光可作为游戏风格的独立 Radiance Term，必须在设置与调试图中单独
-标识。它不能和解析灯能量重复计算。
+体素顶点天光/方块光仍保留在 GBuffer，供游戏逻辑、天空可见性先验和 OpenGL 基础管线使用；
+Vulkan 现代 Deferred、Forward+ 与 RTGI 的直接/次级局部灯统一来自 `GpuLight`，不再把无阴影的
+传播方块光作为 Radiance Term 叠加。这样点光源的遮挡只由对应 Raster Shadow 或 Ray Query 决定，
+不会被第二份无阴影能量重新照亮。
 
 ### 5.5 原始输出
 
