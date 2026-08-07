@@ -44,29 +44,22 @@ void main() {
 
     ivec2 texel = ivec2(gl_FragCoord.xy);
     float depth = texelFetch(uDepthTex, texel, 0).r;
+    vec2 pixelCenter = vec2(texel) + vec2(0.5);
 
-    // Use the center pixel depth for reprojection. Replacing it with a nearest
-    // 3x3 neighbor causes alpha-cutout foliage edges to inherit motion from an
-    // unrelated trunk, terrain, or sky pixel.
-    vec3 closestFragment = vec3(texel, depth);
-
-    // DerivativeMain: no sky early return. depth=1 (sky/far-plane) gets
-    // a valid far-plane reprojection velocity. This is critical for TAA
-    // to properly accumulate VFog dither; sky pixels must track camera
-    // rotation, not stay pinned to screen space.
-    // DerivativeMain/program/Post/Temporal.frag::GetClosestFragment returns
-    // closestFragment.xy *= screenPixelSize, without a half-texel offset.
-    vec2 closestTextureUv = closestFragment.xy / uScreenParams.xy;
-    vec2 closestScreenUv = rhiNativeFragCoordToScreenUv(
-        closestFragment.xy, uScreenParams.xy);
-    vec2 closestClipUv = rhiScreenUvToClipUv(closestScreenUv);
+    // texelFetch addresses the integer texel while clip-space reprojection
+    // addresses its center. Keeping both coordinates on the same sample is
+    // required for stable camera motion at depth discontinuities.
+    vec2 currentScreenUv = rhiNativeFragCoordToScreenUv(
+        pixelCenter, uScreenParams.xy);
+    vec2 currentTextureUv = rhiScreenUvToTextureUv(currentScreenUv);
+    vec2 currentClipUv = rhiScreenUvToClipUv(currentScreenUv);
 
     // Projective reprojection straight from clip space: the composed matrix
     // already contains inverse(current raster VP) * previous jittered VP, so
     // no intermediate world-space divide is needed and the shared velocity
     // buffer stays in the native texture UV domain for every consumer.
-    vec4 currentClip = vec4(closestClipUv * 2.0 - 1.0,
-                            closestFragment.z * 2.0 - 1.0, 1.0);
+    vec4 currentClip = vec4(currentClipUv * 2.0 - 1.0,
+                            depth * 2.0 - 1.0, 1.0);
     vec4 previousClip = uClipToPrevClip * currentClip;
     if (badVec4(previousClip) || previousClip.w <= 0.00001) {
         FragVelocity = kRejectHistoryVelocity;
@@ -76,12 +69,12 @@ void main() {
     vec2 previousScreenUv = rhiScreenUvToClipUv(previousClipUv);
     vec2 previousTextureUv = rhiScreenUvToTextureUv(previousScreenUv);
 
-    vec2 cameraVelocity = closestTextureUv - previousTextureUv;
+    vec2 cameraVelocity = currentTextureUv - previousTextureUv;
 
     // Per-object velocity: entity/drop GBuffer shaders write texture UV velocity to a separate
     // MRT attachment. Use it when non-zero to
     // override camera-only reprojection for moving objects.
-    vec2 perObjectVel = texelFetch(uPerObjectVelocityTex, ivec2(closestFragment.xy), 0).rg;
+    vec2 perObjectVel = texelFetch(uPerObjectVelocityTex, texel, 0).rg;
     vec2 velocity = (!badVec2(perObjectVel) && dot(perObjectVel, perObjectVel) > 1e-10)
         ? perObjectVel
         : cameraVelocity;

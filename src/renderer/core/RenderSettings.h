@@ -313,6 +313,15 @@ struct DebugSettings {
     bool disableGreedyMeshing = false;
 };
 
+/// Determine whether debug output selection changes the HDR signal presented to a temporal upscaler.
+/// @param previous Debug configuration used to produce the existing upscaler history.
+/// @param current Debug configuration that will produce the next upscaler input.
+/// @return True when a pre-upscale debug selector changes the input signal domain.
+[[nodiscard]] constexpr bool changesTemporalUpscalerInput(const DebugSettings& previous, const DebugSettings& current) {
+    return previous.viewMode != current.viewMode || previous.deferredLightDebugMode != current.deferredLightDebugMode ||
+           previous.reflectionDebugMode != current.reflectionDebugMode;
+}
+
 /// Determines whether the selected view inspects raw RTGI trace products.
 /// @param debugViewMode Deferred debug-view identifier.
 /// @return True for RTGI trace products whose sampling phase must remain fixed while inspecting them.

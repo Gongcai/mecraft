@@ -127,7 +127,8 @@ enum class TemporalResetReason : uint32_t {
     AssetRevision = 1u << 10u,
     ActiveRect = 1u << 11u,
     PreExposure = 1u << 12u,
-    DenoiserMethod = 1u << 13u
+    DenoiserMethod = 1u << 13u,
+    UpscalerInput = 1u << 14u
 };
 
 using TemporalResetReasons = uint32_t;
@@ -188,7 +189,7 @@ struct TemporalResetReasonDescriptor {
 };
 
 /// Fixed metadata table for every observable non-zero reset cause.
-inline constexpr std::array<TemporalResetReasonDescriptor, 14u> kTemporalResetReasonDescriptors{
+inline constexpr std::array<TemporalResetReasonDescriptor, 15u> kTemporalResetReasonDescriptors{
     {{TemporalResetReason::FirstFrame, "first_frame"},
      {TemporalResetReason::CameraCut, "camera_cut"},
      {TemporalResetReason::Teleport, "teleport"},
@@ -202,11 +203,12 @@ inline constexpr std::array<TemporalResetReasonDescriptor, 14u> kTemporalResetRe
      {TemporalResetReason::AssetRevision, "asset_revision"},
      {TemporalResetReason::ActiveRect, "active_rect"},
      {TemporalResetReason::PreExposure, "pre_exposure"},
-     {TemporalResetReason::DenoiserMethod, "denoiser_method"}}};
+     {TemporalResetReason::DenoiserMethod, "denoiser_method"},
+     {TemporalResetReason::UpscalerInput, "upscaler_input"}}};
 
 /// Return the fixed table of observable temporal reset causes.
 /// @return Compile-time table containing every non-zero reason and its stable identifier.
-[[nodiscard]] constexpr const std::array<TemporalResetReasonDescriptor, 14u>& temporalResetReasonDescriptors() {
+[[nodiscard]] constexpr const std::array<TemporalResetReasonDescriptor, 15u>& temporalResetReasonDescriptors() {
     return kTemporalResetReasonDescriptors;
 }
 
@@ -225,17 +227,23 @@ enum class TemporalHistoryOwner : uint32_t {
     Upscaler
 };
 
-/// Reset causes one history owner reacts to. A denoiser method switch only
-/// rebuilds NRD state, and a scene pre-exposure step only rescales histories
-/// that store pre-exposed radiance (NRD accumulates de-exposed values).
+/// Reset causes one history owner reacts to. A denoiser method switch rebuilds
+/// NRD and the upscaler that consumes its output. An upscaler-input selector
+/// change is private to the upscaler, while pre-exposure does not invalidate
+/// NRD because it accumulates de-exposed radiance.
 /// @param owner History owner whose relevant reset causes are requested.
 /// @return Bitmask of every cause that invalidates the owner's history.
 [[nodiscard]] constexpr TemporalResetReasons temporalResetReasonMaskForOwner(const TemporalHistoryOwner owner) {
     constexpr TemporalResetReasons kAllReasons = ~0u;
     if (owner == TemporalHistoryOwner::NrdDiffuse) {
-        return kAllReasons & ~temporalResetReasonBit(TemporalResetReason::PreExposure);
+        return kAllReasons & ~temporalResetReasonBit(TemporalResetReason::PreExposure) &
+               ~temporalResetReasonBit(TemporalResetReason::UpscalerInput);
     }
-    return kAllReasons & ~temporalResetReasonBit(TemporalResetReason::DenoiserMethod);
+    if (owner == TemporalHistoryOwner::Upscaler) {
+        return kAllReasons;
+    }
+    return kAllReasons & ~temporalResetReasonBit(TemporalResetReason::DenoiserMethod) &
+           ~temporalResetReasonBit(TemporalResetReason::UpscalerInput);
 }
 
 /// Determine whether one owner's history must restart for the given causes.

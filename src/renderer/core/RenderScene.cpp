@@ -782,9 +782,12 @@ void RenderScene::setSettings(const RenderSettings& settings) {
     if (normalizedSettings.rtgi.enabled != m_settings.rtgi.enabled ||
         normalizedSettings.nrd.enabled != m_settings.nrd.enabled ||
         normalizedSettings.nrd.method != m_settings.nrd.method) {
-        // Denoiser reconfiguration only rebuilds the NRD-owned history; the
-        // owner-scoped reset keeps scene-domain and upscaler histories alive.
+        // NRD reconfiguration changes both its history and the radiance signal
+        // consumed by the temporal upscaler; scene-domain histories remain valid.
         resetReasons = resetReasons | TemporalResetReason::DenoiserMethod;
+    }
+    if (changesTemporalUpscalerInput(m_settings.debug, normalizedSettings.debug)) {
+        resetReasons = resetReasons | TemporalResetReason::UpscalerInput;
     }
     if (isRtgiTraceInspectionView(normalizedSettings.debug.viewMode) !=
         isRtgiTraceInspectionView(m_settings.debug.viewMode)) {
@@ -1573,16 +1576,19 @@ float RenderScene::resolveScenePreExposure() {
 
 void RenderScene::invalidateFrameHistory(const TemporalResetReasons reasons) {
     m_pendingTemporalResetReasons |= reasons;
-    if (!ownerRequiresTemporalReset(TemporalHistoryOwner::ScreenSpace, reasons) &&
-        !ownerRequiresTemporalReset(TemporalHistoryOwner::Upscaler, reasons)) {
-        // NRD-only causes: the reason still reaches every per-owner filter
-        // through the frame context, so scene-domain histories, the previous
-        // frame context, and the upscaler survive.
+    const bool screenSpaceReset = ownerRequiresTemporalReset(TemporalHistoryOwner::ScreenSpace, reasons);
+    const bool upscalerReset = ownerRequiresTemporalReset(TemporalHistoryOwner::Upscaler, reasons);
+    if (!screenSpaceReset && !upscalerReset) {
+        return;
+    }
+    m_temporalFrameInput.reset();
+    m_temporalUpscaleResult.reset();
+    if (!screenSpaceReset) {
+        // The pending reason resets the SDK dispatch while preserving camera
+        // continuity and every renderer-owned temporal history.
         return;
     }
     m_hasPreviousContext = false;
-    m_temporalFrameInput.reset();
-    m_temporalUpscaleResult.reset();
     if (m_deferredPipeline) {
         m_deferredPipeline->invalidateHistory();
     }

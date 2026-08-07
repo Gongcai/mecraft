@@ -319,6 +319,36 @@ void main() {
     }
     return true;
 }
+
+[[nodiscard]] bool validateVelocityPixelCenterContracts() {
+    const auto opaqueSource = renderer::rhi::loadShaderSource("assets/shaders/velocity_resolve.frag");
+    const auto transparentSource = renderer::rhi::loadShaderSource("assets/shaders/velocity_transparent_resolve.frag");
+    if (!opaqueSource.has_value() || !transparentSource.has_value()) {
+        std::cerr << "Velocity resolve fragment sources failed to load\n";
+        return false;
+    }
+
+    const std::string normalizedOpaque = normalizedShaderSource(*opaqueSource);
+    if (!sourceContainsAll(normalizedOpaque,
+                           {"vec2pixelCenter=vec2(texel)+vec2(0.5);",
+                            "vec2currentScreenUv=rhiNativeFragCoordToScreenUv(pixelCenter,uScreenParams.xy);",
+                            "vec2currentTextureUv=rhiScreenUvToTextureUv(currentScreenUv);",
+                            "vec2currentClipUv=rhiScreenUvToClipUv(currentScreenUv);",
+                            "texelFetch(uPerObjectVelocityTex,texel,0).rg;"}) ||
+        normalizedOpaque.find("rhiNativeFragCoordToScreenUv(closestFragment.xy") != std::string::npos ||
+        normalizedOpaque.find("closestFragment.xy/uScreenParams.xy") != std::string::npos) {
+        std::cerr << "Opaque velocity reprojection must use the fetched depth texel center\n";
+        return false;
+    }
+
+    const std::string normalizedTransparent = normalizedShaderSource(*transparentSource);
+    if (normalizedTransparent.find("rhiNativeFragCoordToScreenUv(vec2(gl_FragCoord.xy),uScreenParams.xy)") ==
+        std::string::npos) {
+        std::cerr << "Transparent velocity reprojection must use the fragment sample center\n";
+        return false;
+    }
+    return true;
+}
 } // namespace
 
 int main() {
@@ -471,5 +501,6 @@ int main() {
     success = validateAccelerationStructureReflection() && success;
     success = validateSpirvBytecodeInput() && success;
     success = validateGBufferWriterContracts() && success;
+    success = validateVelocityPixelCenterContracts() && success;
     return success ? 0 : 1;
 }

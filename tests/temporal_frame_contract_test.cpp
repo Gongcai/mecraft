@@ -112,6 +112,35 @@ bool testNrdValidationDebugViewSelection() {
                        "NRD reprojection coverage view must not consume the optional validation output");
 }
 
+bool testTemporalUpscalerInputChangeSelection() {
+    const DebugSettings baseline;
+    DebugSettings changed = baseline;
+    changed.viewMode = 98;
+    if (!requireTrue(changesTemporalUpscalerInput(baseline, changed),
+                     "deferred debug views must invalidate temporal upscaler history")) {
+        return false;
+    }
+
+    changed = baseline;
+    changed.deferredLightDebugMode = 1;
+    if (!requireTrue(changesTemporalUpscalerInput(baseline, changed),
+                     "lighting debug output must invalidate temporal upscaler history")) {
+        return false;
+    }
+
+    changed = baseline;
+    changed.reflectionDebugMode = 1;
+    if (!requireTrue(changesTemporalUpscalerInput(baseline, changed),
+                     "reflection debug output must invalidate temporal upscaler history")) {
+        return false;
+    }
+
+    changed = baseline;
+    changed.postprocessDebugMode = 1;
+    return requireTrue(!changesTemporalUpscalerInput(baseline, changed),
+                       "post-upscale debug output must preserve temporal upscaler history");
+}
+
 bool testMotionVectorConvention() {
     return requireTrue(TemporalMotionVectorConvention::currentMinusPrevious,
                        "motion vectors must store current minus previous UV") &&
@@ -228,14 +257,15 @@ bool testTemporalReset() {
         }
         describedReasons |= temporalResetReasonBit(descriptor.reason);
     }
-    if (!requireTrue(describedReasons == ((1u << 14u) - 1u),
+    if (!requireTrue(describedReasons == ((1u << 15u) - 1u),
                      "reset descriptors must cover every declared temporal reset bit")) {
         return false;
     }
 
-    // Owner-scoped filtering: a denoiser method switch is private to the NRD
-    // owner, and a pre-exposure step never restarts NRD's de-exposed history.
+    // Owner-scoped filtering keeps scene-domain histories alive when only the
+    // denoiser/upscaler signal chain changes.
     const TemporalResetReasons denoiserOnly = temporalResetReasonBit(TemporalResetReason::DenoiserMethod);
+    const TemporalResetReasons upscalerInputOnly = temporalResetReasonBit(TemporalResetReason::UpscalerInput);
     const TemporalResetReasons preExposureOnly = temporalResetReasonBit(TemporalResetReason::PreExposure);
     const TemporalResetReasons assetRevisionOnly = temporalResetReasonBit(TemporalResetReason::AssetRevision);
     const TemporalResetReasons cameraCut = temporalResetReasonBit(TemporalResetReason::CameraCut);
@@ -243,8 +273,16 @@ bool testTemporalReset() {
                          !ownerRequiresTemporalReset(TemporalHistoryOwner::ScreenSpace, denoiserOnly) &&
                          !ownerRequiresTemporalReset(TemporalHistoryOwner::Clouds, denoiserOnly) &&
                          !ownerRequiresTemporalReset(TemporalHistoryOwner::Volumetrics, denoiserOnly) &&
-                         !ownerRequiresTemporalReset(TemporalHistoryOwner::Upscaler, denoiserOnly),
-                     "a denoiser method change must only reset the NRD history owner")) {
+                         ownerRequiresTemporalReset(TemporalHistoryOwner::Upscaler, denoiserOnly),
+                     "a denoiser method change must reset NRD and its temporal upscaler consumer")) {
+        return false;
+    }
+    if (!requireTrue(!ownerRequiresTemporalReset(TemporalHistoryOwner::NrdDiffuse, upscalerInputOnly) &&
+                         !ownerRequiresTemporalReset(TemporalHistoryOwner::ScreenSpace, upscalerInputOnly) &&
+                         !ownerRequiresTemporalReset(TemporalHistoryOwner::Clouds, upscalerInputOnly) &&
+                         !ownerRequiresTemporalReset(TemporalHistoryOwner::Volumetrics, upscalerInputOnly) &&
+                         ownerRequiresTemporalReset(TemporalHistoryOwner::Upscaler, upscalerInputOnly),
+                     "an upscaler input change must only reset the temporal upscaler")) {
         return false;
     }
     if (!requireTrue(!ownerRequiresTemporalReset(TemporalHistoryOwner::NrdDiffuse, preExposureOnly) &&
@@ -477,6 +515,8 @@ int main() {
     if (!testTemporalReconstructionSelection())
         return 1;
     if (!testNrdValidationDebugViewSelection())
+        return 1;
+    if (!testTemporalUpscalerInputChangeSelection())
         return 1;
     if (!testMotionVectorConvention())
         return 1;
