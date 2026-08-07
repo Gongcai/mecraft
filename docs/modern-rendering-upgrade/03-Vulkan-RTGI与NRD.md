@@ -412,9 +412,9 @@ Object ID 比较结果。
 
 RELAX/REBLUR 的主历史按 SDK 推荐的 `0.5` 秒积累周期和真实渲染帧间隔换算为帧数，并受对应 Method
 的历史上限约束；Fast History 使用 `0.1` 秒周期且始终长于 History Fix。这样在关闭垂直同步的高帧率
-运行中，历史不会因固定 30 帧而缩短成很小的时间窗口。RELAX Anti-lag 的加速与重置量保持关闭，防止
-1 spp 合法高方差亮样本触发历史反复重置；几何、材质和视口变化仍由正常的反遮挡与 Temporal Reset
-路径处理。
+运行中，历史不会因固定 30 帧而缩短成很小的时间窗口。RELAX 保留 SDK 默认 Anti-lag 加速与重置响应，
+使当前 Raw 辐射能在反遮挡和运动轮廓上替换误投影的暗历史；太阳盘稀疏亮点在 RTGI Trace 源头消除，
+不通过关闭历史响应来掩盖。几何、材质和视口变化仍由正常的反遮挡与 Temporal Reset 路径处理。
 
 Debug View 89、98、99 统一显示 Scene-referred Linear RGB：89 在预览前移除 Raw RTGI 的当前
 Pre-exposure，98 对 REBLUR 输出先执行 YCoCg 解码，99 再在相同辐射域计算 Raw/Output Delta。因此

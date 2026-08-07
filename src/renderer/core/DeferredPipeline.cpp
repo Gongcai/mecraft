@@ -2028,9 +2028,10 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
 
             renderer::nrd::NrdDiffuseSettings methodSettings;
             if (settings.nrd.method == NrdDiffuseMethod::Relax) {
-                // The raw RTGI signal already applies a bounded radiance
-                // clamp. Relax's adaptive anti-firefly pass can toggle sparse
-                // bright samples as motion causes history confidence to vary.
+                // Keep RELAX's SDK anti-lag response active. Known sparse
+                // solar samples are removed by the trace pass, while history
+                // clamping still needs to replace stale luminance after a
+                // disocclusion or a moving silhouette.
                 ::nrd::RelaxSettings relaxSettings{};
                 relaxSettings.atrousIterationNum = static_cast<uint32_t>(settings.nrd.relaxAtrousIterations);
                 relaxSettings.minMaterialForDiffuse = 0.0f;
@@ -2039,10 +2040,6 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
                                               ::nrd::RELAX_MAX_HISTORY_FRAME_NUM);
                 relaxSettings.diffuseMaxFastAccumulatedFrameNum =
                     nrdFastAccumulationFrameCount(ctx.deltaTime, relaxSettings.diffuseMaxAccumulatedFrameNum);
-                // One-spp RTGI contains legitimate high-variance samples. Do
-                // not reset the accumulated history on a single bright sample.
-                relaxSettings.antilagSettings.accelerationAmount = 0.0f;
-                relaxSettings.antilagSettings.resetAmount = 0.0f;
                 methodSettings = relaxSettings;
             } else {
                 ::nrd::ReblurSettings reblurSettings{};

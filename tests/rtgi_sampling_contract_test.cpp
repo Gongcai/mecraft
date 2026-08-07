@@ -1,6 +1,10 @@
 #include "renderer/contracts/RtgiSamplingContract.h"
 #include "renderer/core/RenderSettings.h"
 
+#if defined(MECRAFT_ENABLE_NRD)
+#include <NRD.h>
+#endif
+
 #include <glm/geometric.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
@@ -91,8 +95,8 @@ namespace {
            pipelineSource.find("relaxSettings.atrousIterationNum =") != std::string::npos &&
            pipelineSource.find("nrdAccumulationFrameCount(::nrd::RELAX_DEFAULT_ACCUMULATION_TIME") !=
                std::string::npos &&
-           pipelineSource.find("relaxSettings.antilagSettings.accelerationAmount = 0.0f;") != std::string::npos &&
-           pipelineSource.find("relaxSettings.antilagSettings.resetAmount = 0.0f;") != std::string::npos &&
+           pipelineSource.find("relaxSettings.antilagSettings.accelerationAmount = 0.0f;") == std::string::npos &&
+           pipelineSource.find("relaxSettings.antilagSettings.resetAmount = 0.0f;") == std::string::npos &&
            pipelineSource.find("reblurSettings.enableAntiFirefly = true;") != std::string::npos &&
            pipelineSource.find("const bool nrdEnabled = rtgiEnabled && settings.nrd.enabled;") != std::string::npos &&
            pipelineSource.find(
@@ -110,6 +114,13 @@ int main() {
     using namespace renderer::contracts;
 
     bool valid = true;
+#if defined(MECRAFT_ENABLE_NRD)
+    const nrd::RelaxSettings defaultRelaxSettings{};
+    valid = requireTrue(defaultRelaxSettings.antilagSettings.accelerationAmount > 0.0f &&
+                            defaultRelaxSettings.antilagSettings.resetAmount > 0.0f,
+                        "RELAX anti-lag must remain responsive to stale luminance history") &&
+            valid;
+#endif
     valid = requireTrue(kRtgiVoxelSurfaceExpansion == 1.0f / 2048.0f && kRtgiMinimumRayOriginBias == 1.0f / 1024.0f &&
                             RtgiSettings{}.minimumRayOriginBias == kRtgiMinimumRayOriginBias,
                         "RTGI ray-origin bias must remain larger than the sealed voxel BLAS shell") &&
