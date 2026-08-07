@@ -1,9 +1,14 @@
 #include "app/AppSettings.h"
 #include "renderer/contracts/SceneIdentityContract.h"
 #include "renderer/contracts/TemporalFrameContract.h"
+#include "renderer/contracts/TemporalReprojectionContract.h"
 #include "renderer/core/RenderSettings.h"
 #include "renderer/passes/TemporalUpscalePass.h"
 
+#include <glm/gtc/matrix_transform.hpp>
+
+#include <array>
+#include <cmath>
 #include <iostream>
 #include <limits>
 #include <type_traits>
@@ -151,6 +156,65 @@ bool testMotionVectorConvention() {
            requireTrue(TemporalMotionVectorConvention::minimumStoredValue == -2.0f &&
                            TemporalMotionVectorConvention::maximumStoredValue == 2.0f,
                        "motion-vector storage range must match RG16F resolve clamping");
+}
+
+glm::vec2 applySkyHomography(const renderer::contracts::TemporalSkyReprojectionHomography& homography,
+                             const glm::vec2 clipPosition) {
+    const glm::vec3 source(clipPosition, 1.0f);
+    const glm::vec3 projected(glm::dot(glm::vec3(homography.row0), source),
+                              glm::dot(glm::vec3(homography.row1), source),
+                              glm::dot(glm::vec3(homography.row2), source));
+    return glm::vec2(projected) / projected.z;
+}
+
+glm::mat4 applyProjectionJitter(glm::mat4 projection, const glm::vec2 jitterOffset) {
+    for (int column = 0; column < 4; ++column) {
+        projection[column][0] += jitterOffset.x * projection[column][3];
+        projection[column][1] += jitterOffset.y * projection[column][3];
+    }
+    return projection;
+}
+
+bool testSkyVelocityReprojection() {
+    const glm::mat4 projection = glm::perspective(glm::radians(70.0f), 16.0f / 9.0f, 0.1f, 500.0f);
+    const glm::vec3 forward = glm::normalize(glm::vec3(0.12f, -0.04f, -1.0f));
+    const glm::vec3 up(0.0f, 1.0f, 0.0f);
+    const glm::mat4 previousView =
+        glm::lookAt(glm::vec3(-24.0f, 71.0f, 18.0f), glm::vec3(-24.0f, 71.0f, 18.0f) + forward, up);
+    const glm::mat4 translatedView =
+        glm::lookAt(glm::vec3(43.0f, 64.0f, -31.0f), glm::vec3(43.0f, 64.0f, -31.0f) + forward, up);
+    const glm::vec2 jitterOffset(0.00031f, -0.00047f);
+    const glm::mat4 translationOnly = renderer::contracts::makeTemporalSkyClipToPrevClip(
+        projection, translatedView, projection, previousView, jitterOffset, true);
+    const auto translationHomography = renderer::contracts::makeTemporalSkyReprojectionHomography(translationOnly);
+    constexpr std::array<glm::vec2, 4u> kClipSamples{glm::vec2(-0.8f, -0.6f), glm::vec2(0.7f, -0.4f),
+                                                     glm::vec2(-0.3f, 0.75f), glm::vec2(0.2f, 0.1f)};
+    for (const glm::vec2 sample : kClipSamples) {
+        const glm::vec2 reprojected = applySkyHomography(translationHomography, sample);
+        if (!requireTrue(glm::length(reprojected - sample) < 1.0e-5f,
+                         "camera translation must not produce velocity on infinite sky pixels")) {
+            return false;
+        }
+    }
+
+    const glm::vec3 previousForward = glm::normalize(glm::vec3(-0.16f, 0.06f, -1.0f));
+    const glm::vec3 currentForward = glm::normalize(glm::vec3(0.19f, -0.03f, -1.0f));
+    const glm::mat4 rotatedPreviousView =
+        glm::lookAt(glm::vec3(-8.0f, 67.0f, 11.0f), glm::vec3(-8.0f, 67.0f, 11.0f) + previousForward, up);
+    const glm::mat4 rotatedCurrentView =
+        glm::lookAt(glm::vec3(35.0f, 59.0f, -27.0f), glm::vec3(35.0f, 59.0f, -27.0f) + currentForward, up);
+    const glm::mat4 rotationReprojection = renderer::contracts::makeTemporalSkyClipToPrevClip(
+        projection, rotatedCurrentView, projection, rotatedPreviousView, jitterOffset, true);
+    const auto rotationHomography = renderer::contracts::makeTemporalSkyReprojectionHomography(rotationReprojection);
+    const glm::vec3 worldDirection = glm::normalize(glm::vec3(0.02f, 0.01f, -1.0f));
+    const glm::mat4 jitteredProjection = applyProjectionJitter(projection, jitterOffset);
+    const glm::vec4 currentClip = jitteredProjection * rotatedCurrentView * glm::vec4(worldDirection, 0.0f);
+    const glm::vec4 expectedPreviousClip = jitteredProjection * rotatedPreviousView * glm::vec4(worldDirection, 0.0f);
+    const glm::vec2 currentNdc = glm::vec2(currentClip) / currentClip.w;
+    const glm::vec2 expectedPreviousNdc = glm::vec2(expectedPreviousClip) / expectedPreviousClip.w;
+    const glm::vec2 reprojectedPreviousNdc = applySkyHomography(rotationHomography, currentNdc);
+    return requireTrue(glm::length(reprojectedPreviousNdc - expectedPreviousNdc) < 1.0e-5f,
+                       "sky reprojection must preserve rotational camera motion and current jitter");
 }
 
 bool testTemporalExtents() {
@@ -519,6 +583,8 @@ int main() {
     if (!testTemporalUpscalerInputChangeSelection())
         return 1;
     if (!testMotionVectorConvention())
+        return 1;
+    if (!testSkyVelocityReprojection())
         return 1;
     if (!testTemporalExtents())
         return 1;

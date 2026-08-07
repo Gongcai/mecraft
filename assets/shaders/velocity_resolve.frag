@@ -14,10 +14,14 @@ layout(push_constant) uniform RhiPushConstants {
     // precision; for a static camera it is the identity to fp64 accuracy, so
     // no jitter or matrix-inverse residue leaks into the velocity buffer.
     mat4 uClipToPrevClip;
+    // Far-plane reprojection with camera translation removed. Three rows are
+    // sufficient because clear-depth sky positions always have z = w = 1.
+    vec4 uSkyClipToPrevClipRows[3];
     vec4 uScreenParams;
 };
 
 const vec2 kRejectHistoryVelocity = vec2(2.0);
+const float kSkyDepth = 1.0;
 
 bool badVec2(vec2 v) {
     return any(isnan(v)) || any(isinf(v));
@@ -33,6 +37,15 @@ vec2 sanitizeVelocity(vec2 velocity) {
     }
     // Keep finite but very large reprojection errors bounded before RG16F storage.
     return clamp(velocity, vec2(-2.0), vec2(2.0));
+}
+
+vec4 reprojectSky(vec2 currentClipPosition) {
+    vec3 currentSkyPosition = vec3(currentClipPosition, 1.0);
+    vec3 previousSkyPosition = vec3(
+        dot(uSkyClipToPrevClipRows[0].xyz, currentSkyPosition),
+        dot(uSkyClipToPrevClipRows[1].xyz, currentSkyPosition),
+        dot(uSkyClipToPrevClipRows[2].xyz, currentSkyPosition));
+    return vec4(previousSkyPosition.xy, 0.0, previousSkyPosition.z);
 }
 
 void main() {
@@ -60,7 +73,9 @@ void main() {
     // buffer stays in the native texture UV domain for every consumer.
     vec4 currentClip = vec4(currentClipUv * 2.0 - 1.0,
                             depth * 2.0 - 1.0, 1.0);
-    vec4 previousClip = uClipToPrevClip * currentClip;
+    vec4 previousClip = depth == kSkyDepth
+        ? reprojectSky(currentClip.xy)
+        : uClipToPrevClip * currentClip;
     if (badVec4(previousClip) || previousClip.w <= 0.00001) {
         FragVelocity = kRejectHistoryVelocity;
         return;

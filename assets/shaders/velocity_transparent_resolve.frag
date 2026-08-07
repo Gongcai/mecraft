@@ -12,6 +12,8 @@ layout(binding = 2) uniform sampler2D uTransparencyMaskTex;
 layout(push_constant) uniform RhiPushConstants {
     // Same fp64-composed clip-to-previous-clip transform as the opaque pass.
     mat4 uClipToPrevClip;
+    // Kept layout-compatible with the opaque pass's 128-byte constants.
+    vec4 uSkyClipToPrevClipRows[3];
     vec4 uScreenParams;
 };
 

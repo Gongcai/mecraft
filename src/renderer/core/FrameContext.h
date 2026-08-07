@@ -195,6 +195,9 @@ struct FrameContext {
     // Composing in fp64 on the CPU makes the product collapse to identity for
     // a static camera, so velocity carries no floating-point jitter residue.
     glm::mat4 velocityClipToPrevClip = glm::mat4(1.0f);
+    // Rotation-only reprojection for clear-depth pixels representing the
+    // infinitely distant sky. Camera translation must not create sky parallax.
+    glm::mat4 skyVelocityClipToPrevClip = glm::mat4(1.0f);
 
     // Sky / Atmosphere
     SkyColorsData skyColors;

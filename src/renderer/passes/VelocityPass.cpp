@@ -1,6 +1,7 @@
 #include "VelocityPass.h"
 
 #include "../core/RenderScene.h"
+#include "../contracts/TemporalReprojectionContract.h"
 #include "../rhi/RhiCommandList.h"
 #include "../rhi/RhiDevice.h"
 #include "../rhi/RhiResources.h"
@@ -13,10 +14,13 @@
 #include <glm/glm.hpp>
 
 namespace {
-struct VelocityPushConstants {
+struct alignas(16) VelocityPushConstants {
     glm::mat4 clipToPrevClip;
+    renderer::contracts::TemporalSkyReprojectionHomography skyClipToPrevClip;
     glm::vec4 screenParams;
 };
+
+static_assert(sizeof(VelocityPushConstants) == 128u);
 
 [[nodiscard]] bool sameTextureView(const RhiTextureViewHandle lhs, const RhiTextureViewHandle rhs) {
     return lhs.index == rhs.index && lhs.generation == rhs.generation;
@@ -65,10 +69,11 @@ bool VelocityPass::execute(RhiCommandList& commandList, const FrameContext& ctx,
 
     // The fp64-composed clip-to-previous-clip transform cancels jitter and
     // matrix-inverse residue exactly for a static camera.
-    const VelocityPushConstants pushConstants{ctx.velocityClipToPrevClip,
-                                              glm::vec4(static_cast<float>(std::max(1, targets.width())),
-                                                        static_cast<float>(std::max(1, targets.height())),
-                                                        settings.taa.forceZeroVelocity ? 1.0f : 0.0f, 0.0f)};
+    const VelocityPushConstants pushConstants{
+        ctx.velocityClipToPrevClip,
+        renderer::contracts::makeTemporalSkyReprojectionHomography(ctx.skyVelocityClipToPrevClip),
+        glm::vec4(static_cast<float>(std::max(1, targets.width())), static_cast<float>(std::max(1, targets.height())),
+                  settings.taa.forceZeroVelocity ? 1.0f : 0.0f, 0.0f)};
     commandList.pushConstants(&pushConstants, sizeof(pushConstants), rhiFlag(RhiShaderStage::Fragment));
     commandList.draw(3u, 1u, 0u, 0u);
     commandList.endRendering();
@@ -108,10 +113,11 @@ bool VelocityPass::executeTransparent(RhiCommandList& commandList, const FrameCo
     commandList.setBindGroup(0u, m_transparentBindGroup);
 
     // Same fp64-composed reprojection as the opaque velocity pass.
-    const VelocityPushConstants pushConstants{ctx.velocityClipToPrevClip,
-                                              glm::vec4(static_cast<float>(std::max(1, targets.width())),
-                                                        static_cast<float>(std::max(1, targets.height())),
-                                                        settings.taa.forceZeroVelocity ? 1.0f : 0.0f, 0.0f)};
+    const VelocityPushConstants pushConstants{
+        ctx.velocityClipToPrevClip,
+        renderer::contracts::makeTemporalSkyReprojectionHomography(ctx.skyVelocityClipToPrevClip),
+        glm::vec4(static_cast<float>(std::max(1, targets.width())), static_cast<float>(std::max(1, targets.height())),
+                  settings.taa.forceZeroVelocity ? 1.0f : 0.0f, 0.0f)};
     commandList.pushConstants(&pushConstants, sizeof(pushConstants), rhiFlag(RhiShaderStage::Fragment));
     commandList.draw(3u, 1u, 0u, 0u);
     commandList.endRendering();

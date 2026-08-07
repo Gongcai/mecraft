@@ -1,5 +1,6 @@
 #include "RenderScene.h"
 #include "../../Diagnostics.h"
+#include "../contracts/TemporalReprojectionContract.h"
 #include "RenderResourceHub.h"
 #include "SettingsMapper.h"
 #include "ForwardPipeline.h"
@@ -1406,6 +1407,9 @@ RenderScene::buildFrameContext(const IWorldView& worldView, const Camera& camera
             glm::dmat4(projectionJitter ? ctx.camera.jitteredViewProj : ctx.camera.viewProj);
         const glm::dmat4 previousRaster = glm::dmat4(ctx.previousViewProjWithCurrentJitter);
         ctx.velocityClipToPrevClip = glm::mat4(previousRaster * glm::inverse(currentRaster));
+        ctx.skyVelocityClipToPrevClip = renderer::contracts::makeTemporalSkyClipToPrevClip(
+            ctx.camera.projection, ctx.camera.view, ctx.prevCamera.projection, ctx.prevCamera.view,
+            ctx.jitter.projectionOffset, projectionJitter);
     }
 
     // Weather state from WeatherSystem

@@ -13,6 +13,7 @@
 #include "renderer/core/DeferredPipeline.h"
 #include "renderer/core/IDeferredGeometryProvider.h"
 #include "renderer/core/RenderScene.h"
+#include "renderer/contracts/TemporalReprojectionContract.h"
 #include "renderer/debug/RenderDebugService.h"
 #include "renderer/passes/PostProcessPass.h"
 #include "renderer/passes/Fsr1Pass.h"
@@ -272,6 +273,9 @@ struct ModelSceneDeferredRenderer::Impl {
                                                                                       : context.camera.viewProj;
         context.velocityClipToPrevClip = glm::mat4(glm::dmat4(context.previousViewProjWithCurrentJitter) *
                                                    glm::inverse(glm::dmat4(rasterViewProjection)));
+        context.skyVelocityClipToPrevClip = renderer::contracts::makeTemporalSkyClipToPrevClip(
+            context.camera.projection, context.camera.view, context.prevCamera.projection, context.prevCamera.view,
+            context.jitter.projectionOffset, usesTemporalProjectionJitter(settings.upscale.type, settings.taa.enabled));
 
         const WeatherState& weatherState = weather.getRenderState();
         const WeatherDerived& weatherDerived = weather.getDerived();

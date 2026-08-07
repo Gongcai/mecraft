@@ -333,7 +333,9 @@ void main() {
                            {"vec2pixelCenter=vec2(texel)+vec2(0.5);",
                             "vec2currentScreenUv=rhiNativeFragCoordToScreenUv(pixelCenter,uScreenParams.xy);",
                             "vec2currentTextureUv=rhiScreenUvToTextureUv(currentScreenUv);",
-                            "vec2currentClipUv=rhiScreenUvToClipUv(currentScreenUv);",
+                            "vec2currentClipUv=rhiScreenUvToClipUv(currentScreenUv);", "vec4uSkyClipToPrevClipRows[3];",
+                            "constfloatkSkyDepth=1.0;",
+                            "depth==kSkyDepth?reprojectSky(currentClip.xy):uClipToPrevClip*currentClip;",
                             "texelFetch(uPerObjectVelocityTex,texel,0).rg;"}) ||
         normalizedOpaque.find("rhiNativeFragCoordToScreenUv(closestFragment.xy") != std::string::npos ||
         normalizedOpaque.find("closestFragment.xy/uScreenParams.xy") != std::string::npos) {
@@ -342,8 +344,9 @@ void main() {
     }
 
     const std::string normalizedTransparent = normalizedShaderSource(*transparentSource);
-    if (normalizedTransparent.find("rhiNativeFragCoordToScreenUv(vec2(gl_FragCoord.xy),uScreenParams.xy)") ==
-        std::string::npos) {
+    if (!sourceContainsAll(normalizedTransparent,
+                           {"vec4uSkyClipToPrevClipRows[3];",
+                            "rhiNativeFragCoordToScreenUv(vec2(gl_FragCoord.xy),uScreenParams.xy)"})) {
         std::cerr << "Transparent velocity reprojection must use the fragment sample center\n";
         return false;
     }
