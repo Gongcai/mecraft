@@ -8,17 +8,17 @@
   "capture": {
     "camera_time_seconds": 6.0,
     "height": 720,
-    "path": "assets/validation/reference_captures/m3_model_rtgi_sponza_vulkan_1280x720.png",
+    "path": "/tmp/mecraft-validation-retest/m3_model_rtgi_sponza_vulkan_1280x720.png",
     "width": 1280
   },
   "cpu_update_render_ms": {
-    "average": 199.92691233333332,
-    "max": 538.687284,
-    "median": 32.025466,
-    "min": 29.067987,
-    "p50": 32.025466,
-    "p95": 538.687284,
-    "p99": 538.687284
+    "average": 169.89404333333331,
+    "max": 489.804894,
+    "median": 10.248650999999999,
+    "min": 9.628585000000001,
+    "p50": 10.248650999999999,
+    "p95": 489.804894,
+    "p99": 489.804894
   },
   "environment": {
     "time_of_day_seconds": 900.0,
@@ -38,44 +38,64 @@
     "observed_sample_count": 3,
     "stages": {
       "Cloud": {
-        "p50": 0.258048,
-        "p95": 0.260096,
-        "p99": 0.260096
+        "p50": 0.269312,
+        "p95": 0.27648,
+        "p99": 0.27648
       },
       "GBuffer": {
-        "p50": 0.191744,
-        "p95": 0.192,
-        "p99": 0.192
+        "p50": 0.192512,
+        "p95": 0.195328,
+        "p99": 0.195328
       },
       "Lighting": {
-        "p50": 9.719808,
-        "p95": 9.756672,
-        "p99": 9.756672
+        "p50": 1.16736,
+        "p95": 1.174528,
+        "p99": 1.174528
       },
       "NRD": {
-        "p50": 2.038784,
-        "p95": 2.771968,
-        "p99": 2.771968
+        "p50": 1.497088,
+        "p95": 2.550784,
+        "p99": 2.550784
+      },
+      "NRD.Dispatch": {
+        "p50": 1.455104,
+        "p95": 2.506752,
+        "p99": 2.506752
+      },
+      "NRD.GuidePrep": {
+        "p50": 0.043008,
+        "p95": 0.044032,
+        "p99": 0.044032
       },
       "Post": {
-        "p50": 0.18048,
-        "p95": 0.217344,
-        "p99": 0.217344
+        "p50": 0.18176,
+        "p95": 0.183552,
+        "p99": 0.183552
       },
       "RTGI": {
-        "p50": 13.658112,
-        "p95": 15.627264,
-        "p99": 15.627264
+        "p50": 3.269632,
+        "p95": 3.721216,
+        "p99": 3.721216
+      },
+      "RTGI.SignalPack": {
+        "p50": 0.05632,
+        "p95": 0.059392,
+        "p99": 0.059392
+      },
+      "RTGI.Trace": {
+        "p50": 3.21024,
+        "p95": 3.664896,
+        "p99": 3.664896
       },
       "Reflection": {
-        "p50": 0.39936,
-        "p95": 0.401408,
-        "p99": 0.401408
+        "p50": 0.390144,
+        "p95": 0.398336,
+        "p99": 0.398336
       },
       "SSAO": {
-        "p50": 0.282624,
-        "p95": 0.285696,
-        "p99": 0.285696
+        "p50": 0.294912,
+        "p95": 0.295936,
+        "p99": 0.295936
       },
       "SSGI": {
         "p50": 0.0,
@@ -83,9 +103,9 @@
         "p99": 0.0
       },
       "Shadow": {
-        "p50": 0.241664,
-        "p95": 0.260608,
-        "p99": 0.260608
+        "p50": 0.24576,
+        "p95": 0.28288,
+        "p99": 0.28288
       },
       "Transparent": {
         "p50": 0.0,
@@ -93,9 +113,9 @@
         "p99": 0.0
       },
       "Volumetric": {
-        "p50": 0.24064,
-        "p95": 0.24064,
-        "p99": 0.24064
+        "p50": 0.246784,
+        "p95": 0.249856,
+        "p99": 0.249856
       },
       "Water": {
         "p50": 0.0,
@@ -104,16 +124,16 @@
       }
     },
     "total_tracked": {
-      "p50": 27.186688,
-      "p95": 29.905663999999998,
-      "p99": 29.905663999999998
+      "p50": 7.737088,
+      "p95": 9.28896,
+      "p99": 9.28896
     },
     "valid": true,
     "window_capacity": 1000,
     "window_sample_count": 3
   },
   "render_settings": {
-    "content_hash": "b8afb7f84be62d98",
+    "content_hash": "a01010a43cdb7781",
     "id": "m3_model_rtgi_quality",
     "version": 2
   },
@@ -123,14 +143,14 @@
     "accuracy": "exact",
     "categories": {
       "acceleration_structure": {
-        "allocation_count": 3,
-        "bytes": 20480,
-        "resource_count": 5
+        "allocation_count": 5,
+        "bytes": 22784,
+        "resource_count": 8
       },
       "gbuffer_history": {
-        "allocation_count": 74,
-        "bytes": 565638144,
-        "resource_count": 74
+        "allocation_count": 76,
+        "bytes": 567604224,
+        "resource_count": 76
       },
       "geometry": {
         "allocation_count": 150,
@@ -153,9 +173,9 @@
         "resource_count": 6
       },
       "scene_data": {
-        "allocation_count": 31,
-        "bytes": 13943424,
-        "resource_count": 31
+        "allocation_count": 35,
+        "bytes": 13951488,
+        "resource_count": 35
       },
       "sdk": {
         "allocation_count": 0,
@@ -168,9 +188,9 @@
         "resource_count": 75
       },
       "transient": {
-        "allocation_count": 8,
-        "bytes": 53084160,
-        "resource_count": 15
+        "allocation_count": 9,
+        "bytes": 57016320,
+        "resource_count": 17
       },
       "unclassified": {
         "allocation_count": 0,
@@ -183,15 +203,15 @@
         "resource_count": 16
       }
     },
-    "total_allocation_count": 373,
-    "total_bytes": 818094448,
-    "total_resource_count": 385,
+    "total_allocation_count": 382,
+    "total_bytes": 824003056,
+    "total_resource_count": 396,
     "valid": true
   },
   "sample_duration_seconds": 0.05000000260770321,
   "scene": "model",
   "scene_contract": {
-    "content_hash": "f472f91c279cb22c",
+    "content_hash": "0376d1804439f51f",
     "hash_algorithm": "fnv1a64",
     "id": "m3_model_rtgi_sponza",
     "source": "assets/validation/scenes/m3_model_rtgi_sponza.json",

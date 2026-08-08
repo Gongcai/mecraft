@@ -3,7 +3,7 @@
   "version": 2,
   "id": "m03_sponza_atrium",
   "scene": "model",
-  "content_hash": "5c46b72ce7a2139c",
+  "content_hash": "72769566d3e17f6c",
   "camera_path": {
     "source": "../camera_paths/m03_sponza_atrium.json",
     "id": "m03_sponza_atrium",
@@ -12,7 +12,7 @@
   "render_settings": {
     "id": "m0_model_render_settings",
     "version": 1,
-    "content_hash": "26b5990e49b5e2a8"
+    "content_hash": "b8bb5b3347e46551"
   },
   "environment": {
     "time_of_day_seconds": 900.0,

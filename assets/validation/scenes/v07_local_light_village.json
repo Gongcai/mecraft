@@ -3,7 +3,7 @@
   "version": 2,
   "id": "v07_local_light_village",
   "scene": "voxel",
-  "content_hash": "0f45db88f1a99f52",
+  "content_hash": "185cc198a75902e7",
   "camera_path": {
     "source": "../camera_paths/v07_local_light_village.json",
     "id": "v07_local_light_village",
@@ -12,7 +12,7 @@
   "render_settings": {
     "id": "m0_voxel_render_settings",
     "version": 1,
-    "content_hash": "a64f59f7e206230c"
+    "content_hash": "dd51efecb1ce4c75"
   },
   "environment": {
     "time_of_day_seconds": 900.0,

@@ -168,8 +168,9 @@ Method 切换必须清空对应历史，并在 Dashboard 显示新 Method 与 Re
 
 ## 6. 性能矩阵
 
-目标设备：RTX 4060 Laptop 8GB，固定高性能电源模式。每组预热 300 帧，采集 1000 个
-真实渲染帧。
+目标设备：RTX 4060 Laptop 8GB，固定高性能电源模式。正式性能组每组预热 300 帧，采集 1000 个
+真实渲染帧；参考图仍使用 3 帧采样。正式 GPU p95 必须来自完整 Render Graph Frame Span，不能使用
+只覆盖显式阶段的阶段和。
 
 | 场景 | Output/模式 | 总 GPU p95 | CPU Render p95 | 显存 |
 | --- | --- | ---: | ---: | ---: |
@@ -180,6 +181,25 @@ Method 切换必须清空对应历史，并在 Dashboard 显示新 Method 与 Re
 
 同时报告每个大 Pass p50/p95/p99、Triangle、Ray、Candidate、Draw、Cluster、PPLL Node、
 BLAS/TLAS 和 NRD Dispatch 数。Frame Generation 只单列展示 FPS，不用于满足 GPU p95。
+
+### 6.1 2026-08-08 复测观察（尚非门禁结果）
+
+以下数据来自 RTX 4060 Laptop、Vulkan、RELAX_DIFFUSE、场景契约 v2，300 帧预热加 1000 帧采样。
+`已追踪 GPU p95` 是显式 Pass 阶段和，未包含完整 Render Graph 跨图跨度、AS/TLAS 和调度间隙；
+`update+render p95` 是墙钟时间，不能作为纯 CPU Render p95。两种口径都不满足完整 GPU 门禁，
+仅用于定位当前瓶颈。
+
+| 场景 | 分辨率 | 已追踪 GPU p95 | RTGI.Trace p95 | NRD.Dispatch p95 | update+render p95 | 平均 FPS |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| V02 体素洞穴 | 1280×720 | 9.215 ms | 2.664 ms | 2.959 ms | 31.734 ms | 39.42 |
+| M03 Sponza | 1280×720 | 10.870 ms | 4.742 ms | 3.642 ms | 14.207 ms | 88.83 |
+| V02 体素洞穴 | 1920×1080 | 18.359 ms | 5.462 ms | 6.624 ms | 65.510 ms | 19.07 |
+| M03 Sponza | 1920×1080 | 23.321 ms | 10.665 ms | 7.261 ms | 29.974 ms | 40.92 |
+
+当前状态：四组均为“未判定”。1080p 体素的墙钟 p95 为 65.510 ms，1080p Sponza 的 RTGI.Trace 和
+NRD.Dispatch 是明确的 GPU 热点；720p Sponza 的墙钟 p95 约 14.2 ms，不能外推到体素或 1080p。
+在完整 Span 与 AS/TLAS 计时发布前，不得把任何一组写成“达到 ≤16.67 ms”或作为动态分辨率控制器
+的目标样本。
 
 ## 7. 后端能力测试
 

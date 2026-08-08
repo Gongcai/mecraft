@@ -35,7 +35,7 @@ int main() {
                          controller.renderSettingsProfile().version ==
                              app::validation::kValidationRenderSettingsVersion &&
                          renderer::contracts::stableContentHashHex(controller.renderSettingsProfile().contentHash) ==
-                             "a64f59f7e206230c" &&
+                             "dd51efecb1ce4c75" &&
                          !controller.renderSettingsProfile().settings.upscale.dynamicResolutionEnabled &&
                          !controller.renderSettingsProfile().settings.upscale.fsr1Enabled,
                      "validation must publish the fixed versioned renderer profile") ||

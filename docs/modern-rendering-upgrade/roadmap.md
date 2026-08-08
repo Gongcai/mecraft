@@ -278,14 +278,39 @@ M1 与 M2 可并行开发，但公共 `GpuMaterial`、`GpuSceneGeometry` 与 Sta
 - NRD 达到验证矩阵的方差、拖影和 GPU 时间门槛。
 - Vulkan Modern 的间接漫反射只来自 RTGI，不混入 SSGI。
 
-当前 M3 画质门槛状态：双场景 Reference Capture 与运行链路已自动验收；64 spp Linear EXR、固定 ROI 的
-Variance/SSIM/95th HDR error、Ghost/Disocclusion 像素统计尚未接入现有 PNG validation runner，因此不能
-把这些数值门槛标记为通过。最新体素世界 Dashboard 千帧窗口观测中，1280×720 的总 GPU p95 为
-7.281 ms（RTGI 2.611 ms、NRD 2.230 ms、Lighting 0.845 ms），1920×1080 的总 GPU p95 为
-14.170 ms（RTGI 5.119 ms、NRD 4.142 ms、Lighting 1.911 ms）。1080p 总时间已经低于 16.67 ms
-预算，RTGI、NRD 与 Lighting 分项仍是主要优化目标。该观测仍需补齐固定场景契约、硬件与渲染设置记录，
-再进入性能矩阵的正式 1000 帧报告。下一轮先采集四个新增细分阶段，并固定比较 RELAX A-Trous 5/3；
-Lighting 同时记录火把数量、Cluster 覆盖与索引数量，定位逐像素灯光、阴影采样或 Cluster 覆盖成本。
+当前 M3 画质门槛状态：双场景 Reference Capture、RTGI/NRD 运行链路和自动契约测试已通过；64 spp
+Linear EXR、固定 ROI 的 Variance/SSIM/95th HDR error、Ghost/Disocclusion 像素统计尚未接入现有 PNG
+validation runner，因此这些画质数值门槛仍不能标记为通过。
+
+2026-08-08 在 RTX 4060 Laptop、Vulkan、RELAX_DIFFUSE、300 帧预热加 1000 帧采样下完成四组复测。
+报告中的 `total_tracked` 是显式 Pass 阶段和，不是完整 GPU 帧跨度：它没有覆盖独立的帧首/场景 Overlay/
+上采样 Render Graph、未打点的 AS/TLAS 与提交间隙。`cpu_update_render_ms` 是 update+render 调用的墙钟时间，
+可能包含 GPU 等待，不能当作纯 CPU Render p95。结果如下，详细口径见
+`06-时域输出与性能.md` 第 8 节：
+
+| 场景 | 分辨率 | 已追踪 GPU p95 | RTGI.Trace p95 | NRD.Dispatch p95 | update+render p95 | 平均 FPS |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 体素洞穴 | 1280×720 | 9.215 ms | 2.664 ms | 2.959 ms | 31.734 ms | 39.42 |
+| Sponza | 1280×720 | 10.870 ms | 4.742 ms | 3.642 ms | 14.207 ms | 88.83 |
+| 体素洞穴 | 1920×1080 | 18.359 ms | 5.462 ms | 6.624 ms | 65.510 ms | 19.07 |
+| Sponza | 1920×1080 | 23.321 ms | 10.665 ms | 7.261 ms | 29.974 ms | 40.92 |
+
+因此撤销旧的“1080p 总 GPU p95 已低于 16.67 ms”结论；当前四组数据都是定位用观察值，不能作为性能矩阵
+通过证据。720p Sponza 和 1080p Sponza 的墙钟 p95 分别约为 14.2 ms 和 30.0 ms，体素洞穴在 1080p
+墙钟 p95 约为 65.5 ms，瓶颈需要继续按场景拆解。
+
+下一轮任务按以下顺序执行：
+
+1. 将完整 Render Graph 的 `gpuSpanMs`（含跨图提交顺序、首尾时间戳和调度间隙）接入固定 1000 帧历史，
+   在 Benchmark JSON 中同时输出 p50/p95/p99；没有完整跨度时报告必须明确为无效。
+2. 为 `SceneTLAS`、Terrain BLAS Build/Compaction、Static BLAS、动态资源准备和 RTGI bootstrap 分别增加
+   GPU/CPU Timestamp，报告构建次数、Primitive、Scratch、TLAS/BLAS 字节和每帧峰值。
+3. 对照 Caustica 评估动态实体 BLAS Refit、TLAS Ring、固定 Solid/Cutout/Translucent/Water Geometry
+   Bucket 以及 Cutout Any-Hit/OMM 路径，先补契约和统计再改实现。
+4. 针对 1080p 继续定位：体素优先检查地形提交、流送和 AS；Sponza 优先检查 RTGI.Trace 与 NRD.Dispatch。
+   固定场景、驱动和电源模式后保留前后 Capture。
+5. 完整跨度和分项归因稳定后，再在同一镜头比较 RELAX A-Trous 5 与 3；不得用减少迭代数掩盖 Trace 或
+   AS 成本。
 
 ## 7. M4：GPU Culling、LOD 与动画
 

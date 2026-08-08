@@ -107,6 +107,30 @@ struct RtgiTraceSmokeCase final {
     std::vector<RtgiTraceSmokeExpectedPixel> expectedPixels;
 };
 
+/// Builds a blue-noise texture whose per-pixel samples match the production RTGI sampling contract.
+/// @param width Render-width texel count used by the smoke case.
+/// @param height Render-height texel count used by the smoke case.
+/// @param frameIndex Deterministic RTGI frame index supplied to the shader.
+/// @param desiredSample Sample value the fixture wants after the shader's pixel rotation is added.
+/// @return RGBA float texels with one contract-matched sample for every render pixel.
+[[nodiscard]] std::vector<float> makeRtgiFixtureBlueNoise(const uint32_t width, const uint32_t height,
+                                                          const uint32_t frameIndex,
+                                                          const glm::vec2& desiredSample) {
+    std::vector<float> blueNoise(static_cast<size_t>(width) * static_cast<size_t>(height) * 4u, 0.0f);
+    for (uint32_t y = 0u; y < height; ++y) {
+        for (uint32_t x = 0u; x < width; ++x) {
+            const glm::vec2 rotation = renderer::contracts::rtgiPixelScrambledCranleyPattersonRotation(
+                frameIndex, glm::uvec2(x, y));
+            const size_t offset = (static_cast<size_t>(y) * width + x) * 4u;
+            blueNoise[offset + 0u] = glm::fract(desiredSample.x - rotation.x);
+            blueNoise[offset + 1u] = glm::fract(desiredSample.y - rotation.y);
+            blueNoise[offset + 2u] = 0.0f;
+            blueNoise[offset + 3u] = 1.0f;
+        }
+    }
+    return blueNoise;
+}
+
 [[nodiscard]] bool validateRtgiTraceCase(VkRhiDevice& device, RhiCommandListPool& commandPool,
                                          renderer::rt::SceneTlasCache& sceneTlas,
                                          const renderer::rt::SceneTlasView& activeTlas,
@@ -3763,13 +3787,7 @@ void main() {
                                       RhiResourceState::StorageBuffer, &*firstGpuHitData, sizeof(*firstGpuHitData),
                                       "VulkanSmoke.TerrainTLAS.HitDataReadback1");
     if (valid) {
-        const glm::vec2 rotation = renderer::contracts::rtgiCranleyPattersonRotation(0u);
-        const auto wrapUnit = [](const float value) {
-            return value - std::floor(value);
-        };
         constexpr glm::vec2 kDesiredSample{0.125f, 0.0001f};
-        const std::array<float, 4u> noiseTexel{wrapUnit(kDesiredSample.x - rotation.x),
-                                               wrapUnit(kDesiredSample.y - rotation.y), 0.0f, 1.0f};
         RtgiTraceSmokeCase smokeCase;
         smokeCase.label = "Terrain Cutout Candidate Confirm";
         smokeCase.width = 2u;
@@ -3778,8 +3796,7 @@ void main() {
         smokeCase.normalAo = {0.5f, 0.5f, 1.0f, 0.0f, 0.5f, 0.5f, 1.0f, 0.0f};
         smokeCase.materialAux = std::vector<float>(8u, 0.0f);
         smokeCase.voxelLight = {255u, 0u, 0u, 255u, 255u, 0u, 0u, 255u};
-        smokeCase.blueNoise = {noiseTexel[0], noiseTexel[1], noiseTexel[2], noiseTexel[3],
-                               noiseTexel[0], noiseTexel[1], noiseTexel[2], noiseTexel[3]};
+        smokeCase.blueNoise = makeRtgiFixtureBlueNoise(smokeCase.width, smokeCase.height, 0u, kDesiredSample);
         smokeCase.terrainAlbedoWidth = 2u;
         smokeCase.terrainAlbedoHeight = 1u;
         smokeCase.terrainAlbedoLayers = 2u;
@@ -5083,10 +5100,6 @@ namespace {
                                          renderer::core::GlobalBindlessSet& globalBindlessSet) {
     using namespace renderer::contracts;
 
-    const glm::vec2 rotation = renderer::contracts::rtgiCranleyPattersonRotation(0u);
-    const auto wrapUnit = [](const float value) {
-        return value - std::floor(value);
-    };
     constexpr glm::vec2 kDesiredSample{0.125f, 0.0001f};
     RtgiTraceSmokeCase smokeCase;
     smokeCase.label = "Static Mesh Alpha Mask";
@@ -5096,10 +5109,7 @@ namespace {
     smokeCase.normalAo = {1.0f, 1.0f, 1.0f, 0.0f, 1.0f, 1.0f, 1.0f, 0.0f};
     smokeCase.materialAux = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
     smokeCase.voxelLight = {255u, 0u, 0u, 255u, 255u, 0u, 0u, 255u};
-    const std::array<float, 4u> noisePixel{wrapUnit(kDesiredSample.x - rotation.x),
-                                           wrapUnit(kDesiredSample.y - rotation.y), 0.0f, 1.0f};
-    smokeCase.blueNoise = {noisePixel[0], noisePixel[1], noisePixel[2], noisePixel[3],
-                           noisePixel[0], noisePixel[1], noisePixel[2], noisePixel[3]};
+    smokeCase.blueNoise = makeRtgiFixtureBlueNoise(smokeCase.width, smokeCase.height, 0u, kDesiredSample);
     smokeCase.terrainAlbedoWidth = 1u;
     smokeCase.terrainAlbedoHeight = 1u;
     smokeCase.terrainAlbedoLayers = 1u;
@@ -5117,7 +5127,7 @@ namespace {
     pointInput.positionMeters = {0.0f, 0.0f, 0.0f};
     pointInput.rangeMeters = 4.0f;
     pointInput.colorLinear = {0.0f, 0.0f, 1.0f};
-    pointInput.intensity = 2145.7078f;
+    pointInput.intensity = 33.526684f;
     pointInput.intensityUnit = GpuLightIntensityUnit::Candela;
     pointInput.contributionFlags = gpuLightContributionFlagBit(GpuLightContributionFlag::Diffuse);
     const GpuLightNormalizationResult point = normalizeGpuLight(pointInput);
@@ -5158,7 +5168,7 @@ namespace {
     missCase.normalAo = {1.0f, 1.0f, 1.0f, 0.0f};
     missCase.materialAux = {0.0f, 0.0f, 0.0f, 0.0f};
     missCase.voxelLight = {255u, 0u, 0u, 255u};
-    missCase.blueNoise = {noisePixel[0], noisePixel[1], noisePixel[2], noisePixel[3]};
+    missCase.blueNoise = makeRtgiFixtureBlueNoise(missCase.width, missCase.height, 0u, kDesiredSample);
     missCase.terrainAlbedoWidth = 1u;
     missCase.terrainAlbedoHeight = 1u;
     missCase.terrainAlbedoLayers = 1u;

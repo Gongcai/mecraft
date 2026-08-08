@@ -8,17 +8,17 @@
   "capture": {
     "camera_time_seconds": 6.0,
     "height": 720,
-    "path": "assets/validation/reference_captures/m3_voxel_rtgi_cave_vulkan_1280x720.png",
+    "path": "/tmp/mecraft-validation-retest/m3_voxel_rtgi_cave_vulkan_1280x720.png",
     "width": 1280
   },
   "cpu_update_render_ms": {
-    "average": 199.20907533333332,
-    "max": 545.111421,
-    "median": 27.098777000000002,
-    "min": 25.417028000000002,
-    "p50": 27.098777000000002,
-    "p95": 545.111421,
-    "p99": 545.111421
+    "average": 184.350406,
+    "max": 509.49055799999996,
+    "median": 22.801038,
+    "min": 20.759621999999997,
+    "p50": 22.801038,
+    "p95": 509.49055799999996,
+    "p99": 509.49055799999996
   },
   "environment": {
     "time_of_day_seconds": 900.0,
@@ -30,44 +30,64 @@
     "observed_sample_count": 3,
     "stages": {
       "Cloud": {
-        "p50": 0.254976,
-        "p95": 0.260096,
-        "p99": 0.260096
+        "p50": 0.251904,
+        "p95": 0.257024,
+        "p99": 0.257024
       },
       "GBuffer": {
-        "p50": 0.43008,
-        "p95": 0.536576,
-        "p99": 0.536576
+        "p50": 0.41984,
+        "p95": 0.521216,
+        "p99": 0.521216
       },
       "Lighting": {
-        "p50": 1.516544,
-        "p95": 1.538048,
-        "p99": 1.538048
+        "p50": 0.842752,
+        "p95": 0.842752,
+        "p99": 0.842752
       },
       "NRD": {
-        "p50": 2.684928,
-        "p95": 4.06016,
-        "p99": 4.06016
+        "p50": 1.755136,
+        "p95": 2.81088,
+        "p99": 2.81088
+      },
+      "NRD.Dispatch": {
+        "p50": 1.6896,
+        "p95": 2.733056,
+        "p99": 2.733056
+      },
+      "NRD.GuidePrep": {
+        "p50": 0.065536,
+        "p95": 0.077824,
+        "p99": 0.077824
       },
       "Post": {
-        "p50": 0.178944,
-        "p95": 0.187904,
-        "p99": 0.187904
+        "p50": 0.175872,
+        "p95": 0.176384,
+        "p99": 0.176384
       },
       "RTGI": {
-        "p50": 2.445312,
-        "p95": 3.713024,
-        "p99": 3.713024
+        "p50": 1.062912,
+        "p95": 1.657856,
+        "p99": 1.657856
+      },
+      "RTGI.SignalPack": {
+        "p50": 0.047104,
+        "p95": 0.052224,
+        "p99": 0.052224
+      },
+      "RTGI.Trace": {
+        "p50": 1.015808,
+        "p95": 1.605632,
+        "p99": 1.605632
       },
       "Reflection": {
-        "p50": 0.438272,
-        "p95": 0.55296,
-        "p99": 0.55296
+        "p50": 0.371712,
+        "p95": 0.546816,
+        "p99": 0.546816
       },
       "SSAO": {
         "p50": 0.2496,
-        "p95": 0.287744,
-        "p99": 0.287744
+        "p95": 0.28672,
+        "p99": 0.28672
       },
       "SSGI": {
         "p50": 0.0,
@@ -75,9 +95,9 @@
         "p99": 0.0
       },
       "Shadow": {
-        "p50": 0.953344,
-        "p95": 0.975872,
-        "p99": 0.975872
+        "p50": 0.910336,
+        "p95": 1.111296,
+        "p99": 1.111296
       },
       "Transparent": {
         "p50": 0.0,
@@ -85,27 +105,27 @@
         "p99": 0.0
       },
       "Volumetric": {
-        "p50": 0.238592,
-        "p95": 0.256,
-        "p99": 0.256
+        "p50": 0.233472,
+        "p95": 0.253952,
+        "p99": 0.253952
       },
       "Water": {
-        "p50": 0.178176,
-        "p95": 0.203776,
-        "p99": 0.203776
+        "p50": 0.177152,
+        "p95": 0.2048,
+        "p99": 0.2048
       }
     },
     "total_tracked": {
-      "p50": 10.898176,
-      "p95": 10.933759999999998,
-      "p99": 10.933759999999998
+      "p50": 6.986239999999999,
+      "p95": 7.483648,
+      "p99": 7.483648
     },
     "valid": true,
     "window_capacity": 1000,
     "window_sample_count": 3
   },
   "render_settings": {
-    "content_hash": "f102d1561423ccc6",
+    "content_hash": "ab8c0ee1b49d569f",
     "id": "m3_voxel_rtgi_quality",
     "version": 2
   },
@@ -116,17 +136,17 @@
     "categories": {
       "acceleration_structure": {
         "allocation_count": 258,
-        "bytes": 3009024,
+        "bytes": 6015744,
         "resource_count": 515
       },
       "gbuffer_history": {
-        "allocation_count": 73,
-        "bytes": 561705984,
-        "resource_count": 73
+        "allocation_count": 75,
+        "bytes": 563672064,
+        "resource_count": 75
       },
       "geometry": {
         "allocation_count": 552,
-        "bytes": 56814592,
+        "bytes": 70838784,
         "resource_count": 552
       },
       "nrd": {
@@ -146,7 +166,7 @@
       },
       "scene_data": {
         "allocation_count": 36,
-        "bytes": 8858336,
+        "bytes": 11842656,
         "resource_count": 36
       },
       "sdk": {
@@ -160,9 +180,9 @@
         "resource_count": 80
       },
       "transient": {
-        "allocation_count": 9,
-        "bytes": 53346304,
-        "resource_count": 16
+        "allocation_count": 10,
+        "bytes": 57278464,
+        "resource_count": 18
       },
       "unclassified": {
         "allocation_count": 0,
@@ -175,15 +195,15 @@
         "resource_count": 19
       }
     },
-    "total_allocation_count": 1052,
-    "total_bytes": 985289616,
-    "total_resource_count": 1319,
+    "total_allocation_count": 1055,
+    "total_bytes": 1011203088,
+    "total_resource_count": 1323,
     "valid": true
   },
   "sample_duration_seconds": 0.05000000260770321,
   "scene": "voxel",
   "scene_contract": {
-    "content_hash": "f555ab3a2d85b3b4",
+    "content_hash": "088740cdd9c3b7ad",
     "hash_algorithm": "fnv1a64",
     "id": "m3_voxel_rtgi_cave",
     "source": "assets/validation/scenes/m3_voxel_rtgi_cave.json",
