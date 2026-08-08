@@ -1,3 +1,4 @@
+#include "renderer/contracts/CubeMapContract.h"
 #include "renderer/contracts/LocalShadowContract.h"
 
 #include <array>
@@ -230,6 +231,34 @@ bool testCpuAndGlslMirror() {
     return true;
 }
 
+bool testCubeMapCaptureCoordinateContract() {
+    using namespace renderer::contracts;
+    constexpr float nearPlane = 0.05f;
+    constexpr float farPlane = 16.0f;
+    const glm::vec3 origin(0.0f);
+    const auto projectedCoordinates = [](const glm::mat4& matrix, const glm::vec3& point) {
+        const glm::vec4 clip = matrix * glm::vec4(point, 1.0f);
+        return glm::vec2(clip.x / clip.w, clip.y / clip.w);
+    };
+    for (uint32_t face = 0u; face < kCubeMapFaceCount; ++face) {
+        const glm::mat4 corrected = cubeMapFaceViewProjection(origin, face, nearPlane, farPlane);
+        const glm::mat4 uncorrected = glm::perspective(glm::half_pi<float>(), 1.0f, nearPlane, farPlane) *
+                                      cubeMapFaceView(origin, face);
+        const glm::vec3 upperPoint = kCubeMapFaceDirections[face] + kCubeMapFaceUpVectors[face] * 0.5f;
+        const glm::vec3 lowerPoint = kCubeMapFaceDirections[face] - kCubeMapFaceUpVectors[face] * 0.5f;
+        const glm::vec2 correctedUpper = projectedCoordinates(corrected, upperPoint);
+        const glm::vec2 correctedLower = projectedCoordinates(corrected, lowerPoint);
+        const glm::vec2 uncorrectedUpper = projectedCoordinates(uncorrected, upperPoint);
+        const glm::vec2 uncorrectedLower = projectedCoordinates(uncorrected, lowerPoint);
+        if (!requireTrue(correctedUpper.y < correctedLower.y && uncorrectedUpper.y > uncorrectedLower.y &&
+                             correctedUpper.x == uncorrectedUpper.x && correctedLower.x == uncorrectedLower.x,
+                         "cubemap capture must compensate the RHI negative viewport only in clip-space Y")) {
+            return false;
+        }
+    }
+    return true;
+}
+
 bool testTerrainGeometrySignature() {
     using namespace renderer::contracts;
     const uint64_t pending = extendLocalShadowGeometrySignature(
@@ -249,7 +278,7 @@ bool testTerrainGeometrySignature() {
 int main() {
     if (!testStableSlotsAndDeterministicInsertion() || !testDeletionAndLowestFreeReuse() ||
         !testTransactionalCapacityFailure() || !testStructuredFailures() || !testCpuAndGlslMirror() ||
-        !testTerrainGeometrySignature()) {
+        !testCubeMapCaptureCoordinateContract() || !testTerrainGeometrySignature()) {
         return 1;
     }
     std::cout << "[local_shadow_contract_test] PASS\n";

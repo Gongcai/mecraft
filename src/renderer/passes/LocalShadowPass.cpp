@@ -2,6 +2,7 @@
 
 #include "renderer/core/IDeferredGeometryProvider.h"
 #include "renderer/core/RenderScene.h"
+#include "renderer/contracts/CubeMapContract.h"
 #include "renderer/debug/RenderDebugService.h"
 #include "renderer/mesh/TerrainRhiPipelineSet.h"
 #include "renderer/mesh/WorldRenderBuffer.h"
@@ -380,17 +381,10 @@ bool LocalShadowPass::buildPreparedShadows(const FrameContext& ctx, const IWorld
             prepared.worldViewProjections[0] = prepared.projections[0] * prepared.views[0];
         } else {
             ++m_pendingFrameStats.requestedPointLights;
-            static constexpr std::array<glm::vec3, 6> kDirections{
-                glm::vec3(1.0f, 0.0f, 0.0f),  glm::vec3(-1.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f),
-                glm::vec3(0.0f, -1.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f),  glm::vec3(0.0f, 0.0f, -1.0f)};
-            static constexpr std::array<glm::vec3, 6> kUpVectors{
-                glm::vec3(0.0f, -1.0f, 0.0f), glm::vec3(0.0f, -1.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f),
-                glm::vec3(0.0f, 0.0f, -1.0f), glm::vec3(0.0f, -1.0f, 0.0f), glm::vec3(0.0f, -1.0f, 0.0f)};
-            for (uint32_t face = 0u; face < 6u; ++face) {
-                prepared.views[face] =
-                    glm::lookAt(prepared.worldPosition, prepared.worldPosition + kDirections[face], kUpVectors[face]);
+            for (uint32_t face = 0u; face < renderer::contracts::kCubeMapFaceCount; ++face) {
+                prepared.views[face] = renderer::contracts::cubeMapFaceView(prepared.worldPosition, face);
                 prepared.projections[face] =
-                    glm::perspective(glm::radians(90.0f), 1.0f, kLocalShadowNearPlaneMeters, prepared.range);
+                    renderer::contracts::cubeMapFaceProjection(kLocalShadowNearPlaneMeters, prepared.range);
                 prepared.worldViewProjections[face] = prepared.projections[face] * prepared.views[face];
             }
         }

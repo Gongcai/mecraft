@@ -1,16 +1,13 @@
 #include "ReflectionProbeCapturePass.h"
 
 #include "renderer/core/FrameContext.h"
+#include "renderer/contracts/CubeMapContract.h"
 #include "renderer/rhi/RhiCommandList.h"
 #include "renderer/rhi/RhiDevice.h"
 #include "renderer/rhi/RhiResources.h"
 #include "renderer/rhi/RhiShaderSourceLoader.h"
 
-#include <glm/gtc/constants.hpp>
-#include <glm/gtc/matrix_transform.hpp>
-
 #include <algorithm>
-#include <array>
 #include <cmath>
 #include <utility>
 
@@ -72,28 +69,13 @@ normalizationInput(const ReflectionProbeCaptureSource& source, const glm::vec3& 
 }
 
 [[nodiscard]] glm::mat4 captureView(const ReflectionProbeCaptureSource& source, const uint32_t face) {
-    constexpr std::array<glm::vec3, renderer::contracts::kReflectionProbeCubeFaceCount> kDirections{
-        {{1.0f, 0.0f, 0.0f},
-         {-1.0f, 0.0f, 0.0f},
-         {0.0f, 1.0f, 0.0f},
-         {0.0f, -1.0f, 0.0f},
-         {0.0f, 0.0f, 1.0f},
-         {0.0f, 0.0f, -1.0f}}};
-    constexpr std::array<glm::vec3, renderer::contracts::kReflectionProbeCubeFaceCount> kUpVectors{
-        {{0.0f, -1.0f, 0.0f},
-         {0.0f, -1.0f, 0.0f},
-         {0.0f, 0.0f, 1.0f},
-         {0.0f, 0.0f, -1.0f},
-         {0.0f, -1.0f, 0.0f},
-         {0.0f, -1.0f, 0.0f}}};
-    return glm::lookAt(source.positionWorldMeters, source.positionWorldMeters + kDirections[face], kUpVectors[face]);
+    return renderer::contracts::cubeMapFaceView(source.positionWorldMeters, face);
 }
 
 [[nodiscard]] glm::mat4 captureViewProjection(const ReflectionProbeCaptureSource& source, const uint32_t face) {
     const float farPlane = captureFarPlane(source);
-    const glm::mat4 projection = glm::perspective(
-        glm::half_pi<float>(), 1.0f, renderer::contracts::kReflectionProbeCaptureNearPlaneMeters, farPlane);
-    return projection * captureView(source, face);
+    return renderer::contracts::cubeMapFaceViewProjection(
+        source.positionWorldMeters, face, renderer::contracts::kReflectionProbeCaptureNearPlaneMeters, farPlane);
 }
 
 } // namespace

@@ -1,6 +1,7 @@
 #include "renderer/core/GlobalBindlessSet.h"
 #include "renderer/core/GpuSceneBufferSet.h"
 #include "renderer/core/RenderScene.h"
+#include "renderer/contracts/CubeMapContract.h"
 #include "renderer/contracts/GpuLightContract.h"
 #include "renderer/contracts/GpuMaterialContract.h"
 #include "renderer/contracts/LocalShadowContract.h"
@@ -5694,6 +5695,301 @@ namespace {
     return valid && device.validationErrorCount() == validationErrorsBefore;
 }
 
+[[nodiscard]] bool validateCubeArrayCaptureOrientation(VkRhiDevice& device, RhiCommandListPool& commandPool) {
+    constexpr uint32_t kFaceExtent = 32u;
+    constexpr uint32_t kOutputWidth = 2u;
+    constexpr uint32_t kOutputHeight = 1u;
+    constexpr uint32_t kBytesPerPixel = 4u;
+    const uint64_t validationErrorsBefore = device.validationErrorCount();
+
+    RhiTextureDesc cubeDesc;
+    cubeDesc.debugName = "VulkanSmoke.CubeArrayOrientation.Source";
+    cubeDesc.dimension = RhiTextureDimension::CubeArray;
+    cubeDesc.format = RhiTextureFormat::Rgba8Unorm;
+    cubeDesc.width = kFaceExtent;
+    cubeDesc.height = kFaceExtent;
+    cubeDesc.depthOrLayers = renderer::contracts::kCubeMapFaceCount;
+    cubeDesc.usage = rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment);
+    cubeDesc.memoryCategory = RhiMemoryCategory::SceneData;
+    const RhiTextureHandle cubeTexture = device.createTexture(cubeDesc, nullptr);
+
+    RhiTextureViewDesc cubeArrayViewDesc;
+    cubeArrayViewDesc.texture = cubeTexture;
+    cubeArrayViewDesc.viewType = RhiTextureViewType::CubeArray;
+    cubeArrayViewDesc.format = cubeDesc.format;
+    cubeArrayViewDesc.layerCount = renderer::contracts::kCubeMapFaceCount;
+    const RhiTextureViewHandle cubeArrayView = device.createTextureView(cubeArrayViewDesc);
+
+    RhiTextureViewDesc faceViewDesc;
+    faceViewDesc.texture = cubeTexture;
+    faceViewDesc.viewType = RhiTextureViewType::Texture2D;
+    faceViewDesc.format = cubeDesc.format;
+    faceViewDesc.baseLayer = 0u;
+    faceViewDesc.layerCount = 1u;
+    const RhiTextureViewHandle faceView = device.createTextureView(faceViewDesc);
+
+    RhiTextureDesc outputDesc;
+    outputDesc.debugName = "VulkanSmoke.CubeArrayOrientation.Output";
+    outputDesc.format = RhiTextureFormat::Rgba8Unorm;
+    outputDesc.width = kOutputWidth;
+    outputDesc.height = kOutputHeight;
+    outputDesc.usage = rhiFlag(RhiTextureUsage::ColorAttachment) | rhiFlag(RhiTextureUsage::TransferSrc);
+    outputDesc.memoryCategory = RhiMemoryCategory::Readback;
+    const RhiTextureHandle outputTexture = device.createTexture(outputDesc, nullptr);
+
+    RhiTextureViewDesc outputViewDesc;
+    outputViewDesc.texture = outputTexture;
+    outputViewDesc.viewType = RhiTextureViewType::Texture2D;
+    outputViewDesc.format = outputDesc.format;
+    const RhiTextureViewHandle outputView = device.createTextureView(outputViewDesc);
+
+    RhiSamplerDesc samplerDesc;
+    samplerDesc.minFilter = RhiFilter::Nearest;
+    samplerDesc.magFilter = RhiFilter::Nearest;
+    samplerDesc.mipmapMode = RhiMipmapMode::Nearest;
+    samplerDesc.addressU = RhiAddressMode::ClampToEdge;
+    samplerDesc.addressV = RhiAddressMode::ClampToEdge;
+    samplerDesc.addressW = RhiAddressMode::ClampToEdge;
+    const RhiSamplerHandle sampler = device.createSampler(samplerDesc);
+
+    RhiBindGroupLayoutDesc bindGroupLayoutDesc;
+    bindGroupLayoutDesc.debugName = "VulkanSmoke.CubeArrayOrientation.BindGroupLayout";
+    bindGroupLayoutDesc.entries.push_back(
+        {0u, RhiBindingType::CombinedTextureSampler, rhiFlag(RhiShaderStage::Fragment), 1u, 0u});
+    const RhiBindGroupLayoutHandle bindGroupLayout = device.createBindGroupLayout(bindGroupLayoutDesc);
+
+    RhiBindGroupDesc bindGroupDesc;
+    bindGroupDesc.layout = bindGroupLayout;
+    RhiBindGroupEntry bindGroupEntry;
+    bindGroupEntry.binding = 0u;
+    bindGroupEntry.resource.combinedTextureSampler = {cubeArrayView, sampler};
+    bindGroupDesc.entries.push_back(bindGroupEntry);
+    const RhiBindGroupHandle bindGroup = device.createBindGroup(bindGroupDesc);
+
+    constexpr char kFaceVertexSource[] = R"glsl(
+#version 450 core
+layout(push_constant) uniform FacePushConstants {
+    mat4 viewProjection;
+};
+const vec3 positions[6] = vec3[](
+    vec3(1.0, 0.35, -0.25), vec3(1.0, 0.75, -0.25), vec3(1.0, 0.75, 0.25),
+    vec3(1.0, 0.35, -0.25), vec3(1.0, 0.75, 0.25), vec3(1.0, 0.35, 0.25)
+);
+void main() {
+    gl_Position = viewProjection * vec4(positions[gl_VertexIndex], 1.0);
+}
+)glsl";
+    constexpr char kFaceFragmentSource[] = R"glsl(
+#version 450 core
+layout(location = 0) out vec4 outColor;
+void main() {
+    outColor = vec4(1.0, 0.0, 0.0, 1.0);
+}
+)glsl";
+    constexpr char kSampleVertexSource[] = R"glsl(
+#version 450 core
+void main() {
+    const vec2 positions[3] = vec2[](
+        vec2(-1.0, -1.0), vec2(3.0, -1.0), vec2(-1.0, 3.0)
+    );
+    gl_Position = vec4(positions[gl_VertexIndex], 0.0, 1.0);
+}
+)glsl";
+    constexpr char kSampleFragmentSource[] = R"glsl(
+#version 450 core
+layout(set = 0, binding = 0) uniform samplerCubeArray cubeArray;
+layout(location = 0) out vec4 outColor;
+void main() {
+    const bool upperDirection = gl_FragCoord.x < 1.0;
+    const vec3 direction = normalize(vec3(1.0, upperDirection ? 0.60 : -0.60, 0.0));
+    outColor = textureLod(cubeArray, vec4(direction, 0.0), 0.0);
+}
+)glsl";
+
+    RhiShaderDesc shaderDesc;
+    shaderDesc.debugName = "VulkanSmoke.CubeArrayOrientation.FaceVertex";
+    shaderDesc.stage = RhiShaderStage::Vertex;
+    shaderDesc.source = kFaceVertexSource;
+    shaderDesc.sourceSize = sizeof(kFaceVertexSource) - 1u;
+    const RhiShaderHandle faceVertexShader = device.createShader(shaderDesc);
+    shaderDesc.debugName = "VulkanSmoke.CubeArrayOrientation.FaceFragment";
+    shaderDesc.stage = RhiShaderStage::Fragment;
+    shaderDesc.source = kFaceFragmentSource;
+    shaderDesc.sourceSize = sizeof(kFaceFragmentSource) - 1u;
+    const RhiShaderHandle faceFragmentShader = device.createShader(shaderDesc);
+    shaderDesc.debugName = "VulkanSmoke.CubeArrayOrientation.SampleVertex";
+    shaderDesc.stage = RhiShaderStage::Vertex;
+    shaderDesc.source = kSampleVertexSource;
+    shaderDesc.sourceSize = sizeof(kSampleVertexSource) - 1u;
+    const RhiShaderHandle sampleVertexShader = device.createShader(shaderDesc);
+    shaderDesc.debugName = "VulkanSmoke.CubeArrayOrientation.SampleFragment";
+    shaderDesc.stage = RhiShaderStage::Fragment;
+    shaderDesc.source = kSampleFragmentSource;
+    shaderDesc.sourceSize = sizeof(kSampleFragmentSource) - 1u;
+    const RhiShaderHandle sampleFragmentShader = device.createShader(shaderDesc);
+
+    RhiPipelineLayoutDesc faceLayoutDesc;
+    faceLayoutDesc.debugName = "VulkanSmoke.CubeArrayOrientation.FaceLayout";
+    faceLayoutDesc.pushConstantBytes = sizeof(glm::mat4);
+    faceLayoutDesc.pushConstantStages = rhiFlag(RhiShaderStage::Vertex);
+    const RhiPipelineLayoutHandle faceLayout = device.createPipelineLayout(faceLayoutDesc);
+
+    RhiPipelineLayoutDesc sampleLayoutDesc;
+    sampleLayoutDesc.debugName = "VulkanSmoke.CubeArrayOrientation.SampleLayout";
+    sampleLayoutDesc.bindGroupLayouts.push_back(bindGroupLayout);
+    const RhiPipelineLayoutHandle sampleLayout = device.createPipelineLayout(sampleLayoutDesc);
+
+    RhiGraphicsPipelineDesc facePipelineDesc;
+    facePipelineDesc.debugName = "VulkanSmoke.CubeArrayOrientation.FacePipeline";
+    facePipelineDesc.vertexShader = faceVertexShader;
+    facePipelineDesc.fragmentShader = faceFragmentShader;
+    facePipelineDesc.layout = faceLayout;
+    facePipelineDesc.raster.cullMode = RhiCullMode::Back;
+    facePipelineDesc.depthStencil.depthTestEnabled = false;
+    facePipelineDesc.depthStencil.depthWriteEnabled = false;
+    facePipelineDesc.colorFormats = {cubeDesc.format};
+    const RhiPipelineHandle facePipeline = device.createGraphicsPipeline(facePipelineDesc);
+
+    RhiGraphicsPipelineDesc samplePipelineDesc;
+    samplePipelineDesc.debugName = "VulkanSmoke.CubeArrayOrientation.SamplePipeline";
+    samplePipelineDesc.vertexShader = sampleVertexShader;
+    samplePipelineDesc.fragmentShader = sampleFragmentShader;
+    samplePipelineDesc.layout = sampleLayout;
+    samplePipelineDesc.raster.cullMode = RhiCullMode::None;
+    samplePipelineDesc.depthStencil.depthTestEnabled = false;
+    samplePipelineDesc.depthStencil.depthWriteEnabled = false;
+    samplePipelineDesc.colorFormats = {outputDesc.format};
+    const RhiPipelineHandle samplePipeline = device.createGraphicsPipeline(samplePipelineDesc);
+
+    RhiBufferDesc readbackDesc;
+    readbackDesc.debugName = "VulkanSmoke.CubeArrayOrientation.Readback";
+    readbackDesc.size = static_cast<uint64_t>(kOutputWidth) * kOutputHeight * kBytesPerPixel;
+    readbackDesc.usage = rhiFlag(RhiBufferUsage::TransferDst) | rhiFlag(RhiBufferUsage::MapRead);
+    readbackDesc.memoryUsage = RhiMemoryUsage::GpuToCpu;
+    readbackDesc.initialState = RhiResourceState::TransferDst;
+    readbackDesc.memoryCategory = RhiMemoryCategory::Readback;
+    const RhiBufferHandle readback = device.createBuffer(readbackDesc, nullptr, 0u);
+
+    bool valid = cubeTexture.isValid() && cubeArrayView.isValid() && faceView.isValid() && outputTexture.isValid() &&
+                 outputView.isValid() && sampler.isValid() && bindGroupLayout.isValid() && bindGroup.isValid() &&
+                 faceVertexShader.isValid() && faceFragmentShader.isValid() && sampleVertexShader.isValid() &&
+                 sampleFragmentShader.isValid() && faceLayout.isValid() && sampleLayout.isValid() &&
+                 facePipeline.isValid() && samplePipeline.isValid() && readback.isValid();
+
+    if (valid) {
+        RhiCommandList* commands = commandPool.acquire(RhiCommandListType::Graphics);
+        valid = commands != nullptr && commands->begin({"VulkanSmoke.CubeArrayOrientation.Commands",
+                                                         RhiCommandListType::Graphics});
+        if (valid) {
+            commands->textureBarrier({cubeTexture, RhiResourceState::Undefined, RhiResourceState::RenderTarget});
+            RhiColorAttachment faceAttachment;
+            faceAttachment.view = faceView;
+            faceAttachment.loadOp = RhiLoadOp::Clear;
+            faceAttachment.storeOp = RhiStoreOp::Store;
+            faceAttachment.clearColor[0] = 0.0f;
+            faceAttachment.clearColor[1] = 0.0f;
+            faceAttachment.clearColor[2] = 1.0f;
+            faceAttachment.clearColor[3] = 1.0f;
+            RhiRenderingInfo faceRendering;
+            faceRendering.debugName = "VulkanSmoke.CubeArrayOrientation.FaceRendering";
+            faceRendering.renderArea = {0, 0, kFaceExtent, kFaceExtent};
+            faceRendering.colorAttachments = &faceAttachment;
+            faceRendering.colorAttachmentCount = 1u;
+            commands->beginRendering(faceRendering);
+            commands->setGraphicsPipeline(facePipeline);
+            const glm::mat4 viewProjection = renderer::contracts::cubeMapFaceViewProjection(
+                glm::vec3(0.0f), 0u, 0.05f, 4.0f);
+            commands->pushConstants(&viewProjection, sizeof(viewProjection), rhiFlag(RhiShaderStage::Vertex));
+            commands->draw(6u, 1u, 0u, 0u);
+            commands->endRendering();
+            commands->textureBarrier({cubeTexture, RhiResourceState::RenderTarget, RhiResourceState::ShaderRead});
+
+            commands->textureBarrier({outputTexture, RhiResourceState::Undefined, RhiResourceState::RenderTarget});
+            RhiColorAttachment outputAttachment;
+            outputAttachment.view = outputView;
+            outputAttachment.loadOp = RhiLoadOp::Clear;
+            outputAttachment.storeOp = RhiStoreOp::Store;
+            RhiRenderingInfo outputRendering;
+            outputRendering.debugName = "VulkanSmoke.CubeArrayOrientation.SampleRendering";
+            outputRendering.renderArea = {0, 0, kOutputWidth, kOutputHeight};
+            outputRendering.colorAttachments = &outputAttachment;
+            outputRendering.colorAttachmentCount = 1u;
+            commands->beginRendering(outputRendering);
+            commands->setGraphicsPipeline(samplePipeline);
+            commands->setBindGroup(0u, bindGroup);
+            commands->draw(3u, 1u, 0u, 0u);
+            commands->endRendering();
+            commands->textureBarrier({outputTexture, RhiResourceState::RenderTarget, RhiResourceState::TransferSrc});
+
+            RhiTextureBufferCopy copy;
+            copy.srcTexture = outputTexture;
+            copy.dstBuffer = readback;
+            copy.bytesPerRow = static_cast<uint64_t>(kOutputWidth) * kBytesPerPixel;
+            copy.rowsPerImage = kOutputHeight;
+            copy.width = kOutputWidth;
+            copy.height = kOutputHeight;
+            commands->copyTextureToBuffer(copy);
+            commands->bufferBarrier({readback, RhiResourceState::TransferDst, RhiResourceState::HostRead});
+            valid = commands->end();
+        }
+        if (valid) {
+            RhiCommandList* submissions[] = {commands};
+            RhiSubmissionToken token;
+            valid = device.submit({"VulkanSmoke.CubeArrayOrientation.Submit", submissions, 1u}, &token) &&
+                    device.waitForSubmission(token);
+        }
+    }
+    if (valid) {
+        const auto* pixels = static_cast<const uint8_t*>(device.mapBuffer(readback, 0u, readbackDesc.size));
+        const auto isRed = [](const uint8_t* pixel) {
+            return pixel[0] >= 250u && pixel[1] <= 5u && pixel[2] <= 5u && pixel[3] >= 250u;
+        };
+        const auto isBlue = [](const uint8_t* pixel) {
+            return pixel[0] <= 5u && pixel[1] <= 5u && pixel[2] >= 250u && pixel[3] >= 250u;
+        };
+        valid = pixels != nullptr && isRed(pixels) && isBlue(pixels + kBytesPerPixel);
+        if (pixels != nullptr) {
+            device.unmapBuffer(readback);
+        }
+    }
+
+    if (readback.isValid())
+        device.destroyBuffer(readback);
+    if (samplePipeline.isValid())
+        device.destroyPipeline(samplePipeline);
+    if (facePipeline.isValid())
+        device.destroyPipeline(facePipeline);
+    if (sampleLayout.isValid())
+        device.destroyPipelineLayout(sampleLayout);
+    if (faceLayout.isValid())
+        device.destroyPipelineLayout(faceLayout);
+    if (sampleFragmentShader.isValid())
+        device.destroyShader(sampleFragmentShader);
+    if (sampleVertexShader.isValid())
+        device.destroyShader(sampleVertexShader);
+    if (faceFragmentShader.isValid())
+        device.destroyShader(faceFragmentShader);
+    if (faceVertexShader.isValid())
+        device.destroyShader(faceVertexShader);
+    if (bindGroup.isValid())
+        device.destroyBindGroup(bindGroup);
+    if (bindGroupLayout.isValid())
+        device.destroyBindGroupLayout(bindGroupLayout);
+    if (sampler.isValid())
+        device.destroySampler(sampler);
+    if (outputView.isValid())
+        device.destroyTextureView(outputView);
+    if (outputTexture.isValid())
+        device.destroyTexture(outputTexture);
+    if (faceView.isValid())
+        device.destroyTextureView(faceView);
+    if (cubeArrayView.isValid())
+        device.destroyTextureView(cubeArrayView);
+    if (cubeTexture.isValid())
+        device.destroyTexture(cubeTexture);
+    return valid && device.validationErrorCount() == validationErrorsBefore;
+}
+
 int main() {
 #if defined(MECRAFT_ENABLE_STREAMLINE)
     StreamlineRuntime& streamline = StreamlineRuntime::instance();
@@ -5849,7 +6145,9 @@ int main() {
          device.capabilities().swapchainPresentMode == RhiPresentMode::Immediate && device.setVsyncEnabled(true) &&
          device.vsyncEnabled() && renderStableFrame(device, *commandPool, window) &&
          device.capabilities().swapchainPresentMode == RhiPresentMode::Fifo);
-    if (commandPool == nullptr || !immediateModeValidated || !validateRg32UintAttachmentClear(device, *commandPool) ||
+    if (commandPool == nullptr || !immediateModeValidated ||
+        (commandPool != nullptr && !validateCubeArrayCaptureOrientation(device, *commandPool)) ||
+        !validateRg32UintAttachmentClear(device, *commandPool) ||
 #if defined(MECRAFT_ENABLE_FSR31)
         !validateFsr31VulkanDispatch(device, *commandPool) || !validateFsr31VulkanContext(device) ||
 #endif
