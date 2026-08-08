@@ -54,6 +54,32 @@ GpuTimingPercentiles calculatePercentiles(const std::array<double, GpuTimingHist
     return {nearestRank(50u), nearestRank(95u), nearestRank(99u)};
 }
 
+double renderGraphCpuTimingMilliseconds(const RenderGraphFrameStats& stats, const RenderGraphCpuTimingStage stage) {
+    switch (stage) {
+    case RenderGraphCpuTimingStage::Build: return stats.cpuBuildMs;
+    case RenderGraphCpuTimingStage::Compile: return stats.cpuCompileMs;
+    case RenderGraphCpuTimingStage::Execute: return stats.cpuExecuteMs;
+    case RenderGraphCpuTimingStage::Record: return stats.cpuRecordMs;
+    case RenderGraphCpuTimingStage::Submit: return stats.cpuSubmitMs;
+    case RenderGraphCpuTimingStage::ShadowPrep: return stats.cpuShadowPrepMs;
+    case RenderGraphCpuTimingStage::Context: return stats.cpuContextMs;
+    case RenderGraphCpuTimingStage::TerrainPrep: return stats.cpuTerrainPrepMs;
+    case RenderGraphCpuTimingStage::Count: break;
+    }
+    std::abort();
+}
+
+double renderGraphGpuTimingMilliseconds(const RenderGraphFrameStats& stats, const RenderGraphGpuTimingMetric metric) {
+    switch (metric) {
+    case RenderGraphGpuTimingMetric::Total: return stats.gpuTotalMs;
+    case RenderGraphGpuTimingMetric::Span: return stats.gpuSpanMs;
+    case RenderGraphGpuTimingMetric::Idle: return stats.gpuIdleMs;
+    case RenderGraphGpuTimingMetric::Overlap: return std::max(0.0, stats.gpuTotalMs - stats.gpuSpanMs);
+    case RenderGraphGpuTimingMetric::Count: break;
+    }
+    std::abort();
+}
+
 } // namespace
 
 const char* gpuTimerPassName(const GpuTimerPass pass) {
@@ -76,6 +102,32 @@ const char* gpuTimerPassName(const GpuTimerPass pass) {
     case GpuTimerPass::NrdGuidePrep: return "NRD.GuidePrep";
     case GpuTimerPass::NrdDispatch: return "NRD.Dispatch";
     case GpuTimerPass::Count: break;
+    }
+    std::abort();
+}
+
+const char* renderGraphCpuTimingStageName(const RenderGraphCpuTimingStage stage) {
+    switch (stage) {
+    case RenderGraphCpuTimingStage::Build: return "Build";
+    case RenderGraphCpuTimingStage::Compile: return "Compile";
+    case RenderGraphCpuTimingStage::Execute: return "Execute";
+    case RenderGraphCpuTimingStage::Record: return "Record";
+    case RenderGraphCpuTimingStage::Submit: return "Submit";
+    case RenderGraphCpuTimingStage::ShadowPrep: return "ShadowPrep";
+    case RenderGraphCpuTimingStage::Context: return "Context";
+    case RenderGraphCpuTimingStage::TerrainPrep: return "TerrainPrep";
+    case RenderGraphCpuTimingStage::Count: break;
+    }
+    std::abort();
+}
+
+const char* renderGraphGpuTimingMetricName(const RenderGraphGpuTimingMetric metric) {
+    switch (metric) {
+    case RenderGraphGpuTimingMetric::Total: return "Total";
+    case RenderGraphGpuTimingMetric::Span: return "Span";
+    case RenderGraphGpuTimingMetric::Idle: return "Idle";
+    case RenderGraphGpuTimingMetric::Overlap: return "Overlap";
+    case RenderGraphGpuTimingMetric::Count: break;
     }
     std::abort();
 }
@@ -128,6 +180,95 @@ GpuTimingWindowStats GpuTimingHistory::snapshot() const {
         passStats.pass = static_cast<GpuTimerPass>(passIndex);
         passStats.gpuMs = calculatePercentiles(m_passSamples[passIndex], m_sampleCount);
     }
+    return stats;
+}
+
+void RenderGraphTimingHistory::reset() {
+    for (auto& samples : m_cpuSamples) {
+        samples.fill(0.0);
+    }
+    for (auto& samples : m_gpuSamples) {
+        samples.fill(0.0);
+    }
+    m_cpuNextSample = 0u;
+    m_cpuSampleCount = 0u;
+    m_gpuNextSample = 0u;
+    m_gpuSampleCount = 0u;
+    m_observedGpuSampleCount = 0u;
+    m_lastGpuExecution = 0u;
+    m_latest = {};
+}
+
+bool RenderGraphTimingHistory::record(const RenderGraphFrameStats& stats) {
+    if (!stats.valid) {
+        return false;
+    }
+
+    std::array<double, static_cast<size_t>(RenderGraphCpuTimingStage::Count)> cpuValues{};
+    for (size_t index = 0u; index < static_cast<size_t>(RenderGraphCpuTimingStage::Count); ++index) {
+        const double milliseconds = renderGraphCpuTimingMilliseconds(
+            stats, static_cast<RenderGraphCpuTimingStage>(index));
+        if (!std::isfinite(milliseconds) || milliseconds < 0.0) {
+            return false;
+        }
+        cpuValues[index] = milliseconds;
+    }
+
+    const bool gpuCandidate = stats.execution != 0u && !stats.passes.empty();
+    const bool acceptGpu = gpuCandidate && stats.execution > m_lastGpuExecution;
+    std::array<double, static_cast<size_t>(RenderGraphGpuTimingMetric::Count)> gpuValues{};
+    if (acceptGpu) {
+        for (size_t index = 0u; index < static_cast<size_t>(RenderGraphGpuTimingMetric::Count); ++index) {
+            const double milliseconds = renderGraphGpuTimingMilliseconds(
+                stats, static_cast<RenderGraphGpuTimingMetric>(index));
+            if (!std::isfinite(milliseconds) || milliseconds < 0.0) {
+                return false;
+            }
+            gpuValues[index] = milliseconds;
+        }
+    }
+
+    for (size_t index = 0u; index < cpuValues.size(); ++index) {
+        m_cpuSamples[index][m_cpuNextSample] = cpuValues[index];
+    }
+    m_cpuNextSample = (m_cpuNextSample + 1u) % kCapacity;
+    m_cpuSampleCount = std::min(m_cpuSampleCount + 1u, kCapacity);
+
+    m_latest.valid = true;
+    m_latest.execution = stats.execution;
+    m_latest.passCount = stats.passCount;
+    m_latest.batchCount = stats.batchCount;
+    m_latest.submitCount = stats.submitCount;
+    m_latest.workerRecordedBatches = stats.workerRecordedBatches;
+    m_latest.gpuValid = gpuCandidate;
+
+    if (acceptGpu) {
+        for (size_t index = 0u; index < gpuValues.size(); ++index) {
+            m_gpuSamples[index][m_gpuNextSample] = gpuValues[index];
+        }
+        m_gpuNextSample = (m_gpuNextSample + 1u) % kCapacity;
+        m_gpuSampleCount = std::min(m_gpuSampleCount + 1u, kCapacity);
+        ++m_observedGpuSampleCount;
+        m_lastGpuExecution = stats.execution;
+    }
+    return true;
+}
+
+RenderGraphTimingWindowStats RenderGraphTimingHistory::snapshot() const {
+    RenderGraphTimingWindowStats stats;
+    stats.cpuValid = m_cpuSampleCount > 0u;
+    stats.gpuValid = m_gpuSampleCount > 0u;
+    stats.capacity = kCapacity;
+    stats.cpuSampleCount = m_cpuSampleCount;
+    stats.gpuSampleCount = m_gpuSampleCount;
+    stats.observedGpuSampleCount = m_observedGpuSampleCount;
+    for (size_t index = 0u; index < static_cast<size_t>(RenderGraphCpuTimingStage::Count); ++index) {
+        stats.cpu[index] = calculatePercentiles(m_cpuSamples[index], m_cpuSampleCount);
+    }
+    for (size_t index = 0u; index < static_cast<size_t>(RenderGraphGpuTimingMetric::Count); ++index) {
+        stats.gpu[index] = calculatePercentiles(m_gpuSamples[index], m_gpuSampleCount);
+    }
+    stats.latest = m_latest;
     return stats;
 }
 

@@ -23,6 +23,7 @@ class GlobalBindlessSet;
 }
 struct RenderSettings;
 struct GpuFrameStats;
+struct RenderGraphFrameStats;
 enum class WeatherType;
 
 /// Owns the shared deferred environment used by the standalone model scene.
@@ -95,6 +96,7 @@ public:
     [[nodiscard]] RhiTextureHandle captureTextureHandle() const;
     [[nodiscard]] RhiTextureFormat captureTextureFormat() const;
     [[nodiscard]] const GpuFrameStats* gpuFrameStats() const;
+    [[nodiscard]] RenderGraphFrameStats renderGraphFrameStats() const;
     [[nodiscard]] ReflectionProbeCaptureFrameStats reflectionProbeCaptureStats() const;
     /// Returns the Vulkan Global Bindless Set used by imported model assets, or nullptr on OpenGL.
     [[nodiscard]] renderer::core::GlobalBindlessSet* globalBindlessSet();

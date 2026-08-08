@@ -94,6 +94,10 @@ public:
     /// Latest GPU cascade-cull counters read back from the ring.
     [[nodiscard]] const ShadowCullFrameStats& cullStats() const { return m_cullStats; }
 
+    /// Invalidates delayed culling counters when the GPU cascade cull path is not active.
+    /// This prevents a previous enabled frame from being presented as current data.
+    void invalidateCullStats();
+
 private:
     /// Render humanoid/mob entities into the current shadow cascade layer.
     void renderShadowEntities(RhiCommandList& commandList, const glm::mat4& shadowViewProj, const glm::vec3& cameraPos,

@@ -22,6 +22,7 @@ public:
     void update(double frameTime, double& accumulator) override;
     void render(double frameTime) override;
     [[nodiscard]] const GpuFrameStats* gpuFrameStats() const override;
+    [[nodiscard]] RenderGraphFrameStats renderGraphFrameStats() const override;
 #ifdef MECRAFT_DEBUG
     void recordPollEvents(double ms, unsigned keyEvents, unsigned mouseButtonEvents, unsigned cursorPosEvents,
                           unsigned scrollEvents, unsigned charEvents, double inputCallbackMs,

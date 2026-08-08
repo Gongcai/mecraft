@@ -18,7 +18,10 @@ inline constexpr uint32_t kValidationSceneContractVersion1 = 1u;
 inline constexpr uint32_t kValidationSceneContractVersion = 2u;
 inline constexpr const char* kValidationSceneContractKind = "mecraft.validation_scene";
 inline constexpr uint32_t kValidationRenderSettingsVersion = 1u;
-inline constexpr uint32_t kValidationRtgiRenderSettingsVersion = 2u;
+inline constexpr uint32_t kValidationRtgiModelRenderSettingsVersion = 2u;
+inline constexpr uint32_t kValidationRtgiVoxelRenderSettingsVersion = 3u;
+/// Legacy alias retained for callers that only address the model RTGI profile.
+inline constexpr uint32_t kValidationRtgiRenderSettingsVersion = kValidationRtgiModelRenderSettingsVersion;
 inline constexpr const char* kValidationRtgiVoxelRenderSettingsId = "m3_voxel_rtgi_quality";
 inline constexpr const char* kValidationRtgiModelRenderSettingsId = "m3_model_rtgi_quality";
 inline constexpr const char* kValidationVoxelGeneratorId = "mecraft.overworld";

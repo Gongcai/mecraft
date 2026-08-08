@@ -874,6 +874,13 @@ const GpuFrameStats* ModelSceneDeferredRenderer::gpuFrameStats() const {
     return m_impl->initialized ? &m_impl->debugService.getGpuFrameStats() : nullptr;
 }
 
+RenderGraphFrameStats ModelSceneDeferredRenderer::renderGraphFrameStats() const {
+    if (!m_impl->initialized) {
+        return {};
+    }
+    return m_impl->pipeline.renderGraphFrameStats();
+}
+
 ReflectionProbeCaptureFrameStats ModelSceneDeferredRenderer::reflectionProbeCaptureStats() const {
     if (!m_impl->initialized) {
         return {};

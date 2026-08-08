@@ -47,6 +47,38 @@ nlohmann::json gpuTimingPercentilesJson(const GpuTimingPercentiles& timing) {
     return {{"p50", timing.p50Ms}, {"p95", timing.p95Ms}, {"p99", timing.p99Ms}};
 }
 
+nlohmann::json renderGraphTimingWindowJson(const RenderGraphTimingWindowStats& stats) {
+    nlohmann::json cpu = nlohmann::json::object();
+    for (size_t index = 0u; index < static_cast<size_t>(RenderGraphCpuTimingStage::Count); ++index) {
+        const auto stage = static_cast<RenderGraphCpuTimingStage>(index);
+        cpu[renderGraphCpuTimingStageName(stage)] = gpuTimingPercentilesJson(stats.cpu[index]);
+    }
+
+    nlohmann::json gpu = nlohmann::json::object();
+    for (size_t index = 0u; index < static_cast<size_t>(RenderGraphGpuTimingMetric::Count); ++index) {
+        const auto metric = static_cast<RenderGraphGpuTimingMetric>(index);
+        gpu[renderGraphGpuTimingMetricName(metric)] = gpuTimingPercentilesJson(stats.gpu[index]);
+    }
+
+    return {{"scope", "primary_render_graph"},
+            {"complete_frame", false},
+            {"cpu_valid", stats.cpuValid},
+            {"gpu_valid", stats.gpuValid},
+            {"window_capacity", stats.capacity},
+            {"cpu_sample_count", stats.cpuSampleCount},
+            {"gpu_sample_count", stats.gpuSampleCount},
+            {"observed_gpu_sample_count", stats.observedGpuSampleCount},
+            {"cpu_ms", std::move(cpu)},
+            {"gpu_ms", std::move(gpu)},
+            {"latest", { {"valid", stats.latest.valid},
+                          {"gpu_valid", stats.latest.gpuValid},
+                          {"execution", stats.latest.execution},
+                          {"pass_count", stats.latest.passCount},
+                          {"batch_count", stats.latest.batchCount},
+                          {"submit_count", stats.latest.submitCount},
+                          {"worker_recorded_batches", stats.latest.workerRecordedBatches} }} };
+}
+
 nlohmann::json rhiMemoryStatsJson(const RhiMemoryStats& stats) {
     nlohmann::json categories = nlohmann::json::object();
     for (size_t index = 0u; index < kRhiMemoryCategoryCount; ++index) {
@@ -74,6 +106,7 @@ bool GameManager::init(int width, int height, const char* title, AppLaunchOption
     m_launchOptions = std::move(launchOptions);
     m_benchmarkStats = {};
     m_benchmarkGpuTimingHistory.reset();
+    m_benchmarkRenderGraphTimingHistory.reset();
     m_benchmarkReplayWasActive = false;
     m_benchmarkReportWritten = false;
     m_benchmarkReportSucceeded = true;
@@ -475,6 +508,8 @@ void GameManager::recordBenchmarkFrame(const double measuredFrameSeconds, const 
     if (gpuStats != nullptr) {
         (void)m_benchmarkGpuTimingHistory.record(*gpuStats);
     }
+    const RenderGraphFrameStats graphStats = m_appStateMachine.renderGraphFrameStats();
+    (void)m_benchmarkRenderGraphTimingHistory.record(graphStats);
 }
 
 void GameManager::closeWindowIfBenchmarkComplete() {
@@ -530,6 +565,7 @@ bool GameManager::writeBenchmarkReport() {
     const double p99FrameMs = percentileFromSorted(sortedFrameMs, 99.0);
     const double avgFps = avgFrameMs > 0.0 ? 1000.0 / avgFrameMs : 0.0;
     const GpuTimingWindowStats gpuTimingWindow = m_benchmarkGpuTimingHistory.snapshot();
+    const RenderGraphTimingWindowStats renderGraphTimingWindow = m_benchmarkRenderGraphTimingHistory.snapshot();
     const RhiMemoryStats memoryStats = m_rhiDevice != nullptr ? m_rhiDevice->memoryStats() : RhiMemoryStats{};
 
     std::cout << std::fixed << std::setprecision(3) << "[Benchmark] frames=" << m_benchmarkStats.frameCount
@@ -541,6 +577,14 @@ bool GameManager::writeBenchmarkReport() {
               << " rhi_memory_bytes=" << memoryStats.totalBytes;
     if (gpuTimingWindow.valid) {
         std::cout << " gpu_tracked_p95_ms=" << gpuTimingWindow.totalTrackedGpuMs.p95Ms;
+    }
+    if (renderGraphTimingWindow.gpuValid) {
+        std::cout << " render_graph_gpu_span_p95_ms="
+                  << renderGraphTimingWindow.gpu[static_cast<size_t>(RenderGraphGpuTimingMetric::Span)].p95Ms;
+    }
+    if (renderGraphTimingWindow.cpuValid) {
+        std::cout << " render_graph_cpu_record_p95_ms="
+                  << renderGraphTimingWindow.cpu[static_cast<size_t>(RenderGraphCpuTimingStage::Record)].p95Ms;
     }
     std::cout << '\n';
 
@@ -634,6 +678,7 @@ bool GameManager::writeBenchmarkReport() {
                                      {"observed_sample_count", gpuTimingWindow.observedSampleCount},
                                      {"total_tracked", gpuTimingPercentilesJson(gpuTimingWindow.totalTrackedGpuMs)},
                                      {"stages", std::move(gpuStages)}};
+    root["render_graph_frame_ms"] = renderGraphTimingWindowJson(renderGraphTimingWindow);
     root["rhi_memory"] = rhiMemoryStatsJson(memoryStats);
 
     const std::filesystem::path parentPath = reportPath.parent_path();

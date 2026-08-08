@@ -22,6 +22,7 @@ class AudioListenerSyncSystem;
 class GameFrameOrchestrator;
 class GameplayRenderRuntime;
 struct GpuFrameStats;
+struct RenderGraphFrameStats;
 
 class Game {
 public:
@@ -54,6 +55,10 @@ public:
     /// Returns the latest completed renderer GPU timing frame.
     /// @return Non-owning statistics pointer, or null before renderer initialization.
     [[nodiscard]] const GpuFrameStats* gpuFrameStats() const;
+
+    /// Returns the latest primary Render Graph CPU/GPU timing snapshot.
+    /// @return Value snapshot, or an invalid snapshot before renderer initialization.
+    [[nodiscard]] RenderGraphFrameStats renderGraphFrameStats() const;
 #ifdef MECRAFT_DEBUG
     void publishDebugStats(float frameTime);
     void recordPollEvents(double ms, unsigned keyEvents, unsigned mouseButtonEvents, unsigned cursorPosEvents,

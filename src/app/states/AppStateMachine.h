@@ -20,6 +20,10 @@ public:
     /// @return Non-owning statistics pointer, or null when no render sample exists.
     [[nodiscard]] const GpuFrameStats* gpuFrameStats() const;
 
+    /// Queries primary Render Graph timing statistics from the active application state.
+    /// @return Value snapshot, or an invalid snapshot when no renderer is active.
+    [[nodiscard]] RenderGraphFrameStats renderGraphFrameStats() const;
+
 #ifdef MECRAFT_DEBUG
     void recordPollEvents(double ms, unsigned keyEvents, unsigned mouseButtonEvents, unsigned cursorPosEvents,
                           unsigned scrollEvents, unsigned charEvents, double inputCallbackMs,

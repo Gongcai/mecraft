@@ -185,6 +185,93 @@ struct RenderGraphFrameStats {
     std::vector<RenderGraphPassStats> passes;
 };
 
+/// Stable CPU timing stages exported by the Render Graph benchmark history.
+enum class RenderGraphCpuTimingStage : size_t {
+    Build = 0,
+    Compile = 1,
+    Execute = 2,
+    Record = 3,
+    Submit = 4,
+    ShadowPrep = 5,
+    Context = 6,
+    TerrainPrep = 7,
+    Count = 8
+};
+
+/// Returns the stable diagnostic name for one Render Graph CPU timing stage.
+/// @param stage CPU timing stage whose name is requested.
+/// @return Process-lifetime English name suitable for UI and JSON keys.
+[[nodiscard]] const char* renderGraphCpuTimingStageName(RenderGraphCpuTimingStage stage);
+
+/// Stable GPU frame metrics exported by the Render Graph benchmark history.
+enum class RenderGraphGpuTimingMetric : size_t {
+    Total = 0,
+    Span = 1,
+    Idle = 2,
+    Overlap = 3,
+    Count = 4
+};
+
+/// Returns the stable diagnostic name for one Render Graph GPU frame metric.
+/// @param metric GPU frame metric whose name is requested.
+/// @return Process-lifetime English name suitable for UI and JSON keys.
+[[nodiscard]] const char* renderGraphGpuTimingMetricName(RenderGraphGpuTimingMetric metric);
+
+/// Structural values from the latest Render Graph submission in a timing window.
+struct RenderGraphLatestStats {
+    bool valid = false;
+    bool gpuValid = false;
+    uint64_t execution = 0u;
+    uint32_t passCount = 0u;
+    uint32_t batchCount = 0u;
+    uint32_t submitCount = 0u;
+    uint32_t workerRecordedBatches = 0u;
+};
+
+/// Fixed-window CPU and primary Render Graph GPU timing statistics.
+struct RenderGraphTimingWindowStats {
+    bool cpuValid = false;
+    bool gpuValid = false;
+    size_t capacity = 0u;
+    size_t cpuSampleCount = 0u;
+    size_t gpuSampleCount = 0u;
+    uint64_t observedGpuSampleCount = 0u;
+    std::array<GpuTimingPercentiles, static_cast<size_t>(RenderGraphCpuTimingStage::Count)> cpu{};
+    std::array<GpuTimingPercentiles, static_cast<size_t>(RenderGraphGpuTimingMetric::Count)> gpu{};
+    RenderGraphLatestStats latest;
+};
+
+/// Stores CPU submission timings and delayed primary Render Graph GPU spans.
+/// CPU samples are accepted on every valid frame; GPU samples are accepted once
+/// per completed Render Graph execution identity.
+class RenderGraphTimingHistory {
+public:
+    static constexpr size_t kCapacity = GpuTimingHistory::kCapacity;
+
+    /// Clears every stored CPU/GPU sample and structural value.
+    void reset();
+
+    /// Records one Render Graph frame snapshot.
+    /// @param stats CPU submission statistics and the latest completed GPU timing snapshot.
+    /// @return True when the CPU snapshot or a new GPU execution was accepted.
+    [[nodiscard]] bool record(const RenderGraphFrameStats& stats);
+
+    /// Computes p50, p95, and p99 for all CPU/GPU frame metrics.
+    /// @return Immutable statistics for the currently stored timing windows.
+    [[nodiscard]] RenderGraphTimingWindowStats snapshot() const;
+
+private:
+    std::array<std::array<double, kCapacity>, static_cast<size_t>(RenderGraphCpuTimingStage::Count)> m_cpuSamples{};
+    std::array<std::array<double, kCapacity>, static_cast<size_t>(RenderGraphGpuTimingMetric::Count)> m_gpuSamples{};
+    size_t m_cpuNextSample = 0u;
+    size_t m_cpuSampleCount = 0u;
+    size_t m_gpuNextSample = 0u;
+    size_t m_gpuSampleCount = 0u;
+    uint64_t m_observedGpuSampleCount = 0u;
+    uint64_t m_lastGpuExecution = 0u;
+    RenderGraphLatestStats m_latest;
+};
+
 /// Hi-Z occlusion culling counters read back from the GPU (ring-delayed by
 /// a few frames to avoid stalls).
 struct HiZCullFrameStats {

@@ -98,11 +98,13 @@ int main() {
         !requireTrue(rtgiController.renderSettingsProfile().id ==
                              app::validation::kValidationRtgiVoxelRenderSettingsId &&
                          rtgiController.renderSettingsProfile().version ==
-                             app::validation::kValidationRtgiRenderSettingsVersion &&
+                             app::validation::kValidationRtgiVoxelRenderSettingsVersion &&
                          rtgiController.renderSettingsProfile().settings.rtgi.enabled &&
                          rtgiController.renderSettingsProfile().settings.nrd.enabled &&
                          !rtgiController.renderSettingsProfile().settings.ssgi.enabled &&
-                         rtgiController.renderSettingsProfile().settings.nrd.disocclusionThreshold == 0.02f,
+                         rtgiController.renderSettingsProfile().settings.nrd.disocclusionThreshold == 0.02f &&
+                         !rtgiController.renderSettingsProfile().settings.occlusion.hiZEnabled &&
+                         !rtgiController.renderSettingsProfile().settings.shadow.gpuCascadeCullEnabled,
                      "M3 validation must select the fixed RTGI/RELAX profile without SSGI")) {
         return 1;
     }

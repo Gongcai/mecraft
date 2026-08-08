@@ -1130,12 +1130,16 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub& render, Re
                 const uint32_t culled = cull.opaqueCulled + cull.cutoutCulled;
                 ImGui::Text("HiZ Cull: %u / %u occluded (opaque %u/%u, cutout %u/%u)", culled, total, cull.opaqueCulled,
                             cull.opaqueTotal, cull.cutoutCulled, cull.cutoutTotal);
+            } else if (!renderScene.getSettings().occlusion.hiZEnabled) {
+                ImGui::TextUnformatted("HiZ Cull: disabled");
             }
             if (m_displayShadowCullStats.valid) {
                 const ShadowCullFrameStats& shadowCull = m_displayShadowCullStats;
                 ImGui::Text("Shadow Cull: c0 %u/%u  c1 %u/%u  c2 %u/%u  c3 %u/%u", shadowCull.culled[0],
                             shadowCull.total[0], shadowCull.culled[1], shadowCull.total[1], shadowCull.culled[2],
                             shadowCull.total[2], shadowCull.culled[3], shadowCull.total[3]);
+            } else if (!renderScene.getSettings().shadow.gpuCascadeCullEnabled) {
+                ImGui::TextUnformatted("Shadow Cull: disabled");
             }
             if (graphStats.aliasedTextureCount > 0u) {
                 constexpr double kBytesPerMegabyte = 1024.0 * 1024.0;

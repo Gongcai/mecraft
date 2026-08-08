@@ -177,9 +177,9 @@ int main() {
         !requireTrue(rtgiVoxel.contract.version == app::validation::kValidationSceneContractVersion &&
                          rtgiVoxel.contract.scene == ValidationScene::Voxel && rtgiVoxel.contract.voxelWorld.has_value() &&
                          rtgiVoxel.contract.renderSettings.id == app::validation::kValidationRtgiVoxelRenderSettingsId &&
-                         rtgiVoxel.contract.renderSettings.version == app::validation::kValidationRtgiRenderSettingsVersion &&
-                         stableContentHashHex(rtgiVoxel.contract.contentHash) == "088740cdd9c3b7ad" &&
-                         stableContentHashHex(rtgiVoxel.contract.renderSettings.contentHash) == "ab8c0ee1b49d569f" &&
+                         rtgiVoxel.contract.renderSettings.version == app::validation::kValidationRtgiVoxelRenderSettingsVersion &&
+                         stableContentHashHex(rtgiVoxel.contract.contentHash) == "be46e44f90e35451" &&
+                         stableContentHashHex(rtgiVoxel.contract.renderSettings.contentHash) == "5aae41a7d7957a2d" &&
                          app::validation::makeValidationRenderSettingsProfile(
                              rtgiVoxel.contract.scene, rtgiVoxel.contract.renderSettings)
                                  .settings.rtgi.enabled &&
@@ -190,7 +190,7 @@ int main() {
         !requireTrue(rtgiModel.contract.version == app::validation::kValidationSceneContractVersion &&
                          rtgiModel.contract.scene == ValidationScene::Model && rtgiModel.contract.modelAsset.has_value() &&
                          rtgiModel.contract.renderSettings.id == app::validation::kValidationRtgiModelRenderSettingsId &&
-                         rtgiModel.contract.renderSettings.version == app::validation::kValidationRtgiRenderSettingsVersion &&
+                         rtgiModel.contract.renderSettings.version == app::validation::kValidationRtgiModelRenderSettingsVersion &&
                          stableContentHashHex(rtgiModel.contract.contentHash) == "0376d1804439f51f" &&
                          stableContentHashHex(rtgiModel.contract.renderSettings.contentHash) == "a01010a43cdb7781" &&
                          app::validation::makeValidationRenderSettingsProfile(

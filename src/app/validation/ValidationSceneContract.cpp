@@ -579,18 +579,26 @@ makeValidationRenderSettingsProfile(const ValidationScene scene, const Validatio
 
     const char* expectedRtgiId = scene == ValidationScene::Voxel ? kValidationRtgiVoxelRenderSettingsId
                                                                  : kValidationRtgiModelRenderSettingsId;
+    const uint32_t expectedRtgiVersion =
+        scene == ValidationScene::Voxel ? kValidationRtgiVoxelRenderSettingsVersion
+                                        : kValidationRtgiModelRenderSettingsVersion;
     if (scene == ValidationScene::None || identity.id != expectedRtgiId ||
-        identity.version != kValidationRtgiRenderSettingsVersion) {
+        identity.version != expectedRtgiVersion) {
         return {};
     }
     profile.id = expectedRtgiId;
-    profile.version = kValidationRtgiRenderSettingsVersion;
+    profile.version = expectedRtgiVersion;
     profile.settings.rtgi.enabled = true;
     profile.settings.rtgi.intensity = 1.0f;
     profile.settings.nrd.enabled = true;
     profile.settings.nrd.method = NrdDiffuseMethod::Relax;
     profile.settings.nrd.disocclusionThreshold = 0.02f;
     profile.settings.ssgi.enabled = false;
+    if (scene == ValidationScene::Voxel) {
+        // The versioned RTGI voxel baseline must not execute known-incorrect occlusion paths.
+        profile.settings.occlusion.hiZEnabled = false;
+        profile.settings.shadow.gpuCascadeCullEnabled = false;
+    }
     profile.contentHash = renderSettingsContentHash(profile.settings);
     return profile;
 }

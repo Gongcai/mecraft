@@ -20,6 +20,7 @@
 class ImGuiRhiRenderer;
 class ResourceMgr;
 struct GpuFrameStats;
+struct RenderGraphFrameStats;
 struct RenderFrameClock;
 class RhiCommandList;
 class RhiCommandListPool;
@@ -164,6 +165,7 @@ public:
     [[nodiscard]] RhiTextureHandle captureTextureHandle() const;
     [[nodiscard]] RhiTextureFormat captureTextureFormat() const;
     [[nodiscard]] const GpuFrameStats* gpuFrameStats() const;
+    [[nodiscard]] RenderGraphFrameStats renderGraphFrameStats() const;
     [[nodiscard]] ReflectionProbeCaptureFrameStats reflectionProbeCaptureStats() const;
 
     /// Adds one manually placed probe centered at the requested world position.

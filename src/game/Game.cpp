@@ -355,6 +355,13 @@ const GpuFrameStats* Game::gpuFrameStats() const {
     return &m_renderRuntime->renderScene().debugService().getGpuFrameStats();
 }
 
+RenderGraphFrameStats Game::renderGraphFrameStats() const {
+    if (!m_initialized || !m_renderRuntime) {
+        return {};
+    }
+    return m_renderRuntime->renderScene().renderGraphFrameStats();
+}
+
 void Game::shutdown() {
     if (!m_initialized) {
         return;

@@ -1,7 +1,7 @@
 #ifndef MECRAFT_IAPPSTATE_H
 #define MECRAFT_IAPPSTATE_H
 
-struct GpuFrameStats;
+#include "../../renderer/debug/RenderDebugService.h"
 
 class IAppState {
 public:
@@ -16,6 +16,10 @@ public:
     /// Returns the latest completed gameplay GPU timing frame.
     /// @return Non-owning statistics pointer, or null for states without a renderer.
     [[nodiscard]] virtual const GpuFrameStats* gpuFrameStats() const = 0;
+
+    /// Returns the latest primary Render Graph CPU/GPU timing snapshot.
+    /// @return Value snapshot, or an invalid snapshot for states without a renderer.
+    [[nodiscard]] virtual RenderGraphFrameStats renderGraphFrameStats() const { return {}; }
 
 #ifdef MECRAFT_DEBUG
     virtual void recordPollEvents(double ms, unsigned keyEvents, unsigned mouseButtonEvents, unsigned cursorPosEvents,

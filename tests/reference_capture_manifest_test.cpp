@@ -113,17 +113,17 @@ constexpr std::array<ExpectedCapture, 20u> kExpectedCaptures{
       "m0_model_render_settings", "b8bb5b3347e46551", "m03_sponza_atrium_opengl_1280x720.png", 1180902u,
       "b35c719c29555d77", "ebb937340e9fb4044781ff524d3c4c11475e778e39513ea7270c37c65c0467f3"},
      {"voxel", "vulkan", "../scenes/m3_voxel_rtgi_cave.json", "m3_voxel_rtgi_cave",
-      app::validation::kValidationSceneContractVersion, "088740cdd9c3b7ad", "87e07b85195fdded",
-      app::validation::kValidationRtgiVoxelRenderSettingsId, "ab8c0ee1b49d569f",
-      "m3_voxel_rtgi_cave_vulkan_1280x720.png", 1580310u, "7dd7ae23ab6afe54",
-      "3495d2e089c6ee173ba2110747fe8484c21b2ab0dfc83ab85e97f2106e3af05b",
-      app::validation::kValidationRtgiRenderSettingsVersion, "v02_cave_turn"},
+      app::validation::kValidationSceneContractVersion, "be46e44f90e35451", "87e07b85195fdded",
+      app::validation::kValidationRtgiVoxelRenderSettingsId, "5aae41a7d7957a2d",
+      "m3_voxel_rtgi_cave_vulkan_1280x720.png", 1579895u, "d31c3dd96de31cf2",
+      "30c8088215694f4be538e31cd09211c30eca9518c8aa3a2312052f501700d061",
+      app::validation::kValidationRtgiVoxelRenderSettingsVersion, "v02_cave_turn"},
      {"model", "vulkan", "../scenes/m3_model_rtgi_sponza.json", "m3_model_rtgi_sponza",
       app::validation::kValidationSceneContractVersion, "0376d1804439f51f", "0bb11dd13d10c191",
       app::validation::kValidationRtgiModelRenderSettingsId, "a01010a43cdb7781",
       "m3_model_rtgi_sponza_vulkan_1280x720.png", 1120476u, "77a66296c93dea3a",
       "dd8e12534a84a0aba6323d165172016e27e6a10879276f7260e9bc0cbd444776",
-      app::validation::kValidationRtgiRenderSettingsVersion, "m03_sponza_atrium"}}};
+      app::validation::kValidationRtgiModelRenderSettingsVersion, "m03_sponza_atrium"}}};
 
 bool requireTrue(const bool condition, const std::string_view message) {
     if (!condition) {

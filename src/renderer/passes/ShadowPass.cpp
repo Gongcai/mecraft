@@ -364,6 +364,18 @@ void ShadowPass::finishGraphExecution(const bool succeeded) {
     m_externalGeometryFrame = false;
 }
 
+void ShadowPass::invalidateCullStats() {
+    m_cullStats = {};
+    m_cullRingWritten.fill(false);
+    for (auto& totals : m_cullTotalsRing) {
+        totals.fill(0u);
+    }
+    m_cullRingWriteIndex = 0u;
+    m_cullTotals.fill(0u);
+    m_gpuCullEnabledThisFrame = false;
+    m_cullLastRenderedCascade = 0;
+}
+
 bool ShadowPass::recordOpaquePass(RhiCommandList& commandList, const int cascade) {
     if (!m_graphExecutionBegun || cascade < 0 || cascade >= SHADOW_CASCADE_COUNT) {
         return false;

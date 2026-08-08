@@ -269,7 +269,8 @@ M1 与 M2 可并行开发，但公共 `GpuMaterial`、`GpuSceneGeometry` 与 Sta
    First-bounce Hit Distance、Trace Classification、Candidate/Confirmed 计数），RTGI 关闭时以恒有效
    目标替换绑定；新增 `m3_voxel_rtgi_cave` 与 `m3_model_rtgi_sponza` 的 Vulkan RELAX 基准图、运行报告和
    `rtgi_reference_capture_manifest_test`，manifest 同时锁定场景/Camera Path/profile/image 字节身份，
-   报告验收 RTGI/NRD Timestamp 有效且 SSGI 为零。）
+   报告验收 RTGI/NRD Timestamp 有效且 SSGI 为零；体素 RTGI Profile v3 明确关闭已知错误的 Hi-Z 与
+   GPU Cascade Culling。）
 
 ### 完成条件
 
@@ -299,10 +300,15 @@ validation runner，因此这些画质数值门槛仍不能标记为通过。
 通过证据。720p Sponza 和 1080p Sponza 的墙钟 p95 分别约为 14.2 ms 和 30.0 ms，体素洞穴在 1080p
 墙钟 p95 约为 65.5 ms，瓶颈需要继续按场景拆解。
 
+主 Render Graph 的 CPU/GPU 历史已接入 Benchmark JSON 的 `render_graph_frame_ms`，包含固定窗口的
+Build/Compile/Execute/Record/Submit/ShadowPrep/Context/TerrainPrep、GPU Total/Span/Idle/Overlap
+p50/p95/p99，以及最新 Pass/Batch/Submit/工作线程 Batch 计数。该字段范围明确为
+`primary_render_graph`，尚未覆盖跨图完整 GPU Frame。
+
 下一轮任务按以下顺序执行：
 
-1. 将完整 Render Graph 的 `gpuSpanMs`（含跨图提交顺序、首尾时间戳和调度间隙）接入固定 1000 帧历史，
-   在 Benchmark JSON 中同时输出 p50/p95/p99；没有完整跨度时报告必须明确为无效。
+1. 将跨 Render Graph 的完整 `gpuSpanMs`（含跨图提交顺序、首尾时间戳和调度间隙）接入固定 1000 帧历史，
+   在 Benchmark JSON 中单独输出 p50/p95/p99；没有完整跨度时报告必须明确为无效。
 2. 为 `SceneTLAS`、Terrain BLAS Build/Compaction、Static BLAS、动态资源准备和 RTGI bootstrap 分别增加
    GPU/CPU Timestamp，报告构建次数、Primitive、Scratch、TLAS/BLAS 字节和每帧峰值。
 3. 对照 Caustica 评估动态实体 BLAS Refit、TLAS Ring、固定 Solid/Cutout/Translucent/Water Geometry

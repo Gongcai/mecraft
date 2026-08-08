@@ -1064,6 +1064,13 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
 
     const bool shadowEnabled = settings.shadow.enabled;
     const bool clusteredLightingActive = rhiDevice.backend() == RhiBackend::Vulkan;
+    if (m_hiZPass != nullptr && (externalGeometry || !settings.occlusion.hiZEnabled)) {
+        m_hiZPass->invalidateCullStats();
+    }
+    if (m_shadowPass != nullptr &&
+        (externalGeometry || !settings.shadow.gpuCascadeCullEnabled || !shadowEnabled)) {
+        m_shadowPass->invalidateCullStats();
+    }
     if (externalGeometry && !m_shared->deferredGeometryProvider->prepareShadowFrame()) {
         return false;
     }

@@ -17,6 +17,7 @@
 #include "ModelSceneSerializer.h"
 #include "ecs/components/TransformComponents.h"
 #include "renderer/core/FrameContext.h"
+#include "renderer/debug/RenderDebugService.h"
 #include "renderer/renderers/StaticMeshRenderer.h"
 #include "renderer/rhi/RhiCommandList.h"
 #include "renderer/rhi/RhiCommandListPool.h"
@@ -1800,6 +1801,10 @@ RhiTextureFormat ModelSceneRuntime::captureTextureFormat() const {
 
 const GpuFrameStats* ModelSceneRuntime::gpuFrameStats() const {
     return m_deferredRenderer ? m_deferredRenderer->gpuFrameStats() : nullptr;
+}
+
+RenderGraphFrameStats ModelSceneRuntime::renderGraphFrameStats() const {
+    return m_deferredRenderer ? m_deferredRenderer->renderGraphFrameStats() : RenderGraphFrameStats{};
 }
 
 ReflectionProbeCaptureFrameStats ModelSceneRuntime::reflectionProbeCaptureStats() const {

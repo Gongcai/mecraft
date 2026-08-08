@@ -40,6 +40,10 @@ public:
     /// Latest culled/total command counts, delayed by the readback ring.
     [[nodiscard]] const HiZCullFrameStats& cullStats() const { return m_cullStats; }
 
+    /// Invalidates delayed culling counters when the Hi-Z cull path is not active.
+    /// This prevents a previous enabled frame from being presented as current data.
+    void invalidateCullStats();
+
     [[nodiscard]] RgPassHandle addCullPass(RenderGraph& graph, const FrameContext& ctx, const RenderSettings& settings,
                                            DeferredRenderTargets& targets, WorldRenderBuffer& worldBuffer,
                                            RgTextureHandle hiZ, RgPassHandle dependency);

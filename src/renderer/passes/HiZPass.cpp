@@ -336,6 +336,22 @@ void HiZPass::finishGraphExecution(const bool succeeded) {
     m_cullSubmissionPending = false;
 }
 
+void HiZPass::invalidateCullStats() {
+    m_cullStats = {};
+    for (bool& written : m_cullRingWritten) {
+        written = false;
+    }
+    for (auto& totals : m_cullTotalsRing) {
+        totals[0] = 0u;
+        totals[1] = 0u;
+    }
+    m_cullRingWriteIndex = 0u;
+    m_pendingCullRingIndex = 0u;
+    m_pendingCullTotals[0] = 0u;
+    m_pendingCullTotals[1] = 0u;
+    m_cullSubmissionPending = false;
+}
+
 bool HiZPass::ensureCullPipeline(RhiDevice& rhiDevice) {
     if (m_cullPipeline.isValid() && m_cullCounterBuffer.isValid() &&
         m_cullReadbackBuffers[kCullStatsRingSize - 1u].isValid()) {

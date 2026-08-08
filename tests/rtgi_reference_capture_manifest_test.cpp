@@ -101,6 +101,14 @@ int main() {
                          "RTGI report must contain the complete sampled GPU timing window")) {
             return 1;
         }
+        const Json& frameTiming = report.at("render_graph_frame_ms");
+        if (!requireTrue(frameTiming.value("scope", "") == "primary_render_graph" &&
+                             !frameTiming.value("complete_frame", true) && frameTiming.value("cpu_valid", false) &&
+                             frameTiming.value("gpu_valid", false) && frameTiming.value("cpu_sample_count", 0u) == 3u &&
+                             frameTiming.value("gpu_sample_count", 0u) == 3u,
+                         "RTGI report must expose the primary Render Graph CPU/GPU timing window")) {
+            return 1;
+        }
         const Json& stages = timing.at("stages");
         double rtgiP95 = 0.0;
         double nrdP95 = 0.0;

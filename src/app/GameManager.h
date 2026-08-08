@@ -23,6 +23,7 @@
 #include "states/AppStateDependencies.h"
 #include "../locale/LocaleManager.h"
 #include "../thread/ThreadPool.h"
+#include "../renderer/debug/RenderDebugService.h"
 
 class RhiDevice;
 class RhiCommandListPool;
@@ -80,6 +81,7 @@ private:
     bool m_fullscreenEnabled = false;
     BenchmarkFrameStats m_benchmarkStats{};
     GpuTimingHistory m_benchmarkGpuTimingHistory;
+    RenderGraphTimingHistory m_benchmarkRenderGraphTimingHistory;
     bool m_benchmarkReplayWasActive = false;
     bool m_benchmarkReportWritten = false;
     bool m_benchmarkReportSucceeded = true;
