@@ -201,11 +201,12 @@ bool rtgiCandidateAlphaPasses(uint customIndex, uint geometryIndex, uint primiti
 }
 
 bool rtgiTraceVisibility(vec3 surfacePosition, vec3 normal, vec3 direction, float maximumDistance,
-                         float coneWidth, out float visibility) {
+                         float endpointExclusionDistance, float coneWidth, out float visibility) {
     visibility = 0.0;
     float directionLengthSquared = dot(direction, direction);
     if (!rtgiFinite(surfacePosition) || !rtgiFinite(normal) || !rtgiFinite(direction) ||
         directionLengthSquared <= 1.0e-12 || !rtgiFinite(maximumDistance) || maximumDistance <= 0.0 ||
+        !rtgiFinite(endpointExclusionDistance) || endpointExclusionDistance < 0.0 ||
         !rtgiFinite(coneWidth) || coneWidth <= 0.0) {
         return false;
     }
@@ -213,7 +214,8 @@ bool rtgiTraceVisibility(vec3 surfacePosition, vec3 normal, vec3 direction, floa
     float originBias = rtgiOriginBias(surfacePosition, normal, unitDirection);
     vec3 originOffset = rtgiOffsetSurfaceOrigin(vec3(0.0), normal, unitDirection, originBias);
     float rayMinimum = max(originBias * 0.25, 1.0e-4);
-    float rayMaximum = maximumDistance - dot(originOffset, unitDirection) - rayMinimum;
+    float endpointDistance = maximumDistance - dot(originOffset, unitDirection);
+    float rayMaximum = endpointDistance - rayMinimum;
     if (rayMaximum <= rayMinimum) {
         visibility = 1.0;
         return true;
@@ -225,6 +227,12 @@ bool rtgiTraceVisibility(vec3 surfacePosition, vec3 normal, vec3 direction, floa
                           pc.frameMaskAndFlags.w, rayOrigin, rayMinimum, unitDirection, rayMaximum);
     while (rayQueryProceedEXT(query)) {
         if (rayQueryGetIntersectionTypeEXT(query, false) != gl_RayQueryCandidateIntersectionTriangleEXT) {
+            continue;
+        }
+        float candidateDistance = rayQueryGetIntersectionTEXT(query, false);
+        // Point-light source geometry lies at the ray endpoint. Exclude only
+        // its authored local radius so it cannot block its own GI transport.
+        if (candidateDistance >= endpointDistance - endpointExclusionDistance) {
             continue;
         }
         float sampledOpacity;
@@ -264,7 +272,7 @@ bool rtgiPrimarySkyVisibility(vec3 surfacePosition, vec3 geometricNormal, float 
     }
     float geometryVisibility = 0.0;
     if (!rtgiTraceVisibility(surfacePosition, geometricNormal, skyDirection,
-                              uSecondaryLighting.traceAndEmissionScales.x, pixelWorldFootprint,
+                              uSecondaryLighting.traceAndEmissionScales.x, 0.0, pixelWorldFootprint,
                               geometryVisibility)) {
         return false;
     }
@@ -321,7 +329,7 @@ bool rtgiAccumulateCelestial(RtgiSecondarySurface surface, vec3 surfacePosition,
     }
     float shadowVisibility;
     if (!rtgiTraceVisibility(surfacePosition, surface.geometricNormal, directionAndVisibility.xyz,
-                             uSecondaryLighting.traceAndEmissionScales.x, coneWidth, shadowVisibility)) {
+                             uSecondaryLighting.traceAndEmissionScales.x, 0.0, coneWidth, shadowVisibility)) {
         return false;
     }
     radiance += directRadiance * shadowVisibility;
@@ -366,8 +374,12 @@ bool rtgiLightVisibility(GpuLight light, vec3 surfacePosition, vec3 cameraRelati
     // Raster policies identify the direct-light cache and do not change this path.
     vec3 direction;
     float maximumDistance;
+    float endpointExclusionDistance = gpuLightType(light) == GPU_LIGHT_TYPE_POINT
+                                          ? gpuLightPointSelfShadowRadius(light)
+                                          : 0.0;
     return rtgiLightRayDirection(light, cameraRelativeSurface, direction, maximumDistance) &&
-           rtgiTraceVisibility(surfacePosition, originNormal, direction, maximumDistance, coneWidth, visibility);
+           rtgiTraceVisibility(surfacePosition, originNormal, direction, maximumDistance, endpointExclusionDistance,
+                               coneWidth, visibility);
 }
 
 bool rtgiAccumulateGpuLight(GpuLight light, RtgiSecondarySurface surface, vec3 surfacePosition,
@@ -444,7 +456,7 @@ bool rtgiAccumulateSkyAmbient(RtgiSecondarySurface surface, vec3 surfacePosition
     }
     float visibility;
     if (!rtgiTraceVisibility(surfacePosition, surface.geometricNormal, skyDirection,
-                             uSecondaryLighting.traceAndEmissionScales.x, coneWidth, visibility)) {
+                             uSecondaryLighting.traceAndEmissionScales.x, 0.0, coneWidth, visibility)) {
         return false;
     }
     radiance += rtgiDiffuseTransportAlbedo(surface) * uSecondaryLighting.skyAmbientRadiance.rgb * surface.ao *

@@ -3,13 +3,17 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <optional>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
 
+#include <glm/gtc/matrix_transform.hpp>
+
 #include "world/IWorldView.h"
 #include "world/block/Block.h"
 #include "world/block/BlockStateRegistry.h"
+#include "world/block/PropIndices.h"
 #include "world/chunk/Chunk.h"
 
 namespace renderer::lighting {
@@ -18,6 +22,7 @@ namespace {
 struct CachedVoxelLightSource final {
     uint32_t localBlockIndex = 0u;
     BlockID blockId = RUNTIME_ID_NULL;
+    BlockStateId state = NULL_BLOCK_STATE;
     renderer::contracts::StableLightId lightId;
 };
 
@@ -40,7 +45,8 @@ struct ActiveChunkEntry final {
         return false;
     }
     for (std::size_t index = 0u; index < lhs.size(); ++index) {
-        if (lhs[index].localBlockIndex != rhs[index].localBlockIndex || lhs[index].blockId != rhs[index].blockId) {
+        if (lhs[index].localBlockIndex != rhs[index].localBlockIndex || lhs[index].blockId != rhs[index].blockId ||
+            lhs[index].state != rhs[index].state) {
             return false;
         }
     }
@@ -54,6 +60,81 @@ struct ActiveChunkEntry final {
     return definition.enabledStateValueIndex != BlockAnalyticLightDefinition::kUnconditionalStateIndex &&
            BlockStateRegistry::getPropertyIndex(state, definition.enabledStatePropertyIndex) ==
                definition.enabledStateValueIndex;
+}
+
+constexpr float kVoxelTorchModelPixel = 1.0f / 16.0f;
+
+/// Builds a rotation around the same local pivot used by the torch mesh.
+/// @param angleDegrees Counter-clockwise angle in degrees.
+/// @param axis Unit axis of rotation in torch-local space.
+/// @param origin Torch-local point that remains fixed during rotation.
+/// @return Affine matrix that rotates local torch coordinates around origin.
+[[nodiscard]] glm::mat4 makeVoxelTorchRotation(const float angleDegrees, const glm::vec3& axis,
+                                                const glm::vec3& origin) {
+    glm::mat4 transform(1.0f);
+    transform = glm::translate(transform, origin);
+    transform = glm::rotate(transform, glm::radians(angleDegrees), axis);
+    return glm::translate(transform, -origin);
+}
+
+/// Resolves the wall-torch orientation transform shared by its mesh geometry
+/// and analytic emitter. The local anchor stays attached to the rendered flame
+/// rather than the block center.
+/// @param facingValue Encoded torch-facing property value.
+/// @return Transform for one valid wall-facing value, or no value for an
+/// unsupported state.
+[[nodiscard]] std::optional<glm::mat4> wallTorchLightTransform(const uint16_t facingValue) {
+    const glm::mat4 tilt = makeVoxelTorchRotation(
+        -22.5f, glm::vec3(0.0f, 0.0f, 1.0f),
+        glm::vec3(0.0f, 3.5f * kVoxelTorchModelPixel, 8.0f * kVoxelTorchModelPixel));
+
+    float yDegrees = 0.0f;
+    if (facingValue == PropIndices::FACING_NORTH) {
+        yDegrees = 90.0f;
+    } else if (facingValue == PropIndices::FACING_SOUTH) {
+        yDegrees = -90.0f;
+    } else if (facingValue == PropIndices::FACING_WEST) {
+        yDegrees = 180.0f;
+    } else if (facingValue != PropIndices::FACING_EAST) {
+        return std::nullopt;
+    }
+
+    const glm::mat4 yaw = makeVoxelTorchRotation(yDegrees, glm::vec3(0.0f, 1.0f, 0.0f),
+                                                  glm::vec3(0.5f, 0.5f, 0.5f));
+    return yaw * tilt;
+}
+
+/// Selects the local point where a block's analytic emitter originates.
+/// Torch states use the rendered flame tip so wall attachments do not leave
+/// their point light embedded in the supporting block or in the block center.
+/// @param block Immutable block definition that selects the render shape.
+/// @param definition Authored analytic-light parameters for the block.
+/// @param state Concrete placed block state whose facing selects the torch pose.
+/// @return Local emitter position in meters, or no value when a torch state is
+/// incomplete or uses an unsupported facing value.
+[[nodiscard]] std::optional<glm::vec3> voxelLightPositionOffset(const BlockDef& block,
+                                                                 const BlockAnalyticLightDefinition& definition,
+                                                                 const BlockStateId state) {
+    if (block.renderShapeName != "torch") {
+        return definition.positionOffsetMeters;
+    }
+    if (PropIndices::FACING == PropIndices::INVALID) {
+        return std::nullopt;
+    }
+    const uint16_t facingValue = BlockStateRegistry::getPropertyIndex(state, PropIndices::FACING);
+    if (facingValue == BlockStateRegistry::INVALID_INDEX) {
+        return std::nullopt;
+    }
+    if (facingValue == PropIndices::FACING_FLOOR) {
+        return definition.positionOffsetMeters;
+    }
+
+    const std::optional<glm::mat4> transform = wallTorchLightTransform(facingValue);
+    if (!transform.has_value()) {
+        return std::nullopt;
+    }
+    const glm::vec3 flameAnchor{0.0f, 13.5f * kVoxelTorchModelPixel, 8.0f * kVoxelTorchModelPixel};
+    return glm::vec3(*transform * glm::vec4(flameAnchor, 1.0f));
 }
 
 } // namespace
@@ -111,7 +192,7 @@ bool VoxelLightRegistry::Impl::rebuildChunk(const CachedVoxelLightChunk* previou
                     }
                     lightId = *allocated;
                 }
-                rebuilt.sources.push_back({localIndex, blockId, lightId});
+                rebuilt.sources.push_back({localIndex, blockId, state, lightId});
             }
         }
     }
@@ -234,15 +315,21 @@ bool VoxelLightRegistry::buildSceneLights(const IWorldView& worldView, const glm
                 return false;
             }
             const BlockAnalyticLightDefinition& definition = *block.analyticLight;
+            const std::optional<glm::vec3> positionOffset = voxelLightPositionOffset(block, definition, source.state);
+            if (!positionOffset.has_value()) {
+                m_impl->setError("voxel analytic light has an invalid torch-facing state [block=" +
+                                 BlockRegistry::getNamespacedId(source.blockId).full() + "]");
+                return false;
+            }
             const uint32_t y = source.localBlockIndex / static_cast<uint32_t>(Chunk::SIZE_X * Chunk::SIZE_Z);
             const uint32_t horizontal = source.localBlockIndex % static_cast<uint32_t>(Chunk::SIZE_X * Chunk::SIZE_Z);
             const uint32_t z = horizontal / static_cast<uint32_t>(Chunk::SIZE_X);
             const uint32_t x = horizontal % static_cast<uint32_t>(Chunk::SIZE_X);
             const double worldX =
-                static_cast<double>(chunk.chunkX) * Chunk::SIZE_X + x + definition.positionOffsetMeters.x;
-            const double worldY = static_cast<double>(y) + definition.positionOffsetMeters.y;
+                static_cast<double>(chunk.chunkX) * Chunk::SIZE_X + x + positionOffset->x;
+            const double worldY = static_cast<double>(y) + positionOffset->y;
             const double worldZ =
-                static_cast<double>(chunk.chunkZ) * Chunk::SIZE_Z + z + definition.positionOffsetMeters.z;
+                static_cast<double>(chunk.chunkZ) * Chunk::SIZE_Z + z + positionOffset->z;
 
             GpuLightNormalizationInput input;
             input.lightId = source.lightId;
@@ -251,6 +338,8 @@ bool VoxelLightRegistry::buildSceneLights(const IWorldView& worldView, const glm
                                     static_cast<float>(worldY - cameraPositionMeters.y),
                                     static_cast<float>(worldZ - cameraPositionMeters.z)};
             input.rangeMeters = definition.rangeMeters;
+            input.pointEmitterRadiusMeters = definition.pointEmitterRadiusMeters;
+            input.pointSelfShadowRadiusMeters = definition.pointSelfShadowRadiusMeters;
             input.colorLinear = definition.colorLinear;
             input.intensity = definition.luminousFluxLumens;
             input.intensityUnit = GpuLightIntensityUnit::Lumen;

@@ -1,7 +1,7 @@
 #ifndef MECRAFT_GPU_LIGHT_CONTRACT_GLSL
 #define MECRAFT_GPU_LIGHT_CONTRACT_GLSL
 
-const uint GPU_LIGHT_CONTRACT_VERSION = 3u;
+const uint GPU_LIGHT_CONTRACT_VERSION = 4u;
 const uint GPU_LIGHT_INVALID_RESOURCE_INDEX = 0xffffffffu;
 
 const uint GPU_LIGHT_TYPE_DIRECTIONAL = 0u;
@@ -53,6 +53,14 @@ bool gpuLightContributes(GpuLight light, uint contributionFlag) {
 
 float gpuLightInverseRangeSquared(GpuLight light) {
     return light.direction.w;
+}
+
+float gpuLightPointEmitterRadius(GpuLight light) {
+    return light.spotCosinesAndRectSize.z;
+}
+
+float gpuLightPointSelfShadowRadius(GpuLight light) {
+    return light.spotCosinesAndRectSize.w;
 }
 
 #endif

@@ -61,7 +61,10 @@ namespace {
            traceSource.find("localShadowVisibility(light, cameraRelativeSurface") == std::string::npos &&
            traceSource.find("rtgiTraceVisibility(surfacePosition, originNormal, direction, maximumDistance") !=
                std::string::npos &&
-           traceSource.find("maximumDistance - dot(originOffset, unitDirection) - rayMinimum") != std::string::npos &&
+           traceSource.find("float endpointDistance = maximumDistance - dot(originOffset, unitDirection);") !=
+               std::string::npos &&
+           traceSource.find("candidateDistance >= endpointDistance - endpointExclusionDistance") != std::string::npos &&
+           traceSource.find("gpuLightPointSelfShadowRadius(light)") != std::string::npos &&
            traceSource.find("const float RTGI_METALLIC_DIFFUSE_TRANSPORT_FLOOR = 0.35;") != std::string::npos &&
            traceSource.find("const float RTGI_RADIANCE_FIREFLY_CLAMP = 8.0;") != std::string::npos &&
            traceSource.find("vec3 rtgiSuppressSolarSkyLobe(vec3 skyRadiance, vec3 worldDirection)") !=
@@ -102,6 +105,7 @@ namespace {
                std::string::npos &&
            pipelineSource.find("relaxSettings.antilagSettings.accelerationAmount = 0.0f;") == std::string::npos &&
            pipelineSource.find("relaxSettings.antilagSettings.resetAmount = 0.0f;") == std::string::npos &&
+           pipelineSource.find("relaxSettings.enableAntiFirefly = true;") != std::string::npos &&
            pipelineSource.find("reblurSettings.enableAntiFirefly = true;") != std::string::npos &&
            pipelineSource.find("const bool nrdEnabled = rtgiEnabled && settings.nrd.enabled;") != std::string::npos &&
            pipelineSource.find(

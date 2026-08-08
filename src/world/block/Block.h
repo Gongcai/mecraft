@@ -265,6 +265,10 @@ struct BlockAnalyticLightDefinition {
     float luminousFluxLumens = 0.0f;
     /// Finite influence radius used by clustered-light bounds and attenuation.
     float rangeMeters = 0.0f;
+    /// Finite point-emitter radius that regularizes near-field irradiance.
+    float pointEmitterRadiusMeters = 0.0f;
+    /// Source-local distance excluded from direct and RTGI self-occlusion.
+    float pointSelfShadowRadiusMeters = 0.0f;
     /// Explicit local-shadow policy independent of frame-time quality changes.
     BlockAnalyticLightShadowPolicy shadowPolicy = BlockAnalyticLightShadowPolicy::None;
     /// Optional block-state property and value required to emit this light.

@@ -105,6 +105,7 @@ namespace {
            pipelineSource.find("return -jitter.pixels;") != std::string::npos &&
            pipelineSource.find("commonSettings.motionVectorScale[2] = 1.0f;") != std::string::npos &&
            pipelineSource.find("relaxSettings.minMaterialForDiffuse = 0.0f;") != std::string::npos &&
+           pipelineSource.find("relaxSettings.enableAntiFirefly = true;") != std::string::npos &&
            pipelineSource.find("reblurSettings.minMaterialForDiffuse = 0.0f;") != std::string::npos &&
            pipelineSource.find("guideSettings.historyValid = !m_nrdClearHistory && !nrdTemporalReset;") !=
                std::string::npos &&

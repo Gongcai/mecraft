@@ -30,7 +30,9 @@ renderer::contracts::SceneLight makeSceneLight(const uint32_t stableId, const re
                                                           : glm::vec4(0.0f, 0.0f, 0.0f, 1.0f / 64.0f);
     result.light.colorAndIntensity = {1.0f, 0.8f, 0.6f, 100.0f};
     result.light.spotCosinesAndRectSize =
-        type == GpuLightType::Spot ? glm::vec4(0.95f, 0.8f, 0.0f, 0.0f) : glm::vec4(0.0f);
+        type == GpuLightType::Point ? glm::vec4(0.0f, 0.0f, 0.5f, 0.125f)
+        : type == GpuLightType::Spot ? glm::vec4(0.95f, 0.8f, 0.0f, 0.0f)
+                                     : glm::vec4(0.0f);
     result.light.classificationAndIdentity = {static_cast<uint32_t>(type), stableId,
                                               static_cast<uint32_t>(GpuLightShadowPolicy::None),
                                               kGpuLightInvalidResourceIndex};

@@ -54,6 +54,8 @@ bool testPhysicalUnitNormalization() {
     point.type = GpuLightType::Point;
     point.positionMeters = {1.0f, 2.0f, 3.0f};
     point.rangeMeters = 12.0f;
+    point.pointEmitterRadiusMeters = 0.75f;
+    point.pointSelfShadowRadiusMeters = 0.2f;
     point.colorLinear = {1.0f, 0.5f, 0.25f};
     point.intensity = 1256.6370614f;
     point.intensityUnit = GpuLightIntensityUnit::Lumen;
@@ -72,6 +74,8 @@ bool testPhysicalUnitNormalization() {
         !requireTrue(near(pointResult.light.direction.w, 1.0f / 144.0f, 1.0e-7f) &&
                          gpuLightPackedRangeValid(pointResult.light),
                      "local lights must pack a validated inverse squared range") ||
+        !requireTrue(pointResult.light.spotCosinesAndRectSize == glm::vec4(0.0f, 0.0f, 0.75f, 0.2f),
+                     "point lights must pack finite emitter and self-shadow radii") ||
         !requireTrue(pointResult.light.classificationAndIdentity == glm::uvec4(1u, 41u, 1u, 7u),
                      "classification and stable identity must use fixed fields") ||
         !requireTrue(pointResult.light.resourcesAndFlags ==
@@ -164,6 +168,24 @@ bool testStructuredErrors() {
     }
 
     input.colorLinear = {1.0f, 1.0f, 1.0f};
+    input.pointEmitterRadiusMeters = 0.0f;
+    result = normalizeGpuLight(input);
+    if (!requireTrue(result.error == GpuLightNormalizationError::ValueOutOfRange &&
+                         result.field == GpuLightField::PointEmitterRadius,
+                     "non-positive point emitter radii must fail explicitly")) {
+        return false;
+    }
+
+    input.pointEmitterRadiusMeters = 0.5f;
+    input.pointSelfShadowRadiusMeters = 0.75f;
+    result = normalizeGpuLight(input);
+    if (!requireTrue(result.error == GpuLightNormalizationError::ValueOutOfRange &&
+                         result.field == GpuLightField::PointSelfShadowRadius,
+                     "point self-shadow radii must remain within the emitter radius")) {
+        return false;
+    }
+
+    input.pointSelfShadowRadiusMeters = 0.0f;
     input.shadowIndex = 0u;
     result = normalizeGpuLight(input);
     if (!requireTrue(result.error == GpuLightNormalizationError::ShadowIndexConflict,
@@ -279,7 +301,7 @@ bool testShaderLayoutMirror() {
         return false;
     }
     const std::string source((std::istreambuf_iterator<char>(stream)), std::istreambuf_iterator<char>());
-    if (!requireTrue(source.find("GPU_LIGHT_CONTRACT_VERSION = 3u") != std::string::npos,
+    if (!requireTrue(source.find("GPU_LIGHT_CONTRACT_VERSION = 4u") != std::string::npos,
                      "GLSL light contract must mirror the CPU version") ||
         !requireTrue(source.find("GPU_LIGHT_TYPE_RECT = 3u") != std::string::npos,
                      "GLSL light types must mirror the CPU order") ||
@@ -287,6 +309,9 @@ bool testShaderLayoutMirror() {
                      "GLSL flags must mirror all contribution channels") ||
         !requireTrue(source.find("gpuLightInverseRangeSquared") != std::string::npos,
                      "GLSL lights must expose the packed inverse range") ||
+        !requireTrue(source.find("gpuLightPointEmitterRadius") != std::string::npos &&
+                         source.find("gpuLightPointSelfShadowRadius") != std::string::npos,
+                     "GLSL lights must expose Point emitter and self-shadow radii") ||
         !requireTrue(source.find("GPU_LIGHT_SHADOW_RASTER_DYNAMIC = 1u") != std::string::npos &&
                          source.find("GPU_LIGHT_SHADOW_RASTER_CACHED = 2u") != std::string::npos &&
                          source.find("GPU_LIGHT_SHADOW_RAY_QUERY = 3u") != std::string::npos,

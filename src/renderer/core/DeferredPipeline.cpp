@@ -2054,6 +2054,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
                 ::nrd::RelaxSettings relaxSettings{};
                 relaxSettings.atrousIterationNum = static_cast<uint32_t>(settings.nrd.relaxAtrousIterations);
                 relaxSettings.minMaterialForDiffuse = 0.0f;
+                relaxSettings.enableAntiFirefly = true;
                 relaxSettings.diffuseMaxAccumulatedFrameNum =
                     nrdAccumulationFrameCount(::nrd::RELAX_DEFAULT_ACCUMULATION_TIME, ctx.deltaTime,
                                               ::nrd::RELAX_MAX_HISTORY_FRAME_NUM);

@@ -305,13 +305,16 @@ bool testSharedLightingConsumers() {
                 sharedLighting.find("referenceDepth -= metadata.nearFarDepthBiasNormalOffset.z") == std::string::npos &&
                 sharedLighting.find("visibility / 9.0") != std::string::npos &&
                 sharedLighting.find("visibility / 4.0") != std::string::npos &&
-                sharedLighting.find("const vec2 pcfOffsets[4]") != std::string::npos,
+                sharedLighting.find("const vec2 pcfOffsets[4]") != std::string::npos &&
+                sharedLighting.find("gpuLightPointSelfShadowRadius(light)") != std::string::npos,
             "shared consumers must compare metric Spot and Point PCF depths") ||
         !requireTrue(contributionEvaluation != std::string::npos && shadowSampling != std::string::npos &&
                          contributionEvaluation < shadowSampling,
                      "surface contribution rejection must precede local-shadow sampling") ||
         !requireTrue(lightEvaluation.find("inversesqrt(distanceSquared)") != std::string::npos &&
                          lightEvaluation.find("distanceSquared, normalizedDistanceSquared") != std::string::npos &&
+                         lightEvaluation.find("GPU_LIGHT_LOCAL_SCENE_RADIANCE_SCALE = 64.0") != std::string::npos &&
+                         lightEvaluation.find("gpuLightPointEmitterRadius(light)") != std::string::npos &&
                          lightEvaluation.find("normalize(light.direction.xyz)") == std::string::npos,
                      "local-light evaluation must reuse squared distance and normalized contract directions")) {
         return false;

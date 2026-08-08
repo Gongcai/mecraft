@@ -211,6 +211,12 @@ float sampleLocalPointShadow(
             valid = false;
             return 1.0;
         }
+        // The source-local interval contains only the emitting model itself.
+        // Skipping it prevents a torch card from occluding its own point light.
+        if (occluderFaceDepth <= gpuLightPointSelfShadowRadius(light)) {
+            visibility += 1.0;
+            continue;
+        }
         visibility += receiverFaceDepth - metadata.nearFarDepthBiasNormalOffset.z <= occluderFaceDepth ? 1.0 : 0.0;
     }
     return visibility / 4.0;

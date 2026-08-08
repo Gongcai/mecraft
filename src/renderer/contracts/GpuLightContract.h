@@ -14,8 +14,10 @@
 
 namespace renderer::contracts {
 
-inline constexpr uint32_t kGpuLightContractVersion = 3u;
+inline constexpr uint32_t kGpuLightContractVersion = 4u;
 inline constexpr uint32_t kGpuLightInvalidResourceIndex = std::numeric_limits<uint32_t>::max();
+inline constexpr float kGpuLightDefaultPointEmitterRadiusMeters = 0.1f;
+inline constexpr float kGpuLightDefaultPointSelfShadowRadiusMeters = 0.0f;
 
 /// Selects the analytic light shape evaluated by raster and ray paths.
 enum class GpuLightType : uint32_t { Directional = 0u, Point = 1u, Spot = 2u, Rect = 3u };
@@ -65,7 +67,8 @@ struct alignas(16) GpuLight final {
     /// Linear RGB chromaticity and normalized shading intensity. The fourth
     /// component stores lux, candela, or nit according to the light type.
     glm::vec4 colorAndIntensity{0.0f};
-    /// Spot cosine inner/outer angles and Rect width/height in meters.
+    /// Spot cosine inner/outer angles, Rect width/height in meters, or Point
+    /// emitter radius and source-geometry shadow exclusion radius in meters.
     glm::vec4 spotCosinesAndRectSize{0.0f};
     /// Type, stable light ID, shadow policy, and shadow allocation index.
     glm::uvec4 classificationAndIdentity{static_cast<uint32_t>(GpuLightType::Directional), 0u,
@@ -91,6 +94,8 @@ struct GpuLightNormalizationInput final {
     glm::vec3 positionMeters{0.0f};
     glm::vec3 emissionDirection{0.0f};
     float rangeMeters = 0.0f;
+    float pointEmitterRadiusMeters = kGpuLightDefaultPointEmitterRadiusMeters;
+    float pointSelfShadowRadiusMeters = kGpuLightDefaultPointSelfShadowRadiusMeters;
     glm::vec3 colorLinear{1.0f};
     float intensity = 0.0f;
     GpuLightIntensityUnit intensityUnit = GpuLightIntensityUnit::Candela;
@@ -129,6 +134,8 @@ enum class GpuLightField : uint8_t {
     Position,
     Direction,
     Range,
+    PointEmitterRadius,
+    PointSelfShadowRadius,
     Color,
     Intensity,
     IntensityUnit,
@@ -158,6 +165,8 @@ struct AnalyticLightSourceDefinition final {
     glm::vec3 localPositionMeters{0.0f};
     glm::vec3 localEmissionDirection{0.0f};
     float rangeMeters = 0.0f;
+    float pointEmitterRadiusMeters = kGpuLightDefaultPointEmitterRadiusMeters;
+    float pointSelfShadowRadiusMeters = kGpuLightDefaultPointSelfShadowRadiusMeters;
     glm::vec3 colorLinear{1.0f};
     float intensity = 0.0f;
     GpuLightIntensityUnit intensityUnit = GpuLightIntensityUnit::Candela;
@@ -201,10 +210,12 @@ struct AnalyticLightInstantiationResult final {
 /// @return Packed light or a stable field-specific validation error.
 [[nodiscard]] GpuLightNormalizationResult normalizeGpuLight(const GpuLightNormalizationInput& input);
 
-/// Validates the packed inverse squared range against the finite range.
+/// Validates the packed finite range and Point emitter data.
 /// @param light Normalized GPU light record.
 /// @return True when directional lights store zeros and every local light
-/// stores a finite positive reciprocal matching positionAndRange.w.
+/// stores a finite positive reciprocal matching positionAndRange.w. Point
+/// records additionally store a positive finite emitter radius and an
+/// in-range source-geometry shadow exclusion radius.
 [[nodiscard]] bool gpuLightPackedRangeValid(const GpuLight& light);
 
 /// Applies one affine scene transform to an asset-local analytic light.

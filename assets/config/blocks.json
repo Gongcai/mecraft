@@ -886,6 +886,8 @@
         "positionOffsetMeters": [0.5, 0.72, 0.5],
         "luminousFluxLumens": 90.0,
         "rangeMeters": 10.0,
+        "pointEmitterRadiusMeters": 0.5,
+        "pointSelfShadowRadiusMeters": 0.18,
         "shadowPolicy": "raster_cached"
       },
       "allowsFluidCoexistence": true,
@@ -1025,6 +1027,8 @@
         "positionOffsetMeters": [0.5, 0.5, 0.5],
         "luminousFluxLumens": 28.0,
         "rangeMeters": 6.0,
+        "pointEmitterRadiusMeters": 0.25,
+        "pointSelfShadowRadiusMeters": 0.08,
         "shadowPolicy": "none"
       },
       "timeToBreak": 10,
@@ -1148,6 +1152,8 @@
         "positionOffsetMeters": [0.5, 0.72, 0.5],
         "luminousFluxLumens": 30.0,
         "rangeMeters": 6.0,
+        "pointEmitterRadiusMeters": 0.4,
+        "pointSelfShadowRadiusMeters": 0.18,
         "shadowPolicy": "raster_cached",
         "enabledStateProperty": "lit",
         "enabledStateValue": "true"
@@ -1186,6 +1192,8 @@
         "positionOffsetMeters": [0.5, 0.5, 0.5],
         "luminousFluxLumens": 900.0,
         "rangeMeters": 14.0,
+        "pointEmitterRadiusMeters": 0.6,
+        "pointSelfShadowRadiusMeters": 0.55,
         "shadowPolicy": "raster_cached",
         "enabledStateProperty": "lit",
         "enabledStateValue": "true"
@@ -1952,6 +1960,8 @@
         "positionOffsetMeters": [0.5, 0.5, 0.5],
         "luminousFluxLumens": 1200.0,
         "rangeMeters": 16.0,
+        "pointEmitterRadiusMeters": 0.6,
+        "pointSelfShadowRadiusMeters": 0.55,
         "shadowPolicy": "none"
       },
       "timeToBreak": 300,
@@ -1969,6 +1979,8 @@
         "positionOffsetMeters": [0.5, 0.6, 0.5],
         "luminousFluxLumens": 45.0,
         "rangeMeters": 5.0,
+        "pointEmitterRadiusMeters": 0.5,
+        "pointSelfShadowRadiusMeters": 0.45,
         "shadowPolicy": "none"
       },
       "timeToBreak": 500,

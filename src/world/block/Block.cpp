@@ -204,12 +204,17 @@ std::optional<ParsedBlockAnalyticLightDefinition> parseAnalyticLight(const nlohm
     definition.colorLinear = parseRequiredFiniteVec3(object, "colorLinear", blockId);
     definition.positionOffsetMeters = parseRequiredFiniteVec3(object, "positionOffsetMeters", blockId);
     if (!object.contains("luminousFluxLumens") || !object["luminousFluxLumens"].is_number() ||
-        !object.contains("rangeMeters") || !object["rangeMeters"].is_number()) {
+        !object.contains("rangeMeters") || !object["rangeMeters"].is_number() ||
+        !object.contains("pointEmitterRadiusMeters") || !object["pointEmitterRadiusMeters"].is_number() ||
+        !object.contains("pointSelfShadowRadiusMeters") || !object["pointSelfShadowRadiusMeters"].is_number()) {
         failBlockRegistry("Block " + blockId.full() +
-                          " analyticLight requires numeric luminousFluxLumens and rangeMeters");
+                          " analyticLight requires numeric luminousFluxLumens, rangeMeters, pointEmitterRadiusMeters, "
+                          "and pointSelfShadowRadiusMeters");
     }
     definition.luminousFluxLumens = object["luminousFluxLumens"].get<float>();
     definition.rangeMeters = object["rangeMeters"].get<float>();
+    definition.pointEmitterRadiusMeters = object["pointEmitterRadiusMeters"].get<float>();
+    definition.pointSelfShadowRadiusMeters = object["pointSelfShadowRadiusMeters"].get<float>();
     if (!object.contains("shadowPolicy") || !object["shadowPolicy"].is_string()) {
         failBlockRegistry("Block " + blockId.full() + " analyticLight.shadowPolicy must be an explicit string");
     }
@@ -223,13 +228,18 @@ std::optional<ParsedBlockAnalyticLightDefinition> parseAnalyticLight(const nlohm
     }
     if (!std::isfinite(definition.luminousFluxLumens) || definition.luminousFluxLumens <= 0.0f ||
         !std::isfinite(definition.rangeMeters) || definition.rangeMeters <= 0.0f ||
+        !std::isfinite(definition.pointEmitterRadiusMeters) || definition.pointEmitterRadiusMeters <= 0.0f ||
+        definition.pointEmitterRadiusMeters > definition.rangeMeters ||
+        !std::isfinite(definition.pointSelfShadowRadiusMeters) ||
+        definition.pointSelfShadowRadiusMeters < 0.0f ||
+        definition.pointSelfShadowRadiusMeters > definition.pointEmitterRadiusMeters ||
         glm::any(glm::lessThan(definition.colorLinear, glm::vec3(0.0f))) ||
         glm::all(glm::equal(definition.colorLinear, glm::vec3(0.0f))) ||
         glm::any(glm::lessThan(definition.positionOffsetMeters, glm::vec3(0.0f))) ||
         glm::any(glm::greaterThan(definition.positionOffsetMeters, glm::vec3(1.0f)))) {
         failBlockRegistry(
             "Block " + blockId.full() +
-            " analyticLight requires positive flux, range, color energy, and a position inside the unit block");
+            " analyticLight requires valid flux, range, point radii, color energy, and a position inside the unit block");
     }
 
     const bool hasEnabledProperty = object.contains("enabledStateProperty");

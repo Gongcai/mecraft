@@ -73,7 +73,8 @@ bool gpuLightPackedRangeValid(const GpuLight& light) {
     }
     const bool directional = type == static_cast<uint32_t>(GpuLightType::Directional);
     if (directional) {
-        return light.positionAndRange.w == 0.0f && light.direction.w == 0.0f;
+        return light.positionAndRange.w == 0.0f && light.direction.w == 0.0f &&
+               light.spotCosinesAndRectSize == glm::vec4(0.0f);
     }
     const float range = light.positionAndRange.w;
     const float inverseRangeSquared = light.direction.w;
@@ -82,7 +83,20 @@ bool gpuLightPackedRangeValid(const GpuLight& light) {
     }
     const double normalizedRange =
         static_cast<double>(inverseRangeSquared) * static_cast<double>(range) * static_cast<double>(range);
-    return std::isfinite(normalizedRange) && std::abs(normalizedRange - 1.0) <= 1.0e-4;
+    if (!std::isfinite(normalizedRange) || std::abs(normalizedRange - 1.0) > 1.0e-4) {
+        return false;
+    }
+
+    if (type == static_cast<uint32_t>(GpuLightType::Point)) {
+        const float emitterRadius = light.spotCosinesAndRectSize.z;
+        const float selfShadowRadius = light.spotCosinesAndRectSize.w;
+        return std::isfinite(emitterRadius) && emitterRadius > 0.0f && emitterRadius <= range &&
+               std::isfinite(selfShadowRadius) && selfShadowRadius >= 0.0f && selfShadowRadius <= emitterRadius;
+    }
+    if (type == static_cast<uint32_t>(GpuLightType::Spot)) {
+        return light.spotCosinesAndRectSize.z == 0.0f && light.spotCosinesAndRectSize.w == 0.0f;
+    }
+    return light.spotCosinesAndRectSize.z > 0.0f && light.spotCosinesAndRectSize.w > 0.0f;
 }
 
 GpuLightNormalizationResult normalizeGpuLight(const GpuLightNormalizationInput& input) {
@@ -140,6 +154,13 @@ GpuLightNormalizationResult normalizeGpuLight(const GpuLightNormalizationInput& 
     const bool spot = input.type == GpuLightType::Spot;
     const bool rect = input.type == GpuLightType::Rect;
 
+    if (point && !std::isfinite(input.pointEmitterRadiusMeters)) {
+        return fail(GpuLightNormalizationError::NonFiniteValue, GpuLightField::PointEmitterRadius);
+    }
+    if (point && !std::isfinite(input.pointSelfShadowRadiusMeters)) {
+        return fail(GpuLightNormalizationError::NonFiniteValue, GpuLightField::PointSelfShadowRadius);
+    }
+
     if ((directional && input.intensityUnit != GpuLightIntensityUnit::Lux) ||
         (rect && input.intensityUnit != GpuLightIntensityUnit::Nit) ||
         ((point || spot) && input.intensityUnit != GpuLightIntensityUnit::Lumen &&
@@ -155,6 +176,13 @@ GpuLightNormalizationResult normalizeGpuLight(const GpuLightNormalizationInput& 
         }
     } else if (input.rangeMeters <= 0.0f) {
         return fail(GpuLightNormalizationError::ValueOutOfRange, GpuLightField::Range);
+    }
+    if (point && (input.pointEmitterRadiusMeters <= 0.0f || input.pointEmitterRadiusMeters > input.rangeMeters)) {
+        return fail(GpuLightNormalizationError::ValueOutOfRange, GpuLightField::PointEmitterRadius);
+    }
+    if (point && (input.pointSelfShadowRadiusMeters < 0.0f ||
+                  input.pointSelfShadowRadiusMeters > input.pointEmitterRadiusMeters)) {
+        return fail(GpuLightNormalizationError::ValueOutOfRange, GpuLightField::PointSelfShadowRadius);
     }
     float inverseRangeSquared = 0.0f;
     if (!directional) {
@@ -210,7 +238,10 @@ GpuLightNormalizationResult normalizeGpuLight(const GpuLightNormalizationInput& 
     result.light.colorAndIntensity = glm::vec4(input.colorLinear, shadingIntensity);
     result.light.spotCosinesAndRectSize = {spot ? std::cos(input.innerConeAngleRadians) : 0.0f,
                                            spot ? std::cos(input.outerConeAngleRadians) : 0.0f,
-                                           rect ? input.rectSizeMeters.x : 0.0f, rect ? input.rectSizeMeters.y : 0.0f};
+                                           point ? input.pointEmitterRadiusMeters
+                                                 : (rect ? input.rectSizeMeters.x : 0.0f),
+                                           point ? input.pointSelfShadowRadiusMeters
+                                                 : (rect ? input.rectSizeMeters.y : 0.0f)};
     result.light.classificationAndIdentity = {static_cast<uint32_t>(input.type), input.lightId.value,
                                               static_cast<uint32_t>(input.shadowPolicy), input.shadowIndex};
     result.light.resourcesAndFlags = {input.cookieIndex, input.iesProfileIndex, input.contributionFlags,
@@ -275,6 +306,8 @@ AnalyticLightInstantiationResult instantiateAnalyticLight(const AnalyticLightSou
                     : glm::vec3(localToWorld * glm::vec4(source.localPositionMeters, 1.0f)) - cameraPositionMeters;
     input.emissionDirection = orientation * source.localEmissionDirection;
     input.rangeMeters = source.rangeMeters;
+    input.pointEmitterRadiusMeters = source.pointEmitterRadiusMeters;
+    input.pointSelfShadowRadiusMeters = source.pointSelfShadowRadiusMeters;
     input.colorLinear = source.colorLinear;
     input.intensity = source.intensity;
     input.intensityUnit = source.intensityUnit;
@@ -320,6 +353,8 @@ const char* gpuLightFieldStableId(const GpuLightField field) {
     case GpuLightField::Position: return "Position";
     case GpuLightField::Direction: return "Direction";
     case GpuLightField::Range: return "Range";
+    case GpuLightField::PointEmitterRadius: return "PointEmitterRadius";
+    case GpuLightField::PointSelfShadowRadius: return "PointSelfShadowRadius";
     case GpuLightField::Color: return "Color";
     case GpuLightField::Intensity: return "Intensity";
     case GpuLightField::IntensityUnit: return "IntensityUnit";

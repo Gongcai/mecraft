@@ -152,6 +152,22 @@ bool testIncrementalVoxelLights() {
         return false;
     }
 
+    const BlockStateId wallTorch =
+        BlockStateRegistry::withProperty(torch, PropIndices::FACING, PropIndices::FACING_EAST);
+    center->setBlock(1, 64, 2, wallTorch);
+    world.notifyBlockChange();
+    if (!requireTrue(registry.buildSceneLights(world, glm::vec3(0.0f), lights),
+                     "wall torch state changes must rebuild its light source") ||
+        !requireTrue(lights[1].light.classificationAndIdentity.y == torchLightId &&
+                         lights[1].light.positionAndRange.x < 1.4f &&
+                         lights[1].light.positionAndRange.y > 64.75f &&
+                         lights[1].light.positionAndRange.z == 2.5f,
+                     "wall torches must place their light at the oriented rendered flame") ||
+        !requireTrue(registry.lightRevision() > initialRevision,
+                     "torch-facing state changes must advance the light revision")) {
+        return false;
+    }
+
     center->setBlock(1, 64, 2, stone);
     world.notifyBlockChange();
     if (!requireTrue(registry.buildSceneLights(world, glm::vec3(0.0f), lights) && lights.size() == 3u,
