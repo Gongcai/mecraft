@@ -226,56 +226,62 @@ bool PostProcessPass::compositeToBackbuffer(RhiDevice& rhiDevice, const RhiTextu
                                             const RhiTextureFormat swapchainColorFormat, const int outputWidth,
                                             const int outputHeight, const float frameTime,
                                             const RhiTextureHandle gbufferDepthTexture,
-                                            RenderDebugService& debugService) {
+                                            RenderDebugService& debugService, const bool terminalFrameGpuSpan) {
     if (!m_sceneCaptured || !swapchainColorView.isValid() ||
         !ensureProcessingTargets(rhiDevice, m_hdrInputWidth, m_hdrInputHeight) || !ensureRhiPipelines(rhiDevice) ||
         !ensureNoiseTextureView(rhiDevice) || !ensureSwapchainCompositePipeline(rhiDevice, swapchainColorFormat) ||
         !ensureGbufferDepthTextureView(rhiDevice, gbufferDepthTexture) || !rebuildTargetBindGroups() ||
         !rebuildCompositeBindGroups()) {
+        debugService.cancelGpuFrameSpan();
         return false;
     }
     return executeCompositeGraph(rhiDevice, CompositeDestination::Backbuffer, swapchainColorView, outputWidth,
-                                 outputHeight, frameTime, debugService);
+                                 outputHeight, frameTime, debugService, terminalFrameGpuSpan);
 }
 
 RhiTextureHandle PostProcessPass::compositeToTexture(RhiDevice& rhiDevice, const float frameTime,
                                                      const RhiTextureHandle gbufferDepthTexture,
-                                                     RenderDebugService& debugService) {
+                                                     RenderDebugService& debugService,
+                                                     const bool terminalFrameGpuSpan) {
     if (!m_sceneCaptured || !ensureProcessingTargets(rhiDevice, m_hdrInputWidth, m_hdrInputHeight) ||
         !ensureCompositeTarget(rhiDevice, m_hdrInputWidth, m_hdrInputHeight) || !ensureRhiPipelines(rhiDevice) ||
         !ensureNoiseTextureView(rhiDevice) || !ensureGbufferDepthTextureView(rhiDevice, gbufferDepthTexture) ||
         !rebuildTargetBindGroups() || !rebuildCompositeBindGroups() ||
         !executeCompositeGraph(rhiDevice, CompositeDestination::Texture, m_compositeView, m_processingWidth,
-                               m_processingHeight, frameTime, debugService)) {
+                               m_processingHeight, frameTime, debugService, terminalFrameGpuSpan)) {
+        debugService.cancelGpuFrameSpan();
         return {};
     }
     return m_compositeHandle;
 }
 
 bool PostProcessPass::blitSceneCaptureToBackbuffer(RhiDevice& rhiDevice, const RhiTextureViewHandle swapchainColorView,
-                                                   RenderDebugService& debugService) {
+                                                   RenderDebugService& debugService, const bool terminalFrameGpuSpan) {
     if (!m_sceneCaptured || !m_sceneColorHandle.isValid()) {
+        debugService.cancelGpuFrameSpan();
         return false;
     }
-    return executeBlitGraph(rhiDevice, m_sceneColorHandle, swapchainColorView, debugService);
+    return executeBlitGraph(rhiDevice, m_sceneColorHandle, swapchainColorView, debugService, terminalFrameGpuSpan);
 }
 
 bool PostProcessPass::blitCompositeToBackbuffer(RhiDevice& rhiDevice, const RhiTextureViewHandle swapchainColorView,
-                                                RenderDebugService& debugService) {
+                                                RenderDebugService& debugService, const bool terminalFrameGpuSpan) {
     if (!m_compositeHandle.isValid()) {
+        debugService.cancelGpuFrameSpan();
         return false;
     }
-    return executeBlitGraph(rhiDevice, m_compositeHandle, swapchainColorView, debugService);
+    return executeBlitGraph(rhiDevice, m_compositeHandle, swapchainColorView, debugService, terminalFrameGpuSpan);
 }
 
 bool PostProcessPass::executeCompositeGraph(RhiDevice& rhiDevice, const CompositeDestination destination,
                                             const RhiTextureViewHandle outputView, const int outputWidth,
                                             const int outputHeight, const float frameTime,
-                                            RenderDebugService& debugService) {
+                                            RenderDebugService& debugService, const bool terminalFrameGpuSpan) {
     if (m_commandListPool == nullptr || m_rhiDevice != &rhiDevice || !m_hdrInputHandle.isValid() ||
         !m_hdrInputView.isValid() || !m_sceneDepthHandle.isValid() || !m_sceneDepthView.isValid() ||
         !m_noiseTexture.isValid() || !m_noiseTextureView.isValid() || !m_gbufferDepthViewTexture.isValid() ||
         !m_gbufferDepthTextureView.isValid() || !m_compositeParamsBuffer.isValid() || !outputView.isValid()) {
+        debugService.cancelGpuFrameSpan();
         return false;
     }
 
@@ -330,12 +336,14 @@ bool PostProcessPass::executeCompositeGraph(RhiDevice& rhiDevice, const Composit
         !importTexture(m_gbufferDepthViewTexture, m_gbufferDepthTextureView, RhiResourceState::DepthRead,
                        resources.gbufferDepth) ||
         !importBuffer(m_compositeParamsBuffer, RhiResourceState::UniformBuffer, resources.compositeParams)) {
+        debugService.cancelGpuFrameSpan();
         return false;
     }
     for (int mip = 0; mip < kBloomMipCount; ++mip) {
         for (int ping = 0; ping < 2; ++ping) {
             if (!importTexture(m_bloomHandle[mip][ping], m_bloomView[mip][ping], RhiResourceState::ShaderRead,
                                resources.bloom[mip][ping])) {
+                debugService.cancelGpuFrameSpan();
                 return false;
             }
         }
@@ -343,12 +351,14 @@ bool PostProcessPass::executeCompositeGraph(RhiDevice& rhiDevice, const Composit
     for (int mip = 0; mip < m_exposureMipCount; ++mip) {
         if (!importTexture(m_exposureHandle[mip], m_exposureView[mip], RhiResourceState::ShaderRead,
                            resources.exposure[mip])) {
+            debugService.cancelGpuFrameSpan();
             return false;
         }
     }
     for (int index = 0; index < 2; ++index) {
         if (!importTexture(m_exposureStateHandle[index], m_exposureStateView[index], RhiResourceState::ShaderRead,
                            resources.exposureState[index])) {
+            debugService.cancelGpuFrameSpan();
             return false;
         }
     }
@@ -358,6 +368,7 @@ bool PostProcessPass::executeCompositeGraph(RhiDevice& rhiDevice, const Composit
     const RhiResourceState outputStableState =
         destination == CompositeDestination::Texture ? RhiResourceState::ShaderRead : RhiResourceState::Present;
     if (!outputTexture.isValid() || !importTexture(outputTexture, outputView, outputStableState, resources.output)) {
+        debugService.cancelGpuFrameSpan();
         return false;
     }
 
@@ -567,7 +578,7 @@ bool PostProcessPass::executeCompositeGraph(RhiDevice& rhiDevice, const Composit
         composite.readTexture(resources.bloom[mip][0], RhiResourceState::ShaderRead);
     }
     composite.setExecute([this, &debugService, &compositeTimer, destination, outputView, outputWidth, outputHeight,
-                          finalExposureReadIndex](RgPassContext& pass) {
+                          finalExposureReadIndex, terminalFrameGpuSpan](RgPassContext& pass) {
         if (destination == CompositeDestination::Texture) {
             bindCompositeOutput(pass.commandList(), m_processingWidth, m_processingHeight);
             renderComposite(pass.commandList(), m_compositeTexturePipeline, finalExposureReadIndex);
@@ -578,18 +589,23 @@ bool PostProcessPass::executeCompositeGraph(RhiDevice& rhiDevice, const Composit
         }
         pass.commandList().endRendering();
         debugService.endGpuTimer(pass.commandList(), compositeTimer);
+        if (terminalFrameGpuSpan) {
+            debugService.endGpuFrameSpan(pass.commandList());
+        }
         return true;
     });
 
     const RgCompileResult compiled = m_renderGraph.compile();
     if (!compiled.succeeded()) {
         MECRAFT_LOG_STREAM(std::cerr << "[PostProcessPass] Render Graph compile failed: " << compiled.message << '\n');
+        debugService.cancelGpuFrameSpan();
         return false;
     }
     const GpuTimerCheckpoint timerCheckpoint = debugService.gpuTimerCheckpoint();
     const RgExecuteResult executed = m_renderGraph.execute(rhiDevice, *m_commandListPool);
     if (!executed.succeeded()) {
         debugService.cancelGpuTimersSince(timerCheckpoint);
+        debugService.cancelGpuFrameSpan();
         m_exposureReadbackRecorded = false;
         MECRAFT_LOG_STREAM(std::cerr << "[PostProcessPass] Render Graph execution failed: " << executed.message
                                      << '\n');
@@ -618,13 +634,15 @@ bool PostProcessPass::executeCompositeGraph(RhiDevice& rhiDevice, const Composit
 
 bool PostProcessPass::executeBlitGraph(RhiDevice& rhiDevice, const RhiTextureHandle sourceTexture,
                                        const RhiTextureViewHandle swapchainColorView,
-                                       RenderDebugService& debugService) {
+                                       RenderDebugService& debugService, const bool terminalFrameGpuSpan) {
     if (m_commandListPool == nullptr || m_rhiDevice != &rhiDevice || !sourceTexture.isValid() ||
         !swapchainColorView.isValid()) {
+        debugService.cancelGpuFrameSpan();
         return false;
     }
     const RhiTextureHandle swapchainTexture = rhiDevice.currentSwapchainColorTexture();
     if (!swapchainTexture.isValid()) {
+        debugService.cancelGpuFrameSpan();
         return false;
     }
 
@@ -655,25 +673,30 @@ bool PostProcessPass::executeBlitGraph(RhiDevice& rhiDevice, const RhiTextureHan
     RenderGraphPassBuilder blit = m_renderGraph.addPass({"PostProcess.Blit", RgPassType::Copy, RhiQueueType::Graphics});
     blit.readTexture(source, RhiResourceState::TransferSrc)
         .writeTexture(swapchain, RhiResourceState::TransferDst)
-        .setExecute([&debugService, sourceTexture, swapchainColorView](RgPassContext& pass) {
+        .setExecute([&debugService, sourceTexture, swapchainColorView, terminalFrameGpuSpan](RgPassContext& pass) {
             const GpuTimerSegmentToken timerToken = debugService.beginGpuTimer(pass.commandList(), GpuTimerPass::Post);
             RhiTextureBlit blitInfo;
             blitInfo.src = sourceTexture;
             blitInfo.dstView = swapchainColorView;
             pass.commandList().blitTexture(blitInfo);
             debugService.endGpuTimer(pass.commandList(), timerToken);
+            if (terminalFrameGpuSpan) {
+                debugService.endGpuFrameSpan(pass.commandList());
+            }
             return true;
         });
 
     const RgCompileResult compiled = m_renderGraph.compile();
     if (!compiled.succeeded()) {
         MECRAFT_LOG_STREAM(std::cerr << "[PostProcessPass] Blit graph compile failed: " << compiled.message << '\n');
+        debugService.cancelGpuFrameSpan();
         return false;
     }
     const GpuTimerCheckpoint timerCheckpoint = debugService.gpuTimerCheckpoint();
     const RgExecuteResult executed = m_renderGraph.execute(rhiDevice, *m_commandListPool);
     if (!executed.succeeded()) {
         debugService.cancelGpuTimersSince(timerCheckpoint);
+        debugService.cancelGpuFrameSpan();
         MECRAFT_LOG_STREAM(std::cerr << "[PostProcessPass] Blit graph execution failed: " << executed.message << '\n');
         return false;
     }

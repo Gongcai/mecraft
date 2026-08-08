@@ -109,14 +109,27 @@ int main() {
                          "RTGI report must expose the primary Render Graph CPU/GPU timing window")) {
             return 1;
         }
+        const auto completeFrameTiming = report.find("complete_gpu_frame_ms");
+        if (!requireTrue(completeFrameTiming != report.end() && completeFrameTiming->is_object() &&
+                             completeFrameTiming->value("scope", "") == "scene_render_graphs" &&
+                             completeFrameTiming->value("complete_frame", false) &&
+                             completeFrameTiming->value("valid", false) &&
+                             completeFrameTiming->value("window_capacity", 0u) == 1000u &&
+                             completeFrameTiming->value("sample_count", 0u) == 3u &&
+                             completeFrameTiming->value("observed_sample_count", 0u) == 3u,
+                         "RTGI report must expose the complete scene-render GPU timing window")) {
+            return 1;
+        }
         const Json& stages = timing.at("stages");
         double rtgiP95 = 0.0;
         double nrdP95 = 0.0;
         double ssgiP95 = 0.0;
+        double completeFrameP95 = 0.0;
         if (!requireTrue(readFiniteP95(stages, "RTGI", rtgiP95) && rtgiP95 > 0.0 &&
                              readFiniteP95(stages, "NRD", nrdP95) && nrdP95 > 0.0 &&
-                             readFiniteP95(stages, "SSGI", ssgiP95) && ssgiP95 == 0.0,
-                         "RTGI and NRD must be active while SSGI remains disabled")) {
+                             readFiniteP95(stages, "SSGI", ssgiP95) && ssgiP95 == 0.0 &&
+                             readFiniteP95(*completeFrameTiming, "span_ms", completeFrameP95),
+                         "RTGI, NRD, and complete scene GPU spans must have valid statistics")) {
             return 1;
         }
     }

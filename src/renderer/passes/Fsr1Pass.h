@@ -26,15 +26,18 @@ public:
     /// Allocates the owned shader-readable RCAS output for an offscreen consumer.
     [[nodiscard]] bool prepareTextureOutput(RhiDevice& rhiDevice, int width, int height);
 
+    /// Executes EASU and RCAS into the supplied output view.
+    /// @param terminalFrameGpuSpan Whether the RCAS pass writes the scene-frame terminal timestamp.
     bool execute(RhiDevice& rhiDevice, RhiTextureViewHandle swapchainColorView, RhiTextureHandle inputTexture,
                  RhiTextureViewHandle inputView, int inputWidth, int inputHeight, int outputWidth, int outputHeight,
-                 float sharpness, RenderDebugService& debugService);
+                 float sharpness, RenderDebugService& debugService, bool terminalFrameGpuSpan);
 
     /// Executes EASU and RCAS into an owned shader-readable texture.
+    /// @param terminalFrameGpuSpan Whether the RCAS pass writes the scene-frame terminal timestamp.
     [[nodiscard]] bool executeToTexture(RhiDevice& rhiDevice, RhiTextureHandle inputTexture,
                                         RhiTextureViewHandle inputView, int inputWidth, int inputHeight,
                                         int outputWidth, int outputHeight, float sharpness,
-                                        RenderDebugService& debugService);
+                                        RenderDebugService& debugService, bool terminalFrameGpuSpan);
     [[nodiscard]] RhiTextureHandle outputTextureHandle() const { return m_outputHandle; }
     [[nodiscard]] RhiTextureViewHandle outputTextureViewHandle() const { return m_outputView; }
 
@@ -46,7 +49,8 @@ private:
     bool executeToOutput(RhiDevice& rhiDevice, RhiTextureHandle outputTexture, RhiTextureViewHandle outputView,
                          RhiResourceState outputStableState, RhiLoadOp outputLoadOp, RhiTextureHandle inputTexture,
                          RhiTextureViewHandle inputView, int inputWidth, int inputHeight, int outputWidth,
-                         int outputHeight, float sharpness, RenderDebugService& debugService);
+                         int outputHeight, float sharpness, RenderDebugService& debugService,
+                         bool terminalFrameGpuSpan);
     bool ensureRhiPipeline(RhiDevice& rhiDevice);
     bool ensureEasuBindGroup(RhiDevice& rhiDevice, RhiTextureViewHandle inputView);
     bool ensureRcasBindGroup(RhiDevice& rhiDevice);

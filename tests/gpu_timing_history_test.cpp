@@ -112,6 +112,8 @@ bool testRenderGraphTimingHistory() {
     frame.submitCount = 11u;
     frame.workerRecordedBatches = 3u;
     frame.passes.push_back({"Frame", RhiQueueType::Graphics, 1.0, 0.0});
+    frame.completeGpuFrame.supported = true;
+    frame.completeGpuFrame.valid = true;
 
     for (uint64_t execution = 1u; execution <= 1002u; ++execution) {
         const double value = static_cast<double>(execution);
@@ -127,6 +129,8 @@ bool testRenderGraphTimingHistory() {
         frame.gpuTotalMs = value * 2.0;
         frame.gpuSpanMs = value * 1.5;
         frame.gpuIdleMs = 0.0;
+        frame.completeGpuFrame.sequence = execution;
+        frame.completeGpuFrame.spanMs = value * 0.75;
         if (!requireTrue(history.record(frame), "valid Render Graph frames must be accepted")) {
             return false;
         }
@@ -134,6 +138,14 @@ bool testRenderGraphTimingHistory() {
 
     frame.cpuBuildMs = 2000.0;
     if (!requireTrue(history.record(frame), "a CPU sample must be accepted when the GPU execution is duplicated")) {
+        return false;
+    }
+
+    RenderGraphFrameStats invalidCompleteGpuFrame = frame;
+    invalidCompleteGpuFrame.completeGpuFrame.sequence = 1003u;
+    invalidCompleteGpuFrame.completeGpuFrame.spanMs = -1.0;
+    if (!requireTrue(!history.record(invalidCompleteGpuFrame),
+                     "negative complete GPU frame spans must be rejected")) {
         return false;
     }
 
@@ -150,15 +162,26 @@ bool testRenderGraphTimingHistory() {
     const auto& gpuTotal = stats.gpu[static_cast<size_t>(RenderGraphGpuTimingMetric::Total)];
     const auto& gpuSpan = stats.gpu[static_cast<size_t>(RenderGraphGpuTimingMetric::Span)];
     return requireTrue(stats.cpuValid && stats.gpuValid && stats.cpuSampleCount == 1000u &&
-                           stats.gpuSampleCount == 1000u && stats.observedGpuSampleCount == 1002u,
+                           stats.gpuSampleCount == 1000u && stats.observedGpuSampleCount == 1002u &&
+                           stats.completeGpuFrameValid && stats.completeGpuFrameSampleCount == 1000u &&
+                           stats.observedCompleteGpuFrameSampleCount == 1002u,
                        "Render Graph history must retain separate CPU and GPU windows") &&
            requireNear(build.p50Ms, 503.0, "Render Graph CPU p50 must use nearest-rank selection") &&
            requireNear(record.p95Ms, 3812.0, "Render Graph CPU Record p95 must preserve stage values") &&
            requireNear(gpuTotal.p95Ms, 1904.0, "Render Graph GPU Total p95 must preserve stage values") &&
            requireNear(gpuSpan.p50Ms, 753.0, "Render Graph GPU Span p50 must preserve stage values") &&
+           requireNear(stats.completeGpuFrameSpanMs.p50Ms, 376.5,
+                       "complete GPU frame p50 must use its independent window") &&
+           requireNear(stats.completeGpuFrameSpanMs.p95Ms, 714.0,
+                       "complete GPU frame p95 must use its independent window") &&
+           requireNear(stats.completeGpuFrameSpanMs.p99Ms, 744.0,
+                       "complete GPU frame p99 must use its independent window") &&
            requireTrue(stats.latest.valid && stats.latest.gpuValid && stats.latest.execution == 1002u &&
-                           stats.latest.passCount == 75u && stats.latest.workerRecordedBatches == 3u,
-                       "Render Graph history must expose latest structural counters");
+                           stats.latest.passCount == 75u && stats.latest.workerRecordedBatches == 3u &&
+                           stats.latest.completeGpuFrameValid && stats.latest.completeGpuFrameSequence == 1002u,
+                       "Render Graph history must expose latest structural counters") &&
+           requireNear(stats.latest.completeGpuFrameSpanMs, 751.5,
+                       "latest complete GPU frame span must remain distinct");
 }
 
 } // namespace

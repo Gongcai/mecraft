@@ -663,18 +663,20 @@ bool ModelSceneDeferredRenderer::render(const glm::mat4& view, const glm::mat4& 
         state.error = "failed to configure model scene FSR 1 HDR input";
         return false;
     }
+    const bool fsr1Enabled = state.fsr1Enabled();
     state.postProcess.setFrameEffects(buildPostProcessEffects(state.settings, context));
     const RhiTextureHandle texture = state.postProcess.compositeToTexture(*state.rhiDevice, frameClock.deltaTimeSeconds,
-                                                                          output.gbufferDepth, state.debugService);
+                                                                          output.gbufferDepth, state.debugService,
+                                                                          !fsr1Enabled);
     if (!texture.isValid()) {
         state.error = "failed to composite model scene post-process output";
         return false;
     }
-    if (state.fsr1Enabled() &&
+    if (fsr1Enabled &&
         !state.fsr1.executeToTexture(*state.rhiDevice, texture, state.postProcess.compositeTextureViewHandle(),
                                      static_cast<int>(state.renderWidth), static_cast<int>(state.renderHeight),
                                      static_cast<int>(state.width), static_cast<int>(state.height),
-                                     state.settings.upscale.fsr1Sharpness, state.debugService)) {
+                                     state.settings.upscale.fsr1Sharpness, state.debugService, true)) {
         state.error = "failed to execute model scene FSR 1 pass";
         return false;
     }
@@ -878,7 +880,9 @@ RenderGraphFrameStats ModelSceneDeferredRenderer::renderGraphFrameStats() const 
     if (!m_impl->initialized) {
         return {};
     }
-    return m_impl->pipeline.renderGraphFrameStats();
+    RenderGraphFrameStats stats = m_impl->pipeline.renderGraphFrameStats();
+    stats.completeGpuFrame = m_impl->debugService.getGpuFrameSpanStats();
+    return stats;
 }
 
 ReflectionProbeCaptureFrameStats ModelSceneDeferredRenderer::reflectionProbeCaptureStats() const {

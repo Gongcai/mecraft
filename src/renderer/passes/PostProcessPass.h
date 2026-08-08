@@ -100,23 +100,27 @@ public:
     [[nodiscard]] bool prepareTextureOutput(RhiDevice& rhiDevice, int width, int height);
 
     /// Composite captured scene to back buffer with active effects.
+    /// @param terminalFrameGpuSpan Whether this composite pass writes the scene-frame terminal timestamp.
     [[nodiscard]] bool compositeToBackbuffer(RhiDevice& rhiDevice, RhiTextureViewHandle swapchainColorView,
                                              RhiTextureFormat swapchainColorFormat, int outputWidth, int outputHeight,
                                              float frameTime, RhiTextureHandle gbufferDepthTexture,
-                                             RenderDebugService& debugService);
+                                             RenderDebugService& debugService, bool terminalFrameGpuSpan);
 
     /// Composite captured scene into an internal LDR texture instead of the back buffer.
+    /// @param terminalFrameGpuSpan Whether this composite pass writes the scene-frame terminal timestamp.
     [[nodiscard]] RhiTextureHandle compositeToTexture(RhiDevice& rhiDevice, float frameTime,
                                                       RhiTextureHandle gbufferDepthTexture,
-                                                      RenderDebugService& debugService);
+                                                      RenderDebugService& debugService, bool terminalFrameGpuSpan);
 
     /// Blit captured scene directly to back buffer without any postprocessing.
+    /// @param terminalFrameGpuSpan Whether this blit pass writes the scene-frame terminal timestamp.
     [[nodiscard]] bool blitSceneCaptureToBackbuffer(RhiDevice& rhiDevice, RhiTextureViewHandle swapchainColorView,
-                                                    RenderDebugService& debugService);
+                                                    RenderDebugService& debugService, bool terminalFrameGpuSpan);
 
     /// Blit the internal composited LDR texture to the back buffer.
+    /// @param terminalFrameGpuSpan Whether this blit pass writes the scene-frame terminal timestamp.
     [[nodiscard]] bool blitCompositeToBackbuffer(RhiDevice& rhiDevice, RhiTextureViewHandle swapchainColorView,
-                                                 RenderDebugService& debugService);
+                                                 RenderDebugService& debugService, bool terminalFrameGpuSpan);
 
     /// Set effects configuration for the current frame.
     void setFrameEffects(const PostProcessEffects& effects);
@@ -186,9 +190,11 @@ private:
     void destroyRhiResources();
     [[nodiscard]] bool executeCompositeGraph(RhiDevice& rhiDevice, CompositeDestination destination,
                                              RhiTextureViewHandle outputView, int outputWidth, int outputHeight,
-                                             float frameTime, RenderDebugService& debugService);
+                                             float frameTime, RenderDebugService& debugService,
+                                             bool terminalFrameGpuSpan);
     [[nodiscard]] bool executeBlitGraph(RhiDevice& rhiDevice, RhiTextureHandle sourceTexture,
-                                        RhiTextureViewHandle swapchainColorView, RenderDebugService& debugService);
+                                        RhiTextureViewHandle swapchainColorView, RenderDebugService& debugService,
+                                        bool terminalFrameGpuSpan);
     void recordExposureStateInitialization(RhiCommandList& commandList, float manualExposure);
     void recordExposureDownsample(RhiCommandList& commandList, int mip, const glm::ivec2& sourceSize,
                                   bool sourceIsScene, int sourceLod);

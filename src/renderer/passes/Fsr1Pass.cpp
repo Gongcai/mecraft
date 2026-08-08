@@ -66,24 +66,25 @@ void Fsr1Pass::submitCommandList(RhiDevice& rhiDevice, RhiCommandList& commandLi
 bool Fsr1Pass::execute(RhiDevice& rhiDevice, const RhiTextureViewHandle swapchainColorView,
                        const RhiTextureHandle inputTexture, const RhiTextureViewHandle inputView, const int inputWidth,
                        const int inputHeight, const int outputWidth, const int outputHeight, const float sharpness,
-                       RenderDebugService& debugService) {
+                       RenderDebugService& debugService, const bool terminalFrameGpuSpan) {
     const RhiTextureHandle swapchainTexture = rhiDevice.currentSwapchainColorTexture();
     return executeToOutput(rhiDevice, swapchainTexture, swapchainColorView, RhiResourceState::Present, RhiLoadOp::Load,
                            inputTexture, inputView, inputWidth, inputHeight, outputWidth, outputHeight, sharpness,
-                           debugService);
+                           debugService, terminalFrameGpuSpan);
 }
 
 bool Fsr1Pass::executeToTexture(RhiDevice& rhiDevice, const RhiTextureHandle inputTexture,
                                 const RhiTextureViewHandle inputView, const int inputWidth, const int inputHeight,
                                 const int outputWidth, const int outputHeight, const float sharpness,
-                                RenderDebugService& debugService) {
+                                RenderDebugService& debugService, const bool terminalFrameGpuSpan) {
     if (!ensureRhiPipeline(rhiDevice) || !ensureTargets(rhiDevice, outputWidth, outputHeight) ||
         !ensureOutputTarget(rhiDevice, outputWidth, outputHeight)) {
+        debugService.cancelGpuFrameSpan();
         return false;
     }
     return executeToOutput(rhiDevice, m_outputHandle, m_outputView, RhiResourceState::ShaderRead, RhiLoadOp::DontCare,
                            inputTexture, inputView, inputWidth, inputHeight, outputWidth, outputHeight, sharpness,
-                           debugService);
+                           debugService, terminalFrameGpuSpan);
 }
 
 bool Fsr1Pass::executeToOutput(RhiDevice& rhiDevice, const RhiTextureHandle outputTexture,
@@ -91,11 +92,12 @@ bool Fsr1Pass::executeToOutput(RhiDevice& rhiDevice, const RhiTextureHandle outp
                                const RhiLoadOp outputLoadOp, const RhiTextureHandle inputTexture,
                                const RhiTextureViewHandle inputView, const int inputWidth, const int inputHeight,
                                const int outputWidth, const int outputHeight, const float sharpness,
-                               RenderDebugService& debugService) {
+                               RenderDebugService& debugService, const bool terminalFrameGpuSpan) {
     if (!isSupported(rhiDevice) || !inputTexture.isValid() || !inputView.isValid() || !outputTexture.isValid() ||
         !outputView.isValid() || inputWidth <= 0 || inputHeight <= 0 || outputWidth <= 0 || outputHeight <= 0 ||
         !ensureRhiPipeline(rhiDevice) || !ensureTargets(rhiDevice, outputWidth, outputHeight) ||
         !ensureEasuBindGroup(rhiDevice, inputView) || !ensureRcasBindGroup(rhiDevice)) {
+        debugService.cancelGpuFrameSpan();
         return false;
     }
 
@@ -134,6 +136,7 @@ bool Fsr1Pass::executeToOutput(RhiDevice& rhiDevice, const RhiTextureHandle outp
     if (!importTexture(inputTexture, inputView, RhiResourceState::ShaderRead, graphInput) ||
         !importTexture(m_easuHandle, m_easuView, RhiResourceState::ShaderRead, graphEasu) ||
         !importTexture(outputTexture, outputView, outputStableState, graphSwapchain)) {
+        debugService.cancelGpuFrameSpan();
         return false;
     }
 
@@ -168,7 +171,7 @@ bool Fsr1Pass::executeToOutput(RhiDevice& rhiDevice, const RhiTextureHandle outp
         .readTexture(graphEasu, RhiResourceState::ShaderRead)
         .writeTexture(graphSwapchain, RhiResourceState::RenderTarget)
         .setExecute([this, &debugService, rcasPushConstants, outputView, outputLoadOp, outputWidth,
-                     outputHeight](RgPassContext& pass) {
+                     outputHeight, terminalFrameGpuSpan](RgPassContext& pass) {
             RhiCommandList& commandList = pass.commandList();
             const GpuTimerSegmentToken timerToken = debugService.beginGpuTimer(commandList, GpuTimerPass::Post);
             RhiColorAttachment colorAttachment;
@@ -188,17 +191,22 @@ bool Fsr1Pass::executeToOutput(RhiDevice& rhiDevice, const RhiTextureHandle outp
             commandList.draw(3u, 1u, 0u, 0u);
             commandList.endRendering();
             debugService.endGpuTimer(commandList, timerToken);
+            if (terminalFrameGpuSpan) {
+                debugService.endGpuFrameSpan(commandList);
+            }
             return true;
         });
 
     const RgCompileResult compiled = m_renderGraph.compile();
     if (!compiled.succeeded()) {
+        debugService.cancelGpuFrameSpan();
         return false;
     }
     const GpuTimerCheckpoint timerCheckpoint = debugService.gpuTimerCheckpoint();
     const RgExecuteResult executed = m_renderGraph.execute(rhiDevice, *m_commandListPool);
     if (!executed.succeeded()) {
         debugService.cancelGpuTimersSince(timerCheckpoint);
+        debugService.cancelGpuFrameSpan();
         return false;
     }
 

@@ -79,6 +79,16 @@ struct GpuFrameStats {
     double postMs = 0.0;
 };
 
+/// Complete GPU span for one scene-rendering frame across all submitted Render Graphs.
+/// Presentation and UI work submitted after the terminal scene-render marker are excluded.
+struct GpuFrameSpanStats {
+    bool supported = false;
+    bool valid = false;
+    /// Monotonic identity assigned whenever a completed span is published.
+    uint64_t sequence = 0u;
+    double spanMs = 0.0;
+};
+
 /// Percentiles computed from one fixed GPU timing sample window.
 struct GpuTimingPercentiles {
     double p50Ms = 0.0;
@@ -182,6 +192,8 @@ struct RenderGraphFrameStats {
     uint64_t aliasedRequestBytes = 0u;
     /// Total bytes allocated across all live shared alias pages.
     uint64_t aliasTotalPageBytes = 0u;
+    /// Complete scene-rendering GPU span collected from frame-start and terminal markers.
+    GpuFrameSpanStats completeGpuFrame;
     std::vector<RenderGraphPassStats> passes;
 };
 
@@ -226,6 +238,9 @@ struct RenderGraphLatestStats {
     uint32_t batchCount = 0u;
     uint32_t submitCount = 0u;
     uint32_t workerRecordedBatches = 0u;
+    bool completeGpuFrameValid = false;
+    uint64_t completeGpuFrameSequence = 0u;
+    double completeGpuFrameSpanMs = 0.0;
 };
 
 /// Fixed-window CPU and primary Render Graph GPU timing statistics.
@@ -236,6 +251,10 @@ struct RenderGraphTimingWindowStats {
     size_t cpuSampleCount = 0u;
     size_t gpuSampleCount = 0u;
     uint64_t observedGpuSampleCount = 0u;
+    bool completeGpuFrameValid = false;
+    size_t completeGpuFrameSampleCount = 0u;
+    uint64_t observedCompleteGpuFrameSampleCount = 0u;
+    GpuTimingPercentiles completeGpuFrameSpanMs;
     std::array<GpuTimingPercentiles, static_cast<size_t>(RenderGraphCpuTimingStage::Count)> cpu{};
     std::array<GpuTimingPercentiles, static_cast<size_t>(RenderGraphGpuTimingMetric::Count)> gpu{};
     RenderGraphLatestStats latest;
@@ -269,6 +288,11 @@ private:
     size_t m_gpuSampleCount = 0u;
     uint64_t m_observedGpuSampleCount = 0u;
     uint64_t m_lastGpuExecution = 0u;
+    std::array<double, kCapacity> m_completeGpuFrameSamples{};
+    size_t m_completeGpuFrameNextSample = 0u;
+    size_t m_completeGpuFrameSampleCount = 0u;
+    uint64_t m_observedCompleteGpuFrameSampleCount = 0u;
+    uint64_t m_lastCompleteGpuFrameSequence = 0u;
     RenderGraphLatestStats m_latest;
 };
 
@@ -422,6 +446,13 @@ public:
     /// @param commandList Recording command list outside any rendering scope.
     void beginFrame(RhiCommandList& commandList);
 
+    /// Marks the terminal GPU point of the current scene-rendering frame.
+    /// @param commandList Final submitted scene-render command list outside rendering scope.
+    void endGpuFrameSpan(RhiCommandList& commandList);
+
+    /// Discards the current frame span when its terminal graph cannot submit.
+    void cancelGpuFrameSpan();
+
     /// Begin one command-list segment for a GPU pass.
     [[nodiscard]] GpuTimerSegmentToken beginGpuTimer(RhiCommandList& commandList, GpuTimerPass pass);
 
@@ -443,6 +474,9 @@ public:
 
     /// Get the latest GPU frame statistics.
     [[nodiscard]] const GpuFrameStats& getGpuFrameStats() const { return m_gpuFrameStats; }
+
+    /// Get the latest completed complete scene-rendering GPU span.
+    [[nodiscard]] const GpuFrameSpanStats& getGpuFrameSpanStats() const { return m_gpuFrameSpanStats; }
 
     /// Computes fixed-window percentiles for completed GPU timer frames.
     /// @return Statistics covering at most the latest 1000 real rendered frames.
@@ -471,6 +505,8 @@ public:
 
 private:
     enum class GpuTimerSegmentState : uint8_t { Unused, Recording, Issued };
+    enum class GpuFrameSpanState : uint8_t { Unused, Started, Issued };
+    enum class GpuFrameSpanPoint : size_t { Start = 0, End = 1, Count = 2 };
 
     static constexpr size_t GPU_TIMER_RING_SIZE = 4;
     static constexpr size_t GPU_TIMER_PASS_COUNT = static_cast<size_t>(GpuTimerPass::Count);
@@ -480,6 +516,9 @@ private:
     static constexpr size_t GPU_TIMER_POINTS_PER_SEGMENT = 2;
     static constexpr uint32_t GPU_TIMER_QUERY_COUNT = static_cast<uint32_t>(
         GPU_TIMER_RING_SIZE * GPU_TIMER_PASS_COUNT * GPU_TIMER_MAX_SEGMENTS_PER_PASS * GPU_TIMER_POINTS_PER_SEGMENT);
+    static constexpr size_t GPU_FRAME_SPAN_POINT_COUNT = static_cast<size_t>(GpuFrameSpanPoint::Count);
+    static constexpr uint32_t GPU_FRAME_SPAN_QUERY_COUNT =
+        static_cast<uint32_t>(GPU_TIMER_RING_SIZE * GPU_FRAME_SPAN_POINT_COUNT);
     static constexpr size_t SHADOW_TIMER_CASCADE_COUNT = ShadowFrameStats::kMaxCascades;
     static constexpr size_t SHADOW_TIMER_POINT_COUNT = static_cast<size_t>(ShadowTimestampPoint::Count);
     static constexpr uint32_t SHADOW_TIMER_QUERY_COUNT =
@@ -487,6 +526,7 @@ private:
 
     [[nodiscard]] static uint32_t gpuTimerQueryIndex(size_t frameIndex, size_t passIndex, size_t segmentIndex,
                                                      size_t pointIndex);
+    [[nodiscard]] static uint32_t gpuFrameSpanQueryIndex(size_t frameIndex, GpuFrameSpanPoint point);
     [[nodiscard]] static uint32_t shadowQueryIndex(size_t frameIndex, size_t cascadeIndex, size_t pointIndex);
 
     // GPU timer state
@@ -495,17 +535,21 @@ private:
     /// on worker threads, so segment slots must be claimed atomically.
     mutable std::mutex m_gpuTimerMutex;
     RhiQueryPoolHandle m_gpuTimerQueryPool;
+    RhiQueryPoolHandle m_gpuFrameSpanQueryPool;
     std::array<std::array<uint8_t, GPU_TIMER_PASS_COUNT>, GPU_TIMER_RING_SIZE> m_gpuTimerAllocatedSegmentCounts{};
     std::array<std::array<std::array<GpuTimerSegmentState, GPU_TIMER_MAX_SEGMENTS_PER_PASS>, GPU_TIMER_PASS_COUNT>,
                GPU_TIMER_RING_SIZE>
         m_gpuTimerSegmentStates{};
     GpuFrameStats m_gpuFrameStats{};
+    GpuFrameSpanStats m_gpuFrameSpanStats{};
     GpuTimingHistory m_gpuTimingHistory;
     uint64_t m_gpuFrameSequence = 0u;
+    uint64_t m_gpuFrameSpanSequence = 0u;
     size_t m_gpuTimerWriteIndex = 0;
     bool m_gpuTimersInitialized = false;
     bool m_gpuTimerEnabled = true;
     bool m_gpuTimerCanIssueThisFrame = true;
+    std::array<GpuFrameSpanState, GPU_TIMER_RING_SIZE> m_gpuFrameSpanStates{};
 
     // Shadow timestamps use one explicit RHI query pool. Each ring slot owns a
     // contiguous range so availability and result reads can be batched.

@@ -303,19 +303,21 @@ validation runner，因此这些画质数值门槛仍不能标记为通过。
 主 Render Graph 的 CPU/GPU 历史已接入 Benchmark JSON 的 `render_graph_frame_ms`，包含固定窗口的
 Build/Compile/Execute/Record/Submit/ShadowPrep/Context/TerrainPrep、GPU Total/Span/Idle/Overlap
 p50/p95/p99，以及最新 Pass/Batch/Submit/工作线程 Batch 计数。该字段范围明确为
-`primary_render_graph`，尚未覆盖跨图完整 GPU Frame。
+`primary_render_graph`，不覆盖跨图完整 GPU Frame。2026-08-09 已接入独立的
+`complete_gpu_frame_ms`：同一 `RenderDebugService` 在帧首和终端 Composite/Blit/FSR1 pass 记录首尾
+timestamp，范围为 `scene_render_graphs`，包括图间提交顺序和 GPU 调度间隙，不包括 UI/Present；没有完整
+首尾 timestamp 时 `valid=false`，不填充旧值。两份 RTGI 参考报告已用新二进制重新采集，Sponza 和体素
+洞穴分别得到 15.926 ms 与 19.487 ms 的 3 帧 p95；该窗口只用于验证报告契约，正式性能结论仍要求 1000 帧。
 
 下一轮任务按以下顺序执行：
 
-1. 将跨 Render Graph 的完整 `gpuSpanMs`（含跨图提交顺序、首尾时间戳和调度间隙）接入固定 1000 帧历史，
-   在 Benchmark JSON 中单独输出 p50/p95/p99；没有完整跨度时报告必须明确为无效。
-2. 为 `SceneTLAS`、Terrain BLAS Build/Compaction、Static BLAS、动态资源准备和 RTGI bootstrap 分别增加
+1. 为 `SceneTLAS`、Terrain BLAS Build/Compaction、Static BLAS、动态资源准备和 RTGI bootstrap 分别增加
    GPU/CPU Timestamp，报告构建次数、Primitive、Scratch、TLAS/BLAS 字节和每帧峰值。
-3. 对照 Caustica 评估动态实体 BLAS Refit、TLAS Ring、固定 Solid/Cutout/Translucent/Water Geometry
+2. 对照 Caustica 评估动态实体 BLAS Refit、TLAS Ring、固定 Solid/Cutout/Translucent/Water Geometry
    Bucket 以及 Cutout Any-Hit/OMM 路径，先补契约和统计再改实现。
-4. 针对 1080p 继续定位：体素优先检查地形提交、流送和 AS；Sponza 优先检查 RTGI.Trace 与 NRD.Dispatch。
+3. 针对 1080p 继续定位：体素优先检查地形提交、流送和 AS；Sponza 优先检查 RTGI.Trace 与 NRD.Dispatch。
    固定场景、驱动和电源模式后保留前后 Capture。
-5. 完整跨度和分项归因稳定后，再在同一镜头比较 RELAX A-Trous 5 与 3；不得用减少迭代数掩盖 Trace 或
+4. 完整跨度和分项归因稳定后，再在同一镜头比较 RELAX A-Trous 5 与 3；不得用减少迭代数掩盖 Trace 或
    AS 成本。
 
 ## 7. M4：GPU Culling、LOD 与动画

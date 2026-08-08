@@ -190,12 +190,17 @@ void RenderGraphTimingHistory::reset() {
     for (auto& samples : m_gpuSamples) {
         samples.fill(0.0);
     }
+    m_completeGpuFrameSamples.fill(0.0);
     m_cpuNextSample = 0u;
     m_cpuSampleCount = 0u;
     m_gpuNextSample = 0u;
     m_gpuSampleCount = 0u;
     m_observedGpuSampleCount = 0u;
     m_lastGpuExecution = 0u;
+    m_completeGpuFrameNextSample = 0u;
+    m_completeGpuFrameSampleCount = 0u;
+    m_observedCompleteGpuFrameSampleCount = 0u;
+    m_lastCompleteGpuFrameSequence = 0u;
     m_latest = {};
 }
 
@@ -228,6 +233,15 @@ bool RenderGraphTimingHistory::record(const RenderGraphFrameStats& stats) {
         }
     }
 
+    const bool completeGpuFrameCandidate = stats.completeGpuFrame.supported && stats.completeGpuFrame.valid &&
+                                           stats.completeGpuFrame.sequence != 0u;
+    const bool acceptCompleteGpuFrame = completeGpuFrameCandidate &&
+                                       stats.completeGpuFrame.sequence > m_lastCompleteGpuFrameSequence;
+    if (completeGpuFrameCandidate &&
+        (!std::isfinite(stats.completeGpuFrame.spanMs) || stats.completeGpuFrame.spanMs < 0.0)) {
+        return false;
+    }
+
     for (size_t index = 0u; index < cpuValues.size(); ++index) {
         m_cpuSamples[index][m_cpuNextSample] = cpuValues[index];
     }
@@ -241,6 +255,9 @@ bool RenderGraphTimingHistory::record(const RenderGraphFrameStats& stats) {
     m_latest.submitCount = stats.submitCount;
     m_latest.workerRecordedBatches = stats.workerRecordedBatches;
     m_latest.gpuValid = gpuCandidate;
+    m_latest.completeGpuFrameValid = completeGpuFrameCandidate;
+    m_latest.completeGpuFrameSequence = stats.completeGpuFrame.sequence;
+    m_latest.completeGpuFrameSpanMs = stats.completeGpuFrame.spanMs;
 
     if (acceptGpu) {
         for (size_t index = 0u; index < gpuValues.size(); ++index) {
@@ -250,6 +267,13 @@ bool RenderGraphTimingHistory::record(const RenderGraphFrameStats& stats) {
         m_gpuSampleCount = std::min(m_gpuSampleCount + 1u, kCapacity);
         ++m_observedGpuSampleCount;
         m_lastGpuExecution = stats.execution;
+    }
+    if (acceptCompleteGpuFrame) {
+        m_completeGpuFrameSamples[m_completeGpuFrameNextSample] = stats.completeGpuFrame.spanMs;
+        m_completeGpuFrameNextSample = (m_completeGpuFrameNextSample + 1u) % kCapacity;
+        m_completeGpuFrameSampleCount = std::min(m_completeGpuFrameSampleCount + 1u, kCapacity);
+        ++m_observedCompleteGpuFrameSampleCount;
+        m_lastCompleteGpuFrameSequence = stats.completeGpuFrame.sequence;
     }
     return true;
 }
@@ -262,6 +286,10 @@ RenderGraphTimingWindowStats RenderGraphTimingHistory::snapshot() const {
     stats.cpuSampleCount = m_cpuSampleCount;
     stats.gpuSampleCount = m_gpuSampleCount;
     stats.observedGpuSampleCount = m_observedGpuSampleCount;
+    stats.completeGpuFrameValid = m_completeGpuFrameSampleCount > 0u;
+    stats.completeGpuFrameSampleCount = m_completeGpuFrameSampleCount;
+    stats.observedCompleteGpuFrameSampleCount = m_observedCompleteGpuFrameSampleCount;
+    stats.completeGpuFrameSpanMs = calculatePercentiles(m_completeGpuFrameSamples, m_completeGpuFrameSampleCount);
     for (size_t index = 0u; index < static_cast<size_t>(RenderGraphCpuTimingStage::Count); ++index) {
         stats.cpu[index] = calculatePercentiles(m_cpuSamples[index], m_cpuSampleCount);
     }
@@ -278,6 +306,10 @@ uint32_t RenderDebugService::gpuTimerQueryIndex(const size_t frameIndex, const s
         (((frameIndex * GPU_TIMER_PASS_COUNT + passIndex) * GPU_TIMER_MAX_SEGMENTS_PER_PASS + segmentIndex) *
          GPU_TIMER_POINTS_PER_SEGMENT) +
         pointIndex);
+}
+
+uint32_t RenderDebugService::gpuFrameSpanQueryIndex(const size_t frameIndex, const GpuFrameSpanPoint point) {
+    return static_cast<uint32_t>(frameIndex * GPU_FRAME_SPAN_POINT_COUNT + static_cast<size_t>(point));
 }
 
 uint32_t RenderDebugService::shadowQueryIndex(const size_t frameIndex, const size_t cascadeIndex,
@@ -299,6 +331,14 @@ void RenderDebugService::init(RhiDevice& rhiDevice) {
         std::abort();
     }
 
+    RhiQueryPoolDesc gpuFrameSpanPoolDesc;
+    gpuFrameSpanPoolDesc.debugName = "RenderDebug.FrameSpanTimestamps";
+    gpuFrameSpanPoolDesc.queryCount = GPU_FRAME_SPAN_QUERY_COUNT;
+    m_gpuFrameSpanQueryPool = rhiDevice.createQueryPool(gpuFrameSpanPoolDesc);
+    if (!m_gpuFrameSpanQueryPool.isValid()) {
+        std::abort();
+    }
+
     RhiQueryPoolDesc shadowPoolDesc;
     shadowPoolDesc.debugName = "RenderDebug.ShadowTimestamps";
     shadowPoolDesc.queryCount = SHADOW_TIMER_QUERY_COUNT;
@@ -315,6 +355,7 @@ void RenderDebugService::init(RhiDevice& rhiDevice) {
             pass.fill(GpuTimerSegmentState::Unused);
         }
     }
+    m_gpuFrameSpanStates.fill(GpuFrameSpanState::Unused);
     for (auto& frame : m_shadowTimestampIssued) {
         for (auto& cascade : frame) {
             cascade.fill(false);
@@ -324,6 +365,9 @@ void RenderDebugService::init(RhiDevice& rhiDevice) {
     m_gpuFrameStats = {};
     m_gpuFrameStats.supported = true;
     m_gpuFrameSequence = 0u;
+    m_gpuFrameSpanStats = {};
+    m_gpuFrameSpanStats.supported = true;
+    m_gpuFrameSpanSequence = 0u;
     m_gpuTimingHistory.reset();
     m_shadowFrameStats.supported = true;
     m_gpuTimersInitialized = true;
@@ -337,6 +381,10 @@ void RenderDebugService::shutdown() {
         m_rhiDevice->destroyQueryPool(m_gpuTimerQueryPool);
     }
     m_gpuTimerQueryPool = {};
+    if (m_rhiDevice != nullptr && m_gpuFrameSpanQueryPool.isValid()) {
+        m_rhiDevice->destroyQueryPool(m_gpuFrameSpanQueryPool);
+    }
+    m_gpuFrameSpanQueryPool = {};
     if (m_rhiDevice != nullptr && m_shadowTimestampQueryPool.isValid()) {
         m_rhiDevice->destroyQueryPool(m_shadowTimestampQueryPool);
     }
@@ -350,6 +398,7 @@ void RenderDebugService::shutdown() {
             pass.fill(GpuTimerSegmentState::Unused);
         }
     }
+    m_gpuFrameSpanStates.fill(GpuFrameSpanState::Unused);
     for (auto& frame : m_shadowTimestampIssued) {
         for (auto& cascade : frame) {
             cascade.fill(false);
@@ -359,6 +408,8 @@ void RenderDebugService::shutdown() {
     m_gpuTimersInitialized = false;
     m_gpuFrameStats = {};
     m_gpuFrameSequence = 0u;
+    m_gpuFrameSpanStats = {};
+    m_gpuFrameSpanSequence = 0u;
     m_gpuTimingHistory.reset();
     m_shadowFrameStats.valid = false;
     m_shadowFrameActive = false;
@@ -368,6 +419,10 @@ void RenderDebugService::beginFrame(RhiCommandList& commandList) {
     if (!m_gpuTimersInitialized || !m_gpuTimerEnabled) {
         m_gpuFrameStats.supported = m_gpuTimersInitialized && m_gpuFrameStats.supported;
         m_gpuFrameStats.valid = false;
+        m_gpuFrameSpanStats.supported = m_gpuTimersInitialized && m_gpuFrameSpanStats.supported;
+        m_gpuFrameSpanStats.valid = false;
+        m_gpuFrameSpanStats.sequence = 0u;
+        m_gpuFrameSpanStats.spanMs = 0.0;
         m_shadowFrameStats.supported = m_gpuFrameStats.supported;
         m_shadowFrameStats.valid = false;
         m_gpuTimerCanIssueThisFrame = false;
@@ -375,6 +430,10 @@ void RenderDebugService::beginFrame(RhiCommandList& commandList) {
     }
 
     m_shadowFrameStats.supported = true;
+    m_gpuFrameSpanStats.supported = true;
+    m_gpuFrameSpanStats.valid = false;
+    m_gpuFrameSpanStats.sequence = 0u;
+    m_gpuFrameSpanStats.spanMs = 0.0;
 
     const size_t readIndex = (m_gpuTimerWriteIndex + 1) % GPU_TIMER_RING_SIZE;
     bool anyPassIssued = false;
@@ -533,6 +592,31 @@ void RenderDebugService::beginFrame(RhiCommandList& commandList) {
         }
     }
 
+    const GpuFrameSpanState spanState = m_gpuFrameSpanStates[readIndex];
+    if (spanState == GpuFrameSpanState::Issued) {
+        const uint32_t firstQuery = gpuFrameSpanQueryIndex(readIndex, GpuFrameSpanPoint::Start);
+        if (m_rhiDevice->areQueryResultsAvailable(m_gpuFrameSpanQueryPool, firstQuery,
+                                                   static_cast<uint32_t>(GPU_FRAME_SPAN_POINT_COUNT))) {
+            std::array<uint64_t, GPU_FRAME_SPAN_POINT_COUNT> timestamps{};
+            if (!m_rhiDevice->getQueryResults(m_gpuFrameSpanQueryPool, firstQuery,
+                                              static_cast<uint32_t>(GPU_FRAME_SPAN_POINT_COUNT), timestamps.data())) {
+                std::abort();
+            }
+            const uint64_t start = timestamps[static_cast<size_t>(GpuFrameSpanPoint::Start)];
+            const uint64_t end = timestamps[static_cast<size_t>(GpuFrameSpanPoint::End)];
+            if (end < start) {
+                std::abort();
+            }
+            m_gpuFrameSpanStats.valid = true;
+            m_gpuFrameSpanStats.sequence = ++m_gpuFrameSpanSequence;
+            m_gpuFrameSpanStats.spanMs = static_cast<double>(end - start) / 1000000.0;
+            m_gpuFrameSpanStates[readIndex] = GpuFrameSpanState::Unused;
+        }
+    } else if (spanState == GpuFrameSpanState::Started) {
+        // A frame that reached the ring without a terminal marker is incomplete.
+        m_gpuFrameSpanStates[readIndex] = GpuFrameSpanState::Unused;
+    }
+
     bool slotStillPending = false;
     for (const auto& pass : m_gpuTimerSegmentStates[readIndex]) {
         for (const GpuTimerSegmentState state : pass) {
@@ -545,6 +629,9 @@ void RenderDebugService::beginFrame(RhiCommandList& commandList) {
         }
     }
     if (m_shadowFrameIssued[readIndex]) {
+        slotStillPending = true;
+    }
+    if (m_gpuFrameSpanStates[readIndex] == GpuFrameSpanState::Issued) {
         slotStillPending = true;
     }
     m_gpuTimerCanIssueThisFrame = !slotStillPending;
@@ -570,6 +657,10 @@ void RenderDebugService::beginFrame(RhiCommandList& commandList) {
     m_shadowFrameSlots[m_gpuTimerWriteIndex] = ShadowFrameStats{};
     m_shadowFrameIssued[m_gpuTimerWriteIndex] = false;
     m_shadowFrameActive = false;
+    if (m_gpuFrameSpanStates[m_gpuTimerWriteIndex] == GpuFrameSpanState::Started) {
+        std::abort();
+    }
+    m_gpuFrameSpanStates[m_gpuTimerWriteIndex] = GpuFrameSpanState::Unused;
 
     const uint32_t timerSlotFirstQuery = gpuTimerQueryIndex(m_gpuTimerWriteIndex, 0u, 0u, 0u);
     const uint32_t timerSlotQueryCount =
@@ -579,6 +670,38 @@ void RenderDebugService::beginFrame(RhiCommandList& commandList) {
     const uint32_t shadowSlotFirstQuery = shadowQueryIndex(m_gpuTimerWriteIndex, 0u, 0u);
     const uint32_t shadowSlotQueryCount = static_cast<uint32_t>(SHADOW_TIMER_CASCADE_COUNT * SHADOW_TIMER_POINT_COUNT);
     commandList.resetQueryPool(m_shadowTimestampQueryPool, shadowSlotFirstQuery, shadowSlotQueryCount);
+
+    const uint32_t spanSlotFirstQuery = gpuFrameSpanQueryIndex(m_gpuTimerWriteIndex, GpuFrameSpanPoint::Start);
+    commandList.resetQueryPool(m_gpuFrameSpanQueryPool, spanSlotFirstQuery,
+                               static_cast<uint32_t>(GPU_FRAME_SPAN_POINT_COUNT));
+    commandList.writeTimestamp(m_gpuFrameSpanQueryPool, spanSlotFirstQuery);
+    m_gpuFrameSpanStates[m_gpuTimerWriteIndex] = GpuFrameSpanState::Started;
+}
+
+void RenderDebugService::endGpuFrameSpan(RhiCommandList& commandList) {
+    if (!m_gpuTimersInitialized || !m_gpuTimerEnabled || !m_gpuTimerCanIssueThisFrame) {
+        return;
+    }
+
+    const std::lock_guard<std::mutex> timerLock(m_gpuTimerMutex);
+    if (m_gpuFrameSpanStates[m_gpuTimerWriteIndex] != GpuFrameSpanState::Started) {
+        std::abort();
+    }
+    const uint32_t endQuery = gpuFrameSpanQueryIndex(m_gpuTimerWriteIndex, GpuFrameSpanPoint::End);
+    commandList.writeTimestamp(m_gpuFrameSpanQueryPool, endQuery);
+    m_gpuFrameSpanStates[m_gpuTimerWriteIndex] = GpuFrameSpanState::Issued;
+}
+
+void RenderDebugService::cancelGpuFrameSpan() {
+    if (!m_gpuTimersInitialized || !m_gpuTimerEnabled || !m_gpuTimerCanIssueThisFrame) {
+        return;
+    }
+
+    const std::lock_guard<std::mutex> timerLock(m_gpuTimerMutex);
+    GpuFrameSpanState& state = m_gpuFrameSpanStates[m_gpuTimerWriteIndex];
+    if (state == GpuFrameSpanState::Started || state == GpuFrameSpanState::Issued) {
+        state = GpuFrameSpanState::Unused;
+    }
 }
 
 GpuTimerSegmentToken RenderDebugService::beginGpuTimer(RhiCommandList& commandList, const GpuTimerPass pass) {

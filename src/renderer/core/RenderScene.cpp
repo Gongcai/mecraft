@@ -657,7 +657,7 @@ bool RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
 
     if (skipPostProcess) {
         if (!m_postProcessPass.blitSceneCaptureToBackbuffer(*m_shared.rhiDevice, m_currentContext.swapchainColorView,
-                                                            m_debugService)) {
+                                                            m_debugService, true)) {
             m_terrainStreamingService.endFrame();
             return false;
         }
@@ -669,7 +669,8 @@ bool RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
         m_postProcessPass.setFrameEffects(effects);
         if (lightDebugActive) {
             if (!m_postProcessPass.blitSceneCaptureToBackbuffer(*m_shared.rhiDevice,
-                                                                m_currentContext.swapchainColorView, m_debugService)) {
+                                                                m_currentContext.swapchainColorView, m_debugService,
+                                                                true)) {
                 m_terrainStreamingService.endFrame();
                 return false;
             }
@@ -677,7 +678,7 @@ bool RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
             const bool fsrEnabled = isFsr1RuntimeEnabled();
             if (fsrEnabled) {
                 const RhiTextureHandle postTexture = m_postProcessPass.compositeToTexture(
-                    *m_shared.rhiDevice, request.frameTime, m_lastFrameOutput.gbufferDepth, m_debugService);
+                    *m_shared.rhiDevice, request.frameTime, m_lastFrameOutput.gbufferDepth, m_debugService, false);
                 if (!postTexture.isValid()) {
                     m_terrainStreamingService.endFrame();
                     return false;
@@ -687,7 +688,7 @@ bool RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
                 if (!m_fsr1Pass.execute(*m_shared.rhiDevice, m_currentContext.swapchainColorView, postTexture,
                                         m_postProcessPass.compositeTextureViewHandle(), inputWidth, inputHeight,
                                         displaySize.x, displaySize.y, m_settings.upscale.fsr1Sharpness,
-                                        m_debugService)) {
+                                        m_debugService, true)) {
                     m_terrainStreamingService.endFrame();
                     return false;
                 }
@@ -695,7 +696,7 @@ bool RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
                 if (!m_postProcessPass.compositeToBackbuffer(*m_shared.rhiDevice, m_currentContext.swapchainColorView,
                                                              m_currentContext.swapchainColorFormat, displaySize.x,
                                                              displaySize.y, request.frameTime,
-                                                             m_lastFrameOutput.gbufferDepth, m_debugService)) {
+                                                             m_lastFrameOutput.gbufferDepth, m_debugService, true)) {
                     m_terrainStreamingService.endFrame();
                     return false;
                 }
@@ -1030,6 +1031,7 @@ RenderGraphFrameStats RenderScene::renderGraphFrameStats() const {
     }
     RenderGraphFrameStats stats = m_deferredPipeline->renderGraphFrameStats();
     stats.cpuContextMs = m_contextCpuMs;
+    stats.completeGpuFrame = m_debugService.getGpuFrameSpanStats();
     return stats;
 }
 

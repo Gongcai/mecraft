@@ -79,6 +79,19 @@ nlohmann::json renderGraphTimingWindowJson(const RenderGraphTimingWindowStats& s
                           {"worker_recorded_batches", stats.latest.workerRecordedBatches} }} };
 }
 
+nlohmann::json completeGpuFrameTimingWindowJson(const RenderGraphTimingWindowStats& stats) {
+    return {{"scope", "scene_render_graphs"},
+            {"complete_frame", true},
+            {"valid", stats.completeGpuFrameValid},
+            {"window_capacity", stats.capacity},
+            {"sample_count", stats.completeGpuFrameSampleCount},
+            {"observed_sample_count", stats.observedCompleteGpuFrameSampleCount},
+            {"span_ms", gpuTimingPercentilesJson(stats.completeGpuFrameSpanMs)},
+            {"latest", {{"valid", stats.latest.completeGpuFrameValid},
+                        {"sequence", stats.latest.completeGpuFrameSequence},
+                        {"span_ms", stats.latest.completeGpuFrameSpanMs}}}};
+}
+
 nlohmann::json rhiMemoryStatsJson(const RhiMemoryStats& stats) {
     nlohmann::json categories = nlohmann::json::object();
     for (size_t index = 0u; index < kRhiMemoryCategoryCount; ++index) {
@@ -582,6 +595,9 @@ bool GameManager::writeBenchmarkReport() {
         std::cout << " render_graph_gpu_span_p95_ms="
                   << renderGraphTimingWindow.gpu[static_cast<size_t>(RenderGraphGpuTimingMetric::Span)].p95Ms;
     }
+    if (renderGraphTimingWindow.completeGpuFrameValid) {
+        std::cout << " complete_gpu_frame_p95_ms=" << renderGraphTimingWindow.completeGpuFrameSpanMs.p95Ms;
+    }
     if (renderGraphTimingWindow.cpuValid) {
         std::cout << " render_graph_cpu_record_p95_ms="
                   << renderGraphTimingWindow.cpu[static_cast<size_t>(RenderGraphCpuTimingStage::Record)].p95Ms;
@@ -679,6 +695,7 @@ bool GameManager::writeBenchmarkReport() {
                                      {"total_tracked", gpuTimingPercentilesJson(gpuTimingWindow.totalTrackedGpuMs)},
                                      {"stages", std::move(gpuStages)}};
     root["render_graph_frame_ms"] = renderGraphTimingWindowJson(renderGraphTimingWindow);
+    root["complete_gpu_frame_ms"] = completeGpuFrameTimingWindowJson(renderGraphTimingWindow);
     root["rhi_memory"] = rhiMemoryStatsJson(memoryStats);
 
     const std::filesystem::path parentPath = reportPath.parent_path();
