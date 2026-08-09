@@ -14,8 +14,9 @@ struct alignas(16) NrdGuidePrepPushConstants final {
     glm::mat4 inverseProjection{1.0f};
     glm::mat4 currentClipToPreviousView{1.0f};
     glm::vec4 renderExtentInvalidViewZAndHistory{1.0f};
+    glm::vec4 flags{0.0f};
 };
-static_assert(sizeof(NrdGuidePrepPushConstants) == 144u);
+static_assert(sizeof(NrdGuidePrepPushConstants) == 160u);
 
 [[nodiscard]] bool sameHandle(const RhiTextureViewHandle lhs, const RhiTextureViewHandle rhs) {
     return lhs.index == rhs.index && lhs.generation == rhs.generation;
@@ -122,6 +123,7 @@ bool NrdGuidePrepPass::recordGuide(RhiCommandList& commandList, const FrameConte
     pushConstants.renderExtentInvalidViewZAndHistory =
         glm::vec4(static_cast<float>(extent.width), static_cast<float>(extent.height), settings.denoisingRange * 2.0f,
                   settings.historyValid ? 1.0f : 0.0f);
+    pushConstants.flags.x = settings.useVoxelGeometricNormal ? 1.0f : 0.0f;
 
     const GpuTimerSegmentToken gpuTimer = ctx.debugService != nullptr
                                               ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::NrdGuidePrep)

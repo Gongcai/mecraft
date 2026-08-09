@@ -20,6 +20,7 @@ layout(push_constant) uniform NrdGuidePrepPushConstants {
     mat4 inverseProjection;
     mat4 currentClipToPreviousView;
     vec4 renderExtentInvalidViewZAndHistory;
+    vec4 flags;
 } pc;
 
 bool nrdGuideFinite(vec4 value) {
@@ -80,6 +81,17 @@ vec4 nrdGuidePackNormalRoughness(vec3 normal, float roughness, float materialId)
     return packed;
 }
 
+vec3 nrdGuideVoxelGeometricNormal(vec3 shadingNormal) {
+    vec3 magnitude = abs(shadingNormal);
+    if (magnitude.x >= magnitude.y && magnitude.x >= magnitude.z) {
+        return vec3(shadingNormal.x < 0.0 ? -1.0 : 1.0, 0.0, 0.0);
+    }
+    if (magnitude.y >= magnitude.z) {
+        return vec3(0.0, shadingNormal.y < 0.0 ? -1.0 : 1.0, 0.0);
+    }
+    return vec3(0.0, 0.0, shadingNormal.z < 0.0 ? -1.0 : 1.0);
+}
+
 void main() {
     ivec2 texel = ivec2(gl_GlobalInvocationID.xy);
     ivec2 extent = ivec2(pc.renderExtentInvalidViewZAndHistory.xy);
@@ -123,7 +135,8 @@ void main() {
     // reprojection during motion.
     float signedViewZ = currentPositiveViewZ < invalidViewZ ? -currentPositiveViewZ : -invalidViewZ;
     imageStore(uViewZ, texel, vec4(signedViewZ, 0.0, 0.0, 0.0));
-    imageStore(uLeakageNormal, texel, vec4(normal * 0.5 + 0.5, 1.0));
+    vec3 leakageNormal = pc.flags.x > 0.5 ? nrdGuideVoxelGeometricNormal(normal) : normal;
+    imageStore(uLeakageNormal, texel, vec4(leakageNormal * 0.5 + 0.5, 1.0));
     imageStore(uLeakageViewZ, texel, vec4(currentPositiveViewZ, currentPositiveViewZ, currentPositiveViewZ, 1.0));
 
     // This mask is a current-frame diagnostic of whether the surface maps

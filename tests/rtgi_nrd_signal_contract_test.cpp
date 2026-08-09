@@ -88,6 +88,11 @@ namespace {
            guideSource.find("vec2 motion = -texelFetch(uVelocityTexture, texel, 0).rg;") != std::string::npos &&
            guideSource.find("float nrdGuideMaterialId(SurfaceMaterial material, float roughness)") !=
                std::string::npos &&
+           guideSource.find("vec3 nrdGuideVoxelGeometricNormal(vec3 shadingNormal)") != std::string::npos &&
+           guideSource.find("vec3 leakageNormal = pc.flags.x > 0.5 ? nrdGuideVoxelGeometricNormal(normal) : normal;") !=
+               std::string::npos &&
+           guideSource.find("imageStore(uNormalRoughness, texel, nrdGuidePackNormalRoughness(normal, roughness, materialId));") !=
+               std::string::npos &&
            guideSource.find("packed.w = clamp(materialId / 3.0, 0.0, 1.0);") != std::string::npos &&
            guideSource.find("nrdGuideReconstructPositiveViewZ") != std::string::npos &&
            guideSource.find("float motionViewZ = 0.0;") != std::string::npos &&
@@ -110,6 +115,8 @@ namespace {
            pipelineSource.find("guideSettings.historyValid = !m_nrdClearHistory && !nrdTemporalReset;") !=
                std::string::npos &&
            pipelineSource.find("guideSettings.useJitteredProjection = traceSettings.useJitteredProjection;") !=
+               std::string::npos &&
+           pipelineSource.find("guideSettings.useVoxelGeometricNormal = m_shared->terrain != nullptr;") !=
                std::string::npos &&
            pipelineSource.find("IN_DIFF_CONFIDENCE") == std::string::npos &&
            pipelineSource.find("commonSettings.isHistoryConfidenceAvailable = false;") != std::string::npos &&

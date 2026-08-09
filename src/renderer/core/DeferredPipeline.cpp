@@ -2165,6 +2165,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
             guideResources.leakageViewZ = rtgiLeakageViewZValidationOutput;
             guideSettings.historyValid = !m_nrdClearHistory && !nrdTemporalReset;
             guideSettings.useJitteredProjection = traceSettings.useJitteredProjection;
+            guideSettings.useVoxelGeometricNormal = m_shared->terrain != nullptr;
             graphTail = m_nrdGuidePrepPass->addGraphPass(m_renderGraph, ctx, guideSettings, guideResources, graphTail);
             if (!graphTail.isValid()) {
                 return failGraphSetup();

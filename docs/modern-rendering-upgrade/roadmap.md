@@ -367,6 +367,13 @@ Denoised/Reference 亮度为 `0.003908509/0.004488416`，方向为亮侧能量�
 V02 的 RELAX A-Trous `5/8` 单变量 A/B 得到 SSIM `0.788408/0.786351`、HDR p95 `0.507056/0.507651`，
 且 8 次迭代增加 GPU 成本；迭代数不足不是当前质量根因，生产保持用户设置 `5`。
 
+本轮新增 `NrdGuidePrep` 的显式 `useVoxelGeometricNormal` 设置：体素场景的 Leakage Guide 使用 dominant-axis
+几何法线，NRD 的 `Normal/Roughness` 仍使用 GBuffer shading normal，模型场景保持原路径。V02 重新完成
+300 帧预热加 32 帧 Raw/Denoised，AS Pending/Invalid 仍为 `0`，静态报告的 `boundary_pixel_count` 与
+`leakage_pixel_count` 从 `10092/17847` 降为 `0/0`，最大带宽从 `3` 降为 `0 Pixels`；但 SSIM 与 HDR p95
+仍为 `0.788408/0.507056`，因此该修改只证明 Cave 的大部分 Leakage 证据来自 shading-normal 变化，尚未
+修复一次反弹输运或静态 HDR 门槛。Guide shader 编译、NRD 信号契约测试和 Vulkan 运行均通过。
+
 2026-08-08 在 RTX 4060 Laptop、Vulkan、RELAX_DIFFUSE、300 帧预热加 1000 帧采样下完成四组复测。
 报告中的 `total_tracked` 是显式 Pass 阶段和，不是完整 GPU 帧跨度：它没有覆盖独立的帧首/场景 Overlay/
 上采样 Render Graph、未打点的 AS/TLAS 与提交间隙。`cpu_update_render_ms` 是 update+render 调用的墙钟时间，

@@ -37,6 +37,9 @@ public:
         // The NRD common matrices remain non-jittered, while the guide must
         // match the projection that produced the current and previous depth.
         bool useJitteredProjection = false;
+        // Uses the axis-aligned voxel surface normal for leakage diagnostics.
+        // NRD normal/roughness continues to use the G-buffer shading normal.
+        bool useVoxelGeometricNormal = false;
     };
 
     /// Latest successfully recorded guide dispatch diagnostics.

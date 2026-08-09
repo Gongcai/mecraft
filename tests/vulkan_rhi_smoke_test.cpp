@@ -619,6 +619,8 @@ void setNrdIdentityMatrix(float (&matrix)[16]) {
     NrdSmokeTexture normalRoughnessTexture;
     NrdSmokeTexture viewZTexture;
     NrdSmokeTexture reprojectionCoverageTexture;
+    NrdSmokeTexture leakageNormalTexture;
+    NrdSmokeTexture leakageViewZTexture;
     RhiBufferHandle readback;
     RenderGraph graph;
     NrdGuidePrepPass pass;
@@ -630,6 +632,8 @@ void setNrdIdentityMatrix(float (&matrix)[16]) {
             device.destroyBuffer(readback);
         }
         destroyNrdSmokeTexture(device, reprojectionCoverageTexture);
+        destroyNrdSmokeTexture(device, leakageViewZTexture);
+        destroyNrdSmokeTexture(device, leakageNormalTexture);
         destroyNrdSmokeTexture(device, viewZTexture);
         destroyNrdSmokeTexture(device, normalRoughnessTexture);
         destroyNrdSmokeTexture(device, motionTexture);
@@ -681,7 +685,15 @@ void setNrdIdentityMatrix(float (&matrix)[16]) {
         requireTexture(createNrdSmokeTexture(device, "VulkanSmoke.NRD.Guide.ReprojectionCoverage",
                                              RhiTextureFormat::R8Unorm, kWidth, kHeight, kGuideOutputUsage, nullptr, 0u,
                                              RhiResourceState::Undefined, reprojectionCoverageTexture),
-                       "reprojection-coverage output");
+                       "reprojection-coverage output") &&
+        requireTexture(createNrdSmokeTexture(device, "VulkanSmoke.NRD.Guide.LeakageNormal",
+                                             RhiTextureFormat::Rgba16Float, kWidth, kHeight, kGuideOutputUsage, nullptr,
+                                             0u, RhiResourceState::Undefined, leakageNormalTexture),
+                       "leakage-normal output") &&
+        requireTexture(createNrdSmokeTexture(device, "VulkanSmoke.NRD.Guide.LeakageViewZ",
+                                             RhiTextureFormat::Rgba16Float, kWidth, kHeight, kGuideOutputUsage, nullptr,
+                                             0u, RhiResourceState::Undefined, leakageViewZTexture),
+                       "leakage-View-Z output");
     if (!valid) {
         std::cerr << "NRD Guide Prep smoke test failed to create textures\n";
         cleanup();
@@ -733,6 +745,10 @@ void setNrdIdentityMatrix(float (&matrix)[16]) {
         resources.viewZ = importTexture(viewZTexture, RhiResourceState::Undefined, RhiResourceState::ShaderWrite);
         resources.reprojectionCoverage =
             importTexture(reprojectionCoverageTexture, RhiResourceState::Undefined, RhiResourceState::ShaderWrite);
+        resources.leakageNormal =
+            importTexture(leakageNormalTexture, RhiResourceState::Undefined, RhiResourceState::ShaderWrite);
+        resources.leakageViewZ =
+            importTexture(leakageViewZTexture, RhiResourceState::Undefined, RhiResourceState::ShaderWrite);
         readbackResource =
             graph.importBuffer({readbackDesc.debugName, readback, readbackDesc, RhiResourceState::TransferDst,
                                 RhiResourceState::HostRead, RhiQueueType::Graphics, RhiQueueType::Graphics});
@@ -746,7 +762,7 @@ void setNrdIdentityMatrix(float (&matrix)[16]) {
         valid = resources.depth.isValid() && resources.normalAo.isValid() && resources.material.isValid() &&
                 resources.velocity.isValid() && resources.motion.isValid() && resources.normalRoughness.isValid() &&
                 resources.viewZ.isValid() && resources.reprojectionCoverage.isValid() && readbackResource.isValid() &&
-                guideHandle.isValid();
+                resources.leakageNormal.isValid() && resources.leakageViewZ.isValid() && guideHandle.isValid();
     }
     if (valid) {
         graph.addPass({"NRD.GuideReadback", RgPassType::Copy, RhiQueueType::Graphics})

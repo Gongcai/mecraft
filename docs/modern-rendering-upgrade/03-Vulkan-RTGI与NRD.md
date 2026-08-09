@@ -693,6 +693,12 @@ V02 Cave Turn 已完成同口径 300+32/64 Vulkan 静态运行：方差降低 `9
 V02 的 RELAX A-Trous `5/8` A/B 仅得到 SSIM `0.788408/0.786351`、HDR p95 `0.507056/0.507651`，8 次迭代
 没有改善并增加 GPU 成本，生产保持显式设置 `5`。
 
+随后完成一次 Guide 法线轴 A/B：`NrdGuidePrep` 仅在体素场景将 Leakage Guide 改为 dominant-axis 几何法线，
+NRD 的 shading normal 输入保持不变。V02 相同 300+32/64 运行的 `boundary_pixel_count` 与
+`leakage_pixel_count` 为 `0/0`，最大带宽 `0 Pixels`，但 SSIM/HDR p95 仍为 `0.788408/0.507056`。
+因此 Cave 的原始 Leakage 证据主要由法线贴图边界触发，几何法线修复了诊断误报轴，但没有修复实际一次反弹
+积分误差；固定 Leakage 门槛和静态质量门槛继续有效。
+
 ## 10. 调试视图与验收
 
 必须实现：

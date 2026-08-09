@@ -184,6 +184,12 @@ Pixels 和非法 Guide。V01 300+32 正式报告的
 V02 Cave Turn 的同口径 300+32/64 实跑得到方差降低 `99.985878%`、AS Pending/Invalid `0`，但 SSIM
 `0.788408`、HDR p95 `0.507056`、Leakage 最大带宽 `3 Pixels` 失败；ROI 的边界像素数为 `10092`。因此
 V02 也尚未达到静态门槛，后续修复必须同时覆盖洞穴边界和一次反弹输运。
+
+2026-08-09 的 V02 几何法线 Guide A/B 保持 Profile、ROI、64 spp Reference 和固定阈值不变，仅让体素
+`LeakageNormal` 使用 dominant-axis geometric normal；NRD `Normal/Roughness` 仍使用 shading normal。
+新捕获的 AS Pending/Invalid 为 `0`，`boundary_pixel_count/leakage_pixel_count` 为 `0/0`，最大带宽为
+`0 Pixels`，但 SSIM `0.788408`、HDR p95 `0.507056` 与上一轮相同，静态门槛仍失败。该结果不改变
+`<=2 Pixels` 门槛，也不能把没有边界诊断 Seed 解释为画质通过；下一步继续定位一次反弹的实际能量输运。
 V02 RELAX A-Trous `5/8` A/B 的 SSIM 为 `0.788408/0.786351`、HDR p95 为 `0.507056/0.507651`，8 次迭代
 没有质量收益且增加成本，因此生产保持 `5`。
 
