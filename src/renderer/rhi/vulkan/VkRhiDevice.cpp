@@ -72,6 +72,12 @@ void logRhiError(const char* message) {
     std::cerr << "VkRhiDevice: " << message << '\n';
 }
 
+[[nodiscard]] bool containsDeviceExtension(const std::vector<VkExtensionProperties>& extensions, const char* name) {
+    return std::any_of(extensions.begin(), extensions.end(), [name](const VkExtensionProperties& extension) {
+        return std::strcmp(extension.extensionName, name) == 0;
+    });
+}
+
 [[nodiscard]] bool vkSucceeded(const VkResult result, const char* operation) {
     if (result == VK_SUCCESS) {
         return true;
@@ -1656,6 +1662,7 @@ bool VkRhiDevice::init(const RhiDeviceDesc& desc) {
     VkPhysicalDeviceFeatures selectedCoreFeatures{};
     bool selectedAccelerationStructureHostCommands = false;
     bool selectedAccelerationStructureDescriptorUpdateAfterBind = false;
+    bool selectedOpacityMicromap = false;
     const bool requireOpticalFlow = requirements.opticalFlowQueueCount() > 0u;
     const std::vector<const char*> requiredFeatures12 = requirements.vulkan12FeatureNames();
     const std::vector<const char*> requiredFeatures13 = requirements.vulkan13FeatureNames();
@@ -1667,6 +1674,8 @@ bool VkRhiDevice::init(const RhiDeviceDesc& desc) {
         if (!requirements.validateDeviceExtensions(extensions, missingExtension)) {
             continue;
         }
+        const bool supportsOpacityMicromap =
+            containsDeviceExtension(extensions, VK_EXT_OPACITY_MICROMAP_EXTENSION_NAME);
         const QueueFamilies families = queryQueueFamilies(candidate, m_data->surface, requireOpticalFlow);
         if (!families.complete(requireOpticalFlow) || !queueRequirementsSupported(candidate, families, requirements)) {
             continue;
@@ -1674,8 +1683,11 @@ bool VkRhiDevice::init(const RhiDeviceDesc& desc) {
         VkPhysicalDeviceOpticalFlowFeaturesNV opticalFlow{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_OPTICAL_FLOW_FEATURES_NV};
         VkPhysicalDeviceRayQueryFeaturesKHR rayQuery{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR,
                                                      requireOpticalFlow ? &opticalFlow : nullptr};
+        VkPhysicalDeviceOpacityMicromapFeaturesEXT opacityMicromap{
+            VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_OPACITY_MICROMAP_FEATURES_EXT, &rayQuery};
         VkPhysicalDeviceAccelerationStructureFeaturesKHR accelerationStructure{
-            VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR, &rayQuery};
+            VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR,
+            supportsOpacityMicromap ? static_cast<void*>(&opacityMicromap) : static_cast<void*>(&rayQuery)};
         VkPhysicalDeviceRayTracingMaintenance1FeaturesKHR rayTracingMaintenance{
             VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_MAINTENANCE_1_FEATURES_KHR, &accelerationStructure};
         VkPhysicalDeviceDepthClipControlFeaturesEXT depthClip{
@@ -1721,6 +1733,7 @@ bool VkRhiDevice::init(const RhiDeviceDesc& desc) {
             selectedAccelerationStructureHostCommands =
                 accelerationStructure.accelerationStructureHostCommands == VK_TRUE;
             selectedAccelerationStructureDescriptorUpdateAfterBind = true;
+            selectedOpacityMicromap = supportsOpacityMicromap && opacityMicromap.micromap == VK_TRUE;
         }
     }
     if (m_data->physicalDevice == VK_NULL_HANDLE) {
@@ -1758,8 +1771,12 @@ bool VkRhiDevice::init(const RhiDeviceDesc& desc) {
     VkPhysicalDeviceRayQueryFeaturesKHR rayQuery{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR,
                                                  requireOpticalFlow ? &opticalFlow : nullptr};
     rayQuery.rayQuery = VK_TRUE;
+    VkPhysicalDeviceOpacityMicromapFeaturesEXT opacityMicromap{
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_OPACITY_MICROMAP_FEATURES_EXT, &rayQuery};
+    opacityMicromap.micromap = selectedOpacityMicromap ? VK_TRUE : VK_FALSE;
     VkPhysicalDeviceAccelerationStructureFeaturesKHR accelerationStructure{
-        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR, &rayQuery};
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR,
+        selectedOpacityMicromap ? static_cast<void*>(&opacityMicromap) : static_cast<void*>(&rayQuery)};
     accelerationStructure.accelerationStructure = VK_TRUE;
     accelerationStructure.accelerationStructureHostCommands =
         selectedAccelerationStructureHostCommands ? VK_TRUE : VK_FALSE;
@@ -1812,7 +1829,10 @@ bool VkRhiDevice::init(const RhiDeviceDesc& desc) {
 #if defined(MECRAFT_ENABLE_FSR31)
     features2.features.shaderInt16 = VK_TRUE;
 #endif
-    const std::vector<const char*> deviceExtensions = requirements.deviceExtensionNames();
+    std::vector<const char*> deviceExtensions = requirements.deviceExtensionNames();
+    if (selectedOpacityMicromap) {
+        deviceExtensions.push_back(VK_EXT_OPACITY_MICROMAP_EXTENSION_NAME);
+    }
     VkDeviceCreateInfo deviceInfo{VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO, &features2};
     deviceInfo.queueCreateInfoCount = static_cast<uint32_t>(queueInfos.size());
     deviceInfo.pQueueCreateInfos = queueInfos.data();
@@ -1954,6 +1974,7 @@ bool VkRhiDevice::init(const RhiDeviceDesc& desc) {
     m_capabilities.bufferDeviceAddress = true;
     m_capabilities.accelerationStructure = true;
     m_capabilities.rayQuery = true;
+    m_capabilities.opacityMicromap = selectedOpacityMicromap;
     m_capabilities.accelerationStructureHostCommands = selectedAccelerationStructureHostCommands;
     m_capabilities.maxAccelerationStructureGeometryCount = accelerationStructureProperties.maxGeometryCount;
     m_capabilities.maxAccelerationStructureInstanceCount = accelerationStructureProperties.maxInstanceCount;

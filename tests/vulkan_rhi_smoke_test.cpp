@@ -1674,6 +1674,45 @@ void main() {
     return valid;
 }
 
+[[nodiscard]] bool validateOpacityMicromapCapability(VkRhiDevice& device) {
+    const std::optional<VkRhiDeviceInteropInfo> native = VkRhiInterop::deviceInfo(device);
+    if (!native.has_value() || native->physicalDevice == VK_NULL_HANDLE) {
+        std::cerr << "Vulkan opacity micromap capability has no native physical-device handle\n";
+        return false;
+    }
+
+    uint32_t extensionCount = 0u;
+    if (vkEnumerateDeviceExtensionProperties(native->physicalDevice, nullptr, &extensionCount, nullptr) != VK_SUCCESS) {
+        std::cerr << "Vulkan opacity micromap extension enumeration failed\n";
+        return false;
+    }
+    std::vector<VkExtensionProperties> extensions(extensionCount);
+    if (extensionCount > 0u && vkEnumerateDeviceExtensionProperties(native->physicalDevice, nullptr, &extensionCount,
+                                                                    extensions.data()) != VK_SUCCESS) {
+        std::cerr << "Vulkan opacity micromap extension enumeration returned an error\n";
+        return false;
+    }
+    const bool extensionAvailable =
+        std::any_of(extensions.begin(), extensions.end(), [](const VkExtensionProperties& extension) {
+            return std::strcmp(extension.extensionName, VK_EXT_OPACITY_MICROMAP_EXTENSION_NAME) == 0;
+        });
+    bool expected = false;
+    if (extensionAvailable) {
+        VkPhysicalDeviceOpacityMicromapFeaturesEXT micromap{};
+        micromap.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_OPACITY_MICROMAP_FEATURES_EXT;
+        VkPhysicalDeviceFeatures2 features{};
+        features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+        features.pNext = &micromap;
+        vkGetPhysicalDeviceFeatures2(native->physicalDevice, &features);
+        expected = micromap.micromap == VK_TRUE;
+    }
+    if (device.capabilities().opacityMicromap != expected) {
+        std::cerr << "Vulkan opacity micromap capability does not match extension and feature discovery\n";
+        return false;
+    }
+    return true;
+}
+
 [[nodiscard]] bool validateBindGroupUpdateLifecycle(VkRhiDevice& device, RhiCommandListPool& commandPool) {
     const RhiCapabilities& capabilities = device.capabilities();
     if (!capabilities.descriptorBindingPartiallyBound || !capabilities.descriptorBindingVariableDescriptorCount ||
@@ -6121,7 +6160,7 @@ int main() {
         glfwTerminate();
         return 1;
     }
-    if (!validateDescriptorArrayContract(device)) {
+    if (!validateDescriptorArrayContract(device) || !validateOpacityMicromapCapability(device)) {
         device.shutdown();
         glfwDestroyWindow(window);
         glfwTerminate();

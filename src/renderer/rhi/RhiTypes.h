@@ -157,6 +157,8 @@ struct RhiCapabilities {
     bool accelerationStructure = false;
     bool rayQuery = false;
     bool rayTracingPipeline = false;
+    /// True when VK_EXT_opacity_micromap is enabled and its micromap feature is available.
+    bool opacityMicromap = false;
     bool accelerationStructureHostCommands = false;
     uint64_t maxAccelerationStructureGeometryCount = 0u;
     uint64_t maxAccelerationStructureInstanceCount = 0u;

@@ -331,8 +331,9 @@ Caustica 对照评估和第一轮策略契约已经完成：
 - Terrain Ray Query 保持 Opaque/Cutout 两类 Geometry。体素参考场景的 203,188 个 Terrain Primitive 中，
   Opaque 为 202,312，Cutout 为 876（约 0.43%）；两份参考场景的 Static BLAS Cutout Primitive 均为 0。
   Translucent/Water 不属于当前 Solid BLAS，扩为四类会改变生产 ABI，却没有对应的 Ray Query 收益证据。
-- 当前 RTGI 使用 Candidate Loop，不使用 SBT/Any-Hit；RHI 也没有 `VK_EXT_opacity_micromap` 能力和资源契约。
-  OMM 的工程判断需要 Candidate/Confirmed 场景总量、Trace 时间和资产 Alpha Coverage 共同支撑。
+- 当前 RTGI 使用 Candidate Loop，不使用 SBT/Any-Hit。RHI 已接入 `VK_EXT_opacity_micromap` 的可选能力协商：
+  仅在驱动同时暴露扩展和 `micromap` feature 时启用并上报，尚未建立 Micromap 资源、BLAS 关联或着色路径。
+  OMM 的工程判断仍需要 Candidate/Confirmed 场景总量、Trace 时间和资产 Alpha Coverage 共同支撑。
 
 Candidate/Confirmed 归约遥测已经完成：8x8 Compute 将 Validation Image 聚合为 64-bit 总量和每像素峰值，
 三槽 Submission Token Readback 不等待 GPU，固定 1000 样本窗口按 sequence 去重。Sponza 和体素洞穴仍为
@@ -344,7 +345,7 @@ Confirmed，确认率 76.36%，峰值为 8 Candidate/1 Confirmed 每像素，Ter
 
 下一轮任务按以下顺序执行：
 
-1. 增加 `VK_EXT_opacity_micromap` RHI Capability、Micromap 资产与生命周期契约；以 V03 固定 Camera Path、
+1. 增加 `VK_EXT_opacity_micromap` Micromap 资产与生命周期契约；以 V03 固定 Camera Path、
    Alpha 纹理和 Profile 对比 Candidate Loop 与 OMM 的 `RTGI.Trace` p95、Counter 和显存，再决定是否采用。
 2. 针对 1080p 继续定位：体素优先检查地形提交、流送和 AS；Sponza 优先检查 RTGI.Trace 与 NRD.Dispatch。
    固定场景、驱动和电源模式后保留前后 Capture。
