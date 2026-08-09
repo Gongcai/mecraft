@@ -21,6 +21,7 @@ bool ValidationRunController::configure(const AppLaunchOptions& options) {
     m_sceneContract = {};
     m_cameraPath = {};
     m_renderSettingsProfile = {};
+    m_rtgiQualityProfile.reset();
     m_currentFrame.reset();
     m_phase = Phase::Inactive;
     m_error = ValidationRunError::None;
@@ -43,6 +44,36 @@ bool ValidationRunController::configure(const AppLaunchOptions& options) {
     m_cameraPath = std::move(loaded.cameraPath);
     m_renderSettingsProfile =
         makeValidationRenderSettingsProfile(m_sceneContract.scene, m_sceneContract.renderSettings);
+    if (!options.validationRtgiQualityProfile.empty()) {
+        RtgiQualityProfile profile;
+        std::string detail;
+        const std::filesystem::path profilePath =
+            options.validationScenePath.parent_path().parent_path() / "rtgi_quality_profiles.json";
+        const RtgiQualityProfileError profileError =
+            loadRtgiQualityProfile(profilePath, options.validationRtgiQualityProfile, profile, detail);
+        if (profileError != RtgiQualityProfileError::None || profile.sceneContractId != m_sceneContract.id ||
+            profile.captureWidth != options.validationWidth || profile.captureHeight != options.validationHeight ||
+            profile.cameraTimeSeconds > m_cameraPath.durationSeconds) {
+            m_error = ValidationRunError::SceneContractLoadFailed;
+            m_detail = profileError != RtgiQualityProfileError::None
+                           ? std::string(rtgiQualityProfileErrorStableId(profileError)) + ":" + detail
+                           : "RtgiQualityProfileMismatch:" + profile.id;
+            m_phase = Phase::Failed;
+            return false;
+        }
+        ValidationRenderSettingsIdentity identity;
+        identity.id = profile.renderSettingsId;
+        identity.version = m_sceneContract.scene == ValidationScene::Voxel ? kValidationRtgiVoxelRenderSettingsVersion
+                                                                           : kValidationRtgiModelRenderSettingsVersion;
+        m_renderSettingsProfile = makeValidationRenderSettingsProfile(m_sceneContract.scene, identity);
+        if (m_renderSettingsProfile.id != profile.renderSettingsId) {
+            m_error = ValidationRunError::SceneContractLoadFailed;
+            m_detail = "RtgiQualityRenderSettingsMismatch:" + profile.renderSettingsId;
+            m_phase = Phase::Failed;
+            return false;
+        }
+        m_rtgiQualityProfile = std::move(profile);
+    }
     m_phase = Phase::Ready;
     return true;
 }
@@ -70,7 +101,7 @@ bool ValidationRunController::completeFrame(const bool captureSucceeded, std::st
         fail(ValidationRunError::InvalidState, "validation frame completion requires an active frame");
         return false;
     }
-    if (m_currentFrame->captureAfterRender && !captureSucceeded) {
+    if ((m_currentFrame->captureAfterRender || m_currentFrame->captureRtgiHdrAfterRender) && !captureSucceeded) {
         fail(ValidationRunError::CaptureFailed, std::move(captureDetail));
         return false;
     }
@@ -148,6 +179,10 @@ const ValidationRenderSettingsProfile& ValidationRunController::renderSettingsPr
     return m_renderSettingsProfile;
 }
 
+const std::optional<RtgiQualityProfile>& ValidationRunController::rtgiQualityProfile() const {
+    return m_rtgiQualityProfile;
+}
+
 RenderSettings ValidationRunController::runtimeRenderSettings() const {
     RenderSettings settings = m_renderSettingsProfile.settings;
     if (m_options.validationRtgiCutoutTraversal.has_value()) {
@@ -182,9 +217,13 @@ bool ValidationRunController::buildCurrentFrame() {
     double cameraTimeSeconds = 0.0;
     if (m_completedWarmupFrames == m_options.validationWarmupFrames) {
         frame.collectPerformance = true;
-        const double sampleDenominator = static_cast<double>(m_options.validationSampleFrames - 1u);
-        cameraTimeSeconds =
-            m_cameraPath.durationSeconds * static_cast<double>(m_completedSampleFrames) / sampleDenominator;
+        if (m_rtgiQualityProfile.has_value()) {
+            cameraTimeSeconds = m_rtgiQualityProfile->cameraTimeSeconds;
+        } else {
+            const double sampleDenominator = static_cast<double>(m_options.validationSampleFrames - 1u);
+            cameraTimeSeconds =
+                m_cameraPath.durationSeconds * static_cast<double>(m_completedSampleFrames) / sampleDenominator;
+        }
         frame.captureAfterRender = m_completedSampleFrames + 1u == m_options.validationSampleFrames;
         frame.captureRtgiHdrAfterRender = m_options.validationRtgiHdrCaptureMode.has_value();
         frame.rtgiHdrCaptureSampleIndex = m_completedSampleFrames;

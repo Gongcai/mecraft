@@ -38,6 +38,8 @@ void printUsage() {
               << "                                      Directory for linear RTGI HDR EXR sample frames.\n"
               << "  --validation-rtgi-hdr-capture <raw|denoised|raw_and_denoised>\n"
               << "                                      Select linear RTGI HDR signals written per sample frame.\n"
+              << "  --validation-rtgi-quality-profile <id>\n"
+              << "                                      Lock a static RTGI camera time, resolution, and ROI.\n"
               << "  --rhi-backend <opengl|vulkan>      Select the graphics backend.\n"
               << "  --rhi-debug-output                 Enable graphics backend debug output.\n"
               << "  --no-rhi-debug-output              Disable graphics backend debug output.\n"
@@ -250,6 +252,12 @@ bool parseLaunchOptions(int argc, char** argv, AppLaunchOptions& options, std::s
                 error = "Validation RTGI HDR capture must be raw, denoised, or raw_and_denoised";
                 return false;
             }
+        } else if (arg == "--validation-rtgi-quality-profile") {
+            const char* value = nullptr;
+            if (!requireValue(argc, argv, index, "--validation-rtgi-quality-profile", value, error)) {
+                return false;
+            }
+            options.validationRtgiQualityProfile = value;
         } else if (arg == "--rhi-backend") {
             const char* value = nullptr;
             if (!requireValue(argc, argv, index, "--rhi-backend", value, error)) {

@@ -57,6 +57,7 @@ struct AppLaunchOptions {
     std::optional<RtgiCutoutTraversalMode> validationRtgiCutoutTraversal;
     std::filesystem::path validationRtgiHdrCaptureDirectory;
     std::optional<ValidationRtgiHdrCaptureMode> validationRtgiHdrCaptureMode;
+    std::string validationRtgiQualityProfile;
 
     /// Reports whether a deterministic validation run was requested.
     /// @return True when a versioned scene descriptor was supplied.

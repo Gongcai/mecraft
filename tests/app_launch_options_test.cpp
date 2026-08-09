@@ -1,4 +1,5 @@
 #include "app/AppLaunchOptions.h"
+#include "app/validation/RtgiQualityProfile.h"
 
 #include <iostream>
 #include <limits>
@@ -105,6 +106,20 @@ int main() {
     invalid.validationRtgiHdrCaptureMode = ValidationRtgiHdrCaptureMode::Raw;
     if (!requireTrue(!validateAppLaunchOptions(invalid, error),
                      "an RTGI HDR capture mode must require an output directory")) {
+        return 1;
+    }
+    AppLaunchOptions quality = validation;
+    quality.validationSampleFrames = app::validation::kRtgiQualitySequenceFrameCount;
+    quality.validationRtgiHdrCaptureDirectory = "hdr";
+    quality.validationRtgiHdrCaptureMode = ValidationRtgiHdrCaptureMode::RawAndDenoised;
+    quality.validationRtgiQualityProfile = "v01_window_room_static";
+    if (!requireTrue(validateAppLaunchOptions(quality, error),
+                     "a static RTGI quality profile must require its exact sequence contract")) {
+        return 1;
+    }
+    quality.validationSampleFrames = 31u;
+    if (!requireTrue(!validateAppLaunchOptions(quality, error),
+                     "a static RTGI quality profile must reject non-32-frame sequences")) {
         return 1;
     }
     invalid = validation;

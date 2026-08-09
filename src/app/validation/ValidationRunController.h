@@ -2,6 +2,7 @@
 #define MECRAFT_VALIDATION_RUN_CONTROLLER_H
 
 #include "app/AppLaunchOptions.h"
+#include "app/validation/RtgiQualityProfile.h"
 #include "app/validation/ValidationSceneContract.h"
 #include "renderer/contracts/CameraPathContract.h"
 
@@ -82,6 +83,7 @@ public:
     [[nodiscard]] const renderer::contracts::CameraPath& cameraPath() const;
     [[nodiscard]] const ValidationSceneContract& sceneContract() const;
     [[nodiscard]] const ValidationRenderSettingsProfile& renderSettingsProfile() const;
+    [[nodiscard]] const std::optional<RtgiQualityProfile>& rtgiQualityProfile() const;
 
     /// Returns the locked quality profile with the explicit validation traversal implementation applied.
     [[nodiscard]] RenderSettings runtimeRenderSettings() const;
@@ -98,6 +100,7 @@ private:
     ValidationSceneContract m_sceneContract;
     renderer::contracts::CameraPath m_cameraPath;
     ValidationRenderSettingsProfile m_renderSettingsProfile;
+    std::optional<RtgiQualityProfile> m_rtgiQualityProfile;
     std::optional<ValidationFrame> m_currentFrame;
     Phase m_phase = Phase::Inactive;
     ValidationRunError m_error = ValidationRunError::None;

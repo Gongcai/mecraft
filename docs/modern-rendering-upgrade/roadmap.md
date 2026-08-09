@@ -292,6 +292,10 @@ RGBA16F Raw/NRD 信号写入 `rtgi_raw_####.exr`/`rtgi_denoised_####.exr`；信�
 每个场景均输出完整的两组两帧 EXR，`exrheader` 验证为无压缩 RGB Half scanline OpenEXR，Vulkan Validation 无错误。
 捕获器现已同时严格读取本项目写出的 EXR Header、offset table 和全部 RGB Half scanline；该回环契约阻止
 只有头部可解析、像素 offset 错误的文件进入后续质量报告。
+V01/V02/M03 静态质量 Profile 已由独立 JSON 锁定场景契约、M3 RTGI Render Settings、1280×720、Camera Path
+2.0 秒及固定 ROI。控制器选择 Profile 后强制 32 帧 Raw/Denoised，并在整个序列保持相机不动；报告发布
+Profile/ROI/64 spp 目标。V01 已以 1 帧预热完成真实 32+32 EXR 链路验证，正式门槛仍需 300 帧预热、ROI 内容
+复核、64 spp Reference 和数值报告。
 
 2026-08-08 在 RTX 4060 Laptop、Vulkan、RELAX_DIFFUSE、300 帧预热加 1000 帧采样下完成四组复测。
 报告中的 `total_tracked` 是显式 Pass 阶段和，不是完整 GPU 帧跨度：它没有覆盖独立的帧首/场景 Overlay/
@@ -376,7 +380,7 @@ MAE/RMSE 为 0.000991734/0.002267379，全局亮度 SSIM 为 0.999885319。
 
 下一轮任务按以下顺序执行：
 
-1. 为 V01、V02、M03 接入 64 spp Linear EXR Reference、1 spp Raw/Denoised 序列和固定 ROI，自动计算
+1. 为已锁定固定 ROI 的 V01、V02、M03 接入 64 spp Linear EXR Reference，并自动计算
    Variance、32 帧 SSIM、95th HDR Error、泄漏带及非法像素计数。
 2. 为 V03、V06、M06 接入 Ghost/Disocclusion、动态边缘差分和历史恢复帧数门禁。
 3. 针对 1080p 继续定位：体素优先检查地形提交、流送和 AS；Sponza 优先检查 RTGI.Trace 与 NRD.Dispatch。

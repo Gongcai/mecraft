@@ -632,6 +632,9 @@ Vulkan 质量运行据此采用 `opacity_micromap`，Candidate Loop 保留为显
 RTX 4060 Laptop 的 Vulkan 小窗口实跑已分别覆盖两条路径（320×180、1 帧预热、2 帧采样），每组 Raw/Denoised
 均完整生成两帧无压缩 RGB Half scanline EXR，`exrheader` 可解析且 Vulkan Validation 无错误。
 捕获器的严格读回同时校验 Header、offset table 与 RGB Half scanline，防止格式表面有效而像素数据不可读取。
+版本化静态质量 Profile 已锁定 V01/V02/M03 的场景契约、M3 RTGI Render Settings、1280×720、Camera Path
+2.0 秒和固定 ROI；选择 Profile 会强制 32 帧 Raw/Denoised 且保持相机静止。V01 的真实 32+32 EXR 小预热
+运行已验证调度、写入和报告字段，64 spp Reference 与实际指标尚未生成。
 
 ## 10. 调试视图与验收
 

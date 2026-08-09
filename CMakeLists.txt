@@ -234,6 +234,7 @@ find_package(spirv_cross_c CONFIG REQUIRED)
 # [应用层]
 set(SRC_APP
         src/app/AppLaunchOptions.cpp
+        src/app/validation/RtgiQualityProfile.cpp
         src/app/validation/ValidationSceneContract.cpp
         src/app/validation/ValidationVoxelFixture.cpp
         src/app/validation/ValidationRunController.cpp
@@ -1057,6 +1058,9 @@ if(MECRAFT_BUILD_TESTS)
             MECRAFT_TEST_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
     add_mecraft_test(validation_run_controller_test tests/validation_run_controller_test.cpp)
     target_compile_definitions(validation_run_controller_test PRIVATE
+            MECRAFT_TEST_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
+    add_mecraft_test(rtgi_quality_profile_test tests/rtgi_quality_profile_test.cpp)
+    target_compile_definitions(rtgi_quality_profile_test PRIVATE
             MECRAFT_TEST_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
     add_mecraft_test(validation_scene_contract_test tests/validation_scene_contract_test.cpp)
     target_compile_definitions(validation_scene_contract_test PRIVATE

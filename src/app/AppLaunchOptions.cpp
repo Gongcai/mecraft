@@ -1,5 +1,6 @@
 #include "AppLaunchOptions.h"
 
+#include "app/validation/RtgiQualityProfile.h"
 #include "renderer/rhi/RhiDeviceFactory.h"
 
 #include <cstdlib>
@@ -82,7 +83,8 @@ bool validateAppLaunchOptions(const AppLaunchOptions& options, std::string& erro
         if (!options.validationCapturePath.empty() || !options.validationReportPath.empty() ||
             options.validationWarmupFramesSet || options.validationSampleFramesSet || options.validationWidthSet ||
             options.validationHeightSet || options.validationRtgiCutoutTraversal.has_value() ||
-            !options.validationRtgiHdrCaptureDirectory.empty() || options.validationRtgiHdrCaptureMode.has_value()) {
+            !options.validationRtgiHdrCaptureDirectory.empty() || options.validationRtgiHdrCaptureMode.has_value() ||
+            !options.validationRtgiQualityProfile.empty()) {
             error = "Validation options require --validation-scene-file";
             return false;
         }
@@ -98,6 +100,12 @@ bool validateAppLaunchOptions(const AppLaunchOptions& options, std::string& erro
     }
     if (options.validationRtgiHdrCaptureDirectory.empty() != !options.validationRtgiHdrCaptureMode.has_value()) {
         error = "--validation-rtgi-hdr-capture-dir and --validation-rtgi-hdr-capture must be supplied together";
+        return false;
+    }
+    if (!options.validationRtgiQualityProfile.empty() &&
+        (options.validationSampleFrames != app::validation::kRtgiQualitySequenceFrameCount ||
+         options.validationRtgiHdrCaptureMode != ValidationRtgiHdrCaptureMode::RawAndDenoised)) {
+        error = "--validation-rtgi-quality-profile requires 32 samples and raw_and_denoised HDR capture";
         return false;
     }
     if (options.validationSampleFrames < 2u) {

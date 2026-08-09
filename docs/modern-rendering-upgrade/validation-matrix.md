@@ -123,6 +123,11 @@ Static Mesh Custom Index 对应 Terrain 记录必须保持全零，表字节数�
 
 阈值以固定 ROI 计算，天空、曝光饱和区和刻意随机动画从静态指标中分离。
 
+静态输入由 `assets/validation/rtgi_quality_profiles.json` 版本化。V01、V02、M03 当前均锁定 1280×720、
+Camera Path 2.0 秒和 `(384,216,512,288)` ROI；运行时必须使用 32 帧 `raw_and_denoised` 捕获，报告记录
+Profile ID、版本、ROI、质量 Render Settings 及 64 spp Reference 目标。ROI 内容在正式 Reference 采集前仍需
+结合线性 HDR 与 Depth/Normal 边界检查确认；不得仅因矩形契约已固定而宣称画质门槛通过。
+
 ### 3.3 动态画面
 
 在 V03、V06、M06 的 Camera Path：

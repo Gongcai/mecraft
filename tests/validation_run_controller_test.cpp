@@ -130,6 +130,37 @@ int main() {
         return 1;
     }
 
+    AppLaunchOptions qualityOptions = options;
+    qualityOptions.validationScenePath =
+        std::filesystem::path(MECRAFT_TEST_SOURCE_DIR) / "assets/validation/scenes/v01_window_room.json";
+    qualityOptions.validationWarmupFrames = 0u;
+    qualityOptions.validationSampleFrames = app::validation::kRtgiQualitySequenceFrameCount;
+    qualityOptions.validationRtgiQualityProfile = "v01_window_room_static";
+    app::validation::ValidationRunController qualityController;
+    if (!requireTrue(qualityController.configure(qualityOptions), "the V01 static RTGI profile must configure") ||
+        !requireTrue(qualityController.rtgiQualityProfile().has_value() &&
+                         qualityController.renderSettingsProfile().id ==
+                             app::validation::kValidationRtgiVoxelRenderSettingsId &&
+                         qualityController.runtimeRenderSettings().rtgi.enabled &&
+                         qualityController.runtimeRenderSettings().nrd.enabled,
+                     "a static profile must select the versioned RTGI quality renderer") ||
+        !requireTrue(qualityController.beginScene(ValidationScene::Voxel), "the V01 static profile must start")) {
+        return 1;
+    }
+    frame = qualityController.currentFrame();
+    if (!requireTrue(frame != nullptr && frame->collectPerformance && nearlyEqual(frame->cameraPose.position.x, 0.0) &&
+                         nearlyEqual(frame->cameraPose.position.z, -3.5),
+                     "all static quality samples must use the locked two-second camera pose") ||
+        !requireTrue(qualityController.completeFrame(true), "the first static quality sample must complete")) {
+        return 1;
+    }
+    frame = qualityController.currentFrame();
+    if (!requireTrue(frame != nullptr && nearlyEqual(frame->cameraPose.position.x, 0.0) &&
+                         nearlyEqual(frame->cameraPose.position.z, -3.5),
+                     "the static quality camera must not advance along the path")) {
+        return 1;
+    }
+
     std::cout << "[validation_run_controller_test] PASS\n";
     return 0;
 }
