@@ -640,10 +640,12 @@ Reference 运行轴现会强制 64 帧 Raw-only、关闭 NRD，并让 R2 低差�
 首帧、次帧和第 64 帧 EXR 哈希均不同，报告中 `NRD.GuidePrep`/`NRD.Dispatch` 为 0。质量工具已生成单张
 64 spp EXR。首轮 v1 ROI 覆盖中心窗口 Sky，不能用于静态门槛；Profile v2 将 V01 移到室内地面
 `(256,544,256,128)`。`FrameOutput` 现明确 Raw 为 pre-exposed、NRD 输出为 scene-referred，捕获器在写入
-Denoised EXR 时使用同帧 Pre-exposure 统一评价域。当前 V01 的 Pre-exposure 为 1，v2 短预热的
-Raw/Reference/Denoised 平均亮度为 `0.021384/0.021434/0.002634`，方差降低 `99.931645%`，但 SSIM
-`0.341391`、HDR 相对误差 p95 `0.947647` 均失败。该差异仍需定位 NRD/Guide/History 根因，禁止用阈值、
-ROI 扩张或报告缩放处理；Leakage Band 与 AS Pending 当前在报告中明确为缺少证据，
+Denoised EXR 时使用同帧 Pre-exposure 统一评价域。图外读取 Render Graph 瞬态目标会命中其后的别名资源，
+因此 Raw 和 Denoised 在各自最后有效 Pass 后拷贝到持久 RGBA16F 输出，再交给验证 runner。当前 V01 的
+Pre-exposure 为 1；300 帧预热正式运行的 Raw/Reference/Denoised 平均亮度为
+`0.002882143/0.002882066/0.002634361`，方差降低 `99.834749%`，但 SSIM `0.775638`、HDR 相对误差 p95
+`0.321060` 仍失败。该差异需要定位 RELAX 的真实空间/时域根因，禁止用阈值、ROI 扩张或报告缩放处理；
+Leakage Band 与 AS Pending 当前在报告中明确为缺少证据，
 `complete_static_gate_passed=false`。
 
 ## 10. 调试视图与验收

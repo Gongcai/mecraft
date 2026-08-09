@@ -134,11 +134,13 @@ Profile ID、版本、ROI、质量 Render Settings 及 64 spp Reference 目标�
 IEEE Half 解码、64 帧线性平均、32 帧 Raw/Denoised 方差与均值、SSIM、HDR Error p95 和非法辐射门禁。
 Leakage Band 与 AS Pending 没有输入证据时必须在 JSON 中保持 `passed=null`，完整静态门槛固定为失败。
 
-首轮 1 帧预热 V01 v1 数据覆盖中心窗口 Sky，不能用作门槛。v2 的室内地面数据中 Raw/Reference/Denoised
-ROI 平均亮度为 `0.021384/0.021434/0.002634`；SSIM `0.341391`、HDR 相对误差 p95 `0.947647` 均不通过。
-Raw 为 pre-exposed，NRD 输出为 scene-referred，捕获器已在写入 Denoised EXR 时使用同帧 Pre-exposure
-统一域，当前运行比例为 1。该结果不得归档为正式门槛，必须先修复 NRD/Guide/History 偏差，再以 300 帧预热
-重采 V01/V02/M03 并复核 ROI。
+首轮 1 帧预热 V01 v1 数据覆盖中心窗口 Sky，不能用作门槛。旧 v2 室内地面数据的
+Raw/Reference/Denoised ROI 平均亮度 `0.021384/0.021434/0.002634` 也不能使用：图外捕获读取了已别名的
+Render Graph 瞬态信号。Raw 与 Denoised 已改为在最后有效图内访问时拷贝到持久 RGBA16F 输出。修复后的 V01
+正式运行（300 帧预热、32+32/64）得到 `0.002882143/0.002882066/0.002634361`，Raw/Reference 对齐；方差
+降低 `99.834749%` 通过，但 SSIM `0.775638`、HDR 相对误差 p95 `0.321060` 仍不通过。Raw 为 pre-exposed，
+NRD 输出为 scene-referred，捕获器在写入 Denoised EXR 时使用同帧 Pre-exposure 统一域，当前比例为 1。
+必须修复真实 RELAX 空间/时域误差后，重采 V01/V02/M03 并复核 ROI。
 
 ### 3.3 动态画面
 

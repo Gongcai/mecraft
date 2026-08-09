@@ -286,7 +286,10 @@ M1 与 M2 可并行开发，但公共 `GpuMaterial`、`GpuSceneGeometry` 与 Sta
 32 帧 Raw/Denoised 与 64 帧 Raw Reference，流式平均并写出单张 64 spp Linear EXR，再生成结构化门槛报告；
 缺帧、多余序号、尺寸变化、NaN/Inf 和负辐射都会明确失败。Ghost/Disocclusion、Leakage Band 与 AS Pending
 证据仍未接入，因此 M3 画质门槛不能标记为通过。
-Deferred `FrameOutput` 已发布本帧的 Raw RTGI 与 NRD Diffuse 线性 HDR 句柄，供 runner 读取生产信号；
+Deferred `FrameOutput` 已发布本帧的 Raw RTGI 与 NRD Diffuse 线性 HDR 句柄，供 runner 读取生产信号。因为
+Render Graph 瞬态目标在最后一次图内访问后允许别名，两个句柄现在由图内 `RTGI.RawDiffuseValidationCopy` 与
+`NRD.DiffuseValidationCopy` 快照到独立的持久 RGBA16F 纹理，直到下一帧才释放；不能再由图外读回瞬态句柄。
+这为 1280x720 增加 14.0625 MiB 的 NRD 归类常驻验证输出。
 验证控制器现已为每个采样帧发布严格递增的 HDR 捕获序号，`raw`、`denoised` 和 `raw_and_denoised` 由显式
 CLI/目录契约选择。Gameplay 通过 pre-UI 回调读取 `FrameOutput`，Model 直接读取 Deferred 输出，两者均将
 RGBA16F Raw/NRD 信号写入 `rtgi_raw_####.exr`/`rtgi_denoised_####.exr`；信号、格式或写入失败会终止验证。
@@ -304,10 +307,11 @@ Reference 运行轴已接入：显式 `--validation-rtgi-reference` 强制 64 �
 0。质量工具已将这 64 帧平均为 Reference EXR。`FrameOutput` 明确 Raw 在 pre-exposed 域、NRD 输出在
 scene-referred 域，EXR 捕获在写入 Denoised 时以同帧 Pre-exposure 转换为 Raw/Reference 域，并拒绝非有限、
 负值或 FP16 溢出。当前 V01 验证运行的 Pre-exposure 为 1，因此这一契约修复不改变这组像素。
-v2 ROI 的短预热报告得到 Raw/Reference ROI 平均亮度 `0.021384/0.021434`，Denoised 为 `0.002634`；
-方差降低 `99.931645%` 通过，但 SSIM `0.341391`、相对亮度误差 p95 `0.947647` 失败。该运行只验证工具链与
-Profile 内容，不能作为正式门槛证据；下一步定位剩余 NRD/Guide/History 能量偏差，再执行 300 帧预热的
-V01/V02/M03 正式采集。
+旧 v2 短预热 Raw/Reference 的 `0.021384/0.021434` 来自图外读取已别名的瞬态纹理，不能作为任何质量结论。
+修复后，RTX 4060 Laptop 的 V01 正式运行（300 帧预热、32 Raw+Denoised、64 Raw Reference）得到
+Raw/Reference/Denoised ROI 平均亮度 `0.002882143/0.002882066/0.002634361`，证明 Raw 与 Reference 已对齐，
+并消除了此前误报的约 88% 能量差。方差降低 `99.834749%` 通过；但 SSIM `0.775638`、相对亮度误差 p95
+`0.321060` 仍失败。下一步定位 RELAX 的真实空间/时域残余误差，再重采 V01/V02/M03。
 
 2026-08-08 在 RTX 4060 Laptop、Vulkan、RELAX_DIFFUSE、300 帧预热加 1000 帧采样下完成四组复测。
 报告中的 `total_tracked` 是显式 Pass 阶段和，不是完整 GPU 帧跨度：它没有覆盖独立的帧首/场景 Overlay/
@@ -392,7 +396,7 @@ MAE/RMSE 为 0.000991734/0.002267379，全局亮度 SSIM 为 0.999885319。
 
 下一轮任务按以下顺序执行：
 
-1. 定位并修复 V01 v2 ROI 中 Denoised 相对 Raw/Reference 仍丢失约 88% 平均亮度的问题；同一 Profile 重采后必须
+1. 定位并修复 V01 v2 ROI 中 RELAX 相对 64 spp Reference 的真实空间/时域残余误差；同一 Profile 重采后必须
    通过 SSIM 与 HDR Error 门槛，禁止以改阈值、扩张 ROI 或缩放报告输入处理。
 2. 为 V01、V02、M03 接入 Leakage Band、AS Pending 计数和 300 帧预热正式运行，固定 ROI 复核后归档报告。
 3. 为 V03、V06、M06 接入 Ghost/Disocclusion、动态边缘差分和历史恢复帧数门禁。

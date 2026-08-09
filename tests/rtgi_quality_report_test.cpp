@@ -75,10 +75,10 @@ int main() {
     std::ofstream manifestOutput(manifest);
     manifestOutput << R"({
   "kind": "mecraft.rtgi_quality_profiles",
-  "version": 1,
+  "version": 2,
   "profiles": [{
     "id": "synthetic_static",
-    "version": 1,
+    "version": 2,
     "scene_contract_id": "synthetic_scene",
     "render_settings_id": "synthetic_settings",
     "camera_time_seconds": 2.0,

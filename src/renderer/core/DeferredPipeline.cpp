@@ -691,6 +691,7 @@ void DeferredPipeline::init(SharedRenderResources& shared) {
 void DeferredPipeline::shutdown() {
     if (m_shared != nullptr && m_shared->rhiDevice != nullptr) {
         m_renderGraph.releaseTransientResources(*m_shared->rhiDevice);
+        destroyRtgiValidationOutputTextures(*m_shared->rhiDevice);
     }
     if (m_debugPass)
         m_debugPass->shutdown();
@@ -785,6 +786,79 @@ void DeferredPipeline::shutdown() {
     m_accelerationStructureFrameSequence = 0u;
     m_sceneTlasPrepareCpuMs = 0.0;
     m_rtgiSceneTlasBootstrapCpuMs = 0.0;
+}
+
+bool DeferredPipeline::ensureRtgiValidationOutputTextures(RhiDevice& rhiDevice, const uint32_t width,
+                                                           const uint32_t height) {
+    const bool matchingExtent = m_rtgiValidationOutputWidth == width && m_rtgiValidationOutputHeight == height;
+    if (matchingExtent && m_rtgiRawDiffuseValidationTexture.isValid() && m_rtgiRawDiffuseValidationView.isValid() &&
+        m_nrdDiffuseValidationTexture.isValid() && m_nrdDiffuseValidationView.isValid()) {
+        return true;
+    }
+
+    destroyRtgiValidationOutputTextures(rhiDevice);
+
+    RhiTextureDesc textureDesc;
+    textureDesc.dimension = RhiTextureDimension::Texture2D;
+    textureDesc.format = RhiTextureFormat::Rgba16Float;
+    textureDesc.width = width;
+    textureDesc.height = height;
+    textureDesc.depthOrLayers = 1u;
+    textureDesc.mipLevels = 1u;
+    textureDesc.sampleCount = 1u;
+    textureDesc.usage = rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::TransferSrc) |
+                        rhiFlag(RhiTextureUsage::TransferDst);
+    textureDesc.memoryCategory = RhiMemoryCategory::Nrd;
+
+    const auto createTextureAndView = [&rhiDevice, &textureDesc](const char* debugName, RhiTextureHandle& texture,
+                                                                   RhiTextureViewHandle& view) {
+        textureDesc.debugName = debugName;
+        texture = rhiDevice.createTexture(textureDesc, nullptr);
+        if (!texture.isValid()) {
+            return false;
+        }
+        RhiTextureViewDesc viewDesc;
+        viewDesc.texture = texture;
+        viewDesc.viewType = RhiTextureViewType::Texture2D;
+        viewDesc.format = textureDesc.format;
+        view = rhiDevice.createTextureView(viewDesc);
+        return view.isValid();
+    };
+
+    if (!createTextureAndView("RTGI.RawDiffuseValidationOutput", m_rtgiRawDiffuseValidationTexture,
+                              m_rtgiRawDiffuseValidationView) ||
+        !createTextureAndView("NRD.DiffuseValidationOutput", m_nrdDiffuseValidationTexture,
+                              m_nrdDiffuseValidationView)) {
+        destroyRtgiValidationOutputTextures(rhiDevice);
+        return false;
+    }
+
+    m_rtgiValidationOutputWidth = width;
+    m_rtgiValidationOutputHeight = height;
+    m_rtgiValidationOutputInitialized = false;
+    return true;
+}
+
+void DeferredPipeline::destroyRtgiValidationOutputTextures(RhiDevice& rhiDevice) {
+    if (m_rtgiRawDiffuseValidationView.isValid()) {
+        rhiDevice.destroyTextureView(m_rtgiRawDiffuseValidationView);
+    }
+    if (m_nrdDiffuseValidationView.isValid()) {
+        rhiDevice.destroyTextureView(m_nrdDiffuseValidationView);
+    }
+    if (m_rtgiRawDiffuseValidationTexture.isValid()) {
+        rhiDevice.destroyTexture(m_rtgiRawDiffuseValidationTexture);
+    }
+    if (m_nrdDiffuseValidationTexture.isValid()) {
+        rhiDevice.destroyTexture(m_nrdDiffuseValidationTexture);
+    }
+    m_rtgiRawDiffuseValidationTexture = {};
+    m_rtgiRawDiffuseValidationView = {};
+    m_nrdDiffuseValidationTexture = {};
+    m_nrdDiffuseValidationView = {};
+    m_rtgiValidationOutputWidth = 0u;
+    m_rtgiValidationOutputHeight = 0u;
+    m_rtgiValidationOutputInitialized = false;
 }
 
 void DeferredPipeline::invalidateHistory() {
@@ -1426,6 +1500,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
     RgTextureHandle grassColormap;
     RgTextureHandle foliageColormap;
     RgTextureHandle rtgiRawDiffuse;
+    RgTextureHandle rtgiRawValidationOutput;
     RgTextureHandle rtgiValidation;
     RgTextureHandle rtgiRelaxDiffuse;
     RgTextureHandle rtgiReblurDiffuse;
@@ -1433,6 +1508,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
     RgTextureHandle nrdNormalRoughness;
     RgTextureHandle nrdViewZ;
     RgTextureHandle nrdOutputDiffuse;
+    RgTextureHandle nrdDiffuseValidationOutput;
     RgTextureHandle nrdValidation;
     SkyIblPass::GraphResources skyIblResources;
     const RhiTextureHandle lightmapDayTexture = m_resourceMgr->getLightmapDay();
@@ -1485,6 +1561,29 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
     }
 
     if (rtgiEnabled) {
+        if (!ensureRtgiValidationOutputTextures(rhiDevice, ctx.temporalExtents.renderExtent.width,
+                                                ctx.temporalExtents.renderExtent.height)) {
+            return failGraphSetup();
+        }
+        RhiTextureDesc rawValidationOutputDesc;
+        RhiTextureDesc denoisedValidationOutputDesc;
+        if (!rhiDevice.getTextureDesc(m_rtgiRawDiffuseValidationTexture, rawValidationOutputDesc) ||
+            !rhiDevice.getTextureDesc(m_nrdDiffuseValidationTexture, denoisedValidationOutputDesc)) {
+            return failGraphSetup();
+        }
+        const RhiResourceState validationOutputInitialState =
+            m_rtgiValidationOutputInitialized ? RhiResourceState::ShaderRead : RhiResourceState::Undefined;
+        rtgiRawValidationOutput = m_renderGraph.importTexture(
+            {"RTGI.RawDiffuseValidationOutput", m_rtgiRawDiffuseValidationTexture, rawValidationOutputDesc,
+             validationOutputInitialState, RhiResourceState::ShaderRead, m_rtgiRawDiffuseValidationView,
+             RhiQueueType::Graphics, RhiQueueType::Graphics});
+        nrdDiffuseValidationOutput = m_renderGraph.importTexture(
+            {"NRD.DiffuseValidationOutput", m_nrdDiffuseValidationTexture, denoisedValidationOutputDesc,
+             validationOutputInitialState, RhiResourceState::ShaderRead, m_nrdDiffuseValidationView,
+             RhiQueueType::Graphics, RhiQueueType::Graphics});
+        if (!rtgiRawValidationOutput.isValid() || !nrdDiffuseValidationOutput.isValid()) {
+            return failGraphSetup();
+        }
         if (!importTexture(terrainAlbedoTexture, {}, RhiResourceState::ShaderRead, terrainAlbedo) ||
             !importTexture(terrainNormalTexture, {}, RhiResourceState::ShaderRead, terrainNormal) ||
             !importTexture(terrainSpecularTexture, {}, RhiResourceState::ShaderRead, terrainSpecular) ||
@@ -1542,8 +1641,8 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
     {
         DeferredRenderTargets* const targetsPointer = &targets;
         m_renderGraph.setPreRecordCallback([this, targetsPointer, sceneLighting, sceneComposite, transparentComposite,
-                                            transparentCompositeDepth, reflection, cloud, rtgiRawDiffuse,
-                                            nrdOutputDiffuse]() {
+                                            transparentCompositeDepth, reflection, cloud, rtgiRawValidationOutput,
+                                            nrdOutputDiffuse, nrdDiffuseValidationOutput]() {
             const auto publish = [this, targetsPointer](const DeferredTransientTarget target,
                                                         const RgTextureHandle handle) {
                 targetsPointer->publishTransientTarget(target, m_renderGraph.resolvedTexture(handle),
@@ -1555,10 +1654,11 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
             publish(DeferredTransientTarget::TransparentCompositeDepth, transparentCompositeDepth);
             publish(DeferredTransientTarget::Reflection, reflection);
             publish(DeferredTransientTarget::Cloud, cloud);
-            m_rtgiRawDiffuseTexture =
-                rtgiRawDiffuse.isValid() ? m_renderGraph.resolvedTexture(rtgiRawDiffuse) : RhiTextureHandle{};
-            m_nrdDiffuseTexture =
-                nrdOutputDiffuse.isValid() ? m_renderGraph.resolvedTexture(nrdOutputDiffuse) : RhiTextureHandle{};
+            m_rtgiRawDiffuseTexture = rtgiRawValidationOutput.isValid() ? m_rtgiRawDiffuseValidationTexture
+                                                                         : RhiTextureHandle{};
+            m_nrdDiffuseTexture = nrdOutputDiffuse.isValid() && nrdDiffuseValidationOutput.isValid()
+                                      ? m_nrdDiffuseValidationTexture
+                                      : RhiTextureHandle{};
         });
     }
 
@@ -1971,6 +2071,20 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
             return failGraphSetup();
         }
         rtgiTraceGraphPrepared = true;
+        RenderGraphPassBuilder rawValidationCopy =
+            m_renderGraph.addPass({"RTGI.RawDiffuseValidationCopy", RgPassType::Copy, RhiQueueType::Graphics,
+                                   /*threadSafeRecord=*/true});
+        rawValidationCopy.dependsOn(graphTail)
+            .readTexture(rtgiRawDiffuse, RhiResourceState::TransferSrc)
+            .writeTexture(rtgiRawValidationOutput, RhiResourceState::TransferDst)
+            .setExecute([rtgiRawDiffuse, rtgiRawValidationOutput](RgPassContext& pass) {
+                RhiTextureBlit blit;
+                blit.src = pass.texture(rtgiRawDiffuse);
+                blit.dst = pass.texture(rtgiRawValidationOutput);
+                pass.commandList().blitTexture(blit);
+                return true;
+            });
+        graphTail = rawValidationCopy.handle();
         rtgiDiffuseTexture = rtgiRawDiffuse;
         rtgiDiffuseEncoding = DeferredLightingPass::RtgiDiffuseEncoding::LinearRgb;
         // The raw trace target and Scene HDR use the same pre-exposed domain.
@@ -2123,6 +2237,20 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
                 return failGraphSetup();
             }
             graphTail = nrdDispatch.lastPass;
+            RenderGraphPassBuilder denoisedValidationCopy =
+                m_renderGraph.addPass({"NRD.DiffuseValidationCopy", RgPassType::Copy, RhiQueueType::Graphics,
+                                       /*threadSafeRecord=*/true});
+            denoisedValidationCopy.dependsOn(graphTail)
+                .readTexture(nrdOutputDiffuse, RhiResourceState::TransferSrc)
+                .writeTexture(nrdDiffuseValidationOutput, RhiResourceState::TransferDst)
+                .setExecute([nrdOutputDiffuse, nrdDiffuseValidationOutput](RgPassContext& pass) {
+                    RhiTextureBlit blit;
+                    blit.src = pass.texture(nrdOutputDiffuse);
+                    blit.dst = pass.texture(nrdDiffuseValidationOutput);
+                    pass.commandList().blitTexture(blit);
+                    return true;
+                });
+            graphTail = denoisedValidationCopy.handle();
             rtgiDiffuseTexture = nrdOutputDiffuse;
             rtgiDiffuseEncoding = settings.nrd.method == NrdDiffuseMethod::Reblur
                                       ? DeferredLightingPass::RtgiDiffuseEncoding::ReblurYCoCg
@@ -2927,6 +3055,9 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
     if (!executed.succeeded()) {
         MECRAFT_LOG_STREAM(std::cerr << "[DeferredPipeline] Render Graph execution failed: " << executed.message
                                      << '\n');
+    }
+    if (executed.succeeded() && rtgiEnabled) {
+        m_rtgiValidationOutputInitialized = true;
     }
     // Advance the low-discrepancy phase after each stable temporal frame.
     if (executed.succeeded() && (rtgiReferenceSampling || (nrdEnabled && !nrdTemporalReset)) && !rtgiTraceInspection) {

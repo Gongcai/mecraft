@@ -122,6 +122,11 @@ namespace {
            pipelineSource.find("const RhiTextureUsageFlags nrdOutputUsage =") != std::string::npos &&
            pipelineSource.find("sampledStorage | rhiFlag(RhiTextureUsage::ColorAttachment)") != std::string::npos &&
            pipelineSource.find("NRD.OutputInit") != std::string::npos &&
+           pipelineSource.find("RTGI.RawDiffuseValidationCopy") != std::string::npos &&
+           pipelineSource.find("NRD.DiffuseValidationCopy") != std::string::npos &&
+           pipelineSource.find("ensureRtgiValidationOutputTextures") != std::string::npos &&
+           pipelineSource.find("m_rtgiRawDiffuseValidationTexture") != std::string::npos &&
+           pipelineSource.find("m_nrdDiffuseValidationTexture") != std::string::npos &&
            pipelineSource.find("writeTexture(nrdOutputDiffuse, RhiResourceState::RenderTarget)") != std::string::npos &&
            pipelineSource.find("NRD.ValidationDescriptorInit") != std::string::npos &&
            pipelineSource.find("writeTexture(nrdValidation, RhiResourceState::RenderTarget)") != std::string::npos &&

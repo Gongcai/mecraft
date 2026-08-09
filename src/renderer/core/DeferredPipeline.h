@@ -107,6 +107,15 @@ public:
 
 private:
     void initializePasses(ResourceMgr& resourceMgr, shadow::ShadowRenderer* shadowRenderer);
+    /// Ensures that FrameOutput RTGI signals have non-aliased storage until the next frame.
+    /// @param rhiDevice Device that owns the persistent validation textures.
+    /// @param width Render width in texels.
+    /// @param height Render height in texels.
+    /// @return True when both RGBA16F textures and views match the requested extent.
+    [[nodiscard]] bool ensureRtgiValidationOutputTextures(RhiDevice& rhiDevice, uint32_t width, uint32_t height);
+    /// Releases the persistent RTGI signal textures and their views.
+    /// @param rhiDevice Device that owns the textures.
+    void destroyRtgiValidationOutputTextures(RhiDevice& rhiDevice);
 
     // Pass instances
     std::unique_ptr<SsaoPass> m_ssaoPass;
@@ -156,6 +165,13 @@ private:
     bool m_rtgiTraceInspectionActive = false;
     RhiTextureHandle m_rtgiRawDiffuseTexture;
     RhiTextureHandle m_nrdDiffuseTexture;
+    RhiTextureHandle m_rtgiRawDiffuseValidationTexture;
+    RhiTextureViewHandle m_rtgiRawDiffuseValidationView;
+    RhiTextureHandle m_nrdDiffuseValidationTexture;
+    RhiTextureViewHandle m_nrdDiffuseValidationView;
+    uint32_t m_rtgiValidationOutputWidth = 0u;
+    uint32_t m_rtgiValidationOutputHeight = 0u;
+    bool m_rtgiValidationOutputInitialized = false;
     int m_heldBlockLightValue = 0;
     std::vector<renderer::contracts::SceneLight> m_sceneLights;
 
