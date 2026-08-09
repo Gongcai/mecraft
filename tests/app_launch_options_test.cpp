@@ -46,6 +46,14 @@ int main() {
                      "validation scene reports must use stable identifiers")) {
         return 1;
     }
+    if (!requireTrue(parseRtgiCutoutTraversalMode("candidate_loop") == RtgiCutoutTraversalMode::CandidateLoop &&
+                         parseRtgiCutoutTraversalMode("opacity_micromap") == RtgiCutoutTraversalMode::OpacityMicromap &&
+                         !parseRtgiCutoutTraversalMode("candidate").has_value() &&
+                         std::string(rtgiCutoutTraversalModeStableId(RtgiCutoutTraversalMode::OpacityMicromap)) ==
+                             "opacity_micromap",
+                     "validation RTGI traversal identifiers must be strict and stable")) {
+        return 1;
+    }
 
     AppLaunchOptions validation;
     validation.validationScenePath = "scene.json";
@@ -108,6 +116,12 @@ int main() {
     framesWithoutScene.validationWarmupFrames = 2u;
     if (!requireTrue(!validateAppLaunchOptions(framesWithoutScene, error),
                      "validation frame options must require a scene")) {
+        return 1;
+    }
+    AppLaunchOptions traversalWithoutScene;
+    traversalWithoutScene.validationRtgiCutoutTraversal = RtgiCutoutTraversalMode::OpacityMicromap;
+    if (!requireTrue(!validateAppLaunchOptions(traversalWithoutScene, error),
+                     "validation RTGI traversal overrides must require a scene")) {
         return 1;
     }
 

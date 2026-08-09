@@ -171,7 +171,9 @@ constexpr double kWorldDaySeconds = 1200.0;
 }
 
 [[nodiscard]] StableContentHash renderSettingsContentHash(const RenderSettings& settings) {
-    const std::string serialized = app::serializeRenderSettings(settings).dump();
+    Json profileSettings = app::serializeRenderSettings(settings);
+    profileSettings.at("rtgi").erase("cutoutTraversal");
+    const std::string serialized = profileSettings.dump();
     return renderer::contracts::stableContentHashBytes(serialized.data(), serialized.size());
 }
 

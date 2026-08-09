@@ -155,7 +155,7 @@ void ModelSceneAppState::onEnter() {
             failValidationInitialization(m_scene.lastError());
             return;
         }
-        if (!m_scene.setRenderSettings(m_deps.validationRun.renderSettingsProfile().settings)) {
+        if (!m_scene.setRenderSettings(m_deps.validationRun.runtimeRenderSettings())) {
             failValidationInitialization(m_scene.lastError());
             return;
         }

@@ -108,6 +108,18 @@ int main() {
                      "M3 validation must select the fixed RTGI/RELAX profile without SSGI")) {
         return 1;
     }
+    rtgiOptions.validationRtgiCutoutTraversal = RtgiCutoutTraversalMode::OpacityMicromap;
+    app::validation::ValidationRunController rtgiOmmController;
+    if (!requireTrue(rtgiOmmController.configure(rtgiOptions), "the RTGI OMM validation axis must configure") ||
+        !requireTrue(rtgiOmmController.renderSettingsProfile().contentHash ==
+                             rtgiController.renderSettingsProfile().contentHash &&
+                         rtgiOmmController.renderSettingsProfile().settings.rtgi.cutoutTraversal ==
+                             RtgiCutoutTraversalMode::CandidateLoop &&
+                         rtgiOmmController.runtimeRenderSettings().rtgi.cutoutTraversal ==
+                             RtgiCutoutTraversalMode::OpacityMicromap,
+                     "the traversal implementation must not alter the locked quality-profile identity")) {
+        return 1;
+    }
 
     std::cout << "[validation_run_controller_test] PASS\n";
     return 0;

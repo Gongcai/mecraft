@@ -136,6 +136,14 @@ const ValidationRenderSettingsProfile& ValidationRunController::renderSettingsPr
     return m_renderSettingsProfile;
 }
 
+RenderSettings ValidationRunController::runtimeRenderSettings() const {
+    RenderSettings settings = m_renderSettingsProfile.settings;
+    if (m_options.validationRtgiCutoutTraversal.has_value()) {
+        settings.rtgi.cutoutTraversal = *m_options.validationRtgiCutoutTraversal;
+    }
+    return settings;
+}
+
 const AppLaunchOptions& ValidationRunController::options() const {
     return m_options;
 }

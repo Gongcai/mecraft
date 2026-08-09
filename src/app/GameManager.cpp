@@ -541,7 +541,7 @@ bool GameManager::makeBenchmarkSessionConfig(GameSessionConfig& outConfig) const
         outConfig.renderDistance = contract.voxelWorld->renderDistance;
         outConfig.enableSaving = false;
         outConfig.renderSettingsSource = GameRenderSettingsSource::FixedProfile;
-        outConfig.fixedRenderSettings = m_validationRun.renderSettingsProfile().settings;
+        outConfig.fixedRenderSettings = m_validationRun.runtimeRenderSettings();
         return true;
     }
 
@@ -867,9 +867,13 @@ bool GameManager::writeBenchmarkReport() {
         root["warmup_frame_count"] = m_launchOptions.validationWarmupFrames;
         root["requested_sample_frame_count"] = m_launchOptions.validationSampleFrames;
         const app::validation::ValidationRenderSettingsProfile& profile = m_validationRun.renderSettingsProfile();
+        const RenderSettings runtimeSettings = m_validationRun.runtimeRenderSettings();
         root["render_settings"] = {{"id", profile.id},
                                    {"version", profile.version},
-                                   {"content_hash", renderer::contracts::stableContentHashHex(profile.contentHash)}};
+                                   {"content_hash", renderer::contracts::stableContentHashHex(profile.contentHash)},
+                                   {"content_hash_scope", "quality_profile_excluding_traversal_implementation"},
+                                   {"rtgi_cutout_traversal",
+                                    rtgiCutoutTraversalModeStableId(runtimeSettings.rtgi.cutoutTraversal)}};
         root["environment"] = {{"time_of_day_seconds", contract.environment.timeOfDaySeconds},
                                {"weather", app::validation::validationWeatherStableId(contract.environment.weather)}};
         if (m_validationRun.scene() == ValidationScene::Voxel) {

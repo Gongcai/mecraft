@@ -77,6 +77,9 @@ public:
     [[nodiscard]] const renderer::contracts::CameraPath& cameraPath() const;
     [[nodiscard]] const ValidationSceneContract& sceneContract() const;
     [[nodiscard]] const ValidationRenderSettingsProfile& renderSettingsProfile() const;
+
+    /// Returns the locked quality profile with the explicit validation traversal implementation applied.
+    [[nodiscard]] RenderSettings runtimeRenderSettings() const;
     [[nodiscard]] const AppLaunchOptions& options() const;
     [[nodiscard]] uint32_t completedWarmupFrames() const;
     [[nodiscard]] uint32_t completedSampleFrames() const;

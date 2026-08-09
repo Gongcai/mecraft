@@ -37,11 +37,29 @@ const char* validationSceneStableId(const ValidationScene scene) {
     std::abort();
 }
 
+std::optional<RtgiCutoutTraversalMode> parseRtgiCutoutTraversalMode(const std::string_view value) {
+    if (value == "candidate_loop") {
+        return RtgiCutoutTraversalMode::CandidateLoop;
+    }
+    if (value == "opacity_micromap") {
+        return RtgiCutoutTraversalMode::OpacityMicromap;
+    }
+    return std::nullopt;
+}
+
+const char* rtgiCutoutTraversalModeStableId(const RtgiCutoutTraversalMode mode) {
+    switch (mode) {
+    case RtgiCutoutTraversalMode::CandidateLoop: return "candidate_loop";
+    case RtgiCutoutTraversalMode::OpacityMicromap: return "opacity_micromap";
+    }
+    std::abort();
+}
+
 bool validateAppLaunchOptions(const AppLaunchOptions& options, std::string& error) {
     if (!options.validationEnabled()) {
         if (!options.validationCapturePath.empty() || !options.validationReportPath.empty() ||
             options.validationWarmupFramesSet || options.validationSampleFramesSet || options.validationWidthSet ||
-            options.validationHeightSet) {
+            options.validationHeightSet || options.validationRtgiCutoutTraversal.has_value()) {
             error = "Validation options require --validation-scene-file";
             return false;
         }

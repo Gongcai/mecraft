@@ -32,6 +32,8 @@ void printUsage() {
               << "  --validation-sample-frames <n>    Fixed measured frame count; default 1000.\n"
               << "  --validation-width <pixels>       Capture width; default 1280.\n"
               << "  --validation-height <pixels>      Capture height; default 720.\n"
+              << "  --validation-rtgi-cutout-traversal <candidate_loop|opacity_micromap>\n"
+              << "                                      Select the measured RTGI cutout implementation.\n"
               << "  --rhi-backend <opengl|vulkan>      Select the graphics backend.\n"
               << "  --rhi-debug-output                 Enable graphics backend debug output.\n"
               << "  --no-rhi-debug-output              Disable graphics backend debug output.\n"
@@ -218,6 +220,16 @@ bool parseLaunchOptions(int argc, char** argv, AppLaunchOptions& options, std::s
                 return false;
             }
             options.validationHeightSet = true;
+        } else if (arg == "--validation-rtgi-cutout-traversal") {
+            const char* value = nullptr;
+            if (!requireValue(argc, argv, index, "--validation-rtgi-cutout-traversal", value, error)) {
+                return false;
+            }
+            options.validationRtgiCutoutTraversal = parseRtgiCutoutTraversalMode(value);
+            if (!options.validationRtgiCutoutTraversal.has_value()) {
+                error = "Validation RTGI cutout traversal must be candidate_loop or opacity_micromap";
+                return false;
+            }
         } else if (arg == "--rhi-backend") {
             const char* value = nullptr;
             if (!requireValue(argc, argv, index, "--rhi-backend", value, error)) {

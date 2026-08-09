@@ -2,6 +2,7 @@
 #define MECRAFT_APP_LAUNCH_OPTIONS_H
 
 #include "renderer/rhi/RhiTypes.h"
+#include "renderer/core/RenderSettings.h"
 
 #include <cstdint>
 #include <filesystem>
@@ -50,6 +51,7 @@ struct AppLaunchOptions {
     bool validationSampleFramesSet = false;
     bool validationWidthSet = false;
     bool validationHeightSet = false;
+    std::optional<RtgiCutoutTraversalMode> validationRtgiCutoutTraversal;
 
     /// Reports whether a deterministic validation run was requested.
     /// @return True when a versioned scene descriptor was supplied.
@@ -68,6 +70,12 @@ struct AppLaunchOptions {
 /// @param scene Validation scene class to identify.
 /// @return Process-lifetime lowercase scene identifier.
 [[nodiscard]] const char* validationSceneStableId(ValidationScene scene);
+
+/// Parses the stable validation identifier for the measured RTGI cutout traversal implementation.
+[[nodiscard]] std::optional<RtgiCutoutTraversalMode> parseRtgiCutoutTraversalMode(std::string_view value);
+
+/// Returns the stable identifier emitted by validation reports and benchmark telemetry.
+[[nodiscard]] const char* rtgiCutoutTraversalModeStableId(RtgiCutoutTraversalMode mode);
 
 /// Validates cross-option requirements for benchmark and validation modes.
 /// @param options Complete launch configuration after command-line parsing.
