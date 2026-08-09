@@ -117,6 +117,16 @@ public:
     /// @return Live handle, or an invalid handle when the complete description is rejected.
     virtual RhiAccelerationStructureHandle createAccelerationStructure(const RhiAccelerationStructureDesc& desc) = 0;
 
+    /// Creates an opacity micromap inside a caller-owned storage-buffer range.
+    virtual RhiMicromapHandle createMicromap(const RhiMicromapDesc& desc) = 0;
+
+    /// Returns the immutable creation description for a live opacity micromap.
+    [[nodiscard]] virtual bool getMicromapDesc(RhiMicromapHandle micromap, RhiMicromapDesc& desc) const = 0;
+
+    /// Queries exact storage and scratch requirements for an opacity micromap build.
+    [[nodiscard]] virtual bool queryMicromapBuildSizes(const RhiMicromapBuildInput& input,
+                                                       RhiMicromapBuildSizes& sizes) const = 0;
+
     /// Returns the immutable creation description for a live acceleration structure.
     /// @param accelerationStructure Handle owned by this device.
     /// @param desc Receives the exact description used to create the object.
@@ -203,6 +213,7 @@ public:
     virtual void destroyBindGroup(RhiBindGroupHandle handle) = 0;
     virtual void destroyQueryPool(RhiQueryPoolHandle handle) = 0;
     virtual void destroyAccelerationStructure(RhiAccelerationStructureHandle handle) = 0;
+    virtual void destroyMicromap(RhiMicromapHandle handle) = 0;
 
     [[nodiscard]] virtual std::unique_ptr<RhiCommandListPool>
     createCommandListPool(const RhiCommandListPoolDesc& desc) = 0;

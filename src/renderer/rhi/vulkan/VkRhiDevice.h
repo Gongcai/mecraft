@@ -44,6 +44,10 @@ public:
     RhiPipelineHandle createComputePipeline(const RhiComputePipelineDesc& desc) override;
     RhiBindGroupHandle createBindGroup(const RhiBindGroupDesc& desc) override;
     RhiAccelerationStructureHandle createAccelerationStructure(const RhiAccelerationStructureDesc& desc) override;
+    RhiMicromapHandle createMicromap(const RhiMicromapDesc& desc) override;
+    [[nodiscard]] bool getMicromapDesc(RhiMicromapHandle micromap, RhiMicromapDesc& desc) const override;
+    [[nodiscard]] bool queryMicromapBuildSizes(const RhiMicromapBuildInput& input,
+                                               RhiMicromapBuildSizes& sizes) const override;
     [[nodiscard]] bool getAccelerationStructureDesc(RhiAccelerationStructureHandle accelerationStructure,
                                                     RhiAccelerationStructureDesc& desc) const override;
     [[nodiscard]] bool queryAccelerationStructureBuildSizes(const RhiAccelerationStructureBuildInput& input,
@@ -84,6 +88,7 @@ public:
     void destroyBindGroup(RhiBindGroupHandle handle) override;
     void destroyQueryPool(RhiQueryPoolHandle handle) override;
     void destroyAccelerationStructure(RhiAccelerationStructureHandle handle) override;
+    void destroyMicromap(RhiMicromapHandle handle) override;
 
     [[nodiscard]] std::unique_ptr<RhiCommandListPool>
     createCommandListPool(const RhiCommandListPoolDesc& desc) override;

@@ -66,6 +66,9 @@ public:
     /// @return True when every build was accepted and recorded.
     virtual bool buildAccelerationStructures(const RhiAccelerationStructureBuildDesc* builds, uint32_t buildCount) = 0;
 
+    /// Atomically records one or more opacity micromap build operations.
+    virtual bool buildMicromaps(const RhiMicromapBuildDesc* builds, uint32_t buildCount) = 0;
+
     /// Records a clone or compact copy between compatible acceleration structures.
     virtual bool copyAccelerationStructure(const RhiAccelerationStructureCopyDesc& copy) = 0;
 

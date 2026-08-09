@@ -316,6 +316,16 @@ enum class RhiAccelerationStructureBuildMode : uint8_t { Build, Update };
 
 enum class RhiAccelerationStructureCopyMode : uint8_t { Clone, Compact };
 
+enum class RhiOpacityMicromapFormat : uint8_t { TwoState = 0u, FourState = 1u };
+
+enum class RhiMicromapBuildFlag : uint32_t {
+    PreferFastTrace = 1u << 0u,
+    PreferFastBuild = 1u << 1u,
+    AllowCompaction = 1u << 2u
+};
+
+using RhiMicromapBuildFlags = uint32_t;
+
 enum class RhiAccelerationStructureBuildFlag : uint32_t {
     AllowUpdate = 1u << 0u,
     AllowCompaction = 1u << 1u,
@@ -377,6 +387,10 @@ struct RhiRect2D {
 
 [[nodiscard]] constexpr RhiAccelerationStructureGeometryFlags rhiFlag(RhiAccelerationStructureGeometryFlag flag) {
     return static_cast<RhiAccelerationStructureGeometryFlags>(flag);
+}
+
+[[nodiscard]] constexpr RhiMicromapBuildFlags rhiFlag(RhiMicromapBuildFlag flag) {
+    return static_cast<RhiMicromapBuildFlags>(flag);
 }
 
 [[nodiscard]] constexpr RhiAccelerationStructureInstanceFlags rhiFlag(RhiAccelerationStructureInstanceFlag flag) {

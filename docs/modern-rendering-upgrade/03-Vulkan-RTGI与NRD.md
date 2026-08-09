@@ -588,7 +588,8 @@ p95 为 13.990 ms。生产 `RtgiTracePass` Vulkan Smoke 也继续覆盖已知 Cu
 `VK_EXT_opacity_micromap` 已完成可选 RHI Capability 协商：只有扩展与 `micromap` feature 同时存在才会在
 逻辑设备启用并报告为可用，缺少任一条件时保持不可用且不会改变 Candidate Loop。下一步实现 Micromap 资产与
 生命周期契约已经落地，资产现在校验 Alpha/Profile 身份、每个 BLAS primitive 的 subdivision/state，并严格
-执行 Empty→CpuReady→GpuBuildPending→Resident→Retired 状态迁移。下一步实现 GPU 资源与 BLAS 几何关联，再在同一 V03 Camera Path、
+执行 Empty→CpuReady→GpuBuildPending→Resident→Retired 状态迁移。RHI/Vulkan 已接入 Micromap Storage/Build Input Buffer、独立同步状态、
+强类型 Handle、Build Size、GPU Build、提交引用和延迟销毁。下一步实现 BLAS 几何关联，再在同一 V03 Camera Path、
 相同 Alpha 纹理和 Profile 下比较 Candidate Loop 与 OMM 的 `RTGI.Trace` p95、Counter 与显存；当前零值
 参考镜头、Cutout bucket 数和单独的确认率都不能替代这项 A/B 证据。
 

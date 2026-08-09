@@ -27,6 +27,7 @@ struct VkRhiCommandResourceReferences {
     std::vector<RhiBindGroupHandle> bindGroups;
     std::vector<RhiQueryPoolHandle> queryPools;
     std::vector<RhiAccelerationStructureHandle> accelerationStructures;
+    std::vector<RhiMicromapHandle> micromaps;
 
     void reference(const RhiBufferHandle handle) { addUnique(buffers, handle); }
     void reference(const RhiTextureHandle handle) { addUnique(textures, handle); }
@@ -38,6 +39,7 @@ struct VkRhiCommandResourceReferences {
     void reference(const RhiBindGroupHandle handle) { addUnique(bindGroups, handle); }
     void reference(const RhiQueryPoolHandle handle) { addUnique(queryPools, handle); }
     void reference(const RhiAccelerationStructureHandle handle) { addUnique(accelerationStructures, handle); }
+    void reference(const RhiMicromapHandle handle) { addUnique(micromaps, handle); }
 
     void clear() {
         buffers.clear();
@@ -50,12 +52,13 @@ struct VkRhiCommandResourceReferences {
         bindGroups.clear();
         queryPools.clear();
         accelerationStructures.clear();
+        micromaps.clear();
     }
 
     [[nodiscard]] bool empty() const {
         return buffers.empty() && textures.empty() && textureViews.empty() && samplers.empty() &&
                bindGroupLayouts.empty() && pipelineLayouts.empty() && pipelines.empty() && bindGroups.empty() &&
-               queryPools.empty() && accelerationStructures.empty();
+               queryPools.empty() && accelerationStructures.empty() && micromaps.empty();
     }
 
 private:
@@ -143,6 +146,12 @@ struct VkRhiDeviceData {
         std::string debugName;
         VkRhiResourceLifetime lifetime{};
     };
+    struct Micromap {
+        VkMicromapEXT micromap = VK_NULL_HANDLE;
+        RhiMicromapDesc desc{};
+        std::string debugName;
+        VkRhiResourceLifetime lifetime{};
+    };
     struct FrameContext {
         VkSemaphore imageAvailable = VK_NULL_HANDLE;
         VkFence fence = VK_NULL_HANDLE;
@@ -227,6 +236,10 @@ struct VkRhiDeviceData {
     PFN_vkCmdBuildAccelerationStructuresKHR cmdBuildAccelerationStructures = nullptr;
     PFN_vkCmdCopyAccelerationStructureKHR cmdCopyAccelerationStructure = nullptr;
     PFN_vkCmdWriteAccelerationStructuresPropertiesKHR cmdWriteAccelerationStructuresProperties = nullptr;
+    PFN_vkCreateMicromapEXT createMicromap = nullptr;
+    PFN_vkDestroyMicromapEXT destroyMicromap = nullptr;
+    PFN_vkGetMicromapBuildSizesEXT getMicromapBuildSizes = nullptr;
+    PFN_vkCmdBuildMicromapsEXT cmdBuildMicromaps = nullptr;
     VkSwapchainKHR swapchain = VK_NULL_HANDLE;
     VkFormat swapchainFormat = VK_FORMAT_UNDEFINED;
     VkExtent2D swapchainExtent{};
@@ -262,6 +275,7 @@ struct VkRhiDeviceData {
     RhiHandleAllocator<RhiBindGroupHandle> bindGroupHandles;
     RhiHandleAllocator<RhiQueryPoolHandle> queryPoolHandles;
     RhiHandleAllocator<RhiAccelerationStructureHandle> accelerationStructureHandles;
+    RhiHandleAllocator<RhiMicromapHandle> micromapHandles;
     RhiHandleAllocator<RhiMemoryHandle> textureMemoryHandles;
     std::unordered_map<uint64_t, Buffer> buffers;
     std::unordered_map<uint64_t, Texture> textures;
@@ -274,6 +288,7 @@ struct VkRhiDeviceData {
     std::unordered_map<uint64_t, BindGroup> bindGroups;
     std::unordered_map<uint64_t, QueryPool> queryPools;
     std::unordered_map<uint64_t, AccelerationStructure> accelerationStructures;
+    std::unordered_map<uint64_t, Micromap> micromaps;
     std::unordered_map<uint64_t, TextureMemory> textureMemories;
     std::deque<DeferredBuffer> deferredBuffers;
     std::deque<DeferredImage> deferredImages;

@@ -425,6 +425,46 @@ struct RhiAccelerationStructureBarrier {
     RhiResourceState newState = RhiResourceState::AccelerationStructureRead;
 };
 
+/// Describes one homogeneous set of opacity micromap triangles.
+struct RhiOpacityMicromapUsageDesc {
+    uint32_t count = 0u;
+    uint32_t subdivisionLevel = 0u;
+    RhiOpacityMicromapFormat format = RhiOpacityMicromapFormat::TwoState;
+};
+
+/// Places an opacity micromap inside a caller-owned storage buffer.
+struct RhiMicromapDesc {
+    const char* debugName = nullptr;
+    RhiBufferHandle buffer;
+    uint64_t offset = 0u;
+    uint64_t size = 0u;
+};
+
+/// Defines immutable buffers and usage groups consumed by a micromap build.
+struct RhiMicromapBuildInput {
+    RhiMicromapBuildFlags flags = 0u;
+    const RhiOpacityMicromapUsageDesc* usages = nullptr;
+    uint32_t usageCount = 0u;
+    RhiBufferHandle opacityDataBuffer;
+    uint64_t opacityDataOffset = 0u;
+    RhiBufferHandle triangleBuffer;
+    uint64_t triangleOffset = 0u;
+    uint64_t triangleStride = 0u;
+};
+
+struct RhiMicromapBuildSizes {
+    uint64_t micromapSize = 0u;
+    uint64_t buildScratchSize = 0u;
+};
+
+/// Records one opacity micromap build into a caller-owned destination and scratch buffer.
+struct RhiMicromapBuildDesc {
+    RhiMicromapBuildInput input;
+    RhiMicromapHandle destination;
+    RhiBufferHandle scratchBuffer;
+    uint64_t scratchOffset = 0u;
+};
+
 /// Matches the 64-byte GPU layout consumed by top-level acceleration-structure builds.
 struct RhiAccelerationStructureInstance {
     std::array<float, 12u> transform{1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f};

@@ -55,6 +55,7 @@ public:
     void resetQueryPool(RhiQueryPoolHandle pool, uint32_t firstQuery, uint32_t queryCount) override;
     void writeTimestamp(RhiQueryPoolHandle pool, uint32_t queryIndex) override;
     bool buildAccelerationStructures(const RhiAccelerationStructureBuildDesc* builds, uint32_t buildCount) override;
+    bool buildMicromaps(const RhiMicromapBuildDesc* builds, uint32_t buildCount) override;
     bool copyAccelerationStructure(const RhiAccelerationStructureCopyDesc& copy) override;
     bool writeAccelerationStructureProperties(const RhiAccelerationStructurePropertyQueryDesc& query) override;
 
@@ -226,6 +227,10 @@ public:
     RhiPipelineHandle createComputePipeline(const RhiComputePipelineDesc& desc) override;
     RhiBindGroupHandle createBindGroup(const RhiBindGroupDesc& desc) override;
     RhiAccelerationStructureHandle createAccelerationStructure(const RhiAccelerationStructureDesc& desc) override;
+    RhiMicromapHandle createMicromap(const RhiMicromapDesc& desc) override;
+    [[nodiscard]] bool getMicromapDesc(RhiMicromapHandle micromap, RhiMicromapDesc& desc) const override;
+    [[nodiscard]] bool queryMicromapBuildSizes(const RhiMicromapBuildInput& input,
+                                               RhiMicromapBuildSizes& sizes) const override;
     [[nodiscard]] bool getAccelerationStructureDesc(RhiAccelerationStructureHandle accelerationStructure,
                                                     RhiAccelerationStructureDesc& desc) const override;
     [[nodiscard]] bool queryAccelerationStructureBuildSizes(const RhiAccelerationStructureBuildInput& input,
@@ -266,6 +271,7 @@ public:
     void destroyBindGroup(RhiBindGroupHandle handle) override;
     void destroyQueryPool(RhiQueryPoolHandle handle) override;
     void destroyAccelerationStructure(RhiAccelerationStructureHandle handle) override;
+    void destroyMicromap(RhiMicromapHandle handle) override;
 
     [[nodiscard]] std::unique_ptr<RhiCommandListPool>
     createCommandListPool(const RhiCommandListPoolDesc& desc) override;

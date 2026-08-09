@@ -570,6 +570,11 @@ struct NativeAccelerationStructureBuildInput {
     std::vector<uint32_t> primitiveCounts;
 };
 
+struct NativeMicromapBuildInput {
+    std::vector<VkMicromapUsageEXT> usages;
+    VkMicromapBuildInfoEXT info{VK_STRUCTURE_TYPE_MICROMAP_BUILD_INFO_EXT};
+};
+
 [[nodiscard]] bool rangeFits(const uint64_t totalSize, const uint64_t offset, const uint64_t size) {
     return size != 0u && offset <= totalSize && size <= totalSize - offset;
 }
@@ -844,6 +849,97 @@ struct NativeAccelerationStructureBuildInput {
     return true;
 }
 
+[[nodiscard]] VkOpacityMicromapFormatEXT toVkOpacityMicromapFormat(const RhiOpacityMicromapFormat format) {
+    switch (format) {
+    case RhiOpacityMicromapFormat::TwoState: return VK_OPACITY_MICROMAP_FORMAT_2_STATE_EXT;
+    case RhiOpacityMicromapFormat::FourState: return VK_OPACITY_MICROMAP_FORMAT_4_STATE_EXT;
+    }
+    return VK_OPACITY_MICROMAP_FORMAT_2_STATE_EXT;
+}
+
+[[nodiscard]] VkBuildMicromapFlagsEXT toVkMicromapBuildFlags(const RhiMicromapBuildFlags flags) {
+    VkBuildMicromapFlagsEXT result = 0u;
+    if ((flags & rhiFlag(RhiMicromapBuildFlag::PreferFastTrace)) != 0u)
+        result |= VK_BUILD_MICROMAP_PREFER_FAST_TRACE_BIT_EXT;
+    if ((flags & rhiFlag(RhiMicromapBuildFlag::PreferFastBuild)) != 0u)
+        result |= VK_BUILD_MICROMAP_PREFER_FAST_BUILD_BIT_EXT;
+    if ((flags & rhiFlag(RhiMicromapBuildFlag::AllowCompaction)) != 0u)
+        result |= VK_BUILD_MICROMAP_ALLOW_COMPACTION_BIT_EXT;
+    return result;
+}
+
+[[nodiscard]] bool fillNativeMicromapBuildInput(const VkRhiDeviceData& data, const RhiCapabilities& capabilities,
+                                                const RhiMicromapBuildInput& input, NativeMicromapBuildInput& native,
+                                                VkRhiCommandResourceReferences* references) {
+    constexpr RhiMicromapBuildFlags kKnownFlags = rhiFlag(RhiMicromapBuildFlag::PreferFastTrace) |
+                                                  rhiFlag(RhiMicromapBuildFlag::PreferFastBuild) |
+                                                  rhiFlag(RhiMicromapBuildFlag::AllowCompaction);
+    const bool conflictingPreferences = (input.flags & rhiFlag(RhiMicromapBuildFlag::PreferFastTrace)) != 0u &&
+                                        (input.flags & rhiFlag(RhiMicromapBuildFlag::PreferFastBuild)) != 0u;
+    if (!capabilities.opacityMicromap || input.usages == nullptr || input.usageCount == 0u ||
+        (input.flags & ~kKnownFlags) != 0u || conflictingPreferences || input.opacityDataOffset % 256u != 0u ||
+        input.triangleOffset % 256u != 0u || input.triangleStride < sizeof(VkMicromapTriangleEXT) ||
+        input.triangleStride % sizeof(uint32_t) != 0u) {
+        return false;
+    }
+
+    const auto* opacityData = findRecord(data.buffers, input.opacityDataBuffer);
+    const auto* triangles = findRecord(data.buffers, input.triangleBuffer);
+    constexpr RhiBufferUsageFlags kBuildInputUsages =
+        rhiFlag(RhiBufferUsage::DeviceAddress) | rhiFlag(RhiBufferUsage::MicromapBuildInput);
+    if (opacityData == nullptr || triangles == nullptr || !bufferHasUsages(*opacityData, kBuildInputUsages) ||
+        !bufferHasUsages(*triangles, kBuildInputUsages) || input.opacityDataOffset >= opacityData->desc.size ||
+        input.triangleOffset >= triangles->desc.size) {
+        return false;
+    }
+
+    native.usages.resize(input.usageCount);
+    uint64_t triangleCount = 0u;
+    for (uint32_t index = 0u; index < input.usageCount; ++index) {
+        const RhiOpacityMicromapUsageDesc& usage = input.usages[index];
+        const bool formatValid =
+            usage.format == RhiOpacityMicromapFormat::TwoState || usage.format == RhiOpacityMicromapFormat::FourState;
+        const uint32_t maximumLevel = usage.format == RhiOpacityMicromapFormat::TwoState
+                                          ? capabilities.maxOpacityMicromapTwoStateSubdivisionLevel
+                                          : capabilities.maxOpacityMicromapFourStateSubdivisionLevel;
+        if (!formatValid || usage.count == 0u || usage.subdivisionLevel > maximumLevel ||
+            triangleCount > std::numeric_limits<uint32_t>::max() - usage.count) {
+            return false;
+        }
+        triangleCount += usage.count;
+        native.usages[index] = {usage.count, usage.subdivisionLevel,
+                                static_cast<uint32_t>(toVkOpacityMicromapFormat(usage.format))};
+    }
+    uint64_t triangleBytes = 0u;
+    if (!checkedMultiply(triangleCount - 1u, input.triangleStride, triangleBytes) ||
+        !checkedAdd(triangleBytes, sizeof(VkMicromapTriangleEXT), triangleBytes) ||
+        !rangeFits(triangles->desc.size, input.triangleOffset, triangleBytes)) {
+        return false;
+    }
+
+    VkDeviceAddress opacityAddress = 0u;
+    VkDeviceAddress triangleAddress = 0u;
+    if (!deviceAddressAtOffset(nativeBufferDeviceAddress(data, *opacityData), input.opacityDataOffset,
+                               opacityAddress) ||
+        !deviceAddressAtOffset(nativeBufferDeviceAddress(data, *triangles), input.triangleOffset, triangleAddress) ||
+        opacityAddress % 256u != 0u || triangleAddress % 256u != 0u) {
+        return false;
+    }
+    native.info.type = VK_MICROMAP_TYPE_OPACITY_MICROMAP_EXT;
+    native.info.flags = toVkMicromapBuildFlags(input.flags);
+    native.info.mode = VK_BUILD_MICROMAP_MODE_BUILD_EXT;
+    native.info.usageCountsCount = input.usageCount;
+    native.info.pUsageCounts = native.usages.data();
+    native.info.data.deviceAddress = opacityAddress;
+    native.info.triangleArray.deviceAddress = triangleAddress;
+    native.info.triangleArrayStride = input.triangleStride;
+    if (references != nullptr) {
+        references->reference(input.opacityDataBuffer);
+        references->reference(input.triangleBuffer);
+    }
+    return true;
+}
+
 [[nodiscard]] bool resolveResourceReferences(VkRhiDeviceData& data, VkRhiCommandResourceReferences& references) {
     for (size_t index = 0u; index < references.pipelines.size(); ++index) {
         const auto* pipeline = findRecord(data.pipelines, references.pipelines[index]);
@@ -880,6 +976,12 @@ struct NativeAccelerationStructureBuildInput {
             return false;
         references.reference(accelerationStructure->desc.buffer);
     }
+    for (size_t index = 0u; index < references.micromaps.size(); ++index) {
+        const auto* micromap = findRecord(data.micromaps, references.micromaps[index]);
+        if (micromap == nullptr)
+            return false;
+        references.reference(micromap->desc.buffer);
+    }
     for (size_t index = 0u; index < references.textureViews.size(); ++index) {
         const auto* view = findRecord(data.textureViews, references.textureViews[index]);
         if (view == nullptr)
@@ -896,7 +998,8 @@ struct NativeAccelerationStructureBuildInput {
            allExist(references.pipelineLayouts, data.pipelineLayouts) &&
            allExist(references.pipelines, data.pipelines) && allExist(references.bindGroups, data.bindGroups) &&
            allExist(references.queryPools, data.queryPools) &&
-           allExist(references.accelerationStructures, data.accelerationStructures);
+           allExist(references.accelerationStructures, data.accelerationStructures) &&
+           allExist(references.micromaps, data.micromaps);
 }
 
 [[nodiscard]] VkRect2D toVkClippedScissor(const RhiRect2D& rect, const uint32_t targetWidth,
@@ -928,6 +1031,7 @@ void markResourceReferencesUsed(VkRhiDeviceData& data, const VkRhiCommandResourc
     markAll(references.bindGroups, data.bindGroups);
     markAll(references.queryPools, data.queryPools);
     markAll(references.accelerationStructures, data.accelerationStructures);
+    markAll(references.micromaps, data.micromaps);
 }
 
 void destroyDeferredObject(VkRhiDeviceData& data, const VkRhiDeviceData::DeferredObject& item) {
@@ -961,6 +1065,9 @@ void destroyDeferredObject(VkRhiDeviceData& data, const VkRhiDeviceData::Deferre
     case VK_OBJECT_TYPE_ACCELERATION_STRUCTURE_KHR:
         data.destroyAccelerationStructure(data.device, reinterpret_cast<VkAccelerationStructureKHR>(item.object),
                                           nullptr);
+        break;
+    case VK_OBJECT_TYPE_MICROMAP_EXT:
+        data.destroyMicromap(data.device, reinterpret_cast<VkMicromapEXT>(item.object), nullptr);
         break;
     default: break;
     }
@@ -1891,6 +1998,22 @@ bool VkRhiDevice::init(const RhiDeviceDesc& desc) {
     m_data->cmdWriteAccelerationStructuresProperties =
         reinterpret_cast<PFN_vkCmdWriteAccelerationStructuresPropertiesKHR>(
             vkGetDeviceProcAddr(m_data->device, "vkCmdWriteAccelerationStructuresPropertiesKHR"));
+    if (selectedOpacityMicromap) {
+        m_data->createMicromap =
+            reinterpret_cast<PFN_vkCreateMicromapEXT>(vkGetDeviceProcAddr(m_data->device, "vkCreateMicromapEXT"));
+        m_data->destroyMicromap =
+            reinterpret_cast<PFN_vkDestroyMicromapEXT>(vkGetDeviceProcAddr(m_data->device, "vkDestroyMicromapEXT"));
+        m_data->getMicromapBuildSizes = reinterpret_cast<PFN_vkGetMicromapBuildSizesEXT>(
+            vkGetDeviceProcAddr(m_data->device, "vkGetMicromapBuildSizesEXT"));
+        m_data->cmdBuildMicromaps =
+            reinterpret_cast<PFN_vkCmdBuildMicromapsEXT>(vkGetDeviceProcAddr(m_data->device, "vkCmdBuildMicromapsEXT"));
+        if (m_data->createMicromap == nullptr || m_data->destroyMicromap == nullptr ||
+            m_data->getMicromapBuildSizes == nullptr || m_data->cmdBuildMicromaps == nullptr) {
+            logRhiError("required opacity-micromap entry points are unavailable");
+            shutdown();
+            return false;
+        }
+    }
     if (m_data->createAccelerationStructure == nullptr || m_data->destroyAccelerationStructure == nullptr ||
         m_data->getAccelerationStructureBuildSizes == nullptr ||
         m_data->getAccelerationStructureDeviceAddress == nullptr || m_data->cmdBuildAccelerationStructures == nullptr ||
@@ -2132,6 +2255,9 @@ void VkRhiDevice::shutdown() {
         for (auto& [_, record] : m_data->accelerationStructures) {
             m_data->destroyAccelerationStructure(m_data->device, record.accelerationStructure, nullptr);
         }
+        for (auto& [_, record] : m_data->micromaps) {
+            m_data->destroyMicromap(m_data->device, record.micromap, nullptr);
+        }
         for (const auto& record : m_data->deferredObjects) {
             destroyDeferredObject(*m_data, record);
         }
@@ -2244,7 +2370,7 @@ RhiMemoryStats VkRhiDevice::memoryStats() const {
         }
     }
     if (!stats.add(RhiMemoryCategory::AccelerationStructure, 0u, 0u,
-                   m_data->accelerationStructureHandles.liveCount())) {
+                   m_data->accelerationStructureHandles.liveCount() + m_data->micromapHandles.liveCount())) {
         return {};
     }
     return stats;
@@ -2303,6 +2429,8 @@ RhiBufferHandle VkRhiDevice::createBuffer(const RhiBufferDesc& desc, const void*
                                                                        : VMA_MEMORY_USAGE_AUTO_PREFER_HOST;
     if (accelerationStructureBuildScratch) {
         allocationInfo.minAlignment = m_capabilities.minAccelerationStructureScratchOffsetAlignment;
+    } else if (micromapBuildInput || micromapBuildScratch) {
+        allocationInfo.minAlignment = 256u;
     }
     if (desc.memoryUsage != RhiMemoryUsage::GpuOnly) {
         allocationInfo.flags =
@@ -2674,15 +2802,22 @@ RhiAccelerationStructureHandle VkRhiDevice::createAccelerationStructure(const Rh
             return existing.buffer.index == desc.buffer.index && existing.buffer.generation == desc.buffer.generation &&
                    rangesOverlap(desc.offset, desc.size, existing.offset, existing.size);
         });
+    const bool overlapsMicromap =
+        std::any_of(m_data->micromaps.begin(), m_data->micromaps.end(), [&](const auto& entry) {
+            const RhiMicromapDesc& existing = entry.second.desc;
+            return existing.buffer.index == desc.buffer.index && existing.buffer.generation == desc.buffer.generation &&
+                   rangesOverlap(desc.offset, desc.size, existing.offset, existing.size);
+        });
     const bool overlapsDeferred =
         std::any_of(m_data->deferredObjects.begin(), m_data->deferredObjects.end(), [&](const auto& item) {
-            return item.type == VK_OBJECT_TYPE_ACCELERATION_STRUCTURE_KHR &&
+            return (item.type == VK_OBJECT_TYPE_ACCELERATION_STRUCTURE_KHR ||
+                    item.type == VK_OBJECT_TYPE_MICROMAP_EXT) &&
                    item.accelerationStructureBuffer.index == desc.buffer.index &&
                    item.accelerationStructureBuffer.generation == desc.buffer.generation &&
                    rangesOverlap(desc.offset, desc.size, item.accelerationStructureOffset,
                                  item.accelerationStructureSize);
         });
-    if (overlaps || overlapsDeferred) {
+    if (overlaps || overlapsMicromap || overlapsDeferred) {
         logRhiError("createAccelerationStructure received an overlapping backing-buffer range");
         return {};
     }
@@ -2722,6 +2857,99 @@ bool VkRhiDevice::getAccelerationStructureDesc(const RhiAccelerationStructureHan
     }
     desc = record->desc;
     desc.debugName = record->debugName.c_str();
+    return true;
+}
+
+RhiMicromapHandle VkRhiDevice::createMicromap(const RhiMicromapDesc& desc) {
+    if (!m_initialized || m_data == nullptr || !m_capabilities.opacityMicromap || desc.size == 0u ||
+        desc.offset % 256u != 0u) {
+        return {};
+    }
+    const std::unique_lock<std::shared_mutex> registryLock(m_data->resourceRegistryMutex);
+    const auto* buffer = findRecord(m_data->buffers, desc.buffer);
+    constexpr RhiBufferUsageFlags kRequiredUsages =
+        rhiFlag(RhiBufferUsage::DeviceAddress) | rhiFlag(RhiBufferUsage::MicromapStorage);
+    if (buffer == nullptr || !bufferHasUsages(*buffer, kRequiredUsages) ||
+        buffer->desc.memoryCategory != RhiMemoryCategory::AccelerationStructure ||
+        !rangeFits(buffer->desc.size, desc.offset, desc.size)) {
+        return {};
+    }
+    const bool overlaps = std::any_of(m_data->micromaps.begin(), m_data->micromaps.end(), [&](const auto& entry) {
+        const RhiMicromapDesc& existing = entry.second.desc;
+        return existing.buffer.index == desc.buffer.index && existing.buffer.generation == desc.buffer.generation &&
+               rangesOverlap(desc.offset, desc.size, existing.offset, existing.size);
+    });
+    const bool overlapsAccelerationStructure = std::any_of(
+        m_data->accelerationStructures.begin(), m_data->accelerationStructures.end(), [&](const auto& entry) {
+            const RhiAccelerationStructureDesc& existing = entry.second.desc;
+            return existing.buffer.index == desc.buffer.index && existing.buffer.generation == desc.buffer.generation &&
+                   rangesOverlap(desc.offset, desc.size, existing.offset, existing.size);
+        });
+    const bool overlapsDeferred =
+        std::any_of(m_data->deferredObjects.begin(), m_data->deferredObjects.end(), [&](const auto& item) {
+            return (item.type == VK_OBJECT_TYPE_ACCELERATION_STRUCTURE_KHR ||
+                    item.type == VK_OBJECT_TYPE_MICROMAP_EXT) &&
+                   item.accelerationStructureBuffer.index == desc.buffer.index &&
+                   item.accelerationStructureBuffer.generation == desc.buffer.generation &&
+                   rangesOverlap(desc.offset, desc.size, item.accelerationStructureOffset,
+                                 item.accelerationStructureSize);
+        });
+    if (overlaps || overlapsAccelerationStructure || overlapsDeferred) {
+        logRhiError("createMicromap received an overlapping backing-buffer range");
+        return {};
+    }
+
+    VkMicromapCreateInfoEXT createInfo{VK_STRUCTURE_TYPE_MICROMAP_CREATE_INFO_EXT};
+    createInfo.buffer = buffer->buffer;
+    createInfo.offset = desc.offset;
+    createInfo.size = desc.size;
+    createInfo.type = VK_MICROMAP_TYPE_OPACITY_MICROMAP_EXT;
+    VkMicromapEXT micromap = VK_NULL_HANDLE;
+    if (!vkSucceeded(m_data->createMicromap(m_data->device, &createInfo, nullptr, &micromap), "vkCreateMicromapEXT")) {
+        return {};
+    }
+
+    const RhiMicromapHandle handle = m_data->micromapHandles.allocate();
+    VkRhiDeviceData::Micromap record;
+    record.micromap = micromap;
+    record.desc = desc;
+    record.debugName = desc.debugName != nullptr ? desc.debugName : "";
+    const auto insertion = m_data->micromaps.emplace(handleKey(handle), std::move(record));
+    insertion.first->second.desc.debugName = insertion.first->second.debugName.c_str();
+    nameObject(*m_data, VK_OBJECT_TYPE_MICROMAP_EXT, reinterpret_cast<uint64_t>(micromap), desc.debugName);
+    return handle;
+}
+
+bool VkRhiDevice::getMicromapDesc(const RhiMicromapHandle micromap, RhiMicromapDesc& desc) const {
+    if (!m_initialized || m_data == nullptr) {
+        return false;
+    }
+    const std::shared_lock<std::shared_mutex> registryLock(m_data->resourceRegistryMutex);
+    const auto* record = findRecord(m_data->micromaps, micromap);
+    if (record == nullptr) {
+        return false;
+    }
+    desc = record->desc;
+    desc.debugName = record->debugName.c_str();
+    return true;
+}
+
+bool VkRhiDevice::queryMicromapBuildSizes(const RhiMicromapBuildInput& input, RhiMicromapBuildSizes& sizes) const {
+    if (!m_initialized || m_data == nullptr || m_data->getMicromapBuildSizes == nullptr) {
+        return false;
+    }
+    const std::shared_lock<std::shared_mutex> registryLock(m_data->resourceRegistryMutex);
+    NativeMicromapBuildInput native;
+    if (!fillNativeMicromapBuildInput(*m_data, m_capabilities, input, native, nullptr)) {
+        return false;
+    }
+    VkMicromapBuildSizesInfoEXT nativeSizes{VK_STRUCTURE_TYPE_MICROMAP_BUILD_SIZES_INFO_EXT};
+    m_data->getMicromapBuildSizes(m_data->device, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &native.info,
+                                  &nativeSizes);
+    if (nativeSizes.micromapSize == 0u || nativeSizes.buildScratchSize == 0u) {
+        return false;
+    }
+    sizes = {nativeSizes.micromapSize, nativeSizes.buildScratchSize};
     return true;
 }
 
@@ -4067,7 +4295,13 @@ void VkRhiDevice::destroyBuffer(const RhiBufferHandle handle) {
                 return entry.second.desc.buffer.index == handle.index &&
                        entry.second.desc.buffer.generation == handle.generation;
             });
-        if (it == m_data->buffers.end() || hostsAccelerationStructure || !m_data->bufferHandles.release(handle))
+        const bool hostsMicromap =
+            std::any_of(m_data->micromaps.begin(), m_data->micromaps.end(), [handle](const auto& entry) {
+                return entry.second.desc.buffer.index == handle.index &&
+                       entry.second.desc.buffer.generation == handle.generation;
+            });
+        if (it == m_data->buffers.end() || hostsAccelerationStructure || hostsMicromap ||
+            !m_data->bufferHandles.release(handle))
             return;
         enqueueDeferred(m_data->deferredBuffers,
                         VkRhiDeviceData::DeferredBuffer{it->second.lifetime.lastUseSequence, it->second.buffer,
@@ -4240,6 +4474,25 @@ void VkRhiDevice::destroyAccelerationStructure(const RhiAccelerationStructureHan
                             reinterpret_cast<uint64_t>(it->second.accelerationStructure), it->second.desc.buffer,
                             it->second.desc.offset, it->second.desc.size});
         m_data->accelerationStructures.erase(it);
+    }
+    reclaimCompletedWork();
+}
+
+void VkRhiDevice::destroyMicromap(const RhiMicromapHandle handle) {
+    if (m_data == nullptr)
+        return;
+    {
+        const std::unique_lock<std::shared_mutex> registryLock(m_data->resourceRegistryMutex);
+        const auto it = m_data->micromaps.find(handleKey(handle));
+        if (it == m_data->micromaps.end() || !m_data->micromapHandles.release(handle)) {
+            return;
+        }
+        enqueueDeferred(
+            m_data->deferredObjects,
+            VkRhiDeviceData::DeferredObject{it->second.lifetime.lastUseSequence, VK_OBJECT_TYPE_MICROMAP_EXT,
+                                            reinterpret_cast<uint64_t>(it->second.micromap), it->second.desc.buffer,
+                                            it->second.desc.offset, it->second.desc.size});
+        m_data->micromaps.erase(it);
     }
     reclaimCompletedWork();
 }
@@ -5499,7 +5752,14 @@ bool VkRhiCommandList::buildAccelerationStructures(const RhiAccelerationStructur
                                    rangesOverlap(accelerationStructure.offset, accelerationStructure.size,
                                                  build.scratchOffset, scratchSize);
                         });
-        if (overlapsAccelerationStructure) {
+        const bool overlapsMicromap =
+            std::any_of(m_device->m_data->micromaps.begin(), m_device->m_data->micromaps.end(), [&](const auto& entry) {
+                const RhiMicromapDesc& micromap = entry.second.desc;
+                return micromap.buffer.index == build.scratchBuffer.index &&
+                       micromap.buffer.generation == build.scratchBuffer.generation &&
+                       rangesOverlap(micromap.offset, micromap.size, build.scratchOffset, scratchSize);
+            });
+        if (overlapsAccelerationStructure || overlapsMicromap) {
             return false;
         }
         scratchRanges.push_back({build.scratchBuffer, build.scratchOffset, scratchSize});
@@ -5530,6 +5790,104 @@ bool VkRhiCommandList::buildAccelerationStructures(const RhiAccelerationStructur
     mergeHandles(stagedReferences.accelerationStructures, m_data->resourceReferences);
     m_device->m_data->cmdBuildAccelerationStructures(m_data->commandBuffer, buildCount, nativeBuilds.data(),
                                                      nativeRangePointers.data());
+    return true;
+}
+
+bool VkRhiCommandList::buildMicromaps(const RhiMicromapBuildDesc* builds, const uint32_t buildCount) {
+    if (m_data->state != RhiCommandListState::Recording || m_data->rendering ||
+        m_data->type == RhiCommandListType::Transfer || builds == nullptr || buildCount == 0u ||
+        m_device->m_data->cmdBuildMicromaps == nullptr) {
+        return false;
+    }
+    const std::shared_lock<std::shared_mutex> registryLock(m_device->m_data->resourceRegistryMutex);
+    std::vector<NativeMicromapBuildInput> nativeInputs(buildCount);
+    std::vector<uint64_t> destinationKeys;
+    struct ScratchRange {
+        RhiBufferHandle buffer;
+        uint64_t offset = 0u;
+        uint64_t size = 0u;
+    };
+    std::vector<ScratchRange> scratchRanges;
+    destinationKeys.reserve(buildCount);
+    scratchRanges.reserve(buildCount);
+    VkRhiCommandResourceReferences stagedReferences;
+
+    for (uint32_t buildIndex = 0u; buildIndex < buildCount; ++buildIndex) {
+        const RhiMicromapBuildDesc& build = builds[buildIndex];
+        if (!fillNativeMicromapBuildInput(*m_device->m_data, m_device->m_capabilities, build.input,
+                                          nativeInputs[buildIndex], &stagedReferences)) {
+            return false;
+        }
+        const auto* destination = findRecord(m_device->m_data->micromaps, build.destination);
+        const auto* scratch = findRecord(m_device->m_data->buffers, build.scratchBuffer);
+        constexpr RhiBufferUsageFlags kScratchUsages =
+            rhiFlag(RhiBufferUsage::Storage) | rhiFlag(RhiBufferUsage::DeviceAddress);
+        if (destination == nullptr || scratch == nullptr || !bufferHasUsages(*scratch, kScratchUsages) ||
+            build.scratchOffset % 256u != 0u) {
+            return false;
+        }
+        const uint64_t destinationKey = handleKey(build.destination);
+        if (std::find(destinationKeys.begin(), destinationKeys.end(), destinationKey) != destinationKeys.end()) {
+            return false;
+        }
+        destinationKeys.push_back(destinationKey);
+
+        VkMicromapBuildSizesInfoEXT nativeSizes{VK_STRUCTURE_TYPE_MICROMAP_BUILD_SIZES_INFO_EXT};
+        m_device->m_data->getMicromapBuildSizes(m_device->m_data->device,
+                                                VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR,
+                                                &nativeInputs[buildIndex].info, &nativeSizes);
+        const VkDeviceAddress scratchAddress = nativeBufferDeviceAddress(*m_device->m_data, *scratch);
+        if (nativeSizes.micromapSize == 0u || nativeSizes.buildScratchSize == 0u ||
+            destination->desc.size < nativeSizes.micromapSize ||
+            !rangeFits(scratch->desc.size, build.scratchOffset, nativeSizes.buildScratchSize) || scratchAddress == 0u ||
+            (scratchAddress + build.scratchOffset) % 256u != 0u) {
+            return false;
+        }
+        for (const ScratchRange& previous : scratchRanges) {
+            if (previous.buffer.index == build.scratchBuffer.index &&
+                previous.buffer.generation == build.scratchBuffer.generation &&
+                rangesOverlap(previous.offset, previous.size, build.scratchOffset, nativeSizes.buildScratchSize)) {
+                return false;
+            }
+        }
+        const bool overlapsMicromap =
+            std::any_of(m_device->m_data->micromaps.begin(), m_device->m_data->micromaps.end(), [&](const auto& entry) {
+                const RhiMicromapDesc& micromap = entry.second.desc;
+                return micromap.buffer.index == build.scratchBuffer.index &&
+                       micromap.buffer.generation == build.scratchBuffer.generation &&
+                       rangesOverlap(micromap.offset, micromap.size, build.scratchOffset, nativeSizes.buildScratchSize);
+            });
+        const bool overlapsAccelerationStructure =
+            std::any_of(m_device->m_data->accelerationStructures.begin(),
+                        m_device->m_data->accelerationStructures.end(), [&](const auto& entry) {
+                            const RhiAccelerationStructureDesc& accelerationStructure = entry.second.desc;
+                            return accelerationStructure.buffer.index == build.scratchBuffer.index &&
+                                   accelerationStructure.buffer.generation == build.scratchBuffer.generation &&
+                                   rangesOverlap(accelerationStructure.offset, accelerationStructure.size,
+                                                 build.scratchOffset, nativeSizes.buildScratchSize);
+                        });
+        if (overlapsMicromap || overlapsAccelerationStructure) {
+            return false;
+        }
+        scratchRanges.push_back({build.scratchBuffer, build.scratchOffset, nativeSizes.buildScratchSize});
+        nativeInputs[buildIndex].info.dstMicromap = destination->micromap;
+        nativeInputs[buildIndex].info.scratchData.deviceAddress = scratchAddress + build.scratchOffset;
+        stagedReferences.reference(build.destination);
+        stagedReferences.reference(build.scratchBuffer);
+    }
+
+    const auto mergeHandles = [](const auto& handles, auto& references) {
+        for (const auto handle : handles) {
+            references.reference(handle);
+        }
+    };
+    mergeHandles(stagedReferences.buffers, m_data->resourceReferences);
+    mergeHandles(stagedReferences.micromaps, m_data->resourceReferences);
+    std::vector<VkMicromapBuildInfoEXT> nativeBuilds(buildCount);
+    for (uint32_t index = 0u; index < buildCount; ++index) {
+        nativeBuilds[index] = nativeInputs[index].info;
+    }
+    m_device->m_data->cmdBuildMicromaps(m_data->commandBuffer, buildCount, nativeBuilds.data());
     return true;
 }
 

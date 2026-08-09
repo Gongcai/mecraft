@@ -1734,6 +1734,89 @@ void main() {
     return true;
 }
 
+[[nodiscard]] bool validateOpacityMicromapBuild(VkRhiDevice& device, RhiCommandListPool& commandPool) {
+    if (!device.capabilities().opacityMicromap) {
+        return true;
+    }
+    const uint64_t validationErrorsBefore = device.validationErrorCount();
+    std::array<uint8_t, 256u> opacityData{};
+    opacityData[0] = 1u;
+    std::array<uint8_t, 256u> triangleData{};
+    VkMicromapTriangleEXT triangle{};
+    triangle.dataOffset = 0u;
+    triangle.subdivisionLevel = 0u;
+    triangle.format = VK_OPACITY_MICROMAP_FORMAT_2_STATE_EXT;
+    std::memcpy(triangleData.data(), &triangle, sizeof(triangle));
+
+    RhiBufferDesc inputDesc;
+    inputDesc.size = 256u;
+    inputDesc.usage = rhiFlag(RhiBufferUsage::DeviceAddress) | rhiFlag(RhiBufferUsage::MicromapBuildInput) |
+                      rhiFlag(RhiBufferUsage::TransferDst);
+    inputDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+    inputDesc.initialState = RhiResourceState::MicromapBuildInput;
+    inputDesc.memoryCategory = RhiMemoryCategory::AccelerationStructure;
+    inputDesc.debugName = "VulkanSmoke.Micromap.OpacityData";
+    const RhiBufferHandle opacityBuffer = device.createBuffer(inputDesc, opacityData.data(), opacityData.size());
+    inputDesc.debugName = "VulkanSmoke.Micromap.Triangles";
+    const RhiBufferHandle triangleBuffer = device.createBuffer(inputDesc, triangleData.data(), triangleData.size());
+
+    const RhiOpacityMicromapUsageDesc usage{1u, 0u, RhiOpacityMicromapFormat::TwoState};
+    RhiMicromapBuildInput input;
+    input.flags = rhiFlag(RhiMicromapBuildFlag::PreferFastTrace);
+    input.usages = &usage;
+    input.usageCount = 1u;
+    input.opacityDataBuffer = opacityBuffer;
+    input.triangleBuffer = triangleBuffer;
+    input.triangleStride = sizeof(VkMicromapTriangleEXT);
+    RhiMicromapBuildSizes sizes;
+    bool valid = opacityBuffer.isValid() && triangleBuffer.isValid() && device.queryMicromapBuildSizes(input, sizes);
+
+    RhiBufferHandle storage;
+    RhiBufferHandle scratch;
+    RhiMicromapHandle micromap;
+    if (valid) {
+        RhiBufferDesc storageDesc;
+        storageDesc.debugName = "VulkanSmoke.Micromap.Storage";
+        storageDesc.size = sizes.micromapSize;
+        storageDesc.usage = rhiFlag(RhiBufferUsage::DeviceAddress) | rhiFlag(RhiBufferUsage::MicromapStorage);
+        storageDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+        storageDesc.initialState = RhiResourceState::MicromapBuildWrite;
+        storageDesc.memoryCategory = RhiMemoryCategory::AccelerationStructure;
+        storage = device.createBuffer(storageDesc, nullptr, 0u);
+        RhiBufferDesc scratchDesc;
+        scratchDesc.debugName = "VulkanSmoke.Micromap.Scratch";
+        scratchDesc.size = sizes.buildScratchSize;
+        scratchDesc.usage = rhiFlag(RhiBufferUsage::Storage) | rhiFlag(RhiBufferUsage::DeviceAddress);
+        scratchDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+        scratchDesc.initialState = RhiResourceState::MicromapBuildScratch;
+        scratchDesc.memoryCategory = RhiMemoryCategory::AccelerationStructure;
+        scratch = device.createBuffer(scratchDesc, nullptr, 0u);
+        micromap = device.createMicromap({"VulkanSmoke.Micromap", storage, 0u, sizes.micromapSize});
+        RhiMicromapDesc retainedDesc;
+        valid = storage.isValid() && scratch.isValid() && micromap.isValid() &&
+                device.getMicromapDesc(micromap, retainedDesc) && retainedDesc.size == sizes.micromapSize;
+    }
+    if (valid) {
+        RhiCommandList* commands = commandPool.acquire(RhiCommandListType::Graphics);
+        const RhiMicromapBuildDesc build{input, micromap, scratch, 0u};
+        valid = commands != nullptr && commands->begin({"VulkanSmoke.Micromap.Build", RhiCommandListType::Graphics}) &&
+                commands->buildMicromaps(&build, 1u) && commands->end();
+        if (valid) {
+            RhiCommandList* submissions[] = {commands};
+            RhiSubmissionToken token;
+            valid = device.submit({"VulkanSmoke.Micromap.Build", submissions, 1u, RhiQueueType::Graphics}, &token) &&
+                    device.waitForSubmission(token);
+        }
+    }
+
+    device.destroyMicromap(micromap);
+    device.destroyBuffer(scratch);
+    device.destroyBuffer(storage);
+    device.destroyBuffer(triangleBuffer);
+    device.destroyBuffer(opacityBuffer);
+    return valid && device.validationErrorCount() == validationErrorsBefore;
+}
+
 [[nodiscard]] bool validateBindGroupUpdateLifecycle(VkRhiDevice& device, RhiCommandListPool& commandPool) {
     const RhiCapabilities& capabilities = device.capabilities();
     if (!capabilities.descriptorBindingPartiallyBound || !capabilities.descriptorBindingVariableDescriptorCount ||
@@ -6254,7 +6337,7 @@ int main() {
         !validateDlssVulkanDispatch(device, *commandPool, window) ||
         !validateDlssFrameGenerationSwapchainLifecycle(device, *commandPool, window) ||
 #endif
-        !validateTemporalOutputTarget(device, *commandPool) ||
+        !validateTemporalOutputTarget(device, *commandPool) || !validateOpacityMicromapBuild(device, *commandPool) ||
         !validateBindGroupUpdateLifecycle(device, *commandPool) ||
         !validateGlobalBindlessGpuScene(device, *commandPool) ||
         !validateAccelerationStructures(device, *commandPool) || !validateTerrainBlasCache(device, *commandPool) ||

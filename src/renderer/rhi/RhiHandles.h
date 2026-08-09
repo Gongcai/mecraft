@@ -80,6 +80,13 @@ struct RhiAccelerationStructureHandle {
     [[nodiscard]] constexpr bool isValid() const { return index != 0 && generation != 0; }
 };
 
+struct RhiMicromapHandle {
+    uint32_t index = 0;
+    uint32_t generation = 0;
+
+    [[nodiscard]] constexpr bool isValid() const { return index != 0 && generation != 0; }
+};
+
 /// Device memory block shared by placed textures with disjoint lifetimes.
 struct RhiMemoryHandle {
     uint32_t index = 0;

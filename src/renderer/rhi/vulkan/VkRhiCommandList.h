@@ -52,6 +52,7 @@ public:
     void resetQueryPool(RhiQueryPoolHandle pool, uint32_t firstQuery, uint32_t queryCount) override;
     void writeTimestamp(RhiQueryPoolHandle pool, uint32_t queryIndex) override;
     bool buildAccelerationStructures(const RhiAccelerationStructureBuildDesc* builds, uint32_t buildCount) override;
+    bool buildMicromaps(const RhiMicromapBuildDesc* builds, uint32_t buildCount) override;
     bool copyAccelerationStructure(const RhiAccelerationStructureCopyDesc& copy) override;
     bool writeAccelerationStructureProperties(const RhiAccelerationStructurePropertyQueryDesc& query) override;
 

@@ -4000,6 +4000,12 @@ bool GlRhiCommandList::buildAccelerationStructures(const RhiAccelerationStructur
     return rejectRecordedCommand("OpenGL does not support acceleration-structure builds");
 }
 
+bool GlRhiCommandList::buildMicromaps(const RhiMicromapBuildDesc* builds, const uint32_t buildCount) {
+    (void)builds;
+    (void)buildCount;
+    return rejectRecordedCommand("OpenGL does not support micromap builds");
+}
+
 bool GlRhiCommandList::copyAccelerationStructure(const RhiAccelerationStructureCopyDesc& copy) {
     (void)copy;
     return rejectRecordedCommand("OpenGL does not support acceleration-structure copies");
@@ -5402,6 +5408,26 @@ RhiAccelerationStructureHandle GlRhiDevice::createAccelerationStructure(const Rh
     return {};
 }
 
+RhiMicromapHandle GlRhiDevice::createMicromap(const RhiMicromapDesc& desc) {
+    (void)desc;
+    logRhiError("OpenGL does not support micromaps");
+    return {};
+}
+
+bool GlRhiDevice::getMicromapDesc(RhiMicromapHandle micromap, RhiMicromapDesc& desc) const {
+    (void)micromap;
+    (void)desc;
+    logRhiError("OpenGL does not support micromaps");
+    return false;
+}
+
+bool GlRhiDevice::queryMicromapBuildSizes(const RhiMicromapBuildInput& input, RhiMicromapBuildSizes& sizes) const {
+    (void)input;
+    (void)sizes;
+    logRhiError("OpenGL does not support micromap build-size queries");
+    return false;
+}
+
 bool GlRhiDevice::getAccelerationStructureDesc(RhiAccelerationStructureHandle accelerationStructure,
                                                RhiAccelerationStructureDesc& desc) const {
     (void)accelerationStructure;
@@ -5774,6 +5800,11 @@ void GlRhiDevice::destroyAccelerationStructure(RhiAccelerationStructureHandle ha
     if (handle.isValid()) {
         logRhiError("OpenGL does not own acceleration-structure resources");
     }
+}
+
+void GlRhiDevice::destroyMicromap(RhiMicromapHandle handle) {
+    (void)handle;
+    logRhiError("OpenGL does not support micromaps");
 }
 
 std::unique_ptr<RhiCommandListPool> GlRhiDevice::createCommandListPool(const RhiCommandListPoolDesc& desc) {

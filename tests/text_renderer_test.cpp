@@ -136,6 +136,7 @@ public:
     void resetQueryPool(RhiQueryPoolHandle, uint32_t, uint32_t) override {}
     void writeTimestamp(RhiQueryPoolHandle, uint32_t) override {}
     bool buildAccelerationStructures(const RhiAccelerationStructureBuildDesc*, uint32_t) override { return false; }
+    bool buildMicromaps(const RhiMicromapBuildDesc*, uint32_t) override { return false; }
     bool copyAccelerationStructure(const RhiAccelerationStructureCopyDesc&) override { return false; }
     bool writeAccelerationStructureProperties(const RhiAccelerationStructurePropertyQueryDesc&) override {
         return false;
@@ -256,6 +257,11 @@ public:
     RhiAccelerationStructureHandle createAccelerationStructure(const RhiAccelerationStructureDesc&) override {
         return {};
     }
+    RhiMicromapHandle createMicromap(const RhiMicromapDesc&) override { return {}; }
+    [[nodiscard]] bool getMicromapDesc(RhiMicromapHandle, RhiMicromapDesc&) const override { return false; }
+    [[nodiscard]] bool queryMicromapBuildSizes(const RhiMicromapBuildInput&, RhiMicromapBuildSizes&) const override {
+        return false;
+    }
     [[nodiscard]] bool getAccelerationStructureDesc(RhiAccelerationStructureHandle,
                                                     RhiAccelerationStructureDesc&) const override {
         return false;
@@ -301,6 +307,7 @@ public:
     void destroyBindGroup(RhiBindGroupHandle) override {}
     void destroyQueryPool(RhiQueryPoolHandle) override {}
     void destroyAccelerationStructure(RhiAccelerationStructureHandle) override {}
+    void destroyMicromap(RhiMicromapHandle) override {}
 
     [[nodiscard]] std::unique_ptr<RhiCommandListPool> createCommandListPool(const RhiCommandListPoolDesc&) override {
         return std::make_unique<RecordingCommandListPool>(commandList);
