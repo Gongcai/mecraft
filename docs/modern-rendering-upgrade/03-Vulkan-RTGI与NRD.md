@@ -665,7 +665,10 @@ p50 `0.165041`、绝对误差 p95 `0.001317`、分母下限像素 `0%`；Referen
 `0.289572/1.294182`，绝对误差 p95 `0.003587`。完整集合不变且半序列覆盖修正后仍未收敛，主方差来自
 一次反弹的二值可见性与局部高能路径。
 RELAX 主历史 30/64 帧的同镜头 300+32 A/B 仅把 HDR p95 从 `0.473326` 改为 `0.473316`，排除历史上限为
-静态误差主因，生产设置已恢复为 0.5 秒。质量报告 schema v4 强制读取同次 Validation Capture Report；
+静态误差主因，生产设置已恢复为 0.5 秒。Diffuse Pre-pass 半径 `30/15/5/1 Pixels` 的单变量 A/B 将 HDR p95
+依次改为 `0.474772/0.462746/0.440701/0.420822`、Leakage 像素改为 `621/589/555/532`，但最大带宽始终为
+`3 Pixels`，Denoised 均值偏差则从约 `-1.4%` 扩大到 `-4.2%`。因此 pre-pass 不是带宽根因，缩小半径造成的
+能量下移不能作为画质修复；生产保持 SDK 默认 `30 Pixels`。质量报告 schema v4 强制读取同次 Validation Capture Report；
 Scene TLAS desired/active 不一致、TLAS generation pending、Terrain BLAS Build 或 Compaction 任一非零时，
 保守整帧 Mask 将该采样帧全部像素标记为 AS Pending。正式 V01 的 32 帧 Pending Frame 和 Invalid Pixel 均为
 `0`，AS Pending Gate 已通过；HDR p95 仍失败。

@@ -163,7 +163,10 @@ V01 实跑的 SSIM/HDR p95 为 `0.997339/0.474772`，分母下限占比 `0%`；R
 p50/p95 为 `0.289572/1.294182`、绝对误差 p95 `0.003587`。采样域修正后高方差仍然存在，说明失败来自
 一次反弹 integrand 的二值可见性与局部高能路径，而不是近零亮度或半序列漏采样域。
 同一 V01 的 RELAX 主历史 30/64 帧 A/B 得到 HDR p95 `0.473326/0.473316`，排除主历史上限为静态失败主因，
-正式设置保持按 0.5 秒计算。质量报告 schema v4 必须绑定同次 Validation Capture Report；AS Pending 采用
+正式设置保持按 0.5 秒计算。Diffuse Pre-pass 半径 `30/15/5/1 Pixels` A/B 的 HDR p95 为
+`0.474772/0.462746/0.440701/0.420822`，Leakage 像素为 `621/589/555/532`，但最大带宽全部为 `3 Pixels`，
+且 Denoised 均值偏差随半径缩小扩大到约 `-4.2%`。该轴未修复 Leakage，指标改善包含整体能量下移，生产
+保持 SDK 默认 `30 Pixels`。质量报告 schema v4 必须绑定同次 Validation Capture Report；AS Pending 采用
 保守整帧 Mask，Scene TLAS 或 Terrain BLAS 任一 Pending 就把该采样帧全部像素计为无效。最新 300+32 正式
 V01 的 Pending Frame、Invalid Pixel、Terrain Build/Compaction 峰值均为 `0`，因此 AS Pending Gate 已通过。
 质量报告 schema v5 已强制绑定生产捕获的 RGBA16F 世界法线和正线性 ViewZ，Leakage 不再缺证据。

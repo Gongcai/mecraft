@@ -338,7 +338,11 @@ RTX 4060 Laptop 的最新 300+64 实跑得到 SSIM `0.997339`、HDR p95 `0.47477
 收敛，证明主因是一次反弹 integrand 的二值可见性与局部高能路径，而不是半序列漏采样域。
 RELAX 主历史上限从按 0.5 秒计算的 30 帧改为 64 帧后完成同一 V01 300+32 单变量 A/B，HDR p95 仅从
 `0.473326` 变为 `0.473316`，Denoised 均值和方差也只在浮点尾数变化，因此已恢复正式 0.5 秒设置；静态失败
-不来自主历史上限。质量报告 schema v4 现强制绑定同次运行的 Validation Capture Report，并消费保守整帧
+不来自主历史上限。RELAX Diffuse Pre-pass 半径 `30/15/5/1 Pixels` 的同一 V01 单变量 A/B 得到 HDR p95
+`0.474772/0.462746/0.440701/0.420822`，Leakage 像素 `621/589/555/532`，但四组最大带宽均为 `3 Pixels`；
+Denoised 相对 Reference 的均值偏差同时从约 `-1.4%` 扩大到 `-4.2%`。因此半径不是带宽主因，p95 下降部分
+来自错误的整体能量下移；生产保持 SDK 默认 `30 Pixels`，不以缩小空间复用掩盖积分/Reference 问题。
+质量报告 schema v4 现强制绑定同次运行的 Validation Capture Report，并消费保守整帧
 AS Pending Mask：Scene TLAS desired/active 不一致、TLAS generation pending 或 Terrain BLAS Build/Compaction
 任一非零时，该采样帧全部像素计为无效。正式 V01 的 32/32 帧均稳定，Pending Frame 和 Invalid Pixel 均为
 `0`，AS Pending Gate 已通过；HDR p95 仍失败。
