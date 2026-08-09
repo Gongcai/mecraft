@@ -55,11 +55,34 @@ const char* rtgiCutoutTraversalModeStableId(const RtgiCutoutTraversalMode mode) 
     std::abort();
 }
 
+std::optional<ValidationRtgiHdrCaptureMode> parseValidationRtgiHdrCaptureMode(const std::string_view value) {
+    if (value == "raw") {
+        return ValidationRtgiHdrCaptureMode::Raw;
+    }
+    if (value == "denoised") {
+        return ValidationRtgiHdrCaptureMode::Denoised;
+    }
+    if (value == "raw_and_denoised") {
+        return ValidationRtgiHdrCaptureMode::RawAndDenoised;
+    }
+    return std::nullopt;
+}
+
+const char* validationRtgiHdrCaptureModeStableId(const ValidationRtgiHdrCaptureMode mode) {
+    switch (mode) {
+    case ValidationRtgiHdrCaptureMode::Raw: return "raw";
+    case ValidationRtgiHdrCaptureMode::Denoised: return "denoised";
+    case ValidationRtgiHdrCaptureMode::RawAndDenoised: return "raw_and_denoised";
+    }
+    std::abort();
+}
+
 bool validateAppLaunchOptions(const AppLaunchOptions& options, std::string& error) {
     if (!options.validationEnabled()) {
         if (!options.validationCapturePath.empty() || !options.validationReportPath.empty() ||
             options.validationWarmupFramesSet || options.validationSampleFramesSet || options.validationWidthSet ||
-            options.validationHeightSet || options.validationRtgiCutoutTraversal.has_value()) {
+            options.validationHeightSet || options.validationRtgiCutoutTraversal.has_value() ||
+            !options.validationRtgiHdrCaptureDirectory.empty() || options.validationRtgiHdrCaptureMode.has_value()) {
             error = "Validation options require --validation-scene-file";
             return false;
         }
@@ -71,6 +94,10 @@ bool validateAppLaunchOptions(const AppLaunchOptions& options, std::string& erro
     }
     if (options.validationReportPath.empty()) {
         error = "--validation-report is required for validation runs";
+        return false;
+    }
+    if (options.validationRtgiHdrCaptureDirectory.empty() != !options.validationRtgiHdrCaptureMode.has_value()) {
+        error = "--validation-rtgi-hdr-capture-dir and --validation-rtgi-hdr-capture must be supplied together";
         return false;
     }
     if (options.validationSampleFrames < 2u) {

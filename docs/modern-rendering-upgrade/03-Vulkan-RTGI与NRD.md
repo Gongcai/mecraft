@@ -625,7 +625,9 @@ Vulkan 质量运行据此采用 `opacity_micromap`，Candidate Loop 保留为显
 无偏亮度方差，对 32 帧结果与 Reference 计算亮度 SSIM 和 95th 相对亮度误差，并拒绝 NaN/Inf、负辐射、
 尺寸不一致与不足两帧的序列；实际 64 spp 采集尚未开始。
 `FrameOutput` 已发布 Deferred Graph 解析的 `rtgiRawDiffuse` 与 `nrdDiffuse`，两者均为当前 pre-exposed
-线性 HDR 域；下一步由验证 runner 在下一次 Graph 执行前完成多帧 EXR 读取。
+线性 HDR 域。验证控制器已为每个采样帧生成递增 EXR 序号，启动参数
+`--validation-rtgi-hdr-capture-dir` 与 `--validation-rtgi-hdr-capture raw|denoised|raw_and_denoised` 必须成对
+出现；下一步将此请求接入两个场景的 EXR 写入。
 
 ## 10. 调试视图与验收
 

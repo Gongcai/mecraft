@@ -230,6 +230,22 @@ bool parseLaunchOptions(int argc, char** argv, AppLaunchOptions& options, std::s
                 error = "Validation RTGI cutout traversal must be candidate_loop or opacity_micromap";
                 return false;
             }
+        } else if (arg == "--validation-rtgi-hdr-capture-dir") {
+            const char* value = nullptr;
+            if (!requireValue(argc, argv, index, "--validation-rtgi-hdr-capture-dir", value, error)) {
+                return false;
+            }
+            options.validationRtgiHdrCaptureDirectory = value;
+        } else if (arg == "--validation-rtgi-hdr-capture") {
+            const char* value = nullptr;
+            if (!requireValue(argc, argv, index, "--validation-rtgi-hdr-capture", value, error)) {
+                return false;
+            }
+            options.validationRtgiHdrCaptureMode = parseValidationRtgiHdrCaptureMode(value);
+            if (!options.validationRtgiHdrCaptureMode.has_value()) {
+                error = "Validation RTGI HDR capture must be raw, denoised, or raw_and_denoised";
+                return false;
+            }
         } else if (arg == "--rhi-backend") {
             const char* value = nullptr;
             if (!requireValue(argc, argv, index, "--rhi-backend", value, error)) {

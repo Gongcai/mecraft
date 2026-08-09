@@ -54,6 +54,16 @@ int main() {
                      "validation RTGI traversal identifiers must be strict and stable")) {
         return 1;
     }
+    if (!requireTrue(
+            parseValidationRtgiHdrCaptureMode("raw") == ValidationRtgiHdrCaptureMode::Raw &&
+                parseValidationRtgiHdrCaptureMode("denoised") == ValidationRtgiHdrCaptureMode::Denoised &&
+                parseValidationRtgiHdrCaptureMode("raw_and_denoised") == ValidationRtgiHdrCaptureMode::RawAndDenoised &&
+                !parseValidationRtgiHdrCaptureMode("both").has_value() &&
+                std::string(validationRtgiHdrCaptureModeStableId(ValidationRtgiHdrCaptureMode::RawAndDenoised)) ==
+                    "raw_and_denoised",
+            "validation RTGI HDR capture identifiers must be strict and stable")) {
+        return 1;
+    }
 
     AppLaunchOptions validation;
     validation.validationScenePath = "scene.json";
@@ -83,6 +93,18 @@ int main() {
     invalid = validation;
     invalid.validationWidth = 0u;
     if (!requireTrue(!validateAppLaunchOptions(invalid, error), "validation dimensions must be nonzero")) {
+        return 1;
+    }
+    invalid = validation;
+    invalid.validationRtgiHdrCaptureDirectory = "hdr";
+    if (!requireTrue(!validateAppLaunchOptions(invalid, error),
+                     "an RTGI HDR capture directory must require an explicit capture mode")) {
+        return 1;
+    }
+    invalid = validation;
+    invalid.validationRtgiHdrCaptureMode = ValidationRtgiHdrCaptureMode::Raw;
+    if (!requireTrue(!validateAppLaunchOptions(invalid, error),
+                     "an RTGI HDR capture mode must require an output directory")) {
         return 1;
     }
     invalid = validation;
@@ -122,6 +144,13 @@ int main() {
     traversalWithoutScene.validationRtgiCutoutTraversal = RtgiCutoutTraversalMode::OpacityMicromap;
     if (!requireTrue(!validateAppLaunchOptions(traversalWithoutScene, error),
                      "validation RTGI traversal overrides must require a scene")) {
+        return 1;
+    }
+    AppLaunchOptions hdrCaptureWithoutScene;
+    hdrCaptureWithoutScene.validationRtgiHdrCaptureDirectory = "hdr";
+    hdrCaptureWithoutScene.validationRtgiHdrCaptureMode = ValidationRtgiHdrCaptureMode::Raw;
+    if (!requireTrue(!validateAppLaunchOptions(hdrCaptureWithoutScene, error),
+                     "validation RTGI HDR capture options must require a scene")) {
         return 1;
     }
 

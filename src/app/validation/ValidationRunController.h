@@ -33,6 +33,8 @@ struct ValidationFrame {
     double renderTimeSeconds = 0.0;
     bool collectPerformance = false;
     bool captureAfterRender = false;
+    bool captureRtgiHdrAfterRender = false;
+    uint32_t rtgiHdrCaptureSampleIndex = 0u;
 };
 
 /// Drives one versioned Camera Path through fixed warmup and sample phases.

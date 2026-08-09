@@ -28,6 +28,8 @@ int main() {
     options.validationReportPath = "report.json";
     options.validationWarmupFrames = 2u;
     options.validationSampleFrames = 3u;
+    options.validationRtgiHdrCaptureDirectory = "hdr";
+    options.validationRtgiHdrCaptureMode = ValidationRtgiHdrCaptureMode::RawAndDenoised;
 
     app::validation::ValidationRunController controller;
     if (!requireTrue(controller.configure(options), "a valid Camera Path must configure validation") ||
@@ -59,6 +61,7 @@ int main() {
 
     frame = controller.currentFrame();
     if (!requireTrue(frame != nullptr && frame->collectPerformance && !frame->captureAfterRender &&
+                         frame->captureRtgiHdrAfterRender && frame->rtgiHdrCaptureSampleIndex == 0u &&
                          nearlyEqual(frame->cameraPose.position.x, 12.0),
                      "sampling must start at the inclusive path origin") ||
         !requireTrue(controller.completeFrame(true), "the first sample must complete") ||
@@ -75,7 +78,8 @@ int main() {
     }
 
     frame = controller.currentFrame();
-    if (!requireTrue(frame != nullptr && frame->captureAfterRender && nearlyEqual(frame->cameraPose.position.x, -16.0),
+    if (!requireTrue(frame != nullptr && frame->captureAfterRender && frame->captureRtgiHdrAfterRender &&
+                         frame->rtgiHdrCaptureSampleIndex == 2u && nearlyEqual(frame->cameraPose.position.x, -16.0),
                      "the final sample must request capture at the path endpoint") ||
         !requireTrue(!controller.completeFrame(false, "write failed") && controller.failed() &&
                          controller.error() == app::validation::ValidationRunError::CaptureFailed,

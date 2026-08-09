@@ -12,6 +12,9 @@
 
 enum class ValidationScene : uint8_t { None, Voxel, Model };
 
+/// Selects the linear RTGI signal captured for every sampled validation frame.
+enum class ValidationRtgiHdrCaptureMode : uint8_t { Raw = 0, Denoised = 1, RawAndDenoised = 2 };
+
 struct AppLaunchOptions {
     AppLaunchOptions();
 
@@ -52,6 +55,8 @@ struct AppLaunchOptions {
     bool validationWidthSet = false;
     bool validationHeightSet = false;
     std::optional<RtgiCutoutTraversalMode> validationRtgiCutoutTraversal;
+    std::filesystem::path validationRtgiHdrCaptureDirectory;
+    std::optional<ValidationRtgiHdrCaptureMode> validationRtgiHdrCaptureMode;
 
     /// Reports whether a deterministic validation run was requested.
     /// @return True when a versioned scene descriptor was supplied.
@@ -76,6 +81,12 @@ struct AppLaunchOptions {
 
 /// Returns the stable identifier emitted by validation reports and benchmark telemetry.
 [[nodiscard]] const char* rtgiCutoutTraversalModeStableId(RtgiCutoutTraversalMode mode);
+
+/// Parses the stable capture mode for per-sample linear RTGI HDR output.
+[[nodiscard]] std::optional<ValidationRtgiHdrCaptureMode> parseValidationRtgiHdrCaptureMode(std::string_view value);
+
+/// Returns the stable identifier emitted by validation reports and capture manifests.
+[[nodiscard]] const char* validationRtgiHdrCaptureModeStableId(ValidationRtgiHdrCaptureMode mode);
 
 /// Validates cross-option requirements for benchmark and validation modes.
 /// @param options Complete launch configuration after command-line parsing.

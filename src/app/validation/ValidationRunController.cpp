@@ -30,7 +30,8 @@ bool ValidationRunController::configure(const AppLaunchOptions& options) {
     }
     m_sceneContract = std::move(loaded.contract);
     m_cameraPath = std::move(loaded.cameraPath);
-    m_renderSettingsProfile = makeValidationRenderSettingsProfile(m_sceneContract.scene, m_sceneContract.renderSettings);
+    m_renderSettingsProfile =
+        makeValidationRenderSettingsProfile(m_sceneContract.scene, m_sceneContract.renderSettings);
     m_phase = Phase::Ready;
     return true;
 }
@@ -174,6 +175,8 @@ bool ValidationRunController::buildCurrentFrame() {
         cameraTimeSeconds =
             m_cameraPath.durationSeconds * static_cast<double>(m_completedSampleFrames) / sampleDenominator;
         frame.captureAfterRender = m_completedSampleFrames + 1u == m_options.validationSampleFrames;
+        frame.captureRtgiHdrAfterRender = m_options.validationRtgiHdrCaptureMode.has_value();
+        frame.rtgiHdrCaptureSampleIndex = m_completedSampleFrames;
     }
 
     const renderer::contracts::CameraPathError sampleError =
