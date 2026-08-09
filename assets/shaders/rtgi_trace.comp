@@ -590,8 +590,10 @@ void main() {
     ivec2 noiseExtent = textureSize(uBlueNoiseTexture, 0);
     ivec2 noiseTexel = ivec2(uvec2(texel) % uvec2(noiseExtent));
     vec2 blueNoise = texelFetch(uBlueNoiseTexture, noiseTexel, 0).rg;
-    vec2 sampleValue = fract(blueNoise +
-                             rtgiPixelScrambledCranleyPattersonRotation(pc.frameMaskAndFlags.x, uvec2(texel)));
+    vec2 sampleValue = pc.materialGeometryCounts.z != 0u
+                           ? rtgiReferenceR2Sample(pc.frameMaskAndFlags.x, uvec2(texel))
+                           : fract(blueNoise + rtgiPixelScrambledCranleyPattersonRotation(
+                                                   pc.frameMaskAndFlags.x, uvec2(texel)));
     // A voxel normal map changes the BRDF but not the solid block boundary.
     // Sampling its perturbed hemisphere creates near-tangent directions that
     // can enter an adjacent face through a greedy-mesh seam. Use the exact

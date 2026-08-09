@@ -96,7 +96,9 @@ int main() {
                           writeFrame(quality / frameName("rtgi_denoised_", frame), 2u, 2u, 1.0f);
     }
     for (uint32_t frame = 0u; frame < validation::kRtgiQualityReferenceSpp; ++frame) {
-        sequenceWritten = sequenceWritten && writeFrame(reference / frameName("rtgi_raw_", frame), 2u, 2u, 1.0f);
+        const float referenceValue = frame < validation::kRtgiQualityReferenceSpp / 2u ? 0.5f : 1.5f;
+        sequenceWritten =
+            sequenceWritten && writeFrame(reference / frameName("rtgi_raw_", frame), 2u, 2u, referenceValue);
     }
     if (!requireTrue(sequenceWritten, "synthetic EXR sequences must be written")) {
         return 1;
@@ -129,12 +131,19 @@ int main() {
                          summary.variance.denoisedVariance == 0.0 && summary.variance.reductionPercent == 100.0,
                      "report metrics must use the complete raw and denoised sequences") ||
         !requireTrue(summary.rawMeanLuminance == 1.0 && summary.denoisedMeanLuminance == 1.0 &&
-                         summary.referenceMeanLuminance == 1.0,
-                     "report diagnostics must expose the three averaged signal luminances") ||
+                         summary.referenceMeanLuminance == 1.0 &&
+                         summary.referenceConvergence.relativeLuminanceErrorP95 > 0.1 &&
+                         !summary.referenceConvergencePassed,
+                     "report diagnostics must expose an unconverged reference without changing its full average") ||
         !requireTrue(summary.availableMetricsPassed && !summary.completeStaticGatePassed,
-                     "available gates must pass without claiming missing static evidence") ||
+                     "reference convergence diagnostics must not become an undeclared static quality gate") ||
         !requireTrue(!report.is_discarded() && report.at("gates").at("leakage_band").at("passed").is_null() &&
                          report.at("gates").at("as_pending").at("passed").is_null() &&
+                         !report.at("diagnostics").at("reference_half_luminance_ssim").at("passed").get<bool>() &&
+                         report.at("diagnostics")
+                             .at("reference_half_relative_luminance_error_p95")
+                             .at("passed")
+                             .get<bool>() == false &&
                          !report.at("complete_static_gate_passed").get<bool>(),
                      "JSON must expose Leakage Band and AS Pending as unavailable evidence")) {
         std::cerr << "[rtgi_quality_report_test] detail: " << detail << '\n';

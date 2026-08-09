@@ -17,6 +17,9 @@ namespace renderer::capture {
 /// Identifies the row origin of texels returned by a graphics backend.
 enum class TextureCaptureOrigin : uint8_t { TopLeft, BottomLeft };
 
+/// Describes how an RGBA16F source becomes non-negative linear RGB for EXR output.
+enum class TextureCaptureLinearEncoding : uint8_t { NonNegativeLinearRgb = 0, NrdRelaxLinearRgb, NrdReblurYCoCg };
+
 /// Identifies every deterministic texture readback or PNG writing failure.
 enum class TextureCaptureError : uint8_t {
     None,
@@ -46,6 +49,7 @@ struct TextureCaptureRequest {
     uint32_t width = 0u;
     uint32_t height = 0u;
     TextureCaptureOrigin origin = TextureCaptureOrigin::TopLeft;
+    TextureCaptureLinearEncoding linearEncoding = TextureCaptureLinearEncoding::NonNegativeLinearRgb;
     float linearRgbScale = 1.0f;
     std::filesystem::path outputPath;
 };
@@ -103,6 +107,17 @@ struct LinearExrImage final {
 /// @param scale Scene-linear RGB multiplier required by the output-domain contract.
 /// @return None when every scaled RGB channel remains finite, non-negative, and representable by FP16.
 [[nodiscard]] TextureCaptureError scaleTextureCaptureHalfPixels(std::vector<uint16_t>& rgba16f, float scale);
+
+/// Resolves one supported source encoding and applies the output-domain scale.
+/// NRD encodings reproduce the production lighting decode, including removal
+/// of finite filter undershoot after decoding. Non-finite and FP16 overflow
+/// values remain hard errors.
+/// @param rgba16f In-place IEEE-754 half-float pixels; alpha channels are preserved.
+/// @param encoding Source encoding stored in RGB.
+/// @param scale Scene-linear RGB multiplier required by the output domain.
+/// @return None when every resolved channel is finite and representable by FP16.
+[[nodiscard]] TextureCaptureError resolveTextureCaptureHalfPixels(std::vector<uint16_t>& rgba16f,
+                                                                  TextureCaptureLinearEncoding encoding, float scale);
 
 /// Writes a linear RGB OpenEXR scanline image from tightly packed RGBA16F pixels.
 /// @param outputPath Lowercase .exr output path.

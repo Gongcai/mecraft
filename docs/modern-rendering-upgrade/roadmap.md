@@ -303,18 +303,23 @@ Profile/ROI/64 spp 目标。V01 已以 1 帧预热完成真实 32+32 EXR 链路�
 窗口的 Sky 像素，违反静态门槛的天空排除规则。因此 Profile 升级到 v2：V01 改为室内地面
 `(256,544,256,128)`，V02/M03 保留原 ROI；正式门槛仍需 300 帧预热与完整 ROI 内容复核。
 Reference 运行轴已接入：显式 `--validation-rtgi-reference` 强制 64 帧 Raw-only、关闭 NRD，并在无 NRD 时继续
-推进 RTGI 低差异相位。此前帧首的 `!nrdEnabled` 分支会在 Reference 模式下错误地把显式 R2 样本索引重置为
-0，帧末递增无法跨帧保留；现已将重置限定为既没有 NRD、也没有 Reference Sampling 的路径，并由
-`rtgi_sampling_contract_test` 同时锁定“不重置”和“成功帧递增”条件。修复后的 V01 正式重采生成 64 个不同
-哈希的 Raw EXR，报告中 NRD/Guide Prep/Dispatch 时间均为 0。质量工具已将这 64 帧平均为 Reference EXR；
-新序列、平均 EXR 和质量报告与当前正式归档逐字节一致，因此下述门槛数据不变。`FrameOutput` 明确 Raw 在 pre-exposed 域、NRD 输出在
-scene-referred 域，EXR 捕获在写入 Denoised 时以同帧 Pre-exposure 转换为 Raw/Reference 域，并拒绝非有限、
-负值或 FP16 溢出。当前 V01 验证运行的 Pre-exposure 为 1，因此这一契约修复不改变这组像素。
+推进 RTGI 低差异相位。Reference 采用每像素固定 Cranley-Patterson 旋转的周期 64 点 R2 集合，任意连续
+64 个实际渲染帧都枚举同一完整集合，不再让 300 帧预热把采集区间切到两个不同批次。帧首重置条件只在既没有
+NRD、也没有 Reference Sampling 时清零样本索引；源码契约锁定 Reference 不重置、成功帧递增和
+`sample(0)==sample(64)`。报告 schema v2 另外发布 Reference 前后 32 帧均值的 SSIM 与 HDR p95 作为收敛诊断，
+该诊断不改变验证矩阵原定的 M3 必过指标。
+质量捕获还修复了 NRD 输出域：RELAX 的有限负振铃按生产 Lighting 的非负线性 RGB 消费契约解析，REBLUR
+从 YCoCg 解码后写入 Linear EXR；NaN/Inf、Raw 负辐射和 FP16 溢出仍会明确失败。
 旧 v2 短预热 Raw/Reference 的 `0.021384/0.021434` 来自图外读取已别名的瞬态纹理，不能作为任何质量结论。
-修复后，RTX 4060 Laptop 的 V01 正式运行（300 帧预热、32 Raw+Denoised、64 Raw Reference）得到
-Raw/Reference/Denoised ROI 平均亮度 `0.002882143/0.002882066/0.002634361`，证明 Raw 与 Reference 已对齐，
-并消除了此前误报的约 88% 能量差。方差降低 `99.834749%` 通过；但 SSIM `0.775638`、相对亮度误差 p95
-`0.321060` 仍失败。下一步定位 RELAX 的真实空间/时域残余误差，再重采 V01/V02/M03。
+随后发现 HDR 捕获前的 readiness render 与正式 render 复用了同一逻辑 `sequenceFrameIndex`，导致每个正式
+样本都触发 `FrameDiscontinuity`，NRD 的 32 帧全部错误使用 Restart。验证控制器现以独立实际渲染时钟推进
+每次成功 render attempt，逻辑 Camera Path 样本编号不再承担渲染帧时钟；报告中的
+`temporal_reset_reasons` 已证明修复后 V01 为 Restart `0`、Continue `32`。
+RTX 4060 Laptop 的同一 V01 Profile 正式重采（300 帧预热、32 Raw+Denoised、64 Raw Reference）得到
+Raw/Reference/Denoised ROI 平均亮度 `0.002624319/0.002611804/0.002304740`。方差降低 `99.988285%`、SSIM
+`0.996256` 通过，HDR 相对亮度误差 p95 `0.454668` 仍失败；Denoised 均值比 Reference 低约 `11.8%`。
+Reference 前后半诊断为 SSIM `0.985370`、HDR p95 `2.078409`，说明暗部 64 spp 估计仍未稳定，不能把全部
+p95 差异直接归因于 RELAX。
 
 2026-08-08 在 RTX 4060 Laptop、Vulkan、RELAX_DIFFUSE、300 帧预热加 1000 帧采样下完成四组复测。
 报告中的 `total_tracked` 是显式 Pass 阶段和，不是完整 GPU 帧跨度：它没有覆盖独立的帧首/场景 Overlay/
@@ -399,8 +404,9 @@ MAE/RMSE 为 0.000991734/0.002267379，全局亮度 SSIM 为 0.999885319。
 
 下一轮任务按以下顺序执行：
 
-1. 定位并修复 V01 v2 ROI 中 RELAX 相对 64 spp Reference 的真实空间/时域残余误差；同一 Profile 重采后必须
-   通过 SSIM 与 HDR Error 门槛，禁止以改阈值、扩张 ROI 或缩放报告输入处理。
+1. 使用同一 V01 v2 Profile 对 RELAX Anti-firefly、History Fix 与累积长度做单变量 A/B，定位约 `11.8%`
+   稳定能量损失；同时分析 Reference 暗部稀疏高能路径和 64 spp 收敛性。同一 Profile 重采后必须通过 HDR
+   Error 门槛，禁止以改阈值、扩张 ROI 或缩放报告输入处理。
 2. 为 V01、V02、M03 接入 Leakage Band、AS Pending 计数和 300 帧预热正式运行，固定 ROI 复核后归档报告。
 3. 为 V03、V06、M06 接入 Ghost/Disocclusion、动态边缘差分和历史恢复帧数门禁。
 4. 针对 1080p 继续定位：体素优先检查地形提交、流送和 AS；Sponza 优先检查 RTGI.Trace 与 NRD.Dispatch。

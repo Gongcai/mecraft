@@ -94,6 +94,17 @@ glm::vec2 rtgiPixelScrambledCranleyPattersonRotation(const uint32_t frameIndex, 
     return rotation;
 }
 
+glm::vec2 rtgiReferenceR2Sample(const uint32_t frameIndex, const glm::uvec2& pixel) {
+    constexpr uint32_t kBatchSize = 64u;
+    constexpr float kInverseHashRange = 1.0f / 16777216.0f;
+    const uint32_t sampleIndex = frameIndex % kBatchSize;
+    const uint32_t hashX = rtgiSampleHash(pixel.x * 1973u + pixel.y * 9277u + 0x68bc21ebu);
+    const uint32_t hashY = rtgiSampleHash(pixel.x * 92821u + pixel.y * 68917u + 0x02e5be93u);
+    const glm::vec2 batchRotation{static_cast<float>(hashX & 0x00ffffffu) * kInverseHashRange,
+                                  static_cast<float>(hashY & 0x00ffffffu) * kInverseHashRange};
+    return glm::fract(batchRotation + rtgiCranleyPattersonRotation(sampleIndex));
+}
+
 std::optional<glm::vec3> rtgiCosineHemisphereDirection(const glm::vec2& sample, const glm::vec3& normal) {
     if (!finite(sample) || sample.x < 0.0f || sample.x >= 1.0f || sample.y < 0.0f || sample.y >= 1.0f ||
         !finite(normal)) {

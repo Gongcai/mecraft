@@ -1089,6 +1089,7 @@ if(MECRAFT_BUILD_TESTS)
             MECRAFT_TEST_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
     add_mecraft_test(texture_capture_test tests/texture_capture_test.cpp)
     add_mecraft_test(temporal_frame_contract_test tests/temporal_frame_contract_test.cpp)
+    add_mecraft_test(temporal_reset_capture_test tests/temporal_reset_capture_test.cpp)
     add_mecraft_test(clustered_lighting_contract_test
             tests/clustered_lighting_contract_test.cpp)
     target_compile_definitions(clustered_lighting_contract_test PRIVATE

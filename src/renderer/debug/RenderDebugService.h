@@ -468,6 +468,8 @@ struct RenderGraphPassStats {
 /// graph submission plus GPU pass timings from the latest completed snapshot.
 struct RenderGraphFrameStats {
     bool valid = false;
+    /// Exact temporal reset causes consumed by the frame represented here.
+    uint32_t temporalResetReasons = 0u;
     /// Execution identity of the GPU timing snapshot (0 while none completed).
     uint64_t execution = 0u;
     uint32_t passCount = 0u;

@@ -638,16 +638,20 @@ RTX 4060 Laptop 的 Vulkan 小窗口实跑已分别覆盖两条路径（320×180
 运行已验证调度、写入和报告字段。
 Reference 运行轴现会强制 64 帧 Raw-only、关闭 NRD，并让 R2 低差异相位在无降噪器时逐帧推进。V01 实跑的
 帧首重置条件此前错误地把所有 `!nrdEnabled` 帧清零，现已排除显式 Reference Sampling，并由源码契约测试
-锁定 Reference 不重置、成功帧递增。修复后的 300 帧预热正式重采中，首帧、次帧和第 64 帧 EXR 哈希均不同，
-报告中 `NRD.GuidePrep`/`NRD.Dispatch` 为 0。质量工具已生成单张
-64 spp EXR。首轮 v1 ROI 覆盖中心窗口 Sky，不能用于静态门槛；Profile v2 将 V01 移到室内地面
+锁定 Reference 不重置、成功帧递增。每像素固定 Cranley-Patterson 旋转的周期 64 点 R2 集合保证预热后任意
+连续 64 帧仍枚举同一完整集合；报告 schema v2 的前后半 Reference SSIM/HDR p95 只作为收敛诊断。
+首轮 v1 ROI 覆盖中心窗口 Sky，不能用于静态门槛；Profile v2 将 V01 移到室内地面
 `(256,544,256,128)`。`FrameOutput` 现明确 Raw 为 pre-exposed、NRD 输出为 scene-referred，捕获器在写入
-Denoised EXR 时使用同帧 Pre-exposure 统一评价域。图外读取 Render Graph 瞬态目标会命中其后的别名资源，
+Denoised EXR 时使用同帧 Pre-exposure 统一评价域。RELAX 有限负振铃按生产 Lighting 契约钳制为非负线性
+RGB，REBLUR 从 YCoCg 解码；非法辐射与 FP16 溢出仍是硬错误。图外读取 Render Graph 瞬态目标会命中其后的别名资源，
 因此 Raw 和 Denoised 在各自最后有效 Pass 后拷贝到持久 RGBA16F 输出，再交给验证 runner。当前 V01 的
-Pre-exposure 为 1；300 帧预热正式运行的 Raw/Reference/Denoised 平均亮度为
-`0.002882143/0.002882066/0.002634361`，方差降低 `99.834749%`，但 SSIM `0.775638`、HDR 相对误差 p95
-`0.321060` 仍失败。该差异需要定位 RELAX 的真实空间/时域根因，禁止用阈值、ROI 扩张或报告缩放处理；
-修复后的 Reference 序列、平均 EXR 和报告与当前正式归档逐字节一致，因此这些指标不变；
+第一次正式质量运行又暴露验证时钟错误：捕获前 readiness render 与正式 render 复用逻辑样本编号，每帧都以
+`FrameDiscontinuity` 让 NRD Restart。控制器现以独立 render-attempt 时钟驱动 Gameplay/Model 两条路径，
+报告的 32 个正式样本为 Restart `0`、Continue `32`。修复后同一 V01 正式重采的
+Raw/Reference/Denoised 平均亮度为 `0.002624319/0.002611804/0.002304740`，方差降低 `99.988285%`、SSIM
+`0.996256` 通过，HDR 相对误差 p95 `0.454668` 失败。Denoised 均值低约 `11.8%`；Reference 前后半诊断
+SSIM `0.985370`、HDR p95 `2.078409`，还需分别定位 RELAX 稳定能量偏差与 64 spp 暗部高方差，禁止用阈值、
+ROI 扩张或报告缩放处理。
 Leakage Band 与 AS Pending 当前在报告中明确为缺少证据，
 `complete_static_gate_passed=false`。
 

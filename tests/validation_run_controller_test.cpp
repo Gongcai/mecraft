@@ -52,8 +52,14 @@ int main() {
     }
 
     const app::validation::ValidationFrame* frame = controller.currentFrame();
+    const app::validation::ValidationRenderClock firstRenderClock = controller.currentRenderClock();
     if (!requireTrue(frame != nullptr && !frame->collectPerformance && nearlyEqual(frame->cameraPose.position.x, 12.0),
                      "warmup must hold the first Camera Path pose") ||
+        !requireTrue(firstRenderClock.frameIndex == 0u && nearlyEqual(firstRenderClock.renderTimeSeconds, 0.0),
+                     "validation render attempts must start from a deterministic zero clock") ||
+        !requireTrue(controller.completeRenderAttempt(), "the first render attempt must advance independently") ||
+        !requireTrue(controller.currentFrame() == frame && controller.currentRenderClock().frameIndex == 1u,
+                     "readiness retries must advance render time without consuming the logical frame") ||
         !requireTrue(controller.completeFrame(true), "the first warmup frame must complete") ||
         !requireTrue(controller.completeFrame(true), "the second warmup frame must complete")) {
         return 1;

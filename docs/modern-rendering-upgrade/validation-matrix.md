@@ -134,16 +134,21 @@ Profile ID、版本、ROI、质量 Render Settings 及 64 spp Reference 目标�
 IEEE Half 解码、64 帧线性平均、32 帧 Raw/Denoised 方差与均值、SSIM、HDR Error p95 和非法辐射门禁。
 Leakage Band 与 AS Pending 没有输入证据时必须在 JSON 中保持 `passed=null`，完整静态门槛固定为失败。
 Reference 帧首重置现明确排除 `referenceSamplingEnabled`：只有既没有 NRD、也没有 Reference Sampling 的路径
-才将显式样本索引清零，成功的 Reference 帧在图执行后递增。修复后以 300 帧预热重新采集的 64 个 Raw EXR、
-64 spp 平均 EXR 和结构化报告与当前正式归档逐字节一致，现有 V01 指标继续有效。
+才将显式样本索引清零，成功的 Reference 帧在图执行后递增。每像素固定 Cranley-Patterson 旋转与周期 64 点
+R2 集合保证任意连续 64 个实际帧覆盖同一完整集合。报告 schema v2 对前后两个 32 帧均值额外计算 SSIM 与
+HDR Error p95；它们用于判断 Reference 收敛可信度，不是验证矩阵新增的最终门槛。
 
 首轮 1 帧预热 V01 v1 数据覆盖中心窗口 Sky，不能用作门槛。旧 v2 室内地面数据的
 Raw/Reference/Denoised ROI 平均亮度 `0.021384/0.021434/0.002634` 也不能使用：图外捕获读取了已别名的
 Render Graph 瞬态信号。Raw 与 Denoised 已改为在最后有效图内访问时拷贝到持久 RGBA16F 输出。修复后的 V01
-正式运行（300 帧预热、32+32/64）得到 `0.002882143/0.002882066/0.002634361`，Raw/Reference 对齐；方差
-降低 `99.834749%` 通过，但 SSIM `0.775638`、HDR 相对误差 p95 `0.321060` 仍不通过。Raw 为 pre-exposed，
-NRD 输出为 scene-referred，捕获器在写入 Denoised EXR 时使用同帧 Pre-exposure 统一域，当前比例为 1。
-必须修复真实 RELAX 空间/时域误差后，重采 V01/V02/M03 并复核 ROI。
+第一次正式运行仍因 readiness render 与正式 render 复用逻辑样本编号而让 NRD 每帧触发
+`FrameDiscontinuity`。独立实际渲染时钟修复后，V01 的 Temporal Reset 证据为 Restart `0`、Continue `32`。
+同一正式配置（300 帧预热、32+32/64）重采得到 Raw/Reference/Denoised 平均亮度
+`0.002624319/0.002611804/0.002304740`；方差降低 `99.988285%`、SSIM `0.996256` 通过，HDR 相对误差 p95
+`0.454668` 仍不通过。Reference 前后半诊断为 SSIM `0.985370`、HDR p95 `2.078409`，说明 64 spp 暗部估计
+仍未稳定。捕获器按生产消费契约解析 RELAX 有限负振铃并解码 REBLUR YCoCg，NaN/Inf、Raw 负值和 FP16
+溢出仍明确失败。下一步必须分别定位 Denoised 约 `11.8%` 能量损失与 Reference 高方差，再重采
+V01/V02/M03 并复核 ROI。
 
 ### 3.3 动态画面
 

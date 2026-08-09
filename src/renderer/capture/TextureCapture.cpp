@@ -14,6 +14,7 @@
 #include <cstring>
 #include <fstream>
 #include <limits>
+#include <sstream>
 #include <utility>
 
 namespace renderer::capture {
@@ -113,21 +114,64 @@ TextureCaptureError normalizeTextureCaptureHalfPixels(const uint8_t* source, con
     return TextureCaptureError::None;
 }
 
-TextureCaptureError scaleTextureCaptureHalfPixels(std::vector<uint16_t>& rgba16f, const float scale) {
+struct HalfRadianceScalingFailure final {
+    size_t pixel = 0u;
+    uint32_t channel = 0u;
+    float source = 0.0f;
+    float scaled = 0.0f;
+};
+
+TextureCaptureError resolveTextureCaptureHalfPixelsDetailed(std::vector<uint16_t>& rgba16f,
+                                                            const TextureCaptureLinearEncoding encoding,
+                                                            const float scale,
+                                                            HalfRadianceScalingFailure* const failure) {
     if (rgba16f.empty() || rgba16f.size() % 4u != 0u || !std::isfinite(scale) || scale <= 0.0f) {
         return TextureCaptureError::InvalidRequest;
     }
     for (size_t pixel = 0u; pixel < rgba16f.size() / 4u; ++pixel) {
+        const size_t base = pixel * 4u;
+        const glm::vec3 source{glm::unpackHalf1x16(rgba16f[base]), glm::unpackHalf1x16(rgba16f[base + 1u]),
+                               glm::unpackHalf1x16(rgba16f[base + 2u])};
+        if (!std::isfinite(source.x) || !std::isfinite(source.y) || !std::isfinite(source.z)) {
+            if (failure != nullptr) {
+                const uint32_t channel = !std::isfinite(source.x) ? 0u : !std::isfinite(source.y) ? 1u : 2u;
+                *failure = {pixel, channel, source[channel], source[channel]};
+            }
+            return TextureCaptureError::RadianceScalingFailed;
+        }
+
+        glm::vec3 linear = source;
+        if (encoding == TextureCaptureLinearEncoding::NrdRelaxLinearRgb) {
+            linear = glm::max(linear, glm::vec3(0.0f));
+        } else if (encoding == TextureCaptureLinearEncoding::NrdReblurYCoCg) {
+            const float t = source.x - source.z;
+            linear = glm::max(glm::vec3(t + source.y, source.x + source.z, t - source.y), glm::vec3(0.0f));
+        } else if (encoding != TextureCaptureLinearEncoding::NonNegativeLinearRgb) {
+            return TextureCaptureError::InvalidRequest;
+        }
+
         for (uint32_t channel = 0u; channel < 3u; ++channel) {
-            const float source = glm::unpackHalf1x16(rgba16f[pixel * 4u + channel]);
-            const float scaled = source * scale;
-            if (!std::isfinite(source) || source < 0.0f || !std::isfinite(scaled) || scaled > 65504.0f) {
+            const float scaled = linear[channel] * scale;
+            if (linear[channel] < 0.0f || !std::isfinite(scaled) || scaled > 65504.0f) {
+                if (failure != nullptr) {
+                    *failure = {pixel, channel, source[channel], scaled};
+                }
                 return TextureCaptureError::RadianceScalingFailed;
             }
-            rgba16f[pixel * 4u + channel] = glm::packHalf1x16(scaled);
+            rgba16f[base + channel] = glm::packHalf1x16(scaled);
         }
     }
     return TextureCaptureError::None;
+}
+
+TextureCaptureError scaleTextureCaptureHalfPixels(std::vector<uint16_t>& rgba16f, const float scale) {
+    return resolveTextureCaptureHalfPixelsDetailed(rgba16f, TextureCaptureLinearEncoding::NonNegativeLinearRgb, scale,
+                                                   nullptr);
+}
+
+TextureCaptureError resolveTextureCaptureHalfPixels(std::vector<uint16_t>& rgba16f,
+                                                    const TextureCaptureLinearEncoding encoding, const float scale) {
+    return resolveTextureCaptureHalfPixelsDetailed(rgba16f, encoding, scale, nullptr);
 }
 
 namespace {
@@ -676,9 +720,15 @@ TextureCaptureResult captureTextureToExr(RhiDevice& rhiDevice, RhiCommandListPoo
     if (normalizationError != TextureCaptureError::None) {
         return failure(TextureCaptureError::PixelNormalizationFailed, textureCaptureErrorStableId(normalizationError));
     }
-    const TextureCaptureError scalingError = scaleTextureCaptureHalfPixels(rgba16f, request.linearRgbScale);
+    HalfRadianceScalingFailure scalingFailure;
+    const TextureCaptureError scalingError = resolveTextureCaptureHalfPixelsDetailed(
+        rgba16f, request.linearEncoding, request.linearRgbScale, &scalingFailure);
     if (scalingError != TextureCaptureError::None) {
-        return failure(TextureCaptureError::RadianceScalingFailed, textureCaptureErrorStableId(scalingError));
+        std::ostringstream detail;
+        detail << textureCaptureErrorStableId(scalingError) << ":pixel=" << scalingFailure.pixel
+               << ":channel=" << scalingFailure.channel << ":source=" << scalingFailure.source
+               << ":scaled=" << scalingFailure.scaled << ":scale=" << request.linearRgbScale;
+        return failure(TextureCaptureError::RadianceScalingFailed, detail.str());
     }
     return writeLinearExr(request.outputPath, request.width, request.height, rgba16f);
 }

@@ -260,6 +260,7 @@ bool Game::renderFrame(const float frameTime) {
             }
             const FrameOutput& output = m_renderRuntime->renderScene().getLastFrameOutput();
             const auto captureHdr = [this](const RhiTextureHandle texture, const bool available,
+                                           const renderer::capture::TextureCaptureLinearEncoding linearEncoding,
                                            const float linearRgbScale, const std::filesystem::path& outputPath) {
                 if (!available || !texture.isValid()) {
                     renderer::capture::TextureCaptureResult result;
@@ -284,6 +285,7 @@ bool Game::renderFrame(const float frameTime) {
                 request.width = textureDesc.width;
                 request.height = textureDesc.height;
                 request.origin = renderer::capture::TextureCaptureOrigin::TopLeft;
+                request.linearEncoding = linearEncoding;
                 request.linearRgbScale = linearRgbScale;
                 request.outputPath = outputPath;
                 m_validationCaptureResult =
@@ -291,12 +293,17 @@ bool Game::renderFrame(const float frameTime) {
                 return m_validationCaptureResult->succeeded();
             };
             if (rawCapturePath.has_value() &&
-                !captureHdr(output.rtgiRawDiffuse, output.hasRtgiRawDiffuse, 1.0f, *rawCapturePath)) {
+                !captureHdr(output.rtgiRawDiffuse, output.hasRtgiRawDiffuse,
+                            renderer::capture::TextureCaptureLinearEncoding::NonNegativeLinearRgb, 1.0f,
+                            *rawCapturePath)) {
                 return;
             }
             if (denoisedCapturePath.has_value() &&
-                !captureHdr(output.nrdDiffuse, output.hasNrdDiffuse, output.nrdDiffuseToPreExposedScale,
-                            *denoisedCapturePath)) {
+                !captureHdr(output.nrdDiffuse, output.hasNrdDiffuse,
+                            output.nrdDiffuseEncoding == NrdDiffuseOutputEncoding::ReblurYCoCg
+                                ? renderer::capture::TextureCaptureLinearEncoding::NrdReblurYCoCg
+                                : renderer::capture::TextureCaptureLinearEncoding::NrdRelaxLinearRgb,
+                            output.nrdDiffuseToPreExposedScale, *denoisedCapturePath)) {
                 return;
             }
             if (!m_validationCaptureResult.has_value()) {

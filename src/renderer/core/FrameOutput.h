@@ -33,6 +33,9 @@ struct FirstPersonShadowData {
     float skyIntensity = 1.0f;
 };
 
+/// Storage encoding published for the NRD diffuse output texture.
+enum class NrdDiffuseOutputEncoding : uint8_t { LinearRgb = 0, ReblurYCoCg };
+
 /// Output contract from render pipeline to RenderScene / PostProcess
 /// Replaces implicit state queries like isDeferredFrameActive()
 struct FrameOutput {
@@ -54,6 +57,7 @@ struct FrameOutput {
     // These graph-owned handles remain valid until the next deferred graph execution.
     RhiTextureHandle rtgiRawDiffuse;
     RhiTextureHandle nrdDiffuse;
+    NrdDiffuseOutputEncoding nrdDiffuseEncoding = NrdDiffuseOutputEncoding::LinearRgb;
     float nrdDiffuseToPreExposedScale = 1.0f;
 
     // Deferred pipeline capabilities

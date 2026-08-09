@@ -76,8 +76,9 @@ namespace {
            traceSource.find("rtgiSuppressSolarSkyLobe(sampleSkyRadiance(uSkyCapture, rayDirection), rayDirection)") !=
                std::string::npos &&
            traceSource.find("ivec2 noiseTexel = ivec2(uvec2(texel) % uvec2(noiseExtent));") != std::string::npos &&
-           traceSource.find("rtgiPixelScrambledCranleyPattersonRotation(pc.frameMaskAndFlags.x, uvec2(texel))") !=
-               std::string::npos &&
+           traceSource.find("pc.materialGeometryCounts.z != 0u") != std::string::npos &&
+           traceSource.find("? rtgiReferenceR2Sample(pc.frameMaskAndFlags.x, uvec2(texel))") != std::string::npos &&
+           traceSource.find("rtgiPixelScrambledCranleyPattersonRotation(") != std::string::npos &&
            pipelineSource.find("traceSettings.temporalSamplingEnabled = (nrdEnabled || rtgiReferenceSampling)") !=
                std::string::npos &&
            pipelineSource.find("(rtgiReferenceSampling || (nrdEnabled && !nrdTemporalReset))") != std::string::npos &&
@@ -109,9 +110,10 @@ namespace {
                "const bool rtgiTraceInspection = isRtgiTraceInspectionView(settings.debug.viewMode);") !=
                std::string::npos &&
            pipelineSource.find("traceSettings.temporalSampleIndex = m_rtgiTemporalSampleIndex;") != std::string::npos &&
+           pipelineSource.find("traceSettings.referenceSamplingEnabled = rtgiReferenceSampling;") !=
+               std::string::npos &&
            pipelineSource.find("++m_rtgiTemporalSampleIndex;") != std::string::npos &&
-           pipelineSource.find(
-               "if ((!nrdEnabled && !rtgiReferenceSampling) || nrdTemporalReset || rtgiTraceInspectionChanged)") !=
+           pipelineSource.find("if ((!nrdEnabled && !rtgiReferenceSampling) || (nrdEnabled && nrdTemporalReset) || ") !=
                std::string::npos &&
            pipelineSource.find("if (!nrdEnabled || nrdTemporalReset || rtgiTraceInspectionChanged)") ==
                std::string::npos &&
@@ -202,6 +204,18 @@ int main() {
                             glm::all(glm::greaterThanEqual(scrambled, glm::vec2(0.0f))) &&
                             glm::all(glm::lessThan(scrambled, glm::vec2(1.0f))),
                         "RTGI pixel scrambling must be deterministic, spatially decorrelated, and frame-varying") &&
+            valid;
+
+    const glm::vec2 referenceFirst = rtgiReferenceR2Sample(0u, glm::uvec2(7u, 11u));
+    const glm::vec2 referenceNext = rtgiReferenceR2Sample(1u, glm::uvec2(7u, 11u));
+    const glm::vec2 referenceNextBatch = rtgiReferenceR2Sample(64u, glm::uvec2(7u, 11u));
+    const glm::vec2 referenceAdjacent = rtgiReferenceR2Sample(0u, glm::uvec2(8u, 11u));
+    const glm::vec2 referenceStep = glm::mod(referenceNext - referenceFirst + glm::vec2(1.0f), glm::vec2(1.0f));
+    valid = requireTrue(glm::length(referenceStep - kExpectedR2Step) <= 1.0e-6f &&
+                            referenceFirst == referenceNextBatch && referenceFirst != referenceAdjacent &&
+                            glm::all(glm::greaterThanEqual(referenceFirst, glm::vec2(0.0f))) &&
+                            glm::all(glm::lessThan(referenceFirst, glm::vec2(1.0f))),
+                        "RTGI Reference sampling must preserve one complete periodic 64-point R2 set") &&
             valid;
 
     const std::optional<glm::vec3> pole = rtgiCosineHemisphereDirection(glm::vec2(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));

@@ -1525,11 +1525,15 @@ void ModelSceneAppState::render(const double frameTime) {
         const glm::mat4 view = camera.getViewMatrix();
         const glm::mat4 projection =
             glm::perspective(glm::radians(camera.getFOV()), aspect, m_cameraNearPlane, m_cameraFarPlane);
-        const RenderFrameClock clock{validationFrame->sequenceFrameIndex, validationFrame->deltaTimeSeconds,
-                                     validationFrame->renderTimeSeconds, validationFrame->renderTimeSeconds};
+        const app::validation::ValidationRenderClock validationClock = m_deps.validationRun.currentRenderClock();
+        const RenderFrameClock clock{validationClock.frameIndex, validationClock.deltaTimeSeconds,
+                                     validationClock.renderTimeSeconds, validationClock.renderTimeSeconds};
         if (!m_scene.renderViewport(view, projection, camera.getPosition(), m_cameraNearPlane, m_cameraFarPlane,
                                     camera.getFOV(), clock)) {
             m_deps.validationRun.fail(app::validation::ValidationRunError::RenderFailed, m_scene.lastError());
+            return;
+        }
+        if (!m_deps.validationRun.completeRenderAttempt()) {
             return;
         }
 
@@ -1560,9 +1564,10 @@ void ModelSceneAppState::render(const double frameTime) {
                     std::string(renderer::capture::textureCaptureErrorStableId(result.error)) + ":" + result.detail;
             }
         }
-        const auto captureHdr = [this, &captureSucceeded, &captureDetail](const RhiTextureHandle texture,
-                                                                          const float linearRgbScale,
-                                                                          const std::filesystem::path& outputPath) {
+        const auto captureHdr = [this, &captureSucceeded,
+                                 &captureDetail](const RhiTextureHandle texture,
+                                                 const renderer::capture::TextureCaptureLinearEncoding linearEncoding,
+                                                 const float linearRgbScale, const std::filesystem::path& outputPath) {
             if (!texture.isValid()) {
                 captureSucceeded = false;
                 captureDetail = "requested RTGI HDR validation signal is not available";
@@ -1582,6 +1587,7 @@ void ModelSceneAppState::render(const double frameTime) {
             request.width = textureDesc.width;
             request.height = textureDesc.height;
             request.origin = renderer::capture::TextureCaptureOrigin::TopLeft;
+            request.linearEncoding = linearEncoding;
             request.linearRgbScale = linearRgbScale;
             request.outputPath = outputPath;
             const renderer::capture::TextureCaptureResult result =
@@ -1593,11 +1599,16 @@ void ModelSceneAppState::render(const double frameTime) {
             }
         };
         if (captureSucceeded && !validationFrame->rtgiRawCapturePath.empty()) {
-            captureHdr(m_scene.rtgiRawDiffuseTextureHandle(), 1.0f, validationFrame->rtgiRawCapturePath);
+            captureHdr(m_scene.rtgiRawDiffuseTextureHandle(),
+                       renderer::capture::TextureCaptureLinearEncoding::NonNegativeLinearRgb, 1.0f,
+                       validationFrame->rtgiRawCapturePath);
         }
         if (captureSucceeded && !validationFrame->nrdDiffuseCapturePath.empty()) {
-            captureHdr(m_scene.nrdDiffuseTextureHandle(), m_scene.nrdDiffuseToPreExposedScale(),
-                       validationFrame->nrdDiffuseCapturePath);
+            captureHdr(m_scene.nrdDiffuseTextureHandle(),
+                       m_deps.validationRun.runtimeRenderSettings().nrd.method == NrdDiffuseMethod::Reblur
+                           ? renderer::capture::TextureCaptureLinearEncoding::NrdReblurYCoCg
+                           : renderer::capture::TextureCaptureLinearEncoding::NrdRelaxLinearRgb,
+                       m_scene.nrdDiffuseToPreExposedScale(), validationFrame->nrdDiffuseCapturePath);
         }
         static_cast<void>(m_deps.validationRun.completeFrame(captureSucceeded, std::move(captureDetail)));
         return;

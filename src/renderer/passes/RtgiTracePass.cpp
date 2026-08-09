@@ -461,7 +461,8 @@ bool RtgiTracePass::recordTrace(RhiCommandList& commandList, const FrameContext&
                    static_cast<uint32_t>(settings.instanceMask), sceneBuffers.sceneInstanceCount,
                    static_cast<uint32_t>(settings.shadowInstanceMask));
     pushConstants.materialGeometryCounts =
-        glm::uvec4(sceneBuffers.gpuSceneMaterialCount, sceneBuffers.gpuSceneGeometryCount, 0u, 0u);
+        glm::uvec4(sceneBuffers.gpuSceneMaterialCount, sceneBuffers.gpuSceneGeometryCount,
+                   settings.referenceSamplingEnabled ? 1u : 0u, 0u);
 
     renderer::contracts::RtgiSecondaryLightingParams lightingParams;
     lightingParams.sunDirectionAndVisibility = glm::vec4(ctx.skyColors.sunDirection, ctx.skyColors.sunVisibility);

@@ -9,6 +9,7 @@
 
 #include "AppLaunchOptions.h"
 #include "validation/ValidationRunController.h"
+#include "validation/TemporalResetCapture.h"
 #include "../engine/platform/Window.h"
 #include "../engine/input/InputManager.h"
 #include "../game/session/GameSessionConfig.h"
@@ -84,6 +85,7 @@ private:
     RenderGraphTimingHistory m_benchmarkRenderGraphTimingHistory;
     AccelerationStructureHistory m_benchmarkAccelerationStructureHistory;
     RtgiTraceCounterHistory m_benchmarkRtgiTraceCounterHistory;
+    app::validation::TemporalResetCapture m_validationTemporalResetCapture;
     bool m_benchmarkReplayWasActive = false;
     bool m_benchmarkReportWritten = false;
     bool m_benchmarkReportSucceeded = true;

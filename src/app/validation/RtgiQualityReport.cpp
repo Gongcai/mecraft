@@ -175,6 +175,24 @@ struct SequenceData final {
     return image;
 }
 
+[[nodiscard]] RtgiLinearImage averageFrameRange(const std::vector<RtgiLinearImage>& frames, const size_t begin,
+                                                const size_t end) {
+    RtgiLinearImage image;
+    image.width = frames.front().width;
+    image.height = frames.front().height;
+    image.pixels.assign(frames.front().pixels.size(), glm::vec3{0.0f});
+    for (size_t frame = begin; frame < end; ++frame) {
+        for (size_t pixel = 0u; pixel < image.pixels.size(); ++pixel) {
+            image.pixels[pixel] += frames[frame].pixels[pixel];
+        }
+    }
+    const float inverseFrameCount = 1.0f / static_cast<float>(end - begin);
+    for (glm::vec3& pixel : image.pixels) {
+        pixel *= inverseFrameCount;
+    }
+    return image;
+}
+
 [[nodiscard]] double meanLuminance(const RtgiLinearImage& image) {
     constexpr glm::dvec3 kLuminance{0.2126, 0.7152, 0.0722};
     double sum = 0.0;
@@ -279,8 +297,20 @@ struct SequenceData final {
                 {"raw_mean_luminance", summary.rawMeanLuminance},
                 {"denoised_mean_luminance", summary.denoisedMeanLuminance},
                 {"reference_mean_luminance", summary.referenceMeanLuminance},
+                {"reference_half_luminance_ssim", summary.referenceConvergence.luminanceSsim},
+                {"reference_half_relative_luminance_error_p95",
+                 summary.referenceConvergence.relativeLuminanceErrorP95},
                 {"luminance_ssim", summary.comparison.luminanceSsim},
                 {"relative_luminance_error_p95", summary.comparison.relativeLuminanceErrorP95}}},
+              {"diagnostics",
+               {{"reference_half_luminance_ssim",
+                 gateJson(true, summary.referenceConvergence.luminanceSsim, ">=", kRtgiLuminanceSsimThreshold,
+                          summary.referenceConvergence.luminanceSsim >= kRtgiLuminanceSsimThreshold)},
+                {"reference_half_relative_luminance_error_p95",
+                 gateJson(true, summary.referenceConvergence.relativeLuminanceErrorP95, "<=",
+                          kRtgiRelativeLuminanceErrorP95Threshold,
+                          summary.referenceConvergence.relativeLuminanceErrorP95 <=
+                              kRtgiRelativeLuminanceErrorP95Threshold)}}},
               {"gates", std::move(gates)},
               {"available_metrics_passed", summary.availableMetricsPassed},
               {"complete_static_gate_passed", summary.completeStaticGatePassed},
@@ -344,7 +374,7 @@ RtgiQualityReportError generateRtgiQualityReport(const RtgiQualityReportRequest&
     if (error != RtgiQualityReportError::None) {
         return error;
     }
-    error = loadSequence(request.referenceSequenceDirectory, "rtgi_raw_", kRtgiQualityReferenceSpp, profile, false,
+    error = loadSequence(request.referenceSequenceDirectory, "rtgi_raw_", kRtgiQualityReferenceSpp, profile, true,
                          true, reference, detail);
     if (error != RtgiQualityReportError::None) {
         return error;
@@ -380,6 +410,16 @@ RtgiQualityReportError generateRtgiQualityReport(const RtgiQualityReportRequest&
         detail = renderer::contracts::rtgiQualityMetricErrorStableId(comparisonError);
         return RtgiQualityReportError::MetricEvaluationFailed;
     }
+    const size_t referenceHalfFrameCount = reference.frames.size() / 2u;
+    const RtgiLinearImage referenceFirstHalf = averageFrameRange(reference.frames, 0u, referenceHalfFrameCount);
+    const RtgiLinearImage referenceSecondHalf =
+        averageFrameRange(reference.frames, referenceHalfFrameCount, reference.frames.size());
+    const RtgiQualityMetricError convergenceError = renderer::contracts::compareRtgiLinearReference(
+        referenceFirstHalf, referenceSecondHalf, croppedRoi, summary.referenceConvergence);
+    if (convergenceError != RtgiQualityMetricError::None) {
+        detail = renderer::contracts::rtgiQualityMetricErrorStableId(convergenceError);
+        return RtgiQualityReportError::MetricEvaluationFailed;
+    }
 
     summary.rawMeanLuminance = meanLuminance(rawAverage);
     summary.denoisedMeanLuminance = meanLuminance(denoisedAverage);
@@ -389,6 +429,9 @@ RtgiQualityReportError generateRtgiQualityReport(const RtgiQualityReportRequest&
     summary.luminanceSsimPassed = summary.comparison.luminanceSsim >= kRtgiLuminanceSsimThreshold;
     summary.relativeLuminanceErrorPassed =
         summary.comparison.relativeLuminanceErrorP95 <= kRtgiRelativeLuminanceErrorP95Threshold;
+    summary.referenceConvergencePassed =
+        summary.referenceConvergence.luminanceSsim >= kRtgiLuminanceSsimThreshold &&
+        summary.referenceConvergence.relativeLuminanceErrorP95 <= kRtgiRelativeLuminanceErrorP95Threshold;
     summary.radianceValidationPassed = true;
     summary.availableMetricsPassed = summary.varianceReductionPassed && summary.luminanceSsimPassed &&
                                      summary.relativeLuminanceErrorPassed && summary.radianceValidationPassed;

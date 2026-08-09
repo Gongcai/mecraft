@@ -41,6 +41,13 @@ struct ValidationFrame {
     std::filesystem::path nrdDiffuseCapturePath;
 };
 
+/// Deterministic clock for one actual validation render attempt.
+struct ValidationRenderClock {
+    uint32_t frameIndex = 0u;
+    float deltaTimeSeconds = kValidationFrameDeltaSeconds;
+    double renderTimeSeconds = 0.0;
+};
+
 /// Drives one versioned Camera Path through fixed warmup and sample phases.
 class ValidationRunController final {
 public:
@@ -57,6 +64,15 @@ public:
     /// Returns the immutable frame that both runtime scene classes must render.
     /// @return Current frame, or null before scene startup and after termination.
     [[nodiscard]] const ValidationFrame* currentFrame() const;
+
+    /// Return the clock for the next actual render attempt. Readiness retries
+    /// advance this clock without advancing the logical validation sample.
+    /// @return Deterministic frame index and time for the next rendered frame.
+    [[nodiscard]] ValidationRenderClock currentRenderClock() const;
+
+    /// Commit one successful render attempt and advance the deterministic clock.
+    /// @return True when the next attempt can be represented by the clock contract.
+    [[nodiscard]] bool completeRenderAttempt();
 
     /// Commits one successfully rendered frame and advances the fixed timeline.
     /// @param captureSucceeded True when a requested final capture was written.
@@ -108,6 +124,7 @@ private:
     uint32_t m_completedWarmupFrames = 0u;
     uint32_t m_completedSampleFrames = 0u;
     uint32_t m_completedSamplesPending = 0u;
+    uint32_t m_completedRenderAttempts = 0u;
 };
 
 /// Returns the stable identifier used by logs and validation reports.

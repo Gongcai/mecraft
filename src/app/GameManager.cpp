@@ -95,6 +95,21 @@ nlohmann::json completeGpuFrameTimingWindowJson(const RenderGraphTimingWindowSta
               {"span_ms", stats.latest.completeGpuFrameSpanMs}}}};
 }
 
+nlohmann::json temporalResetCaptureJson(const app::validation::TemporalResetCapture& capture) {
+    nlohmann::json histogram = nlohmann::json::object();
+    const auto& descriptors = temporalResetReasonDescriptors();
+    const auto& counts = capture.reasonCounts();
+    for (size_t index = 0u; index < descriptors.size(); ++index) {
+        histogram[descriptors[index].stableId] = counts[index];
+    }
+    return {{"scope", "sampled_render_frames"},
+            {"sample_count", capture.sampleReasons().size()},
+            {"nrd_restart_frame_count", capture.nrdRestartFrameCount()},
+            {"nrd_continue_frame_count", capture.nrdContinueFrameCount()},
+            {"reason_histogram", std::move(histogram)},
+            {"sample_bitmasks", capture.sampleReasons()}};
+}
+
 nlohmann::json rtgiTraceCounterWindowJson(const RtgiTraceCounterWindowStats& stats) {
     const renderer::contracts::RtgiTraceCounterFrameStats& latest = stats.latest;
     const double latestConfirmationRate = latest.candidateCount != 0u ? static_cast<double>(latest.confirmedCount) /
@@ -345,6 +360,7 @@ bool GameManager::init(int width, int height, const char* title, AppLaunchOption
     m_benchmarkRenderGraphTimingHistory.reset();
     m_benchmarkAccelerationStructureHistory.reset();
     m_benchmarkRtgiTraceCounterHistory.reset();
+    m_validationTemporalResetCapture.reset(m_launchOptions.validationSampleFrames);
     m_benchmarkReplayWasActive = false;
     m_benchmarkReportWritten = false;
     m_benchmarkReportSucceeded = true;
@@ -750,6 +766,9 @@ void GameManager::recordBenchmarkFrame(const double measuredFrameSeconds, const 
     (void)m_benchmarkRenderGraphTimingHistory.record(graphStats);
     (void)m_benchmarkAccelerationStructureHistory.record(graphStats.accelerationStructures);
     (void)m_benchmarkRtgiTraceCounterHistory.record(graphStats.rtgiTraceCounters);
+    if (m_validationRun.enabled()) {
+        m_validationTemporalResetCapture.record(graphStats.temporalResetReasons);
+    }
 }
 
 void GameManager::closeWindowIfBenchmarkComplete() {
@@ -890,6 +909,7 @@ bool GameManager::writeBenchmarkReport() {
             root["rtgi_quality_profile"]["capture_mode"] =
                 m_launchOptions.validationRtgiReference ? "reference" : "raw_and_denoised_sequence";
             root["rtgi_quality_profile"]["nrd_enabled"] = runtimeSettings.nrd.enabled;
+            root["temporal_reset_reasons"] = temporalResetCaptureJson(m_validationTemporalResetCapture);
         }
         root["environment"] = {{"time_of_day_seconds", contract.environment.timeOfDaySeconds},
                                {"weather", app::validation::validationWeatherStableId(contract.environment.weather)}};

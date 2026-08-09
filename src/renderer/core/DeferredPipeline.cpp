@@ -789,7 +789,7 @@ void DeferredPipeline::shutdown() {
 }
 
 bool DeferredPipeline::ensureRtgiValidationOutputTextures(RhiDevice& rhiDevice, const uint32_t width,
-                                                           const uint32_t height) {
+                                                          const uint32_t height) {
     const bool matchingExtent = m_rtgiValidationOutputWidth == width && m_rtgiValidationOutputHeight == height;
     if (matchingExtent && m_rtgiRawDiffuseValidationTexture.isValid() && m_rtgiRawDiffuseValidationView.isValid() &&
         m_nrdDiffuseValidationTexture.isValid() && m_nrdDiffuseValidationView.isValid()) {
@@ -811,7 +811,7 @@ bool DeferredPipeline::ensureRtgiValidationOutputTextures(RhiDevice& rhiDevice, 
     textureDesc.memoryCategory = RhiMemoryCategory::Nrd;
 
     const auto createTextureAndView = [&rhiDevice, &textureDesc](const char* debugName, RhiTextureHandle& texture,
-                                                                   RhiTextureViewHandle& view) {
+                                                                 RhiTextureViewHandle& view) {
         textureDesc.debugName = debugName;
         texture = rhiDevice.createTexture(textureDesc, nullptr);
         if (!texture.isValid()) {
@@ -979,6 +979,7 @@ bool DeferredPipeline::recordDeferredAuxiliaryClear(RhiCommandList& commandList,
 }
 
 bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSettings& settings) {
+    m_lastTemporalResetReasons = ctx.temporalResetReasons;
     const bool externalGeometry = m_shared != nullptr && m_shared->deferredGeometryProvider != nullptr;
     if (m_shared == nullptr || m_shared->rhiDevice == nullptr || m_shared->commandListPool == nullptr ||
         m_shared->deferredTargets == nullptr || m_resourceMgr == nullptr || m_skyCapturePass == nullptr ||
@@ -1059,7 +1060,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
     const bool rtgiTraceInspection = isRtgiTraceInspectionView(settings.debug.viewMode);
     const bool rtgiTraceInspectionChanged = rtgiTraceInspection != m_rtgiTraceInspectionActive;
     m_rtgiTraceInspectionActive = rtgiTraceInspection;
-    if ((!nrdEnabled && !rtgiReferenceSampling) || nrdTemporalReset || rtgiTraceInspectionChanged) {
+    if ((!nrdEnabled && !rtgiReferenceSampling) || (nrdEnabled && nrdTemporalReset) || rtgiTraceInspectionChanged) {
         m_rtgiTemporalSampleIndex = 0u;
     }
 #if defined(MECRAFT_ENABLE_NRD)
@@ -1654,8 +1655,8 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
             publish(DeferredTransientTarget::TransparentCompositeDepth, transparentCompositeDepth);
             publish(DeferredTransientTarget::Reflection, reflection);
             publish(DeferredTransientTarget::Cloud, cloud);
-            m_rtgiRawDiffuseTexture = rtgiRawValidationOutput.isValid() ? m_rtgiRawDiffuseValidationTexture
-                                                                         : RhiTextureHandle{};
+            m_rtgiRawDiffuseTexture =
+                rtgiRawValidationOutput.isValid() ? m_rtgiRawDiffuseValidationTexture : RhiTextureHandle{};
             m_nrdDiffuseTexture = nrdOutputDiffuse.isValid() && nrdDiffuseValidationOutput.isValid()
                                       ? m_nrdDiffuseValidationTexture
                                       : RhiTextureHandle{};
@@ -2056,6 +2057,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
             renderer::rt::sceneTlasMaskBit(renderer::rt::SceneTlasInstanceMask::ShadowCaster);
         traceSettings.temporalSamplingEnabled = (nrdEnabled || rtgiReferenceSampling) && !rtgiTraceInspection;
         traceSettings.temporalSampleIndex = m_rtgiTemporalSampleIndex;
+        traceSettings.referenceSamplingEnabled = rtgiReferenceSampling;
         traceSettings.useJitteredProjection = usesTemporalProjectionJitter(settings.upscale.type, settings.taa.enabled);
         traceSettings.terrainNormalMapsEnabled =
             settings.blockMaterialMaps.enabled && settings.blockMaterialMaps.normalMapsEnabled;
@@ -3125,6 +3127,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
 RenderGraphFrameStats DeferredPipeline::renderGraphFrameStats() const {
     RenderGraphFrameStats stats;
     stats.valid = m_graphCpuStatsValid;
+    stats.temporalResetReasons = m_lastTemporalResetReasons;
     if (m_rtgiTracePass != nullptr) {
         stats.rtgiTraceCounters = m_rtgiTracePass->counterStats();
     }
@@ -3959,6 +3962,9 @@ FrameOutput DeferredPipeline::buildFrameOutput(const FrameContext& ctx) {
     output.skipPostProcess = false;
     output.rtgiRawDiffuse = m_rtgiRawDiffuseTexture;
     output.nrdDiffuse = m_nrdDiffuseTexture;
+    output.nrdDiffuseEncoding = m_currentSettings.nrd.method == NrdDiffuseMethod::Reblur
+                                    ? NrdDiffuseOutputEncoding::ReblurYCoCg
+                                    : NrdDiffuseOutputEncoding::LinearRgb;
     output.nrdDiffuseToPreExposedScale = ctx.preExposure;
     output.hasRtgiRawDiffuse = output.rtgiRawDiffuse.isValid();
     output.hasNrdDiffuse = output.nrdDiffuse.isValid();

@@ -162,6 +162,7 @@ private:
     // Advances the production low-discrepancy sequence; trace inspection
     // freezes it so raw validation images remain comparable across frames.
     uint32_t m_rtgiTemporalSampleIndex = 0u;
+    TemporalResetReasons m_lastTemporalResetReasons = temporalResetReasonBit(TemporalResetReason::FirstFrame);
     bool m_rtgiTraceInspectionActive = false;
     RhiTextureHandle m_rtgiRawDiffuseTexture;
     RhiTextureHandle m_nrdDiffuseTexture;

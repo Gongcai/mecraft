@@ -61,6 +61,8 @@ public:
         // so rejected NRD history does not expose a new one-spp estimate on
         // every frame.
         uint32_t temporalSampleIndex = 0u;
+        // Reference capture uses the shared R2 sequence without spatial blue-noise offsets.
+        bool referenceSamplingEnabled = false;
         bool terrainNormalMapsEnabled = true;
         bool terrainSpecularMapsEnabled = true;
         // Match the artistic irradiance scale used by deferred sunlight.

@@ -91,6 +91,25 @@ int main() {
         return 1;
     }
 
+    std::vector<uint16_t> relaxHalf{glm::packHalf1x16(-0.25f), glm::packHalf1x16(0.5f), glm::packHalf1x16(1.0f),
+                                    glm::packHalf1x16(3.0f)};
+    std::vector<uint16_t> reblurHalf{glm::packHalf1x16(0.5f), glm::packHalf1x16(0.25f), glm::packHalf1x16(-0.125f),
+                                     glm::packHalf1x16(4.0f)};
+    if (!requireTrue(renderer::capture::resolveTextureCaptureHalfPixels(
+                         relaxHalf, renderer::capture::TextureCaptureLinearEncoding::NrdRelaxLinearRgb, 2.0f) ==
+                             renderer::capture::TextureCaptureError::None &&
+                         relaxHalf == std::vector<uint16_t>{glm::packHalf1x16(0.0f), glm::packHalf1x16(1.0f),
+                                                            glm::packHalf1x16(2.0f), glm::packHalf1x16(3.0f)},
+                     "RELAX capture must resolve finite filter undershoot like production lighting") ||
+        !requireTrue(renderer::capture::resolveTextureCaptureHalfPixels(
+                         reblurHalf, renderer::capture::TextureCaptureLinearEncoding::NrdReblurYCoCg, 1.0f) ==
+                             renderer::capture::TextureCaptureError::None &&
+                         reblurHalf == std::vector<uint16_t>{glm::packHalf1x16(0.875f), glm::packHalf1x16(0.375f),
+                                                             glm::packHalf1x16(0.375f), glm::packHalf1x16(4.0f)},
+                     "REBLUR capture must decode YCoCg before writing linear EXR")) {
+        return 1;
+    }
+
     const std::filesystem::path exrPath = std::filesystem::temp_directory_path() / "mecraft_texture_capture_test.exr";
     const renderer::capture::TextureCaptureResult exrResult =
         renderer::capture::writeLinearExr(exrPath, kHalfWidth, kHalfHeight, rgba16f);

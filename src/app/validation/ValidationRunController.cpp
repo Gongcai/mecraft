@@ -2,6 +2,7 @@
 
 #include <cstdlib>
 #include <iomanip>
+#include <limits>
 #include <sstream>
 #include <utility>
 
@@ -29,6 +30,7 @@ bool ValidationRunController::configure(const AppLaunchOptions& options) {
     m_completedWarmupFrames = 0u;
     m_completedSampleFrames = 0u;
     m_completedSamplesPending = 0u;
+    m_completedRenderAttempts = 0u;
     if (!options.validationEnabled()) {
         return true;
     }
@@ -94,6 +96,24 @@ bool ValidationRunController::beginScene(const ValidationScene scene) {
 
 const ValidationFrame* ValidationRunController::currentFrame() const {
     return m_currentFrame ? &*m_currentFrame : nullptr;
+}
+
+ValidationRenderClock ValidationRunController::currentRenderClock() const {
+    return {m_completedRenderAttempts, kValidationFrameDeltaSeconds,
+            static_cast<double>(m_completedRenderAttempts) * static_cast<double>(kValidationFrameDeltaSeconds)};
+}
+
+bool ValidationRunController::completeRenderAttempt() {
+    if (m_phase != Phase::Running || !m_currentFrame.has_value()) {
+        fail(ValidationRunError::InvalidState, "render attempt completion requires an active validation frame");
+        return false;
+    }
+    if (m_completedRenderAttempts == std::numeric_limits<uint32_t>::max()) {
+        fail(ValidationRunError::InvalidState, "validation render attempt clock overflow");
+        return false;
+    }
+    ++m_completedRenderAttempts;
+    return true;
 }
 
 bool ValidationRunController::completeFrame(const bool captureSucceeded, std::string captureDetail) {

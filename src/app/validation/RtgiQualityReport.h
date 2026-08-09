@@ -10,7 +10,7 @@
 namespace app::validation {
 
 inline constexpr const char* kRtgiQualityReportKind = "mecraft.rtgi_quality_report";
-inline constexpr uint32_t kRtgiQualityReportVersion = 1u;
+inline constexpr uint32_t kRtgiQualityReportVersion = 2u;
 inline constexpr double kRtgiVarianceReductionThresholdPercent = 70.0;
 inline constexpr double kRtgiLuminanceSsimThreshold = 0.95;
 inline constexpr double kRtgiRelativeLuminanceErrorP95Threshold = 0.10;
@@ -47,12 +47,14 @@ enum class RtgiQualityReportError : uint8_t {
 struct RtgiQualityReportSummary final {
     renderer::contracts::RtgiTemporalVarianceMetrics variance;
     renderer::contracts::RtgiReferenceComparisonMetrics comparison;
+    renderer::contracts::RtgiReferenceComparisonMetrics referenceConvergence;
     double rawMeanLuminance = 0.0;
     double denoisedMeanLuminance = 0.0;
     double referenceMeanLuminance = 0.0;
     bool varianceReductionPassed = false;
     bool luminanceSsimPassed = false;
     bool relativeLuminanceErrorPassed = false;
+    bool referenceConvergencePassed = false;
     bool radianceValidationPassed = false;
     bool availableMetricsPassed = false;
     bool completeStaticGatePassed = false;

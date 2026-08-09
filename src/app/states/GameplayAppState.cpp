@@ -186,11 +186,11 @@ void GameplayAppState::render(double frameTime) {
                                           "gameplay validation has no active frame");
                 return;
             }
-            const RenderFrameClock clock{validationFrame->sequenceFrameIndex, validationFrame->deltaTimeSeconds,
-                                         validationFrame->renderTimeSeconds, validationFrame->renderTimeSeconds};
+            const app::validation::ValidationRenderClock validationClock = m_deps.validationRun.currentRenderClock();
+            const RenderFrameClock clock{validationClock.frameIndex, validationClock.deltaTimeSeconds,
+                                         validationClock.renderTimeSeconds, validationClock.renderTimeSeconds};
             if (m_validationSequenceFrame != validationFrame->sequenceFrameIndex) {
                 m_validationSequenceFrame = validationFrame->sequenceFrameIndex;
-                m_validationSceneReady = false;
             }
             const bool captureRequested = m_validationSceneReady && validationFrame->captureAfterRender;
             const bool hdrCaptureRequested = m_validationSceneReady && validationFrame->captureRtgiHdrAfterRender;
@@ -212,6 +212,9 @@ void GameplayAppState::render(double frameTime) {
             if (!m_game->renderFrame(validationFrame->deltaTimeSeconds)) {
                 m_deps.validationRun.fail(app::validation::ValidationRunError::RenderFailed,
                                           "gameplay validation scene rendering failed");
+                return;
+            }
+            if (!m_deps.validationRun.completeRenderAttempt()) {
                 return;
             }
 

@@ -72,6 +72,18 @@ vec2 rtgiPixelScrambledCranleyPattersonRotation(uint frameIndex, uvec2 pixel) {
     return rotation;
 }
 
+// Uses one independent per-pixel Cranley-Patterson rotation for a periodic
+// 64-point R2 set. Any 64 consecutive frames enumerate the complete set, even
+// when validation warmup ends at a non-zero phase.
+vec2 rtgiReferenceR2Sample(uint frameIndex, uvec2 pixel) {
+    const uint batchSize = 64u;
+    uint sampleIndex = frameIndex % batchSize;
+    uint hashX = rtgiSampleHash(pixel.x * 1973u + pixel.y * 9277u + 0x68bc21ebu);
+    uint hashY = rtgiSampleHash(pixel.x * 92821u + pixel.y * 68917u + 0x02e5be93u);
+    vec2 batchRotation = vec2(hashX & 0x00ffffffu, hashY & 0x00ffffffu) / 16777216.0;
+    return fract(batchRotation + rtgiCranleyPattersonRotation(sampleIndex));
+}
+
 // Maps one low-discrepancy sample to a cosine-weighted unit direction around normal.
 vec3 rtgiCosineHemisphereDirection(vec2 sampleValue, vec3 normal) {
     vec3 unitNormal = normalize(normal);
