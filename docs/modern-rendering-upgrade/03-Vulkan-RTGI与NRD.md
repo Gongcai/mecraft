@@ -620,10 +620,11 @@ OMM 常驻 52 个 Micromap、598,144 B，1,773,056 个 microtriangle 精确分�
 A/B 门禁；该显示输出比较不替代 64 spp Linear EXR、固定 ROI 和动态 Ghost/Disocclusion 的 M3 画质门槛。
 `rtgi_cutout_traversal_ab_test` 从锁定 PNG/报告重算身份、样本、Micromap 分区、性能收益和图像指标。M3 V03
 Vulkan 质量运行据此采用 `opacity_micromap`，Candidate Loop 保留为显式诊断实现轴。
-捕获层同时提供严格 RGBA16F Linear EXR 写入，Reference runner 尚未接入该原始 HDR 输出。
+捕获层同时提供严格 RGBA16F Linear EXR 写入，Reference runner 已接入该原始 HDR 输出。
 `RtgiQualityValidationContract` 已统一线性 HDR 评价口径：在固定 ROI 内对 Raw/Denoised 逐像素帧序列使用
 无偏亮度方差，对 32 帧结果与 Reference 计算亮度 SSIM 和 95th 相对亮度误差，并拒绝 NaN/Inf、负辐射、
-尺寸不一致与不足两帧的序列；实际 64 spp 采集尚未开始。
+尺寸不一致与不足两帧的序列。独立质量工具严格检查 32 帧 Raw/Denoised 与 64 帧 Reference 的连续编号和
+尺寸，使用 IEEE Half 解码、流式线性平均并写出最终 64 spp EXR，然后输出指标、阈值、证据可用性与通过状态。
 `FrameOutput` 已发布 Deferred Graph 解析的 `rtgiRawDiffuse` 与 `nrdDiffuse`，两者均为当前 pre-exposed
 线性 HDR 域。验证控制器已为每个采样帧生成递增 EXR 序号，启动参数
 `--validation-rtgi-hdr-capture-dir` 与 `--validation-rtgi-hdr-capture raw|denoised|raw_and_denoised` 必须成对
@@ -634,9 +635,13 @@ RTX 4060 Laptop 的 Vulkan 小窗口实跑已分别覆盖两条路径（320×180
 捕获器的严格读回同时校验 Header、offset table 与 RGB Half scanline，防止格式表面有效而像素数据不可读取。
 版本化静态质量 Profile 已锁定 V01/V02/M03 的场景契约、M3 RTGI Render Settings、1280×720、Camera Path
 2.0 秒和固定 ROI；选择 Profile 会强制 32 帧 Raw/Denoised 且保持相机静止。V01 的真实 32+32 EXR 小预热
-运行已验证调度、写入和报告字段，64 spp Reference 与实际指标尚未生成。
+运行已验证调度、写入和报告字段。
 Reference 运行轴现会强制 64 帧 Raw-only、关闭 NRD，并让 R2 低差异相位在无降噪器时逐帧推进。V01 实跑的
-首帧、次帧和第 64 帧 EXR 哈希均不同，报告中 `NRD.GuidePrep`/`NRD.Dispatch` 为 0；64 帧平均与质量报告尚待接入。
+首帧、次帧和第 64 帧 EXR 哈希均不同，报告中 `NRD.GuidePrep`/`NRD.Dispatch` 为 0。质量工具已生成单张
+64 spp EXR；短预热 V01 的 Raw 与 Reference ROI 平均亮度分别为 `0.311690` 与 `0.311530`，Denoised 只有
+`0.021325`。因此方差降低虽为 `99.989986%`，SSIM `0.007898` 与 HDR 相对误差 p95 `1.0` 均失败。该结果
+定位到 NRD 输出能量链，不允许通过改阈值或对报告输入补偿；正式采集前必须修复并重跑。Leakage Band 与
+AS Pending 当前在报告中明确为缺少证据，`complete_static_gate_passed=false`。
 
 ## 10. 调试视图与验收
 

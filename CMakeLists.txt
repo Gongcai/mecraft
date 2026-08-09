@@ -234,6 +234,7 @@ find_package(spirv_cross_c CONFIG REQUIRED)
 # [应用层]
 set(SRC_APP
         src/app/AppLaunchOptions.cpp
+        src/app/validation/RtgiQualityReport.cpp
         src/app/validation/RtgiQualityProfile.cpp
         src/app/validation/ValidationSceneContract.cpp
         src/app/validation/ValidationVoxelFixture.cpp
@@ -893,6 +894,18 @@ target_compile_definitions(mecraft_core PRIVATE
         $<$<BOOL:${MECRAFT_RHI_BACKEND_VULKAN}>:MECRAFT_RHI_BACKEND_VULKAN>
 )
 
+add_executable(rtgi_quality_report_tool tools/rtgi_quality_report_main.cpp)
+target_compile_features(rtgi_quality_report_tool PRIVATE cxx_std_17)
+target_link_libraries(rtgi_quality_report_tool PRIVATE mecraft_core)
+mecraft_apply_project_warnings(rtgi_quality_report_tool)
+mecraft_apply_msvc_defaults(rtgi_quality_report_tool)
+mecraft_disable_rtti(rtgi_quality_report_tool)
+mecraft_disable_exceptions(rtgi_quality_report_tool)
+if(MECRAFT_ENABLE_PCH)
+    target_precompile_headers(rtgi_quality_report_tool REUSE_FROM mecraft_pch)
+endif()
+mecraft_apply_ipo(rtgi_quality_report_tool)
+
 # Shared compile definitions required by public project headers and consumers.
 target_compile_definitions(mecraft_core PUBLIC
         GLFW_INCLUDE_NONE
@@ -1118,6 +1131,7 @@ if(MECRAFT_BUILD_TESTS)
             MECRAFT_TEST_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
     add_mecraft_test(rtgi_sampling_contract_test tests/rtgi_sampling_contract_test.cpp)
     add_mecraft_test(rtgi_quality_validation_contract_test tests/rtgi_quality_validation_contract_test.cpp)
+    add_mecraft_test(rtgi_quality_report_test tests/rtgi_quality_report_test.cpp)
     target_compile_definitions(rtgi_sampling_contract_test PRIVATE
             MECRAFT_TEST_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
     add_mecraft_test(terrain_material_sampling_contract_test

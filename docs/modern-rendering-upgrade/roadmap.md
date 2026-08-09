@@ -282,8 +282,10 @@ M1 与 M2 可并行开发，但公共 `GpuMaterial`、`GpuSceneGeometry` 与 Sta
 
 当前 M3 画质门槛状态：双场景 Reference Capture、RTGI/NRD 运行链路和自动契约测试已通过；捕获层现已支持
 严格 RGBA16F Linear EXR 读回，`RtgiQualityValidationContract` 已定义固定 ROI 的帧序列 Variance、
-线性亮度 SSIM、95th 相对亮度误差和非法辐射拒绝；但 64 spp Reference、Raw/Denoised 序列与
-Ghost/Disocclusion 像素统计尚未接入 validation runner，因此这些画质数值门槛仍不能标记为通过。
+线性亮度 SSIM、95th 相对亮度误差和非法辐射拒绝。独立 `rtgi_quality_report_tool` 已严格消费连续的
+32 帧 Raw/Denoised 与 64 帧 Raw Reference，流式平均并写出单张 64 spp Linear EXR，再生成结构化门槛报告；
+缺帧、多余序号、尺寸变化、NaN/Inf 和负辐射都会明确失败。Ghost/Disocclusion、Leakage Band 与 AS Pending
+证据仍未接入，因此 M3 画质门槛不能标记为通过。
 Deferred `FrameOutput` 已发布本帧的 Raw RTGI 与 NRD Diffuse 线性 HDR 句柄，供 runner 读取生产信号；
 验证控制器现已为每个采样帧发布严格递增的 HDR 捕获序号，`raw`、`denoised` 和 `raw_and_denoised` 由显式
 CLI/目录契约选择。Gameplay 通过 pre-UI 回调读取 `FrameOutput`，Model 直接读取 Deferred 输出，两者均将
@@ -294,11 +296,14 @@ RGBA16F Raw/NRD 信号写入 `rtgi_raw_####.exr`/`rtgi_denoised_####.exr`；信�
 只有头部可解析、像素 offset 错误的文件进入后续质量报告。
 V01/V02/M03 静态质量 Profile 已由独立 JSON 锁定场景契约、M3 RTGI Render Settings、1280×720、Camera Path
 2.0 秒及固定 ROI。控制器选择 Profile 后强制 32 帧 Raw/Denoised，并在整个序列保持相机不动；报告发布
-Profile/ROI/64 spp 目标。V01 已以 1 帧预热完成真实 32+32 EXR 链路验证，正式门槛仍需 300 帧预热、ROI 内容
-复核、64 spp Reference 和数值报告。
+Profile/ROI/64 spp 目标。V01 已以 1 帧预热完成真实 32+32 EXR 链路验证，正式门槛仍需 300 帧预热与 ROI 内容
+复核。
 Reference 运行轴已接入：显式 `--validation-rtgi-reference` 强制 64 帧 Raw-only、关闭 NRD，并在无 NRD 时继续
 推进 RTGI 低差异相位。V01 真实运行生成 64 个不同哈希的 Raw EXR，报告中 NRD/Guide Prep/Dispatch 时间均为
-0；下一步仍需将 64 帧平均为 Reference EXR并由自动报告消费。
+0。质量工具已将这 64 帧平均为 Reference EXR，并对同一组短预热质量序列得到 Raw/Reference ROI 平均亮度
+`0.311690/0.311530`，证明 Reference 能量一致；Denoised 平均亮度只有 `0.021325`，导致 SSIM `0.007898`、
+相对亮度误差 p95 `1.0`，仅方差降低 `99.989986%` 通过。该运行只用于验证报告链并暴露 NRD 能量丢失，不能作为
+正式门槛证据；下一步先修复 Denoised 能量错误，再执行 300 帧预热的 V01/V02/M03 正式采集。
 
 2026-08-08 在 RTX 4060 Laptop、Vulkan、RELAX_DIFFUSE、300 帧预热加 1000 帧采样下完成四组复测。
 报告中的 `total_tracked` 是显式 Pass 阶段和，不是完整 GPU 帧跨度：它没有覆盖独立的帧首/场景 Overlay/
@@ -383,12 +388,13 @@ MAE/RMSE 为 0.000991734/0.002267379，全局亮度 SSIM 为 0.999885319。
 
 下一轮任务按以下顺序执行：
 
-1. 为已锁定固定 ROI 的 V01、V02、M03 接入 64 spp Linear EXR Reference，并自动计算
-   Variance、32 帧 SSIM、95th HDR Error、泄漏带及非法像素计数。
-2. 为 V03、V06、M06 接入 Ghost/Disocclusion、动态边缘差分和历史恢复帧数门禁。
-3. 针对 1080p 继续定位：体素优先检查地形提交、流送和 AS；Sponza 优先检查 RTGI.Trace 与 NRD.Dispatch。
+1. 定位并修复 V01 Denoised 相对 Raw/Reference 丢失约 93% 平均亮度的问题；同一 Profile 重采后必须通过
+   SSIM 与 HDR Error 门槛，禁止以改阈值或缩放报告输入处理。
+2. 为 V01、V02、M03 接入 Leakage Band、AS Pending 计数和 300 帧预热正式运行，固定 ROI 复核后归档报告。
+3. 为 V03、V06、M06 接入 Ghost/Disocclusion、动态边缘差分和历史恢复帧数门禁。
+4. 针对 1080p 继续定位：体素优先检查地形提交、流送和 AS；Sponza 优先检查 RTGI.Trace 与 NRD.Dispatch。
    固定场景、驱动和电源模式后保留前后 Capture。
-4. 完整跨度和分项归因稳定后，再在同一镜头比较 RELAX A-Trous 5 与 3；不得用减少迭代数掩盖 Trace 或
+5. 完整跨度和分项归因稳定后，再在同一镜头比较 RELAX A-Trous 5 与 3；不得用减少迭代数掩盖 Trace 或
    AS 成本。
 
 ## 7. M4：GPU Culling、LOD 与动画

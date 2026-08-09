@@ -129,7 +129,13 @@ Profile ID、版本、ROI、质量 Render Settings 及 64 spp Reference 目标�
 结合线性 HDR 与 Depth/Normal 边界检查确认；不得仅因矩形契约已固定而宣称画质门槛通过。
 `--validation-rtgi-reference` 将同一 Profile 切换为严格 64 帧 Raw-only 运行：NRD 必须关闭，RTGI 的 R2
 低差异相位仍逐帧推进，报告记录 `capture_mode=reference` 与 `nrd_enabled=false`。这 64 个线性样本随后必须
-平均为单张 Reference EXR；不能直接选取其中一帧作为参考。
+平均为单张 Reference EXR；不能直接选取其中一帧作为参考。`rtgi_quality_report_tool` 已实现严格序列检查、
+IEEE Half 解码、64 帧线性平均、32 帧 Raw/Denoised 方差与均值、SSIM、HDR Error p95 和非法辐射门禁。
+Leakage Band 与 AS Pending 没有输入证据时必须在 JSON 中保持 `passed=null`，完整静态门槛固定为失败。
+
+首轮 1 帧预热 V01 数据仅用于验证报告链：Raw/Reference ROI 平均亮度一致（`0.311690/0.311530`），但
+Denoised 只有 `0.021325`；SSIM `0.007898`、HDR 相对误差 p95 `1.0` 均不通过。该结果不得归档为正式门槛，
+必须先修复 NRD 能量错误，再以 300 帧预热重采 V01/V02/M03 并复核 ROI。
 
 ### 3.3 动态画面
 
