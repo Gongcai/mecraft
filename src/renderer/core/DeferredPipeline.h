@@ -154,6 +154,8 @@ private:
     // freezes it so raw validation images remain comparable across frames.
     uint32_t m_rtgiTemporalSampleIndex = 0u;
     bool m_rtgiTraceInspectionActive = false;
+    RhiTextureHandle m_rtgiRawDiffuseTexture;
+    RhiTextureHandle m_nrdDiffuseTexture;
     int m_heldBlockLightValue = 0;
     std::vector<renderer::contracts::SceneLight> m_sceneLights;
 

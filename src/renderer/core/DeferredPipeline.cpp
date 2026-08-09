@@ -818,6 +818,8 @@ FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderS
     // Per-frame state reset
     m_waterRenderedBeforeTemporal = false;
     m_waterRenderedAfterTemporal = false;
+    m_rtgiRawDiffuseTexture = {};
+    m_nrdDiffuseTexture = {};
 
     // Ensure deferred targets are sized correctly
     if (!targets.ensureSize(windowWidth, windowHeight, m_currentSettings.shadow.resolution)) {
@@ -1082,8 +1084,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
     if (m_hiZPass != nullptr && (externalGeometry || !settings.occlusion.hiZEnabled)) {
         m_hiZPass->invalidateCullStats();
     }
-    if (m_shadowPass != nullptr &&
-        (externalGeometry || !settings.shadow.gpuCascadeCullEnabled || !shadowEnabled)) {
+    if (m_shadowPass != nullptr && (externalGeometry || !settings.shadow.gpuCascadeCullEnabled || !shadowEnabled)) {
         m_shadowPass->invalidateCullStats();
     }
     if (externalGeometry && !m_shared->deferredGeometryProvider->prepareShadowFrame()) {
@@ -1537,7 +1538,8 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
     {
         DeferredRenderTargets* const targetsPointer = &targets;
         m_renderGraph.setPreRecordCallback([this, targetsPointer, sceneLighting, sceneComposite, transparentComposite,
-                                            transparentCompositeDepth, reflection, cloud]() {
+                                            transparentCompositeDepth, reflection, cloud, rtgiRawDiffuse,
+                                            nrdOutputDiffuse]() {
             const auto publish = [this, targetsPointer](const DeferredTransientTarget target,
                                                         const RgTextureHandle handle) {
                 targetsPointer->publishTransientTarget(target, m_renderGraph.resolvedTexture(handle),
@@ -1549,6 +1551,10 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
             publish(DeferredTransientTarget::TransparentCompositeDepth, transparentCompositeDepth);
             publish(DeferredTransientTarget::Reflection, reflection);
             publish(DeferredTransientTarget::Cloud, cloud);
+            m_rtgiRawDiffuseTexture =
+                rtgiRawDiffuse.isValid() ? m_renderGraph.resolvedTexture(rtgiRawDiffuse) : RhiTextureHandle{};
+            m_nrdDiffuseTexture =
+                nrdOutputDiffuse.isValid() ? m_renderGraph.resolvedTexture(nrdOutputDiffuse) : RhiTextureHandle{};
         });
     }
 
@@ -2084,9 +2090,8 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
                 relaxSettings.atrousIterationNum = static_cast<uint32_t>(settings.nrd.relaxAtrousIterations);
                 relaxSettings.minMaterialForDiffuse = 0.0f;
                 relaxSettings.enableAntiFirefly = true;
-                relaxSettings.diffuseMaxAccumulatedFrameNum =
-                    nrdAccumulationFrameCount(::nrd::RELAX_DEFAULT_ACCUMULATION_TIME, ctx.deltaTime,
-                                              ::nrd::RELAX_MAX_HISTORY_FRAME_NUM);
+                relaxSettings.diffuseMaxAccumulatedFrameNum = nrdAccumulationFrameCount(
+                    ::nrd::RELAX_DEFAULT_ACCUMULATION_TIME, ctx.deltaTime, ::nrd::RELAX_MAX_HISTORY_FRAME_NUM);
                 relaxSettings.diffuseMaxFastAccumulatedFrameNum =
                     nrdFastAccumulationFrameCount(ctx.deltaTime, relaxSettings.diffuseMaxAccumulatedFrameNum);
                 methodSettings = relaxSettings;
@@ -2097,9 +2102,8 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
                 reblurSettings.hitDistanceParameters.C = settings.nrd.reblurHitDistanceRoughnessScale;
                 reblurSettings.minMaterialForDiffuse = 0.0f;
                 reblurSettings.enableAntiFirefly = true;
-                reblurSettings.maxAccumulatedFrameNum =
-                    nrdAccumulationFrameCount(::nrd::REBLUR_DEFAULT_ACCUMULATION_TIME, ctx.deltaTime,
-                                              ::nrd::REBLUR_MAX_HISTORY_FRAME_NUM);
+                reblurSettings.maxAccumulatedFrameNum = nrdAccumulationFrameCount(
+                    ::nrd::REBLUR_DEFAULT_ACCUMULATION_TIME, ctx.deltaTime, ::nrd::REBLUR_MAX_HISTORY_FRAME_NUM);
                 reblurSettings.maxFastAccumulatedFrameNum =
                     nrdFastAccumulationFrameCount(ctx.deltaTime, reblurSettings.maxAccumulatedFrameNum);
                 methodSettings = reblurSettings;
@@ -3818,6 +3822,10 @@ FrameOutput DeferredPipeline::buildFrameOutput(const FrameContext& ctx) {
     output.hasDeferredInputs = m_deferredFrameActive;
     output.hasDebugView = (m_debugPass != nullptr);
     output.skipPostProcess = false;
+    output.rtgiRawDiffuse = m_rtgiRawDiffuseTexture;
+    output.nrdDiffuse = m_nrdDiffuseTexture;
+    output.hasRtgiRawDiffuse = output.rtgiRawDiffuse.isValid();
+    output.hasNrdDiffuse = output.nrdDiffuse.isValid();
 
     return output;
 }

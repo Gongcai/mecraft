@@ -284,6 +284,8 @@ M1 与 M2 可并行开发，但公共 `GpuMaterial`、`GpuSceneGeometry` 与 Sta
 严格 RGBA16F Linear EXR 读回，`RtgiQualityValidationContract` 已定义固定 ROI 的帧序列 Variance、
 线性亮度 SSIM、95th 相对亮度误差和非法辐射拒绝；但 64 spp Reference、Raw/Denoised 序列与
 Ghost/Disocclusion 像素统计尚未接入 validation runner，因此这些画质数值门槛仍不能标记为通过。
+Deferred `FrameOutput` 已发布本帧的 Raw RTGI 与 NRD Diffuse 线性 HDR 句柄，供 runner 读取生产信号；
+多帧捕获调度尚未接入。
 
 2026-08-08 在 RTX 4060 Laptop、Vulkan、RELAX_DIFFUSE、300 帧预热加 1000 帧采样下完成四组复测。
 报告中的 `total_tracked` 是显式 Pass 阶段和，不是完整 GPU 帧跨度：它没有覆盖独立的帧首/场景 Overlay/

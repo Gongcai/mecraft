@@ -50,10 +50,17 @@ struct FrameOutput {
     RhiTextureHandle reactiveMask;
     RhiTextureHandle transparencyMask;
 
+    // Production RTGI signals in the current pre-exposed linear HDR domain.
+    // These graph-owned handles remain valid until the next deferred graph execution.
+    RhiTextureHandle rtgiRawDiffuse;
+    RhiTextureHandle nrdDiffuse;
+
     // Deferred pipeline capabilities
     bool hasDeferredInputs = false;
     bool hasDebugView = false;
     bool skipPostProcess = false;
+    bool hasRtgiRawDiffuse = false;
+    bool hasNrdDiffuse = false;
 
     // Shadow data for held item rendering
     FirstPersonShadowData heldItemShadow{};

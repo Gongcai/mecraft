@@ -624,6 +624,8 @@ Vulkan 质量运行据此采用 `opacity_micromap`，Candidate Loop 保留为显
 `RtgiQualityValidationContract` 已统一线性 HDR 评价口径：在固定 ROI 内对 Raw/Denoised 逐像素帧序列使用
 无偏亮度方差，对 32 帧结果与 Reference 计算亮度 SSIM 和 95th 相对亮度误差，并拒绝 NaN/Inf、负辐射、
 尺寸不一致与不足两帧的序列；实际 64 spp 采集尚未开始。
+`FrameOutput` 已发布 Deferred Graph 解析的 `rtgiRawDiffuse` 与 `nrdDiffuse`，两者均为当前 pre-exposed
+线性 HDR 域；下一步由验证 runner 在下一次 Graph 执行前完成多帧 EXR 读取。
 
 ## 10. 调试视图与验收
 
