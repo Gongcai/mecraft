@@ -133,6 +133,9 @@ Profile ID、版本、ROI、质量 Render Settings 及 64 spp Reference 目标�
 平均为单张 Reference EXR；不能直接选取其中一帧作为参考。`rtgi_quality_report_tool` 已实现严格序列检查、
 IEEE Half 解码、64 帧线性平均、32 帧 Raw/Denoised 方差与均值、SSIM、HDR Error p95 和非法辐射门禁。
 Leakage Band 与 AS Pending 没有输入证据时必须在 JSON 中保持 `passed=null`，完整静态门槛固定为失败。
+Reference 帧首重置现明确排除 `referenceSamplingEnabled`：只有既没有 NRD、也没有 Reference Sampling 的路径
+才将显式样本索引清零，成功的 Reference 帧在图执行后递增。修复后以 300 帧预热重新采集的 64 个 Raw EXR、
+64 spp 平均 EXR 和结构化报告与当前正式归档逐字节一致，现有 V01 指标继续有效。
 
 首轮 1 帧预热 V01 v1 数据覆盖中心窗口 Sky，不能用作门槛。旧 v2 室内地面数据的
 Raw/Reference/Denoised ROI 平均亮度 `0.021384/0.021434/0.002634` 也不能使用：图外捕获读取了已别名的

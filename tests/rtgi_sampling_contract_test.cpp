@@ -110,6 +110,11 @@ namespace {
                std::string::npos &&
            pipelineSource.find("traceSettings.temporalSampleIndex = m_rtgiTemporalSampleIndex;") != std::string::npos &&
            pipelineSource.find("++m_rtgiTemporalSampleIndex;") != std::string::npos &&
+           pipelineSource.find(
+               "if ((!nrdEnabled && !rtgiReferenceSampling) || nrdTemporalReset || rtgiTraceInspectionChanged)") !=
+               std::string::npos &&
+           pipelineSource.find("if (!nrdEnabled || nrdTemporalReset || rtgiTraceInspectionChanged)") ==
+               std::string::npos &&
            pipelineSource.find("m_lastNrdSceneTlasRevision") == std::string::npos &&
            pipelineSource.find("relaxSettings.atrousIterationNum =") != std::string::npos &&
            pipelineSource.find("nrdAccumulationFrameCount(") != std::string::npos &&

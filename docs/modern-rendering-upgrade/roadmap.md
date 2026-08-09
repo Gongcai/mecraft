@@ -303,8 +303,11 @@ Profile/ROI/64 spp 目标。V01 已以 1 帧预热完成真实 32+32 EXR 链路�
 窗口的 Sky 像素，违反静态门槛的天空排除规则。因此 Profile 升级到 v2：V01 改为室内地面
 `(256,544,256,128)`，V02/M03 保留原 ROI；正式门槛仍需 300 帧预热与完整 ROI 内容复核。
 Reference 运行轴已接入：显式 `--validation-rtgi-reference` 强制 64 帧 Raw-only、关闭 NRD，并在无 NRD 时继续
-推进 RTGI 低差异相位。V01 真实运行生成 64 个不同哈希的 Raw EXR，报告中 NRD/Guide Prep/Dispatch 时间均为
-0。质量工具已将这 64 帧平均为 Reference EXR。`FrameOutput` 明确 Raw 在 pre-exposed 域、NRD 输出在
+推进 RTGI 低差异相位。此前帧首的 `!nrdEnabled` 分支会在 Reference 模式下错误地把显式 R2 样本索引重置为
+0，帧末递增无法跨帧保留；现已将重置限定为既没有 NRD、也没有 Reference Sampling 的路径，并由
+`rtgi_sampling_contract_test` 同时锁定“不重置”和“成功帧递增”条件。修复后的 V01 正式重采生成 64 个不同
+哈希的 Raw EXR，报告中 NRD/Guide Prep/Dispatch 时间均为 0。质量工具已将这 64 帧平均为 Reference EXR；
+新序列、平均 EXR 和质量报告与当前正式归档逐字节一致，因此下述门槛数据不变。`FrameOutput` 明确 Raw 在 pre-exposed 域、NRD 输出在
 scene-referred 域，EXR 捕获在写入 Denoised 时以同帧 Pre-exposure 转换为 Raw/Reference 域，并拒绝非有限、
 负值或 FP16 溢出。当前 V01 验证运行的 Pre-exposure 为 1，因此这一契约修复不改变这组像素。
 旧 v2 短预热 Raw/Reference 的 `0.021384/0.021434` 来自图外读取已别名的瞬态纹理，不能作为任何质量结论。

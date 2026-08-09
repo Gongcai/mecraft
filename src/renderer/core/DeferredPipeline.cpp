@@ -1059,7 +1059,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
     const bool rtgiTraceInspection = isRtgiTraceInspectionView(settings.debug.viewMode);
     const bool rtgiTraceInspectionChanged = rtgiTraceInspection != m_rtgiTraceInspectionActive;
     m_rtgiTraceInspectionActive = rtgiTraceInspection;
-    if (!nrdEnabled || nrdTemporalReset || rtgiTraceInspectionChanged) {
+    if ((!nrdEnabled && !rtgiReferenceSampling) || nrdTemporalReset || rtgiTraceInspectionChanged) {
         m_rtgiTemporalSampleIndex = 0u;
     }
 #if defined(MECRAFT_ENABLE_NRD)

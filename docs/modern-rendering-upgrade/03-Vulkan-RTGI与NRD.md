@@ -637,7 +637,9 @@ RTX 4060 Laptop 的 Vulkan 小窗口实跑已分别覆盖两条路径（320×180
 2.0 秒和固定 ROI；选择 Profile 会强制 32 帧 Raw/Denoised 且保持相机静止。V01 的真实 32+32 EXR 小预热
 运行已验证调度、写入和报告字段。
 Reference 运行轴现会强制 64 帧 Raw-only、关闭 NRD，并让 R2 低差异相位在无降噪器时逐帧推进。V01 实跑的
-首帧、次帧和第 64 帧 EXR 哈希均不同，报告中 `NRD.GuidePrep`/`NRD.Dispatch` 为 0。质量工具已生成单张
+帧首重置条件此前错误地把所有 `!nrdEnabled` 帧清零，现已排除显式 Reference Sampling，并由源码契约测试
+锁定 Reference 不重置、成功帧递增。修复后的 300 帧预热正式重采中，首帧、次帧和第 64 帧 EXR 哈希均不同，
+报告中 `NRD.GuidePrep`/`NRD.Dispatch` 为 0。质量工具已生成单张
 64 spp EXR。首轮 v1 ROI 覆盖中心窗口 Sky，不能用于静态门槛；Profile v2 将 V01 移到室内地面
 `(256,544,256,128)`。`FrameOutput` 现明确 Raw 为 pre-exposed、NRD 输出为 scene-referred，捕获器在写入
 Denoised EXR 时使用同帧 Pre-exposure 统一评价域。图外读取 Render Graph 瞬态目标会命中其后的别名资源，
@@ -645,6 +647,7 @@ Denoised EXR 时使用同帧 Pre-exposure 统一评价域。图外读取 Render 
 Pre-exposure 为 1；300 帧预热正式运行的 Raw/Reference/Denoised 平均亮度为
 `0.002882143/0.002882066/0.002634361`，方差降低 `99.834749%`，但 SSIM `0.775638`、HDR 相对误差 p95
 `0.321060` 仍失败。该差异需要定位 RELAX 的真实空间/时域根因，禁止用阈值、ROI 扩张或报告缩放处理；
+修复后的 Reference 序列、平均 EXR 和报告与当前正式归档逐字节一致，因此这些指标不变；
 Leakage Band 与 AS Pending 当前在报告中明确为缺少证据，
 `complete_static_gate_passed=false`。
 
