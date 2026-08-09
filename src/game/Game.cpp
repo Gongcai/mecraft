@@ -219,32 +219,87 @@ bool Game::renderFrame(const float frameTime) {
     if (m_captureScreenshotOnNextFrame && m_validationCapturePath.has_value()) {
         return false;
     }
-    // Set screenshot capture callback if requested (captures before UI overlay)
-    if (m_validationCapturePath.has_value()) {
-        const std::filesystem::path capturePath = *m_validationCapturePath;
+    // Set validation capture callback before UI overlay.
+    if (m_validationCapturePath.has_value() || m_validationRtgiRawCapturePath.has_value() ||
+        m_validationNrdDiffuseCapturePath.has_value()) {
+        const std::optional<std::filesystem::path> capturePath = std::move(m_validationCapturePath);
+        const std::optional<std::filesystem::path> rawCapturePath = std::move(m_validationRtgiRawCapturePath);
+        const std::optional<std::filesystem::path> denoisedCapturePath = std::move(m_validationNrdDiffuseCapturePath);
         m_validationCapturePath.reset();
+        m_validationRtgiRawCapturePath.reset();
+        m_validationNrdDiffuseCapturePath.reset();
         m_validationCaptureResult.reset();
-        m_frameOrchestrator->setPreUiCallback([this, capturePath]() {
-            const Window::FramebufferSize framebufferSize = m_deps.window.getFramebufferSize();
-            if (framebufferSize.width <= 0 || framebufferSize.height <= 0) {
+        m_frameOrchestrator->setPreUiCallback([this, capturePath, rawCapturePath, denoisedCapturePath]() {
+            const auto fail = [this](const char* detail) {
                 renderer::capture::TextureCaptureResult result;
                 result.error = renderer::capture::TextureCaptureError::InvalidRequest;
-                result.detail = "validation framebuffer extent is invalid";
+                result.detail = detail;
                 m_validationCaptureResult = std::move(result);
+            };
+            if (capturePath.has_value()) {
+                const Window::FramebufferSize framebufferSize = m_deps.window.getFramebufferSize();
+                if (framebufferSize.width <= 0 || framebufferSize.height <= 0) {
+                    fail("validation framebuffer extent is invalid");
+                    return;
+                }
+                renderer::capture::TextureCaptureRequest request;
+                request.sourceTexture = m_deps.rhiDevice.currentSwapchainColorTexture();
+                request.sourceState = RhiResourceState::Present;
+                request.sourceFormat = m_deps.rhiDevice.swapchainColorFormat();
+                request.width = static_cast<uint32_t>(framebufferSize.width);
+                request.height = static_cast<uint32_t>(framebufferSize.height);
+                request.origin = m_deps.rhiDevice.backend() == RhiBackend::OpenGL
+                                     ? renderer::capture::TextureCaptureOrigin::BottomLeft
+                                     : renderer::capture::TextureCaptureOrigin::TopLeft;
+                request.outputPath = *capturePath;
+                m_validationCaptureResult =
+                    renderer::capture::captureTextureToPng(m_deps.rhiDevice, m_deps.commandListPool, request);
+                if (!m_validationCaptureResult->succeeded()) {
+                    return;
+                }
+            }
+            const FrameOutput& output = m_renderRuntime->renderScene().getLastFrameOutput();
+            const auto captureHdr = [this, &output](const RhiTextureHandle texture, const bool available,
+                                                    const std::filesystem::path& outputPath) {
+                if (!available || !texture.isValid()) {
+                    renderer::capture::TextureCaptureResult result;
+                    result.error = renderer::capture::TextureCaptureError::InvalidRequest;
+                    result.detail = "requested RTGI HDR validation signal is not available";
+                    m_validationCaptureResult = std::move(result);
+                    return false;
+                }
+                renderer::capture::TextureCaptureRequest request;
+                RhiTextureDesc textureDesc;
+                if (!m_deps.rhiDevice.getTextureDesc(texture, textureDesc) ||
+                    textureDesc.format != RhiTextureFormat::Rgba16Float) {
+                    renderer::capture::TextureCaptureResult result;
+                    result.error = renderer::capture::TextureCaptureError::InvalidRequest;
+                    result.detail = "requested RTGI HDR validation signal has an invalid texture contract";
+                    m_validationCaptureResult = std::move(result);
+                    return false;
+                }
+                request.sourceTexture = texture;
+                request.sourceState = RhiResourceState::ShaderRead;
+                request.sourceFormat = RhiTextureFormat::Rgba16Float;
+                request.width = textureDesc.width;
+                request.height = textureDesc.height;
+                request.origin = renderer::capture::TextureCaptureOrigin::TopLeft;
+                request.outputPath = outputPath;
+                m_validationCaptureResult =
+                    renderer::capture::captureTextureToExr(m_deps.rhiDevice, m_deps.commandListPool, request);
+                return m_validationCaptureResult->succeeded();
+            };
+            if (rawCapturePath.has_value() &&
+                !captureHdr(output.rtgiRawDiffuse, output.hasRtgiRawDiffuse, *rawCapturePath)) {
                 return;
             }
-            renderer::capture::TextureCaptureRequest request;
-            request.sourceTexture = m_deps.rhiDevice.currentSwapchainColorTexture();
-            request.sourceState = RhiResourceState::Present;
-            request.sourceFormat = m_deps.rhiDevice.swapchainColorFormat();
-            request.width = static_cast<uint32_t>(framebufferSize.width);
-            request.height = static_cast<uint32_t>(framebufferSize.height);
-            request.origin = m_deps.rhiDevice.backend() == RhiBackend::OpenGL
-                                 ? renderer::capture::TextureCaptureOrigin::BottomLeft
-                                 : renderer::capture::TextureCaptureOrigin::TopLeft;
-            request.outputPath = capturePath;
-            m_validationCaptureResult =
-                renderer::capture::captureTextureToPng(m_deps.rhiDevice, m_deps.commandListPool, request);
+            if (denoisedCapturePath.has_value() &&
+                !captureHdr(output.nrdDiffuse, output.hasNrdDiffuse, *denoisedCapturePath)) {
+                return;
+            }
+            if (!m_validationCaptureResult.has_value()) {
+                m_validationCaptureResult = renderer::capture::TextureCaptureResult{};
+            }
         });
     } else if (m_captureScreenshotOnNextFrame) {
         m_captureScreenshotOnNextFrame = false;
@@ -261,7 +316,9 @@ bool Game::renderFrame(const float frameTime) {
 }
 
 bool Game::configureValidationFrame(const renderer::contracts::CameraPathPose& pose, const RenderFrameClock& clock,
-                                    const std::filesystem::path* capturePath) {
+                                    const std::filesystem::path* capturePath,
+                                    const std::filesystem::path* rtgiRawCapturePath,
+                                    const std::filesystem::path* nrdDiffuseCapturePath) {
     const glm::vec3 position(pose.position);
     const glm::vec3 forward(pose.forward);
     const glm::vec3 up(pose.up);
@@ -277,6 +334,16 @@ bool Game::configureValidationFrame(const renderer::contracts::CameraPathPose& p
         m_validationCapturePath = *capturePath;
     } else {
         m_validationCapturePath.reset();
+    }
+    if (rtgiRawCapturePath != nullptr) {
+        m_validationRtgiRawCapturePath = *rtgiRawCapturePath;
+    } else {
+        m_validationRtgiRawCapturePath.reset();
+    }
+    if (nrdDiffuseCapturePath != nullptr) {
+        m_validationNrdDiffuseCapturePath = *nrdDiffuseCapturePath;
+    } else {
+        m_validationNrdDiffuseCapturePath.reset();
     }
     return true;
 }

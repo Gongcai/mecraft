@@ -1810,6 +1810,14 @@ RhiTextureFormat ModelSceneRuntime::captureTextureFormat() const {
     return m_deferredRenderer ? m_deferredRenderer->captureTextureFormat() : RhiTextureFormat::Undefined;
 }
 
+RhiTextureHandle ModelSceneRuntime::rtgiRawDiffuseTextureHandle() const {
+    return m_deferredRenderer ? m_deferredRenderer->rtgiRawDiffuseTextureHandle() : RhiTextureHandle{};
+}
+
+RhiTextureHandle ModelSceneRuntime::nrdDiffuseTextureHandle() const {
+    return m_deferredRenderer ? m_deferredRenderer->nrdDiffuseTextureHandle() : RhiTextureHandle{};
+}
+
 const GpuFrameStats* ModelSceneRuntime::gpuFrameStats() const {
     return m_deferredRenderer ? m_deferredRenderer->gpuFrameStats() : nullptr;
 }

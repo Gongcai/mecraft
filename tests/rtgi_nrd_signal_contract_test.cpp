@@ -114,6 +114,11 @@ namespace {
            pipelineSource.find("IN_DIFF_CONFIDENCE") == std::string::npos &&
            pipelineSource.find("commonSettings.isHistoryConfidenceAvailable = false;") != std::string::npos &&
            pipelineSource.find("guideResources.reprojectionCoverage = nrdReprojectionCoverage;") != std::string::npos &&
+           pipelineSource.find(
+               "const RhiTextureUsageFlags sampledStorage = rhiFlag(RhiTextureUsage::Sampled) |\n"
+               "                                                    rhiFlag(RhiTextureUsage::Storage) |\n"
+               "                                                    rhiFlag(RhiTextureUsage::TransferSrc);") !=
+               std::string::npos &&
            pipelineSource.find("const RhiTextureUsageFlags nrdOutputUsage =") != std::string::npos &&
            pipelineSource.find("sampledStorage | rhiFlag(RhiTextureUsage::ColorAttachment)") != std::string::npos &&
            pipelineSource.find("NRD.OutputInit") != std::string::npos &&
@@ -129,8 +134,7 @@ namespace {
            targetsSource.find("historyConfidenceTexture") == std::string::npos &&
            targetsSource.find("historyRtgiValidationTexture") == std::string::npos &&
            debugPassSource.find("!isNrdValidationView(settings.debug.viewMode)") == std::string::npos &&
-           debugPassSource.find("params.rtgiParams = glm::vec4(nrdEncoding, ctx.preExposure") !=
-               std::string::npos &&
+           debugPassSource.find("params.rtgiParams = glm::vec4(nrdEncoding, ctx.preExposure") != std::string::npos &&
            debugShaderSource.find("vec3 debugRawRtgiSceneRadiance(vec2 textureUv)") != std::string::npos &&
            debugShaderSource.find("/ uRtgiPreExposure;") != std::string::npos &&
            debugShaderSource.find("vec3 debugNrdSceneRadiance(vec2 textureUv)") != std::string::npos &&

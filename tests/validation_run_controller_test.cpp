@@ -62,6 +62,8 @@ int main() {
     frame = controller.currentFrame();
     if (!requireTrue(frame != nullptr && frame->collectPerformance && !frame->captureAfterRender &&
                          frame->captureRtgiHdrAfterRender && frame->rtgiHdrCaptureSampleIndex == 0u &&
+                         frame->rtgiRawCapturePath == "hdr/rtgi_raw_0000.exr" &&
+                         frame->nrdDiffuseCapturePath == "hdr/rtgi_denoised_0000.exr" &&
                          nearlyEqual(frame->cameraPose.position.x, 12.0),
                      "sampling must start at the inclusive path origin") ||
         !requireTrue(controller.completeFrame(true), "the first sample must complete") ||
@@ -79,7 +81,10 @@ int main() {
 
     frame = controller.currentFrame();
     if (!requireTrue(frame != nullptr && frame->captureAfterRender && frame->captureRtgiHdrAfterRender &&
-                         frame->rtgiHdrCaptureSampleIndex == 2u && nearlyEqual(frame->cameraPose.position.x, -16.0),
+                         frame->rtgiHdrCaptureSampleIndex == 2u &&
+                         frame->rtgiRawCapturePath == "hdr/rtgi_raw_0002.exr" &&
+                         frame->nrdDiffuseCapturePath == "hdr/rtgi_denoised_0002.exr" &&
+                         nearlyEqual(frame->cameraPose.position.x, -16.0),
                      "the final sample must request capture at the path endpoint") ||
         !requireTrue(!controller.completeFrame(false, "write failed") && controller.failed() &&
                          controller.error() == app::validation::ValidationRunError::CaptureFailed,

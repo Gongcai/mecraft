@@ -1506,8 +1506,11 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
             handle = m_renderGraph.createTexture({name, desc, RhiResourceState::ShaderRead});
             return handle.isValid();
         };
-        const RhiTextureUsageFlags sampledStorage =
-            rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::Storage);
+        // Validation exports the resolved linear HDR RTGI outputs through a texture-to-buffer copy.
+        // Every transient signal sharing this usage must therefore support TransferSrc.
+        const RhiTextureUsageFlags sampledStorage = rhiFlag(RhiTextureUsage::Sampled) |
+                                                    rhiFlag(RhiTextureUsage::Storage) |
+                                                    rhiFlag(RhiTextureUsage::TransferSrc);
         const RhiTextureUsageFlags nrdOutputUsage = sampledStorage | rhiFlag(RhiTextureUsage::ColorAttachment);
         const RhiTextureUsageFlags nrdValidationUsage = sampledStorage | rhiFlag(RhiTextureUsage::ColorAttachment);
         if (!createRtgiTexture("RTGI.RawDiffuseRadianceHitDistance", RhiTextureFormat::Rgba16Float, sampledStorage,

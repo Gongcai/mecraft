@@ -627,7 +627,10 @@ Vulkan 质量运行据此采用 `opacity_micromap`，Candidate Loop 保留为显
 `FrameOutput` 已发布 Deferred Graph 解析的 `rtgiRawDiffuse` 与 `nrdDiffuse`，两者均为当前 pre-exposed
 线性 HDR 域。验证控制器已为每个采样帧生成递增 EXR 序号，启动参数
 `--validation-rtgi-hdr-capture-dir` 与 `--validation-rtgi-hdr-capture raw|denoised|raw_and_denoised` 必须成对
-出现；下一步将此请求接入两个场景的 EXR 写入。
+出现。Gameplay 与 Model 场景均已接入：分别从 `RenderScene::FrameOutput` 和模型 Deferred 输出写入
+`rtgi_raw_####.exr`/`rtgi_denoised_####.exr`；请求信号无效、非 RGBA16F 或任何 EXR 写入失败均明确终止运行。
+RTX 4060 Laptop 的 Vulkan 小窗口实跑已分别覆盖两条路径（320×180、1 帧预热、2 帧采样），每组 Raw/Denoised
+均完整生成两帧无压缩 RGB Half scanline EXR，`exrheader` 可解析且 Vulkan Validation 无错误。
 
 ## 10. 调试视图与验收
 

@@ -1,9 +1,20 @@
 #include "app/validation/ValidationRunController.h"
 
 #include <cstdlib>
+#include <iomanip>
+#include <sstream>
 #include <utility>
 
 namespace app::validation {
+namespace {
+
+[[nodiscard]] std::string rtgiHdrCaptureFilename(const char* signal, const uint32_t sampleIndex) {
+    std::ostringstream stream;
+    stream << "rtgi_" << signal << '_' << std::setw(4) << std::setfill('0') << sampleIndex << ".exr";
+    return stream.str();
+}
+
+} // namespace
 
 bool ValidationRunController::configure(const AppLaunchOptions& options) {
     m_options = options;
@@ -177,6 +188,18 @@ bool ValidationRunController::buildCurrentFrame() {
         frame.captureAfterRender = m_completedSampleFrames + 1u == m_options.validationSampleFrames;
         frame.captureRtgiHdrAfterRender = m_options.validationRtgiHdrCaptureMode.has_value();
         frame.rtgiHdrCaptureSampleIndex = m_completedSampleFrames;
+        if (frame.captureRtgiHdrAfterRender) {
+            const ValidationRtgiHdrCaptureMode mode = *m_options.validationRtgiHdrCaptureMode;
+            if (mode == ValidationRtgiHdrCaptureMode::Raw || mode == ValidationRtgiHdrCaptureMode::RawAndDenoised) {
+                frame.rtgiRawCapturePath = m_options.validationRtgiHdrCaptureDirectory /
+                                           rtgiHdrCaptureFilename("raw", m_completedSampleFrames);
+            }
+            if (mode == ValidationRtgiHdrCaptureMode::Denoised ||
+                mode == ValidationRtgiHdrCaptureMode::RawAndDenoised) {
+                frame.nrdDiffuseCapturePath = m_options.validationRtgiHdrCaptureDirectory /
+                                              rtgiHdrCaptureFilename("denoised", m_completedSampleFrames);
+            }
+        }
     }
 
     const renderer::contracts::CameraPathError sampleError =

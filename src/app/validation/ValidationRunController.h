@@ -6,6 +6,7 @@
 #include "renderer/contracts/CameraPathContract.h"
 
 #include <cstdint>
+#include <filesystem>
 #include <optional>
 #include <string>
 
@@ -35,6 +36,8 @@ struct ValidationFrame {
     bool captureAfterRender = false;
     bool captureRtgiHdrAfterRender = false;
     uint32_t rtgiHdrCaptureSampleIndex = 0u;
+    std::filesystem::path rtgiRawCapturePath;
+    std::filesystem::path nrdDiffuseCapturePath;
 };
 
 /// Drives one versioned Camera Path through fixed warmup and sample phases.

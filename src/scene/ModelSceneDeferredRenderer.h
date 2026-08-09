@@ -95,6 +95,8 @@ public:
     [[nodiscard]] uint32_t viewportHeight() const;
     [[nodiscard]] RhiTextureHandle captureTextureHandle() const;
     [[nodiscard]] RhiTextureFormat captureTextureFormat() const;
+    [[nodiscard]] RhiTextureHandle rtgiRawDiffuseTextureHandle() const;
+    [[nodiscard]] RhiTextureHandle nrdDiffuseTextureHandle() const;
     [[nodiscard]] const GpuFrameStats* gpuFrameStats() const;
     [[nodiscard]] RenderGraphFrameStats renderGraphFrameStats() const;
     [[nodiscard]] ReflectionProbeCaptureFrameStats reflectionProbeCaptureStats() const;

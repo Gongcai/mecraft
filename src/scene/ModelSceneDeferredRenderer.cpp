@@ -362,6 +362,7 @@ struct ModelSceneDeferredRenderer::Impl {
     bool instantWeatherTransition = true;
     SharedRenderResources shared;
     RenderSettings settings = modelSceneSettings();
+    FrameOutput lastFrameOutput;
     FrameContext previousContext;
     RhiSamplerHandle viewportSampler;
     uint64_t textureId = 0u;
@@ -600,6 +601,7 @@ bool ModelSceneDeferredRenderer::render(const glm::mat4& view, const glm::mat4& 
         state.error = "failed to render model scene deferred pipeline";
         return false;
     }
+    state.lastFrameOutput = output;
     if (!state.fsr1Enabled()) {
         TemporalFrameInput temporalInput;
         temporalInput.frameIndex = context.frameIndex;
@@ -665,9 +667,8 @@ bool ModelSceneDeferredRenderer::render(const glm::mat4& view, const glm::mat4& 
     }
     const bool fsr1Enabled = state.fsr1Enabled();
     state.postProcess.setFrameEffects(buildPostProcessEffects(state.settings, context));
-    const RhiTextureHandle texture = state.postProcess.compositeToTexture(*state.rhiDevice, frameClock.deltaTimeSeconds,
-                                                                          output.gbufferDepth, state.debugService,
-                                                                          !fsr1Enabled);
+    const RhiTextureHandle texture = state.postProcess.compositeToTexture(
+        *state.rhiDevice, frameClock.deltaTimeSeconds, output.gbufferDepth, state.debugService, !fsr1Enabled);
     if (!texture.isValid()) {
         state.error = "failed to composite model scene post-process output";
         return false;
@@ -870,6 +871,14 @@ RhiTextureHandle ModelSceneDeferredRenderer::captureTextureHandle() const {
 
 RhiTextureFormat ModelSceneDeferredRenderer::captureTextureFormat() const {
     return m_impl->viewportUsesFsr1 ? m_impl->rhiDevice->swapchainColorFormat() : RhiTextureFormat::Rgba8Unorm;
+}
+
+RhiTextureHandle ModelSceneDeferredRenderer::rtgiRawDiffuseTextureHandle() const {
+    return m_impl->lastFrameOutput.hasRtgiRawDiffuse ? m_impl->lastFrameOutput.rtgiRawDiffuse : RhiTextureHandle{};
+}
+
+RhiTextureHandle ModelSceneDeferredRenderer::nrdDiffuseTextureHandle() const {
+    return m_impl->lastFrameOutput.hasNrdDiffuse ? m_impl->lastFrameOutput.nrdDiffuse : RhiTextureHandle{};
 }
 
 const GpuFrameStats* ModelSceneDeferredRenderer::gpuFrameStats() const {

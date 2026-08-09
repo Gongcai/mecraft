@@ -1560,6 +1560,42 @@ void ModelSceneAppState::render(const double frameTime) {
                     std::string(renderer::capture::textureCaptureErrorStableId(result.error)) + ":" + result.detail;
             }
         }
+        const auto captureHdr = [this, &captureSucceeded, &captureDetail](const RhiTextureHandle texture,
+                                                                          const std::filesystem::path& outputPath) {
+            if (!texture.isValid()) {
+                captureSucceeded = false;
+                captureDetail = "requested RTGI HDR validation signal is not available";
+                return;
+            }
+            RhiTextureDesc textureDesc;
+            if (!m_deps.rhiDevice.getTextureDesc(texture, textureDesc) ||
+                textureDesc.format != RhiTextureFormat::Rgba16Float) {
+                captureSucceeded = false;
+                captureDetail = "requested RTGI HDR validation signal has an invalid texture contract";
+                return;
+            }
+            renderer::capture::TextureCaptureRequest request;
+            request.sourceTexture = texture;
+            request.sourceState = RhiResourceState::ShaderRead;
+            request.sourceFormat = RhiTextureFormat::Rgba16Float;
+            request.width = textureDesc.width;
+            request.height = textureDesc.height;
+            request.origin = renderer::capture::TextureCaptureOrigin::TopLeft;
+            request.outputPath = outputPath;
+            const renderer::capture::TextureCaptureResult result =
+                renderer::capture::captureTextureToExr(m_deps.rhiDevice, m_deps.commandListPool, request);
+            if (!result.succeeded()) {
+                captureSucceeded = false;
+                captureDetail =
+                    std::string(renderer::capture::textureCaptureErrorStableId(result.error)) + ":" + result.detail;
+            }
+        };
+        if (captureSucceeded && !validationFrame->rtgiRawCapturePath.empty()) {
+            captureHdr(m_scene.rtgiRawDiffuseTextureHandle(), validationFrame->rtgiRawCapturePath);
+        }
+        if (captureSucceeded && !validationFrame->nrdDiffuseCapturePath.empty()) {
+            captureHdr(m_scene.nrdDiffuseTextureHandle(), validationFrame->nrdDiffuseCapturePath);
+        }
         static_cast<void>(m_deps.validationRun.completeFrame(captureSucceeded, std::move(captureDetail)));
         return;
     }

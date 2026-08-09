@@ -82,14 +82,17 @@ public:
     /// Schedules save-thumbnail capture during the next normal gameplay frame.
     void requestExitScreenshot();
 
-    /// Configures the exact camera, clock, and optional PNG request for one frame.
+    /// Configures the exact camera, clock, and optional validation capture requests for one frame.
     /// @param pose Validated Camera Path pose to apply to world rendering.
     /// @param clock Fixed validation frame clock used by temporal rendering.
-    /// @param capturePath PNG destination for the final frame, or null for no capture.
+    /// @param capturePath PNG destination for the final frame, or null for no PNG capture.
+    /// @param rtgiRawCapturePath Linear EXR destination for the raw RTGI signal, or null when disabled.
+    /// @param nrdDiffuseCapturePath Linear EXR destination for the denoised RTGI signal, or null when disabled.
     /// @return True when the double-precision pose converts to a valid render camera.
     [[nodiscard]] bool configureValidationFrame(const renderer::contracts::CameraPathPose& pose,
-                                                const RenderFrameClock& clock,
-                                                const std::filesystem::path* capturePath);
+                                                const RenderFrameClock& clock, const std::filesystem::path* capturePath,
+                                                const std::filesystem::path* rtgiRawCapturePath,
+                                                const std::filesystem::path* nrdDiffuseCapturePath);
 
     /// Returns and clears the most recent validation capture result.
     /// @return Capture status after a requested frame, or no value otherwise.
@@ -131,6 +134,8 @@ private:
     std::optional<Camera> m_validationCamera;
     std::optional<RenderFrameClock> m_validationFrameClock;
     std::optional<std::filesystem::path> m_validationCapturePath;
+    std::optional<std::filesystem::path> m_validationRtgiRawCapturePath;
+    std::optional<std::filesystem::path> m_validationNrdDiffuseCapturePath;
     std::optional<renderer::capture::TextureCaptureResult> m_validationCaptureResult;
     std::optional<app::validation::ValidationVoxelFixtureIdentity> m_validationVoxelFixture;
     std::string m_validationSceneError;

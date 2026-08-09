@@ -193,8 +193,18 @@ void GameplayAppState::render(double frameTime) {
                 m_validationSceneReady = false;
             }
             const bool captureRequested = m_validationSceneReady && validationFrame->captureAfterRender;
+            const bool hdrCaptureRequested = m_validationSceneReady && validationFrame->captureRtgiHdrAfterRender;
             const std::filesystem::path* capturePath = captureRequested ? &options.validationCapturePath : nullptr;
-            if (!m_game->configureValidationFrame(validationFrame->cameraPose, clock, capturePath)) {
+            const std::filesystem::path* rawCapturePath =
+                !hdrCaptureRequested || validationFrame->rtgiRawCapturePath.empty()
+                    ? nullptr
+                    : &validationFrame->rtgiRawCapturePath;
+            const std::filesystem::path* denoisedCapturePath =
+                !hdrCaptureRequested || validationFrame->nrdDiffuseCapturePath.empty()
+                    ? nullptr
+                    : &validationFrame->nrdDiffuseCapturePath;
+            if (!m_game->configureValidationFrame(validationFrame->cameraPose, clock, capturePath, rawCapturePath,
+                                                  denoisedCapturePath)) {
                 m_deps.validationRun.fail(app::validation::ValidationRunError::CameraPoseConversionFailed,
                                           "gameplay Camera Path pose cannot be represented by the float render camera");
                 return;
@@ -207,20 +217,21 @@ void GameplayAppState::render(double frameTime) {
 
             const bool sceneReadyAfterRender = m_game->isValidationSceneReady();
             if (!sceneReadyAfterRender) {
-                if (captureRequested) {
+                if (captureRequested || hdrCaptureRequested) {
                     static_cast<void>(m_game->takeValidationCaptureResult());
                 }
                 m_validationSceneReady = false;
                 return;
             }
             m_validationSceneReady = true;
-            if (validationFrame->captureAfterRender && !captureRequested) {
+            if ((validationFrame->captureAfterRender || validationFrame->captureRtgiHdrAfterRender) &&
+                !captureRequested && !hdrCaptureRequested) {
                 return;
             }
 
             bool captureSucceeded = true;
             std::string captureDetail;
-            if (validationFrame->captureAfterRender) {
+            if (captureRequested || hdrCaptureRequested) {
                 std::optional<renderer::capture::TextureCaptureResult> result = m_game->takeValidationCaptureResult();
                 captureSucceeded = result.has_value() && result->succeeded();
                 if (!captureSucceeded) {
