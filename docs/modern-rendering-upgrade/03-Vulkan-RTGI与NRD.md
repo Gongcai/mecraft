@@ -650,8 +650,12 @@ RGB，REBLUR 从 YCoCg 解码；非法辐射与 FP16 溢出仍是硬错误。图
 报告的 32 个正式样本为 Restart `0`、Continue `32`。修复后同一 V01 正式重采的
 Raw/Reference/Denoised 平均亮度为 `0.002624319/0.002611804/0.002304740`，方差降低 `99.988285%`、SSIM
 `0.996256` 通过，HDR 相对误差 p95 `0.454668` 失败。Denoised 均值低约 `11.8%`；Reference 前后半诊断
-SSIM `0.985370`、HDR p95 `2.078409`，还需分别定位 RELAX 稳定能量偏差与 64 spp 暗部高方差，禁止用阈值、
-ROI 扩张或报告缩放处理。
+SSIM `0.985370`、HDR p95 `2.078409`，RELAX 稳定能量偏差与 64 spp 暗部高方差必须按独立轴验证，禁止用
+阈值、ROI 扩张或报告缩放处理。
+同一 V01 Profile 的 Anti-firefly 单变量 A/B 中，关闭后的 Denoised 均值为 `0.002572764`，相对 Reference
+偏差由约 `-11.8%` 缩小到 `-1.5%`，SSIM 为 `0.997113`，方差降低 `99.981906%`；HDR p95 为
+`0.528282`，仍未通过。该结果确认 RELAX Anti-firefly 在当前有界 1 spp Diffuse 信号上产生稳定负偏差，
+生产 RELAX 固定为 SDK 默认的关闭状态；REBLUR 继续使用其独立 Anti-firefly 设置。
 Leakage Band 与 AS Pending 当前在报告中明确为缺少证据，
 `complete_static_gate_passed=false`。
 

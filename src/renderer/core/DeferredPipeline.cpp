@@ -2202,14 +2202,13 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
 
             renderer::nrd::NrdDiffuseSettings methodSettings;
             if (settings.nrd.method == NrdDiffuseMethod::Relax) {
-                // Keep RELAX's SDK anti-lag response active. Known sparse
-                // solar samples are removed by the trace pass, while history
-                // clamping still needs to replace stale luminance after a
-                // disocclusion or a moving silhouette.
+                // Preserve RELAX's default energy response. Its anti-firefly
+                // filter causes a stable negative luminance bias for this
+                // bounded one-sample diffuse signal.
                 ::nrd::RelaxSettings relaxSettings{};
                 relaxSettings.atrousIterationNum = static_cast<uint32_t>(settings.nrd.relaxAtrousIterations);
                 relaxSettings.minMaterialForDiffuse = 0.0f;
-                relaxSettings.enableAntiFirefly = true;
+                relaxSettings.enableAntiFirefly = false;
                 relaxSettings.diffuseMaxAccumulatedFrameNum = nrdAccumulationFrameCount(
                     ::nrd::RELAX_DEFAULT_ACCUMULATION_TIME, ctx.deltaTime, ::nrd::RELAX_MAX_HISTORY_FRAME_NUM);
                 relaxSettings.diffuseMaxFastAccumulatedFrameNum =

@@ -123,7 +123,7 @@ namespace {
            pipelineSource.find("::nrd::RELAX_DEFAULT_ACCUMULATION_TIME") != std::string::npos &&
            pipelineSource.find("relaxSettings.antilagSettings.accelerationAmount = 0.0f;") == std::string::npos &&
            pipelineSource.find("relaxSettings.antilagSettings.resetAmount = 0.0f;") == std::string::npos &&
-           pipelineSource.find("relaxSettings.enableAntiFirefly = true;") != std::string::npos &&
+           pipelineSource.find("relaxSettings.enableAntiFirefly = false;") != std::string::npos &&
            pipelineSource.find("reblurSettings.enableAntiFirefly = true;") != std::string::npos &&
            pipelineSource.find("const bool nrdEnabled = rtgiEnabled && settings.nrd.enabled;") != std::string::npos &&
            pipelineSource.find(

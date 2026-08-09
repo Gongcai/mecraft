@@ -320,6 +320,11 @@ Raw/Reference/Denoised ROI 平均亮度 `0.002624319/0.002611804/0.002304740`。
 `0.996256` 通过，HDR 相对亮度误差 p95 `0.454668` 仍失败；Denoised 均值比 Reference 低约 `11.8%`。
 Reference 前后半诊断为 SSIM `0.985370`、HDR p95 `2.078409`，说明暗部 64 spp 估计仍未稳定，不能把全部
 p95 差异直接归因于 RELAX。
+同一 Profile 的 RELAX Anti-firefly 单变量 A/B 已完成：关闭后 Denoised 均值由 `0.002304740` 提升到
+`0.002572764`，相对 Reference 的稳定能量偏差由约 `-11.8%` 缩小到 `-1.5%`，SSIM 由 `0.996256` 提升到
+`0.997113`；方差降低仍为 `99.981906%`。HDR p95 从 `0.454668` 变为 `0.528282`，没有通过门槛，也不能在
+Reference 半序列自身 p95 为 `2.078409` 时解释为更可信的绝对退化。RELAX 因此保持 SDK 默认的
+Anti-firefly 关闭状态；REBLUR 的独立设置不变。
 
 2026-08-08 在 RTX 4060 Laptop、Vulkan、RELAX_DIFFUSE、300 帧预热加 1000 帧采样下完成四组复测。
 报告中的 `total_tracked` 是显式 Pass 阶段和，不是完整 GPU 帧跨度：它没有覆盖独立的帧首/场景 Overlay/
@@ -404,9 +409,8 @@ MAE/RMSE 为 0.000991734/0.002267379，全局亮度 SSIM 为 0.999885319。
 
 下一轮任务按以下顺序执行：
 
-1. 使用同一 V01 v2 Profile 对 RELAX Anti-firefly、History Fix 与累积长度做单变量 A/B，定位约 `11.8%`
-   稳定能量损失；同时分析 Reference 暗部稀疏高能路径和 64 spp 收敛性。同一 Profile 重采后必须通过 HDR
-   Error 门槛，禁止以改阈值、扩张 ROI 或缩放报告输入处理。
+1. 分析 Reference 暗部稀疏高能路径和 64 spp 收敛性，再对 RELAX History Fix 与累积长度做单变量 A/B；
+   同一 Profile 重采后必须通过 HDR Error 门槛，禁止以改阈值、扩张 ROI 或缩放报告输入处理。
 2. 为 V01、V02、M03 接入 Leakage Band、AS Pending 计数和 300 帧预热正式运行，固定 ROI 复核后归档报告。
 3. 为 V03、V06、M06 接入 Ghost/Disocclusion、动态边缘差分和历史恢复帧数门禁。
 4. 针对 1080p 继续定位：体素优先检查地形提交、流送和 AS；Sponza 优先检查 RTGI.Trace 与 NRD.Dispatch。
