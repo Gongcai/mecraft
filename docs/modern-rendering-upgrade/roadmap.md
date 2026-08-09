@@ -335,14 +335,17 @@ Caustica 对照评估和第一轮策略契约已经完成：
   OMM 的工程判断需要 Candidate/Confirmed 场景总量、Trace 时间和资产 Alpha Coverage 共同支撑。
 
 Candidate/Confirmed 归约遥测已经完成：8x8 Compute 将 Validation Image 聚合为 64-bit 总量和每像素峰值，
-三槽 Submission Token Readback 不等待 GPU，固定 1000 样本窗口按 sequence 去重。最新两份参考报告均为
-3/3 有效样本，每份覆盖 2,764,800 像素，Candidate、Confirmed 和峰值全部为 0；生产 Vulkan Smoke 已验证
-已知 Cutout 像素的非零路径。当前零值只说明两个参考镜头没有产生 Cutout Candidate，不能推出 OMM 无收益。
+三槽 Submission Token Readback 不等待 GPU，固定 1000 样本窗口按 sequence 去重。Sponza 和体素洞穴仍为
+3/3 有效但全零的参考镜头；V03 Forest Cutout 现已提供版本化 Camera Path、`mecraft.forest_cutout` fixture、
+Vulkan PNG/报告和非零自动验收。V03 的 3/3 窗口覆盖 2,764,800 像素，累计 2,142,695 Candidate、1,636,266
+Confirmed，确认率 76.36%，峰值为 8 Candidate/1 Confirmed 每像素，Terrain Cutout Primitive 为 6,926。
+同窗口 `RTGI.Trace` p95 为 3.874 ms；生产 Vulkan Smoke 已验证确定性 Cutout 像素的非零路径。
+这建立了 OMM 的生产压力基线，不能单独推出 OMM 收益。
 
 下一轮任务按以下顺序执行：
 
-1. 建立 V03 Forest Cutout 大量树叶验收场景，固定 Camera Path、资产 Alpha Coverage 和画质 Profile；采集
-   非零 Candidate/Confirmed 总量、确认率、每像素峰值与同窗口 `RTGI.Trace`，据此建立 OMM 收益门槛。
+1. 增加 `VK_EXT_opacity_micromap` RHI Capability、Micromap 资产与生命周期契约；以 V03 固定 Camera Path、
+   Alpha 纹理和 Profile 对比 Candidate Loop 与 OMM 的 `RTGI.Trace` p95、Counter 和显存，再决定是否采用。
 2. 针对 1080p 继续定位：体素优先检查地形提交、流送和 AS；Sponza 优先检查 RTGI.Trace 与 NRD.Dispatch。
    固定场景、驱动和电源模式后保留前后 Capture。
 3. 完整跨度和分项归因稳定后，再在同一镜头比较 RELAX A-Trous 5 与 3；不得用减少迭代数掩盖 Trace 或

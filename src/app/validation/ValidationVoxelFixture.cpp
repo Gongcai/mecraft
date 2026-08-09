@@ -6,6 +6,7 @@
 #include "world/block/Block.h"
 #include "world/block/BlockStateRegistry.h"
 
+#include <glm/vec2.hpp>
 #include <glm/vec3.hpp>
 
 #include <array>
@@ -27,13 +28,17 @@ constexpr std::string_view kMagmaBlockId = "minecraft:magma_block";
 constexpr std::string_view kIronBlockId = "minecraft:iron_block";
 constexpr std::string_view kGoldBlockId = "minecraft:gold_block";
 constexpr std::string_view kDiamondBlockId = "minecraft:diamond_block";
+constexpr std::string_view kGrassBlockId = "minecraft:grass_block";
+constexpr std::string_view kOakLogBlockId = "minecraft:oak_log";
+constexpr std::string_view kOakLeavesBlockId = "minecraft:oak_leaves";
+constexpr std::string_view kTallGrassBlockId = "minecraft:tall_grass";
 
 struct FixtureEdit final {
     glm::ivec3 position{0};
     std::string_view blockId;
 };
 
-enum class FixtureKind : uint8_t { None, WindowRoom, CaveTurn, LocalLightVillage };
+enum class FixtureKind : uint8_t { None, WindowRoom, CaveTurn, LocalLightVillage, ForestCutout };
 
 struct FixtureBlockStates final {
     BlockStateId air = NULL_BLOCK_STATE;
@@ -47,6 +52,10 @@ struct FixtureBlockStates final {
     BlockStateId iron = NULL_BLOCK_STATE;
     BlockStateId gold = NULL_BLOCK_STATE;
     BlockStateId diamond = NULL_BLOCK_STATE;
+    BlockStateId grass = NULL_BLOCK_STATE;
+    BlockStateId oakLog = NULL_BLOCK_STATE;
+    BlockStateId oakLeaves = NULL_BLOCK_STATE;
+    BlockStateId tallGrass = NULL_BLOCK_STATE;
 };
 
 [[nodiscard]] bool fixtureKind(const ValidationVoxelFixtureIdentity& fixture, FixtureKind& kind) {
@@ -67,6 +76,10 @@ struct FixtureBlockStates final {
     }
     if (fixture.id == kValidationVoxelFixtureLocalLightVillageId) {
         kind = FixtureKind::LocalLightVillage;
+        return true;
+    }
+    if (fixture.id == kValidationVoxelFixtureForestCutoutId) {
+        kind = FixtureKind::ForestCutout;
         return true;
     }
     return false;
@@ -179,6 +192,42 @@ struct FixtureBlockStates final {
     return kAirBlockId;
 }
 
+[[nodiscard]] std::string_view forestCutoutBlock(const int x, const int y, const int z) {
+    constexpr std::array<glm::ivec2, 12u> kTreeBases{{
+        {-15, -14},
+        {-7, -10},
+        {1, -12},
+        {10, -10},
+        {-13, -2},
+        {-4, -3},
+        {5, -1},
+        {14, 0},
+        {-10, 7},
+        {0, 6},
+        {9, 8},
+        {-2, 12},
+    }};
+    if (y == 78) {
+        return kGrassBlockId;
+    }
+    for (const glm::ivec2 treeBase : kTreeBases) {
+        const int deltaX = std::abs(x - treeBase.x);
+        const int deltaZ = std::abs(z - treeBase.y);
+        if (deltaX == 0 && deltaZ == 0 && y >= 79 && y <= 84) {
+            return kOakLogBlockId;
+        }
+        const int canopyRadius = y == 82 || y == 87 ? 2 : (y >= 83 && y <= 86 ? 3 : 0);
+        if (canopyRadius != 0 && deltaX <= canopyRadius && deltaZ <= canopyRadius &&
+            (deltaX + deltaZ <= canopyRadius + 1 || (deltaX != canopyRadius && deltaZ != canopyRadius))) {
+            return kOakLeavesBlockId;
+        }
+    }
+    if (y == 79 && ((x * 17 + z * 31) & 3) == 0 && ((x + z) & 1) == 0) {
+        return kTallGrassBlockId;
+    }
+    return kAirBlockId;
+}
+
 [[nodiscard]] std::vector<FixtureEdit> buildFixtureEdits(const FixtureKind kind) {
     std::vector<FixtureEdit> edits;
     switch (kind) {
@@ -213,6 +262,16 @@ struct FixtureBlockStates final {
             }
         }
         return edits;
+    case FixtureKind::ForestCutout:
+        edits.reserve(49u * 11u * 49u);
+        for (int y = 78; y <= 88; ++y) {
+            for (int z = -24; z <= 24; ++z) {
+                for (int x = -24; x <= 24; ++x) {
+                    edits.push_back({glm::ivec3(x, y, z), forestCutoutBlock(x, y, z)});
+                }
+            }
+        }
+        return edits;
     }
     std::abort();
 }
@@ -227,7 +286,7 @@ struct FixtureBlockStates final {
 }
 
 [[nodiscard]] ValidationVoxelFixtureResult resolveFixtureBlockStates(FixtureBlockStates& states) {
-    const std::array<std::pair<std::string_view, BlockStateId*>, 11u> required{{
+    const std::array<std::pair<std::string_view, BlockStateId*>, 15u> required{{
         {kAirBlockId, &states.air},
         {kStoneBlockId, &states.stone},
         {kOakPlanksBlockId, &states.oakPlanks},
@@ -239,6 +298,10 @@ struct FixtureBlockStates final {
         {kIronBlockId, &states.iron},
         {kGoldBlockId, &states.gold},
         {kDiamondBlockId, &states.diamond},
+        {kGrassBlockId, &states.grass},
+        {kOakLogBlockId, &states.oakLog},
+        {kOakLeavesBlockId, &states.oakLeaves},
+        {kTallGrassBlockId, &states.tallGrass},
     }};
     for (const auto& entry : required) {
         if (!resolveBlockState(entry.first, *entry.second)) {
@@ -271,6 +334,14 @@ struct FixtureBlockStates final {
         return states.gold;
     if (blockId == kDiamondBlockId)
         return states.diamond;
+    if (blockId == kGrassBlockId)
+        return states.grass;
+    if (blockId == kOakLogBlockId)
+        return states.oakLog;
+    if (blockId == kOakLeavesBlockId)
+        return states.oakLeaves;
+    if (blockId == kTallGrassBlockId)
+        return states.tallGrass;
     std::abort();
 }
 

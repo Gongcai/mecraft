@@ -577,12 +577,17 @@ Micromap 资产和生命周期契约。Candidate/Confirmed 已接入 8x8 GPU 归
 Submission Token 异步读回；CPU 严格校验 Counter ABI 版本、Extent、像素数及 Confirmed 不超过 Candidate，
 Benchmark 固定窗口按唯一 readback sequence 聚合。
 
-2026-08-09 重新采集的两份 300 帧预热加 3 帧参考报告均得到 2,764,800 个有效像素样本，Candidate、
-Confirmed 与每像素峰值都为 0。该结果说明当前 Sponza 镜头没有 Cutout，体素洞穴镜头的射线也没有实际
-遇到驻留的 Cutout Primitive；它不能作为 OMM 无收益的结论。生产 `RtgiTracePass` 的 Vulkan Smoke 已用
-已知 Cutout 像素验证非零总量和峰值读回。下一步必须建立 V03 Forest Cutout 大量树叶场景，再结合
-Candidate/Confirmed 总量、Alpha Coverage 和 `RTGI.Trace` 时间设定 OMM 收益门槛；当前 bucket 分布和
-零值参考镜头都不构成 OMM 扩展依据。
+2026-08-09 重新采集的 Sponza 与体素洞穴报告均得到 2,764,800 个有效像素样本，Candidate、Confirmed 与
+每像素峰值都为 0：前者没有 Cutout，后者的射线没有实际遇到驻留的 Cutout Primitive。V03 Forest Cutout
+补足了该压力缺口：固定 `mecraft.forest_cutout` fixture 的 12 个树冠、草地方块和高草使 Terrain 当前
+Cutout Primitive 达到 6,926。相同 300 帧预热加 3 帧 1280×720 报告累计 2,142,695 Candidate、1,636,266
+Confirmed，确认率为 76.36%，Candidate 峰值为每像素 8，`RTGI.Trace` p95 为 3.874 ms，完整 GPU Span
+p95 为 13.990 ms。生产 `RtgiTracePass` Vulkan Smoke 也继续覆盖已知 Cutout 像素的非零总量和峰值读回。
+
+这些数据证明 Candidate Loop 在生产 V03 路径真实承受 Cutout 压力，但尚不代表 OMM 已有收益或值得接入。
+下一步先实现 `VK_EXT_opacity_micromap` 的 RHI Capability、资产与生命周期契约，再在同一 V03 Camera Path、
+相同 Alpha 纹理和 Profile 下比较 Candidate Loop 与 OMM 的 `RTGI.Trace` p95、Counter 与显存；当前零值
+参考镜头、Cutout bucket 数和单独的确认率都不能替代这项 A/B 证据。
 
 ## 10. 调试视图与验收
 

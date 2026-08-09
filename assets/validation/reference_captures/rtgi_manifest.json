@@ -17,6 +17,13 @@
   "captures": [
     {
       "scene": "voxel",
+      "scene_contract_id": "v03_forest_cutout",
+      "render_settings_id": "m3_voxel_rtgi_quality",
+      "image": "v03_forest_cutout_vulkan_1280x720.png",
+      "report": "v03_forest_cutout_vulkan_1280x720.report.json"
+    },
+    {
+      "scene": "voxel",
       "scene_contract_id": "m3_voxel_rtgi_cave",
       "render_settings_id": "m3_voxel_rtgi_quality",
       "image": "m3_voxel_rtgi_cave_vulkan_1280x720.png",

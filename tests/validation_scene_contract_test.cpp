@@ -45,6 +45,7 @@ int main() {
     const std::filesystem::path modelPath = sceneRoot / "m0_model_damaged_helmet.json";
     const std::filesystem::path windowRoomPath = sceneRoot / "v01_window_room.json";
     const std::filesystem::path cavePath = sceneRoot / "v02_cave_turn.json";
+    const std::filesystem::path forestPath = sceneRoot / "v03_forest_cutout.json";
     const std::filesystem::path villagePath = sceneRoot / "v07_local_light_village.json";
     const std::filesystem::path materialGridPath = sceneRoot / "m01_material_grid.json";
     const std::filesystem::path damagedHelmetPath = sceneRoot / "m02_damaged_helmet.json";
@@ -60,6 +61,8 @@ int main() {
         app::validation::loadValidationSceneContract(windowRoomPath);
     const app::validation::ValidationSceneContractLoadResult cave =
         app::validation::loadValidationSceneContract(cavePath);
+    const app::validation::ValidationSceneContractLoadResult forest =
+        app::validation::loadValidationSceneContract(forestPath);
     const app::validation::ValidationSceneContractLoadResult village =
         app::validation::loadValidationSceneContract(villagePath);
     const app::validation::ValidationSceneContractLoadResult materialGrid =
@@ -78,6 +81,7 @@ int main() {
     const bool modelLoaded = requireLoaded(model, "m0_model_damaged_helmet");
     const bool windowRoomLoaded = requireLoaded(windowRoom, "v01_window_room");
     const bool caveLoaded = requireLoaded(cave, "v02_cave_turn");
+    const bool forestLoaded = requireLoaded(forest, "v03_forest_cutout");
     const bool villageLoaded = requireLoaded(village, "v07_local_light_village");
     const bool materialGridLoaded = requireLoaded(materialGrid, "m01_material_grid");
     const bool damagedHelmetLoaded = requireLoaded(damagedHelmet, "m02_damaged_helmet");
@@ -85,8 +89,9 @@ int main() {
     const bool probeInteriorLoaded = requireLoaded(probeInterior, "m07_probe_interior");
     const bool rtgiVoxelLoaded = requireLoaded(rtgiVoxel, "m3_voxel_rtgi_cave");
     const bool rtgiModelLoaded = requireLoaded(rtgiModel, "m3_model_rtgi_sponza");
-    if (!voxelLoaded || !modelLoaded || !windowRoomLoaded || !caveLoaded || !villageLoaded || !materialGridLoaded ||
-        !damagedHelmetLoaded || !sponzaAtriumLoaded || !probeInteriorLoaded || !rtgiVoxelLoaded || !rtgiModelLoaded) {
+    if (!voxelLoaded || !modelLoaded || !windowRoomLoaded || !caveLoaded || !forestLoaded || !villageLoaded ||
+        !materialGridLoaded || !damagedHelmetLoaded || !sponzaAtriumLoaded || !probeInteriorLoaded ||
+        !rtgiVoxelLoaded || !rtgiModelLoaded) {
         return 1;
     }
     if (!requireTrue(voxel.succeeded() && model.succeeded(), "both M0 scene descriptors must verify") ||
@@ -123,6 +128,18 @@ int main() {
                          stableContentHashHex(cave.contract.cameraPath.contentHash) == "87e07b85195fdded" &&
                          stableContentHashHex(cave.contract.contentHash) == "38e52e1b43c36514",
                      "V02 scene, Camera Path, world, and fixture identities must remain locked") ||
+        !requireTrue(
+            forest.contract.version == app::validation::kValidationSceneContractVersion &&
+                forest.contract.scene == ValidationScene::Voxel && forest.contract.voxelWorld.has_value() &&
+                forest.contract.voxelWorld->fixture.has_value() &&
+                forest.contract.voxelWorld->fixture->id == app::validation::kValidationVoxelFixtureForestCutoutId &&
+                stableContentHashHex(forest.contract.voxelWorld->fixture->contentHash) == "52620fc1f6c3e6c8" &&
+                stableContentHashHex(forest.contract.voxelWorld->contentHash) == "ac0f4e3a63f33c30" &&
+                stableContentHashHex(forest.contract.cameraPath.contentHash) == "013c54501db3aebd" &&
+                stableContentHashHex(forest.contract.contentHash) == "7a4f9eb7c94662df" &&
+                forest.contract.renderSettings.id == app::validation::kValidationRtgiVoxelRenderSettingsId &&
+                forest.contract.renderSettings.version == app::validation::kValidationRtgiVoxelRenderSettingsVersion,
+            "V03 Forest Cutout scene, Camera Path, world, fixture, and RTGI profile identities must remain locked") ||
         !requireTrue(village.contract.version == app::validation::kValidationSceneContractVersion &&
                          village.contract.scene == ValidationScene::Voxel && village.contract.voxelWorld.has_value() &&
                          village.contract.voxelWorld->fixture.has_value() &&
@@ -174,32 +191,36 @@ int main() {
                          stableContentHashHex(probeInterior.contract.cameraPath.contentHash) == "c17f7838a2a58df0" &&
                          stableContentHashHex(probeInterior.contract.contentHash) == "868a3adbe426276d",
                      "M07 scene, Camera Path, asset, and Probe grid identities must remain locked") ||
-        !requireTrue(rtgiVoxel.contract.version == app::validation::kValidationSceneContractVersion &&
-                         rtgiVoxel.contract.scene == ValidationScene::Voxel && rtgiVoxel.contract.voxelWorld.has_value() &&
-                         rtgiVoxel.contract.renderSettings.id == app::validation::kValidationRtgiVoxelRenderSettingsId &&
-                         rtgiVoxel.contract.renderSettings.version == app::validation::kValidationRtgiVoxelRenderSettingsVersion &&
-                         stableContentHashHex(rtgiVoxel.contract.contentHash) == "be46e44f90e35451" &&
-                         stableContentHashHex(rtgiVoxel.contract.renderSettings.contentHash) == "5aae41a7d7957a2d" &&
-                         app::validation::makeValidationRenderSettingsProfile(
-                             rtgiVoxel.contract.scene, rtgiVoxel.contract.renderSettings)
-                                 .settings.rtgi.enabled &&
-                         app::validation::makeValidationRenderSettingsProfile(
-                             rtgiVoxel.contract.scene, rtgiVoxel.contract.renderSettings)
-                                 .settings.nrd.enabled,
-                     "M3 voxel RTGI scene and quality profile identities must remain locked") ||
-        !requireTrue(rtgiModel.contract.version == app::validation::kValidationSceneContractVersion &&
-                         rtgiModel.contract.scene == ValidationScene::Model && rtgiModel.contract.modelAsset.has_value() &&
-                         rtgiModel.contract.renderSettings.id == app::validation::kValidationRtgiModelRenderSettingsId &&
-                         rtgiModel.contract.renderSettings.version == app::validation::kValidationRtgiModelRenderSettingsVersion &&
-                         stableContentHashHex(rtgiModel.contract.contentHash) == "0376d1804439f51f" &&
-                         stableContentHashHex(rtgiModel.contract.renderSettings.contentHash) == "a01010a43cdb7781" &&
-                         app::validation::makeValidationRenderSettingsProfile(
-                             rtgiModel.contract.scene, rtgiModel.contract.renderSettings)
-                                 .settings.rtgi.enabled &&
-                         app::validation::makeValidationRenderSettingsProfile(
-                             rtgiModel.contract.scene, rtgiModel.contract.renderSettings)
-                                 .settings.nrd.enabled,
-                     "M3 model RTGI scene and quality profile identities must remain locked")) {
+        !requireTrue(
+            rtgiVoxel.contract.version == app::validation::kValidationSceneContractVersion &&
+                rtgiVoxel.contract.scene == ValidationScene::Voxel && rtgiVoxel.contract.voxelWorld.has_value() &&
+                rtgiVoxel.contract.renderSettings.id == app::validation::kValidationRtgiVoxelRenderSettingsId &&
+                rtgiVoxel.contract.renderSettings.version ==
+                    app::validation::kValidationRtgiVoxelRenderSettingsVersion &&
+                stableContentHashHex(rtgiVoxel.contract.contentHash) == "be46e44f90e35451" &&
+                stableContentHashHex(rtgiVoxel.contract.renderSettings.contentHash) == "5aae41a7d7957a2d" &&
+                app::validation::makeValidationRenderSettingsProfile(rtgiVoxel.contract.scene,
+                                                                     rtgiVoxel.contract.renderSettings)
+                    .settings.rtgi.enabled &&
+                app::validation::makeValidationRenderSettingsProfile(rtgiVoxel.contract.scene,
+                                                                     rtgiVoxel.contract.renderSettings)
+                    .settings.nrd.enabled,
+            "M3 voxel RTGI scene and quality profile identities must remain locked") ||
+        !requireTrue(
+            rtgiModel.contract.version == app::validation::kValidationSceneContractVersion &&
+                rtgiModel.contract.scene == ValidationScene::Model && rtgiModel.contract.modelAsset.has_value() &&
+                rtgiModel.contract.renderSettings.id == app::validation::kValidationRtgiModelRenderSettingsId &&
+                rtgiModel.contract.renderSettings.version ==
+                    app::validation::kValidationRtgiModelRenderSettingsVersion &&
+                stableContentHashHex(rtgiModel.contract.contentHash) == "0376d1804439f51f" &&
+                stableContentHashHex(rtgiModel.contract.renderSettings.contentHash) == "a01010a43cdb7781" &&
+                app::validation::makeValidationRenderSettingsProfile(rtgiModel.contract.scene,
+                                                                     rtgiModel.contract.renderSettings)
+                    .settings.rtgi.enabled &&
+                app::validation::makeValidationRenderSettingsProfile(rtgiModel.contract.scene,
+                                                                     rtgiModel.contract.renderSettings)
+                    .settings.nrd.enabled,
+            "M3 model RTGI scene and quality profile identities must remain locked")) {
         return 1;
     }
 

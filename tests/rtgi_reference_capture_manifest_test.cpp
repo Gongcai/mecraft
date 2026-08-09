@@ -80,8 +80,8 @@ int main() {
     }
 
     const Json& captures = manifest.at("captures");
-    if (!requireTrue(captures.is_array() && captures.size() == 2u,
-                     "RTGI manifest must contain the voxel and model captures")) {
+    if (!requireTrue(captures.is_array() && captures.size() == 3u,
+                     "RTGI manifest must contain Forest Cutout, voxel cave, and model captures")) {
         return 1;
     }
     for (const Json& capture : captures) {
@@ -308,6 +308,13 @@ int main() {
                          "RTGI counter window must contain three complete validated reductions")) {
             return 1;
         }
+        const bool forestCutoutCapture = capture.at("scene_contract_id") == "v03_forest_cutout";
+        if (!requireTrue(!forestCutoutCapture ||
+                             (candidateCount > 0u && confirmedCount > 0u && peakCandidateCount > 0u &&
+                              peakConfirmedCount > 0u && confirmationRate > 0.0),
+                         "V03 Forest Cutout must exercise non-zero Candidate and Confirmed RTGI counters")) {
+            return 1;
+        }
 
         const uint64_t latestCandidateCount = latestCounters.value("candidate_count", uint64_t{0u});
         const uint64_t latestConfirmedCount = latestCounters.value("confirmed_count", uint64_t{0u});
@@ -330,6 +337,12 @@ int main() {
                              latestPeakCandidateCount <= maximumCounterPerPixel &&
                              latestPeakConfirmedCount <= latestPeakCandidateCount,
                          "Latest RTGI counter readback must preserve its source-frame and per-pixel invariants")) {
+            return 1;
+        }
+        if (!requireTrue(!forestCutoutCapture ||
+                             (latestCandidateCount > 0u && latestConfirmedCount > 0u && latestPeakCandidateCount > 0u &&
+                              latestPeakConfirmedCount > 0u && latestConfirmationRate > 0.0),
+                         "V03 Forest Cutout latest counter readback must remain non-zero")) {
             return 1;
         }
     }

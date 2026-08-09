@@ -1,0 +1,35 @@
+{
+  "kind": "mecraft.validation_scene",
+  "version": 2,
+  "id": "v03_forest_cutout",
+  "scene": "voxel",
+  "content_hash": "7a4f9eb7c94662df",
+  "camera_path": {
+    "source": "../camera_paths/v03_forest_cutout.json",
+    "id": "v03_forest_cutout",
+    "content_hash": "013c54501db3aebd"
+  },
+  "render_settings": {
+    "id": "m3_voxel_rtgi_quality",
+    "version": 3,
+    "content_hash": "5aae41a7d7957a2d"
+  },
+  "environment": {
+    "time_of_day_seconds": 900.0,
+    "weather": "clear"
+  },
+  "voxel_world": {
+    "generator": {
+      "id": "mecraft.overworld",
+      "version": 1
+    },
+    "seed": 1234,
+    "render_distance": 4,
+    "fixture": {
+      "id": "mecraft.forest_cutout",
+      "version": 1,
+      "content_hash": "52620fc1f6c3e6c8"
+    },
+    "content_hash": "ac0f4e3a63f33c30"
+  }
+}

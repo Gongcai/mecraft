@@ -50,6 +50,11 @@ V01、V02、V07、M01、M02、M03、M07 使用场景契约 v2，其中体素场�
 ID + 后端”验证唯一性。七个 v2 场景的 Vulkan 捕获均启用 Validation，未发现 Validation/VUID
 错误。粒子不纳入本轮版本化参考图。
 
+RTGI 专用 `rtgi_manifest.json` 另锁定 Vulkan `v03_forest_cutout`：它使用 v2 场景契约、
+`m3_voxel_rtgi_quality`、1280×720、300 帧预热和 3 帧采样。fixture 固定 12 个树冠、草地与高草；
+报告契约要求 3/3 有效 Counter Readback 以及非零 Candidate/Confirmed，防止 V03 退化为没有实际
+Cutout Ray Candidate 的普通体素镜头。
+
 ## 2. 功能矩阵
 
 | 能力 | 体素验收 | 模型验收 | 自动检查 | 通过标准 |
