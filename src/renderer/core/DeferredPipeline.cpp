@@ -3217,6 +3217,10 @@ RenderGraphFrameStats DeferredPipeline::renderGraphFrameStats() const {
     accelerationStructures.activeSceneReferencedBlasBytes = sceneTlasStats.activeBlasBytes;
     accelerationStructures.activeTerrainBlasBytes = terrainBlasStats.activeBlasBytes;
     accelerationStructures.activeTerrainPrimitiveCount = terrainBlasStats.activePrimitiveCount;
+    accelerationStructures.sceneTlasPending =
+        sceneTlasStats.pending || sceneTlasStats.desiredRevision != sceneTlasStats.activeRevision;
+    accelerationStructures.pendingTerrainBlasBuilds = terrainBlasStats.pendingBuildCount;
+    accelerationStructures.pendingTerrainBlasCompactions = terrainBlasStats.pendingCompactionCount;
     accelerationStructures.sceneTlasGenerationAllocations = sceneTlasStats.generationAllocationsThisFrame;
     accelerationStructures.sceneTlasGenerationReuses = sceneTlasStats.generationReusesThisFrame;
     accelerationStructures.sceneTlasGenerationReuseWaits = sceneTlasStats.generationReuseWaitsThisFrame;

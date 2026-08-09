@@ -10,7 +10,7 @@
 namespace app::validation {
 
 inline constexpr const char* kRtgiQualityReportKind = "mecraft.rtgi_quality_report";
-inline constexpr uint32_t kRtgiQualityReportVersion = 3u;
+inline constexpr uint32_t kRtgiQualityReportVersion = 4u;
 inline constexpr double kRtgiVarianceReductionThresholdPercent = 70.0;
 inline constexpr double kRtgiLuminanceSsimThreshold = 0.95;
 inline constexpr double kRtgiRelativeLuminanceErrorP95Threshold = 0.10;
@@ -21,6 +21,7 @@ struct RtgiQualityReportRequest final {
     std::string profileId;
     std::filesystem::path qualitySequenceDirectory;
     std::filesystem::path referenceSequenceDirectory;
+    std::filesystem::path validationCaptureReportPath;
     std::filesystem::path referenceOutputPath;
     std::filesystem::path reportOutputPath;
 };
@@ -40,6 +41,8 @@ enum class RtgiQualityReportError : uint8_t {
     AveragedRadianceOutOfRange,
     ReferenceWriteFailed,
     MetricEvaluationFailed,
+    ValidationCaptureReportReadFailed,
+    ValidationCaptureReportMismatch,
     ReportWriteFailed
 };
 
@@ -56,6 +59,9 @@ struct RtgiQualityReportSummary final {
     bool relativeLuminanceErrorPassed = false;
     bool referenceConvergencePassed = false;
     bool radianceValidationPassed = false;
+    uint64_t asPendingFrameCount = 0u;
+    uint64_t asPendingInvalidPixelCount = 0u;
+    bool asPendingPassed = false;
     bool availableMetricsPassed = false;
     bool completeStaticGatePassed = false;
 };

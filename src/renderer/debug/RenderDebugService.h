@@ -254,6 +254,9 @@ struct AccelerationStructureFrameStats {
     uint64_t activeSceneReferencedBlasBytes = 0u;
     uint64_t activeTerrainBlasBytes = 0u;
     uint64_t activeTerrainPrimitiveCount = 0u;
+    bool sceneTlasPending = false;
+    uint32_t pendingTerrainBlasBuilds = 0u;
+    uint32_t pendingTerrainBlasCompactions = 0u;
     uint32_t sceneTlasGenerationAllocations = 0u;
     uint32_t sceneTlasGenerationReuses = 0u;
     uint32_t sceneTlasGenerationReuseWaits = 0u;
@@ -327,6 +330,9 @@ struct AccelerationStructureWindowStats {
     uint64_t peakActiveSceneReferencedBlasBytes = 0u;
     uint64_t peakActiveTerrainBlasBytes = 0u;
     uint64_t peakActiveTerrainPrimitiveCount = 0u;
+    uint64_t pendingFrameCount = 0u;
+    uint32_t peakPendingTerrainBlasBuilds = 0u;
+    uint32_t peakPendingTerrainBlasCompactions = 0u;
     uint64_t sceneTlasGenerationAllocationCount = 0u;
     uint64_t sceneTlasGenerationReuseCount = 0u;
     uint64_t sceneTlasGenerationReuseWaitCount = 0u;
@@ -419,6 +425,9 @@ private:
     std::array<uint64_t, kCapacity> m_activeSceneReferencedBlasByteSamples{};
     std::array<uint64_t, kCapacity> m_activeTerrainBlasByteSamples{};
     std::array<uint64_t, kCapacity> m_activeTerrainPrimitiveSamples{};
+    std::array<uint8_t, kCapacity> m_sceneTlasPendingSamples{};
+    std::array<uint32_t, kCapacity> m_pendingTerrainBlasBuildSamples{};
+    std::array<uint32_t, kCapacity> m_pendingTerrainBlasCompactionSamples{};
     std::array<uint32_t, kCapacity> m_sceneTlasGenerationAllocationSamples{};
     std::array<uint32_t, kCapacity> m_sceneTlasGenerationReuseSamples{};
     std::array<uint32_t, kCapacity> m_sceneTlasGenerationReuseWaitSamples{};

@@ -284,8 +284,8 @@ M1 与 M2 可并行开发，但公共 `GpuMaterial`、`GpuSceneGeometry` 与 Sta
 严格 RGBA16F Linear EXR 读回，`RtgiQualityValidationContract` 已定义固定 ROI 的帧序列 Variance、
 线性亮度 SSIM、95th 相对亮度误差和非法辐射拒绝。独立 `rtgi_quality_report_tool` 已严格消费连续的
 32 帧 Raw/Denoised 与 64 帧 Raw Reference，流式平均并写出单张 64 spp Linear EXR，再生成结构化门槛报告；
-缺帧、多余序号、尺寸变化、NaN/Inf 和负辐射都会明确失败。Ghost/Disocclusion、Leakage Band 与 AS Pending
-证据仍未接入，因此 M3 画质门槛不能标记为通过。
+缺帧、多余序号、尺寸变化、NaN/Inf 和负辐射都会明确失败。Ghost/Disocclusion 与 Leakage Band 证据仍未
+全部接入，且 HDR p95 尚未通过，因此 M3 画质门槛不能标记为通过。
 Deferred `FrameOutput` 已发布本帧的 Raw RTGI 与 NRD Diffuse 线性 HDR 句柄，供 runner 读取生产信号。因为
 Render Graph 瞬态目标在最后一次图内访问后允许别名，两个句柄现在由图内 `RTGI.RawDiffuseValidationCopy` 与
 `NRD.DiffuseValidationCopy` 快照到独立的持久 RGBA16F 纹理，直到下一帧才释放；不能再由图外读回瞬态句柄。
@@ -331,6 +331,12 @@ HDR p95 恶化到 `0.782297`；偶/奇交错 scrambled Hammersley 得到最优�
 `0.473326` 和 Reference 均值 `0.002609387`，因此替换旧 R2。新序列的相对误差 p50 `0.165331`、绝对误差
 p95 `0.001310`，使用 `1e-4` 分母下限的像素仍为 `0%`。Reference 前后半相对误差 p50 `0.269300`、p95
 `1.103705`、绝对误差 p95 `0.003461`；采样改进有效，但 64 spp 对 V01 可见性积分仍未收敛。
+RELAX 主历史上限从按 0.5 秒计算的 30 帧改为 64 帧后完成同一 V01 300+32 单变量 A/B，HDR p95 仅从
+`0.473326` 变为 `0.473316`，Denoised 均值和方差也只在浮点尾数变化，因此已恢复正式 0.5 秒设置；静态失败
+不来自主历史上限。质量报告 schema v4 现强制绑定同次运行的 Validation Capture Report，并消费保守整帧
+AS Pending Mask：Scene TLAS desired/active 不一致、TLAS generation pending 或 Terrain BLAS Build/Compaction
+任一非零时，该采样帧全部像素计为无效。正式 V01 的 32/32 帧均稳定，Pending Frame 和 Invalid Pixel 均为
+`0`，AS Pending Gate 已通过；当前静态门槛缺失证据只剩 Leakage Band，HDR p95 仍失败。
 
 2026-08-08 在 RTX 4060 Laptop、Vulkan、RELAX_DIFFUSE、300 帧预热加 1000 帧采样下完成四组复测。
 报告中的 `total_tracked` 是显式 Pass 阶段和，不是完整 GPU 帧跨度：它没有覆盖独立的帧首/场景 Overlay/
@@ -418,7 +424,8 @@ MAE/RMSE 为 0.000991734/0.002267379，全局亮度 SSIM 为 0.999885319。
 1. 保持 Hammersley、64 spp、ROI 和阈值不变，定位一次反弹中的二值可见性与太阳/天空高能路径方差；再对
    RELAX History Fix 与累积长度做单变量 A/B；
    同一 Profile 重采后必须通过 HDR Error 门槛，禁止以改阈值、扩张 ROI 或缩放报告输入处理。
-2. 为 V01、V02、M03 接入 Leakage Band、AS Pending 计数和 300 帧预热正式运行，固定 ROI 复核后归档报告。
+2. 为 V01、V02、M03 接入 Leakage Band；复用已闭环的 AS Pending 计数完成 300 帧预热正式运行，固定 ROI
+   复核后归档报告。
 3. 为 V03、V06、M06 接入 Ghost/Disocclusion、动态边缘差分和历史恢复帧数门禁。
 4. 针对 1080p 继续定位：体素优先检查地形提交、流送和 AS；Sponza 优先检查 RTGI.Trace 与 NRD.Dispatch。
    固定场景、驱动和电源模式后保留前后 Capture。

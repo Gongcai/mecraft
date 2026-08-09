@@ -132,7 +132,8 @@ Profile ID、版本、ROI、质量 Render Settings 及 64 spp Reference 目标�
 低差异相位仍逐帧推进，报告记录 `capture_mode=reference` 与 `nrd_enabled=false`。这 64 个线性样本随后必须
 平均为单张 Reference EXR；不能直接选取其中一帧作为参考。`rtgi_quality_report_tool` 已实现严格序列检查、
 IEEE Half 解码、64 帧线性平均、32 帧 Raw/Denoised 方差与均值、SSIM、HDR Error p95 和非法辐射门禁。
-Leakage Band 与 AS Pending 没有输入证据时必须在 JSON 中保持 `passed=null`，完整静态门槛固定为失败。
+Leakage Band 没有输入证据时必须在 JSON 中保持 `passed=null`。AS Pending 必须由同次 Validation Capture
+Report 的保守整帧 Mask 提供，身份、样本数或计数不一致会直接拒绝生成质量报告。
 Reference 帧首重置现明确排除 `referenceSamplingEnabled`：只有既没有 NRD、也没有 Reference Sampling 的路径
 才将显式样本索引清零，成功的 Reference 帧在图执行后递增。每像素独立旋转、XOR 扰动的周期 64 点
 Hammersley 集合保证任意连续 64 个实际帧覆盖同一完整集合，并以偶/奇交错让两个半序列覆盖完整二维域。
@@ -157,6 +158,11 @@ Render Graph 瞬态信号。Raw 与 Denoised 已改为在最后有效图内访�
 Gate。固定 64 spp A/B 已排除 8×8 分层序列，并采用偶/奇交错 scrambled Hammersley：SSIM `0.997353`、
 HDR p95 `0.473326`。V01 的分母下限占比为 `0%`；Reference 前后半相对误差 p50 `0.269300`、p95
 `1.103705`、绝对误差 p95 `0.003461`，说明失败来自可见性积分的广泛高方差，而不是近零亮度像素。
+同一 V01 的 RELAX 主历史 30/64 帧 A/B 得到 HDR p95 `0.473326/0.473316`，排除主历史上限为静态失败主因，
+正式设置保持按 0.5 秒计算。质量报告 schema v4 必须绑定同次 Validation Capture Report；AS Pending 采用
+保守整帧 Mask，Scene TLAS 或 Terrain BLAS 任一 Pending 就把该采样帧全部像素计为无效。最新 300+32 正式
+V01 的 Pending Frame、Invalid Pixel、Terrain Build/Compaction 峰值均为 `0`，因此 AS Pending Gate 已通过。
+Leakage Band 仍为 `passed=null`，完整静态门槛继续失败。
 
 ### 3.3 动态画面
 

@@ -9,14 +9,14 @@ namespace {
 void printUsage() {
     std::cerr << "Usage: rtgi_quality_report_tool --profile-manifest <path> --profile <id> "
                  "--quality-dir <path> --reference-dir <path> --reference-output <path.exr> "
-                 "--report-output <path.json>\n";
+                 "--validation-report <path.json> --report-output <path.json>\n";
 }
 
 } // namespace
 
 int main(const int argc, const char* const* argv) {
     app::validation::RtgiQualityReportRequest request;
-    if (argc != 13) {
+    if (argc != 15) {
         printUsage();
         return 2;
     }
@@ -33,6 +33,8 @@ int main(const int argc, const char* const* argv) {
             request.referenceSequenceDirectory = value;
         } else if (option == "--reference-output") {
             request.referenceOutputPath = value;
+        } else if (option == "--validation-report") {
+            request.validationCaptureReportPath = value;
         } else if (option == "--report-output") {
             request.reportOutputPath = value;
         } else {
@@ -52,6 +54,6 @@ int main(const int argc, const char* const* argv) {
     std::cout << "RTGI quality report written: " << request.reportOutputPath << '\n'
               << "64 spp reference written: " << request.referenceOutputPath << '\n'
               << "Available metrics passed: " << (summary.availableMetricsPassed ? "true" : "false") << '\n'
-              << "Complete static gate passed: false (Leakage Band and AS Pending evidence required)\n";
+              << "Complete static gate passed: false (Leakage Band evidence required)\n";
     return 0;
 }

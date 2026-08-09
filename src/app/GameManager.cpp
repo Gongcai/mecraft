@@ -157,7 +157,8 @@ GpuTimerPass accelerationStructureGpuTimerPass(const AccelerationStructureStage 
 }
 
 nlohmann::json accelerationStructureWindowJson(const AccelerationStructureWindowStats& stats,
-                                               const GpuTimingWindowStats& gpuStats) {
+                                               const GpuTimingWindowStats& gpuStats, const uint32_t captureWidth,
+                                               const uint32_t captureHeight) {
     nlohmann::json stages = nlohmann::json::object();
     for (size_t stageIndex = 0u; stageIndex < static_cast<size_t>(AccelerationStructureStage::Count); ++stageIndex) {
         const auto stage = static_cast<AccelerationStructureStage>(stageIndex);
@@ -209,6 +210,7 @@ nlohmann::json accelerationStructureWindowJson(const AccelerationStructureWindow
     const StaticBlasFrameStats& staticBlas = latest.staticBlas;
     const TerrainOpacityMicromapFrameStats& latestOpacityMicromaps = latest.terrainOpacityMicromaps;
     const TerrainOpacityMicromapWindowStats& opacityMicromaps = stats.terrainOpacityMicromaps;
+    const uint64_t capturePixelCount = static_cast<uint64_t>(captureWidth) * captureHeight;
     return {
         {"scope", "scene_acceleration_structures"},
         {"valid", stats.valid},
@@ -216,6 +218,18 @@ nlohmann::json accelerationStructureWindowJson(const AccelerationStructureWindow
         {"window_capacity", stats.capacity},
         {"sample_count", stats.sampleCount},
         {"observed_sample_count", stats.observedSampleCount},
+        {"as_pending_evidence",
+         {{"mode", "conservative_whole_frame_mask"},
+          {"sample_count", stats.sampleCount},
+          {"pending_frame_count", stats.pendingFrameCount},
+          {"invalid_pixel_count", stats.pendingFrameCount * capturePixelCount},
+          {"latest",
+           {{"scene_tlas_pending", latest.sceneTlasPending},
+            {"terrain_blas_builds", latest.pendingTerrainBlasBuilds},
+            {"terrain_blas_compactions", latest.pendingTerrainBlasCompactions}}},
+          {"peak",
+           {{"terrain_blas_builds", stats.peakPendingTerrainBlasBuilds},
+            {"terrain_blas_compactions", stats.peakPendingTerrainBlasCompactions}}}}},
         {"stages", std::move(stages)},
         {"residency",
          {{"latest",
@@ -971,7 +985,9 @@ bool GameManager::writeBenchmarkReport() {
                                      {"stages", std::move(gpuStages)}};
     root["render_graph_frame_ms"] = renderGraphTimingWindowJson(renderGraphTimingWindow);
     root["complete_gpu_frame_ms"] = completeGpuFrameTimingWindowJson(renderGraphTimingWindow);
-    root["acceleration_structure_work"] = accelerationStructureWindowJson(accelerationStructureWindow, gpuTimingWindow);
+    root["acceleration_structure_work"] = accelerationStructureWindowJson(
+        accelerationStructureWindow, gpuTimingWindow, m_launchOptions.validationWidth,
+        m_launchOptions.validationHeight);
     root["rtgi_trace_counters"] = rtgiTraceCounterWindowJson(rtgiTraceCounterWindow);
     root["rhi_memory"] = rhiMemoryStatsJson(memoryStats);
 

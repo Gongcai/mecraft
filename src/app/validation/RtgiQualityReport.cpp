@@ -252,6 +252,62 @@ struct SequenceData final {
     return Json{{"evidence_available", false}, {"required_evidence", requiredEvidence}, {"passed", nullptr}};
 }
 
+[[nodiscard]] RtgiQualityReportError loadAsPendingEvidence(const std::filesystem::path& path,
+                                                           const RtgiQualityProfile& profile,
+                                                           RtgiQualityReportSummary& summary, std::string& detail) {
+    std::ifstream input(path);
+    if (!input) {
+        detail = path.generic_u8string();
+        return RtgiQualityReportError::ValidationCaptureReportReadFailed;
+    }
+    const Json report = Json::parse(input, nullptr, false);
+    if (report.is_discarded() || !report.is_object()) {
+        detail = path.generic_u8string();
+        return RtgiQualityReportError::ValidationCaptureReportReadFailed;
+    }
+    const Json* capture = report.contains("capture") ? &report["capture"] : nullptr;
+    const Json* qualityProfile = report.contains("rtgi_quality_profile") ? &report["rtgi_quality_profile"] : nullptr;
+    const Json* accelerationWork =
+        report.contains("acceleration_structure_work") ? &report["acceleration_structure_work"] : nullptr;
+    const Json* evidence = accelerationWork != nullptr && accelerationWork->contains("as_pending_evidence")
+                               ? &(*accelerationWork)["as_pending_evidence"]
+                               : nullptr;
+    const bool identityValid = report.value("kind", std::string{}) == "mecraft.validation_capture_report" &&
+                               capture != nullptr && capture->is_object() &&
+                               capture->value("width", 0u) == profile.captureWidth &&
+                               capture->value("height", 0u) == profile.captureHeight && qualityProfile != nullptr &&
+                               qualityProfile->is_object() && qualityProfile->value("id", std::string{}) == profile.id &&
+                               qualityProfile->value("version", 0u) == profile.version &&
+                               report.value("requested_sample_frame_count", 0u) == kRtgiQualitySequenceFrameCount;
+    const bool evidenceShapeValid = accelerationWork != nullptr && accelerationWork->is_object() &&
+                                    accelerationWork->value("valid", false) && evidence != nullptr &&
+                                    evidence->is_object() &&
+                                    evidence->value("mode", std::string{}) == "conservative_whole_frame_mask" &&
+                                    evidence->contains("sample_count") &&
+                                    (*evidence)["sample_count"].is_number_unsigned() &&
+                                    evidence->contains("pending_frame_count") &&
+                                    (*evidence)["pending_frame_count"].is_number_unsigned() &&
+                                    evidence->contains("invalid_pixel_count") &&
+                                    (*evidence)["invalid_pixel_count"].is_number_unsigned();
+    if (!identityValid || !evidenceShapeValid) {
+        detail = path.generic_u8string() + ": AS Pending evidence identity or schema mismatch";
+        return RtgiQualityReportError::ValidationCaptureReportMismatch;
+    }
+    const uint64_t sampleCount = (*evidence)["sample_count"].get<uint64_t>();
+    const uint64_t pendingFrameCount = (*evidence)["pending_frame_count"].get<uint64_t>();
+    const uint64_t invalidPixelCount = (*evidence)["invalid_pixel_count"].get<uint64_t>();
+    const uint64_t pixelsPerFrame = static_cast<uint64_t>(profile.captureWidth) * profile.captureHeight;
+    if (sampleCount != kRtgiQualitySequenceFrameCount || pendingFrameCount > sampleCount ||
+        invalidPixelCount != pendingFrameCount * pixelsPerFrame) {
+        detail = path.generic_u8string() + ": AS Pending evidence counts mismatch";
+        return RtgiQualityReportError::ValidationCaptureReportMismatch;
+    }
+    summary.asPendingFrameCount = pendingFrameCount;
+    summary.asPendingInvalidPixelCount = invalidPixelCount;
+    summary.asPendingPassed = invalidPixelCount == 0u;
+    return RtgiQualityReportError::None;
+}
+
 [[nodiscard]] RtgiQualityReportError writeReport(const RtgiQualityReportRequest& request,
                                                  const RtgiQualityProfile& profile,
                                                  const RtgiQualityReportSummary& summary, std::string& detail) {
@@ -269,7 +325,14 @@ struct SequenceData final {
                                         {"negative_radiance_pixel_count", 0u},
                                         {"passed", summary.radianceValidationPassed}};
     gates["leakage_band"] = missingGateJson("fixed depth/normal boundary band mask and leakage metric");
-    gates["as_pending"] = missingGateJson("AS Pending heatmap capture and invalid-pixel count");
+    gates["as_pending"] = Json{{"evidence_available", true},
+                               {"mode", "conservative_whole_frame_mask"},
+                               {"sample_count", kRtgiQualitySequenceFrameCount},
+                               {"pending_frame_count", summary.asPendingFrameCount},
+                               {"invalid_pixel_count", summary.asPendingInvalidPixelCount},
+                               {"comparison", "=="},
+                               {"threshold", 0u},
+                               {"passed", summary.asPendingPassed}};
 
     Json root{{"kind", kRtgiQualityReportKind},
               {"version", kRtgiQualityReportVersion},
@@ -289,7 +352,9 @@ struct SequenceData final {
                {{"quality_raw", kRtgiQualitySequenceFrameCount},
                 {"quality_denoised", kRtgiQualitySequenceFrameCount},
                 {"reference_raw", kRtgiQualityReferenceSpp}}},
-              {"outputs", {{"reference_exr", request.referenceOutputPath.generic_u8string()}}},
+              {"outputs",
+               {{"reference_exr", request.referenceOutputPath.generic_u8string()},
+                {"validation_capture_report", request.validationCaptureReportPath.generic_u8string()}}},
               {"metrics",
                {{"raw_temporal_variance", summary.variance.rawVariance},
                 {"denoised_temporal_variance", summary.variance.denoisedVariance},
@@ -336,7 +401,7 @@ struct SequenceData final {
               {"gates", std::move(gates)},
               {"available_metrics_passed", summary.availableMetricsPassed},
               {"complete_static_gate_passed", summary.completeStaticGatePassed},
-              {"missing_evidence", Json::array({"leakage_band", "as_pending"})}};
+              {"missing_evidence", Json::array({"leakage_band"})}};
 
     const std::filesystem::path parent = request.reportOutputPath.parent_path();
     if (!parent.empty()) {
@@ -368,10 +433,11 @@ RtgiQualityReportError generateRtgiQualityReport(const RtgiQualityReportRequest&
     summary = {};
     detail.clear();
     if (request.profileManifestPath.empty() || request.profileId.empty() || request.qualitySequenceDirectory.empty() ||
-        request.referenceSequenceDirectory.empty() || request.referenceOutputPath.empty() ||
+        request.referenceSequenceDirectory.empty() || request.validationCaptureReportPath.empty() ||
+        request.validationCaptureReportPath.extension() != ".json" || request.referenceOutputPath.empty() ||
         request.referenceOutputPath.extension() != ".exr" || request.reportOutputPath.empty() ||
         request.reportOutputPath.extension() != ".json") {
-        detail = "profile, sequence directories, .exr reference output, and .json report output are required";
+        detail = "profile, sequence directories, validation report, .exr reference output, and .json report output are required";
         return RtgiQualityReportError::InvalidRequest;
     }
 
@@ -382,12 +448,17 @@ RtgiQualityReportError generateRtgiQualityReport(const RtgiQualityReportRequest&
         detail = std::string{rtgiQualityProfileErrorStableId(profileError)} + ": " + detail;
         return RtgiQualityReportError::ProfileLoadFailed;
     }
+    RtgiQualityReportError error =
+        loadAsPendingEvidence(request.validationCaptureReportPath, profile, summary, detail);
+    if (error != RtgiQualityReportError::None) {
+        return error;
+    }
 
     SequenceData raw;
     SequenceData denoised;
     SequenceData reference;
-    RtgiQualityReportError error = loadSequence(request.qualitySequenceDirectory, "rtgi_raw_",
-                                                kRtgiQualitySequenceFrameCount, profile, true, false, raw, detail);
+    error = loadSequence(request.qualitySequenceDirectory, "rtgi_raw_", kRtgiQualitySequenceFrameCount, profile,
+                         true, false, raw, detail);
     if (error != RtgiQualityReportError::None) {
         return error;
     }
@@ -456,7 +527,8 @@ RtgiQualityReportError generateRtgiQualityReport(const RtgiQualityReportRequest&
         summary.referenceConvergence.relativeLuminanceErrorP95 <= kRtgiRelativeLuminanceErrorP95Threshold;
     summary.radianceValidationPassed = true;
     summary.availableMetricsPassed = summary.varianceReductionPassed && summary.luminanceSsimPassed &&
-                                     summary.relativeLuminanceErrorPassed && summary.radianceValidationPassed;
+                                     summary.relativeLuminanceErrorPassed && summary.radianceValidationPassed &&
+                                     summary.asPendingPassed;
     summary.completeStaticGatePassed = false;
     return writeReport(request, profile, summary, detail);
 }
@@ -476,6 +548,8 @@ const char* rtgiQualityReportErrorStableId(const RtgiQualityReportError error) {
     case RtgiQualityReportError::AveragedRadianceOutOfRange: return "AveragedRadianceOutOfRange";
     case RtgiQualityReportError::ReferenceWriteFailed: return "ReferenceWriteFailed";
     case RtgiQualityReportError::MetricEvaluationFailed: return "MetricEvaluationFailed";
+    case RtgiQualityReportError::ValidationCaptureReportReadFailed: return "ValidationCaptureReportReadFailed";
+    case RtgiQualityReportError::ValidationCaptureReportMismatch: return "ValidationCaptureReportMismatch";
     case RtgiQualityReportError::ReportWriteFailed: return "ReportWriteFailed";
     }
     std::abort();

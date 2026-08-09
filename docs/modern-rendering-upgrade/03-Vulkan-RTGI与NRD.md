@@ -661,7 +661,11 @@ SSIM `0.985370`、HDR p95 `2.078409`，RELAX 稳定能量偏差与 64 spp 暗部
 SSIM/HDR p95 改善为 `0.997353/0.473326`，因此替换旧 R2。schema v3 给出的相对误差 p50 为 `0.165331`、
 绝对误差 p95 为 `0.001310`、分母下限像素为 `0%`；Reference 前后半相对误差 p50/p95 为
 `0.269300/1.103705`，当前 64 点集合对固定像素可见性积分仍未收敛。
-Leakage Band 与 AS Pending 当前在报告中明确为缺少证据，
+RELAX 主历史 30/64 帧的同镜头 300+32 A/B 仅把 HDR p95 从 `0.473326` 改为 `0.473316`，排除历史上限为
+静态误差主因，生产设置已恢复为 0.5 秒。质量报告 schema v4 强制读取同次 Validation Capture Report；
+Scene TLAS desired/active 不一致、TLAS generation pending、Terrain BLAS Build 或 Compaction 任一非零时，
+保守整帧 Mask 将该采样帧全部像素标记为 AS Pending。正式 V01 的 32 帧 Pending Frame 和 Invalid Pixel 均为
+`0`，AS Pending Gate 已通过。Leakage Band 仍缺证据，且 HDR p95 仍失败，
 `complete_static_gate_passed=false`。
 
 ## 10. 调试视图与验收

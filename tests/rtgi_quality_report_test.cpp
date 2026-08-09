@@ -89,6 +89,25 @@ int main() {
 })";
     manifestOutput.close();
 
+    const std::filesystem::path validationReport = root / "validation_report.json";
+    std::ofstream validationReportOutput(validationReport);
+    validationReportOutput << R"({
+  "kind": "mecraft.validation_capture_report",
+  "requested_sample_frame_count": 32,
+  "capture": {"width": 2, "height": 2},
+  "rtgi_quality_profile": {"id": "synthetic_static", "version": 2},
+  "acceleration_structure_work": {
+    "valid": true,
+    "as_pending_evidence": {
+      "mode": "conservative_whole_frame_mask",
+      "sample_count": 32,
+      "pending_frame_count": 0,
+      "invalid_pixel_count": 0
+    }
+  }
+})";
+    validationReportOutput.close();
+
     bool sequenceWritten = true;
     for (uint32_t frame = 0u; frame < validation::kRtgiQualitySequenceFrameCount; ++frame) {
         const float rawValue = frame % 2u == 0u ? 0.0f : 2.0f;
@@ -109,6 +128,7 @@ int main() {
     request.profileId = "synthetic_static";
     request.qualitySequenceDirectory = quality;
     request.referenceSequenceDirectory = reference;
+    request.validationCaptureReportPath = validationReport;
     request.referenceOutputPath = root / "reference_64spp.exr";
     request.reportOutputPath = root / "quality_report.json";
     validation::RtgiQualityReportSummary summary;
@@ -143,8 +163,11 @@ int main() {
                      "report diagnostics must expose an unconverged reference without changing its full average") ||
         !requireTrue(summary.availableMetricsPassed && !summary.completeStaticGatePassed,
                      "reference convergence diagnostics must not become an undeclared static quality gate") ||
-        !requireTrue(!report.is_discarded() && report.at("gates").at("leakage_band").at("passed").is_null() &&
-                         report.at("gates").at("as_pending").at("passed").is_null() &&
+        !requireTrue(!report.is_discarded() && report.at("version").get<uint32_t>() == 4u &&
+                         report.at("gates").at("leakage_band").at("passed").is_null() &&
+                         report.at("gates").at("as_pending").at("passed").get<bool>() &&
+                         report.at("gates").at("as_pending").at("invalid_pixel_count").get<uint64_t>() == 0u &&
+                         report.at("missing_evidence").size() == 1u &&
                          !report.at("diagnostics").at("reference_half_luminance_ssim").at("passed").get<bool>() &&
                          report.at("diagnostics").at("absolute_luminance_error_p95").get<double>() == 0.0 &&
                          report.at("diagnostics").at("relative_p95_pixel").at("coordinate_space") == "capture" &&
@@ -162,7 +185,7 @@ int main() {
                              .at("passed")
                              .get<bool>() == false &&
                          !report.at("complete_static_gate_passed").get<bool>(),
-                     "JSON must expose Leakage Band and AS Pending as unavailable evidence")) {
+                     "JSON must consume AS Pending evidence while retaining Leakage Band as unavailable")) {
         std::cerr << "[rtgi_quality_report_test] detail: " << detail << '\n';
         return 1;
     }
@@ -206,6 +229,29 @@ int main() {
     error = validation::generateRtgiQualityReport(request, summary, detail);
     if (!requireTrue(error == validation::RtgiQualityReportError::NegativeRadiance,
                      "a negative half-float radiance channel must be rejected")) {
+        return 1;
+    }
+
+    std::ofstream invalidValidationReportOutput(validationReport, std::ios::trunc);
+    invalidValidationReportOutput << R"({
+  "kind": "mecraft.validation_capture_report",
+  "requested_sample_frame_count": 32,
+  "capture": {"width": 2, "height": 2},
+  "rtgi_quality_profile": {"id": "synthetic_static", "version": 2},
+  "acceleration_structure_work": {
+    "valid": true,
+    "as_pending_evidence": {
+      "mode": "conservative_whole_frame_mask",
+      "sample_count": 32,
+      "pending_frame_count": 1,
+      "invalid_pixel_count": 0
+    }
+  }
+})";
+    invalidValidationReportOutput.close();
+    error = validation::generateRtgiQualityReport(request, summary, detail);
+    if (!requireTrue(error == validation::RtgiQualityReportError::ValidationCaptureReportMismatch,
+                     "AS Pending frame and pixel counts must agree exactly")) {
         return 1;
     }
 

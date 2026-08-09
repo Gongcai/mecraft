@@ -170,6 +170,9 @@ bool testAccelerationStructureHistory() {
         frame.activeSceneReferencedBlasBytes = sequence * 40u;
         frame.activeTerrainBlasBytes = sequence * 50u;
         frame.activeTerrainPrimitiveCount = sequence * 60u;
+        frame.sceneTlasPending = sequence % 2u == 0u;
+        frame.pendingTerrainBlasBuilds = frame.sceneTlasPending ? 2u : 0u;
+        frame.pendingTerrainBlasCompactions = 0u;
         frame.sceneTlasGenerationAllocations = 1u;
         frame.retiredSceneTlasGenerations = static_cast<uint32_t>(sequence % 7u);
         frame.terrainBuckets.activeOpaquePrimitives = sequence * 40u;
@@ -228,6 +231,9 @@ bool testAccelerationStructureHistory() {
                            stats.peakSceneTlasGenerationAllocationsPerFrame == 1u &&
                            stats.peakRetiredSceneTlasGenerations == 6u,
                        "AS history must expose TLAS generation allocation and retirement pressure") &&
+           requireTrue(stats.pendingFrameCount == 500u && stats.peakPendingTerrainBlasBuilds == 2u &&
+                           stats.peakPendingTerrainBlasCompactions == 0u && stats.latest.sceneTlasPending,
+                       "AS history must retain conservative pending-frame evidence") &&
            requireTrue(stats.dynamicBlas.producerConnected &&
                            stats.dynamicBlas
                                    .actionCounts[static_cast<size_t>(renderer::contracts::DynamicBlasAction::Update)] ==

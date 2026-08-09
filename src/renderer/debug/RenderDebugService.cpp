@@ -237,6 +237,9 @@ void AccelerationStructureHistory::reset() {
     m_activeSceneReferencedBlasByteSamples.fill(0u);
     m_activeTerrainBlasByteSamples.fill(0u);
     m_activeTerrainPrimitiveSamples.fill(0u);
+    m_sceneTlasPendingSamples.fill(0u);
+    m_pendingTerrainBlasBuildSamples.fill(0u);
+    m_pendingTerrainBlasCompactionSamples.fill(0u);
     m_sceneTlasGenerationAllocationSamples.fill(0u);
     m_sceneTlasGenerationReuseSamples.fill(0u);
     m_sceneTlasGenerationReuseWaitSamples.fill(0u);
@@ -324,6 +327,9 @@ bool AccelerationStructureHistory::record(const AccelerationStructureFrameStats&
     m_activeSceneReferencedBlasByteSamples[m_nextSample] = stats.activeSceneReferencedBlasBytes;
     m_activeTerrainBlasByteSamples[m_nextSample] = stats.activeTerrainBlasBytes;
     m_activeTerrainPrimitiveSamples[m_nextSample] = stats.activeTerrainPrimitiveCount;
+    m_sceneTlasPendingSamples[m_nextSample] = stats.sceneTlasPending ? 1u : 0u;
+    m_pendingTerrainBlasBuildSamples[m_nextSample] = stats.pendingTerrainBlasBuilds;
+    m_pendingTerrainBlasCompactionSamples[m_nextSample] = stats.pendingTerrainBlasCompactions;
     m_sceneTlasGenerationAllocationSamples[m_nextSample] = stats.sceneTlasGenerationAllocations;
     m_sceneTlasGenerationReuseSamples[m_nextSample] = stats.sceneTlasGenerationReuses;
     m_sceneTlasGenerationReuseWaitSamples[m_nextSample] = stats.sceneTlasGenerationReuseWaits;
@@ -405,6 +411,15 @@ AccelerationStructureWindowStats AccelerationStructureHistory::snapshot() const 
             std::max(stats.peakActiveTerrainBlasBytes, m_activeTerrainBlasByteSamples[sampleIndex]);
         stats.peakActiveTerrainPrimitiveCount =
             std::max(stats.peakActiveTerrainPrimitiveCount, m_activeTerrainPrimitiveSamples[sampleIndex]);
+        const bool framePending = m_sceneTlasPendingSamples[sampleIndex] != 0u ||
+                                  m_pendingTerrainBlasBuildSamples[sampleIndex] != 0u ||
+                                  m_pendingTerrainBlasCompactionSamples[sampleIndex] != 0u;
+        stats.pendingFrameCount += framePending ? 1u : 0u;
+        stats.peakPendingTerrainBlasBuilds =
+            std::max(stats.peakPendingTerrainBlasBuilds, m_pendingTerrainBlasBuildSamples[sampleIndex]);
+        stats.peakPendingTerrainBlasCompactions =
+            std::max(stats.peakPendingTerrainBlasCompactions,
+                     m_pendingTerrainBlasCompactionSamples[sampleIndex]);
         stats.sceneTlasGenerationAllocationCount += m_sceneTlasGenerationAllocationSamples[sampleIndex];
         stats.sceneTlasGenerationReuseCount += m_sceneTlasGenerationReuseSamples[sampleIndex];
         stats.sceneTlasGenerationReuseWaitCount += m_sceneTlasGenerationReuseWaitSamples[sampleIndex];
