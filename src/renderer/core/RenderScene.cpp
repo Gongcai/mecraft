@@ -668,9 +668,8 @@ bool RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
         effects.preExposure = m_currentContext.preExposure;
         m_postProcessPass.setFrameEffects(effects);
         if (lightDebugActive) {
-            if (!m_postProcessPass.blitSceneCaptureToBackbuffer(*m_shared.rhiDevice,
-                                                                m_currentContext.swapchainColorView, m_debugService,
-                                                                true)) {
+            if (!m_postProcessPass.blitSceneCaptureToBackbuffer(
+                    *m_shared.rhiDevice, m_currentContext.swapchainColorView, m_debugService, true)) {
                 m_terrainStreamingService.endFrame();
                 return false;
             }
@@ -687,8 +686,8 @@ bool RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
                 const int inputHeight = m_postProcessPass.targetHeight();
                 if (!m_fsr1Pass.execute(*m_shared.rhiDevice, m_currentContext.swapchainColorView, postTexture,
                                         m_postProcessPass.compositeTextureViewHandle(), inputWidth, inputHeight,
-                                        displaySize.x, displaySize.y, m_settings.upscale.fsr1Sharpness,
-                                        m_debugService, true)) {
+                                        displaySize.x, displaySize.y, m_settings.upscale.fsr1Sharpness, m_debugService,
+                                        true)) {
                     m_terrainStreamingService.endFrame();
                     return false;
                 }
@@ -782,6 +781,7 @@ void RenderScene::setSettings(const RenderSettings& settings) {
         resetReasons = resetReasons | TemporalResetReason::ResourceExtent;
     }
     if (normalizedSettings.rtgi.enabled != m_settings.rtgi.enabled ||
+        normalizedSettings.rtgi.cutoutTraversal != m_settings.rtgi.cutoutTraversal ||
         normalizedSettings.nrd.enabled != m_settings.nrd.enabled ||
         normalizedSettings.nrd.method != m_settings.nrd.method) {
         // NRD reconfiguration changes both its history and the radiance signal
@@ -796,6 +796,11 @@ void RenderScene::setSettings(const RenderSettings& settings) {
         resetReasons = resetReasons | TemporalResetReason::Method;
     }
 
+    if (normalizedSettings.rtgi.cutoutTraversal != m_settings.rtgi.cutoutTraversal &&
+        !m_terrainStreamingService.setOpacityMicromapEnabled(normalizedSettings.rtgi.cutoutTraversal ==
+                                                             RtgiCutoutTraversalMode::OpacityMicromap)) {
+        return;
+    }
     m_settings = normalizedSettings;
 
     if (requiresTemporalReset(resetReasons)) {
@@ -961,6 +966,14 @@ void RenderScene::setupResources(ThreadPool* threadPool, RhiDevice* rhiDevice, R
     if (threadPool == nullptr || rhiDevice == nullptr || commandListPool == nullptr)
         std::abort();
     if (!m_terrainStreamingService.init(threadPool, worldRenderBuffer, rhiDevice)) {
+        std::abort();
+    }
+    if (m_shared.resources == nullptr ||
+        !m_terrainStreamingService.setOpacityMicromapSource(m_shared.resources->getTerrainOpacityMicromapSource())) {
+        std::abort();
+    }
+    if (!m_terrainStreamingService.setOpacityMicromapEnabled(initialSettings.rtgi.cutoutTraversal ==
+                                                             RtgiCutoutTraversalMode::OpacityMicromap)) {
         std::abort();
     }
     if (!m_sceneTlasCache.init(rhiDevice)) {

@@ -130,6 +130,10 @@ const TextureArray& ResourceMgr::getBlockSpecularTextureArray() const {
     return m_impl->blockTextures.specularTextureArray();
 }
 
+renderer::contracts::TerrainOpacityMicromapSource ResourceMgr::getTerrainOpacityMicromapSource() const {
+    return m_impl->blockTextures.terrainOpacityMicromapSource();
+}
+
 bool ResourceMgr::hasBlockNormalMaps() const {
     return m_impl->blockTextures.hasNormalMaps();
 }

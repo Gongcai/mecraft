@@ -38,9 +38,12 @@
 
 namespace {
 [[nodiscard]] bool validRtgiSettings(const RtgiSettings& settings) {
-    return std::isfinite(settings.intensity) && settings.intensity >= 0.0f && std::isfinite(settings.maxRayDistance) &&
-           settings.maxRayDistance > 0.0f && std::isfinite(settings.maxShadowRayDistance) &&
-           settings.maxShadowRayDistance > 0.0f && std::isfinite(settings.minimumRayOriginBias) &&
+    const bool traversalValid = settings.cutoutTraversal == RtgiCutoutTraversalMode::CandidateLoop ||
+                                settings.cutoutTraversal == RtgiCutoutTraversalMode::OpacityMicromap;
+    return traversalValid && std::isfinite(settings.intensity) && settings.intensity >= 0.0f &&
+           std::isfinite(settings.maxRayDistance) && settings.maxRayDistance > 0.0f &&
+           std::isfinite(settings.maxShadowRayDistance) && settings.maxShadowRayDistance > 0.0f &&
+           std::isfinite(settings.minimumRayOriginBias) &&
            settings.minimumRayOriginBias >= renderer::contracts::kRtgiMinimumRayOriginBias &&
            settings.minimumRayOriginBias < settings.maxRayDistance &&
            settings.minimumRayOriginBias < settings.maxShadowRayDistance;
@@ -3081,6 +3084,25 @@ RenderGraphFrameStats DeferredPipeline::renderGraphFrameStats() const {
     accelerationStructures.terrainBuckets.activeCutoutPrimitives = terrainBlasStats.activeCutoutPrimitiveCount;
     accelerationStructures.terrainBuckets.builtOpaquePrimitives = terrainBlasStats.buildOpaquePrimitiveCountThisFrame;
     accelerationStructures.terrainBuckets.builtCutoutPrimitives = terrainBlasStats.buildCutoutPrimitiveCountThisFrame;
+    TerrainOpacityMicromapFrameStats& opacityMicromaps = accelerationStructures.terrainOpacityMicromaps;
+    opacityMicromaps.enabled = terrainBlasStats.opacityMicromapEnabled;
+    opacityMicromaps.subdivisionLevel = terrainBlasStats.opacityMicromapSubdivisionLevel;
+    opacityMicromaps.alphaTextureHash = terrainBlasStats.opacityMicromapAlphaTextureHash;
+    opacityMicromaps.profileHash = terrainBlasStats.opacityMicromapProfileHash;
+    opacityMicromaps.activeMicromapCount = terrainBlasStats.activeOpacityMicromapCount;
+    opacityMicromaps.activeMicromapBytes = terrainBlasStats.activeOpacityMicromapBytes;
+    opacityMicromaps.activeOpaqueMicroTriangles = terrainBlasStats.activeOpacityMicromapOpaqueMicroTriangles;
+    opacityMicromaps.activeTransparentMicroTriangles = terrainBlasStats.activeOpacityMicromapTransparentMicroTriangles;
+    opacityMicromaps.activeUnknownMicroTriangles = terrainBlasStats.activeOpacityMicromapUnknownMicroTriangles;
+    opacityMicromaps.builtMicromapCount = terrainBlasStats.opacityMicromapsBuiltThisFrame;
+    opacityMicromaps.builtPrimitiveCount = terrainBlasStats.opacityMicromapPrimitivesBuiltThisFrame;
+    opacityMicromaps.buildInputBytes = terrainBlasStats.opacityMicromapInputBytesThisFrame;
+    opacityMicromaps.buildStorageBytes = terrainBlasStats.opacityMicromapStorageBytesThisFrame;
+    opacityMicromaps.buildScratchBytes = terrainBlasStats.opacityMicromapScratchBytesThisFrame;
+    opacityMicromaps.builtOpaqueMicroTriangles = terrainBlasStats.opacityMicromapOpaqueMicroTrianglesBuiltThisFrame;
+    opacityMicromaps.builtTransparentMicroTriangles =
+        terrainBlasStats.opacityMicromapTransparentMicroTrianglesBuiltThisFrame;
+    opacityMicromaps.builtUnknownMicroTriangles = terrainBlasStats.opacityMicromapUnknownMicroTrianglesBuiltThisFrame;
     StaticBlasFrameStats& staticBlas = accelerationStructures.staticBlas;
     staticBlas.supported = staticBlasStats.supported;
     staticBlas.assetCount = staticBlasStats.assetCount;

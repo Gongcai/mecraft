@@ -176,6 +176,23 @@ bool testAccelerationStructureHistory() {
         frame.terrainBuckets.activeCutoutPrimitives = sequence * 20u;
         frame.terrainBuckets.builtOpaquePrimitives = sequence * 2u;
         frame.terrainBuckets.builtCutoutPrimitives = sequence;
+        frame.terrainOpacityMicromaps.enabled = true;
+        frame.terrainOpacityMicromaps.subdivisionLevel = 4u;
+        frame.terrainOpacityMicromaps.alphaTextureHash = 0x1234u;
+        frame.terrainOpacityMicromaps.profileHash = 0x5678u;
+        frame.terrainOpacityMicromaps.activeMicromapCount = 2u;
+        frame.terrainOpacityMicromaps.activeMicromapBytes = 4096u;
+        frame.terrainOpacityMicromaps.activeOpaqueMicroTriangles = 100u;
+        frame.terrainOpacityMicromaps.activeTransparentMicroTriangles = 200u;
+        frame.terrainOpacityMicromaps.activeUnknownMicroTriangles = 212u;
+        frame.terrainOpacityMicromaps.builtMicromapCount = 1u;
+        frame.terrainOpacityMicromaps.builtPrimitiveCount = 3u;
+        frame.terrainOpacityMicromaps.buildInputBytes = 128u;
+        frame.terrainOpacityMicromaps.buildStorageBytes = 256u;
+        frame.terrainOpacityMicromaps.buildScratchBytes = 512u;
+        frame.terrainOpacityMicromaps.builtOpaqueMicroTriangles = 150u;
+        frame.terrainOpacityMicromaps.builtTransparentMicroTriangles = 250u;
+        frame.terrainOpacityMicromaps.builtUnknownMicroTriangles = 368u;
         frame.dynamicBlas.producerConnected = true;
         frame.dynamicBlas.actionCounts[static_cast<size_t>(renderer::contracts::DynamicBlasAction::Update)] = 2u;
         frame.dynamicBlas.rigidReuseRejectCounts[static_cast<size_t>(
@@ -221,7 +238,19 @@ bool testAccelerationStructureHistory() {
            requireTrue(stats.terrainBuckets.peakActiveOpaquePrimitives == 40080u &&
                            stats.terrainBuckets.peakActiveCutoutPrimitives == 20040u &&
                            stats.latest.terrainBuckets.activeOpaquePrimitives == 40080u,
-                       "AS history must preserve terrain geometry-bucket residency");
+                       "AS history must preserve terrain geometry-bucket residency") &&
+           requireTrue(stats.terrainOpacityMicromaps.builtMicromapCount == 1000u &&
+                           stats.terrainOpacityMicromaps.builtPrimitiveCount == 3000u &&
+                           stats.terrainOpacityMicromaps.buildInputBytes == 128000u &&
+                           stats.terrainOpacityMicromaps.buildStorageBytes == 256000u &&
+                           stats.terrainOpacityMicromaps.buildScratchBytes == 512000u &&
+                           stats.terrainOpacityMicromaps.builtOpaqueMicroTriangles == 150000u &&
+                           stats.terrainOpacityMicromaps.builtTransparentMicroTriangles == 250000u &&
+                           stats.terrainOpacityMicromaps.builtUnknownMicroTriangles == 368000u &&
+                           stats.terrainOpacityMicromaps.peakActiveMicromapCount == 2u &&
+                           stats.terrainOpacityMicromaps.peakActiveMicromapBytes == 4096u &&
+                           stats.latest.terrainOpacityMicromaps.profileHash == 0x5678u,
+                       "AS history must retain Terrain OMM build totals, classification, identity, and residency");
 }
 
 bool testRenderGraphTimingHistory() {

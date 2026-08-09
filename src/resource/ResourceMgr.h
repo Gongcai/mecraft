@@ -11,6 +11,7 @@
 #include <vector>
 #include "BlockTextureCatalog.h"
 #include "BlockTextureColorProvider.h"
+#include "renderer/contracts/TerrainOpacityMicromapContract.h"
 #include "renderer/rhi/RhiResources.h"
 #include "TextureAtlas.h"
 
@@ -56,6 +57,8 @@ public:
     [[nodiscard]] const TextureArray& getTextureArray() const;
     [[nodiscard]] const TextureArray& getBlockNormalTextureArray() const;
     [[nodiscard]] const TextureArray& getBlockSpecularTextureArray() const;
+    /// Returns the immutable normalized albedo pixels and identity used by terrain opacity micromaps.
+    [[nodiscard]] renderer::contracts::TerrainOpacityMicromapSource getTerrainOpacityMicromapSource() const;
     [[nodiscard]] bool hasBlockNormalMaps() const;
     [[nodiscard]] bool hasBlockSpecularMaps() const;
     [[nodiscard]] bool loadBlockTextureCatalog(const std::string& textureConfigPath);

@@ -335,9 +335,15 @@ Caustica 对照评估和第一轮策略契约已经完成：
   仅在驱动同时暴露扩展和 `micromap` feature 时启用并上报，并携带设备的 Two/Four-state subdivision 上限；资产契约已锁定 Alpha/Profile 身份、每三角形
   subdivision/state 与 Empty→CpuReady→GpuBuildPending→Resident→Retired 生命周期；RHI 已冻结 Micromap Storage/Build Input Buffer Usage
   和独立 Build Input/Scratch/Write 同步状态，并已接入强类型 Micromap Handle、精确 Build Size、GPU Build、提交引用与延迟销毁；
-  BLAS Triangle Geometry 已通过 OMM `pNext`、Usage Group 与可选 Primitive Index Buffer 关联，并由 RTX 4060 Laptop
-  Vulkan Smoke 完成真实 Micromap→BLAS Build 与 Validation 验证；尚未接入 Terrain Cutout 生产缓存或 A/B 路径。
-  OMM 的工程判断仍需要 Candidate/Confirmed 场景总量、Trace 时间和资产 Alpha Coverage 共同支撑。
+  BLAS Triangle Geometry 已通过 OMM `pNext`、Usage Group 与可选 Primitive Index Buffer 关联。Terrain Cutout
+  生产缓存现已保留规范化 RGBA8 Alpha Source，按固定 `0.1` Cutoff、动画全部有效帧、Repeat UV 与 subdivision 4
+  生成 Four-state Micromap；同一命令列表完成 Micromap Build、`MicromapRead` 同步和 BLAS Build，压缩后 BLAS
+  共享生命周期保留 Micromap 与 Storage Buffer。设置显式选择 `candidate_loop` 或 `opacity_micromap`，已有 BLAS
+  generation 时拒绝切换，能力、Four-state subdivision 或 Alpha Source 不满足时明确失败。RTX 4060 Laptop Vulkan
+  Smoke 已验证 Opaque Geometry 不关联 OMM、Cutout Geometry 正确关联、Candidate 模式零 Micromap、旧 TLAS generation
+  保留旧 Micromap 且替换完成后才释放，Validation 无新增错误。Benchmark 的 `terrain_opacity_micromaps` 已发布模式、
+  Alpha/Profile Hash、subdivision、活动数量/字节、Build Input/Storage/Scratch 字节及 Opaque/Transparent/Unknown
+  microtriangle 总量。OMM 是否采用仍需由正式 V03 Candidate/OMM A/B 决策。
 
 Candidate/Confirmed 归约遥测已经完成：8x8 Compute 将 Validation Image 聚合为 64-bit 总量和每像素峰值，
 三槽 Submission Token Readback 不等待 GPU，固定 1000 样本窗口按 sequence 去重。Sponza 和体素洞穴仍为
@@ -349,8 +355,9 @@ Confirmed，确认率 76.36%，峰值为 8 Candidate/1 Confirmed 每像素，Ter
 
 下一轮任务按以下顺序执行：
 
-1. 增加 `VK_EXT_opacity_micromap` Micromap 资产与生命周期契约；以 V03 固定 Camera Path、
-   Alpha 纹理和 Profile 对比 Candidate Loop 与 OMM 的 `RTGI.Trace` p95、Counter 和显存，再决定是否采用。
+1. 以 V03 固定 Camera Path、Alpha 纹理和 Profile，分别执行 Candidate Loop 与 OMM 的 300 帧预热加 1000 帧
+   采样；比较 `RTGI.Trace` p95、Candidate/Confirmed、Complete GPU Span、Micromap Build/驻留显存和三类
+   microtriangle 分布，再决定是否采用。
 2. 针对 1080p 继续定位：体素优先检查地形提交、流送和 AS；Sponza 优先检查 RTGI.Trace 与 NRD.Dispatch。
    固定场景、驱动和电源模式后保留前后 Capture。
 3. 完整跨度和分项归因稳定后，再在同一镜头比较 RELAX A-Trous 5 与 3；不得用减少迭代数掩盖 Trace 或

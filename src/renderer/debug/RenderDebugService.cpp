@@ -245,6 +245,19 @@ void AccelerationStructureHistory::reset() {
     m_activeTerrainCutoutPrimitiveSamples.fill(0u);
     m_builtTerrainOpaquePrimitiveSamples.fill(0u);
     m_builtTerrainCutoutPrimitiveSamples.fill(0u);
+    m_activeTerrainOpacityMicromapSamples.fill(0u);
+    m_activeTerrainOpacityMicromapByteSamples.fill(0u);
+    m_activeTerrainOpacityOpaqueMicroTriangleSamples.fill(0u);
+    m_activeTerrainOpacityTransparentMicroTriangleSamples.fill(0u);
+    m_activeTerrainOpacityUnknownMicroTriangleSamples.fill(0u);
+    m_builtTerrainOpacityMicromapSamples.fill(0u);
+    m_builtTerrainOpacityPrimitiveSamples.fill(0u);
+    m_terrainOpacityBuildInputByteSamples.fill(0u);
+    m_terrainOpacityBuildStorageByteSamples.fill(0u);
+    m_terrainOpacityBuildScratchByteSamples.fill(0u);
+    m_builtTerrainOpacityOpaqueMicroTriangleSamples.fill(0u);
+    m_builtTerrainOpacityTransparentMicroTriangleSamples.fill(0u);
+    m_builtTerrainOpacityUnknownMicroTriangleSamples.fill(0u);
     for (auto& samples : m_dynamicBlasActionSamples) {
         samples.fill(0u);
     }
@@ -272,6 +285,7 @@ bool AccelerationStructureHistory::record(const AccelerationStructureFrameStats&
         }
     }
     const StaticBlasFrameStats& staticBlas = stats.staticBlas;
+    const TerrainOpacityMicromapFrameStats& opacityMicromaps = stats.terrainOpacityMicromaps;
     if (!std::isfinite(staticBlas.buildCpuMs) || staticBlas.buildCpuMs < 0.0 || !std::isfinite(staticBlas.buildGpuMs) ||
         staticBlas.buildGpuMs < 0.0 || !std::isfinite(staticBlas.compactionCpuMs) || staticBlas.compactionCpuMs < 0.0 ||
         !std::isfinite(staticBlas.compactionGpuMs) || staticBlas.compactionGpuMs < 0.0 ||
@@ -280,7 +294,17 @@ bool AccelerationStructureHistory::record(const AccelerationStructureFrameStats&
                         stats.activeTerrainPrimitiveCount) ||
         !exactPartition(
             stats.terrainBuckets.builtOpaquePrimitives, stats.terrainBuckets.builtCutoutPrimitives,
-            stats.stages[static_cast<size_t>(AccelerationStructureStage::TerrainBlasBuild)].primitiveCount)) {
+            stats.stages[static_cast<size_t>(AccelerationStructureStage::TerrainBlasBuild)].primitiveCount) ||
+        opacityMicromaps.activeMicromapCount > stats.activeTerrainBlas ||
+        opacityMicromaps.builtMicromapCount >
+            stats.stages[static_cast<size_t>(AccelerationStructureStage::TerrainBlasBuild)].operationCount ||
+        (!opacityMicromaps.enabled &&
+         (opacityMicromaps.activeMicromapCount != 0u || opacityMicromaps.activeMicromapBytes != 0u ||
+          opacityMicromaps.builtMicromapCount != 0u || opacityMicromaps.builtPrimitiveCount != 0u ||
+          opacityMicromaps.buildInputBytes != 0u || opacityMicromaps.buildStorageBytes != 0u ||
+          opacityMicromaps.buildScratchBytes != 0u)) ||
+        (opacityMicromaps.enabled && (opacityMicromaps.subdivisionLevel > 10u ||
+                                      opacityMicromaps.alphaTextureHash == 0u || opacityMicromaps.profileHash == 0u))) {
         return false;
     }
 
@@ -308,6 +332,21 @@ bool AccelerationStructureHistory::record(const AccelerationStructureFrameStats&
     m_activeTerrainCutoutPrimitiveSamples[m_nextSample] = stats.terrainBuckets.activeCutoutPrimitives;
     m_builtTerrainOpaquePrimitiveSamples[m_nextSample] = stats.terrainBuckets.builtOpaquePrimitives;
     m_builtTerrainCutoutPrimitiveSamples[m_nextSample] = stats.terrainBuckets.builtCutoutPrimitives;
+    m_activeTerrainOpacityMicromapSamples[m_nextSample] = opacityMicromaps.activeMicromapCount;
+    m_activeTerrainOpacityMicromapByteSamples[m_nextSample] = opacityMicromaps.activeMicromapBytes;
+    m_activeTerrainOpacityOpaqueMicroTriangleSamples[m_nextSample] = opacityMicromaps.activeOpaqueMicroTriangles;
+    m_activeTerrainOpacityTransparentMicroTriangleSamples[m_nextSample] =
+        opacityMicromaps.activeTransparentMicroTriangles;
+    m_activeTerrainOpacityUnknownMicroTriangleSamples[m_nextSample] = opacityMicromaps.activeUnknownMicroTriangles;
+    m_builtTerrainOpacityMicromapSamples[m_nextSample] = opacityMicromaps.builtMicromapCount;
+    m_builtTerrainOpacityPrimitiveSamples[m_nextSample] = opacityMicromaps.builtPrimitiveCount;
+    m_terrainOpacityBuildInputByteSamples[m_nextSample] = opacityMicromaps.buildInputBytes;
+    m_terrainOpacityBuildStorageByteSamples[m_nextSample] = opacityMicromaps.buildStorageBytes;
+    m_terrainOpacityBuildScratchByteSamples[m_nextSample] = opacityMicromaps.buildScratchBytes;
+    m_builtTerrainOpacityOpaqueMicroTriangleSamples[m_nextSample] = opacityMicromaps.builtOpaqueMicroTriangles;
+    m_builtTerrainOpacityTransparentMicroTriangleSamples[m_nextSample] =
+        opacityMicromaps.builtTransparentMicroTriangles;
+    m_builtTerrainOpacityUnknownMicroTriangleSamples[m_nextSample] = opacityMicromaps.builtUnknownMicroTriangles;
     for (size_t index = 0u; index < stats.dynamicBlas.actionCounts.size(); ++index) {
         m_dynamicBlasActionSamples[index][m_nextSample] = stats.dynamicBlas.actionCounts[index];
     }
@@ -387,6 +426,31 @@ AccelerationStructureWindowStats AccelerationStructureHistory::snapshot() const 
                                                                    m_activeTerrainOpaquePrimitiveSamples[sampleIndex]);
         stats.terrainBuckets.peakActiveCutoutPrimitives = std::max(stats.terrainBuckets.peakActiveCutoutPrimitives,
                                                                    m_activeTerrainCutoutPrimitiveSamples[sampleIndex]);
+        stats.terrainOpacityMicromaps.builtMicromapCount += m_builtTerrainOpacityMicromapSamples[sampleIndex];
+        stats.terrainOpacityMicromaps.builtPrimitiveCount += m_builtTerrainOpacityPrimitiveSamples[sampleIndex];
+        stats.terrainOpacityMicromaps.buildInputBytes += m_terrainOpacityBuildInputByteSamples[sampleIndex];
+        stats.terrainOpacityMicromaps.buildStorageBytes += m_terrainOpacityBuildStorageByteSamples[sampleIndex];
+        stats.terrainOpacityMicromaps.buildScratchBytes += m_terrainOpacityBuildScratchByteSamples[sampleIndex];
+        stats.terrainOpacityMicromaps.builtOpaqueMicroTriangles +=
+            m_builtTerrainOpacityOpaqueMicroTriangleSamples[sampleIndex];
+        stats.terrainOpacityMicromaps.builtTransparentMicroTriangles +=
+            m_builtTerrainOpacityTransparentMicroTriangleSamples[sampleIndex];
+        stats.terrainOpacityMicromaps.builtUnknownMicroTriangles +=
+            m_builtTerrainOpacityUnknownMicroTriangleSamples[sampleIndex];
+        stats.terrainOpacityMicromaps.peakActiveMicromapCount = std::max(
+            stats.terrainOpacityMicromaps.peakActiveMicromapCount, m_activeTerrainOpacityMicromapSamples[sampleIndex]);
+        stats.terrainOpacityMicromaps.peakActiveMicromapBytes =
+            std::max(stats.terrainOpacityMicromaps.peakActiveMicromapBytes,
+                     m_activeTerrainOpacityMicromapByteSamples[sampleIndex]);
+        stats.terrainOpacityMicromaps.peakActiveOpaqueMicroTriangles =
+            std::max(stats.terrainOpacityMicromaps.peakActiveOpaqueMicroTriangles,
+                     m_activeTerrainOpacityOpaqueMicroTriangleSamples[sampleIndex]);
+        stats.terrainOpacityMicromaps.peakActiveTransparentMicroTriangles =
+            std::max(stats.terrainOpacityMicromaps.peakActiveTransparentMicroTriangles,
+                     m_activeTerrainOpacityTransparentMicroTriangleSamples[sampleIndex]);
+        stats.terrainOpacityMicromaps.peakActiveUnknownMicroTriangles =
+            std::max(stats.terrainOpacityMicromaps.peakActiveUnknownMicroTriangles,
+                     m_activeTerrainOpacityUnknownMicroTriangleSamples[sampleIndex]);
         for (size_t index = 0u; index < stats.dynamicBlas.actionCounts.size(); ++index) {
             stats.dynamicBlas.actionCounts[index] += m_dynamicBlasActionSamples[index][sampleIndex];
             stats.dynamicBlas.peakActionsPerFrame[index] =

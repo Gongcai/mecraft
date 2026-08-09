@@ -11,7 +11,8 @@ std::shared_ptr<SceneBlasResource> SceneBlasResource::create(RhiDevice& device,
                                                              const RhiAccelerationStructureHandle accelerationStructure,
                                                              const RhiBufferHandle storageBuffer,
                                                              const uint64_t deviceAddress, const uint64_t blasBytes,
-                                                             std::vector<RhiBufferHandle> retainedBuffers) {
+                                                             std::vector<RhiBufferHandle> retainedBuffers,
+                                                             std::vector<RhiMicromapHandle> retainedMicromaps) {
     if (!accelerationStructure.isValid() || !storageBuffer.isValid() || deviceAddress == 0u || blasBytes == 0u) {
         return nullptr;
     }
@@ -29,18 +30,34 @@ std::shared_ptr<SceneBlasResource> SceneBlasResource::create(RhiDevice& device,
         }
         retainedBufferAddresses.push_back(retainedAddress);
     }
-    return std::shared_ptr<SceneBlasResource>(
-        new SceneBlasResource(device, accelerationStructure, storageBuffer, deviceAddress, blasBytes,
-                              std::move(retainedBuffers), std::move(retainedBufferAddresses)));
+    std::unordered_set<uint64_t> uniqueMicromaps;
+    uniqueMicromaps.reserve(retainedMicromaps.size());
+    for (const RhiMicromapHandle micromap : retainedMicromaps) {
+        const uint64_t identity = (static_cast<uint64_t>(micromap.generation) << 32u) | micromap.index;
+        RhiMicromapDesc desc;
+        if (!micromap.isValid() || !uniqueMicromaps.insert(identity).second ||
+            !device.getMicromapDesc(micromap, desc)) {
+            return nullptr;
+        }
+        const uint64_t backingIdentity = (static_cast<uint64_t>(desc.buffer.generation) << 32u) | desc.buffer.index;
+        if (uniqueBuffers.find(backingIdentity) == uniqueBuffers.end()) {
+            return nullptr;
+        }
+    }
+    return std::shared_ptr<SceneBlasResource>(new SceneBlasResource(
+        device, accelerationStructure, storageBuffer, deviceAddress, blasBytes, std::move(retainedBuffers),
+        std::move(retainedBufferAddresses), std::move(retainedMicromaps)));
 }
 
 SceneBlasResource::SceneBlasResource(RhiDevice& device, const RhiAccelerationStructureHandle accelerationStructure,
                                      const RhiBufferHandle storageBuffer, const uint64_t deviceAddress,
                                      const uint64_t blasBytes, std::vector<RhiBufferHandle> retainedBuffers,
-                                     std::vector<uint64_t> retainedBufferAddresses)
+                                     std::vector<uint64_t> retainedBufferAddresses,
+                                     std::vector<RhiMicromapHandle> retainedMicromaps)
     : m_device(&device), m_accelerationStructure(accelerationStructure), m_storageBuffer(storageBuffer),
       m_deviceAddress(deviceAddress), m_blasBytes(blasBytes), m_retainedBuffers(std::move(retainedBuffers)),
-      m_retainedBufferAddresses(std::move(retainedBufferAddresses)) {}
+      m_retainedBufferAddresses(std::move(retainedBufferAddresses)), m_retainedMicromaps(std::move(retainedMicromaps)) {
+}
 
 std::optional<uint64_t> SceneBlasResource::retainedBufferDeviceAddress(const RhiBufferHandle buffer) const {
     for (std::size_t index = 0u; index < m_retainedBuffers.size(); ++index) {
@@ -55,6 +72,9 @@ std::optional<uint64_t> SceneBlasResource::retainedBufferDeviceAddress(const Rhi
 SceneBlasResource::~SceneBlasResource() {
     m_device->destroyAccelerationStructure(m_accelerationStructure);
     m_device->destroyBuffer(m_storageBuffer);
+    for (const RhiMicromapHandle micromap : m_retainedMicromaps) {
+        m_device->destroyMicromap(micromap);
+    }
     for (const RhiBufferHandle buffer : m_retainedBuffers) {
         m_device->destroyBuffer(buffer);
     }

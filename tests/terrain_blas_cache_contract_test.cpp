@@ -30,6 +30,15 @@ namespace {
 } // namespace
 
 int main() {
+    TerrainBlasCache unsupportedOpacityMicromapCache;
+    const bool unsupportedOpacityMicromapRejected =
+        !unsupportedOpacityMicromapCache.setOpacityMicromapEnabled(true) &&
+        unsupportedOpacityMicromapCache.lastError() ==
+            "Terrain opacity micromap mode is unsupported by the active device or texture source";
+    TerrainBlasCache invalidOpacityMicromapSourceCache;
+    const bool invalidOpacityMicromapSourceRejected =
+        !invalidOpacityMicromapSourceCache.setOpacityMicromapSource({}) &&
+        invalidOpacityMicromapSourceCache.lastError() == "Terrain opacity micromap source is invalid";
     const std::vector<BlockVertex> opaque{makeVertex(0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 2, 17u),
                                           makeVertex(1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 2, 17u),
                                           makeVertex(0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 2, 17u)};
@@ -83,6 +92,8 @@ int main() {
     std::sort(schedule.begin(), schedule.end());
 
     const bool valid =
+        requireTrue(unsupportedOpacityMicromapRejected && invalidOpacityMicromapSourceRejected,
+                    "unsupported OMM mode and invalid alpha sources must be rejected explicitly") &&
         requireTrue(
             validResult == TerrainBlasRequestResult::Queued && geometry.opaqueVertexCount == 3u &&
                 geometry.cutoutVertexCount == 6u && geometry.vertexCount() == 9u && geometry.primitiveCount() == 3u &&
@@ -95,7 +106,8 @@ int main() {
                 renderer::contracts::terrainPrimitiveFace(geometry.primitiveMetadata[1]) == -1 &&
                 geometry.uploadByteSize() ==
                     sizeof(BlockVertex) * 9u + sizeof(renderer::contracts::TerrainPrimitiveMetadata) * 3u,
-            "geometry preparation must seal opaque faces, preserve triangle order, and emit one metadata record per primitive") &&
+            "geometry preparation must seal opaque faces, preserve triangle order, and emit one metadata record per "
+            "primitive") &&
         requireTrue(emptyResult == TerrainBlasRequestResult::Cleared && emptyGeometry.empty(),
                     "empty solid geometry must explicitly clear the resident BLAS") &&
         requireTrue(invalidCountResult == TerrainBlasRequestResult::InvalidGeometry &&

@@ -411,6 +411,7 @@ struct GlVertexFormatInfo {
     case RhiResourceState::MicromapBuildInput: return "MicromapBuildInput";
     case RhiResourceState::MicromapBuildScratch: return "MicromapBuildScratch";
     case RhiResourceState::MicromapBuildWrite: return "MicromapBuildWrite";
+    case RhiResourceState::MicromapRead: return "MicromapRead";
     case RhiResourceState::HostRead: return "HostRead";
     case RhiResourceState::HostWrite: return "HostWrite";
     }
@@ -440,6 +441,7 @@ struct GlVertexFormatInfo {
     case RhiResourceState::MicromapBuildInput:
     case RhiResourceState::MicromapBuildScratch:
     case RhiResourceState::MicromapBuildWrite:
+    case RhiResourceState::MicromapRead:
     case RhiResourceState::HostRead:
     case RhiResourceState::HostWrite: return false;
     }
@@ -462,6 +464,7 @@ struct GlVertexFormatInfo {
     case RhiResourceState::MicromapBuildInput:
     case RhiResourceState::MicromapBuildScratch:
     case RhiResourceState::MicromapBuildWrite: return false;
+    case RhiResourceState::MicromapRead: return false;
     case RhiResourceState::HostRead: return (usage & rhiFlag(RhiBufferUsage::MapRead)) != 0u;
     case RhiResourceState::HostWrite: return (usage & rhiFlag(RhiBufferUsage::MapWrite)) != 0u;
     case RhiResourceState::Undefined: return true;
@@ -496,6 +499,7 @@ struct GlVertexFormatInfo {
     case RhiResourceState::MicromapBuildInput:
     case RhiResourceState::MicromapBuildScratch:
     case RhiResourceState::MicromapBuildWrite: return 0u;
+    case RhiResourceState::MicromapRead: return 0u;
     case RhiResourceState::HostRead: return GL_CLIENT_MAPPED_BUFFER_BARRIER_BIT;
     case RhiResourceState::HostWrite: return GL_CLIENT_MAPPED_BUFFER_BARRIER_BIT;
     case RhiResourceState::Undefined:

@@ -61,6 +61,14 @@ public:
     // Configuration
     void setMeshingSubmitBudget(int budget);
     void setRegionChunkSize(int chunkSize);
+    /// Forwards the immutable texture-array source to the active terrain BLAS cache.
+    [[nodiscard]] bool setOpacityMicromapSource(renderer::contracts::TerrainOpacityMicromapSource source) {
+        return m_terrainCache.setOpacityMicromapSource(source);
+    }
+    /// Selects one explicit terrain cutout traversal implementation before geometry is queued.
+    [[nodiscard]] bool setOpacityMicromapEnabled(const bool enabled) {
+        return m_terrainCache.setOpacityMicromapEnabled(enabled);
+    }
 
     // Accessors for sub-components
     [[nodiscard]] TerrainRenderCache& terrainCache() { return m_terrainCache; }

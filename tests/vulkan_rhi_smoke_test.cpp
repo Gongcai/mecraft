@@ -271,7 +271,10 @@ struct RtgiTraceSmokeCase final {
         VkRhiInterop::resourceStages(RhiResourceState::MicromapBuildWrite) !=
             VK_PIPELINE_STAGE_2_MICROMAP_BUILD_BIT_EXT ||
         VkRhiInterop::resourceAccess(RhiResourceState::MicromapBuildWrite) !=
-            (VK_ACCESS_2_MICROMAP_READ_BIT_EXT | VK_ACCESS_2_MICROMAP_WRITE_BIT_EXT)) {
+            (VK_ACCESS_2_MICROMAP_READ_BIT_EXT | VK_ACCESS_2_MICROMAP_WRITE_BIT_EXT) ||
+        VkRhiInterop::resourceStages(RhiResourceState::MicromapRead) !=
+            VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_BUILD_BIT_KHR ||
+        VkRhiInterop::resourceAccess(RhiResourceState::MicromapRead) != VK_ACCESS_2_MICROMAP_READ_BIT_EXT) {
         return false;
     }
 
@@ -1876,7 +1879,7 @@ void main() {
                     commands->begin({"VulkanSmoke.Micromap.BLAS.Build", RhiCommandListType::Graphics});
             if (valid) {
                 commands->bufferBarrier(
-                    {storage, RhiResourceState::MicromapBuildWrite, RhiResourceState::AccelerationStructureBuildInput});
+                    {storage, RhiResourceState::MicromapBuildWrite, RhiResourceState::MicromapRead});
                 valid = commands->buildAccelerationStructures(&blasBuild, 1u) && commands->end();
             }
             if (valid) {
@@ -3819,6 +3822,18 @@ void main() {
         cache.shutdown();
         return false;
     }
+    std::vector<uint8_t> terrainOmmPixels(2u * 2u * 4u * 2u, 255u);
+    for (size_t texel = 4u; texel < 8u; ++texel) {
+        terrainOmmPixels[texel * 4u + 3u] = 0u;
+    }
+    const bool terrainOmmEnabled = device.capabilities().opacityMicromap;
+    const renderer::contracts::TerrainOpacityMicromapSource terrainOmmSource{
+        terrainOmmPixels.data(), terrainOmmPixels.size(), 2u, 2u, 0x4d65637261667401u};
+    if (!cache.setOpacityMicromapSource(terrainOmmSource) || !cache.setOpacityMicromapEnabled(terrainOmmEnabled)) {
+        std::cerr << "Terrain BLAS opacity micromap configuration failed\n";
+        cache.shutdown();
+        return false;
+    }
     cache.setBudgets({1u, 1024u * 1024u, 4096u, 1u});
 
     const auto makeVertex = [](const float x, const float y, const float z, const float u, const float v,
@@ -3845,6 +3860,7 @@ void main() {
         }
         return geometry;
     };
+    TerrainBlasStats lastOpacityMicromapBuildStats;
     const auto submitCacheFrame = [&](const char* debugName) {
         cache.beginFrame();
         RhiCommandList* commands = commandPool.acquire(RhiCommandListType::Compute);
@@ -3863,6 +3879,10 @@ void main() {
         cache.finishGraphExecution(true, token);
         if (!device.waitForSubmission(token)) {
             return false;
+        }
+        const TerrainBlasStats submittedStats = cache.stats();
+        if (submittedStats.opacityMicromapsBuiltThisFrame != 0u) {
+            lastOpacityMicromapBuildStats = submittedStats;
         }
         cache.beginFrame();
         return cache.healthy();
@@ -3966,7 +3986,8 @@ void main() {
         firstView->opaqueVertexCount == 3u && firstView->cutoutVertexCount == 3u && firstView->primitiveCount == 2u &&
         firstView->primitiveMetadataBytes ==
             sizeof(renderer::contracts::TerrainPrimitiveMetadata) * expectedGeometry.primitiveMetadata.size() &&
-        firstView->resource->retainedBuffers().size() == 2u &&
+        firstView->resource->retainedBuffers().size() == (terrainOmmEnabled ? 3u : 2u) &&
+        firstView->resource->retainedMicromaps().size() == (terrainOmmEnabled ? 1u : 0u) &&
         renderer::contracts::validTerrainRayTracingHitData(firstView->hitData) &&
         firstView->hitData.geometryCount == 2u &&
         firstView->hitData.geometries[0].geometryClass == renderer::contracts::TerrainRayTracingGeometryClass::Opaque &&
@@ -3974,6 +3995,7 @@ void main() {
         firstView->hitData.geometries[1].geometryClass == renderer::contracts::TerrainRayTracingGeometryClass::Cutout &&
         firstView->hitData.geometries[1].primitiveBase == 1u &&
         validateMetadataReadback(*firstView, expectedGeometry.primitiveMetadata);
+    valid = valid && !cache.setOpacityMicromapEnabled(false) && cache.healthy() && cache.opacityMicromapEnabled();
     if (valid) {
         valid = sceneTlas.init(&device) && sceneTlas.supported();
     }
@@ -3995,11 +4017,15 @@ void main() {
     renderer::rt::SceneTlasTerrainHitData firstSceneHitData;
     RhiBufferHandle firstGeometryBuffer;
     RhiBufferHandle firstPrimitiveMetadataBuffer;
+    RhiMicromapHandle firstOpacityMicromap;
     if (firstView.has_value()) {
         firstHitData = firstView->hitData;
         firstGeometryBuffer = firstView->geometryBuffer;
         firstPrimitiveMetadataBuffer = firstView->primitiveMetadataBuffer;
         firstSceneHitData = {firstView->hitData, firstView->geometryBuffer, firstView->primitiveMetadataBuffer};
+        if (terrainOmmEnabled && !firstView->resource->retainedMicromaps().empty()) {
+            firstOpacityMicromap = firstView->resource->retainedMicromaps().front();
+        }
     }
     const std::optional<renderer::contracts::TerrainRayTracingGpuInstance> firstGpuHitData =
         renderer::contracts::encodeTerrainRayTracingGpuInstance(firstHitData);
@@ -4072,7 +4098,7 @@ void main() {
             cache.requestBuild(key, 2u, glm::vec3(32.0f, 64.0f, -16.0f), makeGeometry()) ==
                 TerrainBlasRequestResult::Queued &&
             submitCacheFrame("VulkanSmoke.TerrainBLAS.Build2");
-    const std::optional<TerrainBlasView> duringRevision = cache.activeView(key);
+    std::optional<TerrainBlasView> duringRevision = cache.activeView(key);
     valid = valid && duringRevision.has_value() && duringRevision->revision == 1u &&
             submitCacheFrame("VulkanSmoke.TerrainBLAS.Compact2");
     const std::optional<TerrainBlasView> secondView = cache.activeView(key);
@@ -4081,9 +4107,14 @@ void main() {
             secondView->hitData.primitiveMetadataAddress != firstHitData.primitiveMetadataAddress &&
             device.bufferDeviceAddress(firstGeometryBuffer) == firstHitData.vertexAddress &&
             device.bufferDeviceAddress(firstPrimitiveMetadataBuffer) == firstHitData.primitiveMetadataAddress;
+    duringRevision.reset();
     const std::optional<renderer::rt::SceneTlasView> retainedFirstTlas = valid ? sceneTlas.activeView() : std::nullopt;
+    RhiMicromapDesc retainedFirstMicromapDesc;
     valid = valid && retainedFirstTlas.has_value() && retainedFirstTlas->revision == firstTlas->revision &&
             retainedFirstTlas->mappings[0].terrainHitData == std::optional(firstSceneHitData) &&
+            (!terrainOmmEnabled || (firstOpacityMicromap.isValid() &&
+                                    device.getMicromapDesc(firstOpacityMicromap, retainedFirstMicromapDesc) &&
+                                    retainedFirstMicromapDesc.buffer.isValid())) &&
             setTerrainInstance(*secondView,
                                renderer::rt::SceneTlasTerrainHitData{secondView->hitData, secondView->geometryBuffer,
                                                                      secondView->primitiveMetadataBuffer}) ==
@@ -4101,6 +4132,7 @@ void main() {
         secondView.has_value() ? renderer::contracts::encodeTerrainRayTracingGpuInstance(secondView->hitData)
                                : std::optional<renderer::contracts::TerrainRayTracingGpuInstance>{};
     const renderer::rt::SceneTlasStats secondTlasStats = sceneTlas.stats();
+    RhiMicromapDesc retiredFirstMicromapDesc;
     valid = valid && secondTlas.has_value() && secondTlas->revision > firstTlas->revision &&
             secondTlas->instanceCount == 1u && secondTlas->mappings.size() == 1u &&
             secondTlas->mappings[0].terrainHitData.has_value() &&
@@ -4116,6 +4148,7 @@ void main() {
              secondTlas->terrainHitDataBuffer.generation != firstTlas->terrainHitDataBuffer.generation) &&
             secondTlas->terrainHitDataBytes == sizeof(renderer::contracts::TerrainRayTracingGpuInstance) &&
             secondTlasStats.activeTerrainHitDataBytes == secondTlas->terrainHitDataBytes &&
+            (!terrainOmmEnabled || !device.getMicromapDesc(firstOpacityMicromap, retiredFirstMicromapDesc)) &&
             secondGpuHitData.has_value() &&
             validateGpuBufferContents(device, commandPool, secondTlas->terrainHitDataBuffer,
                                       RhiResourceState::StorageBuffer, &*secondGpuHitData, sizeof(*secondGpuHitData),
@@ -4134,23 +4167,71 @@ void main() {
                 TerrainBlasRequestResult::Unchanged;
 
     const TerrainBlasStats residentStats = cache.stats();
+    const uint64_t activeMicroTriangleCount = residentStats.activeOpacityMicromapOpaqueMicroTriangles +
+                                              residentStats.activeOpacityMicromapTransparentMicroTriangles +
+                                              residentStats.activeOpacityMicromapUnknownMicroTriangles;
     valid = valid && residentStats.activeBlasCount == 1u && residentStats.activePrimitiveCount == 2u &&
             residentStats.activeOpaquePrimitiveCount == 1u && residentStats.activeCutoutPrimitiveCount == 1u &&
             residentStats.activeGeometryBytes == sizeof(BlockVertex) * 6u &&
             residentStats.activePrimitiveMetadataBytes == sizeof(renderer::contracts::TerrainPrimitiveMetadata) * 2u &&
-            residentStats.activeBlasBytes != 0u && cache.isSettled() &&
-            sceneTlas.setInstances({}) == renderer::rt::SceneTlasSetResult::Accepted &&
+            residentStats.activeBlasBytes != 0u && residentStats.buildsRecordedThisFrame == 0u &&
+            residentStats.opacityMicromapsBuiltThisFrame == 0u &&
+            residentStats.opacityMicromapInputBytesThisFrame == 0u &&
+            residentStats.opacityMicromapStorageBytesThisFrame == 0u &&
+            residentStats.opacityMicromapScratchBytesThisFrame == 0u &&
+            residentStats.opacityMicromapEnabled == terrainOmmEnabled &&
+            residentStats.opacityMicromapAlphaTextureHash == terrainOmmSource.alphaTextureHash &&
+            residentStats.opacityMicromapProfileHash != 0u &&
+            residentStats.activeOpacityMicromapCount == (terrainOmmEnabled ? 1u : 0u) &&
+            (terrainOmmEnabled ? residentStats.activeOpacityMicromapBytes != 0u && activeMicroTriangleCount == 256u
+                               : residentStats.activeOpacityMicromapBytes == 0u && activeMicroTriangleCount == 0u) &&
+            (!terrainOmmEnabled ||
+             (lastOpacityMicromapBuildStats.opacityMicromapsBuiltThisFrame == 1u &&
+              lastOpacityMicromapBuildStats.opacityMicromapPrimitivesBuiltThisFrame == 1u &&
+              lastOpacityMicromapBuildStats.opacityMicromapInputBytesThisFrame != 0u &&
+              lastOpacityMicromapBuildStats.opacityMicromapStorageBytesThisFrame != 0u &&
+              lastOpacityMicromapBuildStats.opacityMicromapScratchBytesThisFrame != 0u &&
+              lastOpacityMicromapBuildStats.opacityMicromapOpaqueMicroTrianglesBuiltThisFrame +
+                      lastOpacityMicromapBuildStats.opacityMicromapTransparentMicroTrianglesBuiltThisFrame +
+                      lastOpacityMicromapBuildStats.opacityMicromapUnknownMicroTrianglesBuiltThisFrame ==
+                  256u)) &&
+            cache.isSettled() && sceneTlas.setInstances({}) == renderer::rt::SceneTlasSetResult::Accepted &&
             !sceneTlas.activeView().has_value() && sceneTlas.isSettled();
     cache.remove(key);
     const TerrainBlasStats removedStats = cache.stats();
     valid = valid && removedStats.activeBlasCount == 0u && removedStats.pendingBuildCount == 0u &&
             removedStats.pendingCompactionCount == 0u;
 
+    valid = valid && cache.setOpacityMicromapEnabled(false) &&
+            cache.requestBuild(key, 1u, glm::vec3(32.0f, 64.0f, -16.0f), makeGeometry()) ==
+                TerrainBlasRequestResult::Queued &&
+            submitCacheFrame("VulkanSmoke.TerrainBLAS.Candidate.Build") &&
+            submitCacheFrame("VulkanSmoke.TerrainBLAS.Candidate.Compact");
+    const std::optional<TerrainBlasView> candidateView = cache.activeView(key);
+    const TerrainBlasStats candidateStats = cache.stats();
+    valid = valid && candidateView.has_value() && candidateView->resource->retainedBuffers().size() == 2u &&
+            candidateView->resource->retainedMicromaps().empty() && !candidateStats.opacityMicromapEnabled &&
+            candidateStats.activeOpacityMicromapCount == 0u && candidateStats.activeOpacityMicromapBytes == 0u &&
+            candidateStats.activeOpacityMicromapOpaqueMicroTriangles == 0u &&
+            candidateStats.activeOpacityMicromapTransparentMicroTriangles == 0u &&
+            candidateStats.activeOpacityMicromapUnknownMicroTriangles == 0u;
+    cache.remove(key);
+
     sceneTlas.shutdown();
     cache.shutdown();
     device.waitIdle();
     valid = valid && device.validationErrorCount() == validationErrorsBefore;
     if (!valid) {
+        RhiMicromapDesc debugFirstMicromapDesc;
+        const bool firstMicromapStillRegistered =
+            firstOpacityMicromap.isValid() && device.getMicromapDesc(firstOpacityMicromap, debugFirstMicromapDesc);
+        std::cerr << "Terrain OMM diagnostics: enabled=" << terrainOmmEnabled
+                  << " active=" << residentStats.activeOpacityMicromapCount
+                  << " bytes=" << residentStats.activeOpacityMicromapBytes
+                  << " microtriangles=" << activeMicroTriangleCount
+                  << " alphaHash=" << residentStats.opacityMicromapAlphaTextureHash
+                  << " profileHash=" << residentStats.opacityMicromapProfileHash
+                  << " oldRegistered=" << firstMicromapStillRegistered << '\n';
         std::cerr << "Terrain BLAS build, compaction, revision, or lifetime validation failed\n";
     }
     return valid;

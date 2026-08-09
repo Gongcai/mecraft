@@ -259,6 +259,12 @@ bool showRtgiSettings(RenderSettings& settings) {
         ImGui::SliderFloat("RTGI Max Shadow Distance", &settings.rtgi.maxShadowRayDistance, 1.0f, 512.0f, "%.1f");
     changed |= ImGui::SliderFloat("RTGI Ray Origin Bias", &settings.rtgi.minimumRayOriginBias,
                                   renderer::contracts::kRtgiMinimumRayOriginBias, 0.25f, "%.4f");
+    int cutoutTraversal = static_cast<int>(settings.rtgi.cutoutTraversal);
+    static constexpr const char* kCutoutTraversals[] = {"Candidate Loop", "Opacity Micromap"};
+    if (ImGui::Combo("RTGI Cutout Traversal", &cutoutTraversal, kCutoutTraversals, IM_ARRAYSIZE(kCutoutTraversals))) {
+        settings.rtgi.cutoutTraversal = static_cast<RtgiCutoutTraversalMode>(cutoutTraversal);
+        changed = true;
+    }
 
     if (!settings.rtgi.enabled) {
         ImGui::BeginDisabled();

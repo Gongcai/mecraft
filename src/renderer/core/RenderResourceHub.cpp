@@ -87,6 +87,9 @@ bool RenderResourceHub::init(ResourceMgr& resourceMgr, ThreadPool& threadPool, R
     if (!m_terrainCache.init(m_rhiDevice)) {
         return false;
     }
+    if (!m_terrainCache.setOpacityMicromapSource(resourceMgr.getTerrainOpacityMicromapSource())) {
+        return false;
+    }
     m_terrainCache.setWorldRenderBuffer(&m_worldRenderBuffer);
     m_terrainCache.setChunkMeshingService(&m_meshingService);
     m_terrainCache.setRegionChunkSize(m_regionChunkSize);

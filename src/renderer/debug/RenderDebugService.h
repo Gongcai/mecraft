@@ -220,6 +220,27 @@ struct TerrainRayTracingBucketFrameStats {
     uint64_t builtCutoutPrimitives = 0u;
 };
 
+/// Current Terrain Cutout OMM residency and this frame's production workload.
+struct TerrainOpacityMicromapFrameStats {
+    bool enabled = false;
+    uint32_t subdivisionLevel = 0u;
+    uint64_t alphaTextureHash = 0u;
+    uint64_t profileHash = 0u;
+    uint32_t activeMicromapCount = 0u;
+    uint64_t activeMicromapBytes = 0u;
+    uint64_t activeOpaqueMicroTriangles = 0u;
+    uint64_t activeTransparentMicroTriangles = 0u;
+    uint64_t activeUnknownMicroTriangles = 0u;
+    uint32_t builtMicromapCount = 0u;
+    uint64_t builtPrimitiveCount = 0u;
+    uint64_t buildInputBytes = 0u;
+    uint64_t buildStorageBytes = 0u;
+    uint64_t buildScratchBytes = 0u;
+    uint64_t builtOpaqueMicroTriangles = 0u;
+    uint64_t builtTransparentMicroTriangles = 0u;
+    uint64_t builtUnknownMicroTriangles = 0u;
+};
+
 /// Per-frame runtime AS workload plus the current resident resource snapshot.
 struct AccelerationStructureFrameStats {
     bool supported = false;
@@ -239,6 +260,7 @@ struct AccelerationStructureFrameStats {
     uint32_t retiredSceneTlasGenerations = 0u;
     DynamicBlasFrameStats dynamicBlas;
     TerrainRayTracingBucketFrameStats terrainBuckets;
+    TerrainOpacityMicromapFrameStats terrainOpacityMicromaps;
     StaticBlasFrameStats staticBlas;
 };
 
@@ -274,6 +296,23 @@ struct TerrainRayTracingBucketWindowStats {
     uint64_t peakActiveCutoutPrimitives = 0u;
 };
 
+/// Fixed-window Terrain Cutout OMM build totals and residency peaks.
+struct TerrainOpacityMicromapWindowStats {
+    uint64_t builtMicromapCount = 0u;
+    uint64_t builtPrimitiveCount = 0u;
+    uint64_t buildInputBytes = 0u;
+    uint64_t buildStorageBytes = 0u;
+    uint64_t buildScratchBytes = 0u;
+    uint64_t builtOpaqueMicroTriangles = 0u;
+    uint64_t builtTransparentMicroTriangles = 0u;
+    uint64_t builtUnknownMicroTriangles = 0u;
+    uint32_t peakActiveMicromapCount = 0u;
+    uint64_t peakActiveMicromapBytes = 0u;
+    uint64_t peakActiveOpaqueMicroTriangles = 0u;
+    uint64_t peakActiveTransparentMicroTriangles = 0u;
+    uint64_t peakActiveUnknownMicroTriangles = 0u;
+};
+
 /// Fixed-window acceleration-structure workload and residency statistics.
 struct AccelerationStructureWindowStats {
     bool valid = false;
@@ -297,6 +336,7 @@ struct AccelerationStructureWindowStats {
     uint32_t peakRetiredSceneTlasGenerations = 0u;
     DynamicBlasWindowStats dynamicBlas;
     TerrainRayTracingBucketWindowStats terrainBuckets;
+    TerrainOpacityMicromapWindowStats terrainOpacityMicromaps;
     AccelerationStructureFrameStats latest;
 };
 
@@ -387,6 +427,19 @@ private:
     std::array<uint64_t, kCapacity> m_activeTerrainCutoutPrimitiveSamples{};
     std::array<uint64_t, kCapacity> m_builtTerrainOpaquePrimitiveSamples{};
     std::array<uint64_t, kCapacity> m_builtTerrainCutoutPrimitiveSamples{};
+    std::array<uint32_t, kCapacity> m_activeTerrainOpacityMicromapSamples{};
+    std::array<uint64_t, kCapacity> m_activeTerrainOpacityMicromapByteSamples{};
+    std::array<uint64_t, kCapacity> m_activeTerrainOpacityOpaqueMicroTriangleSamples{};
+    std::array<uint64_t, kCapacity> m_activeTerrainOpacityTransparentMicroTriangleSamples{};
+    std::array<uint64_t, kCapacity> m_activeTerrainOpacityUnknownMicroTriangleSamples{};
+    std::array<uint32_t, kCapacity> m_builtTerrainOpacityMicromapSamples{};
+    std::array<uint64_t, kCapacity> m_builtTerrainOpacityPrimitiveSamples{};
+    std::array<uint64_t, kCapacity> m_terrainOpacityBuildInputByteSamples{};
+    std::array<uint64_t, kCapacity> m_terrainOpacityBuildStorageByteSamples{};
+    std::array<uint64_t, kCapacity> m_terrainOpacityBuildScratchByteSamples{};
+    std::array<uint64_t, kCapacity> m_builtTerrainOpacityOpaqueMicroTriangleSamples{};
+    std::array<uint64_t, kCapacity> m_builtTerrainOpacityTransparentMicroTriangleSamples{};
+    std::array<uint64_t, kCapacity> m_builtTerrainOpacityUnknownMicroTriangleSamples{};
     std::array<std::array<uint32_t, kCapacity>, static_cast<size_t>(renderer::contracts::DynamicBlasAction::Count)>
         m_dynamicBlasActionSamples{};
     std::array<std::array<uint32_t, kCapacity>,

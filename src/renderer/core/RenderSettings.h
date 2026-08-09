@@ -68,9 +68,13 @@ struct SsgiSettings {
 /// Selects the fixed diffuse denoiser used for one NRD instance lifetime.
 enum class NrdDiffuseMethod { Relax = 0, Reblur = 1 };
 
+/// Selects one explicit alpha-tested terrain traversal implementation for RTGI BLAS builds.
+enum class RtgiCutoutTraversalMode { CandidateLoop = 0, OpacityMicromap = 1 };
+
 /// Ray-traced diffuse global illumination controls.
 struct RtgiSettings {
     bool enabled = false;
+    RtgiCutoutTraversalMode cutoutTraversal = RtgiCutoutTraversalMode::CandidateLoop;
     float intensity = 1.0f;
     float maxRayDistance = 64.0f;
     float maxShadowRayDistance = 128.0f;

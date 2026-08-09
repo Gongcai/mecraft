@@ -26,6 +26,11 @@ constexpr RhiBufferUsageFlags kAccelerationStructureStorageUsages =
     rhiFlag(RhiBufferUsage::DeviceAddress) | rhiFlag(RhiBufferUsage::AccelerationStructureStorage);
 constexpr RhiBufferUsageFlags kScratchBufferUsages =
     rhiFlag(RhiBufferUsage::Storage) | rhiFlag(RhiBufferUsage::DeviceAddress);
+constexpr RhiBufferUsageFlags kMicromapBuildInputUsages = rhiFlag(RhiBufferUsage::TransferDst) |
+                                                          rhiFlag(RhiBufferUsage::DeviceAddress) |
+                                                          rhiFlag(RhiBufferUsage::MicromapBuildInput);
+constexpr RhiBufferUsageFlags kMicromapStorageUsages =
+    rhiFlag(RhiBufferUsage::DeviceAddress) | rhiFlag(RhiBufferUsage::MicromapStorage);
 constexpr RhiAccelerationStructureBuildFlags kTerrainBuildFlags =
     rhiFlag(RhiAccelerationStructureBuildFlag::AllowCompaction) |
     rhiFlag(RhiAccelerationStructureBuildFlag::PreferFastTrace);
@@ -137,6 +142,24 @@ primitiveMetadataForTriangle(const std::vector<BlockVertex>& vertices, const siz
     return true;
 }
 
+[[nodiscard]] std::vector<renderer::contracts::TerrainOpacityMicromapTriangleInput>
+makeTerrainOpacityMicromapInputs(const TerrainBlasGeometry& geometry) {
+    std::vector<renderer::contracts::TerrainOpacityMicromapTriangleInput> inputs;
+    inputs.reserve(geometry.cutoutVertexCount / 3u);
+    for (uint32_t firstVertex = geometry.opaqueVertexCount; firstVertex < geometry.vertexCount(); firstVertex += 3u) {
+        const BlockVertex& first = geometry.vertices[firstVertex];
+        const BlockVertex& second = geometry.vertices[firstVertex + 1u];
+        const BlockVertex& third = geometry.vertices[firstVertex + 2u];
+        renderer::contracts::TerrainOpacityMicromapTriangleInput input;
+        input.uv = {first.u, first.v, second.u, second.v, third.u, third.v};
+        input.firstTextureLayer = first.layer;
+        input.animationFrameCount = first.animationFrameCount;
+        input.animated = first.animated != 0u;
+        inputs.push_back(input);
+    }
+    return inputs;
+}
+
 [[nodiscard]] std::optional<renderer::contracts::TerrainRayTracingHitData>
 makeTerrainHitData(const uint64_t revision, const uint64_t vertexAddress, const uint64_t primitiveMetadataAddress,
                    const uint32_t opaqueVertexCount, const uint32_t cutoutVertexCount) {
@@ -195,6 +218,38 @@ bool TerrainBlasCache::init(RhiDevice* device) {
     return true;
 }
 
+bool TerrainBlasCache::setOpacityMicromapSource(const renderer::contracts::TerrainOpacityMicromapSource source) {
+    if (!m_entries.empty() || !m_tasks.empty()) {
+        setFatalError("Terrain opacity micromap source cannot change while BLAS generations exist");
+        return false;
+    }
+    if (!renderer::contracts::validTerrainOpacityMicromapSource(source)) {
+        setFatalError("Terrain opacity micromap source is invalid");
+        return false;
+    }
+    m_opacityMicromapSource = source;
+    return true;
+}
+
+bool TerrainBlasCache::setOpacityMicromapEnabled(const bool enabled) {
+    if (enabled == m_opacityMicromapEnabled) {
+        return true;
+    }
+    if (!m_entries.empty() || !m_tasks.empty()) {
+        setTransientError("Terrain opacity micromap mode cannot change while BLAS generations exist");
+        return false;
+    }
+    if (enabled && (!m_initialized || m_device == nullptr || !m_device->capabilities().opacityMicromap ||
+                    m_device->capabilities().maxOpacityMicromapFourStateSubdivisionLevel <
+                        m_opacityMicromapProfile.subdivisionLevel ||
+                    !renderer::contracts::validTerrainOpacityMicromapSource(m_opacityMicromapSource))) {
+        setFatalError("Terrain opacity micromap mode is unsupported by the active device or texture source");
+        return false;
+    }
+    m_opacityMicromapEnabled = enabled;
+    return true;
+}
+
 void TerrainBlasCache::shutdown() {
     if (m_device != nullptr) {
         for (auto& [_, entry] : m_entries) {
@@ -233,10 +288,19 @@ void TerrainBlasCache::shutdown() {
     m_dynamicResourceBytesThisFrame = 0u;
     m_scratchBytesRecordedThisFrame = 0u;
     m_scratchPeakBytesThisFrame = 0u;
+    m_opacityMicromapsBuiltThisFrame = 0u;
+    m_opacityMicromapPrimitivesBuiltThisFrame = 0u;
+    m_opacityMicromapInputBytesThisFrame = 0u;
+    m_opacityMicromapStorageBytesThisFrame = 0u;
+    m_opacityMicromapScratchBytesThisFrame = 0u;
+    m_opacityMicromapCountersBuiltThisFrame = {};
     m_buildCpuMsThisFrame = 0.0;
     m_compactionCpuMsThisFrame = 0.0;
     m_dynamicResourceCpuMsThisFrame = 0.0;
     m_lastError.clear();
+    m_opacityMicromapSource = {};
+    m_opacityMicromapProfile = {};
+    m_opacityMicromapEnabled = false;
 }
 
 void TerrainBlasCache::beginFrame() {
@@ -251,6 +315,12 @@ void TerrainBlasCache::beginFrame() {
     m_dynamicResourceBytesThisFrame = 0u;
     m_scratchBytesRecordedThisFrame = 0u;
     m_scratchPeakBytesThisFrame = 0u;
+    m_opacityMicromapsBuiltThisFrame = 0u;
+    m_opacityMicromapPrimitivesBuiltThisFrame = 0u;
+    m_opacityMicromapInputBytesThisFrame = 0u;
+    m_opacityMicromapStorageBytesThisFrame = 0u;
+    m_opacityMicromapScratchBytesThisFrame = 0u;
+    m_opacityMicromapCountersBuiltThisFrame = {};
     m_buildCpuMsThisFrame = 0.0;
     m_compactionCpuMsThisFrame = 0.0;
     m_dynamicResourceCpuMsThisFrame = 0.0;
@@ -314,6 +384,16 @@ TerrainBlasRequestResult TerrainBlasCache::requestBuild(const SubChunkGpuKey& ke
         return TerrainBlasRequestResult::InvalidGeometry;
     }
 
+    std::optional<renderer::contracts::TerrainOpacityMicromapCpuData> opacityMicromap;
+    if (m_opacityMicromapEnabled && geometry.cutoutVertexCount != 0u) {
+        opacityMicromap = renderer::contracts::buildTerrainOpacityMicromapCpuData(
+            m_opacityMicromapSource, m_opacityMicromapProfile, makeTerrainOpacityMicromapInputs(geometry));
+        if (!opacityMicromap.has_value()) {
+            setFatalError("Terrain opacity micromap CPU preparation failed");
+            return TerrainBlasRequestResult::OpacityMicromapPreparationFailed;
+        }
+    }
+
     auto [entryIt, _] = m_entries.try_emplace(key);
     Entry& entry = entryIt->second;
     switch (terrainBlasClassifyRevision(entry.hasRevision, entry.latestRevision, revision)) {
@@ -342,6 +422,17 @@ TerrainBlasRequestResult TerrainBlasCache::requestBuild(const SubChunkGpuKey& ke
     task.revision = revision;
     task.worldOrigin = worldOrigin;
     task.geometry = std::move(geometry);
+    task.opacityMicromap = std::move(opacityMicromap);
+    if (task.opacityMicromap.has_value()) {
+        const renderer::contracts::TerrainOpacityMicromapCpuData& cpuData = *task.opacityMicromap;
+        task.micromapInputBytes =
+            cpuData.opacityData.size() + cpuData.triangleRecords.size() * sizeof(cpuData.triangleRecords.front());
+        task.micromapPrimitiveCount = task.geometry.cutoutVertexCount / 3u;
+        task.micromapCounters = cpuData.counters;
+        task.micromapAlphaTextureHash = cpuData.alphaTextureHash;
+        task.micromapProfileHash = cpuData.profileHash;
+        task.micromapSubdivisionLevel = cpuData.subdivisionLevel;
+    }
     entry.currentTaskSequence = sequence;
     m_tasks.emplace(sequence, std::move(task));
     return TerrainBlasRequestResult::Queued;
@@ -450,8 +541,21 @@ void TerrainBlasCache::finishGraphExecution(const bool succeeded, const RhiSubmi
                 m_device->destroyBuffer(task.scratchBuffer);
                 task.scratchBuffer = {};
             }
+            if (task.micromapScratchBuffer.isValid()) {
+                m_device->destroyBuffer(task.micromapScratchBuffer);
+                task.micromapScratchBuffer = {};
+            }
+            if (task.micromapOpacityBuffer.isValid()) {
+                m_device->destroyBuffer(task.micromapOpacityBuffer);
+                task.micromapOpacityBuffer = {};
+            }
+            if (task.micromapTriangleBuffer.isValid()) {
+                m_device->destroyBuffer(task.micromapTriangleBuffer);
+                task.micromapTriangleBuffer = {};
+            }
             std::vector<BlockVertex>().swap(task.geometry.vertices);
             std::vector<renderer::contracts::TerrainPrimitiveMetadata>().swap(task.geometry.primitiveMetadata);
+            task.opacityMicromap.reset();
             continue;
         }
 
@@ -582,6 +686,19 @@ TerrainBlasStats TerrainBlasCache::stats() const {
     result.compactedBlasBytesThisFrame = m_compactedBlasBytesThisFrame;
     result.dynamicResourceBytesThisFrame = m_dynamicResourceBytesThisFrame;
     result.scratchPeakBytesThisFrame = m_scratchPeakBytesThisFrame;
+    result.opacityMicromapEnabled = m_opacityMicromapEnabled;
+    result.opacityMicromapSubdivisionLevel = m_opacityMicromapProfile.subdivisionLevel;
+    result.opacityMicromapAlphaTextureHash = m_opacityMicromapSource.alphaTextureHash;
+    result.opacityMicromapProfileHash =
+        renderer::contracts::terrainOpacityMicromapProfileHash(m_opacityMicromapProfile);
+    result.opacityMicromapsBuiltThisFrame = m_opacityMicromapsBuiltThisFrame;
+    result.opacityMicromapPrimitivesBuiltThisFrame = m_opacityMicromapPrimitivesBuiltThisFrame;
+    result.opacityMicromapInputBytesThisFrame = m_opacityMicromapInputBytesThisFrame;
+    result.opacityMicromapStorageBytesThisFrame = m_opacityMicromapStorageBytesThisFrame;
+    result.opacityMicromapScratchBytesThisFrame = m_opacityMicromapScratchBytesThisFrame;
+    result.opacityMicromapOpaqueMicroTrianglesBuiltThisFrame = m_opacityMicromapCountersBuiltThisFrame.opaque;
+    result.opacityMicromapTransparentMicroTrianglesBuiltThisFrame = m_opacityMicromapCountersBuiltThisFrame.transparent;
+    result.opacityMicromapUnknownMicroTrianglesBuiltThisFrame = m_opacityMicromapCountersBuiltThisFrame.unknown;
     result.buildCpuMsThisFrame = m_buildCpuMsThisFrame;
     result.compactionCpuMsThisFrame = m_compactionCpuMsThisFrame;
     result.dynamicResourceCpuMsThisFrame = m_dynamicResourceCpuMsThisFrame;
@@ -596,6 +713,22 @@ TerrainBlasStats TerrainBlasCache::stats() const {
         result.activeGeometryBytes += entry.active->geometryBytes;
         result.activePrimitiveMetadataBytes += entry.active->primitiveMetadataBytes;
         result.activeBlasBytes += entry.active->resource->blasBytes();
+        if (entry.active->opacityMicromapBytes != 0u) {
+            if (result.activeOpacityMicromapCount == 0u) {
+                result.opacityMicromapAlphaTextureHash = entry.active->opacityMicromapAlphaTextureHash;
+                result.opacityMicromapProfileHash = entry.active->opacityMicromapProfileHash;
+                result.opacityMicromapSubdivisionLevel = entry.active->opacityMicromapSubdivisionLevel;
+            } else if (result.opacityMicromapAlphaTextureHash != entry.active->opacityMicromapAlphaTextureHash ||
+                       result.opacityMicromapProfileHash != entry.active->opacityMicromapProfileHash ||
+                       result.opacityMicromapSubdivisionLevel != entry.active->opacityMicromapSubdivisionLevel) {
+                result.healthy = false;
+            }
+            ++result.activeOpacityMicromapCount;
+            result.activeOpacityMicromapBytes += entry.active->opacityMicromapBytes;
+            result.activeOpacityMicromapOpaqueMicroTriangles += entry.active->opacityMicromapCounters.opaque;
+            result.activeOpacityMicromapTransparentMicroTriangles += entry.active->opacityMicromapCounters.transparent;
+            result.activeOpacityMicromapUnknownMicroTriangles += entry.active->opacityMicromapCounters.unknown;
+        }
     }
     for (const auto& [_, task] : m_tasks) {
         if (!task.current) {
@@ -715,11 +848,82 @@ bool TerrainBlasCache::recordBuild(PendingTask& task, RhiCommandList& commandLis
         return false;
     }
 
+    RhiOpacityMicromapUsageDesc micromapUsage;
+    RhiMicromapBuildInput micromapBuildInput;
+    if (task.opacityMicromap.has_value()) {
+        const renderer::contracts::TerrainOpacityMicromapCpuData& cpuData = *task.opacityMicromap;
+        RhiBufferDesc opacityDesc;
+        opacityDesc.debugName = "Terrain.OMM.OpacityInput";
+        opacityDesc.size = cpuData.opacityData.size();
+        opacityDesc.usage = kMicromapBuildInputUsages;
+        opacityDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+        opacityDesc.initialState = RhiResourceState::TransferDst;
+        opacityDesc.memoryCategory = RhiMemoryCategory::AccelerationStructure;
+        task.micromapOpacityBuffer = m_device->createBuffer(opacityDesc, nullptr, 0u);
+
+        RhiBufferDesc triangleDesc;
+        triangleDesc.debugName = "Terrain.OMM.TriangleInput";
+        triangleDesc.size = cpuData.triangleRecords.size() * sizeof(cpuData.triangleRecords.front());
+        triangleDesc.usage = kMicromapBuildInputUsages;
+        triangleDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+        triangleDesc.initialState = RhiResourceState::TransferDst;
+        triangleDesc.memoryCategory = RhiMemoryCategory::AccelerationStructure;
+        task.micromapTriangleBuffer = m_device->createBuffer(triangleDesc, nullptr, 0u);
+
+        micromapUsage.count = task.geometry.cutoutVertexCount / 3u;
+        micromapUsage.subdivisionLevel = cpuData.subdivisionLevel;
+        micromapUsage.format = RhiOpacityMicromapFormat::FourState;
+        micromapBuildInput.flags = rhiFlag(RhiMicromapBuildFlag::PreferFastTrace);
+        micromapBuildInput.usages = &micromapUsage;
+        micromapBuildInput.usageCount = 1u;
+        micromapBuildInput.opacityDataBuffer = task.micromapOpacityBuffer;
+        micromapBuildInput.triangleBuffer = task.micromapTriangleBuffer;
+        micromapBuildInput.triangleStride = sizeof(renderer::contracts::TerrainOpacityMicromapTriangleRecord);
+
+        RhiMicromapBuildSizes micromapSizes;
+        if (!task.micromapOpacityBuffer.isValid() || !task.micromapTriangleBuffer.isValid() ||
+            !m_device->queryMicromapBuildSizes(micromapBuildInput, micromapSizes)) {
+            destroyBuildAttempt(task);
+            setTransientError("Terrain opacity micromap build-size query failed");
+            return false;
+        }
+        task.micromapStorageBytes = micromapSizes.micromapSize;
+        task.micromapScratchBytes = micromapSizes.buildScratchSize;
+
+        RhiBufferDesc micromapStorageDesc;
+        micromapStorageDesc.debugName = "Terrain.OMM.Storage";
+        micromapStorageDesc.size = micromapSizes.micromapSize;
+        micromapStorageDesc.usage = kMicromapStorageUsages;
+        micromapStorageDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+        micromapStorageDesc.initialState = RhiResourceState::MicromapBuildWrite;
+        micromapStorageDesc.memoryCategory = RhiMemoryCategory::AccelerationStructure;
+        task.micromapStorageBuffer = m_device->createBuffer(micromapStorageDesc, nullptr, 0u);
+
+        RhiBufferDesc micromapScratchDesc;
+        micromapScratchDesc.debugName = "Terrain.OMM.Scratch";
+        micromapScratchDesc.size = micromapSizes.buildScratchSize;
+        micromapScratchDesc.usage = kScratchBufferUsages;
+        micromapScratchDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+        micromapScratchDesc.initialState = RhiResourceState::MicromapBuildScratch;
+        micromapScratchDesc.memoryCategory = RhiMemoryCategory::AccelerationStructure;
+        task.micromapScratchBuffer = m_device->createBuffer(micromapScratchDesc, nullptr, 0u);
+        if (task.micromapStorageBuffer.isValid()) {
+            task.micromap =
+                m_device->createMicromap({"Terrain.OMM", task.micromapStorageBuffer, 0u, micromapSizes.micromapSize});
+        }
+        if (!task.micromapStorageBuffer.isValid() || !task.micromapScratchBuffer.isValid() ||
+            !task.micromap.isValid()) {
+            destroyBuildAttempt(task);
+            setTransientError("Terrain opacity micromap GPU resource creation failed");
+            return false;
+        }
+    }
+
     std::array<RhiAccelerationStructureGeometryDesc, 2u> geometries{};
     std::array<RhiAccelerationStructureBuildRangeDesc, 2u> ranges{};
     uint32_t geometryCount = 0u;
     const auto appendGeometry = [&](const uint32_t vertexOffset, const uint32_t vertexCount,
-                                    const RhiAccelerationStructureGeometryFlags flags) {
+                                    const RhiAccelerationStructureGeometryFlags flags, const bool attachMicromap) {
         if (vertexCount == 0u) {
             return;
         }
@@ -732,11 +936,17 @@ bool TerrainBlasCache::recordBuild(PendingTask& task, RhiCommandList& commandLis
         geometry.triangles.vertexCount = vertexCount;
         geometry.triangles.vertexFormat = RhiVertexFormat::Float3;
         geometry.triangles.indexFormat = RhiAccelerationStructureIndexFormat::None;
+        if (attachMicromap) {
+            geometry.opacityMicromap.micromap = task.micromap;
+            geometry.opacityMicromap.usages = &micromapUsage;
+            geometry.opacityMicromap.usageCount = 1u;
+        }
         ranges[geometryCount].primitiveCount = vertexCount / 3u;
         ++geometryCount;
     };
-    appendGeometry(0u, task.geometry.opaqueVertexCount, rhiFlag(RhiAccelerationStructureGeometryFlag::Opaque));
-    appendGeometry(task.geometry.opaqueVertexCount, task.geometry.cutoutVertexCount, 0u);
+    appendGeometry(0u, task.geometry.opaqueVertexCount, rhiFlag(RhiAccelerationStructureGeometryFlag::Opaque), false);
+    appendGeometry(task.geometry.opaqueVertexCount, task.geometry.cutoutVertexCount, 0u,
+                   task.opacityMicromap.has_value());
 
     RhiAccelerationStructureBuildInput buildInput;
     buildInput.type = RhiAccelerationStructureType::BottomLevel;
@@ -792,6 +1002,17 @@ bool TerrainBlasCache::recordBuild(PendingTask& task, RhiCommandList& commandLis
     commandList.updateBuffer(task.geometryBuffer, 0u, task.geometry.vertices.data(), task.geometry.vertexByteSize());
     commandList.updateBuffer(task.primitiveMetadataBuffer, 0u, task.geometry.primitiveMetadata.data(),
                              task.geometry.primitiveMetadataByteSize());
+    if (task.opacityMicromap.has_value()) {
+        const renderer::contracts::TerrainOpacityMicromapCpuData& cpuData = *task.opacityMicromap;
+        commandList.updateBuffer(task.micromapOpacityBuffer, 0u, cpuData.opacityData.data(),
+                                 cpuData.opacityData.size());
+        commandList.updateBuffer(task.micromapTriangleBuffer, 0u, cpuData.triangleRecords.data(),
+                                 cpuData.triangleRecords.size() * sizeof(cpuData.triangleRecords.front()));
+        commandList.bufferBarrier(
+            {task.micromapOpacityBuffer, RhiResourceState::TransferDst, RhiResourceState::MicromapBuildInput});
+        commandList.bufferBarrier(
+            {task.micromapTriangleBuffer, RhiResourceState::TransferDst, RhiResourceState::MicromapBuildInput});
+    }
     commandList.bufferBarrier(
         {task.geometryBuffer, RhiResourceState::TransferDst, RhiResourceState::AccelerationStructureBuildInput});
     commandList.bufferBarrier(
@@ -810,6 +1031,18 @@ bool TerrainBlasCache::recordBuild(PendingTask& task, RhiCommandList& commandLis
     const GpuTimerSegmentToken buildTimer =
         debugService != nullptr ? debugService->beginGpuTimer(commandList, GpuTimerPass::TerrainBlasBuild)
                                 : GpuTimerSegmentToken{};
+    if (task.opacityMicromap.has_value()) {
+        const RhiMicromapBuildDesc micromapBuild{micromapBuildInput, task.micromap, task.micromapScratchBuffer, 0u};
+        if (!commandList.buildMicromaps(&micromapBuild, 1u)) {
+            if (debugService != nullptr) {
+                debugService->cancelGpuTimer(buildTimer);
+            }
+            setTransientError("Terrain opacity micromap build command was rejected");
+            return false;
+        }
+        commandList.bufferBarrier(
+            {task.micromapStorageBuffer, RhiResourceState::MicromapBuildWrite, RhiResourceState::MicromapRead});
+    }
     if (!commandList.buildAccelerationStructures(&build, 1u)) {
         if (debugService != nullptr) {
             debugService->cancelGpuTimer(buildTimer);
@@ -847,8 +1080,18 @@ bool TerrainBlasCache::recordBuild(PendingTask& task, RhiCommandList& commandLis
     m_buildCutoutPrimitiveCountThisFrame += task.geometry.cutoutVertexCount / 3u;
     m_buildBlasBytesThisFrame += task.buildBlasBytes;
     m_dynamicResourceBytesThisFrame += task.geometry.uploadByteSize();
-    m_scratchBytesRecordedThisFrame += task.buildScratchBytes;
+    m_scratchBytesRecordedThisFrame += task.buildScratchBytes + task.micromapScratchBytes;
     m_scratchPeakBytesThisFrame = std::max(m_scratchPeakBytesThisFrame, m_scratchBytesRecordedThisFrame);
+    if (task.micromap.isValid()) {
+        ++m_opacityMicromapsBuiltThisFrame;
+        m_opacityMicromapPrimitivesBuiltThisFrame += task.micromapPrimitiveCount;
+        m_opacityMicromapInputBytesThisFrame += task.micromapInputBytes;
+        m_opacityMicromapStorageBytesThisFrame += task.micromapStorageBytes;
+        m_opacityMicromapScratchBytesThisFrame += task.micromapScratchBytes;
+        m_opacityMicromapCountersBuiltThisFrame.opaque += task.micromapCounters.opaque;
+        m_opacityMicromapCountersBuiltThisFrame.transparent += task.micromapCounters.transparent;
+        m_opacityMicromapCountersBuiltThisFrame.unknown += task.micromapCounters.unknown;
+    }
     return true;
 }
 
@@ -942,9 +1185,15 @@ bool TerrainBlasCache::promoteTask(PendingTask& task, Entry& entry) {
     ActiveResource active;
     active.revision = task.revision;
     active.worldOrigin = task.worldOrigin;
+    std::vector<RhiBufferHandle> retainedBuffers{task.geometryBuffer, task.primitiveMetadataBuffer};
+    std::vector<RhiMicromapHandle> retainedMicromaps;
+    if (task.micromap.isValid()) {
+        retainedBuffers.push_back(task.micromapStorageBuffer);
+        retainedMicromaps.push_back(task.micromap);
+    }
     active.resource = renderer::rt::SceneBlasResource::create(
         *m_device, task.compactAccelerationStructure, task.compactStorageBuffer, deviceAddress, task.compactedBlasBytes,
-        {task.geometryBuffer, task.primitiveMetadataBuffer});
+        std::move(retainedBuffers), std::move(retainedMicromaps));
     if (active.resource == nullptr) {
         setFatalError("Terrain BLAS shared resource creation failed");
         return false;
@@ -957,11 +1206,18 @@ bool TerrainBlasCache::promoteTask(PendingTask& task, Entry& entry) {
     active.geometryBytes = static_cast<uint64_t>(task.geometry.vertexCount()) * sizeof(BlockVertex);
     active.primitiveMetadataBytes =
         static_cast<uint64_t>(task.geometry.primitiveCount()) * sizeof(renderer::contracts::TerrainPrimitiveMetadata);
+    active.opacityMicromapBytes = task.micromapStorageBytes;
+    active.opacityMicromapCounters = task.micromapCounters;
+    active.opacityMicromapAlphaTextureHash = task.micromapAlphaTextureHash;
+    active.opacityMicromapProfileHash = task.micromapProfileHash;
+    active.opacityMicromapSubdivisionLevel = task.micromapSubdivisionLevel;
     active.hitData = *hitData;
     task.compactAccelerationStructure = {};
     task.compactStorageBuffer = {};
     task.geometryBuffer = {};
     task.primitiveMetadataBuffer = {};
+    task.micromapStorageBuffer = {};
+    task.micromap = {};
 
     entry.active = std::move(active);
     entry.currentTaskSequence = 0u;
@@ -999,6 +1255,26 @@ void TerrainBlasCache::destroyTaskResources(PendingTask& task) {
         m_device->destroyBuffer(task.primitiveMetadataBuffer);
         task.primitiveMetadataBuffer = {};
     }
+    if (task.micromap.isValid()) {
+        m_device->destroyMicromap(task.micromap);
+        task.micromap = {};
+    }
+    if (task.micromapStorageBuffer.isValid()) {
+        m_device->destroyBuffer(task.micromapStorageBuffer);
+        task.micromapStorageBuffer = {};
+    }
+    if (task.micromapScratchBuffer.isValid()) {
+        m_device->destroyBuffer(task.micromapScratchBuffer);
+        task.micromapScratchBuffer = {};
+    }
+    if (task.micromapOpacityBuffer.isValid()) {
+        m_device->destroyBuffer(task.micromapOpacityBuffer);
+        task.micromapOpacityBuffer = {};
+    }
+    if (task.micromapTriangleBuffer.isValid()) {
+        m_device->destroyBuffer(task.micromapTriangleBuffer);
+        task.micromapTriangleBuffer = {};
+    }
 }
 
 void TerrainBlasCache::destroyBuildAttempt(PendingTask& task) {
@@ -1023,9 +1299,31 @@ void TerrainBlasCache::destroyBuildAttempt(PendingTask& task) {
         m_device->destroyBuffer(task.primitiveMetadataBuffer);
         task.primitiveMetadataBuffer = {};
     }
+    if (task.micromap.isValid()) {
+        m_device->destroyMicromap(task.micromap);
+        task.micromap = {};
+    }
+    if (task.micromapStorageBuffer.isValid()) {
+        m_device->destroyBuffer(task.micromapStorageBuffer);
+        task.micromapStorageBuffer = {};
+    }
+    if (task.micromapScratchBuffer.isValid()) {
+        m_device->destroyBuffer(task.micromapScratchBuffer);
+        task.micromapScratchBuffer = {};
+    }
+    if (task.micromapOpacityBuffer.isValid()) {
+        m_device->destroyBuffer(task.micromapOpacityBuffer);
+        task.micromapOpacityBuffer = {};
+    }
+    if (task.micromapTriangleBuffer.isValid()) {
+        m_device->destroyBuffer(task.micromapTriangleBuffer);
+        task.micromapTriangleBuffer = {};
+    }
     task.buildBlasBytes = 0u;
     task.buildScratchBytes = 0u;
     task.compactedBlasBytes = 0u;
+    task.micromapStorageBytes = 0u;
+    task.micromapScratchBytes = 0u;
     task.submissionToken = {};
 }
 

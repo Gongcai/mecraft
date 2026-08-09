@@ -88,6 +88,10 @@ public:
         return texture;
     }
 
+    /// Transfers the normalized RGBA8 level-zero pixels after GPU resource creation.
+    /// @return Layer-major pixels with four bytes per texel.
+    [[nodiscard]] std::vector<unsigned char> releasePixels() && { return std::move(m_pixels); }
+
 private:
     int m_tileSize = 0;
     int m_layerCount = 0;
@@ -460,6 +464,7 @@ BlockTextureArraySet buildBlockTextureArraySet(const BlockTextureManifest& manif
     if (!rhiDevice.submit({"BlockTextureArrays.Submit", submittedCommandLists, 1u})) {
         std::abort();
     }
+    result.albedoPixels = std::move(albedoArray).releasePixels();
     return result;
 }
 

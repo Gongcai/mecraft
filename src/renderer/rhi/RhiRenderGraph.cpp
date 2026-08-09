@@ -56,6 +56,7 @@ namespace {
     case RhiResourceState::AccelerationStructureBuildInput:
     case RhiResourceState::AccelerationStructureRead:
     case RhiResourceState::MicromapBuildInput:
+    case RhiResourceState::MicromapRead:
     case RhiResourceState::HostRead: return access == RgAccessType::Read;
     case RhiResourceState::TransferDst:
     case RhiResourceState::AccelerationStructureBuildWrite:
@@ -205,7 +206,8 @@ void addUniqueEdge(std::vector<std::vector<uint32_t>>& edges, std::vector<std::v
     case RhiResourceState::AccelerationStructureRead:
     case RhiResourceState::MicromapBuildInput:
     case RhiResourceState::MicromapBuildScratch:
-    case RhiResourceState::MicromapBuildWrite: return queue == RhiQueueType::Compute;
+    case RhiResourceState::MicromapBuildWrite:
+    case RhiResourceState::MicromapRead: return queue == RhiQueueType::Compute;
     case RhiResourceState::Present:
     case RhiResourceState::RenderTarget:
     case RhiResourceState::DepthWrite:

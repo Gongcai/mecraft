@@ -160,6 +160,9 @@ struct VkResourceStateMapping {
     case RhiResourceState::MicromapBuildWrite:
         return {VK_PIPELINE_STAGE_2_MICROMAP_BUILD_BIT_EXT,
                 VK_ACCESS_2_MICROMAP_READ_BIT_EXT | VK_ACCESS_2_MICROMAP_WRITE_BIT_EXT, VK_IMAGE_LAYOUT_UNDEFINED};
+    case RhiResourceState::MicromapRead:
+        return {VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, VK_ACCESS_2_MICROMAP_READ_BIT_EXT,
+                VK_IMAGE_LAYOUT_UNDEFINED};
     case RhiResourceState::HostRead:
         return {VK_PIPELINE_STAGE_2_HOST_BIT, VK_ACCESS_2_HOST_READ_BIT, VK_IMAGE_LAYOUT_UNDEFINED};
     case RhiResourceState::HostWrite:

@@ -360,6 +360,7 @@ set(SRC_RENDERER
         src/renderer/contracts/ContentHashContract.cpp
         src/renderer/contracts/DynamicBlasPolicyContract.cpp
         src/renderer/contracts/OpacityMicromapContract.cpp
+        src/renderer/contracts/TerrainOpacityMicromapContract.cpp
         src/renderer/contracts/GpuLightContract.cpp
         src/renderer/contracts/LocalShadowContract.cpp
         src/renderer/contracts/GpuMaterialContract.cpp
@@ -1128,6 +1129,8 @@ if(MECRAFT_BUILD_TESTS)
             tests/dynamic_blas_policy_contract_test.cpp)
     add_mecraft_test(opacity_micromap_contract_test
             tests/opacity_micromap_contract_test.cpp)
+    add_mecraft_test(terrain_opacity_micromap_contract_test
+            tests/terrain_opacity_micromap_contract_test.cpp)
     add_mecraft_test(terrain_blas_cache_contract_test
             tests/terrain_blas_cache_contract_test.cpp)
     add_mecraft_test(scene_tlas_cache_contract_test

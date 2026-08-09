@@ -26,7 +26,8 @@ public:
     /// @return Shared lifetime object, or nullptr when the descriptor is invalid.
     [[nodiscard]] static std::shared_ptr<SceneBlasResource>
     create(RhiDevice& device, RhiAccelerationStructureHandle accelerationStructure, RhiBufferHandle storageBuffer,
-           uint64_t deviceAddress, uint64_t blasBytes, std::vector<RhiBufferHandle> retainedBuffers = {});
+           uint64_t deviceAddress, uint64_t blasBytes, std::vector<RhiBufferHandle> retainedBuffers = {},
+           std::vector<RhiMicromapHandle> retainedMicromaps = {});
 
     ~SceneBlasResource();
 
@@ -38,6 +39,7 @@ public:
     [[nodiscard]] uint64_t deviceAddress() const { return m_deviceAddress; }
     [[nodiscard]] uint64_t blasBytes() const { return m_blasBytes; }
     [[nodiscard]] const std::vector<RhiBufferHandle>& retainedBuffers() const { return m_retainedBuffers; }
+    [[nodiscard]] const std::vector<RhiMicromapHandle>& retainedMicromaps() const { return m_retainedMicromaps; }
 
     /// Resolves the immutable device address captured for one retained geometry buffer.
     /// @param buffer Exact handle whose lifetime is owned by this shared BLAS resource.
@@ -47,7 +49,8 @@ public:
 private:
     SceneBlasResource(RhiDevice& device, RhiAccelerationStructureHandle accelerationStructure,
                       RhiBufferHandle storageBuffer, uint64_t deviceAddress, uint64_t blasBytes,
-                      std::vector<RhiBufferHandle> retainedBuffers, std::vector<uint64_t> retainedBufferAddresses);
+                      std::vector<RhiBufferHandle> retainedBuffers, std::vector<uint64_t> retainedBufferAddresses,
+                      std::vector<RhiMicromapHandle> retainedMicromaps);
 
     RhiDevice* m_device = nullptr;
     RhiAccelerationStructureHandle m_accelerationStructure;
@@ -56,6 +59,7 @@ private:
     uint64_t m_blasBytes = 0u;
     std::vector<RhiBufferHandle> m_retainedBuffers;
     std::vector<uint64_t> m_retainedBufferAddresses;
+    std::vector<RhiMicromapHandle> m_retainedMicromaps;
 };
 
 using SceneBlasResourcePtr = std::shared_ptr<const SceneBlasResource>;

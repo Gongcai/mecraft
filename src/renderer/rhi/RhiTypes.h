@@ -277,6 +277,7 @@ enum class RhiResourceState {
     MicromapBuildInput,
     MicromapBuildScratch,
     MicromapBuildWrite,
+    MicromapRead,
     HostRead,
     HostWrite
 };

@@ -584,16 +584,28 @@ Cutout Primitive 达到 6,926。相同 300 帧预热加 3 帧 1280×720 报告�
 Confirmed，确认率为 76.36%，Candidate 峰值为每像素 8，`RTGI.Trace` p95 为 3.874 ms，完整 GPU Span
 p95 为 13.990 ms。生产 `RtgiTracePass` Vulkan Smoke 也继续覆盖已知 Cutout 像素的非零总量和峰值读回。
 
-这些数据证明 Candidate Loop 在生产 V03 路径真实承受 Cutout 压力，但尚不代表 OMM 已有收益或值得接入。
+这些数据证明 Candidate Loop 在生产 V03 路径真实承受 Cutout 压力，但尚不代表 OMM 已有收益或值得采用。
 `VK_EXT_opacity_micromap` 已完成可选 RHI Capability 协商：只有扩展与 `micromap` feature 同时存在才会在
-逻辑设备启用并报告为可用，缺少任一条件时保持不可用且不会改变 Candidate Loop。下一步实现 Micromap 资产与
-生命周期契约已经落地，资产现在校验 Alpha/Profile 身份、每个 BLAS primitive 的 subdivision/state，并严格
+逻辑设备启用并报告为可用，缺少任一条件时明确拒绝 OMM 模式。Micromap 资产与生命周期契约已经落地，资产校验
+Alpha/Profile 身份、每个 BLAS primitive 的 subdivision/state，并严格
 执行 Empty→CpuReady→GpuBuildPending→Resident→Retired 状态迁移。RHI/Vulkan 已接入 Micromap Storage/Build Input Buffer、独立同步状态、
 强类型 Handle、Build Size、GPU Build、提交引用和延迟销毁。RHI BLAS Triangle Geometry 已接入 OMM Usage Group、
 可选 Primitive Index Buffer 和 Micromap 引用；RTX 4060 Laptop Vulkan Smoke 已真实完成 Micromap Build、同步和
-关联 BLAS Build，Validation 无新增错误。下一步接入 Terrain Cutout 生产缓存，再在同一 V03 Camera Path、
-相同 Alpha 纹理和 Profile 下比较 Candidate Loop 与 OMM 的 `RTGI.Trace` p95、Counter 与显存；当前零值
-参考镜头、Cutout bucket 数和单独的确认率都不能替代这项 A/B 证据。
+关联 BLAS Build，Validation 无新增错误。
+
+Terrain Cutout 生产链现已接入：`BlockTextureLibrary` 保留规范化 RGBA8 Texture Array 与 Alpha Hash，CPU 分类
+固定使用 `0.1` Cutoff、动画全部有效帧联合覆盖、Repeat UV 和 Caustica 对齐的 Vulkan microtriangle index 顺序，
+subdivision 4 的 Four-state 状态打包为 Transparent、Opaque、Unknown Opaque。生产缓存先上传 Opacity 与 Triangle
+Record，再在同一命令列表执行 Micromap Build、`MicromapBuildWrite→MicromapRead`、Cutout BLAS Build；Opaque
+Geometry 不关联 OMM。压缩后的 `SceneBlasResource` 同时持有 Micromap Handle 和 backing buffer，TLAS 旧代仍引用
+旧 BLAS 时不会提前销毁。设置显式选择 Candidate Loop 或 OMM，已有 BLAS generation 时拒绝切换；Candidate 模式
+不创建 Micromap 资源。
+
+Benchmark 的 `terrain_opacity_micromaps` 已发布 mode、Four-state subdivision、Alpha/Profile Hash、活动 Micromap
+数量/字节、构建 Input/Storage/Scratch 字节和 Opaque/Transparent/Unknown microtriangle 计数。下一步必须在同一
+V03 Camera Path、相同 Alpha 纹理和 Profile 下分别执行 300 帧预热加 1000 帧采样，比较 `RTGI.Trace` p95、
+Candidate/Confirmed、Complete GPU Span 和 Micromap 显存；当前零值参考镜头、Cutout bucket 数和单独确认率
+都不能替代这项 A/B 证据。
 
 ## 10. 调试视图与验收
 

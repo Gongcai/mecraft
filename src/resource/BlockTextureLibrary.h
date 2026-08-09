@@ -5,6 +5,7 @@
 #include "BlockTextureManifest.h"
 #include "TextureAtlas.h"
 #include "TextureSamplerController.h"
+#include "renderer/contracts/TerrainOpacityMicromapContract.h"
 
 #include <glm/vec3.hpp>
 
@@ -40,6 +41,10 @@ public:
     [[nodiscard]] bool hasNormalMaps() const;
     [[nodiscard]] bool hasSpecularMaps() const;
     [[nodiscard]] const std::vector<unsigned char>& atlasPixels() const;
+    /// Returns the exact RGBA8 level-zero pixels uploaded to the block albedo texture array.
+    [[nodiscard]] const std::vector<uint8_t>& textureArrayPixels() const;
+    /// Returns a stable view of the normalized albedo array used by terrain OMM classification.
+    [[nodiscard]] renderer::contracts::TerrainOpacityMicromapSource terrainOpacityMicromapSource() const;
     [[nodiscard]] const BlockTextureCatalog& catalog() const;
     [[nodiscard]] int tileSize() const;
     [[nodiscard]] const glm::vec3& textureAverageColor(int arrayLayer) const;
@@ -63,6 +68,8 @@ private:
     TextureArray m_specularTextureArray;
     TextureSamplerController m_sampler;
     std::vector<unsigned char> m_atlasPixels;
+    std::vector<uint8_t> m_textureArrayPixels;
+    uint64_t m_textureArrayAlphaHash = 0u;
     std::unordered_map<std::string, int> m_textureArrayLayers;
     std::vector<glm::vec3> m_textureAverageColors;
     BlockTextureCatalog m_catalog;

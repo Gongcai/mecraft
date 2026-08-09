@@ -3,12 +3,14 @@
 #include "BlockTextureArrayBuilder.h"
 #include "TextureAtlasBuilders.h"
 #include "../Diagnostics.h"
+#include "renderer/contracts/ContentHashContract.h"
 #include "renderer/rhi/RhiDevice.h"
 
 #include <cassert>
 #include <cstdlib>
 #include <cstdio>
 #include <iostream>
+#include <limits>
 #include <utility>
 
 namespace {
@@ -23,6 +25,27 @@ int validateBlockTextureTileSize(const int configuredTileSize) {
         failBlockTextureLibrary("Block texture tile size must be positive");
     }
     return configuredTileSize;
+}
+
+[[nodiscard]] uint64_t computeTextureArrayAlphaHash(const TextureArray& texture, const std::vector<uint8_t>& pixels) {
+    if (texture.tileSize <= 0 || texture.layerCount <= 0) {
+        return 0u;
+    }
+    const uint64_t texelCount = static_cast<uint64_t>(texture.tileSize) * texture.tileSize * texture.layerCount;
+    if (texelCount > std::numeric_limits<size_t>::max() / 4u || pixels.size() != static_cast<size_t>(texelCount) * 4u) {
+        return 0u;
+    }
+    renderer::contracts::StableContentHashBuilder hash;
+    hash.addString("block-texture-array-alpha8-v1");
+    hash.addUint64(static_cast<uint64_t>(texture.tileSize));
+    hash.addUint64(static_cast<uint64_t>(texture.layerCount));
+    hash.addUint64(texelCount);
+    std::vector<uint8_t> alpha(static_cast<size_t>(texelCount));
+    for (size_t texel = 0u; texel < alpha.size(); ++texel) {
+        alpha[texel] = pixels[texel * 4u + 3u];
+    }
+    hash.addBytes(alpha.data(), alpha.size());
+    return hash.value();
 }
 
 } // namespace
@@ -57,6 +80,8 @@ void BlockTextureLibrary::shutdown() {
     deleteTextureArray(m_specularTextureArray);
 
     m_atlasPixels.clear();
+    m_textureArrayPixels.clear();
+    m_textureArrayAlphaHash = 0u;
     m_textureArrayLayers.clear();
     m_textureAverageColors.clear();
     m_catalog.clear();
@@ -110,6 +135,8 @@ void BlockTextureLibrary::buildTextures(const std::string& directory, const int 
     m_textureArrayLayers = std::move(textureArrayResult.layers);
     m_arrayLayerToAtlasTile = std::move(textureArrayResult.layerToAtlasTile);
     m_textureAverageColors = std::move(textureArrayResult.layerAverageColors);
+    m_textureArrayPixels = std::move(textureArrayResult.albedoPixels);
+    m_textureArrayAlphaHash = computeTextureArrayAlphaHash(m_textureArray, m_textureArrayPixels);
     m_hasNormalMaps = textureArrayResult.hasNormalMaps;
     m_hasSpecularMaps = textureArrayResult.hasSpecularMaps;
 
@@ -134,6 +161,8 @@ void BlockTextureLibrary::buildTextureArray(const std::string& directory, const 
     deleteTextureArray(m_textureArray);
     deleteTextureArray(m_normalTextureArray);
     deleteTextureArray(m_specularTextureArray);
+    m_textureArrayPixels.clear();
+    m_textureArrayAlphaHash = 0u;
 
     m_manifest = resource::buildBlockTextureManifest(directory);
     const int resolvedTileSize = validateBlockTextureTileSize(tileSize);
@@ -146,6 +175,8 @@ void BlockTextureLibrary::buildTextureArray(const std::string& directory, const 
     m_textureArrayLayers = std::move(textureArrayResult.layers);
     m_arrayLayerToAtlasTile = std::move(textureArrayResult.layerToAtlasTile);
     m_textureAverageColors = std::move(textureArrayResult.layerAverageColors);
+    m_textureArrayPixels = std::move(textureArrayResult.albedoPixels);
+    m_textureArrayAlphaHash = computeTextureArrayAlphaHash(m_textureArray, m_textureArrayPixels);
     m_hasNormalMaps = textureArrayResult.hasNormalMaps;
     m_hasSpecularMaps = textureArrayResult.hasSpecularMaps;
 
@@ -178,6 +209,15 @@ bool BlockTextureLibrary::hasSpecularMaps() const {
 
 const std::vector<unsigned char>& BlockTextureLibrary::atlasPixels() const {
     return m_atlasPixels;
+}
+
+const std::vector<uint8_t>& BlockTextureLibrary::textureArrayPixels() const {
+    return m_textureArrayPixels;
+}
+
+renderer::contracts::TerrainOpacityMicromapSource BlockTextureLibrary::terrainOpacityMicromapSource() const {
+    return {m_textureArrayPixels.data(), m_textureArrayPixels.size(), static_cast<uint32_t>(m_textureArray.tileSize),
+            static_cast<uint32_t>(m_textureArray.layerCount), m_textureArrayAlphaHash};
 }
 
 const BlockTextureCatalog& BlockTextureLibrary::catalog() const {

@@ -3,6 +3,7 @@
 
 #include "TerrainGpuKey.h"
 #include "renderer/contracts/RtgiSamplingContract.h"
+#include "renderer/contracts/TerrainOpacityMicromapContract.h"
 #include "renderer/contracts/TerrainRayTracingContract.h"
 #include "renderer/rhi/RhiHandles.h"
 #include "renderer/rhi/SceneBlasResource.h"
@@ -89,7 +90,8 @@ enum class TerrainBlasRequestResult : uint8_t {
     InvalidKey,
     InvalidRevision,
     StaleRevision,
-    InvalidGeometry
+    InvalidGeometry,
+    OpacityMicromapPreparationFailed
 };
 
 /// Per-frame scheduler limits for terrain BLAS build and compaction work.
@@ -145,6 +147,23 @@ struct TerrainBlasStats {
     uint64_t activePrimitiveMetadataBytes = 0u;
     uint64_t activeBlasBytes = 0u;
     uint64_t scratchPeakBytesThisFrame = 0u;
+    bool opacityMicromapEnabled = false;
+    uint32_t opacityMicromapSubdivisionLevel = 0u;
+    uint64_t opacityMicromapAlphaTextureHash = 0u;
+    uint64_t opacityMicromapProfileHash = 0u;
+    uint32_t activeOpacityMicromapCount = 0u;
+    uint64_t activeOpacityMicromapBytes = 0u;
+    uint64_t activeOpacityMicromapOpaqueMicroTriangles = 0u;
+    uint64_t activeOpacityMicromapTransparentMicroTriangles = 0u;
+    uint64_t activeOpacityMicromapUnknownMicroTriangles = 0u;
+    uint32_t opacityMicromapsBuiltThisFrame = 0u;
+    uint64_t opacityMicromapPrimitivesBuiltThisFrame = 0u;
+    uint64_t opacityMicromapInputBytesThisFrame = 0u;
+    uint64_t opacityMicromapStorageBytesThisFrame = 0u;
+    uint64_t opacityMicromapScratchBytesThisFrame = 0u;
+    uint64_t opacityMicromapOpaqueMicroTrianglesBuiltThisFrame = 0u;
+    uint64_t opacityMicromapTransparentMicroTrianglesBuiltThisFrame = 0u;
+    uint64_t opacityMicromapUnknownMicroTrianglesBuiltThisFrame = 0u;
     double buildCpuMsThisFrame = 0.0;
     double compactionCpuMsThisFrame = 0.0;
     double dynamicResourceCpuMsThisFrame = 0.0;
@@ -163,6 +182,15 @@ public:
 
     /// Resolves completed submissions and resets per-frame recording counters.
     void beginFrame();
+
+    /// Publishes the immutable texture-array pixels used by future Terrain Cutout OMM preparation.
+    /// @return False when the source does not exactly describe a valid RGBA8 texture array.
+    [[nodiscard]] bool setOpacityMicromapSource(renderer::contracts::TerrainOpacityMicromapSource source);
+
+    /// Selects the explicit Candidate Loop or Opacity Micromap terrain BLAS build path before geometry is queued.
+    /// @return False when the requested OMM profile is unsupported or resident work already fixes the build mode.
+    [[nodiscard]] bool setOpacityMicromapEnabled(bool enabled);
+    [[nodiscard]] bool opacityMicromapEnabled() const { return m_opacityMicromapEnabled; }
 
     /// Updates scheduler limits. Every field is clamped to at least one unit.
     void setBudgets(const TerrainBlasBudgets& budgets);
@@ -228,6 +256,11 @@ private:
         uint32_t primitiveCount = 0u;
         uint64_t geometryBytes = 0u;
         uint64_t primitiveMetadataBytes = 0u;
+        uint64_t opacityMicromapBytes = 0u;
+        renderer::contracts::TerrainOpacityMicromapCounters opacityMicromapCounters;
+        uint64_t opacityMicromapAlphaTextureHash = 0u;
+        uint64_t opacityMicromapProfileHash = 0u;
+        uint32_t opacityMicromapSubdivisionLevel = 0u;
         renderer::contracts::TerrainRayTracingHitData hitData;
     };
 
@@ -247,6 +280,11 @@ private:
         TaskState state = TaskState::Queued;
         RhiBufferHandle geometryBuffer;
         RhiBufferHandle primitiveMetadataBuffer;
+        RhiBufferHandle micromapOpacityBuffer;
+        RhiBufferHandle micromapTriangleBuffer;
+        RhiBufferHandle micromapStorageBuffer;
+        RhiBufferHandle micromapScratchBuffer;
+        RhiMicromapHandle micromap;
         RhiBufferHandle buildStorageBuffer;
         RhiAccelerationStructureHandle buildAccelerationStructure;
         RhiBufferHandle scratchBuffer;
@@ -255,6 +293,15 @@ private:
         uint64_t buildBlasBytes = 0u;
         uint64_t buildScratchBytes = 0u;
         uint64_t compactedBlasBytes = 0u;
+        uint64_t micromapStorageBytes = 0u;
+        uint64_t micromapScratchBytes = 0u;
+        uint64_t micromapInputBytes = 0u;
+        uint64_t micromapPrimitiveCount = 0u;
+        renderer::contracts::TerrainOpacityMicromapCounters micromapCounters;
+        uint64_t micromapAlphaTextureHash = 0u;
+        uint64_t micromapProfileHash = 0u;
+        uint32_t micromapSubdivisionLevel = 0u;
+        std::optional<renderer::contracts::TerrainOpacityMicromapCpuData> opacityMicromap;
         uint32_t queryIndex = std::numeric_limits<uint32_t>::max();
         RhiSubmissionToken submissionToken;
     };
@@ -289,6 +336,9 @@ private:
     bool m_supported = false;
     bool m_healthy = true;
     TerrainBlasBudgets m_budgets;
+    renderer::contracts::TerrainOpacityMicromapSource m_opacityMicromapSource;
+    renderer::contracts::TerrainOpacityMicromapProfile m_opacityMicromapProfile;
+    bool m_opacityMicromapEnabled = false;
     uint64_t m_nextRequestSequence = 1u;
     std::unordered_map<SubChunkGpuKey, Entry, SubChunkGpuKeyHash> m_entries;
     std::map<uint64_t, PendingTask> m_tasks;
@@ -307,6 +357,12 @@ private:
     uint64_t m_dynamicResourceBytesThisFrame = 0u;
     uint64_t m_scratchBytesRecordedThisFrame = 0u;
     uint64_t m_scratchPeakBytesThisFrame = 0u;
+    uint32_t m_opacityMicromapsBuiltThisFrame = 0u;
+    uint64_t m_opacityMicromapPrimitivesBuiltThisFrame = 0u;
+    uint64_t m_opacityMicromapInputBytesThisFrame = 0u;
+    uint64_t m_opacityMicromapStorageBytesThisFrame = 0u;
+    uint64_t m_opacityMicromapScratchBytesThisFrame = 0u;
+    renderer::contracts::TerrainOpacityMicromapCounters m_opacityMicromapCountersBuiltThisFrame;
     double m_buildCpuMsThisFrame = 0.0;
     double m_compactionCpuMsThisFrame = 0.0;
     double m_dynamicResourceCpuMsThisFrame = 0.0;

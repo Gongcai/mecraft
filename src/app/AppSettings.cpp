@@ -199,6 +199,9 @@ json toJson(const SsgiSettings& s) {
 
 void applyRtgiSettings(const json& j, RtgiSettings& s) {
     readBool(j, "enabled", s.enabled);
+    int cutoutTraversal = static_cast<int>(s.cutoutTraversal);
+    readInt(j, "cutoutTraversal", cutoutTraversal);
+    s.cutoutTraversal = static_cast<RtgiCutoutTraversalMode>(cutoutTraversal);
     readFloat(j, "intensity", s.intensity);
     readFloat(j, "maxRayDistance", s.maxRayDistance);
     readFloat(j, "maxShadowRayDistance", s.maxShadowRayDistance);
@@ -208,6 +211,7 @@ void applyRtgiSettings(const json& j, RtgiSettings& s) {
 json toJson(const RtgiSettings& s) {
     return {
         {"enabled", s.enabled},
+        {"cutoutTraversal", static_cast<int>(s.cutoutTraversal)},
         {"intensity", s.intensity},
         {"maxRayDistance", s.maxRayDistance},
         {"maxShadowRayDistance", s.maxShadowRayDistance},

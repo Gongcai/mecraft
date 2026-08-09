@@ -86,6 +86,14 @@ public:
     [[nodiscard]] bool init(RhiDevice* rhiDevice = nullptr);
     void shutdown();
     void beginFrame();
+    /// Configures the texture-array source required by future Terrain Cutout OMM builds.
+    [[nodiscard]] bool setOpacityMicromapSource(renderer::contracts::TerrainOpacityMicromapSource source) {
+        return m_blasCache.setOpacityMicromapSource(source);
+    }
+    /// Selects one explicit terrain cutout traversal implementation before geometry is queued.
+    [[nodiscard]] bool setOpacityMicromapEnabled(const bool enabled) {
+        return m_blasCache.setOpacityMicromapEnabled(enabled);
+    }
 
     // Configuration injection
     void setWorldRenderBuffer(WorldRenderBuffer* buf) { m_worldRenderBuffer = buf; }
