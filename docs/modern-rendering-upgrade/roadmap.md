@@ -360,6 +360,10 @@ V01 300+32 报告已得到 `missing_evidence=[]`，但最大 Leakage Band 为 `3
 `(267,552)`；边界 ViewZ 相对差 `0.431170`、Normal dot `0.008343`，证明锚点对应真实几何边界。该点的
 Denoised/Reference 亮度为 `0.003908509/0.004488416`，方向为亮侧能量损失。CPU 合成测试继续覆盖
 2 Pixels 通过、3 Pixels 失败和非法 Guide。
+随后按同一生产设置完成 V02 Cave Turn 的 300+32/64 静态运行：方差降低 `99.985878%` 与 AS Pending Gate
+通过，但 SSIM `0.788408`、HDR p95 `0.507056` 和 Leakage 最大带宽 `3 Pixels` 均失败；ROI 内
+`boundary_pixel_count=10092`，Pending Frame/Invalid Pixel 仍为 `0`。这证明 V01 的失败不是单窗场景特例，
+下一轮以 V02 的洞穴边界和一次反弹局部光输运作为主修复镜头。
 
 2026-08-08 在 RTX 4060 Laptop、Vulkan、RELAX_DIFFUSE、300 帧预热加 1000 帧采样下完成四组复测。
 报告中的 `total_tracked` 是显式 Pass 阶段和，不是完整 GPU 帧跨度：它没有覆盖独立的帧首/场景 Overlay/
