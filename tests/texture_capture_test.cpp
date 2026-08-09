@@ -79,6 +79,8 @@ int main() {
     const std::filesystem::path exrPath = std::filesystem::temp_directory_path() / "mecraft_texture_capture_test.exr";
     const renderer::capture::TextureCaptureResult exrResult =
         renderer::capture::writeLinearExr(exrPath, kHalfWidth, kHalfHeight, rgba16f);
+    renderer::capture::LinearExrImage exrImage;
+    const renderer::capture::TextureCaptureResult exrReadResult = renderer::capture::readLinearExr(exrPath, exrImage);
     std::ifstream exrInput(exrPath, std::ios::binary);
     std::array<uint8_t, 8u> exrPrefix{};
     exrInput.read(reinterpret_cast<char*>(exrPrefix.data()), static_cast<std::streamsize>(exrPrefix.size()));
@@ -86,9 +88,17 @@ int main() {
         exrResult.succeeded() && exrInput.gcount() == static_cast<std::streamsize>(exrPrefix.size()) &&
         exrPrefix[0] == 0x76u && exrPrefix[1] == 0x2fu && exrPrefix[2] == 0x31u && exrPrefix[3] == 0x01u &&
         exrPrefix[4] == 0x02u && exrPrefix[5] == 0x00u && exrPrefix[6] == 0x00u && exrPrefix[7] == 0x00u;
+    if (!exrReadResult.succeeded()) {
+        std::cerr << "[texture_capture_test] EXR read detail: " << exrReadResult.detail << '\n';
+    }
     std::error_code removeError;
     std::filesystem::remove(exrPath, removeError);
-    if (!requireTrue(exrValid && !removeError, "linear EXR writer must emit a valid OpenEXR prefix")) {
+    if (!requireTrue(
+            exrValid && exrReadResult.succeeded() && exrImage.width == kHalfWidth && exrImage.height == kHalfHeight &&
+                exrImage.rgb16f == std::vector<uint16_t>{0x4600u, 0x4800u, 0x4a00u, 0xffffu, 0xffffu, 0xffffu, 0x3c00u,
+                                                         0x4000u, 0x4200u, 0xffffu, 0xffffu, 0xffffu} &&
+                !removeError,
+            "linear EXR writer and reader must round-trip RGB half-float scanlines")) {
         return 1;
     }
 

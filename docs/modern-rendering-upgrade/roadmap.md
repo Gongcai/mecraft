@@ -290,6 +290,8 @@ CLI/目录契约选择。Gameplay 通过 pre-UI 回调读取 `FrameOutput`，Mod
 RGBA16F Raw/NRD 信号写入 `rtgi_raw_####.exr`/`rtgi_denoised_####.exr`；信号、格式或写入失败会终止验证。
 2026-08-09 已在 RTX 4060 Laptop 的 Vulkan 小窗口运行中分别覆盖两条生产路径（320×180、1 帧预热、2 帧采样）：
 每个场景均输出完整的两组两帧 EXR，`exrheader` 验证为无压缩 RGB Half scanline OpenEXR，Vulkan Validation 无错误。
+捕获器现已同时严格读取本项目写出的 EXR Header、offset table 和全部 RGB Half scanline；该回环契约阻止
+只有头部可解析、像素 offset 错误的文件进入后续质量报告。
 
 2026-08-08 在 RTX 4060 Laptop、Vulkan、RELAX_DIFFUSE、300 帧预热加 1000 帧采样下完成四组复测。
 报告中的 `total_tracked` 是显式 Pass 阶段和，不是完整 GPU 帧跨度：它没有覆盖独立的帧首/场景 Overlay/

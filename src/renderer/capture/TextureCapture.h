@@ -33,7 +33,8 @@ enum class TextureCaptureError : uint8_t {
     PixelNormalizationFailed,
     OutputDirectoryFailed,
     PngWriteFailed,
-    ExrWriteFailed
+    ExrWriteFailed,
+    ExrReadFailed
 };
 
 /// Describes one synchronous 8-bit RGBA or BGRA texture capture.
@@ -55,6 +56,13 @@ struct TextureCaptureResult {
     /// Reports whether texture readback and PNG writing both succeeded.
     /// @return True only when error is None.
     [[nodiscard]] bool succeeded() const;
+};
+
+/// Stores one tightly packed top-left linear RGB half-float OpenEXR image.
+struct LinearExrImage final {
+    uint32_t width = 0u;
+    uint32_t height = 0u;
+    std::vector<uint16_t> rgb16f;
 };
 
 /// Converts padded backend rows into tightly packed top-left RGBA pixels.
@@ -96,6 +104,12 @@ struct TextureCaptureResult {
 /// @return Stable capture result describing EXR directory or write failure.
 [[nodiscard]] TextureCaptureResult writeLinearExr(const std::filesystem::path& outputPath, uint32_t width,
                                                   uint32_t height, const std::vector<uint16_t>& rgba16f);
+
+/// Reads the strict uncompressed RGB Half scanline OpenEXR layout emitted by writeLinearExr.
+/// @param inputPath Lowercase .exr source path.
+/// @param image Receives tightly packed top-left RGB half-float channel bit patterns.
+/// @return Stable capture result describing file or format validation failure.
+[[nodiscard]] TextureCaptureResult readLinearExr(const std::filesystem::path& inputPath, LinearExrImage& image);
 
 /// Reads one texture synchronously and writes a deterministic PNG file.
 /// @param rhiDevice Device that owns the source texture and readback buffer.

@@ -149,17 +149,18 @@ void writeAttribute(std::ofstream& output, const std::string_view name, const st
 uint64_t exrHeaderSize() {
     constexpr uint64_t kMagicAndVersionBytes = 8u;
     constexpr uint64_t kChannelsPayloadBytes = 55u;
-    constexpr uint64_t kChannelsAttributeBytes = 9u + 6u + 4u + kChannelsPayloadBytes;
+    constexpr uint64_t kChannelsAttributeBytes = 9u + 7u + 4u + kChannelsPayloadBytes;
     constexpr uint64_t kCompressionAttributeBytes = 12u + 12u + 4u + 1u;
-    constexpr uint64_t kBoxAttributeBytes = 11u + 6u + 4u + 16u;
+    constexpr uint64_t kDataWindowAttributeBytes = 11u + 6u + 4u + 16u;
+    constexpr uint64_t kDisplayWindowAttributeBytes = 14u + 6u + 4u + 16u;
     constexpr uint64_t kLineOrderAttributeBytes = 10u + 10u + 4u + 1u;
     constexpr uint64_t kPixelAspectAttributeBytes = 17u + 6u + 4u + 4u;
     constexpr uint64_t kScreenCenterAttributeBytes = 19u + 4u + 4u + 8u;
     constexpr uint64_t kScreenWidthAttributeBytes = 18u + 6u + 4u + 4u;
     constexpr uint64_t kHeaderTerminatorBytes = 1u;
-    return kMagicAndVersionBytes + kChannelsAttributeBytes + kCompressionAttributeBytes + kBoxAttributeBytes * 2u +
-           kLineOrderAttributeBytes + kPixelAspectAttributeBytes + kScreenCenterAttributeBytes +
-           kScreenWidthAttributeBytes + kHeaderTerminatorBytes;
+    return kMagicAndVersionBytes + kChannelsAttributeBytes + kCompressionAttributeBytes + kDataWindowAttributeBytes +
+           kDisplayWindowAttributeBytes + kLineOrderAttributeBytes + kPixelAspectAttributeBytes +
+           kScreenCenterAttributeBytes + kScreenWidthAttributeBytes + kHeaderTerminatorBytes;
 }
 
 void writeExrHeader(std::ofstream& output, const uint32_t width, const uint32_t height) {
@@ -201,6 +202,106 @@ void writeExrHeader(std::ofstream& output, const uint32_t width, const uint32_t 
     writeAttribute(output, "screenWindowWidth", "float", 4u);
     writeFloat(output, 1.0f);
     output.put('\0');
+}
+
+class ExrByteReader final {
+public:
+    explicit ExrByteReader(const std::vector<uint8_t>& bytes) : m_bytes(bytes) {}
+
+    [[nodiscard]] bool readByte(uint8_t& value) {
+        if (m_offset >= m_bytes.size()) {
+            return false;
+        }
+        value = m_bytes[m_offset++];
+        return true;
+    }
+
+    [[nodiscard]] bool readUint16(uint16_t& value) {
+        uint8_t bytes[2u]{};
+        if (!readByte(bytes[0u]) || !readByte(bytes[1u])) {
+            return false;
+        }
+        value = static_cast<uint16_t>(bytes[0u]) | (static_cast<uint16_t>(bytes[1u]) << 8u);
+        return true;
+    }
+
+    [[nodiscard]] bool readUint32(uint32_t& value) {
+        uint8_t bytes[4u]{};
+        for (uint32_t index = 0u; index < 4u; ++index) {
+            if (!readByte(bytes[index])) {
+                return false;
+            }
+        }
+        value = static_cast<uint32_t>(bytes[0u]) | (static_cast<uint32_t>(bytes[1u]) << 8u) |
+                (static_cast<uint32_t>(bytes[2u]) << 16u) | (static_cast<uint32_t>(bytes[3u]) << 24u);
+        return true;
+    }
+
+    [[nodiscard]] bool readUint64(uint64_t& value) {
+        value = 0u;
+        for (uint32_t index = 0u; index < 8u; ++index) {
+            uint8_t byte = 0u;
+            if (!readByte(byte)) {
+                return false;
+            }
+            value |= static_cast<uint64_t>(byte) << (index * 8u);
+        }
+        return true;
+    }
+
+    [[nodiscard]] bool readCString(std::string& value) {
+        value.clear();
+        while (m_offset < m_bytes.size()) {
+            const uint8_t byte = m_bytes[m_offset++];
+            if (byte == 0u) {
+                return true;
+            }
+            value.push_back(static_cast<char>(byte));
+        }
+        return false;
+    }
+
+    [[nodiscard]] size_t offset() const { return m_offset; }
+
+private:
+    const std::vector<uint8_t>& m_bytes;
+    size_t m_offset = 0u;
+};
+
+[[nodiscard]] bool readExrAttribute(ExrByteReader& reader, const char* expectedName, const char* expectedType,
+                                    const uint32_t expectedSize) {
+    std::string name;
+    std::string type;
+    uint32_t size = 0u;
+    return reader.readCString(name) && name == expectedName && reader.readCString(type) && type == expectedType &&
+           reader.readUint32(size) && size == expectedSize;
+}
+
+[[nodiscard]] bool readExrChannel(ExrByteReader& reader, const char* expectedName) {
+    std::string name;
+    uint32_t pixelType = 0u;
+    uint8_t reserved = 0u;
+    uint32_t xSampling = 0u;
+    uint32_t ySampling = 0u;
+    return reader.readCString(name) && name == expectedName && reader.readUint32(pixelType) && pixelType == 1u &&
+           reader.readByte(reserved) && reserved == 0u && reader.readByte(reserved) && reserved == 0u &&
+           reader.readByte(reserved) && reserved == 0u && reader.readByte(reserved) && reserved == 0u &&
+           reader.readUint32(xSampling) && xSampling == 1u && reader.readUint32(ySampling) && ySampling == 1u;
+}
+
+[[nodiscard]] bool readExrBox(ExrByteReader& reader, uint32_t& width, uint32_t& height) {
+    uint32_t minX = 0u;
+    uint32_t minY = 0u;
+    uint32_t maxX = 0u;
+    uint32_t maxY = 0u;
+    if (!reader.readUint32(minX) || !reader.readUint32(minY) || !reader.readUint32(maxX) || !reader.readUint32(maxY) ||
+        minX != 0u || minY != 0u || maxX == std::numeric_limits<uint32_t>::max() ||
+        maxY == std::numeric_limits<uint32_t>::max()) {
+        return false;
+    }
+    width = maxX + 1u;
+    height = maxY + 1u;
+    return width != 0u && height != 0u;
 }
 
 } // namespace
@@ -254,6 +355,105 @@ TextureCaptureResult writeLinearExr(const std::filesystem::path& outputPath, con
     output.flush();
     if (!output) {
         return failure(TextureCaptureError::ExrWriteFailed, outputPath.generic_u8string());
+    }
+    return {};
+}
+
+TextureCaptureResult readLinearExr(const std::filesystem::path& inputPath, LinearExrImage& image) {
+    image = {};
+    if (inputPath.empty() || inputPath.extension() != ".exr") {
+        return failure(TextureCaptureError::InvalidRequest, "a lowercase .exr input path is required");
+    }
+    std::ifstream input(inputPath, std::ios::binary | std::ios::ate);
+    if (!input) {
+        return failure(TextureCaptureError::ExrReadFailed, inputPath.generic_u8string());
+    }
+    const std::streamoff size = input.tellg();
+    if (size <= 0 || static_cast<uint64_t>(size) > std::numeric_limits<size_t>::max()) {
+        return failure(TextureCaptureError::ExrReadFailed, "EXR size is invalid");
+    }
+    std::vector<uint8_t> bytes(static_cast<size_t>(size));
+    input.seekg(0, std::ios::beg);
+    input.read(reinterpret_cast<char*>(bytes.data()), size);
+    if (input.gcount() != size) {
+        return failure(TextureCaptureError::ExrReadFailed, "EXR file could not be read completely");
+    }
+
+    ExrByteReader reader(bytes);
+    uint32_t magic = 0u;
+    uint32_t version = 0u;
+    uint8_t headerTerminator = 0u;
+    uint8_t compression = 0u;
+    uint8_t lineOrder = 0u;
+    uint32_t dataWidth = 0u;
+    uint32_t dataHeight = 0u;
+    uint32_t displayWidth = 0u;
+    uint32_t displayHeight = 0u;
+    uint32_t floatBits = 0u;
+    if (!reader.readUint32(magic) || magic != 20000630u || !reader.readUint32(version) || version != 2u ||
+        !readExrAttribute(reader, "channels", "chlist", 55u) || !readExrChannel(reader, "B") ||
+        !readExrChannel(reader, "G") || !readExrChannel(reader, "R") || !reader.readByte(headerTerminator) ||
+        headerTerminator != 0u || !readExrAttribute(reader, "compression", "compression", 1u) ||
+        !reader.readByte(compression) || compression != 0u || !readExrAttribute(reader, "dataWindow", "box2i", 16u) ||
+        !readExrBox(reader, dataWidth, dataHeight) || !readExrAttribute(reader, "displayWindow", "box2i", 16u) ||
+        !readExrBox(reader, displayWidth, displayHeight) || dataWidth != displayWidth || dataHeight != displayHeight ||
+        !readExrAttribute(reader, "lineOrder", "lineOrder", 1u) || !reader.readByte(lineOrder) || lineOrder != 0u ||
+        !readExrAttribute(reader, "pixelAspectRatio", "float", 4u) || !reader.readUint32(floatBits) ||
+        floatBits != 0x3f800000u || !readExrAttribute(reader, "screenWindowCenter", "v2f", 8u) ||
+        !reader.readUint32(floatBits) || floatBits != 0u || !reader.readUint32(floatBits) || floatBits != 0u ||
+        !readExrAttribute(reader, "screenWindowWidth", "float", 4u) || !reader.readUint32(floatBits) ||
+        floatBits != 0x3f800000u || !reader.readByte(headerTerminator) || headerTerminator != 0u) {
+        return failure(TextureCaptureError::ExrReadFailed, "EXR header does not match the linear RGB capture contract");
+    }
+
+    const uint64_t pixelCount = static_cast<uint64_t>(dataWidth) * dataHeight;
+    const uint64_t scanlineBytes = static_cast<uint64_t>(dataWidth) * 3u * sizeof(uint16_t);
+    const uint64_t offsetTableBytes = static_cast<uint64_t>(dataHeight) * sizeof(uint64_t);
+    if (pixelCount > std::numeric_limits<size_t>::max() / 3u || scanlineBytes > std::numeric_limits<uint32_t>::max() ||
+        reader.offset() > std::numeric_limits<uint64_t>::max() - offsetTableBytes) {
+        return failure(TextureCaptureError::ExrReadFailed, "EXR dimensions exceed the linear capture contract");
+    }
+    const uint64_t firstChunkOffset = static_cast<uint64_t>(reader.offset()) + offsetTableBytes;
+    const uint64_t chunkBytes = sizeof(uint32_t) * 2u + scanlineBytes;
+    if (chunkBytes == 0u || dataHeight > (std::numeric_limits<uint64_t>::max() - firstChunkOffset) / chunkBytes ||
+        firstChunkOffset + static_cast<uint64_t>(dataHeight) * chunkBytes != bytes.size()) {
+        return failure(TextureCaptureError::ExrReadFailed, "EXR chunk table size is invalid");
+    }
+    for (uint32_t y = 0u; y < dataHeight; ++y) {
+        uint64_t offset = 0u;
+        const uint64_t expectedOffset = firstChunkOffset + static_cast<uint64_t>(y) * chunkBytes;
+        if (!reader.readUint64(offset) || offset != expectedOffset) {
+            return failure(TextureCaptureError::ExrReadFailed,
+                           "EXR scanline offset is invalid:" + std::to_string(offset) +
+                               "!=" + std::to_string(expectedOffset));
+        }
+    }
+
+    image.width = dataWidth;
+    image.height = dataHeight;
+    image.rgb16f.resize(static_cast<size_t>(pixelCount) * 3u);
+    for (uint32_t y = 0u; y < dataHeight; ++y) {
+        uint32_t scanlineY = 0u;
+        uint32_t storedBytes = 0u;
+        if (!reader.readUint32(scanlineY) || scanlineY != y || !reader.readUint32(storedBytes) ||
+            storedBytes != scanlineBytes) {
+            image = {};
+            return failure(TextureCaptureError::ExrReadFailed, "EXR scanline header is invalid");
+        }
+        for (const uint32_t channel : {2u, 1u, 0u}) {
+            for (uint32_t x = 0u; x < dataWidth; ++x) {
+                uint16_t half = 0u;
+                if (!reader.readUint16(half)) {
+                    image = {};
+                    return failure(TextureCaptureError::ExrReadFailed, "EXR scanline payload is truncated");
+                }
+                image.rgb16f[(static_cast<size_t>(y) * dataWidth + x) * 3u + channel] = half;
+            }
+        }
+    }
+    if (reader.offset() != bytes.size()) {
+        image = {};
+        return failure(TextureCaptureError::ExrReadFailed, "EXR contains trailing data");
     }
     return {};
 }
@@ -476,6 +676,7 @@ const char* textureCaptureErrorStableId(const TextureCaptureError error) {
     case TextureCaptureError::OutputDirectoryFailed: return "OutputDirectoryFailed";
     case TextureCaptureError::PngWriteFailed: return "PngWriteFailed";
     case TextureCaptureError::ExrWriteFailed: return "ExrWriteFailed";
+    case TextureCaptureError::ExrReadFailed: return "ExrReadFailed";
     }
     std::abort();
 }

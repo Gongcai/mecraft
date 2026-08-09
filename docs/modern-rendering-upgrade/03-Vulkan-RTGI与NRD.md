@@ -631,6 +631,7 @@ Vulkan 质量运行据此采用 `opacity_micromap`，Candidate Loop 保留为显
 `rtgi_raw_####.exr`/`rtgi_denoised_####.exr`；请求信号无效、非 RGBA16F 或任何 EXR 写入失败均明确终止运行。
 RTX 4060 Laptop 的 Vulkan 小窗口实跑已分别覆盖两条路径（320×180、1 帧预热、2 帧采样），每组 Raw/Denoised
 均完整生成两帧无压缩 RGB Half scanline EXR，`exrheader` 可解析且 Vulkan Validation 无错误。
+捕获器的严格读回同时校验 Header、offset table 与 RGB Half scanline，防止格式表面有效而像素数据不可读取。
 
 ## 10. 调试视图与验收
 
