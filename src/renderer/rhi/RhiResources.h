@@ -360,11 +360,26 @@ struct RhiAccelerationStructureInstancesDesc {
     bool arrayOfPointers = false;
 };
 
+struct RhiOpacityMicromapUsageDesc;
+
+/// Associates bottom-level triangle primitives with one built opacity micromap.
+struct RhiAccelerationStructureOpacityMicromapDesc {
+    RhiMicromapHandle micromap;
+    RhiAccelerationStructureIndexFormat indexFormat = RhiAccelerationStructureIndexFormat::None;
+    RhiBufferHandle indexBuffer;
+    uint64_t indexOffset = 0u;
+    uint64_t indexStride = 0u;
+    uint32_t baseTriangle = 0u;
+    const RhiOpacityMicromapUsageDesc* usages = nullptr;
+    uint32_t usageCount = 0u;
+};
+
 /// Selects one geometry payload and the traversal semantics used while building it.
 struct RhiAccelerationStructureGeometryDesc {
     RhiAccelerationStructureGeometryType type = RhiAccelerationStructureGeometryType::Triangles;
     RhiAccelerationStructureGeometryFlags flags = 0u;
     RhiAccelerationStructureTrianglesDesc triangles;
+    RhiAccelerationStructureOpacityMicromapDesc opacityMicromap;
     RhiAccelerationStructureAabbsDesc aabbs;
     RhiAccelerationStructureInstancesDesc instances;
 };

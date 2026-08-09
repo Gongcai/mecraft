@@ -335,7 +335,8 @@ Caustica 对照评估和第一轮策略契约已经完成：
   仅在驱动同时暴露扩展和 `micromap` feature 时启用并上报，并携带设备的 Two/Four-state subdivision 上限；资产契约已锁定 Alpha/Profile 身份、每三角形
   subdivision/state 与 Empty→CpuReady→GpuBuildPending→Resident→Retired 生命周期；RHI 已冻结 Micromap Storage/Build Input Buffer Usage
   和独立 Build Input/Scratch/Write 同步状态，并已接入强类型 Micromap Handle、精确 Build Size、GPU Build、提交引用与延迟销毁；
-  尚未建立 BLAS Geometry 关联或着色路径。
+  BLAS Triangle Geometry 已通过 OMM `pNext`、Usage Group 与可选 Primitive Index Buffer 关联，并由 RTX 4060 Laptop
+  Vulkan Smoke 完成真实 Micromap→BLAS Build 与 Validation 验证；尚未接入 Terrain Cutout 生产缓存或 A/B 路径。
   OMM 的工程判断仍需要 Candidate/Confirmed 场景总量、Trace 时间和资产 Alpha Coverage 共同支撑。
 
 Candidate/Confirmed 归约遥测已经完成：8x8 Compute 将 Validation Image 聚合为 64-bit 总量和每像素峰值，

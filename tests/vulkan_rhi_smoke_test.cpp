@@ -1774,11 +1774,16 @@ void main() {
     RhiBufferHandle storage;
     RhiBufferHandle scratch;
     RhiMicromapHandle micromap;
+    RhiBufferHandle vertexBuffer;
+    RhiBufferHandle blasStorage;
+    RhiBufferHandle blasScratch;
+    RhiAccelerationStructureHandle blas;
     if (valid) {
         RhiBufferDesc storageDesc;
         storageDesc.debugName = "VulkanSmoke.Micromap.Storage";
         storageDesc.size = sizes.micromapSize;
-        storageDesc.usage = rhiFlag(RhiBufferUsage::DeviceAddress) | rhiFlag(RhiBufferUsage::MicromapStorage);
+        storageDesc.usage = rhiFlag(RhiBufferUsage::DeviceAddress) | rhiFlag(RhiBufferUsage::MicromapStorage) |
+                            rhiFlag(RhiBufferUsage::AccelerationStructureBuildInput);
         storageDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
         storageDesc.initialState = RhiResourceState::MicromapBuildWrite;
         storageDesc.memoryCategory = RhiMemoryCategory::AccelerationStructure;
@@ -1809,6 +1814,85 @@ void main() {
         }
     }
 
+    if (valid) {
+        const std::array<float, 9u> vertices = {-1.0f, -1.0f, 0.0f, 1.0f, -1.0f, 0.0f, 0.0f, 1.0f, 0.0f};
+        RhiBufferDesc vertexDesc;
+        vertexDesc.debugName = "VulkanSmoke.Micromap.BLAS.Vertices";
+        vertexDesc.size = sizeof(vertices);
+        vertexDesc.usage = rhiFlag(RhiBufferUsage::DeviceAddress) |
+                           rhiFlag(RhiBufferUsage::AccelerationStructureBuildInput) |
+                           rhiFlag(RhiBufferUsage::TransferDst);
+        vertexDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+        vertexDesc.initialState = RhiResourceState::AccelerationStructureBuildInput;
+        vertexDesc.memoryCategory = RhiMemoryCategory::Geometry;
+        vertexBuffer = device.createBuffer(vertexDesc, vertices.data(), sizeof(vertices));
+
+        RhiAccelerationStructureGeometryDesc geometry;
+        geometry.type = RhiAccelerationStructureGeometryType::Triangles;
+        geometry.triangles.vertexBuffer = vertexBuffer;
+        geometry.triangles.vertexStride = sizeof(float) * 3u;
+        geometry.triangles.vertexCount = 3u;
+        geometry.triangles.vertexFormat = RhiVertexFormat::Float3;
+        geometry.triangles.indexFormat = RhiAccelerationStructureIndexFormat::None;
+        geometry.opacityMicromap.micromap = micromap;
+        geometry.opacityMicromap.usages = &usage;
+        geometry.opacityMicromap.usageCount = 1u;
+        const RhiAccelerationStructureBuildRangeDesc range{1u, 0u, 0u, 0u};
+        RhiAccelerationStructureBuildInput blasInput;
+        blasInput.type = RhiAccelerationStructureType::BottomLevel;
+        blasInput.flags = rhiFlag(RhiAccelerationStructureBuildFlag::PreferFastTrace);
+        blasInput.geometries = &geometry;
+        blasInput.ranges = &range;
+        blasInput.geometryCount = 1u;
+        RhiAccelerationStructureBuildSizes blasSizes;
+        valid = vertexBuffer.isValid() && device.queryAccelerationStructureBuildSizes(blasInput, blasSizes);
+        if (valid) {
+            RhiBufferDesc blasStorageDesc;
+            blasStorageDesc.debugName = "VulkanSmoke.Micromap.BLAS.Storage";
+            blasStorageDesc.size = blasSizes.accelerationStructureSize;
+            blasStorageDesc.usage =
+                rhiFlag(RhiBufferUsage::DeviceAddress) | rhiFlag(RhiBufferUsage::AccelerationStructureStorage);
+            blasStorageDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+            blasStorageDesc.initialState = RhiResourceState::AccelerationStructureBuildWrite;
+            blasStorageDesc.memoryCategory = RhiMemoryCategory::AccelerationStructure;
+            blasStorage = device.createBuffer(blasStorageDesc, nullptr, 0u);
+            RhiBufferDesc blasScratchDesc;
+            blasScratchDesc.debugName = "VulkanSmoke.Micromap.BLAS.Scratch";
+            blasScratchDesc.size = blasSizes.buildScratchSize;
+            blasScratchDesc.usage = rhiFlag(RhiBufferUsage::Storage) | rhiFlag(RhiBufferUsage::DeviceAddress);
+            blasScratchDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+            blasScratchDesc.initialState = RhiResourceState::AccelerationStructureBuildScratch;
+            blasScratchDesc.memoryCategory = RhiMemoryCategory::AccelerationStructure;
+            blasScratch = device.createBuffer(blasScratchDesc, nullptr, 0u);
+            blas = device.createAccelerationStructure({"VulkanSmoke.Micromap.BLAS",
+                                                       RhiAccelerationStructureType::BottomLevel, blasStorage, 0u,
+                                                       blasSizes.accelerationStructureSize});
+            RhiAccelerationStructureBuildDesc blasBuild;
+            blasBuild.input = blasInput;
+            blasBuild.destination = blas;
+            blasBuild.scratchBuffer = blasScratch;
+            RhiCommandList* commands = commandPool.acquire(RhiCommandListType::Graphics);
+            valid = blasStorage.isValid() && blasScratch.isValid() && blas.isValid() && commands != nullptr &&
+                    commands->begin({"VulkanSmoke.Micromap.BLAS.Build", RhiCommandListType::Graphics});
+            if (valid) {
+                commands->bufferBarrier(
+                    {storage, RhiResourceState::MicromapBuildWrite, RhiResourceState::AccelerationStructureBuildInput});
+                valid = commands->buildAccelerationStructures(&blasBuild, 1u) && commands->end();
+            }
+            if (valid) {
+                RhiCommandList* submissions[] = {commands};
+                RhiSubmissionToken token;
+                valid = device.submit({"VulkanSmoke.Micromap.BLAS.Build", submissions, 1u, RhiQueueType::Graphics},
+                                      &token) &&
+                        device.waitForSubmission(token);
+            }
+        }
+    }
+
+    device.destroyAccelerationStructure(blas);
+    device.destroyBuffer(blasScratch);
+    device.destroyBuffer(blasStorage);
+    device.destroyBuffer(vertexBuffer);
     device.destroyMicromap(micromap);
     device.destroyBuffer(scratch);
     device.destroyBuffer(storage);

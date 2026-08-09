@@ -568,6 +568,8 @@ struct NativeAccelerationStructureBuildInput {
     std::vector<VkAccelerationStructureGeometryKHR> geometries;
     std::vector<VkAccelerationStructureBuildRangeInfoKHR> ranges;
     std::vector<uint32_t> primitiveCounts;
+    std::vector<VkAccelerationStructureTrianglesOpacityMicromapEXT> opacityMicromaps;
+    std::vector<std::vector<VkMicromapUsageEXT>> opacityMicromapUsages;
 };
 
 struct NativeMicromapBuildInput {
@@ -624,6 +626,8 @@ struct NativeMicromapBuildInput {
     return base != 0u && checkedAdd(base, offset, address);
 }
 
+[[nodiscard]] VkOpacityMicromapFormatEXT toVkOpacityMicromapFormat(RhiOpacityMicromapFormat format);
+
 [[nodiscard]] bool fillNativeAccelerationStructureBuildInput(const VkRhiDeviceData& data,
                                                              const RhiCapabilities& capabilities,
                                                              const RhiAccelerationStructureBuildInput& input,
@@ -651,13 +655,23 @@ struct NativeMicromapBuildInput {
     native.geometries.resize(input.geometryCount);
     native.ranges.resize(input.geometryCount);
     native.primitiveCounts.resize(input.geometryCount);
+    native.opacityMicromaps.resize(input.geometryCount);
+    native.opacityMicromapUsages.resize(input.geometryCount);
     uint64_t totalPrimitiveCount = 0u;
     for (uint32_t index = 0u; index < input.geometryCount; ++index) {
         const RhiAccelerationStructureGeometryDesc& geometry = input.geometries[index];
         const RhiAccelerationStructureBuildRangeDesc& range = input.ranges[index];
+        const bool hasOpacityMicromap =
+            geometry.opacityMicromap.micromap.isValid() || geometry.opacityMicromap.indexBuffer.isValid() ||
+            geometry.opacityMicromap.indexOffset != 0u || geometry.opacityMicromap.indexStride != 0u ||
+            geometry.opacityMicromap.baseTriangle != 0u || geometry.opacityMicromap.usages != nullptr ||
+            geometry.opacityMicromap.usageCount != 0u;
         if ((geometry.flags & ~kKnownGeometryFlags) != 0u || range.primitiveCount == 0u ||
             range.primitiveCount > capabilities.maxAccelerationStructurePrimitiveCount ||
             totalPrimitiveCount > capabilities.maxAccelerationStructurePrimitiveCount - range.primitiveCount) {
+            return false;
+        }
+        if (geometry.type != RhiAccelerationStructureGeometryType::Triangles && hasOpacityMicromap) {
             return false;
         }
         totalPrimitiveCount += range.primitiveCount;
@@ -766,6 +780,75 @@ struct NativeMicromapBuildInput {
                     references->reference(geometry.triangles.transformBuffer);
                 }
             } else if (geometry.triangles.transformOffset != 0u || range.transformOffset != 0u) {
+                return false;
+            }
+
+            if (geometry.opacityMicromap.micromap.isValid()) {
+                const RhiAccelerationStructureOpacityMicromapDesc& opacity = geometry.opacityMicromap;
+                const auto* micromap = findRecord(data.micromaps, opacity.micromap);
+                if (!capabilities.opacityMicromap || micromap == nullptr || opacity.usages == nullptr ||
+                    opacity.usageCount == 0u ||
+                    opacity.baseTriangle > std::numeric_limits<uint32_t>::max() - range.primitiveCount) {
+                    return false;
+                }
+                std::vector<VkMicromapUsageEXT>& nativeUsages = native.opacityMicromapUsages[index];
+                nativeUsages.resize(opacity.usageCount);
+                for (uint32_t usageIndex = 0u; usageIndex < opacity.usageCount; ++usageIndex) {
+                    const RhiOpacityMicromapUsageDesc& usage = opacity.usages[usageIndex];
+                    const bool formatValid = usage.format == RhiOpacityMicromapFormat::TwoState ||
+                                             usage.format == RhiOpacityMicromapFormat::FourState;
+                    const uint32_t maximumLevel = usage.format == RhiOpacityMicromapFormat::TwoState
+                                                      ? capabilities.maxOpacityMicromapTwoStateSubdivisionLevel
+                                                      : capabilities.maxOpacityMicromapFourStateSubdivisionLevel;
+                    if (!formatValid || usage.count == 0u || usage.subdivisionLevel > maximumLevel) {
+                        return false;
+                    }
+                    nativeUsages[usageIndex] = {usage.count, usage.subdivisionLevel,
+                                                static_cast<uint32_t>(toVkOpacityMicromapFormat(usage.format))};
+                }
+
+                VkAccelerationStructureTrianglesOpacityMicromapEXT& nativeOpacity = native.opacityMicromaps[index];
+                nativeOpacity = {VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_TRIANGLES_OPACITY_MICROMAP_EXT};
+                nativeOpacity.indexType = toVkAccelerationStructureIndexType(opacity.indexFormat);
+                if (nativeOpacity.indexType == VK_INDEX_TYPE_MAX_ENUM) {
+                    return false;
+                }
+                nativeOpacity.baseTriangle = opacity.baseTriangle;
+                nativeOpacity.usageCountsCount = opacity.usageCount;
+                nativeOpacity.pUsageCounts = nativeUsages.data();
+                nativeOpacity.micromap = micromap->micromap;
+                if (opacity.indexFormat == RhiAccelerationStructureIndexFormat::None) {
+                    if (opacity.indexBuffer.isValid() || opacity.indexOffset != 0u || opacity.indexStride != 0u) {
+                        return false;
+                    }
+                } else {
+                    const auto* opacityIndexBuffer = findRecord(data.buffers, opacity.indexBuffer);
+                    const uint64_t indexSize = opacity.indexFormat == RhiAccelerationStructureIndexFormat::Uint16
+                                                   ? sizeof(uint16_t)
+                                                   : sizeof(uint32_t);
+                    if (opacityIndexBuffer == nullptr || !bufferHasUsages(*opacityIndexBuffer, kBuildInputUsages) ||
+                        opacity.indexStride != indexSize ||
+                        !stridedRangeFits(opacityIndexBuffer->desc.size, opacity.indexOffset, opacity.indexStride,
+                                          indexSize, range.primitiveCount)) {
+                        return false;
+                    }
+                    VkDeviceAddress opacityIndexAddress = 0u;
+                    if (!deviceAddressAtOffset(nativeBufferDeviceAddress(data, *opacityIndexBuffer),
+                                               opacity.indexOffset, opacityIndexAddress) ||
+                        opacityIndexAddress % indexSize != 0u) {
+                        return false;
+                    }
+                    nativeOpacity.indexBuffer.deviceAddress = opacityIndexAddress;
+                    nativeOpacity.indexStride = opacity.indexStride;
+                    if (references != nullptr) {
+                        references->reference(opacity.indexBuffer);
+                    }
+                }
+                triangles.pNext = &nativeOpacity;
+                if (references != nullptr) {
+                    references->reference(opacity.micromap);
+                }
+            } else if (hasOpacityMicromap) {
                 return false;
             }
 
@@ -5788,6 +5871,7 @@ bool VkRhiCommandList::buildAccelerationStructures(const RhiAccelerationStructur
     };
     mergeHandles(stagedReferences.buffers, m_data->resourceReferences);
     mergeHandles(stagedReferences.accelerationStructures, m_data->resourceReferences);
+    mergeHandles(stagedReferences.micromaps, m_data->resourceReferences);
     m_device->m_data->cmdBuildAccelerationStructures(m_data->commandBuffer, buildCount, nativeBuilds.data(),
                                                      nativeRangePointers.data());
     return true;
