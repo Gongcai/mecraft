@@ -1697,6 +1697,8 @@ void main() {
             return std::strcmp(extension.extensionName, VK_EXT_OPACITY_MICROMAP_EXTENSION_NAME) == 0;
         });
     bool expected = false;
+    uint32_t maxTwoStateSubdivisionLevel = 0u;
+    uint32_t maxFourStateSubdivisionLevel = 0u;
     if (extensionAvailable) {
         VkPhysicalDeviceOpacityMicromapFeaturesEXT micromap{};
         micromap.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_OPACITY_MICROMAP_FEATURES_EXT;
@@ -1705,8 +1707,23 @@ void main() {
         features.pNext = &micromap;
         vkGetPhysicalDeviceFeatures2(native->physicalDevice, &features);
         expected = micromap.micromap == VK_TRUE;
+        if (expected) {
+            VkPhysicalDeviceOpacityMicromapPropertiesEXT properties{};
+            properties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_OPACITY_MICROMAP_PROPERTIES_EXT;
+            VkPhysicalDeviceProperties2 deviceProperties{};
+            deviceProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+            deviceProperties.pNext = &properties;
+            vkGetPhysicalDeviceProperties2(native->physicalDevice, &deviceProperties);
+            maxTwoStateSubdivisionLevel = properties.maxOpacity2StateSubdivisionLevel;
+            maxFourStateSubdivisionLevel = properties.maxOpacity4StateSubdivisionLevel;
+        }
     }
-    if (device.capabilities().opacityMicromap != expected) {
+    if (device.capabilities().opacityMicromap != expected ||
+        (!expected && (device.capabilities().maxOpacityMicromapTwoStateSubdivisionLevel != 0u ||
+                       device.capabilities().maxOpacityMicromapFourStateSubdivisionLevel != 0u)) ||
+        (expected &&
+         (device.capabilities().maxOpacityMicromapTwoStateSubdivisionLevel != maxTwoStateSubdivisionLevel ||
+          device.capabilities().maxOpacityMicromapFourStateSubdivisionLevel != maxFourStateSubdivisionLevel))) {
         std::cerr << "Vulkan opacity micromap capability does not match extension and feature discovery\n";
         return false;
     }

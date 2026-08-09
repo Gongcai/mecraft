@@ -1959,6 +1959,12 @@ bool VkRhiDevice::init(const RhiDeviceDesc& desc) {
 
     VkPhysicalDeviceAccelerationStructurePropertiesKHR accelerationStructureProperties{
         VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_PROPERTIES_KHR};
+    VkPhysicalDeviceOpacityMicromapPropertiesEXT opacityMicromapProperties{
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_OPACITY_MICROMAP_PROPERTIES_EXT};
+    if (selectedOpacityMicromap) {
+        opacityMicromapProperties.pNext = nullptr;
+        accelerationStructureProperties.pNext = &opacityMicromapProperties;
+    }
     VkPhysicalDeviceVulkan12Properties properties12{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_PROPERTIES,
                                                     &accelerationStructureProperties};
     VkPhysicalDeviceProperties2 properties2{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2, &properties12};
@@ -1975,6 +1981,10 @@ bool VkRhiDevice::init(const RhiDeviceDesc& desc) {
     m_capabilities.accelerationStructure = true;
     m_capabilities.rayQuery = true;
     m_capabilities.opacityMicromap = selectedOpacityMicromap;
+    m_capabilities.maxOpacityMicromapTwoStateSubdivisionLevel =
+        selectedOpacityMicromap ? opacityMicromapProperties.maxOpacity2StateSubdivisionLevel : 0u;
+    m_capabilities.maxOpacityMicromapFourStateSubdivisionLevel =
+        selectedOpacityMicromap ? opacityMicromapProperties.maxOpacity4StateSubdivisionLevel : 0u;
     m_capabilities.accelerationStructureHostCommands = selectedAccelerationStructureHostCommands;
     m_capabilities.maxAccelerationStructureGeometryCount = accelerationStructureProperties.maxGeometryCount;
     m_capabilities.maxAccelerationStructureInstanceCount = accelerationStructureProperties.maxInstanceCount;
@@ -3440,8 +3450,8 @@ bool VkRhiDevice::updateBindGroups(const RhiBindGroupUpdate* updates, const uint
                               << " binding=" << update.binding << " arrayElement=" << arrayElement
                               << " handle=" << resource.buffer.buffer.index << ':' << resource.buffer.buffer.generation
                               << " offset=" << resource.buffer.offset << " requestedRange=" << resource.buffer.range
-                              << " resolvedRange=" << range << " requiredUsage=0x" << std::hex
-                              << rhiFlag(requiredUsage) << " requiredAlignment=" << std::dec << requiredAlignment
+                              << " resolvedRange=" << range << " requiredUsage=0x" << std::hex << rhiFlag(requiredUsage)
+                              << " requiredAlignment=" << std::dec << requiredAlignment
                               << " maximumRange=" << maximumRange;
                     if (buffer == nullptr) {
                         std::cerr << " buffer=null";
