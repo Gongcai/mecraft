@@ -13,6 +13,8 @@ layout(binding = 4, rgba16f) uniform writeonly image2D uMotion;
 layout(binding = 5, rgb10_a2) uniform writeonly image2D uNormalRoughness;
 layout(binding = 6, r32f) uniform writeonly image2D uViewZ;
 layout(binding = 7, r8) uniform writeonly image2D uReprojectionCoverage;
+layout(binding = 8, rgba16f) uniform writeonly image2D uLeakageNormal;
+layout(binding = 9, rgba16f) uniform writeonly image2D uLeakageViewZ;
 
 layout(push_constant) uniform NrdGuidePrepPushConstants {
     mat4 inverseProjection;
@@ -121,6 +123,8 @@ void main() {
     // reprojection during motion.
     float signedViewZ = currentPositiveViewZ < invalidViewZ ? -currentPositiveViewZ : -invalidViewZ;
     imageStore(uViewZ, texel, vec4(signedViewZ, 0.0, 0.0, 0.0));
+    imageStore(uLeakageNormal, texel, vec4(normal * 0.5 + 0.5, 1.0));
+    imageStore(uLeakageViewZ, texel, vec4(currentPositiveViewZ, currentPositiveViewZ, currentPositiveViewZ, 1.0));
 
     // This mask is a current-frame diagnostic of whether the surface maps
     // inside the previous viewport. It is not NRD history confidence, whose

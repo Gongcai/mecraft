@@ -88,11 +88,15 @@ public:
     /// @param capturePath PNG destination for the final frame, or null for no PNG capture.
     /// @param rtgiRawCapturePath Linear EXR destination for the raw RTGI signal, or null when disabled.
     /// @param nrdDiffuseCapturePath Linear EXR destination for the denoised RTGI signal, or null when disabled.
+    /// @param leakageNormalCapturePath Encoded world-normal EXR destination, or null when disabled.
+    /// @param leakageViewZCapturePath Positive linear ViewZ EXR destination, or null when disabled.
     /// @return True when the double-precision pose converts to a valid render camera.
     [[nodiscard]] bool configureValidationFrame(const renderer::contracts::CameraPathPose& pose,
                                                 const RenderFrameClock& clock, const std::filesystem::path* capturePath,
                                                 const std::filesystem::path* rtgiRawCapturePath,
-                                                const std::filesystem::path* nrdDiffuseCapturePath);
+                                                const std::filesystem::path* nrdDiffuseCapturePath,
+                                                const std::filesystem::path* leakageNormalCapturePath,
+                                                const std::filesystem::path* leakageViewZCapturePath);
 
     /// Returns and clears the most recent validation capture result.
     /// @return Capture status after a requested frame, or no value otherwise.
@@ -136,6 +140,8 @@ private:
     std::optional<std::filesystem::path> m_validationCapturePath;
     std::optional<std::filesystem::path> m_validationRtgiRawCapturePath;
     std::optional<std::filesystem::path> m_validationNrdDiffuseCapturePath;
+    std::optional<std::filesystem::path> m_validationLeakageNormalCapturePath;
+    std::optional<std::filesystem::path> m_validationLeakageViewZCapturePath;
     std::optional<renderer::capture::TextureCaptureResult> m_validationCaptureResult;
     std::optional<app::validation::ValidationVoxelFixtureIdentity> m_validationVoxelFixture;
     std::string m_validationSceneError;

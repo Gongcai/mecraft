@@ -57,6 +57,8 @@ struct FrameOutput {
     // These graph-owned handles remain valid until the next deferred graph execution.
     RhiTextureHandle rtgiRawDiffuse;
     RhiTextureHandle nrdDiffuse;
+    RhiTextureHandle rtgiLeakageNormal;
+    RhiTextureHandle rtgiLeakageViewZ;
     NrdDiffuseOutputEncoding nrdDiffuseEncoding = NrdDiffuseOutputEncoding::LinearRgb;
     float nrdDiffuseToPreExposedScale = 1.0f;
 
@@ -66,6 +68,7 @@ struct FrameOutput {
     bool skipPostProcess = false;
     bool hasRtgiRawDiffuse = false;
     bool hasNrdDiffuse = false;
+    bool hasRtgiLeakageGuides = false;
 
     // Shadow data for held item rendering
     FirstPersonShadowData heldItemShadow{};

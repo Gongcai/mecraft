@@ -1610,6 +1610,16 @@ void ModelSceneAppState::render(const double frameTime) {
                            : renderer::capture::TextureCaptureLinearEncoding::NrdRelaxLinearRgb,
                        m_scene.nrdDiffuseToPreExposedScale(), validationFrame->nrdDiffuseCapturePath);
         }
+        if (captureSucceeded && !validationFrame->rtgiLeakageNormalCapturePath.empty()) {
+            captureHdr(m_scene.rtgiLeakageNormalTextureHandle(),
+                       renderer::capture::TextureCaptureLinearEncoding::NonNegativeLinearRgb, 1.0f,
+                       validationFrame->rtgiLeakageNormalCapturePath);
+        }
+        if (captureSucceeded && !validationFrame->rtgiLeakageViewZCapturePath.empty()) {
+            captureHdr(m_scene.rtgiLeakageViewZTextureHandle(),
+                       renderer::capture::TextureCaptureLinearEncoding::NonNegativeLinearRgb, 1.0f,
+                       validationFrame->rtgiLeakageViewZCapturePath);
+        }
         static_cast<void>(m_deps.validationRun.completeFrame(captureSucceeded, std::move(captureDetail)));
         return;
     }

@@ -65,6 +65,19 @@ struct RtgiLeakageBandMetrics final {
     uint64_t boundaryPixelCount = 0u;
     uint64_t leakagePixelCount = 0u;
     uint32_t maximumBandWidthPixels = 0u;
+    uint32_t maximumBandX = 0u;
+    uint32_t maximumBandY = 0u;
+    uint32_t maximumBandSeedX = 0u;
+    uint32_t maximumBandSeedY = 0u;
+    uint32_t maximumBandOppositeSeedX = 0u;
+    uint32_t maximumBandOppositeSeedY = 0u;
+    double denoisedLuminanceAtMaximum = 0.0;
+    double referenceLuminanceAtMaximum = 0.0;
+    double seedReferenceLuminanceAtMaximum = 0.0;
+    double oppositeSeedReferenceLuminanceAtMaximum = 0.0;
+    double seedRelativeDepthDifferenceAtMaximum = 0.0;
+    double seedNormalDotAtMaximum = 1.0;
+    bool positiveErrorAtMaximum = false;
 };
 
 /// Validates image dimensions, storage, and finite non-negative radiance in an ROI.

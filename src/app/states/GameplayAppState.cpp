@@ -203,8 +203,17 @@ void GameplayAppState::render(double frameTime) {
                 !hdrCaptureRequested || validationFrame->nrdDiffuseCapturePath.empty()
                     ? nullptr
                     : &validationFrame->nrdDiffuseCapturePath;
+            const std::filesystem::path* leakageNormalCapturePath =
+                !hdrCaptureRequested || validationFrame->rtgiLeakageNormalCapturePath.empty()
+                    ? nullptr
+                    : &validationFrame->rtgiLeakageNormalCapturePath;
+            const std::filesystem::path* leakageViewZCapturePath =
+                !hdrCaptureRequested || validationFrame->rtgiLeakageViewZCapturePath.empty()
+                    ? nullptr
+                    : &validationFrame->rtgiLeakageViewZCapturePath;
             if (!m_game->configureValidationFrame(validationFrame->cameraPose, clock, capturePath, rawCapturePath,
-                                                  denoisedCapturePath)) {
+                                                  denoisedCapturePath, leakageNormalCapturePath,
+                                                  leakageViewZCapturePath)) {
                 m_deps.validationRun.fail(app::validation::ValidationRunError::CameraPoseConversionFailed,
                                           "gameplay Camera Path pose cannot be represented by the float render camera");
                 return;

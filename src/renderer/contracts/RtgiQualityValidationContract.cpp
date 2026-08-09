@@ -1,6 +1,7 @@
 #include "RtgiQualityValidationContract.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdlib>
 #include <deque>
@@ -232,9 +233,22 @@ RtgiQualityMetricError calculateRtgiLeakageBand(const RtgiLinearImage& denoised,
         return RtgiQualityMetricError::InvalidImage;
     }
 
+    struct LeakageFrontier final {
+        size_t index = 0u;
+        size_t seedIndex = 0u;
+        size_t oppositeSeedIndex = 0u;
+        double threshold = 0.0;
+        double seedReferenceLuminance = 0.0;
+        double oppositeSeedReferenceLuminance = 0.0;
+        double seedRelativeDepthDifference = 0.0;
+        double seedNormalDot = 1.0;
+        uint32_t distance = 0u;
+        bool positiveError = false;
+    };
     const size_t roiPixelCount = static_cast<size_t>(roi.width) * roi.height;
     std::vector<uint8_t> boundary(roiPixelCount, 0u);
-    std::vector<uint8_t> leakage(roiPixelCount, 0u);
+    std::vector<uint8_t> countedLeakage(roiPixelCount, 0u);
+    std::deque<LeakageFrontier> queue;
     const auto roiIndex = [&roi](const uint32_t x, const uint32_t y) {
         return static_cast<size_t>(y - roi.y) * roi.width + x - roi.x;
     };
@@ -248,13 +262,6 @@ RtgiQualityMetricError calculateRtgiLeakageBand(const RtgiLinearImage& denoised,
                 std::abs(normalLengthSquared - 1.0f) > 1.0e-3f) {
                 return RtgiQualityMetricError::InvalidImage;
             }
-            const double denoisedLuminance = luminance(denoised.pixels[pixelIndex(denoised, x, y)]);
-            const double referenceLuminance = luminance(reference.pixels[pixelIndex(reference, x, y)]);
-            const double relativeError =
-                std::abs(denoisedLuminance - referenceLuminance) /
-                std::max(referenceLuminance, kRelativeErrorDenominator);
-            leakage[roiIndex(x, y)] = relativeError > kRtgiLeakageRelativeErrorThreshold ? 1u : 0u;
-
             constexpr int32_t kNeighborX[2] = {1, 0};
             constexpr int32_t kNeighborY[2] = {0, 1};
             for (size_t neighborIndex = 0u; neighborIndex < 2u; ++neighborIndex) {
@@ -276,32 +283,88 @@ RtgiQualityMetricError calculateRtgiLeakageBand(const RtgiLinearImage& denoised,
                     std::max(std::min(static_cast<double>(depth), static_cast<double>(neighborDepth)), 1.0e-4);
                 if (relativeDepthDifference > kRtgiLeakageDepthDiscontinuityThreshold ||
                     glm::dot(normal, neighborNormal) < kRtgiLeakageNormalDotThreshold) {
-                    boundary[roiIndex(x, y)] = 1u;
-                    boundary[roiIndex(neighborX, neighborY)] = 1u;
+                    const size_t currentIndex = roiIndex(x, y);
+                    const size_t neighborIndexInRoi = roiIndex(neighborX, neighborY);
+                    boundary[currentIndex] = 1u;
+                    boundary[neighborIndexInRoi] = 1u;
+                    const double currentReference =
+                        luminance(reference.pixels[pixelIndex(reference, x, y)]);
+                    const double neighborReference =
+                        luminance(reference.pixels[pixelIndex(reference, neighborX, neighborY)]);
+                    const double contrast = std::abs(currentReference - neighborReference);
+                    const double visibleContrast =
+                        std::max(kRelativeErrorDenominator,
+                                 kRtgiLeakageRelativeErrorThreshold * std::max(currentReference, neighborReference));
+                    if (contrast > visibleContrast) {
+                        const double leakageThreshold = kRtgiLeakageRelativeErrorThreshold * contrast;
+                        const bool currentIsDark = currentReference < neighborReference;
+                        const double boundaryNormalDot = glm::dot(normal, neighborNormal);
+                        queue.push_back({currentIndex, currentIndex, neighborIndexInRoi, leakageThreshold,
+                                         currentReference, neighborReference, relativeDepthDifference,
+                                         boundaryNormalDot, 0u, currentIsDark});
+                        queue.push_back({neighborIndexInRoi, neighborIndexInRoi, currentIndex, leakageThreshold,
+                                         neighborReference, currentReference, relativeDepthDifference,
+                                         boundaryNormalDot, 0u, !currentIsDark});
+                    }
                 }
             }
         }
     }
 
-    std::deque<size_t> queue;
-    std::vector<uint32_t> distance(roiPixelCount, std::numeric_limits<uint32_t>::max());
-    for (size_t index = 0u; index < roiPixelCount; ++index) {
-        if (boundary[index] != 0u) {
+    for (const uint8_t boundaryPixel : boundary) {
+        if (boundaryPixel != 0u) {
             ++metrics.boundaryPixelCount;
-            distance[index] = 0u;
-            queue.push_back(index);
         }
     }
+    std::array<std::vector<double>, 2u> visitedThreshold{
+        std::vector<double>(roiPixelCount, std::numeric_limits<double>::infinity()),
+        std::vector<double>(roiPixelCount, std::numeric_limits<double>::infinity())};
     constexpr int32_t kExpansionX[4] = {-1, 1, 0, 0};
     constexpr int32_t kExpansionY[4] = {0, 0, -1, 1};
     while (!queue.empty()) {
-        const size_t index = queue.front();
+        const LeakageFrontier frontier = queue.front();
         queue.pop_front();
-        const uint32_t localX = static_cast<uint32_t>(index % roi.width);
-        const uint32_t localY = static_cast<uint32_t>(index / roi.width);
-        if (leakage[index] != 0u) {
-            ++metrics.leakagePixelCount;
-            metrics.maximumBandWidthPixels = std::max(metrics.maximumBandWidthPixels, distance[index]);
+        const size_t signIndex = frontier.positiveError ? 1u : 0u;
+        if (frontier.threshold >= visitedThreshold[signIndex][frontier.index]) {
+            continue;
+        }
+        visitedThreshold[signIndex][frontier.index] = frontier.threshold;
+        const uint32_t localX = static_cast<uint32_t>(frontier.index % roi.width);
+        const uint32_t localY = static_cast<uint32_t>(frontier.index / roi.width);
+        const uint32_t x = roi.x + localX;
+        const uint32_t y = roi.y + localY;
+        const double signedError = luminance(denoised.pixels[pixelIndex(denoised, x, y)]) -
+                                   luminance(reference.pixels[pixelIndex(reference, x, y)]);
+        const bool leakage = frontier.positiveError ? signedError > frontier.threshold
+                                                    : signedError < -frontier.threshold;
+        if (leakage) {
+            if (countedLeakage[frontier.index] == 0u) {
+                countedLeakage[frontier.index] = 1u;
+                ++metrics.leakagePixelCount;
+            }
+            if (metrics.leakagePixelCount == 1u || frontier.distance > metrics.maximumBandWidthPixels) {
+                metrics.maximumBandWidthPixels = frontier.distance;
+                metrics.maximumBandX = x;
+                metrics.maximumBandY = y;
+                metrics.maximumBandSeedX = roi.x + static_cast<uint32_t>(frontier.seedIndex % roi.width);
+                metrics.maximumBandSeedY = roi.y + static_cast<uint32_t>(frontier.seedIndex / roi.width);
+                metrics.maximumBandOppositeSeedX =
+                    roi.x + static_cast<uint32_t>(frontier.oppositeSeedIndex % roi.width);
+                metrics.maximumBandOppositeSeedY =
+                    roi.y + static_cast<uint32_t>(frontier.oppositeSeedIndex / roi.width);
+                metrics.denoisedLuminanceAtMaximum =
+                    luminance(denoised.pixels[pixelIndex(denoised, x, y)]);
+                metrics.referenceLuminanceAtMaximum =
+                    luminance(reference.pixels[pixelIndex(reference, x, y)]);
+                metrics.seedReferenceLuminanceAtMaximum = frontier.seedReferenceLuminance;
+                metrics.oppositeSeedReferenceLuminanceAtMaximum = frontier.oppositeSeedReferenceLuminance;
+                metrics.seedRelativeDepthDifferenceAtMaximum = frontier.seedRelativeDepthDifference;
+                metrics.seedNormalDotAtMaximum = frontier.seedNormalDot;
+                metrics.positiveErrorAtMaximum = frontier.positiveError;
+            }
+        }
+        if (frontier.distance >= kRtgiLeakageMaximumBandWidthPixels + 1u) {
+            continue;
         }
         for (size_t neighborIndex = 0u; neighborIndex < 4u; ++neighborIndex) {
             const int32_t neighborX = static_cast<int32_t>(localX) + kExpansionX[neighborIndex];
@@ -311,11 +374,32 @@ RtgiQualityMetricError calculateRtgiLeakageBand(const RtgiLinearImage& denoised,
                 continue;
             }
             const size_t neighbor = static_cast<size_t>(neighborY) * roi.width + static_cast<uint32_t>(neighborX);
-            if (distance[neighbor] != std::numeric_limits<uint32_t>::max() || leakage[neighbor] == 0u) {
+            const uint32_t neighborPixelX = roi.x + static_cast<uint32_t>(neighborX);
+            const uint32_t neighborPixelY = roi.y + static_cast<uint32_t>(neighborY);
+            const float currentDepth = viewZ.pixels[pixelIndex(viewZ, x, y)].x;
+            const float neighborDepth = viewZ.pixels[pixelIndex(viewZ, neighborPixelX, neighborPixelY)].x;
+            const double relativeDepthDifference =
+                std::abs(static_cast<double>(currentDepth) - neighborDepth) /
+                std::max(std::min(static_cast<double>(currentDepth), static_cast<double>(neighborDepth)), 1.0e-4);
+            const glm::vec3 currentNormal = worldNormal.pixels[pixelIndex(worldNormal, x, y)];
+            const glm::vec3 neighborNormal =
+                worldNormal.pixels[pixelIndex(worldNormal, neighborPixelX, neighborPixelY)];
+            if (relativeDepthDifference > kRtgiLeakageDepthDiscontinuityThreshold ||
+                glm::dot(currentNormal, neighborNormal) < kRtgiLeakageNormalDotThreshold) {
                 continue;
             }
-            distance[neighbor] = distance[index] + 1u;
-            queue.push_back(neighbor);
+            const double neighborSignedError =
+                luminance(denoised.pixels[pixelIndex(denoised, neighborPixelX, neighborPixelY)]) -
+                luminance(reference.pixels[pixelIndex(reference, neighborPixelX, neighborPixelY)]);
+            const bool neighborLeaks = frontier.positiveError ? neighborSignedError > frontier.threshold
+                                                              : neighborSignedError < -frontier.threshold;
+            if (!neighborLeaks) {
+                continue;
+            }
+            queue.push_back({neighbor, frontier.seedIndex, frontier.oppositeSeedIndex, frontier.threshold,
+                             frontier.seedReferenceLuminance, frontier.oppositeSeedReferenceLuminance,
+                             frontier.seedRelativeDepthDifference, frontier.seedNormalDot, frontier.distance + 1u,
+                             frontier.positiveError});
         }
     }
     return RtgiQualityMetricError::None;

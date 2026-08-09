@@ -284,8 +284,9 @@ M1 与 M2 可并行开发，但公共 `GpuMaterial`、`GpuSceneGeometry` 与 Sta
 严格 RGBA16F Linear EXR 读回，`RtgiQualityValidationContract` 已定义固定 ROI 的帧序列 Variance、
 线性亮度 SSIM、95th 相对亮度误差和非法辐射拒绝。独立 `rtgi_quality_report_tool` 已严格消费连续的
 32 帧 Raw/Denoised 与 64 帧 Raw Reference，流式平均并写出单张 64 spp Linear EXR，再生成结构化门槛报告；
-缺帧、多余序号、尺寸变化、NaN/Inf 和负辐射都会明确失败。Ghost/Disocclusion 与 Leakage Band 证据仍未
-全部接入，且 HDR p95 尚未通过，因此 M3 画质门槛不能标记为通过。
+缺帧、多余序号、尺寸变化、NaN/Inf 和负辐射都会明确失败。静态 Leakage Band 与 AS Pending 证据已完整
+接入；Ghost/Disocclusion 动态证据尚未接入，且 V01 的 Leakage Band 与 HDR p95 尚未通过，因此 M3 画质
+门槛不能标记为通过。
 Deferred `FrameOutput` 已发布本帧的 Raw RTGI 与 NRD Diffuse 线性 HDR 句柄，供 runner 读取生产信号。因为
 Render Graph 瞬态目标在最后一次图内访问后允许别名，两个句柄现在由图内 `RTGI.RawDiffuseValidationCopy` 与
 `NRD.DiffuseValidationCopy` 快照到独立的持久 RGBA16F 纹理，直到下一帧才释放；不能再由图外读回瞬态句柄。
@@ -336,11 +337,17 @@ RELAX 主历史上限从按 0.5 秒计算的 30 帧改为 64 帧后完成同一 
 不来自主历史上限。质量报告 schema v4 现强制绑定同次运行的 Validation Capture Report，并消费保守整帧
 AS Pending Mask：Scene TLAS desired/active 不一致、TLAS generation pending 或 Terrain BLAS Build/Compaction
 任一非零时，该采样帧全部像素计为无效。正式 V01 的 32/32 帧均稳定，Pending Frame 和 Invalid Pixel 均为
-`0`，AS Pending Gate 已通过；当前静态门槛缺失证据只剩 Leakage Band，HDR p95 仍失败。
-Leakage Band 的指标契约已固定：以正线性 ViewZ 和单位世界法线建立 Depth/Normal Discontinuity Seed，使用
-与 HDR Gate 相同的 10% 相对亮度误差构造 Error Mask，再从 Seed 沿 4 邻域误差像素向两侧扩张；最大连通
-距离不得超过 2 Pixels。无边界区域的普通误差不计为 Leakage，非法深度、非法法线、尺寸或 ROI 不一致会
-明确失败。CPU 合成测试已覆盖 2 Pixels 通过、3 Pixels 失败和非法 Guide；生产 Guide 捕获与报告绑定仍待接入。
+`0`，AS Pending Gate 已通过；HDR p95 仍失败。
+Leakage Band 的生产证据已经闭环：Guide Prep 同次写出持久 RGBA16F 世界法线与正线性 ViewZ，Gameplay 与
+Model 捕获路径把最后一个静态质量样本保存为 `rtgi_leakage_normal.exr` 和 `rtgi_leakage_viewz.exr`；质量报告
+schema v5 强制读取、解码并校验这两张 Guide。指标先以 ViewZ 相对差 `> 0.02` 或世界法线点积 `< 0.95`
+建立几何边界，仅当 Reference 在边界两侧具有可见亮度对比时建立方向性输运 Seed：暗侧只追踪正能量增益，
+亮侧只追踪负能量损失，阈值为边界 Reference 亮度差的 `10%`；4 邻域扩张不得穿越另一条几何边界，并追踪到
+第 3 Pixel 以判定固定 `<= 2 Pixels` 门槛。无边界的广泛 Monte Carlo 偏差不会计为 Leakage，非法深度、法线、
+尺寸或 ROI 会明确失败。V01 300+32 报告已得到 `missing_evidence=[]`，但最大 Leakage Band 为 `3 Pixels`，
+仍未通过。最大带宽从捕获坐标 `(269,548)` 与 `(268,548)` 的边界两侧扩张至 `(272,548)`；边界 ViewZ 相对差
+为 `0.479685`、Normal dot 为 `0.008317`，证明锚点对应真实几何边界。该点的 Denoised/Reference 亮度为
+`0.001048305/0.000878900`，方向为暗侧能量增益。CPU 合成测试继续覆盖 2 Pixels 通过、3 Pixels 失败和非法 Guide。
 
 2026-08-08 在 RTX 4060 Laptop、Vulkan、RELAX_DIFFUSE、300 帧预热加 1000 帧采样下完成四组复测。
 报告中的 `total_tracked` 是显式 Pass 阶段和，不是完整 GPU 帧跨度：它没有覆盖独立的帧首/场景 Overlay/
@@ -428,8 +435,8 @@ MAE/RMSE 为 0.000991734/0.002267379，全局亮度 SSIM 为 0.999885319。
 1. 保持 Hammersley、64 spp、ROI 和阈值不变，定位一次反弹中的二值可见性与太阳/天空高能路径方差；再对
    RELAX History Fix 与累积长度做单变量 A/B；
    同一 Profile 重采后必须通过 HDR Error 门槛，禁止以改阈值、扩张 ROI 或缩放报告输入处理。
-2. 将 NRD Guide 的线性 ViewZ/世界法线输出为持久 RGBA16F 验证纹理，为 V01、V02、M03 接入已冻结的
-   Leakage Band 指标；复用已闭环的 AS Pending 计数完成 300 帧预热正式运行，固定 ROI 复核后归档报告。
+2. 保持固定 `2 Pixels` 门槛，定位 V01 从边界 Seed 到第 3 Pixel 的方向性能量输运，修复实际跨边界平滑；
+   同时区分 64 spp Reference 高方差，禁止通过修改阈值、扩大 ROI 或缩放报告输入消除失败。
 3. 为 V03、V06、M06 接入 Ghost/Disocclusion、动态边缘差分和历史恢复帧数门禁。
 4. 针对 1080p 继续定位：体素优先检查地形提交、流送和 AS；Sponza 优先检查 RTGI.Trace 与 NRD.Dispatch。
    固定场景、驱动和电源模式后保留前后 Capture。

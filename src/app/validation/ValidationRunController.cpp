@@ -262,6 +262,13 @@ bool ValidationRunController::buildCurrentFrame() {
                 frame.nrdDiffuseCapturePath = m_options.validationRtgiHdrCaptureDirectory /
                                               rtgiHdrCaptureFilename("denoised", m_completedSampleFrames);
             }
+            if (m_rtgiQualityProfile.has_value() && !m_options.validationRtgiReference &&
+                m_completedSampleFrames + 1u == m_options.validationSampleFrames) {
+                frame.rtgiLeakageNormalCapturePath =
+                    m_options.validationRtgiHdrCaptureDirectory / "rtgi_leakage_normal.exr";
+                frame.rtgiLeakageViewZCapturePath =
+                    m_options.validationRtgiHdrCaptureDirectory / "rtgi_leakage_viewz.exr";
+            }
         }
     }
 

@@ -1818,6 +1818,14 @@ RhiTextureHandle ModelSceneRuntime::nrdDiffuseTextureHandle() const {
     return m_deferredRenderer ? m_deferredRenderer->nrdDiffuseTextureHandle() : RhiTextureHandle{};
 }
 
+RhiTextureHandle ModelSceneRuntime::rtgiLeakageNormalTextureHandle() const {
+    return m_deferredRenderer ? m_deferredRenderer->rtgiLeakageNormalTextureHandle() : RhiTextureHandle{};
+}
+
+RhiTextureHandle ModelSceneRuntime::rtgiLeakageViewZTextureHandle() const {
+    return m_deferredRenderer ? m_deferredRenderer->rtgiLeakageViewZTextureHandle() : RhiTextureHandle{};
+}
+
 float ModelSceneRuntime::nrdDiffuseToPreExposedScale() const {
     return m_deferredRenderer ? m_deferredRenderer->nrdDiffuseToPreExposedScale() : 1.0f;
 }

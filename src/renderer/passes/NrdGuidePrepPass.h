@@ -25,6 +25,8 @@ public:
         RgTextureHandle normalRoughness;
         RgTextureHandle viewZ;
         RgTextureHandle reprojectionCoverage;
+        RgTextureHandle leakageNormal;
+        RgTextureHandle leakageViewZ;
     };
 
     /// Explicit projection and valid-depth range used to prepare one guide frame.
@@ -71,6 +73,8 @@ private:
         RhiTextureViewHandle normalRoughness;
         RhiTextureViewHandle viewZ;
         RhiTextureViewHandle reprojectionCoverage;
+        RhiTextureViewHandle leakageNormal;
+        RhiTextureViewHandle leakageViewZ;
     };
 
     [[nodiscard]] bool recordGuide(RhiCommandList& commandList, const FrameContext& ctx, const Settings& settings,
@@ -86,7 +90,7 @@ private:
     RhiPipelineLayoutHandle m_pipelineLayout;
     RhiPipelineHandle m_pipeline;
     RhiBindGroupHandle m_bindGroup;
-    std::array<RhiTextureViewHandle, 8u> m_boundViews{};
+    std::array<RhiTextureViewHandle, 10u> m_boundViews{};
     Stats m_stats;
 };
 

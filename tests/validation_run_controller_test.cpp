@@ -162,8 +162,22 @@ int main() {
     }
     frame = qualityController.currentFrame();
     if (!requireTrue(frame != nullptr && nearlyEqual(frame->cameraPose.position.x, 0.0) &&
-                         nearlyEqual(frame->cameraPose.position.z, -3.5),
+                         nearlyEqual(frame->cameraPose.position.z, -3.5) &&
+                         frame->rtgiLeakageNormalCapturePath.empty() && frame->rtgiLeakageViewZCapturePath.empty(),
                      "the static quality camera must not advance along the path")) {
+        return 1;
+    }
+    while (qualityController.completedSampleFrames() + 1u < app::validation::kRtgiQualitySequenceFrameCount) {
+        if (!requireTrue(qualityController.completeFrame(true),
+                         "intermediate static quality samples must complete")) {
+            return 1;
+        }
+    }
+    frame = qualityController.currentFrame();
+    if (!requireTrue(frame != nullptr &&
+                         frame->rtgiLeakageNormalCapturePath == "hdr/rtgi_leakage_normal.exr" &&
+                         frame->rtgiLeakageViewZCapturePath == "hdr/rtgi_leakage_viewz.exr",
+                     "the final static quality sample must capture fixed Leakage Band guides")) {
         return 1;
     }
 

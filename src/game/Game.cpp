@@ -221,15 +221,24 @@ bool Game::renderFrame(const float frameTime) {
     }
     // Set validation capture callback before UI overlay.
     if (m_validationCapturePath.has_value() || m_validationRtgiRawCapturePath.has_value() ||
-        m_validationNrdDiffuseCapturePath.has_value()) {
+        m_validationNrdDiffuseCapturePath.has_value() || m_validationLeakageNormalCapturePath.has_value() ||
+        m_validationLeakageViewZCapturePath.has_value()) {
         const std::optional<std::filesystem::path> capturePath = std::move(m_validationCapturePath);
         const std::optional<std::filesystem::path> rawCapturePath = std::move(m_validationRtgiRawCapturePath);
         const std::optional<std::filesystem::path> denoisedCapturePath = std::move(m_validationNrdDiffuseCapturePath);
+        const std::optional<std::filesystem::path> leakageNormalCapturePath =
+            std::move(m_validationLeakageNormalCapturePath);
+        const std::optional<std::filesystem::path> leakageViewZCapturePath =
+            std::move(m_validationLeakageViewZCapturePath);
         m_validationCapturePath.reset();
         m_validationRtgiRawCapturePath.reset();
         m_validationNrdDiffuseCapturePath.reset();
+        m_validationLeakageNormalCapturePath.reset();
+        m_validationLeakageViewZCapturePath.reset();
         m_validationCaptureResult.reset();
-        m_frameOrchestrator->setPreUiCallback([this, capturePath, rawCapturePath, denoisedCapturePath]() {
+        m_frameOrchestrator->setPreUiCallback(
+            [this, capturePath, rawCapturePath, denoisedCapturePath, leakageNormalCapturePath,
+             leakageViewZCapturePath]() {
             const auto fail = [this](const char* detail) {
                 renderer::capture::TextureCaptureResult result;
                 result.error = renderer::capture::TextureCaptureError::InvalidRequest;
@@ -306,6 +315,18 @@ bool Game::renderFrame(const float frameTime) {
                             output.nrdDiffuseToPreExposedScale, *denoisedCapturePath)) {
                 return;
             }
+            if (leakageNormalCapturePath.has_value() &&
+                !captureHdr(output.rtgiLeakageNormal, output.hasRtgiLeakageGuides,
+                            renderer::capture::TextureCaptureLinearEncoding::NonNegativeLinearRgb, 1.0f,
+                            *leakageNormalCapturePath)) {
+                return;
+            }
+            if (leakageViewZCapturePath.has_value() &&
+                !captureHdr(output.rtgiLeakageViewZ, output.hasRtgiLeakageGuides,
+                            renderer::capture::TextureCaptureLinearEncoding::NonNegativeLinearRgb, 1.0f,
+                            *leakageViewZCapturePath)) {
+                return;
+            }
             if (!m_validationCaptureResult.has_value()) {
                 m_validationCaptureResult = renderer::capture::TextureCaptureResult{};
             }
@@ -327,7 +348,9 @@ bool Game::renderFrame(const float frameTime) {
 bool Game::configureValidationFrame(const renderer::contracts::CameraPathPose& pose, const RenderFrameClock& clock,
                                     const std::filesystem::path* capturePath,
                                     const std::filesystem::path* rtgiRawCapturePath,
-                                    const std::filesystem::path* nrdDiffuseCapturePath) {
+                                    const std::filesystem::path* nrdDiffuseCapturePath,
+                                    const std::filesystem::path* leakageNormalCapturePath,
+                                    const std::filesystem::path* leakageViewZCapturePath) {
     const glm::vec3 position(pose.position);
     const glm::vec3 forward(pose.forward);
     const glm::vec3 up(pose.up);
@@ -353,6 +376,16 @@ bool Game::configureValidationFrame(const renderer::contracts::CameraPathPose& p
         m_validationNrdDiffuseCapturePath = *nrdDiffuseCapturePath;
     } else {
         m_validationNrdDiffuseCapturePath.reset();
+    }
+    if (leakageNormalCapturePath != nullptr) {
+        m_validationLeakageNormalCapturePath = *leakageNormalCapturePath;
+    } else {
+        m_validationLeakageNormalCapturePath.reset();
+    }
+    if (leakageViewZCapturePath != nullptr) {
+        m_validationLeakageViewZCapturePath = *leakageViewZCapturePath;
+    } else {
+        m_validationLeakageViewZCapturePath.reset();
     }
     return true;
 }

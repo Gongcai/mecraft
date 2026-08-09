@@ -43,6 +43,18 @@ bool writeFrame(const std::filesystem::path& path, const uint32_t width, const u
     return renderer::capture::writeLinearExr(path, width, height, pixels).succeeded();
 }
 
+bool writeRgbFrame(const std::filesystem::path& path, const uint32_t width, const uint32_t height,
+                   const glm::vec3 value) {
+    std::vector<uint16_t> pixels(static_cast<size_t>(width) * height * 4u);
+    for (size_t pixel = 0u; pixel < static_cast<size_t>(width) * height; ++pixel) {
+        pixels[pixel * 4u] = glm::packHalf1x16(value.x);
+        pixels[pixel * 4u + 1u] = glm::packHalf1x16(value.y);
+        pixels[pixel * 4u + 2u] = glm::packHalf1x16(value.z);
+        pixels[pixel * 4u + 3u] = glm::packHalf1x16(1.0f);
+    }
+    return renderer::capture::writeLinearExr(path, width, height, pixels).succeeded();
+}
+
 bool writeNanFrame(const std::filesystem::path& path) {
     std::vector<uint16_t> pixels(2u * 2u * 4u, glm::packHalf1x16(1.0f));
     pixels[0u] = 0x7e00u;
@@ -122,6 +134,12 @@ int main() {
     if (!requireTrue(sequenceWritten, "synthetic EXR sequences must be written")) {
         return 1;
     }
+    if (!requireTrue(writeRgbFrame(quality / "rtgi_leakage_normal.exr", 2u, 2u,
+                                   glm::vec3(0.5f, 0.5f, 1.0f)) &&
+                         writeRgbFrame(quality / "rtgi_leakage_viewz.exr", 2u, 2u, glm::vec3(2.0f)),
+                     "synthetic Leakage Band guides must be written")) {
+        return 1;
+    }
 
     validation::RtgiQualityReportRequest request;
     request.profileManifestPath = manifest;
@@ -161,13 +179,17 @@ int main() {
                          summary.referenceConvergence.relativeLuminanceErrorP95 > 0.1 &&
                          !summary.referenceConvergencePassed,
                      "report diagnostics must expose an unconverged reference without changing its full average") ||
-        !requireTrue(summary.availableMetricsPassed && !summary.completeStaticGatePassed,
-                     "reference convergence diagnostics must not become an undeclared static quality gate") ||
-        !requireTrue(!report.is_discarded() && report.at("version").get<uint32_t>() == 4u &&
-                         report.at("gates").at("leakage_band").at("passed").is_null() &&
+        !requireTrue(summary.availableMetricsPassed && summary.completeStaticGatePassed,
+                     "all declared static gates must pass for exact synthetic inputs") ||
+        !requireTrue(!report.is_discarded() && report.at("version").get<uint32_t>() == 5u &&
+                         report.at("gates").at("leakage_band").at("passed").get<bool>() &&
+                         report.at("gates").at("leakage_band").at("maximum_band_width_pixels").get<uint32_t>() == 0u &&
+                         report.at("gates").at("leakage_band").contains("maximum_band_boundary_seed") &&
+                         report.at("gates").at("leakage_band").contains("maximum_band_opposite_boundary_seed") &&
+                         report.at("gates").at("leakage_band").contains("maximum_band_boundary_contrast") &&
                          report.at("gates").at("as_pending").at("passed").get<bool>() &&
                          report.at("gates").at("as_pending").at("invalid_pixel_count").get<uint64_t>() == 0u &&
-                         report.at("missing_evidence").size() == 1u &&
+                         report.at("missing_evidence").empty() &&
                          !report.at("diagnostics").at("reference_half_luminance_ssim").at("passed").get<bool>() &&
                          report.at("diagnostics").at("absolute_luminance_error_p95").get<double>() == 0.0 &&
                          report.at("diagnostics").at("relative_p95_pixel").at("coordinate_space") == "capture" &&
@@ -184,8 +206,8 @@ int main() {
                              .at("reference_half_relative_luminance_error_p95")
                              .at("passed")
                              .get<bool>() == false &&
-                         !report.at("complete_static_gate_passed").get<bool>(),
-                     "JSON must consume AS Pending evidence while retaining Leakage Band as unavailable")) {
+                         report.at("complete_static_gate_passed").get<bool>(),
+                     "JSON must consume AS Pending and Leakage Band evidence")) {
         std::cerr << "[rtgi_quality_report_test] detail: " << detail << '\n';
         return 1;
     }

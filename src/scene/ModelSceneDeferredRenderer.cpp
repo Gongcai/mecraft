@@ -881,6 +881,16 @@ RhiTextureHandle ModelSceneDeferredRenderer::nrdDiffuseTextureHandle() const {
     return m_impl->lastFrameOutput.hasNrdDiffuse ? m_impl->lastFrameOutput.nrdDiffuse : RhiTextureHandle{};
 }
 
+RhiTextureHandle ModelSceneDeferredRenderer::rtgiLeakageNormalTextureHandle() const {
+    return m_impl->lastFrameOutput.hasRtgiLeakageGuides ? m_impl->lastFrameOutput.rtgiLeakageNormal
+                                                        : RhiTextureHandle{};
+}
+
+RhiTextureHandle ModelSceneDeferredRenderer::rtgiLeakageViewZTextureHandle() const {
+    return m_impl->lastFrameOutput.hasRtgiLeakageGuides ? m_impl->lastFrameOutput.rtgiLeakageViewZ
+                                                        : RhiTextureHandle{};
+}
+
 float ModelSceneDeferredRenderer::nrdDiffuseToPreExposedScale() const {
     return m_impl->lastFrameOutput.nrdDiffuseToPreExposedScale;
 }

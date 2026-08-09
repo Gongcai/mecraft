@@ -39,6 +39,8 @@ struct ValidationFrame {
     uint32_t rtgiHdrCaptureSampleIndex = 0u;
     std::filesystem::path rtgiRawCapturePath;
     std::filesystem::path nrdDiffuseCapturePath;
+    std::filesystem::path rtgiLeakageNormalCapturePath;
+    std::filesystem::path rtgiLeakageViewZCapturePath;
 };
 
 /// Deterministic clock for one actual validation render attempt.

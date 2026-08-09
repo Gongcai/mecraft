@@ -248,10 +248,6 @@ struct SequenceData final {
     return gate;
 }
 
-[[nodiscard]] Json missingGateJson(const char* requiredEvidence) {
-    return Json{{"evidence_available", false}, {"required_evidence", requiredEvidence}, {"passed", nullptr}};
-}
-
 [[nodiscard]] RtgiQualityReportError loadAsPendingEvidence(const std::filesystem::path& path,
                                                            const RtgiQualityProfile& profile,
                                                            RtgiQualityReportSummary& summary, std::string& detail) {
@@ -308,6 +304,40 @@ struct SequenceData final {
     return RtgiQualityReportError::None;
 }
 
+[[nodiscard]] RtgiQualityReportError loadLeakageGuides(const RtgiQualityReportRequest& request,
+                                                       const RtgiQualityProfile& profile,
+                                                       RtgiLinearImage& worldNormal, RtgiLinearImage& viewZ,
+                                                       std::string& detail) {
+    std::vector<glm::vec3> encodedNormal;
+    std::vector<glm::vec3> encodedViewZ;
+    RtgiQualityReportError error =
+        loadFrame(request.qualitySequenceDirectory / "rtgi_leakage_normal.exr", profile.captureWidth,
+                  profile.captureHeight, encodedNormal, detail);
+    if (error != RtgiQualityReportError::None) {
+        return error;
+    }
+    error = loadFrame(request.qualitySequenceDirectory / "rtgi_leakage_viewz.exr", profile.captureWidth,
+                      profile.captureHeight, encodedViewZ, detail);
+    if (error != RtgiQualityReportError::None) {
+        return error;
+    }
+    worldNormal = cropImage(encodedNormal, profile.captureWidth, profile.roi);
+    viewZ = cropImage(encodedViewZ, profile.captureWidth, profile.roi);
+    for (size_t pixel = 0u; pixel < worldNormal.pixels.size(); ++pixel) {
+        glm::vec3 normal = worldNormal.pixels[pixel] * 2.0f - 1.0f;
+        const float normalLengthSquared = glm::dot(normal, normal);
+        const float depth = viewZ.pixels[pixel].x;
+        if (!std::isfinite(normalLengthSquared) || normalLengthSquared <= 1.0e-12f || !std::isfinite(depth) ||
+            depth <= 0.0f) {
+            detail = "invalid leakage guide pixel " + std::to_string(pixel);
+            return RtgiQualityReportError::MetricEvaluationFailed;
+        }
+        worldNormal.pixels[pixel] = normal / std::sqrt(normalLengthSquared);
+        viewZ.pixels[pixel] = glm::vec3(depth);
+    }
+    return RtgiQualityReportError::None;
+}
+
 [[nodiscard]] RtgiQualityReportError writeReport(const RtgiQualityReportRequest& request,
                                                  const RtgiQualityProfile& profile,
                                                  const RtgiQualityReportSummary& summary, std::string& detail) {
@@ -324,7 +354,36 @@ struct SequenceData final {
                                         {"non_finite_pixel_count", 0u},
                                         {"negative_radiance_pixel_count", 0u},
                                         {"passed", summary.radianceValidationPassed}};
-    gates["leakage_band"] = missingGateJson("fixed depth/normal boundary band mask and leakage metric");
+    gates["leakage_band"] = Json{{"evidence_available", true},
+                                 {"boundary_pixel_count", summary.leakage.boundaryPixelCount},
+                                 {"leakage_pixel_count", summary.leakage.leakagePixelCount},
+                                 {"maximum_band_width_pixels", summary.leakage.maximumBandWidthPixels},
+                                 {"maximum_band_pixel",
+                                  {{"coordinate_space", "capture"},
+                                   {"x", profile.roi.x + summary.leakage.maximumBandX},
+                                   {"y", profile.roi.y + summary.leakage.maximumBandY},
+                                   {"denoised_luminance", summary.leakage.denoisedLuminanceAtMaximum},
+                                   {"reference_luminance", summary.leakage.referenceLuminanceAtMaximum},
+                                   {"error_direction",
+                                    summary.leakage.positiveErrorAtMaximum ? "dark_side_gain" : "bright_side_loss"}}},
+                                 {"maximum_band_boundary_seed",
+                                  {{"coordinate_space", "capture"},
+                                   {"x", profile.roi.x + summary.leakage.maximumBandSeedX},
+                                   {"y", profile.roi.y + summary.leakage.maximumBandSeedY},
+                                   {"reference_luminance", summary.leakage.seedReferenceLuminanceAtMaximum}}},
+                                 {"maximum_band_opposite_boundary_seed",
+                                  {{"coordinate_space", "capture"},
+                                   {"x", profile.roi.x + summary.leakage.maximumBandOppositeSeedX},
+                                   {"y", profile.roi.y + summary.leakage.maximumBandOppositeSeedY},
+                                   {"reference_luminance",
+                                    summary.leakage.oppositeSeedReferenceLuminanceAtMaximum}}},
+                                 {"maximum_band_boundary_contrast",
+                                  {{"relative_viewz_difference",
+                                    summary.leakage.seedRelativeDepthDifferenceAtMaximum},
+                                   {"world_normal_dot", summary.leakage.seedNormalDotAtMaximum}}},
+                                 {"comparison", "<="},
+                                 {"threshold", renderer::contracts::kRtgiLeakageMaximumBandWidthPixels},
+                                 {"passed", summary.leakageBandPassed}};
     gates["as_pending"] = Json{{"evidence_available", true},
                                {"mode", "conservative_whole_frame_mask"},
                                {"sample_count", kRtgiQualitySequenceFrameCount},
@@ -354,7 +413,11 @@ struct SequenceData final {
                 {"reference_raw", kRtgiQualityReferenceSpp}}},
               {"outputs",
                {{"reference_exr", request.referenceOutputPath.generic_u8string()},
-                {"validation_capture_report", request.validationCaptureReportPath.generic_u8string()}}},
+                {"validation_capture_report", request.validationCaptureReportPath.generic_u8string()},
+                {"leakage_normal_exr",
+                 (request.qualitySequenceDirectory / "rtgi_leakage_normal.exr").generic_u8string()},
+                {"leakage_viewz_exr",
+                 (request.qualitySequenceDirectory / "rtgi_leakage_viewz.exr").generic_u8string()}}},
               {"metrics",
                {{"raw_temporal_variance", summary.variance.rawVariance},
                 {"denoised_temporal_variance", summary.variance.denoisedVariance},
@@ -401,7 +464,7 @@ struct SequenceData final {
               {"gates", std::move(gates)},
               {"available_metrics_passed", summary.availableMetricsPassed},
               {"complete_static_gate_passed", summary.completeStaticGatePassed},
-              {"missing_evidence", Json::array({"leakage_band"})}};
+              {"missing_evidence", Json::array()}};
 
     const std::filesystem::path parent = request.reportOutputPath.parent_path();
     if (!parent.empty()) {
@@ -503,6 +566,18 @@ RtgiQualityReportError generateRtgiQualityReport(const RtgiQualityReportRequest&
         detail = renderer::contracts::rtgiQualityMetricErrorStableId(comparisonError);
         return RtgiQualityReportError::MetricEvaluationFailed;
     }
+    RtgiLinearImage leakageNormal;
+    RtgiLinearImage leakageViewZ;
+    error = loadLeakageGuides(request, profile, leakageNormal, leakageViewZ, detail);
+    if (error != RtgiQualityReportError::None) {
+        return error;
+    }
+    const RtgiQualityMetricError leakageError = renderer::contracts::calculateRtgiLeakageBand(
+        denoisedAverage, referenceAverage, leakageNormal, leakageViewZ, croppedRoi, summary.leakage);
+    if (leakageError != RtgiQualityMetricError::None) {
+        detail = renderer::contracts::rtgiQualityMetricErrorStableId(leakageError);
+        return RtgiQualityReportError::MetricEvaluationFailed;
+    }
     const size_t referenceHalfFrameCount = reference.frames.size() / 2u;
     const RtgiLinearImage referenceFirstHalf = averageFrameRange(reference.frames, 0u, referenceHalfFrameCount);
     const RtgiLinearImage referenceSecondHalf =
@@ -526,10 +601,12 @@ RtgiQualityReportError generateRtgiQualityReport(const RtgiQualityReportRequest&
         summary.referenceConvergence.luminanceSsim >= kRtgiLuminanceSsimThreshold &&
         summary.referenceConvergence.relativeLuminanceErrorP95 <= kRtgiRelativeLuminanceErrorP95Threshold;
     summary.radianceValidationPassed = true;
+    summary.leakageBandPassed =
+        summary.leakage.maximumBandWidthPixels <= renderer::contracts::kRtgiLeakageMaximumBandWidthPixels;
     summary.availableMetricsPassed = summary.varianceReductionPassed && summary.luminanceSsimPassed &&
                                      summary.relativeLuminanceErrorPassed && summary.radianceValidationPassed &&
-                                     summary.asPendingPassed;
-    summary.completeStaticGatePassed = false;
+                                     summary.asPendingPassed && summary.leakageBandPassed;
+    summary.completeStaticGatePassed = summary.availableMetricsPassed;
     return writeReport(request, profile, summary, detail);
 }
 

@@ -132,8 +132,9 @@ Profile ID、版本、ROI、质量 Render Settings 及 64 spp Reference 目标�
 低差异相位仍逐帧推进，报告记录 `capture_mode=reference` 与 `nrd_enabled=false`。这 64 个线性样本随后必须
 平均为单张 Reference EXR；不能直接选取其中一帧作为参考。`rtgi_quality_report_tool` 已实现严格序列检查、
 IEEE Half 解码、64 帧线性平均、32 帧 Raw/Denoised 方差与均值、SSIM、HDR Error p95 和非法辐射门禁。
-Leakage Band 没有输入证据时必须在 JSON 中保持 `passed=null`。AS Pending 必须由同次 Validation Capture
-Report 的保守整帧 Mask 提供，身份、样本数或计数不一致会直接拒绝生成质量报告。
+Leakage Band 必须读取质量序列同次捕获的 ViewZ/Normal EXR；缺少或非法 Guide 会拒绝生成报告，不会生成
+无证据的通过结论。AS Pending 必须由同次 Validation Capture Report 的保守整帧 Mask 提供，身份、样本数
+或计数不一致也会直接拒绝生成质量报告。
 Reference 帧首重置现明确排除 `referenceSamplingEnabled`：只有既没有 NRD、也没有 Reference Sampling 的路径
 才将显式样本索引清零，成功的 Reference 帧在图执行后递增。每像素独立旋转、XOR 扰动的周期 64 点
 Hammersley 集合保证任意连续 64 个实际帧覆盖同一完整集合，并以偶/奇交错让两个半序列覆盖完整二维域。
@@ -162,11 +163,14 @@ HDR p95 `0.473326`。V01 的分母下限占比为 `0%`；Reference 前后半相�
 正式设置保持按 0.5 秒计算。质量报告 schema v4 必须绑定同次 Validation Capture Report；AS Pending 采用
 保守整帧 Mask，Scene TLAS 或 Terrain BLAS 任一 Pending 就把该采样帧全部像素计为无效。最新 300+32 正式
 V01 的 Pending Frame、Invalid Pixel、Terrain Build/Compaction 峰值均为 `0`，因此 AS Pending Gate 已通过。
-Leakage Band 仍为 `passed=null`，完整静态门槛继续失败。
-Leakage 指标本身已冻结：线性 ViewZ 的相对差超过 `0.02` 或单位世界法线点积低于 `0.95` 时，两侧像素成为
-Boundary Seed；Denoised/Reference 相对亮度误差超过 `0.10` 的像素形成 Error Mask，从 Seed 沿 4 邻域连通
-扩张得到最大带宽，门槛为 `<= 2 Pixels`。合成契约测试已覆盖 2/3 Pixels 和非法 Guide；在生产 ViewZ/Normal
-捕获接入前，报告继续保持 `passed=null`。
+质量报告 schema v5 已强制绑定生产捕获的 RGBA16F 世界法线和正线性 ViewZ，Leakage 不再缺证据。
+Leakage 指标以 ViewZ 相对差 `> 0.02` 或单位世界法线点积 `< 0.95` 建立几何边界；仅当 Reference 在边界
+两侧的亮度差超过 `max(1e-4, 0.10 * max(sideA, sideB))` 时建立方向性 Seed。暗侧只追踪超过边界对比 `10%`
+的正能量增益，亮侧只追踪同阈值的负能量损失；4 邻域扩张不得跨越另一条 Depth/Normal 边界，最大带宽门槛
+保持 `<= 2 Pixels`。合成契约测试覆盖 2/3 Pixels 和非法 Guide。V01 300+32 正式报告的
+`missing_evidence=[]`，但 `boundary_pixel_count=310`、`leakage_pixel_count=601`、最大带宽 `3 Pixels`，因此
+Leakage Gate 与完整静态门槛仍失败。最大路径的边界 Seed 为捕获坐标 `(269,548)/(268,548)`，ViewZ 相对差
+`0.479685`、Normal dot `0.008317`，末端 `(272,548)` 为暗侧能量增益；后续修复不得修改门槛、ROI 或报告缩放。
 
 ### 3.3 动态画面
 

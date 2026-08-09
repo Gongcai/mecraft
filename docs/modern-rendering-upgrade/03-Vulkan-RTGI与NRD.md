@@ -665,12 +665,18 @@ RELAX 主历史 30/64 帧的同镜头 300+32 A/B 仅把 HDR p95 从 `0.473326` �
 静态误差主因，生产设置已恢复为 0.5 秒。质量报告 schema v4 强制读取同次 Validation Capture Report；
 Scene TLAS desired/active 不一致、TLAS generation pending、Terrain BLAS Build 或 Compaction 任一非零时，
 保守整帧 Mask 将该采样帧全部像素标记为 AS Pending。正式 V01 的 32 帧 Pending Frame 和 Invalid Pixel 均为
-`0`，AS Pending Gate 已通过。Leakage Band 仍缺证据，且 HDR p95 仍失败，
-`complete_static_gate_passed=false`。
-Leakage Band 的计算契约已经实现：正线性 ViewZ 相对差 `> 0.02` 或单位世界法线点积 `< 0.95` 生成边界两侧
-Seed；相对亮度误差 `> 0.10` 生成 Error Mask；从 Seed 沿 4 邻域误差像素扩张并报告最大距离，`<= 2 Pixels`
-才通过。无边界误差不会进入该门槛，非有限/非正深度和非单位法线会明确失败。生产路径下一步将
-`NRD.ViewZ` 与解码后的世界法线复制到持久 RGBA16F 验证输出，再由质量工具绑定同一静态帧。
+`0`，AS Pending Gate 已通过；HDR p95 仍失败。
+Leakage Band 的生产证据已接入。`NRD.GuidePrep` 在生成 NRD 输入的同一 Dispatch 中把编码世界法线与正线性
+ViewZ 写入两张持久 RGBA16F 验证纹理，`FrameOutput` 发布句柄，Gameplay/Model 捕获路径将最后一个质量样本
+写为独立 EXR。质量报告 schema v5 强制读取 Guide、解码并单位化法线、验证 ViewZ 为有限正值。
+指标以 ViewZ 相对差 `> 0.02` 或世界法线点积 `< 0.95` 建立几何边界；仅对 Reference 两侧可见亮度对比建立
+方向性 Seed，暗侧追踪正能量增益、亮侧追踪负能量损失，误差阈值为边界亮度差的 `10%`。4 邻域扩张不会
+跨越另一条几何边界，并只追踪到第 3 Pixel 来判定固定 `<= 2 Pixels` 门槛。该定义排除了远离边界的广泛
+Monte Carlo 偏差；非有限/非正深度、非法法线、尺寸或 ROI 不一致仍明确失败。
+V01 300+32 的 schema v5 报告得到 `missing_evidence=[]`，但最大 Leakage Band 为 `3 Pixels`，因此
+`complete_static_gate_passed=false`。最大路径从捕获坐标 `(269,548)/(268,548)` 的边界两侧扩张到
+`(272,548)`；边界 ViewZ 相对差 `0.479685`、Normal dot `0.008317`，末端 Denoised/Reference 亮度
+`0.001048305/0.000878900`，分类为暗侧能量增益。下一轮保持阈值和 ROI 不变，定位并修复该跨边界输运。
 
 ## 10. 调试视图与验收
 

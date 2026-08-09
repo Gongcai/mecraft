@@ -792,7 +792,9 @@ bool DeferredPipeline::ensureRtgiValidationOutputTextures(RhiDevice& rhiDevice, 
                                                           const uint32_t height) {
     const bool matchingExtent = m_rtgiValidationOutputWidth == width && m_rtgiValidationOutputHeight == height;
     if (matchingExtent && m_rtgiRawDiffuseValidationTexture.isValid() && m_rtgiRawDiffuseValidationView.isValid() &&
-        m_nrdDiffuseValidationTexture.isValid() && m_nrdDiffuseValidationView.isValid()) {
+        m_nrdDiffuseValidationTexture.isValid() && m_nrdDiffuseValidationView.isValid() &&
+        m_rtgiLeakageNormalValidationTexture.isValid() && m_rtgiLeakageNormalValidationView.isValid() &&
+        m_rtgiLeakageViewZValidationTexture.isValid() && m_rtgiLeakageViewZValidationView.isValid()) {
         return true;
     }
 
@@ -806,8 +808,8 @@ bool DeferredPipeline::ensureRtgiValidationOutputTextures(RhiDevice& rhiDevice, 
     textureDesc.depthOrLayers = 1u;
     textureDesc.mipLevels = 1u;
     textureDesc.sampleCount = 1u;
-    textureDesc.usage = rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::TransferSrc) |
-                        rhiFlag(RhiTextureUsage::TransferDst);
+    textureDesc.usage = rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::Storage) |
+                        rhiFlag(RhiTextureUsage::TransferSrc) | rhiFlag(RhiTextureUsage::TransferDst);
     textureDesc.memoryCategory = RhiMemoryCategory::Nrd;
 
     const auto createTextureAndView = [&rhiDevice, &textureDesc](const char* debugName, RhiTextureHandle& texture,
@@ -828,7 +830,11 @@ bool DeferredPipeline::ensureRtgiValidationOutputTextures(RhiDevice& rhiDevice, 
     if (!createTextureAndView("RTGI.RawDiffuseValidationOutput", m_rtgiRawDiffuseValidationTexture,
                               m_rtgiRawDiffuseValidationView) ||
         !createTextureAndView("NRD.DiffuseValidationOutput", m_nrdDiffuseValidationTexture,
-                              m_nrdDiffuseValidationView)) {
+                              m_nrdDiffuseValidationView) ||
+        !createTextureAndView("RTGI.LeakageNormalValidationOutput", m_rtgiLeakageNormalValidationTexture,
+                              m_rtgiLeakageNormalValidationView) ||
+        !createTextureAndView("RTGI.LeakageViewZValidationOutput", m_rtgiLeakageViewZValidationTexture,
+                              m_rtgiLeakageViewZValidationView)) {
         destroyRtgiValidationOutputTextures(rhiDevice);
         return false;
     }
@@ -846,16 +852,32 @@ void DeferredPipeline::destroyRtgiValidationOutputTextures(RhiDevice& rhiDevice)
     if (m_nrdDiffuseValidationView.isValid()) {
         rhiDevice.destroyTextureView(m_nrdDiffuseValidationView);
     }
+    if (m_rtgiLeakageNormalValidationView.isValid()) {
+        rhiDevice.destroyTextureView(m_rtgiLeakageNormalValidationView);
+    }
+    if (m_rtgiLeakageViewZValidationView.isValid()) {
+        rhiDevice.destroyTextureView(m_rtgiLeakageViewZValidationView);
+    }
     if (m_rtgiRawDiffuseValidationTexture.isValid()) {
         rhiDevice.destroyTexture(m_rtgiRawDiffuseValidationTexture);
     }
     if (m_nrdDiffuseValidationTexture.isValid()) {
         rhiDevice.destroyTexture(m_nrdDiffuseValidationTexture);
     }
+    if (m_rtgiLeakageNormalValidationTexture.isValid()) {
+        rhiDevice.destroyTexture(m_rtgiLeakageNormalValidationTexture);
+    }
+    if (m_rtgiLeakageViewZValidationTexture.isValid()) {
+        rhiDevice.destroyTexture(m_rtgiLeakageViewZValidationTexture);
+    }
     m_rtgiRawDiffuseValidationTexture = {};
     m_rtgiRawDiffuseValidationView = {};
     m_nrdDiffuseValidationTexture = {};
     m_nrdDiffuseValidationView = {};
+    m_rtgiLeakageNormalValidationTexture = {};
+    m_rtgiLeakageNormalValidationView = {};
+    m_rtgiLeakageViewZValidationTexture = {};
+    m_rtgiLeakageViewZValidationView = {};
     m_rtgiValidationOutputWidth = 0u;
     m_rtgiValidationOutputHeight = 0u;
     m_rtgiValidationOutputInitialized = false;
@@ -1510,6 +1532,8 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
     RgTextureHandle nrdViewZ;
     RgTextureHandle nrdOutputDiffuse;
     RgTextureHandle nrdDiffuseValidationOutput;
+    RgTextureHandle rtgiLeakageNormalValidationOutput;
+    RgTextureHandle rtgiLeakageViewZValidationOutput;
     RgTextureHandle nrdValidation;
     SkyIblPass::GraphResources skyIblResources;
     const RhiTextureHandle lightmapDayTexture = m_resourceMgr->getLightmapDay();
@@ -1568,8 +1592,12 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
         }
         RhiTextureDesc rawValidationOutputDesc;
         RhiTextureDesc denoisedValidationOutputDesc;
+        RhiTextureDesc leakageNormalValidationOutputDesc;
+        RhiTextureDesc leakageViewZValidationOutputDesc;
         if (!rhiDevice.getTextureDesc(m_rtgiRawDiffuseValidationTexture, rawValidationOutputDesc) ||
-            !rhiDevice.getTextureDesc(m_nrdDiffuseValidationTexture, denoisedValidationOutputDesc)) {
+            !rhiDevice.getTextureDesc(m_nrdDiffuseValidationTexture, denoisedValidationOutputDesc) ||
+            !rhiDevice.getTextureDesc(m_rtgiLeakageNormalValidationTexture, leakageNormalValidationOutputDesc) ||
+            !rhiDevice.getTextureDesc(m_rtgiLeakageViewZValidationTexture, leakageViewZValidationOutputDesc)) {
             return failGraphSetup();
         }
         const RhiResourceState validationOutputInitialState =
@@ -1582,7 +1610,16 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
             {"NRD.DiffuseValidationOutput", m_nrdDiffuseValidationTexture, denoisedValidationOutputDesc,
              validationOutputInitialState, RhiResourceState::ShaderRead, m_nrdDiffuseValidationView,
              RhiQueueType::Graphics, RhiQueueType::Graphics});
-        if (!rtgiRawValidationOutput.isValid() || !nrdDiffuseValidationOutput.isValid()) {
+        rtgiLeakageNormalValidationOutput = m_renderGraph.importTexture(
+            {"RTGI.LeakageNormalValidationOutput", m_rtgiLeakageNormalValidationTexture,
+             leakageNormalValidationOutputDesc, validationOutputInitialState, RhiResourceState::ShaderRead,
+             m_rtgiLeakageNormalValidationView, RhiQueueType::Graphics, RhiQueueType::Graphics});
+        rtgiLeakageViewZValidationOutput = m_renderGraph.importTexture(
+            {"RTGI.LeakageViewZValidationOutput", m_rtgiLeakageViewZValidationTexture,
+             leakageViewZValidationOutputDesc, validationOutputInitialState, RhiResourceState::ShaderRead,
+             m_rtgiLeakageViewZValidationView, RhiQueueType::Graphics, RhiQueueType::Graphics});
+        if (!rtgiRawValidationOutput.isValid() || !nrdDiffuseValidationOutput.isValid() ||
+            !rtgiLeakageNormalValidationOutput.isValid() || !rtgiLeakageViewZValidationOutput.isValid()) {
             return failGraphSetup();
         }
         if (!importTexture(terrainAlbedoTexture, {}, RhiResourceState::ShaderRead, terrainAlbedo) ||
@@ -2124,6 +2161,8 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
             guideResources.normalRoughness = nrdNormalRoughness;
             guideResources.viewZ = nrdViewZ;
             guideResources.reprojectionCoverage = nrdReprojectionCoverage;
+            guideResources.leakageNormal = rtgiLeakageNormalValidationOutput;
+            guideResources.leakageViewZ = rtgiLeakageViewZValidationOutput;
             guideSettings.historyValid = !m_nrdClearHistory && !nrdTemporalReset;
             guideSettings.useJitteredProjection = traceSettings.useJitteredProjection;
             graphTail = m_nrdGuidePrepPass->addGraphPass(m_renderGraph, ctx, guideSettings, guideResources, graphTail);
@@ -3965,12 +4004,16 @@ FrameOutput DeferredPipeline::buildFrameOutput(const FrameContext& ctx) {
     output.skipPostProcess = false;
     output.rtgiRawDiffuse = m_rtgiRawDiffuseTexture;
     output.nrdDiffuse = m_nrdDiffuseTexture;
+    output.rtgiLeakageNormal = m_rtgiLeakageNormalValidationTexture;
+    output.rtgiLeakageViewZ = m_rtgiLeakageViewZValidationTexture;
     output.nrdDiffuseEncoding = m_currentSettings.nrd.method == NrdDiffuseMethod::Reblur
                                     ? NrdDiffuseOutputEncoding::ReblurYCoCg
                                     : NrdDiffuseOutputEncoding::LinearRgb;
     output.nrdDiffuseToPreExposedScale = ctx.preExposure;
     output.hasRtgiRawDiffuse = output.rtgiRawDiffuse.isValid();
     output.hasNrdDiffuse = output.nrdDiffuse.isValid();
+    output.hasRtgiLeakageGuides = output.hasNrdDiffuse && output.rtgiLeakageNormal.isValid() &&
+                                  output.rtgiLeakageViewZ.isValid();
 
     return output;
 }

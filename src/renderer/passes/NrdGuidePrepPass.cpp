@@ -61,7 +61,8 @@ RgPassHandle NrdGuidePrepPass::addGraphPass(RenderGraph& graph, const FrameConte
         settings.denoisingRange <= 0.0f || !resources.depth.isValid() || !resources.normalAo.isValid() ||
         !resources.material.isValid() || !resources.velocity.isValid() || !resources.motion.isValid() ||
         !resources.normalRoughness.isValid() || !resources.viewZ.isValid() ||
-        !resources.reprojectionCoverage.isValid()) {
+        !resources.reprojectionCoverage.isValid() || !resources.leakageNormal.isValid() ||
+        !resources.leakageViewZ.isValid()) {
         return {};
     }
 
@@ -77,12 +78,15 @@ RgPassHandle NrdGuidePrepPass::addGraphPass(RenderGraph& graph, const FrameConte
         .writeTexture(resources.normalRoughness, RhiResourceState::ShaderWrite)
         .writeTexture(resources.viewZ, RhiResourceState::ShaderWrite)
         .writeTexture(resources.reprojectionCoverage, RhiResourceState::ShaderWrite)
+        .writeTexture(resources.leakageNormal, RhiResourceState::ShaderWrite)
+        .writeTexture(resources.leakageViewZ, RhiResourceState::ShaderWrite)
         .setExecute([this, frame, settings, frameResources](RgPassContext& pass) {
             const GuideViews views{
                 pass.textureView(frameResources.depth),    pass.textureView(frameResources.normalAo),
                 pass.textureView(frameResources.material), pass.textureView(frameResources.velocity),
                 pass.textureView(frameResources.motion),   pass.textureView(frameResources.normalRoughness),
-                pass.textureView(frameResources.viewZ),    pass.textureView(frameResources.reprojectionCoverage)};
+                pass.textureView(frameResources.viewZ),    pass.textureView(frameResources.reprojectionCoverage),
+                pass.textureView(frameResources.leakageNormal), pass.textureView(frameResources.leakageViewZ)};
             return recordGuide(pass.commandList(), *frame, settings, views);
         });
     return guide.handle();
@@ -181,7 +185,7 @@ bool NrdGuidePrepPass::ensurePipeline(RhiDevice& rhiDevice) {
         layoutDesc.entries.push_back(
             {binding, RhiBindingType::CombinedTextureSampler, rhiFlag(RhiShaderStage::Compute), 1u});
     }
-    for (uint32_t binding = 4u; binding < 8u; ++binding) {
+    for (uint32_t binding = 4u; binding < 10u; ++binding) {
         layoutDesc.entries.push_back({binding, RhiBindingType::StorageTexture, rhiFlag(RhiShaderStage::Compute), 1u});
     }
     m_bindGroupLayout = rhiDevice.createBindGroupLayout(layoutDesc);
@@ -215,13 +219,15 @@ bool NrdGuidePrepPass::ensurePipeline(RhiDevice& rhiDevice) {
 
 bool NrdGuidePrepPass::ensureBindGroup(RhiDevice& rhiDevice, const GuideViews& views, const uint32_t width,
                                        const uint32_t height) {
-    const std::array<RhiTextureViewHandle, 8u> boundViews{
+    const std::array<RhiTextureViewHandle, 10u> boundViews{
         views.depth,  views.normalAo,        views.material, views.velocity,
-        views.motion, views.normalRoughness, views.viewZ,    views.reprojectionCoverage};
-    const std::array<RhiTextureFormat, 8u> formats{RhiTextureFormat::Depth32Float, RhiTextureFormat::Rgb10A2Unorm,
-                                                   RhiTextureFormat::Rgba8Unorm,   RhiTextureFormat::Rg16Float,
-                                                   RhiTextureFormat::Rgba16Float,  RhiTextureFormat::Rgb10A2Unorm,
-                                                   RhiTextureFormat::R32Float,     RhiTextureFormat::R8Unorm};
+        views.motion, views.normalRoughness, views.viewZ,    views.reprojectionCoverage,
+        views.leakageNormal, views.leakageViewZ};
+    const std::array<RhiTextureFormat, 10u> formats{
+        RhiTextureFormat::Depth32Float, RhiTextureFormat::Rgb10A2Unorm, RhiTextureFormat::Rgba8Unorm,
+        RhiTextureFormat::Rg16Float, RhiTextureFormat::Rgba16Float, RhiTextureFormat::Rgb10A2Unorm,
+        RhiTextureFormat::R32Float, RhiTextureFormat::R8Unorm, RhiTextureFormat::Rgba16Float,
+        RhiTextureFormat::Rgba16Float};
     for (uint32_t index = 0u; index < boundViews.size(); ++index) {
         const RhiTextureUsage usage = index < 4u ? RhiTextureUsage::Sampled : RhiTextureUsage::Storage;
         if (!textureViewMatches(rhiDevice, boundViews[index], formats[index], usage, width, height)) {

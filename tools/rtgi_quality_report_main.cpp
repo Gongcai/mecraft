@@ -54,6 +54,6 @@ int main(const int argc, const char* const* argv) {
     std::cout << "RTGI quality report written: " << request.reportOutputPath << '\n'
               << "64 spp reference written: " << request.referenceOutputPath << '\n'
               << "Available metrics passed: " << (summary.availableMetricsPassed ? "true" : "false") << '\n'
-              << "Complete static gate passed: false (Leakage Band evidence required)\n";
+              << "Complete static gate passed: " << (summary.completeStaticGatePassed ? "true" : "false") << '\n';
     return 0;
 }

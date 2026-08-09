@@ -86,7 +86,7 @@ int main() {
     constexpr uint32_t kLeakageWidth = 7u;
     constexpr uint32_t kLeakageHeight = 3u;
     const RtgiValidationRoi leakageRoi{0u, 0u, kLeakageWidth, kLeakageHeight};
-    const RtgiLinearImage leakageReference =
+    RtgiLinearImage leakageReference =
         makeConstantImage(kLeakageWidth, kLeakageHeight, glm::vec3(1.0f));
     RtgiLinearImage leakageDenoised =
         makeConstantImage(kLeakageWidth, kLeakageHeight, glm::vec3(1.25f));
@@ -96,13 +96,24 @@ int main() {
     for (uint32_t y = 0u; y < kLeakageHeight; ++y) {
         for (uint32_t x = 3u; x < kLeakageWidth; ++x) {
             leakageDepth.pixels[static_cast<size_t>(y) * kLeakageWidth + x] = glm::vec3(2.0f);
+            leakageReference.pixels[static_cast<size_t>(y) * kLeakageWidth + x] = glm::vec3(2.0f);
+            leakageDenoised.pixels[static_cast<size_t>(y) * kLeakageWidth + x] = glm::vec3(1.75f);
         }
     }
     RtgiLeakageBandMetrics leakageMetrics;
     if (!requireTrue(calculateRtgiLeakageBand(leakageDenoised, leakageReference, leakageNormals, leakageDepth,
                                               leakageRoi, leakageMetrics) == RtgiQualityMetricError::None &&
                          leakageMetrics.boundaryPixelCount == 6u && leakageMetrics.leakagePixelCount == 21u &&
-                         leakageMetrics.maximumBandWidthPixels == 3u,
+                         leakageMetrics.maximumBandWidthPixels == 3u && leakageMetrics.maximumBandX == 6u &&
+                         leakageMetrics.maximumBandY == 0u && leakageMetrics.maximumBandSeedX == 3u &&
+                         leakageMetrics.maximumBandSeedY == 0u &&
+                         leakageMetrics.maximumBandOppositeSeedX == 2u &&
+                         leakageMetrics.maximumBandOppositeSeedY == 0u &&
+                         leakageMetrics.seedReferenceLuminanceAtMaximum > 1.99 &&
+                         leakageMetrics.oppositeSeedReferenceLuminanceAtMaximum < 1.01 &&
+                         leakageMetrics.seedRelativeDepthDifferenceAtMaximum > 0.49 &&
+                         leakageMetrics.seedNormalDotAtMaximum > 0.999 &&
+                         !leakageMetrics.positiveErrorAtMaximum,
                      "leakage measurement must expand connected error from fixed depth boundaries") ||
         !requireTrue(leakageMetrics.maximumBandWidthPixels > kRtgiLeakageMaximumBandWidthPixels,
                      "a three-pixel stable leakage band must fail the fixed two-pixel threshold")) {
@@ -110,7 +121,7 @@ int main() {
     }
     for (uint32_t y = 0u; y < kLeakageHeight; ++y) {
         leakageDenoised.pixels[static_cast<size_t>(y) * kLeakageWidth] = glm::vec3(1.0f);
-        leakageDenoised.pixels[static_cast<size_t>(y) * kLeakageWidth + 6u] = glm::vec3(1.0f);
+        leakageDenoised.pixels[static_cast<size_t>(y) * kLeakageWidth + 6u] = glm::vec3(2.0f);
     }
     if (!requireTrue(calculateRtgiLeakageBand(leakageDenoised, leakageReference, leakageNormals, leakageDepth,
                                               leakageRoi, leakageMetrics) == RtgiQualityMetricError::None &&

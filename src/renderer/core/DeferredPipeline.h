@@ -170,6 +170,10 @@ private:
     RhiTextureViewHandle m_rtgiRawDiffuseValidationView;
     RhiTextureHandle m_nrdDiffuseValidationTexture;
     RhiTextureViewHandle m_nrdDiffuseValidationView;
+    RhiTextureHandle m_rtgiLeakageNormalValidationTexture;
+    RhiTextureViewHandle m_rtgiLeakageNormalValidationView;
+    RhiTextureHandle m_rtgiLeakageViewZValidationTexture;
+    RhiTextureViewHandle m_rtgiLeakageViewZValidationView;
     uint32_t m_rtgiValidationOutputWidth = 0u;
     uint32_t m_rtgiValidationOutputHeight = 0u;
     bool m_rtgiValidationOutputInitialized = false;
