@@ -137,7 +137,8 @@ Leakage Band 必须读取质量序列同次捕获的 ViewZ/Normal EXR；缺少�
 或计数不一致也会直接拒绝生成质量报告。
 Reference 帧首重置现明确排除 `referenceSamplingEnabled`：只有既没有 NRD、也没有 Reference Sampling 的路径
 才将显式样本索引清零，成功的 Reference 帧在图执行后递增。每像素独立旋转、XOR 扰动的周期 64 点
-Hammersley 集合保证任意连续 64 个实际帧覆盖同一完整集合，并以偶/奇交错让两个半序列覆盖完整二维域。
+Hammersley 集合保证任意连续 64 个实际帧覆盖同一完整集合，并以 6-bit 索引奇偶校验划分两个 32 点子集；
+两半在两个维度的全部二进制分层区间中均衡覆盖，CPU 契约以最大环形间距阻止半域漏采样。
 报告 schema v2 对前后两个 32 帧均值额外计算 SSIM 与
 HDR Error p95；它们用于判断 Reference 收敛可信度，不是验证矩阵新增的最终门槛。
 
@@ -156,9 +157,11 @@ Render Graph 瞬态信号。Raw 与 Denoised 已改为在最后有效图内访�
 该 A/B 确认 Anti-firefly 是稳定能量损失主因，RELAX 固定为关闭；Reference 半序列 p95 仍为 `2.078409`，
 因此下一步先闭环 Reference 收敛性，再判断剩余逐像素误差。
 质量报告 schema v3 额外发布相对误差 p50、绝对误差 p95、相对 p95 锚点和分母下限像素占比，但不改变既有
-Gate。固定 64 spp A/B 已排除 8×8 分层序列，并采用偶/奇交错 scrambled Hammersley：SSIM `0.997353`、
-HDR p95 `0.473326`。V01 的分母下限占比为 `0%`；Reference 前后半相对误差 p50 `0.269300`、p95
-`1.103705`、绝对误差 p95 `0.003461`，说明失败来自可见性积分的广泛高方差，而不是近零亮度像素。
+Gate。固定 64 spp A/B 已排除 8×8 分层序列，并采用 scrambled Hammersley。旧偶/奇划分会让每个 32 点
+半序列的 Radical Inverse 维只覆盖半域；6-bit 奇偶校验重排修复两半覆盖，且不改变完整 64 点集合。最新
+V01 实跑的 SSIM/HDR p95 为 `0.997339/0.474772`，分母下限占比 `0%`；Reference 前后半相对误差
+p50/p95 为 `0.289572/1.294182`、绝对误差 p95 `0.003587`。采样域修正后高方差仍然存在，说明失败来自
+一次反弹 integrand 的二值可见性与局部高能路径，而不是近零亮度或半序列漏采样域。
 同一 V01 的 RELAX 主历史 30/64 帧 A/B 得到 HDR p95 `0.473326/0.473316`，排除主历史上限为静态失败主因，
 正式设置保持按 0.5 秒计算。质量报告 schema v4 必须绑定同次 Validation Capture Report；AS Pending 采用
 保守整帧 Mask，Scene TLAS 或 Terrain BLAS 任一 Pending 就把该采样帧全部像素计为无效。最新 300+32 正式
@@ -168,9 +171,10 @@ Leakage 指标以 ViewZ 相对差 `> 0.02` 或单位世界法线点积 `< 0.95` 
 两侧的亮度差超过 `max(1e-4, 0.10 * max(sideA, sideB))` 时建立方向性 Seed。暗侧只追踪超过边界对比 `10%`
 的正能量增益，亮侧只追踪同阈值的负能量损失；4 邻域扩张不得跨越另一条 Depth/Normal 边界，最大带宽门槛
 保持 `<= 2 Pixels`。合成契约测试覆盖 2/3 Pixels 和非法 Guide。V01 300+32 正式报告的
-`missing_evidence=[]`，但 `boundary_pixel_count=310`、`leakage_pixel_count=601`、最大带宽 `3 Pixels`，因此
-Leakage Gate 与完整静态门槛仍失败。最大路径的边界 Seed 为捕获坐标 `(269,548)/(268,548)`，ViewZ 相对差
-`0.479685`、Normal dot `0.008317`，末端 `(272,548)` 为暗侧能量增益；后续修复不得修改门槛、ROI 或报告缩放。
+`missing_evidence=[]`，与最新 Reference 重算得到 `boundary_pixel_count=310`、`leakage_pixel_count=621`、
+最大带宽 `3 Pixels`，因此 Leakage Gate 与完整静态门槛仍失败。最大路径的边界 Seed 为捕获坐标
+`(268,554)/(269,554)`，ViewZ 相对差 `0.431170`、Normal dot `0.008343`，末端 `(267,552)` 为亮侧能量损失；
+后续修复不得修改门槛、ROI 或报告缩放。
 
 ### 3.3 动态画面
 

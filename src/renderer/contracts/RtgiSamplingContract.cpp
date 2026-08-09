@@ -102,7 +102,11 @@ glm::vec2 rtgiReferenceHammersleySample(const uint32_t frameIndex, const glm::uv
     const uint32_t hashY = rtgiSampleHash(pixel.x * 92821u + pixel.y * 68917u + 0x02e5be93u);
     const glm::vec2 batchRotation{static_cast<float>(hashX & 0x00ffffffu) * kInverseHashRange,
                                   static_cast<float>(hashY & 0x00ffffffu) * kInverseHashRange};
-    const uint32_t orderedIndex = ((sampleIndex & 31u) << 1u) | (sampleIndex >> 5u);
+    const uint32_t subsetIndex = sampleIndex & 31u;
+    const uint32_t subsetParity = (subsetIndex ^ (subsetIndex >> 1u) ^ (subsetIndex >> 2u) ^
+                                   (subsetIndex >> 3u) ^ (subsetIndex >> 4u)) &
+                                  1u;
+    const uint32_t orderedIndex = subsetIndex | ((subsetParity ^ (sampleIndex >> 5u)) << 5u);
     const uint32_t scrambledIndex = orderedIndex ^ (hashX & 63u);
     uint32_t reversedBits = scrambledIndex;
     reversedBits = ((reversedBits & 0x55555555u) << 1u) | ((reversedBits >> 1u) & 0x55555555u);

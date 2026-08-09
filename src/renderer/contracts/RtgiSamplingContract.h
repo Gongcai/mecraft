@@ -133,8 +133,9 @@ static_assert(sizeof(RtgiSecondaryLightingParams) == 128u);
 [[nodiscard]] glm::vec2 rtgiPixelScrambledCranleyPattersonRotation(uint32_t frameIndex, const glm::uvec2& pixel);
 
 /// Produces one randomized low-discrepancy Reference sample from a complete
-/// periodic 64-point Hammersley set. Even/odd interleaving gives both 32-sample
-/// halves full-domain coverage, and validation warmup cannot change the set.
+/// periodic 64-point Hammersley set. A six-bit parity partition gives both
+/// 32-sample halves balanced dyadic coverage, and validation warmup cannot
+/// change the set.
 /// @param frameIndex Consecutive rendered frame index.
 /// @param pixel Pixel coordinate used to derive an independent set rotation.
 /// @return Two values in the half-open interval [0, 1).

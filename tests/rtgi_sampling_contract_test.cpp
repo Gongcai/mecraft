@@ -8,6 +8,7 @@
 #include <glm/geometric.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstddef>
@@ -25,6 +26,15 @@ namespace {
         return false;
     }
     return true;
+}
+
+[[nodiscard]] float maximumCircularGap(std::array<float, 32u> values) {
+    std::sort(values.begin(), values.end());
+    float maximum = values.front() + 1.0f - values.back();
+    for (size_t index = 1u; index < values.size(); ++index) {
+        maximum = std::max(maximum, values[index] - values[index - 1u]);
+    }
+    return maximum;
 }
 
 [[nodiscard]] bool validateShaderMirror() {
@@ -213,6 +223,10 @@ int main() {
     const glm::vec2 referenceNextBatch = rtgiReferenceHammersleySample(64u, glm::uvec2(7u, 11u));
     const glm::vec2 referenceAdjacent = rtgiReferenceHammersleySample(0u, glm::uvec2(8u, 11u));
     std::array<glm::vec2, 64u> referenceSet{};
+    std::array<float, 32u> firstHalfX{};
+    std::array<float, 32u> firstHalfY{};
+    std::array<float, 32u> secondHalfX{};
+    std::array<float, 32u> secondHalfY{};
     bool referenceSetValid = true;
     for (uint32_t index = 0u; index < referenceSet.size(); ++index) {
         referenceSet[index] = rtgiReferenceHammersleySample(index, glm::uvec2(7u, 11u));
@@ -223,12 +237,25 @@ int main() {
         for (uint32_t previous = 0u; previous < index; ++previous) {
             referenceSetValid = referenceSetValid && referenceSet[index] != referenceSet[previous];
         }
+        if (index < 32u) {
+            firstHalfX[index] = referenceSet[index].x;
+            firstHalfY[index] = referenceSet[index].y;
+        } else {
+            secondHalfX[index - 32u] = referenceSet[index].x;
+            secondHalfY[index - 32u] = referenceSet[index].y;
+        }
     }
     valid = requireTrue(referenceSetValid && referenceFirst == referenceNextBatch && referenceFirst != referenceNext &&
                             referenceFirst != referenceAdjacent &&
                             glm::all(glm::greaterThanEqual(referenceFirst, glm::vec2(0.0f))) &&
                             glm::all(glm::lessThan(referenceFirst, glm::vec2(1.0f))),
                         "RTGI Reference sampling must preserve one complete periodic 64-point Hammersley set") &&
+            valid;
+    valid = requireTrue(maximumCircularGap(firstHalfX) <= 0.062501f &&
+                            maximumCircularGap(firstHalfY) <= 0.062501f &&
+                            maximumCircularGap(secondHalfX) <= 0.062501f &&
+                            maximumCircularGap(secondHalfY) <= 0.062501f,
+                        "each 32-sample Reference half must retain full-domain stratification") &&
             valid;
 
     const std::optional<glm::vec3> pole = rtgiCosineHemisphereDirection(glm::vec2(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));

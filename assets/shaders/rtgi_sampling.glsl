@@ -73,15 +73,19 @@ vec2 rtgiPixelScrambledCranleyPattersonRotation(uint frameIndex, uvec2 pixel) {
 }
 
 // Uses one independently rotated, XOR-scrambled 64-point Hammersley set.
-// Even/odd index interleaving gives both 32-sample halves full-domain coverage,
-// while any 64 consecutive frames enumerate the same complete set.
+// Splitting the six-bit indices by bit parity keeps both 32-sample halves
+// balanced in every dyadic interval of either dimension, while any 64
+// consecutive frames enumerate the same complete set.
 vec2 rtgiReferenceHammersleySample(uint frameIndex, uvec2 pixel) {
     const uint batchSize = 64u;
     uint sampleIndex = frameIndex % batchSize;
     uint hashX = rtgiSampleHash(pixel.x * 1973u + pixel.y * 9277u + 0x68bc21ebu);
     uint hashY = rtgiSampleHash(pixel.x * 92821u + pixel.y * 68917u + 0x02e5be93u);
     vec2 batchRotation = vec2(hashX & 0x00ffffffu, hashY & 0x00ffffffu) / 16777216.0;
-    uint orderedIndex = ((sampleIndex & 31u) << 1u) | (sampleIndex >> 5u);
+    uint subsetIndex = sampleIndex & 31u;
+    uint subsetParity = (subsetIndex ^ (subsetIndex >> 1u) ^ (subsetIndex >> 2u) ^
+                         (subsetIndex >> 3u) ^ (subsetIndex >> 4u)) & 1u;
+    uint orderedIndex = subsetIndex | ((subsetParity ^ (sampleIndex >> 5u)) << 5u);
     uint scrambledIndex = orderedIndex ^ (hashX & 63u);
     uint reversedBits = bitfieldReverse(scrambledIndex);
     vec2 hammersley = vec2(float(scrambledIndex) + 0.5, float(reversedBits) + 0.5) / vec2(64.0, 4294967296.0);

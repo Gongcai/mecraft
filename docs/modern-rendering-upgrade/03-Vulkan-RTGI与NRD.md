@@ -639,7 +639,8 @@ RTX 4060 Laptop 的 Vulkan 小窗口实跑已分别覆盖两条路径（320×180
 Reference 运行轴现会强制 64 帧 Raw-only、关闭 NRD，并让固定样本数低差异相位在无降噪器时逐帧推进。V01 实跑的
 帧首重置条件此前错误地把所有 `!nrdEnabled` 帧清零，现已排除显式 Reference Sampling，并由源码契约测试
 锁定 Reference 不重置、成功帧递增。每像素独立旋转、XOR 扰动的周期 64 点 Hammersley 集合保证预热后
-任意连续 64 帧仍枚举同一完整集合，偶/奇交错让两个 32 帧半序列覆盖完整二维域；报告 schema v2 的前后半
+任意连续 64 帧仍枚举同一完整集合；6-bit 索引奇偶校验划分让两个 32 点子集在两个维度的全部二进制分层
+区间中保持均衡，CPU 最大环形间距测试阻止半域漏采样。报告 schema v2 的前后半
 Reference SSIM/HDR p95 只作为收敛诊断。
 首轮 v1 ROI 覆盖中心窗口 Sky，不能用于静态门槛；Profile v2 将 V01 移到室内地面
 `(256,544,256,128)`。`FrameOutput` 现明确 Raw 为 pre-exposed、NRD 输出为 scene-referred，捕获器在写入
@@ -657,10 +658,12 @@ SSIM `0.985370`、HDR p95 `2.078409`，RELAX 稳定能量偏差与 64 spp 暗部
 偏差由约 `-11.8%` 缩小到 `-1.5%`，SSIM 为 `0.997113`，方差降低 `99.981906%`；HDR p95 为
 `0.528282`，仍未通过。该结果确认 RELAX Anti-firefly 在当前有界 1 spp Diffuse 信号上产生稳定负偏差，
 生产 RELAX 固定为 SDK 默认的关闭状态；REBLUR 继续使用其独立 Anti-firefly 设置。
-固定 64 spp 的 8×8 分层序列使 HDR p95 恶化到 `0.782297`；偶/奇交错 scrambled Hammersley 则把
-SSIM/HDR p95 改善为 `0.997353/0.473326`，因此替换旧 R2。schema v3 给出的相对误差 p50 为 `0.165331`、
-绝对误差 p95 为 `0.001310`、分母下限像素为 `0%`；Reference 前后半相对误差 p50/p95 为
-`0.269300/1.103705`，当前 64 点集合对固定像素可见性积分仍未收敛。
+固定 64 spp 的 8×8 分层序列使 HDR p95 恶化到 `0.782297`，scrambled Hammersley 因此替换旧 R2。旧的
+偶/奇重排虽然保持完整 64 点集合，却让每个半序列的 Radical Inverse 维只覆盖旋转后的半域；当前 6-bit
+奇偶校验重排修复了两个 32 点子集的二维覆盖。最新实跑的 SSIM/HDR p95 为 `0.997339/0.474772`，相对误差
+p50 `0.165041`、绝对误差 p95 `0.001317`、分母下限像素 `0%`；Reference 前后半相对误差 p50/p95 为
+`0.289572/1.294182`，绝对误差 p95 `0.003587`。完整集合不变且半序列覆盖修正后仍未收敛，主方差来自
+一次反弹的二值可见性与局部高能路径。
 RELAX 主历史 30/64 帧的同镜头 300+32 A/B 仅把 HDR p95 从 `0.473326` 改为 `0.473316`，排除历史上限为
 静态误差主因，生产设置已恢复为 0.5 秒。质量报告 schema v4 强制读取同次 Validation Capture Report；
 Scene TLAS desired/active 不一致、TLAS generation pending、Terrain BLAS Build 或 Compaction 任一非零时，
@@ -674,9 +677,10 @@ ViewZ 写入两张持久 RGBA16F 验证纹理，`FrameOutput` 发布句柄，Gam
 跨越另一条几何边界，并只追踪到第 3 Pixel 来判定固定 `<= 2 Pixels` 门槛。该定义排除了远离边界的广泛
 Monte Carlo 偏差；非有限/非正深度、非法法线、尺寸或 ROI 不一致仍明确失败。
 V01 300+32 的 schema v5 报告得到 `missing_evidence=[]`，但最大 Leakage Band 为 `3 Pixels`，因此
-`complete_static_gate_passed=false`。最大路径从捕获坐标 `(269,548)/(268,548)` 的边界两侧扩张到
-`(272,548)`；边界 ViewZ 相对差 `0.479685`、Normal dot `0.008317`，末端 Denoised/Reference 亮度
-`0.001048305/0.000878900`，分类为暗侧能量增益。下一轮保持阈值和 ROI 不变，定位并修复该跨边界输运。
+`complete_static_gate_passed=false`。与最新 Reference 重算后，最大路径从捕获坐标 `(268,554)/(269,554)`
+的边界两侧扩张到 `(267,552)`；边界 ViewZ 相对差 `0.431170`、Normal dot `0.008343`，末端
+Denoised/Reference 亮度 `0.003908509/0.004488416`，分类为亮侧能量损失。下一轮保持阈值和 ROI 不变，
+定位并修复该跨边界输运。
 
 ## 10. 调试视图与验收
 
