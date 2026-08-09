@@ -128,14 +128,15 @@ Camera Path 2.0 秒；V01 使用室内地面 `(256,544,256,128)`，V02/M03 使�
 32 帧 `raw_and_denoised` 捕获，报告记录
 Profile ID、版本、ROI、质量 Render Settings 及 64 spp Reference 目标。ROI 内容在正式 Reference 采集前仍需
 结合线性 HDR 与 Depth/Normal 边界检查确认；不得仅因矩形契约已固定而宣称画质门槛通过。
-`--validation-rtgi-reference` 将同一 Profile 切换为严格 64 帧 Raw-only 运行：NRD 必须关闭，RTGI 的 R2
+`--validation-rtgi-reference` 将同一 Profile 切换为严格 64 帧 Raw-only 运行：NRD 必须关闭，RTGI 的
 低差异相位仍逐帧推进，报告记录 `capture_mode=reference` 与 `nrd_enabled=false`。这 64 个线性样本随后必须
 平均为单张 Reference EXR；不能直接选取其中一帧作为参考。`rtgi_quality_report_tool` 已实现严格序列检查、
 IEEE Half 解码、64 帧线性平均、32 帧 Raw/Denoised 方差与均值、SSIM、HDR Error p95 和非法辐射门禁。
 Leakage Band 与 AS Pending 没有输入证据时必须在 JSON 中保持 `passed=null`，完整静态门槛固定为失败。
 Reference 帧首重置现明确排除 `referenceSamplingEnabled`：只有既没有 NRD、也没有 Reference Sampling 的路径
-才将显式样本索引清零，成功的 Reference 帧在图执行后递增。每像素固定 Cranley-Patterson 旋转与周期 64 点
-R2 集合保证任意连续 64 个实际帧覆盖同一完整集合。报告 schema v2 对前后两个 32 帧均值额外计算 SSIM 与
+才将显式样本索引清零，成功的 Reference 帧在图执行后递增。每像素独立旋转、XOR 扰动的周期 64 点
+Hammersley 集合保证任意连续 64 个实际帧覆盖同一完整集合，并以偶/奇交错让两个半序列覆盖完整二维域。
+报告 schema v2 对前后两个 32 帧均值额外计算 SSIM 与
 HDR Error p95；它们用于判断 Reference 收敛可信度，不是验证矩阵新增的最终门槛。
 
 首轮 1 帧预热 V01 v1 数据覆盖中心窗口 Sky，不能用作门槛。旧 v2 室内地面数据的
@@ -153,8 +154,9 @@ Render Graph 瞬态信号。Raw 与 Denoised 已改为在最后有效图内访�
 该 A/B 确认 Anti-firefly 是稳定能量损失主因，RELAX 固定为关闭；Reference 半序列 p95 仍为 `2.078409`，
 因此下一步先闭环 Reference 收敛性，再判断剩余逐像素误差。
 质量报告 schema v3 额外发布相对误差 p50、绝对误差 p95、相对 p95 锚点和分母下限像素占比，但不改变既有
-Gate。V01 的分母下限占比为 `0%`；Reference 前后半相对误差 p50 `0.436918`、绝对误差 p95 `0.004012`，
-说明失败来自 64 spp 可见性积分的广泛高方差，而不是少量近零亮度像素。
+Gate。固定 64 spp A/B 已排除 8×8 分层序列，并采用偶/奇交错 scrambled Hammersley：SSIM `0.997353`、
+HDR p95 `0.473326`。V01 的分母下限占比为 `0%`；Reference 前后半相对误差 p50 `0.269300`、p95
+`1.103705`、绝对误差 p95 `0.003461`，说明失败来自可见性积分的广泛高方差，而不是近零亮度像素。
 
 ### 3.3 动态画面
 

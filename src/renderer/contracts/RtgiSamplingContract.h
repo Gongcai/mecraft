@@ -132,13 +132,13 @@ static_assert(sizeof(RtgiSecondaryLightingParams) == 128u);
 /// @return Pixel-scrambled low-discrepancy rotation in the half-open interval [0, 1).
 [[nodiscard]] glm::vec2 rtgiPixelScrambledCranleyPattersonRotation(uint32_t frameIndex, const glm::uvec2& pixel);
 
-/// Produces one randomized low-discrepancy Reference sample from the complete
-/// periodic 64-point R2 set. Any 64 consecutive indices enumerate the same set,
-/// so validation warmup cannot split the capture across incompatible rotations.
+/// Produces one randomized low-discrepancy Reference sample from a complete
+/// periodic 64-point Hammersley set. Even/odd interleaving gives both 32-sample
+/// halves full-domain coverage, and validation warmup cannot change the set.
 /// @param frameIndex Consecutive rendered frame index.
 /// @param pixel Pixel coordinate used to derive an independent set rotation.
 /// @return Two values in the half-open interval [0, 1).
-[[nodiscard]] glm::vec2 rtgiReferenceR2Sample(uint32_t frameIndex, const glm::uvec2& pixel);
+[[nodiscard]] glm::vec2 rtgiReferenceHammersleySample(uint32_t frameIndex, const glm::uvec2& pixel);
 
 /// Maps one two-dimensional sample to a cosine-weighted world-space hemisphere direction.
 /// @param sample Two values in the half-open interval [0, 1).

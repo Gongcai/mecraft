@@ -636,10 +636,11 @@ RTX 4060 Laptop 的 Vulkan 小窗口实跑已分别覆盖两条路径（320×180
 版本化静态质量 Profile 已锁定 V01/V02/M03 的场景契约、M3 RTGI Render Settings、1280×720、Camera Path
 2.0 秒和固定 ROI；选择 Profile 会强制 32 帧 Raw/Denoised 且保持相机静止。V01 的真实 32+32 EXR 小预热
 运行已验证调度、写入和报告字段。
-Reference 运行轴现会强制 64 帧 Raw-only、关闭 NRD，并让 R2 低差异相位在无降噪器时逐帧推进。V01 实跑的
+Reference 运行轴现会强制 64 帧 Raw-only、关闭 NRD，并让固定样本数低差异相位在无降噪器时逐帧推进。V01 实跑的
 帧首重置条件此前错误地把所有 `!nrdEnabled` 帧清零，现已排除显式 Reference Sampling，并由源码契约测试
-锁定 Reference 不重置、成功帧递增。每像素固定 Cranley-Patterson 旋转的周期 64 点 R2 集合保证预热后任意
-连续 64 帧仍枚举同一完整集合；报告 schema v2 的前后半 Reference SSIM/HDR p95 只作为收敛诊断。
+锁定 Reference 不重置、成功帧递增。每像素独立旋转、XOR 扰动的周期 64 点 Hammersley 集合保证预热后
+任意连续 64 帧仍枚举同一完整集合，偶/奇交错让两个 32 帧半序列覆盖完整二维域；报告 schema v2 的前后半
+Reference SSIM/HDR p95 只作为收敛诊断。
 首轮 v1 ROI 覆盖中心窗口 Sky，不能用于静态门槛；Profile v2 将 V01 移到室内地面
 `(256,544,256,128)`。`FrameOutput` 现明确 Raw 为 pre-exposed、NRD 输出为 scene-referred，捕获器在写入
 Denoised EXR 时使用同帧 Pre-exposure 统一评价域。RELAX 有限负振铃按生产 Lighting 契约钳制为非负线性
@@ -656,9 +657,10 @@ SSIM `0.985370`、HDR p95 `2.078409`，RELAX 稳定能量偏差与 64 spp 暗部
 偏差由约 `-11.8%` 缩小到 `-1.5%`，SSIM 为 `0.997113`，方差降低 `99.981906%`；HDR p95 为
 `0.528282`，仍未通过。该结果确认 RELAX Anti-firefly 在当前有界 1 spp Diffuse 信号上产生稳定负偏差，
 生产 RELAX 固定为 SDK 默认的关闭状态；REBLUR 继续使用其独立 Anti-firefly 设置。
-schema v3 的非门槛诊断进一步给出 Denoised/Reference 相对误差 p50 `0.172629`、绝对误差 p95
-`0.001329` 和分母下限像素 `0%`。Reference 前后半相对误差 p50 `0.436918`、绝对误差 p95 `0.004012`，
-锚点两半亮度 `0.007697/0.002500`；当前 64 点周期 R2 对该固定像素可见性积分没有收敛。
+固定 64 spp 的 8×8 分层序列使 HDR p95 恶化到 `0.782297`；偶/奇交错 scrambled Hammersley 则把
+SSIM/HDR p95 改善为 `0.997353/0.473326`，因此替换旧 R2。schema v3 给出的相对误差 p50 为 `0.165331`、
+绝对误差 p95 为 `0.001310`、分母下限像素为 `0%`；Reference 前后半相对误差 p50/p95 为
+`0.269300/1.103705`，当前 64 点集合对固定像素可见性积分仍未收敛。
 Leakage Band 与 AS Pending 当前在报告中明确为缺少证据，
 `complete_static_gate_passed=false`。
 

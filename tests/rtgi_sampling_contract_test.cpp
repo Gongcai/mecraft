@@ -8,6 +8,7 @@
 #include <glm/geometric.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -77,7 +78,8 @@ namespace {
                std::string::npos &&
            traceSource.find("ivec2 noiseTexel = ivec2(uvec2(texel) % uvec2(noiseExtent));") != std::string::npos &&
            traceSource.find("pc.materialGeometryCounts.z != 0u") != std::string::npos &&
-           traceSource.find("? rtgiReferenceR2Sample(pc.frameMaskAndFlags.x, uvec2(texel))") != std::string::npos &&
+           traceSource.find("? rtgiReferenceHammersleySample(pc.frameMaskAndFlags.x, uvec2(texel))") !=
+               std::string::npos &&
            traceSource.find("rtgiPixelScrambledCranleyPattersonRotation(") != std::string::npos &&
            pipelineSource.find("traceSettings.temporalSamplingEnabled = (nrdEnabled || rtgiReferenceSampling)") !=
                std::string::npos &&
@@ -206,16 +208,27 @@ int main() {
                         "RTGI pixel scrambling must be deterministic, spatially decorrelated, and frame-varying") &&
             valid;
 
-    const glm::vec2 referenceFirst = rtgiReferenceR2Sample(0u, glm::uvec2(7u, 11u));
-    const glm::vec2 referenceNext = rtgiReferenceR2Sample(1u, glm::uvec2(7u, 11u));
-    const glm::vec2 referenceNextBatch = rtgiReferenceR2Sample(64u, glm::uvec2(7u, 11u));
-    const glm::vec2 referenceAdjacent = rtgiReferenceR2Sample(0u, glm::uvec2(8u, 11u));
-    const glm::vec2 referenceStep = glm::mod(referenceNext - referenceFirst + glm::vec2(1.0f), glm::vec2(1.0f));
-    valid = requireTrue(glm::length(referenceStep - kExpectedR2Step) <= 1.0e-6f &&
-                            referenceFirst == referenceNextBatch && referenceFirst != referenceAdjacent &&
+    const glm::vec2 referenceFirst = rtgiReferenceHammersleySample(0u, glm::uvec2(7u, 11u));
+    const glm::vec2 referenceNext = rtgiReferenceHammersleySample(1u, glm::uvec2(7u, 11u));
+    const glm::vec2 referenceNextBatch = rtgiReferenceHammersleySample(64u, glm::uvec2(7u, 11u));
+    const glm::vec2 referenceAdjacent = rtgiReferenceHammersleySample(0u, glm::uvec2(8u, 11u));
+    std::array<glm::vec2, 64u> referenceSet{};
+    bool referenceSetValid = true;
+    for (uint32_t index = 0u; index < referenceSet.size(); ++index) {
+        referenceSet[index] = rtgiReferenceHammersleySample(index, glm::uvec2(7u, 11u));
+        referenceSetValid = referenceSetValid &&
+                            referenceSet[index] == rtgiReferenceHammersleySample(index + 64u, glm::uvec2(7u, 11u)) &&
+                            glm::all(glm::greaterThanEqual(referenceSet[index], glm::vec2(0.0f))) &&
+                            glm::all(glm::lessThan(referenceSet[index], glm::vec2(1.0f)));
+        for (uint32_t previous = 0u; previous < index; ++previous) {
+            referenceSetValid = referenceSetValid && referenceSet[index] != referenceSet[previous];
+        }
+    }
+    valid = requireTrue(referenceSetValid && referenceFirst == referenceNextBatch && referenceFirst != referenceNext &&
+                            referenceFirst != referenceAdjacent &&
                             glm::all(glm::greaterThanEqual(referenceFirst, glm::vec2(0.0f))) &&
                             glm::all(glm::lessThan(referenceFirst, glm::vec2(1.0f))),
-                        "RTGI Reference sampling must preserve one complete periodic 64-point R2 set") &&
+                        "RTGI Reference sampling must preserve one complete periodic 64-point Hammersley set") &&
             valid;
 
     const std::optional<glm::vec3> pole = rtgiCosineHemisphereDirection(glm::vec2(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));

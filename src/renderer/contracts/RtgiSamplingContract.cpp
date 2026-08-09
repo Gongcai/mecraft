@@ -94,7 +94,7 @@ glm::vec2 rtgiPixelScrambledCranleyPattersonRotation(const uint32_t frameIndex, 
     return rotation;
 }
 
-glm::vec2 rtgiReferenceR2Sample(const uint32_t frameIndex, const glm::uvec2& pixel) {
+glm::vec2 rtgiReferenceHammersleySample(const uint32_t frameIndex, const glm::uvec2& pixel) {
     constexpr uint32_t kBatchSize = 64u;
     constexpr float kInverseHashRange = 1.0f / 16777216.0f;
     const uint32_t sampleIndex = frameIndex % kBatchSize;
@@ -102,7 +102,17 @@ glm::vec2 rtgiReferenceR2Sample(const uint32_t frameIndex, const glm::uvec2& pix
     const uint32_t hashY = rtgiSampleHash(pixel.x * 92821u + pixel.y * 68917u + 0x02e5be93u);
     const glm::vec2 batchRotation{static_cast<float>(hashX & 0x00ffffffu) * kInverseHashRange,
                                   static_cast<float>(hashY & 0x00ffffffu) * kInverseHashRange};
-    return glm::fract(batchRotation + rtgiCranleyPattersonRotation(sampleIndex));
+    const uint32_t orderedIndex = ((sampleIndex & 31u) << 1u) | (sampleIndex >> 5u);
+    const uint32_t scrambledIndex = orderedIndex ^ (hashX & 63u);
+    uint32_t reversedBits = scrambledIndex;
+    reversedBits = ((reversedBits & 0x55555555u) << 1u) | ((reversedBits >> 1u) & 0x55555555u);
+    reversedBits = ((reversedBits & 0x33333333u) << 2u) | ((reversedBits >> 2u) & 0x33333333u);
+    reversedBits = ((reversedBits & 0x0f0f0f0fu) << 4u) | ((reversedBits >> 4u) & 0x0f0f0f0fu);
+    reversedBits = ((reversedBits & 0x00ff00ffu) << 8u) | ((reversedBits >> 8u) & 0x00ff00ffu);
+    reversedBits = (reversedBits << 16u) | (reversedBits >> 16u);
+    const glm::vec2 hammersley{(static_cast<float>(scrambledIndex) + 0.5f) / 64.0f,
+                               (static_cast<float>(reversedBits) + 0.5f) / 4294967296.0f};
+    return glm::fract(batchRotation + hammersley);
 }
 
 std::optional<glm::vec3> rtgiCosineHemisphereDirection(const glm::vec2& sample, const glm::vec3& normal) {
