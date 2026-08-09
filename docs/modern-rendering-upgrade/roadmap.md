@@ -337,6 +337,10 @@ RELAX 主历史上限从按 0.5 秒计算的 30 帧改为 64 帧后完成同一 
 AS Pending Mask：Scene TLAS desired/active 不一致、TLAS generation pending 或 Terrain BLAS Build/Compaction
 任一非零时，该采样帧全部像素计为无效。正式 V01 的 32/32 帧均稳定，Pending Frame 和 Invalid Pixel 均为
 `0`，AS Pending Gate 已通过；当前静态门槛缺失证据只剩 Leakage Band，HDR p95 仍失败。
+Leakage Band 的指标契约已固定：以正线性 ViewZ 和单位世界法线建立 Depth/Normal Discontinuity Seed，使用
+与 HDR Gate 相同的 10% 相对亮度误差构造 Error Mask，再从 Seed 沿 4 邻域误差像素向两侧扩张；最大连通
+距离不得超过 2 Pixels。无边界区域的普通误差不计为 Leakage，非法深度、非法法线、尺寸或 ROI 不一致会
+明确失败。CPU 合成测试已覆盖 2 Pixels 通过、3 Pixels 失败和非法 Guide；生产 Guide 捕获与报告绑定仍待接入。
 
 2026-08-08 在 RTX 4060 Laptop、Vulkan、RELAX_DIFFUSE、300 帧预热加 1000 帧采样下完成四组复测。
 报告中的 `total_tracked` 是显式 Pass 阶段和，不是完整 GPU 帧跨度：它没有覆盖独立的帧首/场景 Overlay/
@@ -424,8 +428,8 @@ MAE/RMSE 为 0.000991734/0.002267379，全局亮度 SSIM 为 0.999885319。
 1. 保持 Hammersley、64 spp、ROI 和阈值不变，定位一次反弹中的二值可见性与太阳/天空高能路径方差；再对
    RELAX History Fix 与累积长度做单变量 A/B；
    同一 Profile 重采后必须通过 HDR Error 门槛，禁止以改阈值、扩张 ROI 或缩放报告输入处理。
-2. 为 V01、V02、M03 接入 Leakage Band；复用已闭环的 AS Pending 计数完成 300 帧预热正式运行，固定 ROI
-   复核后归档报告。
+2. 将 NRD Guide 的线性 ViewZ/世界法线输出为持久 RGBA16F 验证纹理，为 V01、V02、M03 接入已冻结的
+   Leakage Band 指标；复用已闭环的 AS Pending 计数完成 300 帧预热正式运行，固定 ROI 复核后归档报告。
 3. 为 V03、V06、M06 接入 Ghost/Disocclusion、动态边缘差分和历史恢复帧数门禁。
 4. 针对 1080p 继续定位：体素优先检查地形提交、流送和 AS；Sponza 优先检查 RTGI.Trace 与 NRD.Dispatch。
    固定场景、驱动和电源模式后保留前后 Capture。

@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
+#include <deque>
 #include <limits>
 
 namespace renderer::contracts {
@@ -207,6 +208,116 @@ RtgiQualityMetricError compareRtgiLinearReference(const RtgiLinearImage& denoise
                          return lhs.absolute < rhs.absolute;
                      });
     metrics.absoluteLuminanceErrorP95 = errors[p95Index].absolute;
+    return RtgiQualityMetricError::None;
+}
+
+RtgiQualityMetricError calculateRtgiLeakageBand(const RtgiLinearImage& denoised, const RtgiLinearImage& reference,
+                                                const RtgiLinearImage& worldNormal, const RtgiLinearImage& viewZ,
+                                                const RtgiValidationRoi& roi, RtgiLeakageBandMetrics& metrics) {
+    metrics = {};
+    if (denoised.width != reference.width || denoised.height != reference.height ||
+        denoised.width != worldNormal.width || denoised.height != worldNormal.height ||
+        denoised.width != viewZ.width || denoised.height != viewZ.height) {
+        return RtgiQualityMetricError::ImageExtentMismatch;
+    }
+    const RtgiQualityMetricError denoisedError = validateRtgiLinearImage(denoised, roi);
+    const RtgiQualityMetricError referenceError = validateRtgiLinearImage(reference, roi);
+    if (denoisedError != RtgiQualityMetricError::None) {
+        return denoisedError;
+    }
+    if (referenceError != RtgiQualityMetricError::None) {
+        return referenceError;
+    }
+    if (!validExtent(worldNormal) || !validExtent(viewZ) || !validRoi(worldNormal, roi) || !validRoi(viewZ, roi)) {
+        return RtgiQualityMetricError::InvalidImage;
+    }
+
+    const size_t roiPixelCount = static_cast<size_t>(roi.width) * roi.height;
+    std::vector<uint8_t> boundary(roiPixelCount, 0u);
+    std::vector<uint8_t> leakage(roiPixelCount, 0u);
+    const auto roiIndex = [&roi](const uint32_t x, const uint32_t y) {
+        return static_cast<size_t>(y - roi.y) * roi.width + x - roi.x;
+    };
+    for (uint32_t y = roi.y; y < roi.y + roi.height; ++y) {
+        for (uint32_t x = roi.x; x < roi.x + roi.width; ++x) {
+            const glm::vec3 normal = worldNormal.pixels[pixelIndex(worldNormal, x, y)];
+            const float depth = viewZ.pixels[pixelIndex(viewZ, x, y)].x;
+            const float normalLengthSquared = glm::dot(normal, normal);
+            if (!std::isfinite(normal.x) || !std::isfinite(normal.y) || !std::isfinite(normal.z) ||
+                !std::isfinite(depth) || depth <= 0.0f || !std::isfinite(normalLengthSquared) ||
+                std::abs(normalLengthSquared - 1.0f) > 1.0e-3f) {
+                return RtgiQualityMetricError::InvalidImage;
+            }
+            const double denoisedLuminance = luminance(denoised.pixels[pixelIndex(denoised, x, y)]);
+            const double referenceLuminance = luminance(reference.pixels[pixelIndex(reference, x, y)]);
+            const double relativeError =
+                std::abs(denoisedLuminance - referenceLuminance) /
+                std::max(referenceLuminance, kRelativeErrorDenominator);
+            leakage[roiIndex(x, y)] = relativeError > kRtgiLeakageRelativeErrorThreshold ? 1u : 0u;
+
+            constexpr int32_t kNeighborX[2] = {1, 0};
+            constexpr int32_t kNeighborY[2] = {0, 1};
+            for (size_t neighborIndex = 0u; neighborIndex < 2u; ++neighborIndex) {
+                const uint32_t neighborX = x + static_cast<uint32_t>(kNeighborX[neighborIndex]);
+                const uint32_t neighborY = y + static_cast<uint32_t>(kNeighborY[neighborIndex]);
+                if (neighborX >= roi.x + roi.width || neighborY >= roi.y + roi.height) {
+                    continue;
+                }
+                const glm::vec3 neighborNormal = worldNormal.pixels[pixelIndex(worldNormal, neighborX, neighborY)];
+                const float neighborDepth = viewZ.pixels[pixelIndex(viewZ, neighborX, neighborY)].x;
+                const float neighborNormalLengthSquared = glm::dot(neighborNormal, neighborNormal);
+                if (!std::isfinite(neighborDepth) || neighborDepth <= 0.0f ||
+                    !std::isfinite(neighborNormalLengthSquared) ||
+                    std::abs(neighborNormalLengthSquared - 1.0f) > 1.0e-3f) {
+                    return RtgiQualityMetricError::InvalidImage;
+                }
+                const double relativeDepthDifference =
+                    std::abs(static_cast<double>(depth) - neighborDepth) /
+                    std::max(std::min(static_cast<double>(depth), static_cast<double>(neighborDepth)), 1.0e-4);
+                if (relativeDepthDifference > kRtgiLeakageDepthDiscontinuityThreshold ||
+                    glm::dot(normal, neighborNormal) < kRtgiLeakageNormalDotThreshold) {
+                    boundary[roiIndex(x, y)] = 1u;
+                    boundary[roiIndex(neighborX, neighborY)] = 1u;
+                }
+            }
+        }
+    }
+
+    std::deque<size_t> queue;
+    std::vector<uint32_t> distance(roiPixelCount, std::numeric_limits<uint32_t>::max());
+    for (size_t index = 0u; index < roiPixelCount; ++index) {
+        if (boundary[index] != 0u) {
+            ++metrics.boundaryPixelCount;
+            distance[index] = 0u;
+            queue.push_back(index);
+        }
+    }
+    constexpr int32_t kExpansionX[4] = {-1, 1, 0, 0};
+    constexpr int32_t kExpansionY[4] = {0, 0, -1, 1};
+    while (!queue.empty()) {
+        const size_t index = queue.front();
+        queue.pop_front();
+        const uint32_t localX = static_cast<uint32_t>(index % roi.width);
+        const uint32_t localY = static_cast<uint32_t>(index / roi.width);
+        if (leakage[index] != 0u) {
+            ++metrics.leakagePixelCount;
+            metrics.maximumBandWidthPixels = std::max(metrics.maximumBandWidthPixels, distance[index]);
+        }
+        for (size_t neighborIndex = 0u; neighborIndex < 4u; ++neighborIndex) {
+            const int32_t neighborX = static_cast<int32_t>(localX) + kExpansionX[neighborIndex];
+            const int32_t neighborY = static_cast<int32_t>(localY) + kExpansionY[neighborIndex];
+            if (neighborX < 0 || neighborY < 0 || neighborX >= static_cast<int32_t>(roi.width) ||
+                neighborY >= static_cast<int32_t>(roi.height)) {
+                continue;
+            }
+            const size_t neighbor = static_cast<size_t>(neighborY) * roi.width + static_cast<uint32_t>(neighborX);
+            if (distance[neighbor] != std::numeric_limits<uint32_t>::max() || leakage[neighbor] == 0u) {
+                continue;
+            }
+            distance[neighbor] = distance[index] + 1u;
+            queue.push_back(neighbor);
+        }
+    }
     return RtgiQualityMetricError::None;
 }
 

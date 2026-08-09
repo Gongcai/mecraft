@@ -667,6 +667,10 @@ Scene TLAS desired/active 不一致、TLAS generation pending、Terrain BLAS Bui
 保守整帧 Mask 将该采样帧全部像素标记为 AS Pending。正式 V01 的 32 帧 Pending Frame 和 Invalid Pixel 均为
 `0`，AS Pending Gate 已通过。Leakage Band 仍缺证据，且 HDR p95 仍失败，
 `complete_static_gate_passed=false`。
+Leakage Band 的计算契约已经实现：正线性 ViewZ 相对差 `> 0.02` 或单位世界法线点积 `< 0.95` 生成边界两侧
+Seed；相对亮度误差 `> 0.10` 生成 Error Mask；从 Seed 沿 4 邻域误差像素扩张并报告最大距离，`<= 2 Pixels`
+才通过。无边界误差不会进入该门槛，非有限/非正深度和非单位法线会明确失败。生产路径下一步将
+`NRD.ViewZ` 与解码后的世界法线复制到持久 RGBA16F 验证输出，再由质量工具绑定同一静态帧。
 
 ## 10. 调试视图与验收
 

@@ -163,6 +163,10 @@ HDR p95 `0.473326`。V01 的分母下限占比为 `0%`；Reference 前后半相�
 保守整帧 Mask，Scene TLAS 或 Terrain BLAS 任一 Pending 就把该采样帧全部像素计为无效。最新 300+32 正式
 V01 的 Pending Frame、Invalid Pixel、Terrain Build/Compaction 峰值均为 `0`，因此 AS Pending Gate 已通过。
 Leakage Band 仍为 `passed=null`，完整静态门槛继续失败。
+Leakage 指标本身已冻结：线性 ViewZ 的相对差超过 `0.02` 或单位世界法线点积低于 `0.95` 时，两侧像素成为
+Boundary Seed；Denoised/Reference 相对亮度误差超过 `0.10` 的像素形成 Error Mask，从 Seed 沿 4 邻域连通
+扩张得到最大带宽，门槛为 `<= 2 Pixels`。合成契约测试已覆盖 2/3 Pixels 和非法 Guide；在生产 ViewZ/Normal
+捕获接入前，报告继续保持 `passed=null`。
 
 ### 3.3 动态画面
 

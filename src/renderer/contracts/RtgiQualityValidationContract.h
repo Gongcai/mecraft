@@ -55,6 +55,18 @@ struct RtgiReferenceComparisonMetrics final {
     uint32_t relativeP95Y = 0u;
 };
 
+inline constexpr double kRtgiLeakageRelativeErrorThreshold = 0.10;
+inline constexpr double kRtgiLeakageDepthDiscontinuityThreshold = 0.02;
+inline constexpr double kRtgiLeakageNormalDotThreshold = 0.95;
+inline constexpr uint32_t kRtgiLeakageMaximumBandWidthPixels = 2u;
+
+/// Contains the fixed-boundary leakage extent measured from linear depth and world normals.
+struct RtgiLeakageBandMetrics final {
+    uint64_t boundaryPixelCount = 0u;
+    uint64_t leakagePixelCount = 0u;
+    uint32_t maximumBandWidthPixels = 0u;
+};
+
 /// Validates image dimensions, storage, and finite non-negative radiance in an ROI.
 /// @param image Linear RGB image to validate.
 /// @param roi Region to inspect.
@@ -83,6 +95,21 @@ calculateRtgiTemporalVariance(const std::vector<const RtgiLinearImage*>& rawFram
                                                                 const RtgiLinearImage& reference,
                                                                 const RtgiValidationRoi& roi,
                                                                 RtgiReferenceComparisonMetrics& metrics);
+
+/// Measures connected luminance error extending away from depth or normal discontinuities.
+/// @param denoised Accumulated denoised linear radiance.
+/// @param reference Fixed-sample linear radiance reference.
+/// @param worldNormal Unit world-space normals in signed RGB components.
+/// @param viewZ Positive linear view depth replicated or stored in the red component.
+/// @param roi Fixed static-quality region shared by all inputs.
+/// @param metrics Receives boundary count, connected leakage pixels, and maximum band width.
+/// @return None when all inputs and guides satisfy the leakage measurement contract.
+[[nodiscard]] RtgiQualityMetricError calculateRtgiLeakageBand(const RtgiLinearImage& denoised,
+                                                              const RtgiLinearImage& reference,
+                                                              const RtgiLinearImage& worldNormal,
+                                                              const RtgiLinearImage& viewZ,
+                                                              const RtgiValidationRoi& roi,
+                                                              RtgiLeakageBandMetrics& metrics);
 
 /// Returns the stable diagnostic identifier for a quality metric error.
 /// @param error Error value to identify.

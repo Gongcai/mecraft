@@ -24,6 +24,15 @@ renderer::contracts::RtgiLinearImage makeImage(const std::array<float, 4u>& lumi
     return image;
 }
 
+renderer::contracts::RtgiLinearImage makeConstantImage(const uint32_t width, const uint32_t height,
+                                                       const glm::vec3 value) {
+    renderer::contracts::RtgiLinearImage image;
+    image.width = width;
+    image.height = height;
+    image.pixels.assign(static_cast<size_t>(width) * height, value);
+    return image;
+}
+
 } // namespace
 
 int main() {
@@ -71,6 +80,49 @@ int main() {
                              RtgiQualityMetricError::None &&
                          comparison.denominatorFloorPixelPercent == 25.0,
                      "reference diagnostics must count pixels that use the relative-error denominator floor")) {
+        return 1;
+    }
+
+    constexpr uint32_t kLeakageWidth = 7u;
+    constexpr uint32_t kLeakageHeight = 3u;
+    const RtgiValidationRoi leakageRoi{0u, 0u, kLeakageWidth, kLeakageHeight};
+    const RtgiLinearImage leakageReference =
+        makeConstantImage(kLeakageWidth, kLeakageHeight, glm::vec3(1.0f));
+    RtgiLinearImage leakageDenoised =
+        makeConstantImage(kLeakageWidth, kLeakageHeight, glm::vec3(1.25f));
+    const RtgiLinearImage leakageNormals =
+        makeConstantImage(kLeakageWidth, kLeakageHeight, glm::vec3(0.0f, 0.0f, 1.0f));
+    RtgiLinearImage leakageDepth = makeConstantImage(kLeakageWidth, kLeakageHeight, glm::vec3(1.0f));
+    for (uint32_t y = 0u; y < kLeakageHeight; ++y) {
+        for (uint32_t x = 3u; x < kLeakageWidth; ++x) {
+            leakageDepth.pixels[static_cast<size_t>(y) * kLeakageWidth + x] = glm::vec3(2.0f);
+        }
+    }
+    RtgiLeakageBandMetrics leakageMetrics;
+    if (!requireTrue(calculateRtgiLeakageBand(leakageDenoised, leakageReference, leakageNormals, leakageDepth,
+                                              leakageRoi, leakageMetrics) == RtgiQualityMetricError::None &&
+                         leakageMetrics.boundaryPixelCount == 6u && leakageMetrics.leakagePixelCount == 21u &&
+                         leakageMetrics.maximumBandWidthPixels == 3u,
+                     "leakage measurement must expand connected error from fixed depth boundaries") ||
+        !requireTrue(leakageMetrics.maximumBandWidthPixels > kRtgiLeakageMaximumBandWidthPixels,
+                     "a three-pixel stable leakage band must fail the fixed two-pixel threshold")) {
+        return 1;
+    }
+    for (uint32_t y = 0u; y < kLeakageHeight; ++y) {
+        leakageDenoised.pixels[static_cast<size_t>(y) * kLeakageWidth] = glm::vec3(1.0f);
+        leakageDenoised.pixels[static_cast<size_t>(y) * kLeakageWidth + 6u] = glm::vec3(1.0f);
+    }
+    if (!requireTrue(calculateRtgiLeakageBand(leakageDenoised, leakageReference, leakageNormals, leakageDepth,
+                                              leakageRoi, leakageMetrics) == RtgiQualityMetricError::None &&
+                         leakageMetrics.maximumBandWidthPixels == 2u,
+                     "a two-pixel connected error band must satisfy the fixed leakage threshold")) {
+        return 1;
+    }
+    RtgiLinearImage invalidNormals = leakageNormals;
+    invalidNormals.pixels[0u] = glm::vec3(0.0f);
+    if (!requireTrue(calculateRtgiLeakageBand(leakageDenoised, leakageReference, invalidNormals, leakageDepth,
+                                              leakageRoi, leakageMetrics) == RtgiQualityMetricError::InvalidImage,
+                     "non-unit guide normals must reject leakage measurement")) {
         return 1;
     }
 
