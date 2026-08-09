@@ -364,6 +364,8 @@ Denoised/Reference 亮度为 `0.003908509/0.004488416`，方向为亮侧能量�
 通过，但 SSIM `0.788408`、HDR p95 `0.507056` 和 Leakage 最大带宽 `3 Pixels` 均失败；ROI 内
 `boundary_pixel_count=10092`，Pending Frame/Invalid Pixel 仍为 `0`。这证明 V01 的失败不是单窗场景特例，
 下一轮以 V02 的洞穴边界和一次反弹局部光输运作为主修复镜头。
+V02 的 RELAX A-Trous `5/8` 单变量 A/B 得到 SSIM `0.788408/0.786351`、HDR p95 `0.507056/0.507651`，
+且 8 次迭代增加 GPU 成本；迭代数不足不是当前质量根因，生产保持用户设置 `5`。
 
 2026-08-08 在 RTX 4060 Laptop、Vulkan、RELAX_DIFFUSE、300 帧预热加 1000 帧采样下完成四组复测。
 报告中的 `total_tracked` 是显式 Pass 阶段和，不是完整 GPU 帧跨度：它没有覆盖独立的帧首/场景 Overlay/
