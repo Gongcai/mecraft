@@ -3828,6 +3828,7 @@ FrameOutput DeferredPipeline::buildFrameOutput(const FrameContext& ctx) {
     output.skipPostProcess = false;
     output.rtgiRawDiffuse = m_rtgiRawDiffuseTexture;
     output.nrdDiffuse = m_nrdDiffuseTexture;
+    output.nrdDiffuseToPreExposedScale = ctx.preExposure;
     output.hasRtgiRawDiffuse = output.rtgiRawDiffuse.isValid();
     output.hasNrdDiffuse = output.nrdDiffuse.isValid();
 

@@ -1,20 +1,20 @@
 {
   "kind": "mecraft.rtgi_quality_profiles",
-  "version": 1,
+  "version": 2,
   "profiles": [
     {
       "id": "v01_window_room_static",
-      "version": 1,
+      "version": 2,
       "scene_contract_id": "v01_window_room",
       "render_settings_id": "m3_voxel_rtgi_quality",
       "camera_time_seconds": 2.0,
       "capture_width": 1280,
       "capture_height": 720,
-      "roi": { "x": 384, "y": 216, "width": 512, "height": 288 }
+      "roi": { "x": 256, "y": 544, "width": 256, "height": 128 }
     },
     {
       "id": "v02_cave_turn_static",
-      "version": 1,
+      "version": 2,
       "scene_contract_id": "v02_cave_turn",
       "render_settings_id": "m3_voxel_rtgi_quality",
       "camera_time_seconds": 2.0,
@@ -24,7 +24,7 @@
     },
     {
       "id": "m03_sponza_atrium_static",
-      "version": 1,
+      "version": 2,
       "scene_contract_id": "m03_sponza_atrium",
       "render_settings_id": "m3_model_rtgi_quality",
       "camera_time_seconds": 2.0,

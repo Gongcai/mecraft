@@ -1818,6 +1818,10 @@ RhiTextureHandle ModelSceneRuntime::nrdDiffuseTextureHandle() const {
     return m_deferredRenderer ? m_deferredRenderer->nrdDiffuseTextureHandle() : RhiTextureHandle{};
 }
 
+float ModelSceneRuntime::nrdDiffuseToPreExposedScale() const {
+    return m_deferredRenderer ? m_deferredRenderer->nrdDiffuseToPreExposedScale() : 1.0f;
+}
+
 const GpuFrameStats* ModelSceneRuntime::gpuFrameStats() const {
     return m_deferredRenderer ? m_deferredRenderer->gpuFrameStats() : nullptr;
 }

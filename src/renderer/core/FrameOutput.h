@@ -50,10 +50,11 @@ struct FrameOutput {
     RhiTextureHandle reactiveMask;
     RhiTextureHandle transparencyMask;
 
-    // Production RTGI signals in the current pre-exposed linear HDR domain.
+    // Production RTGI signals. Raw is pre-exposed while NRD output is scene-referred.
     // These graph-owned handles remain valid until the next deferred graph execution.
     RhiTextureHandle rtgiRawDiffuse;
     RhiTextureHandle nrdDiffuse;
+    float nrdDiffuseToPreExposedScale = 1.0f;
 
     // Deferred pipeline capabilities
     bool hasDeferredInputs = false;

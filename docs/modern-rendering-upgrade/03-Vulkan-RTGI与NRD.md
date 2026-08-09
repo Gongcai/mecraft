@@ -638,10 +638,13 @@ RTX 4060 Laptop 的 Vulkan 小窗口实跑已分别覆盖两条路径（320×180
 运行已验证调度、写入和报告字段。
 Reference 运行轴现会强制 64 帧 Raw-only、关闭 NRD，并让 R2 低差异相位在无降噪器时逐帧推进。V01 实跑的
 首帧、次帧和第 64 帧 EXR 哈希均不同，报告中 `NRD.GuidePrep`/`NRD.Dispatch` 为 0。质量工具已生成单张
-64 spp EXR；短预热 V01 的 Raw 与 Reference ROI 平均亮度分别为 `0.311690` 与 `0.311530`，Denoised 只有
-`0.021325`。因此方差降低虽为 `99.989986%`，SSIM `0.007898` 与 HDR 相对误差 p95 `1.0` 均失败。该结果
-定位到 NRD 输出能量链，不允许通过改阈值或对报告输入补偿；正式采集前必须修复并重跑。Leakage Band 与
-AS Pending 当前在报告中明确为缺少证据，`complete_static_gate_passed=false`。
+64 spp EXR。首轮 v1 ROI 覆盖中心窗口 Sky，不能用于静态门槛；Profile v2 将 V01 移到室内地面
+`(256,544,256,128)`。`FrameOutput` 现明确 Raw 为 pre-exposed、NRD 输出为 scene-referred，捕获器在写入
+Denoised EXR 时使用同帧 Pre-exposure 统一评价域。当前 V01 的 Pre-exposure 为 1，v2 短预热的
+Raw/Reference/Denoised 平均亮度为 `0.021384/0.021434/0.002634`，方差降低 `99.931645%`，但 SSIM
+`0.341391`、HDR 相对误差 p95 `0.947647` 均失败。该差异仍需定位 NRD/Guide/History 根因，禁止用阈值、
+ROI 扩张或报告缩放处理；Leakage Band 与 AS Pending 当前在报告中明确为缺少证据，
+`complete_static_gate_passed=false`。
 
 ## 10. 调试视图与验收
 

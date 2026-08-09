@@ -123,8 +123,9 @@ Static Mesh Custom Index 对应 Terrain 记录必须保持全零，表字节数�
 
 阈值以固定 ROI 计算，天空、曝光饱和区和刻意随机动画从静态指标中分离。
 
-静态输入由 `assets/validation/rtgi_quality_profiles.json` 版本化。V01、V02、M03 当前均锁定 1280×720、
-Camera Path 2.0 秒和 `(384,216,512,288)` ROI；运行时必须使用 32 帧 `raw_and_denoised` 捕获，报告记录
+静态输入由 `assets/validation/rtgi_quality_profiles.json` v2 版本化。V01、V02、M03 当前均锁定 1280×720、
+Camera Path 2.0 秒；V01 使用室内地面 `(256,544,256,128)`，V02/M03 使用 `(384,216,512,288)` ROI。运行时必须使用
+32 帧 `raw_and_denoised` 捕获，报告记录
 Profile ID、版本、ROI、质量 Render Settings 及 64 spp Reference 目标。ROI 内容在正式 Reference 采集前仍需
 结合线性 HDR 与 Depth/Normal 边界检查确认；不得仅因矩形契约已固定而宣称画质门槛通过。
 `--validation-rtgi-reference` 将同一 Profile 切换为严格 64 帧 Raw-only 运行：NRD 必须关闭，RTGI 的 R2
@@ -133,9 +134,11 @@ Profile ID、版本、ROI、质量 Render Settings 及 64 spp Reference 目标�
 IEEE Half 解码、64 帧线性平均、32 帧 Raw/Denoised 方差与均值、SSIM、HDR Error p95 和非法辐射门禁。
 Leakage Band 与 AS Pending 没有输入证据时必须在 JSON 中保持 `passed=null`，完整静态门槛固定为失败。
 
-首轮 1 帧预热 V01 数据仅用于验证报告链：Raw/Reference ROI 平均亮度一致（`0.311690/0.311530`），但
-Denoised 只有 `0.021325`；SSIM `0.007898`、HDR 相对误差 p95 `1.0` 均不通过。该结果不得归档为正式门槛，
-必须先修复 NRD 能量错误，再以 300 帧预热重采 V01/V02/M03 并复核 ROI。
+首轮 1 帧预热 V01 v1 数据覆盖中心窗口 Sky，不能用作门槛。v2 的室内地面数据中 Raw/Reference/Denoised
+ROI 平均亮度为 `0.021384/0.021434/0.002634`；SSIM `0.341391`、HDR 相对误差 p95 `0.947647` 均不通过。
+Raw 为 pre-exposed，NRD 输出为 scene-referred，捕获器已在写入 Denoised EXR 时使用同帧 Pre-exposure
+统一域，当前运行比例为 1。该结果不得归档为正式门槛，必须先修复 NRD/Guide/History 偏差，再以 300 帧预热
+重采 V01/V02/M03 并复核 ROI。
 
 ### 3.3 动态画面
 

@@ -881,6 +881,10 @@ RhiTextureHandle ModelSceneDeferredRenderer::nrdDiffuseTextureHandle() const {
     return m_impl->lastFrameOutput.hasNrdDiffuse ? m_impl->lastFrameOutput.nrdDiffuse : RhiTextureHandle{};
 }
 
+float ModelSceneDeferredRenderer::nrdDiffuseToPreExposedScale() const {
+    return m_impl->lastFrameOutput.nrdDiffuseToPreExposedScale;
+}
+
 const GpuFrameStats* ModelSceneDeferredRenderer::gpuFrameStats() const {
     return m_impl->initialized ? &m_impl->debugService.getGpuFrameStats() : nullptr;
 }

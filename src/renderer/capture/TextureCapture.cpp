@@ -4,10 +4,12 @@
 #include "renderer/rhi/RhiCommandListPool.h"
 #include "renderer/rhi/RhiDevice.h"
 
+#include <glm/gtc/packing.hpp>
 #include <stb/stb_image_write.h>
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
@@ -107,6 +109,23 @@ TextureCaptureError normalizeTextureCaptureHalfPixels(const uint8_t* source, con
         const uint8_t* sourceRow = source + static_cast<uint64_t>(sourceY) * bytesPerRow;
         uint16_t* destinationRow = rgba16f.data() + static_cast<size_t>(destinationY) * width * 4u;
         std::memcpy(destinationRow, sourceRow, static_cast<size_t>(tightRowBytes));
+    }
+    return TextureCaptureError::None;
+}
+
+TextureCaptureError scaleTextureCaptureHalfPixels(std::vector<uint16_t>& rgba16f, const float scale) {
+    if (rgba16f.empty() || rgba16f.size() % 4u != 0u || !std::isfinite(scale) || scale <= 0.0f) {
+        return TextureCaptureError::InvalidRequest;
+    }
+    for (size_t pixel = 0u; pixel < rgba16f.size() / 4u; ++pixel) {
+        for (uint32_t channel = 0u; channel < 3u; ++channel) {
+            const float source = glm::unpackHalf1x16(rgba16f[pixel * 4u + channel]);
+            const float scaled = source * scale;
+            if (!std::isfinite(source) || source < 0.0f || !std::isfinite(scaled) || scaled > 65504.0f) {
+                return TextureCaptureError::RadianceScalingFailed;
+            }
+            rgba16f[pixel * 4u + channel] = glm::packHalf1x16(scaled);
+        }
     }
     return TextureCaptureError::None;
 }
@@ -578,7 +597,8 @@ TextureCaptureResult captureTextureToExr(RhiDevice& rhiDevice, RhiCommandListPoo
                                          const TextureCaptureRequest& request) {
     if (!request.sourceTexture.isValid() || request.width == 0u || request.height == 0u ||
         request.sourceState == RhiResourceState::Undefined || request.sourceFormat != RhiTextureFormat::Rgba16Float ||
-        request.outputPath.empty() || request.outputPath.extension() != ".exr") {
+        !std::isfinite(request.linearRgbScale) || request.linearRgbScale <= 0.0f || request.outputPath.empty() ||
+        request.outputPath.extension() != ".exr") {
         return failure(TextureCaptureError::InvalidRequest,
                        "source texture, state, RGBA16F extent, and lowercase .exr path are required");
     }
@@ -656,6 +676,10 @@ TextureCaptureResult captureTextureToExr(RhiDevice& rhiDevice, RhiCommandListPoo
     if (normalizationError != TextureCaptureError::None) {
         return failure(TextureCaptureError::PixelNormalizationFailed, textureCaptureErrorStableId(normalizationError));
     }
+    const TextureCaptureError scalingError = scaleTextureCaptureHalfPixels(rgba16f, request.linearRgbScale);
+    if (scalingError != TextureCaptureError::None) {
+        return failure(TextureCaptureError::RadianceScalingFailed, textureCaptureErrorStableId(scalingError));
+    }
     return writeLinearExr(request.outputPath, request.width, request.height, rgba16f);
 }
 
@@ -673,6 +697,7 @@ const char* textureCaptureErrorStableId(const TextureCaptureError error) {
     case TextureCaptureError::SubmissionWaitFailed: return "SubmissionWaitFailed";
     case TextureCaptureError::BufferMapFailed: return "BufferMapFailed";
     case TextureCaptureError::PixelNormalizationFailed: return "PixelNormalizationFailed";
+    case TextureCaptureError::RadianceScalingFailed: return "RadianceScalingFailed";
     case TextureCaptureError::OutputDirectoryFailed: return "OutputDirectoryFailed";
     case TextureCaptureError::PngWriteFailed: return "PngWriteFailed";
     case TextureCaptureError::ExrWriteFailed: return "ExrWriteFailed";

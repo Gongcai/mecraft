@@ -1561,6 +1561,7 @@ void ModelSceneAppState::render(const double frameTime) {
             }
         }
         const auto captureHdr = [this, &captureSucceeded, &captureDetail](const RhiTextureHandle texture,
+                                                                          const float linearRgbScale,
                                                                           const std::filesystem::path& outputPath) {
             if (!texture.isValid()) {
                 captureSucceeded = false;
@@ -1581,6 +1582,7 @@ void ModelSceneAppState::render(const double frameTime) {
             request.width = textureDesc.width;
             request.height = textureDesc.height;
             request.origin = renderer::capture::TextureCaptureOrigin::TopLeft;
+            request.linearRgbScale = linearRgbScale;
             request.outputPath = outputPath;
             const renderer::capture::TextureCaptureResult result =
                 renderer::capture::captureTextureToExr(m_deps.rhiDevice, m_deps.commandListPool, request);
@@ -1591,10 +1593,11 @@ void ModelSceneAppState::render(const double frameTime) {
             }
         };
         if (captureSucceeded && !validationFrame->rtgiRawCapturePath.empty()) {
-            captureHdr(m_scene.rtgiRawDiffuseTextureHandle(), validationFrame->rtgiRawCapturePath);
+            captureHdr(m_scene.rtgiRawDiffuseTextureHandle(), 1.0f, validationFrame->rtgiRawCapturePath);
         }
         if (captureSucceeded && !validationFrame->nrdDiffuseCapturePath.empty()) {
-            captureHdr(m_scene.nrdDiffuseTextureHandle(), validationFrame->nrdDiffuseCapturePath);
+            captureHdr(m_scene.nrdDiffuseTextureHandle(), m_scene.nrdDiffuseToPreExposedScale(),
+                       validationFrame->nrdDiffuseCapturePath);
         }
         static_cast<void>(m_deps.validationRun.completeFrame(captureSucceeded, std::move(captureDetail)));
         return;

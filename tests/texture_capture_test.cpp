@@ -1,5 +1,7 @@
 #include "renderer/capture/TextureCapture.h"
 
+#include <glm/gtc/packing.hpp>
+
 #include <cstdint>
 #include <array>
 #include <filesystem>
@@ -73,6 +75,19 @@ int main() {
                          RhiTextureFormat::Rgba8Unorm, renderer::capture::TextureCaptureOrigin::TopLeft,
                          invalidHalf) == renderer::capture::TextureCaptureError::UnsupportedFormat,
                      "non-RGBA16F formats must be rejected by the half-float path")) {
+        return 1;
+    }
+
+    std::vector<uint16_t> scaledHalf{glm::packHalf1x16(0.5f), glm::packHalf1x16(1.0f), glm::packHalf1x16(2.0f),
+                                     glm::packHalf1x16(7.0f)};
+    if (!requireTrue(renderer::capture::scaleTextureCaptureHalfPixels(scaledHalf, 2.0f) ==
+                             renderer::capture::TextureCaptureError::None &&
+                         scaledHalf == std::vector<uint16_t>{glm::packHalf1x16(1.0f), glm::packHalf1x16(2.0f),
+                                                             glm::packHalf1x16(4.0f), glm::packHalf1x16(7.0f)},
+                     "linear RGB scaling must preserve alpha and convert scene-referred NRD radiance") ||
+        !requireTrue(renderer::capture::scaleTextureCaptureHalfPixels(scaledHalf, 0.0f) ==
+                         renderer::capture::TextureCaptureError::InvalidRequest,
+                     "non-positive capture radiance scales must be rejected")) {
         return 1;
     }
 

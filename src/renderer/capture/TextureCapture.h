@@ -31,6 +31,7 @@ enum class TextureCaptureError : uint8_t {
     SubmissionWaitFailed,
     BufferMapFailed,
     PixelNormalizationFailed,
+    RadianceScalingFailed,
     OutputDirectoryFailed,
     PngWriteFailed,
     ExrWriteFailed,
@@ -45,6 +46,7 @@ struct TextureCaptureRequest {
     uint32_t width = 0u;
     uint32_t height = 0u;
     TextureCaptureOrigin origin = TextureCaptureOrigin::TopLeft;
+    float linearRgbScale = 1.0f;
     std::filesystem::path outputPath;
 };
 
@@ -95,6 +97,12 @@ struct LinearExrImage final {
                                                                     uint32_t height, RhiTextureFormat format,
                                                                     TextureCaptureOrigin origin,
                                                                     std::vector<uint16_t>& rgba16f);
+
+/// Applies a finite positive scale to RGB channels in tightly packed RGBA16F pixels.
+/// @param rgba16f In-place IEEE-754 half-float pixels; alpha channels are preserved.
+/// @param scale Scene-linear RGB multiplier required by the output-domain contract.
+/// @return None when every scaled RGB channel remains finite, non-negative, and representable by FP16.
+[[nodiscard]] TextureCaptureError scaleTextureCaptureHalfPixels(std::vector<uint16_t>& rgba16f, float scale);
 
 /// Writes a linear RGB OpenEXR scanline image from tightly packed RGBA16F pixels.
 /// @param outputPath Lowercase .exr output path.

@@ -167,6 +167,7 @@ public:
     [[nodiscard]] RhiTextureFormat captureTextureFormat() const;
     [[nodiscard]] RhiTextureHandle rtgiRawDiffuseTextureHandle() const;
     [[nodiscard]] RhiTextureHandle nrdDiffuseTextureHandle() const;
+    [[nodiscard]] float nrdDiffuseToPreExposedScale() const;
     [[nodiscard]] const GpuFrameStats* gpuFrameStats() const;
     [[nodiscard]] RenderGraphFrameStats renderGraphFrameStats() const;
     [[nodiscard]] ReflectionProbeCaptureFrameStats reflectionProbeCaptureStats() const;

@@ -259,8 +259,8 @@ bool Game::renderFrame(const float frameTime) {
                 }
             }
             const FrameOutput& output = m_renderRuntime->renderScene().getLastFrameOutput();
-            const auto captureHdr = [this, &output](const RhiTextureHandle texture, const bool available,
-                                                    const std::filesystem::path& outputPath) {
+            const auto captureHdr = [this](const RhiTextureHandle texture, const bool available,
+                                           const float linearRgbScale, const std::filesystem::path& outputPath) {
                 if (!available || !texture.isValid()) {
                     renderer::capture::TextureCaptureResult result;
                     result.error = renderer::capture::TextureCaptureError::InvalidRequest;
@@ -284,17 +284,19 @@ bool Game::renderFrame(const float frameTime) {
                 request.width = textureDesc.width;
                 request.height = textureDesc.height;
                 request.origin = renderer::capture::TextureCaptureOrigin::TopLeft;
+                request.linearRgbScale = linearRgbScale;
                 request.outputPath = outputPath;
                 m_validationCaptureResult =
                     renderer::capture::captureTextureToExr(m_deps.rhiDevice, m_deps.commandListPool, request);
                 return m_validationCaptureResult->succeeded();
             };
             if (rawCapturePath.has_value() &&
-                !captureHdr(output.rtgiRawDiffuse, output.hasRtgiRawDiffuse, *rawCapturePath)) {
+                !captureHdr(output.rtgiRawDiffuse, output.hasRtgiRawDiffuse, 1.0f, *rawCapturePath)) {
                 return;
             }
             if (denoisedCapturePath.has_value() &&
-                !captureHdr(output.nrdDiffuse, output.hasNrdDiffuse, *denoisedCapturePath)) {
+                !captureHdr(output.nrdDiffuse, output.hasNrdDiffuse, output.nrdDiffuseToPreExposedScale,
+                            *denoisedCapturePath)) {
                 return;
             }
             if (!m_validationCaptureResult.has_value()) {

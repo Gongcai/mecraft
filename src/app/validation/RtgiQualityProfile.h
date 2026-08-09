@@ -12,7 +12,7 @@
 namespace app::validation {
 
 inline constexpr const char* kRtgiQualityProfileKind = "mecraft.rtgi_quality_profiles";
-inline constexpr uint32_t kRtgiQualityProfileVersion = 1u;
+inline constexpr uint32_t kRtgiQualityProfileVersion = 2u;
 inline constexpr uint32_t kRtgiQualitySequenceFrameCount = 32u;
 inline constexpr uint32_t kRtgiQualityReferenceSpp = 64u;
 
