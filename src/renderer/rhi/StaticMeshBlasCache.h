@@ -53,8 +53,37 @@ struct StaticMeshBlasStats {
     bool containsDoubleSided = false;
     uint32_t geometryCount = 0u;
     uint64_t primitiveCount = 0u;
+    uint64_t buildCount = 0u;
+    uint64_t compactionCount = 0u;
+    uint64_t scratchPeakBytes = 0u;
     uint64_t uncompactedBlasBytes = 0u;
     uint64_t compactedBlasBytes = 0u;
+    double buildCpuMs = 0.0;
+    double buildGpuMs = 0.0;
+    double compactionCpuMs = 0.0;
+    double compactionGpuMs = 0.0;
+};
+
+/// Aggregates immutable static BLAS diagnostics once per unique loaded asset.
+struct StaticMeshBlasAggregateStats {
+    bool supported = false;
+    uint32_t assetCount = 0u;
+    uint32_t residentAssetCount = 0u;
+    uint64_t buildCount = 0u;
+    uint64_t compactionCount = 0u;
+    uint64_t geometryCount = 0u;
+    uint64_t primitiveCount = 0u;
+    uint64_t scratchPeakBytes = 0u;
+    uint64_t uncompactedBlasBytes = 0u;
+    uint64_t compactedBlasBytes = 0u;
+    double buildCpuMs = 0.0;
+    double buildGpuMs = 0.0;
+    double compactionCpuMs = 0.0;
+    double compactionGpuMs = 0.0;
+
+    /// Adds one unique asset snapshot to the aggregate.
+    /// @param stats Asset-level residency, workload, and timing values.
+    void add(const StaticMeshBlasStats& stats);
 };
 
 /// Builds and owns one compacted BLAS shared by every runtime instance of a static mesh asset.

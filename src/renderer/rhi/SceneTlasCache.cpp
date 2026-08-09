@@ -3,12 +3,14 @@
 #include "renderer/rhi/RhiCommandList.h"
 #include "renderer/rhi/RhiDevice.h"
 #include "renderer/rhi/RhiResources.h"
+#include "renderer/debug/RenderDebugService.h"
 
 #include <glm/common.hpp>
 #include <glm/geometric.hpp>
 #include <glm/mat3x3.hpp>
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstring>
 #include <limits>
@@ -154,6 +156,13 @@ void SceneTlasCache::shutdown() {
     m_nextRevision = 1u;
     m_buildsRecorded = 0u;
     m_buildsCompleted = 0u;
+    m_buildsRecordedThisFrame = 0u;
+    m_instancesRecordedThisFrame = 0u;
+    m_scratchBytesThisFrame = 0u;
+    m_tlasBytesThisFrame = 0u;
+    m_dynamicResourceBytesThisFrame = 0u;
+    m_buildCpuMsThisFrame = 0.0;
+    m_dynamicResourceCpuMsThisFrame = 0.0;
     m_desiredRevision = 0u;
     m_desiredSceneOrigin = glm::vec3(0.0f);
     m_desiredInputs.clear();
@@ -164,6 +173,17 @@ void SceneTlasCache::shutdown() {
 }
 
 void SceneTlasCache::beginFrame() {
+    m_buildsRecordedThisFrame = 0u;
+    m_instancesRecordedThisFrame = 0u;
+    m_scratchBytesThisFrame = 0u;
+    m_tlasBytesThisFrame = 0u;
+    m_dynamicResourceBytesThisFrame = 0u;
+    m_buildCpuMsThisFrame = 0.0;
+    m_dynamicResourceCpuMsThisFrame = 0.0;
+    pollCompletedWork();
+}
+
+void SceneTlasCache::pollCompletedWork() {
     if (!m_supported || !m_healthy) {
         return;
     }
@@ -271,7 +291,7 @@ SceneTlasSetResult SceneTlasCache::setInstances(std::vector<SceneTlasInstanceInp
     return SceneTlasSetResult::Accepted;
 }
 
-bool SceneTlasCache::recordFrame(RhiCommandList& commandList) {
+bool SceneTlasCache::recordFrame(RhiCommandList& commandList, RenderDebugService* const debugService) {
     if (!m_supported) {
         return true;
     }
@@ -289,6 +309,8 @@ bool SceneTlasCache::recordFrame(RhiCommandList& commandList) {
         (m_active.has_value() && m_active->revision == m_desiredRevision)) {
         return true;
     }
+
+    const auto dynamicResourceCpuStart = std::chrono::steady_clock::now();
 
     std::vector<RhiAccelerationStructureInstance> nativeInstances;
     nativeInstances.reserve(m_desiredInputs.size());
@@ -518,6 +540,10 @@ bool SceneTlasCache::recordFrame(RhiCommandList& commandList) {
     }
     generation.tlasBytes = buildSizes.accelerationStructureSize;
 
+    const GpuTimerSegmentToken dynamicResourceTimer =
+        debugService != nullptr
+            ? debugService->beginGpuTimer(commandList, GpuTimerPass::AccelerationStructureDynamicPrepare)
+            : GpuTimerSegmentToken{};
     commandList.updateBuffer(generation.instanceBuffer, 0u, nativeInstances.data(), instanceDesc.size);
     commandList.updateBuffer(generation.terrainHitDataBuffer, 0u, terrainHitData.data(), terrainHitDataDesc.size);
     const std::array<uint8_t, sizeof(renderer::contracts::GpuMaterial)> zeroMaterialRecord{};
@@ -540,25 +566,54 @@ bool SceneTlasCache::recordFrame(RhiCommandList& commandList) {
         {generation.gpuSceneGeometryBuffer, RhiResourceState::TransferDst, RhiResourceState::StorageBuffer});
     commandList.bufferBarrier(
         {generation.gpuSceneInstanceBuffer, RhiResourceState::TransferDst, RhiResourceState::StorageBuffer});
+    if (debugService != nullptr) {
+        debugService->endGpuTimer(commandList, dynamicResourceTimer);
+    }
+    m_dynamicResourceCpuMsThisFrame +=
+        std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - dynamicResourceCpuStart).count();
+
     const RhiAccelerationStructureBuildDesc buildDesc{buildInput,
                                                       RhiAccelerationStructureBuildMode::Build,
                                                       {},
                                                       generation.accelerationStructure,
                                                       generation.scratchBuffer,
                                                       0u};
+    const auto buildCpuStart = std::chrono::steady_clock::now();
+    const GpuTimerSegmentToken buildTimer = debugService != nullptr
+                                                ? debugService->beginGpuTimer(commandList, GpuTimerPass::SceneTlas)
+                                                : GpuTimerSegmentToken{};
     if (!commandList.buildAccelerationStructures(&buildDesc, 1u)) {
+        if (debugService != nullptr) {
+            debugService->cancelGpuTimer(buildTimer);
+        }
         destroyGeneration(generation);
         setTransientError("Scene TLAS build command recording failed");
         return false;
     }
     m_pending = PendingGeneration{PendingState::Recorded, std::move(generation)};
-    ++m_buildsRecorded;
     if (!commandList.accelerationStructureBarrier({m_pending->generation.accelerationStructure,
                                                    RhiResourceState::AccelerationStructureBuildWrite,
                                                    RhiResourceState::AccelerationStructureRead})) {
+        if (debugService != nullptr) {
+            debugService->cancelGpuTimer(buildTimer);
+        }
         setTransientError("Scene TLAS read barrier recording failed");
         return false;
     }
+    if (debugService != nullptr) {
+        debugService->endGpuTimer(commandList, buildTimer);
+    }
+    m_buildCpuMsThisFrame +=
+        std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - buildCpuStart).count();
+    ++m_buildsRecorded;
+    ++m_buildsRecordedThisFrame;
+    m_instancesRecordedThisFrame += m_pending->generation.mappings.size();
+    m_scratchBytesThisFrame += buildSizes.buildScratchSize;
+    m_tlasBytesThisFrame += m_pending->generation.tlasBytes;
+    m_dynamicResourceBytesThisFrame += m_pending->generation.instanceBytes + m_pending->generation.terrainHitDataBytes +
+                                       m_pending->generation.gpuSceneMaterialBytes +
+                                       m_pending->generation.gpuSceneGeometryBytes +
+                                       m_pending->generation.gpuSceneInstanceBytes;
     return true;
 }
 
@@ -648,6 +703,13 @@ SceneTlasStats SceneTlasCache::stats() const {
     result.desiredRevision = m_desiredRevision;
     result.buildsRecorded = m_buildsRecorded;
     result.buildsCompleted = m_buildsCompleted;
+    result.buildsRecordedThisFrame = m_buildsRecordedThisFrame;
+    result.instancesRecordedThisFrame = m_instancesRecordedThisFrame;
+    result.scratchBytesThisFrame = m_scratchBytesThisFrame;
+    result.tlasBytesThisFrame = m_tlasBytesThisFrame;
+    result.dynamicResourceBytesThisFrame = m_dynamicResourceBytesThisFrame;
+    result.buildCpuMsThisFrame = m_buildCpuMsThisFrame;
+    result.dynamicResourceCpuMsThisFrame = m_dynamicResourceCpuMsThisFrame;
     if (m_active.has_value()) {
         result.activeInstanceCount = static_cast<uint32_t>(m_active->mappings.size());
         result.activeBlasCount = static_cast<uint32_t>(m_active->blasResources.size());

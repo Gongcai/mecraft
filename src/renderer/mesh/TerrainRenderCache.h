@@ -19,6 +19,7 @@ class World;
 class WorldRenderBuffer;
 class RhiCommandList;
 class RhiDevice;
+class RenderDebugService;
 
 /// Per-sub-chunk transparent bounds cache
 struct TransparentSubChunkCache {
@@ -112,7 +113,8 @@ public:
 
     // Meshing job management
     void submitMeshingJobs(const IWorldView& worldView, const glm::vec3& cameraPos);
-    [[nodiscard]] bool drainMeshingResults(const IWorldView& worldView, RhiCommandList& commandList);
+    [[nodiscard]] bool drainMeshingResults(const IWorldView& worldView, RhiCommandList& commandList,
+                                           RenderDebugService* debugService);
     void finishGraphExecution(bool succeeded, RhiSubmissionToken completionToken);
     [[nodiscard]] const std::unordered_set<int64_t>& meshingInFlight() const { return m_meshingInFlight; }
     [[nodiscard]] bool isMeshingSettled(const IWorldView& worldView) const;

@@ -49,7 +49,7 @@ void TerrainStreamingService::releaseMdiAllocation(const SubChunkGpuKey& key) {
 }
 
 bool TerrainStreamingService::drainMeshingResults(const IWorldView& worldView, RhiCommandList& commandList) {
-    const bool succeeded = m_terrainCache.drainMeshingResults(worldView, commandList);
+    const bool succeeded = m_terrainCache.drainMeshingResults(worldView, commandList, nullptr);
     syncFrameStats();
     return succeeded;
 }

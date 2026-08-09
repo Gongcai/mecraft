@@ -545,6 +545,9 @@ BLAS；普通完整方块在每个 SubChunk BLAS 内使用可见单位面，仍�
   Benchmark JSON 使用 `RTGI.Trace`、`RTGI.SignalPack`、`NRD.GuidePrep`、`NRD.Dispatch` 发布细分
   p50/p95/p99，同时保留不重复计入总时间的 RTGI/NRD 聚合项。Alpha Candidate 与
   Secondary Shadow 的细分计时仍通过后续诊断增量补充。
+- `SceneTLAS`、Terrain BLAS Build/Compaction、动态资源准备和 RTGI bootstrap 已接入独立的 CPU/GPU
+  计时、工作量与驻留峰值；Static BLAS 在资产加载时记录 Build/Compaction 时间及压缩前后字节。
+  bootstrap 包含内部 SceneTLAS，其时间只用于归因，不重复计入已追踪 GPU 总时间。
 - RT Distance、Max Local Lights Per Hit 与 Signal Resolution 是公开画质参数。
 - 动态分辨率只改变 Render Extent，不改变 Method、Ray Distance 或材质复杂度。
 

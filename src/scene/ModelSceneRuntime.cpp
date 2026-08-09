@@ -1483,6 +1483,17 @@ bool ModelSceneRuntime::collectRayTracingInstances(std::vector<renderer::rt::Sce
     return true;
 }
 
+renderer::rt::StaticMeshBlasAggregateStats ModelSceneRuntime::staticBlasAggregateStats() const {
+    renderer::rt::StaticMeshBlasAggregateStats stats;
+    for (const MeshAsset& asset : m_assets) {
+        if (asset.renderer == nullptr) {
+            std::abort();
+        }
+        stats.add(asset.renderer->staticBlasStats());
+    }
+    return stats;
+}
+
 bool ModelSceneRuntime::configureClusteredLighting(const DeferredClusteredLightingResources& resources) {
     for (MeshAsset& asset : m_assets) {
         if (!asset.renderer->configureClusteredLighting(resources.bindGroupLayout, resources.bindGroup,

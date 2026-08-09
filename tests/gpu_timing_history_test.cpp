@@ -25,11 +25,28 @@ bool requireNear(const double actual, const double expected, const char* message
 }
 
 bool testStableStageNames() {
-    const char* expected[] = {"GBuffer",         "Shadow",          "SSAO",          "SSGI",
-                              "RTGI",            "NRD",             "Lighting",      "Transparent",
-                              "Volumetric",      "Reflection",      "Cloud",         "Water",
-                              "Post",            "RTGI.Trace",      "RTGI.SignalPack", "NRD.GuidePrep",
-                              "NRD.Dispatch"};
+    const char* expected[] = {"GBuffer",
+                              "Shadow",
+                              "SSAO",
+                              "SSGI",
+                              "RTGI",
+                              "NRD",
+                              "Lighting",
+                              "Transparent",
+                              "Volumetric",
+                              "Reflection",
+                              "Cloud",
+                              "Water",
+                              "Post",
+                              "RTGI.Trace",
+                              "RTGI.SignalPack",
+                              "NRD.GuidePrep",
+                              "NRD.Dispatch",
+                              "SceneTLAS",
+                              "TerrainBLAS.Build",
+                              "TerrainBLAS.Compaction",
+                              "AS.DynamicResourcePreparation",
+                              "RTGI.SceneTLASBootstrap"};
     for (size_t index = 0u; index < static_cast<size_t>(GpuTimerPass::Count); ++index) {
         if (!requireTrue(std::string(gpuTimerPassName(static_cast<GpuTimerPass>(index))) == expected[index],
                          "GPU stage names must remain stable")) {
@@ -63,6 +80,11 @@ bool testFixedWindowPercentiles() {
         frame.shadowMs = static_cast<double>(sequence) * 2.0;
         frame.rtgiMs = static_cast<double>(sequence) * 0.5;
         frame.nrdMs = static_cast<double>(sequence) * 0.25;
+        frame.sceneTlasMs = static_cast<double>(sequence) * 0.1;
+        frame.terrainBlasBuildMs = static_cast<double>(sequence) * 0.2;
+        frame.terrainBlasCompactionMs = static_cast<double>(sequence) * 0.3;
+        frame.accelerationStructureDynamicPrepareMs = static_cast<double>(sequence) * 0.4;
+        frame.rtgiSceneTlasBootstrapMs = static_cast<double>(sequence) * 10.0;
         if (!requireTrue(history.record(frame), "unique completed GPU frames must be recorded")) {
             return false;
         }
@@ -90,6 +112,7 @@ bool testFixedWindowPercentiles() {
     const auto& shadow = stats.passes[static_cast<size_t>(GpuTimerPass::Shadow)].gpuMs;
     const auto& rtgi = stats.passes[static_cast<size_t>(GpuTimerPass::Rtgi)].gpuMs;
     const auto& nrd = stats.passes[static_cast<size_t>(GpuTimerPass::Nrd)].gpuMs;
+    const auto& sceneTlas = stats.passes[static_cast<size_t>(GpuTimerPass::SceneTlas)].gpuMs;
     return requireNear(gbuffer.p50Ms, 502.0, "GBuffer p50 must use nearest-rank selection") &&
            requireNear(gbuffer.p95Ms, 952.0, "GBuffer p95 must use nearest-rank selection") &&
            requireNear(gbuffer.p99Ms, 992.0, "GBuffer p99 must use nearest-rank selection") &&
@@ -98,9 +121,79 @@ bool testFixedWindowPercentiles() {
            requireNear(shadow.p99Ms, 1984.0, "Shadow p99 must preserve stage values") &&
            requireNear(rtgi.p50Ms, 251.0, "RTGI p50 must preserve stage values") &&
            requireNear(nrd.p95Ms, 238.0, "NRD p95 must preserve stage values") &&
-           requireNear(stats.totalTrackedGpuMs.p50Ms, 1882.5, "tracked total p50 must be computed per frame") &&
-           requireNear(stats.totalTrackedGpuMs.p95Ms, 3570.0, "tracked total p95 must be computed per frame") &&
-           requireNear(stats.totalTrackedGpuMs.p99Ms, 3720.0, "tracked total p99 must be computed per frame");
+           requireNear(sceneTlas.p95Ms, 95.2, "Scene TLAS p95 must preserve stage values") &&
+           requireNear(stats.totalTrackedGpuMs.p50Ms, 2384.5, "tracked total p50 must include disjoint AS work") &&
+           requireNear(stats.totalTrackedGpuMs.p95Ms, 4522.0, "tracked total p95 must exclude bootstrap overlap") &&
+           requireNear(stats.totalTrackedGpuMs.p99Ms, 4712.0, "tracked total p99 must exclude bootstrap overlap");
+}
+
+bool testAccelerationStructureHistory() {
+    AccelerationStructureHistory history;
+    const AccelerationStructureWindowStats empty = history.snapshot();
+    if (!requireTrue(!empty.valid && empty.sampleCount == 0u &&
+                         empty.capacity == AccelerationStructureHistory::kCapacity,
+                     "empty AS history must expose its fixed capacity")) {
+        return false;
+    }
+
+    AccelerationStructureFrameStats frame;
+    frame.supported = true;
+    frame.valid = true;
+    frame.staticBlas.supported = true;
+    frame.staticBlas.assetCount = 2u;
+    frame.staticBlas.residentAssetCount = 2u;
+    frame.staticBlas.buildCount = 2u;
+    frame.staticBlas.compactionCount = 2u;
+    frame.staticBlas.buildCpuMs = 4.0;
+    frame.staticBlas.buildGpuMs = 2.0;
+    frame.staticBlas.compactionCpuMs = 3.0;
+    frame.staticBlas.compactionGpuMs = 1.0;
+    for (uint64_t sequence = 1u; sequence <= 1002u; ++sequence) {
+        frame.sequence = sequence;
+        auto& sceneTlas = frame.stages[static_cast<size_t>(AccelerationStructureStage::SceneTlas)];
+        sceneTlas.cpuMs = static_cast<double>(sequence);
+        sceneTlas.operationCount = 1u;
+        sceneTlas.instanceCount = sequence;
+        sceneTlas.scratchBytes = sequence * 10u;
+        sceneTlas.structureBytes = sequence * 20u;
+        auto& terrainBuild = frame.stages[static_cast<size_t>(AccelerationStructureStage::TerrainBlasBuild)];
+        terrainBuild.cpuMs = static_cast<double>(sequence) * 2.0;
+        terrainBuild.operationCount = 2u;
+        terrainBuild.primitiveCount = sequence * 3u;
+        frame.activeSceneTlasInstances = static_cast<uint32_t>(sequence);
+        frame.activeSceneTlasBlas = 2u;
+        frame.activeTerrainBlas = 4u;
+        frame.activeSceneTlasBytes = sequence * 30u;
+        frame.activeSceneReferencedBlasBytes = sequence * 40u;
+        frame.activeTerrainBlasBytes = sequence * 50u;
+        frame.activeTerrainPrimitiveCount = sequence * 60u;
+        if (!requireTrue(history.record(frame), "unique AS frame sequences must be recorded")) {
+            return false;
+        }
+    }
+    if (!requireTrue(!history.record(frame), "duplicate AS frame sequences must be rejected")) {
+        return false;
+    }
+    frame.sequence = 1003u;
+    frame.stages[static_cast<size_t>(AccelerationStructureStage::SceneTlas)].cpuMs = -1.0;
+    if (!requireTrue(!history.record(frame), "negative AS CPU durations must be rejected")) {
+        return false;
+    }
+
+    const AccelerationStructureWindowStats stats = history.snapshot();
+    const auto& sceneTlas = stats.stages[static_cast<size_t>(AccelerationStructureStage::SceneTlas)];
+    const auto& terrainBuild = stats.stages[static_cast<size_t>(AccelerationStructureStage::TerrainBlasBuild)];
+    return requireTrue(stats.valid && stats.sampleCount == 1000u && stats.observedSampleCount == 1002u,
+                       "AS history must retain the latest fixed-size window") &&
+           requireNear(sceneTlas.cpuMs.p50Ms, 502.0, "AS CPU p50 must use nearest-rank selection") &&
+           requireNear(terrainBuild.cpuMs.p95Ms, 1904.0, "terrain BLAS CPU p95 must preserve stage values") &&
+           requireTrue(sceneTlas.operationCount == 1000u && sceneTlas.peakOperationsPerFrame == 1u &&
+                           sceneTlas.peakInstancesPerFrame == 1002u && sceneTlas.peakScratchBytesPerFrame == 10020u &&
+                           sceneTlas.peakStructureBytesPerFrame == 20040u,
+                       "AS history must retain work totals and per-frame peaks") &&
+           requireTrue(stats.peakActiveSceneTlasInstances == 1002u && stats.peakActiveTerrainBlasBytes == 50100u &&
+                           stats.latest.sequence == 1002u && stats.latest.staticBlas.assetCount == 2u,
+                       "AS history must expose residency peaks and the latest static BLAS snapshot");
 }
 
 bool testRenderGraphTimingHistory() {
@@ -187,7 +280,8 @@ bool testRenderGraphTimingHistory() {
 } // namespace
 
 int main() {
-    if (!testStableStageNames() || !testFixedWindowPercentiles() || !testRenderGraphTimingHistory()) {
+    if (!testStableStageNames() || !testFixedWindowPercentiles() || !testAccelerationStructureHistory() ||
+        !testRenderGraphTimingHistory()) {
         return 1;
     }
     std::cout << "[gpu_timing_history_test] PASS\n";

@@ -22,6 +22,11 @@ double gpuTimerPassMilliseconds(const GpuFrameStats& stats, const GpuTimerPass p
     case GpuTimerPass::RtgiSignalPack: return stats.rtgiSignalPackMs;
     case GpuTimerPass::NrdGuidePrep: return stats.nrdGuidePrepMs;
     case GpuTimerPass::NrdDispatch: return stats.nrdDispatchMs;
+    case GpuTimerPass::SceneTlas: return stats.sceneTlasMs;
+    case GpuTimerPass::TerrainBlasBuild: return stats.terrainBlasBuildMs;
+    case GpuTimerPass::TerrainBlasCompaction: return stats.terrainBlasCompactionMs;
+    case GpuTimerPass::AccelerationStructureDynamicPrepare: return stats.accelerationStructureDynamicPrepareMs;
+    case GpuTimerPass::RtgiSceneTlasBootstrap: return stats.rtgiSceneTlasBootstrapMs;
     case GpuTimerPass::Lighting: return stats.lightingMs;
     case GpuTimerPass::Transparent: return stats.transparentMs;
     case GpuTimerPass::Volumetric: return stats.volumetricMs;
@@ -36,7 +41,8 @@ double gpuTimerPassMilliseconds(const GpuFrameStats& stats, const GpuTimerPass p
 
 bool gpuTimerPassIncludedInTrackedTotal(const GpuTimerPass pass) {
     return pass != GpuTimerPass::RtgiTrace && pass != GpuTimerPass::RtgiSignalPack &&
-           pass != GpuTimerPass::NrdGuidePrep && pass != GpuTimerPass::NrdDispatch;
+           pass != GpuTimerPass::NrdGuidePrep && pass != GpuTimerPass::NrdDispatch &&
+           pass != GpuTimerPass::RtgiSceneTlasBootstrap;
 }
 
 GpuTimingPercentiles calculatePercentiles(const std::array<double, GpuTimingHistory::kCapacity>& samples,
@@ -101,7 +107,24 @@ const char* gpuTimerPassName(const GpuTimerPass pass) {
     case GpuTimerPass::RtgiSignalPack: return "RTGI.SignalPack";
     case GpuTimerPass::NrdGuidePrep: return "NRD.GuidePrep";
     case GpuTimerPass::NrdDispatch: return "NRD.Dispatch";
+    case GpuTimerPass::SceneTlas: return "SceneTLAS";
+    case GpuTimerPass::TerrainBlasBuild: return "TerrainBLAS.Build";
+    case GpuTimerPass::TerrainBlasCompaction: return "TerrainBLAS.Compaction";
+    case GpuTimerPass::AccelerationStructureDynamicPrepare: return "AS.DynamicResourcePreparation";
+    case GpuTimerPass::RtgiSceneTlasBootstrap: return "RTGI.SceneTLASBootstrap";
     case GpuTimerPass::Count: break;
+    }
+    std::abort();
+}
+
+const char* accelerationStructureStageName(const AccelerationStructureStage stage) {
+    switch (stage) {
+    case AccelerationStructureStage::SceneTlas: return "SceneTLAS";
+    case AccelerationStructureStage::TerrainBlasBuild: return "TerrainBLAS.Build";
+    case AccelerationStructureStage::TerrainBlasCompaction: return "TerrainBLAS.Compaction";
+    case AccelerationStructureStage::DynamicResourcePreparation: return "AS.DynamicResourcePreparation";
+    case AccelerationStructureStage::RtgiSceneTlasBootstrap: return "RTGI.SceneTLASBootstrap";
+    case AccelerationStructureStage::Count: break;
     }
     std::abort();
 }
@@ -179,6 +202,124 @@ GpuTimingWindowStats GpuTimingHistory::snapshot() const {
         GpuTimerPassWindowStats& passStats = stats.passes[passIndex];
         passStats.pass = static_cast<GpuTimerPass>(passIndex);
         passStats.gpuMs = calculatePercentiles(m_passSamples[passIndex], m_sampleCount);
+    }
+    return stats;
+}
+
+void AccelerationStructureHistory::reset() {
+    for (auto& samples : m_cpuSamples) {
+        samples.fill(0.0);
+    }
+    for (auto& samples : m_operationSamples) {
+        samples.fill(0u);
+    }
+    for (auto& samples : m_instanceSamples) {
+        samples.fill(0u);
+    }
+    for (auto& samples : m_primitiveSamples) {
+        samples.fill(0u);
+    }
+    for (auto& samples : m_scratchByteSamples) {
+        samples.fill(0u);
+    }
+    for (auto& samples : m_structureByteSamples) {
+        samples.fill(0u);
+    }
+    m_activeSceneTlasInstanceSamples.fill(0u);
+    m_activeSceneTlasBlasSamples.fill(0u);
+    m_activeTerrainBlasSamples.fill(0u);
+    m_activeSceneTlasByteSamples.fill(0u);
+    m_activeSceneReferencedBlasByteSamples.fill(0u);
+    m_activeTerrainBlasByteSamples.fill(0u);
+    m_activeTerrainPrimitiveSamples.fill(0u);
+    m_nextSample = 0u;
+    m_sampleCount = 0u;
+    m_observedSampleCount = 0u;
+    m_lastSequence = 0u;
+    m_latest = {};
+}
+
+bool AccelerationStructureHistory::record(const AccelerationStructureFrameStats& stats) {
+    if (!stats.valid || stats.sequence == 0u || stats.sequence <= m_lastSequence) {
+        return false;
+    }
+
+    for (const AccelerationStructureStageFrameStats& stage : stats.stages) {
+        if (!std::isfinite(stage.cpuMs) || stage.cpuMs < 0.0) {
+            return false;
+        }
+    }
+    const StaticBlasFrameStats& staticBlas = stats.staticBlas;
+    if (!std::isfinite(staticBlas.buildCpuMs) || staticBlas.buildCpuMs < 0.0 || !std::isfinite(staticBlas.buildGpuMs) ||
+        staticBlas.buildGpuMs < 0.0 || !std::isfinite(staticBlas.compactionCpuMs) || staticBlas.compactionCpuMs < 0.0 ||
+        !std::isfinite(staticBlas.compactionGpuMs) || staticBlas.compactionGpuMs < 0.0) {
+        return false;
+    }
+
+    for (size_t stageIndex = 0u; stageIndex < stats.stages.size(); ++stageIndex) {
+        const AccelerationStructureStageFrameStats& stage = stats.stages[stageIndex];
+        m_cpuSamples[stageIndex][m_nextSample] = stage.cpuMs;
+        m_operationSamples[stageIndex][m_nextSample] = stage.operationCount;
+        m_instanceSamples[stageIndex][m_nextSample] = stage.instanceCount;
+        m_primitiveSamples[stageIndex][m_nextSample] = stage.primitiveCount;
+        m_scratchByteSamples[stageIndex][m_nextSample] = stage.scratchBytes;
+        m_structureByteSamples[stageIndex][m_nextSample] = stage.structureBytes;
+    }
+    m_activeSceneTlasInstanceSamples[m_nextSample] = stats.activeSceneTlasInstances;
+    m_activeSceneTlasBlasSamples[m_nextSample] = stats.activeSceneTlasBlas;
+    m_activeTerrainBlasSamples[m_nextSample] = stats.activeTerrainBlas;
+    m_activeSceneTlasByteSamples[m_nextSample] = stats.activeSceneTlasBytes;
+    m_activeSceneReferencedBlasByteSamples[m_nextSample] = stats.activeSceneReferencedBlasBytes;
+    m_activeTerrainBlasByteSamples[m_nextSample] = stats.activeTerrainBlasBytes;
+    m_activeTerrainPrimitiveSamples[m_nextSample] = stats.activeTerrainPrimitiveCount;
+    m_nextSample = (m_nextSample + 1u) % kCapacity;
+    m_sampleCount = std::min(m_sampleCount + 1u, kCapacity);
+    ++m_observedSampleCount;
+    m_lastSequence = stats.sequence;
+    m_latest = stats;
+    return true;
+}
+
+AccelerationStructureWindowStats AccelerationStructureHistory::snapshot() const {
+    AccelerationStructureWindowStats stats;
+    stats.valid = m_sampleCount > 0u;
+    stats.sampleCount = m_sampleCount;
+    stats.capacity = kCapacity;
+    stats.observedSampleCount = m_observedSampleCount;
+    stats.latest = m_latest;
+
+    for (size_t stageIndex = 0u; stageIndex < stats.stages.size(); ++stageIndex) {
+        AccelerationStructureStageWindowStats& stage = stats.stages[stageIndex];
+        stage.cpuMs = calculatePercentiles(m_cpuSamples[stageIndex], m_sampleCount);
+        for (size_t sampleIndex = 0u; sampleIndex < m_sampleCount; ++sampleIndex) {
+            stage.operationCount += m_operationSamples[stageIndex][sampleIndex];
+            stage.peakOperationsPerFrame =
+                std::max(stage.peakOperationsPerFrame, m_operationSamples[stageIndex][sampleIndex]);
+            stage.peakInstancesPerFrame =
+                std::max(stage.peakInstancesPerFrame, m_instanceSamples[stageIndex][sampleIndex]);
+            stage.peakPrimitivesPerFrame =
+                std::max(stage.peakPrimitivesPerFrame, m_primitiveSamples[stageIndex][sampleIndex]);
+            stage.peakScratchBytesPerFrame =
+                std::max(stage.peakScratchBytesPerFrame, m_scratchByteSamples[stageIndex][sampleIndex]);
+            stage.peakStructureBytesPerFrame =
+                std::max(stage.peakStructureBytesPerFrame, m_structureByteSamples[stageIndex][sampleIndex]);
+        }
+    }
+
+    for (size_t sampleIndex = 0u; sampleIndex < m_sampleCount; ++sampleIndex) {
+        stats.peakActiveSceneTlasInstances =
+            std::max(stats.peakActiveSceneTlasInstances, m_activeSceneTlasInstanceSamples[sampleIndex]);
+        stats.peakActiveSceneTlasBlas =
+            std::max(stats.peakActiveSceneTlasBlas, m_activeSceneTlasBlasSamples[sampleIndex]);
+        stats.peakActiveTerrainBlas = std::max(stats.peakActiveTerrainBlas, m_activeTerrainBlasSamples[sampleIndex]);
+        stats.peakActiveSceneTlasBytes =
+            std::max(stats.peakActiveSceneTlasBytes, m_activeSceneTlasByteSamples[sampleIndex]);
+        stats.peakActiveSceneReferencedBlasBytes =
+            std::max(stats.peakActiveSceneReferencedBlasBytes, m_activeSceneReferencedBlasByteSamples[sampleIndex]);
+        stats.peakActiveTerrainBlasBytes =
+            std::max(stats.peakActiveTerrainBlasBytes, m_activeTerrainBlasByteSamples[sampleIndex]);
+        stats.peakActiveTerrainPrimitiveCount =
+            std::max(stats.peakActiveTerrainPrimitiveCount, m_activeTerrainPrimitiveSamples[sampleIndex]);
     }
     return stats;
 }
@@ -497,6 +638,12 @@ void RenderDebugService::beginFrame(RhiCommandList& commandList) {
             m_gpuFrameStats.rtgiSignalPackMs = readMs(GpuTimerPass::RtgiSignalPack);
             m_gpuFrameStats.nrdGuidePrepMs = readMs(GpuTimerPass::NrdGuidePrep);
             m_gpuFrameStats.nrdDispatchMs = readMs(GpuTimerPass::NrdDispatch);
+            m_gpuFrameStats.sceneTlasMs = readMs(GpuTimerPass::SceneTlas);
+            m_gpuFrameStats.terrainBlasBuildMs = readMs(GpuTimerPass::TerrainBlasBuild);
+            m_gpuFrameStats.terrainBlasCompactionMs = readMs(GpuTimerPass::TerrainBlasCompaction);
+            m_gpuFrameStats.accelerationStructureDynamicPrepareMs =
+                readMs(GpuTimerPass::AccelerationStructureDynamicPrepare);
+            m_gpuFrameStats.rtgiSceneTlasBootstrapMs = readMs(GpuTimerPass::RtgiSceneTlasBootstrap);
             m_gpuFrameStats.rtgiMs = m_gpuFrameStats.rtgiTraceMs + m_gpuFrameStats.rtgiSignalPackMs;
             m_gpuFrameStats.nrdMs = m_gpuFrameStats.nrdGuidePrepMs + m_gpuFrameStats.nrdDispatchMs;
             m_gpuFrameStats.lightingMs = readMs(GpuTimerPass::Lighting);

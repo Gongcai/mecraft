@@ -520,7 +520,8 @@ bool TerrainRenderCache::isMeshingSettled(const IWorldView& worldView) const {
 // Meshing result drain
 // ---------------------------------------------------------------------------
 
-bool TerrainRenderCache::drainMeshingResults(const IWorldView& worldView, RhiCommandList& commandList) {
+bool TerrainRenderCache::drainMeshingResults(const IWorldView& worldView, RhiCommandList& commandList,
+                                             RenderDebugService* const debugService) {
     // Phase 1: Drain all completed results from the service into the deferred buffer.
     // This avoids interleaving tryPopCompleted with budget checks, and lets us
     // process results in order with strict vertex/time budgets.
@@ -742,7 +743,7 @@ bool TerrainRenderCache::drainMeshingResults(const IWorldView& worldView, RhiCom
     }
 
     m_meshUploadDeferredCount = static_cast<int>(m_deferredMeshResults.size());
-    if (succeeded && !m_blasCache.recordFrame(commandList)) {
+    if (succeeded && !m_blasCache.recordFrame(commandList, debugService)) {
         succeeded = false;
     }
     return succeeded;

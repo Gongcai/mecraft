@@ -113,7 +113,8 @@ bool ForwardPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSet
     RenderGraphPassBuilder sceneTlas =
         m_renderGraph.addPass({"Forward.SceneTLAS", RgPassType::Graphics, RhiQueueType::Graphics});
     sceneTlas.setExecute([&](RgPassContext& pass) {
-        return m_shared->sceneTlasCache == nullptr || m_shared->sceneTlasCache->recordFrame(pass.commandList());
+        return m_shared->sceneTlasCache == nullptr ||
+               m_shared->sceneTlasCache->recordFrame(pass.commandList(), ctx.debugService);
     });
 
     RenderGraphPassBuilder prepare =
@@ -338,7 +339,7 @@ bool ForwardPipeline::prepareTerrain(const FrameContext& ctx, RhiCommandList& co
 
     if (m_terrainCache) {
         m_terrainCache->releaseStaleMdiAllocations(*ctx.worldView);
-        if (!m_terrainCache->drainMeshingResults(*ctx.worldView, commandList)) {
+        if (!m_terrainCache->drainMeshingResults(*ctx.worldView, commandList, ctx.debugService)) {
             MECRAFT_LOG_STREAM(std::cerr << "[ForwardPipeline] " << m_terrainCache->blasCache().lastError() << '\n');
             return false;
         }

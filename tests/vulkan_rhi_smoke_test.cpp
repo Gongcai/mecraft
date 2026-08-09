@@ -3623,7 +3623,7 @@ void main() {
         cache.beginFrame();
         RhiCommandList* commands = commandPool.acquire(RhiCommandListType::Compute);
         if (commands == nullptr || !commands->begin({debugName, RhiCommandListType::Compute}) ||
-            !cache.recordFrame(*commands) || !commands->end()) {
+            !cache.recordFrame(*commands, nullptr) || !commands->end()) {
             cache.finishGraphExecution(false, {});
             std::cerr << cache.lastError() << '\n';
             return false;
@@ -3692,7 +3692,7 @@ void main() {
         sceneTlas.beginFrame();
         RhiCommandList* commands = commandPool.acquire(RhiCommandListType::Graphics);
         if (commands == nullptr || !commands->begin({debugName, RhiCommandListType::Graphics}) ||
-            !sceneTlas.recordFrame(*commands) || !commands->end()) {
+            !sceneTlas.recordFrame(*commands, nullptr) || !commands->end()) {
             sceneTlas.finishGraphExecution(false, {});
             return false;
         }
@@ -5446,8 +5446,12 @@ namespace {
         sharedBlas = staticBlas.resource();
         const StaticMeshBlasStats& stats = staticBlas.stats();
         valid = sharedBlas != nullptr && stats.resident && stats.geometryCount == 2u && stats.primitiveCount == 2u &&
-                stats.containsOpaque && stats.containsCutout && stats.containsDoubleSided &&
-                stats.compactedBlasBytes != 0u && stats.compactedBlasBytes <= stats.uncompactedBlasBytes;
+                stats.containsOpaque && stats.containsCutout && stats.containsDoubleSided && stats.buildCount == 1u &&
+                stats.compactionCount == 1u && stats.scratchPeakBytes != 0u && stats.compactedBlasBytes != 0u &&
+                stats.compactedBlasBytes <= stats.uncompactedBlasBytes && std::isfinite(stats.buildCpuMs) &&
+                stats.buildCpuMs > 0.0 && std::isfinite(stats.buildGpuMs) && stats.buildGpuMs >= 0.0 &&
+                std::isfinite(stats.compactionCpuMs) && stats.compactionCpuMs > 0.0 &&
+                std::isfinite(stats.compactionGpuMs) && stats.compactionGpuMs >= 0.0;
     }
     if (valid) {
         std::vector<GpuMaterial> invalidOpaqueMaterials = gpuMaterials;
@@ -5523,7 +5527,7 @@ namespace {
         sceneTlas.beginFrame();
         RhiCommandList* commands = commandPool.acquire(RhiCommandListType::Graphics);
         if (commands == nullptr || !commands->begin({debugName, RhiCommandListType::Graphics}) ||
-            !sceneTlas.recordFrame(*commands) || !commands->end()) {
+            !sceneTlas.recordFrame(*commands, nullptr) || !commands->end()) {
             sceneTlas.finishGraphExecution(false, {});
             return false;
         }
@@ -5544,7 +5548,7 @@ namespace {
         sceneTlas.beginFrame();
         RhiCommandList* commands = commandPool.acquire(RhiCommandListType::Graphics);
         if (commands == nullptr || !commands->begin({debugName, RhiCommandListType::Graphics}) ||
-            !sceneTlas.recordFrame(*commands) || !commands->end()) {
+            !sceneTlas.recordFrame(*commands, nullptr) || !commands->end()) {
             sceneTlas.finishGraphExecution(false, {});
             return false;
         }

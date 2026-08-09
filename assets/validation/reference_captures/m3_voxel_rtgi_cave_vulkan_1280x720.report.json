@@ -1,4 +1,195 @@
 {
+  "acceleration_structure_work": {
+    "gpu_valid": true,
+    "observed_sample_count": 3,
+    "residency": {
+      "latest": {
+        "scene_referenced_blas_bytes": 5910784,
+        "scene_tlas_bytes": 78720,
+        "scene_tlas_instances": 256,
+        "scene_tlas_unique_blas": 256,
+        "terrain_blas": 255,
+        "terrain_blas_bytes": 5397760,
+        "terrain_primitives": 203188
+      },
+      "peak": {
+        "scene_referenced_blas_bytes": 5910784,
+        "scene_tlas_bytes": 78720,
+        "scene_tlas_instances": 256,
+        "scene_tlas_unique_blas": 256,
+        "terrain_blas": 255,
+        "terrain_blas_bytes": 5397760,
+        "terrain_primitives": 203188
+      }
+    },
+    "sample_count": 3,
+    "scope": "scene_acceleration_structures",
+    "stages": {
+      "AS.DynamicResourcePreparation": {
+        "cpu_ms": {
+          "p50": 0.105898,
+          "p95": 0.118033,
+          "p99": 0.118033
+        },
+        "gpu_ms": {
+          "p50": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "latest": {
+          "cpu_ms": 0.118033,
+          "instances": 256,
+          "operations": 1,
+          "primitives": 0,
+          "scratch_bytes": 0,
+          "structure_bytes": 0
+        },
+        "operation_count": 3,
+        "peak_per_frame": {
+          "instances": 256,
+          "operations": 1,
+          "primitives": 0,
+          "scratch_bytes": 0,
+          "structure_bytes": 0
+        }
+      },
+      "RTGI.SceneTLASBootstrap": {
+        "cpu_ms": {
+          "p50": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "gpu_ms": {
+          "p50": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "latest": {
+          "cpu_ms": 0.0,
+          "instances": 0,
+          "operations": 0,
+          "primitives": 0,
+          "scratch_bytes": 0,
+          "structure_bytes": 0
+        },
+        "operation_count": 0,
+        "peak_per_frame": {
+          "instances": 0,
+          "operations": 0,
+          "primitives": 0,
+          "scratch_bytes": 0,
+          "structure_bytes": 0
+        }
+      },
+      "SceneTLAS": {
+        "cpu_ms": {
+          "p50": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "gpu_ms": {
+          "p50": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "latest": {
+          "cpu_ms": 0.0,
+          "instances": 0,
+          "operations": 0,
+          "primitives": 0,
+          "scratch_bytes": 0,
+          "structure_bytes": 0
+        },
+        "operation_count": 0,
+        "peak_per_frame": {
+          "instances": 0,
+          "operations": 0,
+          "primitives": 0,
+          "scratch_bytes": 0,
+          "structure_bytes": 0
+        }
+      },
+      "TerrainBLAS.Build": {
+        "cpu_ms": {
+          "p50": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "gpu_ms": {
+          "p50": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "latest": {
+          "cpu_ms": 0.0,
+          "instances": 0,
+          "operations": 0,
+          "primitives": 0,
+          "scratch_bytes": 0,
+          "structure_bytes": 0
+        },
+        "operation_count": 0,
+        "peak_per_frame": {
+          "instances": 0,
+          "operations": 0,
+          "primitives": 0,
+          "scratch_bytes": 0,
+          "structure_bytes": 0
+        }
+      },
+      "TerrainBLAS.Compaction": {
+        "cpu_ms": {
+          "p50": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "gpu_ms": {
+          "p50": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "latest": {
+          "cpu_ms": 0.0,
+          "instances": 0,
+          "operations": 0,
+          "primitives": 0,
+          "scratch_bytes": 0,
+          "structure_bytes": 0
+        },
+        "operation_count": 0,
+        "peak_per_frame": {
+          "instances": 0,
+          "operations": 0,
+          "primitives": 0,
+          "scratch_bytes": 0,
+          "structure_bytes": 0
+        }
+      }
+    },
+    "static_blas": {
+      "asset_count": 1,
+      "build": {
+        "count": 1,
+        "cpu_ms": 0.941233,
+        "gpu_ms": 0.408064,
+        "scratch_peak_bytes": 329472,
+        "uncompacted_blas_bytes": 1089408
+      },
+      "compaction": {
+        "compacted_blas_bytes": 513024,
+        "count": 1,
+        "cpu_ms": 0.058293,
+        "gpu_ms": 0.01408
+      },
+      "geometry_count": 1,
+      "primitive_count": 15450,
+      "resident_asset_count": 1,
+      "scope": "asset_load",
+      "supported": true
+    },
+    "valid": true,
+    "window_capacity": 1000
+  },
   "camera_path": {
     "content_hash": "87e07b85195fdded",
     "duration_seconds": 6.0,
@@ -15,28 +206,28 @@
     "complete_frame": true,
     "latest": {
       "sequence": 424,
-      "span_ms": 15.925248,
+      "span_ms": 8.488704,
       "valid": true
     },
     "observed_sample_count": 3,
     "sample_count": 3,
     "scope": "scene_render_graphs",
     "span_ms": {
-      "p50": 15.925248,
-      "p95": 19.48672,
-      "p99": 19.48672
+      "p50": 9.330688,
+      "p95": 9.674752,
+      "p99": 9.674752
     },
     "valid": true,
     "window_capacity": 1000
   },
   "cpu_update_render_ms": {
-    "average": 212.44509166666668,
-    "max": 572.048615,
-    "median": 35.41296,
-    "min": 29.8737,
-    "p50": 35.41296,
-    "p95": 572.048615,
-    "p99": 572.048615
+    "average": 181.76264,
+    "max": 502.93065699999994,
+    "median": 21.286209,
+    "min": 21.071054,
+    "p50": 21.286209,
+    "p95": 502.93065699999994,
+    "p99": 502.93065699999994
   },
   "environment": {
     "time_of_day_seconds": 900.0,
@@ -48,53 +239,53 @@
     "complete_frame": false,
     "cpu_ms": {
       "Build": {
-        "p50": 0.207131,
-        "p95": 0.226623,
-        "p99": 0.226623
+        "p50": 0.134421,
+        "p95": 0.140854,
+        "p99": 0.140854
       },
       "Compile": {
-        "p50": 0.094948,
-        "p95": 0.467671,
-        "p99": 0.467671
+        "p50": 0.06135,
+        "p95": 0.347664,
+        "p99": 0.347664
       },
       "Context": {
-        "p50": 0.00596,
-        "p95": 0.006336,
-        "p99": 0.006336
+        "p50": 0.003581,
+        "p95": 0.003595,
+        "p99": 0.003595
       },
       "Execute": {
-        "p50": 1.895763,
-        "p95": 1.930773,
-        "p99": 1.930773
+        "p50": 1.321864,
+        "p95": 1.491976,
+        "p99": 1.491976
       },
       "Record": {
-        "p50": 1.640403,
-        "p95": 1.772418,
-        "p99": 1.772418
+        "p50": 1.211848,
+        "p95": 1.334385,
+        "p99": 1.334385
       },
       "ShadowPrep": {
-        "p50": 0.103526,
-        "p95": 0.109547,
-        "p99": 0.109547
+        "p50": 0.073018,
+        "p95": 0.079978,
+        "p99": 0.079978
       },
       "Submit": {
-        "p50": 0.149628,
-        "p95": 0.247088,
-        "p99": 0.247088
+        "p50": 0.138114,
+        "p95": 0.152044,
+        "p99": 0.152044
       },
       "TerrainPrep": {
-        "p50": 0.040035,
-        "p95": 0.041122,
-        "p99": 0.041122
+        "p50": 0.023185,
+        "p95": 0.024676,
+        "p99": 0.024676
       }
     },
     "cpu_sample_count": 3,
     "cpu_valid": true,
     "gpu_ms": {
       "Idle": {
-        "p50": 3.2581119999999997,
-        "p95": 3.5781119999999955,
-        "p99": 3.5781119999999955
+        "p50": 0.060671999999998505,
+        "p95": 0.06272000000000055,
+        "p99": 0.06272000000000055
       },
       "Overlap": {
         "p50": 0.0,
@@ -102,14 +293,14 @@
         "p99": 0.0
       },
       "Span": {
-        "p50": 10.253312,
-        "p95": 13.512704,
-        "p99": 13.512704
+        "p50": 7.13216,
+        "p95": 7.723007999999999,
+        "p99": 7.723007999999999
       },
       "Total": {
-        "p50": 7.117568,
-        "p95": 9.934592000000004,
-        "p99": 9.934592000000004
+        "p50": 7.071488000000001,
+        "p95": 7.660287999999999,
+        "p99": 7.660287999999999
       }
     },
     "gpu_sample_count": 3,
@@ -130,75 +321,100 @@
   "render_graph_stage_ms": {
     "observed_sample_count": 3,
     "stages": {
+      "AS.DynamicResourcePreparation": {
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 0.0
+      },
       "Cloud": {
-        "p50": 0.258048,
-        "p95": 0.26112,
-        "p99": 0.26112
+        "p50": 0.253952,
+        "p95": 0.254976,
+        "p99": 0.254976
       },
       "GBuffer": {
-        "p50": 0.43008,
-        "p95": 0.5632,
-        "p99": 0.5632
+        "p50": 0.41984,
+        "p95": 0.5376,
+        "p99": 0.5376
       },
       "Lighting": {
-        "p50": 0.846848,
-        "p95": 0.863232,
-        "p99": 0.863232
+        "p50": 0.83968,
+        "p95": 0.841728,
+        "p99": 0.841728
       },
       "NRD": {
-        "p50": 3.0525439999999997,
-        "p95": 3.2256,
-        "p99": 3.2256
+        "p50": 1.75104,
+        "p95": 1.7551359999999998,
+        "p99": 1.7551359999999998
       },
       "NRD.Dispatch": {
-        "p50": 3.003392,
-        "p95": 3.16928,
-        "p99": 3.16928
+        "p50": 1.690624,
+        "p95": 1.690624,
+        "p99": 1.690624
       },
       "NRD.GuidePrep": {
-        "p50": 0.05632,
-        "p95": 0.069632,
-        "p99": 0.069632
+        "p50": 0.060416,
+        "p95": 0.064512,
+        "p99": 0.064512
       },
       "Post": {
-        "p50": 0.179456,
-        "p95": 0.185344,
-        "p99": 0.185344
+        "p50": 0.17536,
+        "p95": 0.175616,
+        "p99": 0.175616
       },
       "RTGI": {
-        "p50": 3.08736,
-        "p95": 3.344384,
-        "p99": 3.344384
+        "p50": 1.043456,
+        "p95": 1.665024,
+        "p99": 1.665024
+      },
+      "RTGI.SceneTLASBootstrap": {
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 0.0
       },
       "RTGI.SignalPack": {
-        "p50": 0.075776,
-        "p95": 0.08704,
-        "p99": 0.08704
+        "p50": 0.04608,
+        "p95": 0.054272,
+        "p99": 0.054272
       },
       "RTGI.Trace": {
-        "p50": 3.011584,
-        "p95": 3.257344,
-        "p99": 3.257344
+        "p50": 0.9984,
+        "p95": 1.610752,
+        "p99": 1.610752
       },
       "Reflection": {
-        "p50": 0.410624,
-        "p95": 0.622592,
-        "p99": 0.622592
+        "p50": 0.371712,
+        "p95": 0.544768,
+        "p99": 0.544768
       },
       "SSAO": {
-        "p50": 0.254464,
-        "p95": 0.302592,
-        "p99": 0.302592
+        "p50": 0.248832,
+        "p95": 0.290304,
+        "p99": 0.290304
       },
       "SSGI": {
         "p50": 0.0,
         "p95": 0.0,
         "p99": 0.0
       },
+      "SceneTLAS": {
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 0.0
+      },
       "Shadow": {
-        "p50": 0.9024,
-        "p95": 0.982272,
-        "p99": 0.982272
+        "p50": 0.889856,
+        "p95": 0.923904,
+        "p99": 0.923904
+      },
+      "TerrainBLAS.Build": {
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 0.0
+      },
+      "TerrainBLAS.Compaction": {
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 0.0
       },
       "Transparent": {
         "p50": 0.0,
@@ -206,20 +422,20 @@
         "p99": 0.0
       },
       "Volumetric": {
-        "p50": 0.237568,
-        "p95": 0.263168,
-        "p99": 0.263168
+        "p50": 0.232448,
+        "p95": 0.253952,
+        "p99": 0.253952
       },
       "Water": {
-        "p50": 0.216064,
-        "p95": 0.222208,
-        "p99": 0.222208
+        "p50": 0.176128,
+        "p95": 0.206848,
+        "p99": 0.206848
       }
     },
     "total_tracked": {
-      "p50": 10.112,
-      "p95": 10.449664,
-      "p99": 10.449664
+      "p50": 6.404351999999999,
+      "p95": 7.0315520000000005,
+      "p99": 7.0315520000000005
     },
     "valid": true,
     "window_capacity": 1000,

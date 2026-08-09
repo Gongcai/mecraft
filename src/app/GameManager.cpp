@@ -18,6 +18,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <cstdlib>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
@@ -92,6 +93,92 @@ nlohmann::json completeGpuFrameTimingWindowJson(const RenderGraphTimingWindowSta
                         {"span_ms", stats.latest.completeGpuFrameSpanMs}}}};
 }
 
+GpuTimerPass accelerationStructureGpuTimerPass(const AccelerationStructureStage stage) {
+    switch (stage) {
+    case AccelerationStructureStage::SceneTlas: return GpuTimerPass::SceneTlas;
+    case AccelerationStructureStage::TerrainBlasBuild: return GpuTimerPass::TerrainBlasBuild;
+    case AccelerationStructureStage::TerrainBlasCompaction: return GpuTimerPass::TerrainBlasCompaction;
+    case AccelerationStructureStage::DynamicResourcePreparation:
+        return GpuTimerPass::AccelerationStructureDynamicPrepare;
+    case AccelerationStructureStage::RtgiSceneTlasBootstrap: return GpuTimerPass::RtgiSceneTlasBootstrap;
+    case AccelerationStructureStage::Count: break;
+    }
+    std::abort();
+}
+
+nlohmann::json accelerationStructureWindowJson(const AccelerationStructureWindowStats& stats,
+                                               const GpuTimingWindowStats& gpuStats) {
+    nlohmann::json stages = nlohmann::json::object();
+    for (size_t stageIndex = 0u; stageIndex < static_cast<size_t>(AccelerationStructureStage::Count); ++stageIndex) {
+        const auto stage = static_cast<AccelerationStructureStage>(stageIndex);
+        const AccelerationStructureStageWindowStats& window = stats.stages[stageIndex];
+        const AccelerationStructureStageFrameStats& latest = stats.latest.stages[stageIndex];
+        const GpuTimerPass gpuPass = accelerationStructureGpuTimerPass(stage);
+        stages[accelerationStructureStageName(stage)] = {
+            {"cpu_ms", gpuTimingPercentilesJson(window.cpuMs)},
+            {"gpu_ms", gpuTimingPercentilesJson(gpuStats.passes[static_cast<size_t>(gpuPass)].gpuMs)},
+            {"operation_count", window.operationCount},
+            {"peak_per_frame",
+             {{"operations", window.peakOperationsPerFrame},
+              {"instances", window.peakInstancesPerFrame},
+              {"primitives", window.peakPrimitivesPerFrame},
+              {"scratch_bytes", window.peakScratchBytesPerFrame},
+              {"structure_bytes", window.peakStructureBytesPerFrame}}},
+            {"latest",
+             {{"cpu_ms", latest.cpuMs},
+              {"operations", latest.operationCount},
+              {"instances", latest.instanceCount},
+              {"primitives", latest.primitiveCount},
+              {"scratch_bytes", latest.scratchBytes},
+              {"structure_bytes", latest.structureBytes}}}};
+    }
+
+    const AccelerationStructureFrameStats& latest = stats.latest;
+    const StaticBlasFrameStats& staticBlas = latest.staticBlas;
+    return {{"scope", "scene_acceleration_structures"},
+            {"valid", stats.valid},
+            {"gpu_valid", gpuStats.valid},
+            {"window_capacity", stats.capacity},
+            {"sample_count", stats.sampleCount},
+            {"observed_sample_count", stats.observedSampleCount},
+            {"stages", std::move(stages)},
+            {"residency",
+             {{"latest",
+               {{"scene_tlas_instances", latest.activeSceneTlasInstances},
+                {"scene_tlas_unique_blas", latest.activeSceneTlasBlas},
+                {"terrain_blas", latest.activeTerrainBlas},
+                {"scene_tlas_bytes", latest.activeSceneTlasBytes},
+                {"scene_referenced_blas_bytes", latest.activeSceneReferencedBlasBytes},
+                {"terrain_blas_bytes", latest.activeTerrainBlasBytes},
+                {"terrain_primitives", latest.activeTerrainPrimitiveCount}}},
+              {"peak",
+               {{"scene_tlas_instances", stats.peakActiveSceneTlasInstances},
+                {"scene_tlas_unique_blas", stats.peakActiveSceneTlasBlas},
+                {"terrain_blas", stats.peakActiveTerrainBlas},
+                {"scene_tlas_bytes", stats.peakActiveSceneTlasBytes},
+                {"scene_referenced_blas_bytes", stats.peakActiveSceneReferencedBlasBytes},
+                {"terrain_blas_bytes", stats.peakActiveTerrainBlasBytes},
+                {"terrain_primitives", stats.peakActiveTerrainPrimitiveCount}}}}},
+            {"static_blas",
+             {{"scope", "asset_load"},
+              {"supported", staticBlas.supported},
+              {"asset_count", staticBlas.assetCount},
+              {"resident_asset_count", staticBlas.residentAssetCount},
+              {"geometry_count", staticBlas.geometryCount},
+              {"primitive_count", staticBlas.primitiveCount},
+              {"build",
+               {{"count", staticBlas.buildCount},
+                {"cpu_ms", staticBlas.buildCpuMs},
+                {"gpu_ms", staticBlas.buildGpuMs},
+                {"scratch_peak_bytes", staticBlas.scratchPeakBytes},
+                {"uncompacted_blas_bytes", staticBlas.uncompactedBlasBytes}}},
+              {"compaction",
+               {{"count", staticBlas.compactionCount},
+                {"cpu_ms", staticBlas.compactionCpuMs},
+                {"gpu_ms", staticBlas.compactionGpuMs},
+                {"compacted_blas_bytes", staticBlas.compactedBlasBytes}}}}}};
+}
+
 nlohmann::json rhiMemoryStatsJson(const RhiMemoryStats& stats) {
     nlohmann::json categories = nlohmann::json::object();
     for (size_t index = 0u; index < kRhiMemoryCategoryCount; ++index) {
@@ -120,6 +207,7 @@ bool GameManager::init(int width, int height, const char* title, AppLaunchOption
     m_benchmarkStats = {};
     m_benchmarkGpuTimingHistory.reset();
     m_benchmarkRenderGraphTimingHistory.reset();
+    m_benchmarkAccelerationStructureHistory.reset();
     m_benchmarkReplayWasActive = false;
     m_benchmarkReportWritten = false;
     m_benchmarkReportSucceeded = true;
@@ -523,6 +611,7 @@ void GameManager::recordBenchmarkFrame(const double measuredFrameSeconds, const 
     }
     const RenderGraphFrameStats graphStats = m_appStateMachine.renderGraphFrameStats();
     (void)m_benchmarkRenderGraphTimingHistory.record(graphStats);
+    (void)m_benchmarkAccelerationStructureHistory.record(graphStats.accelerationStructures);
 }
 
 void GameManager::closeWindowIfBenchmarkComplete() {
@@ -579,6 +668,8 @@ bool GameManager::writeBenchmarkReport() {
     const double avgFps = avgFrameMs > 0.0 ? 1000.0 / avgFrameMs : 0.0;
     const GpuTimingWindowStats gpuTimingWindow = m_benchmarkGpuTimingHistory.snapshot();
     const RenderGraphTimingWindowStats renderGraphTimingWindow = m_benchmarkRenderGraphTimingHistory.snapshot();
+    const AccelerationStructureWindowStats accelerationStructureWindow =
+        m_benchmarkAccelerationStructureHistory.snapshot();
     const RhiMemoryStats memoryStats = m_rhiDevice != nullptr ? m_rhiDevice->memoryStats() : RhiMemoryStats{};
 
     std::cout << std::fixed << std::setprecision(3) << "[Benchmark] frames=" << m_benchmarkStats.frameCount
@@ -696,6 +787,7 @@ bool GameManager::writeBenchmarkReport() {
                                      {"stages", std::move(gpuStages)}};
     root["render_graph_frame_ms"] = renderGraphTimingWindowJson(renderGraphTimingWindow);
     root["complete_gpu_frame_ms"] = completeGpuFrameTimingWindowJson(renderGraphTimingWindow);
+    root["acceleration_structure_work"] = accelerationStructureWindowJson(accelerationStructureWindow, gpuTimingWindow);
     root["rhi_memory"] = rhiMemoryStatsJson(memoryStats);
 
     const std::filesystem::path parentPath = reportPath.parent_path();

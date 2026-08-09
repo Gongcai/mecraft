@@ -5,6 +5,7 @@
 #include "../contracts/ClusteredLightingContract.h"
 #include "../contracts/GpuLightContract.h"
 #include "../rhi/SceneTlasCache.h"
+#include "../rhi/StaticMeshBlasCache.h"
 
 #include <glm/glm.hpp>
 
@@ -89,6 +90,9 @@ public:
     /// @return True when the snapshot is complete and internally consistent.
     [[nodiscard]] virtual bool collectRayTracingInstances(std::vector<renderer::rt::SceneTlasInstanceInput>& instances,
                                                           std::string& error) const = 0;
+
+    /// Returns immutable static BLAS diagnostics aggregated once per unique loaded asset.
+    [[nodiscard]] virtual renderer::rt::StaticMeshBlasAggregateStats staticBlasAggregateStats() const = 0;
 
     /// Publishes the current clustered-light descriptor set and grid before
     /// any frame commands are recorded.

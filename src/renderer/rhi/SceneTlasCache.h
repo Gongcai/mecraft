@@ -20,6 +20,7 @@
 
 class RhiCommandList;
 class RhiDevice;
+class RenderDebugService;
 
 namespace renderer::rt {
 
@@ -144,6 +145,13 @@ struct SceneTlasStats {
     uint64_t activeTlasBytes = 0u;
     uint64_t buildsRecorded = 0u;
     uint64_t buildsCompleted = 0u;
+    uint32_t buildsRecordedThisFrame = 0u;
+    uint64_t instancesRecordedThisFrame = 0u;
+    uint64_t scratchBytesThisFrame = 0u;
+    uint64_t tlasBytesThisFrame = 0u;
+    uint64_t dynamicResourceBytesThisFrame = 0u;
+    double buildCpuMsThisFrame = 0.0;
+    double dynamicResourceCpuMsThisFrame = 0.0;
     glm::vec3 activeSceneOrigin{0.0f};
 };
 
@@ -161,6 +169,10 @@ public:
     /// Polls submitted generations, promotes completed builds, and reclaims retired resources.
     void beginFrame();
 
+    /// Polls completed generations again after a synchronous bootstrap submission.
+    /// This preserves the current frame's profiling counters.
+    void pollCompletedWork();
+
     /// Replaces the desired scene instance snapshot after validation and stable sorting.
     /// @param instances Complete scene snapshot; an empty vector explicitly retires the active TLAS.
     /// @param sceneOrigin Shared floating origin for TLAS and camera-relative GPU Scene data.
@@ -170,7 +182,7 @@ public:
 
     /// Records one required TLAS build into the current Render Graph command list.
     /// @return False when resource creation or command recording fails.
-    [[nodiscard]] bool recordFrame(RhiCommandList& commandList);
+    [[nodiscard]] bool recordFrame(RhiCommandList& commandList, RenderDebugService* debugService);
 
     /// Commits the recorded build and active-generation usage to the graph completion token.
     /// @param succeeded True only when the complete graph submission succeeded.
@@ -272,6 +284,13 @@ private:
     uint64_t m_nextRevision = 1u;
     uint64_t m_buildsRecorded = 0u;
     uint64_t m_buildsCompleted = 0u;
+    uint32_t m_buildsRecordedThisFrame = 0u;
+    uint64_t m_instancesRecordedThisFrame = 0u;
+    uint64_t m_scratchBytesThisFrame = 0u;
+    uint64_t m_tlasBytesThisFrame = 0u;
+    uint64_t m_dynamicResourceBytesThisFrame = 0u;
+    double m_buildCpuMsThisFrame = 0.0;
+    double m_dynamicResourceCpuMsThisFrame = 0.0;
     uint64_t m_desiredRevision = 0u;
     glm::vec3 m_desiredSceneOrigin{0.0f};
     std::vector<NormalizedInput> m_desiredInputs;

@@ -649,6 +649,9 @@ void DeferredPipeline::initializePasses(ResourceMgr& resourceMgr, shadow::Shadow
 void DeferredPipeline::init(SharedRenderResources& shared) {
     // Store shared resources pointer
     m_shared = &shared;
+    m_accelerationStructureFrameSequence = 0u;
+    m_sceneTlasPrepareCpuMs = 0.0;
+    m_rtgiSceneTlasBootstrapCpuMs = 0.0;
 
     // Extract ResourceMgr and ShadowRenderer from shared resources
     if (shared.resources) {
@@ -776,6 +779,9 @@ void DeferredPipeline::shutdown() {
     m_shared = nullptr;
     m_rtgiTemporalSampleIndex = 0u;
     m_rtgiTraceInspectionActive = false;
+    m_accelerationStructureFrameSequence = 0u;
+    m_sceneTlasPrepareCpuMs = 0.0;
+    m_rtgiSceneTlasBootstrapCpuMs = 0.0;
 }
 
 void DeferredPipeline::invalidateHistory() {
@@ -950,10 +956,16 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
     if (!externalGeometry && m_shared->staticMeshRenderer != nullptr) {
         m_shared->staticMeshRenderer->prepareFrame(ctx, *ctx.worldView);
     }
-    if (!prepareSceneTlas(ctx.camera.position)) {
+    m_sceneTlasPrepareCpuMs = 0.0;
+    m_rtgiSceneTlasBootstrapCpuMs = 0.0;
+    const auto sceneTlasPrepareStart = std::chrono::steady_clock::now();
+    const bool sceneTlasPrepared = prepareSceneTlas(ctx.camera.position);
+    m_sceneTlasPrepareCpuMs =
+        std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - sceneTlasPrepareStart).count();
+    if (!sceneTlasPrepared) {
         return false;
     }
-    if (rtgiEnabled && !bootstrapSceneTlasForRtgi()) {
+    if (rtgiEnabled && !bootstrapSceneTlasForRtgi(ctx.debugService)) {
         return false;
     }
     if (externalGeometry) {
@@ -1697,8 +1709,9 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
     if (m_shared->sceneTlasCache != nullptr && m_shared->sceneTlasCache->supported()) {
         RenderGraphPassBuilder sceneTlas =
             m_renderGraph.addPass({"Deferred.SceneTLAS", RgPassType::Graphics, RhiQueueType::Graphics});
-        sceneTlas.dependsOn(graphTail).setExecute(
-            [&](RgPassContext& pass) { return m_shared->sceneTlasCache->recordFrame(pass.commandList()); });
+        sceneTlas.dependsOn(graphTail).setExecute([&](RgPassContext& pass) {
+            return m_shared->sceneTlasCache->recordFrame(pass.commandList(), ctx.debugService);
+        });
         graphTail = sceneTlas.handle();
     }
     // Hi-Z occlusion culling: reduce the previous frame's depth into a
@@ -2890,6 +2903,10 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
     m_graphSubmitCount = static_cast<uint32_t>(executed.submissions.size());
     m_graphWorkerRecordedBatchCount = executed.workerRecordedBatchCount;
     m_graphCpuStatsValid = true;
+    ++m_accelerationStructureFrameSequence;
+    if (m_accelerationStructureFrameSequence == 0u) {
+        std::abort();
+    }
     if (!executed.succeeded()) {
         MECRAFT_LOG_STREAM(std::cerr << "[DeferredPipeline] Render Graph execution failed: " << executed.message
                                      << '\n');
@@ -2974,6 +2991,92 @@ RenderGraphFrameStats DeferredPipeline::renderGraphFrameStats() const {
     stats.aliasedRequestBytes = transientStats.aliasedRequestBytes;
     stats.aliasTotalPageBytes = transientStats.totalPageBytes;
 
+    AccelerationStructureFrameStats& accelerationStructures = stats.accelerationStructures;
+    accelerationStructures.valid = stats.valid;
+    accelerationStructures.sequence = m_accelerationStructureFrameSequence;
+    renderer::rt::SceneTlasStats sceneTlasStats;
+    if (m_shared != nullptr && m_shared->sceneTlasCache != nullptr) {
+        sceneTlasStats = m_shared->sceneTlasCache->stats();
+    }
+    TerrainBlasStats terrainBlasStats;
+    if (m_shared != nullptr && m_shared->terrainCache != nullptr) {
+        terrainBlasStats = m_shared->terrainCache->blasCache().stats();
+    }
+    renderer::rt::StaticMeshBlasAggregateStats staticBlasStats;
+    if (m_shared != nullptr && m_shared->deferredGeometryProvider != nullptr) {
+        staticBlasStats = m_shared->deferredGeometryProvider->staticBlasAggregateStats();
+    } else if (m_shared != nullptr && m_shared->staticMeshRenderer != nullptr) {
+        staticBlasStats.add(m_shared->staticMeshRenderer->staticBlasStats());
+    }
+    accelerationStructures.supported =
+        sceneTlasStats.supported || terrainBlasStats.supported || staticBlasStats.supported;
+
+    auto& sceneTlasStage = accelerationStructures.stages[static_cast<size_t>(AccelerationStructureStage::SceneTlas)];
+    sceneTlasStage.cpuMs = sceneTlasStats.buildCpuMsThisFrame;
+    sceneTlasStage.operationCount = sceneTlasStats.buildsRecordedThisFrame;
+    sceneTlasStage.instanceCount = sceneTlasStats.instancesRecordedThisFrame;
+    sceneTlasStage.scratchBytes = sceneTlasStats.scratchBytesThisFrame;
+    sceneTlasStage.structureBytes = sceneTlasStats.tlasBytesThisFrame;
+
+    auto& terrainBuildStage =
+        accelerationStructures.stages[static_cast<size_t>(AccelerationStructureStage::TerrainBlasBuild)];
+    terrainBuildStage.cpuMs = terrainBlasStats.buildCpuMsThisFrame;
+    terrainBuildStage.operationCount = terrainBlasStats.buildsRecordedThisFrame;
+    terrainBuildStage.primitiveCount = terrainBlasStats.buildPrimitiveCountThisFrame;
+    terrainBuildStage.scratchBytes = terrainBlasStats.scratchPeakBytesThisFrame;
+    terrainBuildStage.structureBytes = terrainBlasStats.buildBlasBytesThisFrame;
+
+    auto& terrainCompactionStage =
+        accelerationStructures.stages[static_cast<size_t>(AccelerationStructureStage::TerrainBlasCompaction)];
+    terrainCompactionStage.cpuMs = terrainBlasStats.compactionCpuMsThisFrame;
+    terrainCompactionStage.operationCount = terrainBlasStats.compactionsRecordedThisFrame;
+    terrainCompactionStage.primitiveCount = terrainBlasStats.compactionPrimitiveCountThisFrame;
+    terrainCompactionStage.structureBytes = terrainBlasStats.compactedBlasBytesThisFrame;
+
+    auto& dynamicResourceStage =
+        accelerationStructures.stages[static_cast<size_t>(AccelerationStructureStage::DynamicResourcePreparation)];
+    dynamicResourceStage.cpuMs = m_sceneTlasPrepareCpuMs + sceneTlasStats.dynamicResourceCpuMsThisFrame +
+                                 terrainBlasStats.dynamicResourceCpuMsThisFrame;
+    dynamicResourceStage.operationCount =
+        (sceneTlasStats.supported ? 1u : 0u) + terrainBlasStats.buildsRecordedThisFrame;
+    dynamicResourceStage.instanceCount = sceneTlasStats.desiredInstanceCount;
+    dynamicResourceStage.primitiveCount = terrainBlasStats.buildPrimitiveCountThisFrame;
+    dynamicResourceStage.structureBytes =
+        sceneTlasStats.dynamicResourceBytesThisFrame + terrainBlasStats.dynamicResourceBytesThisFrame;
+
+    auto& bootstrapStage =
+        accelerationStructures.stages[static_cast<size_t>(AccelerationStructureStage::RtgiSceneTlasBootstrap)];
+    bootstrapStage.cpuMs = m_rtgiSceneTlasBootstrapCpuMs;
+    if (m_rtgiSceneTlasBootstrapCpuMs > 0.0) {
+        bootstrapStage.operationCount = sceneTlasStats.buildsRecordedThisFrame;
+        bootstrapStage.instanceCount = sceneTlasStats.instancesRecordedThisFrame;
+        bootstrapStage.scratchBytes = sceneTlasStats.scratchBytesThisFrame;
+        bootstrapStage.structureBytes = sceneTlasStats.tlasBytesThisFrame;
+    }
+
+    accelerationStructures.activeSceneTlasInstances = sceneTlasStats.activeInstanceCount;
+    accelerationStructures.activeSceneTlasBlas = sceneTlasStats.activeBlasCount;
+    accelerationStructures.activeTerrainBlas = terrainBlasStats.activeBlasCount;
+    accelerationStructures.activeSceneTlasBytes = sceneTlasStats.activeTlasBytes;
+    accelerationStructures.activeSceneReferencedBlasBytes = sceneTlasStats.activeBlasBytes;
+    accelerationStructures.activeTerrainBlasBytes = terrainBlasStats.activeBlasBytes;
+    accelerationStructures.activeTerrainPrimitiveCount = terrainBlasStats.activePrimitiveCount;
+    StaticBlasFrameStats& staticBlas = accelerationStructures.staticBlas;
+    staticBlas.supported = staticBlasStats.supported;
+    staticBlas.assetCount = staticBlasStats.assetCount;
+    staticBlas.residentAssetCount = staticBlasStats.residentAssetCount;
+    staticBlas.buildCount = staticBlasStats.buildCount;
+    staticBlas.compactionCount = staticBlasStats.compactionCount;
+    staticBlas.geometryCount = staticBlasStats.geometryCount;
+    staticBlas.primitiveCount = staticBlasStats.primitiveCount;
+    staticBlas.scratchPeakBytes = staticBlasStats.scratchPeakBytes;
+    staticBlas.uncompactedBlasBytes = staticBlasStats.uncompactedBlasBytes;
+    staticBlas.compactedBlasBytes = staticBlasStats.compactedBlasBytes;
+    staticBlas.buildCpuMs = staticBlasStats.buildCpuMs;
+    staticBlas.buildGpuMs = staticBlasStats.buildGpuMs;
+    staticBlas.compactionCpuMs = staticBlasStats.compactionCpuMs;
+    staticBlas.compactionGpuMs = staticBlasStats.compactionGpuMs;
+
     const RgTimingSnapshot& timings = m_renderGraph.latestTimings();
     stats.execution = timings.execution;
     if (!timings.isValid() || timings.passes.empty()) {
@@ -3006,7 +3109,7 @@ RenderGraphFrameStats DeferredPipeline::renderGraphFrameStats() const {
     return stats;
 }
 
-bool DeferredPipeline::bootstrapSceneTlasForRtgi() {
+bool DeferredPipeline::bootstrapSceneTlasForRtgi(RenderDebugService* const debugService) {
     if (m_shared == nullptr || m_shared->rhiDevice == nullptr || m_shared->commandListPool == nullptr ||
         m_shared->sceneTlasCache == nullptr || m_shared->globalBindlessSet == nullptr) {
         return false;
@@ -3016,10 +3119,28 @@ bool DeferredPipeline::bootstrapSceneTlasForRtgi() {
     renderer::rt::SceneTlasCache& cache = *m_shared->sceneTlasCache;
     std::optional<renderer::rt::SceneTlasView> activeTlas = cache.activeView();
     if (!activeTlas.has_value()) {
+        const auto bootstrapCpuStart = std::chrono::steady_clock::now();
         RenderGraph bootstrapGraph;
         RenderGraphPassBuilder tlasBuild =
             bootstrapGraph.addPass({"RTGI.SceneTLASBootstrap", RgPassType::Graphics, RhiQueueType::Graphics});
-        tlasBuild.setExecute([&](RgPassContext& pass) { return cache.recordFrame(pass.commandList()); });
+        const GpuTimerCheckpoint timerCheckpoint =
+            debugService != nullptr ? debugService->gpuTimerCheckpoint() : GpuTimerCheckpoint{};
+        tlasBuild.setExecute([&](RgPassContext& pass) {
+            const GpuTimerSegmentToken bootstrapTimer =
+                debugService != nullptr
+                    ? debugService->beginGpuTimer(pass.commandList(), GpuTimerPass::RtgiSceneTlasBootstrap)
+                    : GpuTimerSegmentToken{};
+            if (!cache.recordFrame(pass.commandList(), debugService)) {
+                if (debugService != nullptr) {
+                    debugService->cancelGpuTimer(bootstrapTimer);
+                }
+                return false;
+            }
+            if (debugService != nullptr) {
+                debugService->endGpuTimer(pass.commandList(), bootstrapTimer);
+            }
+            return true;
+        });
         const RgCompileResult compiled = bootstrapGraph.compile();
         if (!compiled.succeeded()) {
             MECRAFT_LOG_STREAM(
@@ -3029,13 +3150,18 @@ bool DeferredPipeline::bootstrapSceneTlasForRtgi() {
 
         const RgExecuteResult executed = bootstrapGraph.execute(rhiDevice, *m_shared->commandListPool);
         cache.finishGraphExecution(executed.succeeded(), executed.completionToken());
+        if (!executed.succeeded() && debugService != nullptr) {
+            debugService->cancelGpuTimersSince(timerCheckpoint);
+        }
         if (!executed.succeeded() || !executed.completionToken().isValid() ||
             !rhiDevice.waitForSubmission(executed.completionToken())) {
             MECRAFT_LOG_STREAM(
                 std::cerr << "[DeferredPipeline] RTGI TLAS bootstrap execution failed: " << executed.message << '\n');
             return false;
         }
-        cache.beginFrame();
+        m_rtgiSceneTlasBootstrapCpuMs =
+            std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - bootstrapCpuStart).count();
+        cache.pollCompletedWork();
         if (!cache.healthy()) {
             MECRAFT_LOG_STREAM(std::cerr << "[DeferredPipeline] " << cache.lastError() << '\n');
             return false;
@@ -3169,7 +3295,7 @@ bool DeferredPipeline::recordTerrainDrawPreparation(RhiCommandList& commandList,
 
     if (m_shared->terrainCache) {
         m_shared->terrainCache->releaseStaleMdiAllocations(*ctx.worldView);
-        if (!m_shared->terrainCache->drainMeshingResults(*ctx.worldView, commandList)) {
+        if (!m_shared->terrainCache->drainMeshingResults(*ctx.worldView, commandList, ctx.debugService)) {
             MECRAFT_LOG_STREAM(std::cerr << "[DeferredPipeline] " << m_shared->terrainCache->blasCache().lastError()
                                          << '\n');
             return false;

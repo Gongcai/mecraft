@@ -1,4 +1,195 @@
 {
+  "acceleration_structure_work": {
+    "gpu_valid": true,
+    "observed_sample_count": 3,
+    "residency": {
+      "latest": {
+        "scene_referenced_blas_bytes": 18176,
+        "scene_tlas_bytes": 2048,
+        "scene_tlas_instances": 1,
+        "scene_tlas_unique_blas": 1,
+        "terrain_blas": 0,
+        "terrain_blas_bytes": 0,
+        "terrain_primitives": 0
+      },
+      "peak": {
+        "scene_referenced_blas_bytes": 18176,
+        "scene_tlas_bytes": 2048,
+        "scene_tlas_instances": 1,
+        "scene_tlas_unique_blas": 1,
+        "terrain_blas": 0,
+        "terrain_blas_bytes": 0,
+        "terrain_primitives": 0
+      }
+    },
+    "sample_count": 3,
+    "scope": "scene_acceleration_structures",
+    "stages": {
+      "AS.DynamicResourcePreparation": {
+        "cpu_ms": {
+          "p50": 0.02192,
+          "p95": 0.091985,
+          "p99": 0.091985
+        },
+        "gpu_ms": {
+          "p50": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "latest": {
+          "cpu_ms": 0.02192,
+          "instances": 1,
+          "operations": 1,
+          "primitives": 0,
+          "scratch_bytes": 0,
+          "structure_bytes": 0
+        },
+        "operation_count": 3,
+        "peak_per_frame": {
+          "instances": 1,
+          "operations": 1,
+          "primitives": 0,
+          "scratch_bytes": 0,
+          "structure_bytes": 8128
+        }
+      },
+      "RTGI.SceneTLASBootstrap": {
+        "cpu_ms": {
+          "p50": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "gpu_ms": {
+          "p50": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "latest": {
+          "cpu_ms": 0.0,
+          "instances": 0,
+          "operations": 0,
+          "primitives": 0,
+          "scratch_bytes": 0,
+          "structure_bytes": 0
+        },
+        "operation_count": 0,
+        "peak_per_frame": {
+          "instances": 0,
+          "operations": 0,
+          "primitives": 0,
+          "scratch_bytes": 0,
+          "structure_bytes": 0
+        }
+      },
+      "SceneTLAS": {
+        "cpu_ms": {
+          "p50": 0.0,
+          "p95": 0.070136,
+          "p99": 0.070136
+        },
+        "gpu_ms": {
+          "p50": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "latest": {
+          "cpu_ms": 0.0,
+          "instances": 0,
+          "operations": 0,
+          "primitives": 0,
+          "scratch_bytes": 0,
+          "structure_bytes": 0
+        },
+        "operation_count": 1,
+        "peak_per_frame": {
+          "instances": 1,
+          "operations": 1,
+          "primitives": 0,
+          "scratch_bytes": 2176,
+          "structure_bytes": 2048
+        }
+      },
+      "TerrainBLAS.Build": {
+        "cpu_ms": {
+          "p50": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "gpu_ms": {
+          "p50": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "latest": {
+          "cpu_ms": 0.0,
+          "instances": 0,
+          "operations": 0,
+          "primitives": 0,
+          "scratch_bytes": 0,
+          "structure_bytes": 0
+        },
+        "operation_count": 0,
+        "peak_per_frame": {
+          "instances": 0,
+          "operations": 0,
+          "primitives": 0,
+          "scratch_bytes": 0,
+          "structure_bytes": 0
+        }
+      },
+      "TerrainBLAS.Compaction": {
+        "cpu_ms": {
+          "p50": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "gpu_ms": {
+          "p50": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "latest": {
+          "cpu_ms": 0.0,
+          "instances": 0,
+          "operations": 0,
+          "primitives": 0,
+          "scratch_bytes": 0,
+          "structure_bytes": 0
+        },
+        "operation_count": 0,
+        "peak_per_frame": {
+          "instances": 0,
+          "operations": 0,
+          "primitives": 0,
+          "scratch_bytes": 0,
+          "structure_bytes": 0
+        }
+      }
+    },
+    "static_blas": {
+      "asset_count": 1,
+      "build": {
+        "count": 1,
+        "cpu_ms": 0.473921,
+        "gpu_ms": 0.173568,
+        "scratch_peak_bytes": 30976,
+        "uncompacted_blas_bytes": 38656
+      },
+      "compaction": {
+        "compacted_blas_bytes": 18176,
+        "count": 1,
+        "cpu_ms": 0.03699,
+        "gpu_ms": 0.006656
+      },
+      "geometry_count": 47,
+      "primitive_count": 564,
+      "resident_asset_count": 1,
+      "scope": "asset_load",
+      "supported": true
+    },
+    "valid": true,
+    "window_capacity": 1000
+  },
   "camera_path": {
     "content_hash": "0bb11dd13d10c191",
     "duration_seconds": 6.0,
@@ -15,28 +206,28 @@
     "complete_frame": true,
     "latest": {
       "sequence": 353,
-      "span_ms": 9.109504,
+      "span_ms": 8.272384,
       "valid": true
     },
     "observed_sample_count": 3,
     "sample_count": 3,
     "scope": "scene_render_graphs",
     "span_ms": {
-      "p50": 9.169408,
-      "p95": 15.92576,
-      "p99": 15.92576
+      "p50": 8.429056,
+      "p95": 8.710656,
+      "p99": 8.710656
     },
     "valid": true,
     "window_capacity": 1000
   },
   "cpu_update_render_ms": {
-    "average": 185.14105533333336,
-    "max": 532.125144,
-    "median": 14.155966000000001,
-    "min": 9.142056,
-    "p50": 14.155966000000001,
-    "p95": 532.125144,
-    "p99": 532.125144
+    "average": 165.19476733333335,
+    "max": 477.13492,
+    "median": 10.099072000000001,
+    "min": 8.35031,
+    "p50": 10.099072000000001,
+    "p95": 477.13492,
+    "p99": 477.13492
   },
   "environment": {
     "time_of_day_seconds": 900.0,
@@ -56,14 +247,14 @@
     "complete_frame": false,
     "cpu_ms": {
       "Build": {
-        "p50": 0.167276,
-        "p95": 0.209107,
-        "p99": 0.209107
+        "p50": 0.291671,
+        "p95": 0.297524,
+        "p99": 0.297524
       },
       "Compile": {
-        "p50": 0.364146,
-        "p95": 0.474046,
-        "p99": 0.474046
+        "p50": 0.827677,
+        "p95": 0.861232,
+        "p99": 0.861232
       },
       "Context": {
         "p50": 0.0,
@@ -71,24 +262,24 @@
         "p99": 0.0
       },
       "Execute": {
-        "p50": 9.124904,
-        "p95": 13.491691,
-        "p99": 13.491691
+        "p50": 6.848299,
+        "p95": 9.059687,
+        "p99": 9.059687
       },
       "Record": {
-        "p50": 8.920146,
-        "p95": 13.325459,
-        "p99": 13.325459
+        "p50": 6.600588,
+        "p95": 8.772814,
+        "p99": 8.772814
       },
       "ShadowPrep": {
-        "p50": 0.0075,
-        "p95": 0.009156,
-        "p99": 0.009156
+        "p50": 0.01125,
+        "p95": 0.012604,
+        "p99": 0.012604
       },
       "Submit": {
-        "p50": 0.19659,
-        "p95": 0.217068,
-        "p99": 0.217068
+        "p50": 0.274087,
+        "p95": 0.282287,
+        "p99": 0.282287
       },
       "TerrainPrep": {
         "p50": 0.0,
@@ -100,9 +291,9 @@
     "cpu_valid": true,
     "gpu_ms": {
       "Idle": {
-        "p50": 0.6625280000000009,
-        "p95": 2.897407999999997,
-        "p99": 2.897407999999997
+        "p50": 0.05888000000000382,
+        "p95": 0.06246400000000207,
+        "p99": 0.06246400000000207
       },
       "Overlap": {
         "p50": 0.0,
@@ -110,14 +301,14 @@
         "p99": 0.0
       },
       "Span": {
-        "p50": 8.173568,
-        "p95": 13.263872,
-        "p99": 13.263872
+        "p50": 7.5008,
+        "p95": 9.01632,
+        "p99": 9.01632
       },
       "Total": {
-        "p50": 8.109824000000001,
-        "p95": 10.366464000000002,
-        "p99": 10.366464000000002
+        "p50": 7.442687999999997,
+        "p95": 8.957439999999997,
+        "p99": 8.957439999999997
       }
     },
     "gpu_sample_count": 3,
@@ -138,75 +329,100 @@
   "render_graph_stage_ms": {
     "observed_sample_count": 3,
     "stages": {
+      "AS.DynamicResourcePreparation": {
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 0.0
+      },
       "Cloud": {
         "p50": 0.272384,
-        "p95": 0.27648,
-        "p99": 0.27648
+        "p95": 0.272384,
+        "p99": 0.272384
       },
       "GBuffer": {
         "p50": 0.195584,
-        "p95": 0.196352,
-        "p99": 0.196352
+        "p95": 0.19584,
+        "p99": 0.19584
       },
       "Lighting": {
-        "p50": 1.183744,
-        "p95": 1.19296,
-        "p99": 1.19296
+        "p50": 1.175552,
+        "p95": 1.18272,
+        "p99": 1.18272
       },
       "NRD": {
-        "p50": 2.197504,
-        "p95": 4.16256,
-        "p99": 4.16256
+        "p50": 1.5083520000000001,
+        "p95": 1.516544,
+        "p99": 1.516544
       },
       "NRD.Dispatch": {
-        "p50": 2.15552,
-        "p95": 4.120576,
-        "p99": 4.120576
+        "p50": 1.468416,
+        "p95": 1.476608,
+        "p99": 1.476608
       },
       "NRD.GuidePrep": {
-        "p50": 0.041984,
-        "p95": 0.041984,
-        "p99": 0.041984
+        "p50": 0.039936,
+        "p95": 0.04096,
+        "p99": 0.04096
       },
       "Post": {
-        "p50": 0.184832,
-        "p95": 0.188416,
-        "p99": 0.188416
+        "p50": 0.18432,
+        "p95": 0.187136,
+        "p99": 0.187136
       },
       "RTGI": {
-        "p50": 2.492416,
-        "p95": 6.765568,
-        "p99": 6.765568
+        "p50": 2.486272,
+        "p95": 2.4913920000000003,
+        "p99": 2.4913920000000003
+      },
+      "RTGI.SceneTLASBootstrap": {
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 0.0
       },
       "RTGI.SignalPack": {
-        "p50": 0.041984,
-        "p95": 0.057344,
-        "p99": 0.057344
+        "p50": 0.04096,
+        "p95": 0.04096,
+        "p99": 0.04096
       },
       "RTGI.Trace": {
-        "p50": 2.450432,
-        "p95": 6.708224,
-        "p99": 6.708224
+        "p50": 2.445312,
+        "p95": 2.450432,
+        "p99": 2.450432
       },
       "Reflection": {
-        "p50": 0.405504,
-        "p95": 0.411648,
-        "p99": 0.411648
+        "p50": 0.39424,
+        "p95": 0.39936,
+        "p99": 0.39936
       },
       "SSAO": {
-        "p50": 0.299008,
-        "p95": 0.301056,
-        "p99": 0.301056
+        "p50": 0.297984,
+        "p95": 0.299008,
+        "p99": 0.299008
       },
       "SSGI": {
         "p50": 0.0,
         "p95": 0.0,
         "p99": 0.0
       },
+      "SceneTLAS": {
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 0.0
+      },
       "Shadow": {
-        "p50": 0.255232,
-        "p95": 0.28032,
-        "p99": 0.28032
+        "p50": 0.256512,
+        "p95": 0.260608,
+        "p99": 0.260608
+      },
+      "TerrainBLAS.Build": {
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 0.0
+      },
+      "TerrainBLAS.Compaction": {
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 0.0
       },
       "Transparent": {
         "p50": 0.0,
@@ -215,8 +431,8 @@
       },
       "Volumetric": {
         "p50": 0.25088,
-        "p95": 0.253952,
-        "p99": 0.253952
+        "p95": 0.25088,
+        "p99": 0.25088
       },
       "Water": {
         "p50": 0.0,
@@ -225,9 +441,9 @@
       }
     },
     "total_tracked": {
-      "p50": 7.735808000000001,
-      "p95": 14.016,
-      "p99": 14.016
+      "p50": 7.023360000000001,
+      "p95": 7.037951999999999,
+      "p99": 7.037951999999999
     },
     "valid": true,
     "window_capacity": 1000,
@@ -264,9 +480,9 @@
         "resource_count": 7
       },
       "presentation": {
-        "allocation_count": 4,
-        "bytes": 15728640,
-        "resource_count": 8
+        "allocation_count": 3,
+        "bytes": 11796480,
+        "resource_count": 6
       },
       "readback": {
         "allocation_count": 6,
@@ -304,9 +520,9 @@
         "resource_count": 16
       }
     },
-    "total_allocation_count": 383,
-    "total_bytes": 827935216,
-    "total_resource_count": 398,
+    "total_allocation_count": 382,
+    "total_bytes": 824003056,
+    "total_resource_count": 396,
     "valid": true
   },
   "sample_duration_seconds": 0.05000000260770321,

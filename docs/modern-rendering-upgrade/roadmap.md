@@ -307,17 +307,24 @@ p50/p95/p99，以及最新 Pass/Batch/Submit/工作线程 Batch 计数。该字�
 `complete_gpu_frame_ms`：同一 `RenderDebugService` 在帧首和终端 Composite/Blit/FSR1 pass 记录首尾
 timestamp，范围为 `scene_render_graphs`，包括图间提交顺序和 GPU 调度间隙，不包括 UI/Present；没有完整
 首尾 timestamp 时 `valid=false`，不填充旧值。两份 RTGI 参考报告已用新二进制重新采集，Sponza 和体素
-洞穴分别得到 15.926 ms 与 19.487 ms 的 3 帧 p95；该窗口只用于验证报告契约，正式性能结论仍要求 1000 帧。
+洞穴在 AS 遥测接入后的最新报告中分别得到 8.711 ms 与 9.675 ms 的 3 帧 p95；该窗口只用于验证报告契约，
+正式性能结论仍要求 1000 帧。
+
+AS 分项遥测已完成：`SceneTLAS`、`TerrainBLAS.Build`、`TerrainBLAS.Compaction`、
+`AS.DynamicResourcePreparation` 和 `RTGI.SceneTLASBootstrap` 已接入多段 GPU Timestamp 与独立 CPU
+计时；Benchmark JSON 的 `acceleration_structure_work` 同时发布构建次数、Instance/Primitive、Scratch、
+TLAS/BLAS 字节、固定窗口每帧峰值和驻留峰值。Static BLAS 在资产加载路径记录 Build/Compaction 的
+CPU/GPU 时间、压缩前后字节和唯一资产聚合，bootstrap 与其内部 SceneTLAS 的重叠时间不重复计入
+`total_tracked`。两份 3 帧 RTGI 参考报告与 Vulkan Smoke 已验证真实 Query、统计契约和资源生命周期；
+预热完成后的稳态帧没有 Terrain BLAS 工作时，相应阶段保持合法的零值。
 
 下一轮任务按以下顺序执行：
 
-1. 为 `SceneTLAS`、Terrain BLAS Build/Compaction、Static BLAS、动态资源准备和 RTGI bootstrap 分别增加
-   GPU/CPU Timestamp，报告构建次数、Primitive、Scratch、TLAS/BLAS 字节和每帧峰值。
-2. 对照 Caustica 评估动态实体 BLAS Refit、TLAS Ring、固定 Solid/Cutout/Translucent/Water Geometry
+1. 对照 Caustica 评估动态实体 BLAS Refit、TLAS Ring、固定 Solid/Cutout/Translucent/Water Geometry
    Bucket 以及 Cutout Any-Hit/OMM 路径，先补契约和统计再改实现。
-3. 针对 1080p 继续定位：体素优先检查地形提交、流送和 AS；Sponza 优先检查 RTGI.Trace 与 NRD.Dispatch。
+2. 针对 1080p 继续定位：体素优先检查地形提交、流送和 AS；Sponza 优先检查 RTGI.Trace 与 NRD.Dispatch。
    固定场景、驱动和电源模式后保留前后 Capture。
-4. 完整跨度和分项归因稳定后，再在同一镜头比较 RELAX A-Trous 5 与 3；不得用减少迭代数掩盖 Trace 或
+3. 完整跨度和分项归因稳定后，再在同一镜头比较 RELAX A-Trous 5 与 3；不得用减少迭代数掩盖 Trace 或
    AS 成本。
 
 ## 7. M4：GPU Culling、LOD 与动画

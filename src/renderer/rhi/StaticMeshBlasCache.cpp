@@ -8,6 +8,8 @@
 #include <glm/vector_relational.hpp>
 
 #include <algorithm>
+#include <array>
+#include <chrono>
 #include <cmath>
 #include <cstddef>
 #include <limits>
@@ -50,6 +52,23 @@ constexpr RhiBufferUsageFlags kScratchBufferUsages =
 }
 
 } // namespace
+
+void StaticMeshBlasAggregateStats::add(const StaticMeshBlasStats& stats) {
+    supported = supported || stats.supported;
+    ++assetCount;
+    residentAssetCount += stats.resident ? 1u : 0u;
+    buildCount += stats.buildCount;
+    compactionCount += stats.compactionCount;
+    geometryCount += stats.geometryCount;
+    primitiveCount += stats.primitiveCount;
+    scratchPeakBytes = std::max(scratchPeakBytes, stats.scratchPeakBytes);
+    uncompactedBlasBytes += stats.uncompactedBlasBytes;
+    compactedBlasBytes += stats.compactedBlasBytes;
+    buildCpuMs += stats.buildCpuMs;
+    buildGpuMs += stats.buildGpuMs;
+    compactionCpuMs += stats.compactionCpuMs;
+    compactionGpuMs += stats.compactionGpuMs;
+}
 
 bool StaticMeshBlasCache::init(RhiDevice* device) {
     shutdown();
@@ -135,6 +154,7 @@ StaticMeshBlasBuildResult StaticMeshBlasCache::build(RhiCommandListPool& command
         ranges[index].primitiveCount = source.primitiveCount();
     }
 
+    const auto buildCpuStart = std::chrono::steady_clock::now();
     RhiAccelerationStructureBuildInput buildInput;
     buildInput.type = RhiAccelerationStructureType::BottomLevel;
     buildInput.flags = kStaticMeshBuildFlags;
@@ -150,6 +170,8 @@ StaticMeshBlasBuildResult StaticMeshBlasCache::build(RhiCommandListPool& command
 
     RhiQueryPoolHandle compactedSizeQuery = m_device->createQueryPool(
         {"StaticMesh.BLAS.CompactedSizeQuery", RhiQueryType::AccelerationStructureCompactedSize, 1u});
+    RhiQueryPoolHandle timestampQuery =
+        m_device->createQueryPool({"StaticMesh.BLAS.Timestamps", RhiQueryType::Timestamp, 4u});
     RhiBufferDesc storageDesc;
     storageDesc.debugName = "StaticMesh.BLAS.Build.Storage";
     storageDesc.size = buildSizes.accelerationStructureSize;
@@ -190,9 +212,13 @@ StaticMeshBlasBuildResult StaticMeshBlasCache::build(RhiCommandListPool& command
             m_device->destroyQueryPool(compactedSizeQuery);
             compactedSizeQuery = {};
         }
+        if (timestampQuery.isValid()) {
+            m_device->destroyQueryPool(timestampQuery);
+            timestampQuery = {};
+        }
     };
-    if (!compactedSizeQuery.isValid() || !buildStorage.isValid() || !scratchBuffer.isValid() ||
-        !buildAccelerationStructure.isValid()) {
+    if (!compactedSizeQuery.isValid() || !timestampQuery.isValid() || !buildStorage.isValid() ||
+        !scratchBuffer.isValid() || !buildAccelerationStructure.isValid()) {
         destroyBuildResources();
         setError("Static mesh BLAS build resource creation failed");
         return StaticMeshBlasBuildResult::Failed;
@@ -212,8 +238,10 @@ StaticMeshBlasBuildResult StaticMeshBlasCache::build(RhiCommandListPool& command
             {geometry.indexBuffer, RhiResourceState::IndexBuffer, RhiResourceState::AccelerationStructureBuildInput});
     }
     buildCommands->resetQueryPool(compactedSizeQuery, 0u, 1u);
+    buildCommands->resetQueryPool(timestampQuery, 0u, 4u);
     const RhiAccelerationStructureBuildDesc buildDesc{
         buildInput, RhiAccelerationStructureBuildMode::Build, {}, buildAccelerationStructure, scratchBuffer, 0u};
+    buildCommands->writeTimestamp(timestampQuery, 0u);
     bool buildRecorded =
         buildCommands->buildAccelerationStructures(&buildDesc, 1u) &&
         buildCommands->accelerationStructureBarrier({buildAccelerationStructure,
@@ -226,6 +254,7 @@ StaticMeshBlasBuildResult StaticMeshBlasCache::build(RhiCommandListPool& command
         buildCommands->bufferBarrier(
             {geometry.indexBuffer, RhiResourceState::AccelerationStructureBuildInput, RhiResourceState::IndexBuffer});
     }
+    buildCommands->writeTimestamp(timestampQuery, 1u);
     const bool buildCommandsEnded = buildCommands->end();
     buildRecorded = buildRecorded && buildCommandsEnded;
     RhiSubmissionToken buildToken;
@@ -246,11 +275,23 @@ StaticMeshBlasBuildResult StaticMeshBlasCache::build(RhiCommandListPool& command
         setError("Static mesh BLAS compacted-size query result is invalid");
         return StaticMeshBlasBuildResult::Failed;
     }
+    std::array<uint64_t, 2u> buildTimestamps{};
+    if (!m_device->areQueryResultsAvailable(timestampQuery, 0u, 2u) ||
+        !m_device->getQueryResults(timestampQuery, 0u, 2u, buildTimestamps.data()) ||
+        buildTimestamps[1] < buildTimestamps[0]) {
+        destroyBuildResources();
+        setError("Static mesh BLAS build timestamp result is invalid");
+        return StaticMeshBlasBuildResult::Failed;
+    }
+    const double buildGpuMs = static_cast<double>(buildTimestamps[1] - buildTimestamps[0]) / 1000000.0;
+    const double buildCpuMs =
+        std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - buildCpuStart).count();
     m_device->destroyQueryPool(compactedSizeQuery);
     compactedSizeQuery = {};
     m_device->destroyBuffer(scratchBuffer);
     scratchBuffer = {};
 
+    const auto compactionCpuStart = std::chrono::steady_clock::now();
     storageDesc.debugName = "StaticMesh.BLAS.Compact.Storage";
     storageDesc.size = compactedSize;
     RhiBufferHandle compactStorage = m_device->createBuffer(storageDesc, nullptr, 0u);
@@ -284,12 +325,14 @@ StaticMeshBlasBuildResult StaticMeshBlasCache::build(RhiCommandListPool& command
         setError("Static mesh BLAS compact command-list acquisition failed");
         return StaticMeshBlasBuildResult::Failed;
     }
+    compactCommands->writeTimestamp(timestampQuery, 2u);
     const bool compactRecorded =
         compactCommands->copyAccelerationStructure(
             {buildAccelerationStructure, compactAccelerationStructure, RhiAccelerationStructureCopyMode::Compact}) &&
         compactCommands->accelerationStructureBarrier({compactAccelerationStructure,
                                                        RhiResourceState::AccelerationStructureBuildWrite,
                                                        RhiResourceState::AccelerationStructureRead});
+    compactCommands->writeTimestamp(timestampQuery, 3u);
     const bool compactCommandsEnded = compactCommands->end();
     if (!compactRecorded || !compactCommandsEnded) {
         destroyCompactResources();
@@ -297,6 +340,7 @@ StaticMeshBlasBuildResult StaticMeshBlasCache::build(RhiCommandListPool& command
         setError("Static mesh BLAS compact command recording failed");
         return StaticMeshBlasBuildResult::Failed;
     }
+
     RhiSubmissionToken compactToken;
     RhiCommandList* compactSubmission[] = {compactCommands};
     if (!m_device->submit({"StaticMesh.BLAS.CompactSubmit", compactSubmission, 1u, RhiQueueType::Graphics},
@@ -307,6 +351,19 @@ StaticMeshBlasBuildResult StaticMeshBlasCache::build(RhiCommandListPool& command
         setError("Static mesh BLAS compact submission failed");
         return StaticMeshBlasBuildResult::Failed;
     }
+
+    std::array<uint64_t, 2u> compactionTimestamps{};
+    if (!m_device->areQueryResultsAvailable(timestampQuery, 2u, 2u) ||
+        !m_device->getQueryResults(timestampQuery, 2u, 2u, compactionTimestamps.data()) ||
+        compactionTimestamps[1] < compactionTimestamps[0]) {
+        destroyCompactResources();
+        destroyBuildResources();
+        setError("Static mesh BLAS compaction timestamp result is invalid");
+        return StaticMeshBlasBuildResult::Failed;
+    }
+    const double compactionGpuMs = static_cast<double>(compactionTimestamps[1] - compactionTimestamps[0]) / 1000000.0;
+    const double compactionCpuMs =
+        std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - compactionCpuStart).count();
 
     const uint64_t deviceAddress = m_device->accelerationStructureDeviceAddress(compactAccelerationStructure);
     SceneBlasResourcePtr resource = SceneBlasResource::create(*m_device, compactAccelerationStructure, compactStorage,
@@ -378,8 +435,15 @@ StaticMeshBlasBuildResult StaticMeshBlasCache::build(RhiCommandListPool& command
     m_stats.resident = true;
     m_stats.geometryCount = static_cast<uint32_t>(geometries.size());
     m_stats.primitiveCount = primitiveCount;
+    m_stats.buildCount = 1u;
+    m_stats.compactionCount = 1u;
+    m_stats.scratchPeakBytes = buildSizes.buildScratchSize;
     m_stats.uncompactedBlasBytes = buildSizes.accelerationStructureSize;
     m_stats.compactedBlasBytes = compactedSize;
+    m_stats.buildCpuMs = buildCpuMs;
+    m_stats.buildGpuMs = buildGpuMs;
+    m_stats.compactionCpuMs = compactionCpuMs;
+    m_stats.compactionGpuMs = compactionGpuMs;
     m_stats.containsOpaque = std::any_of(geometries.begin(), geometries.end(),
                                          [](const StaticMeshBlasGeometry& geometry) { return geometry.opaque; });
     m_stats.containsCutout = std::any_of(geometries.begin(), geometries.end(),

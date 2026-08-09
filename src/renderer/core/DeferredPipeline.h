@@ -173,6 +173,9 @@ private:
     double m_graphCpuSubmitMs = 0.0;
     double m_graphCpuShadowPrepMs = 0.0;
     double m_graphCpuTerrainPrepMs = 0.0;
+    double m_sceneTlasPrepareCpuMs = 0.0;
+    double m_rtgiSceneTlasBootstrapCpuMs = 0.0;
+    uint64_t m_accelerationStructureFrameSequence = 0u;
     uint32_t m_graphSubmitCount = 0u;
     uint32_t m_graphWorkerRecordedBatchCount = 0u;
     bool m_graphCpuStatsValid = false;
@@ -192,7 +195,7 @@ private:
                                                     bool clearSsaoFiltered);
     void commitDeferredHistoryState();
     [[nodiscard]] bool prepareSceneTlas(const glm::vec3& cameraPosition);
-    [[nodiscard]] bool bootstrapSceneTlasForRtgi();
+    [[nodiscard]] bool bootstrapSceneTlasForRtgi(RenderDebugService* debugService);
     [[nodiscard]] bool recordTerrainDrawPreparation(RhiCommandList& commandList, const FrameContext& ctx);
     [[nodiscard]] bool configureVoxelReflectionProbe(const FrameContext& ctx);
     [[nodiscard]] bool executeFrameGraph(const FrameContext& ctx, const RenderSettings& settings);

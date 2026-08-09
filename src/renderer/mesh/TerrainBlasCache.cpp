@@ -3,10 +3,12 @@
 #include "renderer/rhi/RhiCommandList.h"
 #include "renderer/rhi/RhiDevice.h"
 #include "renderer/rhi/RhiResources.h"
+#include "renderer/debug/RenderDebugService.h"
 #include "../../world/chunk/Chunk.h"
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cmath>
 #include <cstddef>
 #include <limits>
@@ -222,16 +224,32 @@ void TerrainBlasCache::shutdown() {
     m_recordedCompactions.clear();
     m_buildsRecordedThisFrame = 0u;
     m_compactionsRecordedThisFrame = 0u;
+    m_buildPrimitiveCountThisFrame = 0u;
+    m_compactionPrimitiveCountThisFrame = 0u;
+    m_buildBlasBytesThisFrame = 0u;
+    m_compactedBlasBytesThisFrame = 0u;
+    m_dynamicResourceBytesThisFrame = 0u;
     m_scratchBytesRecordedThisFrame = 0u;
     m_scratchPeakBytesThisFrame = 0u;
+    m_buildCpuMsThisFrame = 0.0;
+    m_compactionCpuMsThisFrame = 0.0;
+    m_dynamicResourceCpuMsThisFrame = 0.0;
     m_lastError.clear();
 }
 
 void TerrainBlasCache::beginFrame() {
     m_buildsRecordedThisFrame = 0u;
     m_compactionsRecordedThisFrame = 0u;
+    m_buildPrimitiveCountThisFrame = 0u;
+    m_compactionPrimitiveCountThisFrame = 0u;
+    m_buildBlasBytesThisFrame = 0u;
+    m_compactedBlasBytesThisFrame = 0u;
+    m_dynamicResourceBytesThisFrame = 0u;
     m_scratchBytesRecordedThisFrame = 0u;
     m_scratchPeakBytesThisFrame = 0u;
+    m_buildCpuMsThisFrame = 0.0;
+    m_compactionCpuMsThisFrame = 0.0;
+    m_dynamicResourceCpuMsThisFrame = 0.0;
     if (m_healthy) {
         m_lastError.clear();
         (void)pollCompletedTasks();
@@ -338,7 +356,7 @@ void TerrainBlasCache::remove(const SubChunkGpuKey& key) {
     m_entries.erase(entryIt);
 }
 
-bool TerrainBlasCache::recordFrame(RhiCommandList& commandList) {
+bool TerrainBlasCache::recordFrame(RhiCommandList& commandList, RenderDebugService* const debugService) {
     if (!m_supported) {
         return true;
     }
@@ -360,7 +378,7 @@ bool TerrainBlasCache::recordFrame(RhiCommandList& commandList) {
         if (!task.current || task.state != TaskState::ReadyToCompact) {
             continue;
         }
-        if (!recordCompaction(task, commandList)) {
+        if (!recordCompaction(task, commandList, debugService)) {
             return false;
         }
         ++compactionCount;
@@ -388,7 +406,7 @@ bool TerrainBlasCache::recordFrame(RhiCommandList& commandList) {
         if (m_freeQueryIndices.empty()) {
             break;
         }
-        if (!recordBuild(task, commandList)) {
+        if (!recordBuild(task, commandList, debugService)) {
             return false;
         }
         if (task.state == TaskState::Queued) {
@@ -552,7 +570,15 @@ TerrainBlasStats TerrainBlasCache::stats() const {
     result.healthy = m_healthy;
     result.buildsRecordedThisFrame = m_buildsRecordedThisFrame;
     result.compactionsRecordedThisFrame = m_compactionsRecordedThisFrame;
+    result.buildPrimitiveCountThisFrame = m_buildPrimitiveCountThisFrame;
+    result.compactionPrimitiveCountThisFrame = m_compactionPrimitiveCountThisFrame;
+    result.buildBlasBytesThisFrame = m_buildBlasBytesThisFrame;
+    result.compactedBlasBytesThisFrame = m_compactedBlasBytesThisFrame;
+    result.dynamicResourceBytesThisFrame = m_dynamicResourceBytesThisFrame;
     result.scratchPeakBytesThisFrame = m_scratchPeakBytesThisFrame;
+    result.buildCpuMsThisFrame = m_buildCpuMsThisFrame;
+    result.compactionCpuMsThisFrame = m_compactionCpuMsThisFrame;
+    result.dynamicResourceCpuMsThisFrame = m_dynamicResourceCpuMsThisFrame;
     for (const auto& [_, entry] : m_entries) {
         if (!entry.active.has_value()) {
             continue;
@@ -650,7 +676,9 @@ bool TerrainBlasCache::pollCompletedTasks() {
     return true;
 }
 
-bool TerrainBlasCache::recordBuild(PendingTask& task, RhiCommandList& commandList) {
+bool TerrainBlasCache::recordBuild(PendingTask& task, RhiCommandList& commandList,
+                                   RenderDebugService* const debugService) {
+    const auto dynamicResourceCpuStart = std::chrono::steady_clock::now();
     const std::optional<uint32_t> queryIndex = acquireQueryIndex();
     if (!queryIndex.has_value()) {
         return true;
@@ -749,10 +777,10 @@ bool TerrainBlasCache::recordBuild(PendingTask& task, RhiCommandList& commandLis
 
     task.state = TaskState::BuildRecorded;
     m_recordedBuilds.push_back(task.schedule.requestSequence);
-    ++m_buildsRecordedThisFrame;
-    m_scratchBytesRecordedThisFrame += task.buildScratchBytes;
-    m_scratchPeakBytesThisFrame = std::max(m_scratchPeakBytesThisFrame, m_scratchBytesRecordedThisFrame);
-
+    const GpuTimerSegmentToken dynamicResourceTimer =
+        debugService != nullptr
+            ? debugService->beginGpuTimer(commandList, GpuTimerPass::AccelerationStructureDynamicPrepare)
+            : GpuTimerSegmentToken{};
     commandList.updateBuffer(task.geometryBuffer, 0u, task.geometry.vertices.data(), task.geometry.vertexByteSize());
     commandList.updateBuffer(task.primitiveMetadataBuffer, 0u, task.geometry.primitiveMetadata.data(),
                              task.geometry.primitiveMetadataByteSize());
@@ -760,31 +788,63 @@ bool TerrainBlasCache::recordBuild(PendingTask& task, RhiCommandList& commandLis
         {task.geometryBuffer, RhiResourceState::TransferDst, RhiResourceState::AccelerationStructureBuildInput});
     commandList.bufferBarrier(
         {task.primitiveMetadataBuffer, RhiResourceState::TransferDst, RhiResourceState::ShaderRead});
+    if (debugService != nullptr) {
+        debugService->endGpuTimer(commandList, dynamicResourceTimer);
+    }
+    m_dynamicResourceCpuMsThisFrame +=
+        std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - dynamicResourceCpuStart).count();
+
     commandList.resetQueryPool(m_compactedSizeQueries, task.queryIndex, 1u);
     const RhiAccelerationStructureBuildDesc build{
         buildInput, RhiAccelerationStructureBuildMode::Build, {}, task.buildAccelerationStructure, task.scratchBuffer,
         0u};
+    const auto buildCpuStart = std::chrono::steady_clock::now();
+    const GpuTimerSegmentToken buildTimer =
+        debugService != nullptr ? debugService->beginGpuTimer(commandList, GpuTimerPass::TerrainBlasBuild)
+                                : GpuTimerSegmentToken{};
     if (!commandList.buildAccelerationStructures(&build, 1u)) {
+        if (debugService != nullptr) {
+            debugService->cancelGpuTimer(buildTimer);
+        }
         setTransientError("Terrain BLAS acceleration-structure build command was rejected");
         return false;
     }
     if (!commandList.accelerationStructureBarrier({task.buildAccelerationStructure,
                                                    RhiResourceState::AccelerationStructureBuildWrite,
                                                    RhiResourceState::AccelerationStructureRead})) {
+        if (debugService != nullptr) {
+            debugService->cancelGpuTimer(buildTimer);
+        }
         setTransientError("Terrain BLAS acceleration-structure barrier recording failed");
         return false;
     }
     if (!commandList.writeAccelerationStructureProperties(
             {&task.buildAccelerationStructure, 1u, m_compactedSizeQueries, task.queryIndex})) {
+        if (debugService != nullptr) {
+            debugService->cancelGpuTimer(buildTimer);
+        }
         setTransientError("Terrain BLAS compacted-size query recording failed");
         return false;
     }
     commandList.bufferBarrier(
         {task.geometryBuffer, RhiResourceState::AccelerationStructureBuildInput, RhiResourceState::ShaderRead});
+    if (debugService != nullptr) {
+        debugService->endGpuTimer(commandList, buildTimer);
+    }
+    m_buildCpuMsThisFrame +=
+        std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - buildCpuStart).count();
+    ++m_buildsRecordedThisFrame;
+    m_buildPrimitiveCountThisFrame += task.geometry.primitiveCount();
+    m_buildBlasBytesThisFrame += task.buildBlasBytes;
+    m_dynamicResourceBytesThisFrame += task.geometry.uploadByteSize();
+    m_scratchBytesRecordedThisFrame += task.buildScratchBytes;
+    m_scratchPeakBytesThisFrame = std::max(m_scratchPeakBytesThisFrame, m_scratchBytesRecordedThisFrame);
     return true;
 }
 
-bool TerrainBlasCache::recordCompaction(PendingTask& task, RhiCommandList& commandList) {
+bool TerrainBlasCache::recordCompaction(PendingTask& task, RhiCommandList& commandList,
+                                        RenderDebugService* const debugService) {
+    const auto compactionCpuStart = std::chrono::steady_clock::now();
     RhiBufferDesc storageDesc;
     storageDesc.debugName = "Terrain.BLAS.Compact.Storage";
     storageDesc.size = task.compactedBlasBytes;
@@ -806,15 +866,29 @@ bool TerrainBlasCache::recordCompaction(PendingTask& task, RhiCommandList& comma
 
     task.state = TaskState::CompactRecorded;
     m_recordedCompactions.push_back(task.schedule.requestSequence);
-    ++m_compactionsRecordedThisFrame;
+    const GpuTimerSegmentToken compactionTimer =
+        debugService != nullptr ? debugService->beginGpuTimer(commandList, GpuTimerPass::TerrainBlasCompaction)
+                                : GpuTimerSegmentToken{};
     if (!commandList.copyAccelerationStructure({task.buildAccelerationStructure, task.compactAccelerationStructure,
                                                 RhiAccelerationStructureCopyMode::Compact}) ||
         !commandList.accelerationStructureBarrier({task.compactAccelerationStructure,
                                                    RhiResourceState::AccelerationStructureBuildWrite,
                                                    RhiResourceState::AccelerationStructureRead})) {
+        if (debugService != nullptr) {
+            debugService->cancelGpuTimer(compactionTimer);
+        }
         setTransientError("Terrain BLAS compact command recording failed");
         return false;
     }
+    if (debugService != nullptr) {
+        debugService->endGpuTimer(commandList, compactionTimer);
+    }
+    m_compactionCpuMsThisFrame +=
+        std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - compactionCpuStart).count();
+    ++m_compactionsRecordedThisFrame;
+    m_compactionPrimitiveCountThisFrame +=
+        (static_cast<uint64_t>(task.geometry.opaqueVertexCount) + task.geometry.cutoutVertexCount) / 3u;
+    m_compactedBlasBytesThisFrame += task.compactedBlasBytes;
     return true;
 }
 

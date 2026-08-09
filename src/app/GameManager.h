@@ -82,6 +82,7 @@ private:
     BenchmarkFrameStats m_benchmarkStats{};
     GpuTimingHistory m_benchmarkGpuTimingHistory;
     RenderGraphTimingHistory m_benchmarkRenderGraphTimingHistory;
+    AccelerationStructureHistory m_benchmarkAccelerationStructureHistory;
     bool m_benchmarkReplayWasActive = false;
     bool m_benchmarkReportWritten = false;
     bool m_benchmarkReportSucceeded = true;

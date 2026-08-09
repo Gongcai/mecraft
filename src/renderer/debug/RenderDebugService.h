@@ -33,7 +33,12 @@ enum class GpuTimerPass : size_t {
     RtgiSignalPack = 14,
     NrdGuidePrep = 15,
     NrdDispatch = 16,
-    Count = 17
+    SceneTlas = 17,
+    TerrainBlasBuild = 18,
+    TerrainBlasCompaction = 19,
+    AccelerationStructureDynamicPrepare = 20,
+    RtgiSceneTlasBootstrap = 21,
+    Count = 22
 };
 
 /// Identifies one explicitly recorded GPU timestamp segment.
@@ -70,6 +75,11 @@ struct GpuFrameStats {
     double rtgiSignalPackMs = 0.0;
     double nrdGuidePrepMs = 0.0;
     double nrdDispatchMs = 0.0;
+    double sceneTlasMs = 0.0;
+    double terrainBlasBuildMs = 0.0;
+    double terrainBlasCompactionMs = 0.0;
+    double accelerationStructureDynamicPrepareMs = 0.0;
+    double rtgiSceneTlasBootstrapMs = 0.0;
     double lightingMs = 0.0;
     double transparentMs = 0.0;
     double volumetricMs = 0.0;
@@ -145,6 +155,135 @@ private:
     uint64_t m_lastSequence = 0u;
 };
 
+/// Runtime acceleration-structure stages with independent CPU work attribution.
+enum class AccelerationStructureStage : size_t {
+    SceneTlas = 0,
+    TerrainBlasBuild = 1,
+    TerrainBlasCompaction = 2,
+    DynamicResourcePreparation = 3,
+    RtgiSceneTlasBootstrap = 4,
+    Count = 5
+};
+
+/// Returns the stable report name for one acceleration-structure stage.
+/// @param stage Stage whose diagnostic name is requested.
+/// @return Process-lifetime English identifier suitable for JSON keys.
+[[nodiscard]] const char* accelerationStructureStageName(AccelerationStructureStage stage);
+
+/// CPU duration and work volume recorded for one acceleration-structure stage in one frame.
+struct AccelerationStructureStageFrameStats {
+    double cpuMs = 0.0;
+    uint32_t operationCount = 0u;
+    uint64_t instanceCount = 0u;
+    uint64_t primitiveCount = 0u;
+    uint64_t scratchBytes = 0u;
+    uint64_t structureBytes = 0u;
+};
+
+/// Immutable asset-level static BLAS build diagnostics aggregated across the active scene.
+struct StaticBlasFrameStats {
+    bool supported = false;
+    uint32_t assetCount = 0u;
+    uint32_t residentAssetCount = 0u;
+    uint64_t buildCount = 0u;
+    uint64_t compactionCount = 0u;
+    uint64_t geometryCount = 0u;
+    uint64_t primitiveCount = 0u;
+    uint64_t scratchPeakBytes = 0u;
+    uint64_t uncompactedBlasBytes = 0u;
+    uint64_t compactedBlasBytes = 0u;
+    double buildCpuMs = 0.0;
+    double buildGpuMs = 0.0;
+    double compactionCpuMs = 0.0;
+    double compactionGpuMs = 0.0;
+};
+
+/// Per-frame runtime AS workload plus the current resident resource snapshot.
+struct AccelerationStructureFrameStats {
+    bool supported = false;
+    bool valid = false;
+    uint64_t sequence = 0u;
+    std::array<AccelerationStructureStageFrameStats, static_cast<size_t>(AccelerationStructureStage::Count)> stages{};
+    uint32_t activeSceneTlasInstances = 0u;
+    uint32_t activeSceneTlasBlas = 0u;
+    uint32_t activeTerrainBlas = 0u;
+    uint64_t activeSceneTlasBytes = 0u;
+    uint64_t activeSceneReferencedBlasBytes = 0u;
+    uint64_t activeTerrainBlasBytes = 0u;
+    uint64_t activeTerrainPrimitiveCount = 0u;
+    StaticBlasFrameStats staticBlas;
+};
+
+/// Totals and per-frame peaks for one AS work stage over a fixed sample window.
+struct AccelerationStructureStageWindowStats {
+    GpuTimingPercentiles cpuMs;
+    uint64_t operationCount = 0u;
+    uint32_t peakOperationsPerFrame = 0u;
+    uint64_t peakInstancesPerFrame = 0u;
+    uint64_t peakPrimitivesPerFrame = 0u;
+    uint64_t peakScratchBytesPerFrame = 0u;
+    uint64_t peakStructureBytesPerFrame = 0u;
+};
+
+/// Fixed-window acceleration-structure workload and residency statistics.
+struct AccelerationStructureWindowStats {
+    bool valid = false;
+    size_t sampleCount = 0u;
+    size_t capacity = 0u;
+    uint64_t observedSampleCount = 0u;
+    std::array<AccelerationStructureStageWindowStats, static_cast<size_t>(AccelerationStructureStage::Count)> stages{};
+    uint32_t peakActiveSceneTlasInstances = 0u;
+    uint32_t peakActiveSceneTlasBlas = 0u;
+    uint32_t peakActiveTerrainBlas = 0u;
+    uint64_t peakActiveSceneTlasBytes = 0u;
+    uint64_t peakActiveSceneReferencedBlasBytes = 0u;
+    uint64_t peakActiveTerrainBlasBytes = 0u;
+    uint64_t peakActiveTerrainPrimitiveCount = 0u;
+    AccelerationStructureFrameStats latest;
+};
+
+/// Stores runtime AS CPU work, counts, byte volumes, and residency peaks without allocation.
+class AccelerationStructureHistory {
+public:
+    static constexpr size_t kCapacity = 1000u;
+
+    /// Clears every sample, accumulated counter, peak, and sequence identity.
+    void reset();
+
+    /// Records one rendered frame with a non-zero monotonic sequence identity.
+    /// @param stats Completed acceleration-structure frame snapshot.
+    /// @return True when the frame was accepted into the history window.
+    [[nodiscard]] bool record(const AccelerationStructureFrameStats& stats);
+
+    /// Computes CPU percentiles and returns accumulated work and residency peaks.
+    [[nodiscard]] AccelerationStructureWindowStats snapshot() const;
+
+private:
+    std::array<std::array<double, kCapacity>, static_cast<size_t>(AccelerationStructureStage::Count)> m_cpuSamples{};
+    std::array<std::array<uint32_t, kCapacity>, static_cast<size_t>(AccelerationStructureStage::Count)>
+        m_operationSamples{};
+    std::array<std::array<uint64_t, kCapacity>, static_cast<size_t>(AccelerationStructureStage::Count)>
+        m_instanceSamples{};
+    std::array<std::array<uint64_t, kCapacity>, static_cast<size_t>(AccelerationStructureStage::Count)>
+        m_primitiveSamples{};
+    std::array<std::array<uint64_t, kCapacity>, static_cast<size_t>(AccelerationStructureStage::Count)>
+        m_scratchByteSamples{};
+    std::array<std::array<uint64_t, kCapacity>, static_cast<size_t>(AccelerationStructureStage::Count)>
+        m_structureByteSamples{};
+    std::array<uint32_t, kCapacity> m_activeSceneTlasInstanceSamples{};
+    std::array<uint32_t, kCapacity> m_activeSceneTlasBlasSamples{};
+    std::array<uint32_t, kCapacity> m_activeTerrainBlasSamples{};
+    std::array<uint64_t, kCapacity> m_activeSceneTlasByteSamples{};
+    std::array<uint64_t, kCapacity> m_activeSceneReferencedBlasByteSamples{};
+    std::array<uint64_t, kCapacity> m_activeTerrainBlasByteSamples{};
+    std::array<uint64_t, kCapacity> m_activeTerrainPrimitiveSamples{};
+    size_t m_nextSample = 0u;
+    size_t m_sampleCount = 0u;
+    uint64_t m_observedSampleCount = 0u;
+    uint64_t m_lastSequence = 0u;
+    AccelerationStructureFrameStats m_latest;
+};
+
 /// One Render Graph pass GPU timing entry in compiled execution order.
 struct RenderGraphPassStats {
     std::string name;
@@ -194,6 +333,8 @@ struct RenderGraphFrameStats {
     uint64_t aliasTotalPageBytes = 0u;
     /// Complete scene-rendering GPU span collected from frame-start and terminal markers.
     GpuFrameSpanStats completeGpuFrame;
+    /// Runtime acceleration-structure work and residency for this rendered frame.
+    AccelerationStructureFrameStats accelerationStructures;
     std::vector<RenderGraphPassStats> passes;
 };
 

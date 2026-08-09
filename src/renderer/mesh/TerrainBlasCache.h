@@ -21,6 +21,7 @@
 
 class RhiCommandList;
 class RhiDevice;
+class RenderDebugService;
 
 /// Classifies a candidate geometry revision relative to the current resident revision.
 enum class TerrainBlasRevisionRelation : uint8_t { Newer, Current, Stale };
@@ -130,11 +131,19 @@ struct TerrainBlasStats {
     uint32_t retiredTaskCount = 0u;
     uint32_t buildsRecordedThisFrame = 0u;
     uint32_t compactionsRecordedThisFrame = 0u;
+    uint64_t buildPrimitiveCountThisFrame = 0u;
+    uint64_t compactionPrimitiveCountThisFrame = 0u;
+    uint64_t buildBlasBytesThisFrame = 0u;
+    uint64_t compactedBlasBytesThisFrame = 0u;
+    uint64_t dynamicResourceBytesThisFrame = 0u;
     uint64_t activePrimitiveCount = 0u;
     uint64_t activeGeometryBytes = 0u;
     uint64_t activePrimitiveMetadataBytes = 0u;
     uint64_t activeBlasBytes = 0u;
     uint64_t scratchPeakBytesThisFrame = 0u;
+    double buildCpuMsThisFrame = 0.0;
+    double compactionCpuMsThisFrame = 0.0;
+    double dynamicResourceCpuMsThisFrame = 0.0;
 };
 
 /// Builds, compacts, revisions, and retires per-SubChunk bottom-level acceleration structures.
@@ -177,7 +186,7 @@ public:
 
     /// Records budgeted build and compaction commands into the current graph command list.
     /// @return False when resource creation or command recording fails.
-    [[nodiscard]] bool recordFrame(RhiCommandList& commandList);
+    [[nodiscard]] bool recordFrame(RhiCommandList& commandList, RenderDebugService* debugService);
 
     /// Commits recorded work to a submission token or rolls it back for exact retry.
     /// @param succeeded True when the render graph submitted every recorded command list.
@@ -255,8 +264,9 @@ private:
     static constexpr uint32_t kInvalidQueryIndex = std::numeric_limits<uint32_t>::max();
 
     [[nodiscard]] bool pollCompletedTasks();
-    [[nodiscard]] bool recordBuild(PendingTask& task, RhiCommandList& commandList);
-    [[nodiscard]] bool recordCompaction(PendingTask& task, RhiCommandList& commandList);
+    [[nodiscard]] bool recordBuild(PendingTask& task, RhiCommandList& commandList, RenderDebugService* debugService);
+    [[nodiscard]] bool recordCompaction(PendingTask& task, RhiCommandList& commandList,
+                                        RenderDebugService* debugService);
     [[nodiscard]] bool taskIsCurrent(const PendingTask& task) const;
     void retireCurrentTask(Entry& entry);
     [[nodiscard]] bool promoteTask(PendingTask& task, Entry& entry);
@@ -284,8 +294,16 @@ private:
     std::vector<uint64_t> m_recordedCompactions;
     uint32_t m_buildsRecordedThisFrame = 0u;
     uint32_t m_compactionsRecordedThisFrame = 0u;
+    uint64_t m_buildPrimitiveCountThisFrame = 0u;
+    uint64_t m_compactionPrimitiveCountThisFrame = 0u;
+    uint64_t m_buildBlasBytesThisFrame = 0u;
+    uint64_t m_compactedBlasBytesThisFrame = 0u;
+    uint64_t m_dynamicResourceBytesThisFrame = 0u;
     uint64_t m_scratchBytesRecordedThisFrame = 0u;
     uint64_t m_scratchPeakBytesThisFrame = 0u;
+    double m_buildCpuMsThisFrame = 0.0;
+    double m_compactionCpuMsThisFrame = 0.0;
+    double m_dynamicResourceCpuMsThisFrame = 0.0;
     std::string m_lastError;
 };
 

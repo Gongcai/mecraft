@@ -1,6 +1,8 @@
 #include <nlohmann/json.hpp>
 
+#include <array>
 #include <cmath>
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -33,6 +35,15 @@ bool readFiniteP95(const Json& stages, const char* stage, double& value) {
         return false;
     }
     value = p95->get<double>();
+    return std::isfinite(value) && value >= 0.0;
+}
+
+bool readFinitePercentile(const Json& object, const char* field, double& value) {
+    const auto percentile = object.find(field);
+    if (percentile == object.end() || !percentile->is_number()) {
+        return false;
+    }
+    value = percentile->get<double>();
     return std::isfinite(value) && value >= 0.0;
 }
 
@@ -130,6 +141,97 @@ int main() {
                              readFiniteP95(stages, "SSGI", ssgiP95) && ssgiP95 == 0.0 &&
                              readFiniteP95(*completeFrameTiming, "span_ms", completeFrameP95),
                          "RTGI, NRD, and complete scene GPU spans must have valid statistics")) {
+            return 1;
+        }
+
+        const auto accelerationWorkValue = report.find("acceleration_structure_work");
+        if (!requireTrue(accelerationWorkValue != report.end() && accelerationWorkValue->is_object(),
+                         "RTGI report must contain acceleration-structure workload statistics")) {
+            return 1;
+        }
+        const Json& accelerationWork = *accelerationWorkValue;
+        if (!requireTrue(accelerationWork.value("scope", "") == "scene_acceleration_structures" &&
+                             accelerationWork.value("valid", false) && accelerationWork.value("gpu_valid", false) &&
+                             accelerationWork.value("window_capacity", 0u) == 1000u &&
+                             accelerationWork.value("sample_count", 0u) == 3u &&
+                             accelerationWork.value("observed_sample_count", 0u) == 3u,
+                         "Acceleration-structure workload window must be complete and valid")) {
+            return 1;
+        }
+        const Json& accelerationStages = accelerationWork.at("stages");
+        constexpr std::array<const char*, 5u> requiredAccelerationStages{
+            "SceneTLAS", "TerrainBLAS.Build", "TerrainBLAS.Compaction", "AS.DynamicResourcePreparation",
+            "RTGI.SceneTLASBootstrap"};
+        for (const char* stageName : requiredAccelerationStages) {
+            const auto stageValue = accelerationStages.find(stageName);
+            if (!requireTrue(stageValue != accelerationStages.end() && stageValue->is_object(),
+                             "Acceleration-structure stage entry must be present")) {
+                return 1;
+            }
+            double cpuP95 = 0.0;
+            double gpuP95 = 0.0;
+            const Json& stage = *stageValue;
+            if (!requireTrue(readFinitePercentile(stage.at("cpu_ms"), "p95", cpuP95) &&
+                                 readFinitePercentile(stage.at("gpu_ms"), "p95", gpuP95) &&
+                                 stage.at("operation_count").is_number_unsigned() &&
+                                 stage.at("peak_per_frame").is_object() &&
+                                 stage.at("peak_per_frame").at("operations").is_number_unsigned() &&
+                                 stage.at("peak_per_frame").at("instances").is_number_unsigned() &&
+                                 stage.at("peak_per_frame").at("primitives").is_number_unsigned() &&
+                                 stage.at("peak_per_frame").at("scratch_bytes").is_number_unsigned() &&
+                                 stage.at("peak_per_frame").at("structure_bytes").is_number_unsigned(),
+                             "Acceleration-structure stage must expose CPU/GPU p95 and per-frame peaks")) {
+                return 1;
+            }
+        }
+        const Json& residency = accelerationWork.at("residency");
+        const Json& latestResidency = residency.at("latest");
+        const bool commonResidencyValid = latestResidency.at("scene_tlas_instances").is_number_unsigned() &&
+                                          latestResidency.value("scene_tlas_instances", 0u) > 0u &&
+                                          latestResidency.value("scene_tlas_unique_blas", 0u) > 0u &&
+                                          latestResidency.value("scene_tlas_bytes", uint64_t{0u}) > 0u &&
+                                          latestResidency.value("scene_referenced_blas_bytes", uint64_t{0u}) > 0u;
+        const bool sceneResidencyValid = report.value("scene", "") == "voxel"
+                                             ? latestResidency.value("terrain_blas", 0u) > 0u &&
+                                                   latestResidency.value("terrain_blas_bytes", uint64_t{0u}) > 0u &&
+                                                   latestResidency.value("terrain_primitives", uint64_t{0u}) > 0u
+                                             : report.value("scene", "") == "model" &&
+                                                   latestResidency.value("terrain_blas", 0u) == 0u &&
+                                                   latestResidency.value("terrain_blas_bytes", uint64_t{0u}) == 0u &&
+                                                   latestResidency.value("terrain_primitives", uint64_t{0u}) == 0u;
+        if (!requireTrue(residency.at("peak").is_object() && commonResidencyValid && sceneResidencyValid,
+                         "Acceleration-structure residency must match the captured scene")) {
+            return 1;
+        }
+        const auto staticBlasValue = accelerationWork.find("static_blas");
+        if (!requireTrue(staticBlasValue != accelerationWork.end() && staticBlasValue->is_object(),
+                         "Static BLAS asset-load statistics must be present")) {
+            return 1;
+        }
+        const Json& staticBlas = *staticBlasValue;
+        const Json& staticBuild = staticBlas.at("build");
+        const Json& staticCompaction = staticBlas.at("compaction");
+        double staticBuildCpuMs = 0.0;
+        double staticBuildGpuMs = 0.0;
+        double staticCompactionCpuMs = 0.0;
+        double staticCompactionGpuMs = 0.0;
+        if (!requireTrue(staticBlas.value("scope", "") == "asset_load" && staticBlas.value("supported", false) &&
+                             staticBlas.value("asset_count", 0u) > 0u &&
+                             staticBlas.value("resident_asset_count", 0u) == staticBlas.value("asset_count", 0u) &&
+                             staticBlas.value("geometry_count", uint64_t{0u}) > 0u &&
+                             staticBlas.value("primitive_count", uint64_t{0u}) > 0u &&
+                             staticBuild.value("count", uint64_t{0u}) > 0u &&
+                             staticBuild.value("scratch_peak_bytes", uint64_t{0u}) > 0u &&
+                             staticBuild.value("uncompacted_blas_bytes", uint64_t{0u}) > 0u &&
+                             readFinitePercentile(staticBuild, "cpu_ms", staticBuildCpuMs) && staticBuildCpuMs > 0.0 &&
+                             readFinitePercentile(staticBuild, "gpu_ms", staticBuildGpuMs) && staticBuildGpuMs > 0.0 &&
+                             staticCompaction.value("count", uint64_t{0u}) > 0u &&
+                             staticCompaction.value("compacted_blas_bytes", uint64_t{0u}) > 0u &&
+                             readFinitePercentile(staticCompaction, "cpu_ms", staticCompactionCpuMs) &&
+                             staticCompactionCpuMs > 0.0 &&
+                             readFinitePercentile(staticCompaction, "gpu_ms", staticCompactionGpuMs) &&
+                             staticCompactionGpuMs > 0.0,
+                         "Static BLAS reports must contain resident geometry and real build timings")) {
             return 1;
         }
     }
