@@ -916,6 +916,20 @@ ReflectionProbeCaptureFrameStats ModelSceneDeferredRenderer::reflectionProbeCapt
     return capturePass != nullptr ? capturePass->frameStats() : ReflectionProbeCaptureFrameStats{};
 }
 
+bool ModelSceneDeferredRenderer::isAccelerationStructureReady() const {
+    if (!m_impl->initialized || m_impl->rhiDevice == nullptr || m_impl->rhiDevice->backend() != RhiBackend::Vulkan) {
+        return true;
+    }
+    return m_impl->sceneTlasCache.isSettled();
+}
+
+void ModelSceneDeferredRenderer::discardValidationTemporalFrame() {
+    if (!m_impl->initialized) {
+        std::abort();
+    }
+    m_impl->invalidateTemporalHistory(temporalResetReasonBit(TemporalResetReason::FrameDiscontinuity));
+}
+
 renderer::core::GlobalBindlessSet* ModelSceneDeferredRenderer::globalBindlessSet() {
     return m_impl->globalBindlessSet.initialized() ? &m_impl->globalBindlessSet : nullptr;
 }

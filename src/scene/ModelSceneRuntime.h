@@ -173,6 +173,9 @@ public:
     [[nodiscard]] const GpuFrameStats* gpuFrameStats() const;
     [[nodiscard]] RenderGraphFrameStats renderGraphFrameStats() const;
     [[nodiscard]] ReflectionProbeCaptureFrameStats reflectionProbeCaptureStats() const;
+    [[nodiscard]] bool isAccelerationStructureReady() const;
+    /// Discards the just-rendered validation frame when scene resources were not ready.
+    void discardValidationTemporalFrame();
 
     /// Adds one manually placed probe centered at the requested world position.
     /// @return Persistent scene ID, or zero when validation or allocation fails.

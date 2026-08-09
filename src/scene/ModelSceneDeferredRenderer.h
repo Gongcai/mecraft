@@ -103,6 +103,10 @@ public:
     [[nodiscard]] const GpuFrameStats* gpuFrameStats() const;
     [[nodiscard]] RenderGraphFrameStats renderGraphFrameStats() const;
     [[nodiscard]] ReflectionProbeCaptureFrameStats reflectionProbeCaptureStats() const;
+    /// Reports whether the model TLAS has no pending or retired generation.
+    [[nodiscard]] bool isAccelerationStructureReady() const;
+    /// Discards the just-rendered validation frame when scene resources were not ready.
+    void discardValidationTemporalFrame();
     /// Returns the Vulkan Global Bindless Set used by imported model assets, or nullptr on OpenGL.
     [[nodiscard]] renderer::core::GlobalBindlessSet* globalBindlessSet();
     [[nodiscard]] const std::string& lastError() const;

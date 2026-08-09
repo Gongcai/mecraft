@@ -1842,6 +1842,17 @@ ReflectionProbeCaptureFrameStats ModelSceneRuntime::reflectionProbeCaptureStats(
     return m_deferredRenderer ? m_deferredRenderer->reflectionProbeCaptureStats() : ReflectionProbeCaptureFrameStats{};
 }
 
+bool ModelSceneRuntime::isAccelerationStructureReady() const {
+    return m_deferredRenderer != nullptr && m_deferredRenderer->isAccelerationStructureReady();
+}
+
+void ModelSceneRuntime::discardValidationTemporalFrame() {
+    if (!m_deferredRenderer) {
+        std::abort();
+    }
+    m_deferredRenderer->discardValidationTemporalFrame();
+}
+
 void ModelSceneRuntime::setTimeOfDay(const float timeOfDaySeconds) {
     if (!m_deferredRenderer) {
         std::abort();

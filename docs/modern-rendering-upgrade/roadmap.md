@@ -374,6 +374,17 @@ V02 的 RELAX A-Trous `5/8` 单变量 A/B 得到 SSIM `0.788408/0.786351`、HDR 
 仍为 `0.788408/0.507056`，因此该修改只证明 Cave 的大部分 Leakage 证据来自 shading-normal 变化，尚未
 修复一次反弹输运或静态 HDR 门槛。Guide shader 编译、NRD 信号契约测试和 Vulkan 运行均通过。
 
+M03 Sponza 首次 300+32/64 正式捕获发现模型验证在首个测量帧仍允许未 settled 的 Static BLAS/TLAS 代际，
+AS Pending 为 `1`；把预热增加到 301 或 600 帧仍稳定复现。模型验证现与 Probe 就绪条件并列等待
+`SceneTlasCache::isSettled()`，当前 sequence frame 在 TLAS 完成前不前进。修复后同一 300+32 运行的
+AS Pending/Invalid 为 `0`，但方差降低 `99.943255%` 之外，SSIM `0.591176`、HDR p95 `392.062510`、
+Leakage `3 Pixels` 均失败。M03 ROI 中 `68.886990%` Reference 像素使用相对误差分母下限，Reference 两半
+SSIM 仅 `0.148110`，因此下一轮必须先复核 ROI 的非零间接光覆盖与 Reference 收敛，再定位模型输运。
+未就绪的 TLAS 或 Reflection Probe 渲染会调用 `discardValidationTemporalFrame()`，清除已提交的模型
+temporal context、NRD 历史和 RTGI 低差异采样相位；同一验证帧只有在两类资源均 settled 后才允许成为质量样本。
+Gameplay 验证也使用相同隔离语义：Terrain Streaming 或 Reflection Probe 未 settled 的渲染不会推进 sequence frame，
+且已提交的 gameplay temporal context、NRD 历史和 RTGI 采样相位会在下一次尝试前清除。
+
 2026-08-08 在 RTX 4060 Laptop、Vulkan、RELAX_DIFFUSE、300 帧预热加 1000 帧采样下完成四组复测。
 报告中的 `total_tracked` 是显式 Pass 阶段和，不是完整 GPU 帧跨度：它没有覆盖独立的帧首/场景 Overlay/
 上采样 Render Graph、未打点的 AS/TLAS 与提交间隙。`cpu_update_render_ms` 是 update+render 调用的墙钟时间，

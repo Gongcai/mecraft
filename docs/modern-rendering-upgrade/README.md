@@ -25,29 +25,29 @@ OpenGL 保持独立的基础功能集。Vulkan 现代功能未满足设备、驱
 ## 2. 当前基线与关键缺口
 
 当前已经具备 Deferred/Forward、Render Graph、Vulkan/OpenGL RHI、CSM/PCSS、
-SSAO、SSGI、SSR、体积雾、体积云、物理大气、TAA、FSR 1、FSR 3.1、
-DLSS、HDR 中间颜色和 Hi-Z。glTF 路径已经支持 metallic-roughness，并处理
-`KHR_materials_ior`、`KHR_materials_clearcoat`、`KHR_materials_transmission` 与
-`KHR_materials_volume` 的主要参数。
+SSAO、SSGI、SSR、体积雾、体积云、物理大气、TAA、FSR 1、FSR 3.1、DLSS、
+HDR 中间颜色和 Hi-Z。glTF 路径已支持 metallic-roughness 以及 IOR、Clearcoat、
+Transmission、Volume 等主要材质参数。
 
-代码库目前仍包含 `VoxelGiClipmap`、3D 纹理更新、Scene Composite Shader Variant、设置
-序列化和 UI 控件，这些属于待删除实现，不计入当前能力，也不进入任何后续阶段的依赖图。
+M0 的 Voxel GI 删除门禁已经通过：产品源码、Shader、配置和 CMake 中不再创建
+`VoxelGiClipmap` 运行时链路，`renderer_removed_feature_test` 会扫描并拒绝遗留引用。
+OpenGL 保持基础管线；Vulkan 的 Modern 能力不会在不可用时静默切换算法。
 
-当前距离完整现代画面的关键链路是：
+M1/M2 已完成统一材质、Clustered Lighting、局部灯阴影、Sky IBL/Reflection Probe、
+Vulkan 1.3/SPIR-V 1.6、Bindless Descriptor、GPU Scene 底层表和 Terrain/Model
+BLAS/TLAS。M3 的 RTGI、NRD、Pre-exposure、History Reset、调试视图、时间戳和
+Linear EXR 验证链已接通；模型验证在 TLAS/Probe 未就绪、体素验证在 Terrain/Probe 未就绪时
+都会丢弃本帧 temporal history，避免未 settled 的资源状态进入质量样本。当前阶段仍处于画质与性能门禁收口。
 
-1. RHI 只有光追能力字段，缺少加速结构资源、构建命令、资源状态和 Ray Query 绑定。
-2. Vulkan 着色器编译目标仍为 Vulkan 1.1 / SPIR-V 1.3。
-3. Descriptor Indexing 已查询，但 Bind Group 限制 `arrayCount == 1`，尚未形成
-   Bindless 材质表。
-4. 场景缺少统一局部光源缓冲、Clustered Light Culling 和局部灯阴影链。
-5. 环境光已具备双代际 GGX 预过滤天空、DFG LUT 和局部反射探针捕获链。
-6. SSGI 的屏幕空间信息缺失无法由现有降噪器恢复；Vulkan RTGI 需要真实世界空间命中
-   与专用降噪器。
-7. 透明物按 Primitive 中心距离排序，已有 IOR、粗糙折射和体积吸收，但缺少逐像素
-   多层排序、真实前后表面厚度和透明运动矢量。
-8. 模型实例仍由 CPU 逐实例、逐 Primitive 提交，缺少统一 GPU Scene、实例剔除、LOD
-   与间接绘制。
-9. Vulkan 交换链固定为 SDR，动态分辨率也未形成基于 GPU 时间的控制闭环。
+当前剩余关键缺口是：
+
+1. M3 的 V01/V02/M03 静态 HDR 误差和泄漏带仍未达标，动态 Ghost/Disocclusion 证据尚未接入。
+2. 1080p 正式完整 GPU Span、CPU p95 和显存门禁尚未完成，RTGI.Trace/NRD.Dispatch 是模型场景热点。
+3. GpuScene 尚未连接体素区块、模型实例和资产注册表，Visible/Indirect/Draw Count 及 GPU Culling/LOD
+   仍属于 M4；模型光栅路径仍保留逐实例提交。
+4. PPLL 多层透明、真实厚度/折射与 RT Reflection 属于 M5，尚未进入现代预设。
+5. GPU 时间动态分辨率、完整 Temporal History Registry、HDR10/scRGB 交换链和 Frame Generation 契约属于 M6。
+6. M7 的全量 Validation Matrix、Windows 构建、长时压力、许可证和发布门禁尚未完成。
 
 ## 3. 固定架构决策
 

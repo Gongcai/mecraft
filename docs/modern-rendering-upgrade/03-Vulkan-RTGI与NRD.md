@@ -699,6 +699,15 @@ NRD 的 shading normal 输入保持不变。V02 相同 300+32/64 运行的 `boun
 因此 Cave 的原始 Leakage 证据主要由法线贴图边界触发，几何法线修复了诊断误报轴，但没有修复实际一次反弹
 积分误差；固定 Leakage 门槛和静态质量门槛继续有效。
 
+M03 Sponza 的 300+32/64 捕获进一步暴露模型验证就绪缺口：Probe 已完成时 Static BLAS/TLAS 仍可能处于
+首个代际切换，300/301/600 帧预热均得到 Pending Frame `1`。模型验证现要求
+`SceneTlasCache::isSettled()` 后才完成当前 sequence frame；修复后 AS Pending/Invalid 为 `0`。
+同次报告的方差降低为 `99.943255%`，但 SSIM `0.591176`、HDR p95 `392.062510`、Leakage `3 Pixels`；
+`68.886990%` ROI 像素命中相对误差分母下限，Reference 两半 SSIM `0.148110`。该结果证明 M03 当前失败
+同时包含 Reference/ROI 收敛性和空间泄漏，不能只调 NRD 参数或把极大相对误差解释为单一算法回归。
+当前验证路径在 TLAS 或 Probe 未 settled 的渲染后调用 `discardValidationTemporalFrame()`，清除该次提交的
+模型 temporal context、NRD 历史和 RTGI 采样相位；这保证首个有效质量帧不会继承未完成 AS/Probe 代际的历史。
+
 ## 10. 调试视图与验收
 
 必须实现：

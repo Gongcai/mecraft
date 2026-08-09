@@ -114,6 +114,8 @@ public:
     /// Reports whether every terrain mesh required by the frozen world is resident.
     /// @return True after all dirty, executing, and deferred meshing work has drained.
     [[nodiscard]] bool isValidationSceneReady() const;
+    /// Discards the just-rendered validation frame when scene resources were not ready.
+    void discardValidationTemporalFrame();
 
 private:
     // G1: Structured config and dependencies

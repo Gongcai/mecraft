@@ -457,6 +457,13 @@ bool Game::isValidationSceneReady() const {
     return probesSettled && renderScene.getTerrainStreamingService().isSettled(m_session.worldView());
 }
 
+void Game::discardValidationTemporalFrame() {
+    if (!m_initialized || !m_renderRuntime) {
+        std::abort();
+    }
+    m_renderRuntime->renderScene().discardValidationTemporalFrame();
+}
+
 const GpuFrameStats* Game::gpuFrameStats() const {
     if (!m_initialized || !m_renderRuntime) {
         return nullptr;

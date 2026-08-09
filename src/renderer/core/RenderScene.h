@@ -318,6 +318,9 @@ public:
     /// Used by Game before rain rendering.
     float computeCameraRainVisibility(const IWorldView& worldView, const glm::vec3& cameraPos) const;
 
+    /// Discards the just-rendered validation frame when scene resources were not ready.
+    void discardValidationTemporalFrame();
+
 private:
     /// Build FrameContext from world state
     std::optional<FrameContext> buildFrameContext(const IWorldView& worldView, const Camera& camera,

@@ -1537,9 +1537,17 @@ void ModelSceneAppState::render(const double frameTime) {
             return;
         }
 
+        // Keep the validation sequence frame open until the model TLAS generation is settled.
+        // A first-frame BLAS/TLAS promotion must not become an invalid HDR quality sample.
+        if (!m_scene.isAccelerationStructureReady()) {
+            m_scene.discardValidationTemporalFrame();
+            return;
+        }
+
         const ReflectionProbeCaptureFrameStats probes = m_scene.reflectionProbeCaptureStats();
         if (probes.sourceCount == 0u || probes.activeProbeCount != probes.sourceCount ||
             probes.buildingProbeCount != 0u || probes.pendingWorkItemCount != 0u || probes.workScheduled) {
+            m_scene.discardValidationTemporalFrame();
             return;
         }
 

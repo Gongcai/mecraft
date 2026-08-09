@@ -1614,6 +1614,10 @@ void RenderScene::invalidateFrameHistory(const TemporalResetReasons reasons) {
     m_lastFrameOutput = {};
 }
 
+void RenderScene::discardValidationTemporalFrame() {
+    invalidateFrameHistory(temporalResetReasonBit(TemporalResetReason::FrameDiscontinuity));
+}
+
 void RenderScene::refreshTemporalFrameInput() {
     m_temporalFrameInput.reset();
     if (!m_lastFrameOutput.hasDeferredInputs || m_shared.deferredTargets == nullptr || isFsr1RuntimeEnabled()) {

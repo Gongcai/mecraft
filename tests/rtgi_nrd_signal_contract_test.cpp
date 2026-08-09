@@ -35,6 +35,10 @@ namespace {
     const std::string scenePath = std::string(MECRAFT_TEST_SOURCE_DIR) + "/src/renderer/core/RenderScene.cpp";
     const std::string modelScenePath =
         std::string(MECRAFT_TEST_SOURCE_DIR) + "/src/scene/ModelSceneDeferredRenderer.cpp";
+    const std::string modelStatePath =
+        std::string(MECRAFT_TEST_SOURCE_DIR) + "/src/app/states/ModelSceneAppState.cpp";
+    const std::string gameplayStatePath =
+        std::string(MECRAFT_TEST_SOURCE_DIR) + "/src/app/states/GameplayAppState.cpp";
     std::ifstream signalFile(signalPath, std::ios::binary);
     std::ifstream packFile(packPath, std::ios::binary);
     std::ifstream traceFile(tracePath, std::ios::binary);
@@ -46,9 +50,12 @@ namespace {
     std::ifstream debugShaderFile(debugShaderPath, std::ios::binary);
     std::ifstream sceneFile(scenePath, std::ios::binary);
     std::ifstream modelSceneFile(modelScenePath, std::ios::binary);
+    std::ifstream modelStateFile(modelStatePath, std::ios::binary);
+    std::ifstream gameplayStateFile(gameplayStatePath, std::ios::binary);
     if (!signalFile.is_open() || !packFile.is_open() || !traceFile.is_open() || !guideFile.is_open() ||
         !lightingFile.is_open() || !pipelineFile.is_open() || !targetsFile.is_open() || !debugPassFile.is_open() ||
-        !debugShaderFile.is_open() || !sceneFile.is_open() || !modelSceneFile.is_open()) {
+        !debugShaderFile.is_open() || !sceneFile.is_open() || !modelSceneFile.is_open() || !modelStateFile.is_open() ||
+        !gameplayStateFile.is_open()) {
         return false;
     }
     const std::string signalSource{std::istreambuf_iterator<char>(signalFile), std::istreambuf_iterator<char>()};
@@ -64,6 +71,10 @@ namespace {
     const std::string sceneSource{std::istreambuf_iterator<char>(sceneFile), std::istreambuf_iterator<char>()};
     const std::string modelSceneSource{std::istreambuf_iterator<char>(modelSceneFile),
                                        std::istreambuf_iterator<char>()};
+    const std::string modelStateSource{std::istreambuf_iterator<char>(modelStateFile),
+                                       std::istreambuf_iterator<char>()};
+    const std::string gameplayStateSource{std::istreambuf_iterator<char>(gameplayStateFile),
+                                          std::istreambuf_iterator<char>()};
     return signalSource.find("const float RTGI_NRD_FP16_MAX = 65504.0;") != std::string::npos &&
            signalSource.find("const float RTGI_NRD_EPSILON = 1.0e-6;") != std::string::npos &&
            signalSource.find("dot(color, vec3(0.25, 0.5, 0.25))") != std::string::npos &&
@@ -159,6 +170,13 @@ namespace {
            sceneSource.find("m_previousContext.camera.projection != ctx.camera.projection") == std::string::npos &&
            modelSceneSource.find("previousContext.camera.projection != context.camera.projection") ==
                std::string::npos &&
+           modelSceneSource.find("m_impl->sceneTlasCache.isSettled()") != std::string::npos &&
+           modelSceneSource.find("discardValidationTemporalFrame()") != std::string::npos &&
+           modelStateSource.find("if (!m_scene.isAccelerationStructureReady())") != std::string::npos &&
+           modelStateSource.find("m_scene.discardValidationTemporalFrame();") != std::string::npos &&
+           gameplayStateSource.find("if (!sceneReadyAfterRender)") != std::string::npos &&
+           gameplayStateSource.find("m_game->discardValidationTemporalFrame();") != std::string::npos &&
+           sceneSource.find("void RenderScene::discardValidationTemporalFrame()") != std::string::npos &&
            lightingSource.find("uRtgiRadianceScale pRtgi.z") != std::string::npos &&
            lightingSource.find("* uRtgiRadianceScale;") != std::string::npos;
 }

@@ -229,6 +229,7 @@ void GameplayAppState::render(double frameTime) {
 
             const bool sceneReadyAfterRender = m_game->isValidationSceneReady();
             if (!sceneReadyAfterRender) {
+                m_game->discardValidationTemporalFrame();
                 if (captureRequested || hdrCaptureRequested) {
                     static_cast<void>(m_game->takeValidationCaptureResult());
                 }
