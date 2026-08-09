@@ -281,7 +281,8 @@ M1 与 M2 可并行开发，但公共 `GpuMaterial`、`GpuSceneGeometry` 与 Sta
 - Vulkan Modern 的间接漫反射只来自 RTGI，不混入 SSGI。
 
 当前 M3 画质门槛状态：双场景 Reference Capture、RTGI/NRD 运行链路和自动契约测试已通过；捕获层现已支持
-严格 RGBA16F Linear EXR 读回，但 64 spp Reference、固定 ROI 的 Variance/SSIM/95th HDR error、
+严格 RGBA16F Linear EXR 读回，`RtgiQualityValidationContract` 已定义固定 ROI 的帧序列 Variance、
+线性亮度 SSIM、95th 相对亮度误差和非法辐射拒绝；但 64 spp Reference、Raw/Denoised 序列与
 Ghost/Disocclusion 像素统计尚未接入 validation runner，因此这些画质数值门槛仍不能标记为通过。
 
 2026-08-08 在 RTX 4060 Laptop、Vulkan、RELAX_DIFFUSE、300 帧预热加 1000 帧采样下完成四组复测。

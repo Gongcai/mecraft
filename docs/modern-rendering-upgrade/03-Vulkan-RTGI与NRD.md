@@ -621,6 +621,9 @@ A/B 门禁；该显示输出比较不替代 64 spp Linear EXR、固定 ROI 和�
 `rtgi_cutout_traversal_ab_test` 从锁定 PNG/报告重算身份、样本、Micromap 分区、性能收益和图像指标。M3 V03
 Vulkan 质量运行据此采用 `opacity_micromap`，Candidate Loop 保留为显式诊断实现轴。
 捕获层同时提供严格 RGBA16F Linear EXR 写入，Reference runner 尚未接入该原始 HDR 输出。
+`RtgiQualityValidationContract` 已统一线性 HDR 评价口径：在固定 ROI 内对 Raw/Denoised 逐像素帧序列使用
+无偏亮度方差，对 32 帧结果与 Reference 计算亮度 SSIM 和 95th 相对亮度误差，并拒绝 NaN/Inf、负辐射、
+尺寸不一致与不足两帧的序列；实际 64 spp 采集尚未开始。
 
 ## 10. 调试视图与验收
 
