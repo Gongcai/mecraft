@@ -3061,6 +3061,14 @@ RenderGraphFrameStats DeferredPipeline::renderGraphFrameStats() const {
     accelerationStructures.activeSceneReferencedBlasBytes = sceneTlasStats.activeBlasBytes;
     accelerationStructures.activeTerrainBlasBytes = terrainBlasStats.activeBlasBytes;
     accelerationStructures.activeTerrainPrimitiveCount = terrainBlasStats.activePrimitiveCount;
+    accelerationStructures.sceneTlasGenerationAllocations = sceneTlasStats.generationAllocationsThisFrame;
+    accelerationStructures.sceneTlasGenerationReuses = sceneTlasStats.generationReusesThisFrame;
+    accelerationStructures.sceneTlasGenerationReuseWaits = sceneTlasStats.generationReuseWaitsThisFrame;
+    accelerationStructures.retiredSceneTlasGenerations = sceneTlasStats.retiredGenerationCount;
+    accelerationStructures.terrainBuckets.activeOpaquePrimitives = terrainBlasStats.activeOpaquePrimitiveCount;
+    accelerationStructures.terrainBuckets.activeCutoutPrimitives = terrainBlasStats.activeCutoutPrimitiveCount;
+    accelerationStructures.terrainBuckets.builtOpaquePrimitives = terrainBlasStats.buildOpaquePrimitiveCountThisFrame;
+    accelerationStructures.terrainBuckets.builtCutoutPrimitives = terrainBlasStats.buildCutoutPrimitiveCountThisFrame;
     StaticBlasFrameStats& staticBlas = accelerationStructures.staticBlas;
     staticBlas.supported = staticBlasStats.supported;
     staticBlas.assetCount = staticBlasStats.assetCount;
@@ -3069,6 +3077,8 @@ RenderGraphFrameStats DeferredPipeline::renderGraphFrameStats() const {
     staticBlas.compactionCount = staticBlasStats.compactionCount;
     staticBlas.geometryCount = staticBlasStats.geometryCount;
     staticBlas.primitiveCount = staticBlasStats.primitiveCount;
+    staticBlas.opaquePrimitiveCount = staticBlasStats.opaquePrimitiveCount;
+    staticBlas.cutoutPrimitiveCount = staticBlasStats.cutoutPrimitiveCount;
     staticBlas.scratchPeakBytes = staticBlasStats.scratchPeakBytes;
     staticBlas.uncompactedBlasBytes = staticBlasStats.uncompactedBlasBytes;
     staticBlas.compactedBlasBytes = staticBlasStats.compactedBlasBytes;

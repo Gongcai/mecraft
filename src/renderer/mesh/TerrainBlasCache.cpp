@@ -225,6 +225,8 @@ void TerrainBlasCache::shutdown() {
     m_buildsRecordedThisFrame = 0u;
     m_compactionsRecordedThisFrame = 0u;
     m_buildPrimitiveCountThisFrame = 0u;
+    m_buildOpaquePrimitiveCountThisFrame = 0u;
+    m_buildCutoutPrimitiveCountThisFrame = 0u;
     m_compactionPrimitiveCountThisFrame = 0u;
     m_buildBlasBytesThisFrame = 0u;
     m_compactedBlasBytesThisFrame = 0u;
@@ -241,6 +243,8 @@ void TerrainBlasCache::beginFrame() {
     m_buildsRecordedThisFrame = 0u;
     m_compactionsRecordedThisFrame = 0u;
     m_buildPrimitiveCountThisFrame = 0u;
+    m_buildOpaquePrimitiveCountThisFrame = 0u;
+    m_buildCutoutPrimitiveCountThisFrame = 0u;
     m_compactionPrimitiveCountThisFrame = 0u;
     m_buildBlasBytesThisFrame = 0u;
     m_compactedBlasBytesThisFrame = 0u;
@@ -571,6 +575,8 @@ TerrainBlasStats TerrainBlasCache::stats() const {
     result.buildsRecordedThisFrame = m_buildsRecordedThisFrame;
     result.compactionsRecordedThisFrame = m_compactionsRecordedThisFrame;
     result.buildPrimitiveCountThisFrame = m_buildPrimitiveCountThisFrame;
+    result.buildOpaquePrimitiveCountThisFrame = m_buildOpaquePrimitiveCountThisFrame;
+    result.buildCutoutPrimitiveCountThisFrame = m_buildCutoutPrimitiveCountThisFrame;
     result.compactionPrimitiveCountThisFrame = m_compactionPrimitiveCountThisFrame;
     result.buildBlasBytesThisFrame = m_buildBlasBytesThisFrame;
     result.compactedBlasBytesThisFrame = m_compactedBlasBytesThisFrame;
@@ -585,6 +591,8 @@ TerrainBlasStats TerrainBlasCache::stats() const {
         }
         ++result.activeBlasCount;
         result.activePrimitiveCount += entry.active->primitiveCount;
+        result.activeOpaquePrimitiveCount += entry.active->opaqueVertexCount / 3u;
+        result.activeCutoutPrimitiveCount += entry.active->cutoutVertexCount / 3u;
         result.activeGeometryBytes += entry.active->geometryBytes;
         result.activePrimitiveMetadataBytes += entry.active->primitiveMetadataBytes;
         result.activeBlasBytes += entry.active->resource->blasBytes();
@@ -835,6 +843,8 @@ bool TerrainBlasCache::recordBuild(PendingTask& task, RhiCommandList& commandLis
         std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - buildCpuStart).count();
     ++m_buildsRecordedThisFrame;
     m_buildPrimitiveCountThisFrame += task.geometry.primitiveCount();
+    m_buildOpaquePrimitiveCountThisFrame += task.geometry.opaqueVertexCount / 3u;
+    m_buildCutoutPrimitiveCountThisFrame += task.geometry.cutoutVertexCount / 3u;
     m_buildBlasBytesThisFrame += task.buildBlasBytes;
     m_dynamicResourceBytesThisFrame += task.geometry.uploadByteSize();
     m_scratchBytesRecordedThisFrame += task.buildScratchBytes;

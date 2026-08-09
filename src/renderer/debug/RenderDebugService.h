@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 
+#include "../contracts/DynamicBlasPolicyContract.h"
 #include "../rhi/RhiHandles.h"
 #include "../rhi/RhiTypes.h"
 
@@ -189,6 +190,8 @@ struct StaticBlasFrameStats {
     uint64_t compactionCount = 0u;
     uint64_t geometryCount = 0u;
     uint64_t primitiveCount = 0u;
+    uint64_t opaquePrimitiveCount = 0u;
+    uint64_t cutoutPrimitiveCount = 0u;
     uint64_t scratchPeakBytes = 0u;
     uint64_t uncompactedBlasBytes = 0u;
     uint64_t compactedBlasBytes = 0u;
@@ -196,6 +199,24 @@ struct StaticBlasFrameStats {
     double buildGpuMs = 0.0;
     double compactionCpuMs = 0.0;
     double compactionGpuMs = 0.0;
+};
+
+/// Per-frame dynamic BLAS actions and ordered policy rejection counters.
+struct DynamicBlasFrameStats {
+    bool producerConnected = false;
+    std::array<uint32_t, static_cast<size_t>(renderer::contracts::DynamicBlasAction::Count)> actionCounts{};
+    std::array<uint32_t, static_cast<size_t>(renderer::contracts::DynamicBlasRigidReuseRejectReason::Count)>
+        rigidReuseRejectCounts{};
+    std::array<uint32_t, static_cast<size_t>(renderer::contracts::DynamicBlasUpdateRejectReason::Count)>
+        updateRejectCounts{};
+};
+
+/// Current terrain ray-tracing bucket distribution and this frame's build workload.
+struct TerrainRayTracingBucketFrameStats {
+    uint64_t activeOpaquePrimitives = 0u;
+    uint64_t activeCutoutPrimitives = 0u;
+    uint64_t builtOpaquePrimitives = 0u;
+    uint64_t builtCutoutPrimitives = 0u;
 };
 
 /// Per-frame runtime AS workload plus the current resident resource snapshot.
@@ -211,6 +232,12 @@ struct AccelerationStructureFrameStats {
     uint64_t activeSceneReferencedBlasBytes = 0u;
     uint64_t activeTerrainBlasBytes = 0u;
     uint64_t activeTerrainPrimitiveCount = 0u;
+    uint32_t sceneTlasGenerationAllocations = 0u;
+    uint32_t sceneTlasGenerationReuses = 0u;
+    uint32_t sceneTlasGenerationReuseWaits = 0u;
+    uint32_t retiredSceneTlasGenerations = 0u;
+    DynamicBlasFrameStats dynamicBlas;
+    TerrainRayTracingBucketFrameStats terrainBuckets;
     StaticBlasFrameStats staticBlas;
 };
 
@@ -223,6 +250,27 @@ struct AccelerationStructureStageWindowStats {
     uint64_t peakPrimitivesPerFrame = 0u;
     uint64_t peakScratchBytesPerFrame = 0u;
     uint64_t peakStructureBytesPerFrame = 0u;
+};
+
+/// Fixed-window totals and per-frame peaks for dynamic BLAS policy decisions.
+struct DynamicBlasWindowStats {
+    bool producerConnected = false;
+    std::array<uint64_t, static_cast<size_t>(renderer::contracts::DynamicBlasAction::Count)> actionCounts{};
+    std::array<uint32_t, static_cast<size_t>(renderer::contracts::DynamicBlasAction::Count)> peakActionsPerFrame{};
+    std::array<uint64_t, static_cast<size_t>(renderer::contracts::DynamicBlasRigidReuseRejectReason::Count)>
+        rigidReuseRejectCounts{};
+    std::array<uint64_t, static_cast<size_t>(renderer::contracts::DynamicBlasUpdateRejectReason::Count)>
+        updateRejectCounts{};
+};
+
+/// Fixed-window terrain ray-tracing bucket workload and residency peaks.
+struct TerrainRayTracingBucketWindowStats {
+    uint64_t builtOpaquePrimitives = 0u;
+    uint64_t builtCutoutPrimitives = 0u;
+    uint64_t peakBuiltOpaquePrimitivesPerFrame = 0u;
+    uint64_t peakBuiltCutoutPrimitivesPerFrame = 0u;
+    uint64_t peakActiveOpaquePrimitives = 0u;
+    uint64_t peakActiveCutoutPrimitives = 0u;
 };
 
 /// Fixed-window acceleration-structure workload and residency statistics.
@@ -239,6 +287,15 @@ struct AccelerationStructureWindowStats {
     uint64_t peakActiveSceneReferencedBlasBytes = 0u;
     uint64_t peakActiveTerrainBlasBytes = 0u;
     uint64_t peakActiveTerrainPrimitiveCount = 0u;
+    uint64_t sceneTlasGenerationAllocationCount = 0u;
+    uint64_t sceneTlasGenerationReuseCount = 0u;
+    uint64_t sceneTlasGenerationReuseWaitCount = 0u;
+    uint32_t peakSceneTlasGenerationAllocationsPerFrame = 0u;
+    uint32_t peakSceneTlasGenerationReusesPerFrame = 0u;
+    uint32_t peakSceneTlasGenerationReuseWaitsPerFrame = 0u;
+    uint32_t peakRetiredSceneTlasGenerations = 0u;
+    DynamicBlasWindowStats dynamicBlas;
+    TerrainRayTracingBucketWindowStats terrainBuckets;
     AccelerationStructureFrameStats latest;
 };
 
@@ -277,6 +334,22 @@ private:
     std::array<uint64_t, kCapacity> m_activeSceneReferencedBlasByteSamples{};
     std::array<uint64_t, kCapacity> m_activeTerrainBlasByteSamples{};
     std::array<uint64_t, kCapacity> m_activeTerrainPrimitiveSamples{};
+    std::array<uint32_t, kCapacity> m_sceneTlasGenerationAllocationSamples{};
+    std::array<uint32_t, kCapacity> m_sceneTlasGenerationReuseSamples{};
+    std::array<uint32_t, kCapacity> m_sceneTlasGenerationReuseWaitSamples{};
+    std::array<uint32_t, kCapacity> m_retiredSceneTlasGenerationSamples{};
+    std::array<uint64_t, kCapacity> m_activeTerrainOpaquePrimitiveSamples{};
+    std::array<uint64_t, kCapacity> m_activeTerrainCutoutPrimitiveSamples{};
+    std::array<uint64_t, kCapacity> m_builtTerrainOpaquePrimitiveSamples{};
+    std::array<uint64_t, kCapacity> m_builtTerrainCutoutPrimitiveSamples{};
+    std::array<std::array<uint32_t, kCapacity>, static_cast<size_t>(renderer::contracts::DynamicBlasAction::Count)>
+        m_dynamicBlasActionSamples{};
+    std::array<std::array<uint32_t, kCapacity>,
+               static_cast<size_t>(renderer::contracts::DynamicBlasRigidReuseRejectReason::Count)>
+        m_dynamicBlasRigidReuseRejectSamples{};
+    std::array<std::array<uint32_t, kCapacity>,
+               static_cast<size_t>(renderer::contracts::DynamicBlasUpdateRejectReason::Count)>
+        m_dynamicBlasUpdateRejectSamples{};
     size_t m_nextSample = 0u;
     size_t m_sampleCount = 0u;
     uint64_t m_observedSampleCount = 0u;
@@ -357,13 +430,7 @@ enum class RenderGraphCpuTimingStage : size_t {
 [[nodiscard]] const char* renderGraphCpuTimingStageName(RenderGraphCpuTimingStage stage);
 
 /// Stable GPU frame metrics exported by the Render Graph benchmark history.
-enum class RenderGraphGpuTimingMetric : size_t {
-    Total = 0,
-    Span = 1,
-    Idle = 2,
-    Overlap = 3,
-    Count = 4
-};
+enum class RenderGraphGpuTimingMetric : size_t { Total = 0, Span = 1, Idle = 2, Overlap = 3, Count = 4 };
 
 /// Returns the stable diagnostic name for one Render Graph GPU frame metric.
 /// @param metric GPU frame metric whose name is requested.

@@ -53,6 +53,8 @@ struct StaticMeshBlasStats {
     bool containsDoubleSided = false;
     uint32_t geometryCount = 0u;
     uint64_t primitiveCount = 0u;
+    uint64_t opaquePrimitiveCount = 0u;
+    uint64_t cutoutPrimitiveCount = 0u;
     uint64_t buildCount = 0u;
     uint64_t compactionCount = 0u;
     uint64_t scratchPeakBytes = 0u;
@@ -73,6 +75,8 @@ struct StaticMeshBlasAggregateStats {
     uint64_t compactionCount = 0u;
     uint64_t geometryCount = 0u;
     uint64_t primitiveCount = 0u;
+    uint64_t opaquePrimitiveCount = 0u;
+    uint64_t cutoutPrimitiveCount = 0u;
     uint64_t scratchPeakBytes = 0u;
     uint64_t uncompactedBlasBytes = 0u;
     uint64_t compactedBlasBytes = 0u;

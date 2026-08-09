@@ -61,6 +61,8 @@ void StaticMeshBlasAggregateStats::add(const StaticMeshBlasStats& stats) {
     compactionCount += stats.compactionCount;
     geometryCount += stats.geometryCount;
     primitiveCount += stats.primitiveCount;
+    opaquePrimitiveCount += stats.opaquePrimitiveCount;
+    cutoutPrimitiveCount += stats.cutoutPrimitiveCount;
     scratchPeakBytes = std::max(scratchPeakBytes, stats.scratchPeakBytes);
     uncompactedBlasBytes += stats.uncompactedBlasBytes;
     compactedBlasBytes += stats.compactedBlasBytes;
@@ -435,6 +437,13 @@ StaticMeshBlasBuildResult StaticMeshBlasCache::build(RhiCommandListPool& command
     m_stats.resident = true;
     m_stats.geometryCount = static_cast<uint32_t>(geometries.size());
     m_stats.primitiveCount = primitiveCount;
+    for (const StaticMeshBlasGeometry& geometry : geometries) {
+        if (geometry.opaque) {
+            m_stats.opaquePrimitiveCount += geometry.primitiveCount();
+        } else {
+            m_stats.cutoutPrimitiveCount += geometry.primitiveCount();
+        }
+    }
     m_stats.buildCount = 1u;
     m_stats.compactionCount = 1u;
     m_stats.scratchPeakBytes = buildSizes.buildScratchSize;

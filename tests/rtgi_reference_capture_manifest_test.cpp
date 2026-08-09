@@ -50,8 +50,8 @@ bool readFinitePercentile(const Json& object, const char* field, double& value) 
 } // namespace
 
 int main() {
-    const std::filesystem::path root = std::filesystem::path(MECRAFT_TEST_SOURCE_DIR) /
-                                       "assets/validation/reference_captures";
+    const std::filesystem::path root =
+        std::filesystem::path(MECRAFT_TEST_SOURCE_DIR) / "assets/validation/reference_captures";
     std::ifstream manifestInput(root / "rtgi_manifest.json");
     const Json manifest = Json::parse(manifestInput, nullptr, false);
     if (!requireTrue(static_cast<bool>(manifestInput) && !manifest.is_discarded(),
@@ -203,6 +203,45 @@ int main() {
                          "Acceleration-structure residency must match the captured scene")) {
             return 1;
         }
+        const Json& tlasGenerations = accelerationWork.at("scene_tlas_generations");
+        if (!requireTrue(tlasGenerations.value("strategy", "") == "snapshot_generations" &&
+                             tlasGenerations.value("ring_size", 1u) == 0u &&
+                             tlasGenerations.at("allocation_count").is_number_unsigned() &&
+                             tlasGenerations.value("reuse_count", uint64_t{1u}) == 0u &&
+                             tlasGenerations.value("reuse_wait_count", uint64_t{1u}) == 0u &&
+                             tlasGenerations.at("peak_per_frame").is_object() &&
+                             tlasGenerations.at("latest").at("retired_generations").is_number_unsigned(),
+                         "Scene TLAS generation reports must identify allocation without claiming ring reuse")) {
+            return 1;
+        }
+        const Json& dynamicBlas = accelerationWork.at("dynamic_blas");
+        const Json& dynamicActions = dynamicBlas.at("actions");
+        bool dynamicActionsEmpty = !dynamicBlas.value("producer_connected", true) &&
+                                   dynamicBlas.value("maximum_consecutive_updates", 0u) == 120u;
+        constexpr std::array<const char*, 3u> requiredDynamicActions{"RigidReuse", "Update", "Rebuild"};
+        for (const char* action : requiredDynamicActions) {
+            const Json& actionStats = dynamicActions.at(action);
+            dynamicActionsEmpty = dynamicActionsEmpty && actionStats.value("count", uint64_t{1u}) == 0u &&
+                                  actionStats.value("peak_per_frame", 1u) == 0u;
+        }
+        if (!requireTrue(dynamicActionsEmpty &&
+                             dynamicBlas.at("rigid_reuse_rejects").at("IndexTopologyChanged").get<uint64_t>() == 0u &&
+                             dynamicBlas.at("update_rejects").at("PeriodicRebuild").get<uint64_t>() == 0u,
+                         "Dynamic BLAS policy counters must remain explicit and zero without a production producer")) {
+            return 1;
+        }
+        const Json& terrainBuckets = accelerationWork.at("terrain_geometry_buckets");
+        const Json& latestTerrainBuckets = terrainBuckets.at("latest");
+        const uint64_t activeOpaquePrimitives = latestTerrainBuckets.value("active_opaque_primitives", uint64_t{0u});
+        const uint64_t activeCutoutPrimitives = latestTerrainBuckets.value("active_cutout_primitives", uint64_t{0u});
+        if (!requireTrue(terrainBuckets.value("geometry_capacity", 0u) == 2u &&
+                             activeOpaquePrimitives <= latestResidency.value("terrain_primitives", uint64_t{0u}) &&
+                             activeCutoutPrimitives ==
+                                 latestResidency.value("terrain_primitives", uint64_t{0u}) - activeOpaquePrimitives &&
+                             terrainBuckets.at("window").is_object(),
+                         "Terrain Opaque/Cutout bucket counts must exactly partition resident primitives")) {
+            return 1;
+        }
         const auto staticBlasValue = accelerationWork.find("static_blas");
         if (!requireTrue(staticBlasValue != accelerationWork.end() && staticBlasValue->is_object(),
                          "Static BLAS asset-load statistics must be present")) {
@@ -215,11 +254,15 @@ int main() {
         double staticBuildGpuMs = 0.0;
         double staticCompactionCpuMs = 0.0;
         double staticCompactionGpuMs = 0.0;
+        const uint64_t staticPrimitiveCount = staticBlas.value("primitive_count", uint64_t{0u});
+        const uint64_t staticOpaquePrimitiveCount = staticBlas.value("opaque_primitive_count", uint64_t{0u});
+        const uint64_t staticCutoutPrimitiveCount = staticBlas.value("cutout_primitive_count", uint64_t{0u});
         if (!requireTrue(staticBlas.value("scope", "") == "asset_load" && staticBlas.value("supported", false) &&
                              staticBlas.value("asset_count", 0u) > 0u &&
                              staticBlas.value("resident_asset_count", 0u) == staticBlas.value("asset_count", 0u) &&
-                             staticBlas.value("geometry_count", uint64_t{0u}) > 0u &&
-                             staticBlas.value("primitive_count", uint64_t{0u}) > 0u &&
+                             staticBlas.value("geometry_count", uint64_t{0u}) > 0u && staticPrimitiveCount > 0u &&
+                             staticOpaquePrimitiveCount <= staticPrimitiveCount &&
+                             staticCutoutPrimitiveCount == staticPrimitiveCount - staticOpaquePrimitiveCount &&
                              staticBuild.value("count", uint64_t{0u}) > 0u &&
                              staticBuild.value("scratch_peak_bytes", uint64_t{0u}) > 0u &&
                              staticBuild.value("uncompacted_blas_bytes", uint64_t{0u}) > 0u &&

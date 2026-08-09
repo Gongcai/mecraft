@@ -133,6 +133,28 @@ nlohmann::json accelerationStructureWindowJson(const AccelerationStructureWindow
               {"structure_bytes", latest.structureBytes}}}};
     }
 
+    nlohmann::json dynamicActions = nlohmann::json::object();
+    for (size_t index = 0u; index < static_cast<size_t>(renderer::contracts::DynamicBlasAction::Count); ++index) {
+        const auto action = static_cast<renderer::contracts::DynamicBlasAction>(index);
+        dynamicActions[renderer::contracts::dynamicBlasActionStableId(action)] = {
+            {"count", stats.dynamicBlas.actionCounts[index]},
+            {"peak_per_frame", stats.dynamicBlas.peakActionsPerFrame[index]}};
+    }
+    nlohmann::json rigidReuseRejects = nlohmann::json::object();
+    for (size_t index = static_cast<size_t>(renderer::contracts::DynamicBlasRigidReuseRejectReason::None) + 1u;
+         index < static_cast<size_t>(renderer::contracts::DynamicBlasRigidReuseRejectReason::Count); ++index) {
+        const auto reason = static_cast<renderer::contracts::DynamicBlasRigidReuseRejectReason>(index);
+        rigidReuseRejects[renderer::contracts::dynamicBlasRigidReuseRejectStableId(reason)] =
+            stats.dynamicBlas.rigidReuseRejectCounts[index];
+    }
+    nlohmann::json updateRejects = nlohmann::json::object();
+    for (size_t index = static_cast<size_t>(renderer::contracts::DynamicBlasUpdateRejectReason::None) + 1u;
+         index < static_cast<size_t>(renderer::contracts::DynamicBlasUpdateRejectReason::Count); ++index) {
+        const auto reason = static_cast<renderer::contracts::DynamicBlasUpdateRejectReason>(index);
+        updateRejects[renderer::contracts::dynamicBlasUpdateRejectStableId(reason)] =
+            stats.dynamicBlas.updateRejectCounts[index];
+    }
+
     const AccelerationStructureFrameStats& latest = stats.latest;
     const StaticBlasFrameStats& staticBlas = latest.staticBlas;
     return {{"scope", "scene_acceleration_structures"},
@@ -159,6 +181,42 @@ nlohmann::json accelerationStructureWindowJson(const AccelerationStructureWindow
                 {"scene_referenced_blas_bytes", stats.peakActiveSceneReferencedBlasBytes},
                 {"terrain_blas_bytes", stats.peakActiveTerrainBlasBytes},
                 {"terrain_primitives", stats.peakActiveTerrainPrimitiveCount}}}}},
+            {"scene_tlas_generations",
+             {{"strategy", "snapshot_generations"},
+              {"ring_size", 0u},
+              {"allocation_count", stats.sceneTlasGenerationAllocationCount},
+              {"reuse_count", stats.sceneTlasGenerationReuseCount},
+              {"reuse_wait_count", stats.sceneTlasGenerationReuseWaitCount},
+              {"peak_per_frame",
+               {{"allocations", stats.peakSceneTlasGenerationAllocationsPerFrame},
+                {"reuses", stats.peakSceneTlasGenerationReusesPerFrame},
+                {"reuse_waits", stats.peakSceneTlasGenerationReuseWaitsPerFrame}}},
+              {"latest",
+               {{"allocations", latest.sceneTlasGenerationAllocations},
+                {"reuses", latest.sceneTlasGenerationReuses},
+                {"reuse_waits", latest.sceneTlasGenerationReuseWaits},
+                {"retired_generations", latest.retiredSceneTlasGenerations}}},
+              {"peak_retired_generations", stats.peakRetiredSceneTlasGenerations}}},
+            {"dynamic_blas",
+             {{"producer_connected", stats.dynamicBlas.producerConnected},
+              {"maximum_consecutive_updates", renderer::contracts::kDynamicBlasMaximumConsecutiveUpdates},
+              {"actions", std::move(dynamicActions)},
+              {"rigid_reuse_rejects", std::move(rigidReuseRejects)},
+              {"update_rejects", std::move(updateRejects)}}},
+            {"terrain_geometry_buckets",
+             {{"geometry_capacity", renderer::contracts::kTerrainRayTracingGeometryCapacity},
+              {"latest",
+               {{"active_opaque_primitives", latest.terrainBuckets.activeOpaquePrimitives},
+                {"active_cutout_primitives", latest.terrainBuckets.activeCutoutPrimitives},
+                {"built_opaque_primitives", latest.terrainBuckets.builtOpaquePrimitives},
+                {"built_cutout_primitives", latest.terrainBuckets.builtCutoutPrimitives}}},
+              {"window",
+               {{"built_opaque_primitives", stats.terrainBuckets.builtOpaquePrimitives},
+                {"built_cutout_primitives", stats.terrainBuckets.builtCutoutPrimitives},
+                {"peak_built_opaque_primitives_per_frame", stats.terrainBuckets.peakBuiltOpaquePrimitivesPerFrame},
+                {"peak_built_cutout_primitives_per_frame", stats.terrainBuckets.peakBuiltCutoutPrimitivesPerFrame},
+                {"peak_active_opaque_primitives", stats.terrainBuckets.peakActiveOpaquePrimitives},
+                {"peak_active_cutout_primitives", stats.terrainBuckets.peakActiveCutoutPrimitives}}}}},
             {"static_blas",
              {{"scope", "asset_load"},
               {"supported", staticBlas.supported},
@@ -166,6 +224,8 @@ nlohmann::json accelerationStructureWindowJson(const AccelerationStructureWindow
               {"resident_asset_count", staticBlas.residentAssetCount},
               {"geometry_count", staticBlas.geometryCount},
               {"primitive_count", staticBlas.primitiveCount},
+              {"opaque_primitive_count", staticBlas.opaquePrimitiveCount},
+              {"cutout_primitive_count", staticBlas.cutoutPrimitiveCount},
               {"build",
                {{"count", staticBlas.buildCount},
                 {"cpu_ms", staticBlas.buildCpuMs},

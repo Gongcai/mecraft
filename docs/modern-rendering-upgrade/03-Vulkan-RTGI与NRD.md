@@ -547,12 +547,33 @@ BLAS；普通完整方块在每个 SubChunk BLAS 内使用可见单位面，仍�
   Secondary Shadow 的细分计时仍通过后续诊断增量补充。
 - `SceneTLAS`、Terrain BLAS Build/Compaction、动态资源准备和 RTGI bootstrap 已接入独立的 CPU/GPU
   计时、工作量与驻留峰值；Static BLAS 在资产加载时记录 Build/Compaction 时间及压缩前后字节。
-  bootstrap 包含内部 SceneTLAS，其时间只用于归因，不重复计入已追踪 GPU 总时间。
+  bootstrap 包含内部 SceneTLAS，其时间只用于归因，不重复计入已追踪 GPU 总时间。AS 报告还发布
+  TLAS Generation Allocation/Reuse/Wait、动态 BLAS Action/Reject Counter、Terrain Opaque/Cutout Primitive
+  分布和 Static BLAS Opaque/Cutout Primitive 分布。
 - RT Distance、Max Local Lights Per Hit 与 Signal Resolution 是公开画质参数。
 - 动态分辨率只改变 Render Extent，不改变 Method、Ray Distance 或材质复杂度。
 
 具体预算见《06-时域输出与性能》。任何优化都以 Reference Capture 的图像误差、p95 GPU
 时间和历史稳定性共同评估。
+
+### 9.1 Caustica 对照后的策略边界
+
+动态实体 BLAS 使用独立的 `DynamicBlasPolicyContract` 固定决策条件。Rigid Reuse 要求保留引用与当前快照的
+Build Flags、Geometry 顺序、格式、数量和 Index Topology 一致，姿态必须是位相等或 Yaw+Translation 刚体
+关系，Shading Hash 也必须一致。UPDATE 要求选中的槽以 `AllowUpdate` 构建，全部 Geometry 兼容字段一致；
+连续 UPDATE 上限为 120，达到上限的操作是完整 BUILD。当前动态实体尚未接入 TLAS，因此生产 Action Counter
+保持为零，契约测试覆盖了 Shading、Bucket Primitive、Topology、Build Flag 和周期重建拒绝原因。
+
+Caustica 的四槽 TLAS 解决每帧动态实例导致的 VMA 创建与销毁尖峰；Mecraft 当前只在场景快照变化时创建
+generation。`scene_tlas_generations` 现已直接测量 Allocation、Reuse、Reuse Wait 和 Retired Generation。
+最新 3 帧报告中体素为 0 次 Allocation，Sponza 为 1 次 Allocation，Reuse/Wait 都为 0；固定 Ring 不进入
+当前生产实现。
+
+Terrain BLAS 的 Shader ABI 仍是 Opaque/Cutout 两类。体素参考场景当前为 202,312 个 Opaque Primitive 和
+876 个 Cutout Primitive，Cutout 占约 0.43%；Sponza 与场景内 Static BLAS 的 Cutout Primitive 为 0。
+Ray Query Candidate Loop 与 Any-Hit/SBT 的执行模型不同，OMM 还要求新增 RHI Extension、Capability、
+Micromap 资产和生命周期契约。工程入口是 Candidate/Confirmed GPU 归约读回及大量 Cutout 资产场景，当前
+bucket 分布本身不构成 OMM 扩展依据。
 
 ## 10. 调试视图与验收
 

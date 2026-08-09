@@ -146,6 +146,9 @@ struct SceneTlasStats {
     uint64_t buildsRecorded = 0u;
     uint64_t buildsCompleted = 0u;
     uint32_t buildsRecordedThisFrame = 0u;
+    uint32_t generationAllocationsThisFrame = 0u;
+    uint32_t generationReusesThisFrame = 0u;
+    uint32_t generationReuseWaitsThisFrame = 0u;
     uint64_t instancesRecordedThisFrame = 0u;
     uint64_t scratchBytesThisFrame = 0u;
     uint64_t tlasBytesThisFrame = 0u;
@@ -285,6 +288,9 @@ private:
     uint64_t m_buildsRecorded = 0u;
     uint64_t m_buildsCompleted = 0u;
     uint32_t m_buildsRecordedThisFrame = 0u;
+    uint32_t m_generationAllocationsThisFrame = 0u;
+    uint32_t m_generationReusesThisFrame = 0u;
+    uint32_t m_generationReuseWaitsThisFrame = 0u;
     uint64_t m_instancesRecordedThisFrame = 0u;
     uint64_t m_scratchBytesThisFrame = 0u;
     uint64_t m_tlasBytesThisFrame = 0u;

@@ -132,11 +132,15 @@ struct TerrainBlasStats {
     uint32_t buildsRecordedThisFrame = 0u;
     uint32_t compactionsRecordedThisFrame = 0u;
     uint64_t buildPrimitiveCountThisFrame = 0u;
+    uint64_t buildOpaquePrimitiveCountThisFrame = 0u;
+    uint64_t buildCutoutPrimitiveCountThisFrame = 0u;
     uint64_t compactionPrimitiveCountThisFrame = 0u;
     uint64_t buildBlasBytesThisFrame = 0u;
     uint64_t compactedBlasBytesThisFrame = 0u;
     uint64_t dynamicResourceBytesThisFrame = 0u;
     uint64_t activePrimitiveCount = 0u;
+    uint64_t activeOpaquePrimitiveCount = 0u;
+    uint64_t activeCutoutPrimitiveCount = 0u;
     uint64_t activeGeometryBytes = 0u;
     uint64_t activePrimitiveMetadataBytes = 0u;
     uint64_t activeBlasBytes = 0u;
@@ -295,6 +299,8 @@ private:
     uint32_t m_buildsRecordedThisFrame = 0u;
     uint32_t m_compactionsRecordedThisFrame = 0u;
     uint64_t m_buildPrimitiveCountThisFrame = 0u;
+    uint64_t m_buildOpaquePrimitiveCountThisFrame = 0u;
+    uint64_t m_buildCutoutPrimitiveCountThisFrame = 0u;
     uint64_t m_compactionPrimitiveCountThisFrame = 0u;
     uint64_t m_buildBlasBytesThisFrame = 0u;
     uint64_t m_compactedBlasBytesThisFrame = 0u;

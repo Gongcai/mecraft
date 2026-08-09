@@ -157,6 +157,9 @@ void SceneTlasCache::shutdown() {
     m_buildsRecorded = 0u;
     m_buildsCompleted = 0u;
     m_buildsRecordedThisFrame = 0u;
+    m_generationAllocationsThisFrame = 0u;
+    m_generationReusesThisFrame = 0u;
+    m_generationReuseWaitsThisFrame = 0u;
     m_instancesRecordedThisFrame = 0u;
     m_scratchBytesThisFrame = 0u;
     m_tlasBytesThisFrame = 0u;
@@ -174,6 +177,9 @@ void SceneTlasCache::shutdown() {
 
 void SceneTlasCache::beginFrame() {
     m_buildsRecordedThisFrame = 0u;
+    m_generationAllocationsThisFrame = 0u;
+    m_generationReusesThisFrame = 0u;
+    m_generationReuseWaitsThisFrame = 0u;
     m_instancesRecordedThisFrame = 0u;
     m_scratchBytesThisFrame = 0u;
     m_tlasBytesThisFrame = 0u;
@@ -607,6 +613,7 @@ bool SceneTlasCache::recordFrame(RhiCommandList& commandList, RenderDebugService
         std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - buildCpuStart).count();
     ++m_buildsRecorded;
     ++m_buildsRecordedThisFrame;
+    ++m_generationAllocationsThisFrame;
     m_instancesRecordedThisFrame += m_pending->generation.mappings.size();
     m_scratchBytesThisFrame += buildSizes.buildScratchSize;
     m_tlasBytesThisFrame += m_pending->generation.tlasBytes;
@@ -704,6 +711,9 @@ SceneTlasStats SceneTlasCache::stats() const {
     result.buildsRecorded = m_buildsRecorded;
     result.buildsCompleted = m_buildsCompleted;
     result.buildsRecordedThisFrame = m_buildsRecordedThisFrame;
+    result.generationAllocationsThisFrame = m_generationAllocationsThisFrame;
+    result.generationReusesThisFrame = m_generationReusesThisFrame;
+    result.generationReuseWaitsThisFrame = m_generationReuseWaitsThisFrame;
     result.instancesRecordedThisFrame = m_instancesRecordedThisFrame;
     result.scratchBytesThisFrame = m_scratchBytesThisFrame;
     result.tlasBytesThisFrame = m_tlasBytesThisFrame;

@@ -144,6 +144,9 @@ bool testAccelerationStructureHistory() {
     frame.staticBlas.residentAssetCount = 2u;
     frame.staticBlas.buildCount = 2u;
     frame.staticBlas.compactionCount = 2u;
+    frame.staticBlas.primitiveCount = 100u;
+    frame.staticBlas.opaquePrimitiveCount = 70u;
+    frame.staticBlas.cutoutPrimitiveCount = 30u;
     frame.staticBlas.buildCpuMs = 4.0;
     frame.staticBlas.buildGpuMs = 2.0;
     frame.staticBlas.compactionCpuMs = 3.0;
@@ -167,6 +170,16 @@ bool testAccelerationStructureHistory() {
         frame.activeSceneReferencedBlasBytes = sequence * 40u;
         frame.activeTerrainBlasBytes = sequence * 50u;
         frame.activeTerrainPrimitiveCount = sequence * 60u;
+        frame.sceneTlasGenerationAllocations = 1u;
+        frame.retiredSceneTlasGenerations = static_cast<uint32_t>(sequence % 7u);
+        frame.terrainBuckets.activeOpaquePrimitives = sequence * 40u;
+        frame.terrainBuckets.activeCutoutPrimitives = sequence * 20u;
+        frame.terrainBuckets.builtOpaquePrimitives = sequence * 2u;
+        frame.terrainBuckets.builtCutoutPrimitives = sequence;
+        frame.dynamicBlas.producerConnected = true;
+        frame.dynamicBlas.actionCounts[static_cast<size_t>(renderer::contracts::DynamicBlasAction::Update)] = 2u;
+        frame.dynamicBlas.rigidReuseRejectCounts[static_cast<size_t>(
+            renderer::contracts::DynamicBlasRigidReuseRejectReason::NonRigidPose)] = 2u;
         if (!requireTrue(history.record(frame), "unique AS frame sequences must be recorded")) {
             return false;
         }
@@ -193,7 +206,22 @@ bool testAccelerationStructureHistory() {
                        "AS history must retain work totals and per-frame peaks") &&
            requireTrue(stats.peakActiveSceneTlasInstances == 1002u && stats.peakActiveTerrainBlasBytes == 50100u &&
                            stats.latest.sequence == 1002u && stats.latest.staticBlas.assetCount == 2u,
-                       "AS history must expose residency peaks and the latest static BLAS snapshot");
+                       "AS history must expose residency peaks and the latest static BLAS snapshot") &&
+           requireTrue(stats.sceneTlasGenerationAllocationCount == 1000u &&
+                           stats.peakSceneTlasGenerationAllocationsPerFrame == 1u &&
+                           stats.peakRetiredSceneTlasGenerations == 6u,
+                       "AS history must expose TLAS generation allocation and retirement pressure") &&
+           requireTrue(stats.dynamicBlas.producerConnected &&
+                           stats.dynamicBlas
+                                   .actionCounts[static_cast<size_t>(renderer::contracts::DynamicBlasAction::Update)] ==
+                               2000u &&
+                           stats.dynamicBlas.peakActionsPerFrame[static_cast<size_t>(
+                               renderer::contracts::DynamicBlasAction::Update)] == 2u,
+                       "AS history must accumulate dynamic BLAS policy actions") &&
+           requireTrue(stats.terrainBuckets.peakActiveOpaquePrimitives == 40080u &&
+                           stats.terrainBuckets.peakActiveCutoutPrimitives == 20040u &&
+                           stats.latest.terrainBuckets.activeOpaquePrimitives == 40080u,
+                       "AS history must preserve terrain geometry-bucket residency");
 }
 
 bool testRenderGraphTimingHistory() {

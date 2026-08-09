@@ -60,6 +60,10 @@ GpuTimingPercentiles calculatePercentiles(const std::array<double, GpuTimingHist
     return {nearestRank(50u), nearestRank(95u), nearestRank(99u)};
 }
 
+bool exactPartition(const uint64_t first, const uint64_t second, const uint64_t total) {
+    return first <= total && second == total - first;
+}
+
 double renderGraphCpuTimingMilliseconds(const RenderGraphFrameStats& stats, const RenderGraphCpuTimingStage stage) {
     switch (stage) {
     case RenderGraphCpuTimingStage::Build: return stats.cpuBuildMs;
@@ -232,6 +236,23 @@ void AccelerationStructureHistory::reset() {
     m_activeSceneReferencedBlasByteSamples.fill(0u);
     m_activeTerrainBlasByteSamples.fill(0u);
     m_activeTerrainPrimitiveSamples.fill(0u);
+    m_sceneTlasGenerationAllocationSamples.fill(0u);
+    m_sceneTlasGenerationReuseSamples.fill(0u);
+    m_sceneTlasGenerationReuseWaitSamples.fill(0u);
+    m_retiredSceneTlasGenerationSamples.fill(0u);
+    m_activeTerrainOpaquePrimitiveSamples.fill(0u);
+    m_activeTerrainCutoutPrimitiveSamples.fill(0u);
+    m_builtTerrainOpaquePrimitiveSamples.fill(0u);
+    m_builtTerrainCutoutPrimitiveSamples.fill(0u);
+    for (auto& samples : m_dynamicBlasActionSamples) {
+        samples.fill(0u);
+    }
+    for (auto& samples : m_dynamicBlasRigidReuseRejectSamples) {
+        samples.fill(0u);
+    }
+    for (auto& samples : m_dynamicBlasUpdateRejectSamples) {
+        samples.fill(0u);
+    }
     m_nextSample = 0u;
     m_sampleCount = 0u;
     m_observedSampleCount = 0u;
@@ -252,7 +273,13 @@ bool AccelerationStructureHistory::record(const AccelerationStructureFrameStats&
     const StaticBlasFrameStats& staticBlas = stats.staticBlas;
     if (!std::isfinite(staticBlas.buildCpuMs) || staticBlas.buildCpuMs < 0.0 || !std::isfinite(staticBlas.buildGpuMs) ||
         staticBlas.buildGpuMs < 0.0 || !std::isfinite(staticBlas.compactionCpuMs) || staticBlas.compactionCpuMs < 0.0 ||
-        !std::isfinite(staticBlas.compactionGpuMs) || staticBlas.compactionGpuMs < 0.0) {
+        !std::isfinite(staticBlas.compactionGpuMs) || staticBlas.compactionGpuMs < 0.0 ||
+        !exactPartition(staticBlas.opaquePrimitiveCount, staticBlas.cutoutPrimitiveCount, staticBlas.primitiveCount) ||
+        !exactPartition(stats.terrainBuckets.activeOpaquePrimitives, stats.terrainBuckets.activeCutoutPrimitives,
+                        stats.activeTerrainPrimitiveCount) ||
+        !exactPartition(
+            stats.terrainBuckets.builtOpaquePrimitives, stats.terrainBuckets.builtCutoutPrimitives,
+            stats.stages[static_cast<size_t>(AccelerationStructureStage::TerrainBlasBuild)].primitiveCount)) {
         return false;
     }
 
@@ -272,6 +299,23 @@ bool AccelerationStructureHistory::record(const AccelerationStructureFrameStats&
     m_activeSceneReferencedBlasByteSamples[m_nextSample] = stats.activeSceneReferencedBlasBytes;
     m_activeTerrainBlasByteSamples[m_nextSample] = stats.activeTerrainBlasBytes;
     m_activeTerrainPrimitiveSamples[m_nextSample] = stats.activeTerrainPrimitiveCount;
+    m_sceneTlasGenerationAllocationSamples[m_nextSample] = stats.sceneTlasGenerationAllocations;
+    m_sceneTlasGenerationReuseSamples[m_nextSample] = stats.sceneTlasGenerationReuses;
+    m_sceneTlasGenerationReuseWaitSamples[m_nextSample] = stats.sceneTlasGenerationReuseWaits;
+    m_retiredSceneTlasGenerationSamples[m_nextSample] = stats.retiredSceneTlasGenerations;
+    m_activeTerrainOpaquePrimitiveSamples[m_nextSample] = stats.terrainBuckets.activeOpaquePrimitives;
+    m_activeTerrainCutoutPrimitiveSamples[m_nextSample] = stats.terrainBuckets.activeCutoutPrimitives;
+    m_builtTerrainOpaquePrimitiveSamples[m_nextSample] = stats.terrainBuckets.builtOpaquePrimitives;
+    m_builtTerrainCutoutPrimitiveSamples[m_nextSample] = stats.terrainBuckets.builtCutoutPrimitives;
+    for (size_t index = 0u; index < stats.dynamicBlas.actionCounts.size(); ++index) {
+        m_dynamicBlasActionSamples[index][m_nextSample] = stats.dynamicBlas.actionCounts[index];
+    }
+    for (size_t index = 0u; index < stats.dynamicBlas.rigidReuseRejectCounts.size(); ++index) {
+        m_dynamicBlasRigidReuseRejectSamples[index][m_nextSample] = stats.dynamicBlas.rigidReuseRejectCounts[index];
+    }
+    for (size_t index = 0u; index < stats.dynamicBlas.updateRejectCounts.size(); ++index) {
+        m_dynamicBlasUpdateRejectSamples[index][m_nextSample] = stats.dynamicBlas.updateRejectCounts[index];
+    }
     m_nextSample = (m_nextSample + 1u) % kCapacity;
     m_sampleCount = std::min(m_sampleCount + 1u, kCapacity);
     ++m_observedSampleCount;
@@ -287,6 +331,7 @@ AccelerationStructureWindowStats AccelerationStructureHistory::snapshot() const 
     stats.capacity = kCapacity;
     stats.observedSampleCount = m_observedSampleCount;
     stats.latest = m_latest;
+    stats.dynamicBlas.producerConnected = m_latest.dynamicBlas.producerConnected;
 
     for (size_t stageIndex = 0u; stageIndex < stats.stages.size(); ++stageIndex) {
         AccelerationStructureStageWindowStats& stage = stats.stages[stageIndex];
@@ -320,6 +365,38 @@ AccelerationStructureWindowStats AccelerationStructureHistory::snapshot() const 
             std::max(stats.peakActiveTerrainBlasBytes, m_activeTerrainBlasByteSamples[sampleIndex]);
         stats.peakActiveTerrainPrimitiveCount =
             std::max(stats.peakActiveTerrainPrimitiveCount, m_activeTerrainPrimitiveSamples[sampleIndex]);
+        stats.sceneTlasGenerationAllocationCount += m_sceneTlasGenerationAllocationSamples[sampleIndex];
+        stats.sceneTlasGenerationReuseCount += m_sceneTlasGenerationReuseSamples[sampleIndex];
+        stats.sceneTlasGenerationReuseWaitCount += m_sceneTlasGenerationReuseWaitSamples[sampleIndex];
+        stats.peakSceneTlasGenerationAllocationsPerFrame = std::max(
+            stats.peakSceneTlasGenerationAllocationsPerFrame, m_sceneTlasGenerationAllocationSamples[sampleIndex]);
+        stats.peakSceneTlasGenerationReusesPerFrame =
+            std::max(stats.peakSceneTlasGenerationReusesPerFrame, m_sceneTlasGenerationReuseSamples[sampleIndex]);
+        stats.peakSceneTlasGenerationReuseWaitsPerFrame = std::max(stats.peakSceneTlasGenerationReuseWaitsPerFrame,
+                                                                   m_sceneTlasGenerationReuseWaitSamples[sampleIndex]);
+        stats.peakRetiredSceneTlasGenerations =
+            std::max(stats.peakRetiredSceneTlasGenerations, m_retiredSceneTlasGenerationSamples[sampleIndex]);
+        stats.terrainBuckets.builtOpaquePrimitives += m_builtTerrainOpaquePrimitiveSamples[sampleIndex];
+        stats.terrainBuckets.builtCutoutPrimitives += m_builtTerrainCutoutPrimitiveSamples[sampleIndex];
+        stats.terrainBuckets.peakBuiltOpaquePrimitivesPerFrame = std::max(
+            stats.terrainBuckets.peakBuiltOpaquePrimitivesPerFrame, m_builtTerrainOpaquePrimitiveSamples[sampleIndex]);
+        stats.terrainBuckets.peakBuiltCutoutPrimitivesPerFrame = std::max(
+            stats.terrainBuckets.peakBuiltCutoutPrimitivesPerFrame, m_builtTerrainCutoutPrimitiveSamples[sampleIndex]);
+        stats.terrainBuckets.peakActiveOpaquePrimitives = std::max(stats.terrainBuckets.peakActiveOpaquePrimitives,
+                                                                   m_activeTerrainOpaquePrimitiveSamples[sampleIndex]);
+        stats.terrainBuckets.peakActiveCutoutPrimitives = std::max(stats.terrainBuckets.peakActiveCutoutPrimitives,
+                                                                   m_activeTerrainCutoutPrimitiveSamples[sampleIndex]);
+        for (size_t index = 0u; index < stats.dynamicBlas.actionCounts.size(); ++index) {
+            stats.dynamicBlas.actionCounts[index] += m_dynamicBlasActionSamples[index][sampleIndex];
+            stats.dynamicBlas.peakActionsPerFrame[index] =
+                std::max(stats.dynamicBlas.peakActionsPerFrame[index], m_dynamicBlasActionSamples[index][sampleIndex]);
+        }
+        for (size_t index = 0u; index < stats.dynamicBlas.rigidReuseRejectCounts.size(); ++index) {
+            stats.dynamicBlas.rigidReuseRejectCounts[index] += m_dynamicBlasRigidReuseRejectSamples[index][sampleIndex];
+        }
+        for (size_t index = 0u; index < stats.dynamicBlas.updateRejectCounts.size(); ++index) {
+            stats.dynamicBlas.updateRejectCounts[index] += m_dynamicBlasUpdateRejectSamples[index][sampleIndex];
+        }
     }
     return stats;
 }
@@ -352,8 +429,8 @@ bool RenderGraphTimingHistory::record(const RenderGraphFrameStats& stats) {
 
     std::array<double, static_cast<size_t>(RenderGraphCpuTimingStage::Count)> cpuValues{};
     for (size_t index = 0u; index < static_cast<size_t>(RenderGraphCpuTimingStage::Count); ++index) {
-        const double milliseconds = renderGraphCpuTimingMilliseconds(
-            stats, static_cast<RenderGraphCpuTimingStage>(index));
+        const double milliseconds =
+            renderGraphCpuTimingMilliseconds(stats, static_cast<RenderGraphCpuTimingStage>(index));
         if (!std::isfinite(milliseconds) || milliseconds < 0.0) {
             return false;
         }
@@ -365,8 +442,8 @@ bool RenderGraphTimingHistory::record(const RenderGraphFrameStats& stats) {
     std::array<double, static_cast<size_t>(RenderGraphGpuTimingMetric::Count)> gpuValues{};
     if (acceptGpu) {
         for (size_t index = 0u; index < static_cast<size_t>(RenderGraphGpuTimingMetric::Count); ++index) {
-            const double milliseconds = renderGraphGpuTimingMilliseconds(
-                stats, static_cast<RenderGraphGpuTimingMetric>(index));
+            const double milliseconds =
+                renderGraphGpuTimingMilliseconds(stats, static_cast<RenderGraphGpuTimingMetric>(index));
             if (!std::isfinite(milliseconds) || milliseconds < 0.0) {
                 return false;
             }
@@ -374,10 +451,10 @@ bool RenderGraphTimingHistory::record(const RenderGraphFrameStats& stats) {
         }
     }
 
-    const bool completeGpuFrameCandidate = stats.completeGpuFrame.supported && stats.completeGpuFrame.valid &&
-                                           stats.completeGpuFrame.sequence != 0u;
-    const bool acceptCompleteGpuFrame = completeGpuFrameCandidate &&
-                                       stats.completeGpuFrame.sequence > m_lastCompleteGpuFrameSequence;
+    const bool completeGpuFrameCandidate =
+        stats.completeGpuFrame.supported && stats.completeGpuFrame.valid && stats.completeGpuFrame.sequence != 0u;
+    const bool acceptCompleteGpuFrame =
+        completeGpuFrameCandidate && stats.completeGpuFrame.sequence > m_lastCompleteGpuFrameSequence;
     if (completeGpuFrameCandidate &&
         (!std::isfinite(stats.completeGpuFrame.spanMs) || stats.completeGpuFrame.spanMs < 0.0)) {
         return false;
@@ -743,7 +820,7 @@ void RenderDebugService::beginFrame(RhiCommandList& commandList) {
     if (spanState == GpuFrameSpanState::Issued) {
         const uint32_t firstQuery = gpuFrameSpanQueryIndex(readIndex, GpuFrameSpanPoint::Start);
         if (m_rhiDevice->areQueryResultsAvailable(m_gpuFrameSpanQueryPool, firstQuery,
-                                                   static_cast<uint32_t>(GPU_FRAME_SPAN_POINT_COUNT))) {
+                                                  static_cast<uint32_t>(GPU_FRAME_SPAN_POINT_COUNT))) {
             std::array<uint64_t, GPU_FRAME_SPAN_POINT_COUNT> timestamps{};
             if (!m_rhiDevice->getQueryResults(m_gpuFrameSpanQueryPool, firstQuery,
                                               static_cast<uint32_t>(GPU_FRAME_SPAN_POINT_COUNT), timestamps.data())) {

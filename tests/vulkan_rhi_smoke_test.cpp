@@ -3909,6 +3909,7 @@ void main() {
 
     const TerrainBlasStats residentStats = cache.stats();
     valid = valid && residentStats.activeBlasCount == 1u && residentStats.activePrimitiveCount == 2u &&
+            residentStats.activeOpaquePrimitiveCount == 1u && residentStats.activeCutoutPrimitiveCount == 1u &&
             residentStats.activeGeometryBytes == sizeof(BlockVertex) * 6u &&
             residentStats.activePrimitiveMetadataBytes == sizeof(renderer::contracts::TerrainPrimitiveMetadata) * 2u &&
             residentStats.activeBlasBytes != 0u && cache.isSettled() &&
@@ -5446,7 +5447,8 @@ namespace {
         sharedBlas = staticBlas.resource();
         const StaticMeshBlasStats& stats = staticBlas.stats();
         valid = sharedBlas != nullptr && stats.resident && stats.geometryCount == 2u && stats.primitiveCount == 2u &&
-                stats.containsOpaque && stats.containsCutout && stats.containsDoubleSided && stats.buildCount == 1u &&
+                stats.opaquePrimitiveCount == 1u && stats.cutoutPrimitiveCount == 1u && stats.containsOpaque &&
+                stats.containsCutout && stats.containsDoubleSided && stats.buildCount == 1u &&
                 stats.compactionCount == 1u && stats.scratchPeakBytes != 0u && stats.compactedBlasBytes != 0u &&
                 stats.compactedBlasBytes <= stats.uncompactedBlasBytes && std::isfinite(stats.buildCpuMs) &&
                 stats.buildCpuMs > 0.0 && std::isfinite(stats.buildGpuMs) && stats.buildGpuMs >= 0.0 &&

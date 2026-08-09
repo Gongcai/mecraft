@@ -358,6 +358,7 @@ set(SRC_RENDERER
         src/renderer/contracts/CameraPathContract.cpp
         src/renderer/contracts/ClusteredLightingContract.cpp
         src/renderer/contracts/ContentHashContract.cpp
+        src/renderer/contracts/DynamicBlasPolicyContract.cpp
         src/renderer/contracts/GpuLightContract.cpp
         src/renderer/contracts/LocalShadowContract.cpp
         src/renderer/contracts/GpuMaterialContract.cpp
@@ -1122,6 +1123,8 @@ if(MECRAFT_BUILD_TESTS)
             MECRAFT_TEST_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
     add_mecraft_test(rhi_acceleration_structure_contract_test
             tests/rhi_acceleration_structure_contract_test.cpp)
+    add_mecraft_test(dynamic_blas_policy_contract_test
+            tests/dynamic_blas_policy_contract_test.cpp)
     add_mecraft_test(terrain_blas_cache_contract_test
             tests/terrain_blas_cache_contract_test.cpp)
     add_mecraft_test(scene_tlas_cache_contract_test
