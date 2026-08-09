@@ -635,6 +635,8 @@ RTX 4060 Laptop 的 Vulkan 小窗口实跑已分别覆盖两条路径（320×180
 版本化静态质量 Profile 已锁定 V01/V02/M03 的场景契约、M3 RTGI Render Settings、1280×720、Camera Path
 2.0 秒和固定 ROI；选择 Profile 会强制 32 帧 Raw/Denoised 且保持相机静止。V01 的真实 32+32 EXR 小预热
 运行已验证调度、写入和报告字段，64 spp Reference 与实际指标尚未生成。
+Reference 运行轴现会强制 64 帧 Raw-only、关闭 NRD，并让 R2 低差异相位在无降噪器时逐帧推进。V01 实跑的
+首帧、次帧和第 64 帧 EXR 哈希均不同，报告中 `NRD.GuidePrep`/`NRD.Dispatch` 为 0；64 帧平均与质量报告尚待接入。
 
 ## 10. 调试视图与验收
 

@@ -58,6 +58,7 @@ struct AppLaunchOptions {
     std::filesystem::path validationRtgiHdrCaptureDirectory;
     std::optional<ValidationRtgiHdrCaptureMode> validationRtgiHdrCaptureMode;
     std::string validationRtgiQualityProfile;
+    bool validationRtgiReference = false;
 
     /// Reports whether a deterministic validation run was requested.
     /// @return True when a versioned scene descriptor was supplied.

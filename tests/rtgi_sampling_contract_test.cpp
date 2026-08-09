@@ -78,6 +78,9 @@ namespace {
            traceSource.find("ivec2 noiseTexel = ivec2(uvec2(texel) % uvec2(noiseExtent));") != std::string::npos &&
            traceSource.find("rtgiPixelScrambledCranleyPattersonRotation(pc.frameMaskAndFlags.x, uvec2(texel))") !=
                std::string::npos &&
+           pipelineSource.find("traceSettings.temporalSamplingEnabled = (nrdEnabled || rtgiReferenceSampling)") !=
+               std::string::npos &&
+           pipelineSource.find("(rtgiReferenceSampling || (nrdEnabled && !nrdTemporalReset))") != std::string::npos &&
            traceSource.find("frameOffset") == std::string::npos &&
            traceSource.find("layout(set = 1, binding = 17) uniform sampler2D uVoxelLightTexture;") !=
                std::string::npos &&
@@ -105,14 +108,12 @@ namespace {
            pipelineSource.find(
                "const bool rtgiTraceInspection = isRtgiTraceInspectionView(settings.debug.viewMode);") !=
                std::string::npos &&
-           pipelineSource.find("traceSettings.temporalSamplingEnabled = nrdEnabled && !rtgiTraceInspection;") !=
-               std::string::npos &&
            pipelineSource.find("traceSettings.temporalSampleIndex = m_rtgiTemporalSampleIndex;") != std::string::npos &&
            pipelineSource.find("++m_rtgiTemporalSampleIndex;") != std::string::npos &&
            pipelineSource.find("m_lastNrdSceneTlasRevision") == std::string::npos &&
            pipelineSource.find("relaxSettings.atrousIterationNum =") != std::string::npos &&
-           pipelineSource.find("nrdAccumulationFrameCount(::nrd::RELAX_DEFAULT_ACCUMULATION_TIME") !=
-               std::string::npos &&
+           pipelineSource.find("nrdAccumulationFrameCount(") != std::string::npos &&
+           pipelineSource.find("::nrd::RELAX_DEFAULT_ACCUMULATION_TIME") != std::string::npos &&
            pipelineSource.find("relaxSettings.antilagSettings.accelerationAmount = 0.0f;") == std::string::npos &&
            pipelineSource.find("relaxSettings.antilagSettings.resetAmount = 0.0f;") == std::string::npos &&
            pipelineSource.find("relaxSettings.enableAntiFirefly = true;") != std::string::npos &&

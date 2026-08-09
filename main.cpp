@@ -40,6 +40,7 @@ void printUsage() {
               << "                                      Select linear RTGI HDR signals written per sample frame.\n"
               << "  --validation-rtgi-quality-profile <id>\n"
               << "                                      Lock a static RTGI camera time, resolution, and ROI.\n"
+              << "  --validation-rtgi-reference        Capture 64 advancing raw samples with NRD disabled.\n"
               << "  --rhi-backend <opengl|vulkan>      Select the graphics backend.\n"
               << "  --rhi-debug-output                 Enable graphics backend debug output.\n"
               << "  --no-rhi-debug-output              Disable graphics backend debug output.\n"
@@ -258,6 +259,8 @@ bool parseLaunchOptions(int argc, char** argv, AppLaunchOptions& options, std::s
                 return false;
             }
             options.validationRtgiQualityProfile = value;
+        } else if (arg == "--validation-rtgi-reference") {
+            options.validationRtgiReference = true;
         } else if (arg == "--rhi-backend") {
             const char* value = nullptr;
             if (!requireValue(argc, argv, index, "--rhi-backend", value, error)) {

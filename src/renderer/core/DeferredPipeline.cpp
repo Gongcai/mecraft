@@ -927,6 +927,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
     DeferredRenderTargets& targets = *m_shared->deferredTargets;
     const bool rtgiEnabled = settings.rtgi.enabled;
     const bool nrdEnabled = rtgiEnabled && settings.nrd.enabled;
+    const bool rtgiReferenceSampling = rtgiEnabled && settings.rtgi.referenceSamplingEnabled && !nrdEnabled;
     if (nrdEnabled && (!std::isfinite(ctx.deltaTime) || ctx.deltaTime < 0.0f)) {
         MECRAFT_LOG_STREAM(std::cerr << "[DeferredPipeline] NRD requires a finite non-negative frame delta\n");
         return false;
@@ -1953,7 +1954,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
                                      renderer::rt::sceneTlasMaskBit(renderer::rt::SceneTlasInstanceMask::GiCutout);
         traceSettings.shadowInstanceMask =
             renderer::rt::sceneTlasMaskBit(renderer::rt::SceneTlasInstanceMask::ShadowCaster);
-        traceSettings.temporalSamplingEnabled = nrdEnabled && !rtgiTraceInspection;
+        traceSettings.temporalSamplingEnabled = (nrdEnabled || rtgiReferenceSampling) && !rtgiTraceInspection;
         traceSettings.temporalSampleIndex = m_rtgiTemporalSampleIndex;
         traceSettings.useJitteredProjection = usesTemporalProjectionJitter(settings.upscale.type, settings.taa.enabled);
         traceSettings.terrainNormalMapsEnabled =
@@ -2928,7 +2929,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
                                      << '\n');
     }
     // Advance the low-discrepancy phase after each stable temporal frame.
-    if (executed.succeeded() && nrdEnabled && !nrdTemporalReset && !rtgiTraceInspection) {
+    if (executed.succeeded() && (rtgiReferenceSampling || (nrdEnabled && !nrdTemporalReset)) && !rtgiTraceInspection) {
         ++m_rtgiTemporalSampleIndex;
     }
     if (m_shared->terrainCache != nullptr) {

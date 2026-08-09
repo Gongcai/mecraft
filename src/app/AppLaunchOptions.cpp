@@ -84,7 +84,7 @@ bool validateAppLaunchOptions(const AppLaunchOptions& options, std::string& erro
             options.validationWarmupFramesSet || options.validationSampleFramesSet || options.validationWidthSet ||
             options.validationHeightSet || options.validationRtgiCutoutTraversal.has_value() ||
             !options.validationRtgiHdrCaptureDirectory.empty() || options.validationRtgiHdrCaptureMode.has_value() ||
-            !options.validationRtgiQualityProfile.empty()) {
+            !options.validationRtgiQualityProfile.empty() || options.validationRtgiReference) {
             error = "Validation options require --validation-scene-file";
             return false;
         }
@@ -102,10 +102,19 @@ bool validateAppLaunchOptions(const AppLaunchOptions& options, std::string& erro
         error = "--validation-rtgi-hdr-capture-dir and --validation-rtgi-hdr-capture must be supplied together";
         return false;
     }
-    if (!options.validationRtgiQualityProfile.empty() &&
-        (options.validationSampleFrames != app::validation::kRtgiQualitySequenceFrameCount ||
-         options.validationRtgiHdrCaptureMode != ValidationRtgiHdrCaptureMode::RawAndDenoised)) {
-        error = "--validation-rtgi-quality-profile requires 32 samples and raw_and_denoised HDR capture";
+    if (!options.validationRtgiQualityProfile.empty()) {
+        const bool validReference = options.validationRtgiReference &&
+                                    options.validationSampleFrames == app::validation::kRtgiQualityReferenceSpp &&
+                                    options.validationRtgiHdrCaptureMode == ValidationRtgiHdrCaptureMode::Raw;
+        const bool validSequence = !options.validationRtgiReference &&
+                                   options.validationSampleFrames == app::validation::kRtgiQualitySequenceFrameCount &&
+                                   options.validationRtgiHdrCaptureMode == ValidationRtgiHdrCaptureMode::RawAndDenoised;
+        if (!validReference && !validSequence) {
+            error = "RTGI quality profiles require either 32 raw_and_denoised samples or 64 raw reference samples";
+            return false;
+        }
+    } else if (options.validationRtgiReference) {
+        error = "--validation-rtgi-reference requires --validation-rtgi-quality-profile";
         return false;
     }
     if (options.validationSampleFrames < 2u) {

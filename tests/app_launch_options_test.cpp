@@ -122,6 +122,18 @@ int main() {
                      "a static RTGI quality profile must reject non-32-frame sequences")) {
         return 1;
     }
+    quality.validationSampleFrames = app::validation::kRtgiQualityReferenceSpp;
+    quality.validationRtgiHdrCaptureMode = ValidationRtgiHdrCaptureMode::Raw;
+    quality.validationRtgiReference = true;
+    if (!requireTrue(validateAppLaunchOptions(quality, error),
+                     "a static RTGI profile must accept exactly 64 raw Reference samples")) {
+        return 1;
+    }
+    quality.validationRtgiQualityProfile.clear();
+    if (!requireTrue(!validateAppLaunchOptions(quality, error),
+                     "the RTGI Reference axis must require a versioned static profile")) {
+        return 1;
+    }
     invalid = validation;
     invalid.recordInput = true;
     if (!requireTrue(!validateAppLaunchOptions(invalid, error), "validation must reject input recording")) {

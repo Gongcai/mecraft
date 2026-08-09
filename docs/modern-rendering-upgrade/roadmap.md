@@ -296,6 +296,9 @@ V01/V02/M03 静态质量 Profile 已由独立 JSON 锁定场景契约、M3 RTGI 
 2.0 秒及固定 ROI。控制器选择 Profile 后强制 32 帧 Raw/Denoised，并在整个序列保持相机不动；报告发布
 Profile/ROI/64 spp 目标。V01 已以 1 帧预热完成真实 32+32 EXR 链路验证，正式门槛仍需 300 帧预热、ROI 内容
 复核、64 spp Reference 和数值报告。
+Reference 运行轴已接入：显式 `--validation-rtgi-reference` 强制 64 帧 Raw-only、关闭 NRD，并在无 NRD 时继续
+推进 RTGI 低差异相位。V01 真实运行生成 64 个不同哈希的 Raw EXR，报告中 NRD/Guide Prep/Dispatch 时间均为
+0；下一步仍需将 64 帧平均为 Reference EXR并由自动报告消费。
 
 2026-08-08 在 RTX 4060 Laptop、Vulkan、RELAX_DIFFUSE、300 帧预热加 1000 帧采样下完成四组复测。
 报告中的 `total_tracked` 是显式 Pass 阶段和，不是完整 GPU 帧跨度：它没有覆盖独立的帧首/场景 Overlay/

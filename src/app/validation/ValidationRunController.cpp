@@ -188,6 +188,10 @@ RenderSettings ValidationRunController::runtimeRenderSettings() const {
     if (m_options.validationRtgiCutoutTraversal.has_value()) {
         settings.rtgi.cutoutTraversal = *m_options.validationRtgiCutoutTraversal;
     }
+    if (m_options.validationRtgiReference) {
+        settings.nrd.enabled = false;
+        settings.rtgi.referenceSamplingEnabled = true;
+    }
     return settings;
 }
 

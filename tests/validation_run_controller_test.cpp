@@ -161,6 +161,18 @@ int main() {
         return 1;
     }
 
+    qualityOptions.validationSampleFrames = app::validation::kRtgiQualityReferenceSpp;
+    qualityOptions.validationRtgiHdrCaptureMode = ValidationRtgiHdrCaptureMode::Raw;
+    qualityOptions.validationRtgiReference = true;
+    app::validation::ValidationRunController referenceController;
+    if (!requireTrue(referenceController.configure(qualityOptions), "the V01 64-spp Reference axis must configure") ||
+        !requireTrue(referenceController.runtimeRenderSettings().rtgi.enabled &&
+                         referenceController.runtimeRenderSettings().rtgi.referenceSamplingEnabled &&
+                         !referenceController.runtimeRenderSettings().nrd.enabled,
+                     "Reference capture must advance raw RTGI samples with NRD disabled")) {
+        return 1;
+    }
+
     std::cout << "[validation_run_controller_test] PASS\n";
     return 0;
 }

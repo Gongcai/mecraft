@@ -74,6 +74,8 @@ enum class RtgiCutoutTraversalMode { CandidateLoop = 0, OpacityMicromap = 1 };
 /// Ray-traced diffuse global illumination controls.
 struct RtgiSettings {
     bool enabled = false;
+    /// Advances raw samples without NRD only for the explicit offline Reference runner.
+    bool referenceSamplingEnabled = false;
     RtgiCutoutTraversalMode cutoutTraversal = RtgiCutoutTraversalMode::CandidateLoop;
     float intensity = 1.0f;
     float maxRayDistance = 64.0f;

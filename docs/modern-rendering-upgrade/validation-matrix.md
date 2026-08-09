@@ -127,6 +127,9 @@ Static Mesh Custom Index 对应 Terrain 记录必须保持全零，表字节数�
 Camera Path 2.0 秒和 `(384,216,512,288)` ROI；运行时必须使用 32 帧 `raw_and_denoised` 捕获，报告记录
 Profile ID、版本、ROI、质量 Render Settings 及 64 spp Reference 目标。ROI 内容在正式 Reference 采集前仍需
 结合线性 HDR 与 Depth/Normal 边界检查确认；不得仅因矩形契约已固定而宣称画质门槛通过。
+`--validation-rtgi-reference` 将同一 Profile 切换为严格 64 帧 Raw-only 运行：NRD 必须关闭，RTGI 的 R2
+低差异相位仍逐帧推进，报告记录 `capture_mode=reference` 与 `nrd_enabled=false`。这 64 个线性样本随后必须
+平均为单张 Reference EXR；不能直接选取其中一帧作为参考。
 
 ### 3.3 动态画面
 

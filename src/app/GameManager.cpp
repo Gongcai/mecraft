@@ -887,6 +887,9 @@ bool GameManager::writeBenchmarkReport() {
                                               {"y", qualityProfile->roi.y},
                                               {"width", qualityProfile->roi.width},
                                               {"height", qualityProfile->roi.height}}}};
+            root["rtgi_quality_profile"]["capture_mode"] =
+                m_launchOptions.validationRtgiReference ? "reference" : "raw_and_denoised_sequence";
+            root["rtgi_quality_profile"]["nrd_enabled"] = runtimeSettings.nrd.enabled;
         }
         root["environment"] = {{"time_of_day_seconds", contract.environment.timeOfDaySeconds},
                                {"weather", app::validation::validationWeatherStableId(contract.environment.weather)}};
