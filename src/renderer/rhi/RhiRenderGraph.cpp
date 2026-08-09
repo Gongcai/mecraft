@@ -55,12 +55,15 @@ namespace {
     case RhiResourceState::UniformBuffer:
     case RhiResourceState::AccelerationStructureBuildInput:
     case RhiResourceState::AccelerationStructureRead:
+    case RhiResourceState::MicromapBuildInput:
     case RhiResourceState::HostRead: return access == RgAccessType::Read;
     case RhiResourceState::TransferDst:
     case RhiResourceState::AccelerationStructureBuildWrite:
+    case RhiResourceState::MicromapBuildWrite:
     case RhiResourceState::HostWrite: return access == RgAccessType::Write;
     case RhiResourceState::StorageBuffer:
-    case RhiResourceState::AccelerationStructureBuildScratch: return true;
+    case RhiResourceState::AccelerationStructureBuildScratch:
+    case RhiResourceState::MicromapBuildScratch: return true;
     default: return false;
     }
 }
@@ -199,7 +202,10 @@ void addUniqueEdge(std::vector<std::vector<uint32_t>>& edges, std::vector<std::v
     case RhiResourceState::AccelerationStructureBuildInput:
     case RhiResourceState::AccelerationStructureBuildScratch:
     case RhiResourceState::AccelerationStructureBuildWrite:
-    case RhiResourceState::AccelerationStructureRead: return queue == RhiQueueType::Compute;
+    case RhiResourceState::AccelerationStructureRead:
+    case RhiResourceState::MicromapBuildInput:
+    case RhiResourceState::MicromapBuildScratch:
+    case RhiResourceState::MicromapBuildWrite: return queue == RhiQueueType::Compute;
     case RhiResourceState::Present:
     case RhiResourceState::RenderTarget:
     case RhiResourceState::DepthWrite:

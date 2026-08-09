@@ -267,7 +267,11 @@ struct RtgiTraceSmokeCase final {
             kAccelerationStructureWriteStages ||
         VkRhiInterop::resourceStages(RhiResourceState::AccelerationStructureRead) != kAccelerationStructureReadStages ||
         VkRhiInterop::resourceAccess(RhiResourceState::AccelerationStructureBuildInput) !=
-            VK_ACCESS_2_SHADER_READ_BIT) {
+            VK_ACCESS_2_SHADER_READ_BIT ||
+        VkRhiInterop::resourceStages(RhiResourceState::MicromapBuildWrite) !=
+            VK_PIPELINE_STAGE_2_MICROMAP_BUILD_BIT_EXT ||
+        VkRhiInterop::resourceAccess(RhiResourceState::MicromapBuildWrite) !=
+            (VK_ACCESS_2_MICROMAP_READ_BIT_EXT | VK_ACCESS_2_MICROMAP_WRITE_BIT_EXT)) {
         return false;
     }
 

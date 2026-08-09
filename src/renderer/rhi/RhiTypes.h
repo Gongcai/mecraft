@@ -230,7 +230,9 @@ enum class RhiBufferUsage : uint32_t {
     MapWrite = 1u << 8u,
     DeviceAddress = 1u << 9u,
     AccelerationStructureStorage = 1u << 10u,
-    AccelerationStructureBuildInput = 1u << 11u
+    AccelerationStructureBuildInput = 1u << 11u,
+    MicromapStorage = 1u << 12u,
+    MicromapBuildInput = 1u << 13u
 };
 
 using RhiBufferUsageFlags = uint32_t;
@@ -272,6 +274,9 @@ enum class RhiResourceState {
     AccelerationStructureBuildScratch,
     AccelerationStructureBuildWrite,
     AccelerationStructureRead,
+    MicromapBuildInput,
+    MicromapBuildScratch,
+    MicromapBuildWrite,
     HostRead,
     HostWrite
 };

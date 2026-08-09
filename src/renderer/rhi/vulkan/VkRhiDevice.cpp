@@ -179,6 +179,10 @@ VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityFlagBits
         result |= VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR;
     if ((usage & rhiFlag(RhiBufferUsage::AccelerationStructureBuildInput)) != 0u)
         result |= VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR;
+    if ((usage & rhiFlag(RhiBufferUsage::MicromapStorage)) != 0u)
+        result |= VK_BUFFER_USAGE_MICROMAP_STORAGE_BIT_EXT;
+    if ((usage & rhiFlag(RhiBufferUsage::MicromapBuildInput)) != 0u)
+        result |= VK_BUFFER_USAGE_MICROMAP_BUILD_INPUT_READ_ONLY_BIT_EXT;
     return result;
 }
 
@@ -2256,16 +2260,27 @@ RhiBufferHandle VkRhiDevice::createBuffer(const RhiBufferDesc& desc, const void*
         (desc.usage & rhiFlag(RhiBufferUsage::AccelerationStructureBuildInput)) != 0u;
     const bool accelerationStructureBuildScratch =
         desc.initialState == RhiResourceState::AccelerationStructureBuildScratch;
+    const bool micromapStorage = (desc.usage & rhiFlag(RhiBufferUsage::MicromapStorage)) != 0u;
+    const bool micromapBuildInput = (desc.usage & rhiFlag(RhiBufferUsage::MicromapBuildInput)) != 0u;
+    const bool micromapBuildScratch = desc.initialState == RhiResourceState::MicromapBuildScratch;
     if (!m_initialized || !rhiMemoryCategoryValid(desc.memoryCategory) || desc.size == 0u || desc.usage == 0u ||
         toVkBufferUsage(desc.usage) == 0u || (initialData == nullptr && initialDataSize != 0u) ||
         initialDataSize > desc.size) {
         return {};
     }
-    if ((accelerationStructureStorage &&
+    if (((micromapStorage || micromapBuildInput || micromapBuildScratch) && !m_capabilities.opacityMicromap) ||
+        (accelerationStructureStorage &&
          ((desc.usage & kAccelerationStructureStorageUsages) != kAccelerationStructureStorageUsages ||
           desc.memoryUsage != RhiMemoryUsage::GpuOnly)) ||
         (accelerationStructureBuildInput && (desc.usage & rhiFlag(RhiBufferUsage::DeviceAddress)) == 0u) ||
         (accelerationStructureBuildScratch &&
+         ((desc.usage & (rhiFlag(RhiBufferUsage::Storage) | rhiFlag(RhiBufferUsage::DeviceAddress))) !=
+              (rhiFlag(RhiBufferUsage::Storage) | rhiFlag(RhiBufferUsage::DeviceAddress)) ||
+          desc.memoryUsage != RhiMemoryUsage::GpuOnly)) ||
+        (micromapStorage && ((desc.usage & rhiFlag(RhiBufferUsage::DeviceAddress)) == 0u ||
+                             desc.memoryUsage != RhiMemoryUsage::GpuOnly)) ||
+        (micromapBuildInput && (desc.usage & rhiFlag(RhiBufferUsage::DeviceAddress)) == 0u) ||
+        (micromapBuildScratch &&
          ((desc.usage & (rhiFlag(RhiBufferUsage::Storage) | rhiFlag(RhiBufferUsage::DeviceAddress))) !=
               (rhiFlag(RhiBufferUsage::Storage) | rhiFlag(RhiBufferUsage::DeviceAddress)) ||
           desc.memoryUsage != RhiMemoryUsage::GpuOnly))) {

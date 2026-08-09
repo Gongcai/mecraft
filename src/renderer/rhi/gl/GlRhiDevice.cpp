@@ -408,6 +408,9 @@ struct GlVertexFormatInfo {
     case RhiResourceState::AccelerationStructureBuildScratch: return "AccelerationStructureBuildScratch";
     case RhiResourceState::AccelerationStructureBuildWrite: return "AccelerationStructureBuildWrite";
     case RhiResourceState::AccelerationStructureRead: return "AccelerationStructureRead";
+    case RhiResourceState::MicromapBuildInput: return "MicromapBuildInput";
+    case RhiResourceState::MicromapBuildScratch: return "MicromapBuildScratch";
+    case RhiResourceState::MicromapBuildWrite: return "MicromapBuildWrite";
     case RhiResourceState::HostRead: return "HostRead";
     case RhiResourceState::HostWrite: return "HostWrite";
     }
@@ -434,6 +437,9 @@ struct GlVertexFormatInfo {
     case RhiResourceState::AccelerationStructureBuildScratch:
     case RhiResourceState::AccelerationStructureBuildWrite:
     case RhiResourceState::AccelerationStructureRead:
+    case RhiResourceState::MicromapBuildInput:
+    case RhiResourceState::MicromapBuildScratch:
+    case RhiResourceState::MicromapBuildWrite:
     case RhiResourceState::HostRead:
     case RhiResourceState::HostWrite: return false;
     }
@@ -453,6 +459,9 @@ struct GlVertexFormatInfo {
     case RhiResourceState::AccelerationStructureBuildScratch:
     case RhiResourceState::AccelerationStructureBuildWrite:
     case RhiResourceState::AccelerationStructureRead: return false;
+    case RhiResourceState::MicromapBuildInput:
+    case RhiResourceState::MicromapBuildScratch:
+    case RhiResourceState::MicromapBuildWrite: return false;
     case RhiResourceState::HostRead: return (usage & rhiFlag(RhiBufferUsage::MapRead)) != 0u;
     case RhiResourceState::HostWrite: return (usage & rhiFlag(RhiBufferUsage::MapWrite)) != 0u;
     case RhiResourceState::Undefined: return true;
@@ -484,6 +493,9 @@ struct GlVertexFormatInfo {
     case RhiResourceState::AccelerationStructureBuildScratch:
     case RhiResourceState::AccelerationStructureBuildWrite:
     case RhiResourceState::AccelerationStructureRead: return 0u;
+    case RhiResourceState::MicromapBuildInput:
+    case RhiResourceState::MicromapBuildScratch:
+    case RhiResourceState::MicromapBuildWrite: return 0u;
     case RhiResourceState::HostRead: return GL_CLIENT_MAPPED_BUFFER_BARRIER_BIT;
     case RhiResourceState::HostWrite: return GL_CLIENT_MAPPED_BUFFER_BARRIER_BIT;
     case RhiResourceState::Undefined:
@@ -4461,7 +4473,8 @@ RhiMemoryStats GlRhiDevice::memoryStats() const {
 RhiBufferHandle GlRhiDevice::createBuffer(const RhiBufferDesc& desc, const void* initialData, size_t initialDataSize) {
     constexpr RhiBufferUsageFlags kUnsupportedAccelerationStructureUsages =
         rhiFlag(RhiBufferUsage::DeviceAddress) | rhiFlag(RhiBufferUsage::AccelerationStructureStorage) |
-        rhiFlag(RhiBufferUsage::AccelerationStructureBuildInput);
+        rhiFlag(RhiBufferUsage::AccelerationStructureBuildInput) | rhiFlag(RhiBufferUsage::MicromapStorage) |
+        rhiFlag(RhiBufferUsage::MicromapBuildInput);
     if ((desc.usage & kUnsupportedAccelerationStructureUsages) != 0u) {
         logRhiError("OpenGL does not support acceleration-structure buffer usages");
         return {};
