@@ -620,6 +620,7 @@ OMM 常驻 52 个 Micromap、598,144 B，1,773,056 个 microtriangle 精确分�
 A/B 门禁；该显示输出比较不替代 64 spp Linear EXR、固定 ROI 和动态 Ghost/Disocclusion 的 M3 画质门槛。
 `rtgi_cutout_traversal_ab_test` 从锁定 PNG/报告重算身份、样本、Micromap 分区、性能收益和图像指标。M3 V03
 Vulkan 质量运行据此采用 `opacity_micromap`，Candidate Loop 保留为显式诊断实现轴。
+捕获层同时提供严格 RGBA16F Linear EXR 写入，Reference runner 尚未接入该原始 HDR 输出。
 
 ## 10. 调试视图与验收
 

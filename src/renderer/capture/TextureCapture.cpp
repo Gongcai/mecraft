@@ -7,7 +7,10 @@
 #include <stb/stb_image_write.h>
 
 #include <algorithm>
+#include <array>
 #include <cstdlib>
+#include <cstring>
+#include <fstream>
 #include <limits>
 #include <utility>
 
@@ -15,6 +18,7 @@ namespace renderer::capture {
 namespace {
 
 constexpr uint32_t kBytesPerPixel = 4u;
+constexpr uint32_t kHalfBytesPerPixel = 8u;
 
 [[nodiscard]] bool supportedFormat(const RhiTextureFormat format) {
     return format == RhiTextureFormat::Rgba8Unorm || format == RhiTextureFormat::Rgba8Srgb ||
@@ -23,6 +27,10 @@ constexpr uint32_t kBytesPerPixel = 4u;
 
 [[nodiscard]] bool bgraFormat(const RhiTextureFormat format) {
     return format == RhiTextureFormat::Bgra8Unorm || format == RhiTextureFormat::Bgra8Srgb;
+}
+
+[[nodiscard]] bool halfFormat(const RhiTextureFormat format) {
+    return format == RhiTextureFormat::Rgba16Float;
 }
 
 [[nodiscard]] TextureCaptureResult failure(const TextureCaptureError error, std::string detail) {
@@ -72,6 +80,182 @@ TextureCaptureError normalizeTextureCapturePixels(const uint8_t* source, const s
         }
     }
     return TextureCaptureError::None;
+}
+
+TextureCaptureError normalizeTextureCaptureHalfPixels(const uint8_t* source, const size_t sourceSize,
+                                                      const uint32_t bytesPerRow, const uint32_t width,
+                                                      const uint32_t height, const RhiTextureFormat format,
+                                                      const TextureCaptureOrigin origin,
+                                                      std::vector<uint16_t>& rgba16f) {
+    rgba16f.clear();
+    if (source == nullptr || width == 0u || height == 0u || !halfFormat(format)) {
+        return !halfFormat(format) ? TextureCaptureError::UnsupportedFormat : TextureCaptureError::InvalidRequest;
+    }
+    const uint64_t tightRowBytes = static_cast<uint64_t>(width) * kHalfBytesPerPixel;
+    if (tightRowBytes > bytesPerRow) {
+        return TextureCaptureError::InvalidRequest;
+    }
+    const uint64_t requiredSourceSize = static_cast<uint64_t>(height - 1u) * bytesPerRow + tightRowBytes;
+    const uint64_t outputSize = tightRowBytes * height;
+    if (requiredSourceSize > sourceSize || outputSize > std::numeric_limits<size_t>::max()) {
+        return TextureCaptureError::SizeOverflow;
+    }
+
+    rgba16f.resize(static_cast<size_t>(width) * height * 4u);
+    for (uint32_t destinationY = 0u; destinationY < height; ++destinationY) {
+        const uint32_t sourceY = origin == TextureCaptureOrigin::TopLeft ? destinationY : height - destinationY - 1u;
+        const uint8_t* sourceRow = source + static_cast<uint64_t>(sourceY) * bytesPerRow;
+        uint16_t* destinationRow = rgba16f.data() + static_cast<size_t>(destinationY) * width * 4u;
+        std::memcpy(destinationRow, sourceRow, static_cast<size_t>(tightRowBytes));
+    }
+    return TextureCaptureError::None;
+}
+
+namespace {
+
+void writeUint32(std::ofstream& output, const uint32_t value) {
+    const std::array<uint8_t, 4u> bytes{static_cast<uint8_t>(value), static_cast<uint8_t>(value >> 8u),
+                                        static_cast<uint8_t>(value >> 16u), static_cast<uint8_t>(value >> 24u)};
+    output.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+}
+
+void writeUint64(std::ofstream& output, const uint64_t value) {
+    const std::array<uint8_t, 8u> bytes{static_cast<uint8_t>(value),        static_cast<uint8_t>(value >> 8u),
+                                        static_cast<uint8_t>(value >> 16u), static_cast<uint8_t>(value >> 24u),
+                                        static_cast<uint8_t>(value >> 32u), static_cast<uint8_t>(value >> 40u),
+                                        static_cast<uint8_t>(value >> 48u), static_cast<uint8_t>(value >> 56u)};
+    output.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+}
+
+void writeFloat(std::ofstream& output, const float value) {
+    static_assert(sizeof(float) == sizeof(uint32_t));
+    uint32_t bits = 0u;
+    std::memcpy(&bits, &value, sizeof(bits));
+    writeUint32(output, bits);
+}
+
+void writeString(std::ofstream& output, const std::string_view value) {
+    output.write(value.data(), static_cast<std::streamsize>(value.size()));
+    output.put('\0');
+}
+
+void writeAttribute(std::ofstream& output, const std::string_view name, const std::string_view type,
+                    const uint32_t size) {
+    writeString(output, name);
+    writeString(output, type);
+    writeUint32(output, size);
+}
+
+uint64_t exrHeaderSize() {
+    constexpr uint64_t kMagicAndVersionBytes = 8u;
+    constexpr uint64_t kChannelsPayloadBytes = 55u;
+    constexpr uint64_t kChannelsAttributeBytes = 9u + 6u + 4u + kChannelsPayloadBytes;
+    constexpr uint64_t kCompressionAttributeBytes = 12u + 12u + 4u + 1u;
+    constexpr uint64_t kBoxAttributeBytes = 11u + 6u + 4u + 16u;
+    constexpr uint64_t kLineOrderAttributeBytes = 10u + 10u + 4u + 1u;
+    constexpr uint64_t kPixelAspectAttributeBytes = 17u + 6u + 4u + 4u;
+    constexpr uint64_t kScreenCenterAttributeBytes = 19u + 4u + 4u + 8u;
+    constexpr uint64_t kScreenWidthAttributeBytes = 18u + 6u + 4u + 4u;
+    constexpr uint64_t kHeaderTerminatorBytes = 1u;
+    return kMagicAndVersionBytes + kChannelsAttributeBytes + kCompressionAttributeBytes + kBoxAttributeBytes * 2u +
+           kLineOrderAttributeBytes + kPixelAspectAttributeBytes + kScreenCenterAttributeBytes +
+           kScreenWidthAttributeBytes + kHeaderTerminatorBytes;
+}
+
+void writeExrHeader(std::ofstream& output, const uint32_t width, const uint32_t height) {
+    writeUint32(output, 20000630u);
+    writeUint32(output, 2u);
+
+    writeAttribute(output, "channels", "chlist", 55u);
+    for (const std::string_view channel : {std::string_view{"B"}, std::string_view{"G"}, std::string_view{"R"}}) {
+        writeString(output, channel);
+        writeUint32(output, 1u);
+        output.put('\0');
+        output.put('\0');
+        output.put('\0');
+        output.put('\0');
+        writeUint32(output, 1u);
+        writeUint32(output, 1u);
+    }
+    output.put('\0');
+
+    writeAttribute(output, "compression", "compression", 1u);
+    output.put('\0');
+    const auto writeBox = [&output, width, height]() {
+        writeUint32(output, 0u);
+        writeUint32(output, 0u);
+        writeUint32(output, width - 1u);
+        writeUint32(output, height - 1u);
+    };
+    writeAttribute(output, "dataWindow", "box2i", 16u);
+    writeBox();
+    writeAttribute(output, "displayWindow", "box2i", 16u);
+    writeBox();
+    writeAttribute(output, "lineOrder", "lineOrder", 1u);
+    output.put('\0');
+    writeAttribute(output, "pixelAspectRatio", "float", 4u);
+    writeFloat(output, 1.0f);
+    writeAttribute(output, "screenWindowCenter", "v2f", 8u);
+    writeFloat(output, 0.0f);
+    writeFloat(output, 0.0f);
+    writeAttribute(output, "screenWindowWidth", "float", 4u);
+    writeFloat(output, 1.0f);
+    output.put('\0');
+}
+
+} // namespace
+
+TextureCaptureResult writeLinearExr(const std::filesystem::path& outputPath, const uint32_t width,
+                                    const uint32_t height, const std::vector<uint16_t>& rgba16f) {
+    const uint64_t pixelCount = static_cast<uint64_t>(width) * height;
+    if (outputPath.empty() || outputPath.extension() != ".exr" || width == 0u || height == 0u ||
+        pixelCount > std::numeric_limits<size_t>::max() / 4u || rgba16f.size() != pixelCount * 4u) {
+        return failure(TextureCaptureError::InvalidRequest,
+                       "lowercase .exr path and exact RGBA16F pixels are required");
+    }
+    const uint64_t scanlineBytes = static_cast<uint64_t>(width) * 3u * sizeof(uint16_t);
+    const uint64_t offsetTableBytes = static_cast<uint64_t>(height) * sizeof(uint64_t);
+    if (scanlineBytes > std::numeric_limits<uint32_t>::max() ||
+        exrHeaderSize() > std::numeric_limits<uint64_t>::max() - offsetTableBytes ||
+        scanlineBytes > std::numeric_limits<uint64_t>::max() - sizeof(uint32_t) * 2u) {
+        return failure(TextureCaptureError::SizeOverflow, "EXR scanline or offset table size overflowed");
+    }
+    const std::filesystem::path parent = outputPath.parent_path();
+    if (!parent.empty()) {
+        std::error_code directoryError;
+        std::filesystem::create_directories(parent, directoryError);
+        if (directoryError) {
+            return failure(TextureCaptureError::OutputDirectoryFailed, directoryError.message());
+        }
+    }
+
+    std::ofstream output(outputPath, std::ios::binary | std::ios::trunc);
+    if (!output) {
+        return failure(TextureCaptureError::ExrWriteFailed, outputPath.generic_u8string());
+    }
+    writeExrHeader(output, width, height);
+    const uint64_t firstChunkOffset = exrHeaderSize() + offsetTableBytes;
+    const uint64_t chunkSize = sizeof(uint32_t) * 2u + scanlineBytes;
+    for (uint32_t y = 0u; y < height; ++y) {
+        writeUint64(output, firstChunkOffset + static_cast<uint64_t>(y) * chunkSize);
+    }
+    for (uint32_t y = 0u; y < height; ++y) {
+        writeUint32(output, y);
+        writeUint32(output, static_cast<uint32_t>(scanlineBytes));
+        const uint16_t* row = rgba16f.data() + static_cast<size_t>(y) * width * 4u;
+        for (const uint32_t channel : {2u, 1u, 0u}) {
+            for (uint32_t x = 0u; x < width; ++x) {
+                const uint16_t half = row[x * 4u + channel];
+                output.put(static_cast<char>(half & 0xffu));
+                output.put(static_cast<char>(half >> 8u));
+            }
+        }
+    }
+    output.flush();
+    if (!output) {
+        return failure(TextureCaptureError::ExrWriteFailed, outputPath.generic_u8string());
+    }
+    return {};
 }
 
 TextureCaptureResult captureTextureToPng(RhiDevice& rhiDevice, RhiCommandListPool& commandListPool,
@@ -190,6 +374,91 @@ TextureCaptureResult captureTextureToPng(RhiDevice& rhiDevice, RhiCommandListPoo
     return {};
 }
 
+TextureCaptureResult captureTextureToExr(RhiDevice& rhiDevice, RhiCommandListPool& commandListPool,
+                                         const TextureCaptureRequest& request) {
+    if (!request.sourceTexture.isValid() || request.width == 0u || request.height == 0u ||
+        request.sourceState == RhiResourceState::Undefined || request.sourceFormat != RhiTextureFormat::Rgba16Float ||
+        request.outputPath.empty() || request.outputPath.extension() != ".exr") {
+        return failure(TextureCaptureError::InvalidRequest,
+                       "source texture, state, RGBA16F extent, and lowercase .exr path are required");
+    }
+    const uint64_t tightRowBytes = static_cast<uint64_t>(request.width) * kHalfBytesPerPixel;
+    if (request.width > static_cast<uint32_t>(std::numeric_limits<int>::max()) ||
+        request.height > static_cast<uint32_t>(std::numeric_limits<int>::max())) {
+        return failure(TextureCaptureError::SizeOverflow, "EXR dimensions exceed the writer contract");
+    }
+    const uint64_t alignment = std::max<uint64_t>(1u, rhiDevice.capabilities().textureBufferCopyRowPitchAlignment);
+    if (tightRowBytes > std::numeric_limits<uint64_t>::max() - (alignment - 1u)) {
+        return failure(TextureCaptureError::SizeOverflow, "aligned EXR capture row size overflowed");
+    }
+    const uint64_t bytesPerRow64 = ((tightRowBytes + alignment - 1u) / alignment) * alignment;
+    if (bytesPerRow64 > std::numeric_limits<uint32_t>::max() ||
+        request.height > std::numeric_limits<uint64_t>::max() / bytesPerRow64) {
+        return failure(TextureCaptureError::SizeOverflow, "EXR capture readback size overflowed");
+    }
+    const uint32_t bytesPerRow = static_cast<uint32_t>(bytesPerRow64);
+    const uint64_t readbackSize = bytesPerRow64 * request.height;
+    if (readbackSize > std::numeric_limits<size_t>::max()) {
+        return failure(TextureCaptureError::SizeOverflow, "EXR capture readback exceeds the host address space");
+    }
+
+    RhiBufferDesc readbackDesc;
+    readbackDesc.debugName = "ValidationCapture.ExrReadback";
+    readbackDesc.size = readbackSize;
+    readbackDesc.usage = rhiFlag(RhiBufferUsage::TransferDst) | rhiFlag(RhiBufferUsage::MapRead);
+    readbackDesc.memoryUsage = RhiMemoryUsage::GpuToCpu;
+    readbackDesc.initialState = RhiResourceState::TransferDst;
+    readbackDesc.memoryCategory = RhiMemoryCategory::Readback;
+    const RhiBufferHandle readback = rhiDevice.createBuffer(readbackDesc, nullptr, 0u);
+    if (!readback.isValid()) {
+        return failure(TextureCaptureError::ReadbackAllocationFailed,
+                       "failed to create the GPU-to-CPU EXR readback buffer");
+    }
+    RhiCommandList* commandList = commandListPool.acquire(RhiCommandListType::Graphics);
+    if (commandList == nullptr ||
+        !commandList->begin({"ValidationCapture.ExrCommands", RhiCommandListType::Graphics})) {
+        rhiDevice.destroyBuffer(readback);
+        return failure(TextureCaptureError::CommandListBeginFailed, "failed to begin the EXR capture command list");
+    }
+    commandList->textureBarrier({request.sourceTexture, request.sourceState, RhiResourceState::TransferSrc});
+    RhiTextureBufferCopy copy;
+    copy.srcTexture = request.sourceTexture;
+    copy.dstBuffer = readback;
+    copy.bytesPerRow = bytesPerRow;
+    copy.rowsPerImage = request.height;
+    copy.width = request.width;
+    copy.height = request.height;
+    commandList->copyTextureToBuffer(copy);
+    commandList->bufferBarrier({readback, RhiResourceState::TransferDst, RhiResourceState::HostRead});
+    commandList->textureBarrier({request.sourceTexture, RhiResourceState::TransferSrc, request.sourceState});
+    if (!commandList->end()) {
+        rhiDevice.destroyBuffer(readback);
+        return failure(TextureCaptureError::CommandListEndFailed, "EXR capture command validation failed");
+    }
+    RhiCommandList* submitted[] = {commandList};
+    RhiSubmissionToken token;
+    if (!rhiDevice.submit({"ValidationCapture.ExrSubmit", submitted, 1u, RhiQueueType::Graphics}, &token) ||
+        !rhiDevice.waitForSubmission(token)) {
+        rhiDevice.destroyBuffer(readback);
+        return failure(TextureCaptureError::SubmissionFailed, "EXR capture submission did not complete");
+    }
+    const auto* mapped = static_cast<const uint8_t*>(rhiDevice.mapBuffer(readback, 0u, readbackSize));
+    if (mapped == nullptr) {
+        rhiDevice.destroyBuffer(readback);
+        return failure(TextureCaptureError::BufferMapFailed, "EXR capture readback mapping failed");
+    }
+    std::vector<uint16_t> rgba16f;
+    const TextureCaptureError normalizationError =
+        normalizeTextureCaptureHalfPixels(mapped, static_cast<size_t>(readbackSize), bytesPerRow, request.width,
+                                          request.height, request.sourceFormat, request.origin, rgba16f);
+    rhiDevice.unmapBuffer(readback);
+    rhiDevice.destroyBuffer(readback);
+    if (normalizationError != TextureCaptureError::None) {
+        return failure(TextureCaptureError::PixelNormalizationFailed, textureCaptureErrorStableId(normalizationError));
+    }
+    return writeLinearExr(request.outputPath, request.width, request.height, rgba16f);
+}
+
 const char* textureCaptureErrorStableId(const TextureCaptureError error) {
     switch (error) {
     case TextureCaptureError::None: return "None";
@@ -206,6 +475,7 @@ const char* textureCaptureErrorStableId(const TextureCaptureError error) {
     case TextureCaptureError::PixelNormalizationFailed: return "PixelNormalizationFailed";
     case TextureCaptureError::OutputDirectoryFailed: return "OutputDirectoryFailed";
     case TextureCaptureError::PngWriteFailed: return "PngWriteFailed";
+    case TextureCaptureError::ExrWriteFailed: return "ExrWriteFailed";
     }
     std::abort();
 }

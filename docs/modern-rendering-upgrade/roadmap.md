@@ -280,9 +280,9 @@ M1 与 M2 可并行开发，但公共 `GpuMaterial`、`GpuSceneGeometry` 与 Sta
 - NRD 达到验证矩阵的方差、拖影和 GPU 时间门槛。
 - Vulkan Modern 的间接漫反射只来自 RTGI，不混入 SSGI。
 
-当前 M3 画质门槛状态：双场景 Reference Capture、RTGI/NRD 运行链路和自动契约测试已通过；64 spp
-Linear EXR、固定 ROI 的 Variance/SSIM/95th HDR error、Ghost/Disocclusion 像素统计尚未接入现有 PNG
-validation runner，因此这些画质数值门槛仍不能标记为通过。
+当前 M3 画质门槛状态：双场景 Reference Capture、RTGI/NRD 运行链路和自动契约测试已通过；捕获层现已支持
+严格 RGBA16F Linear EXR 读回，但 64 spp Reference、固定 ROI 的 Variance/SSIM/95th HDR error、
+Ghost/Disocclusion 像素统计尚未接入 validation runner，因此这些画质数值门槛仍不能标记为通过。
 
 2026-08-08 在 RTX 4060 Laptop、Vulkan、RELAX_DIFFUSE、300 帧预热加 1000 帧采样下完成四组复测。
 报告中的 `total_tracked` 是显式 Pass 阶段和，不是完整 GPU 帧跨度：它没有覆盖独立的帧首/场景 Overlay/

@@ -32,7 +32,8 @@ enum class TextureCaptureError : uint8_t {
     BufferMapFailed,
     PixelNormalizationFailed,
     OutputDirectoryFailed,
-    PngWriteFailed
+    PngWriteFailed,
+    ExrWriteFailed
 };
 
 /// Describes one synchronous 8-bit RGBA or BGRA texture capture.
@@ -71,12 +72,45 @@ struct TextureCaptureResult {
                                                                 RhiTextureFormat format, TextureCaptureOrigin origin,
                                                                 std::vector<uint8_t>& rgba);
 
+/// Converts padded RGBA16F backend rows into tightly packed top-left half-float pixels.
+/// @param source Raw mapped readback bytes.
+/// @param sourceSize Number of readable bytes at source.
+/// @param bytesPerRow Backend-aligned byte stride between source rows.
+/// @param width Image width in texels.
+/// @param height Image height in texels.
+/// @param format Source texture format; only RGBA16F is accepted.
+/// @param origin Row origin used by the source backend.
+/// @param rgba16f Receives width * height * 4 IEEE-754 half-float channel bit patterns.
+/// @return Stable normalization error, or None on success.
+[[nodiscard]] TextureCaptureError normalizeTextureCaptureHalfPixels(const uint8_t* source, size_t sourceSize,
+                                                                    uint32_t bytesPerRow, uint32_t width,
+                                                                    uint32_t height, RhiTextureFormat format,
+                                                                    TextureCaptureOrigin origin,
+                                                                    std::vector<uint16_t>& rgba16f);
+
+/// Writes a linear RGB OpenEXR scanline image from tightly packed RGBA16F pixels.
+/// @param outputPath Lowercase .exr output path.
+/// @param width Image width in texels.
+/// @param height Image height in texels.
+/// @param rgba16f Top-left RGBA16F pixels represented by IEEE-754 half bit patterns.
+/// @return Stable capture result describing EXR directory or write failure.
+[[nodiscard]] TextureCaptureResult writeLinearExr(const std::filesystem::path& outputPath, uint32_t width,
+                                                  uint32_t height, const std::vector<uint16_t>& rgba16f);
+
 /// Reads one texture synchronously and writes a deterministic PNG file.
 /// @param rhiDevice Device that owns the source texture and readback buffer.
 /// @param commandListPool Graphics command-list pool for copy submission.
 /// @param request Complete source-state, format, extent, and output contract.
 /// @return Stable capture result with operation-specific detail.
 [[nodiscard]] TextureCaptureResult captureTextureToPng(RhiDevice& rhiDevice, RhiCommandListPool& commandListPool,
+                                                       const TextureCaptureRequest& request);
+
+/// Reads one RGBA16F texture synchronously and writes a linear RGB OpenEXR file.
+/// @param rhiDevice Device that owns the source texture and readback buffer.
+/// @param commandListPool Graphics command-list pool for copy submission.
+/// @param request Complete source-state, RGBA16F format, extent, and output contract.
+/// @return Stable capture result with operation-specific detail.
+[[nodiscard]] TextureCaptureResult captureTextureToExr(RhiDevice& rhiDevice, RhiCommandListPool& commandListPool,
                                                        const TextureCaptureRequest& request);
 
 /// Returns the stable identifier used by validation logs and reports.
