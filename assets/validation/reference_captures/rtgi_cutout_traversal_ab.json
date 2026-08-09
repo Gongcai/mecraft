@@ -1,0 +1,58 @@
+{
+  "kind": "mecraft.rtgi_cutout_traversal_ab",
+  "version": 1,
+  "capture_profile": {
+    "backend": "vulkan",
+    "width": 1280,
+    "height": 720,
+    "warmup_frame_count": 300,
+    "sample_frame_count": 1000,
+    "scene_contract_id": "v03_forest_cutout",
+    "scene_contract_hash": "7a4f9eb7c94662df",
+    "camera_path_id": "v03_forest_cutout",
+    "camera_path_hash": "013c54501db3aebd",
+    "render_settings_id": "m3_voxel_rtgi_quality",
+    "render_settings_hash": "5aae41a7d7957a2d",
+    "alpha_texture_hash": "078afc3b87ece4a2",
+    "opacity_micromap_profile_hash": "477cc1f4cefc31c5"
+  },
+  "acceptance": {
+    "maximum_rgb_mae": 0.001,
+    "maximum_rgb_rmse": 0.0025,
+    "minimum_luminance_ssim": 0.999,
+    "minimum_rtgi_trace_p95_reduction_percent": 20.0,
+    "minimum_complete_gpu_p95_reduction_percent": 3.0,
+    "minimum_candidate_reduction_percent": 75.0,
+    "maximum_memory_increase_bytes": 1048576
+  },
+  "candidate_loop": {
+    "image": "v03_forest_cutout_candidate_loop_vulkan_1280x720_1000.png",
+    "image_byte_size": 1884344,
+    "image_fnv1a64": "bc9c742bbdf61fc3",
+    "image_sha256": "aa480b974e327ed618b02a6b1802a5d0f142bacb69b67d7c365fd30c1b727260",
+    "report": "v03_forest_cutout_candidate_loop_vulkan_1280x720_1000.report.json",
+    "report_byte_size": 17123,
+    "report_fnv1a64": "da7d4c74da3ec042",
+    "report_sha256": "295c1a317d2d892df2643bc882ec08df631428fcb7004639334c0b56a187ebe1"
+  },
+  "opacity_micromap": {
+    "image": "v03_forest_cutout_opacity_micromap_vulkan_1280x720_1000.png",
+    "image_byte_size": 1887436,
+    "image_fnv1a64": "2805c3303f59f5ec",
+    "image_sha256": "283d9b923a436f53ce0dc86327225c9b4e2ac56656e6d67e53e13ae9d93c90ae",
+    "report": "v03_forest_cutout_opacity_micromap_vulkan_1280x720_1000.report.json",
+    "report_byte_size": 17187,
+    "report_fnv1a64": "2dc87342306ec887",
+    "report_sha256": "a5c9f1cc7ccdba4989f763f8650310140065695670f3908612c59bbc536a81b3"
+  },
+  "measured": {
+    "rgb_mae": 0.00099173361474132042,
+    "rgb_rmse": 0.0022673788876304809,
+    "luminance_ssim": 0.99988531899137933,
+    "rtgi_trace_p95_reduction_percent": 25.403417988697484,
+    "complete_gpu_p95_reduction_percent": 5.145920532079596,
+    "candidate_reduction_percent": 82.09100679375268,
+    "memory_increase_bytes": 613888
+  },
+  "decision": "adopt_opacity_micromap"
+}

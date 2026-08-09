@@ -1,0 +1,713 @@
+{
+  "acceleration_structure_work": {
+    "dynamic_blas": {
+      "actions": {
+        "Rebuild": {
+          "count": 0,
+          "peak_per_frame": 0
+        },
+        "RigidReuse": {
+          "count": 0,
+          "peak_per_frame": 0
+        },
+        "Update": {
+          "count": 0,
+          "peak_per_frame": 0
+        }
+      },
+      "maximum_consecutive_updates": 120,
+      "producer_connected": false,
+      "rigid_reuse_rejects": {
+        "BuildFlagsChanged": 0,
+        "GeometryClassChanged": 0,
+        "GeometryCountChanged": 0,
+        "GeometryFlagsChanged": 0,
+        "IndexCountChanged": 0,
+        "IndexFormatChanged": 0,
+        "IndexTopologyChanged": 0,
+        "MissingReference": 0,
+        "NonRigidPose": 0,
+        "PrimitiveCountChanged": 0,
+        "ShadingChanged": 0,
+        "VertexCountChanged": 0,
+        "VertexFormatChanged": 0,
+        "VertexStrideChanged": 0
+      },
+      "update_rejects": {
+        "BuildFlagsChanged": 0,
+        "GeometryClassChanged": 0,
+        "GeometryCountChanged": 0,
+        "GeometryFlagsChanged": 0,
+        "IndexCountChanged": 0,
+        "IndexFormatChanged": 0,
+        "IndexTopologyChanged": 0,
+        "MissingSlot": 0,
+        "PeriodicRebuild": 0,
+        "PrimitiveCountChanged": 0,
+        "UpdateNotAllowed": 0,
+        "UpdatesDisabled": 0,
+        "VertexCountChanged": 0,
+        "VertexFormatChanged": 0,
+        "VertexStrideChanged": 0
+      }
+    },
+    "gpu_valid": true,
+    "observed_sample_count": 1000,
+    "residency": {
+      "latest": {
+        "scene_referenced_blas_bytes": 6290432,
+        "scene_tlas_bytes": 83456,
+        "scene_tlas_instances": 272,
+        "scene_tlas_unique_blas": 272,
+        "terrain_blas": 271,
+        "terrain_blas_bytes": 5777408,
+        "terrain_primitives": 215734
+      },
+      "peak": {
+        "scene_referenced_blas_bytes": 6290432,
+        "scene_tlas_bytes": 83456,
+        "scene_tlas_instances": 272,
+        "scene_tlas_unique_blas": 272,
+        "terrain_blas": 271,
+        "terrain_blas_bytes": 5777408,
+        "terrain_primitives": 215734
+      }
+    },
+    "sample_count": 1000,
+    "scene_tlas_generations": {
+      "allocation_count": 0,
+      "latest": {
+        "allocations": 0,
+        "retired_generations": 0,
+        "reuse_waits": 0,
+        "reuses": 0
+      },
+      "peak_per_frame": {
+        "allocations": 0,
+        "reuse_waits": 0,
+        "reuses": 0
+      },
+      "peak_retired_generations": 0,
+      "reuse_count": 0,
+      "reuse_wait_count": 0,
+      "ring_size": 0,
+      "strategy": "snapshot_generations"
+    },
+    "scope": "scene_acceleration_structures",
+    "stages": {
+      "AS.DynamicResourcePreparation": {
+        "cpu_ms": {
+          "p50": 0.11415,
+          "p95": 0.133397,
+          "p99": 0.167382
+        },
+        "gpu_ms": {
+          "p50": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "latest": {
+          "cpu_ms": 0.120261,
+          "instances": 272,
+          "operations": 1,
+          "primitives": 0,
+          "scratch_bytes": 0,
+          "structure_bytes": 0
+        },
+        "operation_count": 1000,
+        "peak_per_frame": {
+          "instances": 272,
+          "operations": 1,
+          "primitives": 0,
+          "scratch_bytes": 0,
+          "structure_bytes": 0
+        }
+      },
+      "RTGI.SceneTLASBootstrap": {
+        "cpu_ms": {
+          "p50": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "gpu_ms": {
+          "p50": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "latest": {
+          "cpu_ms": 0.0,
+          "instances": 0,
+          "operations": 0,
+          "primitives": 0,
+          "scratch_bytes": 0,
+          "structure_bytes": 0
+        },
+        "operation_count": 0,
+        "peak_per_frame": {
+          "instances": 0,
+          "operations": 0,
+          "primitives": 0,
+          "scratch_bytes": 0,
+          "structure_bytes": 0
+        }
+      },
+      "SceneTLAS": {
+        "cpu_ms": {
+          "p50": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "gpu_ms": {
+          "p50": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "latest": {
+          "cpu_ms": 0.0,
+          "instances": 0,
+          "operations": 0,
+          "primitives": 0,
+          "scratch_bytes": 0,
+          "structure_bytes": 0
+        },
+        "operation_count": 0,
+        "peak_per_frame": {
+          "instances": 0,
+          "operations": 0,
+          "primitives": 0,
+          "scratch_bytes": 0,
+          "structure_bytes": 0
+        }
+      },
+      "TerrainBLAS.Build": {
+        "cpu_ms": {
+          "p50": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "gpu_ms": {
+          "p50": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "latest": {
+          "cpu_ms": 0.0,
+          "instances": 0,
+          "operations": 0,
+          "primitives": 0,
+          "scratch_bytes": 0,
+          "structure_bytes": 0
+        },
+        "operation_count": 0,
+        "peak_per_frame": {
+          "instances": 0,
+          "operations": 0,
+          "primitives": 0,
+          "scratch_bytes": 0,
+          "structure_bytes": 0
+        }
+      },
+      "TerrainBLAS.Compaction": {
+        "cpu_ms": {
+          "p50": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "gpu_ms": {
+          "p50": 0.0,
+          "p95": 0.0,
+          "p99": 0.0
+        },
+        "latest": {
+          "cpu_ms": 0.0,
+          "instances": 0,
+          "operations": 0,
+          "primitives": 0,
+          "scratch_bytes": 0,
+          "structure_bytes": 0
+        },
+        "operation_count": 0,
+        "peak_per_frame": {
+          "instances": 0,
+          "operations": 0,
+          "primitives": 0,
+          "scratch_bytes": 0,
+          "structure_bytes": 0
+        }
+      }
+    },
+    "static_blas": {
+      "asset_count": 1,
+      "build": {
+        "count": 1,
+        "cpu_ms": 1.100799,
+        "gpu_ms": 0.410624,
+        "scratch_peak_bytes": 329472,
+        "uncompacted_blas_bytes": 1089408
+      },
+      "compaction": {
+        "compacted_blas_bytes": 513024,
+        "count": 1,
+        "cpu_ms": 1.00684,
+        "gpu_ms": 0.016384
+      },
+      "cutout_primitive_count": 0,
+      "geometry_count": 1,
+      "opaque_primitive_count": 15450,
+      "primitive_count": 15450,
+      "resident_asset_count": 1,
+      "scope": "asset_load",
+      "supported": true
+    },
+    "terrain_geometry_buckets": {
+      "geometry_capacity": 2,
+      "latest": {
+        "active_cutout_primitives": 6926,
+        "active_opaque_primitives": 208808,
+        "built_cutout_primitives": 0,
+        "built_opaque_primitives": 0
+      },
+      "window": {
+        "built_cutout_primitives": 0,
+        "built_opaque_primitives": 0,
+        "peak_active_cutout_primitives": 6926,
+        "peak_active_opaque_primitives": 208808,
+        "peak_built_cutout_primitives_per_frame": 0,
+        "peak_built_opaque_primitives_per_frame": 0
+      }
+    },
+    "terrain_opacity_micromaps": {
+      "alpha_texture_hash": "078afc3b87ece4a2",
+      "format": "four_state",
+      "latest": {
+        "active_bytes": 598144,
+        "active_micromaps": 52,
+        "active_microtriangles": {
+          "opaque": 1145448,
+          "transparent": 510754,
+          "unknown": 116854
+        },
+        "build_input_bytes": 0,
+        "build_scratch_bytes": 0,
+        "build_storage_bytes": 0,
+        "built_micromaps": 0,
+        "built_microtriangles": {
+          "opaque": 0,
+          "transparent": 0,
+          "unknown": 0
+        },
+        "built_primitives": 0
+      },
+      "mode": "opacity_micromap",
+      "profile_hash": "477cc1f4cefc31c5",
+      "subdivision_level": 4,
+      "window": {
+        "build_input_bytes": 0,
+        "build_scratch_bytes": 0,
+        "build_storage_bytes": 0,
+        "built_micromaps": 0,
+        "built_microtriangles": {
+          "opaque": 0,
+          "transparent": 0,
+          "unknown": 0
+        },
+        "built_primitives": 0,
+        "peak_active_bytes": 598144,
+        "peak_active_micromaps": 52,
+        "peak_active_microtriangles": {
+          "opaque": 1145448,
+          "transparent": 510754,
+          "unknown": 116854
+        }
+      }
+    },
+    "valid": true,
+    "window_capacity": 1000
+  },
+  "camera_path": {
+    "content_hash": "013c54501db3aebd",
+    "duration_seconds": 4.0,
+    "id": "v03_forest_cutout",
+    "source": "../camera_paths/v03_forest_cutout.json"
+  },
+  "capture": {
+    "camera_time_seconds": 4.0,
+    "height": 720,
+    "path": "assets/validation/reference_captures/v03_forest_cutout_opacity_micromap_vulkan_1280x720_1000.png",
+    "width": 1280
+  },
+  "complete_gpu_frame_ms": {
+    "complete_frame": true,
+    "latest": {
+      "sequence": 1526,
+      "span_ms": 15.785984,
+      "valid": true
+    },
+    "observed_sample_count": 1000,
+    "sample_count": 1000,
+    "scope": "scene_render_graphs",
+    "span_ms": {
+      "p50": 14.494976,
+      "p95": 16.940544,
+      "p99": 18.409984
+    },
+    "valid": true,
+    "window_capacity": 1000
+  },
+  "cpu_update_render_ms": {
+    "average": 27.26063059900001,
+    "max": 525.367306,
+    "median": 26.492451,
+    "min": 24.364362,
+    "p50": 26.492451,
+    "p95": 29.488684000000003,
+    "p99": 32.376351
+  },
+  "environment": {
+    "time_of_day_seconds": 900.0,
+    "weather": "clear"
+  },
+  "frame_count": 1000,
+  "kind": "mecraft.validation_capture_report",
+  "render_graph_frame_ms": {
+    "complete_frame": false,
+    "cpu_ms": {
+      "Build": {
+        "p50": 0.217838,
+        "p95": 0.256155,
+        "p99": 0.362519
+      },
+      "Compile": {
+        "p50": 0.303555,
+        "p95": 0.469802,
+        "p99": 0.536984
+      },
+      "Context": {
+        "p50": 0.004031,
+        "p95": 0.005161,
+        "p99": 0.00897
+      },
+      "Execute": {
+        "p50": 4.399514,
+        "p95": 5.334634,
+        "p99": 6.518474
+      },
+      "Record": {
+        "p50": 3.939701,
+        "p95": 4.864967,
+        "p99": 5.839054
+      },
+      "ShadowPrep": {
+        "p50": 0.079236,
+        "p95": 0.091791,
+        "p99": 0.113092
+      },
+      "Submit": {
+        "p50": 0.422993,
+        "p95": 0.60888,
+        "p99": 0.722657
+      },
+      "TerrainPrep": {
+        "p50": 0.075335,
+        "p95": 0.089159,
+        "p99": 0.111224
+      }
+    },
+    "cpu_sample_count": 1000,
+    "cpu_valid": true,
+    "gpu_ms": {
+      "Idle": {
+        "p50": 0.06886400000000137,
+        "p95": 1.353216000000005,
+        "p99": 2.2415360000000017
+      },
+      "Overlap": {
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 0.0
+      },
+      "Span": {
+        "p50": 8.955904,
+        "p95": 11.174911999999999,
+        "p99": 12.24704
+      },
+      "Total": {
+        "p50": 8.731135999999998,
+        "p95": 10.268671999999999,
+        "p99": 11.08096
+      }
+    },
+    "gpu_sample_count": 1000,
+    "gpu_valid": true,
+    "latest": {
+      "batch_count": 10,
+      "execution": 1529,
+      "gpu_valid": true,
+      "pass_count": 71,
+      "submit_count": 5,
+      "valid": true,
+      "worker_recorded_batches": 0
+    },
+    "observed_gpu_sample_count": 1000,
+    "scope": "primary_render_graph",
+    "window_capacity": 1000
+  },
+  "render_graph_stage_ms": {
+    "observed_sample_count": 1000,
+    "stages": {
+      "AS.DynamicResourcePreparation": {
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 0.0
+      },
+      "Cloud": {
+        "p50": 0.249856,
+        "p95": 0.257024,
+        "p99": 0.295936
+      },
+      "GBuffer": {
+        "p50": 0.627712,
+        "p95": 0.760832,
+        "p99": 0.78848
+      },
+      "Lighting": {
+        "p50": 0.879616,
+        "p95": 0.917504,
+        "p99": 0.925696
+      },
+      "NRD": {
+        "p50": 1.595392,
+        "p95": 2.6327040000000004,
+        "p99": 2.976768
+      },
+      "NRD.Dispatch": {
+        "p50": 1.538048,
+        "p95": 2.568192,
+        "p99": 2.91328
+      },
+      "NRD.GuidePrep": {
+        "p50": 0.054272,
+        "p95": 0.070656,
+        "p99": 0.100352
+      },
+      "Post": {
+        "p50": 0.176384,
+        "p95": 0.188672,
+        "p99": 1.170944
+      },
+      "RTGI": {
+        "p50": 1.83424,
+        "p95": 2.903808,
+        "p99": 3.495168
+      },
+      "RTGI.SceneTLASBootstrap": {
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 0.0
+      },
+      "RTGI.SignalPack": {
+        "p50": 0.044544,
+        "p95": 0.0576,
+        "p99": 0.0896
+      },
+      "RTGI.Trace": {
+        "p50": 1.791232,
+        "p95": 2.804736,
+        "p99": 3.439872
+      },
+      "Reflection": {
+        "p50": 0.723968,
+        "p95": 0.854016,
+        "p99": 0.909312
+      },
+      "SSAO": {
+        "p50": 0.29056,
+        "p95": 0.295936,
+        "p99": 0.336896
+      },
+      "SSGI": {
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 0.0
+      },
+      "SceneTLAS": {
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 0.0
+      },
+      "Shadow": {
+        "p50": 1.063936,
+        "p95": 1.078528,
+        "p99": 1.132544
+      },
+      "TerrainBLAS.Build": {
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 0.0
+      },
+      "TerrainBLAS.Compaction": {
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 0.0
+      },
+      "Transparent": {
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 0.001024
+      },
+      "Volumetric": {
+        "p50": 0.31232,
+        "p95": 0.338944,
+        "p99": 0.355328
+      },
+      "Water": {
+        "p50": 0.200704,
+        "p95": 0.224256,
+        "p99": 0.229376
+      }
+    },
+    "total_tracked": {
+      "p50": 8.0512,
+      "p95": 9.479679999999998,
+      "p99": 10.241280000000001
+    },
+    "valid": true,
+    "window_capacity": 1000,
+    "window_sample_count": 1000
+  },
+  "render_settings": {
+    "content_hash": "5aae41a7d7957a2d",
+    "content_hash_scope": "quality_profile_excluding_traversal_implementation",
+    "id": "m3_voxel_rtgi_quality",
+    "rtgi_cutout_traversal": "opacity_micromap",
+    "version": 3
+  },
+  "requested_sample_frame_count": 1000,
+  "rhi_backend": "vulkan",
+  "rhi_memory": {
+    "accuracy": "exact",
+    "categories": {
+      "acceleration_structure": {
+        "allocation_count": 326,
+        "bytes": 7003904,
+        "resource_count": 651
+      },
+      "gbuffer_history": {
+        "allocation_count": 75,
+        "bytes": 563672064,
+        "resource_count": 75
+      },
+      "geometry": {
+        "allocation_count": 584,
+        "bytes": 72245024,
+        "resource_count": 584
+      },
+      "nrd": {
+        "allocation_count": 7,
+        "bytes": 25559808,
+        "resource_count": 7
+      },
+      "presentation": {
+        "allocation_count": 6,
+        "bytes": 16384000,
+        "resource_count": 9
+      },
+      "readback": {
+        "allocation_count": 9,
+        "bytes": 288,
+        "resource_count": 9
+      },
+      "scene_data": {
+        "allocation_count": 35,
+        "bytes": 11527344,
+        "resource_count": 35
+      },
+      "sdk": {
+        "allocation_count": 0,
+        "bytes": 0,
+        "resource_count": 0
+      },
+      "texture": {
+        "allocation_count": 80,
+        "bytes": 259604992,
+        "resource_count": 80
+      },
+      "transient": {
+        "allocation_count": 10,
+        "bytes": 57278464,
+        "resource_count": 18
+      },
+      "unclassified": {
+        "allocation_count": 0,
+        "bytes": 0,
+        "resource_count": 0
+      },
+      "uniform": {
+        "allocation_count": 19,
+        "bytes": 6336,
+        "resource_count": 19
+      }
+    },
+    "total_allocation_count": 1151,
+    "total_bytes": 1013282224,
+    "total_resource_count": 1487,
+    "valid": true
+  },
+  "rtgi_trace_counters": {
+    "latest": {
+      "candidate_count": 183395,
+      "confirmation_rate": 0.706709561329371,
+      "confirmed_count": 129607,
+      "height": 720,
+      "peak_candidate_count_per_pixel": 6,
+      "peak_confirmed_count_per_pixel": 1,
+      "pixel_count": 921600,
+      "sequence": 1529,
+      "source_frame_index": 1299,
+      "supported": true,
+      "valid": true,
+      "width": 1280
+    },
+    "observed_sample_count": 1000,
+    "peak_per_pixel": {
+      "candidate_count": 7,
+      "confirmed_count": 1
+    },
+    "sample_count": 1000,
+    "scope": "rtgi_validation_image",
+    "totals": {
+      "candidate_count": 128248955,
+      "confirmation_rate": 0.7174124342767549,
+      "confirmed_count": 92007395,
+      "pixel_count": 921600000
+    },
+    "valid": true,
+    "window_capacity": 1000
+  },
+  "sample_duration_seconds": 16.66666753590107,
+  "scene": "voxel",
+  "scene_contract": {
+    "content_hash": "7a4f9eb7c94662df",
+    "hash_algorithm": "fnv1a64",
+    "id": "v03_forest_cutout",
+    "source": "assets/validation/scenes/v03_forest_cutout.json",
+    "version": 2
+  },
+  "version": 1,
+  "voxel_world": {
+    "content_hash": "ac0f4e3a63f33c30",
+    "fixture": {
+      "content_hash": "52620fc1f6c3e6c8",
+      "id": "mecraft.forest_cutout",
+      "version": 1
+    },
+    "generator": {
+      "id": "mecraft.overworld",
+      "version": 1
+    },
+    "persistent_writes_enabled": false,
+    "render_distance": 4,
+    "seed": 1234
+  },
+  "warmup_frame_count": 300
+}

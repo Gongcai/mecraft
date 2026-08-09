@@ -584,7 +584,7 @@ Cutout Primitive 达到 6,926。相同 300 帧预热加 3 帧 1280×720 报告�
 Confirmed，确认率为 76.36%，Candidate 峰值为每像素 8，`RTGI.Trace` p95 为 3.874 ms，完整 GPU Span
 p95 为 13.990 ms。生产 `RtgiTracePass` Vulkan Smoke 也继续覆盖已知 Cutout 像素的非零总量和峰值读回。
 
-这些数据证明 Candidate Loop 在生产 V03 路径真实承受 Cutout 压力，但尚不代表 OMM 已有收益或值得采用。
+这些数据证明 Candidate Loop 在生产 V03 路径真实承受 Cutout 压力；OMM 的采用结论由后续正式 A/B 给出。
 `VK_EXT_opacity_micromap` 已完成可选 RHI Capability 协商：只有扩展与 `micromap` feature 同时存在才会在
 逻辑设备启用并报告为可用，缺少任一条件时明确拒绝 OMM 模式。Micromap 资产与生命周期契约已经落地，资产校验
 Alpha/Profile 身份、每个 BLAS primitive 的 subdivision/state，并严格
@@ -602,10 +602,24 @@ Geometry 不关联 OMM。压缩后的 `SceneBlasResource` 同时持有 Micromap 
 不创建 Micromap 资源。
 
 Benchmark 的 `terrain_opacity_micromaps` 已发布 mode、Four-state subdivision、Alpha/Profile Hash、活动 Micromap
-数量/字节、构建 Input/Storage/Scratch 字节和 Opaque/Transparent/Unknown microtriangle 计数。下一步必须在同一
-V03 Camera Path、相同 Alpha 纹理和 Profile 下分别执行 300 帧预热加 1000 帧采样，比较 `RTGI.Trace` p95、
-Candidate/Confirmed、Complete GPU Span 和 Micromap 显存；当前零值参考镜头、Cutout bucket 数和单独确认率
-都不能替代这项 A/B 证据。
+数量/字节、构建 Input/Storage/Scratch 字节和 Opaque/Transparent/Unknown microtriangle 计数。2026-08-09 在同一
+V03 Camera Path、Alpha 纹理、质量 Profile 和 RTX 4060 Laptop 上完成 Candidate Loop/OMM 各 300 帧预热加
+1000 帧采样的正式 A/B：
+
+| 指标 | Candidate Loop | Opacity Micromap | 变化 |
+| --- | ---: | ---: | ---: |
+| `RTGI.Trace` p95 | 3.759872 ms | 2.804736 ms | -25.40% |
+| Complete GPU Span p95 | 17.859584 ms | 16.940544 ms | -5.15% |
+| Candidate 总量 | 716,114,823 | 128,248,955 | -82.09% |
+| Confirmed 总量 | 538,191,865 | 92,007,395 | -82.90% |
+| RHI 总内存 | 1,012,668,336 B | 1,013,282,224 B | +613,888 B |
+
+OMM 常驻 52 个 Micromap、598,144 B，1,773,056 个 microtriangle 精确分为 1,145,448 Opaque、
+510,754 Transparent 和 116,854 Unknown Opaque，等于 6,926 个 Cutout Primitive 各 256 个。最终 RGBA8
+显示输出的 RGB MAE 为 0.000991734、RGB RMSE 为 0.002267379、全局亮度 SSIM 为 0.999885319，满足独立
+A/B 门禁；该显示输出比较不替代 64 spp Linear EXR、固定 ROI 和动态 Ghost/Disocclusion 的 M3 画质门槛。
+`rtgi_cutout_traversal_ab_test` 从锁定 PNG/报告重算身份、样本、Micromap 分区、性能收益和图像指标。M3 V03
+Vulkan 质量运行据此采用 `opacity_micromap`，Candidate Loop 保留为显式诊断实现轴。
 
 ## 10. 调试视图与验收
 

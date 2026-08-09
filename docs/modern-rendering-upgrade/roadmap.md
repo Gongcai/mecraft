@@ -343,7 +343,7 @@ Caustica 对照评估和第一轮策略契约已经完成：
   Smoke 已验证 Opaque Geometry 不关联 OMM、Cutout Geometry 正确关联、Candidate 模式零 Micromap、旧 TLAS generation
   保留旧 Micromap 且替换完成后才释放，Validation 无新增错误。Benchmark 的 `terrain_opacity_micromaps` 已发布模式、
   Alpha/Profile Hash、subdivision、活动数量/字节、Build Input/Storage/Scratch 字节及 Opaque/Transparent/Unknown
-  microtriangle 总量。OMM 是否采用仍需由正式 V03 Candidate/OMM A/B 决策。
+  microtriangle 总量。正式 V03 Candidate/OMM A/B 已完成并采用 OMM，结果见下文。
 
 Candidate/Confirmed 归约遥测已经完成：8x8 Compute 将 Validation Image 聚合为 64-bit 总量和每像素峰值，
 三槽 Submission Token Readback 不等待 GPU，固定 1000 样本窗口按 sequence 去重。Sponza 和体素洞穴仍为
@@ -351,16 +351,28 @@ Candidate/Confirmed 归约遥测已经完成：8x8 Compute 将 Validation Image 
 Vulkan PNG/报告和非零自动验收。V03 的 3/3 窗口覆盖 2,764,800 像素，累计 2,142,695 Candidate、1,636,266
 Confirmed，确认率 76.36%，峰值为 8 Candidate/1 Confirmed 每像素，Terrain Cutout Primitive 为 6,926。
 同窗口 `RTGI.Trace` p95 为 3.874 ms；生产 Vulkan Smoke 已验证确定性 Cutout 像素的非零路径。
-这建立了 OMM 的生产压力基线，不能单独推出 OMM 收益。
+这建立了 OMM 的生产压力基线，正式采用结论不依赖该 3 帧数据。
+
+2026-08-09 已在相同 Scene/Camera/Profile/Alpha 身份下完成两组 300 帧预热加 1000 帧采样：OMM 将
+`RTGI.Trace` p95 从 3.759872 ms 降至 2.804736 ms（-25.40%），Complete GPU Span p95 从
+17.859584 ms 降至 16.940544 ms（-5.15%），Candidate 总量从 716,114,823 降至 128,248,955
+（-82.09%），RHI 内存增加 613,888 B。52 个常驻 Micromap 占 598,144 B，1,773,056 个 microtriangle
+精确分为 1,145,448 Opaque、510,754 Transparent 和 116,854 Unknown。两张最终显示 PNG 的 RGB
+MAE/RMSE 为 0.000991734/0.002267379，全局亮度 SSIM 为 0.999885319。
+
+新增 `rtgi_cutout_traversal_ab.json` 和 `rtgi_cutout_traversal_ab_test`，自动锁定文件 FNV/SHA 身份、两组
+1000/1000 有效样本、相同 Scene/Camera/Profile/Alpha、Candidate 模式零 Micromap、OMM 精确分区、收益百分比
+和显示输出差异门槛。M3 V03 Vulkan 质量运行据此采用 OMM；此 A/B 只比较实现轴，不替代 64 spp Linear EXR
+和固定 ROI 的 M3 画质门槛。
 
 下一轮任务按以下顺序执行：
 
-1. 以 V03 固定 Camera Path、Alpha 纹理和 Profile，分别执行 Candidate Loop 与 OMM 的 300 帧预热加 1000 帧
-   采样；比较 `RTGI.Trace` p95、Candidate/Confirmed、Complete GPU Span、Micromap Build/驻留显存和三类
-   microtriangle 分布，再决定是否采用。
-2. 针对 1080p 继续定位：体素优先检查地形提交、流送和 AS；Sponza 优先检查 RTGI.Trace 与 NRD.Dispatch。
+1. 为 V01、V02、M03 接入 64 spp Linear EXR Reference、1 spp Raw/Denoised 序列和固定 ROI，自动计算
+   Variance、32 帧 SSIM、95th HDR Error、泄漏带及非法像素计数。
+2. 为 V03、V06、M06 接入 Ghost/Disocclusion、动态边缘差分和历史恢复帧数门禁。
+3. 针对 1080p 继续定位：体素优先检查地形提交、流送和 AS；Sponza 优先检查 RTGI.Trace 与 NRD.Dispatch。
    固定场景、驱动和电源模式后保留前后 Capture。
-3. 完整跨度和分项归因稳定后，再在同一镜头比较 RELAX A-Trous 5 与 3；不得用减少迭代数掩盖 Trace 或
+4. 完整跨度和分项归因稳定后，再在同一镜头比较 RELAX A-Trous 5 与 3；不得用减少迭代数掩盖 Trace 或
    AS 成本。
 
 ## 7. M4：GPU Culling、LOD 与动画
