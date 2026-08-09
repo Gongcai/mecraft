@@ -14,7 +14,9 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 #include <iostream>
+#include <limits>
 #include <optional>
 
 namespace {
@@ -66,6 +68,8 @@ constexpr uint8_t kRtgiKnownShadowInstanceMask =
 void RtgiTracePass::shutdown() {
     destroyRhiResources();
     m_stats = {};
+    m_counterStats = {};
+    m_counterReadbackSequence = 0u;
 }
 
 RgPassHandle RtgiTracePass::addGraphPass(RenderGraph& graph, const FrameContext& ctx, const Settings& settings,
@@ -85,10 +89,9 @@ RgPassHandle RtgiTracePass::addGraphPass(RenderGraph& graph, const FrameContext&
         settings.shadowInstanceMask == 0u ||
         (settings.shadowInstanceMask & static_cast<uint8_t>(~kRtgiKnownShadowInstanceMask)) != 0u ||
         !resources.depth.isValid() || !resources.normalAo.isValid() || !resources.materialAux.isValid() ||
-        !resources.voxelLight.isValid() ||
-        !resources.blueNoise.isValid() || !resources.terrainAlbedo.isValid() || !resources.terrainNormal.isValid() ||
-        !resources.terrainSpecular.isValid() || !resources.grassColormap.isValid() ||
-        !resources.foliageColormap.isValid() || !resources.skyCapture.isValid() ||
+        !resources.voxelLight.isValid() || !resources.blueNoise.isValid() || !resources.terrainAlbedo.isValid() ||
+        !resources.terrainNormal.isValid() || !resources.terrainSpecular.isValid() ||
+        !resources.grassColormap.isValid() || !resources.foliageColormap.isValid() || !resources.skyCapture.isValid() ||
         !resources.diffuseRadianceHitDistance.isValid() || !resources.validation.isValid() ||
         !std::isfinite(ctx.preExposure) || ctx.preExposure <= 0.0f || !lighting.bindGroupLayout.isValid() ||
         !lighting.bindGroup.isValid() || !lighting.lights.isValid() || !lighting.worldCells.isValid() ||
@@ -137,6 +140,20 @@ RgPassHandle RtgiTracePass::addGraphPass(RenderGraph& graph, const FrameContext&
         return {};
     }
 
+    if (!m_counterHealthy || m_counterReadbackPending ||
+        !ensurePipeline(*ctx.shared->rhiDevice, ctx.shared->globalBindlessSet->layout(), lighting.bindGroupLayout) ||
+        !pollCounterReadback(*ctx.shared->rhiDevice)) {
+        return {};
+    }
+    RhiBufferDesc counterBufferDesc;
+    if (!ctx.shared->rhiDevice->getBufferDesc(m_counterBuffer, counterBufferDesc) ||
+        counterBufferDesc.size != sizeof(uint32_t) * renderer::contracts::kRtgiTraceCounterWordCount ||
+        (counterBufferDesc.usage & rhiFlag(RhiBufferUsage::Storage)) == 0u ||
+        (counterBufferDesc.usage & rhiFlag(RhiBufferUsage::TransferSrc)) == 0u ||
+        (counterBufferDesc.usage & rhiFlag(RhiBufferUsage::TransferDst)) == 0u) {
+        return {};
+    }
+
     const RgBufferHandle terrainHitData =
         graph.importBuffer({terrainHitDataDesc.debugName, activeTlas->terrainHitDataBuffer, terrainHitDataDesc,
                             RhiResourceState::StorageBuffer, RhiResourceState::StorageBuffer, RhiQueueType::Graphics,
@@ -153,8 +170,11 @@ RgPassHandle RtgiTracePass::addGraphPass(RenderGraph& graph, const FrameContext&
         graph.importBuffer({gpuSceneInstanceDesc.debugName, activeTlas->gpuSceneInstanceBuffer, gpuSceneInstanceDesc,
                             RhiResourceState::StorageBuffer, RhiResourceState::StorageBuffer, RhiQueueType::Graphics,
                             RhiQueueType::Graphics});
+    const RgBufferHandle counterBuffer = graph.importBuffer(
+        {counterBufferDesc.debugName, m_counterBuffer, counterBufferDesc, RhiResourceState::StorageBuffer,
+         RhiResourceState::StorageBuffer, RhiQueueType::Graphics, RhiQueueType::Graphics});
     if (!terrainHitData.isValid() || !gpuSceneMaterials.isValid() || !gpuSceneGeometries.isValid() ||
-        !gpuSceneInstances.isValid()) {
+        !gpuSceneInstances.isValid() || !counterBuffer.isValid()) {
         return {};
     }
 
@@ -220,7 +240,168 @@ RgPassHandle RtgiTracePass::addGraphPass(RenderGraph& graph, const FrameContext&
             return recordTrace(pass.commandList(), *frame, settings, views, sceneBuffers, frameLighting.bindGroupLayout,
                                frameLighting.bindGroup, sceneTlasRevision);
         });
-    return trace.handle();
+    if (!m_counterReadbackSlotAvailable) {
+        return trace.handle();
+    }
+
+    const TemporalExtent counterExtent = ctx.temporalExtents.renderExtent;
+    const uint64_t counterFrameIndex = ctx.frameIndex;
+    RenderGraphPassBuilder counters =
+        graph.addPass({"RTGI.TraceCounters", RgPassType::Compute, RhiQueueType::Graphics});
+    counters.dependsOn(trace.handle())
+        .readWriteTexture(resources.validation, RhiResourceState::ShaderWrite)
+        .readWriteBuffer(counterBuffer, RhiResourceState::StorageBuffer)
+        .setExecute([this, frameResources, counterFrameIndex, counterExtent](RgPassContext& pass) {
+            return recordCounterReduction(pass.commandList(), pass.textureView(frameResources.validation),
+                                          counterFrameIndex, counterExtent.width, counterExtent.height);
+        });
+    return counters.handle();
+}
+
+void RtgiTracePass::finishGraphExecution(const bool succeeded, const RhiSubmissionToken completionToken) {
+    if (!m_counterReadbackPending) {
+        return;
+    }
+    if (succeeded && completionToken.isValid()) {
+        m_counterReadbackWritten[m_pendingCounterReadbackIndex] = true;
+        m_counterReadbackTokens[m_pendingCounterReadbackIndex] = completionToken;
+        m_counterReadbackWriteIndex = (m_pendingCounterReadbackIndex + 1u) % kCounterReadbackRingSize;
+    } else if (succeeded) {
+        m_counterHealthy = false;
+        MECRAFT_LOG_STREAM(std::cerr << "[RtgiTracePass] Counter readback submission token is invalid\n");
+    }
+    m_counterReadbackPending = false;
+}
+
+bool RtgiTracePass::pollCounterReadback(RhiDevice& rhiDevice) {
+    return m_rhiDevice == &rhiDevice && m_counterHealthy && consumeCounterReadback(rhiDevice);
+}
+
+bool RtgiTracePass::consumeCounterReadback(RhiDevice& rhiDevice) {
+    for (uint32_t offset = 0u; offset < kCounterReadbackRingSize; ++offset) {
+        const uint32_t ringIndex = (m_counterReadbackWriteIndex + offset) % kCounterReadbackRingSize;
+        const RhiSubmissionToken token = m_counterReadbackTokens[ringIndex];
+        if (!token.isValid()) {
+            continue;
+        }
+
+        bool complete = false;
+        if (!rhiDevice.isSubmissionComplete(token, complete)) {
+            m_counterHealthy = false;
+            MECRAFT_LOG_STREAM(std::cerr << "[RtgiTracePass] Counter readback submission query failed\n");
+            return false;
+        }
+        if (!complete) {
+            break;
+        }
+
+        constexpr size_t kReadbackBytes = sizeof(uint32_t) * renderer::contracts::kRtgiTraceCounterWordCount;
+        const void* mapped = rhiDevice.mapBuffer(m_counterReadbackBuffers[ringIndex], 0u, kReadbackBytes);
+        if (mapped == nullptr) {
+            m_counterHealthy = false;
+            MECRAFT_LOG_STREAM(std::cerr << "[RtgiTracePass] Counter readback mapping failed\n");
+            return false;
+        }
+        std::array<uint32_t, renderer::contracts::kRtgiTraceCounterWordCount> words{};
+        std::memcpy(words.data(), mapped, kReadbackBytes);
+        rhiDevice.unmapBuffer(m_counterReadbackBuffers[ringIndex]);
+
+        if (m_counterReadbackSequence == std::numeric_limits<uint64_t>::max()) {
+            std::abort();
+        }
+        const CounterReadbackMetadata& metadata = m_counterReadbackMetadata[ringIndex];
+        const std::optional<renderer::contracts::RtgiTraceCounterFrameStats> decoded =
+            renderer::contracts::decodeRtgiTraceCounterReadback(words, m_counterReadbackSequence + 1u,
+                                                                metadata.frameIndex, metadata.width, metadata.height);
+        if (!decoded.has_value()) {
+            m_counterHealthy = false;
+            MECRAFT_LOG_STREAM(std::cerr << "[RtgiTracePass] Counter readback invariant failed\n");
+            return false;
+        }
+
+        ++m_counterReadbackSequence;
+        m_counterStats = *decoded;
+        m_counterReadbackTokens[ringIndex] = {};
+        break;
+    }
+    m_counterReadbackSlotAvailable = !m_counterReadbackTokens[m_counterReadbackWriteIndex].isValid();
+    return true;
+}
+
+bool RtgiTracePass::ensureCounterBindGroup(RhiDevice& rhiDevice, const RhiTextureViewHandle validationView) {
+    if (!validationView.isValid() || !m_counterBindGroupLayout.isValid() || !m_counterBuffer.isValid()) {
+        return false;
+    }
+    if (m_counterBindGroup.isValid() && sameHandle(m_boundCounterValidationView, validationView)) {
+        return true;
+    }
+    if (m_counterBindGroup.isValid()) {
+        rhiDevice.waitIdle();
+        rhiDevice.destroyBindGroup(m_counterBindGroup);
+        m_counterBindGroup = {};
+    }
+
+    RhiBindGroupDesc desc;
+    desc.layout = m_counterBindGroupLayout;
+    RhiBindGroupEntry validationEntry;
+    validationEntry.binding = 0u;
+    validationEntry.resource.textureView = validationView;
+    desc.entries.push_back(validationEntry);
+    RhiBindGroupEntry counterEntry;
+    counterEntry.binding = 1u;
+    counterEntry.resource.buffer = {m_counterBuffer, 0u,
+                                    sizeof(uint32_t) * renderer::contracts::kRtgiTraceCounterWordCount};
+    desc.entries.push_back(counterEntry);
+    m_counterBindGroup = rhiDevice.createBindGroup(desc);
+    if (!m_counterBindGroup.isValid()) {
+        return false;
+    }
+    m_boundCounterValidationView = validationView;
+    return true;
+}
+
+bool RtgiTracePass::recordCounterReduction(RhiCommandList& commandList, const RhiTextureViewHandle validationView,
+                                           const uint64_t frameIndex, const uint32_t width, const uint32_t height) {
+    if (m_rhiDevice == nullptr || !m_counterHealthy || m_counterReadbackPending || !m_counterReadbackSlotAvailable ||
+        width == 0u || height == 0u || !m_counterPipeline.isValid() || !m_counterBuffer.isValid() ||
+        !m_counterReadbackBuffers[m_counterReadbackWriteIndex].isValid() ||
+        !ensureCounterBindGroup(*m_rhiDevice, validationView)) {
+        return false;
+    }
+
+    constexpr size_t kCounterBytes = sizeof(uint32_t) * renderer::contracts::kRtgiTraceCounterWordCount;
+    constexpr std::array<uint32_t, renderer::contracts::kRtgiTraceCounterWordCount> kZeroCounters{};
+    commandList.bufferBarrier({m_counterBuffer, RhiResourceState::StorageBuffer, RhiResourceState::TransferDst});
+    commandList.updateBuffer(m_counterBuffer, 0u, kZeroCounters.data(), kCounterBytes);
+    commandList.bufferBarrier({m_counterBuffer, RhiResourceState::TransferDst, RhiResourceState::StorageBuffer});
+
+    renderer::contracts::RtgiTraceCounterPushConstants pushConstants;
+    pushConstants.renderExtentAndContract =
+        glm::uvec4(width, height, renderer::contracts::kRtgiTraceCounterContractVersion, 0u);
+    commandList.setComputePipeline(m_counterPipeline);
+    commandList.setBindGroup(0u, m_counterBindGroup);
+    commandList.pushConstants(&pushConstants, sizeof(pushConstants), rhiFlag(RhiShaderStage::Compute));
+    commandList.dispatch((width + 7u) / 8u, (height + 7u) / 8u, 1u);
+
+    const uint32_t ringIndex = m_counterReadbackWriteIndex;
+    commandList.bufferBarrier({m_counterBuffer, RhiResourceState::StorageBuffer, RhiResourceState::TransferSrc});
+    if (m_counterReadbackWritten[ringIndex]) {
+        commandList.bufferBarrier(
+            {m_counterReadbackBuffers[ringIndex], RhiResourceState::HostRead, RhiResourceState::TransferDst});
+    }
+    RhiBufferCopy copy;
+    copy.src = m_counterBuffer;
+    copy.dst = m_counterReadbackBuffers[ringIndex];
+    copy.size = kCounterBytes;
+    commandList.copyBuffer(copy);
+    commandList.bufferBarrier(
+        {m_counterReadbackBuffers[ringIndex], RhiResourceState::TransferDst, RhiResourceState::HostRead});
+    commandList.bufferBarrier({m_counterBuffer, RhiResourceState::TransferSrc, RhiResourceState::StorageBuffer});
+
+    m_counterReadbackMetadata[ringIndex] = {frameIndex, width, height};
+    m_pendingCounterReadbackIndex = ringIndex;
+    m_counterReadbackPending = true;
+    return true;
 }
 
 bool RtgiTracePass::recordTrace(RhiCommandList& commandList, const FrameContext& ctx, const Settings& settings,
@@ -277,8 +458,8 @@ bool RtgiTracePass::recordTrace(RhiCommandList& commandList, const FrameContext&
                                                   settings.minimumRayOriginBias, ctx.animationTime);
     pushConstants.frameMaskAndFlags =
         glm::uvec4(settings.temporalSamplingEnabled ? settings.temporalSampleIndex : 0u,
-                   static_cast<uint32_t>(settings.instanceMask),
-                   sceneBuffers.sceneInstanceCount, static_cast<uint32_t>(settings.shadowInstanceMask));
+                   static_cast<uint32_t>(settings.instanceMask), sceneBuffers.sceneInstanceCount,
+                   static_cast<uint32_t>(settings.shadowInstanceMask));
     pushConstants.materialGeometryCounts =
         glm::uvec4(sceneBuffers.gpuSceneMaterialCount, sceneBuffers.gpuSceneGeometryCount, 0u, 0u);
 
@@ -337,11 +518,13 @@ bool RtgiTracePass::ensurePipeline(RhiDevice& rhiDevice, const RhiBindGroupLayou
     if (m_rhiDevice != nullptr && m_rhiDevice != &rhiDevice) {
         destroyRhiResources();
     }
-    if (m_pipeline.isValid() && sameHandle(m_globalBindlessLayout, globalBindlessLayout) &&
-        sameHandle(m_lightingLayout, lightingLayout)) {
+    const bool counterReadbacksValid = std::all_of(m_counterReadbackBuffers.begin(), m_counterReadbackBuffers.end(),
+                                                   [](const RhiBufferHandle buffer) { return buffer.isValid(); });
+    if (m_pipeline.isValid() && m_counterPipeline.isValid() && m_counterBuffer.isValid() && counterReadbacksValid &&
+        sameHandle(m_globalBindlessLayout, globalBindlessLayout) && sameHandle(m_lightingLayout, lightingLayout)) {
         return true;
     }
-    if (m_pipeline.isValid()) {
+    if (m_rhiDevice != nullptr) {
         destroyRhiResources();
     }
     if (!globalBindlessLayout.isValid() || !lightingLayout.isValid()) {
@@ -352,9 +535,11 @@ bool RtgiTracePass::ensurePipeline(RhiDevice& rhiDevice, const RhiBindGroupLayou
     m_lightingLayout = lightingLayout;
 
     const std::optional<std::string> source = renderer::rhi::loadShaderSource("assets/shaders/rtgi_trace.comp");
-    if (!source.has_value()) {
+    const std::optional<std::string> counterSource =
+        renderer::rhi::loadShaderSource("assets/shaders/rtgi_trace_counter_reduce.comp");
+    if (!source.has_value() || !counterSource.has_value()) {
         destroyRhiResources();
-        return reject("RTGI trace shader source is unavailable");
+        return reject("RTGI trace or counter-reduction shader source is unavailable");
     }
     RhiShaderDesc shaderDesc;
     shaderDesc.debugName = "RTGI.Trace.Compute";
@@ -365,6 +550,16 @@ bool RtgiTracePass::ensurePipeline(RhiDevice& rhiDevice, const RhiBindGroupLayou
     if (!m_shader.isValid()) {
         destroyRhiResources();
         return reject("RTGI trace shader compilation failed");
+    }
+    RhiShaderDesc counterShaderDesc;
+    counterShaderDesc.debugName = "RTGI.TraceCounters.Compute";
+    counterShaderDesc.stage = RhiShaderStage::Compute;
+    counterShaderDesc.source = counterSource->c_str();
+    counterShaderDesc.sourceSize = counterSource->size();
+    m_counterShader = rhiDevice.createShader(counterShaderDesc);
+    if (!m_counterShader.isValid()) {
+        destroyRhiResources();
+        return reject("RTGI counter-reduction shader compilation failed");
     }
 
     RhiSamplerDesc samplerDesc;
@@ -396,33 +591,65 @@ bool RtgiTracePass::ensurePipeline(RhiDevice& rhiDevice, const RhiBindGroupLayou
     lightingBufferDesc.initialState = RhiResourceState::UniformBuffer;
     lightingBufferDesc.memoryCategory = RhiMemoryCategory::SceneData;
     m_secondaryLightingBuffer = rhiDevice.createBuffer(lightingBufferDesc, nullptr, 0u);
+    RhiBufferDesc counterBufferDesc;
+    counterBufferDesc.debugName = "RTGI.TraceCounters";
+    counterBufferDesc.size = sizeof(uint32_t) * renderer::contracts::kRtgiTraceCounterWordCount;
+    counterBufferDesc.usage =
+        rhiFlag(RhiBufferUsage::Storage) | rhiFlag(RhiBufferUsage::TransferSrc) | rhiFlag(RhiBufferUsage::TransferDst);
+    counterBufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+    counterBufferDesc.initialState = RhiResourceState::StorageBuffer;
+    counterBufferDesc.memoryCategory = RhiMemoryCategory::SceneData;
+    m_counterBuffer = rhiDevice.createBuffer(counterBufferDesc, nullptr, 0u);
+    for (RhiBufferHandle& readback : m_counterReadbackBuffers) {
+        RhiBufferDesc readbackDesc;
+        readbackDesc.debugName = "RTGI.TraceCountersReadback";
+        readbackDesc.size = counterBufferDesc.size;
+        readbackDesc.usage = rhiFlag(RhiBufferUsage::TransferDst) | rhiFlag(RhiBufferUsage::MapRead);
+        readbackDesc.memoryUsage = RhiMemoryUsage::GpuToCpu;
+        readbackDesc.initialState = RhiResourceState::TransferDst;
+        readbackDesc.memoryCategory = RhiMemoryCategory::Readback;
+        readback = rhiDevice.createBuffer(readbackDesc, nullptr, 0u);
+        if (!readback.isValid()) {
+            break;
+        }
+    }
     if (!m_sampler.isValid() || !m_terrainSampler.isValid() || !m_linearClampSampler.isValid() ||
-        !m_secondaryLightingBuffer.isValid()) {
+        !m_secondaryLightingBuffer.isValid() || !m_counterBuffer.isValid() ||
+        !std::all_of(m_counterReadbackBuffers.begin(), m_counterReadbackBuffers.end(),
+                     [](const RhiBufferHandle buffer) { return buffer.isValid(); })) {
         destroyRhiResources();
-        return reject("RTGI trace sampler or secondary-lighting buffer creation failed");
+        return reject("RTGI trace sampler, uniform buffer, or counter buffers could not be created");
     }
 
     RhiBindGroupLayoutDesc traceLayoutDesc;
     traceLayoutDesc.debugName = "RTGI.Trace.BindGroupLayout";
     const RhiCapabilities& capabilities = rhiDevice.capabilities();
-    const RhiBindingFlags partiallyBoundAndUnused = rhiFlag(RhiBindingFlag::PartiallyBound) |
-                                                     rhiFlag(RhiBindingFlag::UpdateUnusedWhilePending);
+    const RhiBindingFlags partiallyBoundAndUnused =
+        rhiFlag(RhiBindingFlag::PartiallyBound) | rhiFlag(RhiBindingFlag::UpdateUnusedWhilePending);
     const auto traceBindingFlags = [&](const RhiBindingType type) {
         bool updateAfterBind = false;
         switch (type) {
-        case RhiBindingType::UniformBuffer: updateAfterBind = capabilities.descriptorBindingUniformBufferUpdateAfterBind; break;
-        case RhiBindingType::StorageBuffer: updateAfterBind = capabilities.descriptorBindingStorageBufferUpdateAfterBind; break;
-        case RhiBindingType::StorageTexture: updateAfterBind = capabilities.descriptorBindingStorageImageUpdateAfterBind; break;
+        case RhiBindingType::UniformBuffer:
+            updateAfterBind = capabilities.descriptorBindingUniformBufferUpdateAfterBind;
+            break;
+        case RhiBindingType::StorageBuffer:
+            updateAfterBind = capabilities.descriptorBindingStorageBufferUpdateAfterBind;
+            break;
+        case RhiBindingType::StorageTexture:
+            updateAfterBind = capabilities.descriptorBindingStorageImageUpdateAfterBind;
+            break;
         case RhiBindingType::CombinedTextureSampler:
-        case RhiBindingType::SampledTexture: updateAfterBind = capabilities.descriptorBindingSampledImageUpdateAfterBind; break;
+        case RhiBindingType::SampledTexture:
+            updateAfterBind = capabilities.descriptorBindingSampledImageUpdateAfterBind;
+            break;
         default: break;
         }
         return partiallyBoundAndUnused | (updateAfterBind ? rhiFlag(RhiBindingFlag::UpdateAfterBind) : 0u);
     };
     for (uint32_t binding = 0u; binding < 4u; ++binding) {
-        traceLayoutDesc.entries.push_back(
-            {binding, RhiBindingType::CombinedTextureSampler, rhiFlag(RhiShaderStage::Compute), 1u,
-             traceBindingFlags(RhiBindingType::CombinedTextureSampler)});
+        traceLayoutDesc.entries.push_back({binding, RhiBindingType::CombinedTextureSampler,
+                                           rhiFlag(RhiShaderStage::Compute), 1u,
+                                           traceBindingFlags(RhiBindingType::CombinedTextureSampler)});
     }
     traceLayoutDesc.entries.push_back({4u, RhiBindingType::StorageTexture, rhiFlag(RhiShaderStage::Compute), 1u,
                                        traceBindingFlags(RhiBindingType::StorageTexture)});
@@ -430,28 +657,35 @@ bool RtgiTracePass::ensurePipeline(RhiDevice& rhiDevice, const RhiBindGroupLayou
                                        traceBindingFlags(RhiBindingType::StorageTexture)});
     traceLayoutDesc.entries.push_back({6u, RhiBindingType::StorageBuffer, rhiFlag(RhiShaderStage::Compute), 1u,
                                        traceBindingFlags(RhiBindingType::StorageBuffer)});
-    traceLayoutDesc.entries.push_back(
-        {7u, RhiBindingType::CombinedTextureSampler, rhiFlag(RhiShaderStage::Compute), 1u,
-         traceBindingFlags(RhiBindingType::CombinedTextureSampler)});
+    traceLayoutDesc.entries.push_back({7u, RhiBindingType::CombinedTextureSampler, rhiFlag(RhiShaderStage::Compute), 1u,
+                                       traceBindingFlags(RhiBindingType::CombinedTextureSampler)});
     for (uint32_t binding = 8u; binding <= 10u; ++binding) {
-        traceLayoutDesc.entries.push_back(
-            {binding, RhiBindingType::StorageBuffer, rhiFlag(RhiShaderStage::Compute), 1u,
-             traceBindingFlags(RhiBindingType::StorageBuffer)});
+        traceLayoutDesc.entries.push_back({binding, RhiBindingType::StorageBuffer, rhiFlag(RhiShaderStage::Compute), 1u,
+                                           traceBindingFlags(RhiBindingType::StorageBuffer)});
     }
     for (uint32_t binding = 11u; binding <= 15u; ++binding) {
-        traceLayoutDesc.entries.push_back(
-            {binding, RhiBindingType::CombinedTextureSampler, rhiFlag(RhiShaderStage::Compute), 1u,
-             traceBindingFlags(RhiBindingType::CombinedTextureSampler)});
+        traceLayoutDesc.entries.push_back({binding, RhiBindingType::CombinedTextureSampler,
+                                           rhiFlag(RhiShaderStage::Compute), 1u,
+                                           traceBindingFlags(RhiBindingType::CombinedTextureSampler)});
     }
     traceLayoutDesc.entries.push_back({16u, RhiBindingType::UniformBuffer, rhiFlag(RhiShaderStage::Compute), 1u,
                                        traceBindingFlags(RhiBindingType::UniformBuffer)});
-    traceLayoutDesc.entries.push_back(
-        {17u, RhiBindingType::CombinedTextureSampler, rhiFlag(RhiShaderStage::Compute), 1u,
-         traceBindingFlags(RhiBindingType::CombinedTextureSampler)});
+    traceLayoutDesc.entries.push_back({17u, RhiBindingType::CombinedTextureSampler, rhiFlag(RhiShaderStage::Compute),
+                                       1u, traceBindingFlags(RhiBindingType::CombinedTextureSampler)});
     m_traceBindGroupLayout = rhiDevice.createBindGroupLayout(traceLayoutDesc);
     if (!m_traceBindGroupLayout.isValid()) {
         destroyRhiResources();
         return reject("RTGI trace bind group layout creation failed");
+    }
+
+    RhiBindGroupLayoutDesc counterLayoutDesc;
+    counterLayoutDesc.debugName = "RTGI.TraceCounters.BindGroupLayout";
+    counterLayoutDesc.entries.push_back({0u, RhiBindingType::StorageTexture, rhiFlag(RhiShaderStage::Compute), 1u});
+    counterLayoutDesc.entries.push_back({1u, RhiBindingType::StorageBuffer, rhiFlag(RhiShaderStage::Compute), 1u});
+    m_counterBindGroupLayout = rhiDevice.createBindGroupLayout(counterLayoutDesc);
+    if (!m_counterBindGroupLayout.isValid()) {
+        destroyRhiResources();
+        return reject("RTGI counter bind group layout creation failed");
     }
 
     RhiPipelineLayoutDesc pipelineLayoutDesc;
@@ -467,6 +701,17 @@ bool RtgiTracePass::ensurePipeline(RhiDevice& rhiDevice, const RhiBindGroupLayou
         return reject("RTGI trace pipeline layout creation failed");
     }
 
+    RhiPipelineLayoutDesc counterPipelineLayoutDesc;
+    counterPipelineLayoutDesc.debugName = "RTGI.TraceCounters.PipelineLayout";
+    counterPipelineLayoutDesc.bindGroupLayouts.push_back(m_counterBindGroupLayout);
+    counterPipelineLayoutDesc.pushConstantBytes = sizeof(renderer::contracts::RtgiTraceCounterPushConstants);
+    counterPipelineLayoutDesc.pushConstantStages = rhiFlag(RhiShaderStage::Compute);
+    m_counterPipelineLayout = rhiDevice.createPipelineLayout(counterPipelineLayoutDesc);
+    if (!m_counterPipelineLayout.isValid()) {
+        destroyRhiResources();
+        return reject("RTGI counter pipeline layout creation failed");
+    }
+
     RhiComputePipelineDesc pipelineDesc;
     pipelineDesc.debugName = "RTGI.Trace.Pipeline";
     pipelineDesc.computeShader = m_shader;
@@ -476,6 +721,17 @@ bool RtgiTracePass::ensurePipeline(RhiDevice& rhiDevice, const RhiBindGroupLayou
         destroyRhiResources();
         return reject("RTGI trace compute pipeline creation failed");
     }
+
+    RhiComputePipelineDesc counterPipelineDesc;
+    counterPipelineDesc.debugName = "RTGI.TraceCounters.Pipeline";
+    counterPipelineDesc.computeShader = m_counterShader;
+    counterPipelineDesc.layout = m_counterPipelineLayout;
+    m_counterPipeline = rhiDevice.createComputePipeline(counterPipelineDesc);
+    if (!m_counterPipeline.isValid()) {
+        destroyRhiResources();
+        return reject("RTGI counter compute pipeline creation failed");
+    }
+    m_counterStats.supported = true;
     return true;
 }
 
@@ -656,14 +912,26 @@ bool RtgiTracePass::ensureBindGroup(RhiDevice& rhiDevice, const TraceViews& view
 
 void RtgiTracePass::destroyRhiResources() {
     if (m_rhiDevice != nullptr) {
+        if (m_counterBindGroup.isValid()) {
+            m_rhiDevice->destroyBindGroup(m_counterBindGroup);
+        }
         if (m_traceBindGroup.isValid()) {
             m_rhiDevice->destroyBindGroup(m_traceBindGroup);
+        }
+        if (m_counterPipeline.isValid()) {
+            m_rhiDevice->destroyPipeline(m_counterPipeline);
         }
         if (m_pipeline.isValid()) {
             m_rhiDevice->destroyPipeline(m_pipeline);
         }
+        if (m_counterPipelineLayout.isValid()) {
+            m_rhiDevice->destroyPipelineLayout(m_counterPipelineLayout);
+        }
         if (m_pipelineLayout.isValid()) {
             m_rhiDevice->destroyPipelineLayout(m_pipelineLayout);
+        }
+        if (m_counterBindGroupLayout.isValid()) {
+            m_rhiDevice->destroyBindGroupLayout(m_counterBindGroupLayout);
         }
         if (m_traceBindGroupLayout.isValid()) {
             m_rhiDevice->destroyBindGroupLayout(m_traceBindGroupLayout);
@@ -680,12 +948,24 @@ void RtgiTracePass::destroyRhiResources() {
         if (m_secondaryLightingBuffer.isValid()) {
             m_rhiDevice->destroyBuffer(m_secondaryLightingBuffer);
         }
+        if (m_counterBuffer.isValid()) {
+            m_rhiDevice->destroyBuffer(m_counterBuffer);
+        }
+        for (const RhiBufferHandle readback : m_counterReadbackBuffers) {
+            if (readback.isValid()) {
+                m_rhiDevice->destroyBuffer(readback);
+            }
+        }
+        if (m_counterShader.isValid()) {
+            m_rhiDevice->destroyShader(m_counterShader);
+        }
         if (m_shader.isValid()) {
             m_rhiDevice->destroyShader(m_shader);
         }
     }
     m_rhiDevice = nullptr;
     m_shader = {};
+    m_counterShader = {};
     m_sampler = {};
     m_terrainSampler = {};
     m_linearClampSampler = {};
@@ -693,10 +973,26 @@ void RtgiTracePass::destroyRhiResources() {
     m_globalBindlessLayout = {};
     m_lightingLayout = {};
     m_traceBindGroupLayout = {};
+    m_counterBindGroupLayout = {};
     m_pipelineLayout = {};
+    m_counterPipelineLayout = {};
     m_pipeline = {};
+    m_counterPipeline = {};
     m_traceBindGroup = {};
+    m_counterBindGroup = {};
+    m_counterBuffer = {};
+    m_counterReadbackBuffers.fill({});
+    m_counterReadbackWritten.fill(false);
+    m_counterReadbackTokens.fill({});
+    m_counterReadbackMetadata.fill({});
+    m_counterReadbackWriteIndex = 0u;
+    m_pendingCounterReadbackIndex = 0u;
+    m_counterReadbackSlotAvailable = true;
+    m_counterReadbackPending = false;
+    m_counterHealthy = true;
+    m_boundCounterValidationView = {};
     m_boundSceneBuffers = {};
     m_boundSceneBufferBytes = {};
     m_boundViews = {};
+    m_counterStats = {};
 }

@@ -269,8 +269,9 @@ M1 与 M2 可并行开发，但公共 `GpuMaterial`、`GpuSceneGeometry` 与 Sta
    First-bounce Hit Distance、Trace Classification、Candidate/Confirmed 计数），RTGI 关闭时以恒有效
    目标替换绑定；新增 `m3_voxel_rtgi_cave` 与 `m3_model_rtgi_sponza` 的 Vulkan RELAX 基准图、运行报告和
    `rtgi_reference_capture_manifest_test`，manifest 同时锁定场景/Camera Path/profile/image 字节身份，
-   报告验收 RTGI/NRD Timestamp 有效且 SSGI 为零；体素 RTGI Profile v3 明确关闭已知错误的 Hi-Z 与
-   GPU Cascade Culling。）
+   报告验收 RTGI/NRD Timestamp 有效且 SSGI 为零；Candidate/Confirmed 已接入 GPU 归约、三槽异步读回、
+   固定窗口总量/确认率/每像素峰值和严格报告契约；体素 RTGI Profile v3 明确关闭已知错误的 Hi-Z 与 GPU
+   Cascade Culling。）
 
 ### 完成条件
 
@@ -307,7 +308,7 @@ p50/p95/p99，以及最新 Pass/Batch/Submit/工作线程 Batch 计数。该字�
 `complete_gpu_frame_ms`：同一 `RenderDebugService` 在帧首和终端 Composite/Blit/FSR1 pass 记录首尾
 timestamp，范围为 `scene_render_graphs`，包括图间提交顺序和 GPU 调度间隙，不包括 UI/Present；没有完整
 首尾 timestamp 时 `valid=false`，不填充旧值。两份 RTGI 参考报告已用新二进制重新采集，Sponza 和体素
-洞穴在 AS 策略遥测接入后的最新报告中分别得到 9.754 ms 与 10.645 ms 的 3 帧 p95；该窗口只用于验证报告
+洞穴在 RTGI Counter 遥测接入后的最新报告中分别得到 10.768 ms 与 9.475 ms 的 3 帧 p95；该窗口只用于验证报告
 契约，正式性能结论仍要求 1000 帧。
 
 AS 分项遥测已完成：`SceneTLAS`、`TerrainBLAS.Build`、`TerrainBLAS.Compaction`、
@@ -333,10 +334,15 @@ Caustica 对照评估和第一轮策略契约已经完成：
 - 当前 RTGI 使用 Candidate Loop，不使用 SBT/Any-Hit；RHI 也没有 `VK_EXT_opacity_micromap` 能力和资源契约。
   OMM 的工程判断需要 Candidate/Confirmed 场景总量、Trace 时间和资产 Alpha Coverage 共同支撑。
 
+Candidate/Confirmed 归约遥测已经完成：8x8 Compute 将 Validation Image 聚合为 64-bit 总量和每像素峰值，
+三槽 Submission Token Readback 不等待 GPU，固定 1000 样本窗口按 sequence 去重。最新两份参考报告均为
+3/3 有效样本，每份覆盖 2,764,800 像素，Candidate、Confirmed 和峰值全部为 0；生产 Vulkan Smoke 已验证
+已知 Cutout 像素的非零路径。当前零值只说明两个参考镜头没有产生 Cutout Candidate，不能推出 OMM 无收益。
+
 下一轮任务按以下顺序执行：
 
-1. 对 RTGI Validation Image 中的 Candidate/Confirmed Counter 执行 GPU 归约和异步读回，Benchmark JSON
-   发布总量、确认率与每像素峰值；使用大量树叶场景建立 OMM 收益门槛。
+1. 建立 V03 Forest Cutout 大量树叶验收场景，固定 Camera Path、资产 Alpha Coverage 和画质 Profile；采集
+   非零 Candidate/Confirmed 总量、确认率、每像素峰值与同窗口 `RTGI.Trace`，据此建立 OMM 收益门槛。
 2. 针对 1080p 继续定位：体素优先检查地形提交、流送和 AS；Sponza 优先检查 RTGI.Trace 与 NRD.Dispatch。
    固定场景、驱动和电源模式后保留前后 Capture。
 3. 完整跨度和分项归因稳定后，再在同一镜头比较 RELAX A-Trous 5 与 3；不得用减少迭代数掩盖 Trace 或

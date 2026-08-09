@@ -543,8 +543,9 @@ BLAS；普通完整方块在每个 SubChunk BLAS 内使用可见单位面，仍�
 - Quality 在 Render Extent 全像素 1 spp；Performance 使用 Checkerboard 1 spp。
 - RTGI Trace/Signal Pack 与 NRD Guide/SDK Dispatch 已分别拥有独立 Timestamp；Dashboard 与
   Benchmark JSON 使用 `RTGI.Trace`、`RTGI.SignalPack`、`NRD.GuidePrep`、`NRD.Dispatch` 发布细分
-  p50/p95/p99，同时保留不重复计入总时间的 RTGI/NRD 聚合项。Alpha Candidate 与
-  Secondary Shadow 的细分计时仍通过后续诊断增量补充。
+  p50/p95/p99，同时保留不重复计入总时间的 RTGI/NRD 聚合项。RTGI Validation Image 的
+  Candidate/Confirmed 已通过 GPU 归约和异步读回发布总量、确认率与每像素峰值；Secondary Shadow
+  的细分计时仍通过后续诊断增量补充。
 - `SceneTLAS`、Terrain BLAS Build/Compaction、动态资源准备和 RTGI bootstrap 已接入独立的 CPU/GPU
   计时、工作量与驻留峰值；Static BLAS 在资产加载时记录 Build/Compaction 时间及压缩前后字节。
   bootstrap 包含内部 SceneTLAS，其时间只用于归因，不重复计入已追踪 GPU 总时间。AS 报告还发布
@@ -572,8 +573,16 @@ generation。`scene_tlas_generations` 现已直接测量 Allocation、Reuse、Re
 Terrain BLAS 的 Shader ABI 仍是 Opaque/Cutout 两类。体素参考场景当前为 202,312 个 Opaque Primitive 和
 876 个 Cutout Primitive，Cutout 占约 0.43%；Sponza 与场景内 Static BLAS 的 Cutout Primitive 为 0。
 Ray Query Candidate Loop 与 Any-Hit/SBT 的执行模型不同，OMM 还要求新增 RHI Extension、Capability、
-Micromap 资产和生命周期契约。工程入口是 Candidate/Confirmed GPU 归约读回及大量 Cutout 资产场景，当前
-bucket 分布本身不构成 OMM 扩展依据。
+Micromap 资产和生命周期契约。Candidate/Confirmed 已接入 8x8 GPU 归约、低高 32-bit 原子累加和三槽
+Submission Token 异步读回；CPU 严格校验 Counter ABI 版本、Extent、像素数及 Confirmed 不超过 Candidate，
+Benchmark 固定窗口按唯一 readback sequence 聚合。
+
+2026-08-09 重新采集的两份 300 帧预热加 3 帧参考报告均得到 2,764,800 个有效像素样本，Candidate、
+Confirmed 与每像素峰值都为 0。该结果说明当前 Sponza 镜头没有 Cutout，体素洞穴镜头的射线也没有实际
+遇到驻留的 Cutout Primitive；它不能作为 OMM 无收益的结论。生产 `RtgiTracePass` 的 Vulkan Smoke 已用
+已知 Cutout 像素验证非零总量和峰值读回。下一步必须建立 V03 Forest Cutout 大量树叶场景，再结合
+Candidate/Confirmed 总量、Alpha Coverage 和 `RTGI.Trace` 时间设定 OMM 收益门槛；当前 bucket 分布和
+零值参考镜头都不构成 OMM 扩展依据。
 
 ## 10. 调试视图与验收
 

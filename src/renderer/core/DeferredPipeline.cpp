@@ -1099,6 +1099,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
     bool volumetricGraphPrepared = false;
     bool localShadowGraphPrepared = false;
     bool clusteredLightingGraphPrepared = false;
+    bool rtgiTraceGraphPrepared = false;
     bool skyIblGraphPrepared = false;
     bool reflectionProbeCaptureGraphPrepared = false;
     bool reflectionProbeGridGraphPrepared = false;
@@ -1132,6 +1133,10 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
         if (clusteredLightingGraphPrepared) {
             m_clusteredLightingPass->finishGraphExecution(false, RhiSubmissionToken{});
             clusteredLightingGraphPrepared = false;
+        }
+        if (rtgiTraceGraphPrepared) {
+            m_rtgiTracePass->finishGraphExecution(false, RhiSubmissionToken{});
+            rtgiTraceGraphPrepared = false;
         }
         if (localShadowGraphPrepared) {
             m_localShadowPass->finishGraphExecution(false);
@@ -1952,6 +1957,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
         if (!graphTail.isValid()) {
             return failGraphSetup();
         }
+        rtgiTraceGraphPrepared = true;
         rtgiDiffuseTexture = rtgiRawDiffuse;
         rtgiDiffuseEncoding = DeferredLightingPass::RtgiDiffuseEncoding::LinearRgb;
         // The raw trace target and Scene HDR use the same pre-exposed domain.
@@ -2921,6 +2927,9 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
     if (m_shared->sceneTlasCache != nullptr) {
         m_shared->sceneTlasCache->finishGraphExecution(executed.succeeded(), executed.completionToken());
     }
+    if (rtgiTraceGraphPrepared) {
+        m_rtgiTracePass->finishGraphExecution(executed.succeeded(), executed.completionToken());
+    }
 #if defined(MECRAFT_ENABLE_NRD)
     if (m_nrdBridge != nullptr && m_nrdBridge->framePending()) {
         m_nrdBridge->completeGraphExecution(executed);
@@ -2974,6 +2983,9 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
 RenderGraphFrameStats DeferredPipeline::renderGraphFrameStats() const {
     RenderGraphFrameStats stats;
     stats.valid = m_graphCpuStatsValid;
+    if (m_rtgiTracePass != nullptr) {
+        stats.rtgiTraceCounters = m_rtgiTracePass->counterStats();
+    }
     stats.cpuBuildMs = m_graphCpuBuildMs;
     stats.cpuCompileMs = m_graphCpuCompileMs;
     stats.cpuExecuteMs = m_graphCpuExecuteMs;

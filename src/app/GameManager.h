@@ -83,6 +83,7 @@ private:
     GpuTimingHistory m_benchmarkGpuTimingHistory;
     RenderGraphTimingHistory m_benchmarkRenderGraphTimingHistory;
     AccelerationStructureHistory m_benchmarkAccelerationStructureHistory;
+    RtgiTraceCounterHistory m_benchmarkRtgiTraceCounterHistory;
     bool m_benchmarkReplayWasActive = false;
     bool m_benchmarkReportWritten = false;
     bool m_benchmarkReportSucceeded = true;

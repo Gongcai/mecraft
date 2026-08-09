@@ -7,6 +7,7 @@
 #include <array>
 #include <cmath>
 #include <cstdlib>
+#include <limits>
 
 namespace {
 
@@ -398,6 +399,70 @@ AccelerationStructureWindowStats AccelerationStructureHistory::snapshot() const 
             stats.dynamicBlas.updateRejectCounts[index] += m_dynamicBlasUpdateRejectSamples[index][sampleIndex];
         }
     }
+    return stats;
+}
+
+void RtgiTraceCounterHistory::reset() {
+    m_pixelSamples.fill(0u);
+    m_candidateSamples.fill(0u);
+    m_confirmedSamples.fill(0u);
+    m_peakCandidateSamples.fill(0u);
+    m_peakConfirmedSamples.fill(0u);
+    m_nextSample = 0u;
+    m_sampleCount = 0u;
+    m_observedSampleCount = 0u;
+    m_lastSequence = 0u;
+    m_latest = {};
+}
+
+bool RtgiTraceCounterHistory::record(const renderer::contracts::RtgiTraceCounterFrameStats& stats) {
+    const uint64_t expectedPixels = static_cast<uint64_t>(stats.width) * static_cast<uint64_t>(stats.height);
+    if (!stats.supported || !stats.valid || stats.sequence == 0u || stats.sequence <= m_lastSequence ||
+        stats.width == 0u || stats.height == 0u || stats.pixelCount != expectedPixels ||
+        stats.confirmedCount > stats.candidateCount ||
+        stats.peakCandidateCountPerPixel > renderer::contracts::kRtgiTraceValidationCandidateMask ||
+        stats.peakConfirmedCountPerPixel > renderer::contracts::kRtgiTraceValidationConfirmedMask ||
+        stats.peakConfirmedCountPerPixel > stats.peakCandidateCountPerPixel ||
+        (stats.candidateCount == 0u) != (stats.peakCandidateCountPerPixel == 0u) ||
+        (stats.confirmedCount == 0u) != (stats.peakConfirmedCountPerPixel == 0u)) {
+        return false;
+    }
+
+    m_pixelSamples[m_nextSample] = stats.pixelCount;
+    m_candidateSamples[m_nextSample] = stats.candidateCount;
+    m_confirmedSamples[m_nextSample] = stats.confirmedCount;
+    m_peakCandidateSamples[m_nextSample] = stats.peakCandidateCountPerPixel;
+    m_peakConfirmedSamples[m_nextSample] = stats.peakConfirmedCountPerPixel;
+    m_nextSample = (m_nextSample + 1u) % kCapacity;
+    m_sampleCount = std::min(m_sampleCount + 1u, kCapacity);
+    ++m_observedSampleCount;
+    m_lastSequence = stats.sequence;
+    m_latest = stats;
+    return true;
+}
+
+RtgiTraceCounterWindowStats RtgiTraceCounterHistory::snapshot() const {
+    RtgiTraceCounterWindowStats stats;
+    stats.sampleCount = m_sampleCount;
+    stats.capacity = kCapacity;
+    stats.observedSampleCount = m_observedSampleCount;
+    stats.latest = m_latest;
+    for (size_t index = 0u; index < m_sampleCount; ++index) {
+        if (stats.pixelCount > std::numeric_limits<uint64_t>::max() - m_pixelSamples[index] ||
+            stats.candidateCount > std::numeric_limits<uint64_t>::max() - m_candidateSamples[index] ||
+            stats.confirmedCount > std::numeric_limits<uint64_t>::max() - m_confirmedSamples[index]) {
+            return stats;
+        }
+        stats.pixelCount += m_pixelSamples[index];
+        stats.candidateCount += m_candidateSamples[index];
+        stats.confirmedCount += m_confirmedSamples[index];
+        stats.peakCandidateCountPerPixel = std::max(stats.peakCandidateCountPerPixel, m_peakCandidateSamples[index]);
+        stats.peakConfirmedCountPerPixel = std::max(stats.peakConfirmedCountPerPixel, m_peakConfirmedSamples[index]);
+    }
+    stats.confirmationRate = stats.candidateCount != 0u
+                                 ? static_cast<double>(stats.confirmedCount) / static_cast<double>(stats.candidateCount)
+                                 : 0.0;
+    stats.valid = m_sampleCount != 0u;
     return stats;
 }
 

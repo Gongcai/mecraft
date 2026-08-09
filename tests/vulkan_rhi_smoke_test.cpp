@@ -114,13 +114,12 @@ struct RtgiTraceSmokeCase final {
 /// @param desiredSample Sample value the fixture wants after the shader's pixel rotation is added.
 /// @return RGBA float texels with one contract-matched sample for every render pixel.
 [[nodiscard]] std::vector<float> makeRtgiFixtureBlueNoise(const uint32_t width, const uint32_t height,
-                                                          const uint32_t frameIndex,
-                                                          const glm::vec2& desiredSample) {
+                                                          const uint32_t frameIndex, const glm::vec2& desiredSample) {
     std::vector<float> blueNoise(static_cast<size_t>(width) * static_cast<size_t>(height) * 4u, 0.0f);
     for (uint32_t y = 0u; y < height; ++y) {
         for (uint32_t x = 0u; x < width; ++x) {
-            const glm::vec2 rotation = renderer::contracts::rtgiPixelScrambledCranleyPattersonRotation(
-                frameIndex, glm::uvec2(x, y));
+            const glm::vec2 rotation =
+                renderer::contracts::rtgiPixelScrambledCranleyPattersonRotation(frameIndex, glm::uvec2(x, y));
             const size_t offset = (static_cast<size_t>(y) * width + x) * 4u;
             blueNoise[offset + 0u] = glm::fract(desiredSample.x - rotation.x);
             blueNoise[offset + 1u] = glm::fract(desiredSample.y - rotation.y);
@@ -4594,10 +4593,14 @@ namespace {
         clusteredLightingPass.finishGraphExecution(executed.succeeded(), executed.completionToken());
         clusteredFinished = true;
         sceneTlas.finishGraphExecution(executed.succeeded(), executed.completionToken());
+        tracePass.finishGraphExecution(executed.succeeded(), executed.completionToken());
         valid = executed.succeeded() && executed.completionToken().isValid() &&
                 device.waitForSubmission(executed.completionToken());
         if (!executed.succeeded()) {
             std::cerr << "RTGI Trace Render Graph execution failed: " << executed.message << '\n';
+        }
+        if (valid) {
+            valid = tracePass.pollCounterReadback(device);
         }
     }
     if (valid) {
@@ -4693,8 +4696,19 @@ namespace {
                 }
             }
             const RtgiTracePass::Stats& stats = tracePass.stats();
+            const RtgiTraceCounterFrameStats& counterStats = tracePass.counterStats();
             const RtgiSignalPackPass::Stats& packStats = signalPackPass.stats();
             const RtgiSignalPackPass::Stats& reblurPackStats = reblurSignalPackPass.stats();
+            uint64_t expectedCandidateCount = 0u;
+            uint64_t expectedConfirmedCount = 0u;
+            uint32_t expectedPeakCandidateCount = 0u;
+            uint32_t expectedPeakConfirmedCount = 0u;
+            for (const RtgiTraceSmokeExpectedPixel& expected : smokeCase.expectedPixels) {
+                expectedCandidateCount += expected.candidateCount;
+                expectedConfirmedCount += expected.confirmedCount;
+                expectedPeakCandidateCount = std::max(expectedPeakCandidateCount, expected.candidateCount);
+                expectedPeakConfirmedCount = std::max(expectedPeakConfirmedCount, expected.confirmedCount);
+            }
             valid = valid && stats.dispatched && stats.frameIndex == frame.frameIndex &&
                     stats.sceneTlasRevision == activeTlas.revision && stats.width == smokeCase.width &&
                     stats.height == smokeCase.height && stats.instanceMask == smokeCase.instanceMask &&
@@ -4703,7 +4717,13 @@ namespace {
                     stats.gpuSceneGeometryBytes == activeTlas.gpuSceneGeometryBytes &&
                     stats.gpuSceneInstanceBytes == activeTlas.gpuSceneInstanceBytes &&
                     stats.gpuSceneMaterialCount == activeTlas.gpuSceneMaterialCount &&
-                    stats.gpuSceneGeometryCount == activeTlas.gpuSceneGeometryCount && packStats.dispatched &&
+                    stats.gpuSceneGeometryCount == activeTlas.gpuSceneGeometryCount && counterStats.supported &&
+                    counterStats.valid && counterStats.sequence == 1u && counterStats.frameIndex == frame.frameIndex &&
+                    counterStats.width == smokeCase.width && counterStats.height == smokeCase.height &&
+                    counterStats.pixelCount == pixelCount && counterStats.candidateCount == expectedCandidateCount &&
+                    counterStats.confirmedCount == expectedConfirmedCount &&
+                    counterStats.peakCandidateCountPerPixel == expectedPeakCandidateCount &&
+                    counterStats.peakConfirmedCountPerPixel == expectedPeakConfirmedCount && packStats.dispatched &&
                     packStats.width == smokeCase.width && packStats.height == smokeCase.height &&
                     packStats.reblurHitDistance.constantScale == 3.0f &&
                     packStats.reblurHitDistance.viewZScale == 0.1f &&
@@ -5894,8 +5914,8 @@ void main() {
 
     if (valid) {
         RhiCommandList* commands = commandPool.acquire(RhiCommandListType::Graphics);
-        valid = commands != nullptr && commands->begin({"VulkanSmoke.CubeArrayOrientation.Commands",
-                                                         RhiCommandListType::Graphics});
+        valid = commands != nullptr &&
+                commands->begin({"VulkanSmoke.CubeArrayOrientation.Commands", RhiCommandListType::Graphics});
         if (valid) {
             commands->textureBarrier({cubeTexture, RhiResourceState::Undefined, RhiResourceState::RenderTarget});
             RhiColorAttachment faceAttachment;
@@ -5913,8 +5933,8 @@ void main() {
             faceRendering.colorAttachmentCount = 1u;
             commands->beginRendering(faceRendering);
             commands->setGraphicsPipeline(facePipeline);
-            const glm::mat4 viewProjection = renderer::contracts::cubeMapFaceViewProjection(
-                glm::vec3(0.0f), 0u, 0.05f, 4.0f);
+            const glm::mat4 viewProjection =
+                renderer::contracts::cubeMapFaceViewProjection(glm::vec3(0.0f), 0u, 0.05f, 4.0f);
             commands->pushConstants(&viewProjection, sizeof(viewProjection), rhiFlag(RhiShaderStage::Vertex));
             commands->draw(6u, 1u, 0u, 0u);
             commands->endRendering();

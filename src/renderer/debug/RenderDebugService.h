@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "../contracts/DynamicBlasPolicyContract.h"
+#include "../contracts/RtgiSamplingContract.h"
 #include "../rhi/RhiHandles.h"
 #include "../rhi/RhiTypes.h"
 
@@ -299,6 +300,50 @@ struct AccelerationStructureWindowStats {
     AccelerationStructureFrameStats latest;
 };
 
+/// Fixed-window totals and peaks from completed RTGI validation-image reductions.
+struct RtgiTraceCounterWindowStats final {
+    bool valid = false;
+    size_t sampleCount = 0u;
+    size_t capacity = 0u;
+    uint64_t observedSampleCount = 0u;
+    uint64_t pixelCount = 0u;
+    uint64_t candidateCount = 0u;
+    uint64_t confirmedCount = 0u;
+    double confirmationRate = 0.0;
+    uint32_t peakCandidateCountPerPixel = 0u;
+    uint32_t peakConfirmedCountPerPixel = 0u;
+    renderer::contracts::RtgiTraceCounterFrameStats latest;
+};
+
+/// Stores unique delayed RTGI counter readbacks in a fixed allocation-free window.
+class RtgiTraceCounterHistory final {
+public:
+    static constexpr size_t kCapacity = 1000u;
+
+    /// Clears every counter sample and sequence identity.
+    void reset();
+
+    /// Records one validated asynchronous counter readback.
+    /// @param stats Completed reduction with a non-zero monotonic sequence identity.
+    /// @return True when the sample was accepted into the window.
+    [[nodiscard]] bool record(const renderer::contracts::RtgiTraceCounterFrameStats& stats);
+
+    /// Returns aggregate totals, confirmation rate, and per-pixel peaks.
+    [[nodiscard]] RtgiTraceCounterWindowStats snapshot() const;
+
+private:
+    std::array<uint64_t, kCapacity> m_pixelSamples{};
+    std::array<uint64_t, kCapacity> m_candidateSamples{};
+    std::array<uint64_t, kCapacity> m_confirmedSamples{};
+    std::array<uint32_t, kCapacity> m_peakCandidateSamples{};
+    std::array<uint32_t, kCapacity> m_peakConfirmedSamples{};
+    size_t m_nextSample = 0u;
+    size_t m_sampleCount = 0u;
+    uint64_t m_observedSampleCount = 0u;
+    uint64_t m_lastSequence = 0u;
+    renderer::contracts::RtgiTraceCounterFrameStats m_latest;
+};
+
 /// Stores runtime AS CPU work, counts, byte volumes, and residency peaks without allocation.
 class AccelerationStructureHistory {
 public:
@@ -408,6 +453,8 @@ struct RenderGraphFrameStats {
     GpuFrameSpanStats completeGpuFrame;
     /// Runtime acceleration-structure work and residency for this rendered frame.
     AccelerationStructureFrameStats accelerationStructures;
+    /// Latest completed asynchronous RTGI validation-image reduction.
+    renderer::contracts::RtgiTraceCounterFrameStats rtgiTraceCounters;
     std::vector<RenderGraphPassStats> passes;
 };
 

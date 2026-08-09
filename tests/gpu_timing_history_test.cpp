@@ -265,8 +265,7 @@ bool testRenderGraphTimingHistory() {
     RenderGraphFrameStats invalidCompleteGpuFrame = frame;
     invalidCompleteGpuFrame.completeGpuFrame.sequence = 1003u;
     invalidCompleteGpuFrame.completeGpuFrame.spanMs = -1.0;
-    if (!requireTrue(!history.record(invalidCompleteGpuFrame),
-                     "negative complete GPU frame spans must be rejected")) {
+    if (!requireTrue(!history.record(invalidCompleteGpuFrame), "negative complete GPU frame spans must be rejected")) {
         return false;
     }
 
@@ -305,11 +304,55 @@ bool testRenderGraphTimingHistory() {
                        "latest complete GPU frame span must remain distinct");
 }
 
+bool testRtgiTraceCounterHistory() {
+    RtgiTraceCounterHistory history;
+    const RtgiTraceCounterWindowStats empty = history.snapshot();
+    if (!requireTrue(!empty.valid && empty.sampleCount == 0u && empty.capacity == RtgiTraceCounterHistory::kCapacity,
+                     "empty RTGI counter history must expose its fixed capacity")) {
+        return false;
+    }
+
+    renderer::contracts::RtgiTraceCounterFrameStats frame;
+    frame.supported = true;
+    frame.valid = true;
+    frame.width = 32u;
+    frame.height = 32u;
+    frame.pixelCount = 1024u;
+    frame.candidateCount = 10u;
+    frame.confirmedCount = 4u;
+    frame.peakCandidateCountPerPixel = 3u;
+    frame.peakConfirmedCountPerPixel = 2u;
+    for (uint64_t sequence = 1u; sequence <= 1002u; ++sequence) {
+        frame.sequence = sequence;
+        frame.frameIndex = sequence + 40u;
+        if (!requireTrue(history.record(frame), "unique RTGI counter readbacks must be recorded")) {
+            return false;
+        }
+    }
+    if (!requireTrue(!history.record(frame), "duplicate RTGI counter readbacks must be rejected")) {
+        return false;
+    }
+    frame.sequence = 1003u;
+    frame.confirmedCount = 11u;
+    if (!requireTrue(!history.record(frame), "RTGI confirmed totals must not exceed candidate totals")) {
+        return false;
+    }
+
+    const RtgiTraceCounterWindowStats stats = history.snapshot();
+    return requireTrue(stats.valid && stats.sampleCount == 1000u && stats.observedSampleCount == 1002u &&
+                           stats.pixelCount == 1024000u && stats.candidateCount == 10000u &&
+                           stats.confirmedCount == 4000u && stats.peakCandidateCountPerPixel == 3u &&
+                           stats.peakConfirmedCountPerPixel == 2u && stats.latest.sequence == 1002u &&
+                           stats.latest.frameIndex == 1042u,
+                       "RTGI counter history must retain totals, peaks, and the latest delayed source frame") &&
+           requireNear(stats.confirmationRate, 0.4, "RTGI confirmation rate must use aggregate totals");
+}
+
 } // namespace
 
 int main() {
     if (!testStableStageNames() || !testFixedWindowPercentiles() || !testAccelerationStructureHistory() ||
-        !testRenderGraphTimingHistory()) {
+        !testRenderGraphTimingHistory() || !testRtgiTraceCounterHistory()) {
         return 1;
     }
     std::cout << "[gpu_timing_history_test] PASS\n";

@@ -29,15 +29,19 @@ namespace {
 [[nodiscard]] bool validateShaderMirror() {
     const std::string samplingPath = std::string(MECRAFT_TEST_SOURCE_DIR) + "/assets/shaders/rtgi_sampling.glsl";
     const std::string tracePath = std::string(MECRAFT_TEST_SOURCE_DIR) + "/assets/shaders/rtgi_trace.comp";
+    const std::string counterPath =
+        std::string(MECRAFT_TEST_SOURCE_DIR) + "/assets/shaders/rtgi_trace_counter_reduce.comp";
     const std::string pipelinePath = std::string(MECRAFT_TEST_SOURCE_DIR) + "/src/renderer/core/DeferredPipeline.cpp";
     std::ifstream samplingFile(samplingPath, std::ios::binary);
     std::ifstream traceFile(tracePath, std::ios::binary);
+    std::ifstream counterFile(counterPath, std::ios::binary);
     std::ifstream pipelineFile(pipelinePath, std::ios::binary);
-    if (!samplingFile.is_open() || !traceFile.is_open() || !pipelineFile.is_open()) {
+    if (!samplingFile.is_open() || !traceFile.is_open() || !counterFile.is_open() || !pipelineFile.is_open()) {
         return false;
     }
     const std::string samplingSource{std::istreambuf_iterator<char>(samplingFile), std::istreambuf_iterator<char>()};
     const std::string traceSource{std::istreambuf_iterator<char>(traceFile), std::istreambuf_iterator<char>()};
+    const std::string counterSource{std::istreambuf_iterator<char>(counterFile), std::istreambuf_iterator<char>()};
     const std::string pipelineSource{std::istreambuf_iterator<char>(pipelineFile), std::istreambuf_iterator<char>()};
     return samplingSource.find("const uint RTGI_SECONDARY_LIGHTING_TERRAIN_NORMAL_MAP_BIT = 1u << 0u;") !=
                std::string::npos &&
@@ -92,6 +96,12 @@ namespace {
            traceSource.find("surface.albedo * (1.0 - surface.metalness)") == std::string::npos &&
            traceSource.find("optional local-light shadow resource must not erase") != std::string::npos &&
            traceSource.find("Local lights are optional secondary transport") != std::string::npos &&
+           counterSource.find("const uint RTGI_TRACE_COUNTER_CONTRACT_VERSION = 1u;") != std::string::npos &&
+           counterSource.find("void rtgiTraceCounterAtomicAdd64(uint lowWord, uint highWord, uint value)") !=
+               std::string::npos &&
+           counterSource.find("atomicMax(uCounters.words[RTGI_TRACE_COUNTER_PEAK_CANDIDATE]") != std::string::npos &&
+           counterSource.find("any(notEqual(pc.renderExtentAndContract.xy, uvec2(imageSize(uValidation))))") !=
+               std::string::npos &&
            pipelineSource.find(
                "const bool rtgiTraceInspection = isRtgiTraceInspectionView(settings.debug.viewMode);") !=
                std::string::npos &&
@@ -279,6 +289,27 @@ int main() {
                 !encodeRtgiTraceValidation(RtgiTraceClassification::Miss, 0u, kRtgiTraceValidationConfirmedMask + 1u)
                      .has_value(),
             "RTGI validation packing must preserve classification and Cutout counters") &&
+        valid;
+
+    std::array<uint32_t, kRtgiTraceCounterWordCount> counterWords{};
+    counterWords[static_cast<size_t>(RtgiTraceCounterWord::CandidateLow)] = 4u;
+    counterWords[static_cast<size_t>(RtgiTraceCounterWord::CandidateHigh)] = 1u;
+    counterWords[static_cast<size_t>(RtgiTraceCounterWord::ConfirmedLow)] = 2u;
+    counterWords[static_cast<size_t>(RtgiTraceCounterWord::ConfirmedHigh)] = 1u;
+    counterWords[static_cast<size_t>(RtgiTraceCounterWord::PeakCandidatePerPixel)] = 4u;
+    counterWords[static_cast<size_t>(RtgiTraceCounterWord::PeakConfirmedPerPixel)] = 2u;
+    counterWords[static_cast<size_t>(RtgiTraceCounterWord::PixelHigh)] = 1u;
+    counterWords[static_cast<size_t>(RtgiTraceCounterWord::ContractVersion)] = kRtgiTraceCounterContractVersion;
+    const std::optional<RtgiTraceCounterFrameStats> decodedCounters =
+        decodeRtgiTraceCounterReadback(counterWords, 7u, 91u, 65536u, 65536u);
+    counterWords[static_cast<size_t>(RtgiTraceCounterWord::InvariantError)] = 1u;
+    valid =
+        requireTrue(decodedCounters.has_value() && decodedCounters->sequence == 7u &&
+                        decodedCounters->frameIndex == 91u && decodedCounters->pixelCount == (uint64_t{1u} << 32u) &&
+                        decodedCounters->candidateCount == (uint64_t{1u} << 32u) + 4u &&
+                        decodedCounters->confirmedCount == (uint64_t{1u} << 32u) + 2u &&
+                        !decodeRtgiTraceCounterReadback(counterWords, 8u, 92u, 65536u, 65536u).has_value(),
+                    "RTGI counter readback must preserve 64-bit totals and reject GPU invariant errors") &&
         valid;
     valid = requireTrue(validateShaderMirror(), "RTGI GLSL flags and secondary-lighting UBO must mirror C++") && valid;
     return valid ? 0 : 1;

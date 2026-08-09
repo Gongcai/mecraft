@@ -3,6 +3,8 @@
 
 #include <glm/glm.hpp>
 
+#include <array>
+#include <cstddef>
 #include <cstdint>
 #include <optional>
 
@@ -21,6 +23,46 @@ inline constexpr float kRtgiMinimumRayOriginBias = kRtgiVoxelSurfaceExpansion * 
 inline constexpr uint32_t kRtgiSecondaryLightingTerrainNormalMapBit = 1u << 0u;
 inline constexpr uint32_t kRtgiSecondaryLightingTerrainSpecularMapBit = 1u << 1u;
 inline constexpr float kRtgiMetallicDiffuseTransportFloor = 0.35f;
+inline constexpr uint32_t kRtgiTraceCounterContractVersion = 1u;
+
+/// Stable word offsets written by the RTGI validation-image reduction shader.
+enum class RtgiTraceCounterWord : size_t {
+    CandidateLow = 0u,
+    CandidateHigh,
+    ConfirmedLow,
+    ConfirmedHigh,
+    PeakCandidatePerPixel,
+    PeakConfirmedPerPixel,
+    PixelLow,
+    PixelHigh,
+    InvariantError,
+    ContractVersion,
+    Count
+};
+
+inline constexpr size_t kRtgiTraceCounterWordCount = static_cast<size_t>(RtgiTraceCounterWord::Count);
+
+/// Push constants for reducing one complete RTGI validation image.
+struct alignas(16) RtgiTraceCounterPushConstants final {
+    glm::uvec4 renderExtentAndContract{1u, 1u, kRtgiTraceCounterContractVersion, 0u};
+};
+
+static_assert(sizeof(RtgiTraceCounterPushConstants) == 16u);
+
+/// One completed asynchronous GPU reduction of the RTGI validation image.
+struct RtgiTraceCounterFrameStats final {
+    bool supported = false;
+    bool valid = false;
+    uint64_t sequence = 0u;
+    uint64_t frameIndex = 0u;
+    uint32_t width = 0u;
+    uint32_t height = 0u;
+    uint64_t pixelCount = 0u;
+    uint64_t candidateCount = 0u;
+    uint64_t confirmedCount = 0u;
+    uint32_t peakCandidateCountPerPixel = 0u;
+    uint32_t peakConfirmedCountPerPixel = 0u;
+};
 
 /// Push constants shared by the production RTGI trace pass and Vulkan smoke validation.
 struct alignas(16) RtgiTracePushConstants final {
@@ -63,9 +105,9 @@ static_assert(sizeof(RtgiSecondaryLightingParams) == 128u);
 /// @param inverseViewProjection Receives clip-to-scene-space reconstruction matrix.
 /// @return False when an input is non-finite, singular, or produces a non-finite result.
 [[nodiscard]] bool makeRtgiCameraRelativeInverseViewProjection(const glm::mat4& projection, const glm::mat4& view,
-                                                              const glm::vec3& cameraPosition,
-                                                              const glm::vec3& sceneOrigin,
-                                                              glm::mat4& inverseViewProjection);
+                                                               const glm::vec3& cameraPosition,
+                                                               const glm::vec3& sceneOrigin,
+                                                               glm::mat4& inverseViewProjection);
 
 /// Hashes stable material and geometry identities for the RTGI validation image.
 /// @param stableMaterialId Non-zero stable material identity from primitive metadata.
@@ -123,6 +165,17 @@ static_assert(sizeof(RtgiSecondaryLightingParams) == 128u);
 [[nodiscard]] constexpr uint32_t rtgiTraceValidationConfirmedCount(const uint32_t packed) {
     return (packed >> kRtgiTraceValidationConfirmedShift) & kRtgiTraceValidationConfirmedMask;
 }
+
+/// Validates and decodes one fixed-layout GPU counter readback.
+/// @param words Exact reduction payload copied from the GPU statistics buffer.
+/// @param sequence Non-zero monotonic readback identity assigned by the owning pass.
+/// @param frameIndex Source render-frame identity captured when the copy was recorded.
+/// @param width Source validation-image width.
+/// @param height Source validation-image height.
+/// @return Validated 64-bit counter snapshot, or no value when any GPU invariant is broken.
+[[nodiscard]] std::optional<RtgiTraceCounterFrameStats>
+decodeRtgiTraceCounterReadback(const std::array<uint32_t, kRtgiTraceCounterWordCount>& words, uint64_t sequence,
+                               uint64_t frameIndex, uint32_t width, uint32_t height);
 
 } // namespace renderer::contracts
 

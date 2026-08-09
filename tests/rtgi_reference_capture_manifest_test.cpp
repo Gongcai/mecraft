@@ -277,6 +277,61 @@ int main() {
                          "Static BLAS reports must contain resident geometry and real build timings")) {
             return 1;
         }
+
+        const auto rtgiTraceCountersValue = report.find("rtgi_trace_counters");
+        if (!requireTrue(rtgiTraceCountersValue != report.end() && rtgiTraceCountersValue->is_object(),
+                         "RTGI report must contain validation-image counter statistics")) {
+            return 1;
+        }
+        const Json& rtgiTraceCounters = *rtgiTraceCountersValue;
+        const Json& counterTotals = rtgiTraceCounters.at("totals");
+        const Json& counterPeaks = rtgiTraceCounters.at("peak_per_pixel");
+        const Json& latestCounters = rtgiTraceCounters.at("latest");
+        constexpr uint64_t expectedPixelCount = 3u * 1280u * 720u;
+        constexpr uint32_t maximumCounterPerPixel = 0xfffu;
+        const uint64_t candidateCount = counterTotals.value("candidate_count", uint64_t{0u});
+        const uint64_t confirmedCount = counterTotals.value("confirmed_count", uint64_t{0u});
+        const double confirmationRate = counterTotals.value("confirmation_rate", -1.0);
+        const double expectedConfirmationRate =
+            candidateCount != 0u ? static_cast<double>(confirmedCount) / static_cast<double>(candidateCount) : 0.0;
+        const uint32_t peakCandidateCount = counterPeaks.value("candidate_count", maximumCounterPerPixel + 1u);
+        const uint32_t peakConfirmedCount = counterPeaks.value("confirmed_count", maximumCounterPerPixel + 1u);
+        if (!requireTrue(rtgiTraceCounters.value("scope", "") == "rtgi_validation_image" &&
+                             rtgiTraceCounters.value("valid", false) &&
+                             rtgiTraceCounters.value("window_capacity", 0u) == 1000u &&
+                             rtgiTraceCounters.value("sample_count", 0u) == 3u &&
+                             rtgiTraceCounters.value("observed_sample_count", 0u) == 3u &&
+                             counterTotals.value("pixel_count", uint64_t{0u}) == expectedPixelCount &&
+                             confirmedCount <= candidateCount && std::isfinite(confirmationRate) &&
+                             std::abs(confirmationRate - expectedConfirmationRate) <= 1.0e-12 &&
+                             peakCandidateCount <= maximumCounterPerPixel && peakConfirmedCount <= peakCandidateCount,
+                         "RTGI counter window must contain three complete validated reductions")) {
+            return 1;
+        }
+
+        const uint64_t latestCandidateCount = latestCounters.value("candidate_count", uint64_t{0u});
+        const uint64_t latestConfirmedCount = latestCounters.value("confirmed_count", uint64_t{0u});
+        const double latestConfirmationRate = latestCounters.value("confirmation_rate", -1.0);
+        const double expectedLatestConfirmationRate =
+            latestCandidateCount != 0u
+                ? static_cast<double>(latestConfirmedCount) / static_cast<double>(latestCandidateCount)
+                : 0.0;
+        const uint32_t latestPeakCandidateCount =
+            latestCounters.value("peak_candidate_count_per_pixel", maximumCounterPerPixel + 1u);
+        const uint32_t latestPeakConfirmedCount =
+            latestCounters.value("peak_confirmed_count_per_pixel", maximumCounterPerPixel + 1u);
+        if (!requireTrue(latestCounters.value("supported", false) && latestCounters.value("valid", false) &&
+                             latestCounters.value("sequence", uint64_t{0u}) > 0u &&
+                             latestCounters.value("source_frame_index", uint64_t{0u}) > 0u &&
+                             latestCounters.value("width", 0u) == 1280u && latestCounters.value("height", 0u) == 720u &&
+                             latestCounters.value("pixel_count", uint64_t{0u}) == 1280u * 720u &&
+                             latestConfirmedCount <= latestCandidateCount && std::isfinite(latestConfirmationRate) &&
+                             std::abs(latestConfirmationRate - expectedLatestConfirmationRate) <= 1.0e-12 &&
+                             latestPeakCandidateCount <= maximumCounterPerPixel &&
+                             latestPeakConfirmedCount <= latestPeakCandidateCount,
+                         "Latest RTGI counter readback must preserve its source-frame and per-pixel invariants")) {
+            return 1;
+        }
     }
 
     std::cout << "[rtgi_reference_capture_manifest_test] PASS\n";

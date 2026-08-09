@@ -97,9 +97,23 @@ public:
                                             const GraphResources& resources, const LightingResources& lighting,
                                             RgPassHandle dependency);
 
+    /// Commits a pending counter readback only after the complete graph submission succeeds.
+    /// @param succeeded True when every graph command list was submitted.
+    /// @param completionToken Final submission token that depends on the reduction copy.
+    void finishGraphExecution(bool succeeded, RhiSubmissionToken completionToken);
+
+    /// Polls one oldest completed readback slot without waiting for GPU work.
+    /// @param rhiDevice Device that owns the reduction and readback buffers.
+    /// @return False when the submission, mapping, or GPU counter contract is invalid.
+    [[nodiscard]] bool pollCounterReadback(RhiDevice& rhiDevice);
+
     /// Returns diagnostics for the latest successfully recorded dispatch.
     /// @return Immutable dispatch snapshot; dispatched is false before the first successful record.
     [[nodiscard]] const Stats& stats() const { return m_stats; }
+
+    /// Returns the latest completed validation-image counter reduction.
+    /// @return Delayed asynchronous readback snapshot; valid is false before the first completed slot.
+    [[nodiscard]] const renderer::contracts::RtgiTraceCounterFrameStats& counterStats() const { return m_counterStats; }
 
 private:
     struct TraceViews final {
@@ -133,6 +147,12 @@ private:
         glm::vec3 sceneOrigin{0.0f};
     };
 
+    struct CounterReadbackMetadata final {
+        uint64_t frameIndex = 0u;
+        uint32_t width = 0u;
+        uint32_t height = 0u;
+    };
+
     [[nodiscard]] bool recordTrace(RhiCommandList& commandList, const FrameContext& ctx, const Settings& settings,
                                    const TraceViews& views, const TraceSceneBuffers& sceneBuffers,
                                    RhiBindGroupLayoutHandle lightingLayout, RhiBindGroupHandle lightingBindGroup,
@@ -141,10 +161,15 @@ private:
                                       RhiBindGroupLayoutHandle lightingLayout);
     [[nodiscard]] bool ensureBindGroup(RhiDevice& rhiDevice, const TraceViews& views,
                                        const TraceSceneBuffers& sceneBuffers);
+    [[nodiscard]] bool consumeCounterReadback(RhiDevice& rhiDevice);
+    [[nodiscard]] bool ensureCounterBindGroup(RhiDevice& rhiDevice, RhiTextureViewHandle validationView);
+    [[nodiscard]] bool recordCounterReduction(RhiCommandList& commandList, RhiTextureViewHandle validationView,
+                                              uint64_t frameIndex, uint32_t width, uint32_t height);
     void destroyRhiResources();
 
     RhiDevice* m_rhiDevice = nullptr;
     RhiShaderHandle m_shader;
+    RhiShaderHandle m_counterShader;
     RhiSamplerHandle m_sampler;
     RhiSamplerHandle m_terrainSampler;
     RhiSamplerHandle m_linearClampSampler;
@@ -152,13 +177,31 @@ private:
     RhiBindGroupLayoutHandle m_globalBindlessLayout;
     RhiBindGroupLayoutHandle m_lightingLayout;
     RhiBindGroupLayoutHandle m_traceBindGroupLayout;
+    RhiBindGroupLayoutHandle m_counterBindGroupLayout;
     RhiPipelineLayoutHandle m_pipelineLayout;
+    RhiPipelineLayoutHandle m_counterPipelineLayout;
     RhiPipelineHandle m_pipeline;
+    RhiPipelineHandle m_counterPipeline;
     RhiBindGroupHandle m_traceBindGroup;
+    RhiBindGroupHandle m_counterBindGroup;
+    RhiBufferHandle m_counterBuffer;
+    static constexpr uint32_t kCounterReadbackRingSize = 3u;
+    std::array<RhiBufferHandle, kCounterReadbackRingSize> m_counterReadbackBuffers{};
+    std::array<bool, kCounterReadbackRingSize> m_counterReadbackWritten{};
+    std::array<RhiSubmissionToken, kCounterReadbackRingSize> m_counterReadbackTokens{};
+    std::array<CounterReadbackMetadata, kCounterReadbackRingSize> m_counterReadbackMetadata{};
+    uint32_t m_counterReadbackWriteIndex = 0u;
+    uint32_t m_pendingCounterReadbackIndex = 0u;
+    bool m_counterReadbackSlotAvailable = true;
+    bool m_counterReadbackPending = false;
+    bool m_counterHealthy = true;
+    uint64_t m_counterReadbackSequence = 0u;
+    RhiTextureViewHandle m_boundCounterValidationView;
     std::array<RhiBufferHandle, 4u> m_boundSceneBuffers{};
     std::array<uint64_t, 4u> m_boundSceneBufferBytes{};
     std::array<RhiTextureViewHandle, 13u> m_boundViews{};
     Stats m_stats;
+    renderer::contracts::RtgiTraceCounterFrameStats m_counterStats;
 };
 
 #endif // MECRAFT_RTGI_TRACE_PASS_H

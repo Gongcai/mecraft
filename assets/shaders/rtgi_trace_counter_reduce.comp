@@ -1,0 +1,100 @@
+#version 460 core
+
+#include "rtgi_sampling.glsl"
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+layout(set = 0, binding = 0, rg32ui) uniform readonly uimage2D uValidation;
+layout(std430, set = 0, binding = 1) buffer RtgiTraceCounterBuffer {
+    uint words[];
+} uCounters;
+
+layout(push_constant) uniform RtgiTraceCounterPushConstants {
+    uvec4 renderExtentAndContract;
+} pc;
+
+const uint RTGI_TRACE_COUNTER_CONTRACT_VERSION = 1u;
+const uint RTGI_TRACE_COUNTER_CANDIDATE_LOW = 0u;
+const uint RTGI_TRACE_COUNTER_CANDIDATE_HIGH = 1u;
+const uint RTGI_TRACE_COUNTER_CONFIRMED_LOW = 2u;
+const uint RTGI_TRACE_COUNTER_CONFIRMED_HIGH = 3u;
+const uint RTGI_TRACE_COUNTER_PEAK_CANDIDATE = 4u;
+const uint RTGI_TRACE_COUNTER_PEAK_CONFIRMED = 5u;
+const uint RTGI_TRACE_COUNTER_PIXEL_LOW = 6u;
+const uint RTGI_TRACE_COUNTER_PIXEL_HIGH = 7u;
+const uint RTGI_TRACE_COUNTER_INVARIANT_ERROR = 8u;
+const uint RTGI_TRACE_COUNTER_CONTRACT = 9u;
+
+const uint RTGI_TRACE_COUNTER_ERROR_CONTRACT = 1u << 0u;
+const uint RTGI_TRACE_COUNTER_ERROR_EXTENT = 1u << 1u;
+const uint RTGI_TRACE_COUNTER_ERROR_CONFIRMED_EXCEEDS_CANDIDATE = 1u << 2u;
+
+shared uint sCandidate[64];
+shared uint sConfirmed[64];
+shared uint sPeakCandidate[64];
+shared uint sPeakConfirmed[64];
+shared uint sPixelCount[64];
+
+void rtgiTraceCounterAtomicAdd64(uint lowWord, uint highWord, uint value) {
+    uint previousLow = atomicAdd(uCounters.words[lowWord], value);
+    if (previousLow > 0xffffffffu - value) {
+        atomicAdd(uCounters.words[highWord], 1u);
+    }
+}
+
+void main() {
+    uint localIndex = gl_LocalInvocationIndex;
+    uvec2 texel = gl_GlobalInvocationID.xy;
+    bool inside = all(lessThan(texel, pc.renderExtentAndContract.xy));
+    uint candidateCount = 0u;
+    uint confirmedCount = 0u;
+    if (inside) {
+        uint validationWord = imageLoad(uValidation, ivec2(texel)).x;
+        candidateCount = (validationWord >> RTGI_TRACE_VALIDATION_CANDIDATE_SHIFT) &
+                         RTGI_TRACE_VALIDATION_CANDIDATE_MASK;
+        confirmedCount = (validationWord >> RTGI_TRACE_VALIDATION_CONFIRMED_SHIFT) &
+                         RTGI_TRACE_VALIDATION_CONFIRMED_MASK;
+        if (confirmedCount > candidateCount) {
+            atomicOr(uCounters.words[RTGI_TRACE_COUNTER_INVARIANT_ERROR],
+                     RTGI_TRACE_COUNTER_ERROR_CONFIRMED_EXCEEDS_CANDIDATE);
+        }
+    }
+
+    sCandidate[localIndex] = candidateCount;
+    sConfirmed[localIndex] = confirmedCount;
+    sPeakCandidate[localIndex] = candidateCount;
+    sPeakConfirmed[localIndex] = confirmedCount;
+    sPixelCount[localIndex] = inside ? 1u : 0u;
+    barrier();
+
+    for (uint stride = 32u; stride != 0u; stride >>= 1u) {
+        if (localIndex < stride) {
+            sCandidate[localIndex] += sCandidate[localIndex + stride];
+            sConfirmed[localIndex] += sConfirmed[localIndex + stride];
+            sPeakCandidate[localIndex] = max(sPeakCandidate[localIndex], sPeakCandidate[localIndex + stride]);
+            sPeakConfirmed[localIndex] = max(sPeakConfirmed[localIndex], sPeakConfirmed[localIndex + stride]);
+            sPixelCount[localIndex] += sPixelCount[localIndex + stride];
+        }
+        barrier();
+    }
+
+    if (localIndex == 0u) {
+        rtgiTraceCounterAtomicAdd64(RTGI_TRACE_COUNTER_CANDIDATE_LOW, RTGI_TRACE_COUNTER_CANDIDATE_HIGH,
+                                    sCandidate[0]);
+        rtgiTraceCounterAtomicAdd64(RTGI_TRACE_COUNTER_CONFIRMED_LOW, RTGI_TRACE_COUNTER_CONFIRMED_HIGH,
+                                    sConfirmed[0]);
+        rtgiTraceCounterAtomicAdd64(RTGI_TRACE_COUNTER_PIXEL_LOW, RTGI_TRACE_COUNTER_PIXEL_HIGH, sPixelCount[0]);
+        atomicMax(uCounters.words[RTGI_TRACE_COUNTER_PEAK_CANDIDATE], sPeakCandidate[0]);
+        atomicMax(uCounters.words[RTGI_TRACE_COUNTER_PEAK_CONFIRMED], sPeakConfirmed[0]);
+    }
+
+    if (all(equal(gl_GlobalInvocationID, uvec3(0u)))) {
+        uCounters.words[RTGI_TRACE_COUNTER_CONTRACT] = RTGI_TRACE_COUNTER_CONTRACT_VERSION;
+        if (pc.renderExtentAndContract.z != RTGI_TRACE_COUNTER_CONTRACT_VERSION) {
+            atomicOr(uCounters.words[RTGI_TRACE_COUNTER_INVARIANT_ERROR], RTGI_TRACE_COUNTER_ERROR_CONTRACT);
+        }
+        if (any(notEqual(pc.renderExtentAndContract.xy, uvec2(imageSize(uValidation))))) {
+            atomicOr(uCounters.words[RTGI_TRACE_COUNTER_INVARIANT_ERROR], RTGI_TRACE_COUNTER_ERROR_EXTENT);
+        }
+    }
+}

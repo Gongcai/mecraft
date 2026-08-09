@@ -5,6 +5,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 
 #include <cmath>
+#include <limits>
 #include <utility>
 
 namespace renderer::contracts {
@@ -53,8 +54,8 @@ bool makeRtgiCameraRelativeInverseViewProjection(const glm::mat4& projection, co
     const glm::mat4 inverseProjection = glm::inverse(projection);
     const glm::mat4 inverseViewRotation = glm::inverse(viewRotation);
     const glm::vec3 cameraRelativePosition = cameraPosition - sceneOrigin;
-    inverseViewProjection = glm::translate(glm::mat4(1.0f), cameraRelativePosition) * inverseViewRotation *
-                            inverseProjection;
+    inverseViewProjection =
+        glm::translate(glm::mat4(1.0f), cameraRelativePosition) * inverseViewRotation * inverseProjection;
     return finite(inverseViewProjection);
 }
 
@@ -141,6 +142,57 @@ std::optional<uint32_t> encodeRtgiTraceValidation(const RtgiTraceClassification 
     }
     return classificationValue | (candidateCount << kRtgiTraceValidationCandidateShift) |
            (confirmedCount << kRtgiTraceValidationConfirmedShift);
+}
+
+std::optional<RtgiTraceCounterFrameStats>
+decodeRtgiTraceCounterReadback(const std::array<uint32_t, kRtgiTraceCounterWordCount>& words, const uint64_t sequence,
+                               const uint64_t frameIndex, const uint32_t width, const uint32_t height) {
+    const auto word = [&](const RtgiTraceCounterWord index) {
+        return words[static_cast<size_t>(index)];
+    };
+    if (sequence == 0u || width == 0u || height == 0u ||
+        word(RtgiTraceCounterWord::ContractVersion) != kRtgiTraceCounterContractVersion ||
+        word(RtgiTraceCounterWord::InvariantError) != 0u) {
+        return std::nullopt;
+    }
+
+    const auto combineWords = [](const uint32_t low, const uint32_t high) {
+        return static_cast<uint64_t>(low) | (static_cast<uint64_t>(high) << 32u);
+    };
+    const uint64_t pixelCount =
+        combineWords(word(RtgiTraceCounterWord::PixelLow), word(RtgiTraceCounterWord::PixelHigh));
+    const uint64_t expectedPixelCount = static_cast<uint64_t>(width) * static_cast<uint64_t>(height);
+    const uint64_t candidateCount =
+        combineWords(word(RtgiTraceCounterWord::CandidateLow), word(RtgiTraceCounterWord::CandidateHigh));
+    const uint64_t confirmedCount =
+        combineWords(word(RtgiTraceCounterWord::ConfirmedLow), word(RtgiTraceCounterWord::ConfirmedHigh));
+    const uint32_t peakCandidate = word(RtgiTraceCounterWord::PeakCandidatePerPixel);
+    const uint32_t peakConfirmed = word(RtgiTraceCounterWord::PeakConfirmedPerPixel);
+    const auto withinPerPixelBound = [](const uint64_t count, const uint64_t pixels, const uint32_t maximumPerPixel) {
+        return pixels > std::numeric_limits<uint64_t>::max() / maximumPerPixel || count <= pixels * maximumPerPixel;
+    };
+    if (pixelCount != expectedPixelCount || confirmedCount > candidateCount ||
+        peakCandidate > kRtgiTraceValidationCandidateMask || peakConfirmed > kRtgiTraceValidationConfirmedMask ||
+        peakConfirmed > peakCandidate ||
+        !withinPerPixelBound(candidateCount, pixelCount, kRtgiTraceValidationCandidateMask) ||
+        !withinPerPixelBound(confirmedCount, pixelCount, kRtgiTraceValidationConfirmedMask) ||
+        (candidateCount == 0u) != (peakCandidate == 0u) || (confirmedCount == 0u) != (peakConfirmed == 0u)) {
+        return std::nullopt;
+    }
+
+    RtgiTraceCounterFrameStats stats;
+    stats.supported = true;
+    stats.valid = true;
+    stats.sequence = sequence;
+    stats.frameIndex = frameIndex;
+    stats.width = width;
+    stats.height = height;
+    stats.pixelCount = pixelCount;
+    stats.candidateCount = candidateCount;
+    stats.confirmedCount = confirmedCount;
+    stats.peakCandidateCountPerPixel = peakCandidate;
+    stats.peakConfirmedCountPerPixel = peakConfirmed;
+    return stats;
 }
 
 } // namespace renderer::contracts

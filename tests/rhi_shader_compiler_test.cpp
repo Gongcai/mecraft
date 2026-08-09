@@ -355,7 +355,7 @@ void main() {
 } // namespace
 
 int main() {
-    constexpr std::array<ShaderCase, 110> kShaderCases{
+    constexpr std::array<ShaderCase, 111> kShaderCases{
         {{"tests/shaders/rhi_screen_coordinates_test.frag", RhiShaderStage::Fragment},
          {"tests/shaders/material_brdf_shared_test.frag", RhiShaderStage::Fragment},
          {"tests/shaders/reflection_probe_contract_test.frag", RhiShaderStage::Fragment},
@@ -365,6 +365,7 @@ int main() {
           true},
          {"tests/shaders/cutout_ray_query_test.comp", RhiShaderStage::Compute, nullptr, nullptr, nullptr, true},
          {"assets/shaders/rtgi_trace.comp", RhiShaderStage::Compute, nullptr, nullptr, nullptr, true},
+         {"assets/shaders/rtgi_trace_counter_reduce.comp", RhiShaderStage::Compute},
          {"assets/shaders/nrd_guide_prep.comp", RhiShaderStage::Compute, nullptr, nullptr, nullptr, true},
          {"assets/shaders/rtgi_nrd_signal_pack.comp", RhiShaderStage::Compute, "MECRAFT_RTGI_SIGNAL_PACK_RELAX",
           nullptr, nullptr, true},
