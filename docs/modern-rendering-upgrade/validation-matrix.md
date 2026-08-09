@@ -173,7 +173,10 @@ V01 的 Pending Frame、Invalid Pixel、Terrain Build/Compaction 峰值均为 `0
 Leakage 指标以 ViewZ 相对差 `> 0.02` 或单位世界法线点积 `< 0.95` 建立几何边界；仅当 Reference 在边界
 两侧的亮度差超过 `max(1e-4, 0.10 * max(sideA, sideB))` 时建立方向性 Seed。暗侧只追踪超过边界对比 `10%`
 的正能量增益，亮侧只追踪同阈值的负能量损失；4 邻域扩张不得跨越另一条 Depth/Normal 边界，最大带宽门槛
-保持 `<= 2 Pixels`。合成契约测试覆盖 2/3 Pixels 和非法 Guide。V01 300+32 正式报告的
+保持 `<= 2 Pixels`。NRD Guide 的 Primary Material ID `0..3` 只用于编码，Diffuse 输入不应按其拆分；
+RELAX/REBLUR 已恢复 `minMaterialForDiffuse=4`，CPU/Shader 契约固定该语义。V01 A/B 的 HDR p95
+`0.474772→0.474806`、SSIM `0.997339` 基本不变，Material ID 修复不是当前主方差源。合成契约测试覆盖 2/3
+Pixels 和非法 Guide。V01 300+32 正式报告的
 `missing_evidence=[]`，与最新 Reference 重算得到 `boundary_pixel_count=310`、`leakage_pixel_count=621`、
 最大带宽 `3 Pixels`，因此 Leakage Gate 与完整静态门槛仍失败。最大路径的边界 Seed 为捕获坐标
 `(268,554)/(269,554)`，ViewZ 相对差 `0.431170`、Normal dot `0.008343`，末端 `(267,552)` 为亮侧能量损失；

@@ -680,7 +680,10 @@ ViewZ 写入两张持久 RGBA16F 验证纹理，`FrameOutput` 发布句柄，Gam
 跨越另一条几何边界，并只追踪到第 3 Pixel 来判定固定 `<= 2 Pixels` 门槛。该定义排除了远离边界的广泛
 Monte Carlo 偏差；非有限/非正深度、非法法线、尺寸或 ROI 不一致仍明确失败。
 V01 300+32 的 schema v5 报告得到 `missing_evidence=[]`，但最大 Leakage Band 为 `3 Pixels`，因此
-`complete_static_gate_passed=false`。与最新 Reference 重算后，最大路径从捕获坐标 `(268,554)/(269,554)`
+`minMaterialForDiffuse` 已固定为 `4`：Guide 的 `0..3` Primary Material ID 只用于 NRD 编码，Deferred Lighting
+在 NRD 后应用 Primary Material 响应，不能把入射 Diffuse 历史按粗糙度、SSS、Emissive 分类拆分。V01 A/B 的
+HDR p95 `0.474772→0.474806`、SSIM `0.997339` 几乎不变，排除该语义错误是当前主方差源。与最新 Reference
+重算后，最大路径从捕获坐标 `(268,554)/(269,554)`
 的边界两侧扩张到 `(267,552)`；边界 ViewZ 相对差 `0.431170`、Normal dot `0.008343`，末端
 Denoised/Reference 亮度 `0.003908509/0.004488416`，分类为亮侧能量损失。下一轮保持阈值和 ROI 不变，
 定位并修复该跨边界输运。

@@ -352,7 +352,10 @@ schema v5 强制读取、解码并校验这两张 Guide。指标先以 ViewZ 相
 建立几何边界，仅当 Reference 在边界两侧具有可见亮度对比时建立方向性输运 Seed：暗侧只追踪正能量增益，
 亮侧只追踪负能量损失，阈值为边界 Reference 亮度差的 `10%`；4 邻域扩张不得穿越另一条几何边界，并追踪到
 第 3 Pixel 以判定固定 `<= 2 Pixels` 门槛。无边界的广泛 Monte Carlo 偏差不会计为 Leakage，非法深度、法线、
-尺寸或 ROI 会明确失败。V01 300+32 报告已得到 `missing_evidence=[]`，但最大 Leakage Band 为 `3 Pixels`，
+尺寸或 ROI 会明确失败。NRD Guide 的四类 Primary Material ID 只服务于编码，Deferred Lighting 在 NRD 后才
+应用材质响应；因此 RELAX/REBLUR 已恢复 `minMaterialForDiffuse=4`，将 ID `0..3` 合并为同一入射 Diffuse 域。
+V01 A/B 的 HDR p95 `0.474772→0.474806`、SSIM `0.997339` 基本不变，证明该输入修复不是当前主方差源。
+V01 300+32 报告已得到 `missing_evidence=[]`，但最大 Leakage Band 为 `3 Pixels`，
 仍未通过。与最新 Reference 重算后，最大带宽从捕获坐标 `(268,554)` 与 `(269,554)` 的边界两侧扩张至
 `(267,552)`；边界 ViewZ 相对差 `0.431170`、Normal dot `0.008343`，证明锚点对应真实几何边界。该点的
 Denoised/Reference 亮度为 `0.003908509/0.004488416`，方向为亮侧能量损失。CPU 合成测试继续覆盖

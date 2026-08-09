@@ -2246,7 +2246,10 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
                 // bounded one-sample diffuse signal.
                 ::nrd::RelaxSettings relaxSettings{};
                 relaxSettings.atrousIterationNum = static_cast<uint32_t>(settings.nrd.relaxAtrousIterations);
-                relaxSettings.minMaterialForDiffuse = 0.0f;
+                // Raw RTGI contains incident diffuse radiance before the
+                // primary material response. Collapse guide IDs 0..3 so
+                // primary roughness, SSS, and emission cannot split history.
+                relaxSettings.minMaterialForDiffuse = 4.0f;
                 relaxSettings.enableAntiFirefly = false;
                 relaxSettings.diffuseMaxAccumulatedFrameNum = nrdAccumulationFrameCount(
                     ::nrd::RELAX_DEFAULT_ACCUMULATION_TIME, ctx.deltaTime, ::nrd::RELAX_MAX_HISTORY_FRAME_NUM);
@@ -2258,7 +2261,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
                 reblurSettings.hitDistanceParameters.A = settings.nrd.reblurHitDistanceConstantScale;
                 reblurSettings.hitDistanceParameters.B = settings.nrd.reblurHitDistanceViewZScale;
                 reblurSettings.hitDistanceParameters.C = settings.nrd.reblurHitDistanceRoughnessScale;
-                reblurSettings.minMaterialForDiffuse = 0.0f;
+                reblurSettings.minMaterialForDiffuse = 4.0f;
                 reblurSettings.enableAntiFirefly = true;
                 reblurSettings.maxAccumulatedFrameNum = nrdAccumulationFrameCount(
                     ::nrd::REBLUR_DEFAULT_ACCUMULATION_TIME, ctx.deltaTime, ::nrd::REBLUR_MAX_HISTORY_FRAME_NUM);
