@@ -10,7 +10,7 @@
 namespace app::validation {
 
 inline constexpr const char* kRtgiQualityReportKind = "mecraft.rtgi_quality_report";
-inline constexpr uint32_t kRtgiQualityReportVersion = 2u;
+inline constexpr uint32_t kRtgiQualityReportVersion = 3u;
 inline constexpr double kRtgiVarianceReductionThresholdPercent = 70.0;
 inline constexpr double kRtgiLuminanceSsimThreshold = 0.95;
 inline constexpr double kRtgiRelativeLuminanceErrorP95Threshold = 0.10;

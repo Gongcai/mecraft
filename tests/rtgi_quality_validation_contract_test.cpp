@@ -46,10 +46,31 @@ int main() {
 
     const RtgiLinearImage reference = makeImage({2.0f, 3.0f, 4.0f, 5.0f});
     RtgiReferenceComparisonMetrics comparison;
-    if (!requireTrue(
-            compareRtgiLinearReference(reference, reference, roi, comparison) == RtgiQualityMetricError::None &&
-                std::abs(comparison.luminanceSsim - 1.0) < 1.0e-12 && comparison.relativeLuminanceErrorP95 == 0.0,
-            "an image must exactly match itself in linear reference metrics")) {
+    const bool exactComparison =
+        compareRtgiLinearReference(reference, reference, roi, comparison) == RtgiQualityMetricError::None &&
+        std::abs(comparison.luminanceSsim - 1.0) < 1.0e-12 && comparison.relativeLuminanceErrorP50 == 0.0 &&
+        comparison.relativeLuminanceErrorP95 == 0.0 && comparison.absoluteLuminanceErrorP95 == 0.0 &&
+        std::abs(comparison.comparedLuminanceAtRelativeP95 - 5.0) < 1.0e-6 &&
+        std::abs(comparison.referenceLuminanceAtRelativeP95 - 5.0) < 1.0e-6 &&
+        comparison.denominatorFloorPixelPercent == 0.0 &&
+        comparison.relativeP95X == 1u && comparison.relativeP95Y == 1u;
+    if (!requireTrue(exactComparison, "an image must exactly match itself in linear reference metrics")) {
+        std::cerr << "[rtgi_quality_validation_contract_test] exact metrics: ssim=" << comparison.luminanceSsim
+                  << " p50=" << comparison.relativeLuminanceErrorP50
+                  << " p95=" << comparison.relativeLuminanceErrorP95
+                  << " absolute_p95=" << comparison.absoluteLuminanceErrorP95
+                  << " compared=" << comparison.comparedLuminanceAtRelativeP95
+                  << " reference=" << comparison.referenceLuminanceAtRelativeP95
+                  << " floor_percent=" << comparison.denominatorFloorPixelPercent
+                  << " pixel=(" << comparison.relativeP95X << ',' << comparison.relativeP95Y << ")\n";
+        return 1;
+    }
+
+    const RtgiLinearImage denominatorFloor = makeImage({0.0f, 0.001f, 1.0f, 2.0f});
+    if (!requireTrue(compareRtgiLinearReference(denominatorFloor, denominatorFloor, roi, comparison) ==
+                             RtgiQualityMetricError::None &&
+                         comparison.denominatorFloorPixelPercent == 25.0,
+                     "reference diagnostics must count pixels that use the relative-error denominator floor")) {
         return 1;
     }
 

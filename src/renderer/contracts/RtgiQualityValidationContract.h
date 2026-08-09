@@ -45,7 +45,14 @@ struct RtgiTemporalVarianceMetrics final {
 /// Contains the display-independent comparison between a denoised image and a linear reference.
 struct RtgiReferenceComparisonMetrics final {
     double luminanceSsim = 0.0;
+    double relativeLuminanceErrorP50 = 0.0;
     double relativeLuminanceErrorP95 = 0.0;
+    double absoluteLuminanceErrorP95 = 0.0;
+    double comparedLuminanceAtRelativeP95 = 0.0;
+    double referenceLuminanceAtRelativeP95 = 0.0;
+    double denominatorFloorPixelPercent = 0.0;
+    uint32_t relativeP95X = 0u;
+    uint32_t relativeP95Y = 0u;
 };
 
 /// Validates image dimensions, storage, and finite non-negative radiance in an ROI.
@@ -70,7 +77,7 @@ calculateRtgiTemporalVariance(const std::vector<const RtgiLinearImage*>& rawFram
 /// @param denoised Accumulated denoised image.
 /// @param reference 64-spp linear diffuse reference image.
 /// @param roi Fixed validation region that excludes sky and exposure saturation.
-/// @param metrics Receives global luminance SSIM and the 95th relative luminance error.
+/// @param metrics Receives global luminance SSIM, error percentiles, and the pixel represented by relative p95.
 /// @return None on success, otherwise the reason metric evaluation is invalid.
 [[nodiscard]] RtgiQualityMetricError compareRtgiLinearReference(const RtgiLinearImage& denoised,
                                                                 const RtgiLinearImage& reference,

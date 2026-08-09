@@ -132,6 +132,12 @@ int main() {
                      "report metrics must use the complete raw and denoised sequences") ||
         !requireTrue(summary.rawMeanLuminance == 1.0 && summary.denoisedMeanLuminance == 1.0 &&
                          summary.referenceMeanLuminance == 1.0 &&
+                         summary.comparison.relativeLuminanceErrorP50 == 0.0 &&
+                         summary.comparison.absoluteLuminanceErrorP95 == 0.0 &&
+                         summary.comparison.comparedLuminanceAtRelativeP95 == 1.0 &&
+                         summary.comparison.referenceLuminanceAtRelativeP95 == 1.0 &&
+                         summary.comparison.denominatorFloorPixelPercent == 0.0 &&
+                         summary.comparison.relativeP95X == 1u && summary.comparison.relativeP95Y == 1u &&
                          summary.referenceConvergence.relativeLuminanceErrorP95 > 0.1 &&
                          !summary.referenceConvergencePassed,
                      "report diagnostics must expose an unconverged reference without changing its full average") ||
@@ -140,6 +146,17 @@ int main() {
         !requireTrue(!report.is_discarded() && report.at("gates").at("leakage_band").at("passed").is_null() &&
                          report.at("gates").at("as_pending").at("passed").is_null() &&
                          !report.at("diagnostics").at("reference_half_luminance_ssim").at("passed").get<bool>() &&
+                         report.at("diagnostics").at("absolute_luminance_error_p95").get<double>() == 0.0 &&
+                         report.at("diagnostics").at("relative_p95_pixel").at("coordinate_space") == "capture" &&
+                         report.at("diagnostics")
+                                 .at("reference_half_relative_luminance_error_p50")
+                                 .get<double>() > 0.1 &&
+                         report.at("diagnostics")
+                                 .at("reference_half_absolute_luminance_error_p95")
+                                 .get<double>() == 1.0 &&
+                         report.at("diagnostics")
+                                 .at("relative_error_denominator_floor_pixel_percent")
+                                 .get<double>() == 0.0 &&
                          report.at("diagnostics")
                              .at("reference_half_relative_luminance_error_p95")
                              .at("passed")

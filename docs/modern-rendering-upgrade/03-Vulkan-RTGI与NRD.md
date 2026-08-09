@@ -656,6 +656,9 @@ SSIM `0.985370`、HDR p95 `2.078409`，RELAX 稳定能量偏差与 64 spp 暗部
 偏差由约 `-11.8%` 缩小到 `-1.5%`，SSIM 为 `0.997113`，方差降低 `99.981906%`；HDR p95 为
 `0.528282`，仍未通过。该结果确认 RELAX Anti-firefly 在当前有界 1 spp Diffuse 信号上产生稳定负偏差，
 生产 RELAX 固定为 SDK 默认的关闭状态；REBLUR 继续使用其独立 Anti-firefly 设置。
+schema v3 的非门槛诊断进一步给出 Denoised/Reference 相对误差 p50 `0.172629`、绝对误差 p95
+`0.001329` 和分母下限像素 `0%`。Reference 前后半相对误差 p50 `0.436918`、绝对误差 p95 `0.004012`，
+锚点两半亮度 `0.007697/0.002500`；当前 64 点周期 R2 对该固定像素可见性积分没有收敛。
 Leakage Band 与 AS Pending 当前在报告中明确为缺少证据，
 `complete_static_gate_passed=false`。
 

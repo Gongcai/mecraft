@@ -15,6 +15,15 @@ constexpr double kSsimLuminanceStability = 0.01 * 0.01;
 constexpr double kSsimContrastStability = 0.03 * 0.03;
 constexpr double kRelativeErrorDenominator = 1.0e-4;
 
+struct LuminanceErrorSample final {
+    double relative = 0.0;
+    double absolute = 0.0;
+    double compared = 0.0;
+    double reference = 0.0;
+    uint32_t x = 0u;
+    uint32_t y = 0u;
+};
+
 [[nodiscard]] bool validExtent(const RtgiLinearImage& image) {
     const uint64_t pixelCount = static_cast<uint64_t>(image.width) * image.height;
     return image.width != 0u && image.height != 0u && pixelCount <= std::numeric_limits<size_t>::max() &&
@@ -144,8 +153,9 @@ RtgiQualityMetricError compareRtgiLinearReference(const RtgiLinearImage& denoise
     double denoisedSquareSum = 0.0;
     double referenceSquareSum = 0.0;
     double productSum = 0.0;
-    std::vector<double> relativeErrors;
-    relativeErrors.reserve(static_cast<size_t>(roi.width) * roi.height);
+    std::vector<LuminanceErrorSample> errors;
+    errors.reserve(static_cast<size_t>(roi.width) * roi.height);
+    uint64_t denominatorFloorPixelCount = 0u;
     for (uint32_t y = roi.y; y < roi.y + roi.height; ++y) {
         for (uint32_t x = roi.x; x < roi.x + roi.width; ++x) {
             const double denoisedLuminance = luminance(denoised.pixels[pixelIndex(denoised, x, y)]);
@@ -155,8 +165,10 @@ RtgiQualityMetricError compareRtgiLinearReference(const RtgiLinearImage& denoise
             denoisedSquareSum += denoisedLuminance * denoisedLuminance;
             referenceSquareSum += referenceLuminance * referenceLuminance;
             productSum += denoisedLuminance * referenceLuminance;
-            relativeErrors.push_back(std::abs(denoisedLuminance - referenceLuminance) /
-                                     std::max(referenceLuminance, kRelativeErrorDenominator));
+            const double absoluteError = std::abs(denoisedLuminance - referenceLuminance);
+            errors.push_back({absoluteError / std::max(referenceLuminance, kRelativeErrorDenominator), absoluteError,
+                              denoisedLuminance, referenceLuminance, x, y});
+            denominatorFloorPixelCount += referenceLuminance < kRelativeErrorDenominator ? 1u : 0u;
         }
     }
     const double denoisedMean = denoisedSum / pixelCount;
@@ -171,9 +183,30 @@ RtgiQualityMetricError compareRtgiLinearReference(const RtgiLinearImage& denoise
         ((2.0 * denoisedMean * referenceMean + kSsimLuminanceStability) * (2.0 * covariance + kSsimContrastStability)) /
         ((denoisedMean * denoisedMean + referenceMean * referenceMean + kSsimLuminanceStability) *
          (denoisedVariance + referenceVariance + kSsimContrastStability));
-    const size_t percentileIndex = static_cast<size_t>(std::ceil(0.95 * relativeErrors.size())) - 1u;
-    std::nth_element(relativeErrors.begin(), relativeErrors.begin() + percentileIndex, relativeErrors.end());
-    metrics.relativeLuminanceErrorP95 = relativeErrors[percentileIndex];
+    const size_t p50Index = static_cast<size_t>(std::ceil(0.50 * errors.size())) - 1u;
+    const size_t p95Index = static_cast<size_t>(std::ceil(0.95 * errors.size())) - 1u;
+    std::sort(errors.begin(), errors.end(), [](const LuminanceErrorSample& lhs, const LuminanceErrorSample& rhs) {
+        if (lhs.relative != rhs.relative) {
+            return lhs.relative < rhs.relative;
+        }
+        if (lhs.y != rhs.y) {
+            return lhs.y < rhs.y;
+        }
+        return lhs.x < rhs.x;
+    });
+    metrics.relativeLuminanceErrorP50 = errors[p50Index].relative;
+    metrics.relativeLuminanceErrorP95 = errors[p95Index].relative;
+    metrics.comparedLuminanceAtRelativeP95 = errors[p95Index].compared;
+    metrics.referenceLuminanceAtRelativeP95 = errors[p95Index].reference;
+    metrics.relativeP95X = errors[p95Index].x;
+    metrics.relativeP95Y = errors[p95Index].y;
+    metrics.denominatorFloorPixelPercent =
+        100.0 * static_cast<double>(denominatorFloorPixelCount) / pixelCount;
+    std::nth_element(errors.begin(), errors.begin() + p95Index, errors.end(),
+                     [](const LuminanceErrorSample& lhs, const LuminanceErrorSample& rhs) {
+                         return lhs.absolute < rhs.absolute;
+                     });
+    metrics.absoluteLuminanceErrorP95 = errors[p95Index].absolute;
     return RtgiQualityMetricError::None;
 }
 
