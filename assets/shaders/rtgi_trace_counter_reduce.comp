@@ -13,7 +13,7 @@ layout(push_constant) uniform RtgiTraceCounterPushConstants {
     uvec4 renderExtentAndContract;
 } pc;
 
-const uint RTGI_TRACE_COUNTER_CONTRACT_VERSION = 1u;
+const uint RTGI_TRACE_COUNTER_CONTRACT_VERSION = 2u;
 const uint RTGI_TRACE_COUNTER_CANDIDATE_LOW = 0u;
 const uint RTGI_TRACE_COUNTER_CANDIDATE_HIGH = 1u;
 const uint RTGI_TRACE_COUNTER_CONFIRMED_LOW = 2u;
@@ -24,16 +24,32 @@ const uint RTGI_TRACE_COUNTER_PIXEL_LOW = 6u;
 const uint RTGI_TRACE_COUNTER_PIXEL_HIGH = 7u;
 const uint RTGI_TRACE_COUNTER_INVARIANT_ERROR = 8u;
 const uint RTGI_TRACE_COUNTER_CONTRACT = 9u;
+const uint RTGI_TRACE_COUNTER_SKY_LOW = 10u;
+const uint RTGI_TRACE_COUNTER_SKY_HIGH = 11u;
+const uint RTGI_TRACE_COUNTER_TRANSLUCENT_LOW = 12u;
+const uint RTGI_TRACE_COUNTER_TRANSLUCENT_HIGH = 13u;
+const uint RTGI_TRACE_COUNTER_MISS_LOW = 14u;
+const uint RTGI_TRACE_COUNTER_MISS_HIGH = 15u;
+const uint RTGI_TRACE_COUNTER_HIT_LOW = 16u;
+const uint RTGI_TRACE_COUNTER_HIT_HIGH = 17u;
+const uint RTGI_TRACE_COUNTER_NON_FINITE_LOW = 18u;
+const uint RTGI_TRACE_COUNTER_NON_FINITE_HIGH = 19u;
 
 const uint RTGI_TRACE_COUNTER_ERROR_CONTRACT = 1u << 0u;
 const uint RTGI_TRACE_COUNTER_ERROR_EXTENT = 1u << 1u;
 const uint RTGI_TRACE_COUNTER_ERROR_CONFIRMED_EXCEEDS_CANDIDATE = 1u << 2u;
+const uint RTGI_TRACE_COUNTER_ERROR_CLASSIFICATION = 1u << 3u;
 
 shared uint sCandidate[64];
 shared uint sConfirmed[64];
 shared uint sPeakCandidate[64];
 shared uint sPeakConfirmed[64];
 shared uint sPixelCount[64];
+shared uint sSky[64];
+shared uint sTranslucent[64];
+shared uint sMiss[64];
+shared uint sHit[64];
+shared uint sNonFinite[64];
 
 void rtgiTraceCounterAtomicAdd64(uint lowWord, uint highWord, uint value) {
     uint previousLow = atomicAdd(uCounters.words[lowWord], value);
@@ -48,8 +64,14 @@ void main() {
     bool inside = all(lessThan(texel, pc.renderExtentAndContract.xy));
     uint candidateCount = 0u;
     uint confirmedCount = 0u;
+    uint skyCount = 0u;
+    uint translucentCount = 0u;
+    uint missCount = 0u;
+    uint hitCount = 0u;
+    uint nonFiniteCount = 0u;
     if (inside) {
         uint validationWord = imageLoad(uValidation, ivec2(texel)).x;
+        uint classification = validationWord & RTGI_TRACE_VALIDATION_CLASSIFICATION_MASK;
         candidateCount = (validationWord >> RTGI_TRACE_VALIDATION_CANDIDATE_SHIFT) &
                          RTGI_TRACE_VALIDATION_CANDIDATE_MASK;
         confirmedCount = (validationWord >> RTGI_TRACE_VALIDATION_CONFIRMED_SHIFT) &
@@ -58,6 +80,20 @@ void main() {
             atomicOr(uCounters.words[RTGI_TRACE_COUNTER_INVARIANT_ERROR],
                      RTGI_TRACE_COUNTER_ERROR_CONFIRMED_EXCEEDS_CANDIDATE);
         }
+        if (classification == RTGI_TRACE_CLASS_SKY) {
+            skyCount = 1u;
+        } else if (classification == RTGI_TRACE_CLASS_TRANSLUCENT) {
+            translucentCount = 1u;
+        } else if (classification == RTGI_TRACE_CLASS_MISS) {
+            missCount = 1u;
+        } else if (classification == RTGI_TRACE_CLASS_HIT) {
+            hitCount = 1u;
+        } else if (classification == RTGI_TRACE_CLASS_NON_FINITE) {
+            nonFiniteCount = 1u;
+        } else {
+            atomicOr(uCounters.words[RTGI_TRACE_COUNTER_INVARIANT_ERROR],
+                     RTGI_TRACE_COUNTER_ERROR_CLASSIFICATION);
+        }
     }
 
     sCandidate[localIndex] = candidateCount;
@@ -65,6 +101,11 @@ void main() {
     sPeakCandidate[localIndex] = candidateCount;
     sPeakConfirmed[localIndex] = confirmedCount;
     sPixelCount[localIndex] = inside ? 1u : 0u;
+    sSky[localIndex] = skyCount;
+    sTranslucent[localIndex] = translucentCount;
+    sMiss[localIndex] = missCount;
+    sHit[localIndex] = hitCount;
+    sNonFinite[localIndex] = nonFiniteCount;
     barrier();
 
     for (uint stride = 32u; stride != 0u; stride >>= 1u) {
@@ -74,6 +115,11 @@ void main() {
             sPeakCandidate[localIndex] = max(sPeakCandidate[localIndex], sPeakCandidate[localIndex + stride]);
             sPeakConfirmed[localIndex] = max(sPeakConfirmed[localIndex], sPeakConfirmed[localIndex + stride]);
             sPixelCount[localIndex] += sPixelCount[localIndex + stride];
+            sSky[localIndex] += sSky[localIndex + stride];
+            sTranslucent[localIndex] += sTranslucent[localIndex + stride];
+            sMiss[localIndex] += sMiss[localIndex + stride];
+            sHit[localIndex] += sHit[localIndex + stride];
+            sNonFinite[localIndex] += sNonFinite[localIndex + stride];
         }
         barrier();
     }
@@ -84,6 +130,13 @@ void main() {
         rtgiTraceCounterAtomicAdd64(RTGI_TRACE_COUNTER_CONFIRMED_LOW, RTGI_TRACE_COUNTER_CONFIRMED_HIGH,
                                     sConfirmed[0]);
         rtgiTraceCounterAtomicAdd64(RTGI_TRACE_COUNTER_PIXEL_LOW, RTGI_TRACE_COUNTER_PIXEL_HIGH, sPixelCount[0]);
+        rtgiTraceCounterAtomicAdd64(RTGI_TRACE_COUNTER_SKY_LOW, RTGI_TRACE_COUNTER_SKY_HIGH, sSky[0]);
+        rtgiTraceCounterAtomicAdd64(RTGI_TRACE_COUNTER_TRANSLUCENT_LOW, RTGI_TRACE_COUNTER_TRANSLUCENT_HIGH,
+                                    sTranslucent[0]);
+        rtgiTraceCounterAtomicAdd64(RTGI_TRACE_COUNTER_MISS_LOW, RTGI_TRACE_COUNTER_MISS_HIGH, sMiss[0]);
+        rtgiTraceCounterAtomicAdd64(RTGI_TRACE_COUNTER_HIT_LOW, RTGI_TRACE_COUNTER_HIT_HIGH, sHit[0]);
+        rtgiTraceCounterAtomicAdd64(RTGI_TRACE_COUNTER_NON_FINITE_LOW, RTGI_TRACE_COUNTER_NON_FINITE_HIGH,
+                                    sNonFinite[0]);
         atomicMax(uCounters.words[RTGI_TRACE_COUNTER_PEAK_CANDIDATE], sPeakCandidate[0]);
         atomicMax(uCounters.words[RTGI_TRACE_COUNTER_PEAK_CONFIRMED], sPeakConfirmed[0]);
     }

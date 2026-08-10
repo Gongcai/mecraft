@@ -485,6 +485,11 @@ void RtgiTraceCounterHistory::reset() {
     m_pixelSamples.fill(0u);
     m_candidateSamples.fill(0u);
     m_confirmedSamples.fill(0u);
+    m_skyPixelSamples.fill(0u);
+    m_translucentPixelSamples.fill(0u);
+    m_missPixelSamples.fill(0u);
+    m_hitPixelSamples.fill(0u);
+    m_nonFinitePixelSamples.fill(0u);
     m_peakCandidateSamples.fill(0u);
     m_peakConfirmedSamples.fill(0u);
     m_nextSample = 0u;
@@ -496,9 +501,17 @@ void RtgiTraceCounterHistory::reset() {
 
 bool RtgiTraceCounterHistory::record(const renderer::contracts::RtgiTraceCounterFrameStats& stats) {
     const uint64_t expectedPixels = static_cast<uint64_t>(stats.width) * static_cast<uint64_t>(stats.height);
+    const bool classificationCountsValid =
+        stats.skyPixelCount <= stats.pixelCount &&
+        stats.translucentPixelCount <= stats.pixelCount - stats.skyPixelCount &&
+        stats.missPixelCount <= stats.pixelCount - stats.skyPixelCount - stats.translucentPixelCount &&
+        stats.hitPixelCount <=
+            stats.pixelCount - stats.skyPixelCount - stats.translucentPixelCount - stats.missPixelCount &&
+        stats.nonFinitePixelCount == stats.pixelCount - stats.skyPixelCount - stats.translucentPixelCount -
+                                         stats.missPixelCount - stats.hitPixelCount;
     if (!stats.supported || !stats.valid || stats.sequence == 0u || stats.sequence <= m_lastSequence ||
         stats.width == 0u || stats.height == 0u || stats.pixelCount != expectedPixels ||
-        stats.confirmedCount > stats.candidateCount ||
+        stats.confirmedCount > stats.candidateCount || !classificationCountsValid ||
         stats.peakCandidateCountPerPixel > renderer::contracts::kRtgiTraceValidationCandidateMask ||
         stats.peakConfirmedCountPerPixel > renderer::contracts::kRtgiTraceValidationConfirmedMask ||
         stats.peakConfirmedCountPerPixel > stats.peakCandidateCountPerPixel ||
@@ -510,6 +523,11 @@ bool RtgiTraceCounterHistory::record(const renderer::contracts::RtgiTraceCounter
     m_pixelSamples[m_nextSample] = stats.pixelCount;
     m_candidateSamples[m_nextSample] = stats.candidateCount;
     m_confirmedSamples[m_nextSample] = stats.confirmedCount;
+    m_skyPixelSamples[m_nextSample] = stats.skyPixelCount;
+    m_translucentPixelSamples[m_nextSample] = stats.translucentPixelCount;
+    m_missPixelSamples[m_nextSample] = stats.missPixelCount;
+    m_hitPixelSamples[m_nextSample] = stats.hitPixelCount;
+    m_nonFinitePixelSamples[m_nextSample] = stats.nonFinitePixelCount;
     m_peakCandidateSamples[m_nextSample] = stats.peakCandidateCountPerPixel;
     m_peakConfirmedSamples[m_nextSample] = stats.peakConfirmedCountPerPixel;
     m_nextSample = (m_nextSample + 1u) % kCapacity;
@@ -526,6 +544,13 @@ RtgiTraceCounterWindowStats RtgiTraceCounterHistory::snapshot() const {
     stats.capacity = kCapacity;
     stats.observedSampleCount = m_observedSampleCount;
     stats.latest = m_latest;
+    const auto addSample = [](uint64_t& total, const uint64_t sample) {
+        if (total > std::numeric_limits<uint64_t>::max() - sample) {
+            return false;
+        }
+        total += sample;
+        return true;
+    };
     for (size_t index = 0u; index < m_sampleCount; ++index) {
         if (stats.pixelCount > std::numeric_limits<uint64_t>::max() - m_pixelSamples[index] ||
             stats.candidateCount > std::numeric_limits<uint64_t>::max() - m_candidateSamples[index] ||
@@ -535,6 +560,13 @@ RtgiTraceCounterWindowStats RtgiTraceCounterHistory::snapshot() const {
         stats.pixelCount += m_pixelSamples[index];
         stats.candidateCount += m_candidateSamples[index];
         stats.confirmedCount += m_confirmedSamples[index];
+        if (!addSample(stats.skyPixelCount, m_skyPixelSamples[index]) ||
+            !addSample(stats.translucentPixelCount, m_translucentPixelSamples[index]) ||
+            !addSample(stats.missPixelCount, m_missPixelSamples[index]) ||
+            !addSample(stats.hitPixelCount, m_hitPixelSamples[index]) ||
+            !addSample(stats.nonFinitePixelCount, m_nonFinitePixelSamples[index])) {
+            return stats;
+        }
         stats.peakCandidateCountPerPixel = std::max(stats.peakCandidateCountPerPixel, m_peakCandidateSamples[index]);
         stats.peakConfirmedCountPerPixel = std::max(stats.peakConfirmedCountPerPixel, m_peakConfirmedSamples[index]);
     }

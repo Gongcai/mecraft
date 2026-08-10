@@ -355,6 +355,11 @@ bool testRtgiTraceCounterHistory() {
     frame.pixelCount = 1024u;
     frame.candidateCount = 10u;
     frame.confirmedCount = 4u;
+    frame.skyPixelCount = 100u;
+    frame.translucentPixelCount = 200u;
+    frame.missPixelCount = 300u;
+    frame.hitPixelCount = 400u;
+    frame.nonFinitePixelCount = 24u;
     frame.peakCandidateCountPerPixel = 3u;
     frame.peakConfirmedCountPerPixel = 2u;
     for (uint64_t sequence = 1u; sequence <= 1002u; ++sequence) {
@@ -372,13 +377,21 @@ bool testRtgiTraceCounterHistory() {
     if (!requireTrue(!history.record(frame), "RTGI confirmed totals must not exceed candidate totals")) {
         return false;
     }
+    frame.confirmedCount = 4u;
+    frame.nonFinitePixelCount = 23u;
+    if (!requireTrue(!history.record(frame), "RTGI classifications must cover every source pixel exactly once")) {
+        return false;
+    }
 
     const RtgiTraceCounterWindowStats stats = history.snapshot();
     return requireTrue(stats.valid && stats.sampleCount == 1000u && stats.observedSampleCount == 1002u &&
                            stats.pixelCount == 1024000u && stats.candidateCount == 10000u &&
-                           stats.confirmedCount == 4000u && stats.peakCandidateCountPerPixel == 3u &&
-                           stats.peakConfirmedCountPerPixel == 2u && stats.latest.sequence == 1002u &&
-                           stats.latest.frameIndex == 1042u,
+                           stats.confirmedCount == 4000u && stats.skyPixelCount == 100000u &&
+                           stats.translucentPixelCount == 200000u && stats.missPixelCount == 300000u &&
+                           stats.hitPixelCount == 400000u && stats.nonFinitePixelCount == 24000u &&
+                           stats.peakCandidateCountPerPixel == 3u && stats.peakConfirmedCountPerPixel == 2u &&
+                           stats.latest.sequence == 1002u && stats.latest.frameIndex == 1042u &&
+                           stats.latest.skyPixelCount == 100u && stats.latest.nonFinitePixelCount == 24u,
                        "RTGI counter history must retain totals, peaks, and the latest delayed source frame") &&
            requireNear(stats.confirmationRate, 0.4, "RTGI confirmation rate must use aggregate totals");
 }

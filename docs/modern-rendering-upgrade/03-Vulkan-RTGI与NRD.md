@@ -699,12 +699,20 @@ NRD 的 shading normal 输入保持不变。V02 相同 300+32/64 运行的 `boun
 因此 Cave 的原始 Leakage 证据主要由法线贴图边界触发，几何法线修复了诊断误报轴，但没有修复实际一次反弹
 积分误差；固定 Leakage 门槛和静态质量门槛继续有效。
 
-M03 Sponza 的 300+32/64 捕获进一步暴露模型验证就绪缺口：Probe 已完成时 Static BLAS/TLAS 仍可能处于
+M03 Sponza 的首轮 300+32/64 捕获暴露模型验证就绪缺口：Probe 已完成时 Static BLAS/TLAS 仍可能处于
 首个代际切换，300/301/600 帧预热均得到 Pending Frame `1`。模型验证现要求
-`SceneTlasCache::isSettled()` 后才完成当前 sequence frame；修复后 AS Pending/Invalid 为 `0`。
-同次报告的方差降低为 `99.943255%`，但 SSIM `0.591176`、HDR p95 `392.062510`、Leakage `3 Pixels`；
-`68.886990%` ROI 像素命中相对误差分母下限，Reference 两半 SSIM `0.148110`。该结果证明 M03 当前失败
-同时包含 Reference/ROI 收敛性和空间泄漏，不能只调 NRD 参数或把极大相对误差解释为单一算法回归。
+`SceneTlasCache::isSettled()` 后才完成当前 sequence frame；最新正式重采的 AS Pending/Invalid 为 `0/0`，
+首个质量样本因 `FrameDiscontinuity` Restart，随后 `31` 帧 Continue。方差降低 `99.975496%` 通过，但
+SSIM `0.605898`、HDR p95 `302.831336`、Leakage `3 Pixels` 仍失败；Raw/Denoised/Reference 平均亮度为
+`0.023914909/0.021091750/0.024492087`。完整 Reference 的相对误差分母下限覆盖为 `68.886312%`，
+Reference 两半 SSIM/HDR p95 为 `0.145936/1294.945618`，两半分母下限覆盖为 `83.023410%`。
+固定 ROI 的非零 Reference 覆盖约 `31.12%`，全图同尺寸候选区域的最高覆盖约 `41.59%`，因此移动 ROI
+不能解决 Reference 高方差，也不能用于消除失败。
+
+RTGI Counter Contract v2 将 Sky、Translucent、Miss、Hit、NonFinite 五类像素加入 64 位 GPU 归约、异步读回
+和报告窗口。M03 的 320×180、1+2 Vulkan smoke 共得到 `115200` 个 Hit，其他四类均为 `0`，确认当前失败
+不来自未命中、非法二次表面解码或 sky miss 丢失；结合 Reference 稀疏覆盖，下一步保持固定 Profile、ROI、
+64 spp 和门槛，改进命中后二次表面的一次反弹能量采样。
 当前验证路径在 TLAS 或 Probe 未 settled 的渲染后调用 `discardValidationTemporalFrame()`，清除该次提交的
 模型 temporal context、NRD 历史和 RTGI 采样相位；这保证首个有效质量帧不会继承未完成 AS/Probe 代际的历史。
 

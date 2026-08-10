@@ -376,10 +376,13 @@ V02 的 RELAX A-Trous `5/8` 单变量 A/B 得到 SSIM `0.788408/0.786351`、HDR 
 
 M03 Sponza 首次 300+32/64 正式捕获发现模型验证在首个测量帧仍允许未 settled 的 Static BLAS/TLAS 代际，
 AS Pending 为 `1`；把预热增加到 301 或 600 帧仍稳定复现。模型验证现与 Probe 就绪条件并列等待
-`SceneTlasCache::isSettled()`，当前 sequence frame 在 TLAS 完成前不前进。修复后同一 300+32 运行的
-AS Pending/Invalid 为 `0`，但方差降低 `99.943255%` 之外，SSIM `0.591176`、HDR p95 `392.062510`、
-Leakage `3 Pixels` 均失败。M03 ROI 中 `68.886990%` Reference 像素使用相对误差分母下限，Reference 两半
-SSIM 仅 `0.148110`，因此下一轮必须先复核 ROI 的非零间接光覆盖与 Reference 收敛，再定位模型输运。
+`SceneTlasCache::isSettled()`，当前 sequence frame 在 TLAS 完成前不前进。第二轮正式重采的 AS Pending/
+Invalid 为 `0/0`，首个样本 Restart、随后 `31` 帧 Continue；方差降低 `99.975496%` 通过，SSIM `0.605898`、
+HDR p95 `302.831336` 和 Leakage `3 Pixels` 失败。Raw/Denoised/Reference 平均亮度为
+`0.023914909/0.021091750/0.024492087`，Reference 两半 SSIM/HDR p95 为 `0.145936/1294.945618`。
+M03 固定 ROI 的非零 Reference 覆盖约 `31.12%`，全图同尺寸候选区域最高约 `41.59%`；移动 ROI 不能建立
+稳定参考。Counter Contract v2 的 1+2 Vulkan smoke 共统计 `115200` 个 Hit，其他分类为 `0`，下一轮保持
+Profile、ROI、64 spp 和阈值不变，改进命中后二次表面的一次反弹能量采样。
 未就绪的 TLAS 或 Reflection Probe 渲染会调用 `discardValidationTemporalFrame()`，清除已提交的模型
 temporal context、NRD 历史和 RTGI 低差异采样相位；同一验证帧只有在两类资源均 settled 后才允许成为质量样本。
 Gameplay 验证也使用相同隔离语义：Terrain Streaming 或 Reflection Probe 未 settled 的渲染不会推进 sequence frame，

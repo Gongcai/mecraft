@@ -193,12 +193,18 @@ V02 也尚未达到静态门槛，后续修复必须同时覆盖洞穴边界和�
 V02 RELAX A-Trous `5/8` A/B 的 SSIM 为 `0.788408/0.786351`、HDR p95 为 `0.507056/0.507651`，8 次迭代
 没有质量收益且增加成本，因此生产保持 `5`。
 
-2026-08-10 完成 M03 Sponza 的首轮 300+32/64 捕获。验证流程原先只等待 Probe，首个质量帧仍可能包含
-未 settled 的 Static BLAS/TLAS；301/600 帧预热不能消除固定的 Pending Frame `1`。模型验证现额外等待
-`SceneTlasCache::isSettled()`，修复后 AS Pending/Invalid 为 `0`。当前方差降低 `99.943255%` 通过，但
-SSIM `0.591176`、HDR p95 `392.062510`、Leakage 最大带宽 `3 Pixels` 失败；相对误差分母下限覆盖
-`68.886990%` ROI，Reference 两半 SSIM `0.148110`。因此 M03 静态门槛尚未通过，且正式归因前必须复核
-ROI 是否满足非天空、非零间接光覆盖要求。
+2026-08-10 完成 M03 Sponza 的第二轮 300+32/64 正式捕获。首轮暴露的 Static BLAS/TLAS 就绪缺口已经修复；
+最新运行的 AS Pending/Invalid 为 `0/0`，首个质量样本因 `FrameDiscontinuity` Restart，随后 `31` 帧均为
+Continue。方差降低 `99.975496%` 通过，但 SSIM `0.605898`、HDR p95 `302.831336` 和 Leakage 最大带宽
+`3 Pixels` 仍失败。Raw/Denoised/Reference 平均亮度依次为 `0.023914909/0.021091750/0.024492087`；
+Reference 两半 SSIM/HDR p95 为 `0.145936/1294.945618`，完整 Reference 与两半诊断的相对误差分母下限
+覆盖分别为 `68.886312%/83.023410%`。
+
+M03 固定 ROI 的非零 Reference 覆盖约为 `31.12%`。对整张 Reference 扫描所有同尺寸候选区域后，最高覆盖
+也仅约 `41.59%`，移动 ROI 不能建立稳定的 64 spp 参考，也不得用于消除当前失败。RTGI Counter Contract v2
+的 320×180、1+2 Vulkan smoke 共统计 `115200` 个 Hit，Sky/Translucent/Miss/NonFinite 均为 `0`；结合
+Reference 覆盖与两半差异，当前根因已收敛到命中后二次表面的一次反弹能量估计高度稀疏。下一轮保持 Profile、
+ROI 和阈值不变，改进输运采样并重新执行 300+32/64 门禁。
 
 ### 3.3 动态画面
 

@@ -23,7 +23,7 @@ inline constexpr float kRtgiMinimumRayOriginBias = kRtgiVoxelSurfaceExpansion * 
 inline constexpr uint32_t kRtgiSecondaryLightingTerrainNormalMapBit = 1u << 0u;
 inline constexpr uint32_t kRtgiSecondaryLightingTerrainSpecularMapBit = 1u << 1u;
 inline constexpr float kRtgiMetallicDiffuseTransportFloor = 0.35f;
-inline constexpr uint32_t kRtgiTraceCounterContractVersion = 1u;
+inline constexpr uint32_t kRtgiTraceCounterContractVersion = 2u;
 
 /// Stable word offsets written by the RTGI validation-image reduction shader.
 enum class RtgiTraceCounterWord : size_t {
@@ -37,6 +37,16 @@ enum class RtgiTraceCounterWord : size_t {
     PixelHigh,
     InvariantError,
     ContractVersion,
+    SkyLow,
+    SkyHigh,
+    TranslucentLow,
+    TranslucentHigh,
+    MissLow,
+    MissHigh,
+    HitLow,
+    HitHigh,
+    NonFiniteLow,
+    NonFiniteHigh,
     Count
 };
 
@@ -60,6 +70,11 @@ struct RtgiTraceCounterFrameStats final {
     uint64_t pixelCount = 0u;
     uint64_t candidateCount = 0u;
     uint64_t confirmedCount = 0u;
+    uint64_t skyPixelCount = 0u;
+    uint64_t translucentPixelCount = 0u;
+    uint64_t missPixelCount = 0u;
+    uint64_t hitPixelCount = 0u;
+    uint64_t nonFinitePixelCount = 0u;
     uint32_t peakCandidateCountPerPixel = 0u;
     uint32_t peakConfirmedCountPerPixel = 0u;
 };

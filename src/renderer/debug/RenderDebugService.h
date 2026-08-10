@@ -355,6 +355,11 @@ struct RtgiTraceCounterWindowStats final {
     uint64_t pixelCount = 0u;
     uint64_t candidateCount = 0u;
     uint64_t confirmedCount = 0u;
+    uint64_t skyPixelCount = 0u;
+    uint64_t translucentPixelCount = 0u;
+    uint64_t missPixelCount = 0u;
+    uint64_t hitPixelCount = 0u;
+    uint64_t nonFinitePixelCount = 0u;
     double confirmationRate = 0.0;
     uint32_t peakCandidateCountPerPixel = 0u;
     uint32_t peakConfirmedCountPerPixel = 0u;
@@ -381,6 +386,11 @@ private:
     std::array<uint64_t, kCapacity> m_pixelSamples{};
     std::array<uint64_t, kCapacity> m_candidateSamples{};
     std::array<uint64_t, kCapacity> m_confirmedSamples{};
+    std::array<uint64_t, kCapacity> m_skyPixelSamples{};
+    std::array<uint64_t, kCapacity> m_translucentPixelSamples{};
+    std::array<uint64_t, kCapacity> m_missPixelSamples{};
+    std::array<uint64_t, kCapacity> m_hitPixelSamples{};
+    std::array<uint64_t, kCapacity> m_nonFinitePixelSamples{};
     std::array<uint32_t, kCapacity> m_peakCandidateSamples{};
     std::array<uint32_t, kCapacity> m_peakConfirmedSamples{};
     size_t m_nextSample = 0u;

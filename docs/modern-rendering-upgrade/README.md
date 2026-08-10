@@ -38,6 +38,9 @@ Vulkan 1.3/SPIR-V 1.6、Bindless Descriptor、GPU Scene 底层表和 Terrain/Mod
 BLAS/TLAS。M3 的 RTGI、NRD、Pre-exposure、History Reset、调试视图、时间戳和
 Linear EXR 验证链已接通；模型验证在 TLAS/Probe 未就绪、体素验证在 Terrain/Probe 未就绪时
 都会丢弃本帧 temporal history，避免未 settled 的资源状态进入质量样本。当前阶段仍处于画质与性能门禁收口。
+M03 最新 300+32/64 重采已通过方差和 AS 门禁，但 SSIM、HDR p95、Leakage 与 Reference 两半收敛诊断仍失败；
+全图 ROI 扫描和 RTGI 五类 Counter 已排除 ROI 移动、射线未命中与非法二次表面解码，当前收口点是一次反弹
+能量采样的高稀疏度。
 
 当前剩余关键缺口是：
 

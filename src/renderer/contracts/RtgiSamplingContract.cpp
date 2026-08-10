@@ -191,12 +191,25 @@ decodeRtgiTraceCounterReadback(const std::array<uint32_t, kRtgiTraceCounterWordC
         combineWords(word(RtgiTraceCounterWord::CandidateLow), word(RtgiTraceCounterWord::CandidateHigh));
     const uint64_t confirmedCount =
         combineWords(word(RtgiTraceCounterWord::ConfirmedLow), word(RtgiTraceCounterWord::ConfirmedHigh));
+    const std::array<uint64_t, 5u> classificationCounts{
+        combineWords(word(RtgiTraceCounterWord::SkyLow), word(RtgiTraceCounterWord::SkyHigh)),
+        combineWords(word(RtgiTraceCounterWord::TranslucentLow), word(RtgiTraceCounterWord::TranslucentHigh)),
+        combineWords(word(RtgiTraceCounterWord::MissLow), word(RtgiTraceCounterWord::MissHigh)),
+        combineWords(word(RtgiTraceCounterWord::HitLow), word(RtgiTraceCounterWord::HitHigh)),
+        combineWords(word(RtgiTraceCounterWord::NonFiniteLow), word(RtgiTraceCounterWord::NonFiniteHigh))};
     const uint32_t peakCandidate = word(RtgiTraceCounterWord::PeakCandidatePerPixel);
     const uint32_t peakConfirmed = word(RtgiTraceCounterWord::PeakConfirmedPerPixel);
     const auto withinPerPixelBound = [](const uint64_t count, const uint64_t pixels, const uint32_t maximumPerPixel) {
         return pixels > std::numeric_limits<uint64_t>::max() / maximumPerPixel || count <= pixels * maximumPerPixel;
     };
-    if (pixelCount != expectedPixelCount || confirmedCount > candidateCount ||
+    uint64_t classifiedPixelCount = 0u;
+    for (const uint64_t count : classificationCounts) {
+        if (count > pixelCount - classifiedPixelCount) {
+            return std::nullopt;
+        }
+        classifiedPixelCount += count;
+    }
+    if (pixelCount != expectedPixelCount || classifiedPixelCount != pixelCount || confirmedCount > candidateCount ||
         peakCandidate > kRtgiTraceValidationCandidateMask || peakConfirmed > kRtgiTraceValidationConfirmedMask ||
         peakConfirmed > peakCandidate ||
         !withinPerPixelBound(candidateCount, pixelCount, kRtgiTraceValidationCandidateMask) ||
@@ -215,6 +228,11 @@ decodeRtgiTraceCounterReadback(const std::array<uint32_t, kRtgiTraceCounterWordC
     stats.pixelCount = pixelCount;
     stats.candidateCount = candidateCount;
     stats.confirmedCount = confirmedCount;
+    stats.skyPixelCount = classificationCounts[0u];
+    stats.translucentPixelCount = classificationCounts[1u];
+    stats.missPixelCount = classificationCounts[2u];
+    stats.hitPixelCount = classificationCounts[3u];
+    stats.nonFinitePixelCount = classificationCounts[4u];
     stats.peakCandidateCountPerPixel = peakCandidate;
     stats.peakConfirmedCountPerPixel = peakConfirmed;
     return stats;
