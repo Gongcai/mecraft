@@ -99,6 +99,75 @@ int main() {
         return fail("created entity presence command did not round trip");
     }
 
+    const entt::entity pointLight = runtime.createPointLight({2.0f, 3.0f, 4.0f});
+    scene::SceneEntityDocument pointLightBefore;
+    scene::SceneEntityDocument pointLightAfter;
+    if (pointLight == entt::null || !runtime.captureEntityState(pointLight, pointLightBefore) ||
+        !pointLightBefore.manualPointLight.has_value()) {
+        return fail("failed to create a Point-light scene entity");
+    }
+    scene::SceneManualPointLightDocument editedLight = *pointLightBefore.manualPointLight;
+    editedLight.intensityCandela = 1450.0f;
+    editedLight.colorLinear = {1.0f, 0.4f, 0.15f};
+    if (!runtime.updatePointLight(pointLight, editedLight) ||
+        !runtime.captureEntityState(pointLight, pointLightAfter)) {
+        return fail("failed to edit the Point-light entity payload");
+    }
+    history.recordEntityState(pointLightBefore, pointLightAfter);
+    if (!history.undo(runtime)) {
+        return fail("Point-light property command could not be undone");
+    }
+    const entt::entity restoredPointLight = runtime.findEntity(pointLightBefore.id);
+    scene::SceneEntityDocument restoredPointLightState;
+    if (restoredPointLight == entt::null ||
+        !runtime.captureEntityState(restoredPointLight, restoredPointLightState) ||
+        !restoredPointLightState.manualPointLight.has_value() ||
+        restoredPointLightState.manualPointLight->intensityCandela !=
+            pointLightBefore.manualPointLight->intensityCandela ||
+        !history.redo(runtime)) {
+        return fail("Point-light property command did not restore exact state");
+    }
+
+    const entt::entity duplicatedPointLight = runtime.duplicateEntity(restoredPointLight);
+    scene::SceneEntityDocument duplicatedPointLightState;
+    if (duplicatedPointLight == entt::null ||
+        !runtime.captureEntityState(duplicatedPointLight, duplicatedPointLightState) ||
+        !duplicatedPointLightState.manualPointLight.has_value() ||
+        duplicatedPointLightState.manualPointLight->intensityCandela != editedLight.intensityCandela) {
+        return fail("Point-light entity duplication lost its light payload");
+    }
+    const auto restoredPointLightStableId =
+        runtime.registry().get<scene::ManualPointLightComponent>(restoredPointLight).stableId;
+    const auto duplicatedPointLightStableId =
+        runtime.registry().get<scene::ManualPointLightComponent>(duplicatedPointLight).stableId;
+    if (!restoredPointLightStableId.isValid() || !duplicatedPointLightStableId.isValid() ||
+        restoredPointLightStableId == duplicatedPointLightStableId) {
+        return fail("Point-light duplication reused a stable GPU-light identity");
+    }
+
+    std::vector<scene::SceneEntityDocument> deletedPointLightStates;
+    const scene::SceneEntityId duplicatedPointLightEntityId = runtime.entityId(duplicatedPointLight);
+    if (!runtime.captureEntitySubtree(duplicatedPointLight, deletedPointLightStates)) {
+        return fail("failed to capture a deleted Point-light command");
+    }
+    runtime.destroyEntity(duplicatedPointLight);
+    history.recordDeletedSubtree(deletedPointLightStates);
+    if (!history.undo(runtime)) {
+        return fail("deleted Point-light command could not be undone");
+    }
+    const entt::entity recoveredPointLight = runtime.findEntity(duplicatedPointLightEntityId);
+    if (recoveredPointLight == entt::null ||
+        !runtime.registry().all_of<scene::ManualPointLightComponent>(recoveredPointLight)) {
+        return fail("Point-light delete undo did not restore its component");
+    }
+    const auto recoveredPointLightStableId =
+        runtime.registry().get<scene::ManualPointLightComponent>(recoveredPointLight).stableId;
+    if (!recoveredPointLightStableId.isValid() || recoveredPointLightStableId == duplicatedPointLightStableId ||
+        !history.redo(runtime) || runtime.findEntity(duplicatedPointLightEntityId) != entt::null ||
+        !history.undo(runtime)) {
+        return fail("Point-light delete command did not round trip with a fresh stable GPU identity");
+    }
+
     const entt::entity currentRoot = runtime.findEntity(rootId);
     std::vector<scene::SceneEntityDocument> deletedStates;
     if (!runtime.captureEntitySubtree(currentRoot, deletedStates) || deletedStates.size() != 2u) {

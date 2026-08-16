@@ -1,10 +1,13 @@
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
+#include <string>
+#include <vector>
 
 #include <glm/gtc/matrix_transform.hpp>
 
 #include "ecs/components/TransformComponents.h"
+#include "renderer/contracts/LocalShadowContract.h"
 #include "scene/ModelSceneComponents.h"
 #include "scene/ModelSceneRuntime.h"
 
@@ -141,6 +144,61 @@ int main() {
     }
     if (!scene.registry().valid(duplicatedRoot) || !scene.registry().valid(duplicatedChild)) {
         return fail("destroying a hierarchy also removed its duplicate");
+    }
+
+    ModelSceneRuntime lightScene;
+    const entt::entity lightParent = lightScene.createEmptyEntity("Light Group");
+    const entt::entity pointLight = lightScene.createPointLight({1.0f, 2.0f, 3.0f});
+    if (lightParent == entt::null || pointLight == entt::null || !lightScene.setParent(pointLight, lightParent)) {
+        return fail("failed to create a parented Point-light entity");
+    }
+    const glm::mat4 movedParent = glm::translate(glm::mat4(1.0f), glm::vec3(4.0f, 0.0f, 0.0f));
+    if (!lightScene.setWorldTransform(lightParent, movedParent)) {
+        return fail("failed to move the Point-light parent entity");
+    }
+    std::vector<renderer::contracts::SceneLight> collectedLights;
+    std::string lightError;
+    if (!lightScene.collectSceneLights(glm::vec3(0.0f), collectedLights, lightError) || collectedLights.size() != 1u ||
+        !near(collectedLights[0].light.positionAndRange.x, 5.0f) ||
+        !near(collectedLights[0].light.positionAndRange.y, 2.0f) ||
+        !near(collectedLights[0].light.positionAndRange.z, 3.0f)) {
+        return fail("Point-light collection did not use the inherited world transform");
+    }
+
+    const auto originalLightId =
+        lightScene.registry().get<scene::ManualPointLightComponent>(pointLight).stableId;
+    const entt::entity duplicatedLightParent = lightScene.duplicateEntity(lightParent);
+    if (duplicatedLightParent == entt::null) {
+        return fail("failed to duplicate a hierarchy containing a Point light");
+    }
+    const auto& duplicatedLightChildren =
+        lightScene.registry().get<ecs::ChildrenComponent>(duplicatedLightParent).children;
+    if (duplicatedLightChildren.size() != 1u ||
+        !lightScene.registry().all_of<scene::ManualPointLightComponent>(duplicatedLightChildren.front())) {
+        return fail("duplicated hierarchy lost its Point-light component");
+    }
+    const auto duplicatedLightId =
+        lightScene.registry().get<scene::ManualPointLightComponent>(duplicatedLightChildren.front()).stableId;
+    if (!originalLightId.isValid() || !duplicatedLightId.isValid() || originalLightId == duplicatedLightId) {
+        return fail("duplicated Point lights did not receive distinct stable GPU identities");
+    }
+
+    ModelSceneRuntime capacityScene;
+    scene::SceneEntityId lastLightEntityId = scene::kInvalidSceneEntityId;
+    for (uint32_t index = 0u; index < renderer::contracts::kLocalShadowMaxPointLightCount; ++index) {
+        const entt::entity createdLight = capacityScene.createPointLight({static_cast<float>(index), 0.0f, 0.0f});
+        if (createdLight == entt::null) {
+            return fail("Point-light capacity rejected a supported light count");
+        }
+        lastLightEntityId = capacityScene.entityId(createdLight);
+    }
+    if (capacityScene.createPointLight(glm::vec3(0.0f)) != entt::null) {
+        return fail("Point-light capacity overflow was accepted");
+    }
+    const entt::entity entityAfterCapacityFailure = capacityScene.createEmptyEntity("After Capacity Failure");
+    if (entityAfterCapacityFailure == entt::null ||
+        capacityScene.entityId(entityAfterCapacityFailure) != lastLightEntityId + 1u) {
+        return fail("Point-light capacity failure consumed a scene entity ID");
     }
 
     std::cout << "[model_scene_hierarchy_test] PASS\n";

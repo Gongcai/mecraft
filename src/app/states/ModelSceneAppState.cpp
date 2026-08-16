@@ -26,6 +26,7 @@
 #include "engine/camera/Camera.h"
 #include "engine/platform/Time.h"
 #include "renderer/capture/TextureCapture.h"
+#include "renderer/contracts/LocalShadowContract.h"
 #include "renderer/core/FrameContext.h"
 #include "renderer/rhi/RhiCommandList.h"
 #include "renderer/rhi/RhiCommandListPool.h"
@@ -1049,6 +1050,14 @@ void ModelSceneAppState::showHierarchyPanel() {
             recordCreatedEntity(created);
         }
     }
+    ImGui::SameLine();
+    if (ImGui::Button("Create Point Light")) {
+        const entt::entity created = m_scene.createPointLight(m_cameraTarget);
+        if (created != entt::null) {
+            recordCreatedEntity(created);
+            m_entityNameEditorId = scene::kInvalidSceneEntityId;
+        }
+    }
     ImGui::Separator();
 
     m_hierarchyDropPending = false;
@@ -1233,6 +1242,7 @@ void ModelSceneAppState::showInspectorPanel() {
             finishTransformCommand();
         }
     }
+    showSelectedPointLightEditor(selected);
     const auto* pickable = m_scene.registry().try_get<scene::PickableComponent>(selected);
     if (pickable != nullptr && ImGui::CollapsingHeader("Local Bounds")) {
         ImGui::Text("Min: %.3f, %.3f, %.3f", pickable->localBoundsMin.x, pickable->localBoundsMin.y,
@@ -1252,6 +1262,75 @@ void ModelSceneAppState::showInspectorPanel() {
         deleteSelectedEntity();
     }
     ImGui::End();
+}
+
+void ModelSceneAppState::showSelectedPointLightEditor(const entt::entity entity) {
+    const auto* component = m_scene.registry().try_get<scene::ManualPointLightComponent>(entity);
+    if (component == nullptr || !ImGui::CollapsingHeader("Point Light", ImGuiTreeNodeFlags_DefaultOpen)) {
+        return;
+    }
+
+    scene::SceneEntityDocument beforeFrame;
+    if (!m_scene.captureEntityState(entity, beforeFrame) || !beforeFrame.manualPointLight.has_value()) {
+        std::abort();
+    }
+    scene::SceneManualPointLightDocument edited = *beforeFrame.manualPointLight;
+    bool changed = false;
+    bool activated = false;
+    bool deactivated = false;
+    bool active = false;
+    changed |= ImGui::ColorEdit3("Color", glm::value_ptr(edited.colorLinear));
+    activated |= ImGui::IsItemActivated();
+    deactivated |= ImGui::IsItemDeactivated();
+    active |= ImGui::IsItemActive();
+    changed |= ImGui::DragFloat("Intensity", &edited.intensityCandela, 5.0f, 0.0f, 200000.0f, "%.1f cd");
+    activated |= ImGui::IsItemActivated();
+    deactivated |= ImGui::IsItemDeactivated();
+    active |= ImGui::IsItemActive();
+    changed |= ImGui::DragFloat("Range", &edited.rangeMeters, 0.1f, edited.emitterRadiusMeters, 10000.0f, "%.2f m");
+    activated |= ImGui::IsItemActivated();
+    deactivated |= ImGui::IsItemDeactivated();
+    active |= ImGui::IsItemActive();
+    changed |= ImGui::DragFloat("Emitter Radius", &edited.emitterRadiusMeters, 0.01f, 0.001f,
+                                edited.rangeMeters, "%.3f m");
+    activated |= ImGui::IsItemActivated();
+    deactivated |= ImGui::IsItemDeactivated();
+    active |= ImGui::IsItemActive();
+    changed |= ImGui::DragFloat("Self Shadow Radius", &edited.selfShadowRadiusMeters, 0.01f, 0.0f,
+                                edited.emitterRadiusMeters, "%.3f m");
+    activated |= ImGui::IsItemActivated();
+    deactivated |= ImGui::IsItemDeactivated();
+    active |= ImGui::IsItemActive();
+
+    constexpr const char* shadowPolicyNames[] = {"None", "Dynamic", "Cached"};
+    int shadowPolicy = 0;
+    switch (edited.shadowPolicy) {
+    case renderer::contracts::GpuLightShadowPolicy::None: shadowPolicy = 0; break;
+    case renderer::contracts::GpuLightShadowPolicy::RasterDynamic: shadowPolicy = 1; break;
+    case renderer::contracts::GpuLightShadowPolicy::RasterCached: shadowPolicy = 2; break;
+    case renderer::contracts::GpuLightShadowPolicy::RayQuery: std::abort();
+    }
+    if (ImGui::Combo("Shadow", &shadowPolicy, shadowPolicyNames, static_cast<int>(std::size(shadowPolicyNames)))) {
+        switch (shadowPolicy) {
+        case 0: edited.shadowPolicy = renderer::contracts::GpuLightShadowPolicy::None; break;
+        case 1: edited.shadowPolicy = renderer::contracts::GpuLightShadowPolicy::RasterDynamic; break;
+        case 2: edited.shadowPolicy = renderer::contracts::GpuLightShadowPolicy::RasterCached; break;
+        default: std::abort();
+        }
+        changed = true;
+    }
+    activated |= ImGui::IsItemActivated();
+    deactivated |= ImGui::IsItemDeactivated();
+    active |= ImGui::IsItemActive();
+    if (activated || (changed && !m_transformCommandActive)) {
+        beginTransformCommand(entity, beforeFrame, false);
+    }
+    if (changed && m_scene.updatePointLight(entity, edited)) {
+        m_sceneDirty = true;
+    }
+    if ((deactivated || (changed && !active)) && m_transformCommandActive && !m_transformCommandFromGizmo) {
+        finishTransformCommand();
+    }
 }
 
 void ModelSceneAppState::showAssetsPanel() {

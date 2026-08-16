@@ -1,8 +1,10 @@
 #include "ModelSceneSerializer.h"
 
 #include "app/AppSettings.h"
+#include "renderer/contracts/LocalShadowContract.h"
 #include "renderer/contracts/ReflectionProbeContract.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
@@ -93,8 +95,25 @@ constexpr float kWorldDaySeconds = 1200.0f;
     return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
 }
 
+[[nodiscard]] bool manualPointLightShadowPolicyValid(const renderer::contracts::GpuLightShadowPolicy policy) {
+    using renderer::contracts::GpuLightShadowPolicy;
+    return policy == GpuLightShadowPolicy::None || policy == GpuLightShadowPolicy::RasterDynamic ||
+           policy == GpuLightShadowPolicy::RasterCached;
+}
+
 [[nodiscard]] json vec3ToJson(const glm::vec3& value) {
     return json::array({value.x, value.y, value.z});
+}
+
+[[nodiscard]] json manualPointLightToJson(const SceneManualPointLightDocument& light) {
+    return {
+        {"colorLinear", vec3ToJson(light.colorLinear)},
+        {"intensityCandela", light.intensityCandela},
+        {"rangeMeters", light.rangeMeters},
+        {"emitterRadiusMeters", light.emitterRadiusMeters},
+        {"selfShadowRadiusMeters", light.selfShadowRadiusMeters},
+        {"shadowPolicy", static_cast<uint32_t>(light.shadowPolicy)},
+    };
 }
 
 [[nodiscard]] bool readObject(const json& owner, const char* key, const json*& value, const std::string& context,
@@ -367,6 +386,14 @@ bool ModelSceneSerializer::validate(const ModelSceneDocument& document, std::str
             error = context + ".assetId references an unknown asset";
             return false;
         }
+        if (entity.assetId.has_value() && entity.manualPointLight.has_value()) {
+            error = context + " cannot combine a mesh asset and manual Point light";
+            return false;
+        }
+        if (entity.manualPointLight.has_value() && !validateManualPointLight(*entity.manualPointLight, error)) {
+            error = context + ".manualPointLight." + error;
+            return false;
+        }
     }
     if (!validateHierarchy(parents, error)) {
         return false;
@@ -389,6 +416,14 @@ bool ModelSceneSerializer::validate(const ModelSceneDocument& document, std::str
             error = context + ".id is duplicated";
             return false;
         }
+    }
+
+    const std::size_t manualPointLightCount = std::count_if(
+        document.entities.begin(), document.entities.end(),
+        [](const SceneEntityDocument& entity) { return entity.manualPointLight.has_value(); });
+    if (manualPointLightCount > renderer::contracts::kLocalShadowMaxPointLightCount) {
+        error = "entities exceeds the supported Point-light capacity";
+        return false;
     }
 
     if (!std::isfinite(document.environment.timeOfDay) || document.environment.timeOfDay < 0.0f ||
@@ -447,6 +482,34 @@ bool ModelSceneSerializer::validateReflectionProbe(const SceneReflectionProbeDoc
     return true;
 }
 
+bool ModelSceneSerializer::validateManualPointLight(const SceneManualPointLightDocument& light, std::string& error) {
+    error.clear();
+    if (!manualPointLightShadowPolicyValid(light.shadowPolicy)) {
+        error = "shadowPolicy is invalid";
+        return false;
+    }
+    renderer::contracts::GpuLightNormalizationInput input;
+    input.lightId = renderer::contracts::StableLightId{1u};
+    input.type = renderer::contracts::GpuLightType::Point;
+    input.positionMeters = glm::vec3(0.0f);
+    input.rangeMeters = light.rangeMeters;
+    input.pointEmitterRadiusMeters = light.emitterRadiusMeters;
+    input.pointSelfShadowRadiusMeters = light.selfShadowRadiusMeters;
+    input.colorLinear = light.colorLinear;
+    input.intensity = light.intensityCandela;
+    input.intensityUnit = renderer::contracts::GpuLightIntensityUnit::Candela;
+    input.contributionFlags =
+        renderer::contracts::gpuLightContributionFlagBit(renderer::contracts::GpuLightContributionFlag::Diffuse) |
+        renderer::contracts::gpuLightContributionFlagBit(renderer::contracts::GpuLightContributionFlag::Specular);
+    const renderer::contracts::GpuLightNormalizationResult normalized = renderer::contracts::normalizeGpuLight(input);
+    if (!normalized.succeeded()) {
+        error = std::string(renderer::contracts::gpuLightFieldStableId(normalized.field)) +
+                " violates the Point-light contract";
+        return false;
+    }
+    return true;
+}
+
 nlohmann::json ModelSceneSerializer::serialize(const ModelSceneDocument& document) {
     json assets = json::array();
     for (const SceneAssetDocument& asset : document.assets) {
@@ -464,6 +527,8 @@ nlohmann::json ModelSceneSerializer::serialize(const ModelSceneDocument& documen
             {"name", entity.name},
             {"parentId", entity.parentId.has_value() ? json(*entity.parentId) : json(nullptr)},
             {"assetId", entity.assetId.has_value() ? json(*entity.assetId) : json(nullptr)},
+            {"manualPointLight", entity.manualPointLight.has_value() ? manualPointLightToJson(*entity.manualPointLight)
+                                                                       : json(nullptr)},
             {"transform",
              {
                  {"position", vec3ToJson(entity.transform.position)},
@@ -579,6 +644,35 @@ bool ModelSceneSerializer::deserialize(const nlohmann::json& value, ModelSceneDo
             !readVec3(*transform, "rotation", entity.transform.rotation, context + ".transform", error) ||
             !readVec3(*transform, "scale", entity.transform.scale, context + ".transform", error)) {
             return false;
+        }
+        const auto manualPointLight = item.find("manualPointLight");
+        if (manualPointLight == item.end()) {
+            error = context + ".manualPointLight is required";
+            return false;
+        }
+        if (!manualPointLight->is_null()) {
+            if (!manualPointLight->is_object()) {
+                error = context + ".manualPointLight must be null or an object";
+                return false;
+            }
+            SceneManualPointLightDocument light;
+            uint32_t shadowPolicy = 0u;
+            const std::string lightContext = context + ".manualPointLight";
+            if (!readVec3(*manualPointLight, "colorLinear", light.colorLinear, lightContext, error) ||
+                !readFloat(*manualPointLight, "intensityCandela", light.intensityCandela, lightContext, error) ||
+                !readFloat(*manualPointLight, "rangeMeters", light.rangeMeters, lightContext, error) ||
+                !readFloat(*manualPointLight, "emitterRadiusMeters", light.emitterRadiusMeters, lightContext, error) ||
+                !readFloat(*manualPointLight, "selfShadowRadiusMeters", light.selfShadowRadiusMeters, lightContext,
+                           error) ||
+                !readUnsigned(*manualPointLight, "shadowPolicy", shadowPolicy, lightContext, error)) {
+                return false;
+            }
+            if (shadowPolicy > static_cast<uint32_t>(renderer::contracts::GpuLightShadowPolicy::RayQuery)) {
+                error = lightContext + ".shadowPolicy is invalid";
+                return false;
+            }
+            light.shadowPolicy = static_cast<renderer::contracts::GpuLightShadowPolicy>(shadowPolicy);
+            entity.manualPointLight = light;
         }
         parsed.entities.push_back(std::move(entity));
     }

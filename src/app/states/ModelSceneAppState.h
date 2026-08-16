@@ -48,6 +48,7 @@ private:
     void showHierarchyEntity(entt::entity entity);
     void showInspectorPanel();
     void showRenderSettingsPanel();
+    void showSelectedPointLightEditor(entt::entity entity);
     void showReflectionProbePanel();
     void showAssetsPanel();
     void browseAndImportModel();

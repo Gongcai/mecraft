@@ -197,6 +197,15 @@ Light Registry。
 > 分配、局部阴影和 RTGI 次级局部灯。V07 参考图与性能报告必须记录火把数量及相关统计。
 > 模型场景中的显式 Point Light/Spot Light 使用同一光照契约。
 
+> **模型场景手工 Point Light 实体化记录（2026-08-16）**
+>
+> 模型场景手工 Point Light 已纳入标准场景实体：Scene Hierarchy 负责创建、选择、复制、删除与
+> 父子关系，实体 Transform 和视口 Gizmo 决定世界位置，Inspector 只编辑线性颜色、Candela
+> 强度、作用范围、发光体半径、自阴影排除半径与阴影策略。场景文件格式 v4 将灯光属性挂载到
+> `SceneEntityDocument`，持久化 Scene Entity ID；运行时在加载、复制以及删除撤销恢复时分配独立
+> Stable Light ID。灯光按 Scene Entity ID 排序进入统一 `GpuLight` 收集，并受 64 盏手工 Point
+> Light 的明确容量契约约束。模型资产与手工 Point Light 不允许由同一实体同时持有。
+
 Minecraft 风格的方块光等级仍可服务游戏逻辑和 OpenGL 基础管线；Vulkan 现代管线的
 直接光来自 `GpuLight`，两者是明确的数据产品，不在着色器中混合解释。
 
@@ -358,6 +367,7 @@ Reflection 使用 NRD 的 Specular Method 时拥有独立历史，不与 Diffuse
 - Damaged Helmet、Flight Helmet、Sponza 等资产的法线、F0、Emissive 与 Probe 结果正确。
 - Clearcoat 基底衰减、IOR F0 和 Volume Absorption 通过独立参考图验证。
 - 多实例场景不随实例提交顺序改变灯光或反射结果。
+- 手工 Point Light 随父实体世界变换更新位置；复制与删除撤销恢复产生独立有效的 Stable Light ID。
 
 ## 10. 参考资料
 

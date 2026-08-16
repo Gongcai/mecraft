@@ -59,7 +59,9 @@ M1 与 M2 可并行开发，但公共 `GpuMaterial`、`GpuSceneGeometry` 与 Sta
    Point Cube Array、缓存修订、Deferred/Forward+ 共享采样、Debug View、契约测试、
    双后端 RHI 测试与 Vulkan Validation 均已接入；V07 与 M03 已完成场景契约 v2、
    OpenGL/Vulkan 正式参考图与 Vulkan Validation 验收。M03 锁定三个 Point Light、一个
-   Spot Light、缓存/动态阴影策略和 Emissive 灯具。）
+   Spot Light、缓存/动态阴影策略和 Emissive 灯具。模型场景手工 Point Light 已在场景格式 v4
+   中成为标准实体，统一接入层级 Transform、Gizmo、Inspector、复制、删除、撤销/重做与
+   Stable Light ID 生命周期。）
 7. 生成 Sky Cubemap、GGX Prefilter Mips、DFG LUT。（实现完成：动态天气天空生成 128×128
    HDR Cubemap，构建 8 级 GGX 预过滤链与 256×256 Split-sum DFG LUT；Reflection Pass 已按
    Roughness/NoV 消费并提供 Mip/DFG Debug View；天空修订使用双代资源，Radiance 整体快照后

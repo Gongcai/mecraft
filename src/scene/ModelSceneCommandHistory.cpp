@@ -13,9 +13,22 @@ namespace {
     return lhs.position == rhs.position && lhs.rotation == rhs.rotation && lhs.scale == rhs.scale;
 }
 
+[[nodiscard]] bool equalPointLight(const std::optional<SceneManualPointLightDocument>& lhs,
+                                   const std::optional<SceneManualPointLightDocument>& rhs) {
+    if (lhs.has_value() != rhs.has_value()) {
+        return false;
+    }
+    if (!lhs.has_value()) {
+        return true;
+    }
+    return lhs->colorLinear == rhs->colorLinear && lhs->intensityCandela == rhs->intensityCandela &&
+           lhs->rangeMeters == rhs->rangeMeters && lhs->emitterRadiusMeters == rhs->emitterRadiusMeters &&
+           lhs->selfShadowRadiusMeters == rhs->selfShadowRadiusMeters && lhs->shadowPolicy == rhs->shadowPolicy;
+}
+
 [[nodiscard]] bool equalEntity(const SceneEntityDocument& lhs, const SceneEntityDocument& rhs) {
     return lhs.id == rhs.id && lhs.name == rhs.name && lhs.parentId == rhs.parentId && lhs.assetId == rhs.assetId &&
-           equalTransform(lhs.transform, rhs.transform);
+           equalPointLight(lhs.manualPointLight, rhs.manualPointLight) && equalTransform(lhs.transform, rhs.transform);
 }
 
 [[nodiscard]] bool equalSubtree(const std::vector<SceneEntityDocument>& lhs,

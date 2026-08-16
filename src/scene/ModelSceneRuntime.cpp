@@ -17,6 +17,8 @@
 #include "ModelSceneSerializer.h"
 #include "ecs/components/TransformComponents.h"
 #include "renderer/core/FrameContext.h"
+#include "renderer/contracts/ClusteredLightingContract.h"
+#include "renderer/contracts/LocalShadowContract.h"
 #include "renderer/debug/RenderDebugService.h"
 #include "renderer/renderers/StaticMeshRenderer.h"
 #include "renderer/rhi/RhiCommandList.h"
@@ -97,6 +99,19 @@ namespace {
         }
     }
     return visited.size() == view.size_hint();
+}
+
+[[nodiscard]] bool subtreeContainsRenderedSceneContent(const entt::registry& registry, const entt::entity root) {
+    std::vector<entt::entity> entities{root};
+    for (std::size_t index = 0u; index < entities.size(); ++index) {
+        const entt::entity entity = entities[index];
+        if (registry.any_of<scene::ManualPointLightComponent, scene::StaticMeshComponent>(entity)) {
+            return true;
+        }
+        const auto& children = registry.get<ecs::ChildrenComponent>(entity).children;
+        entities.insert(entities.end(), children.begin(), children.end());
+    }
+    return false;
 }
 
 [[nodiscard]] bool validDocumentTransform(const scene::SceneTransformDocument& transform) {
@@ -260,6 +275,17 @@ entt::entity ModelSceneRuntime::duplicateEntity(const entt::entity source) {
         setError("model scene entity ID space cannot fit the duplicated hierarchy");
         return entt::null;
     }
+    const std::size_t duplicatedPointLightCount =
+        std::count_if(originals.begin(), originals.end(), [this](const entt::entity entity) {
+            return m_registry.all_of<scene::ManualPointLightComponent>(entity);
+        });
+    const std::size_t currentPointLightCount = m_registry.storage<scene::ManualPointLightComponent>().size();
+    if (currentPointLightCount > renderer::contracts::kLocalShadowMaxPointLightCount ||
+        duplicatedPointLightCount >
+            renderer::contracts::kLocalShadowMaxPointLightCount - currentPointLightCount) {
+        setError("duplicated hierarchy exceeds the model scene Point-light capacity");
+        return entt::null;
+    }
 
     std::unordered_map<entt::entity, entt::entity> duplicates;
     duplicates.reserve(originals.size());
@@ -284,6 +310,24 @@ entt::entity ModelSceneRuntime::duplicateEntity(const entt::entity source) {
         }
         if (const auto* pickable = m_registry.try_get<scene::PickableComponent>(original)) {
             m_registry.emplace<scene::PickableComponent>(duplicate, *pickable);
+        }
+        if (const auto* light = m_registry.try_get<scene::ManualPointLightComponent>(original)) {
+            scene::SceneManualPointLightDocument document;
+            document.colorLinear = light->colorLinear;
+            document.intensityCandela = light->intensityCandela;
+            document.rangeMeters = light->rangeMeters;
+            document.emitterRadiusMeters = light->emitterRadiusMeters;
+            document.selfShadowRadiusMeters = light->selfShadowRadiusMeters;
+            document.shadowPolicy = light->shadowPolicy;
+            if (!emplaceManualPointLight(m_registry, duplicate, document)) {
+                for (const auto& pair : duplicates) {
+                    if (m_registry.valid(pair.second)) {
+                        m_registry.destroy(pair.second);
+                    }
+                }
+                m_nextEntityId = originalNextEntityId;
+                return entt::null;
+            }
         }
     }
 
@@ -311,6 +355,11 @@ entt::entity ModelSceneRuntime::duplicateEntity(const entt::entity source) {
     }
     const entt::entity duplicateRoot = duplicates.at(source);
     m_selectedEntity = duplicateRoot;
+    if (std::any_of(originals.begin(), originals.end(), [this](const entt::entity entity) {
+            return m_registry.any_of<scene::ManualPointLightComponent, scene::StaticMeshComponent>(entity);
+        })) {
+        invalidateReflectionProbeCapture();
+    }
     m_lastError.clear();
     return duplicateRoot;
 }
@@ -331,6 +380,16 @@ bool ModelSceneRuntime::captureEntityState(const entt::entity entity, scene::Sce
     }
     if (const auto* mesh = m_registry.try_get<scene::StaticMeshComponent>(entity)) {
         captured.assetId = mesh->assetId;
+    }
+    if (const auto* light = m_registry.try_get<scene::ManualPointLightComponent>(entity)) {
+        scene::SceneManualPointLightDocument document;
+        document.colorLinear = light->colorLinear;
+        document.intensityCandela = light->intensityCandela;
+        document.rangeMeters = light->rangeMeters;
+        document.emitterRadiusMeters = light->emitterRadiusMeters;
+        document.selfShadowRadiusMeters = light->selfShadowRadiusMeters;
+        document.shadowPolicy = light->shadowPolicy;
+        captured.manualPointLight = document;
     }
     const auto& transform = m_registry.get<ecs::LocalTransformComponent>(entity);
     captured.transform.position = transform.localPosition;
@@ -387,6 +446,22 @@ bool ModelSceneRuntime::applyEntityState(const scene::SceneEntityDocument& state
         setError("entity state command cannot change mesh asset ownership");
         return false;
     }
+    if (state.assetId.has_value() && state.manualPointLight.has_value()) {
+        setError("entity state command cannot combine mesh and Point-light ownership");
+        return false;
+    }
+    const auto* currentLight = m_registry.try_get<scene::ManualPointLightComponent>(entity);
+    if ((currentLight != nullptr) != state.manualPointLight.has_value()) {
+        setError("entity state command cannot change Point-light ownership");
+        return false;
+    }
+    if (state.manualPointLight.has_value()) {
+        std::string validationError;
+        if (!scene::ModelSceneSerializer::validateManualPointLight(*state.manualPointLight, validationError)) {
+            setError(std::move(validationError));
+            return false;
+        }
+    }
     const auto names = m_registry.view<scene::NameComponent>();
     for (const entt::entity namedEntity : names) {
         if (namedEntity != entity && names.get<scene::NameComponent>(namedEntity).value == state.name) {
@@ -425,7 +500,19 @@ bool ModelSceneRuntime::applyEntityState(const scene::SceneEntityDocument& state
     transform.localRotation = state.transform.rotation;
     transform.localScale = state.transform.scale;
     m_registry.replace<ecs::LocalTransformComponent>(entity, transform);
+    if (state.manualPointLight.has_value()) {
+        auto& light = m_registry.get<scene::ManualPointLightComponent>(entity);
+        light.colorLinear = state.manualPointLight->colorLinear;
+        light.intensityCandela = state.manualPointLight->intensityCandela;
+        light.rangeMeters = state.manualPointLight->rangeMeters;
+        light.emitterRadiusMeters = state.manualPointLight->emitterRadiusMeters;
+        light.selfShadowRadiusMeters = state.manualPointLight->selfShadowRadiusMeters;
+        light.shadowPolicy = state.manualPointLight->shadowPolicy;
+    }
     syncTransforms();
+    if (subtreeContainsRenderedSceneContent(m_registry, entity)) {
+        invalidateReflectionProbeCapture();
+    }
     m_lastError.clear();
     return true;
 }
@@ -460,6 +547,28 @@ entt::entity ModelSceneRuntime::restoreEntitySubtree(const std::vector<scene::Sc
             setError("entity subtree restoration references an unknown asset");
             return entt::null;
         }
+        if (state.assetId.has_value() && state.manualPointLight.has_value()) {
+            setError("entity subtree restoration cannot combine mesh and Point-light ownership");
+            return entt::null;
+        }
+        if (state.manualPointLight.has_value()) {
+            std::string validationError;
+            if (!scene::ModelSceneSerializer::validateManualPointLight(*state.manualPointLight, validationError)) {
+                setError(std::move(validationError));
+                return entt::null;
+            }
+        }
+    }
+
+    const std::size_t restoredPointLightCount =
+        std::count_if(states.begin(), states.end(), [](const scene::SceneEntityDocument& state) {
+            return state.manualPointLight.has_value();
+        });
+    const std::size_t currentPointLightCount = m_registry.storage<scene::ManualPointLightComponent>().size();
+    if (currentPointLightCount > renderer::contracts::kLocalShadowMaxPointLightCount ||
+        restoredPointLightCount > renderer::contracts::kLocalShadowMaxPointLightCount - currentPointLightCount) {
+        setError("entity subtree restoration exceeds the model scene Point-light capacity");
+        return entt::null;
     }
 
     std::unordered_map<scene::SceneEntityId, scene::SceneEntityId> parents;
@@ -542,6 +651,15 @@ entt::entity ModelSceneRuntime::restoreEntitySubtree(const std::vector<scene::Sc
             m_registry.emplace<scene::PickableComponent>(entity,
                                                          scene::PickableComponent{asset.boundsMin, asset.boundsMax});
         }
+        if (state.manualPointLight.has_value() &&
+            !emplaceManualPointLight(m_registry, entity, *state.manualPointLight)) {
+            for (const auto& pair : restored) {
+                if (m_registry.valid(pair.second)) {
+                    m_registry.destroy(pair.second);
+                }
+            }
+            return entt::null;
+        }
     }
     for (const scene::SceneEntityDocument& state : states) {
         if (!state.parentId.has_value()) {
@@ -567,6 +685,11 @@ entt::entity ModelSceneRuntime::restoreEntitySubtree(const std::vector<scene::Sc
     }
     const entt::entity root = restored.at(states.front().id);
     m_selectedEntity = root;
+    if (std::any_of(states.begin(), states.end(), [](const scene::SceneEntityDocument& state) {
+            return state.manualPointLight.has_value() || state.assetId.has_value();
+        })) {
+        invalidateReflectionProbeCapture();
+    }
     m_lastError.clear();
     return root;
 }
@@ -642,10 +765,17 @@ void ModelSceneRuntime::destroyEntity(const entt::entity entity) {
     if (std::find(entities.begin(), entities.end(), m_selectedEntity) != entities.end()) {
         m_selectedEntity = entt::null;
     }
+    const bool sceneContentChanged = std::any_of(entities.begin(), entities.end(), [this](const entt::entity current) {
+        return m_registry.valid(current) &&
+               m_registry.any_of<scene::ManualPointLightComponent, scene::StaticMeshComponent>(current);
+    });
     for (auto it = entities.rbegin(); it != entities.rend(); ++it) {
         if (m_registry.valid(*it)) {
             m_registry.destroy(*it);
         }
+    }
+    if (sceneContentChanged) {
+        invalidateReflectionProbeCapture();
     }
 }
 
@@ -793,6 +923,9 @@ bool ModelSceneRuntime::setParent(const entt::entity child, const entt::entity p
     }
     m_registry.replace<ecs::LocalTransformComponent>(child, localTransform);
     syncTransforms();
+    if (subtreeContainsRenderedSceneContent(m_registry, child)) {
+        invalidateReflectionProbeCapture();
+    }
     m_lastError.clear();
     return true;
 }
@@ -824,6 +957,9 @@ bool ModelSceneRuntime::setWorldTransform(const entt::entity entity, const glm::
     }
     m_registry.replace<ecs::LocalTransformComponent>(entity, localTransform);
     syncTransforms();
+    if (subtreeContainsRenderedSceneContent(m_registry, entity)) {
+        invalidateReflectionProbeCapture();
+    }
     m_lastError.clear();
     return true;
 }
@@ -905,6 +1041,31 @@ bool ModelSceneRuntime::allocateReflectionProbeIdentities(std::vector<RuntimeRef
     return true;
 }
 
+bool ModelSceneRuntime::emplaceManualPointLight(entt::registry& registry, const entt::entity entity,
+                                                const scene::SceneManualPointLightDocument& light) {
+    if (registry.storage<scene::ManualPointLightComponent>().size() >=
+        renderer::contracts::kLocalShadowMaxPointLightCount) {
+        setError("model scene manual Point-light capacity is exhausted");
+        return false;
+    }
+    std::string validationError;
+    if (!scene::ModelSceneSerializer::validateManualPointLight(light, validationError)) {
+        setError(std::move(validationError));
+        return false;
+    }
+    const std::optional<renderer::contracts::StableLightId> stableId =
+        renderer::contracts::allocateStableSceneId<renderer::contracts::StableLightIdTag>();
+    if (!stableId.has_value()) {
+        setError("stable model scene Point-light identity space is exhausted");
+        return false;
+    }
+    registry.emplace<scene::ManualPointLightComponent>(
+        entity, scene::ManualPointLightComponent{*stableId, light.colorLinear, light.intensityCandela,
+                                                  light.rangeMeters, light.emitterRadiusMeters,
+                                                  light.selfShadowRadiusMeters, light.shadowPolicy});
+    return true;
+}
+
 const scene::SceneReflectionProbeDocument& ModelSceneRuntime::reflectionProbe(const std::size_t index) const {
     if (index >= m_reflectionProbes.size()) {
         std::abort();
@@ -976,6 +1137,57 @@ bool ModelSceneRuntime::removeReflectionProbe(const scene::SceneReflectionProbeI
         return false;
     }
     m_reflectionProbes.erase(found);
+    m_lastError.clear();
+    return true;
+}
+
+entt::entity ModelSceneRuntime::createPointLight(const glm::vec3& position) {
+    if (!std::isfinite(position.x) || !std::isfinite(position.y) || !std::isfinite(position.z)) {
+        setError("Point-light creation requires a finite world position");
+        return entt::null;
+    }
+    if (m_registry.storage<scene::ManualPointLightComponent>().size() >=
+        renderer::contracts::kLocalShadowMaxPointLightCount) {
+        setError("model scene manual Point-light capacity is exhausted");
+        return entt::null;
+    }
+    const entt::entity entity = createEntity("Point Light");
+    if (entity == entt::null) {
+        return entt::null;
+    }
+    auto& transform = m_registry.get<ecs::LocalTransformComponent>(entity);
+    transform.localPosition = position;
+    m_registry.get<ecs::WorldTransformComponent>(entity).worldMatrix = transform.toMatrix();
+    m_registry.get<scene::PreviousWorldTransformComponent>(entity).worldMatrix = transform.toMatrix();
+    if (!emplaceManualPointLight(m_registry, entity, scene::SceneManualPointLightDocument{})) {
+        m_registry.destroy(entity);
+        return entt::null;
+    }
+    m_selectedEntity = entity;
+    invalidateReflectionProbeCapture();
+    m_lastError.clear();
+    return entity;
+}
+
+bool ModelSceneRuntime::updatePointLight(const entt::entity entity,
+                                         const scene::SceneManualPointLightDocument& light) {
+    auto* found = m_registry.try_get<scene::ManualPointLightComponent>(entity);
+    if (found == nullptr) {
+        setError("cannot update a scene entity without a manual Point light");
+        return false;
+    }
+    std::string validationError;
+    if (!scene::ModelSceneSerializer::validateManualPointLight(light, validationError)) {
+        setError(std::move(validationError));
+        return false;
+    }
+    found->colorLinear = light.colorLinear;
+    found->intensityCandela = light.intensityCandela;
+    found->rangeMeters = light.rangeMeters;
+    found->emitterRadiusMeters = light.emitterRadiusMeters;
+    found->selfShadowRadiusMeters = light.selfShadowRadiusMeters;
+    found->shadowPolicy = light.shadowPolicy;
+    invalidateReflectionProbeCapture();
     m_lastError.clear();
     return true;
 }
@@ -1173,6 +1385,13 @@ bool ModelSceneRuntime::loadDocument(const scene::ModelSceneDocument& document) 
             loadedRegistry.emplace<scene::PickableComponent>(
                 entity, scene::PickableComponent{asset.boundsMin, asset.boundsMax});
         }
+        if (entry.manualPointLight.has_value() &&
+            !emplaceManualPointLight(loadedRegistry, entity, *entry.manualPointLight)) {
+            for (MeshAsset& loaded : loadedAssets) {
+                loaded.renderer->shutdown();
+            }
+            return false;
+        }
         if (entry.id < selectedId) {
             selectedId = entry.id;
             selectedEntity = entity;
@@ -1355,17 +1574,27 @@ bool ModelSceneRuntime::prepareShadowFrame() {
 
 bool ModelSceneRuntime::collectSceneLights(const glm::vec3& cameraPosition,
                                            std::vector<renderer::contracts::SceneLight>& lights, std::string& error) {
+    using namespace renderer::contracts;
+
     struct LightEntityEntry final {
         scene::SceneEntityId sceneEntityId = scene::kInvalidSceneEntityId;
         entt::entity entity = entt::null;
         StaticMeshRenderer* renderer = nullptr;
     };
 
+    const auto manualView =
+        m_registry.view<scene::ManualPointLightComponent, scene::SceneEntityIdComponent,
+                        ecs::WorldTransformComponent>();
+    std::vector<entt::entity> manualEntries(manualView.begin(), manualView.end());
+    std::sort(manualEntries.begin(), manualEntries.end(), [this](const entt::entity lhs, const entt::entity rhs) {
+        return entityId(lhs) < entityId(rhs);
+    });
+
     const auto view =
         m_registry.view<scene::StaticMeshComponent, scene::SceneEntityIdComponent, ecs::WorldTransformComponent>();
     std::vector<LightEntityEntry> entries;
     entries.reserve(view.size_hint());
-    std::size_t totalLightCount = 0u;
+    std::size_t totalLightCount = manualEntries.size();
     std::vector<renderer::contracts::SceneLight> collected;
     for (const entt::entity entity : view) {
         const auto& mesh = view.get<scene::StaticMeshComponent>(entity);
@@ -1388,7 +1617,42 @@ bool ModelSceneRuntime::collectSceneLights(const glm::vec3& cameraPosition,
         return lhs.sceneEntityId < rhs.sceneEntityId;
     });
 
+    if (totalLightCount > kClusterMaxLightCount) {
+        error = "model scene light count exceeds the clustered-light capacity";
+        return false;
+    }
+
     collected.reserve(totalLightCount);
+    for (const entt::entity entity : manualEntries) {
+        const auto& manual = manualView.get<scene::ManualPointLightComponent>(entity);
+        if (!manual.stableId.isValid()) {
+            error = "model scene manual Point light has no stable identity";
+            return false;
+        }
+        GpuLightNormalizationInput input;
+        input.lightId = manual.stableId;
+        input.type = GpuLightType::Point;
+        input.positionMeters = glm::vec3(manualView.get<ecs::WorldTransformComponent>(entity).worldMatrix[3]) -
+                               cameraPosition;
+        input.rangeMeters = manual.rangeMeters;
+        input.pointEmitterRadiusMeters = manual.emitterRadiusMeters;
+        input.pointSelfShadowRadiusMeters = manual.selfShadowRadiusMeters;
+        input.colorLinear = manual.colorLinear;
+        input.intensity = manual.intensityCandela;
+        input.intensityUnit = GpuLightIntensityUnit::Candela;
+        input.contributionFlags = gpuLightContributionFlagBit(GpuLightContributionFlag::Diffuse) |
+                                  gpuLightContributionFlagBit(GpuLightContributionFlag::Specular);
+        const GpuLightNormalizationResult normalized = normalizeGpuLight(input);
+        if (!normalized.succeeded()) {
+            error = "model scene manual Point light entity " + std::to_string(entityId(entity)) +
+                    " violates the GPU light contract [field=" + gpuLightFieldStableId(normalized.field) + "]";
+            return false;
+        }
+        SceneLight light;
+        light.light = normalized.light;
+        light.requestedShadowPolicy = manual.shadowPolicy;
+        collected.push_back(light);
+    }
     for (const LightEntityEntry& entry : entries) {
         const entt::entity entity = entry.entity;
         StaticMeshRenderer& renderer = *entry.renderer;
@@ -1566,6 +1830,17 @@ bool ModelSceneRuntime::configureReflectionProbeCapture() {
         glm::vec3 localBoundsMin{0.0f};
         glm::vec3 localBoundsMax{0.0f};
     };
+    struct LightSignatureEntry final {
+        scene::SceneEntityId entityId = scene::kInvalidSceneEntityId;
+        glm::mat4 world{1.0f};
+        glm::vec3 colorLinear{1.0f};
+        float intensityCandela = 0.0f;
+        float rangeMeters = 0.0f;
+        float emitterRadiusMeters = 0.0f;
+        float selfShadowRadiusMeters = 0.0f;
+        renderer::contracts::GpuLightShadowPolicy shadowPolicy =
+            renderer::contracts::GpuLightShadowPolicy::None;
+    };
     std::vector<SignatureEntry> entries;
     const auto meshView = m_registry.view<scene::SceneEntityIdComponent, scene::StaticMeshComponent,
                                           scene::PickableComponent, ecs::WorldTransformComponent>();
@@ -1579,6 +1854,22 @@ bool ModelSceneRuntime::configureReflectionProbeCapture() {
     }
     std::sort(entries.begin(), entries.end(),
               [](const SignatureEntry& lhs, const SignatureEntry& rhs) { return lhs.entityId < rhs.entityId; });
+    std::vector<LightSignatureEntry> lightEntries;
+    const auto lightView =
+        m_registry.view<scene::SceneEntityIdComponent, scene::ManualPointLightComponent,
+                        ecs::WorldTransformComponent>();
+    lightEntries.reserve(lightView.size_hint());
+    for (const entt::entity entity : lightView) {
+        const auto& light = lightView.get<scene::ManualPointLightComponent>(entity);
+        lightEntries.push_back({lightView.get<scene::SceneEntityIdComponent>(entity).value,
+                                lightView.get<ecs::WorldTransformComponent>(entity).worldMatrix, light.colorLinear,
+                                light.intensityCandela, light.rangeMeters, light.emitterRadiusMeters,
+                                light.selfShadowRadiusMeters, light.shadowPolicy});
+    }
+    std::sort(lightEntries.begin(), lightEntries.end(),
+              [](const LightSignatureEntry& lhs, const LightSignatureEntry& rhs) {
+                  return lhs.entityId < rhs.entityId;
+              });
 
     uint64_t signature = 1469598103934665603ull;
     const auto appendSignature = [&signature](const auto& value) {
@@ -1594,6 +1885,16 @@ bool ModelSceneRuntime::configureReflectionProbeCapture() {
         appendSignature(entry.world);
         appendSignature(entry.localBoundsMin);
         appendSignature(entry.localBoundsMax);
+    }
+    for (const LightSignatureEntry& entry : lightEntries) {
+        appendSignature(entry.entityId);
+        appendSignature(entry.world);
+        appendSignature(entry.colorLinear);
+        appendSignature(entry.intensityCandela);
+        appendSignature(entry.rangeMeters);
+        appendSignature(entry.emitterRadiusMeters);
+        appendSignature(entry.selfShadowRadiusMeters);
+        appendSignature(entry.shadowPolicy);
     }
     const bool sceneChanged = m_reflectionProbeRevisionInvalidated || signature != m_reflectionProbeSceneSignature;
     if (!m_reflectionProbeSignatureValid) {
@@ -2068,6 +2369,16 @@ ModelSceneRuntime::captureDocument(const scene::SceneEditorCameraDocument& edito
                 std::abort();
             }
             entry.assetId = mesh->assetId;
+        }
+        if (const auto* light = m_registry.try_get<scene::ManualPointLightComponent>(entity)) {
+            scene::SceneManualPointLightDocument pointLight;
+            pointLight.colorLinear = light->colorLinear;
+            pointLight.intensityCandela = light->intensityCandela;
+            pointLight.rangeMeters = light->rangeMeters;
+            pointLight.emitterRadiusMeters = light->emitterRadiusMeters;
+            pointLight.selfShadowRadiusMeters = light->selfShadowRadiusMeters;
+            pointLight.shadowPolicy = light->shadowPolicy;
+            entry.manualPointLight = pointLight;
         }
         document.entities.push_back(std::move(entry));
     }

@@ -2,6 +2,7 @@
 #define MECRAFT_MODEL_SCENE_DOCUMENT_H
 
 #include "ModelSceneIds.h"
+#include "renderer/contracts/GpuLightContract.h"
 #include "renderer/core/RenderSettings.h"
 #include "world/WeatherSystem.h"
 
@@ -26,11 +27,24 @@ struct SceneAssetDocument {
     std::string path;
 };
 
+/// Stores editable Point-light properties owned by a model-scene entity.
+/// The owning entity's world transform determines the light position.
+struct SceneManualPointLightDocument {
+    glm::vec3 colorLinear{1.0f};
+    float intensityCandela = 800.0f;
+    float rangeMeters = 8.0f;
+    float emitterRadiusMeters = 0.1f;
+    float selfShadowRadiusMeters = 0.0f;
+    renderer::contracts::GpuLightShadowPolicy shadowPolicy =
+        renderer::contracts::GpuLightShadowPolicy::RasterDynamic;
+};
+
 struct SceneEntityDocument {
     SceneEntityId id = kInvalidSceneEntityId;
     std::string name;
     std::optional<SceneEntityId> parentId;
     std::optional<SceneAssetId> assetId;
+    std::optional<SceneManualPointLightDocument> manualPointLight;
     SceneTransformDocument transform;
 };
 
@@ -64,7 +78,7 @@ struct SceneReflectionProbeDocument {
 };
 
 struct ModelSceneDocument {
-    static constexpr uint32_t kCurrentVersion = 3u;
+    static constexpr uint32_t kCurrentVersion = 4u;
     static constexpr const char* kFormat = "mecraft.scene";
 
     std::string format = kFormat;

@@ -18,6 +18,10 @@ public:
     /// Validates one persistent reflection probe against the renderer contract.
     [[nodiscard]] static bool validateReflectionProbe(const SceneReflectionProbeDocument& probe, std::string& error);
 
+    /// Validates one persistent manual Point light against the GPU-light contract.
+    [[nodiscard]] static bool validateManualPointLight(const SceneManualPointLightDocument& light,
+                                                       std::string& error);
+
     /// Serializes a previously validated document to a JSON object.
     [[nodiscard]] static nlohmann::json serialize(const ModelSceneDocument& document);
 

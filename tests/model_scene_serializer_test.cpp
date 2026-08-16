@@ -8,6 +8,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include "renderer/contracts/LocalShadowContract.h"
 #include "scene/ModelSceneSerializer.h"
 #include "scene/ModelSceneDeferredRenderer.h"
 #include "renderer/contracts/ReflectionProbeContract.h"
@@ -54,6 +55,21 @@ scene::ModelSceneDocument makeDocument() {
     probe.exposureScale = 1.25f;
     document.reflectionProbes.push_back(probe);
 
+    scene::SceneManualPointLightDocument pointLight;
+    pointLight.colorLinear = {1.0f, 0.45f, 0.12f};
+    pointLight.intensityCandela = 1250.0f;
+    pointLight.rangeMeters = 14.0f;
+    pointLight.emitterRadiusMeters = 0.25f;
+    pointLight.selfShadowRadiusMeters = 0.1f;
+    pointLight.shadowPolicy = renderer::contracts::GpuLightShadowPolicy::RasterCached;
+    scene::SceneEntityDocument lightEntity;
+    lightEntity.id = 31u;
+    lightEntity.name = "Point Light";
+    lightEntity.parentId = root.id;
+    lightEntity.transform.position = {4.0f, 5.0f, 6.0f};
+    lightEntity.manualPointLight = pointLight;
+    document.entities.push_back(lightEntity);
+
     document.environment.timeOfDay = 725.0f;
     document.environment.timePaused = false;
     document.environment.timeScale = 2.5f;
@@ -96,7 +112,7 @@ int main() {
     }
     if (decoded.format != scene::ModelSceneDocument::kFormat ||
         decoded.version != scene::ModelSceneDocument::kCurrentVersion || decoded.assets.size() != 1u ||
-        decoded.entities.size() != 2u || decoded.reflectionProbes.size() != 1u ||
+        decoded.entities.size() != 3u || decoded.reflectionProbes.size() != 1u ||
         decoded.entities[1].parentId != source.entities[0].id || decoded.entities[1].assetId != source.assets[0].id ||
         !near(decoded.environment.timeOfDay, 725.0f) || decoded.environment.timePaused ||
         !near(decoded.environment.timeScale, 2.5f) || decoded.environment.weather != WeatherType::Storm ||
@@ -106,7 +122,11 @@ int main() {
         !near(decoded.editorCamera.distance, 12.0f) || !near(decoded.editorCamera.nearPlane, 0.025f) ||
         !near(decoded.editorCamera.farPlane, 2500.0f) || decoded.reflectionProbes[0].id != 23u ||
         !near(decoded.reflectionProbes[0].position.y, 2.0f) || !near(decoded.reflectionProbes[0].blendDistance, 1.5f) ||
-        !near(decoded.reflectionProbes[0].exposureScale, 1.25f)) {
+        !near(decoded.reflectionProbes[0].exposureScale, 1.25f) || !decoded.entities[2].manualPointLight.has_value() ||
+        decoded.entities[2].manualPointLight->shadowPolicy !=
+            renderer::contracts::GpuLightShadowPolicy::RasterCached ||
+        !near(decoded.entities[2].transform.position.z, 6.0f) ||
+        !near(decoded.entities[2].manualPointLight->intensityCandela, 1250.0f)) {
         return fail("JSON round trip changed stable scene data");
     }
 
@@ -119,6 +139,11 @@ int main() {
     missingProbes.erase("reflectionProbes");
     if (scene::ModelSceneSerializer::deserialize(missingProbes, decoded, error)) {
         return fail("missing reflection-probe array was accepted");
+    }
+    nlohmann::json missingPointLightPayload = encoded;
+    missingPointLightPayload["entities"][2].erase("manualPointLight");
+    if (scene::ModelSceneSerializer::deserialize(missingPointLightPayload, decoded, error)) {
+        return fail("missing entity Point-light payload was accepted");
     }
 
     nlohmann::json incompleteSettings = encoded;
@@ -170,6 +195,34 @@ int main() {
     if (scene::ModelSceneSerializer::validate(excessiveProbes, error)) {
         return fail("reflection-probe capture capacity overflow was accepted");
     }
+    scene::ModelSceneDocument invalidManualPointLight = source;
+    invalidManualPointLight.entities[2].manualPointLight->rangeMeters = 0.0f;
+    if (scene::ModelSceneSerializer::validate(invalidManualPointLight, error)) {
+        return fail("non-positive manual Point-light range was accepted");
+    }
+    scene::ModelSceneDocument unsupportedManualShadow = source;
+    unsupportedManualShadow.entities[2].manualPointLight->shadowPolicy =
+        renderer::contracts::GpuLightShadowPolicy::RayQuery;
+    if (scene::ModelSceneSerializer::validate(unsupportedManualShadow, error)) {
+        return fail("unsupported manual Point-light shadow policy was accepted");
+    }
+    scene::ModelSceneDocument mixedMeshAndPointLight = source;
+    mixedMeshAndPointLight.entities[2].assetId = source.assets[0].id;
+    if (scene::ModelSceneSerializer::validate(mixedMeshAndPointLight, error)) {
+        return fail("one entity owning both a mesh and a Point light was accepted");
+    }
+    scene::ModelSceneDocument excessiveManualPointLights = source;
+    excessiveManualPointLights.entities.clear();
+    for (uint32_t index = 0u; index <= renderer::contracts::kLocalShadowMaxPointLightCount; ++index) {
+        scene::SceneEntityDocument entity;
+        entity.id = static_cast<scene::SceneEntityId>(index) + 1u;
+        entity.name = "Point Light " + std::to_string(index + 1u);
+        entity.manualPointLight = scene::SceneManualPointLightDocument{};
+        excessiveManualPointLights.entities.push_back(std::move(entity));
+    }
+    if (scene::ModelSceneSerializer::validate(excessiveManualPointLights, error)) {
+        return fail("manual Point-light document capacity overflow was accepted");
+    }
 
     const auto unique = std::chrono::steady_clock::now().time_since_epoch().count();
     const std::filesystem::path path =
@@ -191,7 +244,9 @@ int main() {
     if (loaded.entities.size() != source.entities.size() ||
         loaded.reflectionProbes.size() != source.reflectionProbes.size() ||
         loaded.entities[1].name != source.entities[1].name || loaded.assets[0].path != source.assets[0].path ||
-        !near(loaded.reflectionProbes[0].boxProjectionMax.z, 7.0f)) {
+        !near(loaded.reflectionProbes[0].boxProjectionMax.z, 7.0f) ||
+        !loaded.entities[2].manualPointLight.has_value() ||
+        !near(loaded.entities[2].manualPointLight->emitterRadiusMeters, 0.25f)) {
         return fail("file round trip changed scene entities");
     }
 

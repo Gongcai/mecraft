@@ -193,6 +193,13 @@ public:
     [[nodiscard]] std::size_t reflectionProbeCount() const { return m_reflectionProbes.size(); }
     [[nodiscard]] const scene::SceneReflectionProbeDocument& reflectionProbe(std::size_t index) const;
 
+    /// Creates a Point-light scene entity at a world-space position.
+    /// @return The selected entity, or entt::null when validation or allocation fails.
+    [[nodiscard]] entt::entity createPointLight(const glm::vec3& position);
+
+    /// Replaces one Point-light payload without changing its transform or stable GPU-light identity.
+    [[nodiscard]] bool updatePointLight(entt::entity entity, const scene::SceneManualPointLightDocument& light);
+
     /// Updates the deferred environment time used by sky and lighting passes.
     /// @param timeOfDaySeconds Time within the 1200-second world day.
     void setTimeOfDay(float timeOfDaySeconds);
@@ -251,6 +258,8 @@ private:
     [[nodiscard]] bool configureReflectionProbeCapture();
     [[nodiscard]] bool sceneWorldBounds(glm::vec3& boundsMin, glm::vec3& boundsMax) const;
     [[nodiscard]] bool allocateReflectionProbeIdentities(std::vector<RuntimeReflectionProbe>& probes);
+    [[nodiscard]] bool emplaceManualPointLight(entt::registry& registry, entt::entity entity,
+                                               const scene::SceneManualPointLightDocument& light);
     void invalidateReflectionProbeCapture();
     void detachFromParent(entt::entity entity);
     void setError(std::string message);
