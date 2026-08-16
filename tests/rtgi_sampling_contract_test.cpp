@@ -80,6 +80,14 @@ namespace {
                std::string::npos &&
            traceSource.find("candidateDistance >= endpointDistance - endpointExclusionDistance") != std::string::npos &&
            traceSource.find("gpuLightPointSelfShadowRadius(light)") != std::string::npos &&
+           traceSource.find(
+               "rayQueryInitializeEXT(query, globalBindlessSceneTlas, gl_RayFlagsTerminateOnFirstHitEXT,\n"
+               "                          pc.frameMaskAndFlags.w, rayOrigin, rayMinimum, unitDirection, rayMaximum);") !=
+               std::string::npos &&
+           traceSource.find(
+               "rayQueryInitializeEXT(query, globalBindlessSceneTlas, 0u,\n"
+               "                          pc.frameMaskAndFlags.y, rayOrigin, rayMinimum, rayDirection,\n"
+               "                          pc.cameraPositionAndMaxDistance.w);") != std::string::npos &&
            traceSource.find("const float RTGI_METALLIC_DIFFUSE_TRANSPORT_FLOOR = 0.35;") != std::string::npos &&
            traceSource.find("const float RTGI_RADIANCE_FIREFLY_CLAMP = 8.0;") != std::string::npos &&
            traceSource.find("vec3 rtgiSuppressSolarSkyLobe(vec3 skyRadiance, vec3 worldDirection)") !=

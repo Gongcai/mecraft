@@ -223,6 +223,8 @@ bool rtgiTraceVisibility(vec3 surfacePosition, vec3 normal, vec3 direction, floa
     vec3 rayOrigin = surfacePosition + originOffset;
 
     rayQueryEXT query;
+    // Visibility needs only one accepted blocker, so terminating after the
+    // first confirmed alpha-tested hit preserves the occlusion contract.
     rayQueryInitializeEXT(query, globalBindlessSceneTlas, gl_RayFlagsTerminateOnFirstHitEXT,
                           pc.frameMaskAndFlags.w, rayOrigin, rayMinimum, unitDirection, rayMaximum);
     while (rayQueryProceedEXT(query)) {
@@ -611,7 +613,9 @@ void main() {
     float primarySurfaceDistance = length(worldPosition - pc.cameraPositionAndMaxDistance.xyz);
 
     rayQueryEXT query;
-    rayQueryInitializeEXT(query, globalBindlessSceneTlas, gl_RayFlagsTerminateOnFirstHitEXT,
+    // Material transport must commit the closest accepted triangle.
+    // TerminateOnFirstHit is an occlusion optimization and may commit a farther surface.
+    rayQueryInitializeEXT(query, globalBindlessSceneTlas, 0u,
                           pc.frameMaskAndFlags.y, rayOrigin, rayMinimum, rayDirection,
                           pc.cameraPositionAndMaxDistance.w);
     uint candidateCount = 0u;
