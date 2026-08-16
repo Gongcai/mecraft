@@ -62,6 +62,9 @@ namespace {
                "surface.analyticLightOwnsEmission = terrainPrimitiveAnalyticLightOwnsEmission(triangle.metadata);") !=
                std::string::npos &&
            traceSource.find("terrainRayQueryCommittedSurface(") != std::string::npos &&
+           traceSource.find(
+               "surface.emission = terrainSurface.analyticLightOwnsEmission ? vec3(0.0) : terrainSurface.emission;") !=
+               std::string::npos &&
            traceSource.find("rtgiAccumulateWorldLights") != std::string::npos &&
            traceSource.find("worldLightGridCellRange") != std::string::npos &&
            traceSource.find("sampleSkyRadiance(uSkyCapture, rayDirection)") != std::string::npos;

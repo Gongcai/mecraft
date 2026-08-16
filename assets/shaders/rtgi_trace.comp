@@ -689,7 +689,8 @@ void main() {
                 surface.albedo = terrainSurface.albedo;
                 surface.normal = terrainSurface.normal;
                 surface.geometricNormal = terrainSurface.geometricNormal;
-                surface.emission = terrainSurface.emission;
+                // The enabled analytic voxel light is the sole local-radiance owner for this surface.
+                surface.emission = terrainSurface.analyticLightOwnsEmission ? vec3(0.0) : terrainSurface.emission;
                 surface.specularF0 = terrainSurface.specularF0;
                 surface.specularF90 = terrainSurface.specularF90;
                 surface.perceptualRoughness = terrainSurface.perceptualRoughness;
