@@ -1615,9 +1615,9 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
              leakageNormalValidationOutputDesc, validationOutputInitialState, RhiResourceState::ShaderRead,
              m_rtgiLeakageNormalValidationView, RhiQueueType::Graphics, RhiQueueType::Graphics});
         rtgiLeakageViewZValidationOutput = m_renderGraph.importTexture(
-            {"RTGI.LeakageViewZValidationOutput", m_rtgiLeakageViewZValidationTexture,
-             leakageViewZValidationOutputDesc, validationOutputInitialState, RhiResourceState::ShaderRead,
-             m_rtgiLeakageViewZValidationView, RhiQueueType::Graphics, RhiQueueType::Graphics});
+            {"RTGI.LeakageViewZValidationOutput", m_rtgiLeakageViewZValidationTexture, leakageViewZValidationOutputDesc,
+             validationOutputInitialState, RhiResourceState::ShaderRead, m_rtgiLeakageViewZValidationView,
+             RhiQueueType::Graphics, RhiQueueType::Graphics});
         if (!rtgiRawValidationOutput.isValid() || !nrdDiffuseValidationOutput.isValid() ||
             !rtgiLeakageNormalValidationOutput.isValid() || !rtgiLeakageViewZValidationOutput.isValid()) {
             return failGraphSetup();
@@ -3173,6 +3173,16 @@ RenderGraphFrameStats DeferredPipeline::renderGraphFrameStats() const {
     if (m_rtgiTracePass != nullptr) {
         stats.rtgiTraceCounters = m_rtgiTracePass->counterStats();
     }
+    if (m_clusteredLightingPass != nullptr) {
+        const ClusteredLightingFrameStats& clustered = m_clusteredLightingPass->frameStats();
+        stats.clusteredLighting.valid = clustered.valid;
+        stats.clusteredLighting.lightCount = clustered.lightCount;
+        stats.clusteredLighting.worldCellCount = clustered.worldCellCount;
+        stats.clusteredLighting.worldIndexCount = clustered.worldIndexCount;
+        stats.clusteredLighting.worldGlobalLightCount = clustered.worldGlobalLightCount;
+        stats.clusteredLighting.maxWorldLightsPerCell = clustered.maxWorldLightsPerCell;
+        stats.clusteredLighting.buildError = clustered.buildError;
+    }
     stats.cpuBuildMs = m_graphCpuBuildMs;
     stats.cpuCompileMs = m_graphCpuCompileMs;
     stats.cpuExecuteMs = m_graphCpuExecuteMs;
@@ -4016,8 +4026,8 @@ FrameOutput DeferredPipeline::buildFrameOutput(const FrameContext& ctx) {
     output.nrdDiffuseToPreExposedScale = ctx.preExposure;
     output.hasRtgiRawDiffuse = output.rtgiRawDiffuse.isValid();
     output.hasNrdDiffuse = output.nrdDiffuse.isValid();
-    output.hasRtgiLeakageGuides = output.hasNrdDiffuse && output.rtgiLeakageNormal.isValid() &&
-                                  output.rtgiLeakageViewZ.isValid();
+    output.hasRtgiLeakageGuides =
+        output.hasNrdDiffuse && output.rtgiLeakageNormal.isValid() && output.rtgiLeakageViewZ.isValid();
 
     return output;
 }

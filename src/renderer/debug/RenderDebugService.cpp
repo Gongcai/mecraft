@@ -418,8 +418,7 @@ AccelerationStructureWindowStats AccelerationStructureHistory::snapshot() const 
         stats.peakPendingTerrainBlasBuilds =
             std::max(stats.peakPendingTerrainBlasBuilds, m_pendingTerrainBlasBuildSamples[sampleIndex]);
         stats.peakPendingTerrainBlasCompactions =
-            std::max(stats.peakPendingTerrainBlasCompactions,
-                     m_pendingTerrainBlasCompactionSamples[sampleIndex]);
+            std::max(stats.peakPendingTerrainBlasCompactions, m_pendingTerrainBlasCompactionSamples[sampleIndex]);
         stats.sceneTlasGenerationAllocationCount += m_sceneTlasGenerationAllocationSamples[sampleIndex];
         stats.sceneTlasGenerationReuseCount += m_sceneTlasGenerationReuseSamples[sampleIndex];
         stats.sceneTlasGenerationReuseWaitCount += m_sceneTlasGenerationReuseWaitSamples[sampleIndex];
@@ -652,6 +651,7 @@ bool RenderGraphTimingHistory::record(const RenderGraphFrameStats& stats) {
     m_latest.completeGpuFrameValid = completeGpuFrameCandidate;
     m_latest.completeGpuFrameSequence = stats.completeGpuFrame.sequence;
     m_latest.completeGpuFrameSpanMs = stats.completeGpuFrame.spanMs;
+    m_latest.clusteredLighting = stats.clusteredLighting;
 
     if (acceptGpu) {
         for (size_t index = 0u; index < gpuValues.size(); ++index) {

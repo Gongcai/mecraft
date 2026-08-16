@@ -483,6 +483,17 @@ struct RenderGraphPassStats {
     double gapMs = 0.0;
 };
 
+/// Latest clustered-light build values published with a Render Graph frame.
+struct ClusteredLightingFrameSummary final {
+    bool valid = false;
+    uint32_t lightCount = 0u;
+    uint32_t worldCellCount = 0u;
+    uint32_t worldIndexCount = 0u;
+    uint32_t worldGlobalLightCount = 0u;
+    uint32_t maxWorldLightsPerCell = 0u;
+    uint32_t buildError = 0u;
+};
+
 /// Render Graph frame statistics: CPU stage costs sampled at the most recent
 /// graph submission plus GPU pass timings from the latest completed snapshot.
 struct RenderGraphFrameStats {
@@ -527,6 +538,8 @@ struct RenderGraphFrameStats {
     GpuFrameSpanStats completeGpuFrame;
     /// Runtime acceleration-structure work and residency for this rendered frame.
     AccelerationStructureFrameStats accelerationStructures;
+    /// Latest clustered-light and world-light-grid build snapshot.
+    ClusteredLightingFrameSummary clusteredLighting;
     /// Latest completed asynchronous RTGI validation-image reduction.
     renderer::contracts::RtgiTraceCounterFrameStats rtgiTraceCounters;
     std::vector<RenderGraphPassStats> passes;
@@ -570,6 +583,7 @@ struct RenderGraphLatestStats {
     bool completeGpuFrameValid = false;
     uint64_t completeGpuFrameSequence = 0u;
     double completeGpuFrameSpanMs = 0.0;
+    ClusteredLightingFrameSummary clusteredLighting;
 };
 
 /// Fixed-window CPU and primary Render Graph GPU timing statistics.

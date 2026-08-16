@@ -78,7 +78,15 @@ nlohmann::json renderGraphTimingWindowJson(const RenderGraphTimingWindowStats& s
               {"pass_count", stats.latest.passCount},
               {"batch_count", stats.latest.batchCount},
               {"submit_count", stats.latest.submitCount},
-              {"worker_recorded_batches", stats.latest.workerRecordedBatches}}}};
+              {"worker_recorded_batches", stats.latest.workerRecordedBatches},
+              {"clustered_lighting",
+               {{"valid", stats.latest.clusteredLighting.valid},
+                {"light_count", stats.latest.clusteredLighting.lightCount},
+                {"world_cell_count", stats.latest.clusteredLighting.worldCellCount},
+                {"world_index_count", stats.latest.clusteredLighting.worldIndexCount},
+                {"world_global_light_count", stats.latest.clusteredLighting.worldGlobalLightCount},
+                {"max_world_lights_per_cell", stats.latest.clusteredLighting.maxWorldLightsPerCell},
+                {"build_error", stats.latest.clusteredLighting.buildError}}}}}};
 }
 
 nlohmann::json completeGpuFrameTimingWindowJson(const RenderGraphTimingWindowStats& stats) {
@@ -995,9 +1003,9 @@ bool GameManager::writeBenchmarkReport() {
                                      {"stages", std::move(gpuStages)}};
     root["render_graph_frame_ms"] = renderGraphTimingWindowJson(renderGraphTimingWindow);
     root["complete_gpu_frame_ms"] = completeGpuFrameTimingWindowJson(renderGraphTimingWindow);
-    root["acceleration_structure_work"] = accelerationStructureWindowJson(
-        accelerationStructureWindow, gpuTimingWindow, m_launchOptions.validationWidth,
-        m_launchOptions.validationHeight);
+    root["acceleration_structure_work"] =
+        accelerationStructureWindowJson(accelerationStructureWindow, gpuTimingWindow, m_launchOptions.validationWidth,
+                                        m_launchOptions.validationHeight);
     root["rtgi_trace_counters"] = rtgiTraceCounterWindowJson(rtgiTraceCounterWindow);
     root["rhi_memory"] = rhiMemoryStatsJson(memoryStats);
 
