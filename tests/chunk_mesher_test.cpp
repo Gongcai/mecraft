@@ -687,7 +687,8 @@ int main() {
         }
         const bool hasAnimatedWaterVertex =
             std::any_of(meshData.waterVertices.begin(), meshData.waterVertices.end(), [](const BlockVertex& vertex) {
-                return vertex.animated > 0.5f && vertex.animationFrameCount >= 32.0f && vertex.animationFps > 0.0f;
+                return blockVertexAnimated(vertex) && vertex.animationFrameCount >= 32.0f &&
+                       vertex.animationFps > 0.0f;
             });
         if (!hasAnimatedWaterVertex) {
             return fail("water vertices should carry animation sampling metadata");
@@ -847,7 +848,7 @@ int main() {
         }
         const bool hasFlowAnimatedTopVertex =
             std::any_of(topFaceVertices.begin(), topFaceVertices.end(), [](const BlockVertex* vertex) {
-                return vertex != nullptr && vertex->animated > 0.5f && vertex->animationFrameCount >= 32.0f &&
+                return vertex != nullptr && blockVertexAnimated(*vertex) && vertex->animationFrameCount >= 32.0f &&
                        vertex->animationFps >= 8.0f;
             });
         if (!hasFlowAnimatedTopVertex) {
@@ -898,7 +899,7 @@ int main() {
 
         const bool hasFlowAnimation =
             std::any_of(frontFaceVertices.begin(), frontFaceVertices.end(), [](const BlockVertex* vertex) {
-                return vertex != nullptr && vertex->animated > 0.5f && vertex->animationFps >= 8.0f;
+                return vertex != nullptr && blockVertexAnimated(*vertex) && vertex->animationFps >= 8.0f;
             });
         if (!hasFlowAnimation) {
             return fail("falling water side face should use flow animation metadata");

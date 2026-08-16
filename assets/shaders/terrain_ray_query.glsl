@@ -48,6 +48,7 @@ struct TerrainRayQuerySurface {
     float ao;
     float skyVisibility;
     float blockLight;
+    bool analyticLightOwnsEmission;
     uint materialKind;
 };
 
@@ -262,6 +263,7 @@ bool terrainRayQueryCommittedSurface(TerrainRayTracingGpuInstance instanceData, 
     surface.ao = 0.0;
     surface.skyVisibility = 0.0;
     surface.blockLight = 0.0;
+    surface.analyticLightOwnsEmission = false;
     surface.materialKind = 0u;
 
     TerrainRayQueryTriangle triangle;
@@ -270,6 +272,7 @@ bool terrainRayQueryCommittedSurface(TerrainRayTracingGpuInstance instanceData, 
         !terrainRayQueryInterpolateAttributes(triangle, barycentrics, attributes)) {
         return false;
     }
+    surface.analyticLightOwnsEmission = terrainPrimitiveAnalyticLightOwnsEmission(triangle.metadata);
     ivec3 albedoExtent = textureSize(terrainAlbedo, 0);
     ivec3 normalExtent = textureSize(terrainNormal, 0);
     ivec3 specularExtent = textureSize(terrainSpecular, 0);

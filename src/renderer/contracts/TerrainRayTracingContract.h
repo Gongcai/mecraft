@@ -9,7 +9,7 @@
 
 namespace renderer::contracts {
 
-inline constexpr uint32_t kTerrainRayTracingContractVersion = 1u;
+inline constexpr uint32_t kTerrainRayTracingContractVersion = 2u;
 inline constexpr uint32_t kTerrainRayTracingGeometryCapacity = 2u;
 inline constexpr uint32_t kTerrainRayTracingVertexStride = 32u;
 inline constexpr uint32_t kTerrainRayTracingVertexPositionOffset = 0u;
@@ -29,7 +29,10 @@ inline constexpr uint32_t kTerrainPrimitiveAnimationKnownMask =
     (kTerrainPrimitiveAnimationFramesPerSecondMask << kTerrainPrimitiveAnimationFramesPerSecondShift) |
     (kTerrainPrimitiveAnimationAnimatedMask << kTerrainPrimitiveAnimationAnimatedShift);
 inline constexpr uint32_t kTerrainPrimitiveMaterialTintKnownMask = 0xffffu;
-inline constexpr uint32_t kTerrainPrimitiveFaceKnownMask = 0xffu;
+inline constexpr uint32_t kTerrainPrimitiveFaceMask = 0xffu;
+inline constexpr uint32_t kTerrainPrimitiveAnalyticLightOwnsEmissionBit = 1u << 8u;
+inline constexpr uint32_t kTerrainPrimitiveFaceKnownMask =
+    kTerrainPrimitiveFaceMask | kTerrainPrimitiveAnalyticLightOwnsEmissionBit;
 
 /// Stores immutable material data for one non-indexed terrain triangle.
 /// The metadata order exactly follows consecutive three-vertex primitives in the terrain BLAS vertex buffer.
@@ -53,6 +56,7 @@ struct TerrainPrimitiveMetadataInput final {
     bool animated = false;
     uint16_t materialAndTint = 0u;
     int32_t face = 0;
+    bool analyticLightOwnsEmission = false;
 };
 
 /// Encodes one triangle's material fields after validating texture-array, animation, tint, and face constraints.
@@ -100,8 +104,16 @@ encodeTerrainPrimitiveMetadata(const TerrainPrimitiveMetadataInput& input);
 /// @param metadata Canonically encoded primitive record.
 /// @return Face value in the inclusive range [-2, 5].
 [[nodiscard]] constexpr int32_t terrainPrimitiveFace(const TerrainPrimitiveMetadata& metadata) {
-    const uint32_t encodedFace = metadata.faceAndFlags & kTerrainPrimitiveFaceKnownMask;
+    const uint32_t encodedFace = metadata.faceAndFlags & kTerrainPrimitiveFaceMask;
     return encodedFace <= 0x7fu ? static_cast<int32_t>(encodedFace) : static_cast<int32_t>(encodedFace) - 0x100;
+}
+
+/// Tests whether an enabled analytic voxel light owns this primitive's emissive transport.
+/// @param metadata Canonically encoded primitive record.
+/// @return True when RTGI must exclude the matching surface-emission term.
+[[nodiscard]] constexpr bool
+terrainPrimitiveAnalyticLightOwnsEmission(const TerrainPrimitiveMetadata& metadata) {
+    return (metadata.faceAndFlags & kTerrainPrimitiveAnalyticLightOwnsEmissionBit) != 0u;
 }
 
 /// Classifies the two canonical terrain BLAS geometry ranges.

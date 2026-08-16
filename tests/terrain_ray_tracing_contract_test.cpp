@@ -36,7 +36,7 @@ namespace {
         return false;
     }
     const std::string traceSource{std::istreambuf_iterator<char>(traceFile), std::istreambuf_iterator<char>()};
-    return source.find("const uint TERRAIN_RAY_TRACING_CONTRACT_VERSION = 1u;") != std::string::npos &&
+    return source.find("const uint TERRAIN_RAY_TRACING_CONTRACT_VERSION = 2u;") != std::string::npos &&
            source.find("const uint TERRAIN_RAY_TRACING_VERTEX_STRIDE = 32u;") != std::string::npos &&
            source.find("const uint TERRAIN_RAY_TRACING_VERTEX_UV_OFFSET = 12u;") != std::string::npos &&
            source.find("struct TerrainPrimitiveMetadata") != std::string::npos &&
@@ -44,8 +44,11 @@ namespace {
            source.find("uint animationAndFlags;") != std::string::npos &&
            source.find("uint materialAndTint;") != std::string::npos &&
            source.find("uint faceAndFlags;") != std::string::npos &&
+           source.find("TERRAIN_PRIMITIVE_ANALYTIC_LIGHT_OWNS_EMISSION_BIT") != std::string::npos &&
            source.find("struct TerrainRayTracingGpuInstance") != std::string::npos &&
            source.find("int terrainPrimitiveFace(TerrainPrimitiveMetadata metadata)") != std::string::npos &&
+           source.find("bool terrainPrimitiveAnalyticLightOwnsEmission(TerrainPrimitiveMetadata metadata)") !=
+               std::string::npos &&
            querySource.find("layout(buffer_reference, std430, buffer_reference_align = 4)") != std::string::npos &&
            querySource.find("bool terrainRayQueryInterpolateAttributes") != std::string::npos &&
            querySource.find("bool terrainRayQueryConeTextureLod") != std::string::npos &&
@@ -55,6 +58,9 @@ namespace {
            querySource.find("decodeLabPbrSpecular") != std::string::npos &&
            querySource.find("textureLod(grassColormap") != std::string::npos &&
            querySource.find("surface.emission = albedo * material.emission * emissionScale;") != std::string::npos &&
+           querySource.find(
+               "surface.analyticLightOwnsEmission = terrainPrimitiveAnalyticLightOwnsEmission(triangle.metadata);") !=
+               std::string::npos &&
            traceSource.find("terrainRayQueryCommittedSurface(") != std::string::npos &&
            traceSource.find("rtgiAccumulateWorldLights") != std::string::npos &&
            traceSource.find("worldLightGridCellRange") != std::string::npos &&
@@ -67,16 +73,18 @@ int main() {
     using namespace renderer::contracts;
 
     const std::optional<TerrainPrimitiveMetadata> encoded =
-        encodeTerrainPrimitiveMetadata({100u, 3u, 4u, true, 0xabcdu, kTerrainPrimitiveFaceCrossBiomeTint});
+        encodeTerrainPrimitiveMetadata(
+            {100u, 3u, 4u, true, 0xabcdu, kTerrainPrimitiveFaceCrossBiomeTint, true});
     if (!requireTrue(encoded.has_value(), "valid primitive metadata must encode successfully")) {
         return EXIT_FAILURE;
     }
     bool valid = requireTrue(
         encoded->textureLayer == 100u && encoded->animationAndFlags == 0x1103u && encoded->materialAndTint == 0xabcdu &&
-            encoded->faceAndFlags == 0xffu && terrainPrimitiveAnimationFrameCount(*encoded) == 3u &&
+            encoded->faceAndFlags == 0x1ffu && terrainPrimitiveAnimationFrameCount(*encoded) == 3u &&
             terrainPrimitiveAnimationFramesPerSecond(*encoded) == 4u && terrainPrimitiveAnimated(*encoded) &&
             terrainPrimitiveMaterialAndTint(*encoded) == 0xabcdu &&
             terrainPrimitiveFace(*encoded) == kTerrainPrimitiveFaceCrossBiomeTint &&
+            terrainPrimitiveAnalyticLightOwnsEmission(*encoded) &&
             validTerrainPrimitiveMetadata(*encoded),
         "primitive metadata must preserve the exact 16-byte packed layout");
 

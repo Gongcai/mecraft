@@ -1,7 +1,7 @@
 #ifndef MECRAFT_TERRAIN_RAY_TRACING_CONTRACT_GLSL
 #define MECRAFT_TERRAIN_RAY_TRACING_CONTRACT_GLSL
 
-const uint TERRAIN_RAY_TRACING_CONTRACT_VERSION = 1u;
+const uint TERRAIN_RAY_TRACING_CONTRACT_VERSION = 2u;
 const uint TERRAIN_RAY_TRACING_VERTEX_STRIDE = 32u;
 const uint TERRAIN_RAY_TRACING_VERTEX_POSITION_OFFSET = 0u;
 const uint TERRAIN_RAY_TRACING_VERTEX_UV_OFFSET = 12u;
@@ -11,6 +11,7 @@ const uint TERRAIN_PRIMITIVE_ANIMATION_FPS_MASK = 0x3fu;
 const uint TERRAIN_PRIMITIVE_ANIMATION_ANIMATED_SHIFT = 12u;
 const uint TERRAIN_PRIMITIVE_MATERIAL_TINT_MASK = 0xffffu;
 const uint TERRAIN_PRIMITIVE_FACE_MASK = 0xffu;
+const uint TERRAIN_PRIMITIVE_ANALYTIC_LIGHT_OWNS_EMISSION_BIT = 1u << 8u;
 const int TERRAIN_PRIMITIVE_FACE_CROSS_FLOWER = -2;
 const int TERRAIN_PRIMITIVE_FACE_CROSS_BIOME_TINT = -1;
 const uint TERRAIN_RAY_TRACING_GEOMETRY_OPAQUE = 0u;
@@ -75,6 +76,10 @@ uvec2 terrainPrimitiveTintCoordinates(TerrainPrimitiveMetadata metadata) {
 int terrainPrimitiveFace(TerrainPrimitiveMetadata metadata) {
     uint encodedFace = metadata.faceAndFlags & TERRAIN_PRIMITIVE_FACE_MASK;
     return encodedFace <= 0x7fu ? int(encodedFace) : int(encodedFace) - 0x100;
+}
+
+bool terrainPrimitiveAnalyticLightOwnsEmission(TerrainPrimitiveMetadata metadata) {
+    return (metadata.faceAndFlags & TERRAIN_PRIMITIVE_ANALYTIC_LIGHT_OWNS_EMISSION_BIT) != 0u;
 }
 
 bool terrainRayTracingGpuInstanceValid(TerrainRayTracingGpuInstance instanceData) {

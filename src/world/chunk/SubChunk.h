@@ -49,9 +49,15 @@ struct BlockVertex {
     uint16_t layer;
     uint16_t animationFrameCount;
     uint8_t animationFps;
-    uint8_t animated;
+    uint8_t animationAndFlags;
     uint16_t tintPacked;
 };
+
+namespace BlockVertexFlags {
+inline constexpr uint8_t ANIMATED = 1u << 0u;
+inline constexpr uint8_t ANALYTIC_LIGHT_OWNS_EMISSION = 1u << 1u;
+inline constexpr uint8_t KNOWN_MASK = ANIMATED | ANALYTIC_LIGHT_OWNS_EMISSION;
+} // namespace BlockVertexFlags
 
 struct PackedBlockVertex {
     uint32_t posPacked;
@@ -107,6 +113,36 @@ inline uint16_t packBlockVertexTint(uint8_t kind, uint8_t u, uint8_t v,
     return static_cast<uint16_t>((packedKind << 14U) | (packedMaterial << 8U) | (packedU << 4U) | packedV);
 }
 
+/// Tests whether the texture animation bit is enabled for one terrain vertex.
+/// @param vertex Source vertex whose packed animation and transport flags are inspected.
+/// @return True when texture-array frame selection advances with render time.
+inline bool blockVertexAnimated(const BlockVertex& vertex) {
+    return (vertex.animationAndFlags & BlockVertexFlags::ANIMATED) != 0u;
+}
+
+/// Tests whether an enabled analytic voxel light owns this surface's emissive transport.
+/// @param vertex Source vertex whose packed animation and transport flags are inspected.
+/// @return True when RTGI must not count the matching surface emission a second time.
+inline bool blockVertexAnalyticLightOwnsEmission(const BlockVertex& vertex) {
+    return (vertex.animationAndFlags & BlockVertexFlags::ANALYTIC_LIGHT_OWNS_EMISSION) != 0u;
+}
+
+/// Validates the packed terrain-vertex animation and transport flag byte.
+/// @param vertex Source vertex to validate.
+/// @return True when no undefined flag bits are set.
+inline bool validBlockVertexFlags(const BlockVertex& vertex) {
+    return (vertex.animationAndFlags & ~BlockVertexFlags::KNOWN_MASK) == 0u;
+}
+
+/// Updates only the analytic-light emissive-transport ownership bit.
+/// @param vertex Vertex whose packed flag byte is updated in place.
+/// @param enabled True when the placed block state's analytic light owns emissive transport.
+inline void setBlockVertexAnalyticLightOwnsEmission(BlockVertex& vertex, const bool enabled) {
+    const uint8_t encoded = enabled ? BlockVertexFlags::ANALYTIC_LIGHT_OWNS_EMISSION : 0u;
+    vertex.animationAndFlags = static_cast<uint8_t>(
+        (vertex.animationAndFlags & ~BlockVertexFlags::ANALYTIC_LIGHT_OWNS_EMISSION) | encoded);
+}
+
 inline BlockVertex makeBlockVertex(float x, float y, float z, float u, float v, float normal, float sunlight,
                                    float blockLight, float ao, float layer, float animationFrameCount = 1.0f,
                                    float animationFps = 0.0f, float animated = 0.0f,
@@ -124,7 +160,7 @@ inline BlockVertex makeBlockVertex(float x, float y, float z, float u, float v, 
             packBlockVertexU16(layer),
             packBlockVertexU16(animationFrameCount),
             packBlockVertexByte(animationFps),
-            animated > 0.5f ? static_cast<uint8_t>(1) : static_cast<uint8_t>(0),
+            animated > 0.5f ? BlockVertexFlags::ANIMATED : static_cast<uint8_t>(0),
             packBlockVertexTint(tintKind, tintU, tintV, derivativeMaterialId)};
 }
 

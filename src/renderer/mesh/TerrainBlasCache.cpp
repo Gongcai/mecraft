@@ -56,7 +56,7 @@ static_assert(sizeof(BlockVertex) == renderer::contracts::kTerrainRayTracingVert
 [[nodiscard]] bool samePrimitiveMaterial(const BlockVertex& left, const BlockVertex& right) {
     return left.normal == right.normal && left.layer == right.layer &&
            left.animationFrameCount == right.animationFrameCount && left.animationFps == right.animationFps &&
-           left.animated == right.animated && left.tintPacked == right.tintPacked;
+           left.animationAndFlags == right.animationAndFlags && left.tintPacked == right.tintPacked;
 }
 
 [[nodiscard]] std::optional<renderer::contracts::TerrainPrimitiveMetadata>
@@ -67,13 +67,14 @@ primitiveMetadataForTriangle(const std::vector<BlockVertex>& vertices, const siz
     const BlockVertex& first = vertices[firstVertex];
     const BlockVertex& second = vertices[firstVertex + 1u];
     const BlockVertex& third = vertices[firstVertex + 2u];
-    if (first.animated > 1u || !finitePositionAndUv(first) || !finitePositionAndUv(second) ||
+    if (!validBlockVertexFlags(first) || !finitePositionAndUv(first) || !finitePositionAndUv(second) ||
         !finitePositionAndUv(third) || !samePrimitiveMaterial(first, second) || !samePrimitiveMaterial(first, third)) {
         return std::nullopt;
     }
     return renderer::contracts::encodeTerrainPrimitiveMetadata({first.layer, first.animationFrameCount,
-                                                                first.animationFps, first.animated != 0u,
-                                                                first.tintPacked, first.normal});
+                                                                first.animationFps, blockVertexAnimated(first),
+                                                                first.tintPacked, first.normal,
+                                                                blockVertexAnalyticLightOwnsEmission(first)});
 }
 
 [[nodiscard]] bool buildPrimitiveMetadata(const std::vector<BlockVertex>& vertices,
@@ -154,7 +155,7 @@ makeTerrainOpacityMicromapInputs(const TerrainBlasGeometry& geometry) {
         input.uv = {first.u, first.v, second.u, second.v, third.u, third.v};
         input.firstTextureLayer = first.layer;
         input.animationFrameCount = first.animationFrameCount;
-        input.animated = first.animated != 0u;
+        input.animated = blockVertexAnimated(first);
         inputs.push_back(input);
     }
     return inputs;

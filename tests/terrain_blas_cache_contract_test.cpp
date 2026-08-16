@@ -39,9 +39,12 @@ int main() {
     const bool invalidOpacityMicromapSourceRejected =
         !invalidOpacityMicromapSourceCache.setOpacityMicromapSource({}) &&
         invalidOpacityMicromapSourceCache.lastError() == "Terrain opacity micromap source is invalid";
-    const std::vector<BlockVertex> opaque{makeVertex(0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 2, 17u),
-                                          makeVertex(1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 2, 17u),
-                                          makeVertex(0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 2, 17u)};
+    std::vector<BlockVertex> opaque{makeVertex(0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 2, 17u),
+                                    makeVertex(1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 2, 17u),
+                                    makeVertex(0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 2, 17u)};
+    for (BlockVertex& vertex : opaque) {
+        setBlockVertexAnalyticLightOwnsEmission(vertex, true);
+    }
     const std::vector<BlockVertex> cutout{
         makeVertex(0.0f, 0.0f, 1.0f, 0.0f, 0.0f, -1, 100u, 3u, 4u, true, BlockTintKinds::GRASS, 9u),
         makeVertex(1.0f, 0.0f, 1.0f, 1.0f, 0.0f, -1, 100u, 3u, 4u, true, BlockTintKinds::GRASS, 9u),
@@ -80,13 +83,13 @@ int main() {
     const TerrainBlasRequestResult inconsistentMaterialResult =
         TerrainBlasCache::prepareGeometry(inconsistentMaterial, {}, {}, inconsistentMaterialGeometry);
 
-    std::vector<BlockVertex> invalidAnimationFlag = opaque;
-    for (BlockVertex& vertex : invalidAnimationFlag) {
-        vertex.animated = 2u;
+    std::vector<BlockVertex> invalidVertexFlags = opaque;
+    for (BlockVertex& vertex : invalidVertexFlags) {
+        vertex.animationAndFlags = 1u << 7u;
     }
-    TerrainBlasGeometry invalidAnimationFlagGeometry;
-    const TerrainBlasRequestResult invalidAnimationFlagResult =
-        TerrainBlasCache::prepareGeometry(invalidAnimationFlag, {}, {}, invalidAnimationFlagGeometry);
+    TerrainBlasGeometry invalidVertexFlagsGeometry;
+    const TerrainBlasRequestResult invalidVertexFlagsResult =
+        TerrainBlasCache::prepareGeometry(invalidVertexFlags, {}, {}, invalidVertexFlagsGeometry);
 
     std::vector<TerrainBlasScheduleKey> schedule{{2u, {8, 1}}, {1u, {9, 3}}, {2u, {7, 5}}, {2u, {7, 2}}};
     std::sort(schedule.begin(), schedule.end());
@@ -100,6 +103,7 @@ int main() {
                 std::abs(geometry.vertices[0].z - kTerrainBlasOpaqueSurfaceExpansion) <= 1.0e-7f &&
                 geometry.vertices[3].z == 1.0f && geometry.vertices[6].z == 2.0f &&
                 geometry.primitiveMetadata.size() == 3u && geometry.primitiveMetadata[0].textureLayer == 17u &&
+                renderer::contracts::terrainPrimitiveAnalyticLightOwnsEmission(geometry.primitiveMetadata[0]) &&
                 renderer::contracts::terrainPrimitiveAnimationFrameCount(geometry.primitiveMetadata[1]) == 3u &&
                 renderer::contracts::terrainPrimitiveAnimationFramesPerSecond(geometry.primitiveMetadata[1]) == 4u &&
                 renderer::contracts::terrainPrimitiveAnimated(geometry.primitiveMetadata[1]) &&
@@ -114,7 +118,7 @@ int main() {
                         invalidPositionResult == TerrainBlasRequestResult::InvalidGeometry &&
                         invalidUvResult == TerrainBlasRequestResult::InvalidGeometry &&
                         inconsistentMaterialResult == TerrainBlasRequestResult::InvalidGeometry &&
-                        invalidAnimationFlagResult == TerrainBlasRequestResult::InvalidGeometry,
+                        invalidVertexFlagsResult == TerrainBlasRequestResult::InvalidGeometry,
                     "non-triangle, non-finite, and material-inconsistent primitives must be rejected") &&
         requireTrue(TerrainBlasCache::validKey({0, 0}) && TerrainBlasCache::validKey({0, 15}) &&
                         !TerrainBlasCache::validKey({0, -1}) && !TerrainBlasCache::validKey({0, 16}),

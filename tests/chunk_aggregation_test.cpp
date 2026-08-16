@@ -176,7 +176,7 @@ int main() {
     }
     const bool hasAnimatedWaterVertex =
         std::any_of(aggregated.waterVertices.begin(), aggregated.waterVertices.end(), [](const BlockVertex& vertex) {
-            return vertex.animated > 0.5f && vertex.animationFrameCount >= 32.0f && vertex.animationFps > 0.0f;
+            return blockVertexAnimated(vertex) && vertex.animationFrameCount >= 32.0f && vertex.animationFps > 0.0f;
         });
     if (!hasAnimatedWaterVertex) {
         return fail("aggregated transparent water vertices should preserve animation metadata");

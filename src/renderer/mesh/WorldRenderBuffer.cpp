@@ -65,7 +65,7 @@ std::vector<PackedBlockVertex> packBlockVertices(const std::vector<BlockVertex>&
                            ((static_cast<uint32_t>(v.ao) & 0x03u) << 7u) | (static_cast<uint32_t>(v.layer) & 0x7Fu);
         out.tintAnim = ((static_cast<uint32_t>(v.animationFrameCount) & 0x3Fu) << 26u) |
                        ((static_cast<uint32_t>(v.animationFps) & 0x3Fu) << 20u) |
-                       ((static_cast<uint32_t>(v.animated) & 0x01u) << 19u) |
+                       (static_cast<uint32_t>(blockVertexAnimated(v)) << 19u) |
                        (((static_cast<uint32_t>(v.layer) >> 7u) & 0x07u) << 16u) |
                        (static_cast<uint32_t>(v.tintPacked) & 0xFFFFu);
         packed.push_back(out);

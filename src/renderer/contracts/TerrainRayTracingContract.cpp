@@ -20,7 +20,8 @@ std::optional<TerrainPrimitiveMetadata> encodeTerrainPrimitiveMetadata(const Ter
                                  (input.animationFramesPerSecond << kTerrainPrimitiveAnimationFramesPerSecondShift) |
                                  (static_cast<uint32_t>(input.animated) << kTerrainPrimitiveAnimationAnimatedShift);
     metadata.materialAndTint = input.materialAndTint;
-    metadata.faceAndFlags = static_cast<uint8_t>(input.face);
+    metadata.faceAndFlags = static_cast<uint8_t>(input.face) |
+                            (input.analyticLightOwnsEmission ? kTerrainPrimitiveAnalyticLightOwnsEmissionBit : 0u);
     return metadata;
 }
 
@@ -35,7 +36,8 @@ bool validTerrainPrimitiveMetadata(const TerrainPrimitiveMetadata& metadata) {
                                               terrainPrimitiveAnimationFramesPerSecond(metadata),
                                               terrainPrimitiveAnimated(metadata),
                                               terrainPrimitiveMaterialAndTint(metadata),
-                                              terrainPrimitiveFace(metadata)};
+                                              terrainPrimitiveFace(metadata),
+                                              terrainPrimitiveAnalyticLightOwnsEmission(metadata)};
     const std::optional<TerrainPrimitiveMetadata> encoded = encodeTerrainPrimitiveMetadata(input);
     return encoded.has_value() && *encoded == metadata;
 }
