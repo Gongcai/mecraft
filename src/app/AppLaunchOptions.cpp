@@ -79,6 +79,17 @@ const char* validationRtgiHdrCaptureModeStableId(const ValidationRtgiHdrCaptureM
 }
 
 bool validateAppLaunchOptions(const AppLaunchOptions& options, std::string& error) {
+    if (!options.modelScenePath.empty() && options.validationEnabled()) {
+        error = "--model-scene-file cannot be combined with --validation-scene-file";
+        return false;
+    }
+    if (!options.modelScenePath.empty() &&
+        (options.autoStartGameplay || !options.benchmarkWorldName.empty() ||
+         !options.benchmarkWorldDisplayName.empty() || options.benchmarkDurationSeconds > 0.0 ||
+         !options.benchmarkReportPath.empty() || options.benchmarkSeedSet || options.benchmarkRenderDistanceSet)) {
+        error = "--model-scene-file cannot be combined with gameplay benchmark options";
+        return false;
+    }
     if (!options.validationEnabled()) {
         if (!options.validationCapturePath.empty() || !options.validationReportPath.empty() ||
             options.validationWarmupFramesSet || options.validationSampleFramesSet || options.validationWidthSet ||

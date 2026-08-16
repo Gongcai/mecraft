@@ -7,6 +7,7 @@
 #include <glm/glm.hpp>
 
 #include <array>
+#include <filesystem>
 
 #include "scene/ModelSceneRuntime.h"
 #include "scene/ModelSceneCommandHistory.h"
@@ -16,7 +17,7 @@ struct InputSnapshot;
 
 class ModelSceneAppState : public IAppState {
 public:
-    explicit ModelSceneAppState(AppStateDependencies deps);
+    explicit ModelSceneAppState(AppStateDependencies deps, std::filesystem::path initialScenePath = {});
 
     void onEnter() override;
     void onExit() override;
@@ -86,6 +87,7 @@ private:
     [[nodiscard]] glm::vec3 cameraPosition() const;
 
     AppStateDependencies m_deps;
+    std::filesystem::path m_initialScenePath;
     ImGuiRhiRenderer m_imguiRenderer;
     ModelSceneRuntime m_scene;
     scene::ModelSceneCommandHistory m_history;

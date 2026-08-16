@@ -43,6 +43,9 @@ struct AppLaunchOptions {
     bool rhiBackendExplicit = false;
     RhiBackend rhiBackend;
 
+    /// Opens a persisted model-scene document directly in the editor.
+    std::filesystem::path modelScenePath;
+
     std::filesystem::path validationScenePath;
     std::filesystem::path validationCapturePath;
     std::filesystem::path validationReportPath;

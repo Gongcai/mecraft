@@ -1,0 +1,340 @@
+{
+  "assets": [
+    {
+      "id": 1,
+      "name": "DamagedHelmet",
+      "path": "../../../cmake-build-linux-relwithdebinfo/assets/models/showcase/DamagedHelmet.glb"
+    },
+    {
+      "id": 2,
+      "name": "Sponza",
+      "path": "../../../../../../../home/caiwen/Downloads/glTF/Sponza.gltf"
+    }
+  ],
+  "editorCamera": {
+    "distance": 0.6000000238418579,
+    "farPlane": 500.0,
+    "nearPlane": 0.05000000074505806,
+    "pitch": -1.0,
+    "target": [
+      -0.08727298676967621,
+      -0.34619417786598206,
+      -0.0034949237015098333
+    ],
+    "yaw": -3.75
+  },
+  "entities": [
+    {
+      "assetId": 2,
+      "id": 2,
+      "manualPointLight": null,
+      "name": "Sponza",
+      "parentId": null,
+      "transform": {
+        "position": [
+          0.039035502821207047,
+          -0.4202231466770172,
+          0.024955926463007927
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "scale": [
+          0.08062665164470673,
+          0.08062665164470673,
+          0.08062665164470673
+        ]
+      }
+    },
+    {
+      "assetId": null,
+      "id": 3,
+      "manualPointLight": {
+        "colorLinear": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "emitterRadiusMeters": 0.10000000149011612,
+        "intensityCandela": 25.0,
+        "rangeMeters": 8.0,
+        "selfShadowRadiusMeters": 0.0,
+        "shadowPolicy": 1
+      },
+      "name": "Point Light",
+      "parentId": null,
+      "transform": {
+        "position": [
+          0.00013643503189086914,
+          0.515268862247467,
+          -0.003906453028321266
+        ],
+        "rotation": [
+          0.0,
+          -0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    }
+  ],
+  "environment": {
+    "renderSettings": {
+      "blockMaterialMaps": {
+        "enabled": true,
+        "normalMapsEnabled": true,
+        "parallaxDepth": 0.07500000298023224,
+        "parallaxMapsEnabled": true,
+        "specularMapsEnabled": true
+      },
+      "cloud": {
+        "asyncComputeEnabled": true,
+        "coverage": 0.3499999940395355,
+        "density": 1.0,
+        "height": 1000.0,
+        "planarAltitude": 7000.0,
+        "planarCoverage": 0.5,
+        "planarDensity": 1.0,
+        "sceneCloudCompositeStrength": 0.8500000238418579,
+        "shadowScale": 0.0044999998062849045,
+        "shadowSpeed": 0.017999999225139618,
+        "shadowStrength": 0.0,
+        "shadowsEnabled": false,
+        "thickness": 1400.0,
+        "timeScale": 0.3499999940395355,
+        "updateInterval": 2
+      },
+      "debug": {
+        "deferredLightDebugMode": 0,
+        "derivativeStrictMode": false,
+        "disableGreedyMeshing": false,
+        "lightDebugMode": 0,
+        "postprocessDebugMode": 0,
+        "reflectionDebugMode": 0,
+        "viewMode": 0
+      },
+      "fog": {
+        "autoDistanceByRenderDistance": false,
+        "autoEndOffsetChunks": -0.5,
+        "autoFadeWidthChunks": 2.0,
+        "color": [
+          0.6700000166893005,
+          0.8399999737739563,
+          1.0
+        ],
+        "density": 0.009999999776482582,
+        "enabled": true,
+        "endDistance": 260.0,
+        "mode": 0,
+        "startDistance": 140.0
+      },
+      "nrd": {
+        "denoisingRange": 500.0,
+        "disocclusionThreshold": 0.019999999552965164,
+        "disocclusionThresholdAlternate": 0.05000000074505806,
+        "enabled": false,
+        "method": 0,
+        "reblurHitDistanceConstantScale": 3.0,
+        "reblurHitDistanceRoughnessScale": 20.0,
+        "reblurHitDistanceViewZScale": 0.10000000149011612,
+        "relaxAtrousIterations": 5
+      },
+      "nvidia": {
+        "frameGeneration": 0,
+        "reflexMode": 1
+      },
+      "occlusion": {
+        "hiZEnabled": false
+      },
+      "pipelineMode": 1,
+      "postProcess": {
+        "aerialPerspectiveEnabled": true,
+        "aerialStrength": 0.6499999761581421,
+        "albedoDesaturation": 0.0,
+        "autoExposureBias": 0.0,
+        "autoExposureEnabled": true,
+        "autoExposureMax": 64.0,
+        "autoExposureMin": 0.0010000000474974513,
+        "autoExposureSpeed": 1.0,
+        "blockLightStrength": 1.0,
+        "bloomEnabled": true,
+        "bloomMipCount": 5,
+        "bloomStrength": 1.0,
+        "bloomThreshold": 0.0,
+        "bloomyFogEnabled": true,
+        "colorLumaB": 0.9599999785423279,
+        "colorLumaG": 1.0,
+        "colorLumaR": 1.0199999809265137,
+        "colorTemperature": 1.0,
+        "contrast": 1.0,
+        "directSunStrength": 1.0,
+        "dofAperture": 2.799999952316284,
+        "dofEnabled": false,
+        "dofFocusDistance": 5.0,
+        "dofIntensity": 0.15000000596046448,
+        "exposure": 12.0,
+        "fakeBounceStrength": 0.05999999865889549,
+        "filmEmulationStrength": 0.0,
+        "gamma": 1.0,
+        "highlightCompression": 0.0,
+        "horizonScatterStrength": 0.7799999713897705,
+        "minimumAmbient": 0.054999999701976776,
+        "motionBlurEnabled": false,
+        "motionBlurSamples": 8,
+        "motionBlurStrength": 1.0,
+        "noiseDitherStrength": 0.014999999664723873,
+        "purkinjeShiftEnabled": false,
+        "redModifierStrength": 0.3499999940395355,
+        "saturation": 1.0,
+        "shaderpackGradingEnabled": true,
+        "shadowContrast": 1.0,
+        "shadowDesaturation": 0.2199999988079071,
+        "shadowMinLight": 0.0,
+        "shadowTintStrength": 0.4000000059604645,
+        "sharpenStrength": 0.30000001192092896,
+        "skyAmbientStrength": 0.36000001430511475,
+        "skyCoolness": 0.18000000715255737,
+        "splitToneStrength": 0.0,
+        "sunRayStrength": 0.18000000715255737,
+        "sunRaysEnabled": false,
+        "sunWarmth": 0.3400000035762787,
+        "tonemapMode": 1,
+        "vibrance": 0.0,
+        "vignetteStrength": 0.0
+      },
+      "reflection": {
+        "filterEnabled": true,
+        "filterStrength": 1.0,
+        "historyWeight": 0.8999999761581421,
+        "sceneReflectionCompositeStrength": 1.0,
+        "temporalEnabled": true
+      },
+      "renderGraph": {
+        "multithreadedRecordEnabled": false,
+        "textureAliasingEnabled": true
+      },
+      "rtgi": {
+        "cutoutTraversal": 1,
+        "enabled": false,
+        "intensity": 1.0,
+        "maxRayDistance": 64.0,
+        "maxShadowRayDistance": 128.0,
+        "minimumRayOriginBias": 0.0009765625
+      },
+      "shadow": {
+        "constantBias": 0.000699999975040555,
+        "contactShadowStrength": 0.11999999731779099,
+        "contactShadowsEnabled": false,
+        "distance": 64.0,
+        "enabled": true,
+        "farCascadeInterleaved": true,
+        "gpuCascadeCullEnabled": false,
+        "normalOffset": 0.03500000014901161,
+        "pcssShadowsEnabled": true,
+        "pcssStrength": 0.7200000286102295,
+        "resolution": 3404,
+        "slopeBias": 0.002199999988079071,
+        "softShadowsEnabled": true,
+        "softness": 1.0
+      },
+      "ssao": {
+        "asyncComputeEnabled": true,
+        "enabled": true,
+        "filterEnabled": true,
+        "historyWeight": 0.8500000238418579,
+        "radius": 0.6000000238418579,
+        "samples": 8,
+        "strength": 0.75,
+        "temporalEnabled": true
+      },
+      "ssgi": {
+        "colorBleedStrength": 0.3499999940395355,
+        "denoiseEnabled": true,
+        "denoiseIterations": 2,
+        "denoiseStrength": 0.8500000238418579,
+        "enabled": false,
+        "historyWeight": 0.8199999928474426,
+        "maxDistance": 16.0,
+        "radianceFilterStrength": 0.550000011920929,
+        "radius": 5.5,
+        "samples": 12,
+        "strength": 1.2000000476837158,
+        "temporalEnabled": true,
+        "thickness": 1.5
+      },
+      "taa": {
+        "blendMax": 0.25999999046325684,
+        "blendMin": 0.07999999821186066,
+        "enabled": false,
+        "forceZeroVelocity": false,
+        "freezeJitter": false
+      },
+      "transparent": {
+        "compositeEnabled": false,
+        "waterEffectsEnabled": false
+      },
+      "upscale": {
+        "debugVisualizationEnabled": false,
+        "dynamicResolutionEnabled": false,
+        "fsr1Enabled": false,
+        "outputHeight": 0,
+        "outputWidth": 0,
+        "quality": 0,
+        "renderScale": 0.7699999809265137,
+        "sharpeningEnabled": true,
+        "sharpeningStrength": 0.20000000298023224,
+        "sharpness": 0.20000000298023224,
+        "type": 0
+      },
+      "volumetric": {
+        "baseDensity": 1.0,
+        "fogCenterHeight": 63.0,
+        "fogDensityScale": 1.0,
+        "fogEnabled": true,
+        "fogHeightSpread": 100.0,
+        "fogLightStrength": 0.20000000298023224,
+        "fogNoiseScale": 0.03999999910593033,
+        "fogSamples": 8,
+        "fogStrength": 1.0,
+        "freezeBias": false,
+        "freezeR1": false,
+        "lightEnabled": true,
+        "maxDistance": 260.0,
+        "qualityTier": 1,
+        "shadowBiasScale": 1.0,
+        "skyRayEnabled": true,
+        "temporalEnabled": true,
+        "temporalWeight": 0.8999999761581421,
+        "timeFadeEnabled": true,
+        "underwaterLightStrength": 0.10000000149011612,
+        "updateInterval": 1,
+        "uwLightEnabled": true
+      },
+      "weather": {
+        "directWeatherOcclusion": -1.0,
+        "exposureBias": 0.0,
+        "particlesEnabled": false,
+        "postRainFog": 1.0,
+        "rainAlphaScale": 2.5,
+        "rainLinesEnabled": false,
+        "skylightScale": 1.0,
+        "surfaceRipplesEnabled": true,
+        "wetSurfacesEnabled": true
+      }
+    },
+    "timeOfDay": 629.0,
+    "timePaused": true,
+    "timeScale": 1.0,
+    "weather": 0,
+    "weatherTransitionInstant": true
+  },
+  "format": "mecraft.scene",
+  "reflectionProbes": [],
+  "version": 4
+}

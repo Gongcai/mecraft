@@ -25,6 +25,7 @@ void printUsage() {
               << "  --benchmark-report <file>          Write gameplay replay frame timing summary as JSON.\n"
               << "  --benchmark-save-root <path>       Save root for benchmark worlds.\n"
               << "  --benchmark-no-save                Disable saving for benchmark gameplay.\n"
+              << "  --model-scene-file <file>          Open a persisted .scene document in the model editor.\n"
               << "  --validation-scene-file <file>    Versioned scene identity used by validation.\n"
               << "  --validation-capture <file>       Write the final scene frame as PNG.\n"
               << "  --validation-report <file>        Write timing and capture metadata as JSON.\n"
@@ -181,6 +182,12 @@ bool parseLaunchOptions(int argc, char** argv, AppLaunchOptions& options, std::s
             options.benchmarkSaveRoot = value;
         } else if (arg == "--benchmark-no-save") {
             options.benchmarkEnableSaving = false;
+        } else if (arg == "--model-scene-file") {
+            const char* value = nullptr;
+            if (!requireValue(argc, argv, index, "--model-scene-file", value, error)) {
+                return false;
+            }
+            options.modelScenePath = value;
         } else if (arg == "--validation-scene-file") {
             const char* value = nullptr;
             if (!requireValue(argc, argv, index, "--validation-scene-file", value, error)) {

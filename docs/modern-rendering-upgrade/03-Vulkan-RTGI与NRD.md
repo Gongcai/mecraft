@@ -527,6 +527,9 @@ BLAS；普通完整方块在每个 SubChunk BLAS 内使用可见单位面，仍�
 
 ## 8. 模型场景专项设计
 
+- 编辑器保存的 `.scene` 文档通过 `--model-scene-file <path>` 显式进入 `ModelSceneAppState`。
+  该入口只加载场景实体、环境和相对资产路径，不改变 `mecraft.validation_scene` 验证契约；需要
+  固定 Camera Path、采样帧数和 HDR 门禁的运行仍必须使用 `--validation-scene-file`。
 - 每个 glTF Primitive 必须提供位置、法线、UV、Index、Material ID 的设备地址。
 - 多实例共享 BLAS，Instance Custom Index 唯一定位 GPU Scene Instance。
 - Alpha Mask 材质使用与主 GBuffer 相同的 Texture Transform 和 Cutoff。

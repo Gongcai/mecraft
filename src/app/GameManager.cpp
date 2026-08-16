@@ -483,8 +483,9 @@ bool GameManager::init(int width, int height, const char* title, AppLaunchOption
         return false;
     }
 
-    if (m_validationRun.scene() == ValidationScene::Model) {
-        m_appStateMachine.pushState(std::make_unique<ModelSceneAppState>(makeAppStateDependencies()));
+    if (m_validationRun.scene() == ValidationScene::Model || !m_launchOptions.modelScenePath.empty()) {
+        m_appStateMachine.pushState(
+            std::make_unique<ModelSceneAppState>(makeAppStateDependencies(), m_launchOptions.modelScenePath));
     } else if (m_validationRun.scene() == ValidationScene::Voxel || m_launchOptions.autoStartGameplay) {
         GameSessionConfig benchmarkConfig;
         if (!makeBenchmarkSessionConfig(benchmarkConfig)) {

@@ -81,7 +81,8 @@ constexpr const char* kDefaultModelPath = "assets/models/showcase/DamagedHelmet.
 }
 } // namespace
 
-ModelSceneAppState::ModelSceneAppState(AppStateDependencies deps) : m_deps(deps) {}
+ModelSceneAppState::ModelSceneAppState(AppStateDependencies deps, std::filesystem::path initialScenePath)
+    : m_deps(deps), m_initialScenePath(std::move(initialScenePath)) {}
 
 void ModelSceneAppState::onEnter() {
     const auto failValidationInitialization = [this](std::string detail) {
@@ -104,6 +105,7 @@ void ModelSceneAppState::onEnter() {
         failValidationInitialization(m_scene.lastError());
         return;
     }
+    const bool loadPersistedScene = !m_deps.validationRun.enabled() && !m_initialScenePath.empty();
     std::string initialModelPath = kDefaultModelPath;
     if (m_deps.validationRun.enabled()) {
         const app::validation::ValidationSceneContract& contract = m_deps.validationRun.sceneContract();
@@ -114,7 +116,7 @@ void ModelSceneAppState::onEnter() {
         }
         initialModelPath = contract.modelAsset->resolvedPath.generic_u8string();
     }
-    if (m_scene.importModel(initialModelPath) == entt::null) {
+    if (!loadPersistedScene && m_scene.importModel(initialModelPath) == entt::null) {
         MECRAFT_LOG_STREAM(std::cerr << "[ModelSceneAppState] " << m_scene.lastError() << '\n');
         failValidationInitialization(m_scene.lastError());
         m_scene.shutdown();
@@ -133,6 +135,11 @@ void ModelSceneAppState::onEnter() {
     m_transformCommandActive = false;
     m_transformCommandFromGizmo = false;
     m_transformCommandEntityId = scene::kInvalidSceneEntityId;
+    if (loadPersistedScene && !loadScenePath(m_initialScenePath.generic_u8string())) {
+        MECRAFT_LOG_STREAM(std::cerr << "[ModelSceneAppState] " << m_sceneIoError << '\n');
+        m_scene.shutdown();
+        return;
+    }
     if (m_deps.validationRun.enabled()) {
         const app::validation::ValidationSceneContract& contract = m_deps.validationRun.sceneContract();
         float probeGridSpacing = 0.0f;

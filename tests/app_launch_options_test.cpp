@@ -76,6 +76,18 @@ int main() {
         return 1;
     }
 
+    AppLaunchOptions persistedScene;
+    persistedScene.modelScenePath = "assets/validation/scenes/RTGI-PointLight.scene";
+    if (!requireTrue(validateAppLaunchOptions(persistedScene, error),
+                     "a persisted model scene launch must be accepted")) {
+        return 1;
+    }
+    persistedScene.validationScenePath = "scene.json";
+    if (!requireTrue(!validateAppLaunchOptions(persistedScene, error),
+                     "persisted model scenes must not use validation contracts")) {
+        return 1;
+    }
+
     AppLaunchOptions invalid = validation;
     invalid.validationScenePath.clear();
     if (!requireTrue(!validateAppLaunchOptions(invalid, error), "validation outputs must require a scene descriptor")) {
