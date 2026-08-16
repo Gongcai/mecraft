@@ -102,7 +102,17 @@ bool testIncrementalVoxelLights() {
         !requireTrue(
             BlockRegistry::getFast(redstoneLampId).analyticLight->enabledStatePropertyIndex == PropIndices::LIT &&
                 BlockRegistry::getFast(redstoneLampId).analyticLight->enabledStateValueIndex == PropIndices::LIT_TRUE,
-            "analytic light state activation must resolve to hot indices")) {
+            "analytic light state activation must resolve to hot indices") ||
+        !requireTrue(BlockStateRegistry::analyticLightEnabledForState(torch) &&
+                         !BlockStateRegistry::analyticLightEnabledForState(redstoneTorchOff) &&
+                         BlockStateRegistry::analyticLightEnabledForState(redstoneTorchOn) &&
+                         !BlockStateRegistry::analyticLightEnabledForState(redstoneLampOff) &&
+                         BlockStateRegistry::analyticLightEnabledForState(redstoneLampOn) &&
+                         BlockStateRegistry::analyticLightEnabledForState(glowstone) &&
+                         BlockStateRegistry::analyticLightEnabledForState(magma) &&
+                         BlockStateRegistry::analyticLightEnabledForState(glowLichen) &&
+                         !BlockStateRegistry::analyticLightEnabledForState(stone),
+                     "analytic light activation must be classified from the concrete block state")) {
         return false;
     }
 

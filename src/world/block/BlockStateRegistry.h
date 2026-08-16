@@ -105,6 +105,10 @@ public:
     static BlockStateId getState(BlockID blockId, const std::vector<std::pair<uint16_t, uint16_t>>& props);
     static BlockID getBlockId(BlockStateId stateId);
     static uint16_t getPropertyIndex(BlockStateId stateId, uint16_t nameIndex);
+    /// Tests whether a concrete placed state publishes its block's analytic-light source.
+    /// @param stateId Concrete block state whose optional activation property is evaluated.
+    /// @return True only when the block declares an analytic light and its activation state matches.
+    static bool analyticLightEnabledForState(BlockStateId stateId);
     static uint8_t getPropertyCount(BlockStateId stateId);
     static BlockStateId withProperty(BlockStateId currentState, uint16_t propKey, uint16_t newValue);
     static BlockStateId withProperty(BlockStateId currentState, uint16_t propKey, const std::string& newValue);

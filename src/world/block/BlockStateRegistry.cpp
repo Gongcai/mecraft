@@ -624,6 +624,23 @@ uint16_t BlockStateRegistry::getPropertyIndex(const BlockStateId stateId, const 
     return INVALID_INDEX;
 }
 
+bool BlockStateRegistry::analyticLightEnabledForState(const BlockStateId stateId) {
+    const BlockID blockId = getBlockId(stateId);
+    if (blockId == RUNTIME_ID_NULL) {
+        return false;
+    }
+    const BlockDef& block = BlockRegistry::getFast(blockId);
+    if (!block.analyticLight.has_value()) {
+        return false;
+    }
+    const BlockAnalyticLightDefinition& definition = *block.analyticLight;
+    if (definition.enabledStatePropertyIndex == BlockAnalyticLightDefinition::kUnconditionalStateIndex) {
+        return definition.enabledStateValueIndex == BlockAnalyticLightDefinition::kUnconditionalStateIndex;
+    }
+    return definition.enabledStateValueIndex != BlockAnalyticLightDefinition::kUnconditionalStateIndex &&
+           getPropertyIndex(stateId, definition.enabledStatePropertyIndex) == definition.enabledStateValueIndex;
+}
+
 uint8_t BlockStateRegistry::getPropertyCount(const BlockStateId stateId) {
     const size_t index = stateIndex(stateId);
     if (index < s_states.size()) {

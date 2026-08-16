@@ -66,6 +66,7 @@ struct FaceRenderData {
     float animationFrameCount = 1.0f;
     float animationFps = 0.0f;
     float animated = 0.0f;
+    bool analyticLightOwnsEmission = false;
     bool flipDiagonal = false;
     uint8_t tintKind = BlockTintKinds::NONE;
     uint8_t tintU = 0;
@@ -160,6 +161,7 @@ struct MeshBlockInfo {
     MeshCubeClass cubeClass = MeshCubeClass::Air;
     bool isSolid = false;
     bool isTransparent = false;
+    bool analyticLightOwnsEmission = false;
 };
 
 MECRAFT_FORCEINLINE const MeshBlockInfo& getMeshBlockInfo(BlockStateId stateId);
@@ -604,9 +606,9 @@ MeshFaceInfo buildMeshFaceInfo(const BlockStateId stateId, const int face) {
     return info;
 }
 
-FaceRenderData buildFaceRenderData(const SubChunkMeshingSnapshot& snapshot, const BlockStateId stateId,
-                                   const BlockDef& def, const MeshBlockInfo& info, const int x, const int y,
-                                   const int z, const int face) {
+FaceRenderData buildFaceRenderData(const SubChunkMeshingSnapshot& snapshot, const BlockDef& def,
+                                   const MeshBlockInfo& info, const int x, const int y, const int z,
+                                   const int face) {
     FaceRenderData renderData;
     const MeshFaceInfo& faceInfo = info.faces[static_cast<size_t>(face)];
     renderData.tileIndex = faceInfo.tileIndex;
@@ -614,6 +616,7 @@ FaceRenderData buildFaceRenderData(const SubChunkMeshingSnapshot& snapshot, cons
     renderData.animationFrameCount = faceInfo.animationFrameCount;
     renderData.animationFps = faceInfo.animationFps;
     renderData.animated = faceInfo.animated;
+    renderData.analyticLightOwnsEmission = info.analyticLightOwnsEmission;
     renderData.tintKind =
         faceInfo.tintKind != BlockTintKinds::NONE ? faceInfo.tintKind : blockTintKindFromBiomeTint(def.biomeTint);
     renderData.derivativeMaterialId = def.derivativeMaterialId;
@@ -641,7 +644,7 @@ FaceRenderData buildFaceRenderData(const SubChunkMeshingSnapshot& snapshot, cons
 
 FaceRenderData buildFaceRenderData(const SubChunkMeshingSnapshot& snapshot, const BlockStateId stateId,
                                    const BlockDef& def, const int x, const int y, const int z, const int face) {
-    return buildFaceRenderData(snapshot, stateId, def, getMeshBlockInfo(stateId), x, y, z, face);
+    return buildFaceRenderData(snapshot, def, getMeshBlockInfo(stateId), x, y, z, face);
 }
 
 uint64_t computeMergeKeyHash(const FaceMergeKey& key) {
@@ -714,6 +717,7 @@ MeshBlockInfo buildMeshBlockInfo(const BlockStateId stateId) {
     info.def = &def;
     info.isSolid = def.isSolid;
     info.isTransparent = def.isTransparent;
+    info.analyticLightOwnsEmission = BlockStateRegistry::analyticLightEnabledForState(stateId);
     for (int face = 0; face < 6; ++face) {
         info.faces[static_cast<size_t>(face)] = buildMeshFaceInfo(stateId, face);
     }
@@ -1073,15 +1077,17 @@ void appendFaceVertices(std::vector<BlockVertex>& vertices, const std::array<glm
         renderData.flipDiagonal ? std::array<int, 6>{{1, 2, 3, 1, 3, 0}} : std::array<int, 6>{{0, 1, 2, 0, 2, 3}};
 
     for (const int index : indices) {
-        vertices.push_back(makeBlockVertex(corners[static_cast<size_t>(index)].x, corners[static_cast<size_t>(index)].y,
-                                           corners[static_cast<size_t>(index)].z, faceUV[static_cast<size_t>(index)].x,
-                                           faceUV[static_cast<size_t>(index)].y, static_cast<float>(face),
-                                           renderData.vertices[static_cast<size_t>(index)].sunNormalized,
-                                           renderData.vertices[static_cast<size_t>(index)].blockNormalized,
-                                           static_cast<float>(renderData.vertices[static_cast<size_t>(index)].ao),
-                                           renderData.layer, renderData.animationFrameCount, renderData.animationFps,
-                                           renderData.animated, renderData.tintKind, renderData.tintU, renderData.tintV,
-                                           renderData.derivativeMaterialId));
+        BlockVertex vertex = makeBlockVertex(
+            corners[static_cast<size_t>(index)].x, corners[static_cast<size_t>(index)].y,
+            corners[static_cast<size_t>(index)].z, faceUV[static_cast<size_t>(index)].x,
+            faceUV[static_cast<size_t>(index)].y, static_cast<float>(face),
+            renderData.vertices[static_cast<size_t>(index)].sunNormalized,
+            renderData.vertices[static_cast<size_t>(index)].blockNormalized,
+            static_cast<float>(renderData.vertices[static_cast<size_t>(index)].ao), renderData.layer,
+            renderData.animationFrameCount, renderData.animationFps, renderData.animated, renderData.tintKind,
+            renderData.tintU, renderData.tintV, renderData.derivativeMaterialId);
+        setBlockVertexAnalyticLightOwnsEmission(vertex, renderData.analyticLightOwnsEmission);
+        vertices.push_back(vertex);
     }
 }
 
@@ -1564,8 +1570,9 @@ std::vector<BlockVertex>& selectModelVertexTarget(ChunkMeshData& meshData, const
     failChunkMesher("Unknown render layer for model block");
 }
 
-FaceRenderData buildCachedModelFaceRenderData(const SubChunkMeshingSnapshot& snapshot, const BlockDef& def,
-                                              const CachedModelFace& face, const int x, const int y, const int z) {
+FaceRenderData buildCachedModelFaceRenderData(const SubChunkMeshingSnapshot& snapshot, const BlockStateId stateId,
+                                              const BlockDef& def, const CachedModelFace& face, const int x,
+                                              const int y, const int z) {
     const AnimatedTextureRef textureRef = BlockModelRegistry::resolveTextureRef(face.textureName);
 
     FaceRenderData renderData;
@@ -1574,6 +1581,7 @@ FaceRenderData buildCachedModelFaceRenderData(const SubChunkMeshingSnapshot& sna
     renderData.animationFrameCount = static_cast<float>(std::max<uint16_t>(1, textureRef.frameCount));
     renderData.animationFps = textureRef.isAnimated ? textureRef.fps : 0.0f;
     renderData.animated = textureRef.isAnimated ? 1.0f : 0.0f;
+    renderData.analyticLightOwnsEmission = getMeshBlockInfo(stateId).analyticLightOwnsEmission;
     renderData.derivativeMaterialId = def.derivativeMaterialId;
     renderData.tintKind = face.tintIndex >= 0 ? blockTintKindFromBiomeTint(def.biomeTint) : BlockTintKinds::NONE;
     if (renderData.tintKind != BlockTintKinds::NONE) {
@@ -1763,7 +1771,7 @@ void addWaterFacesImpl(ChunkMeshData& meshData, const SubChunkMeshingSnapshot& s
     const glm::vec3 pos(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z));
     const MeshBlockInfo& info = getMeshBlockInfo(stateId);
     const auto emitWaterFace = [&](const int face, const std::array<glm::vec3, 4>& corners) {
-        FaceRenderData renderData = buildFaceRenderData(snapshot, stateId, def, info, x, y, z, face);
+        FaceRenderData renderData = buildFaceRenderData(snapshot, def, info, x, y, z, face);
         if (waterTexture != nullptr) {
             applyWaterTextureRef(renderData, *waterTexture);
         }
@@ -1848,7 +1856,7 @@ bool populateTransparentFaceCellForTarget(const SubChunkMeshingSnapshot& snapsho
     outCell.x = x;
     outCell.y = y;
     outCell.z = z;
-    outCell.renderData = buildFaceRenderData(snapshot, stateId, def, info, x, y, z, face);
+    outCell.renderData = buildFaceRenderData(snapshot, def, info, x, y, z, face);
     outCell.key = buildFaceMergeKey(stateId, outCell.renderData);
     return true;
 }
@@ -1885,7 +1893,7 @@ bool populateCutoutFaceCell(const SubChunkMeshingSnapshot& snapshot, const int f
     outCell.x = x;
     outCell.y = y;
     outCell.z = z;
-    outCell.renderData = buildFaceRenderData(snapshot, stateId, def, info, x, y, z, face);
+    outCell.renderData = buildFaceRenderData(snapshot, def, info, x, y, z, face);
     outCell.key = buildFaceMergeKey(stateId, outCell.renderData);
     return true;
 }
@@ -1912,7 +1920,7 @@ bool populateCutoutDistanceFaceCell(const SubChunkMeshingSnapshot& snapshot, con
     outCell.x = x;
     outCell.y = y;
     outCell.z = z;
-    outCell.renderData = buildFaceRenderData(snapshot, stateId, def, info, x, y, z, face);
+    outCell.renderData = buildFaceRenderData(snapshot, def, info, x, y, z, face);
     outCell.key = buildFaceMergeKey(stateId, outCell.renderData);
     return true;
 }
@@ -2103,7 +2111,7 @@ void buildOpaqueGreedyPlane(const SubChunkMeshingSnapshot& snapshot, ChunkMeshDa
                 cell.x = x;
                 cell.y = y;
                 cell.z = z;
-                cell.renderData = buildFaceRenderData(snapshot, stateId, *info.def, info, x, y, z, Face);
+                cell.renderData = buildFaceRenderData(snapshot, *info.def, info, x, y, z, Face);
                 cell.key = buildFaceMergeKey(stateId, cell.renderData);
                 ++meshData.opaqueFaceCountBeforeGreedy;
                 if (meshData.rayTracingGeometryBuilt) {
@@ -2239,7 +2247,7 @@ void buildStillWaterTopGreedyFaces(const SubChunkMeshingSnapshot& snapshot, Chun
                 cell.height = height;
                 cell.heightKey = heightKey;
                 cell.renderData =
-                    buildFaceRenderData(snapshot, stateId, *def, getMeshBlockInfo(stateId), x, y, z, FACE_TOP);
+                    buildFaceRenderData(snapshot, *def, getMeshBlockInfo(stateId), x, y, z, FACE_TOP);
                 if (const AnimatedTextureRef* waterTexture = findNamedWaterTexture(*def, "still")) {
                     applyWaterTextureRef(cell.renderData, *waterTexture);
                 }
@@ -2316,9 +2324,9 @@ void buildStillWaterTopGreedyFaces(const SubChunkMeshingSnapshot& snapshot, Chun
 void addCrossedQuadsImpl(std::vector<BlockVertex>& vertices, const glm::vec3& pos, const BlockStateId stateId,
                          const BlockDef& def, const int x, const int y, const int z,
                          const SubChunkMeshingSnapshot& snapshot) {
-    static_cast<void>(def);
     const StateTextureIndices& textures = BlockStateRegistry::getStateTextures(stateId);
     const float layer = static_cast<float>(textures.faceTop.firstLayer);
+    const bool analyticLightOwnsEmission = getMeshBlockInfo(stateId).analyticLightOwnsEmission;
 
     uint8_t sunLevel = getResolvedSunlightSC(snapshot, x, y, z);
     uint8_t blockLevel = getResolvedBlockLightSC(snapshot, x, y, z);
@@ -2344,11 +2352,13 @@ void addCrossedQuadsImpl(std::vector<BlockVertex>& vertices, const glm::vec3& po
 
     const auto emitQuad = [&](const std::array<glm::vec3, 4>& corners) {
         for (const int index : indices) {
-            vertices.push_back(makeBlockVertex(
+            BlockVertex vertex = makeBlockVertex(
                 pos.x + corners[static_cast<size_t>(index)].x, pos.y + corners[static_cast<size_t>(index)].y,
                 pos.z + corners[static_cast<size_t>(index)].z, quadUV[static_cast<size_t>(index)].x,
                 quadUV[static_cast<size_t>(index)].y, crossMarker, sunNormalized, blockNormalized, 3.0f, layer, 1.0f,
-                0.0f, 0.0f, tintKind, tintU, tintV, def.derivativeMaterialId));
+                0.0f, 0.0f, tintKind, tintU, tintV, def.derivativeMaterialId);
+            setBlockVertexAnalyticLightOwnsEmission(vertex, analyticLightOwnsEmission);
+            vertices.push_back(vertex);
         }
     };
 
@@ -2395,6 +2405,7 @@ void addTorchCuboidImpl(std::vector<BlockVertex>& vertices, const glm::vec3& pos
                         const int x, const int y, const int z, const SubChunkMeshingSnapshot& snapshot) {
     const BlockDef& def = *getMeshBlockInfo(stateId).def;
     const StateTextureIndices& textures = BlockStateRegistry::getStateTextures(stateId);
+    const bool analyticLightOwnsEmission = getMeshBlockInfo(stateId).analyticLightOwnsEmission;
     int tileIndex = textures.faceTop.firstLayer;
     if (tileIndex < 0)
         tileIndex = 0;
@@ -2430,11 +2441,13 @@ void addTorchCuboidImpl(std::vector<BlockVertex>& vertices, const glm::vec3& pos
     const auto emitFace = [&](const std::array<glm::vec3, 4>& corners, const int face,
                               const std::array<glm::vec2, 4>& uv) {
         for (const int idx : indices) {
-            vertices.push_back(makeBlockVertex(
+            BlockVertex vertex = makeBlockVertex(
                 pos.x + corners[static_cast<size_t>(idx)].x, pos.y + corners[static_cast<size_t>(idx)].y,
                 pos.z + corners[static_cast<size_t>(idx)].z, uv[static_cast<size_t>(idx)].x,
                 uv[static_cast<size_t>(idx)].y, static_cast<float>(face), sunNorm, blockNorm, 3.0f, layer, 1.0f, 0.0f,
-                0.0f, BlockTintKinds::NONE, 0, 0, def.derivativeMaterialId));
+                0.0f, BlockTintKinds::NONE, 0, 0, def.derivativeMaterialId);
+            setBlockVertexAnalyticLightOwnsEmission(vertex, analyticLightOwnsEmission);
+            vertices.push_back(vertex);
         }
     };
 
@@ -2496,6 +2509,7 @@ void addTorchPrismImpl(std::vector<BlockVertex>& vertices, const glm::vec3& pos,
     const BlockDef& def = *getMeshBlockInfo(stateId).def;
     const StateTextureIndices& textures = BlockStateRegistry::getStateTextures(stateId);
     const float layer = static_cast<float>(textures.faceTop.firstLayer);
+    const bool analyticLightOwnsEmission = getMeshBlockInfo(stateId).analyticLightOwnsEmission;
 
     uint8_t sunLevel = getResolvedSunlightSC(snapshot, x, y, z);
     uint8_t blockLevel = getResolvedBlockLightSC(snapshot, x, y, z);
@@ -2524,11 +2538,13 @@ void addTorchPrismImpl(std::vector<BlockVertex>& vertices, const glm::vec3& pos,
     const auto emitFace = [&](const std::array<glm::vec3, 4>& corners, const int face,
                               const std::array<glm::vec2, 4>& uv) {
         for (const int idx : indices) {
-            vertices.push_back(makeBlockVertex(
+            BlockVertex vertex = makeBlockVertex(
                 pos.x + corners[static_cast<size_t>(idx)].x, pos.y + corners[static_cast<size_t>(idx)].y,
                 pos.z + corners[static_cast<size_t>(idx)].z, uv[static_cast<size_t>(idx)].x,
                 uv[static_cast<size_t>(idx)].y, static_cast<float>(face), sunNorm, blockNorm, 3.0f, layer, 1.0f, 0.0f,
-                0.0f, BlockTintKinds::NONE, 0, 0, def.derivativeMaterialId));
+                0.0f, BlockTintKinds::NONE, 0, 0, def.derivativeMaterialId);
+            setBlockVertexAnalyticLightOwnsEmission(vertex, analyticLightOwnsEmission);
+            vertices.push_back(vertex);
         }
     };
 
@@ -2620,17 +2636,20 @@ glm::mat4 buildWallTorchModelTransform(const uint16_t facingValue) {
 void emitTorchModelFace(std::vector<BlockVertex>& vertices, const glm::vec3& pos, const float layer,
                         const float sunNorm, const float blockNorm, const int face,
                         const std::array<glm::vec3, 4>& localCorners, const TorchModelUvRect& uvRect,
-                        const uint8_t derivativeMaterialId, const glm::mat4& transform = glm::mat4(1.0f)) {
+                        const uint8_t derivativeMaterialId, const bool analyticLightOwnsEmission,
+                        const glm::mat4& transform = glm::mat4(1.0f)) {
     const std::array<int, 6> indices = {{0, 1, 2, 0, 2, 3}};
     const std::array<glm::vec2, 4> uv = {
         {{uvRect.u0, uvRect.v0}, {uvRect.u1, uvRect.v0}, {uvRect.u1, uvRect.v1}, {uvRect.u0, uvRect.v1}}};
 
     for (const int idx : indices) {
         const glm::vec3 localPos = transformTorchModelPoint(transform, localCorners[static_cast<size_t>(idx)]);
-        vertices.push_back(makeBlockVertex(pos.x + localPos.x, pos.y + localPos.y, pos.z + localPos.z,
-                                           uv[static_cast<size_t>(idx)].x, uv[static_cast<size_t>(idx)].y,
-                                           static_cast<float>(face), sunNorm, blockNorm, 3.0f, layer, 1.0f, 0.0f, 0.0f,
-                                           BlockTintKinds::NONE, 0, 0, derivativeMaterialId));
+        BlockVertex vertex = makeBlockVertex(pos.x + localPos.x, pos.y + localPos.y, pos.z + localPos.z,
+                                             uv[static_cast<size_t>(idx)].x, uv[static_cast<size_t>(idx)].y,
+                                             static_cast<float>(face), sunNorm, blockNorm, 3.0f, layer, 1.0f, 0.0f,
+                                             0.0f, BlockTintKinds::NONE, 0, 0, derivativeMaterialId);
+        setBlockVertexAnalyticLightOwnsEmission(vertex, analyticLightOwnsEmission);
+        vertices.push_back(vertex);
     }
 }
 
@@ -2640,39 +2659,40 @@ void emitTorchModelCuboidFaces(std::vector<BlockVertex>& vertices, const glm::ve
                                const bool emitBottom, const TorchModelUvRect& bottomUv, const bool emitFront,
                                const TorchModelUvRect& frontUv, const bool emitBack, const TorchModelUvRect& backUv,
                                const bool emitLeft, const TorchModelUvRect& leftUv, const bool emitRight,
-                               const TorchModelUvRect& rightUv, const uint8_t derivativeMaterialId) {
+                               const TorchModelUvRect& rightUv, const uint8_t derivativeMaterialId,
+                               const bool analyticLightOwnsEmission) {
     if (emitTop) {
         emitTorchModelFace(vertices, pos, layer, sunNorm, blockNorm, FACE_TOP,
                            {{{from.x, to.y, to.z}, {to.x, to.y, to.z}, {to.x, to.y, from.z}, {from.x, to.y, from.z}}},
-                           topUv, derivativeMaterialId, transform);
+                           topUv, derivativeMaterialId, analyticLightOwnsEmission, transform);
     }
     if (emitBottom) {
         emitTorchModelFace(
             vertices, pos, layer, sunNorm, blockNorm, FACE_BOTTOM,
             {{{from.x, from.y, from.z}, {to.x, from.y, from.z}, {to.x, from.y, to.z}, {from.x, from.y, to.z}}},
-            bottomUv, derivativeMaterialId, transform);
+            bottomUv, derivativeMaterialId, analyticLightOwnsEmission, transform);
     }
     if (emitFront) {
         emitTorchModelFace(vertices, pos, layer, sunNorm, blockNorm, FACE_FRONT,
                            {{{from.x, from.y, to.z}, {to.x, from.y, to.z}, {to.x, to.y, to.z}, {from.x, to.y, to.z}}},
-                           frontUv, derivativeMaterialId, transform);
+                           frontUv, derivativeMaterialId, analyticLightOwnsEmission, transform);
     }
     if (emitBack) {
         emitTorchModelFace(
             vertices, pos, layer, sunNorm, blockNorm, FACE_BACK,
             {{{to.x, from.y, from.z}, {from.x, from.y, from.z}, {from.x, to.y, from.z}, {to.x, to.y, from.z}}}, backUv,
-            derivativeMaterialId, transform);
+            derivativeMaterialId, analyticLightOwnsEmission, transform);
     }
     if (emitLeft) {
         emitTorchModelFace(
             vertices, pos, layer, sunNorm, blockNorm, FACE_LEFT,
             {{{from.x, from.y, from.z}, {from.x, from.y, to.z}, {from.x, to.y, to.z}, {from.x, to.y, from.z}}}, leftUv,
-            derivativeMaterialId, transform);
+            derivativeMaterialId, analyticLightOwnsEmission, transform);
     }
     if (emitRight) {
         emitTorchModelFace(vertices, pos, layer, sunNorm, blockNorm, FACE_RIGHT,
                            {{{to.x, from.y, to.z}, {to.x, from.y, from.z}, {to.x, to.y, from.z}, {to.x, to.y, to.z}}},
-                           rightUv, derivativeMaterialId, transform);
+                           rightUv, derivativeMaterialId, analyticLightOwnsEmission, transform);
     }
 }
 
@@ -2681,6 +2701,7 @@ void addTorchTemplateImpl(std::vector<BlockVertex>& vertices, const glm::vec3& p
     const BlockDef& def = *getMeshBlockInfo(stateId).def;
     const StateTextureIndices& textures = BlockStateRegistry::getStateTextures(stateId);
     const float layer = static_cast<float>(textures.faceTop.firstLayer);
+    const bool analyticLightOwnsEmission = getMeshBlockInfo(stateId).analyticLightOwnsEmission;
 
     uint8_t sunLevel = getResolvedSunlightSC(snapshot, x, y, z);
     uint8_t blockLevel = getResolvedBlockLightSC(snapshot, x, y, z);
@@ -2709,15 +2730,16 @@ void addTorchTemplateImpl(std::vector<BlockVertex>& vertices, const glm::vec3& p
                                   glm::vec3(kTorchModelCoreMin, 0.0f, kTorchModelCoreMin),
                                   glm::vec3(kTorchModelCoreMax, kTorchModelCoreTop, kTorchModelCoreMax),
                                   glm::mat4(1.0f), true, kTorchTopUv, true, kTorchBottomUv, false, kTorchFullUv, false,
-                                  kTorchFullUv, false, kTorchFullUv, false, kTorchFullUv, def.derivativeMaterialId);
+                                  kTorchFullUv, false, kTorchFullUv, false, kTorchFullUv, def.derivativeMaterialId,
+                                  analyticLightOwnsEmission);
         emitTorchModelCuboidFaces(vertices, pos, layer, sunNorm, blockNorm, glm::vec3(kTorchModelCoreMin, 0.0f, 0.0f),
                                   glm::vec3(kTorchModelCoreMax, 1.0f, 1.0f), glm::mat4(1.0f), false, kTorchFullUv,
                                   false, kTorchFullUv, false, kTorchFullUv, false, kTorchFullUv, true, kTorchFullUv,
-                                  true, kTorchFullUv, def.derivativeMaterialId);
+                                  true, kTorchFullUv, def.derivativeMaterialId, analyticLightOwnsEmission);
         emitTorchModelCuboidFaces(vertices, pos, layer, sunNorm, blockNorm, glm::vec3(0.0f, 0.0f, kTorchModelCoreMin),
                                   glm::vec3(1.0f, 1.0f, kTorchModelCoreMax), glm::mat4(1.0f), false, kTorchFullUv,
                                   false, kTorchFullUv, true, kTorchFullUv, true, kTorchFullUv, false, kTorchFullUv,
-                                  false, kTorchFullUv, def.derivativeMaterialId);
+                                  false, kTorchFullUv, def.derivativeMaterialId, analyticLightOwnsEmission);
         return;
     }
 
@@ -2726,17 +2748,20 @@ void addTorchTemplateImpl(std::vector<BlockVertex>& vertices, const glm::vec3& p
                               glm::vec3(-1.0f * kTorchModelPixel, 3.5f * kTorchModelPixel, 7.0f * kTorchModelPixel),
                               glm::vec3(1.0f * kTorchModelPixel, 13.5f * kTorchModelPixel, 9.0f * kTorchModelPixel),
                               wallTransform, true, kTorchTopUv, true, kTorchBottomUv, false, kTorchFullUv, false,
-                              kTorchFullUv, false, kTorchFullUv, false, kTorchFullUv, def.derivativeMaterialId);
+                              kTorchFullUv, false, kTorchFullUv, false, kTorchFullUv, def.derivativeMaterialId,
+                              analyticLightOwnsEmission);
     emitTorchModelCuboidFaces(vertices, pos, layer, sunNorm, blockNorm,
                               glm::vec3(-1.0f * kTorchModelPixel, 3.5f * kTorchModelPixel, 0.0f),
                               glm::vec3(1.0f * kTorchModelPixel, 19.5f * kTorchModelPixel, 1.0f), wallTransform, false,
                               kTorchFullUv, false, kTorchFullUv, false, kTorchFullUv, false, kTorchFullUv, true,
-                              kTorchFullUv, true, kTorchFullUv, def.derivativeMaterialId);
+                              kTorchFullUv, true, kTorchFullUv, def.derivativeMaterialId,
+                              analyticLightOwnsEmission);
     emitTorchModelCuboidFaces(vertices, pos, layer, sunNorm, blockNorm,
                               glm::vec3(-8.0f * kTorchModelPixel, 3.5f * kTorchModelPixel, 7.0f * kTorchModelPixel),
                               glm::vec3(8.0f * kTorchModelPixel, 19.5f * kTorchModelPixel, 9.0f * kTorchModelPixel),
                               wallTransform, false, kTorchFullUv, false, kTorchFullUv, true, kTorchFullUv, true,
-                              kTorchFullUv, false, kTorchFullUv, false, kTorchFullUv, def.derivativeMaterialId);
+                              kTorchFullUv, false, kTorchFullUv, false, kTorchFullUv, def.derivativeMaterialId,
+                              analyticLightOwnsEmission);
 }
 
 constexpr float kFacePlaneSurfaceOffset = 1.0f / 128.0f;
@@ -3225,7 +3250,7 @@ void ChunkMeshBuilders::buildModelBlock(ChunkMeshData& meshData, const SubChunkM
             corner += blockOffset;
         }
 
-        FaceRenderData renderData = buildCachedModelFaceRenderData(snapshot, def, face, x, y, z);
+        FaceRenderData renderData = buildCachedModelFaceRenderData(snapshot, stateId, def, face, x, y, z);
         appendFaceVertices(target, worldCorners, face.uv, face.transformedFace, renderData);
         expandBoundsForCorners(meshData, worldCorners);
     }

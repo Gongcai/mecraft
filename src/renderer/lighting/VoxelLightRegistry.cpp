@@ -53,15 +53,6 @@ struct ActiveChunkEntry final {
     return true;
 }
 
-[[nodiscard]] bool sourceEnabledForState(const BlockAnalyticLightDefinition& definition, const BlockStateId state) {
-    if (definition.enabledStatePropertyIndex == BlockAnalyticLightDefinition::kUnconditionalStateIndex) {
-        return definition.enabledStateValueIndex == BlockAnalyticLightDefinition::kUnconditionalStateIndex;
-    }
-    return definition.enabledStateValueIndex != BlockAnalyticLightDefinition::kUnconditionalStateIndex &&
-           BlockStateRegistry::getPropertyIndex(state, definition.enabledStatePropertyIndex) ==
-               definition.enabledStateValueIndex;
-}
-
 constexpr float kVoxelTorchModelPixel = 1.0f / 16.0f;
 
 /// Builds a rotation around the same local pivot used by the torch mesh.
@@ -174,8 +165,7 @@ bool VoxelLightRegistry::Impl::rebuildChunk(const CachedVoxelLightChunk* previou
             for (int x = 0; x < Chunk::SIZE_X; ++x) {
                 const BlockStateId state = chunk.getBlock(x, y, z);
                 const BlockID blockId = BlockStateRegistry::getBlockId(state);
-                const BlockDef& block = BlockRegistry::getFast(blockId);
-                if (!block.analyticLight.has_value() || !sourceEnabledForState(*block.analyticLight, state)) {
+                if (!BlockStateRegistry::analyticLightEnabledForState(state)) {
                     continue;
                 }
                 const uint32_t localIndex = static_cast<uint32_t>(Chunk::toIndex(x, y, z));

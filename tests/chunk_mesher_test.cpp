@@ -450,6 +450,47 @@ int main() {
 
     {
         Chunk chunk(0, 0);
+        const BlockStateId glowstone = stateForBlockName("minecraft:glowstone");
+        const BlockStateId lampOff = stateForBlockName("minecraft:redstone_lamp");
+        const BlockStateId lampOn =
+            BlockStateRegistry::withProperty(lampOff, PropIndices::LIT, PropIndices::LIT_TRUE);
+        const BlockStateId stone = stateForBlockName("minecraft:stone");
+        chunk.setBlock(1, 32, 1, glowstone);
+        chunk.setBlock(4, 32, 1, lampOn);
+        chunk.setBlock(7, 32, 1, lampOff);
+        chunk.setBlock(10, 32, 1, stone);
+
+        const SubChunkMeshingSnapshotPtr snapshot = ChunkMesher::captureSubChunkSnapshot(chunk, 2);
+        if (!snapshot) {
+            return fail("analytic-light ownership meshing should capture the populated sub-chunk");
+        }
+        snapshot->buildRayTracingGeometry = true;
+        const ChunkMeshData meshData = ChunkMesher::buildSubChunkMeshData(*snapshot);
+        const auto blockHasOwnership = [&](const int blockX, const bool expected) {
+            bool matched = false;
+            for (const BlockVertex& vertex : meshData.rayTracingOpaqueVertices) {
+                const bool insideBlock = vertex.x >= static_cast<float>(blockX) - 0.01f &&
+                                         vertex.x <= static_cast<float>(blockX + 1) + 0.01f &&
+                                         vertex.y >= -0.01f && vertex.y <= 1.01f && vertex.z >= 0.99f &&
+                                         vertex.z <= 2.01f;
+                if (!insideBlock) {
+                    continue;
+                }
+                matched = true;
+                if (blockVertexAnalyticLightOwnsEmission(vertex) != expected) {
+                    return false;
+                }
+            }
+            return matched;
+        };
+        if (!blockHasOwnership(1, true) || !blockHasOwnership(4, true) || !blockHasOwnership(7, false) ||
+            !blockHasOwnership(10, false)) {
+            return fail("ray-tracing vertices must encode analytic-light ownership from the concrete block state");
+        }
+    }
+
+    {
+        Chunk chunk(0, 0);
         chunk.setBlock(0, 15, 0, stateForBlockName("minecraft:stone"));
         chunk.recalcHeightMap(0, 0);
 
