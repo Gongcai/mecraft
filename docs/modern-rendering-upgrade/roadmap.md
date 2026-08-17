@@ -369,6 +369,12 @@ Denoised/Reference 亮度为 `0.003908509/0.004488416`，方向为亮侧能量�
 V02 的 RELAX A-Trous `5/8` 单变量 A/B 得到 SSIM `0.788408/0.786351`、HDR p95 `0.507056/0.507651`，
 且 8 次迭代增加 GPU 成本；迭代数不足不是当前质量根因，生产保持用户设置 `5`。
 
+2026-08-17 在当前有限范围解析光分布实现上重新完成固定 V02 300+32 Vulkan 复测：方差降低
+`99.376258%`、SSIM `0.998078`、AS Pending/Invalid/NaN/Inf/负辐射均通过，但 HDR relative luminance
+p95 为 `0.133310`、Leakage 最大带宽为 `3 Pixels`，仍未达到 `0.1` 与 `2 Pixels` 门槛。对导引候选加入主表面
+受光半球筛选后 p95 为 `0.136230`，对 NRD 体素 Guide 临时使用几何法线后 p95 为 `0.157730`，两项均已撤回；
+因此当前失败仍由一次反弹输运与 NRD 跨边界扩散共同构成，不能标记 M3 画质门禁完成。
+
 本轮新增 `NrdGuidePrep` 的显式 `useVoxelGeometricNormal` 设置：体素场景的 Leakage Guide 使用 dominant-axis
 几何法线，NRD 的 `Normal/Roughness` 仍使用 GBuffer shading normal，模型场景保持原路径。V02 重新完成
 300 帧预热加 32 帧 Raw/Denoised，AS Pending/Invalid 仍为 `0`，静态报告的 `boundary_pixel_count` 与

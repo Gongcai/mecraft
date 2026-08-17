@@ -696,6 +696,11 @@ V02 Cave Turn 已完成同口径 300+32/64 Vulkan 静态运行：方差降低 `9
 V02 的 RELAX A-Trous `5/8` A/B 仅得到 SSIM `0.788408/0.786351`、HDR p95 `0.507056/0.507651`，8 次迭代
 没有改善并增加 GPU 成本，生产保持显式设置 `5`。
 
+2026-08-17 按固定 Profile 重新完成 V02 300+32 Vulkan 复测：方差降低 `99.376258%`、SSIM `0.998078`，
+AS Pending、Invalid、NaN/Inf 与负辐射均为 `0`；HDR relative luminance p95 `0.133310`、Leakage 最大带宽
+`3 Pixels` 仍失败。导引候选的主表面半球筛选 A/B 得到 p95 `0.136230`，NRD 体素 Guide 改用几何法线得到
+`0.157730`，均劣于生产设置并已撤回。当前 V02 仍不能作为 M3 静态画质门禁通过证据。
+
 随后完成一次 Guide 法线轴 A/B：`NrdGuidePrep` 仅在体素场景将 Leakage Guide 改为 dominant-axis 几何法线，
 NRD 的 shading normal 输入保持不变。V02 相同 300+32/64 运行的 `boundary_pixel_count` 与
 `leakage_pixel_count` 为 `0/0`，最大带宽 `0 Pixels`，但 SSIM/HDR p95 仍为 `0.788408/0.507056`。
