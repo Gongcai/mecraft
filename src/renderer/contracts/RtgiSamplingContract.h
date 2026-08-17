@@ -176,9 +176,60 @@ struct RtgiUniformConeSample final {
 /// @param axis Finite non-zero world-space cone axis.
 /// @param minimumCosine Cosine of the cone boundary in the interval [-1, 1).
 /// @return Unit direction and reciprocal cone solid angle, or no value when the contract is invalid.
-[[nodiscard]] std::optional<RtgiUniformConeSample> rtgiUniformConeSample(const glm::vec2& sample,
-                                                                        const glm::vec3& axis,
-                                                                        float minimumCosine);
+[[nodiscard]] std::optional<RtgiUniformConeSample> rtgiUniformConeSample(const glm::vec2& sample, const glm::vec3& axis,
+                                                                         float minimumCosine);
+
+/// Finite-range angular distribution used to guide one analytic world light.
+/// The front hemisphere follows the range-windowed attenuation profile. When
+/// the primary point lies inside the light range, the back hemisphere uses the
+/// nearest-point boundary weight shared by the GLSL sampler.
+struct RtgiWorldLightGuideWindowDistribution final {
+    float minimumCosine = 0.0f;
+    float normalizedDistanceSquared = 0.0f;
+    float normalizedEmitterRadiusSquared = 0.0f;
+    float frontIntegral = 0.0f;
+    float backIntegral = 0.0f;
+    float totalIntegral = 0.0f;
+    float pdfScale = 0.0f;
+};
+
+/// Evaluates the analytic integral of the finite-range angular window.
+/// @param cosine Axis cosine in the closed interval [0, 1].
+/// @param normalizedDistanceSquared Squared primary-to-light distance divided by squared light range.
+/// @param normalizedEmitterRadiusSquared Squared emitter radius divided by squared light range.
+/// @return Indefinite integral value whose derivative is rtgiWorldLightGuideWindowWeight.
+[[nodiscard]] float rtgiWorldLightGuideWindowAntiderivative(float cosine, float normalizedDistanceSquared,
+                                                            float normalizedEmitterRadiusSquared);
+
+/// Evaluates the unnormalized finite-range angular window.
+/// @param cosine Axis cosine in the closed interval [0, 1].
+/// @param normalizedDistanceSquared Squared primary-to-light distance divided by squared light range.
+/// @param normalizedEmitterRadiusSquared Squared emitter radius divided by squared light range.
+/// @return Positive angular weight for a valid finite light configuration.
+[[nodiscard]] float rtgiWorldLightGuideWindowWeight(float cosine, float normalizedDistanceSquared,
+                                                    float normalizedEmitterRadiusSquared);
+
+/// Builds the normalized finite-range angular distribution mirrored by the GLSL world-light sampler.
+/// @param distanceSquared Squared distance from the primary point to the light center.
+/// @param emitterRadiusSquared Squared finite emitter radius.
+/// @param rangeSquared Squared finite light influence range.
+/// @return Normalized angular distribution, or no value when the physical inputs are invalid.
+[[nodiscard]] std::optional<RtgiWorldLightGuideWindowDistribution>
+makeRtgiWorldLightGuideWindowDistribution(float distanceSquared, float emitterRadiusSquared, float rangeSquared);
+
+/// Evaluates the solid-angle PDF of a finite-range world-light guide proposal.
+/// @param distribution Valid distribution produced by makeRtgiWorldLightGuideWindowDistribution.
+/// @param cosine Cosine between the proposal direction and the primary-to-light axis.
+/// @return Solid-angle density, including zero outside the finite influence support.
+[[nodiscard]] float rtgiWorldLightGuideWindowPdf(const RtgiWorldLightGuideWindowDistribution& distribution,
+                                                 float cosine);
+
+/// Inverts the finite-range angular CDF using the fixed 12-iteration GLSL search.
+/// @param distribution Valid distribution produced by makeRtgiWorldLightGuideWindowDistribution.
+/// @param sampleValue Scalar sample in the half-open interval [0, 1).
+/// @return Axis cosine selected by the mirrored GLSL sampler, or no value for an invalid contract.
+[[nodiscard]] std::optional<float>
+rtgiWorldLightGuideWindowSampleCosine(const RtgiWorldLightGuideWindowDistribution& distribution, float sampleValue);
 
 /// Maps one two-dimensional sample to a cosine-weighted world-space hemisphere direction.
 /// @param sample Two values in the half-open interval [0, 1).

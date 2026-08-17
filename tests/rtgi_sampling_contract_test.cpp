@@ -38,6 +38,39 @@ namespace {
     return maximum;
 }
 
+[[nodiscard]] float integrateWorldLightWindow(const float normalizedDistanceSquared,
+                                              const float normalizedEmitterRadiusSquared, const float lower,
+                                              const float upper) {
+    constexpr uint32_t kStepCount = 16384u;
+    const float step = (upper - lower) / static_cast<float>(kStepCount);
+    double sum = 0.0;
+    for (uint32_t index = 0u; index <= kStepCount; ++index) {
+        const float cosine = lower + step * static_cast<float>(index);
+        const double coefficient = index == 0u || index == kStepCount ? 1.0 : (index % 2u == 0u ? 2.0 : 4.0);
+        sum += coefficient * renderer::contracts::rtgiWorldLightGuideWindowWeight(cosine, normalizedDistanceSquared,
+                                                                                  normalizedEmitterRadiusSquared);
+    }
+    return static_cast<float>(sum * static_cast<double>(step) / 3.0);
+}
+
+[[nodiscard]] float
+worldLightWindowSampleParameter(const renderer::contracts::RtgiWorldLightGuideWindowDistribution& distribution,
+                                const float cosine) {
+    if (cosine < distribution.minimumCosine) {
+        return 0.0f;
+    }
+    if (cosine <= 0.0f && distribution.backIntegral > 0.0f) {
+        return -cosine * distribution.backIntegral / distribution.totalIntegral;
+    }
+    const float frontMinimum = std::max(distribution.minimumCosine, 0.0f);
+    const float frontArea =
+        renderer::contracts::rtgiWorldLightGuideWindowAntiderivative(cosine, distribution.normalizedDistanceSquared,
+                                                                     distribution.normalizedEmitterRadiusSquared) -
+        renderer::contracts::rtgiWorldLightGuideWindowAntiderivative(
+            frontMinimum, distribution.normalizedDistanceSquared, distribution.normalizedEmitterRadiusSquared);
+    return (distribution.backIntegral + frontArea) / distribution.totalIntegral;
+}
+
 [[nodiscard]] bool validateShaderMirror() {
     const std::string samplingPath = std::string(MECRAFT_TEST_SOURCE_DIR) + "/assets/shaders/rtgi_sampling.glsl";
     const std::string tracePath = std::string(MECRAFT_TEST_SOURCE_DIR) + "/assets/shaders/rtgi_trace.comp";
@@ -309,18 +342,81 @@ int main() {
         rtgiUniformConeSample(glm::vec2(0.25f, 0.75f), glm::vec3(0.0f, 1.0f, 0.0f), 0.8f);
     const std::optional<RtgiUniformConeSample> sphereSample =
         rtgiUniformConeSample(glm::vec2(0.25f, 0.75f), glm::vec3(0.0f, 1.0f, 0.0f), -1.0f);
-    valid = requireTrue(coneSample.has_value() && std::abs(glm::length(coneSample->direction) - 1.0f) <= 1.0e-5f &&
-                            glm::dot(coneSample->direction, glm::vec3(0.0f, 1.0f, 0.0f)) >= 0.8f &&
-                            std::abs(coneSample->solidAnglePdf -
-                                     1.0f / (2.0f * glm::pi<float>() * 0.2f)) <= 1.0e-5f &&
-                            !rtgiUniformConeSample(glm::vec2(1.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f), 0.8f)
-                                 .has_value() &&
-                            !rtgiUniformConeSample(glm::vec2(0.5f), glm::vec3(0.0f), 0.8f).has_value() &&
-                            sphereSample.has_value() &&
-                            std::abs(sphereSample->solidAnglePdf - 1.0f / (4.0f * glm::pi<float>())) <= 1.0e-6f &&
-                            !rtgiUniformConeSample(glm::vec2(0.5f), glm::vec3(0.0f, 1.0f, 0.0f), 1.0f)
-                                 .has_value(),
-                        "RTGI analytic-light cones must preserve their exact solid-angle PDF") &&
+    valid =
+        requireTrue(coneSample.has_value() && std::abs(glm::length(coneSample->direction) - 1.0f) <= 1.0e-5f &&
+                        glm::dot(coneSample->direction, glm::vec3(0.0f, 1.0f, 0.0f)) >= 0.8f &&
+                        std::abs(coneSample->solidAnglePdf - 1.0f / (2.0f * glm::pi<float>() * 0.2f)) <= 1.0e-5f &&
+                        !rtgiUniformConeSample(glm::vec2(1.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f), 0.8f).has_value() &&
+                        !rtgiUniformConeSample(glm::vec2(0.5f), glm::vec3(0.0f), 0.8f).has_value() &&
+                        sphereSample.has_value() &&
+                        std::abs(sphereSample->solidAnglePdf - 1.0f / (4.0f * glm::pi<float>())) <= 1.0e-6f &&
+                        !rtgiUniformConeSample(glm::vec2(0.5f), glm::vec3(0.0f, 1.0f, 0.0f), 1.0f).has_value(),
+                    "RTGI analytic-light cones must preserve their exact solid-angle PDF") &&
+        valid;
+
+    const auto outsideRangeDistribution = makeRtgiWorldLightGuideWindowDistribution(9.0f, 0.04f, 4.0f);
+    const auto insideRangeDistribution = makeRtgiWorldLightGuideWindowDistribution(1.0f, 0.04f, 4.0f);
+    const auto boundaryDistribution = makeRtgiWorldLightGuideWindowDistribution(4.0f, 0.04f, 4.0f);
+    bool worldLightWindowValid =
+        outsideRangeDistribution.has_value() && insideRangeDistribution.has_value() && boundaryDistribution.has_value();
+    if (worldLightWindowValid) {
+        const auto& outside = *outsideRangeDistribution;
+        const auto& inside = *insideRangeDistribution;
+        const auto& boundary = *boundaryDistribution;
+        const float outsideNumericalIntegral = integrateWorldLightWindow(
+            outside.normalizedDistanceSquared, outside.normalizedEmitterRadiusSquared, outside.minimumCosine, 1.0f);
+        const float outsideAnalyticIntegral =
+            rtgiWorldLightGuideWindowAntiderivative(1.0f, outside.normalizedDistanceSquared,
+                                                    outside.normalizedEmitterRadiusSquared) -
+            rtgiWorldLightGuideWindowAntiderivative(outside.minimumCosine, outside.normalizedDistanceSquared,
+                                                    outside.normalizedEmitterRadiusSquared);
+        const float insideNumericalFrontIntegral = integrateWorldLightWindow(
+            inside.normalizedDistanceSquared, inside.normalizedEmitterRadiusSquared, 0.0f, 1.0f);
+        const float insideAnalyticFrontIntegral =
+            rtgiWorldLightGuideWindowAntiderivative(1.0f, inside.normalizedDistanceSquared,
+                                                    inside.normalizedEmitterRadiusSquared) -
+            rtgiWorldLightGuideWindowAntiderivative(0.0f, inside.normalizedDistanceSquared,
+                                                    inside.normalizedEmitterRadiusSquared);
+        const float outsidePdfIntegral = 2.0f * glm::pi<float>() * outside.totalIntegral * outside.pdfScale;
+        const float insidePdfIntegral = 2.0f * glm::pi<float>() * inside.totalIntegral * inside.pdfScale;
+        worldLightWindowValid =
+            outside.minimumCosine > 0.0f && outside.backIntegral == 0.0f && boundary.minimumCosine == 0.0f &&
+            boundary.backIntegral == 0.0f && inside.minimumCosine < 0.0f && inside.backIntegral > 0.0f &&
+            std::abs(outsideAnalyticIntegral - outsideNumericalIntegral) <=
+                3.0e-3f * std::max(1.0f, outsideAnalyticIntegral) &&
+            std::abs(insideAnalyticFrontIntegral - insideNumericalFrontIntegral) <=
+                3.0e-3f * std::max(1.0f, insideAnalyticFrontIntegral) &&
+            std::abs(outsidePdfIntegral - 1.0f) <= 1.0e-5f && std::abs(insidePdfIntegral - 1.0f) <= 1.0e-5f &&
+            rtgiWorldLightGuideWindowPdf(outside, outside.minimumCosine - 0.001f) == 0.0f &&
+            rtgiWorldLightGuideWindowPdf(outside, outside.minimumCosine + 0.01f) > 0.0f &&
+            rtgiWorldLightGuideWindowPdf(inside, -0.5f) > 0.0f &&
+            !makeRtgiWorldLightGuideWindowDistribution(0.0f, 0.04f, 4.0f).has_value();
+        const float outsideInversionTolerance =
+            (1.0f - outside.minimumCosine) / 8192.0f *
+                rtgiWorldLightGuideWindowWeight(1.0f, outside.normalizedDistanceSquared,
+                                                outside.normalizedEmitterRadiusSquared) /
+                outside.totalIntegral +
+            1.0e-4f;
+        const float insideInversionTolerance = rtgiWorldLightGuideWindowWeight(1.0f, inside.normalizedDistanceSquared,
+                                                                               inside.normalizedEmitterRadiusSquared) /
+                                                   (8192.0f * inside.totalIntegral) +
+                                               1.0e-4f;
+        for (const float sample : {0.0f, 0.1f, 0.499f, 0.9f, 0.999999f}) {
+            const auto outsideCosine = rtgiWorldLightGuideWindowSampleCosine(outside, sample);
+            const auto insideCosine = rtgiWorldLightGuideWindowSampleCosine(inside, sample);
+            worldLightWindowValid =
+                worldLightWindowValid && outsideCosine.has_value() && insideCosine.has_value() &&
+                *outsideCosine >= outside.minimumCosine && *outsideCosine < 1.0f &&
+                *insideCosine >= inside.minimumCosine && *insideCosine < 1.0f &&
+                std::abs(worldLightWindowSampleParameter(outside, *outsideCosine) - sample) <=
+                    outsideInversionTolerance &&
+                std::abs(worldLightWindowSampleParameter(inside, *insideCosine) - sample) <= insideInversionTolerance;
+        }
+        worldLightWindowValid =
+            worldLightWindowValid && !rtgiWorldLightGuideWindowSampleCosine(inside, 1.0f).has_value();
+    }
+    valid = requireTrue(worldLightWindowValid,
+                        "RTGI finite-range world-light window must match its analytic integral, PDF, and inversion") &&
             valid;
 
     const std::optional<glm::vec3> pole = rtgiCosineHemisphereDirection(glm::vec2(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));

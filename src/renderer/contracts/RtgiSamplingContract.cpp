@@ -161,6 +161,116 @@ std::optional<RtgiUniformConeSample> rtgiUniformConeSample(const glm::vec2& samp
     return RtgiUniformConeSample{glm::normalize(direction), 1.0f / solidAngle};
 }
 
+float rtgiWorldLightGuideWindowAntiderivative(const float cosine, const float normalizedDistanceSquared,
+                                              const float normalizedEmitterRadiusSquared) {
+    const float a = normalizedDistanceSquared;
+    const float q = normalizedEmitterRadiusSquared;
+    const float aPlusQ = a + q;
+    const float root = std::sqrt(a * aPlusQ);
+    const float inverseRoot = std::sqrt(a / aPlusQ);
+    const float qSquared = q * q;
+    const float k = 1.0f - 2.0f * qSquared + qSquared * qSquared;
+    const float cosineSquared = cosine * cosine;
+    const float cosineCubed = cosine * cosineSquared;
+    const float cosineFifth = cosineCubed * cosineSquared;
+    const float cosineSeventh = cosineFifth * cosineSquared;
+    const float p1 = cosine - cosineCubed / 3.0f;
+    const float p2 = cosine - 2.0f * cosineCubed / 3.0f + cosineFifth / 5.0f;
+    const float p3 = cosine - cosineCubed + 3.0f * cosineFifth / 5.0f - cosineSeventh / 7.0f;
+    return k * std::atanh(cosine * inverseRoot) / root + a * a * a * p3 - q * a * a * p2 + (qSquared - 2.0f) * a * p1 +
+           (2.0f * q - q * qSquared) * cosine;
+}
+
+float rtgiWorldLightGuideWindowWeight(const float cosine, const float normalizedDistanceSquared,
+                                      const float normalizedEmitterRadiusSquared) {
+    const float z = normalizedDistanceSquared * (1.0f - cosine * cosine);
+    const float window = 1.0f - z * z;
+    return window * window / (z + normalizedEmitterRadiusSquared);
+}
+
+std::optional<RtgiWorldLightGuideWindowDistribution>
+makeRtgiWorldLightGuideWindowDistribution(const float distanceSquared, const float emitterRadiusSquared,
+                                          const float rangeSquared) {
+    if (!std::isfinite(distanceSquared) || distanceSquared <= 1.0e-12f || !std::isfinite(emitterRadiusSquared) ||
+        emitterRadiusSquared <= 0.0f || !std::isfinite(rangeSquared) || rangeSquared <= 0.0f) {
+        return std::nullopt;
+    }
+
+    RtgiWorldLightGuideWindowDistribution distribution;
+    distribution.normalizedDistanceSquared = distanceSquared / rangeSquared;
+    distribution.normalizedEmitterRadiusSquared = emitterRadiusSquared / rangeSquared;
+    distribution.minimumCosine =
+        distanceSquared >= rangeSquared ? std::sqrt(1.0f - rangeSquared / distanceSquared) : -1.0f;
+    const float frontMinimum = std::max(distribution.minimumCosine, 0.0f);
+    const float antiderivativeAtOne = rtgiWorldLightGuideWindowAntiderivative(
+        1.0f, distribution.normalizedDistanceSquared, distribution.normalizedEmitterRadiusSquared);
+    const float antiderivativeAtFrontMinimum = rtgiWorldLightGuideWindowAntiderivative(
+        frontMinimum, distribution.normalizedDistanceSquared, distribution.normalizedEmitterRadiusSquared);
+    distribution.frontIntegral = antiderivativeAtOne - antiderivativeAtFrontMinimum;
+    const float backWeight = rtgiWorldLightGuideWindowWeight(0.0f, distribution.normalizedDistanceSquared,
+                                                             distribution.normalizedEmitterRadiusSquared);
+    distribution.backIntegral = distribution.minimumCosine < 0.0f ? backWeight : 0.0f;
+    distribution.totalIntegral = distribution.frontIntegral + distribution.backIntegral;
+    distribution.pdfScale = 1.0f / (kTwoPi * distribution.totalIntegral);
+    if (!std::isfinite(distribution.normalizedDistanceSquared) || distribution.normalizedDistanceSquared <= 0.0f ||
+        !std::isfinite(distribution.normalizedEmitterRadiusSquared) ||
+        distribution.normalizedEmitterRadiusSquared <= 0.0f || !std::isfinite(distribution.minimumCosine) ||
+        distribution.minimumCosine < -1.0f || distribution.minimumCosine >= 1.0f || !std::isfinite(frontMinimum) ||
+        frontMinimum < 0.0f || frontMinimum >= 1.0f || !std::isfinite(antiderivativeAtOne) ||
+        !std::isfinite(antiderivativeAtFrontMinimum) || !std::isfinite(distribution.frontIntegral) ||
+        distribution.frontIntegral <= 0.0f || !std::isfinite(backWeight) || backWeight < 0.0f ||
+        !std::isfinite(distribution.backIntegral) || distribution.backIntegral < 0.0f ||
+        !std::isfinite(distribution.totalIntegral) || distribution.totalIntegral <= 0.0f ||
+        !std::isfinite(distribution.pdfScale) || distribution.pdfScale <= 0.0f) {
+        return std::nullopt;
+    }
+    return distribution;
+}
+
+float rtgiWorldLightGuideWindowPdf(const RtgiWorldLightGuideWindowDistribution& distribution, const float cosine) {
+    if (!std::isfinite(cosine) || cosine < distribution.minimumCosine || cosine > 1.0f) {
+        return 0.0f;
+    }
+    const float windowWeight = rtgiWorldLightGuideWindowWeight(
+        std::max(cosine, 0.0f), distribution.normalizedDistanceSquared, distribution.normalizedEmitterRadiusSquared);
+    return distribution.pdfScale * windowWeight;
+}
+
+std::optional<float> rtgiWorldLightGuideWindowSampleCosine(const RtgiWorldLightGuideWindowDistribution& distribution,
+                                                           const float sampleValue) {
+    if (!std::isfinite(sampleValue) || sampleValue < 0.0f || sampleValue >= 1.0f ||
+        !std::isfinite(distribution.totalIntegral) || distribution.totalIntegral <= 0.0f ||
+        !std::isfinite(distribution.backIntegral) || distribution.backIntegral < 0.0f ||
+        distribution.backIntegral >= distribution.totalIntegral) {
+        return std::nullopt;
+    }
+
+    const float backProbability = distribution.backIntegral / distribution.totalIntegral;
+    if (distribution.backIntegral > 0.0f && sampleValue < backProbability) {
+        return -sampleValue / backProbability;
+    }
+
+    const float frontSample =
+        distribution.backIntegral > 0.0f ? (sampleValue - backProbability) / (1.0f - backProbability) : sampleValue;
+    const float frontMinimum = std::max(distribution.minimumCosine, 0.0f);
+    const float target = rtgiWorldLightGuideWindowAntiderivative(frontMinimum, distribution.normalizedDistanceSquared,
+                                                                 distribution.normalizedEmitterRadiusSquared) +
+                         frontSample * distribution.frontIntegral;
+    float lower = frontMinimum;
+    float upper = 1.0f;
+    for (uint32_t iteration = 0u; iteration < 12u; ++iteration) {
+        const float middle = 0.5f * (lower + upper);
+        const float middleValue = rtgiWorldLightGuideWindowAntiderivative(
+            middle, distribution.normalizedDistanceSquared, distribution.normalizedEmitterRadiusSquared);
+        if (middleValue < target) {
+            lower = middle;
+        } else {
+            upper = middle;
+        }
+    }
+    return 0.5f * (lower + upper);
+}
+
 std::optional<glm::vec3> rtgiCosineHemisphereDirection(const glm::vec2& sample, const glm::vec3& normal) {
     if (!finite(sample) || sample.x < 0.0f || sample.x >= 1.0f || sample.y < 0.0f || sample.y >= 1.0f ||
         !finite(normal)) {
