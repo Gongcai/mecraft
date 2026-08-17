@@ -116,6 +116,12 @@ namespace {
            traceSource.find("if (!voxelPrimarySurface && adjacentDepthValid") != std::string::npos &&
            traceSource.find("vec3 samplingNormal = voxelPrimarySurface ? geometricNormal : normal;") !=
                std::string::npos &&
+           traceSource.find("bool rtgiPrepareWorldLightGuide(vec3 primaryCameraRelative,\n"
+                            "                                out RtgiWorldLightGuide guide)") !=
+               std::string::npos &&
+           traceSource.find("rtgiPrepareWorldLightGuide(worldPosition - pc.cameraPositionAndMaxDistance.xyz,\n"
+                            "                                    worldLightGuide)") != std::string::npos &&
+           traceSource.find("voxelPrimarySurface, worldLightGuide") == std::string::npos &&
            traceSource.find("radiance += rtgiDiffuseTransportAlbedo(surface) * contribution.diffuse") !=
                std::string::npos &&
            traceSource.find("rtgiTerrainBlockLightIncident") == std::string::npos &&

@@ -589,7 +589,7 @@ bool rtgiWorldLightGuideProposalPdf(GpuLight light, RtgiWorldLightGuide guide,
     return rtgiFinite(proposalPdf) && proposalPdf > 0.0;
 }
 
-bool rtgiPrepareWorldLightGuide(vec3 primaryCameraRelative, bool enabled,
+bool rtgiPrepareWorldLightGuide(vec3 primaryCameraRelative,
                                 out RtgiWorldLightGuide guide) {
     guide.primaryCameraRelative = primaryCameraRelative;
     guide.primaryCellCoordinate = ivec3(0);
@@ -602,9 +602,6 @@ bool rtgiPrepareWorldLightGuide(vec3 primaryCameraRelative, bool enabled,
         return false;
     }
     guide.primaryCellCoordinate = ivec3(floor(primaryCameraRelative * uWorldLightGrid.cellSizeAndInverse.y));
-    if (!enabled) {
-        return true;
-    }
     uint lightCount = uClusterStats[CLUSTER_STATS_LIGHT_COUNT];
     for (uint listIndex = 0u; listIndex < guide.localIndexRange.y; ++listIndex) {
         uint lightIndex = uWorldLightIndices[guide.localIndexRange.x + listIndex];
@@ -1031,7 +1028,7 @@ void main() {
     float primarySurfaceDistance = length(worldPosition - pc.cameraPositionAndMaxDistance.xyz);
     RtgiWorldLightGuide worldLightGuide;
     if (!rtgiPrepareWorldLightGuide(worldPosition - pc.cameraPositionAndMaxDistance.xyz,
-                                    voxelPrimarySurface, worldLightGuide)) {
+                                    worldLightGuide)) {
         rtgiWriteResult(texel, vec3(0.0), 0.0, RTGI_TRACE_CLASS_NON_FINITE, 0u, 0u, 0u);
         return;
     }
