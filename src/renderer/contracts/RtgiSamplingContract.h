@@ -156,6 +156,30 @@ static_assert(sizeof(RtgiSecondaryLightingParams) == 128u);
 /// @return Two values in the half-open interval [0, 1).
 [[nodiscard]] glm::vec2 rtgiReferenceHammersleySample(uint32_t frameIndex, const glm::uvec2& pixel);
 
+/// Produces one scalar stratum from the Reference sequence without applying a
+/// continuous rotation. Each 32-frame half covers every one of 32 strata,
+/// and the complete 64-frame batch covers every one of 64 strata.
+/// @param frameIndex Consecutive rendered frame index.
+/// @param pixel Pixel coordinate used to derive an independent permutation.
+/// @return Center of one stratum in the half-open interval [0, 1).
+[[nodiscard]] float rtgiReferenceStratifiedScalar(uint32_t frameIndex, const glm::uvec2& pixel);
+
+
+/// One uniform solid-angle cone sample and its probability density.
+struct RtgiUniformConeSample final {
+    glm::vec3 direction{0.0f};
+    float solidAnglePdf = 0.0f;
+};
+
+/// Maps one two-dimensional sample to a uniform solid-angle cone.
+/// @param sample Two values in the half-open interval [0, 1).
+/// @param axis Finite non-zero world-space cone axis.
+/// @param minimumCosine Cosine of the cone boundary in the interval [-1, 1).
+/// @return Unit direction and reciprocal cone solid angle, or no value when the contract is invalid.
+[[nodiscard]] std::optional<RtgiUniformConeSample> rtgiUniformConeSample(const glm::vec2& sample,
+                                                                        const glm::vec3& axis,
+                                                                        float minimumCosine);
+
 /// Maps one two-dimensional sample to a cosine-weighted world-space hemisphere direction.
 /// @param sample Two values in the half-open interval [0, 1).
 /// @param normal Finite non-zero world-space surface normal.

@@ -4,6 +4,7 @@
 #include <glm/geometric.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
+#include <algorithm>
 #include <cmath>
 #include <limits>
 #include <utility>
@@ -117,6 +118,47 @@ glm::vec2 rtgiReferenceHammersleySample(const uint32_t frameIndex, const glm::uv
     const glm::vec2 hammersley{(static_cast<float>(scrambledIndex) + 0.5f) / 64.0f,
                                (static_cast<float>(reversedBits) + 0.5f) / 4294967296.0f};
     return glm::fract(batchRotation + hammersley);
+}
+
+float rtgiReferenceStratifiedScalar(const uint32_t frameIndex, const glm::uvec2& pixel) {
+    const uint32_t sampleIndex = frameIndex & 63u;
+    const uint32_t scramble = rtgiSampleHash(pixel.x * 1973u + pixel.y * 9277u + 0xa511e9b3u);
+    const uint32_t subsetIndex = sampleIndex & 31u;
+    const uint32_t subsetParity = (subsetIndex ^ (subsetIndex >> 1u) ^ (subsetIndex >> 2u) ^
+                                   (subsetIndex >> 3u) ^ (subsetIndex >> 4u)) &
+                                  1u;
+    const uint32_t orderedIndex = subsetIndex | ((subsetParity ^ (sampleIndex >> 5u)) << 5u);
+    const uint32_t scrambledIndex = orderedIndex ^ (scramble & 63u);
+    return (static_cast<float>(scrambledIndex) + 0.5f) / 64.0f;
+}
+
+
+std::optional<RtgiUniformConeSample> rtgiUniformConeSample(const glm::vec2& sample, const glm::vec3& axis,
+                                                           const float minimumCosine) {
+    if (!finite(sample) || sample.x < 0.0f || sample.x >= 1.0f || sample.y < 0.0f || sample.y >= 1.0f ||
+        !finite(axis) || !std::isfinite(minimumCosine) || minimumCosine < -1.0f || minimumCosine >= 1.0f) {
+        return std::nullopt;
+    }
+    const float axisLengthSquared = glm::dot(axis, axis);
+    if (!std::isfinite(axisLengthSquared) || axisLengthSquared <= 1.0e-12f) {
+        return std::nullopt;
+    }
+
+    const glm::vec3 unitAxis = axis / std::sqrt(axisLengthSquared);
+    const glm::vec3 helper =
+        std::abs(unitAxis.z) < 0.999f ? glm::vec3(0.0f, 0.0f, 1.0f) : glm::vec3(1.0f, 0.0f, 0.0f);
+    const glm::vec3 tangent = glm::normalize(glm::cross(helper, unitAxis));
+    const glm::vec3 bitangent = glm::cross(unitAxis, tangent);
+    const float cosine = 1.0f - sample.y * (1.0f - minimumCosine);
+    const float sine = std::sqrt(std::max(1.0f - cosine * cosine, 0.0f));
+    const float angle = kTwoPi * sample.x;
+    const glm::vec3 direction = tangent * (sine * std::cos(angle)) + bitangent * (sine * std::sin(angle)) +
+                                unitAxis * cosine;
+    const float solidAngle = kTwoPi * (1.0f - minimumCosine);
+    if (!finite(direction) || !std::isfinite(solidAngle) || solidAngle <= 0.0f) {
+        return std::nullopt;
+    }
+    return RtgiUniformConeSample{glm::normalize(direction), 1.0f / solidAngle};
 }
 
 std::optional<glm::vec3> rtgiCosineHemisphereDirection(const glm::vec2& sample, const glm::vec3& normal) {

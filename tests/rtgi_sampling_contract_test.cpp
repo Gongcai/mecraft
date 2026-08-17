@@ -6,6 +6,7 @@
 #endif
 
 #include <glm/geometric.hpp>
+#include <glm/gtc/constants.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
 #include <algorithm>
@@ -64,6 +65,10 @@ namespace {
                std::string::npos &&
            samplingSource.find(
                "uint rtgiTerrainHitIdentityHash(uint revisionLow, uint revisionHigh, uvec2 vertexAddressWords)") !=
+               std::string::npos &&
+           samplingSource.find("float rtgiReferenceStratifiedScalar(uint frameIndex, uvec2 pixel)") !=
+               std::string::npos &&
+           samplingSource.find("vec3 rtgiUniformConeDirection(vec2 sampleValue, vec3 axis, float minimumCosine)") !=
                std::string::npos &&
            traceSource.find("layout(std140, set = 1, binding = 16) uniform RtgiSecondaryLightingParams") !=
                std::string::npos &&
@@ -267,6 +272,49 @@ int main() {
                             maximumCircularGap(secondHalfX) <= 0.062501f &&
                             maximumCircularGap(secondHalfY) <= 0.062501f,
                         "each 32-sample Reference half must retain full-domain stratification") &&
+            valid;
+
+    std::array<bool, 32u> firstHalfScalarStrata{};
+    std::array<bool, 32u> secondHalfScalarStrata{};
+    std::array<bool, 64u> fullScalarStrata{};
+    bool scalarStrataValid = true;
+    for (uint32_t index = 0u; index < 64u; ++index) {
+        const float sample = rtgiReferenceStratifiedScalar(index, glm::uvec2(7u, 11u));
+        const uint32_t halfStratum = std::min(static_cast<uint32_t>(sample * 32.0f), 31u);
+        const uint32_t fullStratum = std::min(static_cast<uint32_t>(sample * 64.0f), 63u);
+        std::array<bool, 32u>& halfStrata = index < 32u ? firstHalfScalarStrata : secondHalfScalarStrata;
+        scalarStrataValid = scalarStrataValid && sample >= 0.0f && sample < 1.0f &&
+                            !halfStrata[halfStratum] && !fullScalarStrata[fullStratum] &&
+                            sample == rtgiReferenceStratifiedScalar(index + 64u, glm::uvec2(7u, 11u));
+        halfStrata[halfStratum] = true;
+        fullScalarStrata[fullStratum] = true;
+    }
+    valid = requireTrue(scalarStrataValid &&
+                            std::all_of(firstHalfScalarStrata.begin(), firstHalfScalarStrata.end(),
+                                        [](const bool visited) { return visited; }) &&
+                            std::all_of(secondHalfScalarStrata.begin(), secondHalfScalarStrata.end(),
+                                        [](const bool visited) { return visited; }) &&
+                            std::all_of(fullScalarStrata.begin(), fullScalarStrata.end(),
+                                        [](const bool visited) { return visited; }),
+                        "RTGI scalar Reference sampling must exactly stratify both 32-frame halves") &&
+            valid;
+
+    const std::optional<RtgiUniformConeSample> coneSample =
+        rtgiUniformConeSample(glm::vec2(0.25f, 0.75f), glm::vec3(0.0f, 1.0f, 0.0f), 0.8f);
+    const std::optional<RtgiUniformConeSample> sphereSample =
+        rtgiUniformConeSample(glm::vec2(0.25f, 0.75f), glm::vec3(0.0f, 1.0f, 0.0f), -1.0f);
+    valid = requireTrue(coneSample.has_value() && std::abs(glm::length(coneSample->direction) - 1.0f) <= 1.0e-5f &&
+                            glm::dot(coneSample->direction, glm::vec3(0.0f, 1.0f, 0.0f)) >= 0.8f &&
+                            std::abs(coneSample->solidAnglePdf -
+                                     1.0f / (2.0f * glm::pi<float>() * 0.2f)) <= 1.0e-5f &&
+                            !rtgiUniformConeSample(glm::vec2(1.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f), 0.8f)
+                                 .has_value() &&
+                            !rtgiUniformConeSample(glm::vec2(0.5f), glm::vec3(0.0f), 0.8f).has_value() &&
+                            sphereSample.has_value() &&
+                            std::abs(sphereSample->solidAnglePdf - 1.0f / (4.0f * glm::pi<float>())) <= 1.0e-6f &&
+                            !rtgiUniformConeSample(glm::vec2(0.5f), glm::vec3(0.0f, 1.0f, 0.0f), 1.0f)
+                                 .has_value(),
+                        "RTGI analytic-light cones must preserve their exact solid-angle PDF") &&
             valid;
 
     const std::optional<glm::vec3> pole = rtgiCosineHemisphereDirection(glm::vec2(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));

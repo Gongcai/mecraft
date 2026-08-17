@@ -92,6 +92,34 @@ vec2 rtgiReferenceHammersleySample(uint frameIndex, uvec2 pixel) {
     return fract(batchRotation + hammersley);
 }
 
+// Produces one scalar stratum from the same 64-sample parity partition used
+// by Reference sampling. Each 32-frame half visits every one of 32 strata
+// exactly once, while the complete batch visits every one of 64 strata once.
+float rtgiReferenceStratifiedScalar(uint frameIndex, uvec2 pixel) {
+    uint sampleIndex = frameIndex & 63u;
+    uint scramble = rtgiSampleHash(pixel.x * 1973u + pixel.y * 9277u + 0xa511e9b3u);
+    uint subsetIndex = sampleIndex & 31u;
+    uint subsetParity = (subsetIndex ^ (subsetIndex >> 1u) ^ (subsetIndex >> 2u) ^
+                         (subsetIndex >> 3u) ^ (subsetIndex >> 4u)) & 1u;
+    uint orderedIndex = subsetIndex | ((subsetParity ^ (sampleIndex >> 5u)) << 5u);
+    uint scrambledIndex = orderedIndex ^ (scramble & 63u);
+    return (float(scrambledIndex) + 0.5) / 64.0;
+}
+
+
+// Maps a unit-square sample to a uniform solid-angle cone around axis. The
+// minimum cosine defines the cone boundary and must remain in [-1, 1).
+vec3 rtgiUniformConeDirection(vec2 sampleValue, vec3 axis, float minimumCosine) {
+    vec3 unitAxis = normalize(axis);
+    vec3 helper = abs(unitAxis.z) < 0.999 ? vec3(0.0, 0.0, 1.0) : vec3(1.0, 0.0, 0.0);
+    vec3 tangent = normalize(cross(helper, unitAxis));
+    vec3 bitangent = cross(unitAxis, tangent);
+    float cosine = 1.0 - sampleValue.y * (1.0 - minimumCosine);
+    float sine = sqrt(max(1.0 - cosine * cosine, 0.0));
+    float angle = RTGI_TWO_PI * sampleValue.x;
+    return normalize(tangent * (sine * cos(angle)) + bitangent * (sine * sin(angle)) + unitAxis * cosine);
+}
+
 // Maps one low-discrepancy sample to a cosine-weighted unit direction around normal.
 vec3 rtgiCosineHemisphereDirection(vec2 sampleValue, vec3 normal) {
     vec3 unitNormal = normalize(normal);
