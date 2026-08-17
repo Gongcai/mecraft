@@ -702,6 +702,8 @@ AS Pending、Invalid、NaN/Inf 与负辐射均为 `0`；HDR relative luminance p
 `0.157730`，均劣于生产设置并已撤回。当前 V02 仍不能作为 M3 静态画质门禁通过证据。
 同一条件下关闭解析光导引的 A/B 得到 HDR p95 `0.139468`、Raw 方差 `0.005512`，劣于生产导引的
 `0.133310` 与 `0.002614`；导引对方差有真实收益，但目标分布与一次反弹联合估计仍需继续修复。
+随后对 V02 仅将 RELAX Diffuse Pre-pass 半径设为 `1 Pixel` 完成同口径复测：HDR p95 `0.132520`、SSIM
+`0.998189`、Raw 方差 `0.002614`，Leakage 最大带宽仍为 `3 Pixels`。该实验未达到固定门槛，临时设置已撤回，生产保持 SDK 默认半径。
 
 随后完成一次 Guide 法线轴 A/B：`NrdGuidePrep` 仅在体素场景将 Leakage Guide 改为 dominant-axis 几何法线，
 NRD 的 shading normal 输入保持不变。V02 相同 300+32/64 运行的 `boundary_pixel_count` 与

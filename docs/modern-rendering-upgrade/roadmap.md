@@ -376,6 +376,8 @@ p95 为 `0.133310`、Leakage 最大带宽为 `3 Pixels`，仍未达到 `0.1` 与
 因此当前失败仍由一次反弹输运与 NRD 跨边界扩散共同构成，不能标记 M3 画质门禁完成。
 同一运行条件下关闭解析光导引的 A/B 得到 HDR p95 `0.139468`、Raw 方差 `0.005512`，劣于生产导引的
 `0.133310` 与 `0.002614`；导引方向仍然正确，后续应优化其目标分布或与一次反弹的联合估计器。
+随后对 V02 仅将 RELAX Diffuse Pre-pass 半径设为 `1 Pixel` 完成同口径复测：HDR p95 为 `0.132520`、SSIM
+`0.998189`、Raw 方差 `0.002614`，Leakage 最大带宽仍为 `3 Pixels`。该轴没有同时改善固定画质门禁，临时设置已撤回，生产保持 SDK 默认半径。
 
 本轮新增 `NrdGuidePrep` 的显式 `useVoxelGeometricNormal` 设置：体素场景的 Leakage Guide 使用 dominant-axis
 几何法线，NRD 的 `Normal/Roughness` 仍使用 GBuffer shading normal，模型场景保持原路径。V02 重新完成
