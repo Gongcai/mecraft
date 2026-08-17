@@ -700,6 +700,8 @@ V02 的 RELAX A-Trous `5/8` A/B 仅得到 SSIM `0.788408/0.786351`、HDR p95 `0.
 AS Pending、Invalid、NaN/Inf 与负辐射均为 `0`；HDR relative luminance p95 `0.133310`、Leakage 最大带宽
 `3 Pixels` 仍失败。导引候选的主表面半球筛选 A/B 得到 p95 `0.136230`，NRD 体素 Guide 改用几何法线得到
 `0.157730`，均劣于生产设置并已撤回。当前 V02 仍不能作为 M3 静态画质门禁通过证据。
+同一条件下关闭解析光导引的 A/B 得到 HDR p95 `0.139468`、Raw 方差 `0.005512`，劣于生产导引的
+`0.133310` 与 `0.002614`；导引对方差有真实收益，但目标分布与一次反弹联合估计仍需继续修复。
 
 随后完成一次 Guide 法线轴 A/B：`NrdGuidePrep` 仅在体素场景将 Leakage Guide 改为 dominant-axis 几何法线，
 NRD 的 shading normal 输入保持不变。V02 相同 300+32/64 运行的 `boundary_pixel_count` 与
