@@ -1157,6 +1157,50 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub& render, Re
                             clustered.indexCapacity, clustered.averageLightsPerCluster, clustered.maxLightsPerCluster,
                             clustered.buildError);
             }
+            const renderer::contracts::RtgiTraceCounterFrameStats& rtgiCounters = graphStats.rtgiTraceCounters;
+            const auto rtgiTracePass =
+                std::find_if(graphStats.passes.begin(), graphStats.passes.end(),
+                             [](const RenderGraphPassStats& pass) { return pass.name == "RTGI.Trace"; });
+            if (rtgiCounters.valid) {
+                constexpr double kQueriesPerMillion = 1'000'000.0;
+                constexpr uint64_t kPrimarySamplesPerCompletedPixel = 2u;
+                const uint64_t completedPrimaryPixels = rtgiCounters.hitPixelCount + rtgiCounters.missPixelCount;
+                const uint64_t completedPrimaryRays = completedPrimaryPixels * kPrimarySamplesPerCompletedPixel;
+                const double primaryRayMillions = static_cast<double>(completedPrimaryRays) / kQueriesPerMillion;
+                const double traceGpuMs = rtgiTracePass != graphStats.passes.end() ? rtgiTracePass->gpuMs : 0.0;
+                const double millisecondsPerMillionPrimaryRays =
+                    primaryRayMillions > 0.0 ? traceGpuMs / primaryRayMillions : 0.0;
+                const double candidateCountPerFirstPrimaryRay =
+                    completedPrimaryPixels > 0u
+                        ? static_cast<double>(rtgiCounters.candidateCount) / static_cast<double>(completedPrimaryPixels)
+                        : 0.0;
+                const double confirmationRate = rtgiCounters.candidateCount > 0u
+                                                    ? static_cast<double>(rtgiCounters.confirmedCount) /
+                                                          static_cast<double>(rtgiCounters.candidateCount) * 100.0
+                                                    : 0.0;
+                ImGui::Separator();
+                ImGui::TextUnformatted("RTGI Trace Detail");
+                ImGui::Text("Trace: %.3f ms  Extent: %ux%u", traceGpuMs, rtgiCounters.width, rtgiCounters.height);
+                ImGui::Text("Primary: %.3f M rays  Pass: %.3f ms/M", primaryRayMillions,
+                            millisecondsPerMillionPrimaryRays);
+                ImGui::Text("Primary sample 0: %llu candidates (%.2f/ray)  %llu confirmed (%.1f%%)",
+                            static_cast<unsigned long long>(rtgiCounters.candidateCount),
+                            candidateCountPerFirstPrimaryRay,
+                            static_cast<unsigned long long>(rtgiCounters.confirmedCount), confirmationRate);
+                ImGui::Text("Primary output: %llu hit  %llu miss",
+                            static_cast<unsigned long long>(rtgiCounters.hitPixelCount),
+                            static_cast<unsigned long long>(rtgiCounters.missPixelCount));
+                ImGui::Text("Skipped: %llu sky  %llu translucent  %llu invalid",
+                            static_cast<unsigned long long>(rtgiCounters.skyPixelCount),
+                            static_cast<unsigned long long>(rtgiCounters.translucentPixelCount),
+                            static_cast<unsigned long long>(rtgiCounters.nonFinitePixelCount));
+                ImGui::Text("Emissive NEE: %llu visible  %llu occluded",
+                            static_cast<unsigned long long>(rtgiCounters.emissiveVisiblePixelCount),
+                            static_cast<unsigned long long>(rtgiCounters.emissiveOccludedPixelCount));
+                ImGui::Text("Emissive NEE: %llu rejected  %llu inactive",
+                            static_cast<unsigned long long>(rtgiCounters.emissiveSurfaceRejectedPixelCount),
+                            static_cast<unsigned long long>(rtgiCounters.emissiveInactivePixelCount));
+            }
             if (graphStats.passes.empty()) {
                 ImGui::Text("GPU timings: waiting");
             } else {

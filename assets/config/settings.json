@@ -1,15 +1,16 @@
 {
   "app": {
+    "fullscreenEnabled": false,
     "rhiBackend": "vulkan",
     "vsyncEnabled": false
   },
   "game": {
-    "renderDistance": 9
+    "renderDistance": 17
   },
   "language": "zh_cn",
   "render": {
     "blockMaterialMaps": {
-      "enabled": true,
+      "enabled": false,
       "normalMapsEnabled": true,
       "parallaxDepth": 0.07500000298023224,
       "parallaxMapsEnabled": false,
@@ -62,10 +63,10 @@
       "disocclusionThresholdAlternate": 0.05000000074505806,
       "enabled": true,
       "method": 0,
-      "relaxAtrousIterations": 5,
       "reblurHitDistanceConstantScale": 3.0,
       "reblurHitDistanceRoughnessScale": 20.0,
-      "reblurHitDistanceViewZScale": 0.10000000149011612
+      "reblurHitDistanceViewZScale": 0.10000000149011612,
+      "relaxAtrousIterations": 5
     },
     "nvidia": {
       "frameGeneration": 0,
@@ -86,7 +87,7 @@
       "autoExposureSpeed": 1.0,
       "blockLightStrength": 1.0,
       "bloomEnabled": true,
-      "bloomMipCount": 7,
+      "bloomMipCount": 3,
       "bloomStrength": 1.0,
       "bloomThreshold": 0.0,
       "bloomyFogEnabled": true,
@@ -142,27 +143,28 @@
       "textureAliasingEnabled": true
     },
     "rtgi": {
+      "cutoutTraversal": 0,
       "enabled": true,
       "intensity": 1.0,
       "maxRayDistance": 64.0,
-      "maxShadowRayDistance": 201.39999389648438,
-      "minimumRayOriginBias": 9.999999747378752e-05
+      "maxShadowRayDistance": 123.0,
+      "minimumRayOriginBias": 0.0009765625
     },
     "shadow": {
       "constantBias": 0.000699999975040555,
       "contactShadowStrength": 0.11999999731779099,
       "contactShadowsEnabled": false,
-      "distance": 64.0,
+      "distance": 192.0,
       "enabled": true,
       "farCascadeInterleaved": true,
       "gpuCascadeCullEnabled": false,
       "normalOffset": 0.03500000014901161,
       "pcssShadowsEnabled": true,
       "pcssStrength": 0.7200000286102295,
-      "resolution": 4096,
+      "resolution": 2011,
       "slopeBias": 0.002199999988079071,
       "softShadowsEnabled": true,
-      "softness": 1.0
+      "softness": 0.949999988079071
     },
     "ssao": {
       "asyncComputeEnabled": true,
@@ -176,7 +178,7 @@
     },
     "ssgi": {
       "colorBleedStrength": 0.3499999940395355,
-      "denoiseEnabled": true,
+      "denoiseEnabled": false,
       "denoiseIterations": 2,
       "denoiseStrength": 0.8500000238418579,
       "enabled": false,
@@ -211,7 +213,7 @@
       "sharpeningEnabled": true,
       "sharpeningStrength": 0.20000000298023224,
       "sharpness": 0.20000000298023224,
-      "type": 1
+      "type": 0
     },
     "volumetric": {
       "baseDensity": 1.0,
@@ -227,14 +229,14 @@
       "freezeR1": false,
       "lightEnabled": true,
       "maxDistance": 260.0,
-      "qualityTier": 0,
+      "qualityTier": 2,
       "shadowBiasScale": 1.0,
       "skyRayEnabled": true,
       "temporalEnabled": true,
       "temporalWeight": 0.8999999761581421,
       "timeFadeEnabled": false,
       "underwaterLightStrength": 0.10000000149011612,
-      "updateInterval": 4,
+      "updateInterval": 1,
       "uwLightEnabled": true
     },
     "weather": {
@@ -245,7 +247,7 @@
       "rainAlphaScale": 2.5,
       "rainLinesEnabled": true,
       "skylightScale": 1.0,
-      "surfaceRipplesEnabled": false,
+      "surfaceRipplesEnabled": true,
       "wetSurfacesEnabled": true
     }
   }
