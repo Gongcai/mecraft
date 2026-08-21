@@ -705,6 +705,9 @@ AS Pending、Invalid、NaN/Inf 与负辐射均为 `0`；HDR relative luminance p
 随后对 V02 仅将 RELAX Diffuse Pre-pass 半径设为 `1 Pixel` 完成同口径复测：HDR p95 `0.132520`、SSIM
 `0.998189`、Raw 方差 `0.002614`，Leakage 最大带宽仍为 `3 Pixels`。该实验未达到固定门槛，临时设置已撤回，生产保持 SDK 默认半径。
 
+随后将 World Light 导引支持域收紧为仅采样朝向点光的前向有限范围，背向方向的导引 PDF 固定为 `0`，其余支持仍由普通余弦路径保留。固定 V02 300+32 Vulkan 复测的 HDR p95 为
+`0.130316`、SSIM `0.998495`、Raw 方差 `0.002295`，较生产导引的 `0.133310/0.002614` 有真实改善，但 Leakage 最大带宽仍为 `3 Pixels`，完整静态门禁继续失败。NRD `Normal/Roughness` 临时改用体素几何法线的 A/B HDR p95 为 `0.157356`，已撤回；当前生产设置保持前向导引与原 NRD 法线输入。
+
 随后完成一次 Guide 法线轴 A/B：`NrdGuidePrep` 仅在体素场景将 Leakage Guide 改为 dominant-axis 几何法线，
 NRD 的 shading normal 输入保持不变。V02 相同 300+32/64 运行的 `boundary_pixel_count` 与
 `leakage_pixel_count` 为 `0/0`，最大带宽 `0 Pixels`，但 SSIM/HDR p95 仍为 `0.788408/0.507056`。

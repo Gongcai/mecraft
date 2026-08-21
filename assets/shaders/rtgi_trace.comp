@@ -569,10 +569,8 @@ bool rtgiWorldLightGuideDistribution(GpuLight light, RtgiWorldLightGuide guide,
     float antiderivativeAtFrontMinimum = rtgiWorldLightGuideWindowAntiderivative(
         frontMinimum, normalizedDistanceSquared, normalizedEmitterRadiusSquared);
     float frontIntegral = antiderivativeAtOne - antiderivativeAtFrontMinimum;
-    float backWeight = rtgiWorldLightGuideWindowWeight(
-        0.0, normalizedDistanceSquared, normalizedEmitterRadiusSquared);
-    float backIntegral = minimumCosine < 0.0 ? backWeight : 0.0;
-    float totalIntegral = frontIntegral + backIntegral;
+    float backIntegral = 0.0;
+    float totalIntegral = frontIntegral;
     float pdfScale = 1.0 / (RTGI_TWO_PI * totalIntegral);
     if (!rtgiFinite(primaryToLight) || !rtgiFinite(distanceSquared) || distanceSquared <= 1.0e-12 ||
         !rtgiFinite(distance) || distance <= 0.0 || !rtgiFinite(emitterRadius) || emitterRadius <= 0.0 ||
@@ -583,7 +581,7 @@ bool rtgiWorldLightGuideDistribution(GpuLight light, RtgiWorldLightGuide guide,
         !rtgiFinite(minimumCosine) || minimumCosine < -1.0 || minimumCosine >= 1.0 ||
         !rtgiFinite(frontMinimum) || frontMinimum < 0.0 || frontMinimum >= 1.0 ||
         !rtgiFinite(antiderivativeAtOne) || !rtgiFinite(antiderivativeAtFrontMinimum) ||
-        !rtgiFinite(frontIntegral) || frontIntegral <= 0.0 || !rtgiFinite(backWeight) || backWeight < 0.0 ||
+        !rtgiFinite(frontIntegral) || frontIntegral <= 0.0 ||
         !rtgiFinite(backIntegral) || backIntegral < 0.0 || !rtgiFinite(totalIntegral) || totalIntegral <= 0.0 ||
         !rtgiFinite(pdfScale) || pdfScale <= 0.0) {
         return false;
@@ -618,7 +616,8 @@ bool rtgiWorldLightGuideProposalPdf(GpuLight light, RtgiWorldLightGuide guide,
         return false;
     }
     float cosine = min(dot(rayDirection * inversesqrt(directionLengthSquared), distribution.axis), 1.0);
-    if (cosine < distribution.minimumCosine) {
+    float guideMinimumCosine = max(distribution.minimumCosine, 0.0);
+    if (cosine < guideMinimumCosine) {
         return true;
     }
     float windowWeight = cosine < 0.0
@@ -778,54 +777,30 @@ bool rtgiGuidedWorldLightDirection(GpuLight light, RtgiWorldLightGuide guide,
     if (!rtgiWorldLightGuideDistribution(light, guide, distribution)) {
         return false;
     }
-    float backProbability = distribution.backIntegral / distribution.totalIntegral;
-    float cosine;
-    float coneSample;
-    vec3 samplingAxis = distribution.axis;
-    float samplingMinimumCosine;
-    if (distribution.backIntegral > 0.0 && sampleValue.y < backProbability) {
-        float backSample = sampleValue.y / backProbability;
-        cosine = -backSample;
-        samplingAxis = -distribution.axis;
-        samplingMinimumCosine = 0.0;
-        coneSample = 1.0 - backSample;
-    } else {
-        float frontSample = distribution.backIntegral > 0.0
-                                ? (sampleValue.y - backProbability) / (1.0 - backProbability)
-                                : sampleValue.y;
-        float frontMinimum = distribution.minimumCosine < 0.0 ? 0.0 : distribution.minimumCosine;
-        float target = rtgiWorldLightGuideWindowAntiderivative(
-                           frontMinimum, distribution.normalizedDistanceSquared,
-                           distribution.normalizedEmitterRadiusSquared) +
-                       frontSample * distribution.frontIntegral;
-        float lower = frontMinimum;
-        float upper = 1.0;
-        for (uint iteration = 0u; iteration < 12u; ++iteration) {
-            float middle = 0.5 * (lower + upper);
-            float middleValue = rtgiWorldLightGuideWindowAntiderivative(
-                middle, distribution.normalizedDistanceSquared,
-                distribution.normalizedEmitterRadiusSquared);
-            if (middleValue < target) {
-                lower = middle;
-            } else {
-                upper = middle;
-            }
+    float frontMinimum = max(distribution.minimumCosine, 0.0);
+    float target = rtgiWorldLightGuideWindowAntiderivative(
+                       frontMinimum, distribution.normalizedDistanceSquared,
+                       distribution.normalizedEmitterRadiusSquared) +
+                   sampleValue.y * distribution.frontIntegral;
+    float lower = frontMinimum;
+    float upper = 1.0;
+    for (uint iteration = 0u; iteration < 12u; ++iteration) {
+        float middle = 0.5 * (lower + upper);
+        float middleValue = rtgiWorldLightGuideWindowAntiderivative(
+            middle, distribution.normalizedDistanceSquared,
+            distribution.normalizedEmitterRadiusSquared);
+        if (middleValue < target) {
+            lower = middle;
+        } else {
+            upper = middle;
         }
-        cosine = 0.5 * (lower + upper);
-        samplingMinimumCosine = frontMinimum;
-        coneSample = (1.0 - cosine) / (1.0 - samplingMinimumCosine);
     }
-    rayDirection = rtgiUniformConeDirection(vec2(sampleValue.x, coneSample),
-                                            samplingAxis, samplingMinimumCosine);
-    float windowWeight = cosine < 0.0
-                             ? rtgiWorldLightGuideWindowWeight(
-                                   0.0, distribution.normalizedDistanceSquared,
-                                   distribution.normalizedEmitterRadiusSquared)
-                             : rtgiWorldLightGuideWindowWeight(
-                                   cosine, distribution.normalizedDistanceSquared,
-                                   distribution.normalizedEmitterRadiusSquared);
-    if (!rtgiFinite(backProbability) || backProbability < 0.0 || backProbability >= 1.0 ||
-        !rtgiFinite(cosine) || cosine < distribution.minimumCosine || cosine >= 1.0 ||
+    float cosine = 0.5 * (lower + upper);
+    float coneSample = (1.0 - cosine) / (1.0 - frontMinimum);
+    rayDirection = rtgiUniformConeDirection(vec2(sampleValue.x, coneSample), distribution.axis, frontMinimum);
+    float windowWeight = rtgiWorldLightGuideWindowWeight(
+        cosine, distribution.normalizedDistanceSquared, distribution.normalizedEmitterRadiusSquared);
+    if (!rtgiFinite(cosine) || cosine < frontMinimum || cosine >= 1.0 ||
         !rtgiFinite(coneSample) || coneSample < 0.0 || coneSample > 1.0 ||
         !rtgiFinite(windowWeight) || windowWeight <= 0.0) {
         return false;

@@ -56,13 +56,10 @@ namespace {
 [[nodiscard]] float
 worldLightWindowSampleParameter(const renderer::contracts::RtgiWorldLightGuideWindowDistribution& distribution,
                                 const float cosine) {
-    if (cosine < distribution.minimumCosine) {
+    const float frontMinimum = std::max(distribution.minimumCosine, 0.0f);
+    if (cosine < frontMinimum) {
         return 0.0f;
     }
-    if (cosine <= 0.0f && distribution.backIntegral > 0.0f) {
-        return -cosine * distribution.backIntegral / distribution.totalIntegral;
-    }
-    const float frontMinimum = std::max(distribution.minimumCosine, 0.0f);
     const float frontArea =
         renderer::contracts::rtgiWorldLightGuideWindowAntiderivative(cosine, distribution.normalizedDistanceSquared,
                                                                      distribution.normalizedEmitterRadiusSquared) -
@@ -381,7 +378,7 @@ int main() {
         const float insidePdfIntegral = 2.0f * glm::pi<float>() * inside.totalIntegral * inside.pdfScale;
         worldLightWindowValid =
             outside.minimumCosine > 0.0f && outside.backIntegral == 0.0f && boundary.minimumCosine == 0.0f &&
-            boundary.backIntegral == 0.0f && inside.minimumCosine < 0.0f && inside.backIntegral > 0.0f &&
+            boundary.backIntegral == 0.0f && inside.minimumCosine < 0.0f && inside.backIntegral == 0.0f &&
             std::abs(outsideAnalyticIntegral - outsideNumericalIntegral) <=
                 3.0e-3f * std::max(1.0f, outsideAnalyticIntegral) &&
             std::abs(insideAnalyticFrontIntegral - insideNumericalFrontIntegral) <=
@@ -389,7 +386,7 @@ int main() {
             std::abs(outsidePdfIntegral - 1.0f) <= 1.0e-5f && std::abs(insidePdfIntegral - 1.0f) <= 1.0e-5f &&
             rtgiWorldLightGuideWindowPdf(outside, outside.minimumCosine - 0.001f) == 0.0f &&
             rtgiWorldLightGuideWindowPdf(outside, outside.minimumCosine + 0.01f) > 0.0f &&
-            rtgiWorldLightGuideWindowPdf(inside, -0.5f) > 0.0f &&
+            rtgiWorldLightGuideWindowPdf(inside, -0.5f) == 0.0f &&
             !makeRtgiWorldLightGuideWindowDistribution(0.0f, 0.04f, 4.0f).has_value();
         const float outsideInversionTolerance =
             (1.0f - outside.minimumCosine) / 8192.0f *
@@ -407,7 +404,7 @@ int main() {
             worldLightWindowValid =
                 worldLightWindowValid && outsideCosine.has_value() && insideCosine.has_value() &&
                 *outsideCosine >= outside.minimumCosine && *outsideCosine < 1.0f &&
-                *insideCosine >= inside.minimumCosine && *insideCosine < 1.0f &&
+                *insideCosine >= 0.0f && *insideCosine < 1.0f &&
                 std::abs(worldLightWindowSampleParameter(outside, *outsideCosine) - sample) <=
                     outsideInversionTolerance &&
                 std::abs(worldLightWindowSampleParameter(inside, *insideCosine) - sample) <= insideInversionTolerance;

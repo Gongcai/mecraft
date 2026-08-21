@@ -180,9 +180,8 @@ struct RtgiUniformConeSample final {
                                                                          float minimumCosine);
 
 /// Finite-range angular distribution used to guide one analytic world light.
-/// The front hemisphere follows the range-windowed attenuation profile. When
-/// the primary point lies inside the light range, the back hemisphere uses the
-/// nearest-point boundary weight shared by the GLSL sampler.
+/// The proposal is restricted to directions that advance toward the light;
+/// the cosine-hemisphere estimator retains the complementary support.
 struct RtgiWorldLightGuideWindowDistribution final {
     float minimumCosine = 0.0f;
     float normalizedDistanceSquared = 0.0f;
@@ -220,7 +219,7 @@ makeRtgiWorldLightGuideWindowDistribution(float distanceSquared, float emitterRa
 /// Evaluates the solid-angle PDF of a finite-range world-light guide proposal.
 /// @param distribution Valid distribution produced by makeRtgiWorldLightGuideWindowDistribution.
 /// @param cosine Cosine between the proposal direction and the primary-to-light axis.
-/// @return Solid-angle density, including zero outside the finite influence support.
+/// @return Solid-angle density, including zero outside the forward finite-influence support.
 [[nodiscard]] float rtgiWorldLightGuideWindowPdf(const RtgiWorldLightGuideWindowDistribution& distribution,
                                                  float cosine);
 

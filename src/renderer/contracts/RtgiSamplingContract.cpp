@@ -207,10 +207,8 @@ makeRtgiWorldLightGuideWindowDistribution(const float distanceSquared, const flo
     const float antiderivativeAtFrontMinimum = rtgiWorldLightGuideWindowAntiderivative(
         frontMinimum, distribution.normalizedDistanceSquared, distribution.normalizedEmitterRadiusSquared);
     distribution.frontIntegral = antiderivativeAtOne - antiderivativeAtFrontMinimum;
-    const float backWeight = rtgiWorldLightGuideWindowWeight(0.0f, distribution.normalizedDistanceSquared,
-                                                             distribution.normalizedEmitterRadiusSquared);
-    distribution.backIntegral = distribution.minimumCosine < 0.0f ? backWeight : 0.0f;
-    distribution.totalIntegral = distribution.frontIntegral + distribution.backIntegral;
+    distribution.backIntegral = 0.0f;
+    distribution.totalIntegral = distribution.frontIntegral;
     distribution.pdfScale = 1.0f / (kTwoPi * distribution.totalIntegral);
     if (!std::isfinite(distribution.normalizedDistanceSquared) || distribution.normalizedDistanceSquared <= 0.0f ||
         !std::isfinite(distribution.normalizedEmitterRadiusSquared) ||
@@ -218,7 +216,7 @@ makeRtgiWorldLightGuideWindowDistribution(const float distanceSquared, const flo
         distribution.minimumCosine < -1.0f || distribution.minimumCosine >= 1.0f || !std::isfinite(frontMinimum) ||
         frontMinimum < 0.0f || frontMinimum >= 1.0f || !std::isfinite(antiderivativeAtOne) ||
         !std::isfinite(antiderivativeAtFrontMinimum) || !std::isfinite(distribution.frontIntegral) ||
-        distribution.frontIntegral <= 0.0f || !std::isfinite(backWeight) || backWeight < 0.0f ||
+        distribution.frontIntegral <= 0.0f ||
         !std::isfinite(distribution.backIntegral) || distribution.backIntegral < 0.0f ||
         !std::isfinite(distribution.totalIntegral) || distribution.totalIntegral <= 0.0f ||
         !std::isfinite(distribution.pdfScale) || distribution.pdfScale <= 0.0f) {
@@ -228,7 +226,8 @@ makeRtgiWorldLightGuideWindowDistribution(const float distanceSquared, const flo
 }
 
 float rtgiWorldLightGuideWindowPdf(const RtgiWorldLightGuideWindowDistribution& distribution, const float cosine) {
-    if (!std::isfinite(cosine) || cosine < distribution.minimumCosine || cosine > 1.0f) {
+    const float frontMinimum = std::max(distribution.minimumCosine, 0.0f);
+    if (!std::isfinite(cosine) || cosine < frontMinimum || cosine > 1.0f) {
         return 0.0f;
     }
     const float windowWeight = rtgiWorldLightGuideWindowWeight(
@@ -240,22 +239,15 @@ std::optional<float> rtgiWorldLightGuideWindowSampleCosine(const RtgiWorldLightG
                                                            const float sampleValue) {
     if (!std::isfinite(sampleValue) || sampleValue < 0.0f || sampleValue >= 1.0f ||
         !std::isfinite(distribution.totalIntegral) || distribution.totalIntegral <= 0.0f ||
-        !std::isfinite(distribution.backIntegral) || distribution.backIntegral < 0.0f ||
-        distribution.backIntegral >= distribution.totalIntegral) {
+        !std::isfinite(distribution.frontIntegral) || distribution.frontIntegral <= 0.0f ||
+        distribution.backIntegral != 0.0f) {
         return std::nullopt;
     }
 
-    const float backProbability = distribution.backIntegral / distribution.totalIntegral;
-    if (distribution.backIntegral > 0.0f && sampleValue < backProbability) {
-        return -sampleValue / backProbability;
-    }
-
-    const float frontSample =
-        distribution.backIntegral > 0.0f ? (sampleValue - backProbability) / (1.0f - backProbability) : sampleValue;
     const float frontMinimum = std::max(distribution.minimumCosine, 0.0f);
     const float target = rtgiWorldLightGuideWindowAntiderivative(frontMinimum, distribution.normalizedDistanceSquared,
                                                                  distribution.normalizedEmitterRadiusSquared) +
-                         frontSample * distribution.frontIntegral;
+                         sampleValue * distribution.frontIntegral;
     float lower = frontMinimum;
     float upper = 1.0f;
     for (uint32_t iteration = 0u; iteration < 12u; ++iteration) {
