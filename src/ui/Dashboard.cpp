@@ -8,6 +8,7 @@
 
 #include "ui/core/UIRenderer.h"
 #include "../ecs/components/Components.h"
+#include "../renderer/contracts/RtgiSamplingContract.h"
 #include "../renderer/renderers/FirstPersonHeldItemRenderer.h"
 #include "../renderer/contracts/RenderFeatureContract.h"
 #include "../renderer/core/RenderSettings.h"
@@ -1163,9 +1164,9 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub& render, Re
                              [](const RenderGraphPassStats& pass) { return pass.name == "RTGI.Trace"; });
             if (rtgiCounters.valid) {
                 constexpr double kQueriesPerMillion = 1'000'000.0;
-                constexpr uint64_t kPrimarySamplesPerCompletedPixel = 2u;
                 const uint64_t completedPrimaryPixels = rtgiCounters.hitPixelCount + rtgiCounters.missPixelCount;
-                const uint64_t completedPrimaryRays = completedPrimaryPixels * kPrimarySamplesPerCompletedPixel;
+                const uint64_t completedPrimaryRays =
+                    completedPrimaryPixels * renderer::contracts::kRtgiPrimarySampleCount;
                 const double primaryRayMillions = static_cast<double>(completedPrimaryRays) / kQueriesPerMillion;
                 const double traceGpuMs = rtgiTracePass != graphStats.passes.end() ? rtgiTracePass->gpuMs : 0.0;
                 const double millisecondsPerMillionPrimaryRays =

@@ -4453,8 +4453,8 @@ void main() {
         rejectedCutout.candidateCount = 1u;
         rejectedCutout.minimumHitDistance = 1.95f;
         rejectedCutout.maximumHitDistance = 2.05f;
-        rejectedCutout.minimumRadiance = {0.25f, 0.38f, 0.24f};
-        rejectedCutout.maximumRadiance = {0.28f, 0.41f, 0.27f};
+        rejectedCutout.minimumRadiance = {0.49f, 0.49f, 0.49f};
+        rejectedCutout.maximumRadiance = {0.51f, 0.51f, 0.51f};
         rejectedCutout.hitIdentityHash = renderer::contracts::rtgiTerrainHitIdentityHash(
             firstView->hitData.revision, firstView->hitData.vertexAddress);
         RtgiTraceSmokeExpectedPixel confirmedCutout;
@@ -5966,8 +5966,8 @@ namespace {
     rejectedMask.hitIdentityHash = renderer::contracts::rtgiStableHitIdentityHash(601u, 501u);
     rejectedMask.minimumHitDistance = 1.45f;
     rejectedMask.maximumHitDistance = 1.55f;
-    rejectedMask.minimumRadiance = {0.0f, 0.228f, 0.105f};
-    rejectedMask.maximumRadiance = {0.002f, 0.231f, 0.109f};
+    rejectedMask.minimumRadiance = {0.0f, 0.456f, 0.210f};
+    rejectedMask.maximumRadiance = {0.002f, 0.462f, 0.218f};
     RtgiTraceSmokeExpectedPixel confirmedMask;
     confirmedMask.classification = renderer::contracts::RtgiTraceClassification::Hit;
     confirmedMask.emissiveStatus = renderer::contracts::RtgiEmissiveSampleClassification::Occluded;
@@ -5976,8 +5976,8 @@ namespace {
     confirmedMask.hitIdentityHash = renderer::contracts::rtgiStableHitIdentityHash(602u, 502u);
     confirmedMask.minimumHitDistance = 0.45f;
     confirmedMask.maximumHitDistance = 0.55f;
-    confirmedMask.minimumRadiance = {0.0f, 0.228f, 0.0f};
-    confirmedMask.maximumRadiance = {0.001f, 0.231f, 0.001f};
+    confirmedMask.minimumRadiance = {0.0f, 0.456f, 0.0f};
+    confirmedMask.maximumRadiance = {0.002f, 0.462f, 0.002f};
     smokeCase.expectedPixels = {rejectedMask, confirmedMask};
     if (!validateRtgiTraceCase(device, commandPool, sceneTlas, activeTlas, globalBindlessSet, smokeCase)) {
         return false;

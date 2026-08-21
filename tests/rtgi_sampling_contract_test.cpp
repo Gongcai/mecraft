@@ -143,6 +143,7 @@ worldLightWindowSampleParameter(const renderer::contracts::RtgiWorldLightGuideWi
            traceSource.find("bool rtgiSampleEmissiveDirect") != std::string::npos &&
            traceSource.find("const uint RTGI_EMISSIVE_DIRECT_SAMPLE_COUNT = 2u;") != std::string::npos &&
            traceSource.find("const uint RTGI_EMISSIVE_DIRECT_PHASE_STRIDE = 32u;") != std::string::npos &&
+           traceSource.find("const uint RTGI_PRIMARY_SAMPLE_COUNT = 1u;") != std::string::npos &&
            traceSource.find("bool rtgiBuildEmissiveCandidate") != std::string::npos &&
            traceSource.find("float proposalAreaPdf = triangleProbability / area;") != std::string::npos &&
            traceSource.find("candidate.targetDensity = emissionLuminance * geometryTerm /") != std::string::npos &&
@@ -266,6 +267,7 @@ int main() {
             valid;
 #endif
     valid = requireTrue(kRtgiVoxelSurfaceExpansion == 1.0f / 2048.0f && kRtgiMinimumRayOriginBias == 1.0f / 1024.0f &&
+                            kRtgiPrimarySampleCount == 1u &&
                             RtgiSettings{}.minimumRayOriginBias == kRtgiMinimumRayOriginBias,
                         "RTGI ray-origin bias must remain larger than the sealed voxel BLAS shell") &&
             valid;

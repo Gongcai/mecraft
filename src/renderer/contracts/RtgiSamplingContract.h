@@ -35,6 +35,7 @@ inline constexpr float kRtgiMinimumRayOriginBias = kRtgiVoxelSurfaceExpansion * 
 inline constexpr uint32_t kRtgiSecondaryLightingTerrainNormalMapBit = 1u << 0u;
 inline constexpr uint32_t kRtgiSecondaryLightingTerrainSpecularMapBit = 1u << 1u;
 inline constexpr float kRtgiMetallicDiffuseTransportFloor = 0.35f;
+inline constexpr uint32_t kRtgiPrimarySampleCount = 1u;
 inline constexpr uint32_t kRtgiTraceCounterContractVersion = 3u;
 
 /// One immutable emissive triangle used by RTGI next-event sampling.
