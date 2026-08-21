@@ -188,6 +188,14 @@ worldLightWindowSampleParameter(const renderer::contracts::RtgiWorldLightGuideWi
            traceSource.find("surface.albedo * (1.0 - surface.metalness)") == std::string::npos &&
            traceSource.find("optional local-light shadow resource must not erase") != std::string::npos &&
            traceSource.find("Local lights are optional secondary transport") != std::string::npos &&
+           traceSource.find("uint candidateCount = globalLightCount + cellRange.y;") != std::string::npos &&
+           traceSource.find("rtgiReferenceStratifiedScalar(pc.frameMaskAndFlags.x + phase, uvec2(texel))") !=
+               std::string::npos &&
+           traceSource.find("uint candidateOrdinal = min(uint(selectionSample * float(candidateCount)), candidateCount - 1u);") !=
+               std::string::npos &&
+           traceSource.find("float estimatorWeight = balanceWeight * float(candidateCount);") != std::string::npos &&
+           traceSource.find("for (uint listIndex = 0u; listIndex < globalLightCount; ++listIndex)") ==
+               std::string::npos &&
            counterSource.find("const uint RTGI_TRACE_COUNTER_CONTRACT_VERSION = 3u;") != std::string::npos &&
            counterSource.find("void rtgiTraceCounterAtomicAdd64(uint lowWord, uint highWord, uint value)") !=
                std::string::npos &&
