@@ -1181,9 +1181,13 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub& render, Re
                 ImGui::TextUnformatted("RTGI Trace Detail");
                 ImGui::Text("Trace: %.3f ms  Extent: %ux%u", traceGpuMs, rtgiCounters.width, rtgiCounters.height);
                 ImGui::Text("Primary: %.3f M rays", primaryRayMillions);
-                ImGui::Text("Auxiliary budget: %u guide + %u emissive estimate / primary pixel",
-                            renderer::contracts::kRtgiWorldLightGuideSampleCount,
-                            renderer::contracts::kRtgiEmissiveDirectSampleCount);
+                if (renderer::contracts::kRtgiAuxiliaryLightingEnabled) {
+                    ImGui::Text("Auxiliary budget: %u guide + %u emissive estimate / primary pixel",
+                                renderer::contracts::kRtgiWorldLightGuideSampleCount,
+                                renderer::contracts::kRtgiEmissiveDirectSampleCount);
+                } else {
+                    ImGui::TextUnformatted("Auxiliary estimators: compiled out");
+                }
                 ImGui::Text("Primary sample 0: %llu candidates (%.2f/ray)  %llu confirmed (%.1f%%)",
                             static_cast<unsigned long long>(rtgiCounters.candidateCount),
                             candidateCountPerFirstPrimaryRay,

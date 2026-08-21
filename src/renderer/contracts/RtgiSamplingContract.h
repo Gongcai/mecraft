@@ -38,6 +38,7 @@ inline constexpr float kRtgiMetallicDiffuseTransportFloor = 0.35f;
 inline constexpr uint32_t kRtgiPrimarySampleCount = 1u;
 inline constexpr uint32_t kRtgiEmissiveDirectSampleCount = 1u;
 inline constexpr uint32_t kRtgiWorldLightGuideSampleCount = 1u;
+inline constexpr bool kRtgiAuxiliaryLightingEnabled = false;
 inline constexpr uint32_t kRtgiTraceCounterContractVersion = 3u;
 
 /// One immutable emissive triangle used by RTGI next-event sampling.

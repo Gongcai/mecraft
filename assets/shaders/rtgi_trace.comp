@@ -60,6 +60,10 @@ const uint RTGI_PRIMARY_SAMPLE_PHASE_STRIDE = 32u;
 // the guide uses balance MIS; a second query caused severe occupancy collapse.
 const uint RTGI_WORLD_LIGHT_GUIDE_SAMPLE_COUNT = 1u;
 const uint RTGI_WORLD_LIGHT_GUIDE_PHASE_STRIDE = 32u;
+// Auxiliary next-event estimators are compiled out of the primary trace
+// variant to keep register pressure and occupancy bounded. Dedicated passes
+// can consume the same contracts when a quality tier enables them.
+#define RTGI_ENABLE_AUXILIARY_LIGHTING 0
 layout(std140, set = 1, binding = 16) uniform RtgiSecondaryLightingParams {
     vec4 sunDirectionAndVisibility;
     vec4 moonDirectionAndVisibility;
@@ -532,6 +536,7 @@ bool rtgiAccumulateGpuLight(GpuLight light, RtgiSecondarySurface surface, vec3 s
     return rtgiFinite(radiance);
 }
 
+#if RTGI_ENABLE_AUXILIARY_LIGHTING
 bool rtgiWorldLightGuidedAtPrimary(GpuLight light, RtgiWorldLightGuide guide) {
     if (gpuLightType(light) != GPU_LIGHT_TYPE_POINT ||
         !gpuLightContributes(light, GPU_LIGHT_CONTRIBUTION_DIFFUSE)) {
@@ -729,6 +734,7 @@ bool rtgiWorldLightBalanceWeight(GpuLight light, RtgiWorldLightGuide guide,
     balanceWeight = primarySampleCount * primaryDirectionPdf / denominator;
     return rtgiFinite(balanceWeight) && balanceWeight >= 0.0 && balanceWeight <= 1.0;
 }
+#endif
 
 bool rtgiAccumulateWorldLights(RtgiSecondarySurface surface, vec3 surfacePosition,
                                vec3 cameraRelativeSurface, vec3 viewDirection, float coneWidth,
@@ -765,10 +771,12 @@ bool rtgiAccumulateWorldLights(RtgiSecondarySurface surface, vec3 surfacePositio
         return false;
     }
     GpuLight light = uClusterLights[lightIndex];
-    float balanceWeight;
+    float balanceWeight = 1.0;
+#if RTGI_ENABLE_AUXILIARY_LIGHTING
     if (!rtgiWorldLightBalanceWeight(light, guide, -viewDirection, primaryDirectionPdf, balanceWeight)) {
         return false;
     }
+#endif
     float estimatorWeight = balanceWeight * float(candidateCount);
     if (!rtgiFinite(estimatorWeight) || estimatorWeight < 0.0) {
         return false;
@@ -777,6 +785,7 @@ bool rtgiAccumulateWorldLights(RtgiSecondarySurface surface, vec3 surfacePositio
                                   viewDirection, coneWidth, estimatorWeight, radiance);
 }
 
+#if RTGI_ENABLE_AUXILIARY_LIGHTING
 bool rtgiSelectGuidedWorldLight(RtgiWorldLightGuide guide, ivec2 texel, uint phase,
                                 out GpuLight light, out float selectionPdf) {
     light = GpuLight(vec4(0.0), vec4(0.0), vec4(0.0), vec4(0.0), uvec4(0u), uvec4(0u));
@@ -959,7 +968,9 @@ bool rtgiSampleGuidedWorldLights(RtgiWorldLightGuide guide, vec3 primaryPosition
     }
     return rtgiFinite(radiance) && all(greaterThanEqual(radiance, vec3(0.0)));
 }
+#endif
 
+#if RTGI_ENABLE_AUXILIARY_LIGHTING
 float rtgiEmissiveReceiverCosine(GpuMaterial material, vec3 emitterNormal, vec3 directionToReceiver) {
     float signedCosine = dot(emitterNormal, directionToReceiver);
     return gpuMaterialHas(material, GPU_MATERIAL_FLAG_DOUBLE_SIDED) ? abs(signedCosine) : max(signedCosine, 0.0);
@@ -1226,7 +1237,9 @@ bool rtgiSampleEmissiveDirect(vec3 surfacePosition, vec3 surfaceNormal, vec3 ori
     radiance /= float(RTGI_EMISSIVE_DIRECT_SAMPLE_COUNT);
     return rtgiFinite(radiance) && all(greaterThanEqual(radiance, vec3(0.0)));
 }
+#endif
 
+#if RTGI_ENABLE_AUXILIARY_LIGHTING
 bool rtgiEmissiveTriangleRegistered(uint customIndex, uint geometryIndex, uint primitiveIndex) {
     uint emitterCount = pc.materialGeometryCounts.w;
     if (emitterCount == 0u) {
@@ -1251,6 +1264,7 @@ bool rtgiEmissiveTriangleRegistered(uint customIndex, uint geometryIndex, uint p
     return lowerIndex < emitterCount &&
            all(equal(uRtgiEmissiveGeometry.records[lowerIndex].instanceGeometryPrimitiveCount.xyz, hitIdentity));
 }
+#endif
 
 bool rtgiAccumulateSkyAmbient(RtgiSecondarySurface surface, vec3 surfacePosition, float coneWidth,
                               float originSkyPrior, inout vec3 radiance) {
@@ -1388,8 +1402,11 @@ bool rtgiTracePrimarySample(vec3 primaryPosition, vec3 samplingNormal, vec3 geom
             return false;
         }
         vec3 surfacePosition = rayOrigin + rayDirection * result.hitDistance;
-        bool includeSurfaceEmission = !staticMeshRayQueryInstancePresent(customIndex, pc.frameMaskAndFlags.z) ||
-                                      !rtgiEmissiveTriangleRegistered(customIndex, geometryIndex, primitiveIndex);
+        bool includeSurfaceEmission = true;
+#if RTGI_ENABLE_AUXILIARY_LIGHTING
+        includeSurfaceEmission = !staticMeshRayQueryInstancePresent(customIndex, pc.frameMaskAndFlags.z) ||
+                                 !rtgiEmissiveTriangleRegistered(customIndex, geometryIndex, primitiveIndex);
+#endif
         if (!rtgiShadeSecondarySurface(surface, surfacePosition, rayDirection, coneWidth, originSkyPrior,
                                        primaryDirectionPdf, includeSurfaceEmission, worldLightGuide, texel, phase,
                                        result.radiance)) {
@@ -1504,29 +1521,22 @@ void main() {
     // their smooth shading-normal distribution.
     vec3 samplingNormal = voxelPrimarySurface ? geometricNormal : normal;
     float primarySurfaceDistance = length(worldPosition - pc.cameraPositionAndMaxDistance.xyz);
-    uint emissiveStatus;
-    vec3 emissiveRadiance;
+    uint emissiveStatus = RTGI_EMISSIVE_STATUS_INACTIVE;
+    vec3 emissiveRadiance = vec3(0.0);
+    vec3 guidedWorldLightRadiance = vec3(0.0);
+    RtgiWorldLightGuide worldLightGuide = RtgiWorldLightGuide(vec3(0.0), ivec3(0), uvec2(0u), 0u);
+#if RTGI_ENABLE_AUXILIARY_LIGHTING
     if (!rtgiSampleEmissiveDirect(worldPosition, samplingNormal, geometricNormal, pixelWorldFootprint,
-                                  primarySurfaceDistance, texel, emissiveStatus, emissiveRadiance)) {
-        rtgiWriteResult(texel, vec3(0.0), vec3(0.0), 0.0, RTGI_TRACE_CLASS_NON_FINITE,
-                        RTGI_EMISSIVE_STATUS_INVALID, 0u, 0u, 0u);
-        return;
-    }
-    RtgiWorldLightGuide worldLightGuide;
-    if (!rtgiPrepareWorldLightGuide(worldPosition - pc.cameraPositionAndMaxDistance.xyz,
-                                    worldLightGuide)) {
-        rtgiWriteResult(texel, vec3(0.0), vec3(0.0), 0.0, RTGI_TRACE_CLASS_NON_FINITE,
-                        RTGI_EMISSIVE_STATUS_INVALID, 0u, 0u, 0u);
-        return;
-    }
-    vec3 guidedWorldLightRadiance;
-    if (!rtgiSampleGuidedWorldLights(worldLightGuide, worldPosition, samplingNormal, geometricNormal,
+                                  primarySurfaceDistance, texel, emissiveStatus, emissiveRadiance) ||
+        !rtgiPrepareWorldLightGuide(worldPosition - pc.cameraPositionAndMaxDistance.xyz, worldLightGuide) ||
+        !rtgiSampleGuidedWorldLights(worldLightGuide, worldPosition, samplingNormal, geometricNormal,
                                      pixelWorldFootprint, primarySurfaceDistance, texel,
                                      guidedWorldLightRadiance)) {
         rtgiWriteResult(texel, vec3(0.0), vec3(0.0), 0.0, RTGI_TRACE_CLASS_NON_FINITE,
                         RTGI_EMISSIVE_STATUS_INVALID, 0u, 0u, 0u);
         return;
     }
+#endif
 
     ivec2 noiseExtent = textureSize(uBlueNoiseTexture, 0);
     ivec2 noiseTexel = ivec2(uvec2(texel) % uvec2(noiseExtent));
