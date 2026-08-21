@@ -707,6 +707,8 @@ AS Pending、Invalid、NaN/Inf 与负辐射均为 `0`；HDR relative luminance p
 
 随后将 World Light 导引支持域收紧为仅采样朝向点光的前向有限范围，背向方向的导引 PDF 固定为 `0`，其余支持仍由普通余弦路径保留。固定 V02 300+32 Vulkan 复测的 HDR p95 为
 `0.130316`、SSIM `0.998495`、Raw 方差 `0.002295`，较生产导引的 `0.133310/0.002614` 有真实改善，但 Leakage 最大带宽仍为 `3 Pixels`，完整静态门禁继续失败。NRD `Normal/Roughness` 临时改用体素几何法线的 A/B HDR p95 为 `0.157356`，已撤回；当前生产设置保持前向导引与原 NRD 法线输入。
+将每像素的 World Light 导引样本数从 `1` 提升至 `2` 后，固定 V02 300+32/64 A/B 的 Raw 方差为
+`0.001782`，但 HDR p95 为 `0.130774`、SSIM 为 `0.997787`，且 Leakage 最大带宽仍为 `3 Pixels`，没有优于单样本前向导引的 `0.130316/0.998495/3 Pixels`。二样本设置已撤回；余弦路径与导引路径的 MIS 权重及其多样本归一化经推导一致，后续应针对一次反弹输运本身继续定位。
 
 随后完成一次 Guide 法线轴 A/B：`NrdGuidePrep` 仅在体素场景将 Leakage Guide 改为 dominant-axis 几何法线，
 NRD 的 shading normal 输入保持不变。V02 相同 300+32/64 运行的 `boundary_pixel_count` 与
