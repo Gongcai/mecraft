@@ -1169,8 +1169,6 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub& render, Re
                     completedPrimaryPixels * renderer::contracts::kRtgiPrimarySampleCount;
                 const double primaryRayMillions = static_cast<double>(completedPrimaryRays) / kQueriesPerMillion;
                 const double traceGpuMs = rtgiTracePass != graphStats.passes.end() ? rtgiTracePass->gpuMs : 0.0;
-                const double millisecondsPerMillionPrimaryRays =
-                    primaryRayMillions > 0.0 ? traceGpuMs / primaryRayMillions : 0.0;
                 const double candidateCountPerFirstPrimaryRay =
                     completedPrimaryPixels > 0u
                         ? static_cast<double>(rtgiCounters.candidateCount) / static_cast<double>(completedPrimaryPixels)
@@ -1182,8 +1180,10 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub& render, Re
                 ImGui::Separator();
                 ImGui::TextUnformatted("RTGI Trace Detail");
                 ImGui::Text("Trace: %.3f ms  Extent: %ux%u", traceGpuMs, rtgiCounters.width, rtgiCounters.height);
-                ImGui::Text("Primary: %.3f M rays  Pass: %.3f ms/M", primaryRayMillions,
-                            millisecondsPerMillionPrimaryRays);
+                ImGui::Text("Primary: %.3f M rays", primaryRayMillions);
+                ImGui::Text("Auxiliary budget: %u guide + %u emissive estimate / primary pixel",
+                            renderer::contracts::kRtgiWorldLightGuideSampleCount,
+                            renderer::contracts::kRtgiEmissiveDirectSampleCount);
                 ImGui::Text("Primary sample 0: %llu candidates (%.2f/ray)  %llu confirmed (%.1f%%)",
                             static_cast<unsigned long long>(rtgiCounters.candidateCount),
                             candidateCountPerFirstPrimaryRay,

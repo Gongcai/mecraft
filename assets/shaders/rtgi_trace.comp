@@ -50,11 +50,15 @@ struct RtgiEmissiveCandidate {
     float proposalAreaPdf;
     float targetDensity;
 };
-const uint RTGI_EMISSIVE_DIRECT_SAMPLE_COUNT = 2u;
+// Keep one next-event estimate per pixel; temporal passes accumulate the
+// unbiased estimator across frames without duplicating ray-query work.
+const uint RTGI_EMISSIVE_DIRECT_SAMPLE_COUNT = 1u;
 const uint RTGI_EMISSIVE_DIRECT_PHASE_STRIDE = 32u;
 const uint RTGI_PRIMARY_SAMPLE_COUNT = 1u;
 const uint RTGI_PRIMARY_SAMPLE_PHASE_STRIDE = 32u;
-const uint RTGI_WORLD_LIGHT_GUIDE_SAMPLE_COUNT = 2u;
+// One guided sample is sufficient because the primary path remains one-spp and
+// the guide uses balance MIS; a second query caused severe occupancy collapse.
+const uint RTGI_WORLD_LIGHT_GUIDE_SAMPLE_COUNT = 1u;
 const uint RTGI_WORLD_LIGHT_GUIDE_PHASE_STRIDE = 32u;
 layout(std140, set = 1, binding = 16) uniform RtgiSecondaryLightingParams {
     vec4 sunDirectionAndVisibility;
