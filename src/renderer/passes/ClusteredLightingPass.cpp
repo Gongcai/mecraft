@@ -344,9 +344,9 @@ bool ClusteredLightingPass::buildScanPlan() {
 }
 
 bool ClusteredLightingPass::ensurePipelines(RhiDevice& rhiDevice) {
-    if (m_countStage.pipeline.isValid() && m_scanStage.pipeline.isValid() && m_scanAddStage.pipeline.isValid() &&
-        m_finalizeStage.pipeline.isValid() && m_fillStage.pipeline.isValid() && m_validateStage.pipeline.isValid() &&
-        m_consumerBindGroupLayout.isValid()) {
+    if (m_countStage.pipeline.isValid() && m_scanStage.pipeline.isValid() && m_scanScratchStage.pipeline.isValid() &&
+        m_scanAddStage.pipeline.isValid() && m_finalizeStage.pipeline.isValid() && m_fillStage.pipeline.isValid() &&
+        m_validateStage.pipeline.isValid() && m_consumerBindGroupLayout.isValid()) {
         return true;
     }
     destroyPipelines();
@@ -413,6 +413,8 @@ bool ClusteredLightingPass::ensurePipelines(RhiDevice& rhiDevice) {
                      sizeof(ClusterGridPushConstants)) ||
         !createStage(m_scanStage, "assets/shaders/cluster_scan.comp", "ClusteredLighting.Scan", 3u,
                      sizeof(ClusterScanPushConstants)) ||
+        !createStage(m_scanScratchStage, "assets/shaders/cluster_scan_scratch.comp", "ClusteredLighting.ScanScratch",
+                     1u, sizeof(ClusterScanPushConstants)) ||
         !createStage(m_scanAddStage, "assets/shaders/cluster_scan_add.comp", "ClusteredLighting.ScanAdd", 2u,
                      sizeof(ClusterScanPushConstants)) ||
         !createStage(m_finalizeStage, "assets/shaders/cluster_finalize.comp", "ClusteredLighting.Finalize", 4u,
@@ -570,15 +572,14 @@ bool ClusteredLightingPass::ensureBuildBindGroups(RhiDevice& rhiDevice) {
     m_scanBindGroups.reserve(m_scanLevels.size());
     for (uint32_t levelIndex = 0u; levelIndex < m_scanLevels.size(); ++levelIndex) {
         RhiBindGroupDesc desc;
-        desc.layout = m_scanStage.bindGroupLayout;
+        desc.layout = levelIndex == 0u ? m_scanStage.bindGroupLayout : m_scanScratchStage.bindGroupLayout;
         if (levelIndex == 0u) {
             appendStorageBinding(desc, 0u, m_countBuffer.handle, m_countBuffer.capacityBytes);
             appendStorageBinding(desc, 1u, m_offsetBuffer.handle, m_offsetBuffer.capacityBytes);
+            appendStorageBinding(desc, 2u, m_scanScratchBuffer.handle, m_scanScratchBuffer.capacityBytes);
         } else {
             appendStorageBinding(desc, 0u, m_scanScratchBuffer.handle, m_scanScratchBuffer.capacityBytes);
-            appendStorageBinding(desc, 1u, m_scanScratchBuffer.handle, m_scanScratchBuffer.capacityBytes);
         }
-        appendStorageBinding(desc, 2u, m_scanScratchBuffer.handle, m_scanScratchBuffer.capacityBytes);
         const RhiBindGroupHandle bindGroup = rhiDevice.createBindGroup(desc);
         if (!bindGroup.isValid()) {
             destroyBuildBindGroups();
@@ -842,7 +843,7 @@ bool ClusteredLightingPass::recordScan(RhiCommandList& commandList, const uint32
     ClusterScanPushConstants push;
     push.offsetsAndCount = {scanLevel.inputOffsetWords, scanLevel.outputOffsetWords, scanLevel.blockSumOffsetWords,
                             scanLevel.elementCount};
-    commandList.setComputePipeline(m_scanStage.pipeline);
+    commandList.setComputePipeline(level == 0u ? m_scanStage.pipeline : m_scanScratchStage.pipeline);
     commandList.setBindGroup(0u, m_scanBindGroups[level]);
     commandList.pushConstants(&push, sizeof(push), rhiFlag(RhiShaderStage::Compute));
     commandList.dispatch(scanLevel.groupCount, 1u, 1u);
@@ -1026,6 +1027,7 @@ void ClusteredLightingPass::destroyComputeStage(ComputeStage& stage) {
 void ClusteredLightingPass::destroyPipelines() {
     destroyComputeStage(m_countStage);
     destroyComputeStage(m_scanStage);
+    destroyComputeStage(m_scanScratchStage);
     destroyComputeStage(m_scanAddStage);
     destroyComputeStage(m_finalizeStage);
     destroyComputeStage(m_fillStage);

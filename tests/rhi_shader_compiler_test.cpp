@@ -355,7 +355,7 @@ void main() {
 } // namespace
 
 int main() {
-    constexpr std::array<ShaderCase, 114> kShaderCases{
+    constexpr std::array<ShaderCase, 115> kShaderCases{
         {{"tests/shaders/rhi_screen_coordinates_test.frag", RhiShaderStage::Fragment},
          {"tests/shaders/material_brdf_shared_test.frag", RhiShaderStage::Fragment},
          {"tests/shaders/reflection_probe_contract_test.frag", RhiShaderStage::Fragment},
@@ -446,6 +446,7 @@ int main() {
          {"assets/shaders/shadow_depth.vert", RhiShaderStage::Vertex, "RHI_TERRAIN_SHADOW_MDI"},
          {"assets/shaders/cluster_count.comp", RhiShaderStage::Compute},
          {"assets/shaders/cluster_scan.comp", RhiShaderStage::Compute},
+         {"assets/shaders/cluster_scan_scratch.comp", RhiShaderStage::Compute},
          {"assets/shaders/cluster_scan_add.comp", RhiShaderStage::Compute},
          {"assets/shaders/cluster_finalize.comp", RhiShaderStage::Compute},
          {"assets/shaders/cluster_fill.comp", RhiShaderStage::Compute},

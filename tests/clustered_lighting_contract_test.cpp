@@ -220,22 +220,39 @@ bool testEmptyLightingSteadyStateContract() {
 
 bool testComputeShaderContracts() {
     std::string scan;
+    std::string scratchScan;
     std::string count;
     std::string fill;
     std::string intersection;
+    std::string pass;
     if (!requireTrue(readProjectFile("assets/shaders/cluster_scan.comp", scan),
                      "hierarchical scan shader must be readable") ||
+        !requireTrue(readProjectFile("assets/shaders/cluster_scan_scratch.comp", scratchScan),
+                     "scratch-resident hierarchical scan shader must be readable") ||
         !requireTrue(readProjectFile("assets/shaders/cluster_count.comp", count),
                      "cluster count shader must be readable") ||
         !requireTrue(readProjectFile("assets/shaders/cluster_fill.comp", fill),
                      "compact list fill shader must be readable") ||
         !requireTrue(readProjectFile("assets/shaders/cluster_sphere_intersection.glsl", intersection),
-                     "cluster sphere intersection shader must be readable")) {
+                     "cluster sphere intersection shader must be readable") ||
+        !requireTrue(readProjectFile("src/renderer/passes/ClusteredLightingPass.cpp", pass),
+                     "clustered-light pass source must be readable")) {
         return false;
     }
     return requireTrue(scan.find("shared uint uScan[512]") != std::string::npos,
                        "prefix sum must scan 512 values per workgroup") &&
            requireTrue(scan.find("uBlockSums") != std::string::npos, "prefix sum must emit hierarchical block sums") &&
+           requireTrue(scratchScan.find("shared uint uScan[512]") != std::string::npos &&
+                           scratchScan.find("buffer ScanScratchBuffer") != std::string::npos &&
+                           scratchScan.find("layout(binding = 1") == std::string::npos &&
+                           scratchScan.find("layout(binding = 2") == std::string::npos,
+                       "intermediate prefix scans must use one scratch-buffer descriptor without aliasing") &&
+           requireTrue(
+               pass.find("m_scanScratchStage") != std::string::npos &&
+                   pass.find("levelIndex == 0u ? m_scanStage.bindGroupLayout : m_scanScratchStage.bindGroupLayout") !=
+                       std::string::npos &&
+                   pass.find("level == 0u ? m_scanStage.pipeline : m_scanScratchStage.pipeline") != std::string::npos,
+               "intermediate scan levels must select the non-aliased scratch pipeline") &&
            requireTrue(count.find("atomicAdd(uClusterCounts") != std::string::npos,
                        "coverage counting must execute on the GPU") &&
            requireTrue(count.find("gl_WorkGroupID.x") != std::string::npos &&

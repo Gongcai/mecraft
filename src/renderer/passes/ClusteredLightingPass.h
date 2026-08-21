@@ -204,6 +204,7 @@ private:
 
     ComputeStage m_countStage;
     ComputeStage m_scanStage;
+    ComputeStage m_scanScratchStage;
     ComputeStage m_scanAddStage;
     ComputeStage m_finalizeStage;
     ComputeStage m_fillStage;

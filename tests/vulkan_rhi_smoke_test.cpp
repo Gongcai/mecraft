@@ -186,6 +186,155 @@ struct RtgiTraceSmokeCase final {
     return valid;
 }
 
+/// Executes the single-descriptor intermediate scan shader across more than
+/// one workgroup and validates its exclusive-prefix and block-sum output.
+/// @param device Vulkan device that owns the test resources.
+/// @param commandPool Command-list pool used for dispatch and readback.
+/// @return True when GPU results preserve every scanned value and block sum.
+[[nodiscard]] bool validateClusteredScratchScan(VkRhiDevice& device, RhiCommandListPool& commandPool) {
+    constexpr uint32_t kElementCount = 513u;
+    constexpr uint32_t kElementsPerWorkgroup = 512u;
+    constexpr uint32_t kOutputOffset = kElementCount;
+    constexpr uint32_t kBlockSumOffset = kOutputOffset + kElementCount;
+    constexpr uint32_t kBlockCount = (kElementCount + kElementsPerWorkgroup - 1u) / kElementsPerWorkgroup;
+    constexpr uint32_t kScratchWordCount = kBlockSumOffset + kBlockCount;
+
+    std::array<uint32_t, kScratchWordCount> initial{};
+    std::array<uint32_t, kScratchWordCount> expected{};
+    initial.fill(0xccccccccu);
+    uint32_t firstBlockSum = 0u;
+    uint32_t runningTotal = 0u;
+    for (uint32_t index = 0u; index < kElementCount; ++index) {
+        const uint32_t value = index % 17u + 1u;
+        initial[index] = value;
+        expected[index] = value;
+        if (index < kElementsPerWorkgroup) {
+            expected[kOutputOffset + index] = runningTotal;
+            runningTotal += value;
+            firstBlockSum += value;
+        } else {
+            expected[kOutputOffset + index] = 0u;
+            expected[kBlockSumOffset + 1u] = value;
+        }
+    }
+    expected[kBlockSumOffset] = firstBlockSum;
+
+    RhiBufferDesc scratchDesc;
+    scratchDesc.debugName = "VulkanSmoke.ClusteredScratchScan.Buffer";
+    scratchDesc.size = sizeof(expected);
+    scratchDesc.usage = rhiFlag(RhiBufferUsage::Storage) | rhiFlag(RhiBufferUsage::TransferSrc);
+    scratchDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+    scratchDesc.initialState = RhiResourceState::StorageBuffer;
+    scratchDesc.memoryCategory = RhiMemoryCategory::SceneData;
+    const RhiBufferHandle scratch = device.createBuffer(scratchDesc, initial.data(), sizeof(initial));
+    if (!scratch.isValid()) {
+        return false;
+    }
+
+    const std::optional<std::string> shaderSource =
+        renderer::rhi::loadShaderSource("assets/shaders/cluster_scan_scratch.comp");
+    RhiShaderHandle shader;
+    RhiBindGroupLayoutHandle bindGroupLayout;
+    RhiPipelineLayoutHandle pipelineLayout;
+    RhiPipelineHandle pipeline;
+    RhiBindGroupHandle bindGroup;
+    const auto destroyResources = [&]() {
+        if (bindGroup.isValid()) {
+            device.destroyBindGroup(bindGroup);
+        }
+        if (pipeline.isValid()) {
+            device.destroyPipeline(pipeline);
+        }
+        if (pipelineLayout.isValid()) {
+            device.destroyPipelineLayout(pipelineLayout);
+        }
+        if (bindGroupLayout.isValid()) {
+            device.destroyBindGroupLayout(bindGroupLayout);
+        }
+        if (shader.isValid()) {
+            device.destroyShader(shader);
+        }
+        device.destroyBuffer(scratch);
+    };
+
+    bool valid = shaderSource.has_value();
+    if (valid) {
+        RhiShaderDesc shaderDesc;
+        shaderDesc.debugName = "VulkanSmoke.ClusteredScratchScan.Shader";
+        shaderDesc.stage = RhiShaderStage::Compute;
+        shaderDesc.source = shaderSource->c_str();
+        shaderDesc.sourceSize = shaderSource->size();
+        shader = device.createShader(shaderDesc);
+        valid = shader.isValid();
+    }
+    if (valid) {
+        RhiBindGroupLayoutDesc bindGroupLayoutDesc;
+        bindGroupLayoutDesc.debugName = "VulkanSmoke.ClusteredScratchScan.BindGroupLayout";
+        bindGroupLayoutDesc.entries.push_back(
+            {0u, RhiBindingType::StorageBuffer, rhiFlag(RhiShaderStage::Compute), 1u});
+        bindGroupLayout = device.createBindGroupLayout(bindGroupLayoutDesc);
+        valid = bindGroupLayout.isValid();
+    }
+    if (valid) {
+        RhiPipelineLayoutDesc pipelineLayoutDesc;
+        pipelineLayoutDesc.debugName = "VulkanSmoke.ClusteredScratchScan.PipelineLayout";
+        pipelineLayoutDesc.bindGroupLayouts.push_back(bindGroupLayout);
+        pipelineLayoutDesc.pushConstantBytes = sizeof(glm::uvec4);
+        pipelineLayoutDesc.pushConstantStages = rhiFlag(RhiShaderStage::Compute);
+        pipelineLayout = device.createPipelineLayout(pipelineLayoutDesc);
+        valid = pipelineLayout.isValid();
+        if (valid) {
+            RhiComputePipelineDesc pipelineDesc;
+            pipelineDesc.debugName = "VulkanSmoke.ClusteredScratchScan.Pipeline";
+            pipelineDesc.computeShader = shader;
+            pipelineDesc.layout = pipelineLayout;
+            pipeline = device.createComputePipeline(pipelineDesc);
+            valid = pipeline.isValid();
+        }
+    }
+    if (valid) {
+        RhiBindGroupDesc bindGroupDesc;
+        bindGroupDesc.layout = bindGroupLayout;
+        RhiBindGroupEntry entry;
+        entry.binding = 0u;
+        entry.resource.buffer.buffer = scratch;
+        entry.resource.buffer.offset = 0u;
+        entry.resource.buffer.range = scratchDesc.size;
+        bindGroupDesc.entries.push_back(entry);
+        bindGroup = device.createBindGroup(bindGroupDesc);
+        valid = bindGroup.isValid();
+    }
+
+    RhiCommandList* commands = nullptr;
+    if (valid) {
+        commands = commandPool.acquire(RhiCommandListType::Compute);
+        valid = commands != nullptr &&
+                commands->begin({"VulkanSmoke.ClusteredScratchScan.Commands", RhiCommandListType::Compute});
+    }
+    if (valid) {
+        const glm::uvec4 push{0u, kOutputOffset, kBlockSumOffset, kElementCount};
+        commands->setComputePipeline(pipeline);
+        commands->setBindGroup(0u, bindGroup);
+        commands->pushConstants(&push, sizeof(push), rhiFlag(RhiShaderStage::Compute));
+        commands->dispatch(kBlockCount, 1u, 1u);
+        valid = commands->end();
+    }
+    RhiSubmissionToken token;
+    if (valid) {
+        RhiCommandList* submissions[] = {commands};
+        valid = device.submit({"VulkanSmoke.ClusteredScratchScan.Submit", submissions, 1u, RhiQueueType::Compute},
+                              &token) &&
+                device.waitForSubmission(token);
+    }
+    if (valid) {
+        valid =
+            validateGpuBufferContents(device, commandPool, scratch, RhiResourceState::StorageBuffer, expected.data(),
+                                      sizeof(expected), "VulkanSmoke.ClusteredScratchScan.Readback");
+    }
+    destroyResources();
+    return valid;
+}
+
 [[nodiscard]] bool validateIndependentUiPresentation(VkRhiDevice& device, RhiCommandListPool& commandPool,
                                                      GLFWwindow* window) {
     std::unique_ptr<PresentationBackend> backend = createNativePresentationBackend(device);
@@ -6840,6 +6989,7 @@ int main() {
     if (commandPool == nullptr || !immediateModeValidated ||
         (commandPool != nullptr && !validateCubeArrayCaptureOrientation(device, *commandPool)) ||
         !validateRg32UintAttachmentClear(device, *commandPool) ||
+        !validateClusteredScratchScan(device, *commandPool) ||
 #if defined(MECRAFT_ENABLE_FSR31)
         !validateFsr31VulkanDispatch(device, *commandPool) || !validateFsr31VulkanContext(device) ||
 #endif

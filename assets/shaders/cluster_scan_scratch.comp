@@ -1,0 +1,56 @@
+#version 450 core
+
+layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
+
+layout(binding = 0, std430) buffer ScanScratchBuffer {
+    uint uScanScratch[];
+};
+
+layout(push_constant) uniform RhiPushConstants {
+    // x: input word offset; y: output word offset;
+    // z: block-sum word offset; w: element count.
+    uvec4 uOffsetsAndCount;
+};
+
+shared uint uScan[512];
+
+void main() {
+    const uint threadIndex = gl_LocalInvocationID.x;
+    const uint blockBase = gl_WorkGroupID.x * 512u;
+    const uint first = blockBase + threadIndex * 2u;
+    const uint second = first + 1u;
+    uScan[threadIndex * 2u] = first < uOffsetsAndCount.w
+        ? uScanScratch[uOffsetsAndCount.x + first] : 0u;
+    uScan[threadIndex * 2u + 1u] = second < uOffsetsAndCount.w
+        ? uScanScratch[uOffsetsAndCount.x + second] : 0u;
+
+    for (uint stride = 1u; stride < 512u; stride <<= 1u) {
+        barrier();
+        const uint index = (threadIndex + 1u) * stride * 2u - 1u;
+        if (index < 512u) {
+            uScan[index] += uScan[index - stride];
+        }
+    }
+    barrier();
+    if (threadIndex == 0u) {
+        uScanScratch[uOffsetsAndCount.z + gl_WorkGroupID.x] = uScan[511u];
+        uScan[511u] = 0u;
+    }
+    for (uint stride = 256u; stride > 0u; stride >>= 1u) {
+        barrier();
+        const uint index = (threadIndex + 1u) * stride * 2u - 1u;
+        if (index < 512u) {
+            const uint left = uScan[index - stride];
+            uScan[index - stride] = uScan[index];
+            uScan[index] += left;
+        }
+    }
+    barrier();
+    if (first < uOffsetsAndCount.w) {
+        uScanScratch[uOffsetsAndCount.y + first] = uScan[threadIndex * 2u];
+    }
+    if (second < uOffsetsAndCount.w) {
+        uScanScratch[uOffsetsAndCount.y + second] =
+            uScan[threadIndex * 2u + 1u];
+    }
+}
