@@ -360,6 +360,12 @@ bool testRtgiTraceCounterHistory() {
     frame.missPixelCount = 300u;
     frame.hitPixelCount = 400u;
     frame.nonFinitePixelCount = 24u;
+    frame.emissiveInactivePixelCount = 100u;
+    frame.emissiveNoPositiveWeightPixelCount = 200u;
+    frame.emissiveSurfaceRejectedPixelCount = 100u;
+    frame.emissiveOccludedPixelCount = 250u;
+    frame.emissiveVisiblePixelCount = 350u;
+    frame.emissiveInvalidPixelCount = 24u;
     frame.peakCandidateCountPerPixel = 3u;
     frame.peakConfirmedCountPerPixel = 2u;
     for (uint64_t sequence = 1u; sequence <= 1002u; ++sequence) {
@@ -382,6 +388,12 @@ bool testRtgiTraceCounterHistory() {
     if (!requireTrue(!history.record(frame), "RTGI classifications must cover every source pixel exactly once")) {
         return false;
     }
+    frame.nonFinitePixelCount = 24u;
+    frame.emissiveInvalidPixelCount = 23u;
+    if (!requireTrue(!history.record(frame),
+                     "RTGI emissive classifications must cover every source pixel exactly once")) {
+        return false;
+    }
 
     const RtgiTraceCounterWindowStats stats = history.snapshot();
     return requireTrue(stats.valid && stats.sampleCount == 1000u && stats.observedSampleCount == 1002u &&
@@ -389,9 +401,17 @@ bool testRtgiTraceCounterHistory() {
                            stats.confirmedCount == 4000u && stats.skyPixelCount == 100000u &&
                            stats.translucentPixelCount == 200000u && stats.missPixelCount == 300000u &&
                            stats.hitPixelCount == 400000u && stats.nonFinitePixelCount == 24000u &&
+                           stats.emissiveInactivePixelCount == 100000u &&
+                           stats.emissiveNoPositiveWeightPixelCount == 200000u &&
+                           stats.emissiveSurfaceRejectedPixelCount == 100000u &&
+                           stats.emissiveOccludedPixelCount == 250000u &&
+                           stats.emissiveVisiblePixelCount == 350000u &&
+                           stats.emissiveInvalidPixelCount == 24000u &&
                            stats.peakCandidateCountPerPixel == 3u && stats.peakConfirmedCountPerPixel == 2u &&
                            stats.latest.sequence == 1002u && stats.latest.frameIndex == 1042u &&
-                           stats.latest.skyPixelCount == 100u && stats.latest.nonFinitePixelCount == 24u,
+                           stats.latest.skyPixelCount == 100u && stats.latest.nonFinitePixelCount == 24u &&
+                           stats.latest.emissiveOccludedPixelCount == 250u &&
+                           stats.latest.emissiveVisiblePixelCount == 350u,
                        "RTGI counter history must retain totals, peaks, and the latest delayed source frame") &&
            requireNear(stats.confirmationRate, 0.4, "RTGI confirmation rate must use aggregate totals");
 }

@@ -324,6 +324,7 @@ bool SceneTlasCache::recordFrame(RhiCommandList& commandList, RenderDebugService
     terrainHitData.reserve(m_desiredInputs.size());
     std::vector<renderer::contracts::GpuMaterial> gpuSceneMaterials;
     std::vector<renderer::contracts::GpuSceneGeometry> gpuSceneGeometries;
+    std::vector<renderer::contracts::RtgiEmissiveGeometryRecord> rtgiEmissiveGeometry;
     std::vector<renderer::contracts::GpuSceneInstance> gpuSceneInstances(m_desiredInputs.size());
     const std::array<uint8_t, sizeof(renderer::contracts::GpuSceneInstance)> zeroGpuSceneInstance{};
     for (renderer::contracts::GpuSceneInstance& instance : gpuSceneInstances) {
@@ -449,6 +450,110 @@ bool SceneTlasCache::recordFrame(RhiCommandList& commandList, RenderDebugService
     generation.gpuSceneInstanceBytes =
         static_cast<uint64_t>(gpuSceneInstances.size()) * sizeof(renderer::contracts::GpuSceneInstance);
 
+    double emissiveWeightSum = 0.0;
+    for (std::size_t instanceIndex = 0u; instanceIndex < m_desiredInputs.size(); ++instanceIndex) {
+        const SceneTlasInstanceInput& input = m_desiredInputs[instanceIndex].source;
+        if (input.staticMeshHitData == nullptr) {
+            continue;
+        }
+        const auto rangeIt = staticMeshTableRanges.find(input.staticMeshHitData.get());
+        if (rangeIt == staticMeshTableRanges.end()) {
+            setTransientError("Scene TLAS emissive geometry table range is missing");
+            return false;
+        }
+        const StaticMeshTableRange& range = rangeIt->second;
+        glm::mat4 rebasedTransform;
+        if (!rebaseTransform(input.transform, generation.sceneOrigin, rebasedTransform)) {
+            setTransientError("Scene TLAS emissive geometry transform rebasing failed");
+            return false;
+        }
+        const glm::mat3 linearTransform(rebasedTransform);
+        const float linearDeterminant = glm::determinant(linearTransform);
+        if (!std::isfinite(linearDeterminant) || std::abs(linearDeterminant) <= 1.0e-12f) {
+            setTransientError("Scene TLAS emissive geometry transform is singular");
+            return false;
+        }
+        const glm::mat3 areaTransform = linearDeterminant * glm::transpose(glm::inverse(linearTransform));
+        bool finiteAreaTransform = true;
+        for (int column = 0; column < 3; ++column) {
+            for (int row = 0; row < 3; ++row) {
+                finiteAreaTransform = finiteAreaTransform && std::isfinite(areaTransform[column][row]);
+            }
+        }
+        if (!finiteAreaTransform) {
+            setTransientError("Scene TLAS emissive geometry area transform is invalid");
+            return false;
+        }
+        for (std::size_t localGeometryIndex = 0u;
+             localGeometryIndex < input.staticMeshHitData->geometries().size(); ++localGeometryIndex) {
+            const StaticMeshRayTracingGeometry& sourceGeometry =
+                input.staticMeshHitData->geometries()[localGeometryIndex];
+            const renderer::contracts::GpuSceneGeometry& geometry = sourceGeometry.gpu;
+            const uint32_t materialIndex = geometry.materialAndIdentity.x;
+            if (materialIndex >= input.staticMeshHitData->materials().size() ||
+                range.materialBase + materialIndex >= gpuSceneMaterials.size()) {
+                setTransientError("Scene TLAS emissive geometry material index is invalid");
+                return false;
+            }
+            const renderer::contracts::GpuMaterial& material = gpuSceneMaterials[range.materialBase + materialIndex];
+            const glm::vec3 emissive = glm::vec3(material.emissiveFactorAndStrength) * material.emissiveFactorAndStrength.w;
+            if (!std::isfinite(emissive.x) || !std::isfinite(emissive.y) || !std::isfinite(emissive.z) ||
+                glm::dot(emissive, emissive) <= 0.0f) {
+                continue;
+            }
+            const uint32_t primitiveCount = geometry.primitiveMeshletAndRevision.x;
+            if (primitiveCount == 0u || sourceGeometry.primitiveAreaVectors.size() != primitiveCount ||
+                range.geometryBase + localGeometryIndex >= gpuSceneGeometries.size()) {
+                setTransientError("Scene TLAS emissive geometry primitive range is invalid");
+                return false;
+            }
+            const double emissionLuminance = static_cast<double>(glm::dot(emissive, glm::vec3(0.2126f, 0.7152f, 0.0722f)));
+            for (uint32_t primitiveIndex = 0u; primitiveIndex < primitiveCount; ++primitiveIndex) {
+                const float worldArea = glm::length(areaTransform * sourceGeometry.primitiveAreaVectors[primitiveIndex]);
+                const double weight = static_cast<double>(worldArea) * emissionLuminance;
+                if (!std::isfinite(worldArea) || worldArea <= 0.0f || !std::isfinite(weight) || weight <= 0.0 ||
+                    weight > static_cast<double>(std::numeric_limits<float>::max()) ||
+                    rtgiEmissiveGeometry.size() >= std::numeric_limits<uint32_t>::max()) {
+                    setTransientError("Scene TLAS emissive triangle sampling weight is invalid");
+                    return false;
+                }
+                const float storedWeight = static_cast<float>(weight);
+                emissiveWeightSum += static_cast<double>(storedWeight);
+                rtgiEmissiveGeometry.push_back(
+                    {{static_cast<uint32_t>(instanceIndex), static_cast<uint32_t>(localGeometryIndex), primitiveIndex,
+                      0u},
+                     {storedWeight, 0.0f, worldArea, 0.0f}});
+            }
+        }
+    }
+    if (!rtgiEmissiveGeometry.empty()) {
+        if (!std::isfinite(emissiveWeightSum) || emissiveWeightSum <= 0.0) {
+            setTransientError("Scene TLAS emissive triangle total sampling weight is invalid");
+            return false;
+        }
+        double cumulativeWeight = 0.0;
+        float previousCdf = 0.0f;
+        for (std::size_t recordIndex = 0u; recordIndex < rtgiEmissiveGeometry.size(); ++recordIndex) {
+            renderer::contracts::RtgiEmissiveGeometryRecord& record = rtgiEmissiveGeometry[recordIndex];
+            cumulativeWeight += static_cast<double>(record.cumulativeProbabilityArea.x);
+            const float cdf = recordIndex + 1u == rtgiEmissiveGeometry.size()
+                                  ? 1.0f
+                                  : static_cast<float>(cumulativeWeight / emissiveWeightSum);
+            const float probability = cdf - previousCdf;
+            if (!std::isfinite(cdf) || !std::isfinite(probability) || cdf <= previousCdf || probability <= 0.0f) {
+                setTransientError("Scene TLAS emissive triangle CDF precision is insufficient");
+                return false;
+            }
+            record.cumulativeProbabilityArea.x = cdf;
+            record.cumulativeProbabilityArea.y = probability;
+            previousCdf = cdf;
+        }
+    }
+    generation.rtgiEmissiveGeometryCount = static_cast<uint32_t>(rtgiEmissiveGeometry.size());
+    generation.rtgiEmissiveGeometryBytes =
+        static_cast<uint64_t>(std::max<std::size_t>(rtgiEmissiveGeometry.size(), 1u)) *
+        sizeof(renderer::contracts::RtgiEmissiveGeometryRecord);
+
     RhiBufferDesc instanceDesc;
     instanceDesc.debugName = "Scene.TLAS.Instances";
     instanceDesc.size = generation.instanceBytes;
@@ -494,6 +599,15 @@ bool SceneTlasCache::recordFrame(RhiCommandList& commandList, RenderDebugService
     gpuSceneInstanceDesc.memoryCategory = RhiMemoryCategory::SceneData;
     generation.gpuSceneInstanceBuffer = m_device->createBuffer(gpuSceneInstanceDesc, nullptr, 0u);
 
+    RhiBufferDesc rtgiEmissiveGeometryDesc;
+    rtgiEmissiveGeometryDesc.debugName = "Scene.TLAS.RtgiEmissiveGeometry";
+    rtgiEmissiveGeometryDesc.size = generation.rtgiEmissiveGeometryBytes;
+    rtgiEmissiveGeometryDesc.usage = kGpuSceneHitDataBufferUsages;
+    rtgiEmissiveGeometryDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+    rtgiEmissiveGeometryDesc.initialState = RhiResourceState::TransferDst;
+    rtgiEmissiveGeometryDesc.memoryCategory = RhiMemoryCategory::SceneData;
+    generation.rtgiEmissiveGeometryBuffer = m_device->createBuffer(rtgiEmissiveGeometryDesc, nullptr, 0u);
+
     RhiAccelerationStructureGeometryDesc instanceGeometry;
     instanceGeometry.type = RhiAccelerationStructureGeometryType::Instances;
     instanceGeometry.instances.buffer = generation.instanceBuffer;
@@ -508,7 +622,7 @@ bool SceneTlasCache::recordFrame(RhiCommandList& commandList, RenderDebugService
     RhiAccelerationStructureBuildSizes buildSizes;
     if (!generation.instanceBuffer.isValid() || !generation.terrainHitDataBuffer.isValid() ||
         !generation.gpuSceneMaterialBuffer.isValid() || !generation.gpuSceneGeometryBuffer.isValid() ||
-        !generation.gpuSceneInstanceBuffer.isValid() ||
+        !generation.gpuSceneInstanceBuffer.isValid() || !generation.rtgiEmissiveGeometryBuffer.isValid() ||
         !m_device->queryAccelerationStructureBuildSizes(buildInput, buildSizes) ||
         buildSizes.accelerationStructureSize == 0u || buildSizes.buildScratchSize == 0u) {
         destroyGeneration(generation);
@@ -562,6 +676,12 @@ bool SceneTlasCache::recordFrame(RhiCommandList& commandList, RenderDebugService
     commandList.updateBuffer(generation.gpuSceneGeometryBuffer, 0u, geometryData, gpuSceneGeometryDesc.size);
     commandList.updateBuffer(generation.gpuSceneInstanceBuffer, 0u, gpuSceneInstances.data(),
                              gpuSceneInstanceDesc.size);
+    const std::array<uint8_t, sizeof(renderer::contracts::RtgiEmissiveGeometryRecord)> zeroEmissiveGeometryRecord{};
+    const void* emissiveGeometryData = rtgiEmissiveGeometry.empty()
+                                            ? static_cast<const void*>(zeroEmissiveGeometryRecord.data())
+                                            : static_cast<const void*>(rtgiEmissiveGeometry.data());
+    commandList.updateBuffer(generation.rtgiEmissiveGeometryBuffer, 0u, emissiveGeometryData,
+                             rtgiEmissiveGeometryDesc.size);
     commandList.bufferBarrier(
         {generation.instanceBuffer, RhiResourceState::TransferDst, RhiResourceState::AccelerationStructureBuildInput});
     commandList.bufferBarrier(
@@ -572,6 +692,8 @@ bool SceneTlasCache::recordFrame(RhiCommandList& commandList, RenderDebugService
         {generation.gpuSceneGeometryBuffer, RhiResourceState::TransferDst, RhiResourceState::StorageBuffer});
     commandList.bufferBarrier(
         {generation.gpuSceneInstanceBuffer, RhiResourceState::TransferDst, RhiResourceState::StorageBuffer});
+    commandList.bufferBarrier(
+        {generation.rtgiEmissiveGeometryBuffer, RhiResourceState::TransferDst, RhiResourceState::StorageBuffer});
     if (debugService != nullptr) {
         debugService->endGpuTimer(commandList, dynamicResourceTimer);
     }
@@ -620,7 +742,8 @@ bool SceneTlasCache::recordFrame(RhiCommandList& commandList, RenderDebugService
     m_dynamicResourceBytesThisFrame += m_pending->generation.instanceBytes + m_pending->generation.terrainHitDataBytes +
                                        m_pending->generation.gpuSceneMaterialBytes +
                                        m_pending->generation.gpuSceneGeometryBytes +
-                                       m_pending->generation.gpuSceneInstanceBytes;
+                                       m_pending->generation.gpuSceneInstanceBytes +
+                                       m_pending->generation.rtgiEmissiveGeometryBytes;
     return true;
 }
 
@@ -682,6 +805,7 @@ std::optional<SceneTlasView> SceneTlasCache::activeView() const {
     view.gpuSceneMaterialBuffer = active.gpuSceneMaterialBuffer;
     view.gpuSceneGeometryBuffer = active.gpuSceneGeometryBuffer;
     view.gpuSceneInstanceBuffer = active.gpuSceneInstanceBuffer;
+    view.rtgiEmissiveGeometryBuffer = active.rtgiEmissiveGeometryBuffer;
     view.deviceAddress = active.deviceAddress;
     view.bindlessIdentity = active.bindlessIdentity;
     view.instanceCount = static_cast<uint32_t>(active.mappings.size());
@@ -693,6 +817,8 @@ std::optional<SceneTlasView> SceneTlasCache::activeView() const {
     view.gpuSceneMaterialBytes = active.gpuSceneMaterialBytes;
     view.gpuSceneGeometryBytes = active.gpuSceneGeometryBytes;
     view.gpuSceneInstanceBytes = active.gpuSceneInstanceBytes;
+    view.rtgiEmissiveGeometryBytes = active.rtgiEmissiveGeometryBytes;
+    view.rtgiEmissiveGeometryCount = active.rtgiEmissiveGeometryCount;
     view.blasBytes = active.blasBytes;
     view.tlasBytes = active.tlasBytes;
     view.mappings = active.mappings;
@@ -887,6 +1013,9 @@ void SceneTlasCache::destroyGeneration(Generation& generation) {
         }
         if (generation.gpuSceneInstanceBuffer.isValid()) {
             m_device->destroyBuffer(generation.gpuSceneInstanceBuffer);
+        }
+        if (generation.rtgiEmissiveGeometryBuffer.isValid()) {
+            m_device->destroyBuffer(generation.rtgiEmissiveGeometryBuffer);
         }
     }
     generation = {};

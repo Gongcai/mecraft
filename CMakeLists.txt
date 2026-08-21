@@ -413,8 +413,10 @@ set(SRC_RENDERER
         src/renderer/passes/SsaoPass.cpp
         src/renderer/passes/SsgiPass.cpp
         src/renderer/passes/NrdGuidePrepPass.cpp
+        src/renderer/passes/RtgiEmissiveTemporalPass.cpp
         src/renderer/passes/RtgiSignalPackPass.cpp
         src/renderer/passes/RtgiTracePass.cpp
+        src/renderer/passes/RtgiValidationComposePass.cpp
         src/renderer/passes/HiZPass.cpp
         src/renderer/passes/VelocityPass.cpp
         src/renderer/passes/ReflectionPass.cpp

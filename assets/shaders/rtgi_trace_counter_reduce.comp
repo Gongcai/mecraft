@@ -13,7 +13,7 @@ layout(push_constant) uniform RtgiTraceCounterPushConstants {
     uvec4 renderExtentAndContract;
 } pc;
 
-const uint RTGI_TRACE_COUNTER_CONTRACT_VERSION = 2u;
+const uint RTGI_TRACE_COUNTER_CONTRACT_VERSION = 3u;
 const uint RTGI_TRACE_COUNTER_CANDIDATE_LOW = 0u;
 const uint RTGI_TRACE_COUNTER_CANDIDATE_HIGH = 1u;
 const uint RTGI_TRACE_COUNTER_CONFIRMED_LOW = 2u;
@@ -34,11 +34,24 @@ const uint RTGI_TRACE_COUNTER_HIT_LOW = 16u;
 const uint RTGI_TRACE_COUNTER_HIT_HIGH = 17u;
 const uint RTGI_TRACE_COUNTER_NON_FINITE_LOW = 18u;
 const uint RTGI_TRACE_COUNTER_NON_FINITE_HIGH = 19u;
+const uint RTGI_TRACE_COUNTER_EMISSIVE_INACTIVE_LOW = 20u;
+const uint RTGI_TRACE_COUNTER_EMISSIVE_INACTIVE_HIGH = 21u;
+const uint RTGI_TRACE_COUNTER_EMISSIVE_NO_POSITIVE_WEIGHT_LOW = 22u;
+const uint RTGI_TRACE_COUNTER_EMISSIVE_NO_POSITIVE_WEIGHT_HIGH = 23u;
+const uint RTGI_TRACE_COUNTER_EMISSIVE_SURFACE_REJECTED_LOW = 24u;
+const uint RTGI_TRACE_COUNTER_EMISSIVE_SURFACE_REJECTED_HIGH = 25u;
+const uint RTGI_TRACE_COUNTER_EMISSIVE_OCCLUDED_LOW = 26u;
+const uint RTGI_TRACE_COUNTER_EMISSIVE_OCCLUDED_HIGH = 27u;
+const uint RTGI_TRACE_COUNTER_EMISSIVE_VISIBLE_LOW = 28u;
+const uint RTGI_TRACE_COUNTER_EMISSIVE_VISIBLE_HIGH = 29u;
+const uint RTGI_TRACE_COUNTER_EMISSIVE_INVALID_LOW = 30u;
+const uint RTGI_TRACE_COUNTER_EMISSIVE_INVALID_HIGH = 31u;
 
 const uint RTGI_TRACE_COUNTER_ERROR_CONTRACT = 1u << 0u;
 const uint RTGI_TRACE_COUNTER_ERROR_EXTENT = 1u << 1u;
 const uint RTGI_TRACE_COUNTER_ERROR_CONFIRMED_EXCEEDS_CANDIDATE = 1u << 2u;
 const uint RTGI_TRACE_COUNTER_ERROR_CLASSIFICATION = 1u << 3u;
+const uint RTGI_TRACE_COUNTER_ERROR_EMISSIVE_STATUS = 1u << 4u;
 
 shared uint sCandidate[64];
 shared uint sConfirmed[64];
@@ -50,6 +63,12 @@ shared uint sTranslucent[64];
 shared uint sMiss[64];
 shared uint sHit[64];
 shared uint sNonFinite[64];
+shared uint sEmissiveInactive[64];
+shared uint sEmissiveNoPositiveWeight[64];
+shared uint sEmissiveSurfaceRejected[64];
+shared uint sEmissiveOccluded[64];
+shared uint sEmissiveVisible[64];
+shared uint sEmissiveInvalid[64];
 
 void rtgiTraceCounterAtomicAdd64(uint lowWord, uint highWord, uint value) {
     uint previousLow = atomicAdd(uCounters.words[lowWord], value);
@@ -69,9 +88,17 @@ void main() {
     uint missCount = 0u;
     uint hitCount = 0u;
     uint nonFiniteCount = 0u;
+    uint emissiveInactiveCount = 0u;
+    uint emissiveNoPositiveWeightCount = 0u;
+    uint emissiveSurfaceRejectedCount = 0u;
+    uint emissiveOccludedCount = 0u;
+    uint emissiveVisibleCount = 0u;
+    uint emissiveInvalidCount = 0u;
     if (inside) {
         uint validationWord = imageLoad(uValidation, ivec2(texel)).x;
         uint classification = validationWord & RTGI_TRACE_VALIDATION_CLASSIFICATION_MASK;
+        uint emissiveStatus = (validationWord >> RTGI_TRACE_VALIDATION_EMISSIVE_STATUS_SHIFT) &
+                              RTGI_TRACE_VALIDATION_EMISSIVE_STATUS_MASK;
         candidateCount = (validationWord >> RTGI_TRACE_VALIDATION_CANDIDATE_SHIFT) &
                          RTGI_TRACE_VALIDATION_CANDIDATE_MASK;
         confirmedCount = (validationWord >> RTGI_TRACE_VALIDATION_CONFIRMED_SHIFT) &
@@ -94,6 +121,22 @@ void main() {
             atomicOr(uCounters.words[RTGI_TRACE_COUNTER_INVARIANT_ERROR],
                      RTGI_TRACE_COUNTER_ERROR_CLASSIFICATION);
         }
+        if (emissiveStatus == RTGI_EMISSIVE_STATUS_INACTIVE) {
+            emissiveInactiveCount = 1u;
+        } else if (emissiveStatus == RTGI_EMISSIVE_STATUS_NO_POSITIVE_WEIGHT) {
+            emissiveNoPositiveWeightCount = 1u;
+        } else if (emissiveStatus == RTGI_EMISSIVE_STATUS_SURFACE_REJECTED) {
+            emissiveSurfaceRejectedCount = 1u;
+        } else if (emissiveStatus == RTGI_EMISSIVE_STATUS_OCCLUDED) {
+            emissiveOccludedCount = 1u;
+        } else if (emissiveStatus == RTGI_EMISSIVE_STATUS_VISIBLE) {
+            emissiveVisibleCount = 1u;
+        } else if (emissiveStatus == RTGI_EMISSIVE_STATUS_INVALID) {
+            emissiveInvalidCount = 1u;
+        } else {
+            atomicOr(uCounters.words[RTGI_TRACE_COUNTER_INVARIANT_ERROR],
+                     RTGI_TRACE_COUNTER_ERROR_EMISSIVE_STATUS);
+        }
     }
 
     sCandidate[localIndex] = candidateCount;
@@ -106,6 +149,12 @@ void main() {
     sMiss[localIndex] = missCount;
     sHit[localIndex] = hitCount;
     sNonFinite[localIndex] = nonFiniteCount;
+    sEmissiveInactive[localIndex] = emissiveInactiveCount;
+    sEmissiveNoPositiveWeight[localIndex] = emissiveNoPositiveWeightCount;
+    sEmissiveSurfaceRejected[localIndex] = emissiveSurfaceRejectedCount;
+    sEmissiveOccluded[localIndex] = emissiveOccludedCount;
+    sEmissiveVisible[localIndex] = emissiveVisibleCount;
+    sEmissiveInvalid[localIndex] = emissiveInvalidCount;
     barrier();
 
     for (uint stride = 32u; stride != 0u; stride >>= 1u) {
@@ -120,6 +169,12 @@ void main() {
             sMiss[localIndex] += sMiss[localIndex + stride];
             sHit[localIndex] += sHit[localIndex + stride];
             sNonFinite[localIndex] += sNonFinite[localIndex + stride];
+            sEmissiveInactive[localIndex] += sEmissiveInactive[localIndex + stride];
+            sEmissiveNoPositiveWeight[localIndex] += sEmissiveNoPositiveWeight[localIndex + stride];
+            sEmissiveSurfaceRejected[localIndex] += sEmissiveSurfaceRejected[localIndex + stride];
+            sEmissiveOccluded[localIndex] += sEmissiveOccluded[localIndex + stride];
+            sEmissiveVisible[localIndex] += sEmissiveVisible[localIndex + stride];
+            sEmissiveInvalid[localIndex] += sEmissiveInvalid[localIndex + stride];
         }
         barrier();
     }
@@ -137,6 +192,20 @@ void main() {
         rtgiTraceCounterAtomicAdd64(RTGI_TRACE_COUNTER_HIT_LOW, RTGI_TRACE_COUNTER_HIT_HIGH, sHit[0]);
         rtgiTraceCounterAtomicAdd64(RTGI_TRACE_COUNTER_NON_FINITE_LOW, RTGI_TRACE_COUNTER_NON_FINITE_HIGH,
                                     sNonFinite[0]);
+        rtgiTraceCounterAtomicAdd64(RTGI_TRACE_COUNTER_EMISSIVE_INACTIVE_LOW,
+                                    RTGI_TRACE_COUNTER_EMISSIVE_INACTIVE_HIGH, sEmissiveInactive[0]);
+        rtgiTraceCounterAtomicAdd64(RTGI_TRACE_COUNTER_EMISSIVE_NO_POSITIVE_WEIGHT_LOW,
+                                    RTGI_TRACE_COUNTER_EMISSIVE_NO_POSITIVE_WEIGHT_HIGH,
+                                    sEmissiveNoPositiveWeight[0]);
+        rtgiTraceCounterAtomicAdd64(RTGI_TRACE_COUNTER_EMISSIVE_SURFACE_REJECTED_LOW,
+                                    RTGI_TRACE_COUNTER_EMISSIVE_SURFACE_REJECTED_HIGH,
+                                    sEmissiveSurfaceRejected[0]);
+        rtgiTraceCounterAtomicAdd64(RTGI_TRACE_COUNTER_EMISSIVE_OCCLUDED_LOW,
+                                    RTGI_TRACE_COUNTER_EMISSIVE_OCCLUDED_HIGH, sEmissiveOccluded[0]);
+        rtgiTraceCounterAtomicAdd64(RTGI_TRACE_COUNTER_EMISSIVE_VISIBLE_LOW,
+                                    RTGI_TRACE_COUNTER_EMISSIVE_VISIBLE_HIGH, sEmissiveVisible[0]);
+        rtgiTraceCounterAtomicAdd64(RTGI_TRACE_COUNTER_EMISSIVE_INVALID_LOW,
+                                    RTGI_TRACE_COUNTER_EMISSIVE_INVALID_HIGH, sEmissiveInvalid[0]);
         atomicMax(uCounters.words[RTGI_TRACE_COUNTER_PEAK_CANDIDATE], sPeakCandidate[0]);
         atomicMax(uCounters.words[RTGI_TRACE_COUNTER_PEAK_CONFIRMED], sPeakConfirmed[0]);
     }

@@ -92,7 +92,8 @@ RgPassHandle RtgiTracePass::addGraphPass(RenderGraph& graph, const FrameContext&
         !resources.voxelLight.isValid() || !resources.blueNoise.isValid() || !resources.terrainAlbedo.isValid() ||
         !resources.terrainNormal.isValid() || !resources.terrainSpecular.isValid() ||
         !resources.grassColormap.isValid() || !resources.foliageColormap.isValid() || !resources.skyCapture.isValid() ||
-        !resources.diffuseRadianceHitDistance.isValid() || !resources.validation.isValid() ||
+        !resources.diffuseRadianceHitDistance.isValid() || !resources.emissiveDirectRadiance.isValid() ||
+        !resources.combinedDiffuseRadianceHitDistance.isValid() || !resources.validation.isValid() ||
         !std::isfinite(ctx.preExposure) || ctx.preExposure <= 0.0f || !lighting.bindGroupLayout.isValid() ||
         !lighting.bindGroup.isValid() || !lighting.lights.isValid() || !lighting.worldCells.isValid() ||
         !lighting.worldIndices.isValid() || !lighting.worldHeader.isValid() ||
@@ -109,6 +110,7 @@ RgPassHandle RtgiTracePass::addGraphPass(RenderGraph& graph, const FrameContext&
     RhiBufferDesc gpuSceneMaterialDesc;
     RhiBufferDesc gpuSceneGeometryDesc;
     RhiBufferDesc gpuSceneInstanceDesc;
+    RhiBufferDesc rtgiEmissiveGeometryDesc;
     const uint64_t expectedMaterialBytes =
         static_cast<uint64_t>(std::max(activeTlas.has_value() ? activeTlas->gpuSceneMaterialCount : 0u, 1u)) *
         sizeof(renderer::contracts::GpuMaterial);
@@ -118,6 +120,9 @@ RgPassHandle RtgiTracePass::addGraphPass(RenderGraph& graph, const FrameContext&
     const uint64_t expectedInstanceBytes =
         static_cast<uint64_t>(activeTlas.has_value() ? activeTlas->instanceCount : 0u) *
         sizeof(renderer::contracts::GpuSceneInstance);
+    const uint64_t expectedEmissiveGeometryBytes =
+        static_cast<uint64_t>(std::max(activeTlas.has_value() ? activeTlas->rtgiEmissiveGeometryCount : 0u, 1u)) *
+        sizeof(renderer::contracts::RtgiEmissiveGeometryRecord);
     if (!activeTlas.has_value() ||
         !sameHandle(ctx.shared->globalBindlessSet->accelerationStructure(), activeTlas->accelerationStructure) ||
         activeTlas->terrainHitDataBytes != static_cast<uint64_t>(activeTlas->instanceCount) *
@@ -126,6 +131,7 @@ RgPassHandle RtgiTracePass::addGraphPass(RenderGraph& graph, const FrameContext&
         activeTlas->gpuSceneMaterialBytes != expectedMaterialBytes ||
         activeTlas->gpuSceneGeometryBytes != expectedGeometryBytes ||
         activeTlas->gpuSceneInstanceBytes != expectedInstanceBytes ||
+        activeTlas->rtgiEmissiveGeometryBytes != expectedEmissiveGeometryBytes ||
         (activeTlas->gpuSceneMaterialCount == 0u && activeTlas->bindlessIdentity != 0u) ||
         (activeTlas->gpuSceneMaterialCount != 0u &&
          activeTlas->bindlessIdentity != ctx.shared->globalBindlessSet->identity()) ||
@@ -136,7 +142,9 @@ RgPassHandle RtgiTracePass::addGraphPass(RenderGraph& graph, const FrameContext&
         !storageBufferMatches(*ctx.shared->rhiDevice, activeTlas->gpuSceneGeometryBuffer,
                               activeTlas->gpuSceneGeometryBytes, gpuSceneGeometryDesc) ||
         !storageBufferMatches(*ctx.shared->rhiDevice, activeTlas->gpuSceneInstanceBuffer,
-                              activeTlas->gpuSceneInstanceBytes, gpuSceneInstanceDesc)) {
+                              activeTlas->gpuSceneInstanceBytes, gpuSceneInstanceDesc) ||
+        !storageBufferMatches(*ctx.shared->rhiDevice, activeTlas->rtgiEmissiveGeometryBuffer,
+                              activeTlas->rtgiEmissiveGeometryBytes, rtgiEmissiveGeometryDesc)) {
         return {};
     }
 
@@ -170,11 +178,15 @@ RgPassHandle RtgiTracePass::addGraphPass(RenderGraph& graph, const FrameContext&
         graph.importBuffer({gpuSceneInstanceDesc.debugName, activeTlas->gpuSceneInstanceBuffer, gpuSceneInstanceDesc,
                             RhiResourceState::StorageBuffer, RhiResourceState::StorageBuffer, RhiQueueType::Graphics,
                             RhiQueueType::Graphics});
+    const RgBufferHandle rtgiEmissiveGeometry =
+        graph.importBuffer({rtgiEmissiveGeometryDesc.debugName, activeTlas->rtgiEmissiveGeometryBuffer,
+                            rtgiEmissiveGeometryDesc, RhiResourceState::StorageBuffer,
+                            RhiResourceState::StorageBuffer, RhiQueueType::Graphics, RhiQueueType::Graphics});
     const RgBufferHandle counterBuffer = graph.importBuffer(
         {counterBufferDesc.debugName, m_counterBuffer, counterBufferDesc, RhiResourceState::StorageBuffer,
          RhiResourceState::StorageBuffer, RhiQueueType::Graphics, RhiQueueType::Graphics});
     if (!terrainHitData.isValid() || !gpuSceneMaterials.isValid() || !gpuSceneGeometries.isValid() ||
-        !gpuSceneInstances.isValid() || !counterBuffer.isValid()) {
+        !gpuSceneInstances.isValid() || !rtgiEmissiveGeometry.isValid() || !counterBuffer.isValid()) {
         return {};
     }
 
@@ -187,9 +199,12 @@ RgPassHandle RtgiTracePass::addGraphPass(RenderGraph& graph, const FrameContext&
     sceneBuffers.gpuSceneMaterialBytes = activeTlas->gpuSceneMaterialBytes;
     sceneBuffers.gpuSceneGeometryBytes = activeTlas->gpuSceneGeometryBytes;
     sceneBuffers.gpuSceneInstanceBytes = activeTlas->gpuSceneInstanceBytes;
+    sceneBuffers.rtgiEmissiveGeometry = activeTlas->rtgiEmissiveGeometryBuffer;
+    sceneBuffers.rtgiEmissiveGeometryBytes = activeTlas->rtgiEmissiveGeometryBytes;
     sceneBuffers.sceneInstanceCount = activeTlas->instanceCount;
     sceneBuffers.gpuSceneMaterialCount = activeTlas->gpuSceneMaterialCount;
     sceneBuffers.gpuSceneGeometryCount = activeTlas->gpuSceneGeometryCount;
+    sceneBuffers.rtgiEmissiveGeometryCount = activeTlas->rtgiEmissiveGeometryCount;
     sceneBuffers.sceneOrigin = activeTlas->sceneOrigin;
     RenderGraphPassBuilder trace = graph.addPass({"RTGI.Trace", RgPassType::Compute, RhiQueueType::Graphics});
     trace.dependsOn(dependency)
@@ -208,6 +223,7 @@ RgPassHandle RtgiTracePass::addGraphPass(RenderGraph& graph, const FrameContext&
         .readBuffer(gpuSceneMaterials, RhiResourceState::StorageBuffer)
         .readBuffer(gpuSceneGeometries, RhiResourceState::StorageBuffer)
         .readBuffer(gpuSceneInstances, RhiResourceState::StorageBuffer)
+        .readBuffer(rtgiEmissiveGeometry, RhiResourceState::StorageBuffer)
         .readBuffer(lighting.lights, RhiResourceState::StorageBuffer)
         .readBuffer(lighting.worldCells, RhiResourceState::StorageBuffer)
         .readBuffer(lighting.worldIndices, RhiResourceState::StorageBuffer)
@@ -216,10 +232,12 @@ RgPassHandle RtgiTracePass::addGraphPass(RenderGraph& graph, const FrameContext&
         .readTexture(lighting.localShadowSpotAtlas, RhiResourceState::DepthRead)
         .readTexture(lighting.localShadowPointCubeArray, RhiResourceState::DepthRead)
         .writeTexture(resources.diffuseRadianceHitDistance, RhiResourceState::ShaderWrite)
-        .writeTexture(resources.validation, RhiResourceState::ShaderWrite)
-        .setExecute([this, frame, settings, frameResources, frameLighting, terrainHitData, gpuSceneMaterials,
-                     gpuSceneGeometries, gpuSceneInstances, sceneBuffers,
-                     sceneTlasRevision](RgPassContext& pass) mutable {
+        .writeTexture(resources.emissiveDirectRadiance, RhiResourceState::ShaderWrite)
+        .writeTexture(resources.combinedDiffuseRadianceHitDistance, RhiResourceState::ShaderWrite)
+        .writeTexture(resources.validation, RhiResourceState::ShaderWrite);
+    trace.setExecute([this, frame, settings, frameResources, frameLighting, terrainHitData, gpuSceneMaterials,
+                      gpuSceneGeometries, gpuSceneInstances, rtgiEmissiveGeometry, sceneBuffers,
+                      sceneTlasRevision](RgPassContext& pass) mutable {
             const TraceViews views{pass.textureView(frameResources.depth),
                                    pass.textureView(frameResources.normalAo),
                                    pass.textureView(frameResources.materialAux),
@@ -232,14 +250,17 @@ RgPassHandle RtgiTracePass::addGraphPass(RenderGraph& graph, const FrameContext&
                                    pass.textureView(frameResources.foliageColormap),
                                    pass.textureView(frameResources.skyCapture),
                                    pass.textureView(frameResources.diffuseRadianceHitDistance),
+                                   pass.textureView(frameResources.emissiveDirectRadiance),
+                                   pass.textureView(frameResources.combinedDiffuseRadianceHitDistance),
                                    pass.textureView(frameResources.validation)};
             sceneBuffers.terrainHitData = pass.buffer(terrainHitData);
             sceneBuffers.gpuSceneMaterials = pass.buffer(gpuSceneMaterials);
             sceneBuffers.gpuSceneGeometries = pass.buffer(gpuSceneGeometries);
             sceneBuffers.gpuSceneInstances = pass.buffer(gpuSceneInstances);
+            sceneBuffers.rtgiEmissiveGeometry = pass.buffer(rtgiEmissiveGeometry);
             return recordTrace(pass.commandList(), *frame, settings, views, sceneBuffers, frameLighting.bindGroupLayout,
                                frameLighting.bindGroup, sceneTlasRevision);
-        });
+    });
     if (!m_counterReadbackSlotAvailable) {
         return trace.handle();
     }
@@ -462,7 +483,7 @@ bool RtgiTracePass::recordTrace(RhiCommandList& commandList, const FrameContext&
                    static_cast<uint32_t>(settings.shadowInstanceMask));
     pushConstants.materialGeometryCounts =
         glm::uvec4(sceneBuffers.gpuSceneMaterialCount, sceneBuffers.gpuSceneGeometryCount,
-                   settings.referenceSamplingEnabled ? 1u : 0u, 0u);
+                   settings.referenceSamplingEnabled ? 1u : 0u, sceneBuffers.rtgiEmissiveGeometryCount);
 
     renderer::contracts::RtgiSecondaryLightingParams lightingParams;
     lightingParams.sunDirectionAndVisibility = glm::vec4(ctx.skyColors.sunDirection, ctx.skyColors.sunVisibility);
@@ -505,6 +526,8 @@ bool RtgiTracePass::recordTrace(RhiCommandList& commandList, const FrameContext&
     m_stats.gpuSceneMaterialBytes = sceneBuffers.gpuSceneMaterialBytes;
     m_stats.gpuSceneGeometryBytes = sceneBuffers.gpuSceneGeometryBytes;
     m_stats.gpuSceneInstanceBytes = sceneBuffers.gpuSceneInstanceBytes;
+    m_stats.rtgiEmissiveGeometryBytes = sceneBuffers.rtgiEmissiveGeometryBytes;
+    m_stats.rtgiEmissiveGeometryCount = sceneBuffers.rtgiEmissiveGeometryCount;
     m_stats.gpuSceneMaterialCount = sceneBuffers.gpuSceneMaterialCount;
     m_stats.gpuSceneGeometryCount = sceneBuffers.gpuSceneGeometryCount;
     return true;
@@ -673,6 +696,12 @@ bool RtgiTracePass::ensurePipeline(RhiDevice& rhiDevice, const RhiBindGroupLayou
                                        traceBindingFlags(RhiBindingType::UniformBuffer)});
     traceLayoutDesc.entries.push_back({17u, RhiBindingType::CombinedTextureSampler, rhiFlag(RhiShaderStage::Compute),
                                        1u, traceBindingFlags(RhiBindingType::CombinedTextureSampler)});
+    traceLayoutDesc.entries.push_back({18u, RhiBindingType::StorageBuffer, rhiFlag(RhiShaderStage::Compute), 1u,
+                                       traceBindingFlags(RhiBindingType::StorageBuffer)});
+    traceLayoutDesc.entries.push_back({19u, RhiBindingType::StorageTexture, rhiFlag(RhiShaderStage::Compute), 1u,
+                                       traceBindingFlags(RhiBindingType::StorageTexture)});
+    traceLayoutDesc.entries.push_back({20u, RhiBindingType::StorageTexture, rhiFlag(RhiShaderStage::Compute), 1u,
+                                       traceBindingFlags(RhiBindingType::StorageTexture)});
     m_traceBindGroupLayout = rhiDevice.createBindGroupLayout(traceLayoutDesc);
     if (!m_traceBindGroupLayout.isValid()) {
         destroyRhiResources();
@@ -742,7 +771,7 @@ bool RtgiTracePass::ensureBindGroup(RhiDevice& rhiDevice, const TraceViews& view
         MECRAFT_LOG_STREAM(std::cerr << "[RtgiTracePass] Bind group setup rejected: " << reason << '\n');
         return false;
     };
-    const std::array<RhiTextureViewHandle, 13u> boundViews{views.depth,
+    const std::array<RhiTextureViewHandle, 15u> boundViews{views.depth,
                                                            views.normalAo,
                                                            views.materialAux,
                                                            views.blueNoise,
@@ -754,7 +783,9 @@ bool RtgiTracePass::ensureBindGroup(RhiDevice& rhiDevice, const TraceViews& view
                                                            views.skyCapture,
                                                            views.diffuseRadianceHitDistance,
                                                            views.validation,
-                                                           views.voxelLight};
+                                                           views.voxelLight,
+                                                           views.emissiveDirectRadiance,
+                                                           views.combinedDiffuseRadianceHitDistance};
     for (const RhiTextureViewHandle view : boundViews) {
         if (!view.isValid()) {
             return reject("one or more RTGI texture views are invalid");
@@ -767,12 +798,13 @@ bool RtgiTracePass::ensureBindGroup(RhiDevice& rhiDevice, const TraceViews& view
     RhiTextureViewDesc foliageColormapDesc;
     RhiTextureViewDesc skyCaptureDesc;
     RhiTextureViewDesc voxelLightDesc;
-    const std::array<RhiBufferHandle, 4u> boundSceneBuffers{sceneBuffers.terrainHitData, sceneBuffers.gpuSceneMaterials,
+    const std::array<RhiBufferHandle, 5u> boundSceneBuffers{sceneBuffers.terrainHitData, sceneBuffers.gpuSceneMaterials,
                                                             sceneBuffers.gpuSceneGeometries,
-                                                            sceneBuffers.gpuSceneInstances};
-    const std::array<uint64_t, 4u> boundSceneBufferBytes{
+                                                            sceneBuffers.gpuSceneInstances,
+                                                            sceneBuffers.rtgiEmissiveGeometry};
+    const std::array<uint64_t, 5u> boundSceneBufferBytes{
         sceneBuffers.terrainHitDataBytes, sceneBuffers.gpuSceneMaterialBytes, sceneBuffers.gpuSceneGeometryBytes,
-        sceneBuffers.gpuSceneInstanceBytes};
+        sceneBuffers.gpuSceneInstanceBytes, sceneBuffers.rtgiEmissiveGeometryBytes};
     if (std::any_of(boundSceneBuffers.begin(), boundSceneBuffers.end(),
                     [](const RhiBufferHandle buffer) { return !buffer.isValid(); })) {
         return reject("one or more Scene TLAS buffers are invalid");
@@ -838,6 +870,9 @@ bool RtgiTracePass::ensureBindGroup(RhiDevice& rhiDevice, const TraceViews& view
     for (uint32_t index = 1u; index < boundSceneBuffers.size(); ++index) {
         RhiBindGroupEntry sceneBufferEntry;
         sceneBufferEntry.binding = 7u + index;
+        if (index == 4u) {
+            sceneBufferEntry.binding = 18u;
+        }
         sceneBufferEntry.resource.buffer = {boundSceneBuffers[index], 0u, boundSceneBufferBytes[index]};
         bindGroupDesc.entries.push_back(sceneBufferEntry);
     }
@@ -859,6 +894,14 @@ bool RtgiTracePass::ensureBindGroup(RhiDevice& rhiDevice, const TraceViews& view
     voxelLightEntry.binding = 17u;
     voxelLightEntry.resource.combinedTextureSampler = {views.voxelLight, m_sampler};
     bindGroupDesc.entries.push_back(voxelLightEntry);
+    RhiBindGroupEntry emissiveDirectEntry;
+    emissiveDirectEntry.binding = 19u;
+    emissiveDirectEntry.resource.textureView = views.emissiveDirectRadiance;
+    bindGroupDesc.entries.push_back(emissiveDirectEntry);
+    RhiBindGroupEntry combinedDiffuseEntry;
+    combinedDiffuseEntry.binding = 20u;
+    combinedDiffuseEntry.resource.textureView = views.combinedDiffuseRadianceHitDistance;
+    bindGroupDesc.entries.push_back(combinedDiffuseEntry);
     const RhiBindGroupHandle previousBindGroup = m_traceBindGroup;
     if (previousBindGroup.isValid()) {
         // Keep one descriptor set across TLAS and transient-view generations.

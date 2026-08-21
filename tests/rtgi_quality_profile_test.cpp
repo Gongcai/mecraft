@@ -26,7 +26,7 @@ int main() {
     } expected[] = {
         {"v01_window_room_static", "v01_window_room", "m3_voxel_rtgi_quality", {256u, 544u, 256u, 128u}},
         {"v02_cave_turn_static", "v02_cave_turn", "m3_voxel_rtgi_quality", {384u, 216u, 512u, 288u}},
-        {"m03_sponza_atrium_static", "m03_sponza_atrium", "m3_model_rtgi_quality", {384u, 216u, 512u, 288u}}};
+        {"m03_sponza_atrium_static", "m3_model_rtgi_sponza", "m3_model_rtgi_quality", {384u, 216u, 512u, 288u}}};
     for (const ExpectedProfile& item : expected) {
         app::validation::RtgiQualityProfile profile;
         std::string detail;

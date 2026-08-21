@@ -44,21 +44,22 @@ public:
     /// @param ctx Current frame camera, weather, atmosphere, and lighting state.
     /// @param settings Current shadow, SSAO, and post-process settings.
     /// @param targets Persistent GBuffer inputs and scene-lighting output.
-    /// @param rtgiDiffuseView Vulkan RTGI diffuse texture, ignored only when encoding is Disabled.
-    /// @param rtgiEncoding Exact RTGI signal encoding consumed by the fragment shader.
-    /// @param rtgiRadianceScale Scale converting the sampled RTGI texture into the scene HDR domain:
-    ///        the reciprocal storage pre-exposure for the raw fallback, one for de-exposed NRD output.
+    /// @param rtgiDiffuseView Vulkan RTGI indirect diffuse texture, ignored only when encoding is Disabled.
+    /// @param rtgiEmissiveDirectView Current-frame pre-exposed emissive direct texture.
+    /// @param rtgiEncoding Exact indirect RTGI signal encoding consumed by the fragment shader.
+    /// @param rtgiRadianceScale Scale converting indirect RTGI into the pre-exposed scene HDR domain.
     /// @return True when resources were prepared and lighting commands were recorded.
     [[nodiscard]] bool execute(RhiCommandList& commandList, const FrameContext& ctx, const RenderSettings& settings,
                                DeferredRenderTargets& targets, RhiTextureViewHandle rtgiDiffuseView,
-                               RtgiDiffuseEncoding rtgiEncoding, float rtgiRadianceScale);
+                               RhiTextureViewHandle rtgiEmissiveDirectView, RtgiDiffuseEncoding rtgiEncoding,
+                               float rtgiRadianceScale);
 
 private:
     bool ensureRhiPipeline(RhiDevice& rhiDevice);
     bool ensureExternalTextureViews(RhiDevice& rhiDevice);
     bool ensureTextureView(RhiDevice& rhiDevice, RhiTextureHandle texture, RhiTextureFormat format,
                            RhiTextureHandle& viewTexture, RhiTextureViewHandle& textureView);
-    bool ensureRhiBindGroup(RhiDevice& rhiDevice, const std::array<RhiTextureViewHandle, 21>& views,
+    bool ensureRhiBindGroup(RhiDevice& rhiDevice, const std::array<RhiTextureViewHandle, 22>& views,
                             uint32_t textureCount);
     void destroyRhiBindGroup();
     void destroyExternalTextureViews();
@@ -92,7 +93,7 @@ private:
     RhiShaderHandle m_fragmentShader;
     RhiPipelineHandle m_pipeline;
     RhiBindGroupHandle m_bindGroup;
-    std::array<RhiTextureViewHandle, 21> m_boundViews = {};
+    std::array<RhiTextureViewHandle, 22> m_boundViews = {};
     uint32_t m_boundViewCount = 0u;
 };
 

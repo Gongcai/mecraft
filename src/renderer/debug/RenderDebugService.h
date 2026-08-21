@@ -360,6 +360,12 @@ struct RtgiTraceCounterWindowStats final {
     uint64_t missPixelCount = 0u;
     uint64_t hitPixelCount = 0u;
     uint64_t nonFinitePixelCount = 0u;
+    uint64_t emissiveInactivePixelCount = 0u;
+    uint64_t emissiveNoPositiveWeightPixelCount = 0u;
+    uint64_t emissiveSurfaceRejectedPixelCount = 0u;
+    uint64_t emissiveOccludedPixelCount = 0u;
+    uint64_t emissiveVisiblePixelCount = 0u;
+    uint64_t emissiveInvalidPixelCount = 0u;
     double confirmationRate = 0.0;
     uint32_t peakCandidateCountPerPixel = 0u;
     uint32_t peakConfirmedCountPerPixel = 0u;
@@ -391,6 +397,12 @@ private:
     std::array<uint64_t, kCapacity> m_missPixelSamples{};
     std::array<uint64_t, kCapacity> m_hitPixelSamples{};
     std::array<uint64_t, kCapacity> m_nonFinitePixelSamples{};
+    std::array<uint64_t, kCapacity> m_emissiveInactivePixelSamples{};
+    std::array<uint64_t, kCapacity> m_emissiveNoPositiveWeightPixelSamples{};
+    std::array<uint64_t, kCapacity> m_emissiveSurfaceRejectedPixelSamples{};
+    std::array<uint64_t, kCapacity> m_emissiveOccludedPixelSamples{};
+    std::array<uint64_t, kCapacity> m_emissiveVisiblePixelSamples{};
+    std::array<uint64_t, kCapacity> m_emissiveInvalidPixelSamples{};
     std::array<uint32_t, kCapacity> m_peakCandidateSamples{};
     std::array<uint32_t, kCapacity> m_peakConfirmedSamples{};
     size_t m_nextSample = 0u;

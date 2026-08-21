@@ -11,8 +11,10 @@
 #include "../passes/SsaoPass.h"
 #include "../passes/SsgiPass.h"
 #include "../passes/NrdGuidePrepPass.h"
+#include "../passes/RtgiEmissiveTemporalPass.h"
 #include "../passes/RtgiSignalPackPass.h"
 #include "../passes/RtgiTracePass.h"
+#include "../passes/RtgiValidationComposePass.h"
 #include "../passes/HiZPass.h"
 #include "../passes/VelocityPass.h"
 #include "../passes/ReflectionPass.h"
@@ -122,7 +124,9 @@ private:
     std::unique_ptr<SsgiPass> m_ssgiPass;
     std::unique_ptr<RtgiTracePass> m_rtgiTracePass;
     std::unique_ptr<NrdGuidePrepPass> m_nrdGuidePrepPass;
+    std::unique_ptr<RtgiEmissiveTemporalPass> m_rtgiEmissiveTemporalPass;
     std::unique_ptr<RtgiSignalPackPass> m_rtgiSignalPackPass;
+    std::unique_ptr<RtgiValidationComposePass> m_rtgiValidationComposePass;
 #if defined(MECRAFT_ENABLE_NRD)
     std::unique_ptr<renderer::nrd::NrdRenderGraphBridge> m_nrdBridge;
     bool m_nrdClearHistory = true;

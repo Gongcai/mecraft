@@ -3,6 +3,7 @@
 
 #include "renderer/contracts/GpuMaterialContract.h"
 #include "renderer/contracts/GpuSceneContract.h"
+#include "renderer/contracts/RtgiSamplingContract.h"
 #include "renderer/contracts/TerrainRayTracingContract.h"
 #include "renderer/rhi/RhiHandles.h"
 #include "renderer/rhi/RhiResources.h"
@@ -108,6 +109,7 @@ struct SceneTlasView {
     RhiBufferHandle gpuSceneMaterialBuffer;
     RhiBufferHandle gpuSceneGeometryBuffer;
     RhiBufferHandle gpuSceneInstanceBuffer;
+    RhiBufferHandle rtgiEmissiveGeometryBuffer;
     uint64_t deviceAddress = 0u;
     uint64_t bindlessIdentity = 0u;
     uint32_t instanceCount = 0u;
@@ -119,6 +121,8 @@ struct SceneTlasView {
     uint64_t gpuSceneMaterialBytes = 0u;
     uint64_t gpuSceneGeometryBytes = 0u;
     uint64_t gpuSceneInstanceBytes = 0u;
+    uint64_t rtgiEmissiveGeometryBytes = 0u;
+    uint32_t rtgiEmissiveGeometryCount = 0u;
     uint64_t blasBytes = 0u;
     uint64_t tlasBytes = 0u;
     std::vector<SceneTlasInstanceMapping> mappings;
@@ -241,6 +245,7 @@ private:
         RhiBufferHandle gpuSceneMaterialBuffer;
         RhiBufferHandle gpuSceneGeometryBuffer;
         RhiBufferHandle gpuSceneInstanceBuffer;
+        RhiBufferHandle rtgiEmissiveGeometryBuffer;
         RhiBufferHandle storageBuffer;
         RhiBufferHandle scratchBuffer;
         RhiAccelerationStructureHandle accelerationStructure;
@@ -253,6 +258,8 @@ private:
         uint64_t gpuSceneMaterialBytes = 0u;
         uint64_t gpuSceneGeometryBytes = 0u;
         uint64_t gpuSceneInstanceBytes = 0u;
+        uint64_t rtgiEmissiveGeometryBytes = 0u;
+        uint32_t rtgiEmissiveGeometryCount = 0u;
         uint64_t blasBytes = 0u;
         uint64_t tlasBytes = 0u;
         std::vector<SceneBlasResourcePtr> blasResources;

@@ -1467,6 +1467,13 @@ bool StaticMeshRenderer::loadAsset(const std::string& modelPath, ResourceMgr& re
         resource.boundsMin = primitiveBoundsMin;
         resource.boundsMax = primitiveBoundsMax;
         resource.boundsCenter = (primitiveBoundsMin + primitiveBoundsMax) * 0.5f;
+        resource.primitiveAreaVectors.reserve(vertices.size() / 3u);
+        for (std::size_t firstVertex = 0u; firstVertex < vertices.size(); firstVertex += 3u) {
+            const glm::vec3 position0 = glm::make_vec3(vertices[firstVertex + 0u].position);
+            const glm::vec3 position1 = glm::make_vec3(vertices[firstVertex + 1u].position);
+            const glm::vec3 position2 = glm::make_vec3(vertices[firstVertex + 2u].position);
+            resource.primitiveAreaVectors.push_back(glm::cross(position1 - position0, position2 - position0) * 0.5f);
+        }
         const MaterialResource& material = m_materials[resource.materialIndex];
         const bool solidGeometry = !material.alphaBlended && !material.transmissive;
         RhiBufferDesc bufferDesc;
@@ -1620,6 +1627,7 @@ bool StaticMeshRenderer::buildStaticBlas(RhiCommandListPool& commandListPool) {
         geometry.materialIndex = primitive.materialIndex;
         geometry.localBoundsMin = primitive.boundsMin;
         geometry.localBoundsMax = primitive.boundsMax;
+        geometry.primitiveAreaVectors = primitive.primitiveAreaVectors;
         geometry.opaque = !material.alphaMasked;
         geometry.doubleSided = material.doubleSided;
         geometries.push_back(geometry);

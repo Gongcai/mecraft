@@ -21,6 +21,7 @@ struct StaticMeshRayTracingGeometry final {
     RhiBufferHandle vertexBuffer;
     RhiBufferHandle indexBuffer;
     RhiBufferHandle primitiveMetadataBuffer;
+    std::vector<glm::vec3> primitiveAreaVectors;
 };
 
 /// Stores immutable asset-level Geometry/Material records consumed by every TLAS instance of one static mesh.

@@ -139,7 +139,7 @@ int main() {
     AppLaunchOptions qualityOptions = options;
     qualityOptions.validationScenePath =
         std::filesystem::path(MECRAFT_TEST_SOURCE_DIR) / "assets/validation/scenes/v01_window_room.json";
-    qualityOptions.validationWarmupFrames = 0u;
+    qualityOptions.validationWarmupFrames = 2u;
     qualityOptions.validationSampleFrames = app::validation::kRtgiQualitySequenceFrameCount;
     qualityOptions.validationRtgiQualityProfile = "v01_window_room_static";
     app::validation::ValidationRunController qualityController;
@@ -151,6 +151,22 @@ int main() {
                          qualityController.runtimeRenderSettings().nrd.enabled,
                      "a static profile must select the versioned RTGI quality renderer") ||
         !requireTrue(qualityController.beginScene(ValidationScene::Voxel), "the V01 static profile must start")) {
+        return 1;
+    }
+    frame = qualityController.currentFrame();
+    if (!requireTrue(frame != nullptr && !frame->collectPerformance &&
+                         nearlyEqual(frame->cameraPose.position.x, 0.0) &&
+                         nearlyEqual(frame->cameraPose.position.z, -3.5),
+                     "static quality warmup must start at the locked two-second camera pose") ||
+        !requireTrue(qualityController.completeFrame(true), "the first static quality warmup frame must complete")) {
+        return 1;
+    }
+    frame = qualityController.currentFrame();
+    if (!requireTrue(frame != nullptr && !frame->collectPerformance &&
+                         nearlyEqual(frame->cameraPose.position.x, 0.0) &&
+                         nearlyEqual(frame->cameraPose.position.z, -3.5),
+                     "all static quality warmup frames must keep the locked camera pose") ||
+        !requireTrue(qualityController.completeFrame(true), "the second static quality warmup frame must complete")) {
         return 1;
     }
     frame = qualityController.currentFrame();

@@ -39,6 +39,7 @@ constexpr RhiBufferUsageFlags kScratchBufferUsages =
     if (!geometry.geometryId.isValid() || !geometry.materialId.isValid() || !geometry.vertexBuffer.isValid() ||
         !geometry.indexBuffer.isValid() || !geometry.primitiveMetadataBuffer.isValid() || geometry.vertexCount == 0u ||
         geometry.indexCount == 0u || geometry.indexCount % 3u != 0u ||
+        geometry.primitiveAreaVectors.size() != geometry.primitiveCount() ||
         geometry.vertexStride != renderer::contracts::kStaticMeshRayTracingVertexStride ||
         geometry.positionOffset != renderer::contracts::kStaticMeshRayTracingPositionOffset ||
         geometry.materialIndex == renderer::contracts::kGpuSceneInvalidTableIndex || geometry.geometryRevision == 0u ||
@@ -46,7 +47,13 @@ constexpr RhiBufferUsageFlags kScratchBufferUsages =
         glm::any(glm::greaterThan(geometry.localBoundsMin, geometry.localBoundsMax))) {
         return false;
     }
-    return bufferIdentity(geometry.vertexBuffer) != bufferIdentity(geometry.indexBuffer) &&
+    const bool validPrimitiveAreas =
+        std::all_of(geometry.primitiveAreaVectors.begin(), geometry.primitiveAreaVectors.end(),
+                    [&finite](const glm::vec3& areaVector) {
+                        return finite(areaVector) && glm::dot(areaVector, areaVector) > 1.0e-16f;
+                    });
+    return validPrimitiveAreas &&
+           bufferIdentity(geometry.vertexBuffer) != bufferIdentity(geometry.indexBuffer) &&
            bufferIdentity(geometry.vertexBuffer) != bufferIdentity(geometry.primitiveMetadataBuffer) &&
            bufferIdentity(geometry.indexBuffer) != bufferIdentity(geometry.primitiveMetadataBuffer);
 }
@@ -427,8 +434,8 @@ StaticMeshBlasBuildResult StaticMeshBlasCache::build(RhiCommandListPool& command
             setError("Static mesh BLAS GPU Scene geometry normalization failed");
             return StaticMeshBlasBuildResult::InvalidGeometry;
         }
-        rayTracingGeometries.push_back(
-            {normalized.geometry, source.vertexBuffer, source.indexBuffer, source.primitiveMetadataBuffer});
+        rayTracingGeometries.push_back({normalized.geometry, source.vertexBuffer, source.indexBuffer,
+                                        source.primitiveMetadataBuffer, source.primitiveAreaVectors});
     }
 
     m_resource = std::move(resource);

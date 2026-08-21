@@ -1,0 +1,83 @@
+{
+  "benchmark": "meshing_perf_test",
+  "build": {
+    "config": "Release"
+  },
+  "captured_at": "2026-08-06",
+  "focus": "SubChunk meshing + ChunkMeshingService throughput",
+  "scenario_1_single_thread": [
+    {
+      "avg_ms": 2.7043443,
+      "calls_per_sec": 2963.959182577107,
+      "checksum": 23,
+      "max_ms": 2.736642,
+      "median_ms": 2.6990925,
+      "min_ms": 2.684656,
+      "name": "small",
+      "ns_per_call": 337386.5625,
+      "p95_ms": 2.718742
+    },
+    {
+      "avg_ms": 59.2765047,
+      "calls_per_sec": 270.1863025744128,
+      "checksum": 27,
+      "max_ms": 59.799156,
+      "median_ms": 59.21839799999999,
+      "min_ms": 59.09087,
+      "name": "medium",
+      "ns_per_call": 3701149.8749999995,
+      "p95_ms": 59.439636
+    },
+    {
+      "avg_ms": 144.866678,
+      "calls_per_sec": 220.9251827479304,
+      "checksum": 1,
+      "max_ms": 145.32139,
+      "median_ms": 144.845416,
+      "min_ms": 144.559967,
+      "name": "large",
+      "ns_per_call": 4526419.25,
+      "p95_ms": 145.169774
+    }
+  ],
+  "scenario_2_throughput": [
+    {
+      "avg_total_ms": 0.8974793,
+      "checksum": 24,
+      "chunks": 8,
+      "chunks_per_sec": 8913.854614808386,
+      "median_ms": 0.0,
+      "name": "small",
+      "p95_ms": 0.0,
+      "threads": 4
+    },
+    {
+      "avg_total_ms": 14.137728200000002,
+      "checksum": 2024,
+      "chunks": 87,
+      "chunks_per_sec": 6153.7468233404,
+      "median_ms": 0.0,
+      "name": "medium",
+      "p95_ms": 0.0,
+      "threads": 4
+    },
+    {
+      "avg_total_ms": 27.7699266,
+      "checksum": 4044,
+      "chunks": 246,
+      "chunks_per_sec": 8858.503788771268,
+      "median_ms": 0.0,
+      "name": "large",
+      "p95_ms": 0.0,
+      "threads": 4
+    }
+  ],
+  "settings": {
+    "large_chunks": 32,
+    "measure_rounds": 10,
+    "medium_chunks": 16,
+    "num_threads": 4,
+    "small_chunks": 8,
+    "warmup_rounds": 3
+  }
+}

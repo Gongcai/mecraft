@@ -13,7 +13,19 @@ namespace renderer::contracts {
 /// Stable per-pixel classifications written by the raw RTGI validation image.
 enum class RtgiTraceClassification : uint32_t { Sky = 0u, Translucent = 1u, Miss = 2u, Hit = 3u, NonFinite = 4u };
 
-inline constexpr uint32_t kRtgiTraceValidationClassificationMask = 0xffu;
+/// Stable per-pixel outcomes of registered emissive-triangle sampling.
+enum class RtgiEmissiveSampleClassification : uint32_t {
+    Inactive = 0u,
+    NoPositiveWeight = 1u,
+    SurfaceRejected = 2u,
+    Occluded = 3u,
+    Visible = 4u,
+    Invalid = 5u
+};
+
+inline constexpr uint32_t kRtgiTraceValidationClassificationMask = 0x7u;
+inline constexpr uint32_t kRtgiTraceValidationEmissiveStatusShift = 3u;
+inline constexpr uint32_t kRtgiTraceValidationEmissiveStatusMask = 0x7u;
 inline constexpr uint32_t kRtgiTraceValidationCandidateShift = 8u;
 inline constexpr uint32_t kRtgiTraceValidationCandidateMask = 0xfffu;
 inline constexpr uint32_t kRtgiTraceValidationConfirmedShift = 20u;
@@ -23,7 +35,18 @@ inline constexpr float kRtgiMinimumRayOriginBias = kRtgiVoxelSurfaceExpansion * 
 inline constexpr uint32_t kRtgiSecondaryLightingTerrainNormalMapBit = 1u << 0u;
 inline constexpr uint32_t kRtgiSecondaryLightingTerrainSpecularMapBit = 1u << 1u;
 inline constexpr float kRtgiMetallicDiffuseTransportFloor = 0.35f;
-inline constexpr uint32_t kRtgiTraceCounterContractVersion = 2u;
+inline constexpr uint32_t kRtgiTraceCounterContractVersion = 3u;
+
+/// One immutable emissive triangle used by RTGI next-event sampling.
+/// The integer fields identify the TLAS instance, instance-local geometry, and
+/// primitive. The floating-point fields store the normalized CDF, selection
+/// probability, and world-space area.
+struct alignas(16) RtgiEmissiveGeometryRecord final {
+    glm::uvec4 instanceGeometryPrimitiveCount{0u};
+    glm::vec4 cumulativeProbabilityArea{0.0f};
+};
+
+static_assert(sizeof(RtgiEmissiveGeometryRecord) == 32u);
 
 /// Stable word offsets written by the RTGI validation-image reduction shader.
 enum class RtgiTraceCounterWord : size_t {
@@ -47,6 +70,18 @@ enum class RtgiTraceCounterWord : size_t {
     HitHigh,
     NonFiniteLow,
     NonFiniteHigh,
+    EmissiveInactiveLow,
+    EmissiveInactiveHigh,
+    EmissiveNoPositiveWeightLow,
+    EmissiveNoPositiveWeightHigh,
+    EmissiveSurfaceRejectedLow,
+    EmissiveSurfaceRejectedHigh,
+    EmissiveOccludedLow,
+    EmissiveOccludedHigh,
+    EmissiveVisibleLow,
+    EmissiveVisibleHigh,
+    EmissiveInvalidLow,
+    EmissiveInvalidHigh,
     Count
 };
 
@@ -75,6 +110,12 @@ struct RtgiTraceCounterFrameStats final {
     uint64_t missPixelCount = 0u;
     uint64_t hitPixelCount = 0u;
     uint64_t nonFinitePixelCount = 0u;
+    uint64_t emissiveInactivePixelCount = 0u;
+    uint64_t emissiveNoPositiveWeightPixelCount = 0u;
+    uint64_t emissiveSurfaceRejectedPixelCount = 0u;
+    uint64_t emissiveOccludedPixelCount = 0u;
+    uint64_t emissiveVisiblePixelCount = 0u;
+    uint64_t emissiveInvalidPixelCount = 0u;
     uint32_t peakCandidateCountPerPixel = 0u;
     uint32_t peakConfirmedCountPerPixel = 0u;
 };
@@ -164,6 +205,10 @@ static_assert(sizeof(RtgiSecondaryLightingParams) == 128u);
 /// @return Center of one stratum in the half-open interval [0, 1).
 [[nodiscard]] float rtgiReferenceStratifiedScalar(uint32_t frameIndex, const glm::uvec2& pixel);
 
+/// Maps one two-dimensional sample to uniform barycentric coordinates on a triangle.
+/// @param sample Two values in the half-open interval [0, 1).
+/// @return The second and third vertex weights, or no value when the sample is invalid.
+[[nodiscard]] std::optional<glm::vec2> rtgiUniformTriangleBarycentrics(const glm::vec2& sample);
 
 /// One uniform solid-angle cone sample and its probability density.
 struct RtgiUniformConeSample final {
@@ -241,17 +286,25 @@ rtgiWorldLightGuideWindowSampleCosine(const RtgiWorldLightGuideWindowDistributio
 /// @return Signed dominant axis, or no value when the input is invalid.
 [[nodiscard]] std::optional<glm::vec3> rtgiVoxelGeometricNormal(const glm::vec3& shadingNormal);
 
-/// Packs one per-pixel trace classification and Cutout Candidate/Confirmed counters into 32 bits.
+/// Packs one per-pixel trace classification, emissive outcome, and Cutout counters into 32 bits.
 /// @param classification Stable raw-trace result classification.
+/// @param emissiveStatus Registered emissive-triangle sampling outcome.
 /// @param candidateCount Number of non-opaque triangle candidates evaluated by the ray query.
 /// @param confirmedCount Number of candidates explicitly confirmed after material alpha testing.
 /// @return Packed validation word, or no value when either counter exceeds its 12-bit field.
 [[nodiscard]] std::optional<uint32_t> encodeRtgiTraceValidation(RtgiTraceClassification classification,
+                                                                RtgiEmissiveSampleClassification emissiveStatus,
                                                                 uint32_t candidateCount, uint32_t confirmedCount);
 
-/// Decodes the stable classification stored in bits 0 through 7.
+/// Decodes the stable trace classification stored in bits 0 through 2.
 [[nodiscard]] constexpr RtgiTraceClassification rtgiTraceValidationClassification(const uint32_t packed) {
     return static_cast<RtgiTraceClassification>(packed & kRtgiTraceValidationClassificationMask);
+}
+
+/// Decodes the registered emissive-triangle outcome stored in bits 3 through 5.
+[[nodiscard]] constexpr RtgiEmissiveSampleClassification rtgiTraceValidationEmissiveStatus(const uint32_t packed) {
+    return static_cast<RtgiEmissiveSampleClassification>((packed >> kRtgiTraceValidationEmissiveStatusShift) &
+                                                         kRtgiTraceValidationEmissiveStatusMask);
 }
 
 /// Decodes the Cutout Candidate count stored in bits 8 through 19.

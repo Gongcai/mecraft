@@ -11,7 +11,15 @@ const uint RTGI_TRACE_CLASS_TRANSLUCENT = 1u;
 const uint RTGI_TRACE_CLASS_MISS = 2u;
 const uint RTGI_TRACE_CLASS_HIT = 3u;
 const uint RTGI_TRACE_CLASS_NON_FINITE = 4u;
-const uint RTGI_TRACE_VALIDATION_CLASSIFICATION_MASK = 0xffu;
+const uint RTGI_TRACE_VALIDATION_CLASSIFICATION_MASK = 0x7u;
+const uint RTGI_EMISSIVE_STATUS_INACTIVE = 0u;
+const uint RTGI_EMISSIVE_STATUS_NO_POSITIVE_WEIGHT = 1u;
+const uint RTGI_EMISSIVE_STATUS_SURFACE_REJECTED = 2u;
+const uint RTGI_EMISSIVE_STATUS_OCCLUDED = 3u;
+const uint RTGI_EMISSIVE_STATUS_VISIBLE = 4u;
+const uint RTGI_EMISSIVE_STATUS_INVALID = 5u;
+const uint RTGI_TRACE_VALIDATION_EMISSIVE_STATUS_SHIFT = 3u;
+const uint RTGI_TRACE_VALIDATION_EMISSIVE_STATUS_MASK = 0x7u;
 const uint RTGI_TRACE_VALIDATION_CANDIDATE_SHIFT = 8u;
 const uint RTGI_TRACE_VALIDATION_CANDIDATE_MASK = 0xfffu;
 const uint RTGI_TRACE_VALIDATION_CONFIRMED_SHIFT = 20u;
@@ -19,8 +27,10 @@ const uint RTGI_TRACE_VALIDATION_CONFIRMED_MASK = 0xfffu;
 const uint RTGI_SECONDARY_LIGHTING_TERRAIN_NORMAL_MAP_BIT = 1u << 0u;
 const uint RTGI_SECONDARY_LIGHTING_TERRAIN_SPECULAR_MAP_BIT = 1u << 1u;
 
-uint rtgiTraceValidationWord(uint classification, uint candidateCount, uint confirmedCount) {
+uint rtgiTraceValidationWord(uint classification, uint emissiveStatus, uint candidateCount, uint confirmedCount) {
     return (classification & RTGI_TRACE_VALIDATION_CLASSIFICATION_MASK) |
+           ((emissiveStatus & RTGI_TRACE_VALIDATION_EMISSIVE_STATUS_MASK)
+            << RTGI_TRACE_VALIDATION_EMISSIVE_STATUS_SHIFT) |
            (min(candidateCount, RTGI_TRACE_VALIDATION_CANDIDATE_MASK) << RTGI_TRACE_VALIDATION_CANDIDATE_SHIFT) |
            (min(confirmedCount, RTGI_TRACE_VALIDATION_CONFIRMED_MASK) << RTGI_TRACE_VALIDATION_CONFIRMED_SHIFT);
 }
@@ -106,6 +116,12 @@ float rtgiReferenceStratifiedScalar(uint frameIndex, uvec2 pixel) {
     return (float(scrambledIndex) + 0.5) / 64.0;
 }
 
+// Maps a unit-square sample to the second and third barycentric weights of a
+// uniformly sampled triangle. The first weight is one minus their sum.
+vec2 rtgiUniformTriangleBarycentrics(vec2 sampleValue) {
+    float squareRoot = sqrt(sampleValue.x);
+    return vec2(1.0 - squareRoot, sampleValue.y * squareRoot);
+}
 
 // Maps a unit-square sample to a uniform solid-angle cone around axis. The
 // minimum cosine defines the cone boundary and must remain in [-1, 1).

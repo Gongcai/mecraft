@@ -123,6 +123,18 @@ nlohmann::json rtgiTraceCounterWindowJson(const RtgiTraceCounterWindowStats& sta
     const double latestConfirmationRate = latest.candidateCount != 0u ? static_cast<double>(latest.confirmedCount) /
                                                                             static_cast<double>(latest.candidateCount)
                                                                       : 0.0;
+    const uint64_t emissiveVisibilitySampleCount = stats.emissiveOccludedPixelCount + stats.emissiveVisiblePixelCount;
+    const double emissiveVisibilityRate =
+        emissiveVisibilitySampleCount != 0u
+            ? static_cast<double>(stats.emissiveVisiblePixelCount) / static_cast<double>(emissiveVisibilitySampleCount)
+            : 0.0;
+    const uint64_t latestEmissiveVisibilitySampleCount =
+        latest.emissiveOccludedPixelCount + latest.emissiveVisiblePixelCount;
+    const double latestEmissiveVisibilityRate =
+        latestEmissiveVisibilitySampleCount != 0u
+            ? static_cast<double>(latest.emissiveVisiblePixelCount) /
+                  static_cast<double>(latestEmissiveVisibilitySampleCount)
+            : 0.0;
     return {{"scope", "rtgi_validation_image"},
             {"valid", stats.valid},
             {"window_capacity", stats.capacity},
@@ -137,6 +149,13 @@ nlohmann::json rtgiTraceCounterWindowJson(const RtgiTraceCounterWindowStats& sta
               {"miss_pixel_count", stats.missPixelCount},
               {"hit_pixel_count", stats.hitPixelCount},
               {"non_finite_pixel_count", stats.nonFinitePixelCount},
+              {"emissive_inactive_pixel_count", stats.emissiveInactivePixelCount},
+              {"emissive_no_positive_weight_pixel_count", stats.emissiveNoPositiveWeightPixelCount},
+              {"emissive_surface_rejected_pixel_count", stats.emissiveSurfaceRejectedPixelCount},
+              {"emissive_occluded_pixel_count", stats.emissiveOccludedPixelCount},
+              {"emissive_visible_pixel_count", stats.emissiveVisiblePixelCount},
+              {"emissive_invalid_pixel_count", stats.emissiveInvalidPixelCount},
+              {"emissive_visibility_rate", emissiveVisibilityRate},
               {"confirmation_rate", stats.confirmationRate}}},
             {"peak_per_pixel",
              {{"candidate_count", stats.peakCandidateCountPerPixel},
@@ -156,6 +175,13 @@ nlohmann::json rtgiTraceCounterWindowJson(const RtgiTraceCounterWindowStats& sta
               {"miss_pixel_count", latest.missPixelCount},
               {"hit_pixel_count", latest.hitPixelCount},
               {"non_finite_pixel_count", latest.nonFinitePixelCount},
+              {"emissive_inactive_pixel_count", latest.emissiveInactivePixelCount},
+              {"emissive_no_positive_weight_pixel_count", latest.emissiveNoPositiveWeightPixelCount},
+              {"emissive_surface_rejected_pixel_count", latest.emissiveSurfaceRejectedPixelCount},
+              {"emissive_occluded_pixel_count", latest.emissiveOccludedPixelCount},
+              {"emissive_visible_pixel_count", latest.emissiveVisiblePixelCount},
+              {"emissive_invalid_pixel_count", latest.emissiveInvalidPixelCount},
+              {"emissive_visibility_rate", latestEmissiveVisibilityRate},
               {"confirmation_rate", latestConfirmationRate},
               {"peak_candidate_count_per_pixel", latest.peakCandidateCountPerPixel},
               {"peak_confirmed_count_per_pixel", latest.peakConfirmedCountPerPixel}}}};

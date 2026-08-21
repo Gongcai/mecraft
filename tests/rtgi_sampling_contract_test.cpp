@@ -115,14 +115,12 @@ worldLightWindowSampleParameter(const renderer::contracts::RtgiWorldLightGuideWi
                std::string::npos &&
            traceSource.find("candidateDistance >= endpointDistance - endpointExclusionDistance") != std::string::npos &&
            traceSource.find("gpuLightPointSelfShadowRadius(light)") != std::string::npos &&
-           traceSource.find(
-               "rayQueryInitializeEXT(query, globalBindlessSceneTlas, gl_RayFlagsTerminateOnFirstHitEXT,\n"
-               "                          pc.frameMaskAndFlags.w, rayOrigin, rayMinimum, unitDirection, rayMaximum);") !=
-               std::string::npos &&
-           traceSource.find(
-               "rayQueryInitializeEXT(query, globalBindlessSceneTlas, 0u,\n"
-               "                          pc.frameMaskAndFlags.y, rayOrigin, rayMinimum, rayDirection,\n"
-               "                          pc.cameraPositionAndMaxDistance.w);") != std::string::npos &&
+           traceSource.find("rayQueryInitializeEXT(query, globalBindlessSceneTlas, gl_RayFlagsTerminateOnFirstHitEXT,\n"
+                            "                          pc.frameMaskAndFlags.w, rayOrigin, rayMinimum, unitDirection, "
+                            "rayMaximum);") != std::string::npos &&
+           traceSource.find("rayQueryInitializeEXT(query, globalBindlessSceneTlas, 0u,\n"
+                            "                          pc.frameMaskAndFlags.y, rayOrigin, rayMinimum, rayDirection,\n"
+                            "                          pc.cameraPositionAndMaxDistance.w);") != std::string::npos &&
            traceSource.find("const float RTGI_METALLIC_DIFFUSE_TRANSPORT_FLOOR = 0.35;") != std::string::npos &&
            traceSource.find("const float RTGI_RADIANCE_FIREFLY_CLAMP = 8.0;") != std::string::npos &&
            traceSource.find("vec3 rtgiSuppressSolarSkyLobe(vec3 skyRadiance, vec3 worldDirection)") !=
@@ -131,14 +129,49 @@ worldLightWindowSampleParameter(const renderer::contracts::RtgiWorldLightGuideWi
                std::string::npos &&
            traceSource.find("ivec2 noiseTexel = ivec2(uvec2(texel) % uvec2(noiseExtent));") != std::string::npos &&
            traceSource.find("pc.materialGeometryCounts.z != 0u") != std::string::npos &&
-           traceSource.find("? rtgiReferenceHammersleySample(pc.frameMaskAndFlags.x, uvec2(texel))") !=
+           traceSource.find("? rtgiReferenceHammersleySample(pc.frameMaskAndFlags.x + phase, uvec2(texel))") !=
                std::string::npos &&
            traceSource.find("rtgiPixelScrambledCranleyPattersonRotation(") != std::string::npos &&
            pipelineSource.find("traceSettings.temporalSamplingEnabled = (nrdEnabled || rtgiReferenceSampling)") !=
                std::string::npos &&
-           pipelineSource.find("(rtgiReferenceSampling || (nrdEnabled && !nrdTemporalReset))") != std::string::npos &&
+           pipelineSource.find("(rtgiReferenceSampling || nrdEnabled)") != std::string::npos &&
            traceSource.find("frameOffset") == std::string::npos &&
            traceSource.find("layout(set = 1, binding = 17) uniform sampler2D uVoxelLightTexture;") !=
+               std::string::npos &&
+           traceSource.find("layout(std430, set = 1, binding = 18) readonly buffer RtgiEmissiveGeometryTable") !=
+               std::string::npos &&
+           traceSource.find("bool rtgiSampleEmissiveDirect") != std::string::npos &&
+           traceSource.find("const uint RTGI_EMISSIVE_DIRECT_SAMPLE_COUNT = 2u;") != std::string::npos &&
+           traceSource.find("const uint RTGI_EMISSIVE_DIRECT_PHASE_STRIDE = 32u;") != std::string::npos &&
+           traceSource.find("bool rtgiBuildEmissiveCandidate") != std::string::npos &&
+           traceSource.find("float proposalAreaPdf = triangleProbability / area;") != std::string::npos &&
+           traceSource.find("candidate.targetDensity = emissionLuminance * geometryTerm /") != std::string::npos &&
+           traceSource.find("candidateWeight = candidate.targetDensity / candidate.proposalAreaPdf;") !=
+               std::string::npos &&
+           traceSource.find("rtgiReferenceHammersleySample(pc.frameMaskAndFlags.x + 17u + phase, pixel)") !=
+               std::string::npos &&
+           traceSource.find("rtgiReferenceHammersleySample(pc.frameMaskAndFlags.x + 101u + phase, pixel)") !=
+               std::string::npos &&
+           traceSource.find("sampleRadiance = contribution / candidate.proposalAreaPdf;") != std::string::npos &&
+           traceSource.find("radiance /= float(RTGI_EMISSIVE_DIRECT_SAMPLE_COUNT);") != std::string::npos &&
+           traceSource.find("reservoir") == std::string::npos &&
+           traceSource.find("EmissiveHistory") == std::string::npos &&
+           traceSource.find("emissiveHistory") == std::string::npos &&
+           traceSource.find("bool rtgiEmissiveTriangleRegistered") != std::string::npos &&
+           traceSource.find("bool includeSurfaceEmission") != std::string::npos &&
+           traceSource.find("rtgiEmissiveHitSolidAnglePdf") == std::string::npos &&
+           traceSource.find("RTGI_EMISSIVE_NEE_SAMPLE_COUNT") == std::string::npos &&
+           samplingSource.find("vec2 rtgiUniformTriangleBarycentrics(vec2 sampleValue)") != std::string::npos &&
+           traceSource.find("rtgiUniformTriangleBarycentrics(barycentricSample)") != std::string::npos &&
+           traceSource.find("GPU_MATERIAL_FLAG_DOUBLE_SIDED") != std::string::npos &&
+           traceSource.find("rtgiEmissiveTriangleImportance") == std::string::npos &&
+           traceSource.find("layout(set = 1, binding = 19, rgba16f) uniform writeonly image2D "
+                            "uEmissiveDirectRadiance;") != std::string::npos &&
+           traceSource.find("layout(set = 1, binding = 20, rgba16f) uniform writeonly image2D "
+                            "uCombinedDiffuseRadianceHitDistance;") != std::string::npos &&
+           traceSource.find("vec3 preExposedEmissive = max(preExposedCombined - preExposedIndirect, vec3(0.0));") !=
+               std::string::npos &&
+           traceSource.find("imageStore(uEmissiveDirectRadiance, texel, vec4(preExposedEmissive, 0.0));") !=
                std::string::npos &&
            traceSource.find("rtgiPrimarySkyVisibility") != std::string::npos &&
            traceSource.find("vec3 rtgiVoxelGeometricNormal(vec3 shadingNormal)") != std::string::npos &&
@@ -146,12 +179,6 @@ worldLightWindowSampleParameter(const renderer::contracts::RtgiWorldLightGuideWi
            traceSource.find("if (!voxelPrimarySurface && adjacentDepthValid") != std::string::npos &&
            traceSource.find("vec3 samplingNormal = voxelPrimarySurface ? geometricNormal : normal;") !=
                std::string::npos &&
-           traceSource.find("bool rtgiPrepareWorldLightGuide(vec3 primaryCameraRelative,\n"
-                            "                                out RtgiWorldLightGuide guide)") !=
-               std::string::npos &&
-           traceSource.find("rtgiPrepareWorldLightGuide(worldPosition - pc.cameraPositionAndMaxDistance.xyz,\n"
-                            "                                    worldLightGuide)") != std::string::npos &&
-           traceSource.find("voxelPrimarySurface, worldLightGuide") == std::string::npos &&
            traceSource.find("radiance += rtgiDiffuseTransportAlbedo(surface) * contribution.diffuse") !=
                std::string::npos &&
            traceSource.find("rtgiTerrainBlockLightIncident") == std::string::npos &&
@@ -161,12 +188,15 @@ worldLightWindowSampleParameter(const renderer::contracts::RtgiWorldLightGuideWi
            traceSource.find("surface.albedo * (1.0 - surface.metalness)") == std::string::npos &&
            traceSource.find("optional local-light shadow resource must not erase") != std::string::npos &&
            traceSource.find("Local lights are optional secondary transport") != std::string::npos &&
-           counterSource.find("const uint RTGI_TRACE_COUNTER_CONTRACT_VERSION = 2u;") != std::string::npos &&
+           counterSource.find("const uint RTGI_TRACE_COUNTER_CONTRACT_VERSION = 3u;") != std::string::npos &&
            counterSource.find("void rtgiTraceCounterAtomicAdd64(uint lowWord, uint highWord, uint value)") !=
                std::string::npos &&
            counterSource.find("RTGI_TRACE_COUNTER_ERROR_CLASSIFICATION") != std::string::npos &&
+           counterSource.find("RTGI_TRACE_COUNTER_ERROR_EMISSIVE_STATUS") != std::string::npos &&
            counterSource.find("RTGI_TRACE_COUNTER_NON_FINITE_LOW, RTGI_TRACE_COUNTER_NON_FINITE_HIGH") !=
                std::string::npos &&
+           counterSource.find("RTGI_TRACE_COUNTER_EMISSIVE_OCCLUDED_LOW") != std::string::npos &&
+           counterSource.find("RTGI_TRACE_COUNTER_EMISSIVE_VISIBLE_LOW") != std::string::npos &&
            counterSource.find("atomicMax(uCounters.words[RTGI_TRACE_COUNTER_PEAK_CANDIDATE]") != std::string::npos &&
            counterSource.find("any(notEqual(pc.renderExtentAndContract.xy, uvec2(imageSize(uValidation))))") !=
                std::string::npos &&
@@ -197,14 +227,29 @@ worldLightWindowSampleParameter(const renderer::contracts::RtgiWorldLightGuideWi
                                "    m_hasPreviousFrameData = false;\n"
                                "    m_rtgiTemporalSampleIndex = 0u;\n"
                                "#if defined(MECRAFT_ENABLE_NRD)\n"
-                               "    m_nrdClearHistory = true;") != std::string::npos;
+                               "    m_nrdClearHistory = true;") != std::string::npos &&
+           traceSource.find("float rtgiWorldLightGuideWindowAntiderivative(float cosine") != std::string::npos &&
+           traceSource.find("float rtgiWorldLightGuideWindowWeight(float cosine") != std::string::npos &&
+           traceSource.find("for (uint iteration = 0u; iteration < 12u; ++iteration)") != std::string::npos;
 }
 } // namespace
 
 int main() {
+    if (!requireTrue(sizeof(renderer::contracts::RtgiEmissiveGeometryRecord) == 32u,
+                     "RTGI emissive geometry record ABI changed")) {
+        return 1;
+    }
     using namespace renderer::contracts;
 
     bool valid = true;
+    const auto triangleBarycentrics = rtgiUniformTriangleBarycentrics(glm::vec2(0.25f, 0.75f));
+    valid = requireTrue(triangleBarycentrics.has_value() &&
+                            glm::length(*triangleBarycentrics - glm::vec2(0.5f, 0.375f)) <= 1.0e-6f &&
+                            (*triangleBarycentrics).x >= 0.0f && (*triangleBarycentrics).y >= 0.0f &&
+                            (*triangleBarycentrics).x + (*triangleBarycentrics).y <= 1.0f &&
+                            !rtgiUniformTriangleBarycentrics(glm::vec2(1.0f, 0.0f)).has_value(),
+                        "RTGI emissive triangle samples must use uniform barycentric coordinates") &&
+            valid;
 #if defined(MECRAFT_ENABLE_NRD)
     const nrd::RelaxSettings defaultRelaxSettings{};
     valid = requireTrue(defaultRelaxSettings.antilagSettings.accelerationAmount > 0.0f &&
@@ -303,12 +348,11 @@ int main() {
                             glm::all(glm::lessThan(referenceFirst, glm::vec2(1.0f))),
                         "RTGI Reference sampling must preserve one complete periodic 64-point Hammersley set") &&
             valid;
-    valid = requireTrue(maximumCircularGap(firstHalfX) <= 0.062501f &&
-                            maximumCircularGap(firstHalfY) <= 0.062501f &&
-                            maximumCircularGap(secondHalfX) <= 0.062501f &&
-                            maximumCircularGap(secondHalfY) <= 0.062501f,
-                        "each 32-sample Reference half must retain full-domain stratification") &&
-            valid;
+    valid =
+        requireTrue(maximumCircularGap(firstHalfX) <= 0.062501f && maximumCircularGap(firstHalfY) <= 0.062501f &&
+                        maximumCircularGap(secondHalfX) <= 0.062501f && maximumCircularGap(secondHalfY) <= 0.062501f,
+                    "each 32-sample Reference half must retain full-domain stratification") &&
+        valid;
 
     std::array<bool, 32u> firstHalfScalarStrata{};
     std::array<bool, 32u> secondHalfScalarStrata{};
@@ -319,8 +363,8 @@ int main() {
         const uint32_t halfStratum = std::min(static_cast<uint32_t>(sample * 32.0f), 31u);
         const uint32_t fullStratum = std::min(static_cast<uint32_t>(sample * 64.0f), 63u);
         std::array<bool, 32u>& halfStrata = index < 32u ? firstHalfScalarStrata : secondHalfScalarStrata;
-        scalarStrataValid = scalarStrataValid && sample >= 0.0f && sample < 1.0f &&
-                            !halfStrata[halfStratum] && !fullScalarStrata[fullStratum] &&
+        scalarStrataValid = scalarStrataValid && sample >= 0.0f && sample < 1.0f && !halfStrata[halfStratum] &&
+                            !fullScalarStrata[fullStratum] &&
                             sample == rtgiReferenceStratifiedScalar(index + 64u, glm::uvec2(7u, 11u));
         halfStrata[halfStratum] = true;
         fullScalarStrata[fullStratum] = true;
@@ -494,19 +538,31 @@ int main() {
                             static_cast<uint32_t>(RtgiTraceClassification::NonFinite) == 4u,
                         "RTGI validation classifications must remain stable") &&
             valid;
+    valid = requireTrue(static_cast<uint32_t>(RtgiEmissiveSampleClassification::Inactive) == 0u &&
+                            static_cast<uint32_t>(RtgiEmissiveSampleClassification::NoPositiveWeight) == 1u &&
+                            static_cast<uint32_t>(RtgiEmissiveSampleClassification::SurfaceRejected) == 2u &&
+                            static_cast<uint32_t>(RtgiEmissiveSampleClassification::Occluded) == 3u &&
+                            static_cast<uint32_t>(RtgiEmissiveSampleClassification::Visible) == 4u &&
+                            static_cast<uint32_t>(RtgiEmissiveSampleClassification::Invalid) == 5u,
+                        "RTGI emissive sampling classifications must remain stable") &&
+            valid;
 
-    const std::optional<uint32_t> packedValidation = encodeRtgiTraceValidation(RtgiTraceClassification::Hit, 17u, 1u);
+    const std::optional<uint32_t> packedValidation =
+        encodeRtgiTraceValidation(RtgiTraceClassification::Hit, RtgiEmissiveSampleClassification::Visible, 17u, 1u);
     valid =
         requireTrue(
             packedValidation.has_value() &&
                 rtgiTraceValidationClassification(*packedValidation) == RtgiTraceClassification::Hit &&
+                rtgiTraceValidationEmissiveStatus(*packedValidation) == RtgiEmissiveSampleClassification::Visible &&
                 rtgiTraceValidationCandidateCount(*packedValidation) == 17u &&
                 rtgiTraceValidationConfirmedCount(*packedValidation) == 1u &&
-                !encodeRtgiTraceValidation(RtgiTraceClassification::Miss, kRtgiTraceValidationCandidateMask + 1u, 0u)
+                !encodeRtgiTraceValidation(RtgiTraceClassification::Miss, RtgiEmissiveSampleClassification::Inactive,
+                                           kRtgiTraceValidationCandidateMask + 1u, 0u)
                      .has_value() &&
-                !encodeRtgiTraceValidation(RtgiTraceClassification::Miss, 0u, kRtgiTraceValidationConfirmedMask + 1u)
+                !encodeRtgiTraceValidation(RtgiTraceClassification::Miss, RtgiEmissiveSampleClassification::Inactive,
+                                           0u, kRtgiTraceValidationConfirmedMask + 1u)
                      .has_value(),
-            "RTGI validation packing must preserve classification and Cutout counters") &&
+            "RTGI validation packing must preserve trace, emissive, and Cutout classifications") &&
         valid;
 
     std::array<uint32_t, kRtgiTraceCounterWordCount> counterWords{};
@@ -518,11 +574,14 @@ int main() {
     counterWords[static_cast<size_t>(RtgiTraceCounterWord::PeakConfirmedPerPixel)] = 2u;
     counterWords[static_cast<size_t>(RtgiTraceCounterWord::PixelHigh)] = 1u;
     counterWords[static_cast<size_t>(RtgiTraceCounterWord::SkyHigh)] = 1u;
+    counterWords[static_cast<size_t>(RtgiTraceCounterWord::EmissiveVisibleHigh)] = 1u;
     counterWords[static_cast<size_t>(RtgiTraceCounterWord::ContractVersion)] = kRtgiTraceCounterContractVersion;
     const std::optional<RtgiTraceCounterFrameStats> decodedCounters =
         decodeRtgiTraceCounterReadback(counterWords, 7u, 91u, 65536u, 65536u);
     std::array<uint32_t, kRtgiTraceCounterWordCount> invalidClassificationWords = counterWords;
     invalidClassificationWords[static_cast<size_t>(RtgiTraceCounterWord::SkyHigh)] = 0u;
+    std::array<uint32_t, kRtgiTraceCounterWordCount> invalidEmissiveWords = counterWords;
+    invalidEmissiveWords[static_cast<size_t>(RtgiTraceCounterWord::EmissiveVisibleHigh)] = 0u;
     counterWords[static_cast<size_t>(RtgiTraceCounterWord::InvariantError)] = 1u;
     valid = requireTrue(
                 decodedCounters.has_value() && decodedCounters->sequence == 7u && decodedCounters->frameIndex == 91u &&
@@ -532,7 +591,14 @@ int main() {
                     decodedCounters->skyPixelCount == (uint64_t{1u} << 32u) &&
                     decodedCounters->translucentPixelCount == 0u && decodedCounters->missPixelCount == 0u &&
                     decodedCounters->hitPixelCount == 0u && decodedCounters->nonFinitePixelCount == 0u &&
+                    decodedCounters->emissiveInactivePixelCount == 0u &&
+                    decodedCounters->emissiveNoPositiveWeightPixelCount == 0u &&
+                    decodedCounters->emissiveSurfaceRejectedPixelCount == 0u &&
+                    decodedCounters->emissiveOccludedPixelCount == 0u &&
+                    decodedCounters->emissiveVisiblePixelCount == (uint64_t{1u} << 32u) &&
+                    decodedCounters->emissiveInvalidPixelCount == 0u &&
                     !decodeRtgiTraceCounterReadback(invalidClassificationWords, 8u, 92u, 65536u, 65536u).has_value() &&
+                    !decodeRtgiTraceCounterReadback(invalidEmissiveWords, 8u, 92u, 65536u, 65536u).has_value() &&
                     !decodeRtgiTraceCounterReadback(counterWords, 8u, 92u, 65536u, 65536u).has_value(),
                 "RTGI counter readback must preserve 64-bit classifications and reject broken invariants") &&
             valid;

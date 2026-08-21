@@ -25,7 +25,7 @@
     {
       "id": "m03_sponza_atrium_static",
       "version": 2,
-      "scene_contract_id": "m03_sponza_atrium",
+      "scene_contract_id": "m3_model_rtgi_sponza",
       "render_settings_id": "m3_model_rtgi_quality",
       "camera_time_seconds": 2.0,
       "capture_width": 1280,

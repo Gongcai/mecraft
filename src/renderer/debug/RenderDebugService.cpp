@@ -489,6 +489,12 @@ void RtgiTraceCounterHistory::reset() {
     m_missPixelSamples.fill(0u);
     m_hitPixelSamples.fill(0u);
     m_nonFinitePixelSamples.fill(0u);
+    m_emissiveInactivePixelSamples.fill(0u);
+    m_emissiveNoPositiveWeightPixelSamples.fill(0u);
+    m_emissiveSurfaceRejectedPixelSamples.fill(0u);
+    m_emissiveOccludedPixelSamples.fill(0u);
+    m_emissiveVisiblePixelSamples.fill(0u);
+    m_emissiveInvalidPixelSamples.fill(0u);
     m_peakCandidateSamples.fill(0u);
     m_peakConfirmedSamples.fill(0u);
     m_nextSample = 0u;
@@ -508,9 +514,26 @@ bool RtgiTraceCounterHistory::record(const renderer::contracts::RtgiTraceCounter
             stats.pixelCount - stats.skyPixelCount - stats.translucentPixelCount - stats.missPixelCount &&
         stats.nonFinitePixelCount == stats.pixelCount - stats.skyPixelCount - stats.translucentPixelCount -
                                          stats.missPixelCount - stats.hitPixelCount;
+    const bool emissiveStatusCountsValid =
+        stats.emissiveInactivePixelCount <= stats.pixelCount &&
+        stats.emissiveNoPositiveWeightPixelCount <= stats.pixelCount - stats.emissiveInactivePixelCount &&
+        stats.emissiveSurfaceRejectedPixelCount <=
+            stats.pixelCount - stats.emissiveInactivePixelCount - stats.emissiveNoPositiveWeightPixelCount &&
+        stats.emissiveOccludedPixelCount <= stats.pixelCount - stats.emissiveInactivePixelCount -
+                                                 stats.emissiveNoPositiveWeightPixelCount -
+                                                 stats.emissiveSurfaceRejectedPixelCount &&
+        stats.emissiveVisiblePixelCount <= stats.pixelCount - stats.emissiveInactivePixelCount -
+                                                stats.emissiveNoPositiveWeightPixelCount -
+                                                stats.emissiveSurfaceRejectedPixelCount -
+                                                stats.emissiveOccludedPixelCount &&
+        stats.emissiveInvalidPixelCount == stats.pixelCount - stats.emissiveInactivePixelCount -
+                                                stats.emissiveNoPositiveWeightPixelCount -
+                                                stats.emissiveSurfaceRejectedPixelCount -
+                                                stats.emissiveOccludedPixelCount -
+                                                stats.emissiveVisiblePixelCount;
     if (!stats.supported || !stats.valid || stats.sequence == 0u || stats.sequence <= m_lastSequence ||
         stats.width == 0u || stats.height == 0u || stats.pixelCount != expectedPixels ||
-        stats.confirmedCount > stats.candidateCount || !classificationCountsValid ||
+        stats.confirmedCount > stats.candidateCount || !classificationCountsValid || !emissiveStatusCountsValid ||
         stats.peakCandidateCountPerPixel > renderer::contracts::kRtgiTraceValidationCandidateMask ||
         stats.peakConfirmedCountPerPixel > renderer::contracts::kRtgiTraceValidationConfirmedMask ||
         stats.peakConfirmedCountPerPixel > stats.peakCandidateCountPerPixel ||
@@ -527,6 +550,12 @@ bool RtgiTraceCounterHistory::record(const renderer::contracts::RtgiTraceCounter
     m_missPixelSamples[m_nextSample] = stats.missPixelCount;
     m_hitPixelSamples[m_nextSample] = stats.hitPixelCount;
     m_nonFinitePixelSamples[m_nextSample] = stats.nonFinitePixelCount;
+    m_emissiveInactivePixelSamples[m_nextSample] = stats.emissiveInactivePixelCount;
+    m_emissiveNoPositiveWeightPixelSamples[m_nextSample] = stats.emissiveNoPositiveWeightPixelCount;
+    m_emissiveSurfaceRejectedPixelSamples[m_nextSample] = stats.emissiveSurfaceRejectedPixelCount;
+    m_emissiveOccludedPixelSamples[m_nextSample] = stats.emissiveOccludedPixelCount;
+    m_emissiveVisiblePixelSamples[m_nextSample] = stats.emissiveVisiblePixelCount;
+    m_emissiveInvalidPixelSamples[m_nextSample] = stats.emissiveInvalidPixelCount;
     m_peakCandidateSamples[m_nextSample] = stats.peakCandidateCountPerPixel;
     m_peakConfirmedSamples[m_nextSample] = stats.peakConfirmedCountPerPixel;
     m_nextSample = (m_nextSample + 1u) % kCapacity;
@@ -563,7 +592,15 @@ RtgiTraceCounterWindowStats RtgiTraceCounterHistory::snapshot() const {
             !addSample(stats.translucentPixelCount, m_translucentPixelSamples[index]) ||
             !addSample(stats.missPixelCount, m_missPixelSamples[index]) ||
             !addSample(stats.hitPixelCount, m_hitPixelSamples[index]) ||
-            !addSample(stats.nonFinitePixelCount, m_nonFinitePixelSamples[index])) {
+            !addSample(stats.nonFinitePixelCount, m_nonFinitePixelSamples[index]) ||
+            !addSample(stats.emissiveInactivePixelCount, m_emissiveInactivePixelSamples[index]) ||
+            !addSample(stats.emissiveNoPositiveWeightPixelCount,
+                       m_emissiveNoPositiveWeightPixelSamples[index]) ||
+            !addSample(stats.emissiveSurfaceRejectedPixelCount,
+                       m_emissiveSurfaceRejectedPixelSamples[index]) ||
+            !addSample(stats.emissiveOccludedPixelCount, m_emissiveOccludedPixelSamples[index]) ||
+            !addSample(stats.emissiveVisiblePixelCount, m_emissiveVisiblePixelSamples[index]) ||
+            !addSample(stats.emissiveInvalidPixelCount, m_emissiveInvalidPixelSamples[index])) {
             return stats;
         }
         stats.peakCandidateCountPerPixel = std::max(stats.peakCandidateCountPerPixel, m_peakCandidateSamples[index]);

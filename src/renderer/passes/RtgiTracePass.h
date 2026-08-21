@@ -30,6 +30,8 @@ public:
         RgTextureHandle foliageColormap;
         RgTextureHandle skyCapture;
         RgTextureHandle diffuseRadianceHitDistance;
+        RgTextureHandle emissiveDirectRadiance;
+        RgTextureHandle combinedDiffuseRadianceHitDistance;
         RgTextureHandle validation;
     };
 
@@ -57,9 +59,8 @@ public:
         // Advance the stochastic sequence only when a temporal denoiser will
         // accumulate it. Raw RTGI inspection remains spatially stable.
         bool temporalSamplingEnabled = false;
-        // The temporal owner may hold this phase while the camera is moving
-        // so rejected NRD history does not expose a new one-spp estimate on
-        // every frame.
+        // The temporal owner advances this consumed phase after every successful
+        // temporal dispatch, including the first frame of restarted history.
         uint32_t temporalSampleIndex = 0u;
         // Reference capture uses the shared R2 sequence without spatial blue-noise offsets.
         bool referenceSamplingEnabled = false;
@@ -81,6 +82,8 @@ public:
         uint64_t gpuSceneMaterialBytes = 0u;
         uint64_t gpuSceneGeometryBytes = 0u;
         uint64_t gpuSceneInstanceBytes = 0u;
+        uint64_t rtgiEmissiveGeometryBytes = 0u;
+        uint32_t rtgiEmissiveGeometryCount = 0u;
         uint32_t gpuSceneMaterialCount = 0u;
         uint32_t gpuSceneGeometryCount = 0u;
     };
@@ -131,6 +134,8 @@ private:
         RhiTextureViewHandle foliageColormap;
         RhiTextureViewHandle skyCapture;
         RhiTextureViewHandle diffuseRadianceHitDistance;
+        RhiTextureViewHandle emissiveDirectRadiance;
+        RhiTextureViewHandle combinedDiffuseRadianceHitDistance;
         RhiTextureViewHandle validation;
     };
 
@@ -139,13 +144,16 @@ private:
         RhiBufferHandle gpuSceneMaterials;
         RhiBufferHandle gpuSceneGeometries;
         RhiBufferHandle gpuSceneInstances;
+        RhiBufferHandle rtgiEmissiveGeometry;
         uint64_t terrainHitDataBytes = 0u;
         uint64_t gpuSceneMaterialBytes = 0u;
         uint64_t gpuSceneGeometryBytes = 0u;
         uint64_t gpuSceneInstanceBytes = 0u;
+        uint64_t rtgiEmissiveGeometryBytes = 0u;
         uint32_t sceneInstanceCount = 0u;
         uint32_t gpuSceneMaterialCount = 0u;
         uint32_t gpuSceneGeometryCount = 0u;
+        uint32_t rtgiEmissiveGeometryCount = 0u;
         glm::vec3 sceneOrigin{0.0f};
     };
 
@@ -199,9 +207,9 @@ private:
     bool m_counterHealthy = true;
     uint64_t m_counterReadbackSequence = 0u;
     RhiTextureViewHandle m_boundCounterValidationView;
-    std::array<RhiBufferHandle, 4u> m_boundSceneBuffers{};
-    std::array<uint64_t, 4u> m_boundSceneBufferBytes{};
-    std::array<RhiTextureViewHandle, 13u> m_boundViews{};
+    std::array<RhiBufferHandle, 5u> m_boundSceneBuffers{};
+    std::array<uint64_t, 5u> m_boundSceneBufferBytes{};
+    std::array<RhiTextureViewHandle, 15u> m_boundViews{};
     Stats m_stats;
     renderer::contracts::RtgiTraceCounterFrameStats m_counterStats;
 };

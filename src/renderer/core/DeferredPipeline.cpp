@@ -599,7 +599,9 @@ void DeferredPipeline::initializePasses(ResourceMgr& resourceMgr, shadow::Shadow
     m_ssgiPass = std::make_unique<SsgiPass>();
     m_rtgiTracePass = std::make_unique<RtgiTracePass>();
     m_nrdGuidePrepPass = std::make_unique<NrdGuidePrepPass>();
+    m_rtgiEmissiveTemporalPass = std::make_unique<RtgiEmissiveTemporalPass>();
     m_rtgiSignalPackPass = std::make_unique<RtgiSignalPackPass>();
+    m_rtgiValidationComposePass = std::make_unique<RtgiValidationComposePass>();
 #if defined(MECRAFT_ENABLE_NRD)
     m_nrdBridge = std::make_unique<renderer::nrd::NrdRenderGraphBridge>();
     m_nrdClearHistory = true;
@@ -699,8 +701,12 @@ void DeferredPipeline::shutdown() {
     if (m_nrdBridge)
         m_nrdBridge->shutdown();
 #endif
+    if (m_rtgiValidationComposePass)
+        m_rtgiValidationComposePass->shutdown();
     if (m_rtgiSignalPackPass)
         m_rtgiSignalPackPass->shutdown();
+    if (m_rtgiEmissiveTemporalPass)
+        m_rtgiEmissiveTemporalPass->shutdown();
     if (m_nrdGuidePrepPass)
         m_nrdGuidePrepPass->shutdown();
     if (m_rtgiTracePass)
@@ -754,7 +760,9 @@ void DeferredPipeline::shutdown() {
     m_nrdBridge.reset();
     m_nrdClearHistory = true;
 #endif
+    m_rtgiValidationComposePass.reset();
     m_rtgiSignalPackPass.reset();
+    m_rtgiEmissiveTemporalPass.reset();
     m_nrdGuidePrepPass.reset();
     m_rtgiTracePass.reset();
     m_dofPass.reset();
@@ -889,6 +897,9 @@ void DeferredPipeline::invalidateHistory() {
 #if defined(MECRAFT_ENABLE_NRD)
     m_nrdClearHistory = true;
 #endif
+    if (m_rtgiEmissiveTemporalPass) {
+        m_rtgiEmissiveTemporalPass->invalidateHistory();
+    }
     if (m_cloudPass) {
         m_cloudPass->invalidateHistory();
     }
@@ -933,6 +944,9 @@ FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderS
         }
         if (m_volumetricPass) {
             m_volumetricPass->invalidateHistory();
+        }
+        if (m_rtgiEmissiveTemporalPass) {
+            m_rtgiEmissiveTemporalPass->invalidateHistory();
         }
     }
 
@@ -1046,7 +1060,8 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
     if (nrdEnabled) {
 #if defined(MECRAFT_ENABLE_NRD)
         if (!rhiDevice.capabilities().storageImageExtendedFormats || m_nrdGuidePrepPass == nullptr ||
-            m_rtgiSignalPackPass == nullptr || m_nrdBridge == nullptr) {
+            m_rtgiEmissiveTemporalPass == nullptr || m_rtgiSignalPackPass == nullptr ||
+            m_rtgiValidationComposePass == nullptr || m_nrdBridge == nullptr) {
             MECRAFT_LOG_STREAM(std::cerr << "[DeferredPipeline] NRD production requirements are unavailable\n");
             return false;
         }
@@ -1088,6 +1103,9 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
 #if defined(MECRAFT_ENABLE_NRD)
     if (rtgiTraceInspectionChanged) {
         m_nrdClearHistory = true;
+    }
+    if (m_rtgiEmissiveTemporalPass != nullptr && (!nrdEnabled || m_nrdClearHistory || nrdTemporalReset)) {
+        m_rtgiEmissiveTemporalPass->invalidateHistory();
     }
 #endif
     const bool ssaoEnabled = settings.ssao.enabled;
@@ -1202,6 +1220,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
     bool localShadowGraphPrepared = false;
     bool clusteredLightingGraphPrepared = false;
     bool rtgiTraceGraphPrepared = false;
+    bool rtgiEmissiveTemporalGraphPrepared = false;
     bool skyIblGraphPrepared = false;
     bool reflectionProbeCaptureGraphPrepared = false;
     bool reflectionProbeGridGraphPrepared = false;
@@ -1239,6 +1258,10 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
         if (rtgiTraceGraphPrepared) {
             m_rtgiTracePass->finishGraphExecution(false, RhiSubmissionToken{});
             rtgiTraceGraphPrepared = false;
+        }
+        if (rtgiEmissiveTemporalGraphPrepared) {
+            m_rtgiEmissiveTemporalPass->finishGraphExecution(false);
+            rtgiEmissiveTemporalGraphPrepared = false;
         }
         if (localShadowGraphPrepared) {
             m_localShadowPass->finishGraphExecution(false);
@@ -1523,6 +1546,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
     RgTextureHandle grassColormap;
     RgTextureHandle foliageColormap;
     RgTextureHandle rtgiRawDiffuse;
+    RgTextureHandle rtgiEmissiveDirect;
     RgTextureHandle rtgiRawValidationOutput;
     RgTextureHandle rtgiValidation;
     RgTextureHandle rtgiRelaxDiffuse;
@@ -1653,6 +1677,8 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
         const RhiTextureUsageFlags nrdValidationUsage = sampledStorage | rhiFlag(RhiTextureUsage::ColorAttachment);
         if (!createRtgiTexture("RTGI.RawDiffuseRadianceHitDistance", RhiTextureFormat::Rgba16Float, sampledStorage,
                                rtgiRawDiffuse) ||
+            !createRtgiTexture("RTGI.EmissiveDirectRadiance", RhiTextureFormat::Rgba16Float, sampledStorage,
+                               rtgiEmissiveDirect) ||
             !createRtgiTexture("RTGI.Validation", RhiTextureFormat::Rg32Uint, sampledStorage, rtgiValidation)) {
             return failGraphSetup();
         }
@@ -2055,6 +2081,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
     reflectionProbeGridGraphPrepared = true;
 
     RgTextureHandle rtgiDiffuseTexture = albedo;
+    RgTextureHandle rtgiEmissiveTexture = albedo;
     DeferredLightingPass::RtgiDiffuseEncoding rtgiDiffuseEncoding = DeferredLightingPass::RtgiDiffuseEncoding::Disabled;
     float rtgiRadianceScale = 1.0f;
     if (rtgiEnabled) {
@@ -2071,6 +2098,8 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
         rtgiResources.foliageColormap = foliageColormap;
         rtgiResources.skyCapture = skyCapture;
         rtgiResources.diffuseRadianceHitDistance = rtgiRawDiffuse;
+        rtgiResources.emissiveDirectRadiance = rtgiEmissiveDirect;
+        rtgiResources.combinedDiffuseRadianceHitDistance = rtgiRawValidationOutput;
         rtgiResources.validation = rtgiValidation;
 
         RtgiTracePass::LightingResources rtgiLighting;
@@ -2110,21 +2139,8 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
             return failGraphSetup();
         }
         rtgiTraceGraphPrepared = true;
-        RenderGraphPassBuilder rawValidationCopy =
-            m_renderGraph.addPass({"RTGI.RawDiffuseValidationCopy", RgPassType::Copy, RhiQueueType::Graphics,
-                                   /*threadSafeRecord=*/true});
-        rawValidationCopy.dependsOn(graphTail)
-            .readTexture(rtgiRawDiffuse, RhiResourceState::TransferSrc)
-            .writeTexture(rtgiRawValidationOutput, RhiResourceState::TransferDst)
-            .setExecute([rtgiRawDiffuse, rtgiRawValidationOutput](RgPassContext& pass) {
-                RhiTextureBlit blit;
-                blit.src = pass.texture(rtgiRawDiffuse);
-                blit.dst = pass.texture(rtgiRawValidationOutput);
-                pass.commandList().blitTexture(blit);
-                return true;
-            });
-        graphTail = rawValidationCopy.handle();
         rtgiDiffuseTexture = rtgiRawDiffuse;
+        rtgiEmissiveTexture = rtgiEmissiveDirect;
         rtgiDiffuseEncoding = DeferredLightingPass::RtgiDiffuseEncoding::LinearRgb;
         // The raw trace target and Scene HDR use the same pre-exposed domain.
         rtgiRadianceScale = 1.0f;
@@ -2170,6 +2186,26 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
             if (!graphTail.isValid()) {
                 return failGraphSetup();
             }
+
+            RtgiEmissiveTemporalPass::Settings emissiveTemporalSettings;
+            emissiveTemporalSettings.historyValid = guideSettings.historyValid;
+            emissiveTemporalSettings.relativeDepthThreshold = settings.nrd.disocclusionThreshold;
+            emissiveTemporalSettings.maximumViewZ = settings.nrd.denoisingRange * 2.0f;
+            RtgiEmissiveTemporalPass::GraphResources emissiveTemporalResources;
+            emissiveTemporalResources.currentEmissiveDirectRadiance = rtgiEmissiveDirect;
+            emissiveTemporalResources.motion = nrdMotion;
+            emissiveTemporalResources.reprojectionCoverage = nrdReprojectionCoverage;
+            emissiveTemporalResources.normalRoughness = nrdNormalRoughness;
+            emissiveTemporalResources.viewZ = nrdViewZ;
+            const RtgiEmissiveTemporalPass::GraphOutput emissiveTemporalOutput =
+                m_rtgiEmissiveTemporalPass->addGraphPass(m_renderGraph, ctx, emissiveTemporalSettings,
+                                                         emissiveTemporalResources, graphTail);
+            if (!emissiveTemporalOutput.isValid()) {
+                return failGraphSetup();
+            }
+            graphTail = emissiveTemporalOutput.pass;
+            rtgiEmissiveTexture = emissiveTemporalOutput.filteredEmissiveDirectRadiance;
+            rtgiEmissiveTemporalGraphPrepared = true;
 
             // NRD deliberately skips pixels beyond denoisingRange. Define
             // those pixels as zero indirect radiance before every dispatch so
@@ -2281,20 +2317,19 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
                 return failGraphSetup();
             }
             graphTail = nrdDispatch.lastPass;
-            RenderGraphPassBuilder denoisedValidationCopy =
-                m_renderGraph.addPass({"NRD.DiffuseValidationCopy", RgPassType::Copy, RhiQueueType::Graphics,
-                                       /*threadSafeRecord=*/true});
-            denoisedValidationCopy.dependsOn(graphTail)
-                .readTexture(nrdOutputDiffuse, RhiResourceState::TransferSrc)
-                .writeTexture(nrdDiffuseValidationOutput, RhiResourceState::TransferDst)
-                .setExecute([nrdOutputDiffuse, nrdDiffuseValidationOutput](RgPassContext& pass) {
-                    RhiTextureBlit blit;
-                    blit.src = pass.texture(nrdOutputDiffuse);
-                    blit.dst = pass.texture(nrdDiffuseValidationOutput);
-                    pass.commandList().blitTexture(blit);
-                    return true;
-                });
-            graphTail = denoisedValidationCopy.handle();
+            RtgiValidationComposePass::Settings composeSettings;
+            composeSettings.encoding = settings.nrd.method == NrdDiffuseMethod::Relax
+                                           ? RtgiValidationComposePass::Encoding::RelaxLinearRgb
+                                           : RtgiValidationComposePass::Encoding::ReblurYCoCg;
+            RtgiValidationComposePass::GraphResources composeResources;
+            composeResources.denoisedIndirectRadianceHitDistance = nrdOutputDiffuse;
+            composeResources.emissiveDirectRadiance = rtgiEmissiveTexture;
+            composeResources.combinedValidationRadiance = nrdDiffuseValidationOutput;
+            graphTail = m_rtgiValidationComposePass->addGraphPass(m_renderGraph, ctx, composeSettings,
+                                                                  composeResources, graphTail);
+            if (!graphTail.isValid()) {
+                return failGraphSetup();
+            }
             rtgiDiffuseTexture = nrdOutputDiffuse;
             rtgiDiffuseEncoding = settings.nrd.method == NrdDiffuseMethod::Reblur
                                       ? DeferredLightingPass::RtgiDiffuseEncoding::ReblurYCoCg
@@ -2346,10 +2381,13 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
         .readTexture(rippleNormal, RhiResourceState::ShaderRead)
         .readWriteTexture(sceneLighting, RhiResourceState::RenderTarget);
     if (rtgiDiffuseEncoding != DeferredLightingPass::RtgiDiffuseEncoding::Disabled) {
-        lighting.readTexture(rtgiDiffuseTexture, RhiResourceState::ShaderRead);
+        lighting.readTexture(rtgiDiffuseTexture, RhiResourceState::ShaderRead)
+            .readTexture(rtgiEmissiveTexture, RhiResourceState::ShaderRead);
     }
-    lighting.setExecute([&, rtgiDiffuseTexture, rtgiDiffuseEncoding, rtgiRadianceScale](RgPassContext& pass) {
-        return m_lightingPass->execute(pass.commandList(), ctx, settings, targets, pass.textureView(rtgiDiffuseTexture),
+    lighting.setExecute([&, rtgiDiffuseTexture, rtgiEmissiveTexture, rtgiDiffuseEncoding,
+                         rtgiRadianceScale](RgPassContext& pass) {
+        return m_lightingPass->execute(pass.commandList(), ctx, settings, targets,
+                                       pass.textureView(rtgiDiffuseTexture), pass.textureView(rtgiEmissiveTexture),
                                        rtgiDiffuseEncoding, rtgiRadianceScale);
     });
     if (clusteredLightingActive) {
@@ -2909,7 +2947,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
                                    transparencyMask,
                                    f0Metallic,
                                    objectMaterialId,
-                                   rtgiRawDiffuse.isValid() ? rtgiRawDiffuse : sceneLighting,
+                                   rtgiRawValidationOutput.isValid() ? rtgiRawValidationOutput : sceneLighting,
                                    rtgiValidation.isValid() ? rtgiValidation : objectMaterialId,
                                    nrdMotion.isValid() ? nrdMotion : velocity,
                                    nrdNormalRoughness.isValid() ? nrdNormalRoughness : normalAo,
@@ -3103,8 +3141,10 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
     if (executed.succeeded() && rtgiEnabled) {
         m_rtgiValidationOutputInitialized = true;
     }
-    // Advance the low-discrepancy phase after each stable temporal frame.
-    if (executed.succeeded() && (rtgiReferenceSampling || (nrdEnabled && !nrdTemporalReset)) && !rtgiTraceInspection) {
+    // A restarted NRD frame still consumes its trace sample. Advancing after
+    // every successful temporal dispatch prevents sample zero from being
+    // repeated and preserves the exact 0..31 quality half-sequence.
+    if (executed.succeeded() && (rtgiReferenceSampling || nrdEnabled) && !rtgiTraceInspection) {
         ++m_rtgiTemporalSampleIndex;
     }
     if (m_shared->terrainCache != nullptr) {
@@ -3115,6 +3155,9 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
     }
     if (rtgiTraceGraphPrepared) {
         m_rtgiTracePass->finishGraphExecution(executed.succeeded(), executed.completionToken());
+    }
+    if (rtgiEmissiveTemporalGraphPrepared) {
+        m_rtgiEmissiveTemporalPass->finishGraphExecution(executed.succeeded());
     }
 #if defined(MECRAFT_ENABLE_NRD)
     if (m_nrdBridge != nullptr && m_nrdBridge->framePending()) {

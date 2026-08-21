@@ -36,8 +36,11 @@ void rtgiSignalPackWriteZero(ivec2 texel) {
 
 void rtgiSignalPackFail(ivec2 texel, uvec4 validation) {
     rtgiSignalPackWriteZero(texel);
-    uint validationWord =
-        (validation.x & ~RTGI_TRACE_VALIDATION_CLASSIFICATION_MASK) | RTGI_TRACE_CLASS_NON_FINITE;
+    const uint classificationAndEmissiveMask =
+        RTGI_TRACE_VALIDATION_CLASSIFICATION_MASK |
+        (RTGI_TRACE_VALIDATION_EMISSIVE_STATUS_MASK << RTGI_TRACE_VALIDATION_EMISSIVE_STATUS_SHIFT);
+    uint validationWord = (validation.x & ~classificationAndEmissiveMask) | RTGI_TRACE_CLASS_NON_FINITE |
+                          (RTGI_EMISSIVE_STATUS_INVALID << RTGI_TRACE_VALIDATION_EMISSIVE_STATUS_SHIFT);
     imageStore(uValidation, texel, uvec4(validationWord, validation.y, 0u, 0u));
 }
 

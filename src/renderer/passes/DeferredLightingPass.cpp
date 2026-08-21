@@ -20,7 +20,7 @@
 
 namespace {
 constexpr size_t kBaseLightingTextureCount = 20u;
-constexpr size_t kVulkanLightingTextureCount = 21u;
+constexpr size_t kVulkanLightingTextureCount = 22u;
 
 [[nodiscard]] bool sameTextureHandle(const RhiTextureHandle lhs, const RhiTextureHandle rhs) {
     return lhs.index == rhs.index && lhs.generation == rhs.generation;
@@ -112,6 +112,7 @@ void DeferredLightingPass::shutdown() {
 
 bool DeferredLightingPass::execute(RhiCommandList& commandList, const FrameContext& ctx, const RenderSettings& settings,
                                    DeferredRenderTargets& targets, const RhiTextureViewHandle rtgiDiffuseView,
+                                   const RhiTextureViewHandle rtgiEmissiveDirectView,
                                    const RtgiDiffuseEncoding rtgiEncoding, const float rtgiRadianceScale) {
     if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr || m_shadowRenderer == nullptr) {
         return false;
@@ -121,7 +122,7 @@ bool DeferredLightingPass::execute(RhiCommandList& commandList, const FrameConte
     const bool clusteredLightingActive = rhiDevice.backend() == RhiBackend::Vulkan;
     const uint32_t lightingTextureCount = clusteredLightingActive ? static_cast<uint32_t>(kVulkanLightingTextureCount)
                                                                   : static_cast<uint32_t>(kBaseLightingTextureCount);
-    if ((clusteredLightingActive && !rtgiDiffuseView.isValid()) ||
+    if ((clusteredLightingActive && (!rtgiDiffuseView.isValid() || !rtgiEmissiveDirectView.isValid())) ||
         (!clusteredLightingActive && rtgiEncoding != RtgiDiffuseEncoding::Disabled) ||
         (settings.rtgi.enabled && rtgiEncoding == RtgiDiffuseEncoding::Disabled) ||
         (!settings.rtgi.enabled && rtgiEncoding != RtgiDiffuseEncoding::Disabled) ||
@@ -165,7 +166,8 @@ bool DeferredLightingPass::execute(RhiCommandList& commandList, const FrameConte
         targets.csmShadowColor1ArrayTextureViewHandle(),
         m_rippleNormalTextureView,
         targets.f0MetallicTextureViewHandle(),
-        rtgiDiffuseView};
+        rtgiDiffuseView,
+        rtgiEmissiveDirectView};
     if (!ensureRhiBindGroup(rhiDevice, views, lightingTextureCount)) {
         return false;
     }
@@ -486,7 +488,7 @@ bool DeferredLightingPass::ensureRhiBindGroup(
         m_linearClampSampler,   m_linearClampSampler,   m_linearRepeatSampler,  m_linearClampSampler,
         m_compareBorderSampler, m_nearestBorderSampler, m_compareBorderSampler, m_nearestBorderSampler,
         m_nearestBorderSampler, m_nearestBorderSampler, m_linearRepeatSampler,  m_nearestClampSampler,
-        m_nearestClampSampler};
+        m_nearestClampSampler,  m_nearestClampSampler};
 
     RhiBindGroupDesc bindGroupDesc;
     bindGroupDesc.layout = m_bindGroupLayout;

@@ -3,7 +3,10 @@
 #include "renderer/contracts/StaticMeshRayTracingContract.h"
 
 #include <glm/common.hpp>
+#include <glm/geometric.hpp>
 
+#include <algorithm>
+#include <cmath>
 #include <limits>
 #include <utility>
 
@@ -30,7 +33,13 @@ namespace {
                                               alphaMode == static_cast<uint32_t>(GpuMaterialAlphaMode::Opaque)) ||
                                              (surfaceClass == gpuSceneGeometryFlagBit(GpuSceneGeometryFlag::Cutout) &&
                                               alphaMode == static_cast<uint32_t>(GpuMaterialAlphaMode::Mask));
-    return geometry.vertexBuffer.isValid() && geometry.indexBuffer.isValid() &&
+    const bool validPrimitiveAreas =
+        std::all_of(geometry.primitiveAreaVectors.begin(), geometry.primitiveAreaVectors.end(),
+                    [](const glm::vec3& areaVector) {
+                        return std::isfinite(areaVector.x) && std::isfinite(areaVector.y) &&
+                               std::isfinite(areaVector.z) && glm::dot(areaVector, areaVector) > 1.0e-16f;
+                    });
+    return validPrimitiveAreas && geometry.vertexBuffer.isValid() && geometry.indexBuffer.isValid() &&
            geometry.primitiveMetadataBuffer.isValid() && !sameBuffer(geometry.vertexBuffer, geometry.indexBuffer) &&
            !sameBuffer(geometry.vertexBuffer, geometry.primitiveMetadataBuffer) &&
            !sameBuffer(geometry.indexBuffer, geometry.primitiveMetadataBuffer) && gpu.vertexAddress.isValid() &&
@@ -46,6 +55,7 @@ namespace {
            materialIds[materialIndex].isValid() && gpu.materialAndIdentity.y == materialIds[materialIndex].value &&
            gpu.materialAndIdentity.z != 0u && gpu.materialAndIdentity.w == sizeof(StaticMeshPrimitiveMetadata) &&
            gpu.primitiveMeshletAndRevision.x == gpu.indexRangeAndType.y / 3u &&
+           geometry.primitiveAreaVectors.size() == gpu.primitiveMeshletAndRevision.x &&
            gpu.primitiveMeshletAndRevision.w == kStaticMeshRayTracingGeometryRevision;
 }
 

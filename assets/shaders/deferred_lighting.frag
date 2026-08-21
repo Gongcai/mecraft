@@ -62,7 +62,8 @@ layout(binding = 19) uniform sampler2D uF0MetallicTex;
 
 #ifdef MECRAFT_RTGI_DIFFUSE
 layout(binding = 20) uniform sampler2D uRtgiDiffuseTex;
-#define MECRAFT_DEFERRED_LIGHTING_PARAMS_BINDING 21
+layout(binding = 21) uniform sampler2D uRtgiEmissiveDirectTex;
+#define MECRAFT_DEFERRED_LIGHTING_PARAMS_BINDING 22
 #else
 #define MECRAFT_DEFERRED_LIGHTING_PARAMS_BINDING 20
 #endif
@@ -244,13 +245,15 @@ vec3 nrdYCoCgToLinear(vec3 color) {
 }
 
 vec3 sampleRtgiDiffuse(vec2 textureUv) {
+    vec3 indirectRadiance = vec3(0.0);
     if (uRtgiEncoding == 1) {
-        return max(texture(uRtgiDiffuseTex, textureUv).rgb, vec3(0.0)) * uRtgiRadianceScale;
+        indirectRadiance = max(texture(uRtgiDiffuseTex, textureUv).rgb, vec3(0.0)) * uRtgiRadianceScale;
     }
     if (uRtgiEncoding == 2) {
-        return nrdYCoCgToLinear(texture(uRtgiDiffuseTex, textureUv).rgb) * uRtgiRadianceScale;
+        indirectRadiance = nrdYCoCgToLinear(texture(uRtgiDiffuseTex, textureUv).rgb) * uRtgiRadianceScale;
     }
-    return vec3(0.0);
+    vec3 emissiveDirectRadiance = max(texture(uRtgiEmissiveDirectTex, textureUv).rgb, vec3(0.0));
+    return indirectRadiance + emissiveDirectRadiance;
 }
 #endif
 

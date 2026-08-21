@@ -1,4 +1,5 @@
 #include "renderer/contracts/RtgiNrdSignalContract.h"
+#include "renderer/passes/RtgiEmissiveTemporalPass.h"
 
 #include <cmath>
 #include <cstddef>
@@ -25,6 +26,14 @@ namespace {
     const std::string signalPath = std::string(MECRAFT_TEST_SOURCE_DIR) + "/assets/shaders/rtgi_nrd_signal.glsl";
     const std::string packPath = std::string(MECRAFT_TEST_SOURCE_DIR) + "/assets/shaders/rtgi_nrd_signal_pack.comp";
     const std::string tracePath = std::string(MECRAFT_TEST_SOURCE_DIR) + "/assets/shaders/rtgi_trace.comp";
+    const std::string composePath =
+        std::string(MECRAFT_TEST_SOURCE_DIR) + "/assets/shaders/rtgi_validation_compose.comp";
+    const std::string emissiveTemporalPath =
+        std::string(MECRAFT_TEST_SOURCE_DIR) + "/assets/shaders/rtgi_emissive_temporal.comp";
+    const std::string emissiveTemporalPassPath =
+        std::string(MECRAFT_TEST_SOURCE_DIR) + "/src/renderer/passes/RtgiEmissiveTemporalPass.cpp";
+    const std::string composePassPath =
+        std::string(MECRAFT_TEST_SOURCE_DIR) + "/src/renderer/passes/RtgiValidationComposePass.cpp";
     const std::string guidePath = std::string(MECRAFT_TEST_SOURCE_DIR) + "/assets/shaders/nrd_guide_prep.comp";
     const std::string lightingPath = std::string(MECRAFT_TEST_SOURCE_DIR) + "/assets/shaders/deferred_lighting.frag";
     const std::string pipelinePath = std::string(MECRAFT_TEST_SOURCE_DIR) + "/src/renderer/core/DeferredPipeline.cpp";
@@ -42,6 +51,10 @@ namespace {
     std::ifstream signalFile(signalPath, std::ios::binary);
     std::ifstream packFile(packPath, std::ios::binary);
     std::ifstream traceFile(tracePath, std::ios::binary);
+    std::ifstream composeFile(composePath, std::ios::binary);
+    std::ifstream emissiveTemporalFile(emissiveTemporalPath, std::ios::binary);
+    std::ifstream emissiveTemporalPassFile(emissiveTemporalPassPath, std::ios::binary);
+    std::ifstream composePassFile(composePassPath, std::ios::binary);
     std::ifstream guideFile(guidePath, std::ios::binary);
     std::ifstream lightingFile(lightingPath, std::ios::binary);
     std::ifstream pipelineFile(pipelinePath, std::ios::binary);
@@ -52,15 +65,23 @@ namespace {
     std::ifstream modelSceneFile(modelScenePath, std::ios::binary);
     std::ifstream modelStateFile(modelStatePath, std::ios::binary);
     std::ifstream gameplayStateFile(gameplayStatePath, std::ios::binary);
-    if (!signalFile.is_open() || !packFile.is_open() || !traceFile.is_open() || !guideFile.is_open() ||
-        !lightingFile.is_open() || !pipelineFile.is_open() || !targetsFile.is_open() || !debugPassFile.is_open() ||
-        !debugShaderFile.is_open() || !sceneFile.is_open() || !modelSceneFile.is_open() || !modelStateFile.is_open() ||
-        !gameplayStateFile.is_open()) {
+    if (!signalFile.is_open() || !packFile.is_open() || !traceFile.is_open() || !composeFile.is_open() ||
+        !emissiveTemporalFile.is_open() || !emissiveTemporalPassFile.is_open() || !composePassFile.is_open() ||
+        !guideFile.is_open() || !lightingFile.is_open() || !pipelineFile.is_open() || !targetsFile.is_open() ||
+        !debugPassFile.is_open() || !debugShaderFile.is_open() || !sceneFile.is_open() || !modelSceneFile.is_open() ||
+        !modelStateFile.is_open() || !gameplayStateFile.is_open()) {
         return false;
     }
     const std::string signalSource{std::istreambuf_iterator<char>(signalFile), std::istreambuf_iterator<char>()};
     const std::string packSource{std::istreambuf_iterator<char>(packFile), std::istreambuf_iterator<char>()};
     const std::string traceSource{std::istreambuf_iterator<char>(traceFile), std::istreambuf_iterator<char>()};
+    const std::string composeSource{std::istreambuf_iterator<char>(composeFile), std::istreambuf_iterator<char>()};
+    const std::string emissiveTemporalSource{std::istreambuf_iterator<char>(emissiveTemporalFile),
+                                             std::istreambuf_iterator<char>()};
+    const std::string emissiveTemporalPassSource{std::istreambuf_iterator<char>(emissiveTemporalPassFile),
+                                                 std::istreambuf_iterator<char>()};
+    const std::string composePassSource{std::istreambuf_iterator<char>(composePassFile),
+                                        std::istreambuf_iterator<char>()};
     const std::string guideSource{std::istreambuf_iterator<char>(guideFile), std::istreambuf_iterator<char>()};
     const std::string lightingSource{std::istreambuf_iterator<char>(lightingFile), std::istreambuf_iterator<char>()};
     const std::string pipelineSource{std::istreambuf_iterator<char>(pipelineFile), std::istreambuf_iterator<char>()};
@@ -86,10 +107,62 @@ namespace {
                std::string::npos &&
            packSource.find("vec3 sceneRadiance = rawSignal.rgb * pc.preExposureAndInverse.y;") != std::string::npos &&
            packSource.find("uvec4(validationWord, validation.y, 0u, 0u)") != std::string::npos &&
-           traceSource.find("radiance * uSecondaryLighting.traceAndEmissionScales.w") != std::string::npos &&
-           traceSource.find("missRadiance, RTGI_NRD_FP16_MAX, RTGI_TRACE_CLASS_MISS") != std::string::npos &&
+           traceSource.find("vec3 preExposedIndirect = indirectRadiance * preExposure;") != std::string::npos &&
+           traceSource.find("vec3 preExposedCombined = combinedRadiance * preExposure;") != std::string::npos &&
+           traceSource.find("vec3 preExposedEmissive = max(preExposedCombined - preExposedIndirect, vec3(0.0));") !=
+               std::string::npos &&
+           traceSource.find("layout(set = 1, binding = 19, rgba16f) uniform writeonly image2D "
+                            "uEmissiveDirectRadiance;") != std::string::npos &&
+           traceSource.find("layout(set = 1, binding = 20, rgba16f) uniform writeonly image2D "
+                            "uCombinedDiffuseRadianceHitDistance;") != std::string::npos &&
+           traceSource.find("result.radiance = rtgiSuppressSolarSkyLobe(sampleSkyRadiance(uSkyCapture, rayDirection), "
+                            "rayDirection) *") != std::string::npos &&
            traceSource.find("rtgiOffsetSurfaceOrigin") != std::string::npos &&
            traceSource.find("dot(geometricNormal, outgoingDirection) < 0.0 ? -1.0 : 1.0") != std::string::npos &&
+           composeSource.find("MECRAFT_RTGI_VALIDATION_COMPOSE_RELAX") != std::string::npos &&
+           composeSource.find("MECRAFT_RTGI_VALIDATION_COMPOSE_REBLUR") != std::string::npos &&
+           composeSource.find("vec3 rtgiValidationDecodeReblurYCoCg(vec3 color)") != std::string::npos &&
+           composeSource.find("indirectRadiance = max(indirectRadiance, vec3(0.0));") != std::string::npos &&
+           composeSource.find("pc.renderExtentAndInversePreExposure.z;") != std::string::npos &&
+           composeSource.find("vec3 combinedRadiance = min(indirectRadiance + emissiveRadiance") !=
+               std::string::npos &&
+           composeSource.find("imageStore(uCombinedValidationRadiance, texel, vec4(combinedRadiance, 0.0));") !=
+               std::string::npos &&
+           composePassSource.find("1.0f / ctx.preExposure") != std::string::npos &&
+           composePassSource.find("RTGI.ValidationCompose") != std::string::npos &&
+           emissiveTemporalSource.find("const float RTGI_EMISSIVE_TEMPORAL_MAX_HISTORY = 32.0;") !=
+               std::string::npos &&
+           emissiveTemporalSource.find(
+               "layout(set = 0, binding = 7, rgba32f) uniform writeonly image2D uOutputEmissiveHistory;") !=
+               std::string::npos &&
+           emissiveTemporalSource.find("vec2 previousUv = screenUv + motion.xy;") != std::string::npos &&
+           emissiveTemporalSource.find("texelFetch(uReprojectionCoverage, texel, 0).r > 0.5") !=
+               std::string::npos &&
+           emissiveTemporalSource.find(
+               "float expectedPreviousPositiveViewZ = currentPositiveViewZ + motion.z;") != std::string::npos &&
+           emissiveTemporalSource.find("relativeDepthError <= pc.rejectionParameters.x") != std::string::npos &&
+           emissiveTemporalSource.find("dot(currentNormal, previousGuide.xyz) >= pc.rejectionParameters.z") !=
+               std::string::npos &&
+           emissiveTemporalSource.find(
+               "vec3 exposureAdjustedHistory = previousSignal.rgb * pc.renderExtentHistoryAndExposure.w;") !=
+               std::string::npos &&
+           emissiveTemporalSource.find(
+               "filteredHistoryCount = min(previousSignal.a + 1.0, RTGI_EMISSIVE_TEMPORAL_MAX_HISTORY);") !=
+               std::string::npos &&
+           emissiveTemporalSource.find("float currentFrameWeight = 1.0 / filteredHistoryCount;") !=
+               std::string::npos &&
+           emissiveTemporalSource.find("imageStore(uOutputEmissiveHistory, texel,") != std::string::npos &&
+           emissiveTemporalPassSource.find("const uint32_t writeGeneration = 1u - readGeneration;") !=
+               std::string::npos &&
+           emissiveTemporalPassSource.find(
+               "settings.historyValid && m_historyValid && m_generationInitialized[readGeneration]") !=
+               std::string::npos &&
+           emissiveTemporalPassSource.find("if (succeeded) {") != std::string::npos &&
+           emissiveTemporalPassSource.find("m_readGeneration = m_pendingWriteGeneration;") != std::string::npos &&
+           emissiveTemporalPassSource.find("m_generationInitialized[m_pendingWriteGeneration] = false;") !=
+               std::string::npos &&
+           emissiveTemporalPassSource.find("RhiTextureFormat::Rgba32Float") != std::string::npos &&
+           emissiveTemporalPassSource.find("camera.position") == std::string::npos &&
            guideSource.find("layout(binding = 4, rgba16f) uniform writeonly image2D uMotion;") != std::string::npos &&
            guideSource.find("layout(binding = 7, r8) uniform writeonly image2D uReprojectionCoverage;") !=
                std::string::npos &&
@@ -132,6 +205,15 @@ namespace {
            pipelineSource.find("IN_DIFF_CONFIDENCE") == std::string::npos &&
            pipelineSource.find("commonSettings.isHistoryConfidenceAvailable = false;") != std::string::npos &&
            pipelineSource.find("guideResources.reprojectionCoverage = nrdReprojectionCoverage;") != std::string::npos &&
+           pipelineSource.find("RtgiEmissiveTemporalPass::GraphResources emissiveTemporalResources;") !=
+               std::string::npos &&
+           pipelineSource.find("emissiveTemporalSettings.historyValid = guideSettings.historyValid;") !=
+               std::string::npos &&
+           pipelineSource.find(
+               "rtgiEmissiveTexture = emissiveTemporalOutput.filteredEmissiveDirectRadiance;") !=
+               std::string::npos &&
+           pipelineSource.find("m_rtgiEmissiveTemporalPass->finishGraphExecution(executed.succeeded());") !=
+               std::string::npos &&
            pipelineSource.find(
                "const RhiTextureUsageFlags sampledStorage = rhiFlag(RhiTextureUsage::Sampled) |\n"
                "                                                    rhiFlag(RhiTextureUsage::Storage) |\n"
@@ -140,8 +222,16 @@ namespace {
            pipelineSource.find("const RhiTextureUsageFlags nrdOutputUsage =") != std::string::npos &&
            pipelineSource.find("sampledStorage | rhiFlag(RhiTextureUsage::ColorAttachment)") != std::string::npos &&
            pipelineSource.find("NRD.OutputInit") != std::string::npos &&
-           pipelineSource.find("RTGI.RawDiffuseValidationCopy") != std::string::npos &&
-           pipelineSource.find("NRD.DiffuseValidationCopy") != std::string::npos &&
+           pipelineSource.find("RTGI.RawDiffuseValidationCopy") == std::string::npos &&
+           pipelineSource.find("NRD.DiffuseValidationCopy") == std::string::npos &&
+           pipelineSource.find("RtgiValidationComposePass::GraphResources composeResources;") !=
+               std::string::npos &&
+           pipelineSource.find("composeResources.denoisedIndirectRadianceHitDistance = nrdOutputDiffuse;") !=
+               std::string::npos &&
+           pipelineSource.find("composeResources.emissiveDirectRadiance = rtgiEmissiveTexture;") !=
+               std::string::npos &&
+           pipelineSource.find("composeResources.combinedValidationRadiance = nrdDiffuseValidationOutput;") !=
+               std::string::npos &&
            pipelineSource.find("ensureRtgiValidationOutputTextures") != std::string::npos &&
            pipelineSource.find("m_rtgiRawDiffuseValidationTexture") != std::string::npos &&
            pipelineSource.find("m_nrdDiffuseValidationTexture") != std::string::npos &&
@@ -177,8 +267,12 @@ namespace {
            gameplayStateSource.find("if (!sceneReadyAfterRender)") != std::string::npos &&
            gameplayStateSource.find("m_game->discardValidationTemporalFrame();") != std::string::npos &&
            sceneSource.find("void RenderScene::discardValidationTemporalFrame()") != std::string::npos &&
+           lightingSource.find("layout(binding = 21) uniform sampler2D uRtgiEmissiveDirectTex;") !=
+               std::string::npos &&
+           lightingSource.find("#define MECRAFT_DEFERRED_LIGHTING_PARAMS_BINDING 22") != std::string::npos &&
            lightingSource.find("uRtgiRadianceScale pRtgi.z") != std::string::npos &&
-           lightingSource.find("* uRtgiRadianceScale;") != std::string::npos;
+           lightingSource.find("* uRtgiRadianceScale;") != std::string::npos &&
+           lightingSource.find("return indirectRadiance + emissiveDirectRadiance;") != std::string::npos;
 }
 } // namespace
 
@@ -186,6 +280,10 @@ int main() {
     using namespace renderer::contracts;
 
     bool valid = true;
+    valid = requireTrue(RtgiEmissiveTemporalPass::kMaximumHistoryFrameCount == 32u &&
+                            near(RtgiEmissiveTemporalPass::kNormalRejectionThreshold, 0.95f),
+                        "RTGI emissive temporal history bounds must remain exact") &&
+            valid;
     valid = requireTrue(kRtgiNrdFp16Max == 65504.0f && kRtgiNrdEpsilon == 1.0e-6f,
                         "RTGI NRD FP16 and epsilon constants must remain exact") &&
             valid;

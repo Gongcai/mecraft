@@ -34,6 +34,7 @@ struct StaticMeshBlasGeometry {
     uint32_t geometryRevision = renderer::contracts::kStaticMeshRayTracingGeometryRevision;
     glm::vec3 localBoundsMin{0.0f};
     glm::vec3 localBoundsMax{0.0f};
+    std::vector<glm::vec3> primitiveAreaVectors;
     bool opaque = true;
     bool doubleSided = false;
 

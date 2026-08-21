@@ -35,7 +35,26 @@ layout(set = 1, binding = 13) uniform sampler2D uGrassColormap;
 layout(set = 1, binding = 14) uniform sampler2D uFoliageColormap;
 layout(set = 1, binding = 15) uniform sampler2D uSkyCapture;
 layout(set = 1, binding = 17) uniform sampler2D uVoxelLightTexture;
-const uint RTGI_WORLD_LIGHT_GUIDE_SAMPLE_COUNT = 1u;
+layout(set = 1, binding = 19, rgba16f) uniform writeonly image2D uEmissiveDirectRadiance;
+layout(set = 1, binding = 20, rgba16f) uniform writeonly image2D uCombinedDiffuseRadianceHitDistance;
+struct RtgiEmissiveGeometryRecord {
+    uvec4 instanceGeometryPrimitiveCount;
+    vec4 cumulativeProbabilityArea;
+};
+layout(std430, set = 1, binding = 18) readonly buffer RtgiEmissiveGeometryTable {
+    RtgiEmissiveGeometryRecord records[];
+} uRtgiEmissiveGeometry;
+struct RtgiEmissiveCandidate {
+    uvec4 instanceGeometryPrimitive;
+    vec2 barycentrics;
+    float proposalAreaPdf;
+    float targetDensity;
+};
+const uint RTGI_EMISSIVE_DIRECT_SAMPLE_COUNT = 2u;
+const uint RTGI_EMISSIVE_DIRECT_PHASE_STRIDE = 32u;
+const uint RTGI_PRIMARY_SAMPLE_COUNT = 2u;
+const uint RTGI_PRIMARY_SAMPLE_PHASE_STRIDE = 32u;
+const uint RTGI_WORLD_LIGHT_GUIDE_SAMPLE_COUNT = 2u;
 const uint RTGI_WORLD_LIGHT_GUIDE_PHASE_STRIDE = 32u;
 layout(std140, set = 1, binding = 16) uniform RtgiSecondaryLightingParams {
     vec4 sunDirectionAndVisibility;
@@ -132,31 +151,46 @@ vec3 rtgiSuppressSolarSkyLobe(vec3 skyRadiance, vec3 worldDirection) {
     return max(skyRadiance, vec3(0.0));
 }
 
-void rtgiWriteResult(ivec2 texel, vec3 radiance, float hitDistance, uint classification, uint candidateCount,
+void rtgiWriteResult(ivec2 texel, vec3 indirectRadiance, vec3 emissiveRadiance, float hitDistance,
+                     uint classification, uint emissiveStatus, uint candidateCount,
                      uint confirmedCount, uint hitIdentityHash) {
-    if (!rtgiFinite(radiance) || !rtgiFinite(hitDistance) ||
-        any(lessThan(radiance, vec3(0.0))) ||
-        hitDistance < 0.0) {
+    vec3 combinedRadiance = indirectRadiance + emissiveRadiance;
+    if (!rtgiFinite(indirectRadiance) || !rtgiFinite(emissiveRadiance) || !rtgiFinite(combinedRadiance) ||
+        !rtgiFinite(hitDistance) || any(lessThan(indirectRadiance, vec3(0.0))) ||
+        any(lessThan(emissiveRadiance, vec3(0.0))) || hitDistance < 0.0) {
         imageStore(uDiffuseRadianceHitDistance, texel, vec4(0.0));
+        imageStore(uEmissiveDirectRadiance, texel, vec4(0.0));
+        imageStore(uCombinedDiffuseRadianceHitDistance, texel, vec4(0.0));
         imageStore(uValidation, texel,
-                   uvec4(rtgiTraceValidationWord(RTGI_TRACE_CLASS_NON_FINITE, candidateCount, confirmedCount),
+                   uvec4(rtgiTraceValidationWord(RTGI_TRACE_CLASS_NON_FINITE, RTGI_EMISSIVE_STATUS_INVALID,
+                                                 candidateCount, confirmedCount),
                          0u, 0u, 0u));
         return;
     }
-    vec3 preExposedRadiance = radiance * uSecondaryLighting.traceAndEmissionScales.w;
-    if (!rtgiFinite(preExposedRadiance)) {
+    float preExposure = uSecondaryLighting.traceAndEmissionScales.w;
+    vec3 preExposedIndirect = indirectRadiance * preExposure;
+    vec3 preExposedCombined = combinedRadiance * preExposure;
+    if (!rtgiFinite(preExposedIndirect) || !rtgiFinite(preExposedCombined)) {
         imageStore(uDiffuseRadianceHitDistance, texel, vec4(0.0));
+        imageStore(uEmissiveDirectRadiance, texel, vec4(0.0));
+        imageStore(uCombinedDiffuseRadianceHitDistance, texel, vec4(0.0));
         imageStore(uValidation, texel,
-                   uvec4(rtgiTraceValidationWord(RTGI_TRACE_CLASS_NON_FINITE, candidateCount, confirmedCount),
+                   uvec4(rtgiTraceValidationWord(RTGI_TRACE_CLASS_NON_FINITE, RTGI_EMISSIVE_STATUS_INVALID,
+                                                 candidateCount, confirmedCount),
                          0u, 0u, 0u));
         return;
     }
-    preExposedRadiance = min(preExposedRadiance,
-                             vec3(RTGI_RADIANCE_FIREFLY_CLAMP) * uSecondaryLighting.traceAndEmissionScales.w);
+    vec3 storageLimit = vec3(min(RTGI_NRD_FP16_MAX, RTGI_RADIANCE_FIREFLY_CLAMP * preExposure));
+    preExposedIndirect = min(preExposedIndirect, storageLimit);
+    preExposedCombined = min(preExposedCombined, storageLimit);
+    vec3 preExposedEmissive = max(preExposedCombined - preExposedIndirect, vec3(0.0));
     imageStore(uDiffuseRadianceHitDistance, texel,
-               vec4(min(preExposedRadiance, vec3(RTGI_NRD_FP16_MAX)), min(hitDistance, RTGI_NRD_FP16_MAX)));
+               vec4(preExposedIndirect, min(hitDistance, RTGI_NRD_FP16_MAX)));
+    imageStore(uEmissiveDirectRadiance, texel, vec4(preExposedEmissive, 0.0));
+    imageStore(uCombinedDiffuseRadianceHitDistance, texel,
+               vec4(preExposedCombined, min(hitDistance, RTGI_NRD_FP16_MAX)));
     imageStore(uValidation, texel,
-               uvec4(rtgiTraceValidationWord(classification, candidateCount, confirmedCount),
+               uvec4(rtgiTraceValidationWord(classification, emissiveStatus, candidateCount, confirmedCount),
                      hitIdentityHash, 0u, 0u));
 }
 
@@ -675,15 +709,20 @@ bool rtgiWorldLightBalanceWeight(GpuLight light, RtgiWorldLightGuide guide,
         return true;
     }
     float lightSelectionPdf = 1.0 / float(guide.candidateCount);
+    float primarySampleCount = float(RTGI_PRIMARY_SAMPLE_COUNT);
     float guideSampleCount = float(RTGI_WORLD_LIGHT_GUIDE_SAMPLE_COUNT);
-    float denominator = primaryDirectionPdf + guideSampleCount * lightSelectionPdf * guideDirectionPdf;
+    float denominator = primarySampleCount * primaryDirectionPdf +
+                        guideSampleCount * lightSelectionPdf * guideDirectionPdf;
     if (!rtgiFinite(primaryDirectionPdf) || primaryDirectionPdf < 0.0 ||
+        !rtgiFinite(primarySampleCount) || primarySampleCount <= 0.0 ||
         !rtgiFinite(lightSelectionPdf) || lightSelectionPdf <= 0.0 ||
         !rtgiFinite(guideSampleCount) || guideSampleCount <= 0.0 ||
         !rtgiFinite(denominator) || denominator <= 0.0) {
         return false;
     }
-    balanceWeight = primaryDirectionPdf / denominator;
+    // The caller averages N cosine paths after shading, so their balance
+    // heuristic numerator must contain the complete N * p primary measure.
+    balanceWeight = primarySampleCount * primaryDirectionPdf / denominator;
     return rtgiFinite(balanceWeight) && balanceWeight >= 0.0 && balanceWeight <= 1.0;
 }
 
@@ -834,9 +873,12 @@ bool rtgiSampleGuidedWorldLightOnce(RtgiWorldLightGuide guide, vec3 primaryPosit
         return true;
     }
     float primaryDirectionPdf = primaryCosine / 3.14159265358979323846;
+    float primarySampleCount = float(RTGI_PRIMARY_SAMPLE_COUNT);
     float guideSampleCount = float(RTGI_WORLD_LIGHT_GUIDE_SAMPLE_COUNT);
-    float balanceDenominator = primaryDirectionPdf + guideSampleCount * selectionPdf * directionPdf;
+    float balanceDenominator = primarySampleCount * primaryDirectionPdf +
+                               guideSampleCount * selectionPdf * directionPdf;
     if (!rtgiFinite(primaryDirectionPdf) || primaryDirectionPdf <= 0.0 ||
+        !rtgiFinite(primarySampleCount) || primarySampleCount <= 0.0 ||
         !rtgiFinite(guideSampleCount) || guideSampleCount <= 0.0 ||
         !rtgiFinite(selectionPdf) || selectionPdf <= 0.0 ||
         !rtgiFinite(directionPdf) || directionPdf <= 0.0 ||
@@ -914,6 +956,298 @@ bool rtgiSampleGuidedWorldLights(RtgiWorldLightGuide guide, vec3 primaryPosition
     return rtgiFinite(radiance) && all(greaterThanEqual(radiance, vec3(0.0)));
 }
 
+float rtgiEmissiveReceiverCosine(GpuMaterial material, vec3 emitterNormal, vec3 directionToReceiver) {
+    float signedCosine = dot(emitterNormal, directionToReceiver);
+    return gpuMaterialHas(material, GPU_MATERIAL_FLAG_DOUBLE_SIDED) ? abs(signedCosine) : max(signedCosine, 0.0);
+}
+
+bool rtgiSelectEmissiveRecord(float selectionTarget, out uint recordIndex,
+                              out RtgiEmissiveGeometryRecord record) {
+    recordIndex = 0u;
+    record = RtgiEmissiveGeometryRecord(uvec4(0u), vec4(0.0));
+    uint emitterCount = pc.materialGeometryCounts.w;
+    if (emitterCount == 0u || !rtgiFinite(selectionTarget) || selectionTarget < 0.0 || selectionTarget >= 1.0) {
+        return false;
+    }
+    uint lowerIndex = 0u;
+    uint upperIndex = emitterCount;
+    while (lowerIndex < upperIndex) {
+        uint middleIndex = lowerIndex + (upperIndex - lowerIndex) / 2u;
+        if (selectionTarget < uRtgiEmissiveGeometry.records[middleIndex].cumulativeProbabilityArea.x) {
+            upperIndex = middleIndex;
+        } else {
+            lowerIndex = middleIndex + 1u;
+        }
+    }
+    if (lowerIndex >= emitterCount) {
+        return false;
+    }
+    recordIndex = lowerIndex;
+    record = uRtgiEmissiveGeometry.records[lowerIndex];
+    return true;
+}
+
+bool rtgiLoadEmissiveCandidate(uint recordIndex, vec2 barycentrics,
+                               out RtgiEmissiveCandidate candidate) {
+    candidate = RtgiEmissiveCandidate(uvec4(0u), vec2(0.0), 0.0, 0.0);
+    if (recordIndex >= pc.materialGeometryCounts.w || !rtgiFinite(barycentrics) ||
+        any(lessThan(barycentrics, vec2(0.0)))) {
+        return false;
+    }
+    float barycentricSum = barycentrics.x + barycentrics.y;
+    if (!rtgiFinite(barycentricSum) || barycentricSum > 1.0001) {
+        return false;
+    }
+    if (barycentricSum > 1.0) {
+        barycentrics /= barycentricSum;
+    }
+    RtgiEmissiveGeometryRecord record = uRtgiEmissiveGeometry.records[recordIndex];
+    float triangleProbability = record.cumulativeProbabilityArea.y;
+    float area = record.cumulativeProbabilityArea.z;
+    float proposalAreaPdf = triangleProbability / area;
+    if (record.instanceGeometryPrimitiveCount.x >= pc.frameMaskAndFlags.z ||
+        !rtgiFinite(triangleProbability) || triangleProbability <= 0.0 || !rtgiFinite(area) || area <= 0.0 ||
+        !rtgiFinite(proposalAreaPdf) || proposalAreaPdf <= 0.0) {
+        return false;
+    }
+    candidate.instanceGeometryPrimitive = record.instanceGeometryPrimitiveCount;
+    candidate.barycentrics = barycentrics;
+    candidate.proposalAreaPdf = proposalAreaPdf;
+    return true;
+}
+
+bool rtgiBuildEmissiveCandidate(vec3 surfacePosition, vec3 surfaceNormal, vec2 selectionSample,
+                                vec2 barycentricSample, out RtgiEmissiveCandidate candidate,
+                                out float candidateWeight) {
+    candidate = RtgiEmissiveCandidate(uvec4(0u), vec2(0.0), 0.0, 0.0);
+    candidateWeight = 0.0;
+    if (!rtgiFinite(surfacePosition) || !rtgiFinite(surfaceNormal) || !rtgiFinite(selectionSample) ||
+        !rtgiFinite(barycentricSample)) {
+        return false;
+    }
+    uint recordIndex;
+    RtgiEmissiveGeometryRecord record;
+    if (!rtgiSelectEmissiveRecord(selectionSample.x, recordIndex, record)) {
+        return false;
+    }
+    vec2 barycentrics = rtgiUniformTriangleBarycentrics(barycentricSample);
+    if (!rtgiLoadEmissiveCandidate(recordIndex, barycentrics, candidate)) {
+        return false;
+    }
+    uint instanceIndex = candidate.instanceGeometryPrimitive.x;
+    uint geometryIndex = candidate.instanceGeometryPrimitive.y;
+    uint primitiveIndex = candidate.instanceGeometryPrimitive.z;
+    GpuSceneInstance instanceData;
+    GpuSceneGeometry geometry;
+    GpuMaterial material;
+    StaticMeshRayQueryTriangle triangle;
+    if (!staticMeshRayQueryResolveGeometry(instanceIndex, geometryIndex, pc.frameMaskAndFlags.z,
+                                           pc.materialGeometryCounts.x, pc.materialGeometryCounts.y,
+                                           instanceData, geometry, material) ||
+        !staticMeshRayQueryLoadTriangle(geometry, primitiveIndex, triangle)) {
+        return false;
+    }
+    vec3 position0 = gpuSceneTransformPoint(instanceData.worldFromObject, triangle.vertices[0].position);
+    vec3 position1 = gpuSceneTransformPoint(instanceData.worldFromObject, triangle.vertices[1].position);
+    vec3 position2 = gpuSceneTransformPoint(instanceData.worldFromObject, triangle.vertices[2].position);
+    vec3 areaVector = cross(position1 - position0, position2 - position0);
+    float areaDouble = length(areaVector);
+    vec3 emitterPosition = position0 * (1.0 - barycentrics.x - barycentrics.y) +
+                           position1 * barycentrics.x + position2 * barycentrics.y;
+    vec3 toEmitter = emitterPosition - surfacePosition;
+    float distanceSquared = dot(toEmitter, toEmitter);
+    if (!rtgiFinite(position0) || !rtgiFinite(position1) || !rtgiFinite(position2) ||
+        !rtgiFinite(areaDouble) || areaDouble <= 1.0e-8 || !rtgiFinite(toEmitter) ||
+        !rtgiFinite(distanceSquared) || distanceSquared <= 1.0e-8) {
+        return false;
+    }
+    float distance = sqrt(distanceSquared);
+    vec3 direction = toEmitter / distance;
+    float surfaceCosine = max(dot(surfaceNormal, direction), 0.0);
+    float emitterCosine = rtgiEmissiveReceiverCosine(material, areaVector / areaDouble, -direction);
+    vec3 emissionFactor = material.emissiveFactorAndStrength.rgb * material.emissiveFactorAndStrength.w;
+    float emissionLuminance = dot(emissionFactor, vec3(0.2126, 0.7152, 0.0722));
+    if (!rtgiFinite(emissionFactor) || !rtgiFinite(emissionLuminance) || emissionLuminance <= 0.0) {
+        return false;
+    }
+    if (surfaceCosine <= 0.0 || emitterCosine <= 0.0) {
+        return true;
+    }
+    float geometryTerm = surfaceCosine * emitterCosine / distanceSquared;
+    candidate.targetDensity = emissionLuminance * geometryTerm / 3.14159265358979323846;
+    candidateWeight = candidate.targetDensity / candidate.proposalAreaPdf;
+    return rtgiFinite(candidate.targetDensity) && candidate.targetDensity > 0.0 &&
+           rtgiFinite(candidateWeight) && candidateWeight > 0.0;
+}
+
+bool rtgiEvaluateEmissiveCandidate(RtgiEmissiveCandidate candidate, vec3 surfacePosition,
+                                   vec3 surfaceNormal, vec3 originNormal, float pixelWorldFootprint,
+                                   float primarySurfaceDistance, bool traceVisibility,
+                                   out uint emissiveStatus, out vec3 contribution,
+                                   out float targetDensity) {
+    emissiveStatus = RTGI_EMISSIVE_STATUS_INVALID;
+    contribution = vec3(0.0);
+    targetDensity = 0.0;
+    uint instanceIndex = candidate.instanceGeometryPrimitive.x;
+    uint geometryIndex = candidate.instanceGeometryPrimitive.y;
+    uint primitiveIndex = candidate.instanceGeometryPrimitive.z;
+    GpuSceneInstance instanceData;
+    GpuSceneGeometry geometry;
+    GpuMaterial material;
+    StaticMeshRayQueryTriangle triangle;
+    StaticMeshRayQueryAttributes attributes;
+    if (!staticMeshRayQueryResolveGeometry(instanceIndex, geometryIndex, pc.frameMaskAndFlags.z,
+                                           pc.materialGeometryCounts.x, pc.materialGeometryCounts.y,
+                                           instanceData, geometry, material) ||
+        !staticMeshRayQueryLoadTriangle(geometry, primitiveIndex, triangle) ||
+        !staticMeshRayQueryInterpolateAttributes(triangle, candidate.barycentrics, attributes)) {
+        return false;
+    }
+    vec3 position0 = gpuSceneTransformPoint(instanceData.worldFromObject, triangle.vertices[0].position);
+    vec3 position1 = gpuSceneTransformPoint(instanceData.worldFromObject, triangle.vertices[1].position);
+    vec3 position2 = gpuSceneTransformPoint(instanceData.worldFromObject, triangle.vertices[2].position);
+    vec3 areaVector = cross(position1 - position0, position2 - position0);
+    float areaDouble = length(areaVector);
+    vec3 emitterPosition = position0 * (1.0 - candidate.barycentrics.x - candidate.barycentrics.y) +
+                           position1 * candidate.barycentrics.x + position2 * candidate.barycentrics.y;
+    vec3 toEmitter = emitterPosition - surfacePosition;
+    float distanceSquared = dot(toEmitter, toEmitter);
+    if (!rtgiFinite(position0) || !rtgiFinite(position1) || !rtgiFinite(position2) ||
+        !rtgiFinite(areaDouble) || areaDouble <= 1.0e-8 || !rtgiFinite(toEmitter) ||
+        !rtgiFinite(distanceSquared) || distanceSquared <= 1.0e-8 ||
+        !rtgiFinite(candidate.proposalAreaPdf) || candidate.proposalAreaPdf <= 0.0) {
+        return false;
+    }
+    float distance = sqrt(distanceSquared);
+    vec3 direction = toEmitter / distance;
+    vec3 emitterNormal = areaVector / areaDouble;
+    float surfaceCosine = max(dot(surfaceNormal, direction), 0.0);
+    float emitterCosine = rtgiEmissiveReceiverCosine(material, emitterNormal, -direction);
+    if (surfaceCosine <= 0.0 || emitterCosine <= 0.0) {
+        return false;
+    }
+    float emitterConeWidth = rtgiConeWidth(pixelWorldFootprint, distance, primarySurfaceDistance);
+    StaticMeshRayQueryTextureSamples textureSamples;
+    float baseColorLod;
+    if (!rtgiFinite(emitterConeWidth) || emitterConeWidth <= 0.0 ||
+        !staticMeshRayQuerySampleMaterial(triangle, instanceData, material, attributes.uv, emitterConeWidth,
+                                          textureSamples, baseColorLod)) {
+        return false;
+    }
+    if (!materialPassesAlphaTest(material, textureSamples.material.baseColor.a)) {
+        emissiveStatus = RTGI_EMISSIVE_STATUS_SURFACE_REJECTED;
+        return true;
+    }
+    MaterialSample sampledMaterial = decodeGltfMaterial(material, textureSamples.material);
+    vec3 emission = evaluateMaterialEmission(sampledMaterial) * uSecondaryLighting.traceAndEmissionScales.z;
+    if (!rtgiFinite(emission) || all(lessThanEqual(emission, vec3(0.0)))) {
+        emissiveStatus = RTGI_EMISSIVE_STATUS_SURFACE_REJECTED;
+        return true;
+    }
+    if (traceVisibility) {
+        float visibility;
+        if (!rtgiTraceVisibility(surfacePosition, originNormal, direction, distance, 0.0, emitterConeWidth,
+                                 visibility)) {
+            return false;
+        }
+        if (visibility <= 0.0) {
+            emissiveStatus = RTGI_EMISSIVE_STATUS_OCCLUDED;
+            return true;
+        }
+    }
+    float geometryTerm = surfaceCosine * emitterCosine / distanceSquared;
+    contribution = emission * (geometryTerm / 3.14159265358979323846);
+    targetDensity = dot(contribution, vec3(0.2126, 0.7152, 0.0722));
+    if (!rtgiFinite(contribution) || !rtgiFinite(targetDensity) || targetDensity <= 0.0) {
+        return false;
+    }
+    emissiveStatus = RTGI_EMISSIVE_STATUS_VISIBLE;
+    return true;
+}
+
+bool rtgiSampleEmissiveDirect(vec3 surfacePosition, vec3 surfaceNormal, vec3 originNormal,
+                              float pixelWorldFootprint, float primarySurfaceDistance,
+                              ivec2 texel, out uint emissiveStatus, out vec3 radiance) {
+    emissiveStatus = RTGI_EMISSIVE_STATUS_INACTIVE;
+    radiance = vec3(0.0);
+    uint emitterCount = pc.materialGeometryCounts.w;
+    if (emitterCount == 0u) {
+        return true;
+    }
+    if (!rtgiFinite(surfacePosition) || !rtgiFinite(surfaceNormal) || !rtgiFinite(originNormal) ||
+        !rtgiFinite(pixelWorldFootprint) || pixelWorldFootprint <= 0.0 ||
+        !rtgiFinite(primarySurfaceDistance) || primarySurfaceDistance < 0.0) {
+        emissiveStatus = RTGI_EMISSIVE_STATUS_INVALID;
+        return false;
+    }
+
+    uvec2 pixel = uvec2(texel);
+    emissiveStatus = RTGI_EMISSIVE_STATUS_NO_POSITIVE_WEIGHT;
+    for (uint sampleIndex = 0u; sampleIndex < RTGI_EMISSIVE_DIRECT_SAMPLE_COUNT; ++sampleIndex) {
+        uint phase = sampleIndex * RTGI_EMISSIVE_DIRECT_PHASE_STRIDE;
+        vec2 selectionSample = rtgiReferenceHammersleySample(pc.frameMaskAndFlags.x + 17u + phase, pixel);
+        vec2 barycentricSample = rtgiReferenceHammersleySample(pc.frameMaskAndFlags.x + 101u + phase, pixel);
+        RtgiEmissiveCandidate candidate;
+        float candidateWeight;
+        if (!rtgiBuildEmissiveCandidate(surfacePosition, surfaceNormal, selectionSample, barycentricSample,
+                                        candidate, candidateWeight)) {
+            emissiveStatus = RTGI_EMISSIVE_STATUS_INVALID;
+            return false;
+        }
+
+        uint sampleStatus = RTGI_EMISSIVE_STATUS_NO_POSITIVE_WEIGHT;
+        vec3 sampleRadiance = vec3(0.0);
+        if (candidateWeight > 0.0) {
+            vec3 contribution;
+            float targetDensity;
+            if (!rtgiEvaluateEmissiveCandidate(candidate, surfacePosition, surfaceNormal, originNormal,
+                                               pixelWorldFootprint, primarySurfaceDistance, true, sampleStatus,
+                                               contribution, targetDensity)) {
+                emissiveStatus = RTGI_EMISSIVE_STATUS_INVALID;
+                return false;
+            }
+            if (sampleStatus == RTGI_EMISSIVE_STATUS_VISIBLE) {
+                sampleRadiance = contribution / candidate.proposalAreaPdf;
+                if (!rtgiFinite(sampleRadiance) || any(lessThan(sampleRadiance, vec3(0.0)))) {
+                    emissiveStatus = RTGI_EMISSIVE_STATUS_INVALID;
+                    return false;
+                }
+            }
+        }
+        // Emissive status values are ordered by the validation priority contract:
+        // Invalid > Visible > Occluded > SurfaceRejected > NoPositiveWeight.
+        emissiveStatus = max(emissiveStatus, sampleStatus);
+        radiance += sampleRadiance;
+    }
+    radiance /= float(RTGI_EMISSIVE_DIRECT_SAMPLE_COUNT);
+    return rtgiFinite(radiance) && all(greaterThanEqual(radiance, vec3(0.0)));
+}
+
+bool rtgiEmissiveTriangleRegistered(uint customIndex, uint geometryIndex, uint primitiveIndex) {
+    uint emitterCount = pc.materialGeometryCounts.w;
+    if (emitterCount == 0u) {
+        return false;
+    }
+    uvec3 hitIdentity = uvec3(customIndex, geometryIndex, primitiveIndex);
+    uint lowerIndex = 0u;
+    uint upperIndex = emitterCount;
+    while (lowerIndex < upperIndex) {
+        uint middleIndex = lowerIndex + (upperIndex - lowerIndex) / 2u;
+        uvec3 candidateIdentity = uRtgiEmissiveGeometry.records[middleIndex].instanceGeometryPrimitiveCount.xyz;
+        bool candidateBeforeHit = candidateIdentity.x < hitIdentity.x ||
+                                  (candidateIdentity.x == hitIdentity.x && candidateIdentity.y < hitIdentity.y) ||
+                                  (all(equal(candidateIdentity.xy, hitIdentity.xy)) &&
+                                   candidateIdentity.z < hitIdentity.z);
+        if (candidateBeforeHit) {
+            lowerIndex = middleIndex + 1u;
+        } else {
+            upperIndex = middleIndex;
+        }
+    }
+    return lowerIndex < emitterCount &&
+           all(equal(uRtgiEmissiveGeometry.records[lowerIndex].instanceGeometryPrimitiveCount.xyz, hitIdentity));
+}
+
 bool rtgiAccumulateSkyAmbient(RtgiSecondarySurface surface, vec3 surfacePosition, float coneWidth,
                               float originSkyPrior, inout vec3 radiance) {
     float skyVisibility = clamp(surface.skyVisibility, 0.0, 1.0) * originSkyPrior;
@@ -941,7 +1275,8 @@ bool rtgiAccumulateSkyAmbient(RtgiSecondarySurface surface, vec3 surfacePosition
 
 bool rtgiShadeSecondarySurface(RtgiSecondarySurface surface, vec3 surfacePosition,
                                vec3 incomingRayDirection, float coneWidth, float originSkyPrior,
-                               float primaryDirectionPdf, RtgiWorldLightGuide worldLightGuide,
+                               float primaryDirectionPdf, bool includeSurfaceEmission,
+                               RtgiWorldLightGuide worldLightGuide,
                                out vec3 radiance) {
     radiance = vec3(0.0);
     vec3 viewDirection = -incomingRayDirection;
@@ -953,7 +1288,7 @@ bool rtgiShadeSecondarySurface(RtgiSecondarySurface surface, vec3 surfacePositio
         !rtgiFinite(viewDirection)) {
         return false;
     }
-    radiance = surface.emission;
+    radiance = includeSurfaceEmission ? surface.emission : vec3(0.0);
     // Celestial radiance is gated by two conservative voxel sky-light priors:
     // the hit surface's vertex sky light (a surface that cannot see the sky
     // cannot receive direct sun or moon radiance) and the ray-origin
@@ -982,6 +1317,95 @@ bool rtgiShadeSecondarySurface(RtgiSecondarySurface surface, vec3 surfacePositio
     return rtgiAccumulateSkyAmbient(surface, surfacePosition, coneWidth, originSkyPrior, radiance);
 }
 
+struct RtgiPrimaryTraceSample {
+    vec3 radiance;
+    float hitDistance;
+    uint classification;
+    uint candidateCount;
+    uint confirmedCount;
+    uint hitIdentityHash;
+};
+
+bool rtgiTracePrimarySample(vec3 primaryPosition, vec3 samplingNormal, vec3 geometricNormal,
+                            float pixelWorldFootprint, float primarySurfaceDistance,
+                            float originSkyPrior, ivec2 texel, vec3 rayDirection,
+                            float primaryDirectionPdf, RtgiWorldLightGuide worldLightGuide,
+                            out RtgiPrimaryTraceSample result) {
+    result = RtgiPrimaryTraceSample(vec3(0.0), 0.0, RTGI_TRACE_CLASS_NON_FINITE, 0u, 0u, 0u);
+    if (!rtgiFinite(primaryPosition) || !rtgiFinite(samplingNormal) || !rtgiFinite(geometricNormal) ||
+        !rtgiFinite(pixelWorldFootprint) || pixelWorldFootprint <= 0.0 ||
+        !rtgiFinite(primarySurfaceDistance) || primarySurfaceDistance < 0.0 ||
+        !rtgiFinite(originSkyPrior) || originSkyPrior < 0.0 ||
+        !rtgiFinite(rayDirection) || !rtgiFinite(primaryDirectionPdf) || primaryDirectionPdf < 0.0) {
+        return false;
+    }
+
+    float originBias = rtgiOriginBias(primaryPosition, geometricNormal, rayDirection);
+    vec3 rayOrigin = rtgiOffsetSurfaceOrigin(primaryPosition, geometricNormal, rayDirection, originBias);
+    float rayMinimum = max(originBias * 0.25, 1.0e-4);
+    rayQueryEXT query;
+    // Material transport must commit the closest accepted triangle.
+    // TerminateOnFirstHit is an occlusion optimization and may commit a farther surface.
+    rayQueryInitializeEXT(query, globalBindlessSceneTlas, 0u,
+                          pc.frameMaskAndFlags.y, rayOrigin, rayMinimum, rayDirection,
+                          pc.cameraPositionAndMaxDistance.w);
+    while (rayQueryProceedEXT(query)) {
+        if (rayQueryGetIntersectionTypeEXT(query, false) != gl_RayQueryCandidateIntersectionTriangleEXT) {
+            continue;
+        }
+        result.candidateCount = min(result.candidateCount + 1u, RTGI_TRACE_VALIDATION_CANDIDATE_MASK);
+        float candidateDistance = rayQueryGetIntersectionTEXT(query, false);
+        float coneWidth = rtgiConeWidth(pixelWorldFootprint, candidateDistance, primarySurfaceDistance);
+        float sampledOpacity;
+        float sampledLod;
+        uint stableMaterialId;
+        uint stableGeometryId;
+        if (rtgiCandidateAlphaPasses(
+                rayQueryGetIntersectionInstanceCustomIndexEXT(query, false),
+                rayQueryGetIntersectionGeometryIndexEXT(query, false),
+                rayQueryGetIntersectionPrimitiveIndexEXT(query, false),
+                rayQueryGetIntersectionBarycentricsEXT(query, false), coneWidth, sampledOpacity,
+                sampledLod, stableMaterialId, stableGeometryId)) {
+            rayQueryConfirmIntersectionEXT(query);
+            result.confirmedCount = min(result.confirmedCount + 1u, RTGI_TRACE_VALIDATION_CONFIRMED_MASK);
+        }
+    }
+
+    if (rayQueryGetIntersectionTypeEXT(query, true) == gl_RayQueryCommittedIntersectionTriangleEXT) {
+        result.hitDistance = rayQueryGetIntersectionTEXT(query, true);
+        float coneWidth = rtgiConeWidth(pixelWorldFootprint, result.hitDistance, primarySurfaceDistance);
+        uint customIndex = rayQueryGetIntersectionInstanceCustomIndexEXT(query, true);
+        uint geometryIndex = rayQueryGetIntersectionGeometryIndexEXT(query, true);
+        uint primitiveIndex = rayQueryGetIntersectionPrimitiveIndexEXT(query, true);
+        vec2 barycentrics = rayQueryGetIntersectionBarycentricsEXT(query, true);
+        RtgiSecondarySurface surface;
+        if (!rtgiResolveSecondarySurface(customIndex, geometryIndex, primitiveIndex, barycentrics, coneWidth,
+                                         rayDirection, surface, result.hitIdentityHash)) {
+            return false;
+        }
+        vec3 surfacePosition = rayOrigin + rayDirection * result.hitDistance;
+        bool includeSurfaceEmission = !staticMeshRayQueryInstancePresent(customIndex, pc.frameMaskAndFlags.z) ||
+                                      !rtgiEmissiveTriangleRegistered(customIndex, geometryIndex, primitiveIndex);
+        if (!rtgiShadeSecondarySurface(surface, surfacePosition, rayDirection, coneWidth, originSkyPrior,
+                                       primaryDirectionPdf, includeSurfaceEmission, worldLightGuide,
+                                       result.radiance)) {
+            return false;
+        }
+        result.classification = RTGI_TRACE_CLASS_HIT;
+    } else {
+        float skyVisibility = 0.0;
+        if (!rtgiPrimarySkyVisibility(primaryPosition, geometricNormal, pixelWorldFootprint, texel, skyVisibility)) {
+            return false;
+        }
+        result.radiance = rtgiSuppressSolarSkyLobe(sampleSkyRadiance(uSkyCapture, rayDirection), rayDirection) *
+                          skyVisibility;
+        result.hitDistance = RTGI_NRD_FP16_MAX;
+        result.classification = RTGI_TRACE_CLASS_MISS;
+    }
+    return rtgiFinite(result.radiance) && all(greaterThanEqual(result.radiance, vec3(0.0))) &&
+           rtgiFinite(result.hitDistance) && result.hitDistance >= 0.0;
+}
+
 void main() {
     ivec2 texel = ivec2(gl_GlobalInvocationID.xy);
     ivec2 extent = ivec2(pc.renderExtentAndBias.xy);
@@ -991,13 +1415,16 @@ void main() {
 
     float depth = texelFetch(uDepthTexture, texel, 0).r;
     if (depth >= 0.9999) {
-        rtgiWriteResult(texel, vec3(0.0), 0.0, RTGI_TRACE_CLASS_SKY, 0u, 0u, 0u);
+        rtgiWriteResult(texel, vec3(0.0), vec3(0.0), 0.0, RTGI_TRACE_CLASS_SKY,
+                        RTGI_EMISSIVE_STATUS_INACTIVE,
+                        0u, 0u, 0u);
         return;
     }
 
     SurfaceMaterialAux materialAux = unpackGBufferMaterialAux(texelFetch(uMaterialAuxTexture, texel, 0));
     if (decodeTranslucentMask(materialAux.materialKind).isTranslucent) {
-        rtgiWriteResult(texel, vec3(0.0), 0.0, RTGI_TRACE_CLASS_TRANSLUCENT, 0u, 0u, 0u);
+        rtgiWriteResult(texel, vec3(0.0), vec3(0.0), 0.0, RTGI_TRACE_CLASS_TRANSLUCENT,
+                        RTGI_EMISSIVE_STATUS_INACTIVE, 0u, 0u, 0u);
         return;
     }
 
@@ -1025,7 +1452,8 @@ void main() {
     if (!rtgiReconstructWorldPosition(screenUv, depth, worldPosition) ||
         !rtgiReconstructWorldPosition(screenUv + vec2(pixelSize.x, 0.0), sampleDepthX, adjacentWorldPositionX) ||
         !rtgiReconstructWorldPosition(screenUv + vec2(0.0, pixelSize.y), sampleDepthY, adjacentWorldPositionY)) {
-        rtgiWriteResult(texel, vec3(0.0), 0.0, RTGI_TRACE_CLASS_NON_FINITE, 0u, 0u, 0u);
+        rtgiWriteResult(texel, vec3(0.0), vec3(0.0), 0.0, RTGI_TRACE_CLASS_NON_FINITE,
+                        RTGI_EMISSIVE_STATUS_INVALID, 0u, 0u, 0u);
         return;
     }
     vec3 normal = unpackGBufferNormal(texelFetch(uNormalAoTexture, texel, 0));
@@ -1035,7 +1463,8 @@ void main() {
                                               adjacentWorldPositionY - worldPosition);
     float geometricNormalLengthSquared = dot(reconstructedGeometricNormal, reconstructedGeometricNormal);
     if (!rtgiFinite(worldPosition) || !rtgiFinite(normal) || !rtgiFinite(reconstructedGeometricNormal)) {
-        rtgiWriteResult(texel, vec3(0.0), 0.0, RTGI_TRACE_CLASS_NON_FINITE, 0u, 0u, 0u);
+        rtgiWriteResult(texel, vec3(0.0), vec3(0.0), 0.0, RTGI_TRACE_CLASS_NON_FINITE,
+                        RTGI_EMISSIVE_STATUS_INVALID, 0u, 0u, 0u);
         return;
     }
     normal = normalize(normal);
@@ -1059,115 +1488,78 @@ void main() {
     float pixelWorldFootprint =
         max(length(adjacentWorldPositionX - worldPosition), length(adjacentWorldPositionY - worldPosition));
     if (!rtgiFinite(pixelWorldFootprint) || pixelWorldFootprint <= 0.0) {
-        rtgiWriteResult(texel, vec3(0.0), 0.0, RTGI_TRACE_CLASS_NON_FINITE, 0u, 0u, 0u);
+        rtgiWriteResult(texel, vec3(0.0), vec3(0.0), 0.0, RTGI_TRACE_CLASS_NON_FINITE,
+                        RTGI_EMISSIVE_STATUS_INVALID, 0u, 0u, 0u);
         return;
     }
 
-    ivec2 noiseExtent = textureSize(uBlueNoiseTexture, 0);
-    ivec2 noiseTexel = ivec2(uvec2(texel) % uvec2(noiseExtent));
-    vec2 blueNoise = texelFetch(uBlueNoiseTexture, noiseTexel, 0).rg;
-    vec2 sampleValue = pc.materialGeometryCounts.z != 0u
-                           ? rtgiReferenceHammersleySample(pc.frameMaskAndFlags.x, uvec2(texel))
-                           : fract(blueNoise + rtgiPixelScrambledCranleyPattersonRotation(
-                                                   pc.frameMaskAndFlags.x, uvec2(texel)));
     // A voxel normal map changes the BRDF but not the solid block boundary.
     // Sampling its perturbed hemisphere creates near-tangent directions that
     // can enter an adjacent face through a greedy-mesh seam. Use the exact
     // axis-aligned face for voxel transport; arbitrary static meshes retain
     // their smooth shading-normal distribution.
     vec3 samplingNormal = voxelPrimarySurface ? geometricNormal : normal;
-    vec3 rayDirection = rtgiCosineHemisphereDirection(sampleValue, samplingNormal);
-    if (dot(rayDirection, geometricNormal) < 0.0) {
-        rayDirection = normalize(reflect(rayDirection, geometricNormal));
-    }
-    float primaryDirectionPdf = max(dot(samplingNormal, rayDirection), 0.0) / 3.14159265358979323846;
-
-    float originBias = rtgiOriginBias(worldPosition, geometricNormal, rayDirection);
-    vec3 rayOrigin = rtgiOffsetSurfaceOrigin(worldPosition, geometricNormal, rayDirection, originBias);
-    float rayMinimum = max(originBias * 0.25, 1.0e-4);
     float primarySurfaceDistance = length(worldPosition - pc.cameraPositionAndMaxDistance.xyz);
+    uint emissiveStatus;
+    vec3 emissiveRadiance;
+    if (!rtgiSampleEmissiveDirect(worldPosition, samplingNormal, geometricNormal, pixelWorldFootprint,
+                                  primarySurfaceDistance, texel, emissiveStatus, emissiveRadiance)) {
+        rtgiWriteResult(texel, vec3(0.0), vec3(0.0), 0.0, RTGI_TRACE_CLASS_NON_FINITE,
+                        RTGI_EMISSIVE_STATUS_INVALID, 0u, 0u, 0u);
+        return;
+    }
     RtgiWorldLightGuide worldLightGuide;
     if (!rtgiPrepareWorldLightGuide(worldPosition - pc.cameraPositionAndMaxDistance.xyz,
                                     worldLightGuide)) {
-        rtgiWriteResult(texel, vec3(0.0), 0.0, RTGI_TRACE_CLASS_NON_FINITE, 0u, 0u, 0u);
+        rtgiWriteResult(texel, vec3(0.0), vec3(0.0), 0.0, RTGI_TRACE_CLASS_NON_FINITE,
+                        RTGI_EMISSIVE_STATUS_INVALID, 0u, 0u, 0u);
         return;
     }
     vec3 guidedWorldLightRadiance;
     if (!rtgiSampleGuidedWorldLights(worldLightGuide, worldPosition, samplingNormal, geometricNormal,
                                      pixelWorldFootprint, primarySurfaceDistance, texel,
                                      guidedWorldLightRadiance)) {
-        rtgiWriteResult(texel, vec3(0.0), 0.0, RTGI_TRACE_CLASS_NON_FINITE, 0u, 0u, 0u);
+        rtgiWriteResult(texel, vec3(0.0), vec3(0.0), 0.0, RTGI_TRACE_CLASS_NON_FINITE,
+                        RTGI_EMISSIVE_STATUS_INVALID, 0u, 0u, 0u);
         return;
     }
 
-    rayQueryEXT query;
-    // Material transport must commit the closest accepted triangle.
-    // TerminateOnFirstHit is an occlusion optimization and may commit a farther surface.
-    rayQueryInitializeEXT(query, globalBindlessSceneTlas, 0u,
-                          pc.frameMaskAndFlags.y, rayOrigin, rayMinimum, rayDirection,
-                          pc.cameraPositionAndMaxDistance.w);
-    uint candidateCount = 0u;
-    uint confirmedCount = 0u;
-    while (rayQueryProceedEXT(query)) {
-        if (rayQueryGetIntersectionTypeEXT(query, false) != gl_RayQueryCandidateIntersectionTriangleEXT) {
-            continue;
+    ivec2 noiseExtent = textureSize(uBlueNoiseTexture, 0);
+    ivec2 noiseTexel = ivec2(uvec2(texel) % uvec2(noiseExtent));
+    vec2 blueNoise = texelFetch(uBlueNoiseTexture, noiseTexel, 0).rg;
+    float originSkyLight = clamp(texelFetch(uVoxelLightTexture, texel, 0).r, 0.0, 1.0);
+    float originSkyPrior = originSkyLight * originSkyLight * originSkyLight;
+    RtgiPrimaryTraceSample guideSample;
+    vec3 primaryRadiance = vec3(0.0);
+    for (uint sampleIndex = 0u; sampleIndex < RTGI_PRIMARY_SAMPLE_COUNT; ++sampleIndex) {
+        uint phase = sampleIndex * RTGI_PRIMARY_SAMPLE_PHASE_STRIDE;
+        vec2 sampleValue = pc.materialGeometryCounts.z != 0u
+                               ? rtgiReferenceHammersleySample(pc.frameMaskAndFlags.x + phase, uvec2(texel))
+                               : fract(blueNoise + rtgiPixelScrambledCranleyPattersonRotation(
+                                                       pc.frameMaskAndFlags.x + phase, uvec2(texel)));
+        vec3 rayDirection = rtgiCosineHemisphereDirection(sampleValue, samplingNormal);
+        if (dot(rayDirection, geometricNormal) < 0.0) {
+            rayDirection = normalize(reflect(rayDirection, geometricNormal));
         }
-        candidateCount = min(candidateCount + 1u, RTGI_TRACE_VALIDATION_CANDIDATE_MASK);
-        float candidateDistance = rayQueryGetIntersectionTEXT(query, false);
-        float coneWidth = rtgiConeWidth(pixelWorldFootprint, candidateDistance, primarySurfaceDistance);
-        float sampledOpacity;
-        float sampledLod;
-        uint stableMaterialId;
-        uint stableGeometryId;
-        if (rtgiCandidateAlphaPasses(
-                rayQueryGetIntersectionInstanceCustomIndexEXT(query, false),
-                rayQueryGetIntersectionGeometryIndexEXT(query, false),
-                rayQueryGetIntersectionPrimitiveIndexEXT(query, false),
-                rayQueryGetIntersectionBarycentricsEXT(query, false), coneWidth, sampledOpacity,
-                sampledLod, stableMaterialId, stableGeometryId)) {
-            rayQueryConfirmIntersectionEXT(query);
-            confirmedCount = min(confirmedCount + 1u, RTGI_TRACE_VALIDATION_CONFIRMED_MASK);
-        }
-    }
-
-    if (rayQueryGetIntersectionTypeEXT(query, true) == gl_RayQueryCommittedIntersectionTriangleEXT) {
-        float hitDistance = rayQueryGetIntersectionTEXT(query, true);
-        float coneWidth = rtgiConeWidth(pixelWorldFootprint, hitDistance, primarySurfaceDistance);
-        uint customIndex = rayQueryGetIntersectionInstanceCustomIndexEXT(query, true);
-        uint geometryIndex = rayQueryGetIntersectionGeometryIndexEXT(query, true);
-        uint primitiveIndex = rayQueryGetIntersectionPrimitiveIndexEXT(query, true);
-        vec2 barycentrics = rayQueryGetIntersectionBarycentricsEXT(query, true);
-        RtgiSecondarySurface surface;
-        uint hitIdentityHash = 0u;
-        bool surfaceValid = rtgiResolveSecondarySurface(customIndex, geometryIndex, primitiveIndex,
-                                                        barycentrics, coneWidth, rayDirection,
-                                                        surface, hitIdentityHash);
-        vec3 radiance;
-        vec3 surfacePosition = rayOrigin + rayDirection * hitDistance;
-        float originSkyLight = clamp(texelFetch(uVoxelLightTexture, texel, 0).r, 0.0, 1.0);
-        float originSkyPrior = originSkyLight * originSkyLight * originSkyLight;
-        if (!surfaceValid ||
-            !rtgiShadeSecondarySurface(surface, surfacePosition, rayDirection, coneWidth, originSkyPrior,
-                                       primaryDirectionPdf, worldLightGuide, radiance)) {
-            rtgiWriteResult(texel, vec3(0.0), 0.0, RTGI_TRACE_CLASS_NON_FINITE, candidateCount,
-                            confirmedCount, 0u);
+        float primaryDirectionPdf = max(dot(samplingNormal, rayDirection), 0.0) / 3.14159265358979323846;
+        RtgiPrimaryTraceSample primarySample;
+        if (!rtgiTracePrimarySample(worldPosition, samplingNormal, geometricNormal, pixelWorldFootprint,
+                                    primarySurfaceDistance, originSkyPrior, texel, rayDirection,
+                                    primaryDirectionPdf, worldLightGuide, primarySample)) {
+            rtgiWriteResult(texel, vec3(0.0), vec3(0.0), 0.0, RTGI_TRACE_CLASS_NON_FINITE, emissiveStatus,
+                            primarySample.candidateCount, primarySample.confirmedCount, 0u);
             return;
         }
-        radiance += guidedWorldLightRadiance;
-        rtgiWriteResult(texel, radiance, hitDistance, RTGI_TRACE_CLASS_HIT, candidateCount,
-                        confirmedCount, hitIdentityHash);
-        return;
+        primaryRadiance += primarySample.radiance;
+        if (sampleIndex == 0u) {
+            // NRD accepts one hit-distance and material identity per pixel.
+            // Keep the first primary event while averaging radiance separately.
+            guideSample = primarySample;
+        }
     }
-
-    float skyVisibility = 0.0;
-    if (!rtgiPrimarySkyVisibility(worldPosition, geometricNormal, pixelWorldFootprint, texel, skyVisibility)) {
-        rtgiWriteResult(texel, vec3(0.0), RTGI_NRD_FP16_MAX, RTGI_TRACE_CLASS_MISS, candidateCount,
-                        confirmedCount, 0u);
-        return;
-    }
-    vec3 missRadiance = rtgiSuppressSolarSkyLobe(sampleSkyRadiance(uSkyCapture, rayDirection), rayDirection) *
-                        skyVisibility;
-    missRadiance += guidedWorldLightRadiance;
-    rtgiWriteResult(texel, missRadiance, RTGI_NRD_FP16_MAX, RTGI_TRACE_CLASS_MISS, candidateCount,
-                    confirmedCount, 0u);
+    primaryRadiance /= float(RTGI_PRIMARY_SAMPLE_COUNT);
+    vec3 radiance = primaryRadiance + guidedWorldLightRadiance;
+    rtgiWriteResult(texel, radiance, emissiveRadiance, guideSample.hitDistance, guideSample.classification,
+                    emissiveStatus, guideSample.candidateCount, guideSample.confirmedCount,
+                    guideSample.hitIdentityHash);
 }

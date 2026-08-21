@@ -223,6 +223,7 @@ private:
         glm::vec3 boundsMin{0.0f};
         glm::vec3 boundsMax{0.0f};
         glm::vec3 boundsCenter{0.0f};
+        std::vector<glm::vec3> primitiveAreaVectors;
         bool retainedByBlas = false;
     };
 

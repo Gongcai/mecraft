@@ -11,6 +11,7 @@
 #include "renderer/mesh/TerrainBlasCache.h"
 #include "renderer/passes/ClusteredLightingPass.h"
 #include "renderer/passes/NrdGuidePrepPass.h"
+#include "renderer/passes/RtgiEmissiveTemporalPass.h"
 #include "renderer/passes/RtgiSignalPackPass.h"
 #include "renderer/passes/RtgiTracePass.h"
 #include "renderer/rhi/RhiCommandList.h"
@@ -59,6 +60,8 @@ enum class FrameAttempt { Success, Retry, Error };
 
 struct RtgiTraceSmokeExpectedPixel final {
     renderer::contracts::RtgiTraceClassification classification = renderer::contracts::RtgiTraceClassification::Miss;
+    renderer::contracts::RtgiEmissiveSampleClassification emissiveStatus =
+        renderer::contracts::RtgiEmissiveSampleClassification::Inactive;
     uint32_t candidateCount = 0u;
     uint32_t confirmedCount = 0u;
     uint32_t hitIdentityHash = 0u;
@@ -849,6 +852,223 @@ void setNrdIdentityMatrix(float (&matrix)[16]) {
     valid = valid && device.validationErrorCount() == validationErrorsBefore;
     if (!valid) {
         std::cerr << "NRD Guide Prep Vulkan readback validation failed\n";
+    }
+    return valid;
+}
+
+[[nodiscard]] bool validateRtgiEmissiveTemporalPass(VkRhiDevice& device, RhiCommandListPool& commandPool) {
+    constexpr uint32_t kWidth = 2u;
+    constexpr uint32_t kHeight = 1u;
+    constexpr size_t kPixelCount = static_cast<size_t>(kWidth) * kHeight;
+    constexpr uint64_t kReadbackBytes = kPixelCount * sizeof(float) * 4u;
+    const uint64_t validationErrorsBefore = device.validationErrorCount();
+
+    const auto packSignals = [](const std::array<glm::vec4, kPixelCount>& signals) {
+        std::array<uint16_t, kPixelCount * 4u> packed{};
+        for (size_t pixel = 0u; pixel < signals.size(); ++pixel) {
+            for (size_t component = 0u; component < 4u; ++component) {
+                packed[pixel * 4u + component] = glm::packHalf1x16(signals[pixel][component]);
+            }
+        }
+        return packed;
+    };
+    const std::array<uint16_t, kPixelCount * 4u> firstEmissive =
+        packSignals({glm::vec4(2.0f, 4.0f, 6.0f, 0.0f), glm::vec4(1.0f, 2.0f, 3.0f, 0.0f)});
+    const std::array<uint16_t, kPixelCount * 4u> secondEmissive =
+        packSignals({glm::vec4(6.0f, 10.0f, 14.0f, 0.0f), glm::vec4(9.0f, 8.0f, 7.0f, 0.0f)});
+    std::array<uint16_t, kPixelCount * 4u> motion{};
+    const std::array<uint8_t, kPixelCount> coverage{255u, 0u};
+    const uint32_t packedNormalRoughness =
+        glm::packUnorm3x10_1x2(glm::vec4(0.5f, 0.5f, 1.0f, 0.0f));
+    const std::array<uint32_t, kPixelCount> normalRoughness{packedNormalRoughness, packedNormalRoughness};
+    const std::array<float, kPixelCount> viewZ{-2.0f, -2.0f};
+
+    constexpr RhiTextureUsageFlags kSampledUsage = rhiFlag(RhiTextureUsage::Sampled);
+    NrdSmokeTexture firstEmissiveTexture;
+    NrdSmokeTexture secondEmissiveTexture;
+    NrdSmokeTexture motionTexture;
+    NrdSmokeTexture coverageTexture;
+    NrdSmokeTexture normalRoughnessTexture;
+    NrdSmokeTexture viewZTexture;
+    RhiBufferHandle readback;
+    RenderGraph graph;
+    RtgiEmissiveTemporalPass pass;
+    const auto cleanup = [&]() {
+        device.waitIdle();
+        pass.shutdown();
+        graph.releaseTransientResources(device);
+        if (readback.isValid()) {
+            device.destroyBuffer(readback);
+        }
+        destroyNrdSmokeTexture(device, viewZTexture);
+        destroyNrdSmokeTexture(device, normalRoughnessTexture);
+        destroyNrdSmokeTexture(device, coverageTexture);
+        destroyNrdSmokeTexture(device, motionTexture);
+        destroyNrdSmokeTexture(device, secondEmissiveTexture);
+        destroyNrdSmokeTexture(device, firstEmissiveTexture);
+    };
+
+    bool valid =
+        createNrdSmokeTexture(device, "VulkanSmoke.RTGI.EmissiveTemporal.First",
+                              RhiTextureFormat::Rgba16Float, kWidth, kHeight, kSampledUsage,
+                              firstEmissive.data(), firstEmissive.size() * sizeof(uint16_t),
+                              RhiResourceState::ShaderRead, firstEmissiveTexture) &&
+        createNrdSmokeTexture(device, "VulkanSmoke.RTGI.EmissiveTemporal.Second",
+                              RhiTextureFormat::Rgba16Float, kWidth, kHeight, kSampledUsage,
+                              secondEmissive.data(), secondEmissive.size() * sizeof(uint16_t),
+                              RhiResourceState::ShaderRead, secondEmissiveTexture) &&
+        createNrdSmokeTexture(device, "VulkanSmoke.RTGI.EmissiveTemporal.Motion",
+                              RhiTextureFormat::Rgba16Float, kWidth, kHeight, kSampledUsage, motion.data(),
+                              motion.size() * sizeof(uint16_t), RhiResourceState::ShaderRead, motionTexture) &&
+        createNrdSmokeTexture(device, "VulkanSmoke.RTGI.EmissiveTemporal.Coverage",
+                              RhiTextureFormat::R8Unorm, kWidth, kHeight, kSampledUsage, coverage.data(),
+                              coverage.size() * sizeof(uint8_t), RhiResourceState::ShaderRead, coverageTexture) &&
+        createNrdSmokeTexture(device, "VulkanSmoke.RTGI.EmissiveTemporal.NormalRoughness",
+                              RhiTextureFormat::Rgb10A2Unorm, kWidth, kHeight, kSampledUsage,
+                              normalRoughness.data(), normalRoughness.size() * sizeof(uint32_t),
+                              RhiResourceState::ShaderRead, normalRoughnessTexture) &&
+        createNrdSmokeTexture(device, "VulkanSmoke.RTGI.EmissiveTemporal.ViewZ", RhiTextureFormat::R32Float,
+                              kWidth, kHeight, kSampledUsage, viewZ.data(), viewZ.size() * sizeof(float),
+                              RhiResourceState::ShaderRead, viewZTexture);
+    if (!valid) {
+        std::cerr << "RTGI Emissive Temporal smoke test failed to create inputs\n";
+        cleanup();
+        return false;
+    }
+
+    RhiBufferDesc readbackDesc;
+    readbackDesc.debugName = "VulkanSmoke.RTGI.EmissiveTemporal.Readback";
+    readbackDesc.size = kReadbackBytes;
+    readbackDesc.usage = rhiFlag(RhiBufferUsage::TransferDst) | rhiFlag(RhiBufferUsage::MapRead);
+    readbackDesc.memoryUsage = RhiMemoryUsage::GpuToCpu;
+    readbackDesc.initialState = RhiResourceState::TransferDst;
+    readbackDesc.memoryCategory = RhiMemoryCategory::Readback;
+    readback = device.createBuffer(readbackDesc, nullptr, 0u);
+    valid = readback.isValid();
+
+    SharedRenderResources shared;
+    shared.rhiDevice = &device;
+    shared.commandListPool = &commandPool;
+    FrameContext frame;
+    frame.shared = &shared;
+    frame.temporalExtents =
+        makeTemporalFrameExtents({kWidth, kHeight}, {kWidth, kHeight}, {kWidth, kHeight}, {kWidth, kHeight});
+
+    const auto executeFrame = [&](const NrdSmokeTexture& emissiveTexture, const bool historyValid,
+                                  const float preExposure, const float previousPreExposure,
+                                  const RhiResourceState readbackInitialState,
+                                  const std::array<glm::vec4, kPixelCount>& expected) {
+        graph.reset();
+        const auto importTexture = [&](const NrdSmokeTexture& texture) {
+            return graph.importTexture({texture.desc.debugName, texture.texture, texture.desc,
+                                        RhiResourceState::ShaderRead, RhiResourceState::ShaderRead, texture.view,
+                                        RhiQueueType::Graphics, RhiQueueType::Graphics});
+        };
+
+        RtgiEmissiveTemporalPass::GraphResources resources;
+        resources.currentEmissiveDirectRadiance = importTexture(emissiveTexture);
+        resources.motion = importTexture(motionTexture);
+        resources.reprojectionCoverage = importTexture(coverageTexture);
+        resources.normalRoughness = importTexture(normalRoughnessTexture);
+        resources.viewZ = importTexture(viewZTexture);
+        const RgBufferHandle readbackResource =
+            graph.importBuffer({readbackDesc.debugName, readback, readbackDesc, readbackInitialState,
+                                RhiResourceState::HostRead, RhiQueueType::Graphics, RhiQueueType::Graphics});
+        const RgPassHandle inputReady =
+            graph.addPass({"RTGI.EmissiveTemporal.InputReady", RgPassType::Copy, RhiQueueType::Graphics})
+                .setExecute([](RgPassContext&) { return true; })
+                .handle();
+
+        frame.preExposure = preExposure;
+        frame.previousPreExposure = previousPreExposure;
+        RtgiEmissiveTemporalPass::Settings settings;
+        settings.historyValid = historyValid;
+        settings.relativeDepthThreshold = 0.02f;
+        settings.maximumViewZ = 100.0f;
+        const RtgiEmissiveTemporalPass::GraphOutput output =
+            pass.addGraphPass(graph, frame, settings, resources, inputReady);
+        if (!resources.currentEmissiveDirectRadiance.isValid() || !resources.motion.isValid() ||
+            !resources.reprojectionCoverage.isValid() || !resources.normalRoughness.isValid() ||
+            !resources.viewZ.isValid() || !readbackResource.isValid() || !output.isValid()) {
+            pass.finishGraphExecution(false);
+            return false;
+        }
+
+        graph.addPass({"RTGI.EmissiveTemporal.Readback", RgPassType::Copy, RhiQueueType::Graphics})
+            .dependsOn(output.pass)
+            .readTexture(output.filteredEmissiveDirectRadiance, RhiResourceState::TransferSrc)
+            .writeBuffer(readbackResource, RhiResourceState::TransferDst)
+            .setExecute([&](RgPassContext& context) {
+                RhiTextureBufferCopy copy;
+                copy.srcTexture = context.texture(output.filteredEmissiveDirectRadiance);
+                copy.dstBuffer = context.buffer(readbackResource);
+                copy.bytesPerRow = sizeof(float) * 4u * kWidth;
+                copy.rowsPerImage = kHeight;
+                copy.width = kWidth;
+                copy.height = kHeight;
+                context.commandList().copyTextureToBuffer(copy);
+                return true;
+            });
+
+        const RgCompileResult compiled = graph.compile();
+        if (!compiled.succeeded()) {
+            pass.finishGraphExecution(false);
+            std::cerr << "RTGI Emissive Temporal Render Graph compile failed: " << compiled.message << '\n';
+            return false;
+        }
+        const RgExecuteResult executed = graph.execute(device, commandPool);
+        pass.finishGraphExecution(executed.succeeded());
+        if (!executed.succeeded() || !executed.completionToken().isValid() ||
+            !device.waitForSubmission(executed.completionToken())) {
+            if (!executed.succeeded()) {
+                std::cerr << "RTGI Emissive Temporal Render Graph execution failed: " << executed.message << '\n';
+            }
+            return false;
+        }
+
+        const auto* packed = static_cast<const float*>(device.mapBuffer(readback, 0u, readbackDesc.size));
+        bool frameValid = packed != nullptr;
+        if (packed != nullptr) {
+            for (size_t pixel = 0u; pixel < kPixelCount; ++pixel) {
+                glm::vec4 actual;
+                for (size_t component = 0u; component < 4u; ++component) {
+                    actual[component] = packed[pixel * 4u + component];
+                }
+                const bool pixelValid = glm::all(glm::lessThanEqual(glm::abs(actual - expected[pixel]),
+                                                                    glm::vec4(1.0e-5f)));
+                if (!pixelValid) {
+                    std::cerr << "RTGI Emissive Temporal pixel " << pixel << " mismatch: actual=(" << actual.x
+                              << ", " << actual.y << ", " << actual.z << ", " << actual.w << ") expected=("
+                              << expected[pixel].x << ", " << expected[pixel].y << ", " << expected[pixel].z
+                              << ", " << expected[pixel].w << ")\n";
+                }
+                frameValid = frameValid && pixelValid;
+            }
+            device.unmapBuffer(readback);
+        }
+        return frameValid;
+    };
+
+    if (valid) {
+        valid = executeFrame(firstEmissiveTexture, false, 2.0f, 2.0f, RhiResourceState::TransferDst,
+                             {glm::vec4(2.0f, 4.0f, 6.0f, 1.0f), glm::vec4(1.0f, 2.0f, 3.0f, 1.0f)});
+    }
+    if (valid) {
+        valid = executeFrame(secondEmissiveTexture, true, 4.0f, 2.0f, RhiResourceState::HostRead,
+                             {glm::vec4(5.0f, 9.0f, 13.0f, 2.0f), glm::vec4(9.0f, 8.0f, 7.0f, 1.0f)});
+    }
+    if (valid) {
+        const RtgiEmissiveTemporalPass::Stats& stats = pass.stats();
+        valid = stats.dispatched && stats.historyInputEnabled && stats.width == kWidth && stats.height == kHeight &&
+                stats.readGeneration == 1u && stats.writeGeneration == 0u &&
+                std::abs(stats.preExposureRatio - 2.0f) < 0.001f &&
+                std::abs(stats.relativeDepthThreshold - 0.02f) < 0.001f;
+    }
+
+    cleanup();
+    valid = valid && device.validationErrorCount() == validationErrorsBefore;
+    if (!valid) {
+        std::cerr << "RTGI Emissive Temporal Vulkan readback validation failed\n";
     }
     return valid;
 }
@@ -4080,15 +4300,17 @@ void main() {
                                  renderer::rt::sceneTlasMaskBit(renderer::rt::SceneTlasInstanceMask::GiCutout);
         RtgiTraceSmokeExpectedPixel rejectedCutout;
         rejectedCutout.classification = renderer::contracts::RtgiTraceClassification::Hit;
+        rejectedCutout.emissiveStatus = renderer::contracts::RtgiEmissiveSampleClassification::Inactive;
         rejectedCutout.candidateCount = 1u;
         rejectedCutout.minimumHitDistance = 1.95f;
         rejectedCutout.maximumHitDistance = 2.05f;
-        rejectedCutout.minimumRadiance = {0.49f, 0.49f, 0.49f};
-        rejectedCutout.maximumRadiance = {0.51f, 0.51f, 0.51f};
+        rejectedCutout.minimumRadiance = {0.25f, 0.38f, 0.24f};
+        rejectedCutout.maximumRadiance = {0.28f, 0.41f, 0.27f};
         rejectedCutout.hitIdentityHash = renderer::contracts::rtgiTerrainHitIdentityHash(
             firstView->hitData.revision, firstView->hitData.vertexAddress);
         RtgiTraceSmokeExpectedPixel confirmedCutout;
         confirmedCutout.classification = renderer::contracts::RtgiTraceClassification::Hit;
+        confirmedCutout.emissiveStatus = renderer::contracts::RtgiEmissiveSampleClassification::Inactive;
         confirmedCutout.candidateCount = 1u;
         confirmedCutout.confirmedCount = 1u;
         confirmedCutout.minimumHitDistance = 0.95f;
@@ -4505,6 +4727,8 @@ namespace {
     SmokeTexture localShadowSpotAtlas;
     SmokeTexture localShadowPointCubeArray;
     SmokeTexture radianceHitDistance;
+    SmokeTexture emissiveDirectRadiance;
+    SmokeTexture combinedRadianceHitDistance;
     SmokeTexture relaxRadianceHitDistance;
     SmokeTexture reblurRadianceHitDistance;
     SmokeTexture validation;
@@ -4516,6 +4740,8 @@ namespace {
     RhiSamplerHandle localShadowSampler;
     RhiBufferHandle validationReadback;
     RhiBufferHandle radianceReadback;
+    RhiBufferHandle emissiveReadback;
+    RhiBufferHandle combinedReadback;
     RhiBufferHandle relaxReadback;
     RhiBufferHandle reblurReadback;
     bool clusteredPrepared = false;
@@ -4535,6 +4761,12 @@ namespace {
         if (radianceReadback.isValid()) {
             device.destroyBuffer(radianceReadback);
         }
+        if (emissiveReadback.isValid()) {
+            device.destroyBuffer(emissiveReadback);
+        }
+        if (combinedReadback.isValid()) {
+            device.destroyBuffer(combinedReadback);
+        }
         if (relaxReadback.isValid()) {
             device.destroyBuffer(relaxReadback);
         }
@@ -4551,6 +4783,8 @@ namespace {
             &validation,
             &reblurRadianceHitDistance,
             &relaxRadianceHitDistance,
+            &combinedRadianceHitDistance,
+            &emissiveDirectRadiance,
             &radianceHitDistance,
             &localShadowPointCubeArray,
             &localShadowSpotAtlas,
@@ -4599,7 +4833,10 @@ namespace {
     bool valid =
         activeTlas.accelerationStructure.isValid() && activeTlas.terrainHitDataBuffer.isValid() &&
         activeTlas.gpuSceneMaterialBuffer.isValid() && activeTlas.gpuSceneGeometryBuffer.isValid() &&
-        activeTlas.gpuSceneInstanceBuffer.isValid() &&
+        activeTlas.gpuSceneInstanceBuffer.isValid() && activeTlas.rtgiEmissiveGeometryBuffer.isValid() &&
+        activeTlas.rtgiEmissiveGeometryBytes ==
+            static_cast<uint64_t>(std::max(activeTlas.rtgiEmissiveGeometryCount, 1u)) *
+                sizeof(RtgiEmissiveGeometryRecord) &&
         (activeTlas.bindlessIdentity == 0u || activeTlas.bindlessIdentity == globalBindlessSet.identity()) &&
         createTexture("VulkanSmoke.RTGI.Depth", RhiTextureDimension::Texture2D, RhiTextureViewType::Texture2D,
                       RhiTextureFormat::Depth32Float, smokeCase.width, smokeCase.height, 1u,
@@ -4656,6 +4893,12 @@ namespace {
         createTexture("VulkanSmoke.RTGI.RadianceHitDistance", RhiTextureDimension::Texture2D,
                       RhiTextureViewType::Texture2D, RhiTextureFormat::Rgba16Float, smokeCase.width, smokeCase.height,
                       1u, kRawSignalUsage, nullptr, 0u, RhiResourceState::Undefined, radianceHitDistance) &&
+        createTexture("VulkanSmoke.RTGI.EmissiveDirectRadiance", RhiTextureDimension::Texture2D,
+                      RhiTextureViewType::Texture2D, RhiTextureFormat::Rgba16Float, smokeCase.width, smokeCase.height,
+                      1u, kRawSignalUsage, nullptr, 0u, RhiResourceState::Undefined, emissiveDirectRadiance) &&
+        createTexture("VulkanSmoke.RTGI.CombinedRadianceHitDistance", RhiTextureDimension::Texture2D,
+                      RhiTextureViewType::Texture2D, RhiTextureFormat::Rgba16Float, smokeCase.width, smokeCase.height,
+                      1u, kRawSignalUsage, nullptr, 0u, RhiResourceState::Undefined, combinedRadianceHitDistance) &&
         createTexture("VulkanSmoke.RTGI.RelaxRadianceHitDistance", RhiTextureDimension::Texture2D,
                       RhiTextureViewType::Texture2D, RhiTextureFormat::Rgba16Float, smokeCase.width, smokeCase.height,
                       1u, kStorageUsage, nullptr, 0u, RhiResourceState::Undefined, relaxRadianceHitDistance) &&
@@ -4704,10 +4947,12 @@ namespace {
     if (valid) {
         validationReadback = device.createBuffer(validationReadbackDesc, nullptr, 0u);
         radianceReadback = device.createBuffer(radianceReadbackDesc, nullptr, 0u);
+        emissiveReadback = device.createBuffer(radianceReadbackDesc, nullptr, 0u);
+        combinedReadback = device.createBuffer(radianceReadbackDesc, nullptr, 0u);
         relaxReadback = device.createBuffer(radianceReadbackDesc, nullptr, 0u);
         reblurReadback = device.createBuffer(radianceReadbackDesc, nullptr, 0u);
-        valid = validationReadback.isValid() && radianceReadback.isValid() && relaxReadback.isValid() &&
-                reblurReadback.isValid();
+        valid = validationReadback.isValid() && radianceReadback.isValid() && emissiveReadback.isValid() &&
+                combinedReadback.isValid() && relaxReadback.isValid() && reblurReadback.isValid();
     }
 
     SharedRenderResources shared;
@@ -4762,6 +5007,8 @@ namespace {
     RtgiTracePass::LightingResources lightingResources;
     RgBufferHandle validationReadbackResource;
     RgBufferHandle radianceReadbackResource;
+    RgBufferHandle emissiveReadbackResource;
+    RgBufferHandle combinedReadbackResource;
     RgBufferHandle relaxReadbackResource;
     RgBufferHandle reblurReadbackResource;
     RgBufferHandle localShadowMetadataResource;
@@ -4789,6 +5036,10 @@ namespace {
         resources.skyCapture = importTexture(skyCapture, RhiResourceState::ShaderRead, RhiResourceState::ShaderRead);
         resources.diffuseRadianceHitDistance =
             importTexture(radianceHitDistance, RhiResourceState::Undefined, RhiResourceState::ShaderWrite);
+        resources.emissiveDirectRadiance =
+            importTexture(emissiveDirectRadiance, RhiResourceState::Undefined, RhiResourceState::ShaderWrite);
+        resources.combinedDiffuseRadianceHitDistance =
+            importTexture(combinedRadianceHitDistance, RhiResourceState::Undefined, RhiResourceState::ShaderWrite);
         resources.validation = importTexture(validation, RhiResourceState::Undefined, RhiResourceState::ShaderWrite);
         packResources.rawDiffuseRadianceHitDistance = resources.diffuseRadianceHitDistance;
         packResources.depth = resources.depth;
@@ -4812,6 +5063,12 @@ namespace {
         radianceReadbackResource = graph.importBuffer({"RTGI.RadianceReadback", radianceReadback, radianceReadbackDesc,
                                                        RhiResourceState::TransferDst, RhiResourceState::HostRead,
                                                        RhiQueueType::Graphics, RhiQueueType::Graphics});
+        emissiveReadbackResource = graph.importBuffer({"RTGI.EmissiveReadback", emissiveReadback, radianceReadbackDesc,
+                                                       RhiResourceState::TransferDst, RhiResourceState::HostRead,
+                                                       RhiQueueType::Graphics, RhiQueueType::Graphics});
+        combinedReadbackResource = graph.importBuffer({"RTGI.CombinedReadback", combinedReadback, radianceReadbackDesc,
+                                                       RhiResourceState::TransferDst, RhiResourceState::HostRead,
+                                                       RhiQueueType::Graphics, RhiQueueType::Graphics});
         relaxReadbackResource = graph.importBuffer({"RTGI.RelaxReadback", relaxReadback, radianceReadbackDesc,
                                                     RhiResourceState::TransferDst, RhiResourceState::HostRead,
                                                     RhiQueueType::Graphics, RhiQueueType::Graphics});
@@ -4821,14 +5078,17 @@ namespace {
         valid =
             valid && resources.depth.isValid() && resources.normalAo.isValid() && resources.materialAux.isValid() &&
             resources.voxelLight.isValid() && resources.blueNoise.isValid() &&
-            resources.diffuseRadianceHitDistance.isValid() && resources.terrainAlbedo.isValid() &&
+            resources.diffuseRadianceHitDistance.isValid() && resources.emissiveDirectRadiance.isValid() &&
+            resources.combinedDiffuseRadianceHitDistance.isValid() && resources.terrainAlbedo.isValid() &&
             resources.terrainNormal.isValid() && resources.terrainSpecular.isValid() &&
             resources.grassColormap.isValid() && resources.foliageColormap.isValid() &&
             resources.skyCapture.isValid() && resources.validation.isValid() && localShadowMetadataResource.isValid() &&
             localShadowSpotAtlasResource.isValid() && localShadowPointCubeArrayResource.isValid() &&
             packResources.relaxDiffuseRadianceHitDistance.isValid() &&
             packResources.reblurDiffuseRadianceHitDistance.isValid() && validationReadbackResource.isValid() &&
-            radianceReadbackResource.isValid() && relaxReadbackResource.isValid() && reblurReadbackResource.isValid();
+            radianceReadbackResource.isValid() && emissiveReadbackResource.isValid() &&
+            combinedReadbackResource.isValid() && relaxReadbackResource.isValid() &&
+            reblurReadbackResource.isValid();
     }
     if (valid) {
         const RgPassHandle inputReady = graph.addPass({"RTGI.InputReady", RgPassType::Copy, RhiQueueType::Graphics})
@@ -4873,10 +5133,14 @@ namespace {
             .dependsOn(reblurPackHandle)
             .readTexture(resources.validation, RhiResourceState::TransferSrc)
             .readTexture(resources.diffuseRadianceHitDistance, RhiResourceState::TransferSrc)
+            .readTexture(resources.emissiveDirectRadiance, RhiResourceState::TransferSrc)
+            .readTexture(resources.combinedDiffuseRadianceHitDistance, RhiResourceState::TransferSrc)
             .readTexture(packResources.relaxDiffuseRadianceHitDistance, RhiResourceState::TransferSrc)
             .readTexture(packResources.reblurDiffuseRadianceHitDistance, RhiResourceState::TransferSrc)
             .writeBuffer(validationReadbackResource, RhiResourceState::TransferDst)
             .writeBuffer(radianceReadbackResource, RhiResourceState::TransferDst)
+            .writeBuffer(emissiveReadbackResource, RhiResourceState::TransferDst)
+            .writeBuffer(combinedReadbackResource, RhiResourceState::TransferDst)
             .writeBuffer(relaxReadbackResource, RhiResourceState::TransferDst)
             .writeBuffer(reblurReadbackResource, RhiResourceState::TransferDst)
             .setExecute([&](RgPassContext& context) {
@@ -4896,6 +5160,14 @@ namespace {
                 radianceCopy.width = smokeCase.width;
                 radianceCopy.height = smokeCase.height;
                 context.commandList().copyTextureToBuffer(radianceCopy);
+                RhiTextureBufferCopy emissiveCopy = radianceCopy;
+                emissiveCopy.srcTexture = context.texture(resources.emissiveDirectRadiance);
+                emissiveCopy.dstBuffer = context.buffer(emissiveReadbackResource);
+                context.commandList().copyTextureToBuffer(emissiveCopy);
+                RhiTextureBufferCopy combinedCopy = radianceCopy;
+                combinedCopy.srcTexture = context.texture(resources.combinedDiffuseRadianceHitDistance);
+                combinedCopy.dstBuffer = context.buffer(combinedReadbackResource);
+                context.commandList().copyTextureToBuffer(combinedCopy);
                 RhiTextureBufferCopy relaxCopy = radianceCopy;
                 relaxCopy.srcTexture = context.texture(packResources.relaxDiffuseRadianceHitDistance);
                 relaxCopy.dstBuffer = context.buffer(relaxReadbackResource);
@@ -4932,14 +5204,18 @@ namespace {
             static_cast<const uint32_t*>(device.mapBuffer(validationReadback, 0u, validationReadbackDesc.size));
         const auto* radianceResult =
             static_cast<const uint16_t*>(device.mapBuffer(radianceReadback, 0u, radianceReadbackDesc.size));
+        const auto* emissiveResult =
+            static_cast<const uint16_t*>(device.mapBuffer(emissiveReadback, 0u, radianceReadbackDesc.size));
+        const auto* combinedResult =
+            static_cast<const uint16_t*>(device.mapBuffer(combinedReadback, 0u, radianceReadbackDesc.size));
         const auto* relaxResult =
             static_cast<const uint16_t*>(device.mapBuffer(relaxReadback, 0u, radianceReadbackDesc.size));
         const auto* reblurResult =
             static_cast<const uint16_t*>(device.mapBuffer(reblurReadback, 0u, radianceReadbackDesc.size));
-        valid = validationResult != nullptr && radianceResult != nullptr && relaxResult != nullptr &&
-                reblurResult != nullptr;
-        if (validationResult != nullptr && radianceResult != nullptr && relaxResult != nullptr &&
-            reblurResult != nullptr) {
+        valid = validationResult != nullptr && radianceResult != nullptr && emissiveResult != nullptr &&
+                combinedResult != nullptr && relaxResult != nullptr && reblurResult != nullptr;
+        if (validationResult != nullptr && radianceResult != nullptr && emissiveResult != nullptr &&
+            combinedResult != nullptr && relaxResult != nullptr && reblurResult != nullptr) {
             const auto unpackSignal = [](const uint16_t* signal, const size_t pixelIndex) {
                 return glm::vec4(glm::unpackHalf1x16(signal[pixelIndex * 4u + 0u]),
                                  glm::unpackHalf1x16(signal[pixelIndex * 4u + 1u]),
@@ -4956,6 +5232,8 @@ namespace {
                                          glm::unpackHalf1x16(radianceResult[pixelIndex * 4u + 1u]),
                                          glm::unpackHalf1x16(radianceResult[pixelIndex * 4u + 2u])};
                 const float hitDistance = glm::unpackHalf1x16(radianceResult[pixelIndex * 4u + 3u]);
+                const glm::vec4 emissiveSignal = unpackSignal(emissiveResult, pixelIndex);
+                const glm::vec4 combinedSignal = unpackSignal(combinedResult, pixelIndex);
                 const std::optional<glm::vec3> sceneRadiance = rtgiRemovePreExposure(radiance, smokeCase.preExposure);
                 const glm::vec4 relaxSignal = unpackSignal(relaxResult, pixelIndex);
                 const glm::vec4 reblurSignal = unpackSignal(reblurResult, pixelIndex);
@@ -4965,6 +5243,23 @@ namespace {
                     radiance.r >= expected.minimumRadiance.r && radiance.g >= expected.minimumRadiance.g &&
                     radiance.b >= expected.minimumRadiance.b && radiance.r <= expected.maximumRadiance.r &&
                     radiance.g <= expected.maximumRadiance.g && radiance.b <= expected.maximumRadiance.b;
+                bool splitSignalsValid = std::isfinite(emissiveSignal.x) && std::isfinite(emissiveSignal.y) &&
+                                         std::isfinite(emissiveSignal.z) && std::isfinite(emissiveSignal.w) &&
+                                         std::isfinite(combinedSignal.x) && std::isfinite(combinedSignal.y) &&
+                                         std::isfinite(combinedSignal.z) && std::isfinite(combinedSignal.w) &&
+                                         emissiveSignal.x >= 0.0f && emissiveSignal.y >= 0.0f &&
+                                         emissiveSignal.z >= 0.0f && std::abs(emissiveSignal.w) <= 0.002f &&
+                                         nearHalf(combinedSignal.w, hitDistance);
+                for (uint32_t component = 0u; component < 3u && splitSignalsValid; ++component) {
+                    splitSignalsValid = nearHalf(combinedSignal[component],
+                                                 radiance[component] + emissiveSignal[component]);
+                }
+                const float emissiveEnergy = emissiveSignal.x + emissiveSignal.y + emissiveSignal.z;
+                splitSignalsValid =
+                    splitSignalsValid &&
+                    (expected.emissiveStatus == RtgiEmissiveSampleClassification::Visible
+                         ? emissiveEnergy > 0.001f
+                         : emissiveEnergy <= 0.002f);
                 bool packedSignalsValid = false;
                 if (expected.classification == RtgiTraceClassification::Hit ||
                     expected.classification == RtgiTraceClassification::Miss) {
@@ -5000,19 +5295,26 @@ namespace {
                     packedSignalsValid = relaxSignal == glm::vec4(0.0f) && reblurSignal == glm::vec4(0.0f);
                 }
                 const bool pixelValid = rtgiTraceValidationClassification(validationWord) == expected.classification &&
+                                        rtgiTraceValidationEmissiveStatus(validationWord) == expected.emissiveStatus &&
                                         rtgiTraceValidationCandidateCount(validationWord) == expected.candidateCount &&
                                         rtgiTraceValidationConfirmedCount(validationWord) == expected.confirmedCount &&
                                         hitIdentityHash == expected.hitIdentityHash && std::isfinite(hitDistance) &&
                                         hitDistance >= expected.minimumHitDistance &&
                                         hitDistance <= expected.maximumHitDistance && radianceValid &&
+                                        splitSignalsValid &&
                                         packedSignalsValid;
                 if (!pixelValid) {
                     std::cerr << smokeCase.label << " pixel " << pixelIndex << " validation failed: class="
                               << static_cast<uint32_t>(rtgiTraceValidationClassification(validationWord))
+                              << " emissive="
+                              << static_cast<uint32_t>(rtgiTraceValidationEmissiveStatus(validationWord))
                               << " candidates=" << rtgiTraceValidationCandidateCount(validationWord)
                               << " confirmed=" << rtgiTraceValidationConfirmedCount(validationWord)
                               << " identityHash=" << hitIdentityHash << " radiance=(" << radiance.r << ", "
-                              << radiance.g << ", " << radiance.b << ") distance=" << hitDistance << " relax=("
+                              << radiance.g << ", " << radiance.b << ") emissive=(" << emissiveSignal.x << ", "
+                              << emissiveSignal.y << ", " << emissiveSignal.z << ") combined=("
+                              << combinedSignal.x << ", " << combinedSignal.y << ", " << combinedSignal.z
+                              << ") distance=" << hitDistance << " relax=("
                               << relaxSignal.x << ", " << relaxSignal.y << ", " << relaxSignal.z << ", "
                               << relaxSignal.w << ") reblur=(" << reblurSignal.x << ", " << reblurSignal.y << ", "
                               << reblurSignal.z << ", " << reblurSignal.w << ")\n";
@@ -5040,6 +5342,8 @@ namespace {
                     stats.gpuSceneMaterialBytes == activeTlas.gpuSceneMaterialBytes &&
                     stats.gpuSceneGeometryBytes == activeTlas.gpuSceneGeometryBytes &&
                     stats.gpuSceneInstanceBytes == activeTlas.gpuSceneInstanceBytes &&
+                    stats.rtgiEmissiveGeometryBytes == activeTlas.rtgiEmissiveGeometryBytes &&
+                    stats.rtgiEmissiveGeometryCount == activeTlas.rtgiEmissiveGeometryCount &&
                     stats.gpuSceneMaterialCount == activeTlas.gpuSceneMaterialCount &&
                     stats.gpuSceneGeometryCount == activeTlas.gpuSceneGeometryCount && counterStats.supported &&
                     counterStats.valid && counterStats.sequence == 1u && counterStats.frameIndex == frame.frameIndex &&
@@ -5062,6 +5366,12 @@ namespace {
         }
         if (radianceResult != nullptr) {
             device.unmapBuffer(radianceReadback);
+        }
+        if (emissiveResult != nullptr) {
+            device.unmapBuffer(emissiveReadback);
+        }
+        if (combinedResult != nullptr) {
+            device.unmapBuffer(combinedReadback);
         }
         if (relaxResult != nullptr) {
             device.unmapBuffer(relaxReadback);
@@ -5142,9 +5452,11 @@ namespace {
     depth[6u] = std::numeric_limits<float>::quiet_NaN();
     std::vector<uint32_t> validation(kPixelCount * 2u, 0u);
     const auto setValidation = [&](const size_t pixel, const RtgiTraceClassification classification,
+                                   const RtgiEmissiveSampleClassification emissiveStatus,
                                    const uint32_t candidateCount, const uint32_t confirmedCount,
                                    const uint32_t identity) {
-        const std::optional<uint32_t> word = encodeRtgiTraceValidation(classification, candidateCount, confirmedCount);
+        const std::optional<uint32_t> word =
+            encodeRtgiTraceValidation(classification, emissiveStatus, candidateCount, confirmedCount);
         if (!word.has_value()) {
             return false;
         }
@@ -5152,13 +5464,20 @@ namespace {
         validation[pixel * 2u + 1u] = identity;
         return true;
     };
-    bool valid = setValidation(0u, RtgiTraceClassification::Hit, 1u, 1u, 111u) &&
-                 setValidation(1u, RtgiTraceClassification::Miss, 2u, 0u, 0u) &&
-                 setValidation(2u, RtgiTraceClassification::Sky, 0u, 0u, 0u) &&
-                 setValidation(3u, RtgiTraceClassification::Translucent, 0u, 0u, 0u) &&
-                 setValidation(4u, RtgiTraceClassification::Hit, 7u, 2u, 444u) &&
-                 setValidation(5u, RtgiTraceClassification::Miss, 3u, 1u, 555u) &&
-                 setValidation(6u, RtgiTraceClassification::Hit, 5u, 4u, 666u);
+    bool valid = setValidation(0u, RtgiTraceClassification::Hit, RtgiEmissiveSampleClassification::Visible,
+                               1u, 1u, 111u) &&
+                 setValidation(1u, RtgiTraceClassification::Miss, RtgiEmissiveSampleClassification::Occluded,
+                               2u, 0u, 0u) &&
+                 setValidation(2u, RtgiTraceClassification::Sky, RtgiEmissiveSampleClassification::Inactive,
+                               0u, 0u, 0u) &&
+                 setValidation(3u, RtgiTraceClassification::Translucent,
+                               RtgiEmissiveSampleClassification::Inactive, 0u, 0u, 0u) &&
+                 setValidation(4u, RtgiTraceClassification::Hit,
+                               RtgiEmissiveSampleClassification::NoPositiveWeight, 7u, 2u, 444u) &&
+                 setValidation(5u, RtgiTraceClassification::Miss,
+                               RtgiEmissiveSampleClassification::SurfaceRejected, 3u, 1u, 555u) &&
+                 setValidation(6u, RtgiTraceClassification::Hit, RtgiEmissiveSampleClassification::Invalid,
+                               5u, 4u, 666u);
 
     constexpr RhiTextureUsageFlags kRawUsage =
         rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::TransferDst);
@@ -5356,6 +5675,11 @@ namespace {
                 RtgiTraceClassification::Sky,       RtgiTraceClassification::Translucent,
                 RtgiTraceClassification::NonFinite, RtgiTraceClassification::NonFinite,
                 RtgiTraceClassification::NonFinite};
+            const std::array<RtgiEmissiveSampleClassification, kPixelCount> expectedEmissiveStatuses{
+                RtgiEmissiveSampleClassification::Visible, RtgiEmissiveSampleClassification::Occluded,
+                RtgiEmissiveSampleClassification::Inactive, RtgiEmissiveSampleClassification::Inactive,
+                RtgiEmissiveSampleClassification::Invalid, RtgiEmissiveSampleClassification::Invalid,
+                RtgiEmissiveSampleClassification::Invalid};
             constexpr std::array<uint32_t, kPixelCount> kExpectedCandidates{1u, 2u, 0u, 0u, 7u, 3u, 5u};
             constexpr std::array<uint32_t, kPixelCount> kExpectedConfirmed{1u, 0u, 0u, 0u, 2u, 1u, 4u};
             constexpr std::array<uint32_t, kPixelCount> kExpectedIdentities{111u, 0u, 0u, 0u, 444u, 555u, 666u};
@@ -5394,6 +5718,7 @@ namespace {
                 const glm::vec4 reblurSignal = unpackSignal(reblurResult, pixel);
                 const bool pixelValid =
                     rtgiTraceValidationClassification(validationWord) == expectedClassifications[pixel] &&
+                    rtgiTraceValidationEmissiveStatus(validationWord) == expectedEmissiveStatuses[pixel] &&
                     rtgiTraceValidationCandidateCount(validationWord) == kExpectedCandidates[pixel] &&
                     rtgiTraceValidationConfirmedCount(validationWord) == kExpectedConfirmed[pixel] &&
                     identity == kExpectedIdentities[pixel] && nearSignal(relaxSignal, expectedRelax[pixel]) &&
@@ -5401,6 +5726,8 @@ namespace {
                 if (!pixelValid) {
                     std::cerr << "RTGI Signal Pack pixel " << pixel << " failed: class="
                               << static_cast<uint32_t>(rtgiTraceValidationClassification(validationWord))
+                              << " emissive="
+                              << static_cast<uint32_t>(rtgiTraceValidationEmissiveStatus(validationWord))
                               << " candidates=" << rtgiTraceValidationCandidateCount(validationWord)
                               << " confirmed=" << rtgiTraceValidationConfirmedCount(validationWord)
                               << " identity=" << identity << " relax=(" << relaxSignal.x << ", " << relaxSignal.y
@@ -5484,22 +5811,24 @@ namespace {
                              renderer::rt::sceneTlasMaskBit(renderer::rt::SceneTlasInstanceMask::GiCutout);
     RtgiTraceSmokeExpectedPixel rejectedMask;
     rejectedMask.classification = renderer::contracts::RtgiTraceClassification::Hit;
+    rejectedMask.emissiveStatus = renderer::contracts::RtgiEmissiveSampleClassification::Visible;
     rejectedMask.candidateCount = 1u;
     rejectedMask.confirmedCount = 0u;
     rejectedMask.hitIdentityHash = renderer::contracts::rtgiStableHitIdentityHash(601u, 501u);
     rejectedMask.minimumHitDistance = 1.45f;
     rejectedMask.maximumHitDistance = 1.55f;
-    rejectedMask.minimumRadiance = {0.999f, 0.456f, 0.212f};
-    rejectedMask.maximumRadiance = {1.001f, 0.46f, 0.216f};
+    rejectedMask.minimumRadiance = {0.0f, 0.228f, 0.105f};
+    rejectedMask.maximumRadiance = {0.002f, 0.231f, 0.109f};
     RtgiTraceSmokeExpectedPixel confirmedMask;
     confirmedMask.classification = renderer::contracts::RtgiTraceClassification::Hit;
+    confirmedMask.emissiveStatus = renderer::contracts::RtgiEmissiveSampleClassification::Occluded;
     confirmedMask.candidateCount = 1u;
     confirmedMask.confirmedCount = 1u;
     confirmedMask.hitIdentityHash = renderer::contracts::rtgiStableHitIdentityHash(602u, 502u);
     confirmedMask.minimumHitDistance = 0.45f;
     confirmedMask.maximumHitDistance = 0.55f;
-    confirmedMask.minimumRadiance = {0.0f, 0.456f, 0.0f};
-    confirmedMask.maximumRadiance = {0.001f, 0.46f, 0.001f};
+    confirmedMask.minimumRadiance = {0.0f, 0.228f, 0.0f};
+    confirmedMask.maximumRadiance = {0.001f, 0.231f, 0.001f};
     smokeCase.expectedPixels = {rejectedMask, confirmedMask};
     if (!validateRtgiTraceCase(device, commandPool, sceneTlas, activeTlas, globalBindlessSet, smokeCase)) {
         return false;
@@ -5528,6 +5857,7 @@ namespace {
     missCase.instanceMask = smokeCase.instanceMask;
     RtgiTraceSmokeExpectedPixel miss;
     miss.classification = RtgiTraceClassification::Miss;
+    miss.emissiveStatus = RtgiEmissiveSampleClassification::Occluded;
     miss.minimumHitDistance = kRtgiNrdFp16Max;
     miss.maximumHitDistance = kRtgiNrdFp16Max;
     miss.minimumRadiance = {0.999f, 1.999f, 2.999f};
@@ -5768,6 +6098,7 @@ namespace {
         opaqueGeometry.materialIndex = 0u;
         opaqueGeometry.localBoundsMin = {0.0f, 0.0f, 0.0f};
         opaqueGeometry.localBoundsMax = {1.0f, 1.0f, 0.0f};
+        opaqueGeometry.primitiveAreaVectors = {{0.0f, 0.0f, 0.5f}};
         opaqueGeometry.opaque = true;
         StaticMeshBlasGeometry cutoutGeometry;
         cutoutGeometry.geometryId = StableGeometryId{502u};
@@ -5781,6 +6112,7 @@ namespace {
         cutoutGeometry.materialIndex = 1u;
         cutoutGeometry.localBoundsMin = {0.0f, 0.0f, 1.0f};
         cutoutGeometry.localBoundsMax = {1.0f, 1.0f, 1.0f};
+        cutoutGeometry.primitiveAreaVectors = {{0.0f, 0.0f, 0.5f}};
         cutoutGeometry.opaque = false;
         cutoutGeometry.doubleSided = true;
         const std::vector<StaticMeshBlasGeometry> geometries{opaqueGeometry, cutoutGeometry};
@@ -6512,7 +6844,9 @@ int main() {
         !validateFsr31VulkanDispatch(device, *commandPool) || !validateFsr31VulkanContext(device) ||
 #endif
 #if defined(MECRAFT_ENABLE_NRD)
-        !validateNrdGuidePrepPass(device, *commandPool) || !validateNrdRenderGraphDispatch(device, *commandPool) ||
+        !validateNrdGuidePrepPass(device, *commandPool) ||
+        !validateRtgiEmissiveTemporalPass(device, *commandPool) ||
+        !validateNrdRenderGraphDispatch(device, *commandPool) ||
 #endif
 #if defined(MECRAFT_ENABLE_STREAMLINE)
         !validateDlssVulkanDispatch(device, *commandPool, window) ||

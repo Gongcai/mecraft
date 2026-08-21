@@ -238,12 +238,11 @@ bool ValidationRunController::buildCurrentFrame() {
     frame.renderTimeSeconds =
         static_cast<double>(frame.sequenceFrameIndex) * static_cast<double>(kValidationFrameDeltaSeconds);
 
-    double cameraTimeSeconds = 0.0;
+    const bool hasRtgiQualityProfile = m_rtgiQualityProfile.has_value();
+    double cameraTimeSeconds = hasRtgiQualityProfile ? m_rtgiQualityProfile->cameraTimeSeconds : 0.0;
     if (m_completedWarmupFrames == m_options.validationWarmupFrames) {
         frame.collectPerformance = true;
-        if (m_rtgiQualityProfile.has_value()) {
-            cameraTimeSeconds = m_rtgiQualityProfile->cameraTimeSeconds;
-        } else {
+        if (!hasRtgiQualityProfile) {
             const double sampleDenominator = static_cast<double>(m_options.validationSampleFrames - 1u);
             cameraTimeSeconds =
                 m_cameraPath.durationSeconds * static_cast<double>(m_completedSampleFrames) / sampleDenominator;
@@ -262,7 +261,7 @@ bool ValidationRunController::buildCurrentFrame() {
                 frame.nrdDiffuseCapturePath = m_options.validationRtgiHdrCaptureDirectory /
                                               rtgiHdrCaptureFilename("denoised", m_completedSampleFrames);
             }
-            if (m_rtgiQualityProfile.has_value() && !m_options.validationRtgiReference &&
+            if (hasRtgiQualityProfile && !m_options.validationRtgiReference &&
                 m_completedSampleFrames + 1u == m_options.validationSampleFrames) {
                 frame.rtgiLeakageNormalCapturePath =
                     m_options.validationRtgiHdrCaptureDirectory / "rtgi_leakage_normal.exr";

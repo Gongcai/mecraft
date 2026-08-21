@@ -1,0 +1,48 @@
+#version 460 core
+
+#include "rtgi_nrd_signal.glsl"
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+layout(set = 0, binding = 0) uniform sampler2D uDenoisedIndirectRadianceHitDistance;
+layout(set = 0, binding = 1) uniform sampler2D uEmissiveDirectRadiance;
+layout(set = 0, binding = 2, rgba16f) uniform writeonly image2D uCombinedValidationRadiance;
+
+#if defined(MECRAFT_RTGI_VALIDATION_COMPOSE_RELAX) && defined(MECRAFT_RTGI_VALIDATION_COMPOSE_REBLUR)
+#error "RTGI validation compose requires exactly one NRD encoding"
+#endif
+#if !defined(MECRAFT_RTGI_VALIDATION_COMPOSE_RELAX) && !defined(MECRAFT_RTGI_VALIDATION_COMPOSE_REBLUR)
+#error "RTGI validation compose requires an NRD encoding"
+#endif
+
+layout(push_constant) uniform RtgiValidationComposePushConstants {
+    vec4 renderExtentAndInversePreExposure;
+} pc;
+
+vec3 rtgiValidationDecodeReblurYCoCg(vec3 color) {
+    float temporary = color.x - color.z;
+    vec3 linearColor;
+    linearColor.y = color.x + color.z;
+    linearColor.x = temporary + color.y;
+    linearColor.z = temporary - color.y;
+    return max(linearColor, vec3(0.0));
+}
+
+void main() {
+    ivec2 texel = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 extent = ivec2(pc.renderExtentAndInversePreExposure.xy);
+    if (texel.x >= extent.x || texel.y >= extent.y) {
+        return;
+    }
+
+    vec3 indirectRadiance = texelFetch(uDenoisedIndirectRadianceHitDistance, texel, 0).rgb;
+#if defined(MECRAFT_RTGI_VALIDATION_COMPOSE_REBLUR)
+    indirectRadiance = rtgiValidationDecodeReblurYCoCg(indirectRadiance);
+#else
+    indirectRadiance = max(indirectRadiance, vec3(0.0));
+#endif
+    vec3 emissiveRadiance = max(texelFetch(uEmissiveDirectRadiance, texel, 0).rgb, vec3(0.0)) *
+                            pc.renderExtentAndInversePreExposure.z;
+    vec3 combinedRadiance = min(indirectRadiance + emissiveRadiance, vec3(RTGI_NRD_FP16_MAX));
+    imageStore(uCombinedValidationRadiance, texel, vec4(combinedRadiance, 0.0));
+}

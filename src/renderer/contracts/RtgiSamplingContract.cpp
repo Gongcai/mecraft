@@ -104,9 +104,8 @@ glm::vec2 rtgiReferenceHammersleySample(const uint32_t frameIndex, const glm::uv
     const glm::vec2 batchRotation{static_cast<float>(hashX & 0x00ffffffu) * kInverseHashRange,
                                   static_cast<float>(hashY & 0x00ffffffu) * kInverseHashRange};
     const uint32_t subsetIndex = sampleIndex & 31u;
-    const uint32_t subsetParity = (subsetIndex ^ (subsetIndex >> 1u) ^ (subsetIndex >> 2u) ^
-                                   (subsetIndex >> 3u) ^ (subsetIndex >> 4u)) &
-                                  1u;
+    const uint32_t subsetParity =
+        (subsetIndex ^ (subsetIndex >> 1u) ^ (subsetIndex >> 2u) ^ (subsetIndex >> 3u) ^ (subsetIndex >> 4u)) & 1u;
     const uint32_t orderedIndex = subsetIndex | ((subsetParity ^ (sampleIndex >> 5u)) << 5u);
     const uint32_t scrambledIndex = orderedIndex ^ (hashX & 63u);
     uint32_t reversedBits = scrambledIndex;
@@ -124,14 +123,20 @@ float rtgiReferenceStratifiedScalar(const uint32_t frameIndex, const glm::uvec2&
     const uint32_t sampleIndex = frameIndex & 63u;
     const uint32_t scramble = rtgiSampleHash(pixel.x * 1973u + pixel.y * 9277u + 0xa511e9b3u);
     const uint32_t subsetIndex = sampleIndex & 31u;
-    const uint32_t subsetParity = (subsetIndex ^ (subsetIndex >> 1u) ^ (subsetIndex >> 2u) ^
-                                   (subsetIndex >> 3u) ^ (subsetIndex >> 4u)) &
-                                  1u;
+    const uint32_t subsetParity =
+        (subsetIndex ^ (subsetIndex >> 1u) ^ (subsetIndex >> 2u) ^ (subsetIndex >> 3u) ^ (subsetIndex >> 4u)) & 1u;
     const uint32_t orderedIndex = subsetIndex | ((subsetParity ^ (sampleIndex >> 5u)) << 5u);
     const uint32_t scrambledIndex = orderedIndex ^ (scramble & 63u);
     return (static_cast<float>(scrambledIndex) + 0.5f) / 64.0f;
 }
 
+std::optional<glm::vec2> rtgiUniformTriangleBarycentrics(const glm::vec2& sample) {
+    if (!finite(sample) || sample.x < 0.0f || sample.x >= 1.0f || sample.y < 0.0f || sample.y >= 1.0f) {
+        return std::nullopt;
+    }
+    const float squareRoot = std::sqrt(sample.x);
+    return glm::vec2(1.0f - squareRoot, sample.y * squareRoot);
+}
 
 std::optional<RtgiUniformConeSample> rtgiUniformConeSample(const glm::vec2& sample, const glm::vec3& axis,
                                                            const float minimumCosine) {
@@ -145,15 +150,14 @@ std::optional<RtgiUniformConeSample> rtgiUniformConeSample(const glm::vec2& samp
     }
 
     const glm::vec3 unitAxis = axis / std::sqrt(axisLengthSquared);
-    const glm::vec3 helper =
-        std::abs(unitAxis.z) < 0.999f ? glm::vec3(0.0f, 0.0f, 1.0f) : glm::vec3(1.0f, 0.0f, 0.0f);
+    const glm::vec3 helper = std::abs(unitAxis.z) < 0.999f ? glm::vec3(0.0f, 0.0f, 1.0f) : glm::vec3(1.0f, 0.0f, 0.0f);
     const glm::vec3 tangent = glm::normalize(glm::cross(helper, unitAxis));
     const glm::vec3 bitangent = glm::cross(unitAxis, tangent);
     const float cosine = 1.0f - sample.y * (1.0f - minimumCosine);
     const float sine = std::sqrt(std::max(1.0f - cosine * cosine, 0.0f));
     const float angle = kTwoPi * sample.x;
-    const glm::vec3 direction = tangent * (sine * std::cos(angle)) + bitangent * (sine * std::sin(angle)) +
-                                unitAxis * cosine;
+    const glm::vec3 direction =
+        tangent * (sine * std::cos(angle)) + bitangent * (sine * std::sin(angle)) + unitAxis * cosine;
     const float solidAngle = kTwoPi * (1.0f - minimumCosine);
     if (!finite(direction) || !std::isfinite(solidAngle) || solidAngle <= 0.0f) {
         return std::nullopt;
@@ -303,13 +307,17 @@ std::optional<glm::vec3> rtgiVoxelGeometricNormal(const glm::vec3& shadingNormal
 }
 
 std::optional<uint32_t> encodeRtgiTraceValidation(const RtgiTraceClassification classification,
+                                                  const RtgiEmissiveSampleClassification emissiveStatus,
                                                   const uint32_t candidateCount, const uint32_t confirmedCount) {
     const uint32_t classificationValue = static_cast<uint32_t>(classification);
-    if (classificationValue > kRtgiTraceValidationClassificationMask ||
+    const uint32_t emissiveStatusValue = static_cast<uint32_t>(emissiveStatus);
+    if (classificationValue > static_cast<uint32_t>(RtgiTraceClassification::NonFinite) ||
+        emissiveStatusValue > static_cast<uint32_t>(RtgiEmissiveSampleClassification::Invalid) ||
         candidateCount > kRtgiTraceValidationCandidateMask || confirmedCount > kRtgiTraceValidationConfirmedMask) {
         return std::nullopt;
     }
-    return classificationValue | (candidateCount << kRtgiTraceValidationCandidateShift) |
+    return classificationValue | (emissiveStatusValue << kRtgiTraceValidationEmissiveStatusShift) |
+           (candidateCount << kRtgiTraceValidationCandidateShift) |
            (confirmedCount << kRtgiTraceValidationConfirmedShift);
 }
 
@@ -341,6 +349,15 @@ decodeRtgiTraceCounterReadback(const std::array<uint32_t, kRtgiTraceCounterWordC
         combineWords(word(RtgiTraceCounterWord::MissLow), word(RtgiTraceCounterWord::MissHigh)),
         combineWords(word(RtgiTraceCounterWord::HitLow), word(RtgiTraceCounterWord::HitHigh)),
         combineWords(word(RtgiTraceCounterWord::NonFiniteLow), word(RtgiTraceCounterWord::NonFiniteHigh))};
+    const std::array<uint64_t, 6u> emissiveStatusCounts{
+        combineWords(word(RtgiTraceCounterWord::EmissiveInactiveLow), word(RtgiTraceCounterWord::EmissiveInactiveHigh)),
+        combineWords(word(RtgiTraceCounterWord::EmissiveNoPositiveWeightLow),
+                     word(RtgiTraceCounterWord::EmissiveNoPositiveWeightHigh)),
+        combineWords(word(RtgiTraceCounterWord::EmissiveSurfaceRejectedLow),
+                     word(RtgiTraceCounterWord::EmissiveSurfaceRejectedHigh)),
+        combineWords(word(RtgiTraceCounterWord::EmissiveOccludedLow), word(RtgiTraceCounterWord::EmissiveOccludedHigh)),
+        combineWords(word(RtgiTraceCounterWord::EmissiveVisibleLow), word(RtgiTraceCounterWord::EmissiveVisibleHigh)),
+        combineWords(word(RtgiTraceCounterWord::EmissiveInvalidLow), word(RtgiTraceCounterWord::EmissiveInvalidHigh))};
     const uint32_t peakCandidate = word(RtgiTraceCounterWord::PeakCandidatePerPixel);
     const uint32_t peakConfirmed = word(RtgiTraceCounterWord::PeakConfirmedPerPixel);
     const auto withinPerPixelBound = [](const uint64_t count, const uint64_t pixels, const uint32_t maximumPerPixel) {
@@ -353,7 +370,15 @@ decodeRtgiTraceCounterReadback(const std::array<uint32_t, kRtgiTraceCounterWordC
         }
         classifiedPixelCount += count;
     }
-    if (pixelCount != expectedPixelCount || classifiedPixelCount != pixelCount || confirmedCount > candidateCount ||
+    uint64_t emissiveClassifiedPixelCount = 0u;
+    for (const uint64_t count : emissiveStatusCounts) {
+        if (count > pixelCount - emissiveClassifiedPixelCount) {
+            return std::nullopt;
+        }
+        emissiveClassifiedPixelCount += count;
+    }
+    if (pixelCount != expectedPixelCount || classifiedPixelCount != pixelCount ||
+        emissiveClassifiedPixelCount != pixelCount || confirmedCount > candidateCount ||
         peakCandidate > kRtgiTraceValidationCandidateMask || peakConfirmed > kRtgiTraceValidationConfirmedMask ||
         peakConfirmed > peakCandidate ||
         !withinPerPixelBound(candidateCount, pixelCount, kRtgiTraceValidationCandidateMask) ||
@@ -377,6 +402,12 @@ decodeRtgiTraceCounterReadback(const std::array<uint32_t, kRtgiTraceCounterWordC
     stats.missPixelCount = classificationCounts[2u];
     stats.hitPixelCount = classificationCounts[3u];
     stats.nonFinitePixelCount = classificationCounts[4u];
+    stats.emissiveInactivePixelCount = emissiveStatusCounts[0u];
+    stats.emissiveNoPositiveWeightPixelCount = emissiveStatusCounts[1u];
+    stats.emissiveSurfaceRejectedPixelCount = emissiveStatusCounts[2u];
+    stats.emissiveOccludedPixelCount = emissiveStatusCounts[3u];
+    stats.emissiveVisiblePixelCount = emissiveStatusCounts[4u];
+    stats.emissiveInvalidPixelCount = emissiveStatusCounts[5u];
     stats.peakCandidateCountPerPixel = peakCandidate;
     stats.peakConfirmedCountPerPixel = peakConfirmed;
     return stats;
