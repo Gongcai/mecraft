@@ -716,6 +716,21 @@ NRD 的 shading normal 输入保持不变。V02 相同 300+32/64 运行的 `boun
 因此 Cave 的原始 Leakage 证据主要由法线贴图边界触发，几何法线修复了诊断误报轴，但没有修复实际一次反弹
 积分误差；固定 Leakage 门槛和静态质量门槛继续有效。
 
+2026-08-21 对双主路径、双 World Light 导引的 V02 300+32/64 运行继续做固定 ROI 复测。完整路径的
+HDR p95 为 `0.116670`、SSIM 为 `0.997793`、方差降低 `99.154830%`，Reference 两半 p95 为 `0.085859`，
+因此 Reference 收敛诊断通过；但完整静态门槛仍差 `0.016670`，Leakage 最大带宽仍为 `3 Pixels`。把同一
+32 帧 Raw 序列作为比较输出重算，p95 为 `0.178149`，证明 RELAX 已显著降低误差，不能把剩余失败归因为
+RELAX 的单独能量偏置。仅将 A-Trous 从 `5` 调至 `3` 的 A/B 将 p95 降为 `0.113929`，Leakage 仍为
+`3 Pixels`，未达到任一失败门槛，临时设置已撤回。
+
+同一轮进一步关闭发光体 NEE，并使用该版本的独立 64 spp Reference；p95 为 `0.116563`、Leakage 为
+`3 Pixels`，与完整路径相同，排除该 NEE 分量为当前主因。REBLUR 的 300+32 A/B 使用不变的 Raw 输入和
+完整路径 Reference，得到 p95 `0.850599`、SSIM `0.849883`、Denoised/Reference 平均亮度
+`0.046694/0.030140`，不具备替换 RELAX 的条件。双主路径下将 NRD Hit Distance/身份从首路径临时改为
+最近命中，只得到 p95 `0.116114` 且 Leakage 仍为 `3 Pixels`，没有实际收益并已撤回。后续必须在不降低
+门槛、ROI、Reference spp 或性能预算的前提下，改进一次反弹输运的采样分布或边界重建，而不是继续调整
+已排除的去噪器参数、NEE 或单路径导引选择。
+
 M03 Sponza 的首轮 300+32/64 捕获暴露模型验证就绪缺口：Probe 已完成时 Static BLAS/TLAS 仍可能处于
 首个代际切换，300/301/600 帧预热均得到 Pending Frame `1`。模型验证现要求
 `SceneTlasCache::isSettled()` 后才完成当前 sequence frame；最新正式重采的 AS Pending/Invalid 为 `0/0`，
