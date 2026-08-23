@@ -2202,6 +2202,8 @@ bool VkRhiDevice::init(const RhiDeviceDesc& desc) {
     m_capabilities.minAccelerationStructureScratchOffsetAlignment =
         accelerationStructureProperties.minAccelerationStructureScratchOffsetAlignment;
     m_capabilities.multiDrawIndirect = selectedCoreFeatures.multiDrawIndirect == VK_TRUE;
+    // Vulkan 1.2 promotes vkCmdDrawIndexedIndirectCount to core; this backend requires 1.3.
+    m_capabilities.drawIndexedIndirectCount = true;
     m_capabilities.timestampQuery = m_data->properties.limits.timestampComputeAndGraphics == VK_TRUE;
     m_capabilities.textureView = true;
     m_capabilities.samplerAnisotropy = true;
@@ -5486,6 +5488,39 @@ void VkRhiCommandList::drawIndirect(const RhiBufferHandle indirectBuffer, const 
     }
     vkCmdDrawIndirect(m_data->commandBuffer, record->buffer, offset, drawCount, stride);
     m_data->resourceReferences.reference(indirectBuffer);
+}
+
+void VkRhiCommandList::drawIndexedIndirectCount(const RhiBufferHandle indirectBuffer, const uint64_t indirectOffset,
+                                                const uint32_t maxDrawCount, const uint32_t stride,
+                                                const RhiBufferHandle countBuffer, const uint64_t countOffset) {
+    const std::shared_lock<std::shared_mutex> registryLock(m_device->m_data->resourceRegistryMutex);
+    const auto* indirectRecord = findRecord(m_device->m_data->buffers, indirectBuffer);
+    const auto* countRecord = findRecord(m_device->m_data->buffers, countBuffer);
+    constexpr uint64_t kCommandSize = sizeof(uint32_t) * 5u;
+    const uint64_t commandStride = stride == 0u ? kCommandSize : stride;
+    const bool commandSizeRepresentable = maxDrawCount == 0u ||
+                                          static_cast<uint64_t>(maxDrawCount - 1u) <=
+                                              (std::numeric_limits<uint64_t>::max() - kCommandSize) / commandStride;
+    const uint64_t commandBytes = commandSizeRepresentable && maxDrawCount != 0u
+                                      ? kCommandSize + static_cast<uint64_t>(maxDrawCount - 1u) * commandStride
+                                      : 0u;
+    const bool valid = m_data->rendering && indirectRecord != nullptr && countRecord != nullptr &&
+                       (indirectRecord->desc.usage & rhiFlag(RhiBufferUsage::Indirect)) != 0u &&
+                       (countRecord->desc.usage & rhiFlag(RhiBufferUsage::Indirect)) != 0u && maxDrawCount > 0u &&
+                       maxDrawCount <= m_device->m_data->properties.limits.maxDrawIndirectCount &&
+                       commandSizeRepresentable && commandStride >= kCommandSize && (commandStride & 3u) == 0u &&
+                       (indirectOffset & 3u) == 0u && (countOffset & 3u) == 0u &&
+                       indirectOffset <= indirectRecord->desc.size &&
+                       commandBytes <= indirectRecord->desc.size - indirectOffset && countOffset <= countRecord->desc.size &&
+                       sizeof(uint32_t) <= countRecord->desc.size - countOffset;
+    if (!valid) {
+        m_data->valid = false;
+        return;
+    }
+    vkCmdDrawIndexedIndirectCount(m_data->commandBuffer, indirectRecord->buffer, indirectOffset, countRecord->buffer,
+                                  countOffset, maxDrawCount, stride);
+    m_data->resourceReferences.reference(indirectBuffer);
+    m_data->resourceReferences.reference(countBuffer);
 }
 
 void VkRhiCommandList::dispatch(const uint32_t groupCountX, const uint32_t groupCountY, const uint32_t groupCountZ) {

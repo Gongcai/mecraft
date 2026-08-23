@@ -1705,7 +1705,8 @@ bool GlRhiCommandList::commandTypeSupports(const CommandType type) const {
     case CommandType::SetIndexBuffer:
     case CommandType::Draw:
     case CommandType::DrawIndexed:
-    case CommandType::DrawIndirect: return true;
+    case CommandType::DrawIndirect:
+    case CommandType::DrawIndexedIndirectCount: return true;
     default: return false;
     }
 }
@@ -1713,7 +1714,8 @@ bool GlRhiCommandList::commandTypeSupports(const CommandType type) const {
 bool GlRhiCommandList::renderingScopeSupports(const CommandType type) const {
     if (!m_recordingRendering) {
         return type != CommandType::EndRendering && type != CommandType::ClearDepthAttachment &&
-               type != CommandType::Draw && type != CommandType::DrawIndexed && type != CommandType::DrawIndirect;
+               type != CommandType::Draw && type != CommandType::DrawIndexed && type != CommandType::DrawIndirect &&
+               type != CommandType::DrawIndexedIndirectCount;
     }
 
     switch (type) {
@@ -1732,6 +1734,7 @@ bool GlRhiCommandList::renderingScopeSupports(const CommandType type) const {
     case CommandType::Draw:
     case CommandType::DrawIndexed:
     case CommandType::DrawIndirect:
+    case CommandType::DrawIndexedIndirectCount:
     case CommandType::WriteTimestamp: return true;
     default: return false;
     }
@@ -2022,6 +2025,18 @@ bool GlRhiCommandList::replay(const bool validationOnly) {
                     readValue(offset, stride);
             if (valid)
                 drawIndirect(buffer, bufferOffset, drawCount, stride);
+            break;
+        }
+        case CommandType::DrawIndexedIndirectCount: {
+            RhiBufferHandle indirectBuffer{};
+            RhiBufferHandle countBuffer{};
+            uint64_t indirectOffset = 0u, countOffset = 0u;
+            uint32_t maxDrawCount = 0u, stride = 0u;
+            valid = readValue(offset, indirectBuffer) && readValue(offset, indirectOffset) &&
+                    readValue(offset, maxDrawCount) && readValue(offset, stride) && readValue(offset, countBuffer) &&
+                    readValue(offset, countOffset);
+            if (valid)
+                drawIndexedIndirectCount(indirectBuffer, indirectOffset, maxDrawCount, stride, countBuffer, countOffset);
             break;
         }
         case CommandType::Dispatch: {
@@ -3430,6 +3445,33 @@ void GlRhiCommandList::drawIndirect(RhiBufferHandle indirectBuffer, uint64_t off
         glMultiDrawArraysIndirect(toGlTopology(pipeline->graphicsDesc.topology), reinterpret_cast<const void*>(offset),
                                   static_cast<GLsizei>(drawCount), static_cast<GLsizei>(stride));
     }
+}
+
+void GlRhiCommandList::drawIndexedIndirectCount(RhiBufferHandle indirectBuffer, const uint64_t indirectOffset,
+                                                const uint32_t maxDrawCount, const uint32_t stride,
+                                                RhiBufferHandle countBuffer, const uint64_t countOffset) {
+    if (!m_replaying) {
+        if (!beginRecordedCommand(CommandType::DrawIndexedIndirectCount))
+            return;
+        appendValue(indirectBuffer);
+        appendValue(indirectOffset);
+        appendValue(maxDrawCount);
+        appendValue(stride);
+        appendValue(countBuffer);
+        appendValue(countOffset);
+        referenceResource(indirectBuffer);
+        referenceResource(countBuffer);
+        return;
+    }
+
+    // OpenGL has no portable GPU-written draw-count primitive in the base RHI contract.
+    (void)indirectBuffer;
+    (void)indirectOffset;
+    (void)maxDrawCount;
+    (void)stride;
+    (void)countBuffer;
+    (void)countOffset;
+    (void)rejectReplayCommand("drawIndexedIndirectCount is unsupported by the OpenGL base backend");
 }
 
 void GlRhiCommandList::dispatch(uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ) {

@@ -100,6 +100,7 @@ struct RhiDeviceDesc {
 
 struct RhiCapabilities {
     bool multiDrawIndirect = false;
+    bool drawIndexedIndirectCount = false;
     bool timestampQuery = false;
     bool graphicsTimestampQuery = false;
     bool computeTimestampQuery = false;

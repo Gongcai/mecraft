@@ -173,6 +173,12 @@ Input Address。Mesher Revision、Build/Compaction 状态、Submission Token、�
 Active SubChunk BLAS 按 Chunk Key 与 Section Y 稳定排序，并以世界偏移生成 TLAS Transform。GPU Scene
 Geometry 注册与可见区块产品复用仍属于 M4。
 
+RHI 的 M4 间接绘制入口已补齐：`RhiCommandList::drawIndexedIndirectCount` 在 Vulkan 1.2/1.3
+映射到原生 GPU-written draw count 命令，并在录制时校验命令/计数缓冲区用途、对齐、范围、stride、
+最大 draw count；OpenGL 基础后端明确返回 Unsupported，避免把 CPU 回退伪装成现代 GPU Scene 能力。
+资源状态仍由 Render Graph 在 Compute 写入后转换为 `IndirectArgument`。该入口目前还未连接 Visible/Indirect/Draw Count 生产 Pass，GPU Culling
+运行时仍属于 M4 后续工作；`RhiCapabilities::drawIndexedIndirectCount` 明确报告该能力边界。
+
 ### 5.4 模型实例
 
 `ModelSceneRuntime` 不再对每个 Entity 调用 `renderToGBuffer`/`renderToShadowMap`。它把

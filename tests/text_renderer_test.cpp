@@ -117,6 +117,7 @@ public:
     }
     void drawIndexed(uint32_t, uint32_t, uint32_t, int32_t, uint32_t) override {}
     void drawIndirect(RhiBufferHandle, uint64_t, uint32_t, uint32_t) override {}
+    void drawIndexedIndirectCount(RhiBufferHandle, uint64_t, uint32_t, uint32_t, RhiBufferHandle, uint64_t) override {}
     void dispatch(uint32_t, uint32_t, uint32_t) override {}
 
     void updateBuffer(RhiBufferHandle, uint64_t, const void*, const size_t size) override {
