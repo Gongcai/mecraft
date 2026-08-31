@@ -16,6 +16,7 @@
 #include "../../../world/block/DoorBlock.h"
 #include "../../../world/block/BlockStateRegistry.h"
 #include "../../../world/block/PropIndices.h"
+#include "../../../world/redstone/RedstoneTick.h"
 #include "../../../world/redstone/RedstoneUpdateQueue.h"
 #include "../../../world/redstone/WireContainerParts.h"
 #include "../../../world/redstone/WireFaceGeometry.h"
@@ -2924,11 +2925,12 @@ void RedstoneSystem::update(SystemContext& ctx) {
     if (ctx.services.gameClient) {
         return;
     }
-    if ((ctx.tickIndex % 2u) != 0u) {
+    if (!RedstoneTick::runsOnGameTick(ctx.tickIndex)) {
         return;
     }
 
-    processWorldWithContext(*ctx.services.world, &ctx.registry, &ctx.registry, ctx.tickIndex / 2u, 4096);
+    processWorldWithContext(*ctx.services.world, &ctx.registry, &ctx.registry,
+                            RedstoneTick::fromGameTick(ctx.tickIndex), 4096);
 }
 
 size_t RedstoneSystem::processWorld(World& world, const uint64_t redstoneTick, const size_t budget) {

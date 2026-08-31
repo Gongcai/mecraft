@@ -2,6 +2,7 @@
 #include "../Diagnostics.h"
 #include "../world/World.h"
 #include "../world/WeatherSystem.h"
+#include "../world/redstone/RedstoneTick.h"
 #include "../world/block/Block.h"
 #include "../world/block/BedBlock.h"
 #include "../world/block/DoorBlock.h"
@@ -1024,12 +1025,13 @@ void GameServer::tickWorldSystems() {
     if (m_gameplayRegistry != nullptr) {
         ecs::PressurePlateSystem::processWorldEntities(m_world, *m_gameplayRegistry);
     }
-    if ((m_currentTick % 2u) == 0u) {
+    if (RedstoneTick::runsOnGameTick(m_currentTick)) {
         if (m_gameplayRegistry != nullptr) {
-            ecs::RedstoneSystem::processWorld(m_world, m_currentTick / 2u, *m_gameplayRegistry, 4096);
+            ecs::RedstoneSystem::processWorld(m_world, RedstoneTick::fromGameTick(m_currentTick),
+                                              *m_gameplayRegistry, 4096);
             ecs::RedstoneDeviceActionSystem::processEvents(m_world, *m_gameplayRegistry);
         } else {
-            ecs::RedstoneSystem::processWorld(m_world, m_currentTick / 2u, 4096);
+            ecs::RedstoneSystem::processWorld(m_world, RedstoneTick::fromGameTick(m_currentTick), 4096);
         }
     }
     if (m_gameplayRegistry != nullptr) {

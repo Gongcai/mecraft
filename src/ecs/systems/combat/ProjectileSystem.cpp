@@ -25,6 +25,7 @@
 #include "../../../world/block/BlockStateRegistry.h"
 #include "../../../world/block/PropIndices.h"
 #include "../../../world/chunk/Chunk.h"
+#include "../../../world/redstone/RedstoneTick.h"
 #include "../../../world/redstone/RedstoneUpdateQueue.h"
 
 namespace ecs {
@@ -157,7 +158,8 @@ void activateTargetBlock(World& world, const uint64_t tickIndex, const glm::ivec
     const uint8_t power = targetPowerFromImpact(blockPosition, impactPosition);
     const BlockStateId updatedState = withPowerProperty(currentState, power);
     world.setBlockState(blockPosition.x, blockPosition.y, blockPosition.z, updatedState);
-    const uint64_t activationRedstoneTick = std::max(world.lastProcessedRedstoneTick(), tickIndex / 2u);
+    const uint64_t activationRedstoneTick =
+        std::max(world.lastProcessedRedstoneTick(), RedstoneTick::fromGameTick(tickIndex));
     world.redstoneScheduledUpdateQueue().reschedule(activationRedstoneTick + kTargetPulseTicks, blockPosition,
                                                     RedstoneScheduledAction::ReleaseTargetPulse);
 }
