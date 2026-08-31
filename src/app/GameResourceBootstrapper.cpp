@@ -4,6 +4,7 @@
 #include "../game/interaction/BlockInteractionRegistry.h"
 #include "../game/inventory/ContainerBehaviorRegistry.h"
 #include "../item/Item.h"
+#include "../resource/AppTextureManifest.h"
 #include "../resource/AtmosphereLutProbe.h"
 #include "../resource/ResourceMgr.h"
 #include "../ui/inventory/ContainerUiRegistry.h"
@@ -207,13 +208,9 @@ bool bootstrapGameResources(ResourceMgr& resourceMgr, RhiDevice& rhiDevice, RhiC
                                            blockTextureNames);
     resourceMgr.loadLightmapTextures(LIGHTMAP_DAY_PATH, LIGHTMAP_NIGHT_PATH);
     resourceMgr.loadColormapTextures(GRASS_TEXTURE_PATH, FOLIAGE_TEXTURE_PATH);
-    resourceMgr.loadTexture2D("shader_noise2d", SHADERPACK_NOISE2D_PATH, false, false,
-                              RhiTextureQueueSharing::GraphicsComputeConcurrent);
-    resourceMgr.loadTexture2D("shader_bayer256", SHADERPACK_BAYER256_PATH);
-    resourceMgr.loadTexture2D("shader_ripple_normal", SHADERPACK_RIPPLE_NORMAL_PATH);
-    resourceMgr.loadTexture2D("shader_ldr_lut", SHADERPACK_LDR_LUT_PATH);
-    resourceMgr.loadTexture2D("rain", RAIN_TEXTURE_PATH);
-    resourceMgr.loadTexture2D("snow", SNOW_TEXTURE_PATH);
+    if (!resource::loadAppTextureManifest(resourceMgr, APP_TEXTURES_MANIFEST_PATH)) {
+        return false;
+    }
 
     resource::probeAtmosphereLut("Transmittance", SHADERPACK_TRANSMITTANCE_LUT_PATH, 256U * 64U * 16U);
     resource::probeAtmosphereLut("Scattering", SHADERPACK_SCATTERING_LUT_PATH, 32U * 128U * 32U * 8U * 16U);
@@ -221,8 +218,6 @@ bool bootstrapGameResources(ResourceMgr& resourceMgr, RhiDevice& rhiDevice, RhiC
     resource::probeAtmosphereLut("Final", SHADERPACK_FINAL_LUT_PATH);
 
     resourceMgr.buildItemTextureAtlas(ITEMS_TEXTURES_DIR, 16);
-    resourceMgr.loadGuiTexture("widgets", WIDGETS_TEXTURE_PATH, true);
-    resourceMgr.loadGuiTexture("inventory", INVENTORY_TEX_PATH, true);
 
     if (!ContainerBehaviorRegistry::init() || !BlockInteractionRegistry::init() || !ui::ContainerUiRegistry::init()) {
         return false;
@@ -235,25 +230,6 @@ bool bootstrapGameResources(ResourceMgr& resourceMgr, RhiDevice& rhiDevice, RhiC
         }
     }
 
-    resourceMgr.loadGuiTexture("creative_tab_inventory", CREATIVE_INVENTORY_PATH, true);
-    resourceMgr.loadGuiTexture("creative_tab_items", CREATIVE_TAB_ITEMS_PATH, true);
-    for (int i = 1; i <= 7; ++i) {
-        const std::string suffix = std::to_string(i) + ".png";
-        resourceMgr.loadGuiTexture("creative_tab_top_selected_" + std::to_string(i),
-                                   std::string(CREATIVE_TABS_PATH) + "/tab_top_selected_" + suffix, true);
-        resourceMgr.loadGuiTexture("creative_tab_top_unselected_" + std::to_string(i),
-                                   std::string(CREATIVE_TABS_PATH) + "/tab_top_unselected_" + suffix, true);
-        resourceMgr.loadGuiTexture("creative_tab_bottom_selected_" + std::to_string(i),
-                                   std::string(CREATIVE_TABS_PATH) + "/tab_bottom_selected_" + suffix, true);
-        resourceMgr.loadGuiTexture("creative_tab_bottom_unselected_" + std::to_string(i),
-                                   std::string(CREATIVE_TABS_PATH) + "/tab_bottom_unselected_" + suffix, true);
-    }
-
-    resourceMgr.loadGuiTexture("creative_scroller", std::string(CREATIVE_TABS_PATH) + "/scroller.png", true);
-    resourceMgr.loadGuiTexture("creative_scroller_disabled", std::string(CREATIVE_TABS_PATH) + "/scroller_disabled.png",
-                               true);
-    resourceMgr.loadGuiTexture("steve", STEVE_TEXTURE_PATH, true);
-    resourceMgr.loadGuiTexture("chest", CHEST_ENTITY_TEXTURE_PATH, true);
     if (!resourceMgr.preloadEntityTexturesFromConfig(ENTITIES_CONFIG_PATH)) {
         return false;
     }

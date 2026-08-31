@@ -7,7 +7,6 @@
 #include "CubemapLibrary.h"
 #include "EntityTexturePreloader.h"
 #include "EnvironmentTextureLibrary.h"
-#include "Paths.h"
 #include "Texture2DLibrary.h"
 #include "UiTextureAtlasLibrary.h"
 #include "renderer/rhi/RhiDevice.h"
@@ -41,9 +40,6 @@ void ResourceMgr::init(RhiDevice& rhiDevice, RhiCommandListPool& commandListPool
     m_impl->environmentTextures.init(rhiDevice);
     m_impl->blockTextures.init(rhiDevice, commandListPool);
     m_impl->uiTextures.init(rhiDevice, commandListPool);
-    loadCubemap("menu_skybox", SKYBOX_TEXTURES_DIR "/right.png", SKYBOX_TEXTURES_DIR "/left.png",
-                SKYBOX_TEXTURES_DIR "/top.png", SKYBOX_TEXTURES_DIR "/bottom.png", SKYBOX_TEXTURES_DIR "/front.png",
-                SKYBOX_TEXTURES_DIR "/back.png");
 }
 
 void ResourceMgr::shutdown() {
