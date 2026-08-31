@@ -19,9 +19,7 @@
 #include "fluid/FluidState.h"
 #include "fluid/FluidSystem.h"
 #include "redstone/WireContainerParts.h"
-#include "redstone/RedstoneRuntimeState.h"
 #include "redstone/RedstoneSimulator.h"
-#include "redstone/RedstoneUpdateQueue.h"
 #include "WeatherSystem.h"
 #include "light/LightService.h"
 #include "gen/TerrainGenerator.h"
@@ -101,21 +99,27 @@ public:
 
     BlockNeighborUpdateQueue& neighborUpdateQueue() { return m_neighborUpdateQueue; }
     const BlockNeighborUpdateQueue& neighborUpdateQueue() const { return m_neighborUpdateQueue; }
-    BlockNeighborUpdateQueue& redstoneUpdateQueue() { return m_redstoneUpdateQueue; }
-    const BlockNeighborUpdateQueue& redstoneUpdateQueue() const { return m_redstoneUpdateQueue; }
-    BlockNeighborUpdateQueue& redstoneChangedBlockQueue() { return m_redstoneChangedBlockQueue; }
-    const BlockNeighborUpdateQueue& redstoneChangedBlockQueue() const { return m_redstoneChangedBlockQueue; }
-    RedstoneUpdateQueue& redstoneScheduledUpdateQueue() { return m_redstoneScheduledUpdateQueue; }
-    const RedstoneUpdateQueue& redstoneScheduledUpdateQueue() const { return m_redstoneScheduledUpdateQueue; }
-    RedstoneRuntimeState& redstoneRuntimeState() { return m_redstoneRuntimeState; }
-    const RedstoneRuntimeState& redstoneRuntimeState() const { return m_redstoneRuntimeState; }
+    BlockNeighborUpdateQueue& redstoneUpdateQueue() { return m_redstoneSimulator.updateQueue(); }
+    const BlockNeighborUpdateQueue& redstoneUpdateQueue() const { return m_redstoneSimulator.updateQueue(); }
+    BlockNeighborUpdateQueue& redstoneChangedBlockQueue() { return m_redstoneSimulator.changedBlockQueue(); }
+    const BlockNeighborUpdateQueue& redstoneChangedBlockQueue() const {
+        return m_redstoneSimulator.changedBlockQueue();
+    }
+    RedstoneUpdateQueue& redstoneScheduledUpdateQueue() { return m_redstoneSimulator.scheduledUpdateQueue(); }
+    const RedstoneUpdateQueue& redstoneScheduledUpdateQueue() const {
+        return m_redstoneSimulator.scheduledUpdateQueue();
+    }
+    RedstoneRuntimeState& redstoneRuntimeState() { return m_redstoneSimulator.runtimeState(); }
+    const RedstoneRuntimeState& redstoneRuntimeState() const { return m_redstoneSimulator.runtimeState(); }
     WireContainerPartStore& wireContainerParts() { return m_wireContainerParts; }
     const WireContainerPartStore& wireContainerParts() const { return m_wireContainerParts; }
     RedstoneSimulator& redstoneSimulator() { return m_redstoneSimulator; }
     const RedstoneSimulator& redstoneSimulator() const { return m_redstoneSimulator; }
     void notifyWireContainerPartsChanged(const glm::ivec3& pos);
-    void setLastProcessedRedstoneTick(uint64_t redstoneTick) { m_lastProcessedRedstoneTick = redstoneTick; }
-    [[nodiscard]] uint64_t lastProcessedRedstoneTick() const { return m_lastProcessedRedstoneTick; }
+    void setLastProcessedRedstoneTick(const uint64_t redstoneTick) {
+        m_redstoneSimulator.setLastProcessedTick(redstoneTick);
+    }
+    [[nodiscard]] uint64_t lastProcessedRedstoneTick() const { return m_redstoneSimulator.lastProcessedTick(); }
 
     /// Access the chunk ticket manager (for GameServer per-client management).
     ChunkTicketManager& ticketManager() { return m_ticketManager; }
@@ -156,15 +160,10 @@ private:
     std::unique_ptr<LightService> m_lightService;
     DayNightSystem m_dayNightSystem;
     FluidSystem m_fluidSystem{*this};
-    RedstoneSimulator m_redstoneSimulator{*this};
+    RedstoneSimulator m_redstoneSimulator;
     WeatherSystem m_weatherSystem;
     BlockNeighborUpdateQueue m_neighborUpdateQueue;
-    BlockNeighborUpdateQueue m_redstoneUpdateQueue;
-    BlockNeighborUpdateQueue m_redstoneChangedBlockQueue;
-    RedstoneUpdateQueue m_redstoneScheduledUpdateQueue;
-    RedstoneRuntimeState m_redstoneRuntimeState;
     WireContainerPartStore m_wireContainerParts;
-    uint64_t m_lastProcessedRedstoneTick = 0;
     ThreadPool* m_threadPool = nullptr;
     BlockChangeCallback m_blockChangeCallback;
     WireContainerChangeCallback m_wireContainerChangeCallback;

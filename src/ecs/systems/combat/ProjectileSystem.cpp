@@ -159,9 +159,9 @@ void activateTargetBlock(World& world, const uint64_t tickIndex, const glm::ivec
     const BlockStateId updatedState = withPowerProperty(currentState, power);
     world.setBlockState(blockPosition.x, blockPosition.y, blockPosition.z, updatedState);
     const uint64_t activationRedstoneTick =
-        std::max(world.lastProcessedRedstoneTick(), RedstoneTick::fromGameTick(tickIndex));
-    world.redstoneScheduledUpdateQueue().reschedule(activationRedstoneTick + kTargetPulseTicks, blockPosition,
-                                                    RedstoneScheduledAction::ReleaseTargetPulse);
+        std::max(world.redstoneSimulator().lastProcessedTick(), RedstoneTick::fromGameTick(tickIndex));
+    world.redstoneSimulator().scheduledUpdateQueue().reschedule(activationRedstoneTick + kTargetPulseTicks,
+                                                                blockPosition, RedstoneScheduledAction::ReleaseTargetPulse);
 }
 
 void emitProjectileImpactParticles(GameplayRegistry& registry, const glm::vec3& position, const BlockID blockType,

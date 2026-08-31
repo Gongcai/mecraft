@@ -1,6 +1,5 @@
 #include "RedstoneSimulator.h"
 
-#include "../World.h"
 #include "../block/Block.h"
 #include "../fluid/FluidState.h"
 #include "WireFaceGeometry.h"
@@ -22,30 +21,40 @@ bool isRedstoneTorchRuntimeState(const BlockStateId stateId) {
 } // namespace
 
 void RedstoneSimulator::onBlockChanged(const glm::ivec3& pos) {
-    m_world.redstoneUpdateQueue().enqueue(pos);
-    m_world.redstoneChangedBlockQueue().enqueue(pos);
+    m_updateQueue.enqueue(pos);
+    m_changedBlockQueue.enqueue(pos);
     for (const glm::ivec3& offset : kNeighborOffsets) {
-        m_world.redstoneUpdateQueue().enqueue(pos + offset);
+        m_updateQueue.enqueue(pos + offset);
     }
     WireFaceGeometry::forEachWireOuterCornerPeerPosition(
-        pos, [this](const glm::ivec3& peer) { m_world.redstoneUpdateQueue().enqueue(peer); });
+        pos, [this](const glm::ivec3& peer) { m_updateQueue.enqueue(peer); });
     WireFaceGeometry::forEachWireOuterCornerPositionBlockedBy(
-        pos, [this](const glm::ivec3& wirePosition) { m_world.redstoneUpdateQueue().enqueue(wirePosition); });
+        pos, [this](const glm::ivec3& wirePosition) { m_updateQueue.enqueue(wirePosition); });
 }
 
 void RedstoneSimulator::onWireContainerPartsChanged(const glm::ivec3& pos) {
-    m_world.redstoneUpdateQueue().enqueue(pos);
-    m_world.redstoneChangedBlockQueue().enqueue(pos);
+    m_updateQueue.enqueue(pos);
+    m_changedBlockQueue.enqueue(pos);
     for (const glm::ivec3& offset : kNeighborOffsets) {
-        m_world.redstoneUpdateQueue().enqueue(pos + offset);
+        m_updateQueue.enqueue(pos + offset);
     }
     WireFaceGeometry::forEachWireOuterCornerPeerPosition(
-        pos, [this](const glm::ivec3& peer) { m_world.redstoneUpdateQueue().enqueue(peer); });
+        pos, [this](const glm::ivec3& peer) { m_updateQueue.enqueue(peer); });
 }
 
 void RedstoneSimulator::onBlockStateReplaced(const glm::ivec3& pos, const BlockStateId oldState,
                                              const BlockStateId newState) {
     if (isRedstoneTorchRuntimeState(oldState) && !isRedstoneTorchRuntimeState(newState)) {
-        m_world.redstoneRuntimeState().eraseTorch(pos);
+        m_runtimeState.eraseTorch(pos);
     }
+}
+
+void RedstoneSimulator::reset() {
+    m_updateQueue.clear();
+    m_changedBlockQueue.clear();
+    m_scheduledUpdateQueue.clear();
+    m_runtimeState.clear();
+    // m_lastProcessedTick is preserved on purpose: World::init() never reset
+    // it, and ProjectileSystem aligns new pulses against the maximum of this
+    // value and the current redstone tick.
 }

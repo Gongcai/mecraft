@@ -2342,7 +2342,7 @@ size_t applyTorchStates(World& world, const std::vector<glm::ivec3>& torches, co
         const WirePowerMap inputWirePowers = propagateWirePower(world, wires, inputSources);
 
         bool shouldBeLit = shouldTorchBeLit(world, inputWirePowers, position, currentState);
-        auto& runtime = world.redstoneRuntimeState();
+        auto& runtime = world.redstoneSimulator().runtimeState();
         auto runtimeIt = runtime.torches.find(position);
         if (runtimeIt != runtime.torches.end() && runtimeIt->second.burnedOut &&
             redstoneTick >= runtimeIt->second.cooldownEndsAtTick) {
@@ -2358,7 +2358,7 @@ size_t applyTorchStates(World& world, const std::vector<glm::ivec3>& torches, co
             if (recordTorchTurnOff(torchRuntime, redstoneTick)) {
                 torchRuntime.burnedOut = true;
                 torchRuntime.cooldownEndsAtTick = redstoneTick + kTorchBurnoutCooldownTicks;
-                world.redstoneScheduledUpdateQueue().reschedule(torchRuntime.cooldownEndsAtTick, position,
+                world.redstoneSimulator().scheduledUpdateQueue().reschedule(torchRuntime.cooldownEndsAtTick, position,
                                                                 RedstoneScheduledAction::ResetTorchBurnout);
             }
         }
@@ -2497,7 +2497,7 @@ void scheduleRepeaterEvaluationUpdates(World& world, const uint64_t redstoneTick
             continue;
         }
 
-        world.redstoneScheduledUpdateQueue().schedule(redstoneTick + repeaterDelayTicks(stateId), position,
+        world.redstoneSimulator().scheduledUpdateQueue().schedule(redstoneTick + repeaterDelayTicks(stateId), position,
                                                       RedstoneScheduledAction::EvaluateRepeater);
     }
 }
@@ -2516,7 +2516,7 @@ void scheduleObserverPulseUpdates(World& world, const uint64_t redstoneTick,
                 continue;
             }
 
-            world.redstoneScheduledUpdateQueue().schedule(redstoneTick + kObserverPulseDelayTicks, observerPosition,
+            world.redstoneSimulator().scheduledUpdateQueue().schedule(redstoneTick + kObserverPulseDelayTicks, observerPosition,
                                                           RedstoneScheduledAction::StartObserverPulse);
         }
     }
@@ -2533,7 +2533,7 @@ void scheduleButtonReleaseUpdates(World& world, const uint64_t redstoneTick,
             continue;
         }
 
-        world.redstoneScheduledUpdateQueue().schedule(redstoneTick + buttonPulseTicks(stateId), position,
+        world.redstoneSimulator().scheduledUpdateQueue().schedule(redstoneTick + buttonPulseTicks(stateId), position,
                                                       RedstoneScheduledAction::ReleaseButton);
     }
 }
@@ -2582,7 +2582,7 @@ bool applyObserverPulseStart(World& world, const glm::ivec3& position, const uin
 
     const BlockStateId updatedState = withPowered(currentState, true);
     world.setBlockState(position.x, position.y, position.z, updatedState);
-    world.redstoneScheduledUpdateQueue().schedule(redstoneTick + kObserverPulseDurationTicks, position,
+    world.redstoneSimulator().scheduledUpdateQueue().schedule(redstoneTick + kObserverPulseDurationTicks, position,
                                                   RedstoneScheduledAction::ReleaseObserverPulse);
     return true;
 }
@@ -2616,7 +2616,7 @@ bool applyTargetPulseRelease(World& world, const glm::ivec3& position) {
 }
 
 bool applyTorchBurnoutReset(World& world, const glm::ivec3& position, const uint64_t redstoneTick) {
-    auto& runtime = world.redstoneRuntimeState();
+    auto& runtime = world.redstoneSimulator().runtimeState();
     const BlockStateId currentState = world.getBlockState(position.x, position.y, position.z);
     if (!isTorchState(currentState)) {
         runtime.eraseTorch(position);
@@ -2860,30 +2860,30 @@ size_t processWorldWithContext(World& world, const GameplayRegistry* readRegistr
         return 0;
     }
 
-    world.setLastProcessedRedstoneTick(redstoneTick);
+    world.redstoneSimulator().setLastProcessedTick(redstoneTick);
 
     RedstoneProcessBuffers& buffers = t_redstoneBuffers;
     size_t changed = 0;
     std::vector<RedstoneScheduledUpdate>& scheduledUpdates = buffers.scheduledUpdates;
     scheduledUpdates.clear();
-    scheduledUpdates.reserve(std::min(budget, world.redstoneScheduledUpdateQueue().size()));
-    world.redstoneScheduledUpdateQueue().drainDue(redstoneTick, scheduledUpdates, budget);
+    scheduledUpdates.reserve(std::min(budget, world.redstoneSimulator().scheduledUpdateQueue().size()));
+    world.redstoneSimulator().scheduledUpdateQueue().drainDue(redstoneTick, scheduledUpdates, budget);
     changed += applyScheduledUpdates(world, scheduledUpdates);
 
     std::vector<glm::ivec3>& changedPositions = buffers.changedPositions;
     changedPositions.clear();
     changedPositions.reserve(budget);
-    world.redstoneChangedBlockQueue().drain(changedPositions, budget);
+    world.redstoneSimulator().changedBlockQueue().drain(changedPositions, budget);
     scheduleObserverPulseUpdates(world, redstoneTick, changedPositions);
 
-    if (world.redstoneUpdateQueue().size() == 0) {
+    if (world.redstoneSimulator().updateQueue().size() == 0) {
         return changed;
     }
 
     std::vector<glm::ivec3>& dirtyPositions = buffers.dirtyPositions;
     dirtyPositions.clear();
     dirtyPositions.reserve(budget);
-    world.redstoneUpdateQueue().drain(dirtyPositions, budget);
+    world.redstoneSimulator().updateQueue().drain(dirtyPositions, budget);
 
     RedstoneWorkSet& workSet = buffers.workSet;
     collectRedstoneWorkSet(world, dirtyPositions, workSet);

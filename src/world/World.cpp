@@ -463,10 +463,7 @@ void World::init(uint32_t seed) {
     }
     m_fluidSystem.reset();
     m_neighborUpdateQueue.clear();
-    m_redstoneUpdateQueue.clear();
-    m_redstoneChangedBlockQueue.clear();
-    m_redstoneScheduledUpdateQueue.clear();
-    m_redstoneRuntimeState.clear();
+    m_redstoneSimulator.reset();
     m_wireContainerParts.clear();
     m_ticketManager.reset();
     m_ticketManager.setViewRadius(m_renderDistance);
