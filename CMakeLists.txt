@@ -340,6 +340,7 @@ set(SRC_WORLD
         src/world/fluid/FluidState.cpp
         src/world/fluid/FluidFlow.cpp
         src/world/fluid/FluidSystem.cpp
+        src/world/tick/ScheduledBlockTickQueue.cpp
         src/world/block/BlockNeighborUpdateQueue.cpp
         src/world/redstone/WireContainerPlacement.cpp
         src/world/redstone/RedstoneUpdateQueue.cpp
@@ -1276,6 +1277,8 @@ if(MECRAFT_BUILD_TESTS)
     mecraft_copy_runtime_assets(bucket_use_test)
     add_mecraft_test(water_spread_test tests/water_spread_test.cpp)
     add_mecraft_test(fluid_flow_test tests/fluid_flow_test.cpp)
+    add_mecraft_test(fluid_stability_test tests/fluid_stability_test.cpp)
+    add_mecraft_test(scheduled_block_tick_queue_test tests/scheduled_block_tick_queue_test.cpp)
     add_mecraft_test(thread_pool_test tests/thread_pool_test.cpp)
     add_mecraft_test(chunk_meshing_service_test tests/chunk_meshing_service_test.cpp)
     add_mecraft_test(terrain_render_cache_test tests/terrain_render_cache_test.cpp)

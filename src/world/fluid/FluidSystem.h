@@ -2,20 +2,22 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <queue>
 #include <unordered_map>
-#include <vector>
 
 #include <glm/glm.hpp>
 
 #include "../block/BlockStateRegistry.h"
+#include "../tick/ScheduledBlockTickQueue.h"
 #include "FluidRegistry.h"
 
 class World;
 
-struct ScheduledBlockTick {
-    uint64_t dueTick = 0;
-    glm::ivec3 pos{};
+struct FlowDirections {
+    uint8_t allowedMask = 0;
+    bool foundHole = false;
+    bool hasAnyPassable = false;
+
+    [[nodiscard]] bool allows(const int directionIndex) const { return (allowedMask & (1u << directionIndex)) != 0u; }
 };
 
 class FluidSystem {
@@ -29,37 +31,25 @@ public:
     void scheduleNeighborsForFluidUpdate(glm::ivec3 pos, uint64_t dueTick);
     void processScheduledBlockTicks(uint64_t currentTick, uint32_t budget = 4096);
 
-    [[nodiscard]] size_t pendingTickCount() const { return m_scheduledBlockTickDue.size(); }
+    [[nodiscard]] size_t pendingTickCount() const { return m_scheduledTickQueue.pendingCount(); }
 
 private:
-    struct ScheduledBlockTickPos {
-        int x = 0;
-        int y = 0;
-        int z = 0;
-
-        bool operator==(const ScheduledBlockTickPos& other) const {
-            return x == other.x && y == other.y && z == other.z;
-        }
-    };
-
-    struct ScheduledBlockTickPosHash {
-        size_t operator()(const ScheduledBlockTickPos& pos) const noexcept;
-    };
-
-    struct ScheduledBlockTickCompare {
-        bool operator()(const ScheduledBlockTick& lhs, const ScheduledBlockTick& rhs) const {
-            return lhs.dueTick > rhs.dueTick;
-        }
+    struct FlowDirectionCacheEntry {
+        uint64_t tick = 0;
+        uint8_t allowedMask = 0;
+        bool foundHole = false;
+        bool hasAnyPassable = false;
     };
 
     void updateFluidCell(const glm::ivec3& pos);
     void scheduleSlopeSearchNeighborhoodForFluidUpdate(glm::ivec3 pos, uint64_t dueTick);
-    [[nodiscard]] BlockStateId computeTargetFluidState(const glm::ivec3& pos, BlockStateId currentState) const;
+    [[nodiscard]] BlockStateId computeTargetFluidState(const glm::ivec3& pos, BlockStateId currentState);
+    [[nodiscard]] FlowDirections flowDirectionsFor(const glm::ivec3& pos, const FluidDesc& desc);
+    void purgeStaleFlowDirectionCache(uint64_t currentTick);
     [[nodiscard]] uint64_t resolveNeighborhoodTickDelay(const glm::ivec3& pos) const;
 
     World& m_world;
-    std::priority_queue<ScheduledBlockTick, std::vector<ScheduledBlockTick>, ScheduledBlockTickCompare>
-        m_scheduledBlockTickQueue;
-    std::unordered_map<ScheduledBlockTickPos, uint64_t, ScheduledBlockTickPosHash> m_scheduledBlockTickDue;
+    ScheduledBlockTickQueue m_scheduledTickQueue;
+    std::unordered_map<BlockPositionKey, FlowDirectionCacheEntry, BlockPositionKeyHash> m_flowDirectionCache;
     uint64_t m_lastProcessedGameTick = 0;
 };

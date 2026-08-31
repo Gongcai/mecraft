@@ -3,9 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <cstdlib>
-#include <functional>
 #include <limits>
-#include <queue>
 #include <vector>
 
 #include "FluidState.h"
@@ -18,13 +16,8 @@ constexpr std::array<glm::ivec3, 7> kFluidUpdateOffsets = {
 
 constexpr std::array<glm::ivec3, 4> kHorizontalFluidOffsets = {{{1, 0, 0}, {-1, 0, 0}, {0, 0, 1}, {0, 0, -1}}};
 
-struct FlowDirections {
-    uint8_t allowedMask = 0;
-    bool foundHole = false;
-    bool hasAnyPassable = false;
-
-    [[nodiscard]] bool allows(const int directionIndex) const { return (allowedMask & (1u << directionIndex)) != 0u; }
-};
+constexpr size_t kFlowDirectionCachePurgeThreshold = 32768;
+constexpr uint64_t kFlowDirectionCacheMaxAgeTicks = 128;
 
 struct SearchNode {
     glm::ivec3 pos{};
@@ -234,11 +227,26 @@ int countHorizontalSourceNeighbors(const World& world, const glm::ivec3& pos, co
     return sourceCount;
 }
 
+BlockStateId computeRetractStep(const FluidDesc& desc, const DecodedFluid& current, const bool supportBelow) {
+    // Drain one level per tick instead of clearing the cell outright: an
+    // instant clear makes whole branches vanish and refill in waves whenever
+    // a supply evaluation flips for one tick, while stepped retraction keeps
+    // the surface smooth and leaves a grace window for the supply to return.
+    if (current.kind == FluidKind::None || current.isSource) {
+        return NULL_BLOCK_STATE;
+    }
+    const uint8_t nextLevel = static_cast<uint8_t>(current.level + 1u);
+    if (nextLevel > desc.maxLevel) {
+        return NULL_BLOCK_STATE;
+    }
+    return FluidState::encode(DecodedFluid{current.kind, nextLevel, current.falling && !supportBelow, false});
+}
+
 } // namespace
 
 void FluidSystem::reset() {
-    m_scheduledBlockTickQueue = {};
-    m_scheduledBlockTickDue.clear();
+    m_scheduledTickQueue.clear();
+    m_flowDirectionCache.clear();
     m_lastProcessedGameTick = 0;
 }
 
@@ -255,14 +263,7 @@ void FluidSystem::scheduleBlockTick(const glm::ivec3 pos, const uint64_t dueTick
         return;
     }
 
-    const ScheduledBlockTickPos key{pos.x, pos.y, pos.z};
-    const auto it = m_scheduledBlockTickDue.find(key);
-    if (it != m_scheduledBlockTickDue.end() && it->second <= dueTick) {
-        return;
-    }
-
-    m_scheduledBlockTickDue[key] = dueTick;
-    m_scheduledBlockTickQueue.push(ScheduledBlockTick{dueTick, pos});
+    m_scheduledTickQueue.schedule(pos, dueTick);
 }
 
 void FluidSystem::scheduleNeighborsForFluidUpdate(const glm::ivec3 pos, const uint64_t dueTick) {
@@ -294,29 +295,55 @@ void FluidSystem::scheduleSlopeSearchNeighborhoodForFluidUpdate(const glm::ivec3
 void FluidSystem::processScheduledBlockTicks(const uint64_t currentTick, const uint32_t budget) {
     m_lastProcessedGameTick = currentTick;
 
-    uint32_t processed = 0;
-    while (!m_scheduledBlockTickQueue.empty() && m_scheduledBlockTickQueue.top().dueTick <= currentTick &&
-           processed < budget) {
-        const ScheduledBlockTick scheduled = m_scheduledBlockTickQueue.top();
-        m_scheduledBlockTickQueue.pop();
+    m_scheduledTickQueue.process(currentTick, budget,
+                                 [this](const ScheduledBlockTick& tick) { updateFluidCell(tick.pos); });
 
-        const ScheduledBlockTickPos key{scheduled.pos.x, scheduled.pos.y, scheduled.pos.z};
-        const auto it = m_scheduledBlockTickDue.find(key);
-        if (it == m_scheduledBlockTickDue.end() || it->second != scheduled.dueTick) {
-            continue;
-        }
-        m_scheduledBlockTickDue.erase(it);
-
-        updateFluidCell(scheduled.pos);
-        ++processed;
-    }
+    purgeStaleFlowDirectionCache(currentTick);
 }
 
-size_t FluidSystem::ScheduledBlockTickPosHash::operator()(const ScheduledBlockTickPos& pos) const noexcept {
-    size_t hash = static_cast<size_t>(std::hash<int>{}(pos.x));
-    hash ^= static_cast<size_t>(std::hash<int>{}(pos.y) + 0x9e3779b9u + (hash << 6u) + (hash >> 2u));
-    hash ^= static_cast<size_t>(std::hash<int>{}(pos.z) + 0x9e3779b9u + (hash << 6u) + (hash >> 2u));
-    return hash;
+FlowDirections FluidSystem::flowDirectionsFor(const glm::ivec3& pos, const FluidDesc& desc) {
+    const BlockPositionKey key{pos.x, pos.y, pos.z};
+    const uint64_t currentTick = m_lastProcessedGameTick;
+
+    const auto cached = m_flowDirectionCache.find(key);
+    if (cached != m_flowDirectionCache.end() && cached->second.tick == currentTick) {
+        const FlowDirectionCacheEntry& entry = cached->second;
+        return FlowDirections{entry.allowedMask, entry.foundHole, entry.hasAnyPassable};
+    }
+
+    FlowDirections fresh = computeFlowDirections(m_world, pos, desc);
+
+    // Direction hysteresis: keep previously established flow directions while
+    // at least one of them is still passable. Without this, a drain hole that
+    // fills and empties across ticks flips the allowed direction mask back and
+    // forth, which in turn cuts and restores supply and makes the water flicker.
+    if (cached != m_flowDirectionCache.end() && cached->second.allowedMask != 0u && fresh.hasAnyPassable) {
+        const uint8_t stillViable = static_cast<uint8_t>(fresh.allowedMask & cached->second.allowedMask);
+        if (stillViable != 0u) {
+            fresh.allowedMask = stillViable;
+        }
+    }
+
+    FlowDirectionCacheEntry entry;
+    entry.tick = currentTick;
+    entry.allowedMask = fresh.allowedMask;
+    entry.foundHole = fresh.foundHole;
+    entry.hasAnyPassable = fresh.hasAnyPassable;
+    m_flowDirectionCache[key] = entry;
+    return fresh;
+}
+
+void FluidSystem::purgeStaleFlowDirectionCache(const uint64_t currentTick) {
+    if (m_flowDirectionCache.size() <= kFlowDirectionCachePurgeThreshold) {
+        return;
+    }
+    for (auto it = m_flowDirectionCache.begin(); it != m_flowDirectionCache.end();) {
+        if (it->second.tick + kFlowDirectionCacheMaxAgeTicks < currentTick) {
+            it = m_flowDirectionCache.erase(it);
+        } else {
+            ++it;
+        }
+    }
 }
 
 void FluidSystem::updateFluidCell(const glm::ivec3& pos) {
@@ -333,8 +360,15 @@ void FluidSystem::updateFluidCell(const glm::ivec3& pos) {
     const FluidKind targetKind = resolveTargetFluidKind(m_world, pos);
     if (targetKind == FluidKind::None) {
         if (currentFluidState != NULL_BLOCK_STATE) {
-            // Fluid should retract — clear the fluid layer
-            m_world.setFluidState(pos.x, pos.y, pos.z, NULL_BLOCK_STATE);
+            // Fluid should retract — drain it one level per tick instead of
+            // clearing it in a single tick.
+            const DecodedFluid currentFluid = FluidState::decode(currentFluidState);
+            const FluidDesc& retractDesc = FluidRegistry::get(currentFluid.kind);
+            const bool supportBelow = hasSupportBelow(m_world, pos, retractDesc);
+            const BlockStateId retracted = computeRetractStep(retractDesc, currentFluid, supportBelow);
+            if (retracted != currentFluidState) {
+                m_world.setFluidState(pos.x, pos.y, pos.z, retracted);
+            }
         }
         return;
     }
@@ -356,7 +390,7 @@ void FluidSystem::updateFluidCell(const glm::ivec3& pos) {
     m_world.setFluidState(pos.x, pos.y, pos.z, targetState);
 }
 
-BlockStateId FluidSystem::computeTargetFluidState(const glm::ivec3& pos, const BlockStateId currentState) const {
+BlockStateId FluidSystem::computeTargetFluidState(const glm::ivec3& pos, const BlockStateId currentState) {
     const FluidKind kind = resolveTargetFluidKind(m_world, pos);
     if (kind == FluidKind::None) {
         return FluidState::decode(currentState).kind == FluidKind::None ? currentState : NULL_BLOCK_STATE;
@@ -412,7 +446,7 @@ BlockStateId FluidSystem::computeTargetFluidState(const glm::ivec3& pos, const B
             continue;
         }
 
-        const FlowDirections flowDirections = computeFlowDirections(m_world, neighborPos, desc);
+        const FlowDirections flowDirections = flowDirectionsFor(neighborPos, desc);
         if (flowDirections.foundHole && !flowDirections.allows(dirIndex)) {
             continue;
         }
@@ -425,7 +459,7 @@ BlockStateId FluidSystem::computeTargetFluidState(const glm::ivec3& pos, const B
     }
 
     if (!foundHorizontalSource || minNeighborLevel >= desc.maxLevel) {
-        return NULL_BLOCK_STATE;
+        return computeRetractStep(desc, current, supportBelow);
     }
 
     return FluidState::encode(DecodedFluid{kind, static_cast<uint8_t>(minNeighborLevel + 1), !supportBelow, false});
