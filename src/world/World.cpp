@@ -39,39 +39,6 @@ void markChunkSubChunkAndVerticalNeighborsDirty(Chunk& chunk, const int scy, con
     }
 }
 
-template <typename Fn> void forEachWireOuterCornerPeerPosition(const glm::ivec3& position, Fn&& fn) {
-    for (const uint16_t selfFacing : WireFaceGeometry::wireFacings()) {
-        const glm::ivec3 support = WireFaceGeometry::supportPosition(position, selfFacing);
-        for (const uint16_t peerFacing : WireFaceGeometry::wireFacings()) {
-            if (!WireFaceGeometry::arePerpendicularFacings(selfFacing, peerFacing)) {
-                continue;
-            }
-            fn(WireFaceGeometry::wirePositionOnSupportFace(support, peerFacing));
-        }
-    }
-}
-
-template <typename Fn> void forEachWireOuterCornerPositionBlockedBy(const glm::ivec3& blocker, Fn&& fn) {
-    for (const uint16_t facingA : WireFaceGeometry::wireFacings()) {
-        for (const uint16_t facingB : WireFaceGeometry::wireFacings()) {
-            if (facingA >= facingB || !WireFaceGeometry::arePerpendicularFacings(facingA, facingB)) {
-                continue;
-            }
-
-            const glm::ivec3 support =
-                blocker - WireFaceGeometry::surfaceNormal(facingA) - WireFaceGeometry::surfaceNormal(facingB);
-            fn(WireFaceGeometry::wirePositionOnSupportFace(support, facingA));
-            fn(WireFaceGeometry::wirePositionOnSupportFace(support, facingB));
-        }
-    }
-}
-
-template <typename Fn> void forEachWirePositionOnSupport(const glm::ivec3& support, Fn&& fn) {
-    for (const uint16_t facing : WireFaceGeometry::wireFacings()) {
-        fn(WireFaceGeometry::wirePositionOnSupportFace(support, facing));
-    }
-}
-
 bool canWaterOccupyBlockLayer(const BlockStateId state) {
     const FluidDesc& waterDesc = FluidRegistry::get(FluidKind::Water);
     return FluidState::canReplace(waterDesc, state) || FluidState::canCoexist(waterDesc, state);
@@ -130,14 +97,6 @@ bool isRedstoneWireState(const BlockStateId stateId) {
     }
     const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
     return isRedstoneWireBlockDef(BlockRegistry::getFast(blockId));
-}
-
-bool isRedstoneTorchRuntimeState(const BlockStateId stateId) {
-    if (stateId == NULL_BLOCK_STATE || FluidState::decode(stateId).kind != FluidKind::None) {
-        return false;
-    }
-    const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
-    return BlockRegistry::getFast(blockId).redstoneBehavior == "torch";
 }
 
 bool isFaceOrientedLogicUnitDef(const BlockDef& def) {
@@ -939,9 +898,7 @@ void World::setBlockState(int x, int y, int z, BlockStateId id) {
             chunk.setBlock(localX, y, localZ, targetState);
         }
 
-        if (isRedstoneTorchRuntimeState(oldId) && !isRedstoneTorchRuntimeState(targetState)) {
-            m_redstoneRuntimeState.eraseTorch(glm::ivec3(x, y, z));
-        }
+        m_redstoneSimulator.onBlockStateReplaced(glm::ivec3(x, y, z), oldId, targetState);
         if (isWireContainerState(oldId) && !isWireContainerState(targetState)) {
             m_wireContainerParts.erase(glm::ivec3(x, y, z));
         }
@@ -987,16 +944,10 @@ void World::setBlockState(int x, int y, int z, BlockStateId id) {
         {1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1},
     };
     m_neighborUpdateQueue.enqueue(glm::ivec3(x, y, z));
-    m_redstoneUpdateQueue.enqueue(glm::ivec3(x, y, z));
-    m_redstoneChangedBlockQueue.enqueue(glm::ivec3(x, y, z));
     for (const auto& off : kNeighborOffsets) {
         m_neighborUpdateQueue.enqueue(glm::ivec3(x, y, z) + off);
-        m_redstoneUpdateQueue.enqueue(glm::ivec3(x, y, z) + off);
     }
-    forEachWireOuterCornerPeerPosition(glm::ivec3(x, y, z),
-                                       [this](const glm::ivec3& peer) { m_redstoneUpdateQueue.enqueue(peer); });
-    forEachWireOuterCornerPositionBlockedBy(
-        glm::ivec3(x, y, z), [this](const glm::ivec3& wirePosition) { m_redstoneUpdateQueue.enqueue(wirePosition); });
+    m_redstoneSimulator.onBlockChanged(glm::ivec3(x, y, z));
     // Notify block change callback (used by GameServer for BlockUpdateBatch)
     if (m_blockChangeCallback) {
         m_blockChangeCallback(x, y, z, targetState);
@@ -1057,15 +1008,7 @@ void World::notifyWireContainerPartsChanged(const glm::ivec3& pos) {
             markChunkSubChunkAndVerticalNeighborsDirty(*nit->second, editedScy, localY);
     }
 
-    static constexpr glm::ivec3 kNeighborOffsets[6] = {
-        {1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1},
-    };
-    m_redstoneUpdateQueue.enqueue(pos);
-    m_redstoneChangedBlockQueue.enqueue(pos);
-    for (const glm::ivec3& offset : kNeighborOffsets) {
-        m_redstoneUpdateQueue.enqueue(pos + offset);
-    }
-    forEachWireOuterCornerPeerPosition(pos, [this](const glm::ivec3& peer) { m_redstoneUpdateQueue.enqueue(peer); });
+    m_redstoneSimulator.onWireContainerPartsChanged(pos);
     markChunkSaveDirty(chunkX, chunkZ);
     refreshConnectedBlocksAround(pos);
 }
@@ -1285,10 +1228,11 @@ void World::refreshConnectedBlocksAround(const glm::ivec3& pos) {
     for (const glm::ivec3& offset : kRefreshOffsets) {
         refreshConnectedBlockAt(pos + offset);
     }
-    forEachWirePositionOnSupport(pos,
-                                 [this](const glm::ivec3& wirePosition) { refreshConnectedBlockAt(wirePosition); });
-    forEachWireOuterCornerPeerPosition(pos, [this](const glm::ivec3& peer) { refreshConnectedBlockAt(peer); });
-    forEachWireOuterCornerPositionBlockedBy(
+    WireFaceGeometry::forEachWirePositionOnSupport(
+        pos, [this](const glm::ivec3& wirePosition) { refreshConnectedBlockAt(wirePosition); });
+    WireFaceGeometry::forEachWireOuterCornerPeerPosition(
+        pos, [this](const glm::ivec3& peer) { refreshConnectedBlockAt(peer); });
+    WireFaceGeometry::forEachWireOuterCornerPositionBlockedBy(
         pos, [this](const glm::ivec3& wirePosition) { refreshConnectedBlockAt(wirePosition); });
 }
 

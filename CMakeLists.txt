@@ -344,6 +344,7 @@ set(SRC_WORLD
         src/world/block/BlockNeighborUpdateQueue.cpp
         src/world/redstone/WireContainerPlacement.cpp
         src/world/redstone/RedstoneUpdateQueue.cpp
+        src/world/redstone/RedstoneSimulator.cpp
         src/world/gen/TerrainGenerator.cpp
         src/world/WorldRaycast.cpp
         src/world/World.cpp

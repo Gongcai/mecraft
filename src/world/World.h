@@ -20,6 +20,7 @@
 #include "fluid/FluidSystem.h"
 #include "redstone/WireContainerParts.h"
 #include "redstone/RedstoneRuntimeState.h"
+#include "redstone/RedstoneSimulator.h"
 #include "redstone/RedstoneUpdateQueue.h"
 #include "WeatherSystem.h"
 #include "light/LightService.h"
@@ -110,6 +111,8 @@ public:
     const RedstoneRuntimeState& redstoneRuntimeState() const { return m_redstoneRuntimeState; }
     WireContainerPartStore& wireContainerParts() { return m_wireContainerParts; }
     const WireContainerPartStore& wireContainerParts() const { return m_wireContainerParts; }
+    RedstoneSimulator& redstoneSimulator() { return m_redstoneSimulator; }
+    const RedstoneSimulator& redstoneSimulator() const { return m_redstoneSimulator; }
     void notifyWireContainerPartsChanged(const glm::ivec3& pos);
     void setLastProcessedRedstoneTick(uint64_t redstoneTick) { m_lastProcessedRedstoneTick = redstoneTick; }
     [[nodiscard]] uint64_t lastProcessedRedstoneTick() const { return m_lastProcessedRedstoneTick; }
@@ -153,6 +156,7 @@ private:
     std::unique_ptr<LightService> m_lightService;
     DayNightSystem m_dayNightSystem;
     FluidSystem m_fluidSystem{*this};
+    RedstoneSimulator m_redstoneSimulator{*this};
     WeatherSystem m_weatherSystem;
     BlockNeighborUpdateQueue m_neighborUpdateQueue;
     BlockNeighborUpdateQueue m_redstoneUpdateQueue;

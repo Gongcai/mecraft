@@ -169,4 +169,44 @@ inline ConnectionDirection connectionDirectionForPlanarOffset(const uint16_t fac
     failWireFaceGeometry("Wire face geometry received an offset outside the wire plane");
 }
 
+/// Invokes `fn` for every wire cell that connects to `position` across an
+/// outer corner of a shared support block.
+template <typename Fn>
+void forEachWireOuterCornerPeerPosition(const glm::ivec3& position, Fn&& fn) {
+    for (const uint16_t selfFacing : wireFacings()) {
+        const glm::ivec3 support = supportPosition(position, selfFacing);
+        for (const uint16_t peerFacing : wireFacings()) {
+            if (!arePerpendicularFacings(selfFacing, peerFacing)) {
+                continue;
+            }
+            fn(wirePositionOnSupportFace(support, peerFacing));
+        }
+    }
+}
+
+/// Invokes `fn` for every wire cell whose outer-corner connection is blocked
+/// by the solid contents of `blocker`.
+template <typename Fn>
+void forEachWireOuterCornerPositionBlockedBy(const glm::ivec3& blocker, Fn&& fn) {
+    for (const uint16_t facingA : wireFacings()) {
+        for (const uint16_t facingB : wireFacings()) {
+            if (facingA >= facingB || !arePerpendicularFacings(facingA, facingB)) {
+                continue;
+            }
+
+            const glm::ivec3 support = blocker - surfaceNormal(facingA) - surfaceNormal(facingB);
+            fn(wirePositionOnSupportFace(support, facingA));
+            fn(wirePositionOnSupportFace(support, facingB));
+        }
+    }
+}
+
+/// Invokes `fn` for every wire cell mounted on any face of the support block.
+template <typename Fn>
+void forEachWirePositionOnSupport(const glm::ivec3& support, Fn&& fn) {
+    for (const uint16_t facing : wireFacings()) {
+        fn(wirePositionOnSupportFace(support, facing));
+    }
+}
+
 } // namespace WireFaceGeometry
